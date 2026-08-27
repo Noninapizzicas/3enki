@@ -5,6 +5,9 @@
  * de interfaz con las 4 zonas operacionales + el trío frontend
  * (manifest.json + index.ts + Panel.svelte), SIN usar LLM.
  *
+ * El blueprint generado sigue el formato que deriveZones() del frontend
+ * consume: transporte.rpc[] + ui.ops{} + ui.datos{} + eventos_que_escucho[].
+ *
  * Uso: node scripts/generar-blueprint.js <slug> [--deploy] [--no-frontend]
  *   --deploy: copia a /opt/enki tras generar
  *   --no-frontend: solo genera el blueprint, sin el trío frontend
@@ -29,8 +32,16 @@ function pascalCase(s) {
   return String(s || '').split(/[-_]+/).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join('');
 }
 
-function tipoField(type) {
-  return { string: 'text', number: 'number', boolean: 'checkbox', integer: 'number' }[type] || 'text';
+function humanize(snake) {
+  return snake.split('_').map(w => w ? w[0].toUpperCase() + w.slice(1) : w).join(' ');
+}
+
+/**
+ * Mapea JSON Schema type → ArgTipo del frontend (blueprint-zones.ts).
+ * ArgTipo: 'string' | 'number' | 'boolean' | 'select' | 'json' | 'kv' | 'ref'
+ */
+function tipoArg(jsonSchemaType) {
+  return { string: 'string', number: 'number', integer: 'number', boolean: 'boolean', object: 'json', array: 'json' }[jsonSchemaType] || 'string';
 }
 
 function eventLabel(ev) {
@@ -38,63 +49,109 @@ function eventLabel(ev) {
 }
 
 function esLectura(name) {
-  return /get\.|\.get|listar|obtener|leer|buscar|show|status|health/i.test(name);
+  return /^get$|get\.|\.get|listar|obtener|leer|buscar|show|status|health/i.test(name);
 }
 
-function esEscritura(name) {
-  return /crear|actualizar|update|set|delete|remove|cambiar|enviar|add|push|borrar/i.test(name);
+// ── Mapa de dominios conocidos para inferir ref en campos _id ──
+
+const KNOWN_DOMAINS = {
+  producto_id:    { ref: 'productos.carta_completa', ref_label: 'nombre', ref_value: 'id' },
+  categoria_id:   { ref: 'productos.carta_completa', ref_label: 'nombre', ref_value: 'id' },
+  ingrediente_id: { ref: 'ingredientes.listar',      ref_label: 'nombre', ref_value: 'id' },
+  receta_id:      { ref: 'recetas.listar',            ref_label: 'nombre', ref_value: 'id' },
+  cuenta_id:      { ref: 'cuentas.listar',            ref_label: 'nombre', ref_value: 'id' },
+  pedido_id:      { ref: 'pedidos.listar',            ref_label: 'id',     ref_value: 'id' },
+  mesa_id:        { ref: 'mesas.listar',              ref_label: 'nombre', ref_value: 'id' },
+};
+
+// ── Normalizar subscribes de module.json ──
+
+function extraerSubscribes(mod) {
+  let subs = mod.subscribes;
+  if (!subs && mod.events && mod.events.subscribes) subs = mod.events.subscribes;
+  if (!subs) return [];
+  if (Array.isArray(subs)) return subs.map(s => typeof s === 'string' ? s : (s.event || ''));
+  if (typeof subs === 'object') return Object.keys(subs);
+  return [];
 }
 
-// ── Normalizar subscribes (array → dict; dict → dict) ──
-
-function normalizarSubscribes(subs) {
-  if (!subs) return {};
-  if (Array.isArray(subs)) {
-    const out = {};
-    for (const s of subs) {
-      if (s && s.event) out[s.event] = s.handler || s.description || true;
-    }
-    return out;
+function extraerPublishes(mod) {
+  let pubs = mod.eventos_publicados;
+  if (!pubs && mod.events && mod.events.publishes) {
+    pubs = mod.events.publishes.map(p => typeof p === 'string' ? p : (p.event || ''));
   }
-  return subs;
+  if (!pubs) return [];
+  return pubs.filter(Boolean);
 }
 
-// ── Obtener eventos de tools de un módulo ──
+// ── Extraer ui_handlers como fuente primaria de acciones ──
 
-function extraerEventos(tools) {
-  const eventos = [];
+function extraerAcciones(mod) {
+  const handlers = mod.ui_handlers || [];
+  const tools = mod.tools || [];
+  const domain = mod.name || 'mod';
+  const acciones = new Map();
 
-  for (const t of (tools || [])) {
-    const name = t.name;
-    if (!name) continue;
-
-    const params = (t.parameters && t.parameters.properties) || {};
-    const required = new Set((t.parameters && t.parameters.required) || []);
-
-    if (esLectura(name)) {
-      eventos.push({ tipo: 'dato', name, label: eventLabel(name), desc: (t.description || '').substring(0, 120) });
-    } else {
-      const args = Object.entries(params)
-        .filter(([k]) => k !== 'project_id')
-        .map(([k, v]) => ({
-          name: k,
-          type: tipoField(v.type || 'string'),
-          label: (v.title || k).replace(/_/g, ' '),
-          required: required.has(k),
-        }));
-
-      eventos.push({
-        tipo: esEscritura(name) ? 'operacion' : 'accion',
-        name,
-        label: eventLabel(name),
-        desc: (t.description || '').substring(0, 120),
-        args: args.length > 0 ? args : undefined,
-        confirm: esEscritura(name) || args.some(a => a.required) || undefined,
-      });
-    }
+  for (const h of handlers) {
+    if (!h.action) continue;
+    acciones.set(h.action, { domain: h.domain || domain, action: h.action });
   }
 
-  return eventos;
+  for (const t of tools) {
+    if (!t.name) continue;
+    const parts = t.name.split('.');
+    const action = parts.length >= 2 ? parts.slice(1).join('.') : parts[0];
+    const dom = parts.length >= 2 ? parts[0] : domain;
+    if (!acciones.has(action)) {
+      acciones.set(action, { domain: dom, action });
+    }
+  }
+
+  return acciones;
+}
+
+// ── Construir args de un tool (formato deriveZones) ──
+
+function construirArgs(tool, moduleName) {
+  const params = (tool.parameters && tool.parameters.properties) || {};
+  const required = new Set((tool.parameters && tool.parameters.required) || []);
+  const args = [];
+
+  for (const [k, v] of Object.entries(params)) {
+    if (k === 'project_id') continue;
+
+    const arg = {
+      nombre: k,
+      tipo: tipoArg(v.type || 'string'),
+      required: required.has(k),
+    };
+
+    if (v.description) arg.descripcion = v.description;
+
+    if (k.endsWith('_id') && KNOWN_DOMAINS[k]) {
+      arg.tipo = 'ref';
+      arg.ref = KNOWN_DOMAINS[k].ref;
+      arg.ref_label = KNOWN_DOMAINS[k].ref_label;
+      arg.ref_value = KNOWN_DOMAINS[k].ref_value;
+      arg.placeholder = `selecciona un ${k.replace(/_id$/, '').replace(/_/g, ' ')}`;
+    } else if (k.endsWith('_id')) {
+      arg.tipo = 'ref';
+      const refDomain = k.replace(/_id$/, '');
+      arg.ref = `${refDomain}.listar`;
+      arg.ref_label = 'nombre';
+      arg.ref_value = 'id';
+      arg.placeholder = `selecciona un ${refDomain.replace(/_/g, ' ')}`;
+    }
+
+    if (v.enum) {
+      arg.tipo = 'select';
+      arg.enum = v.enum;
+    }
+
+    args.push(arg);
+  }
+
+  return args;
 }
 
 // ── Buscar module.json (con resolución de verticales) ──
@@ -109,29 +166,6 @@ function buscarModulo(baseDir, slugModule) {
     if (fs.existsSync(p)) return { dir: d, path: p };
   }
   return null;
-}
-
-// ── Generar blueprint ──
-
-// ── Extraer eventos de ui_handlers ──
-
-function extraerEventosDeUiHandlers(uiHandlers) {
-  const eventos = [];
-  for (const h of (uiHandlers || [])) {
-    if (!h.action) continue;
-    const name = `${h.domain || 'mod'}.${h.action}`;
-    if (esLectura(h.action)) {
-      eventos.push({ tipo: 'dato', name, label: eventLabel(name), desc: '' });
-    } else {
-      eventos.push({
-        tipo: esEscritura(h.action) ? 'operacion' : 'accion',
-        name,
-        label: eventLabel(name),
-        desc: '',
-      });
-    }
-  }
-  return eventos;
 }
 
 // ── Generar trío frontend ──
@@ -210,13 +244,11 @@ export { default as ${pascal}Panel } from './${pascal}Panel.svelte';
   }
 }
 
-function generar(slugModule, deploy, noFrontend) {
-  // Buscar en repo (escribible)
-  let found = buscarModulo(REPO_MODULES, slugModule);
-  const origen = found ? 'repo' : null;
+// ── Generar blueprint en formato deriveZones ──
 
+function generar(slugModule, deploy, noFrontend) {
+  let found = buscarModulo(REPO_MODULES, slugModule);
   if (!found) {
-    // Buscar en deploy (solo lectura)
     found = buscarModulo(DEPLOY_MODULES, slugModule);
     if (!found) {
       console.error(`❌ Módulo "${slugModule}" no encontrado ni en repo ni en deploy`);
@@ -229,43 +261,89 @@ function generar(slugModule, deploy, noFrontend) {
   const name = mod.name || slugModule.split('/').pop();
   const description = mod.description || name;
   const tools = mod.tools || [];
-  const uiHandlers = mod.ui_handlers || [];
-  const subscribesDict = normalizarSubscribes(mod.subscribes);
   const uiDecision = mod.ui_decision || { type: 'workspace_module', zone: 'modulos' };
 
-  const eventosTools = extraerEventos(tools);
-  const eventosHandlers = extraerEventosDeUiHandlers(uiHandlers);
-  const nombresVistos = new Set(eventosTools.map(e => e.name));
-  const eventos = [...eventosTools, ...eventosHandlers.filter(e => !nombresVistos.has(e.name))];
+  const acciones = extraerAcciones(mod);
+  const subscribes = extraerSubscribes(mod);
+  const publishes = extraerPublishes(mod);
 
-  const operaciones = eventos.filter(e => e.tipo === 'operacion').map(({ tipo, ...rest }) => rest);
-  const acciones = eventos.filter(e => e.tipo === 'accion').map(({ tipo, ...rest }) => rest);
-  const datos = eventos.filter(e => e.tipo === 'dato').map(({ tipo, ...rest }) => ({
-    ...rest,
-    refresh_on: Object.keys(subscribesDict).filter(s => s.includes(name)),
-  }));
+  // ── transporte.rpc: líneas "dominio.accion.request -> .response" ──
+  const rpcLines = [];
+  for (const [action, info] of acciones) {
+    rpcLines.push(`${info.domain}.${action}.request -> .response`);
+  }
 
-  // Eventos en vivo: los subscribes del module.json (NO las tools)
-  const eventosVivo = Object.entries(subscribesDict).map(([ev]) => ({
-    event: ev,
-    label: eventLabel(ev),
-  }));
+  // ── ui.ops: dict keyed by action, con titulo + args en formato deriveZones ──
+  const uiOps = {};
+  const toolsByAction = new Map();
+  for (const t of tools) {
+    if (!t.name) continue;
+    const parts = t.name.split('.');
+    const action = parts.length >= 2 ? parts.slice(1).join('.') : parts[0];
+    toolsByAction.set(action, t);
+  }
 
+  const datosOps = [];
+  let formularioCount = 0;
+  let accionesCount = 0;
+
+  for (const [action] of acciones) {
+    const tool = toolsByAction.get(action);
+    const args = tool ? construirArgs(tool, name) : [];
+    const desc = tool ? (tool.description || '').substring(0, 200) : '';
+
+    const op = { titulo: humanize(action) };
+    if (desc) op.descripcion = desc;
+    if (args.length > 0) op.args = args;
+
+    uiOps[action] = op;
+
+    if (args.length > 0) formularioCount++;
+    else accionesCount++;
+
+    if (esLectura(action)) datosOps.push(action);
+  }
+
+  const datosOp = datosOps.find(a => /^(get|listar|obtener|leer|buscar)$/i.test(a))
+    || datosOps.find(a => !/^(health|status|metrics)$/i.test(a))
+    || datosOps[0] || null;
+
+  // ── ui.datos: primer op de lectura con refresh_on de los subscribes ──
+  let datos = undefined;
+  if (datosOp) {
+    const refreshOn = publishes.length > 0
+      ? publishes
+      : subscribes.filter(s => !s.startsWith('project.'));
+    datos = {
+      op: datosOp,
+      titulo: humanize(datosOp),
+      ...(refreshOn.length && { refresh_on: refreshOn }),
+    };
+  }
+
+  // ── eventos_que_escucho (root level, para zona estadosVivos) ──
+  const eventosQueEscucho = subscribes.filter(Boolean);
+
+  // ── Blueprint final ──
   const blueprint = {
     schema: 'blueprint-interfaz-v1',
+    id: name,
+    version: 'blueprint-1.0.0',
     moduleId: name,
     titulo: description.charAt(0).toUpperCase() + description.slice(1),
+    ...(publishes.length && { eventos_publicados: publishes }),
+    ...(eventosQueEscucho.length && { eventos_que_escucho: eventosQueEscucho }),
+    transporte: {
+      rpc: rpcLines,
+      ...(publishes.length && { salida: publishes }),
+    },
     ui: {
-      type: uiDecision.type || 'workspace_module',
-      zone: uiDecision.zone || 'modulos',
-      ...(operaciones.length && { operaciones }),
-      ...(acciones.length && { acciones }),
-      ...(datos.length && { datos }),
-      ...(eventosVivo.length && { eventos_que_escucho: eventosVivo }),
+      ...(Object.keys(uiOps).length && { ops: uiOps }),
+      ...(datos && { datos }),
     },
   };
 
-  // Escribir en repo
+  // ── Escribir ──
   const outDir = path.join(REPO_MODULES, slugModule);
   const outPath = path.join(outDir, `${name}.blueprint.json`);
   const contenido = JSON.stringify(blueprint, null, 2) + '\n';
@@ -275,7 +353,6 @@ function generar(slugModule, deploy, noFrontend) {
     fs.writeFileSync(outPath, contenido, 'utf-8');
     console.log(`✅ Blueprint: ${outPath}`);
   } catch (e) {
-    // Directorio de www-data — escribir a /tmp y reportar
     const tmpPath = `/tmp/${slugModule}.blueprint.json`;
     fs.writeFileSync(tmpPath, contenido, 'utf-8');
     console.log(`⚠️  No se pudo escribir en repo (permisos): ${outPath}`);
@@ -283,12 +360,10 @@ function generar(slugModule, deploy, noFrontend) {
     console.log(`   Para copiar: sudo cp ${tmpPath} ${outPath} && sudo chown admin:admin ${outPath}`);
   }
 
-  // Generar trío frontend (manifest + index.ts + Panel.svelte + blueprint copy)
   if (!noFrontend) {
     generarFrontend(slugModule, name, description, blueprint, uiDecision);
   }
 
-  // Copiar a deploy si --deploy
   if (deploy) {
     const deployDir = path.join(DEPLOY_MODULES, slugModule);
     const deployPath = path.join(deployDir, `${name}.blueprint.json`);
@@ -301,7 +376,7 @@ function generar(slugModule, deploy, noFrontend) {
     }
   }
 
-  console.log(`   ${operaciones.length} ops · ${acciones.length} acciones · ${datos.length} datos · ${eventosVivo.length} eventos`);
+  console.log(`   ${formularioCount} formularios · ${accionesCount} acciones · ${datosOp ? 1 : 0} datos · ${eventosQueEscucho.length} eventos`);
 }
 
 // ── Arranque ──

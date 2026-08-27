@@ -6,13 +6,13 @@ export const productosModule: UIModule = {
     id: 'productos',
     name: 'Productos',
     version: '0.1.0',
-    zone: 'modulos',
+    zone: 'work-bar',
     button: {
       id: 'productos-btn',
-      icon: '📦',
+      icon: '🍕',
       label: 'Productos',
       action: { type: 'panel', panelId: 'productos-panel' },
-      order: 50
+      order: 1
     },
     panels: [{
       id: 'productos-panel',

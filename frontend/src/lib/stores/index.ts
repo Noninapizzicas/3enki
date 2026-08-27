@@ -231,19 +231,19 @@ export type { GenerationStep, GenerationState, GenerationResult } from './menu-g
 
 // Carta Manager Store
 export {
-  cartaManagerStore,
+  cartasStore,
+  cartaSeleccionada,
+  cartasLoading,
+  cartasError,
+  cartasStats,
+  sortedCartas,
   loadCartas,
   getCarta,
-  selectCarta,
-  clearError as clearCartaError,
-  initCartaManagerSubscriptions,
-  sortedCartas,
-  selectedCarta,
-  cartaLoading,
-  cartaError,
-  cartaCount
+  loadHistorial,
+  loadVersionSnapshot,
+  initCartaManagerSubscriptions
 } from './carta-manager';
-export type { Carta, CartaResumen, CartaMeta, Categoria, Producto, Ingrediente, CartaManagerState } from './carta-manager';
+export type { Carta, CartaResumen, CartaVersionResumen } from './carta-manager';
 
 // Carta Design Store
 export {

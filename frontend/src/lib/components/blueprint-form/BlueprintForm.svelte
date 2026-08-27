@@ -19,7 +19,7 @@
   import { mqttRequest, MqttTimeoutError, MqttRequestError } from '$lib/ui-core/mqtt-request';
   import { subscribe } from '$lib/ui-core/mqtt';
   import { activeProjectId } from '$lib/stores/projects';
-  import { deriveZones, type BlueprintArg, type BlueprintOp, type BlueprintEventoVivo, type BlueprintDatos } from './blueprint-zones';
+  import { deriveZones, labelize, type BlueprintArg, type BlueprintOp, type BlueprintEventoVivo, type BlueprintDatos } from './blueprint-zones';
   import RefSelect from './RefSelect.svelte';
 
   export let blueprint: Record<string, unknown> | null = null;
@@ -266,15 +266,15 @@
           <div class="op-campos">
             {#each op.args as arg (arg.nombre)}
               <label class="campo">
-                <span class="campo-label">{arg.nombre}{arg.required ? ' *' : ''}</span>
+                <span class="campo-label" title={arg.nombre}>{labelize(arg.nombre)}{arg.required ? ' *' : ''}</span>
                 {#if arg.tipo === 'select'}
                   <select
                     value={(fieldValue(op.nombre, arg) as string) || ''}
                     on:change={(e) => setField(op.nombre, arg, (e.target as HTMLSelectElement).value)}
                   >
                     <option value="">—</option>
-                    {#each arg.enum || [] as opt}
-                      <option value={opt}>{opt}</option>
+                    {#each arg.enum || [] as opt, i}
+                      <option value={opt}>{arg.enumLabels?.[i] ?? opt}</option>
                     {/each}
                   </select>
                 {:else if arg.tipo === 'ref'}

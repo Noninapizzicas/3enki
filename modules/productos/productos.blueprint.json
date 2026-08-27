@@ -61,9 +61,17 @@
           },
           {
             "nombre": "activo",
-            "tipo": "string",
+            "tipo": "select",
             "required": false,
-            "descripcion": "Filtro opcional por estado activo (boolean o 'true'/'false')."
+            "descripcion": "Filtro opcional por estado activo (boolean o 'true'/'false').",
+            "enum": [
+              "true",
+              "false"
+            ],
+            "enumLabels": [
+              "Sí",
+              "No"
+            ]
           }
         ]
       },
@@ -73,9 +81,13 @@
         "args": [
           {
             "nombre": "id",
-            "tipo": "string",
+            "tipo": "ref",
             "required": true,
-            "descripcion": "Identificador del producto."
+            "descripcion": "Identificador del producto.",
+            "ref": "productos.list",
+            "ref_label": "nombre",
+            "ref_value": "id",
+            "placeholder": "selecciona producto"
           }
         ]
       },
@@ -97,9 +109,13 @@
         "args": [
           {
             "nombre": "id",
-            "tipo": "string",
+            "tipo": "ref",
             "required": true,
-            "descripcion": "Identificador del producto."
+            "descripcion": "Identificador del producto.",
+            "ref": "productos.list",
+            "ref_label": "nombre",
+            "ref_value": "id",
+            "placeholder": "selecciona producto"
           }
         ]
       },
@@ -109,9 +125,13 @@
         "args": [
           {
             "nombre": "id",
-            "tipo": "string",
+            "tipo": "ref",
             "required": true,
-            "descripcion": "Identificador del producto."
+            "descripcion": "Identificador del producto.",
+            "ref": "productos.list",
+            "ref_label": "nombre",
+            "ref_value": "id",
+            "placeholder": "selecciona producto"
           }
         ]
       },

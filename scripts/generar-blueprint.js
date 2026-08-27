@@ -16,9 +16,10 @@
 const fs = require('fs');
 const path = require('path');
 
-const REPO_MODULES = '/home/admin/3enki/modules';
-const DEPLOY_MODULES = '/opt/enki/modules';
-const REPO_FRONTEND = '/home/admin/3enki/frontend/src/lib/modules';
+const REPO_ROOT = process.env.ENKI_REPO || '/home/admin/3enki';
+const REPO_MODULES = path.join(REPO_ROOT, 'modules');
+const DEPLOY_MODULES = process.env.ENKI_DEPLOY || '/opt/enki/modules';
+const REPO_FRONTEND = path.join(REPO_ROOT, 'frontend/src/lib/modules');
 
 // ── Utils ──
 
@@ -110,9 +111,24 @@ function extraerAcciones(mod) {
   return acciones;
 }
 
-// ── Construir args de un tool (formato deriveZones) ──
+// ── Detección de banderas booleanas por NOMBRE (aunque el schema las tipe como string) ──
+// Un filtro como `activo` suele declararse string ("true"/"false") pero se opera como sí/no.
 
-function construirArgs(tool, moduleName) {
+function esBandera(name) {
+  return /^(activo|activa|activos|activas|inactivo|habilitad|deshabilitad|visible|oculto|oculta|disponible|destacad|enabled|disabled|active|is_[a-z]|has_[a-z])/i.test(name);
+}
+
+// ── Singular naïve para placeholders ("productos" → "producto") ──
+function singular(name) {
+  return String(name || '').replace(/s$/i, '');
+}
+
+// ── Construir args de un tool (formato deriveZones) ──
+// selfRef: { ref, ref_label, ref_value } de la op `list` del propio módulo — para
+// convertir el `id` pelado en un desplegable de registros (el user elige por nombre,
+// no teclea un id interno que no conoce).
+
+function construirArgs(tool, moduleName, selfRef) {
   const params = (tool.parameters && tool.parameters.properties) || {};
   const required = new Set((tool.parameters && tool.parameters.required) || []);
   const args = [];
@@ -128,6 +144,7 @@ function construirArgs(tool, moduleName) {
 
     if (v.description) arg.descripcion = v.description;
 
+    // ── Referencia por dominio conocido: *_id → select de entidades existentes ──
     if (k.endsWith('_id') && KNOWN_DOMAINS[k]) {
       arg.tipo = 'ref';
       arg.ref = KNOWN_DOMAINS[k].ref;
@@ -135,17 +152,34 @@ function construirArgs(tool, moduleName) {
       arg.ref_value = KNOWN_DOMAINS[k].ref_value;
       arg.placeholder = `selecciona un ${k.replace(/_id$/, '').replace(/_/g, ' ')}`;
     } else if (k.endsWith('_id')) {
+      // ── Referencia genérica: <dominio>_id → <dominio>.listar (RefSelect degrada a texto si no existe) ──
       arg.tipo = 'ref';
       const refDomain = k.replace(/_id$/, '');
       arg.ref = `${refDomain}.listar`;
       arg.ref_label = 'nombre';
       arg.ref_value = 'id';
       arg.placeholder = `selecciona un ${refDomain.replace(/_/g, ' ')}`;
+    } else if (k === 'id' && selfRef) {
+      // ── `id` pelado (get/update/delete): self-ref al list del propio módulo ──
+      arg.tipo = 'ref';
+      arg.ref = selfRef.ref;
+      arg.ref_label = selfRef.ref_label;
+      arg.ref_value = selfRef.ref_value;
+      arg.placeholder = `selecciona ${singular(moduleName)}`;
     }
 
-    if (v.enum) {
+    // ── Enum explícito del schema → select ──
+    if (Array.isArray(v.enum) && v.enum.length) {
       arg.tipo = 'select';
-      arg.enum = v.enum;
+      arg.enum = v.enum.map(String);
+    }
+
+    // ── Booleano (por tipo o por nombre-bandera) → select Sí/No ──
+    // Mejor que un checkbox para un filtro opcional: la opción vacía = «sin filtro».
+    if (arg.tipo !== 'ref' && arg.tipo !== 'select' && (v.type === 'boolean' || esBandera(k))) {
+      arg.tipo = 'select';
+      arg.enum = ['true', 'false'];
+      arg.enumLabels = ['Sí', 'No'];
     }
 
     args.push(arg);
@@ -283,13 +317,23 @@ function generar(slugModule, deploy, noFrontend) {
     toolsByAction.set(action, t);
   }
 
+  // ── selfRef: la op de listado del propio módulo, para que el `id` pelado sea un
+  //    desplegable de registros (el user elige por nombre, no teclea el id interno). ──
+  let selfRef = null;
+  const listAction = [...acciones.keys()].find(a => /^(list|listar)$/i.test(a))
+    || [...acciones.keys()].find(a => /(^|_)list(ar)?$/i.test(a));
+  if (listAction) {
+    const dom = acciones.get(listAction).domain;
+    selfRef = { ref: `${dom}.${listAction}`, ref_label: 'nombre', ref_value: 'id' };
+  }
+
   const datosOps = [];
   let formularioCount = 0;
   let accionesCount = 0;
 
   for (const [action] of acciones) {
     const tool = toolsByAction.get(action);
-    const args = tool ? construirArgs(tool, name) : [];
+    const args = tool ? construirArgs(tool, name, selfRef) : [];
     const desc = tool ? (tool.description || '').substring(0, 200) : '';
 
     const op = { titulo: humanize(action) };

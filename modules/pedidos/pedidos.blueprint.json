@@ -1,261 +1,375 @@
 {
   "schema": "blueprint-interfaz-v1",
+  "id": "pedidos",
+  "version": "blueprint-1.0.0",
   "moduleId": "pedidos",
   "titulo": "Gestion completa de pedidos pizzepos. Dos tipos: tipo='pos' (flujo POS pizzeria con cuenta_id de cuentas-canales, items en pasos separados, enviado a cocina) y tipo='tienda' (vertical tienda PWA: plano sin cuenta_id, todos los items de una, cliente_nombre como ANCLA de recogida, estado pendiente_recogida). Recibe POS del comandero (bridge comandero.enviar_cocina) o UI handler. Recibe tienda via tool pedido.crear-tienda (auto-wire). Persiste en memoria con restauracion desde cuentas_activas.json al arrancar (delegacion a persistencia-comandero; aplica solo a tipo pos en v3.1.0). Cache de productos invalidada por catalogo.actualizado y producto.{creado,actualizado}.",
-  "ui": {
-    "type": "workspace_module",
-    "zone": "modulos",
-    "operaciones": [
-      {
-        "name": "pedido.add-item",
-        "label": "pedido add-item",
-        "desc": "Agrega un item al pedido (solo en estado borrador/confirmado). Consulta precios al cache de productos.",
-        "args": [
-          {
-            "name": "pedido_id",
-            "type": "text",
-            "label": "pedido id",
-            "required": true
-          },
-          {
-            "name": "producto_id",
-            "type": "text",
-            "label": "producto id",
-            "required": true
-          },
-          {
-            "name": "cantidad",
-            "type": "number",
-            "label": "cantidad",
-            "required": false
-          },
-          {
-            "name": "variaciones",
-            "type": "text",
-            "label": "variaciones",
-            "required": false
-          },
-          {
-            "name": "notas",
-            "type": "text",
-            "label": "notas",
-            "required": false
-          }
-        ],
-        "confirm": true
-      },
-      {
-        "name": "pedido.update-item",
-        "label": "pedido update-item",
-        "desc": "Actualiza un item del pedido (cantidad, variaciones, notas).",
-        "args": [
-          {
-            "name": "pedido_id",
-            "type": "text",
-            "label": "pedido id",
-            "required": true
-          },
-          {
-            "name": "item_id",
-            "type": "text",
-            "label": "item id",
-            "required": true
-          }
-        ],
-        "confirm": true
-      },
-      {
-        "name": "pedido.delete-item",
-        "label": "pedido delete-item",
-        "desc": "Elimina un item del pedido (solo en estado borrador/confirmado).",
-        "args": [
-          {
-            "name": "pedido_id",
-            "type": "text",
-            "label": "pedido id",
-            "required": true
-          },
-          {
-            "name": "item_id",
-            "type": "text",
-            "label": "item id",
-            "required": true
-          }
-        ],
-        "confirm": true
-      },
-      {
-        "name": "pedido.crear-tienda",
-        "label": "pedido crear-tienda",
-        "desc": "Crea un pedido plano de tienda PWA (tipo='tienda'). Sin cuenta_id, todos los items de una, estado inicial pendiente_reco",
-        "args": [
-          {
-            "name": "project_slug",
-            "type": "text",
-            "label": "project slug",
-            "required": true
-          },
-          {
-            "name": "items",
-            "type": "text",
-            "label": "items",
-            "required": true
-          },
-          {
-            "name": "total_centimos",
-            "type": "number",
-            "label": "total centimos",
-            "required": true
-          },
-          {
-            "name": "canal_origen",
-            "type": "text",
-            "label": "canal origen",
-            "required": true
-          },
-          {
-            "name": "cliente_nombre",
-            "type": "text",
-            "label": "cliente nombre",
-            "required": true
-          },
-          {
-            "name": "cliente_telefono",
-            "type": "text",
-            "label": "cliente telefono",
-            "required": false
-          },
-          {
-            "name": "mayor_edad_confirmado",
-            "type": "checkbox",
-            "label": "mayor edad confirmado",
-            "required": false
-          },
-          {
-            "name": "expira_horas",
-            "type": "number",
-            "label": "expira horas",
-            "required": false
-          },
-          {
-            "name": "notas_generales",
-            "type": "text",
-            "label": "notas generales",
-            "required": false
-          },
-          {
-            "name": "correlation_id",
-            "type": "text",
-            "label": "correlation id",
-            "required": false
-          }
-        ],
-        "confirm": true
-      }
+  "eventos_publicados": [
+    "pedido.creado",
+    "pedido.item_agregado",
+    "pedido.item_actualizado",
+    "pedido.item_eliminado",
+    "pedido.enviado_cocina",
+    "pedido.completado",
+    "pedido.cancelado"
+  ],
+  "eventos_que_escucho": [
+    "comandero.enviar_cocina",
+    "variacion.validada",
+    "variacion.rechazada",
+    "cuenta.creada",
+    "catalogo.actualizado",
+    "producto.creado",
+    "producto.actualizado",
+    "caja.cerrada",
+    "dia.iniciado",
+    "pago.confirmado"
+  ],
+  "transporte": {
+    "rpc": [
+      "pedido.list.request -> .response",
+      "pedido.get.request -> .response",
+      "pedido.create.request -> .response",
+      "pedido.add-item.request -> .response",
+      "pedido.update-item.request -> .response",
+      "pedido.delete-item.request -> .response",
+      "pedido.send-kitchen.request -> .response",
+      "pedido.complete.request -> .response",
+      "pedido.cancel.request -> .response",
+      "pedido.total.request -> .response",
+      "pedido.confirmar-recogida.request -> .response",
+      "pedido.health.request -> .response",
+      "pedido.crear-tienda.request -> .response"
     ],
-    "acciones": [
-      {
-        "name": "pedido.create",
-        "label": "pedido create",
-        "desc": "Crea un pedido formal nuevo en estado borrador vinculado a una cuenta. Detecta canal por prefijo del cuenta_id.",
-        "args": [
-          {
-            "name": "cuenta_id",
-            "type": "text",
-            "label": "cuenta id",
-            "required": true
-          },
-          {
-            "name": "notas_generales",
-            "type": "text",
-            "label": "notas generales",
-            "required": false
-          }
-        ],
-        "confirm": true
-      },
-      {
-        "name": "pedido.send-kitchen",
-        "label": "pedido send-kitchen",
-        "desc": "Marca el pedido como enviado a cocina. Emite pedido.enviado_cocina.",
-        "args": [
-          {
-            "name": "pedido_id",
-            "type": "text",
-            "label": "pedido id",
-            "required": true
-          }
-        ],
-        "confirm": true
-      },
-      {
-        "name": "pedido.complete",
-        "label": "pedido complete",
-        "desc": "Marca el pedido como completado (todos los items servidos). Emite pedido.completado.",
-        "args": [
-          {
-            "name": "pedido_id",
-            "type": "text",
-            "label": "pedido id",
-            "required": true
-          }
-        ],
-        "confirm": true
-      },
-      {
-        "name": "pedido.cancel",
-        "label": "pedido cancel",
-        "desc": "Cancela el pedido. Emite pedido.cancelado.",
-        "args": [
-          {
-            "name": "pedido_id",
-            "type": "text",
-            "label": "pedido id",
-            "required": true
-          },
-          {
-            "name": "motivo",
-            "type": "text",
-            "label": "motivo",
-            "required": false
-          }
-        ],
-        "confirm": true
-      },
-      {
-        "name": "pedido.total",
-        "label": "pedido total",
-        "desc": "Recalcula el subtotal/total de un pedido sumando precios de los items.",
-        "args": [
-          {
-            "name": "pedido_id",
-            "type": "text",
-            "label": "pedido id",
-            "required": true
-          }
-        ],
-        "confirm": true
-      }
-    ],
-    "datos": [
-      {
-        "name": "pedido.list",
-        "label": "pedido list",
-        "desc": "Lista pedidos con filtros opcionales por cuenta_id y estado. Orden descendente por fecha de creacion.",
-        "refresh_on": []
-      },
-      {
-        "name": "pedido.get",
-        "label": "pedido get",
-        "desc": "Obtiene un pedido por id.",
-        "refresh_on": []
-      },
-      {
-        "name": "pedido.health",
-        "label": "pedido health",
-        "desc": "Health check del modulo pedidos.",
-        "refresh_on": []
-      }
+    "salida": [
+      "pedido.creado",
+      "pedido.item_agregado",
+      "pedido.item_actualizado",
+      "pedido.item_eliminado",
+      "pedido.enviado_cocina",
+      "pedido.completado",
+      "pedido.cancelado"
     ]
+  },
+  "ui": {
+    "ops": {
+      "list": {
+        "titulo": "List",
+        "descripcion": "Lista pedidos con filtros opcionales por cuenta_id y estado. Orden descendente por fecha de creacion.",
+        "args": [
+          {
+            "nombre": "cuenta_id",
+            "tipo": "ref",
+            "required": false,
+            "descripcion": "Filtro por cuenta.",
+            "ref": "cuentas.listar",
+            "ref_label": "nombre",
+            "ref_value": "id",
+            "placeholder": "selecciona un cuenta"
+          },
+          {
+            "nombre": "estado",
+            "tipo": "string",
+            "required": false,
+            "descripcion": "Filtro por estado del pedido."
+          }
+        ]
+      },
+      "get": {
+        "titulo": "Get",
+        "descripcion": "Obtiene un pedido por id.",
+        "args": [
+          {
+            "nombre": "id",
+            "tipo": "ref",
+            "required": true,
+            "descripcion": "Identificador del pedido.",
+            "ref": "pedido.list",
+            "ref_label": "id",
+            "ref_value": "id",
+            "placeholder": "selecciona pedido"
+          }
+        ]
+      },
+      "create": {
+        "titulo": "Create",
+        "descripcion": "Crea un pedido formal nuevo en estado borrador vinculado a una cuenta. Detecta canal por prefijo del cuenta_id.",
+        "args": [
+          {
+            "nombre": "cuenta_id",
+            "tipo": "ref",
+            "required": true,
+            "descripcion": "Identificador de la cuenta.",
+            "ref": "cuentas.listar",
+            "ref_label": "nombre",
+            "ref_value": "id",
+            "placeholder": "selecciona un cuenta"
+          },
+          {
+            "nombre": "notas_generales",
+            "tipo": "string",
+            "required": false,
+            "descripcion": "Notas generales del pedido."
+          }
+        ]
+      },
+      "add-item": {
+        "titulo": "Add-item",
+        "descripcion": "Agrega un item al pedido (solo en estado borrador/confirmado). Consulta precios al cache de productos.",
+        "args": [
+          {
+            "nombre": "pedido_id",
+            "tipo": "ref",
+            "required": true,
+            "descripcion": "Identificador del pedido.",
+            "ref": "pedido.list",
+            "ref_label": "id",
+            "ref_value": "id",
+            "placeholder": "selecciona un pedido"
+          },
+          {
+            "nombre": "producto_id",
+            "tipo": "ref",
+            "required": true,
+            "descripcion": "Identificador del producto.",
+            "ref": "productos.carta_completa",
+            "ref_label": "nombre",
+            "ref_value": "id",
+            "placeholder": "selecciona un producto"
+          },
+          {
+            "nombre": "cantidad",
+            "tipo": "number",
+            "required": false,
+            "descripcion": "Cantidad (default 1)."
+          },
+          {
+            "nombre": "variaciones",
+            "tipo": "json",
+            "required": false,
+            "descripcion": "Variaciones aplicadas (quitar/anadir)."
+          },
+          {
+            "nombre": "notas",
+            "tipo": "string",
+            "required": false,
+            "descripcion": "Notas del item."
+          }
+        ]
+      },
+      "update-item": {
+        "titulo": "Update-item",
+        "descripcion": "Actualiza un item del pedido (cantidad, variaciones, notas).",
+        "args": [
+          {
+            "nombre": "pedido_id",
+            "tipo": "ref",
+            "required": true,
+            "descripcion": "Identificador del pedido.",
+            "ref": "pedido.list",
+            "ref_label": "id",
+            "ref_value": "id",
+            "placeholder": "selecciona un pedido"
+          },
+          {
+            "nombre": "item_id",
+            "tipo": "string",
+            "required": true,
+            "descripcion": "Identificador del item."
+          }
+        ]
+      },
+      "delete-item": {
+        "titulo": "Delete-item",
+        "descripcion": "Elimina un item del pedido (solo en estado borrador/confirmado).",
+        "args": [
+          {
+            "nombre": "pedido_id",
+            "tipo": "ref",
+            "required": true,
+            "descripcion": "Identificador del pedido.",
+            "ref": "pedido.list",
+            "ref_label": "id",
+            "ref_value": "id",
+            "placeholder": "selecciona un pedido"
+          },
+          {
+            "nombre": "item_id",
+            "tipo": "string",
+            "required": true,
+            "descripcion": "Identificador del item."
+          }
+        ]
+      },
+      "send-kitchen": {
+        "titulo": "Send-kitchen",
+        "descripcion": "Marca el pedido como enviado a cocina. Emite pedido.enviado_cocina.",
+        "args": [
+          {
+            "nombre": "pedido_id",
+            "tipo": "ref",
+            "required": true,
+            "descripcion": "Identificador del pedido.",
+            "ref": "pedido.list",
+            "ref_label": "id",
+            "ref_value": "id",
+            "placeholder": "selecciona un pedido"
+          }
+        ]
+      },
+      "complete": {
+        "titulo": "Complete",
+        "descripcion": "Marca el pedido como completado (todos los items servidos). Emite pedido.completado.",
+        "args": [
+          {
+            "nombre": "pedido_id",
+            "tipo": "ref",
+            "required": true,
+            "descripcion": "Identificador del pedido.",
+            "ref": "pedido.list",
+            "ref_label": "id",
+            "ref_value": "id",
+            "placeholder": "selecciona un pedido"
+          }
+        ]
+      },
+      "cancel": {
+        "titulo": "Cancel",
+        "descripcion": "Cancela el pedido. Emite pedido.cancelado.",
+        "args": [
+          {
+            "nombre": "pedido_id",
+            "tipo": "ref",
+            "required": true,
+            "descripcion": "Identificador del pedido.",
+            "ref": "pedido.list",
+            "ref_label": "id",
+            "ref_value": "id",
+            "placeholder": "selecciona un pedido"
+          },
+          {
+            "nombre": "motivo",
+            "tipo": "string",
+            "required": false,
+            "descripcion": "Motivo de la cancelacion."
+          }
+        ]
+      },
+      "total": {
+        "titulo": "Total",
+        "descripcion": "Recalcula el subtotal/total de un pedido sumando precios de los items.",
+        "args": [
+          {
+            "nombre": "pedido_id",
+            "tipo": "ref",
+            "required": true,
+            "descripcion": "Identificador del pedido.",
+            "ref": "pedido.list",
+            "ref_label": "id",
+            "ref_value": "id",
+            "placeholder": "selecciona un pedido"
+          }
+        ]
+      },
+      "confirmar-recogida": {
+        "titulo": "Confirmar-recogida"
+      },
+      "health": {
+        "titulo": "Health",
+        "descripcion": "Health check del modulo pedidos."
+      },
+      "crear-tienda": {
+        "titulo": "Crear-tienda",
+        "descripcion": "Crea un pedido plano de tienda PWA (tipo='tienda'). Sin cuenta_id, todos los items de una, estado inicial pendiente_recogida. El ANCLA de recogida es cliente_nombre (el nombre que el cliente introduce",
+        "args": [
+          {
+            "nombre": "project_slug",
+            "tipo": "string",
+            "required": true,
+            "descripcion": "Slug del proyecto (ej: vapers)."
+          },
+          {
+            "nombre": "items",
+            "tipo": "json",
+            "required": true,
+            "descripcion": "Lista de items del pedido (todos de una). Cantidad entera > 0 y descripcion no vacia."
+          },
+          {
+            "nombre": "total_centimos",
+            "tipo": "number",
+            "required": true,
+            "descripcion": "Total del pedido en centimos."
+          },
+          {
+            "nombre": "canal_origen",
+            "tipo": "select",
+            "required": true,
+            "descripcion": "Canal por el que llego el pedido.",
+            "enum": [
+              "whatsapp",
+              "web",
+              "manual"
+            ]
+          },
+          {
+            "nombre": "cliente_nombre",
+            "tipo": "string",
+            "required": true,
+            "descripcion": "Nombre que el cliente introduce. ANCLA de recogida (el dependiente lo pide al recoger). OBLIGATORIO."
+          },
+          {
+            "nombre": "cliente_telefono",
+            "tipo": "string",
+            "required": false,
+            "descripcion": "Numero del cliente en E.164 sin + (ej: 34600000000). Transitorio, se desecha al cerrar el pedido. Opcional."
+          },
+          {
+            "nombre": "mayor_edad_confirmado",
+            "tipo": "select",
+            "required": false,
+            "descripcion": "Flag opcional: el cliente confirmo mayoria de edad en la PWA (gate del proyecto si activa verificacion_edad). null si el proyecto no requiere verificacion. NO sustituye verificacion fisica del DNI al recoger.",
+            "enum": [
+              "true",
+              "false"
+            ],
+            "enumLabels": [
+              "Sí",
+              "No"
+            ]
+          },
+          {
+            "nombre": "expira_horas",
+            "tipo": "number",
+            "required": false,
+            "descripcion": "Horas hasta que la reserva expira. Default 24h."
+          },
+          {
+            "nombre": "notas_generales",
+            "tipo": "string",
+            "required": false,
+            "descripcion": "Notas generales del pedido. Opcional."
+          },
+          {
+            "nombre": "correlation_id",
+            "tipo": "string",
+            "required": false,
+            "descripcion": "Correlation id propagado del originador."
+          }
+        ]
+      }
+    },
+    "datos": {
+      "op": "list",
+      "titulo": "List",
+      "refresh_on": [
+        "pedido.creado",
+        "pedido.item_agregado",
+        "pedido.item_actualizado",
+        "pedido.item_eliminado",
+        "pedido.enviado_cocina",
+        "pedido.completado",
+        "pedido.cancelado"
+      ]
+    }
   }
 }

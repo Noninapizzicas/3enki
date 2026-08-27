@@ -52,7 +52,8 @@ export const PAGE_CATALOG: Record<string, PageDef> = {
   'mise-en-place':  { id: 'mise-en-place',    icon: '🥘',  label: 'Mise en Place', nav: false },
   producir:         { id: 'producir',         icon: '🏭',  label: 'Producir', nav: false },
   pedidos:          { id: 'pedidos',          icon: '📋',  label: 'Pedidos', nav: false },
-  variaciones:      { id: 'variaciones',      icon: '🔧',  label: 'Variaciones', nav: false }
+  variaciones:      { id: 'variaciones',      icon: '🔧',  label: 'Variaciones', nav: false },
+  productos:        { id: 'productos',        icon: '🍕',  label: 'Productos', nav: false }
 };
 
 /** Semilla por tipo: lo que un proyecto trae al nacer, antes de que crezca en runtime. */

@@ -1,15 +1,13 @@
 {
-  "_doc": "Blueprint del modulo variaciones (pizzepos). Gestion de variaciones de productos: ingredientes que se pueden quitar, si permite anadir extras, maximo de extras. Se configura desde la CARTA (carta.actualizada/editada). Calcula precio final consultando precios al modulo ingredientes. Auto-valida cada comandero.item_agregado.",
+  "schema": "blueprint-interfaz-v1",
   "id": "variaciones",
   "version": "blueprint-1.0.0",
-
-  "rol": "Gestion de variaciones de productos pizzepos (quitar/anadir ingredientes). Reglas por producto: que se puede quitar, que se puede anadir, maximo de extras. Se configura desde la CARTA (carta.actualizada/editada). Calcula precio final consultando precios al modulo ingredientes (fuente unica via uiHandler.handle('ingredientes', ...)). Auto-valida cada comandero.item_agregado y emite variacion.{validada,rechazada}.",
-
+  "moduleId": "variaciones",
+  "titulo": "Gestion de variaciones de productos pizzepos (quitar/anadir ingredientes). Reglas por producto: que se puede quitar, que se puede anadir, maximo de extras. Se configura desde la CARTA (carta.actualizada/editada). Calcula precio final consultando precios al modulo ingredientes (fuente unica via uiHandler.handle('ingredientes', ...)). Auto-valida cada comandero.item_agregado y emite variacion.{validada,rechazada}.",
   "eventos_publicados": [
     "variacion.validada",
     "variacion.rechazada"
   ],
-
   "eventos_que_escucho": [
     "project.activated",
     "carta.actualizada",
@@ -17,97 +15,107 @@
     "producto.creado",
     "comandero.item_agregado"
   ],
-
   "transporte": {
-    "entrada": "reflejo RPC via ui_handlers (module.json) — las 6 acciones se conducen por ui/request/variaciones/<accion>",
-    "rpc": [],
+    "rpc": [
+      "variaciones.get.request -> .response",
+      "variaciones.validar.request -> .response",
+      "variaciones.calcular_precio.request -> .response",
+      "variaciones.health.request -> .response",
+      "variaciones.metrics.request -> .response",
+      "variaciones.evaluar.request -> .response"
+    ],
     "salida": [
       "variacion.validada",
       "variacion.rechazada"
-    ],
-    "qos": "publishAndWait (request/response correlado) en cada operacion; timeout 8s"
+    ]
   },
-
   "ui": {
-    "_doc": "Schema de panel del generador schema→UI (BlueprintForm). Las 5 operaciones del reflejo con sus args; variacion.{validada,rechazada} refrescan la zona DATOS.",
     "ops": {
       "get": {
-        "titulo": "Obtener variaciones de producto",
+        "titulo": "Get",
         "descripcion": "Obtiene la configuracion de variaciones de un producto: ingredientes que se pueden quitar, si permite anadir extras, sugerencias y maximo de extras.",
         "args": [
           {
             "nombre": "producto_id",
             "tipo": "ref",
+            "required": true,
+            "descripcion": "Identificador del producto.",
             "ref": "productos.carta_completa",
             "ref_label": "nombre",
             "ref_value": "id",
-            "required": true,
             "placeholder": "selecciona un producto"
           }
         ]
       },
       "validar": {
-        "titulo": "Validar variación",
+        "titulo": "Validar",
         "descripcion": "Valida una variacion concreta: comprueba que los ingredientes a quitar esten permitidos y que los extras respeten el limite del producto.",
         "args": [
           {
             "nombre": "producto_id",
             "tipo": "ref",
+            "required": true,
+            "descripcion": "Identificador del producto.",
             "ref": "productos.carta_completa",
             "ref_label": "nombre",
             "ref_value": "id",
-            "required": true,
             "placeholder": "selecciona un producto"
           },
           {
             "nombre": "ingredientes_quitar",
-            "tipo": "text",
+            "tipo": "json",
             "required": false,
-            "placeholder": "IDs de ingredientes a quitar (separados por coma)"
+            "descripcion": "IDs de ingredientes a quitar."
           },
           {
             "nombre": "ingredientes_anadir",
             "tipo": "json",
             "required": false,
-            "descripcion": "Lista de extras: cada item con ingrediente_id y cantidad"
+            "descripcion": "Lista de extras (cada item con ingrediente_id y cantidad)."
           }
         ]
       },
       "calcular_precio": {
-        "titulo": "Calcular precio con variaciones",
+        "titulo": "Calcular Precio",
         "descripcion": "Calcula el precio total de un producto con variaciones (precio base + suma de extras consultados al modulo ingredientes).",
         "args": [
           {
             "nombre": "producto_id",
             "tipo": "ref",
+            "required": true,
+            "descripcion": "Identificador del producto.",
             "ref": "productos.carta_completa",
             "ref_label": "nombre",
             "ref_value": "id",
-            "required": true,
             "placeholder": "selecciona un producto"
           },
           {
             "nombre": "ingredientes_anadir",
             "tipo": "json",
             "required": false,
-            "descripcion": "Lista de extras (ingrediente_id, cantidad)"
+            "descripcion": "Lista de extras (ingrediente_id, cantidad)."
           }
         ]
       },
       "health": {
-        "titulo": "Health check",
+        "titulo": "Health",
         "descripcion": "Health check del modulo variaciones: estado del modulo, version y total de productos configurados."
       },
       "metrics": {
-        "titulo": "Métricas operativas",
+        "titulo": "Metrics",
         "descripcion": "Metricas operativas del modulo variaciones (counters de variaciones validadas/rechazadas y gauges)."
+      },
+      "evaluar": {
+        "titulo": "Evaluar"
       }
     },
     "datos": {
       "op": "get",
-      "titulo": "Configuración de variaciones",
-      "refresh_on": ["variacion.validada", "variacion.rechazada"],
-      "columnas": ["producto_id", "quitar_permitidos", "anadir_permitido", "max_extras", "precio_base_centimos"]
+      "titulo": "Get",
+      "refresh_on": [
+        "variacion.validada",
+        "variacion.rechazada"
+      ]
     }
   }
 }

@@ -143,7 +143,7 @@ function construirArgs(tool, moduleName, selfRef) {
   const args = [];
 
   for (const [k, v] of Object.entries(params)) {
-    if (k === 'project_id') continue;
+    if (k === 'project_id' || k === 'project_slug') continue;
 
     const arg = {
       nombre: k,

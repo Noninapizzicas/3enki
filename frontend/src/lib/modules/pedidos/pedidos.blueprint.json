@@ -283,12 +283,6 @@
         "descripcion": "Crea un pedido plano de tienda PWA (tipo='tienda'). Sin cuenta_id, todos los items de una, estado inicial pendiente_recogida. El ANCLA de recogida es cliente_nombre (el nombre que el cliente introduce",
         "args": [
           {
-            "nombre": "project_slug",
-            "tipo": "string",
-            "required": true,
-            "descripcion": "Slug del proyecto (ej: vapers)."
-          },
-          {
             "nombre": "items",
             "tipo": "json",
             "required": true,

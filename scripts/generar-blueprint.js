@@ -74,6 +74,31 @@ const SUB_RESOURCE_ID_FIELDS = new Set([
   'item_id', 'linea_id', 'detalle_id', 'paso_id',
 ]);
 
+// ── Filtro por actor ──
+// El jefe consulta y supervisa; no crea ni compone.
+// Patrones de ops que SON del jefe (inclusión):
+//   - consulta: list, get, buscar, listar, obtener, show
+//   - supervisión: complete, cancel, confirmar-*, health, status, total
+// Patrones de ops que NO son del jefe (exclusión):
+//   - operativa: create, crear, add-*, update-*, delete-*, send-*, nuevo
+
+const OPS_OPERATIVA = /^(create|crear|crear-tienda|new|nuevo|add-item|update-item|delete-item|send-kitchen|agregar|actualizar|eliminar|quitar|remove)/i;
+const OPS_JEFE = /^(list|listar|get|obtener|buscar|leer|show|complete|completar|cancel|cancelar|confirmar|cerrar|close|total|health|status|metrics)/i;
+
+function filtrarPorActor(acciones, actor) {
+  if (!actor) return acciones;
+  const filtradas = new Map();
+  for (const [action, info] of acciones) {
+    if (actor === 'jefe') {
+      if (OPS_OPERATIVA.test(action)) continue;
+      filtradas.set(action, info);
+    } else {
+      filtradas.set(action, info);
+    }
+  }
+  return filtradas;
+}
+
 // ── Normalizar subscribes de module.json ──
 
 function extraerSubscribes(mod) {
@@ -440,7 +465,7 @@ export { default as ${pascal}Panel } from './${pascal}Panel.svelte';
 
 // ── Generar blueprint en formato deriveZones ──
 
-function generar(slugModule, deploy, noFrontend) {
+function generar(slugModule, deploy, noFrontend, actor) {
   let found = buscarModulo(REPO_MODULES, slugModule);
   if (!found) {
     found = buscarModulo(DEPLOY_MODULES, slugModule);
@@ -457,9 +482,14 @@ function generar(slugModule, deploy, noFrontend) {
   const tools = mod.tools || [];
   const uiDecision = mod.ui_decision || { type: 'workspace_module', zone: 'work-bar' };
 
-  const acciones = extraerAcciones(mod);
+  const accionesRaw = extraerAcciones(mod);
+  const acciones = filtrarPorActor(accionesRaw, actor);
   const subscribes = extraerSubscribes(mod);
   const publishes = extraerPublishes(mod);
+
+  if (actor) {
+    console.log(`🎭 Actor: ${actor} — ${acciones.size}/${accionesRaw.size} ops (excluidas ${accionesRaw.size - acciones.size})`);
+  }
 
   // ── transporte.rpc: líneas "dominio.accion.request -> .response" ──
   const rpcLines = [];
@@ -550,6 +580,7 @@ function generar(slugModule, deploy, noFrontend) {
     id: name,
     version: 'blueprint-2.0.0',
     moduleId: name,
+    ...(actor && { actor }),
     titulo: description.charAt(0).toUpperCase() + description.slice(1),
     ...(bizEvents.length && { eventos_publicados: bizEvents }),
     ...(eventosQueEscucho.length && { eventos_que_escucho: eventosQueEscucho }),
@@ -611,14 +642,16 @@ const args = process.argv.slice(2);
 const target = args.find(a => !a.startsWith('--'));
 const deploy = args.includes('--deploy');
 const noFrontend = args.includes('--no-frontend');
+const actorFlag = args.find(a => a.startsWith('--actor'));
+const actor = actorFlag ? (actorFlag.includes('=') ? actorFlag.split('=')[1] : args[args.indexOf(actorFlag) + 1]) : null;
 
 if (!target) {
-  console.error('Uso: node scripts/generar-blueprint.js <slug> [--deploy] [--no-frontend]');
+  console.error('Uso: node scripts/generar-blueprint.js <slug> [--actor jefe] [--deploy] [--no-frontend]');
   process.exit(1);
 }
 
 try {
-  generar(slug(target), deploy, noFrontend);
+  generar(slug(target), deploy, noFrontend, actor || null);
 } catch (err) {
   console.error('❌ Error:', err.message);
   process.exit(1);

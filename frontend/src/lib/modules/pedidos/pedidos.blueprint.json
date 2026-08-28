@@ -519,6 +519,35 @@
       "crear-tienda": {
         "sensible_estado": true
       }
+    },
+    "detalle": {
+      "op": "get",
+      "titulo": "Detalle de pedido",
+      "cabecera": [
+        "id",
+        "estado",
+        "created_at"
+      ],
+      "campo_items": "items",
+      "campo_total": "total",
+      "estados": [
+        "borrador",
+        "creado",
+        "enviado_cocina",
+        "completado",
+        "cancelado"
+      ],
+      "acciones_contextuales": [
+        "create",
+        "add-item",
+        "update-item",
+        "delete-item",
+        "send-kitchen",
+        "complete",
+        "cancel",
+        "confirmar-recogida",
+        "crear-tienda"
+      ]
     }
   }
 }

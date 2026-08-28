@@ -303,6 +303,36 @@ function derivarFlujo(uiOps, acciones, estados) {
   return fases;
 }
 
+// ── Derivar detalle: la vista drill-down de una entidad ──
+// Si existe una op `get` con arg `id`, el detalle se deriva automáticamente.
+// Estructura: { op, campos_cabecera, campo_items, campo_total }
+
+function derivarDetalle(uiOps, acciones, estados, name) {
+  const getAction = [...acciones.keys()].find(a => /^get$/i.test(a));
+  if (!getAction) return null;
+
+  const opDef = uiOps[getAction];
+  if (!opDef) return null;
+
+  const estadoNames = estados.map(e => e.nombre);
+
+  const transiciones = [];
+  for (const [action] of acciones) {
+    if (/^(list|listar|get|obtener|health|status|total)$/i.test(action)) continue;
+    transiciones.push(action);
+  }
+
+  return {
+    op: getAction,
+    titulo: `Detalle de ${singular(name)}`,
+    cabecera: ['id', 'estado', 'created_at'],
+    campo_items: 'items',
+    campo_total: 'total',
+    estados: estadoNames,
+    acciones_contextuales: transiciones,
+  };
+}
+
 // ── Derivar guardas: ops con CONFLICT_STATE en errores_conocidos ──
 
 function derivarGuardas(tools) {
@@ -512,6 +542,7 @@ function generar(slugModule, deploy, noFrontend) {
   const dependencias = derivarDependencias(uiOps, acciones, selfRef);
   const flujo = derivarFlujo(uiOps, acciones, estados);
   const guardas = derivarGuardas(tools);
+  const detalle = derivarDetalle(uiOps, acciones, estados, name);
 
   // ── Blueprint final ──
   const blueprint = {
@@ -533,6 +564,7 @@ function generar(slugModule, deploy, noFrontend) {
       ...(flujo.length && { flujo }),
       ...(Object.keys(dependencias).length && { dependencias }),
       ...(Object.keys(guardas).length && { guardas }),
+      ...(detalle && { detalle }),
     },
   };
 
@@ -570,7 +602,7 @@ function generar(slugModule, deploy, noFrontend) {
   }
 
   console.log(`   ${formularioCount} formularios · ${accionesCount} acciones · ${datosOp ? 1 : 0} datos · ${eventosQueEscucho.length} eventos`);
-  console.log(`   ${estados.length} estados · ${flujo.length} fases · ${Object.keys(dependencias).length} dependencias · ${Object.keys(guardas).length} guardas`);
+  console.log(`   ${estados.length} estados · ${flujo.length} fases · ${Object.keys(dependencias).length} dependencias · ${Object.keys(guardas).length} guardas · ${detalle ? '1 detalle' : '0 detalle'}`);
 }
 
 // ── Arranque ──

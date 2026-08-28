@@ -197,6 +197,127 @@ function construirArgs(tool, moduleName, selfRef) {
   return args;
 }
 
+// ── Derivar estados del ciclo de vida desde eventos publicados ──
+// Convención: "pedido.creado" → estado "creado", "pedido.enviado_cocina" → "en_cocina"
+// Los estados terminales se detectan por nombre: completado, cancelado, cerrado, expirado.
+
+const ESTADO_TERMINAL = new Set(['completado', 'cancelado', 'cerrado', 'expirado', 'rechazado', 'archivado']);
+
+const ESTADO_VISUAL = {
+  borrador:            { color: 'gray',   icono: '📝' },
+  creado:              { color: 'blue',   icono: '🆕' },
+  confirmado:          { color: 'blue',   icono: '✅' },
+  en_cocina:           { color: 'orange', icono: '🔥' },
+  enviado_cocina:      { color: 'orange', icono: '🔥' },
+  pendiente_recogida:  { color: 'yellow', icono: '📦' },
+  completado:          { color: 'green',  icono: '✔️' },
+  cancelado:           { color: 'red',    icono: '❌' },
+  pagado:              { color: 'green',  icono: '💰' },
+};
+
+const EVENTO_NO_ESTADO = new Set([
+  'item_agregado', 'item_actualizado', 'item_eliminado',
+  'linea_agregada', 'linea_actualizada', 'linea_eliminada',
+  'detalle_agregado', 'detalle_actualizado', 'detalle_eliminado',
+  'paso_agregado', 'paso_actualizado', 'paso_eliminado',
+  'actualizado', 'modificado', 'editado',
+]);
+
+function derivarEstados(publishes) {
+  const estados = [];
+  for (const ev of publishes) {
+    const parts = ev.split('.');
+    if (parts.length < 2) continue;
+    const sufijo = parts.slice(1).join('_');
+    if (EVENTO_NO_ESTADO.has(sufijo)) continue;
+    const estado = sufijo;
+    const visual = ESTADO_VISUAL[estado] || { color: 'gray', icono: '⚪' };
+    estados.push({
+      nombre: estado,
+      terminal: ESTADO_TERMINAL.has(estado),
+      color: visual.color,
+      icono: visual.icono,
+    });
+  }
+  if (estados.length > 0 && !estados.find(e => e.nombre === 'borrador')) {
+    estados.unshift({ nombre: 'borrador', terminal: false, ...ESTADO_VISUAL.borrador });
+  }
+  return estados;
+}
+
+// ── Derivar dependencias entre operaciones ──
+// Si una op tiene un arg X_id y otra op se llama X o create-X, hay dependencia.
+
+function derivarDependencias(uiOps, acciones, selfRef) {
+  const deps = {};
+  const opNames = new Set(acciones.keys());
+
+  for (const [action, opDef] of Object.entries(uiOps)) {
+    if (!opDef.args || !opDef.args.length) continue;
+    const opDeps = [];
+    for (const arg of opDef.args) {
+      if (arg.tipo === 'ref' && arg.ref) {
+        const refParts = arg.ref.split('.');
+        const refAction = refParts.length >= 2 ? refParts[1] : refParts[0];
+        if (refAction && refAction !== action && (opNames.has(refAction) || refAction === 'list')) {
+          opDeps.push({ campo: arg.nombre, de: refAction });
+        }
+      }
+    }
+    if (opDeps.length > 0) deps[action] = opDeps;
+  }
+  return deps;
+}
+
+// ── Derivar flujo (fases del ciclo de vida) ──
+// Agrupa ops por fase según su naturaleza: consulta, creación, composición, transición, utilidad.
+
+function derivarFlujo(uiOps, acciones, estados) {
+  const fases = [];
+  const consultas = [];
+  const creacion = [];
+  const composicion = [];
+  const transicion = [];
+  const utilidad = [];
+
+  for (const [action, opDef] of Object.entries(uiOps)) {
+    if (/^(list|listar|get|obtener|buscar|leer|show)$/i.test(action)) {
+      consultas.push(action);
+    } else if (/^(create|crear|new|nuevo)$/i.test(action) || action === 'crear-tienda') {
+      creacion.push(action);
+    } else if (/add|agregar|update|actualizar|delete|eliminar|remove|quitar/i.test(action)) {
+      composicion.push(action);
+    } else if (/send|enviar|complete|completar|cancel|cancelar|confirm|confirmar|close|cerrar/i.test(action)) {
+      transicion.push(action);
+    } else {
+      utilidad.push(action);
+    }
+  }
+
+  if (consultas.length)   fases.push({ nombre: 'consulta',    orden: 1, ops: consultas,   descripcion: 'Ver y buscar' });
+  if (creacion.length)    fases.push({ nombre: 'creacion',    orden: 2, ops: creacion,    descripcion: 'Crear nuevo' });
+  if (composicion.length) fases.push({ nombre: 'composicion', orden: 3, ops: composicion, descripcion: 'Componer contenido' });
+  if (transicion.length)  fases.push({ nombre: 'transicion',  orden: 4, ops: transicion,  descripcion: 'Cambiar estado' });
+  if (utilidad.length)    fases.push({ nombre: 'utilidad',     orden: 5, ops: utilidad,    descripcion: 'Herramientas' });
+
+  return fases;
+}
+
+// ── Derivar guardas: ops con CONFLICT_STATE en errores_conocidos ──
+
+function derivarGuardas(tools) {
+  const guardas = {};
+  for (const t of tools) {
+    if (!t.name || !t.errores_conocidos) continue;
+    if (t.errores_conocidos.includes('CONFLICT_STATE')) {
+      const parts = t.name.split('.');
+      const action = parts.length >= 2 ? parts.slice(1).join('.') : parts[0];
+      guardas[action] = { sensible_estado: true };
+    }
+  }
+  return guardas;
+}
+
 // ── Buscar module.json (con resolución de verticales) ──
 
 function buscarModulo(baseDir, slugModule) {
@@ -386,11 +507,17 @@ function generar(slugModule, deploy, noFrontend) {
   // ── eventos_que_escucho (root level, para zona estadosVivos) ──
   const eventosQueEscucho = subscribes.filter(Boolean);
 
+  // ── Derivar inteligencia de negocio (esquematizador mecánico) ──
+  const estados = derivarEstados(bizEvents);
+  const dependencias = derivarDependencias(uiOps, acciones, selfRef);
+  const flujo = derivarFlujo(uiOps, acciones, estados);
+  const guardas = derivarGuardas(tools);
+
   // ── Blueprint final ──
   const blueprint = {
-    schema: 'blueprint-interfaz-v1',
+    schema: 'blueprint-interfaz-v2',
     id: name,
-    version: 'blueprint-1.0.0',
+    version: 'blueprint-2.0.0',
     moduleId: name,
     titulo: description.charAt(0).toUpperCase() + description.slice(1),
     ...(bizEvents.length && { eventos_publicados: bizEvents }),
@@ -402,6 +529,10 @@ function generar(slugModule, deploy, noFrontend) {
     ui: {
       ...(Object.keys(uiOps).length && { ops: uiOps }),
       ...(datos && { datos }),
+      ...(estados.length && { estados }),
+      ...(flujo.length && { flujo }),
+      ...(Object.keys(dependencias).length && { dependencias }),
+      ...(Object.keys(guardas).length && { guardas }),
     },
   };
 
@@ -439,6 +570,7 @@ function generar(slugModule, deploy, noFrontend) {
   }
 
   console.log(`   ${formularioCount} formularios · ${accionesCount} acciones · ${datosOp ? 1 : 0} datos · ${eventosQueEscucho.length} eventos`);
+  console.log(`   ${estados.length} estados · ${flujo.length} fases · ${Object.keys(dependencias).length} dependencias · ${Object.keys(guardas).length} guardas`);
 }
 
 // ── Arranque ──

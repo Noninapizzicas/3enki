@@ -1,7 +1,7 @@
 {
-  "schema": "blueprint-interfaz-v1",
+  "schema": "blueprint-interfaz-v2",
   "id": "pedidos",
-  "version": "blueprint-1.0.0",
+  "version": "blueprint-2.0.0",
   "moduleId": "pedidos",
   "titulo": "Gestion completa de pedidos pizzepos. Dos tipos: tipo='pos' (flujo POS pizzeria con cuenta_id de cuentas-canales, items en pasos separados, enviado a cocina) y tipo='tienda' (vertical tienda PWA: plano sin cuenta_id, todos los items de una, cliente_nombre como ANCLA de recogida, estado pendiente_recogida). Recibe POS del comandero (bridge comandero.enviar_cocina) o UI handler. Recibe tienda via tool pedido.crear-tienda (auto-wire). Persiste en memoria con restauracion desde cuentas_activas.json al arrancar (delegacion a persistencia-comandero; aplica solo a tipo pos en v3.1.0). Cache de productos invalidada por catalogo.actualizado y producto.{creado,actualizado}.",
   "eventos_publicados": [
@@ -364,6 +364,161 @@
         "pedido.completado",
         "pedido.cancelado"
       ]
+    },
+    "estados": [
+      {
+        "nombre": "borrador",
+        "terminal": false,
+        "color": "gray",
+        "icono": "📝"
+      },
+      {
+        "nombre": "creado",
+        "terminal": false,
+        "color": "blue",
+        "icono": "🆕"
+      },
+      {
+        "nombre": "enviado_cocina",
+        "terminal": false,
+        "color": "orange",
+        "icono": "🔥"
+      },
+      {
+        "nombre": "completado",
+        "terminal": true,
+        "color": "green",
+        "icono": "✔️"
+      },
+      {
+        "nombre": "cancelado",
+        "terminal": true,
+        "color": "red",
+        "icono": "❌"
+      }
+    ],
+    "flujo": [
+      {
+        "nombre": "consulta",
+        "orden": 1,
+        "ops": [
+          "list",
+          "get"
+        ],
+        "descripcion": "Ver y buscar"
+      },
+      {
+        "nombre": "creacion",
+        "orden": 2,
+        "ops": [
+          "create",
+          "crear-tienda"
+        ],
+        "descripcion": "Crear nuevo"
+      },
+      {
+        "nombre": "composicion",
+        "orden": 3,
+        "ops": [
+          "add-item",
+          "update-item",
+          "delete-item"
+        ],
+        "descripcion": "Componer contenido"
+      },
+      {
+        "nombre": "transicion",
+        "orden": 4,
+        "ops": [
+          "send-kitchen",
+          "complete",
+          "cancel",
+          "confirmar-recogida"
+        ],
+        "descripcion": "Cambiar estado"
+      },
+      {
+        "nombre": "utilidad",
+        "orden": 5,
+        "ops": [
+          "total",
+          "health"
+        ],
+        "descripcion": "Herramientas"
+      }
+    ],
+    "dependencias": {
+      "get": [
+        {
+          "campo": "id",
+          "de": "list"
+        }
+      ],
+      "add-item": [
+        {
+          "campo": "pedido_id",
+          "de": "list"
+        }
+      ],
+      "update-item": [
+        {
+          "campo": "pedido_id",
+          "de": "list"
+        }
+      ],
+      "delete-item": [
+        {
+          "campo": "pedido_id",
+          "de": "list"
+        }
+      ],
+      "send-kitchen": [
+        {
+          "campo": "pedido_id",
+          "de": "list"
+        }
+      ],
+      "complete": [
+        {
+          "campo": "pedido_id",
+          "de": "list"
+        }
+      ],
+      "cancel": [
+        {
+          "campo": "pedido_id",
+          "de": "list"
+        }
+      ],
+      "total": [
+        {
+          "campo": "pedido_id",
+          "de": "list"
+        }
+      ]
+    },
+    "guardas": {
+      "add-item": {
+        "sensible_estado": true
+      },
+      "update-item": {
+        "sensible_estado": true
+      },
+      "delete-item": {
+        "sensible_estado": true
+      },
+      "send-kitchen": {
+        "sensible_estado": true
+      },
+      "complete": {
+        "sensible_estado": true
+      },
+      "cancel": {
+        "sensible_estado": true
+      },
+      "crear-tienda": {
+        "sensible_estado": true
+      }
     }
   }
 }

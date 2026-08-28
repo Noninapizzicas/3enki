@@ -127,7 +127,7 @@
     busy = op.nombre;
     error = '';
     try {
-      const res = await mqttRequest(moduleId, op.nombre, { project_id: pid, ...payload });
+      const res = await mqttRequest(op.dominio || moduleId, op.nombre, { project_id: pid, ...payload });
       resultados = { ...resultados, [op.nombre]: { ok: true, msg: `ok (${res.status})`, data: res.data } };
       if (zones.datos && op.nombre === zones.datos.op && res.data) {
         populateDatos(res.data);
@@ -158,7 +158,10 @@
     datosTitulo = d.titulo;
     error = '';
     try {
-      const res = await mqttRequest(moduleId, d.op, { project_id: pid });
+      const allOps = [...zones.formulario, ...zones.acciones];
+      const datosOp = allOps.find(o => o.nombre === d.op);
+      const domain = datosOp?.dominio || moduleId;
+      const res = await mqttRequest(domain, d.op, { project_id: pid });
       const arr = primerArray(res.data);
       if (arr) {
         datosFilas = arr;

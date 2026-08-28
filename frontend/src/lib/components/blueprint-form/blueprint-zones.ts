@@ -71,11 +71,34 @@ export interface BlueprintDatos {
   columnas?: string[];
 }
 
+export interface BlueprintEstado {
+  nombre: string;
+  terminal: boolean;
+  color: string;
+  icono: string;
+}
+
+export interface BlueprintFase {
+  nombre: string;
+  orden: number;
+  ops: string[];
+  descripcion: string;
+}
+
+export interface BlueprintDependencia {
+  campo: string;
+  de: string;
+}
+
 export interface BlueprintZones {
   formulario: BlueprintOp[];
   acciones: BlueprintOp[];
   estadosVivos: BlueprintEventoVivo[];
   datos: BlueprintDatos | null;
+  estados: BlueprintEstado[];
+  flujo: BlueprintFase[];
+  dependencias: Record<string, BlueprintDependencia[]>;
+  guardas: Record<string, { sensible_estado: boolean }>;
 }
 
 // =============================================================================
@@ -265,5 +288,51 @@ export function deriveZones(blueprint: Record<string, unknown> | null | undefine
     };
   }
 
-  return { formulario, acciones, estadosVivos, datos };
+  // --- ESTADOS: ui.estados (ciclo de vida) ---
+  const estados: BlueprintEstado[] = [];
+  const uiEstados = Array.isArray(ui.estados) ? ui.estados : [];
+  for (const e of uiEstados) {
+    const raw = e as Record<string, unknown>;
+    if (!raw || typeof raw.nombre !== 'string') continue;
+    estados.push({
+      nombre: raw.nombre,
+      terminal: raw.terminal === true,
+      color: typeof raw.color === 'string' ? raw.color : 'gray',
+      icono: typeof raw.icono === 'string' ? raw.icono : '',
+    });
+  }
+
+  // --- FLUJO: ui.flujo (fases del ciclo de vida) ---
+  const flujo: BlueprintFase[] = [];
+  const uiFlujo = Array.isArray(ui.flujo) ? ui.flujo : [];
+  for (const f of uiFlujo) {
+    const raw = f as Record<string, unknown>;
+    if (!raw || typeof raw.nombre !== 'string') continue;
+    flujo.push({
+      nombre: raw.nombre,
+      orden: typeof raw.orden === 'number' ? raw.orden : 0,
+      ops: Array.isArray(raw.ops) ? raw.ops.map(String) : [],
+      descripcion: typeof raw.descripcion === 'string' ? raw.descripcion : '',
+    });
+  }
+
+  // --- DEPENDENCIAS: ui.dependencias ---
+  const dependencias: Record<string, BlueprintDependencia[]> = {};
+  const uiDeps = (ui.dependencias as Record<string, unknown[]>) ?? {};
+  for (const [action, deps] of Object.entries(uiDeps)) {
+    if (!Array.isArray(deps)) continue;
+    dependencias[action] = deps
+      .filter((d): d is Record<string, unknown> => d !== null && typeof d === 'object')
+      .map(d => ({ campo: String(d.campo || ''), de: String(d.de || '') }))
+      .filter(d => d.campo && d.de);
+  }
+
+  // --- GUARDAS: ui.guardas ---
+  const guardas: Record<string, { sensible_estado: boolean }> = {};
+  const uiGuardas = (ui.guardas as Record<string, Record<string, unknown>>) ?? {};
+  for (const [action, g] of Object.entries(uiGuardas)) {
+    guardas[action] = { sensible_estado: g?.sensible_estado === true };
+  }
+
+  return { formulario, acciones, estadosVivos, datos, estados, flujo, dependencias, guardas };
 }

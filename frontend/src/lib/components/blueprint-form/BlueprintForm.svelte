@@ -256,6 +256,38 @@
 
   {#if error}<div class="error">⚠ {error}</div>{/if}
 
+  <!-- ============ ZONA 0: ESTADOS (ciclo de vida) ============ -->
+  {#if zones.estados.length > 0}
+    <div class="zona">
+      <h3 class="zona-titulo">Ciclo de vida</h3>
+      <div class="estados-bar">
+        {#each zones.estados as est (est.nombre)}
+          <span class="estado-pill" class:terminal={est.terminal} style="--est-color: {est.color}">
+            <span class="estado-icono">{est.icono}</span>
+            {est.nombre.replace(/_/g, ' ')}
+          </span>
+          {#if !est.terminal}<span class="estado-flecha">→</span>{/if}
+        {/each}
+      </div>
+    </div>
+  {/if}
+
+  <!-- ============ ZONA 0.5: FLUJO (fases) ============ -->
+  {#if zones.flujo.length > 0}
+    <div class="zona">
+      <h3 class="zona-titulo">Flujo de operaciones</h3>
+      <div class="fases-bar">
+        {#each zones.flujo as fase (fase.nombre)}
+          <div class="fase-chip">
+            <span class="fase-orden">{fase.orden}</span>
+            <span class="fase-nombre">{fase.descripcion || fase.nombre}</span>
+            <span class="fase-ops">{fase.ops.length} ops</span>
+          </div>
+        {/each}
+      </div>
+    </div>
+  {/if}
+
   <!-- ============ ZONA 1: FORMULARIO ============ -->
   {#if zones.formulario.length > 0}
     <div class="zona">
@@ -264,6 +296,7 @@
         <div class="op-card">
           <div class="op-cab">
             <span class="op-nombre">{op.titulo}</span>
+            {#if zones.guardas[op.nombre]?.sensible_estado}<span class="guarda-badge" title="Sensible al estado del pedido">⚡ estado</span>{/if}
             <code class="op-rpc">{moduleId}.{op.nombre}.request</code>
           </div>
           {#if op.descripcion}<p class="op-desc">{op.descripcion}</p>{/if}
@@ -509,4 +542,15 @@
   .tabla th, .tabla td { border: 1px solid var(--color-border, #333); padding: 3px 7px; text-align: left; white-space: nowrap; }
   .tabla th { background: var(--color-surface-2, #1a1a1a); color: var(--color-text-muted, #aaa); font-weight: 600; }
   .tabla td { color: var(--color-text, #ddd); }
+  .estados-bar { display: flex; align-items: center; gap: 0.3rem; flex-wrap: wrap; }
+  .estado-pill { display: inline-flex; align-items: center; gap: 3px; font-size: 0.72rem; padding: 2px 8px; border-radius: 20px; background: color-mix(in srgb, var(--est-color, gray) 15%, transparent); border: 1px solid color-mix(in srgb, var(--est-color, gray) 30%, transparent); color: var(--color-text, #eee); white-space: nowrap; }
+  .estado-pill.terminal { opacity: 0.7; }
+  .estado-icono { font-size: 0.8rem; }
+  .estado-flecha { color: var(--color-text-muted, #666); font-size: 0.7rem; }
+  .fases-bar { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+  .fase-chip { display: flex; align-items: center; gap: 4px; font-size: 0.72rem; padding: 3px 8px; border-radius: 6px; border: 1px solid var(--color-border, #333); background: var(--color-surface-2, #1a1a1a); }
+  .fase-orden { width: 16px; height: 16px; border-radius: 50%; background: var(--color-primary, #eab308); color: #000; display: inline-flex; align-items: center; justify-content: center; font-size: 0.6rem; font-weight: 700; }
+  .fase-nombre { color: var(--color-text, #eee); }
+  .fase-ops { font-size: 0.6rem; color: var(--color-text-muted, #888); }
+  .guarda-badge { font-size: 0.6rem; padding: 1px 5px; border-radius: 4px; background: rgba(245,158,11,0.15); color: #f59e0b; white-space: nowrap; }
 </style>

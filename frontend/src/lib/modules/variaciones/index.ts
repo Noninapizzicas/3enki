@@ -9,10 +9,10 @@ export const variacionesModule: UIModule = {
     zone: 'work-bar',
     button: {
       id: 'variaciones-btn',
-      icon: '📦',
+      icon: '🔀',
       label: 'Variaciones',
       action: { type: 'panel', panelId: 'variaciones-panel' },
-      order: 50
+      order: 55
     },
     panels: [{
       id: 'variaciones-panel',

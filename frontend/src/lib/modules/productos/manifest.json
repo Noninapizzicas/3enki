@@ -3,8 +3,7 @@
   "name": "Productos",
   "version": "0.1.0",
   "zone": "work-bar",
-  "order": 1,
-  "icon": "🍕",
-  "label": "Productos",
-  "universal": true
+  "order": 50,
+  "icon": "📦",
+  "label": "Productos"
 }

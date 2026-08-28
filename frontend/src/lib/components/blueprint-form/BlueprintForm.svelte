@@ -19,7 +19,7 @@
   import { mqttRequest, MqttTimeoutError, MqttRequestError } from '$lib/ui-core/mqtt-request';
   import { subscribe } from '$lib/ui-core/mqtt';
   import { activeProjectId } from '$lib/stores/projects';
-  import { deriveZones, labelize, type BlueprintArg, type BlueprintOp, type BlueprintEventoVivo, type BlueprintDatos } from './blueprint-zones';
+  import { deriveZones, labelize, humanize, type BlueprintArg, type BlueprintOp, type BlueprintEventoVivo, type BlueprintDatos, type BlueprintDetalle } from './blueprint-zones';
   import RefSelect from './RefSelect.svelte';
   import ResultView from './ResultView.svelte';
 
@@ -48,6 +48,11 @@
   let datosCargando = false;
   let datosNeedsArgs = false;
   let datosHint = '';
+
+  // DETALLE: vista drill-down de una entidad
+  let detalleData: Record<string, unknown> | null = null;
+  let detalleCargando = false;
+  let detalleId: string | null = null;
 
   function getProjectId(): string | null {
     if (projectIdOverride) return projectIdOverride;
@@ -81,7 +86,7 @@
   function buildPayload(op: BlueprintOp): { payload: Record<string, unknown>; error: string | null } {
     const payload: Record<string, unknown> = {};
     for (const arg of op.args) {
-      const v = formValues[op]?.[arg.nombre];
+      const v = formValues[op.nombre]?.[arg.nombre];
       if (arg.tipo === 'kv') {
         const kv = (v as { clave?: string; valor?: string }) || {};
         const clave = arg.kvClave ?? kv.clave;
@@ -197,6 +202,61 @@
     }
     datosTitulo = d.titulo;
     datosHint = '';
+  }
+
+  async function loadDetalle(id: string) {
+    if (!zones.detalle) return;
+    const pid = getProjectId();
+    if (!pid) return;
+    detalleId = id;
+    detalleCargando = true;
+    error = '';
+    try {
+      const allOps = [...zones.formulario, ...zones.acciones];
+      const detalleOp = allOps.find(o => o.nombre === zones.detalle!.op);
+      const domain = detalleOp?.dominio || moduleId;
+      const res = await mqttRequest(domain, zones.detalle.op, { project_id: pid, id });
+      detalleData = (res.data && typeof res.data === 'object') ? res.data as Record<string, unknown> : null;
+    } catch (e) {
+      error = `detalle: ${errMsg(e)}`;
+      detalleData = null;
+    } finally {
+      detalleCargando = false;
+    }
+  }
+
+  function closeDetalle() {
+    detalleData = null;
+    detalleId = null;
+  }
+
+  async function runDetalleAction(actionName: string) {
+    if (!detalleId) return;
+    const pid = getProjectId();
+    if (!pid) return;
+    const allOps = [...zones.formulario, ...zones.acciones];
+    const op = allOps.find(o => o.nombre === actionName);
+    if (!op) return;
+    busy = actionName;
+    error = '';
+    try {
+      const payload: Record<string, unknown> = { project_id: pid };
+      const idField = op.args.find(a => a.nombre === 'id' || a.nombre === 'pedido_id' || a.nombre.endsWith('_id'));
+      if (idField) payload[idField.nombre] = detalleId;
+      const res = await mqttRequest(op.dominio || moduleId, actionName, payload);
+      resultados = { ...resultados, [actionName]: { ok: true, msg: `ok (${res.status})`, data: res.data } };
+      if (detalleId) loadDetalle(detalleId);
+      if (zones.datos) loadDatos();
+    } catch (e) {
+      resultados = { ...resultados, [actionName]: { ok: false, msg: errMsg(e) } };
+    } finally {
+      busy = null;
+    }
+  }
+
+  function detalleEstadoActual(): string {
+    if (!detalleData) return '';
+    return String(detalleData['estado'] || detalleData['status'] || '');
   }
 
   function celda(v: unknown): string {
@@ -473,7 +533,11 @@
             </thead>
             <tbody>
               {#each datosFilas as fila, i (i)}
-                <tr>
+                <tr
+                  class:clickable={!!zones.detalle && !!fila['id']}
+                  class:selected={detalleId === String(fila['id'] || '')}
+                  on:click={() => { if (zones.detalle && fila['id']) loadDetalle(String(fila['id'])); }}
+                >
                   {#each datosCols as col}
                     <td>{celda(fila[col])}</td>
                   {/each}
@@ -482,6 +546,127 @@
             </tbody>
           </table>
         </div>
+      {/if}
+    </div>
+  {/if}
+
+  <!-- ============ ZONA 4.5: DETALLE ============ -->
+  {#if zones.detalle && detalleData}
+    {@const det = zones.detalle}
+    {@const estadoActual = detalleEstadoActual()}
+    <div class="zona detalle-zona">
+      <h3 class="zona-titulo">
+        {det.titulo}
+        <button class="cerrar-detalle" on:click={closeDetalle}>✕</button>
+      </h3>
+
+      {#if detalleCargando}
+        <p class="vivo-vacio">cargando…</p>
+      {:else}
+        <!-- Cabecera -->
+        <div class="detalle-cabecera">
+          {#each det.cabecera as campo}
+            <div class="detalle-campo">
+              <span class="detalle-label">{humanize(campo)}</span>
+              <span class="detalle-valor" class:estado-valor={campo === 'estado'}>{celda(detalleData[campo])}</span>
+            </div>
+          {/each}
+        </div>
+
+        <!-- Barra de estado -->
+        {#if det.estados.length > 0}
+          <div class="detalle-estado-bar">
+            {#each det.estados as est}
+              {@const estInfo = zones.estados.find(e => e.nombre === est)}
+              <span
+                class="estado-step"
+                class:activo={est === estadoActual}
+                class:pasado={det.estados.indexOf(est) < det.estados.indexOf(estadoActual)}
+                style="--est-color: {estInfo?.color || 'gray'}"
+              >
+                {#if estInfo}<span class="estado-icono">{estInfo.icono}</span>{/if}
+                {est.replace(/_/g, ' ')}
+              </span>
+              {#if det.estados.indexOf(est) < det.estados.length - 1}
+                <span class="estado-flecha">→</span>
+              {/if}
+            {/each}
+          </div>
+        {/if}
+
+        <!-- Items -->
+        {#if Array.isArray(detalleData[det.campo_items]) && (detalleData[det.campo_items] as unknown[]).length > 0}
+          {@const items = detalleData[det.campo_items] as Record<string, unknown>[]}
+          {@const itemCols = Object.keys(items[0]).filter(k => k !== 'id' && k !== '_id').slice(0, 6)}
+          <div class="detalle-items">
+            <h4 class="detalle-sub">Items ({items.length})</h4>
+            <div class="tabla-wrap">
+              <table class="tabla">
+                <thead><tr>{#each itemCols as col}<th>{humanize(col)}</th>{/each}</tr></thead>
+                <tbody>
+                  {#each items as item, i (i)}
+                    <tr>{#each itemCols as col}<td>{celda(item[col])}</td>{/each}</tr>
+                  {/each}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        {/if}
+
+        <!-- Total -->
+        {#if detalleData[det.campo_total] !== undefined}
+          <div class="detalle-total">
+            <span class="detalle-label">Total</span>
+            <span class="detalle-total-valor">{celda(detalleData[det.campo_total])}</span>
+          </div>
+        {/if}
+
+        <!-- Acciones contextuales -->
+        {#if det.acciones_contextuales.length > 0}
+          <div class="detalle-acciones">
+            <h4 class="detalle-sub">Acciones</h4>
+            <div class="acciones-grid">
+              {#each det.acciones_contextuales as accion}
+                {@const guardado = zones.guardas[accion]?.sensible_estado}
+                <button
+                  class="accion"
+                  class:guarded={guardado}
+                  on:click={() => runDetalleAction(accion)}
+                  disabled={busy === accion}
+                  title={guardado ? `Sensible al estado (${estadoActual})` : humanize(accion)}
+                >
+                  {busy === accion ? '…' : humanize(accion)}
+                  {#if guardado}<span class="guarda-badge-sm">⚡</span>{/if}
+                </button>
+              {/each}
+            </div>
+            {#each det.acciones_contextuales as accion}
+              {#if resultados[accion]}
+                <div class="accion-resultado">
+                  <span class="resultado {resultados[accion].ok ? 'ok' : 'ko'}">
+                    {resultados[accion].ok ? '✓' : '✗'} {humanize(accion)}: {resultados[accion].msg}
+                  </span>
+                </div>
+              {/if}
+            {/each}
+          </div>
+        {/if}
+
+        <!-- Datos crudos (lo que no cubre la estructura) -->
+        {@const extraKeys = Object.keys(detalleData).filter(k => !det.cabecera.includes(k) && k !== det.campo_items && k !== det.campo_total && k !== 'id')}
+        {#if extraKeys.length > 0}
+          <details class="detalle-extra">
+            <summary>Más campos ({extraKeys.length})</summary>
+            <div class="detalle-cabecera">
+              {#each extraKeys as campo}
+                <div class="detalle-campo">
+                  <span class="detalle-label">{humanize(campo)}</span>
+                  <span class="detalle-valor">{celda(detalleData[campo])}</span>
+                </div>
+              {/each}
+            </div>
+          </details>
+        {/if}
       {/if}
     </div>
   {/if}
@@ -553,4 +738,32 @@
   .fase-nombre { color: var(--color-text, #eee); }
   .fase-ops { font-size: 0.6rem; color: var(--color-text-muted, #888); }
   .guarda-badge { font-size: 0.6rem; padding: 1px 5px; border-radius: 4px; background: rgba(245,158,11,0.15); color: #f59e0b; white-space: nowrap; }
+
+  /* Clickable rows (cadena lista→detalle) */
+  .tabla tbody tr.clickable { cursor: pointer; }
+  .tabla tbody tr.clickable:hover { background: rgba(245,158,11,0.08); }
+  .tabla tbody tr.selected { background: rgba(245,158,11,0.15); border-left: 2px solid var(--color-primary, #eab308); }
+
+  /* Zona 4.5: DETALLE */
+  .detalle-zona { border-color: var(--color-primary, #eab308); background: var(--color-surface-2, #1a1a1a); }
+  .detalle-cabecera { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 0.5rem; margin-bottom: 0.5rem; }
+  .detalle-campo { display: flex; flex-direction: column; gap: 1px; }
+  .detalle-label { font-size: 0.65rem; color: var(--color-text-muted, #888); text-transform: uppercase; letter-spacing: 0.03em; }
+  .detalle-valor { font-size: 0.85rem; color: var(--color-text, #eee); word-break: break-word; }
+  .estado-valor { font-weight: 700; color: var(--color-primary, #eab308); }
+  .detalle-estado-bar { display: flex; align-items: center; gap: 0.25rem; flex-wrap: wrap; margin-bottom: 0.5rem; padding: 0.35rem 0; }
+  .estado-step { font-size: 0.68rem; padding: 2px 8px; border-radius: 20px; background: color-mix(in srgb, var(--est-color, gray) 10%, transparent); border: 1px solid color-mix(in srgb, var(--est-color, gray) 20%, transparent); color: var(--color-text-muted, #888); white-space: nowrap; display: inline-flex; align-items: center; gap: 3px; transition: all 0.15s; }
+  .estado-step.activo { background: color-mix(in srgb, var(--est-color, gray) 25%, transparent); border-color: color-mix(in srgb, var(--est-color, gray) 50%, transparent); color: var(--color-text, #eee); font-weight: 700; }
+  .estado-step.pasado { background: color-mix(in srgb, var(--est-color, gray) 15%, transparent); color: var(--color-text, #ccc); }
+  .detalle-items { margin: 0.5rem 0; }
+  .detalle-sub { margin: 0 0 0.3rem; font-size: 0.72rem; color: var(--color-text-muted, #aaa); font-weight: 600; }
+  .detalle-total { display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem 0; border-top: 1px solid var(--color-border, #333); margin-top: 0.3rem; }
+  .detalle-total-valor { font-size: 1rem; font-weight: 700; color: var(--color-primary, #eab308); }
+  .detalle-acciones { margin-top: 0.5rem; padding-top: 0.4rem; border-top: 1px solid var(--color-border, #333); }
+  .accion.guarded { border-color: #f59e0b; background: rgba(245,158,11,0.08); }
+  .guarda-badge-sm { font-size: 0.6rem; margin-left: 2px; }
+  .detalle-extra { margin-top: 0.4rem; font-size: 0.75rem; }
+  .detalle-extra summary { cursor: pointer; color: var(--color-text-muted, #888); font-size: 0.72rem; padding: 0.2rem 0; }
+  .cerrar-detalle { margin-left: auto; cursor: pointer; background: none; border: 1px solid var(--color-border, #333); border-radius: 4px; color: var(--color-text-muted, #888); font-size: 0.75rem; padding: 1px 6px; line-height: 1; }
+  .cerrar-detalle:hover { color: var(--color-text, #eee); border-color: var(--color-text-muted, #888); }
 </style>

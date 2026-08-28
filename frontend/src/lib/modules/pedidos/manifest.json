@@ -3,7 +3,7 @@
   "name": "Pedidos",
   "version": "0.1.0",
   "zone": "work-bar",
-  "order": 50,
-  "icon": "📦",
+  "order": 40,
+  "icon": "🧾",
   "label": "Pedidos"
 }

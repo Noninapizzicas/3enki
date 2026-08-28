@@ -90,11 +90,22 @@ export interface BlueprintDependencia {
   de: string;
 }
 
+export interface BlueprintDetalle {
+  op: string;
+  titulo: string;
+  cabecera: string[];
+  campo_items: string;
+  campo_total: string;
+  estados: string[];
+  acciones_contextuales: string[];
+}
+
 export interface BlueprintZones {
   formulario: BlueprintOp[];
   acciones: BlueprintOp[];
   estadosVivos: BlueprintEventoVivo[];
   datos: BlueprintDatos | null;
+  detalle: BlueprintDetalle | null;
   estados: BlueprintEstado[];
   flujo: BlueprintFase[];
   dependencias: Record<string, BlueprintDependencia[]>;
@@ -288,6 +299,21 @@ export function deriveZones(blueprint: Record<string, unknown> | null | undefine
     };
   }
 
+  // --- DETALLE: ui.detalle (vista drill-down) ---
+  let detalle: BlueprintDetalle | null = null;
+  const uiDetalle = (ui.detalle as Record<string, unknown>) ?? null;
+  if (uiDetalle && typeof uiDetalle.op === 'string') {
+    detalle = {
+      op: uiDetalle.op,
+      titulo: typeof uiDetalle.titulo === 'string' ? uiDetalle.titulo : humanize(uiDetalle.op),
+      cabecera: Array.isArray(uiDetalle.cabecera) ? uiDetalle.cabecera.map(String) : ['id', 'estado'],
+      campo_items: typeof uiDetalle.campo_items === 'string' ? uiDetalle.campo_items : 'items',
+      campo_total: typeof uiDetalle.campo_total === 'string' ? uiDetalle.campo_total : 'total',
+      estados: Array.isArray(uiDetalle.estados) ? uiDetalle.estados.map(String) : [],
+      acciones_contextuales: Array.isArray(uiDetalle.acciones_contextuales) ? uiDetalle.acciones_contextuales.map(String) : [],
+    };
+  }
+
   // --- ESTADOS: ui.estados (ciclo de vida) ---
   const estados: BlueprintEstado[] = [];
   const uiEstados = Array.isArray(ui.estados) ? ui.estados : [];
@@ -334,5 +360,5 @@ export function deriveZones(blueprint: Record<string, unknown> | null | undefine
     guardas[action] = { sensible_estado: g?.sensible_estado === true };
   }
 
-  return { formulario, acciones, estadosVivos, datos, estados, flujo, dependencias, guardas };
+  return { formulario, acciones, estadosVivos, datos, detalle, estados, flujo, dependencias, guardas };
 }

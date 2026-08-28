@@ -9,10 +9,10 @@ export const pedidosModule: UIModule = {
     zone: 'work-bar',
     button: {
       id: 'pedidos-btn',
-      icon: '📦',
+      icon: '🧾',
       label: 'Pedidos',
       action: { type: 'panel', panelId: 'pedidos-panel' },
-      order: 50
+      order: 40
     },
     panels: [{
       id: 'pedidos-panel',

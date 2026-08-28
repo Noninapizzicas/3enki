@@ -1,8 +1,9 @@
 {
-  "schema": "blueprint-interfaz-v1",
+  "schema": "blueprint-interfaz-v2",
   "id": "productos",
-  "version": "blueprint-1.0.0",
+  "version": "blueprint-2.0.0",
   "moduleId": "productos",
+  "actor": "jefe",
   "titulo": "Catalogo de productos pizzepos multi-tenant. PROYECTOR SIN ESTADO: no guarda copia; proyecta la carta activa del proyecto (carta-manager, fuente unica) a formato POS al vuelo via carta.get.request. Lee la carta por su DUEÑO (carta-manager RPC), no por fs directo. Emite catalogo.actualizado como señal de refresco para que comandero/pedidos re-pull. Mutaciones delegan a carta-manager.",
   "eventos_publicados": [
     "catalogo.actualizado",
@@ -21,8 +22,6 @@
       "productos.list.request -> .response",
       "productos.get.request -> .response",
       "productos.search.request -> .response",
-      "productos.update.request -> .response",
-      "productos.delete.request -> .response",
       "productos.categorias.request -> .response",
       "productos.ingredientes.request -> .response",
       "productos.pizzas.request -> .response",
@@ -103,38 +102,6 @@
           }
         ]
       },
-      "update": {
-        "titulo": "Update",
-        "descripcion": "Actualiza campos de un producto. Persiste el catalogo en disco y emite producto.actualizado con el detalle de cambios.",
-        "args": [
-          {
-            "nombre": "id",
-            "tipo": "ref",
-            "required": true,
-            "descripcion": "Identificador del producto.",
-            "ref": "productos.list",
-            "ref_label": "nombre",
-            "ref_value": "id",
-            "placeholder": "selecciona producto"
-          }
-        ]
-      },
-      "delete": {
-        "titulo": "Delete",
-        "descripcion": "Elimina un producto del catalogo y persiste a disco. Emite producto.eliminado.",
-        "args": [
-          {
-            "nombre": "id",
-            "tipo": "ref",
-            "required": true,
-            "descripcion": "Identificador del producto.",
-            "ref": "productos.list",
-            "ref_label": "nombre",
-            "ref_value": "id",
-            "placeholder": "selecciona producto"
-          }
-        ]
-      },
       "categorias": {
         "titulo": "Categorias",
         "descripcion": "Lista categorias del proyecto con contador de productos activos en cada una, ordenadas por orden declarado."
@@ -183,11 +150,91 @@
       }
     },
     "datos": {
-      "op": "get",
-      "titulo": "Get",
+      "op": "list",
+      "titulo": "List",
       "refresh_on": [
         "catalogo.actualizado",
         "tarifas.config.solicitada"
+      ]
+    },
+    "estados": [
+      {
+        "nombre": "borrador",
+        "terminal": false,
+        "color": "gray",
+        "icono": "📝"
+      },
+      {
+        "nombre": "config_solicitada",
+        "terminal": false,
+        "color": "gray",
+        "icono": "⚪"
+      }
+    ],
+    "flujo": [
+      {
+        "nombre": "consulta",
+        "orden": 1,
+        "ops": [
+          "list",
+          "get"
+        ],
+        "descripcion": "Ver y buscar"
+      },
+      {
+        "nombre": "utilidad",
+        "orden": 5,
+        "ops": [
+          "search",
+          "categorias",
+          "ingredientes",
+          "pizzas",
+          "stats",
+          "health",
+          "metrics",
+          "load_carta",
+          "carta_completa"
+        ],
+        "descripcion": "Herramientas"
+      }
+    ],
+    "dependencias": {
+      "list": [
+        {
+          "campo": "categoria_id",
+          "de": "carta_completa"
+        }
+      ],
+      "get": [
+        {
+          "campo": "id",
+          "de": "list"
+        }
+      ]
+    },
+    "detalle": {
+      "op": "get",
+      "titulo": "Detalle de producto",
+      "cabecera": [
+        "id",
+        "estado",
+        "created_at"
+      ],
+      "campo_items": "items",
+      "campo_total": "total",
+      "estados": [
+        "borrador",
+        "config_solicitada"
+      ],
+      "acciones_contextuales": [
+        "search",
+        "categorias",
+        "ingredientes",
+        "pizzas",
+        "stats",
+        "metrics",
+        "load_carta",
+        "carta_completa"
       ]
     }
   }

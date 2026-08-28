@@ -9,17 +9,15 @@ export const productosModule: UIModule = {
     zone: 'work-bar',
     button: {
       id: 'productos-btn',
-      icon: '🍕',
+      icon: '📦',
       label: 'Productos',
       action: { type: 'panel', panelId: 'productos-panel' },
-      order: 1
+      order: 50
     },
     panels: [{
       id: 'productos-panel',
       title: 'Productos',
-      size: 'lg',
-      position: 'right',
-      resizable: true
+      size: 'lg'
     }]
   },
   PanelComponent: ProductosPanel

@@ -6,5 +6,5 @@
 </script>
 
 <div data-productos-panel={panelId}>
-  <BlueprintForm {blueprint} moduleId="productos" titulo="🍕 Productos — generado del blueprint" />
+  <BlueprintForm {blueprint} moduleId="productos" titulo="📦 Productos — generado del blueprint" />
 </div>

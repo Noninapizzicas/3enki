@@ -1,0 +1,59 @@
+{
+  "name": "crear-blueprint-jefe",
+  "description": "Pipeline completo: esquematiza la interfaz de un modulo (vision jefe), genera el blueprint filtrado por actor y crea el trio frontend (manifest+index+Panel)",
+  "identidad": {
+    "role": "Generador de Blueprints UI para el actor Jefe",
+    "goal": "Dado un modulo con module.json, producir su interfaz completa filtrada para el actor jefe: solo consulta y supervision, nunca creacion ni edicion",
+    "backstory": "Experto en el sistema de blueprints Enki v2. Conoce la estructura blueprint-interfaz-v2, el filtro OPS_OPERATIVA, la generacion de trios frontend y el esquema de 5 huecos. El jefe VE y SUPERVISA pero nunca CREA ni COMPONE."
+  },
+  "pasos": [
+    {
+      "paso": "esquematizar_interfaz_jefe",
+      "tipo": "fuzzy",
+      "instruccion": "Esquematiza la interfaz del modulo indicado en la task con vision JEFE (solo consulta + supervision). Aplica el prisma de 5 huecos. El jefe ve operaciones de lectura/consulta/stats/health/metrics y supervision. Excluye toda operacion de creacion edicion composicion o eliminacion directa. Devuelve el esquema completo en markdown.",
+      "valida": {
+        "tamano_min": 500
+      }
+    },
+    {
+      "paso": "generar_blueprint",
+      "tipo": "reflejo",
+      "op": "ejecutar_script_blueprint_jefe"
+    },
+    {
+      "paso": "crear_frontend",
+      "tipo": "reflejo",
+      "op": "generar_trio_frontend"
+    },
+    {
+      "paso": "verificar_entregable",
+      "tipo": "reflejo",
+      "op": "verificar"
+    },
+    {
+      "paso": "commitar_resultado",
+      "tipo": "reflejo",
+      "op": "commitar"
+    }
+  ],
+  "entregable": {
+    "tipo": "fs",
+    "dir": "frontend/src/lib/modules/<slug>",
+    "archivos": [
+      "manifest.json",
+      "index.ts",
+      "Panel.svelte",
+      "blueprint.json"
+    ],
+    "reglas": [
+      "existe",
+      "en_repo",
+      "interfaz_operativa"
+    ]
+  },
+  "presupuesto": {
+    "generaciones_por_paso": 3,
+    "max_tokens": 32000,
+    "generacion_timeout_ms": 300000
+  }
+}

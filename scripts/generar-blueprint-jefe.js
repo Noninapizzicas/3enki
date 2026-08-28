@@ -76,7 +76,7 @@ const SUB_RESOURCE_ID_FIELDS = new Set([
 // Patrones de ops que NO son del jefe (exclusión):
 //   - operativa: create, crear, add-*, update-*, delete-*, send-*, nuevo
 
-const OPS_OPERATIVA = /^(create|crear|crear-tienda|new|nuevo|add|update|delete|edit|editar|send|enviar|agregar|actualizar|eliminar|quitar|remove|escribir|write|put|patch|set|assign|asignar)/i;
+const OPS_OPERATIVA = /^(create|crear|crear-tienda|new|nuevo|add|update|delete|edit|editar|send|enviar|agregar|actualizar|eliminar|quitar|remove|escribir|write|put|patch|set|assign|asignar|configurar|config|configure)/i;
 const OPS_JEFE = /^(list|listar|get|obtener|buscar|leer|show|complete|completar|cancel|cancelar|confirmar|cerrar|close|total|health|status|metrics)/i;
 
 function filtrarPorActor(acciones, actor) {

@@ -1,6 +1,7 @@
 {
   "name": "variaciones",
-  "version": "4.4.0",
+  "version": "4.5.0",
+  "_v4_5_nota": "v4.5.0 (2026-08-28): ROL JEFE — nueva op `configurar` (handleConfigurar): declara las reglas de variación de un producto (permite_quitar, permite_anadir, max_ingredientes_extra, extras_sugeridos). Delega en carta.update_product (custodio), resuelve la carta activa via productos.carta_completa; la carta emite carta.editada → onCartaActualizada reconfigura este módulo solo. Cierra el hueco del esquema (esquema/: el editor de opciones era el único hueco del rol jefe).",
   "_v4_4_nota": "v4.4.0 (2026-06-22): adopta la OPERATIVA del subsistema Opciones (banco de pruebas; el nombre del modulo se queda). _configurar guarda producto.opciones — las de la carta, o DERIVADAS via _shared/derivar-opciones (QUITAR=ingredientes propios + ELEGIR_VARIOS=paleta de su categoria). handleGet devuelve `opciones` + precio_base_centimos (ADITIVO: no rompe el panel actual que aun lee permite_anadir/etc). Nueva op `evaluar` (handleEvaluarOpciones): valida+precia server-side con _shared/motor-opciones (gemelo del tasador).",
   "_v4_2_nota": "v4.2.0 (2026-06-20): WARM en project.activated (cierra el PENDIENTE de v4.1). variaciones vive en memoria (lost_on_restart); sin warm esperaba a la 1a edicion de carta para repoblarse tras un arranque en seco. Ahora onProjectActivated pide la carta activa proyectada al reflejo de productos (uiHandler.handle('productos','carta_completa') — productos resuelve cual es la activa y la proyecta con su campo `variaciones`, anadido a _proyectarProducto) y configura TODOS sus productos. La carta sigue siendo la fuente; aqui solo se lee. Best-effort: si productos no responde, la 1a edicion repobla igual.",
   "_v4_1_nota": "v4.1.0 (2026-06-20): variaciones se configura desde la CARTA (carta.actualizada/editada), no desde el muerto 'producto.creado' (que en la arquitectura carta-based no lo emite NADIE — variaciones quedaba huerfana y no se podia quitar/anadir en ninguna pizza). Mismo patron que ingredientes: el dato vive en la carta, el consumidor la lee. _configurar() unifica la logica; producto.creado se conserva por compat.",
@@ -27,7 +28,8 @@
     { "domain": "variaciones", "action": "calcular_precio", "handler": "handleCalcularPrecio",         "type": "workspace_module", "zone": "barra_modulos" },
     { "domain": "variaciones", "action": "health",          "handler": "handleHealthCheck",            "type": "workspace_module", "zone": "barra_modulos" },
     { "domain": "variaciones", "action": "metrics",         "handler": "handleGetMetrics",             "type": "workspace_module", "zone": "barra_modulos" },
-    { "domain": "variaciones", "action": "evaluar",         "handler": "handleEvaluarOpciones",        "type": "workspace_module", "zone": "barra_modulos" }
+    { "domain": "variaciones", "action": "evaluar",         "handler": "handleEvaluarOpciones",        "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "variaciones", "action": "configurar",      "handler": "handleConfigurar",             "type": "workspace_module", "zone": "barra_modulos" }
   ],
   "tools": [
     {
@@ -88,6 +90,26 @@
       "parameters": { "type": "object", "properties": {}, "additionalProperties": false },
       "handler": "handleGetMetrics",
       "errores_conocidos": []
+    },
+    {
+      "name": "variaciones.configurar",
+      "description": "Configura las reglas de variacion de un producto (ROL JEFE): permite_quitar, permite_anadir, max_ingredientes_extra, extras_sugeridos. Delega en carta.update_product (el custodio), que persiste y emite carta.editada — variaciones se reconfigura automaticamente. Resuelve la carta activa via project_id.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "producto_id": { "type": "string", "description": "Identificador del producto." },
+          "project_id":  { "type": "string", "description": "Proyecto (para resolver la carta activa). Obligatorio si no se pasa carta_id." },
+          "carta_id":    { "type": "string", "description": "Carta concreta (opcional; si falta se resuelve la activa)." },
+          "variaciones": {
+            "type": "object",
+            "description": "Reglas: permite_quitar[ingrediente_id], permite_anadir(bool), max_ingredientes_extra(int), extras_sugeridos[{ingrediente_id, precio_extra?}]."
+          }
+        },
+        "required": ["producto_id", "variaciones"],
+        "additionalProperties": false
+      },
+      "handler": "handleConfigurar",
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "PRECONDITION_FAILED", "UNKNOWN_ERROR"]
     }
   ],
   "dependencies": ["ingredientes"],

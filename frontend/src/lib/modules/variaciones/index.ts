@@ -1,11 +1,3 @@
-/**
- * Módulo Variaciones — ENVOLTORIO del generador schema→UI (patrón interfaz-dinamico).
- * Un único componente (BlueprintForm) renderiza las zonas del panel del módulo
- * 'variaciones' alimentado por su blueprint (variaciones.blueprint.json, sección `ui`).
- * Nada artesanal: este trío es el mismo para CUALQUIER módulo — solo cambia el blueprint.
- * F7 (construir-interfaz): envoltorio mínimo; el BlueprintForm llama mqttRequest directo.
- */
-
 import type { UIModule } from '$lib/ui-core';
 import VariacionesPanel from './VariacionesPanel.svelte';
 
@@ -17,10 +9,10 @@ export const variacionesModule: UIModule = {
     zone: 'work-bar',
     button: {
       id: 'variaciones-btn',
-      icon: '🔧',
+      icon: '📦',
       label: 'Variaciones',
       action: { type: 'panel', panelId: 'variaciones-panel' },
-      order: 16
+      order: 50
     },
     panels: [{
       id: 'variaciones-panel',

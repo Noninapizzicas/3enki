@@ -1,16 +1,10 @@
 #!/usr/bin/env node
 /**
- * generar-blueprint.js — Reflejo determinista.
- * Dado un slug de módulo, lee su module.json y genera el blueprint.json
- * de interfaz con las 4 zonas operacionales + el trío frontend
- * (manifest.json + index.ts + Panel.svelte), SIN usar LLM.
+ * generar-blueprint-jefe.js — Blueprint SOLO para el actor JEFE.
+ * Superficie: consulta + supervisión. Excluye ops de la vía operativa
+ * (crear, componer, enviar — esas son de trabajador/cliente).
  *
- * El blueprint generado sigue el formato que deriveZones() del frontend
- * consume: transporte.rpc[] + ui.ops{} + ui.datos{} + eventos_que_escucho[].
- *
- * Uso: node scripts/generar-blueprint.js <slug> [--deploy] [--no-frontend]
- *   --deploy: copia a /opt/enki tras generar
- *   --no-frontend: solo genera el blueprint, sin el trío frontend
+ * Uso: node scripts/generar-blueprint-jefe.js <slug> [--deploy] [--no-frontend]
  */
 
 const fs = require('fs');
@@ -644,12 +638,12 @@ const deploy = args.includes('--deploy');
 const noFrontend = args.includes('--no-frontend');
 
 if (!target) {
-  console.error('Uso: node scripts/generar-blueprint.js <slug> [--deploy] [--no-frontend]');
+  console.error('Uso: node scripts/generar-blueprint-jefe.js <slug> [--deploy] [--no-frontend]');
   process.exit(1);
 }
 
 try {
-  generar(slug(target), deploy, noFrontend, null);
+  generar(slug(target), deploy, noFrontend, 'jefe');
 } catch (err) {
   console.error('❌ Error:', err.message);
   process.exit(1);

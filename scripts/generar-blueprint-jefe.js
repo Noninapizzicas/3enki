@@ -593,8 +593,8 @@ function generar(slugModule, deploy, noFrontend, actor) {
     },
   };
 
-  // ── Escribir ──
-  const outDir = path.join(REPO_MODULES, slugModule);
+  // ── Escribir (usa el dir real del módulo, respetando verticales como pizzepos/) ──
+  const outDir = found.dir;
   const outPath = path.join(outDir, `${name}.blueprint.json`);
   const contenido = JSON.stringify(blueprint, null, 2) + '\n';
 

@@ -3,6 +3,7 @@
   "id": "variaciones",
   "version": "blueprint-2.0.0",
   "moduleId": "variaciones",
+  "actor": "jefe",
   "titulo": "Gestion de variaciones de productos pizzepos (quitar/anadir ingredientes). Reglas por producto: que se puede quitar, que se puede anadir, maximo de extras. Se configura desde la CARTA (carta.actualizada/editada). Calcula precio final consultando precios al modulo ingredientes (fuente unica via uiHandler.handle('ingredientes', ...)). Auto-valida cada comandero.item_agregado y emite variacion.{validada,rechazada}.",
   "eventos_publicados": [
     "variacion.validada",
@@ -192,6 +193,29 @@
         ],
         "descripcion": "Herramientas"
       }
-    ]
+    ],
+    "detalle": {
+      "op": "get",
+      "titulo": "Detalle de variacione",
+      "cabecera": [
+        "id",
+        "estado",
+        "created_at"
+      ],
+      "campo_items": "items",
+      "campo_total": "total",
+      "estados": [
+        "borrador",
+        "validada",
+        "rechazada"
+      ],
+      "acciones_contextuales": [
+        "validar",
+        "calcular_precio",
+        "metrics",
+        "evaluar",
+        "configurar"
+      ]
+    }
   }
 }

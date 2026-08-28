@@ -6,17 +6,28 @@
       "name": "generar-skill",
       "description": "Genera la SKILL.md de un módulo en la cantera a partir de su código (module.json + index.js).",
       "archivo": "generar-skill.json",
-      "tags": ["documentacion", "cantera", "skill"],
+      "tags": [
+        "documentacion",
+        "cantera",
+        "skill"
+      ],
       "creado": "2026-08-25",
       "ejecuciones": 2,
       "ultima_ejecucion": "2026-08-25",
-      "modulos_procesados": ["composition-manager", "proceso-negocio"]
+      "modulos_procesados": [
+        "composition-manager",
+        "proceso-negocio"
+      ]
     },
     {
       "name": "analizar-log",
       "description": "Analiza el log current.jsonl de Enki, extrae errores, warnings y patrones de los últimos N minutos.",
       "archivo": "analizar-log.json",
-      "tags": ["analisis", "log", "monitoreo"],
+      "tags": [
+        "analisis",
+        "log",
+        "monitoreo"
+      ],
       "creado": "2026-08-25",
       "ejecuciones": 0,
       "ultima_ejecucion": null,
@@ -26,7 +37,11 @@
       "name": "auditar-skills",
       "description": "Recorre todos los módulos del sistema y detecta los que no tienen skill en cantera.",
       "archivo": "auditar-skills.json",
-      "tags": ["auditoria", "cantera", "cobertura"],
+      "tags": [
+        "auditoria",
+        "cantera",
+        "cobertura"
+      ],
       "creado": "2026-08-25",
       "ejecuciones": 0,
       "ultima_ejecucion": null,
@@ -36,7 +51,12 @@
       "name": "generar-blueprint",
       "description": "Genera el blueprint.json de interfaz para un módulo. DETERMINISTA: sin LLM.",
       "archivo": "generar-blueprint.json",
-      "tags": ["interfaz", "blueprint", "ui", "determinista"],
+      "tags": [
+        "interfaz",
+        "blueprint",
+        "ui",
+        "determinista"
+      ],
       "creado": "2026-08-25",
       "ejecuciones": 0,
       "ultima_ejecucion": null,
@@ -46,8 +66,30 @@
       "name": "f6-f7-completo",
       "description": "Pipeline completo F6→F6½→F7 para un módulo: genera blueprint (formato ui.ops) + trío frontend (manifest+index+Panel) + PAGE_CATALOG.",
       "archivo": "f6-f7-completo.json",
-      "tags": ["interfaz", "blueprint", "f7", "f6"],
+      "tags": [
+        "interfaz",
+        "blueprint",
+        "f7",
+        "f6"
+      ],
       "creado": "2026-08-26",
+      "ejecuciones": 0,
+      "ultima_ejecucion": null,
+      "modulos_procesados": []
+    },
+    {
+      "name": "crear-blueprint-jefe",
+      "description": "Blueprint de interfaz con LENTE DE ROLES: cada op clasificada como Jefe (reglas/config) / Utilizacion (al elegir) / neutro. La cara del Jefe primera fase. Extiende generar-blueprint.",
+      "archivo": "crear-blueprint-jefe.json",
+      "tags": [
+        "interfaz",
+        "blueprint",
+        "ui",
+        "roles",
+        "jefe",
+        "utilizacion"
+      ],
+      "creado": "2026-08-28",
       "ejecuciones": 0,
       "ultima_ejecucion": null,
       "modulos_procesados": []

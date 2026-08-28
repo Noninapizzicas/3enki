@@ -1,59 +1,55 @@
 {
   "name": "crear-blueprint-jefe",
-  "description": "Pipeline completo: esquematiza la interfaz de un modulo (vision jefe), genera el blueprint filtrado por actor y crea el trio frontend (manifest+index+Panel)",
+  "description": "Genera el blueprint de interfaz de un módulo aplicando la LENTE DE ROLES: cada op clasificada como Jefe (crea/edita reglas), Utilización (añade/quita al elegir) o neutra. La cara del Jefe se agrupa y destaca como primera fase. Extiende a generar-blueprint (determinista) con la capa de roles.",
   "identidad": {
-    "role": "Generador de Blueprints UI para el actor Jefe",
-    "goal": "Dado un modulo con module.json, producir su interfaz completa filtrada para el actor jefe: solo consulta y supervision, nunca creacion ni edicion",
-    "backstory": "Experto en el sistema de blueprints Enki v2. Conoce la estructura blueprint-interfaz-v2, el filtro OPS_OPERATIVA, la generacion de trios frontend y el esquema de 5 huecos. El jefe VE y SUPERVISA pero nunca CREA ni COMPONE."
+    "role": "Diseñador de Interfaces por Roles de Enki",
+    "goal": "Generar blueprints donde la cara del JEFE (quien declara reglas/config) y la de UTILIZACIÓN (quien consume al elegir) quedan separadas y reconocibles",
+    "backstory": "Eres un diseñador de UI event-driven que analiza módulos por ROLES. El JEFE es la cara de edición del custodio: declara quitables, extras, límites, precios de reglas — escribe en el custodio y el sistema se reconfigura solo. El UTILIZADOR añade/quita al elegir producto: captura con validación del motor. Lo neutro es salud/estado. No improvisas: aplicas la lente de roles sobre las ops reales del module.json; si una op es ambigua, la marcas 'neutro' y lo notas."
   },
   "pasos": [
     {
-      "paso": "esquematizar_interfaz_jefe",
+      "paso": "leer_modulo",
+      "tipo": "reflejo",
+      "op": "leer_modulo"
+    },
+    {
+      "paso": "generar_base",
+      "tipo": "reflejo",
+      "op": "ejecutar_script",
+      "comando": "node scripts/generar-blueprint.js <slug> --no-frontend"
+    },
+    {
+      "paso": "clasificar_roles",
       "tipo": "fuzzy",
-      "instruccion": "Esquematiza la interfaz del modulo indicado en la task con vision JEFE (solo consulta + supervision). Aplica el prisma de 5 huecos. El jefe ve operaciones de lectura/consulta/stats/health/metrics y supervision. Excluye toda operacion de creacion edicion composicion o eliminacion directa. Devuelve el esquema completo en markdown.",
-      "valida": {
-        "tamano_min": 500
-      }
+      "instruccion": "Dado el module.json y el blueprint base del módulo <slug>, clasifica CADA op de ui.ops por ROL: 'jefe' (crea o edita REGLAS/CONFIG del dominio: crear, configurar, permitir, limitar, extras de configuración, precios de reglas), 'utilizacion' (consume AL ELEGIR: añadir/quitar sobre una selección del cliente, evaluar/seleccionar opciones), o 'neutro' (lectura de estado, health, metrics, get/list). Si la op ESCRIBE en reglas → jefe; si opera sobre una ELECCIÓN del cliente final → utilizacion; si solo lee → neutro. Devuelve SOLO un objeto JSON válido, sin markdown ni explicaciones, con esta forma exacta:\n{\"roles\": {\"<op>\": \"jefe|utilizacion|neutro\"}, \"nota\": \"1 línea solo si hubo ambigüedad\"}",
+      "valida": { "tamano_min": 60 }
     },
     {
-      "paso": "generar_blueprint",
+      "paso": "fusionar_roles",
       "tipo": "reflejo",
-      "op": "ejecutar_script_blueprint_jefe"
+      "op": "personalizado",
+      "_detalle": "Inyecta el bloque clasificado en ui.roles del blueprint del módulo + añade fase 'jefe' PRIMERA en ui.flujo (antes de consulta/utilidad) con las ops de rol jefe, y renombra 'utilidad' de la base según roles. Si el módulo vive en vertical (pizzepos/prisma), mover el blueprint de modules/<slug>/ a modules/<vertical>/<slug>/ (bug conocido del script generar-blueprint.js: escribe en la raíz) y rmdir."
     },
     {
-      "paso": "crear_frontend",
-      "tipo": "reflejo",
-      "op": "generar_trio_frontend"
-    },
-    {
-      "paso": "verificar_entregable",
+      "paso": "verificar",
       "tipo": "reflejo",
       "op": "verificar"
     },
     {
-      "paso": "commitar_resultado",
+      "paso": "commitar",
       "tipo": "reflejo",
       "op": "commitar"
     }
   ],
   "entregable": {
     "tipo": "fs",
-    "dir": "frontend/src/lib/modules/<slug>",
-    "archivos": [
-      "manifest.json",
-      "index.ts",
-      "Panel.svelte",
-      "blueprint.json"
-    ],
-    "reglas": [
-      "existe",
-      "en_repo",
-      "interfaz_operativa"
-    ]
+    "path": "modules/<vertical>/<slug>/<slug>.blueprint.json",
+    "reglas": ["existe", "contenido_min", "en_repo"],
+    "min_chars": 800
   },
   "presupuesto": {
-    "generaciones_por_paso": 3,
-    "max_tokens": 32000,
-    "generacion_timeout_ms": 300000
+    "generaciones_por_paso": 2,
+    "max_tokens": 4000,
+    "generacion_timeout_ms": 120000
   }
 }

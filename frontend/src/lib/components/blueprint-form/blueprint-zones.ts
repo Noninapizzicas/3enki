@@ -52,6 +52,7 @@ export interface BlueprintArg {
 
 export interface BlueprintOp {
   nombre: string; // action del RPC (dominio.nombre.request)
+  dominio: string; // dominio RPC real (puede diferir del moduleId)
   titulo: string;
   descripcion?: string;
   args: BlueprintArg[];
@@ -180,6 +181,7 @@ export function deriveZones(blueprint: Record<string, unknown> | null | undefine
   const transporte = (bp.transporte as Record<string, unknown>) ?? {};
   const ui = (bp.ui as Record<string, unknown>) ?? {};
   const uiOps = (ui.ops as Record<string, Record<string, unknown>>) ?? {};
+  const bpModuleId = typeof bp.moduleId === 'string' ? bp.moduleId : '';
 
   // --- Operaciones: transporte.rpc (+ ui.ops que añaden args o titulo) ---
   const opPorAccion = new Map<string, BlueprintOp>();
@@ -196,6 +198,7 @@ export function deriveZones(blueprint: Record<string, unknown> | null | undefine
       : [];
     opPorAccion.set(parsed.accion, {
       nombre: parsed.accion,
+      dominio: parsed.dominio,
       titulo: typeof uiOp?.titulo === 'string' && uiOp.titulo ? uiOp.titulo : humanize(parsed.accion),
       descripcion: typeof uiOp?.descripcion === 'string' ? uiOp.descripcion : undefined,
       args
@@ -210,6 +213,7 @@ export function deriveZones(blueprint: Record<string, unknown> | null | undefine
       : [];
     opPorAccion.set(accion, {
       nombre: accion,
+      dominio: bpModuleId,
       titulo: typeof uiOp.titulo === 'string' && uiOp.titulo ? uiOp.titulo : humanize(accion),
       descripcion: typeof uiOp.descripcion === 'string' ? uiOp.descripcion : undefined,
       args

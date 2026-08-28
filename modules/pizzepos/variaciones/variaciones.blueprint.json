@@ -1,7 +1,7 @@
 {
-  "schema": "blueprint-interfaz-v1",
+  "schema": "blueprint-interfaz-v2",
   "id": "variaciones",
-  "version": "blueprint-1.0.0",
+  "version": "blueprint-2.0.0",
   "moduleId": "variaciones",
   "titulo": "Gestion de variaciones de productos pizzepos (quitar/anadir ingredientes). Reglas por producto: que se puede quitar, que se puede anadir, maximo de extras. Se configura desde la CARTA (carta.actualizada/editada). Calcula precio final consultando precios al modulo ingredientes (fuente unica via uiHandler.handle('ingredientes', ...)). Auto-valida cada comandero.item_agregado y emite variacion.{validada,rechazada}.",
   "eventos_publicados": [
@@ -22,7 +22,8 @@
       "variaciones.calcular_precio.request -> .response",
       "variaciones.health.request -> .response",
       "variaciones.metrics.request -> .response",
-      "variaciones.evaluar.request -> .response"
+      "variaciones.evaluar.request -> .response",
+      "variaciones.configurar.request -> .response"
     ],
     "salida": [
       "variacion.validada",
@@ -107,6 +108,38 @@
       },
       "evaluar": {
         "titulo": "Evaluar"
+      },
+      "configurar": {
+        "titulo": "Configurar",
+        "descripcion": "Configura las reglas de variacion de un producto (ROL JEFE): permite_quitar, permite_anadir, max_ingredientes_extra, extras_sugeridos. Delega en carta.update_product (el custodio), que persiste y emit",
+        "args": [
+          {
+            "nombre": "producto_id",
+            "tipo": "ref",
+            "required": true,
+            "descripcion": "Identificador del producto.",
+            "ref": "productos.carta_completa",
+            "ref_label": "nombre",
+            "ref_value": "id",
+            "placeholder": "selecciona un producto"
+          },
+          {
+            "nombre": "carta_id",
+            "tipo": "ref",
+            "required": false,
+            "descripcion": "Carta concreta (opcional; si falta se resuelve la activa).",
+            "ref": "carta.listar",
+            "ref_label": "nombre",
+            "ref_value": "id",
+            "placeholder": "selecciona un carta"
+          },
+          {
+            "nombre": "variaciones",
+            "tipo": "json",
+            "required": true,
+            "descripcion": "Reglas: permite_quitar[ingrediente_id], permite_anadir(bool), max_ingredientes_extra(int), extras_sugeridos[{ingrediente_id, precio_extra?}]."
+          }
+        ]
       }
     },
     "datos": {
@@ -116,6 +149,49 @@
         "variacion.validada",
         "variacion.rechazada"
       ]
-    }
+    },
+    "estados": [
+      {
+        "nombre": "borrador",
+        "terminal": false,
+        "color": "gray",
+        "icono": "📝"
+      },
+      {
+        "nombre": "validada",
+        "terminal": false,
+        "color": "gray",
+        "icono": "⚪"
+      },
+      {
+        "nombre": "rechazada",
+        "terminal": false,
+        "color": "gray",
+        "icono": "⚪"
+      }
+    ],
+    "flujo": [
+      {
+        "nombre": "consulta",
+        "orden": 1,
+        "ops": [
+          "get"
+        ],
+        "descripcion": "Ver y buscar"
+      },
+      {
+        "nombre": "utilidad",
+        "orden": 5,
+        "ops": [
+          "validar",
+          "calcular_precio",
+          "health",
+          "metrics",
+          "evaluar",
+          "configurar"
+        ],
+        "descripcion": "Herramientas"
+      }
+    ]
   }
 }

@@ -406,6 +406,60 @@ class VariacionesModule extends BaseModule {
   }
 
   // ==========================================
+  // ROL JEFE — configurar reglas de variación (v4.5.0)
+  // ==========================================
+  // El dueño declara las reglas de un producto (quitables, extras con precio, límite).
+  // NO escribe en ficheros: delega en carta.update_product (el custodio), que persiste
+  // campos.variaciones y emite carta.editada → onCartaActualizada reconfigura este módulo
+  // solo. Resuelve la carta activa via productos.carta_completa (el dueño no conoce carta_id).
+
+  async handleConfigurar(data) {
+    const { producto_id, variaciones, project_id } = data || {};
+    if (!producto_id) return this._errorResponse(400, 'INVALID_INPUT', 'producto_id requerido', { field: 'producto_id' });
+    if (!variaciones || typeof variaciones !== 'object') {
+      return this._errorResponse(400, 'INVALID_INPUT', 'variaciones requerido (objeto)', { field: 'variaciones' });
+    }
+
+    // 1. Resolver la carta activa (trae carta_id + valida que el producto exista en ella)
+    let carta_id = data.carta_id || null;
+    if (!carta_id) {
+      if (!project_id) return this._errorResponse(400, 'INVALID_INPUT', 'project_id requerido (o carta_id)', { field: 'project_id' });
+      const res = await this.uiHandler.handle('productos', 'carta_completa', { project_id });
+      if (res?.status !== 200 || !res?.data?.carta_id) {
+        return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'No hay carta activa para el proyecto', { project_id });
+      }
+      const enCarta = (res.data.productos || []).some(p => p.id === producto_id);
+      if (!enCarta) {
+        return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'Producto no encontrado en la carta activa', { producto_id, carta_id: res.data.carta_id });
+      }
+      carta_id = res.data.carta_id;
+    }
+
+    // 2. Delegar en el custodio (carta-manager) — valida y normaliza las reglas
+    const r = await this.uiHandler.handle('carta-manager', 'update_product', {
+      project_id,
+      carta_id,
+      producto_id,
+      campos: { variaciones }
+    });
+    if (r?.status !== 200 && r?.status !== 201) {
+      const err = r?.error || {};
+      return this._errorResponse(r?.status || 500, err.code || 'UNKNOWN_ERROR', err.message || 'carta-manager rechazó la configuración', err.details);
+    }
+
+    return {
+      status: 200,
+      data: {
+        producto_id,
+        carta_id,
+        variaciones: r.data?.producto?.variaciones || null,
+        carta_version: r.data?.carta_version || null,
+        nota: 'carta.editada emitida por el custodio — variaciones se reconfigura automáticamente'
+      }
+    };
+  }
+
+  // ==========================================
   // Event Publishers
   // ==========================================
 

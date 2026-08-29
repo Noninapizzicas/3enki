@@ -1,0 +1,91 @@
+ANATOMÍA DE LÓGICA — variaciones · ROL JEFE
+============================================
+(entrada del agente de UI: qué ofrece el módulo, con qué invariante, y qué
+pantalla necesita el jefe — sin diseñar la pantalla aún)
+
+
+1. NATURALEZA DEL MÓDULO (lo que el agente debe saber antes de pintar)
+=======================================================================
+
+  variaciones es un LECTOR DE LA CARTA + JUEZ DE SELECCIONES.
+  - Las REGLAS de variación viven en la carta (producto.variaciones/opciones).
+  - Si la carta no trae reglas, el módulo las DERIVA solas (determinista:
+    QUITAR = ingredientes propios · AÑADIR = paleta de su categoría).
+  - Su único estado es en memoria (configuraciones por producto), repoblado
+    solo en project.activated (warm desde productos.carta_completa) y en
+    cada carta.editada — la CARTA es la fuente persistente.
+  - El JUZGADO: valida + precia server-side (motor-opciones, céntimos). La
+    UI puede estimar, pero la verdad del precio la fija el módulo.
+
+
+2. EL ROL JEFE EN ESTE MÓDULO (doble cara)
+===========================================
+
+  JEFE DECLARA  ──►  reglas de variación de un producto (qué se puede quitar,
+                     qué extras se ofrecen y a qué precio, límite máximo)
+                     → v4.5.0 op `configurar`: delega en carta.update_product
+                     (custodio único) y resuelve la carta activa sola.
+
+  UTILIZADOR CONSUME (no es jefe): añadir/quitar al elegir producto en el POS
+  (captura emergente por modo: ELEGIR_UNO/ELEGIR_VARIOS/QUITAR/libre) —
+  ese flujo ya está completo y NO se toca aquí.
+
+  NEUTRO: get/validar/calcular_precio/evaluar (lecturas y dictámenes).
+
+
+3. OFERTA DEL MÓDULO (7 ops) mapeada a necesidades del jefe
+============================================================
+
+  OP                          FUNCION                                   PARA LA UI DEL JEFE
+  --------------------------- ----------------------------------------- ----------------------
+  variaciones.get             reglas vigentes de un producto            vista de estado:
+                              (quitables, extras, límite,               transparencia de qué
+                              opciones derivadas o de carta)            rige hoy
+  variaciones.validar         dictamen de una variación concreta        simulador de reglas
+  variaciones.calcular_precio precio con extras                         vista de precio en ficha
+  variaciones.evaluar         valida+precia una selección server-side   (lo usa el POS al elegir)
+  variaciones.configurar      DECLARA las reglas (jefe) — delega        EL EDITOR DE REGLAS:
+                              en carta.update_product; carta.editada    mini-form por producto
+                              → el módulo se reconfigura solo           (quitables/extras/límite)
+  variaciones.health/metrics  estado del sistema                        —
+
+
+4. EVENTOS
+===========
+
+  ESCUCHA (para mantenerse vivo):
+  - carta.actualizada / carta.editada → reconfigura TODOS los productos (fuente: carta)
+  - project.activated                 → warm (pide carta activa a productos y configura)
+  - comandero.item_agregado           → doble verificación: re-valida la variación
+                                        al entrar al buffer y emite el dictamen
+
+  PUBLICA:
+  - variacion.validada   dictamen OK + desglose (ingredientes_finales, precio)
+  - variacion.rechazada  dictamen NO con motivo NOMBRADO (nunca silencio)
+
+
+5. HUECOS (de módulo, para el agente)
+======================================
+
+  H1. Alta de reglas en lote: configurar existe pero es 1 producto por llamada —
+      un jefe con 20 pizzas repite 20 veces. No hay operativa LOTE.
+  H2. Sin evento granular de reglas: al configurar, la señal es carta.editada
+      (gruesa) — no hay variacion.reglas.cambiadas {producto, delta}.
+  H3. No hay vista de DERIVADAS vs DECLARADAS: el jefe no distingue qué reglas
+      escribió él de qué derivó el sistema (get devuelve ambas mezcladas).
+
+
+6. REGLAS DE LÓGICA PARA EL AGENTE DE UI (invariantes)
+=======================================================
+
+  R1. Las reglas viven en la carta: el editor ESCRIBE vía configurar (que delega
+      al custodio) — nunca asume persistencia local.
+  R2. Tras guardar, carta.editada reconfigura el módulo solo: la UI solo espera
+      la señal, no recalcula.
+  R3. La derivación es automática: si el producto no tiene reglas, YA se puede
+      quitar/añadir (derivación) — el panel debe distinguir "regla del jefe"
+      de "derivada por el sistema" (transparencia).
+  R4. El motor es el juez (evaluar): la UI puede ESTIMAR pero jamás fija precio.
+  R5. El límite (max_ingredientes_extra) gobierna el máximo de extras — la UI
+      debe mostrarlo, no negociarlo.
+  R6. Dinero en CÉNTIMOS en el motor; euros en la cara del jefe.

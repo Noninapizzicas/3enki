@@ -59,5 +59,10 @@
     "pr": true,
     "merge": "externo",
     "_nota": "El agente trabaja SIEMPRE en su rama (partir de main limpio) — nunca en main directo. Commita en su rama, push y abre PR. El merge lo revisa y firma el canal externo (el PR es la cola de revisión visible). Si el trabajo sale mal: descartar la rama y punto."
+  },
+  "frontend_sync": {
+    "obligatorio": true,
+    "antes_de": "abrir_el_PR",
+    "_nota": "Si el entregable es un blueprint, copiarlo TAMBIÉN a frontend/src/lib/modules/<slug>/<slug>.blueprint.json y commitear AMBOS en el MISMO PR — la UI renderiza el del frontend, y el deploy (npm run build) compila desde el repo. Sin esta copia el PR se mergea y la UI no cambia nunca."
   }
 }

@@ -155,9 +155,22 @@ El agente NO toca main directo y NO deja trabajo sin versionar. El contrato llev
 }
 ```
 
-Flujo: partir de main limpio → trabajar en `agente/<name>` → commit convencional → push → abrir PR. El PR es la** cola de revisión**: quien firma mira el diff y mergea (o descarta). Si el trabajo sale mal → borrar la rama y punto — main nunca se mancha.
+Flujo: partir de main limpio → trabajar en `agente/<name>` → commit convencional → push → abrir PR. El PR es la cola de revisión: quien firma mira el diff y mergea (o descarta). Si el trabajo sale mal → borrar la rama y punto — main nunca se mancha.
 
 Invocación desde donde sea (chat de Enki, canal externo, cron): el agente siempre sigue el MISMO contrato, así que el resultado es igual de revisable venga de donde venga.
+
+## La copia al FRONTEND va en el MISMO PR (no después del merge)
+
+El blueprint vive en DOS sitios y la UI renderiza el del frontend, no el de modules/:
+
+1. `modules/<vertical>/<slug>/<slug>.blueprint.json` — la fuente (disco)
+2. `frontend/src/lib/modules/<slug>/<slug>.blueprint.json` — el que renderiza BlueprintForm
+
+**Si solo se commitea el de modules/, la UI NO cambia** (pagado 29-ago con mise-en-place y marca-cliente: módulo ya en deploy con roles, UI sin cambios — la copia frontend seguía en 1.0.0).
+
+Regla: el agente, ANTES de abrir el PR, copia el blueprint a su sitio frontend (`cp modules/.../x.blueprint.json frontend/src/lib/modules/<slug>/`) y commitea AMBOS en el mismo PR. Así el deploy — que compila el frontend desde el repo — ya trae la UI nueva al hacerse. El deploy del dueño hace `npm run build` + rsync; quien revisa solo firma el PR.
+
+Checklist post-merge (el firmante): `git pull` en main + deploy — SIN tocar el frontend a mano. Si el PR ya trajo la copia, el deploy basta y la UI refleja el cambio al recargar.
 
 ## Errores a evitar
 

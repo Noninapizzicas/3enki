@@ -14,7 +14,7 @@
    *     vive el micro-estado de la captura (input abierto, error de validación).
    */
 
-  import { formatearPrecio } from '../stores/productos';
+  import { formatearPrecio } from './stores/productos';
 
   export let producto: Producto;
   export let busy = false;

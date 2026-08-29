@@ -3,6 +3,7 @@
   "id": "marca-cliente",
   "version": "blueprint-2.0.0",
   "moduleId": "marca-cliente",
+  "actor": "jefe",
   "titulo": "Relación con el cliente: voz de marca, presencia digital, clientes y fidelización (the-pirate).",
   "eventos_que_escucho": [
     "marca.voz.obtener.request",

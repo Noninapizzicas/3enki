@@ -1,7 +1,8 @@
 {
   "_doc": "Blueprint del modulo mise-en-place (the-pirate). Modulo REFLEJO (index.js determinista, no blueprint-driven) — este blueprint declara SOLO la interfaz del generador schema→UI (BlueprintForm). Seccion `ui` declarada por F6½ (esquematizar-interfaz, 2026-08-18): las 10 operaciones del modulo con sus args reales del contrato y los eventos que refrescan la zona DATOS. Las acciones son DOTTED (escalado.calcular, plan.publicar, compra.calcular...) porque el RPC real del bus es produccion.<accion>.request y el wrapper mqttRequest('mise-en-place', '<accion>') emite ui/request/mise-en-place/<accion> — por eso transporte.rpc va VACIO: la regex de deriveZones solo parsea acciones de 2 segmentos y los topics de 3 segmentos generarian ops fantasma con topic roto. Eventos canonicos con prefix 'produccion.*' (decision del sub-contrato).",
   "id": "mise-en-place",
-  "version": "blueprint-1.0.0",
+  "version": "blueprint-1.1.0",
+  "_lente_roles": "2026-08-29: lente de roles — jefe=plan.publicar/aprobar/ejecutar/cerrar; utilizacion=n/a (módulo de planificación, no de venta); neutro=cálculos puros y lecturas",
 
   "rol": "Planificacion previa al servicio (the-pirate): escalado de recetas a porciones objetivo, planes de produccion (que recetas en que franja con cuantas porciones, state machine propuesto→aprobado→en_ejecucion→cerrado), consolidacion de listas de compra agregando ingredientes a lo largo de un horizonte, retroplanning (ventana de produccion restando la maduracion de masa) y agrupacion de demanda en tandas de masa. Conversores puros + plan con estado; sin acceso cross-modulo (el caller pasa los datos de las recetas).",
 
@@ -117,6 +118,32 @@
       "titulo": "Planes de produccion del proyecto",
       "refresh_on": ["produccion.plan.publicado", "produccion.plan.estado.avanzado"],
       "columnas": ["plan_id", "estado", "lineas_count", "horizonte_desde", "horizonte_hasta"]
-    }
+    },
+    "roles": {
+      "escalado.calcular": "neutro",
+      "plan.publicar": "jefe",
+      "compra.calcular": "neutro",
+      "plan.obtener": "neutro",
+      "planes.listar": "neutro",
+      "retroplanning.calcular": "neutro",
+      "plan.aprobar": "jefe",
+      "plan.ejecutar": "jefe",
+      "plan.cerrar": "jefe",
+      "agrupar_tandas": "neutro"
+    },
+    "flujo": [
+      {
+        "nombre": "jefe",
+        "orden": 1,
+        "ops": ["plan.publicar", "plan.aprobar", "plan.ejecutar", "plan.cerrar"],
+        "descripcion": "Declara y gobierna el plan de producción: publicar, aprobar, ejecutar, cerrar"
+      },
+      {
+        "nombre": "consulta",
+        "orden": 3,
+        "ops": ["planes.listar", "plan.obtener", "retroplanning.calcular", "compra.calcular", "escalado.calcular", "agrupar_tandas"],
+        "descripcion": "Cálculos de apoyo y ver estado"
+      }
+    ]
   }
 }

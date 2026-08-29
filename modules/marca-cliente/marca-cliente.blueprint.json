@@ -47,6 +47,14 @@
       "op": "reglas.leer",
       "titulo": "Reglas.leer"
     },
+    "roles": {
+      "reglas.leer": "neutro",
+      "reglas.actualizar": "jefe",
+      "voz.obtener": "neutro",
+      "presencia.obtener": "neutro",
+      "cliente.obtener": "utilizacion",
+      "fidelizacion.obtener": "utilizacion"
+    },
     "flujo": [
       {
         "nombre": "jefe",
@@ -73,16 +81,8 @@
           "voz.obtener",
           "presencia.obtener"
         ],
-        "descripcion": "Ver reglas vigentes"
+        "descripcion": "Ver las reglas vigentes"
       }
-    ],
-    "roles": {
-      "reglas.leer": "neutro",
-      "reglas.actualizar": "jefe",
-      "voz.obtener": "neutro",
-      "presencia.obtener": "neutro",
-      "cliente.obtener": "utilizacion",
-      "fidelizacion.obtener": "utilizacion"
-    }
+    ]
   }
 }

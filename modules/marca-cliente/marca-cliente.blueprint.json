@@ -1,0 +1,88 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "marca-cliente",
+  "version": "blueprint-2.0.0",
+  "moduleId": "marca-cliente",
+  "titulo": "Relación con el cliente: voz de marca, presencia digital, clientes y fidelización (the-pirate).",
+  "eventos_que_escucho": [
+    "marca.voz.obtener.request",
+    "marca.presencia.obtener.request",
+    "marca.cliente.obtener.request",
+    "marca.fidelizacion.obtener.request",
+    "marca.reglas.leer.request",
+    "marca.reglas.actualizar.request"
+  ],
+  "transporte": {
+    "rpc": [
+      "marca.reglas.leer.request -> .response",
+      "marca.reglas.actualizar.request -> .response",
+      "marca.voz.obtener.request -> .response",
+      "marca.presencia.obtener.request -> .response",
+      "marca.cliente.obtener.request -> .response",
+      "marca.fidelizacion.obtener.request -> .response"
+    ]
+  },
+  "ui": {
+    "ops": {
+      "reglas.leer": {
+        "titulo": "Reglas.leer"
+      },
+      "reglas.actualizar": {
+        "titulo": "Reglas.actualizar"
+      },
+      "voz.obtener": {
+        "titulo": "Voz.obtener"
+      },
+      "presencia.obtener": {
+        "titulo": "Presencia.obtener"
+      },
+      "cliente.obtener": {
+        "titulo": "Cliente.obtener"
+      },
+      "fidelizacion.obtener": {
+        "titulo": "Fidelizacion.obtener"
+      }
+    },
+    "datos": {
+      "op": "reglas.leer",
+      "titulo": "Reglas.leer"
+    },
+    "flujo": [
+      {
+        "nombre": "jefe",
+        "orden": 1,
+        "ops": [
+          "reglas.actualizar"
+        ],
+        "descripcion": "Declara las reglas de marca: voz, presencia, clientes y fidelización (single-writer del dueño)"
+      },
+      {
+        "nombre": "utilizacion",
+        "orden": 2,
+        "ops": [
+          "cliente.obtener",
+          "fidelizacion.obtener"
+        ],
+        "descripcion": "Al atender: consulta de cliente por contacto y puntos/recompensas"
+      },
+      {
+        "nombre": "consulta",
+        "orden": 3,
+        "ops": [
+          "reglas.leer",
+          "voz.obtener",
+          "presencia.obtener"
+        ],
+        "descripcion": "Ver reglas vigentes"
+      }
+    ],
+    "roles": {
+      "reglas.leer": "neutro",
+      "reglas.actualizar": "jefe",
+      "voz.obtener": "neutro",
+      "presencia.obtener": "neutro",
+      "cliente.obtener": "utilizacion",
+      "fidelizacion.obtener": "utilizacion"
+    }
+  }
+}

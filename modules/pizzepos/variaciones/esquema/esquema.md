@@ -3,6 +3,13 @@
 > Sujeto: la modificación de un producto al elegirlo (quitar/añadir), con sus reglas,
 > motor, captura y resultado. Analizado con el esquematizador (prisma recursivo + disección).
 > Ley aplicada: agnosticismo — cero tecnologías nombradas en el análisis; todo entorno es puerto.
+>
+> **Consolidación lente-jefe v2**: ver `pasada-4-consolidacion-formas-ui.md` — veredicto
+> del árbitro 7/7 ops, composición seleccionar→informarse→declarar, formas UI canónicas
+> y señales pareadas. Resumen: `configurar`=JEFE · `evaluar`=UTILIZACIÓN (POS, fuera
+> del panel) · resto neutro. La declaración del jefe es 1 op → 1 `editor-bloque`
+> (las 4 palancas en 1 modal) con señal pareada `carta.editada` (gruesa [ABIERTO H2]).
+> El informe REQUIERE transparencia declarado vs derivado [H3]. Lote [ABIERTO H1]: nombrado, no implementado.
 
 ```
 VARIACIONES
@@ -33,7 +40,11 @@ VARIACIONES
 
 **ROL JEFE (creación y edición de reglas)** — es un CUSTODIO con cara de edición.
 Hoy el dato vive en la carta (`producto.opciones`) y el sistema lo DERIVA cuando la carta
-no lo trae. Lo que falta NO es un módulo: es la **cara de edición** de ese campo:
+no lo trae. Lo que falta NO es un módulo: es la **cara de edición** de ese campo.
+Desde v4.5.0 la escritura existe: op **`configurar`** (delega en `carta.update_product`,
+custodio único; resuelve la carta activa sola). Sus 4 palancas son TODO lo configurable
+(verbales del dueño): `permite_quitar[]`, `permite_anadir`, `max_ingredientes_extra`,
+`extras_sugeridos[{ingrediente_id, precio_extra?}]`.
 
 1. **Editor de opciones por producto** — panel donde el jefe marca qué ingredientes son
    quitables, qué extras se ofrecen (con precio), y el límite máximo. Escribe en

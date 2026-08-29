@@ -51,5 +51,13 @@
     "generaciones_por_paso": 2,
     "max_tokens": 4000,
     "generacion_timeout_ms": 120000
+  },
+  "git": {
+    "modo": "rama-propia",
+    "rama": "agente/crear-blueprint-jefe",
+    "commit": true,
+    "pr": true,
+    "merge": "externo",
+    "_nota": "El agente trabaja SIEMPRE en su rama (partir de main limpio) — nunca en main directo. Commita en su rama, push y abre PR. El merge lo revisa y firma el canal externo (el PR es la cola de revisión visible). Si el trabajo sale mal: descartar la rama y punto."
   }
 }

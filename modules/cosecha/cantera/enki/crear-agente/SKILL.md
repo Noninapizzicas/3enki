@@ -141,6 +141,24 @@ El entregable se verifica EN DISCO, nunca por auto-reporte:
 2. Desde fuera: `ls -la <path>` + tamaño + `git log --oneline -1` (si lleva `en_repo`)
 3. Si el agente reporta "escrito y verificado" pero el archivo no está → success falso; el disco manda
 
+## Git: cada agente, su rama
+
+El agente NO toca main directo y NO deja trabajo sin versionar. El contrato lleva bloque `"git"`:
+
+```json
+"git": {
+  "modo": "rama-propia",
+  "rama": "agente/<name>",
+  "commit": true,
+  "pr": true,
+  "merge": "externo"
+}
+```
+
+Flujo: partir de main limpio → trabajar en `agente/<name>` → commit convencional → push → abrir PR. El PR es la** cola de revisión**: quien firma mira el diff y mergea (o descarta). Si el trabajo sale mal → borrar la rama y punto — main nunca se mancha.
+
+Invocación desde donde sea (chat de Enki, canal externo, cron): el agente siempre sigue el MISMO contrato, así que el resultado es igual de revisable venga de donde venga.
+
 ## Errores a evitar
 
 - **Entregable multi-archivo sin justificación** — el patrón es UN entregable = UN path (F7 es la única excepción: el trío frontend es físicamente inseparable)

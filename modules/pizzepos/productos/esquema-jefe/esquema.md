@@ -81,3 +81,23 @@ El panel del jefe para productos = `CatalogoJefePanel` compuesto por:
 - `precios_de_extras` → hoy: módulo ingredientes
 - `escritor_del_catalogo` → hoy: carta.update_product / carta.add_product / carta.remove_product (custodio)
 - `señal_de_refresco` → hoy: catalogo.actualizado + carta.editada
+
+## Consolidación esquematizador-jefe (pasada 4)
+
+Revisión contra el método (5 preguntas-jefe + lente-roles + formas canónicas):
+las pasadas 1-3 se sostienen; esta pasada NOMBRA lo que faltaba — ver
+`pasada-4-consolidacion-formas-ui.md` para la tabla completa. Resumen:
+
+- **Veredicto del árbitro 13/13 ops**: `update` y `delete` = JEFE · las 11 restantes =
+  neutro (ingredientes/health/metrics marcadas "sistema": fuera del flujo) ·
+  **UTILIZACIÓN: nada** — productos no vende; el POS consume las lecturas.
+- **Composición 3 capas**: SELECCIONAR (ref-select a `productos.carta_completa`:
+  label nombre, value id; la vista viva ES el selector) → INFORMARSE (lecturas +
+  cinta-estado de stats) → DECLARAR (update/delete, única escritura, vía custodio).
+- **Formas UI canónicas mapeadas**: precio/toggle = `inline-gesture` · ficha =
+  `editor-bloque` · retirada = `confirmador-nombrado` · stats = `cinta-estado` ·
+  señal pareada en toda hoja de declaración: `carta.editada` + `catalogo.actualizado`.
+- **[ABIERTO] adicional (c)**: eventos granulares de producto — `producto.creado/
+  actualizado/disponibilidad` NO existen (solo `carta.editada` gruesa): sin señal de
+  alta, sin rastro del apagón de disponibilidad, sin delta auditable. Decisión de
+  dueño + sub-contrato de eventos de la carta; no de esta cara.

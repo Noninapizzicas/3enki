@@ -1,7 +1,7 @@
 {
   "schema": "blueprint-interfaz-v2",
   "id": "variaciones",
-  "version": "blueprint-2.0.0",
+  "version": "blueprint-1.2.0",
   "moduleId": "variaciones",
   "actor": "jefe",
   "titulo": "Gestion de variaciones de productos pizzepos (quitar/anadir ingredientes). Reglas por producto: que se puede quitar, que se puede anadir, maximo de extras. Se configura desde la CARTA (carta.actualizada/editada). Calcula precio final consultando precios al modulo ingredientes (fuente unica via uiHandler.handle('ingredientes', ...)). Auto-valida cada comandero.item_agregado y emite variacion.{validada,rechazada}.",
@@ -23,18 +23,71 @@
       "variaciones.calcular_precio.request -> .response",
       "variaciones.health.request -> .response",
       "variaciones.metrics.request -> .response",
-      "variaciones.evaluar.request -> .response"
+      "variaciones.evaluar.request -> .response",
+      "variaciones.configurar.request -> .response"
     ],
     "salida": [
       "variacion.validada",
       "variacion.rechazada"
     ]
   },
+  "_lente_roles": {
+    "agente": "crear-blueprint-jefe v2",
+    "metodo": "esquematizador-jefe",
+    "arbitro": {
+      "configurar": "jefe",
+      "evaluar": "utilizacion",
+      "get": "neutro",
+      "validar": "neutro",
+      "calcular_precio": "neutro",
+      "health": "neutro_sistema",
+      "metrics": "neutro_sistema"
+    },
+    "nota": "configurar=LA PALANCA (declara las 4 reglas via custodio carta.update_product; carta.editada reconfigura). evaluar es POS/UTILIZACION: fuera del panel del jefe. health/metrics sistema. get devuelve reglas DECLARADAS del jefe mezcladas con DERIVADAS del sistema sin distinguirlas [ABIERTO H3: transparencia requerida en el informe]. Lote [ABIERTO H1]: configurar es 1 producto por llamada. Senal pareada de la fase DECLARAR: carta.editada (gruesa, sin evento granular de reglas) [ABIERTO H2].",
+    "fuente_analisis": "modules/pizzepos/variaciones/esquema/pasada-4-consolidacion-formas-ui.md"
+  },
   "ui": {
     "ops": {
+      "configurar": {
+        "titulo": "Configurar",
+        "rol": "jefe",
+        "forma": "editor-bloque",
+        "descripcion": "Declara las reglas de variacion de UN producto (ROL JEFE): permite_quitar[], permite_anadir, max_ingredientes_extra, extras_sugeridos[{ingrediente_id, precio_extra?}]. Delega en carta.update_product (custodio); carta.editada reconfigura el modulo.",
+        "señal_refresh": "carta.editada",
+        "args": [
+          {
+            "nombre": "producto_id",
+            "tipo": "ref",
+            "required": true,
+            "descripcion": "Identificador del producto.",
+            "ref": "productos.carta_completa",
+            "ref_label": "nombre",
+            "ref_value": "id",
+            "placeholder": "selecciona un producto"
+          },
+          {
+            "nombre": "carta_id",
+            "tipo": "ref",
+            "required": false,
+            "descripcion": "Carta concreta (opcional; si falta se resuelve la activa).",
+            "ref": "carta.listar",
+            "ref_label": "nombre",
+            "ref_value": "id",
+            "placeholder": "selecciona un carta"
+          },
+          {
+            "nombre": "variaciones",
+            "tipo": "json",
+            "required": true,
+            "descripcion": "Las 4 palancas: {permite_quitar:[id], permite_anadir:bool, max_ingredientes_extra:int, extras_sugeridos:[{ingrediente_id, precio_extra_centimos?}]}"
+          }
+        ]
+      },
       "get": {
         "titulo": "Get",
-        "descripcion": "Obtiene la configuracion de variaciones de un producto: ingredientes que se pueden quitar, si permite anadir extras, sugerencias y maximo de extras.",
+        "rol": "neutro",
+        "forma": "cinta-estado",
+        "descripcion": "Reglas vigentes de un producto: quitables, permite anadir, extras sugeridos, maximo — mezcla de reglas DECLARADAS por el jefe y DERIVADAS por el sistema (transparencia H3 en la UI).",
         "args": [
           {
             "nombre": "producto_id",
@@ -50,7 +103,9 @@
       },
       "validar": {
         "titulo": "Validar",
-        "descripcion": "Valida una variacion concreta: comprueba que los ingredientes a quitar esten permitidos y que los extras respeten el limite del producto.",
+        "rol": "neutro",
+        "forma": "cinta-estado",
+        "descripcion": "Dictamen del motor sobre una variacion concreta: comprueba quitables y limite de extras.",
         "args": [
           {
             "nombre": "producto_id",
@@ -78,7 +133,9 @@
       },
       "calcular_precio": {
         "titulo": "Calcular Precio",
-        "descripcion": "Calcula el precio total de un producto con variaciones (precio base + suma de extras consultados al modulo ingredientes).",
+        "rol": "neutro",
+        "forma": "cinta-estado",
+        "descripcion": "Precio total de un producto con variaciones (precio base + extras). El MOTOR es el juez: la UI estima, jamas fija precio (R4).",
         "args": [
           {
             "nombre": "producto_id",
@@ -100,14 +157,18 @@
       },
       "health": {
         "titulo": "Health",
+        "rol": "neutro_sistema",
         "descripcion": "Health check del modulo variaciones: estado del modulo, version y total de productos configurados."
       },
       "metrics": {
         "titulo": "Metrics",
+        "rol": "neutro_sistema",
         "descripcion": "Metricas operativas del modulo variaciones (counters de variaciones validadas/rechazadas y gauges)."
       },
       "evaluar": {
-        "titulo": "Evaluar"
+        "titulo": "Evaluar",
+        "rol": "utilizacion",
+        "descripcion": "Valida y precia una seleccion del cliente al elegir producto (POS/OpcionesSheet). FUERA del panel del jefe: cara de utilizacion, ya completa."
       }
     },
     "datos": {
@@ -140,24 +201,22 @@
     ],
     "flujo": [
       {
-        "nombre": "consulta",
+        "nombre": "jefe",
         "orden": 1,
         "ops": [
-          "get"
+          "configurar"
         ],
-        "descripcion": "Ver y buscar"
+        "descripcion": "Declarar reglas: editor-bloque con las 4 palancas (signal: carta.editada)"
       },
       {
-        "nombre": "utilidad",
-        "orden": 5,
+        "nombre": "consulta",
+        "orden": 2,
         "ops": [
+          "get",
           "validar",
-          "calcular_precio",
-          "health",
-          "metrics",
-          "evaluar"
+          "calcular_precio"
         ],
-        "descripcion": "Herramientas"
+        "descripcion": "Informe de reglas vigentes + simulador (dictamen del motor)"
       }
     ],
     "detalle": {
@@ -178,8 +237,7 @@
       "acciones_contextuales": [
         "validar",
         "calcular_precio",
-        "metrics",
-        "evaluar"
+        "metrics"
       ]
     }
   }

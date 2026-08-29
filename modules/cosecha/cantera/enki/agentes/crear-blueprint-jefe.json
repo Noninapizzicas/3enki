@@ -1,16 +1,29 @@
 {
   "name": "crear-blueprint-jefe",
-  "description": "Genera el blueprint de interfaz de un módulo aplicando la LENTE DE ROLES: cada op clasificada como Jefe (crea/edita reglas), Utilización (añade/quita al elegir) o neutra. La cara del Jefe se agrupa y destaca como primera fase. Extiende a generar-blueprint (determinista) con la capa de roles.",
+  "description": "Genera el blueprint de interfaz de un módulo aplicando la LENTE DE ROLES a través del AGENTE-FASE 1 (análisis con esquematizador-jefe: la cara del rol jefe del módulo — qué declara, de qué se informa, qué señales la sostienen) y la FASE 2 (clasificar roles sobre el blueprint base). Varias fases: análisis-jefe → blueprint base → roles → fusion → verificar → commit.",
   "identidad": {
     "role": "Diseñador de Interfaces por Roles de Enki",
-    "goal": "Generar blueprints donde la cara del JEFE (quien declara reglas/config) y la de UTILIZACIÓN (quien consume al elegir) quedan separadas y reconocibles",
-    "backstory": "Eres un diseñador de UI event-driven que analiza módulos por ROLES. El JEFE es la cara de edición del custodio: declara quitables, extras, límites, precios de reglas — escribe en el custodio y el sistema se reconfigura solo. El UTILIZADOR añade/quita al elegir producto: captura con validación del motor. Lo neutro es salud/estado. No improvisas: aplicas la lente de roles sobre las ops reales del module.json; si una op es ambigua, la marcas 'neutro' y lo notas."
+    "goal": "Generar blueprints donde la cara del JEFE (quien declara reglas/config) y la de UTILIZACIÓN (quien consume al elegir) quedan separadas y reconocibles — apoyado en el análisis del esquematizador-jefe",
+    "backstory": "Eres un diseñador de UI event-driven que analiza módulos por ROLES. El JEFE es la cara de edición del custodio: declara quitables, extras, límites, precios de reglas — escribe en el custodio y el sistema se reconfigura solo. El UTILIZADOR añade/quita al elegir producto: captura con validación del motor. Lo neutro es salud/estado. Tu primera herramienta es el ESQUEMATIZADOR-JEFE (carga la skill 'esquematizador-jefe' de la cantera): prisma de 5 huecos con las preguntas del jefe (qué DECIDE, de qué NO depende, qué VER y qué SEÑAL confirma, qué NO es suyo, qué decisión es SUYA y pendiente), lente-roles árbitro (escribe→jefe · ejecuta-ahora→utilizacion · solo lee→neutro), umbral atómico = pieza dibujable (ref-select · inline-gesture · editor-bloque · confirmador-nombrado · cinta-estado · señal-refresh). No improvisas: el análisis sale en archivos (esquema-jefe/) y DE ÉL deriva la clasificación de roles del blueprint."
   },
   "pasos": [
     {
-      "paso": "leer_modulo",
+      "paso": "cargar_esquematizador_jefe",
       "tipo": "reflejo",
-      "op": "leer_modulo"
+      "op": "personalizado",
+      "_detalle": "Cargar la skill esquematizador-jefe de la cantera (modules/cosecha/cantera/enki/esquematizador-jefe/SKILL.md) como MÉTODO de la fase de análisis. No es opcional: define el sujeto (la cara del rol jefe, no el módulo entero), el alimento (eventos+elementos+invariantes del módulo), las 5 preguntas por hueco, el árbitro de lente-roles y las formas UI de la disección."
+    },
+    {
+      "paso": "alimentar_analisis",
+      "tipo": "reflejo",
+      "op": "leer_modulo",
+      "_detalle": "Leer module.json + index.js del módulo target y extraer los 3 informes del alimento: (1) eventos publica/escucha + huecos, (2) elementos/handlers mapeados a necesidades del jefe, (3) invariantes del módulo (fuentes, custodios, estado). Si existen análisis previos (esquema-jefe/, logica-para-ui.txt), reutilizarlos en vez de repetir."
+    },
+    {
+      "paso": "esquematizar_jefe",
+      "tipo": "fuzzy",
+      "instruccion": "Ejecuta el esquematizador-jefe sobre la cara del ROL JEFE del módulo <slug>. Sigue su método EXACTO: prisma de 5 huecos con las preguntas-jefe (IDENTIDAD=qué decide el jefe · RESTRICCIONES=qué no depende de él/custodios · CONTRATO=qué ve y qué señal confirma · NO-OBJETIVOS=caras no-jefe · ABIERTAS=decisiones suyas pendientes, se NOMBRAN no se cierran), recursión ronda a ronda escribiendo cada pasada en su archivo (modules/<ruta>/<slug>/esquema-jefe/pasada-N-*.md), y al tocar suelo la disección con las FORMAS UI (ref-select · inline-gesture · editor-bloque · confirmador-nombrado · cinta-estado · señal-refresh — toda hoja de declaración lleva su señal pareada). El árbitro de lente-roles separa: escriben→jefe · ejecutan-ahora→utilizacion(FUERA del panel del jefe) · solo leen→neutro. Entregable: esquema-jefe/esquema.md con el árbol maestro (decisiones del jefe, señales, huecos [ABIERTO], invariantes, composición seleccionar→informarse→declarar). LA CLASIFICACIÓN DE ROLES DEL BLUEPRINT SALE DE ESTE ANÁLISIS, no de intuición.",
+      "valida": { "tamano_min": 1500 }
     },
     {
       "paso": "generar_base",
@@ -20,15 +33,21 @@
     },
     {
       "paso": "clasificar_roles",
-      "tipo": "fuzzy",
-      "instruccion": "Dado el module.json y el blueprint base del módulo <slug>, clasifica CADA op de ui.ops por ROL: 'jefe' (crea o edita REGLAS/CONFIG del dominio: crear, configurar, permitir, limitar, extras de configuración, precios de reglas), 'utilizacion' (consume AL ELEGIR: añadir/quitar sobre una selección del cliente, evaluar/seleccionar opciones), o 'neutro' (lectura de estado, health, metrics, get/list). Si la op ESCRIBE en reglas → jefe; si opera sobre una ELECCIÓN del cliente final → utilizacion; si solo lee → neutro. Devuelve SOLO un objeto JSON válido, sin markdown ni explicaciones, con esta forma exacta:\n{\"roles\": {\"<op>\": \"jefe|utilizacion|neutro\"}, \"nota\": \"1 línea solo si hubo ambigüedad\"}",
-      "valida": { "tamano_min": 60 }
+      "tipo": "reflejo",
+      "op": "personalizado",
+      "_detalle": "La clasificación ya NO se improvisa: transcribir del esquema-jefe (paso anterior) el veredicto de lente-roles por op en ui.roles + ui.flujo (fase jefe PRIMERA). Si alguna op del blueprint no aparece en el esquema, marcarla 'neutro' y anotarlo en la nota."
     },
     {
       "paso": "fusionar_roles",
       "tipo": "reflejo",
       "op": "personalizado",
-      "_detalle": "Inyecta el bloque clasificado en ui.roles del blueprint del módulo + añade fase 'jefe' PRIMERA en ui.flujo (antes de consulta/utilidad) con las ops de rol jefe, y renombra 'utilidad' de la base según roles. Si el módulo vive en vertical (pizzepos/prisma), mover el blueprint de modules/<slug>/ a modules/<vertical>/<slug>/ (bug conocido del script generar-blueprint.js: escribe en la raíz) y rmdir."
+      "_detalle": "Inyecta ui.roles y ui.flujo (fase jefe primera) en el blueprint del módulo. Si el módulo vive en vertical (pizzepos/prisma), mover el blueprint de modules/<slug>/ a modules/<vertical>/<slug>/ (bug conocido del script: escribe en la raíz) y rmdir. NO tocar frontend aún."
+    },
+    {
+      "paso": "frontend_sync",
+      "tipo": "reflejo",
+      "op": "personalizado",
+      "_detalle": "Copiar el blueprint a frontend/src/lib/modules/<slug>/<slug>.blueprint.json (frontend_sync del contrato: la UI renderiza el del frontend y el deploy compila desde el repo — sin esta copia el PR nunca cambia la UI). Ambos sitios van en el MISMO commit."
     },
     {
       "paso": "verificar",
@@ -43,7 +62,13 @@
   ],
   "entregable": {
     "tipo": "fs",
-    "path": "modules/<vertical>/<slug>/<slug>.blueprint.json",
+    "dir": "<ruta del módulo>/esquema-jefe",
+    "archivos": [
+      "modules/<vertical>/<slug>/esquema-jefe/esquema.md",
+      "modules/<vertical>/<slug>/esquema-jefe/pasada-*.md",
+      "modules/<vertical>/<slug>/<slug>.blueprint.json",
+      "frontend/src/lib/modules/<slug>/<slug>.blueprint.json"
+    ],
     "reglas": ["existe", "contenido_min", "en_repo"],
     "min_chars": 800
   },

@@ -1,0 +1,210 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "cobros",
+  "version": "blueprint-2.0.0",
+  "moduleId": "cobros",
+  "titulo": "El PAGO UNIVERSAL de Prisma (7 metodos: efectivo, tarjeta, bizum, transferencia, mixto, link_pago, qr). El JEFE GESTIONA los cobros del dia: verlos, CONFIRMAR el pago (la transicion central: pendiente/procesando -> completado, emite cobro.procesado y abre cajon en efectivo) y REEMBOLSAR (completado -> reembolsado, emite cobro.reembolsado). El POS cobra al cliente (utilizacion, fuera); este panel es la cara de gestion del dia.",
+  "_doc": "Blueprint v2 de INTERFAZ de la cara del JEFE del modulo cobros (pizzepos v3.0.0, REFLEJO JS puro: 9 ui_handlers reales). CREADO en ciclo v2 (30-ago-2026) — no existia blueprint previo. Schema 'blueprint-interfaz-v2' (lente de roles esquematizador-jefe). Los 9 ui_handlers reales de module.json: create, list, get, confirm, refund, payment-methods, list-cajones, health, metrics. RPC real: ui/request/cobros/<accion> (ui_handlers declarados). El panel-jefe es una ESTACION DE TRANSICIONES del dinero del dia: ver que hay pendiente, confirmar lo cobrado, reembolsar lo que haya que devolver. Moneda EUROS (monto + propina = monto_total; cambio = monto_recibido - monto_total). Verificaciones de codigo: modules/pizzepos/cobros/index.js 665 lineas (handlers L156-444, senales L493-527), schemas/cobro.json, module.json (9 ui_handlers). Nada inventado: ver _verificado_en_codigo.",
+  "eventos_publicados": [
+    "cobro.iniciado",
+    "cobro.procesado",
+    "cobro.reembolsado",
+    "periferico.abrir-cajon"
+  ],
+  "eventos_que_escucho": [
+    "cobro.iniciado",
+    "cobro.procesado",
+    "cobro.reembolsado"
+  ],
+  "transporte": {
+    "rpc": [
+      "ui/request/cobros/create (ui_handler) -> respuesta directa",
+      "ui/request/cobros/list (ui_handler) -> respuesta directa",
+      "ui/request/cobros/get (ui_handler) -> respuesta directa",
+      "ui/request/cobros/confirm (ui_handler) -> respuesta directa",
+      "ui/request/cobros/refund (ui_handler) -> respuesta directa",
+      "ui/request/cobros/payment-methods (ui_handler) -> respuesta directa",
+      "ui/request/cobros/list-cajones (ui_handler) -> respuesta directa",
+      "ui/request/cobros/health (ui_handler) -> respuesta directa",
+      "ui/request/cobros/metrics (ui_handler) -> respuesta directa"
+    ],
+    "salida": [
+      "cobro.iniciado",
+      "cobro.procesado",
+      "cobro.reembolsado",
+      "periferico.abrir-cajon (confirm en efectivo, best-effort)"
+    ]
+  },
+  "ui": {
+    "_doc": "Panel de la CARA DEL JEFE de cobros: INFORMARSE (cinta del dia + selector de cobro + detalle), DECLARAR (CONFIRMAR el pago pendiente — la transicion central; REEMBOLSAR el completado — transicion inversa destructiva). Jefe-primero: primero la cinta y las tarjetas de cobros pendientes (lo diario), despues los gestos de transicion confirm/refund. El POS cobra al cliente (utilizacion, fuera); este panel gestiona el dia.",
+    "ops": {
+      "create": {
+        "titulo": "Iniciar cobro",
+        "descripcion": "Inicia un cobro nuevo sobre una cuenta con metodo de pago, monto, propina opcional y desglose (para mixto). Idempotente por cuenta (rechaza si ya hay pendiente/procesando/completado). Emite cobro.iniciado.",
+        "args": [
+          { "nombre": "cuenta_id", "tipo": "text", "required": true, "placeholder": "id de la cuenta a cobrar" },
+          { "nombre": "monto", "tipo": "number", "required": true, "placeholder": "monto total a cobrar (euros, > 0)" },
+          { "nombre": "metodo_pago", "tipo": "select", "required": true, "enum": ["efectivo", "tarjeta", "bizum", "transferencia", "mixto", "link_pago", "qr"], "descripcion": "Metodo de pago." },
+          { "nombre": "pedido_ids", "tipo": "json", "required": false, "descripcion": "IDs de pedidos asociados (opcional)." },
+          { "nombre": "propina", "tipo": "number", "required": false, "placeholder": "propina opcional" },
+          { "nombre": "monto_recibido", "tipo": "number", "required": false, "placeholder": "monto recibido en efectivo (para calcular cambio)" },
+          { "nombre": "desglose", "tipo": "json", "required": false, "descripcion": "Desglose por metodo en pagos mixtos." }
+        ]
+      },
+      "list": {
+        "titulo": "Listar cobros",
+        "descripcion": "Lista cobros con filtros opcionales por cuenta_id, estado y metodo_pago. Orden descendente por fecha de creacion. Respuesta {cobros[], total}.",
+        "args": [
+          { "nombre": "cuenta_id", "tipo": "text", "required": false, "placeholder": "filtro por cuenta" },
+          { "nombre": "estado", "tipo": "select", "required": false, "enum": ["pendiente", "procesando", "completado", "fallido", "reembolsado"], "descripcion": "Filtro por estado." },
+          { "nombre": "metodo_pago", "tipo": "select", "required": false, "enum": ["efectivo", "tarjeta", "bizum", "transferencia", "mixto", "link_pago", "qr"], "descripcion": "Filtro por metodo de pago." }
+        ]
+      },
+      "get": {
+        "titulo": "Ver un cobro",
+        "descripcion": "Obtiene un cobro por id (detalle completo: cuenta, metodo, monto_total, propina, cambio, referencia).",
+        "args": [
+          { "nombre": "id", "tipo": "ref", "required": true, "descripcion": "Identificador del cobro.", "ref": "cobro.list", "ref_label": "id", "ref_value": "id", "placeholder": "selecciona cobro" }
+        ]
+      },
+      "confirm": {
+        "titulo": "Confirmar cobro",
+        "descripcion": "Confirma un cobro pendiente o procesando. LA TRANSICION: pendiente/procesando -> completado. Emite cobro.procesado, abre cajon en efectivo y registra metricas.",
+        "args": [
+          { "nombre": "id", "tipo": "ref", "required": true, "descripcion": "Identificador del cobro.", "ref": "cobro.list", "ref_label": "id", "ref_value": "id", "placeholder": "selecciona cobro" },
+          { "nombre": "referencia_pago", "tipo": "text", "required": false, "placeholder": "referencia opcional del pago externo" }
+        ]
+      },
+      "refund": {
+        "titulo": "Reembolsar cobro",
+        "descripcion": "Reembolsa un cobro completado. Transicion inversa: completado -> reembolsado. Emite cobro.reembolsado.",
+        "args": [
+          { "nombre": "id", "tipo": "ref", "required": true, "descripcion": "Identificador del cobro.", "ref": "cobro.list", "ref_label": "id", "ref_value": "id", "placeholder": "selecciona cobro" },
+          { "nombre": "motivo", "tipo": "text", "required": false, "placeholder": "motivo del reembolso (opcional)" }
+        ]
+      },
+      "payment-methods": {
+        "titulo": "Metodos de pago",
+        "descripcion": "Lista los 7 metodos de pago canonicos disponibles con su nombre legible."
+      },
+      "list-cajones": {
+        "titulo": "Cajones",
+        "descripcion": "Lista los cajones de dinero conectados (consulta a perifericos)."
+      },
+      "health": {
+        "titulo": "Health",
+        "descripcion": "Health check del modulo cobros."
+      },
+      "metrics": {
+        "titulo": "Metricas",
+        "descripcion": "Metricas operativas de cobros (counters y gauges)."
+      }
+    },
+    "datos": {
+      "op": "list",
+      "titulo": "Cobros del dia",
+      "refresh_on": [
+        "cobro.iniciado",
+        "cobro.procesado",
+        "cobro.reembolsado"
+      ],
+      "columnas": [
+        "id",
+        "cuenta_id",
+        "metodo_pago",
+        "monto_total",
+        "estado",
+        "created_at"
+      ]
+    },
+    "estados": [
+      { "nombre": "pendiente", "terminal": false, "color": "yellow", "icono": "PENDIENTE" },
+      { "nombre": "procesando", "terminal": false, "color": "blue", "icono": "PROCESANDO" },
+      { "nombre": "completado", "terminal": true, "color": "green", "icono": "COMPLETADO" },
+      { "nombre": "fallido", "terminal": true, "color": "red", "icono": "FALLIDO" },
+      { "nombre": "reembolsado", "terminal": true, "color": "gray", "icono": "REEMBOLSADO" }
+    ],
+    "flujo": [
+      {
+        "nombre": "jefe",
+        "orden": 1,
+        "ops": ["create", "confirm", "refund"],
+        "descripcion": "DECLARAR la gestion del dinero del dia: INICIAR cobro (create, idempotente por cuenta), CONFIRMAR el pago (la transicion central: pendiente/procesando -> completado, emite cobro.procesado y abre cajon en efectivo) y REEMBOLSAR (completado -> reembolsado, transicion inversa destructiva)."
+      },
+      {
+        "nombre": "consulta",
+        "orden": 3,
+        "ops": ["list", "get", "payment-methods", "list-cajones", "health", "metrics"],
+        "descripcion": "INFORMARSE antes de decidir: la cinta del dia (n cobros hoy · n confirmados · n reembolsados), el detalle del cobro seleccionado (cuenta, metodo, monto_total, propina, cambio, referencia), los 7 metodos canonicos y los cajones conectados."
+      }
+    ],
+    "roles": {
+      "create": "jefe",
+      "confirm": "jefe",
+      "refund": "jefe",
+      "list": "neutro",
+      "get": "neutro",
+      "payment-methods": "neutro",
+      "list-cajones": "neutro",
+      "health": "neutro",
+      "metrics": "neutro"
+    },
+    "formas_jefe": {
+      "cinta_dia": {
+        "forma": "cinta-estado",
+        "rpc": "cobro.list {project_id, estado} -> n cobros hoy · n confirmados · n reembolsados",
+        "senal": "cobro.iniciado + cobro.procesado + cobro.reembolsado (debounce 60ms, una re-lectura)"
+      },
+      "selector_cobro": {
+        "forma": "ref-select",
+        "rpc": "cobro.list {project_id} -> cobros[]{id, cuenta_id, metodo_pago, monto_total, estado, created_at}",
+        "senal": null
+      },
+      "detalle_cobro": {
+        "forma": "cinta-estado/informe",
+        "rpc": "cobro.get {project_id, id} -> cobro completo (cuenta, metodo, monto_total, propina, cambio, referencia)",
+        "senal": "cobro.procesado + cobro.reembolsado"
+      },
+      "confirmar_cobro": {
+        "forma": "confirmador-nombrado (transicion de dinero): 'confirma el cobro de X €' — nombra cuenta (ref_display) + monto_total + metodo",
+        "rpc": "cobro.confirm {project_id, id, referencia_pago?} -> 200 {cobro completado} | 409 CONFLICT_STATE (no pendiente/procesando)",
+        "senal": "cobro.procesado (1x) + periferico.abrir-cajon si efectivo (best-effort)"
+      },
+      "reembolsar_cobro": {
+        "forma": "confirmador-nombrado (destructiva, devuelve dinero): 'reembolsa X €' — nombra cuenta + monto_total + motivo opcional; default recomendado NO reembolsar",
+        "rpc": "cobro.refund {project_id, id, motivo?} -> 200 {cobro reembolsado} | 409 CONFLICT_STATE (no completado)",
+        "senal": "cobro.reembolsado (1x)"
+      }
+    }
+  },
+  "_lente_roles": {
+    "agente": "ciclo-cobros v2",
+    "metodo": "esquematizador-jefe (modules/pizzepos/cobros/esquema-jefe/ — pasada-1, pasada-2, pasada-3, esquema.md)",
+    "arbitro": "¿decide el FUTURO del dinero del dia (transiciona el ciclo de vida del cobro)? -> jefe · ¿solo lee/informa? -> neutro · ¿cobra al cliente en la venta? -> utilizacion (POS, fuera)",
+    "veredicto": "9/9 ops juzgadas: jefe(3) create (inicia el cobro sobre una cuenta, idempotente por cuenta, emite cobro.iniciado) + confirm (LA TRANSICION: pendiente/procesando -> completado, emite cobro.procesado que cuentas escucha para marcar como cobrado, abre cajon en efectivo) + refund (transicion inversa: completado -> reembolsado, emite cobro.reembolsado) · neutro(6) list (cinta + ref-select) + get (detalle) + payment-methods (7 metodos canonicos) + list-cajones (cajones conectados) + health + metrics (sistema).",
+    "senales": "create -> cobro.iniciado (index.js L493, 1x) · confirm -> cobro.procesado (L505, 1x) + periferico.abrir-cajon (L537, solo efectivo, best-effort) · refund -> cobro.reembolsado (L518, 1x) · list/get/payment-methods/list-cajones/health/metrics -> lecturas sin señal.",
+    "nota_moneda": "El cobro trabaja en EUROS (no centimos): monto + propina = monto_total; cambio = monto_recibido - monto_total; toFixed(2) en el desglose mixto. El formateo del panel usa euros.",
+    "nota_project_id": "TODOS los RPC del store deben inyectar project_id (leccion bug escandallo: la cinta fallaba con 'project_id requerido'). El modulo lee cobro.project_id en los publishers; el store lo inyecta en cada mqttRequest.",
+    "dualidad": "JEFE=gestion del dinero del dia (create/confirm/refund) | UTILIZACION=el POS cobra al cliente (comandero/cuenta llama cobro.create al cobrar — fuera del panel) | neutro=list/get/payment-methods/list-cajones/health/metrics (lecturas que alimentan la gestion)",
+    "huecos_abiertos": [
+      "[ABIERTO] estado 'procesando': el modulo lo acepta en confirm pero create solo genera 'pendiente'. Quien pone un cobro en procesando? (el gateway externo de link_pago/QR?) — decision de dueño sobre el grafo.",
+      "[ABIERTO] historico real: los cobros viven solo hasta caja.cerrada/dia.iniciado (in-memory, restart_resilient:false). 'n cobros hoy' muere al cerrar caja. Persistencia real (disco) es decision de dueño.",
+      "[ABIERTO] estado 'fallido': existe en el schema pero ningun handler lo produce hoy. Cuando se marca un cobro fallido? — decision de dueño.",
+      "[ABIERTO] reembolso parcial: refund reembolsa el monto_total completo. Reembolso parcial (por metodo, por linea) es decision de dueño."
+    ],
+    "utilizacion": [],
+    "fuente_analisis": "modules/pizzepos/cobros/esquema-jefe/esquema.md",
+    "fecha": "2026-08-30"
+  },
+  "_verificado_en_codigo": {
+    "reflejo": "modules/pizzepos/cobros/index.js (v3.0.0, 665 lineas)",
+    "ui_handlers": "module.json: create (L156), list (L299), get (L313), confirm (L328), refund (L373), payment-methods (L411), list-cajones (L561), health (L424), metrics (L436)",
+    "senales": "cobro.iniciado (L493, publishCobroIniciado) · cobro.procesado (L505, publishCobroProcesado) · cobro.reembolsado (L518, publishCobroReembolsado) · periferico.abrir-cajon (L537, abrirCajonDinero, solo efectivo, best-effort)",
+    "create": "L156-297: valida cuenta_id (rechaza llevadoo_*), monto>0, metodo_pago valido; idempotencia por cuenta (409 ALREADY_EXISTS); calcula cambio en efectivo; desglose mixto; link_pago/qr con expiracion; emite cobro.iniciado (L286)",
+    "confirm": "L328-371: exige pendiente/procesando (409 CONFLICT_STATE); -> completado; emite cobro.procesado (L359); abre cajon si efectivo (L362-364)",
+    "refund": "L373-409: exige completado (409 CONFLICT_STATE); -> reembolsado; emite cobro.reembolsado (L402)",
+    "list": "L299-311: filtros cuenta_id/estado/metodo_pago, orden desc por created_at, {cobros[], total}",
+    "get": "L313-326: por id, 404 RESOURCE_NOT_FOUND",
+    "errores": "400 INVALID_INPUT (cuenta_id/monto/metodo) · 404 RESOURCE_NOT_FOUND (cobro no encontrado) · 409 CONFLICT_STATE (estado invalido para la transicion) · 409 ALREADY_EXISTS (cobro duplicado por cuenta)"
+  }
+}

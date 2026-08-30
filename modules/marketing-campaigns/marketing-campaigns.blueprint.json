@@ -1,0 +1,68 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "marketing-campaigns",
+  "version": "blueprint-1.0.0",
+  "moduleId": "marketing-campaigns",
+  "actor": "jefe",
+  "titulo": "Campañas de marketing: cierre con veredicto y aprendizajes.",
+  "eventos_que_escucho": [
+    "marketing.campaigns.cerrar.request"
+  ],
+  "transporte": {
+    "rpc": [
+      "marketing.campaigns.cerrar.request -> .response"
+    ]
+  },
+  "spine": {
+    "descripcion": "Blueprint coherente: CONTRATO → LEER → PENSAR → GUARDAR → EMITIR",
+    "pasos": [
+      {
+        "paso": "CONTRATO",
+        "descripcion": "Recibe { project_id, campaña_id }. Promete devolver un cierre con veredicto y aprendizajes."
+      },
+      {
+        "paso": "LEER",
+        "descripcion": "Lee la campaña del store, sus KPIs objetivo y los datos reales de analytics.",
+        "lee": [
+          "marketing.campaigns.get.request → campaña con briefing y KPIs",
+          "marketing.analytics.get.request → métricas reales del periodo de la campaña"
+        ]
+      },
+      {
+        "paso": "PENSAR",
+        "descripcion": "Compara resultados reales vs KPIs objetivo. Emite veredicto (éxito/parcial/fracaso). Extrae aprendizajes: qué funcionó, qué no, qué se repite, qué se cambia.",
+        "restricciones": [
+          "El veredicto DEBE basarse en datos, no en intuición",
+          "Los aprendizajes DEBEN ser accionables (qué hacer diferente)",
+          "Si faltan datos, el veredicto es 'sin_datos' con indicación de qué falta"
+        ]
+      },
+      {
+        "paso": "GUARDAR",
+        "descripcion": "Guarda el cierre en la campaña via marketing.campaigns.update.request con estado 'cerrada' y el campo cierre relleno."
+      },
+      {
+        "paso": "EMITIR",
+        "descripcion": "Emite marketing.campaigns.cerrar.response con el veredicto y aprendizajes."
+      }
+    ]
+  },
+  "ui": {
+    "ops": {
+      "cerrar": {
+        "titulo": "Cerrar campaña con veredicto"
+      }
+    },
+    "roles": {
+      "cerrar": "jefe"
+    },
+    "flujo": [
+      {
+        "nombre": "jefe",
+        "orden": 1,
+        "ops": ["cerrar"],
+        "descripcion": "El dueño cierra una campaña y obtiene veredicto + aprendizajes"
+      }
+    ]
+  }
+}

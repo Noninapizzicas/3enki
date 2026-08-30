@@ -214,7 +214,6 @@
   // antes de abrir el RPC): sin proyección (404 nombrado) o preview fallido
   // → bloqueado. El dictamen llega EN LA RESPUESTA; la señal re-confirma.
   // =========================================================================
-  let publicarAbierto = false;
 
   /** FRENO LOCAL: sin proyección (falta carta) o error de lectura → no se dispara. */
   $: publicarBloqueado = !$cinta.proyectable || !!$lecturaError;

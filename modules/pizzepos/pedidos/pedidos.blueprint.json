@@ -1,8 +1,22 @@
 {
   "schema": "blueprint-interfaz-v2",
   "id": "pedidos",
-  "version": "blueprint-2.0.0",
+  "version": "blueprint-2.1.0",
   "moduleId": "pedidos",
+  "_lente_roles": {
+    "agente": "crear-blueprint-jefe v2",
+    "metodo": "esquematizador-jefe",
+    "arbitro": "futuro→jefe · ahora→utilizacion · solo-lee→neutro",
+    "consolidacion": "modules/pizzepos/pedidos/esquema-jefe/pasada-4-consolidacion-formas-ui.md",
+    "dualidad": "JEFE=transiciones del ciclo de vida (estación de transiciones) · UTILIZACION=comandero (add/update/delete-item al elegir) · neutro=listas/totales",
+    "senales_pareadas": {
+      "create": "pedido.creado",
+      "send-kitchen": "pedido.enviado_cocina",
+      "complete": "pedido.completado",
+      "cancel": "pedido.cancelado",
+      "confirmar-recogida": "pedido.recogido"
+    }
+  },
   "titulo": "Gestion completa de pedidos pizzepos. Dos tipos: tipo='pos' (flujo POS pizzeria con cuenta_id de cuentas-canales, items en pasos separados, enviado a cocina) y tipo='tienda' (vertical tienda PWA: plano sin cuenta_id, todos los items de una, cliente_nombre como ANCLA de recogida, estado pendiente_recogida). Recibe POS del comandero (bridge comandero.enviar_cocina) o UI handler. Recibe tienda via tool pedido.crear-tienda (auto-wire). Persiste en memoria con restauracion desde cuentas_activas.json al arrancar (delegacion a persistencia-comandero; aplica solo a tipo pos en v3.1.0). Cache de productos invalidada por catalogo.actualizado y producto.{creado,actualizado}.",
   "eventos_publicados": [
     "pedido.creado",

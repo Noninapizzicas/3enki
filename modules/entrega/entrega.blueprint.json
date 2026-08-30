@@ -1,27 +1,121 @@
 {
-  "schema": "blueprint-interfaz-v1",
+  "_doc": "Blueprint del modulo entrega (the-pirate). Modulo REFLEJO (index.js determinista, no blueprint-driven) — este blueprint declara SOLO la interfaz: las 4 operaciones del modulo con sus args reales del contrato (F6½, esquematizar-interfaz 2026-08-24) + LENTE DE ROLES v2 (ciclo 30-ago-2026, clasificación transcrita del esquema-jefe: modules/entrega/esquema-jefe/). Las acciones son DOTTED (reglas.leer, tiempo.estimar...) porque el RPC real del bus es entrega.<accion>.request y la capa de request de la UI emite ui/request/entrega/<accion> — transporte.rpc va VACIO a proposito: la regex de deriveZones solo parsea acciones de 2 segmentos. LA SEÑAL: entrega.reglas.actualizadas SÍ existe — la publica ConfigCustodio al persistir (config-custodio.js L119) y la emite el eventBus del core a MQTT (core/*/events/entrega/reglas/actualizadas); el dictamen inmediato viene en la respuesta de reglas.actualizar y la señal re-lee la vista (doble confirmación, mismo patrón que masa.reglas.actualizadas).",
+  "id": "entrega",
+  "version": "blueprint-1.0.0",
   "moduleId": "entrega",
-  "titulo": "Entrega: estimación de tiempo de preparación/entrega y política de reparto (the-pirate).",
+  "titulo": "Entrega: estimación de tiempo y política de reparto (the-pirate)",
+
+  "rol": "Custodio single-writer de las reglas de entrega (reparto: activo/radio_km/coste/minutos_por_km; estimacion: minutos_preparacion_base/minutos_por_item) en entrega.json del proyecto + 2 conversores puros: tiempo (estimacion de preparacion+reparto) y reparto (politica declarada). Los nulls del contrato son politica por declarar (el dueño los puebla via reglas.actualizar); la lectura siempre responde (fuente: 'persistida' | 'default').",
+
+  "eventos_publicados": [
+    "entrega.reglas.actualizadas"
+  ],
+
+  "eventos_que_escucho": [],
+
+  "transporte": {
+    "entrada": "reflejo RPC via ui_handlers (module.json) — las 4 operaciones se conducen por ui/request/entrega/<accion> con la accion dotted; ver seccion ui.ops. transporte.rpc vacio a proposito.",
+    "rpc": [],
+    "salida": [
+      "entrega.reglas.actualizadas"
+    ],
+    "qos": "publishAndWait (request/response correlado) en cada operacion; timeout 8s"
+  },
+
   "ui": {
-    "type": "workspace_module",
-    "zone": "modulos",
-    "eventos_que_escucho": [
+    "_doc": "Panel de la CARA DEL JEFE: la politica de reparto y tiempos es una DECLARACION del dueño (los nulls del contrato se pueblan aqui). 4 ops con lente de roles: 1 jefe + 2 utilizacion (fuera del panel, anotadas) + 1 neutro (informe). Los 4 eventos request/*.request de los ui_handlers NO van en eventos_que_escucho (regla anti-colision de hibridos: ya estan en module.json.subscribes).",
+    "ops": {
+      "reglas.leer": {
+        "titulo": "Ver reglas de entrega",
+        "descripcion": "Lectura de las reglas del proyecto (reparto y estimacion). Devuelve el objeto `reglas` con su `fuente` ('persistida' = declarada por el dueño | 'default' = sin politica, valores por defecto con nulls).",
+        "rol": "neutro",
+        "forma": "cinta-estado + informe: la politica vigente en claro, distinguiendo origen; null = 'por declarar', nunca error"
+      },
+      "reglas.actualizar": {
+        "titulo": "Declarar política de entrega",
+        "descripcion": "Escritura single-writer (el dueño): LA DECLARACION de politica. Los bloques/campos presentes se validan (numero >= 0 o null; activo boolean) y aplican; los ausentes se preservan (merge profundo). Envia SOLO el bloque editado: { reparto } o { estimacion }.",
+        "rol": "jefe",
+        "forma": "editor-bloque por bloque (reparto primero por frecuencia; estimacion set-once)",
+        "senal_pareada": "entrega.reglas.actualizadas",
+        "args": [
+          {
+            "nombre": "cambios",
+            "tipo": "json",
+            "required": true,
+            "descripcion": "Cambios a aplicar. Ej: {\"reparto\":{\"activo\":true,\"radio_km\":5,\"coste\":2.5,\"minutos_por_km\":3},\"estimacion\":{\"minutos_preparacion_base\":10,\"minutos_por_item\":2}}"
+          }
+        ]
+      },
+      "tiempo.estimar": {
+        "titulo": "Estimar tiempo de entrega",
+        "descripcion": "Tiempo total (preparacion + reparto) para un pedido, segun las reglas declaradas. Con estimacion sin declarar responde metodo 'pendiente' + nota (no rompe).",
+        "rol": "utilizacion",
+        "forma": "fuera del panel-jefe: la cara POS/PWA al elegir delivery",
+        "args": [
+          {
+            "nombre": "num_items",
+            "tipo": "number",
+            "required": true,
+            "placeholder": "nº de items del pedido"
+          },
+          {
+            "nombre": "km",
+            "tipo": "number",
+            "required": false,
+            "placeholder": "km de reparto (opcional)"
+          }
+        ]
+      },
+      "reparto.obtener": {
+        "titulo": "Ver politica de reparto",
+        "descripcion": "Politica de reparto declarada: radio, coste y tiempo por km.",
+        "rol": "utilizacion",
+        "forma": "fuera del panel-jefe: la cara del cliente (tienda); en el panel del jefe el mismo dato ya vive en el informe reglas.leer"
+      }
+    },
+    "datos": {
+      "op": "reglas.leer",
+      "titulo": "Reglas de entrega del proyecto",
+      "refresh_on": ["entrega.reglas.actualizadas"],
+      "columnas": ["reglas", "fuente"]
+    },
+    "roles": {
+      "reglas.leer": "neutro",
+      "reglas.actualizar": "jefe",
+      "tiempo.estimar": "utilizacion",
+      "reparto.obtener": "utilizacion"
+    },
+    "flujo": [
       {
-        "event": "entrega.tiempo.estimar.request",
-        "label": "entrega tiempo estimar"
+        "nombre": "jefe",
+        "orden": 1,
+        "ops": ["reglas.actualizar"],
+        "descripcion": "DECLARAR la politica: editor-bloque REPARTO (activo/radio/coste/min-por-km) y editor-bloque ESTIMACION (base/min-por-item), cada uno 1 llamada reglas.actualizar {soloSuBloque}. El dictamen llega en la respuesta ({reglas: nuevas}) y la señal entrega.reglas.actualizadas re-lee el informe (nunca recarga)."
       },
       {
-        "event": "entrega.reparto.obtener.request",
-        "label": "entrega reparto obtener"
-      },
-      {
-        "event": "entrega.reglas.leer.request",
-        "label": "entrega reglas leer"
-      },
-      {
-        "event": "entrega.reglas.actualizar.request",
-        "label": "entrega reglas actualizar"
+        "nombre": "consulta",
+        "orden": 3,
+        "ops": ["reglas.leer"],
+        "descripcion": "INFORMARSE antes de decidir: la politica vigente con su origen (fuente 'persistida' vs 'default' = 'sin politica — usa los defaults'); los nulls se muestran 'por declarar'."
       }
     ]
+  },
+
+  "_lente_roles": {
+    "agente": "ciclo-entrega v2",
+    "metodo": "esquematizador-jefe (modules/entrega/esquema-jefe/ — pasada-1, pasada-2-diseccion, anatomia)",
+    "arbitro": "¿decide el FUTURO de la politica (escribe via custodio) -> jefe · sirve pedido/cliente AHORA -> utilizacion · solo informa -> neutro",
+    "veredicto": "4/4 ops juzgadas: jefe(1) reglas.actualizar · utilizacion(2) tiempo.estimar (POS/PWA al elegir delivery) + reparto.obtener (consulta del cliente; en el panel-jefe es el mismo dato del informe, no abre captura) · neutro(1) reglas.leer (informe, alimenta la vista)",
+    "senales": "1 señal de salida: entrega.reglas.actualizadas (ConfigCustodio L119 -> eventBus core -> MQTT core/*/events/...). Doble confirmación tras declarar: dictamen en la respuesta RPC + señal que re-lee (debounce). Sin eventos granulares por campo (hueco menor, anotado en anatomia).",
+    "moneda": "reparto.coste en EUR (el contrato valida numero >= 0; convencion del dominio pizzepos/the-pirate: euros float 2dec, sin céntimos)",
+    "invariante_del_panel": "sin 404 de lectura: reglas.leer responde SIEMPRE (persistida | default). El estado 'sin politica' se representa como los defaults 'por declarar', no como error.",
+    "huecos_abiertos": [
+      "horario de reparto (dia/hora) — no declarable hoy",
+      "zonas multiples vs radio plano",
+      "pedido minimo / envio gratis a partir de X",
+      "quien reparte (propio vs mixto glovo/llevadoo por franja)"
+    ],
+    "fuente_analisis": "modules/entrega/esquema-jefe/esquema.md",
+    "fecha": "2026-08-30"
   }
 }

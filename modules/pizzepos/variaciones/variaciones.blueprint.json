@@ -219,6 +219,15 @@
         "descripcion": "Informe de reglas vigentes + simulador (dictamen del motor)"
       }
     ],
+    "roles": {
+      "configurar": "jefe",
+      "evaluar": "utilizacion",
+      "get": "neutro",
+      "validar": "neutro",
+      "calcular_precio": "neutro",
+      "health": "neutro_sistema",
+      "metrics": "neutro_sistema"
+    },
     "detalle": {
       "op": "get",
       "titulo": "Detalle de variacione",

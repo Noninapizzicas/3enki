@@ -413,6 +413,37 @@ class VariacionesModule extends BaseModule {
   // campos.variaciones y emite carta.editada → onCartaActualizada reconfigura este módulo
   // solo. Resuelve la carta activa via productos.carta_completa (el dueño no conoce carta_id).
 
+  /**
+   * RPC por evento (espejo de productos._rpc): publica {evento}.request con request_id
+   * y espera la respuesta en {evento}.response. La mutación del custodio (carta-manager)
+   * es un REFLEJO POR EVENTO, no un ui_handler — por eso no vale uiHandler.handle.
+   */
+  _rpc(evento, payload = {}, { timeout_ms = 8000 } = {}) {
+    if (!this.eventBus?.subscribe || !this.eventBus?.publish) return Promise.resolve(null);
+    const request_id = crypto.randomUUID();
+    const responseEvent = evento.endsWith('.request')
+      ? evento.slice(0, -('.request'.length)) + '.response'
+      : `${evento}.response`;
+    return new Promise((resolve) => {
+      let unsub = null;
+      const timeout = setTimeout(() => { if (unsub) unsub(); resolve(null); }, timeout_ms);
+      try {
+        unsub = this.eventBus.subscribe(responseEvent, (event) => {
+          const d = event?.data || event;
+          if (!d || d.request_id !== request_id) return;
+          clearTimeout(timeout);
+          if (unsub) unsub();
+          resolve(d);
+        });
+        this.eventBus.publish(evento, { request_id, ...payload });
+      } catch (_) {
+        clearTimeout(timeout);
+        if (unsub) unsub();
+        resolve(null);
+      }
+    });
+  }
+
   async handleConfigurar(data) {
     const { producto_id, variaciones, project_id } = data || {};
     if (!producto_id) return this._errorResponse(400, 'INVALID_INPUT', 'producto_id requerido', { field: 'producto_id' });
@@ -435,16 +466,19 @@ class VariacionesModule extends BaseModule {
       carta_id = res.data.carta_id;
     }
 
-    // 2. Delegar en el custodio (carta-manager) — valida y normaliza las reglas
-    const r = await this.uiHandler.handle('carta-manager', 'update_product', {
-      project_id,
-      carta_id,
-      producto_id,
-      campos: { variaciones }
-    });
-    if (r?.status !== 200 && r?.status !== 201) {
+    // 2. Delegar en el custodio (carta-manager) por RPC de evento — el patrón de productos:
+    // carta.update_product.request → onUpdateProductRequest → _updateProduct (carta/-.response).
+    // (uiHandler.handle('carta-manager','update_product') NO existe: carta-manager no registra
+    // ui_handlers; su mutación es evento RPC con correlation_id — HandledBy evento, no handler.)
+    const r = await this._rpc('carta.update_product.request',
+      { project_id, carta_id, producto_id, campos: { variaciones } }, { timeout_ms: 8000 });
+    if (!r) {
+      return this._errorResponse(503, 'UPSTREAM_UNREACHABLE', 'carta-manager no responde');
+    }
+    const rStatus = r?.status ?? (r?.success ? 200 : r?.status ?? 500);
+    if (rStatus !== 200 && rStatus !== 201) {
       const err = r?.error || {};
-      return this._errorResponse(r?.status || 500, err.code || 'UNKNOWN_ERROR', err.message || 'carta-manager rechazó la configuración', err.details);
+      return this._errorResponse(rStatus, err.code || 'UNKNOWN_ERROR', err.message || 'carta-manager rechazó la configuración', err.details);
     }
 
     return {

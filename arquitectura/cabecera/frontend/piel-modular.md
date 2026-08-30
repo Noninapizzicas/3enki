@@ -435,41 +435,174 @@ ESQUELETO Panel {
 }
 ```
 
-## L6 — Piel (tema)
+## L6 — Piel (dato del proyecto, no código)
+
+> **Decisión clave:** la piel NO se hardcodea en el frontend. Se define en cada proyecto
+> y viaja con él. El código solo tiene el MOTOR que aplica cualquier piel; los VALORES
+> viven en la config del proyecto. Así cada proyecto (pizzepos, prisma, un cliente nuevo)
+> tiene su identidad visual sin tocar el repo del frontend.
+
+```json
+{
+  "esquema": "piel-dinamica-v1",
+  "principio": "la piel es DATO del proyecto, no código del frontend",
+
+  "donde_vive": {
+    "definicion": "en la config del proyecto (project-manager / marca.json / DB)",
+    "transporte": "llega al frontend por MQTT al entrar al proyecto",
+    "topic": "core/<project_id>/config/skin",
+    "persistencia": "el proyecto persiste su piel; el frontend solo la CONSUME"
+  },
+
+  "contrato_piel": {
+    "descripcion": "JSON que redefine tokens semánticos — solo los que cambia respecto al default",
+    "estructura": {
+      "id": "String — identificador único de la piel",
+      "nombre": "String — nombre visible (ej: 'Pizzepos Cálido')",
+      "variante": "'dark' | 'light' — familia base sobre la que se monta",
+      "tokens": {
+        "nota": "Map<TokenSemantico, valor> — SOLO los que difieren del default de la variante",
+        "ejemplo": {
+          "--surface-base": "#0d1512",
+          "--action-primary": "#14b8a6",
+          "--text-link": "#2dd4bf"
+        }
+      },
+      "fuentes": {
+        "nota": "opcional — override de familias tipográficas",
+        "ejemplo": {
+          "--font-sans": "'Poppins', system-ui, sans-serif",
+          "--font-display": "'Playfair Display', serif"
+        }
+      },
+      "motion": {
+        "nota": "opcional — override de duraciones/easings",
+        "ejemplo": {
+          "--dur-normal": "250ms",
+          "--ease-default": "cubic-bezier(0.22, 1, 0.36, 1)"
+        }
+      },
+      "radii": {
+        "nota": "opcional — override de border-radius",
+        "ejemplo": {
+          "--radius-component": "0.5rem",
+          "--radius-card": "1rem"
+        }
+      }
+    }
+  },
+
+  "motor_de_aplicacion": {
+    "archivo": "ui-skin/skin-engine.ts",
+    "responsabilidad": [
+      "recibir el JSON de piel del proyecto por MQTT",
+      "resolver la variante base (dark/light) como capa de defaults",
+      "aplicar los overrides del proyecto como setProperty en :root",
+      "restaurar al default del sistema al salir del proyecto",
+      "emitir 'skin.applied' al bus para que los componentes que necesiten reaccionar lo hagan"
+    ]
+  },
+
+  "flujo": [
+    "1. Usuario entra al proyecto",
+    "2. project-manager publica core/<id>/config/skin con el JSON de piel",
+    "3. skin-engine recibe, resuelve variante base, aplica overrides en :root",
+    "4. Todos los componentes ya consumen tokens semánticos → cambian solos",
+    "5. Usuario sale del proyecto → skin-engine restaura defaults del sistema"
+  ],
+
+  "piel_default_del_sistema": {
+    "nota": "el frontend SÍ trae una piel default (dark + light) como fallback",
+    "vive_en": "ui-skin/tokens/semanticos.css — los valores por defecto",
+    "cuando": "sin proyecto activo, o proyecto sin piel definida"
+  },
+
+  "donde_se_edita_la_piel": {
+    "nota": "la piel se crea/edita desde el proyecto — admin-panel, blueprint, o herramienta de marca",
+    "no_en": "archivos CSS del frontend — esos NUNCA contienen pieles específicas de proyecto"
+  }
+}
+```
+
+### Pseudocódigo del motor
 
 ```
-PROPOSITO: aplica COLOR, SOMBRA, BORDE, GRADIENTE sobre los esqueletos.
-           Una piel = un archivo que redefine los tokens semánticos de L2.
-ARCHIVO: ui-skin/skins/<nombre>.css
+CLASE SkinEngine {
+  defaults : Map<Variante, Map<Token, Valor>>   // dark y light, del CSS estático
+  activa   : Piel | null
+  bus      : EventBus
 
-PIEL default-dark {
-  archivo: skins/default-dark.css
-  hereda: tokens semánticos mapeados a la paleta neutral oscura (L2 tal cual)
+  aplicar(piel: PielJSON): Void {
+    PRECONDICION: piel.tokens es Map<String, String>
+    base ← defaults.get(piel.variante ?? 'dark')
+
+    root ← document.documentElement
+    root.setAttribute('data-skin', piel.id)
+    root.setAttribute('data-variant', piel.variante ?? 'dark')
+
+    // aplica overrides del proyecto sobre la base
+    PARA [token, valor] EN piel.tokens:
+      root.style.setProperty(token, valor)
+
+    SI piel.fuentes:
+      PARA [token, valor] EN piel.fuentes:
+        root.style.setProperty(token, valor)
+
+    SI piel.motion:
+      PARA [token, valor] EN piel.motion:
+        root.style.setProperty(token, valor)
+
+    SI piel.radii:
+      PARA [token, valor] EN piel.radii:
+        root.style.setProperty(token, valor)
+
+    activa = piel
+    bus.emit('skin.applied', { id: piel.id, variante: piel.variante })
+  }
+
+  restaurar(): Void {
+    root ← document.documentElement
+    root.removeAttribute('data-skin')
+    // limpiar todos los inline styles que puso aplicar()
+    SI activa:
+      PARA token EN [...activa.tokens, ...activa.fuentes, ...activa.motion, ...activa.radii]:
+        root.style.removeProperty(token)
+    activa = null
+    // el CSS estático (semanticos.css) retoma el control
+    bus.emit('skin.cleared')
+  }
+
+  // suscripción MQTT — se engancha al conectar al proyecto
+  onSkinMessage(payload: PielJSON): Void {
+    aplicar(payload)
+  }
 }
+```
 
-PIEL default-light {
-  archivo: skins/default-light.css
-  redefine: tokens semánticos invirtiendo la escala neutral
-  ejemplo: "--surface-base: var(--c-neutral-0)"
-           "--text-primary: var(--c-neutral-900)"
+### Ejemplo de piel de proyecto (JSON que viaja por MQTT)
+
+```json
+{
+  "id": "pizzepos-calido",
+  "nombre": "Pizzepos Cálido",
+  "variante": "dark",
+  "tokens": {
+    "--surface-base": "#1a1210",
+    "--surface-raised": "#231c18",
+    "--action-primary": "#e67e22",
+    "--action-primary-hover": "#d35400",
+    "--text-link": "#f0a050",
+    "--status-success": "#27ae60",
+    "--border-focus": "#e67e22"
+  },
+  "fuentes": {
+    "--font-display": "'Merriweather', serif"
+  },
+  "radii": {
+    "--radius-component": "0.5rem",
+    "--radius-card": "1rem"
+  }
 }
-
-PIEL prisma {
-  archivo: skins/prisma.css
-  redefine: sustituye la paleta primary por teal, fondo verde-petróleo
-  convive_con: default-dark (es una variación oscura, no un tema aparte)
-}
-
-PIEL pizzepos {
-  archivo: skins/pizzepos.css
-  redefine: paleta cálida restauración, acentos ámbar
-}
-
-MECANISMO:
-  - La piel se aplica como <link> o como clase en :root
-  - Todos los componentes consumen tokens semánticos (L2) → cambia la piel, cambia todo
-  - JS solo elige qué piel cargar (store theme.ts refactorizado)
-  - NUNCA se tocan estilos inline con setProperty — la piel es una hoja CSS
 ```
 
 ## L7 — Movimiento
@@ -611,32 +744,36 @@ INTERFAZ Capa {
 
 CLASE SistemaUI {
   capas: Map<CapaUI, Capa>
-  pielActiva: Piel
+  skinEngine: SkinEngine
 
-  aplicarCompleto(root: HTMLElement): Void {
-    PARA capa EN capas.ordenPorDependencia():
-      capa.aplicar(root)
-  }
-
-  cambiarPiel(piel: Piel): Void {
-    pielActiva.desaplicar()
-    piel.aplicar()
-    pielActiva = piel
+  aplicarEstructura(root: HTMLElement): Void {
+    // L0→L1→L2→L3→L4→L5→L7→L8→L9 vienen del CSS estático (importados en index.css)
+    // L6 (piel) la aplica skinEngine cuando llega el dato del proyecto
   }
 }
 
-CLASE Piel {
-  nombre: String
-  variante: 'dark' | 'light'
-  tokens: Map<TokenSemantico, TokenAtomico>
-  archivo: String
+VALUE_OBJECT PielJSON {
+  id       : String
+  nombre   : String
+  variante : 'dark' | 'light'
+  tokens   : Map<String, String>         // solo los overrides semánticos
+  fuentes? : Map<String, String>         // override de familias
+  motion?  : Map<String, String>         // override de duraciones/easings
+  radii?   : Map<String, String>         // override de radii
 
-  aplicar(): Void {
-    document.documentElement.setAttribute('data-skin', nombre)
-  }
-  desaplicar(): Void {
-    document.documentElement.removeAttribute('data-skin')
-  }
+  ORIGEN: config del proyecto (project-manager / marca.json / DB)
+  TRANSPORTE: MQTT → core/<project_id>/config/skin
+  CICLO: llega al entrar al proyecto, se limpia al salir
+}
+
+CLASE SkinEngine {
+  defaults : Map<Variante, Map<Token, Valor>>  // del CSS estático
+  activa   : PielJSON | null
+  bus      : EventBus
+
+  aplicar(piel: PielJSON): Void       // overrides en :root
+  restaurar(): Void                    // limpia inline, CSS estático retoma
+  onSkinMessage(payload: PielJSON)     // suscripción MQTT
 }
 ```
 
@@ -646,8 +783,9 @@ CLASE Piel {
 frontend/src/lib/ui-skin/
 ├── reset.css                     # L0
 ├── tokens/
-│   ├── atomicos.css              # L1 — valores brutos
-│   └── semanticos.css            # L2 — mapeo a significado (default dark)
+│   ├── atomicos.css              # L1 — valores brutos (escalas, paleta neutral)
+│   ├── semanticos.css            # L2 — mapeo a significado (defaults dark)
+│   └── semanticos-light.css      # L2 — defaults light (se activa por data-variant="light")
 ├── layout/
 │   ├── Stack.svelte              # L3
 │   ├── Cluster.svelte
@@ -657,30 +795,38 @@ frontend/src/lib/ui-skin/
 │   ├── Cover.svelte
 │   └── Frame.svelte
 ├── typography.css                # L4
+├── skin-engine.ts                # L6 — MOTOR: recibe PielJSON por MQTT, aplica/restaura
 ├── motion.css                    # L7
 ├── responsive.css                # L8
 ├── states.css                    # L9
-├── skins/
-│   ├── default-dark.css          # L6 — piel base (hereda L2)
-│   ├── default-light.css         # L6 — inversión de escala
-│   ├── prisma.css                # L6 — verde-petróleo/teal
-│   └── pizzepos.css              # L6 — cálida restauración
 └── index.css                     # importa L0→L1→L2→L4→L7→L8→L9 en orden
+```
+
+```
+NOTA: NO hay carpeta skins/ con archivos CSS por proyecto.
+      Cada proyecto define su piel en su propia config (marca.json o DB).
+      El frontend solo tiene el MOTOR (skin-engine.ts) y los DEFAULTS (semanticos.css).
 ```
 
 ## Migración desde el estado actual
 
 ```
 PLAN:
-  1. Crear ui-skin/ con L0, L1, L2 (extraer los ~21 colores actuales a la escala atómica)
-  2. Crear las pieles (L6) — traducir darkTheme/lightTheme/PRISMA_SKIN de JS a CSS
-  3. Refactorizar theme.ts: de setProperty×21 a cambiar data-skin en :root
-  4. Crear layout primitives (L3) como componentes Svelte
-  5. Migrar componentes base (Button, Badge, Card...) a esqueleto+piel
-  6. Añadir L7 (motion) y L8 (responsive) como utilidades CSS
-  7. Migrar componentes de dominio gradualmente (comandero, cocina, carta...)
+  1. Crear ui-skin/ con L0, L1, L2 (extraer los ~21 colores actuales a la escala atómica + defaults semánticos)
+  2. Crear skin-engine.ts (L6 motor) — recibe PielJSON, aplica overrides, restaura
+  3. Refactorizar theme.ts: de setProperty×21 a delegar en skin-engine
+  4. Migrar prisma-skin.ts: de objeto JS hardcoded → PielJSON en la config del proyecto prisma
+  5. Crear layout primitives (L3) como componentes Svelte
+  6. Migrar componentes base (Button, Badge, Card...) a esqueleto+tokens semánticos
+  7. Añadir L7 (motion) y L8 (responsive) como utilidades CSS
+  8. Migrar componentes de dominio gradualmente (comandero, cocina, carta...)
+  9. Cada proyecto existente define su PielJSON en su marca.json o config
 
 RIESGO: los fallbacks hardcoded en ~80 componentes (var(--color-text, #e5e5e5)).
 MITIGACION: se eliminan al migrar cada componente — no se rompe nada mientras tanto
             porque los nuevos tokens semánticos mapean a los mismos valores.
+
+RIESGO: proyectos sin piel definida.
+MITIGACION: el CSS estático (semanticos.css) es el fallback — funciona sin MQTT,
+            sin proyecto, sin config. El skin-engine solo AÑADE; sin dato, hay default.
 ```

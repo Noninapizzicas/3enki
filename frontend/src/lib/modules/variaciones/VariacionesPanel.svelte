@@ -34,6 +34,7 @@
     errorMutacion,
     formatearCentimos,
     formatearEuros,
+    eurosACentimos,
     loadProductos,
     loadReglas,
     evaluar,

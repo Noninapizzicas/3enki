@@ -275,11 +275,17 @@ export function formatearPrecioUnitario(precio: number | null | undefined, unida
 export async function loadResumen(): Promise<void> {
   cintaLoading.set(true);
   cintaError.set(null);
+  const projectId = get(activeProjectId);
+  if (!projectId) {
+    cintaError.set('project_id requerido');
+    cintaLoading.set(false);
+    return;
+  }
   try {
     const res = await mqttRequest<{ recetas?: RecetaResumen[]; total?: number }>(
       'recetas',
       'listar',
-      { incluir_lineas: true, limit: 1000 }
+      { project_id: projectId, incluir_lineas: true, limit: 1000 }
     );
     recetasStore.set(res.data?.recetas ?? []);
   } catch (err) {

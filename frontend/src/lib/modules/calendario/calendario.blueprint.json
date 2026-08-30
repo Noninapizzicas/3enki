@@ -1,104 +1,144 @@
 {
-  "_doc": "Blueprint del modulo calendario (panaderia). Modulo REFLEJO (index.js determinista, no blueprint-driven) — este blueprint declara SOLO la interfaz del generador schema→UI (BlueprintForm). Seccion `ui` alineada con los ui_handlers REALES del module.json (F6): producto.leer · producto.actualizar · productos.leer · validar · margen.leer. Las acciones van DOTTED (calendario.<accion>) porque el wrapper mqttRequest('calendario','<accion>') emite ui/request/calendario/<accion>; transporte.rpc vacio a proposito.",
+  "schema": "blueprint-interfaz-v2",
   "id": "calendario",
-  "version": "blueprint-1.1.0",
-
-  "rol": "Custodio single-writer de dias_salida[] (0=Lun..6=Dom) y margen_antelacion_h por producto en calendario.json del proyecto + conversores puros (validar una fecha pedida contra el calendario y proponer el dia valido mas cercano; leer la antelacion minima). El resto del sistema (H2 motor, encargos) bebe sus valores por RPC.",
-
+  "version": "blueprint-2.0.0",
+  "moduleId": "calendario",
+  "titulo": "La BASE COMPARTIDA del TIEMPO de producción/distribución (órgano agenda de Prisma): el JEFE agenda la PRODUCCIÓN/distribución de cada producto por tiempo (días de salida ISO 1..7 + margen de antelación en horas). Ref-select producto de la carta + editor-bloque -> producto.actualizar (LA única escritura del módulo) -> calendario.producto.actualizado re-leyendo la agenda. El resto del sistema (motor de validación H2, encargos, cobro anticipado) bebe por RPC (validar / margen.leer).",
+  "_doc": "Blueprint v2 de INTERFAZ de la cara del JEFE del modulo calendario (RAIZ, v0.1.0 — 'Base compartida del tiempo de Prisma (órgano agenda)'). Reemplaza blueprint-1.0.0 (desincronizado: declaraba ops leer/validar/listar/actualizar). v2.0.0 REESCRIBE en schema 'blueprint-interfaz-v2' (lente de roles esquematizador-jefe, ciclo v2 30-ago-2026) desde los ui_handlers REALES del module.json: producto.leer / producto.actualizar / productos.leer / validar / margen.leer (todos RPC de evento calendario.<accion>.request -> .response, tipo workspace_module barra_modulos). El modulo es REFLEJO determinista (index.js, reflejo-0.1.0, 206 lineas: on*Request L151-155, _productoLeer L160, _productosLeer L169, _productoActualizar L175, _validar L184, _margen L193). El jefe AGENDA la produccion; producto.actualizar es la UNICA escritura (ConfigCustodio merge + valida esquema calendario-v1). Senal REAL verificada: calendario.producto.actualizado (module.json declares el publish y ConfigCustodio L119 lo emite al persistir). Nada inventado: ver _verificado_en_codigo.",
   "eventos_publicados": [
     "calendario.producto.actualizado"
   ],
-
-  "eventos_que_escucho": [],
-
+  "eventos_que_escucho": [
+    "calendario.producto.leer.response",
+    "calendario.producto.actualizar.response",
+    "calendario.productos.leer.response",
+    "calendario.validar.response",
+    "calendario.margen.leer.response",
+    "calendario.producto.actualizado"
+  ],
   "transporte": {
-    "entrada": "reflejo RPC via ui_handlers (module.json) — las 5 operaciones se conducen por ui/calendario/<accion> con la accion dotted; ver seccion ui.ops. transporte.rpc vacio a proposito (los topics reales calendario.*.request tienen 3 segmentos y rompen el parser del generador).",
-    "rpc": [],
-    "salida": [
-      "calendario.producto.actualizado"
+    "rpc": [
+      "calendario.producto.actualizar.request -> calendario.producto.actualizar.response (top-level {status, data:{calendario} | error}) — LA DECISION (agenda la produccion de un producto: dias_salida ISO 1..7 + margen_antelacion_h >= 0)",
+      "calendario.productos.leer.request -> calendario.productos.leer.response (lectura: {calendarios:{producto_id:{dias_salida, margen_antelacion_h}}} — todo el calendario del proyecto en una llamada)",
+      "calendario.producto.leer.request -> calendario.producto.leer.response (ficha de un producto: {producto_id, calendario} | 404)",
+      "calendario.validar.request -> calendario.validar.response (dictamen: {producto_id, fecha_deseada, dia_semana, valido, motivo, propuesta?})",
+      "calendario.margen.leer.request -> calendario.margen.leer.response (dictamen de antelacion: {producto_id, margen_antelacion_h, dias_salida})",
+      "productos.carta_completa.request -> productos.carta_completa.response (ref-select del jefe: {productos:[{id, nombre, ...}]} — proyector, otro modulo, neutro que alimenta la eleccion)"
     ],
-    "qos": "publishAndWait (request/response correlado) en cada operacion; timeout 8s"
+    "salida": [
+      "calendario.producto.actualizado (ConfigCustodio L119, con {project_id, calendario} — confirma la agenda)"
+    ],
+    "qos": "publishAndWait (request/response correlado por request_id); timeout del panel 10s (operaciones locales de config, sin upstream). La accion del wrapper mqttRequest('calendario','<accion>') va DOTTED (producto.actualizar, productos.leer...): emite ui/request/calendario/<accion> -> dispatch al RPC de evento calendario.<accion>.request (los topics reales calendario.<accion>.request tienen 3 segmentos y rompen el parser del generador — por eso transporte.rpc declara el par request/response del EVENTO)."
   },
-
   "ui": {
-    "_doc": "Schema de panel del generador schema→UI (BlueprintForm). Las 5 operaciones reales del module.json con sus args; el evento calendario.producto.actualizado refresca la zona DATOS (consumida por F7).",
+    "_doc": "Panel de la CARA DEL JEFE de la base del tiempo. Composicion (esquema-jefe): SELECCIONAR (ref-select producto desde productos.carta_completa -> producto_id) -> INFORMARSE (cinta-estado agenda del dia via productos.leer + dictamen validar bajo demanda + pulso margen.leer) -> DECLARAR (editor-bloque producto.actualizar: chips de dias ISO 1..7 + margen horas; LA unica escritura; el dictamen {calendario} vuelve en la respuesta + senal calendario.producto.actualizado re-leyendo la agenda).",
     "ops": {
-      "productos.leer": {
-        "titulo": "Ver calendarios",
-        "descripcion": "Lectura de los calendarios del proyecto (todos pueden leer): dias_salida y margen_antelacion_h por producto."
-      },
-      "validar": {
-        "titulo": "Validar fecha de encargo",
-        "descripcion": "Dado producto + fecha deseada, valida contra el calendario; si no cuadra propone el dia valido mas cercano (sin barreras).",
-        "args": [
-          {
-            "nombre": "producto_id",
-            "tipo": "text",
-            "required": true,
-            "descripcion": "ID del producto a validar."
-          },
-          {
-            "nombre": "fecha_iso",
-            "tipo": "date",
-            "required": true,
-            "descripcion": "Fecha deseada (YYYY-MM-DD)."
-          }
-        ]
-      },
-      "producto.leer": {
-        "titulo": "Calendario de un producto",
-        "descripcion": "Leer el calendario de un producto concreto (dias_salida + margen_antelacion_h).",
-        "args": [
-          {
-            "nombre": "producto_id",
-            "tipo": "text",
-            "required": true,
-            "descripcion": "ID del producto."
-          }
-        ]
-      },
-      "margen.leer": {
-        "titulo": "Antelacion minima",
-        "descripcion": "Antelacion minima (horas) de un producto para encargar.",
-        "args": [
-          {
-            "nombre": "producto_id",
-            "tipo": "text",
-            "required": true,
-            "descripcion": "ID del producto."
-          }
-        ]
-      },
       "producto.actualizar": {
-        "titulo": "Actualizar calendario de producto",
-        "descripcion": "Escritura single-writer (el dueno). Los campos presentes se validan (esquema calendario-v1) y persisten.",
+        "titulo": "Agendar la produccion de un producto",
+        "descripcion": "LA DECISION (jefe): elige el producto (ref-select) y declara sus DIAS DE SALIDA (chips ISO 1..7: 1=Lun..7=Dom) + MARGEN DE ANTELACION en horas (>=0). El handler valida los campos presentes (esquema calendario-v1), hace merge en productos.<id> y persiste. Es la agenda de produccion/distribucion que el resto del sistema (motor H2, encargos, cobro anticipado) consume por RPC.",
+        "rol": "jefe",
+        "forma": "ref-select producto + editor-bloque (dias ISO 1..7 + margen horas)",
+        "senal_pareada": "calendario.producto.actualizado (ConfigCustodio L119) — dictamen {calendario} en la respuesta + senal re-leyendo la agenda (debounce 60ms)",
         "args": [
-          {
-            "nombre": "producto_id",
-            "tipo": "text",
-            "required": true,
-            "descripcion": "ID del producto."
-          },
-          {
-            "nombre": "dias_salida",
-            "tipo": "json",
-            "required": false,
-            "descripcion": "Dias de salida (array 0..6, 0=Lun..6=Dom). Ej: [1,3,5]."
-          },
-          {
-            "nombre": "margen_antelacion_h",
-            "tipo": "number",
-            "required": false,
-            "descripcion": "Antelacion minima en horas (>=0)."
-          }
-        ]
+          { "nombre": "producto_id", "tipo": "text", "required": true, "descripcion": "ID del producto a agendar (ref-select desde productos.carta_completa)." },
+          { "nombre": "dias_salida", "tipo": "json", "required": false, "descripcion": "Dias de salida ISO 1..7 (1=Lun..7=Dom). Ej: [1,3,5]. Obligatorio al menos 1 si se agrega." },
+          { "nombre": "margen_antelacion_h", "tipo": "number", "required": false, "descripcion": "Antelacion minima en horas (>= 0). null = politica por declarar." }
+        ],
+        "errores": "400 INVALID_INPUT (falta producto_id o cambios; dias_salida no array 1..7; margen < 0) · 502/503 fs al persistir"
       }
     },
     "datos": {
-      "op": "productos.leer",
-      "titulo": "Calendario del proyecto",
+      "op": "calendario.productos.leer",
+      "titulo": "Agenda del dia (cinta-estado)",
       "refresh_on": ["calendario.producto.actualizado"],
-      "columnas": ["calendario", "fuente"]
+      "columnas": ["producto", "dias_salida", "margen_antelacion_h"]
+    },
+    "roles": {
+      "producto.actualizar": "jefe",
+      "producto.leer": "neutro",
+      "productos.leer": "neutro",
+      "validar": "neutro",
+      "margen.leer": "neutro"
+    },
+    "flujo": [
+      {
+        "nombre": "jefe",
+        "orden": 1,
+        "ops": ["producto.actualizar"],
+        "descripcion": "AGENDAR la produccion/distribucion de un producto por tiempo: ref-select producto de la carta + editor-bloque (dias de salida ISO 1..7 + margen de antelacion horas) -> producto.actualizar (LA unica escritura del modulo, ConfigCustodio) -> calendario.producto.actualizado re-lee la agenda. El jefe decide CUANDO sale cada producto y con cuanto se debe encargar."
+      },
+      {
+        "nombre": "consulta",
+        "orden": 2,
+        "ops": [],
+        "descripcion": "INFORMARSE antes de decidir: la agenda del dia (productos.leer -> {calendarios} agregados por dia — cuantos salen HOY), el dictamen de si una fecha de encargo cuadra (validar -> valido/propuesta) y el pulso de antelacion del producto seleccionado (margen.leer). El ref-select de productos (productos.carta_completa, proyector de otro modulo) alimenta la eleccion."
+      }
+    ],
+    "formas_jefe": {
+      "ref_select_producto": {
+        "forma": "ref-select (elegir el producto desde la carta — nunca teclear el id)",
+        "rpc": "productos.carta_completa.request { project_id } -> { productos:[{id, nombre, ...}] }",
+        "senal": "ninguna propia (lectura neutra de otro modulo — proyector)"
+      },
+      "agenda_del_dia": {
+        "forma": "cinta-estado (el pulso de lo agendado: total productos, cuantos salen HOY dia ISO actual, margenes) sin navegar",
+        "rpc": "calendario.productos.leer.request -> { calendarios }",
+        "senal": "calendario.producto.actualizado (re-lee tras agendar)"
+      },
+      "agendar_produccion": {
+        "forma": "editor-bloque: chips de dias ISO 1..7 (L M X J V S D) + campo margen horas -> producto.actualizar {producto_id, cambios:{dias_salida, margen_antelacion_h}} -> dictamen {calendario} en la respuesta",
+        "rpc": "calendario.producto.actualizar.request { project_id, producto_id, cambios } -> 200 { calendario }",
+        "senal": "calendario.producto.actualizado (ConfigCustodio L119, 1x) — debounce 60ms"
+      },
+      "dictamen_fecha": {
+        "forma": "dictamen bajo demanda: comprobar si una fecha de encargo cuadra con la agenda del producto (valido + propuesta del dia valido mas cercano)",
+        "rpc": "calendario.validar.request { project_id, producto_id, fecha_deseada } -> dictamen en la respuesta",
+        "senal": "refetch del dictamen tras calendario.producto.actualizado (no tiene senal propia — lectura; se consulta bajo demanda)"
+      },
+      "pulso_antelacion": {
+        "forma": "cinta-estado secundaria: cuantas horas antes hay que encargar el producto seleccionado (margen.leer)",
+        "rpc": "calendario.margen.leer.request { project_id, producto_id } -> { margen_antelacion_h, dias_salida }",
+        "senal": "ninguna propia (lectura)"
+      },
+      "ficha_producto": {
+        "forma": "detalle opcional del calendario de un producto (producto.leer) — no imprescindible porque productos.leer ya trae todo",
+        "rpc": "calendario.producto.leer.request { project_id, producto_id } -> { producto_id, calendario } | 404",
+        "senal": "ninguna propia (lectura)"
+      }
     }
+  },
+  "_lente_roles": {
+    "agente": "ciclo-calendario v2",
+    "metodo": "esquematizador-jefe (modules/calendario/esquema-jefe/ — pasada-1, pasada-2-diseccion, esquema.md)",
+    "arbitro": "¿DECIDE el FUTURO del calendario de produccion/distribucion (cuando sale cada producto y su margen de antelacion)? -> jefe · ¿se ejecuta en el momento del ENCARGO/venta? -> utilizacion (POS/PWA) · ¿solo lee/calcula? -> neutro",
+    "veredicto": "5/5 handlers juzgados: jefe(1) producto.actualizar (LA DECISION — agenda la produccion/distribucion de un producto por tiempo: dias de salida ISO 1..7 + margen de antelacion horas, escritura single-writer via ConfigCustodio). Neutros(4): producto.leer (ficha de un producto), productos.leer (todo el calendario del proyecto), validar (dictamen de si una fecha de encargo cuadra + propuesta del dia valido), margen.leer (pulso de antelacion). Utilizacion: sin op propia del panel — aunque validar/margen.leer los consume la utilizacion (POS/portal de encargo/cobro anticipado) en el momento de la venta, el arbtitro los juzga NEUTRO en la cara del jefe porque SOLO leen/calculan y no deciden el futuro de la agenda (la decision del calendar la escribe producto.actualizar).",
+    "senales": "producto.actualizar -> calendario.producto.actualizado (ConfigCustodio L119 con {project_id, calendario}, 1x por producto) · lecturas (producto.leer, productos.leer, validar, margen.leer) sin senal propia (alimentadoras) · dictamen {calendario} inmediato en la respuesta de producto.actualizar (200 {calendario}) · validar no tiene senal: refetch tras calendario.producto.actualizado si una edicion cambio los dias · senales correladas por project_id con debounce 60ms (dictamen en la respuesta + senal que re-confirma — nunca recarga a ciegas, nunca estado optimista).",
+    "moneda": "no aplica moneda (calendario agenda produccion por dias/horas — sin importes). El tipo de dato del tiempo: dias ISO 1..7 + margen_antelacion_h en horas (>=0).",
+    "dualidad": "JEFE=producto.actualizar (LA DECISION de la agenda de produccion/distribucion) | UTILIZACION=consumo de validar/margen.leer en el encargo/venta (fuera del panel del jefe; el arbtitro los juzga neutro en esta cara por ser solo lecturas) | neutro=producto.leer, productos.leer, validar, margen.leer (lecturas/dictamenes que alimentan la vista y el resto del sistema por RPC)",
+    "huecos_abiertos": [
+      "[ABIERTO] que productos entran al calendario: el jefe agenda los que YA estan en la carta; el alta de producto al calendario es decision suya (no se declaran por defecto).",
+      "[ABIERTO] criterio de dias de salida por familia/producto (ej. pan M/X/V) — nada en codigo; decisión del dueno.",
+      "[ABIERTO] margen por defecto para un producto nuevo sin calendario: hoy validar/margen.leer devuelven null/[] si no hay calendario (cal ? cal.margen_antelacion_h ?? null : null). Politica por declarar.",
+      "[ABIERTO] franja horaria de salida: el modulo agenda por DIA (ISO), sin hora. Ampliacion/decision del dueno."
+    ],
+    "moderacion": "producto.actualizar es jefe (agenda la produccion — decide el futuro del tiempo de produccion/distribucion). Las lecturas (producto.leer, productos.leer) y los dictamenes (validar, margen.leer) son neutros que alimentan la vista del jefe y, por RPC, el resto del sistema. La utilizacion consume validar/margen.leer en el momento del encargo/venta (fuera del panel del jefe).",
+    "utilizacion": ["validar (consumido por el motor de validacion H2 / portal de encargo en la venta)", "margen.leer (consumido por encargos / cobro anticipado en la venta)"],
+    "fuente_analisis": "modules/calendario/esquema-jefe/esquema.md",
+    "fecha": "2026-08-30"
+  },
+  "_doc_historico": {
+    "aviso": "Contenido del blueprint-1.1.0/1.0.0 (desincronizado y luego alineado a medias en el frontend). El v2.0.0 de INTERFAZ reescribe en schema 'blueprint-interfaz-v2' con lente de roles (ui.ops/ui.roles/ui.flujo/_lente_roles) desde los REALES ui_handlers del module.json, SIN cambiar el contrato de bus (las 5 ops de evento calendario.<accion>.request). Se conserva por valor documental.",
+    "_doc_original": "Blueprint del modulo calendario (panaderia). Modulo REFLEJO (index.js determinista, no blueprint-driven) — este blueprint declara SOLO la interfaz del generador schema->UI (BlueprintForm). Seccion `ui` alineada con los ui_handlers REALES del module.json (F6): producto.leer · producto.actualizar · productos.leer · validar · margen.leer. Las acciones van DOTTED (calendario.<accion>) porque el wrapper mqttRequest('calendario','<accion>') emite ui/request/calendario/<accion>; transporte.rpc vacio a proposito."
+  },
+  "_verificado_en_codigo": {
+    "reflejo": "modules/calendario/index.js (reflejo-0.1.0, 206 lineas): onProductoLeerRequest (L151, _atender -> calendario.producto.leer.response) · onProductosLeerRequest (L152) · onProductoActualizarRequest (L153, calendario.producto.actualizar.response) · onValidarRequest (L154, calendario.validar.response) · onMargenLeerRequest (L155, calendario.margen.leer.response) · _productoLeer (L160-167) · _productosLeer (L169-172) · _productoActualizar (L175-182: valida producto_id + cambios, merge patch {productos:{[id]:cambios}} via _custodio.actualizar) · _validar (L184-190: validarSchema + FORMULAS.validar.fn) · _margen (L193-199: FORMULAS.margen_leer.fn)",
+    "senales": "calendario.producto.actualizado — publicado por ConfigCustodio al persistir (modules/_shared/config-custodio.js L119: eventBus.publish(this.evento, {project_id, [campoDatos]: nuevas}), campoDatos='calendario'). module.json DECLARA el publish (consistente con el codigo). las lecturas (producto.leer, productos.leer, validar, margen.leer) NO emiten senal (alimentadoras).",
+    "custodio": "ConfigCustodio.crear(this, {esquema:'calendario-v1', path:'calendario.json', bloques:['productos'], validadores:VALIDADORES_CUSTODIA, evento:'calendario.producto.actualizado', campoDatos:'calendario'}) — la escritura es single-writer: valida los campos presentes (dias_salida array 1..7, margen >= 0) y hace merge profundo en productos.<id>.",
+    "producto_actualizar": "input { producto_id (req), cambios (req, objeto — dias_salida? ISO 1..7, margen_antelacion_h? >= 0) } -> 400 INVALID_INPUT si falta producto_id o cambios o no es objeto · 200 { calendario } tras merge en calendario.json del proyecto",
+    "productos_leer": "sin args -> 200 { calendarios: config.productos || {} } (todo el calendario del proyecto en una llamada)",
+    "producto_leer": "input { producto_id } -> 200 { producto_id, calendario } | 404 RESOURCE_NOT_FOUND (sin calendario)",
+    "validar": "input { producto_id, fecha_deseada } -> 200 { producto_id, fecha_deseada, dia_semana, valido, motivo, propuesta?: {fecha, dia} } (si no cuadra propone el dia de salida valido mas cercano que cumpla margen) | 400 INVALID_INPUT · 404 RESOURCE_NOT_FOUND",
+    "margen_leer": "input { producto_id } -> 200 { producto_id, margen_antelacion_h (null si sin calendario), dias_salida ([] si sin calendario) } | 400 · 404",
+    "errores": "400 INVALID_INPUT (validacion esquema calendario-v1) · 404 RESOURCE_NOT_FOUND (producto sin calendario en producto.leer/validar/margen.leer) · 502/503 fs al persistir"
   }
 }

@@ -4,7 +4,12 @@
   "version": "blueprint-2.0.0",
   "moduleId": "marca-cliente",
   "actor": "jefe",
-  "titulo": "Relación con el cliente: voz de marca, presencia digital, clientes y fidelización (the-pirate).",
+  "titulo": "Relación con el cliente: el JEFE DECLARA las reglas de marca (voz, presencia digital, clientes y fidelización) que bebe todo el sistema (the-pirate). Informe reglas.leer (la relación vigente por bloques) + editor-bloque reglas.actualizar (voz/presencia/fidelizacion, validación por campo del cambio).",
+  "_doc": "Blueprint v2 de INTERFAZ de la cara del JEFE del modulo marca-cliente (RAIZ 0.1.0, HIBRIDO, the-pirate — la RELACION CON EL CLIENTE). Rewriting del blueprint que vino con la saga d91f077c (ya traia lente de roles correcta) a schema 'blueprint-interfaz-v2' (ciclo v2) SIN cambiar el contrato: 6 ops reales del reflejo servidas por ui_handlers (ui/request/marca/<accion>). El reflejo (reflejo-0.1.0) persiste /pizzepos/marca.json (ConfigCustodio, single-writer, validacion por campo del cambio). Senal REAL verificada: marca.reglas.actualizadas (index.js L132 -> ConfigCustodio.actualizar -> eventBus.core). Moneda: SIN € (relacion con el cliente, no cifras de venta; el unico numero es fidelizacion.puntos_por_euro). Verificaciones: modules/marca-cliente/index.js 165 lineas (onReglasActualizarRequest L142 -> _custodio.actualizar; _reglasLeer L159-162 sin 404 con fuente; FORMULAS L77-118), module.json (6 ui_handlers, domain 'marca', 6 subscribes RPC, publishes marca.reglas.actualizadas). Nada inventado: ver _verificado_en_codigo.",
+  "_doc_historico": "Blueprint del modulo marca-cliente (custodio single-writer de la relacion con el cliente, the-pirate). Traia ui.roles + ui.flujo de la saga d91f077c (roles CONFIRMADOS correctos contra codigo: reglas.actualizar=jefe, lecturas=neutro, cliente/fidelizacion.obtener=utilizacion). Reescrito v2.0.0 para completar el andamiaje (formas_jefe, _lente_roles, _verificado_en_codigo) y darle cara de UI al ROL JEFE (reglas.actualizar). La utilizacion (cliente.obtener/fidelizacion.obtener, atencion en el POS) se anota pero no se implementa aqui.",
+  "eventos_publicados": [
+    "marca.reglas.actualizadas"
+  ],
   "eventos_que_escucho": [
     "marca.voz.obtener.request",
     "marca.presencia.obtener.request",
@@ -14,39 +19,85 @@
     "marca.reglas.actualizar.request"
   ],
   "transporte": {
-    "rpc": [
-      "marca.reglas.leer.request -> .response",
-      "marca.reglas.actualizar.request -> .response",
-      "marca.voz.obtener.request -> .response",
-      "marca.presencia.obtener.request -> .response",
-      "marca.cliente.obtener.request -> .response",
-      "marca.fidelizacion.obtener.request -> .response"
-    ]
+    "entrada": "reflejo RPC via ui_handlers (module.json) — las 6 ops se conducen por ui/request/marca/<accion> con la accion dotted. transporte.rpc vacio a proposito (ui_handlers reales).",
+    "rpc": [],
+    "salida": [
+      "marca.reglas.actualizadas"
+    ],
+    "qos": "publishAndWait (request/response correlado) en cada operacion; timeout 8s"
   },
   "ui": {
+    "_doc": "Panel de la CARA DEL JEFE: la relacion con el cliente es una DECLARACION del dueño (voz + presencia + clientes + fidelizacion). 6 ops con lente de roles: 1 jefe + 2 utilizacion + 3 neutro. Los 2 eventos request/*.request de los ui_handlers que son de utilizacion (cliente/fidelizacion.obtener) se anotan pero NO se implementan en el panel del jefe (viven en el POS).",
     "ops": {
       "reglas.leer": {
-        "titulo": "Reglas.leer"
+        "titulo": "Ver reglas de marca",
+        "descripcion": "Lectura de la relacion vigente (/pizzepos/marca.json) por bloques (voz/presencia/clientes/fidelizacion). Devuelve SIEMPRE la estructura completa (persistida o el DEFAULT si no existe) con fuente ('persistida'|'default') — sin 404.",
+        "rol": "neutro",
+        "forma": "cinta-estado + informe por bloques; campo null/vacio = 'por declarar', nunca error"
       },
       "reglas.actualizar": {
-        "titulo": "Reglas.actualizar"
+        "titulo": "Declarar reglas de marca",
+        "descripcion": "Escritura single-writer (el dueño): LA DECLARACION de la relacion con el cliente. Validacion por campo del cambio (solo valida lo que viene — los campos ausentes no se tocan). Envia SOLO el bloque editado: { voz } | { presencia } | { fidelizacion }.",
+        "rol": "jefe",
+        "forma": "editor-bloque por bloque (voz/tono-valores-tradicion; presencia/canales; fidelizacion/activa-puntos_por_euro-recompensas)",
+        "senal_pareada": "marca.reglas.actualizadas",
+        "args": [
+          {
+            "nombre": "cambios",
+            "tipo": "json",
+            "required": true,
+            "descripcion": "Parche por bloque del contrato marca-v1 (index.js DEFAULT_REGLAS). Ej: {\"voz\":{\"tono\":\"cercana\",\"valores\":[\"hecho a mano\",\"fresco\"],\"tradicion_referencia\":\"la pizza napolitana\"}} | {\"presencia\":{\"canales\":[\"web\",\"instagram\",\"whatsapp\"]}} | {\"fidelizacion\":{\"activa\":true,\"puntos_por_euro\":1,\"recompensas\":[\"cafe gratis a los 50 puntos\"]}}"
+          }
+        ]
       },
       "voz.obtener": {
-        "titulo": "Voz.obtener"
+        "titulo": "Ver voz",
+        "descripcion": "Lectura parcial de la voz de marca (reglas.voz).",
+        "rol": "neutro"
       },
       "presencia.obtener": {
-        "titulo": "Presencia.obtener"
+        "titulo": "Ver presencia",
+        "descripcion": "Lectura parcial de la presencia digital (reglas.presencia.canales).",
+        "rol": "neutro"
       },
       "cliente.obtener": {
-        "titulo": "Cliente.obtener"
+        "titulo": "Consultar cliente",
+        "descripcion": "UTILIZACION (atencion en el POS): consulta de un cliente por contacto (telefono/email) requerido. Se anota, NO se implementa en el panel del jefe.",
+        "rol": "utilizacion"
       },
       "fidelizacion.obtener": {
-        "titulo": "Fidelizacion.obtener"
+        "titulo": "Ver fidelización del cliente",
+        "descripcion": "UTILIZACION (atencion en el POS): puntos/recompensas de un cliente por contacto requerido. Se anota, NO se implementa en el panel del jefe.",
+        "rol": "utilizacion"
       }
     },
     "datos": {
       "op": "reglas.leer",
-      "titulo": "Reglas.leer"
+      "titulo": "Reglas de marca del proyecto",
+      "refresh_on": ["marca.reglas.actualizadas"],
+      "columnas": ["voz", "presencia", "clientes", "fidelizacion"]
+    },
+    "formas_jefe": {
+      "informe_relacion": {
+        "forma": "cinta-estado + informe por bloques (voz/presencia/clientes/fidelizacion); campo null/vacio = 'por declarar', nunca error; muestra fuente ('persistida'|'default') para transparencia",
+        "rpc": "marca.reglas.leer.request { project_id } -> 200 { reglas, fuente }",
+        "senal": "none (lectura neutra); se re-lee por la senal tras declarar"
+      },
+      "editor_bloque_voz": {
+        "forma": "editor-bloque VOZ (tono + valores csv + tradicion_referencia) -> reglas.actualizar { cambios: { voz } }",
+        "rpc": "marca.reglas.actualizar.request { project_id, cambios: { voz: {...} } } -> 200 { reglas }",
+        "senal": "marca.reglas.actualizadas — debounce 60ms"
+      },
+      "editor_bloque_presencia": {
+        "forma": "editor-bloque PRESENCIA (canales csv) -> reglas.actualizar { cambios: { presencia } }",
+        "rpc": "marca.reglas.actualizar.request { project_id, cambios: { presencia: { canales } } } -> 200 { reglas }",
+        "senal": "marca.reglas.actualizadas — debounce 60ms"
+      },
+      "editor_bloque_fidelizacion": {
+        "forma": "editor-bloque FIDELIZACION (activa bool + puntos_por_euro numero > 0 o null + recompensas csv) -> reglas.actualizar { cambios: { fidelizacion } }",
+        "rpc": "marca.reglas.actualizar.request { project_id, cambios: { fidelizacion: {...} } } -> 200 { reglas }",
+        "senal": "marca.reglas.actualizadas — debounce 60ms"
+      }
     },
     "roles": {
       "reglas.leer": "neutro",
@@ -60,30 +111,42 @@
       {
         "nombre": "jefe",
         "orden": 1,
-        "ops": [
-          "reglas.actualizar"
-        ],
-        "descripcion": "Declara las reglas de marca: voz, presencia, clientes y fidelización (single-writer del dueño)"
+        "ops": ["reglas.actualizar"],
+        "descripcion": "DECLARAR la relacion con el cliente: editor-bloque VOZ (tono/valores/tradicion), editor-bloque PRESENCIA (canales) y editor-bloque FIDELIZACION (activa/puntos_por_euro/recompensas), cada uno 1 llamada reglas.actualizar { soloSuBloque }. El dictamen llega en la respuesta (200 { reglas }) y la señal marca.reglas.actualizadas re-lee el informe (nunca recarga)."
       },
       {
         "nombre": "utilizacion",
         "orden": 2,
-        "ops": [
-          "cliente.obtener",
-          "fidelizacion.obtener"
-        ],
-        "descripcion": "Al atender: consulta de cliente por contacto y puntos/recompensas"
+        "ops": ["cliente.obtener", "fidelizacion.obtener"],
+        "descripcion": "Al atender en el POS: consulta de cliente por contacto (telefono/email) y sus puntos/recompensas. NO se implementa en el panel del jefe."
       },
       {
         "nombre": "consulta",
         "orden": 3,
-        "ops": [
-          "reglas.leer",
-          "voz.obtener",
-          "presencia.obtener"
-        ],
-        "descripcion": "Ver las reglas vigentes"
+        "ops": ["reglas.leer", "voz.obtener", "presencia.obtener"],
+        "descripcion": "INFORMARSE antes de decidir: la relacion vigente por bloques; los campos nulos/vacios se muestran 'por declarar'."
       }
     ]
+  },
+  "_lente_roles": {
+    "agente": "ciclo-marca-cliente v2",
+    "metodo": "esquematizador-jefe (modules/marca-cliente/esquema-jefe/ — pasada-1, pasada-2-diseccion)",
+    "arbitro": "¿escribe en la relacion con el cliente (via reglas.actualizar) -> jefe · se ejecuta en la atencion al cliente AHORA (POS) -> utilizacion · solo informa -> neutro",
+    "veredicto": "3/6 ops juzgadas: jefe(1) reglas.actualizar (LA DECLARACION de la relacion — unico escritor) · utilizacion(2) cliente.obtener y fidelizacion.obtener (consulta puntual por contacto al atender en el POS — NO en el panel del jefe) · neutro(3) reglas.leer (informe), voz.obtener y presencia.obtener (lecturas parciales). Los roles del blueprint previo (saga d91f077c) se CONFIRMAN correctos.",
+    "senales": "1 señal de salida: marca.reglas.actualizadas (ConfigCustodio.actualizar index.js L132 -> eventBus core -> MQTT core/*/events/...). Doble confirmacion tras declarar: dictamen en la respuesta RPC (200 { reglas }) + señal que re-lee (debounce 60ms). Las lecturas/utilizacion NO emiten señal.",
+    "moneda": "SIN € en la mayoria de shapes (relacion con el cliente). Unico numero: fidelizacion.puntos_por_euro (int/float > 0 o null), sin centimos de euro reales.",
+    "invariante_del_panel": "sin 404 de lectura: reglas.leer responde SIEMPRE la estructura completa (persistida o el DEFAULT si no existe) con fuente. El estado 'sin declarar' se representa como campos null/vacios 'por declarar', no como error. La declaracion valida SOLO lo que viene (los campos ausentes no se tocan) — se envia un SOLO bloque por llamada. TODO RPC lleva project_id inyectado (leccion bug escandallo).",
+    "huecos_abiertos": [
+      "alta/edicion de clientes individuales (la lista[] de clientes no tiene escritura UI dedicada en este ciclo — cliente.obtener es consulta puntual de utilizacion)",
+      "eventos granulares por bloque (marca.voz.actualizada, etc.) — la señal es de modulo (marca.reglas.actualizadas) con la reglas completas",
+      "recompensas como tipos validados (cafe gratis vs % descuento) — hoy son strings libres en recompensas[]"
+    ],
+    "fuente_analisis": "modules/marca-cliente/esquema-jefe/esquema.md",
+    "fecha": "2026-08-30"
+  },
+  "_verificado_en_codigo": {
+    "index_js": "modules/marca-cliente/index.js (165 lineas): onReglasActualizarRequest L142 -> _custodio.actualizar (config-custodio: validacion por campo, bloques voz/presencia/clientes/fidelizacion, evento marca.reglas.actualizadas, camposDatos reglas); _reglasLeer L159-162 (sin 404, { reglas, fuente }); onVozObtenerRequest L137 -> _calcular('voz') FORMULAS.voz L78-84; onPresenciaObtenerRequest L138 -> FORMULAS.presencia L86-91; onClienteObtenerRequest L139 -> FORMULAS.cliente L93-103 (contacto requerido); onFidelizacionObtenerRequest L140 -> FORMULAS.fidelizacion L105-117 (contacto requerido).",
+    "module_json": "6 ui_handlers (domain 'marca', zone barra_modulos, workspace_module): reglas.leer, reglas.actualizar, voz.obtener, presencia.obtener, cliente.obtener, fidelizacion.obtener. 6 subscribes RPC. 1 publish: marca.reglas.actualizadas.",
+    "schema": "no hay schema-file propio — contrato marca-v1 via ConfigCustodio (DEFAULT_REGLAS index.js L9-27) + VALIDADORES_CUSTODIA L38-72 (validacion por campo). Bloques: voz/presencia/clientes/fidelizacion."
   }
 }

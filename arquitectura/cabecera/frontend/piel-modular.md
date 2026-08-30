@@ -442,6 +442,107 @@ ESQUELETO Panel {
 > viven en la config del proyecto. Así cada proyecto (pizzepos, prisma, un cliente nuevo)
 > tiene su identidad visual sin tocar el repo del frontend.
 
+### Dos caras visuales por proyecto — el origen de las pieles
+
+> **Idea semilla.** Cada proyecto tiene dos necesidades visuales distintas que conviven:
+>
+> 1. **Marketing (visión cliente)** — lo que ve el cliente final: carta digital, landing,
+>    escaparate, redes, materiales de marca. Aquí la piel es la MARCA del negocio:
+>    colores corporativos, tipografía de identidad, tono visual que transmite personalidad.
+>    Módulos de marketing por proyecto (por crear) consumirán esta cara.
+>
+> 2. **Trabajo (operativa interna)** — lo que ve el operador: comandero, cocina, admin,
+>    dashboard, inventario. Aquí la piel prioriza LEGIBILIDAD, contraste, velocidad de
+>    lectura, ergonomía en condiciones reales (luz de cocina, pantalla táctil grasienta,
+>    estrés de servicio). La marca pasa a segundo plano; la función manda.
+>
+> De estas dos caras nacen los principios de diseño de las pieles — no son la misma piel
+> con distinto logo, son dos conjuntos de prioridades que el mismo proyecto necesita cubrir.
+
+```json
+{
+  "esquema": "dos-caras-v1",
+  "idea": "cada proyecto tiene dos contextos visuales con prioridades distintas",
+
+  "caras": {
+    "marketing": {
+      "quien_ve": "cliente final",
+      "donde": ["carta-digital", "landing", "escaparate", "redes", "materiales de marca"],
+      "prioridades": [
+        "identidad de marca — colores corporativos, tipografía propia, personalidad visual",
+        "impacto emocional — el diseño VENDE, transmite confianza y deseo",
+        "coherencia cross-canal — la misma cara en web, móvil, print, redes",
+        "estética sobre densidad — más espacio, más respiración, menos información por pantalla"
+      ],
+      "modulos_pendientes": "módulos de marketing por proyecto (por crear) que consuman esta piel",
+      "tokens_que_importan": ["paleta de marca", "tipografía display", "radii generosos", "sombras suaves", "motion expresivo"]
+    },
+
+    "trabajo": {
+      "quien_ve": "operador, equipo, staff",
+      "donde": ["comandero", "cocina", "admin-panel", "dashboard", "inventario", "caja"],
+      "prioridades": [
+        "legibilidad — contraste alto, tamaño mínimo generoso, fuentes sin adornos",
+        "densidad informativa — mucha información útil visible sin scroll",
+        "velocidad de interacción — touch targets grandes, feedback inmediato, sin animaciones que retrasen",
+        "resiliencia ambiental — funciona con luz directa, pantalla sucia, manos ocupadas",
+        "diferenciación por proyecto — saber en qué proyecto estás de un vistazo (el hue de fondo que ya hace prisma-skin)"
+      ],
+      "tokens_que_importan": ["contraste alto", "fuente sans limpia", "radii mínimos", "motion rápido o nulo", "colores de estado claros"]
+    }
+  },
+
+  "principios_que_emergen": [
+    {
+      "id": "P-PIEL-1",
+      "principio": "un proyecto define DOS pieles, no una — marketing y trabajo",
+      "implicacion": "PielJSON lleva un campo 'contexto': 'marketing' | 'trabajo'. El skin-engine aplica según el contexto activo."
+    },
+    {
+      "id": "P-PIEL-2",
+      "principio": "marketing hereda de la marca; trabajo hereda del sistema con tinte de proyecto",
+      "implicacion": "la piel de trabajo comparte el HUE de marca (para identificar proyecto) pero no su tipografía display ni su ritmo visual — usa los defaults de sistema optimizados para operativa."
+    },
+    {
+      "id": "P-PIEL-3",
+      "principio": "el contexto visual lo decide la RUTA, no el usuario",
+      "implicacion": "rutas /carta, /landing, /escaparate → marketing. Rutas /comandero, /cocina, /admin → trabajo. Sin toggle manual."
+    },
+    {
+      "id": "P-PIEL-4",
+      "principio": "la piel de trabajo puede ser AUSTERA — la de marketing nunca",
+      "implicacion": "trabajo: el proyecto puede definir solo '--action-primary' y un '--surface-base' con tinte → el resto son defaults de sistema. Marketing: la piel debe ser completa porque ES la marca."
+    },
+    {
+      "id": "P-PIEL-5",
+      "principio": "los módulos de marketing del proyecto son los consumidores naturales de la piel marketing",
+      "implicacion": "estos módulos (por crear) generan la carta digital, la landing, los materiales. Consumen la piel como dato, no como template CSS."
+    }
+  ],
+
+  "impacto_en_PielJSON": {
+    "cambio": "PielJSON pasa de ser un objeto plano a tener DOS secciones",
+    "estructura_nueva": {
+      "id": "String",
+      "nombre": "String",
+      "trabajo": {
+        "variante": "'dark' | 'light'",
+        "tokens": "Map<String, String> — overrides mínimos (hue de proyecto + contraste)",
+        "fuentes?": "normalmente hereda del sistema",
+        "motion?": "normalmente rápido o nulo"
+      },
+      "marketing": {
+        "variante": "'dark' | 'light'",
+        "tokens": "Map<String, String> — paleta completa de marca",
+        "fuentes?": "tipografía corporativa (display + body)",
+        "motion?": "expresivo, con personalidad",
+        "radii?": "los de la marca"
+      }
+    }
+  }
+}
+```
+
 ```json
 {
   "esquema": "piel-dinamica-v1",
@@ -455,39 +556,25 @@ ESQUELETO Panel {
   },
 
   "contrato_piel": {
-    "descripcion": "JSON que redefine tokens semánticos — solo los que cambia respecto al default",
+    "descripcion": "JSON con DOS secciones — trabajo y marketing — cada una redefine tokens semánticos",
     "estructura": {
-      "id": "String — identificador único de la piel",
-      "nombre": "String — nombre visible (ej: 'Pizzepos Cálido')",
-      "variante": "'dark' | 'light' — familia base sobre la que se monta",
-      "tokens": {
-        "nota": "Map<TokenSemantico, valor> — SOLO los que difieren del default de la variante",
-        "ejemplo": {
-          "--surface-base": "#0d1512",
-          "--action-primary": "#14b8a6",
-          "--text-link": "#2dd4bf"
-        }
+      "id": "String — identificador único de la piel del proyecto",
+      "nombre": "String — nombre visible (ej: 'Pizzepos')",
+      "trabajo": {
+        "nota": "piel de OPERATIVA — lo que ve el staff. Overrides mínimos: hue de proyecto + lo que difiera del default sistema.",
+        "variante": "'dark' | 'light'",
+        "tokens": "Map<TokenSemantico, valor>",
+        "fuentes?": "normalmente omitido (hereda sistema)",
+        "motion?": "normalmente omitido (rápido por default)",
+        "radii?": "normalmente omitido"
       },
-      "fuentes": {
-        "nota": "opcional — override de familias tipográficas",
-        "ejemplo": {
-          "--font-sans": "'Poppins', system-ui, sans-serif",
-          "--font-display": "'Playfair Display', serif"
-        }
-      },
-      "motion": {
-        "nota": "opcional — override de duraciones/easings",
-        "ejemplo": {
-          "--dur-normal": "250ms",
-          "--ease-default": "cubic-bezier(0.22, 1, 0.36, 1)"
-        }
-      },
-      "radii": {
-        "nota": "opcional — override de border-radius",
-        "ejemplo": {
-          "--radius-component": "0.5rem",
-          "--radius-card": "1rem"
-        }
+      "marketing": {
+        "nota": "piel de MARCA — lo que ve el cliente. Paleta completa de identidad corporativa.",
+        "variante": "'dark' | 'light'",
+        "tokens": "Map<TokenSemantico, valor>",
+        "fuentes?": "tipografía corporativa (display + body)",
+        "motion?": "expresivo, con personalidad",
+        "radii?": "los de la marca"
       }
     }
   },
@@ -505,10 +592,12 @@ ESQUELETO Panel {
 
   "flujo": [
     "1. Usuario entra al proyecto",
-    "2. project-manager publica core/<id>/config/skin con el JSON de piel",
-    "3. skin-engine recibe, resuelve variante base, aplica overrides en :root",
-    "4. Todos los componentes ya consumen tokens semánticos → cambian solos",
-    "5. Usuario sale del proyecto → skin-engine restaura defaults del sistema"
+    "2. project-manager publica core/<id>/config/skin con el JSON de piel (ambas caras)",
+    "3. skin-engine recibe y guarda ambas caras en memoria",
+    "4. La RUTA determina el contexto: /carta, /landing → marketing; /comandero, /cocina → trabajo",
+    "5. skin-engine aplica la cara correspondiente al contexto de la ruta activa",
+    "6. Si el usuario navega entre rutas de distinto contexto → skin-engine cambia la cara en caliente",
+    "7. Usuario sale del proyecto → skin-engine restaura defaults del sistema"
   ],
 
   "piel_default_del_sistema": {
@@ -527,54 +616,87 @@ ESQUELETO Panel {
 ### Pseudocódigo del motor
 
 ```
-CLASE SkinEngine {
-  defaults : Map<Variante, Map<Token, Valor>>   // dark y light, del CSS estático
-  activa   : Piel | null
-  bus      : EventBus
+ENUM ContextoVisual { TRABAJO, MARKETING }
 
-  aplicar(piel: PielJSON): Void {
-    PRECONDICION: piel.tokens es Map<String, String>
-    base ← defaults.get(piel.variante ?? 'dark')
+CLASE SkinEngine {
+  defaults        : Map<Variante, Map<Token, Valor>>   // dark y light, del CSS estático
+  pielProyecto    : PielJSON | null                     // ambas caras cargadas
+  contextoActivo  : ContextoVisual
+  tokensAplicados : Array<String>                       // para limpiar al cambiar
+  bus             : EventBus
+
+  cargar(piel: PielJSON): Void {
+    pielProyecto = piel
+    // aplica la cara del contexto actual
+    aplicarCara(contextoActivo)
+  }
+
+  cambiarContexto(ctx: ContextoVisual): Void {
+    SI ctx == contextoActivo: RETORNAR
+    contextoActivo = ctx
+    SI pielProyecto: aplicarCara(ctx)
+  }
+
+  aplicarCara(ctx: ContextoVisual): Void {
+    PRECONDICION: pielProyecto existe
+    cara ← SI ctx == MARKETING: pielProyecto.marketing
+           SINO: pielProyecto.trabajo
+
+    SI cara == null: RETORNAR   // el proyecto no define esta cara → defaults
+
+    limpiarTokensAnteriores()
 
     root ← document.documentElement
-    root.setAttribute('data-skin', piel.id)
-    root.setAttribute('data-variant', piel.variante ?? 'dark')
+    root.setAttribute('data-skin', pielProyecto.id)
+    root.setAttribute('data-context', ctx.lowercase())
+    root.setAttribute('data-variant', cara.variante ?? 'dark')
 
-    // aplica overrides del proyecto sobre la base
-    PARA [token, valor] EN piel.tokens:
+    tokensAplicados = []
+
+    PARA [token, valor] EN cara.tokens:
       root.style.setProperty(token, valor)
+      tokensAplicados.push(token)
 
-    SI piel.fuentes:
-      PARA [token, valor] EN piel.fuentes:
-        root.style.setProperty(token, valor)
+    PARA seccion EN [cara.fuentes, cara.motion, cara.radii]:
+      SI seccion:
+        PARA [token, valor] EN seccion:
+          root.style.setProperty(token, valor)
+          tokensAplicados.push(token)
 
-    SI piel.motion:
-      PARA [token, valor] EN piel.motion:
-        root.style.setProperty(token, valor)
+    bus.emit('skin.applied', { id: pielProyecto.id, contexto: ctx })
+  }
 
-    SI piel.radii:
-      PARA [token, valor] EN piel.radii:
-        root.style.setProperty(token, valor)
-
-    activa = piel
-    bus.emit('skin.applied', { id: piel.id, variante: piel.variante })
+  limpiarTokensAnteriores(): Void {
+    root ← document.documentElement
+    PARA token EN tokensAplicados:
+      root.style.removeProperty(token)
+    tokensAplicados = []
   }
 
   restaurar(): Void {
+    limpiarTokensAnteriores()
     root ← document.documentElement
     root.removeAttribute('data-skin')
-    // limpiar todos los inline styles que puso aplicar()
-    SI activa:
-      PARA token EN [...activa.tokens, ...activa.fuentes, ...activa.motion, ...activa.radii]:
-        root.style.removeProperty(token)
-    activa = null
-    // el CSS estático (semanticos.css) retoma el control
+    root.removeAttribute('data-context')
+    pielProyecto = null
     bus.emit('skin.cleared')
   }
 
   // suscripción MQTT — se engancha al conectar al proyecto
   onSkinMessage(payload: PielJSON): Void {
-    aplicar(payload)
+    cargar(payload)
+  }
+
+  // el router llama a esto al cambiar de ruta
+  onRouteChange(ruta: String): Void {
+    ctx ← clasificarRuta(ruta)
+    cambiarContexto(ctx)
+  }
+
+  clasificarRuta(ruta: String): ContextoVisual {
+    SI ruta.contiene('/carta') O ruta.contiene('/landing') O ruta.contiene('/escaparate'):
+      RETORNAR MARKETING
+    RETORNAR TRABAJO   // default — la operativa es el caso común
   }
 }
 ```
@@ -583,26 +705,53 @@ CLASE SkinEngine {
 
 ```json
 {
-  "id": "pizzepos-calido",
-  "nombre": "Pizzepos Cálido",
-  "variante": "dark",
-  "tokens": {
-    "--surface-base": "#1a1210",
-    "--surface-raised": "#231c18",
-    "--action-primary": "#e67e22",
-    "--action-primary-hover": "#d35400",
-    "--text-link": "#f0a050",
-    "--status-success": "#27ae60",
-    "--border-focus": "#e67e22"
+  "id": "pizzepos",
+  "nombre": "Pizzepos",
+
+  "trabajo": {
+    "variante": "dark",
+    "tokens": {
+      "--surface-base": "#1a1210",
+      "--surface-raised": "#231c18",
+      "--action-primary": "#e67e22",
+      "--border-focus": "#e67e22"
+    }
   },
-  "fuentes": {
-    "--font-display": "'Merriweather', serif"
-  },
-  "radii": {
-    "--radius-component": "0.5rem",
-    "--radius-card": "1rem"
+
+  "marketing": {
+    "variante": "light",
+    "tokens": {
+      "--surface-base": "#fdf8f3",
+      "--surface-raised": "#fff9f0",
+      "--action-primary": "#d35400",
+      "--action-primary-hover": "#c0392b",
+      "--text-primary": "#2c1810",
+      "--text-secondary": "#6b4423",
+      "--text-link": "#d35400",
+      "--status-success": "#27ae60",
+      "--border-default": "#e8d5c0",
+      "--border-focus": "#d35400"
+    },
+    "fuentes": {
+      "--font-display": "'Playfair Display', serif",
+      "--font-sans": "'Lato', system-ui, sans-serif"
+    },
+    "motion": {
+      "--dur-normal": "300ms",
+      "--ease-default": "cubic-bezier(0.22, 1, 0.36, 1)"
+    },
+    "radii": {
+      "--radius-component": "0.5rem",
+      "--radius-card": "1rem"
+    }
   }
 }
+```
+
+```
+NOTA: la piel de TRABAJO es espartana — 4 tokens bastan para dar el tinte de proyecto.
+      La piel de MARKETING es completa — ES la marca, tiene que serlo.
+      Un proyecto puede definir solo 'trabajo' (sin módulos marketing aún) y funcionar.
 ```
 
 ## L7 — Movimiento
@@ -752,14 +901,21 @@ CLASE SistemaUI {
   }
 }
 
-VALUE_OBJECT PielJSON {
-  id       : String
-  nombre   : String
+ENUM ContextoVisual { TRABAJO, MARKETING }
+
+VALUE_OBJECT CaraPiel {
   variante : 'dark' | 'light'
-  tokens   : Map<String, String>         // solo los overrides semánticos
+  tokens   : Map<String, String>         // overrides semánticos
   fuentes? : Map<String, String>         // override de familias
   motion?  : Map<String, String>         // override de duraciones/easings
   radii?   : Map<String, String>         // override de radii
+}
+
+VALUE_OBJECT PielJSON {
+  id        : String
+  nombre    : String
+  trabajo   : CaraPiel                    // operativa — staff ve esto
+  marketing : CaraPiel | null             // marca — cliente ve esto (puede no existir aún)
 
   ORIGEN: config del proyecto (project-manager / marca.json / DB)
   TRANSPORTE: MQTT → core/<project_id>/config/skin
@@ -767,13 +923,18 @@ VALUE_OBJECT PielJSON {
 }
 
 CLASE SkinEngine {
-  defaults : Map<Variante, Map<Token, Valor>>  // del CSS estático
-  activa   : PielJSON | null
-  bus      : EventBus
+  defaults        : Map<Variante, Map<Token, Valor>>  // del CSS estático
+  pielProyecto    : PielJSON | null
+  contextoActivo  : ContextoVisual
+  tokensAplicados : Array<String>                      // para limpiar al cambiar
+  bus             : EventBus
 
-  aplicar(piel: PielJSON): Void       // overrides en :root
-  restaurar(): Void                    // limpia inline, CSS estático retoma
-  onSkinMessage(payload: PielJSON)     // suscripción MQTT
+  cargar(piel: PielJSON): Void            // guarda ambas caras, aplica la del contexto actual
+  cambiarContexto(ctx: ContextoVisual)    // cambia cara en caliente (al navegar entre rutas)
+  aplicarCara(ctx: ContextoVisual): Void  // overrides en :root de la cara elegida
+  restaurar(): Void                        // limpia inline, CSS estático retoma
+  onSkinMessage(payload: PielJSON)         // suscripción MQTT
+  onRouteChange(ruta: String)              // el router decide el contexto
 }
 ```
 

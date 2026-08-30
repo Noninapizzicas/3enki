@@ -1,295 +1,301 @@
 <script lang="ts">
   /**
-   * EscandalloPanel - Análisis de costes
+   * EscandalloPanel — la cara del JEFE del costeo (F7, módulo escandallo
+   * reflejo-1.4.0, según esquema-jefe/ del commit 1). Módulo ATÍPICO: el jefe
+   * NO escribe reglas — LEE el dictamen del motor (INV1) y DISPARA costeos.
    *
-   * Views:
-   * - Global: resumen de costes de todas las recetas
-   * - Receta: escandallo detallado de una receta
+   * Composición (3 capas):
+   *   - CINTA-ESTADO: "n recetas · n escandalizadas · coste medio" — SOLO de
+   *     lecturas (recetas.listar {incluir_lineas}, R2). Nunca asumido.
+   *   - REF-SELECT receta → TABLA-CÁLCULO: ingrediente × cantidad = coste de
+   *     línea, con FUENTE del precio (catalogo | sub_receta) y peso % por fila
+   *     (única cuenta permitida en UI: % de presentación — INV1). Sin margen
+   *     ([ABIERTO]).
+   *   - GESTOS de regeneración (D1): [recalcular siguiente] (el motor responde
+   *     con costeada+faltan: gesto repetible), [recalcular LOTE]
+   *     (confirmador-nombrado: N señales en tándem absorbidas por debounce) y
+   *     [costear ESTA] (confirmador, persiste la receta activa). La SEÑAL
+   *     pareada `escandallo.coste.calculado` re-lee (R3) — también la que
+   *     llega de costeos externos (otra ventana/agente).
+   *
+   * Honestidad (INV7): las líneas sin precio en catálogo van SIN número y
+   * nombradas en su fila — retar el precio toca en `ingredientes`, no aquí.
+   *
+   * Moneda (INV2): € (es-ES) — coste_total 2dec, coste_unidad hasta 6dec por
+   * sub-recetas. El escalado NO vive en este panel: es derivación transitoria
+   * sin señal, fuera del flujo del dictamen (INV5).
    */
 
   import { onMount, onDestroy } from 'svelte';
   import {
-    escandalloStore,
-    escandalloReceta,
-    escandalloGlobal,
-    escandalloEscalado,
-    escandalloLoading,
-    escandalloError,
+    cinta,
+    cintaLoading,
+    cintaError,
+    recetas,
+    recetaDetalle,
+    tablaEscandallo,
+    gestosPendientes,
+    errorMutacion,
+    resultadoSiguiente,
+    loadResumen,
+    elegirReceta,
+    costearReceta,
+    recalcularSiguiente,
+    recalcularLote,
     initEscandalloSubscriptions,
-    setActiveView,
-    clearError,
-    escalarReceta
-  } from '$lib/stores/escandallo';
-  import { prefillChatInput } from '$lib/stores/chatInputDraft';
+    resetEscandallo,
+    formatearEuros,
+    formatearPrecioUnitario
+  } from './stores/escandallo';
+  import { activeProjectId } from '$lib/stores/projects';
 
   export let panelId: string = '';
 
+  /** Receta elegida en el ref-select. */
+  let seleccion = '';
+  /** Confirmadores-nombrados (gestos que persisten: piden un "sí, …" explícito). */
+  let costearOpen = false;
+  let loteOpen = false;
+  /** Aviso del último gesto de regeneración (costeada X · faltan N / lote). */
+  let aviso: string | null = null;
+
   let cleanup: (() => void) | null = null;
 
-  // Form de escalado por superficie
-  let escalarRecetaId: string = '';
-  let escalarDiametroOrigen: number = 33;
-  let escalarDiametroDestino: number = 0;
+  $: filas = $tablaEscandallo;
+  $: detalle = $recetaDetalle;
+  /** Nombre mostrado de la receta activa (la ficha de obtener no siempre trae id). */
+  $: detalleNombre = detalle?.nombre ?? ordenadas.find((r) => r.receta_id === seleccion)?.nombre ?? '';
 
-  $: view = $escandalloStore.activeView;
-  $: receta = $escandalloReceta;
-  $: global_ = $escandalloGlobal;
-  $: escalado = $escandalloEscalado;
-  $: loading = $escandalloLoading;
-  $: error = $escandalloError;
+  // Mismo orden que el motor (ORDEN_TIPO): masa/salsa/base → pizza; alfabético dentro.
+  const ORDEN_TIPO: Record<string, number> = { masa: 0, salsa: 0, base: 0, pizza: 1 };
+  $: ordenadas = [...$recetas].sort((a, b) => {
+    const ta = a.tipo != null && ORDEN_TIPO[a.tipo] != null ? ORDEN_TIPO[a.tipo] : 1;
+    const tb = b.tipo != null && ORDEN_TIPO[b.tipo] != null ? ORDEN_TIPO[b.tipo] : 1;
+    return ta !== tb ? ta - tb : a.nombre.localeCompare(b.nombre);
+  });
 
-  onMount(() => { cleanup = initEscandalloSubscriptions(); });
-  onDestroy(() => { cleanup?.(); });
+  onMount(() => {
+    cleanup = initEscandalloSubscriptions();
+    void loadResumen();
+  });
+  onDestroy(() => {
+    cleanup?.();
+    resetEscandallo();
+  });
 
-  function formatPrice(n: number): string { return n.toFixed(2) + '€'; }
-  function formatPct(n: number): string { return n.toFixed(1) + '%'; }
-
-  function getFoodCostColor(fc: number): string {
-    if (fc <= 25) return '#22c55e';
-    if (fc <= 33) return 'rgba(245, 158, 11, 1)';
-    return '#ef4444';
+  function onElegir(): void {
+    loteOpen = false;
+    costearOpen = false;
+    aviso = null;
+    void elegirReceta(seleccion || null);
   }
 
-  function onEscalar(): void {
-    const id = escalarRecetaId.trim() || receta?.receta_id || '';
-    if (!id) {
-      clearError();
-      escandalloStore.update(s => ({ ...s, error: 'Indica el id o nombre de la receta a escalar.' }));
+  // ---- [recalcular siguiente] — gesto repetible: el motor responde «vuelve a llamar» ----
+  async function onSiguiente(): Promise<void> {
+    aviso = null;
+    const r = await recalcularSiguiente();
+    if (!r) return;
+    if (r.costeada) {
+      aviso = r.terminado
+        ? `completo: costeada «${r.costeada.nombre}» — no quedan pendientes`
+        : `costeada «${r.costeada.nombre}» · faltan ${r.faltan} — vuelve a pedir «recalcular siguiente»`;
+    } else if (r.terminado) {
+      aviso = 'completo: no quedan recetas pendientes de costear';
+    }
+  }
+
+  // ---- [recalcular LOTE] — confirmador-nombrado: persiste TODAS las pendientes ----
+  async function ejecutarLote(): Promise<void> {
+    loteOpen = false;
+    aviso = null;
+    const r = await recalcularLote();
+    if (!r) return;
+    if (r.total_costeadas === 0) {
+      aviso = 'nada pendiente: todas las recetas ya tienen su coste';
       return;
     }
-    if (!escalarDiametroDestino || escalarDiametroDestino <= 0) {
-      escandalloStore.update(s => ({ ...s, error: 'Indica el diámetro destino (cm).' }));
-      return;
+    const sin = r.sin_precio ?? [];
+    aviso =
+      `lote: ${r.total_costeadas} receta(s) costeada(s)` +
+      (sin.length > 0 ? ` · sin precio: ${sin.slice(0, 6).join(', ')}${sin.length > 6 ? '…' : ''}` : '');
+  }
+
+  // ---- [costear ESTA] — confirmador de LA receta activa (persiste su dictamen) ----
+  async function ejecutarCostear(): Promise<void> {
+    costearOpen = false;
+    if (!seleccion) return;
+    aviso = null;
+    try {
+      await costearReceta(seleccion);
+      // la señal pareada re-lee (R3): el dictamen nuevo llega solo
+    } catch {
+      /* el error ya vive en $errorMutacion (describeError del store) */
     }
-    escalarReceta(id, escalarDiametroDestino, escalarDiametroOrigen || 33);
   }
 </script>
 
-<div class="escandallo-panel">
-  <div class="tabs">
-    <button class="tab" class:active={view === 'global'} on:click={() => setActiveView('global')}>
-      Resumen Global
-    </button>
-    <button class="tab" class:active={view === 'receta'} on:click={() => setActiveView('receta')} disabled={!receta}>
-      Detalle Receta
-    </button>
-    <button class="tab" class:active={view === 'escalar'} on:click={() => setActiveView('escalar')}>
-      Escalar por superficie
-    </button>
+<div class="escandallo-panel" data-panel-id={panelId}>
+  <!-- CAPA 1 · CINTA-ESTADO (solo lecturas — R2) -->
+  <div class="cinta">
+    <div class="cinta-datos">
+      <span class="dato"><strong>{$cinta.recetas}</strong> recetas</span>
+      <span class="sep">·</span>
+      <span class="dato"><strong>{$cinta.escandalizadas}</strong> escandalizadas</span>
+      <span class="sep">·</span>
+      <span class="dato">coste medio <strong>{formatearEuros($cinta.costeMedio)}</strong></span>
+    </div>
+    {#if $cintaLoading}
+      <span class="cinta-estado">leyendo recetas…</span>
+    {:else if $gestosPendientes > 0}
+      <span class="cinta-estado">costeando…</span>
+    {/if}
   </div>
 
-  {#if error}
+  {#if $cintaError}
+    <div class="error"><span>⚠️ la cinta no leyó: {$cintaError}</span></div>
+  {/if}
+  {#if $errorMutacion}
     <div class="error">
-      <span>{error}</span>
-      <button on:click={clearError}>×</button>
+      <span>⚠️ {$errorMutacion}</span>
+      <button class="cerrar" on:click={() => errorMutacion.set(null)}>×</button>
     </div>
   {/if}
 
-  {#if loading}
-    <div class="loading">Calculando...</div>
-  {/if}
+  <!-- REF-SELECT receta (capa SELECCIONAR) -->
+  <label class="selector">
+    <span>receta a escandalizar</span>
+    <select bind:value={seleccion} on:change={onElegir} disabled={ordenadas.length === 0}>
+      <option value="">— elige una receta —</option>
+      {#each ordenadas as r (r.receta_id)}
+        <option value={r.receta_id}>
+          {r.nombre}{typeof r.coste_unidad === 'number' && r.coste_unidad > 0 ? ` — ${formatearEuros(r.coste_unidad, 4)}/ud` : ' · sin coste'}
+        </option>
+      {/each}
+    </select>
+  </label>
 
-  <!-- GLOBAL VIEW -->
-  {#if view === 'global'}
-    <div class="content">
-      {#if !global_ || global_.total_recetas === 0}
-        <div class="empty">
-          <p>No hay datos de escandallo.</p>
-          <p class="hint">Crea recetas primero en la sección Recetas. Luego:</p>
-          <button class="action-button" on:click={() => prefillChatInput('Dame el escandallo global.')}>
-            Calcular escandallo global
-          </button>
+  <!-- GESTOS [recalcular siguiente][recalcular LOTE·confirmador][costear·confirmador] -->
+  <div class="gestos">
+    <button class="btn-jefe" on:click={onSiguiente} disabled={$gestosPendientes > 0}>
+      ↻ recalcular siguiente
+    </button>
+    {#if loteOpen}
+      <div class="confirmador">
+        <p>¿costear <strong>TODAS</strong> las recetas pendientes en un lote? El motor persiste cada una y la señal late una vez por receta (absorbida en una re-lectura). Lo que no tenga precio queda honesto en su fila.</p>
+        <div class="confirm-gestos">
+          <button class="btn-rojo" disabled={$gestosPendientes > 0} on:click={ejecutarLote}>sí, recalcular lote</button>
+          <button class="btn-neutro" on:click={() => (loteOpen = false)}>dejarlo estar</button>
         </div>
-      {:else}
-        <div class="kpi-row">
-          <div class="kpi">
-            <span class="kpi-value">{global_.total_recetas}</span>
-            <span class="kpi-label">Recetas</span>
-          </div>
-          <div class="kpi">
-            <span class="kpi-value">{formatPrice(global_.coste_unidad_medio)}</span>
-            <span class="kpi-label">Coste medio/porción</span>
-          </div>
-          <div class="kpi">
-            <span class="kpi-value">{formatPrice(global_.coste_unidad_min)} - {formatPrice(global_.coste_unidad_max)}</span>
-            <span class="kpi-label">Rango costes</span>
-          </div>
+      </div>
+    {:else}
+      <button class="btn-lote" on:click={() => { loteOpen = true; costearOpen = false; }} disabled={$gestosPendientes > 0 || ordenadas.length === 0}>
+        recalcular LOTE
+      </button>
+    {/if}
+    {#if costearOpen && detalle}
+      <div class="confirmador">
+        <p>¿recalcular el coste de <strong>{detalleNombre}</strong> y GUARDARLO en la receta? 1 dictamen → 1 señal.</p>
+        <div class="confirm-gestos">
+          <button class="btn-jefe" disabled={$gestosPendientes > 0} on:click={ejecutarCostear}>sí, costear ya</button>
+          <button class="btn-neutro" on:click={() => (costearOpen = false)}>dejarlo estar</button>
         </div>
+      </div>
+    {/if}
+    {#if seleccion && !costearOpen && !loteOpen}
+      <button class="btn-lote costear" on:click={() => { costearOpen = true; loteOpen = false; }} disabled={$gestosPendientes > 0}>
+        costear ESTA
+      </button>
+    {/if}
+  </div>
 
-        {#if global_.ranking_por_coste?.length > 0}
-          <h4>Ranking por coste/porción</h4>
-          <div class="ranking">
-            {#each global_.ranking_por_coste as r, i}
-              <div class="ranking-row">
-                <span class="ranking-pos">#{i + 1}</span>
-                <span class="ranking-name">{r.nombre}</span>
-                <span class="ranking-cat">{r.categoria}</span>
-                <span class="ranking-cost">{formatPrice(r.coste_unidad)}</span>
-              </div>
-            {/each}
-          </div>
-        {/if}
-
-        {#if global_.top_ingredientes_por_coste?.length > 0}
-          <h4>Ingredientes por impacto en coste</h4>
-          <div class="ranking">
-            {#each global_.top_ingredientes_por_coste.slice(0, 8) as ing}
-              <div class="ranking-row">
-                <span class="ranking-name">{ing.nombre}</span>
-                <span class="ranking-cat">{ing.apariciones} receta{ing.apariciones !== 1 ? 's' : ''}</span>
-                <span class="ranking-cost">{formatPrice(ing.coste_total)}</span>
-              </div>
-            {/each}
-          </div>
-        {/if}
+  {#if aviso}
+    <div class="aviso">
+      <span>✓ {aviso}</span>
+      {#if $resultadoSiguiente?.siguiente && !$resultadoSiguiente.terminado}
+        <span class="aviso-detalle">{$resultadoSiguiente.siguiente}</span>
       {/if}
     </div>
   {/if}
 
-  <!-- RECETA VIEW -->
-  {#if view === 'receta'}
-    <div class="content">
-      {#if !receta}
-        <div class="empty">
-          <p>Selecciona una receta para ver su escandallo.</p>
-          <button class="action-button" on:click={() => prefillChatInput('Calcula el escandallo de la receta "<nombre>".')}>
-            Calcular escandallo
-          </button>
+  <!-- TABLA-CÁLCULO (capa INFORMARSE) -->
+  {#if detalle}
+    <div class="ficha">
+      <div class="ficha-cab">
+        <h3>{detalleNombre}</h3>
+        <div class="badges">
+          {#if detalle.tipo}<span class="badge">{detalle.tipo}</span>{/if}
+          {#if detalle.rinde?.cantidad}<span class="badge">rinde {detalle.rinde.cantidad} {detalle.rinde?.unidad}</span>{/if}
         </div>
-      {:else}
-        <h3>{receta.nombre}</h3>
-        <div class="badge-row">
-          <span class="badge">{receta.categoria}</span>
-          <span class="badge">{receta.porciones} porciones</span>
-        </div>
-
-        <div class="action-bar">
-          <button class="action-button" on:click={() => prefillChatInput(`Calcula el escandallo de la receta "${receta.nombre}".`)}>
-            Recalcular escandallo
-          </button>
-        </div>
-
-        <div class="kpi-row">
-          <div class="kpi">
-            <span class="kpi-value">{formatPrice(receta.coste_total)}</span>
-            <span class="kpi-label">Coste total</span>
-          </div>
-          <div class="kpi highlight">
-            <span class="kpi-value">{formatPrice(receta.coste_unidad)}</span>
-            <span class="kpi-label">Coste/porción</span>
-          </div>
-          {#if receta.food_cost_porcentaje !== undefined}
-            <div class="kpi">
-              <span class="kpi-value" style="color: {getFoodCostColor(receta.food_cost_porcentaje)}">{formatPct(receta.food_cost_porcentaje)}</span>
-              <span class="kpi-label">Food cost</span>
-            </div>
-          {/if}
-          {#if receta.margen_euro !== undefined}
-            <div class="kpi">
-              <span class="kpi-value">{formatPrice(receta.margen_euro)}</span>
-              <span class="kpi-label">Margen/porción</span>
-            </div>
-          {/if}
-        </div>
-
-        <h4>Desglose de costes</h4>
-        <div class="desglose">
-          {#each receta.desglose as d}
-            <div class="desglose-row">
-              <div class="desglose-bar" style="width: {d.porcentaje}%"></div>
-              <span class="desglose-name">{d.nombre}</span>
-              <span class="desglose-qty">{d.cantidad} {d.unidad}</span>
-              <span class="desglose-pct">{formatPct(d.porcentaje)}</span>
-              <span class="desglose-price">{formatPrice(d.precio)}</span>
-            </div>
-          {/each}
-        </div>
-
-        {#if receta.insights?.length}
-          <h4>Observaciones</h4>
-          <ul class="insights">
-            {#each receta.insights as insight}
-              <li>{insight}</li>
-            {/each}
-          </ul>
-        {/if}
-      {/if}
-    </div>
-  {/if}
-
-  <!-- ESCALAR VIEW (por superficie) -->
-  {#if view === 'escalar'}
-    <div class="content">
-      <div class="empty" style="text-align:left; padding:0 0 12px 0;">
-        <p style="margin:0 0 4px 0;">Escala una receta a otro diámetro. La masa escala por diámetro (d2/d1), el resto por área ((d2/d1)²). El resultado no se guarda — es una derivación para comparar.</p>
       </div>
 
-      <div class="escalar-form">
-        <div class="form-row">
-          <label>Receta <span class="hint">(id o nombre)</span>
-            <input
-              bind:value={escalarRecetaId}
-              placeholder={receta?.receta_id ? `actual: ${receta.receta_id}` : 'ej. pizza-margarita'}
-            />
-          </label>
-          <label>Diámetro origen (cm)
-            <input type="number" min="1" step="1" bind:value={escalarDiametroOrigen} />
-          </label>
-          <label>Diámetro destino (cm)
-            <input type="number" min="1" step="1" bind:value={escalarDiametroDestino} />
-          </label>
+      {#if !filas || filas.length === 0}
+        <div class="vacio">
+          receta sin líneas todavía — las líneas viven en <strong>recetas</strong>: sin línea no hay coste
         </div>
-        <button class="action-button" on:click={onEscalar} disabled={loading}>
-          Escalar por superficie
-        </button>
-      </div>
-
-      {#if loading}
-        <div class="loading">Escalando...</div>
-      {/if}
-
-      {#if escalado}
-        <div class="kpi-row">
-          <div class="kpi highlight">
-            <span class="kpi-value">{escalado.diametro_origen} → {escalado.diametro_destino} cm</span>
-            <span class="kpi-label">Diámetro</span>
-          </div>
-          <div class="kpi">
-            <span class="kpi-value">{formatPrice(escalado.coste_total)}</span>
-            <span class="kpi-label">Coste total</span>
-          </div>
-          <div class="kpi">
-            <span class="kpi-value">{formatPrice(escalado.coste_unidad)}</span>
-            <span class="kpi-label">Coste/porción</span>
-          </div>
-          <div class="kpi">
-            <span class="kpi-value">×{escalado.factor_area.toFixed(2)}</span>
-            <span class="kpi-label">Factor área</span>
-          </div>
-          <div class="kpi">
-            <span class="kpi-value">×{escalado.factor_masa.toFixed(2)}</span>
-            <span class="kpi-label">Factor masa</span>
-          </div>
+      {:else}
+        <div class="totales">
+          <span class="kpi highlight"><small>coste total</small><strong>{formatearEuros(detalle.coste_total)}</strong></span>
+          <span class="kpi"><small>coste / unidad</small><strong>{formatearEuros(detalle.coste_unidad, 6)}</strong></span>
+          <span class="kpi"><small>fuentes</small><span class="fuentes">{(detalle.fuentes_precios ?? []).join(' · ') || '—'}</span></span>
         </div>
 
-        <h4>Líneas escaladas</h4>
-        <div class="ranking">
-          {#each escalado.lineas_escaladas as l}
-            <div class="ranking-row">
-              <span class="ranking-name">{l.nombre}</span>
-              {#if l.es_masa}
-                <span class="escala-badge">masa</span>
-              {/if}
-              <span class="ranking-cat">{l.cantidad} {l.unidad}</span>
-            </div>
-          {/each}
-        </div>
+        <table class="tabla">
+          <thead>
+            <tr>
+              <th>ingrediente</th>
+              <th class="num">×cantidad</th>
+              <th class="num">= coste línea</th>
+              <th>fuente</th>
+              <th class="num">peso %</th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each filas as f (f.ref)}
+              <tr class:fila-sin-precio={f.sinPrecio}>
+                <td class="nombre">
+                  {f.nombre}
+                  {#if f.sinPrecio}<span class="chip-sin">sin precio</span>{/if}
+                </td>
+                <td class="num">{f.cantidad} {f.unidad}</td>
+                <td class="num precio">
+                  {#if f.sinPrecio}
+                    —
+                  {:else}
+                    {formatearEuros(f.valor)}
+                    <span class="unitario">({formatearPrecioUnitario(f.precioUnitario, f.unidad)})</span>
+                  {/if}
+                </td>
+                <td>{#if !f.sinPrecio}<span class="chip-fuente">{f.fuente}</span>{:else}—{/if}</td>
+                <td class="num celda-peso">
+                  {#if f.pesoPct != null}
+                    <span class="barrita" style="width: {Math.max(f.pesoPct, 2)}px"></span>
+                    {f.pesoPct}%
+                  {:else}
+                    —
+                  {/if}
+                </td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
 
-        {#if escalado.lineas_sin_precio?.length}
-          <p class="sin-precio">Sin precio: {escalado.lineas_sin_precio.join(', ')}</p>
+        {#if (detalle.lineas_sin_precio?.length ?? 0) > 0}
+          <p class="aviso-honesto">
+            sin precio en catálogo: {detalle.lineas_sin_precio!.join(', ')} — el coste es parcial; se retan en <strong>ingredientes</strong>, no aquí
+          </p>
         {/if}
       {/if}
     </div>
+  {:else if $cinta.recetas > $cinta.escandalizadas}
+    <div class="pista">
+      {$cinta.recetas - $cinta.escandalizadas} receta(s) con líneas aún sin coste — «recalcular siguiente» cuesta 1 dictamen; «LOTE» regenera todas de una vez
+    </div>
+  {:else if ordenadas.length === 0 && !$cintaLoading && !$cintaError}
+    <div class="vacio">no hay recetas en servicio — crea recetas (sección Recetas) para escandalizarlas</div>
+  {/if}
+
+  {#if detalle && detalle.coste_actualizado_at}
+    <div class="pista dim">dictamen del {new Date(detalle.coste_actualizado_at).toLocaleString('es-ES')}</div>
   {/if}
 </div>
 
@@ -298,130 +304,191 @@
     display: flex;
     flex-direction: column;
     height: 100%;
+    overflow-y: auto;
     font-size: 13px;
     color: var(--text-primary, rgba(228, 228, 231, 1));
   }
 
-  .tabs {
+  /* ---- capa 1 · cinta ---- */
+  .cinta {
     display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
     border-bottom: 1px solid var(--border-color, #333);
-    padding: 0 8px;
     flex-shrink: 0;
-  }
-  .tab {
-    padding: 8px 12px;
-    background: none;
-    border: none;
-    border-bottom: 2px solid transparent;
-    color: var(--text-secondary, rgba(161, 161, 170, 1));
-    cursor: pointer;
     font-size: 12px;
   }
-  .tab:hover:not(:disabled) { color: var(--text-primary, rgba(228, 228, 231, 1)); }
-  .tab.active { color: var(--accent-color, rgba(96, 165, 250, 1)); border-bottom-color: var(--accent-color, rgba(96, 165, 250, 1)); }
-  .tab:disabled { opacity: 0.4; cursor: default; }
+  .cinta strong { color: var(--accent-color, rgba(96, 165, 250, 1)); }
+  .sep { color: var(--text-tertiary, rgba(113, 113, 122, 1)); }
+  .cinta-estado { margin-left: auto; font-size: 11px; color: var(--text-secondary, rgba(161, 161, 170, 1)); }
 
-  .content { flex: 1; overflow-y: auto; padding: 12px; }
-  .error { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: rgba(239, 68, 68, 0.15); color: rgba(248, 113, 113, 1); font-size: 12px; }
-  .error button { background: none; border: none; color: inherit; cursor: pointer; font-size: 16px; }
-  .loading { padding: 12px; text-align: center; color: var(--text-secondary, rgba(161, 161, 170, 1)); font-size: 12px; }
-  .empty { text-align: center; padding: 32px 16px; color: var(--text-secondary, rgba(161, 161, 170, 1)); }
-  .empty .hint { font-size: 12px; margin-top: 8px; opacity: 0.7; }
+  .error {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 12px;
+    background: rgba(239, 68, 68, 0.15);
+    color: rgba(248, 113, 113, 1);
+    font-size: 12px;
+  }
+  .error .cerrar { background: none; border: none; color: inherit; cursor: pointer; font-size: 15px; }
 
-  .action-bar { display: flex; gap: 8px; margin-bottom: 12px; }
-  .action-button {
+  /* ---- ref-select ---- */
+  .selector {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 12px 12px 8px;
+    font-size: 11px;
+    color: var(--text-secondary, rgba(161, 161, 170, 1));
+  }
+  .selector select {
+    padding: 7px 9px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border-color, #333);
+    border-radius: 6px;
+    color: var(--text-primary, rgba(228, 228, 231, 1));
+    font-size: 13px;
+  }
+  .selector select:focus { outline: none; border-color: var(--accent-color, rgba(96, 165, 250, 1)); }
+
+  /* ---- gestos + confirmadores ---- */
+  .gestos { display: flex; gap: 8px; align-items: flex-start; padding: 0 12px 10px; flex-wrap: wrap; }
+  .gestos .confirmador { flex: 1 1 100%; margin: 0; }
+  button { cursor: pointer; font-size: 12px; border-radius: 6px; transition: all 0.15s; }
+  button:disabled { opacity: 0.45; cursor: default; }
+  .btn-jefe {
     padding: 6px 12px;
     background: rgba(96, 165, 250, 0.15);
     border: 1px solid rgba(96, 165, 250, 0.4);
-    border-radius: 6px;
     color: var(--accent-color, rgba(96, 165, 250, 1));
-    cursor: pointer;
-    font-size: 12px;
-    transition: all 0.15s;
   }
-  .action-button:hover { background: rgba(96, 165, 250, 0.25); }
+  .btn-jefe:hover:not(:disabled) { background: rgba(96, 165, 250, 0.25); }
+  .btn-lote {
+    padding: 6px 12px;
+    background: rgba(245, 158, 11, 0.12);
+    border: 1px solid rgba(245, 158, 11, 0.4);
+    color: rgba(245, 158, 11, 1);
+  }
+  .btn-lote:hover:not(:disabled) { background: rgba(245, 158, 11, 0.22); }
+  .btn-lote.costear { background: none; border-color: rgba(245, 158, 11, 0.25); color: var(--text-secondary, rgba(161, 161, 170, 1)); }
+  .btn-rojo {
+    padding: 6px 12px;
+    background: rgba(239, 68, 68, 0.15);
+    border: 1px solid rgba(239, 68, 68, 0.5);
+    color: rgba(248, 113, 113, 1);
+  }
+  .btn-neutro {
+    padding: 6px 12px;
+    background: none;
+    border: 1px solid var(--border-color, #333);
+    color: var(--text-secondary, rgba(161, 161, 170, 1));
+  }
+  .btn-neutro:hover { color: var(--text-primary, rgba(228, 228, 231, 1)); }
 
-  h3 { margin: 0 0 8px; font-size: 16px; }
-  h4 { margin: 16px 0 8px; font-size: 13px; color: var(--text-secondary, rgba(161, 161, 170, 1)); }
+  .confirmador {
+    flex: 1 1 100%;
+    padding: 10px 12px;
+    background: rgba(245, 158, 11, 0.06);
+    border: 1px solid rgba(245, 158, 11, 0.25);
+    border-radius: 8px;
+    font-size: 12px;
+  }
+  .confirmador p { margin: 0 0 8px; color: var(--text-secondary, rgba(161, 161, 170, 1)); }
+  .confirm-gestos { display: flex; gap: 8px; }
 
-  .badge-row { display: flex; gap: 6px; margin-bottom: 12px; }
+  .aviso {
+    margin: 0 12px 10px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    background: rgba(34, 197, 94, 0.08);
+    color: rgba(74, 222, 128, 1);
+    font-size: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .aviso-detalle { font-size: 11px; opacity: 0.8; }
+
+  /* ---- tabla-cálculo ---- */
+  .ficha { padding: 0 12px 16px; }
+  .ficha-cab { display: flex; align-items: baseline; gap: 10px; margin: 4px 0 10px; flex-wrap: wrap; }
+  .ficha-cab h3 { margin: 0; font-size: 15px; }
+  .badges { display: flex; gap: 6px; flex-wrap: wrap; }
   .badge { font-size: 11px; padding: 2px 8px; border-radius: 4px; background: rgba(255, 255, 255, 0.08); }
 
-  .kpi-row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+  .totales { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
   .kpi {
     display: flex;
     flex-direction: column;
-    padding: 10px 14px;
+    padding: 8px 12px;
     background: rgba(255, 255, 255, 0.03);
     border: 1px solid var(--border-color, #333);
     border-radius: 8px;
     min-width: 80px;
   }
+  .kpi small { font-size: 10px; color: var(--text-secondary, rgba(161, 161, 170, 1)); margin-bottom: 2px; }
+  .kpi strong { font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; }
   .kpi.highlight { background: rgba(96, 165, 250, 0.08); border-color: rgba(96, 165, 250, 0.3); }
-  .kpi-value { font-size: 18px; font-weight: 700; }
-  .kpi-label { font-size: 10px; color: var(--text-secondary, rgba(161, 161, 170, 1)); margin-top: 2px; }
+  .kpi .fuentes { font-size: 11px; color: var(--text-secondary, rgba(161, 161, 170, 1)); }
 
-  .ranking { display: flex; flex-direction: column; gap: 2px; }
-  .ranking-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
+  .tabla { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .tabla th {
+    text-align: left;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: var(--text-tertiary, rgba(113, 113, 122, 1));
     padding: 6px 8px;
-    border-radius: 4px;
-    background: rgba(255, 255, 255, 0.02);
+    border-bottom: 1px solid var(--border-color, #333);
   }
-  .ranking-row:hover { background: rgba(255, 255, 255, 0.05); }
-  .ranking-pos { font-size: 11px; color: var(--text-secondary, rgba(113, 113, 122, 1)); width: 24px; }
-  .ranking-name { flex: 1; }
-  .ranking-cat { font-size: 11px; color: var(--text-secondary, rgba(161, 161, 170, 1)); }
-  .ranking-cost { font-weight: 600; color: var(--accent-color, rgba(96, 165, 250, 1)); }
+  .tabla th.num { text-align: right; }
+  .tabla td { padding: 6px 8px; border-bottom: 1px solid rgba(255, 255, 255, 0.04); vertical-align: top; }
+  .tabla td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .tabla td.nombre { font-weight: 600; }
+  .tabla td.precio { font-weight: 600; color: var(--accent-color, rgba(96, 165, 250, 1)); }
+  .tabla .unitario { font-weight: 400; font-size: 10px; color: var(--text-tertiary, rgba(113, 113, 122, 1)); margin-left: 4px; }
+  .tabla td.celda-peso { color: var(--text-secondary, rgba(161, 161, 170, 1)); }
+  .tabla .barrita {
+    display: inline-block;
+    height: 3px;
+    border-radius: 2px;
+    background: rgba(96, 165, 250, 0.5);
+    margin-right: 6px;
+    vertical-align: middle;
+  }
 
-  .desglose { display: flex; flex-direction: column; gap: 3px; }
-  .desglose-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 8px;
-    border-radius: 4px;
-    position: relative;
-    overflow: hidden;
-  }
-  .desglose-bar {
-    position: absolute;
-    left: 0;
-    top: 0;
-    bottom: 0;
-    background: rgba(96, 165, 250, 0.08);
-    border-radius: 4px;
-  }
-  .desglose-name { flex: 1; position: relative; z-index: 1; }
-  .desglose-qty { font-size: 11px; color: var(--text-secondary, rgba(161, 161, 170, 1)); position: relative; z-index: 1; }
-  .desglose-pct { font-size: 11px; color: var(--text-secondary, rgba(161, 161, 170, 1)); width: 40px; text-align: right; position: relative; z-index: 1; }
-  .desglose-price { font-weight: 600; color: var(--accent-color, rgba(96, 165, 250, 1)); width: 50px; text-align: right; position: relative; z-index: 1; }
-
-  .insights { padding-left: 20px; font-size: 12px; line-height: 1.6; }
-  .insights li { margin-bottom: 4px; }
-
-  .escalar-form { margin-bottom: 12px; }
-  .form-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
-  .form-row label { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--text-secondary, rgba(161, 161, 170, 1)); }
-  .form-row input {
-    padding: 6px 8px;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid var(--border-color, #333);
-    border-radius: 6px;
-    color: var(--text-primary, rgba(228, 228, 231, 1));
-    font-size: 12px;
-    min-width: 160px;
-  }
-  .form-row input:focus { outline: none; border-color: var(--accent-color, rgba(96, 165, 250, 1)); }
-  .hint { font-size: 11px; opacity: 0.7; font-weight: 400; }
-  .escala-badge {
+  .chip-sin {
     font-size: 10px;
     padding: 1px 6px;
     border-radius: 4px;
-    background: rgba(245, 158, 11, 0.2);
-    color: rgba(245, 158, 11, 1);
+    background: rgba(250, 179, 135, 0.15);
+    color: rgba(250, 179, 135, 1);
+    margin-left: 6px;
+    font-weight: 600;
   }
-  .sin-precio { font-size: 12px; color: rgba(248, 113, 113, 1); margin-top: 8px; }
+  .chip-fuente {
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text-secondary, rgba(161, 161, 170, 1));
+  }
+  tr.fila-sin-precio td.precio,
+  tr.fila-sin-precio td:nth-child(4) { vertical-align: middle; }
+
+  .aviso-honesto {
+    margin-top: 10px;
+    font-size: 11px;
+    color: rgba(250, 179, 135, 1);
+    background: rgba(250, 179, 135, 0.06);
+    border: 1px solid rgba(250, 179, 135, 0.2);
+    border-radius: 6px;
+    padding: 8px 10px;
+  }
+
+  .pista { padding: 4px 12px 12px; font-size: 12px; color: var(--text-secondary, rgba(161, 161, 170, 1)); }
+  .vacio { padding: 28px 16px; text-align: center; font-size: 12px; color: var(--text-secondary, rgba(161, 161, 170, 1)); }
 </style>

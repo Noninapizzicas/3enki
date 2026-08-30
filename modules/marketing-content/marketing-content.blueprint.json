@@ -1,0 +1,70 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "marketing-content",
+  "version": "blueprint-1.0.0",
+  "moduleId": "marketing-content",
+  "actor": "jefe",
+  "titulo": "Contenido de marketing: genera plan de fragmentación de una pieza madre en hijas por canal.",
+  "eventos_que_escucho": [
+    "marketing.content.fragmentar.request"
+  ],
+  "transporte": {
+    "rpc": [
+      "marketing.content.fragmentar.request -> .response"
+    ]
+  },
+  "spine": {
+    "descripcion": "Blueprint coherente: CONTRATO → LEER → PENSAR → GUARDAR → EMITIR",
+    "pasos": [
+      {
+        "paso": "CONTRATO",
+        "descripcion": "Recibe { project_id, pieza_id, canales_destino? }. Promete devolver un plan de fragmentación y crear las piezas hijas."
+      },
+      {
+        "paso": "LEER",
+        "descripcion": "Lee la pieza madre del store (via reflejo), los canales activos del proyecto y la audiencia para contexto.",
+        "lee": [
+          "marketing.content.get.request → pieza madre del proyecto",
+          "marketing.channels.get.request → canales activos",
+          "marketing.audience.get.request → segmentos para orientar formatos"
+        ]
+      },
+      {
+        "paso": "PENSAR",
+        "descripcion": "Decide qué formatos × canales generan más valor a partir de la pieza madre. Genera un plan: para cada canal destino, propone formato, título adaptado y descripción breve.",
+        "restricciones": [
+          "Solo fragmenta a canales activos del proyecto",
+          "Cada hija tiene formato coherente con su canal (post_social para redes, email para newsletter, etc.)",
+          "El plan es accionable: título + formato + canal por cada hija",
+          "No duplica fragmentaciones existentes (si ya hay hijas para un canal, no repite)"
+        ]
+      },
+      {
+        "paso": "GUARDAR",
+        "descripcion": "Crea las piezas hijas en el store via marketing.content.update.request con madre_id apuntando a la pieza original."
+      },
+      {
+        "paso": "EMITIR",
+        "descripcion": "Emite marketing.content.fragmentar.response con el plan y las piezas hijas creadas."
+      }
+    ]
+  },
+  "ui": {
+    "ops": {
+      "fragmentar": {
+        "titulo": "Fragmentar pieza en hijas por canal"
+      }
+    },
+    "roles": {
+      "fragmentar": "jefe"
+    },
+    "flujo": [
+      {
+        "nombre": "jefe",
+        "orden": 1,
+        "ops": ["fragmentar"],
+        "descripcion": "El dueño elige una pieza madre y pide fragmentarla para distintos canales"
+      }
+    ]
+  }
+}

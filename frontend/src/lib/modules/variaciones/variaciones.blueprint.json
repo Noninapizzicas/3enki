@@ -1,7 +1,7 @@
 {
   "schema": "blueprint-interfaz-v2",
   "id": "variaciones",
-  "version": "blueprint-1.2.0",
+  "version": "blueprint-2.0.0",
   "moduleId": "variaciones",
   "actor": "jefe",
   "titulo": "Gestion de variaciones de productos pizzepos (quitar/anadir ingredientes). Reglas por producto: que se puede quitar, que se puede anadir, maximo de extras. Se configura desde la CARTA (carta.actualizada/editada). Calcula precio final consultando precios al modulo ingredientes (fuente unica via uiHandler.handle('ingredientes', ...)). Auto-valida cada comandero.item_agregado y emite variacion.{validada,rechazada}.",
@@ -46,6 +46,12 @@
     "nota": "configurar=LA PALANCA (declara las 4 reglas via custodio carta.update_product; carta.editada reconfigura). evaluar es POS/UTILIZACION: fuera del panel del jefe. health/metrics sistema. get devuelve reglas DECLARADAS del jefe mezcladas con DERIVADAS del sistema sin distinguirlas [ABIERTO H3: transparencia requerida en el informe]. Lote [ABIERTO H1]: configurar es 1 producto por llamada. Senal pareada de la fase DECLARAR: carta.editada (gruesa, sin evento granular de reglas) [ABIERTO H2].",
     "fuente_analisis": "modules/pizzepos/variaciones/esquema/pasada-4-consolidacion-formas-ui.md"
   },
+  "_verificado_en_codigo": {
+    "reflejo": "modules/pizzepos/variaciones/index.js (v4.5.0): handleConfigurar delega por RPC de EVENTO (carta.update_product.request ↔ .response, patrón _rpc de productos — NO uiHandler.handle('carta-manager','update_product') que no existe) · handleGet (reglas vigentes) · handleValidar (dictamen del motor) · handleCalcularPrecio (consulta precios a ingredientes, fuente única) · handleEvaluar (POS/utilización) · auto-valida comandero.item_agregado → variacion.{validada,rechazada}",
+    "senales": "index.js: variacion.validada / variacion.rechazada (auto-validación del comandero) · carta.editada (señal INDIRECTA del custodio carta-manager al persistir reglas — reconfigura el módulo) · carta.actualizada",
+    "errores": "400 INVALID_INPUT (falta producto_id/variaciones) · 404 RESOURCE_NOT_FOUND (producto/carta inexistente) · 409 ALREADY_EXISTS (duplicado) · 412 PRECONDITION_FAILED (categoría/ingrediente inexistente)"
+  },
+  "_doc_historico": "blueprint-1.2.0 (ciclo v2 inicial): tenía ui.roles + _lente_roles pero SIN formas_jefe, _verificado_en_codigo ni _doc_historico. Normalizado a blueprint-2.0.0 (estándar del ciclo v2, 19 módulos) añadiendo formas_jefe (editor_reglas/informe_reglas/simulador), _verificado_en_codigo y este _doc_historico. Los roles (configurar=jefe, evaluar=utilizacion, resto neutro) se conservan intactos.",
   "ui": {
     "ops": {
       "configurar": {
@@ -227,6 +233,23 @@
       "calcular_precio": "neutro",
       "health": "neutro_sistema",
       "metrics": "neutro_sistema"
+    },
+    "formas_jefe": {
+      "editor_reglas": {
+        "forma": "editor-bloque (las 4 palancas: permite_quitar[], permite_anadir, max_ingredientes_extra, extras_sugeridos[{ingrediente_id, precio_extra?}])",
+        "rpc": "configurar { producto_id, carta_id?, variaciones } → delega en carta.update_product (custodio)",
+        "senal": "carta.editada (gruesa, sin evento granular de reglas — [ABIERTO H2])"
+      },
+      "informe_reglas": {
+        "forma": "cinta-estado + informe (reglas DECLARADAS del jefe mezcladas con DERIVADAS del sistema — transparencia [ABIERTO H3])",
+        "rpc": "get { producto_id } → reglas vigentes",
+        "senal": "variacion.validada / variacion.rechazada (refresh_on)"
+      },
+      "simulador": {
+        "forma": "cinta-estado (dictamen del MOTOR, la UI estima jamás fija precio — R4)",
+        "rpc": "validar { producto_id, ingredientes_quitar?, ingredientes_anadir? } · calcular_precio { producto_id, ingredientes_anadir? }",
+        "senal": "dictamen en la respuesta (sin señal propia)"
+      }
     },
     "detalle": {
       "op": "get",

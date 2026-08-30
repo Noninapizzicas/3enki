@@ -1,0 +1,97 @@
+{
+  "_doc": "marketing-audience — HÍBRIDO: reflejo JS (CRUD segmentos + personas manuales, state machine, validaciones) + blueprint LLM (generar personas desde segmento). 75% reflejo, 25% micro-agente. El módulo funciona al 100% sin LLM (personas manuales); el blueprint es acelerador, no dependencia. Persiste por proyecto en state/marketing-audience.json.",
+  "name": "marketing-audience",
+  "version": "0.1.0",
+  "description": "Audiencia de marketing del proyecto: segmentos declarativos + personas (manuales o generadas por LLM). Híbrido reflejo + blueprint.",
+  "language": "es",
+
+  "subscribes": [
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Restaura la audiencia del proyecto activado."
+    },
+    {
+      "event": "marketing.audience.get.request",
+      "handler": "onGetRequest",
+      "description": "Devuelve segmentos y personas del proyecto (opcionalmente filtrados por tipo)."
+    },
+    {
+      "event": "marketing.audience.update.request",
+      "handler": "onUpdateRequest",
+      "description": "Actualiza segmentos y/o personas del proyecto (alta, modificación, cambio de estado)."
+    }
+  ],
+
+  "publishes": [
+    {
+      "event": "marketing.audience.actualizada",
+      "description": "La audiencia fue actualizada. Payload: { project_id, campos_actualizados[] }."
+    },
+    {
+      "event": "marketing.audience.generar-persona.response",
+      "description": "Persona generada por blueprint. Payload: { project_id, persona }."
+    }
+  ],
+
+  "blueprint_driven": true,
+
+  "tools": [
+    {
+      "name": "marketing-audience.get",
+      "description": "Obtiene la audiencia (segmentos y personas) de un proyecto.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1, "description": "ID del proyecto." },
+          "tipo": { "type": "string", "enum": ["segmentos", "personas"], "description": "Filtro opcional: solo segmentos o solo personas." }
+        },
+        "required": ["project_id"]
+      },
+      "handler": "toolGet",
+      "errores_conocidos": ["INVALID_INPUT"]
+    },
+    {
+      "name": "marketing-audience.update",
+      "description": "Actualiza segmentos y/o personas de un proyecto (alta o modificación por id).",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1 },
+          "segmentos": {
+            "type": "array",
+            "description": "[{ id?, nombre, criterios: { edad?, genero?, ubicacion?, nivel_socioeconomico? }, necesidad, comportamiento?: { frecuencia_compra?, canales_usados?, sensibilidad_precio? }, tamano_estimado?, prioridad?, estado? }]"
+          },
+          "personas": {
+            "type": "array",
+            "description": "[{ id?, segmento_id, nombre, perfil?, necesidad?, barrera?, motivacion?, canal_preferido?, mensaje_clave?, origen? }]"
+          },
+          "datos_disponibles": {
+            "type": "string",
+            "description": "Descripción de la calidad de datos disponibles para segmentar."
+          }
+        },
+        "required": ["project_id"]
+      },
+      "handler": "toolUpdate",
+      "errores_conocidos": ["INVALID_INPUT", "INVALID_STATE_TRANSITION", "SEGMENTO_NOT_FOUND"]
+    }
+  ],
+
+  "ui_handlers": [
+    {
+      "domain": "marketing-audience",
+      "action": "get",
+      "handler": "handleUiGet",
+      "description": "Obtener audiencia del proyecto activo."
+    },
+    {
+      "domain": "marketing-audience",
+      "action": "update",
+      "handler": "handleUiUpdate",
+      "description": "Actualizar audiencia del proyecto activo."
+    }
+  ]
+}

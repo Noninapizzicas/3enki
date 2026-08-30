@@ -1,0 +1,103 @@
+{
+  "_doc": "marketing-competitors — REFLEJO JS puro: catálogo de competidores, monitorización (observaciones acumuladas), benchmarking (conversor integrado: puntuaciones → comparativa) y diferenciación. 87% reflejo, 9% custodio, 4% conversor. Sin fuzzy, sin blueprint. Persiste por proyecto en state/marketing-competitors.json.",
+  "name": "marketing-competitors",
+  "version": "0.1.0",
+  "description": "Competencia de marketing del proyecto: registro de competidores, monitorización, benchmarking y diferenciación. Reflejo puro con conversor integrado.",
+  "language": "es",
+
+  "subscribes": [
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Restaura los competidores del proyecto activado."
+    },
+    {
+      "event": "marketing.competitors.get.request",
+      "handler": "onGetRequest",
+      "description": "Devuelve competidores, observaciones, dimensiones y comparativa del proyecto."
+    },
+    {
+      "event": "marketing.competitors.update.request",
+      "handler": "onUpdateRequest",
+      "description": "Actualiza competidores, observaciones, dimensiones o puntuaciones."
+    }
+  ],
+
+  "publishes": [
+    {
+      "event": "marketing.competitors.actualizado",
+      "description": "La competencia fue actualizada. Payload: { project_id, campos_actualizados[] }."
+    }
+  ],
+
+  "tools": [
+    {
+      "name": "marketing-competitors.get",
+      "description": "Obtiene el mapa competitivo de un proyecto (competidores, observaciones, benchmarking).",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1, "description": "ID del proyecto." },
+          "competidor_id": { "type": "string", "description": "Filtro opcional: un solo competidor con sus observaciones." }
+        },
+        "required": ["project_id"]
+      },
+      "handler": "toolGet",
+      "errores_conocidos": ["INVALID_INPUT"]
+    },
+    {
+      "name": "marketing-competitors.update",
+      "description": "Actualiza competidores, observaciones, dimensiones o puntuaciones de benchmarking.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1 },
+          "competidores": {
+            "type": "array",
+            "description": "[{ id?, nombre, tipo, descripcion?, fortalezas?, debilidades?, canales_activos?, url?, estado?, frecuencia_revision? }]"
+          },
+          "observaciones": {
+            "type": "array",
+            "description": "[{ competidor_id, tipo_senal, contenido, alerta? }]"
+          },
+          "dimensiones": {
+            "type": "array",
+            "description": "[{ id?, nombre, descripcion? }]"
+          },
+          "puntuaciones": {
+            "type": "array",
+            "description": "[{ sujeto_id, sujeto_tipo, dimension_id, valor }]"
+          },
+          "diferenciacion": {
+            "type": "array",
+            "description": "[string] — lista de diferenciadores del proyecto."
+          },
+          "info_accesible": {
+            "type": "string",
+            "description": "Descripción de qué datos del mercado se tienen."
+          }
+        },
+        "required": ["project_id"]
+      },
+      "handler": "toolUpdate",
+      "errores_conocidos": ["INVALID_INPUT", "INVALID_STATE_TRANSITION", "COMPETIDOR_NOT_FOUND", "DIMENSION_NOT_FOUND"]
+    }
+  ],
+
+  "ui_handlers": [
+    {
+      "domain": "marketing-competitors",
+      "action": "get",
+      "handler": "handleUiGet",
+      "description": "Obtener mapa competitivo del proyecto activo."
+    },
+    {
+      "domain": "marketing-competitors",
+      "action": "update",
+      "handler": "handleUiUpdate",
+      "description": "Actualizar competencia del proyecto activo."
+    }
+  ]
+}

@@ -1,0 +1,91 @@
+{
+  "_doc": "marketing-channels — REFLEJO JS puro: catálogo vivo de canales de marketing por proyecto. Cuatro clasificaciones (propio, ganado, pagado, compartido) con registro unificado, state machine operativa y vigilancia selectiva (salud, fuentes, audiencia, engagement). Persiste por proyecto en state/marketing-channels.json.",
+  "name": "marketing-channels",
+  "version": "0.1.0",
+  "description": "Canales de marketing del proyecto: catálogo vivo por clasificación con estado operativo y vigilancia. Reflejo puro — registra, valida, vigila.",
+  "language": "es",
+
+  "subscribes": [
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Restaura los canales del proyecto activado."
+    },
+    {
+      "event": "marketing.channels.get.request",
+      "handler": "onGetRequest",
+      "description": "Devuelve los canales del proyecto (opcionalmente filtrados por clasificación)."
+    },
+    {
+      "event": "marketing.channels.update.request",
+      "handler": "onUpdateRequest",
+      "description": "Actualiza canales del proyecto (alta, modificación, cambio de estado)."
+    }
+  ],
+
+  "publishes": [
+    {
+      "event": "marketing.channels.actualizado",
+      "description": "Un canal fue creado o actualizado. Payload: { project_id, canal_id, campos_actualizados[] }."
+    }
+  ],
+
+  "tools": [
+    {
+      "name": "marketing-channels.get",
+      "description": "Obtiene los canales de marketing de un proyecto (opcionalmente filtrados por clasificación).",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1, "description": "ID del proyecto." },
+          "clasificacion": { "type": "string", "enum": ["propio", "ganado", "pagado", "compartido"], "description": "Filtro opcional por clasificación." }
+        },
+        "required": ["project_id"]
+      },
+      "handler": "toolGet",
+      "errores_conocidos": ["INVALID_INPUT"]
+    },
+    {
+      "name": "marketing-channels.update",
+      "description": "Actualiza canales de marketing de un proyecto (alta o modificación por id).",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1 },
+          "canales": {
+            "type": "array",
+            "description": "[{ id?, nombre, clasificacion, tipo, localizador?, estado?, responsable?, frecuencia?, presupuesto?, roi_esperado?, plataforma_cuenta?, activos_vinculados?, observaciones?, prioridad? }]"
+          },
+          "capacidad_operativa": {
+            "type": "string",
+            "description": "Ancho de banda del equipo para mantener canales."
+          },
+          "prioridades": {
+            "type": "array",
+            "description": "[{ canal_id, prioridad }] — reordenar prioridades."
+          }
+        },
+        "required": ["project_id"]
+      },
+      "handler": "toolUpdate",
+      "errores_conocidos": ["INVALID_INPUT", "INVALID_STATE_TRANSITION", "INVALID_CLASIFICACION"]
+    }
+  ],
+
+  "ui_handlers": [
+    {
+      "domain": "marketing-channels",
+      "action": "get",
+      "handler": "handleUiGet",
+      "description": "Obtener canales del proyecto activo."
+    },
+    {
+      "domain": "marketing-channels",
+      "action": "update",
+      "handler": "handleUiUpdate",
+      "description": "Actualizar canales del proyecto activo."
+    }
+  ]
+}

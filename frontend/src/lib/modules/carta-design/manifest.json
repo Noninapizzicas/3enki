@@ -1,0 +1,10 @@
+{
+  "id": "carta-design",
+  "name": "Diseño de Carta",
+  "version": "2.0.0",
+  "zone": "work-bar",
+  "order": 1,
+  "routes": ["/carta-design"],
+  "icon": "🖼️",
+  "label": "Diseño"
+}

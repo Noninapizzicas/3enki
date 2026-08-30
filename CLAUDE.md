@@ -615,6 +615,7 @@ PATRONES
 | `arquitectura/cabecera/modulos/operativos-sin-seccion.md` | modulos | Fichas breves de módulos vivos que aún no tienen sección propia — cupulas, inventario, mise-en-place, metricas, notas-poc, staff-manager, system-coherence-analyzer, system-inspector. |
 | `arquitectura/cabecera/frontend/capa-ui.md` | frontend | SvelteKit 2 + Svelte 5 sobre MQTT: MqttClient singleton, mqtt-request, lazy-registry, stores, módulos lazy, rutas multi-tenant, nervio vista-bridge, resiliencia. |
 | `arquitectura/cabecera/frontend/mapa-front-back.md` | frontend | El puente MQTT: mapa dominio→módulo backend por cada consumidor del frontend, mapa inverso y ciclo del enlace. |
+| `arquitectura/cabecera/frontend/piel-modular.md` | frontend | "Sistema de UI modular en 10 capas: tokens atómicos → semánticos → reset → layout → tipografía → componentes-esqueleto → piel/tema → movimiento → responsive → estados. Cada capa se cambia sin tocar las demás." |
 | `arquitectura/cabecera/pizzepos/autoservicio-whatsapp.md` | pizzepos | Pedido del cliente por WhatsApp: PWA arma #P1 por ids, el bot re-tasa server-side (pedido-tasador), webhook real de Meta, ancla por nombre. |
 | `arquitectura/cabecera/plataforma/servir-www.md` | plataforma | Árbol libre en /<ns>/<slug>/ servido por Caddy estático + symlink por proyecto; carta-digital publica el bundle; publicador escribe HTML. |
 | `arquitectura/cabecera/patron/opciones-universal.md` | patron | Opciones: configuración universal de producto (ELEGIR_UNO/VARIOS/QUITAR) — banco motor-opciones, gate pizzepos cerrado. |

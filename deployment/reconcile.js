@@ -390,6 +390,34 @@ async function main() {
     if (workerConfigCambio && !DRY_RUN) { act('systemctl restart hermes-gateway'); shOk('systemctl restart hermes-gateway'); }
   }
 
+  // 6c) Docker services condicionales — levanta solo en VPS con la flag activa.
+  // Idempotente: `docker compose up -d` no recrea si ya está corriendo y la
+  // imagen no cambió; `--build` asegura que el Dockerfile del repo prevalece.
+  for (const ds of (M.docker_services || [])) {
+    const flagMatch = (envVivo || '').match(new RegExp(`^\\s*${ds.env_flag}\\s*=\\s*(.+?)\\s*$`, 'm'));
+    const activo = flagMatch && flagMatch[1].trim().toLowerCase() === 'true';
+    const composeFile = path.join(ds.compose_dir, 'docker-compose.yml');
+
+    if (!existe(composeFile)) {
+      warn(`docker service '${ds.id}': compose file ausente ${composeFile}`);
+      continue;
+    }
+
+    if (activo) {
+      act(`docker compose up -d --build (${ds.id})`);
+      if (!DRY_RUN) {
+        if (shOk(`docker compose -f ${composeFile} up -d --build`)) {
+          log(`docker service '${ds.id}' levantado (${ds.env_flag}=true)`);
+        } else {
+          warn(`docker service '${ds.id}': fallo al levantar — revisa docker logs ${ds.container}`);
+        }
+      }
+      cambios++;
+    } else {
+      log(`docker service '${ds.id}' omitido (${ds.env_flag} no activado)`);
+    }
+  }
+
   // 7) Self-check ruidoso
   if (DRY_RUN) {
     console.log(`\n${CYAN}=== dry-run: ${cambios} cambio(s) pendiente(s). Nada se ha tocado. ===${RST}\n`);

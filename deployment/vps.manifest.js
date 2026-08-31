@@ -103,6 +103,18 @@ const MANIFIESTO = {
     }
   ],
 
+  // Docker Compose services condicionales — contenedores que el reconciliador
+  // LEVANTA solo en VPS que declaran la feature en su .env. Mismo patrón que
+  // caddy_snippets: la flag decide. En VPS sin la flag, el contenedor no se toca.
+  docker_services: [
+    {
+      id: 'openscad-mcp',
+      compose_dir: path.join(DEPLOYMENT_DIR, 'openscad-mcp'),
+      env_flag: 'ENABLE_OPENSCAD',
+      container: 'openscad-mcp'
+    }
+  ],
+
   // Layout LEGACY (Gen-1) que el reconciliador detecta y MIGRA a canónico.
   // En un VPS ya canónico esto no dispara nada (idempotente).
   gen1: {

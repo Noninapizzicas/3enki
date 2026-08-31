@@ -284,13 +284,33 @@ async function main() {
   }
   if (systemdCambio) { act('systemctl daemon-reload'); shOk('systemctl daemon-reload'); }
 
-  // 5) Caddyfile (render con dominio local + escribir si difiere)
+  // 5) Caddyfile (render con dominio local + snippets condicionales + escribir si difiere)
   const caddyTmpl = leer(M.caddy.plantilla);
   let caddyCambio = false;
   if (caddyTmpl == null) {
     warn(`plantilla Caddy ausente: ${M.caddy.plantilla}`);
   } else {
-    const caddyRendered = renderCaddyfile(caddyTmpl, dominio, M.caddy, M.public_ns, M.public_dir);
+    let caddyRendered = renderCaddyfile(caddyTmpl, dominio, M.caddy, M.public_ns, M.public_dir);
+
+    // Snippets condicionales: se concatenan al Caddyfile SOLO si el .env del VPS
+    // declara la flag correspondiente (ej. ENABLE_OPENSCAD=true). Cada snippet
+    // pasa por el mismo replace de dominio que la plantilla principal.
+    for (const snip of (M.caddy_snippets || [])) {
+      const flagValue = (envVivo || '').match(new RegExp(`^\\s*${snip.env_flag}\\s*=\\s*(.+?)\\s*$`, 'm'));
+      if (flagValue && flagValue[1].trim().toLowerCase() === 'true') {
+        const snippetTmpl = leer(snip.plantilla);
+        if (snippetTmpl) {
+          const snippetRendered = renderCaddyfile(snippetTmpl, dominio, M.caddy);
+          caddyRendered += '\n' + snippetRendered;
+          log(`snippet Caddy '${snip.id}' activado (${snip.env_flag}=true)`);
+        } else {
+          warn(`snippet Caddy '${snip.id}': plantilla ausente ${snip.plantilla}`);
+        }
+      } else {
+        log(`snippet Caddy '${snip.id}' omitido (${snip.env_flag} no activado)`);
+      }
+    }
+
     caddyCambio = escribirSiDifiere(M.caddy.destino, caddyRendered, 'Caddyfile');
   }
 

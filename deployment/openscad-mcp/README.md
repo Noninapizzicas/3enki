@@ -1,57 +1,53 @@
-# OpenSCAD MCP Server — Deployment para pizzepos.es
+# OpenSCAD MCP Server — Deployment condicional por VPS
 
 Servidor MCP de OpenSCAD en Docker con autenticación por token Bearer.
-Cualquier instancia de Enki (Claude Desktop, Hermes, portal-mcp) que tenga
-el token puede conectarse.
+Solo se despliega en los VPS que lo declaran (`ENABLE_OPENSCAD=true` en `.env`).
+Cualquier instancia de Enki con el token puede conectarse.
 
-## Setup rápido
+## Activar en un VPS
+
+Añadir al `.env` del VPS (junto a `DOMAIN=`):
+
+```bash
+ENABLE_OPENSCAD=true
+ENKI_MCP_TOKEN=<token generado con openssl rand -hex 32>
+```
+
+Al ejecutar `reconcile.js`, el snippet de Caddy se inyecta automáticamente
+en el Caddyfile renderizado (solo si la flag está). En VPS sin la flag, no
+llega nada.
+
+## Setup
 
 ```bash
 cd deployment/openscad-mcp
 
-# 1. Generar el token secreto (una sola vez)
-echo "ENKI_MCP_TOKEN=$(openssl rand -hex 32)" > .env
-
-# 2. Construir y levantar
+# 1. Construir y levantar
 docker compose up -d --build
 
-# 3. Verificar
+# 2. Verificar
 docker logs openscad-mcp
-curl -H "Authorization: Bearer $(grep ENKI_MCP_TOKEN .env | cut -d= -f2)" \
-     http://localhost:3100/health
+curl -H "Authorization: Bearer $ENKI_MCP_TOKEN" http://localhost:3100/health
 
-# 4. Añadir bloque Caddy (ver abajo) y recargar
-sudo systemctl reload caddy
+# 3. Reconciliar (inyecta el bloque Caddy si ENABLE_OPENSCAD=true)
+sudo node deployment/reconcile.js
 ```
 
-## Caddy — añadir a Caddyfile.vps
+## Caddy — inyección automática
 
-```
-scad.pizzepos.es {
-    @no_token {
-        not header Authorization "Bearer {env.ENKI_MCP_TOKEN}"
-    }
-    respond @no_token 401
+El bloque `scad.<dominio>` vive en `deployment/caddy/Caddyfile.openscad.snippet`.
+El reconciliador:
+1. Lee el `.env` del VPS
+2. Si `ENABLE_OPENSCAD=true`, concatena el snippet al Caddyfile
+3. Sustituye `pizzepos.es` por el dominio local (mismo mecanismo que todo)
+4. Recarga Caddy solo si cambió
 
-    reverse_proxy localhost:3100
-
-    header {
-        X-Content-Type-Options nosniff
-    }
-
-    log {
-        output file /var/log/caddy/scad.pizzepos.log
-        format json
-    }
-}
-```
-
-Caddy necesita la variable `ENKI_MCP_TOKEN` en su entorno. Añadir a
+Caddy necesita `ENKI_MCP_TOKEN` en su entorno. Añadir a
 `/etc/systemd/system/caddy.service.d/override.conf`:
 
 ```ini
 [Service]
-EnvironmentFile=/ruta/a/deployment/openscad-mcp/.env
+EnvironmentFile=/opt/enki/.env
 ```
 
 ## Conectar desde Claude Desktop
@@ -60,7 +56,7 @@ EnvironmentFile=/ruta/a/deployment/openscad-mcp/.env
 {
   "mcpServers": {
     "openscad": {
-      "url": "https://scad.pizzepos.es/mcp",
+      "url": "https://scad.<dominio>/mcp",
       "headers": {
         "Authorization": "Bearer <ENKI_MCP_TOKEN>"
       }
@@ -71,13 +67,11 @@ EnvironmentFile=/ruta/a/deployment/openscad-mcp/.env
 
 ## Conectar desde Enki (portal-mcp)
 
-El portal-mcp lee el token desde `config.json`:
-
 ```json
 {
   "mcp_remotes": {
     "openscad": {
-      "url": "https://scad.pizzepos.es",
+      "url": "https://scad.<dominio>",
       "token_env": "ENKI_MCP_TOKEN"
     }
   }
@@ -86,9 +80,9 @@ El portal-mcp lee el token desde `config.json`:
 
 ## Tools disponibles (15)
 
-| Categoría | Tools |
+| Categoria | Tools |
 |-----------|-------|
 | Render    | `render_single`, `render_perspectives`, `compare_renders` |
 | Export    | `export_model` (STL, 3MF, AMF, OFF, DXF, SVG) |
-| Gestión   | `create_model`, `get_model`, `update_model`, `list_models`, `delete_model` |
-| Análisis  | `validate_scad`, `analyze_model`, `check_openscad`, `get_libraries`, `get_project_files` |
+| Gestion   | `create_model`, `get_model`, `update_model`, `list_models`, `delete_model` |
+| Analisis  | `validate_scad`, `analyze_model`, `check_openscad`, `get_libraries`, `get_project_files` |

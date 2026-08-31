@@ -91,6 +91,18 @@ const MANIFIESTO = {
     log_placeholder: 'pizzepos.log'
   },
 
+  // Snippets Caddy condicionales — bloques extra que el reconciliador CONCATENA
+  // al Caddyfile renderizado SOLO si el .env del VPS declara la feature.
+  // Cada snippet usa el mismo dominio_placeholder que la plantilla principal;
+  // el reconciliador lo sustituye igual. Un VPS sin la variable = no lo trae.
+  caddy_snippets: [
+    {
+      id: 'openscad-mcp',
+      plantilla: path.join(DEPLOYMENT_DIR, 'caddy', 'Caddyfile.openscad.snippet'),
+      env_flag: 'ENABLE_OPENSCAD'
+    }
+  ],
+
   // Layout LEGACY (Gen-1) que el reconciliador detecta y MIGRA a canónico.
   // En un VPS ya canónico esto no dispara nada (idempotente).
   gen1: {

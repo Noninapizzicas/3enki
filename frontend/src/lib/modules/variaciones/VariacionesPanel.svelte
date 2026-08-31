@@ -299,9 +299,9 @@
                   <span class="ing-chip">{nombre}</span>
                 {/each}
               </div>
-            {:else if $opcionQuitarUI?.valores?.length}
+            {:else if opcionQuitarUI?.valores?.length}
               <div class="lista-chips">
-                {#each $opcionQuitarUI.valores as v}
+                {#each opcionQuitarUI.valores as v}
                   <span class="ing-chip">{v.emoji ?? ''} {v.etiqueta}</span>
                 {/each}
               </div>
@@ -346,9 +346,9 @@
 
           <div class="palanca">
             <div class="palanca-titulo">Opciones derivadas (motor)</div>
-            {#if $opcionAnadeUI?.valores?.length}
+            {#if opcionAnadeUI?.valores?.length}
               <div class="lista-chips">
-                {#each $opcionAnadeUI.valores as v}
+                {#each opcionAnadeUI.valores as v}
                   <span class="ing-chip" title="delta céntimos del motor">
                     {v.emoji ?? ''} {v.etiqueta}
                     {#if (v.delta_precio_centimos ?? 0) > 0}
@@ -396,11 +396,11 @@
       <div class="editor-cuerpo">
         <p class="nota-motor">elige una selección de PRUEBA — el MOTOR dictamina (la UI no calcula)</p>
 
-        {#if $opcionQuitarUI?.valores?.length}
+        {#if opcionQuitarUI?.valores?.length}
           <fieldset class="campo">
             <legend>Sin (quitar)</legend>
             <div class="lista-chips">
-              {#each $opcionQuitarUI.valores as v (v.id)}
+              {#each opcionQuitarUI.valores as v (v.id)}
                 <label class="check-chip">
                   <input type="checkbox" bind:group={quitarPrueba} value={v.id} />
                   {v.emoji ?? ''} {v.etiqueta}
@@ -410,11 +410,11 @@
           </fieldset>
         {/if}
 
-        {#if $opcionAnadeUI?.valores?.length}
+        {#if opcionAnadeUI?.valores?.length}
           <fieldset class="campo">
-            <legend>Añadir <small>(máximo {$opcionAnadeUI.max ?? 5})</small></legend>
+            <legend>Añadir <small>(máximo {opcionAnadeUI.max ?? 5})</small></legend>
             <div class="lista-chips">
-              {#each $opcionAnadeUI.valores as v (v.id)}
+              {#each opcionAnadeUI.valores as v (v.id)}
                 <label class="check-chip">
                   <input type="checkbox" bind:group={anadirPrueba} value={v.id} disabled={v.disponible === false} />
                   {v.emoji ?? ''} {v.etiqueta}

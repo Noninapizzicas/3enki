@@ -119,16 +119,16 @@ const MAPA_PROCESO = {
     mensaje: 'FASE 6: decidir la INTERFAZ del módulo — lee modules/<slug>/module.json + la skill de la cantera, razona el rol, escribe ui_handlers (type+zone) en modules/<slug>/module.json. Al terminar: proceso-negocio.completar_fase { fase: "interfaz", resumen: { modulos: ["<slug>"] } }.'
   },
   'negocio.interfaz': {
-    skill: 'esquematizar-interfaz',
+    skill: 'crear-blueprint-jefe',
     lee: ['modules/<slug>/module.json', 'modules/<slug>/<slug>.blueprint.json'],
     escribe: 'modules/<slug>/<slug>.blueprint.json',
-    mensaje: 'FASE 6½: esquematizar la interfaz concreta — lee modules/<slug>/module.json + blueprint, declara ui.ops + ui.datos EN modules/<slug>/<slug>.blueprint.json. Al terminar: proceso-negocio.completar_fase { fase: "interfaz_esquematizada", resumen: { modulos: ["<slug>"] } }.'
+    mensaje: 'FASE 6½ (método v2): ejecutar el agente crear-blueprint-jefe — esquematizador-jefe (5 preguntas + formas UI + señales pareadas) → blueprint con ui.roles + ui.flujo + formas_jefe + _lente_roles + _verificado_en_codigo EN modules/<slug>/<slug>.blueprint.json. Al terminar: proceso-negocio.completar_fase { fase: "interfaz_esquematizada", resumen: { modulos: ["<slug>"] } }.'
   },
   'negocio.interfaz_esquematizada': {
-    skill: 'construir-interfaz',
+    skill: 'crear-blueprint-jefe',
     lee: ['modules/<slug>/<slug>.blueprint.json'],
     escribe: 'frontend/src/lib/modules/<slug>/',
-    mensaje: 'FASE 7: construir la interfaz operativa — lee modules/<slug>/<slug>.blueprint.json, genera frontend/src/lib/modules/<slug>/ (manifest.json + index.ts + <Slug>Panel.svelte + blueprint). Al terminar: proceso-negocio.completar_fase { fase: "interfaz_construida", resumen: { modulos: ["<slug>"] } }.'
+    mensaje: 'FASE 7 (método v2): ejecutar el F7 del agente crear-blueprint-jefe — panel del jefe de generación v2 (composición 3 capas, project_id inyectado, señales pareadas) + frontend_sync (copia del blueprint a frontend/src/lib/modules/<slug>/). Al terminar: proceso-negocio.completar_fase { fase: "interfaz_construida", resumen: { modulos: ["<slug>"] } }.'
   },
   'negocio.interfaz_construida': {
     skill: 'construir-modulos',
@@ -251,8 +251,8 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
   //   hoja sin módulo               → construir-modulos (FASE 4)
   //   módulo sin skill              → escribir-skills (FASE 5)
   //   con skill, sin interfaz       → decidir-interfaz (FASE 6)
-  //   interfaz decidida, sin spec   → esquematizar-interfaz (FASE 6½)
-  //   spec hecha, sin construir     → construir-interfaz (FASE 7)
+  //   interfaz decidida, sin spec   → crear-blueprint-jefe (FASE 6½, método v2)
+  //   spec hecha, sin construir     → crear-blueprint-jefe (FASE 7, método v2)
   //   hoja completa                 → la SIGUIENTE hoja
   //   todas las hojas completas     → verificación final → completado
   _decidirSiguiente(progreso, faseActual = null) {
@@ -271,10 +271,10 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
         return { skill: 'decidir-interfaz', lee: [`modules/${h.slug}/module.json`, `modules/cosecha/cantera/enki/${h.slug}/SKILL.md`], escribe: `modules/${h.slug}/module.json`, mensaje: `MÓDULO POR MÓDULO — ${pos}: decidir interfaz — lee modules/${h.slug}/module.json + skill de la cantera, razona el rol, escribe ui_handlers en modules/${h.slug}/module.json. Al terminar: proceso-negocio.completar_fase { fase: "interfaz", resumen: { modulos: ["${h.slug}"] } }.` };
       }
       if (!h.con_interfaz_esquematizada) {
-        return { skill: 'esquematizar-interfaz', lee: [`modules/${h.slug}/module.json`, `modules/${h.slug}/${h.slug}.blueprint.json`], escribe: `modules/${h.slug}/${h.slug}.blueprint.json`, mensaje: `MÓDULO POR MÓDULO — ${pos}: esquematizar la interfaz — lee modules/${h.slug}/module.json + blueprint, declara ui.ops + ui.datos EN modules/${h.slug}/${h.slug}.blueprint.json. Al terminar: proceso-negocio.completar_fase { fase: "interfaz_esquematizada", resumen: { modulos: ["${h.slug}"] } }.` };
+        return { skill: 'crear-blueprint-jefe', lee: [`modules/${h.slug}/module.json`, `modules/${h.slug}/${h.slug}.blueprint.json`], escribe: `modules/${h.slug}/${h.slug}.blueprint.json`, mensaje: `MÓDULO POR MÓDULO — ${pos}: esquematizar la interfaz (método v2) — ejecutar el agente crear-blueprint-jefe: esquematizador-jefe (5 preguntas + formas UI + señales pareadas) → blueprint con ui.roles + ui.flujo + formas_jefe + _lente_roles + _verificado_en_codigo EN modules/${h.slug}/${h.slug}.blueprint.json. Al terminar: proceso-negocio.completar_fase { fase: "interfaz_esquematizada", resumen: { modulos: ["${h.slug}"] } }.` };
       }
       if (!h.con_interfaz_construida) {
-        return { skill: 'construir-interfaz', lee: [`modules/${h.slug}/${h.slug}.blueprint.json`], escribe: `frontend/src/lib/modules/${h.slug}/`, mensaje: `MÓDULO POR MÓDULO — ${pos}: construir la interfaz — lee modules/${h.slug}/${h.slug}.blueprint.json, genera frontend/src/lib/modules/${h.slug}/ (manifest + index.ts + Panel.svelte). Al terminar: proceso-negocio.completar_fase { fase: "interfaz_construida", resumen: { modulos: ["${h.slug}"] } }.` };
+        return { skill: 'crear-blueprint-jefe', lee: [`modules/${h.slug}/${h.slug}.blueprint.json`], escribe: `frontend/src/lib/modules/${h.slug}/`, mensaje: `MÓDULO POR MÓDULO — ${pos}: construir la interfaz (método v2) — ejecutar el F7 del agente crear-blueprint-jefe: panel del jefe de generación v2 (composición 3 capas, project_id inyectado, señales pareadas) + frontend_sync (copia del blueprint a frontend/src/lib/modules/${h.slug}/). Al terminar: proceso-negocio.completar_fase { fase: "interfaz_construida", resumen: { modulos: ["${h.slug}"] } }.` };
       }
       // hoja completa → continúa a la siguiente
     }
@@ -715,7 +715,7 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
         return { ok: true, verificados: [`interfaz de ${slug}: F6 decidió sin interfaz (ui_decision.necesita=false) — no hay nada que declarar`] };
       }
       if (!this._interfazEsquematizadaEnDisco(dirModulo, slug)) {
-        return { ok: false, esperado: [`modules/<slug>/<slug>.blueprint.json con sección ui (o ui mínima {})`], mensaje: `La declaración de interfaz de ${slug} NO está en disco: modules/${slug}/${slug}.blueprint.json sin sección \`ui\`. Corre la skill esquematizar-interfaz y declara ui.ops + ui.datos EN el blueprint (o ui mínima {} si los defaults del generador cubren).` };
+        return { ok: false, esperado: [`modules/<slug>/<slug>.blueprint.json con sección ui (o ui mínima {})`], mensaje: `La declaración de interfaz de ${slug} NO está en disco: modules/${slug}/${slug}.blueprint.json sin sección \`ui\`. Ejecuta el agente crear-blueprint-jefe (método v2) y declara ui.roles + ui.flujo + formas_jefe + _lente_roles EN el blueprint (o ui mínima {} si los defaults del generador cubren).` };
       }
       // En el repo también (el deploy borra lo no commiteado).
       if (REPO_MODULES_DIR) {
@@ -748,7 +748,7 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
       const envoltorio = ['manifest.json', 'index.ts', `${slugCap}Panel.svelte`, `${slug}.blueprint.json`];
       const faltantes = envoltorio.filter(f => !fs.existsSync(path.join(frontDir, f)));
       if (faltantes.length) {
-        return { ok: false, esperado: [`frontend/src/lib/modules/${slug}/ con ${envoltorio.join(' + ')}`], mensaje: `La interfaz operativa de ${slug} NO está completa: faltan ${faltantes.join(', ')} en frontend/src/lib/modules/${slug}/. Corre la skill construir-interfaz y genera el ENVOLTORIO del generador (manifest + index + <Slug>Panel.svelte con <BlueprintForm blueprint moduleId /> + copia del blueprint).` };
+        return { ok: false, esperado: [`frontend/src/lib/modules/${slug}/ con ${envoltorio.join(' + ')}`], mensaje: `La interfaz operativa de ${slug} NO está completa: faltan ${faltantes.join(', ')} en frontend/src/lib/modules/${slug}/. Ejecuta el F7 del agente crear-blueprint-jefe (método v2) y genera el panel del jefe de generación v2 (manifest + index + <Slug>Panel.svelte + stores/) + frontend_sync (copia del blueprint).` };
       }
       // En el repo también (el deploy del frontend va desde el repo).
       try {

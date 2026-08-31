@@ -4,7 +4,9 @@
   "version": "blueprint-2.0.0",
   "moduleId": "mise-en-place",
   "actor": "jefe",
-  "titulo": "Planificacion previa al servicio: escalado de recetas a porciones objetivo, planes de produccion (que recetas en que franja con cuantas porciones), consolidacion de listas de compra agregando ingredientes a lo largo de un horizonte. Eventos canonicos con prefix 'produccion.*' (decision del sub-contrato). Modulo del subsistema-recetario (ver arquitectura/decisiones/_contratos/subsistema-recetario.contract.json).",
+  "titulo": "Planificacion previa al servicio: el JEFE ESCALA las recetas al volumen del dia, PUBLICA el plan de produccion (que receta en que franja con cuantas porciones) y CONSOLIDA la lista de compra. Editor-escalado (escalado.calcular) + confirmador-nombrado plan.publicar + dictamen compra.calcular.",
+  "_doc": "Blueprint v2 de INTERFAZ de la cara del JEFE del modulo mise-en-place (RAIZ, tier_4_dominio, subsistema-recetario, planificacion-previa-al-servicio). Rewriting del blueprint v2.0.0 heredado (con lente de roles correcta) a schema 'blueprint-interfaz-v2' completo CON el andamiaje v2 (sin cambiar el contrato): 10 ops reales del reflejo servidas por ui_handlers (ui/request/mise-en-place/<accion>). El reflejo (mise-en-place 1.0.0) planifica la produccion: escalar recetas (escalado.calcular, factor destino/origen, NO toca la receta canonica), publicar el plan (plan.publicar -> nace 'propuesto'), consolidar la compra (compra.calcular agrega por ingrediente+unidad con merma). Persistencia json-per-project (/mise-en-place.json: planes[], escalados[], compras[]). Senales REALES verificadas (index.js _publicarEvento L587-611): produccion.escalado.calculado, produccion.plan.publicado, produccion.compra.calculada, produccion.plan.estado.avanzado. El dictamen del escalado/compra/plan viene EN LA RESPUESTA (201 con datos calculados). Roles confirmados: escalado.calcular/plan.publicar/compra.calcular=jefe (LA triada de declaracion), plan.obtener/planes.listar=neutro (lecturas). Verificaciones: modules/mise-en-place/index.js 1175 lineas + module.json (10 ui_handlers domain mise-en-place). Nada inventado: ver _verificado_en_codigo.",
+  "_doc_historico": "Blueprint del modulo mise-en-place (planificacion de produccion previa al servicio, subsistema-recetario). Heredaba una v2.0.0 con ui.roles CONFIRMADOS correctos (escalado.calcular/plan.publicar/compra.calcular=jefe; plan.obtener/planes.listar=neutro; retroplanning/agrupar/aprobar/ejecutar/cerrar jefe o motor) pero INCOMPLETA: sin formas_jefe, sin _lente_roles, sin _verificado_en_codigo, sin _doc_historico (el arbol esquema-jefe/ ni existia). Reescrito v2.0.0 para completar el andamiaje v2 y darle cara de UI a la triada de DECLARACION del jefe: escalar la receta, publicar el plan, consolidar la compra. Esquema-jefe creado en este ciclo (modules/mise-en-place/esquema-jefe/ - pasada-1, pasada-2-diseccion, esquema.md).",
   "eventos_publicados": [
     "produccion.escalado.calculado",
     "produccion.plan.publicado",
@@ -32,18 +34,8 @@
     "produccion.plan.cerrar"
   ],
   "transporte": {
-    "rpc": [
-      "mise-en-place.escalado.calcular.request -> .response",
-      "mise-en-place.plan.publicar.request -> .response",
-      "mise-en-place.compra.calcular.request -> .response",
-      "mise-en-place.plan.obtener.request -> .response",
-      "mise-en-place.planes.listar.request -> .response",
-      "mise-en-place.retroplanning.calcular.request -> .response",
-      "mise-en-place.plan.aprobar.request -> .response",
-      "mise-en-place.plan.ejecutar.request -> .response",
-      "mise-en-place.plan.cerrar.request -> .response",
-      "mise-en-place.agrupar_tandas.request -> .response"
-    ],
+    "entrada": "reflejo RPC via ui_handlers (module.json) - las 10 ops se conducen por ui/request/mise-en-place/<accion> con la accion dotted. transporte.rpc vacio a proposito (ui_handlers reales).",
+    "rpc": [],
     "salida": [
       "produccion.escalado.calculado",
       "produccion.plan.publicado",
@@ -51,31 +43,24 @@
       "produccion.retroplanning.calculado",
       "produccion.tandas.agrupadas",
       "produccion.plan.estado.avanzado"
-    ]
+    ],
+    "qos": "publishAndWait (request/response correlado) en cada operacion; timeout 8s"
   },
   "ui": {
-    "roles": {
-      "escalado.calcular": "jefe",
-      "plan.publicar": "jefe",
-      "compra.calcular": "jefe",
-      "plan.obtener": "neutro",
-      "planes.listar": "neutro",
-      "retroplanning.calcular": "jefe",
-      "plan.aprobar": "jefe",
-      "plan.ejecutar": "jefe",
-      "plan.cerrar": "jefe",
-      "agrupar_tandas": "jefe"
-    },
+    "_doc": "Panel de la CARA DEL JEFE de la planificacion: el jefe escalea la receta al volumen del dia, publica el plan que la produccion lee y consolida la lista de compra. Triada de DECLARACION (escalado.calcular -> plan.publicar -> compra.calcular) + lecturas neutras (recetas.* para el ref-select, planes.listar/plan.obtener para el informe). El dictamen viene EN LA RESPUESTA y la senal pareada re-lee (R3).",
     "ops": {
       "escalado.calcular": {
-        "titulo": "Escalado.calcular",
-        "descripcion": "Calcular el escalado lineal de una receta a nuevas porciones. Multiplica cada cantidad por factor = porciones_destino/porciones_origen. NO modifica la receta canonica.",
+        "titulo": "Escalar receta (volumen del dia)",
+        "descripcion": "Calcula la receta a porciones_destino: factor = destino/origen, cada cantidad x factor. NO modifica la receta canonica (derivacion transitoria para saber cuanto de cada ingrediente harfa falta). Persiste el resultado en escalados[]. El dictamen (ingredientes_escalados) viene EN LA RESPUESTA.",
+        "rol": "jefe",
+        "forma": "inline-editor: ref-select de receta (recetas.*) + porciones_origen/destino; el caller pasa los ingredientes de la receta (recetas.obtener)",
+        "senal_pareada": "produccion.escalado.calculado",
         "args": [
           {
             "nombre": "receta_id",
             "tipo": "ref",
             "required": true,
-            "descripcion": "ID de la receta a escalar.",
+            "descripcion": "ID de la receta a escalar (ref-select desde recetas.listar).",
             "ref": "recetas.listar",
             "ref_label": "nombre",
             "ref_value": "id",
@@ -85,46 +70,29 @@
             "nombre": "porciones_origen",
             "tipo": "number",
             "required": true,
-            "descripcion": "Porciones originales de la receta."
+            "descripcion": "Porciones originales de la receta (del rinde)."
           },
           {
             "nombre": "porciones_destino",
             "tipo": "number",
             "required": true,
-            "descripcion": "Porciones objetivo."
+            "descripcion": "Porciones objetivo (volumen del servicio/dia)."
           },
           {
             "nombre": "ingredientes",
             "tipo": "json",
             "required": true,
-            "descripcion": "Ingredientes de la receta original (para las porciones_origen)."
-          },
-          {
-            "nombre": "user_id",
-            "tipo": "ref",
-            "required": false,
-            "descripcion": "Opcional.",
-            "ref": "user.listar",
-            "ref_label": "nombre",
-            "ref_value": "id",
-            "placeholder": "selecciona un user"
+            "descripcion": "Ingredientes de la receta original (para las porciones_origen) - los trae la UI por recetas.obtener."
           }
         ]
       },
       "plan.publicar": {
-        "titulo": "Plan.publicar",
-        "descripcion": "Publicar un plan de produccion: lineas con receta_id, porciones y franja para un horizonte temporal.",
+        "titulo": "Publicar plan de produccion",
+        "descripcion": "Publica el plan que la produccion lee: lineas (receta x porciones x franja) dentro de un horizonte (desde/hasta). Nace 'propuesto'. Confirmador-nombrado: el gesto nombra que recetas y en que franjas se publicaran.",
+        "rol": "jefe",
+        "forma": "confirmador-nombrado (recetas, franjas, horizonte) + editor de lineas",
+        "senal_pareada": "produccion.plan.publicado",
         "args": [
-          {
-            "nombre": "plan_id",
-            "tipo": "ref",
-            "required": false,
-            "descripcion": "ID opcional. Si se omite, se genera 'plan_xxx'.",
-            "ref": "plan.listar",
-            "ref_label": "nombre",
-            "ref_value": "id",
-            "placeholder": "selecciona un plan"
-          },
           {
             "nombre": "horizonte_desde",
             "tipo": "string",
@@ -140,49 +108,36 @@
           {
             "nombre": "lineas",
             "tipo": "json",
-            "required": true
-          },
-          {
-            "nombre": "user_id",
-            "tipo": "ref",
-            "required": false,
-            "descripcion": "Opcional.",
-            "ref": "user.listar",
-            "ref_label": "nombre",
-            "ref_value": "id",
-            "placeholder": "selecciona un user"
+            "required": true,
+            "descripcion": "Lineas del plan: [{ receta_id, porciones, franja, dia? }] - franja en desayuno/comida/merienda/cena/all_day."
           }
         ]
       },
       "compra.calcular": {
-        "titulo": "Compra.calcular",
-        "descripcion": "Consolidar lista de compra agregando ingredientes a lo largo de un conjunto de recetas. El caller pasa cada receta con sus ingredientes ya escalados para las porciones objetivo. Agrega por (ingredient",
+        "titulo": "Consolidar lista de compra",
+        "descripcion": "Consolida la lista de compra agregando los ingredientes ya escalados a lo largo de un horizonte, por (ingrediente, unidad) con merma_pct opcional. El dictamen (items con cantidad_neta) viene EN LA RESPUESTA.",
+        "rol": "jefe",
+        "forma": "dictamen de lista de la compra (items por ingrediente+unidad, cantidad_neta); recetas pasadas con sus ingredientes escalados",
+        "senal_pareada": "produccion.compra.calculada",
         "args": [
           {
             "nombre": "horizonte",
             "tipo": "json",
-            "required": true
+            "required": true,
+            "descripcion": "{ tipo: servicio|dia|semana|evento|personalizado, desde?, hasta?, etiqueta? }."
           },
           {
             "nombre": "recetas",
             "tipo": "json",
-            "required": true
-          },
-          {
-            "nombre": "user_id",
-            "tipo": "ref",
-            "required": false,
-            "descripcion": "Opcional.",
-            "ref": "user.listar",
-            "ref_label": "nombre",
-            "ref_value": "id",
-            "placeholder": "selecciona un user"
+            "required": true,
+            "descripcion": "[{ receta_id, porciones, ingredientes: [{nombre, cantidad, unidad, merma_pct?}] }] - los ingredientes ya escalados."
           }
         ]
       },
       "plan.obtener": {
-        "titulo": "Plan.obtener",
-        "descripcion": "Obtener un plan de produccion por id.",
+        "titulo": "Ver plan",
+        "descripcion": "Lee un plan por id (404 si no existe) - neutro, informa la decision.",
+        "rol": "neutro",
         "args": [
           {
             "nombre": "plan_id",
@@ -197,163 +152,39 @@
         ]
       },
       "planes.listar": {
-        "titulo": "Planes.listar",
-        "descripcion": "Listar planes del proyecto."
+        "titulo": "Listar planes del proyecto",
+        "descripcion": "Lista los planes publicados del proyecto (id, horizonte, total_lineas, created_at) - neutro, alimenta el informe y la cinta.",
+        "rol": "neutro"
       },
       "retroplanning.calcular": {
-        "titulo": "Retroplanning.calcular",
-        "descripcion": "Retroplanning de produccion: dada la senal de demanda (fecha_servicio + franja + recetas con porciones) devuelve la ventana de produccion de cada receta (desde/hasta/recomendada) restando la ventana d",
-        "args": [
-          {
-            "nombre": "fecha_servicio",
-            "tipo": "string",
-            "required": true,
-            "descripcion": "Cuando se sirve: 'YYYY-MM-DD' (la franja fija la hora) o ISO 8601 completo."
-          },
-          {
-            "nombre": "franja",
-            "tipo": "select",
-            "required": true,
-            "enum": [
-              "desayuno",
-              "comida",
-              "merienda",
-              "cena",
-              "all_day"
-            ]
-          },
-          {
-            "nombre": "lineas",
-            "tipo": "json",
-            "required": true
-          },
-          {
-            "nombre": "user_id",
-            "tipo": "ref",
-            "required": false,
-            "descripcion": "Opcional.",
-            "ref": "user.listar",
-            "ref_label": "nombre",
-            "ref_value": "id",
-            "placeholder": "selecciona un user"
-          }
-        ]
+        "titulo": "Retroplanning",
+        "descripcion": "Ventana de produccion de cada receta restando la maduracion de masa. Conversor puro del motor (no persiste). Rol jefe en contrato, NO hoja primaria de este ciclo.",
+        "rol": "jefe"
       },
       "plan.aprobar": {
-        "titulo": "Plan.aprobar",
-        "descripcion": "Aprobar un plan de produccion: transicion propuesto -> aprobado. Solo el dueno (quien invoca) aprueba. Rechaza CONFLICT_STATE si el plan tiene decision_pendiente sin confirmar.",
-        "args": [
-          {
-            "nombre": "plan_id",
-            "tipo": "ref",
-            "required": true,
-            "descripcion": "ID del plan a aprobar.",
-            "ref": "plan.listar",
-            "ref_label": "nombre",
-            "ref_value": "id",
-            "placeholder": "selecciona un plan"
-          },
-          {
-            "nombre": "user_id",
-            "tipo": "ref",
-            "required": false,
-            "descripcion": "Opcional.",
-            "ref": "user.listar",
-            "ref_label": "nombre",
-            "ref_value": "id",
-            "placeholder": "selecciona un user"
-          }
-        ]
+        "titulo": "Aprobar plan",
+        "descripcion": "Transicion propuesto->aprobado (CONFLICT_STATE si no toca o hay decision_pendiente sin confirmar). Dispara la maquina de estados.",
+        "rol": "jefe"
       },
       "plan.ejecutar": {
-        "titulo": "Plan.ejecutar",
-        "descripcion": "Marcar un plan aprobado como en ejecucion (hoy: se produce). Transicion aprobado -> en_ejecucion.",
-        "args": [
-          {
-            "nombre": "plan_id",
-            "tipo": "ref",
-            "required": true,
-            "descripcion": "ID del plan a ejecutar.",
-            "ref": "plan.listar",
-            "ref_label": "nombre",
-            "ref_value": "id",
-            "placeholder": "selecciona un plan"
-          },
-          {
-            "nombre": "user_id",
-            "tipo": "ref",
-            "required": false,
-            "descripcion": "Opcional.",
-            "ref": "user.listar",
-            "ref_label": "nombre",
-            "ref_value": "id",
-            "placeholder": "selecciona un user"
-          }
-        ]
+        "titulo": "Ejecutar plan",
+        "descripcion": "Transicion aprobado->en_ejecucion (hoy: se produce).",
+        "rol": "jefe"
       },
       "plan.cerrar": {
-        "titulo": "Plan.cerrar",
-        "descripcion": "Cerrar un plan en ejecucion (producido; las tandas siguen vivas en lotes). Transicion en_ejecucion -> cerrado.",
-        "args": [
-          {
-            "nombre": "plan_id",
-            "tipo": "ref",
-            "required": true,
-            "descripcion": "ID del plan a cerrar.",
-            "ref": "plan.listar",
-            "ref_label": "nombre",
-            "ref_value": "id",
-            "placeholder": "selecciona un plan"
-          },
-          {
-            "nombre": "user_id",
-            "tipo": "ref",
-            "required": false,
-            "descripcion": "Opcional.",
-            "ref": "user.listar",
-            "ref_label": "nombre",
-            "ref_value": "id",
-            "placeholder": "selecciona un user"
-          }
-        ]
+        "titulo": "Cerrar plan",
+        "descripcion": "Transicion en_ejecucion->cerrado (producido; las tandas siguen vivas en lotes).",
+        "rol": "jefe"
       },
       "agrupar_tandas": {
-        "titulo": "Agrupar Tandas",
-        "descripcion": "Agrupar lineas de demanda en tandas de masa: pide a masa el gramaje por pieza y el rendimiento por tanda (masa.gramaje.calcular / masa.rendimiento.calcular); empaqueta por franja con capacidad en bola",
-        "args": [
-          {
-            "nombre": "lineas",
-            "tipo": "json",
-            "required": true
-          },
-          {
-            "nombre": "formato",
-            "tipo": "string",
-            "required": false,
-            "descripcion": "Formato de masa (ej: '33cm'). Default config."
-          },
-          {
-            "nombre": "tamano_tanda_kg",
-            "tipo": "number",
-            "required": false,
-            "descripcion": "Tamano de tanda en kg. Default config."
-          },
-          {
-            "nombre": "user_id",
-            "tipo": "ref",
-            "required": false,
-            "descripcion": "Opcional.",
-            "ref": "user.listar",
-            "ref_label": "nombre",
-            "ref_value": "id",
-            "placeholder": "selecciona un user"
-          }
-        ]
+        "titulo": "Agrupar tandas de masa",
+        "descripcion": "Agrupa lineas en tandas de masa (gramaje/rendimiento de masa). Conversor puro del motor (no persiste). Rol jefe en contrato, NO hoja primaria de este ciclo.",
+        "rol": "jefe"
       }
     },
     "datos": {
       "op": "planes.listar",
-      "titulo": "Planes.listar",
+      "titulo": "Planes de produccion del proyecto",
       "refresh_on": [
         "produccion.escalado.calculado",
         "produccion.plan.publicado",
@@ -363,65 +194,55 @@
         "produccion.plan.estado.avanzado"
       ]
     },
-    "estados": [
-      {
-        "nombre": "borrador",
-        "terminal": false,
-        "color": "gray",
-        "icono": "📝"
+    "formas_jefe": {
+      "editor_escalado": {
+        "forma": "inline-editor de escalado: ref-select de receta (recetas.listar) + porciones_origen (del rinde) + porciones_destino (volumen objetivo). El caller trae los ingredientes de la receta por recetas.obtener y los pasa a escalado.calcular.",
+        "rpc": "mise-en-place.escalado.calcular.request { project_id, receta_id, porciones_origen, porciones_destino, ingredientes } -> 201 { escalado_id, receta_id, factor, ingredientes_escalados }",
+        "senal": "produccion.escalado.calculado - re-lee (debounce 60ms)"
       },
-      {
-        "nombre": "escalado_calculado",
-        "terminal": false,
-        "color": "gray",
-        "icono": "⚪"
+      "tabla_escalado": {
+        "forma": "tabla de escalado: cada ingrediente x factor para el volumen objetivo (dictamen del propio escalado). Derivacion del dictamen, no calculo en UI.",
+        "rpc": "derivado de la respuesta de escalado.calcular (ningun RPC adicional)",
+        "senal": "none - se regenera con el dictamen"
       },
-      {
-        "nombre": "plan_publicado",
-        "terminal": false,
-        "color": "gray",
-        "icono": "⚪"
+      "confirmador_plan": {
+        "forma": "confirmador-nombrado PLAN: publica el plan que la produccion lee - editor de lineas (receta x porciones x franja) + horizonte. Nombra que recetas y en que franjas se publicaran y a quien afecta (la produccion del servicio).",
+        "rpc": "mise-en-place.plan.publicar.request { project_id, horizonte_desde, horizonte_hasta, lineas } -> 201 { plan_id, total_lineas }",
+        "senal": "produccion.plan.publicado - re-lee planes.listar (debounce 60ms)"
       },
-      {
-        "nombre": "compra_calculada",
-        "terminal": false,
-        "color": "gray",
-        "icono": "⚪"
+      "dictamen_compra": {
+        "forma": "dictamen de lista de la compra: agrega los ingredientes escalados elegidos por (ingrediente, unidad) con cantidad_neta (y merma opcional). Muestra el items[] consolidado por horizonte.",
+        "rpc": "mise-en-place.compra.calcular.request { project_id, horizonte, recetas: [{ receta_id, porciones, ingredientes }] } -> 201 { compra_id, items_total, items }",
+        "senal": "produccion.compra.calculada - re-lee planes.listar (debounce 60ms)"
       },
-      {
-        "nombre": "retroplanning_calculado",
-        "terminal": false,
-        "color": "gray",
-        "icono": "⚪"
-      },
-      {
-        "nombre": "tandas_agrupadas",
-        "terminal": false,
-        "color": "gray",
-        "icono": "⚪"
-      },
-      {
-        "nombre": "plan_estado_avanzado",
-        "terminal": false,
-        "color": "gray",
-        "icono": "⚪"
+      "informe_planes": {
+        "forma": "cinta-estado + lista de planes (planes.listar): los planes publicados del proyecto (id, horizonte, total_lineas). Refresco por la senal tras publicar.",
+        "rpc": "mise-en-place.planes.listar.request { project_id } -> 200 { planes[], total }",
+        "senal": "produccion.plan.publicado / produccion.plan.estado.avanzado - re-lee (debounce 60ms)"
       }
-    ],
+    },
+    "roles": {
+      "escalado.calcular": "jefe",
+      "plan.publicar": "jefe",
+      "compra.calcular": "jefe",
+      "plan.obtener": "neutro",
+      "planes.listar": "neutro",
+      "retroplanning.calcular": "jefe",
+      "plan.aprobar": "jefe",
+      "plan.ejecutar": "jefe",
+      "plan.cerrar": "jefe",
+      "agrupar_tandas": "jefe"
+    },
     "flujo": [
       {
         "nombre": "jefe",
         "orden": 1,
         "ops": [
-          "plan.publicar",
           "escalado.calcular",
-          "compra.calcular",
-          "retroplanning.calcular",
-          "agrupar_tandas",
-          "plan.aprobar",
-          "plan.ejecutar",
-          "plan.cerrar"
+          "plan.publicar",
+          "compra.calcular"
         ],
-        "descripcion": "Planificacion y supervision del jefe: crear planes, calcular escalados/compras/retroplanning, aprobar/ejecutar/cerrar planes"
+        "descripcion": "DECLARAR la planificacion del servicio: escalar la receta al volumen del dia (escalado.calcular), publicar el plan que la produccion lee (confirmador-nombrado plan.publicar) y consolidar la lista de compra (dictamen compra.calcular). El dictamen llega en la respuesta y la senal pareada re-lee planes.listar (nunca recarga)."
       },
       {
         "nombre": "consulta",
@@ -430,7 +251,7 @@
           "plan.obtener",
           "planes.listar"
         ],
-        "descripcion": "Ver y buscar planes de produccion"
+        "descripcion": "INFORMARSE antes de decidir: los planes publicados del proyecto (planes.listar) y uno por id (plan.obtener)."
       }
     ],
     "guardas": {
@@ -444,5 +265,26 @@
         "sensible_estado": true
       }
     }
+  },
+  "_lente_roles": {
+    "agente": "ciclo-mise-en-place v2",
+    "metodo": "esquematizador-jefe (modules/mise-en-place/esquema-jefe/ - pasada-1, pasada-2-diseccion, esquema.md)",
+    "arbitro": "¿escribe en el plan de produccion / lista de compra (via la triada escalado.calcular -> plan.publicar -> compra.calcular) -> jefe · se ejecuta en la venta/atencion AHORA (POS) -> utilizacion (fuera) · solo lee/calcula -> neutro",
+    "veredicto": "3 ops juzgadas como la DECLARACION del jefe: escalado.calcular (cuanto de cada ingrediente para el volumen del dia), plan.publicar (el plan que la produccion lee - LA declaracion), compra.calcular (la lista de compra). Neutro (lecturas): plan.obtener + planes.listar (informan) y recetas.* (ref-select). Motor/transiciones: retroplanning.calcular + agrupar_tandas (conversores puros del motor) y plan.aprobar/ejecutar/cerrar (maquina de estados) - jefe en contrato, no hoja primaria de este ciclo. Los roles del blueprint heredado se CONFIRMAN correctos.",
+    "senales": "3 senales de salida en la triada: produccion.escalado.calculado, produccion.plan.publicado, produccion.compra.calculada (+ produccion.plan.estado.avanzado para transiciones). Publicadas por _publicarEvento (index.js L587-611). Doble confirmacion tras declarar: dictamen en la respuesta RPC (201 con datos calculados) + senal que re-lee planes.listar (debounce 60ms). Las lecturas NO emiten senal.",
+    "moneda": "SIN € - la planificacion trabaja con porciones, factores, cantidades y unidades de ingrediente; la compra consolida cantidades_neta, no precios.",
+    "invariante_del_panel": "el caller pasa los datos (INV1): la UI trae los ingredientes de la receta por recetas.obtener y los pasa a escalado.calcular/compra.calcular (el modulo NO lee cross-modulo). Escalar NO edita la receta canonica (INV2). El plan nace 'propuesto' y avanza por maquina cerrada (INV3). El dictamen viene en la respuesta y la senal re-asienta (INV4). TODO RPC lleva project_id inyectado (leccion bug escandallo - INV6).",
+    "huecos_abiertos": [
+      "promover un escalado al plan: hoy plan.publicar recibe las lineas explicitadas; no hay una op 'escalar -> plan' en el contrato (el panel arma las lineas desde el escalado calculado)",
+      "retroplanning / agrupacion-tanda UI: existen en contrato (rol jefe/motor) pero no son la decision primaria de este ciclo",
+      "merma en el escalado: el escalado no aplica merma (solo compra.calcular la acepta por ingrediente); el panel usa 0 por defecto"
+    ],
+    "fuente_analisis": "modules/mise-en-place/esquema-jefe/esquema.md",
+    "fecha": "2026-08-31"
+  },
+  "_verificado_en_codigo": {
+    "index_js": "modules/mise-en-place/index.js (1175 lineas, leidas enteras): onCalcularEscalado L234 (factor destino/origen L780 _calcularEscalado; persiste escalados[]; NO toca la receta), onPublicarPlan L291 (nace 'propuesto' ESTADO_INICIAL_PLAN L33; persiste planes[]; _publicarEvento produccion.plan.publicado L332), onCalcularCompra L350 (_agregarCompra L795: agrega por nombre_lower+unidad con merma_pct; persiste compras[]; L382 _publicarEvento produccion.compra.calculada), onObtenerPlan L401, onListarPlanes L419, onCalcularRetroplanning L444, onAgruparTandas L483, _transicionarPlanRequest L528 (plan.aprobar/ejecutar/cerrar -> produccion.plan.estado.avanzado L570). _publicarEvento L587-611 anade project_id + user_id + correlation_id. Persistencia json-per-project /mise-en-place.json L1074-1103 (planes[], escalados[], compras[]).",
+    "module_json": "10 ui_handlers (domain 'mise-en-place', zone barra_modulos, workspace_module): escalado.calcular, plan.publicar, compra.calcular, plan.obtener, planes.listar, retroplanning.calcular, plan.aprobar, plan.ejecutar, plan.cerrar, agrupar_tandas. 15 subscribes RPC. 6 publishes: produccion.escalado.calculado, produccion.plan.publicado, produccion.compra.calculada, produccion.retroplanning.calculado, produccion.tandas.agrupadas, produccion.plan.estado.avanzado.",
+    "schema": "no hay schema-file propio - contrato produccion-v1 por parametros de tools (module.json.tools): escalado.calcular pide {project_id, receta_id, porciones_origen, porciones_destino, ingredientes}, plan.publicar {horizonte_desde, horizonte_hasta, lineas}, compra.calcular {horizonte, recetas}, planes.listar {project_id}. Validaciones _validarEscalado/_validarPlan/_validarCompra (L617-717)."
   }
 }

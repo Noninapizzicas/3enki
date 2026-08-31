@@ -137,8 +137,8 @@ export interface PlanPublicado {
 // =============================================================================
 
 const recetasStore = writable<RecetaResumen[]>([]);
-const recetarioLoading = writable<boolean>(false);
-const recetarioError = writable<string | null>(null);
+export const recetarioLoading = writable<boolean>(false);
+export const recetarioError = writable<string | null>(null);
 
 /** Escalado activo (dictamen transitorio — INV2, nunca guarda la receta). */
 export const escaladoActivo = writable<EscaladoDictamen | null>(null);

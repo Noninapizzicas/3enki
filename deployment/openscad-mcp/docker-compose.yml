@@ -1,0 +1,50 @@
+# OpenSCAD MCP Server — docker compose para pizzepos.es
+#
+# Levanta el servidor MCP de OpenSCAD con transporte HTTP,
+# accesible solo desde localhost (Caddy hace de puerta con TLS + token).
+#
+# Uso:
+#   cd deployment/openscad-mcp
+#   echo "ENKI_MCP_TOKEN=$(openssl rand -hex 32)" > .env
+#   docker compose up -d
+#
+# El token generado en .env es el secreto compartido entre este servicio
+# y cualquier instancia de Enki que lo consuma. Cópialo a la config de
+# cada cliente MCP que deba conectarse.
+
+services:
+  openscad-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: openscad-mcp
+    restart: unless-stopped
+    environment:
+      - SERVER_TRANSPORT=http
+      - MCP_SERVER_HOST=0.0.0.0
+      - MCP_SERVER_PORT=3000
+      - OPENSCAD_TIMEOUT=30
+      - OPENSCAD_MAX_THREADS=4
+      - MAX_RENDER_RESOLUTION=2048
+      - DISABLE_EXTERNAL_INCLUDES=true
+    volumes:
+      - scad-output:/tmp/openscad-output
+      - scad-cache:/tmp/openscad-cache
+      - scad-renders:/tmp/openscad-renders
+      - scad-models:/app/models
+    ports:
+      - "127.0.0.1:3100:3000"
+    mem_limit: 2g
+    cpus: 2
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  scad-output:
+  scad-cache:
+  scad-renders:
+  scad-models:

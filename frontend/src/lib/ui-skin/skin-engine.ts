@@ -168,6 +168,7 @@ export function aplicarPiel(piel: PielJSON, cara?: CaraActiva): void {
   if (browser) {
     document.documentElement.setAttribute('data-piel', piel.project_id);
     document.documentElement.setAttribute('data-cara', _caraActiva);
+    document.documentElement.setAttribute('data-variant', _caraActiva === 'marketing' ? 'light' : 'dark');
   }
 }
 
@@ -184,6 +185,7 @@ export function quitarPiel(): void {
   if (browser) {
     document.documentElement.removeAttribute('data-piel');
     document.documentElement.removeAttribute('data-cara');
+    document.documentElement.removeAttribute('data-variant');
   }
 }
 

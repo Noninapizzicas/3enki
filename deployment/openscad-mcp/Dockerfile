@@ -38,6 +38,11 @@ WORKDIR /app
 COPY --from=builder /dist/*.whl /tmp/
 RUN uv pip install --system --no-cache-dir /tmp/*.whl && rm /tmp/*.whl
 
+# Entrypoint: arranca Xvfb en background y luego el servidor MCP (NO xvfb-run,
+# que como PID1 no mantiene el proceso python vivo).
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
 USER mcp
 
 ENV OPENSCAD_PATH=/usr/bin/openscad \
@@ -59,5 +64,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
 
 VOLUME ["/tmp/openscad-renders", "/tmp/openscad-cache", "/tmp/openscad-output", "/app/models"]
 
-ENTRYPOINT ["xvfb-run", "-a"]
-CMD ["python", "-m", "openscad_mcp"]
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

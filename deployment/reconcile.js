@@ -379,6 +379,9 @@ async function main() {
       const ollamaViva = (envOllama.match(/^OLLAMA_API_KEY=(\S+)/m) || [])[1] || (envOllama.match(/^OLLAMA_CLOUD_API_KEY_GLOBAL=(\S+)/m) || [])[1] || '';
       let renderedCfg = tmplCfg.replace(/__API_SERVER_KEY__/g, keyHermesViva);
       renderedCfg = renderedCfg.replace(/__OLLAMA_API_KEY__/g, ollamaViva);
+      // Token del MCP de OpenSCAD: se lee del .env vivo (nunca versionado).
+      const mcpToken = (envOllama.match(/^ENKI_MCP_TOKEN=(\S+)/m) || [])[1] || '';
+      renderedCfg = renderedCfg.replace(/__ENKI_MCP_TOKEN__/g, mcpToken);
       workerConfigCambio = escribirSiDifiere(HW.config_destino, renderedCfg, 'hermes-worker config.yaml');
       if (workerConfigCambio) { act('chown config → hermes'); if (!DRY_RUN) shOk(`chown -R ${HW.usuario}:${HW.usuario} ${HW.home}`); }
     }

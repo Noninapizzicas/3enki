@@ -24,6 +24,10 @@ mcp_servers:
       - /opt/enki/mcp/enki-mcp-server.js
     env:
       ENKI_BROKER_URL: mqtt://localhost:1883
+  openscad:
+    url: https://enki-ai.online/scad
+    headers:
+      Authorization: "Bearer __ENKI_MCP_TOKEN__"
 session_reset:
   mode: none
 platform_toolsets:

@@ -118,25 +118,29 @@ const MANIFIESTO = {
   },
 
   // Snippets Caddy condicionales — bloques extra que el reconciliador CONCATENA
-  // al Caddyfile renderizado SOLO si el .env del VPS declara la feature.
-  // Cada snippet usa el mismo dominio_placeholder que la plantilla principal;
-  // el reconciliador lo sustituye igual. Un VPS sin la variable = no lo trae.
+  // al Caddyfile renderizado SOLO si el VPS declara la feature: bien por `env_flag`
+  // en su .env, bien por `dominios` (el dominio del VPS está en esta lista — vía
+  // determinista, sin tocar .env a mano). Opción A: `env_flag: 'ENABLE_OPENSCAD'`.
+  // Opción B (determinista por dominio): `dominios: ['enki-ai.online']`. Ambas
+  // coexisten: se activa si cualquiera se cumple.
   caddy_snippets: [
     {
       id: 'openscad-mcp',
       plantilla: path.join(DEPLOYMENT_DIR, 'caddy', 'Caddyfile.openscad.snippet'),
-      env_flag: 'ENABLE_OPENSCAD'
+      env_flag: 'ENABLE_OPENSCAD',
+      dominios: ['enki-ai.online']
     }
   ],
 
   // Docker Compose services condicionales — contenedores que el reconciliador
-  // LEVANTA solo en VPS que declaran la feature en su .env. Mismo patrón que
-  // caddy_snippets: la flag decide. En VPS sin la flag, el contenedor no se toca.
+  // LEVANTA solo en VPS que declaran la feature (igual criterio que caddy_snippets:
+  // env_flag O dominio listado). En VPS sin la feature, el contenedor no se toca.
   docker_services: [
     {
       id: 'openscad-mcp',
       compose_dir: path.join(DEPLOYMENT_DIR, 'openscad-mcp'),
       env_flag: 'ENABLE_OPENSCAD',
+      dominios: ['enki-ai.online'],
       container: 'openscad-mcp'
     }
   ],

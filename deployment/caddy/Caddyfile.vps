@@ -63,6 +63,18 @@ pizzepos.es {
 		reverse_proxy localhost:3000
 	}
 
+	# OpenSCAD MCP — servidor remoto de diseño 3D (path /scad/* en el dominio
+	# principal, sin subdominio). Auth por token Bearer compartido (ENKI_MCP_TOKEN).
+	# El endpoint MCP del contenedor es /mcp; el rewrite quita el prefijo /scad.
+	handle /scad/* {
+		@no_token {
+			not header Authorization "Bearer {env.ENKI_MCP_TOKEN}"
+		}
+		respond @no_token 401
+		rewrite * /mcp
+		reverse_proxy localhost:3100
+	}
+
 	# NAMESPACE PÚBLICO GLOBAL `/<public_ns>/` (por defecto /a/). UN solo bloque
 	# sirve TODAS las superficies de TODOS los proyectos: cada superficie (shop,
 	# oraculo, …) es una subcarpeta de /opt/enki/public/<ns>/, y cada proyecto un

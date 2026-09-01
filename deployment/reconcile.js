@@ -284,13 +284,33 @@ async function main() {
   }
   if (systemdCambio) { act('systemctl daemon-reload'); shOk('systemctl daemon-reload'); }
 
-  // 5) Caddyfile (render con dominio local + escribir si difiere)
+  // 5) Caddyfile (render con dominio local + snippets condicionales + escribir si difiere)
   const caddyTmpl = leer(M.caddy.plantilla);
   let caddyCambio = false;
   if (caddyTmpl == null) {
     warn(`plantilla Caddy ausente: ${M.caddy.plantilla}`);
   } else {
-    const caddyRendered = renderCaddyfile(caddyTmpl, dominio, M.caddy, M.public_ns, M.public_dir);
+    let caddyRendered = renderCaddyfile(caddyTmpl, dominio, M.caddy, M.public_ns, M.public_dir);
+
+    // Snippets condicionales: se concatenan al Caddyfile SOLO si el .env del VPS
+    // declara la flag correspondiente (ej. ENABLE_OPENSCAD=true). Cada snippet
+    // pasa por el mismo replace de dominio que la plantilla principal.
+    for (const snip of (M.caddy_snippets || [])) {
+      const flagValue = (envVivo || '').match(new RegExp(`^\\s*${snip.env_flag}\\s*=\\s*(.+?)\\s*$`, 'm'));
+      if (flagValue && flagValue[1].trim().toLowerCase() === 'true') {
+        const snippetTmpl = leer(snip.plantilla);
+        if (snippetTmpl) {
+          const snippetRendered = renderCaddyfile(snippetTmpl, dominio, M.caddy);
+          caddyRendered += '\n' + snippetRendered;
+          log(`snippet Caddy '${snip.id}' activado (${snip.env_flag}=true)`);
+        } else {
+          warn(`snippet Caddy '${snip.id}': plantilla ausente ${snip.plantilla}`);
+        }
+      } else {
+        log(`snippet Caddy '${snip.id}' omitido (${snip.env_flag} no activado)`);
+      }
+    }
+
     caddyCambio = escribirSiDifiere(M.caddy.destino, caddyRendered, 'Caddyfile');
   }
 
@@ -368,6 +388,34 @@ async function main() {
 
     // reiniciar hermes-gateway si su config cambió (la unit ya se reinicia arriba si cambió)
     if (workerConfigCambio && !DRY_RUN) { act('systemctl restart hermes-gateway'); shOk('systemctl restart hermes-gateway'); }
+  }
+
+  // 6c) Docker services condicionales — levanta solo en VPS con la flag activa.
+  // Idempotente: `docker compose up -d` no recrea si ya está corriendo y la
+  // imagen no cambió; `--build` asegura que el Dockerfile del repo prevalece.
+  for (const ds of (M.docker_services || [])) {
+    const flagMatch = (envVivo || '').match(new RegExp(`^\\s*${ds.env_flag}\\s*=\\s*(.+?)\\s*$`, 'm'));
+    const activo = flagMatch && flagMatch[1].trim().toLowerCase() === 'true';
+    const composeFile = path.join(ds.compose_dir, 'docker-compose.yml');
+
+    if (!existe(composeFile)) {
+      warn(`docker service '${ds.id}': compose file ausente ${composeFile}`);
+      continue;
+    }
+
+    if (activo) {
+      act(`docker compose up -d --build (${ds.id})`);
+      if (!DRY_RUN) {
+        if (shOk(`docker compose -f ${composeFile} up -d --build`)) {
+          log(`docker service '${ds.id}' levantado (${ds.env_flag}=true)`);
+        } else {
+          warn(`docker service '${ds.id}': fallo al levantar — revisa docker logs ${ds.container}`);
+        }
+      }
+      cambios++;
+    } else {
+      log(`docker service '${ds.id}' omitido (${ds.env_flag} no activado)`);
+    }
   }
 
   // 7) Self-check ruidoso

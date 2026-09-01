@@ -78,7 +78,7 @@
   .card-title {
     font-family: var(--font-display);
     font-size: var(--fs-lg);
-    font-weight: var(--fw-semibold);
+    font-weight: var(--fw-heading, var(--fw-semibold));
     line-height: var(--lh-tight);
     color: var(--text-primary);
   }

@@ -98,7 +98,7 @@
   }
 
   .section {
-    padding: var(--sp-20) var(--space-page-padding);
+    padding: var(--space-section-gap, 5rem) var(--space-page-padding);
   }
 
   .section-alt {
@@ -113,7 +113,7 @@
   .section-title {
     font-family: var(--font-display);
     font-size: var(--fs-2xl);
-    font-weight: var(--fw-bold);
+    font-weight: var(--fw-heading, var(--fw-bold));
     line-height: var(--lh-tight);
     color: var(--text-primary);
     text-align: center;

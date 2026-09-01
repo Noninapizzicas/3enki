@@ -23,6 +23,10 @@ export interface PielTipografia {
   body: string;
   /** Familia mono (código, datos). Nombre CSS: 'JetBrains Mono', monospace */
   mono?: string;
+  /** Peso de los títulos: 600 = ligero, 700 = normal, 900 = pesado/bold */
+  pesoTitulos?: number;
+  /** Ratio de escala modular: 1.125 = minor second, 1.25 = major third, 1.333 = perfect fourth */
+  escala?: number;
 }
 
 export interface PielRadii {
@@ -40,6 +44,18 @@ export interface PielSombras {
   difuminado: number;
 }
 
+export interface PielEspaciado {
+  /** Factor de densidad: 0.6 = compacto, 1.0 = normal, 1.5 = generoso/lujo */
+  factor: number;
+}
+
+export interface PielSuperficie {
+  /** Intensidad del gradiente hero: 0 = plano, 1 = gradiente completo */
+  gradiente: number;
+  /** Efecto glass en elevaciones: 0 = sólido, 1 = frosted glass */
+  glass: number;
+}
+
 export interface PielCara {
   color: {
     primary: PielColor;
@@ -50,6 +66,8 @@ export interface PielCara {
   radii: PielRadii;
   motion: PielMotion;
   sombras: PielSombras;
+  espaciado: PielEspaciado;
+  superficie: PielSuperficie;
 }
 
 /**

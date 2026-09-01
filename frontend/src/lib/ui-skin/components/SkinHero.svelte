@@ -27,8 +27,8 @@
 
 <style>
   .hero {
-    padding: var(--sp-24) var(--space-page-padding);
-    background: var(--surface-base);
+    padding: var(--space-hero-y, 6rem) var(--space-page-padding);
+    background: var(--hero-bg, var(--surface-base));
   }
 
   .hero-content {
@@ -51,7 +51,7 @@
   .hero-title {
     font-family: var(--font-display);
     font-size: var(--fs-3xl);
-    font-weight: var(--fw-bold);
+    font-weight: var(--fw-heading, var(--fw-bold));
     line-height: var(--lh-tight);
     letter-spacing: -0.02em;
     color: var(--text-primary);

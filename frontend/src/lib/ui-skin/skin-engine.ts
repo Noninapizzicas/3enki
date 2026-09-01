@@ -109,14 +109,77 @@ function generarSombras(difuminado: number): Record<string, string> {
   };
 }
 
-// ── Tipografía ──
+// ── Tipografía (familias + peso + escala modular) ──
 
-function generarTipografia(tipo: { display: string; body: string; mono?: string }): Record<string, string> {
-  return {
+function generarTipografia(tipo: {
+  display: string;
+  body: string;
+  mono?: string;
+  pesoTitulos?: number;
+  escala?: number;
+}): Record<string, string> {
+  const vars: Record<string, string> = {
     '--font-display': tipo.display,
     '--font-sans':    tipo.body,
     '--font-mono':    tipo.mono ?? "'JetBrains Mono', 'Fira Code', monospace",
   };
+
+  const peso = tipo.pesoTitulos ?? 700;
+  vars['--fw-heading'] = String(peso);
+
+  const r = tipo.escala ?? 1.25;
+  vars['--fs-xs']   = `${(1 / r / r).toFixed(3)}rem`;
+  vars['--fs-sm']   = `${(1 / r).toFixed(3)}rem`;
+  vars['--fs-base'] = '1rem';
+  vars['--fs-md']   = `${r.toFixed(3)}rem`;
+  vars['--fs-lg']   = `${(r * r).toFixed(3)}rem`;
+  vars['--fs-xl']   = `${(r * r * r).toFixed(3)}rem`;
+  vars['--fs-2xl']  = `${(r ** 4).toFixed(3)}rem`;
+  vars['--fs-3xl']  = `${(r ** 5).toFixed(3)}rem`;
+
+  return vars;
+}
+
+// ── Espaciado desde densidad ──
+
+function generarEspaciado(factor: number): Record<string, string> {
+  return {
+    '--space-component-gap': `${(0.5 * factor).toFixed(2)}rem`,
+    '--space-section-gap':   `${(2.0 * factor).toFixed(2)}rem`,
+    '--space-page-padding':  `${(1.0 * factor).toFixed(2)}rem`,
+    '--space-card-padding':  `${(1.0 * factor).toFixed(2)}rem`,
+    '--space-hero-y':        `${(6.0 * factor).toFixed(2)}rem`,
+  };
+}
+
+// ── Superficie (gradiente + glass) ──
+
+function generarSuperficie(
+  gradiente: number,
+  glass: number,
+  primaryHue: number,
+  primaryChroma: number
+): Record<string, string> {
+  const vars: Record<string, string> = {};
+
+  if (gradiente > 0) {
+    const c = (primaryChroma * 0.3 * gradiente).toFixed(3);
+    vars['--hero-bg'] = `linear-gradient(135deg, oklch(0.97 ${c} ${primaryHue}), oklch(0.93 ${(parseFloat(c) * 0.5).toFixed(3)} ${(primaryHue + 30) % 360}))`;
+  } else {
+    vars['--hero-bg'] = 'var(--surface-base)';
+  }
+
+  if (glass > 0) {
+    const blur = Math.round(8 + glass * 16);
+    const alpha = (0.6 + (1 - glass) * 0.35).toFixed(2);
+    vars['--surface-glass'] = `oklch(0.97 0.002 0 / ${alpha})`;
+    vars['--surface-glass-blur'] = `blur(${blur}px)`;
+  } else {
+    vars['--surface-glass'] = 'var(--surface-raised)';
+    vars['--surface-glass-blur'] = 'none';
+  }
+
+  return vars;
 }
 
 // ── Ensamblar todas las variables de una cara ──
@@ -130,6 +193,13 @@ function caraAVariables(cara: PielCara): Record<string, string> {
     ...generarRadii(cara.radii.factor),
     ...generarMotion(cara.motion.expresividad),
     ...generarSombras(cara.sombras.difuminado),
+    ...generarEspaciado(cara.espaciado.factor),
+    ...generarSuperficie(
+      cara.superficie.gradiente,
+      cara.superficie.glass,
+      cara.color.primary.hue,
+      cara.color.primary.chroma
+    ),
   };
 }
 

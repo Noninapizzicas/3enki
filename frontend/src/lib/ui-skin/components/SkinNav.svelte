@@ -28,13 +28,13 @@
 
 <style>
   .nav {
-    background: var(--surface-raised);
+    background: var(--surface-glass, var(--surface-raised));
     border-bottom: 1px solid var(--border-subtle);
     padding: 0 var(--space-page-padding);
     position: sticky;
     top: 0;
     z-index: var(--z-sticky);
-    backdrop-filter: blur(12px);
+    backdrop-filter: var(--surface-glass-blur, blur(12px));
   }
 
   .nav-inner {

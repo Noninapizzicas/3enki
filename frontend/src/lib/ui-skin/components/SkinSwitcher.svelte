@@ -15,10 +15,14 @@
         tipografia: {
           display: "'Playfair Display', 'Georgia', serif",
           body: "'Inter', system-ui, sans-serif",
+          pesoTitulos: 800,
+          escala: 1.333,
         },
         radii: { factor: 1.2 },
         motion: { expresividad: 0.8 },
         sombras: { difuminado: 0.7 },
+        espaciado: { factor: 1.4 },
+        superficie: { gradiente: 0.8, glass: 0.6 },
       },
       trabajo: {
         color: {
@@ -29,10 +33,14 @@
         tipografia: {
           display: "system-ui, sans-serif",
           body: "system-ui, sans-serif",
+          pesoTitulos: 600,
+          escala: 1.2,
         },
         radii: { factor: 0.5 },
         motion: { expresividad: 0.15 },
         sombras: { difuminado: 0.3 },
+        espaciado: { factor: 0.8 },
+        superficie: { gradiente: 0, glass: 0 },
       },
     },
     fintech: {
@@ -47,10 +55,14 @@
         tipografia: {
           display: "'Inter', system-ui, sans-serif",
           body: "'Inter', system-ui, sans-serif",
+          pesoTitulos: 700,
+          escala: 1.2,
         },
         radii: { factor: 0.6 },
         motion: { expresividad: 0.3 },
         sombras: { difuminado: 0.5 },
+        espaciado: { factor: 0.7 },
+        superficie: { gradiente: 0.3, glass: 0.8 },
       },
       trabajo: {
         color: {
@@ -61,10 +73,14 @@
         tipografia: {
           display: "system-ui, sans-serif",
           body: "system-ui, sans-serif",
+          pesoTitulos: 600,
+          escala: 1.125,
         },
         radii: { factor: 0.4 },
         motion: { expresividad: 0.1 },
         sombras: { difuminado: 0.2 },
+        espaciado: { factor: 0.6 },
+        superficie: { gradiente: 0, glass: 0 },
       },
     },
     infantil: {
@@ -79,10 +95,14 @@
         tipografia: {
           display: "'Fredoka', 'Comic Sans MS', cursive",
           body: "'Nunito', 'Quicksand', system-ui, sans-serif",
+          pesoTitulos: 700,
+          escala: 1.333,
         },
         radii: { factor: 2.0 },
         motion: { expresividad: 1.0 },
         sombras: { difuminado: 0.9 },
+        espaciado: { factor: 1.1 },
+        superficie: { gradiente: 1.0, glass: 0.4 },
       },
       trabajo: {
         color: {
@@ -93,10 +113,14 @@
         tipografia: {
           display: "system-ui, sans-serif",
           body: "system-ui, sans-serif",
+          pesoTitulos: 600,
+          escala: 1.2,
         },
         radii: { factor: 0.8 },
         motion: { expresividad: 0.2 },
         sombras: { difuminado: 0.4 },
+        espaciado: { factor: 0.8 },
+        superficie: { gradiente: 0, glass: 0 },
       },
     },
     pirata: {
@@ -111,10 +135,14 @@
         tipografia: {
           display: "'Playfair Display', 'Georgia', serif",
           body: "'Inter', 'Lato', system-ui, sans-serif",
+          pesoTitulos: 900,
+          escala: 1.25,
         },
-        radii: { factor: 0.4 },
+        radii: { factor: 0.3 },
         motion: { expresividad: 0.3 },
-        sombras: { difuminado: 0.2 },
+        sombras: { difuminado: 0.15 },
+        espaciado: { factor: 1.0 },
+        superficie: { gradiente: 0.5, glass: 0.2 },
       },
       trabajo: {
         color: {
@@ -125,10 +153,14 @@
         tipografia: {
           display: "system-ui, sans-serif",
           body: "system-ui, sans-serif",
+          pesoTitulos: 600,
+          escala: 1.2,
         },
-        radii: { factor: 0.5 },
+        radii: { factor: 0.4 },
         motion: { expresividad: 0.15 },
         sombras: { difuminado: 0.2 },
+        espaciado: { factor: 0.8 },
+        superficie: { gradiente: 0, glass: 0 },
       },
     },
   };

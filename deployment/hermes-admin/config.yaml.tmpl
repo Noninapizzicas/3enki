@@ -1,0 +1,9 @@
+# Plantilla del config del Hermes ADMIN (/home/admin/.hermes/config.yaml) — clon céntrico-en-repo.
+# La escribe el reconciliador (deployment/reconcile.js). SOLO se crea la PRIMERA vez
+# (VPS nuevo, config sin existir); después cada VPS evoluciona la suya (identidad
+# independiente). El bloque "model:" lo RENDERIZA el reconcile multi-provider leyendo
+# el .env vivo de Enki: OLLAMA_API_KEY → Ollama Cloud (VPS1), DEEPSEEK_API_KEY_GLOBAL
+# → DeepSeek (VPS2). La key NUNCA se versiona; se rellena desde el .env en el destino.
+agent:
+  max_turns: 150
+_config_version: 33

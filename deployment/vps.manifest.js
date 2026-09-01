@@ -82,6 +82,32 @@ const MANIFIESTO = {
     skills_destino: '/home/hermes/.hermes/skills/enki'
   },
 
+  // Perfil del Hermes ADMIN (el agente conversacional, usuario admin) — clon
+  // céntrico-en-repo para VPS2 (identidad nueva). El binario se instala aparte
+  // (vps-setup.sh); aquí SOLO se reconcilian las skills/agentes desde el repo.
+  // NO se crea el usuario (admin ya existe); NO se copia config/auth/memoria
+  // de otro VPS (identidad independiente). La MEMORIA se siembra una vez como
+  // semilla desde el repo (.hermes/memory) y luego cada VPS la evoluciona solo.
+  hermes_admin: {
+    home: '/home/admin/.hermes',
+    usuario: 'admin',
+    // config de PROVIDERS compartida por el repo (provider custom → ollama/v1,
+    // deepseek-v4-flash). La key se sustituye en reconcile desde el .env vivo de
+    // Enki (NUNCA versionada; misma key que el worker). SOLO se escribe la PRIMERA
+    // vez (config destino inexistente); después cada VPS evoluciona su config.
+    config_plantilla: path.join(DEPLOYMENT_DIR, 'hermes-admin', 'config.yaml.tmpl'),
+    config_destino: '/home/admin/.hermes/config.yaml',
+    // Skills de Enki (mismas 13 que el worker) + cantera de módulos (278) + agentes.
+    skills_enki_origen: path.join(__dirname, '..', '.hermes', 'skills', 'enki'),
+    skills_enki_destino: '/home/admin/.hermes/skills/enki',
+    cantera_origen: path.join(__dirname, '..', 'modules', 'cosecha', 'cantera', 'enki'),
+    cantera_destino: '/home/admin/.hermes/skills/enki-cantera',
+    // Memoria-semilla (una vez): SIEMBRA el contexto aprendido en VPS2; luego
+    // cada VPS la evoluciona de forma independiente (no se re-siembra).
+    memoria_origen: path.join(__dirname, '..', '.hermes', 'memories'),
+    memoria_destino: '/home/admin/.hermes/memories'
+  },
+
   // Caddy: plantilla con dominio hardcoded (pizzepos.es) que se sustituye por
   // el dominio vivo de cada VPS. El log sigue el mismo patrón.
   caddy: {

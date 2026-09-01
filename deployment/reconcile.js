@@ -390,6 +390,115 @@ async function main() {
     if (workerConfigCambio && !DRY_RUN) { act('systemctl restart hermes-gateway'); shOk('systemctl restart hermes-gateway'); }
   }
 
+  // 6b2) Hermes ADMIN (/home/admin/.hermes) — skills/agentes clon céntrico-en-repo.
+  // El binario se instala aparte (vps-setup.sh); aquí SOLO se sincronizan desde
+  // el repo: skills de Enki (13), cantera de módulos (278 + agentes) y — si el
+  // repo trae memoria semilla — se SIEMBRA una vez. NO crea el usuario (admin
+  // ya existe), NO toca config/auth. Cada VPS es identidad independiente.
+  const HA = M.hermes_admin;
+  if (HA) {
+    if (!existe(HA.home)) { act(`mkdir -p ${HA.home}`); if (!DRY_RUN) fs.mkdirSync(HA.home, { recursive: true }); cambios++; }
+
+    // INSTALAR Hermes ADMIN si falta el binario (no viaja en el repo: el paquete
+    // hermes-agent se instala con el instalador oficial de Nous). Idempotente:
+    // si el binario existe, no hace nada. En VPS nuevo lo deja listo de una.
+    const binAdmin = `/home/${HA.usuario}/.local/bin/hermes`;
+    if (!existe(binAdmin)) {
+      const installer = 'https://hermes-agent.nousresearch.com/install.sh';
+      act(`instalando hermes-agent (admin) ${installer} → ${binAdmin}`);
+      if (!DRY_RUN) {
+        shOk(`curl -fsSL ${installer} | HOME=/home/${HA.usuario} bash`);
+        if (!existe(binAdmin)) {
+          warn(`instalador de Hermes admin no dejó el binario en ${binAdmin} — revisa journalctl/network. El VPS queda sin el Hermes conversacional.`);
+        } else {
+          shOk(`chown -R ${HA.usuario}:${HA.usuario} /home/${HA.usuario}/.local /home/${HA.usuario}/.hermes`);
+          cambios++;
+        }
+      }
+    }
+
+    // config de PROVIDERS, clon céntrico-en-repo. SOLO se crea la PRIMERA vez
+    // (config destino inexistente); después cada VPS evoluciona la suya
+    // (identidad independiente). Multi-provider: detecta en el .env vivo de Enki
+    // qué key existe — OLLAMA_API_KEY → Ollama Cloud (VPS1), DEEPSEEK_API_KEY_GLOBAL
+    // → DeepSeek (VPS2) — y escribe el bloqua model correcto. La key NUNCA se
+    // versiona; se rellena desde el .env.
+    const HA_cfg = leer(HA.config_plantilla);
+    if (HA_cfg != null && !existe(HA.config_destino)) {
+      const HA_env = leer(path.join(M.install_dir, 'data', '.env')) || leer(path.join(M.install_dir, '.env')) || '';
+      // detectar provider y su key
+      const ollamaKey = (HA_env.match(/^OLLAMA_API_KEY=(\S+)/m) || [])[1] || '';
+      const deepseekKey = (HA_env.match(/^DEEPSEEK_API_KEY_GLOBAL=(\S+)/m) || [])[1] || '';
+      let baseUrl, defaultModel, apiKey;
+      if (ollamaKey) {
+        baseUrl = 'https://ollama.com/v1';
+        defaultModel = 'deepseek-v4-flash';
+        apiKey = ollamaKey;
+      } else if (deepseekKey) {
+        baseUrl = 'https://api.deepseek.com/v1';
+        defaultModel = 'deepseek-chat';
+        apiKey = deepseekKey;
+      }
+      let HA_rendered = HA_cfg;
+      // si no hay key detectable, dejar el provider sin tocar (no escribir basura)
+      if (apiKey) {
+        const modelYaml = `model:\n  default: ${defaultModel}\n  provider: custom\n  base_url: ${baseUrl}\n  api_key: ${apiKey}\n\n`;
+        // si la plantilla ya tiene un bloque model: lo reemplaza; si no, lo antepone
+        if (/^model:/m.test(HA_cfg)) {
+          HA_rendered = HA_cfg.replace(/^model:[\s\S]*?(?=^\S|\Z)/m, modelYaml);
+        } else {
+          HA_rendered = modelYaml + HA_cfg;
+        }
+      }
+      act(`creando config de admin (provider: ${apiKey ? (ollamaKey ? 'ollama-cloud' : 'deepseek') : 'indetectado'}) → ${HA.config_destino}`);
+      if (!DRY_RUN) {
+        fs.writeFileSync(HA.config_destino, HA_rendered);
+        shOk(`chown ${HA.usuario}:${HA.usuario} ${HA.config_destino}`);
+      }
+      cambios++;
+    } else if (existe(HA.config_destino)) {
+      log(`config de admin ya existe en ${HA.config_destino} — no se toca (identidad independiente)`);
+    }
+
+    // skills de Enki (SIN --delete — cada VPS es identidad independiente y
+    // puede tener skills locales propias que no vienen del repo; el admin no
+    // es un clon exacto del repo, a diferencia del worker que sí es repo-puro)
+    if (existe(HA.skills_enki_origen)) {
+      act(`rsync skills enki → ${HA.skills_enki_destino}`);
+      if (!DRY_RUN) {
+        shOk(`mkdir -p ${HA.skills_enki_destino}`);
+        shOk(`rsync -a ${HA.skills_enki_origen}/ ${HA.skills_enki_destino}/`);
+      }
+      cambios++;
+    }
+
+    // cantera de módulos + agentes (SIN --delete — misma razón que skills)
+    if (existe(HA.cantera_origen)) {
+      act(`rsync cantera enki (módulos+agentes) → ${HA.cantera_destino}`);
+      if (!DRY_RUN) {
+        shOk(`mkdir -p ${HA.cantera_destino}`);
+        shOk(`rsync -a ${HA.cantera_origen}/ ${HA.cantera_destino}/`);
+      }
+      cambios++;
+    }
+
+    // memoria-semilla: SOLO si el repo la trae y el destino NO existe aún
+    // (una vez). Luego cada VPS evoluciona la suya de forma independiente.
+    if (existe(HA.memoria_origen) && !existe(HA.memoria_destino)) {
+      act(`sembrando memoria-semilla → ${HA.memoria_destino} (una vez)`);
+      if (!DRY_RUN) {
+        shOk(`mkdir -p ${HA.memoria_destino}`);
+        shOk(`rsync -a ${HA.memoria_origen}/ ${HA.memoria_destino}/`);
+      }
+      cambios++;
+    } else if (existe(HA.memoria_destino)) {
+      log(`memoria de admin ya existe en ${HA.memoria_destino} — no se re-siembra (independiente)`);
+    }
+
+    // el dueño es admin (el reconcile corre como root; dejar el home a admin)
+    if (!DRY_RUN) shOk(`chown -R ${HA.usuario}:${HA.usuario} ${HA.home}`);
+  }
+
   // 6c) Docker services condicionales — levanta solo en VPS con la flag activa.
   // Idempotente: `docker compose up -d` no recrea si ya está corriendo y la
   // imagen no cambió; `--build` asegura que el Dockerfile del repo prevalece.

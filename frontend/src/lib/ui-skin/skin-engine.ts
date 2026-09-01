@@ -190,16 +190,18 @@ function generarBorde(
   primaryHue: number,
   primaryChroma: number
 ): Record<string, string> {
-  const borderWidth = peso <= 0.5 ? 0 : Math.round(1 + (peso - 0.5) * 1.33);
-  const shadowScale = Math.max(0, 1 - peso * 0.5);
+  const borderWidth = peso <= 0.3 ? 0 : Math.round(1 + peso * 1.5);
+  const shadowOpacity = Math.max(0.01, 0.12 * (1 - peso * 0.4));
+  const accentChroma = Math.max(primaryChroma, 0.12);
 
   return {
     '--border-card-width':   `${borderWidth}px`,
-    '--shadow-card-scale':   shadowScale.toFixed(2),
-    '--accent-bar-position': acento,
-    '--accent-bar-color':    `oklch(0.65 ${Math.min(primaryChroma * 1.2, 0.2).toFixed(3)} ${primaryHue})`,
-    '--accent-bar-width':    acento === 'none' ? '0px' : acento === 'top' ? '100%' : '4px',
-    '--accent-bar-height':   acento === 'none' ? '0px' : acento === 'top' ? '3px' : '100%',
+    '--shadow-card':         peso > 1
+      ? `0 1px 2px oklch(0 0 0 / ${shadowOpacity.toFixed(2)})`
+      : `0 4px ${Math.round(12 + (1 - peso) * 8)}px oklch(0 0 0 / ${shadowOpacity.toFixed(2)})`,
+    '--accent-bar-color':    `oklch(0.58 ${accentChroma.toFixed(3)} ${primaryHue})`,
+    '--accent-bar-width':    acento === 'none' ? '0px' : acento === 'top' ? '100%' : '6px',
+    '--accent-bar-height':   acento === 'none' ? '0px' : acento === 'top' ? '4px' : '100%',
   };
 }
 
@@ -212,26 +214,26 @@ function generarForma(
   primaryHue: number,
   primaryChroma: number
 ): Record<string, string> {
-  const btnPadH = (0.65 + (botonProportion - 0.5) * 0.6).toFixed(2);
+  const btnPadH = (0.5 + botonProportion * 0.7).toFixed(2);
+  const accentChroma = Math.max(primaryChroma, 0.12);
   const vars: Record<string, string> = {
     '--btn-pad-h-factor':    btnPadH,
     '--hero-text-align':     heroAlign,
     '--hero-align-items':    heroAlign === 'left' ? 'flex-start' : 'center',
-    '--card-hover-type':     cardHover,
   };
 
   if (cardHover === 'lift') {
-    vars['--card-hover-transform'] = 'translateY(-3px)';
-    vars['--card-hover-shadow']    = 'var(--shadow-lg)';
+    vars['--card-hover-transform'] = 'translateY(-4px)';
+    vars['--card-hover-shadow']    = '0 12px 24px oklch(0 0 0 / 0.12)';
     vars['--card-hover-border']    = 'var(--border-subtle)';
   } else if (cardHover === 'glow') {
-    vars['--card-hover-transform'] = 'translateY(-1px)';
-    vars['--card-hover-shadow']    = `0 0 20px oklch(0.7 ${Math.min(primaryChroma, 0.15).toFixed(3)} ${primaryHue} / 0.3)`;
-    vars['--card-hover-border']    = 'var(--border-subtle)';
+    vars['--card-hover-transform'] = 'translateY(-2px)';
+    vars['--card-hover-shadow']    = `0 0 24px oklch(0.6 ${accentChroma.toFixed(3)} ${primaryHue} / 0.35)`;
+    vars['--card-hover-border']    = `oklch(0.7 ${(accentChroma * 0.5).toFixed(3)} ${primaryHue})`;
   } else {
     vars['--card-hover-transform'] = 'none';
     vars['--card-hover-shadow']    = 'var(--shadow-card)';
-    vars['--card-hover-border']    = `oklch(0.65 ${Math.min(primaryChroma * 1.2, 0.2).toFixed(3)} ${primaryHue})`;
+    vars['--card-hover-border']    = `oklch(0.58 ${accentChroma.toFixed(3)} ${primaryHue})`;
   }
 
   return vars;
@@ -244,20 +246,23 @@ function generarSeparadores(
   primaryHue: number,
   primaryChroma: number
 ): Record<string, string> {
+  const accentChroma = Math.max(primaryChroma, 0.12);
   const vars: Record<string, string> = {
     '--section-divider-display': estilo === 'none' ? 'none' : 'block',
   };
 
   if (estilo === 'line') {
-    vars['--section-divider'] = '1px solid var(--border-subtle)';
+    vars['--section-divider'] = 'none';
+    vars['--section-divider-bg'] = 'var(--border-subtle)';
+    vars['--section-divider-height'] = '1px';
   } else if (estilo === 'gradient') {
     vars['--section-divider'] = 'none';
-    vars['--section-divider-bg'] = `linear-gradient(90deg, transparent, oklch(0.8 ${(primaryChroma * 0.5).toFixed(3)} ${primaryHue}), transparent)`;
-    vars['--section-divider-height'] = '1px';
+    vars['--section-divider-bg'] = `linear-gradient(90deg, transparent 5%, oklch(0.7 ${accentChroma.toFixed(3)} ${primaryHue}) 50%, transparent 95%)`;
+    vars['--section-divider-height'] = '2px';
   } else if (estilo === 'accent') {
     vars['--section-divider'] = 'none';
-    vars['--section-divider-bg'] = `oklch(0.65 ${Math.min(primaryChroma * 1.2, 0.2).toFixed(3)} ${primaryHue})`;
-    vars['--section-divider-height'] = '2px';
+    vars['--section-divider-bg'] = `oklch(0.58 ${accentChroma.toFixed(3)} ${primaryHue})`;
+    vars['--section-divider-height'] = '3px';
   } else {
     vars['--section-divider'] = 'none';
     vars['--section-divider-bg'] = 'transparent';

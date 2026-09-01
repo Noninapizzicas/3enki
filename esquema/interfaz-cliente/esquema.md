@@ -236,7 +236,7 @@ INTERFAZ CLIENTE
 
 | Métrica | Valor |
 |---|---|
-| Pasadas del prisma | 2 (P1 → 4 SPAWN + P2 → todo atómico, + SPAWN 5 cerrado desde [ABIERTO]) |
+| Pasadas del prisma | 3 (P1 → 5 SPAWN, P2 → todo atómico, P3 → 12 módulos marketing clasificados por capa) |
 | Piezas atómicas totales | 30 (únicas, descontando duplicadas #10≈#20 y #12≈#21) |
 | Piezas contrato | 3 |
 | REFs (deduplicadas) | 7 |
@@ -297,11 +297,45 @@ publicador           ──→ #24 Publicación
 
 ---
 
+## Clasificación de datos por capa (pasada 3)
+
+La pasada 3 clasificó cada campo de los 12 módulos de marketing desde el cliente.
+Tres capas de datos alimentan el ensamblador:
+
+| Capa | Módulos | Qué fluye |
+|---|---|---|
+| **DIRECTA** | content, strategy | Datos que SE MUESTRAN al cliente: títulos, copy, propuesta de valor, evidencias |
+| **GENERATIVA** | campaigns, calendar | Datos que CREAN presencias temporales: landings de campaña, páginas estacionales |
+| **CONTEXTUAL** | audience, funnel, competitors, relations | Datos que INFORMAN cómo escribir: tono, objeciones, CTAs, personalización |
+| **INTERNA** | budget, analytics, automation | 0 datos al cliente. Budget/analytics = tablero jefe. Automation = motor invisible (sus salidas llegan por renderizado) |
+
+### Flujo del conversor por capa
+
+```
+  DIRECTA ──────────────┐
+  (content, strategy)    │
+                         ├──→ CONVERSOR (#12/#21) ──→ secciones con datos
+  GENERATIVA ───────────┤
+  (campaigns, calendar)  │
+                         │
+  CONTEXTUAL ───────────┘
+  (audience, funnel,
+   competitors, relations)
+```
+
+---
+
 ## Siguiente paso
 
-El prisma se agotó. La disección asignó formas. El esquema está ensamblado.
+El prisma se agotó (3 pasadas). La disección asignó formas. La pasada 3 clasificó los 12 módulos por capa (directa/generativa/contextual/interna).
 
-**Construir** — la anatomía dice qué construir y en qué orden:
+**Construir el agente generador de interfaz cliente** — análogo a `crear-blueprint-jefe` pero para el CLIENTE:
+1. Lee un módulo → aplica la clasificación de pasada-3 (qué campos son cliente)
+2. Genera los componentes/secciones que presentan esos datos al cliente
+3. El conversor (#12/#21) materializa los mapeos campo→sección
+4. El ensamblador junta: datos + piel + estructura → interfaz publicada
+
+**Orden de construcción** (de la anatomía):
 1. Los reflejos primero (enums, catálogos, validaciones, acciones) — la base determinista.
 2. Los conversores del ensamblador (la cadena marketing → vista → formato).
 3. Los custodios (máquinas de estado de presencia, página, interacción) — vigilan transiciones.

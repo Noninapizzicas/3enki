@@ -417,16 +417,40 @@ async function main() {
       }
     }
 
-    // config de PROVIDERS compartida por el repo (provider custom → ollama/v1,
-    // deepseek-v4-flash). SOLO se crea la PRIMERA vez (config destino inexistente);
-    // después cada VPS evoluciona la suya (identidad independiente). La key se lee
-    // del .env vivo de Enki (misma que el worker) — nunca versionada.
+    // config de PROVIDERS, clon céntrico-en-repo. SOLO se crea la PRIMERA vez
+    // (config destino inexistente); después cada VPS evoluciona la suya
+    // (identidad independiente). Multi-provider: detecta en el .env vivo de Enki
+    // qué key existe — OLLAMA_API_KEY → Ollama Cloud (VPS1), DEEPSEEK_API_KEY_GLOBAL
+    // → DeepSeek (VPS2) — y escribe el bloqua model correcto. La key NUNCA se
+    // versiona; se rellena desde el .env.
     const HA_cfg = leer(HA.config_plantilla);
     if (HA_cfg != null && !existe(HA.config_destino)) {
-      const HA_envOllama = leer(path.join(M.install_dir, 'data', '.env')) || leer(path.join(M.install_dir, '.env')) || '';
-      const HA_ollama = (HA_envOllama.match(/^OLLAMA_API_KEY=(\S+)/m) || [])[1] || '';
-      const HA_rendered = HA_cfg.replace(/__OLLAMA_API_KEY__/g, HA_ollama || '__OLLAMA_API_KEY__');
-      act(`creando config de admin (providers) → ${HA.config_destino}`);
+      const HA_env = leer(path.join(M.install_dir, 'data', '.env')) || leer(path.join(M.install_dir, '.env')) || '';
+      // detectar provider y su key
+      const ollamaKey = (HA_env.match(/^OLLAMA_API_KEY=(\S+)/m) || [])[1] || '';
+      const deepseekKey = (HA_env.match(/^DEEPSEEK_API_KEY_GLOBAL=(\S+)/m) || [])[1] || '';
+      let baseUrl, defaultModel, apiKey;
+      if (ollamaKey) {
+        baseUrl = 'https://ollama.com/v1';
+        defaultModel = 'deepseek-v4-flash';
+        apiKey = ollamaKey;
+      } else if (deepseekKey) {
+        baseUrl = 'https://api.deepseek.com/v1';
+        defaultModel = 'deepseek-chat';
+        apiKey = deepseekKey;
+      }
+      let HA_rendered = HA_cfg;
+      // si no hay key detectable, dejar el provider sin tocar (no escribir basura)
+      if (apiKey) {
+        const modelYaml = `model:\n  default: ${defaultModel}\n  provider: custom\n  base_url: ${baseUrl}\n  api_key: ${apiKey}\n\n`;
+        // si la plantilla ya tiene un bloque model: lo reemplaza; si no, lo antepone
+        if (/^model:/m.test(HA_cfg)) {
+          HA_rendered = HA_cfg.replace(/^model:[\s\S]*?(?=^\S|\Z)/m, modelYaml);
+        } else {
+          HA_rendered = modelYaml + HA_cfg;
+        }
+      }
+      act(`creando config de admin (provider: ${apiKey ? (ollamaKey ? 'ollama-cloud' : 'deepseek') : 'indetectado'}) → ${HA.config_destino}`);
       if (!DRY_RUN) {
         fs.writeFileSync(HA.config_destino, HA_rendered);
         shOk(`chown ${HA.usuario}:${HA.usuario} ${HA.config_destino}`);

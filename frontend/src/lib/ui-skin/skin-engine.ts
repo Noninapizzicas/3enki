@@ -291,10 +291,10 @@ function generarExpresion(
     vars['--hero-title-bg'] = 'none';
     vars['--hero-title-bg-clip'] = 'unset';
   } else if (exp.heroEstilo === 'shadow-brutal') {
-    vars['--hero-title-color'] = `oklch(0.15 ${(c * 0.5).toFixed(3)} ${primaryHue})`;
-    vars['--hero-title-stroke'] = 'unset';
-    vars['--hero-title-fill'] = 'currentColor';
-    vars['--hero-title-shadow'] = `6px 6px 0px oklch(0.6 ${c.toFixed(3)} ${primaryHue}), 12px 12px 0px oklch(0.8 ${(c * 0.5).toFixed(3)} ${accentHue})`;
+    vars['--hero-title-color'] = `oklch(0.85 ${c.toFixed(3)} ${primaryHue})`;
+    vars['--hero-title-stroke'] = `3px oklch(0.2 ${(c * 0.3).toFixed(3)} ${primaryHue})`;
+    vars['--hero-title-fill'] = `oklch(0.85 ${c.toFixed(3)} ${primaryHue})`;
+    vars['--hero-title-shadow'] = `4px 4px 0px oklch(0.2 ${(c * 0.3).toFixed(3)} ${primaryHue}), 8px 8px 0px oklch(0.65 ${c.toFixed(3)} ${accentHue})`;
     vars['--hero-title-bg'] = 'none';
     vars['--hero-title-bg-clip'] = 'unset';
   } else if (exp.heroEstilo === 'gradient-text') {

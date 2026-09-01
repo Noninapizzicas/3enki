@@ -182,6 +182,91 @@ function generarSuperficie(
   return vars;
 }
 
+// ── Borde (peso + acento) ──
+
+function generarBorde(
+  peso: number,
+  acento: 'none' | 'top' | 'left',
+  primaryHue: number,
+  primaryChroma: number
+): Record<string, string> {
+  const borderWidth = peso <= 0.5 ? 0 : Math.round(1 + (peso - 0.5) * 1.33);
+  const shadowScale = Math.max(0, 1 - peso * 0.5);
+
+  return {
+    '--border-card-width':   `${borderWidth}px`,
+    '--shadow-card-scale':   shadowScale.toFixed(2),
+    '--accent-bar-position': acento,
+    '--accent-bar-color':    `oklch(0.65 ${Math.min(primaryChroma * 1.2, 0.2).toFixed(3)} ${primaryHue})`,
+    '--accent-bar-width':    acento === 'none' ? '0px' : acento === 'top' ? '100%' : '4px',
+    '--accent-bar-height':   acento === 'none' ? '0px' : acento === 'top' ? '3px' : '100%',
+  };
+}
+
+// ── Forma (proporción botones + hero align + card hover) ──
+
+function generarForma(
+  botonProportion: number,
+  heroAlign: 'center' | 'left',
+  cardHover: 'lift' | 'glow' | 'border',
+  primaryHue: number,
+  primaryChroma: number
+): Record<string, string> {
+  const btnPadH = (0.65 + (botonProportion - 0.5) * 0.6).toFixed(2);
+  const vars: Record<string, string> = {
+    '--btn-pad-h-factor':    btnPadH,
+    '--hero-text-align':     heroAlign,
+    '--hero-align-items':    heroAlign === 'left' ? 'flex-start' : 'center',
+    '--card-hover-type':     cardHover,
+  };
+
+  if (cardHover === 'lift') {
+    vars['--card-hover-transform'] = 'translateY(-3px)';
+    vars['--card-hover-shadow']    = 'var(--shadow-lg)';
+    vars['--card-hover-border']    = 'var(--border-subtle)';
+  } else if (cardHover === 'glow') {
+    vars['--card-hover-transform'] = 'translateY(-1px)';
+    vars['--card-hover-shadow']    = `0 0 20px oklch(0.7 ${Math.min(primaryChroma, 0.15).toFixed(3)} ${primaryHue} / 0.3)`;
+    vars['--card-hover-border']    = 'var(--border-subtle)';
+  } else {
+    vars['--card-hover-transform'] = 'none';
+    vars['--card-hover-shadow']    = 'var(--shadow-card)';
+    vars['--card-hover-border']    = `oklch(0.65 ${Math.min(primaryChroma * 1.2, 0.2).toFixed(3)} ${primaryHue})`;
+  }
+
+  return vars;
+}
+
+// ── Separadores entre secciones ──
+
+function generarSeparadores(
+  estilo: 'none' | 'line' | 'gradient' | 'accent',
+  primaryHue: number,
+  primaryChroma: number
+): Record<string, string> {
+  const vars: Record<string, string> = {
+    '--section-divider-display': estilo === 'none' ? 'none' : 'block',
+  };
+
+  if (estilo === 'line') {
+    vars['--section-divider'] = '1px solid var(--border-subtle)';
+  } else if (estilo === 'gradient') {
+    vars['--section-divider'] = 'none';
+    vars['--section-divider-bg'] = `linear-gradient(90deg, transparent, oklch(0.8 ${(primaryChroma * 0.5).toFixed(3)} ${primaryHue}), transparent)`;
+    vars['--section-divider-height'] = '1px';
+  } else if (estilo === 'accent') {
+    vars['--section-divider'] = 'none';
+    vars['--section-divider-bg'] = `oklch(0.65 ${Math.min(primaryChroma * 1.2, 0.2).toFixed(3)} ${primaryHue})`;
+    vars['--section-divider-height'] = '2px';
+  } else {
+    vars['--section-divider'] = 'none';
+    vars['--section-divider-bg'] = 'transparent';
+    vars['--section-divider-height'] = '0px';
+  }
+
+  return vars;
+}
+
 // ── Ensamblar todas las variables de una cara ──
 
 function caraAVariables(cara: PielCara): Record<string, string> {
@@ -197,6 +282,24 @@ function caraAVariables(cara: PielCara): Record<string, string> {
     ...generarSuperficie(
       cara.superficie.gradiente,
       cara.superficie.glass,
+      cara.color.primary.hue,
+      cara.color.primary.chroma
+    ),
+    ...generarBorde(
+      cara.borde.peso,
+      cara.borde.acento,
+      cara.color.primary.hue,
+      cara.color.primary.chroma
+    ),
+    ...generarForma(
+      cara.forma.botonProportion,
+      cara.forma.heroAlign,
+      cara.forma.cardHover,
+      cara.color.primary.hue,
+      cara.color.primary.chroma
+    ),
+    ...generarSeparadores(
+      cara.separadores.estilo,
       cara.color.primary.hue,
       cara.color.primary.chroma
     ),

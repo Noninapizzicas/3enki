@@ -39,17 +39,17 @@
 
   .btn-sm {
     font-size: var(--fs-xs);
-    padding: var(--sp-1\.5) var(--sp-3);
+    padding: var(--sp-1\.5) calc(var(--sp-3) * var(--btn-pad-h-factor, 1));
     border-radius: var(--radius-button);
   }
   .btn-md {
     font-size: var(--fs-sm);
-    padding: var(--sp-2) var(--sp-5);
+    padding: var(--sp-2) calc(var(--sp-5) * var(--btn-pad-h-factor, 1));
     border-radius: var(--radius-button);
   }
   .btn-lg {
     font-size: var(--fs-base);
-    padding: var(--sp-3) var(--sp-8);
+    padding: var(--sp-3) calc(var(--sp-8) * var(--btn-pad-h-factor, 1));
     border-radius: var(--radius-button);
   }
 

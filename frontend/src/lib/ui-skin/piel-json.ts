@@ -56,6 +56,27 @@ export interface PielSuperficie {
   glass: number;
 }
 
+export interface PielBorde {
+  /** Peso del borde: 0 = invisible (sombra domina), 1 = sutil, 2 = grueso (borde domina) */
+  peso: number;
+  /** Barra de acento en tarjetas: dónde aparece el color primario */
+  acento: 'none' | 'top' | 'left';
+}
+
+export interface PielForma {
+  /** Proporción de botones: 0.5 = compacto/cuadrado, 1.0 = normal, 1.5 = ancho/pill */
+  botonProportion: number;
+  /** Alineación del hero */
+  heroAlign: 'center' | 'left';
+  /** Efecto hover en tarjetas */
+  cardHover: 'lift' | 'glow' | 'border';
+}
+
+export interface PielSeparadores {
+  /** Estilo de separador entre secciones */
+  estilo: 'none' | 'line' | 'gradient' | 'accent';
+}
+
 export interface PielCara {
   color: {
     primary: PielColor;
@@ -68,6 +89,9 @@ export interface PielCara {
   sombras: PielSombras;
   espaciado: PielEspaciado;
   superficie: PielSuperficie;
+  borde: PielBorde;
+  forma: PielForma;
+  separadores: PielSeparadores;
 }
 
 /**

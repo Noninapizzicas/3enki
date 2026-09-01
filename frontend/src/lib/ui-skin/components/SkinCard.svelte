@@ -41,16 +41,29 @@
 <style>
   .card {
     background: var(--surface-raised);
-    border: 1px solid var(--border-subtle);
+    border: var(--border-card-width, 1px) solid var(--border-subtle);
     border-radius: var(--radius-card);
     box-shadow: var(--shadow-card);
     overflow: hidden;
+    position: relative;
     transition: box-shadow var(--dur-normal) var(--ease-default),
-                transform var(--dur-normal) var(--ease-default);
+                transform var(--dur-normal) var(--ease-default),
+                border-color var(--dur-normal) var(--ease-default);
+  }
+  .card::before {
+    content: '';
+    position: absolute;
+    z-index: 1;
+    background: var(--accent-bar-color, transparent);
+    top: 0;
+    left: 0;
+    width: var(--accent-bar-width, 0px);
+    height: var(--accent-bar-height, 0px);
   }
   .card:hover {
-    box-shadow: var(--shadow-dropdown);
-    transform: translateY(-2px);
+    box-shadow: var(--card-hover-shadow, var(--shadow-dropdown));
+    transform: var(--card-hover-transform, translateY(-2px));
+    border-color: var(--card-hover-border, var(--border-subtle));
   }
 
   .card-image {

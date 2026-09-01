@@ -40,12 +40,12 @@
   }
 
   .hero-center .hero-content {
-    align-items: center;
-    text-align: center;
+    align-items: var(--hero-align-items, center);
+    text-align: var(--hero-text-align, center);
   }
   .hero-left .hero-content {
-    align-items: flex-start;
-    text-align: left;
+    align-items: var(--hero-align-items, flex-start);
+    text-align: var(--hero-text-align, left);
   }
 
   .hero-title {

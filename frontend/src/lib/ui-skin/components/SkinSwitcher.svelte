@@ -23,6 +23,9 @@
         sombras: { difuminado: 0.7 },
         espaciado: { factor: 1.4 },
         superficie: { gradiente: 0.8, glass: 0.6 },
+        borde: { peso: 0.5, acento: 'top' },
+        forma: { botonProportion: 1.2, heroAlign: 'center', cardHover: 'lift' },
+        separadores: { estilo: 'gradient' },
       },
       trabajo: {
         color: {
@@ -41,6 +44,9 @@
         sombras: { difuminado: 0.3 },
         espaciado: { factor: 0.8 },
         superficie: { gradiente: 0, glass: 0 },
+        borde: { peso: 0.3, acento: 'none' },
+        forma: { botonProportion: 1.0, heroAlign: 'center', cardHover: 'lift' },
+        separadores: { estilo: 'line' },
       },
     },
     fintech: {
@@ -63,6 +69,9 @@
         sombras: { difuminado: 0.5 },
         espaciado: { factor: 0.7 },
         superficie: { gradiente: 0.3, glass: 0.8 },
+        borde: { peso: 0, acento: 'none' },
+        forma: { botonProportion: 0.8, heroAlign: 'left', cardHover: 'glow' },
+        separadores: { estilo: 'line' },
       },
       trabajo: {
         color: {
@@ -81,6 +90,9 @@
         sombras: { difuminado: 0.2 },
         espaciado: { factor: 0.6 },
         superficie: { gradiente: 0, glass: 0 },
+        borde: { peso: 0.3, acento: 'none' },
+        forma: { botonProportion: 0.8, heroAlign: 'left', cardHover: 'lift' },
+        separadores: { estilo: 'line' },
       },
     },
     infantil: {
@@ -103,6 +115,9 @@
         sombras: { difuminado: 0.9 },
         espaciado: { factor: 1.1 },
         superficie: { gradiente: 1.0, glass: 0.4 },
+        borde: { peso: 1.5, acento: 'left' },
+        forma: { botonProportion: 1.4, heroAlign: 'center', cardHover: 'lift' },
+        separadores: { estilo: 'accent' },
       },
       trabajo: {
         color: {
@@ -121,6 +136,9 @@
         sombras: { difuminado: 0.4 },
         espaciado: { factor: 0.8 },
         superficie: { gradiente: 0, glass: 0 },
+        borde: { peso: 0.5, acento: 'none' },
+        forma: { botonProportion: 1.0, heroAlign: 'center', cardHover: 'lift' },
+        separadores: { estilo: 'line' },
       },
     },
     pirata: {
@@ -138,11 +156,14 @@
           pesoTitulos: 900,
           escala: 1.25,
         },
-        radii: { factor: 0.3 },
-        motion: { expresividad: 0.3 },
-        sombras: { difuminado: 0.15 },
+        radii: { factor: 0.2 },
+        motion: { expresividad: 0.25 },
+        sombras: { difuminado: 0.1 },
         espaciado: { factor: 1.0 },
-        superficie: { gradiente: 0.5, glass: 0.2 },
+        superficie: { gradiente: 0.4, glass: 0 },
+        borde: { peso: 1.2, acento: 'left' },
+        forma: { botonProportion: 0.9, heroAlign: 'left', cardHover: 'border' },
+        separadores: { estilo: 'accent' },
       },
       trabajo: {
         color: {
@@ -156,11 +177,14 @@
           pesoTitulos: 600,
           escala: 1.2,
         },
-        radii: { factor: 0.4 },
+        radii: { factor: 0.3 },
         motion: { expresividad: 0.15 },
         sombras: { difuminado: 0.2 },
         espaciado: { factor: 0.8 },
         superficie: { gradiente: 0, glass: 0 },
+        borde: { peso: 0.5, acento: 'none' },
+        forma: { botonProportion: 0.9, heroAlign: 'left', cardHover: 'border' },
+        separadores: { estilo: 'line' },
       },
     },
   };

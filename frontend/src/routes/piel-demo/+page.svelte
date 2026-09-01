@@ -39,6 +39,8 @@
     {/snippet}
   </SkinHero>
 
+  <div class="section-divider"></div>
+
   <section class="section" id="servicios">
     <div class="section-inner">
       <h2 class="section-title">Nuestros Servicios</h2>
@@ -55,6 +57,8 @@
     </div>
   </section>
 
+  <div class="section-divider"></div>
+
   <section class="section section-alt" id="nosotros">
     <div class="section-inner">
       <h2 class="section-title">Lo que dicen nuestros clientes</h2>
@@ -68,6 +72,8 @@
       </div>
     </div>
   </section>
+
+  <div class="section-divider"></div>
 
   <section class="section" id="contacto">
     <div class="section-inner section-cta">
@@ -139,14 +145,34 @@
     gap: var(--sp-6);
   }
 
+  .section-divider {
+    display: var(--section-divider-display, none);
+    max-width: 64rem;
+    margin: 0 auto;
+    border-top: var(--section-divider, none);
+    background: var(--section-divider-bg, transparent);
+    height: var(--section-divider-height, 0px);
+  }
+
   .testimonio {
     background: var(--surface-raised);
-    border: 1px solid var(--border-subtle);
+    border: var(--border-card-width, 1px) solid var(--border-subtle);
     border-radius: var(--radius-card);
     padding: var(--space-card-padding);
     display: flex;
     flex-direction: column;
     gap: var(--sp-4);
+    position: relative;
+    overflow: hidden;
+  }
+  .testimonio::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: var(--accent-bar-width, 0px);
+    height: var(--accent-bar-height, 0px);
+    background: var(--accent-bar-color, transparent);
   }
 
   .testimonio-texto {

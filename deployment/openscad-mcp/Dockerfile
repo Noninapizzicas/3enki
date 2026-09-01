@@ -18,13 +18,13 @@ WORKDIR /build
 RUN git clone --depth 1 https://github.com/quellant/openscad-mcp.git . \
     && uv venv \
     && uv pip install --no-cache-dir build \
-    && python -m build --wheel --outdir /dist
+    && uv run python -m build --wheel --outdir /dist
 
 # ── Stage 2: runtime ───────────────────────────────────────
 FROM python:3.11-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        openscad xvfb curl \
+        openscad xvfb xauth curl \
     && rm -rf /var/lib/apt/lists/*
 
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -44,9 +44,9 @@ ENV OPENSCAD_PATH=/usr/bin/openscad \
     OPENSCAD_TEMP_DIR=/tmp/openscad-renders \
     OPENSCAD_CACHE_DIR=/tmp/openscad-cache \
     OPENSCAD_OUTPUT_DIR=/tmp/openscad-output \
-    SERVER_TRANSPORT=http \
-    MCP_SERVER_HOST=0.0.0.0 \
-    MCP_SERVER_PORT=3000 \
+    MCP_TRANSPORT=http \
+    MCP_HOST=0.0.0.0 \
+    MCP_PORT=3000 \
     OPENSCAD_TIMEOUT=30 \
     OPENSCAD_MAX_THREADS=4 \
     MAX_RENDER_RESOLUTION=2048 \
@@ -54,8 +54,8 @@ ENV OPENSCAD_PATH=/usr/bin/openscad \
 
 EXPOSE 3000
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-    CMD curl -sf http://localhost:3000/health || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+    CMD curl -sf http://localhost:3000/mcp || exit 1
 
 VOLUME ["/tmp/openscad-renders", "/tmp/openscad-cache", "/tmp/openscad-output", "/app/models"]
 

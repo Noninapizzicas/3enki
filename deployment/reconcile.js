@@ -287,6 +287,15 @@ async function main() {
   // 5) Caddyfile (render con dominio local + snippets condicionales + escribir si difiere)
   const caddyTmpl = leer(M.caddy.plantilla);
   let caddyCambio = false;
+  // Una feature se activa si: (a) el .env del VPS declara env_flag=true, O (b) el
+  // dominio del VPS está en la lista `dominios` del spec (vía determinista, sin
+  // tocar .env a mano). Ambas coexisten: cualquiera de las dos la enciende.
+  const featureActiva = (spec, envVivo, dominio) => {
+    const flagValue = (envVivo || '').match(new RegExp(`^\\s*${spec.env_flag}\\s*=\\s*(.+?)\\s*$`, 'm'));
+    if (flagValue && flagValue[1].trim().toLowerCase() === 'true') return true;
+    if (Array.isArray(spec.dominios) && spec.dominios.includes(dominio)) return true;
+    return false;
+  };
   if (caddyTmpl == null) {
     warn(`plantilla Caddy ausente: ${M.caddy.plantilla}`);
   } else {
@@ -296,18 +305,17 @@ async function main() {
     // declara la flag correspondiente (ej. ENABLE_OPENSCAD=true). Cada snippet
     // pasa por el mismo replace de dominio que la plantilla principal.
     for (const snip of (M.caddy_snippets || [])) {
-      const flagValue = (envVivo || '').match(new RegExp(`^\\s*${snip.env_flag}\\s*=\\s*(.+?)\\s*$`, 'm'));
-      if (flagValue && flagValue[1].trim().toLowerCase() === 'true') {
+      if (featureActiva(snip, envVivo, dominio)) {
         const snippetTmpl = leer(snip.plantilla);
         if (snippetTmpl) {
           const snippetRendered = renderCaddyfile(snippetTmpl, dominio, M.caddy);
           caddyRendered += '\n' + snippetRendered;
-          log(`snippet Caddy '${snip.id}' activado (${snip.env_flag}=true)`);
+          log(`snippet Caddy '${snip.id}' activado (flag ${snip.env_flag} o dominio ${dominio} en lista)`);
         } else {
           warn(`snippet Caddy '${snip.id}': plantilla ausente ${snip.plantilla}`);
         }
       } else {
-        log(`snippet Caddy '${snip.id}' omitido (${snip.env_flag} no activado)`);
+        log(`snippet Caddy '${snip.id}' omitido (${snip.env_flag} no activado ni dominio listado)`);
       }
     }
 
@@ -503,8 +511,7 @@ async function main() {
   // Idempotente: `docker compose up -d` no recrea si ya está corriendo y la
   // imagen no cambió; `--build` asegura que el Dockerfile del repo prevalece.
   for (const ds of (M.docker_services || [])) {
-    const flagMatch = (envVivo || '').match(new RegExp(`^\\s*${ds.env_flag}\\s*=\\s*(.+?)\\s*$`, 'm'));
-    const activo = flagMatch && flagMatch[1].trim().toLowerCase() === 'true';
+    const activo = featureActiva(ds, envVivo, dominio);
     const composeFile = path.join(ds.compose_dir, 'docker-compose.yml');
 
     if (!existe(composeFile)) {
@@ -516,14 +523,14 @@ async function main() {
       act(`docker compose up -d --build (${ds.id})`);
       if (!DRY_RUN) {
         if (shOk(`docker compose -f ${composeFile} up -d --build`)) {
-          log(`docker service '${ds.id}' levantado (${ds.env_flag}=true)`);
+          log(`docker service '${ds.id}' levantado (flag ${ds.env_flag} o dominio ${dominio} en lista)`);
         } else {
           warn(`docker service '${ds.id}': fallo al levantar — revisa docker logs ${ds.container}`);
         }
       }
       cambios++;
     } else {
-      log(`docker service '${ds.id}' omitido (${ds.env_flag} no activado)`);
+      log(`docker service '${ds.id}' omitido (${ds.env_flag} no activado ni dominio listado)`);
     }
   }
 

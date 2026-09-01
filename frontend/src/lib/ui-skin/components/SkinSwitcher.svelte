@@ -299,6 +299,62 @@
         separadores: { estilo: 'line' },
       },
     },
+    simpsons: {
+      esquema: 'piel-v1',
+      project_id: 'simpsons',
+      marketing: {
+        color: {
+          primary: { hue: 85, chroma: 0.22 },
+          accent:  { hue: 55, chroma: 0.25 },
+          neutral: { hue: 85, chroma: 0.01 },
+        },
+        tipografia: {
+          display: "'Fredoka', 'Comic Sans MS', 'Chalkboard SE', cursive",
+          body: "'Nunito', 'Quicksand', system-ui, sans-serif",
+          pesoTitulos: 800,
+          escala: 1.414,
+        },
+        radii: { factor: 1.8 },
+        motion: { expresividad: 0.9 },
+        sombras: { difuminado: 0.3 },
+        espaciado: { factor: 1.3 },
+        superficie: { gradiente: 0.9, glass: 0 },
+        borde: { peso: 1.8, acento: 'top' },
+        forma: { botonProportion: 1.4, heroAlign: 'center', cardHover: 'lift' },
+        separadores: { estilo: 'accent' },
+        expresion: {
+          heroEstilo: 'shadow-brutal',
+          sectionSkew: 2,
+          textura: 'dots',
+          texturaOpacidad: 0.05,
+          escalaHero: 1.4,
+          cardRotacion: 1.5,
+          navInvertida: true,
+          heroSombraTexto: true,
+        },
+      },
+      trabajo: {
+        color: {
+          primary: { hue: 85, chroma: 0.06 },
+          accent:  { hue: 55, chroma: 0.04 },
+          neutral: { hue: 85, chroma: 0.003 },
+        },
+        tipografia: {
+          display: "system-ui, sans-serif",
+          body: "system-ui, sans-serif",
+          pesoTitulos: 600,
+          escala: 1.2,
+        },
+        radii: { factor: 0.8 },
+        motion: { expresividad: 0.2 },
+        sombras: { difuminado: 0.3 },
+        espaciado: { factor: 0.8 },
+        superficie: { gradiente: 0, glass: 0 },
+        borde: { peso: 0.5, acento: 'none' },
+        forma: { botonProportion: 1.0, heroAlign: 'center', cardHover: 'lift' },
+        separadores: { estilo: 'line' },
+      },
+    },
   };
 
   let pielActiva = $state<string | null>(null);

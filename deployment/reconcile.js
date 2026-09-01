@@ -390,6 +390,54 @@ async function main() {
     if (workerConfigCambio && !DRY_RUN) { act('systemctl restart hermes-gateway'); shOk('systemctl restart hermes-gateway'); }
   }
 
+  // 6b2) Hermes ADMIN (/home/admin/.hermes) — skills/agentes clon céntrico-en-repo.
+  // El binario se instala aparte (vps-setup.sh); aquí SOLO se sincronizan desde
+  // el repo: skills de Enki (13), cantera de módulos (278 + agentes) y — si el
+  // repo trae memoria semilla — se SIEMBRA una vez. NO crea el usuario (admin
+  // ya existe), NO toca config/auth. Cada VPS es identidad independiente.
+  const HA = M.hermes_admin;
+  if (HA) {
+    if (!existe(HA.home)) { act(`mkdir -p ${HA.home}`); if (!DRY_RUN) fs.mkdirSync(HA.home, { recursive: true }); cambios++; }
+
+    // skills de Enki (SIN --delete — cada VPS es identidad independiente y
+    // puede tener skills locales propias que no vienen del repo; el admin no
+    // es un clon exacto del repo, a diferencia del worker que sí es repo-puro)
+    if (existe(HA.skills_enki_origen)) {
+      act(`rsync skills enki → ${HA.skills_enki_destino}`);
+      if (!DRY_RUN) {
+        shOk(`mkdir -p ${HA.skills_enki_destino}`);
+        shOk(`rsync -a ${HA.skills_enki_origen}/ ${HA.skills_enki_destino}/`);
+      }
+      cambios++;
+    }
+
+    // cantera de módulos + agentes (SIN --delete — misma razón que skills)
+    if (existe(HA.cantera_origen)) {
+      act(`rsync cantera enki (módulos+agentes) → ${HA.cantera_destino}`);
+      if (!DRY_RUN) {
+        shOk(`mkdir -p ${HA.cantera_destino}`);
+        shOk(`rsync -a ${HA.cantera_origen}/ ${HA.cantera_destino}/`);
+      }
+      cambios++;
+    }
+
+    // memoria-semilla: SOLO si el repo la trae y el destino NO existe aún
+    // (una vez). Luego cada VPS evoluciona la suya de forma independiente.
+    if (existe(HA.memoria_origen) && !existe(HA.memoria_destino)) {
+      act(`sembrando memoria-semilla → ${HA.memoria_destino} (una vez)`);
+      if (!DRY_RUN) {
+        shOk(`mkdir -p ${HA.memoria_destino}`);
+        shOk(`rsync -a ${HA.memoria_origen}/ ${HA.memoria_destino}/`);
+      }
+      cambios++;
+    } else if (existe(HA.memoria_destino)) {
+      log(`memoria de admin ya existe en ${HA.memoria_destino} — no se re-siembra (independiente)`);
+    }
+
+    // el dueño es admin (el reconcile corre como root; dejar el home a admin)
+    if (!DRY_RUN) shOk(`chown -R ${HA.usuario}:${HA.usuario} ${HA.home}`);
+  }
+
   // 6c) Docker services condicionales — levanta solo en VPS con la flag activa.
   // Idempotente: `docker compose up -d` no recrea si ya está corriendo y la
   // imagen no cambió; `--build` asegura que el Dockerfile del repo prevalece.

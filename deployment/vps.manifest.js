@@ -114,7 +114,12 @@ const MANIFIESTO = {
     plantilla: path.join(DEPLOYMENT_DIR, 'caddy', 'Caddyfile.vps'),
     destino: '/etc/caddy/Caddyfile',
     dominio_placeholder: 'pizzepos.es',
-    log_placeholder: 'pizzepos.log'
+    log_placeholder: 'pizzepos.log',
+    // Override systemd: Caddy lee el .env PERSISTENTE (data/.env, excluido del
+    // rsync del deploy) para ENKI_MCP_TOKEN y demás. El .env de la raíz
+    // (/opt/enki/.env) NO sobrevive al deploy (rsync --delete lo borra).
+    override_plantilla: path.join(DEPLOYMENT_DIR, 'caddy', 'caddy.override.conf.tmpl'),
+    override_destino: '/etc/systemd/system/caddy.service.d/override.conf'
   },
 
   // Snippets Caddy condicionales — bloques extra que el reconciliador CONCATENA

@@ -399,6 +399,24 @@ async function main() {
   if (HA) {
     if (!existe(HA.home)) { act(`mkdir -p ${HA.home}`); if (!DRY_RUN) fs.mkdirSync(HA.home, { recursive: true }); cambios++; }
 
+    // INSTALAR Hermes ADMIN si falta el binario (no viaja en el repo: el paquete
+    // hermes-agent se instala con el instalador oficial de Nous). Idempotente:
+    // si el binario existe, no hace nada. En VPS nuevo lo deja listo de una.
+    const binAdmin = `/home/${HA.usuario}/.local/bin/hermes`;
+    if (!existe(binAdmin)) {
+      const installer = 'https://hermes-agent.nousresearch.com/install.sh';
+      act(`instalando hermes-agent (admin) ${installer} → ${binAdmin}`);
+      if (!DRY_RUN) {
+        shOk(`curl -fsSL ${installer} | HOME=/home/${HA.usuario} bash`);
+        if (!existe(binAdmin)) {
+          warn(`instalador de Hermes admin no dejó el binario en ${binAdmin} — revisa journalctl/network. El VPS queda sin el Hermes conversacional.`);
+        } else {
+          shOk(`chown -R ${HA.usuario}:${HA.usuario} /home/${HA.usuario}/.local /home/${HA.usuario}/.hermes`);
+          cambios++;
+        }
+      }
+    }
+
     // config de PROVIDERS compartida por el repo (provider custom → ollama/v1,
     // deepseek-v4-flash). SOLO se crea la PRIMERA vez (config destino inexistente);
     // después cada VPS evoluciona la suya (identidad independiente). La key se lee

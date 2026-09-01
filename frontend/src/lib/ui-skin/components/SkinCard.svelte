@@ -49,7 +49,11 @@
     transition: box-shadow var(--dur-normal) var(--ease-default),
                 transform var(--dur-normal) var(--ease-default),
                 border-color var(--dur-normal) var(--ease-default);
+    rotate: var(--card-self-rotate, 0deg);
   }
+  .card:nth-child(1) { --card-self-rotate: var(--card-rotate-1, 0deg); }
+  .card:nth-child(2) { --card-self-rotate: var(--card-rotate-2, 0deg); }
+  .card:nth-child(3) { --card-self-rotate: var(--card-rotate-3, 0deg); }
   .card::before {
     content: '';
     position: absolute;

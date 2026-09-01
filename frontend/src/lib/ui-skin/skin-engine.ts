@@ -9,7 +9,7 @@
  */
 
 import { browser } from '$app/environment';
-import type { PielCara, PielJSON } from './piel-json';
+import type { PielCara, PielExpresion, PielJSON } from './piel-json';
 
 type CaraActiva = 'marketing' | 'trabajo';
 
@@ -272,6 +272,123 @@ function generarSeparadores(
   return vars;
 }
 
+// ── Expresión — lo que rompe la caja rectangular ──
+
+function generarExpresion(
+  exp: PielExpresion,
+  primaryHue: number,
+  primaryChroma: number,
+  accentHue: number
+): Record<string, string> {
+  const vars: Record<string, string> = {};
+  const c = Math.max(primaryChroma, 0.12);
+
+  // Hero title treatment
+  if (exp.heroEstilo === 'stroke') {
+    vars['--hero-title-color'] = 'transparent';
+    vars['--hero-title-stroke'] = `2px oklch(0.3 ${c.toFixed(3)} ${primaryHue})`;
+    vars['--hero-title-fill'] = 'transparent';
+    vars['--hero-title-bg'] = 'none';
+    vars['--hero-title-bg-clip'] = 'unset';
+  } else if (exp.heroEstilo === 'shadow-brutal') {
+    vars['--hero-title-color'] = `oklch(0.15 ${(c * 0.5).toFixed(3)} ${primaryHue})`;
+    vars['--hero-title-stroke'] = 'unset';
+    vars['--hero-title-fill'] = 'currentColor';
+    vars['--hero-title-shadow'] = `6px 6px 0px oklch(0.6 ${c.toFixed(3)} ${primaryHue}), 12px 12px 0px oklch(0.8 ${(c * 0.5).toFixed(3)} ${accentHue})`;
+    vars['--hero-title-bg'] = 'none';
+    vars['--hero-title-bg-clip'] = 'unset';
+  } else if (exp.heroEstilo === 'gradient-text') {
+    vars['--hero-title-color'] = 'transparent';
+    vars['--hero-title-stroke'] = 'unset';
+    vars['--hero-title-fill'] = 'transparent';
+    vars['--hero-title-bg'] = `linear-gradient(135deg, oklch(0.45 ${c.toFixed(3)} ${primaryHue}), oklch(0.55 ${c.toFixed(3)} ${accentHue}), oklch(0.4 ${c.toFixed(3)} ${(primaryHue + 60) % 360}))`;
+    vars['--hero-title-bg-clip'] = 'text';
+  } else {
+    vars['--hero-title-color'] = 'var(--text-primary)';
+    vars['--hero-title-stroke'] = 'unset';
+    vars['--hero-title-fill'] = 'currentColor';
+    vars['--hero-title-bg'] = 'none';
+    vars['--hero-title-bg-clip'] = 'unset';
+    vars['--hero-title-shadow'] = 'none';
+  }
+
+  // Section diagonal clip
+  const skew = exp.sectionSkew;
+  if (skew > 0) {
+    vars['--section-clip-top'] = `polygon(0 ${skew}vw, 100% 0, 100% calc(100% - ${skew}vw), 0 100%)`;
+    vars['--section-clip-margin'] = `-${skew * 0.6}vw`;
+    vars['--section-clip-padding-extra'] = `${skew * 1.2}vw`;
+  } else {
+    vars['--section-clip-top'] = 'none';
+    vars['--section-clip-margin'] = '0';
+    vars['--section-clip-padding-extra'] = '0';
+  }
+
+  // Background textures
+  if (exp.textura === 'stripes') {
+    vars['--section-texture'] = `repeating-linear-gradient(
+      -45deg,
+      transparent,
+      transparent 10px,
+      oklch(0.5 ${(c * 0.3).toFixed(3)} ${primaryHue} / ${exp.texturaOpacidad.toFixed(2)}) 10px,
+      oklch(0.5 ${(c * 0.3).toFixed(3)} ${primaryHue} / ${exp.texturaOpacidad.toFixed(2)}) 11px
+    )`;
+  } else if (exp.textura === 'dots') {
+    vars['--section-texture'] = `radial-gradient(
+      circle 1.5px at 10px 10px,
+      oklch(0.5 ${(c * 0.4).toFixed(3)} ${primaryHue} / ${exp.texturaOpacidad.toFixed(2)}) 1.5px,
+      transparent 1.5px
+    )`;
+    vars['--section-texture-size'] = '20px 20px';
+  } else if (exp.textura === 'diagonal') {
+    vars['--section-texture'] = `repeating-linear-gradient(
+      45deg,
+      oklch(0.6 ${(c * 0.2).toFixed(3)} ${primaryHue} / ${(exp.texturaOpacidad * 0.5).toFixed(2)}) 0px,
+      transparent 1px,
+      transparent 20px
+    )`;
+  } else if (exp.textura === 'noise') {
+    vars['--section-texture'] = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='0.65' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='${exp.texturaOpacidad.toFixed(2)}'/%3E%3C/svg%3E")`;
+    vars['--section-texture-size'] = '200px 200px';
+  } else {
+    vars['--section-texture'] = 'none';
+  }
+
+  // Hero scale — oversized text
+  vars['--hero-title-scale'] = exp.escalaHero.toFixed(2);
+
+  // Card rotation
+  if (exp.cardRotacion !== 0) {
+    const r = exp.cardRotacion;
+    vars['--card-rotate-1'] = `${(-r).toFixed(1)}deg`;
+    vars['--card-rotate-2'] = `${(r * 0.6).toFixed(1)}deg`;
+    vars['--card-rotate-3'] = `${(r * 1.2).toFixed(1)}deg`;
+  } else {
+    vars['--card-rotate-1'] = '0deg';
+    vars['--card-rotate-2'] = '0deg';
+    vars['--card-rotate-3'] = '0deg';
+  }
+
+  // Nav invertida
+  if (exp.navInvertida) {
+    vars['--nav-bg'] = `oklch(0.25 ${(c * 0.8).toFixed(3)} ${primaryHue})`;
+    vars['--nav-text'] = `oklch(0.92 ${(c * 0.1).toFixed(3)} ${primaryHue})`;
+    vars['--nav-border'] = `oklch(0.35 ${(c * 0.6).toFixed(3)} ${primaryHue})`;
+  } else {
+    vars['--nav-bg'] = 'var(--surface-glass, var(--surface-raised))';
+    vars['--nav-text'] = 'var(--text-primary)';
+    vars['--nav-border'] = 'var(--border-subtle)';
+  }
+
+  // Hero text shadow dramática
+  if (exp.heroSombraTexto) {
+    vars['--hero-title-shadow'] = vars['--hero-title-shadow'] ||
+      `0 4px 30px oklch(0.4 ${c.toFixed(3)} ${primaryHue} / 0.5)`;
+  }
+
+  return vars;
+}
+
 // ── Ensamblar todas las variables de una cara ──
 
 function caraAVariables(cara: PielCara): Record<string, string> {
@@ -308,6 +425,12 @@ function caraAVariables(cara: PielCara): Record<string, string> {
       cara.color.primary.hue,
       cara.color.primary.chroma
     ),
+    ...(cara.expresion ? generarExpresion(
+      cara.expresion,
+      cara.color.primary.hue,
+      cara.color.primary.chroma,
+      cara.color.accent.hue
+    ) : {}),
   };
 }
 

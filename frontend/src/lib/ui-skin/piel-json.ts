@@ -77,6 +77,25 @@ export interface PielSeparadores {
   estilo: 'none' | 'line' | 'gradient' | 'accent';
 }
 
+export interface PielExpresion {
+  /** Tratamiento del título hero: fill normal, stroke contorno, shadow-brutal sombra pesada, gradient-text degradado en texto */
+  heroEstilo: 'fill' | 'stroke' | 'shadow-brutal' | 'gradient-text';
+  /** Corte diagonal de secciones: 0 = recto, 5+ = corte visible en grados */
+  sectionSkew: number;
+  /** Textura de fondo en secciones */
+  textura: 'none' | 'stripes' | 'dots' | 'diagonal' | 'noise';
+  /** Opacidad de la textura 0..1 */
+  texturaOpacidad: number;
+  /** Escala del título hero: 1 = normal, 2 = masivo desbordante */
+  escalaHero: number;
+  /** Rotación sutil de cards en grados (-5..5) */
+  cardRotacion: number;
+  /** Invertir la nav (fondo de acento, texto claro) */
+  navInvertida: boolean;
+  /** Sombra de texto dramática en hero */
+  heroSombraTexto: boolean;
+}
+
 export interface PielCara {
   color: {
     primary: PielColor;
@@ -92,6 +111,7 @@ export interface PielCara {
   borde: PielBorde;
   forma: PielForma;
   separadores: PielSeparadores;
+  expresion?: PielExpresion;
 }
 
 /**

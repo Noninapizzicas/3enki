@@ -104,7 +104,23 @@
   }
 
   .section {
-    padding: var(--space-section-gap, 5rem) var(--space-page-padding);
+    padding: calc(var(--space-section-gap, 5rem) + var(--section-clip-padding-extra, 0px)) var(--space-page-padding);
+    clip-path: var(--section-clip-top, none);
+    margin-top: var(--section-clip-margin, 0);
+    position: relative;
+  }
+  .section::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--section-texture, none);
+    background-size: var(--section-texture-size, auto);
+    pointer-events: none;
+    z-index: 0;
+  }
+  .section > * {
+    position: relative;
+    z-index: 1;
   }
 
   .section-alt {

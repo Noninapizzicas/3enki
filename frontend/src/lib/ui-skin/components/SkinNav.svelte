@@ -28,8 +28,8 @@
 
 <style>
   .nav {
-    background: var(--surface-glass, var(--surface-raised));
-    border-bottom: 1px solid var(--border-subtle);
+    background: var(--nav-bg, var(--surface-glass, var(--surface-raised)));
+    border-bottom: 1px solid var(--nav-border, var(--border-subtle));
     padding: 0 var(--space-page-padding);
     position: sticky;
     top: 0;
@@ -50,7 +50,7 @@
     font-family: var(--font-display);
     font-size: var(--fs-md);
     font-weight: var(--fw-bold);
-    color: var(--text-primary);
+    color: var(--nav-text, var(--text-primary));
     text-decoration: none;
   }
 
@@ -64,12 +64,14 @@
     font-family: var(--font-sans);
     font-size: var(--fs-sm);
     font-weight: var(--fw-medium);
-    color: var(--text-secondary);
+    color: var(--nav-text, var(--text-secondary));
     text-decoration: none;
     transition: color var(--dur-fast) var(--ease-default);
     padding: var(--sp-1) 0;
+    opacity: 0.8;
   }
   .nav-links a:hover {
-    color: var(--text-primary);
+    color: var(--nav-text, var(--text-primary));
+    opacity: 1;
   }
 </style>

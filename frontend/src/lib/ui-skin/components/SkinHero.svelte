@@ -50,11 +50,17 @@
 
   .hero-title {
     font-family: var(--font-display);
-    font-size: var(--fs-3xl);
+    font-size: calc(var(--fs-3xl) * var(--hero-title-scale, 1));
     font-weight: var(--fw-heading, var(--fw-bold));
     line-height: var(--lh-tight);
     letter-spacing: -0.02em;
-    color: var(--text-primary);
+    color: var(--hero-title-color, var(--text-primary));
+    -webkit-text-stroke: var(--hero-title-stroke, unset);
+    -webkit-text-fill-color: var(--hero-title-fill, currentColor);
+    text-shadow: var(--hero-title-shadow, none);
+    background: var(--hero-title-bg, none);
+    -webkit-background-clip: var(--hero-title-bg-clip, unset);
+    background-clip: var(--hero-title-bg-clip, unset);
   }
 
   .hero-subtitle {

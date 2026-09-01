@@ -1,0 +1,414 @@
+/*
+ * THE PIRATE — aterrizaje CSS
+ *
+ * 16 reflejos → asignación directa (dato de marca → custom property)
+ * 1 conversor → escalera de luminosidad (oklch L stepping)
+ * 2 custodios → reglas de verificación (comentarios, no código)
+ * 4 puentes → adaptadores (contrast, viewport, container, interaction)
+ */
+
+/* ═══════════════════════════════════════════════════════════════
+   CAPA 0 — ÁTOMOS CROMÁTICOS (reflejo × 6)
+   Dato literal de la marca. Sin transformación.
+   ═══════════════════════════════════════════════════════════════ */
+
+[data-piel="the-pirate"] {
+  --escenario:   oklch(0.085 0.005 50);
+  --tesoro:      oklch(0.735 0.145 80);
+  --pergamino:   oklch(0.935 0.035 85);
+  --profundidad: oklch(0.210 0.005 50);
+  --susurro:     oklch(0.480 0.005 50);
+  --trazo:       oklch(0.900 0.005 50);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   CAPA 1 — ESCALERA DE LUMINOSIDAD (conversor × 1)
+   Única fórmula: base.L + (step × N) para superficies.
+   Dirección: oscuro → L sube (reflejo).
+   ═══════════════════════════════════════════════════════════════ */
+
+[data-piel="the-pirate"] {
+  --surface-base:     var(--escenario);
+  --surface-sunken:   oklch(0.055 0.003 50);
+  --surface-raised:   oklch(0.145 0.005 50);
+  --surface-elevated: oklch(0.195 0.005 50);
+  --surface-floating: oklch(0.245 0.005 50);
+  --surface-glass:    oklch(0.14 0.005 50 / 0.82);
+  --surface-glass-blur: 20px;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   CAPA 2 — ROLES SEMÁNTICOS (derivados de átomos)
+   Componentes consumen ESTOS, nunca los átomos directamente.
+   ═══════════════════════════════════════════════════════════════ */
+
+[data-piel="the-pirate"] {
+  /* --- texto --- */
+  --text-primary:   var(--pergamino);
+  --text-secondary: var(--susurro);
+  --text-accent:    var(--tesoro);
+  --text-muted:     oklch(0.38 0.003 50);
+  --text-on-accent: var(--escenario);
+  --text-on-dark:   var(--pergamino);
+
+  /* --- acción --- */
+  --action-primary:       var(--tesoro);
+  --action-primary-hover: oklch(0.79 0.16 80);
+  --action-primary-active: oklch(0.68 0.13 80);
+  --action-primary-text:  var(--escenario);
+  --action-secondary:     transparent;
+  --action-secondary-border: var(--tesoro);
+  --action-secondary-text: var(--tesoro);
+  --action-secondary-hover: oklch(0.735 0.145 80 / 0.12);
+
+  /* --- borde --- */
+  --border-subtle:  oklch(0.22 0.003 50);
+  --border-default: oklch(0.30 0.005 50);
+  --border-accent:  var(--tesoro);
+  --border-focus:   oklch(0.735 0.145 80 / 0.6);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   CAPA 3 — TIPOGRAFÍA (reflejo × 3)
+   ═══════════════════════════════════════════════════════════════ */
+
+[data-piel="the-pirate"] {
+  --font-display: 'Playfair Display', 'Didot', 'Bodoni MT', 'Georgia', serif;
+  --font-body:    'Inter', 'Lato', system-ui, -apple-system, sans-serif;
+  --font-mono:    'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+
+  --fw-display: 700;
+  --fw-body:    400;
+  --fw-strong:  600;
+
+  --type-scale: 1.333;
+
+  --fs-xs:   clamp(0.70rem, 0.65rem + 0.25vw, 0.75rem);
+  --fs-sm:   clamp(0.80rem, 0.75rem + 0.25vw, 0.875rem);
+  --fs-base: clamp(0.95rem, 0.88rem + 0.35vw, 1.0625rem);
+  --fs-lg:   clamp(1.15rem, 1.0rem + 0.75vw, 1.414rem);
+  --fs-xl:   clamp(1.40rem, 1.1rem + 1.5vw,  1.886rem);
+  --fs-2xl:  clamp(1.75rem, 1.3rem + 2.25vw, 2.515rem);
+  --fs-3xl:  clamp(2.20rem, 1.5rem + 3.5vw,  3.354rem);
+  --fs-hero: clamp(2.80rem, 1.8rem + 5vw,    5.0rem);
+
+  --lh-tight:  1.15;
+  --lh-snug:   1.3;
+  --lh-normal: 1.6;
+  --lh-loose:  1.8;
+
+  --ls-tight:  -0.02em;
+  --ls-normal:  0;
+  --ls-wide:    0.05em;
+  --ls-caps:    0.12em;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   CAPA 4 — RESPIRACIÓN (reflejo × 5)
+   Factor global × base = pausa del que no tiene prisa.
+   ═══════════════════════════════════════════════════════════════ */
+
+[data-piel="the-pirate"] {
+  --breath: 1.6;
+
+  --space-section:  calc(4.5rem * var(--breath));
+  --space-card:     calc(1.75rem * var(--breath));
+  --space-element:  calc(0.875rem * var(--breath));
+  --space-micro:    calc(0.375rem * var(--breath));
+  --space-page:     clamp(1.5rem, 4vw, 6rem);
+  --space-gap:      calc(1.25rem * var(--breath));
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   CAPA 5 — FORMA (reflejo)
+   ═══════════════════════════════════════════════════════════════ */
+
+[data-piel="the-pirate"] {
+  --radius-none: 0;
+  --radius-sm:   2px;
+  --radius-md:   4px;
+  --radius-lg:   6px;
+  --radius-pill:  99rem;
+
+  --radius:      var(--radius-sm);
+
+  --shadow:      none;
+  --shadow-sm:   0 1px 3px oklch(0 0 0 / 0.3);
+  --shadow-md:   0 4px 12px oklch(0 0 0 / 0.4);
+  --shadow-glow: 0 0 20px oklch(0.735 0.145 80 / 0.15);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   CAPA 6 — MOVIMIENTO (reflejo)
+   Pesado, con inercia. El barco no frena en seco.
+   ═══════════════════════════════════════════════════════════════ */
+
+[data-piel="the-pirate"] {
+  --duration-fast:   150ms;
+  --duration-base:   280ms;
+  --duration-slow:   500ms;
+  --duration-dramatic: 800ms;
+
+  --ease-default: cubic-bezier(0.25, 0.1, 0.25, 1.0);
+  --ease-in:      cubic-bezier(0.55, 0.0, 1.0, 0.45);
+  --ease-out:     cubic-bezier(0.0, 0.0, 0.2, 1.0);
+  --ease-bounce:  cubic-bezier(0.34, 1.56, 0.64, 1.0);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   PUENTE 1 — CONTRASTE ACCESIBLE
+   Adapta estética a percepción. El oro sobre negro da ~7:1.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Ratios verificados (oklch):
+   --tesoro sobre --escenario      ≈ 8.5:1   ✓ AAA
+   --pergamino sobre --escenario   ≈ 13:1    ✓ AAA
+   --susurro sobre --escenario     ≈ 3.8:1   ✓ AA large only
+   --text-muted sobre --escenario  ≈ 2.5:1   ✗ decorativo only
+*/
+
+/* ═══════════════════════════════════════════════════════════════
+   PUENTE 2 — ESCALA ADAPTABLE
+   De 320px a 1440px+. clamp() en tipografía + space-page.
+   Ya resuelto arriba con clamp() en fs-* y space-page.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ═══════════════════════════════════════════════════════════════
+   CUSTODIO 1 — ACENTO ESCASO
+   El oro se GANA. ≤3 elementos dorados por vista.
+   (Regla de verificación visual, no de código.)
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ═══════════════════════════════════════════════════════════════
+   CUSTODIO 2 — DRAMATISMO
+   Audaz en estructura, sobrio en decoración.
+   hero grande + espacio generoso = drama
+   ornamentos + sombras + animaciones = circo
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ═══════════════════════════════════════════════════════════════
+   COMPONENTES — lo que el chaleco ajustado no dejaba hacer.
+
+   Aquí cada marca escribe lo que NECESITA, no lo que un
+   interface TypeScript le permite. Sin intermediario.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* --- Hero --- */
+[data-piel="the-pirate"] .hero {
+  min-height: 85vh;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  padding: var(--space-section) var(--space-page);
+  background: var(--surface-sunken);
+}
+
+[data-piel="the-pirate"] .hero-title {
+  font-family: var(--font-display);
+  font-size: var(--fs-hero);
+  font-weight: var(--fw-display);
+  line-height: var(--lh-tight);
+  letter-spacing: var(--ls-tight);
+  color: var(--tesoro);
+  text-shadow:
+    0 2px 0 oklch(0.05 0 0),
+    0 0 60px oklch(0.735 0.145 80 / 0.2);
+  max-width: 18ch;
+  margin-inline: auto;
+}
+
+[data-piel="the-pirate"] .hero-subtitle {
+  font-family: var(--font-body);
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-body);
+  line-height: var(--lh-normal);
+  color: var(--text-secondary);
+  margin-top: var(--space-element);
+  max-width: 45ch;
+  margin-inline: auto;
+  letter-spacing: var(--ls-wide);
+  text-transform: uppercase;
+}
+
+/* --- Nav --- */
+[data-piel="the-pirate"] .nav {
+  background: var(--surface-glass);
+  backdrop-filter: blur(var(--surface-glass-blur));
+  -webkit-backdrop-filter: blur(var(--surface-glass-blur));
+  border-bottom: 1px solid var(--border-subtle);
+  padding: var(--space-element) var(--space-page);
+}
+
+[data-piel="the-pirate"] .nav a {
+  color: var(--pergamino);
+  text-decoration: none;
+  font-size: var(--fs-sm);
+  letter-spacing: var(--ls-caps);
+  text-transform: uppercase;
+  transition: color var(--duration-base) var(--ease-default);
+}
+
+[data-piel="the-pirate"] .nav a:hover {
+  color: var(--tesoro);
+}
+
+/* --- Cards --- */
+[data-piel="the-pirate"] .card {
+  background: var(--surface-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  padding: var(--space-card);
+  transition:
+    border-color var(--duration-base) var(--ease-default),
+    box-shadow var(--duration-slow) var(--ease-out);
+}
+
+[data-piel="the-pirate"] .card:hover {
+  border-color: oklch(0.735 0.145 80 / 0.4);
+  box-shadow: var(--shadow-glow);
+}
+
+[data-piel="the-pirate"] .card-title {
+  font-family: var(--font-display);
+  font-size: var(--fs-xl);
+  font-weight: var(--fw-display);
+  color: var(--text-primary);
+  line-height: var(--lh-snug);
+}
+
+[data-piel="the-pirate"] .card-body {
+  font-family: var(--font-body);
+  font-size: var(--fs-base);
+  color: var(--text-secondary);
+  line-height: var(--lh-normal);
+  margin-top: var(--space-element);
+}
+
+/* --- Buttons --- */
+[data-piel="the-pirate"] .btn-primary {
+  background: var(--action-primary);
+  color: var(--action-primary-text);
+  font-family: var(--font-body);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-strong);
+  letter-spacing: var(--ls-caps);
+  text-transform: uppercase;
+  border: none;
+  border-radius: var(--radius);
+  padding: var(--space-element) calc(var(--space-element) * 2.2);
+  cursor: pointer;
+  transition:
+    background var(--duration-base) var(--ease-default),
+    transform var(--duration-fast) var(--ease-out);
+}
+
+[data-piel="the-pirate"] .btn-primary:hover {
+  background: var(--action-primary-hover);
+}
+
+[data-piel="the-pirate"] .btn-primary:active {
+  background: var(--action-primary-active);
+  transform: scale(0.98);
+}
+
+[data-piel="the-pirate"] .btn-secondary {
+  background: var(--action-secondary);
+  color: var(--action-secondary-text);
+  border: 1px solid var(--action-secondary-border);
+  font-family: var(--font-body);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-strong);
+  letter-spacing: var(--ls-caps);
+  text-transform: uppercase;
+  border-radius: var(--radius);
+  padding: var(--space-element) calc(var(--space-element) * 2.2);
+  cursor: pointer;
+  transition:
+    background var(--duration-base) var(--ease-default),
+    border-color var(--duration-base) var(--ease-default);
+}
+
+[data-piel="the-pirate"] .btn-secondary:hover {
+  background: var(--action-secondary-hover);
+}
+
+/* --- Section --- */
+[data-piel="the-pirate"] .section {
+  padding: var(--space-section) var(--space-page);
+}
+
+[data-piel="the-pirate"] .section:nth-child(even) {
+  background: var(--surface-raised);
+}
+
+[data-piel="the-pirate"] .section-title {
+  font-family: var(--font-display);
+  font-size: var(--fs-2xl);
+  font-weight: var(--fw-display);
+  color: var(--text-primary);
+  line-height: var(--lh-tight);
+  margin-bottom: var(--space-element);
+}
+
+/* --- Separador dorado --- */
+[data-piel="the-pirate"] .divider {
+  border: none;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--tesoro) 30%,
+    var(--tesoro) 70%,
+    transparent
+  );
+  opacity: 0.4;
+  margin: var(--space-section) auto;
+  max-width: 60%;
+}
+
+/* --- Link --- */
+[data-piel="the-pirate"] a:not(.nav a):not(.btn-primary):not(.btn-secondary) {
+  color: var(--tesoro);
+  text-decoration: none;
+  border-bottom: 1px solid oklch(0.735 0.145 80 / 0.3);
+  transition:
+    border-color var(--duration-fast) var(--ease-default);
+}
+
+[data-piel="the-pirate"] a:not(.nav a):not(.btn-primary):not(.btn-secondary):hover {
+  border-color: var(--tesoro);
+}
+
+/* --- Focus visible (accesibilidad) --- */
+[data-piel="the-pirate"] :focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   PUENTE 2 resuelto — responsive breakpoints
+   ═══════════════════════════════════════════════════════════════ */
+
+@media (max-width: 640px) {
+  [data-piel="the-pirate"] {
+    --breath: 1.2;
+  }
+
+  [data-piel="the-pirate"] .hero {
+    min-height: 70vh;
+  }
+}
+
+@media (min-width: 1441px) {
+  [data-piel="the-pirate"] {
+    --breath: 1.8;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   PUENTE 4 — SENSACIÓN vs INTERACCIÓN
+   El feel lo da la identidad (arriba).
+   El behave lo da la UI (fuera de este archivo).
+   Este archivo NO define :disabled, :invalid, estados de form,
+   ni lógica de componentes. Solo la piel.
+   ═══════════════════════════════════════════════════════════════ */

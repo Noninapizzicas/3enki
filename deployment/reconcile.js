@@ -322,6 +322,21 @@ async function main() {
     caddyCambio = escribirSiDifiere(M.caddy.destino, caddyRendered, 'Caddyfile');
   }
 
+  // 5b) Override systemd de Caddy — asegura que Caddy lea el .env PERSISTENTE
+  // (data/.env, excluido del rsync del deploy) para ENKI_MCP_TOKEN y demás.
+  // El .env de la raíz (/opt/enki/.env) NO sobrevive al deploy (rsync --delete).
+  if (M.caddy.override_plantilla && M.caddy.override_destino) {
+    const overrideTmpl = leer(M.caddy.override_plantilla);
+    if (overrideTmpl != null) {
+      const overrideDir = path.dirname(M.caddy.override_destino);
+      if (!existe(overrideDir)) { act(`mkdir -p ${overrideDir}`); if (!DRY_RUN) fs.mkdirSync(overrideDir, { recursive: true }); }
+      const overrideCambio = escribirSiDifiere(M.caddy.override_destino, overrideTmpl, 'caddy override.conf');
+      if (overrideCambio && !DRY_RUN) { act('daemon-reload (override caddy)'); shOk('systemctl daemon-reload'); }
+    } else {
+      warn(`plantilla override caddy ausente: ${M.caddy.override_plantilla}`);
+    }
+  }
+
   // 6) Habilitar + arrancar/recargar SOLO lo que cambió
   for (const nombre of Object.keys(M.servicios)) shOk(`systemctl enable ${nombre}`);
   shOk('systemctl enable caddy');

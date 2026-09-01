@@ -91,6 +91,12 @@ const MANIFIESTO = {
   hermes_admin: {
     home: '/home/admin/.hermes',
     usuario: 'admin',
+    // config de PROVIDERS compartida por el repo (provider custom → ollama/v1,
+    // deepseek-v4-flash). La key se sustituye en reconcile desde el .env vivo de
+    // Enki (NUNCA versionada; misma key que el worker). SOLO se escribe la PRIMERA
+    // vez (config destino inexistente); después cada VPS evoluciona su config.
+    config_plantilla: path.join(DEPLOYMENT_DIR, 'hermes-admin', 'config.yaml.tmpl'),
+    config_destino: '/home/admin/.hermes/config.yaml',
     // Skills de Enki (mismas 13 que el worker) + cantera de módulos (278) + agentes.
     skills_enki_origen: path.join(__dirname, '..', '.hermes', 'skills', 'enki'),
     skills_enki_destino: '/home/admin/.hermes/skills/enki',

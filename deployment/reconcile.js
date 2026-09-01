@@ -399,6 +399,25 @@ async function main() {
   if (HA) {
     if (!existe(HA.home)) { act(`mkdir -p ${HA.home}`); if (!DRY_RUN) fs.mkdirSync(HA.home, { recursive: true }); cambios++; }
 
+    // config de PROVIDERS compartida por el repo (provider custom → ollama/v1,
+    // deepseek-v4-flash). SOLO se crea la PRIMERA vez (config destino inexistente);
+    // después cada VPS evoluciona la suya (identidad independiente). La key se lee
+    // del .env vivo de Enki (misma que el worker) — nunca versionada.
+    const HA_cfg = leer(HA.config_plantilla);
+    if (HA_cfg != null && !existe(HA.config_destino)) {
+      const HA_envOllama = leer(path.join(M.install_dir, 'data', '.env')) || leer(path.join(M.install_dir, '.env')) || '';
+      const HA_ollama = (HA_envOllama.match(/^OLLAMA_API_KEY=(\S+)/m) || [])[1] || '';
+      const HA_rendered = HA_cfg.replace(/__OLLAMA_API_KEY__/g, HA_ollama || '__OLLAMA_API_KEY__');
+      act(`creando config de admin (providers) → ${HA.config_destino}`);
+      if (!DRY_RUN) {
+        fs.writeFileSync(HA.config_destino, HA_rendered);
+        shOk(`chown ${HA.usuario}:${HA.usuario} ${HA.config_destino}`);
+      }
+      cambios++;
+    } else if (existe(HA.config_destino)) {
+      log(`config de admin ya existe en ${HA.config_destino} — no se toca (identidad independiente)`);
+    }
+
     // skills de Enki (SIN --delete — cada VPS es identidad independiente y
     // puede tener skills locales propias que no vienen del repo; el admin no
     // es un clon exacto del repo, a diferencia del worker que sí es repo-puro)

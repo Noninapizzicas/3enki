@@ -1,0 +1,14 @@
+# Plantilla del config del Hermes ADMIN (/home/admin/.hermes/config.yaml) — clon céntrico-en-repo.
+# La escribe el reconciliador (deployment/reconcile.js). SOLO se crea la PRIMERA vez
+# (VPS nuevo, config sin existir); después cada VPS evoluciona la suya (identidad
+# independiente). La config de PROVIDERS es compartida por el repo: provider custom
+# → https://ollama.com/v1 con deepseek-v4-flash. __OLLAMA_API_KEY__ se sustituye por
+# la key real leída del .env vivo de Enki (NUNCA versionada; misma key que el worker).
+model:
+  default: deepseek-v4-flash
+  provider: custom
+  base_url: https://ollama.com/v1
+  api_key: __OLLAMA_API_KEY__
+agent:
+  max_turns: 150
+_config_version: 33

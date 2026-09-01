@@ -133,6 +133,38 @@ INTERFAZ CLIENTE
 │         Cuando un dato de marketing cambia, las presencias
 │         afectadas se regeneran. Custodio del dato vivo.
 │
+├─ INTERACTIVIDAD (el ciclo acción→respuesta) ─────────────────
+│  │
+│  │  La interfaz NO es presentación pasiva. El cliente
+│  │  siempre interactúa: compra, reserva, filtra, busca,
+│  │  chatea, paga. Sin esto, es un póster.
+│  │
+│  ├─ #27 Acciones del cliente ···· ATÓMICO · reflejo
+│  │      Catálogo: enviar formulario, añadir al carrito,
+│  │      reservar, filtrar, buscar, valorar, compartir,
+│  │      descargar, chatear, autenticarse. Tipo + contexto
+│  │      + datos de entrada.
+│  │
+│  ├─ #28 Captura de entrada ······ ATÓMICO · reflejo
+│  │      Inputs de texto, selectores, botones, gestos,
+│  │      voz, escaneo (QR, cámara). Validación en frontera:
+│  │      el dato entra limpio o se rechaza.
+│  │
+│  ├─ #29 Ejecución de acción ····· ATÓMICO · puente
+│  │      "Quiero reservar" → ejecutar(reserva, datos).
+│  │      Puerto: ejecutar(accion, datos) [transporte ABIERTO].
+│  │      El backend es adaptador, no parte de la interfaz.
+│  │
+│  ├─ #30 Estado de interacción ··· ATÓMICO · custodio
+│  │      Carrito con 3 items, formulario a medias, filtro
+│  │      activo, paso 2/4 del checkout. Estado efímero de
+│  │      sesión. Custodio vigila coherencia.
+│  │
+│  └─ #31 Tiempo real ············· ATÓMICO · puente
+│         Stock que baja, mesa que se ocupa, precio que cambia,
+│         mensaje nuevo, pedido que avanza. Puerto:
+│         observar(criterio) [transporte ABIERTO].
+│
 ├─ [RESTRICCIONES] ────────────────────────────────────────────
 │  ├─ REF → marketing-strategy (qué decir y a quién)
 │  ├─ REF → marketing-audience (segmentos y perfiles)
@@ -158,7 +190,7 @@ INTERFAZ CLIENTE
 │  └─ No es el diseñador (la piel viene del proyecto)
 │
 └─ [ABIERTO] ──────────────────────────────────────────────────
-   ├─ ¿Interactividad bidireccional (formularios, checkout, chat)?
+   ├─ ~~¿Interactividad bidireccional?~~ → CERRADA: SPAWN 5 Interactividad
    ├─ ¿Internacionalización (i18n)?
    ├─ ¿Personalización del cliente (preferencias, modo oscuro)?
    └─ ¿Versionado de interfaz publicada (A/B testing, staging)?
@@ -204,43 +236,50 @@ INTERFAZ CLIENTE
 
 | Métrica | Valor |
 |---|---|
-| Pasadas del prisma | 2 (P1 → 4 SPAWN + P2 → todo atómico) |
-| Piezas atómicas totales | 25 (únicas, descontando duplicadas #10≈#20 y #12≈#21) |
+| Pasadas del prisma | 2 (P1 → 4 SPAWN + P2 → todo atómico, + SPAWN 5 cerrado desde [ABIERTO]) |
+| Piezas atómicas totales | 30 (únicas, descontando duplicadas #10≈#20 y #12≈#21) |
 | Piezas contrato | 3 |
 | REFs (deduplicadas) | 7 |
-| Preguntas abiertas | 4 |
+| Preguntas abiertas | 3 (1 cerrada: interactividad → SPAWN 5) |
 
 ### Reparto de formas
 
 | Forma | Cantidad | % | Piezas clave |
 |---|---|---|---|
-| **reflejo** | 12 | 50% | Arquetipos, enums, catálogos, estructura tipada, navegación |
-| **custodio** | 4 | 17% | Estados (presencia, página), nivel de compromiso, sincronización |
-| **conversor** | 4 | 17% | Contenido→sección, inyección, piel, renderizado |
-| **micro-agente** | 3 | 13% | Estructura/selección (híbrido reglas+LLM), SEO |
-| **puente** | 1 | 4% | Publicación (única salida al exterior) |
-| **TOTAL** | **24** | 100% | |
+| **reflejo** | 14 | 48% | Arquetipos, enums, catálogos, estructura tipada, navegación, acciones, captura |
+| **custodio** | 5 | 17% | Estados (presencia, página, interacción), nivel de compromiso, sincronización |
+| **conversor** | 4 | 14% | Contenido→sección, inyección, piel, renderizado |
+| **micro-agente** | 3 | 10% | Estructura/selección (híbrido reglas+LLM), SEO |
+| **puente** | 3 | 10% | Publicación, ejecución de acción, tiempo real |
+| **TOTAL** | **29** | 100% | |
 
 ---
 
 ## Lectura del esquema
 
-**1. Es un sistema reflejo con cadena de conversores.**
-La mitad de las piezas son datos deterministas (reflejo). La otra mitad interesante es la cadena conversor del ensamblador: marketing → contenido → piel → formato → canal. Esa cadena es el corazón.
+**1. Es un sistema reflejo con cadena de conversores y triple puente.**
+La mitad de las piezas son datos deterministas (reflejo). La cadena conversor del ensamblador (marketing → contenido → piel → formato → canal) es el generador. Y tres puentes conectan la interfaz viva con el mundo exterior.
 
 **2. El ensamblador es la pieza convergente — no una rama más.**
 Las dimensiones interdependientes (datos de marketing, piel visual, tipo de proyecto, estructura de páginas) NO son árboles independientes: son INPUTS que entran al ensamblador y se sintetizan en una pipeline secuencial. Si se separaran, al ensamblar no encajarían.
 
-**3. Solo tres puntos necesitan juicio (micro-agente):**
+**3. Tres puentes, no uno.**
+La interfaz toca el exterior por tres caminos, no solo la publicación:
+- **Publicación** (#24) — interfaz generada → canal (salida, unidireccional)
+- **Ejecución** (#29) — intención del cliente → backend (ida-y-vuelta: el cliente pide, el sistema resuelve)
+- **Tiempo real** (#31) — mundo exterior → vista del cliente (entrada continua: el mundo cambia, la interfaz lo refleja)
+Los dos últimos son la interactividad: sin ellos la interfaz es un póster estático.
+
+**4. Solo tres puntos necesitan juicio (micro-agente):**
 - Selección de estructura (qué secciones y en qué orden para un arquetipo)
 - SEO (síntesis de metadatos desde el contenido)
 - El resto es determinista o transformación mecánica.
 
-**4. La publicación es el único puente.**
-Todo el sistema es generación interna hasta el último paso: publicar(resultado, destino). Ese es el puerto de salida — [transporte ABIERTO].
-
 **5. El custodio del dato vivo (#25 Sincronización) cierra el contrato.**
-La promesa de "dato vivo" (si el marketing cambia, la interfaz cambia) se materializa en un custodio que escucha eventos de cambio y dispara regeneración. Sin él, la interfaz es estática.
+La promesa de "dato vivo" (si el marketing cambia, la interfaz cambia) se materializa en un custodio que escucha eventos de cambio y dispara regeneración.
+
+**6. El estado de interacción (#30) es el custodio del CLIENTE.**
+El carrito, el formulario a medias, el filtro activo — es estado efímero que la interfaz mantiene durante la sesión. Sin este custodio, cada acción del cliente empieza de cero.
 
 ---
 
@@ -263,8 +302,8 @@ publicador           ──→ #24 Publicación
 El prisma se agotó. La disección asignó formas. El esquema está ensamblado.
 
 **Construir** — la anatomía dice qué construir y en qué orden:
-1. Los reflejos primero (enums, catálogos, validaciones) — son la base determinista.
-2. Los conversores del ensamblador después (la cadena marketing → vista → formato).
-3. Los custodios (máquinas de estado) — vigilan las transiciones.
-4. Los micro-agentes al final (selección de estructura, SEO) — necesitan reglas + fallback LLM.
-5. El puente (publicación) ya existe: REF → publicador.
+1. Los reflejos primero (enums, catálogos, validaciones, acciones) — la base determinista.
+2. Los conversores del ensamblador (la cadena marketing → vista → formato).
+3. Los custodios (máquinas de estado de presencia, página, interacción) — vigilan transiciones.
+4. Los puentes (publicación ya existe; ejecución y tiempo real son los puertos de interactividad).
+5. Los micro-agentes al final (selección de estructura, SEO) — reglas + fallback LLM.

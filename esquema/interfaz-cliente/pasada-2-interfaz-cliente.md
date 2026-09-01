@@ -104,8 +104,26 @@ El ensamblador NO es un template estático ni un page builder manual. Es un GENE
 
 | Métrica | Valor |
 |---|---|
-| Piezas atómicas nuevas | 22 (4 perfil + 4 presencia + 6 páginas + 4 experiencia + 7 ensamblador - 3 ya contadas en P1) |
+| Piezas atómicas nuevas | 27 (4 perfil + 4 presencia + 6 páginas + 4 experiencia + 7 ensamblador + 5 interactividad - 3 ya contadas en P1) |
 | SPAWN residual | 0 — todo tocó suelo |
 | Convergencias | 1 (Páginas converge en el Ensamblador como punto de síntesis) |
 
 **La pasada 2 agotó el prisma. Todo es atómico, referencia o abierto. Siguiente: disección.**
+
+---
+
+## SPAWN 5 — Interactividad (cerrada desde [ABIERTO])
+
+**¿Qué es?** El ciclo bidireccional completo: el cliente ACTÚA y la interfaz RESPONDE. No es un extra opcional — es la naturaleza misma de la interfaz. Un cliente nunca es espectador pasivo: compra, reserva, rellena formularios, filtra, busca, se loguea, paga, valora, chatea. Sin interactividad la interfaz es un póster, no una interfaz.
+
+La interactividad NO es la retroalimentación (#18, que cubre el "te confirmo que pasó") — es el sistema completo de captura de intención del cliente y ejecución de la acción solicitada.
+
+| # | Pieza | Tipo | Descripción |
+|---|---|---|---|
+| 27 | **Acciones del cliente** | ATÓMICO | Catálogo de lo que el cliente puede HACER: enviar formulario, añadir al carrito, reservar, filtrar, buscar, valorar, compartir, descargar, chatear, autenticarse. Cada acción tiene un tipo, un contexto (en qué página/sección vive) y unos datos de entrada. |
+| 28 | **Captura de entrada** | ATÓMICO | Cómo la interfaz recoge lo que el cliente quiere: inputs de texto, selectores, botones, gestos (swipe, drag), voz, escaneo (QR, cámara). Cada tipo de captura tiene validación en frontera (el dato entra limpio o se rechaza). |
+| 29 | **Ejecución de acción** | ATÓMICO | El puente entre la intención del cliente y el sistema que la cumple. "Quiero reservar" → ejecutar(reserva, datos). Opera sobre el puerto `ejecutar(accion, datos)` [transporte ABIERTO] — el backend que resuelve la acción es adaptador, no parte de la interfaz. |
+| 30 | **Estado de interacción** | ATÓMICO | Lo que la interfaz sabe del cliente DURANTE la sesión: carrito con 3 items, formulario a medias, filtro activo, paso 2 de 4 del checkout. Estado efímero de la interacción, no del perfil. Se pierde o se persiste según el contexto. |
+| 31 | **Tiempo real** | ATÓMICO | Lo que cambia sin que el cliente toque nada: stock que baja, mesa que se ocupa, precio que cambia, mensaje nuevo en el chat, pedido que avanza de estado. La interfaz refleja el mundo exterior en vivo. Opera sobre el puerto `observar(criterio)` [transporte ABIERTO]. |
+
+**Suelo alcanzado** — piezas atómicas.

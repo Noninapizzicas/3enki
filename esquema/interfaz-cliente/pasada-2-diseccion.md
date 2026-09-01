@@ -65,31 +65,43 @@ Método: las 6 preguntas del diseccionador sobre cada pieza.
 
 ---
 
+## Interactividad (cerrada desde [ABIERTO])
+
+| # | Pieza | Forma | Razón |
+|---|---|---|---|
+| 27 | Acciones del cliente | **reflejo** | Catálogo tipado de acciones posibles (enviar, añadir, reservar, filtrar, buscar…). Cada acción tiene tipo + contexto + datos de entrada. Enum extensible, un test afirma que el tipo existe y los datos requeridos están presentes. |
+| 28 | Captura de entrada | **reflejo** | Tipos de input (texto, selector, botón, gesto, voz, escaneo) con validación en frontera. Determinista: dado un tipo de captura, la validación es un test. El dato entra limpio o se rechaza. |
+| 29 | Ejecución de acción | **puente** | El puente entre la intención del cliente y el sistema que la cumple. Opera sobre el puerto `ejecutar(accion, datos)` [transporte ABIERTO]. El backend que resuelve es adaptador, no parte de la interfaz. |
+| 30 | Estado de interacción | **custodio** | Estado efímero de la sesión del cliente (carrito, formulario a medias, filtro activo, paso del checkout). El custodio vigila la coherencia: no se puede pagar un carrito vacío, no se puede saltar un paso obligatorio. |
+| 31 | Tiempo real | **puente** | Lo que cambia sin acción del cliente: stock, disponibilidad, precios, mensajes, estados de pedido. Opera sobre el puerto `observar(criterio)` [transporte ABIERTO]. Puente entre el mundo exterior y la vista del cliente. |
+
+---
+
 ## Resumen de formas
 
 | Forma | Cantidad | Piezas |
 |---|---|---|
-| **reflejo** | 12 | Arquetipo de proyecto, Intención del cliente, Contexto de consumo, Canal, URL/Ubicación, Formato, Tipo de página, Secciones, Puntos de contacto, Navegación, Llamadas a la acción, Retroalimentación, Resolución de contexto |
-| **custodio** | 4 | Nivel de compromiso, Estado (presencia), Estado de página, Sincronización |
+| **reflejo** | 14 | Arquetipo de proyecto, Intención del cliente, Contexto de consumo, Canal, URL/Ubicación, Formato, Tipo de página, Secciones, Puntos de contacto, Navegación, Llamadas a la acción, Retroalimentación, Resolución de contexto, Acciones del cliente, Captura de entrada |
+| **custodio** | 5 | Nivel de compromiso, Estado (presencia), Estado de página, Sincronización, Estado de interacción |
 | **micro-agente** | 3 | Estructura, SEO, Selección de estructura |
 | **conversor** | 4 | Contenido de página, Inyección de datos, Aplicación de piel, Renderizado |
-| **puente** | 1 | Publicación |
-| **TOTAL** | **24** | (26 piezas menos 2 duplicadas: Estructura=#10≈#20, Contenido=#12≈#21) |
+| **puente** | 3 | Publicación, Ejecución de acción, Tiempo real |
+| **TOTAL** | **29** | (31 piezas menos 2 duplicadas: Estructura=#10≈#20, Contenido=#12≈#21) |
 
 ---
 
 ## Lectura del reparto
 
-- **Reflejo dominante (12/24 = 50%)** — la mitad del sistema es determinista: enums, registros, catálogos, estructuras tipadas. Los perfiles, canales, formatos, secciones y puntos de contacto son datos que un test afirma.
+- **Reflejo dominante (14/29 = 48%)** — casi la mitad del sistema es determinista: enums, registros, catálogos, estructuras tipadas, validaciones. Los perfiles, canales, formatos, secciones, acciones y capturas son datos que un test afirma.
 
-- **Conversor fuerte (4/24 ≈ 17%)** — el ensamblador es esencialmente una cadena de conversores: datos de marketing → contenido de sección → estructura+piel → formato de salida. Cada paso transforma de un dominio a otro.
+- **Custodio reforzado (5/29 ≈ 17%)** — las máquinas de estado (presencia, página, interacción) y la sincronización vigilan invariantes: transiciones válidas, dato vivo, carrito coherente.
 
-- **Custodio vigilante (4/24 ≈ 17%)** — las máquinas de estado (presencia, página) y la sincronización vigilan invariantes: transiciones válidas, dato vivo.
+- **Conversor fuerte (4/29 ≈ 14%)** — el ensamblador es una cadena de conversores: datos de marketing → contenido de sección → estructura+piel → formato de salida. Cada paso transforma de un dominio a otro.
 
-- **Micro-agente acotado (3/24 ≈ 13%)** — solo donde hay JUICIO real: elegir estructura de secciones para un arquetipo nuevo, generar metadatos SEO. El resto es reglas.
+- **Puente triple (3/29 ≈ 10%)** — tres puertos de salida al mundo exterior: publicación (interfaz → canal), ejecución (intención del cliente → backend), tiempo real (mundo exterior → vista del cliente). Dos de los tres son BIDIRECCIONALES (ejecución y tiempo real).
 
-- **Puente único (1/24 ≈ 4%)** — la publicación es el único puente real: donde el sistema toca el mundo exterior.
+- **Micro-agente acotado (3/29 ≈ 10%)** — solo donde hay JUICIO real: elegir estructura de secciones para un arquetipo nuevo, generar metadatos SEO. El resto es reglas.
 
-**El sistema es reflejo con cadena de conversores.** La anatomía dice: los datos son deterministas (reflejo), la transformación es una pipeline de conversores (marketing → vista → formato → canal), los estados se custodian, y solo la selección de estructura y el SEO necesitan juicio (micro-agente). La publicación es el puerto de salida.
+**El sistema es reflejo con cadena de conversores y triple puente.** La anatomía completa dice: los datos son deterministas (reflejo), la generación es una pipeline de conversores (marketing → vista → formato → canal), los estados se custodian, el LLM interviene solo en estructura y SEO, y la interfaz toca el exterior por TRES puentes — no uno. La publicación es salida. La ejecución es ida-y-vuelta (el cliente pide, el backend resuelve). El tiempo real es entrada continua (el mundo cambia, la vista lo refleja).
 
-**Convergencia confirmada:** La cadena conversor (piezas #12→#21→#22→#23) es el CORAZÓN del ensamblador — es donde las dimensiones interdependientes (datos, piel, estructura, tipo) se sintetizan. No son ramas paralelas: son inputs de una pipeline secuencial.
+**Convergencia confirmada:** La cadena conversor (piezas #12→#21→#22→#23) es el CORAZÓN del ensamblador. Los puentes de interactividad (#29, #31) son ORTOGONALES al ensamblador — no transforman contenido, conectan la interfaz viva con el mundo.

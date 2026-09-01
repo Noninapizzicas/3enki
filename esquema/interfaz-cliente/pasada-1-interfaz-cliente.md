@@ -45,7 +45,7 @@ Sub-productos:
 
 ## [PREGUNTAS_ABIERTAS] — [ABIERTO]
 
-- ¿La interfaz soporta interactividad bidireccional (formularios, checkout, chat) o es solo presentación?
+- ~~¿La interfaz soporta interactividad bidireccional (formularios, checkout, chat) o es solo presentación?~~ → CERRADA: SÍ, siempre. El cliente siempre interactúa. → SPAWN 5 Interactividad en pasada-2.
 - ¿Qué pasa con la internacionalización (i18n)?
 - ¿El cliente puede personalizar su experiencia (preferencias, idioma, modo oscuro)?
 - ¿Cómo se versiona una interfaz publicada (A/B testing, staging vs producción)?
@@ -56,7 +56,7 @@ Sub-productos:
 
 | Tipo | Cantidad | Piezas |
 |---|---|---|
-| SPAWN | 4 | Perfil de cliente, Presencia, Experiencia, Ensamblador |
+| SPAWN | 5 | Perfil de cliente, Presencia, Experiencia, Ensamblador, Interactividad |
 | REF | 7 | marketing-strategy, marketing-audience, marketing-channels, marketing-content, piel, project-profile, publicador |
 | ATÓMICO | 3 | Coherencia cross-canal, Adaptación al tipo, Dato vivo |
 | [ABIERTO] | 1 | 4 preguntas |

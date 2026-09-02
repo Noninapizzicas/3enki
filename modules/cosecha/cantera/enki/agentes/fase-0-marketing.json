@@ -1,13 +1,11 @@
 {
   "name": "fase-0-marketing",
   "description": "Agente interactivo que entrevista al dueño para rellenar los 12 módulos de marketing, usando la identidad del negocio (F0 proceso-negocio) + el playbook Phase 0 Discovery + skills/agentes de marketing de la cantera/cúpulas. Entregable: esquema/<project_slug>/fm0.md",
-
   "identidad": {
     "role": "Director de Marketing Estratégico para PYMEs",
     "goal": "Rellenar los 12 módulos de marketing del proyecto entrevistando al dueño del negocio — arrancando desde su identidad declarada (F0) y el playbook de descubrimiento, usando las skills de marketing disponibles en la cantera para producir un fundamento de marketing completo (fm0.md)",
     "backstory": "Eres un director de marketing con 15 años de experiencia en PYMEs y hostelería. Has lanzado marcas desde cero, diseñado estrategias de canales para negocios locales y gestionado presupuestos ajustados con resultados medibles. Conoces la realidad del dueño que no tiene departamento de marketing: tú eres ese departamento. Tu método: escuchar primero (qué es el negocio, quién lo toca, qué pretende), diagnosticar con datos (competidores, audiencia, canales), y entregar un plan ejecutable módulo a módulo. Nunca propones sin preguntar. Nunca asumes lo que el dueño no ha dicho. Cada módulo se rellena con información REAL del dueño o se marca como pregunta_abierta."
   },
-
   "pasos": [
     {
       "paso": "leer_identidad_negocio",
@@ -45,18 +43,81 @@
       },
       "arsenal": {
         "skills_marketing": [
-          "marketing-strategy", "marketing-channels", "marketing-audience",
-          "marketing-competitors", "marketing-budget", "marketing-calendar",
-          "marketing-content", "marketing-analytics", "marketing-funnel",
-          "marketing-campaigns", "marketing-automation", "marketing-relations"
+          "marketing-strategy",
+          "marketing-channels",
+          "marketing-audience",
+          "marketing-competitors",
+          "marketing-budget",
+          "marketing-calendar",
+          "marketing-content",
+          "marketing-analytics",
+          "marketing-funnel",
+          "marketing-campaigns",
+          "marketing-automation",
+          "marketing-relations",
+          "affiliate-marketing",
+          "app-ads",
+          "brand-monitoring",
+          "brand-protection",
+          "brand-visual-generator",
+          "branding",
+          "content-marketing",
+          "content-optimization",
+          "content-strategy",
+          "copywriting",
+          "ctv-ads",
+          "directory-listing-ads",
+          "discount-marketing-strategy",
+          "display-ads",
+          "email-marketing",
+          "employee-generated-content",
+          "google-ads",
+          "growth-funnel",
+          "influencer-marketing",
+          "integrated-marketing",
+          "linkedin-ads",
+          "local-seo",
+          "meta-ads",
+          "multi-domain-brand-seo",
+          "native-ads",
+          "paid-ads-strategy",
+          "podcast-marketing",
+          "programmatic-seo",
+          "rebranding-strategy",
+          "referral-program",
+          "seo-audit",
+          "seo-monitoring",
+          "seo-strategy",
+          "tiktok-ads",
+          "video-marketing",
+          "visual-content",
+          "youtube-ads",
+          "youtube-seo",
+          "product-launch",
+          "product-hunt-launch"
         ],
         "modulos_target": [
-          "marketing-strategy", "marketing-channels", "marketing-audience",
-          "marketing-competitors", "marketing-budget", "marketing-calendar",
-          "marketing-content", "marketing-analytics", "marketing-funnel",
-          "marketing-campaigns", "marketing-automation", "marketing-relations"
+          "marketing-strategy",
+          "marketing-channels",
+          "marketing-audience",
+          "marketing-competitors",
+          "marketing-budget",
+          "marketing-calendar",
+          "marketing-content",
+          "marketing-analytics",
+          "marketing-funnel",
+          "marketing-campaigns",
+          "marketing-automation",
+          "marketing-relations"
         ],
-        "playbook": "agency-agents/strategy/playbooks/phase-0-discovery.md"
+        "playbook": "agency-agents/strategy/playbooks/phase-0-discovery.md",
+        "agentes_cupulas": [
+          "esquematizador-negocio",
+          "adaptar-a-enki",
+          "crear-blueprint-jefe",
+          "escribir-skills",
+          "construir-modulos"
+        ]
       }
     },
     {
@@ -78,20 +139,21 @@
       "op": "commitar"
     }
   ],
-
   "entregable": {
     "tipo": "fs",
     "path": "esquema/<project_slug>/fm0.md",
-    "reglas": ["existe", "contenido_min", "en_repo"],
+    "reglas": [
+      "existe",
+      "contenido_min",
+      "en_repo"
+    ],
     "min_chars": 1000
   },
-
   "presupuesto": {
     "generaciones_por_paso": 5,
     "max_tokens": 32000,
     "generacion_timeout_ms": 300000
   },
-
   "git": {
     "modo": "rama-propia",
     "rama": "agente/fase-0-marketing",

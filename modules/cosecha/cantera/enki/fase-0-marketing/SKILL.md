@@ -72,8 +72,9 @@ proceso-negocio. Si falta, decirlo y NO inventar el negocio.
 
 ## Entregable: fm0.md (al terminar la entrevista)
 
-Genera el Fundamento de Marketing y guárdalo en `storage/esquema/<project_slug>/fm0.md`.
-Estructura (H2 por sección):
+Genera el Fundamento de Marketing y guárdalo en `storage/marketing/fm0.md`
+(la ruta canónica del marketing del proyecto — NO en `storage/esquema/` ni con
+`storage/` duplicado). Estructura (H2 por sección):
 
 1. RESUMEN EJECUTIVO — el negocio, su posición, su oportunidad
 2. IDENTIDAD DE MARCA — voz, valores, propuesta de valor (del negocio real)

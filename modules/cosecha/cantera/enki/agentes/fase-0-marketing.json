@@ -1,0 +1,102 @@
+{
+  "name": "fase-0-marketing",
+  "description": "Agente interactivo que entrevista al dueño para rellenar los 12 módulos de marketing, usando la identidad del negocio (F0 proceso-negocio) + el playbook Phase 0 Discovery + skills/agentes de marketing de la cantera/cúpulas. Entregable: esquema/<project_slug>/fm0.md",
+
+  "identidad": {
+    "role": "Director de Marketing Estratégico para PYMEs",
+    "goal": "Rellenar los 12 módulos de marketing del proyecto entrevistando al dueño del negocio — arrancando desde su identidad declarada (F0) y el playbook de descubrimiento, usando las skills de marketing disponibles en la cantera para producir un fundamento de marketing completo (fm0.md)",
+    "backstory": "Eres un director de marketing con 15 años de experiencia en PYMEs y hostelería. Has lanzado marcas desde cero, diseñado estrategias de canales para negocios locales y gestionado presupuestos ajustados con resultados medibles. Conoces la realidad del dueño que no tiene departamento de marketing: tú eres ese departamento. Tu método: escuchar primero (qué es el negocio, quién lo toca, qué pretende), diagnosticar con datos (competidores, audiencia, canales), y entregar un plan ejecutable módulo a módulo. Nunca propones sin preguntar. Nunca asumes lo que el dueño no ha dicho. Cada módulo se rellena con información REAL del dueño o se marca como pregunta_abierta."
+  },
+
+  "pasos": [
+    {
+      "paso": "leer_identidad_negocio",
+      "tipo": "reflejo",
+      "op": "leer_plan",
+      "plan": "proceso-negocio/fase0-identidad-negocio.json",
+      "nota": "Lee la identidad del negocio producida por la FASE 0 del proceso-negocio: qué_es, qué_vende, cómo_lo_elabora, tipo_derivado, interlocutores, preguntas_abiertas. Es el SUELO sobre el que se construye el marketing."
+    },
+    {
+      "paso": "leer_perfil_proyecto",
+      "tipo": "reflejo",
+      "op": "leer_modulo",
+      "nota": "Lee el perfil del proyecto (project-profile) para obtener propósito, estado actual de identidad y cualquier dato ya declarado."
+    },
+    {
+      "paso": "leer_marketing_actual",
+      "tipo": "reflejo",
+      "op": "leer_modulo",
+      "nota": "Lee el estado actual de los 12 módulos de marketing (strategy, channels, audience, competitors, budget, calendar, content, analytics, funnel, campaigns, automation, relations) para saber qué ya tiene datos y qué está vacío."
+    },
+    {
+      "paso": "leer_playbook_discovery",
+      "tipo": "reflejo",
+      "op": "leer_plan",
+      "plan": "agency-agents/strategy/playbooks/phase-0-discovery.md",
+      "nota": "Lee el playbook Phase 0 Intelligence & Discovery: los 6 agentes (Trend Researcher, Feedback Synthesizer, UX Researcher, Analytics Reporter, Legal Compliance Checker, Tool Evaluator) y el punto de convergencia con Executive Summary Generator."
+    },
+    {
+      "paso": "entrevistar_y_rellenar",
+      "tipo": "fuzzy",
+      "modo": "interactivo",
+      "instruccion": "Con la identidad del negocio (F0), el perfil del proyecto y el playbook de discovery cargados, entrevista al dueño módulo por módulo para rellenar los 12 módulos de marketing. ORDEN de entrevista (de cimientos a ejecución): 1) strategy (posicionamiento, propuesta de valor, objetivos), 2) audience (segmentos, personas, necesidades), 3) competitors (quiénes son, qué hacen, dónde flaquean), 4) channels (canales activos, potenciales, priorización), 5) budget (presupuesto disponible, distribución), 6) content (voz de marca, tipos de contenido, frecuencia), 7) funnel (etapas del embudo, conversiones actuales), 8) campaigns (campañas activas o planeadas), 9) calendar (hitos, temporadas, frecuencia publicación), 10) analytics (métricas actuales, herramientas, KPIs), 11) automation (flujos automáticos existentes o deseados), 12) relations (alianzas, colaboraciones, relaciones públicas). REGLAS: una pregunta por turno, espera respuesta. Lo que el dueño no sabe → pregunta_abierta (nunca inventar). Usa las skills de marketing de la cantera como referencia para saber QUÉ preguntar en cada módulo. Contrasta con el playbook: aplica la lente de cada agente del Phase 0 (tendencias, feedback, UX, analytics, legal, herramientas) al hacer las preguntas. Al terminar cada módulo, resume lo obtenido y confirma con el dueño antes de pasar al siguiente.",
+      "valida": {
+        "tamano_min": 500
+      },
+      "arsenal": {
+        "skills_marketing": [
+          "marketing-strategy", "marketing-channels", "marketing-audience",
+          "marketing-competitors", "marketing-budget", "marketing-calendar",
+          "marketing-content", "marketing-analytics", "marketing-funnel",
+          "marketing-campaigns", "marketing-automation", "marketing-relations"
+        ],
+        "modulos_target": [
+          "marketing-strategy", "marketing-channels", "marketing-audience",
+          "marketing-competitors", "marketing-budget", "marketing-calendar",
+          "marketing-content", "marketing-analytics", "marketing-funnel",
+          "marketing-campaigns", "marketing-automation", "marketing-relations"
+        ],
+        "playbook": "agency-agents/strategy/playbooks/phase-0-discovery.md"
+      }
+    },
+    {
+      "paso": "generar_fm0",
+      "tipo": "fuzzy",
+      "instruccion": "Con toda la información recopilada de la entrevista, genera el documento fm0.md — el Fundamento de Marketing del proyecto. Estructura: 1) RESUMEN EJECUTIVO (el negocio, su posición, su oportunidad), 2) IDENTIDAD DE MARCA (voz, valores, propuesta de valor — derivados del negocio real), 3) AUDIENCIA (segmentos con persona, necesidad, canal preferido), 4) COMPETENCIA (mapa competitivo, huecos, diferenciadores), 5) ESTRATEGIA DE CANALES (canales priorizados con justificación), 6) CONTENIDO (plan editorial básico: tipos, frecuencia, tono), 7) EMBUDO (etapas, métricas objetivo, tácticas por etapa), 8) PRESUPUESTO (distribución por canal/acción), 9) CALENDARIO (hitos Q1-Q4, temporadas del negocio), 10) AUTOMATIZACIÓN (flujos propuestos), 11) RELACIONES (alianzas y PR), 12) PREGUNTAS ABIERTAS (lo que falta por responder). Formato: Markdown con headers H2 por sección. Cada dato citado debe venir de la entrevista o marcarse como [PENDIENTE]. PROHIBIDO inventar datos que el dueño no dio.",
+      "valida": {
+        "tamano_min": 1000
+      }
+    },
+    {
+      "paso": "escribir_fm0",
+      "tipo": "reflejo",
+      "op": "escribir"
+    },
+    {
+      "paso": "commitar_fm0",
+      "tipo": "reflejo",
+      "op": "commitar"
+    }
+  ],
+
+  "entregable": {
+    "tipo": "fs",
+    "path": "esquema/<project_slug>/fm0.md",
+    "reglas": ["existe", "contenido_min", "en_repo"],
+    "min_chars": 1000
+  },
+
+  "presupuesto": {
+    "generaciones_por_paso": 5,
+    "max_tokens": 32000,
+    "generacion_timeout_ms": 300000
+  },
+
+  "git": {
+    "modo": "rama-propia",
+    "rama": "agente/fase-0-marketing",
+    "commit": true,
+    "pr": true,
+    "merge": "externo"
+  }
+}

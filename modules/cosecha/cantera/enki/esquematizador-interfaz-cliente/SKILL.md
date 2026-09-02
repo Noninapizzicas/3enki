@@ -1,5 +1,5 @@
 ---
-name: esquematizador-cliente
+name: esquematizador-interfaz-cliente
 description: >-
   Variante del esquematizador con LENTE DE ROL CLIENTE: analiza la cara de
   CONSUMO de un negocio (qué elige, compra, consume y repite el cliente final)

@@ -1,5 +1,5 @@
 {
-  "name": "esquematizador-cliente",
+  "name": "esquematizador-interfaz-cliente",
   "description": "Fase 2 (lente CLIENTE): esquematiza la interfaz gráfica para el cliente de un negocio — el recorrido de consumo (descubrir, elegir, comprar, recoger, repetir) — alimentado por la FASE 0 y el FM0. El fuzzy genera el esquema con el desglose web por apartados (CSS, iconos, fuentes, elementos, lógica, formas); el reflejo lo escribe; el JEFE verifica. DETERMINISTA: UN entregable = UN archivo esquema.md.",
   "pasos": [
     {

@@ -1,6 +1,6 @@
 {
   "name": "fase-0-marketing",
-  "description": "Agente interactivo que entrevista al dueño para rellenar los 12 módulos de marketing, usando la identidad del negocio (F0 proceso-negocio) + el playbook Phase 0 Discovery + skills/agentes de marketing de la cantera/cúpulas. Entregable: esquema/<project_slug>/fm0.md",
+  "description": "Agente interactivo que EL DUEÑO rellena los 12 módulos de marketing. Se basa en el archivo F0 de proceso-negocio (fase0-identidad-negocio.json) y pregunta al dueño módulo por módulo. Usa TODAS las skills de la cantera y TODOS los agentes/pipelines del registro como apoyo, pero el dato de cada módulo SIEMPRE viene del dueño. Entregable: esquema/<project_slug>/fm0.md",
   "identidad": {
     "role": "Director de Marketing Estratégico para PYMEs",
     "goal": "Rellenar los 12 módulos de marketing del proyecto entrevistando al dueño del negocio — arrancando desde su identidad declarada (F0) y el playbook de descubrimiento, usando las skills de marketing disponibles en la cantera para producir un fundamento de marketing completo (fm0.md)",
@@ -37,65 +37,11 @@
       "paso": "entrevistar_y_rellenar",
       "tipo": "fuzzy",
       "modo": "interactivo",
-      "instruccion": "Con la identidad del negocio (F0), el perfil del proyecto y el playbook de discovery cargados, entrevista al dueño módulo por módulo para rellenar los 12 módulos de marketing. ORDEN de entrevista (de cimientos a ejecución): 1) strategy (posicionamiento, propuesta de valor, objetivos), 2) audience (segmentos, personas, necesidades), 3) competitors (quiénes son, qué hacen, dónde flaquean), 4) channels (canales activos, potenciales, priorización), 5) budget (presupuesto disponible, distribución), 6) content (voz de marca, tipos de contenido, frecuencia), 7) funnel (etapas del embudo, conversiones actuales), 8) campaigns (campañas activas o planeadas), 9) calendar (hitos, temporadas, frecuencia publicación), 10) analytics (métricas actuales, herramientas, KPIs), 11) automation (flujos automáticos existentes o deseados), 12) relations (alianzas, colaboraciones, relaciones públicas). REGLAS: una pregunta por turno, espera respuesta. Lo que el dueño no sabe → pregunta_abierta (nunca inventar). Usa las skills de marketing de la cantera como referencia para saber QUÉ preguntar en cada módulo. Contrasta con el playbook: aplica la lente de cada agente del Phase 0 (tendencias, feedback, UX, analytics, legal, herramientas) al hacer las preguntas. Al terminar cada módulo, resume lo obtenido y confirma con el dueño antes de pasar al siguiente.",
+      "instruccion": "Con la identidad del negocio (F0), el perfil del proyecto y el playbook de discovery cargados, entrevista al dueño para rellenar los 12 MÓDULOS de marketing. DIFERENCIACIÓN CLAVE: los 12 módulos (marketing-*) son el DESTINO que debes RELLENAR — no una fuente. El CONTENIDO de cada módulo sale de dos únicas fuentes: (1) el archivo F0 de proceso-negocio (fase0-identidad-negocio.json: qué_es, qué_vende, cómo_lo_elabora, interlocutores, preguntas_abiertas) y (2) lo que el dueño RESPONDE a tus preguntas. NUNCA inventes datos para llenar un módulo: lo que el dueño no sabe → marca_pregunta_abierta. ORDEN de entrevista (de cimientos a ejecución): 1) strategy, 2) audience, 3) competitors, 4) channels, 5) budget, 6) content, 7) funnel, 8) campaigns, 9) calendar, 10) analytics, 11) automation, 12) relations. REGLAS: una pregunta por turno, espera respuesta. Al terminar cada módulo, resume y confirma con el dueño antes de pasar al siguiente. APOYO: para enriquecer las preguntas y el diagnóstico, apóyate en TODAS las skills de la cantera y en TODOS los agentes/pipelines del registro (no solo marketing) — úsalos como REFERENCIA y como herramienta para profundizar, pero el dato de cada módulo SIEMPRE viene del dueño, nunca de una skill.",
       "valida": {
         "tamano_min": 500
       },
       "arsenal": {
-        "skills_marketing": [
-          "marketing-strategy",
-          "marketing-channels",
-          "marketing-audience",
-          "marketing-competitors",
-          "marketing-budget",
-          "marketing-calendar",
-          "marketing-content",
-          "marketing-analytics",
-          "marketing-funnel",
-          "marketing-campaigns",
-          "marketing-automation",
-          "marketing-relations",
-          "affiliate-marketing",
-          "app-ads",
-          "brand-monitoring",
-          "brand-protection",
-          "brand-visual-generator",
-          "branding",
-          "content-marketing",
-          "content-optimization",
-          "content-strategy",
-          "copywriting",
-          "ctv-ads",
-          "directory-listing-ads",
-          "discount-marketing-strategy",
-          "display-ads",
-          "email-marketing",
-          "employee-generated-content",
-          "google-ads",
-          "growth-funnel",
-          "influencer-marketing",
-          "integrated-marketing",
-          "linkedin-ads",
-          "local-seo",
-          "meta-ads",
-          "multi-domain-brand-seo",
-          "native-ads",
-          "paid-ads-strategy",
-          "podcast-marketing",
-          "programmatic-seo",
-          "rebranding-strategy",
-          "referral-program",
-          "seo-audit",
-          "seo-monitoring",
-          "seo-strategy",
-          "tiktok-ads",
-          "video-marketing",
-          "visual-content",
-          "youtube-ads",
-          "youtube-seo",
-          "product-launch",
-          "product-hunt-launch"
-        ],
         "modulos_target": [
           "marketing-strategy",
           "marketing-channels",
@@ -110,14 +56,12 @@
           "marketing-automation",
           "marketing-relations"
         ],
+        "origen_identidad": "proceso-negocio/fase0-identidad-negocio.json",
         "playbook": "agency-agents/strategy/playbooks/phase-0-discovery.md",
-        "agentes_cupulas": [
-          "esquematizador-negocio",
-          "adaptar-a-enki",
-          "crear-blueprint-jefe",
-          "escribir-skills",
-          "construir-modulos"
-        ]
+        "soporte": {
+          "cantera": "TODAS las skills de modules/cosecha/cantera/ (no solo las de marketing)",
+          "agentes_registro": "TODOS los pipelines de modules/agentes/registro/store/ (esquematizador-negocio, adaptar-a-enki, construir-modulos, escribir-skills, crear-blueprint-jefe y los que vaya a necesitar el diagnóstico)"
+        }
       }
     },
     {

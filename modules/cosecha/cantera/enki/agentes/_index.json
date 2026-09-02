@@ -96,7 +96,7 @@
     },
     {
       "name": "fase-0-marketing",
-      "description": "Entrevista al dueño para rellenar los 12 módulos de marketing usando identidad F0 + playbook discovery + TODAS las skills de marketing de la cantera + agentes en cúpulas. Entregable: fm0.md",
+      "description": "Interactivo: rellena los 12 módulos de marketing basándose en F0 y preguntando al dueño; usa toda la cantera + agentes del registro como apoyo (no solo marketing)",
       "archivo": "fase-0-marketing.json",
       "tags": [
         "marketing",

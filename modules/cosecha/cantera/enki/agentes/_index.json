@@ -93,23 +93,6 @@
       "ejecuciones": 0,
       "ultima_ejecucion": null,
       "modulos_procesados": []
-    },
-    {
-      "name": "fase-0-marketing",
-      "description": "Interactivo: rellena los 12 módulos de marketing basándose en F0 y preguntando al dueño; usa toda la cantera + agentes del registro como apoyo (no solo marketing)",
-      "archivo": "fase-0-marketing.json",
-      "tags": [
-        "marketing",
-        "fase0",
-        "entrevista",
-        "interactivo",
-        "discovery",
-        "onboarding"
-      ],
-      "creado": "2026-09-02",
-      "ejecuciones": 0,
-      "ultima_ejecucion": null,
-      "modulos_procesados": []
     }
   ]
 }

@@ -1,0 +1,32 @@
+{
+  "name": "esquematizador-cliente",
+  "description": "Fase 2 (lente CLIENTE): esquematiza la interfaz gráfica para el cliente de un negocio — el recorrido de consumo (descubrir, elegir, comprar, recoger, repetir) — alimentado por la FASE 0 y el FM0. El fuzzy genera el esquema con el desglose web por apartados (CSS, iconos, fuentes, elementos, lógica, formas); el reflejo lo escribe; el JEFE verifica. DETERMINISTA: UN entregable = UN archivo esquema.md.",
+  "pasos": [
+    {
+      "paso": "generar_esquema_cliente",
+      "tipo": "fuzzy",
+      "instruccion": "Esquematiza la INTERFAZ GRÁFICA PARA EL CLIENTE del negocio de la task con el método del esquematizador de lente cliente. Primero LEE el alimento: localiza la FASE 0 (storage/proceso-negocio/fase0-identidad-negocio.json, qué es y qué vende) y el FM0 (storage/marketing/fm0.md, qué prometer, a quién, canales, embudo, diferenciación). Sin ellos no hay ni qué prometer ni a quién dirigirse: si faltan, dilo y NO inventes el negocio.\n\nPrisma de 5 huecos con lente CLIENTE, punto a punto hasta secarse:\n- IDENTIDAD: qué ELIGE el cliente (no qué hace el negocio)\n- RESTRICCIONES: qué ya está decidido por el negocio (precios, catálogo, canal, margen — el cliente no decide estos)\n- CONTRATO: qué necesita VER para decidir comprar y qué SEÑAL confirma su acción (pedido confirmado, pago, recogida)\n- NO-OBJETIVOS: qué caras NO son del cliente (jefe/POS, gestión, sistema)\n- PREGUNTAS_ABIERTAS: qué decisión de negocio falta y bloquea la conversión\n\nMANDATO DEL FOCO: del recorrido declarado en el FM0 (embudo: descubrir->probar->enganchar->fidelizar->referir), identifica TÚ MISMO el ESLABÓN que hoy se para (el FRENO de conversión) y EXPÁNDELO: qué lo bloquea, qué alternativa lo convierte en oportunidad que SUMA (no restas). El freno resuelto es el CORAZÓN del esquema, no una sección más.\n\nLEY DE CERO SUPUESTOS: NO des nada por sentado. Todo dato que no esté en la FASE 0 ni en el FM0 — precios, descuentos, horarios, márgenes, canales concretos — se marca como PREGUNTA ABIERTA, NUNCA se inventa. Si el diseño no puede decidir algo sin dato del dueño, lo deja como pregunta abierta explícita.\n\nDESGLOSE del diseño web por APARTADOS SEPARADOS (no un bloque). Escribe en el esquema una sección H2 para cada uno, para que el agente de UI los construya por separado y coherentes:\n- CSS: paleta (colores de marca), jerarquía tipográfica, espaciado, redondeo, sombras, responsividad. Qué transmite y cómo sostiene la promesa del FM0\n- iconos: set de iconografía que refuerza la marca y guía el recorrido (qué icono en qué acción, coherencia)\n- fuentes: tipografía (títulos/cuerpo), tono que proyecta (artesanal, moderno, cercano), fuentes que combinan con la identidad\n- elementos: componentes de consumo (hero, tarjetas de producto, selectores, botones, formulario de pedido, estados de confirmación)\n- lógica: cómo se conecta cada elemento a un evento del bus (elegir->precio, pedir->confirmar, pagar->recoger). Qué llama a qué\n- formas: silueta visual general (redondeado vs recto, denso vs aire, minimalista vs ornamentado) — la forma que marca esta web\n\nFORMA de cada hoja de consumo (cuándo tocar suelo): hero-promesa (primera vista: qué es + diferenciador, SIEMPRE del FM0) · tarjeta-item (elemento seleccionable del catálogo) · selector-opciones (variantes que elige: tamaño, extra, cantidad, recurrencia) · flujo-pedido (el paso que convierte: carrito->pago->confirmación, mínimo de pasos) · señal-confirmacion (el evento que re-lee tras cada acción — SIEMPRE pareada a toda hoja de acción) · reenganche (lo que trae de vuelta: recordatorio, aviso, oferta recurrente, del FM0).\n\nDevuelve SOLO el markdown del esquema completo, con el árbol maestro del recorrido del cliente, los huecos [ABIERTO], los apartados web (H2 por apartado), las formas de cada hoja y las invariantes.",
+      "valida": {
+        "tamano_min": 800
+      }
+    },
+    {
+      "paso": "escribir_esquema",
+      "tipo": "reflejo",
+      "op": "escribir"
+    }
+  ],
+  "entregable": {
+    "tipo": "fs",
+    "path": "storage/esquema-cliente/esquema.md",
+    "reglas": [
+      "existe", "contenido_min"
+    ],
+    "min_chars": 800
+  },
+  "presupuesto": {
+    "generaciones_por_paso": 3,
+    "max_tokens": 32000,
+    "generacion_timeout_ms": 300000
+  }
+}

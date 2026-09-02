@@ -1,0 +1,89 @@
+{
+  "_doc": "Simulación: marketing-strategy relleno para Nonina Pizzicas. Datos realistas como si el jefe los hubiera introducido a través de marketing-strategy.update.",
+  "esquema": "marketing-strategy-v1",
+
+  "posicionamiento": {
+    "declaracion": "Pizza artesanal napolitana con masa madre y productos de temporada",
+    "propuesta_valor": "Masa madre de 72 horas, ingredientes DOP directos de Campania, horno de leña a 450°C — el sabor de Nápoles en tu barrio, sin intermediarios",
+    "atributos_deseados": [
+      "Masa madre con 72h de fermentación natural",
+      "Ingredientes DOP importados directos de Campania",
+      "Horno de leña artesano a 450°C",
+      "Del productor a tu mesa — sin intermediarios",
+      "Carta de temporada que cambia cada estación"
+    ],
+    "territorio": {
+      "categoria": "restaurante",
+      "vecinos": ["Grosso Napoletano", "Fratelli Figurato", "Mamma Mia Pizza"]
+    },
+    "credibilidad": {
+      "evidencias": [
+        "4.8 estrellas en Google con 340 reseñas",
+        "Finalista Mejor Pizza Artesanal Madrid 2025",
+        "Proveedor directo: Caseificio Di Stefano (mozzarella DOP)",
+        "\"La mejor masa que he probado en Madrid\" — El Comidista",
+        "Más de 12.000 pizzas servidas desde apertura"
+      ]
+    },
+    "consistencia": {
+      "vigente_desde": "2024-03-15",
+      "historial_giros": []
+    }
+  },
+
+  "objetivos": [
+    {
+      "id": "obj-001",
+      "meta": "Aumentar pedidos online un 30% respecto al trimestre anterior",
+      "target": { "valor": 30, "unidad": "porcentaje", "direccion": "subir" },
+      "horizonte": { "fecha": "2026-12-31", "tipo": "trimestral" },
+      "prioridad": 1,
+      "alineacion": "Reducir dependencia de plataformas de delivery externas",
+      "estado": "activo",
+      "criterio_revision": {
+        "umbral_alerta": 15,
+        "fecha_revision": "2026-10-15",
+        "accion_si_falla": "Lanzar campaña de captación con descuento primer pedido"
+      }
+    },
+    {
+      "id": "obj-002",
+      "meta": "Conseguir 500 suscriptores a la newsletter del club de pizza",
+      "target": { "valor": 500, "unidad": "suscriptores", "direccion": "subir" },
+      "horizonte": { "fecha": "2027-03-31", "tipo": "semestral" },
+      "prioridad": 2,
+      "alineacion": "Construir canal propio de comunicación directa con clientes",
+      "estado": "activo"
+    }
+  ],
+
+  "alineacion_negocio": [
+    { "objetivo_id": "obj-001", "proposito_negocio": "Margen operativo: pedidos directos = 25% más margen que Glovo/UberEats" },
+    { "objetivo_id": "obj-002", "proposito_negocio": "Retención: email = canal con mejor ROI para repetición de compra" }
+  ],
+
+  "conocimiento_disponible": {
+    "sabemos": [
+      "El 65% de nuestros clientes vienen por recomendación",
+      "El ticket medio es 18.50€ en local y 24€ en delivery",
+      "Los viernes y sábados concentran el 55% de la facturación",
+      "La mozzarella DOP es el argumento que más convence"
+    ],
+    "no_sabemos": [
+      "Qué porcentaje de clientes de delivery repetiría si pidiera directo",
+      "Si los clientes valoran más la masa madre o los ingredientes DOP",
+      "Cuál es el radio de influencia real (¿barrio? ¿distrito? ¿ciudad?)"
+    ]
+  },
+
+  "revisiones": {
+    "proxima": "2026-10-15",
+    "historial": [
+      {
+        "fecha": "2026-06-01",
+        "resultado": "En línea — pedidos online +18%, newsletter en 230 suscriptores",
+        "acciones": ["Mantener campaña de Instagram", "Probar flyer con QR en cajas de delivery"]
+      }
+    ]
+  }
+}

@@ -93,6 +93,23 @@
       "ejecuciones": 0,
       "ultima_ejecucion": null,
       "modulos_procesados": []
+    },
+    {
+      "name": "fase-0-marketing",
+      "description": "Entrevista al dueño para rellenar los 12 módulos de marketing usando identidad F0 + playbook discovery + skills de la cantera. Entregable: fm0.md",
+      "archivo": "fase-0-marketing.json",
+      "tags": [
+        "marketing",
+        "fase0",
+        "entrevista",
+        "interactivo",
+        "discovery",
+        "onboarding"
+      ],
+      "creado": "2026-09-02",
+      "ejecuciones": 0,
+      "ultima_ejecucion": null,
+      "modulos_procesados": []
     }
   ]
 }

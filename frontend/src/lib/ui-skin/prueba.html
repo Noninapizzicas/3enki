@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Prueba Skin Engine — PielJSON → CSS</title>
+  <style>
+    /* ═══ L0 Reset (inline para la prueba) ═══ */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; }
+    body { line-height: 1.5; -webkit-font-smoothing: antialiased; }
+    img { display: block; max-width: 100%; }
+
+    /* ═══ L1 Tokens atómicos — DEFAULTS (el skin-engine los sobreescribe) ═══ */
+    :root {
+      /* Neutral */
+      --c-neutral-0:   oklch(1.000 0 0);
+      --c-neutral-50:  oklch(0.970 0.001 286);
+      --c-neutral-100: oklch(0.930 0.002 286);
+      --c-neutral-200: oklch(0.870 0.003 286);
+      --c-neutral-300: oklch(0.780 0.004 286);
+      --c-neutral-400: oklch(0.660 0.005 286);
+      --c-neutral-500: oklch(0.550 0.005 286);
+      --c-neutral-600: oklch(0.440 0.005 286);
+      --c-neutral-700: oklch(0.370 0.004 286);
+      --c-neutral-800: oklch(0.280 0.003 286);
+      --c-neutral-900: oklch(0.180 0.002 286);
+      --c-neutral-950: oklch(0.130 0.002 286);
+
+      /* Primary (default azul) */
+      --c-primary-50:  oklch(0.970 0.015 250);
+      --c-primary-100: oklch(0.930 0.040 250);
+      --c-primary-200: oklch(0.870 0.070 250);
+      --c-primary-300: oklch(0.780 0.110 250);
+      --c-primary-400: oklch(0.700 0.140 250);
+      --c-primary-500: oklch(0.600 0.160 250);
+      --c-primary-600: oklch(0.500 0.150 250);
+      --c-primary-700: oklch(0.420 0.130 250);
+      --c-primary-800: oklch(0.340 0.100 250);
+      --c-primary-900: oklch(0.270 0.070 250);
+
+      /* Accent (default teal) */
+      --c-accent-50:  oklch(0.970 0.020 170);
+      --c-accent-400: oklch(0.700 0.140 170);
+      --c-accent-500: oklch(0.600 0.150 170);
+      --c-accent-600: oklch(0.500 0.130 170);
+
+      /* Spacing */
+      --sp-1: 0.25rem; --sp-2: 0.5rem; --sp-3: 0.75rem; --sp-4: 1rem;
+      --sp-6: 1.5rem; --sp-8: 2rem; --sp-12: 3rem; --sp-16: 4rem;
+
+      /* Type scale */
+      --fs-xs: 0.64rem; --fs-sm: 0.8rem; --fs-base: 1rem;
+      --fs-md: 1.25rem; --fs-lg: 1.563rem; --fs-xl: 1.953rem;
+      --fs-2xl: 2.441rem; --fs-3xl: 3.052rem;
+
+      /* Fonts */
+      --font-sans:    system-ui, -apple-system, sans-serif;
+      --font-display: var(--font-sans);
+      --font-mono:    monospace;
+
+      /* Radii */
+      --radius-sm: 0.25rem; --radius-md: 0.375rem; --radius-lg: 0.5rem;
+      --radius-xl: 0.75rem; --radius-2xl: 1rem;
+
+      /* Shadows */
+      --shadow-sm:  0 1px 3px oklch(0 0 0 / 0.1);
+      --shadow-md:  0 4px 6px oklch(0 0 0 / 0.1);
+      --shadow-lg:  0 10px 15px oklch(0 0 0 / 0.1);
+
+      /* Motion */
+      --dur-fast: 100ms; --dur-normal: 200ms; --dur-slow: 300ms;
+      --ease-default: cubic-bezier(0.4, 0, 0.2, 1);
+      --ease-out: cubic-bezier(0, 0, 0.2, 1);
+    }
+
+    /* ═══ L2 Tokens semánticos ═══ */
+    :root {
+      --surface-base:    var(--c-neutral-0);
+      --surface-raised:  var(--c-neutral-50);
+      --surface-overlay: var(--c-neutral-100);
+
+      --text-primary:   var(--c-neutral-950);
+      --text-secondary: var(--c-neutral-600);
+      --text-inverse:   var(--c-neutral-0);
+
+      --action-primary:       var(--c-primary-500);
+      --action-primary-hover: var(--c-primary-600);
+
+      --border-default: var(--c-neutral-200);
+      --border-subtle:  var(--c-neutral-100);
+
+      --space-section-gap: var(--sp-16);
+      --space-card-padding: var(--sp-6);
+
+      --radius-card:   var(--radius-lg);
+      --radius-button: var(--radius-md);
+
+      --shadow-card: var(--shadow-sm);
+    }
+
+    /* ═══ L4 Tipografía ═══ */
+    body {
+      font-family: var(--font-sans);
+      font-size: var(--fs-base);
+      color: var(--text-primary);
+      background: var(--surface-base);
+    }
+
+    /* ═══ L7 Motion ═══ */
+    .transition { transition: all var(--dur-normal) var(--ease-default); }
+
+    /* ═══ Layout de la prueba ═══ */
+    .page { max-width: 64rem; margin: 0 auto; padding: var(--sp-8); }
+
+    .hero {
+      background: var(--c-primary-500);
+      color: var(--text-inverse);
+      padding: var(--sp-16) var(--sp-8);
+      border-radius: var(--radius-card);
+      margin-bottom: var(--space-section-gap);
+      text-align: center;
+    }
+    .hero h1 {
+      font-family: var(--font-display);
+      font-size: var(--fs-3xl);
+      font-weight: 700;
+      line-height: 1.2;
+      margin-bottom: var(--sp-4);
+    }
+    .hero p {
+      font-size: var(--fs-md);
+      opacity: 0.9;
+      max-width: 36rem;
+      margin: 0 auto;
+    }
+
+    .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr)); gap: var(--sp-6); margin-bottom: var(--space-section-gap); }
+
+    .card {
+      background: var(--surface-raised);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-card);
+      padding: var(--space-card-padding);
+      box-shadow: var(--shadow-card);
+      transition: box-shadow var(--dur-normal) var(--ease-default), transform var(--dur-normal) var(--ease-out);
+    }
+    .card:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }
+    .card h3 {
+      font-family: var(--font-display);
+      font-size: var(--fs-lg);
+      font-weight: 600;
+      margin-bottom: var(--sp-2);
+      color: var(--c-primary-700);
+    }
+    .card p { color: var(--text-secondary); font-size: var(--fs-sm); }
+
+    .btn {
+      display: inline-block;
+      background: var(--action-primary);
+      color: var(--text-inverse);
+      padding: var(--sp-3) var(--sp-6);
+      border-radius: var(--radius-button);
+      border: none;
+      font-family: var(--font-sans);
+      font-size: var(--fs-sm);
+      font-weight: 600;
+      cursor: pointer;
+      transition: background var(--dur-fast) var(--ease-default);
+    }
+    .btn:hover { background: var(--action-primary-hover); }
+
+    .testimonial {
+      background: var(--surface-overlay);
+      border-left: 4px solid var(--c-accent-500);
+      padding: var(--sp-6);
+      border-radius: 0 var(--radius-card) var(--radius-card) 0;
+      margin-bottom: var(--space-section-gap);
+    }
+    .testimonial blockquote {
+      font-family: var(--font-display);
+      font-size: var(--fs-md);
+      font-style: italic;
+      color: var(--text-primary);
+      margin-bottom: var(--sp-2);
+    }
+    .testimonial cite { font-size: var(--fs-sm); color: var(--text-secondary); font-style: normal; }
+
+    /* ═══ Panel de control ═══ */
+    .controls {
+      position: fixed;
+      bottom: var(--sp-4);
+      right: var(--sp-4);
+      background: var(--c-neutral-900);
+      color: var(--c-neutral-100);
+      padding: var(--sp-4);
+      border-radius: var(--radius-xl);
+      box-shadow: var(--shadow-lg);
+      z-index: 100;
+      font-family: system-ui, sans-serif;
+      font-size: 13px;
+      min-width: 200px;
+    }
+    .controls h4 { margin-bottom: var(--sp-2); font-size: 14px; }
+    .controls button {
+      display: block; width: 100%;
+      padding: 8px 12px; margin: 4px 0;
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 6px;
+      background: rgba(255,255,255,0.08);
+      color: inherit;
+      cursor: pointer;
+      font-size: 12px;
+      text-align: left;
+    }
+    .controls button:hover { background: rgba(255,255,255,0.15); }
+    .controls button.active { background: rgba(255,255,255,0.2); border-color: rgba(255,255,255,0.4); }
+    .controls .label { color: rgba(255,255,255,0.5); font-size: 11px; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <section class="hero">
+      <h1>Pizza artesanal napolitana</h1>
+      <p>Masa madre de 72 horas, ingredientes DOP directos de Campania, horno de leña a 450°C</p>
+      <br>
+      <button class="btn">Pedir ahora</button>
+    </section>
+
+    <section class="cards">
+      <div class="card">
+        <h3>Masa madre 72h</h3>
+        <p>Fermentación lenta que reduce el índice glucémico un 30%. No es marketing — es bioquímica.</p>
+      </div>
+      <div class="card">
+        <h3>Ingredientes DOP</h3>
+        <p>Mozzarella di bufala de Di Stefano, tomates San Marzano, aceite de oliva extra virgen.</p>
+      </div>
+      <div class="card">
+        <h3>Horno de leña</h3>
+        <p>450°C. La corteza se carameliza en 90 segundos. El centro queda elástico y húmedo.</p>
+      </div>
+    </section>
+
+    <section class="testimonial">
+      <blockquote>"La mejor masa que he probado en Madrid. Los niños ya dicen 'hoy toca Nonina' como si fuera un evento."</blockquote>
+      <cite>— Laura López, clienta desde octubre 2025</cite>
+    </section>
+  </div>
+
+  <!-- Panel de control: cambiar de piel en vivo -->
+  <div class="controls">
+    <h4>Skin Engine</h4>
+    <div class="label">PIELES</div>
+    <button onclick="aplicar('default')" id="btn-default" class="active">Default (sin piel)</button>
+    <button onclick="aplicar('nonina')" id="btn-nonina">Nonina Pizzicas</button>
+    <button onclick="aplicar('fintech')" id="btn-fintech">Fintech Pro</button>
+    <button onclick="aplicar('infantil')" id="btn-infantil">Tienda Infantil</button>
+    <div class="label" style="margin-top:12px">CARA</div>
+    <button onclick="cambiarCara('marketing')" id="btn-marketing" class="active">Marketing</button>
+    <button onclick="cambiarCara('trabajo')" id="btn-trabajo">Trabajo</button>
+  </div>
+
+  <script>
+    // ══════════════════════════════════════════════════
+    // skin-engine.js — versión inline para la prueba
+    // (en producción, este código vive en skin-engine.ts)
+    // ══════════════════════════════════════════════════
+
+    function generarPaletaColor(prefix, hue, chroma) {
+      const steps = [
+        ['50',  0.970, 0.30], ['100', 0.930, 0.55], ['200', 0.870, 0.75],
+        ['300', 0.780, 0.90], ['400', 0.700, 1.00], ['500', 0.600, 1.00],
+        ['600', 0.500, 0.90], ['700', 0.420, 0.78], ['800', 0.340, 0.62],
+        ['900', 0.270, 0.45], ['950', 0.200, 0.28],
+      ];
+      const vars = {};
+      for (const [step, lightness, chromaFactor] of steps) {
+        vars[`--c-${prefix}-${step}`] = `oklch(${lightness} ${(chroma * chromaFactor).toFixed(3)} ${hue})`;
+      }
+      return vars;
+    }
+
+    function generarPaletaNeutral(hue, chroma) {
+      const tint = Math.min(chroma, 0.01);
+      const steps = [
+        ['0', 1.000], ['50', 0.970], ['100', 0.930], ['200', 0.870],
+        ['300', 0.780], ['400', 0.660], ['500', 0.550], ['600', 0.440],
+        ['700', 0.370], ['800', 0.280], ['900', 0.180], ['950', 0.130],
+      ];
+      const vars = {};
+      for (const [step, lightness] of steps) {
+        vars[`--c-neutral-${step}`] = `oklch(${lightness.toFixed(3)} ${tint.toFixed(3)} ${hue})`;
+      }
+      return vars;
+    }
+
+    function generarRadii(factor) {
+      const b = 0.25 * factor;
+      return {
+        '--radius-sm': b + 'rem', '--radius-md': (b*1.5) + 'rem',
+        '--radius-lg': (b*2) + 'rem', '--radius-xl': (b*3) + 'rem',
+        '--radius-2xl': (b*4) + 'rem',
+      };
+    }
+
+    function generarMotion(expresividad) {
+      const s = 0.5 + expresividad * 1.5;
+      return {
+        '--dur-fast': Math.round(100*s)+'ms', '--dur-normal': Math.round(200*s)+'ms',
+        '--dur-slow': Math.round(300*s)+'ms', '--dur-slower': Math.round(500*s)+'ms',
+      };
+    }
+
+    function generarSombras(difuminado) {
+      const o = 0.03 + (1-difuminado)*0.07;
+      return {
+        '--shadow-sm': `0 1px ${Math.round(3*(0.5+difuminado))}px oklch(0 0 0 / ${(o*1.5).toFixed(2)})`,
+        '--shadow-md': `0 4px ${Math.round(6*(0.5+difuminado))}px oklch(0 0 0 / ${(o*1.2).toFixed(2)})`,
+        '--shadow-lg': `0 10px ${Math.round(15*(0.5+difuminado))}px oklch(0 0 0 / ${o.toFixed(2)})`,
+      };
+    }
+
+    function aplicarCara(cara) {
+      const vars = {
+        ...generarPaletaColor('primary', cara.color.primary.hue, cara.color.primary.chroma),
+        ...generarPaletaColor('accent', cara.color.accent.hue, cara.color.accent.chroma),
+        ...generarPaletaNeutral(cara.color.neutral.hue, cara.color.neutral.chroma),
+        '--font-display': cara.tipografia.display,
+        '--font-sans': cara.tipografia.body,
+        ...generarRadii(cara.radii.factor),
+        ...generarMotion(cara.motion.expresividad),
+        ...generarSombras(cara.sombras.difuminado),
+      };
+      const root = document.documentElement;
+      window._varsInyectadas = window._varsInyectadas || [];
+      for (const k of window._varsInyectadas) root.style.removeProperty(k);
+      window._varsInyectadas = Object.keys(vars);
+      for (const [k,v] of Object.entries(vars)) root.style.setProperty(k, v);
+    }
+
+    // ══════════════════════════════════════════════════
+    // PIELES DE EJEMPLO — lo que el blueprint generaría
+    // ══════════════════════════════════════════════════
+
+    const PIELES = {
+      nonina: {
+        marketing: {
+          color: {
+            primary: { hue: 25, chroma: 0.14 },    // terracota cálido — restaurante artesanal
+            accent:  { hue: 85, chroma: 0.12 },     // oliva — ingredientes, naturaleza
+            neutral: { hue: 40, chroma: 0.008 },    // neutro cálido — acogedor
+          },
+          tipografia: {
+            display: "'Playfair Display', 'Georgia', serif",
+            body: "'Source Sans 3', 'Segoe UI', system-ui, sans-serif",
+          },
+          radii: { factor: 1.2 },                   // generoso — artesanal, orgánico
+          motion: { expresividad: 0.8 },             // expresivo — cercano, vivo
+          sombras: { difuminado: 0.7 },              // suaves — cálido, acogedor
+        },
+        trabajo: {
+          color: {
+            primary: { hue: 25, chroma: 0.06 },     // mismo hue, menos saturado
+            accent:  { hue: 85, chroma: 0.04 },
+            neutral: { hue: 40, chroma: 0.003 },
+          },
+          tipografia: {
+            display: "system-ui, sans-serif",
+            body: "system-ui, sans-serif",
+          },
+          radii: { factor: 0.8 },
+          motion: { expresividad: 0.2 },             // rápido, funcional
+          sombras: { difuminado: 0.3 },
+        },
+      },
+
+      fintech: {
+        marketing: {
+          color: {
+            primary: { hue: 240, chroma: 0.15 },    // azul confianza
+            accent:  { hue: 170, chroma: 0.10 },     // teal — datos, crecimiento
+            neutral: { hue: 240, chroma: 0.005 },    // neutro frío — profesional
+          },
+          tipografia: {
+            display: "'Inter', 'Helvetica Neue', sans-serif",
+            body: "'Inter', 'Helvetica Neue', sans-serif",
+          },
+          radii: { factor: 0.6 },                    // tight — limpio, preciso
+          motion: { expresividad: 0.3 },              // contenido — profesional
+          sombras: { difuminado: 0.4 },               // ligeras — clean
+        },
+        trabajo: {
+          color: {
+            primary: { hue: 240, chroma: 0.05 },
+            accent:  { hue: 170, chroma: 0.04 },
+            neutral: { hue: 240, chroma: 0.003 },
+          },
+          tipografia: {
+            display: "system-ui, sans-serif",
+            body: "system-ui, sans-serif",
+          },
+          radii: { factor: 0.5 },
+          motion: { expresividad: 0.1 },
+          sombras: { difuminado: 0.2 },
+        },
+      },
+
+      infantil: {
+        marketing: {
+          color: {
+            primary: { hue: 320, chroma: 0.18 },    // rosa/magenta — juguetón
+            accent:  { hue: 60, chroma: 0.16 },      // amarillo — alegre
+            neutral: { hue: 300, chroma: 0.006 },    // neutro ligeramente cálido
+          },
+          tipografia: {
+            display: "'Fredoka', 'Comic Neue', 'Rounded Mplus 1c', sans-serif",
+            body: "'Nunito', 'Quicksand', system-ui, sans-serif",
+          },
+          radii: { factor: 2.0 },                    // pill — infantil, suave
+          motion: { expresividad: 1.0 },              // muy expresivo — divertido
+          sombras: { difuminado: 0.9 },               // muy suaves — amigable
+        },
+        trabajo: {
+          color: {
+            primary: { hue: 320, chroma: 0.05 },
+            accent:  { hue: 60, chroma: 0.04 },
+            neutral: { hue: 300, chroma: 0.003 },
+          },
+          tipografia: {
+            display: "system-ui, sans-serif",
+            body: "system-ui, sans-serif",
+          },
+          radii: { factor: 0.8 },
+          motion: { expresividad: 0.2 },
+          sombras: { difuminado: 0.3 },
+        },
+      },
+    };
+
+    // ══════════════════════════════════════════════════
+    // Control
+    // ══════════════════════════════════════════════════
+
+    let pielActual = 'default';
+    let caraActual = 'marketing';
+
+    function aplicar(nombre) {
+      pielActual = nombre;
+      document.querySelectorAll('.controls button[id^="btn-"]').forEach(b => {
+        if (b.id.startsWith('btn-default') || b.id.startsWith('btn-nonina') || b.id.startsWith('btn-fintech') || b.id.startsWith('btn-infantil'))
+          b.classList.toggle('active', b.id === 'btn-' + nombre);
+      });
+      if (nombre === 'default') {
+        const root = document.documentElement;
+        (window._varsInyectadas || []).forEach(k => root.style.removeProperty(k));
+        window._varsInyectadas = [];
+        return;
+      }
+      const piel = PIELES[nombre];
+      if (!piel) return;
+      aplicarCara(piel[caraActual]);
+    }
+
+    function cambiarCara(cara) {
+      caraActual = cara;
+      document.getElementById('btn-marketing').classList.toggle('active', cara === 'marketing');
+      document.getElementById('btn-trabajo').classList.toggle('active', cara === 'trabajo');
+      if (pielActual !== 'default') aplicar(pielActual);
+    }
+  </script>
+</body>
+</html>

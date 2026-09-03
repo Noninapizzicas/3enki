@@ -1,29 +1,24 @@
 {
   "name": "esquematizador-que-construir",
-  "description": "FM1 (Fase Marketing 1): deriva QUÉ crear para cubrir los objetivos de fase-0 + fm0. Produce storage/marketing/fm1.md con las piezas a construir (sin asumir web, sin catálogo, lo que no existe se marca a_crear).",
+  "description": "FM1 (Fase Marketing 1): deriva QUÉ crear para cubrir los objetivos de fase-0 + fm0, produce storage/marketing/fm1.md",
   "identidad": {
     "role": "Esquematizador de QUÉ construir (FM1) de Enki",
-    "goal": "Derivar de la lógica de FASE 0 + FM0 qué interfaces/artefactos hay que CREAR para cubrir los objetivos del negocio, y persistirlo en storage/marketing/fm1.md",
-    "backstory": "Eres el esquematizador de QUÉ construir. Naces de la LÓGICA, no de un catálogo: lees la FASE 0 (storage/proceso-negocio/fase0-identidad-negocio.json) y el FM0 (storage/marketing/fm0.md) y respondes a la pregunta rectora '¿qué tenemos que CREAR para cubrir los objetivos de estas bases?'. No asumes web ni catálogo: puede resultar 1 o 2 interfaces, una app web, una PWA, una app móvil, un dashboard, un bot — lo que la lógica pida. Lo que no existe se marca a_crear (se crea con construir-modulos/generar-ui-web/adaptar-a-enki). Los frenos suman: cada pieza convierte un freno del negocio en una oportunidad. Nunca inventas datos que no estén en fase-0 ni fm0."
+    "goal": "Derivar de la lógica de FASE 0 + FM0 qué crear para cubrir los objetivos del negocio, y persistirlo en storage/marketing/fm1.md",
+    "backstory": "Naces de la LÓGICA, no de un catálogo. Lees FASE 0 + FM0 y respondes '¿qué tenemos que CREAR?'. No asumes web ni catálogo: interfaces, app web, PWA, móvil, dashboard, bot — lo que la lógica pida. Lo que no existe se marca a_crear. Los frenos suman. Nunca inventas datos que no estén en fase-0 ni fm0."
   },
   "pasos": [
     {
-      "paso": "leer_bases",
-      "tipo": "reflejo",
-      "op": "leer_bases",
-      "_detalle": "Lee storage/proceso-negocio/fase0-identidad-negocio.json y storage/marketing/fm0.md del proyecto."
-    },
-    {
       "paso": "derivar_que_construir",
       "tipo": "fuzzy",
-      "instruccion": "PRIMERA PREGUNTA RECTORA, derivada SOLO de la lógica del negocio. Con la FASE 0 (qué es, qué vende, cómo lo elabora) y el FM0 (qué prometer, a quién, canales, embudo, diferenciación, objetivos) delante, responde: '¿QUÉ tenemos que CREAR para cubrir los objetivos de estos dos documentos?'. Deriva el QUÉ y el PORQUÉ de cada pieza. NO asumas web: puede resultar 1 o 2 interfaces distintas (cliente que compra / jefe que decide), una app web, una PWA instalable, una app móvil, un dashboard, un bot — lo que la lógica pida, sin límite de catálogo ni inventario. Para cada pieza: nombre, tipo, cara (cliente/jefe/neutro), objetivo que sirve, y POR QUÉ la lógica la exige (qué freno convierte en oportunidad). Si una pieza no existe aún, márcala 'a_crear' — lo que no hay se crea. Devuelve el contenido del documento FM1 completo en markdown con estructura: # FM1 — Qué construir · objetivo (derivado de fase-0 + fm0) · lista de PIEZAS (una por bloque: nombre, tipo, cara, objetivo, porque, estado: existe/a_crear) · frenos que cada pieza convierte en oportunidad · preguntas abiertas. PROHIBIDO inventar datos que no estén en fase-0 ni fm0.",
-      "valida": { "tamano_min": 500 }
+      "instruccion": "PRIMERA PREGUNTA RECTORA. Con FASE 0 + FM0 delante responde '¿QUÉ tenemos que CREAR que cubra los objetivos?'. Deriva el QUÉ y PORQUÉ de cada pieza. NO asumas web: interfaces, PWA, app móvil, dashboard, bot — lo que la lógica pida, sin catálogo ni inventario. Para cada pieza: nombre, tipo, cara (cliente/jefe/neutro), objetivo, porqué (freno que convierte en oportunidad). Lo que no existe se marca a_crear (se crea con construir-modulos/generar-ui-web/adaptar-a-enki). Devuelve el documento FM1 completo en markdown: # FM1 — Qué construir · objetivo (derivado de fase-0+fm0) · lista de PIEZAS (una por bloque: nombre, tipo, cara, objetivo, porque, estado: existe/a_crear) · frenos que cada pieza convierte en oportunidad · preguntas abiertas (nunca inventar datos que no estén en fase-0 ni fm0).",
+      "valida": {
+        "tamano_min": 500
+      }
     },
     {
       "paso": "escribir_fm1",
       "tipo": "reflejo",
-      "op": "escribir",
-      "_detalle": "Escribe el FM1 en storage/marketing/fm1.md (junto a fm0.md, en la carpeta marketing). Ruta EXACTA: storage/marketing/fm1.md — NO crear subcarpetas ni cambiar el nombre."
+      "op": "escribir"
     },
     {
       "paso": "verificar",
@@ -34,7 +29,11 @@
   "entregable": {
     "tipo": "fs",
     "path": "storage/marketing/fm1.md",
-    "reglas": ["existe", "contenido_min"],
+    "reglas": [
+      "existe",
+      "en_repo",
+      "contenido_min"
+    ],
     "min_chars": 500
   },
   "presupuesto": {

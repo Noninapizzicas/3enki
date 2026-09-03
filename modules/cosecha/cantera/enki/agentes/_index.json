@@ -110,6 +110,27 @@
       "ejecuciones": 0,
       "ultima_ejecucion": null,
       "modulos_procesados": []
+    },
+    {
+      "name": "esquematizador-interfaz-cliente",
+      "description": "FASE 2 (lente CLIENTE): esquematiza la cara de consumo del negocio (qué elige, compra, repite el cliente) para producir el esquema que un agente de UI convierte en la interfaz pública. Nace de la lógica de FASE 0 + FM0.",
+      "archivo": "esquematizador-interfaz-cliente.json",
+      "tags": [
+        "esquema",
+        "cliente",
+        "roles",
+        "ui",
+        "web",
+        "marketing",
+        "prisma",
+        "fm0",
+        "css",
+        "frontend"
+      ],
+      "creado": "2026-09-03",
+      "ejecuciones": 0,
+      "ultima_ejecucion": null,
+      "modulos_procesados": []
     }
   ]
 }

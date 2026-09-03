@@ -93,6 +93,23 @@
       "ejecuciones": 0,
       "ultima_ejecucion": null,
       "modulos_procesados": []
+    },
+    {
+      "name": "esquematizador-que-construir",
+      "description": "FM1 (Fase Marketing 1): deriva QUÉ crear para cubrir los objetivos de fase-0 + fm0. Produce storage/marketing/fm1.md con las piezas a construir (sin asumir web, sin catálogo, lo que no existe se marca a_crear).",
+      "archivo": "esquematizador-que-construir.json",
+      "tags": [
+        "marketing",
+        "fm1",
+        "que-construir",
+        "esquema",
+        "proceso",
+        "pipeline"
+      ],
+      "creado": "2026-09-03",
+      "ejecuciones": 0,
+      "ultima_ejecucion": null,
+      "modulos_procesados": []
     }
   ]
 }

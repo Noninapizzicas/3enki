@@ -56,7 +56,7 @@
     type Ingrediente,
     type PrecioLoteFila
   } from './stores/ingredientes';
-  import { activeProjectId } from '$lib/stores/projects';
+  import { sessionProjectId } from '$lib/stores/sessionProject';
 
   export let panelId: string = '';
 
@@ -244,7 +244,7 @@
   // Reaccionar al proyecto activo: cargar o vaciar (multi-tenant).
   let ultimoProjectId = '';
   $: {
-    const pid = $activeProjectId;
+    const pid = $sessionProjectId;
     if (typeof pid === 'string' && pid && pid !== ultimoProjectId) {
       ultimoProjectId = pid;
       void loadCatalogo();
@@ -311,7 +311,7 @@
   </div>
 
   <!-- CAPA 2-3 · tarjetas-ficha con precio inline -->
-  {#if !$activeProjectId}
+  {#if !$sessionProjectId}
     <div class="vacio">sin proyecto activo</div>
   {:else if $cinta.total === 0}
     <div class="vacio">catálogo vacío</div>

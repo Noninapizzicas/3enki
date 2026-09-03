@@ -43,7 +43,7 @@
 import { writable, derived, get } from 'svelte/store';
 import { mqttRequest, MqttRequestError, MqttTimeoutError } from '$lib/ui-core/mqtt-request';
 import { subscribe as mqttSubscribe } from '$lib/ui-core/mqtt';
-import { activeProjectId } from '$lib/stores/projects';
+import { sessionProjectId } from '$lib/stores/sessionProject';
 
 // =============================================================================
 // TIPOS — formas reales devueltas por cobro.list / cobro.get (index.js)
@@ -212,7 +212,7 @@ export async function loadCinta(pid: string): Promise<void> {
 
 /** Detalle fresco del servidor para el confirmador de transición (opcional). */
 export async function pedirCobro(cobroId: string): Promise<Cobro | null> {
-  const pid = get(activeProjectId);
+  const pid = get(sessionProjectId);
   if (!pid) return null;
   try {
     const res = await mqttRequest<{ cobro?: Cobro }>('cobro', 'get', { project_id: pid, id: cobroId });
@@ -237,7 +237,7 @@ export function resetCobros(): void {
 
 /** Confirma un cobro pendiente/procesando → completado (LA TRANSICIÓN). */
 export async function confirmarCobro(cobroId: string, referenciaPago?: string): Promise<void> {
-  const pid = get(activeProjectId);
+  const pid = get(sessionProjectId);
   if (!pid) throw new Error('sin proyecto activo');
   mutacionesPendientes.update((n) => n + 1);
   errorMutacion.set(null);
@@ -258,7 +258,7 @@ export async function confirmarCobro(cobroId: string, referenciaPago?: string): 
 
 /** Reembolsa un cobro completado → reembolsado (transición inversa). */
 export async function reembolsarCobro(cobroId: string, motivo?: string): Promise<void> {
-  const pid = get(activeProjectId);
+  const pid = get(sessionProjectId);
   if (!pid) throw new Error('sin proyecto activo');
   mutacionesPendientes.update((n) => n + 1);
   errorMutacion.set(null);
@@ -306,18 +306,18 @@ export function initCobrosSubscriptions(): () => void {
   let recargaProgramada: ReturnType<typeof setTimeout> | null = null;
 
   function encolarRecarga(): void {
-    const pid = get(activeProjectId);
+    const pid = get(sessionProjectId);
     if (!pid) return;
     if (recargaProgramada) return; // debounce: las señales llegan en tándem
     recargaProgramada = setTimeout(() => {
       recargaProgramada = null;
-      const activo = get(activeProjectId);
+      const activo = get(sessionProjectId);
       if (activo) void loadCinta(activo);
     }, 60);
   }
 
   function onSenal(envelope: unknown): void {
-    const activo = get(activeProjectId);
+    const activo = get(sessionProjectId);
     if (!activo) return;
     const pid = extraerProjectId(envelope);
     if (pid !== undefined && pid !== activo) return; // señal de otro proyecto

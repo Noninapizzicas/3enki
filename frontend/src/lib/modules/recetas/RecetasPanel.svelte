@@ -58,7 +58,7 @@
     type CatalogoIngrediente,
     type ValidarDictamen
   } from './stores/recetas';
-  import { activeProjectId } from '$lib/stores/projects';
+  import { sessionProjectId } from '$lib/stores/sessionProject';
 
   export let panelId: string = '';
 
@@ -190,7 +190,7 @@
   // Reaccionar al proyecto activo: cargar o vaciar (multi-tenant).
   let ultimoProjectId = '';
   $: {
-    const pid = $activeProjectId;
+    const pid = $sessionProjectId;
     if (typeof pid === 'string' && pid && pid !== ultimoProjectId) {
       ultimoProjectId = pid;
       void loadRecetario();
@@ -248,7 +248,7 @@
     <button class="btn-jefe" on:click={abrirCrear}>Crear receta</button>
   </div>
 
-  {#if !$activeProjectId}
+  {#if !$sessionProjectId}
     <div class="vacio">sin proyecto activo</div>
   {:else if $cinta.total === 0}
     <div class="vacio">recetario vacío — crea la primera receta</div>

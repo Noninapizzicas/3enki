@@ -46,7 +46,7 @@
 import { writable, derived, get } from 'svelte/store';
 import { mqttRequest, MqttRequestError, MqttTimeoutError } from '$lib/ui-core/mqtt-request';
 import { subscribe as mqttSubscribe } from '$lib/ui-core/mqtt';
-import { activeProjectId } from '$lib/stores/projects';
+import { sessionProjectId } from '$lib/stores/sessionProject';
 
 // =============================================================================
 // TIPOS — formas reales del contrato marca-v1 (DEFAULT_REGLAS, index.js L9-27)
@@ -178,7 +178,7 @@ export function csvFromArray(a: string[] | undefined): string {
 /** Carga la relación vigente. SIN 404: siempre hay respuesta (estructura
  *  completa — INV3). El panel representa vacío como "por declarar". */
 export async function loadMarca(): Promise<void> {
-  const pid = get(activeProjectId);
+  const pid = get(sessionProjectId);
   if (!pid) return;
   lecturaLoading.set(true);
   lecturaError.set(null);
@@ -210,7 +210,7 @@ async function actualizarReglas(
   bloque: string,
   cambios: Record<string, unknown>
 ): Promise<DictamenDeclaracion> {
-  const pid = get(activeProjectId);
+  const pid = get(sessionProjectId);
   if (!pid) throw new Error('sin proyecto activo');
   mutacionesPendientes.update((n) => n + 1);
   errorMutacion.set(null);
@@ -271,13 +271,13 @@ export function initMarcaSubscriptions(): () => void {
     if (recargaProgramada) return;
     recargaProgramada = setTimeout(() => {
       recargaProgramada = null;
-      const activo = get(activeProjectId);
+      const activo = get(sessionProjectId);
       if (activo) void loadMarca();
     }, 60);
   }
 
   function onSenal(envelope: unknown): void {
-    const activo = get(activeProjectId);
+    const activo = get(sessionProjectId);
     if (!activo) return;
     const pid = extraerProjectId(envelope);
     if (pid !== undefined && pid !== activo) return; // señal de otro proyecto

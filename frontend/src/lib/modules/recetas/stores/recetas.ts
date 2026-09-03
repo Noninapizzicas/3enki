@@ -52,7 +52,7 @@
 import { writable, derived, get } from 'svelte/store';
 import { mqttRequest, MqttRequestError, MqttTimeoutError } from '$lib/ui-core/mqtt-request';
 import { subscribe as mqttSubscribe } from '$lib/ui-core/mqtt';
-import { activeProjectId } from '$lib/stores/projects';
+import { sessionProjectId } from '$lib/stores/sessionProject';
 
 // =============================================================================
 // TIPOS — formas reales devueltas por recetas.listar/obtener/ingredientes
@@ -185,7 +185,7 @@ export function formatearEuros(euros: number | string | null | undefined): strin
  * con incluir_lineas:true). EXIGE project_id (lección del bug del escandallo).
  */
 export async function loadRecetario(): Promise<void> {
-  const projectId = get(activeProjectId);
+  const projectId = get(sessionProjectId);
   if (!projectId) {
     cintaError.set('project_id requerido');
     return;
@@ -208,7 +208,7 @@ export async function loadRecetario(): Promise<void> {
 
 /** Ficha completa de una receta (recetas.obtener — spread directo). */
 export async function cargarReceta(recetaId: string): Promise<Receta | null> {
-  const projectId = get(activeProjectId);
+  const projectId = get(sessionProjectId);
   if (!projectId) return null;
   try {
     const res = await mqttRequest<Receta>('recetas', 'obtener', { project_id: projectId, receta_id: recetaId });
@@ -222,7 +222,7 @@ export async function cargarReceta(recetaId: string): Promise<Receta | null> {
 
 /** Catálogo de ingredientes (recetas.ingredientes) para el ref-select de líneas. */
 export async function cargarCatalogoIngredientes(): Promise<void> {
-  const projectId = get(activeProjectId);
+  const projectId = get(sessionProjectId);
   if (!projectId) return;
   try {
     const res = await mqttRequest<{ ingredientes?: CatalogoIngrediente[]; total?: number }>(
@@ -262,7 +262,7 @@ export async function crearReceta(params: {
   lineas?: RecetaLinea[];
   notas?: string;
 }): Promise<{ receta_id: string; nombre: string; estado_operativo: string; incompleta: boolean; campos_pendientes: string[] }> {
-  const projectId = get(activeProjectId);
+  const projectId = get(sessionProjectId);
   if (!projectId) throw new Error('project_id requerido');
   mutacionesPendientes.update((n) => n + 1);
   errorMutacion.set(null);
@@ -327,7 +327,7 @@ export function initRecetasSubscriptions(): () => void {
   let recargaProgramada: ReturnType<typeof setTimeout> | null = null;
 
   function encolarRecarga(): void {
-    if (!get(activeProjectId)) return;
+    if (!get(sessionProjectId)) return;
     if (recargaProgramada) return; // debounce: señales en tándem
     recargaProgramada = setTimeout(() => {
       recargaProgramada = null;
@@ -336,7 +336,7 @@ export function initRecetasSubscriptions(): () => void {
   }
 
   function onSenal(envelope: unknown): void {
-    const activo = get(activeProjectId);
+    const activo = get(sessionProjectId);
     if (!activo) return;
     const pid = extraerProjectId(envelope);
     if (pid !== undefined && pid !== activo) return; // señal de otro proyecto

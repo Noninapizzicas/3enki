@@ -50,7 +50,7 @@
 import { writable, get } from 'svelte/store';
 import { mqttRequest, MqttRequestError, MqttTimeoutError } from '$lib/ui-core/mqtt-request';
 import { subscribe as mqttSubscribe } from '$lib/ui-core/mqtt';
-import { activeProjectId } from '$lib/stores/projects';
+import { sessionProjectId } from '$lib/stores/sessionProject';
 
 // =============================================================================
 // TIPOS — formas reales devueltas por facturas.listar / facturas.estadisticas
@@ -302,7 +302,7 @@ export async function subirFactura(
   contenidoBase64: string,
   source: FacturaSource = 'manual'
 ): Promise<{ success: boolean; duplicate?: boolean; error?: string }> {
-  const pid = get(activeProjectId);
+  const pid = get(sessionProjectId);
   if (!pid) return { success: false, error: 'sin proyecto activo' };
   mutacionesPendientes.update((n) => n + 1);
   errorMutacion.set(null);
@@ -331,7 +331,7 @@ export async function actualizarFactura(
   id: string,
   datos: Record<string, unknown>
 ): Promise<{ ok: boolean; campos?: string[]; error?: string }> {
-  const pid = get(activeProjectId);
+  const pid = get(sessionProjectId);
   if (!pid) return { ok: false, error: 'sin proyecto activo' };
   mutacionesPendientes.update((n) => n + 1);
   errorMutacion.set(null);
@@ -366,7 +366,7 @@ export async function actualizarFactura(
 
 /** H3 — relanzar el pipeline sobre la factura fallida (404 si el archivo original ya no está en disco). */
 export async function reprocesarFactura(id: string): Promise<{ ok: boolean; duplicate?: boolean; error?: string }> {
-  const pid = get(activeProjectId);
+  const pid = get(sessionProjectId);
   if (!pid) return { ok: false, error: 'sin proyecto activo' };
   mutacionesPendientes.update((n) => n + 1);
   errorMutacion.set(null);
@@ -391,7 +391,7 @@ export async function reprocesarFactura(id: string): Promise<{ ok: boolean; dupl
 export async function exportarFacturas(
   semana?: string
 ): Promise<{ ok: boolean; nombre?: string; contenidoB64?: string; total?: number; error?: string }> {
-  const pid = get(activeProjectId);
+  const pid = get(sessionProjectId);
   if (!pid) return { ok: false, error: 'sin proyecto activo' };
   mutacionesPendientes.update((n) => n + 1);
   errorMutacion.set(null);
@@ -469,13 +469,13 @@ export function initFacturasSenales(): () => void {
     if (recargaProgramada) return; // debounce: las señales llegan en tándem
     recargaProgramada = setTimeout(() => {
       recargaProgramada = null;
-      const activo = get(activeProjectId);
+      const activo = get(sessionProjectId);
       if (activo) void loadCinta(activo);
     }, 60);
   }
 
   function onSenal(envelope: unknown): void {
-    const activo = get(activeProjectId);
+    const activo = get(sessionProjectId);
     if (!activo) return;
     const pid = extraerProjectId(envelope);
     if (pid !== undefined && pid !== activo) return; // señal de otro proyecto

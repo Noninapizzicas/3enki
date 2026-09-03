@@ -54,7 +54,7 @@
 import { writable, derived, get } from 'svelte/store';
 import { mqttRequest, MqttRequestError, MqttTimeoutError } from '$lib/ui-core/mqtt-request';
 import { subscribe as mqttSubscribe } from '$lib/ui-core/mqtt';
-import { activeProjectId } from '$lib/stores/projects';
+import { sessionProjectId } from '$lib/stores/sessionProject';
 
 // =============================================================================
 // TIPOS — formas reales devueltas por recetas.listar/obtener + escandallo.*
@@ -275,7 +275,7 @@ export function formatearPrecioUnitario(precio: number | null | undefined, unida
 export async function loadResumen(): Promise<void> {
   cintaLoading.set(true);
   cintaError.set(null);
-  const projectId = get(activeProjectId);
+  const projectId = get(sessionProjectId);
   if (!projectId) {
     cintaError.set('project_id requerido');
     cintaLoading.set(false);
@@ -329,7 +329,7 @@ export function resetEscandallo(): void {
 // =============================================================================
 
 function requerirProjectId(): string | null {
-  return get(activeProjectId) ?? null;
+  return get(sessionProjectId) ?? null;
 }
 
 /**
@@ -452,7 +452,7 @@ export function initEscandalloSubscriptions(): () => void {
   let recargaProgramada: ReturnType<typeof setTimeout> | null = null;
 
   function encolarRecarga(pidSenal: string | undefined): void {
-    const activo = get(activeProjectId);
+    const activo = get(sessionProjectId);
     if (!activo) return;
     if (pidSenal !== undefined && pidSenal !== activo) return; // señal de otro proyecto
     if (recargaProgramada) return; // debounce: el lote llega como N señales en tándem
@@ -472,7 +472,7 @@ export function initEscandalloSubscriptions(): () => void {
   }
 
   function onSenal(envelope: unknown): void {
-    const activo = get(activeProjectId);
+    const activo = get(sessionProjectId);
     if (!activo) return;
     const e = envelope as { project_id?: string; data?: { project_id?: string } } | null;
     const pid = e?.project_id ?? e?.data?.project_id;

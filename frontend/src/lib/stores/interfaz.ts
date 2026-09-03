@@ -14,7 +14,7 @@ import {
   MqttRequestError
 } from '$lib/ui-core/mqtt-request';
 import { subscribe } from '$lib/ui-core/mqtt';
-import { activeProjectId } from '$lib/stores/projects';
+import { sessionProjectId } from '$lib/stores/sessionProject';
 
 // =============================================================================
 // TYPES (contrato real del módulo — modules/interfaz/index.js)
@@ -76,7 +76,7 @@ function getErrorMessage(e: unknown): string {
 }
 
 function projectIdObligatorio(): string | null {
-  const pid = get(activeProjectId);
+  const pid = get(sessionProjectId);
   if (!pid) {
     error.set('Selecciona un proyecto para usar el radar.');
     return null;

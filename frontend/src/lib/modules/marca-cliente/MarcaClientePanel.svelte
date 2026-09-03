@@ -49,7 +49,7 @@
     type MarcaFidelizacion,
     type DictamenDeclaracion
   } from './stores/marca-cliente';
-  import { activeProjectId } from '$lib/stores/projects';
+  import { sessionProjectId } from '$lib/stores/sessionProject';
 
   export let panelId: string = '';
 
@@ -98,7 +98,7 @@
   // Reacción al proyecto activo: cargar relación o vaciar (multi-tenant).
   let ultimoProjectId = '';
   $: {
-    const pid = $activeProjectId;
+    const pid = $sessionProjectId;
     if (typeof pid === 'string' && pid && pid !== ultimoProjectId) {
       ultimoProjectId = pid;
       cerrarEditores();

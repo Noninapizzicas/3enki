@@ -16,7 +16,7 @@
 import { writable, derived, get } from 'svelte/store';
 import { subscribe as mqttSubscribe } from '$lib/ui-core/mqtt';
 import { mqttRequest, MqttRequestError } from '$lib/ui-core/mqtt-request';
-import { activeProjectId } from './projects';
+import { sessionProjectId } from '$lib/stores/sessionProject';
 
 // =============================================================================
 // TYPES (preservados para no romper paneles)
@@ -251,7 +251,7 @@ export async function loadEscandalloReceta(recetaId: string, precioVenta?: numbe
 export async function loadEscandalloGlobal(): Promise<void> {
   escandalloStore.update(s => ({ ...s, loading: true, error: null }));
   try {
-    const pid = get(activeProjectId);
+    const pid = get(sessionProjectId);
     if (!pid) {
       escandalloStore.update(s => ({ ...s, loading: false }));
       return;

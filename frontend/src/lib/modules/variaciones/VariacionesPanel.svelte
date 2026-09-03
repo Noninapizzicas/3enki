@@ -45,7 +45,7 @@
     type ProductoCarta,
     type ValorOpcion
   } from './stores/variaciones';
-  import { activeProjectId } from '$lib/stores/projects';
+  import { sessionProjectId } from '$lib/stores/sessionProject';
 
   export let panelId: string = '';
 
@@ -74,7 +74,7 @@
   // Reacción al proyecto activo: cargar catálogo o vaciar (multi-tenant).
   let ultimoProjectId = '';
   $: {
-    const pid = $activeProjectId;
+    const pid = $sessionProjectId;
     if (typeof pid === 'string' && pid && pid !== ultimoProjectId) {
       ultimoProjectId = pid;
       productoSeleccionado = '';
@@ -185,7 +185,7 @@
   }
 
   function guardarPalancas(): void {
-    const pid = get(activeProjectId);
+    const pid = get(sessionProjectId);
     const producto = get(productoElegidoStore);
     if (!pid || !producto) return;
     // R6: precio_extra en EUROS (número); vacío → no se manda (precio estándar catálogo).

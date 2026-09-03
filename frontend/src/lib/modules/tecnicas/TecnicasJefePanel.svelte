@@ -52,7 +52,7 @@
     type DictamenAlta,
     type DictamenEvolucion
   } from './stores/tecnicas';
-  import { activeProjectId } from '$lib/stores/projects';
+  import { sessionProjectId } from '$lib/stores/sessionProject';
 
   export let panelId: string = '';
 
@@ -108,7 +108,7 @@
   // Reacción al proyecto activo: cargar catálogo o vaciar (multi-tenant).
   let ultimoProjectId = '';
   $: {
-    const pid = $activeProjectId;
+    const pid = $sessionProjectId;
     if (typeof pid === 'string' && pid && pid !== ultimoProjectId) {
       ultimoProjectId = pid;
       cerrarTodo();

@@ -55,7 +55,7 @@
     type DictamenValidar,
     type DictamenMargen
   } from './stores/calendario';
-  import { activeProjectId } from '$lib/stores/projects';
+  import { sessionProjectId } from '$lib/stores/sessionProject';
 
   export let panelId: string = '';
 
@@ -167,7 +167,7 @@
   // Reaccionar al proyecto activo: cargar o vaciar (multi-tenant).
   let ultimoProjectId = '';
   $: {
-    const pid = $activeProjectId;
+    const pid = $sessionProjectId;
     if (typeof pid === 'string' && pid && pid !== ultimoProjectId) {
       ultimoProjectId = pid;
       void loadCatalogoProductos();
@@ -194,7 +194,7 @@
     <div class="cinta-error">{$errorMutacion}</div>
   {/if}
 
-  {#if !$activeProjectId}
+  {#if !$sessionProjectId}
     <div class="vacio">sin proyecto activo</div>
   {:else}
     <!-- CAPA 1 · ref-select de producto -->

@@ -57,7 +57,7 @@
 import { writable, derived, get } from 'svelte/store';
 import { mqttRequest, MqttRequestError, MqttTimeoutError } from '$lib/ui-core/mqtt-request';
 import { subscribe as mqttSubscribe } from '$lib/ui-core/mqtt';
-import { activeProjectId } from '$lib/stores/projects';
+import { sessionProjectId } from '$lib/stores/sessionProject';
 
 // =============================================================================
 // TIPOS — formas reales devueltas por los ui_handler de carta-digital (index.js)
@@ -209,7 +209,7 @@ function mensajeError(err: unknown): string {
 
 /** Config vigente (SIN 404 — INV2: default nombrado si no hay fichero). */
 export async function loadConfig(): Promise<void> {
-  const pid = get(activeProjectId);
+  const pid = get(sessionProjectId);
   if (!pid) return;
   try {
     const res = await mqttRequest<ConfigCanal>('cartadigital', 'get_config', { project_id: pid });
@@ -222,7 +222,7 @@ export async function loadConfig(): Promise<void> {
 
 /** Diseño de Enki (informe; nulls si aún no compuso — estado nombrado). */
 export async function loadDiseno(): Promise<void> {
-  const pid = get(activeProjectId);
+  const pid = get(sessionProjectId);
   if (!pid) return;
   try {
     const res = await mqttRequest<DisenoCanal>('cartadigital', 'get_diseno', { project_id: pid });
@@ -234,7 +234,7 @@ export async function loadDiseno(): Promise<void> {
 
 /** Proyección al vuelo (dato de fondo de la cinta). 404 = ESTADO NOMBRADO, no error. */
 export async function loadProyeccion(): Promise<void> {
-  const pid = get(activeProjectId);
+  const pid = get(sessionProjectId);
   if (!pid) return;
   try {
     const res = await mqttRequest<CartaPublicaProyeccion>('cartadigital', 'get_carta_publica', { project_id: pid });
@@ -249,7 +249,7 @@ export async function loadProyeccion(): Promise<void> {
 
 /** Carga completa del informe (montaje del panel / re-lectura tras señal). */
 export async function loadInforme(): Promise<void> {
-  const pid = get(activeProjectId);
+  const pid = get(sessionProjectId);
   if (!pid) return;
   lecturaLoading.set(true);
   lecturaError.set(null);
@@ -286,7 +286,7 @@ export interface DictamenConfig {
 export async function declararConfig(
   campos: CamposConfig
 ): Promise<DictamenConfig> {
-  const pid = get(activeProjectId);
+  const pid = get(sessionProjectId);
   if (!pid) throw new Error('sin proyecto activo');
   mutacionesPendientes.update((n) => n + 1);
   errorMutacion.set(null);
@@ -313,7 +313,7 @@ export async function declararConfig(
 // el jefe lo pide a demanda y tras cada señal si estaba abierto (R3).
 // =============================================================================
 export async function dictaminarPreview(): Promise<PreviewDictamen> {
-  const pid = get(activeProjectId);
+  const pid = get(sessionProjectId);
   if (!pid) throw new Error('sin proyecto activo');
   mutacionesPendientes.update((n) => n + 1);
   errorMutacion.set(null);
@@ -344,7 +344,7 @@ export async function dictaminarPreview(): Promise<PreviewDictamen> {
 // sin proyección (404) o con errores de diseño → no se dispara.
 // =============================================================================
 export async function publicarCarta(): Promise<DictamenPublicacion> {
-  const pid = get(activeProjectId);
+  const pid = get(sessionProjectId);
   if (!pid) throw new Error('sin proyecto activo');
   mutacionesPendientes.update((n) => n + 1);
   errorMutacion.set(null);
@@ -400,13 +400,13 @@ export function initCartaDigitalJefeSubscriptions(): () => void {
     if (recargaProgramada) return;
     recargaProgramada = setTimeout(() => {
       recargaProgramada = null;
-      const activo = get(activeProjectId);
+      const activo = get(sessionProjectId);
       if (activo) void loadInforme();
     }, 60);
   }
 
   function onSenal(envelope: unknown): void {
-    const activo = get(activeProjectId);
+    const activo = get(sessionProjectId);
     if (!activo) return;
     const pid = extraerProjectId(envelope);
     if (pid !== undefined && pid !== activo) return; // señal de otro proyecto

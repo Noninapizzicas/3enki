@@ -13,7 +13,7 @@
 import { writable, get } from 'svelte/store';
 import { subscribe as mqttSubscribe } from '$lib/ui-core/mqtt';
 import { mqttRequest, MqttRequestError } from '$lib/ui-core/mqtt-request';
-import { activeProjectId } from './projects';
+import { sessionProjectId } from '$lib/stores/sessionProject';
 
 // =============================================================================
 // TYPES
@@ -71,7 +71,7 @@ export async function loadCartaPublica(): Promise<void> {
   cartaDigitalLoading.set(true);
   cartaDigitalError.set(null);
   try {
-    const project_id = get(activeProjectId);
+    const project_id = get(sessionProjectId);
     const res = await mqttRequest<CartaPublica>('cartadigital', 'get_carta_publica', { project_id });
     cartaPublica.set((res.data as CartaPublica) ?? null);
   } catch (err) {
@@ -88,7 +88,7 @@ export async function loadCartaPublica(): Promise<void> {
 /** Config del canal (dominio + opciones de PWA) — lo único que se edita aquí. */
 export async function loadCartaDigitalConfig(): Promise<void> {
   try {
-    const project_id = get(activeProjectId);
+    const project_id = get(sessionProjectId);
     const res = await mqttRequest<CartaDigitalConfig>('cartadigital', 'get_config', { project_id });
     cartaDigitalConfig.set((res.data as CartaDigitalConfig) ?? { _version: '1.0', opciones_visualizacion: {} });
   } catch (err) {
@@ -103,7 +103,7 @@ export async function loadCartaDigitalConfig(): Promise<void> {
 /** Actualiza el config del canal (solo dominio/opciones; el branding se edita en marketing). */
 export async function updateCartaDigitalConfig(campos: Partial<CartaDigitalConfig>): Promise<boolean> {
   try {
-    const project_id = get(activeProjectId);
+    const project_id = get(sessionProjectId);
     await mqttRequest('cartadigital', 'update_config', { project_id, campos });
     await loadCartaDigitalConfig();
     return true;
@@ -119,7 +119,7 @@ export async function updateCartaDigitalConfig(campos: Partial<CartaDigitalConfi
  */
 export async function publicarCartaDigital(): Promise<{ ok: boolean; data?: any; error?: string }> {
   try {
-    const project_id = get(activeProjectId);
+    const project_id = get(sessionProjectId);
     // Publicar es pesado (copia N imágenes al bundle + verifica el render + escribe ficheros):
     // el default de 10s se queda corto y el botón daba "Request timeout". Le damos 60s.
     const res = await mqttRequest<any>('cartadigital', 'publicar', { project_id }, { timeout: 60000 });

@@ -55,7 +55,7 @@
     type FacturaRow,
     type FacturaEstado
   } from './stores/facturas';
-  import { activeProjectId } from '$lib/stores/projects';
+  import { sessionProjectId } from '$lib/stores/sessionProject';
 
   export let panelId: string = '';
 
@@ -108,7 +108,7 @@
   // Reaccionar al proyecto activo: cargar o vaciar (multi-tenant).
   let ultimoProjectId = '';
   $: {
-    const pid = $activeProjectId;
+    const pid = $sessionProjectId;
     if (typeof pid === 'string' && pid && pid !== ultimoProjectId) {
       ultimoProjectId = pid;
       void loadCinta(pid);
@@ -501,7 +501,7 @@
           <span>♻️ {$pipelineStore.summary?.duplicates ?? 0} duplicados</span>
           <span>💰 {$pipelineStore.cost?.totalEur ?? '0'} €</span>
           <span>🔤 {Intl.NumberFormat('es-ES').format($pipelineStore.cost?.totalTokens ?? 0)} tokens</span>
-          <button class="btn-neutro" title="releer métricas del pipeline" on:click={() => { const pid = $activeProjectId; if (pid) void loadCinta(pid); }}>releer</button>
+          <button class="btn-neutro" title="releer métricas del pipeline" on:click={() => { const pid = $sessionProjectId; if (pid) void loadCinta(pid); }}>releer</button>
         </div>
       {:else}
         <div class="nota-bloque">métricas del pipeline no disponibles ahora mismo</div>

@@ -39,7 +39,7 @@
     eliminarProducto,
     describeError
   } from './stores/productos';
-  import { activeProjectId } from '$lib/stores/projects';
+  import { sessionProjectId } from '$lib/stores/sessionProject';
 
   export let panelId: string = '';
 
@@ -74,7 +74,7 @@
   // Reaccionar al proyecto activo: cargar o vaciar (multi-tenant).
   let ultimoProjectId = '';
   $: {
-    const pid = $activeProjectId;
+    const pid = $sessionProjectId;
     if (typeof pid === 'string' && pid && pid !== ultimoProjectId) {
       ultimoProjectId = pid;
       buscarTodo(pid);
@@ -120,7 +120,7 @@
   // ---- declaraciones (delegan en la store — R2) ----
 
   async function manejarToggle(id: string, disponible: boolean): Promise<void> {
-    const pid = get(activeProjectId);
+    const pid = get(sessionProjectId);
     if (!pid) return;
     limpiarError(id);
     busyId = id;
@@ -134,7 +134,7 @@
   }
 
   async function manejarPrecioConfirmado(id: string, precio: number): Promise<void> {
-    const pid = get(activeProjectId);
+    const pid = get(sessionProjectId);
     if (!pid) return;
     limpiarError(id);
     busyId = id;
@@ -148,7 +148,7 @@
   }
 
   async function manejarGuardarFicha(id: string, campos: Record<string, unknown>): Promise<void> {
-    const pid = get(activeProjectId);
+    const pid = get(sessionProjectId);
     if (!pid) return;
     fichaGuardando = true;
     fichaError = null;
@@ -163,7 +163,7 @@
   }
 
   async function manejarDesactivar(id: string): Promise<void> {
-    const pid = get(activeProjectId);
+    const pid = get(sessionProjectId);
     if (!pid) return;
     retiradaGuardando = true;
     retiradaError = null;
@@ -178,7 +178,7 @@
   }
 
   async function manejarBorrar(id: string): Promise<void> {
-    const pid = get(activeProjectId);
+    const pid = get(sessionProjectId);
     if (!pid) return;
     retiradaGuardando = true;
     retiradaError = null;

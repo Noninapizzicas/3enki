@@ -52,7 +52,7 @@
 import { writable, derived, get } from 'svelte/store';
 import { mqttRequest, MqttRequestError, MqttTimeoutError } from '$lib/ui-core/mqtt-request';
 import { subscribe as mqttSubscribe } from '$lib/ui-core/mqtt';
-import { activeProjectId } from '$lib/stores/projects';
+import { sessionProjectId } from '$lib/stores/sessionProject';
 
 // =============================================================================
 // TIPOS — formas reales del contrato produccion-v1 (module.json tools)
@@ -193,7 +193,7 @@ export function formatearCantidad(n: number | null | undefined): string {
 
 /** Carga el recetario completo ({ incluir_lineas: true }) para el ref-select. */
 export async function loadRecetario(): Promise<void> {
-  const projectId = get(activeProjectId);
+  const projectId = get(sessionProjectId);
   if (!projectId) {
     recetarioError.set('project_id requerido');
     return;
@@ -216,7 +216,7 @@ export async function loadRecetario(): Promise<void> {
 
 /** Carga la lista de planes del proyecto (informe de la cinta — neutro). */
 export async function loadPlanes(): Promise<void> {
-  const projectId = get(activeProjectId);
+  const projectId = get(sessionProjectId);
   if (!projectId) {
     planesError.set('project_id requerido');
     return;
@@ -251,7 +251,7 @@ export function resetMiseEnPlace(): void {
 // =============================================================================
 
 function requerirProjectId(): string {
-  const pid = get(activeProjectId);
+  const pid = get(sessionProjectId);
   if (!pid) throw new Error('sin proyecto activo');
   return pid;
 }
@@ -419,13 +419,13 @@ export function initMiseEnPlaceSubscriptions(): () => void {
   let recargaProgramada: ReturnType<typeof setTimeout> | null = null;
 
   function encolarRecarga(pidSenal: string | undefined): void {
-    const activo = get(activeProjectId);
+    const activo = get(sessionProjectId);
     if (!activo) return;
     if (pidSenal !== undefined && pidSenal !== activo) return; // senal de otro proyecto
     if (recargaProgramada) return; // debounce
     recargaProgramada = setTimeout(() => {
       recargaProgramada = null;
-      if (get(activeProjectId)) {
+      if (get(sessionProjectId)) {
         void loadPlanes();
         void loadRecetario();
       }
@@ -433,7 +433,7 @@ export function initMiseEnPlaceSubscriptions(): () => void {
   }
 
   function onSenal(envelope: unknown): void {
-    const activo = get(activeProjectId);
+    const activo = get(sessionProjectId);
     if (!activo) return;
     encolarRecarga(extraerProjectId(envelope));
   }

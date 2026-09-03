@@ -62,7 +62,8 @@
     type DictamenPublicacion,
     type OpcionesVisualizacion
   } from '$lib/stores/carta-digital-jefe';
-  import { activeProjectId, activeProjectData } from '$lib/stores/projects';
+  import { activeProjectData } from '$lib/stores/projects';
+  import { sessionProjectId } from '$lib/stores/sessionProject';
 
   export let panelId: string = '';
 
@@ -102,7 +103,7 @@
   // Reacción al proyecto activo: leer informe o vaciar (multi-tenant).
   let ultimoProjectId = '';
   $: {
-    const pid = $activeProjectId;
+    const pid = $sessionProjectId;
     if (typeof pid === 'string' && pid && pid !== ultimoProjectId) {
       ultimoProjectId = pid;
       cerrarTodo();
@@ -138,7 +139,7 @@
   // no una maqueta. 404 = estado NOMBRADO. Un preview fallido FRENA publicar.
   // ==========================================================================
   async function abrirPreview(): Promise<void> {
-    if (!$activeProjectId) return;
+    if (!$sessionProjectId) return;
     previewAbierto = true;
     previewCargando = true;
     previewError = '';
@@ -270,7 +271,7 @@
     <div class="banner banner-error">⚠ No se pudo leer el canal: {$lecturaError}</div>
   {/if}
 
-  {#if !$activeProjectId}
+  {#if !$sessionProjectId}
     <div class="estado muted">elige un negocio activo para leer su escaparate.</div>
   {:else if $lecturaLoading && !$configStore}
     <div class="estado muted">leyendo canal…</div>
@@ -346,7 +347,7 @@
       {/if}
 
       <footer class="tarjeta-acciones">
-        <button class="btn" on:click={abrirPreview} disabled={previewCargando || !$activeProjectId}>
+        <button class="btn" on:click={abrirPreview} disabled={previewCargando || !$sessionProjectId}>
           {previewCargando ? 'generando…' : (previewAbierto ? '↻ refrescar preview' : '👁 generar preview')}
         </button>
         {#if previewDictamen}

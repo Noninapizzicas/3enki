@@ -8,11 +8,11 @@
    * NOTA: URL param puede ser alias corto. Para datos usamos activeProjectId (UUID real).
    */
   import { page } from '$app/stores';
-  import { activeProjectId } from '$lib/stores/projects';
+  import { sessionProjectId } from '$lib/stores/sessionProject';
   import { EncargosScreen } from '$lib/components/encargos';
 
   $: urlProjectId = $page.params.project_id;
-  $: projectId = $activeProjectId || urlProjectId;
+  $: projectId = $sessionProjectId || urlProjectId;
 </script>
 
 <svelte:head>

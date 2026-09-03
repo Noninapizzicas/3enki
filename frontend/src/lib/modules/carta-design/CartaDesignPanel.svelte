@@ -55,7 +55,7 @@
     type DictamenValidar,
     type MetaDiseno
   } from './stores/carta-design';
-  import { activeProjectId } from '$lib/stores/projects';
+  import { sessionProjectId } from '$lib/stores/sessionProject';
 
   export let panelId: string = '';
 
@@ -82,14 +82,14 @@
 
   // FRENO local: sin carta o sin HTML → no se dispara (el dictamen REAL lo da
   // el reflejo: 400/404/422 nombrados).
-  $: componerBloqueado = !$activeProjectId || !cartaId;
-  $: validarBloqueado = !$activeProjectId || !cartaId || !htmlDiseno.trim();
-  $: guardarBloqueado = !$activeProjectId || !cartaId || !htmlDiseno.trim();
+  $: componerBloqueado = !$sessionProjectId || !cartaId;
+  $: validarBloqueado = !$sessionProjectId || !cartaId || !htmlDiseno.trim();
+  $: guardarBloqueado = !$sessionProjectId || !cartaId || !htmlDiseno.trim();
 
   // Reacción al proyecto activo: vaciar (multi-tenant, sin datos ajenos).
   let ultimoProjectId = '';
   $: {
-    const pid = $activeProjectId;
+    const pid = $sessionProjectId;
     if (typeof pid === 'string' && pid && pid !== ultimoProjectId) {
       ultimoProjectId = pid;
       resetCartaDesign();
@@ -156,7 +156,7 @@
   <!-- ══════════ CINTA-ESTADO del compositor ══════════ -->
   <div class="cinta-estado">
     <span class="cinta-titulo">🖼️ Compositor del diseño impreso</span>
-    {#if !$activeProjectId}
+    {#if !$sessionProjectId}
       <span class="chip">sin proyecto activo</span>
     {:else if $componiendo}
       <span class="chip chip-info" aria-live="polite">⏳ componiendo… (espera ≥20s)</span>
@@ -178,7 +178,7 @@
     {/if}
   </div>
 
-  {#if !$activeProjectId}
+  {#if !$sessionProjectId}
     <div class="estado muted">elige un negocio activo para componer el diseño de su carta.</div>
   {:else}
     <!-- ══════════ 1. SELECCIONAR — ref-select carta ══════════ -->

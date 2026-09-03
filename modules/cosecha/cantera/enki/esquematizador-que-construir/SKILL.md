@@ -60,11 +60,19 @@ pieza convierte un freno del negocio en una oportunidad.
    dashboard, o una PWA.
 4. **Marcar `a_crear`** lo que no existe — sin descartar.
 
-## Entregable: FM1
+## Entregable: FM1 — RUTA EXACTA, NO IMPROVISES
 
 ```
 storage/marketing/fm1.md   (junto a fm0.md, en la carpeta marketing)
 ```
+
+**REGLA DE PERSISTENCIA (crítica, pagada en vivo)**: el FM1 se escribe SIEMPRE
+en `storage/marketing/fm1.md`. NO crees subcarpetas (nada de `que-construir/`),
+NO cambies el nombre del archivo (ni `esquema.md`, ni `esquematizador.md`), NO
+lo partas en varios archivos. Un solo archivo: `fm1.md`, dentro de la carpeta
+`marketing`. Si además hay un entregable de equipo/personal, va en
+`storage/marketing/equipo.md` (también plano, sin subcarpetas). Verifica al
+final que existe en esa ruta exacta y di el hash/path absoluto.
 
 Estructura:
 - `# FM1 — Qué construir`
@@ -75,11 +83,14 @@ Estructura:
 
 ## Quién lo ejecuta
 
-- **AGENTE** (pipeline del registro): `esquematizador-que-construir` — el chat lo
-  invoca con `invoke_agent('esquematizador-que-construir', {task})`. Determinista:
-  fuzzy → reflejo → JEFE verifica `storage/marketing/fm1.md`.
-- **Cúpula**: registrado en `agentes/_index.json`.
-- **Skill** (este documento): documenta el método para el chat/gente.
+- **El chat** (Hermes bajo el capó): ejecuta el método de esta skill como agente
+  conversacional y persiste el FM1 él mismo en `storage/marketing/fm1.md`. NO hay
+  `invoke_agent` determinista — el motor v3 está apagado; la persistencia la hace
+  quien ejecuta (chat o un sub-agente de Hermes con esta skill cargada).
+- **Sub-agente de Hermes** (`delegate_task`): también puede ejecutarlo; el contrato
+  vivo en `agentes/_index.json` + `agentes/esquematizador-que-construir.json`.
+- **Skill** (este documento): la fuente del método; quien lo ejecute (chat o
+  sub-agente) se guía por aquí y por la regla de persistencia de arriba.
 
 ## Después
 

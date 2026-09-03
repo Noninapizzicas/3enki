@@ -168,10 +168,17 @@ Cada apartado es UNA sección del esquema con su propia hoja. No se mezclan:
 el CSS no decide la lógica, la lógica no decide la forma. Cada uno se esquematiza
 y luego el agente de UI los ensambla sobre el esqueleto.
 
-## Qué escribe
+## Qué escribe — RUTA EXACTA, NO IMPROVISES
+
+**REGLA DE PERSISTENCIA (crítica, pagada en vivo)**: el esquema se escribe SIEMPRE
+en `storage/esquema-cliente/` (raíz del storage del proyecto, NO dentro de
+`marketing/`). NO crees subcarpetas extra (nada de `marketing/esquema-cliente/`),
+NO cambies el nombre de la carpeta. La carpeta base es `esquema-cliente/` y
+dentro van los archivos del árbol maestro. Verifica al final que `esquema.md`
+existe en `storage/esquema-cliente/esquema.md` y di el path absoluto.
 
 ```
-esquema-cliente/
+storage/esquema-cliente/
 ├─ identidad.md           la esencia que la web transmite (del fm0 + fase-0)
 ├─ aparatados-css.md      identidad visual: paleta, tipos, espaciado, responvidad
 ├─ apartados-iconos.md    set de iconografía y coherencia visual

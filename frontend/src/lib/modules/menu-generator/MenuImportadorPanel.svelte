@@ -47,7 +47,7 @@
     type ValidacionLocal,
     type DictamenImport
   } from './stores/importador';
-  import { activeProjectId } from '$lib/stores/projects';
+  import { sessionProjectId } from '$lib/stores/sessionProject';
 
   export let panelId: string = '';
 
@@ -88,12 +88,12 @@
   // FRENO local: sin nombre, JSON roto o vacío → no se dispara (el dictamen
   // REAL de estructura lo dará el reflejo: 400/404/422 nombrados).
   $: importBloqueado =
-    !$activeProjectId || !nombreCarta.trim() || !validacion || !validacion.ok;
+    !$sessionProjectId || !nombreCarta.trim() || !validacion || !validacion.ok;
 
   // Reacción al proyecto activo: vaciar (multi-tenant, sin datos ajenos).
   let ultimoProjectId = '';
   $: {
-    const pid = $activeProjectId;
+    const pid = $sessionProjectId;
     if (typeof pid === 'string' && pid && pid !== ultimoProjectId) {
       ultimoProjectId = pid;
       cerrarTodo();
@@ -171,7 +171,7 @@
   <!-- ══════════ CINTA-ESTADO del importador ══════════ -->
   <div class="cinta-estado">
     <span class="cinta-titulo">📥 Importador de catálogos</span>
-    {#if !$activeProjectId}
+    {#if !$sessionProjectId}
       <span class="chip">sin proyecto activo</span>
     {:else if $importando}
       <span class="chip chip-info" aria-live="polite">⏳ importando… (espera ≥20s)</span>
@@ -189,7 +189,7 @@
     {/if}
   </div>
 
-  {#if !$activeProjectId}
+  {#if !$sessionProjectId}
     <div class="estado muted">elige un negocio activo para importar su catálogo.</div>
   {:else}
     <!-- ══════════ 1. LA FUENTE — EDITOR-JSON (paste + drag-file) ══════════ -->
@@ -277,7 +277,7 @@
       {#if importBloqueado && ($dictamenImport === null)}
         <span class="nota warn">
           bloqueado — falta {[
-            !$activeProjectId ? 'proyecto activo' : '',
+            !$sessionProjectId ? 'proyecto activo' : '',
             !nombreCarta.trim() ? 'el nombre' : '',
             !validacion ? 'el JSON' : '',
             validacion && !validacion.ok ? 'un JSON con categorías y productos' : ''

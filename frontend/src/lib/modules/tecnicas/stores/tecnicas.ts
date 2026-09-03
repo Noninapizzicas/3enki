@@ -58,7 +58,7 @@
 import { writable, derived, get } from 'svelte/store';
 import { mqttRequest, MqttRequestError, MqttTimeoutError } from '$lib/ui-core/mqtt-request';
 import { subscribe as mqttSubscribe } from '$lib/ui-core/mqtt';
-import { activeProjectId } from '$lib/stores/projects';
+import { sessionProjectId } from '$lib/stores/sessionProject';
 
 // =============================================================================
 // TIPOS — formas reales devueltas por tecnicas.listar / obtener (contrato)
@@ -210,7 +210,7 @@ export function parsearArrayLineas(txt: string): { valor: string[] | undefined; 
 /** Carga el catálogo alfabético (salida ligera — INV del contrato). Un store
  *  ausente es catálogo vacío (200 [] — L191), no error. */
 export async function loadCatalogo(): Promise<void> {
-  const pid = get(activeProjectId);
+  const pid = get(sessionProjectId);
   if (!pid) return;
   lecturaLoading.set(true);
   lecturaError.set(null);
@@ -233,7 +233,7 @@ export async function loadCatalogo(): Promise<void> {
 /** Detalle completo con history (obtener). 404 = estado nombrado → el store
  *  queda null + error nombrado (RESOURCE_NOT_FOUND), nunca crash. */
 export async function loadDetalle(idONombre: string): Promise<boolean> {
-  const pid = get(activeProjectId);
+  const pid = get(sessionProjectId);
   if (!pid || !idONombre.trim()) return false;
   detalleLoading.set(true);
   detalleError.set(null);
@@ -298,7 +298,7 @@ export interface DictamenAlta {
 export async function codificarTecnica(
   datos: Omit<CamposTecnica, never> & { nombre: string }
 ): Promise<DictamenAlta> {
-  const pid = get(activeProjectId);
+  const pid = get(sessionProjectId);
   if (!pid) throw new Error('sin proyecto activo');
   mutacionesPendientes.update((n) => n + 1);
   errorMutacion.set(null);
@@ -328,7 +328,7 @@ export async function codificarTecnica(
 
 /** LA EVOLUCIÓN: actualiza campos permitidos → dictamen con diff (L275). */
 export async function actualizarTecnica(tecnicaId: string, campos: CamposTecnica): Promise<DictamenEvolucion> {
-  const pid = get(activeProjectId);
+  const pid = get(sessionProjectId);
   if (!pid) throw new Error('sin proyecto activo');
   const limpios = Object.fromEntries(Object.entries(campos).filter(([, v]) => v !== undefined));
   if (Object.keys(limpios).length === 0) {
@@ -388,13 +388,13 @@ export function initTecnicasSubscriptions(): () => void {
     if (recargaProgramada) return;
     recargaProgramada = setTimeout(() => {
       recargaProgramada = null;
-      const activo = get(activeProjectId);
+      const activo = get(sessionProjectId);
       if (activo) void loadCatalogo();
     }, 60);
   }
 
   function onSenal(envelope: unknown): void {
-    const activo = get(activeProjectId);
+    const activo = get(sessionProjectId);
     if (!activo) return;
     const pid = extraerProjectId(envelope);
     if (pid !== undefined && pid !== activo) return; // señal de otro proyecto

@@ -16,7 +16,7 @@ import { onReconnect } from '$lib/ui-core/mqtt';
 import type { Message, Attachment } from '$lib/ui-core';
 import { openPanel } from '$lib/ui-core/registry';
 import { attachments, clearAttachments } from './attachments';
-import { activeProjectId } from './projects';
+import { sessionProjectId } from '$lib/stores/sessionProject';
 import { activeProvider, activeModel, selectProvider } from './workspace';
 import { providers } from './credentials';
 import { notifyError, notifyInfo } from './ui';
@@ -100,7 +100,7 @@ export async function sendMessage(content: string): Promise<void> {
   }
 
   // Sin proyecto activo → abrir el selector de proyecto
-  const currentProjectId = get(activeProjectId);
+  const currentProjectId = get(sessionProjectId);
   if (!currentProjectId) {
     notifyInfo('Selecciona un proyecto para chatear');
     openPanel('project');
@@ -301,7 +301,7 @@ export async function loadConversation(id: string): Promise<void> {
   messages.set([]);
 
   try {
-    const projId = get(activeProjectId);
+    const projId = get(sessionProjectId);
     if (!projId) throw new Error('No active project');
     const response = await mqttRequest<{
       conversation: any;
@@ -390,7 +390,7 @@ export function clearConversation(): void {
  * Actualiza el store local y envía al backend
  */
 export async function toggleMessageContext(messageId: string, inContext: boolean): Promise<void> {
-  const projId = get(activeProjectId);
+  const projId = get(sessionProjectId);
 
   // Optimistic update en el store de mensajes visibles
   messages.update(msgs =>

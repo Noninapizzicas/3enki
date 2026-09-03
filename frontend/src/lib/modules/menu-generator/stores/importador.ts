@@ -43,7 +43,7 @@
 
 import { writable, get } from 'svelte/store';
 import { publish, subscribe as mqttSubscribe } from '$lib/ui-core/mqtt';
-import { activeProjectId } from '$lib/stores/projects';
+import { sessionProjectId } from '$lib/stores/sessionProject';
 
 // =============================================================================
 // TIPOS — shapes reales del reflejo (index.js _import L58-105)
@@ -252,7 +252,7 @@ export function describeError(err: unknown): string {
  * Lanza ImportRpcError nombrada (describeError la traduce).
  */
 export async function importarCatalogo(nombre: string, textoJson: string): Promise<DictamenImport> {
-  const project_id = get(activeProjectId);
+  const project_id = get(sessionProjectId);
   if (!project_id) throw new ImportRpcError('no hay proyecto activo', 0, 'NO_PROJECT');
   const nombreTrim = String(nombre ?? '').trim();
   if (!nombreTrim) throw new ImportRpcError('falta el nombre de la carta', 400, 'INVALID_INPUT');
@@ -324,7 +324,7 @@ export function initImportadorSubscriptions(
   let recargaProgramada: ReturnType<typeof setTimeout> | null = null;
 
   function onSenal(envelope: unknown): void {
-    const activo = get(activeProjectId);
+    const activo = get(sessionProjectId);
     if (!activo) return;
     const pid = extraerProjectId(envelope);
     if (pid !== undefined && pid !== activo) return; // señal de otro negocio

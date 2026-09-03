@@ -8,7 +8,7 @@
   import { onMount } from 'svelte';
   import { get } from 'svelte/store';
   import { mqttRequest, MqttTimeoutError } from '$lib/ui-core/mqtt-request';
-  import { activeProjectId } from '$lib/stores/projects';
+  import { sessionProjectId } from '$lib/stores/sessionProject';
   import type { BlueprintArg } from './blueprint-zones';
 
   export let arg: BlueprintArg;
@@ -28,7 +28,7 @@
   $: refValue = arg.ref_value || 'id';
 
   function getProjectId(): string | null {
-    return get(activeProjectId) || null;
+    return get(sessionProjectId) || null;
   }
 
   onMount(async () => {

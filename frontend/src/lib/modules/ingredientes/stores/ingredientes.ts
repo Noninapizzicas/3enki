@@ -46,7 +46,7 @@
 import { writable, derived, get } from 'svelte/store';
 import { mqttRequest, MqttRequestError, MqttTimeoutError } from '$lib/ui-core/mqtt-request';
 import { subscribe as mqttSubscribe } from '$lib/ui-core/mqtt';
-import { activeProjectId } from '$lib/stores/projects';
+import { sessionProjectId } from '$lib/stores/sessionProject';
 
 // =============================================================================
 // TIPOS — formas reales devueltas por ingredientes.list / get (index.js)
@@ -315,7 +315,7 @@ export function initIngredientesSubscriptions(): () => void {
   let recargaProgramada: ReturnType<typeof setTimeout> | null = null;
 
   function encolarRecarga(): void {
-    if (!get(activeProjectId)) return;
+    if (!get(sessionProjectId)) return;
     if (recargaProgramada) return; // debounce: el lote llega como N señales en tándem
     recargaProgramada = setTimeout(() => {
       recargaProgramada = null;
@@ -324,7 +324,7 @@ export function initIngredientesSubscriptions(): () => void {
   }
 
   function onSenal(envelope: unknown): void {
-    const activo = get(activeProjectId);
+    const activo = get(sessionProjectId);
     if (!activo) return;
     const pid = extraerProjectId(envelope);
     if (pid !== undefined && pid !== activo) return; // señal de otro proyecto

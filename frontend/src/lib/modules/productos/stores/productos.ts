@@ -18,7 +18,7 @@
 import { writable, get } from 'svelte/store';
 import { mqttRequest, MqttRequestError, MqttTimeoutError } from '$lib/ui-core/mqtt-request';
 import { subscribe as mqttSubscribe } from '$lib/ui-core/mqtt';
-import { activeProjectId } from '$lib/stores/projects';
+import { sessionProjectId } from '$lib/stores/sessionProject';
 
 // =============================================================================
 // TIPOS — shape proyectado por productos (modules/pizzepos/productos/index.js)
@@ -212,12 +212,12 @@ export function initProductosSubscriptions(): () => void {
   let recargaProgramada: ReturnType<typeof setTimeout> | null = null;
 
   function encolarRecarga(): void {
-    const activo = get(activeProjectId);
+    const activo = get(sessionProjectId);
     if (!activo) return;
     if (recargaProgramada) return; // debounce: la señal llega pareja (2 en tándem)
     recargaProgramada = setTimeout(() => {
       recargaProgramada = null;
-      const pid = get(activeProjectId);
+      const pid = get(sessionProjectId);
       if (pid) {
         void loadProductos(pid);
         void loadCinta(pid);
@@ -226,7 +226,7 @@ export function initProductosSubscriptions(): () => void {
   }
 
   function onSenal(envelope: unknown): void {
-    const activo = get(activeProjectId);
+    const activo = get(sessionProjectId);
     if (!activo) return;
     const pid = extraerProjectId(envelope);
     if (pid !== undefined && pid !== activo) return; // señal de otro proyecto

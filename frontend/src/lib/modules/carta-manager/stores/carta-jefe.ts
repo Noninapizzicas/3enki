@@ -43,7 +43,7 @@
 
 import { writable, derived, get } from 'svelte/store';
 import { publish, subscribe as mqttSubscribe } from '$lib/ui-core/mqtt';
-import { activeProjectId } from '$lib/stores/projects';
+import { sessionProjectId } from '$lib/stores/sessionProject';
 
 // =============================================================================
 // TIPOS — formas reales devueltas por carta.list / get (reflejo v2.8.0)
@@ -125,7 +125,7 @@ async function cartaRpc<T = unknown>(
   payload: Record<string, unknown>,
   { timeout_ms = RESPUESTA_TIMEOUT_MS }: { timeout_ms?: number } = {}
 ): Promise<T> {
-  const project_id = get(activeProjectId);
+  const project_id = get(sessionProjectId);
   if (!project_id) throw new CartaRpcError('no hay proyecto activo', 0, 'NO_PROJECT');
 
   const request_id = nuevoRequestId();
@@ -450,7 +450,7 @@ export function initCartaJefeSubscriptions(): () => void {
   let recargaProgramada: ReturnType<typeof setTimeout> | null = null;
 
   function encolarRecarga(): void {
-    if (!get(activeProjectId)) return;
+    if (!get(sessionProjectId)) return;
     if (recargaProgramada) return; // debounce: absorbs N señales en tándem
     recargaProgramada = setTimeout(() => {
       recargaProgramada = null;
@@ -459,7 +459,7 @@ export function initCartaJefeSubscriptions(): () => void {
   }
 
   function onSenal(envelope: unknown): void {
-    const activo = get(activeProjectId);
+    const activo = get(sessionProjectId);
     if (!activo) return;
     const pid = extraerProjectId(envelope);
     if (pid !== undefined && pid !== activo) return; // señal de otro proyecto

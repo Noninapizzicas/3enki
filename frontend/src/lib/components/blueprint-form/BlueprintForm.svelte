@@ -18,7 +18,7 @@
   import { get } from 'svelte/store';
   import { mqttRequest, MqttTimeoutError, MqttRequestError } from '$lib/ui-core/mqtt-request';
   import { subscribe } from '$lib/ui-core/mqtt';
-  import { activeProjectId } from '$lib/stores/projects';
+  import { sessionProjectId } from '$lib/stores/sessionProject';
   import { deriveZones, labelize, humanize, type BlueprintArg, type BlueprintOp, type BlueprintEventoVivo, type BlueprintDatos, type BlueprintDetalle } from './blueprint-zones';
   import RefSelect from './RefSelect.svelte';
   import ResultView from './ResultView.svelte';
@@ -56,7 +56,7 @@
 
   function getProjectId(): string | null {
     if (projectIdOverride) return projectIdOverride;
-    const pid = get(activeProjectId);
+    const pid = get(sessionProjectId);
     return pid || null;
   }
 

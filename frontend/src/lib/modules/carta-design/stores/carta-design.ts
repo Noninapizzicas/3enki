@@ -44,7 +44,7 @@
  * Moneda: SIN € — el diseño de la carta no tiene cifras (es look impreso).
  *
  * TODO RPC inyecta project_id (lección bug escandallo): mqtt-request NO lo
- * inyecta; el store lee get(activeProjectId) y lo pasa en CADA llamada, con
+ * inyecta; el store lee get(sessionProjectId) y lo pasa en CADA llamada, con
  * guard si no hay proyecto activo.
  *
  * Molde: frontend/src/lib/modules/menu-generator/stores/importador.ts.
@@ -52,7 +52,7 @@
 
 import { writable, derived, get } from 'svelte/store';
 import { publish, subscribe as mqttSubscribe } from '$lib/ui-core/mqtt';
-import { activeProjectId } from '$lib/stores/projects';
+import { sessionProjectId } from '$lib/stores/sessionProject';
 
 // =============================================================================
 // TIPOS — shapes reales del reflejo (index.js) y de carta-manager (carta.list)
@@ -268,7 +268,7 @@ export function describeError(err: unknown): string {
 
 /** Carga la lista de cartas del proyecto (ref-select). */
 export async function cargarCartas(): Promise<void> {
-  const pid = get(activeProjectId);
+  const pid = get(sessionProjectId);
   if (!pid) return;
   cartasLoading.set(true);
   cartasError.set(null);
@@ -284,7 +284,7 @@ export async function cargarCartas(): Promise<void> {
 
 /** Carga la galería de diseños guardados (cinta-estado). */
 export async function cargarGaleria(carta_id?: string): Promise<void> {
-  const pid = get(activeProjectId);
+  const pid = get(sessionProjectId);
   if (!pid) return;
   galeriaLoading.set(true);
   try {
@@ -310,7 +310,7 @@ export async function cargarGaleria(carta_id?: string): Promise<void> {
  * carta.html.generada re-confirma (debounce 60ms). Botón muerto en vuelo.
  */
 export async function componerDiseno(carta_id: string): Promise<DictamenContexto> {
-  const pid = get(activeProjectId);
+  const pid = get(sessionProjectId);
   if (!pid) throw new DesignRpcError('no hay proyecto activo', 0, 'NO_PROJECT');
   if (!carta_id) throw new DesignRpcError('falta la carta a diseñar', 400, 'INVALID_INPUT');
 
@@ -347,7 +347,7 @@ export async function componerDiseno(carta_id: string): Promise<DictamenContexto
  * productos_total, productos_faltan}. El freno compara contra la carta REAL.
  */
 export async function validarDiseno(carta_id: string, html: string): Promise<DictamenValidar> {
-  const pid = get(activeProjectId);
+  const pid = get(sessionProjectId);
   if (!pid) throw new DesignRpcError('no hay proyecto activo', 0, 'NO_PROJECT');
   if (!carta_id) throw new DesignRpcError('falta la carta a validar', 400, 'INVALID_INPUT');
   if (!html.trim()) throw new DesignRpcError('falta el HTML del diseño', 400, 'INVALID_INPUT');
@@ -393,7 +393,7 @@ export async function guardarDiseno(
   nombre?: string,
   formato?: string
 ): Promise<MetaDiseno> {
-  const pid = get(activeProjectId);
+  const pid = get(sessionProjectId);
   if (!pid) throw new DesignRpcError('no hay proyecto activo', 0, 'NO_PROJECT');
   if (!carta_id) throw new DesignRpcError('falta la carta a guardar', 400, 'INVALID_INPUT');
   if (!html.trim()) throw new DesignRpcError('falta el HTML del diseño', 400, 'INVALID_INPUT');
@@ -458,13 +458,13 @@ export function initCartaDesignSubscriptions(): () => void {
     if (recargaProgramada) return;
     recargaProgramada = setTimeout(() => {
       recargaProgramada = null;
-      const activo = get(activeProjectId);
+      const activo = get(sessionProjectId);
       if (activo) void cargarGaleria();
     }, 60);
   }
 
   function onSenal(envelope: unknown): void {
-    const activo = get(activeProjectId);
+    const activo = get(sessionProjectId);
     if (!activo) return;
     const pid = extraerProjectId(envelope);
     if (pid !== undefined && pid !== activo) return; // señal de otro proyecto

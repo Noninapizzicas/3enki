@@ -50,7 +50,7 @@
     type MarcaPublico,
     type DictamenDeclaracion
   } from './stores/carta-marketing';
-  import { activeProjectId } from '$lib/stores/projects';
+  import { sessionProjectId } from '$lib/stores/sessionProject';
 
   export let panelId: string = '';
 
@@ -111,7 +111,7 @@
   // Reacción al proyecto activo: cargar identidad o vaciar (multi-tenant).
   let ultimoProjectId = '';
   $: {
-    const pid = $activeProjectId;
+    const pid = $sessionProjectId;
     if (typeof pid === 'string' && pid && pid !== ultimoProjectId) {
       ultimoProjectId = pid;
       cerrarEditores();

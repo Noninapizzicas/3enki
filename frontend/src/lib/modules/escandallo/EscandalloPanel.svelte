@@ -47,7 +47,7 @@
     formatearEuros,
     formatearPrecioUnitario
   } from './stores/escandallo';
-  import { activeProjectId } from '$lib/stores/projects';
+  import { sessionProjectId } from '$lib/stores/sessionProject';
 
   export let panelId: string = '';
 

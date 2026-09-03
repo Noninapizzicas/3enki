@@ -9,7 +9,7 @@
   import { onMount } from 'svelte';
   import { get } from 'svelte/store';
   import { mqttRequest } from '$lib/ui-core/mqtt-request';
-  import { activeProjectId } from '$lib/stores/projects';
+  import { sessionProjectId } from '$lib/stores/sessionProject';
 
   export let panelId: string = '';
 
@@ -20,7 +20,7 @@
   let error = '';
 
   async function cargar() {
-    const project_id = get(activeProjectId);
+    const project_id = get(sessionProjectId);
     if (!project_id) { error = 'Selecciona un proyecto para previsualizar.'; return; }
     loading = true; error = '';
     try {

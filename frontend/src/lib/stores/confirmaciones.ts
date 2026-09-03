@@ -10,7 +10,7 @@
  */
 import { writable, get } from 'svelte/store';
 import { subscribe, mqttRequest } from '$lib/ui-core';
-import { activeProjectId } from './projects';
+import { sessionProjectId } from '$lib/stores/sessionProject';
 
 export interface PendingConfirmation {
   tool: string;
@@ -57,7 +57,7 @@ export async function confirmPending(): Promise<boolean> {
     await mqttRequest('portal', 'call', {
       tool: pend.tool,
       args: pend.args,
-      project_id: pend.project_id || get(activeProjectId) || null,
+      project_id: pend.project_id || get(sessionProjectId) || null,
       confirmado: true
     });
     pendingConfirmation.set(null);

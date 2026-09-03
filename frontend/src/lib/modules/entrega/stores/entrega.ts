@@ -44,7 +44,7 @@
 import { writable, derived, get } from 'svelte/store';
 import { mqttRequest, MqttRequestError, MqttTimeoutError } from '$lib/ui-core/mqtt-request';
 import { subscribe as mqttSubscribe } from '$lib/ui-core/mqtt';
-import { activeProjectId } from '$lib/stores/projects';
+import { sessionProjectId } from '$lib/stores/sessionProject';
 
 // =============================================================================
 // TIPOS — formas reales devueltas por entrega.reglas.leer (index.js + custodio)
@@ -159,7 +159,7 @@ export function parsearCifra(txt: string): { valor: number | null | undefined; e
  *  ('persistida' o 'default' — INV2). El panel representa default como
  *  "sin política — usa los defaults" (estado, no fallo). */
 export async function loadReglas(): Promise<void> {
-  const pid = get(activeProjectId);
+  const pid = get(sessionProjectId);
   if (!pid) return;
   lecturaLoading.set(true);
   lecturaError.set(null);
@@ -209,7 +209,7 @@ async function actualizarReglas(
   bloque: 'reparto' | 'estimacion',
   cambios: CambiosReparto | CambiosEstimacion
 ): Promise<DictamenDeclaracion> {
-  const pid = get(activeProjectId);
+  const pid = get(sessionProjectId);
   if (!pid) throw new Error('sin proyecto activo');
   mutacionesPendientes.update((n) => n + 1);
   errorMutacion.set(null);
@@ -266,13 +266,13 @@ export function initEntregaSubscriptions(): () => void {
     if (recargaProgramada) return;
     recargaProgramada = setTimeout(() => {
       recargaProgramada = null;
-      const activo = get(activeProjectId);
+      const activo = get(sessionProjectId);
       if (activo) void loadReglas();
     }, 60);
   }
 
   function onSenal(envelope: unknown): void {
-    const activo = get(activeProjectId);
+    const activo = get(sessionProjectId);
     if (!activo) return;
     const pid = extraerProjectId(envelope);
     if (pid !== undefined && pid !== activo) return; // señal de otro proyecto

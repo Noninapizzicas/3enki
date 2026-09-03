@@ -54,7 +54,7 @@
     type EscaladoDictamen,
     type CompraDictamen
   } from './stores/mise-en-place';
-  import { activeProjectId } from '$lib/stores/projects';
+  import { sessionProjectId } from '$lib/stores/sessionProject';
 
   export let panelId: string = '';
 
@@ -99,7 +99,7 @@
   // Reaccion al proyecto activo: cargar recetario + planes o vaciar.
   let ultimoProjectId = '';
   $: {
-    const pid = $activeProjectId;
+    const pid = $sessionProjectId;
     if (typeof pid === 'string' && pid && pid !== ultimoProjectId) {
       ultimoProjectId = pid;
       limpiarSeleccion();
@@ -260,7 +260,7 @@
       <span class="cinta-nombre muted">leyendo planes…</span>
     {:else if $gestosPendientes > 0}
       <span class="sync" aria-live="polite">⏳ sincronizando…</span>
-    {:else if $activeProjectId}
+    {:else if $sessionProjectId}
       <span class="cinta-nombre muted">🥘 Planificación del servicio</span>
       <span class="cinta-num">{$cinta.recetas}</span> recetas · <span class="cinta-num">{$planes.length}</span> planes
       {#if $cinta.escaladoActivo}<span class="chip chip-jefe">escalado activo ⚖</span>{/if}
@@ -279,7 +279,7 @@
 
       {#if $recetarioError}
         <div class="feedback error" role="alert">⚠ {$recetarioError}</div>
-      {:else if $activeProjectId}
+      {:else if $sessionProjectId}
         <div class="fila-campos">
           <label class="campo">
             <span>receta (desde el recetario)</span>

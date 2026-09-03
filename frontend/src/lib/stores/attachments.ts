@@ -11,7 +11,7 @@ import { writable, derived, get } from 'svelte/store';
 import type { Attachment } from '$lib/ui-core';
 import { generateUUID } from '$lib/utils';
 import { mqttRequest } from '$lib/ui-core/mqtt-request';
-import { activeProjectId } from './projects';
+import { sessionProjectId } from '$lib/stores/sessionProject';
 
 // ============================================================================
 // CONFIGURACIÓN
@@ -250,7 +250,7 @@ export async function uploadAndAttach(file: File): Promise<boolean> {
     return false;
   }
 
-  const projectId = get(activeProjectId);
+  const projectId = get(sessionProjectId);
   if (!projectId) {
     console.warn('[attachments] Sin proyecto activo');
     return false;

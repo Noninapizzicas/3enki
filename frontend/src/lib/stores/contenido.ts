@@ -11,7 +11,7 @@
 
 import { writable, get } from 'svelte/store';
 import { mqttRequest } from '$lib/ui-core/mqtt-request';
-import { activeProjectId } from './projects';
+import { sessionProjectId } from '$lib/stores/sessionProject';
 
 export const contenidoBusy = writable<string | null>(null);   // product_id en proceso
 export const contenidoError = writable<string | null>(null);
@@ -35,7 +35,7 @@ function fileToBase64(file: File): Promise<{ content: string; ext: string }> {
 
 /** Sube una imagen a un producto. principal=true la marca como la principal. */
 export async function subirImagen(productId: string, file: File, principal = false): Promise<boolean> {
-  const project_id = get(activeProjectId);
+  const project_id = get(sessionProjectId);
   if (!project_id) { contenidoError.set('Sin proyecto activo'); return false; }
   if (!file.type.startsWith('image/')) { contenidoError.set('El archivo no es una imagen'); return false; }
   if (file.size > 5 * 1024 * 1024) { contenidoError.set('La imagen supera 5 MB'); return false; }
@@ -52,7 +52,7 @@ export async function subirImagen(productId: string, file: File, principal = fal
 
 /** Quita una imagen de un producto. */
 export async function quitarImagen(productId: string, imagenId: string): Promise<boolean> {
-  const project_id = get(activeProjectId);
+  const project_id = get(sessionProjectId);
   if (!project_id) { contenidoError.set('Sin proyecto activo'); return false; }
   contenidoError.set(null);
   try {

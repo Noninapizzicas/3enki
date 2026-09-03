@@ -28,36 +28,54 @@ tags: [esquema, cliente, roles, ui, web, marketing, prisma, diseccionador, agnos
 # Esquematizador CLIENTE — la cara de consumo de un negocio (interfaz para el cliente)
 
 > Es la contraparte de `esquematizador-jefe`. El jefe mira la cara de decisión de
-> gestión; ESTE mira la cara de **consumo**: el cliente que descubre, elige,
-> compra, recoge y repite. No reinventa el método del diseccionador: lo APUNTA
-> con la lente de cliente. **Es un CICLO paso a paso, como el de esquematizador-jefe.**
+> gestión; ESTE mira la cara de **consumo**. **NACE DE LA LÓGICA, no de una web
+> asumida.** No reinventa el método del diseccionador: lo APUNTA. **Es un CICLO
+> paso a paso, como el de esquematizador-jefe.**
 
 ## La posición en el ciclo (de cimientos a interfaz)
 
 ```
-FASE 0   identidad-negocio  →  qué ES y qué VENDE el negocio (datos del dueño)
-FM0      fundamento-marketing →  qué PROMETER y a QUÉN (diferenciación, audiencia, canales, embudo)
-FASE 2   esquematizador-cliente (ESTE) →  CÓMO mostrarlo y CONVERTIRLO en la web del cliente
-F7       construir-interfaz-cliente   →  el trío frontend real de la web de consumo
+FASE 0   identidad-negocio   →  qué ES y qué VENDE el negocio (datos del dueño)
+FM0      fundamento-marketing →  qué PROMETER y a QUÉN (diferenciación, audiencia, canales, embudo, objetivos)
+FASE 2   esquematizador-interfaz-cliente (ESTE) →  QUÉ crear para cubrir esos objetivos → CÓMO se ve cada pieza
+F7       construir-interfaz-cliente   →  el trío frontend real de lo que la lógica determinó
 ```
 
-**Sin la FASE 0 y el FM0, este esquema no arranca**: el marketing define el
-posicionamiento y la audiencia; este esquema traduce eso en pantallas, elementos
-y decisiones de diseño. Si faltan, decirlo y NO inventar el negocio.
+**Sin la FASE 0 y el FM0, este esquema no arranca**: no hay de qué derivar. Si
+faltan o no hay objetivos, decirlo y NO inventar.
+
+## La pregunta rectora (TODO nace de aquí)
+
+> **"¿Qué tenemos que CREAR para cubrir los objetivos de estos dos documentos?"**
+
+De la **lógica** de la FASE 0 (el negocio: qué es, qué vende, cómo lo elabora) +
+el FM0 (objetivos de marketing, canales, embudo) SE DERIVA el QUÉ construir. Ese
+QUÉ **no está asumido ni limitado por catálogo/inventario**: puede ser una o dos
+interfaces distintas, una app web, una PWA instalable, una app móvil, un
+dashboard, lo que la lógica pida. **Lo que no existe se crea** (construir-modulos
+/ generar-ui-web / adaptar-a-enki). La oferta no está cortada por lo que ya hay.
+
+Regla de oro: **la lógica manda**. El qué construir nace de la lógica (objetivos
+de fase-0/fm0), y la lógica de cada pieza determina cómo se comporta y qué
+eventos toca. CSS, iconos, fuentes, elementos y formas SOSTIENEN la lógica — no
+al revés.
+
+## Derivar el QUÉ (primer paso, antes de esquematizar)
+
+- Leer FASE 0 + FM0.
+- Derivar las **piezas** que cubren sus objetivos, con **porqué**.
+- Marcar cada pieza con su **cara** (cliente / jefe / neutro) para aplicar la lente correcta.
+- Si una pieza no existe en el sistema → `a_crear` (se construye).
 
 ## El SUJETO correcto (qué entra al prisma)
 
-No es "el negocio" ni "el módulo" — es **la cara del ROL CLIENTE del negocio**:
-
+La **cara de CONSUMO** del negocio:
 ```
 "la capacidad del negocio de servir el RECORRIDO del cliente final:
- descubrir, elegir, comprar, pagar, recoger y repetir — y que ese recorrido
- convierta y fidelice"
+ descubrir, elegir, comprar, pagar, recoger, repetir — que convierta y fidelice"
 ```
-
-Si entra el negocio entero (o la cara del jefe), el prisma mezcla caras y el
-análisis sale contaminado. Entrando solo la cara del cliente, cada hoja que toque
-suelo es directamente material de pantalla web.
+Si una pieza derivada es de cara JEFE, se esquematiza con la lente jefe (reglas/config),
+no con esta — no se mezclan caras.
 
 ## El ALIMENTO antes de prismar (informar al prisma)
 

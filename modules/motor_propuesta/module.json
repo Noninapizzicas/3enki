@@ -28,5 +28,15 @@
     }
   ],
   "tools": [],
+  "ui_handlers": [
+    {
+      "action": "proponer_siguiente",
+      "domain": "motor_propuesta",
+      "type": "chat_tool",
+      "zone": "chat",
+      "label": "¿Qué imprimo?",
+      "description": "Propone el siguiente modelo a imprimir por prioridad y antigüedad."
+    }
+  ],
   "version": "0.1.0"
 }

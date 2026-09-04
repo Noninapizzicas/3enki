@@ -1,0 +1,57 @@
+{
+  "_doc": "Custodio single-writer de la cola de impresión 3D: modelos, prioridad, estado y máquina de estados (PENDIENTE→IMPRIMIENDO→IMPRESO). Aplica el singleton 'imprimiendo' (una sola pieza en la máquina), el freno de transición legal (el estado solo avanza por los arcos permitidos, sin mutar si la transición es inválida) y la propuesta determinista (el siguiente por prioridad, desempate por fecha_alta). NO imprime ni decide el contenido: custodia y propone. El motor de propuesta/orquestador (pasos siguientes del plan) consume esta cripta por bus.",
+  "config": {
+    "persistence": {
+      "concurrency": "single-writer",
+      "data_path": "cola",
+      "pattern": "single-json-file",
+      "scope": "project"
+    }
+  },
+  "dependencies": [],
+  "description": "Cripta de la cola de impresión 3D: modelos, prioridad y máquina de estados.",
+  "language": "es",
+  "main": "index.js",
+  "name": "cola_modelos",
+  "publishes": [
+    {
+      "event": "cola_modelos.modelo_agregado"
+    },
+    {
+      "event": "cola_modelos.modelo_imprimiendo"
+    },
+    {
+      "event": "cola_modelos.modelo_impreso"
+    },
+    {
+      "event": "cola_modelos.agregar.failed"
+    },
+    {
+      "event": "cola_modelos.actualizar_estado.failed"
+    }
+  ],
+  "subscribes": [
+    {
+      "event": "cola_modelos.agregar.request",
+      "handler": "onAgregarRequest"
+    },
+    {
+      "event": "cola_modelos.obtener_por_prioridad.request",
+      "handler": "onObtenerPorPrioridadRequest"
+    },
+    {
+      "event": "cola_modelos.actualizar_estado.request",
+      "handler": "onActualizarEstadoRequest"
+    },
+    {
+      "event": "cola_modelos.listar.request",
+      "handler": "onListarRequest"
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated"
+    }
+  ],
+  "tools": [],
+  "version": "0.1.0"
+}

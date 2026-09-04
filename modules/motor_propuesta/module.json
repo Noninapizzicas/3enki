@@ -1,0 +1,32 @@
+{
+  "_doc": "Motor de propuesta PURO (PASO 2): dado el conjunto de modelos de la cripta, elige el siguiente a imprimir por ReglaPrioridadPorDefecto (prioridad desc → desempate por fecha_alta asc). Cálculo 100% determinista, sin E/S, sin juicio: no aprueba ni desaprueba, solo aplica la regla y devuelve Presente|Ausente. Sin store y sin estado propio; lee la cola via cola_modelos (el custodio single-writer) y nunca muta nada.",
+  "config": {
+    "persistence": {
+      "concurrency": "read-only",
+      "scope": "project"
+    }
+  },
+  "dependencies": [
+    "cola_modelos"
+  ],
+  "description": "Motor de propuesta puro: el siguiente modelo a imprimir por prioridad y antigüedad.",
+  "language": "es",
+  "main": "index.js",
+  "name": "motor_propuesta",
+  "publishes": [
+    {
+      "event": "motor_propuesta.proponer_siguiente.response"
+    },
+    {
+      "event": "motor_propuesta.proponer_siguiente.failed"
+    }
+  ],
+  "subscribes": [
+    {
+      "event": "motor_propuesta.proponer_siguiente.request",
+      "handler": "onProponerSiguienteRequest"
+    }
+  ],
+  "tools": [],
+  "version": "0.1.0"
+}

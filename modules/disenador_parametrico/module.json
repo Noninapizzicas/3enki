@@ -1,0 +1,40 @@
+{
+  "_doc": "Diseñador paramétrico (PASO 4): genera STL/3MF paramétricos y estima tiempo de impresión, alimentando Modelo.tiempo_estimado de la cola. Reflejo + puente: la mitad reflejo valida y orquesta; la mitad puente habla con el servidor OpenSCAD MCP (SSE) por HTTP. Lo generado es SUGERENCIA; solo pasa a Modelo real vía cola_modelos.agregar.",
+  "config": {
+    "persistence": {
+      "concurrency": "read-only",
+      "scope": "project"
+    }
+  },
+  "dependencies": [],
+  "description": "Diseñador paramétrico: genera STL/3MF y estima tiempo de impresión vía OpenSCAD MCP.",
+  "language": "es",
+  "main": "index.js",
+  "name": "disenador_parametrico",
+  "publishes": [
+    {
+      "event": "disenador_parametrico.generar_stl.response"
+    },
+    {
+      "event": "disenador_parametrico.generar_stl.failed"
+    },
+    {
+      "event": "disenador_parametrico.estimar_tiempo.response"
+    },
+    {
+      "event": "disenador_parametrico.estimar_tiempo.failed"
+    }
+  ],
+  "subscribes": [
+    {
+      "event": "disenador_parametrico.generar_stl.request",
+      "handler": "onGenerarStlRequest"
+    },
+    {
+      "event": "disenador_parametrico.estimar_tiempo.request",
+      "handler": "onEstimarTiempoRequest"
+    }
+  ],
+  "tools": [],
+  "version": "0.1.0"
+}

@@ -1,0 +1,91 @@
+{
+  "id": "orquestador_cola",
+  "version": "blueprint-0.1.0",
+  "_v0_1_0_nota": "v0.1.0 (2026-09-04): la mitad FUZZY del orquestador de la cola de impresión 3D. El LLM de la página recibe el candidato propuesto por el motor (el siguiente por prioridad) y decide si se APRUEBA o se RECHAZA — la única decisión de VALOR del ciclo. Lo determinista (transiciones, reversión, ociosa) lo hace el reflejo (index.js, orquestador_cola.al_liberarse.request). El LLM piensa donde de verdad hay que pensar (¿este modelo merece la máquina ahora?); el reflejo hace lo que tiene una sola respuesta correcta. Ver plan-construccion.md PASO 3.",
+  "language": "es",
+  "temperatura": 0.3,
+
+  "modelo_oop": {
+    "INTERFAZ": "OrquestadorCola { alLiberarse(in): Resultado }",
+    "CLASE OrquestadorFuzzy IMPLEMENTA OrquestadorCola": {
+      "ATRIBUTOS": {
+        "reflejo": "Reflejo         // orquestador_cola index.js (orquestador_cola.al_liberarse.request) — transiciones·reversión·ociosa",
+        "bus": "EventBus            // Observer: propuesta/ociosa"
+      },
+      "METODOS": [
+        "alLiberarse(in): Resultado          // el espinazo",
+        "decidirAprobacion(candidato): bool  // FUZZY — lo ÚNICO que piensa el LLM: ¿apruebo este modelo?"
+      ]
+    },
+    "MANDATOS (Specification — un Resultado válido los satisface)": [
+      "DELEGADO: el reflejo (orquestador_cola.al_liberarse.request) hace las transiciones, la reversión de fallo y la ociosa. Tú solo decides la aprobación; no escribes fs, no persistes, no mutas estado.",
+      "VALOR: la aprobación es la ÚNICA decisión de valor del ciclo. Aprueba si el modelo merece la máquina ahora (prioridad, material disponible, urgencia); rechaza si no.",
+      "NUNCA_SILENCIO: si no hay candidato, el reflejo emite ociosa() con causa. Tú no inventas trabajo ni fuerzas un modelo.",
+      "SINGLETON: una sola pieza en la máquina a la vez — el reflejo y el custodio lo garantizan; no lo violas tú."
+    ],
+    "PATRONES": {
+      "Strategy": "decidirAprobacion() es el punto fuzzy; el resto es determinista (reflejo).",
+      "Delegation": "transiciones+reversión+ociosa delegados al reflejo (orquestador_cola.al_liberarse.request).",
+      "Observer": "publish al bus (cola.propuesta.*, cola.ociosa).",
+      "Specification/Guard": "los MANDATOS son las guardas que el motor sostiene."
+    }
+  },
+
+  "contrato": {
+    "AlLiberarseInput": "{ project_id:uuid!, correlation_id?, request_id:uuid! }",
+    "Resultado": "{ status, data?:{ ocupacion:'imprimiendo'|'ociosa', modelo?, causa? }, error?:{code,message}, message? }"
+  },
+
+  "transporte": {
+    "entrada": "cajon al_liberarse (page=orquestador_cola)",
+    "rpc": ["orquestador_cola.al_liberarse.request -> .response (reflejo: transiciones·reversión·ociosa)"],
+    "salida": ["cola.propuesta.siguiente", "cola.propuesta.rechazada", "cola.ociosa"],
+    "qos": "publishAndWait (request/response correlado) en la delegación al reflejo"
+  },
+
+  "operaciones": {
+    "al_liberarse": {
+      "cajon_descripcion": "La máquina quedó libre. El reflejo propone el siguiente modelo por prioridad; tú decides si se aprueba (lo merece la máquina ahora) o se rechaza (deja el modelo pendiente y el reflejo reintenta con el siguiente).",
+      "input": "AlLiberarseInput (ver contrato)",
+      "pseudocodigo": [
+        "async alLiberarse(in):",
+        "  // 1. CONTRATO (guardas)",
+        "  si !in.project_id -> return INVALID_INPUT{field:'project_id'}",
+        "",
+        "  // 2. DELEGAR AL REFLEJO — él propone el siguiente, valida la transición, revierte",
+        "  //    el fallo y emite ociosa() si no hay candidato. Tú NO mutas estado.",
+        "  resp = publishAndWait('orquestador_cola.al_liberarse.request', {project_id:in.project_id, correlation_id:in.correlation_id}, 15000)",
+        "  si !resp || resp.status>=400 -> return resp?.error || UPSTREAM_UNREACHABLE",
+        "",
+        "  // 3. DECIDIR (LO TUYO, fuzzy) — si el reflejo propuso un modelo, decide si se aprueba.",
+        "  //    VALOR: prioridad, material disponible, urgencia. Si rechazas, el reflejo deja el",
+        "  //    modelo pendiente y reintenta con el siguiente (la máquina nunca queda muda).",
+        "  si resp.data?.ocupacion == 'imprimiendo' && resp.data?.modelo:",
+        "    aprobado = decidirAprobacion(resp.data.modelo)",
+        "    si !aprobado -> publish('cola.propuesta.rechazada', {project_id:in.project_id, id:resp.data.modelo.id, motivo:'rechazado_por_operador'})",
+        "    // el reflejo ya reintentó con el siguiente; devuelve el estado resultante",
+        "",
+        "  // 4. EMITIR",
+        "  return {status:200, data:resp.data, message: resp.data?.ocupacion=='imprimiendo' ? 'Máquina ocupada con '+resp.data.modelo.nombre : 'Máquina ociosa — sin candidatos pendientes'}"
+      ],
+      "reglas_clave": [
+        "DELEGADO: el reflejo (orquestador_cola.al_liberarse.request) propone, valida, revierte y emite ociosa. Tú solo decides la aprobación; no escribes fs, no persistes, no mutas estado.",
+        "VALOR: la aprobación es la ÚNICA decisión de valor del ciclo. Aprueba si el modelo merece la máquina ahora (prioridad, material disponible, urgencia); rechaza si no.",
+        "NUNCA_SILENCIO: si no hay candidato, el reflejo emite ociosa() con causa. No inventas trabajo ni fuerzas un modelo.",
+        "SINGLETON: una sola pieza en la máquina a la vez — el reflejo y el custodio lo garantizan; no lo violas tú."
+      ],
+      "errores_posibles": ["INVALID_INPUT", "UPSTREAM_INVALID_RESPONSE", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE", "UNKNOWN_ERROR"]
+    }
+  },
+
+  "eventos_publicados": [
+    "orquestador_cola.al_liberarse.request",
+    "cola.propuesta.siguiente",
+    "cola.propuesta.rechazada",
+    "cola.ociosa"
+  ],
+
+  "eventos_que_escucho": [],
+
+  "filosofia": "El ciclo de la máquina no necesita pensarse: el reflejo propone, valida, revierte y emite ociosa — determinista. El trabajo fuzzy real es la ÚNICA decisión de valor: ¿este modelo merece la máquina ahora? El LLM piensa donde de verdad hay que pensar; el reflejo hace lo que tiene una sola respuesta correcta."
+}

@@ -1,0 +1,48 @@
+{
+  "_doc": "ORQUESTADOR del ciclo de impresión 3D (PASO 3): cierra el ciclo libre → propuesta → aprobación → imprimiendo → impreso → libre. HÍBRIDO: el reflejo (index.js) compone cola_modelos + motor_propuesta por bus (transiciones legales, reversión de fallo, ociosa explícita); el blueprint (orquestador_cola.blueprint.json) decide la aprobación del candidato (LLM de página, SIN agente). Garantía: la máquina queda imprimiendo o se emite ociosa() con causa — nunca silencio, nunca se inventa trabajo. Sin store propio: lee/escribe via cola_modelos (custodio single-writer).",
+  "name": "orquestador_cola",
+  "version": "0.1.0",
+  "language": "es",
+  "description": "Orquestador del ciclo de impresión 3D: libre → propuesta → aprobación → imprimiendo → impreso → libre. Compone cola_modelos + motor_propuesta por bus.",
+  "blueprint_driven": true,
+  "blueprint_path": "orquestador_cola.blueprint.json",
+  "dependencies": [
+    "cola_modelos",
+    "motor_propuesta"
+  ],
+  "config": {
+    "persistence": {
+      "concurrency": "read-only",
+      "scope": "project"
+    }
+  },
+  "publishes": [
+    {
+      "event": "cola.propuesta.siguiente"
+    },
+    {
+      "event": "cola.propuesta.rechazada"
+    },
+    {
+      "event": "cola.ociosa"
+    },
+    {
+      "event": "orquestador_cola.al_liberarse.failed"
+    },
+    {
+      "event": "orquestador_cola.al_terminar_impresion.failed"
+    }
+  ],
+  "subscribes": [
+    {
+      "event": "orquestador_cola.al_liberarse.request",
+      "handler": "onAlLiberarseRequest"
+    },
+    {
+      "event": "orquestador_cola.al_terminar_impresion.request",
+      "handler": "onAlTerminarImpresionRequest"
+    }
+  ],
+  "tools": [],
+  "main": "index.js"
+}

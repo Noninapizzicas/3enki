@@ -55,6 +55,11 @@ export interface ArchivoExportado {
   bytes: number;
 }
 
+export interface Ociosidad {
+  causa: string;
+  instante?: string;
+}
+
 export interface ColaImpresionState {
   // UI
   loading: boolean;
@@ -63,6 +68,9 @@ export interface ColaImpresionState {
   // Cola (cola_modelos)
   cola: ModeloCola[];
   propuesta: Propuesta | null;
+
+  // Orquestador (orquestador_cola) — ociosidad explícita con causa
+  ociosidad: Ociosidad | null;
 
   // Búsqueda (buscador_www)
   busqueda: BusquedaRespuesta | null;
@@ -81,6 +89,7 @@ const initialState: ColaImpresionState = {
   error: null,
   cola: [],
   propuesta: null,
+  ociosidad: null,
   busqueda: null,
   buscando: false,
   archivo: null
@@ -100,6 +109,7 @@ export const imprimiendo = derived(colaImpresionStore, $s =>
   $s.cola.filter(m => m.estado === 'IMPRIMIENDO')
 );
 export const propuesta = derived(colaImpresionStore, $s => $s.propuesta);
+export const ociosidad = derived(colaImpresionStore, $s => $s.ociosidad);
 
 // =============================================================================
 // COLA (cola_modelos)
@@ -211,7 +221,21 @@ export function initColaImpresionSubscriptions(): () => void {
 
   cleanups.push(
     mqttSubscribe('cola_modelos.modelo_agregado', () => { cargarCola(); proponerSiguiente(); }),
-    mqttSubscribe('cola_modelos.estado_actualizado', () => { cargarCola(); proponerSiguiente(); })
+    mqttSubscribe('cola_modelos.estado_actualizado', () => { cargarCola(); proponerSiguiente(); }),
+    // Orquestador: la máquina quedó libre sin candidatos → ociosidad explícita con causa.
+    mqttSubscribe('cola.ociosa', (payload: any) => {
+      colaImpresionStore.update(s => ({
+        ...s,
+        ociosidad: { causa: payload?.causa || 'sin_candidatos_pendientes', instante: payload?.instante }
+      }));
+    }),
+    // Propuesta siguiente → hay trabajo en marcha, la ociosidad se disuelve.
+    mqttSubscribe('cola.propuesta.siguiente', () => {
+      colaImpresionStore.update(s => ({ ...s, ociosidad: null }));
+      cargarCola();
+    }),
+    // Rechazo de propuesta → el modelo queda pendiente; refrescar cola y propuesta.
+    mqttSubscribe('cola.propuesta.rechazada', () => { cargarCola(); proponerSiguiente(); })
   );
 
   cleanups.push(onReconnect(() => { initColaImpresion(); }));

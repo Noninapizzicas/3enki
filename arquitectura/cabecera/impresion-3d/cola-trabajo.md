@@ -18,7 +18,7 @@ fuentes:
   - frontend/src/lib/modules/cola-impresion/index.ts
   - frontend/src/lib/modules/cola-impresion/ColaImpresionPanel.svelte
   - frontend/src/lib/stores/cola-impresion.ts
-verificado: 2026-09-04
+verificado: 2026-09-05
 ---
 
 # IMPRESIÓN-3D — cola de trabajo del taller (SPARKX i7 · PETG)
@@ -93,6 +93,11 @@ Eventos de dominio (fire-and-forget, CREATE-ONLY):
 
 `cola-impresion` (work-bar + panel): store `cola-impresion.ts` + módulo lazy
 (manifest + index + `ColaImpresionPanel.svelte`) que consume los 5 módulos por MQTT.
+`orquestador-impresion` (work-bar + panel): `OrquestadorPanel.svelte` consume el
+orquestador — encadena el ciclo, propone siguiente, y muestra la **ociosidad explícita
+con causa** (`cola.ociosa` → `ociosa · <causa>`, nunca silencio). El store suscribe
+`cola.ociosa`, `cola.propuesta.siguiente` y `cola.propuesta.rechazada` además de los
+eventos de `cola_modelos`.
 Compilado en el bundle de producción (chunk `DPsf4Io_.js`).
 
 ## Estado

@@ -5,12 +5,15 @@
     pendientes,
     imprimiendo,
     propuesta,
+    ociosidad,
     initColaImpresion,
     initColaImpresionSubscriptions,
     encadenar,
     proponerSiguiente,
     actualizarEstado
   } from '$lib/stores/cola-impresion';
+
+  export let panelId: string;
 
   let encadenando = false;
   let ultimoCiclo: string | null = null;
@@ -67,7 +70,13 @@
       <div class="etapa">
         <span class="punto {$propuesta?.modelo ? 'activo' : ''}"></span>
         <span>Propuesta</span>
-        <strong>{$propuesta?.modelo ? $propuesta.modelo.nombre : '—'}</strong>
+        {#if $propuesta?.modelo}
+          <strong>{$propuesta.modelo.nombre}</strong>
+        {:else if $ociosidad}
+          <strong class="ociosa" title="Causa: {$ociosidad.causa}">ociosa · {$ociosidad.causa}</strong>
+        {:else}
+          <strong>—</strong>
+        {/if}
       </div>
     </div>
   </section>
@@ -84,6 +93,9 @@
       </button>
       <button on:click={proponerSiguiente} disabled={!$pendientes.length}>Proponer siguiente</button>
     </div>
+    {#if $ociosidad}
+      <p class="aviso-ociosa">🕐 Máquina ociosa: {$ociosidad.causa}</p>
+    {/if}
     {#if ultimoCiclo}
       <p class="meta">Último ciclo: {ultimoCiclo}</p>
     {/if}
@@ -126,11 +138,13 @@
   .estado-ciclo { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
   .etapa { display: flex; align-items: center; gap: 0.4rem; background: var(--color-bg-item, #1a1a1a); padding: 0.4rem 0.6rem; border-radius: 6px; }
   .etapa strong { color: var(--color-accent, #2563eb); }
+  .etapa strong.ociosa { color: #f59e0b; }
   .punto { width: 10px; height: 10px; border-radius: 50%; background: #444; }
   .punto.activo { background: #22c55e; box-shadow: 0 0 6px #22c55e; }
   .flecha { color: var(--color-text-muted, #888); }
   .desc { color: var(--color-text-muted, #888); font-size: 0.85rem; margin: 0 0 0.5rem; }
   .meta { color: var(--color-text-muted, #888); font-size: 0.8rem; }
+  .aviso-ociosa { color: #f59e0b; font-size: 0.85rem; margin: 0.5rem 0 0; }
   .badge { background: var(--color-badge, #333); border-radius: 999px; padding: 0.15rem 0.6rem; font-size: 0.75rem; }
   .vacio { color: var(--color-text-muted, #888); font-style: italic; }
   .lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.35rem; }

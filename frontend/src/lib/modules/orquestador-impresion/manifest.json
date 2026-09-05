@@ -1,0 +1,10 @@
+{
+  "id": "orquestador-impresion",
+  "name": "Orquestador de Impresión",
+  "version": "1.0.0",
+  "zone": "work-bar",
+  "order": 4,
+  "icon": "🔁",
+  "label": "Orquestador",
+  "universal": true
+}

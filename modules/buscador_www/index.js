@@ -11,11 +11,13 @@
  * HTML cambiado) se anota el error en por_fuente y se sigue con las demás
  * (degradación limpia, nunca un fallo de una fuente tumba la búsqueda entera).
  *
- * Fuentes (todas públicas, sin API key):
- *   - cults3d     https://cults3d.com/en/search?q=<query>
- *   - printables  https://www.printables.com/search/models?q=<query>
- *   - thingiverse https://www.thingiverse.com/search?q=<query>&type=things
- *   - makerworld  https://makerworld.com/en/search/models?keyword=<query>
+ * Fuentes (todas públicas, sin API key). Orden por defecto (regla del dueño):
+ *   - printables  https://www.printables.com/search/models?q=<query>   (default, calidad)
+ *   - makerworld  https://makerworld.com/en/search/models?keyword=<query> (secundaria)
+ *   - cults3d     https://cults3d.com/en/search?q=<query>              (respaldo)
+ *   - thingiverse https://www.thingiverse.com/search?q=<query>&type=things (fuera por defecto: caótico)
+ * El caller puede pedir fuentes concretas con input.fuentes; si no, se usan las
+ * de arriba en ese orden (printables primero).
  *
  * La extracción es por regex sobre el HTML (sin dependencias): cada fuente tiene
  * su extractor. Si el HTML cambia y no matchea, la fuente devuelve 0 resultados
@@ -29,11 +31,14 @@
 const ModuloHibridoReflejo = require('../_shared/modulo-hibrido-reflejo');
 
 const FUENTES = Object.freeze({
-  cults3d:     { url: (q) => `https://cults3d.com/en/search?q=${encodeURIComponent(q)}`, extractor: 'cults3d' },
   printables:  { url: (q) => `https://www.printables.com/search/models?q=${encodeURIComponent(q)}`, extractor: 'printables' },
-  thingiverse: { url: (q) => `https://www.thingiverse.com/search?q=${encodeURIComponent(q)}&type=things`, extractor: 'thingiverse' },
-  makerworld:  { url: (q) => `https://makerworld.com/en/search/models?keyword=${encodeURIComponent(q)}`, extractor: 'makerworld' }
+  makerworld:  { url: (q) => `https://makerworld.com/en/search/models?keyword=${encodeURIComponent(q)}`, extractor: 'makerworld' },
+  cults3d:     { url: (q) => `https://cults3d.com/en/search?q=${encodeURIComponent(q)}`, extractor: 'cults3d' },
+  thingiverse: { url: (q) => `https://www.thingiverse.com/search?q=${encodeURIComponent(q)}&type=things`, extractor: 'thingiverse' }
 });
+// Orden por defecto de consulta (regla del dueño): printables primero, thingiverse
+// fuera salvo que el caller la pida explícitamente.
+const FUENTES_DEFAULT = Object.freeze(['printables', 'makerworld', 'cults3d']);
 
 const UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
 
@@ -115,7 +120,7 @@ class BuscadorWwwReflejo extends ModuloHibridoReflejo {
     const query = String(input.query).trim();
     const fuentes = Array.isArray(input.fuentes) && input.fuentes.length
       ? input.fuentes.filter(f => FUENTES[f])
-      : Object.keys(FUENTES);
+      : FUENTES_DEFAULT;
     const limite = Math.min(input.limite || 20, 50);
 
     const resultados = [];

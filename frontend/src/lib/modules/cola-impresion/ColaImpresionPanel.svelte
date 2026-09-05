@@ -12,15 +12,15 @@
     actualizarEstado,
     proponerSiguiente,
     encadenar,
-    buscarModelos,
-    generarScad
+    buscarModelos
   } from '$lib/stores/cola-impresion';
+
+  export let panelId: string;
 
   let nombre = '';
   let prioridad = 5;
   let tiempoEstimado = 30;
   let query = '';
-  let scadParams = 'ancho=80, alto=20, profundidad=10';
 
   let cleanup: (() => void) | null = null;
 
@@ -42,18 +42,9 @@
   async function onBuscar() {
     await buscarModelos(query);
   }
-
-  async function onGenerarScad() {
-    const params: Record<string, unknown> = {};
-    scadParams.split(',').forEach(pair => {
-      const [k, v] = pair.split('=').map(s => s.trim());
-      if (k && v) params[k] = Number(v) || v;
-    });
-    await generarScad(params);
-  }
 </script>
 
-<div class="panel-cola">
+<div class="panel-cola" data-panel={panelId}>
   <header class="cabecera">
     <h2>🖨️ Cola de Impresión 3D</h2>
     {#if $colaImpresionStore.loading}
@@ -80,11 +71,12 @@
   <section class="seccion">
     <h3>Siguiente a imprimir</h3>
     {#if $propuesta?.modelo}
+      {@const modelo = $propuesta.modelo}
       <div class="propuesta">
-        <strong>{$propuesta.modelo.nombre}</strong>
-        <span class="badge">prioridad {$propuesta.modelo.prioridad}</span>
-        <span class="badge">~{$propuesta.modelo.tiempo_estimado} min</span>
-        <button on:click={() => actualizarEstado($propuesta.modelo.id, 'IMPRIMIENDO')}>▶ Imprimir</button>
+        <strong>{modelo.nombre}</strong>
+        <span class="badge">prioridad {modelo.prioridad}</span>
+        <span class="badge">~{modelo.tiempo_estimado} min</span>
+        <button on:click={() => actualizarEstado(modelo.id, 'IMPRIMIENDO')}>▶ Imprimir</button>
       </div>
     {:else}
       <p class="vacio">{$propuesta?.causa === 'cola_vacia' ? 'Cola vacía — no hay nada que imprimir.' : 'Sin propuesta.'}</p>
@@ -137,18 +129,6 @@
           </li>
         {/each}
       </ul>
-    {/if}
-  </section>
-
-  <!-- Diseño paramétrico -->
-  <section class="seccion">
-    <h3>Diseño paramétrico (OpenSCAD)</h3>
-    <div class="fila">
-      <input type="text" bind:value={scadParams} title="clave=valor, separados por coma" />
-      <button on:click={onGenerarScad}>Generar SCAD</button>
-    </div>
-    {#if $colaImpresionStore.scad}
-      <pre class="scad">{$colaImpresionStore.scad}</pre>
     {/if}
   </section>
 </div>

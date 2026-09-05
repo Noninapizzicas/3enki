@@ -49,6 +49,12 @@ export interface BusquedaRespuesta {
   por_fuente: Record<string, { ok: boolean; total: number }>;
 }
 
+export interface ArchivoExportado {
+  archivo: string;
+  formato: string;
+  bytes: number;
+}
+
 export interface ColaImpresionState {
   // UI
   loading: boolean;
@@ -63,7 +69,7 @@ export interface ColaImpresionState {
   buscando: boolean;
 
   // Diseño (disenador_parametrico)
-  scad: string | null;
+  archivo: ArchivoExportado | null;
 }
 
 // =============================================================================
@@ -77,7 +83,7 @@ const initialState: ColaImpresionState = {
   propuesta: null,
   busqueda: null,
   buscando: false,
-  scad: null
+  archivo: null
 };
 
 export const colaImpresionStore = writable<ColaImpresionState>(initialState);
@@ -154,7 +160,7 @@ export async function proponerSiguiente(): Promise<void> {
 
 export async function encadenar(): Promise<void> {
   try {
-    await mqttRequest<any>('orquestador_cola', 'encadenar', {});
+    await mqttRequest<any>('orquestador_cola', 'al_liberarse', {});
     await cargarCola();
     await proponerSiguiente();
   } catch (err: any) {
@@ -183,8 +189,8 @@ export async function buscarModelos(query: string): Promise<void> {
 
 export async function generarScad(params: Record<string, unknown>): Promise<void> {
   try {
-    const res = await mqttRequest<any>('disenador_parametrico', 'generar', params);
-    colaImpresionStore.update(s => ({ ...s, scad: res.data?.scad || null }));
+    const res = await mqttRequest<any>('disenador_parametrico', 'generar_stl', { parametros: params });
+    colaImpresionStore.update(s => ({ ...s, archivo: res.data || null }));
   } catch (err: any) {
     colaImpresionStore.update(s => ({ ...s, error: `Diseño: ${err.message || 'falló'}` }));
   }

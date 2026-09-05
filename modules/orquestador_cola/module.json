@@ -24,6 +24,12 @@
       "event": "cola.propuesta.rechazada"
     },
     {
+      "event": "cola.pendiente_aprobacion"
+    },
+    {
+      "event": "cola.candidato_aprobado"
+    },
+    {
       "event": "cola.ociosa"
     },
     {
@@ -41,6 +47,10 @@
     {
       "event": "orquestador_cola.al_terminar_impresion.request",
       "handler": "onAlTerminarImpresionRequest"
+    },
+    {
+      "event": "orquestador_cola.aprobar_candidato.request",
+      "handler": "onAprobarCandidatoRequest"
     }
   ],
   "tools": [],

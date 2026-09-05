@@ -30,7 +30,8 @@ const ModuloHibridoReflejo = require('../_shared/modulo-hibrido-reflejo');
  * @param {Array<Modelo>} modelos  lista de modelos (de la cripta, puede ser [])
  * @returns {Modelo|null} el siguiente a imprimir, o null si no hay candidato
  *                        (cola vacía o todo no-PENDIENTE).
- * Orden: solo PENDIENTE es proponible → prioridad desc → fecha_alta asc.
+ * Orden: solo PENDIENTE es proponible → agrupa por material (imprimir en lotes del
+ * mismo carrete ahorra cambios de filamento) → prioridad desc → fecha_alta asc.
  * NUNCA muta el array de entrada ni ninguno de sus elementos.
  */
 function proponerSiguiente(modelos) {
@@ -41,8 +42,11 @@ function proponerSiguiente(modelos) {
   return candidatos
     .slice()
     .sort((a, b) => {
-      if (b.prioridad !== a.prioridad) return b.prioridad - a.prioridad;      // mayor prioridad primero
-      if (a.fecha_alta !== b.fecha_alta) return a.fecha_alta < b.fecha_alta ? -1 : 1; // desempate: el más antiguo
+      const ma = (a.material || '').toLowerCase();
+      const mb = (b.material || '').toLowerCase();
+      if (ma !== mb) return ma < mb ? -1 : 1;                              // 1) agrupar por material
+      if (b.prioridad !== a.prioridad) return b.prioridad - a.prioridad;  // 2) mayor prioridad primero
+      if (a.fecha_alta !== b.fecha_alta) return a.fecha_alta < b.fecha_alta ? -1 : 1; // 3) desempate: el más antiguo
       return 0;
     })[0];
 }

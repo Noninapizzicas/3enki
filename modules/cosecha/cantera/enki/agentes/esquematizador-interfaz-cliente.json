@@ -1,49 +1,30 @@
 {
   "name": "esquematizador-interfaz-cliente",
-  "description": "FASE 2 (lente CLIENTE): esquematiza la cara de consumo del negocio (qué elige, compra, repite el cliente) para producir el esquema que un agente de UI convierte en la interfaz pública. Nace de la lógica de FASE 0 + FM0.",
-  "identidad": {
-    "role": "Esquematizador de la interfaz del cliente (FASE 2) de Enki",
-    "goal": "Derivar de la lógica de FASE 0 + FM0 qué crear para cubrir los objetivos del negocio, y esquematizar cada pieza con la lente cliente (recorrido de consumo) en storage/esquema-cliente/",
-    "backstory": "Naces de la LÓGICA, no de una web asumida. Lees FASE 0 + FM0 y derivas QUÉ crear (interfaces, PWA, app móvil, dashboard — lo que la lógica pida). Luego esquematizas cada pieza con la lente CLIENTE: el recorrido de consumo (descubrir→elegir→convertir→repetir). Aplicas el prisma de 5 huecos con preguntas-cliente, desglosas el diseño por apartados (CSS, iconos, fuentes, elementos, lógica, formas), y marcas a_crear lo que no existe. Los frenos suman. Nunca inventas datos que no estén en fase-0 ni fm0."
-  },
+  "description": "Fase 2 (lente CLIENTE) NACE DE LA LÓGICA, NO de una web asumida. Parte de la pregunta rectora derivada de FASE 0 + FM0 + lógica: '¿qué tenemos que CREAR para cubrir los objetivos de estos dos documentos?'. Primero DERIVA QUÉ construir (pueden ser 1 o 2 interfaces distintas, app web, PWA, app móvil, dashboard — lo que la lógica determine, jamás un catálogo ni una web asumida); luego ESQUEMATIZA cada una de las interfaces resultantes con su desglose (CSS, iconos, fuentes, elementos, lógica, formas); el reflejo escribe; el JEFE verifica.",
   "pasos": [
     {
       "paso": "derivar_que_construir",
       "tipo": "fuzzy",
-      "instruccion": "PRIMERA PREGUNTA RECTORA. Con FASE 0 + FM0 delante responde '¿QUÉ tenemos que CREAR que cubra los objetivos?'. Deriva el QUÉ y PORQUÉ de cada pieza. NO asumas web: interfaces, PWA, app móvil, dashboard, bot — lo que la lógica pida, sin catálogo ni inventario. Para cada pieza: nombre, tipo, cara (cliente/jefe/neutro), objetivo, porqué (freno que convierte en oportunidad). Lo que no existe se marca a_crear. Devuelve SOLO un JSON válido con forma exacta: {\"piezas\": [{\"nombre\": \"...\", \"tipo\": \"app_web|pwa|app_movil|dashboard|web_landing|otro\", \"cara\": \"cliente|jefe|neutro\", \"objetivo\": \"qué cubre del FM0/F0\", \"porque\": \"qué freno convierte en oportunidad\"}], \"nota\": \"1 línea si hay ambigüedad\"}.",
-      "valida": {
-        "tamano_min": 120
-      }
+      "instruccion": "PRIMERA PREGUNTA RECTORA, derivada SOLO de la lógica del negocio. Lee la FASE 0 (storage/proceso-negocio/fase0-identidad-negocio.json: qué es, qué vende, cómo lo elabora) y el FM0 (storage/marketing/fm0.md: qué prometer, a quién, canales, embudo, diferenciación, objetivos). Con la lógica de ambos delante, responde a la pregunta: '¿QUÉ tenemos que CREAR para cubrir los objetivos de estos dos documentos?'. Es decir: ¿qué INTERFACES o artefactos de construcción necesita este negocio para alcanzar sus objetivos de marketing y de venta? DERIVA el QUÉ y el PORQUÉ de cada pieza. NO asumas web: puede resultar 1 o 2 interfaces distintas (una para el cliente que compra, otra para el jefe que decide), una app web, una PWA instalable, una app móvil, un dashboard, un bot — lo que la lógica del negocio pida, sin límite de catálogo ni de inventario. Para cada pieza derivada di: qué es, a qué objetivo sirve, qué cara atiende (cliente/jefe/neutro), y POR QUÉ la lógica la exige (qué freno convierte en oportunidad). Devuelve SOLO un JSON válido con forma exacta: {\\\"piezas\\\": [{\\\"nombre\\\": \\\"...\\\", \\\"tipo\\\": \\\"app_web|pwa|app_movil|dashboard|web_landing|otro\\\", \\\"cara\\\": \\\"cliente|jefe|neutro\\\", \\\"objetivo\\\": \\\"qué cubre del FM0/F0\\\", \\\"porque\\\": \\\"qué freno convierte en oportunidad\\\"}], \\\"nota\\\": \\\"1 línea si hay ambigüedad\\\"}. Si una pieza no existe aún en el sistema, NO la descartes: márcala como 'a_crear' — lo que no hay se crea.",
+      "valida": { "tamano_min": 120 }
     },
     {
       "paso": "generar_esquema_cliente",
       "tipo": "fuzzy",
-      "instruccion": "Con las PIEZAS derivadas en el paso anterior, esquematiza cada UNA con el método del esquematizador de lente cliente. La pieza con cara 'jefe' se esquematiza con la lógica del esquematizador-jefe; la de cara 'cliente' con la lente cliente (recorrido de consumo); la neutra como estado. NO las mezcles. Para CADA pieza aplica el prisma de 5 huecos (identidad: qué se elige/decide; restricciones: qué ya está fijado; contrato: qué ver y qué señal confirma; no-objetivos: qué caras no toca; preguntas_abiertas: qué falta). Y el DESGLOSE del diseño por APARTADOS SEPARADOS (CSS, iconos, fuentes, elementos, lógica, formas) SOLO donde toque diseño visual. MANDATO DEL FOCO: identifica el ESLABÓN que hoy se para (el FRENO de conversión) y EXPÁNDELO: qué lo bloquea, qué alternativa lo convierte en oportunidad que SUMA. LEY DE CERO SUPUESTOS: todo dato que no esté en fase-0 ni fm0 se marca PREGUNTA ABIERTA, NUNCA se inventa. Los apartados de la LÓGICA son la BASE. Devuelve el esquema maestro en markdown con H2 por pieza (objetivo, prisma, apartados aplicables, forma de cada hoja, señal pareada, huecos [ABIERTO]). SIEMPRE incluye al final una sección de SIGUIENTE PASO que nombre la(s) interfaz(es) a construir en la F7.",
-      "valida": {
-        "tamano_min": 800
-      }
+      "instruccion": "Con las PIEZAS derivadas en el paso anterior (el JSON que indica qué interfaces/artefactos hay que crear y porqué), esquematiza cada UNA de ellas con el método del esquematizador de lente cliente. La pieza con cara 'jefe' se esquematiza con la lógica del esquematizador-jefe (decisiones de reglas/config); la de cara 'cliente' con la lente cliente (recorrido de consumo); la neutra como estado. NO las mezcles: cada pieza es SU esquema.\n\nPara CADA pieza, aplica el prisma de 5 huecos (identidad: qué se elige/decide; restricciones: qué ya está fijado; contrato: qué ver y qué señal confirma; no-objetivos: qué caras no toca; preguntas_abiertas: qué falta). Y el DESGLOSE del diseño por APARTADOS SEPARADOS (CSS, iconos, fuentes, elementos, lógica, formas) SOLO donde toque diseño visual — un dashboard de métricas no necesita el mismo desglose visual que la web del cliente.\n\nMANDATO DEL FOCO: del recorrido/objetivo declarado en fase-0/fm0, identifica el ESLABÓN que hoy se para (el FRENO de conversión o de valor) y EXPÁNDELO: qué lo bloquea, qué alternativa lo convierte en oportunidad que SUMA (no restas). El freno resuelto es el CORAZÓN del esquema.\n\nLEY DE CERO SUPUESTOS: NO des nada por sentado. Todo dato que no esté en fase-0 ni fm0 se marca PREGUNTA ABIERTA, NUNCA se inventa.\n\nLos apartados de la LÓGICA son la BASE: la lógica de cada pieza define qué hacer — el resto (css, iconos, fuentes, elementos, formas) la sostiene. El qué construir ya nació de la lógica; ahora la lógica de cada pieza determina cómo se comporta y qué eventos toca.\n\nDevuelve el esquema maestro que incluye: por cada pieza, su sección completa (objetivo, prisma, apartados aplicables, forma de cada hoja, señal pareada, huecos [ABIERTO]). Formato markdown con H2 por pieza. SIEMPRE incluye al final una sección de SIGUIENTE PASO que nombre la(s) interfaz(es) a construir en la F7.",
+      "valida": { "tamano_min": 800 }
     },
     {
       "paso": "escribir_esquema",
       "tipo": "reflejo",
       "op": "escribir"
-    },
-    {
-      "paso": "verificar",
-      "tipo": "reflejo",
-      "op": "verificar"
     }
   ],
   "entregable": {
     "tipo": "fs",
-    "dir": "storage/esquema-cliente",
-    "archivos": [
-      "esquema.md"
-    ],
+    "path": "storage/esquema-cliente/esquema.md",
     "reglas": [
-      "existe",
-      "en_repo",
-      "contenido_min"
+      "existe", "contenido_min"
     ],
     "min_chars": 800
   },

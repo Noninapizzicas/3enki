@@ -7,8 +7,10 @@
     generarScad
   } from '$lib/stores/cola-impresion';
 
-  // Parámetros por defecto para el set ShelfFUXX (conectores 16mm)
-  let paramsTexto = 'diametro=16, pared=1.2, relleno=20, tipo=conector_90';
+  export let panelId: string;
+
+  // Parámetros por defecto (forma + dimensiones que el backend realmente acepta)
+  let paramsTexto = 'forma=caja, ancho=20, alto=20, profundo=20, pared=2';
   let generando = false;
   let cleanup: (() => void) | null = null;
 
@@ -29,20 +31,26 @@
         const [k, v] = pair.split('=').map(s => s.trim());
         if (k && v) params[k] = Number(v) || v;
       });
-      await generarScad(params);
+      // El backend espera { forma, dimensiones:{...} } — separa las dimensiones.
+      const dimensiones: Record<string, unknown> = {};
+      ['ancho', 'alto', 'profundo', 'pared', 'radio'].forEach(d => {
+        if (params[d] !== undefined) { dimensiones[d] = params[d]; delete params[d]; }
+      });
+      const payload = { forma: params.forma || 'caja', dimensiones };
+      await generarScad(payload);
     } finally {
       generando = false;
     }
   }
 
-  function copiarScad() {
-    if ($colaImpresionStore.scad) {
-      navigator.clipboard?.writeText($colaImpresionStore.scad);
+  function copiarRuta() {
+    if ($colaImpresionStore.archivo?.archivo) {
+      navigator.clipboard?.writeText($colaImpresionStore.archivo.archivo);
     }
   }
 </script>
 
-<div class="panel-disenador">
+<div class="panel-disenador" data-panel={panelId}>
   <header class="cabecera">
     <h2>📐 Diseñador Paramétrico</h2>
     {#if $colaImpresionStore.loading}
@@ -60,27 +68,31 @@
     <div class="fila">
       <input type="text" bind:value={paramsTexto} />
       <button on:click={onGenerar} disabled={generando || !paramsTexto.trim()}>
-        {generando ? 'Generando…' : 'Generar SCAD'}
+        {generando ? 'Generando…' : 'Generar modelo'}
       </button>
     </div>
     <div class="presets">
-      <button class="preset" on:click={() => paramsTexto = 'diametro=16, pared=1.2, relleno=20, tipo=conector_90'}>Conector 90°</button>
-      <button class="preset" on:click={() => paramsTexto = 'diametro=16, pared=1.2, relleno=20, tipo=conector_t'}>Conector T</button>
-      <button class="preset" on:click={() => paramsTexto = 'diametro=16, pared=1.2, relleno=20, tipo=conector_recto'}>Conector recto</button>
-      <button class="preset" on:click={() => paramsTexto = 'diametro=16, pared=1.2, relleno=20, tipo=tapon'}>Tapón</button>
+      <button class="preset" on:click={() => paramsTexto = 'forma=caja, ancho=20, alto=20, profundo=20, pared=2'}>Caja 20mm</button>
+      <button class="preset" on:click={() => paramsTexto = 'forma=cilindro, radio=10, alto=20'}>Cilindro</button>
     </div>
   </section>
 
-  <!-- Resultado SCAD -->
+  <!-- Resultado: archivo exportado -->
   <section class="seccion">
-    <h3>SCAD generado</h3>
-    {#if $colaImpresionStore.scad}
-      <div class="scad-toolbar">
-        <button on:click={copiarScad}>Copiar</button>
+    <h3>Modelo exportado</h3>
+    {#if $colaImpresionStore.archivo}
+      <div class="archivo">
+        <div class="archivo-fila">
+          <span class="archivo-ruta">{$colaImpresionStore.archivo.archivo}</span>
+          <button on:click={copiarRuta}>Copiar ruta</button>
+        </div>
+        <div class="archivo-meta">
+          <span class="badge">{$colaImpresionStore.archivo.formato}</span>
+          <span class="badge">{$colaImpresionStore.archivo.bytes} bytes</span>
+        </div>
       </div>
-      <pre class="scad">{$colaImpresionStore.scad}</pre>
     {:else}
-      <p class="vacio">Genera un SCAD para verlo aquí.</p>
+      <p class="vacio">Genera un modelo para ver el archivo exportado aquí.</p>
     {/if}
   </section>
 </div>
@@ -99,8 +111,10 @@
   .presets { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-top: 0.5rem; }
   .preset { background: var(--color-bg-item, #1a1a1a); border-color: var(--color-border, #444); color: var(--color-text-muted, #aaa); font-size: 0.8rem; }
   .preset:hover { color: #fff; border-color: var(--color-accent, #2563eb); }
-  .scad-toolbar { display: flex; justify-content: flex-end; margin-bottom: 0.4rem; }
-  .scad { background: #0d0d0d; border-radius: 6px; padding: 0.5rem; font-size: 0.75rem; overflow-x: auto; white-space: pre-wrap; }
+  .archivo { display: flex; flex-direction: column; gap: 0.5rem; }
+  .archivo-fila { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; flex-wrap: wrap; }
+  .archivo-ruta { font-family: monospace; font-size: 0.8rem; word-break: break-all; }
+  .archivo-meta { display: flex; gap: 0.4rem; }
   .badge { background: var(--color-badge, #333); border-radius: 999px; padding: 0.15rem 0.6rem; font-size: 0.75rem; }
   .vacio { color: var(--color-text-muted, #888); font-style: italic; }
 </style>

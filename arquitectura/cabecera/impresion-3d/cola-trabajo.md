@@ -107,5 +107,4 @@ Compilado en el bundle de producción (chunk `DPsf4Io_.js`).
 ✓ Cola sembrada con el set ShelfFUXX 16mm (conector-90, conector-T, conector-recto, tapon) en PETG.
 ✓ Ciclo completo probado: agregar → proponer → imprimiendo → impreso → encadena.
 ✓ Sin rpc_fantasma de los 5 módulos (el único fantasma del bus es `recetas.actualizar_precio.request`, ajeno).
-◑ Deuda técnica consciente: reglas de prioridad/aprobación/fuentes con defaults (PASO 7 del plan
-  quedó con defaults en vez de reglas afinadas con el dueño).
+✓ Reglas de negocio afinadas con el dueño (PASO 7): aprobación auto-aprueba lo ya impreso y consulta lo nuevo (orquestador `ya_impreso`); prioridad por número (mayor primero, piezas estructurales altas); fuentes por defecto printables+thingiverse primero (buscador_www).

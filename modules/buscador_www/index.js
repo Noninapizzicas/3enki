@@ -13,11 +13,11 @@
  *
  * Fuentes (todas públicas, sin API key). Orden por defecto (regla del dueño):
  *   - printables  https://www.printables.com/search/models?q=<query>   (default, calidad)
- *   - makerworld  https://makerworld.com/en/search/models?keyword=<query> (secundaria)
+ *   - thingiverse https://www.thingiverse.com/search?q=<query>&type=things (las dos grandes, fiables y gratis)
+ *   - makerworld  https://makerworld.com/en/search/models?keyword=<query> (respaldo)
  *   - cults3d     https://cults3d.com/en/search?q=<query>              (respaldo)
- *   - thingiverse https://www.thingiverse.com/search?q=<query>&type=things (fuera por defecto: caótico)
  * El caller puede pedir fuentes concretas con input.fuentes; si no, se usan las
- * de arriba en ese orden (printables primero).
+ * de arriba en ese orden (printables y thingiverse primero).
  *
  * La extracción es por regex sobre el HTML (sin dependencias): cada fuente tiene
  * su extractor. Si el HTML cambia y no matchea, la fuente devuelve 0 resultados
@@ -36,9 +36,9 @@ const FUENTES = Object.freeze({
   cults3d:     { url: (q) => `https://cults3d.com/en/search?q=${encodeURIComponent(q)}`, extractor: 'cults3d' },
   thingiverse: { url: (q) => `https://www.thingiverse.com/search?q=${encodeURIComponent(q)}&type=things`, extractor: 'thingiverse' }
 });
-// Orden por defecto de consulta (regla del dueño): printables primero, thingiverse
-// fuera salvo que el caller la pida explícitamente.
-const FUENTES_DEFAULT = Object.freeze(['printables', 'makerworld', 'cults3d']);
+// Orden por defecto de consulta (regla del dueño): printables y thingiverse primero
+// (las dos grandes, fiables y gratis), makerworld y cults3d como respaldo.
+const FUENTES_DEFAULT = Object.freeze(['printables', 'thingiverse', 'makerworld', 'cults3d']);
 
 const UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
 

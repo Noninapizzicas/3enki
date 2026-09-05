@@ -1,9 +1,0 @@
-{
-  "id": "motor_propuesta",
-  "name": "MotorPropuesta",
-  "version": "0.1.0",
-  "zone": "work-bar",
-  "order": 51,
-  "icon": "🎯",
-  "label": "MotorPropuesta"
-}

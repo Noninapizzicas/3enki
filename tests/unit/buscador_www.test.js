@@ -60,16 +60,16 @@ async function run() {
   assert.strictEqual(r.status, 400);
   console.log('PASS 4: sin query → 400 INVALID_INPUT');
 
-  // 5) Fuente desconocida se ignora; sin fuentes → default (printables, makerworld,
-  //    cults3d — thingiverse fuera por regla del dueño).
+  // 5) Fuente desconocida se ignora; sin fuentes → default (printables, thingiverse,
+  //    makerworld, cults3d — printables y thingiverse primero por regla del dueño).
   mockFetch(HTMLS);
   r = await m._buscar({ query: 'conector', fuentes: ['cults3d', 'noexiste'] });
   assert.strictEqual(r.data.por_fuente.cults3d.ok, true);
   assert.strictEqual(r.data.por_fuente.noexiste, undefined, 'fuente desconocida se ignora');
   r = await m._buscar({ query: 'conector' });
-  assert.strictEqual(r.data.total, 4, 'sin fuentes → default (printables+makerworld+cults3d), thingiverse fuera');
-  assert.strictEqual(r.data.por_fuente.thingiverse, undefined, 'thingiverse no se consulta por defecto');
-  console.log('PASS 5: fuente desconocida ignorada; sin fuentes → default (thingiverse fuera)');
+  assert.strictEqual(r.data.total, 5, 'sin fuentes → default (printables+thingiverse+makerworld+cults3d)');
+  assert.strictEqual(r.data.por_fuente.thingiverse.n, 1, 'thingiverse se consulta por defecto (regla del dueño)');
+  console.log('PASS 5: fuente desconocida ignorada; sin fuentes → default (thingiverse incluido)');
 
   console.log('\nALL PASS (5/5)');
 }

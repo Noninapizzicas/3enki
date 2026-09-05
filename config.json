@@ -61,6 +61,7 @@
       "system-inspector",
       "ai-gateway",
       "ai-agent-framework",
+      "ai-agent-framework-v3",
       "cupulas",
       "cupula-eventos",
       "apis-publicas",
@@ -169,8 +170,7 @@
       "agent-observer",
       "memory-conversation-summary",
       "memory-rag",
-      "memory-user-profile",
-      "ai-agent-framework-v3"
+      "memory-user-profile"
     ]
   },
   "observability": {

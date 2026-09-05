@@ -1,0 +1,10 @@
+{
+  "id": "disenador-parametrico",
+  "name": "Diseñador Paramétrico",
+  "version": "1.0.0",
+  "zone": "work-bar",
+  "order": 5,
+  "icon": "📐",
+  "label": "Diseñador",
+  "universal": true
+}

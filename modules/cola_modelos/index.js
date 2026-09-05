@@ -78,6 +78,7 @@ class ColaModelosReflejo extends ModuloHibridoReflejo {
   onObtenerPorPrioridadRequest(e) { return this._atender(e, 'obtener_por_prioridad', 'cola_modelos.obtener_por_prioridad.response', d => this._obtenerPorPrioridad(d)); }
   onActualizarEstadoRequest(e)  { return this._atender(e, 'actualizar_estado', 'cola_modelos.actualizar_estado.response', d => this._actualizarEstado(d)); }
   onListarRequest(e)            { return this._atender(e, 'listar', 'cola_modelos.listar.response', d => this._listar(d)); }
+  onYaImpresoRequest(e)         { return this._atender(e, 'ya_impreso', 'cola_modelos.ya_impreso.response', d => this._yaImpreso(d)); }
 
   // ── PROYECCIONES (dominio) ──
 
@@ -132,11 +133,12 @@ class ColaModelosReflejo extends ModuloHibridoReflejo {
     return { status: 201, data: { añadidos: nuevos, duplicados } };
   }
 
-  // _obtenerPorPrioridad: propuesta determinista — el modelo de mayor prioridad
-  // (número más alto) en estado PENDIENTE, desempate por fecha_alta más antigua.
-  // Excluye IMPRIMIENDO (el singleton) e IMPRESO. Si todo está impreso/pendiente
-  // vacío → 404 RESOURCE_NOT_FOUND 'cola_vacia' (respuesta canónica: hay respuesta
-  // siempre, nunca silencio).
+  // _obtenerPorPrioridad: propuesta determinista — agrupa por material (cambiar
+  // filamento cuesta tiempo y desperdicia material: se imprime en lotes del mismo
+  // carrete), luego por prioridad (número más alto primero), desempate por
+  // fecha_alta más antigua. Excluye IMPRIMIENDO (el singleton) e IMPRESO. Si todo
+  // está impreso/pendiente vacío → 404 RESOURCE_NOT_FOUND 'cola_vacia' (respuesta
+  // canónica: hay respuesta siempre, nunca silencio).
   async _obtenerPorPrioridad(input) {
     if (!input.project_id) return this._invalid('project_id');
 
@@ -147,8 +149,14 @@ class ColaModelosReflejo extends ModuloHibridoReflejo {
     }
 
     candidatos.sort((a, b) => {
+      // 1) Agrupar por material (null primero: sin material declarado no bloquea lote).
+      const ma = a.material || '';
+      const mb = b.material || '';
+      if (ma !== mb) return ma < mb ? -1 : 1;
+      // 2) Prioridad desc.
       if (b.prioridad !== a.prioridad) return b.prioridad - a.prioridad;
-      return a.fecha_alta < b.fecha_alta ? -1 : 1;   // desempate: el más antiguo primero
+      // 3) Desempate: el más antiguo primero.
+      return a.fecha_alta < b.fecha_alta ? -1 : 1;
     });
 
     return { status: 200, data: { modelo: candidatos[0], candidatos: candidatos.length } };
@@ -210,8 +218,27 @@ class ColaModelosReflejo extends ModuloHibridoReflejo {
       if (!ESTADOS.includes(input.estado)) return this._invalid('estado');
       lista = lista.filter(m => m.estado === input.estado);
     }
-    lista.sort((a, b) => (a.prioridad !== b.prioridad ? b.prioridad - a.prioridad : (a.fecha_alta < b.fecha_alta ? -1 : 1)));
+    lista.sort((a, b) => {
+      const ma = a.material || '';
+      const mb = b.material || '';
+      if (ma !== mb) return ma < mb ? -1 : 1;
+      if (a.prioridad !== b.prioridad) return b.prioridad - a.prioridad;
+      return a.fecha_alta < b.fecha_alta ? -1 : 1;
+    });
     return { status: 200, data: { modelos: lista, total: lista.length } };
+  }
+
+  // _yaImpreso: ¿este modelo (por origen+ref) ya se imprimió con éxito? Consulta el
+  // histórico (single-writer). Sirve al gate de auto-aprobación del orquestador:
+  // reimprimir algo ya impreso no necesita visto bueno humano; solo lo nuevo pasa
+  // por revisión. Devuelve { ya_impreso: bool, impresiones: n }.
+  async _yaImpreso(input) {
+    if (!input.project_id) return this._invalid('project_id');
+    if (!input.origen || !input.ref) return this._invalid('origen/ref');
+
+    const doc = await this._cargar(input.project_id);
+    const coincidencias = [...doc.historico.values()].filter(m => m.origen === input.origen && m.ref === input.ref);
+    return { status: 200, data: { ya_impreso: coincidencias.length > 0, impresiones: coincidencias.length } };
   }
 
   // ── store (single-writer, por proyecto) ──

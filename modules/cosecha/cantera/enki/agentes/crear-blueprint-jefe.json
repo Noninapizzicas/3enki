@@ -16,7 +16,7 @@
       "paso": "generar_base",
       "tipo": "reflejo",
       "op": "ejecutar_script",
-      "comando": "node scripts/generar-blueprint.js <slug> --no-frontend"
+      "comando": "node scripts/generar-blueprint-jefe.js <slug> --no-frontend"
     },
     {
       "paso": "clasificar_roles",

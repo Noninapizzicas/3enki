@@ -53,5 +53,35 @@
     }
   ],
   "tools": [],
+  "ui_handlers": [
+    {
+      "domain": "cola_modelos",
+      "action": "agregar",
+      "handler": "onAgregarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "cola_modelos",
+      "action": "listar",
+      "handler": "onListarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "cola_modelos",
+      "action": "obtener_por_prioridad",
+      "handler": "onObtenerPorPrioridadRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "cola_modelos",
+      "action": "actualizar_estado",
+      "handler": "onActualizarEstadoRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
+  ],
   "version": "0.1.0"
 }

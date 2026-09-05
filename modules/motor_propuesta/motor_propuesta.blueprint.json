@@ -1,0 +1,60 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "motor_propuesta",
+  "version": "blueprint-2.0.0",
+  "moduleId": "motor_propuesta",
+  "actor": "jefe",
+  "titulo": "Motor de propuesta puro: el siguiente modelo a imprimir por prioridad y antigüedad.",
+  "eventos_publicados": [
+    "motor_propuesta.proponer_siguiente.response",
+    "motor_propuesta.proponer_siguiente.failed"
+  ],
+  "eventos_que_escucho": [
+    "motor_propuesta.proponer_siguiente.request"
+  ],
+  "transporte": {
+    "rpc": [
+      "motor_propuesta.proponer_siguiente.request -> .response"
+    ],
+    "salida": [
+      "motor_propuesta.proponer_siguiente.response",
+      "motor_propuesta.proponer_siguiente.failed"
+    ]
+  },
+  "ui": {
+    "roles": {
+      "proponer_siguiente": "neutro"
+    },
+    "ops": {
+      "proponer_siguiente": {
+        "titulo": "Proponer Siguiente",
+        "descripcion": "Propone el siguiente modelo a imprimir por prioridad (desc) y antigüedad (asc). Solo modelos PENDIENTE son proponibles; un modelo IMPRIMIENDO nunca se propone. Devuelve propuesta o causa 'cola_vacia'.",
+        "args": [
+          {
+            "nombre": "project_id",
+            "tipo": "string",
+            "required": true,
+            "descripcion": "Proyecto activo."
+          }
+        ]
+      }
+    },
+    "datos": {
+      "op": "proponer_siguiente",
+      "titulo": "Siguiente a imprimir",
+      "refresh_on": [
+        "motor_propuesta.proponer_siguiente.response"
+      ]
+    },
+    "flujo": [
+      {
+        "nombre": "consulta",
+        "orden": 1,
+        "ops": [
+          "proponer_siguiente"
+        ],
+        "descripcion": "Ver y proponer"
+      }
+    ]
+  }
+}

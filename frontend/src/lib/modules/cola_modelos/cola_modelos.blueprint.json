@@ -1,0 +1,161 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "cola_modelos",
+  "version": "blueprint-2.0.0",
+  "moduleId": "cola_modelos",
+  "actor": "jefe",
+  "titulo": "Cripta de la cola de impresión 3D: modelos, prioridad y máquina de estados.",
+  "eventos_publicados": [
+    "cola_modelos.modelo_agregado",
+    "cola_modelos.modelo_imprimiendo",
+    "cola_modelos.modelo_impreso"
+  ],
+  "eventos_que_escucho": [
+    "cola_modelos.agregar.request",
+    "cola_modelos.obtener_por_prioridad.request",
+    "cola_modelos.actualizar_estado.request",
+    "cola_modelos.listar.request",
+    "project.activated"
+  ],
+  "transporte": {
+    "rpc": [
+      "cola_modelos.agregar.request -> .response",
+      "cola_modelos.listar.request -> .response",
+      "cola_modelos.obtener_por_prioridad.request -> .response",
+      "cola_modelos.actualizar_estado.request -> .response"
+    ],
+    "salida": [
+      "cola_modelos.modelo_agregado",
+      "cola_modelos.modelo_imprimiendo",
+      "cola_modelos.modelo_impreso"
+    ]
+  },
+  "ui": {
+    "roles": {
+      "agregar": "jefe",
+      "actualizar_estado": "jefe",
+      "listar": "neutro",
+      "obtener_por_prioridad": "utilizacion"
+    },
+    "ops": {
+      "agregar": {
+        "titulo": "Agregar modelo a la cola",
+        "descripcion": "Añade uno o varios modelos a la cola de impresión. Cada modelo requiere nombre y prioridad; opcional material, tiempo estimado, origen y ref.",
+        "args": [
+          {
+            "nombre": "modelos",
+            "tipo": "json",
+            "required": true,
+            "descripcion": "Array de modelos {nombre, prioridad, material?, tiempo_estimado?, origen?, ref?}"
+          },
+          {
+            "nombre": "nombre",
+            "tipo": "string",
+            "required": false,
+            "descripcion": "Nombre del modelo (alternativa a modelos para un solo alta)"
+          },
+          {
+            "nombre": "prioridad",
+            "tipo": "number",
+            "required": false,
+            "descripcion": "Prioridad del modelo (número más alto = primero)"
+          },
+          {
+            "nombre": "material",
+            "tipo": "string",
+            "required": false,
+            "descripcion": "Material (p.ej. PETG)"
+          },
+          {
+            "nombre": "tiempo_estimado",
+            "tipo": "number",
+            "required": false,
+            "descripcion": "Tiempo estimado de impresión"
+          }
+        ]
+      },
+      "listar": {
+        "titulo": "Listar cola",
+        "descripcion": "Lista los modelos de la cola, ordenados por prioridad desc y desempate por fecha_alta. Filtro opcional por estado.",
+        "args": [
+          {
+            "nombre": "estado",
+            "tipo": "select",
+            "required": false,
+            "enum": ["PENDIENTE", "IMPRIMIENDO", "IMPRESO"],
+            "descripcion": "Filtrar por estado"
+          }
+        ]
+      },
+      "obtener_por_prioridad": {
+        "titulo": "Proponer siguiente",
+        "descripcion": "Devuelve el modelo de mayor prioridad en estado PENDIENTE (desempate por fecha_alta más antigua). Excluye IMPRIMIENDO e IMPRESO."
+      },
+      "actualizar_estado": {
+        "titulo": "Avanzar estado",
+        "descripcion": "Transición legal de estado: PENDIENTE→IMPRIMIENDO→IMPRESO. Respeta el singleton 'imprimiendo' (una sola pieza en la máquina). Transición inválida → 409 sin mutar.",
+        "args": [
+          {
+            "nombre": "id",
+            "tipo": "ref",
+            "required": true,
+            "ref": "cola_modelos.listar",
+            "ref_label": "nombre",
+            "ref_value": "id",
+            "placeholder": "selecciona modelo"
+          },
+          {
+            "nombre": "estado",
+            "tipo": "select",
+            "required": true,
+            "enum": ["PENDIENTE", "IMPRIMIENDO", "IMPRESO"],
+            "descripcion": "Estado destino (solo arcos legales)"
+          },
+          {
+            "nombre": "motivo",
+            "tipo": "string",
+            "required": false,
+            "descripcion": "Motivo de la transición"
+          }
+        ]
+      }
+    },
+    "datos": {
+      "op": "listar",
+      "titulo": "Cola de impresión",
+      "refresh_on": [
+        "cola_modelos.modelo_agregado",
+        "cola_modelos.modelo_imprimiendo",
+        "cola_modelos.modelo_impreso"
+      ]
+    },
+    "estados": [
+      { "nombre": "PENDIENTE", "terminal": false, "color": "gray", "icono": "📝" },
+      { "nombre": "IMPRIMIENDO", "terminal": false, "color": "orange", "icono": "🔥" },
+      { "nombre": "IMPRESO", "terminal": true, "color": "green", "icono": "✔️" }
+    ],
+    "flujo": [
+      {
+        "nombre": "jefe",
+        "orden": 0,
+        "ops": ["agregar", "actualizar_estado"],
+        "descripcion": "Gestionar la cola: añadir modelos y avanzar su estado"
+      },
+      {
+        "nombre": "consulta",
+        "orden": 1,
+        "ops": ["listar"],
+        "descripcion": "Ver la cola"
+      },
+      {
+        "nombre": "utilidad",
+        "orden": 5,
+        "ops": ["obtener_por_prioridad"],
+        "descripcion": "Proponer el siguiente a imprimir"
+      }
+    ],
+    "guardas": {
+      "actualizar_estado": { "sensible_estado": true }
+    }
+  }
+}

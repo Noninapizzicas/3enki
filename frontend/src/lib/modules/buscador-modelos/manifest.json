@@ -1,0 +1,10 @@
+{
+  "id": "buscador-modelos",
+  "name": "Buscador de Modelos",
+  "version": "1.0.0",
+  "zone": "work-bar",
+  "order": 6,
+  "icon": "🔍",
+  "label": "Buscador",
+  "universal": true
+}

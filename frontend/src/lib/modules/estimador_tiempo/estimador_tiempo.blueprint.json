@@ -1,0 +1,55 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "estimador_tiempo",
+  "version": "blueprint-2.0.0",
+  "moduleId": "estimador_tiempo",
+  "titulo": "Estimador de tiempo puro: minutos de impresión por volumen y material.",
+  "eventos_que_escucho": [
+    "estimador_tiempo.estimar_tiempo.request"
+  ],
+  "transporte": {
+    "rpc": [
+      "estimador_tiempo.estimar_tiempo.request -> .response"
+    ]
+  },
+  "ui": {
+    "ops": {
+      "estimar_tiempo": {
+        "titulo": "Estimar tiempo de impresión",
+        "descripcion": "Estima los minutos de impresión a partir del volumen y material de la pieza. Cálculo determinista sin E/S.",
+        "args": [
+          {
+            "nombre": "volumen_cm3",
+            "tipo": "number",
+            "required": true,
+            "descripcion": "Volumen de la pieza en cm³"
+          },
+          {
+            "nombre": "material",
+            "tipo": "select",
+            "required": false,
+            "enum": [
+              "PETG",
+              "PLA",
+              "ABS"
+            ],
+            "descripcion": "Material (por defecto PETG)"
+          }
+        ]
+      }
+    },
+    "flujo": [
+      {
+        "nombre": "utilidad",
+        "orden": 5,
+        "ops": [
+          "estimar_tiempo"
+        ],
+        "descripcion": "Herramientas y consultas"
+      }
+    ],
+    "roles": {
+      "estimar_tiempo": "utilizacion"
+    }
+  }
+}

@@ -1,0 +1,61 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "cupula_gcode",
+  "version": "blueprint-2.0.0",
+  "moduleId": "cupula_gcode",
+  "titulo": "Cúpula de la receta por máquina: gcode firmado y cacheado por máquina.",
+  "eventos_que_escucho": [
+    "cupula_gcode.registrar.request",
+    "cupula_gcode.obtener_por_maquina.request",
+    "cupula_gcode.listar.request",
+    "project.activated"
+  ],
+  "transporte": {
+    "rpc": [
+      "cupula_gcode.registrar.request -> .response",
+      "cupula_gcode.obtener_por_maquina.request -> .response",
+      "cupula_gcode.listar.request -> .response"
+    ]
+  },
+  "ui": {
+    "ops": {
+      "registrar": {
+        "titulo": "Registrar"
+      },
+      "obtener_por_maquina": {
+        "titulo": "Obtener Por Maquina"
+      },
+      "listar": {
+        "titulo": "Listar"
+      }
+    },
+    "datos": {
+      "op": "listar",
+      "titulo": "Listar"
+    },
+    "flujo": [
+      {
+        "nombre": "jefe",
+        "orden": 0,
+        "ops": [
+          "registrar"
+        ],
+        "descripcion": "Registrar y consultar gcode por máquina"
+      },
+      {
+        "nombre": "utilidad",
+        "orden": 5,
+        "ops": [
+          "obtener_por_maquina",
+          "listar"
+        ],
+        "descripcion": "Herramientas y consultas"
+      }
+    ],
+    "roles": {
+      "registrar": "jefe",
+      "obtener_por_maquina": "neutro",
+      "listar": "neutro"
+    }
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "id": "estimador_tiempo",
+  "name": "EstimadorTiempo",
+  "version": "0.1.0",
+  "zone": "work-bar",
+  "order": 50,
+  "icon": "📦",
+  "label": "EstimadorTiempo"
+}

@@ -230,14 +230,17 @@ if docker compose version &>/dev/null; then
     # (no toca el grupo docker). El core solo lo usa si el interruptor 'headroom' se
     # enciende (OFF por defecto) → tenerlo arriba es inofensivo. Baja el modelo Kompress
     # al 1er arranque (tarda; el healthcheck lo cubre).
+    # [2026-09-06] DESACTIVADO por decisión del dueño: no se levanta el contenedor (no
+    # arranca), pero NO se apaga definitivamente. Para reactivar, descomentar el bloque.
     HR_COMPOSE="${REPO_DIR}/deployment/python-tools/docker-compose.headroom.yml"
     if [ -f "$HR_COMPOSE" ]; then
-        log "Levantando Headroom (proxy de compresión, :8787)..."
-        if docker compose -f "$HR_COMPOSE" up -d --build > /dev/null 2>&1; then
-            log "Headroom arriba (verifica: curl http://127.0.0.1:8787/livez)"
-        else
-            warn "Headroom no arrancó — el provider va directo al LLM (fallback seguro). Revisa: docker compose -f $HR_COMPOSE logs"
-        fi
+        log "Headroom DESACTIVADO (decisión del dueño) — no se levanta el contenedor."
+        # log "Levantando Headroom (proxy de compresión, :8787)..."
+        # if docker compose -f "$HR_COMPOSE" up -d --build > /dev/null 2>&1; then
+        #     log "Headroom arriba (verifica: curl http://127.0.0.1:8787/livez)"
+        # else
+        #     warn "Headroom no arrancó — el provider va directo al LLM (fallback seguro). Revisa: docker compose -f $HR_COMPOSE logs"
+        # fi
     fi
 else
     warn "Sin docker compose: Crawl4RS/SearXNG/Headroom no se levantaron. Todo degrada honesto hasta reejecutar el setup."

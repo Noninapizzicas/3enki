@@ -1,0 +1,57 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "puente_creality",
+  "version": "blueprint-2.0.0",
+  "moduleId": "puente_creality",
+  "titulo": "Puente con el PC del dueño: slice CrealityPrint, arranque y monitoreo de impresión.",
+  "eventos_que_escucho": [
+    "puente_creality.orquestar_slice.request",
+    "puente_creality.arrancar_impresion.request",
+    "puente_creality.estado_impresion.request",
+    "puente_creality.complete"
+  ],
+  "transporte": {
+    "rpc": [
+      "puente_creality.orquestar_slice.request -> .response",
+      "puente_creality.arrancar_impresion.request -> .response",
+      "puente_creality.estado_impresion.request -> .response"
+    ]
+  },
+  "ui": {
+    "ops": {
+      "orquestar_slice": {
+        "titulo": "Orquestar Slice"
+      },
+      "arrancar_impresion": {
+        "titulo": "Arrancar Impresion"
+      },
+      "estado_impresion": {
+        "titulo": "Estado Impresion"
+      }
+    },
+    "flujo": [
+      {
+        "nombre": "jefe",
+        "orden": 0,
+        "ops": [
+          "orquestar_slice",
+          "arrancar_impresion"
+        ],
+        "descripcion": "Orquestar slice, arrancar y monitorear impresión"
+      },
+      {
+        "nombre": "utilidad",
+        "orden": 5,
+        "ops": [
+          "estado_impresion"
+        ],
+        "descripcion": "Herramientas y consultas"
+      }
+    ],
+    "roles": {
+      "orquestar_slice": "jefe",
+      "arrancar_impresion": "jefe",
+      "estado_impresion": "neutro"
+    }
+  }
+}

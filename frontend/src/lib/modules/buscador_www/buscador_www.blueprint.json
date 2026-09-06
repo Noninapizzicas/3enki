@@ -1,0 +1,61 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "buscador_www",
+  "version": "blueprint-2.0.0",
+  "moduleId": "buscador_www",
+  "titulo": "Buscador de modelos 3D en el ecosistema público (Cults3D, Printables, Thingiverse, MakerWorld).",
+  "eventos_que_escucho": [
+    "buscador_www.buscar.request"
+  ],
+  "transporte": {
+    "rpc": [
+      "buscador_www.buscar.request -> .response"
+    ]
+  },
+  "ui": {
+    "ops": {
+      "buscar": {
+        "titulo": "Buscar modelos 3D",
+        "descripcion": "Busca modelos 3D en el ecosistema público (Cults3D, Printables, Thingiverse, MakerWorld). Consulta cada fuente por HTTP con degradación limpia y devuelve candidatos con origen/ref para volcarlos a la cola con dedup.",
+        "args": [
+          {
+            "nombre": "necesidad",
+            "tipo": "string",
+            "required": true,
+            "descripcion": "Descripción de la necesidad o pieza a buscar"
+          },
+          {
+            "nombre": "fuente",
+            "tipo": "select",
+            "required": false,
+            "enum": [
+              "Cults3D",
+              "Printables",
+              "Thingiverse",
+              "MakerWorld",
+              "todas"
+            ],
+            "descripcion": "Fuente a consultar (por defecto todas)"
+          }
+        ]
+      }
+    },
+    "datos": {
+      "op": "buscar",
+      "titulo": "Buscar"
+    },
+    "flujo": [
+      {
+        "nombre": "jefe",
+        "orden": 0,
+        "ops": [
+          "buscar"
+        ],
+        "descripcion": "Buscar modelos 3D en el ecosistema público"
+      }
+    ],
+    "roles": {
+      "buscar": "jefe"
+    }
+  }
+}

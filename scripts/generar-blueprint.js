@@ -142,6 +142,19 @@ function extraerAcciones(mod) {
     }
   }
 
+  // Fuente primaria de RPCs: los subscribes .request (dominio.accion.request).
+  // Cubre módulos sin ui_handlers ni tools (p.ej. los de impresion-3d), donde la
+  // interfaz se deriva de los handlers del bus. No duplica acciones ya presentes.
+  const subs = extraerSubscribes(mod);
+  for (const s of subs) {
+    const m = /^([a-z0-9_]+)\.([a-z0-9_]+)\.request$/i.exec(s);
+    if (!m) continue;
+    const [, dom, action] = m;
+    if (!acciones.has(action)) {
+      acciones.set(action, { domain: dom, action });
+    }
+  }
+
   return acciones;
 }
 
@@ -376,10 +389,17 @@ function derivarGuardas(tools) {
 // ── Buscar module.json (con resolución de verticales) ──
 
 function buscarModulo(baseDir, slugModule) {
-  const dirs = [
-    path.join(baseDir, slugModule),
-    ...['pizzepos', 'prisma'].map(v => path.join(baseDir, v, slugModule)),
+  // El slug llega en kebab-case (slug() lo normaliza), pero los directorios de
+  // módulo son snake_case (buscador_www). Probar ambas variantes.
+  const variantes = [
+    slugModule,
+    slugModule.replace(/-/g, '_'),
   ];
+  const dirs = [];
+  for (const v of variantes) {
+    dirs.push(path.join(baseDir, v));
+    for (const vert of ['pizzepos', 'prisma']) dirs.push(path.join(baseDir, vert, v));
+  }
   for (const d of dirs) {
     const p = path.join(d, 'module.json');
     if (fs.existsSync(p)) return { dir: d, path: p };
@@ -395,7 +415,9 @@ function generarFrontend(slugModule, name, description, blueprint, uiDecision) {
   const zone = uiDecision.zone || 'work-bar';
   const order = uiDecision.order || 50;
   const label = pascal;
-  const frontDir = path.join(REPO_FRONTEND, slugModule);
+  // Directorio frontend en snake_case (consistente con el resto de módulos:
+  // cola_modelos/, motor_propuesta/). El slugModule llega en kebab-case.
+  const frontDir = path.join(REPO_FRONTEND, slugModule.replace(/-/g, '_'));
 
   const manifest = {
     id: name,

@@ -1,0 +1,49 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "disenador_parametrico",
+  "version": "blueprint-2.0.0",
+  "moduleId": "disenador_parametrico",
+  "titulo": "Diseñador paramétrico: genera STL/3MF y estima tiempo de impresión vía OpenSCAD MCP.",
+  "eventos_que_escucho": [
+    "disenador_parametrico.generar_stl.request",
+    "disenador_parametrico.estimar_tiempo.request"
+  ],
+  "transporte": {
+    "rpc": [
+      "disenador_parametrico.generar_stl.request -> .response",
+      "disenador_parametrico.estimar_tiempo.request -> .response"
+    ]
+  },
+  "ui": {
+    "ops": {
+      "generar_stl": {
+        "titulo": "Generar Stl"
+      },
+      "estimar_tiempo": {
+        "titulo": "Estimar Tiempo"
+      }
+    },
+    "flujo": [
+      {
+        "nombre": "jefe",
+        "orden": 0,
+        "ops": [
+          "generar_stl"
+        ],
+        "descripcion": "Generar STL paramétrico y estimar tiempo"
+      },
+      {
+        "nombre": "utilidad",
+        "orden": 5,
+        "ops": [
+          "estimar_tiempo"
+        ],
+        "descripcion": "Herramientas y consultas"
+      }
+    ],
+    "roles": {
+      "generar_stl": "jefe",
+      "estimar_tiempo": "utilizacion"
+    }
+  }
+}

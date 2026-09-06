@@ -95,6 +95,23 @@
       "modulos_procesados": []
     },
     {
+      "name": "crear-blueprint-full",
+      "description": "Blueprint de interfaz SIN filtro de actor (TODAS las ops: consulta + supervisión + operativa). No excluye ninguna operación del module.json. Extiende generar-blueprint con la capa de roles.",
+      "archivo": "crear-blueprint-full.json",
+      "tags": [
+        "interfaz",
+        "blueprint",
+        "ui",
+        "roles",
+        "full",
+        "completo"
+      ],
+      "creado": "2026-09-05",
+      "ejecuciones": 0,
+      "ultima_ejecucion": null,
+      "modulos_procesados": []
+    },
+    {
       "name": "esquematizador-que-construir",
       "description": "FM1 (Fase Marketing 1): deriva QUÉ crear para cubrir los objetivos de fase-0 + fm0. Produce storage/marketing/fm1.md con las piezas a construir (sin asumir web, sin catálogo, lo que no existe se marca a_crear).",
       "archivo": "esquematizador-que-construir.json",

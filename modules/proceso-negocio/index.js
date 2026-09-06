@@ -113,28 +113,10 @@ const MAPA_PROCESO = {
     mensaje: 'FASE 5: escribir la SKILL FULL del módulo — lee modules/<slug>/module.json + index.js del repo, escribe modules/cosecha/cantera/enki/<slug>/SKILL.md en el repo. Al terminar: proceso-negocio.completar_fase { fase: "skills" }.'
   },
   'negocio.skills': {
-    skill: 'decidir-interfaz',
-    lee: ['modules/<slug>/module.json', 'modules/cosecha/cantera/enki/<slug>/SKILL.md'],
-    escribe: 'modules/<slug>/module.json',
-    mensaje: 'FASE 6: decidir la INTERFAZ del módulo — lee modules/<slug>/module.json + la skill de la cantera, razona el rol, escribe ui_handlers (type+zone) en modules/<slug>/module.json. Al terminar: proceso-negocio.completar_fase { fase: "interfaz", resumen: { modulos: ["<slug>"] } }.'
-  },
-  'negocio.interfaz': {
-    skill: 'crear-blueprint-jefe',
-    lee: ['modules/<slug>/module.json', 'modules/<slug>/<slug>.blueprint.json'],
-    escribe: 'modules/<slug>/<slug>.blueprint.json',
-    mensaje: 'FASE 6½ (método v2): ejecutar el agente crear-blueprint-jefe — esquematizador-jefe (5 preguntas + formas UI + señales pareadas) → blueprint con ui.roles + ui.flujo + formas_jefe + _lente_roles + _verificado_en_codigo EN modules/<slug>/<slug>.blueprint.json. Al terminar: proceso-negocio.completar_fase { fase: "interfaz_esquematizada", resumen: { modulos: ["<slug>"] } }.'
-  },
-  'negocio.interfaz_esquematizada': {
-    skill: 'crear-blueprint-jefe',
-    lee: ['modules/<slug>/<slug>.blueprint.json'],
-    escribe: 'frontend/src/lib/modules/<slug>/',
-    mensaje: 'FASE 7 (método v2): ejecutar el F7 del agente crear-blueprint-jefe — panel del jefe de generación v2 (composición 3 capas, project_id inyectado, señales pareadas) + frontend_sync (copia del blueprint a frontend/src/lib/modules/<slug>/). Al terminar: proceso-negocio.completar_fase { fase: "interfaz_construida", resumen: { modulos: ["<slug>"] } }.'
-  },
-  'negocio.interfaz_construida': {
     skill: 'construir-modulos',
     lee: ['esquemas/plan-construccion.md'],
     escribe: 'modules/<slug>/',
-    mensaje: 'Hoja completa. FASE 4: construir la SIGUIENTE hoja del plan — lee esquemas/plan-construccion.md, la siguiente sin módulo en el repo. Al terminar: proceso-negocio.completar_fase { fase: "construido" }. Si no quedan hojas: proceso-negocio.completar_fase { fase: "completado" }.'
+    mensaje: 'Hoja completa (módulo + skill). FASE 4: construir la SIGUIENTE hoja del plan — lee esquemas/plan-construccion.md, la siguiente sin módulo en el repo. Al terminar: proceso-negocio.completar_fase { fase: "construido" }. Si no quedan hojas: proceso-negocio.completar_fase { fase: "completado" }.'
   },
   'negocio.verificado': {
     skill: null,
@@ -244,16 +226,13 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
 
   // ── DECISIÓN DETERMINISTA del siguiente paso (el sistema decide, no el LLM) ──
   // MÓDULO POR MÓDULO (decisión del dueño): se recorre el plan EN ORDEN y se
-  // actúa sobre la PRIMERA hoja incompleta — esa hoja recorre TODAS sus fases
-  // (construir → skill → interfaz → esquematizar interfaz → interfaz operativa)
-  // ANTES de que empiece la siguiente. No es fase-por-fase (todos los módulos,
-  // luego todas las skills): es hoja-por-hoja, cada una terminada de una.
+  // actúa sobre la PRIMERA hoja incompleta — esa hoja recorre SUS fases
+  // (construir → skill) ANTES de que empiece la siguiente. No es fase-por-fase
+  // (todos los módulos, luego todas las skills): es hoja-por-hoja, cada una
+  // terminada de una. Las fases de interfaz (F6/6½/7) se quitaron del proceso.
   //   hoja sin módulo               → construir-modulos (FASE 4)
   //   módulo sin skill              → escribir-skills (FASE 5)
-  //   con skill, sin interfaz       → decidir-interfaz (FASE 6)
-  //   interfaz decidida, sin spec   → crear-blueprint-jefe (FASE 6½, método v2)
-  //   spec hecha, sin construir     → crear-blueprint-jefe (FASE 7, método v2)
-  //   hoja completa                 → la SIGUIENTE hoja
+  //   hoja completa (módulo+skill)  → la SIGUIENTE hoja
   //   todas las hojas completas     → verificación final → completado
   _decidirSiguiente(progreso, faseActual = null) {
     const hojas = progreso.hojas || [];
@@ -267,28 +246,19 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
       if (!h.con_skill) {
         return { skill: 'escribir-skills', lee: [`modules/${h.slug}/module.json`, `modules/${h.slug}/index.js`], escribe: `modules/cosecha/cantera/enki/${h.slug}/SKILL.md`, mensaje: `MÓDULO POR MÓDULO — ${pos}: escribir la SKILL FULL — lee modules/${h.slug}/module.json + index.js del repo, escribe modules/cosecha/cantera/enki/${h.slug}/SKILL.md en el repo. Al terminar: proceso-negocio.completar_fase { fase: "skills", resumen: { skills: ["${h.slug}"] } }.` };
       }
-      if (!h.con_interfaz) {
-        return { skill: 'decidir-interfaz', lee: [`modules/${h.slug}/module.json`, `modules/cosecha/cantera/enki/${h.slug}/SKILL.md`], escribe: `modules/${h.slug}/module.json`, mensaje: `MÓDULO POR MÓDULO — ${pos}: decidir interfaz — lee modules/${h.slug}/module.json + skill de la cantera, razona el rol, escribe ui_handlers en modules/${h.slug}/module.json. Al terminar: proceso-negocio.completar_fase { fase: "interfaz", resumen: { modulos: ["${h.slug}"] } }.` };
-      }
-      if (!h.con_interfaz_esquematizada) {
-        return { skill: 'crear-blueprint-jefe', lee: [`modules/${h.slug}/module.json`, `modules/${h.slug}/${h.slug}.blueprint.json`], escribe: `modules/${h.slug}/${h.slug}.blueprint.json`, mensaje: `MÓDULO POR MÓDULO — ${pos}: esquematizar la interfaz (método v2) — ejecutar el agente crear-blueprint-jefe: esquematizador-jefe (5 preguntas + formas UI + señales pareadas) → blueprint con ui.roles + ui.flujo + formas_jefe + _lente_roles + _verificado_en_codigo EN modules/${h.slug}/${h.slug}.blueprint.json. Al terminar: proceso-negocio.completar_fase { fase: "interfaz_esquematizada", resumen: { modulos: ["${h.slug}"] } }.` };
-      }
-      if (!h.con_interfaz_construida) {
-        return { skill: 'crear-blueprint-jefe', lee: [`modules/${h.slug}/${h.slug}.blueprint.json`], escribe: `frontend/src/lib/modules/${h.slug}/`, mensaje: `MÓDULO POR MÓDULO — ${pos}: construir la interfaz (método v2) — ejecutar el F7 del agente crear-blueprint-jefe: panel del jefe de generación v2 (composición 3 capas, project_id inyectado, señales pareadas) + frontend_sync (copia del blueprint a frontend/src/lib/modules/${h.slug}/). Al terminar: proceso-negocio.completar_fase { fase: "interfaz_construida", resumen: { modulos: ["${h.slug}"] } }.` };
-      }
-      // hoja completa → continúa a la siguiente
+      // hoja completa (módulo + skill) → continúa a la siguiente
     }
     // FASE 8 — VERIFICACIÓN FINAL EN VIVO (determinista, sin LLM).
-    // Todo el plan está construido (módulo + skill + interfaz operativa). Antes
-    // de declarar 'completado', el orquestador VERIFICA EN DISCO que el negocio
-    // realmente funciona: cada hoja del plan debe tener su módulo que CARGA, su
-    // skill en la cantera y su interfaz operativa en el frontend. No se fía del
-    // reporte del agente (lección de todo el proceso). Si ya se verificó
-    // (flag persistido) o se acaba de completar la fase 'verificado', cierra.
+    // Todo el plan está construido (módulo + skill). Antes de declarar
+    // 'completado', el orquestador VERIFICA EN DISCO que el negocio realmente
+    // funciona: cada hoja del plan debe tener su módulo que CARGA y su skill en
+    // la cantera. No se fía del reporte del agente (lección de todo el proceso).
+    // Si ya se verificó (flag persistido) o se acaba de completar la fase
+    // 'verificado', cierra.
     if (this._verificado(progreso.project_id) || faseActual === 'verificado') {
-      return { skill: null, lee: [], escribe: null, mensaje: 'COMPLETO Y VERIFICADO: todas las hojas tienen módulo, skill e interfaz operativa verificados en vivo. F0→F8 cerrado.' };
+      return { skill: null, lee: [], escribe: null, mensaje: 'COMPLETO Y VERIFICADO: todas las hojas tienen módulo y skill verificados en vivo. F0→F5 cerrado.' };
     }
-    return { skill: 'verificar-en-vivo', lee: ['modules/', 'modules/cosecha/cantera/enki/', 'frontend/src/lib/modules/'], escribe: null, mensaje: `FASE 8 · VERIFICACIÓN FINAL (${progreso.con_interfaz_construida}/${progreso.total}): verificar EN VIVO que cada hoja del plan tiene módulo, skill y interfaz operativa en el repo. Al terminar: proceso-negocio.completar_fase { fase: "verificado" }.` };
+    return { skill: 'verificar-en-vivo', lee: ['modules/', 'modules/cosecha/cantera/enki/'], escribe: null, mensaje: `FASE 8 · VERIFICACIÓN FINAL (${progreso.con_skill}/${progreso.total}): verificar EN VIVO que cada hoja del plan tiene módulo y skill en el repo. Al terminar: proceso-negocio.completar_fase { fase: "verificado" }.` };
   }
 
   // ── PROGRESO DEL PLAN (determinista — el sistema decide, no el LLM) ──
@@ -309,7 +279,7 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
     try {
       const r = await this._rpc('fs.read.request', { project_id, path: 'esquemas/plan-construccion.md' });
       const contenido = (r && (r.content || r.data?.content)) || '';
-      if (!contenido) return { project_id, total: 0, construidos: 0, con_skill: 0, con_interfaz: 0, con_interfaz_esquematizada: 0, con_interfaz_construida: 0, faltan_por_construir: 0, faltan_por_skill: 0, faltan_por_interfaz: 0, faltan_por_interfaz_esquematizada: 0, faltan_por_interfaz_construida: 0, slugs: [], hojas: [] };
+      if (!contenido) return { project_id, total: 0, construidos: 0, con_skill: 0, faltan_por_construir: 0, faltan_por_skill: 0, slugs: [], hojas: [] };
       // Las hojas salen de la ESPINA del plano (bloque ```json enki-plan```, el
       // contrato que el adaptador declara y el JEFE verifica). El fallback es
       // cosechar kebab-case del texto — lo que se hacía siempre — y por eso
@@ -317,28 +287,17 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
       // construir: fantasmas que nunca existen en disco, así que
       // faltan_por_construir jamás bajaba a 0 y el rail no llegaba a completado.
       const slugs = this._hojasDelPlan(contenido);
-      let construidos = 0, con_skill = 0, con_interfaz = 0, con_interfaz_esquematizada = 0, con_interfaz_construida = 0;
+      let construidos = 0, con_skill = 0;
       // Estado POR HOJA, en orden del plan — lo que el ciclo módulo-por-módulo
       // recorre para actuar sobre la PRIMERA hoja incompleta. Cada hoja recorre
-      // TODAS sus fases antes de que empiece la siguiente (decisión del dueño).
+      // SUS fases (construir → skill) antes de que empiece la siguiente.
       const hojas = [];
       for (const slug of slugs) {
-        const h = { slug, construido: false, con_skill: false, con_interfaz: false, con_interfaz_esquematizada: false, con_interfaz_construida: false };
+        const h = { slug, construido: false, con_skill: false };
         const dirModulo = this._buscarModulo(slug);
         if (dirModulo) {
           h.construido = true; construidos++;
           if (this._skillEnCantera(slug)) { h.con_skill = true; con_skill++; }
-          if (this._interfazDecidida(dirModulo)) {
-            h.con_interfaz = true; con_interfaz++;
-            if (this._interfazSinNecesidad(dirModulo)) {
-              // Sin interfaz (F6) → la spec y la construcción se dan por hechas.
-              h.con_interfaz_esquematizada = true; con_interfaz_esquematizada++;
-              h.con_interfaz_construida = true; con_interfaz_construida++;
-            } else {
-              if (this._interfazEsquematizadaEnDisco(dirModulo, slug)) { h.con_interfaz_esquematizada = true; con_interfaz_esquematizada++; }
-              if (this._interfazOperativaEnDisco(slug)) { h.con_interfaz_construida = true; con_interfaz_construida++; }
-            }
-          }
         }
         hojas.push(h);
       }
@@ -347,19 +306,13 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
         total: slugs.length,
         construidos,
         con_skill,
-        con_interfaz,
-        con_interfaz_esquematizada,
-        con_interfaz_construida,
         faltan_por_construir: slugs.length - construidos,
         faltan_por_skill: construidos - con_skill,
-        faltan_por_interfaz: construidos - con_interfaz,
-        faltan_por_interfaz_esquematizada: con_interfaz - con_interfaz_esquematizada,
-        faltan_por_interfaz_construida: con_interfaz_esquematizada - con_interfaz_construida,
         slugs,
         hojas
       };
     } catch (_) {
-      return { project_id, total: 0, construidos: 0, con_skill: 0, con_interfaz: 0, con_interfaz_esquematizada: 0, con_interfaz_construida: 0, faltan_por_construir: 0, faltan_por_skill: 0, faltan_por_interfaz: 0, faltan_por_interfaz_esquematizada: 0, faltan_por_interfaz_construida: 0, slugs: [], hojas: [] };
+      return { project_id, total: 0, construidos: 0, con_skill: 0, faltan_por_construir: 0, faltan_por_skill: 0, slugs: [], hojas: [] };
     }
   }
 
@@ -550,8 +503,8 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
     const spec = ESPERADOS[fase];
     if (!spec) return { ok: true };   // fase sin gate declarado → se acepta
     // FASE 8 — verificación final: TODAS las hojas del plan deben estar
-    // construidas + con skill + con interfaz operativa. No se fía del resumen
-    // del agente: cuenta el progreso REAL en disco (_progresoPlan).
+    // construidas + con skill. No se fía del resumen del agente: cuenta el
+    // progreso REAL en disco (_progresoPlan). Las fases de interfaz se quitaron.
     if (fase === 'verificado') {
       const progreso = await this._progresoPlan(project_id);
       // Sin plan no hay nada que verificar: "0 hojas verificadas" NO es verde.
@@ -559,11 +512,9 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
         return { ok: false, esperado: ['un plan de construcción con hojas'], progreso,
           mensaje: 'No hay plan de construcción (esquemas/plan-construccion.md) con hojas: no hay nada que verificar. Cierra antes las fases 3b y 4.' };
       }
-      const faltan = progreso.faltan_por_construir + progreso.faltan_por_skill
-        + progreso.faltan_por_interfaz + progreso.faltan_por_interfaz_esquematizada
-        + progreso.faltan_por_interfaz_construida;
+      const faltan = progreso.faltan_por_construir + progreso.faltan_por_skill;
       if (faltan > 0) {
-        return { ok: false, esperado: ['todas las hojas construidas + skill + interfaz operativa'], mensaje: spec.mensaje, progreso };
+        return { ok: false, esperado: ['todas las hojas construidas + skill'], mensaje: spec.mensaje, progreso };
       }
       return { ok: true, verificados: [`${progreso.total} hojas verificadas en disco`] };
     }

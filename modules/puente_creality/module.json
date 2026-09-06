@@ -1,0 +1,54 @@
+{
+  "_doc": "Puente CrealityPrint (PASO 8): frontera con el PC del dueño (CrealityPrint V7.2.1, 8GB RAM). Orquesta el slice del STL → gcode, sube el gcode, arranca la impresión y la monitorea. El perfil CrealityPrint se gestiona desde Enki. La detección de 'complete' se hace por evento (no por polling): cuando la máquina termina, se emite maquina.liberada para que el orquestador encadene la siguiente pieza.",
+  "config": {
+    "persistence": {
+      "concurrency": "read-only",
+      "scope": "project"
+    }
+  },
+  "dependencies": [
+    "cupula_stl",
+    "cupula_gcode"
+  ],
+  "description": "Puente con el PC del dueño: slice CrealityPrint, arranque y monitoreo de impresión.",
+  "language": "es",
+  "main": "index.js",
+  "name": "puente_creality",
+  "publishes": [
+    {
+      "event": "puente_creality.impresion_arrancada"
+    },
+    {
+      "event": "puente_creality.orquestar_slice.failed"
+    },
+    {
+      "event": "puente_creality.arrancar_impresion.failed"
+    },
+    {
+      "event": "puente_creality.estado_impresion.failed"
+    },
+    {
+      "event": "maquina.liberada"
+    }
+  ],
+  "subscribes": [
+    {
+      "event": "puente_creality.orquestar_slice.request",
+      "handler": "onOrquestarSliceRequest"
+    },
+    {
+      "event": "puente_creality.arrancar_impresion.request",
+      "handler": "onArrancarImpresionRequest"
+    },
+    {
+      "event": "puente_creality.estado_impresion.request",
+      "handler": "onEstadoImpresionRequest"
+    },
+    {
+      "event": "puente_creality.complete",
+      "handler": "onComplete"
+    }
+  ],
+  "tools": [],
+  "version": "0.1.0"
+}

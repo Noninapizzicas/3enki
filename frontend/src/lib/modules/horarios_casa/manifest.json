@@ -1,0 +1,9 @@
+{
+  "id": "horarios_casa",
+  "name": "HorariosCasa",
+  "version": "0.1.0",
+  "zone": "work-bar",
+  "order": 50,
+  "icon": "📦",
+  "label": "HorariosCasa"
+}

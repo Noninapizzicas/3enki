@@ -1,0 +1,122 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "cola-impresion",
+  "version": "blueprint-2.0.0",
+  "moduleId": "cola-impresion",
+  "titulo": "Cola de impresion 3D (CUSTODIO): ordena lo aprobado con un motor de ordenacion por variables (material, urgencia, tamano, tiempo) que se ajusta con el uso. Single-writer de su store por proyecto via PosPersistencia.",
+  "eventos_publicados": [
+    "cola.entrada",
+    "cola.extraccion",
+    "cola.reordenada",
+    "cola.vacia",
+    "cola.entrar.failed"
+  ],
+  "eventos_que_escucho": [
+    "cola.entrar.request",
+    "cola.siguiente.request",
+    "cola.reordenar.request",
+    "cola.longitud.request",
+    "project.activated"
+  ],
+  "transporte": {
+    "rpc": [
+      "cola.entrar.request -> .response",
+      "cola.siguiente.request -> .response",
+      "cola.reordenar.request -> .response",
+      "cola.longitud.request -> .response"
+    ],
+    "salida": [
+      "cola.entrada",
+      "cola.extraccion",
+      "cola.reordenada",
+      "cola.vacia",
+      "cola.entrar.failed"
+    ]
+  },
+  "ui": {
+    "ops": {
+      "entrar": {
+        "titulo": "Entrar"
+      },
+      "siguiente": {
+        "titulo": "Siguiente"
+      },
+      "reordenar": {
+        "titulo": "Reordenar"
+      },
+      "longitud": {
+        "titulo": "Longitud"
+      }
+    },
+    "roles": {
+      "jefe": [
+        "entrar",
+        "reordenar"
+      ],
+      "utilizacion": [
+        "siguiente"
+      ],
+      "neutro": [
+        "longitud"
+      ]
+    },
+    "estados": [
+      {
+        "nombre": "borrador",
+        "terminal": false,
+        "color": "gray",
+        "icono": "📝"
+      },
+      {
+        "nombre": "entrada",
+        "terminal": false,
+        "color": "gray",
+        "icono": "⚪"
+      },
+      {
+        "nombre": "extraccion",
+        "terminal": false,
+        "color": "gray",
+        "icono": "⚪"
+      },
+      {
+        "nombre": "reordenada",
+        "terminal": false,
+        "color": "gray",
+        "icono": "⚪"
+      },
+      {
+        "nombre": "vacia",
+        "terminal": false,
+        "color": "gray",
+        "icono": "⚪"
+      },
+      {
+        "nombre": "entrar_failed",
+        "terminal": false,
+        "color": "gray",
+        "icono": "⚪"
+      }
+    ],
+    "flujo": [
+      {
+        "nombre": "jefe",
+        "orden": 1,
+        "ops": [
+          "entrar",
+          "reordenar"
+        ],
+        "descripcion": "Edicion del custodio: gestiona la cola de impresion (entrar piezas y reordenar)"
+      },
+      {
+        "nombre": "utilidad",
+        "orden": 5,
+        "ops": [
+          "siguiente",
+          "longitud"
+        ],
+        "descripcion": "Herramientas"
+      }
+    ]
+  }
+}

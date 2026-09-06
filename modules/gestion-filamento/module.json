@@ -1,0 +1,79 @@
+{
+  "_doc": "Manifest de gestion-filamento — CUSTODIO del proyecto 3D (taller personal de impresion 3D). Gestion del filamento por LONGITUD (mm): registro de rollos (tipo, color, cantidad restante estimada en mm), verificacion de disponibilidad, decremento tras impresion y aviso de agotamiento. Es el UNICO escritor de su store (Map<id,Filamento>). Op registrar (append + emite filamento.registrado), decrementar (proyeccion _decrementarStock pieza 6.2 + _detectarBajo pieza 6.3, emite filamento.decrementado y filamento.bajo si cae bajo el umbral), listar. Tambien escucha el evento fire-and-forget filamento.usado (la impresora reporta filament_used en mm) para decrementar el rollo activo. Umbral de filamento bajo configurable (pregunta abierta 5). Persiste por proyecto via _shared/pos-persistencia (snapshot fs por project_id, debounced) en /3d/filamento/gestion-filamento.json; restaura en project.activated; vuelca en onUnload. Lo llaman el dueno (registrar/listar) y ciclo-impresion (decrementar). Par de fallo filamento.decrementar.failed. Ver plan-construccion.md seccion 6.4.",
+  "name": "gestion-filamento",
+  "version": "0.1.0",
+  "_v0_1_0_nota": "v0.1.0 (2026-09-06): CUSTODIO de la gestion de filamento por longitud. Ops registrar/decrementar/listar + suscripcion a filamento.usado. Proyecciones _registrar/_decrementar/_decrementarStock/_detectarBajo/_listar. Umbral bajo configurable. Persistencia por proyecto via PosPersistencia. Reflejo 0.1.0.",
+  "description": "Gestion de filamento del taller (CUSTODIO): registrar rollos, verificar disponibilidad, decrementar por longitud tras impresion y avisar de agotamiento.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "filamento.registrar.request",
+      "handler": "onRegistrarRequest",
+      "description": "Reflejo JS: registra un rollo de filamento (tipo, color, longitud restante estimada en mm) y emite filamento.registrado."
+    },
+    {
+      "event": "filamento.decrementar.request",
+      "handler": "onDecrementarRequest",
+      "description": "Reflejo JS: decrementa el stock de un rollo por longitud (mm) y emite filamento.decrementado (+ filamento.bajo si cae bajo el umbral)."
+    },
+    {
+      "event": "filamento.listar.request",
+      "handler": "onListarRequest",
+      "description": "Reflejo JS: lista los rollos de filamento del proyecto."
+    },
+    {
+      "event": "filamento.usado",
+      "handler": "onFilamentoUsado",
+      "description": "Reflejo JS: fire-and-forget de la impresora (filament_used en mm); decrementa el rollo activo del proyecto."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Reflejo JS: restaura los rollos persistidos de ese proyecto desde /3d/filamento/gestion-filamento.json."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "filamento.registrado",
+      "description": "Evento emitido al registrar un rollo de filamento."
+    },
+    {
+      "event": "filamento.decrementado",
+      "description": "Evento emitido al decrementar el stock de un rollo por longitud."
+    },
+    {
+      "event": "filamento.bajo",
+      "description": "Evento emitido cuando un rollo cae bajo el umbral de filamento bajo."
+    },
+    {
+      "event": "filamento.decrementar.failed",
+      "description": "Par de fallo: el decremento no se completo (rollo inexistente o longitud desconocida)."
+    }
+  ],
+  "ui_handlers": [
+    {
+      "action": "registrar",
+      "domain": "filamento",
+      "type": "system_panel",
+      "zone": "lateral_derecha",
+      "label": "Registrar filamento",
+      "description": "Registra un rollo de filamento"
+    },
+    {
+      "action": "decrementar",
+      "domain": "filamento",
+      "type": "system_panel",
+      "zone": "lateral_derecha",
+      "label": "Decrementar filamento",
+      "description": "Reduce la cantidad de filamento tras impresión"
+    },
+    {
+      "action": "listar",
+      "domain": "filamento",
+      "type": "system_panel",
+      "zone": "lateral_derecha",
+      "label": "Listar filamentos",
+      "description": "Lista los filamentos registrados"
+    }
+  ]
+}

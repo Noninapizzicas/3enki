@@ -1,0 +1,124 @@
+{
+  "_doc": "Manifest del modulo cola-impresion — CUSTODIO (reflejo JS) del taller personal de impresion 3D. Single-writer de la cola de impresion por proyecto via PosPersistencia. La cola NO es FIFO simple: un motor de ordenacion (_ordenar, proyeccion interna _op) puntua cada item con variables (material, urgencia, tamano, tiempo) que se ajustan con el uso (el material extraido se vuelve el cargado y gana prioridad para evitar cambios de filamento). La cola NUNCA decide que imprimir: solo ordena lo aprobado (invariante 6). Lee el catalogo por RPC (catalogo.obtener.request) para validar que el modelo existe. Depende de filesystem (fs.*.request) para su store. Todo flujo cierra su circulo: par canonico cola.entrar.failed.",
+  "name": "cola-impresion",
+  "version": "0.1.0",
+  "_v0_1_0_nota": "v0.1.0 (2026-09-06): CUSTODIO de la cola de impresion del proyecto 3D. Ops entrar/siguiente/reordenar/longitud. Motor de ordenacion _ordenar con variables (material, urgencia, tamano, tiempo) que se ajustan con el uso. Emite cola.entrada/extraccion/reordenada/vacia; par de fallo cola.entrar.failed. Reflejo 0.1.0.",
+  "description": "Cola de impresion 3D (CUSTODIO): ordena lo aprobado con un motor de ordenacion por variables (material, urgencia, tamano, tiempo) que se ajusta con el uso. Single-writer de su store por proyecto via PosPersistencia.",
+  "language": "es",
+  "main": "index.js",
+  "blueprint_driven": false,
+  "subscribes": [
+    {
+      "event": "cola.entrar.request",
+      "handler": "onEntrarRequest",
+      "description": "Reflejo JS: mete una pieza aprobada en la cola (valida catalogo.existe + no duplicado). Emite cola.entrada o cola.entrar.failed."
+    },
+    {
+      "event": "cola.siguiente.request",
+      "handler": "onSiguienteRequest",
+      "description": "Reflejo JS: extrae la siguiente pieza segun el motor de ordenacion. Emite cola.extraccion o cola.vacia si no hay pendientes."
+    },
+    {
+      "event": "cola.reordenar.request",
+      "handler": "onReordenarRequest",
+      "description": "Reflejo JS: sube/baja una pieza pendiente a una posicion. Emite cola.reordenada."
+    },
+    {
+      "event": "cola.longitud.request",
+      "handler": "onLongitudRequest",
+      "description": "Reflejo JS: longitud de la cola (pendientes + total)."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Restaura el estado persistido de la cola del proyecto."
+    }
+  ],
+  "events": {
+    "publishes": [
+      {
+        "event": "cola.entrada",
+        "description": "Pieza aprobada metida en la cola. Lleva project_id top-level + correlation_id."
+      },
+      {
+        "event": "cola.extraccion",
+        "description": "Pieza extraida como siguiente a imprimir. Lleva project_id top-level + correlation_id."
+      },
+      {
+        "event": "cola.reordenada",
+        "description": "Cola reordenada (una pieza subida/bajada). Lleva project_id top-level + correlation_id."
+      },
+      {
+        "event": "cola.vacia",
+        "description": "No hay piezas pendientes al pedir la siguiente. Lleva project_id top-level + correlation_id."
+      },
+      {
+        "event": "cola.entrar.failed",
+        "description": "Fallo al meter una pieza en la cola. Par canonico de cola.entrar.request. Lleva project_id top-level + correlation_id."
+      }
+    ]
+  },
+  "config": {
+    "persistence": {
+      "scope": "project",
+      "type": "pos-persistencia",
+      "data_path": "impresion-3d/cola",
+      "pattern": "json-file-per-project",
+      "concurrency": "single-writer"
+    }
+  },
+  "observability": {
+    "logging": {
+      "level": "info",
+      "structured": true,
+      "correlation_id": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "cola-impresion.entrada.total",
+        "cola-impresion.extraccion.total",
+        "cola-impresion.reordenada.total",
+        "cola-impresion.vacia.total",
+        "cola-impresion.errors"
+      ],
+      "gauges": [
+        "cola-impresion.pendientes.count"
+      ]
+    }
+  },
+  "ui_handlers": [
+    {
+      "action": "entrar",
+      "domain": "cola",
+      "type": "workspace_module",
+      "zone": "barra_modulos",
+      "label": "Encolar pieza",
+      "description": "Mete una pieza aprobada en la cola"
+    },
+    {
+      "action": "siguiente",
+      "domain": "cola",
+      "type": "workspace_module",
+      "zone": "barra_modulos",
+      "label": "Siguiente a imprimir",
+      "description": "Obtiene la siguiente pieza según el motor de ordenación"
+    },
+    {
+      "action": "reordenar",
+      "domain": "cola",
+      "type": "workspace_module",
+      "zone": "barra_modulos",
+      "label": "Reordenar cola",
+      "description": "Reordena las piezas pendientes"
+    },
+    {
+      "action": "longitud",
+      "domain": "cola",
+      "type": "workspace_module",
+      "zone": "barra_modulos",
+      "label": "Estado de la cola",
+      "description": "Consulta el estado de la cola"
+    }
+  ]
+}

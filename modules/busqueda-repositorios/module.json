@@ -1,0 +1,38 @@
+{
+  "_doc": "busqueda-repositorios — CONVERSOR del proyecto 3D (taller personal de impresion 3D). Frontera de formato multi-fuente: unifica la busqueda de modelos 3D en varios repositorios (Printables, MakerWorld, Cults3D, Thingiverse) por query. SIN estado, SIN red: el puerto es 'buscar(query) → [resultados]' y los adaptadores concretos (APIs de repositorios) se cablean en el puente, no aqui. El dueno busca en todos a la vez o elige repositorio. Invariante 12: un repositorio caido no rompe la busqueda (se omiten sus resultados); si todos fallan, vacio + busqueda.buscar.failed. Ver plan-construccion.md seccion 6.6.",
+  "name": "busqueda-repositorios",
+  "version": "0.1.0",
+  "_v0_1_0_nota": "v0.1.0: primera hoja construida desde el plan-construccion.md (FASE 4 — construir-modulos). CONVERSOR stateless: _buscar(query) consulta adaptadores inyectados, _unificar() normaliza a forma canonica, omite repositorio caido, vacio si todos fallan.",
+  "description": "Buscador multi-repositorio de modelos 3D (Printables, MakerWorld, Cults3D, Thingiverse). CONVERSOR: frontera de formato, sin estado, sin red. El puerto buscar(query) → [resultados] se cablea con adaptadores en el puente.",
+  "language": "es",
+  "main": "index.js",
+  "subscribes": [
+    {
+      "event": "busqueda.buscar.request",
+      "handler": "onBuscarRequest",
+      "description": "Busca modelos 3D por query en los repositorios configurados (todos a la vez o uno elegido)."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "busqueda.buscar.response",
+      "description": "Respuesta correlada del RPC buscar: { query, resultados, total, repositorios_consultados, repositorios_caidos }."
+    },
+    {
+      "event": "busqueda.buscar.failed",
+      "description": "Par de fallo: todos los repositorios cayeron (vacio) o query invalida. Payload: { query, motivo }."
+    }
+  ],
+  "tools": [],
+  "dependencies": [],
+  "ui_handlers": [
+    {
+      "action": "buscar",
+      "domain": "busqueda",
+      "type": "chat_tool",
+      "zone": "barra_chat_inferior",
+      "label": "Buscar modelos",
+      "description": "Busca modelos 3D en los repositorios"
+    }
+  ]
+}

@@ -1,0 +1,59 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "busqueda-repositorios",
+  "version": "blueprint-2.0.0",
+  "moduleId": "busqueda-repositorios",
+  "titulo": "Buscador multi-repositorio de modelos 3D (Printables, MakerWorld, Cults3D, Thingiverse). CONVERSOR: frontera de formato, sin estado, sin red. El puerto buscar(query) → [resultados] se cablea con adaptadores en el puente.",
+  "eventos_que_escucho": [
+    "busqueda.buscar.request"
+  ],
+  "transporte": {
+    "rpc": [
+      "busqueda.buscar.request -> .response"
+    ]
+  },
+  "ui": {
+    "ops": {
+      "buscar": {
+        "titulo": "Buscar"
+      }
+    },
+    "datos": {
+      "op": "buscar",
+      "titulo": "Buscar"
+    },
+    "roles": {
+      "jefe": [],
+      "utilizacion": [
+        "buscar"
+      ],
+      "neutro": [],
+      "_nota": "CONVERSOR stateless sin cara de edición de reglas/config en su UI: la fase jefe queda VACÍA (caso legítimo, igual que un orquestador). La única op 'buscar' es la acción operativa que el dueño consume al elegir buscar en los repositorios → utilizacion. No hay lecturas de estado puro → neutro vacío. Ambigüedad: 'buscar' es también la op de ui.datos (lectura de estado), pero su función primaria es consumo → se clasifica utilizacion, no neutro."
+    },
+    "flujo": [
+      {
+        "nombre": "jefe",
+        "orden": 1,
+        "ops": [],
+        "descripcion": "Cara de edición del custodio (declara reglas/config). VACÍA: busqueda-repositorios es un CONVERSOR stateless sin cara de edición — configura por cableado de adaptadores en el puente, no por panel."
+      },
+      {
+        "nombre": "consulta",
+        "orden": 3,
+        "ops": [
+          "buscar"
+        ],
+        "descripcion": "Ver y buscar"
+      }
+    ]
+  },
+  "_lente_roles": {
+    "agente": "crear-blueprint-full",
+    "metodo": "clasificar_roles (lente de roles sobre ops reales de ui.ops)",
+    "arbitro": "esquematizador-jefe",
+    "clasificacion": {
+      "buscar": "utilizacion"
+    },
+    "nota": "busqueda-repositorios es un CONVERSOR stateless (sin estado, sin red): su única op 'buscar' es la acción operativa de consumo (el dueño elige buscar en los repositorios). No expone cara de edición de reglas/config → fase jefe vacía. 'buscar' también es la op de ui.datos, pero su función primaria es consumo → utilizacion, no neutro."
+  }
+}

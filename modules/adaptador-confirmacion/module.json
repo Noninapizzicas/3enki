@@ -1,0 +1,17 @@
+{
+  "_doc": "Manifest de adaptador-confirmacion — PUENTE del proyecto 3D (taller personal de impresion 3D). Recibe la confirmacion del dueno por el puerto 'confirmar(tipo) → ok' (adaptador-confirmacion.confirmar.request por RPC, lo llama ciclo-impresion) y por el canal del dueno (telegram-bridge: telegram.callback.received, botones inline o respuesta). El dueno confirma: retirar pieza (pieza_retirada), cambiar filamento (filamento_cambiado), reanudar ciclo tras error (reanudar_ciclo), aprobar/rechazar modelo (modelo_aprobado / modelo_rechazado). El adaptador recibe la confirmacion, la interpreta con el CONVERSOR interno _interpretarConfirmacion (pieza 12.2, mapeo boton → tipo; no_reconocida pide aclaracion) y la entrega al sistema publicando adaptador-confirmacion.confirmacion_recibida. Es PUENTE: sin store, no persiste, transporta y delega. Todo flujo cierra su circulo: si la confirmacion no se puede entregar o el tipo no se reconoce, emite adaptador-confirmacion.confirmar.failed. Ver plan-construccion.md seccion 6.11.",
+  "name": "adaptador-confirmacion",
+  "version": "0.1.0",
+  "_v0_1_0_nota": "v0.1.0 (2026-09-06): PUENTE de confirmacion del taller 3D. Op confirmar (RPC, puerto 'confirmar(tipo) → ok') + telegram.callback.received (fire-and-forget del canal del dueno). Proyecciones _confirmar/_interpretarConfirmacion (12.2 conversor). Publica adaptador-confirmacion.confirmacion_recibida; par de fallo confirmar.failed. Reflejo 0.1.0.",
+  "description": "Puente de confirmacion del taller 3D (PUENTE): recibe la confirmacion del dueno por Telegram, la interpreta y la entrega al sistema.",
+  "language": "es",
+  "subscribes": [
+    { "event": "adaptador-confirmacion.confirmar.request", "handler": "onConfirmarRequest", "description": "Reflejo JS: pide al dueno la confirmacion de un tipo (retirar pieza, cambiar filamento, reanudar, aprobar/rechazar modelo) por el canal; responde adaptador-confirmacion.confirmar.response." },
+    { "event": "telegram.callback.received", "handler": "onTelegramCallbackReceived", "description": "Reflejo JS: fire-and-forget del canal del dueno; interpreta el callback (boton o respuesta) y publica adaptador-confirmacion.confirmacion_recibida." }
+  ],
+  "publishes": [
+    { "event": "adaptador-confirmacion.confirmar.response", "description": "Respuesta RPC: resultado de la peticion de confirmacion (ok:true solo si el canal confirmo el envio)." },
+    { "event": "adaptador-confirmacion.confirmacion_recibida", "description": "Confirmacion del dueno interpretada y entregada al sistema (tipo + contexto)." },
+    { "event": "adaptador-confirmacion.confirmar.failed", "description": "Par de fallo: la confirmacion no se pudo pedir/entregar o el tipo no se reconocio." }
+  ]
+}

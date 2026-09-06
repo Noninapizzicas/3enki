@@ -14,11 +14,21 @@ fuentes:
   - modules/disenador_parametrico/module.json
   - modules/buscador_www/index.js
   - modules/buscador_www/module.json
+  - modules/cupula_stl/index.js
+  - modules/cupula_stl/module.json
+  - modules/cupula_gcode/index.js
+  - modules/cupula_gcode/module.json
+  - modules/estimador_tiempo/index.js
+  - modules/estimador_tiempo/module.json
+  - modules/puente_creality/index.js
+  - modules/puente_creality/module.json
+  - modules/horarios_casa/index.js
+  - modules/horarios_casa/module.json
   - frontend/src/lib/modules/cola-impresion/manifest.json
   - frontend/src/lib/modules/cola-impresion/index.ts
   - frontend/src/lib/modules/cola-impresion/ColaImpresionPanel.svelte
   - frontend/src/lib/stores/cola-impresion.ts
-verificado: 2026-09-05
+verificado: 2026-09-06
 ---
 
 # IMPRESIÓN-3D — cola de trabajo del taller (SPARKX i7 · PETG)
@@ -51,6 +61,21 @@ libre → propuesta → aprobación → imprimiendo → impreso → libre
   `estimar_tiempo` (alimenta `Modelo.tiempo_estimado`).
 - **`buscador_www`** — REFLEJO + PUENTE a fuentes web. `buscar_por_necesidad` → `Lista<Candidato>`
   (DTO de entrada; solo pasa a Modelo vía `cola_modelos.agregar`). Candidatos vacíos no rompen el ciclo.
+- **`cupula_stl`** — CRIPTA (PASO 6). Custodia el STL/3MF UNIVERSAL (el MODELO 3D, una vez por pieza,
+  sirve para CUALQUIER máquina). Single-writer de `/impresion-3d/stl/`. RPCs: `registrar`, `obtener`, `listar`.
+- **`cupula_gcode`** — CRIPTA (PASO 7). Custodia el gcode POR MÁQUINA (la RECETA de UNA máquina, firmada
+  y cacheada). A diferencia del STL, lleva `maquina` + hash/firma. Single-writer de `/impresion-3d/gcode/`.
+  RPCs: `registrar`, `obtener_por_maquina`, `listar`.
+- **`puente_creality`** — HÍBRIDO (PASO 8). Frontera con el PC del dueño (CrealityPrint V7.2.1).
+  Orquesta slice STL→gcode, sube el gcode, arranca y monitorea la impresión. La detección de `complete`
+  es por EVENTO (no polling): al terminar emite `maquina.liberada` para que el orquestador encadene.
+- **`estimador_tiempo`** — REFLEJO PURO (PASO 9). Estima minutos por volumen/altura/material/velocidad,
+  determinista, sin E/S. Alimenta `Modelo.tiempo_estimado`. Su PROPÓSITO es la PRESENCIA: el motor de
+  propuesta usa `tiempo_estimado` + horarios en casa para decidir si la impresión termina con alguien.
+- **`horarios_casa`** — CRIPTA (PASO 10). Ventanas de impresión POR PERSONA (4 perfiles en casa, cada uno
+  con su ritmo). El orquestador consulta `ventana_activa` antes de proponer/arrancar: solo imprime dentro
+  de la ventana de quien pidió la pieza (PRESENCIA). RPCs: `configurar_horario`, `obtener_horario`,
+  `listar_horarios`, `ventana_activa`. `motor_propuesta` v0.2.0 integra `ReglaPrioridadConPresencia`.
 
 ## Contrato de bus (request/response)
 
@@ -108,3 +133,5 @@ Compilado en el bundle de producción (chunk `DPsf4Io_.js`).
 ✓ Ciclo completo probado: agregar → proponer → imprimiendo → impreso → encadena.
 ✓ Sin rpc_fantasma de los 5 módulos (el único fantasma del bus es `recetas.actualizar_precio.request`, ajeno).
 ✓ Reglas de negocio afinadas con el dueño (PASO 7): aprobación auto-aprueba lo ya impreso y consulta lo nuevo (orquestador `ya_impreso`); prioridad por número (mayor primero, piezas estructurales altas); fuentes por defecto printables+thingiverse primero (buscador_www).
+✓ PASOS 6-10 completados: `cupula_stl` (modelo universal), `cupula_gcode` (receta por máquina), `puente_creality` (frontera CrealityPrint, complete por evento), `estimador_tiempo` (minutos deterministas), `horarios_casa` (ventanas por persona, PRESENCIA). `motor_propuesta` v0.2.0 con `ReglaPrioridadConPresencia`.
+✓ `horarios_casa` desplegado y en vivo (135 módulos, presente con module.json + index.js).

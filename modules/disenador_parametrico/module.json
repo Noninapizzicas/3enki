@@ -35,6 +35,18 @@
       "handler": "onEstimarTiempoRequest"
     }
   ],
+  "ui_handlers": [
+    {
+      "domain": "disenador_parametrico",
+      "action": "generar_stl",
+      "handler": "onGenerarStlRequest"
+    },
+    {
+      "domain": "disenador_parametrico",
+      "action": "estimar_tiempo",
+      "handler": "onEstimarTiempoRequest"
+    }
+  ],
   "tools": [],
   "version": "0.1.0"
 }

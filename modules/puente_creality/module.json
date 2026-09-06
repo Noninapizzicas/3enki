@@ -49,6 +49,23 @@
       "handler": "onComplete"
     }
   ],
+  "ui_handlers": [
+    {
+      "domain": "puente_creality",
+      "action": "orquestar_slice",
+      "handler": "onOrquestarSliceRequest"
+    },
+    {
+      "domain": "puente_creality",
+      "action": "arrancar_impresion",
+      "handler": "onArrancarImpresionRequest"
+    },
+    {
+      "domain": "puente_creality",
+      "action": "estado_impresion",
+      "handler": "onEstadoImpresionRequest"
+    }
+  ],
   "tools": [],
   "version": "0.1.0"
 }

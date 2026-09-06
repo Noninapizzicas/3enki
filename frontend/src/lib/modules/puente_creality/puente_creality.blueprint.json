@@ -20,10 +20,38 @@
   "ui": {
     "ops": {
       "orquestar_slice": {
-        "titulo": "Orquestar Slice"
+        "titulo": "Orquestar Slice",
+        "args": [
+          {
+            "nombre": "stl_id",
+            "tipo": "string",
+            "required": true,
+            "descripcion": "ID del STL a slicear"
+          },
+          {
+            "nombre": "maquina",
+            "tipo": "string",
+            "required": false,
+            "descripcion": "Máquina (por defecto SPARKX_i7)"
+          },
+          {
+            "nombre": "perfil",
+            "tipo": "string",
+            "required": false,
+            "descripcion": "Perfil CrealityPrint"
+          }
+        ]
       },
       "arrancar_impresion": {
-        "titulo": "Arrancar Impresion"
+        "titulo": "Arrancar Impresion",
+        "args": [
+          {
+            "nombre": "gcode_id",
+            "tipo": "string",
+            "required": true,
+            "descripcion": "ID del gcode a imprimir"
+          }
+        ]
       },
       "estado_impresion": {
         "titulo": "Estado Impresion"

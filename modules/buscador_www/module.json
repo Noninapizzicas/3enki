@@ -23,6 +23,13 @@
       "handler": "onBuscarRequest"
     }
   ],
+  "ui_handlers": [
+    {
+      "domain": "buscador_www",
+      "action": "buscar",
+      "handler": "onBuscarRequest"
+    }
+  ],
   "tools": [],
   "version": "0.1.0"
 }

@@ -45,6 +45,23 @@
       "handler": "onProjectActivated"
     }
   ],
+  "ui_handlers": [
+    {
+      "domain": "cupula_stl",
+      "action": "registrar",
+      "handler": "onRegistrarRequest"
+    },
+    {
+      "domain": "cupula_stl",
+      "action": "obtener",
+      "handler": "onObtenerRequest"
+    },
+    {
+      "domain": "cupula_stl",
+      "action": "listar",
+      "handler": "onListarRequest"
+    }
+  ],
   "tools": [],
   "version": "0.1.0"
 }

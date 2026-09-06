@@ -20,13 +20,73 @@
   "ui": {
     "ops": {
       "registrar": {
-        "titulo": "Registrar"
+        "titulo": "Registrar",
+        "args": [
+          {
+            "nombre": "stl_id",
+            "tipo": "string",
+            "required": true,
+            "descripcion": "ID del STL"
+          },
+          {
+            "nombre": "maquina",
+            "tipo": "string",
+            "required": true,
+            "descripcion": "Máquina (ej: SPARKX_i7)"
+          },
+          {
+            "nombre": "archivo",
+            "tipo": "string",
+            "required": true,
+            "descripcion": "Ruta del archivo gcode"
+          },
+          {
+            "nombre": "hash",
+            "tipo": "string",
+            "required": false,
+            "descripcion": "Hash del gcode"
+          },
+          {
+            "nombre": "firma",
+            "tipo": "string",
+            "required": false,
+            "descripcion": "Firma del gcode"
+          },
+          {
+            "nombre": "perfil",
+            "tipo": "string",
+            "required": false,
+            "descripcion": "Perfil de impresión"
+          }
+        ]
       },
       "obtener_por_maquina": {
-        "titulo": "Obtener Por Maquina"
+        "titulo": "Obtener Por Maquina",
+        "args": [
+          {
+            "nombre": "stl_id",
+            "tipo": "string",
+            "required": true,
+            "descripcion": "ID del STL"
+          },
+          {
+            "nombre": "maquina",
+            "tipo": "string",
+            "required": true,
+            "descripcion": "Máquina"
+          }
+        ]
       },
       "listar": {
-        "titulo": "Listar"
+        "titulo": "Listar",
+        "args": [
+          {
+            "nombre": "maquina",
+            "tipo": "string",
+            "required": false,
+            "descripcion": "Filtrar por máquina (opcional)"
+          }
+        ]
       }
     },
     "datos": {

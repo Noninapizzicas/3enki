@@ -52,6 +52,28 @@
       "handler": "onProjectActivated"
     }
   ],
+  "ui_handlers": [
+    {
+      "domain": "horarios_casa",
+      "action": "configurar_horario",
+      "handler": "onConfigurarHorarioRequest"
+    },
+    {
+      "domain": "horarios_casa",
+      "action": "obtener_horario",
+      "handler": "onObtenerHorarioRequest"
+    },
+    {
+      "domain": "horarios_casa",
+      "action": "listar_horarios",
+      "handler": "onListarHorariosRequest"
+    },
+    {
+      "domain": "horarios_casa",
+      "action": "ventana_activa",
+      "handler": "onVentanaActivaRequest"
+    }
+  ],
   "tools": [],
   "version": "0.1.0"
 }

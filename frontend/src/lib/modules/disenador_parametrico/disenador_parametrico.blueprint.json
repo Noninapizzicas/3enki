@@ -17,10 +17,26 @@
   "ui": {
     "ops": {
       "generar_stl": {
-        "titulo": "Generar Stl"
+        "titulo": "Generar Stl",
+        "args": [
+          {
+            "nombre": "parametros",
+            "tipo": "json",
+            "required": true,
+            "descripcion": "Parámetros del diseño: { forma:\"caja|cilindro\", dimensiones:{ancho,alto,profundo,pared|radio}, formato:\"stl|3mf\" }"
+          }
+        ]
       },
       "estimar_tiempo": {
-        "titulo": "Estimar Tiempo"
+        "titulo": "Estimar Tiempo",
+        "args": [
+          {
+            "nombre": "parametros",
+            "tipo": "json",
+            "required": true,
+            "descripcion": "Parámetros: { forma, dimensiones:{ancho,alto,profundo,radio} }"
+          }
+        ]
       }
     },
     "flujo": [

@@ -22,16 +22,70 @@
   "ui": {
     "ops": {
       "configurar_horario": {
-        "titulo": "Configurar Horario"
+        "titulo": "Configurar Horario",
+        "args": [
+          {
+            "nombre": "persona_id",
+            "tipo": "select",
+            "required": true,
+            "enum": [
+              "papa",
+              "mama",
+              "hijo1",
+              "hijo2"
+            ],
+            "descripcion": "Persona"
+          },
+          {
+            "nombre": "ventanas",
+            "tipo": "json",
+            "required": true,
+            "descripcion": "Ventanas: [{ dias:[\"LUN\",\"MAR\"], desde:\"09:00\", hasta:\"14:00\" }]"
+          }
+        ]
       },
       "obtener_horario": {
-        "titulo": "Obtener Horario"
+        "titulo": "Obtener Horario",
+        "args": [
+          {
+            "nombre": "persona_id",
+            "tipo": "select",
+            "required": true,
+            "enum": [
+              "papa",
+              "mama",
+              "hijo1",
+              "hijo2"
+            ],
+            "descripcion": "Persona"
+          }
+        ]
       },
       "listar_horarios": {
         "titulo": "Listar Horarios"
       },
       "ventana_activa": {
-        "titulo": "Ventana Activa"
+        "titulo": "Ventana Activa",
+        "args": [
+          {
+            "nombre": "persona_id",
+            "tipo": "select",
+            "required": true,
+            "enum": [
+              "papa",
+              "mama",
+              "hijo1",
+              "hijo2"
+            ],
+            "descripcion": "Persona"
+          },
+          {
+            "nombre": "ahora",
+            "tipo": "string",
+            "required": false,
+            "descripcion": "Instante ISO (opcional, usa el reloj real)"
+          }
+        ]
       }
     },
     "datos": {

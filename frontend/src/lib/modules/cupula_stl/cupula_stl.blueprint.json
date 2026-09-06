@@ -20,13 +20,71 @@
   "ui": {
     "ops": {
       "registrar": {
-        "titulo": "Registrar"
+        "titulo": "Registrar",
+        "args": [
+          {
+            "nombre": "nombre",
+            "tipo": "string",
+            "required": true,
+            "descripcion": "Nombre del modelo"
+          },
+          {
+            "nombre": "archivo",
+            "tipo": "string",
+            "required": true,
+            "descripcion": "Ruta o contenido del archivo STL/3MF"
+          },
+          {
+            "nombre": "formato",
+            "tipo": "select",
+            "required": false,
+            "enum": [
+              "stl",
+              "3mf"
+            ],
+            "descripcion": "Formato (por defecto stl)"
+          },
+          {
+            "nombre": "parametros",
+            "tipo": "json",
+            "required": false,
+            "descripcion": "Parámetros del modelo (opcional)"
+          },
+          {
+            "nombre": "origen",
+            "tipo": "string",
+            "required": false,
+            "descripcion": "Origen (ej: printables)"
+          },
+          {
+            "nombre": "ref",
+            "tipo": "string",
+            "required": false,
+            "descripcion": "Referencia en el origen"
+          }
+        ]
       },
       "obtener": {
-        "titulo": "Obtener"
+        "titulo": "Obtener",
+        "args": [
+          {
+            "nombre": "id",
+            "tipo": "string",
+            "required": true,
+            "descripcion": "ID del STL"
+          }
+        ]
       },
       "listar": {
-        "titulo": "Listar"
+        "titulo": "Listar",
+        "args": [
+          {
+            "nombre": "nombre",
+            "tipo": "string",
+            "required": false,
+            "descripcion": "Filtrar por nombre (opcional)"
+          }
+        ]
       }
     },
     "datos": {

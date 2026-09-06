@@ -19,21 +19,21 @@
         "descripcion": "Busca modelos 3D en el ecosistema público (Cults3D, Printables, Thingiverse, MakerWorld). Consulta cada fuente por HTTP con degradación limpia y devuelve candidatos con origen/ref para volcarlos a la cola con dedup.",
         "args": [
           {
-            "nombre": "necesidad",
+            "nombre": "query",
             "tipo": "string",
             "required": true,
-            "descripcion": "Descripción de la necesidad o pieza a buscar"
+            "descripcion": "Término o necesidad a buscar (ej: soporte para móvil)"
           },
           {
-            "nombre": "fuente",
+            "nombre": "fuentes",
             "tipo": "select",
             "required": false,
             "enum": [
-              "Cults3D",
-              "Printables",
-              "Thingiverse",
-              "MakerWorld",
-              "todas"
+              "todas",
+              "printables",
+              "thingiverse",
+              "makerworld",
+              "cults3d"
             ],
             "descripcion": "Fuente a consultar (por defecto todas)"
           }

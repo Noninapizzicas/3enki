@@ -47,6 +47,23 @@
       "handler": "onProjectActivated"
     }
   ],
+  "ui_handlers": [
+    {
+      "domain": "cupula_gcode",
+      "action": "registrar",
+      "handler": "onRegistrarRequest"
+    },
+    {
+      "domain": "cupula_gcode",
+      "action": "obtener_por_maquina",
+      "handler": "onObtenerPorMaquinaRequest"
+    },
+    {
+      "domain": "cupula_gcode",
+      "action": "listar",
+      "handler": "onListarRequest"
+    }
+  ],
   "tools": [],
   "version": "0.1.0"
 }

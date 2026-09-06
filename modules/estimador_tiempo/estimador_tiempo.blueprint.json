@@ -19,21 +19,22 @@
         "descripcion": "Estima los minutos de impresión a partir del volumen y material de la pieza. Cálculo determinista sin E/S.",
         "args": [
           {
-            "nombre": "volumen_cm3",
-            "tipo": "number",
+            "nombre": "parametros",
+            "tipo": "json",
             "required": true,
-            "descripcion": "Volumen de la pieza en cm³"
+            "descripcion": "Parámetros: { forma, dimensiones:{ancho,alto,profundo,radio} }"
           },
           {
             "nombre": "material",
             "tipo": "select",
             "required": false,
             "enum": [
-              "PETG",
-              "PLA",
-              "ABS"
+              "petg",
+              "pla",
+              "abs",
+              "tpu"
             ],
-            "descripcion": "Material (por defecto PETG)"
+            "descripcion": "Material (por defecto petg)"
           }
         ]
       }

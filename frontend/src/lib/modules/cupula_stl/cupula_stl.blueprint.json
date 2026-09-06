@@ -1,0 +1,61 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "cupula_stl",
+  "version": "blueprint-2.0.0",
+  "moduleId": "cupula_stl",
+  "titulo": "Cúpula del modelo 3D universal: STL/3MF una vez por pieza, sirve para cualquier máquina.",
+  "eventos_que_escucho": [
+    "cupula_stl.registrar.request",
+    "cupula_stl.obtener.request",
+    "cupula_stl.listar.request",
+    "project.activated"
+  ],
+  "transporte": {
+    "rpc": [
+      "cupula_stl.registrar.request -> .response",
+      "cupula_stl.obtener.request -> .response",
+      "cupula_stl.listar.request -> .response"
+    ]
+  },
+  "ui": {
+    "ops": {
+      "registrar": {
+        "titulo": "Registrar"
+      },
+      "obtener": {
+        "titulo": "Obtener"
+      },
+      "listar": {
+        "titulo": "Listar"
+      }
+    },
+    "datos": {
+      "op": "listar",
+      "titulo": "Listar"
+    },
+    "flujo": [
+      {
+        "nombre": "jefe",
+        "orden": 0,
+        "ops": [
+          "registrar"
+        ],
+        "descripcion": "Registrar y consultar STL"
+      },
+      {
+        "nombre": "utilidad",
+        "orden": 5,
+        "ops": [
+          "obtener",
+          "listar"
+        ],
+        "descripcion": "Herramientas y consultas"
+      }
+    ],
+    "roles": {
+      "registrar": "jefe",
+      "obtener": "neutro",
+      "listar": "neutro"
+    }
+  }
+}

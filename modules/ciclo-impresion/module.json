@@ -8,24 +8,78 @@
   "main": "index.js",
   "blueprint_driven": false,
   "subscribes": [
-    { "event": "ciclo.iniciar.request", "handler": "onIniciarRequest", "description": "Reflejo JS: arranca el ciclo (siguiente pieza de la cola, obtiene gcode, sube, inicia, observa). Emite ciclo.iniciado o ciclo.abortado/cola_vacia." },
-    { "event": "impresion.completada", "handler": "onImpresionCompletada", "description": "DUEÑO: aplica transicion IMPRIMIENDO -> ESPERANDO_RETIRADA, registra en historial, decrementa filamento y avisa. Emite ciclo.esperando_confirmacion." },
-    { "event": "impresion.error", "handler": "onImpresionError", "description": "DUEÑO: aplica transicion IMPRIMIENDO -> ERROR. Emite ciclo.abortado y avisa del fallo." },
-    { "event": "filamento.falta", "handler": "onFilamentoFalta", "description": "DUEÑO: aplica transicion IMPRIMIENDO -> PAUSADO_FALTA_FILAMENTO y avisa de cambio de filamento." },
-    { "event": "adaptador-confirmacion.confirmacion_recibida", "handler": "onConfirmacionRecibida", "description": "DUEÑO: interpreta la confirmacion del dueño (pieza_retirada/filamento_cambiado/reanudar_ciclo) y aplica la transicion correspondiente." },
-    { "event": "adaptador-impresora.estado_crudo", "handler": "onEstadoCrudo", "description": "DUEÑO: vigila el progreso (3.3) y detecta fin (3.4), error (3.5) o falta de filamento (3.6) del estado interpretado." }
+    {
+      "event": "ciclo.iniciar.request",
+      "handler": "onIniciarRequest",
+      "description": "Reflejo JS: arranca el ciclo (siguiente pieza de la cola, obtiene gcode, sube, inicia, observa). Emite ciclo.iniciado o ciclo.abortado/cola_vacia."
+    },
+    {
+      "event": "impresion.completada",
+      "handler": "onImpresionCompletada",
+      "description": "DUEÑO: aplica transicion IMPRIMIENDO -> ESPERANDO_RETIRADA, registra en historial, decrementa filamento y avisa. Emite ciclo.esperando_confirmacion."
+    },
+    {
+      "event": "impresion.error",
+      "handler": "onImpresionError",
+      "description": "DUEÑO: aplica transicion IMPRIMIENDO -> ERROR. Emite ciclo.abortado y avisa del fallo."
+    },
+    {
+      "event": "filamento.falta",
+      "handler": "onFilamentoFalta",
+      "description": "DUEÑO: aplica transicion IMPRIMIENDO -> PAUSADO_FALTA_FILAMENTO y avisa de cambio de filamento."
+    },
+    {
+      "event": "adaptador-confirmacion.confirmacion_recibida",
+      "handler": "onConfirmacionRecibida",
+      "description": "DUEÑO: interpreta la confirmacion del dueño (pieza_retirada/filamento_cambiado/reanudar_ciclo) y aplica la transicion correspondiente."
+    },
+    {
+      "event": "adaptador-impresora.estado_crudo",
+      "handler": "onEstadoCrudo",
+      "description": "DUEÑO: vigila el progreso (3.3) y detecta fin (3.4), error (3.5) o falta de filamento (3.6) del estado interpretado."
+    }
   ],
   "publishes": [
-    { "event": "ciclo.iniciado", "description": "El ciclo arranco (una pieza comenzo a imprimirse). Lleva project_id top-level + correlation_id." },
-    { "event": "ciclo.completado", "description": "El ciclo completo termino (pieza impresa y retirada). Lleva project_id top-level + correlation_id." },
-    { "event": "ciclo.abortado", "description": "El ciclo se aborto (error o RPC fallido). Par de fallo canonico. Lleva project_id top-level + correlation_id." },
-    { "event": "ciclo.cola_vacia", "description": "No hay piezas pendientes al iniciar el ciclo. Lleva project_id top-level + correlation_id." },
-    { "event": "ciclo.esperando_confirmacion", "description": "El ciclo espera una confirmacion del dueño (retirar pieza / cambiar filamento / reanudar). Lleva project_id top-level + correlation_id." },
-    { "event": "impresion.completada", "description": "Una pieza termino de imprimirse. La consume historial-impresiones y adaptador-avisos. Lleva project_id top-level + correlation_id." },
-    { "event": "impresion.error", "description": "La impresion fallo. La consume adaptador-avisos. Lleva project_id top-level + correlation_id." },
-    { "event": "filamento.falta", "description": "Falta filamento durante la impresion. La consume adaptador-avisos. Lleva project_id top-level + correlation_id." },
-    { "event": "filamento.usado", "description": "La impresora reporto filamento usado (mm). La consume gestion-filamento para decrementar el rollo activo. Lleva project_id top-level + correlation_id." },
-    { "event": "progreso.actualizado", "description": "Progreso de la impresion actualizado. La consume adaptador-avisos e historial-impresiones. Lleva project_id top-level + correlation_id." }
+    {
+      "event": "ciclo.iniciado",
+      "description": "El ciclo arranco (una pieza comenzo a imprimirse). Lleva project_id top-level + correlation_id."
+    },
+    {
+      "event": "ciclo.completado",
+      "description": "El ciclo completo termino (pieza impresa y retirada). Lleva project_id top-level + correlation_id."
+    },
+    {
+      "event": "ciclo.abortado",
+      "description": "El ciclo se aborto (error o RPC fallido). Par de fallo canonico. Lleva project_id top-level + correlation_id."
+    },
+    {
+      "event": "ciclo.cola_vacia",
+      "description": "No hay piezas pendientes al iniciar el ciclo. Lleva project_id top-level + correlation_id."
+    },
+    {
+      "event": "ciclo.esperando_confirmacion",
+      "description": "El ciclo espera una confirmacion del dueño (retirar pieza / cambiar filamento / reanudar). Lleva project_id top-level + correlation_id."
+    },
+    {
+      "event": "impresion.completada",
+      "description": "Una pieza termino de imprimirse. La consume historial-impresiones y adaptador-avisos. Lleva project_id top-level + correlation_id."
+    },
+    {
+      "event": "impresion.error",
+      "description": "La impresion fallo. La consume adaptador-avisos. Lleva project_id top-level + correlation_id."
+    },
+    {
+      "event": "filamento.falta",
+      "description": "Falta filamento durante la impresion. La consume adaptador-avisos. Lleva project_id top-level + correlation_id."
+    },
+    {
+      "event": "filamento.usado",
+      "description": "La impresora reporto filamento usado (mm). La consume gestion-filamento para decrementar el rollo activo. Lleva project_id top-level + correlation_id."
+    },
+    {
+      "event": "progreso.actualizado",
+      "description": "Progreso de la impresion actualizado. La consume adaptador-avisos e historial-impresiones. Lleva project_id top-level + correlation_id."
+    }
   ],
   "config": {
     "persistence": {
@@ -35,7 +89,11 @@
     }
   },
   "observability": {
-    "logging": { "level": "info", "structured": true, "correlation_id": true },
+    "logging": {
+      "level": "info",
+      "structured": true,
+      "correlation_id": true
+    },
     "metrics": {
       "enabled": true,
       "counters": [
@@ -50,5 +108,23 @@
         "ciclo-impresion.estado"
       ]
     }
-  }
+  },
+  "ui_handlers": [
+    {
+      "action": "iniciar",
+      "domain": "ciclo",
+      "type": "workspace_module",
+      "zone": "barra_modulos",
+      "label": "Iniciar ciclo",
+      "description": "Inicia el ciclo de impresión"
+    },
+    {
+      "action": "estado",
+      "domain": "ciclo",
+      "type": "workspace_module",
+      "zone": "barra_modulos",
+      "label": "Estado del ciclo",
+      "description": "Consulta el estado del ciclo de impresión"
+    }
+  ]
 }

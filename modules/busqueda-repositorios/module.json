@@ -7,12 +7,32 @@
   "language": "es",
   "main": "index.js",
   "subscribes": [
-    { "event": "busqueda.buscar.request", "handler": "onBuscarRequest", "description": "Busca modelos 3D por query en los repositorios configurados (todos a la vez o uno elegido)." }
+    {
+      "event": "busqueda.buscar.request",
+      "handler": "onBuscarRequest",
+      "description": "Busca modelos 3D por query en los repositorios configurados (todos a la vez o uno elegido)."
+    }
   ],
   "publishes": [
-    { "event": "busqueda.buscar.response", "description": "Respuesta correlada del RPC buscar: { query, resultados, total, repositorios_consultados, repositorios_caidos }." },
-    { "event": "busqueda.buscar.failed", "description": "Par de fallo: todos los repositorios cayeron (vacio) o query invalida. Payload: { query, motivo }." }
+    {
+      "event": "busqueda.buscar.response",
+      "description": "Respuesta correlada del RPC buscar: { query, resultados, total, repositorios_consultados, repositorios_caidos }."
+    },
+    {
+      "event": "busqueda.buscar.failed",
+      "description": "Par de fallo: todos los repositorios cayeron (vacio) o query invalida. Payload: { query, motivo }."
+    }
   ],
   "tools": [],
-  "dependencies": []
+  "dependencies": [],
+  "ui_handlers": [
+    {
+      "action": "buscar",
+      "domain": "busqueda",
+      "type": "chat_tool",
+      "zone": "barra_chat_inferior",
+      "label": "Buscar modelos",
+      "description": "Busca modelos 3D en los repositorios"
+    }
+  ]
 }

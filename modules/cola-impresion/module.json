@@ -8,19 +8,54 @@
   "main": "index.js",
   "blueprint_driven": false,
   "subscribes": [
-    { "event": "cola.entrar.request", "handler": "onEntrarRequest", "description": "Reflejo JS: mete una pieza aprobada en la cola (valida catalogo.existe + no duplicado). Emite cola.entrada o cola.entrar.failed." },
-    { "event": "cola.siguiente.request", "handler": "onSiguienteRequest", "description": "Reflejo JS: extrae la siguiente pieza segun el motor de ordenacion. Emite cola.extraccion o cola.vacia si no hay pendientes." },
-    { "event": "cola.reordenar.request", "handler": "onReordenarRequest", "description": "Reflejo JS: sube/baja una pieza pendiente a una posicion. Emite cola.reordenada." },
-    { "event": "cola.longitud.request", "handler": "onLongitudRequest", "description": "Reflejo JS: longitud de la cola (pendientes + total)." },
-    { "event": "project.activated", "handler": "onProjectActivated", "description": "Restaura el estado persistido de la cola del proyecto." }
+    {
+      "event": "cola.entrar.request",
+      "handler": "onEntrarRequest",
+      "description": "Reflejo JS: mete una pieza aprobada en la cola (valida catalogo.existe + no duplicado). Emite cola.entrada o cola.entrar.failed."
+    },
+    {
+      "event": "cola.siguiente.request",
+      "handler": "onSiguienteRequest",
+      "description": "Reflejo JS: extrae la siguiente pieza segun el motor de ordenacion. Emite cola.extraccion o cola.vacia si no hay pendientes."
+    },
+    {
+      "event": "cola.reordenar.request",
+      "handler": "onReordenarRequest",
+      "description": "Reflejo JS: sube/baja una pieza pendiente a una posicion. Emite cola.reordenada."
+    },
+    {
+      "event": "cola.longitud.request",
+      "handler": "onLongitudRequest",
+      "description": "Reflejo JS: longitud de la cola (pendientes + total)."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Restaura el estado persistido de la cola del proyecto."
+    }
   ],
   "events": {
     "publishes": [
-      { "event": "cola.entrada", "description": "Pieza aprobada metida en la cola. Lleva project_id top-level + correlation_id." },
-      { "event": "cola.extraccion", "description": "Pieza extraida como siguiente a imprimir. Lleva project_id top-level + correlation_id." },
-      { "event": "cola.reordenada", "description": "Cola reordenada (una pieza subida/bajada). Lleva project_id top-level + correlation_id." },
-      { "event": "cola.vacia", "description": "No hay piezas pendientes al pedir la siguiente. Lleva project_id top-level + correlation_id." },
-      { "event": "cola.entrar.failed", "description": "Fallo al meter una pieza en la cola. Par canonico de cola.entrar.request. Lleva project_id top-level + correlation_id." }
+      {
+        "event": "cola.entrada",
+        "description": "Pieza aprobada metida en la cola. Lleva project_id top-level + correlation_id."
+      },
+      {
+        "event": "cola.extraccion",
+        "description": "Pieza extraida como siguiente a imprimir. Lleva project_id top-level + correlation_id."
+      },
+      {
+        "event": "cola.reordenada",
+        "description": "Cola reordenada (una pieza subida/bajada). Lleva project_id top-level + correlation_id."
+      },
+      {
+        "event": "cola.vacia",
+        "description": "No hay piezas pendientes al pedir la siguiente. Lleva project_id top-level + correlation_id."
+      },
+      {
+        "event": "cola.entrar.failed",
+        "description": "Fallo al meter una pieza en la cola. Par canonico de cola.entrar.request. Lleva project_id top-level + correlation_id."
+      }
     ]
   },
   "config": {
@@ -33,7 +68,11 @@
     }
   },
   "observability": {
-    "logging": { "level": "info", "structured": true, "correlation_id": true },
+    "logging": {
+      "level": "info",
+      "structured": true,
+      "correlation_id": true
+    },
     "metrics": {
       "enabled": true,
       "counters": [
@@ -47,5 +86,39 @@
         "cola-impresion.pendientes.count"
       ]
     }
-  }
+  },
+  "ui_handlers": [
+    {
+      "action": "entrar",
+      "domain": "cola",
+      "type": "workspace_module",
+      "zone": "barra_modulos",
+      "label": "Encolar pieza",
+      "description": "Mete una pieza aprobada en la cola"
+    },
+    {
+      "action": "siguiente",
+      "domain": "cola",
+      "type": "workspace_module",
+      "zone": "barra_modulos",
+      "label": "Siguiente a imprimir",
+      "description": "Obtiene la siguiente pieza según el motor de ordenación"
+    },
+    {
+      "action": "reordenar",
+      "domain": "cola",
+      "type": "workspace_module",
+      "zone": "barra_modulos",
+      "label": "Reordenar cola",
+      "description": "Reordena las piezas pendientes"
+    },
+    {
+      "action": "longitud",
+      "domain": "cola",
+      "type": "workspace_module",
+      "zone": "barra_modulos",
+      "label": "Estado de la cola",
+      "description": "Consulta el estado de la cola"
+    }
+  ]
 }

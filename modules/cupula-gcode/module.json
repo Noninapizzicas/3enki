@@ -7,14 +7,32 @@
   "main": "index.js",
   "blueprint_driven": false,
   "subscribes": [
-    { "event": "cupula.almacenar.request", "handler": "onAlmacenarRequest", "description": "Reflejo JS: almacena (upsert) un gcode por (modelo, material). Rechaza vacio/corrupto. Emite cupula.gcode_almacenado o cupula.almacenar.failed." },
-    { "event": "cupula.buscar.request", "handler": "onBuscarRequest", "description": "Reflejo JS: busca el gcode de un modelo (con material o material_por_defecto). Devuelve el gcode o ausente." },
-    { "event": "project.activated", "handler": "onProjectActivated", "description": "Restaura el estado persistido del proyecto (PosPersistencia)." }
+    {
+      "event": "cupula.almacenar.request",
+      "handler": "onAlmacenarRequest",
+      "description": "Reflejo JS: almacena (upsert) un gcode por (modelo, material). Rechaza vacio/corrupto. Emite cupula.gcode_almacenado o cupula.almacenar.failed."
+    },
+    {
+      "event": "cupula.buscar.request",
+      "handler": "onBuscarRequest",
+      "description": "Reflejo JS: busca el gcode de un modelo (con material o material_por_defecto). Devuelve el gcode o ausente."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Restaura el estado persistido del proyecto (PosPersistencia)."
+    }
   ],
   "events": {
     "publishes": [
-      { "event": "cupula.gcode_almacenado", "description": "Gcode almacenado en la cupula por (modelo, material). Lleva project_id top-level + correlation_id." },
-      { "event": "cupula.almacenar.failed", "description": "Fallo al almacenar gcode (vacio/corrupto). Par canonico de cupula.almacenar.request. Lleva project_id top-level + correlation_id." }
+      {
+        "event": "cupula.gcode_almacenado",
+        "description": "Gcode almacenado en la cupula por (modelo, material). Lleva project_id top-level + correlation_id."
+      },
+      {
+        "event": "cupula.almacenar.failed",
+        "description": "Fallo al almacenar gcode (vacio/corrupto). Par canonico de cupula.almacenar.request. Lleva project_id top-level + correlation_id."
+      }
     ]
   },
   "config": {
@@ -27,7 +45,11 @@
     }
   },
   "observability": {
-    "logging": { "level": "info", "structured": true, "correlation_id": true },
+    "logging": {
+      "level": "info",
+      "structured": true,
+      "correlation_id": true
+    },
     "metrics": {
       "enabled": true,
       "counters": [
@@ -39,5 +61,23 @@
         "cupula-gcode.gcode.count"
       ]
     }
-  }
+  },
+  "ui_handlers": [
+    {
+      "action": "almacenar",
+      "domain": "cupula",
+      "type": "system_panel",
+      "zone": "lateral_derecha",
+      "label": "Almacenar gcode",
+      "description": "Guarda un gcode en la cúpula"
+    },
+    {
+      "action": "buscar",
+      "domain": "cupula",
+      "type": "system_panel",
+      "zone": "lateral_derecha",
+      "label": "Buscar gcode",
+      "description": "Busca un gcode en la cúpula"
+    }
+  ]
 }

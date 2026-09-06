@@ -6,13 +6,31 @@
   "description": "Puente de importacion de modelos 3D (PUENTE): descarga desde repositorios o diseno propio y registra en el catalogo.",
   "language": "es",
   "main": "index.js",
-
   "subscribes": [
-    { "event": "importacion.importar.request", "handler": "onImportarRequest", "description": "Reflejo JS: importa un modelo (descarga, lee el .3mf y lo registra en el catalogo)." }
+    {
+      "event": "importacion.importar.request",
+      "handler": "onImportarRequest",
+      "description": "Reflejo JS: importa un modelo (descarga, lee el .3mf y lo registra en el catalogo)."
+    }
   ],
-
   "publishes": [
-    { "event": "importacion.importada", "description": "Evento emitido al completar la importacion y registrar el modelo en el catalogo." },
-    { "event": "importacion.importar.failed", "description": "Par de fallo: la importacion no se completo (input invalido, descarga fallida, .3mf ausente o registro fallido)." }
+    {
+      "event": "importacion.importada",
+      "description": "Evento emitido al completar la importacion y registrar el modelo en el catalogo."
+    },
+    {
+      "event": "importacion.importar.failed",
+      "description": "Par de fallo: la importacion no se completo (input invalido, descarga fallida, .3mf ausente o registro fallido)."
+    }
+  ],
+  "ui_handlers": [
+    {
+      "action": "importar",
+      "domain": "importacion",
+      "type": "chat_tool",
+      "zone": "barra_chat_inferior",
+      "label": "Importar modelo",
+      "description": "Importa un modelo desde un repositorio o diseño propio"
+    }
   ]
 }

@@ -1,0 +1,18 @@
+{
+  "_doc": "Manifest de importacion-modelo — PUENTE del proyecto 3D (taller personal de impresion 3D). Importa modelos 3D desde repositorios externos (Printables, MakerWorld, Cults3D, Thingiverse) o desde un diseno propio del dueno. El dueno elige o busca en todos a la vez (delega la busqueda a busqueda-repositorios por el puerto 'buscar(query) -> [resultados]'). La importacion descarga el modelo y lo registra en el catalogo (catalogo-modelos). El input puede ser .3mf o .stl; el slicer necesita .3mf, asi que si el origen es .stl se avisa que falta el .3mf (no se inventa). Es PUENTE: sin store, escucha y delega; no persiste estado (sin PosPersistencia, sin project.activated). Flujo A del plan: dueno busca -> busqueda-repositorios.buscar -> dueno elige -> importacion-modelo.importar -> adaptador-slicing.leer_3mf -> catalogo-modelos.registrar -> catalogo.modelo_registrado. Par de fallo importacion.importar.failed (todo flujo cierra su circulo). Ver plan-construccion.md seccion 6.7.",
+  "name": "importacion-modelo",
+  "version": "0.1.0",
+  "_v0_1_0_nota": "v0.1.0 (2026-09-06): PUENTE stateless de importacion de modelos 3D. Op importar (descarga + lee .3mf + registra en catalogo). Delega la busqueda a busqueda-repositorios. Par de fallo importacion.importar.failed. Reflejo 0.1.0.",
+  "description": "Puente de importacion de modelos 3D (PUENTE): descarga desde repositorios o diseno propio y registra en el catalogo.",
+  "language": "es",
+  "main": "index.js",
+
+  "subscribes": [
+    { "event": "importacion.importar.request", "handler": "onImportarRequest", "description": "Reflejo JS: importa un modelo (descarga, lee el .3mf y lo registra en el catalogo)." }
+  ],
+
+  "publishes": [
+    { "event": "importacion.importada", "description": "Evento emitido al completar la importacion y registrar el modelo en el catalogo." },
+    { "event": "importacion.importar.failed", "description": "Par de fallo: la importacion no se completo (input invalido, descarga fallida, .3mf ausente o registro fallido)." }
+  ]
+}

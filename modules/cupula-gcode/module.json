@@ -1,0 +1,43 @@
+{
+  "_doc": "Manifest del modulo cupula-gcode — CUSTODIO (reflejo JS) del proyecto 3D. La CUPULA de gcode: almacen de gcode indexado por (modelo, material). Es la fuente de verdad del gcode: si un modelo no tiene gcode aqui, no se puede imprimir. Guarda el gcode POR MODELO una vez sliceado para reutilizarlo sin reslicear (invariante 3: gcode reusable). Rechaza gcode vacio/corrupto (invariante 10: el gcode corrupto no se guarda) y avisa. Single-writer de su store por proyecto via PosPersistencia (file 'cupula-gcode.json'). Depende de filesystem (fs.*.request) para persistir. Lo consume ciclo-impresion por RPC (cupula.almacenar/buscar.request). Todo flujo cierra su circulo: par canonico cupula.almacenar.failed.",
+  "name": "cupula-gcode",
+  "version": "0.1.0",
+  "description": "Modulo cupula-gcode CUSTODIO del proyecto 3D: almacen de gcode indexado por (modelo, material). Fuente de verdad del gcode — si un modelo no tiene gcode aqui, no se puede imprimir. Guarda el gcode por modelo una vez sliceado para reutilizarlo sin reslicear. Rechaza gcode vacio/corrupto y avisa. Single-writer de su store por proyecto via PosPersistencia.",
+  "language": "es",
+  "main": "index.js",
+  "blueprint_driven": false,
+  "subscribes": [
+    { "event": "cupula.almacenar.request", "handler": "onAlmacenarRequest", "description": "Reflejo JS: almacena (upsert) un gcode por (modelo, material). Rechaza vacio/corrupto. Emite cupula.gcode_almacenado o cupula.almacenar.failed." },
+    { "event": "cupula.buscar.request", "handler": "onBuscarRequest", "description": "Reflejo JS: busca el gcode de un modelo (con material o material_por_defecto). Devuelve el gcode o ausente." },
+    { "event": "project.activated", "handler": "onProjectActivated", "description": "Restaura el estado persistido del proyecto (PosPersistencia)." }
+  ],
+  "events": {
+    "publishes": [
+      { "event": "cupula.gcode_almacenado", "description": "Gcode almacenado en la cupula por (modelo, material). Lleva project_id top-level + correlation_id." },
+      { "event": "cupula.almacenar.failed", "description": "Fallo al almacenar gcode (vacio/corrupto). Par canonico de cupula.almacenar.request. Lleva project_id top-level + correlation_id." }
+    ]
+  },
+  "config": {
+    "persistence": {
+      "scope": "project",
+      "type": "pos-persistencia",
+      "data_path": "3d/cupula-gcode",
+      "pattern": "json-file-per-project",
+      "concurrency": "single-writer"
+    }
+  },
+  "observability": {
+    "logging": { "level": "info", "structured": true, "correlation_id": true },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "cupula-gcode.gcode_almacenado.total",
+        "cupula-gcode.almacenar.failed.total",
+        "cupula-gcode.errors"
+      ],
+      "gauges": [
+        "cupula-gcode.gcode.count"
+      ]
+    }
+  }
+}

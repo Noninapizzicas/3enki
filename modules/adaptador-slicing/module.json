@@ -1,0 +1,20 @@
+{
+  "_doc": "PUENTE adaptador-slicing del proyecto 3D (taller personal de impresion 3D). Traduce la orden de slicear a una invocacion del slicer externo (CrealityPrint CLI) que corre en el PC del dueno (bastante RAM), NUNCA en el VPS. El puente thin del PC ejecuta la CLI. Input: archivo .3mf (no STL suelto). Output: gcode. El adaptador recibe la orden de slicear, invoca el slicer por el puerto 'slicear(.3mf, perfil) -> gcode', valida que el gcode no este vacio, y lo entrega para que la cupula-gcode lo guarde POR MODELO (una vez sliceado se reutiliza sin reslicear). Es PUENTE: sin store, escucha y delega; no persiste estado. Tambien expone leer_3mf (conversor 10.2) para extraer metadatos del .3mf en el flujo de importacion. Origen: plan-construccion.md 6.9 (FASE 4 construir-modulos).",
+  "name": "adaptador-slicing",
+  "version": "0.1.0",
+  "_v0_1_0_nota": "Primera version. PUENTE stateless: slicear + leer_3mf. Invoca el slicer por puerto inyectado (registrarSlicer), valida gcode no vacio, par de fallo slicear.failed.",
+  "description": "Puente al slicer externo (CrealityPrint CLI en el PC del dueno): slicear .3mf -> gcode y leer metadatos del .3mf.",
+  "language": "es",
+  "main": "index.js",
+
+  "subscribes": [
+    { "event": "adaptador-slicing.slicear.request", "handler": "onSlicearRequest", "description": "Recibe la orden de slicear un .3mf con un perfil; invoca el slicer, valida el gcode y lo entrega para guardar en la cupula." },
+    { "event": "adaptador-slicing.leer_3mf.request", "handler": "onLeer3mfRequest", "description": "Lee metadatos de un archivo .3mf (conversor 10.2); huecos como desconocido." }
+  ],
+
+  "publishes": [
+    { "event": "adaptador-slicing.slicear.response", "description": "Respuesta correlada del RPC slicear: gcode validado listo para guardar en la cupula." },
+    { "event": "adaptador-slicing.leer_3mf.response", "description": "Respuesta correlada del RPC leer_3mf: metadatos del .3mf." },
+    { "event": "adaptador-slicing.slicear.failed", "description": "Par de fallo: el slicer fallo, el .3mf no existe o el gcode salio vacio/corrupto." }
+  ]
+}

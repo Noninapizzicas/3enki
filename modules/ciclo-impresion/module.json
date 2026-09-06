@@ -1,0 +1,54 @@
+{
+  "_doc": "Manifest del modulo ciclo-impresion — MICRO-AGENTE / ORQUESTADOR del taller personal de impresion 3D (SPARKX i7, una pieza a la vez). Es el CORAZON del sistema y la ULTIMA hoja del plan: encadena el ciclo completo libre -> propuesta -> aprobacion -> imprimiendo -> impreso -> libre. Es el DUEÑO de la maquina de estados del ciclo (en memoria, no persiste): IDLE / OBTENIENDO_GCODE / SUBIENDO_GCODE / IMPRIMIENDO / ESPERANDO_RETIRADA / PAUSADO_FALTA_FILAMENTO / ERROR / COLA_VACIA. Garantia: la impresora nunca queda idle por falta de gcode (la cupula-gcode cachea el gcode por (modelo, material) o se slicera antes de encadenar). Orquesta por RPC (nunca import): cola-impresion (siguiente), cupula-gcode (buscar/almacenar), gestion-filamento (decrementar via filamento.usado), historial-impresiones (registrar), adaptador-impresora (subir_gcode/iniciar_impresion/observar_estado), adaptador-slicing (slicear), adaptador-avisos (enviar), adaptador-confirmacion (confirmar). Contrato TOLERANTE: si un RPC falla, el ciclo pasa a ERROR y emite ciclo.abortado (nunca basura). Cuando termina una pieza, encadena la siguiente automaticamente; el dueño debe retirar la pieza y cambiar filamento entre ciclos (no 100% autonomo). Los 16 REFLEJOS y 3 CONVERSORES del esquema que no son modulos viven como proyecciones internas _op de este orquestador (regla de traduccion): _obtenerGcode (3.1), _vigilarProgreso (3.3), _detectarFin (3.4), _detectarError (3.5), _detectarFaltaFilamento (3.6), _aplicarTransicion, _encadenarSiguiente. Todo flujo cierra su circulo: par de fallo ciclo.abortado.",
+  "name": "ciclo-impresion",
+  "version": "0.1.0",
+  "_v0_1_0_nota": "v0.1.0 (2026-09-06): MICRO-AGENTE/ORQUESTADOR del ciclo de impresion 3D. Maquina de estados en memoria (DUEÑO del ciclo). Encadena libre->propuesta->aprobacion->imprimiendo->impreso->libre. Orquesta por RPC cola/cupula/filamento/historial/impresora/slicing/avisos/confirmacion. Contrato tolerante: RPC falla -> ciclo.abortado. Emite ciclo.iniciado/completado/abortado/cola_vacia/esperando_confirmacion + impresion.completada/error, filamento.falta, filamento.usado, progreso.actualizado. Reflejo 0.1.0.",
+  "description": "Orquestador del ciclo de impresion 3D (MICRO-AGENTE): encadena la cadena completa libre->propuesta->aprobacion->imprimiendo->impreso->libre, vigila el progreso y avisa al dueño. DUEÑO de la maquina de estados del ciclo.",
+  "language": "es",
+  "main": "index.js",
+  "blueprint_driven": false,
+  "subscribes": [
+    { "event": "ciclo.iniciar.request", "handler": "onIniciarRequest", "description": "Reflejo JS: arranca el ciclo (siguiente pieza de la cola, obtiene gcode, sube, inicia, observa). Emite ciclo.iniciado o ciclo.abortado/cola_vacia." },
+    { "event": "impresion.completada", "handler": "onImpresionCompletada", "description": "DUEÑO: aplica transicion IMPRIMIENDO -> ESPERANDO_RETIRADA, registra en historial, decrementa filamento y avisa. Emite ciclo.esperando_confirmacion." },
+    { "event": "impresion.error", "handler": "onImpresionError", "description": "DUEÑO: aplica transicion IMPRIMIENDO -> ERROR. Emite ciclo.abortado y avisa del fallo." },
+    { "event": "filamento.falta", "handler": "onFilamentoFalta", "description": "DUEÑO: aplica transicion IMPRIMIENDO -> PAUSADO_FALTA_FILAMENTO y avisa de cambio de filamento." },
+    { "event": "adaptador-confirmacion.confirmacion_recibida", "handler": "onConfirmacionRecibida", "description": "DUEÑO: interpreta la confirmacion del dueño (pieza_retirada/filamento_cambiado/reanudar_ciclo) y aplica la transicion correspondiente." },
+    { "event": "adaptador-impresora.estado_crudo", "handler": "onEstadoCrudo", "description": "DUEÑO: vigila el progreso (3.3) y detecta fin (3.4), error (3.5) o falta de filamento (3.6) del estado interpretado." }
+  ],
+  "publishes": [
+    { "event": "ciclo.iniciado", "description": "El ciclo arranco (una pieza comenzo a imprimirse). Lleva project_id top-level + correlation_id." },
+    { "event": "ciclo.completado", "description": "El ciclo completo termino (pieza impresa y retirada). Lleva project_id top-level + correlation_id." },
+    { "event": "ciclo.abortado", "description": "El ciclo se aborto (error o RPC fallido). Par de fallo canonico. Lleva project_id top-level + correlation_id." },
+    { "event": "ciclo.cola_vacia", "description": "No hay piezas pendientes al iniciar el ciclo. Lleva project_id top-level + correlation_id." },
+    { "event": "ciclo.esperando_confirmacion", "description": "El ciclo espera una confirmacion del dueño (retirar pieza / cambiar filamento / reanudar). Lleva project_id top-level + correlation_id." },
+    { "event": "impresion.completada", "description": "Una pieza termino de imprimirse. La consume historial-impresiones y adaptador-avisos. Lleva project_id top-level + correlation_id." },
+    { "event": "impresion.error", "description": "La impresion fallo. La consume adaptador-avisos. Lleva project_id top-level + correlation_id." },
+    { "event": "filamento.falta", "description": "Falta filamento durante la impresion. La consume adaptador-avisos. Lleva project_id top-level + correlation_id." },
+    { "event": "filamento.usado", "description": "La impresora reporto filamento usado (mm). La consume gestion-filamento para decrementar el rollo activo. Lleva project_id top-level + correlation_id." },
+    { "event": "progreso.actualizado", "description": "Progreso de la impresion actualizado. La consume adaptador-avisos e historial-impresiones. Lleva project_id top-level + correlation_id." }
+  ],
+  "config": {
+    "persistence": {
+      "scope": "runtime",
+      "type": "in-memory",
+      "nota": "La maquina de estados del ciclo es en memoria (DUEÑO del ciclo). No persiste por proyecto: si el proceso cae, el ciclo se reanuda desde IDLE al reiniciar (el estado real de la impresora lo reporta adaptador-impresora)."
+    }
+  },
+  "observability": {
+    "logging": { "level": "info", "structured": true, "correlation_id": true },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "ciclo-impresion.iniciado.total",
+        "ciclo-impresion.completado.total",
+        "ciclo-impresion.abortado.total",
+        "ciclo-impresion.cola_vacia.total",
+        "ciclo-impresion.esperando_confirmacion.total",
+        "ciclo-impresion.errors"
+      ],
+      "gauges": [
+        "ciclo-impresion.estado"
+      ]
+    }
+  }
+}

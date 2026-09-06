@@ -1,0 +1,16 @@
+{
+  "_doc": "Manifest de adaptador-avisos — PUENTE del proyecto 3D (taller personal de impresion 3D). Escucha el evento de aviso (adaptador-avisos.enviar.request por RPC, o aviso.solicitar fire-and-forget de cualquier pieza), genera el mensaje con el CONVERSOR interno _construirMensaje (pieza 4.1, template por tipo) y lo envia por el canal del dueno (telegram-bridge: telegram.send_message.request con ack). Tipos de aviso (pieza 4.3): terminado, cambio_filamento, fallo, cola_vacia, filamento_bajo. Es PUENTE: sin store, no persiste, transporta y delega. Nadie da por hecho el envio sin ok:true explicito del proveedor (honestidad M11): si el canal no confirma, emite adaptador-avisos.enviar.failed (todo flujo cierra su circulo). Ver plan-construccion.md seccion 6.10.",
+  "name": "adaptador-avisos",
+  "version": "0.1.0",
+  "_v0_1_0_nota": "v0.1.0 (2026-09-06): PUENTE de avisos del taller 3D. Op enviar (RPC) + aviso.solicitar (fire-and-forget). Proyecciones _enviar/_construirMensaje/_tiposAviso/_verPanel. Envia por telegram-bridge con ack; par de fallo adaptador-avisos.enviar.failed. Reflejo 0.1.0.",
+  "description": "Puente de avisos del taller 3D (PUENTE): recibe el evento de aviso, construye el mensaje y lo envia por Telegram con confirmacion.",
+  "language": "es",
+  "subscribes": [
+    { "event": "adaptador-avisos.enviar.request", "handler": "onEnviarRequest", "description": "Reflejo JS: envia un aviso por el canal del dueno (telegram-bridge) con ack; responde adaptador-avisos.enviar.response." },
+    { "event": "aviso.solicitar", "handler": "onAvisoSolicitar", "description": "Reflejo JS: fire-and-forget de cualquier pieza que pide un aviso; lo construye y lo envia por el canal." }
+  ],
+  "publishes": [
+    { "event": "adaptador-avisos.enviar.response", "description": "Respuesta RPC: resultado del envio (ok:true solo si el canal confirmo)." },
+    { "event": "adaptador-avisos.enviar.failed", "description": "Par de fallo: el envio no se completo (canal no confirmo o aviso invalido)." }
+  ]
+}

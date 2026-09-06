@@ -1,0 +1,44 @@
+{
+  "_doc": "Manifest del modulo historial-impresiones — CUSTODIO (reflejo JS) del proyecto 3D. Registro append-only de impresiones pasadas del taller: fecha, modelo, material, filamento usado, tiempo y resultado. Es la memoria del taller: cada impresion.completada del ciclo de impresion se registra aqui como entrada inmutable (append-only, nunca se edita ni borra). Si faltan datos (p.ej. tiempo exacto), el hueco queda como 'desconocido' (invariante 5: dato ausente nombrado, nunca inventado). Single-writer de su store por proyecto via PosPersistencia (file 'historial-impresiones.json'). Depende de filesystem (fs.*.request) para persistir. Lo consume ciclo-impresion por RPC (historial.registrar.request) y el dueno por RPC (historial.listar.request). Todo flujo cierra su circulo: par canonico historial.registrar.failed.",
+  "name": "historial-impresiones",
+  "version": "0.1.0",
+  "description": "Modulo historial-impresiones CUSTODIO del proyecto 3D: registro append-only de impresiones pasadas (fecha, modelo, material, filamento usado, tiempo, resultado). Memoria del taller — cada impresion.completada se registra como entrada inmutable. Huecos de datos quedan como 'desconocido'. Single-writer de su store por proyecto via PosPersistencia.",
+  "language": "es",
+  "main": "index.js",
+  "blueprint_driven": false,
+  "subscribes": [
+    { "event": "historial.registrar.request", "handler": "onRegistrarRequest", "description": "Reflejo JS: registra una impresion pasada (append-only). Rellena huecos de datos como 'desconocido'. Emite historial.impresion_registrada o historial.registrar.failed." },
+    { "event": "historial.listar.request", "handler": "onListarRequest", "description": "Reflejo JS: lista el historial de impresiones del proyecto (append-only, mas reciente primero)." },
+    { "event": "impresion.completada", "handler": "onImpresionCompletada", "description": "Reflejo JS: al completarse una impresion, la registra en el historial y emite historial.impresion_registrada." },
+    { "event": "project.activated", "handler": "onProjectActivated", "description": "Restaura el estado persistido del proyecto (PosPersistencia)." }
+  ],
+  "events": {
+    "publishes": [
+      { "event": "historial.impresion_registrada", "description": "Impresion registrada en el historial (append-only). Lleva project_id top-level + correlation_id." },
+      { "event": "historial.registrar.failed", "description": "Fallo al registrar una impresion (datos invalidos). Par canonico de historial.registrar.request. Lleva project_id top-level + correlation_id." }
+    ]
+  },
+  "config": {
+    "persistence": {
+      "scope": "project",
+      "type": "pos-persistencia",
+      "data_path": "3d/historial-impresiones",
+      "pattern": "json-file-per-project",
+      "concurrency": "single-writer"
+    }
+  },
+  "observability": {
+    "logging": { "level": "info", "structured": true, "correlation_id": true },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "historial-impresiones.impresion_registrada.total",
+        "historial-impresiones.registrar.failed.total",
+        "historial-impresiones.errors"
+      ],
+      "gauges": [
+        "historial-impresiones.registros.count"
+      ]
+    }
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "fase": "fase0-identidad-negocio",
+  "evento": "project.created",
+  "estado": "completada",
+  "completada_el": "2026-09-06T12:00:00.000Z",
+  "project_id": "taller-laser",
+  "identidad": {
+    "que_es": "Un sistema de gestión de grabadoras láser — controlar estados de las máquinas, mandar trabajos, avisar por Telegram cuando terminan o hay problemas, controlar tiempos y cola, cúpula de diseños en G-code por grabadora, cola viva",
+    "que_vende": "Piezas personalizadas grabadas y cortadas para casa y encargos",
+    "como_lo_elabora": "Diseño digital (SVG/DXF) → generación G-code en PC dedicado (OpenSCAD + pipeline) → grabado/corte automatizado en Atomstack A20 Pro V2 → pieza terminada",
+    "tipo_derivado": "elaborado+pieza+taller",
+    "maquina": {
+      "modelo": "Atomstack A20 Pro V2",
+      "laser": "diodo 20W (4x6W, 455nm)",
+      "area": "400x365mm",
+      "firmware": "GRBL_ESP32",
+      "comunicacion": "serial USB (CH340X, 115200) + WiFi (ESP32)",
+      "protocolo": "GRBL v1.1 (M4 dinámico, S0-S1000)"
+    },
+    "infraestructura": {
+      "pc_generacion_gcode": true,
+      "openscad": true,
+      "telegram": true,
+      "gcode_por_grabadora": true
+    },
+    "interlocutores": [
+      { "rol": "dueño/operador", "canal": "presencial + Enki", "relacion": "diseña, prepara y opera la máquina" },
+      { "rol": "hijo", "canal": "presencial", "relacion": "usa la máquina, manda trabajos" }
+    ],
+    "criterio_exito": "El flujo de la máquina lo más estable posible — productiva y encargos organizados sin perder tiempo",
+    "preguntas_abiertas": []
+  },
+  "proposito": "Tener la máquina siempre productiva y los encargos organizados sin perder tiempo, con avisos por Telegram y cola viva"
+}

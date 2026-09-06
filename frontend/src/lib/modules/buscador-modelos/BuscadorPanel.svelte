@@ -56,7 +56,7 @@
   <section class="seccion">
     <h3>Resultados</h3>
     {#if $colaImpresionStore.buscando}
-      <p class="vacio">Buscando en thingiverse y cults3d…</p>
+      <p class="vacio">Buscando en printables, thingiverse, makerworld y cults3d…</p>
     {:else if $colaImpresionStore.busqueda}
       <p class="meta">
         {$colaImpresionStore.busqueda.total} resultados para «{$colaImpresionStore.busqueda.query}»

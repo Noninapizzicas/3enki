@@ -1,0 +1,68 @@
+{
+  "name": "crear-blueprint-full",
+  "description": "Genera el blueprint de interfaz de un módulo SIN filtro de actor (TODAS las ops: consulta + supervisión + operativa — crear, editar, enviar, configurar). No excluye ninguna operación del module.json. Extiende a generar-blueprint (determinista) con la capa de roles.",
+  "identidad": {
+    "role": "Diseñador de Interfaces por Roles de Enki",
+    "goal": "Generar blueprints donde la cara del JEFE (quien declara reglas/config) y la de UTILIZACIÓN (quien consume al elegir) quedan separadas y reconocibles",
+    "backstory": "Eres un diseñador de UI event-driven que analiza módulos por ROLES. El JEFE es la cara de edición del custodio: declara quitables, extras, límites, precios de reglas — escribe en el custodio y el sistema se reconfigura solo. El UTILIZADOR añade/quita al elegir producto: captura con validación del motor. Lo neutro es salud/estado. No improvisas: aplicas la lente de roles sobre las ops reales del module.json; si una op es ambigua, la marcas 'neutro' y lo notas."
+  },
+  "pasos": [
+    {
+      "paso": "leer_modulo",
+      "tipo": "reflejo",
+      "op": "leer_modulo"
+    },
+    {
+      "paso": "generar_base",
+      "tipo": "reflejo",
+      "op": "ejecutar_script",
+      "comando": "node scripts/generar-blueprint-full.js <slug> --no-frontend"
+    },
+    {
+      "paso": "clasificar_roles",
+      "tipo": "fuzzy",
+      "instruccion": "Dado el module.json y el blueprint base del módulo <slug>, clasifica CADA op de ui.ops por ROL: 'jefe' (crea o edita REGLAS/CONFIG del dominio: crear, configurar, permitir, limitar, extras de configuración, precios de reglas), 'utilizacion' (consume AL ELEGIR: añadir/quitar sobre una selección del cliente, evaluar/seleccionar opciones), o 'neutro' (lectura de estado, health, metrics, get/list). Si la op ESCRIBE en reglas → jefe; si opera sobre una ELECCIÓN del cliente final → utilizacion; si solo lee → neutro. Devuelve SOLO un objeto JSON válido, sin markdown ni explicaciones, con esta forma exacta:\n{\"roles\": {\"<op>\": \"jefe|utilizacion|neutro\"}, \"nota\": \"1 línea solo si hubo ambigüedad\"}",
+      "valida": { "tamano_min": 60 }
+    },
+    {
+      "paso": "fusionar_roles",
+      "tipo": "reflejo",
+      "op": "personalizado",
+      "_detalle": "Inyecta el bloque clasificado en ui.roles del blueprint del módulo + añade fase 'jefe' PRIMERA en ui.flujo (antes de consulta/utilidad) con las ops de rol jefe, y renombra 'utilidad' de la base según roles. Si el módulo vive en vertical (pizzepos/prisma), mover el blueprint de modules/<slug>/ a modules/<vertical>/<slug>/ (bug conocido del script generar-blueprint.js: escribe en la raíz) y rmdir."
+    },
+    {
+      "paso": "verificar",
+      "tipo": "reflejo",
+      "op": "verificar"
+    },
+    {
+      "paso": "commitar",
+      "tipo": "reflejo",
+      "op": "commitar"
+    }
+  ],
+  "entregable": {
+    "tipo": "fs",
+    "path": "modules/<vertical>/<slug>/<slug>.blueprint.json",
+    "reglas": ["existe", "contenido_min", "en_repo"],
+    "min_chars": 800
+  },
+  "presupuesto": {
+    "generaciones_por_paso": 2,
+    "max_tokens": 4000,
+    "generacion_timeout_ms": 120000
+  },
+  "git": {
+    "modo": "rama-propia",
+    "rama": "agente/crear-blueprint-full",
+    "commit": true,
+    "pr": true,
+    "merge": "externo",
+    "_nota": "El agente trabaja SIEMPRE en su rama (partir de main limpio) — nunca en main directo. Commita en su rama, push y abre PR. El merge lo revisa y firma el canal externo (el PR es la cola de revisión visible). Si el trabajo sale mal: descartar la rama y punto."
+  },
+  "frontend_sync": {
+    "obligatorio": true,
+    "antes_de": "abrir_el_PR",
+    "_nota": "Si el entregable es un blueprint, copiarlo TAMBIÉN a frontend/src/lib/modules/<slug>/<slug>.blueprint.json y commitear AMBOS en el MISMO PR — la UI renderiza el del frontend, y el deploy (npm run build) compila desde el repo. Sin esta copia el PR se mergea y la UI no cambia nunca."
+  }
+}

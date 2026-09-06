@@ -166,11 +166,7 @@
       "cocina-poc",
       "notas-poc",
       "bienvenida-tienda",
-      "prompt-builder",
-      "agent-observer",
-      "memory-conversation-summary",
-      "memory-rag",
-      "memory-user-profile"
+      "prompt-builder"
     ]
   },
   "observability": {

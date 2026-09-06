@@ -1,0 +1,50 @@
+{
+  "_doc": "Cúpula STL (PASO 6): custodia los STL/3MF UNIVERSALES (el MODELO 3D, una vez por pieza). El STL es el modelo: se guarda una vez y sirve para CUALQUIER máquina. Cripta single-writer de /impresion-3d/stl/. La receta de UNA máquina (el gcode) vive aparte, en cupula_gcode. RPCs: registrar, obtener, listar.",
+  "config": {
+    "persistence": {
+      "concurrency": "single-writer",
+      "data_path": "stl",
+      "pattern": "single-json-file",
+      "scope": "project"
+    }
+  },
+  "dependencies": [],
+  "description": "Cúpula del modelo 3D universal: STL/3MF una vez por pieza, sirve para cualquier máquina.",
+  "language": "es",
+  "main": "index.js",
+  "name": "cupula_stl",
+  "publishes": [
+    {
+      "event": "cupula_stl.stl_registrado"
+    },
+    {
+      "event": "cupula_stl.registrar.failed"
+    },
+    {
+      "event": "cupula_stl.obtener.failed"
+    },
+    {
+      "event": "cupula_stl.listar.failed"
+    }
+  ],
+  "subscribes": [
+    {
+      "event": "cupula_stl.registrar.request",
+      "handler": "onRegistrarRequest"
+    },
+    {
+      "event": "cupula_stl.obtener.request",
+      "handler": "onObtenerRequest"
+    },
+    {
+      "event": "cupula_stl.listar.request",
+      "handler": "onListarRequest"
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated"
+    }
+  ],
+  "tools": [],
+  "version": "0.1.0"
+}

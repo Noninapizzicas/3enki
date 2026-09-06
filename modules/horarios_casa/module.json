@@ -1,0 +1,57 @@
+{
+  "_doc": "Horarios de casa (PASO 10): configuración de ventanas de impresión POR PERSONA (4 perfiles en casa, cada uno con su ritmo). El orquestador consulta ventana_activa antes de proponer/arrancar una impresión: solo imprime dentro de la ventana de quien pidió la pieza (PRESENCIA). La base nace simple y se afina con la experiencia (prioridad, choques, límites) sin cambiar el contrato de ventanas. RPCs: configurar_horario, obtener_horario, listar_horarios, ventana_activa.",
+  "config": {
+    "persistence": {
+      "concurrency": "single-writer",
+      "data_path": "horarios",
+      "pattern": "single-json-file",
+      "scope": "project"
+    }
+  },
+  "dependencies": [],
+  "description": "Ventanas de impresión por persona en casa (4 perfiles), para la decisión de presencia del orquestador.",
+  "language": "es",
+  "main": "index.js",
+  "name": "horarios_casa",
+  "publishes": [
+    {
+      "event": "horarios_casa.horario_actualizado"
+    },
+    {
+      "event": "horarios_casa.configurar_horario.failed"
+    },
+    {
+      "event": "horarios_casa.obtener_horario.failed"
+    },
+    {
+      "event": "horarios_casa.listar_horarios.failed"
+    },
+    {
+      "event": "horarios_casa.ventana_activa.failed"
+    }
+  ],
+  "subscribes": [
+    {
+      "event": "horarios_casa.configurar_horario.request",
+      "handler": "onConfigurarHorarioRequest"
+    },
+    {
+      "event": "horarios_casa.obtener_horario.request",
+      "handler": "onObtenerHorarioRequest"
+    },
+    {
+      "event": "horarios_casa.listar_horarios.request",
+      "handler": "onListarHorariosRequest"
+    },
+    {
+      "event": "horarios_casa.ventana_activa.request",
+      "handler": "onVentanaActivaRequest"
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated"
+    }
+  ],
+  "tools": [],
+  "version": "0.1.0"
+}

@@ -1,9 +1,34 @@
 {
   "schema": "blueprint-interfaz-v2",
   "id": "ciclo-impresion",
-  "version": "blueprint-2.0.0",
+  "version": "blueprint-2.1.0",
   "moduleId": "ciclo-impresion",
-  "titulo": "Orquestador del ciclo de impresion 3D (MICRO-AGENTE): encadena la cadena completa libre->propuesta->aprobacion->imprimiendo->impreso->libre, vigila el progreso y avisa al dueño. DUEÑO de la maquina de estados del ciclo.",
+  "_lente_roles": {
+    "agente": "crear-blueprint-jefe v2",
+    "metodo": "esquematizador-jefe",
+    "arbitro": "futuro→jefe · ahora→utilizacion · solo-lee→neutro",
+    "consolidacion": "modules/ciclo-impresion/esquema-jefe/pasada-1-jefe-ciclo-impresion.md",
+    "dualidad": "JEFE=transiciones del ciclo de vida (arrancar ciclo + confirmar transiciones físicas: retirar pieza, cambiar filamento, reanudar tras error) · UTILIZACION=cola-impresion (elegir qué pieza imprimir, fuera de este módulo) · neutro=estado/pulso",
+    "senales_pareadas": {
+      "iniciar": "ciclo.iniciado",
+      "pieza_retirada": "ciclo.iniciado",
+      "filamento_cambiado": "ciclo.iniciado",
+      "reanudar_ciclo": "ciclo.iniciado"
+    }
+  },
+  "titulo": "Orquestador del ciclo de impresion 3D (MICRO-AGENTE): encadena la cadena completa libre->propuesta->aprobacion->imprimiendo->impreso->libre, vigila el progreso y avisa al dueño. DUEÑO de la maquina de estados del ciclo. La cara del JEFE (dueño del taller) arranca el ciclo y confirma las transiciones físicas (retirar pieza, cambiar filamento, reanudar tras error); la cola (qué pieza imprimir) vive en cola-impresion.",
+  "eventos_publicados": [
+    "ciclo.iniciado",
+    "ciclo.completado",
+    "ciclo.abortado",
+    "ciclo.cola_vacia",
+    "ciclo.esperando_confirmacion",
+    "impresion.completada",
+    "impresion.error",
+    "filamento.falta",
+    "filamento.usado",
+    "progreso.actualizado"
+  ],
   "eventos_que_escucho": [
     "ciclo.iniciar.request",
     "impresion.completada",
@@ -16,46 +41,162 @@
     "rpc": [
       "ciclo.iniciar.request -> .response",
       "ciclo.estado.request -> .response"
+    ],
+    "salida": [
+      "ciclo.iniciado",
+      "ciclo.completado",
+      "ciclo.abortado",
+      "ciclo.cola_vacia",
+      "ciclo.esperando_confirmacion",
+      "impresion.completada",
+      "impresion.error",
+      "filamento.falta",
+      "filamento.usado",
+      "progreso.actualizado"
     ]
   },
   "ui": {
     "ops": {
       "iniciar": {
-        "titulo": "Iniciar",
-        "rol": "utilizacion"
+        "titulo": "Iniciar ciclo",
+        "descripcion": "Arranca el ciclo de impresion: toma la siguiente pieza de la cola, obtiene el gcode (cupula o slicer), lo sube a la impresora, inicia la impresion y abre el stream de observacion. Emite ciclo.iniciado o ciclo.abortado/cola_vacia.",
+        "rol": "jefe"
       },
       "estado": {
-        "titulo": "Estado",
+        "titulo": "Estado del ciclo",
+        "descripcion": "Consulta el estado del ciclo de impresion: fase actual, pieza en curso, progreso y error. Alimenta la cinta-estado del panel del jefe.",
         "rol": "neutro"
+      },
+      "pieza_retirada": {
+        "titulo": "Confirmar retirada de pieza",
+        "descripcion": "El dueño retiro la pieza impresa. Transicion ESPERANDO_RETIRADA -> IDLE y encadena la siguiente pieza automaticamente (o ciclo.completado si la cola quedo vacia).",
+        "rol": "jefe"
+      },
+      "filamento_cambiado": {
+        "titulo": "Confirmar cambio de filamento",
+        "descripcion": "El dueño cambio el filamento. Transicion PAUSADO_FALTA_FILAMENTO -> IMPRIMIENDO y reanuda la impresion.",
+        "rol": "jefe"
+      },
+      "reanudar_ciclo": {
+        "titulo": "Reanudar ciclo tras error",
+        "descripcion": "El dueño resuelve el error y reanuda. Transicion ERROR -> IDLE y arranca de nuevo el ciclo.",
+        "rol": "jefe"
       }
     },
-    "roles": {
-      "iniciar": "utilizacion",
-      "estado": "neutro"
+    "datos": {
+      "op": "estado",
+      "titulo": "Estado del ciclo",
+      "refresh_on": [
+        "ciclo.iniciado",
+        "ciclo.completado",
+        "ciclo.abortado",
+        "ciclo.cola_vacia",
+        "ciclo.esperando_confirmacion",
+        "progreso.actualizado"
+      ]
     },
+    "estados": [
+      {
+        "nombre": "IDLE",
+        "terminal": false,
+        "color": "gray",
+        "icono": "⏸️"
+      },
+      {
+        "nombre": "OBTENIENDO_GCODE",
+        "terminal": false,
+        "color": "blue",
+        "icono": "🔍"
+      },
+      {
+        "nombre": "SUBIENDO_GCODE",
+        "terminal": false,
+        "color": "blue",
+        "icono": "📤"
+      },
+      {
+        "nombre": "IMPRIMIENDO",
+        "terminal": false,
+        "color": "orange",
+        "icono": "🖨️"
+      },
+      {
+        "nombre": "ESPERANDO_RETIRADA",
+        "terminal": false,
+        "color": "yellow",
+        "icono": "📦"
+      },
+      {
+        "nombre": "PAUSADO_FALTA_FILAMENTO",
+        "terminal": false,
+        "color": "red",
+        "icono": "🧵"
+      },
+      {
+        "nombre": "ERROR",
+        "terminal": false,
+        "color": "red",
+        "icono": "❌"
+      },
+      {
+        "nombre": "COLA_VACIA",
+        "terminal": true,
+        "color": "green",
+        "icono": "✅"
+      }
+    ],
     "flujo": [
       {
         "nombre": "jefe",
         "orden": 1,
-        "ops": [],
-        "descripcion": "Cara de edicion del custodio (reglas/config). Este orquestador no expone ops de edicion de reglas en su UI: fase vacia (nota: el ciclo se configura por eventos/RPC, no por UI)."
-      },
-      {
-        "nombre": "utilizacion",
-        "orden": 2,
         "ops": [
-          "iniciar"
+          "iniciar",
+          "pieza_retirada",
+          "filamento_cambiado",
+          "reanudar_ciclo"
         ],
-        "descripcion": "El dueño consume el ciclo al elegir iniciarlo (accion operativa de arranque)."
+        "descripcion": "El dueño del taller DECIDE el ciclo: arrancarlo y confirmar las transiciones físicas (retirar pieza, cambiar filamento, reanudar tras error)."
       },
       {
         "nombre": "neutro",
-        "orden": 3,
+        "orden": 2,
         "ops": [
           "estado"
         ],
-        "descripcion": "Salud/estado del ciclo (lectura)."
+        "descripcion": "Pulso del ciclo (fase, pieza, progreso, error) que alimenta la cinta-estado."
       }
-    ]
+    ],
+    "roles": {
+      "iniciar": "jefe",
+      "estado": "neutro",
+      "pieza_retirada": "jefe",
+      "filamento_cambiado": "jefe",
+      "reanudar_ciclo": "jefe"
+    },
+    "formas_jefe": {
+      "cinta-estado": {
+        "op": "estado",
+        "descripcion": "Cinta de fase del ciclo: fase actual, pieza en curso, progreso %, error. Alimenta la decision del jefe."
+      },
+      "inline-gesture": {
+        "iniciar": "Arranque del ciclo cuando IDLE/COLA_VACIA/ERROR. Senal: ciclo.iniciado.",
+        "pieza_retirada": "Confirmar retirada cuando ESPERANDO_RETIRADA. Senal: ciclo.iniciado/completado.",
+        "filamento_cambiado": "Confirmar cambio de filamento cuando PAUSADO_FALTA_FILAMENTO. Senal: ciclo.iniciado."
+      },
+      "confirmador-nombrado": {
+        "reanudar_ciclo": "Reanudar tras ERROR. Nombra el error. Senal: ciclo.iniciado."
+      },
+      "senal-refresh": {
+        "iniciar": "ciclo.iniciado",
+        "pieza_retirada": "ciclo.iniciado",
+        "filamento_cambiado": "ciclo.iniciado",
+        "reanudar_ciclo": "ciclo.iniciado"
+      }
+    },
+    "guardas": {
+      "iniciar": {
+        "sensible_estado": true
+      }
+    }
   }
 }

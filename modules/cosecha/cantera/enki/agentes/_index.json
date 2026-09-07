@@ -148,6 +148,23 @@
       "ejecuciones": 0,
       "ultima_ejecucion": null,
       "modulos_procesados": []
+    },
+    {
+      "name": "esquematizador-interfaz-jefe-operador",
+      "description": "Esquematiza la interfaz de un módulo con DOS caras trabajadas: JEFE (declara reglas, decide transiciones) y OPERADOR (opera el flujo a diario). Cliente al margen. Produce esquema-jefe con lente de roles, máquina de estados, señales pareadas y composición de vista.",
+      "archivo": "esquematizador-interfaz-jefe-operador.json",
+      "tags": [
+        "esquema",
+        "interfaz",
+        "jefe",
+        "operador",
+        "roles",
+        "ui"
+      ],
+      "creado": "2026-09-07",
+      "ejecuciones": 0,
+      "ultima_ejecucion": null,
+      "modulos_procesados": []
     }
   ]
 }

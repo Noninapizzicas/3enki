@@ -1,11 +1,16 @@
-# Pasada 1 — Esquematizador-Jefe · ciclo-impresion
+# Pasada 1 — Esquematizador-Jefe-Operador · ciclo-impresion
 
-> SUJETO correcto: **la cara del ROL JEFE del ciclo de impresión** — NO el módulo entero.
+> SUJETO correcto: **las DOS caras trabajadas del ciclo de impresión — la del JEFE
+> (quien declara reglas/config y decide) y la del OPERADOR (quien opera la máquina a
+> diario)** — NO el módulo entero. La cara del CLIENTE (POS/PWA/consumo) se deja AL
+> MARGEN: no es de este esquema.
+>
 > ciclo-impresion es un ORQUESTADOR (MICRO-AGENTE) que es DUEÑO de la máquina de
 > estados del ciclo (en memoria). No es un custodio de reglas: su "regla" es la
-> transición legal del ciclo. La cara del jefe = el dueño del taller que DECIDE
-> arrancar el ciclo, se INFORMA del estado y CONFIRMA las transiciones físicas
-> (retirar pieza, cambiar filamento, reanudar tras error).
+> transición legal del ciclo. Por eso la cara del JEFE aquí es DELGADA (casi no
+> declara reglas: no hay config de reglas, solo persistence runtime) y la cara del
+> OPERADOR es la GRUESA: arrancar el ciclo, retirar la pieza, cambiar el filamento y
+> reanudar tras error son operaciones FÍSICAS del taller, no decisiones de reglas.
 
 ## Alimento (informer al prisma)
 
@@ -21,86 +26,115 @@
   PAUSADO_FALTA_FILAMENTO, COLA_VACIA.
 - **Confirmaciones** (CONFIRMACIONES): pieza_retirada, filamento_cambiado,
   reanudar_ciclo, modelo_aprobado, modelo_rechazado.
+- **Config**: NO hay config de reglas. `config.persistence` = runtime/in-memory
+  (la máquina de estados no persiste; si el proceso cae, el ciclo se reanuda desde
+  IDLE y el estado real lo reporta adaptador-impresora).
 - **Invariantes**: la impresora nunca queda idle por falta de gcode (cúpula cachea
   o slicera antes de encadenar); una pieza a la vez; contrato tolerante (RPC falla
-  → ciclo.abortado, nunca basura).
+  → ciclo.abortado, nunca basura); el ciclo NO es 100% autónomo — el operador debe
+  retirar la pieza y cambiar filamento entre ciclos.
 
-## Las 5 preguntas-jefe
+## Las 5 preguntas-jefe + operador
 
-1. **IDENTIDAD** — ¿Qué DECIDE el jefe aquí? El dueño del taller decide:
-   - **Arrancar el ciclo** (`iniciar`): lanza la siguiente pieza de la cola
-     (obtener gcode → subir → imprimir → observar). Es la transición de arranque.
-   - **Confirmar las transiciones físicas** (vía adaptador-confirmacion):
-     `pieza_retirada` (ESPERANDO_RETIRADA → IDLE, encadena siguiente),
-     `filamento_cambiado` (PAUSADO_FALTA_FILAMENTO → IMPRIMIENDO),
-     `reanudar_ciclo` (ERROR → IDLE). El ciclo NO es 100% autónomo: el dueño debe
-     retirar la pieza y cambiar filamento entre ciclos.
-   - **Ver el estado** (`estado`): pulso del ciclo (qué pieza, qué fase, progreso).
-2. **RESTRICCIONES** — ¿Qué NO depende de él? El custodio del gcode es la
+1. **IDENTIDAD** — ¿Qué DECIDE el JEFE aquí? ¿Qué OPERA el OPERADOR aquí?
+   - **JEFE (delgado)**: el dueño del taller decide la **aprobación de calidad del
+     modelo** antes de imprimir (`modelo_aprobado` / `modelo_rechazado` — presentes
+     en CONFIRMACIONES, sin op UI hoy). Es la única decisión de "regla/calidad" del
+     ciclo: qué pieza merece imprimirse. No hay config de reglas que declarar.
+   - **OPERADOR (grueso)**: opera el flujo físico a diario:
+     - **Arrancar el ciclo** (`iniciar`): lanza la siguiente pieza de la cola
+       (obtener gcode → subir → imprimir → observar). Es la transición de arranque.
+     - **Retirar la pieza** (`pieza_retirada`): ESPERANDO_RETIRADA → IDLE (encadena
+       la siguiente). Acción física: sacar la pieza de la cama.
+     - **Cambiar el filamento** (`filamento_cambiado`): PAUSADO_FALTA_FILAMENTO →
+       IMPRIMIENDO. Acción física: cargar rollo nuevo.
+     - **Reanudar tras error** (`reanudar_ciclo`): ERROR → IDLE. Acción física:
+       desatascar/limpiar y relanzar.
+   - **NEUTRO**: `estado` (pulso del ciclo: fase, pieza, progreso) — solo informa.
+2. **RESTRICCIONES** — ¿Qué NO depende de cada rol? El custodio del gcode es la
    cúpula-gcode; el de la cola es cola-impresion; el de filamento es
    gestion-filamento; el de historial es historial-impresiones. El ciclo orquesta
    por RPC (nunca import). La máquina de estados es del MÓDULO, no de la UI: una
-   transición ilegal lanza error (409 CONFLICT_STATE si ya está imprimiendo).
-   El estado es en memoria: si el proceso cae, el ciclo se reanuda desde IDLE.
-3. **CONTRATO** — ¿Qué necesita VER antes de decidir y qué SEÑAL confirma?
-   - VER: `estado` (fase actual, pieza, progreso, error) + `progreso.actualizado`
-     (stream de la impresora) + `ciclo.esperando_confirmacion` (cuándo debe actuar).
-   - SEÑALES de confirmación (pareadas): `iniciar` → `ciclo.iniciado` (o
-     `ciclo.abortado`/`ciclo.cola_vacia`); `pieza_retirada` → `ciclo.completado`
-     (si cola vacía) o `ciclo.iniciado` (encadena siguiente); `filamento_cambiado`
-     → `ciclo.iniciado` (reanuda); `reanudar_ciclo` → `ciclo.iniciado`.
-4. **NO-OBJETIVOS** — La UTILIZACIÓN (elegir qué pieza imprimir, gestionar la
-   cola) vive en cola-impresion, NO aquí. El sistema (health, metrics) informa,
-   no decide. El gcode/slicing es de cupula-gcode/adaptador-slicing.
+   transición ilegal lanza error (409 CONFLICT_STATE si ya está imprimiendo). El
+   estado es en memoria: si el proceso cae, el ciclo se reanuda desde IDLE. El
+   JEFE NO edita la cola ni el gcode; el OPERADOR NO decide qué pieza entra (eso
+   es cola-impresion) — solo opera la transición física de la pieza ya encolada.
+3. **CONTRATO** — ¿Qué necesita VER cada rol antes de decidir/operar y qué SEÑAL
+   pareada confirma cada acción?
+   - VER (ambos): `estado` (fase actual, pieza, progreso, error) +
+     `progreso.actualizado` (stream de la impresora) + `ciclo.esperando_confirmacion`
+     (cuándo debe actuar el operador).
+   - SEÑALES de confirmación (pareadas, verificadas en index.js): `iniciar` →
+     `ciclo.iniciado` (o `ciclo.abortado`/`ciclo.cola_vacia`); `pieza_retirada` →
+     `ciclo.completado` (si cola vacía) o `ciclo.iniciado` (encadena siguiente);
+     `filamento_cambiado` → `ciclo.iniciado` (reanuda); `reanudar_ciclo` →
+     `ciclo.iniciado`. `modelo_aprobado/rechazado` → transición de aprobación
+     (hoy sin op UI, [ABIERTO]).
+4. **NO-OBJETIVOS** — La cara CLIENTE (elegir/comprar pieza, gestionar la cola)
+   vive en cola-impresion, NO aquí (al margen). El sistema (health, metrics)
+   informa, no decide. El gcode/slicing es de cupula-gcode/adaptador-slicing. El
+   JEFE no configura pesos ni reglas (no hay config de reglas en este módulo).
 5. **PREGUNTAS_ABIERTAS** — [ABIERTO] (a) ¿el dueño quiere aprobar/rechazar el
    modelo antes de imprimir? (CONFIRMACIONES incluye modelo_aprobado/rechazado
-   pero no hay op UI); (b) ¿notificación push de "pieza lista" al dueño fuera del
-   taller? (hoy avisa por adaptador-avisos).
+   pero no hay op UI — es la única cara de JEFE real y está sin materializar);
+   (b) ¿notificación push de "pieza lista" al operador fuera del taller? (hoy avisa
+   por adaptador-avisos); (c) ¿el operador necesita ver el motivo del error antes
+   de reanudar? (hoy `reanudar_ciclo` no exige confirmar el motivo).
 
-## Veredicto del ÁRBITRO (lente-roles)
+## Veredicto del ÁRBITRO (lente-roles: jefe vs operador)
 
-Pregunta árbitro: ¿decide el FUTURO del ciclo (transiciona la máquina de estados)
-→ JEFE · ¿sirve una decisión AHORA al elegir → UTILIZACIÓN · ¿solo informa → NEUTRO?
+Pregunta árbitro: ¿decide el FUTURO del ciclo por REGLA/CALIDAD (aprueba, declara
+config) → JEFE · ¿opera el flujo físico a diario (arranca, confirma físico, retira,
+reanuda) → OPERADOR · ¿solo informa → NEUTRO? La cara CLIENTE (elegir/comprar) NO se
+clasifica aquí.
 
 | Op | Veredicto | Por qué |
 |---|---|---|
-| `iniciar` | **JEFE** | Transición de arranque del ciclo (IDLE/COLA_VACIA/ERROR → OBTENIENDO_GCODE). El dueño decide lanzar la impresión. |
-| `estado` | neutro | Lectura del pulso del ciclo (fase, pieza, progreso). Alimenta la cinta-estado. |
-| `pieza_retirada` (confirmación) | **JEFE** | Transición física ESPERANDO_RETIRADA → IDLE (encadena siguiente). Decisión del dueño. |
-| `filamento_cambiado` (confirmación) | **JEFE** | Transición PAUSADO_FALTA_FILAMENTO → IMPRIMIENDO. Decisión del dueño. |
-| `reanudar_ciclo` (confirmación) | **JEFE** | Transición ERROR → IDLE. Decisión del dueño. |
+| `iniciar` | **OPERADOR** | Arranca el flujo a diario (IDLE/COLA_VACIA/ERROR → OBTENIENDO_GCODE). Operación física de arranque del taller, no decisión de reglas. |
+| `pieza_retirada` (confirmación) | **OPERADOR** | Transición física ESPERANDO_RETIRADA → IDLE (encadena siguiente). El operador saca la pieza de la cama. |
+| `filamento_cambiado` (confirmación) | **OPERADOR** | Transición física PAUSADO_FALTA_FILAMENTO → IMPRIMIENDO. El operador carga el rollo nuevo. |
+| `reanudar_ciclo` (confirmación) | **OPERADOR** | Transición física ERROR → IDLE. El operador desatasca/limpia y relanza. |
+| `modelo_aprobado` / `modelo_rechazado` | **JEFE** | Decisión de CALIDAD/regla del dueño: qué pieza merece imprimirse. Presente en CONFIRMACIONES, sin op UI hoy. |
+| `estado` | neutro | Lectura del pulso del ciclo (fase, pieza, progreso). Alimenta la cinta-estado, no decide. |
 
-**Dualidad en una línea**: el ciclo NACE de la cola (utilización, cola-impresion)
-y VIVE en el orquestador; el panel-jefe SOLO arranca el ciclo y confirma las
-transiciones físicas — jamás edita la cola ni el gcode (invariante).
+**Dualidad en una línea**: el JEFE aprueba la calidad del modelo (regla, delgada y
+hoy sin materializar); el OPERADOR opera el ciclo físico a diario (arrancar, retirar,
+cambiar filamento, reanudar); el CLIENTE queda al margen (elegir/comprar vive en
+cola-impresion).
 
-## Composición de la vista del jefe (3 capas)
+## Composición de la vista (3 capas)
 
 ```
 1. SELECCIONAR  — no hay entidad a elegir (una pieza a la vez): el ciclo es único.
                   La cinta-estado ES el selector (qué fase, qué pieza).
 2. INFORMARSE   — estado (fase, pieza, progreso, error) + progreso.actualizado
-                  (stream) + ciclo.esperando_confirmacion (cuándo actuar).
-3. DECLARAR     — las ÚNICAS escrituras del jefe: iniciar (arranque) + las
-                  confirmaciones físicas (pieza_retirada, filamento_cambiado,
-                  reanudar_ciclo) según la fase activa. La señal pareada re-lee.
+                  (stream) + ciclo.esperando_confirmacion (cuándo debe actuar el
+                  operador). Alimenta la decisión de ambos roles.
+3. DECLARAR/OPERAR — las ÚNICAS escrituras:
+                  · OPERADOR: iniciar (arranque) + las confirmaciones físicas
+                    (pieza_retirada, filamento_cambiado, reanudar_ciclo) según la
+                    fase activa. La señal pareada re-lee.
+                  · JEFE: aprobar/rechazar modelo (hoy sin op UI, [ABIERTO]).
 ```
 
 ### Frecuencia → jerarquía
-- El gesto rey es la CONFIRMACIÓN de la fase activa (1 toque en vista): retirar
-  pieza, cambiar filamento, reanudar.
-- `iniciar` es el gesto de arranque (botón principal cuando IDLE/COLA_VACIA/ERROR).
+- El gesto rey es la CONFIRMACIÓN FÍSICA del operador en la fase activa (1 toque en
+  vista): retirar pieza, cambiar filamento, reanudar.
+- `iniciar` es el gesto de arranque del operador (botón principal cuando
+  IDLE/COLA_VACIA/ERROR).
 - `reanudar_ciclo` tras ERROR es gruesa → `confirmador-nombrado` (nombra el error).
+- La cara del JEFE (aprobar/rechazar) es de baja frecuencia y hoy no tiene op UI.
 
 ## Formas UI canónicas (disección)
 
 | Hoja (órgano) | Forma canónica | Nota |
 |---|---|---|
-| Cinta de fase del ciclo | `cinta-estado` | estado: fase actual, pieza, progreso %, error. Alimenta la decisión. |
-| Botón Iniciar ciclo | `inline-gesture` | arranque cuando IDLE/COLA_VACIA/ERROR. Señal: ciclo.iniciado. |
-| Confirmar retirada de pieza | `inline-gesture` | ESPERANDO_RETIRADA → encadena siguiente. Señal: ciclo.iniciado/completado. |
-| Confirmar cambio de filamento | `inline-gesture` | PAUSADO_FALTA_FILAMENTO → reanuda. Señal: ciclo.iniciado. |
-| Reanudar tras error | `confirmador-nombrado` | ERROR → IDLE. Nombra el error. Señal: ciclo.iniciado. |
+| Cinta de fase del ciclo | `cinta-estado` | estado: fase actual, pieza, progreso %, error. Alimenta la decisión de ambos roles. |
+| Botón Iniciar ciclo (OPERADOR) | `inline-gesture` | arranque cuando IDLE/COLA_VACIA/ERROR. Señal: ciclo.iniciado. |
+| Confirmar retirada de pieza (OPERADOR) | `inline-gesture` | ESPERANDO_RETIRADA → encadena siguiente. Señal: ciclo.iniciado/completado. |
+| Confirmar cambio de filamento (OPERADOR) | `inline-gesture` | PAUSADO_FALTA_FILAMENTO → reanuda. Señal: ciclo.iniciado. |
+| Reanudar tras error (OPERADOR) | `confirmador-nombrado` | ERROR → IDLE. Nombra el error. Señal: ciclo.iniciado. |
+| Aprobar/rechazar modelo (JEFE) | `confirmador-nombrado` | [ABIERTO] decisión de calidad del dueño; sin op UI hoy. |
 | TODAS las de declaración | `señal-refresh` | pareadas (tabla abajo) |
 
 ## Señales pareadas por hoja de declaración (verificadas en index.js)
@@ -110,14 +144,18 @@ iniciar            → ciclo.iniciado        ✅ (o ciclo.abortado / ciclo.cola_
 pieza_retirada     → ciclo.iniciado        ✅ (encadena siguiente) o ciclo.completado (cola vacía)
 filamento_cambiado → ciclo.iniciado        ✅ (reanuda IMPRIMIENDO)
 reanudar_ciclo     → ciclo.iniciado        ✅ (ERROR → IDLE → arranca)
+modelo_aprobado    → (transición aprobación) ⚠️ [ABIERTO] sin op UI
+modelo_rechazado   → (transición rechazo)   ⚠️ [ABIERTO] sin op UI
 ```
 
 ## Cables hacia el blueprint (agente crear-blueprint-jefe)
 
-- `ui.roles` = veredicto del árbitro: iniciar=jefe, estado=neutro (+ confirmaciones
-  jefe como ops de transición).
-- `ui.flujo` jefe-PRIMERO: [jefe: iniciar, pieza_retirada, filamento_cambiado,
-  reanudar_ciclo] → [neutro: estado].
+- `ui.roles` = veredicto del árbitro: iniciar=operador, pieza_retirada=operador,
+  filamento_cambiado=operador, reanudar_ciclo=operador, modelo_aprobado/rechazado=
+  jefe, estado=neutro.
+- `ui.flujo` OPERADOR-PRIMERO: [operador: iniciar, pieza_retirada,
+  filamento_cambiado, reanudar_ciclo] → [jefe: modelo_aprobado/rechazado] →
+  [neutro: estado].
 - `ui.estados` = máquina de estados del ciclo (IDLE, OBTENIENDO_GCODE,
   SUBIENDO_GCODE, IMPRIMIENDO, ESPERANDO_RETIRADA, PAUSADO_FALTA_FILAMENTO,
   ERROR, COLA_VACIA).

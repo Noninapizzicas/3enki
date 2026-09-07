@@ -1,0 +1,9 @@
+{
+  "id": "importacion-modelo",
+  "name": "Importar Modelo",
+  "version": "0.1.0",
+  "zone": "chat-tools",
+  "order": 27,
+  "icon": "📥",
+  "label": "Importar"
+}

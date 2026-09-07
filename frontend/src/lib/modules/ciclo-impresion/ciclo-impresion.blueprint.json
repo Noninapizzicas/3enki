@@ -1,0 +1,61 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "ciclo-impresion",
+  "version": "blueprint-2.0.0",
+  "moduleId": "ciclo-impresion",
+  "titulo": "Orquestador del ciclo de impresion 3D (MICRO-AGENTE): encadena la cadena completa libre->propuesta->aprobacion->imprimiendo->impreso->libre, vigila el progreso y avisa al dueño. DUEÑO de la maquina de estados del ciclo.",
+  "eventos_que_escucho": [
+    "ciclo.iniciar.request",
+    "impresion.completada",
+    "impresion.error",
+    "filamento.falta",
+    "adaptador-confirmacion.confirmacion_recibida",
+    "adaptador-impresora.estado_crudo"
+  ],
+  "transporte": {
+    "rpc": [
+      "ciclo.iniciar.request -> .response",
+      "ciclo.estado.request -> .response"
+    ]
+  },
+  "ui": {
+    "ops": {
+      "iniciar": {
+        "titulo": "Iniciar",
+        "rol": "utilizacion"
+      },
+      "estado": {
+        "titulo": "Estado",
+        "rol": "neutro"
+      }
+    },
+    "roles": {
+      "iniciar": "utilizacion",
+      "estado": "neutro"
+    },
+    "flujo": [
+      {
+        "nombre": "jefe",
+        "orden": 1,
+        "ops": [],
+        "descripcion": "Cara de edicion del custodio (reglas/config). Este orquestador no expone ops de edicion de reglas en su UI: fase vacia (nota: el ciclo se configura por eventos/RPC, no por UI)."
+      },
+      {
+        "nombre": "utilizacion",
+        "orden": 2,
+        "ops": [
+          "iniciar"
+        ],
+        "descripcion": "El dueño consume el ciclo al elegir iniciarlo (accion operativa de arranque)."
+      },
+      {
+        "nombre": "neutro",
+        "orden": 3,
+        "ops": [
+          "estado"
+        ],
+        "descripcion": "Salud/estado del ciclo (lectura)."
+      }
+    ]
+  }
+}

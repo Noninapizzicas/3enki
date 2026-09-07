@@ -1,0 +1,9 @@
+{
+  "id": "ciclo-impresion",
+  "name": "Ciclo Impresión",
+  "version": "0.1.0",
+  "zone": "work-bar",
+  "order": 22,
+  "icon": "⚙️",
+  "label": "Ciclo"
+}

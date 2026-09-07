@@ -1,0 +1,9 @@
+{
+  "id": "gestion-filamento",
+  "name": "Filamento",
+  "version": "0.1.0",
+  "zone": "work-bar",
+  "order": 24,
+  "icon": "🧵",
+  "label": "Filamento"
+}

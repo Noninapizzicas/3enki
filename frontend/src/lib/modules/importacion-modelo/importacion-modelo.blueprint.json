@@ -1,0 +1,55 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "importacion-modelo",
+  "version": "blueprint-2.0.0",
+  "moduleId": "importacion-modelo",
+  "titulo": "Puente de importacion de modelos 3D (PUENTE): descarga desde repositorios o diseno propio y registra en el catalogo.",
+  "eventos_que_escucho": [
+    "importacion.importar.request"
+  ],
+  "transporte": {
+    "rpc": [
+      "importacion.importar.request -> .response"
+    ]
+  },
+  "ui": {
+    "ops": {
+      "importar": {
+        "titulo": "Importar"
+      }
+    },
+    "roles": {
+      "jefe": [],
+      "utilizacion": [
+        "importar"
+      ],
+      "neutro": [],
+      "_nota": "PUENTE stateless sin cara de edicion de reglas/config: la unica op 'importar' es operativa (el dueno consume al elegir importar un modelo) -> utilizacion. jefe vacio (caso legitimo de puente/orquestador). Sin ops de lectura de estado -> neutro vacio."
+    },
+    "flujo": [
+      {
+        "nombre": "jefe",
+        "orden": 1,
+        "ops": [],
+        "descripcion": "Cara de edicion del custodio - vacia: PUENTE stateless, no declara reglas/config por panel."
+      },
+      {
+        "nombre": "utilizacion",
+        "orden": 5,
+        "ops": [
+          "importar"
+        ],
+        "descripcion": "Importar modelo (el dueno consume al elegir)"
+      }
+    ]
+  },
+  "_lente_roles": {
+    "agente": "clasificar-roles",
+    "metodo": "lente de roles sobre ui.ops reales",
+    "arbitro": "jefe=edita reglas/config · utilizacion=consume al elegir · neutro=lee estado",
+    "clasificacion": {
+      "importar": "utilizacion"
+    },
+    "nota": "importar es la unica op; es operativa (importa un modelo elegido), no edita reglas/config -> utilizacion. Sin ops de lectura de estado -> neutro vacio. jefe vacio por ser PUENTE stateless."
+  }
+}

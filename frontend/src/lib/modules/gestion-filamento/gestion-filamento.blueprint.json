@@ -1,0 +1,90 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "gestion-filamento",
+  "version": "blueprint-2.0.0",
+  "moduleId": "gestion-filamento",
+  "titulo": "Gestion de filamento del taller (CUSTODIO): registrar rollos, verificar disponibilidad, decrementar por longitud tras impresion y avisar de agotamiento.",
+  "eventos_que_escucho": [
+    "filamento.registrar.request",
+    "filamento.decrementar.request",
+    "filamento.listar.request",
+    "filamento.usado",
+    "project.activated"
+  ],
+  "transporte": {
+    "rpc": [
+      "filamento.registrar.request -> .response",
+      "filamento.decrementar.request -> .response",
+      "filamento.listar.request -> .response"
+    ]
+  },
+  "ui": {
+    "ops": {
+      "registrar": {
+        "titulo": "Registrar"
+      },
+      "decrementar": {
+        "titulo": "Decrementar"
+      },
+      "listar": {
+        "titulo": "Listar"
+      }
+    },
+    "roles": {
+      "jefe": {
+        "titulo": "Jefe",
+        "descripcion": "Cara de edicion del custodio: declara y configura el inventario de filamento (alta de rollos).",
+        "ops": [
+          "registrar"
+        ]
+      },
+      "utilizacion": {
+        "titulo": "Utilizacion",
+        "descripcion": "Consume al elegir: reduce el stock de filamento por longitud tras una impresion.",
+        "ops": [
+          "decrementar"
+        ]
+      },
+      "neutro": {
+        "titulo": "Neutro",
+        "descripcion": "Lectura de estado: consulta los rollos de filamento registrados.",
+        "ops": [
+          "listar"
+        ]
+      }
+    },
+    "datos": {
+      "op": "listar",
+      "titulo": "Listar",
+      "refresh_on": [
+        "filamento.usado"
+      ]
+    },
+    "flujo": [
+      {
+        "nombre": "jefe",
+        "orden": 1,
+        "ops": [
+          "registrar"
+        ],
+        "descripcion": "Edicion del custodio: registrar rollos de filamento"
+      },
+      {
+        "nombre": "consulta",
+        "orden": 2,
+        "ops": [
+          "listar"
+        ],
+        "descripcion": "Ver y buscar"
+      },
+      {
+        "nombre": "utilidad",
+        "orden": 5,
+        "ops": [
+          "decrementar"
+        ],
+        "descripcion": "Herramientas"
+      }
+    ]
+  }
+}

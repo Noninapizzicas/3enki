@@ -1,0 +1,9 @@
+{
+  "id": "busqueda-repositorios",
+  "name": "Buscar Modelos",
+  "version": "0.1.0",
+  "zone": "chat-tools",
+  "order": 26,
+  "icon": "🔍",
+  "label": "Buscar"
+}

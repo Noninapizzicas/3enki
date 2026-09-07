@@ -1,0 +1,68 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "catalogo-modelos",
+  "version": "blueprint-2.0.0",
+  "moduleId": "catalogo-modelos",
+  "titulo": "Catalogo de modelos 3D del taller (CUSTODIO): registrar/listar/obtener/categorias, persistido por proyecto.",
+  "eventos_que_escucho": [
+    "catalogo.registrar.request",
+    "catalogo.listar.request",
+    "catalogo.obtener.request",
+    "catalogo.categorias.request",
+    "project.activated"
+  ],
+  "transporte": {
+    "rpc": [
+      "catalogo.registrar.request -> .response",
+      "catalogo.listar.request -> .response",
+      "catalogo.obtener.request -> .response"
+    ]
+  },
+  "ui": {
+    "ops": {
+      "registrar": {
+        "titulo": "Registrar"
+      },
+      "listar": {
+        "titulo": "Listar"
+      },
+      "obtener": {
+        "titulo": "Obtener"
+      }
+    },
+    "roles": {
+      "jefe": [
+        "registrar"
+      ],
+      "utilizacion": [],
+      "neutro": [
+        "listar",
+        "obtener"
+      ],
+      "_nota": "Sin ops de utilizacion: el catalogo es un registro de modelos (alta + consulta), no hay seleccion de cliente final. registrar es la cara de edicion del custodio (unico escritor del store)."
+    },
+    "datos": {
+      "op": "listar",
+      "titulo": "Listar"
+    },
+    "flujo": [
+      {
+        "nombre": "jefe",
+        "orden": 1,
+        "ops": [
+          "registrar"
+        ],
+        "descripcion": "Cara de edicion del custodio: dar de alta modelos en el catalogo"
+      },
+      {
+        "nombre": "consulta",
+        "orden": 2,
+        "ops": [
+          "listar",
+          "obtener"
+        ],
+        "descripcion": "Ver y buscar"
+      }
+    ]
+  }
+}

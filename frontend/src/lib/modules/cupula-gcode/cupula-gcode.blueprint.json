@@ -1,0 +1,111 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "cupula-gcode",
+  "version": "blueprint-2.0.0",
+  "moduleId": "cupula-gcode",
+  "titulo": "Modulo cupula-gcode CUSTODIO del proyecto 3D: almacen de gcode indexado por (modelo, material). Fuente de verdad del gcode — si un modelo no tiene gcode aqui, no se puede imprimir. Guarda el gcode por modelo una vez sliceado para reutilizarlo sin reslicear. Rechaza gcode vacio/corrupto y avisa. Single-writer de su store por proyecto via PosPersistencia.",
+  "eventos_publicados": [
+    "cupula.gcode_almacenado",
+    "cupula.almacenar.failed"
+  ],
+  "eventos_que_escucho": [
+    "cupula.almacenar.request",
+    "cupula.buscar.request",
+    "project.activated"
+  ],
+  "transporte": {
+    "rpc": [
+      "cupula.almacenar.request -> .response",
+      "cupula.buscar.request -> .response"
+    ],
+    "salida": [
+      "cupula.gcode_almacenado",
+      "cupula.almacenar.failed"
+    ]
+  },
+  "ui": {
+    "ops": {
+      "almacenar": {
+        "titulo": "Almacenar"
+      },
+      "buscar": {
+        "titulo": "Buscar"
+      }
+    },
+    "roles": {
+      "jefe": {
+        "titulo": "Jefe",
+        "descripcion": "Cara de edición del custodio: declara/registra el gcode en la cúpula por (modelo, material).",
+        "ops": [
+          "almacenar"
+        ]
+      },
+      "utilizacion": {
+        "titulo": "Utilización",
+        "descripcion": "Consume al elegir: recupera el gcode de un modelo para imprimirlo sin reslicear.",
+        "ops": [
+          "buscar"
+        ]
+      },
+      "neutro": {
+        "titulo": "Neutro",
+        "descripcion": "Lectura de estado / salud de la cúpula.",
+        "ops": []
+      }
+    },
+    "datos": {
+      "op": "buscar",
+      "titulo": "Buscar",
+      "refresh_on": [
+        "cupula.gcode_almacenado",
+        "cupula.almacenar.failed"
+      ]
+    },
+    "estados": [
+      {
+        "nombre": "borrador",
+        "terminal": false,
+        "color": "gray",
+        "icono": "📝"
+      },
+      {
+        "nombre": "gcode_almacenado",
+        "terminal": false,
+        "color": "gray",
+        "icono": "⚪"
+      },
+      {
+        "nombre": "almacenar_failed",
+        "terminal": false,
+        "color": "gray",
+        "icono": "⚪"
+      }
+    ],
+    "flujo": [
+      {
+        "nombre": "jefe",
+        "orden": 1,
+        "ops": [
+          "almacenar"
+        ],
+        "descripcion": "Edición del custodio: declarar/registrar gcode"
+      },
+      {
+        "nombre": "consulta",
+        "orden": 2,
+        "ops": [
+          "buscar"
+        ],
+        "descripcion": "Ver y buscar"
+      },
+      {
+        "nombre": "utilidad",
+        "orden": 5,
+        "ops": [
+          "almacenar"
+        ],
+        "descripcion": "Herramientas"
+      }
+    ]
+  }
+}

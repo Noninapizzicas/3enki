@@ -53,9 +53,15 @@ export const PAGE_CATALOG: Record<string, PageDef> = {
   producir:         { id: 'producir',         icon: '🏭',  label: 'Producir', nav: false },
   pedidos:          { id: 'pedidos',          icon: '📋',  label: 'Pedidos', nav: false },
   variaciones:      { id: 'variaciones',      icon: '🔧',  label: 'Variaciones', nav: false },
-  productos:        { id: 'productos',        icon: '🍕',  label: 'Productos', nav: false }
+  productos:        { id: 'productos',        icon: '🍕',  label: 'Productos', nav: false },
+  'ciclo-impresion':{ id: 'ciclo-impresion',  icon: '⚙️',  label: 'Ciclo', nav: false },
+  'catalogo-modelos': { id: 'catalogo-modelos', icon: '🗂️',  label: 'Catálogo', nav: false },
+  'cola-impresion': { id: 'cola-impresion',   icon: '🖨️',  label: 'Cola', nav: false },
+  'historial-impresiones': { id: 'historial-impresiones', icon: '📜', label: 'Historial', nav: false },
+  'cupula-gcode': { id: 'cupula-gcode', icon: '📦', label: 'Cúpula', nav: false },
+  'busqueda-repositorios': { id: 'busqueda-repositorios', icon: '🔍', label: 'Buscar', nav: false },
+  'importacion-modelo': { id: 'importacion-modelo', icon: '📥', label: 'Importar', nav: false }
 };
-
 /** Semilla por tipo: lo que un proyecto trae al nacer, antes de que crezca en runtime. */
 const SEED_BY_TYPE: Record<string, string[]> = {
   pizzepos: [

@@ -1,0 +1,92 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "historial-impresiones",
+  "version": "blueprint-2.0.0",
+  "moduleId": "historial-impresiones",
+  "titulo": "Modulo historial-impresiones CUSTODIO del proyecto 3D: registro append-only de impresiones pasadas (fecha, modelo, material, filamento usado, tiempo, resultado). Memoria del taller — cada impresion.completada se registra como entrada inmutable. Huecos de datos quedan como 'desconocido'. Single-writer de su store por proyecto via PosPersistencia.",
+  "eventos_publicados": [
+    "historial.impresion_registrada",
+    "historial.registrar.failed"
+  ],
+  "eventos_que_escucho": [
+    "historial.registrar.request",
+    "historial.listar.request",
+    "impresion.completada",
+    "project.activated"
+  ],
+  "transporte": {
+    "rpc": [
+      "historial.registrar.request -> .response",
+      "historial.listar.request -> .response"
+    ],
+    "salida": [
+      "historial.impresion_registrada",
+      "historial.registrar.failed"
+    ]
+  },
+  "ui": {
+    "ops": {
+      "registrar": {
+        "titulo": "Registrar"
+      },
+      "listar": {
+        "titulo": "Listar"
+      }
+    },
+    "roles": {
+      "jefe": [
+        "registrar"
+      ],
+      "utilizacion": [],
+      "neutro": [
+        "listar"
+      ]
+    },
+    "datos": {
+      "op": "listar",
+      "titulo": "Listar",
+      "refresh_on": [
+        "historial.impresion_registrada",
+        "historial.registrar.failed"
+      ]
+    },
+    "estados": [
+      {
+        "nombre": "borrador",
+        "terminal": false,
+        "color": "gray",
+        "icono": "📝"
+      },
+      {
+        "nombre": "impresion_registrada",
+        "terminal": false,
+        "color": "gray",
+        "icono": "⚪"
+      },
+      {
+        "nombre": "registrar_failed",
+        "terminal": false,
+        "color": "gray",
+        "icono": "⚪"
+      }
+    ],
+    "flujo": [
+      {
+        "nombre": "jefe",
+        "orden": 1,
+        "ops": [
+          "registrar"
+        ],
+        "descripcion": "Edicion del custodio: registra impresiones en el historial (append-only)"
+      },
+      {
+        "nombre": "consulta",
+        "orden": 2,
+        "ops": [
+          "listar"
+        ],
+        "descripcion": "Ver y buscar"
+      }
+    ]
+  }
+}

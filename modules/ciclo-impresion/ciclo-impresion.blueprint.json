@@ -150,28 +150,35 @@
         "nombre": "jefe",
         "orden": 1,
         "ops": [
-          "iniciar",
+          "iniciar"
+        ],
+        "descripcion": "El dueño DECIDE arrancar el ciclo"
+      },
+      {
+        "nombre": "operador",
+        "orden": 2,
+        "ops": [
           "pieza_retirada",
           "filamento_cambiado",
           "reanudar_ciclo"
         ],
-        "descripcion": "El dueño del taller DECIDE el ciclo: arrancarlo y confirmar las transiciones físicas (retirar pieza, cambiar filamento, reanudar tras error)."
+        "descripcion": "El operador confirma las transiciones físicas (retirar pieza, cambiar filamento, reanudar)"
       },
       {
         "nombre": "neutro",
-        "orden": 2,
+        "orden": 3,
         "ops": [
           "estado"
         ],
-        "descripcion": "Pulso del ciclo (fase, pieza, progreso, error) que alimenta la cinta-estado."
+        "descripcion": "Pulso del ciclo (fase, pieza, progreso, error)"
       }
     ],
     "roles": {
       "iniciar": "jefe",
       "estado": "neutro",
-      "pieza_retirada": "jefe",
-      "filamento_cambiado": "jefe",
-      "reanudar_ciclo": "jefe"
+      "pieza_retirada": "operador",
+      "filamento_cambiado": "operador",
+      "reanudar_ciclo": "operador"
     },
     "formas_jefe": {
       "cinta-estado": {

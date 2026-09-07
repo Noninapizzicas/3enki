@@ -30,6 +30,20 @@
 
   $: zones = deriveZones(blueprint);
 
+  // ROL ACTIVO — filtra las ops según ui.roles (jefe / operador / utilizacion / neutro)
+  // 'todos' = sin filtro (comportamiento actual). El selector aparece si el blueprint declara roles.
+  let rolActivo = 'todos';
+  $: rolesMap = (blueprint?.ui as Record<string, unknown>)?.roles as Record<string, string> | undefined;
+  $: rolesDisponibles = rolesMap
+    ? [...new Set(Object.values(rolesMap))].filter(Boolean)
+    : [];
+  $: rolFiltro = (op: BlueprintOp) => {
+    if (rolActivo === 'todos' || !rolesMap) return true;
+    return (rolesMap[op.nombre] || 'neutro') === rolActivo;
+  };
+  $: formularioFiltrado = zones.formulario.filter(rolFiltro);
+  $: accionesFiltradas = zones.acciones.filter(rolFiltro);
+
   // Estado del formulario: formValues[op][campo]
   let formValues: Record<string, Record<string, unknown>> = {};
   // Resultado por operación
@@ -332,6 +346,19 @@
     </div>
   {/if}
 
+  <!-- ============ ZONA 0: SELECTOR DE ROL ============ -->
+  {#if rolesDisponibles.length > 0}
+    <div class="zona rol-selector">
+      <h3 class="zona-titulo">Rol</h3>
+      <div class="rol-chips">
+        <button class="rol-chip {rolActivo === 'todos' ? 'activo' : ''}" on:click={() => rolActivo = 'todos'}>Todos</button>
+        {#each rolesDisponibles as rol (rol)}
+          <button class="rol-chip {rolActivo === rol ? 'activo' : ''}" on:click={() => rolActivo = rol}>{rol}</button>
+        {/each}
+      </div>
+    </div>
+  {/if}
+
   <!-- ============ ZONA 0.5: FLUJO (fases) ============ -->
   {#if zones.flujo.length > 0}
     <div class="zona">
@@ -349,10 +376,10 @@
   {/if}
 
   <!-- ============ ZONA 1: FORMULARIO ============ -->
-  {#if zones.formulario.length > 0}
+  {#if formularioFiltrado.length > 0}
     <div class="zona">
       <h3 class="zona-titulo">Formulario</h3>
-      {#each zones.formulario as op (op.nombre)}
+      {#each formularioFiltrado as op (op.nombre)}
         <div class="op-card">
           <div class="op-cab">
             <span class="op-nombre">{op.titulo}</span>
@@ -450,11 +477,11 @@
   {/if}
 
   <!-- ============ ZONA 2: ACCIONES ============ -->
-  {#if zones.acciones.length > 0}
+  {#if accionesFiltradas.length > 0}
     <div class="zona">
       <h3 class="zona-titulo">Acciones</h3>
       <div class="acciones-grid">
-        {#each zones.acciones as op (op.nombre)}
+        {#each accionesFiltradas as op (op.nombre)}
           <button
             class="accion"
             on:click={() => runOp(op)}
@@ -465,7 +492,7 @@
           </button>
         {/each}
       </div>
-      {#each zones.acciones as op (op.nombre)}
+      {#each accionesFiltradas as op (op.nombre)}
         {#if resultados[op.nombre]}
           <div class="accion-resultado">
             <span class="resultado {resultados[op.nombre].ok ? 'ok' : 'ko'}">
@@ -737,6 +764,9 @@
   .fase-orden { width: 16px; height: 16px; border-radius: 50%; background: var(--color-primary, #eab308); color: #000; display: inline-flex; align-items: center; justify-content: center; font-size: 0.6rem; font-weight: 700; }
   .fase-nombre { color: var(--color-text, #eee); }
   .fase-ops { font-size: 0.6rem; color: var(--color-text-muted, #888); }
+  .rol-chips { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+  .rol-chip { font-size: 0.72rem; padding: 3px 10px; border-radius: 6px; border: 1px solid var(--color-border, #333); background: var(--color-surface-2, #1a1a1a); color: var(--color-text, #ddd); cursor: pointer; }
+  .rol-chip.activo { background: var(--color-primary, #eab308); color: #000; border-color: var(--color-primary, #eab308); font-weight: 700; }
   .guarda-badge { font-size: 0.6rem; padding: 1px 5px; border-radius: 4px; background: rgba(245,158,11,0.15); color: #f59e0b; white-space: nowrap; }
 
   /* Clickable rows (cadena lista→detalle) */

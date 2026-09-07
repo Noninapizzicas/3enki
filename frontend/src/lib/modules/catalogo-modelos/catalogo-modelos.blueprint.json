@@ -132,10 +132,10 @@
         "ops": [
           "registrar"
         ],
-        "descripcion": "Cara de edicion del custodio: dar de alta modelos en el catalogo (la unica escritura)"
+        "descripcion": "Cara de edicion del custodio: dar de alta modelos en el catalogo"
       },
       {
-        "nombre": "consulta",
+        "nombre": "neutro",
         "orden": 2,
         "ops": [
           "listar",

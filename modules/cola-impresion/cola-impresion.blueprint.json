@@ -162,18 +162,18 @@
           "entrar",
           "reordenar"
         ],
-        "descripcion": "Declara y gobierna la cola (encolar piezas aprobadas y reordenar la prioridad)"
+        "descripcion": "El dueño gestiona la cola (encolar piezas aprobadas y reordenar prioridad)"
       },
       {
-        "nombre": "utilizacion",
+        "nombre": "operador",
         "orden": 2,
         "ops": [
           "siguiente"
         ],
-        "descripcion": "Opera al imprimir (el operador extrae la siguiente pieza segun el motor)"
+        "descripcion": "El operador extrae la siguiente pieza según el motor"
       },
       {
-        "nombre": "consulta",
+        "nombre": "neutro",
         "orden": 3,
         "ops": [
           "longitud"
@@ -226,7 +226,7 @@
     "roles": {
       "entrar": "jefe",
       "reordenar": "jefe",
-      "siguiente": "utilizacion",
+      "siguiente": "operador",
       "longitud": "neutro"
     },
     "formas_jefe": {

@@ -147,26 +147,19 @@
     ],
     "flujo": [
       {
-        "nombre": "jefe",
+        "nombre": "operador",
         "orden": 1,
         "ops": [
-          "iniciar"
-        ],
-        "descripcion": "El dueño DECIDE arrancar el ciclo"
-      },
-      {
-        "nombre": "operador",
-        "orden": 2,
-        "ops": [
+          "iniciar",
           "pieza_retirada",
           "filamento_cambiado",
           "reanudar_ciclo"
         ],
-        "descripcion": "El operador confirma las transiciones físicas (retirar pieza, cambiar filamento, reanudar)"
+        "descripcion": "El operador opera el ciclo físico a diario: arranca, retira pieza, cambia filamento, reanuda tras error"
       },
       {
         "nombre": "neutro",
-        "orden": 3,
+        "orden": 2,
         "ops": [
           "estado"
         ],
@@ -174,7 +167,7 @@
       }
     ],
     "roles": {
-      "iniciar": "jefe",
+      "iniciar": "operador",
       "estado": "neutro",
       "pieza_retirada": "operador",
       "filamento_cambiado": "operador",

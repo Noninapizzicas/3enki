@@ -121,18 +121,6 @@ export const panels: Record<string, PanelDef> = {
     loader: () => import('$lib/modules/menu-generate/GeneratePanel.svelte')
   },
 
-  // === WORK BAR — Recetas ===
-  'recetas-panel': {
-    id: 'recetas-panel',
-    title: 'Recetas',
-    icon: '📖',
-    size: 'lg',
-    position: 'top',
-    zone: 'work-bar',
-    order: 8,
-    loader: () => import('$lib/modules/recetas/RecetasPanel.svelte')
-  },
-
   // === WORK BAR — Escandallo ===
   'escandallo-panel': {
     id: 'escandallo-panel',
@@ -194,19 +182,6 @@ export const panels: Record<string, PanelDef> = {
     order: 8,
     loader: () => import('$lib/modules/interfaz/InterfazPanel.svelte')
   },
-  // === WORK BAR — Cola Impresión (F7, blueprint) ===
-  'cola-impresion': {
-    id: 'cola-impresion',
-    title: 'Cola Impresión',
-    icon: '🖨️',
-    size: 'lg',
-    position: 'left',
-    zone: 'work-bar',
-    order: 21,
-    showInBar: true,
-    loader: () => import('$lib/modules/cola-impresion/ColaImpresionPanel.svelte')
-  },
-
   // === CHAT TOOLS (barra inferior junto al chat) ===
   files: {
     id: 'files',
@@ -229,104 +204,6 @@ export const panels: Record<string, PanelDef> = {
     zone: 'chat-tools',
     order: 2,
     loader: () => import('$lib/modules/producir/ProducirPanel.svelte')
-  },
-
-  // === WORK BAR — Catálogo Modelos (F7, proyecto 3D). work-bar.
-  // El botón lo pinta el manifest (zone work-bar, order 20, icon 🗂️); esta entrada es el loader.
-  'catalogo-modelos': {
-    id: 'catalogo-modelos',
-    title: 'Catálogo',
-    icon: '🗂️',
-    size: 'lg',
-    position: 'left',
-    zone: 'work-bar',
-    order: 20,
-    showInBar: true,
-    loader: () => import('$lib/modules/catalogo-modelos/CatalogoModelosPanel.svelte')
-  },
-
-  // === WORK BAR — Ciclo Impresión (F7, proyecto 3D). Orquestador del ciclo de impresión 3D.
-  // El botón lo pinta el manifest (zone work-bar, order 22, icon ⚙️); esta entrada es el loader.
-  'ciclo-impresion': {
-    id: 'ciclo-impresion',
-    title: 'Ciclo Impresión',
-    icon: '⚙️',
-    size: 'lg',
-    position: 'left',
-    zone: 'work-bar',
-    order: 22,
-    showInBar: true,
-    loader: () => import('$lib/modules/ciclo-impresion/CicloImpresionPanel.svelte')
-  },
-
-  // === WORK BAR — Cúpula GCode (F7, proyecto 3D). Custodio del almacén de gcode.
-  // El botón lo pinta el manifest (zone work-bar, order 23, icon 📦); esta entrada es el loader.
-  'cupula-gcode': {
-    id: 'cupula-gcode',
-    title: 'Cúpula GCode',
-    icon: '📦',
-    size: 'lg',
-    position: 'left',
-    zone: 'work-bar',
-    order: 23,
-    showInBar: true,
-    loader: () => import('$lib/modules/cupula-gcode/CupulaGcodePanel.svelte')
-  },
-
-  // === WORK BAR — Historial Impresiones (F7, proyecto 3D). Registro append-only de impresiones pasadas.
-  // El botón lo pinta el manifest (zone work-bar, order 25, icon 📜); esta entrada es el loader.
-  'historial-impresiones': {
-    id: 'historial-impresiones',
-    title: 'Historial',
-    icon: '📜',
-    size: 'lg',
-    position: 'left',
-    zone: 'work-bar',
-    order: 25,
-    showInBar: true,
-    loader: () => import('$lib/modules/historial-impresiones/HistorialImpresionesPanel.svelte')
-  },
-
-  // === WORK BAR — Gestion Filamento (F7, proyecto 3D). CUSTODIO del inventario de filamento.
-  // El botón lo pinta el manifest (zone work-bar, order 24, icon 🧵); esta entrada es el loader.
-  'gestion-filamento': {
-    id: 'gestion-filamento',
-    title: 'Filamento',
-    icon: '🧵',
-    size: 'lg',
-    position: 'left',
-    zone: 'work-bar',
-    order: 24,
-    showInBar: true,
-    loader: () => import('$lib/modules/gestion-filamento/GestionFilamentoPanel.svelte')
-  },
-
-  // === CHAT TOOLS — Busqueda Repositorios (F7, proyecto 3D). CONVERSOR stateless multi-repositorio.
-  // El botón lo pinta el manifest (zone chat-tools, order 26, icon 🔍); esta entrada es el loader.
-  'busqueda-repositorios': {
-    id: 'busqueda-repositorios',
-    title: 'Buscar Modelos',
-    icon: '🔍',
-    size: 'lg',
-    position: 'left',
-    zone: 'chat-tools',
-    order: 26,
-    showInBar: true,
-    loader: () => import('$lib/modules/busqueda-repositorios/BusquedaRepositoriosPanel.svelte')
-  },
-
-  // === CHAT TOOLS — Importación de Modelo (F7, proyecto 3D). PUENTE stateless.
-  // El botón lo pinta el manifest (zone chat-tools, order 27, icon 📥); esta entrada es el loader.
-  'importacion-modelo': {
-    id: 'importacion-modelo',
-    title: 'Importar Modelo',
-    icon: '📥',
-    size: 'lg',
-    position: 'left',
-    zone: 'chat-tools',
-    order: 27,
-    showInBar: true,
-    loader: () => import('$lib/modules/importacion-modelo/ImportacionModeloPanel.svelte')
   },
 
   // === PANELES PROGRAMÁTICOS (showInBar: false — solo vía openPanel()) ===

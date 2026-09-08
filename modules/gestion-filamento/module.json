@@ -49,34 +49,5 @@
       "event": "filamento.decrementar.failed",
       "description": "Par de fallo: el decremento no se completo (rollo inexistente o longitud desconocida)."
     }
-  ],
-  "ui_handlers": [
-    {
-      "action": "registrar",
-      "domain": "filamento",
-      "type": "system_panel",
-      "zone": "lateral_derecha",
-      "label": "Registrar filamento",
-      "description": "Registra un rollo de filamento",
-      "handler": "onRegistrarRequest"
-    },
-    {
-      "action": "decrementar",
-      "domain": "filamento",
-      "type": "system_panel",
-      "zone": "lateral_derecha",
-      "label": "Decrementar filamento",
-      "description": "Reduce la cantidad de filamento tras impresión",
-      "handler": "onDecrementarRequest"
-    },
-    {
-      "action": "listar",
-      "domain": "filamento",
-      "type": "system_panel",
-      "zone": "lateral_derecha",
-      "label": "Listar filamentos",
-      "description": "Lista los filamentos registrados",
-      "handler": "onListarRequest"
-    }
   ]
 }

@@ -41,39 +41,5 @@
       "event": "catalogo.registrar.failed",
       "description": "Par de fallo: el registro no se completo (input invalido o duplicado)."
     }
-  ],
-  "ui_decision": {
-    "necesita": false,
-    "tipo": null,
-    "razon": "uso propio, sin cara de consumo"
-  },
-  "ui_handlers": [
-    {
-      "action": "registrar",
-      "domain": "catalogo",
-      "type": "workspace_module",
-      "zone": "barra_modulos",
-      "label": "Registrar modelo",
-      "description": "Registra un modelo 3D en el catálogo",
-      "handler": "onRegistrarRequest"
-    },
-    {
-      "action": "listar",
-      "domain": "catalogo",
-      "type": "workspace_module",
-      "zone": "barra_modulos",
-      "label": "Listar modelos",
-      "description": "Lista los modelos del catálogo",
-      "handler": "onListarRequest"
-    },
-    {
-      "action": "obtener",
-      "domain": "catalogo",
-      "type": "workspace_module",
-      "zone": "barra_modulos",
-      "label": "Ver modelo",
-      "description": "Obtiene un modelo del catálogo",
-      "handler": "onObtenerRequest"
-    }
   ]
 }

@@ -24,16 +24,5 @@
     }
   ],
   "tools": [],
-  "dependencies": [],
-  "ui_handlers": [
-    {
-      "action": "buscar",
-      "domain": "busqueda",
-      "type": "chat_tool",
-      "zone": "barra_chat_inferior",
-      "label": "Buscar modelos",
-      "description": "Busca modelos 3D en los repositorios",
-      "handler": "onBuscarRequest"
-    }
-  ]
+  "dependencies": []
 }

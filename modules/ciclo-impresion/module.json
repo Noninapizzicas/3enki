@@ -108,51 +108,5 @@
         "ciclo-impresion.estado"
       ]
     }
-  },
-  "ui_handlers": [
-    {
-      "action": "iniciar",
-      "domain": "ciclo",
-      "type": "workspace_module",
-      "zone": "barra_modulos",
-      "label": "Iniciar ciclo",
-      "description": "Inicia el ciclo de impresión: lanza la siguiente pieza (gcode → subir → imprimir → observar)",
-      "handler": "onIniciarRequest"
-    },
-    {
-      "action": "estado",
-      "domain": "ciclo",
-      "type": "workspace_module",
-      "zone": "barra_modulos",
-      "label": "Estado del ciclo",
-      "description": "Consulta el estado del ciclo de impresión"
-    },
-    {
-      "action": "pieza_retirada",
-      "domain": "ciclo",
-      "type": "workspace_module",
-      "zone": "barra_modulos",
-      "label": "Confirmar pieza retirada",
-      "description": "[ABIERTO] Confirma que el trabajador retiró la pieza (ESPERANDO_RETIRADA → IDLE, encadena siguiente). NO tiene handler RPC propio: se dispara por evento adaptador-confirmacion.confirmacion_recibida, no por RPC UI directo.",
-      "handler": null
-    },
-    {
-      "action": "filamento_cambiado",
-      "domain": "ciclo",
-      "type": "workspace_module",
-      "zone": "barra_modulos",
-      "label": "Confirmar filamento cambiado",
-      "description": "[ABIERTO] Confirma que el trabajador cargó un rollo nuevo (PAUSADO_FALTA_FILAMENTO → IMPRIMIENDO). NO tiene handler RPC propio: se dispara por evento adaptador-confirmacion.confirmacion_recibida.",
-      "handler": null
-    },
-    {
-      "action": "reanudar_ciclo",
-      "domain": "ciclo",
-      "type": "workspace_module",
-      "zone": "barra_modulos",
-      "label": "Reanudar tras error",
-      "description": "[ABIERTO] Confirma que el trabajador desatascó/limpió y relanza (ERROR → IDLE). NO tiene handler RPC propio: se dispara por evento adaptador-confirmacion.confirmacion_recibida.",
-      "handler": null
-    }
-  ]
+  }
 }

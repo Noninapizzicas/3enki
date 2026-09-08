@@ -66,25 +66,5 @@
         "historial-impresiones.registros.count"
       ]
     }
-  },
-  "ui_handlers": [
-    {
-      "action": "registrar",
-      "domain": "historial",
-      "type": "system_panel",
-      "zone": "lateral_derecha",
-      "label": "Registrar impresión",
-      "description": "Registra una impresión en el historial",
-      "handler": "onRegistrarRequest"
-    },
-    {
-      "action": "listar",
-      "domain": "historial",
-      "type": "system_panel",
-      "zone": "lateral_derecha",
-      "label": "Listar historial",
-      "description": "Lista el historial de impresiones",
-      "handler": "onListarRequest"
-    }
-  ]
+  }
 }

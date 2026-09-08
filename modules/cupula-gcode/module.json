@@ -61,25 +61,5 @@
         "cupula-gcode.gcode.count"
       ]
     }
-  },
-  "ui_handlers": [
-    {
-      "action": "almacenar",
-      "domain": "cupula",
-      "type": "system_panel",
-      "zone": "lateral_derecha",
-      "label": "Almacenar gcode",
-      "description": "Guarda un gcode en la cúpula",
-      "handler": "onAlmacenarRequest"
-    },
-    {
-      "action": "buscar",
-      "domain": "cupula",
-      "type": "system_panel",
-      "zone": "lateral_derecha",
-      "label": "Buscar gcode",
-      "description": "Busca un gcode en la cúpula",
-      "handler": "onBuscarRequest"
-    }
-  ]
+  }
 }

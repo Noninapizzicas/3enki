@@ -69,6 +69,23 @@
       "label": "Ver modelo",
       "description": "Obtiene un modelo del catálogo",
       "handler": "onObtenerRequest"
+    },
+    {
+      "action": "categorias",
+      "domain": "catalogo",
+      "type": "workspace_module",
+      "zone": "barra_modulos",
+      "label": "Ver categorías",
+      "description": "Categorías distintas del catálogo (alimenta el select de categoría al registrar)",
+      "handler": "onCategoriasRequest"
+    },
+    {
+      "action": "aprobar_rechazar",
+      "domain": "catalogo",
+      "type": "workspace_module",
+      "zone": "barra_modulos",
+      "label": "Aprobar/Rechazar modelo",
+      "description": "[ABIERTO] decisión de calidad del dueño (estados pendiente_aprobacion/aprobado/archivado) — sin handler real en index.js"
     }
   ]
 }

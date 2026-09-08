@@ -1,0 +1,59 @@
+{
+  "_doc": "Manifest de disenador_parametrico — genera piezas 3D paramétricas (OpenSCAD) via MCP bridge. Ops: generar_stl (construye scad + exporta STL via MCP), estimar_tiempo (heurística volumen→minutos). Exporta construirScad y estimarMinutos como funciones estáticas puras. Reflejo 0.1.0.",
+  "name": "disenador_parametrico",
+  "version": "0.1.0",
+  "description": "Diseñador paramétrico 3D: genera código OpenSCAD, exporta STL via MCP y estima tiempos de impresión.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "disenador.generar_stl.request",
+      "handler": "onGenerarStlRequest",
+      "description": "Reflejo JS: construye scad paramétrico y exporta a STL via OpenSCAD MCP."
+    },
+    {
+      "event": "disenador.estimar_tiempo.request",
+      "handler": "onEstimarTiempoRequest",
+      "description": "Reflejo JS: estima minutos de impresión por heurística de volumen."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Reflejo JS: prepara contexto del proyecto (futuro: cargar .scad registrados)."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "disenador.stl_generado",
+      "description": "Evento emitido al exportar un STL con éxito."
+    },
+    {
+      "event": "disenador.generar_stl.failed",
+      "description": "Par de fallo: la generación no se completó (input inválido, MCP caído, formato no soportado)."
+    }
+  ],
+  "ui_decision": {
+    "necesita": true,
+    "tipo": "workspace_module",
+    "razon": "el usuario interactúa para elegir forma, parámetros y lanzar exportación"
+  },
+  "ui_handlers": [
+    {
+      "action": "generar_stl",
+      "domain": "disenador",
+      "type": "workspace_module",
+      "zone": "work-bar",
+      "label": "Generar STL",
+      "description": "Genera un archivo STL paramétrico desde OpenSCAD",
+      "handler": "onGenerarStlRequest"
+    },
+    {
+      "action": "estimar_tiempo",
+      "domain": "disenador",
+      "type": "workspace_module",
+      "zone": "work-bar",
+      "label": "Estimar tiempo",
+      "description": "Estima el tiempo de impresión de una pieza",
+      "handler": "onEstimarTiempoRequest"
+    }
+  ]
+}

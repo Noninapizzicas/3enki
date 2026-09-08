@@ -42,6 +42,11 @@
       "description": "Par de fallo: el registro no se completo (input invalido o duplicado)."
     }
   ],
+  "ui_decision": {
+    "necesita": false,
+    "tipo": null,
+    "razon": "uso propio, sin cara de consumo"
+  },
   "ui_handlers": [
     {
       "action": "registrar",

@@ -1,0 +1,186 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "catalogo-modelos",
+  "version": "blueprint-2.1.0",
+  "moduleId": "catalogo-modelos",
+  "actor": "jefe",
+  "_lente_roles": {
+    "agente": "esquematizar-interfaz v2 (consume esquemas)",
+    "metodo": "esquematizador-jefe-trabajador",
+    "arbitro": "futuro→jefe · ahora→trabajador · solo-lee→neutro",
+    "consolidacion": "modules/catalogo-modelos/esquema-jefe/pasada-1-jefe-catalogo-modelos.md",
+    "dualidad": "JEFE=registrar (única escritura del custodio, decide el futuro del catálogo) · TRABAJADOR=listar/obtener/categorias (consulta diaria qué hay disponible para imprimir) · CLIENTE=no existe (uso propio, necesita=false)",
+    "senales_pareadas": {
+      "registrar": "catalogo.modelo_registrado",
+      "fallo": "catalogo.registrar.failed"
+    }
+  },
+  "titulo": "Catalogo de modelos 3D del taller (CUSTODIO): registrar/listar/obtener/categorias, persistido por proyecto. Es el UNICO escritor de su store (Map<id,Modelo>). Op registrar (append + emite catalogo.modelo_registrado), listar, obtener, categorias (distinct de listar) y metadatos (huecos como 'desconocido'). Persiste por proyecto via _shared/pos-persistencia (snapshot fs por project_id, debounced) en /3d/catalogo/catalogo-modelos.json; restaura en project.activated; vuelca en onUnload. Lo llaman importacion-modelo (tras leer el .3mf) y el dueno. Par de fallo catalogo.registrar.failed.",
+  "eventos_publicados": [
+    "catalogo.modelo_registrado",
+    "catalogo.registrar.failed"
+  ],
+  "eventos_que_escucho": [
+    "catalogo.registrar.request",
+    "catalogo.listar.request",
+    "catalogo.obtener.request",
+    "catalogo.categorias.request",
+    "project.activated"
+  ],
+  "transporte": {
+    "rpc": [
+      "catalogo.registrar.request -> .response",
+      "catalogo.listar.request -> .response",
+      "catalogo.obtener.request -> .response",
+      "catalogo.categorias.request -> .response"
+    ],
+    "salida": [
+      "catalogo.modelo_registrado",
+      "catalogo.registrar.failed"
+    ]
+  },
+  "ui": {
+    "ops": {
+      "registrar": {
+        "rol": "jefe",
+        "titulo": "Registrar",
+        "descripcion": "Registra un modelo 3D en el catalogo (append al store). Requiere nombre y project_id; id unico (duplicado → 409 ALREADY_EXISTS). Emite catalogo.modelo_registrado.",
+        "args": [
+          {
+            "nombre": "nombre",
+            "tipo": "string",
+            "required": true,
+            "descripcion": "Nombre del modelo 3D."
+          },
+          {
+            "nombre": "categoria",
+            "tipo": "string",
+            "required": false,
+            "descripcion": "Categoria del modelo (default 'sin_categoria')."
+          },
+          {
+            "nombre": "archivo3mf",
+            "tipo": "string",
+            "required": false,
+            "descripcion": "Ruta/ref del archivo .3mf del modelo."
+          },
+          {
+            "nombre": "origen",
+            "tipo": "string",
+            "required": false,
+            "descripcion": "Origen del modelo (default 'desconocido')."
+          },
+          {
+            "nombre": "metadatos",
+            "tipo": "json",
+            "required": false,
+            "descripcion": "Metadatos del modelo: material, dimensiones, tiempo_estimado, peso_estimado (huecos como 'desconocido')."
+          }
+        ]
+      },
+      "listar": {
+        "rol": "trabajador",
+        "titulo": "Listar",
+        "descripcion": "Lista todos los modelos del proyecto. Respuesta {modelos[], total}. Consulta diaria del trabajador: qué hay disponible para imprimir.",
+        "args": [
+          {
+            "nombre": "project_id",
+            "tipo": "string",
+            "required": false,
+            "descripcion": "Filtro por proyecto."
+          }
+        ]
+      },
+      "obtener": {
+        "rol": "trabajador",
+        "titulo": "Obtener",
+        "descripcion": "Obtiene un modelo por id (404 si no existe). Detalle del modelo (metadatos, origen, archivo) que abre la decisión de qué imprimir.",
+        "args": [
+          {
+            "nombre": "id",
+            "tipo": "ref",
+            "required": true,
+            "descripcion": "Identificador del modelo.",
+            "ref": "catalogo.listar",
+            "ref_label": "nombre",
+            "ref_value": "id",
+            "placeholder": "selecciona modelo"
+          }
+        ]
+      },
+      "categorias": {
+        "rol": "trabajador",
+        "titulo": "Categorias",
+        "descripcion": "Categorias distintas del catalogo (distinct de listar). Alimenta el select de categoria al registrar (jefe) y el filtro de la cinta (trabajador)."
+      }
+    },
+    "datos": {
+      "op": "listar",
+      "titulo": "Listar",
+      "refresh_on": [
+        "catalogo.modelo_registrado"
+      ]
+    },
+    "estados": [
+      {
+        "nombre": "registrado",
+        "terminal": false,
+        "color": "blue",
+        "icono": "🆕"
+      }
+    ],
+    "flujo": [
+      {
+        "nombre": "jefe",
+        "orden": 1,
+        "ops": [
+          "registrar"
+        ],
+        "descripcion": "Cara de edicion del custodio: dar de alta modelos en el catalogo (la unica escritura del modulo)"
+      },
+      {
+        "nombre": "trabajador",
+        "orden": 2,
+        "ops": [
+          "listar",
+          "obtener",
+          "categorias"
+        ],
+        "descripcion": "Consulta diaria del trabajador: ver y buscar modelos disponibles para imprimir"
+      }
+    ],
+    "dependencias": {
+      "obtener": [
+        {
+          "campo": "id",
+          "de": "listar"
+        }
+      ]
+    },
+    "roles": {
+      "registrar": "jefe",
+      "listar": "trabajador",
+      "obtener": "trabajador",
+      "categorias": "trabajador"
+    },
+    "formas_jefe": {
+      "registrar": {
+        "forma": "editor-bloque",
+        "nota": "Declaracion multi-campo (nombre, categoria, archivo, origen, metadatos) — 1 modal, no fases. La unica escritura del custodio.",
+        "senal_refresh": "catalogo.modelo_registrado"
+      },
+      "listar": {
+        "forma": "cinta-estado",
+        "nota": "Cinta del catalogo: tarjetas de modelos; el ref-select queda expuesto en la cinta."
+      },
+      "obtener": {
+        "forma": "cinta-estado",
+        "nota": "Detalle del modelo (metadatos, origen, archivo, created_at) que alimenta la decision."
+      },
+      "categorias": {
+        "forma": "cinta-estado",
+        "nota": "Distinct de listar — alimenta el select de categoria al registrar y el filtro de la cinta."
+      }
+    }
+  }
+}

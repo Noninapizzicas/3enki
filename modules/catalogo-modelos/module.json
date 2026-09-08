@@ -74,6 +74,15 @@
       "label": "Ver modelo",
       "description": "Obtiene un modelo del catálogo",
       "handler": "onObtenerRequest"
+    },
+    {
+      "action": "categorias",
+      "domain": "catalogo",
+      "type": "workspace_module",
+      "zone": "barra_modulos",
+      "label": "Categorías",
+      "description": "Categorías distintas del catálogo (filtro/select del trabajador)",
+      "handler": "onCategoriasRequest"
     }
   ]
 }

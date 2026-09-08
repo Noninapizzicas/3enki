@@ -86,43 +86,5 @@
         "cola-impresion.pendientes.count"
       ]
     }
-  },
-  "ui_handlers": [
-    {
-      "action": "entrar",
-      "domain": "cola",
-      "type": "workspace_module",
-      "zone": "barra_modulos",
-      "label": "Encolar pieza",
-      "description": "Mete una pieza aprobada en la cola",
-      "handler": "onEntrarRequest"
-    },
-    {
-      "action": "siguiente",
-      "domain": "cola",
-      "type": "workspace_module",
-      "zone": "barra_modulos",
-      "label": "Siguiente a imprimir",
-      "description": "Obtiene la siguiente pieza según el motor de ordenación",
-      "handler": "onSiguienteRequest"
-    },
-    {
-      "action": "reordenar",
-      "domain": "cola",
-      "type": "workspace_module",
-      "zone": "barra_modulos",
-      "label": "Reordenar cola",
-      "description": "Reordena las piezas pendientes",
-      "handler": "onReordenarRequest"
-    },
-    {
-      "action": "longitud",
-      "domain": "cola",
-      "type": "workspace_module",
-      "zone": "barra_modulos",
-      "label": "Estado de la cola",
-      "description": "Consulta el estado de la cola",
-      "handler": "onLongitudRequest"
-    }
-  ]
+  }
 }

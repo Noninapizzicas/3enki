@@ -166,6 +166,54 @@
       "ejecuciones": 0,
       "ultima_ejecucion": null,
       "modulos_procesados": []
+    },
+    {
+      "name": "f6-esquematizador-jefe",
+      "description": "FASE 6 lente JEFE: esquematiza desde F0+F2+módulo con lente jefe, materializa ui_handlers jefe con handler derivado del index.js.",
+      "archivo": "f6-esquematizador-jefe.json",
+      "tags": [
+        "f6",
+        "esquema",
+        "interfaz",
+        "jefe",
+        "ui"
+      ],
+      "creado": "2026-09-08",
+      "ejecuciones": 0,
+      "ultima_ejecucion": null,
+      "modulos_procesados": []
+    },
+    {
+      "name": "f6-esquematizador-trabajador",
+      "description": "FASE 6 lente TRABAJADOR: esquematiza desde F0+F2+módulo con lente trabajador, materializa ui_handlers trabajador con handler derivado del index.js.",
+      "archivo": "f6-esquematizador-trabajador.json",
+      "tags": [
+        "f6",
+        "esquema",
+        "interfaz",
+        "trabajador",
+        "ui"
+      ],
+      "creado": "2026-09-08",
+      "ejecuciones": 0,
+      "ultima_ejecucion": null,
+      "modulos_procesados": []
+    },
+    {
+      "name": "f6-esquematizador-cliente",
+      "description": "FASE 6 lente CLIENTE: esquematiza desde F0+F2+módulo con lente cliente (o declara sin interfaz en uso propio), materializa ui_handlers cliente con handler derivado del index.js.",
+      "archivo": "f6-esquematizador-cliente.json",
+      "tags": [
+        "f6",
+        "esquema",
+        "interfaz",
+        "cliente",
+        "ui"
+      ],
+      "creado": "2026-09-08",
+      "ejecuciones": 0,
+      "ultima_ejecucion": null,
+      "modulos_procesados": []
     }
   ]
 }

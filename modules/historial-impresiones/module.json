@@ -74,7 +74,8 @@
       "type": "system_panel",
       "zone": "lateral_derecha",
       "label": "Registrar impresión",
-      "description": "Registra una impresión en el historial"
+      "description": "Registra una impresión en el historial",
+      "handler": "onRegistrarRequest"
     },
     {
       "action": "listar",
@@ -82,7 +83,8 @@
       "type": "system_panel",
       "zone": "lateral_derecha",
       "label": "Listar historial",
-      "description": "Lista el historial de impresiones"
+      "description": "Lista el historial de impresiones",
+      "handler": "onListarRequest"
     }
   ]
 }

@@ -57,7 +57,8 @@
       "type": "system_panel",
       "zone": "lateral_derecha",
       "label": "Registrar filamento",
-      "description": "Registra un rollo de filamento"
+      "description": "Registra un rollo de filamento",
+      "handler": "onRegistrarRequest"
     },
     {
       "action": "decrementar",
@@ -65,7 +66,8 @@
       "type": "system_panel",
       "zone": "lateral_derecha",
       "label": "Decrementar filamento",
-      "description": "Reduce la cantidad de filamento tras impresión"
+      "description": "Reduce la cantidad de filamento tras impresión",
+      "handler": "onDecrementarRequest"
     },
     {
       "action": "listar",
@@ -73,7 +75,8 @@
       "type": "system_panel",
       "zone": "lateral_derecha",
       "label": "Listar filamentos",
-      "description": "Lista los filamentos registrados"
+      "description": "Lista los filamentos registrados",
+      "handler": "onListarRequest"
     }
   ]
 }

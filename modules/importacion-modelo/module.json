@@ -30,7 +30,8 @@
       "type": "chat_tool",
       "zone": "barra_chat_inferior",
       "label": "Importar modelo",
-      "description": "Importa un modelo desde un repositorio o diseño propio"
+      "description": "Importa un modelo desde un repositorio o diseño propio",
+      "handler": "onImportarRequest"
     }
   ]
 }

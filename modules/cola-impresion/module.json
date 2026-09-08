@@ -94,7 +94,8 @@
       "type": "workspace_module",
       "zone": "barra_modulos",
       "label": "Encolar pieza",
-      "description": "Mete una pieza aprobada en la cola"
+      "description": "Mete una pieza aprobada en la cola",
+      "handler": "onEntrarRequest"
     },
     {
       "action": "siguiente",
@@ -102,7 +103,8 @@
       "type": "workspace_module",
       "zone": "barra_modulos",
       "label": "Siguiente a imprimir",
-      "description": "Obtiene la siguiente pieza según el motor de ordenación"
+      "description": "Obtiene la siguiente pieza según el motor de ordenación",
+      "handler": "onSiguienteRequest"
     },
     {
       "action": "reordenar",
@@ -110,7 +112,8 @@
       "type": "workspace_module",
       "zone": "barra_modulos",
       "label": "Reordenar cola",
-      "description": "Reordena las piezas pendientes"
+      "description": "Reordena las piezas pendientes",
+      "handler": "onReordenarRequest"
     },
     {
       "action": "longitud",
@@ -118,7 +121,8 @@
       "type": "workspace_module",
       "zone": "barra_modulos",
       "label": "Estado de la cola",
-      "description": "Consulta el estado de la cola"
+      "description": "Consulta el estado de la cola",
+      "handler": "onLongitudRequest"
     }
   ]
 }

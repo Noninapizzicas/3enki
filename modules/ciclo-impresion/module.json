@@ -116,7 +116,8 @@
       "type": "workspace_module",
       "zone": "barra_modulos",
       "label": "Iniciar ciclo",
-      "description": "Inicia el ciclo de impresión"
+      "description": "Inicia el ciclo de impresión",
+      "handler": "onIniciarRequest"
     },
     {
       "action": "estado",

@@ -49,7 +49,8 @@
       "type": "workspace_module",
       "zone": "barra_modulos",
       "label": "Registrar modelo",
-      "description": "Registra un modelo 3D en el catálogo"
+      "description": "Registra un modelo 3D en el catálogo",
+      "handler": "onRegistrarRequest"
     },
     {
       "action": "listar",
@@ -57,7 +58,8 @@
       "type": "workspace_module",
       "zone": "barra_modulos",
       "label": "Listar modelos",
-      "description": "Lista los modelos del catálogo"
+      "description": "Lista los modelos del catálogo",
+      "handler": "onListarRequest"
     },
     {
       "action": "obtener",
@@ -65,7 +67,8 @@
       "type": "workspace_module",
       "zone": "barra_modulos",
       "label": "Ver modelo",
-      "description": "Obtiene un modelo del catálogo"
+      "description": "Obtiene un modelo del catálogo",
+      "handler": "onObtenerRequest"
     }
   ]
 }

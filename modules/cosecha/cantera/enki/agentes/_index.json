@@ -214,6 +214,22 @@
       "ejecuciones": 0,
       "ultima_ejecucion": null,
       "modulos_procesados": []
+    },
+    {
+      "name": "esquematizador",
+      "description": "Esquematiza la interfaz de un modulo con el prisma de 5 huecos, parametrizado por rol (jefe/trabajador/cliente/negocio). Bebe de module.json+index.js, agota, produce esquema-<rol>/esquema-<rol>.md",
+      "archivo": "esquematizador.json",
+      "tags": [
+        "f6",
+        "esquema",
+        "interfaz",
+        "prisma",
+        "rol"
+      ],
+      "creado": "2026-09-09",
+      "ejecuciones": 0,
+      "ultima_ejecucion": null,
+      "modulos_procesados": []
     }
   ]
 }

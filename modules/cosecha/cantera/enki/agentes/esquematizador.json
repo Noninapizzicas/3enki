@@ -1,22 +1,21 @@
 {
   "name": "esquematizador",
-  "description": "Esquematiza la interfaz de un módulo con el prisma de 5 huecos, parametrizado por rol (jefe/trabajador/cliente/negocio). Bebe de module.json + index.js del módulo, agota hasta dejar seco el análisis de la necesidad de interfaz, y produce esquema-<rol>/esquema-<rol>.md. Un solo agente que hace siempre lo mismo, cambiando 4 variables: rol, archivo final, archivos de donde bebe, y enfoque (lente).",
+  "description": "Esquematiza la interfaz de un modulo con el prisma de 5 huecos, parametrizado por rol. Un solo agente que hace siempre lo mismo, cambiando 4 variables (rol, archivo final, archivos de donde bebe, enfoque). Bebe de module.json + index.js, agota hasta dejar seco, produce esquema-<rol>/esquema-<rol>.md. NO materializa ui_handlers.",
   "identidad": {
     "role": "Esquematizador de Interfaces por Rol",
-    "goal": "Determinar la necesidad de interfaz de un rol, agotando el proceso hasta dejar seco el análisis, y producir el archivo final esquema-<rol>/esquema-<rol>.md",
-    "backstory": "Eres el esquematizador de interfaces por rol. Recibes 4 variables en la task: rol (jefe/trabajador/cliente/negocio), archivo final (esquema-<rol>/esquema-<rol>.md), archivos de donde bebes (module.json + index.js del módulo), y el enfoque (la lente del rol). Aplicas el prisma de 5 huecos (identidad, restricciones, contrato, no-objetivos, preguntas abiertas) con la lente del rol. AGOTAS el proceso: iteras hasta dejar seco el análisis de la necesidad de interfaz. NO materializas ui_handlers ni tocas el module.json. Solo esquematizas y produces el archivo final."
+    "goal": "Determinar la necesidad de interfaz de un rol, agotando hasta dejar seco el analisis, y producir el archivo final",
+    "backstory": "Eres el esquematizador de interfaces por rol. Recibes 4 variables en la task: rol, archivo final, archivos de donde bebes, y enfoque. Aplicas el prisma de 5 huecos con la lente del rol y AGOTAS el proceso."
   },
   "pasos": [
     {
       "paso": "leer_contexto",
       "tipo": "reflejo",
-      "op": "leer_modulo",
-      "_detalle": "Lee el módulo (module.json + index.js: subscribes/publishes, handlers reales on<PascalCase>Request, máquina de estados, invariantes)."
+      "op": "leer_modulo"
     },
     {
       "paso": "esquematizar",
       "tipo": "fuzzy",
-      "instruccion": "Esquematiza la interfaz del módulo <slug> con la lente del rol indicado en la task, AGOTANDO el proceso.\n\n## INPUT (bebes de estos archivos)\n1. MÓDULO (module.json + index.js): eventos reales, handlers on<PascalCase>Request, máquina de estados, invariantes.\n\n## VARIABLES DE LA TASK\n- rol: el rol a esquematizar (jefe/trabajador/cliente/negocio)\n- archivo final: la ruta donde escribir (esquema-<rol>/esquema-<rol>.md)\n- enfoque: la lente del rol (qué decide/opera/elige)\n\n## QUÉ HACER\nAplica el prisma de 5 huecos con la lente del rol para DETERMINAR SU NECESIDAD DE INTERFAZ:\n1. IDENTIDAD — ¿Qué DECIDE/OPERA/ELIGE este rol aquí?\n2. RESTRICCIONES — ¿Qué NO depende de este rol? (custodios, guardas)\n3. CONTRATO — ¿Qué necesita VER para decidir/operar/elegir? ¿Qué SEÑAL pareada confirma? (verifica contra index.js)\n4. NO-OBJETIVOS — ¿Qué caras NO son de este rol? (las demás, al margen aquí)\n5. PREGUNTAS_ABIERTAS — huecos [ABIERTO] que se nombran, no se cierran\n\nDetermina la NECESIDAD DE INTERFAZ del rol: qué ops necesita exponer, qué señales pareadas, qué formas UI (cinta-estado, gestos, confirmadores, ref-select).\n\nAGOTA el proceso: revisa el esquema contra el index.js real, verifica que cada op clasificada tiene su handler real, que las señales pareadas existen. Si algo no cuadra, REESCRIBE y vuelve a verificar. Repite hasta dejar seco el análisis.\n\nEscribe el archivo final en la ruta indicada en la task.\n\nNO materialices ui_handlers ni toques el module.json — solo esquematiza y produce el archivo final.",
+      "instruccion": "Esquematiza la interfaz del modulo <slug> con la lente del rol indicado en la task, AGOTANDO el proceso. BEBE de module.json + index.js. Aplica el prisma de 5 huecos (identidad, restricciones, contrato, no-objetivos, preguntas abiertas) con la lente del rol. Determina la NECESIDAD DE INTERFAZ del rol. AGOTA hasta dejar seco. Escribe el archivo final en la ruta de la task. NO materialices ui_handlers.",
       "valida": {
         "tamano_min": 800
       }
@@ -29,8 +28,7 @@
     {
       "paso": "verificar",
       "tipo": "reflejo",
-      "op": "verificar",
-      "_detalle": "Verifica que el archivo final existe y que cada op clasificada tiene su handler real en el index.js."
+      "op": "verificar"
     },
     {
       "paso": "commitar",
@@ -41,19 +39,16 @@
   "entregable": {
     "tipo": "fs",
     "path": "modules/<slug>/esquema-<rol>/esquema-<rol>.md",
-    "reglas": ["existe", "contenido_min", "en_repo"],
+    "reglas": [
+      "existe",
+      "contenido_min",
+      "en_repo"
+    ],
     "min_chars": 800
   },
   "presupuesto": {
     "generaciones_por_paso": 3,
     "max_tokens": 32000,
     "generacion_timeout_ms": 240000
-  },
-  "git": {
-    "modo": "rama-propia",
-    "rama": "agente/esquematizador",
-    "commit": true,
-    "pr": true,
-    "merge": "externo"
   }
 }

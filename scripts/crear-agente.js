@@ -118,6 +118,53 @@ const REGLAS_JEFE = [
 
 // ── Wizard principal ──────────────────────────────────────────────
 
+/**
+ * Modo batch (no interactivo).
+ * Uso: node scripts/crear-agente.js --json <definicion.json> [--dir /opt/enki]
+ *
+ * La definición JSON sigue EXACTAMENTE el contrato que genera el wizard:
+ * { name, description, identidad?, pasos[], entregable, presupuesto }
+ *
+ * Reutiliza la misma serialización (escribe store + espejo). El modo batch es
+ * determinista: no hace preguntas, no confirma, y sobrescribe si el agente ya
+ * existe (sin pedir permiso — asume intención explícita por CLI).
+ */
+function generarAgenteJSON(pipeline, dirs) {
+  const json = JSON.stringify(pipeline, null, 2) + '\n';
+  const storePath = path.join(dirs.store, `${pipeline.name}.json`);
+  const espejoPath = path.join(dirs.espejo, `${pipeline.name}.json`);
+  fs.mkdirSync(dirs.store, { recursive: true });
+  fs.writeFileSync(storePath, json, 'utf-8');
+  fs.mkdirSync(dirs.espejo, { recursive: true });
+  fs.writeFileSync(espejoPath, json, 'utf-8');
+  return { storePath, espejoPath };
+}
+
+function validarPipeline(p) {
+  const errs = [];
+  if (!p || typeof p !== 'object') return 'Definición JSON inválida (no es objeto).';
+  if (!p.name || !/^[a-z][a-z0-9-]{2,40}$/.test(p.name)) errs.push('name (slug minúsculas, guiones, 3-40 chars)');
+  if (!p.description) errs.push('description');
+  if (!Array.isArray(p.pasos) || p.pasos.length === 0) errs.push('pasos (array no vacío)');
+  if (!p.entregable || typeof p.entregable !== 'object') errs.push('entregable');
+  if (!p.presupuesto || typeof p.presupuesto !== 'object') errs.push('presupuesto');
+  return errs.length ? `Faltan/inválidos: ${errs.join(', ')}` : null;
+}
+
+async function batchMode(jsonPath) {
+  const pipeline = JSON.parse(fs.readFileSync(jsonPath, 'utf-8'));
+  const error = validarPipeline(pipeline);
+  if (error) {
+    console.error(`  ❌ ${error}`);
+    process.exit(1);
+  }
+  const dirs = { store: STORE_DIR, espejo: ESPEJO_DIR };
+  const { storePath, espejoPath } = generarAgenteJSON(pipeline, dirs);
+  console.log(`  ✅ Agent (batch): ${storePath}`);
+  console.log(`  ✅ Mirror (batch): ${espejoPath}`);
+  console.log(`\n  Invoke: invoke_agent("${pipeline.name}", { task: "..." })`);
+}
+
 async function wizard() {
   console.log('\n');
   console.log('  ╔══════════════════════════════════════════════╗');
@@ -343,7 +390,21 @@ async function wizard() {
 
 // ── Arranque ──────────────────────────────────────────────────────
 
-wizard().catch((err) => {
-  console.error('  ❌ Error:', err.message);
-  process.exit(1);
-});
+// Modo batch: si se pasa --json <archivo>, crea el agente sin interactividad.
+const jsonFlagIdx = process.argv.indexOf('--json');
+if (jsonFlagIdx !== -1) {
+  const jsonPath = process.argv[jsonFlagIdx + 1];
+  if (!jsonPath) {
+    console.error('  ❌ Falta la ruta del JSON. Uso: node scripts/crear-agente.js --json <definicion.json>');
+    process.exit(1);
+  }
+  batchMode(jsonPath).catch((err) => {
+    console.error('  ❌ Error (batch):', err.message);
+    process.exit(1);
+  });
+} else {
+  wizard().catch((err) => {
+    console.error('  ❌ Error:', err.message);
+    process.exit(1);
+  });
+}

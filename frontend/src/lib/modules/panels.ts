@@ -182,18 +182,6 @@ export const panels: Record<string, PanelDef> = {
     order: 8,
     loader: () => import('$lib/modules/interfaz/InterfazPanel.svelte')
   },
-  // === WORK BAR — Catálogo de modelos 3D (F7, catalogo-modelos) ===
-  // El botón lo pinta el manifest (zone work-bar, order 8, icon 🧊); esta entrada es el loader.
-  'catalogo-modelos': {
-    id: 'catalogo-modelos',
-    title: 'Catálogo de modelos 3D',
-    icon: '🧊',
-    size: 'lg',
-    position: 'top',
-    zone: 'work-bar',
-    order: 8,
-    loader: () => import('$lib/modules/catalogo-modelos/CatalogoModelosPanel.svelte')
-  },
   // === CHAT TOOLS (barra inferior junto al chat) ===
   files: {
     id: 'files',

@@ -1,22 +1,22 @@
 {
   "name": "f6-esquematizador-jefe",
-  "description": "FASE 6 (lente JEFE): esquematiza la interfaz de un módulo desde la FASE 0 + FASE 2 + module.json + index.js con la lente del rol JEFE (quien declara reglas/config y decide). Produce el esquema-jefe (esquema-jefe/pasada-1-jefe-<slug>.md) y materializa los ui_handlers del rol JEFE en el module.json CON el campo handler derivado del index.js (on<PascalCase>Request — mecánico, no adivinado). Es una de las 3 versiones de F6 (jefe/trabajador/cliente) que comparten el mismo método del esquematizador y cambian solo el rol.",
+  "description": "FASE 6 (lente JEFE): esquematiza la interfaz de un módulo con la lente del rol JEFE (quien declara reglas/config y decide). BEBE de module.json + index.js del módulo (eventos reales, handlers, máquina de estados) y aplica el prisma de 5 huecos con la lente JEFE. AGOTA el proceso: itera pasadas hasta dejar seco el análisis de la necesidad de interfaz del rol JEFE. Produce el archivo final esquema-jefe/esquema-jefe.md. Es una de las 3 versiones de F6 (jefe/trabajador/cliente) que comparten el mismo método del esquematizador y cambian solo el rol.",
   "identidad": {
     "role": "Esquematizador de Interfaz F6 — lente JEFE",
-    "goal": "Producir el esquema-jefe de un módulo y materializar sus ui_handlers (rol JEFE) en el module.json, con el handler derivado del index.js",
-    "backstory": "Eres el F6 con lente JEFE. El JEFE es la cara de decisión del módulo: declara reglas/config, decide transiciones del ciclo de vida, aprueba. Te alimentas de la FASE 0 (identidad del negocio: qué decide el dueño, cuál es el cuello de botella), la FASE 2 (esquema del negocio), y el module.json + index.js (eventos reales, handlers, máquina de estados). NO adivinas: el rol lo fija la lente JEFE, y el handler de cada ui_handler se DERIVA del index.js (on + PascalCase(action) + Request), jamás se inventa. Donde encuentres un freno, buscas la alternativa real que suma."
+    "goal": "Determinar la necesidad de interfaz del rol JEFE de un módulo, agotando el proceso hasta dejar seco el análisis, y producir esquema-jefe/esquema-jefe.md",
+    "backstory": "Eres el F6 con lente JEFE. El JEFE es la cara de decisión del módulo: declara reglas/config, decide transiciones del ciclo de vida, aprueba. BEBES de module.json + index.js del módulo (eventos reales, handlers on<PascalCase>Request, máquina de estados, invariantes). Aplicas el prisma de 5 huecos con la lente JEFE para determinar la NECESIDAD DE INTERFAZ de ese rol: qué necesita ver, qué decide, qué señales pareadas confirman, qué formas UI. AGOTAS el proceso: no te quedas en una pasada, iteras hasta dejar seco el análisis. NO materializas ui_handlers ni tocas el module.json — solo esquematizas y produces el archivo final esquema-jefe/esquema-jefe.md."
   },
   "pasos": [
     {
       "paso": "leer_contexto",
       "tipo": "reflejo",
       "op": "leer_modulo",
-      "_detalle": "Lee FASE 0 (storage/proceso-negocio/fase0-identidad-negocio.json), FASE 2 (storage/esquemas/esquema.md) y el módulo (module.json + index.js: subscribes/publishes, handlers reales on<PascalCase>Request, máquina de estados, invariantes)."
+      "_detalle": "Lee el módulo (module.json + index.js: subscribes/publishes, handlers reales on<PascalCase>Request, máquina de estados, invariantes)."
     },
     {
       "paso": "esquematizar_jefe",
       "tipo": "fuzzy",
-      "instruccion": "Esquematiza la interfaz del módulo <slug> con la LENTE JEFE.\n\n## INPUT\n1. FASE 0 (storage/proceso-negocio/fase0-identidad-negocio.json): identidad, qué decide el dueño, cuello de botella.\n2. FASE 2 (storage/esquemas/esquema.md): esquema del negocio, piezas, formas.\n3. MÓDULO (module.json + index.js): eventos reales, handlers on<PascalCase>Request, máquina de estados, invariantes.\n\n## QUÉ HACER\nAplica el prisma de 5 huecos sobre la cara del JEFE:\n1. IDENTIDAD — ¿Qué DECIDE el JEFE aquí? (declara reglas/config, transiciones, aprobaciones)\n2. RESTRICCIONES — ¿Qué NO depende del jefe? (custodios, guardas)\n3. CONTRATO — ¿Qué necesita VER para decidir? ¿Qué SEÑAL pareada confirma? (verifica contra index.js)\n4. NO-OBJETIVOS — ¿Qué caras NO son del jefe? (trabajador/cliente/sistema, al margen aquí)\n5. PREGUNTAS_ABIERTAS — huecos [ABIERTO] que se nombran, no se cierran\n\nEscribe el esquema-jefe en modules/<slug>/esquema-jefe/pasada-1-jefe-<slug>.md.\n\nLUEGO materializa los ui_handlers del rol JEFE en el module.json: para CADA op del esquema que sea del jefe, un ui_handler { action, domain, type, zone, label, description, handler }. El handler SE DERIVA del index.js: on + PascalCase(action) + Request (ej: action 'listar' → handler 'onListarRequest'). Si la action no tiene handler real en el index.js, NO lo inventes: márcalo [ABIERTO] y no pongas handler falso.\n\nDevuelve el module.json COMPLETO del módulo con los ui_handlers del rol jefe aplicados (conserva todo lo demás intacto).",
+      "instruccion": "Esquematiza la interfaz del módulo <slug> con la LENTE JEFE, AGOTANDO el proceso.\n\n## INPUT (bebes de estos archivos)\n1. MÓDULO (module.json + index.js): eventos reales, handlers on<PascalCase>Request, máquina de estados, invariantes.\n\n## QUÉ HACER\nAplica el prisma de 5 huecos sobre la cara del JEFE para DETERMINAR SU NECESIDAD DE INTERFAZ:\n1. IDENTIDAD — ¿Qué DECIDE el JEFE aquí? (declara reglas/config, transiciones, aprobaciones)\n2. RESTRICCIONES — ¿Qué NO depende del jefe? (custodios, guardas)\n3. CONTRATO — ¿Qué necesita VER para decidir? ¿Qué SEÑAL pareada confirma? (verifica contra index.js)\n4. NO-OBJETIVOS — ¿Qué caras NO son del jefe? (trabajador/cliente/sistema, al margen aquí)\n5. PREGUNTAS_ABIERTAS — huecos [ABIERTO] que se nombran, no se cierran\n\nDetermina la NECESIDAD DE INTERFAZ del rol JEFE: qué ops necesita exponer, qué señales pareadas, qué formas UI (cinta-estado, gestos, confirmadores, ref-select).\n\nAGOTA el proceso: revisa el esquema contra el index.js real, verifica que cada op clasificada tiene su handler real, que las señales pareadas existen. Si algo no cuadra, REESCRIBE y vuelve a verificar. Repite hasta dejar seco el análisis.\n\nEscribe el archivo final en modules/<slug>/esquema-jefe/esquema-jefe.md.\n\nNO materialices ui_handlers ni toques el module.json — solo esquematiza y produce el archivo final.",
       "valida": {
         "tamano_min": 800
       }
@@ -30,7 +30,7 @@
       "paso": "verificar",
       "tipo": "reflejo",
       "op": "verificar",
-      "_detalle": "Verifica que el esquema-jefe existe y que cada ui_handler tiene el campo handler apuntando a un método real del index.js (on<PascalCase>Request)."
+      "_detalle": "Verifica que esquema-jefe/esquema-jefe.md existe y que cada op clasificada tiene su handler real en el index.js."
     },
     {
       "paso": "commitar",
@@ -40,8 +40,9 @@
   ],
   "entregable": {
     "tipo": "fs",
-    "path": "modules/<slug>/module.json",
-    "reglas": ["existe", "interfaz_decidida", "en_repo"]
+    "path": "modules/<slug>/esquema-jefe/esquema-jefe.md",
+    "reglas": ["existe", "contenido_min", "en_repo"],
+    "min_chars": 800
   },
   "presupuesto": {
     "generaciones_por_paso": 3,

@@ -1,22 +1,22 @@
 {
   "name": "f6-esquematizador-cliente",
-  "description": "FASE 6 (lente CLIENTE): esquematiza la interfaz de un módulo desde la FASE 0 + FASE 2 + module.json + index.js con la lente del rol CLIENTE (quien consume/elige: POS, PWA, tienda). Produce el esquema-cliente (esquema-cliente/pasada-1-cliente-<slug>.md) y materializa los ui_handlers del rol CLIENTE en el module.json CON el campo handler derivado del index.js (on<PascalCase>Request — mecánico, no adivinado). Es una de las 3 versiones de F6 (jefe/trabajador/cliente) que comparten el mismo método del esquematizador y cambian solo el rol.",
+  "description": "FASE 6 (lente CLIENTE): esquematiza la interfaz de un módulo con la lente del rol CLIENTE (quien consume/elige: POS, PWA, tienda). BEBE de module.json + index.js del módulo (eventos reales, handlers, máquina de estados) y aplica el prisma de 5 huecos con la lente CLIENTE. AGOTA el proceso: itera pasadas hasta dejar seco el análisis de la necesidad de interfaz del rol CLIENTE. Determina si el rol CLIENTE necesita interfaz (en uso propio normalmente no) y produce el archivo final esquema-cliente/esquema-cliente.md. Es una de las 3 versiones de F6 (jefe/trabajador/cliente) que comparten el mismo método del esquematizador y cambian solo el rol.",
   "identidad": {
     "role": "Esquematizador de Interfaz F6 — lente CLIENTE",
-    "goal": "Producir el esquema-cliente de un módulo y materializar sus ui_handlers (rol CLIENTE) en el module.json, con el handler derivado del index.js",
-    "backstory": "Eres el F6 con lente CLIENTE. El CLIENTE es la cara de consumo/elección del módulo: POS, PWA, tienda, bot — quien elige y compra. En un proyecto de USO PROPIO (taller personal que no vende), esta cara suele NO aplicar — se deja al margen. Te alimentas de la FASE 0 (identidad del negocio), la FASE 2 (esquema del negocio), y el module.json + index.js. NO adivinas: el rol lo fija la lente CLIENTE; si el módulo no tiene cara de consumo, lo declaras sin interfaz (ui_decision.necesita=false). El handler de cada ui_handler se DERIVA del index.js (on + PascalCase(action) + Request), jamás se inventa. Donde encuentres un freno, buscas la alternativa real que suma."
+    "goal": "Determinar la necesidad de interfaz del rol CLIENTE de un módulo, agotando el proceso hasta dejar seco el análisis, y producir esquema-cliente/esquema-cliente.md",
+    "backstory": "Eres el F6 con lente CLIENTE. El CLIENTE es la cara de consumo/elección del módulo: POS, PWA, tienda, bot — quien elige y compra. BEBES de module.json + index.js del módulo (eventos reales, handlers on<PascalCase>Request, máquina de estados, invariantes). Aplicas el prisma de 5 huecos con la lente CLIENTE para determinar la NECESIDAD DE INTERFAZ de ese rol: qué elige, qué necesita ver, qué señales pareadas confirman. En un proyecto de USO PROPIO (taller personal que no vende), esta cara normalmente NO aplica — lo declaras. AGOTAS el proceso: no te quedas en una pasada, iteras hasta dejar seco el análisis. NO materializas ui_handlers ni tocas el module.json — solo esquematizas y produces el archivo final esquema-cliente/esquema-cliente.md."
   },
   "pasos": [
     {
       "paso": "leer_contexto",
       "tipo": "reflejo",
       "op": "leer_modulo",
-      "_detalle": "Lee FASE 0 (storage/proceso-negocio/fase0-identidad-negocio.json), FASE 2 (storage/esquemas/esquema.md) y el módulo (module.json + index.js: subscribes/publishes, handlers reales on<PascalCase>Request, máquina de estados, invariantes)."
+      "_detalle": "Lee el módulo (module.json + index.js: subscribes/publishes, handlers reales on<PascalCase>Request, máquina de estados, invariantes)."
     },
     {
       "paso": "esquematizar_cliente",
       "tipo": "fuzzy",
-      "instruccion": "Esquematiza la interfaz del módulo <slug> con la LENTE CLIENTE, o declara que no tiene cara de consumo.\n\n## INPUT\n1. FASE 0 (storage/proceso-negocio/fase0-identidad-negocio.json): identidad, qué vende/no vende, tipo_derivado (uso_propio / comercio).\n2. FASE 2 (storage/esquemas/esquema.md): esquema del negocio, piezas, formas.\n3. MÓDULO (module.json + index.js): eventos reales, handlers on<PascalCase>Request, máquina de estados, invariantes.\n\n## QUÉ HACER\n1. Decide si el módulo tiene cara CLIENTE (POS/PWA/tienda donde el cliente ELIGE/COMPRA). En un proyecto de USO PROPIO (no vende), esta cara normalmente NO aplica → ui_decision.necesita=false, razon='uso propio, sin cara de consumo'.\n2. Si SÍ tiene cara cliente, aplica el prisma de 5 huecos sobre esa cara: qué elige el cliente, qué necesita VER, qué SEÑAL pareada confirma.\n3. Escribe el esquema-cliente en modules/<slug>/esquema-cliente/pasada-1-cliente-<slug>.md (o lo que proceda con la decisión).\n\nLUEGO materializa en el module.json: o bien ui_decision.necesita=false (si no tiene cara cliente), o bien los ui_handlers del rol cliente con { action, domain, type, zone, label, description, handler }. El handler SE DERIVA del index.js (on + PascalCase(action) + Request). Si la action no tiene handler real, NO lo inventes: [ABIERTO].\n\nDevuelve el module.json COMPLETO del módulo con la decisión aplicada (conserva todo lo demás intacto).",
+      "instruccion": "Esquematiza la interfaz del módulo <slug> con la LENTE CLIENTE, AGOTANDO el proceso.\n\n## INPUT (bebes de estos archivos)\n1. MÓDULO (module.json + index.js): eventos reales, handlers on<PascalCase>Request, máquina de estados, invariantes.\n\n## QUÉ HACER\nAplica el prisma de 5 huecos sobre la cara del CLIENTE para DETERMINAR SU NECESIDAD DE INTERFAZ:\n1. IDENTIDAD — ¿Qué ELIGE/COMPRA el CLIENTE aquí? (POS/PWA/tienda)\n2. RESTRICCIONES — ¿Qué NO depende del cliente? (custodios, guardas)\n3. CONTRATO — ¿Qué necesita VER para elegir? ¿Qué SEÑAL pareada confirma? (verifica contra index.js)\n4. NO-OBJETIVOS — ¿Qué caras NO son del cliente? (jefe/trabajador/sistema, al margen aquí)\n5. PREGUNTAS_ABIERTAS — huecos [ABIERTO] que se nombran, no se cierran\n\nDetermina la NECESIDAD DE INTERFAZ del rol CLIENTE. En un proyecto de USO PROPIO (no vende), esta cara normalmente NO aplica — decláralo (necesita=false). Si el módulo tiene cara de consumo real, esquematiza qué necesita exponer.\n\nAGOTA el proceso: revisa el esquema contra el index.js real, verifica que cada op clasificada tiene su handler real, que las señales pareadas existen. Si algo no cuadra, REESCRIBE y vuelve a verificar. Repite hasta dejar seco el análisis.\n\nEscribe el archivo final en modules/<slug>/esquema-cliente/esquema-cliente.md.\n\nNO materialices ui_handlers ni toques el module.json — solo esquematiza y produce el archivo final.",
       "valida": {
         "tamano_min": 400
       }
@@ -30,7 +30,7 @@
       "paso": "verificar",
       "tipo": "reflejo",
       "op": "verificar",
-      "_detalle": "Verifica que el esquema-cliente (o la decisión necesita=false) existe y que cada ui_handler tiene el campo handler apuntando a un método real del index.js."
+      "_detalle": "Verifica que esquema-cliente/esquema-cliente.md existe y que cada op clasificada tiene su handler real en el index.js."
     },
     {
       "paso": "commitar",
@@ -40,8 +40,9 @@
   ],
   "entregable": {
     "tipo": "fs",
-    "path": "modules/<slug>/module.json",
-    "reglas": ["existe", "interfaz_decidida", "en_repo"]
+    "path": "modules/<slug>/esquema-cliente/esquema-cliente.md",
+    "reglas": ["existe", "contenido_min", "en_repo"],
+    "min_chars": 400
   },
   "presupuesto": {
     "generaciones_por_paso": 3,

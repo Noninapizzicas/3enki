@@ -230,6 +230,24 @@
       "ejecuciones": 0,
       "ultima_ejecucion": null,
       "modulos_procesados": []
+    },
+    {
+      "name": "prisma-universal",
+      "description": "Esquematizador universal: prisma de 5 huecos parametrizado por 3 variables (entrada, archivo final, enfoque=CÓMO+PARA). Sirve para cualquier sujeto: negocio, interfaz, informes, módulos.",
+      "archivo": "prisma-universal.json",
+      "tags": [
+        "esquema",
+        "prisma",
+        "universal",
+        "f0",
+        "f2",
+        "f6",
+        "f6h"
+      ],
+      "creado": "2026-09-09",
+      "ejecuciones": 0,
+      "ultima_ejecucion": null,
+      "modulos_procesados": []
     }
   ]
 }

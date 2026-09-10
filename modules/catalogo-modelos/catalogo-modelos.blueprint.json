@@ -1,15 +1,15 @@
 {
   "schema": "blueprint-interfaz-v2",
   "id": "catalogo-modelos",
-  "version": "blueprint-2.1.0",
+  "version": "blueprint-2.2.0",
   "moduleId": "catalogo-modelos",
   "actor": "jefe",
-  "_doc": "Blueprint de interfaz de catalogo-modelos — CUSTODIO del proyecto 3D. Creado por prisma-universal (FASE 6.5) como INGENIERO DE INTERFAZ DE ENKI, consumiendo el esquema-jefe de F6 (modules/catalogo-modelos/esquema-jefe/esquema-jefe.md). Se declaró en la seccion `ui`: ops con su rol del veredicto del arbitro (registrar=jefe · listar/obtener/categorias=neutro->jefe), ui.datos (listar con refresh_on), ui.flujo (fase jefe PRIMERA, luego consulta). `aprobar/rechazar` es [ABIERTO] en el esquema-jefe y NO tiene handler en index.js -> no entra en ui.ops. La op `categorias` se anade a transporte.rpc a mano (el generador base la omite porque no esta en ui_handlers).",
+  "_doc": "Blueprint de interfaz de catalogo-modelos — CUSTODIO del proyecto 3D. REESCRITO por prisma-universal (FASE 6.5 v2) como INGENIERO DE INTERFAZ DE ENKI, consumiendo el esquema-jefe de F6 (modules/catalogo-modelos/esquema-jefe/esquema-jefe.md), module.json (ui_handlers con handler real) e index.js (handlers/proyecciones/invariantes reales). ENRIQUECIDO con FORMAS UI CONCRETAS por op (select/tabla/formulario/detalle) y LOGICA FUNCIONAL real: registrar=formulario (editor-bloque), listar=tabla/cinta, obtener=detalle, categorias=select. Cada op de ui.ops corresponde a un handler REAL (onRegistrarRequest/onListarRequest/onObtenerRequest/onCategoriasRequest). `aprobar/rechazar` es [ABIERTO] en el esquema-jefe y NO tiene handler en index.js -> NO entra en ui.ops. Se declara `ui.formas` con la forma UI de cada op. La op `categorias` se anade a transporte.rpc a mano (el generador base la omite porque no esta en ui_handlers).",
   "_lente_roles": {
     "agente": "prisma-universal",
-    "fase": "F6_5",
-    "enfoque": "como ingeniero de interfaz de Enki para la interfaz de catalogo-modelos",
-    "metodo": "esquematizador-universal (prisma de 5 huecos) + lente rol JEFE",
+    "fase": "F6_5_v2",
+    "enfoque": "como ingeniero de interfaz de Enki para la interfaz PRACTICA y FUNCIONAL de catalogo-modelos",
+    "metodo": "esquematizador-universal (prisma de 5 huecos) + lente rol JEFE + formas UI concretas",
     "arbitro": "futuro->jefe · ahora->utilizacion · solo-lee->neutro",
     "consolidacion": "modules/catalogo-modelos/esquema-jefe/esquema-jefe.md",
     "dualidad": "JEFE=registrar (unica escritura del custodio, decide el futuro del catalogo) · UTILIZACION=no existe (no hay seleccion de cliente final; importacion-modelo es ORIGEN de datos, no cara) · neutro=listar/obtener/categorias (lecturas que alimentan la decision de registrar)",
@@ -46,8 +46,10 @@
     "ops": {
       "registrar": {
         "rol": "jefe",
+        "forma": "formulario",
         "titulo": "Registrar",
         "descripcion": "Registra un modelo 3D en el catalogo (append al store). Requiere nombre y project_id; id unico (duplicado -> 409 ALREADY_EXISTS). Emite catalogo.modelo_registrado.",
+        "logica": "Formulario (editor-bloque) de alta: al guardar emite catalogo.registrar.request y la vista re-lee via la senal catalogo.modelo_registrado (nunca recarga). El select de categoria se alimenta de la op categorias.",
         "args": [
           {
             "nombre": "nombre",
@@ -60,6 +62,8 @@
             "nombre": "categoria",
             "tipo": "string",
             "required": false,
+            "forma": "select",
+            "fuente": "categorias",
             "descripcion": "Categoria del modelo (default 'sin_categoria'). Select alimentado por categorias.",
             "placeholder": "selecciona categoria"
           },
@@ -86,8 +90,10 @@
       },
       "listar": {
         "rol": "neutro",
+        "forma": "tabla",
         "titulo": "Listar",
         "descripcion": "Lista todos los modelos del proyecto. Respuesta {modelos[], total}. Cinta del catalogo del jefe.",
+        "logica": "Tabla/cinta de modelos: columnas nombre, categoria, origen. refresh_on catalogo.modelo_registrado (al dar de alta, la cinta re-lee).",
         "args": [
           {
             "nombre": "project_id",
@@ -99,8 +105,10 @@
       },
       "obtener": {
         "rol": "neutro",
+        "forma": "detalle",
         "titulo": "Obtener",
         "descripcion": "Obtiene un modelo por id (404 si no existe). Detalle del modelo (metadatos, origen, archivo, created_at) que alimenta la decision de registrar.",
+        "logica": "Vista de detalle: muestra metadatos, archivo3mf, origen, created_at del modelo seleccionado. El id se toma de la fila seleccionada en listar.",
         "args": [
           {
             "nombre": "id",
@@ -116,8 +124,10 @@
       },
       "categorias": {
         "rol": "neutro",
+        "forma": "select",
         "titulo": "Categorias",
-        "descripcion": "Categorias distintas del catalogo (distinct de listar, ordenado). Alimenta el select de categoria al registrar."
+        "descripcion": "Categorias distintas del catalogo (distinct de listar, ordenado). Alimenta el select de categoria al registrar.",
+        "logica": "Select de categoria: alimenta el campo categoria del formulario registrar. Respuesta {categorias[], total}."
       }
     },
     "datos": {
@@ -142,7 +152,7 @@
         "ops": [
           "registrar"
         ],
-        "descripcion": "Cara de edicion del custodio: dar de alta modelos en el catalogo (la unica escritura). Editor-bloque multi-campo (nombre, categoria, archivo, origen, metadatos) — 1 modal, no fases. Senal pareada catalogo.modelo_registrado refresca la vista (nunca recarga)."
+        "descripcion": "Cara de edicion del custodio: dar de alta modelos en el catalogo (la unica escritura). Formulario (editor-bloque) multi-campo (nombre, categoria, archivo, origen, metadatos) — 1 modal, no fases. Senal pareada catalogo.modelo_registrado refresca la vista (nunca recarga)."
       },
       {
         "nombre": "consulta",
@@ -152,7 +162,7 @@
           "obtener",
           "categorias"
         ],
-        "descripcion": "Lecturas neutras que alimentan la decision del jefe: cinta del catalogo (listar), detalle del modelo (obtener) y select de categoria (categorias). La vista re-lee, nunca recarga."
+        "descripcion": "Lecturas neutras que alimentan la decision del jefe: tabla/cinta del catalogo (listar), detalle del modelo (obtener) y select de categoria (categorias). La vista re-lee, nunca recarga."
       }
     ],
     "dependencias": {
@@ -175,23 +185,42 @@
       "obtener": "neutro",
       "categorias": "neutro"
     },
-    "formas_jefe": {
+    "formas": {
       "registrar": {
-        "forma": "editor-bloque",
-        "nota": "Declaracion multi-campo (nombre, categoria, archivo, origen, metadatos) — 1 modal, no fases. La unica escritura del custodio.",
+        "forma": "formulario",
+        "tipo": "editor-bloque",
+        "nota": "Formulario de alta (editor-bloque multi-campo): nombre, categoria (select), archivo3mf, origen, metadatos. 1 modal, no fases. Al guardar emite catalogo.registrar.request; la senal catalogo.modelo_registrado refresca la vista.",
         "senal_refresh": "catalogo.modelo_registrado"
       },
       "listar": {
-        "forma": "cinta-estado",
-        "nota": "Cinta del catalogo: tarjetas de modelos (nombre, categoria, origen); el ref-select queda expuesto en la cinta. Cinta de pulso 'n modelos · n categorias'."
+        "forma": "tabla",
+        "tipo": "cinta",
+        "nota": "Tabla/cinta de modelos: columnas nombre, categoria, origen. Cinta de pulso 'n modelos · n categorias'. refresh_on catalogo.modelo_registrado.",
+        "columnas": [
+          "nombre",
+          "categoria",
+          "origen"
+        ],
+        "refresh_on": [
+          "catalogo.modelo_registrado"
+        ]
       },
       "obtener": {
-        "forma": "cinta-estado",
-        "nota": "Detalle del modelo (metadatos, origen, archivo, created_at) que alimenta la decision."
+        "forma": "detalle",
+        "tipo": "informe",
+        "nota": "Vista de detalle del modelo: metadatos, archivo3mf, origen, created_at. Se abre al tocar una fila de listar.",
+        "campos": [
+          "metadatos",
+          "archivo3mf",
+          "origen",
+          "created_at"
+        ]
       },
       "categorias": {
-        "forma": "cinta-estado",
-        "nota": "Distinct de listar — alimenta el select de categoria al registrar."
+        "forma": "select",
+        "tipo": "ref-select",
+        "nota": "Select de categoria: distinct de listar, alimenta el campo categoria del formulario registrar.",
+        "alimenta": "registrar.categoria"
       }
     }
   }

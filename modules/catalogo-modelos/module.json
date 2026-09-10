@@ -41,5 +41,43 @@
       "event": "catalogo.registrar.failed",
       "description": "Par de fallo: el registro no se completo (input invalido o duplicado)."
     }
+  ],
+  "ui_handlers": [
+    {
+      "action": "registrar",
+      "domain": "catalogo",
+      "type": "workspace_module",
+      "zone": "barra_modulos",
+      "label": "Registrar",
+      "description": "Registra un modelo 3D en el catalogo",
+      "handler": "onRegistrarRequest"
+    },
+    {
+      "action": "listar",
+      "domain": "catalogo",
+      "type": "workspace_module",
+      "zone": "barra_modulos",
+      "label": "Listar",
+      "description": "Lista los modelos del proyecto",
+      "handler": "onListarRequest"
+    },
+    {
+      "action": "obtener",
+      "domain": "catalogo",
+      "type": "workspace_module",
+      "zone": "barra_modulos",
+      "label": "Obtener",
+      "description": "Obtiene un modelo por id",
+      "handler": "onObtenerRequest"
+    },
+    {
+      "action": "categorias",
+      "domain": "catalogo",
+      "type": "workspace_module",
+      "zone": "barra_modulos",
+      "label": "Categorias",
+      "description": "Lista las categorias",
+      "handler": "onCategoriasRequest"
+    }
   ]
 }

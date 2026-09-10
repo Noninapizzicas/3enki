@@ -53,7 +53,9 @@ export const PAGE_CATALOG: Record<string, PageDef> = {
   producir:         { id: 'producir',         icon: '🏭',  label: 'Producir', nav: false },
   pedidos:          { id: 'pedidos',          icon: '📋',  label: 'Pedidos', nav: false },
   variaciones:      { id: 'variaciones',      icon: '🔧',  label: 'Variaciones', nav: false },
-  productos:        { id: 'productos',        icon: '🍕',  label: 'Productos', nav: false }
+  productos:        { id: 'productos',        icon: '🍕',  label: 'Productos', nav: false },
+  // — vertical 3D (taller de impresión): catalogo-modelos (F7, prisma-universal) —
+  'catalogo-modelos': { id: 'catalogo-modelos', icon: '🧊', label: 'Catálogo 3D', nav: false }
 };
 /** Semilla por tipo: lo que un proyecto trae al nacer, antes de que crezca en runtime. */
 const SEED_BY_TYPE: Record<string, string[]> = {

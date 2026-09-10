@@ -169,6 +169,21 @@ export const panels: Record<string, PanelDef> = {
     loader: () => import('$lib/modules/impresion/ImpresionPanel.svelte')
   },
 
+  // === WORK BAR — Catalogo de modelos 3D (F7, prisma-universal) ===
+  // El botón lo pinta el manifest (zone work-bar, order 8, icon 🧊); esta entrada
+  // es el loader de respaldo del panel (el autodescubrimiento del lazy-registry
+  // lo resuelve primero vía module.manifest.panels).
+  'catalogo-modelos-panel': {
+    id: 'catalogo-modelos-panel',
+    title: 'Catálogo de modelos 3D',
+    icon: '🧊',
+    size: 'lg',
+    position: 'top',
+    zone: 'work-bar',
+    order: 8,
+    loader: () => import('$lib/modules/catalogo-modelos/CatalogoModelosPanel.svelte')
+  },
+
   // === WORK BAR — Radar de nichos (interfaz) ===
   // El botón de la barra lo renderiza el manifest.json del módulo (zone work-bar,
   // order 8, icon 📡); esta entrada es el loader que carga el panel al pulsar.

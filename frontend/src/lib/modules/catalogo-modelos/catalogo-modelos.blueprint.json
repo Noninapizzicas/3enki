@@ -184,44 +184,6 @@
       "listar": "neutro",
       "obtener": "neutro",
       "categorias": "neutro"
-    },
-    "formas": {
-      "registrar": {
-        "forma": "formulario",
-        "tipo": "editor-bloque",
-        "nota": "Formulario de alta (editor-bloque multi-campo): nombre, categoria (select), archivo3mf, origen, metadatos. 1 modal, no fases. Al guardar emite catalogo.registrar.request; la senal catalogo.modelo_registrado refresca la vista.",
-        "senal_refresh": "catalogo.modelo_registrado"
-      },
-      "listar": {
-        "forma": "tabla",
-        "tipo": "cinta",
-        "nota": "Tabla/cinta de modelos: columnas nombre, categoria, origen. Cinta de pulso 'n modelos · n categorias'. refresh_on catalogo.modelo_registrado.",
-        "columnas": [
-          "nombre",
-          "categoria",
-          "origen"
-        ],
-        "refresh_on": [
-          "catalogo.modelo_registrado"
-        ]
-      },
-      "obtener": {
-        "forma": "detalle",
-        "tipo": "informe",
-        "nota": "Vista de detalle del modelo: metadatos, archivo3mf, origen, created_at. Se abre al tocar una fila de listar.",
-        "campos": [
-          "metadatos",
-          "archivo3mf",
-          "origen",
-          "created_at"
-        ]
-      },
-      "categorias": {
-        "forma": "select",
-        "tipo": "ref-select",
-        "nota": "Select de categoria: distinct de listar, alimenta el campo categoria del formulario registrar.",
-        "alimenta": "registrar.categoria"
-      }
     }
   }
 }

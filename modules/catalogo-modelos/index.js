@@ -29,7 +29,7 @@ class CatalogoModelosReflejo extends ModuloHibridoReflejo {
     this.modelos = new Map();   // id → Modelo { project_id, ... }
 
     this._persist = new PosPersistencia({
-      modulo: this, file: 'catalogo-modelos.json', dir: '/3d/catalogo',
+      modulo: this, file: 'catalogo-modelos.json', dir: '/catalogo',
       snapshot: (pid) => ({ modelos: [...this.modelos].filter(([, m]) => m.project_id === pid) }),
       hidratar: (pid, data) => { for (const e of (data.modelos || [])) { const m = Array.isArray(e) ? e[1] : e; if (m && m.id) this.modelos.set(m.id, m); } }
     });

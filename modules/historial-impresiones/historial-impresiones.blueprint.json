@@ -1,0 +1,141 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "historial-impresiones",
+  "version": "blueprint-2.2.0",
+  "moduleId": "historial-impresiones",
+  "actor": "jefe",
+  "_doc": "Blueprint de interfaz de historial-impresiones — CUSTODIO puro del proyecto 3D (memoria del taller). CREADO por prisma-universal (FASE 6.5) como INGENIERO DE INTERFAZ DE ENKI, consumiendo el esquema-jefe de F6 (modules/historial-impresiones/esquema-jefe/esquema-jefe.md, LA FUENTE DE VERDAD), module.json e index.js. SEPARACION DE RESPONSABILIDADES (opcion B): F6.5 declara SOLO ui.ops (con rol), ui.datos, ui.flujo, transporte.rpc y transporte.salida. NO se declara ui.formas (F7 decide las formas al construir) NI ui.estados (append-only puro, SIN ciclo de estados en index.js: ninguna op de editar/borrar/estado). Cada op de ui.ops corresponde a un handler REAL (onListarRequest/onRegistrarRequest). El jefe es LECTOR (solo listar): el registro llega AUTOMATICO por impresion.completada (onImpresionCompletada, fire-and-forget) o por RPC de ciclo-impresion (historial.registrar.request), no lo teclea el jefe. registrar es NEUTRO/sistema (rol segun el veredicto del arbitro del esquema-jefe). onImpresionCompletada y project.activated son entrada por EVENTO/sistema, no se declaran como op de UI.",
+  "_lente_roles": {
+    "agente": "prisma-universal",
+    "fase": "F6_5",
+    "enfoque": "como ingeniero de interfaz de Enki para la interfaz PRACTICA de historial-impresiones (la cinta del historial del jefe)",
+    "metodo": "esquematizador-universal (prisma de 5 huecos) + lente rol JEFE, verificando cada op contra handlers reales en index.js",
+    "arbitro": "decide-futuro-del-store->jefe · consulta-memoria-a-diario->jefe/consulta · solo-informa->neutro",
+    "consolidacion": "modules/historial-impresiones/esquema-jefe/esquema-jefe.md",
+    "dualidad": "JEFE=listar (LECTOR puro: la cinta cronologica + total; onListarRequest->_listar devuelve {registros[], total}). neutro=registrar (escritura del custodio, pero en el flujo normal la invoca ciclo-impresion por RPC historial.registrar.request, NO el jefe; solo se expondria en un registro manual [ABIERTO]). onImpresionCompletada (fire-and-forget, entrada por evento) y project.activated (restaura persistencia) son sistema, no cara de UI.",
+    "senales_pareadas": {
+      "registro": "historial.impresion_registrada",
+      "registro.fallo": "historial.registrar.failed"
+    }
+  },
+  "titulo": "Historial de impresiones 3D del taller (CUSTODIO): apppend-only, mas reciente primero, persistido por proyecto. Registro inmutable de impresiones pasadas: fecha, modelo (id/nombre), material, filamento usado, tiempo y resultado; huecos como 'desconocido' (invariante 5: dato ausente nombrado, nunca inventado). Single-writer de su store por proyecto via PosPersistencia. NO se conecta a la impresora: solo lee/lista registros; el registro entra SOLO por impresion.completada (onImpresionCompletada, fire-and-forget) o por RPC de ciclo-impresion (historial.registrar.request). El jefe es LECTOR: mira la memoria del taller y sabe cuanto hay (total). La cinta se refresca en vivo por la senal de ESCRITURA del sistema historial.impresion_registrada, nunca recarga. Par de fallo historial.registrar.failed.",
+  "eventos_publicados": [
+    "historial.impresion_registrada",
+    "historial.registrar.failed"
+  ],
+  "eventos_que_escucho": [
+    "historial.registrar.request",
+    "historial.listar.request",
+    "impresion.completada",
+    "project.activated"
+  ],
+  "transporte": {
+    "rpc": [
+      "historial.listar.request -> .response",
+      "historial.registrar.request -> .response"
+    ],
+    "salida": [
+      "historial.impresion_registrada",
+      "historial.registrar.failed"
+    ]
+  },
+  "ui": {
+    "ops": {
+      "listar": {
+        "rol": "jefe",
+        "titulo": "Historial de impresiones",
+        "descripcion": "Lista la cinta completa de impresiones registradas del proyecto (append-only, mas reciente primero). Respuesta {project_id, registros[], total}. OnListarRequest/_listar: si no hay store devuelve {registros: [], total: 0} (estado vacio sin error). El jefe es LECTOR puro — este es su unico gesto real: ver la memoria del taller (cada entrada: fecha, modelo_id/nombre, material, filamento_usado, tiempo, resultado, registrado_en) y saber cuanto hay (total).",
+        "logica": "Cinta cronologica (ref-select/cinta) del historial, mas reciente primero, con cabecera de pulso (n registros en total via total). Lectura pura, sin senal propia: la vista re-lee, nunca recarga. Se refresca automoticamente por la senal de escritura del sistema historial.impresion_registrada. Huecos mostrados como 'desconocido' (dato ausente nombrado). Emite historial.listar.request. Es el gesto rey del jefe (frecuencia -> jerarquia).",
+        "args": [
+          {
+            "nombre": "project_id",
+            "tipo": "string",
+            "required": true,
+            "descripcion": "Proyecto cuyo historial se consulta (obligatorio, 400 si falta)."
+          }
+        ]
+      },
+      "registrar": {
+        "rol": "neutro",
+        "titulo": "Registrar impresion (sistema)",
+        "descripcion": "Registra una impresion pasada (append-only, store.unshift mas reciente primero). Requiere project_id y modelo_id (400 si faltan; si falta modelo_id emite historial.registrar.failed). Rellena huecos como 'desconocido' (modelo_nombre, material, filamento_usado, tiempo, resultado). registrado_en es INMUTABLE y lo fija el modulo; la UI no lo pasa. Emite historial.impresion_registrada. Rol neutro/sistema: en el flujo normal la invoca ciclo-impresion por RPC (historial.registrar.request); el jefe NO la usa salvo un registro manual [ABIERTO] (decision del dueno, sin handler de UI dedicado mas alla de este RPC).",
+        "logica": "Escritura del custodio, NO gesto del jefe. Entra automaticamente por impresion.completada (onImpresionCompletada, fire-and-forget) o por RPC de ciclo-impresion. Solo se materializaria en UI si el dueno decide el registro manual [ABIERTO] (formulario/editor); si no, queda como consumo del sistema. Emite historial.registrar.request.",
+        "args": [
+          {
+            "nombre": "project_id",
+            "tipo": "string",
+            "required": true,
+            "descripcion": "Proyecto al que pertenece la impresion (obligatorio, 400 si falta)."
+          },
+          {
+            "nombre": "modelo_id",
+            "tipo": "string",
+            "required": true,
+            "descripcion": "Identificador del modelo impreso (obligatorio, 400 si falta; si falta emite historial.registrar.failed)."
+          },
+          {
+            "nombre": "modelo_nombre",
+            "tipo": "string",
+            "required": false,
+            "descripcion": "Nombre legible del modelo. Default 'desconocido'."
+          },
+          {
+            "nombre": "material",
+            "tipo": "string",
+            "required": false,
+            "descripcion": "Material de la impresion. Default 'desconocido'."
+          },
+          {
+            "nombre": "filamento_usado",
+            "tipo": "string",
+            "required": false,
+            "descripcion": "Filamento usado. Default 'desconocido'."
+          },
+          {
+            "nombre": "tiempo",
+            "tipo": "string",
+            "required": false,
+            "descripcion": "Tiempo de la impresion. Default 'desconocido' si el hueco no se midio."
+          },
+          {
+            "nombre": "resultado",
+            "tipo": "string",
+            "required": false,
+            "descripcion": "Resultado de la impresion. onImpresionCompletada fuerza default 'completada'; en RPC directo default 'desconocido'."
+          }
+        ]
+      }
+    },
+    "datos": {
+      "op": "listar",
+      "titulo": "Cinta del historial (append-only, mas reciente primero)",
+      "refresh_on": [
+        "historial.impresion_registrada"
+      ],
+      "_nota_hueco": "El panel del jefe se refresca SOLO por la senal de ESCRITURA del sistema historial.impresion_registrada (cuando una impresion se completa, la cinta re-lee y el nuevo registro aparece arriba). No hay senal propia de listar porque es lectura pura. historial.registrar.failed solo importa para el registro manual [ABIERTO]; el flujo normal (impresion.completada) no falla por UI."
+    },
+    "flujo": [
+      {
+        "nombre": "jefe",
+        "orden": 1,
+        "ops": [
+          "listar"
+        ],
+        "descripcion": "Cara LECTORA del dueno: ver la cinta cronologica del historial (listar, mas reciente primero) + cabecera de pulso (total) + estado vacio (registros:[] · total:0 -> 'aun no hay impresiones registradas') + huecos como 'desconocido'. El jefe NO DECLARA: no hay gesto de escritura. El panel se refresca en vivo por la senal del sistema historial.impresion_registrada (la vista re-lee, nunca recarga)."
+      },
+      {
+        "nombre": "neutro",
+        "orden": 2,
+        "ops": [
+          "registrar"
+        ],
+        "descripcion": "Escritura del custodio consumida por el sistema: onImpresionCompletada (fire-and-forget) y RPC historial.registrar.request invocado por ciclo-impresion. No es gesto del jefe; solo se expondria en UI si el dueno decide el registro manual [ABIERTO]. La senal de exito historial.impresion_registrada es la que refresca la cinta del jefe."
+      }
+    ],
+    "dependencias": {},
+    "roles": {
+      "listar": "jefe",
+      "registrar": "neutro"
+    }
+  }
+}

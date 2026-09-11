@@ -1,13 +1,17 @@
 'use strict';
 const ModuloHibridoReflejo = require('../_shared/modulo-hibrido-reflejo');
 
+const BRIDGE_PREFIX = 'bridge.moonraker';
+
 /**
  * AdaptadorImpresoraReflejo — PUENTE hacia la impresora 3D SPARKX i7 (Moonraker).
  *
- * Transporta, no decide, no persiste. Sin store ni PosPersistencia (frontera de
- * transporte). El puerto de la impresora se inyecta via registrarImpresora():
- *   { subirGcode(gcode) -> Promise<{ok, id}>, iniciarImpresion() -> Promise<{ok}>,
- *     observarEstado(onPush) -> Promise<{ok, unsubscribe}> }
+ * Dos modos de transporte (transparente para quien consume el adaptador):
+ *   LOCAL  — puerto inyectado via registrarImpresora() (mismo proceso).
+ *   REMOTO — thin bridge en el PC del dueño, comunicado por MQTT RPC
+ *            (bridge.moonraker.*.request/response + estado_push).
+ * Si hay puerto local, se usa; si no, se delega al bridge remoto.
+ *
  * La impresora reporta por PUSH (WebSocket, sin polling). El adaptador interpreta
  * el estado crudo -> estado_sistema (CONVERSOR interno _interpretarEstado, 9.4).
  * Todo flujo cierra su circulo con par de fallo (*.failed).
@@ -16,9 +20,10 @@ class AdaptadorImpresoraReflejo extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'adaptador-impresora';
-    this.version = 'reflejo-0.1.0';
-    this._impresora = null;   // puerto inyectado (thin PC del dueño)
+    this.version = 'reflejo-0.2.0';
+    this._impresora = null;   // puerto inyectado local (opcional)
     this._streamAbierto = false;
+    this._unsubBridgePush = null;
   }
 
   // =============================================================
@@ -57,71 +62,68 @@ class AdaptadorImpresoraReflejo extends ModuloHibridoReflejo {
       this._publicarEvento('subir_gcode.failed', { project_id: pid, motivo: 'gcode_vacio' });
       return { status: 400, data: { error: 'INVALID_INPUT', message: 'gcode requerido (no vacio)' } };
     }
-    if (!this._impresora) {
-      this._publicarEvento('subir_gcode.failed', { project_id: pid, motivo: 'impresora_no_configurada' });
-      return { status: 503, data: { error: 'UPSTREAM_UNREACHABLE', message: 'impresora no configurada' } };
-    }
-    try {
-      const res = await this._impresora.subirGcode(gcode.trim());
-      if (!res || res.ok !== true) {
-        this._publicarEvento('subir_gcode.failed', { project_id: pid, motivo: 'impresora_rechazo' });
-        return { status: 502, data: { error: 'UPSTREAM_INVALID_RESPONSE', message: 'la impresora no confirmo la subida' } };
+    if (this._impresora) {
+      try {
+        const res = await this._impresora.subirGcode(gcode.trim());
+        if (!res || res.ok !== true) {
+          this._publicarEvento('subir_gcode.failed', { project_id: pid, motivo: 'impresora_rechazo' });
+          return { status: 502, data: { error: 'UPSTREAM_INVALID_RESPONSE', message: 'la impresora no confirmo la subida' } };
+        }
+        return { status: 200, data: { ok: true, id: res.id || null, confirmado: true } };
+      } catch (err) {
+        this._publicarEvento('subir_gcode.failed', { project_id: pid, motivo: 'error', error: err.message });
+        return { status: 503, data: { error: 'UPSTREAM_UNREACHABLE', message: err.message } };
       }
-      return { status: 200, data: { ok: true, id: res.id || null, confirmado: true } };
-    } catch (err) {
-      this._publicarEvento('subir_gcode.failed', { project_id: pid, motivo: 'error', error: err.message });
-      return { status: 503, data: { error: 'UPSTREAM_UNREACHABLE', message: err.message } };
     }
+    return this._delegarAlBridge('subir_gcode', { gcode: gcode.trim(), project_id: pid }, pid);
   }
 
   // 9.2 — iniciar la impresion del gcode ya subido
   async _iniciarImpresion(input) {
     const pid = (input && input.project_id) || null;
-    if (!this._impresora) {
-      this._publicarEvento('iniciar_impresion.failed', { project_id: pid, motivo: 'impresora_no_configurada' });
-      return { status: 503, data: { error: 'UPSTREAM_UNREACHABLE', message: 'impresora no configurada' } };
-    }
-    try {
-      const res = await this._impresora.iniciarImpresion();
-      if (!res || res.ok !== true) {
-        this._publicarEvento('iniciar_impresion.failed', { project_id: pid, motivo: 'impresora_rechazo' });
-        return { status: 502, data: { error: 'UPSTREAM_INVALID_RESPONSE', message: 'la impresora no confirmo el inicio' } };
+    if (this._impresora) {
+      try {
+        const res = await this._impresora.iniciarImpresion();
+        if (!res || res.ok !== true) {
+          this._publicarEvento('iniciar_impresion.failed', { project_id: pid, motivo: 'impresora_rechazo' });
+          return { status: 502, data: { error: 'UPSTREAM_INVALID_RESPONSE', message: 'la impresora no confirmo el inicio' } };
+        }
+        return { status: 200, data: { ok: true, confirmado: true } };
+      } catch (err) {
+        this._publicarEvento('iniciar_impresion.failed', { project_id: pid, motivo: 'error', error: err.message });
+        return { status: 503, data: { error: 'UPSTREAM_UNREACHABLE', message: err.message } };
       }
-      return { status: 200, data: { ok: true, confirmado: true } };
-    } catch (err) {
-      this._publicarEvento('iniciar_impresion.failed', { project_id: pid, motivo: 'error', error: err.message });
-      return { status: 503, data: { error: 'UPSTREAM_UNREACHABLE', message: err.message } };
     }
+    return this._delegarAlBridge('iniciar_impresion', { filename: input?.filename || input?.id, project_id: pid }, pid);
   }
 
   // 9.3 — abrir el stream de estado (push, sin polling) y entregar estado_crudo
   async _observarEstado(input) {
     const pid = (input && input.project_id) || null;
-    if (!this._impresora) {
-      this._publicarEvento('iniciar_impresion.failed', { project_id: pid, motivo: 'impresora_no_configurada' });
-      return { status: 503, data: { error: 'UPSTREAM_UNREACHABLE', message: 'impresora no configurada' } };
-    }
     if (this._streamAbierto) {
       return { status: 200, data: { ok: true, stream: 'ya_abierto' } };
     }
-    try {
-      const res = await this._impresora.observarEstado((crudo) => {
-        const interpretado = this._interpretarEstado(crudo);
-        this._publicarEvento('adaptador-impresora.estado_crudo', {
-          project_id: pid, crudo, estado_sistema: interpretado
+    if (this._impresora) {
+      try {
+        const res = await this._impresora.observarEstado((crudo) => {
+          const interpretado = this._interpretarEstado(crudo);
+          this._publicarEvento('adaptador-impresora.estado_crudo', {
+            project_id: pid, crudo, estado_sistema: interpretado
+          });
         });
-      });
-      if (!res || res.ok !== true) {
-        this._publicarEvento('iniciar_impresion.failed', { project_id: pid, motivo: 'stream_rechazado' });
-        return { status: 502, data: { error: 'UPSTREAM_INVALID_RESPONSE', message: 'no se pudo abrir el stream de estado' } };
+        if (!res || res.ok !== true) {
+          this._publicarEvento('observar_estado.failed', { project_id: pid, motivo: 'stream_rechazado' });
+          return { status: 502, data: { error: 'UPSTREAM_INVALID_RESPONSE', message: 'no se pudo abrir el stream de estado' } };
+        }
+        this._streamAbierto = true;
+        this._unsubscribeStream = res.unsubscribe || null;
+        return { status: 200, data: { ok: true, stream: 'abierto' } };
+      } catch (err) {
+        this._publicarEvento('observar_estado.failed', { project_id: pid, motivo: 'error', error: err.message });
+        return { status: 503, data: { error: 'UPSTREAM_UNREACHABLE', message: err.message } };
       }
-      this._streamAbierto = true;
-      this._unsubscribeStream = res.unsubscribe || null;
-      return { status: 200, data: { ok: true, stream: 'abierto' } };
-    } catch (err) {
-      this._publicarEvento('iniciar_impresion.failed', { project_id: pid, motivo: 'error', error: err.message });
-      return { status: 503, data: { error: 'UPSTREAM_UNREACHABLE', message: err.message } };
     }
+    return this._delegarStreamAlBridge(pid);
   }
 
   // 9.4 — CONVERSOR interno: estado crudo -> estado_sistema
@@ -159,6 +161,42 @@ class AdaptadorImpresoraReflejo extends ModuloHibridoReflejo {
       bed_target: heaterBed.target != null ? this._round(heaterBed.target, 2) : null,
       idle_state: idleTimeout.state || 'desconocido'
     };
+  }
+
+  // =============================================================
+  // Delegación al bridge remoto (MQTT RPC)
+  // =============================================================
+  async _delegarAlBridge(op, payload, pid) {
+    const res = await this._rpc(`${BRIDGE_PREFIX}.${op}.request`, payload, { timeout_ms: 30000 });
+    if (!res) {
+      this._publicarEvento(`${op}.failed`, { project_id: pid, motivo: 'bridge_sin_respuesta' });
+      return { status: 503, data: { error: 'UPSTREAM_UNREACHABLE', message: 'bridge no responde (timeout)' } };
+    }
+    if (res.ok !== true) {
+      this._publicarEvento(`${op}.failed`, { project_id: pid, motivo: 'bridge_rechazo', error: res.error });
+      return { status: 502, data: { error: 'UPSTREAM_INVALID_RESPONSE', message: res.error || 'bridge rechazo la operacion' } };
+    }
+    if (op === 'subir_gcode') return { status: 200, data: { ok: true, id: res.id || null, confirmado: true } };
+    return { status: 200, data: { ok: true, confirmado: true } };
+  }
+
+  async _delegarStreamAlBridge(pid) {
+    const res = await this._rpc(`${BRIDGE_PREFIX}.observar_estado.request`, { project_id: pid }, { timeout_ms: 15000 });
+    if (!res || res.ok !== true) {
+      this._publicarEvento('observar_estado.failed', { project_id: pid, motivo: 'bridge_sin_respuesta' });
+      return { status: 503, data: { error: 'UPSTREAM_UNREACHABLE', message: 'bridge no responde para el stream' } };
+    }
+    if (this.eventBus?.subscribe) {
+      this._unsubBridgePush = this.eventBus.subscribe(`${BRIDGE_PREFIX}.estado_push`, (event) => {
+        const crudo = event?.data || event;
+        const interpretado = this._interpretarEstado(crudo);
+        this._publicarEvento('adaptador-impresora.estado_crudo', {
+          project_id: pid, crudo, estado_sistema: interpretado
+        });
+      });
+    }
+    this._streamAbierto = true;
+    return { status: 200, data: { ok: true, stream: 'abierto', via: 'bridge' } };
   }
 
   // =============================================================

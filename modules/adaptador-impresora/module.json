@@ -1,9 +1,10 @@
 {
   "_doc": "PUENTE hacia la impresora 3D SPARKX i7 (Moonraker). Transporta, no decide, no persiste. Escucha RPCs del ciclo-impresion (subir_gcode, iniciar_impresion, observar_estado) y delega en el puerto de la impresora. La impresora reporta por PUSH (WebSocket, sin polling): print_stats (state, filament_used mm, print_duration, total_duration, current_layer, total_layer), filament_switch_sensor (filament_detected), virtual_sdcard (progress 0-1), idle_timeout (state), extruder/heater_bed (temperature, target), pause_resume (is_paused). El adaptador interpreta el estado crudo -> estado_sistema (CONVERSOR interno _interpretarEstado): {imprimiendo, completado, fallo, pausado, desconectado}. El puerto de la impresora se inyecta via registrarImpresora({ subirGcode, iniciarImpresion, observarEstado }). Sin store: es frontera de transporte. Todo flujo cierra su circulo con par de fallo (*.failed).",
   "name": "adaptador-impresora",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "_v0_1_0_nota": "Primera version. PUENTE a la impresora 3D: subir_gcode, iniciar_impresion, observar_estado (stream push). Conversor interno _interpretarEstado (9.4). Sin store ni persistencia.",
-  "description": "Puente a la impresora 3D SPARKX i7: sube gcode, inicia impresion y observa el estado por stream push, interpretandolo a estado_sistema.",
+  "_v0_2_0_nota": "Doble transporte: puerto local inyectado (mismo proceso) O delegacion al thin bridge remoto (bridge.moonraker.*) por MQTT RPC. Fix: observar_estado.failed corregido (antes decia iniciar_impresion.failed).",
+  "description": "Puente a la impresora 3D SPARKX i7: sube gcode, inicia impresion y observa el estado por stream push, interpretandolo a estado_sistema. Delega al thin bridge remoto si no hay puerto local.",
   "language": "es",
   "main": "index.js",
 
@@ -14,8 +15,12 @@
   ],
 
   "publishes": [
-    { "event": "adaptador-impresora.estado_crudo", "description": "Estado crudo de la impresora + estado_sistema interpretado, emitido por cada push del stream." },
+    { "event": "adaptador-impresora.estado_crudo", "description": "Estado crudo de la impresora + estado_sistema interpretado, emitido por cada push del stream (local o bridge)." },
     { "event": "subir_gcode.failed",               "description": "Par de fallo: no se pudo subir el gcode a la impresora." },
-    { "event": "iniciar_impresion.failed",         "description": "Par de fallo: no se pudo iniciar la impresion." }
+    { "event": "iniciar_impresion.failed",         "description": "Par de fallo: no se pudo iniciar la impresion." },
+    { "event": "observar_estado.failed",           "description": "Par de fallo: no se pudo abrir el stream de estado." },
+    { "event": "bridge.moonraker.subir_gcode.request",        "description": "RPC al thin bridge: subir gcode a Moonraker." },
+    { "event": "bridge.moonraker.iniciar_impresion.request",   "description": "RPC al thin bridge: iniciar impresion en Moonraker." },
+    { "event": "bridge.moonraker.observar_estado.request",    "description": "RPC al thin bridge: abrir stream de estado de Moonraker." }
   ]
 }

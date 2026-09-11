@@ -1,0 +1,220 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "cola-impresion",
+  "version": "blueprint-2.2.0",
+  "moduleId": "cola-impresion",
+  "actor": "jefe",
+  "_doc": "Blueprint de interfaz de cola-impresion — CUSTODIO del proyecto 3D. CREADO por prisma-universal (FASE 6.5) como INGENIERO DE INTERFAZ DE ENKI, consumiendo el esquema-jefe de F6 (modules/cola-impresion/esquema-jefe/esquema-jefe.md, LA FUENTE DE VERDAD), module.json e index.js. SEPARACION DE RESPONSABILIDADES (opcion B): F6.5 declara SOLO ui.ops (con rol), ui.datos, ui.flujo, ui.estados, transporte.rpc y transporte.salida. NO se declara ui.formas — F7 decide las formas al construir. Cada op de ui.ops corresponde a un handler REAL (onEntrarRequest/onSiguienteRequest/onReordenarRequest/onLongitudRequest). La proyeccion del orden propuesto por el motor _ordenar sobre _pendientes NO tiene op RPC dedicada de listar: la vista se arma de siguiente + longitud (documentado en ui.datos como hueco de op listar).",
+  "_lente_roles": {
+    "agente": "prisma-universal",
+    "fase": "F6_5",
+    "enfoque": "como ingeniero de interfaz de Enki para la interfaz PRACTICA de cola-impresion (la cola del jefe)",
+    "metodo": "esquematizador-universal (prisma de 5 huecos) + lente rol JEFE, verificando cada op contra handlers reales en index.js",
+    "arbitro": "escribe-en-store (futuro) -> jefe · dispara-operacion-fria -> jefe · solo-informa -> neutro",
+    "consolidacion": "modules/cola-impresion/esquema-jefe/esquema-jefe.md",
+    "dualidad": "JEFE=entrar (append, da de alta una pieza aprobada) + reordenar (mano del dueno sobre la prioridad del motor) + siguiente (disparador de la cara fria 'que imprimir ahora'). neutro=longitud (lectura pura que alimenta el pulso pendientes/total). project.activated es sistema, no UI.",
+    "senales_pareadas": {
+      "entrar": "cola.entrada",
+      "entrar.fallo": "cola.entrar.failed",
+      "siguiente": "cola.extraccion",
+      "siguiente.vacia": "cola.vacia",
+      "reordenar": "cola.reordenada"
+    }
+  },
+  "titulo": "Cola de impresion 3D del taller (CUSTODIO): entrar/reordenar/siguiente/longitud, persistida por proyecto. Es el UNICO escritor de su store de cola (por proyecto via pos-persistencia). Cola NO es FIFO simple: un motor de ordenacion _ordenar puntua cada pieza pendiente con variables (material, urgencia, tamano, tiempo) ajustables con el uso; la cola NUNCA decide que imprimir (invariante 6: solo ordena lo aprobado). Rol del dueno: entrar piezas aprobadas (la escritura clave), reordenar la prioridad cuando cambia, saber cual sigue y cuanto hay pendiente. Emite cola.entrada/extraccion/reordenada/vacia; par de fallo cola.entrar.failed. La vista re-lee via las senales, nunca recarga.",
+  "eventos_publicados": [
+    "cola.entrada",
+    "cola.extraccion",
+    "cola.reordenada",
+    "cola.vacia",
+    "cola.entrar.failed"
+  ],
+  "eventos_que_escucho": [
+    "cola.entrar.request",
+    "cola.siguiente.request",
+    "cola.reordenar.request",
+    "cola.longitud.request",
+    "project.activated"
+  ],
+  "transporte": {
+    "rpc": [
+      "cola.entrar.request -> .response",
+      "cola.siguiente.request -> .response",
+      "cola.reordenar.request -> .response",
+      "cola.longitud.request -> .response"
+    ],
+    "salida": [
+      "cola.entrada",
+      "cola.extraccion",
+      "cola.reordenada",
+      "cola.vacia",
+      "cola.entrar.failed"
+    ]
+  },
+  "ui": {
+    "ops": {
+      "entrar": {
+        "rol": "jefe",
+        "titulo": "Entrar pieza",
+        "descripcion": "Da de alta una pieza aprobada en la cola (append al store + emite cola.entrada). Es la escritura clave del custodio y una de las pocas decisiones de declaracion del dueno. Requiere project_id, modelo_id, nombre (400 si faltan). Valida catalogo.obtener (RPC best-effort, 404 si el modelo no existe, no bloquea si el catalogo no responde) y no duplicado pendiente por modelo_id (409 ALREADY_EXISTS).",
+        "logica": "Editor-bloque (declaracion multi-campo, 1 gesto no fases) para el alta. Al guardar emite cola.entrar.request y la vista re-lee via la senal cola.entrada (nunca recarga). Es el gesto rey del jefe (frecuencia -> jerarquia).",
+        "args": [
+          {
+            "nombre": "project_id",
+            "tipo": "string",
+            "required": true,
+            "descripcion": "Proyecto al que pertenece la cola (obligatorio, 400 si falta)."
+          },
+          {
+            "nombre": "modelo_id",
+            "tipo": "string",
+            "required": true,
+            "descripcion": "Identificador del modelo aprobado (obligatorio, 400 si falta). Valida existencia en catalogo y no duplicado pendiente."
+          },
+          {
+            "nombre": "nombre",
+            "tipo": "string",
+            "required": true,
+            "descripcion": "Nombre legible de la pieza (obligatorio, 400 si falta)."
+          },
+          {
+            "nombre": "material",
+            "tipo": "string",
+            "required": false,
+            "descripcion": "Material de la pieza. Alimenta el motor de ordenacion (coincidir con materialCargado evita cambio de filamento). Default 'desconocido'."
+          },
+          {
+            "nombre": "urgencia",
+            "tipo": "integer",
+            "required": false,
+            "descripcion": "Prioridad declarada del dueno, clamp 1..5 (default 1). Mayor -> mas score en el motor."
+          },
+          {
+            "nombre": "tamano",
+            "tipo": "integer",
+            "required": false,
+            "descripcion": "Tamano estimado en mm3 (0 = desconocido). Piezas pequenas primero -> encadenar rapido."
+          }
+        ]
+      },
+      "siguiente": {
+        "rol": "jefe",
+        "titulo": "Siguiente a imprimir",
+        "descripcion": "Extrae la siguiente pieza segun el motor de ordenacion _ordenar (la cara de decision fria 'cual imprime ahora'). Si no hay pendientes emite cola.vacia y devuelve {vacia:true, item:null}; si no, pop a 'imprimiendo', ajusta materialCargado (evita cambio de filamento) y emite cola.extraccion. Lo dispara el dueno manualmente; tambien lo encadena ciclo-impresion (consumidor).",
+        "logica": "Accion 'siguiente' (extraer el que toca). Requiere solo project_id. La senal cola.extraccion confirma y avanza el orden; cola.vacia avisa si no hay trabajo (el dueno decide si entra mas). Emite cola.siguiente.request.",
+        "args": [
+          {
+            "nombre": "project_id",
+            "tipo": "string",
+            "required": true,
+            "descripcion": "Proyecto cuya cola se consulta (obligatorio, 400 si falta)."
+          }
+        ]
+      },
+      "reordenar": {
+        "rol": "jefe",
+        "titulo": "Reordenar pendiente",
+        "descripcion": "Sube/baja una pieza pendiente a una posicion (1-based) — la mano del dueno para corregir la prioridad que el motor propone. Requiere project_id e item_id (400 si faltan); item inexistente (404), estado no pendiente (409 CONFLICT_STATE: solo se reordena una pendiente). Emite cola.reordenada con pos y total_pendientes.",
+        "logica": "Control de subir/bajar a posicion sobre cada pendiente (gesto de correccion). Solo aplica a pendientes. Emite cola.reordenar.request; la senal cola.reordenada refresca el orden propuesto, nunca recarga.",
+        "args": [
+          {
+            "nombre": "project_id",
+            "tipo": "string",
+            "required": true,
+            "descripcion": "Proyecto cuya cola se reordena (obligatorio, 400 si falta)."
+          },
+          {
+            "nombre": "item_id",
+            "tipo": "string",
+            "required": true,
+            "descripcion": "Id del item pendiente a mover (obligatorio, 400 si falta). Debe estar en estado pendiente."
+          },
+          {
+            "nombre": "pos",
+            "tipo": "integer",
+            "required": true,
+            "descripcion": "Posicion 1-based a la que mover la pieza (clamp 1..len)."
+          }
+        ]
+      },
+      "longitud": {
+        "rol": "neutro",
+        "titulo": "Longitud de la cola",
+        "descripcion": "Longitud de la cola: {pendientes, total}. Es el pulso del jefe (n pendientes · total en cola). Lectura pura, sin senal: la vista re-lee, nunca recarga.",
+        "logica": "Cabecera de pulso (pendientes / total). Tambien es la op mas lectora REAL para ui.datos: no hay op RPC dedicada de listar la cola completa; la vista se arma de siguiente + longitud (hueco de op listar documentado). Emite cola.longitud.request.",
+        "args": [
+          {
+            "nombre": "project_id",
+            "tipo": "string",
+            "required": true,
+            "descripcion": "Proyecto cuya cola se mide (obligatorio, 400 si falta)."
+          }
+        ]
+      }
+    },
+    "datos": {
+      "op": "longitud",
+      "titulo": "Pulso de la cola (pendientes · total)",
+      "refresh_on": [
+        "cola.entrada",
+        "cola.extraccion",
+        "cola.reordenada",
+        "cola.vacia"
+      ],
+      "_nota_hueco": "HUECO DOCUMENTADO de op 'listar': index.js NO tiene handler RPC que liste la cola completa. La proyeccion del orden propuesto del motor (_ordenar sobre _pendientes) se sirve desde la vista y no hay op RPC dedicada. La op mas lectora real es 'longitud' (pendientes/total). Si F7 necesita una cinta de la cola completa, requerira una op nueva con handler en el modulo (de la decision de F6). No se inventa una op sin handler."
+    },
+    "estados": [
+      {
+        "nombre": "pendiente",
+        "terminal": false,
+        "color": "blue",
+        "icono": "🔵"
+      },
+      {
+        "nombre": "imprimiendo",
+        "terminal": false,
+        "color": "orange",
+        "icono": "🖨️"
+      },
+      {
+        "nombre": "hecho",
+        "terminal": true,
+        "color": "green",
+        "icono": "✅"
+      },
+      {
+        "nombre": "retirada",
+        "terminal": true,
+        "color": "gray",
+        "icono": "🗑️"
+      }
+    ],
+    "flujo": [
+      {
+        "nombre": "jefe",
+        "orden": 1,
+        "ops": [
+          "entrar",
+          "reordenar",
+          "siguiente"
+        ],
+        "descripcion": "Cara de decision del dueno: entrar (editor-bloque multi-campo: project_id, modelo_id, nombre, material, urgencia, tamano; senal pareada cola.entrada refresca, nunca recarga), reordenar (subir/bajar una pendiente a posicion, SOLO pendientes; senal cola.reordenada refresca el orden propuesto), siguiente (extrae el que toca segun el motor; cola.extraccion confirma y avanza, cola.vacia si no hay trabajo). Son las escrituras/disparos del jefe."
+      },
+      {
+        "nombre": "neutro",
+        "orden": 2,
+        "ops": [
+          "longitud"
+        ],
+        "descripcion": "Lectura pura que alimenta el pulso permanente del jefe (n pendientes · total). La vista re-lee, nunca recarga. project.activated (sistema, restaura persistencia) no es cara de UI."
+      }
+    ],
+    "dependencias": {},
+    "roles": {
+      "entrar": "jefe",
+      "siguiente": "jefe",
+      "reordenar": "jefe",
+      "longitud": "neutro"
+    }
+  }
+}

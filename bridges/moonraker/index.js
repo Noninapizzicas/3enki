@@ -99,13 +99,16 @@ const moonraker = MOCK
 
 // ── MQTT ──────────────────────────────────────────────────────
 
-const mqttClient = mqtt.connect(config.mqtt.broker, {
+const mqttOpts = {
   clientId: config.mqtt.clientId || `bridge-moonraker-${Date.now()}`,
-  username: config.mqtt.username,
-  password: config.mqtt.password,
   clean: true,
-  reconnectPeriod: 5000
-});
+  reconnectPeriod: 5000,
+  connectTimeout: 8000
+};
+if (config.mqtt.username) mqttOpts.username = config.mqtt.username;
+if (config.mqtt.password) mqttOpts.password = config.mqtt.password;
+
+const mqttClient = mqtt.connect(config.mqtt.broker, mqttOpts);
 
 let streamAbierto = false;
 

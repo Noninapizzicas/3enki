@@ -1,0 +1,14 @@
+{
+  "_doc": "Copia este archivo como config.json y rellena tus datos. El bridge corre en tu PC, NO en el VPS.",
+  "mqtt": {
+    "broker": "mqtts://tu-vps.example.com:8883",
+    "username": "bridge-moonraker",
+    "password": "tu_password_aqui",
+    "clientId": "bridge-moonraker-pc"
+  },
+  "moonraker": {
+    "host": "192.168.1.100",
+    "port": 7125
+  },
+  "topicPrefix": "bridge.moonraker"
+}

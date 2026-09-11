@@ -7,8 +7,10 @@
 #   2. Crea la carpeta ~/enki-bridge-moonraker
 #   3. Genera los 3 archivos del bridge (empotrados aquí)
 #   4. Instala las 2 dependencias npm (mqtt, ws)
-#   5. Crea el servicio systemd para arranque automático
-#   6. Genera config.json interactivo (pide IP de la impresora y datos MQTT)
+#   5. Genera config.json (solo pide la IP de la impresora)
+#   6. Crea el servicio systemd para arranque automático
+#
+# El broker MQTT es wss://enki-ai.online/mqtt (sin autenticación).
 #
 # Uso:
 #   chmod +x setup-pc.sh
@@ -25,9 +27,12 @@ set -euo pipefail
 
 BRIDGE_DIR="$HOME/enki-bridge-moonraker"
 SERVICE_NAME="enki-bridge-moonraker"
+MQTT_BROKER="wss://enki-ai.online/mqtt"
+MQTT_CLIENT_ID="bridge-moonraker-pc"
 
 echo ""
 echo "=== Bridge Moonraker — Instalador para PC Linux ==="
+echo "    Broker: $MQTT_BROKER (sin autenticación)"
 echo ""
 
 # ── 1. Node.js ─────────────────────────────────────────────
@@ -390,13 +395,16 @@ const moonraker = MOCK
   ? crearMock()
   : new MoonrakerClient({ ...config.moonraker, logger: log });
 
-const mqttClient = mqtt.connect(config.mqtt.broker, {
+const mqttOpts = {
   clientId: config.mqtt.clientId || `bridge-moonraker-${Date.now()}`,
-  username: config.mqtt.username,
-  password: config.mqtt.password,
   clean: true,
-  reconnectPeriod: 5000
-});
+  reconnectPeriod: 5000,
+  connectTimeout: 8000
+};
+if (config.mqtt.username) mqttOpts.username = config.mqtt.username;
+if (config.mqtt.password) mqttOpts.password = config.mqtt.password;
+
+const mqttClient = mqtt.connect(config.mqtt.broker, mqttOpts);
 
 let streamAbierto = false;
 
@@ -522,37 +530,21 @@ configure() {
   CONFIG_FILE="$BRIDGE_DIR/config.json"
 
   if [ -f "$CONFIG_FILE" ]; then
-    echo "  config.json ya existe. Saltando configuracion."
-    echo "  (Edita $CONFIG_FILE manualmente si necesitas cambiar algo)"
-    return
+    echo "  config.json ya existe. Borrando para regenerar con los datos correctos..."
+    rm -f "$CONFIG_FILE"
   fi
 
-  read -rp "  IP de la SPARKX i7 en tu red local (ej: 192.168.1.50): " MOONRAKER_HOST
-  MOONRAKER_HOST=${MOONRAKER_HOST:-192.168.1.100}
+  read -rp "  IP de la SPARKX i7 en tu red local [192.168.1.128]: " MOONRAKER_HOST
+  MOONRAKER_HOST=${MOONRAKER_HOST:-192.168.1.128}
 
   read -rp "  Puerto de Moonraker [7125]: " MOONRAKER_PORT
   MOONRAKER_PORT=${MOONRAKER_PORT:-7125}
-
-  read -rp "  URL del broker MQTT del VPS (ej: mqtts://mi-vps.com:8883): " MQTT_BROKER
-  MQTT_BROKER=${MQTT_BROKER:-mqtts://localhost:8883}
-
-  read -rp "  Usuario MQTT [bridge-moonraker]: " MQTT_USER
-  MQTT_USER=${MQTT_USER:-bridge-moonraker}
-
-  read -rsp "  Password MQTT: " MQTT_PASS
-  echo ""
-  MQTT_PASS=${MQTT_PASS:-changeme}
-
-  read -rp "  Client ID MQTT [bridge-moonraker-pc]: " MQTT_CLIENT
-  MQTT_CLIENT=${MQTT_CLIENT:-bridge-moonraker-pc}
 
   cat > "$CONFIG_FILE" << CONFIGEOF
 {
   "mqtt": {
     "broker": "${MQTT_BROKER}",
-    "username": "${MQTT_USER}",
-    "password": "${MQTT_PASS}",
-    "clientId": "${MQTT_CLIENT}"
+    "clientId": "${MQTT_CLIENT_ID}"
   },
   "moonraker": {
     "host": "${MOONRAKER_HOST}",
@@ -562,7 +554,11 @@ configure() {
 }
 CONFIGEOF
 
-  echo "  config.json creado en $CONFIG_FILE"
+  echo ""
+  echo "  config.json creado:"
+  echo "    Broker:    $MQTT_BROKER (sin autenticación)"
+  echo "    Moonraker: $MOONRAKER_HOST:$MOONRAKER_PORT"
+  echo "    ClientId:  $MQTT_CLIENT_ID"
 }
 
 # ── 6. Servicio systemd ───────────────────────────────────
@@ -616,6 +612,7 @@ echo "=== Instalacion completada ==="
 echo ""
 echo "  Directorio: $BRIDGE_DIR"
 echo "  Config:     $BRIDGE_DIR/config.json"
+echo "  Broker:     $MQTT_BROKER (sin autenticación)"
 echo ""
 echo "  Probar sin impresora:"
 echo "    cd $BRIDGE_DIR && node index.js --mock"

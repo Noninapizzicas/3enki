@@ -184,6 +184,22 @@ export const panels: Record<string, PanelDef> = {
     loader: () => import('$lib/modules/catalogo-modelos/CatalogoModelosPanel.svelte')
   },
 
+  // === WORK BAR — Historial de impresiones 3D (F7, prisma-universal, 2ª iteración) ===
+  // El botón lo pinta el manifest (zone work-bar, order 8, icon 🖨️); esta entrada es el
+  // loader de respaldo del panel (el autodescubrimiento del lazy-registry lo resuelve
+  // primero vía module.manifest.panels). Jefe LECTOR: la cinta se refresca por
+  // historial.impresion_registrada, sin gesto de escritura.
+  'historial-impresiones-panel': {
+    id: 'historial-impresiones-panel',
+    title: 'Historial de impresiones',
+    icon: '🖨️',
+    size: 'lg',
+    position: 'top',
+    zone: 'work-bar',
+    order: 8,
+    loader: () => import('$lib/modules/historial-impresiones/HistorialImpresionesPanel.svelte')
+  },
+
   // === WORK BAR — Radar de nichos (interfaz) ===
   // El botón de la barra lo renderiza el manifest.json del módulo (zone work-bar,
   // order 8, icon 📡); esta entrada es el loader que carga el panel al pulsar.

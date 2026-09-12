@@ -40,6 +40,26 @@
       }
     ]
   },
+  "ui_handlers": [
+    {
+      "action": "listar",
+      "domain": "historial",
+      "type": "workspace_module",
+      "zone": "barra_modulos",
+      "label": "Listar",
+      "description": "Lista la cinta del historial del proyecto ({project_id} -> {registros[], total}, mas reciente primero). Cara jefe LECTOR del panel F7.",
+      "handler": "handleUiListar"
+    },
+    {
+      "action": "registrar",
+      "domain": "historial",
+      "type": "workspace_module",
+      "zone": "barra_modulos",
+      "label": "Registrar",
+      "description": "Registra una impresion pasada (append-only, store.unshift mas reciente primero). Rol neutro/sistema: en el flujo normal lo invoca ciclo-impresion por RPC o entra por impresion.completada; NO es gesto del jefe (solo registro manual [ABIERTO]).",
+      "handler": "handleUiRegistrar"
+    }
+  ],
   "config": {
     "persistence": {
       "scope": "project",

@@ -21,6 +21,7 @@ Ambos comparten laboratorio, agar, grano, tecnica esteril, habitat y tecnologia 
 - [[comercio/00 - Comercio (MOC)|Comercio]] — digital, local e internacional (margenes, canales, unit economics)
 - [[inmobiliario/00 - Inmobiliario (MOC)|Inmobiliario]] — intermediacion en Espana (captacion, MLS, comisiones, legal)
 - [[trading/00 - Trading (MOC)|Trading]] — futuros, crypto, acciones, forex, opciones (gestion de riesgo, sistema, psicologia)
+- [[teoria-restricciones/00 - Teoría de las Restricciones (MOC)|Teoría de las Restricciones (TOC)]] — Goldratt, 5 pasos de focalizacion, Drum-Buffer-Rope, Contabilidad del Throughput, Procesos de Pensamiento, Cadena Critica (CCPM), distribucion, ventas, DevOps
 
 ### Ingenieria
 - [[refrigeracion-por-calor/00 - Frio accionado por calor (MOC)|Frio accionado por calor]] — absorcion, adsorcion, eyector; fuentes termicas

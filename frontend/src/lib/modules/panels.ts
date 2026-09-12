@@ -216,6 +216,23 @@ export const panels: Record<string, PanelDef> = {
     loader: () => import('$lib/modules/cola-impresion/ColaImpresionPanel.svelte')
   },
 
+  // === WORK BAR — Ciclo de impresión 3D (F7, prisma-universal, 4ª iteración) ===
+  // El botón lo pinta el manifest (zone work-bar, order 8, icon ⏱️); esta entrada es el
+  // loader de respaldo del panel (el autodescubrimiento del lazy-registry lo resuelve
+  // primero vía module.manifest.panels). Jefe OPERADOR DE MÁQUINA: ver el estado del
+  // ciclo + iniciar + confirmar transiciones físicas. PANEL DE ESTADO de una máquina de
+  // estados (no CRUD): se reconstruye por las señales del orquestador (no hay RPC lectora).
+  'ciclo-impresion-panel': {
+    id: 'ciclo-impresion-panel',
+    title: 'Ciclo de impresión',
+    icon: '⏱️',
+    size: 'lg',
+    position: 'top',
+    zone: 'work-bar',
+    order: 8,
+    loader: () => import('$lib/modules/ciclo-impresion/CicloImpresionPanel.svelte')
+  },
+
   // === WORK BAR — Radar de nichos (interfaz) ===
   // El botón de la barra lo renderiza el manifest.json del módulo (zone work-bar,
   // order 8, icon 📡); esta entrada es el loader que carga el panel al pulsar.

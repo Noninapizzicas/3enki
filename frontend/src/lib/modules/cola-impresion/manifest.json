@@ -1,0 +1,9 @@
+{
+  "id": "cola-impresion",
+  "name": "Cola de impresión",
+  "version": "0.1.0",
+  "zone": "work-bar",
+  "order": 8,
+  "icon": "🖨️",
+  "label": "Cola 3D"
+}

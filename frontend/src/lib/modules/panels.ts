@@ -200,6 +200,22 @@ export const panels: Record<string, PanelDef> = {
     loader: () => import('$lib/modules/historial-impresiones/HistorialImpresionesPanel.svelte')
   },
 
+  // === WORK BAR — Cola de impresión 3D (F7, prisma-universal, 3ª iteración) ===
+  // El botón lo pinta el manifest (zone work-bar, order 8, icon 🖨️); esta entrada es el
+  // loader de respaldo del panel (el autodescubrimiento del lazy-registry lo resuelve
+  // primero vía module.manifest.panels). Jefe ESCRITOR-REORDENADOR-DISPARADOR: entrar +
+  // reordenar + siguiente; la cinta se refresca por cola.entrada/extraccion/reordenada/vacia.
+  'cola-impresion-panel': {
+    id: 'cola-impresion-panel',
+    title: 'Cola de impresión',
+    icon: '🖨️',
+    size: 'lg',
+    position: 'top',
+    zone: 'work-bar',
+    order: 8,
+    loader: () => import('$lib/modules/cola-impresion/ColaImpresionPanel.svelte')
+  },
+
   // === WORK BAR — Radar de nichos (interfaz) ===
   // El botón de la barra lo renderiza el manifest.json del módulo (zone work-bar,
   // order 8, icon 📡); esta entrada es el loader que carga el panel al pulsar.

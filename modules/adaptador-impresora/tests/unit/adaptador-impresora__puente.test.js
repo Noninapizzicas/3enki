@@ -31,9 +31,15 @@ function makeModulo({ rpcResponse } = {}) {
   m.logger = stubs.logger;
   m.metrics = stubs.metrics;
   if (rpcResponse !== undefined) {
-    m._rpc = async () => rpcResponse;
+    m._rpcBridge = async () => rpcResponse;
   }
-  return { m, ...stubs };
+  const bridgeSubs = {};
+  m._subscribeBridge = (topic, handler) => {
+    if (!bridgeSubs[topic]) bridgeSubs[topic] = [];
+    bridgeSubs[topic].push(handler);
+    return () => { bridgeSubs[topic] = (bridgeSubs[topic] || []).filter(f => f !== handler); };
+  };
+  return { m, bridgeSubs, ...stubs };
 }
 
 // Impresora fake que reporta por push
@@ -175,12 +181,14 @@ tests.push({
 tests.push({
   name: 'observar_estado sin impresora delega al bridge ok + recibe push',
   fn: async () => {
-    const { m, publicados, eventBus } = makeModulo({ rpcResponse: { ok: true, stream: 'abierto', request_id: 'r1' } });
+    const { m, publicados, bridgeSubs } = makeModulo({ rpcResponse: { ok: true, stream: 'abierto', request_id: 'r1' } });
     const res = await m._observarEstado({ project_id: 'p1' });
     assert.strictEqual(res.status, 200);
     assert.strictEqual(res.data.stream, 'abierto');
     assert.strictEqual(res.data.via, 'bridge');
-    eventBus.publish('bridge.moonraker.estado_push', {
+    const handlers = bridgeSubs['bridge.moonraker.estado_push'];
+    assert.ok(handlers && handlers.length > 0, 'debe suscribirse a estado_push');
+    handlers[0]({
       data: { print_stats: { state: 'printing' }, virtual_sdcard: { progress: 0.5 } }
     });
     const emitido = publicados.find(p => p.ev === 'adaptador-impresora.estado_crudo');

@@ -92,6 +92,9 @@
     return map[estado] || { color: '', icono: '❔' };
   }
 
+  /** Metadatos del estado actual (color + icono) — derivado reactivo. */
+  $: meta = estadoMeta($cicloEstado);
+
   /** Orden del flujo de los 8 estados (para la máquina visual). */
   const ORDEN_ESTADOS: EstadoCiclo[] = [
     'IDLE', 'OBTENIENDO_GCODE', 'SUBIENDO_GCODE', 'IMPRIMIENDO',
@@ -132,7 +135,6 @@
   {/if}
 
   <!-- PUNT0 DE LA MÁQUINA (el centro del panel de estado) -->
-  {@const meta = estadoMeta($cicloEstado)}
   <div class="estado-hero">
     <span class="estado-ico">{meta.icono}</span>
     <div class="estado-bloque">

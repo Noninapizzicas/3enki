@@ -4,15 +4,15 @@
   "version": "blueprint-2.2.0",
   "moduleId": "cola-impresion",
   "actor": "jefe",
-  "_doc": "Blueprint de interfaz de cola-impresion — CUSTODIO del proyecto 3D. CREADO por prisma-universal (FASE 6.5) como INGENIERO DE INTERFAZ DE ENKI, consumiendo el esquema-jefe de F6 (modules/cola-impresion/esquema-jefe/esquema-jefe.md, LA FUENTE DE VERDAD), module.json e index.js. SEPARACION DE RESPONSABILIDADES (opcion B): F6.5 declara SOLO ui.ops (con rol), ui.datos, ui.flujo, ui.estados, transporte.rpc y transporte.salida. NO se declara ui.formas — F7 decide las formas al construir. Cada op de ui.ops corresponde a un handler REAL (onEntrarRequest/onSiguienteRequest/onReordenarRequest/onLongitudRequest). La proyeccion del orden propuesto por el motor _ordenar sobre _pendientes NO tiene op RPC dedicada de listar: la vista se arma de siguiente + longitud (documentado en ui.datos como hueco de op listar).",
+  "_doc": "Blueprint de interfaz de cola-impresion — CUSTODIO del proyecto 3D. CREADO por prisma-universal (FASE 6.5) como INGENIERO DE INTERFAZ DE ENKI, consumiendo el esquema-jefe de F6 (modules/cola-impresion/esquema-jefe/esquema-jefe.md, LA FUENTE DE VERDAD), module.json e index.js, y AMPLIADO en la pasada TRABAJADOR con el esquema-trabajador de F6 (modules/cola-impresion/esquema-trabajador/esquema-trabajador.md, ROL TRABAJADOR/OPERADOR — SUMAR, no recrear). SEPARACION DE RESPONSABILIDADES (opcion B): F6.5 declara SOLO ui.ops (con rol), ui.datos, ui.flujo, ui.estados, transporte.rpc y transporte.salida. NO se declara ui.formas — F7 decide las formas al construir. Cada op de ui.ops corresponde a un handler REAL (onEntrarRequest/onSiguienteRequest/onReordenarRequest/onLongitudRequest/onListarRequest). La proyeccion del orden propuesto por el motor _ordenar sobre _pendientes NO tiene op RPC dedicada de listar: la vista se arma de siguiente + longitud (documentado en ui.datos como hueco de op listar). PASADA TRABAJADOR: las lecturas (longitud/listar) pasan de rol neutro a TRABAJADOR — el operador junto a la impresora es LECTOR de la cinta (ve que se imprime ahora y que sigue, con material, para preparar el rollo y la maquina). Se conserva jefe para entrar/siguiente/reordenar (el trabajador NO escribe en cola-impresion: ni declara ni reordena ni extrae). Se suma el flujo trabajador_vigilar.",
   "_lente_roles": {
     "agente": "prisma-universal",
     "fase": "F6_5",
-    "enfoque": "como ingeniero de interfaz de Enki para la interfaz PRACTICA de cola-impresion (la cola del jefe)",
-    "metodo": "esquematizador-universal (prisma de 5 huecos) + lente rol JEFE, verificando cada op contra handlers reales en index.js",
-    "arbitro": "escribe-en-store (futuro) -> jefe · dispara-operacion-fria -> jefe · solo-informa -> neutro",
-    "consolidacion": "modules/cola-impresion/esquema-jefe/esquema-jefe.md",
-    "dualidad": "JEFE=entrar (append, da de alta una pieza aprobada) + reordenar (mano del dueno sobre la prioridad del motor) + siguiente (disparador de la cara fria 'que imprimir ahora'). neutro=longitud (lectura pura que alimenta el pulso pendientes/total). project.activated es sistema, no UI.",
+    "enfoque": "como ingeniero de interfaz de Enki para la interfaz PRACTICA de cola-impresion (la cola del jefe + la cinta que VIGILA el trabajador/operador)",
+    "metodo": "esquematizador-universal (prisma de 5 huecos) + lente rol TRABAJADOR sobre la pasada jefe ya existente (AMPLIAR, no recrear), verificando cada op contra handlers reales en index.js",
+    "arbitro": "escribe-en-store / decide-el-futuro-de-la-cola -> jefe · dispara-operacion-fria -> jefe · LEE-la-cinta-a-diario-para-operar -> trabajador · solo-informa -> neutro (sistema)",
+    "consolidacion": "modules/cola-impresion/esquema-jefe/esquema-jefe.md + esquema-trabajador/esquema-trabajador.md",
+    "dualidad": "JEFE=entrar (append, da de alta una pieza aprobada) + reordenar (mano del dueno sobre la prioridad del motor) + siguiente (disparador de la cara fria 'que imprimir ahora'). TRABAJADOR=listar (LECTOR de la cinta completa: que esta en curso y que sigue, con estado/material/orden, para preparar la impresora) + longitud (pulso 'n pendientes · total' de cuanto trabajo hay por delante). Como en catalogo-modelos (y a diferencia de ciclo-impresion), el trabajador aqui es LECTOR casi puro de la cinta: NO toca entrar/reordenar/siguiente (son del jefe). project.activated es sistema, no UI.",
     "senales_pareadas": {
       "entrar": "cola.entrada",
       "entrar.fallo": "cola.entrar.failed",
@@ -21,7 +21,7 @@
       "reordenar": "cola.reordenada"
     }
   },
-  "titulo": "Cola de impresion 3D del taller (CUSTODIO): entrar/reordenar/siguiente/longitud, persistida por proyecto. Es el UNICO escritor de su store de cola (por proyecto via pos-persistencia). Cola NO es FIFO simple: un motor de ordenacion _ordenar puntua cada pieza pendiente con variables (material, urgencia, tamano, tiempo) ajustables con el uso; la cola NUNCA decide que imprimir (invariante 6: solo ordena lo aprobado). Rol del dueno: entrar piezas aprobadas (la escritura clave), reordenar la prioridad cuando cambia, saber cual sigue y cuanto hay pendiente. Emite cola.entrada/extraccion/reordenada/vacia; par de fallo cola.entrar.failed. La vista re-lee via las senales, nunca recarga.",
+  "titulo": "Cola de impresion 3D del taller (CUSTODIO): entrar/reordenar/siguiente/longitud, persistida por proyecto. Es el UNICO escritor de su store de cola (por proyecto via pos-persistencia). Cola NO es FIFO simple: un motor de ordenacion _ordenar puntua cada pieza pendiente con variables (material, urgencia, tamano, tiempo) ajustables con el uso; la cola NUNCA decide que imprimir (invariante 6: solo ordena lo aprobado). Rol del dueno (JEFE): entrar piezas aprobadas (la escritura clave), reordenar la prioridad cuando cambia, saber cual sigue y cuanto hay pendiente. Rol del trabajador/operador (TRABAJADOR): VIGILA la cinta de la cola (listar: que se imprime ahora y que sigue, con estado/material/orden, para preparar el rollo y la maquina) + longitud (pulso de cuanto trabajo hay por delante) — es LECTOR, no escribe en la cola (entrar/reordenar/siguiente son del jefe). Emite cola.entrada/extraccion/reordenada/vacia; par de fallo cola.entrar.failed. La vista re-lee via las senales, nunca recarga.",
   "eventos_publicados": [
     "cola.entrada",
     "cola.extraccion",
@@ -133,10 +133,10 @@
         ]
       },
       "longitud": {
-        "rol": "neutro",
+        "rol": "trabajador",
         "titulo": "Longitud de la cola",
-        "descripcion": "Longitud de la cola: {pendientes, total}. Es el pulso del jefe (n pendientes · total en cola). Lectura pura, sin senal: la vista re-lee, nunca recarga.",
-        "logica": "Cabecera de pulso (pendientes / total). Emite cola.longitud.request.",
+        "descripcion": "Longitud de la cola: {pendientes, total}. Es el pulso que ve el trabajador (n pendientes · total en cola): cuanto trabajo hay por delante antes de que cambie el rollo. Lectura pura, sin senal: la vista re-lee, nunca recarga. Tambien alimenta la cabecera del jefe.",
+        "logica": "Cabecera de pulso (pendientes / total) compartida entre trabajador y jefe. El trabajador la usa para preparar material cuando se acerca un cambio de filamento. Emite cola.longitud.request.",
         "args": [
           {
             "nombre": "project_id",
@@ -147,10 +147,10 @@
         ]
       },
       "listar": {
-        "rol": "neutro",
-        "titulo": "Listar la cola completa",
-        "descripcion": "Devuelve todos los items de la cola del proyecto (pendiente/imprimiendo/hecho/retirada) ordenados por posicion, con estado, material, urgencia, tamano y materialCargado. Es la op que alimenta la cinta de la cola (el jefe ve que espera y en que orden).",
-        "logica": "Cinta/tabla de la cola completa (listar): filas con estado, material, urgencia, orden. La senal cola.entrada/extraccion/reordenada refresca (nunca recarga). Emite cola.listar.request.",
+        "rol": "trabajador",
+        "titulo": "Listar la cola completa (cinta del taller)",
+        "descripcion": "Devuelve todos los items de la cola del proyecto (pendiente/imprimiendo/hecho/retirada) con estado, material, urgencia, tamano, orden y materialCargado. Es la CINTA que el trabajador VIGILA para preparar la impresora: que pieza esta en marcha (imprimiendo), que sigue (pendiente, destacado) y con que material (para tener el rollo correcto puesto). El item imprimiendo se destaca como 'en curso'; el siguiente pendiente como 'a continuacion'.",
+        "logica": "Cinta/tabla de la cola completa (listar): filas con estado, material, urgencia, orden. El trabajador la lee para preparar el material y la maquina; la senal cola.entrada/extraccion/reordenada refresca (nunca recarga). Emite cola.listar.request.",
         "args": [
           {
             "nombre": "project_id",
@@ -164,6 +164,7 @@
     "datos": {
       "op": "listar",
       "titulo": "Cinta de la cola (pendientes en orden)",
+      "_consumidor": "La cinta (listar) la consumen TANTO el jefe (ve que espera y en que orden, decide entrar/reordenar/siguiente) COMO el trabajador (LECTOR: ve que pieza esta en marcha y que sigue, con material, para preparar el rollo y la maquina antes de ejecutar en ciclo-impresion). Incluye item imprimiendo destacado como 'en curso' y el siguiente pendiente como 'a continuacion'.",
       "refresh_on": [
         "cola.entrada",
         "cola.extraccion",
@@ -206,16 +207,16 @@
           "reordenar",
           "siguiente"
         ],
-        "descripcion": "Cara de decision del dueno: entrar (editor-bloque multi-campo: project_id, modelo_id, nombre, material, urgencia, tamano; senal pareada cola.entrada refresca, nunca recarga), reordenar (subir/bajar una pendiente a posicion, SOLO pendientes; senal cola.reordenada refresca el orden propuesto), siguiente (extrae el que toca segun el motor; cola.extraccion confirma y avanza, cola.vacia si no hay trabajo). Son las escrituras/disparos del jefe."
+        "descripcion": "Cara de decision del dueno: entrar (editor-bloque multi-campo: project_id, modelo_id, nombre, material, urgencia, tamano; senal pareada cola.entrada refresca, nunca recarga), reordenar (subir/bajar una pendiente a posicion, SOLO pendientes; senal cola.reordenada refresca el orden propuesto), siguiente (extrae el que toca segun el motor; cola.extraccion confirma y avanza, cola.vacia si no hay trabajo). Son las escrituras/disparos del jefe — el trabajador NO las toca."
       },
       {
-        "nombre": "neutro",
+        "nombre": "trabajador_vigilar",
         "orden": 2,
         "ops": [
           "longitud",
           "listar"
         ],
-        "descripcion": "Lectura pura que alimenta el pulso permanente del jefe (n pendientes · total) y la cinta de la cola en orden (listar). La vista re-lee, nunca recarga. project.activated (sistema, restaura persistencia) no es cara de UI."
+        "descripcion": "VIGILAR la cinta del taller — la cara del TRABAJADOR/operador junto a la impresora: longitud (cabecera de pulso 'n pendientes · total': cuanto trabajo hay por delante antes de cambiar el rollo) + listar (la cinta completa: que pieza esta en marcha (imprimiendo) y que sigue (pendiente), con estado/material/orden, para preparar el material y la maquina). Es LECTOR casi puro: RPC de lectura, la vista re-lee, refrescada por las senales cola.entrada/extraccion/reordenada/vacia que EMITE el jefe/motor (el trabajador NO las dispara). NO hay escrituras ni disparos del worker: no entra, no reordena, no extrae."
       }
     ],
     "dependencias": {},
@@ -223,8 +224,8 @@
       "entrar": "jefe",
       "siguiente": "jefe",
       "reordenar": "jefe",
-      "longitud": "neutro",
-      "listar": "neutro"
+      "longitud": "trabajador",
+      "listar": "trabajador"
     }
   },
   "_eventos_que_escucho_nota": "Vacio a proposito (ley ANTICOLISION: subscribes XOR eventos_que_escucho). Los eventos que escucha ya son la fuente de verdad en module.json.subscribes; no se duplican aqui."

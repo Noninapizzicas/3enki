@@ -1,0 +1,188 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "gestion-filamento",
+  "version": "blueprint-2.2.0",
+  "moduleId": "gestion-filamento",
+  "actor": "jefe",
+  "_doc": "Blueprint de interfaz de gestion-filamento — CUSTODIO del proyecto 3D. CREADO por prisma-universal (FASE 6.5) como INGENIERO DE INTERFAZ DE ENKI, consumiendo el esquema-jefe de F6 (modules/gestion-filamento/esquema-jefe/esquema-jefe.md, LA FUENTE DE VERDAD del rol jefe), el esquema-trabajador de F6 (modules/gestion-filamento/esquema-trabajador/esquema-trabajador.md, LA FUENTE DE VERDAD del rol TRABAJADOR/OPERADOR), module.json (subscribes/publishes) e index.js (handlers/proyecciones/invariantes reales). NO EXISTIA blueprint previo: en la pasada del jefe este modulo llego solo a F6 (esquema-jefe y esquema-trabajador, PR #576), sin F6.5 ni F7. Se CREA desde CERO declarando las caras de AMBOS roles: JEFE (registrar, alta de rollo con toggle activo) y TRABAJADOR (listar, LECTOR del stock del taller). SEPARACION DE RESPONSABILIDADES (opcion B): F6.5 declara SOLO ui.ops (con rol), ui.datos, ui.estados, ui.flujo y transporte.rpc. NO se declara ui.formas — F7 decide las formas al construir. Cada op de ui.ops corresponde a un handler REAL (onRegistrarRequest/onListarRequest/onDecrementarRequest). `decrementar` NO es una cara de UI (rol neutro/automatizado: lo dispara la IMPRESORA por evento filamento.usado contra el rollo activo, no el jefe ni el trabajador) — se documenta en ui.ops con rol 'sistema' pero SIN flujo propio (no hay gesto de panel). `activar rollo` (marcar activo) es [ABIERTO]: hoy el campo `activo` vive SOLO como toggle de `registrar`, sin RPC dedicado onMarcarActivo — se documenta sin inventar. PASADA TRABAJADOR: el trabajador aqui es un LECTOR casi puro del stock (listar: que rollos hay, cuanto queda, cual esta bajo y cual activo), para operar la impresora y tener material a mano; NO registra (JEFE). Su operacion fisica del cambio de rollo vive en ciclo-impresion.",
+  "_lente_roles": {
+    "agente": "prisma-universal",
+    "fase": "F6_5",
+    "enfoque": "como ingeniero de interfaz de Enki para la interfaz PRACTICA de gestion-filamento (el stock del jefe + la cinta de filamento que LEE el trabajador/operador)",
+    "metodo": "esquematizador-universal (prisma de 5 huecos) con lente de rol, CREANDO el blueprint desde CERO (no existia — el modulo llego solo a F6) y declarando las caras de jefe Y trabajador segun lo que esquematizo el esquema-jefe/esquema-trabajador de F6, verificando cada op contra handlers reales en index.js",
+    "arbitro": "escribe-en-store / decide-el-futuro-del-stock -> jefe · LEE-el-stock-a-diario-para-operar-la-impresora -> trabajador · solo-informa/automatiza -> neutro (sistema/impresora)",
+    "consolidacion": "modules/gestion-filamento/esquema-jefe/esquema-jefe.md + esquema-trabajador/esquema-trabajador.md",
+    "dualidad": "JEFE=registrar (la unica escritura del custodio: alta de rollo con tipo/color/longitud inicial + toggle activo — decide el futuro del stock). TRABAJADOR=listar (LECTOR del stock: la cinta de rollos con tipo/color/longitud restante/bajo/activo, para operar la impresora y preparar el repuesto). NEUTRO=decrementar (lo dispara la impresora por evento filamento.usado contra el rollo activo — automatizado, sin gesto de panel) + project.activated (restaura persistencia, sistema). Como en cola-impresion (y a diferencia de ciclo-impresion), el trabajador en gestion-filamento es un LECTOR casi puro del stock: NO toca registrar (jefe) ni decrementar (impresora). `activar rollo` (marcar activo) es [ABIERTO] — hoy solo vive como campo de registrar, sin RPC propio.",
+    "senales_pareadas": {
+      "registrar": "filamento.registrado",
+      "registrar.fallo": "filamento.registrar.failed",
+      "decrementar": "filamento.decrementado",
+      "decrementar.bajo": "filamento.bajo",
+      "decrementar.fallo": "filamento.decrementar.failed",
+      "lectura.listar": "(listar) la vista re-lee, nunca recarga — RPC de lectura puro"
+    }
+  },
+  "titulo": "Gestion de filamento del taller (CUSTODIO): registrar/listar/decrementar, persistida por proyecto. Es el UNICO escritor de su store de filamento (Map<id,Filamento>, por proyecto via pos-persistencia). Op registrar (append + emite filamento.registrado), decrementar (proyeccion _decrementarStock + _detectarBajo, emite filamento.decrementado/filamento.bajo/filamento.decrementar.failed), listar. Tambien escucha el evento fire-and-forget filamento.usado (la impresora reporta filament_used en mm) para decrementar el rollo activo (Invariante 9: no se decrementa sin rollo o con longitud desconocida). Rol del dueno (JEFE): registrar rollos nuevos (la escritura clave, alta con tipo/color/longitud inicial + toggle activo) y ver el stock para reponer. Rol del trabajador/operador (TRABAJADOR): VIGILA el stock del taller (listar: que rollos hay, cuanto queda, cual esta bajo el umbral (<=5000mm) y cual es el activo cargado en la impresora) para operar y preparar el material — es LECTOR, no escribe (registrar es del jefe). El decremento es NEUTRO (impresora por evento). Emite filamento.registrado/decrementado/bajo; par de fallo decrementar.failed. La vista re-lee via las senales, nunca recarga.",
+  "eventos_publicados": [
+    "filamento.registrado",
+    "filamento.decrementado",
+    "filamento.bajo",
+    "filamento.decrementar.failed"
+  ],
+  "eventos_que_escucho": [],
+  "transporte": {
+    "rpc": [
+      "filamento.registrar.request -> .response",
+      "filamento.listar.request -> .response",
+      "filamento.decrementar.request -> .response"
+    ],
+    "salida": [
+      "filamento.registrado",
+      "filamento.decrementado",
+      "filamento.bajo",
+      "filamento.decrementar.failed"
+    ]
+  },
+  "ui": {
+    "ops": {
+      "listar": {
+        "rol": "trabajador",
+        "titulo": "Stock de filamento (cinta del taller)",
+        "descripcion": "Devuelve {filamentos[], total} del proyecto: cada rollo con tipo, color, longitud_inicial, longitud_restante, activo (cargado en la impresora) y bajo (derivado <= umbralBajo 5000mm). Es la CINTA del stock que el TRABAJADOR/operador LEE para operar la impresora: que rollos hay, cuanto queda del activo, cual esta por agotarse (para preparar el repuesto) y cual es el que esta gastando la maquina. Lectura pura, sin señal: la vista re-lee, refrescada por las senales que EMITE el jefe/impresora (el trabajador NO las dispara). Tambien alimenta la vista del JEFE (decidir si repone).",
+        "logica": "Cinta/tabla del stock vía listar: tarjetas con tipo, color y longitud_restante; badge 'activo' (que gasta la impresora) y badge 'bajo' (ten repuesto a mano); cabecera de pulso 'n rollos · k bajo'. El operador la lee para preparar material y saber cual rollo poner/cambiar. Emite filamento.listar.request. RPC de lectura: la vista re-lee, nunca recarga.",
+        "args": [
+          {
+            "nombre": "project_id",
+            "tipo": "string",
+            "required": false,
+            "descripcion": "Proyecto cuyo stock de filamento se lista (filtro)."
+          }
+        ]
+      },
+      "registrar": {
+        "rol": "jefe",
+        "titulo": "Registrar rollo",
+        "descripcion": "Da de alta un rollo de filamento en el store (append + emite filamento.registrado). La UNICA escritura del custodio, exclusiva del JEFE (el trabajador NO da de alta rollos). Requiere tipo y project_id (400 si faltan); id unico (409 ALREADY_EXISTS). longitud_inicial opcional: si no se declara un numero > 0, el rollo nace de longitud desconocida (null) y NO podra decrementarse (Invariante 9). Incluye el toggle 'activo' (si el rollo esta cargado en la impresora).",
+        "logica": "Editor-bloque (declaracion multi-campo, 1 gesto no fases) para el alta: tipo, color, longitud inicial (mm) + toggle 'activo'. Al guardar emite filamento.registrar.request y la vista re-lee via la senal filamento.registrado (nunca recarga). Es el gesto rey del jefe (frecuencia -> jerarquia).",
+        "args": [
+          {
+            "nombre": "project_id",
+            "tipo": "string",
+            "required": true,
+            "descripcion": "Proyecto al que pertenece el rollo (obligatorio, 400 si falta)."
+          },
+          {
+            "nombre": "tipo",
+            "tipo": "string",
+            "required": true,
+            "descripcion": "Tipo de filamento (obligatorio, 400 si falta). P.ej. PETG."
+          },
+          {
+            "nombre": "color",
+            "tipo": "string",
+            "required": false,
+            "descripcion": "Color del rollo (default 'desconocido')."
+          },
+          {
+            "nombre": "longitud_inicial",
+            "tipo": "number",
+            "required": false,
+            "descripcion": "Longitud inicial en mm. Si no es un numero > 0, el rollo nace de longitud desconocida (null) y NO podra decrementarse (Invariante 9)."
+          },
+          {
+            "nombre": "activo",
+            "tipo": "boolean",
+            "required": false,
+            "descripcion": "Si el rollo esta cargado en la impresora (activo: input.activo === true). Solo se fija aqui en registrar; no hay RPC de 'marcar activo' separado [ABIERTO]."
+          }
+        ]
+      },
+      "decrementar": {
+        "rol": "sistema",
+        "titulo": "Decrementar stock (automatizado · impresora)",
+        "descripcion": "Decrementa el stock de un rollo por longitud (mm) y emite filamento.decrementado (+ filamento.bajo si cae bajo el umbral). NO es una cara de UI: es NEUTRO/automatizado — lo dispara la IMPRESORA por evento filamento.usado (onFilamentoUsado, fire-and-forget) contra el rollo activo del proyecto. Ni el jefe ni el trabajador lo ejercen como gesto de panel. Invariante 9: rollo inexistente -> 404 RESOURCE_NOT_FOUND; longitud desconocida -> 409 LONGITUD_DESCONOCIDA (par de fallo filamento.decrementar.failed).",
+        "logica": "Sin gesto de panel: el decremento se declara por honestidad (es handler RPC real onDecrementarRequest) pero vive en el SISTEMA (evento filamento.usado de la impresora). La vista solo se REFRESCA con filamento.decrementado/filamento.bajo. Documentado, NO se incluye en ningun flujo de rol.",
+        "args": [
+          {
+            "nombre": "rollo_id",
+            "tipo": "string",
+            "required": true,
+            "descripcion": "Identificador del rollo a decrementar (obligatorio, 400 si falta)."
+          },
+          {
+            "nombre": "project_id",
+            "tipo": "string",
+            "required": true,
+            "descripcion": "Proyecto del rollo (obligatorio, 400 si falta)."
+          },
+          {
+            "nombre": "filament_used",
+            "tipo": "number",
+            "required": true,
+            "descripcion": "Filamento usado en mm, >= 0 (400 INVALID_INPUT si no)."
+          }
+        ]
+      }
+    },
+    "datos": {
+      "op": "listar",
+      "titulo": "Stock de filamento del taller (cinta de rollos)",
+      "_consumidor": "La cinta (listar) la consumen TANTO el jefe (ve el stock para decidir si repone: que hay, que esta activo, que esta bajo) COMO el trabajador/operador (LECTOR: ve que rollos hay, cuanto queda del activo y cual esta por agotarse, para operar la impresora y preparar el material/repuesto). Cada rollo lleva badge 'activo' (el que gasta la maquina) y 'bajo' (derivado <= 5000mm).",
+      "refresh_on": [
+        "filamento.registrado",
+        "filamento.decrementado",
+        "filamento.bajo"
+      ]
+    },
+    "estados": [
+      {
+        "nombre": "normal",
+        "terminal": false,
+        "color": "blue",
+        "icono": "🟦",
+        "_nota": "Rollo con stock por encima del umbral: longitud_restante > 5000mm (bajo:false) o longitud desconocida (null). Badge visual en la tarjeta."
+      },
+      {
+        "nombre": "bajo",
+        "terminal": false,
+        "color": "orange",
+        "icono": "⚠️",
+        "_nota": "Rollo por debajo del umbral (longitud_restante <= 5000mm, bajo:true). Badge de alerta 'ten repuesto a mano'. Deriva de la proyeccion _detectarBajo; no es un estado transicionable por el usuario."
+      },
+      {
+        "nombre": "activo",
+        "terminal": false,
+        "color": "green",
+        "icono": "🖨️",
+        "_nota": "Rollo cargado en la impresora (activo:true) — el que el sistema decrementa por evento filamento.usado. Badge 'activo' en la tarjeta. Se fija solo en registrar (JEFE); no hay RPC de 'marcar activo' separado [ABIERTO]."
+      }
+    ],
+    "flujo": [
+      {
+        "nombre": "trabajador_vigilar",
+        "orden": 1,
+        "ops": [
+          "listar"
+        ],
+        "descripcion": "VIGILAR el stock del taller — la cara del TRABAJADOR/operador junto a la impresora: listar (la cinta de rollos: tipo, color, longitud restante, badge 'activo' (el rollo cargado que gasta la maquina) y badge 'bajo' (ten repuesto a mano, <=5000mm), con cabecera 'n rollos · k bajo'). Es LECTOR casi puro del stock: RPC de lectura, la vista re-lee, refrescada por las senales filamento.registrado/decrementado/bajo que EMITE el jefe/impresora (el trabajador NO las dispara). NO hay escrituras ni disparos del worker: no registra (JEFE), no decrementa (impresora). Su operacion fisica del cambio de rollo vive en ciclo-impresion."
+      },
+      {
+        "nombre": "jefe_registrar",
+        "orden": 2,
+        "ops": [
+          "listar",
+          "registrar"
+        ],
+        "descripcion": "Gestion del stock del taller — la cara del JEFE/dueño: listar (la cinta del stock con badges activo/bajo para decidir si repone; alimenta la vista) + registrar (editor-bloque multi-campo: tipo, color, longitud inicial + toggle 'activo' — la unica escritura del custodio; senal pareada filamento.registrado refresca, nunca recarga). El decremento NO es gesto del jefe (lo dispara la impresora por evento); el panel solo se refresca con filamento.decrementado/filamento.bajo. 'Marcar/activar rollo' sin re-registrar es [ABIERTO] (hoy solo en registrar)."
+      }
+    ],
+    "dependencias": {},
+    "roles": {
+      "listar": "trabajador",
+      "registrar": "jefe",
+      "decrementar": "sistema"
+    }
+  },
+  "_nota_trabajador": "El ROL TRABAJADOR/OPERADOR en gestion-filamento es un LECTOR casi puro del stock: su cara es listar (la cinta de rollos del taller: que hay, cuanto queda, cual esta bajo y cual activo) para operar la impresora y preparar el material/repuesto. NO toca registrar (escritura exclusiva del jefe) ni decrementar (lo hace la impresora por evento filamento.usado). No hay op RPC para marcar el activo — eso es del jefe y hoy solo vive en registrar [ABIERTO]. Su operacion fisica real del cambio de rollo vive en ciclo-impresion, no en este custodio. Esquema fuente de verdad: modules/gestion-filamento/esquema-trabajador/esquema-trabajador.md.",
+  "_eventos_que_escucho_nota": "Vacio a proposito (ley ANTICOLISION: subscribes XOR eventos_que_escucho). Los eventos que escucha ya son la fuente de verdad en module.json.subscribes (filamento.registrar.request, filamento.decrementar.request, filamento.listar.request, filamento.usado, project.activated); no se duplican aqui."
+}

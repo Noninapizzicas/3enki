@@ -1,0 +1,26 @@
+{
+  "_doc": "PUENTE hacia la grabadora laser Atomstack A20 Pro V2 (GRBL WiFi). Transporta, no decide, no persiste. Escucha RPCs (enviar_gcode, iniciar_trabajo, observar_estado) y delega al thin bridge remoto (bridge.grbl.*) via MQTT directo. El bridge reporta estado_push (estado_maquina, mpos, feed, spindle) y progreso_push (linea, total, progreso) por stream continuo. El adaptador interpreta el estado crudo -> estado_sistema (CONVERSOR interno _interpretarEstado): {grabando, libre, pausado, alarma, puerta_abierta, homing, dormido, check, desconocido}. Sin store: es frontera de transporte. Todo flujo cierra su circulo con par de fallo (*.failed).",
+  "name": "adaptador-laser",
+  "version": "0.1.0",
+  "_v0_1_0_nota": "Primera version. PUENTE a la grabadora laser via bridge GRBL remoto: enviar_gcode, iniciar_trabajo, observar_estado (stream push). Conversor interno _interpretarEstado para estados GRBL. Progreso de grabado via progreso_push.",
+  "description": "Puente a la grabadora laser Atomstack A20 Pro V2: envia gcode, inicia trabajos y observa el estado por stream push GRBL, interpretandolo a estado_sistema. Delega al thin bridge remoto bridge.grbl.",
+  "language": "es",
+  "main": "index.js",
+
+  "subscribes": [
+    { "event": "adaptador-laser.enviar_gcode.request",      "handler": "onEnviarGcodeRequest",     "description": "Envia gcode a la grabadora laser y devuelve confirmacion." },
+    { "event": "adaptador-laser.iniciar_trabajo.request",    "handler": "onIniciarTrabajoRequest",   "description": "Envia un comando GRBL directo (hold, resume, reset, home, etc)." },
+    { "event": "adaptador-laser.observar_estado.request",   "handler": "onObservarEstadoRequest",  "description": "Abre el stream de estado de la grabadora (push) y entrega estado_crudo interpretado." }
+  ],
+
+  "publishes": [
+    { "event": "adaptador-laser.estado_crudo",   "description": "Estado crudo GRBL + estado_sistema interpretado, emitido por cada push del stream." },
+    { "event": "adaptador-laser.progreso",       "description": "Progreso de envio de gcode (linea actual, total, porcentaje)." },
+    { "event": "enviar_gcode.failed",            "description": "Par de fallo: no se pudo enviar el gcode a la grabadora." },
+    { "event": "iniciar_trabajo.failed",         "description": "Par de fallo: no se pudo enviar el comando a la grabadora." },
+    { "event": "observar_estado.failed",         "description": "Par de fallo: no se pudo abrir el stream de estado." },
+    { "event": "bridge.grbl.enviar_gcode.request",       "description": "RPC al thin bridge: enviar gcode al GRBL." },
+    { "event": "bridge.grbl.iniciar_trabajo.request",     "description": "RPC al thin bridge: enviar comando GRBL directo." },
+    { "event": "bridge.grbl.observar_estado.request",    "description": "RPC al thin bridge: abrir stream de estado GRBL." }
+  ]
+}

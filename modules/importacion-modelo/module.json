@@ -22,5 +22,16 @@
       "event": "importacion.importar.failed",
       "description": "Par de fallo: la importacion no se completo (input invalido, descarga fallida, .3mf ausente o registro fallido)."
     }
+  ],
+  "ui_handlers": [
+    {
+      "action": "importar",
+      "domain": "importacion-modelo",
+      "type": "workspace_module",
+      "zone": "barra_modulos",
+      "label": "Importar",
+      "description": "Importa un modelo 3D al taller ({project_id, url} obligatorios + {origen?, categoria?, nombre?}). Unica RPC real del puente; emite importacion.importada o importacion.importar.failed (motivo tipado). Cara jefe del panel F7 (formulario de accion).",
+      "handler": "onImportarRequest"
+    }
   ]
 }

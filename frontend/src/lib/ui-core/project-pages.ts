@@ -70,7 +70,14 @@ export const PAGE_CATALOG: Record<string, PageDef> = {
   // físicas). PANEL DE ESTADO de la máquina de estados del ciclo (no CRUD) —
   // nav:false → el rail lateral no lo pinta (sin ruta /<proyecto>/ciclo); el
   // botón vive en la work-bar (manifest zone work-bar + loader en panels.ts).
-  'ciclo-impresion': { id: 'ciclo-impresion', icon: '⏱️', label: 'Ciclo 3D', nav: false }
+  'ciclo-impresion': { id: 'ciclo-impresion', icon: '⏱️', label: 'Ciclo 3D', nav: false },
+  // — vertical 3D: importacion-modelo (F7, prisma-universal, 5ª y última
+  // iteración). jefe que IMPORTA (PUENTE stateless, formulario de acción +
+  // feedback por señal, sin lista propia — los modelos viven en
+  // catalogo-modelos). nav:false → el rail lateral no lo pinta (sin ruta
+  // /<proyecto>/importar); el botón vive en la work-bar (manifest zone work-bar
+  // + loader en panels.ts) y abre el panel del jefe que importa.
+  'importacion-modelo': { id: 'importacion-modelo', icon: '📥', label: 'Importar 3D', nav: false }
 };
 /** Semilla por tipo: lo que un proyecto trae al nacer, antes de que crezca en runtime. */
 const SEED_BY_TYPE: Record<string, string[]> = {

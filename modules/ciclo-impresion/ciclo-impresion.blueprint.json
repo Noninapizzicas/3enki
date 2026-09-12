@@ -4,15 +4,15 @@
   "version": "blueprint-2.2.0",
   "moduleId": "ciclo-impresion",
   "actor": "jefe",
-  "_doc": "Blueprint de interfaz de ciclo-impresion — MICRO-AGENTE/ORQUESTADOR del proyecto 3D (DUEÑO de una maquina de estados en memoria, NO un custodio CRUD). CREADO por prisma-universal (FASE 6.5) como INGENIERO DE INTERFAZ DE ENKI, consumiendo el esquema-jefe de F6 (modules/ciclo-impresion/esquema-jefe/esquema-jefe.md, LA FUENTE DE VERDAD), module.json e index.js. SEPARACION DE RESPONSABILIDADES (opcion B): F6.5 declara SOLO ui.ops (con rol), ui.datos, ui.flujo, ui.estados, transporte.rpc y transporte.salida. NO se declara ui.formas — F7 decide las formas al construir. Este es EL CASO MAS SUTIL del prisma: casi no hay RPC. SOLO 1 op en ui.ops con handler real .request: iniciar (onIniciarRequest). Las 3 confirmaciones contextuales (pieza_retirada/filamento_cambiado/reanudar_ciclo) NO tienen handler .request en el modulo — NO son RPC, se entregan por evento adaptador-confirmacion.confirmacion_recibida (onConfirmacionRecibida). Por LEY DE CERO SUPUESTOS se declaran FUERA de ui.ops (no son ops RPC) en la seccion dedicada ui.confirmaciones_contextuales con handler: null + nota [ABIERTO] + el canal real por el que se emiten. Los 5 listeners fire-and-forget del sistema (onEstadoCrudo/onImpresionCompletada/onImpresionError/onFilamentoFalta/onConfirmacionRecibida) NO son ops de UI: son el sistema que alimenta las señales.",
+  "_doc": "Blueprint de interfaz de ciclo-impresion — MICRO-AGENTE/ORQUESTADOR del proyecto 3D (DUEÑO de una maquina de estados en memoria, NO un custodio CRUD). CREADO por prisma-universal (FASE 6.5) como INGENIERO DE INTERFAZ DE ENKI, consumiendo el esquema-jefe de F6 (modules/ciclo-impresion/esquema-jefe/esquema-jefe.md, LA FUENTE DE VERDAD), module.json e index.js, y AMPLIADO en la pasada TRABAJADOR con el esquema-trabajador de F6 (modules/ciclo-impresion/esquema-trabajador/esquema-trabajador.md). SEPARACION DE RESPONSABILIDADES (opcion B): F6.5 declara SOLO ui.ops (con rol), ui.datos, ui.flujo, ui.estados, transporte.rpc y transporte.salida. NO se declara ui.formas — F7 decide las formas al construir. Este es EL CASO MAS SUTIL del prisma: casi no hay RPC. SOLO 1 op en ui.ops con handler real .request: iniciar (onIniciarRequest) — rol JEFE. Las 3 confirmaciones contextuales (pieza_retirada/filamento_cambiado/reanudar_ciclo) NO tienen handler .request en el modulo — NO son RPC, se entregan por evento adaptador-confirmacion.confirmacion_recibida (onConfirmacionRecibida). Por LEY DE CERO SUPUESTOS se declaran FUERA de ui.ops (no son ops RPC) en la seccion dedicada ui.confirmaciones_contextuales con handler: null + nota [ABIERTO] + el canal real por el que se emiten. PASADA TRABAJADOR (F6.5 ampliada): las 3 confirmaciones fisicas pasan del rol jefe al rol TRABAJADOR/OPERADOR — es quien ejecuta la accion fisica en el taller (retirar pieza de la cama, cambiar el filamento, reanudar tras un fallo), conservando iniciar=jefe (decision de arranque del reloj). Se suma el flujo trabajador_vigilar_ejecutar. La cara del trabajador = VIGILAR (el estado del ciclo por la señal + el progreso de la pieza en curso via progreso.actualizado) + EJECUTAR (el boton contextual de confirmacion segun estado). Los 5 listeners fire-and-forget del sistema (onEstadoCrudo/onImpresionCompletada/onImpresionError/onFilamentoFalta/onConfirmacionRecibida) NO son ops de UI: son el sistema que alimenta las señales y el canal por el que el trabajador emite sus confirmaciones.",
   "_lente_roles": {
     "agente": "prisma-universal",
     "fase": "F6_5",
-    "enfoque": "como ingeniero de interfaz de Enki para la interfaz PRACTICA de ciclo-impresion (el panel del ciclo del jefe: ver estado + iniciar + confirmar)",
-    "metodo": "esquematizador-universal (prisma de 5 huecos) + lente rol JEFE, verificando cada op contra handlers reales en index.js",
-    "arbitro": "dispara-operacion-fria -> jefe · confirma-transicion-fisica -> jefe (contextual, via evento) · solo-informa -> neutro",
-    "consolidacion": "modules/ciclo-impresion/esquema-jefe/esquema-jefe.md",
-    "dualidad": "JEFE=iniciar (la UNICA RPC, disparador del ciclo, onIniciarRequest -> _iniciar) + las 3 confirmaciones contextuales (decision fisica del dueno, emitidas por evento adaptador-confirmacion.confirmacion_recibida, NO RPC con handler .request propio). neutro=sistema: onEstadoCrudo/onImpresionCompletada/onImpresionError/onFilamentoFalta alimentan las señales que REFRESCAN el panel. project.activated no existe (la maquina es runtime, se reanuda de IDLE).",
+    "enfoque": "como ingeniero de interfaz de Enki para la interfaz PRACTICA de ciclo-impresion (jefe: ver estado + iniciar; trabajador: confirmaciones fisicas + vigilar el progreso)",
+    "metodo": "esquematizador-universal (prisma de 5 huecos) + lente rol TRABAJADOR sobre la pasada jefe ya existente (AMPLIAR, no recrear), verificando cada op/handler contra handlers reales en index.js",
+    "arbitro": "dispara-operacion-fria -> jefe · confirma-transicion-fisica -> trabajador (contextual, via evento) · vigila-progreso -> trabajador · solo-informa -> neutro (sistema)",
+    "consolidacion": "modules/ciclo-impresion/esquema-jefe/esquema-jefe.md + esquema-trabajador/esquema-trabajador.md",
+    "dualidad": "JEFE=iniciar (la UNICA RPC, disparador del ciclo, onIniciarRequest -> _iniciar). TRABAJADOR=las 3 confirmaciones fisicas (pieza_retirada/filamento_cambiado/reanudar_ciclo) + la VIGILANCIA del progreso (progreso.actualizado). Las confirmaciones se emiten por evento adaptador-confirmacion.confirmacion_recibida (onConfirmacionRecibida, fire-and-forget), NO son RPC con handler .request propio. neutro=sistema: onEstadoCrudo/onImpresionCompletada/onImpresionError/onFilamentoFalta alimentan las señales que REFRESCAN el panel. project.activated no existe (la maquina es runtime, se reanuda de IDLE).",
     "senales_pareadas": {
       "iniciar_ok": "ciclo.iniciado",
       "iniciar_sin_trabajo": "ciclo.cola_vacia",
@@ -25,7 +25,7 @@
       "pide_mano": "ciclo.esperando_confirmacion"
     }
   },
-  "titulo": "Panel del ciclo de impresion 3D del taller (MICRO-AGENTE / ORQUESTADOR): el reloj que el jefe arranca y acompania. DUEÑO de la maquina de estados del ciclo (en memoria, runtime, NO persiste): IDLE / OBTENIENDO_GCODE / SUBIENDO_GCODE / IMPRIMIENDO / ESPERANDO_RETIRADA / PAUSADO_FALTA_FILAMENTO / ERROR / COLA_VACIA. A diferencia de un custodio, el jefe NO escribe en un store NI lista entidades: es un OPERADOR DE MAQUINA que OBSERVA el punto actual de la maquina (por las señales publicadas, NO hay RPC de leer estado), DISPARA el inicio del ciclo (la UNICA RPC: ciclo.iniciar.request) y CONFIRMA las transiciones fisicas que requieren su mano (retirar pieza / cambiar filamento / reanudar tras error) via evento adaptador-confirmacion.confirmacion_recibida. El boton de confirmacion ES la maquina: un boton contextual habilitado SOLO por el estado actual. Una pieza a la vez (invariante 7). Emite ciclo.iniciado/completado/abortado/cola_vacia/esperando_confirmacion + impresion.completada/error, filamento.falta, filamento.usado, progreso.actualizado; par de fallo ciclo.abortado. La vista re-lee via las senales, nunca recarga.",
+  "titulo": "Panel del ciclo de impresion 3D del taller (MICRO-AGENTE / ORQUESTADOR): el reloj que el jefe arranca y el trabajador ejecuta y vigila. DUEÑO de la maquina de estados del ciclo (en memoria, runtime, NO persiste): IDLE / OBTENIENDO_GCODE / SUBIENDO_GCODE / IMPRIMIENDO / ESPERANDO_RETIRADA / PAUSADO_FALTA_FILAMENTO / ERROR / COLA_VACIA. A diferencia de un custodio, no se escribe en un store NI se listan entidades: es un OPERADOR DE MAQUINA que OBSERVA el punto actual de la maquina (por las señales publicadas, NO hay RPC de leer estado). Rol JEFE: DISPARA el inicio del ciclo (la UNICA RPC: ciclo.iniciar.request) — el jefe decide CUANDO arranca el reloj. Rol TRABAJADOR (operador, junto a la impresora): EJECUTA las confirmaciones fisicas que requieren su mano (retirar pieza / cambiar filamento / reanudar tras error) via evento adaptador-confirmacion.confirmacion_recibida y VIGILA el progreso de la pieza en curso. El boton de confirmacion ES la maquina: un boton contextual habilitado SOLO por el estado actual. Una pieza a la vez (invariante 7). Emite ciclo.iniciado/completado/abortado/cola_vacia/esperando_confirmacion + impresion.completada/error, filamento.falta, filamento.usado, progreso.actualizado; par de fallo ciclo.abortado. La vista re-lee via las senales, nunca recarga.",
   "eventos_publicados": [
     "ciclo.iniciado",
     "ciclo.completado",
@@ -61,8 +61,8 @@
       "iniciar": {
         "rol": "jefe",
         "titulo": "Iniciar ciclo",
-        "descripcion": "La UNICA RPC real del modulo (handler .request: onIniciarRequest -> _iniciar). Arranca el ciclo con la siguiente pieza de la cola: pide a cola.siguiente.request, obtiene gcode (cupula o slicer, invariante 7), sube gcode, inicia la impresion y abre el stream de observacion. Legal SOLO desde IDLE / COLA_VACIA / ERROR; si ya imprime o espera retirada devuelve 409 CONFLICT_STATE (una pieza a la vez, invariante 7). Sin piezas pendientes -> estado COLA_VACIA + emite ciclo.cola_vacia; RPC falla -> ciclo.abortado (par de fallo canonico). El jefe decide CUANDO arranca el reloj.",
-        "logica": "Accion 'iniciar ciclo' (disparador): boton de accion primario ▶ 'iniciar ciclo'. Requiere solo project_id (400 si falta). Habilitado SOLO en IDLE / COLA_VACIA / ERROR. Al disparar emite ciclo.iniciar.request; la senal pareada ciclo.iniciado (pieza en marcha) o ciclo.abortado/cola_vacia refresca la vista, nunca recarga.",
+        "descripcion": "La UNICA RPC real del modulo (handler .request: onIniciarRequest -> _iniciar). Arranca el ciclo con la siguiente pieza de la cola: pide a cola.siguiente.request, obtiene gcode (cupula o slicer, invariante 7), sube gcode, inicia la impresion y abre el stream de observacion. Legal SOLO desde IDLE / COLA_VACIA / ERROR; si ya imprime o espera retirada devuelve 409 CONFLICT_STATE (una pieza a la vez, invariante 7). Sin piezas pendientes -> estado COLA_VACIA + emite ciclo.cola_vacia; RPC falla -> ciclo.abortado (par de fallo canonico). El jefe decide CUANDO arranca el reloj. [TRABAJADOR: NO toca esta op — es del jefe; en la cara trabajador no existe boton iniciar]",
+        "logica": "Accion 'iniciar ciclo' (disparador): boton de accion primario ▶ 'iniciar ciclo'. Requiere solo project_id (400 si falta). Habilitado SOLO en IDLE / COLA_VACIA / ERROR. Al disparar emite ciclo.iniciar.request; la senal pareada ciclo.iniciado (pieza en marcha) o ciclo.abortado/cola_vacia refresca la vista, nunca recarga. ROL: JEFE (el trabajador la VIGILA, no la emite).",
         "args": [
           {
             "nombre": "project_id",
@@ -74,41 +74,41 @@
       }
     },
     "confirmaciones_contextuales": {
-      "_doc": "LAS 3 CONFIRMACIONES DEL JEFE. POR LEY DE CERO SUPUESTOS: NO son ops RPC — NO tienen handler .request propio en el modulo. Se entregan por el EVENTO adaptador-confirmacion.confirmacion_recibida (handler onConfirmacionRecibida, fire-and-forget), que el puente adaptador-confirmacion media por el canal de avisos/confirmacion del dueno. El boton contextual del panel emite esa confirmacion por el adaptador-confirmacion; NO llama a un handler .request del ciclo. Por eso se declaran aqui con handler: null + nota [ABIERTO] del canal mecanico de emision, FUERA de ui.ops (que solo declara RPC reales). Su 'respuesta' NO es una senal .response propia: es la TRANSICION de la maquina que se refleja en el siguiente evento publicado (cada flujo re-lee).",
+      "_doc": "LAS 3 CONFIRMACIONES DEL TRABAJADOR (pasada trabajador; antes rol jefe). El jefe conserva 'iniciar' (decision de arranque); las confirmaciones fisicas son de quien ejerce la MANO en el taller: retirar la pieza, cambiar el filamento, reanudar tras un fallo. POR LEY DE CERO SUPUESTOS: NO son ops RPC — NO tienen handler .request propio en el modulo. Se entregan por el EVENTO adaptador-confirmacion.confirmacion_recibida (handler onConfirmacionRecibida, fire-and-forget), que el puente adaptador-confirmacion media por el canal de avisos/confirmacion. El boton contextual del panel emite esa confirmacion por el adaptador-confirmacion; NO llama a un handler .request del ciclo. Por eso se declaran aqui con handler: null + nota [ABIERTO] del canal mecanico de emision, FUERA de ui.ops (que solo declara RPC reales). Su 'respuesta' NO es una senal .response propia: es la TRANSICION de la maquina que se refleja en el siguiente evento publicado (cada flujo re-lee). El trabajador NO toca 'iniciar' — su unico output son estas confirmaciones + la vigilancia por señal.",
       "pieza_retirada": {
-        "rol": "jefe",
+        "rol": "trabajador",
         "titulo": "Pieza retirada",
         "handler": null,
         "estado_gatillo": "ESPERANDO_RETIRADA",
         "transicion_aplica": "ESPERANDO_RETIRADA -> IDLE (encadena siguiente automaticamente, _encadenarSiguiente)",
-        "emision": "evento adaptador-confirmacion.confirmacion_recibida con tipo=pieza_retirada -> onConfirmacionRecibida",
+        "emision": "evento adaptador-confirmacion.confirmacion_recibida con tipo=pieza_retirada -> onConfirmacionRecibida (la mano del TRABAJADOR: retira la pieza terminada de la cama y confirma; el ciclo encadena solo)",
         "senal_resultante": "ciclo.iniciado (si encadena siguiente) o ciclo.completado (si cola vacia)",
-        "nota": "[ABIERTO] No existe handler .request 'ciclo.confirmar.pieza_retirada'. El boton contextual emite la confirmacion por adaptador-confirmacion.confirmacion_recibida. Decidir el mecanismo exacto de emision de UI es del F7/sitio."
+        "nota": "[ABIERTO] No existe handler .request 'ciclo.confirmar.pieza_retirada'. El boton contextual emite la confirmacion por adaptador-confirmacion.confirmacion_recibida. El rol es TRABAJADOR: es quien ejecuta la retirada en el taller. Decidir el mecanismo exacto de emision de UI es del F7/sitio."
       },
       "filamento_cambiado": {
-        "rol": "jefe",
+        "rol": "trabajador",
         "titulo": "Filamento cambiado",
         "handler": null,
         "estado_gatillo": "PAUSADO_FALTA_FILAMENTO",
         "transicion_aplica": "PAUSADO_FALTA_FILAMENTO -> IMPRIMIENDO (reanuda la impresion pausada)",
-        "emision": "evento adaptador-confirmacion.confirmacion_recibida con tipo=filamento_cambiado -> onConfirmacionRecibida",
+        "emision": "evento adaptador-confirmacion.confirmacion_recibida con tipo=filamento_cambiado -> onConfirmacionRecibida (la mano del TRABAJADOR: cambia el rollo agotado y confirma; el sistema NUNCA sabe cuando termino — solo el operador)",
         "senal_resultante": "progreso.actualizado (reanudada la impresion)",
-        "nota": "[ABIERTO] No existe handler .request 'ciclo.confirmar.filamento_cambiado'. El boton contextual emite la confirmacion por adaptador-confirmacion.confirmacion_recibida. "
+        "nota": "[ABIERTO] No existe handler .request 'ciclo.confirmar.filamento_cambiado'. El boton contextual emite la confirmacion por adaptador-confirmacion.confirmacion_recibida. El rol es TRABAJADOR: es quien cambia el filamento en el taller. "
       },
       "reanudar_ciclo": {
-        "rol": "jefe",
+        "rol": "trabajador",
         "titulo": "Reanudar ciclo",
         "handler": null,
         "estado_gatillo": "ERROR",
         "transicion_aplica": "ERROR -> IDLE (limpia el error y deja el ciclo listo para re-iniciar)",
-        "emision": "evento adaptador-confirmacion.confirmacion_recibida con tipo=reanudar_ciclo -> onConfirmacionRecibida",
+        "emision": "evento adaptador-confirmacion.confirmacion_recibida con tipo=reanudar_ciclo -> onConfirmacionRecibida (la mano del TRABAJADOR: soluciona el fallo fisico y reanuda; el limpia el error y deja el ciclo en IDLE)",
         "senal_resultante": "ciclo.iniciado (si luego el jefe inicia) o el ciclo queda IDLE listo para iniciar",
-        "nota": "[ABIERTO] No existe handler .request 'ciclo.confirmar.reanudar_ciclo'. El boton contextual emite la confirmacion por adaptador-confirmacion.confirmacion_recibida. "
+        "nota": "[ABIERTO] No existe handler .request 'ciclo.confirmar.reanudar_ciclo'. El boton contextual emite la confirmacion por adaptador-confirmacion.confirmacion_recibida. El rol es TRABAJADOR: es quien reanuda tras solucionar el fallo en el taller. "
       }
     },
     "datos": {
       "fuente": "senales-publicadas",
-      "_doc": "NO hay op RPC lectora / listar de estado en index.js (hueco [ABIERTO] a del esquema-jefe: leer estado por RPC bajo demanda). El estado actual del ciclo se RECONSTRUYE por las SEÑALES publicadas por el orquestador: el panel vive del bus (o del gauge de observability ciclo-impresion.estado). Datos visibles: estado actual (badge), pieza en curso (item_id, modelo_id, nombre, material) via ciclo.iniciado, progreso % + capa actual/total via progreso.actualizado.",
+      "_doc": "NO hay op RPC lectora / listar de estado en index.js (hueco [ABIERTO] a del esquema: leer estado por RPC bajo demanda). El estado actual del ciclo se RECONSTRUYE por las SEÑALES publicadas por el orquestador: el panel vive del bus (o del gauge de observability ciclo-impresion.estado). Datos visibles: estado actual (badge), pieza en curso (item_id, modelo_id, nombre, material) via ciclo.iniciado, progreso % + capa actual/total via progreso.actualizado. CARA TRABAJADOR: tanto el jefe como el trabajador VIGILAN por las mismas señales (progreso.actualizado para el % de la pieza que imprime ahora, ciclo.esperando_confirmacion/impresion.completada/filamento.falta/impresion.error para deducir QUE mano hace falta segun el estado). La cara del trabajador vive de las señales, igual que la del jefe: no hay RPC de lectura; cada señal refresca, nunca recarga.",
       "refresh_on": [
         "ciclo.iniciado",
         "ciclo.completado",
@@ -127,7 +127,7 @@
         "terminal": false,
         "color": "gray",
         "icono": "⏸️",
-        "_transicion_nota": "Ocioso, listo para iniciar. Desde aqui se puede iniciar (legal)."
+        "_transicion_nota": "Ocioso, listo para iniciar. Desde aqui el JEFE puede iniciar (legal)."
       },
       {
         "nombre": "OBTENIENDO_GCODE",
@@ -148,35 +148,35 @@
         "terminal": false,
         "color": "orange",
         "icono": "🖨️",
-        "_transicion_nota": "Imprimiendo. Estado con vigilia: progreso.actualizado y filamento.usado aqui (gating onEstadoCrudo)."
+        "_transicion_nota": "Imprimiendo. Estado con vigilia (del trabajador): progreso.actualizado y filamento.usado aqui (gating onEstadoCrudo) — la pieza en curso que el operador VIGILA."
       },
       {
         "nombre": "ESPERANDO_RETIRADA",
         "terminal": false,
         "color": "yellow",
         "icono": "🛠️",
-        "_transicion_nota": "Pieza terminada; el jefe debe retirarla de la cama. Confirmacion contextual pieza_retirada -> IDLE (encadena)."
+        "_transicion_nota": "Pieza terminada; el TRABAJADOR debe retirarla de la cama. Confirmacion contextual pieza_retirada -> IDLE (encadena)."
       },
       {
         "nombre": "PAUSADO_FALTA_FILAMENTO",
         "terminal": false,
         "color": "purple",
         "icono": "🧵",
-        "_transicion_nota": "Falta filamento; el jefe debe cambiarlo. Confirmacion contextual filamento_cambiado -> IMPRIMIENDO."
+        "_transicion_nota": "Falta filamento; el TRABAJADOR debe cambiarlo. Confirmacion contextual filamento_cambiado -> IMPRIMIENDO."
       },
       {
         "nombre": "ERROR",
         "terminal": false,
         "color": "red",
         "icono": "❌",
-        "_transicion_nota": "Fallo. Confirmacion contextual reanudar_ciclo -> IDLE. Tambien desde aqui se puede iniciar."
+        "_transicion_nota": "Fallo. Confirmacion contextual reanudar_ciclo (TRABAJADOR) -> IDLE. Tambien desde aqui el JEFE puede iniciar."
       },
       {
         "nombre": "COLA_VACIA",
         "terminal": false,
         "color": "cyan",
         "icono": "📭",
-        "_transicion_nota": "No hay piezas pendientes al iniciar. Desde aqui se puede iniciar (re-iniciar con nueva pieza, legal)."
+        "_transicion_nota": "No hay piezas pendientes al iniciar. Desde aqui el JEFE puede iniciar (re-iniciar con nueva pieza, legal)."
       }
     ],
     "flujo": [
@@ -184,7 +184,7 @@
         "nombre": "jefe_ver",
         "orden": 1,
         "ops": [],
-        "descripcion": "VER — observar la maquina de estados en su punto actual (el 80% del valor). El panel vivo del estado reconstruido por la señal de eventos (NO hay RPC de leer): estado actual (badge de ui.estados), pieza en curso (item_id/modelo_id/nombre/material via ciclo.iniciado), progreso % + capa actual/total (via progreso.actualizado), y el aviso contextual 'tu mano hace falta' cuando ciclo.esperando_confirmacion (motivo: retirar / filamento / reanudar). No es una op RPC: es la cara de observacion que re-lee con cada senal, nunca recarga."
+        "descripcion": "VER — observar la maquina de estados en su punto actual (el 80% del valor). El panel vivo del estado reconstruido por la señal de eventos (NO hay RPC de leer): estado actual (badge de ui.estados), pieza en curso (item_id/modelo_id/nombre/material via ciclo.iniciado), progreso % + capa actual/total (via progreso.actualizado), y el aviso contextual 'tu mano hace falta' cuando ciclo.esperando_confirmacion (motivo: retirar / filamento / reanudar). No es una op RPC: es la cara de observacion que re-lee con cada senal, nunca recarga. COMPARTIDO con el trabajador (ambos vigilan por la misma señal)."
       },
       {
         "nombre": "jefe_iniciar",
@@ -192,7 +192,7 @@
         "ops": [
           "iniciar"
         ],
-        "descripcion": "INICIAR — el unico RPC del modulo. Boton 'iniciar ciclo' (ciclo.iniciar.request), habilitado SOLO en IDLE / COLA_VACIA / ERROR. Senal pareada ciclo.iniciado (pieza en marcha) o ciclo.abortado/cola_vacia. El jefe decide cuando arranca el reloj."
+        "descripcion": "INICIAR — el unico RPC del modulo. Boton 'iniciar ciclo' (ciclo.iniciar.request), habilitado SOLO en IDLE / COLA_VACIA / ERROR. Senal pareada ciclo.iniciado (pieza en marcha) o ciclo.abortado/cola_vacia. El JEFE decide cuando arranca el reloj. El trabajador NO toca este flujo (no emite iniciar)."
       },
       {
         "nombre": "jefe_confirmar",
@@ -203,16 +203,28 @@
           "filamento_cambiado",
           "reanudar_ciclo"
         ],
-        "descripcion": "CONFIRMAR — transiciones fisicas contextuales, la mano del dueno. NO son RPC: son acciones que emiten el evento adaptador-confirmacion.confirmacion_recibida (ver ui.confirmaciones_contextuales, handler: null). El boton contextual UNICO segun estado: ESPERANDO_RETIRADA -> 'pieza retirada' (-> IDLE, encadena); PAUSADO_FALTA_FILAMENTO -> 'filamento cambiado' (-> IMPRIMIENDO); ERROR -> 'reanudar ciclo' (-> IDLE). Cualquier otro estado -> sin boton de confirmacion (nada que confirmar). Emitir la confirmacion -> el orquestador aplica la transicion (onConfirmacionRecibida) -> publica el siguiente evento -> la vista re-lee. Cero recargas."
+        "descripcion": "CONFIRMAR (pasada jefe, CONSERVADO por compatibilidad) — el panel del jefe todavia puede mostrar las confirmaciones cuando el jefe y el trabajador son el mismo humano (taller de uso propio, fase 0). Mismo comportamiento que el flujo trabajador_vigilar_ejecutar. Mantenido como superconjunto para no romper la pasada jefe."
+      },
+      {
+        "nombre": "trabajador_vigilar_ejecutar",
+        "orden": 4,
+        "ops": [],
+        "confirmaciones": [
+          "pieza_retirada",
+          "filamento_cambiado",
+          "reanudar_ciclo"
+        ],
+        "descripcion": "VIGILAR + EJECUTAR — la estacion de trabajo del TRABAJADOR/OPERADOR (quien tiene la mano en la impresora). Capa 1 VIGILAR: la cara de observacion identica a jefe_ver (estado actual + pieza en curso + progreso % via progreso.actualizado), reconstruida por la señal de eventos, sin recargas. Capa 2 EJECUTAR: el boton contextual UNICO segun estado (las confirmaciones, NO RPC): ESPERANDO_RETIRADA -> 'pieza retirada' (trabajador retira -> IDLE, el ciclo encadena solo); PAUSADO_FALTA_FILAMENTO -> 'filamento cambiado' (trabajador cambia el rollo -> IMPRIMIENDO); ERROR -> 'reanudar ciclo' (trabajador soluciona -> IDLE). Cualquier otro estado -> sin boton de confirmacion (solo vigilar). NO hay boton 'iniciar' en esta cara — eso es del JEFE. Cada confirmacion se emite por evento adaptador-confirmacion.confirmacion_recibida (onConfirmacionRecibida); el orquestador aplica la transicion -> publica el siguiente evento -> la vista re-lee. Cero recargas."
       }
     ],
     "dependencias": {},
     "roles": {
       "iniciar": "jefe",
-      "pieza_retirada": "jefe",
-      "filamento_cambiado": "jefe",
-      "reanudar_ciclo": "jefe"
+      "pieza_retirada": "trabajador",
+      "filamento_cambiado": "trabajador",
+      "reanudar_ciclo": "trabajador"
     }
   },
-  "_eventos_que_escucho_nota": "Vacio a proposito (ley ANTICOLISION: subscribes XOR eventos_que_escucho). Los eventos que escucha ya son la fuente de verdad en module.json.subscribes; no se duplican aqui."
+  "_nota_trabajador": "CONVENCION PASADA TRABAJADOR (SUMAR, no reemplazar): el rol trabajador se suma al blueprint; las ops de EJECUCION FISICA (retirar pieza / cambiar filamento / reanudar tras error) pasan del rol jefe al rol TRABAJADOR (quien opera la impresora), conservando iniciar=jefe (decision de arranque del reloj). Las confirmaciones NO son subscribes del ciclo ni se documentan en eventos_que_escucho (siguen en [], ley ANTICOLISION: los .request ya viven en subscribes del module.json): se entregan por el evento externo adaptador-confirmacion.confirmacion_recibida — se documentan SOLO en ui.confirmaciones_contextuales/_nota/descripciones, no rellenando eventos_que_escucho. En un taller de uso propio jefe=operador=dueño, asi que el panel puede mostrar ambas caras: iniciar (cara jefe) + confirmaciones contextuales (cara trabajador). [ABIERTO] (c) esquema-trabajador: ¿panel trabajador separado o dos caras del mismo panel? — decision del sitio.",
+  "_eventos_que_escucho_nota": "Vacio a proposito (ley ANTICOLISION: subscribes XOR eventos_que_escucho). Los eventos que escucha ya son la fuente de verdad en module.json.subscribes; no se duplican aqui. Las confirmaciones del trabajador (pieza_retirada/filamento_cambiado/reanudar_ciclo) NO son subscribes del ciclo: se entregan por el evento externo adaptador-confirmacion.confirmacion_recibida (documentado en ui.confirmaciones_contextuales), por eso no aparecen aqui."
 }

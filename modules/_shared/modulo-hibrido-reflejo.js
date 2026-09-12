@@ -37,6 +37,7 @@ class ModuloHibridoReflejo extends BaseModule {
     this.logger = context.logger;
     this.eventBus = context.eventBus;
     this.metrics = context.metrics;
+    this.mqttClient = context.mqttClient || null;
     this.logger?.info(`${this.name}.reflejo.loaded`, { module: this.name, version: this.version });
   }
 
@@ -104,6 +105,51 @@ class ModuloHibridoReflejo extends BaseModule {
 
   async _editarJson(project_id, path, patches) {
     return this._rpc('fs.edit.request', { project_id, path, patches });
+  }
+
+  // =============================================================
+  // Bridge MQTT — suscripción y RPC directos al broker (sin pasar
+  // por el EventBus, que filtra topics fuera de core/*/events/#).
+  // Para comunicación con thin bridges (bridge.moonraker.*, bridge.grbl.*, etc.)
+  // =============================================================
+  _subscribeBridge(topic, handler) {
+    if (!this.mqttClient) return () => {};
+    const wrapper = (_topic, message) => {
+      if (_topic !== topic) return;
+      try {
+        const parsed = typeof message === 'string' ? JSON.parse(message) : message;
+        handler(parsed);
+      } catch (_) { /* payload no JSON — ignorar */ }
+    };
+    this.mqttClient.on('message', wrapper);
+    this.mqttClient.subscribe(topic).catch(err => {
+      this.logger?.error(`${this.name}.bridge.subscribe.error`, { topic, error: err.message });
+    });
+    return () => {
+      this.mqttClient.removeListener('message', wrapper);
+      this.mqttClient.unsubscribe(topic).catch(() => {});
+    };
+  }
+
+  async _rpcBridge(requestTopic, payload = {}, { timeout_ms = 8000 } = {}) {
+    if (!this.mqttClient) return null;
+    const request_id = crypto.randomUUID();
+    const responseTopic = requestTopic.endsWith('.request')
+      ? requestTopic.slice(0, -('.request'.length)) + '.response'
+      : `${requestTopic}.response`;
+    return new Promise((resolve) => {
+      let unsub = null;
+      const timeout = setTimeout(() => { if (unsub) unsub(); resolve(null); }, timeout_ms);
+      unsub = this._subscribeBridge(responseTopic, (data) => {
+        if (!data || data.request_id !== request_id) return;
+        clearTimeout(timeout);
+        if (unsub) unsub();
+        resolve(data);
+      });
+      this.mqttClient.publish(requestTopic, JSON.stringify({
+        request_id, ...payload, timestamp: new Date().toISOString()
+      })).catch(() => { clearTimeout(timeout); if (unsub) unsub(); resolve(null); });
+    });
   }
 
   // =============================================================

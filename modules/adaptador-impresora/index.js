@@ -167,7 +167,7 @@ class AdaptadorImpresoraReflejo extends ModuloHibridoReflejo {
   // Delegación al bridge remoto (MQTT RPC)
   // =============================================================
   async _delegarAlBridge(op, payload, pid) {
-    const res = await this._rpc(`${BRIDGE_PREFIX}.${op}.request`, payload, { timeout_ms: 30000 });
+    const res = await this._rpcBridge(`${BRIDGE_PREFIX}.${op}.request`, payload, { timeout_ms: 30000 });
     if (!res) {
       this._publicarEvento(`${op}.failed`, { project_id: pid, motivo: 'bridge_sin_respuesta' });
       return { status: 503, data: { error: 'UPSTREAM_UNREACHABLE', message: 'bridge no responde (timeout)' } };
@@ -181,20 +181,18 @@ class AdaptadorImpresoraReflejo extends ModuloHibridoReflejo {
   }
 
   async _delegarStreamAlBridge(pid) {
-    const res = await this._rpc(`${BRIDGE_PREFIX}.observar_estado.request`, { project_id: pid }, { timeout_ms: 15000 });
+    const res = await this._rpcBridge(`${BRIDGE_PREFIX}.observar_estado.request`, { project_id: pid }, { timeout_ms: 15000 });
     if (!res || res.ok !== true) {
       this._publicarEvento('observar_estado.failed', { project_id: pid, motivo: 'bridge_sin_respuesta' });
       return { status: 503, data: { error: 'UPSTREAM_UNREACHABLE', message: 'bridge no responde para el stream' } };
     }
-    if (this.eventBus?.subscribe) {
-      this._unsubBridgePush = this.eventBus.subscribe(`${BRIDGE_PREFIX}.estado_push`, (event) => {
-        const crudo = event?.data || event;
-        const interpretado = this._interpretarEstado(crudo);
-        this._publicarEvento('adaptador-impresora.estado_crudo', {
-          project_id: pid, crudo, estado_sistema: interpretado
-        });
+    this._unsubBridgePush = this._subscribeBridge(`${BRIDGE_PREFIX}.estado_push`, (data) => {
+      const crudo = data?.data || data;
+      const interpretado = this._interpretarEstado(crudo);
+      this._publicarEvento('adaptador-impresora.estado_crudo', {
+        project_id: pid, crudo, estado_sistema: interpretado
       });
-    }
+    });
     this._streamAbierto = true;
     return { status: 200, data: { ok: true, stream: 'abierto', via: 'bridge' } };
   }

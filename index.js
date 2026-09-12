@@ -384,6 +384,7 @@ async function main() {
         tracer: core.tracer,
         activity: core.activity,
         uiHandler: core.uiHandler,
+        mqttClient: core.mqttClient,
         // Provider registry for AI agent tool auto-discovery
         providerRegistry: core.providerSystem?.registry || null
       };

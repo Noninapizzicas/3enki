@@ -55,7 +55,11 @@ export const PAGE_CATALOG: Record<string, PageDef> = {
   variaciones:      { id: 'variaciones',      icon: '🔧',  label: 'Variaciones', nav: false },
   productos:        { id: 'productos',        icon: '🍕',  label: 'Productos', nav: false },
   // — vertical 3D (taller de impresión): catalogo-modelos (F7, prisma-universal) —
-  'catalogo-modelos': { id: 'catalogo-modelos', icon: '🧊', label: 'Catálogo 3D', nav: false }
+  'catalogo-modelos': { id: 'catalogo-modelos', icon: '🧊', label: 'Catálogo 3D', nav: false },
+  // — vertical 3D: historial-impresiones (F7, prisma-universal, 2ª iteración). jefe LECTOR —
+  // nav:false → el rail lateral no lo pinta (sin ruta /<proyecto>/historial); el botón vive
+  // en la work-bar (manifest zone work-bar + loader en panels.ts) y abre el panel de la cinta.
+  'historial-impresiones': { id: 'historial-impresiones', icon: '🖨️', label: 'Historial 3D', nav: false }
 };
 /** Semilla por tipo: lo que un proyecto trae al nacer, antes de que crezca en runtime. */
 const SEED_BY_TYPE: Record<string, string[]> = {

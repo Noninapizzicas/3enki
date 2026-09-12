@@ -95,8 +95,13 @@ CICLO.INICIAR.REQUEST (RPC, jefe) → ▶ arranca el ciclo · señal pareada ref
 3. **El botón de confirmación ES la máquina.** Un único botón contextual,
    decido por `confirmacionPorEstado` (derived que parte de `ui.confirmaciones_contextuales.estado_gatillo`), habilitado SOLO por el estado actual. Cualquier otro estado → sin botón de confirmación (nada que confirmar).
 
-4. **Filtro por rol jefe.** `iniciar` y las 3 confirmaciones son rol `jefe`; el
-   resto de la superficie solo informa (observación del estado, rol neutro).
+4. **Filtro por rol (pestaña de cara).** El panel ahora tiene DOS caras (pestañas
+   Jefe / Trabajador) SUMADAS en el MISMO `CicloImpresionPanel.svelte`. En la
+   pestaña Jefe: `iniciar` (rol jefe) + las 3 confirmaciones conservadas por
+   compatibilidad (superconjunto, `jefe_confirmar` del blueprint F6½). En la
+   pestaña Trabajador: solo las 3 confirmaciones contextuales (rol trabajador),
+   NUNCA `iniciar`. La observación (estado/pieza/progreso) es común a ambas
+   (`jefe_ver` es COMPARTIDO en el blueprint).
 
 5. **Multi-tenant.** El store filtra por `sessionProjectId`; al cambiar de
    proyecto `resetCiclo()` vacía la máquina (sin estado ajeno).
@@ -110,3 +115,46 @@ CICLO.INICIAR.REQUEST (RPC, jefe) → ▶ arranca el ciclo · señal pareada ref
 | botón de CONFIRMACIÓN contextual | transición física del dueño (NO RPC del módulo) | botón único por estado, decido por `confirmacionPorEstado` | mapear `ui.confirmaciones_contextuales[].estado_gatillo` → tipo; emitir por su canal documentado |
 | barra de progreso | evento de vigilia (`progreso.actualizado`) | % + capa actual/total | solo en IMPRIMIENDO; la señal la alimenta en vivo |
 | indicador de última señal | cualquier evento del bus | evento + hora | da vida al panel de estado; muestra de dónde sale el estado |
+| pestañas de ROL (cara por rol) | el blueprint F6½ define `ui.roles` (jefe/trabajador) | tab-bar con la cara activa; la observación común, las acciones por pestaña | CONVENCION SUMAR: la cara del rol 2 se SUMA al panel del rol 1 (mismo `*.svelte`, tab-bar), NO panel nuevo ni duplicación |
+
+## Decisión clave de esta pasada (SUMAR, no panel nuevo)
+
+> El blueprint F6½ re-clasificó las 3 confirmaciones al rol **trabajador**
+> (quien EJECUTA la acción física) dejando `iniciar`=jefe (quien decide CUANDO
+> arranca el reloj). La pregunta de diseño del blueprint — `[ABIERTO] (c)
+> esquema-trabajador: ¿panel trabajador separado o dos caras del mismo panel?`
+> — se cierra aquí en F7 con **dos caras del MISMO panel** (pestañas Jefe /
+> Trabajador). Mismo store (`stores/ciclo.ts`), mismo `CicloImpresionPanel.svelte`,
+> sin duplicación de suscripciones ni handlers. La cara trabajador = VIGILAR +
+> EJECUTAR, como la estación del operador frente a la impresora.
+
+### Cara TRABAJADOR — VIGILAR (estado en grande + pieza + progreso)
+
+La observación de la máquina es IDÉNTICA a la del jefe (`jefe_ver` es COMPARTIDO
+en `ui.flujo` del blueprint F6½): ambos vigilan por la misma señal, nunca recarga.
+El worker ve el punto actual + qué pieza imprime ahora + el % de avance.
+
+| rol / op | evento / contexto | forma | elemento | atributos | por qué |
+|---|---|---|---|---|---|
+| trabajador · VIGILAR estado | señal del bus (sin RPC lectora; NO hay `ciclo.state.request`) | hero badge | `chip-estado` color+icono (estado actual) | `estado` de la máquina | el operador mira la máquina de estados en su punto actual: qué imprime ahora, sin recargar |
+| trabajador · VIGILAR pieza | ciclo.iniciado (proyecta pieza en curso) | tarjeta pieza | nombre + material + modelo | item_id/modelo_id/nombre/material | el worker sabe QUÉ pieza está en la cama ahora mismo |
+| trabajador · VIGILAR progreso | progreso.actualizado | barra % + capa | `progreso.progress`, current/total_layer | % + capa actual/total | vigilia de la impresión en curso (IMPRIMIENDO): avance en vivo |
+| trabajador · VIGILAR máquina | los 8 estados de `ui.estados` | máquina visual | flujo con estado actual resaltado | estado activo | mapa del ciclo completo; el operador ubica en qué punto del flujo está |
+
+### Cara TRABAJADOR — EJECUTAR (confirmaciones contextuales, NO son RPC)
+
+Las 3 confirmaciones del trabajador se emiten por el evento del puente
+`adaptador-confirmacion.confirmacion_recibida` (handler `onConfirmacionRecibida`
+del ciclo → `_aplicarTransicion`). NUNCA se usa `iniciar` en esta cara. El botón
+ES la máquina: visible solo en el estado que lo pide.
+
+| botón (worker) | estado_gatillo | evento / contexto | forma | elemento | por qué |
+|---|---|---|---|---|---|
+| ✅ Pieza retirada | ESPERANDO_RETIRADA | impresion.completada (la pieza terminó, el worker la retira de la cama) | botón contextual | `btn-confirmar btn-worker` → `confirmarCiclo(pid,'pieza_retirada')` | el trabajador ejecuta la retirada física; el ciclo encadena solo → IDLE |
+| 🧵 Filamento cambiado | PAUSADO_FALTA_FILAMENTO | filamento.falta (rollo agotado; el sistema NUNCA sabe cuándo termina — solo el operador) | botón contextual | `btn-confirmar btn-worker` → `confirmarCiclo(pid,'filamento_cambiado')` | el trabajador cambia el rollo → IMPRIMIENDO (reanuda la pausa) |
+| 🔁 Reanudar ciclo | ERROR | impresion.error o ciclo.abortado (fallo físico; el worker lo soluciona y reanuda) | botón contextual | `btn-confirmar btn-worker` → `confirmarCiclo(pid,'reanudar_ciclo')` | el trabajador limpia el error → IDLE (listo para re-iniciar) |
+| — (sin mano pendiente) | cualquier otro estado | no hay transición física que requiera la mano | espera pasiva | `worker-espera` «solo vigilar» | el worker NO toca nada si la máquina no se lo pide |
+
+**No-objetivos de la cara trabajador (declarativo):** NO hay botón ▶ Iniciar
+(es del JEFE — `iniciar.rol==='jefe'`). NO se crea un panel nuevo ni se reemplaza
+el del jefe. NO se duplica el store ni las suscripciones.

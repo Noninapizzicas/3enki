@@ -59,10 +59,10 @@
   "ui": {
     "ops": {
       "iniciar": {
-        "rol": "jefe",
-        "titulo": "Iniciar ciclo",
-        "descripcion": "La UNICA RPC real del modulo (handler .request: onIniciarRequest -> _iniciar). Arranca el ciclo con la siguiente pieza de la cola: pide a cola.siguiente.request, obtiene gcode (cupula o slicer, invariante 7), sube gcode, inicia la impresion y abre el stream de observacion. Legal SOLO desde IDLE / COLA_VACIA / ERROR; si ya imprime o espera retirada devuelve 409 CONFLICT_STATE (una pieza a la vez, invariante 7). Sin piezas pendientes -> estado COLA_VACIA + emite ciclo.cola_vacia; RPC falla -> ciclo.abortado (par de fallo canonico). El jefe decide CUANDO arranca el reloj. [TRABAJADOR: NO toca esta op — es del jefe; en la cara trabajador no existe boton iniciar]",
-        "logica": "Accion 'iniciar ciclo' (disparador): boton de accion primario ▶ 'iniciar ciclo'. Requiere solo project_id (400 si falta). Habilitado SOLO en IDLE / COLA_VACIA / ERROR. Al disparar emite ciclo.iniciar.request; la senal pareada ciclo.iniciado (pieza en marcha) o ciclo.abortado/cola_vacia refresca la vista, nunca recarga. ROL: JEFE (el trabajador la VIGILA, no la emite).",
+        "rol": "trabajador",
+        "titulo": "Iniciar ciclo (producir)",
+        "descripcion": "El TRABAJADOR controla el proceso productivo/creativo: dispara el inicio del ciclo (siguiente pieza → gcode → subir → imprimir). Es la mano del productor que arranca la producción. El jefe NO lo opera (solo ve resultados). Emite ciclo.iniciar.request.",
+        "logica": "Gesto del trabajador que produce. Emite ciclo.iniciar.request; la senal ciclo.iniciado confirma y refresca, nunca recarga.",
         "args": [
           {
             "nombre": "project_id",
@@ -181,45 +181,26 @@
     ],
     "flujo": [
       {
-        "nombre": "jefe_ver",
+        "nombre": "trabajador_producir",
         "orden": 1,
-        "ops": [],
-        "descripcion": "VER — observar la maquina de estados en su punto actual (el 80% del valor). El panel vivo del estado reconstruido por la señal de eventos (NO hay RPC de leer): estado actual (badge de ui.estados), pieza en curso (item_id/modelo_id/nombre/material via ciclo.iniciado), progreso % + capa actual/total (via progreso.actualizado), y el aviso contextual 'tu mano hace falta' cuando ciclo.esperando_confirmacion (motivo: retirar / filamento / reanudar). No es una op RPC: es la cara de observacion que re-lee con cada senal, nunca recarga. COMPARTIDO con el trabajador (ambos vigilan por la misma señal)."
-      },
-      {
-        "nombre": "jefe_iniciar",
-        "orden": 2,
         "ops": [
-          "iniciar"
-        ],
-        "descripcion": "INICIAR — el unico RPC del modulo. Boton 'iniciar ciclo' (ciclo.iniciar.request), habilitado SOLO en IDLE / COLA_VACIA / ERROR. Senal pareada ciclo.iniciado (pieza en marcha) o ciclo.abortado/cola_vacia. El JEFE decide cuando arranca el reloj. El trabajador NO toca este flujo (no emite iniciar)."
-      },
-      {
-        "nombre": "jefe_confirmar",
-        "orden": 3,
-        "ops": [],
-        "confirmaciones": [
+          "iniciar",
           "pieza_retirada",
           "filamento_cambiado",
           "reanudar_ciclo"
         ],
-        "descripcion": "CONFIRMAR (pasada jefe, CONSERVADO por compatibilidad) — el panel del jefe todavia puede mostrar las confirmaciones cuando el jefe y el trabajador son el mismo humano (taller de uso propio, fase 0). Mismo comportamiento que el flujo trabajador_vigilar_ejecutar. Mantenido como superconjunto para no romper la pasada jefe."
+        "descripcion": "El TRABAJADOR controla TODO el proceso productivo/creativo: arranca la produccion (iniciar) y ejecuta las acciones fisicas que el proceso pide (retirar pieza, cambiar filamento, reanudar). Es la cara principal del panel: quien produce manda en el ciclo."
       },
       {
-        "nombre": "trabajador_vigilar_ejecutar",
-        "orden": 4,
+        "nombre": "jefe_ver_resultados",
+        "orden": 2,
         "ops": [],
-        "confirmaciones": [
-          "pieza_retirada",
-          "filamento_cambiado",
-          "reanudar_ciclo"
-        ],
-        "descripcion": "VIGILAR + EJECUTAR — la estacion de trabajo del TRABAJADOR/OPERADOR (quien tiene la mano en la impresora). Capa 1 VIGILAR: la cara de observacion identica a jefe_ver (estado actual + pieza en curso + progreso % via progreso.actualizado), reconstruida por la señal de eventos, sin recargas. Capa 2 EJECUTAR: el boton contextual UNICO segun estado (las confirmaciones, NO RPC): ESPERANDO_RETIRADA -> 'pieza retirada' (trabajador retira -> IDLE, el ciclo encadena solo); PAUSADO_FALTA_FILAMENTO -> 'filamento cambiado' (trabajador cambia el rollo -> IMPRIMIENDO); ERROR -> 'reanudar ciclo' (trabajador soluciona -> IDLE). Cualquier otro estado -> sin boton de confirmacion (solo vigilar). NO hay boton 'iniciar' en esta cara — eso es del JEFE. Cada confirmacion se emite por evento adaptador-confirmacion.confirmacion_recibida (onConfirmacionRecibida); el orquestador aplica la transicion -> publica el siguiente evento -> la vista re-lee. Cero recargas."
+        "descripcion": "El JEFE ve el CONJUNTO y los RESULTADOS: observa el estado del ciclo y los datos/sucesos (por senales), sin operar. No arranca produccion ni confirma (eso es del trabajador). Panel de vigilancia/panorama."
       }
     ],
     "dependencias": {},
     "roles": {
-      "iniciar": "jefe",
+      "iniciar": "trabajador",
       "pieza_retirada": "trabajador",
       "filamento_cambiado": "trabajador",
       "reanudar_ciclo": "trabajador"

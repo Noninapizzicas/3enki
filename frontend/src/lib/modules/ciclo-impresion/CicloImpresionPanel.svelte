@@ -63,7 +63,7 @@
   export let panelId: string = '';
 
   /* Pestaña de rol activa — la cara del trabajador SE SUMA a este panel (no panel nuevo). */
-  let rol: 'jefe' | 'trabajador' = 'jefe';
+  let rol: 'jefe' | 'trabajador' = 'trabajador';
 
   /* Suscripción a las señales reconstructoras — R3, la esencia del panel. */
   let cleanupSenal: (() => void) | null = null;
@@ -244,29 +244,16 @@
 
   <!-- ACCIONES POR PESTAÑA -->
 
-  <!-- CARA JEFE: iniciar (la ÚNICA RPC) + confirmar conservado (superconjunto) -->
-  {#if rol === 'jefe'}
+  <!-- CARA TRABAJADOR (la PRINCIPAL): controla TODO el proceso productivo/creativo — inicia + ejecuta confirmaciones -->
+  {#if rol === 'trabajador'}
     <div class="gestos">
       {#if $puedeIniciar}
         <button class="btn-jefe" disabled={$cicloIniciando} on:click={ejecutarIniciar}
-          title="arranca el ciclo (ciclo.iniciar.request → ciclo.iniciado; una pieza a la vez)">
-          {$cicloIniciando ? '⏳ iniciando…' : '▶ Iniciar ciclo'}
+          title="el trabajador controla el proceso de producción (ciclo.iniciar.request → ciclo.iniciado; una pieza a la vez)">
+          {$cicloIniciando ? '⏳ iniciando…' : '▶ Iniciar ciclo (producir)'}
         </button>
       {/if}
 
-      {#if $confirmacionPorEstado}
-        {@const c = confirmarMeta($confirmacionPorEstado)}
-        <button class="btn-confirmar" on:click={() => ejecutarConfirmar($confirmacionPorEstado!)}>
-          {c.icono} {c.label}
-        </button>
-        <div class="confirmar-hint">{c.hint} <em>· no es RPC: va por adaptador-confirmacion</em></div>
-      {/if}
-    </div>
-  {/if}
-
-  <!-- CARA TRABAJADOR: VIGILAR (arriba, común) + EJECUTAR (solo confirmaciones contextuales, SIN iniciar) -->
-  {#if rol === 'trabajador'}
-    <div class="gestos">
       {#if $confirmacionPorEstado}
         {@const c = confirmarMeta($confirmacionPorEstado)}
         <button class="btn-confirmar btn-worker" on:click={() => ejecutarConfirmar($confirmacionPorEstado!)}>
@@ -274,13 +261,20 @@
         </button>
         <div class="confirmar-hint">{c.hint} <em>· no es RPC: va por adaptador-confirmacion</em></div>
       {:else}
-        <div class="worker-espera">👀 solo vigilar — no hay ninguna acción física pendiente en este estado</div>
+        <div class="worker-espera">👀 produciendo — el estado del ciclo se vigila; no hay ninguna acción física pendiente</div>
       {/if}
     </div>
   {/if}
 
+  <!-- CARA JEFE: ve RESULTADOS / visión de conjunto — SOLO vigilancia, sin operar producción -->
+  {#if rol === 'jefe'}
+    <div class="gestos">
+      <div class="jefe-ver">📊 Visión de conjunto: el jefe observa el estado del ciclo y los resultados. No arranca producción ni confirma transiciones físicas — eso es del trabajador que controla el proceso.</div>
+    </div>
+  {/if}
+
   <div class="pie-hint">
-    es un panel de ESTADO: la vista se reconstruye por las señales del orquestador, nunca recarga · el JEFE inicia desde IDLE/COLA_VACIA/ERROR · el TRABAJADOR confirma retirar/filamento/reanudar con el botón contextual según el estado
+    es un panel de ESTADO: la vista se reconstruye por las señales del orquestador, nunca recarga · el TRABAJADOR controla el proceso (inicia y confirma retirar/filamento/reanudar) · el JEFE ve el conjunto y los resultados
   </div>
 </div>
 

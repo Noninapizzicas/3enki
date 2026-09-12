@@ -4,21 +4,22 @@
   "version": "blueprint-2.2.0",
   "moduleId": "catalogo-modelos",
   "actor": "jefe",
-  "_doc": "Blueprint de interfaz de catalogo-modelos — CUSTODIO del proyecto 3D. REESCRITO por prisma-universal (FASE 6.5 v2) como INGENIERO DE INTERFAZ DE ENKI, consumiendo el esquema-jefe de F6 (modules/catalogo-modelos/esquema-jefe/esquema-jefe.md), module.json (ui_handlers con handler real) e index.js (handlers/proyecciones/invariantes reales). ENRIQUECIDO con FORMAS UI CONCRETAS por op (select/tabla/formulario/detalle) y LOGICA FUNCIONAL real: registrar=formulario (editor-bloque), listar=tabla/cinta, obtener=detalle, categorias=select. Cada op de ui.ops corresponde a un handler REAL (onRegistrarRequest/onListarRequest/onObtenerRequest/onCategoriasRequest). `aprobar/rechazar` es [ABIERTO] en el esquema-jefe y NO tiene handler en index.js -> NO entra en ui.ops. Se declara `ui.formas` con la forma UI de cada op. La op `categorias` se anade a transporte.rpc a mano (el generador base la omite porque no esta en ui_handlers).",
+  "_doc": "Blueprint de interfaz de catalogo-modelos — CUSTODIO del proyecto 3D. REESCRITO por prisma-universal (FASE 6.5 v2) como INGENIERO DE INTERFAZ DE ENKI, consumiendo el esquema-jefe de F6 (modules/catalogo-modelos/esquema-jefe/esquema-jefe.md), module.json (ui_handlers con handler real) e index.js (handlers/proyecciones/invariantes reales). ENRIQUECIDO con FORMAS UI CONCRETAS por op (select/tabla/formulario/detalle) y LOGICA FUNCIONAL real: registrar=formulario (editor-bloque), listar=tabla/cinta, obtener=detalle, categorias=select. AMPLIADO (FASE 6.5 v3) con el ROL TRABAJADOR/OPERADOR: las lecturas listar/obtener/categorias pasan de `neutro` a `trabajador` (gesto rey del worker = obtener = ficha del modelo a imprimir), conservando registrar=jefe (unica escritura del custodio). El trabajador aqui es un LECTOR casi puro: consulta la ficha antes de imprimir; su operacion fisica (retirar, filamento) vive en ciclo-impresion/cola-impresion, NO en catalogo. Fuente de verdad del rol trabajador: modules/catalogo-modelos/esquema-trabajador/esquema-trabajador.md. Cada op de ui.ops corresponde a un handler REAL (onRegistrarRequest/onListarRequest/onObtenerRequest/onCategoriasRequest). `aprobar/rechazar` es [ABIERTO] en el esquema-jefe y NO tiene handler en index.js -> NO entra en ui.ops. Se declara `ui.formas` con la forma UI de cada op. La op `categorias` se anade a transporte.rpc a mano (el generador base la omite porque no esta en ui_handlers).",
   "_lente_roles": {
     "agente": "prisma-universal",
-    "fase": "F6_5_v2",
-    "enfoque": "como ingeniero de interfaz de Enki para la interfaz PRACTICA y FUNCIONAL de catalogo-modelos",
-    "metodo": "esquematizador-universal (prisma de 5 huecos) + lente rol JEFE + formas UI concretas",
-    "arbitro": "futuro->jefe · ahora->utilizacion · solo-lee->neutro",
-    "consolidacion": "modules/catalogo-modelos/esquema-jefe/esquema-jefe.md",
-    "dualidad": "JEFE=registrar (unica escritura del custodio, decide el futuro del catalogo) · UTILIZACION=no existe (no hay seleccion de cliente final; importacion-modelo es ORIGEN de datos, no cara) · neutro=listar/obtener/categorias (lecturas que alimentan la decision de registrar)",
+    "fase": "F6_5_v3",
+    "enfoque": "como ingeniero de interfaz de Enki para la interfaz PRACTICA y FUNCIONAL de catalogo-modelos, ampliada con el rol TRABAJADOR/OPERADOR",
+    "metodo": "esquematizador-universal (prisma de 5 huecos) + lente rol JEFE (conservado) + lente rol TRABAJADOR (anadido) + formas UI concretas",
+    "arbitro": "futuro->jefe · operacion/consulta->trabajador · solo-informa->neutro",
+    "consolidacion": "modules/catalogo-modelos/esquema-trabajador/esquema-trabajador.md + esquema-jefe/esquema-jefe.md",
+    "dualidad": "JEFE=registrar (unica escritura del custodio, decide el futuro del catalogo) · TRABAJADOR=listar/obtener/categorias (consultas de lectura que alimentan la OPERACION de imprimir; gesto rey del worker = obtener = la ficha del modelo) · UTILIZACION=no existe (no hay seleccion de cliente final; importacion-modelo es ORIGEN de datos, no cara)",
     "senales_pareadas": {
       "registrar": "catalogo.modelo_registrado",
-      "fallo": "catalogo.registrar.failed"
+      "fallo": "catalogo.registrar.failed",
+      "lecturas": "(listar/obtener/categorias) la vista re-lee, nunca recarga — RPC de lectura puro"
     }
   },
-  "titulo": "Catalogo de modelos 3D del taller (CUSTODIO): registrar/listar/obtener/categorias, persistido por proyecto. Es el UNICO escritor de su store (Map<id,Modelo>). Op registrar (append + emite catalogo.modelo_registrado), listar, obtener, categorias (distinct de listar) y metadatos (huecos como 'desconocido'). Persiste por proyecto via _shared/pos-persistencia (snapshot fs por project_id, debounced) en /3d/catalogo/catalogo-modelos.json; restaura en project.activated; vuelca en onUnload. Lo llaman importacion-modelo (tras leer el .3mf) y el dueno. Par de fallo catalogo.registrar.failed.",
+  "titulo": "Catalogo de modelos 3D del taller (CUSTODIO): registrar/listar/obtener/categorias, persistido por proyecto. Es el UNICO escritor de su store (Map<id,Modelo>). Op registrar (append + emite catalogo.modelo_registrado), listar, obtener, categorias (distinct de listar) y metadatos (huecos como 'desconocido'). Persiste por proyecto via _shared/pos-persistencia (snapshot fs por project_id, debounced) en /3d/catalogo/catalogo-modelos.json; restaura en project.activated; vuelca en onUnload. Lo llaman importacion-modelo (tras leer el .3mf) y el dueno. Par de fallo catalogo.registrar.failed. ROL TRABAJADOR: cara de consulta operativa del taller — ver la ficha del modelo (obtener) y que hay disponible (listar/categorias) ANTES de imprimir; no escribe.",
   "eventos_publicados": [
     "catalogo.modelo_registrado",
     "catalogo.registrar.failed"
@@ -42,7 +43,7 @@
         "rol": "jefe",
         "forma": "formulario",
         "titulo": "Registrar",
-        "descripcion": "Registra un modelo 3D en el catalogo (append al store). Requiere nombre y project_id; id unico (duplicado -> 409 ALREADY_EXISTS). Emite catalogo.modelo_registrado.",
+        "descripcion": "Registra un modelo 3D en el catalogo (append al store). Requiere nombre y project_id; id unico (duplicado -> 409 ALREADY_EXISTS). Emite catalogo.modelo_registrado. ESCLUSIVA del jefe: el trabajador NO da de alta modelos.",
         "logica": "Formulario (editor-bloque) de alta: al guardar emite catalogo.registrar.request y la vista re-lee via la senal catalogo.modelo_registrado (nunca recarga). El select de categoria se alimenta de la op categorias.",
         "args": [
           {
@@ -83,11 +84,11 @@
         ]
       },
       "listar": {
-        "rol": "neutro",
+        "rol": "trabajador",
         "forma": "tabla",
         "titulo": "Listar",
-        "descripcion": "Lista todos los modelos del proyecto. Respuesta {modelos[], total}. Cinta del catalogo del jefe.",
-        "logica": "Tabla/cinta de modelos: columnas nombre, categoria, origen. refresh_on catalogo.modelo_registrado (al dar de alta, la cinta re-lee).",
+        "descripcion": "Lista todos los modelos del proyecto. Respuesta {modelos[], total}. Para el TRABAJADOR es la cinta 'que hay disponible para imprimir' (la alacena de piezas imprimibles); para el JEFE, la cinta del catalogo.",
+        "logica": "Cinta de piezas disponibles (tabla): columnas nombre, categoria, origen. El operador toca una fila para abrir la ficha (obtener). refresh_on catalogo.modelo_registrado (la senal la EMITE el jefe; el worker la ve llegar, no la dispara). RPC de lectura: la vista re-lee, nunca recarga.",
         "args": [
           {
             "nombre": "project_id",
@@ -98,11 +99,11 @@
         ]
       },
       "obtener": {
-        "rol": "neutro",
+        "rol": "trabajador",
         "forma": "detalle",
         "titulo": "Obtener",
-        "descripcion": "Obtiene un modelo por id (404 si no existe). Detalle del modelo (metadatos, origen, archivo, created_at) que alimenta la decision de registrar.",
-        "logica": "Vista de detalle: muestra metadatos, archivo3mf, origen, created_at del modelo seleccionado. El id se toma de la fila seleccionada en listar.",
+        "descripcion": "Obtiene un modelo por id (404 si no existe). Detalle del modelo (metadatos, origen, archivo, created_at). GESTO REY del trabajador: la ficha tecnica que lee ANTES de imprimir — que archivo .3mf, que material, que dimensiones, que tiempo estimado.",
+        "logica": "Vista de ficha/detalle del modelo: muestra metadatos (material, dimensiones, tiempo/peso estimado), archivo3mf, origen, created_at. Los huecos se ven honestos como 'desconocido'. El id se toma de la fila seleccionada en listar (un toque: cinta -> ficha). RPC de lectura: nunca recarga.",
         "args": [
           {
             "nombre": "id",
@@ -117,16 +118,16 @@
         ]
       },
       "categorias": {
-        "rol": "neutro",
+        "rol": "trabajador",
         "forma": "select",
         "titulo": "Categorias",
-        "descripcion": "Categorias distintas del catalogo (distinct de listar, ordenado). Alimenta el select de categoria al registrar.",
-        "logica": "Select de categoria: alimenta el campo categoria del formulario registrar. Respuesta {categorias[], total}."
+        "descripcion": "Categorias distintas del catalogo (distinct de listar, ordenado). Para el TRABAJADOR, agrupar/ordenar la cinta para localizar la pieza rapido (p.ej. por categoria). Alimenta tambien el select del formulario de registrar (jefe).",
+        "logica": "Select/agrupador de categoria: agrupa la cinta para encontrar la pieza a imprimir y alimenta el campo categoria del formulario registrar (jefe). Respuesta {categorias[], total}. RPC de lectura."
       }
     },
     "datos": {
       "op": "listar",
-      "titulo": "Cinta del catalogo",
+      "titulo": "Cinta de piezas disponibles del catalogo",
       "refresh_on": [
         "catalogo.modelo_registrado"
       ]
@@ -146,17 +147,17 @@
         "ops": [
           "registrar"
         ],
-        "descripcion": "Cara de edicion del custodio: dar de alta modelos en el catalogo (la unica escritura). Formulario (editor-bloque) multi-campo (nombre, categoria, archivo, origen, metadatos) — 1 modal, no fases. Senal pareada catalogo.modelo_registrado refresca la vista (nunca recarga)."
+        "descripcion": "Cara de edicion del custodio (JEFE): dar de alta modelos en el catalogo (la unica escritura). Formulario (editor-bloque) multi-campo (nombre, categoria, archivo, origen, metadatos) — 1 modal, no fases. Senal pareada catalogo.modelo_registrado refresca la vista (nunca recarga). Conservado de la pasada del jefe."
       },
       {
-        "nombre": "consulta",
+        "nombre": "trabajador",
         "orden": 2,
         "ops": [
           "listar",
           "obtener",
           "categorias"
         ],
-        "descripcion": "Lecturas neutras que alimentan la decision del jefe: tabla/cinta del catalogo (listar), detalle del modelo (obtener) y select de categoria (categorias). La vista re-lee, nunca recarga."
+        "descripcion": "Cara de CONSULTA OPERATIVA del trabajador/operador del taller: ver la ficha del modelo ANTES de imprimir (obtener — gesto rey), que hay disponible (listar) y como agrupar la cinta (categorias). Un toque: cinta -> ficha. El worker SOLO LEE aqui (no escribe, registrar es jefe); RPC de lectura, la vista re-lee nunca recarga; recibe catalogo.modelo_registrado como novedad pero NO la dispara. La operacion fisica (retirar, filamento) vive en ciclo-impresion/cola-impresion, no aqui."
       }
     ],
     "dependencias": {
@@ -175,10 +176,11 @@
     },
     "roles": {
       "registrar": "jefe",
-      "listar": "neutro",
-      "obtener": "neutro",
-      "categorias": "neutro"
+      "listar": "trabajador",
+      "obtener": "trabajador",
+      "categorias": "trabajador"
     }
   },
-  "_eventos_que_escucho_nota": "Vacio a proposito (ley ANTICOLISION: subscribes XOR eventos_que_escucho). Los eventos que escucha ya son la fuente de verdad en module.json.subscribes; no se duplican aqui."
+  "_nota_trabajador": "El ROL TRABAJADOR/OPERADOR en catalogo-modelos es un LECTOR casi puro: sus caras son listar + obtener + categorias (consulta para imprimir). NO toca registrar (escritura exclusiva del jefe). Su operacion fisica real (arrancar impresion, retirar pieza, cambiar filamento, stock) vive en ciclo-impresion / cola-impresion, NO en este modulo. Gesto rey del worker = obtener (la ficha del modelo a imprimir). Esquema fuente de verdad: modules/catalogo-modelos/esquema-trabajador/esquema-trabajador.md.",
+  "_eventos_que_escucho_nota": "Vacio a proposito (ley ANTICOLISION: subscribes XOR eventos_que_escucho). Los eventos que escucha ya son la fuente de verdad en module.json.subscribes; no se duplican aqui. El worker no anade subscribes: recibe catalogo.modelo_registrado como novedad via UI, no como receptor propio del evento."
 }

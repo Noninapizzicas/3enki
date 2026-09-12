@@ -49,5 +49,25 @@
       "event": "filamento.decrementar.failed",
       "description": "Par de fallo: el decremento no se completo (rollo inexistente o longitud desconocida)."
     }
+  ],
+  "ui_handlers": [
+    {
+      "action": "listar",
+      "domain": "gestion-filamento",
+      "type": "workspace_module",
+      "zone": "barra_modulos",
+      "label": "Listar",
+      "description": "Lista el stock de filamento del proyecto ({project_id} -> {filamentos[], total}). Cinta del stock que LEE el TRABAJADOR/operador para operar la impresora y que alimenta la vista del JEFE para decidir si repone. Lectura pura, sin señal (la vista re-lee, refrescada por filamento.registrado/decrementado/bajo).",
+      "handler": "onListarRequest"
+    },
+    {
+      "action": "registrar",
+      "domain": "gestion-filamento",
+      "type": "workspace_module",
+      "zone": "barra_modulos",
+      "label": "Registrar",
+      "description": "Da de alta un rollo de filamento ({project_id, tipo} obligatorios + {color?, longitud_inicial?, activo?}). La UNICA escritura del custodio, exclusiva del JEFE; incluye el toggle 'activo'. Emite filamento.registrado o filamento.registrar.failed.",
+      "handler": "onRegistrarRequest"
+    }
   ]
 }

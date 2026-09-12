@@ -23,13 +23,7 @@
     "catalogo.modelo_registrado",
     "catalogo.registrar.failed"
   ],
-  "eventos_que_escucho": [
-    "catalogo.registrar.request",
-    "catalogo.listar.request",
-    "catalogo.obtener.request",
-    "catalogo.categorias.request",
-    "project.activated"
-  ],
+  "eventos_que_escucho": [],
   "transporte": {
     "rpc": [
       "catalogo.registrar.request -> .response",
@@ -185,5 +179,6 @@
       "obtener": "neutro",
       "categorias": "neutro"
     }
-  }
+  },
+  "_eventos_que_escucho_nota": "Vacio a proposito (ley ANTICOLISION: subscribes XOR eventos_que_escucho). Los eventos que escucha ya son la fuente de verdad en module.json.subscribes; no se duplican aqui."
 }

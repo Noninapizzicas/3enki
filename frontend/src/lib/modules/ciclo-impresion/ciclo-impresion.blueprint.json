@@ -38,14 +38,7 @@
     "filamento.usado",
     "progreso.actualizado"
   ],
-  "eventos_que_escucho": [
-    "ciclo.iniciar.request",
-    "impresion.completada",
-    "impresion.error",
-    "filamento.falta",
-    "adaptador-confirmacion.confirmacion_recibida",
-    "adaptador-impresora.estado_crudo"
-  ],
+  "eventos_que_escucho": [],
   "transporte": {
     "rpc": [
       "ciclo.iniciar.request -> .response"
@@ -220,5 +213,6 @@
       "filamento_cambiado": "jefe",
       "reanudar_ciclo": "jefe"
     }
-  }
+  },
+  "_eventos_que_escucho_nota": "Vacio a proposito (ley ANTICOLISION: subscribes XOR eventos_que_escucho). Los eventos que escucha ya son la fuente de verdad en module.json.subscribes; no se duplican aqui."
 }

@@ -1,34 +1,53 @@
 <script lang="ts">
   /**
-   * CicloImpresionPanel — la MÁQUINA DE ESTADOS del ciclo + la MANO DEL JEFE (F7, prisma-universal).
+   * CicloImpresionPanel — la MÁQUINA DE ESTADOS del ciclo + las DOS CARAS del rol (F7, prisma-universal).
    *
    * REEMPLAZA el envoltorio genérico (BlueprintForm): panel ESPECÍFICO de ESTADO
    * con store MQTT, siguiendo el patrón de CatalogoModelosPanel / HistorialImpresionesPanel /
    * ColaImpresionPanel (4ª iteración de la práctica F7).
    *
-   * EL JEFE AQUÍ OBSERVA + CONFIRMA (operador de máquina): a diferencia de historial
-   * (jefe LECTOR) y cola (jefe escritor-reordenador-disparador), ciclo-impresion NO
-   * lista ni registra: el jefe mira el punto actual de la máquina de estados y decide
-   * las transiciones físicas que requieren su mano. El estado se RECONSTRUYE por las
-   * señales del orquestador (NO hay RPC lectora — hueco [ABIERTO] del esquema-jefe):
-   *   - iniciar (ROL JEFE, la ÚNICA RPC real): ▶ arranca el ciclo desde IDLE/COLA_VACIA/ERROR.
-   *   - Confirmaciones CONTEXTUALES (ROL JEFE, NO son RPC del módulo): el botón según
-   *     el estado emite adaptador-confirmacion.confirmacion_recibida; el ciclo lo
-   *     consume en onConfirmacionRecibida y aplica la transición:
-   *       ESPERANDO_RETIRADA     → 🛠️ "Pieza retirada"  → IDLE (encadena siguiente)
-   *       PAUSADO_FALTA_FILAMENTO → 🧵 "Filamento cambiado" → IMPRIMIENDO
-   *       ERROR                  → ❌ "Reanudar ciclo"    → IDLE
+   * SUMAR (pasada F7 trabajador): la cara del rol TRABAJADOR se SUMA a este MISMO
+   * panel del jefe mediante pestañas de rol — NO se creó un panel nuevo. La
+   * observación (estado + pieza + progreso + máquina visual) es COMÚN a ambos
+   * (jefe_ver es COMPARTIDO en el blueprint F6½), y cada pestaña aporta SUS
+   * acciones:
+   *   - PESTAÑA JEFE: ▶ iniciar ciclo (la ÚNICA RPC real, onIniciarRequest → _iniciar)
+   *     + las confirmaciones contextuales conservadas por compatibilidad
+   *     (jefe_confirmar; en un taller de uso propio jefe=trabajador=dueño).
+   *   - PESTAÑA TRABAJADOR/OPERADOR: la cara MÁS operativa del taller, quie n es
+   *     quien EJECUTA las acciones físicas y VIGILA la impresora:
+   *       VIGILAR — el estado de la máquina en grande (badge) + pieza en curso +
+   *                 progreso %/capa (via progreso.actualizado): el operador ve
+   *                 qué imprime ahora.
+   *       EJECUTAR — las 3 confirmaciones contextuales según estado (las que
+   *                 requieren su mano física):
+   *           ESPERANDO_RETIRADA      → "✅ Pieza retirada"      (pieza_retirada)
+   *           PAUSADO_FALTA_FILAMENTO → "🧵 Filamento cambiado"  (filamento_cambiado)
+   *           ERROR                   → "🔁 Reanudar ciclo"      (reanudar_ciclo)
+   *                 Visible SOLO en el estado correspondiente. NO hay botón
+   *                 "Iniciar ciclo" en esta cara (eso es del JEFE).
+   *       Las confirmaciones se emiten vía confirmarCiclo(pid, tipo) del store
+   *       (publica adaptador-confirmacion.confirmacion_recibida → onConfirmacionRecibida),
+   *       NO son RPC .request del módulo.
+   *
+   * El estado se RECONSTRUYE por las señales del orquestador (NO hay RPC lectora —
+   * hueco [ABIERTO] del esquema-jefe). Confirmaciones contextuales (NO son RPC del
+   * módulo): el botón según el estado emite adaptador-confirmacion.confirmacion_recibida;
+   * el ciclo lo consume en onConfirmacionRecibida y aplica la transición:
+   *   ESPERANDO_RETIRADA     → 🛠️ "Pieza retirada"  → IDLE (encadena siguiente)
+   *   PAUSADO_FALTA_FILAMENTO → 🧵 "Filamento cambiado" → IMPRIMIENDO
+   *   ERROR                  → ❌ "Reanudar ciclo"    → IDLE
    *
    * Composición:
-   *   - CABECERA: "Ciclo de impresión" + badge grande del estado actual (color=estado).
-   *   - PIEZA EN CURSO: nombre + material + modelo (via ciclo.iniciado).
-   *   - PROGRESO: barra % + capa actual/total (via progreso.actualizado).
-   *   - MÁQUINA DE ESTADOS VISUAL: el flujo de los 8 estados (ui.estados) con el
-   *     actual resaltado; los estados con "mano" (retirar/filamento/error) marcados.
-   *   - BOTONES: ▶ Iniciar ciclo (IDLE/COLA_VACIA/ERROR) + botón contextual de
-   *     confirmación según estado. El botón de confirmación ES la máquina (habilitado
-   *     solo en el estado que lo pide).
+   *   - PESTAÑAS DE ROL: "Jefe" | "Trabajador/Operador" (SUMA dentro del MISMO panel).
+   *   - CABECERA: "Ciclo de impresión" + badge grande del estado actual (color=estado),
+   *     alcance según pestaña activa.
+   *   - OBSERVACIÓN (común): pieza en curso (via ciclo.iniciado), progreso barra % +
+   *     capa actual/total (via progreso.actualizado), máquina de estados VISUAL de los
+   *     8 estados (ui.estados) con el actual resaltado.
    *   - ÚLTIMA SEÑAL: actividad en vivo (qué evento llegó por el bus).
+   *   - ACCIONES POR PESTAÑA: Jefe → [▶ Iniciar + botón contextual]; Trabajador →
+   *     [botón contextual SOLO, sin iniciar].
    *   - ESTADOS: esperando proyecto → aviso (sin iniciar) → punto de la máquina.
    */
 
@@ -42,6 +61,9 @@
   import { sessionProjectId } from '$lib/stores/sessionProject';
 
   export let panelId: string = '';
+
+  /* Pestaña de rol activa — la cara del trabajador SE SUMA a este panel (no panel nuevo). */
+  let rol: 'jefe' | 'trabajador' = 'jefe';
 
   /* Suscripción a las señales reconstructoras — R3, la esencia del panel. */
   let cleanupSenal: (() => void) | null = null;
@@ -60,14 +82,14 @@
     if (!pid) resetCiclo();
   }
 
-  // ---- gesto INICIAR ----
+  // ---- gesto INICIAR (ROL JEFE — la ÚNICA RPC real) ----
   async function ejecutarIniciar(): Promise<void> {
     const pid = $sessionProjectId;
     if (!pid) return;
     await iniciarCiclo(pid);
   }
 
-  // ---- gesto CONFIRMAR (contextual, emite adaptador-confirmacion.confirmacion_recibida) ----
+  // ---- gesto CONFIRMAR (rol TRABAJADOR, contextual, emite adaptador-confirmacion.confirmacion_recibida) ----
   function ejecutarConfirmar(tipo: TipoConfirmacion): void {
     const pid = $sessionProjectId;
     if (!pid) return;
@@ -75,6 +97,11 @@
     // No hay señal .response propia: la transición se refleja en el siguiente
     // evento publicado (ciclo.iniciado/completado o progreso.actualizado). Re-lee.
   }
+
+  // ---- Al cambiar de pestaña al trabajador, el alcance del badge refleja el rol ----
+  $: alcance = rol === 'jefe'
+    ? 'ver + iniciar + confirmar (jefe operador de máquina)'
+    : 'VIGILAR + EJECUTAR (operador del taller · la mano en la impresora)';
 
   // ---- helpers de visual ----
   /** Metadatos del estado (color + icono), de ui.estados del blueprint F6½. */
@@ -107,9 +134,9 @@
   /** Texto + qué hace el botón de confirmación contextual para un tipo. */
   function confirmarMeta(tipo: TipoConfirmacion): { label: string; icono: string; hint: string } {
     const map: Record<TipoConfirmacion, { label: string; icono: string; hint: string }> = {
-      pieza_retirada:      { label: 'Pieza retirada',        icono: '🛠️', hint: 'retirar de la cama → IDLE (encadena la siguiente)' },
+      pieza_retirada:      { label: 'Pieza retirada',        icono: '✅', hint: 'retirar de la cama → IDLE (encadena la siguiente)' },
       filamento_cambiado:  { label: 'Filamento cambiado',    icono: '🧵', hint: 'cambiar filamento → IMPRIMIENDO (reanuda)' },
-      reanudar_ciclo:      { label: 'Reanudar ciclo',        icono: '❌', hint: 'limpiar el error → IDLE (listo para re-iniciar)' }
+      reanudar_ciclo:      { label: 'Reanudar ciclo',        icono: '🔁', hint: 'limpiar el error → IDLE (listo para re-iniciar)' }
     };
     return map[tipo];
   }
@@ -124,7 +151,7 @@
   <div class="actor-badge">
     <span class="badge-icon">⏱️</span>
     <span class="badge-label">Ciclo de impresión</span>
-    <span class="badge-scope">MICRO-AGENTE · jefe OPERADOR DE MÁQUINA · ver + iniciar + confirmar</span>
+    <span class="badge-scope">MICRO-AGENTE · {alcance}</span>
     {#if $cicloIniciando}
       <span class="badge-sync">iniciando…</span>
     {/if}
@@ -133,6 +160,18 @@
   {#if $cicloError}
     <div class="aviso-error">⚠️ {$cicloError}</div>
   {/if}
+
+  <!-- PESTAÑAS DE ROL — la cara del trabajador SE SUMA al panel del jefe (no panel nuevo) -->
+  <div class="rol-tabs" role="tablist" aria-label="cara de rol">
+    <button class="rol-tab {rol === 'jefe' ? 'rol-tab-activo' : ''}" role="tab"
+      aria-selected={rol === 'jefe'} on:click={() => (rol = 'jefe')}>👔 Jefe</button>
+    <button class="rol-tab {rol === 'trabajador' ? 'rol-tab-activo' : ''}" role="tab"
+      aria-selected={rol === 'trabajador'} on:click={() => (rol = 'trabajador')}>🛠️ Trabajador / Operador</button>
+  </div>
+
+  <!-- OBSERVACIÓN COMÚN (jefe_ver es COMPARTIDO con el trabajador en el blueprint F6½):
+       estado en grande + pieza en curso + progreso %/capa + máquina visual. El VIGILAR
+       del trabajador ve exactamente esto: qué imprime ahora. -->
 
   <!-- PUNT0 DE LA MÁQUINA (el centro del panel de estado) -->
   <div class="estado-hero">
@@ -191,7 +230,7 @@
       {/each}
     </ol>
     <div class="maquina-leyenda">
-      estados con «tu mano hace falta»: 🛠️ retirar · 🧵 filamento · ❌ reanudar
+      estados con «tu mano hace falta»: ✅ retirar · 🧵 filamento · 🔁 reanudar
     </div>
   </div>
 
@@ -203,26 +242,45 @@
     </div>
   {/if}
 
-  <!-- ACCIONES DEL JEFE -->
-  <div class="gestos">
-    {#if $puedeIniciar}
-      <button class="btn-jefe" disabled={$cicloIniciando} on:click={ejecutarIniciar}
-        title="arranca el ciclo (ciclo.iniciar.request → ciclo.iniciado; una pieza a la vez)">
-        {$cicloIniciando ? '⏳ iniciando…' : '▶ Iniciar ciclo'}
-      </button>
-    {/if}
+  <!-- ACCIONES POR PESTAÑA -->
 
-    {#if $confirmacionPorEstado}
-      {@const c = confirmarMeta($confirmacionPorEstado)}
-      <button class="btn-confirmar" on:click={() => ejecutarConfirmar($confirmacionPorEstado!)}>
-        {c.icono} {c.label}
-      </button>
-      <div class="confirmar-hint">{c.hint} <em>· no es RPC: va por adaptador-confirmacion</em></div>
-    {/if}
-  </div>
+  <!-- CARA JEFE: iniciar (la ÚNICA RPC) + confirmar conservado (superconjunto) -->
+  {#if rol === 'jefe'}
+    <div class="gestos">
+      {#if $puedeIniciar}
+        <button class="btn-jefe" disabled={$cicloIniciando} on:click={ejecutarIniciar}
+          title="arranca el ciclo (ciclo.iniciar.request → ciclo.iniciado; una pieza a la vez)">
+          {$cicloIniciando ? '⏳ iniciando…' : '▶ Iniciar ciclo'}
+        </button>
+      {/if}
+
+      {#if $confirmacionPorEstado}
+        {@const c = confirmarMeta($confirmacionPorEstado)}
+        <button class="btn-confirmar" on:click={() => ejecutarConfirmar($confirmacionPorEstado!)}>
+          {c.icono} {c.label}
+        </button>
+        <div class="confirmar-hint">{c.hint} <em>· no es RPC: va por adaptador-confirmacion</em></div>
+      {/if}
+    </div>
+  {/if}
+
+  <!-- CARA TRABAJADOR: VIGILAR (arriba, común) + EJECUTAR (solo confirmaciones contextuales, SIN iniciar) -->
+  {#if rol === 'trabajador'}
+    <div class="gestos">
+      {#if $confirmacionPorEstado}
+        {@const c = confirmarMeta($confirmacionPorEstado)}
+        <button class="btn-confirmar btn-worker" on:click={() => ejecutarConfirmar($confirmacionPorEstado!)}>
+          {c.icono} {c.label}
+        </button>
+        <div class="confirmar-hint">{c.hint} <em>· no es RPC: va por adaptador-confirmacion</em></div>
+      {:else}
+        <div class="worker-espera">👀 solo vigilar — no hay ninguna acción física pendiente en este estado</div>
+      {/if}
+    </div>
+  {/if}
 
   <div class="pie-hint">
-    es un panel de ESTADO: la vista se reconstruye por las señales del orquestador, nunca recarga · inicia desde IDLE/COLA_VACIA/ERROR · confirma retirar/filamento/reanudar con el botón contextual
+    es un panel de ESTADO: la vista se reconstruye por las señales del orquestador, nunca recarga · el JEFE inicia desde IDLE/COLA_VACIA/ERROR · el TRABAJADOR confirma retirar/filamento/reanudar con el botón contextual según el estado
   </div>
 </div>
 
@@ -233,6 +291,11 @@
   .badge-label { font-weight: 700; color: var(--color-primary, #eab308); text-transform: uppercase; letter-spacing: 0.05em; }
   .badge-scope { color: var(--color-text-muted, #888); font-size: 0.65rem; }
   .badge-sync { margin-left: auto; color: var(--color-primary, #eab308); font-size: 0.65rem; }
+
+  .rol-tabs { display: flex; gap: 0.35rem; padding: 0.15rem; background: var(--color-surface, #1a1a1a); border: 1px solid var(--color-border, #333); border-radius: 8px; }
+  .rol-tab { font-size: 0.72rem; flex: 1; padding: 0.35rem 0.5rem; border-radius: 6px; border: 1px solid transparent; cursor: pointer; background: transparent; color: var(--color-text-muted, #888); font-weight: 600; }
+  .rol-tab-activo { background: rgba(234,179,8,0.14); color: var(--color-primary, #eab308); border-color: rgba(234,179,8,0.35); }
+
   .aviso-error { font-size: 0.75rem; color: #ef4444; padding: 0.4rem 0.7rem; background: rgba(239,68,68,0.08); border-radius: 6px; border: 1px solid rgba(239,68,68,0.25); }
   .aviso-ok { font-size: 0.75rem; color: #22c55e; padding: 0.4rem 0.7rem; background: rgba(34,197,94,0.08); border-radius: 6px; border: 1px solid rgba(34,197,94,0.25); }
 
@@ -280,7 +343,10 @@
   .btn-jefe:disabled { opacity: 0.5; cursor: not-allowed; }
   .btn-confirmar { font-size: 0.82rem; padding: 0.45rem 0.9rem; border-radius: 6px; border: 1px solid var(--color-primary, #eab308); cursor: pointer; background: transparent; color: var(--color-primary, #eab308); font-weight: 700; }
   .btn-confirmar:hover { background: rgba(234,179,8,0.12); }
+  .btn-worker { border-color: #22c55e; color: #22c55e; }
+  .btn-worker:hover { background: rgba(34,197,94,0.12); }
   .confirmar-hint { font-size: 0.62rem; color: var(--color-text-muted, #888); }
   .confirmar-hint em { font-style: normal; color: #f59e0b; }
+  .worker-espera { font-size: 0.68rem; color: var(--color-text-muted, #888); font-style: italic; }
   .pie-hint { font-size: 0.62rem; color: var(--color-text-muted, #888); padding: 0 0.2rem; }
 </style>

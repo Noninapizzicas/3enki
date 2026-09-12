@@ -14,6 +14,13 @@
 | registrar | catalogo.registrar.request → .response | 5 campos de alta + metadatos (editor-bloque) | formulario | modal (overlay + panel) | nombre*, categoria(select), archivo3mf, origen, metadatos | sobrepasa el gesto inline; 1 modal no fases es la escritura única del rol jefe |
 | categorias | catalogo.categorias.request → .response | opciones de un campo del alta | select | combobox alimentado por `categorias` | lista de valores | evita tipeo errado en `categoria`; alimenta `registrar.categoria` |
 | obtener | catalogo.obtener.request → .response | detalle de un registro ya listado | vista detalle | panel (dl) | metadatos, origen, archivo3mf, created_at | no abarrotar la cinta; el detalle alimenta la decisión del jefe |
+| obtener · TRABAJADOR | catalogo.obtener.request → .response | ficha técnica de UN modelo ANTES de imprimir (gesto rey del worker) | ficha inline (cinta-estado/informe) | .ficha-trabajador (dl) | .3mf, material, dimensiones, tiempo/peso, origen | el trabajador LEE la pieza que va a tirar; un toque de la cinta abre la ficha — es la consulta que desbloquea la operación |
+| listar · TRABAJADOR | catalogo.listar.request → .response | cinta "qué hay disponible" para elegir qué pieza imprimir | tabla/cinta (misma cinta del store) | .worker-cinta filas clicables | nombre, categoria, origen | el worker ve la alacena de piezas imprimibles para elegir; reusa `modelos` sin duplicar store |
+| categorias · TRABAJADOR | catalogo.categorias.request → .response | agrupar/ordenar la cinta del worker | select/badge agrupador (derivado) | .worker-filtro select | lista de categorías → filtra `modelosWorker` | localizar la pieza rápido por categoría; mismo `categorias` que alimenta el alta del jefe |
+
+> La fila del rol trabajador ocupa un bloque de 3 (obtener-ficha, listar-cinta operativa, categorias-orden)
+> porque las 3 ops comparten el mismo gesto: consultar para imprimir. Es el dataset de la 6ª decisión de
+> la fase 7 — SUMAR la cara del LECTOR al panel del jefe, sin crear panel nuevo ni duplicar stores.
 
 ## Señal-refresh (tiempo real, nunca recarga)
 
@@ -39,8 +46,17 @@ CATALOGO.REGISTRAR (RPC, ROL JEFE — única escritura)
    │   └──> form modal: nombre* + categoria(select) + archivo3mf + origen + metadatos
    │        duplicado → 409 ALREADY_EXISTS (MqttRequestError → altaError)
    │
-CATALOGO.OBTENER (RPC)
+CATALOGO.OBTENER (RPC, ROL JEFE — detalle del alta)
    └──> detalle panel: metadatos + origen + archivo + created_at
+
+── CARA DEL TRABAJADOR (SUMA al mismo panel: pestaña "Trabajador", LECTOR) ──
+CATALOGO.LISTAR (RPC, ROL TRABAJADOR — cinta operativa)
+   └──> .worker-cinta: "qué hay disponible" para elegir qué pieza imprimir
+CATALOGO.CATEGORIAS (RPC, ROL TRABAJADOR — orden)
+   └──> .worker-filtro select → deriva modelosWorker (agrupa la cinta por categoría)
+CATALOGO.OBTENER (RPC, ROL TRABAJADOR — ficha, gesto rey)
+   └──> .ficha-trabajador inline: .3mf + material + dimensiones + tiempo/peso + origen
+        un toque de la cinta → ficha; SIN escritura (no registra)
 ```
 
 ## Decisiones de arquitectura de la práctica
@@ -61,6 +77,16 @@ CATALOGO.OBTENER (RPC)
 
 4. **Multi-tenant.** El store lee `sessionProjectId`; al cambiar de proyecto
    `resetCatalogo()` vacía (sin datos ajenos) y re-carga el activo.
+
+5. **SUMAR la cara del trabajador al MISMO panel (no crear panel nuevo).**
+   `CatalogoModelosPanel.svelte` tiene UN solo panel con DOS pestañas dentro de la
+   MISMA vista: **Jefe** (cinta + alta + detalle, conservado) y **Trabajador** (nueva:
+   ficha `obtener` + cinta `listar` + orden `categorias`). El registro no cambia —
+   sigue siendo `catalogo-modelos-panel`. La cara del worker es de LECTOR casi puro:
+   reutiliza el store `stores/catalogo.ts` (sin duplicar — `modelos`, `categorias`,
+   `obtenerModelo`), filtra localmente con un derivado `$` (`modelosWorker`) para
+   agrupar por categoría, y **NO tiene gesto de escritura** (el trabajador no registra;
+   el alta y el detalle-modal siguen siendo del jefe).
 
 ## Dataset de patrones (aprendizaje para automatizar F7)
 

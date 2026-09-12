@@ -17,6 +17,15 @@
    *     cola.extraccion confirma y avanza; cola.vacia avisa si no hay trabajo.
    *   - LONGITUD (neutro) → cabecera de pulso (n pendientes · total) + materialCargado badge.
    *
+   * F7 ROL TRABAJADOR (SUMAR, no duplicar): una segunda pestaña del mismo panel — "Trabajador"
+   * — con la cara del OPERADOR (esquema-trabajador F6), un LECTOR casi puro de la cinta:
+   *   - cabecera de pulso (longitud → n pendientes · total · completadas) + materialCargado.
+   *   - cinta "qué viene" (listar): pieza EN CURSO (imprimiendo) + la siguiente pendiente a
+   *     preparar, con su MATERIAL (clave para el rollo) y estado (🖨️/🔵/✅/🗑️), + cinta completa.
+   *   - aviso de próximo cambio de filamento (pieza pendiente con material ≠ cargado, [hueco d]).
+   *   - SIN gestos de escritura: el trabajador NO ve entrar/reordenar/siguiente (esos son del
+   *     JEFE). Refresco en vivo por las señales cola.entrada/extraccion/reordenada/vacia.
+   *
    * La cola NUNCA decide qué imprimir (invariante 6): solo ordena lo aprobado. La vista
    * muestra el ORDEN PROPUESTO por el motor, no una lista cruda. El item cabeza de los
    * pendientes es "siguiente a imprimir".
@@ -92,6 +101,30 @@
       resetCola();
     }
   }
+
+  // ---- pestaña de rol (Jefe | Trabajador) — la cara del TRABAJADOR se SUMA al panel ----
+  // Convención F7 (prisma-universal): SUMAR, nunca reemplazar ni duplicar. Un solo
+  // ColaImpresionPanel con la cara del jefe (gestos) + la del trabajador (lector).
+  let rolActivo: 'jefe' | 'trabajador' = 'jefe';
+
+  // ---- derivados de la cara TRABAJADOR (LECTOR de la cinta, esquema-trabajador F6) ----
+  // La pieza en curso de la impresora (imprimiendo) o null.
+  $: enCurso = $itemsCola.find((i) => i.estado === 'imprimiendo') ?? null;
+  // La siguiente pendiente a preparar (el que toca si la máquina estuviera libre).
+  $: siguienteParaPreparar = $pendientesCola.find((i) => i.estado === 'pendiente') ?? null;
+  // [LECTURA, hueco (d)] la primera pieza pendiente cuyo material difiere del cargado
+  // → próximo cambio de rollo que anticipar (consulta, nunca escritura).
+  $: proximoCambioFilamento = (() => {
+    const actual = enCurso?.material || $materialCargado || null;
+    if (!actual || actual === 'desconocido') return null;
+    return (
+      $pendientesCola.find(
+        (i) => i.material && i.material !== 'desconocido' && i.material !== actual
+      ) ?? null
+    );
+  })();
+  // Piezas ya terminadas / retiradas (pie de cinta del trabajador).
+  $: terminadasCola = $itemsCola.filter((i) => i.estado === 'hecho' || i.estado === 'retirada').length;
 
   // ---- gesto ENTRAR ----
   function abrirAlta(): void {
@@ -215,6 +248,27 @@
     {/if}
   </div>
 
+  <!-- PESTAÑAS DE ROL: la cara del TRABAJADOR se SUMA al panel del JEFE (F7 sumar, no duplicar) -->
+  <div class="rol-tabs" role="tablist">
+    <button
+      class:rol-tab-activa={rolActivo === 'jefe'}
+      class="rol-tab"
+      class:rol-tab-jefe
+      role="tab"
+      aria-selected={rolActivo === 'jefe'}
+      on:click={() => (rolActivo = 'jefe')}
+      title="jefe: entrar · reordenar · siguiente + cinta completa">👨‍🔧 Jefe</button>
+    <button
+      class:rol-tab-activa={rolActivo === 'trabajador'}
+      class="rol-tab"
+      class:rol-tab-worker
+      role="tab"
+      aria-selected={rolActivo === 'trabajador'}
+      on:click={() => (rolActivo = 'trabajador')}
+      title="trabajador: vigilar qué viene para preparar el material (lectura pura)">🧑‍🔧 Trabajador</button>
+  </div>
+
+  {#if rolActivo === 'jefe'}
   {#if $colaError || siguienteError}
     <div class="cinta-error">
       {#if $colaError}⚠️ {$colaError}{:else}⚠️ {siguienteError}{/if}
@@ -314,6 +368,117 @@
   <div class="pie-hint">
     entra · reordena (subir/bajar solo pendientes) · saca el siguiente · la cinta se refresca en vivo por señal, sin recargar
   </div>
+  {/if}
+
+  <!-- ===== CARA DEL TRABAJADOR (LECTOR / VIGILAR) — se SUMA al panel del jefe ===== -->
+  {#if rolActivo === 'trabajador'}
+  <div class="worker-view" data-rol="trabajador">
+    {#if $colaError || siguienteError}
+      <div class="cinta-error">
+        {#if $colaError}⚠️ {$colaError}{:else}⚠️ {siguienteError}{/if}
+      </div>
+    {/if}
+
+    <!-- VIGILAR 1 · cabecera de pulso + material cargado (longitud → "n pendientes · total") -->
+    <div class="worker-cabecera">
+      <span class="worker-titulo">🧭 Qué viene — vigila la cinta para preparar la impresora</span>
+      <div class="worker-pulso">
+        <span class="pulso" title="pendientes · total en cola">⏳ {$pendientesCola.length} pendientes</span>
+        <span class="pulso-total" title="total de piezas vivas en cola">🧮 {$totalCola} en cola</span>
+        <span class="pulso-total" title="piezas ya hechas / retiradas">✔ {$terminadasCola} completadas</span>
+        {#if enCurso && enCurso.material && enCurso.material !== 'desconocido'}
+          <span class="badge-material" title="filamento en la impresora AHORA">🖨️ en curso: 🧵 {enCurso.material}</span>
+        {:else if $materialCargado && $materialCargado !== 'desconocido'}
+          <span class="badge-material" title="filamento cargado en la impresora">🧵 {$materialCargado}</span>
+        {/if}
+      </div>
+    </div>
+
+    {#if $colaLoading && $itemsCola.length === 0 && !enCurso}
+      <div class="vacio">
+        <div class="vacio-ico">🖨️</div>
+        <div class="vacio-txt">cargando la cinta…</div>
+      </div>
+    {:else if $itemsCola.length === 0}
+      <div class="vacio">
+        <div class="vacio-ico">🫙</div>
+        <div class="vacio-txt">la cola está vacía — no hay piezas que preparar</div>
+      </div>
+    {:else}
+      <!-- VIGILAR 2 · lo que toca AHORA: pieza en curso + la siguiente a preparar -->
+      <div class="worker-ahora">
+        {#if enCurso}
+          <div class="wcard wcard-encurso {estadoCls(enCurso.estado)}">
+            <span class="wcard-kicker">🖨️ EN CURSO — imprimiendo ahora</span>
+            <span class="wcard-titulo">🧊 {enCurso.nombre}</span>
+            <div class="wcard-meta">
+              <span class="chip-chip">🧵 {campoValor(enCurso.material)}</span>
+              <span class="chip-chip">⚡ urgencia {enCurso.urgencia}/5</span>
+              {#if enCurso.tamano > 0}<span class="chip-chip">📐 {enCurso.tamano} mm³</span>{/if}
+            </div>
+          </div>
+        {/if}
+        {#if siguienteParaPreparar && (!enCurso || siguienteParaPreparar.id !== enCurso.id)}
+          <div class="wcard wcard-prepara {estadoCls(siguienteParaPreparar.estado)}">
+            <span class="wcard-kicker">⏭️ A CONTINUACIÓN — prepara este rollo</span>
+            <span class="wcard-titulo">🧊 {siguienteParaPreparar.nombre}</span>
+            <div class="wcard-meta">
+              <span class="chip-chip">🧵 {campoValor(siguienteParaPreparar.material)}</span>
+              <span class="chip-chip">⚡ urgencia {siguienteParaPreparar.urgencia}/5</span>
+              {#if siguienteParaPreparar.tamano > 0}<span class="chip-chip">📐 {siguienteParaPreparar.tamano} mm³</span>{/if}
+              {#if proximoCambioFilamento && proximoCambioFilamento.id === siguienteParaPreparar.id}
+                <span class="chip-aviso" title="este material difiere del cargado — habrá cambio de rollo">🔄 cambio de filamento</span>
+              {/if}
+            </div>
+          </div>
+        {/if}
+        {#if proximoCambioFilamento && proximoCambioFilamento.id !== siguienteParaPreparar?.id}
+          <div class="wcard wcard-aviso">
+            <span class="wcard-kicker">🧵 PRÓXIMO CAMBIO DE ROLLO</span>
+            <span class="wcard-titulo">🧊 {proximoCambioFilamento.nombre}</span>
+            <div class="wcard-meta">
+              <span class="chip-chip">🧵 {campoValor(proximoCambioFilamento.material)} (≠ cargado)</span>
+            </div>
+          </div>
+        {/if}
+      </div>
+
+      <!-- VIGILAR 3 · cinta completa "qué viene" ordenada (listar, LECTOR) -->
+      <div class="worker-cinta-titulo">📋 La cola, en orden de impresión</div>
+      <ol class="cinta">
+        {#each $itemsCola as item (item.id)}
+          <li class="fila {estadoCls(item.estado)} {item.estado === 'pendiente' ? 'fila-pendiente' : ''}">
+            <div class="fila-pos">
+              <span class="orden muted">#{item.orden}</span>
+            </div>
+            <div class="fila-cuerpo">
+              <div class="fila-encabezado">
+                {#if item.estado === 'imprimiendo'}
+                  <span class="chip-proximo" title="pieza en curso">🖨️ ahora</span>
+                {:else if item.estado === 'pendiente' && item.orden === 1}
+                  <span class="chip-proximo" title="próximo a imprimir">⏭️ luego</span>
+                {/if}
+                <span class="fila-nombre" title="modelo_id: {item.modelo_id}">🧊 {item.nombre}</span>
+                <span class="chip-estado {estadoCls(item.estado)}">{estadoChip(item.estado)}</span>
+              </div>
+              <div class="fila-meta">
+                <span class="chip-chip">🧵 {campoValor(item.material)}</span>
+                <span class="chip-chip">⚡ urgencia {item.urgencia}/5</span>
+                {#if item.tamano > 0}
+                  <span class="chip-chip">📐 {item.tamano} mm³</span>
+                {/if}
+              </div>
+            </div>
+          </li>
+        {/each}
+      </ol>
+    {/if}
+
+    <div class="pie-hint worker-pie">
+      👉 el trabajador VIGILA (lista · pulso) para preparar el material — no entra, no reordena, no dispara «siguiente» (esos gestos son del JEFE). La cinta se refresca sola por señal (cola.entrada / extraccion / reordenada / vacia).
+    </div>
+  </div>
+  {/if}
 
   <!-- MODAL DE ALTA (entrar, ROL JEFE — editor-bloque) -->
   {#if altaAbierta}
@@ -573,4 +738,78 @@
   }
   .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
   .panel-gestos { display: flex; gap: 0.5rem; justify-content: flex-end; }
+  /* ---- pestañas de rol (Jefe | Trabajador) ---- */
+  .rol-tabs {
+    display: flex;
+    gap: 0.25rem;
+    padding: 0.15rem;
+    background: var(--color-surface, #1a1a1a);
+    border: 1px solid var(--color-border, #333);
+    border-radius: 8px;
+  }
+  .rol-tab {
+    flex: 1;
+    font-size: 0.78rem;
+    padding: 0.35rem 0.5rem;
+    border-radius: 6px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--color-text-muted, #888);
+    cursor: pointer;
+    font-weight: 600;
+  }
+  .rol-tab:hover:not(.rol-tab-activa) { border-color: var(--color-border, #444); color: inherit; }
+  .rol-tab-jefe.rol-tab-activa { background: var(--color-primary, #eab308); color: #111; }
+  .rol-tab-worker.rol-tab-activa { background: #60a5fa; color: #111; }
+  /* ---- cara del trabajador (LECTOR / VIGILAR) ---- */
+  .worker-view { display: flex; flex-direction: column; gap: 0.6rem; }
+  .worker-cabecera {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    padding: 0.45rem 0.7rem;
+    background: var(--color-surface, #1a1a1a);
+    border: 1px solid var(--color-border, #333);
+    border-radius: 8px;
+  }
+  .worker-titulo { font-size: 0.72rem; font-weight: 700; color: var(--color-text-muted, #888); text-transform: uppercase; letter-spacing: 0.04em; }
+  .worker-pulso { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
+  .worker-ahora { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.5rem; }
+  .wcard {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    padding: 0.55rem 0.7rem;
+    background: var(--color-surface, #1a1a1a);
+    border: 1px solid var(--color-border, #333);
+    border-radius: 8px;
+    font-size: 0.78rem;
+  }
+  .wcard-encurso { border-left: 3px solid #f59e0b; }
+  .wcard-prepara { border-left: 3px solid #3b82f6; }
+  .wcard-aviso { border-left: 3px solid #a3a3a3; }
+  .wcard-kicker { font-size: 0.62rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }
+  .wcard-encurso .wcard-kicker { color: #f59e0b; }
+  .wcard-prepara .wcard-kicker { color: #60a5fa; }
+  .wcard-aviso .wcard-kicker { color: #a3a3a3; }
+  .wcard-titulo { font-size: 0.95rem; font-weight: 700; }
+  .wcard-meta { display: flex; gap: 0.3rem; flex-wrap: wrap; }
+  .chip-aviso {
+    font-size: 0.64rem;
+    padding: 0.05rem 0.45rem;
+    border-radius: 999px;
+    font-weight: 700;
+    color: #f59e0b;
+    background: rgba(245, 158, 11, 0.14);
+  }
+  .chip-proximo {
+    font-size: 0.62rem;
+    padding: 0.05rem 0.4rem;
+    border-radius: 999px;
+    font-weight: 700;
+    color: #34d399;
+    background: rgba(52, 211, 153, 0.14);
+  }
+  .worker-cinta-titulo { font-size: 0.72rem; font-weight: 700; color: var(--color-text-muted, #888); text-transform: uppercase; letter-spacing: 0.04em; }
+  .worker-pie { color: var(--color-text-muted, #888); line-height: 1.5; }
 </style>

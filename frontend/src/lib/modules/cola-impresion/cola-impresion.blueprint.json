@@ -29,22 +29,15 @@
     "cola.vacia",
     "cola.entrar.failed"
   ],
-  "eventos_que_escucho": [
-  "cola.entrar.request",
-  "cola.siguiente.request",
-  "cola.reordenar.request",
-  "cola.longitud.request",
-  "cola.listar.request",
-  "project.activated"
-  ],
+  "eventos_que_escucho": [],
   "transporte": {
-  "rpc": [
-    "cola.entrar.request -> .response",
-    "cola.siguiente.request -> .response",
-    "cola.reordenar.request -> .response",
-    "cola.longitud.request -> .response",
-    "cola.listar.request -> .response"
-  ],
+    "rpc": [
+      "cola.entrar.request -> .response",
+      "cola.siguiente.request -> .response",
+      "cola.reordenar.request -> .response",
+      "cola.longitud.request -> .response",
+      "cola.listar.request -> .response"
+    ],
     "salida": [
       "cola.entrada",
       "cola.extraccion",
@@ -233,5 +226,6 @@
       "longitud": "neutro",
       "listar": "neutro"
     }
-  }
+  },
+  "_eventos_que_escucho_nota": "Vacio a proposito (ley ANTICOLISION: subscribes XOR eventos_que_escucho). Los eventos que escucha ya son la fuente de verdad en module.json.subscribes; no se duplican aqui."
 }

@@ -23,12 +23,7 @@
     "historial.impresion_registrada",
     "historial.registrar.failed"
   ],
-  "eventos_que_escucho": [
-    "historial.registrar.request",
-    "historial.listar.request",
-    "impresion.completada",
-    "project.activated"
-  ],
+  "eventos_que_escucho": [],
   "transporte": {
     "rpc": [
       "historial.listar.request -> .response",
@@ -137,5 +132,6 @@
       "listar": "jefe",
       "registrar": "neutro"
     }
-  }
+  },
+  "_eventos_que_escucho_nota": "Vacio a proposito (ley ANTICOLISION: subscribes XOR eventos_que_escucho). Los eventos que escucha ya son la fuente de verdad en module.json.subscribes; no se duplican aqui."
 }

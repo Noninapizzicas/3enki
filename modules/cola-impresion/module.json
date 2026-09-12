@@ -67,6 +67,53 @@
       "concurrency": "single-writer"
     }
   },
+  "ui_handlers": [
+    {
+      "action": "listar",
+      "domain": "cola-impresion",
+      "type": "workspace_module",
+      "zone": "barra_modulos",
+      "label": "Listar",
+      "description": "Lista la cinta de la cola del proyecto ({project_id} -> {items[], total, pendientes, materialCargado}, ordenados por posicion). Cara jefe del panel F7 (ver que espera la cola y en que orden).",
+      "handler": "onListarRequest"
+    },
+    {
+      "action": "entrar",
+      "domain": "cola-impresion",
+      "type": "workspace_module",
+      "zone": "barra_modulos",
+      "label": "Entrar",
+      "description": "Da de alta una pieza aprobada en la cola ({project_id, modelo_id, nombre, material?, urgencia?, tamano?}). Escritura del jefe; emite cola.entrada o cola.entrar.failed.",
+      "handler": "onEntrarRequest"
+    },
+    {
+      "action": "siguiente",
+      "domain": "cola-impresion",
+      "type": "workspace_module",
+      "zone": "barra_modulos",
+      "label": "Siguiente",
+      "description": "Extrae la siguiente pieza segun el motor de ordenacion ({project_id}). Emite cola.extraccion o cola.vacia.",
+      "handler": "onSiguienteRequest"
+    },
+    {
+      "action": "reordenar",
+      "domain": "cola-impresion",
+      "type": "workspace_module",
+      "zone": "barra_modulos",
+      "label": "Reordenar",
+      "description": "Sube/baja una pieza pendiente a una posicion 1-based ({project_id, item_id, pos}). Solo pendientes; emite cola.reordenada.",
+      "handler": "onReordenarRequest"
+    },
+    {
+      "action": "longitud",
+      "domain": "cola-impresion",
+      "type": "workspace_module",
+      "zone": "barra_modulos",
+      "label": "Longitud",
+      "description": "Longitud de la cola ({project_id} -> {pendientes, total}). Pulso del jefe; lectura pura.",
+      "handler": "onLongitudRequest"
+    }
+  ],
   "observability": {
     "logging": {
       "level": "info",

@@ -59,7 +59,12 @@ export const PAGE_CATALOG: Record<string, PageDef> = {
   // — vertical 3D: historial-impresiones (F7, prisma-universal, 2ª iteración). jefe LECTOR —
   // nav:false → el rail lateral no lo pinta (sin ruta /<proyecto>/historial); el botón vive
   // en la work-bar (manifest zone work-bar + loader en panels.ts) y abre el panel de la cinta.
-  'historial-impresiones': { id: 'historial-impresiones', icon: '🖨️', label: 'Historial 3D', nav: false }
+  'historial-impresiones': { id: 'historial-impresiones', icon: '🖨️', label: 'Historial 3D', nav: false },
+  // — vertical 3D: cola-impresion (F7, prisma-universal, 3ª iteración). jefe
+  // ESCRITOR-REORDENADOR-DISPARADOR (entrar+reordenar+siguiente) — nav:false → el rail
+  // lateral no lo pinta (sin ruta /<proyecto>/cola); el botón vive en la work-bar
+  // (manifest zone work-bar + loader en panels.ts) y abre el panel de la cinta de la cola.
+  'cola-impresion': { id: 'cola-impresion', icon: '🖨️', label: 'Cola 3D', nav: false }
 };
 /** Semilla por tipo: lo que un proyecto trae al nacer, antes de que crezca en runtime. */
 const SEED_BY_TYPE: Record<string, string[]> = {

@@ -1,0 +1,141 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "importacion-modelo",
+  "version": "blueprint-2.2.0",
+  "moduleId": "importacion-modelo",
+  "actor": "jefe",
+  "_doc": "Blueprint de interfaz de importacion-modelo — PUENTE del proyecto 3D (reflejo JS) que aloja la UNICA accion real de ENTRADA de modelos al taller: IMPORTAR. CREADO por prisma-universal (FASE 6.5) como INGENIERO DE INTERFAZ DE ENKI, consumiendo el esquema-jefe de F6 (modules/importacion-modelo/esquema-jefe/esquema-jefe.md, LA FUENTE DE VERDAD), module.json e index.js. SEPARACION DE RESPONSABILIDADES (opcion B): F6.5 declara SOLO ui.ops (con rol), ui.datos, ui.flujo, ui.estados, transporte.rpc y transporte.salida. NO se declara ui.formas — F7 decide las formas al construir. RETO DE DECLARACION DECIDIDO (honestidad RPC vs delegacion): importacion-modelo expone UN SOLO handler RPC real — importar (onImportarRequest -> _importar, pareado a importacion.importar.response). El gesto _buscar del dueno (buscar antes de importar) NO es un handler RPC de este modulo (no existe onBuscarRequest en index.js, y module.json subscribes SOLO tiene importacion.importar.request); ES DELEGACION INTERNA que usa el RPC busqueda.buscar.request de busqueda-repositorios por _rpc(). Por LEY DE CERO SUPUESTOS, _buscar NO se declara como op RPC en ui.ops (sin handler real): se documenta como PASO PREVIO del ui.flujo que delega a busqueda-repositorios, y como hueco [ABIERTO] en ui.datos. El modulo es PUENTE sin store ni persistencia: los modelos importados VIVEN en catalogo-modelos (el CUSTODIO que persiste), NO en una lista propia de este puente. Por eso NO hay op lectora/listar de 'mis importaciones': la confirmacion de una importacion es la senal importacion.importada, y la vista de los modelos 'ya importados' es la del catalogo. project.activated ausente (sin persistencia que restaurar, puente stateless).",
+  "_lente_roles": {
+    "agente": "prisma-universal",
+    "fase": "F6_5",
+    "enfoque": "como ingeniero de interfaz de Enki para la interfaz PRACTICA de importacion-modelo (el panel del jefe para importar modelos 3D al taller: buscar -> elegir -> importar -> ver la senal)",
+    "metodo": "esquematizador-universal (prisma de 5 huecos) + lente rol JEFE, verificando cada op contra handlers reales en index.js y contra module.json (subscribes)",
+    "arbitro": "decide-futuro-del-catalogo (escribe en pipeline via registrar) -> jefe · opera-flujo (busca, consulta) -> jefe/trabajador · solo-informa -> neutro",
+    "consolidacion": "modules/importacion-modelo/esquema-jefe/esquema-jefe.md",
+    "dualidad": "JEFE=importar (la UNICA RPC real del modulo: onImportarRequest -> _importar; decide QUE modelo entra al taller: url + origen + categoria). _buscar (paso previo del flujo del dueno) ES una delegacion interna a busqueda-repositorios (por _rpc a busqueda.buscar.request), NO handler RPC expuesto del modulo: se NOMBRA en ui.flujo y ui.datos como delegacion, NO se inventa como op con handler. neutro=sistema: onImportarRequest responde; no hay lecturas de puente (sin store). project.activated ausente por diseno (puente sin estado).",
+    "senales_pareadas": {
+      "importar_ok": "importacion.importada",
+      "importar_fallo": "importacion.importar.failed",
+      "buscar_delegado_ok": "busqueda.buscar.response (via RPC a busqueda.buscar.request)",
+      "buscar_delegado_fallo": "BUSQUEDA_FALLO (502)"
+    }
+  },
+  "titulo": "Panel del jefe para IMPORTAR modelos 3D al taller (PUENTE): el eslabon de ENTRADA del pipeline de la vertical 3D. No es un custodio: es un puente stateless que aloja la accion real de importacion del dueno. El jefe decide QUE pieza adopta del repositorio o del diseno propio: pega una URL (o la trae de la busqueda previa), indica origen (printables/makerworld/cults3d/thingiverse/diseno propio) y categoria, y dispara importar. Ese gesto descarga el modelo, lee el .3mf (via adaptador-slicing) y lo registra en el catalogo (catalogo-modelos.registrar). La confirmacion del resultado es la senal pareada importacion.importada (o el par de fallo importacion.importar.failed con el motivo tipado) — la vista re-lee, nunca recarga. RESTRICCIONES DEL SISTEMA (no decide la UI): sin descargador cableado -> 503 DESCARGADOR_NO_CONFIGURADO; origen .stl sin .3mf -> 422 FALTA_3MF (no se convierte, invariante 5); url/project_id requeridos -> 400. El resultado de los modelos importados VIVE en catalogo-modelos (cara de catalogo), NO en una lista propia de este puente (sin store). El gesto _buscar previo delega a busqueda-repositorios (NO es RPC de este modulo).",
+  "eventos_publicados": [
+    "importacion.importada",
+    "importacion.importar.failed"
+  ],
+  "eventos_que_escucho": [],
+  "_eventos_que_escucho_nota": "Vacio a proposito (ley ANTICOLISION: subscribes XOR eventos_que_escucho). El unico evento que este modulo escucha es importacion.importar.request, que ya es la fuente de verdad en module.json.subscribes — no se duplica aqui. No escucha ningun otro evento (puente stateless, sin project.activated).",
+  "transporte": {
+    "rpc": [
+      "importacion.importar.request -> .response"
+    ],
+    "salida": [
+      "importacion.importada",
+      "importacion.importar.failed"
+    ]
+  },
+  "ui": {
+    "ops": {
+      "importar": {
+        "rol": "jefe",
+        "titulo": "Importar modelo",
+        "descripcion": "La UNICA RPC real del modulo (handler .request: onImportarRequest -> _importar, pareada a importacion.importar.response). Importa un modelo de 3D al taller: valida url (400 url_requerida) y project_id (400 project_id_requerido); sin descargador cableado -> 503 DESCARGADOR_NO_CONFIGURADO; descarga fallida -> 502 DESCARGA_FALLIDA; archivo vacio -> 502 ARCHIVO_VACIO; si el origen es .stl sin .3mf -> 422 FALTA_3MF (no se convierte, invariante 5); lee metadatos del .3mf via adaptador-slicing.leer_3mf.request; registra en catalogo-modelos.registrar (si rechaza -> 502 REGISTRO_FALLIDO); exito -> 201 y emite importacion.importada. La accion REY del jefe: decide QUE modelo entra al taller. Declaracion de entrada: url (obligatoria), origen (select, default 'desconocido') y categoria (select, default 'sin_categoria'), opcional nombre.",
+        "logica": "Editor-bloque (declaracion multi-campo, 1 gesto no fases): url + select origen + select categoria [+ nombre opcional] -> dispara importacion.importar.request. La senal pareada importacion.importada (exito: {modelo_id, nombre, origen, archivo3mf}) confirma y refresca, o importacion.importar.failed (par de fallo con el motivo tipado: url_requerida · project_id_requerido · descarga_fallida · descargador_no_configurado · archivo_vacio · falta_3mf · registro_fallido) avisa; la vista re-lee, nunca recarga. Restricciones del SISTEMA visibles en el feedback, no decididas por la UI.",
+        "args": [
+          {
+            "nombre": "project_id",
+            "tipo": "string",
+            "required": true,
+            "descripcion": "Proyecto cuyo taller recibe el modelo (obligatorio, 400 project_id_requerido si falta)."
+          },
+          {
+            "nombre": "url",
+            "tipo": "string",
+            "required": true,
+            "descripcion": "URL del modelo a importar (obligatoria, 400 url_requerida si falta). Puede pegarse directa o traerse al editor desde el resultado de la busqueda previa (delegada)."
+          },
+          {
+            "nombre": "origen",
+            "tipo": "string",
+            "required": false,
+            "descripcion": "Origen del modelo: printables / makerworld / cults3d / thingiverse / diseno propio. Default 'desconocido'. Alimenta el registro en el catalogo."
+          },
+          {
+            "nombre": "categoria",
+            "tipo": "string",
+            "required": false,
+            "descripcion": "Categoria del modelo en el catalogo. Default 'sin_categoria'. Si se ofrece desde catalogo-modelos.categorias o texto libre es decision de dueño [ABIERTO]."
+          },
+          {
+            "nombre": "nombre",
+            "tipo": "string",
+            "required": false,
+            "descripcion": "Nombre opcional. Si no se da, se usa el de los metadatos del .3mf o 'desconocido'."
+          }
+        ]
+      }
+    },
+    "datos": {
+      "fuente": "senales-publicadas",
+      "_doc": "NO hay handler RPC lector / listar en index.js: importacion-modelo es PUENTE sin store, NO lista ni tiene historial propio. La confirmacion de una importacion es la senal importacion.importada con {modelo_id, nombre, origen, archivo3mf}; el fallo es importacion.importar.failed con motivo tipado. Los modelos importados 'ya viven' en catalogo-modelos (el CUSTODIO que persiste) — la vista de 'que tengo / mis importaciones' es la cara del CATALOGO, no una lista de este puente. Hueco [ABIERTO] honesto: construir una 'lista de importaciones propias' exigiria que este puente persistiera estado (no lo hace) o leer del catalogo — decision de dueño (ver esquema-jefe). El feedback del editor de importacion es la senal pareada, no una respuesta de listado.",
+      "refresh_on": [
+        "importacion.importada",
+        "importacion.importar.failed"
+      ]
+    },
+    "estados": [
+      {
+        "nombre": "en_progreso",
+        "terminal": false,
+        "color": "blue",
+        "icono": "⏳",
+        "_transicion_nota": "Importacion en marcha: tras disparar importacion.importar.request, el puente descarga / lee .3mf / registra. La UI refleja 'importando...' mientras espera la senal pareada (nunca recarga)."
+      },
+      {
+        "nombre": "importada",
+        "terminal": true,
+        "color": "green",
+        "icono": "✅",
+        "_transicion_nota": "Confirmado por la senal importacion.importada ({modelo_id, nombre, origen, archivo3mf}). El modelo entro al taller; se ve en catalogo-modelos."
+      },
+      {
+        "nombre": "fallida",
+        "terminal": true,
+        "color": "red",
+        "icono": "❌",
+        "_transicion_nota": "Par de fallo importacion.importar.failed con el motivo tipado (descargador_no_configurado / falta_3mf / descarga_fallida / archivo_vacio / registro_fallido / url_requerida / project_id_requerido). El jefe puede corregir y reintentar."
+      }
+    ],
+    "flujo": [
+      {
+        "nombre": "dueno_buscar",
+        "orden": 1,
+        "ops": [],
+        "delegaciones": [
+          "_buscar"
+        ],
+        "descripcion": "BUSCAR (paso previo, DELEGACION — NO es RPC de este modulo). El dueno busca el modelo antes de importar en los 4 repos a la vez. Este gesto DELEGA a busqueda-repositorios por el puerto _buscar(query) -> _rpc('busqueda.buscar.request') — el RPC buscar expuesto VIVE en busqueda-repositorios; aqui NO existe onBuscarRequest ni module.json subscrita a busqueda.buscar.request (subscribes solo tiene importacion.importar.request). Por LEY DE CERO SUPUESTOS NO se declara como op RPC de ui.ops (sin handler real): es un paso previo del flujo del dueno que alimenta la eleccion. Resultado: query -> {resultados[], total} unificados de busqueda-repositorios; el jefe toca un resultado y lleva su URL al editor de importacion. Si busqueda-repositorios no responde -> 502 BUSQUEDA_FALLO. [ABIERTO] El mecanismo exacto de la caja de busqueda (en la vista, via el puente del PC) se decide en el sitio/F7."
+      },
+      {
+        "nombre": "dueno_importar",
+        "orden": 2,
+        "ops": [
+          "importar"
+        ],
+        "descripcion": "IMPORTAR (la accion REY del jefe, la UNICA RPC real). Editor-bloque: pegar url (o traerla del resultado de la busqueda previa) + select origen + select categoria [+ nombre opcional] -> dispara importacion.importar.request. El puente descarga, lee el .3mf y registra en catalogo-modelos. Senal pareada importacion.importada confirma (el modelo entro al taller, se ve en el catalogo) o importacion.importar.failed avisa con el motivo tipado. La vista re-lee, nunca recarga."
+      },
+      {
+        "nombre": "dueno_ver_resultado",
+        "orden": 3,
+        "ops": [],
+        "descripcion": "VER resultado (la senal, no una lista del puente). La confirmacion de la importacion es importacion.importada — ese evento ES la forma con valor de negocio del modulo. La vista del 'resultado importado' (los modelos en si) es la del CATALOGO (catalogo-modelos), porque el puente NO persiste (sin store). No existe ni puede existir una 'lista de importaciones' propia de este puente [ABIERTO]; ver lo importado = cara del catalogo."
+      }
+    ],
+    "dependencias": {},
+    "roles": {
+      "importar": "jefe"
+    }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "name": "bridge-grbl",
+  "version": "0.1.0",
+  "description": "Thin bridge: PC del dueño <-> Atomstack A20 Pro V2 (GRBL WiFi). Traduce MQTT <-> GRBL TCP.",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "mock": "node index.js --mock"
+  },
+  "dependencies": {
+    "mqtt": "^5.0.0"
+  },
+  "private": true
+}

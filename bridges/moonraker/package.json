@@ -1,0 +1,15 @@
+{
+  "name": "bridge-moonraker",
+  "version": "0.1.0",
+  "description": "Thin bridge: PC del dueño ↔ SPARKX i7 (Moonraker/Klipper). Traduce MQTT ↔ Moonraker REST+WebSocket.",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "mock": "node index.js --mock"
+  },
+  "dependencies": {
+    "mqtt": "^5.0.0",
+    "ws": "^8.14.0"
+  },
+  "private": true
+}

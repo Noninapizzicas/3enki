@@ -1,0 +1,12 @@
+{
+  "_doc": "Copia este archivo como config.json. El bridge corre en tu PC, NO en el VPS.",
+  "mqtt": {
+    "broker": "wss://enki-ai.online/mqtt",
+    "clientId": "bridge-grbl-pc"
+  },
+  "grbl": {
+    "host": "192.168.1.105",
+    "port": 23
+  },
+  "topicPrefix": "bridge.grbl"
+}

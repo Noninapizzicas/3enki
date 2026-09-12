@@ -5,24 +5,41 @@ const AdaptadorImpresoraReflejo = require('../../index.js');
 // =============================================================
 // Stubs
 // =============================================================
-function makeStubs() {
+function makeStubs({ rpcResponse } = {}) {
   const publicados = [];
+  const suscripciones = {};
   const eventBus = {
-    publish: (ev, data) => { publicados.push({ ev, data }); },
-    subscribe: () => () => {}
+    publish: (ev, data) => {
+      publicados.push({ ev, data });
+      if (suscripciones[ev]) suscripciones[ev].forEach(fn => fn(data));
+    },
+    subscribe: (ev, fn) => {
+      if (!suscripciones[ev]) suscripciones[ev] = [];
+      suscripciones[ev].push(fn);
+      return () => { suscripciones[ev] = suscripciones[ev].filter(f => f !== fn); };
+    }
   };
   const logger = { info: () => {}, error: () => {} };
   const metrics = { increment: () => {} };
-  return { publicados, eventBus, logger, metrics };
+  return { publicados, suscripciones, eventBus, logger, metrics, rpcResponse };
 }
 
-function makeModulo() {
+function makeModulo({ rpcResponse } = {}) {
   const m = new AdaptadorImpresoraReflejo();
-  const stubs = makeStubs();
+  const stubs = makeStubs({ rpcResponse });
   m.eventBus = stubs.eventBus;
   m.logger = stubs.logger;
   m.metrics = stubs.metrics;
-  return { m, ...stubs };
+  if (rpcResponse !== undefined) {
+    m._rpcBridge = async () => rpcResponse;
+  }
+  const bridgeSubs = {};
+  m._subscribeBridge = (topic, handler) => {
+    if (!bridgeSubs[topic]) bridgeSubs[topic] = [];
+    bridgeSubs[topic].push(handler);
+    return () => { bridgeSubs[topic] = (bridgeSubs[topic] || []).filter(f => f !== handler); };
+  };
+  return { m, bridgeSubs, ...stubs };
 }
 
 // Impresora fake que reporta por push
@@ -69,12 +86,23 @@ tests.push({
 });
 
 tests.push({
-  name: 'subir_gcode sin impresora -> 503 + failed',
+  name: 'subir_gcode sin impresora delega al bridge ok',
   fn: async () => {
-    const { m, publicados } = makeModulo();
+    const { m, publicados } = makeModulo({ rpcResponse: { ok: true, id: 'bridge-gcode-1', request_id: 'r1' } });
+    const res = await m._subirGcode({ project_id: 'p1', gcode: 'G28' });
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.data.id, 'bridge-gcode-1');
+    assert.ok(!publicados.some(p => p.ev === 'subir_gcode.failed'));
+  }
+});
+
+tests.push({
+  name: 'subir_gcode sin impresora bridge timeout -> 503 + failed',
+  fn: async () => {
+    const { m, publicados } = makeModulo({ rpcResponse: null });
     const res = await m._subirGcode({ project_id: 'p1', gcode: 'G28' });
     assert.strictEqual(res.status, 503);
-    assert.ok(publicados.some(p => p.ev === 'subir_gcode.failed' && p.data.motivo === 'impresora_no_configurada'));
+    assert.ok(publicados.some(p => p.ev === 'subir_gcode.failed' && p.data.motivo === 'bridge_sin_respuesta'));
   }
 });
 
@@ -102,12 +130,23 @@ tests.push({
 });
 
 tests.push({
-  name: 'iniciar_impresion sin impresora -> 503 + failed',
+  name: 'iniciar_impresion sin impresora delega al bridge ok',
   fn: async () => {
-    const { m, publicados } = makeModulo();
-    const res = await m._iniciarImpresion({ project_id: 'p1' });
+    const { m, publicados } = makeModulo({ rpcResponse: { ok: true, request_id: 'r1' } });
+    const res = await m._iniciarImpresion({ project_id: 'p1', filename: 'test.gcode' });
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.data.confirmado, true);
+    assert.ok(!publicados.some(p => p.ev === 'iniciar_impresion.failed'));
+  }
+});
+
+tests.push({
+  name: 'iniciar_impresion sin impresora bridge timeout -> 503 + failed',
+  fn: async () => {
+    const { m, publicados } = makeModulo({ rpcResponse: null });
+    const res = await m._iniciarImpresion({ project_id: 'p1', filename: 'test.gcode' });
     assert.strictEqual(res.status, 503);
-    assert.ok(publicados.some(p => p.ev === 'iniciar_impresion.failed'));
+    assert.ok(publicados.some(p => p.ev === 'iniciar_impresion.failed' && p.data.motivo === 'bridge_sin_respuesta'));
   }
 });
 
@@ -140,12 +179,31 @@ tests.push({
 });
 
 tests.push({
-  name: 'observar_estado sin impresora -> 503 + failed',
+  name: 'observar_estado sin impresora delega al bridge ok + recibe push',
   fn: async () => {
-    const { m, publicados } = makeModulo();
+    const { m, publicados, bridgeSubs } = makeModulo({ rpcResponse: { ok: true, stream: 'abierto', request_id: 'r1' } });
+    const res = await m._observarEstado({ project_id: 'p1' });
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.data.stream, 'abierto');
+    assert.strictEqual(res.data.via, 'bridge');
+    const handlers = bridgeSubs['bridge.moonraker.estado_push'];
+    assert.ok(handlers && handlers.length > 0, 'debe suscribirse a estado_push');
+    handlers[0]({
+      data: { print_stats: { state: 'printing' }, virtual_sdcard: { progress: 0.5 } }
+    });
+    const emitido = publicados.find(p => p.ev === 'adaptador-impresora.estado_crudo');
+    assert.ok(emitido, 'debe re-emitir el push del bridge como estado_crudo');
+    assert.strictEqual(emitido.data.estado_sistema.estado, 'imprimiendo');
+  }
+});
+
+tests.push({
+  name: 'observar_estado sin impresora bridge timeout -> 503 + failed',
+  fn: async () => {
+    const { m, publicados } = makeModulo({ rpcResponse: null });
     const res = await m._observarEstado({ project_id: 'p1' });
     assert.strictEqual(res.status, 503);
-    assert.ok(publicados.some(p => p.ev === 'iniciar_impresion.failed'));
+    assert.ok(publicados.some(p => p.ev === 'observar_estado.failed' && p.data.motivo === 'bridge_sin_respuesta'));
   }
 });
 
@@ -205,7 +263,7 @@ tests.push({
   fn: async () => {
     const { m } = makeModulo();
     assert.strictEqual(m.name, 'adaptador-impresora');
-    assert.strictEqual(m.version, 'reflejo-0.1.0');
+    assert.strictEqual(m.version, 'reflejo-0.2.0');
     assert.strictEqual(typeof m.onSubirGcodeRequest, 'function');
     assert.strictEqual(typeof m.onIniciarImpresionRequest, 'function');
     assert.strictEqual(typeof m.onObservarEstadoRequest, 'function');

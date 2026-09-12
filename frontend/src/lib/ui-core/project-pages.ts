@@ -77,7 +77,15 @@ export const PAGE_CATALOG: Record<string, PageDef> = {
   // catalogo-modelos). nav:false → el rail lateral no lo pinta (sin ruta
   // /<proyecto>/importar); el botón vive en la work-bar (manifest zone work-bar
   // + loader en panels.ts) y abre el panel del jefe que importa.
-  'importacion-modelo': { id: 'importacion-modelo', icon: '📥', label: 'Importar 3D', nav: false }
+  'importacion-modelo': { id: 'importacion-modelo', icon: '📥', label: 'Importar 3D', nav: false },
+  // — vertical 3D: gestion-filamento (F7, prisma-universal, 6ª iteración). CASO ESPECIAL:
+  // panel CREADO desde CERO (el módulo llegó solo a F6/F6½). CUSTODIO del stock de
+  // filamento: trabajador LECTOR del stock (listar) + jefe que registra rollos (registrar,
+  // la única escritura). nav:false → el rail lateral no lo pinta (sin ruta
+  // /<proyecto>/filamento); el botón vive en la work-bar (manifest zone work-bar + loader
+  // en panels.ts) y abre el panel del stock. La cinta se refresca por
+  // filamento.registrado/decrementado/bajo.
+  'gestion-filamento': { id: 'gestion-filamento', icon: '🧵', label: 'Filamento', nav: false }
 };
 /** Semilla por tipo: lo que un proyecto trae al nacer, antes de que crezca en runtime. */
 const SEED_BY_TYPE: Record<string, string[]> = {

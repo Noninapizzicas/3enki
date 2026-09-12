@@ -252,6 +252,24 @@ export const panels: Record<string, PanelDef> = {
     loader: () => import('$lib/modules/importacion-modelo/ImportacionModeloJefePanel.svelte')
   },
 
+  // === WORK BAR — Gestión de filamento 3D (F7, prisma-universal, 6ª iteración) ===
+  // CASO ESPECIAL: panel CREADO desde CERO (el módulo llegó solo a F6/F6½). El botón
+  // lo pinta el manifest (zone work-bar, order 8, icon 🧵); esta entrada es el loader de
+  // respaldo del panel (el autodescubrimiento del lazy-registry lo resuelve primero vía
+  // module.manifest.panels). CUSTODIO del stock de filamento: trabajador LECTOR del stock
+  // (listar) + jefe que registra rollos (registrar). La cinta se refresca por
+  // filamento.registrado/decrementado/bajo.
+  'gestion-filamento-panel': {
+    id: 'gestion-filamento-panel',
+    title: 'Stock de filamento',
+    icon: '🧵',
+    size: 'lg',
+    position: 'top',
+    zone: 'work-bar',
+    order: 8,
+    loader: () => import('$lib/modules/gestion-filamento/GestionFilamentoPanel.svelte')
+  },
+
   // === WORK BAR — Radar de nichos (interfaz) ===
   // El botón de la barra lo renderiza el manifest.json del módulo (zone work-bar,
   // order 8, icon 📡); esta entrada es el loader que carga el panel al pulsar.

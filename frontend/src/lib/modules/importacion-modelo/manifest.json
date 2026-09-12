@@ -1,0 +1,9 @@
+{
+  "id": "importacion-modelo",
+  "name": "Importar modelo 3D",
+  "version": "0.1.0",
+  "zone": "work-bar",
+  "order": 8,
+  "icon": "📥",
+  "label": "Importar 3D"
+}

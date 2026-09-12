@@ -233,6 +233,25 @@ export const panels: Record<string, PanelDef> = {
     loader: () => import('$lib/modules/ciclo-impresion/CicloImpresionPanel.svelte')
   },
 
+  // === WORK BAR — Importación de modelos 3D (F7, prisma-universal, 5ª iteración) ===
+  // El botón lo pinta el manifest (zone work-bar, order 8, icon 📥); esta entrada es el
+  // loader de respaldo del panel (el autodescubrimiento del lazy-registry lo resuelve
+  // primero vía module.manifest.panels). Jefe que IMPORTA (PUENTE stateless): FORMULARIO
+  // DE ACCIÓN (url + origen + categoría) + feedback de la señal pareada
+  // en_progreso→importada/fallida. Sin lista propia (los modelos importados viven en
+  // catalogo-modelos). Búsqueda previa = delegación a busqueda-repositorios (NO es RPC
+  // de este módulo) → la forma real es pegar la URL.
+  'importacion-modelo-panel': {
+    id: 'importacion-modelo-panel',
+    title: 'Importar modelo 3D',
+    icon: '📥',
+    size: 'lg',
+    position: 'top',
+    zone: 'work-bar',
+    order: 8,
+    loader: () => import('$lib/modules/importacion-modelo/ImportacionModeloJefePanel.svelte')
+  },
+
   // === WORK BAR — Radar de nichos (interfaz) ===
   // El botón de la barra lo renderiza el manifest.json del módulo (zone work-bar,
   // order 8, icon 📡); esta entrada es el loader que carga el panel al pulsar.

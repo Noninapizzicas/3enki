@@ -64,14 +64,20 @@ function crearMock() {
   mock._progreso = 0;
   mock._state = 'standby';
   mock._estadoActual = () => ({
-    print_stats: { state: mock._state, filament_used: 0, print_duration: 0,
-      total_duration: 0, current_layer: 0, total_layer: 10 },
-    virtual_sdcard: { progress: mock._progreso },
-    extruder: { temperature: 200, target: 200 },
+    print_stats: { state: mock._state, message: '', filename: 'mock.gcode', filament_used: 0,
+      print_duration: 0, total_duration: 0, current_layer: 0, total_layer: 10, start_time: 0 },
+    virtual_sdcard: { progress: mock._progreso, is_active: false, file_position: 0 },
+    extruder: { temperature: 200, target: 200, pressure_advance: 0.04 },
     heater_bed: { temperature: 60, target: 60 },
+    toolhead: { position: [0, 0, 0, 0], status: 'Idle', homed_axes: 'xyz', print_time: 0 },
+    gcode_move: { gcode_position: [0, 0, 0, 0], absolute_coordinates: true, absolute_extrude: true, extrude_factor: 1, speed_factor: 1 },
     pause_resume: { is_paused: false },
     idle_timeout: { state: 'Printing' },
-    filament_switch_sensor: { filament_detected: true }
+    display_status: { message: '', progress: mock._progreso },
+    filament_switch_sensor: { filament_detected: true },
+    fan: { speed: 1.0, rpm: 5200 },
+    mcu: { mcu_state: 'ready', mcu_avg_voltage: 24.5, mcu_current_frequency: 70000000, mcu_last_avr8_est: 0, mcu_last_est: 0, mcu_temp: 42 },
+    system_stats: { sysload: 0.2, total_memory: 8388608, available_memory: 4194304 }
   });
   mock._simularProgreso = () => {
     mock._state = 'printing';

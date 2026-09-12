@@ -5,14 +5,24 @@ const WebSocket = require('ws');
 const { EventEmitter } = require('events');
 
 const OBJETOS_SUSCRIPCION = {
-  print_stats: ['state', 'filename', 'filament_used', 'print_duration',
-    'total_duration', 'current_layer', 'total_layer'],
+  print_stats: ['state', 'message', 'filename', 'filament_used', 'print_duration',
+    'total_duration', 'current_layer', 'total_layer', 'start_time'],
   virtual_sdcard: ['progress', 'is_active', 'file_position'],
-  extruder: ['temperature', 'target'],
+  extruder: ['temperature', 'target', 'pressure_advance'],
   heater_bed: ['temperature', 'target'],
+  toolhead: ['position', 'status', 'homed_axes', 'max_velocity', 'max_accel', 'print_time'],
+  gcode_move: ['gcode_position', 'absolute_coordinates', 'absolute_extrude', 'extrude_factor', 'speed_factor'],
   pause_resume: ['is_paused'],
   idle_timeout: ['state'],
-  filament_switch_sensor: ['filament_detected']
+  display_status: ['message', 'progress'],
+  filament_switch_sensor: ['filament_detected'],
+  fan: ['speed', 'rpm'],
+  mcu: ['mcu_state', 'mcu_avg_voltage', 'mcu_current_frequency', 'mcu_last_avr8_est', 'mcu_last_est', 'mcu_temp'],
+  system_stats: ['sysload', 'total_memory', 'available_memory']
+  // Nota: se omiten sensores/ventiladores GENÉRICOS (temperature_sensor, temperature_fan,
+  // heater_generic) porque su existencia depende de la config de Klipper. Suscribirlos
+  // sin estar definidos devolvería error de objeto desconocido en el WebSocket.
+  // Si el taller los usa, añadir aquí: temperature_sensor (por nombre), temperature_fan (por nombre).
 };
 
 class MoonrakerClient extends EventEmitter {

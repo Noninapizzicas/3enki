@@ -33,6 +33,10 @@ catalogo/historial) — se declaran en F7 para que el frontend
 | reordenar | cola-impresion/reordenar.request → .response | la mano del dueño corrige la prioridad que el motor propone | control subir/bajar a posición (confirmador-nombrado) | botones ▲/▼ por pendiente | item_id · pos (1-based dentro de pendientes, clamp 1..len) | SOLO pendientes (409 si no); señal cola.reordenada refresca el orden propuesto en vivo |
 | siguiente | cola-impresion/siguiente.request → .response | decisión fría "qué imprime ahora" según el motor _ordenar | acción nombrada | botón "Siguiente a imprimir" (btn-jefe) | solo project_id | cola.extraccion confirma y avanza; cola.vacia avisa si no hay trabajo (dueño decide si entra más) |
 | estado vacío | cola-impresion/listar.request → {items:[], total:0} | store sin piezas aún (no es error: respuesta 200) | cinta-estado aviso | .vacio (icono 🧭 + texto + botón) | "cola vacía — entra la primera pieza" | hueco nombrado, nunca inventado; orienta al gesto que sí existe (entrar) |
+| (TRABAJADOR) listar → cinta "qué viene" | cola-impresion/listar.request → .response | el operador junto a la impresora VIGILA qué pieza está en marcha (`imprimiendo`) y qué sigue, con MATERIAL/estado/orden de cada una (para preparar el rollo) | cinta-estado / cinta del taller | pestaña "Trabajador": tarjeta EN CURSO (🖨️) + A CONTINUACIÓN (⏭️) + cinta completa ordenada | estado (chip-color) · nombre (🧊) · material (🧵) · urgencia (⚡ n/5) · tamaño (📐 mm³) · orden (#n) | el gesto rey del trabajador es VER la cinta (listar) para preparar la impresora; SIN gestos de escritura (entrar/reordenar/siguiente son del JEFE) |
+| (TRABAJADOR) longitud → pulso | cola-impresion/longitud.request → .response | cuánto trabajo queda por delante y qué rollo está puesto (anticipar cambio de filamento) | cabecera de pulso (cinta-estado) | chips en cabecera trabajador: pendientes · total · completadas + badge materialCargado | {$pendientesCola.length} pendientes · {$totalCola} en cola · ✔ completadas · 🧵 en curso | el trabajador sabe de una pasada cuántas piezas hay que preparar y qué filamento hay cargado AHORA |
+| (TRABAJADOR) próximo cambio de filamento | cola-impresion/listar.request → .response (re-lectura) | pieza pendiente con material ≠ cargado → habrá que cambiar de rollo (hueco [d] del esquema) | cinta-estado aviso | chip-aviso 🔄 "cambio de filamento" + tarjeta PRÓXIMO CAMBIO DE ROLLO | material pendiente ≠ materialCargado/en curso | consulta pura (nunca escritura): el operador anticipa el cambio sin tocar la cola |
+| (TRABAJADOR) estado vacío | cola-impresion/listar.request → {items:[]} | cola sin piezas: no hay nada que preparar | cinta-estado aviso | .vacio (icono 🫙) | "la cola está vacía — no hay piezas que preparar" | a diferencia del jefe (el vacío ofrece entrar), el worker no tiene gesto: solo lee |
 
 ## Estados de pieza (color=estado, del blueprint ui.estados)
 
@@ -127,6 +131,30 @@ COLA.SIGUIENTE (RPC, ROL JEFE — DISPARADOR)
 7. **Multi-tenant.** El store lee `sessionProjectId`; al cambiar de proyecto
    `resetCola()` vacía (sin datos ajenos) y re-carga el activo.
 
+8. **SUMAR, no duplicar: cara del trabajador dentro del mismo panel.** El esquema
+   trabajador (F6 #570 → `esquema-trabajador.md`) convierte a `cola-impresion` en
+   un **LECTOR casi puro**: `listar` (la cinta) + `longitud` (pulso) son suyas;
+   `entrar`/`reordenar`/`siguiente` son del **JEFE** (#571 blueprint). En F7 la
+   cara del trabajador se **SUMA** al `ColaImpresionPanel.svelte` existente como
+   una **pestaña de rol** (`.rol-tabs`: `Jefe | Trabajador`, estado `rolActivo`),
+   NO se crea un panel nuevo. La pestaña "Trabajador" es de **lectura pura**:
+   cinta "qué viene" (pieza EN CURSO `imprimiendo` + A CONTINUACIÓN pendiente +
+   cinta completa) y pulso (pendientes · total · completadas + materialCargado),
+   **sin** entrar / reordenar / siguiente (esos gestos quedan solo en la pestaña
+   del jefe).
+
+9. **Derivados del trabajador vía `$:` (nunca `{@const}` en la raíz).** La cara
+   del worker usa derivados reactivos en el script — `enCurso`,
+   `siguienteParaPreparar`, `proximoCambioFilamento` (hueco [d]: primera pieza
+   pendiente con material ≠ cargado → anticipar cambio de rollo) y
+   `terminadasCola` — calculados con `$:` sobre los derivados del store
+   (`itemsCola`/`pendientesCola`/`totalCola`/`materialCargado`). Se evita
+   reintroducir el bug del `{@const}` en la raíz del template. **Sin duplicar
+   store ni handlers:** el worker reutiliza `stores/cola.ts` y sus 4 señales
+   `cola.entrada/extraccion/reordenada/vacia`) para el refresco en vivo; el
+   frontend NO registra handlers nuevos (los 5 `ui_handlers` ya cableados siguen
+   apuntando a los métodos reales de `index.js`).
+
 ## Dataset de patrones (aprendizaje para automatizar F7)
 
 | forma UI | disparo | elementos recurrentes | plantilla de decisión |
@@ -137,6 +165,9 @@ COLA.SIGUIENTE (RPC, ROL JEFE — DISPARADOR)
 | control subir/bajar a posición | gesto de CORRECCIÓN sobre una fila | botones ▲/▼ + pos calculada dentro de pendientes | solo pendientes; la señal re-lee el orden propuesto |
 | acción nombrada (jefe disparador) | decisión fría "qué sigue" | botón + aviso vacío | cola.vacia avisa; el dueño decide si entra más (no hay gesto destructivo [ABIERTO]) |
 | estado vacío (con gesto) | store sin piezas, jefe SÍ escribe | icono + mensaje + botón de alta | a diferencia de historial (sin gesto), aquí el vacío ORIENTA al gesto que existe (entrar) |
+| pestaña de rol (Jefe\|Trabajador) | SUMAR la cara del trabajador al panel del jefe, no duplicar | barra .rol-tabs con 2 botones; el contenido se condiciona a rolActivo | un solo Panel.svelte con ambas caras; `rolActivo` (svelte) filtra: jefe muestra gestos, trabajador solo lectura |
+| cinta "qué viene" del trabajador (lector) | el operador VIGILA qué está en curso y qué sigue (listar) | tarjeta EN CURSO (🖨️) + A CONTINUACIÓN (⏭️) + cinta completa ordenada (fila) | reutiliza itemsCola/pendientesCola/materialCargado del MISMO store (cola.ts); derivados `enCurso`/`siguienteParaPreparar`/`proximoCambioFilamento` via `$:` (nunca `{@const}` en raíz) |
+| pulso del trabajador + material | cuánto trabajo queda + qué rollo está puesto (longitud) | chips pendientes · total · completadas + badge materialCargado | reusa los derivados existentes; el worker NO ve entrar/reordenar/siguiente |
 
 **Ley de cero supuestos (matizada):** el panel materializa solo lo que el
 esquema/blueprint declaran, PERO cuando el jefe tiene escritura real (como aquí),

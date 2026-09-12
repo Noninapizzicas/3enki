@@ -1,0 +1,9 @@
+{
+  "id": "ciclo-impresion",
+  "name": "Ciclo de impresión",
+  "version": "0.1.0",
+  "zone": "work-bar",
+  "order": 8,
+  "icon": "⏱️",
+  "label": "Ciclo 3D"
+}

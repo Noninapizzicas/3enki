@@ -64,7 +64,13 @@ export const PAGE_CATALOG: Record<string, PageDef> = {
   // ESCRITOR-REORDENADOR-DISPARADOR (entrar+reordenar+siguiente) — nav:false → el rail
   // lateral no lo pinta (sin ruta /<proyecto>/cola); el botón vive en la work-bar
   // (manifest zone work-bar + loader en panels.ts) y abre el panel de la cinta de la cola.
-  'cola-impresion': { id: 'cola-impresion', icon: '🖨️', label: 'Cola 3D', nav: false }
+  'cola-impresion': { id: 'cola-impresion', icon: '🖨️', label: 'Cola 3D', nav: false },
+  // — vertical 3D: ciclo-impresion (F7, prisma-universal, 4ª iteración). jefe
+  // OPERADOR DE MÁQUINA (ver estado del ciclo + iniciar + confirmar transiciones
+  // físicas). PANEL DE ESTADO de la máquina de estados del ciclo (no CRUD) —
+  // nav:false → el rail lateral no lo pinta (sin ruta /<proyecto>/ciclo); el
+  // botón vive en la work-bar (manifest zone work-bar + loader en panels.ts).
+  'ciclo-impresion': { id: 'ciclo-impresion', icon: '⏱️', label: 'Ciclo 3D', nav: false }
 };
 /** Semilla por tipo: lo que un proyecto trae al nacer, antes de que crezca en runtime. */
 const SEED_BY_TYPE: Record<string, string[]> = {

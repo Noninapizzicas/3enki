@@ -96,6 +96,7 @@ class ColaImpresionReflejo extends ModuloHibridoReflejo {
   onSiguienteRequest(e) { return this._atender(e, 'siguiente', 'cola.siguiente.response', d => this._siguiente(d)); }
   onReordenarRequest(e) { return this._atender(e, 'reordenar', 'cola.reordenar.response', d => this._reordenar(d)); }
   onLongitudRequest(e)  { return this._atender(e, 'longitud', 'cola.longitud.response', d => this._longitud(d)); }
+  onListarRequest(e)    { return this._atender(e, 'listar', 'cola.listar.response', d => this._listar(d)); }
 
   // =============================================================
   // Store
@@ -237,6 +238,23 @@ class ColaImpresionReflejo extends ModuloHibridoReflejo {
     const store = this._obtenerOCrear(pid);
     const pendientes = this._pendientes(store);
     return { status: 200, data: { project_id: pid, pendientes: pendientes.length, total: store.items.size } };
+  }
+
+  // _listar — devuelve todos los items de la cola del proyecto (orden actual por estado).
+  async _listar(input) {
+    const pid = input.project_id;
+    if (!pid) return this._invalid('project_id');
+    const store = this._obtenerOCrear(pid);
+    const items = [...store.items.values()]
+      .sort((a, b) => (a.orden ?? Infinity) - (b.orden ?? Infinity))
+      .map((it) => ({
+        id: it.id, estado: it.estado, orden: it.orden,
+        modelo_id: it.modelo_id, nombre: it.nombre,
+        material: it.material, urgencia: it.urgencia, tamano: it.tamano,
+        creada_en: it.creada_en, extraida_en: it.extraida_en
+      }));
+    const pendientes = items.filter((i) => i.estado === 'pendiente').length;
+    return { status: 200, data: { project_id: pid, items, total: items.length, pendientes, materialCargado: store.materialCargado || null } };
   }
 
   // =============================================================

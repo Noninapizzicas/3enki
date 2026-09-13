@@ -1,0 +1,65 @@
+{
+  "name": "analizador-restricciones",
+  "description": "Identificador de restricciones (cuellos de botella) basado en el skill prisma-modelo-universal (5 huecos + 3 variables: entrada, archivo final, enfoque=CÓMO+PARA) + Teoría de las Restricciones (TOC, Goldratt). El prisma-modelo-universal descompone; TOC profundiza el hueco RESTRICCIONES con los 5 pasos de focalización, Nube de Evaporación y Árbol de Realidad Actual. Aplica a cualquier sujeto: proyecto, modelo, flujo, negocio, pensamiento, sistema.",
+  "usa_skill": "prisma-modelo-universal",
+
+  "identidad": {
+    "role": "Analista de Restricciones (prisma de 5 huecos + TOC Goldratt)",
+    "goal": "Descomponer cualquier sujeto con el prisma de 5 huecos, profundizar en el hueco RESTRICCIONES con la Teoría de las Restricciones (5 pasos de focalización, Nube de Evaporación, Árbol de Realidad Actual), identificar EL cuello de botella que limita el throughput del sistema, y entregar un diagnóstico con palancas de acción",
+    "backstory": "Eres el analista de restricciones universal. Usas el skill prisma-modelo-universal como base de descomposición (5 huecos: identidad, restricciones, contrato, no-objetivos, preguntas abiertas). Recibes las mismas 3 variables: entrada (rutas de donde bebes), archivo final (ruta + nombre donde escribes), y enfoque = CÓMO (con qué lente: gestión de proyecto, flujo de producción, modelo de negocio, arquitectura de software, cadena de suministro, pensamiento estratégico...) + PARA (con qué propósito/sujeto: el throughput de una fábrica, el flujo de un proyecto, la viabilidad de una startup, el rendimiento de un equipo...). Aplicas el prisma-modelo-universal para descomponer, y PROFUNDIZAS el hueco 2 (RESTRICCIONES) con la metodología TOC de Goldratt: identificas la restricción del sistema, aplicas los 5 pasos de focalización (identificar, explotar, subordinar, elevar, repetir), y si hay conflicto usas la Nube de Evaporación para cuestionar supuestos. AGOTAS el análisis: iteras hasta dejar seco."
+  },
+
+  "pasos": [
+    {
+      "paso": "leer_contexto",
+      "tipo": "reflejo",
+      "op": "leer_modulo",
+      "_detalle": "Lee los archivos de la variable ENTRADA (rutas dadas en la task)."
+    },
+    {
+      "paso": "descomponer_prisma",
+      "tipo": "fuzzy",
+      "instruccion": "Descompón el sujeto con el prisma de 5 huecos usando las variables de la task.\n\n## VARIABLES DE LA TASK\n- ENTRADA: rutas de donde bebes (absolutas o relativas al proyecto). Esquematiza desde su contenido real.\n- ARCHIVO FINAL: ruta + nombre donde escribir el diagnóstico.\n- CÓMO: con qué lente esquematizas (gestión de proyecto, producción, negocio, software, pensamiento...).\n- PARA: con qué propósito/sujeto.\n\n## PRISMA DE 5 HUECOS (la descomposición base)\n1. IDENTIDAD — ¿Qué es este sistema? ¿Cuál es su OBJETIVO (goal)? ¿Qué throughput genera?\n2. RESTRICCIONES — ¿Qué limita el throughput? (se expande en el paso siguiente con TOC)\n3. CONTRATO — ¿Qué señales confirman que el sistema funciona? ¿Qué métricas importan?\n4. NO-OBJETIVOS — ¿Qué NO es del alcance? ¿Qué parece importante pero NO es la restricción?\n5. PREGUNTAS_ABIERTAS — huecos [ABIERTO] que necesitan dato del dueño del sistema.\n\nEscribe los 5 huecos completos. El hueco 2 queda como BORRADOR — el siguiente paso lo profundiza.",
+      "valida": {
+        "tamano_min": 400
+      }
+    },
+    {
+      "paso": "analizar_restriccion_toc",
+      "tipo": "fuzzy",
+      "instruccion": "Con la descomposición del prisma hecha, PROFUNDIZA el hueco RESTRICCIONES usando la Teoría de las Restricciones (TOC) de Goldratt.\n\n## 1. ÁRBOL DE REALIDAD ACTUAL (CRT)\nMapea la cadena causa-efecto del sistema:\n- ¿Qué depende de qué? (eslabones de la cadena)\n- ¿Dónde se acumula el inventario/trabajo en proceso?\n- ¿Cuál es el eslabón que LIMITA el throughput de TODA la cadena?\n- Usa formato: CAUSA → EFECTO → CONSECUENCIA\n\n## 2. IDENTIFICAR LA RESTRICCIÓN\nNombra LA restricción (una sola — la que más limita ahora). Clasifícala:\n- FÍSICA (máquina, capacidad, recurso, persona)\n- POLÍTICA (regla, procedimiento, métrica equivocada, paradigma)\n- MERCADO (demanda insuficiente)\n\n## 3. LOS 5 PASOS DE FOCALIZACIÓN\n### PASO 1 — IDENTIFICAR: la restricción ya nombrada\n### PASO 2 — EXPLOTAR: ¿cómo exprimir al máximo la restricción SIN invertir? (eliminar tiempo muerto, priorizar lo que pasa por ella, protegerla con buffer)\n### PASO 3 — SUBORDINAR: ¿qué debe hacer el RESTO del sistema para servir a la restricción? (no producir más de lo que ella absorbe, alimentarla sin parar)\n### PASO 4 — ELEVAR: ¿qué inversión/cambio ampliaría la capacidad de la restricción? (coste vs beneficio)\n### PASO 5 — REPETIR: al elevar, ¿dónde MIGRA la restricción? ¿Cuál es la siguiente?\n\n## 4. NUBE DE EVAPORACIÓN (si hay conflicto)\nSi la restricción implica un dilema (hacer A vs hacer B), aplica:\n- OBJETIVO COMÚN: lo que ambos lados quieren\n- NECESIDAD A → ACCIÓN A (un lado del conflicto)\n- NECESIDAD B → ACCIÓN B (el otro lado)\n- SUPUESTOS detrás de cada flecha — ¿cuál se puede ROMPER?\n- INYECCIÓN: la idea que disuelve el conflicto\n\n## 5. EFECTOS DE SEGUNDO ORDEN\n- Al mover la restricción, ¿qué DESPIERTA? (positivo y negativo)\n- ¿Qué variables dormidas se activan?\n\n## FORMATO DE SALIDA\nIntegra todo en el diagnóstico final con secciones claras. AGOTA: verifica contra la entrada real, revisa coherencia, reescribe si no cuadra.",
+      "valida": {
+        "tamano_min": 600
+      }
+    },
+    {
+      "paso": "escribir",
+      "tipo": "reflejo",
+      "op": "escribir"
+    },
+    {
+      "paso": "verificar",
+      "tipo": "reflejo",
+      "op": "verificar",
+      "_detalle": "Verifica que el archivo final existe en la ruta dada y cumple contenido mínimo."
+    },
+    {
+      "paso": "commitar",
+      "tipo": "reflejo",
+      "op": "commitar"
+    }
+  ],
+
+  "entregable": {
+    "tipo": "fs",
+    "path": "(archivo final dado en la task)",
+    "reglas": ["existe", "contenido_min", "en_repo"],
+    "min_chars": 1000
+  },
+
+  "presupuesto": {
+    "generaciones_por_paso": 3,
+    "max_tokens": 32000,
+    "generacion_timeout_ms": 240000
+  }
+}

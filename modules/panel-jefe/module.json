@@ -1,0 +1,38 @@
+{
+  "_doc": "REFLEJO panel-jefe del taller 3D (pieza 17, rol FUTURO). Cara AGREGADA del jefe: vision de conjunto cruzando los stores por proyeccion (impresion actual + cola + filamento + consumo/eficiencia + historial) y ACTIONS para decidir el FUTURO (aprobar propuesta via motor-propuesta/confirmacion, marcar prioridad/urgente, pedir reposicion, ver detalle). CERO juicio: el panel solo PROYECTA (cruza stores por RPC) y delega las decisiones al dueño; propuesta != decision (la cola solo reordena si el jefe aprueba). Se repinta con cola.actualizada | pieza.imprimida | impresion.registrada | material.actualizado (fire-and-forget, no muta). Cliente nulo. Reflejo puro sin store propio. Pares panel-jefe.*.failed. Origen: plan-construccion.md seccion 6.14 + espina (FASE 4 construir-modulos, pieza 17, TANDA 4).",
+  "name": "panel-jefe",
+  "version": "reflejo-0.1.0",
+  "_v0_1_0_nota": "v0.1.0 (2026-09-13): REFLEJO rol FUTURO. Ops resumen/propuestas/aprobar_propuesta/marcar_prioridad/pedir_reposicion/ver_detalle (RPC). Proyeccion _resumen cruza cola+ciclo+filamento+consumo+historial (best-effort, huecos desconocido). _propuestas usa motor-propuesta.proponer (PROPUESTA, no muta). _aprobarPropuesta delega en cola.reordenar SOLO con decisión del dueño. _marcarPrioridad/_pedirReposicion/_verDetalle delegan en cola/filamento/catalogo. CERO juicio: el sistema transporta, el jefe decide. Repintado por fire-and-forget. Pares panel-jefe.*.failed.",
+  "description": "Cara agregada del jefe (rol FUTURO): vision de conjunto (cola + impresion + filamento + consumo + historial) y acciones que DELEGAN (aprobar propuesta, marcar prioridad, pedir reposicion). CERO juicio: proyecta y transporta.",
+  "language": "es",
+  "main": "index.js",
+  "dependencies": [
+    "cola",
+    "ciclo-impresion",
+    "filamento",
+    "historial",
+    "cupula-gcode",
+    "consumo",
+    "motor-propuesta",
+    "adaptador-confirmacion"
+  ],
+  "config": {
+    "cero_juicio": true
+  },
+  "subscribes": [
+    { "event": "panel-jefe.resumen.request", "handler": "onResumenRequest", "description": "Vision de conjunto agregada: impresion actual + cola + filamento + consumo/eficiencia + historial (cruza stores por RPC)." },
+    { "event": "panel-jefe.propuestas.request", "handler": "onPropuestasRequest", "description": "Propuesta de orden de la cola (motor-propuesta.proponer); PROPUESTA, no decision." },
+    { "event": "panel-jefe.aprobar_propuesta.request", "handler": "onAprobarPropuestaRequest", "description": "El jefe aprueba una propuesta -> cola.reordenar (decision humana; el sistema transporta)." },
+    { "event": "panel-jefe.marcar_prioridad.request", "handler": "onMarcarPrioridadRequest", "description": "El jefe marca urgencia/prioridad de una tarea (cola.marcar_urgente)." },
+    { "event": "panel-jefe.pedir_reposicion.request", "handler": "onPedirReposicionRequest", "description": "El jefe pide reposicion de filamento (pedir por adaptador-confirmacion)." },
+    { "event": "panel-jefe.ver_detalle.request", "handler": "onVerDetalleRequest", "description": "Detalle de un modelo (catalogo.por_id / cupula-gcode.obtener)." }
+  ],
+  "publishes": [
+    { "event": "panel-jefe.resumen.response", "description": "Respuesta correlada: vision de conjunto." },
+    { "event": "panel-jefe.aprobar_propuesta.failed", "description": "Par de fallo: no se pudo aprobar/reordenar la propuesta." }
+  ],
+  "tools": [],
+  "observability": {
+    "metrics": ["panel-jefe.reflejo.served", "panel-jefe.reflejo.errors"]
+  }
+}

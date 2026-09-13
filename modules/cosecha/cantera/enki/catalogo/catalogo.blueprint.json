@@ -1,0 +1,125 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "catalogo",
+  "version": "blueprint-1.0.0",
+  "moduleId": "catalogo",
+  "moduleType": "workspace_module",
+  "zone": "barra_modulos",
+  "_lente_roles": {
+    "agente": "prisma-universal (cosecha.obtener / delegate_task)",
+    "metodo": "esquematizar-interfaz (F6½)",
+    "fase6": "workspace_module · zone barra_modulos (fase6-decidir-interfaz.md #1 · CUSTODIO biblioteca)",
+    "lente": "ingeniero de interfaz como CUSTODIO curador de la biblioteca (el dueño CURRADOREA a diario: ver/registrar/editar/aprobar)",
+    "arbitro": "future→jefe (registrar/actualizar) · now→operador (ver/listar curaduría) · solo-lee→neutro (por_id/listar)",
+    "_nota_formas": "FORMA SIN DECIDIR (null). La F6½ solo declara op/contexto/evento → elemento; la FORMA (tabla/tarjeta/formulario/detalle) la decide la F7. NO se escribe ui.formas."
+  },
+  "titulo": "Catálogo de piezas del taller 3D (CUSTODIO de la biblioteca). Single-writer del store modelos por proyecto (PosPersistencia, dir /3d/catalogo). Ficha multiformato: archivo_stl/archivo_3mf/archivo_gcode conviven como archivos distintos (la moneda real del taller es STL→GCODE, no solo .3mf). Registra reconcilia ANTES de crear (nombre canónico + fuente + origenUrl → NO duplica); actualizar hace merge (no re-crea); por_id lee una ficha; listar lista por nombre. Emite modelo.registrado al registrar/actualizar. CERO juicio: uso/filamento/aprobar quedan a decisión del dueño. Rol CLIENTE nulo.",
+  "eventos_publicados": [
+    "modelo.registrado",
+    "catalogo.registrar.response",
+    "catalogo.por_id.response",
+    "catalogo.actualizar.response",
+    "catalogo.listar.response",
+    "catalogo.registrar.failed",
+    "catalogo.actualizar.failed"
+  ],
+  "eventos_que_escucho": [],
+  "_eventos_que_escucho_nota": "GATE ANTICOLISION-001: los *.request que el módulo atiende ya son fuente de verdad en module.json.subscribes; NO se repiten en el blueprint.eventos_que_escucho. Se deja [] (XOR: subscribes XOR eventos_que_escucho).",
+  "_ui_handlers": {
+    "tipo": "workspace_module",
+    "zone": "barra_modulos",
+    "handlers": [
+      { "ui_handler": "catalogo.listar", "handler_backend": "onListarRequest", "clase": "lectura", "contexto": "ver la biblioteca completa" },
+      { "ui_handler": "catalogo.registrar", "handler_backend": "onRegistrarRequest", "clase": "escritura", "contexto": "dar de alta una ficha nueva (reconcilia antes de crear)" },
+      { "ui_handler": "catalogo.por_id", "handler_backend": "onPorIdRequest", "clase": "lectura", "contexto": "detalle de una ficha" },
+      { "ui_handler": "catalogo.actualizar", "handler_backend": "onActualizarRequest", "clase": "escritura", "contexto": "editar/mergear una ficha existente" }
+    ]
+  },
+  "transporte": {
+    "entrada": "reflejo RPC via ui_handlers (module.json.subscribes *.request). El generador schema→UI (BlueprintForm, 4 zonas) renderiza desde ui.ops/ui.datos.",
+    "rpc": [
+      "catalogo.listar.request -> catalogo.listar.response",
+      "catalogo.por_id.request -> catalogo.por_id.response",
+      "catalogo.registrar.request -> catalogo.registrar.response",
+      "catalogo.actualizar.request -> catalogo.actualizar.response"
+    ],
+    "salida": [
+      "modelo.registrado",
+      "catalogo.registrar.failed",
+      "catalogo.actualizar.failed"
+    ],
+    "qos": "publishAndWait (request/response correlado) en cada operación; timeout 8s"
+  },
+  "ui": {
+    "_doc": "Schema de panel del generador schema→UI (BlueprintForm). Las 4 RPC del CUSTODIO con sus args reales del contrato (index.js); modelo.registrado refresca la zona DATOS. FORMAS sin decidir (F7).",
+    "ops": {
+      "listar": {
+        "titulo": "Listar biblioteca",
+        "descripcion": "Lista las fichas del proyecto ordenadas por nombre canónico (toda la biblioteca de la moneda real: STL/3MF/GCODE).",
+        "clase": "lectura",
+        "contexto": "el dueño cierra o abre la biblioteca y ve qué piezas hay",
+        "elemento_sugerido": null
+      },
+      "por_id": {
+        "titulo": "Ver ficha",
+        "descripcion": "Detalle de una ficha de modelo por id (uso, filamento sugerido, fuente, origenUrl y archivos de cada formato).",
+        "clase": "lectura",
+        "contexto": "el dueño consulta la ficha completa de una pieza concreta",
+        "elemento_sugerido": null,
+        "args": [
+          { "nombre": "modelo_id", "tipo": "string", "ref": "catalogo.listar", "ref_label": "nombre", "ref_value": "id", "required": true, "placeholder": "seleccione una pieza de la biblioteca" }
+        ]
+      },
+      "registrar": {
+        "titulo": "Registrar modelo",
+        "descripcion": "Alta de ficha de modelo. Reconcilia ANTES de crear (nombre canónico + fuente + origenUrl; NO duplica). Los 3 formatos conviven como archivos distintos. Emite modelo.registrado.",
+        "clase": "escritura",
+        "contexto": "el dueño da de alta una pieza nueva de la moneda real del taller",
+        "elemento_sugerido": null,
+        "args": [
+          { "nombre": "nombre", "tipo": "string", "required": true, "placeholder": "nombre canónico de la pieza *" },
+          { "nombre": "uso", "tipo": "string", "required": false, "placeholder": "qué resuelve la pieza (opcional)" },
+          { "nombre": "filamento_sug", "tipo": "string", "required": false, "placeholder": "filamento sugerido (default PETG)" },
+          { "nombre": "fuente", "tipo": "select", "required": false, "placeholder": "origen (default ARCHIVO)", "enum": ["DISEÑADO", "REPOSITORIO", "ARCHIVO"] },
+          { "nombre": "origenUrl", "tipo": "string", "required": false, "placeholder": "URL de origen (clave de reconciliación, opcional)" },
+          { "nombre": "archivo_stl", "tipo": "string", "required": false, "placeholder": "ruta del .stl (opcional)" },
+          { "nombre": "archivo_3mf", "tipo": "string", "required": false, "placeholder": "ruta del .3mf (opcional)" },
+          { "nombre": "archivo_gcode", "tipo": "string", "required": false, "placeholder": "ruta del .gcode (opcional)" }
+        ]
+      },
+      "actualizar": {
+        "titulo": "Actualizar ficha",
+        "descripcion": "Edición/merge de una ficha existente (no re-crea). Actualiza uso, filamento sugerido, archivos de formato, fuente u origenUrl. Emite modelo.registrado.",
+        "clase": "escritura",
+        "contexto": "el dueño corrige o completa la ficha de una pieza ya en biblioteca (p. ej. añade el .gcode)",
+        "elemento_sugerido": null,
+        "args": [
+          { "nombre": "modelo_id", "tipo": "string", "ref": "catalogo.listar", "ref_label": "nombre", "ref_value": "id", "required": true, "placeholder": "seleccione la pieza a editar *" },
+          { "nombre": "uso", "tipo": "string", "required": false, "placeholder": "uso nuevo (opcional)" },
+          { "nombre": "filamento_sug", "tipo": "string", "required": false, "placeholder": "filamento sugerido nuevo (opcional)" },
+          { "nombre": "fuente", "tipo": "select", "required": false, "placeholder": "origen nuevo (opcional)", "enum": ["DISEÑADO", "REPOSITORIO", "ARCHIVO"] },
+          { "nombre": "origenUrl", "tipo": "string", "required": false, "placeholder": "URL de origen nueva (opcional)" },
+          { "nombre": "archivo_stl", "tipo": "string", "required": false, "placeholder": "ruta .stl nueva (opcional)" },
+          { "nombre": "archivo_3mf", "tipo": "string", "required": false, "placeholder": "ruta .3mf nueva (opcional)" },
+          { "nombre": "archivo_gcode", "tipo": "string", "required": false, "placeholder": "ruta .gcode nueva (opcional)" }
+        ]
+      }
+    },
+    "datos": {
+      "op": "listar",
+      "titulo": "Biblioteca de piezas",
+      "columnas": ["nombre", "fuente", "filamento_sug", "formato_dispon", "uso"],
+      "refresh_on": ["modelo.registrado"]
+    },
+    "flujo": [
+      { "nombre": "curaduria", "orden": 1, "ops": ["registrar", "actualizar"], "descripcion": "JEFE/CUSTODIO escribe la biblioteca (alta y edición de ficha)" },
+      { "nombre": "consulta", "orden": 2, "ops": ["listar", "por_id"], "descripcion": "VER la biblioteca (neutro/operador)" }
+    ],
+    "dependencias": {
+      "por_id": [ { "campo": "modelo_id", "de": "listar" } ],
+      "actualizar": [ { "campo": "modelo_id", "de": "listar" } ]
+    },
+    "_nota_formas_sin_decidir": "FORMA = null en ui.ops (F6½ no declara forma). La F7 decide: registrar/actualizar → formulario (Z1), listar → tabla/lista (Z4), por_id → detalle/tarjeta (Z4). Todo derivable del generador con args simples."
+  },
+  "filosofia": "El catálogo es la fuente de verdad de piezas del taller: la moneda real son archivos STL→GCODE, no solo .3mf. Es la única store que el dueño curadorea a diario — el panel le deja ver toda la biblioteca y dar de alta/editar fichas sin duplicar (reconciliación por nombre+fuente+origenUrl). CERO juicio: uso, filamento y aprobación quedan a la decisión del dueño; el custodio solo custodia."
+}

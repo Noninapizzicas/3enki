@@ -9,9 +9,7 @@
  *   intentada pero vacía  -> "lo buscas, te falta montarlo, ¿lo completamos?"
  *   ofrecida nunca tocada -> "esto existe y te daría valor, ¿lo arrancamos?"
  *
- * Apagado por defecto. Su on/off vive en el registro central de interruptores
- * (botón 'conserje'); reacciona a interruptor.cambiado en caliente. Cooldown
- * por capacidad para no agobiar.
+ * Siempre activo. Cooldown por capacidad para no agobiar.
  */
 
 'use strict';
@@ -75,9 +73,9 @@ class ConserjeModule extends BaseModule {
     this.version = '0.7.0';
     this.config = null;
     this.libro = new LibroDeCapacidades(PIZZEPOS_CAPACIDADES);
-    this.activo = false;                 // OFF por defecto (lo gobierna el interruptor 'conserje')
-    this.activoRutas = false;            // OFF por defecto — interruptor 'conserje-rutas' (replay sugerente)
-    this.activoCantera = false;          // OFF por defecto — interruptor 'conserje-cantera' (ofrece skills de la cosecha)
+    this.activo = true;
+    this.activoRutas = true;
+    this.activoCantera = true;
     this.umbralRuta = 3;                 // solo ofrece rutas aprendidas >= N veces
     this.estados = new Map();            // project_id -> { usadas:Set, intentadas:Set }
     this.cooldown = new Map();           // `${project}::${capacidad}` -> ts
@@ -95,14 +93,8 @@ class ConserjeModule extends BaseModule {
     this.eventBus = context.eventBus;
     this.metrics = context.metrics;
     this.config = context.moduleConfig || {};
-    this.activo = this.config.enabled_default === true;   // por defecto false
-    this.activoRutas = this.config.rutas_enabled_default === true;   // por defecto false (aparcado)
-    this.activoCantera = this.config.cantera_enabled_default === true;   // por defecto false
     this.umbralRuta = Number(this.config.umbral_ruta) || 3;
     this.cooldownMs = Number(this.config.cooldown_h ? this.config.cooldown_h * 3600000 : null) || 24 * 60 * 60 * 1000;
-
-    this._registrarBoton();   // registra AMBOS botones (conserje + conserje-rutas); idempotente
-
 
     this._startBusCapture();
     const tickMs = Number(this.config.tick_ms) || 15000;
@@ -121,48 +113,6 @@ class ConserjeModule extends BaseModule {
     this.pendingReq.clear();
     this.dirty.clear();
     this.logger?.info('conserje.unloaded', { module: this.name });
-  }
-
-  // registra su botón en el panel central. Idempotente: se llama al cargar y
-  // cada vez que interruptores pide registro (cura la carrera de arranque).
-  _registrarBoton() {
-    try {
-      this.eventBus.publish('interruptor.registrar', {
-        id: 'conserje', label: 'Conserje (empujones al comerciante)', grupo: 'aprendizaje',
-        descripcion: 'Sugiere al comerciante el siguiente paso según lo que ofrece el sistema y lo que ya usa.',
-        default: false
-      });
-      this.eventBus.publish('interruptor.registrar', {
-        id: 'conserje-rutas', label: 'Conserje · rutas aprendidas (replay)', grupo: 'aprendizaje',
-        descripcion: 'Tras un paso, ofrece la ruta que el destilador aprendió que suele seguir (replay sugerente). Independiente del conserje base.',
-        default: false
-      });
-      this.eventBus.publish('interruptor.registrar', {
-        id: 'conserje-cantera', label: 'Conserje · skills de la cantera', grupo: 'aprendizaje',
-        descripcion: 'Tras un paso, mina la cosecha (cantera de skills) y ofrece en positivo la skill pertinente a lo que el comerciante está haciendo. Convierte la abundancia guardada en munición de empujones. Independiente de los otros dos.',
-        default: false
-      });
-    } catch (_) { /* best-effort */ }
-  }
-
-  // interruptores (re)cargó y pide a todos que se registren -> respondemos.
-  onSolicitarRegistro() {
-    this._registrarBoton();
-  }
-
-  // ── on/off en caliente desde el panel ──
-  onInterruptorCambiado(event) {
-    const d = (event && event.data) || event || {};
-    if (d.id === 'conserje') {
-      this.activo = !!d.enabled;
-      this.logger?.warn('conserje.toggled', { activo: this.activo });
-    } else if (d.id === 'conserje-rutas') {
-      this.activoRutas = !!d.enabled;
-      this.logger?.warn('conserje.rutas.toggled', { activoRutas: this.activoRutas });
-    } else if (d.id === 'conserje-cantera') {
-      this.activoCantera = !!d.enabled;
-      this.logger?.warn('conserje.cantera.toggled', { activoCantera: this.activoCantera });
-    }
   }
 
   // ── oído al bus: deriva usadas / intentadas ──
@@ -246,9 +196,9 @@ class ConserjeModule extends BaseModule {
     if (this.dirty.size === 0) return;
     const proyectos = Array.from(this.dirty);
     this.dirty.clear();
-    if (this.activo) this._tickBrecha(proyectos);              // empujón por brecha (OFRECE vs USA)
-    if (this.activoRutas) await this._tickRutas(proyectos);    // empujón por ruta aprendida (replay sugerente)
-    if (this.activoCantera) await this._tickCantera(proyectos);// empujón por skill de la cantera (la abundancia como munición)
+    this._tickBrecha(proyectos);
+    await this._tickRutas(proyectos);
+    await this._tickCantera(proyectos);
     // FUERA proactivo retirado (v0.7.0): la búsqueda externa se queda como PULL — las tools
     // de chat buscar_fuera/traer_skill (feeder), con las palabras reales del LLM. Ver nota arriba.
   }
@@ -416,7 +366,7 @@ class ConserjeModule extends BaseModule {
       return {
         status: 200,
         data: {
-          project_id, activo: this.activo,
+          project_id,
           usadas: Array.from(est.usadas), intentadas: Array.from(est.intentadas),
           brecha
         }
@@ -427,7 +377,7 @@ class ConserjeModule extends BaseModule {
   }
 
   async handleHealthCheck() {
-    return { status: 200, data: { module: this.name, version: this.version, activo: this.activo, proyectos: this.estados.size } };
+    return { status: 200, data: { module: this.name, version: this.version, proyectos: this.estados.size } };
   }
 
   _parseEnvelope(message) {

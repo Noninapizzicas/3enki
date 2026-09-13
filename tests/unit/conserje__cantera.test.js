@@ -19,7 +19,6 @@ function make() {
   m.metrics = { increment(){} };
   m._publicados = [];
   m.eventBus = { publish: (ev, payload) => m._publicados.push({ ev, payload }) };
-  m.activoCantera = true;
   return m;
 }
 function estado(m, proj, ultimaCapacidad) {
@@ -86,16 +85,6 @@ test('cooldown: no repite la misma skill', async () => {
   m._publicados.length = 0;
   await m._tickCantera(['proj1']);
   assert.ok(!m._publicados.find(p => p.ev === 'conserje.empujon'), 'en cooldown no repite');
-});
-
-test('OFF (activoCantera=false) -> el tick no ofrece', async () => {
-  const m = make();
-  m.activoCantera = false;
-  m._rpc = async () => ({ data: { skills: [{ nombre: 'deep-research', descripcion: 'z' }] } });
-  estado(m, 'proj1', 'investigacion');
-  m.dirty.add('proj1');
-  await m._tick();
-  assert.ok(!m._publicados.find(p => p.ev === 'conserje.empujon'), 'apagado no ofrece');
 });
 
 (async () => {

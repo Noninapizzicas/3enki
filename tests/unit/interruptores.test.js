@@ -1,6 +1,6 @@
 /**
  * Tests unitarios — interruptores (registro central de on/off) + conserje
- * (que registra su botón y reacciona en caliente).
+ * (siempre activo, empujones al comerciante).
  *
  * Ejecutar: node tests/unit/interruptores.test.js
  */
@@ -83,7 +83,7 @@ test('el estado persistido manda sobre el default al re-registrar', async () => 
 
 async function nuevoConserje(bus) {
   const mod = new Conserje();
-  await mod.onLoad({ logger: noop, metrics: noopM, eventBus: bus, moduleConfig: { tick_ms: 999999, enabled_default: false } });
+  await mod.onLoad({ logger: noop, metrics: noopM, eventBus: bus, moduleConfig: { tick_ms: 999999 } });
   return mod;
 }
 
@@ -99,30 +99,6 @@ function tocarMarca(bus, { project_id = 'P', lleno = false } = {}) {
   bus.inject('carta-marketing.get_perfil.response', { request_id, status: 200, data });
 }
 
-test('conserje registra su botón en el panel al cargar', async () => {
-  const bus = fakeBus();
-  const mod = await nuevoConserje(bus);
-  assert.ok(bus.published.some(p => p.event === 'interruptor.registrar' && p.data.id === 'conserje'));
-  await mod.onUnload();
-});
-
-test('carrera de arranque: interruptores pide registro y conserje responde', async () => {
-  // Simula el orden malo: conserje cargó ANTES, su registrar se "perdió".
-  const bus = fakeBus();
-  const tmp = path.join(os.tmpdir(), 'int-' + Date.now() + '-race.json');
-  const conserje = await nuevoConserje(bus);          // publica registrar al vacío
-  const inter = new Interruptores();
-  // cableado que en producción hace el loader (subscribes de cada module.json):
-  bus.subscribe('interruptor.solicitar_registro', () => conserje.onSolicitarRegistro());
-  bus.subscribe('interruptor.registrar', (e) => inter.onRegistrar(e));
-  await inter.onLoad({ logger: noop, metrics: noopM, eventBus: bus, moduleConfig: { estados_path: tmp } });
-  // al cargar, interruptores emite solicitar_registro -> conserje re-registra -> aparece
-  const res = await inter.handleListar();
-  assert.ok(res.data.toggles.some(t => t.id === 'conserje'), 'el botón conserje aparece tras la solicitud');
-  fs.rmSync(tmp, { force: true });
-  await conserje.onUnload(); await inter.onUnload();
-});
-
 test('conserje deriva INTENCIÓN: marca tocada vacía -> intentada', async () => {
   const bus = fakeBus();
   const mod = await nuevoConserje(bus);
@@ -133,21 +109,14 @@ test('conserje deriva INTENCIÓN: marca tocada vacía -> intentada', async () =>
   await mod.onUnload();
 });
 
-test('conserje APAGADO no empuja; ENCENDIDO empuja el desbloqueo de marca', async () => {
+test('conserje siempre activo empuja el desbloqueo de marca', async () => {
   const bus = fakeBus();
   const mod = await nuevoConserje(bus);
   tocarMarca(bus);
 
-  // apagado por defecto -> tick no emite
-  mod._tick();
-  assert.strictEqual(bus.published.filter(p => p.event === 'conserje.empujon').length, 0);
-
-  // el panel lo enciende en caliente
-  tocarMarca(bus); // re-dirty
-  mod.onInterruptorCambiado({ data: { id: 'conserje', enabled: true } });
   mod._tick();
   const emp = bus.published.filter(p => p.event === 'conserje.empujon');
-  assert.strictEqual(emp.length, 1, 'al encender, empuja');
+  assert.strictEqual(emp.length, 1, 'empuja');
   assert.strictEqual(emp[0].data.recurso, 'marca');
   assert.strictEqual(emp[0].data.tipo, 'desbloqueo');
   assert.strictEqual(emp[0].data.accion_sugerida, 'carta-marketing.completar_onboarding');
@@ -157,7 +126,6 @@ test('conserje APAGADO no empuja; ENCENDIDO empuja el desbloqueo de marca', asyn
 test('conserje respeta el cooldown (no agobia)', async () => {
   const bus = fakeBus();
   const mod = await nuevoConserje(bus);
-  mod.onInterruptorCambiado({ data: { id: 'conserje', enabled: true } });
   tocarMarca(bus);
   mod._tick();
   tocarMarca(bus);
@@ -169,7 +137,6 @@ test('conserje respeta el cooldown (no agobia)', async () => {
 test('conserje: el empujón pendiente se lee UNA vez (consume-on-read, para el nervio)', async () => {
   const bus = fakeBus();
   const mod = await nuevoConserje(bus);
-  mod.onInterruptorCambiado({ data: { id: 'conserje', enabled: true } });
   tocarMarca(bus);
   mod._tick();
   // primera lectura: trae el empujón

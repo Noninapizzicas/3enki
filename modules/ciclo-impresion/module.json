@@ -1,0 +1,44 @@
+{
+  "_doc": "REFLEJO / ORQUESTADOR ciclo-impresion del taller 3D (pieza 12). El CICLO de imprimir, DUEÑO de la maquina de estados (LIBRE->PREPARANDO->IMPRIMIENDO->TERMINADA/FALLIDA/CANCELADA). Inicia la impresion via adaptador-impresora (RPC declarado), observa estados (adaptador-impresora.estado_crudo), confirma transiciones (adaptador-confirmacion.confirmacion_recibida), avisa al terminar/fallar (adaptador-avisos) y encadena (motor-encadenamiento.al_terminar). Maquina de estados determinista: una sola impresora -> nunca dos en IMPRIMIENDO. Estado ilegal imposible via _aplicarTransicion. TERMINADA siempre registra (historial)+descuenta (filamento)+encadena; FALLO siempre avisa y delega en manejo-fallo. CERO juicio: reintento/saltar/especulacion van por adaptador-confirmacion (el dueño decide). Estado en memoria (sin PosPersistencia): si el proceso cae el ciclo se reanuda desde LIBRE; el estado real lo reporta el adaptador externo. Encola/imprime piezas con GCODE listo (moneda real). Origen: plan-construccion.md seccion 6.9 + espina (FASE 4 construir-modulos, pieza 12, TANDA 4).",
+  "name": "ciclo-impresion",
+  "version": "reflejo-0.1.0",
+  "_v0_1_0_nota": "v0.1.0 (2026-09-13): REFLEJO/orquestador. Maquina de estados LIBRE->PREPARANDO->IMPRIMIENDO->TERMINADA|FALLIDA|CANCELADA. RPCs iniciar/pausar/reanudar/abortar. Observa adaptador-impresora.estado_crudo (completado->TERMINADA, fallo->FALLIDA), confirma por adaptador-confirmacion.confirmacion_recibida. TERMINADA: historial.registrar+filamento.descontar+motor-encadenamiento.al_terminar. FALLO: manejo-fallo (siempre avisa). Publica impresion.iniciada/impresion.fallida/impresion.finalizada/ciclo_abortado + pares de fallo.",
+  "description": "Orquestador dueno de la maquina de estados del ciclo de impresion 3D: inicia, observa, confirma transiciones, avisa al terminar/fallar y encadena. CERO juicio automatico.",
+  "language": "es",
+  "main": "index.js",
+  "dependencies": [
+    "adaptador-impresora",
+    "historial",
+    "filamento",
+    "manejo-fallo",
+    "motor-encadenamiento",
+    "adaptador-avisos"
+  ],
+  "config": {
+    "cero_juicio": true,
+    "persistence": { "scope": "runtime", "type": "in-memory", "nota": "maquina de estados en memoria; si el proceso cae el ciclo se reanuda desde LIBRE, el estado real lo reporta el adaptador externo" }
+  },
+  "subscribes": [
+    { "event": "ciclo-impresion.iniciar.request", "handler": "onIniciarRequest", "description": "Inicia el ciclo de impresion de una pieza con GCODE listo: obtiene gcode, sube a la impresora e inicia la impresion (LIBRE->PREPARANDO->IMPRIMIENDO)." },
+    { "event": "ciclo-impresion.pausar.request", "handler": "onPausarRequest", "description": "Pausa la impresion actual (IMPRIMIENDO->PAUSADO)." },
+    { "event": "ciclo-impresion.reanudar.request", "handler": "onReanudarRequest", "description": "Reanuda la impresion pausada (PAUSADO->IMPRIMIENDO)." },
+    { "event": "ciclo-impresion.abortar.request", "handler": "onAbortarRequest", "description": "Aborta la impresion por decision del trabajador (->CANCELADA; registra historial CANCELADA)." }
+  ],
+  "publishes": [
+    { "event": "ciclo-impresion.iniciar.response", "description": "Respuesta correlada: impresion iniciada (o fallo)." },
+    { "event": "ciclo-impresion.pausar.response", "description": "Respuesta correlada: impresion pausada." },
+    { "event": "ciclo-impresion.reanudar.response", "description": "Respuesta correlada: impresion reanudada." },
+    { "event": "ciclo-impresion.abortar.response", "description": "Respuesta correlada: impresion abortada." },
+    { "event": "impresion.iniciada", "description": "La pieza pasa a IMPRIMIENDO (aviso de inicio)." },
+    { "event": "impresion.registrada", "description": "Re-emite cuando termina y registra en historial." },
+    { "event": "impresion.fallida", "description": "Fallo fisico -> siempre avisa y delega en manejo-fallo." },
+    { "event": "impresion.finalizada", "description": "La pieza termina OK y se encadena la siguiente." },
+    { "event": "ciclo_abortado", "description": "Aborto por el trabajador (historial CANCELADA)." },
+    { "event": "ciclo-impresion.iniciar.failed", "description": "Par de fallo: no se pudo iniciar el ciclo." },
+    { "event": "ciclo-impresion.abortar.failed", "description": "Par de fallo: no se pudo abortar el ciclo." }
+  ],
+  "tools": [],
+  "observability": {
+    "metrics": ["ciclo-impresion.reflejo.served", "ciclo-impresion.reflejo.errors"]
+  }
+}

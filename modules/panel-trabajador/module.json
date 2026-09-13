@@ -1,0 +1,35 @@
+{
+  "_doc": "REFLEJO panel-trabajador del taller 3D (pieza 16, rol HOY). Cara OPERATIVA del trabajador: expone estado en vivo (pieza, progreso, fase del ciclo), proximo a encadenar, ultimos eventos, pendientes de confirmacion del dueño y cola + filamento; y ACTIONS para operar HOY (pausar/abortar/reanudar/reintentar/saltar/cambio bobina/confirmar) que DELEGAN en ciclo-impresion/cola/filamento/manejo-fallo. NADA de decision futura (eso es panel-jefe). Sin gesto de jefe: no aprueba propuestas, no marca urgencia futura. CERO juicio: cada comando de control delega por RPC; la confirmacion espera la respuesta del dueño. Proyeccion de lectura (cruzando store por RPC) + comandos que delegan. Reflejo puro sin store propio. Pares de fallo panel-trabajador.*.failed. Origen: plan-construccion.md seccion 6.13 + espina (FASE 4 construir-modulos, pieza 16, TANDA 4).",
+  "name": "panel-trabajador",
+  "version": "reflejo-0.1.0",
+  "_v0_1_0_nota": "v0.1.0 (2026-09-13): REFLEJO rol HOY. Ops estado_vivo/proximo_encadenar/eventos/pendientes/control (RPC). Proyeccion _estadoVivo cruza ciclo+cola+filamento+historial por RPC (best-effort, huecos desconocido); _control delega pausar/abortar/reanudar (ciclo-impresion), reintentar/saltar (manejo-fallo), cambio bobina (filamento.cambiar), confirmar (adaptador-confirmacion). CERO juicio: no decide futuro. Pares panel-trabajador.*.failed.",
+  "description": "Cara operativa del trabajador (rol HOY): estado en vivo de la impresion + cola + filamento + pendientes, y comandos que DELEGAN en el ciclo/filamento/manejo-fallo. Sin decision futura.",
+  "language": "es",
+  "main": "index.js",
+  "dependencies": [
+    "ciclo-impresion",
+    "cola",
+    "filamento",
+    "cupula-gcode",
+    "manejo-fallo",
+    "historial"
+  ],
+  "config": {
+    "cero_juicio": true
+  },
+  "subscribes": [
+    { "event": "panel-trabajador.estado_vivo.request", "handler": "onEstadoVivoRequest", "description": "Estado en vivo: pieza actual + progreso + fase del ciclo (cruzando ciclo, cola, filamento por RPC)." },
+    { "event": "panel-trabajador.proximo_encadenar.request", "handler": "onProximoEncadenarRequest", "description": "Proxima pieza lista para encadenar (cola.siguiente)." },
+    { "event": "panel-trabajador.eventos.request", "handler": "onEventosRequest", "description": "Ultimos eventos del taller (historial.recientes)." },
+    { "event": "panel-trabajador.pendientes.request", "handler": "onPendientesRequest", "description": "Confirmaciones pendientes de decision del dueño." },
+    { "event": "panel-trabajador.control.request", "handler": "onControlRequest", "description": "Comandos de control HOY (pausar/abortar/reanudar/reintentar/saltar/cambio bobina/confirmar) que DELEGAN en ciclo/filamento/manejo-fallo." }
+  ],
+  "publishes": [
+    { "event": "panel-trabajador.estado_vivo.response", "description": "Respuesta correlada: estado en vivo del taller." },
+    { "event": "panel-trabajador.control.failed", "description": "Par de fallo: el comando de control no se pudo ejecutar." }
+  ],
+  "tools": [],
+  "observability": {
+    "metrics": ["panel-trabajador.reflejo.served", "panel-trabajador.reflejo.errors"]
+  }
+}

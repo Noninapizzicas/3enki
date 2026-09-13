@@ -64,14 +64,20 @@ function crearMock() {
   mock._progreso = 0;
   mock._state = 'standby';
   mock._estadoActual = () => ({
-    print_stats: { state: mock._state, filament_used: 0, print_duration: 0,
-      total_duration: 0, current_layer: 0, total_layer: 10 },
-    virtual_sdcard: { progress: mock._progreso },
-    extruder: { temperature: 200, target: 200 },
+    print_stats: { state: mock._state, message: '', filename: 'mock.gcode', filament_used: 0,
+      print_duration: 0, total_duration: 0, current_layer: 0, total_layer: 10, start_time: 0 },
+    virtual_sdcard: { progress: mock._progreso, is_active: false, file_position: 0 },
+    extruder: { temperature: 200, target: 200, pressure_advance: 0.04 },
     heater_bed: { temperature: 60, target: 60 },
+    toolhead: { position: [0, 0, 0, 0], status: 'Idle', homed_axes: 'xyz', print_time: 0 },
+    gcode_move: { gcode_position: [0, 0, 0, 0], absolute_coordinates: true, absolute_extrude: true, extrude_factor: 1, speed_factor: 1 },
     pause_resume: { is_paused: false },
     idle_timeout: { state: 'Printing' },
-    filament_switch_sensor: { filament_detected: true }
+    display_status: { message: '', progress: mock._progreso },
+    filament_switch_sensor: { filament_detected: true },
+    fan: { speed: 1.0, rpm: 5200 },
+    mcu: { mcu_state: 'ready', mcu_avg_voltage: 24.5, mcu_current_frequency: 70000000, mcu_last_avr8_est: 0, mcu_last_est: 0, mcu_temp: 42 },
+    system_stats: { sysload: 0.2, total_memory: 8388608, available_memory: 4194304 }
   });
   mock._simularProgreso = () => {
     mock._state = 'printing';
@@ -111,6 +117,40 @@ if (config.mqtt.password) mqttOpts.password = config.mqtt.password;
 const mqttClient = mqtt.connect(config.mqtt.broker, mqttOpts);
 
 let streamAbierto = false;
+// project_id que se usa en el estado_push del stream auto-abierto
+let streamProjectId = (config && config.project_id) || null;
+// listeners de 'estado' registrados (para no acumular en reconexiones)
+let estadoListener = null;
+
+function registrarEstadosListener() {
+  if (estadoListener) {
+    moonraker.removeListener('estado', estadoListener);
+  }
+  estadoListener = (estado) => {
+    publicar(TOPICS.estadoPush, {
+      project_id: streamProjectId,
+      data: estado,
+      timestamp: new Date().toISOString()
+    });
+  };
+  moonraker.on('estado', estadoListener);
+}
+
+// Abre el stream de Moonraker (si aún no está), de modo que el bridge publique
+// estado_push por su cuenta sin depender de recibir observar_estado.request.
+// Esto lo hace resiliente a reconexiones del PC (p.ej. tras un standby): al volver
+// a conectar el broker, re-abre el stream y retoma la publicación automática.
+function autoAbrirStream() {
+  if (streamAbierto) return;
+  try {
+    registrarEstadosListener();
+    moonraker.conectarStream();
+    streamAbierto = true;
+    log.info('stream.auto_abierto');
+  } catch (err) {
+    log.error('stream.auto_abrir.error', { error: err.message });
+  }
+}
 
 mqttClient.on('connect', () => {
   log.info('mqtt.conectado', { broker: config.mqtt.broker });
@@ -118,6 +158,8 @@ mqttClient.on('connect', () => {
     if (err) log.error('mqtt.subscribe.error', { error: err.message });
     else log.info('mqtt.suscrito', { topics: Object.values(TOPICS).filter(t => t.endsWith('.request')) });
   });
+  // Al conectar/reconectar, abrir el stream automáticamente (resiliencia al standby).
+  autoAbrirStream();
 });
 
 mqttClient.on('error', (err) => {
@@ -175,13 +217,8 @@ async function handleObservarEstado(payload, reqId) {
     return publicar(TOPICS.observarRes, { request_id: reqId, ok: true, stream: 'ya_abierto' });
   }
   try {
-    moonraker.on('estado', (estado) => {
-      publicar(TOPICS.estadoPush, {
-        project_id: payload.project_id || null,
-        data: estado,
-        timestamp: new Date().toISOString()
-      });
-    });
+    if (payload && payload.project_id) streamProjectId = payload.project_id;
+    registrarEstadosListener();
     moonraker.conectarStream();
     streamAbierto = true;
     publicar(TOPICS.observarRes, { request_id: reqId, ok: true, stream: 'abierto' });

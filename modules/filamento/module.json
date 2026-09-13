@@ -1,0 +1,44 @@
+{
+  "_doc": "CUSTODIO filamento del proyecto 3D (taller personal de impresion 3D). Stock de bobinas de filamento: registrar, listar, decrementar (por señal de impresion), cambiar bobina y evaluar umbral de reposicion. Single-writer del store bobinas por proyecto (PosPersistencia). CERO estimacion sin dato medido: _descontar SOLO con gramo MEDIDO del historial (nunca conjetura); el umbral de reposicion es decision del dueno (ABIERTO) y _evaluarUmbral avisa (material.bajo) pero NO decide. Emite material.actualizado ante consumo/cambio y material.bajo al cruzar el umbral. Soporta varios materiales (hoy PETG). Origen: plan-construccion.md seccion 6.3 (FASE 4 construir-modulos, pieza 3).",
+  "name": "filamento",
+  "version": "0.1.0",
+  "_v0_1_0_nota": "v0.1.0 (2026-09-13): CUSTODIO. Ops registrar/descontar/cambiar/evaluar (RPC). Proyecciones _registrarBobina, _descontar (SOLO gramo medido), _cambiarBobina, _restaDe, _evaluarUmbral (resta<umbral -> material.bajo, avisa NO decide). Emite material.actualizado y material.bajo; pares de fallo filamento.descontar.failed y filamento.cambiar.failed.",
+  "description": "Custodio del stock de filamento del taller 3D: bobinas por proyecto, decremento por gramo medido, cambio de rollo y umbral de reposicion (avisa, no decide).",
+  "language": "es",
+  "main": "index.js",
+  "dependencies": [
+    "_shared/pos-persistencia"
+  ],
+  "config": {
+    "persistence": {
+      "concurrency": "single-writer",
+      "data_path": "filamento",
+      "pattern": "single-json-file",
+      "scope": "project",
+      "dir": "/3d/filamento"
+    },
+    "umbral_reposicion_abierto": true,
+    "materiales": ["PETG"]
+  },
+  "subscribes": [
+    { "event": "filamento.registrar.request", "handler": "onRegistrarRequest", "description": "Registra una bobina nueva con su gramos_total y gramos_restantes. Emite material.actualizado." },
+    { "event": "filamento.descontar.request", "handler": "onDescontarRequest", "description": "Decrementa el stock solo con gramo MEDIDO del historial (cero estimacion). Emite material.actualizado y material.bajo si cruza umbral." },
+    { "event": "filamento.cambiar.request", "handler": "onCambiarRequest", "description": "Cambia la bobina en uso (pone enUso en otra o nueva). Emite material.actualizado." },
+    { "event": "filamento.evaluar.request", "handler": "onEvaluarRequest", "description": "Evalua el umbral de reposicion de las bobinas; si alguna cruza, emite material.bajo (avisa, no decide)." },
+    { "event": "project.activated", "handler": "onProjectActivated", "description": "Restaura el store del proyecto activado." }
+  ],
+  "publishes": [
+    { "event": "filamento.registrar.response", "description": "Respuesta correlada: bobina registrada." },
+    { "event": "filamento.descontar.response", "description": "Respuesta correlada: bobina decrementada." },
+    { "event": "filamento.cambiar.response", "description": "Respuesta correlada: bobina en uso cambiada." },
+    { "event": "filamento.evaluar.response", "description": "Respuesta correlada: resultado de la evaluacion de umbrales." },
+    { "event": "material.actualizado", "description": "Cambio de bobina o consumo: estado del material actualizado." },
+    { "event": "material.bajo", "description": "Se cruzo el umbral de reposicion (resta < umbral): aviso, NO decide." },
+    { "event": "filamento.descontar.failed", "description": "Par de fallo: no se pudo descontar (sin gramo medido o bobina inexistente)." },
+    { "event": "filamento.cambiar.failed", "description": "Par de fallo: no se pudo cambiar la bobina." }
+  ],
+  "tools": [],
+  "observability": {
+    "metrics": ["filamento.reflejo.served", "filamento.reflejo.errors"]
+  }
+}

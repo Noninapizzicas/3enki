@@ -1,0 +1,27 @@
+{
+  "_doc": "PUENTE buscador-repositorios del proyecto 3D (taller personal de impresion 3D). Busqueda desde repositorios externos (Printables, MakerWorld, Cults3D, Thingiverse, etc.). Es PUENTE stateless: sin store, escucha y delega. Reutiliza crawl4rs como transporte de busqueda (crawl4rs.buscar.request → SearXNG; infraestructura, NO pieza). Puerto RepositoriosPort ABIERTO (transport 'crawl4rs' por defecto, inyectable). NO inventa resultados: devuelve lo que el puerto obtiene mapeado a ResultadoRepositorio { fuente, titulo, url, autor, formatos }; el dueno elige y aprueba. Par de fallo buscador-repositorios.buscar.failed. Origen: plan-construccion.md seccion 6.6 (FASE 4 construir-modulos, pieza 9).",
+  "name": "buscador-repositorios",
+  "version": "0.1.0",
+  "_v0_1_0_nota": "v0.1.0 (2026-09-13): PUENTE stateless. Op buscar (RPC). Proyecciones _buscar (mapea transport → resultados tipados; CERO inventado) y _resultadoDe. Reutiliza crawl4rs.buscar como transporte. Par de fallo buscador-repositorios.buscar.failed.",
+  "description": "Puente de busqueda en repositorios externos de modelos 3D: delega en crawl4rs/SearXNG y devuelve resultados tipados sin inventarlos.",
+  "language": "es",
+  "main": "index.js",
+  "dependencies": [
+    "crawl4rs"
+  ],
+  "config": {
+    "transport": "crawl4rs",
+    "repositorios_etiquetados": ["Printables", "MakerWorld", "Cults3D", "Thingiverse", "Thangs"]
+  },
+  "subscribes": [
+    { "event": "buscador-repositorios.buscar.request", "handler": "onBuscarRequest", "description": "Busca en repositorios externos por query; NO inventa resultados (devuelve lo que el puerto obtiene, forma ResultadoRepositorio)." }
+  ],
+  "publishes": [
+    { "event": "buscador-repositorios.buscar.response", "description": "Respuesta correlada: { resultados:[{fuente,titulo,url,autor,formatos}], total } o error." },
+    { "event": "buscador-repositorios.buscar.failed", "description": "Par de fallo: el transporte no respondió, falló o devolvió error." }
+  ],
+  "tools": [],
+  "observability": {
+    "metrics": ["buscador-repositorios.reflejo.served", "buscador-repositorios.reflejo.errors"]
+  }
+}

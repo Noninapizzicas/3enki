@@ -1,0 +1,87 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "importacion",
+  "version": "blueprint-1.0.0",
+  "moduleId": "importacion",
+  "moduleType": "chat_tool",
+  "zone": "barra_chat_inferior",
+  "_lente_roles": {
+    "agente": "prisma-universal (cosecha.obtener / delegate_task)",
+    "metodo": "esquematizar-interfaz (F6½)",
+    "fase6": "chat_tool · zone barra_chat_inferior (fase6-decidir-interfaz.md #13 · CONVERSOR multi-formato)",
+    "lente": "ingeniero de interfaz como el dueño que dispara una operación PUNTUAL desde el chat (importar / leer metadatos de un archivo)",
+    "arbitro": "future→jefe (ninguna; importar es acción puntual del dueño desde el chat) · now→operador (dispara importación) · solo-lee→neutro (leer_metadatos)",
+    "_nota_formas": "FORMA SIN DECIDIR (null). La F6½ solo declara op/contexto/evento → elemento; la FORMA (formulario de acción / feedback por señal) la decide la F7. NO se escribe ui.formas."
+  },
+  "titulo": "Importación de modelos externos (CONVERSOR multi-formato). Frontera de formato de la moneda real del taller: importa STL/3MF/GCODE y lee sus metadatos vía un lector por formato (puerto LectorArchivo ABIERTO, inyectable en despliegue). Distingue el GCODE ya preparado (va a la cúpula cupula-gcode directo como ArchivoPreparado) del STL/3MF fuente (va al catálogo como ficha, por RPC catalogo.registrar/actualizar). Stateless (sin store, sin project.activated). CERO juicio: no decide qué pieza imprimir; solo normaliza y entrega. Par de fallo importacion.importar.failed.",
+  "eventos_publicados": [
+    "importacion.importar.response",
+    "importacion.leer_metadatos.response",
+    "importacion.importar.failed"
+  ],
+  "eventos_que_escucho": [],
+  "_eventos_que_escucho_nota": "GATE ANTICOLISION-001: los *.request que el módulo atiende ya son fuente de verdad en module.json.subscribes; NO se repiten en el blueprint.eventos_que_escucho. Se deja [] (XOR).",
+  "_ui_handlers": {
+    "tipo": "chat_tool",
+    "zone": "barra_chat_inferior",
+    "handlers": [
+      { "ui_handler": "importacion.importar", "handler_backend": "onImportarRequest", "clase": "escritura (acción puntual)", "contexto": "sube/normaliza/entrega un archivo externo" },
+      { "ui_handler": "importacion.leer_metadatos", "handler_backend": "onLeerMetadatosRequest", "clase": "lectura", "contexto": "lee metadatos del archivo antes de importar" }
+    ]
+  },
+  "transporte": {
+    "entrada": "reflejo RPC via ui_handlers (module.json.subscribes *.request). El generador schema→UI (BlueprintForm, 4 zonas) renderiza desde ui.ops.",
+    "rpc": [
+      "importacion.importar.request -> importacion.importar.response",
+      "importacion.leer_metadatos.request -> importacion.leer_metadatos.response"
+    ],
+    "salida": [
+      "importacion.importar.failed"
+    ],
+    "qos": "publishAndWait (request/response correlado) en cada operación; timeout 12s (importación puede involucrar RPC a catalogo/cupula)"
+  },
+  "ui": {
+    "_doc": "Schema del generador schema→UI (BlueprintForm). Las 2 RPC del CONVERSOR con sus args reales (index.js). chat_tool: se dispara desde el chat como operación puntual, no como panel persistente. FORMAS sin decidir (F7).",
+    "ops": {
+      "importar": {
+        "titulo": "Importar modelo",
+        "descripcion": "Importa un archivo externo (STL/3MF/GCODE): lee metadatos y lo entrega — GCODE a la cúpula (ArchivoPreparado), STL/3MF al catálogo como ficha (RPC catalogo.registrar/actualizar).",
+        "clase": "escritura (acción puntual)",
+        "contexto": "el dueño dispara desde el chat la importación de un modelo externo",
+        "elemento_sugerido": null,
+        "args": [
+          { "nombre": "archivo", "tipo": "string", "required": true, "placeholder": "ruta o url del archivo (STL/3MF/GCODE) *" },
+          { "nombre": "formato", "tipo": "select", "required": false, "placeholder": "formato (autodetectable por extensión)", "enum": ["STL", "3MF", "GCODE"] },
+          { "nombre": "uso", "tipo": "string", "required": false, "placeholder": "qué resuelve la pieza (opcional)" },
+          { "nombre": "filamento_sug", "tipo": "string", "required": false, "placeholder": "filamento sugerido (opcional)" },
+          { "nombre": "origenUrl", "tipo": "string", "required": false, "placeholder": "URL de origen (opcional)" }
+        ]
+      },
+      "leer_metadatos": {
+        "titulo": "Leer metadatos",
+        "descripcion": "Lee metadatos de un archivo por su formato (nombre, unidades, material sugerido, formatos). Huecos -> 'desconocido'/null; nunca se inventan.",
+        "clase": "lectura",
+        "contexto": "el dueño previsualiza los metadatos de un archivo antes de importarlo",
+        "elemento_sugerido": null,
+        "args": [
+          { "nombre": "archivo", "tipo": "string", "required": true, "placeholder": "ruta o url del archivo *" },
+          { "nombre": "formato", "tipo": "select", "required": false, "placeholder": "formato (autodetectable por extensión)", "enum": ["STL", "3MF", "GCODE"] }
+        ]
+      }
+    },
+    "datos": {
+      "op": "leer_metadatos",
+      "titulo": "Metadatos del archivo",
+      "columnas": ["nombre", "unidades", "material", "formatos", "dimensiones"],
+      "refresh_on": []
+    },
+    "flujo": [
+      { "nombre": "chat_importar", "orden": 1, "ops": ["leer_metadatos", "importar"], "descripcion": "El dueño previsualiza metadatos y dispara la importación puntual desde el chat" }
+    ],
+    "dependencias": {
+      "importar": []
+    },
+    "_nota_formas_sin_decidir": "FORMA = null en ui.ops (F6½ no declara forma). La F7 decide: importar → formulario de acción (Z1) con feedback por señal en_progreso→importada(✅)/fallida(❌) y restricciones reales (503, 422 formato no soportado); leer_metadatos → tarjeta de metadatos (Z4)."
+  },
+  "filosofia": "La importación es la frontera de entrada de la moneda real del taller: un archivo externo (STL/3MF/GCODE) entra desde el chat, se leen sus metadatos y se entrega donde corresponde (GCODE a la cúpula; STL/3MF al catálogo). Operación puntual disparada por el dueño, no un panel persistente. CERO juicio: no decide qué pieza imprimir; solo normaliza y entrega. Lo que no se sabe se muestra como desconocido/null, nunca inventado."
+}

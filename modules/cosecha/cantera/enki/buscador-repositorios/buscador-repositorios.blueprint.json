@@ -1,0 +1,70 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "buscador-repositorios",
+  "version": "blueprint-1.0.0",
+  "moduleId": "buscador-repositorios",
+  "moduleType": "chat_tool",
+  "zone": "barra_chat_inferior",
+  "_lente_roles": {
+    "agente": "prisma-universal (cosecha.obtener / delegate_task)",
+    "metodo": "esquematizar-interfaz (F6½)",
+    "fase6": "chat_tool · zone barra_chat_inferior (fase6-decidir-interfaz.md #14 · PUENTE búsqueda externa)",
+    "lente": "ingeniero de interfaz como el dueño que dispara una búsqueda puntual en repositorios externos desde el chat",
+    "arbitro": "future→jefe (ninguna) · now→operador (dispara búsqueda bajo demanda) · solo-lee→neutro (buscar)",
+    "_nota_formas": "FORMA SIN DECIDIR (null). La F6½ solo declara op/contexto/evento → elemento; la FORMA (input de búsqueda + resultados como tarjetas) la decide la F7. NO se escribe ui.formas."
+  },
+  "titulo": "Búsqueda en repositorios externos de modelos 3D (PUENTE stateless). BUSCA en Printables/MakerWorld/Cults3D/Thingiverse... delegando en crawl4rs.buscar (→ SearXNG) y devuelve resultados tipados ResultadoRepositorio { fuente, titulo, url, autor, formatos }. NO inventa resultados: devuelve lo que el puerto obtiene; el dueño elige y aprueba, y la importación posterior la hace importacion. CERO juicio. Par de fallo buscador-repositorios.buscar.failed.",
+  "eventos_publicados": [
+    "buscador-repositorios.buscar.response",
+    "buscador-repositorios.buscar.failed"
+  ],
+  "eventos_que_escucho": [],
+  "_eventos_que_escucho_nota": "GATE ANTICOLISION-001: el *.request que el módulo atiende ya es fuente de verdad en module.json.subscribes; NO se repite en el blueprint.eventos_que_escucho. Se deja [] (XOR).",
+  "_ui_handlers": {
+    "tipo": "chat_tool",
+    "zone": "barra_chat_inferior",
+    "handlers": [
+      { "ui_handler": "buscador-repositorios.buscar", "handler_backend": "onBuscarRequest", "clase": "lectura (búsqueda bajo demanda)", "contexto": "buscar modelos en repositorios externos y ver resultados como tarjetas" }
+    ]
+  },
+  "transporte": {
+    "entrada": "reflejo RPC via ui_handlers (module.json.subscribes *.request). El generador schema→UI (BlueprintForm) renderiza desde ui.ops.",
+    "rpc": [
+      "buscador-repositorios.buscar.request -> buscador-repositorios.buscar.response"
+    ],
+    "salida": [
+      "buscador-repositorios.buscar.failed"
+    ],
+    "qos": "publishAndWait (request/response correlado); timeout 20s (búsqueda externa vía crawl4rs/SearXNG)"
+  },
+  "ui": {
+    "_doc": "Schema del generador schema→UI (BlueprintForm). La 1 RPC del PUENTE con sus args reales (index.js). chat_tool: búsqueda bajo demanda desde el chat; los resultados se devuelven como tarjetas. FORMAS sin decidir (F7).",
+    "ops": {
+      "buscar": {
+        "titulo": "Buscar modelos",
+        "descripcion": "Busca en repositorios externos por query (Printables/MakerWorld/Cults3D/Thingiverse...). NO inventa resultados: devuelve lo que el puerto obtiene, mapeado a ResultadoRepositorio { fuente, titulo, url, autor, formatos }.",
+        "clase": "lectura (búsqueda bajo demanda)",
+        "contexto": "el dueño busca una pieza en repositorios externos y evalúa resultados para luego importarla",
+        "elemento_sugerido": null,
+        "args": [
+          { "nombre": "query", "tipo": "string", "required": true, "placeholder": "términos de búsqueda *" },
+          { "nombre": "limit", "tipo": "number", "required": false, "placeholder": "límite de resultados (default 10)" }
+        ]
+      }
+    },
+    "datos": {
+      "op": "buscar",
+      "titulo": "Resultados de búsqueda",
+      "columnas": ["fuente", "titulo", "url", "autor", "formatos"],
+      "refresh_on": []
+    },
+    "flujo": [
+      { "nombre": "chat_buscar", "orden": 1, "ops": ["buscar"], "descripcion": "El dueño busca bajo demanda desde el chat y ve resultados como tarjetas" }
+    ],
+    "dependencias": {
+      "buscar": []
+    },
+    "_nota_formas_sin_decidir": "FORMA = null en ui.ops (F6½ no declara forma). La F7 decide: buscar → input de búsqueda (Z2) + resultados como tarjetas (Z4). La búsqueda puntual se dispara desde la barra inferior del chat; la importación posterior vive en importacion, no aquí."
+  },
+  "filosofia": "El buscador es la puerta de entrada externa del taller: el dueño busca una pieza en Printables/MakerWorld/Cults3D... desde el chat, ve los resultados como tarjetas (fuente/título/url/autor/formatos) y decide cuál importar (eso lo hace importacion). CERO juicio: no inventa resultados, devuelve lo que el puerto obtiene; si el transporte falla o no hay datos, lo dice honestamente."
+}

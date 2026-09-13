@@ -1,0 +1,132 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "panel-jefe",
+  "version": "blueprint-1.0.0",
+  "moduleId": "panel-jefe",
+  "moduleType": "workspace_module",
+  "zone": "barra_modulos",
+  "_lente_roles": {
+    "agente": "prisma-universal (cosecha.obtener / delegate_task)",
+    "metodo": "esquematizar-interfaz (F6½)",
+    "fase6": "workspace_module · zone barra_modulos (fase6-decidir-interfaz.md #12 · REFLEJO rol FUTURO / agregado)",
+    "lente": "ingeniero de interfaz como JEFE (ve el panorama agregado y DECIDE el futuro; el sistema solo proyecta y transporta)",
+    "arbitro": "future→jefe (aprobar_propuesta/marcar_prioridad/pedir_reposicion) · now→jefe (resumen/ver_detalle) · solo-lee→neutro (propuestas)",
+    "_nota_formas": "FORMA SIN DECIDIR (null). La F6½ solo declara op/contexto/evento → elemento; la FORMA (dashboard/tabla/botón de decisión/detalle) la decide la F7. NO se escribe ui.formas."
+  },
+  "titulo": "Panel del jefe (rol FUTURO) — cara AGREGADA del taller. Visión de conjunto cruzando los stores por proyección (impresión actual + cola + filamento + consumo/eficiencia + historial, best-effort) y acciones para decidir el FUTURO que DELEGAN: aprobar propuesta (→ cola.reordenar SOLO con decisión humana), marcar prioridad/urgencia (→ cola.marcar_urgente), pedir reposición de filamento, ver detalle de un modelo. CERO juicio: el sistema proyecta y transporta; el jefe decide. PROPUESTA ≠ DECISIÓN. Se repinta con cola.actualizada | pieza.imprimida | impresion.registrada | material.actualizado (fire-and-forget). Reflejo puro sin store propio.",
+  "eventos_publicados": [
+    "panel-jefe.resumen.response",
+    "panel-jefe.aprobar_propuesta.failed"
+  ],
+  "eventos_que_escucho": [],
+  "_eventos_que_escucho_nota": "GATE ANTICOLISION-001: los *.request que el módulo atiende ya son fuente de verdad en module.json.subscribes; NO se repiten en el blueprint.eventos_que_escucho. Se deja [] (XOR). El REFRESCO en vivo de la zona DATOS se declara vía ui.datos.refresh_on (cola.actualizada / pieza.imprimida / impresion.registrada / material.actualizado), NO como subscribes de lectura.",
+  "_ui_handlers": {
+    "tipo": "workspace_module",
+    "zone": "barra_modulos",
+    "handlers": [
+      { "ui_handler": "panel-jefe.resumen", "handler_backend": "onResumenRequest", "clase": "lectura agregada", "contexto": "ver la visión de conjunto del taller" },
+      { "ui_handler": "panel-jefe.propuestas", "handler_backend": "onPropuestasRequest", "clase": "lectura/propuesta", "contexto": "ver la propuesta de orden de la cola (NO decisión)" },
+      { "ui_handler": "panel-jefe.aprobar_propuesta", "handler_backend": "onAprobarPropuestaRequest", "clase": "escritura/decisión", "contexto": "el jefe aprueba una propuesta → cola.reordenar" },
+      { "ui_handler": "panel-jefe.marcar_prioridad", "handler_backend": "onMarcarPrioridadRequest", "clase": "escritura/decisión", "contexto": "marcar urgencia/prioridad de una tarea" },
+      { "ui_handler": "panel-jefe.pedir_reposicion", "handler_backend": "onPedirReposicionRequest", "clase": "escritura/decisión", "contexto": "pedir reposición de filamento" },
+      { "ui_handler": "panel-jefe.ver_detalle", "handler_backend": "onVerDetalleRequest", "clase": "lectura", "contexto": "detalle de un modelo (catalogo/cupula)" }
+    ]
+  },
+  "transporte": {
+    "entrada": "reflejo RPC via ui_handlers (module.json.subscribes *.request). El generador schema→UI (BlueprintForm, 4 zonas) renderiza desde ui.ops/ui.datos.",
+    "rpc": [
+      "panel-jefe.resumen.request -> panel-jefe.resumen.response",
+      "panel-jefe.propuestas.request -> panel-jefe.propuestas.response",
+      "panel-jefe.aprobar_propuesta.request -> panel-jefe.aprobar_propuesta.response",
+      "panel-jefe.marcar_prioridad.request -> panel-jefe.marcar_prioridad.response",
+      "panel-jefe.pedir_reposicion.request -> panel-jefe.pedir_reposicion.response",
+      "panel-jefe.ver_detalle.request -> panel-jefe.ver_detalle.response"
+    ],
+    "salida": [
+      "panel-jefe.aprobar_propuesta.failed"
+    ],
+    "qos": "publishAndWait (request/response correlado) en cada operación; timeout 8s"
+  },
+  "ui": {
+    "_doc": "Schema de panel del generador schema→UI (BlueprintForm). Las 6 RPC del REFLEJO agregado con sus args reales (index.js). Las lecturas de conjunto se conectan con ui.datos.refresh_on. FORMAS sin decidir (F7).",
+    "ops": {
+      "resumen": {
+        "titulo": "Resumen de conjunto",
+        "descripcion": "Visión agregada del taller: impresión actual + cola + filamento + consumo/eficiencia + historial, cruzando stores por RPC best-effort (huecos -> 'desconocido'). Repintado por cola.actualizada | pieza.imprimida | impresion.registrada | material.actualizado.",
+        "clase": "lectura agregada",
+        "contexto": "el jefe abre el cuadro de mando y ve el panorama completo",
+        "elemento_sugerido": null,
+        "args": [
+          { "nombre": "n", "tipo": "number", "required": false, "placeholder": "registros de historial (default 10)" },
+          { "nombre": "modelo_filtro", "tipo": "string", "required": false, "placeholder": "filtrar consumo por modelo (opcional)" }
+        ]
+      },
+      "propuestas": {
+        "titulo": "Propuestas de orden",
+        "descripcion": "Propuesta de orden de la cola (motor-propuesta.proponer). PROPUESTA, NO decisión: el sistema no reordena solo; el jefe la aprueba.",
+        "clase": "lectura/propuesta",
+        "contexto": "el jefe ve la orden que propone el motor antes de decidir",
+        "elemento_sugerido": null
+      },
+      "aprobar_propuesta": {
+        "titulo": "Aprobar propuesta",
+        "descripcion": "El jefe aprueba una propuesta → cola.reordenar SOLO con decisión humana. El sistema transporta la decisión; no decide.",
+        "clase": "escritura/decisión",
+        "contexto": "el jefe convierte una propuesta en el nuevo orden de la cola",
+        "elemento_sugerido": null,
+        "args": [
+          { "nombre": "orden", "tipo": "json", "required": true, "descripcion": "Array de ids en el orden aprobado (viene de propuestas; no vacío)." },
+          { "nombre": "jefe", "tipo": "string", "required": false, "placeholder": "decision (default panel-jefe)" }
+        ]
+      },
+      "marcar_prioridad": {
+        "titulo": "Marcar prioridad",
+        "descripcion": "Marca urgencia/prioridad de una tarea (cola.marcar_urgente). El jefe decide qué sube.",
+        "clase": "escritura/decisión",
+        "contexto": "el jefe prioriza una pieza urgente en la cola",
+        "elemento_sugerido": null,
+        "args": [
+          { "nombre": "id", "tipo": "string", "required": true, "placeholder": "id o tarea_id de la tarea *" },
+          { "nombre": "urgente", "tipo": "select", "required": false, "placeholder": "urgente (default true)", "enum": ["true", "false"], "enumLabels": ["Sí", "No"] }
+        ]
+      },
+      "pedir_reposicion": {
+        "titulo": "Pedir reposición",
+        "descripcion": "Pide reposición de filamento (vía adaptador-confirmacion.confirmar → SolicitudDecision al dueño).",
+        "clase": "escritura/decisión",
+        "contexto": "el jefe detecta stock bajo y pide filamento",
+        "elemento_sugerido": null,
+        "args": [
+          { "nombre": "confirmacion_id", "tipo": "string", "required": false, "placeholder": "id de confirmación (opcional)" },
+          { "nombre": "bobina_id", "tipo": "string", "required": false, "placeholder": "bobina a reponer (opcional)" }
+        ]
+      },
+      "ver_detalle": {
+        "titulo": "Ver detalle",
+        "descripcion": "Detalle de un modelo (catalogo.por_id o cupula-gcode.obtener).",
+        "clase": "lectura",
+        "contexto": "el jefe inspecciona la ficha o el gcode de una pieza",
+        "elemento_sugerido": null,
+        "args": [
+          { "nombre": "modelo_id", "tipo": "string", "required": false, "placeholder": "id de modelo (para catalogo.por_id)" },
+          { "nombre": "archivo_id", "tipo": "string", "required": false, "placeholder": "id de archivo (para cupula-gcode.obtener)" }
+        ]
+      }
+    },
+    "datos": {
+      "op": "resumen",
+      "titulo": "Panorama del taller",
+      "columnas": ["impresion_actual", "cola", "filamento", "consumo", "historial"],
+      "refresh_on": ["cola.actualizada", "pieza.imprimida", "impresion.registrada", "material.actualizado"]
+    },
+    "flujo": [
+      { "nombre": "jefe_dashboard", "orden": 1, "ops": ["resumen", "propuestas", "ver_detalle"], "descripcion": "El jefe ve la visión de conjunto agregada" },
+      { "nombre": "jefe_decidir_futuro", "orden": 2, "ops": ["aprobar_propuesta", "marcar_prioridad", "pedir_reposicion"], "descripcion": "El jefe decide el futuro (delega en cola/filamento/adaptador)" }
+    ],
+    "dependencias": {
+      "aprobar_propuesta": [ { "campo": "orden", "de": "propuestas" } ]
+    },
+    "_nota_formas_sin_decidir": "FORMA = null en ui.ops (F6½ no declara forma). La F7 decide: resumen → dashboard de conjunto (Z3+Z4), propuestas → tabla de orden (Z4), aprobar_propuesta/marcar_prioridad/pedir_reposicion → botones de decisión contextuales (Z2), ver_detalle → detalle/tarjeta (Z4)."
+  },
+  "filosofia": "El panel del jefe es la cara FUTURO del taller: el dueño abre el cuadro de mando y ve el panorama agregado (lo que imprime ahora, la cola, el filamento, el consumo, el historial), y DECIDE el futuro con datos. PROPUESTA ≠ DECISIÓN: el sistema propone, el dueño aprueba; cada acción de decisión DELEGA (cola.reordenar / cola.marcar_urgente / pedir reposición) y espera la voz del dueño. CERO juicio: el sistema proyecta y transporta, nunca decide por el dueño."
+}

@@ -49,6 +49,18 @@ A/B/C: declara.
 
 ## 3 · EL MANDATO
 
+> **Motor de esquematización = `prisma-universal`** (vía `delegate_task` o
+> `cosecha.obtener`). Pásale las 3 variables:
+> - ENTRADA = `<slug>.blueprint.json` del módulo (contrato · operaciones ·
+>   eventos_que_escucho · transporte.rpc · transporte.salida)
+> - ARCHIVO_FINAL = la sección `ui.*` en el blueprint del módulo
+> - CÓMO = ingeniero de interfaz lente del tipo decidido en F6
+>   (workspace_module / system_panel / chat_tool / inline_render) · PARA = la
+>   interfaz del módulo <slug>
+>
+> El resto (default del generador probado, `ui.*` escrita cuando aplica, caso
+> raro a zona 5) se ejecuta con el método y bajo el veredicto de prisma-universal.
+
 1. **Lee** el blueprint del módulo: `transporte.rpc` (operaciones RPC),
    `operaciones` (contrato), `eventos_que_escucho`, `transporte.salida`, y `ui.*`
    si ya existe.

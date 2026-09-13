@@ -172,6 +172,16 @@ dueño diga "no hay más". Cada interlocutor lleva `{ rol, canal, relacion }`.
 
 ## 3 · FLUJO — la FASE 0 completa
 
+> **Motor de esquematización = `prisma-universal`** (vía `delegate_task` o
+> `cosecha.obtener`). Pásale las 3 variables:
+> - ENTRADA = la identidad preliminar declarada por el dueño + sus interlocutores
+> - ARCHIVO_FINAL = el bloque `identidad` del perfil del proyecto
+> - CÓMO = entrevistador anti-sesgo · PARA = la identidad del negocio del proyecto
+>
+> Esta fase descubre la identidad MÍNIMA (10 preguntas abiertas, anti-sesgo); la
+> anatomía completa con el prisma de 5 huecos es la FASE SIGUIENTE
+> (esquematizar-negocio), que también usa `prisma-universal`.
+
 ```
 Se aloja el negocio (directorios creados) → ESTADO: sin_identidad
   ↓

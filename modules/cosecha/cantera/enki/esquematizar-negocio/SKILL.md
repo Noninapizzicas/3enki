@@ -75,8 +75,18 @@ vacío o falta, pide completar la FASE 0 antes de seguir.
 
 ## 2 · EL MÉTODO — el esquematizador aplicado al negocio
 
-Sigue el método de la skill `esquematizador` (cárgala para el detalle), pero el
-sujeto ya está fijado:
+> **Motor de esquematización = `prisma-universal`** (vía `delegate_task` o
+> `cosecha.obtener`). Pásale las 3 variables:
+> - ENTRADA = la identidad del negocio (project-profile.get) + el esquema de fase previa
+> - ARCHIVO_FINAL = `<storage del proyecto>/esquemas/esquema.md`
+> - CÓMO = experto en talleres/dominio del negocio · PARA = el negocio del proyecto
+>   (`que_es + que_vende + como_lo_elabora`), con su prisma GLOBAL + POR
+>   INTERLOCUTOR + POR ROL (los pasos 1, 1b y 1c de abajo se ejecutan con el
+>   método de prisma-universal, cambiando solo CÓMO/PARA por cada interlocutor
+>   y por cada rol jefe/trabajador/cliente).
+>
+> Sigue el método de la skill `esquematizador` (cárgala para el detalle), pero el
+> sujeto ya está fijado:
 
 **Fase 1 · Prisma recursivo** — pasa el NEGOCIO por los 5 huecos
 (IDENTIDAD, RESTRICCIONES, CONTRATO, NO-OBJETIVOS, PREGUNTAS_ABIERTAS).

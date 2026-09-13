@@ -117,6 +117,40 @@ if (config.mqtt.password) mqttOpts.password = config.mqtt.password;
 const mqttClient = mqtt.connect(config.mqtt.broker, mqttOpts);
 
 let streamAbierto = false;
+// project_id que se usa en el estado_push del stream auto-abierto
+let streamProjectId = (config && config.project_id) || null;
+// listeners de 'estado' registrados (para no acumular en reconexiones)
+let estadoListener = null;
+
+function registrarEstadosListener() {
+  if (estadoListener) {
+    moonraker.removeListener('estado', estadoListener);
+  }
+  estadoListener = (estado) => {
+    publicar(TOPICS.estadoPush, {
+      project_id: streamProjectId,
+      data: estado,
+      timestamp: new Date().toISOString()
+    });
+  };
+  moonraker.on('estado', estadoListener);
+}
+
+// Abre el stream de Moonraker (si aún no está), de modo que el bridge publique
+// estado_push por su cuenta sin depender de recibir observar_estado.request.
+// Esto lo hace resiliente a reconexiones del PC (p.ej. tras un standby): al volver
+// a conectar el broker, re-abre el stream y retoma la publicación automática.
+function autoAbrirStream() {
+  if (streamAbierto) return;
+  try {
+    registrarEstadosListener();
+    moonraker.conectarStream();
+    streamAbierto = true;
+    log.info('stream.auto_abierto');
+  } catch (err) {
+    log.error('stream.auto_abrir.error', { error: err.message });
+  }
+}
 
 mqttClient.on('connect', () => {
   log.info('mqtt.conectado', { broker: config.mqtt.broker });
@@ -124,6 +158,8 @@ mqttClient.on('connect', () => {
     if (err) log.error('mqtt.subscribe.error', { error: err.message });
     else log.info('mqtt.suscrito', { topics: Object.values(TOPICS).filter(t => t.endsWith('.request')) });
   });
+  // Al conectar/reconectar, abrir el stream automáticamente (resiliencia al standby).
+  autoAbrirStream();
 });
 
 mqttClient.on('error', (err) => {
@@ -181,13 +217,8 @@ async function handleObservarEstado(payload, reqId) {
     return publicar(TOPICS.observarRes, { request_id: reqId, ok: true, stream: 'ya_abierto' });
   }
   try {
-    moonraker.on('estado', (estado) => {
-      publicar(TOPICS.estadoPush, {
-        project_id: payload.project_id || null,
-        data: estado,
-        timestamp: new Date().toISOString()
-      });
-    });
+    if (payload && payload.project_id) streamProjectId = payload.project_id;
+    registrarEstadosListener();
     moonraker.conectarStream();
     streamAbierto = true;
     publicar(TOPICS.observarRes, { request_id: reqId, ok: true, stream: 'abierto' });

@@ -266,6 +266,26 @@
       "ejecuciones": 0,
       "ultima_ejecucion": null,
       "modulos_procesados": []
+    },
+    {
+      "name": "adaptador-pieza-3d",
+      "description": "Traduce descripción funcional de pieza en código OpenSCAD+BOSL2 compilable, exporta STL y encola para impresión. Sin frenos en tipos de diseño: estructural, mecánico, articulado, roscado, engranajes, enclosures, jigs, contenedores, tubería, herramientas. Usa prisma de 5 huecos para la anatomía y BOSL2 para la geometría.",
+      "archivo": "adaptador-pieza-3d.json",
+      "tags": [
+        "impresion-3d",
+        "openscad",
+        "bosl2",
+        "stl",
+        "parametrico",
+        "diseño",
+        "pieza",
+        "fabricacion",
+        "prisma"
+      ],
+      "creado": "2026-09-13",
+      "ejecuciones": 0,
+      "ultima_ejecucion": null,
+      "modulos_procesados": []
     }
   ]
 }

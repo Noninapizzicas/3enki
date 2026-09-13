@@ -248,6 +248,24 @@
       "ejecuciones": 0,
       "ultima_ejecucion": null,
       "modulos_procesados": []
+    },
+    {
+      "name": "analizador-restricciones",
+      "description": "Identificador de restricciones (cuellos de botella) de cualquier sujeto. Extiende prisma-universal + TOC Goldratt: 5 pasos de focalización, Árbol de Realidad Actual, Nube de Evaporación.",
+      "archivo": "analizador-restricciones.json",
+      "tags": [
+        "restricciones",
+        "toc",
+        "goldratt",
+        "prisma",
+        "universal",
+        "analisis",
+        "cuello-de-botella"
+      ],
+      "creado": "2026-09-13",
+      "ejecuciones": 0,
+      "ultima_ejecucion": null,
+      "modulos_procesados": []
     }
   ]
 }

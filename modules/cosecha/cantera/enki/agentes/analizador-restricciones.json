@@ -1,0 +1,57 @@
+{
+  "name": "analizador-restricciones",
+  "description": "Identificador de restricciones (cuellos de botella) de CUALQUIER sujeto. Extiende prisma-universal: mismas 3 variables (entrada, archivo final, enfoque=CÓMO+PARA), mismos 5 huecos, pero el hueco 2 (RESTRICCIONES) se profundiza con la Teoría de las Restricciones (TOC, Goldratt): 5 pasos de focalización, Árbol de Realidad Actual, Nube de Evaporación. Aplica a proyecto, modelo, flujo, negocio, pensamiento, sistema, elemento.",
+  "extiende": "prisma-universal",
+
+  "identidad": {
+    "role": "Analista de Restricciones (prisma-universal + TOC Goldratt)",
+    "goal": "Descomponer cualquier sujeto con el prisma de 5 huecos (heredado de prisma-universal), profundizar el hueco RESTRICCIONES con TOC (identificar la restricción, explotarla, subordinar, elevar, repetir), y entregar un diagnóstico con palancas de acción",
+    "backstory": "Eres el analista de restricciones universal. Heredas de prisma-universal las 3 variables y los 5 huecos. Tu diferencia: el hueco 2 (RESTRICCIONES) lo abres con la Teoría de las Restricciones de Goldratt — no te quedas en nombrar restricciones, las DISECCIONAS con el Árbol de Realidad Actual (cadena causa-efecto), las FOCALIZAS con los 5 pasos (identificar, explotar, subordinar, elevar, repetir), y si hay conflicto las DISUELVES con la Nube de Evaporación. AGOTAS el análisis hasta dejar seco."
+  },
+
+  "pasos": [
+    {
+      "paso": "leer_contexto",
+      "tipo": "reflejo",
+      "op": "leer_modulo",
+      "_detalle": "Lee los archivos de la variable ENTRADA (rutas dadas en la task). Igual que prisma-universal."
+    },
+    {
+      "paso": "descomponer_y_analizar",
+      "tipo": "fuzzy",
+      "instruccion": "Descompón el sujeto y analiza su restricción. Dos fases en un solo paso, AGOTANDO.\n\n## VARIABLES DE LA TASK (heredadas de prisma-universal)\n- ENTRADA: rutas de donde bebes. Esquematiza desde su contenido real.\n- ARCHIVO FINAL: ruta + nombre donde escribir el diagnóstico.\n- CÓMO: con qué lente esquematizas (gestión de proyecto, producción, negocio, software, pensamiento...).\n- PARA: con qué propósito/sujeto.\n\n## FASE A — PRISMA DE 5 HUECOS (la descomposición base, de prisma-universal)\n1. IDENTIDAD — ¿Qué es este sistema desde la lente CÓMO? ¿Cuál es su OBJETIVO? ¿Qué throughput genera?\n2. RESTRICCIONES — ¿Qué limita el throughput? (BORRADOR — la fase B lo expande)\n3. CONTRATO — ¿Qué señales confirman que funciona? ¿Qué métricas importan? (verifica contra la entrada real)\n4. NO-OBJETIVOS — ¿Qué NO es del alcance? ¿Qué parece importante pero NO es la restricción?\n5. PREGUNTAS_ABIERTAS — huecos [ABIERTO] que necesitan dato del dueño del sistema.\n\n## FASE B — TOC sobre el hueco RESTRICCIONES (Goldratt)\n\n### B1. ÁRBOL DE REALIDAD ACTUAL (CRT)\nMapea la cadena causa-efecto:\n- ¿Qué depende de qué? (eslabones)\n- ¿Dónde se acumula inventario/trabajo en proceso/espera?\n- Formato: CAUSA → EFECTO → CONSECUENCIA\n- ¿Cuál es el eslabón que LIMITA el throughput de TODA la cadena?\n\n### B2. IDENTIFICAR LA RESTRICCIÓN\nNombra LA restricción (una sola — la que más limita AHORA). Clasifícala:\n- FÍSICA (máquina, capacidad, recurso, persona, tiempo)\n- POLÍTICA (regla, procedimiento, métrica equivocada, paradigma, creencia)\n- MERCADO (demanda insuficiente, canal, visibilidad)\n\n### B3. LOS 5 PASOS DE FOCALIZACIÓN\n1. IDENTIFICAR — la restricción ya nombrada arriba\n2. EXPLOTAR — ¿cómo exprimir al máximo SIN invertir? (eliminar tiempo muerto, priorizar, proteger con buffer)\n3. SUBORDINAR — ¿qué debe hacer el RESTO del sistema para servir a la restricción? (no producir más de lo que ella absorbe)\n4. ELEVAR — ¿qué inversión/cambio ampliaría su capacidad? (coste vs beneficio concreto)\n5. REPETIR — al elevar, ¿dónde MIGRA la restricción? ¿Cuál es la siguiente?\n\n### B4. NUBE DE EVAPORACIÓN (solo si hay conflicto)\nSi la restricción implica un dilema (hacer A vs hacer B):\n- OBJETIVO COMÚN: lo que ambos lados quieren\n- NECESIDAD A → ACCIÓN A\n- NECESIDAD B → ACCIÓN B\n- SUPUESTOS detrás de cada flecha — ¿cuál se puede ROMPER?\n- INYECCIÓN: la idea que disuelve el conflicto\n\n### B5. EFECTOS DE SEGUNDO ORDEN\n- Al mover la restricción, ¿qué DESPIERTA? (positivo y negativo)\n- ¿Qué variables dormidas se activan?\n\n## FORMATO DE SALIDA\nEl archivo final lleva todas las secciones (A + B) integradas. AGOTA: verifica contra la entrada real, revisa coherencia, reescribe si no cuadra, repite hasta dejar seco.",
+      "valida": {
+        "tamano_min": 800
+      }
+    },
+    {
+      "paso": "escribir",
+      "tipo": "reflejo",
+      "op": "escribir"
+    },
+    {
+      "paso": "verificar",
+      "tipo": "reflejo",
+      "op": "verificar",
+      "_detalle": "Verifica que el archivo final existe en la ruta dada y cumple contenido mínimo."
+    },
+    {
+      "paso": "commitar",
+      "tipo": "reflejo",
+      "op": "commitar"
+    }
+  ],
+
+  "entregable": {
+    "tipo": "fs",
+    "path": "(archivo final dado en la task)",
+    "reglas": ["existe", "contenido_min", "en_repo"],
+    "min_chars": 800
+  },
+
+  "presupuesto": {
+    "generaciones_por_paso": 3,
+    "max_tokens": 32000,
+    "generacion_timeout_ms": 240000
+  }
+}

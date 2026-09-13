@@ -1,0 +1,43 @@
+{
+  "_doc": "CUSTODIO catalogo del proyecto 3D (taller personal de impresion 3D). Biblioteca de piezas: ficha de cada modelo fisico util de la moneda real del taller (STL/3MF/GCODE conviven como archivos distintos, archivo_stl/archivo_3mf/archivo_gcode). Single-writer del store modelos por proyecto (PosPersistencia). Reconcilia ANTES de crear (nombre canonico + fuente + origenUrl → NO duplica); emite modelo.registrado al registrar (ficha nueva o actualizada). CERO juicio: el dueno decide (uso/filamento/aprobar); rol CLIENTE nulo (uso propio, sin venta). Origen: plan-construccion.md seccion 6.1 (FASE 4 construir-modulos, pieza 1).",
+  "name": "catalogo",
+  "version": "0.1.0",
+  "_v0_1_0_nota": "v0.1.0 (2026-09-13): CUSTODIO. Ops registrar/por_id/actualizar/listar (RPC). Proyecciones _registrar (reconcilia antes de crear), _porId, _listar, _actualizar. Publica modelo.registrado; pares de fallo catalogo.registrar.failed y catalogo.actualizar.failed. Moneda real STL/3MF/GCODE como archivos distintos.",
+  "description": "Custodio de la biblioteca de piezas del taller 3D: fichas de modelos multiformato (STL/3MF/GCODE), single-writer por proyecto.",
+  "language": "es",
+  "main": "index.js",
+  "dependencies": [
+    "_shared/pos-persistencia"
+  ],
+  "config": {
+    "persistence": {
+      "concurrency": "single-writer",
+      "data_path": "catalogo",
+      "pattern": "single-json-file",
+      "scope": "project",
+      "dir": "/3d/catalogo"
+    },
+    "formatos": ["STL", "3MF", "GCODE"],
+    "fuentes": ["DISEÑADO", "REPOSITORIO", "ARCHIVO"]
+  },
+  "subscribes": [
+    { "event": "catalogo.registrar.request", "handler": "onRegistrarRequest", "description": "Registra un modelo nuevo: reconcilia antes de crear (nombre+fuente+origenUrl, NO duplica). Emite modelo.registrado." },
+    { "event": "catalogo.por_id.request", "handler": "onPorIdRequest", "description": "Obtiene una ficha de modelo por id." },
+    { "event": "catalogo.actualizar.request", "handler": "onActualizarRequest", "description": "Edita una ficha existente (merge; no re-crea). Emite modelo.registrado." },
+    { "event": "catalogo.listar.request", "handler": "onListarRequest", "description": "Lista las fichas del proyecto ordenadas por nombre." },
+    { "event": "project.activated", "handler": "onProjectActivated", "description": "Restaura el store del proyecto activado." }
+  ],
+  "publishes": [
+    { "event": "catalogo.registrar.response", "description": "Respuesta correlada: modelo creado o reconciliado." },
+    { "event": "catalogo.por_id.response", "description": "Respuesta correlada: ficha del modelo o 404." },
+    { "event": "catalogo.actualizar.response", "description": "Respuesta correlada: ficha actualizada." },
+    { "event": "catalogo.listar.response", "description": "Respuesta correlada: lista de modelos." },
+    { "event": "modelo.registrado", "description": "Ficha nueva o actualizada (reconciliada) del catalogo." },
+    { "event": "catalogo.registrar.failed", "description": "Par de fallo: no se pudo registrar." },
+    { "event": "catalogo.actualizar.failed", "description": "Par de fallo: no se pudo actualizar." }
+  ],
+  "tools": [],
+  "observability": {
+    "metrics": ["catalogo.reflejo.served", "catalogo.reflejo.errors"]
+  }
+}

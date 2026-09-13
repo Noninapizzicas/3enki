@@ -1,0 +1,43 @@
+{
+  "_doc": "REFLEJO historial del proyecto 3D (taller personal de impresion 3D). Registro append-only de impresiones: cada asiento es dato MEDIDO (gramos_reales, tiempo_real, nunca estimado). Append-only: solo se anade; el unico borrado permitido es el asiento erroneo. Emite impresion.registrada al registrar y, si resultado == OK, pieza.imprimida (dispara el encadenamiento del motor). Store persistente por proyecto (PosPersistencia). Origen: plan-construccion.md seccion 6.11 (FASE 4 construir-modulos, pieza 14).",
+  "name": "historial",
+  "version": "0.1.0",
+  "_v0_1_0_nota": "v0.1.0 (2026-09-13): REFLEJO append-only. Ops registrar/por_modelo/recientes/borrar (RPC). Proyecciones _registrar (append-only; emite pieza.imprimida solo con resultado OK), _porModelo, _recientes, _borrarAsiento (solo asiento erroneo). Par de fallo historial.registrar.failed.",
+  "description": "Historial append-only de impresiones del taller 3D: registro de dato medido (gramos y tiempo reales) por modelo, proyecto aislado.",
+  "language": "es",
+  "main": "index.js",
+  "dependencies": [
+    "_shared/pos-persistencia"
+  ],
+  "config": {
+    "persistence": {
+      "concurrency": "single-writer",
+      "data_path": "historial",
+      "pattern": "single-json-file",
+      "scope": "project",
+      "dir": "/3d/historial"
+    },
+    "resultados": ["OK", "FALLIDA", "CANCELADA"],
+    "append_only": true
+  },
+  "subscribes": [
+    { "event": "historial.registrar.request", "handler": "onRegistrarRequest", "description": "Registra una impresion (append-only). Emite impresion.registrada y, si resultado OK, pieza.imprimida." },
+    { "event": "historial.por_modelo.request", "handler": "onPorModeloRequest", "description": "Registros de un modelo (mas recientes primero)." },
+    { "event": "historial.recientes.request", "handler": "onRecientesRequest", "description": "N registros mas recientes del proyecto." },
+    { "event": "historial.borrar.request", "handler": "onBorrarRequest", "description": "Borra un asiento erroneo (unico borrado permitido)." },
+    { "event": "project.activated", "handler": "onProjectActivated", "description": "Restaura el store del proyecto activado." }
+  ],
+  "publishes": [
+    { "event": "historial.registrar.response", "description": "Respuesta correlada: asiento registrado." },
+    { "event": "historial.por_modelo.response", "description": "Respuesta correlada: registros del modelo." },
+    { "event": "historial.recientes.response", "description": "Respuesta correlada: recientes." },
+    { "event": "historial.borrar.response", "description": "Respuesta correlada: asiento borrado/corregido." },
+    { "event": "impresion.registrada", "description": "Registro append-only con dato MEDIDO del historial." },
+    { "event": "pieza.imprimida", "description": "Exito (resultado OK): dispara el encadenamiento del motor." },
+    { "event": "historial.registrar.failed", "description": "Par de fallo: no se pudo registrar." }
+  ],
+  "tools": [],
+  "observability": {
+    "metrics": ["historial.reflejo.served", "historial.reflejo.errors"]
+  }
+}

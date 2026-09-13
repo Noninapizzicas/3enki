@@ -53,7 +53,16 @@ export const PAGE_CATALOG: Record<string, PageDef> = {
   producir:         { id: 'producir',         icon: '🏭',  label: 'Producir', nav: false },
   pedidos:          { id: 'pedidos',          icon: '📋',  label: 'Pedidos', nav: false },
   variaciones:      { id: 'variaciones',      icon: '🔧',  label: 'Variaciones', nav: false },
-  productos:        { id: 'productos',        icon: '🍕',  label: 'Productos', nav: false }
+  productos:        { id: 'productos',        icon: '🍕',  label: 'Productos', nav: false },
+  // — Proyecto 3D (vertical impresión) — F7: paneles de interfaz (construir-interfaz).
+  // nav:false → el rail lateral no los pinta (sin ruta /<proyecto>/<id>); el page-set
+  // los gatea en la work-bar (catalogo/panel-trabajador/panel-jefe) y el chat-tools
+  // (importacion/buscador-repositorios, que además exigen loader en panels.ts).
+  // NOTA: 'catalogo' ya existe más arriba (id 'catalogo'); se comparte entre prisma y 3d.
+  'panel-trabajador':{ id: 'panel-trabajador', icon: '🔧',  label: 'Panel del trabajador', nav: false },
+  'panel-jefe':     { id: 'panel-jefe',       icon: '🗂',  label: 'Panel del jefe', nav: false },
+  importacion:      { id: 'importacion',      icon: '📥',  label: 'Importación', nav: false },
+  'buscador-repositorios': { id: 'buscador-repositorios', icon: '🔎',  label: 'Buscar modelos', nav: false }
 };
 /** Semilla por tipo: lo que un proyecto trae al nacer, antes de que crezca en runtime. */
 const SEED_BY_TYPE: Record<string, string[]> = {

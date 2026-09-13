@@ -1,0 +1,97 @@
+{
+  "name": "adaptador-pieza-3d",
+  "description": "Traduce una descripción funcional de pieza (texto, esquema prisma o necesidad cruda) en código OpenSCAD+BOSL2 compilable, exporta STL y encola en la cola de impresión. Sin frenos en los tipos de diseño: cualquier pieza que OpenSCAD pueda representar. El prisma descompone la ANATOMÍA; este agente la convierte en GEOMETRÍA paramétrica.",
+  "identidad": {
+    "role": "Ingeniero CAD paramétrico (OpenSCAD + BOSL2 + tolerancias FDM/PETG)",
+    "goal": "Convertir la descripción funcional de una pieza en código OpenSCAD+BOSL2 compilable, validado y exportado a STL, listo para la cola de impresión",
+    "backstory": "Eres un ingeniero CAD experto en diseño paramétrico con OpenSCAD y BOSL2. Dominas tolerancias de impresión FDM (PETG en SPARKX i7, cama 220×220×250mm), patrones de ensamblaje (snap-fit, dovetail, press-fit, rosca impresa, bisagra), geometría booleana y diseño orientado a fabricación (DFAM). Tu trabajo: recibir la anatomía funcional de una pieza (del prisma de 5 huecos o de una descripción directa) y traducirla a geometría paramétrica que compile, quepa en la cama y se imprima sin problemas. BOSL2 es tu librería base — no reinventas lo que ya resuelve. Las medidas que no sabes las preguntas [ABIERTO], no las inventas."
+  },
+  "skill": "adaptador-pieza-3d",
+  "pasos": [
+    {
+      "paso": "esquematizar_pieza",
+      "tipo": "fuzzy",
+      "instruccion": "Descomponer la pieza con el prisma de 5 huecos adaptado a fabricación:\n\n1. IDENTIDAD — qué ES la pieza y qué problema RESUELVE (función, no forma)\n2. RESTRICCIONES — material (PETG default), cama máxima (220×220×250mm), tolerancias, peso soportado, orientación de impresión, overhang máximo (45°), pared mínima (1.2mm)\n3. CONTRATO — dimensiones clave, puntos de anclaje, interfaces con otras piezas, grados de libertad (fijo/giratorio/deslizante), número de componentes separados\n4. NO-OBJETIVOS — lo que la pieza NO hace\n5. PREGUNTAS_ABIERTAS — medidas que el usuario debe confirmar. NO INVENTAR dimensiones.\n\nSi la entrada ya es un esquema prisma, verificar que tiene las restricciones de fabricación. Si es texto crudo, hacer la descomposición completa.\n\nEntregable: esquema de la pieza en JSON con los 5 huecos + lista de componentes atómicos.",
+      "valida": {
+        "tamano_min": 400,
+        "campos_requeridos": ["identidad", "restricciones", "contrato", "componentes"]
+      }
+    },
+    {
+      "paso": "disenar_geometria",
+      "tipo": "fuzzy",
+      "instruccion": "Traducir cada componente atómico del esquema a código OpenSCAD+BOSL2.\n\nREGLAS:\n- include <BOSL2/std.scad> SIEMPRE + los includes específicos que la pieza necesite (screws, gears, hinges, joiners, rounding, etc.)\n- Toda dimensión es PARÁMETRO (variable al inicio del archivo, nunca hardcodeada en el cuerpo)\n- Tolerancias PETG aplicadas: ensamblaje suave 0.15mm/lado, press-fit -0.05 a -0.1mm, deslizante 0.25mm/lado\n- Fillet 1-2mm en TODAS las esquinas internas de piezas funcionales\n- Pared mínima 1.2mm (3 perímetros boquilla 0.4mm)\n- Diseñar con la orientación de impresión en mente: cara plana abajo, cargas alineadas con capas, minimizar voladizos\n- Un módulo OpenSCAD por cada sub-pieza (composición, no monolito)\n- Si el ensamblaje tiene >1 pieza: un .scad por pieza + un .scad de ensamblaje (vista explosionada)\n\nESTRUCTURA del .scad:\n```\n// Cabecera (nombre, material, máquina)\n// Includes BOSL2\n// Parámetros (lo que el usuario toca)\n// Constantes derivadas\n// Módulos (uno por sub-pieza)\n// Render (la llamada final, orientada para impresión)\n```\n\nCATÁLOGO de capacidades (SIN LÍMITE de tipo): estructural, organizadores, enclosures, mecánico (engranajes, ejes, poleas), articulado (bisagras, rótulas), ensamblaje (dovetail, snap-fit, rosca), roscado, jigs/plantillas, contenedores, tubería/fluidos, electrónica, herramientas, decorativo.\n\nEntregable: código .scad completo, comentado con orientación de impresión recomendada.",
+      "valida": {
+        "tamano_min": 500,
+        "contiene": ["include <BOSL2/std.scad>", "module"]
+      }
+    },
+    {
+      "paso": "validar_compilacion",
+      "tipo": "reflejo",
+      "op": "validar_scad",
+      "_detalle": "Enviar el .scad a OpenSCAD MCP para compilar. Si falla: leer el error, corregir y reintentar (máximo 3 intentos). Verificar: compila sin error, geometría manifold, bounding box ≤ 220×220×250mm, pared mínima respetada. Si no hay MCP disponible, validar sintaxis manualmente (paréntesis, punto y coma, módulos cerrados, variables definidas)."
+    },
+    {
+      "paso": "exportar_stl",
+      "tipo": "reflejo",
+      "op": "exportar",
+      "_detalle": "Exportar a STL via OpenSCAD MCP (disenador_parametrico._mcpCall('export_model', {scad_content, output_format:'stl'})). Registrar en cupula_stl.registrar {pieza_id, archivo, formato:'stl'}. Si MCP no disponible, guardar el .scad en storage/impresion-3d/scad/<nombre>.scad para exportación manual."
+    },
+    {
+      "paso": "estimar_y_encolar",
+      "tipo": "reflejo",
+      "op": "encolar",
+      "_detalle": "Estimar tiempo con estimador_tiempo (volumen, altura, material, velocidad). Encolar con cola_modelos.agregar {id, nombre, descripcion, prioridad, tiempo_estimado, material:'PETG', estado:'pendiente'}. Si la cola no está disponible, guardar la ficha del modelo en storage/impresion-3d/pendientes/<nombre>.json."
+    },
+    {
+      "paso": "escribir_ficha",
+      "tipo": "reflejo",
+      "op": "escribir",
+      "_detalle": "Escribir la ficha completa de la pieza en storage/impresion-3d/piezas/<nombre>/ficha.md con: esquema (5 huecos), parámetros, orientación de impresión, tiempo estimado, ruta del .scad y del .stl. Esta ficha es el registro permanente de la pieza diseñada."
+    },
+    {
+      "paso": "verificar",
+      "tipo": "reflejo",
+      "op": "verificar",
+      "_detalle": "Verificar que existen: el .scad, el .stl (o el .scad guardado si MCP no disponible), la ficha, y la entrada en la cola (o el pendiente). Listar los archivos creados al usuario."
+    }
+  ],
+  "entregable": {
+    "tipo": "fs",
+    "archivos": [
+      "storage/impresion-3d/scad/<nombre>.scad",
+      "storage/impresion-3d/piezas/<nombre>/ficha.md"
+    ],
+    "reglas": ["existe", "contenido_min", "scad_compila"],
+    "min_chars": 500
+  },
+  "presupuesto": {
+    "generaciones_por_paso": 3,
+    "max_tokens": 48000,
+    "generacion_timeout_ms": 300000
+  },
+  "dependencias": {
+    "skills": ["prisma-modelo-universal", "esquematizador"],
+    "modulos_backend": ["disenador_parametrico", "cupula_stl", "cola_modelos", "estimador_tiempo"],
+    "librerias": ["BOSL2 (OpenSCAD)"],
+    "mcp": ["openscad-mcp (export_model)"]
+  },
+  "maquina": {
+    "nombre": "SPARKX i7",
+    "cama": { "x": 220, "y": 220, "z": 250 },
+    "material_default": "PETG",
+    "boquilla": 0.4,
+    "layer_height_default": 0.2,
+    "tolerancias": {
+      "ensamblaje_suave": 0.15,
+      "press_fit": -0.075,
+      "deslizante": 0.25,
+      "rosca": 0.2,
+      "shrinkage_petg": 0.005,
+      "pared_minima": 1.2,
+      "fillet_min": 1.0,
+      "overhang_max_deg": 45
+    }
+  }
+}

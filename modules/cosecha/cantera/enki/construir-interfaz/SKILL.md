@@ -106,6 +106,14 @@ artefacto ES múltiple por naturaleza, no por comodidad.
 
 ## 3 · EL MANDATO — el envoltorio mínimo, mecánico
 
+> **Motor de esquematización de la cadena = `prisma-universal`** (vía
+> `delegate_task` o `cosecha.obtener`). La F7 CONSTRUYE el envoltorio; no
+> escribe `ui.*` (eso lo hizo la F6½ con prisma-universal). Si en el blueprint
+> falta `ui.*` o el default verificado → la F6½ quedó incompleta: pásale a
+> prisma-universal las 3 variables (ENTRADA=blueprint del módulo ·
+> ARCHIVO_FINAL=`ui.*` en el blueprint · CÓMO=ingeniero de interfaz lente del
+> tipo decidido · PARA=la interfaz del módulo) para declararla antes de construir.
+
 1. **Lee el blueprint** `<slug>.blueprint.json` (FASE 6½): sección `ui.*`
    (`ui.ops` · `ui.datos`) o `modo: default_generador` verificado. **Si no hay
    ni lo uno ni lo otro → no construyas: avisa que falta la FASE 6½** (el gate

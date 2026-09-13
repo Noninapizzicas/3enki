@@ -83,6 +83,14 @@ eventos (health, alertas) → **no la necesita** (su salida es el bus).
 
 ## 3 · EL MANDATO — mecánico, no opinión
 
+> **Motor de esquematización de la cadena de interfaz = `prisma-universal`**
+> (vía `delegate_task` o `cosecha.obtener`). La F6 decide el TIPO por señales
+> deterministas (script); la esquematización de cada cara la ejecuta
+> `prisma-universal` (F6½), con las 3 variables: ENTRADA=module.json + el
+> blueprint del módulo · ARCHIVO_FINAL=`ui.*` en el blueprint ·
+> CÓMO=lente del tipo decidido · PARA=la interfaz del módulo <slug>. El criterio
+> de la F6 que sigue alimenta exactamente esas 3 variables.
+
 1. **Lee** el `module.json` del módulo (o el `esquema.md` si viene del proceso).
 2. **Corre el script** `scripts/decidir-interfaz.js --module <slug>` (o `--all`)
    → devuelve la decisión por señales, sin LLM.

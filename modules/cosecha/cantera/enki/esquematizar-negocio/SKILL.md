@@ -110,6 +110,44 @@ piezas que emergen SOLO desde la perspectiva de un actor concreto se añaden al
 árbol — son invisibles desde la vista global. Las piezas que varios actores
 comparten se refuerzan y se cruzan (validación cruzada).
 
+**Fase 1c · Prisma por ROL** — un paso más, complementario del prisma por
+interlocutor. Donde el interlocutor es el actor *externo/relacional* (el que
+toca el negocio desde fuera: dueño, cliente, proveedor, socio), el ROL es la
+**función interna** que el sistema debe servir dentro del negocio: **jefe ·
+trabajador · cliente** (y cualquier otro rol de la identidad). Aunque en un
+taller personal el DUEÑO sea los tres a la vez, el sistema necesita esquematizar
+cada rol por separado porque cada uno exige SU cara de interfaz Y SU lógica de
+dominio.
+
+Para cada rol, pasa el negocio por los 5 huecos DESDE SU PERSPECTIVA, con
+DOBLE alcance (lo que el rol espera VER/ACTUAR **y** la LÓGICA que ese rol
+exige construir):
+
+- **IDENTIDAD**: ¿qué es el negocio para ESTE rol? (jefe: la visión de conjunto
+  para decidir el futuro; trabajador: el proceso que opera HOY; cliente: lo que
+  recibe).
+- **RESTRICCIONES**: ¿qué le limita a ESTE rol? (capacidad, información, estado
+  del proceso). Cada freno → FRENOS → EMPUJONES.
+- **CONTRATO**: ¿qué espera **VER y ACTUAR** este rol? (su cara de interfaz:
+  jefe → resultados agregados; trabajador → control del proceso; cliente → su
+  pedido). **Y qué espera VER/ACTUAR se traduce en qué LÓGICA de dominio hay
+  que construir** para servirlo.
+- **LÓGICA NECESARIA** (el punto que la lente interlocutor no cubre): para que
+  este rol opere, ¿qué motor/datos/agregación falta? Ej: jefe necesita un
+  dashboard que cruce los resultados de todos los módulos (pieza de
+  agregación); trabajador necesita el motor de cola/ciclo/filamento; cliente
+  (si vende) necesita catálogo público + carrito. Cada pieza de lógica que
+  emerge aquí se añade al árbol como MÓDULO o capacidad nueva.
+- **NO-OBJETIVOS**: ¿qué NO es del alcance de este rol? (jefe no opera el
+  proceso; trabajador no decide el futuro; cliente no administra).
+- **PREGUNTAS ABIERTAS**: huecos sobre qué espera este rol que aún no están
+  declarados.
+
+Cada rol genera su pasada: `pasada-N-rol-<rol>.md`. Las piezas de interfaz
+(alimentan F6/F6½/F7) y las piezas de LÓGICA (nuevos módulos o capacidades) que
+solo emergen desde un rol se añaden al árbol maestro. En un taller personal,
+los roles son **jefe · trabajador · cliente** aunque sean el mismo humano.
+
 **Principio transversal · FRENOS → EMPUJONES** — en TODA pasada del prisma
 (global y por interlocutor), cuando el hueco RESTRICCIONES devuelve un freno
 (algo que limita, bloquea o corta el flujo), NO lo registres como muro.
@@ -219,17 +257,38 @@ proceso no avanza.
       distinto, eso es un conflicto que el esquema debe resolver).
    e. **Pregunta al dueño** si emerge algo que no estaba en la vista global
       — las preguntas abiertas del interlocutor se suman al guion.
-8. Solo cuando NINGÚN punto se parta más (seco) y TODOS los interlocutores
-   tengan su pasada → ensambla TODO en `esquemas/esquema.md` (el árbol maestro
-   con piezas globales + piezas por interlocutor, todo embebido, no punteros).
-9. **DISECCIÓN PUNTO A PUNTO** (mecánica, en el mismo espíritu):
-   - Toma la lista de hojas ATÓMICAS que salieron del prisma global + del
-     prisma por interlocutor (las que el prisma ya no parte).
-   - **Cada hoja, una a una, sin saltarte ninguna**: pásala por el diseccionador y sus preguntas → fija su FORMA (reflejo puro · micro-agente fuzzy · custodio · conversor · puente).
-   - Escribe cada FORMA en el esquema (`esquema.md`: cada pieza con su forma) y la lista completa en `pasada-N-diseccion.md`.
-   - **NO paras hasta que TODAS las hojas atómicas tengan su FORMA** — si quedan hojas sin forma, la disección no está terminada.
-   - **NO agrupas de golpe**: es una por una, punto a punto, como el prisma.
-10. Cierra la fase: `proceso-negocio.completar_fase { fase: 'esquematizado' }`.
+8. **PRISMA POR ROL** — complementario e igual de obligatorio que el de
+   interlocutor. Una vez agotado el de interlocutor, toma los **roles** del
+   negocio (**jefe · trabajador · cliente**; en un taller personal pueden ser
+   el mismo humano, pero se esquematizan por separado). Para CADA rol, uno a uno:
+   a. Pasa el negocio por los 5 huecos DESDE LA PERSPECTIVA de ese rol
+      (¿qué espera VER/ACTUAR? ¿qué le restringe? ¿qué lógica de dominio
+      necesita para operar? ¿qué NO es de su alcance? ¿qué faltaría por
+      declarar?).
+   b. Escribe `pasada-N-rol-<rol>.md` (un archivo por rol) con DOBLE alcance:
+      la cara de interfaz (qué ve/actúa el rol → alimenta F6/F6½/F7) **y** la
+      lógica de dominio necesaria para servirlo (qué piezas/módulos/capacidades
+      hay que construir — p.ej. el jefe necesita la pieza de agregación del
+      dashboard que cruza los resultados de todos los módulos).
+   c. Las piezas de interfaz y de LÓGICA que solo emergen desde ese rol se
+      añaden al árbol maestro — son invisibles desde la vista global.
+   d. Las piezas que varios roles comparten se refuerzan y se cruzan
+      (validación cruzada: si jefe y trabajador necesitan la misma pieza de
+      lógica, se refuerza; si quieren caras distintas, se documenta).
+   e. **Pregunta al dueño** si emerge algo que no estaba declarado — las
+      preguntas abiertas del rol se suman al guion.
+9. Solo cuando NINGÚN punto se parta más (seco), TODOS los interlocutores
+   tengan su pasada y TODOS los roles tengan su pasada → ensambla TODO en
+   `esquemas/esquema.md` (el árbol maestro con piezas globales + piezas por
+   interlocutor + piezas por rol, todo embebido, no punteros).
+10. **DISECCIÓN PUNTO A PUNTO** (mecánica, en el mismo espíritu):
+    - Toma la lista de hojas ATÓMICAS que salieron del prisma global + del
+      prisma por interlocutor + del prisma por ROL (las que el prisma ya no parte).
+    - **Cada hoja, una a una, sin saltarte ninguna**: pásala por el diseccionador y sus preguntas → fija su FORMA (reflejo puro · micro-agente fuzzy · custodio · conversor · puente).
+    - Escribe cada FORMA en el esquema (`esquema.md`: cada pieza con su forma) y la lista completa en `pasada-N-diseccion.md`.
+    - **NO paras hasta que TODAS las hojas atómicas tengan su FORMA** — si quedan hojas sin forma, la disección no está terminada.
+    - **NO agrupas de golpe**: es una por una, punto a punto, como el prisma.
+11. Cierra la fase: `proceso-negocio.completar_fase { fase: 'esquematizado' }`.
 
 **NO pares a mitad**: si un punto todavía se parte, sigues. **NO resumas**: cada
 pasada es un archivo real en disco. **NO te saltes el esquema.md**: es el
@@ -331,6 +390,7 @@ con honestidad y NO inventes el esquema. La fase queda pendiente, no forzada.
 - **Saltarse la investigación** — los puntos investigables (horno, consumos, casos, precios) se investigan en web; mejor algo que nada.
 - **Terminar en el primer esquema** — si quedan preguntas abiertas relevantes, el ciclo sigue (preguntas → investigación → replanteamiento → pasada 2).
 - **Saltarse el prisma por interlocutor** — el prisma global ve el negocio "desde arriba"; el prisma por interlocutor lo ve desde la silla de cada actor. Las piezas que solo emergen desde una perspectiva concreta se pierden sin esta pasada — y son distintas en cada negocio porque los actores son distintos.
+- **Saltarse el prisma por ROL** — el prisma por interlocutor ve al actor *externo/relacional*; el prisma por ROL ve la **función interna** (jefe/trabajador/cliente) que el sistema debe servir, y de él emergen las piezas de LÓGICA de dominio (p.ej. el dashboard del jefe que cruza los módulos). Sin este paso, un taller personal cuyo interlocutor es solo "dueño" nunca esquematiza que el dueño es a la vez jefe Y trabajador Y cliente, y se pierde la lógica que cada rol exige.
 - **Inventar interlocutores nuevos** — el mapa se cerró en FASE 0; esta fase lo CONSUME, no lo amplía. Si aparece un actor que falta, se devuelve a FASE 0 para reabrir el mapa.
 - **Registrar un freno como muro sin buscar su empujón** — toda restricción que sale del prisma pasa por FRENOS → EMPUJONES: ¿qué estado protege? Si protege algo real → su gemelo positivo es una pieza del esquema. Si no protege nada → se disuelve. Un freno sin empujón es pregunta abierta al dueño, nunca un muro aceptado.
 - **Disecar antes de tocar suelo** — primero el prisma global + prisma por interlocutor se agotan, luego la FORMA.
@@ -346,6 +406,7 @@ con honestidad y NO inventes el esquema. La fase queda pendiente, no forzada.
 - **CERO supuestos**: todo valor no declarado aparece como pregunta abierta explícita, ninguno estimado.
 - **Cada punto del prisma tiene su pasada en disco** (`esquemas/pasada-N-<punto>.md`) — ronda a ronda hasta seca.
 - **Cada interlocutor tiene su pasada** (`esquemas/pasada-N-interlocutor-<rol>.md`) — uno por actor del mapa cerrado en FASE 0, con los 5 huecos desde SU perspectiva.
+- **Cada ROL tiene su pasada** (`esquemas/pasada-N-rol-<rol>.md`) — jefe/trabajador/cliente (y otros roles de la identidad), con los 5 huecos DESDE SU PERSPECTIVA y con DOBLE alcance: la cara de interfaz (qué ver/actuar) Y la lógica de dominio que el rol exige construir. Aunque en un taller personal el dueño sea los tres, los 3 roles se esquematizan por separado.
 - **Las piezas que solo emergen desde un interlocutor** están en el árbol maestro (no se quedaron solo en la pasada del actor).
 - **`esquemas/esquema.md` existe** con el árbol maestro (piezas globales + piezas por interlocutor — el gate lo comprueba).
 - **FRENOS → EMPUJONES aplicado**: toda restricción del prisma (global + por interlocutor) tiene su gemelo positivo (empujón = pieza construible) o está marcada como pregunta abierta al dueño. Cero frenos aceptados como muros.

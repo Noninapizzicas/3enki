@@ -1,0 +1,31 @@
+{
+  "_doc": "CONVERSOR importacion del proyecto 3D (taller personal de impresion 3D). Frontera de formato de la moneda real del taller: importa modelos externos multi-formato (STL/3MF/GCODE) y lee sus metadatos via un lector por formato (puerto LectorArchivo ABIERTO: LectorSTL/Lector3MF/LectorGCODE, cableados en despliegue). Distingue el GCODE ya preparado (va a la cupula-gcode directo como ArchivoPreparado) del STL/3MF fuente (va al catalogo como ficha). Registra en catalogo via RPC catalogo.registrar/actualizar. CERO juicio: no decide que pieza imprimir, solo normaliza y entrega. Reflejo stateless (sin store, sin project.activated). Par de fallo importacion.importar.failed. Origen: plan-construccion.md seccion 6.5 (FASE 4 construir-modulos, pieza 5).",
+  "name": "importacion",
+  "version": "0.1.0",
+  "_v0_1_0_nota": "v0.1.0 (2026-09-13): CONVERSOR stateless. Ops importar/leer_metadatos (RPC). Proyecciones _importar (distingue GCODE preparado -> cupula, STL/3MF fuente -> catalogo por RPC) y _leerMetadatos (nombre/unidades/material sug/formatos por lector inyectable). Registra en catalogo via RPC catalogo.registrar/catalogo.actualizar. Par de fallo importacion.importar.failed.",
+  "description": "Conversor de importacion de modelos del taller 3D: STL/3MF/GCODE entran con sus metadatos (puerto LectorArchivo) y se entregan al catalogo o a la cupula segun su formato.",
+  "language": "es",
+  "main": "index.js",
+  "dependencies": [
+    "catalogo",
+    "adaptador-slicing"
+  ],
+  "config": {
+    "formatos": ["STL", "3MF", "GCODE"],
+    "directo_cupula": "GCODE",
+    "fuente_catalogo": ["STL", "3MF"]
+  },
+  "subscribes": [
+    { "event": "importacion.importar.request", "handler": "onImportarRequest", "description": "Importa un archivo externo (STL/3MF/GCODE): lee metadatos y lo entrega — GCODE a la cupula, STL/3MF al catalogo (RPC)." },
+    { "event": "importacion.leer_metadatos.request", "handler": "onLeerMetadatosRequest", "description": "Lee metadatos de un archivo por su formato (nombre, unidades, material sugerido, formatos)." }
+  ],
+  "publishes": [
+    { "event": "importacion.importar.response", "description": "Respuesta correlada: resultado de importar (registrado en catalogo o cupula)." },
+    { "event": "importacion.leer_metadatos.response", "description": "Respuesta correlada: metadatos leidos del archivo." },
+    { "event": "importacion.importar.failed", "description": "Par de fallo: no se pudo importar (formato no soportado, RPC destino fallo, metadatos invalidos)." }
+  ],
+  "tools": [],
+  "observability": {
+    "metrics": ["importacion.reflejo.served", "importacion.reflejo.errors"]
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "_doc": "REFLEJO consumo del proyecto 3D (taller personal de impresion 3D). Calcula el consumo/tiempo estimado de impresion usando dato MEDIDO del historial (promedio/pronostico), nunca estimacion sin muestra. CERO estimacion sin muestras: si un modelo no tiene registros medidos en el historial, el promedio devuelve NULO (no conjetura). Consume impresion.registrada (evento fire-and-forget del historial) para acumular las muestras. Pronostico de tanda = suma de promedios medidos de cada modelo; hueco -> NULO o pregunta al dueno (ABIERTO). Reflejo puro: sin store propio persistente, sin project.activated. Par de fallo consumo.promedio.failed. Origen: plan-construccion.md seccion 6.10 (FASE 4 construir-modulos, pieza 13).",
+  "name": "consumo",
+  "version": "0.1.0",
+  "_v0_1_0_nota": "v0.1.0 (2026-09-13): REFLEJO puro. Ops promedio/pronostico (RPC). Proyecciones _consumoPromedio, _tiempoPromedio, _pronosticoTanda. Consume impresion.registrada para acumular muestras (Map en memoria). CERO estimacion sin muestras: devuelve NULO o pregunta al dueno. Pares de fallo consumo.promedio.failed y consumo.pronostico.failed.",
+  "description": "Reflejo de consumo del taller 3D: promedio de gramos/tiempo por modelo desde dato medido del historial, y pronostico de tanda (CERO estimacion sin muestras).",
+  "language": "es",
+  "main": "index.js",
+  "dependencies": [
+    "historial"
+  ],
+  "config": {
+    "cero_estimacion_sin_muestras": true
+  },
+  "subscribes": [
+    { "event": "consumo.promedio.request", "handler": "onPromedioRequest", "description": "Promedio de consumo/tiempo MEDIDO de un modelo desde el historial. Sin muestras -> NULO (CERO estimacion)." },
+    { "event": "consumo.pronostico.request", "handler": "onPronosticoRequest", "description": "Pronostico de una tanda: suma de promedios medidos reales; hueco sin muestra -> NULO o pregunta al dueno (ABIERTO)." },
+    { "event": "impresion.registrada", "handler": "onImpresionRegistrada", "description": "Acumula la muestra medida (gramos_real, tiempo_real) por modelo. No persiste (reflejo puro) ni decide." }
+  ],
+  "publishes": [
+    { "event": "consumo.promedio.response", "description": "Respuesta correlada: { promedio } del modelo (o NULO sin muestras)." },
+    { "event": "consumo.pronostico.response", "description": "Respuesta correlada: pronostico de la tanda." },
+    { "event": "consumo.promedio.failed", "description": "Par de fallo: no se pudo calcular el promedio." },
+    { "event": "consumo.pronostico.failed", "description": "Par de fallo: no se pudo calcular el pronostico." }
+  ],
+  "tools": [],
+  "observability": {
+    "metrics": ["consumo.reflejo.served", "consumo.reflejo.errors"]
+  }
+}

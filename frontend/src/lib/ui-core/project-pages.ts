@@ -53,39 +53,7 @@ export const PAGE_CATALOG: Record<string, PageDef> = {
   producir:         { id: 'producir',         icon: '🏭',  label: 'Producir', nav: false },
   pedidos:          { id: 'pedidos',          icon: '📋',  label: 'Pedidos', nav: false },
   variaciones:      { id: 'variaciones',      icon: '🔧',  label: 'Variaciones', nav: false },
-  productos:        { id: 'productos',        icon: '🍕',  label: 'Productos', nav: false },
-  // — vertical 3D (taller de impresión): catalogo-modelos (F7, prisma-universal) —
-  'catalogo-modelos': { id: 'catalogo-modelos', icon: '🧊', label: 'Catálogo 3D', nav: false },
-  // — vertical 3D: historial-impresiones (F7, prisma-universal, 2ª iteración). jefe LECTOR —
-  // nav:false → el rail lateral no lo pinta (sin ruta /<proyecto>/historial); el botón vive
-  // en la work-bar (manifest zone work-bar + loader en panels.ts) y abre el panel de la cinta.
-  'historial-impresiones': { id: 'historial-impresiones', icon: '🖨️', label: 'Historial 3D', nav: false },
-  // — vertical 3D: cola-impresion (F7, prisma-universal, 3ª iteración). jefe
-  // ESCRITOR-REORDENADOR-DISPARADOR (entrar+reordenar+siguiente) — nav:false → el rail
-  // lateral no lo pinta (sin ruta /<proyecto>/cola); el botón vive en la work-bar
-  // (manifest zone work-bar + loader en panels.ts) y abre el panel de la cinta de la cola.
-  'cola-impresion': { id: 'cola-impresion', icon: '🖨️', label: 'Cola 3D', nav: false },
-  // — vertical 3D: ciclo-impresion (F7, prisma-universal, 4ª iteración). jefe
-  // OPERADOR DE MÁQUINA (ver estado del ciclo + iniciar + confirmar transiciones
-  // físicas). PANEL DE ESTADO de la máquina de estados del ciclo (no CRUD) —
-  // nav:false → el rail lateral no lo pinta (sin ruta /<proyecto>/ciclo); el
-  // botón vive en la work-bar (manifest zone work-bar + loader en panels.ts).
-  'ciclo-impresion': { id: 'ciclo-impresion', icon: '⏱️', label: 'Ciclo 3D', nav: false },
-  // — vertical 3D: importacion-modelo (F7, prisma-universal, 5ª y última
-  // iteración). jefe que IMPORTA (PUENTE stateless, formulario de acción +
-  // feedback por señal, sin lista propia — los modelos viven en
-  // catalogo-modelos). nav:false → el rail lateral no lo pinta (sin ruta
-  // /<proyecto>/importar); el botón vive en la work-bar (manifest zone work-bar
-  // + loader en panels.ts) y abre el panel del jefe que importa.
-  'importacion-modelo': { id: 'importacion-modelo', icon: '📥', label: 'Importar 3D', nav: false },
-  // — vertical 3D: gestion-filamento (F7, prisma-universal, 6ª iteración). CASO ESPECIAL:
-  // panel CREADO desde CERO (el módulo llegó solo a F6/F6½). CUSTODIO del stock de
-  // filamento: trabajador LECTOR del stock (listar) + jefe que registra rollos (registrar,
-  // la única escritura). nav:false → el rail lateral no lo pinta (sin ruta
-  // /<proyecto>/filamento); el botón vive en la work-bar (manifest zone work-bar + loader
-  // en panels.ts) y abre el panel del stock. La cinta se refresca por
-  // filamento.registrado/decrementado/bajo.
-  'gestion-filamento': { id: 'gestion-filamento', icon: '🧵', label: 'Filamento', nav: false }
+  productos:        { id: 'productos',        icon: '🍕',  label: 'Productos', nav: false }
 };
 /** Semilla por tipo: lo que un proyecto trae al nacer, antes de que crezca en runtime. */
 const SEED_BY_TYPE: Record<string, string[]> = {

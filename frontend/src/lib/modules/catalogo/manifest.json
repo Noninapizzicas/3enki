@@ -1,0 +1,10 @@
+{
+  "id": "catalogo",
+  "name": "Catálogo 3D",
+  "version": "0.1.0",
+  "zone": "work-bar",
+  "order": 8,
+  "icon": "🧊",
+  "label": "Catálogo",
+  "routes": ["/catalogo"]
+}

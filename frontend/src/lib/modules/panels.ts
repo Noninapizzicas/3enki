@@ -187,6 +187,41 @@ export const panels: Record<string, PanelDef> = {
     order: 8,
     loader: () => import('$lib/modules/interfaz/InterfazPanel.svelte')
   },
+
+  // === WORK BAR — Proyecto 3D — FASE 7 (construir-interfaz) ===
+  // El botón de la barra lo renderiza el manifest.json de cada módulo (zone work-bar).
+  // Estas entradas son los loaders que cargan el panel al pulsar.
+  catalogo: {
+    id: 'catalogo',
+    title: 'Catálogo de piezas',
+    icon: '🧊',
+    size: 'lg',
+    position: 'top',
+    zone: 'work-bar',
+    order: 8,
+    loader: () => import('$lib/modules/catalogo/CatalogoPanel.svelte')
+  },
+  'panel-trabajador': {
+    id: 'panel-trabajador',
+    title: 'Panel del trabajador',
+    icon: '🔧',
+    size: 'lg',
+    position: 'top',
+    zone: 'work-bar',
+    order: 9,
+    loader: () => import('$lib/modules/panel-trabajador/PanelTrabajadorPanel.svelte')
+  },
+  'panel-jefe': {
+    id: 'panel-jefe',
+    title: 'Panel del jefe',
+    icon: '🗂',
+    size: 'lg',
+    position: 'top',
+    zone: 'work-bar',
+    order: 10,
+    loader: () => import('$lib/modules/panel-jefe/PanelJefePanel.svelte')
+  },
+
   // === CHAT TOOLS (barra inferior junto al chat) ===
   files: {
     id: 'files',
@@ -209,6 +244,30 @@ export const panels: Record<string, PanelDef> = {
     zone: 'chat-tools',
     order: 2,
     loader: () => import('$lib/modules/producir/ProducirPanel.svelte')
+  },
+
+  // === CHAT TOOLS — Proyecto 3D — FASE 7 (construir-interfaz) ===
+  // Los chat_tool del proyecto 3d (conversor y puente de búsqueda). El botón lo
+  // pinta el manifest (zone chat-tools); estas entradas son los loaders.
+  importacion: {
+    id: 'importacion',
+    title: 'Importación de modelos',
+    icon: '📥',
+    size: 'lg',
+    position: 'left',
+    zone: 'chat-tools',
+    order: 3,
+    loader: () => import('$lib/modules/importacion/ImportacionPanel.svelte')
+  },
+  'buscador-repositorios': {
+    id: 'buscador-repositorios',
+    title: 'Buscar modelos',
+    icon: '🔎',
+    size: 'lg',
+    position: 'left',
+    zone: 'chat-tools',
+    order: 4,
+    loader: () => import('$lib/modules/buscador-repositorios/BuscadorRepositoriosPanel.svelte')
   },
 
   // === PANELES PROGRAMÁTICOS (showInBar: false — solo vía openPanel()) ===

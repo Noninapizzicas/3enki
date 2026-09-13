@@ -1,0 +1,10 @@
+{
+  "id": "panel-trabajador",
+  "name": "Panel del trabajador",
+  "version": "0.1.0",
+  "zone": "work-bar",
+  "order": 9,
+  "icon": "🔧",
+  "label": "Trabajador",
+  "routes": ["/panel-trabajador"]
+}

@@ -37,6 +37,12 @@
     { "event": "catalogo.actualizar.failed", "description": "Par de fallo: no se pudo actualizar." }
   ],
   "tools": [],
+  "ui_handlers": [
+    { "action": "listar", "domain": "catalogo", "type": "workspace_module", "zone": "barra_modulos", "label": "Listar biblioteca", "handler": "onListarRequest" },
+    { "action": "por_id", "domain": "catalogo", "type": "workspace_module", "zone": "barra_modulos", "label": "Ver ficha", "handler": "onPorIdRequest" },
+    { "action": "registrar", "domain": "catalogo", "type": "workspace_module", "zone": "barra_modulos", "label": "Registrar modelo", "handler": "onRegistrarRequest" },
+    { "action": "actualizar", "domain": "catalogo", "type": "workspace_module", "zone": "barra_modulos", "label": "Actualizar ficha", "handler": "onActualizarRequest" }
+  ],
   "observability": {
     "metrics": ["catalogo.reflejo.served", "catalogo.reflejo.errors"]
   }

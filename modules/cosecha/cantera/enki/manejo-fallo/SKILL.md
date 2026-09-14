@@ -39,6 +39,17 @@ Reflejo puro: cada fallo cierra su círculo; si no puede avisar ni resolver, emi
 `manejo-fallo.manejar.failed`. CERO juicio: ningún fallo se calla; ninguna acción sin
 política conocida del dueño.
 
+## Flujo típico
+
+Caso real: **la impresora falla → se avisa SIEMPRE al dueño → se aplica la política (reintentar/saltar) o se espera su decisión**.
+
+1. `ciclo-impresion` detecta el fallo físico y llama `manejo-fallo.manejar.request` con `{ project_id, tarea_id, motivo, politica }` (desde `_manejarFallo`; `panel-trabajador` también puede dispararlo con `reintentar`/`saltar`).
+2. `_manejar` **avisa SIEMPRE** publicando `aviso.solicitar` (`tipo: 'fallo'`, fire-and-forget a `adaptador-avisos`); ningún fallo se calla.
+3. Lee la política del dueño (`input.politica`/`politica_fallo` o config).
+4. Política **`reintentar`**: si `reintentos < reintentos_max` → `REINTENTAR` (incrementa el contador en memoria); si agotados → `SALTAR` (no detener el taller). Política **`saltar`** → `SALTAR` siempre.
+5. Política **ABIERTO / sin política** → `_solicitarDecision` pide al dueño por `adaptador-confirmacion.confirmar.request` (`tipo: 'reanudar_ciclo'`) y responde `{ accion: 'ESPERAR_DECISION', esperando: true }` (el sistema espera, no sustituye).
+6. Cada decisión responde en `manejo-fallo.manejar.response`; si no puede avisar/resolver → `manejo-fallo.manejar.failed` (cierra el círculo).
+
 ## Contrato de eventos (module.json real)
 
 ### Subscribes (RPCs request/response)

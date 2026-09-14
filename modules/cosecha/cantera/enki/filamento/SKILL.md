@@ -35,6 +35,18 @@ Es un **CUSTODIO sin juicio**: el **umbral de reposición es decisión del dueñ
 Cuando se cruza el umbral, `_evaluarUmbral` **avisa** (emite `material.bajo`) pero
 **nunca decide ni encarga** la reposición. Soporta varios materiales (hoy `PETG`).
 
+## Flujo típico
+
+Caso real: **registrar una bobina → descontar stock tras una impresión medida → avisar al cruzar el umbral**.
+
+1. `_registrarBobina`: se da de alta la bobina con `gramos_total` (y opcional `gramos_restantes`, `umbral_repos`, `enUso`) → `201` + `material.actualizado` (`accion: 'registrada'`).
+2. Tras imprimir, `ciclo-impresion` conoce el gramo MEDIDO del historial y llama `filamento.descontar.request` con `{ gramos_medido }`. `_descontar` localiza la bobina (`enUso`/material/id), decrementa `gramos_restantes` (nunca bajo 0) → `200` + `material.actualizado` (`accion: 'descontada'`).
+3. Si el dueño fijó `umbral_repos` y la resta cruza (`gramos_restantes < umbral`) → emite además `material.bajo` (avisa, NO decide). Sin `gramos_medido` → `400` + `filamento.descontar.failed` (`sin_gramo_medido`); sin bobina → `404` + `failed` (`bobina_no_encontrada`).
+4. `_cambiarBobina`: poner otra bobina en uso (o rellenar gramo) → `200` + `material.actualizado` (`accion: 'cambio_bobina'`).
+5. `_evaluarUmbral`: revisa todas las bobinas del proyecto contra su umbral y emite un `material.bajo` por cruce; sin umbral fijado no evalúa (no se inventa). Devuelve `{ evaluadas, bajas }`.
+
+Cada flujo cierra su círculo en `filamento.<accion>.response` y ante error de dominio responde el código HTTP exacto con su par `*.failed`.
+
 ## Contrato de eventos (module.json real)
 
 ### Subscribes (RPCs request/response)

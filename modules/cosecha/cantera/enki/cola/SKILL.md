@@ -39,6 +39,19 @@ preparada; el ciclo de impresión (ciclo-impresion) es quien consume la siguient
 
 Estado de tarea: `ENCOLADA → IMPRIMIENDO → TERMINADA | CANCELADA`.
 
+## Flujo típico
+
+Caso real: **encolar una pieza → se imprime → termina y se libera la impresora (una sola a la vez)**.
+
+1. `cupula-gcode` ya preparó el GCODE; `importacion`/dueño llama `cola.encolar.request` con `{ project_id, modelo_id, archivo_id, gcode_listo: true }`.
+2. `_encolar` crea la tarea `ENCOLADA` con la próxima posición FIFO (`201`) y publica `cola.actualizada`.
+3. `motor-encadenamiento` (o un panel) pide `cola.siguiente.request`; `_siguienteAImprimir` devuelve la cabecera lista (`gcode_listo`) con prioridad URGENTE→orden FIFO, o `{ siguiente: null, razon: 'impresora_ocupada' }` si ya hay una en IMPRIMIENDO.
+4. `ciclo-impresion` arranca la pieza y marca `cola.imprimiendo.request` → `_marcarImprimiendo` pasa la tarea a `IMPRIMIENDO` y fija `enImpresion` (nunca dos a la vez; segundo → `409 ESTADO_ILEGAL` + `cola.imprimiendo.failed`).
+5. Al terminar, `motor-encadenamiento` llama `cola.terminada.request` → `_marcarTerminada` pasa a `TERMINADA`, libera `enImpresion = null` y publica `cola.actualizada`.
+6. Para reordenar antes de imprimir: `motor-propuesta` propone, el jefe aprueba y `cola.reordenar.request` (con `aprobada_by`) aplica la orden; sin decisor humano → `409 PROPUESTA_NO_APROBADA` + `cola.reordenar.failed`.
+
+Cada mutación cierra su círculo en `cola.<accion>.response` y publica `cola.actualizada`; ante error de dominio se responde el código HTTP exacto (400/404/409/500) con su par `*.failed`.
+
 ## Contrato de eventos (module.json real)
 
 ### Subscribes (RPCs request/response + lifecycle)
@@ -69,9 +82,11 @@ Estado de tarea: `ENCOLADA → IMPRIMIENDO → TERMINADA | CANCELADA`.
 | `cola.encolar.failed` | Par de fallo: no se pudo encolar. |
 | `cola.cancelar.failed` | Par de fallo: no se pudo cancelar. |
 
-> Nota: el par de fallo `cola.imprimiendo.failed` se emite en runtime (impresora ocupada /
-> estado inválido) aunque el `module.json` declara explícitamente solo `cola.encolar.failed`
-> y `cola.cancelar.failed`.
+> Nota: los pares de fallo `cola.imprimiendo.failed` y `cola.reordenar.failed` no están en
+> el `module.json` (que solo declara `cola.encolar.failed` y `cola.cancelar.failed`) pero sí
+> los emite el `index.js` en runtime: `cola.imprimiendo.failed` ante impresora ocupada /
+> estado inválido (`_marcarImprimiendo`) y `cola.reordenar.failed` ante `_reordenar` sin
+> propuesta aprobada (`propuesta_no_aprobada`).
 
 > **Regla de cierre de círculo**: todo flujo cierra su círculo con su par de fallo
 > canónico. Nadie da por hecho una mutación sin `ok:true`/respuesta correlada.

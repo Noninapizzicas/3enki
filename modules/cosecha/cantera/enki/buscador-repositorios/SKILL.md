@@ -34,6 +34,17 @@ pero se puede inyectar otro (función `{ query, limit } → resultados crudos`).
 `ResultadoRepositorio` `{ fuente, titulo, url, autor, formatos }`. El **dueño elige y
 aprueba**.
 
+## Flujo típico
+
+Caso real: **buscar un modelo en repositorios externos → mapear los resultados → que el dueño elija y apruebe**.
+
+1. El dueño/UI llama `buscador-repositorios.buscar.request` con `{ query, limit }`; sin `query` → `400 INVALID_INPUT`.
+2. `_buscar` delega en el puerto de búsqueda: por defecto `crawl4rs.buscar.request` (SearXNG, `timeout_ms: 20000`), o el transporte inyectado.
+3. Mapea cada resultado crudo a `ResultadoRepositorio` con `_resultadoDe`: etiqueta `fuente` por hostname (`printables.com`→Printables, etc.), `formatos` por pistas evidentes (formato/extensión/título), y campos ausentes → `null`/`'Sin título'`. Sin `url` un crudo se descarta; sin pista → `formatos: []` (**CERO inventado**).
+4. Responde `{ resultados, total }` (`200`). Si el transporte no devuelve nada → lista vacía (honesto, nunca fabrica entradas).
+5. El dueño elige un resultado y lo aprueba (decide importarlo), llevando el flujo a la importación.
+6. Fallo de transporte honesto: sin respuesta → `502 TRANSPORTE_SIN_RESPUESTA`; `status >= 400` → `502/4xx` del transporte; transporte desconocido → `502 TRANSPORTE_DESCONOCIDO`. Todo cierra en `buscador-repositorios.buscar.response` + `buscador-repositorios.buscar.failed`.
+
 ## Contrato de eventos (module.json real)
 
 ### Subscribes (RPCs request/response)

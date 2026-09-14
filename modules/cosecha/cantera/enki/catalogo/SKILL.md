@@ -38,6 +38,20 @@ La clave de identidad canónica es `nombre canónico + fuente + origenUrl` (ABIE
 identidad). **Reconcilia ANTES de crear**: si existe una ficha equivalente, **no duplica**,
 devuelve la existente y, si aporta formatos/rutas nuevos, los **añade** a la ficha.
 
+## Flujo típico
+
+Caso real: **registrar un modelo → se refleja en la biblioteca y queda listo para imprimir**.
+
+1. `importacion` (o el dueño) llama `catalogo.registrar.request` con `{ project_id, nombre, fuente, archivo_stl/archivo_3mf/archivo_gcode }`.
+2. `_registrar` **reconcilia ANTES de crear**: calcula el nombre canónico (`trim + toLowerCase + normalizar espacios`) y busca una ficha equivalente (`nombre + fuente + origenUrl`).
+3. Si **no existe** → crea la ficha (`201`, `reconciliado:false`) y publica `modelo.registrado`.
+4. Si **ya existe** → devuelve la existente (`200`, `reconciliado:true, duplicado:true`), **mergea** los `archivo_*` nuevos (`_mergeFormato`) y también publica `modelo.registrado`. Nunca duplica.
+5. `PosPersistencia` marca el `project_id` como dirty y el `snapshot` persiste `catalogo.json` en `/3d/catalogo`.
+6. Un panel o `importacion` hace `catalogo.listar.request` y ve la ficha en la biblioteca (ordenada por nombre); `catalogo.por_id.request` obtiene su detalle.
+7. `catalogo.actualizar.request` edita campos (uso, filamento_sug, archivo_*) sin re-crear; vuelve a emitir `modelo.registrado`. Si el id no existe → `404 NOT_FOUND`.
+
+Cada operación cierra su círculo en `catalogo.<accion>.response`; ante error de dominio la proyección responde el código HTTP exacto (400/404/500) y el módulo publica el par `catalogo.registrar.failed` / `catalogo.actualizar.failed`.
+
 ## Contrato de eventos (module.json real)
 
 ### Subscribes (RPCs request/response)

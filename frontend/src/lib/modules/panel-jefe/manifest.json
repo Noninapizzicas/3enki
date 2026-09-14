@@ -5,6 +5,5 @@
   "zone": "work-bar",
   "order": 10,
   "icon": "🗂",
-  "label": "Jefe",
-  "routes": ["/panel-jefe"]
+  "label": "Jefe"
 }

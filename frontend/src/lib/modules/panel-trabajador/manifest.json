@@ -5,6 +5,5 @@
   "zone": "work-bar",
   "order": 9,
   "icon": "🔧",
-  "label": "Trabajador",
-  "routes": ["/panel-trabajador"]
+  "label": "Trabajador"
 }

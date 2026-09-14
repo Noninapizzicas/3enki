@@ -33,21 +33,33 @@
 </script>
 
 <!-- rail VACÍO (page-set vacío, p.ej. proyecto prisma nuevo) → no se pinta la tira -->
-{#if PAGES.length > 0}
+<!-- PERO el botón de Config Interfaz SIEMPRE se muestra: es el acceso del dueño
+     a la página donde elige qué paneles ve en este proyecto (workbar configurable).
+     Aunque el page-set esté vacío, la configuración de interfaz siempre aplica. -->
 <nav class="page-nav-strip" aria-label="Navegación de páginas">
-  {#each PAGES as p (p.id)}
-    <button
-      class="pn-btn"
-      class:current={p.id === currentPage}
-      on:click={() => navigate(p.id)}
-      disabled={p.id === currentPage}
-      title={p.id === currentPage ? p.label : `Ir a ${p.label}`}
-    >
-      <span class="ic" aria-hidden="true">{p.icon}</span>
-    </button>
-  {/each}
+  <button
+    class="pn-btn"
+    class:current={currentPage === 'configuracion'}
+    on:click={() => navigate('configuracion')}
+    disabled={currentPage === 'configuracion'}
+    title="Configuración de interfaz — elige qué paneles ves en este proyecto"
+  >
+    <span class="ic" aria-hidden="true">⚙</span>
+  </button>
+  {#if PAGES.length > 0}
+    {#each PAGES as p (p.id)}
+      <button
+        class="pn-btn"
+        class:current={p.id === currentPage}
+        on:click={() => navigate(p.id)}
+        disabled={p.id === currentPage}
+        title={p.id === currentPage ? p.label : `Ir a ${p.label}`}
+      >
+        <span class="ic" aria-hidden="true">{p.icon}</span>
+      </button>
+    {/each}
+  {/if}
 </nav>
-{/if}
 
 <style>
   .page-nav-strip {

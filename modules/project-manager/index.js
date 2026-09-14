@@ -1039,7 +1039,7 @@ class ProjectManagerModule extends BaseModule {
 
   async handleUIUpdate(data) {
     try {
-      const { id, name, description, color, icon, workspaceType } = data || {};
+      const { id, name, description, color, icon, workspaceType, pages } = data || {};
       if (!id) return this._errorResponse(400, 'INVALID_INPUT', 'Project ID is required',
         { kind: 'domain', field: 'id' });
 
@@ -1054,6 +1054,13 @@ class ProjectManagerModule extends BaseModule {
       if (color !== undefined) metadata.color = color;
       if (icon !== undefined) metadata.icon = icon;
       if (workspaceType !== undefined) metadata.workspaceType = workspaceType;
+      // Workbar configurable por proyecto: el page-set declarado del proyecto
+      // (qué paneles se ven en SU workbar). resolvePages lo lee via metadata.pages.
+      if (pages !== undefined) {
+        if (!Array.isArray(pages)) return this._errorResponse(400, 'INVALID_INPUT',
+          'pages must be an array of strings', { kind: 'domain', field: 'pages' });
+        metadata.pages = pages.filter(p => typeof p === 'string');
+      }
       updates.metadata = metadata;
 
       const project = await this._updateProject(id, updates, crypto.randomUUID());

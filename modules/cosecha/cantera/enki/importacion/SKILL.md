@@ -39,6 +39,18 @@ Es **stateless**: sin store, sin `project.activated`, sin PosPersistencia. Es un
 **CONVERSOR sin juicio**: no decide qué pieza imprimir; solo normaliza la entrada del
 formato al sistema y la entrega. La aprobación sigue siendo decisión humana.
 
+## Flujo típico
+
+Caso real: **importar un archivo externo → leer metadatos → entregarlo al destino correcto (catálogo o cúpula)**.
+
+1. El dueño/UI llama `importacion.importar.request` con `{ project_id, archivo, formato }`.
+2. `_importar` resuelve el formato por extensión o `input.formato`; si es `DESCONOCIDO`/no soportado → `422 FORMATO_NO_SOPORTADO` + `importacion.importar.failed` (`formato_no_soportado`). Sin `project_id`/`archivo` → `400`.
+3. Lee metadatos vía `_leerMetadatos` (usa el lector inyectado del formato, o `adaptador-slicing.leer_3mf` para `.3mf` sin lector propio); huecos → `null`/`'desconocido'` (nunca inventados).
+4. **Según formato**, delega por RPC al destino:
+   - **GCODE** (ya preparado) → `cupula-gcode.registrar.request` como `ArchivoPreparado` `listo:true` → responde `{ destino: 'cupula', archivo_id }` (`201`).
+   - **STL/3MF** (fuente) → `catalogo.registrar.request` (ficha con `archivo_<formato>`, reconcilia) → responde `{ destino: 'catalogo', modelo, reconciliado }` (`201`).
+5. Si el RPC destino falla (`>=400`/sin respuesta) → `502 CUPULA_FALLO`/`CATALOGO_FALLO` + `failed` (`cupula_registro_fallo`/`catalogo_registro_fallo`); excepción → `500 RPC_FALLO` + `failed` (`rpc_fallo`). Cada operación cierra su círculo en `importacion.<accion>.response`.
+
 ## Contrato de eventos (module.json real)
 
 ### Subscribes (RPCs request/response)

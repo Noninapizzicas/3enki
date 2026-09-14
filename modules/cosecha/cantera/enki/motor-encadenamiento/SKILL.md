@@ -35,6 +35,19 @@ consumir `pieza.imprimida`), el motor:
 **CERO juicio**: este motor no decide SI imprimir (eso vive en el ciclo-impresion);
 solo encadena la cabecera lista que la cola ofrece.
 
+## Flujo típico
+
+Caso real: **termina una impresión → marcar la tarea terminada → encadenar la siguiente (o quedarse en cola_vacia)**.
+
+1. `ciclo-impresion` completa una pieza y delega en `motor-encadenamiento.al_terminar.request` con `{ project_id, tarea_id }` (tras consumir `pieza.imprimida`).
+2. `_alTerminar` (1) marca la tarea terminada en la cola vía `cola.terminada.request` (best-effort; la cola libera la impresora).
+3. (2) Resuelve la siguiente: la toma de `input.siguiente` o la obtiene por `cola.siguiente.request` (cabecera YA preparada; normaliza la respuesta envolviendo `{ data: { siguiente } }` / `{ siguiente }` / `null`).
+4. (3) Si hay siguiente lista → dispara `ciclo-impresion.iniciar.request` con `{ project_id, tarea_id, modelo_id, archivo_id }` → responde `{ encadenada: true, pieza }`.
+5. (4) Si NULO → publica `cola_vacia` (impresora ociosa) y responde `{ encadenada: false, cola_vacia: true }`.
+6. Sin `project_id` → `400`; ante error de dominio se publica `motor-encadenamiento.al_terminar.failed`.
+
+Cada flujo cierra su círculo en `motor-encadenamiento.al_terminar.response`.
+
 ## Contrato de eventos (module.json real)
 
 ### Subscribes (RPCs request/response)

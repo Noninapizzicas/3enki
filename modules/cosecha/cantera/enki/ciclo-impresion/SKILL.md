@@ -46,6 +46,19 @@ El estado vive **EN MEMORIA** (sin PosPersistencia): si el proceso cae el ciclo 
 reanuda desde LIBRE; el estado real lo reporta el adaptador externo. Encola/imprime
 siempre piezas con **GCODE listo** (moneda real).
 
+## Flujo típico
+
+Caso real: **encolar → iniciar el ciclo → imprimir → terminar → registra/descuenta/encadena** (y el fallo siempre avisa).
+
+1. `motor-encadenamiento` dispara `ciclo-impresion.iniciar.request` con `{ project_id, tarea_id, modelo_id, archivo_id }`.
+2. `_iniciar` valida (ciclo no-LIBRE → `409 CONFLICT_STATE`; sin gcode → `abortarCiclo` `sin_gcode_listo`): obtiene el gcode (`cupula-gcode.obtener` si solo llega `archivo_id`), lo **sube** (`adaptador-impresora.subir_gcode`), **inicia** (`adaptador-impresora.iniciar_impresion`), marca la tarea en `cola.imprimiendo` y transiciona `LIBRE→PREPARANDO→IMPRIMIENDO` (publica `impresion.iniciada`).
+3. Durante la impresión, `onEstadoCrudo` observa el estado físico (`adaptador-impresora.estado_crudo`): `completado → _manejarTerminada`, `fallo → _manejarFallo`, `pausado → PAUSADO`.
+4. `_manejarTerminada`: `IMPRIMIENDO→TERMINADA`, registra en `historial.registrar` (`OK`), descuenta `filamento.descontar` solo con gramo medido, llama `motor-encadenamiento.al_terminar` y publica `impresion.finalizada`.
+5. `_manejarFallo`: `IMPRIMIENDO→FALLIDA`, publica `impresion.fallida` y delega SIEMPRE en `manejo-fallo.manejar`.
+6. El dueño resuelve por `adaptador-confirmacion.confirmacion_recibida` (`reanudar_ciclo`/`pieza_retirada`): `FALLIDA→LIBRE` (publica `ciclo-impresion.resuelto` y encadena si `reanudar_ciclo`). Abortar (`abortar`) → `CANCELADA` + `ciclo_abortado`.
+
+Invariante: TERMINADA siempre registra + descuenta (con dato) + encadena; FALLO siempre avisa y delega en manejo-fallo.
+
 ## Contrato de eventos (module.json real)
 
 ### Subscribes (RPCs request/response + observación + confirmación)

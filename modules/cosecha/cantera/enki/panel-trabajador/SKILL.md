@@ -41,6 +41,21 @@ tags: [enki, modulo, reflejo, impresora-3d, panel-trabajador, rol-hoy, operativo
 propuestas, no marca urgencia futura. **CERO juicio**: cada comando delega por RPC; la
 confirmación espera la respuesta del dueño.
 
+## Flujo típico
+
+Caso real: **el trabajador ve el estado en vivo → identifica la pieza o el problema → ejecuta una acción HOY que delega**.
+
+1. El trabajador abre su panel y pide `panel-trabajador.estado_vivo.request` → `_estadoVivo` cruza por RPC (`ciclo-impresion.estado`, `cola.siguiente`, `filamento.evaluar`, `historial.recientes`) y devuelve `{ fase, pieza, cola, filamento, eventos, timestamp }` (huecos → `desconocido`).
+2. Pide la siguiente pieza (`proximo_encadenar` → `cola.siguiente`), los últimos eventos (`eventos` → `historial.recientes`) o las decisiones pendientes (`pendientes` → detecta ciclo FALLIDA/esperando).
+3. Para actuar, llama `panel-trabajador.control.request` con `{ accion }`. `_control` mapea la acción a su RPC de dominio y delega:
+   - `pausar`/`reanudar`/`abortar` → `ciclo-impresion.(pausar|reanudar|abortar).request`;
+   - `reintentar`/`saltar` → `manejo-fallo.manejar.request` (con la política);
+   - `cambio_bobina` → `filamento.cambiar.request`;
+   - `confirmar` → `adaptador-confirmacion.confirmar.request`.
+4. Cada delegación responde `{ accion, resultado, delegado_en }`; si la delegación falla → `502` + `panel-trabajador.control.failed`.
+
+El panel es reflejo puro (no muta); cada comando cierra su círculo en `panel-trabajador.<accion>.response`.
+
 ## Contrato de eventos (module.json real)
 
 ### Subscribes (RPCs request/response)

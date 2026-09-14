@@ -33,6 +33,18 @@ imprimir.
 Depende de `cola` y `cupula-gcode` (la moneda lista): la propuesta se construye sobre
 las tareas vigentes (ENCOLADA) que el llamante le pasa.
 
+## Flujo típico
+
+Caso real: **proponer el orden de la cola → el jefe lo revisa → aprueba vía cola.reordenar (decisión humana)**.
+
+1. `panel-jefe` (o la superficie de control) llama `motor-propuesta.proponer.request` con `{ project_id, tareas }` (las tareas vigentes ENCOLADA; si no llegan, `panel-jefe` las resuelve antes).
+2. `_proponerOrden` filtra tareas ENCOLADA/sin estado y ordena: **(1)** URGENTE → **(2)** FIFO por antigüedad (`orden`/`encolada_en`) → **(3)** preferencia a las **YA preparadas** (gcode listo). Devuelve `{ propuesta: true, orden, total, nota }` vía `motor-propuesta.proponer.response`.
+3. **CERO juicio**: el motor NO toca el store de la cola ni dispara imprimir. La propuesta (lista de `{ id, modelo_id, urgente }`) la revisa el jefe.
+4. El jefe decide y llama `cola.reordenar.request` con `aprobada_by`; solo entonces la cola aplica la orden. Sin aprobación la cola no se reordena.
+5. Si `tareas` no es un array o falta `project_id` → `400` + `motor-propuesta.proponer.failed`.
+
+Cada flujo cierra su círculo en `motor-propuesta.proponer.response`; ante error emite `motor-propuesta.proponer.failed`.
+
 ## Contrato de eventos (module.json real)
 
 ### Subscribes (RPCs request/response)

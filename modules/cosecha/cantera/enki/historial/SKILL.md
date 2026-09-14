@@ -34,6 +34,19 @@ longitud del gcode), **nunca estimado** (regla CERO estimación, honestidad M11)
 Al registrar emite `impresion.registrada` **siempre** (con dato medido) y, si el
 `resultado === OK`, `pieza.imprimida` (dispara el encadenamiento del motor).
 
+## Flujo típico
+
+Caso real: **registrar una impresión terminada → se guarda como histórico → dispara el encadenamiento y alimenta el consumo**.
+
+1. `ciclo-impresion` termina una pieza OK y llama `historial.registrar.request` con `{ modelo_id, resultado: 'OK', gramos_reales, tiempo_real }` (dato MEDIDO del estado real).
+2. `_registrar` valida: sin `gramos_reales` o `tiempo_real` → `400` (CERO estimación); `resultado` no válido → `400`. Crea el asiento append-only (`201`).
+3. Emite `impresion.registrada` (lo consume `consumo` para promedios y los paneles para repintar).
+4. Como `resultado === OK` emite además `pieza.imprimida`, que `motor-encadenamiento` consume para encadenar la siguiente pieza.
+5. Consultas: `historial.por_modelo.request` (registros de un modelo, más recientes primero), `historial.recientes.request` (N recientes del proyecto).
+6. Si un asiento es erróneo, `historial.borrar.request`: si era OK (ya disparó encadenamiento) → se **corrige** a CANCELADA (`corregido:true`); si era FALLIDA/CANCELADA → se elimina (`eliminado:true`); desconocido → `404`.
+
+Cada flujo cierra su círculo en `historial.<accion>.response`; ante error responde el código HTTP exacto con su par `*.failed`.
+
 ## Contrato de eventos (module.json real)
 
 ### Subscribes (RPCs request/response)

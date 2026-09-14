@@ -33,6 +33,18 @@ las muestras **en memoria** (`Map` `${project_id}:${modelo_id}` → `{ gramos: [
 el promedio devuelve **NULO** (no conjetura). Lo no medido queda [ABIERTO] (se pregunta al
 dueño).
 
+## Flujo típico
+
+Caso real: **acumular las impresiones medidas → consultar el promedio de un modelo → pronosticar una tanda**.
+
+1. Cada vez que `historial` registra una impresión emite `impresion.registrada`; `consumo` lo consume (fire-and-forget) y acumula la muestra MEDIDA en memoria (`Map` `${project_id}:${modelo_id}` → `{ gramos: [], tiempos: [] }`). Sin dato medido no acumula nada.
+2. El jefe/panel pide `consumo.promedio.request` `{ project_id, modelo_id }` → `_consumoPromedio` devuelve `{ muestras, gramos_promedio, tiempo_promedio_s, estimacion }`. Sin muestras → promedios `null` y `estimacion: 'NULO'` (CERO conjetura).
+3. Para decidir si imprimir una tanda, `consumo.pronostico.request` `{ project_id, modelos: [{ modelo_id, veces }] }` suma `promedio * veces` por modelo.
+4. Un modelo sin dato medido queda `pendiente: true` y el `total` global es `null` (`completo:false`): CERO estimación — se pregunta al dueño (ABIERTO). Solo si TODOS median se entrega el `total`.
+5. `promedio`/`pronostico` validan `project_id` (+`modelo_id`/array no vacío); si no → `400` + `consumo.<accion>.failed`.
+
+Cada flujo cierra su círculo en `consumo.<accion>.response`; el módulo no publica eventos de dominio propios (calculador puro que acumula `impresion.registrada` y responde).
+
 ## Contrato de eventos (module.json real)
 
 ### Subscribes (RPCs request/response + fire-and-forget)

@@ -39,6 +39,18 @@ Se **repinta** con `cola.actualizada | pieza.imprimida | impresion.registrada |
 material.actualizado` (fire-and-forget, no muta; el panel es de solo lectura). **CERO
 juicio**: el sistema proyecta y transporta; el jefe decide. Cliente nulo.
 
+## Flujo típico
+
+Caso real: **abrir el resumen del taller → ver la propuesta de orden → aprobar la propuesta (decisión humana)**.
+
+1. El jefe abre el panel y pide `panel-jefe.resumen.request`; `_resumen` cruza por RPC (`Promise.all`): `ciclo-impresion.estado`, `cola.siguiente`, `filamento.evaluar`, `consumo.promedio`, `historial.recientes`. Cada hueco sin respuesta 200 → `desconocido`/`[]` (nunca se inventa).
+2. Pide `panel-jefe.propuestas.request` → `_propuestas` delega en `motor-propuesta.proponer` y responde `{ propuesta: true, orden, total, nota }` (PROPUESTA ≠ DECISIÓN; no muta la cola).
+3. El jefe aprueba llamando `panel-jefe.aprobar_propuesta.request` con `{ orden, aprobada_by }` → `_aprobarPropuesta` delega en `cola.reordenar` con la marca de decisión humana y responde `{ aprobada: true, por, orden, total }`.
+4. `_marcar_prioridad` marca urgencia (delega `cola.marcar_urgente`); `_pedir_reposicion` pide filamento (delega `adaptador-confirmacion.confirmar`); `_ver_detalle` cruza `catalogo.por_id` / `cupula-gcode.obtener`.
+5. El panel se mantiene al día **repintándose** con `cola.actualizada | pieza.imprimida | impresion.registrada | material.actualizado` (fire-and-forget, solo lectura; no muta).
+
+Cada flujo cierra su círculo en `panel-jefe.<accion>.response` y ante fallo publica su par `panel-jefe.*.failed` (ver notas del contrato).
+
 ## Contrato de eventos (module.json real)
 
 ### Subscribes (RPCs request/response + repintado fire-and-forget)
@@ -59,6 +71,12 @@ juicio**: el sistema proyecta y transporta; el jefe decide. Cliente nulo.
 > Nota: los repintados (`cola.actualizada`, `pieza.imprimida`, `impresion.registrada`,
 > `material.actualizado`) son fire-and-forget que el index.js escucha sin mutar; no están
 > en el `module.json` de panel-jefe (son eventos de otros módulos que el panel observa).
+
+> Nota: además de `panel-jefe.aprobar_propuesta.failed`, el `index.js` también emite pares
+> `panel-jefe.*.failed` sub-declarados en runtime vía `_failed(op, ...)`: `panel-jefe.propuestas.failed`
+> (fallo de `motor-propuesta.proponer`), `panel-jefe.marcar_prioridad.failed` (fallo de
+> `cola.marcar_urgente`) y `panel-jefe.pedir_reposicion.failed` (fallo de `adaptador-confirmacion.confirmar`).
+> Ninguno consta en el `module.json`, pero sí los publica el `index.js`.
 
 ### Publishes
 

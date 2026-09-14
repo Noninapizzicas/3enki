@@ -37,6 +37,18 @@ la cola encadena desde aquí (`_reserva` alimenta la próxima tanda lista **sin 
 Es un **CUSTODIO sin juicio**: no decide qué pieza imprimir (eso vive en el dueño/cola);
 solo guarda y sirve la preparación. `reservaMin` ABIERTO (decisión no fijada aún).
 
+## Flujo típico
+
+Caso real: **registrar un archivo preparado → alimentar la cola desde la reserva → retirarlo tras imprimir**.
+
+1. `importacion` prepara el GCODE (o el usuario lo tiene listo) y llama `cupula-gcode.registrar.request` con `{ modelo_id, formato: 'GCODE', archivo, listo: true }`. `_registrar` crea el `ArchivoPreparado` (`201`) y —como `listo === true`— emite `archivo.preparado`.
+2. Si se registra solo el STL/3MF **origen** (no listo) → `201` pero **no** emite `archivo.preparado`. Si ya existe un archivo equivalente (mismo `modelo_id`+`formato`+`listo`) → **reconcilia** (`reconciliado:true`) y **no re-emite** (`_mergeArchivo` añade rutas/formatos).
+3. La cola pide `cupula-gcode.reserva.request` (`n`/`excluir_ids`/`ya_encolados`) → `_reserva` devuelve solo los `listo && !consumido` ordenados por `preparado_en`, **sin re-slicear** lo ya preparado (caché).
+4. `ciclo-impresion` obtiene el gcode vía `cupula-gcode.obtener.request` y `_obtener` lo devuelve por `archivo_id` (o `404`).
+5. Tras imprimir, se llama `cupula-gcode.marcar_consumido.request` → `_marcarConsumido` pone `consumido:true` y lo retira de la futura reserva (`404` + `failed` `archivo_no_encontrado` si no existe).
+
+Cada flujo cierra su círculo en `cupula-gcode.<accion>.response`; ante error de dominio responde el código HTTP exacto (400/404/422) con su par `*.failed`.
+
 ## Contrato de eventos (module.json real)
 
 ### Subscribes (RPCs request/response)

@@ -18,18 +18,94 @@
     "cero_juicio": true
   },
   "subscribes": [
-    { "event": "panel-trabajador.estado_vivo.request", "handler": "onEstadoVivoRequest", "description": "Estado en vivo: pieza actual + progreso + fase del ciclo (cruzando ciclo, cola, filamento por RPC)." },
-    { "event": "panel-trabajador.proximo_encadenar.request", "handler": "onProximoEncadenarRequest", "description": "Proxima pieza lista para encadenar (cola.siguiente)." },
-    { "event": "panel-trabajador.eventos.request", "handler": "onEventosRequest", "description": "Ultimos eventos del taller (historial.recientes)." },
-    { "event": "panel-trabajador.pendientes.request", "handler": "onPendientesRequest", "description": "Confirmaciones pendientes de decision del dueño." },
-    { "event": "panel-trabajador.control.request", "handler": "onControlRequest", "description": "Comandos de control HOY (pausar/abortar/reanudar/reintentar/saltar/cambio bobina/confirmar) que DELEGAN en ciclo/filamento/manejo-fallo." }
+    {
+      "event": "panel-trabajador.estado_vivo.request",
+      "handler": "onEstadoVivoRequest",
+      "description": "Estado en vivo: pieza actual + progreso + fase del ciclo (cruzando ciclo, cola, filamento por RPC)."
+    },
+    {
+      "event": "panel-trabajador.proximo_encadenar.request",
+      "handler": "onProximoEncadenarRequest",
+      "description": "Proxima pieza lista para encadenar (cola.siguiente)."
+    },
+    {
+      "event": "panel-trabajador.eventos.request",
+      "handler": "onEventosRequest",
+      "description": "Ultimos eventos del taller (historial.recientes)."
+    },
+    {
+      "event": "panel-trabajador.pendientes.request",
+      "handler": "onPendientesRequest",
+      "description": "Confirmaciones pendientes de decision del dueño."
+    },
+    {
+      "event": "panel-trabajador.control.request",
+      "handler": "onControlRequest",
+      "description": "Comandos de control HOY (pausar/abortar/reanudar/reintentar/saltar/cambio bobina/confirmar) que DELEGAN en ciclo/filamento/manejo-fallo."
+    }
   ],
   "publishes": [
-    { "event": "panel-trabajador.estado_vivo.response", "description": "Respuesta correlada: estado en vivo del taller." },
-    { "event": "panel-trabajador.control.failed", "description": "Par de fallo: el comando de control no se pudo ejecutar." }
+    {
+      "event": "panel-trabajador.estado_vivo.response",
+      "description": "Respuesta correlada: estado en vivo del taller."
+    },
+    {
+      "event": "panel-trabajador.control.failed",
+      "description": "Par de fallo: el comando de control no se pudo ejecutar."
+    }
   ],
   "tools": [],
   "observability": {
-    "metrics": ["panel-trabajador.reflejo.served", "panel-trabajador.reflejo.errors"]
-  }
+    "metrics": [
+      "panel-trabajador.reflejo.served",
+      "panel-trabajador.reflejo.errors"
+    ]
+  },
+  "ui_handlers": [
+    {
+      "action": "estado_vivo",
+      "domain": "panel-trabajador",
+      "type": "workspace_module",
+      "zone": "barra_modulos",
+      "label": "Estado vivo",
+      "description": "Estado en vivo: pieza actual + progreso + fase del ciclo (cruzando ciclo, cola, filamento por RPC).",
+      "handler": "onEstadoVivoRequest"
+    },
+    {
+      "action": "proximo_encadenar",
+      "domain": "panel-trabajador",
+      "type": "workspace_module",
+      "zone": "barra_modulos",
+      "label": "Proximo encadenar",
+      "description": "Proxima pieza lista para encadenar (cola.siguiente).",
+      "handler": "onProximoEncadenarRequest"
+    },
+    {
+      "action": "eventos",
+      "domain": "panel-trabajador",
+      "type": "workspace_module",
+      "zone": "barra_modulos",
+      "label": "Eventos",
+      "description": "Ultimos eventos del taller (historial.recientes).",
+      "handler": "onEventosRequest"
+    },
+    {
+      "action": "pendientes",
+      "domain": "panel-trabajador",
+      "type": "workspace_module",
+      "zone": "barra_modulos",
+      "label": "Pendientes",
+      "description": "Confirmaciones pendientes de decision del dueño.",
+      "handler": "onPendientesRequest"
+    },
+    {
+      "action": "control",
+      "domain": "panel-trabajador",
+      "type": "workspace_module",
+      "zone": "barra_modulos",
+      "label": "Control",
+      "description": "Comandos de control HOY (pausar/abortar/reanudar/reintentar/saltar/cambio bobina/confirmar) que DELEGAN en ciclo/filamento/manejo-fallo.",
+      "handler": "onControlRequest"
+    }
+  ]
 }

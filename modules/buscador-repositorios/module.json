@@ -11,17 +11,47 @@
   ],
   "config": {
     "transport": "crawl4rs",
-    "repositorios_etiquetados": ["Printables", "MakerWorld", "Cults3D", "Thingiverse", "Thangs"]
+    "repositorios_etiquetados": [
+      "Printables",
+      "MakerWorld",
+      "Cults3D",
+      "Thingiverse",
+      "Thangs"
+    ]
   },
   "subscribes": [
-    { "event": "buscador-repositorios.buscar.request", "handler": "onBuscarRequest", "description": "Busca en repositorios externos por query; NO inventa resultados (devuelve lo que el puerto obtiene, forma ResultadoRepositorio)." }
+    {
+      "event": "buscador-repositorios.buscar.request",
+      "handler": "onBuscarRequest",
+      "description": "Busca en repositorios externos por query; NO inventa resultados (devuelve lo que el puerto obtiene, forma ResultadoRepositorio)."
+    }
   ],
   "publishes": [
-    { "event": "buscador-repositorios.buscar.response", "description": "Respuesta correlada: { resultados:[{fuente,titulo,url,autor,formatos}], total } o error." },
-    { "event": "buscador-repositorios.buscar.failed", "description": "Par de fallo: el transporte no respondió, falló o devolvió error." }
+    {
+      "event": "buscador-repositorios.buscar.response",
+      "description": "Respuesta correlada: { resultados:[{fuente,titulo,url,autor,formatos}], total } o error."
+    },
+    {
+      "event": "buscador-repositorios.buscar.failed",
+      "description": "Par de fallo: el transporte no respondió, falló o devolvió error."
+    }
   ],
   "tools": [],
   "observability": {
-    "metrics": ["buscador-repositorios.reflejo.served", "buscador-repositorios.reflejo.errors"]
-  }
+    "metrics": [
+      "buscador-repositorios.reflejo.served",
+      "buscador-repositorios.reflejo.errors"
+    ]
+  },
+  "ui_handlers": [
+    {
+      "action": "buscar",
+      "domain": "buscador-repositorios",
+      "type": "chat_tool",
+      "zone": "chat_tools",
+      "label": "Buscar",
+      "description": "Busca en repositorios externos por query; NO inventa resultados (devuelve lo que el puerto obtiene, forma ResultadoRepositorio).",
+      "handler": "onBuscarRequest"
+    }
+  ]
 }

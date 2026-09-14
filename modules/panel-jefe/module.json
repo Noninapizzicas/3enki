@@ -20,19 +20,108 @@
     "cero_juicio": true
   },
   "subscribes": [
-    { "event": "panel-jefe.resumen.request", "handler": "onResumenRequest", "description": "Vision de conjunto agregada: impresion actual + cola + filamento + consumo/eficiencia + historial (cruza stores por RPC)." },
-    { "event": "panel-jefe.propuestas.request", "handler": "onPropuestasRequest", "description": "Propuesta de orden de la cola (motor-propuesta.proponer); PROPUESTA, no decision." },
-    { "event": "panel-jefe.aprobar_propuesta.request", "handler": "onAprobarPropuestaRequest", "description": "El jefe aprueba una propuesta -> cola.reordenar (decision humana; el sistema transporta)." },
-    { "event": "panel-jefe.marcar_prioridad.request", "handler": "onMarcarPrioridadRequest", "description": "El jefe marca urgencia/prioridad de una tarea (cola.marcar_urgente)." },
-    { "event": "panel-jefe.pedir_reposicion.request", "handler": "onPedirReposicionRequest", "description": "El jefe pide reposicion de filamento (pedir por adaptador-confirmacion)." },
-    { "event": "panel-jefe.ver_detalle.request", "handler": "onVerDetalleRequest", "description": "Detalle de un modelo (catalogo.por_id / cupula-gcode.obtener)." }
+    {
+      "event": "panel-jefe.resumen.request",
+      "handler": "onResumenRequest",
+      "description": "Vision de conjunto agregada: impresion actual + cola + filamento + consumo/eficiencia + historial (cruza stores por RPC)."
+    },
+    {
+      "event": "panel-jefe.propuestas.request",
+      "handler": "onPropuestasRequest",
+      "description": "Propuesta de orden de la cola (motor-propuesta.proponer); PROPUESTA, no decision."
+    },
+    {
+      "event": "panel-jefe.aprobar_propuesta.request",
+      "handler": "onAprobarPropuestaRequest",
+      "description": "El jefe aprueba una propuesta -> cola.reordenar (decision humana; el sistema transporta)."
+    },
+    {
+      "event": "panel-jefe.marcar_prioridad.request",
+      "handler": "onMarcarPrioridadRequest",
+      "description": "El jefe marca urgencia/prioridad de una tarea (cola.marcar_urgente)."
+    },
+    {
+      "event": "panel-jefe.pedir_reposicion.request",
+      "handler": "onPedirReposicionRequest",
+      "description": "El jefe pide reposicion de filamento (pedir por adaptador-confirmacion)."
+    },
+    {
+      "event": "panel-jefe.ver_detalle.request",
+      "handler": "onVerDetalleRequest",
+      "description": "Detalle de un modelo (catalogo.por_id / cupula-gcode.obtener)."
+    }
   ],
   "publishes": [
-    { "event": "panel-jefe.resumen.response", "description": "Respuesta correlada: vision de conjunto." },
-    { "event": "panel-jefe.aprobar_propuesta.failed", "description": "Par de fallo: no se pudo aprobar/reordenar la propuesta." }
+    {
+      "event": "panel-jefe.resumen.response",
+      "description": "Respuesta correlada: vision de conjunto."
+    },
+    {
+      "event": "panel-jefe.aprobar_propuesta.failed",
+      "description": "Par de fallo: no se pudo aprobar/reordenar la propuesta."
+    }
   ],
   "tools": [],
   "observability": {
-    "metrics": ["panel-jefe.reflejo.served", "panel-jefe.reflejo.errors"]
-  }
+    "metrics": [
+      "panel-jefe.reflejo.served",
+      "panel-jefe.reflejo.errors"
+    ]
+  },
+  "ui_handlers": [
+    {
+      "action": "resumen",
+      "domain": "panel-jefe",
+      "type": "workspace_module",
+      "zone": "barra_modulos",
+      "label": "Resumen",
+      "description": "Vision de conjunto agregada: impresion actual + cola + filamento + consumo/eficiencia + historial (cruza stores por RPC).",
+      "handler": "onResumenRequest"
+    },
+    {
+      "action": "propuestas",
+      "domain": "panel-jefe",
+      "type": "workspace_module",
+      "zone": "barra_modulos",
+      "label": "Propuestas",
+      "description": "Propuesta de orden de la cola (motor-propuesta.proponer); PROPUESTA, no decision.",
+      "handler": "onPropuestasRequest"
+    },
+    {
+      "action": "aprobar_propuesta",
+      "domain": "panel-jefe",
+      "type": "workspace_module",
+      "zone": "barra_modulos",
+      "label": "Aprobar propuesta",
+      "description": "El jefe aprueba una propuesta -> cola.reordenar (decision humana; el sistema transporta).",
+      "handler": "onAprobarPropuestaRequest"
+    },
+    {
+      "action": "marcar_prioridad",
+      "domain": "panel-jefe",
+      "type": "workspace_module",
+      "zone": "barra_modulos",
+      "label": "Marcar prioridad",
+      "description": "El jefe marca urgencia/prioridad de una tarea (cola.marcar_urgente).",
+      "handler": "onMarcarPrioridadRequest"
+    },
+    {
+      "action": "pedir_reposicion",
+      "domain": "panel-jefe",
+      "type": "workspace_module",
+      "zone": "barra_modulos",
+      "label": "Pedir reposicion",
+      "description": "El jefe pide reposicion de filamento (pedir por adaptador-confirmacion).",
+      "handler": "onPedirReposicionRequest"
+    },
+    {
+      "action": "ver_detalle",
+      "domain": "panel-jefe",
+      "type": "workspace_module",
+      "zone": "barra_modulos",
+      "label": "Ver detalle",
+      "description": "Detalle de un modelo (catalogo.por_id / cupula-gcode.obtener).",
+      "handler": "onVerDetalleRequest"
+    }
+  ]
 }

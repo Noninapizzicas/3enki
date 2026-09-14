@@ -11,21 +11,68 @@
     "adaptador-slicing"
   ],
   "config": {
-    "formatos": ["STL", "3MF", "GCODE"],
+    "formatos": [
+      "STL",
+      "3MF",
+      "GCODE"
+    ],
     "directo_cupula": "GCODE",
-    "fuente_catalogo": ["STL", "3MF"]
+    "fuente_catalogo": [
+      "STL",
+      "3MF"
+    ]
   },
   "subscribes": [
-    { "event": "importacion.importar.request", "handler": "onImportarRequest", "description": "Importa un archivo externo (STL/3MF/GCODE): lee metadatos y lo entrega — GCODE a la cupula, STL/3MF al catalogo (RPC)." },
-    { "event": "importacion.leer_metadatos.request", "handler": "onLeerMetadatosRequest", "description": "Lee metadatos de un archivo por su formato (nombre, unidades, material sugerido, formatos)." }
+    {
+      "event": "importacion.importar.request",
+      "handler": "onImportarRequest",
+      "description": "Importa un archivo externo (STL/3MF/GCODE): lee metadatos y lo entrega — GCODE a la cupula, STL/3MF al catalogo (RPC)."
+    },
+    {
+      "event": "importacion.leer_metadatos.request",
+      "handler": "onLeerMetadatosRequest",
+      "description": "Lee metadatos de un archivo por su formato (nombre, unidades, material sugerido, formatos)."
+    }
   ],
   "publishes": [
-    { "event": "importacion.importar.response", "description": "Respuesta correlada: resultado de importar (registrado en catalogo o cupula)." },
-    { "event": "importacion.leer_metadatos.response", "description": "Respuesta correlada: metadatos leidos del archivo." },
-    { "event": "importacion.importar.failed", "description": "Par de fallo: no se pudo importar (formato no soportado, RPC destino fallo, metadatos invalidos)." }
+    {
+      "event": "importacion.importar.response",
+      "description": "Respuesta correlada: resultado de importar (registrado en catalogo o cupula)."
+    },
+    {
+      "event": "importacion.leer_metadatos.response",
+      "description": "Respuesta correlada: metadatos leidos del archivo."
+    },
+    {
+      "event": "importacion.importar.failed",
+      "description": "Par de fallo: no se pudo importar (formato no soportado, RPC destino fallo, metadatos invalidos)."
+    }
   ],
   "tools": [],
   "observability": {
-    "metrics": ["importacion.reflejo.served", "importacion.reflejo.errors"]
-  }
+    "metrics": [
+      "importacion.reflejo.served",
+      "importacion.reflejo.errors"
+    ]
+  },
+  "ui_handlers": [
+    {
+      "action": "importar",
+      "domain": "importacion",
+      "type": "chat_tool",
+      "zone": "chat_tools",
+      "label": "Importar",
+      "description": "Importa un archivo externo (STL/3MF/GCODE): lee metadatos y lo entrega — GCODE a la cupula, STL/3MF al catalogo (RPC).",
+      "handler": "onImportarRequest"
+    },
+    {
+      "action": "leer_metadatos",
+      "domain": "importacion",
+      "type": "chat_tool",
+      "zone": "chat_tools",
+      "label": "Leer metadatos",
+      "description": "Lee metadatos de un archivo por su formato (nombre, unidades, material sugerido, formatos).",
+      "handler": "onLeerMetadatosRequest"
+    }
+  ]
 }

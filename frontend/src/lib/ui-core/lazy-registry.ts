@@ -440,6 +440,11 @@ export const chatConfigDefinitions = derived(definitionsStore, $d => filterDefin
 export const chatToolsDefinitions = derived(definitionsStore, $d => filterDefinitionsByZone($d, 'chat-tools'));
 export const systemBarDefinitions = derived(definitionsStore, $d => filterDefinitionsByZone($d, 'system-bar'));
 
+// TODAS las definiciones de módulos con interfaz (sin filtrar por zona) — lo que
+// consume la página de configuración de interfaz por proyecto: el dueño elige
+// qué paneles de "todo lo usable" se ven en la workbar del proyecto.
+export const allModuleDefinitions = derived(definitionsStore, $d => [...$d.values()]);
+
 // Estado de carga de módulos
 export const moduleLoadState = derived(loadedStore, $l => {
   const states: Record<string, { loading: boolean; loaded: boolean; mounted: boolean; error: Error | null }> = {};

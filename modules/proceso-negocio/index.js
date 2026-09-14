@@ -113,10 +113,28 @@ const MAPA_PROCESO = {
     mensaje: 'FASE 5: escribir la SKILL FULL del módulo — lee modules/<slug>/module.json + index.js del repo, escribe modules/cosecha/cantera/enki/<slug>/SKILL.md en el repo. Al terminar: proceso-negocio.completar_fase { fase: "skills" }.'
   },
   'negocio.skills': {
+    skill: 'decidir-interfaz',
+    lee: ['modules/<slug>/module.json', 'modules/<slug>/index.js'],
+    escribe: 'proceso-negocio/fase6-decidir-interfaz.json',
+    mensaje: 'FASE 6 · decidir-interfaz: ¿este módulo necesita interfaz? — lee modules/<slug>/module.json + index.js, aplica la skill decidir-interfaz. Si ui_decision.necesita=false (sin cara) → completar_fase { fase: "interfaz" } directo. Si necesita → escribe la decisión y completar_fase { fase: "interfaz" }. Al terminar: proceso-negocio.completar_fase { fase: "interfaz", resumen: { modulos: ["<slug>"], necesita: <bool> } }.'
+  },
+  'negocio.interfaz': {
+    skill: 'esquematizar-interfaz',
+    lee: ['modules/<slug>/module.json', 'modules/<slug>/<slug>.blueprint.json'],
+    escribe: 'proceso-negocio/fase6h-esquematizar-interfaz.json',
+    mensaje: 'FASE 6½ · esquematizar-interfaz: aplica prisma-universal sobre "la interfaz del módulo <slug>" → SPEC en esquemas/interfaz-<slug>.md (UN archivo). Si ui_decision.necesita=false → completar_fase { fase: "interfaz_esquematizada" } directo (no hay spec que construir). Al terminar: proceso-negocio.completar_fase { fase: "interfaz_esquematizada" }.'
+  },
+  'negocio.interfaz_esquematizada': {
+    skill: 'construir-interfaz',
+    lee: ['esquemas/interfaz-<slug>.md', 'modules/<slug>/module.json'],
+    escribe: 'frontend/src/lib/modules/<slug>/',
+    mensaje: 'FASE 7 · construir-interfaz: CONSUME la spec esquemas/interfaz-<slug>.md → trío frontend (manifest.json + index.ts + <Slug>Panel.svelte + store) en frontend/src/lib/modules/<slug>/. Si ui_decision.necesita=false → no hay trío que construir, completar_fase directo. Al terminar: proceso-negocio.completar_fase { fase: "interfaz_construida", resumen: { modulos: ["<slug>"] } } → sigue a la siguiente hoja del plan.'
+  },
+  'negocio.interfaz_construida': {
     skill: 'construir-modulos',
     lee: ['esquemas/plan-construccion.md'],
     escribe: 'modules/<slug>/',
-    mensaje: 'Hoja completa (módulo + skill). FASE 4: construir la SIGUIENTE hoja del plan — lee esquemas/plan-construccion.md, la siguiente sin módulo en el repo. Al terminar: proceso-negocio.completar_fase { fase: "construido" }. Si no quedan hojas: proceso-negocio.completar_fase { fase: "completado" }.'
+    mensaje: 'Hoja completa (módulo + skill + interfaz). FASE 4: construir la SIGUIENTE hoja del plan — lee esquemas/plan-construccion.md, la siguiente sin módulo en el repo. Al terminar: proceso-negocio.completar_fase { fase: "construido" }. Si no quedan hojas: proceso-negocio.completar_fase { fase: "completado" }.'
   },
   'negocio.verificado': {
     skill: null,
@@ -227,13 +245,15 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
   // ── DECISIÓN DETERMINISTA del siguiente paso (el sistema decide, no el LLM) ──
   // MÓDULO POR MÓDULO (decisión del dueño): se recorre el plan EN ORDEN y se
   // actúa sobre la PRIMERA hoja incompleta — esa hoja recorre SUS fases
-  // (construir → skill) ANTES de que empiece la siguiente. No es fase-por-fase
-  // (todos los módulos, luego todas las skills): es hoja-por-hoja, cada una
-  // terminada de una. Las fases de interfaz (F6/6½/7) se quitaron del proceso.
-  //   hoja sin módulo               → construir-modulos (FASE 4)
-  //   módulo sin skill              → escribir-skills (FASE 5)
-  //   hoja completa (módulo+skill)  → la SIGUIENTE hoja
-  //   todas las hojas completas     → verificación final → completado
+  // (construir → skill → interfaz) ANTES de que empiece la siguiente. No es
+  // fase-por-fase (todos los módulos, luego todas las skills): es hoja-por-hoja.
+  //   hoja sin módulo                → construir-modulos (FASE 4)
+  //   módulo sin skill               → escribir-skills (FASE 5)
+  //   módulo+skill sin interfaz y la necesita → decidir-interfaz (FASE 6)
+  //                                           → esquematizar-interfaz (F6½)
+  //                                           → construir-interfaz (F7)
+  //   hoja completa (módulo+skill+interfaz)  → la siguiente hoja
+  //   todas las hojas completas      → verificación final → completado
   _decidirSiguiente(progreso, faseActual = null) {
     const hojas = progreso.hojas || [];
     const n = progreso.total || hojas.length;
@@ -246,19 +266,36 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
       if (!h.con_skill) {
         return { skill: 'escribir-skills', lee: [`modules/${h.slug}/module.json`, `modules/${h.slug}/index.js`], escribe: `modules/cosecha/cantera/enki/${h.slug}/SKILL.md`, mensaje: `MÓDULO POR MÓDULO — ${pos}: escribir la SKILL FULL — lee modules/${h.slug}/module.json + index.js del repo, escribe modules/cosecha/cantera/enki/${h.slug}/SKILL.md en el repo. Al terminar: proceso-negocio.completar_fase { fase: "skills", resumen: { skills: ["${h.slug}"] } }.` };
       }
-      // hoja completa (módulo + skill) → continúa a la siguiente
+      // Módulo + skill construidos: falta la interfaz (si la necesita).
+      // La interfaz del módulo se construye ANTES de pasar a la siguiente hoja.
+      // Secuencia F6 → F6½ → F7:
+      //  - si aún no está decidida (sin ui_decision en el blueprint) → decidir-interfaz (F6)
+      //  - si está decidida y la necesita pero no esquematizada → esquematizar-interfaz (F6½)
+      //  - si esquematizada pero no operativa en frontend → construir-interfaz (F7)
+      if (h.interfaz_necesita && !h.con_interfaz) {
+        const dirModulo = this._buscarModulo(h.slug);
+        if (!this._interfazDecidida(dirModulo, h.slug)) {
+          return { skill: 'decidir-interfaz', lee: [`modules/${h.slug}/module.json`], escribe: `proceso-negocio/fase6-decidir-interfaz.json`, mensaje: `MÓDULO POR MÓDULO — ${pos}: decidir si ${h.slug} necesita interfaz — lee modules/${h.slug}/module.json, aplica decidir-interfaz. Escribe la decisión (ui_decision.necesita) y completar_fase { fase: "interfaz", resumen: { modulos: ["${h.slug}"], necesita: <bool> } }. Si necesita=false, directo.` };
+        }
+        if (!this._interfazEsquematizadaEnDisco(dirModulo, h.slug)) {
+          return { skill: 'esquematizar-interfaz', lee: [`modules/${h.slug}/module.json`, `modules/${h.slug}/${h.slug}.blueprint.json`], escribe: `esquemas/interfaz-${h.slug}.md`, mensaje: `MÓDULO POR MÓDULO — ${pos}: esquematizar la interfaz de ${h.slug} — aplica esquematizar-interfaz (prisma-universal sobre "la interfaz de ${h.slug}") → esquemas/interfaz-${h.slug}.md (UN archivo). Al terminar: proceso-negocio.completar_fase { fase: "interfaz_esquematizada" }.` };
+        }
+        return { skill: 'construir-interfaz', lee: [`esquemas/interfaz-${h.slug}.md`, `modules/${h.slug}/module.json`], escribe: `frontend/src/lib/modules/${h.slug}/`, mensaje: `MÓDULO POR MÓDULO — ${pos}: construir la interfaz de ${h.slug} — CONSUME esquemas/interfaz-${h.slug}.md → trío frontend (manifest.json + index.ts + ${h.slug.charAt(0).toUpperCase()+h.slug.slice(1)}Panel.svelte + store) en frontend/src/lib/modules/${h.slug}/. Al terminar: proceso-negocio.completar_fase { fase: "interfaz_construida", resumen: { modulos: ["${h.slug}"] } }.` };
+      }
+      // hoja completa (módulo + skill + interfaz) → continúa a la siguiente
     }
     // FASE 8 — VERIFICACIÓN FINAL EN VIVO (determinista, sin LLM).
-    // Todo el plan está construido (módulo + skill). Antes de declarar
+    // Todo el plan está construido (módulo + skill + interfaz). Antes de declarar
     // 'completado', el orquestador VERIFICA EN DISCO que el negocio realmente
     // funciona: cada hoja del plan debe tener su módulo que CARGA y su skill en
-    // la cantera. No se fía del reporte del agente (lección de todo el proceso).
+    // la cantera (y su interfaz operativa si la necesita). No se fía del reporte
+    // del agente (lección de todo el proceso).
     // Si ya se verificó (flag persistido) o se acaba de completar la fase
     // 'verificado', cierra.
     if (this._verificado(progreso.project_id) || faseActual === 'verificado') {
-      return { skill: null, lee: [], escribe: null, mensaje: 'COMPLETO Y VERIFICADO: todas las hojas tienen módulo y skill verificados en vivo. F0→F5 cerrado.' };
+      return { skill: null, lee: [], escribe: null, mensaje: 'COMPLETO Y VERIFICADO: todas las hojas tienen módulo, skill e interfaz operativa verificados en vivo. F0→F7 cerrado.' };
     }
-    return { skill: 'verificar-en-vivo', lee: ['modules/', 'modules/cosecha/cantera/enki/'], escribe: null, mensaje: `FASE 8 · VERIFICACIÓN FINAL (${progreso.con_skill}/${progreso.total}): verificar EN VIVO que cada hoja del plan tiene módulo y skill en el repo. Al terminar: proceso-negocio.completar_fase { fase: "verificado" }.` };
+    return { skill: 'verificar-en-vivo', lee: ['modules/', 'modules/cosecha/cantera/enki/'], escribe: null, mensaje: `FASE 8 · VERIFICACIÓN FINAL (${progreso.con_skill}/${progreso.total}): verificar EN VIVO que cada hoja del plan tiene módulo, skill y (si la necesita) interfaz operativa en el repo. Al terminar: proceso-negocio.completar_fase { fase: "verificado" }.` };
   }
 
   // ── PROGRESO DEL PLAN (determinista — el sistema decide, no el LLM) ──
@@ -287,17 +324,20 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
       // construir: fantasmas que nunca existen en disco, así que
       // faltan_por_construir jamás bajaba a 0 y el rail no llegaba a completado.
       const slugs = this._hojasDelPlan(contenido);
-      let construidos = 0, con_skill = 0;
+      let construidos = 0, con_skill = 0, con_interfaz_ops = 0;
       // Estado POR HOJA, en orden del plan — lo que el ciclo módulo-por-módulo
       // recorre para actuar sobre la PRIMERA hoja incompleta. Cada hoja recorre
-      // SUS fases (construir → skill) antes de que empiece la siguiente.
+      // SUS fases (construir → skill → interfaz) antes de que empiece la siguiente.
       const hojas = [];
       for (const slug of slugs) {
-        const h = { slug, construido: false, con_skill: false };
+        const h = { slug, construido: false, con_skill: false, interfaz_necesita: false, con_interfaz: false };
         const dirModulo = this._buscarModulo(slug);
         if (dirModulo) {
           h.construido = true; construidos++;
           if (this._skillEnCantera(slug)) { h.con_skill = true; con_skill++; }
+          // Interfaz: ¿necesita? (ui_decision.necesita != false) y ¿operativa?
+          h.interfaz_necesita = this._interfazNecesita(dirModulo, slug);
+          if (this._interfazOperativaEnDisco(slug)) { h.con_interfaz = true; con_interfaz_ops++; }
         }
         hojas.push(h);
       }
@@ -306,8 +346,10 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
         total: slugs.length,
         construidos,
         con_skill,
+        con_interfaz_ops,
         faltan_por_construir: slugs.length - construidos,
         faltan_por_skill: construidos - con_skill,
+        faltan_por_interfaz: con_skill - con_interfaz_ops,
         slugs,
         hojas
       };
@@ -333,8 +375,43 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
 
   // ¿La interfaz está DECLARADA en el blueprint del módulo (F6½ por generador)?
 
-  // La sección `ui` de modules/<slug>/<slug>.blueprint.json (regla ui_declarada).
-  // Existe (aunque sea vacía) → declarada (los defaults del generador cubren).
+  // ¿La interfaz OPERATIVA del módulo existe en el frontend (envoltorio real)?
+  // frontend/src/lib/modules/<slug>/ con manifest.json + index.ts +
+  // <Slug>Panel.svelte (envoltorio <BlueprintForm>) + <slug>.blueprint.json
+  // (la copia que el Panel importa con ruta relativa).
+
+  // ¿Este módulo NECESITA interfaz? (FASE 6): decisión del blueprint
+  // ui_decision.necesita !== false (por defecto necesita=true; los módulos sin
+  // cara declaran ui_decision.necesita=false). Si no hay blueprint o no declara
+  // la decisión, se asume necesita=true (el ciclo la comprueba).
+  _interfazNecesita(dirModulo, slug) {
+    try {
+      const bpPath = path.join(dirModulo, `${slug}.blueprint.json`);
+      if (!fs.existsSync(bpPath)) return true; // sin blueprint → por defecto necesita (F6 lo decidirá)
+      const m = JSON.parse(fs.readFileSync(bpPath, 'utf8'));
+      const ui = m && m.ui;
+      if (ui && typeof ui.decision === 'object' && 'necesita' in ui.decision) return !!ui.decision.necesita;
+      return true; // default: necesita interfaz
+    } catch (_) {
+      return true;
+    }
+  }
+
+  // ¿La interfaz ya está DECIDIDA en el blueprint? (¿F6 corrió?)
+  // Tiene si el blueprint declara ui.decision.necesita (true o false). Sin esa
+  // clave, F6 no se ha ejecutado → hay que decidir.
+  _interfazDecidida(dirModulo, slug) {
+    try {
+      const bpPath = path.join(dirModulo, `${slug}.blueprint.json`);
+      if (!fs.existsSync(bpPath)) return false;
+      const m = JSON.parse(fs.readFileSync(bpPath, 'utf8'));
+      const ui = m && m.ui;
+      return !!(ui && typeof ui.decision === 'object' && 'necesita' in ui.decision);
+    } catch (_) {
+      return false;
+    }
+  }
+
   _interfazEsquematizadaEnDisco(dirModulo, slug) {
     try {
       const bpPath = path.join(dirModulo, `${slug}.blueprint.json`);

@@ -12,8 +12,10 @@
    */
   import { page } from '$app/stores';
   import { onMount } from 'svelte';
+  import { get } from 'svelte/store';
   import { allModuleDefinitions } from '$lib/ui-core/lazy-registry';
   import { updateProject, getProject } from '$lib/stores/projects';
+  import { connect, connected } from '$lib/ui-core/mqtt';
   import type { Project } from '$lib/stores/projects';
 
   let selected = new Set<string>();
@@ -22,6 +24,7 @@
   let project: Project | null = null;
 
   $: projectSlug = $page.params.project_id;
+  $: isConnected = $connected;
 
   // Todos los módulos con interfaz (no universales) que el dueño puede activar.
   $: definibles = $allModuleDefinitions.filter(d => !d.universal);
@@ -43,6 +46,10 @@
   }
 
   async function guardar() {
+    if (!isConnected) {
+      resultado = { type: 'error', message: 'MQTT no conectado aún — espera y reintenta' };
+      return;
+    }
     saving = true;
     resultado = { type: 'info', message: 'Guardando…' };
     try {
@@ -56,7 +63,13 @@
     }
   }
 
-  onMount(load);
+  onMount(() => {
+    // Conectar MQTT (singleton, no bloquea). Sin esto la página no puede
+    // guardar (updateProject requiere MQTT) y esta página usa el shell mínimo.
+    if (!get(connected)) connect();
+    load();
+  });
+
 </script>
 
 <svelte:head>

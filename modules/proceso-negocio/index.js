@@ -95,7 +95,7 @@ const MAPA_PROCESO = {
     mensaje: 'FASE 3 · PLASMA: diseñar el SISTEMA en PSEUDOCÓDIGO OOP — lee proceso-negocio/fase2-cierre-diseccion.json, diseña entidades/clases/flujos/contratos en OOP estándar SIN conocer Enki. Al terminar: proceso-negocio.completar_fase { fase: "planificado" }.'
   },
   'negocio.planificado': {
-    skill: 'construir-modulos',
+    skill: 'enki-adaptador-disenos',
     lee: ['proceso-negocio/fase3-planificar-construccion.json'],
     escribe: 'proceso-negocio/fase3b-adaptador.json',
     mensaje: 'FASE 3b · ADAPTADOR: traducir el diseño OOP al sistema Enki — lee proceso-negocio/fase3-planificar-construccion.json, mapea contra el inventario real (reutiliza/construye/adapta). Al terminar: proceso-negocio.completar_fase { fase: "adaptado" }.'

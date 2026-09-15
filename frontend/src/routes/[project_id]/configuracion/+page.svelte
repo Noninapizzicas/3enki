@@ -10,12 +10,12 @@
    * registrados en el sistema (allModuleDefinitions). Cada uno con su nombre.
    * Los universales del sistema SIEMPRE se muestran (no se configuran aquí).
    */
-  import { page } from '$app/stores';
   import { onMount } from 'svelte';
   import { get } from 'svelte/store';
   import { allModuleDefinitions } from '$lib/ui-core/lazy-registry';
   import { updateProject, getProject } from '$lib/stores/projects';
   import { connect, connected } from '$lib/ui-core/mqtt';
+  import { getSessionProject } from '$lib/stores/sessionProject';
   import type { Project } from '$lib/stores/projects';
 
   let selected = new Set<string>();
@@ -23,15 +23,25 @@
   let resultado: { type: 'ok' | 'error' | 'info'; message: string } | null = null;
   let project: Project | null = null;
 
-  $: projectSlug = $page.params.project_id;
+  // El id real del proyecto (UUID) lo resuelve el [project_id]/+layout y lo deja
+  // en sessionProjectId. Los RPC (project.get / project.update) exigen ese UUID,
+  // NO el slug de la URL ('3d' → Project not found).
+  let projectId = '';
+
   $: isConnected = $connected;
 
   // Todos los módulos con interfaz (no universales) que el dueño puede activar.
   $: definibles = $allModuleDefinitions.filter(d => !d.universal);
 
   async function load() {
+    // sessionProjectId lo alimenta el +layout al resolver el UUID real.
+    projectId = getSessionProject() || '';
+    if (!projectId) {
+      resultado = { type: 'info', message: 'Cargando proyecto…' };
+      return;
+    }
     try {
-      const p = await getProject(projectSlug);
+      const p = await getProject(projectId);
       project = p;
       selected = new Set<string>(p.pages || p.metadata?.pages || []);
     } catch (err: any) {
@@ -46,6 +56,11 @@
   }
 
   async function guardar() {
+    if (!projectId) projectId = getSessionProject() || '';
+    if (!projectId) {
+      resultado = { type: 'error', message: 'No se pudo resolver el proyecto (espera y reintenta)' };
+      return;
+    }
     if (!isConnected) {
       resultado = { type: 'error', message: 'MQTT no conectado aún — espera y reintenta' };
       return;
@@ -54,7 +69,7 @@
     resultado = { type: 'info', message: 'Guardando…' };
     try {
       // Respetar el orden: el orden de selección (Set) se preserva en la lista.
-      await updateProject(projectSlug, { pages: [...selected] });
+      await updateProject(projectId, { pages: [...selected] });
       resultado = { type: 'ok', message: 'Interfaz guardada para este proyecto' };
     } catch (err: any) {
       resultado = { type: 'error', message: `Guardar: ${err.message || 'fallo'}` };

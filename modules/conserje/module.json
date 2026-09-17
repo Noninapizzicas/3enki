@@ -24,7 +24,13 @@
     }
   ],
 
-  "subscribes": [],
+  "subscribes": [
+  {
+   "event": "conserje.empujon",
+   "handler": "onConserjeEmpujon",
+   "description": "Recibe empujones de OTROS módulos (p.ej. proceso-negocio, que lanza su F0→skills) y los coloca en el pendientes del conserje, el único que el nervio (ai-gateway) lee y consume. Sin esto, el empujón ajeno queda en el aire del bus y nunca se surfacea en el chat (verificado 2026-09-17)."
+  }
+ ],
 
   "ui_handlers": [
     {

@@ -25,6 +25,20 @@
       },
       "handler": "toolCompletarFase",
       "errores_conocidos": ["INVALID_INPUT", "FASE_NO_MAPEADA", "FASE_INCOMPLETA"]
+    },
+    {
+      "name": "proceso-negocio.reiniciar_f0",
+      "description": "Relanza la FASE 0 (identidad-negocio) en un proyecto que quedó en sin_identidad y ya nació anteriormente (project.created es idempotente, así que un proyecto existente no re-recibe la F0 sola). La invoca el chat cuando el dueño dice 'vamos a empezar proceso negocio fase 0'. Devuelve la skill que se empuja (identidad-negocio).",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1, "description": "ID del proyecto." }
+        },
+        "required": ["project_id"]
+      },
+      "handler": "toolReiniciarF0",
+      "errores_conocidos": ["INVALID_INPUT"]
     }
   ],
   "subscribes": [

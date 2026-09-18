@@ -175,6 +175,29 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
       d => this._completarFase(d));
   }
 
+  // Reinicia la F0 (identidad-negocio) en un proyecto YA EXISTENTE que quedó en
+  // sin_identidad. project.created solo se llama al nacer el proyecto y es
+  // idempotente (`_emitidos[proyecto::project.created]`), así que un proyecto
+  // nacido antes no re-recibe la F0. Esta tool la invoca el chat (p.ej. "vamos a
+  // empezar proceso negocio fase 0") para re-dispararla limpiamente.
+  async onReiniciarF0Request(e) {
+    return this._atender(e, 'reiniciar_f0', 'proceso-negocio.reiniciar_f0.response',
+      d => this._reiniciarF0(d));
+  }
+
+  // UNA sola implementación del verbo, dos puertas (evento .request y tool).
+  async _reiniciarF0(d) {
+    {
+      const project_id = d.project_id;
+      if (!project_id) return this._invalid('project_id');
+      // Quitar la marca de idempotencia de la F0 → volver a permitir el empujón.
+      this._emitidos.delete(`${project_id}::project.created`);
+      // Forzar el empujón de la F0 (identidad-negocio) por el canal del nervio.
+      this._encadenar({ data: { project_id } }, 'project.created');
+      return { status: 200, data: { project_id, reiniciada: true, fase: 'project.created', skill: 'identidad-negocio', mensaje: 'FASE 0 relanzada: identidad-negocio. Entra en el chat y responde a la entrevista de identidad del negocio.' } };
+    }
+  }
+
   // UNA sola implementación del verbo, dos puertas (evento .request y tool).
   // Antes eran dos cuerpos distintos: el del evento aplicaba el gate y erraba
   // el destino; el del tool acertaba el destino y no aplicaba gate ninguno.
@@ -968,6 +991,13 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
   // entrar por la tool en vez de por el evento.
   async toolCompletarFase(params) {
     return this._completarFase(params || {});
+  }
+
+  // Relanza la FASE 0 en un proyecto existente (sin_identidad). Tool del chat:
+  // el dueño dice "vamos a empezar proceso negocio fase 0". Misma puerta que
+  // completar_fase: el LLM no gana permisos por entrar por la tool.
+  async toolReiniciarF0(params) {
+    return this._reiniciarF0(params || {});
   }
 
 }

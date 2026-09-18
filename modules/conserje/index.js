@@ -347,6 +347,29 @@ class ConserjeModule extends BaseModule {
     });
   }
 
+  // ── RECEPTOR de empujones ajenos (proceso-negocio) ──
+  // El proceso-negocio publica `conserje.empujon` (su F0→skills lo surfacea el
+  // nervio). Para que el nervio lo lea y consuma, DEBE entrar al `pendientes`
+  // del conserje (el único que `handleEmpujonPendiente` sirve). Sin esto, el
+  // empujón del proceso queda en el aire del bus (verificado 2026-09-17: la F0
+  // de un proyecto nuevo nunca se surfaceó en el chat).
+  async onConserjeEmpujon(event) {
+    const d = (event && event.data) || event || {};
+    const project_id = d.project_id || d.projectId;
+    if (!project_id || !d.recurso || !d.mensaje) return;
+    // No pisar un empujón del propio conserje aún pendiente (prioridad: el suyo).
+    if (this.pendientes.has(project_id)) return;
+    this.pendientes.set(project_id, {
+      tipo: d.tipo || 'proceso',
+      recurso: d.recurso,
+      mensaje: d.mensaje,
+      accion_sugerida: d.accion_sugerida || '',
+      fase: d.fase || null,
+      lee: d.lee || [],
+      escribe: d.escribe || null
+    });
+  }
+
   // ── el NERVIO lee el empujón pendiente (y lo CONSUME: se ofrece una vez) ──
   async handleEmpujonPendiente(data) {
     const project_id = data && (data.project_id || data.projectId);

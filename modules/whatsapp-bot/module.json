@@ -190,6 +190,54 @@
         },
         "required": ["project_slug", "to", "template"]
       }
+    },
+    {
+      "name": "whatsapp.enviar_media",
+      "description": "Enviar MEDIA al cliente por link (URL publica). Tipos: image | video | audio | document. Meta descarga la URL en su red al entregar. Vía para mandar imagenes de producto, PDFs (carta), notas de voz pre-grabadas, etc. Requiere proyecto operativo (Meta Cloud API).",
+      "handler": "handleToolEnviarMedia",
+      "errores_conocidos": [
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND",
+        "AUTHENTICATION_REQUIRED",
+        "UPSTREAM_UNREACHABLE",
+        "UPSTREAM_INVALID_RESPONSE",
+        "RATE_LIMITED"
+      ],
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_slug": {
+            "type": "string",
+            "description": "Slug del proyecto (ej: vapers). Debe estar operativo."
+          },
+          "to": {
+            "type": "string",
+            "description": "Numero del cliente en formato E.164 sin el + (ej: 34600000000)"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["image", "video", "audio", "document"],
+            "description": "Tipo de media a enviar."
+          },
+          "link": {
+            "type": "string",
+            "description": "URL publica del media. Meta la descarga en su red al entregar. Debe ser accesible publicamente."
+          },
+          "filename": {
+            "type": "string",
+            "description": "Solo para document: nombre del archivo que vera el receptor (ej: carta.pdf)."
+          },
+          "caption": {
+            "type": "string",
+            "description": "Leyenda asociada al media (image/video/document). Opcional."
+          },
+          "mime_type": {
+            "type": "string",
+            "description": "Solo para document: tipo MIME (ej: application/pdf). Opcional."
+          }
+        },
+        "required": ["project_slug", "to", "type", "link"]
+      }
     }
   ],
 

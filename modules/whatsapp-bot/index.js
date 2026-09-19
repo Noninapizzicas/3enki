@@ -369,7 +369,10 @@ class WhatsappBotModule extends BaseModule {
     }
     await this._publicarEvento('whatsapp.mensaje.recibido', {
       project_slug, phone_number_id: msg.phone_number_id, from: msg.from,
-      message_type: msg.message_type, message_id: msg.message_id, has_text: !!msg.text
+      message_type: msg.message_type, message_id: msg.message_id, has_text: !!msg.text,
+      // Media entrante (image/video/audio/document). Contiene el `id` de Meta para
+      // rescatar el media via Graph API — NO se descarga aquí (decisión del consumidor).
+      media: msg.media || null
     });
     await this._despacharEntrante(project_slug, msg);
   }
@@ -609,6 +612,57 @@ class WhatsappBotModule extends BaseModule {
     }
   }
 
+  // Enviar MEDIA al cliente por link (URL pública). Tipos: image | video | audio | document.
+  // Meta descarga la URL en su red al entregar. Es la vía para mandar imágenes de producto,
+  // PDFs (cartas), notas de voz pre-grabadas, etc. Abre WhatsApp a contenido no-texto.
+  async handleToolEnviarMedia(data) {
+    const project_slug = data?.project_slug;
+    const to = data?.to;
+    const type = data?.type;
+    const link = data?.link;
+    try {
+      if (!project_slug) return this._errorResponse(400, 'INVALID_INPUT', 'project_slug requerido', { field: 'project_slug' });
+      if (!to || typeof to !== 'string') return this._errorResponse(400, 'INVALID_INPUT', 'to requerido (E.164 sin +)', { field: 'to' });
+      const tipos = ['image', 'video', 'audio', 'document'];
+      if (!tipos.includes(type)) return this._errorResponse(400, 'INVALID_INPUT', `type debe ser uno de: ${tipos.join(', ')}`, { field: 'type' });
+      if (!link || typeof link !== 'string') return this._errorResponse(400, 'INVALID_INPUT', 'link (URL pública del media) requerido', { field: 'link' });
+
+      const meta = this.projectsByMeta.get(project_slug);
+      if (!meta || !meta.phone_number_id || String(meta.phone_number_id).startsWith('<PENDIENTE')) {
+        return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Proyecto '${project_slug}' no configurado o con datos pendientes`, { project_slug });
+      }
+      const token = process.env[this._envTokenKey(project_slug)];
+      if (!token) {
+        return this._errorResponse(401, 'AUTHENTICATION_REQUIRED', `Credencial META_WHATSAPP no disponible para '${project_slug}'`, { project_slug });
+      }
+
+      const { messageId } = await this.metaClient.sendMedia({
+        phoneNumberId: meta.phone_number_id,
+        accessToken: token,
+        to,
+        type,
+        link,
+        filename: data?.filename,
+        caption: data?.caption,
+        mime_type: data?.mime_type
+      });
+
+      this.metrics?.increment('whatsapp-bot.message.sent', { project: project_slug, kind: `media_${type}` });
+      await this._publicarEvento('whatsapp.mensaje.enviado', {
+        project_slug, to: this._maskPhoneNumber(to), message_id: messageId, kind: `media_${type}`
+      });
+
+      return { status: 200, data: { message_id: messageId, project_slug, kind: `media_${type}` } };
+    } catch (err) {
+      this.metrics?.increment('whatsapp-bot.message.failed', { project: project_slug, kind: `media_${type || 'unknown'}` });
+      await this._publicarEvento('whatsapp.envio.fallido', {
+        project_slug, to: this._maskPhoneNumber(to),
+        error_code: err._code || 'UNKNOWN_ERROR', error_message: err.message
+      });
+      return this._handleHandlerError('whatsapp-bot.tool.enviar_media.error', err, 'tool');
+    }
+  }
+
   // ==========================================
   // Dominio protegido (mapping, despacho, helpers)
   // ==========================================
@@ -698,8 +752,18 @@ class WhatsappBotModule extends BaseModule {
   }
 
   async _despacharEntrante(project_slug, msg) {
+    // Media entrante (foto/audio/vídeo/documento) SIN texto: no es un pedido por formato
+    // texto. Lo capturamos y avisamos al cliente; el media viaja en whatsapp.mensaje.recibido
+    // para que el módulo de negocio del proyecto decida qué hacer (guardar/analizar/derivar).
     if (!msg.text) {
-      this.logger.info('whatsapp-bot.entrante.sin_texto', { project_slug, message_type: msg.message_type });
+      this.logger.info('whatsapp-bot.entrante.sin_texto', { project_slug, message_type: msg.message_type, media: msg.media || null });
+      if (msg.media) {
+        this.metrics?.increment?.('whatsapp-bot.media.recibido', { project: project_slug, type: msg.media.type });
+        const label = msg.media.type === 'audio' ? 'nota de voz' : msg.media.type;
+        const pwa = this.projectsByMeta.get(project_slug)?.pwa_url || 'nuestro catálogo';
+        await this._enviarMensajeSeguro(project_slug, msg.from,
+          `Hemos recibido tu ${label}. Si quieres hacer un pedido, abre la carta aquí: ${pwa}.`);
+      }
       return;
     }
     const parsed = parsearPedido(msg.text);

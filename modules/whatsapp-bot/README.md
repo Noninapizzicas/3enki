@@ -61,16 +61,39 @@ ventana de 24h — re-engagement, recordatorios, avisos tardíos).
 - `body_params`: rellenan `{{1}}`, `{{2}}`... en orden.
 - Devuelve `{ status: 200, data: { message_id, project_slug, kind: "template" } }`.
 
+### `whatsapp.enviar_media`
+Enviar **media por link** (URL pública). Tipos: `image | video | audio | document`.
+Meta descarga la URL en su red al entregar — el link debe ser **públicamente accesible**.
+Vía para mandar imágenes de producto, PDFs (carta), notas de voz pre-grabadas, etc.
+
+```json
+{
+  "project_slug": "nonina", "to": "34600000000",
+  "type": "image",
+  "link": "https://tu-dominio/a/shop/nonina/img/pizza.jpg",
+  "caption": "Pizza Margarita"
+}
+```
+- `type` y `link` son obligatorios.
+- `filename` y `mime_type`: solo para `document` (nombre visible + tipo MIME).
+- `caption`: image/video/document (leyenda).
+- Devuelve `{ status: 200, data: { message_id, project_slug, kind: "media_<type>" } }`.
+
 ---
 
 ## 3 · Eventos que emite (inbound / observabilidad)
 
 | Evento | Payload | Cuándo | Para qué |
 |---|---|---|---|
-| `whatsapp.mensaje.recibido` | `{ project_slug, phone_number_id, from, message_type, message_id, has_text }` | Cada mensaje entrante | Tu módulo reacciona al texto/estado |
+| `whatsapp.mensaje.recibido` | `{ project_slug, phone_number_id, from, message_type, message_id, has_text, media }` | Cada mensaje entrante | Tu módulo reacciona al texto/estado |
 | `whatsapp.pedido.detectado` | `{ project_slug, from, items[], total_centimos, message_id }` | El parser reconoció un pedido en el mensaje | Prevenir/pre-procesar |
-| `whatsapp.mensaje.enviado` | `{ project_slug, to (enmascarado), message_id, kind }` | Envío exitoso (kind: `text` \| `template` \| `auto`) | Audit / tracking |
+| `whatsapp.mensaje.enviado` | `{ project_slug, to (enmascarado), message_id, kind }` | Envío exitoso (kind: `text` \| `template` \| `media_<tipo>` \| `auto`) | Audit / tracking |
 | `whatsapp.envio.fallido` | `{ project_slug, to (enmascarado), error_code, error_message }` | Envío fallido | Retry / alertas |
+
+**Media entrante:** cuando el cliente manda una foto/audio/vídeo/documento, el evento
+`whatsapp.mensaje.recibido` incluye `media: { type, id, mime_type, sha256, link?, filename?, caption?, duration? }`.
+El `id` de Meta permite rescatar el media vía Graph API (GET `/{id}` con el token del proyecto).
+No se descarga aquí: el módulo de negocio decide si lo guarda/analiza/deriva.
 
 Los consumidores se suscriben por `eventBus` (patrón estándar de Enki).
 
@@ -162,10 +185,10 @@ GET /modules/whatsapp-bot/health
 
 ## 9 · Ampliaciones pendientes (no implementadas aún)
 
-- **Media outbound:** no hay tool pública para enviar imagen/audio/video/documento
-  (meta-cloud-client solo expone `sendText` y `sendTemplate`).
-- **Media inbound:** `_despacharEntrante` solo lee `msg.text`; una foto o nota de voz
-  del cliente se ignora. El payload Meta trae el media, pero no se captura ni se expone.
+- **Rescate/descarga del media entrante:** el media se captura y viaja en `whatsapp.mensaje.recibido`
+  (con su `id` de Meta), pero el módulo no ofrece aún una tool para descargar el binario via Graph API
+  (`GET /<id>`). Si un módulo de negocio necesita el archivo (guardar foto, transcribir audio), se añade
+  una tool `whatsapp.obtener_media` que resuelva el id → binario.
 - **Bot de respuesta por proyecto:** la lógica de "qué responder a cada mensaje" por
   negocio es responsabilidad de un módulo de proyecto que consuma los eventos de §3.
   Aquí solo está el detección de pedido en formato PWA.

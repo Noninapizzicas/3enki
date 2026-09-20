@@ -127,6 +127,22 @@ Enviar **encuesta** (poll nativo de WhatsApp):
 ```
 - `options`: de 2 a 10. Devuelve `{ status: 200, data: { message_id, project_slug, kind: "poll" } }`.
 
+### `whatsapp.enviar_catalogo`
+Enviar el **catálogo nativo de WhatsApp** (Commerce Manager de Meta). El catálogo y sus
+productos viven en el Commerce Manager del WABA de Meta; Enki solo envía el mensaje.
+NO se mezcla con los catálogos de Enki.
+
+```json
+{
+  "project_slug": "nonina", "to": "34600000000",
+  "catalog_id": "ID_CATALOGO_META", "text": "Mira nuestra carta"
+}
+```
+- `catalog_id` (obligatorio): id de Meta del catálogo conectado al número. Puede pasarse o
+  ponerse en la config del proyecto (`whatsapp.catalog_id`).
+- `text`: presentación del catálogo.
+- Devuelve `{ status: 200, data: { message_id, project_slug, kind: "catalog" } }`.
+
 ---
 
 ## 3 · Eventos que emite (inbound / observabilidad)
@@ -135,7 +151,7 @@ Enviar **encuesta** (poll nativo de WhatsApp):
 |---|---|---|---|
 | `whatsapp.mensaje.recibido` | `{ project_slug, phone_number_id, from, message_type, message_id, has_text, interaction, media, location }` | Cada mensaje entrante | Tu módulo reacciona al texto/estado |
 | `whatsapp.pedido.detectado` | `{ project_slug, from, items[], total_centimos, message_id }` | El parser reconoció un pedido en el mensaje | Prevenir/pre-procesar |
-| `whatsapp.mensaje.enviado` | `{ project_slug, to (enmascarado), message_id, kind }` | Envío exitoso (kind: `text` \| `template` \| `media_<tipo>` \| `location` \| `auto`) | Audit / tracking |
+| `whatsapp.mensaje.enviado` | `{ project_slug, to (enmascarado), message_id, kind }` | Envío exitoso (kind: `text` \| `template` \| `media_<tipo>` \| `location` \| `interactive_<tipo>` \| `poll` \| `catalog` \| `auto`) | Audit / tracking |
 | `whatsapp.envio.fallido` | `{ project_slug, to (enmascarado), error_code, error_message }` | Envío fallido | Retry / alertas |
 
 **Media entrante:** cuando el cliente manda una foto/audio/vídeo/documento, el evento
@@ -190,7 +206,8 @@ En el config del proyecto (`data/projects/<slug>/config/config.json`, bloque `wh
     "webhook_path": "/whatsapp/webhook/nonina",
     "pwa_url": "https://tu-dominio/shop/<slug>",
     "telegram": { "chatId": 12345, "botName": "tu_bot" },
-    "template_listo": "pedido_listo"
+    "template_listo": "pedido_listo",
+    "catalog_id": "ID_CATALOGO_META"
   }
 }
 ```
@@ -198,6 +215,8 @@ En el config del proyecto (`data/projects/<slug>/config/config.json`, bloque `wh
 - `phone_number_id` y `waba_id`: vienen de Meta Cloud (WABA del número).
 - `template_listo`: plantilla aprobada para el aviso "ven a recoger" (permite escribir
   también pasadas 24h). Opcional; sin ella se usa texto.
+- `catalog_id`: id de Meta del catálogo nativo del número (Commerce Manager). Opcional;
+  se usa por `whatsapp.enviar_catalogo` si no se pasa en la llamada.
 - Datos **no secretos**: por eso van en el config, no en credential-manager.
 
 **Gestionable desde la app** vía UI handlers `whatsapp.get_config` / `whatsapp.set_config`

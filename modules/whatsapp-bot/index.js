@@ -822,6 +822,60 @@ class WhatsappBotModule extends BaseModule {
     }
   }
 
+  // Enviar el CATÁLOGO NATIVO de WhatsApp (Commerce Manager de Meta). El catálogo y sus
+  // productos viven en el Commerce Manager del WABA de Meta; Enki solo envía el mensaje.
+  // `catalog_id` (obligatorio) es el id de Meta del catálogo conectado al número. El texto
+  // `text` presenta el catálogo. Si el proyecto tiene un catalog_id en su config (bloque
+  // whatsapp), se puede omitir y se toma de ahí. NO se mezcla con los catálogos de Enki.
+  async handleToolEnviarCatalogo(data) {
+    const project_slug = data?.project_slug;
+    const to = data?.to;
+    try {
+      if (!project_slug) return this._errorResponse(400, 'INVALID_INPUT', 'project_slug requerido', { field: 'project_slug' });
+      if (!to || typeof to !== 'string') return this._errorResponse(400, 'INVALID_INPUT', 'to requerido (E.164 sin +)', { field: 'to' });
+      const text = data?.text || 'Este es nuestro catálogo';
+      const meta = this.projectsByMeta.get(project_slug);
+      if (!meta || !meta.phone_number_id || String(meta.phone_number_id).startsWith('<PENDIENTE')) {
+        return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Proyecto '${project_slug}' no configurado o con datos pendientes`, { project_slug });
+      }
+      const token = process.env[this._envTokenKey(project_slug)];
+      if (!token) {
+        return this._errorResponse(401, 'AUTHENTICATION_REQUIRED', `Credencial META_WHATSAPP no disponible para '${project_slug}'`, { project_slug });
+      }
+      // catalog_id: o se pasa en la llamada, o se lee del config del proyecto (bloque whatsapp).
+      let catalogId = data?.catalog_id;
+      if (!catalogId) {
+        const cfg = await this._readProjectConfig(project_slug);
+        catalogId = cfg?.whatsapp?.catalog_id || null;
+      }
+      if (!catalogId) {
+        return this._errorResponse(400, 'INVALID_INPUT', 'catalog_id requerido (id de Meta del catálogo del número). Pásalo o ponlo en el config del proyecto (whatsapp.catalog_id)', { field: 'catalog_id' });
+      }
+
+      const { messageId } = await this.metaClient.sendCatalog({
+        phoneNumberId: meta.phone_number_id,
+        accessToken: token,
+        to,
+        catalogId,
+        body: text
+      });
+
+      this.metrics?.increment('whatsapp-bot.message.sent', { project: project_slug, kind: 'catalog' });
+      await this._publicarEvento('whatsapp.mensaje.enviado', {
+        project_slug, to: this._maskPhoneNumber(to), message_id: messageId, kind: 'catalog'
+      });
+
+      return { status: 200, data: { message_id: messageId, project_slug, kind: 'catalog' } };
+    } catch (err) {
+      this.metrics?.increment('whatsapp-bot.message.failed', { project: project_slug, kind: 'catalog' });
+      await this._publicarEvento('whatsapp.envio.fallido', {
+        project_slug, to: this._maskPhoneNumber(to),
+        error_code: err._code || 'UNKNOWN_ERROR', error_message: err.message
+      });
+      return this._handleHandlerError('whatsapp-bot.tool.enviar_catalogo.error', err, 'tool');
+    }
+  }
+
   // ==========================================
   // Dominio protegido (mapping, despacho, helpers)
   // ==========================================

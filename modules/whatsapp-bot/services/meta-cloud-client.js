@@ -173,6 +173,30 @@ class MetaCloudClient {
     });
   }
 
+  // CATÁLOGO NATIVO de WhatsApp (Commerce Manager de Meta, NO Enki).
+  // El catálogo y sus productos viven en el Commerce Manager del WABA; desde Enki
+  // solo se ENVÍA el mensaje de catálogo. `catalog_id` es el id de Meta del catálogo
+  // conectado al número; `body.text` es el texto de presentación.
+  // Forma: type 'catalog_message' con { catalog_id, body:{text} }.
+  async sendCatalog({ phoneNumberId, accessToken, to, catalogId, body }) {
+    if (!phoneNumberId) throw _err('INVALID_INPUT', 'phoneNumberId is required');
+    if (!accessToken) throw _err('AUTHENTICATION_REQUIRED', 'accessToken is required');
+    if (!to) throw _err('INVALID_INPUT', 'to is required');
+    if (!catalogId) throw _err('INVALID_INPUT', 'catalogId (id de Meta del catálogo) is required');
+    if (!body || typeof body !== 'string') throw _err('INVALID_INPUT', 'body (texto de presentación) is required');
+
+    return this._postMessage(phoneNumberId, accessToken, {
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to,
+      type: 'catalog_message',
+      catalog_message: {
+        catalog_id: String(catalogId),
+        body: { text: body }
+      }
+    });
+  }
+
   // POST /{phone_number_id}/messages compartido por sendText/sendTemplate: fetch con timeout,
   // mapeo de status HTTP a codigos canonicos, y extraccion de messages[0].id.
   async _postMessage(phoneNumberId, accessToken, body) {

@@ -353,6 +353,29 @@
         },
         "required": ["project_slug", "to", "question", "options"]
       }
+    },
+    {
+      "name": "whatsapp.enviar_catalogo",
+      "description": "Enviar el CATALOGO NATIVO de WhatsApp (Commerce Manager de Meta). El catalogo y sus productos viven en el Commerce Manager del WABA; Enki solo envia el mensaje. catalog_id (obligatorio) es el id de Meta del catalogo conectado al numero; se puede pasar o poner en el config del proyecto (whatsapp.catalog_id). text presenta el catalogo. NO se mezcla con catalogos de Enki.",
+      "handler": "handleToolEnviarCatalogo",
+      "errores_conocidos": [
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND",
+        "AUTHENTICATION_REQUIRED",
+        "UPSTREAM_UNREACHABLE",
+        "UPSTREAM_INVALID_RESPONSE",
+        "RATE_LIMITED"
+      ],
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_slug": { "type": "string", "description": "Slug del proyecto. Debe estar operativo." },
+          "to": { "type": "string", "description": "Numero del cliente E.164 sin + (ej: 34600000000)" },
+          "catalog_id": { "type": "string", "description": "Id de Meta del catalogo conectado al numero (Commerce Manager). Si se omite, se lee de whatsapp.catalog_id del config del proyecto." },
+          "text": { "type": "string", "description": "Texto de presentacion del catalogo (default 'Este es nuestro catalogo')." }
+        },
+        "required": ["project_slug", "to"]
+      }
     }
   ],
 

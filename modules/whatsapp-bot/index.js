@@ -370,6 +370,9 @@ class WhatsappBotModule extends BaseModule {
     await this._publicarEvento('whatsapp.mensaje.recibido', {
       project_slug, phone_number_id: msg.phone_number_id, from: msg.from,
       message_type: msg.message_type, message_id: msg.message_id, has_text: !!msg.text,
+      // Entrada interactiva estructurada (botón/list) o encuesta. El módulo de negocio
+      // sabe EXACTAMENTE qué tocó el cliente. {type: button|list|flow|poll, ...}. Ver README.
+      interaction: msg.interaction || null,
       // Media entrante (image/video/audio/document). Contiene el `id` de Meta para
       // rescatar el media via Graph API — NO se descarga aquí (decisión del consumidor).
       media: msg.media || null,
@@ -712,6 +715,110 @@ class WhatsappBotModule extends BaseModule {
         error_code: err._code || 'UNKNOWN_ERROR', error_message: err.message
       });
       return this._handleHandlerError('whatsapp-bot.tool.enviar_ubicacion.error', err, 'tool');
+    }
+  }
+
+  // Enviar INTERACTIVO: botones (quick-reply, máx 3) o lista (menú con secciones/opciones).
+  // kind: 'buttons' | 'list'. Da opciones al cliente para responder con un toque,
+  // sin que tenga que escribir. Ideal para menús, confirmar, elegir opción, etc.
+  async handleToolEnviarInteractivo(data) {
+    const project_slug = data?.project_slug;
+    const to = data?.to;
+    const kind = data?.kind;
+    try {
+      if (!project_slug) return this._errorResponse(400, 'INVALID_INPUT', 'project_slug requerido', { field: 'project_slug' });
+      if (!to || typeof to !== 'string') return this._errorResponse(400, 'INVALID_INPUT', 'to requerido (E.164 sin +)', { field: 'to' });
+      if (!['buttons', 'list'].includes(kind)) return this._errorResponse(400, 'INVALID_INPUT', 'kind debe ser buttons|list', { field: 'kind' });
+      const body = data?.body;
+      if (!body || typeof body !== 'string') return this._errorResponse(400, 'INVALID_INPUT', 'body (texto) requerido', { field: 'body' });
+      if (kind === 'buttons' && (!Array.isArray(data?.buttons) || data.buttons.length === 0)) {
+        return this._errorResponse(400, 'INVALID_INPUT', 'buttons: array requerido (1..3)', { field: 'buttons' });
+      }
+      if (kind === 'list' && (!data?.list || !Array.isArray(data.list.sections) || data.list.sections.length === 0)) {
+        return this._errorResponse(400, 'INVALID_INPUT', 'list.sections requerido', { field: 'list' });
+      }
+
+      const meta = this.projectsByMeta.get(project_slug);
+      if (!meta || !meta.phone_number_id || String(meta.phone_number_id).startsWith('<PENDIENTE')) {
+        return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Proyecto '${project_slug}' no configurado o con datos pendientes`, { project_slug });
+      }
+      const token = process.env[this._envTokenKey(project_slug)];
+      if (!token) {
+        return this._errorResponse(401, 'AUTHENTICATION_REQUIRED', `Credencial META_WHATSAPP no disponible para '${project_slug}'`, { project_slug });
+      }
+
+      const { messageId } = await this.metaClient.sendInteractive({
+        phoneNumberId: meta.phone_number_id,
+        accessToken: token,
+        to,
+        kind,
+        header: data?.header,
+        body,
+        footer: data?.footer,
+        buttons: data?.buttons,
+        list: data?.list
+      });
+
+      this.metrics?.increment('whatsapp-bot.message.sent', { project: project_slug, kind: `interactive_${kind}` });
+      await this._publicarEvento('whatsapp.mensaje.enviado', {
+        project_slug, to: this._maskPhoneNumber(to), message_id: messageId, kind: `interactive_${kind}`
+      });
+
+      return { status: 200, data: { message_id: messageId, project_slug, kind: `interactive_${kind}` } };
+    } catch (err) {
+      this.metrics?.increment('whatsapp-bot.message.failed', { project: project_slug, kind: `interactive_${kind || 'unknown'}` });
+      await this._publicarEvento('whatsapp.envio.fallido', {
+        project_slug, to: this._maskPhoneNumber(to),
+        error_code: err._code || 'UNKNOWN_ERROR', error_message: err.message
+      });
+      return this._handleHandlerError('whatsapp-bot.tool.enviar_interactivo.error', err, 'tool');
+    }
+  }
+
+  // Enviar ENCUESTA (poll). question obligatorio, options 2..10. WhatsApp nativo.
+  async handleToolEnviarEncuesta(data) {
+    const project_slug = data?.project_slug;
+    const to = data?.to;
+    const question = data?.question;
+    const options = data?.options;
+    try {
+      if (!project_slug) return this._errorResponse(400, 'INVALID_INPUT', 'project_slug requerido', { field: 'project_slug' });
+      if (!to || typeof to !== 'string') return this._errorResponse(400, 'INVALID_INPUT', 'to requerido (E.164 sin +)', { field: 'to' });
+      if (!question || typeof question !== 'string') return this._errorResponse(400, 'INVALID_INPUT', 'question requerida', { field: 'question' });
+      if (!Array.isArray(options) || options.length < 2 || options.length > 10) {
+        return this._errorResponse(400, 'INVALID_INPUT', 'options: array de 2..10', { field: 'options' });
+      }
+
+      const meta = this.projectsByMeta.get(project_slug);
+      if (!meta || !meta.phone_number_id || String(meta.phone_number_id).startsWith('<PENDIENTE')) {
+        return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Proyecto '${project_slug}' no configurado o con datos pendientes`, { project_slug });
+      }
+      const token = process.env[this._envTokenKey(project_slug)];
+      if (!token) {
+        return this._errorResponse(401, 'AUTHENTICATION_REQUIRED', `Credencial META_WHATSAPP no disponible para '${project_slug}'`, { project_slug });
+      }
+
+      const { messageId } = await this.metaClient.sendPoll({
+        phoneNumberId: meta.phone_number_id,
+        accessToken: token,
+        to,
+        question,
+        options: options.map((o, i) => ({ id: String(data?.poll_id || `opt_${i}`), title: String(o) }))
+      });
+
+      this.metrics?.increment('whatsapp-bot.message.sent', { project: project_slug, kind: 'poll' });
+      await this._publicarEvento('whatsapp.mensaje.enviado', {
+        project_slug, to: this._maskPhoneNumber(to), message_id: messageId, kind: 'poll'
+      });
+
+      return { status: 200, data: { message_id: messageId, project_slug, kind: 'poll' } };
+    } catch (err) {
+      this.metrics?.increment('whatsapp-bot.message.failed', { project: project_slug, kind: 'poll' });
+      await this._publicarEvento('whatsapp.envio.fallido', {
+        project_slug, to: this._maskPhoneNumber(to),
+        error_code: err._code || 'UNKNOWN_ERROR', error_message: err.message
+      });
+      return this._handleHandlerError('whatsapp-bot.tool.enviar_encuesta.error', err, 'tool');
     }
   }
 

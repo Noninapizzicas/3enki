@@ -108,6 +108,71 @@ class MetaCloudClient {
     });
   }
 
+  // Interactive outbound: BOTONES (quick reply) o LISTAS (menú).
+  // kind: 'buttons' | 'list'. body text obligatorio; footer opcional.
+  // buttons: array de { title } (máx 3) → botones como quick-reply del mensaje.
+  // list:  { button, sections: [{ title?, rows: [{ id, title, description? }] }] }.
+  // Devuelve el message_id al igual que el resto.
+  async sendInteractive({ phoneNumberId, accessToken, to, kind, header, body, footer, buttons, list }) {
+    if (!phoneNumberId) throw _err('INVALID_INPUT', 'phoneNumberId is required');
+    if (!accessToken) throw _err('AUTHENTICATION_REQUIRED', 'accessToken is required');
+    if (!to) throw _err('INVALID_INPUT', 'to is required');
+    if (!['buttons', 'list'].includes(kind)) throw _err('INVALID_INPUT', 'kind debe ser buttons|list');
+    if (!body || typeof body !== 'string') throw _err('INVALID_INPUT', 'body (texto) es requerido');
+
+    const interactive = { type: kind === 'buttons' ? 'button' : 'list' };
+    if (header || typeof header === 'string') interactive.header = { type: 'text', text: header };
+    if (body) interactive.body = { text: body };
+    if (footer) interactive.footer = { text: footer };
+
+    if (kind === 'buttons') {
+      if (!Array.isArray(buttons) || buttons.length === 0 || buttons.length > 3) {
+        throw _err('INVALID_INPUT', 'buttons: array de 1..3 bots');
+      }
+      interactive.action = { buttons: buttons.slice(0, 3).map((b, i) => ({ id: String(b.id || `btn_${i}`), title: b.title, type: 'reply' })) };
+    } else {
+      if (!list || !Array.isArray(list.sections) || list.sections.length === 0) {
+        throw _err('INVALID_INPUT', 'list.sections requerido');
+      }
+      interactive.action = {
+        button: String(list.button || 'Ver opciones'),
+        sections: list.sections.map(sec => ({
+          title: sec.title || '',
+          rows: (sec.rows || []).map(r => ({ id: String(r.id || ''), title: r.title, description: r.description || undefined })).filter(r => r.id && r.title)
+        })).filter(s => s.rows.length > 0)
+      };
+    }
+
+    return this._postMessage(phoneNumberId, accessToken, {
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to,
+      type: 'interactive',
+      interactive
+    });
+  }
+
+  // Encuesta outbound. question obligatorio; options 2..10. Send poll (v21.0).
+  async sendPoll({ phoneNumberId, accessToken, to, question, options, pollId }) {
+    if (!phoneNumberId) throw _err('INVALID_INPUT', 'phoneNumberId is required');
+    if (!accessToken) throw _err('AUTHENTICATION_REQUIRED', 'accessToken is required');
+    if (!to) throw _err('INVALID_INPUT', 'to is required');
+    if (!question || typeof question !== 'string') throw _err('INVALID_INPUT', 'question es requerida');
+    if (!Array.isArray(options) || options.length < 2 || options.length > 10) {
+      throw _err('INVALID_INPUT', 'options: array de 2..10');
+    }
+    const poll = {
+      question,
+      options: options.slice(0, 10).map((o, i) => ({ id: String(pollId || `opt_${i}`), title: String(o) }))
+    };
+    return this._postMessage(phoneNumberId, accessToken, {
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to,
+      poll
+    });
+  }
+
   // POST /{phone_number_id}/messages compartido por sendText/sendTemplate: fetch con timeout,
   // mapeo de status HTTP a codigos canonicos, y extraccion de messages[0].id.
   async _postMessage(phoneNumberId, accessToken, body) {
@@ -181,6 +246,45 @@ function parseWebhookEvent(payload) {
           const inter = msg.interactive || {};
           text = inter.button_reply?.title || inter.list_reply?.title || null;
         }
+        // Entrada interactiva entrante, estructurada (botón/list) + encuesta (poll).
+        // Mantenemos `text` para retro-compat, pero el módulo consumidor de negocio puede
+        // usar `interaction` para saber EXACTAMENTE qué tocó el cliente (tipo + id + título).
+        // Se expone en whatsapp.mensaje.recibido.
+        let interaction = null;
+        if (message_type === 'interactive') {
+          const inter = msg.interactive || {};
+          if (inter.button_reply) {
+            interaction = {
+              type: 'button',
+              id: inter.button_reply.id || null,
+              title: inter.button_reply.title || null
+            };
+          } else if (inter.nfm_reply) {
+            let flowId = null;
+            try {
+              flowId = JSON.parse(inter.nfm_reply.response_json || '{}').flow_received || null;
+            } catch (_) { /* response_json no es JSON plano */ }
+            interaction = {
+              type: 'flow',
+              id: flowId,
+              title: inter.nfm_reply.response_json || null
+            };
+          } else if (inter.list_reply) {
+            interaction = {
+              type: 'list',
+              id: inter.list_reply.id || null,
+              title: inter.list_reply.title || null,
+              description: inter.list_reply.description || null
+            };
+          }
+        } else if (message_type === 'poll' && msg.poll && typeof msg.poll === 'object') {
+          // Encuesta entrante (el cliente ha votado). Meta manda poll.id + poll.title (pregunta).
+          interaction = {
+            type: 'poll',
+            poll_id: msg.poll.id || null,
+            question: msg.poll.title || null
+          };
+        }
         // Media entrante. Meta manda el media en un subcampo con el nombre del tipo
         // (image/video/audio/document). Traen id + mime_type + sha256. El `id` sirve
         // para rescatar el media con una llamada a la Graph API (GET /{id}); NO se
@@ -225,6 +329,7 @@ function parseWebhookEvent(payload) {
           message_id: msg.id,
           message_type,
           text,
+          interaction,
           media,
           location,
           timestamp: msg.timestamp || null,

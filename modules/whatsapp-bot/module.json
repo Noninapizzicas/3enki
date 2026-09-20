@@ -281,6 +281,78 @@
         },
         "required": ["project_slug", "to", "longitude", "latitude"]
       }
+    },
+    {
+      "name": "whatsapp.enviar_interactivo",
+      "description": "Enviar INTERACTIVO (botones quick-reply o lista/menu) al cliente. kind: 'buttons' (max 3 botones) o 'list' (menu con secciones/opciones). Da opciones al cliente para responder con un toque, sin escribir. Ideal para menus, confirmar, elegir. Requiere proyecto operativo.",
+      "handler": "handleToolEnviarInteractivo",
+      "errores_conocidos": [
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND",
+        "AUTHENTICATION_REQUIRED",
+        "UPSTREAM_UNREACHABLE",
+        "UPSTREAM_INVALID_RESPONSE",
+        "RATE_LIMITED"
+      ],
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_slug": { "type": "string", "description": "Slug del proyecto. Debe estar operativo." },
+          "to": { "type": "string", "description": "Numero del cliente E.164 sin + (ej: 34600000000)" },
+          "kind": { "type": "string", "enum": ["buttons", "list"], "description": "botones quick-reply o lista/menu" },
+          "header": { "type": "string", "description": "Texto del header (opcional)." },
+          "body": { "type": "string", "description": "Texto del cuerpo (obligatorio)." },
+          "footer": { "type": "string", "description": "Texto del footer (opcional)." },
+          "buttons": {
+            "type": "array",
+            "items": { "type": "object", "properties": { "id": { "type": "string" }, "title": { "type": "string" } } },
+            "description": "Solo kind=buttons: 1..3 botones {id, title}."
+          },
+          "list": {
+            "type": "object",
+            "properties": {
+              "button": { "type": "string", "description": "Texto del boton que abre el menu (default 'Ver opciones')." },
+              "sections": {
+                "type": "array",
+                "items": { "type": "object", "properties": {
+                  "title": { "type": "string" },
+                  "rows": { "type": "array", "items": { "type": "object", "properties": { "id": { "type": "string" }, "title": { "type": "string" }, "description": { "type": "string" } } } }
+                } }
+              }
+            },
+            "description": "Solo kind=list: { button, sections:[{title, rows:[{id,title,description?}]}] }."
+          }
+        },
+        "required": ["project_slug", "to", "kind", "body"]
+      }
+    },
+    {
+      "name": "whatsapp.enviar_encuesta",
+      "description": "Enviar ENCUESTA (poll nativo de WhatsApp) al cliente. question obligatoria, options de 2 a 10. Para valoraciones, preferencias, sondeos. Requiere proyecto operativo.",
+      "handler": "handleToolEnviarEncuesta",
+      "errores_conocidos": [
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND",
+        "AUTHENTICATION_REQUIRED",
+        "UPSTREAM_UNREACHABLE",
+        "UPSTREAM_INVALID_RESPONSE",
+        "RATE_LIMITED"
+      ],
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_slug": { "type": "string", "description": "Slug del proyecto. Debe estar operativo." },
+          "to": { "type": "string", "description": "Numero del cliente E.164 sin + (ej: 34600000000)" },
+          "question": { "type": "string", "description": "Pregunta de la encuesta (obligatoria)." },
+          "options": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Opciones de respuesta (2..10)."
+          },
+          "poll_id": { "type": "string", "description": "Prefijo para los ids de las opciones (opcional)." }
+        },
+        "required": ["project_slug", "to", "question", "options"]
+      }
     }
   ],
 

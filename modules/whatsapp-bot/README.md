@@ -94,13 +94,46 @@ del negocio, puntos de recogida, etc.
 - `name` / `address`: opcionales (se muestran sobre el pin).
 - Devuelve `{ status: 200, data: { message_id, project_slug, kind: "location" } }`.
 
+### `whatsapp.enviar_interactivo`
+Enviar **botones quick-reply** o **lista/menú** al cliente. Da opciones para responder
+con un toque, sin escribir. Ideal para menús, confirmar, elegir opción, etc.
+
+**Botones** (`kind: "buttons"`, máx 3):
+```json
+{
+  "project_slug": "nonina", "to": "34600000000", "kind": "buttons",
+  "header": "Hola", "body": "¿Qué quieres hacer?", "footer": "Toca una opción",
+  "buttons": [{ "id": "pedir", "title": "Pedir" }, { "id": "carta", "title": "Ver carta" }]
+}
+```
+
+**Lista** (`kind: "list"`):
+```json
+{
+  "project_slug": "nonina", "to": "34600000000", "kind": "list",
+  "body": "Elige una carta",
+  "list": { "button": "Ver cartas", "sections": [{ "title": "Pizzas", "rows": [{ "id": "p1", "title": "Margarita" }] }] }
+}
+```
+- Devuelve `{ status: 200, data: { message_id, project_slug, kind: "interactive_<kind>" } }`.
+
+### `whatsapp.enviar_encuesta`
+Enviar **encuesta** (poll nativo de WhatsApp):
+```json
+{
+  "project_slug": "nonina", "to": "34600000000",
+  "question": "¿Cómo valoras tu pedido?", "options": ["Perfecto", "Bien", "Regular"]
+}
+```
+- `options`: de 2 a 10. Devuelve `{ status: 200, data: { message_id, project_slug, kind: "poll" } }`.
+
 ---
 
 ## 3 · Eventos que emite (inbound / observabilidad)
 
 | Evento | Payload | Cuándo | Para qué |
 |---|---|---|---|
-| `whatsapp.mensaje.recibido` | `{ project_slug, phone_number_id, from, message_type, message_id, has_text, media, location }` | Cada mensaje entrante | Tu módulo reacciona al texto/estado |
+| `whatsapp.mensaje.recibido` | `{ project_slug, phone_number_id, from, message_type, message_id, has_text, interaction, media, location }` | Cada mensaje entrante | Tu módulo reacciona al texto/estado |
 | `whatsapp.pedido.detectado` | `{ project_slug, from, items[], total_centimos, message_id }` | El parser reconoció un pedido en el mensaje | Prevenir/pre-procesar |
 | `whatsapp.mensaje.enviado` | `{ project_slug, to (enmascarado), message_id, kind }` | Envío exitoso (kind: `text` \| `template` \| `media_<tipo>` \| `location` \| `auto`) | Audit / tracking |
 | `whatsapp.envio.fallido` | `{ project_slug, to (enmascarado), error_code, error_message }` | Envío fallido | Retry / alertas |
@@ -112,6 +145,15 @@ No se descarga aquí: el módulo de negocio decide si lo guarda/analiza/deriva.
 
 **Ubicación entrante:** cuando el cliente comparte un punto del mapa (type `location`), el evento
 incluye `location: { type, longitude, latitude, name?, address? }`. Útil para reparto/recogida/geolocalización.
+
+**Interactivo / encuesta entrantes:** cuando el cliente responde a un botón, lista o encuesta, el evento
+incluye `interaction`:
+- `{ type: "button", id, title }` — pulsó un botón quick-reply.
+- `{ type: "list", id, title, description? }` — eligió una opción de una lista.
+- `{ type: "poll", poll_id, question }` — respondió a una encuesta.
+- `{ type: "flow", id }` — respuesta de un formulario flow.
+
+`text` se mantiene con el título elegido para retro-compat; `interaction` da la estructura exacta.
 
 Los consumidores se suscriben por `eventBus` (patrón estándar de Enki).
 

@@ -79,21 +79,39 @@ Vía para mandar imágenes de producto, PDFs (carta), notas de voz pre-grabadas,
 - `caption`: image/video/document (leyenda).
 - Devuelve `{ status: 200, data: { message_id, project_slug, kind: "media_<type>" } }`.
 
+### `whatsapp.enviar_ubicacion`
+Enviar **ubicación** al cliente (un punto del mapa). Sirve para mandar la dirección
+del negocio, puntos de recogida, etc.
+
+```json
+{
+  "project_slug": "nonina", "to": "34600000000",
+  "longitude": -3.7038, "latitude": 40.4168,
+  "name": "Nuestra Pizzeria", "address": "Calle Mayor 1"
+}
+```
+- `longitude` y `latitude`: obligatorios (números).
+- `name` / `address`: opcionales (se muestran sobre el pin).
+- Devuelve `{ status: 200, data: { message_id, project_slug, kind: "location" } }`.
+
 ---
 
 ## 3 · Eventos que emite (inbound / observabilidad)
 
 | Evento | Payload | Cuándo | Para qué |
 |---|---|---|---|
-| `whatsapp.mensaje.recibido` | `{ project_slug, phone_number_id, from, message_type, message_id, has_text, media }` | Cada mensaje entrante | Tu módulo reacciona al texto/estado |
+| `whatsapp.mensaje.recibido` | `{ project_slug, phone_number_id, from, message_type, message_id, has_text, media, location }` | Cada mensaje entrante | Tu módulo reacciona al texto/estado |
 | `whatsapp.pedido.detectado` | `{ project_slug, from, items[], total_centimos, message_id }` | El parser reconoció un pedido en el mensaje | Prevenir/pre-procesar |
-| `whatsapp.mensaje.enviado` | `{ project_slug, to (enmascarado), message_id, kind }` | Envío exitoso (kind: `text` \| `template` \| `media_<tipo>` \| `auto`) | Audit / tracking |
+| `whatsapp.mensaje.enviado` | `{ project_slug, to (enmascarado), message_id, kind }` | Envío exitoso (kind: `text` \| `template` \| `media_<tipo>` \| `location` \| `auto`) | Audit / tracking |
 | `whatsapp.envio.fallido` | `{ project_slug, to (enmascarado), error_code, error_message }` | Envío fallido | Retry / alertas |
 
 **Media entrante:** cuando el cliente manda una foto/audio/vídeo/documento, el evento
 `whatsapp.mensaje.recibido` incluye `media: { type, id, mime_type, sha256, link?, filename?, caption?, duration? }`.
 El `id` de Meta permite rescatar el media vía Graph API (GET `/{id}` con el token del proyecto).
 No se descarga aquí: el módulo de negocio decide si lo guarda/analiza/deriva.
+
+**Ubicación entrante:** cuando el cliente comparte un punto del mapa (type `location`), el evento
+incluye `location: { type, longitude, latitude, name?, address? }`. Útil para reparto/recogida/geolocalización.
 
 Los consumidores se suscriben por `eventBus` (patrón estándar de Enki).
 

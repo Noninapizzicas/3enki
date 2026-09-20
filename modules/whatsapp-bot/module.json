@@ -238,6 +238,49 @@
         },
         "required": ["project_slug", "to", "type", "link"]
       }
+    },
+    {
+      "name": "whatsapp.enviar_ubicacion",
+      "description": "Enviar UBICACION al cliente (un punto del mapa). longitude+latitude obligatorios; name/address opcionales (se muestran sobre el pin). Sirve para mandar la direccion del negocio, puntos de recogida, etc. Requiere proyecto operativo (Meta Cloud API).",
+      "handler": "handleToolEnviarUbicacion",
+      "errores_conocidos": [
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND",
+        "AUTHENTICATION_REQUIRED",
+        "UPSTREAM_UNREACHABLE",
+        "UPSTREAM_INVALID_RESPONSE",
+        "RATE_LIMITED"
+      ],
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_slug": {
+            "type": "string",
+            "description": "Slug del proyecto (ej: vapers). Debe estar operativo."
+          },
+          "to": {
+            "type": "string",
+            "description": "Numero del cliente en formato E.164 sin el + (ej: 34600000000)"
+          },
+          "longitude": {
+            "type": "number",
+            "description": "Longitud del punto a enviar."
+          },
+          "latitude": {
+            "type": "number",
+            "description": "Latitud del punto a enviar."
+          },
+          "name": {
+            "type": "string",
+            "description": "Nombre que se muestra sobre el pin (ej: 'Nuestra Pizzeria'). Opcional."
+          },
+          "address": {
+            "type": "string",
+            "description": "Direccion que se muestra sobre el pin (ej: 'Calle Mayor 1'). Opcional."
+          }
+        },
+        "required": ["project_slug", "to", "longitude", "latitude"]
+      }
     }
   ],
 

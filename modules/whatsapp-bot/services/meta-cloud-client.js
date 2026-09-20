@@ -85,6 +85,29 @@ class MetaCloudClient {
     });
   }
 
+  // Ubicación outbound. Envía un punto del mapa: longitude+latitude obligatorios,
+  // name/address opcionales (se muestran sobre el pin en el chat del cliente).
+  async sendLocation({ phoneNumberId, accessToken, to, longitude, latitude, name, address }) {
+    if (!phoneNumberId) throw _err('INVALID_INPUT', 'phoneNumberId is required');
+    if (!accessToken) throw _err('AUTHENTICATION_REQUIRED', 'accessToken is required');
+    if (!to) throw _err('INVALID_INPUT', 'to is required');
+    if (typeof longitude !== 'number' || typeof latitude !== 'number') {
+      throw _err('INVALID_INPUT', 'longitude y latitude deben ser números');
+    }
+
+    const location = { longitude, latitude };
+    if (name) location.name = name;
+    if (address) location.address = address;
+
+    return this._postMessage(phoneNumberId, accessToken, {
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to,
+      type: 'location',
+      location
+    });
+  }
+
   // POST /{phone_number_id}/messages compartido por sendText/sendTemplate: fetch con timeout,
   // mapeo de status HTTP a codigos canonicos, y extraccion de messages[0].id.
   async _postMessage(phoneNumberId, accessToken, body) {
@@ -181,6 +204,20 @@ function parseWebhookEvent(payload) {
             };
           }
         }
+        // Ubicación entrante. El cliente comparte un punto del mapa (type:'location').
+        // latitude/longitude son números; name/address opcionales. Se expone en el
+        // evento whatsapp.mensaje.recibido para que el módulo de negocio decida qué usar.
+        let location = null;
+        if (message_type === 'location' && msg.location && typeof msg.location === 'object') {
+          const lc = msg.location;
+          location = {
+            type: 'location',
+            longitude: typeof lc.longitude === 'number' ? lc.longitude : null,
+            latitude: typeof lc.latitude === 'number' ? lc.latitude : null,
+            name: lc.name || null,
+            address: lc.address || null
+          };
+        }
         const contact = contacts.find(c => c && c.wa_id === msg.from) || contacts[0] || null;
         out.push({
           phone_number_id,
@@ -189,6 +226,7 @@ function parseWebhookEvent(payload) {
           message_type,
           text,
           media,
+          location,
           timestamp: msg.timestamp || null,
           contact_name: contact?.profile?.name || null
         });

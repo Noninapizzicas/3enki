@@ -372,7 +372,9 @@ class WhatsappBotModule extends BaseModule {
       message_type: msg.message_type, message_id: msg.message_id, has_text: !!msg.text,
       // Media entrante (image/video/audio/document). Contiene el `id` de Meta para
       // rescatar el media via Graph API — NO se descarga aquí (decisión del consumidor).
-      media: msg.media || null
+      media: msg.media || null,
+      // Ubicación entrante (el cliente comparte un punto del mapa). {longitude, latitude, name?, address?}.
+      location: msg.location || null
     });
     await this._despacharEntrante(project_slug, msg);
   }
@@ -663,6 +665,56 @@ class WhatsappBotModule extends BaseModule {
     }
   }
 
+  // Enviar UBICACIÓN al cliente (un punto del mapa). longitude/latitude obligatorios;
+  // name/address opcionales (se muestran sobre el pin). Sirve para mandar la dirección
+  // del negocio, puntos de recogida, etc. Abre WhatsApp al canal de ubicación.
+  async handleToolEnviarUbicacion(data) {
+    const project_slug = data?.project_slug;
+    const to = data?.to;
+    const longitude = data?.longitude;
+    const latitude = data?.latitude;
+    try {
+      if (!project_slug) return this._errorResponse(400, 'INVALID_INPUT', 'project_slug requerido', { field: 'project_slug' });
+      if (!to || typeof to !== 'string') return this._errorResponse(400, 'INVALID_INPUT', 'to requerido (E.164 sin +)', { field: 'to' });
+      if (typeof longitude !== 'number' || typeof latitude !== 'number') {
+        return this._errorResponse(400, 'INVALID_INPUT', 'longitude y latitude deben ser números', { field: 'longitude/latitude' });
+      }
+
+      const meta = this.projectsByMeta.get(project_slug);
+      if (!meta || !meta.phone_number_id || String(meta.phone_number_id).startsWith('<PENDIENTE')) {
+        return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Proyecto '${project_slug}' no configurado o con datos pendientes`, { project_slug });
+      }
+      const token = process.env[this._envTokenKey(project_slug)];
+      if (!token) {
+        return this._errorResponse(401, 'AUTHENTICATION_REQUIRED', `Credencial META_WHATSAPP no disponible para '${project_slug}'`, { project_slug });
+      }
+
+      const { messageId } = await this.metaClient.sendLocation({
+        phoneNumberId: meta.phone_number_id,
+        accessToken: token,
+        to,
+        longitude,
+        latitude,
+        name: data?.name,
+        address: data?.address
+      });
+
+      this.metrics?.increment('whatsapp-bot.message.sent', { project: project_slug, kind: 'location' });
+      await this._publicarEvento('whatsapp.mensaje.enviado', {
+        project_slug, to: this._maskPhoneNumber(to), message_id: messageId, kind: 'location'
+      });
+
+      return { status: 200, data: { message_id: messageId, project_slug, kind: 'location' } };
+    } catch (err) {
+      this.metrics?.increment('whatsapp-bot.message.failed', { project: project_slug, kind: 'location' });
+      await this._publicarEvento('whatsapp.envio.fallido', {
+        project_slug, to: this._maskPhoneNumber(to),
+        error_code: err._code || 'UNKNOWN_ERROR', error_message: err.message
+      });
+      return this._handleHandlerError('whatsapp-bot.tool.enviar_ubicacion.error', err, 'tool');
+    }
+  }
+
   // ==========================================
   // Dominio protegido (mapping, despacho, helpers)
   // ==========================================
@@ -756,11 +808,18 @@ class WhatsappBotModule extends BaseModule {
     // texto. Lo capturamos y avisamos al cliente; el media viaja en whatsapp.mensaje.recibido
     // para que el módulo de negocio del proyecto decida qué hacer (guardar/analizar/derivar).
     if (!msg.text) {
-      this.logger.info('whatsapp-bot.entrante.sin_texto', { project_slug, message_type: msg.message_type, media: msg.media || null });
-      if (msg.media) {
+      this.logger.info('whatsapp-bot.entrante.sin_texto', { project_slug, message_type: msg.message_type, media: msg.media || null, location: msg.location || null });
+      const pwa = this.projectsByMeta.get(project_slug)?.pwa_url || 'nuestro catálogo';
+      if (msg.location) {
+        // El cliente compartió su ubicación. La capturamos (ya viaja en
+        // whatsapp.mensaje.recibido) y avisamos. Un módulo de negocio puede usar las
+        // coordenadas para reparto/recogida/geolocalización.
+        this.metrics?.increment?.('whatsapp-bot.location.recibido', { project: project_slug });
+        await this._enviarMensajeSeguro(project_slug, msg.from,
+          `Hemos recibido tu ubicación. Si quieres hacer un pedido, abre la carta aquí: ${pwa}.`);
+      } else if (msg.media) {
         this.metrics?.increment?.('whatsapp-bot.media.recibido', { project: project_slug, type: msg.media.type });
         const label = msg.media.type === 'audio' ? 'nota de voz' : msg.media.type;
-        const pwa = this.projectsByMeta.get(project_slug)?.pwa_url || 'nuestro catálogo';
         await this._enviarMensajeSeguro(project_slug, msg.from,
           `Hemos recibido tu ${label}. Si quieres hacer un pedido, abre la carta aquí: ${pwa}.`);
       }

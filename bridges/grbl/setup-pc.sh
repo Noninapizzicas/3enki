@@ -188,7 +188,7 @@ function parsearStatusReport(linea) {
 }
 
 class GrblClient extends EventEmitter {
-  constructor({ host = '127.0.0.1', port = 23, logger } = {}) {
+  constructor({ host = '127.0.0.1', port = 8080, logger } = {}) {
     super();
     this._host = host;
     this._port = port;
@@ -725,11 +725,11 @@ configure() {
     rm -f "$CONFIG_FILE"
   fi
 
-  read -rp "  IP de la Atomstack A20 Pro V2 en tu red local [192.168.1.105]: " GRBL_HOST
-  GRBL_HOST=${GRBL_HOST:-192.168.1.105}
+  read -rp "  IP de la Atomstack A20 Pro V2 en tu red local [192.168.1.153]: " GRBL_HOST
+  GRBL_HOST=${GRBL_HOST:-192.168.1.153}
 
-  read -rp "  Puerto TCP de GRBL [23]: " GRBL_PORT
-  GRBL_PORT=${GRBL_PORT:-23}
+  read -rp "  Puerto TCP de GRBL [8080]: " GRBL_PORT
+  GRBL_PORT=${GRBL_PORT:-8080}
 
   cat > "$CONFIG_FILE" << CONFIGEOF
 {

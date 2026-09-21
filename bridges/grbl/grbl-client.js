@@ -125,6 +125,8 @@ class GrblClient extends EventEmitter {
     this._socket.on('connect', () => {
       this._log.info?.('grbl.tcp.conectado');
       this._buffer = '';
+      this._enviarRaw('?');
+      if (this._keepAliveMs > 0) this.conectarStream(this._keepAliveMs);
       this.emit('conectado');
     });
 

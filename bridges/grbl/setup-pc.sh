@@ -188,10 +188,11 @@ function parsearStatusReport(linea) {
 }
 
 class GrblClient extends EventEmitter {
-  constructor({ host = '127.0.0.1', port = 8080, logger } = {}) {
+  constructor({ host = '127.0.0.1', port = 8080, keepAliveMs = 3000, logger } = {}) {
     super();
     this._host = host;
     this._port = port;
+    this._keepAliveMs = keepAliveMs;
     this._log = logger || console;
     this._socket = null;
     this._reconectando = false;
@@ -433,6 +434,7 @@ class GrblClient extends EventEmitter {
       if (linea.startsWith('Grbl ')) {
         this._log.info?.('grbl.banner', { version: linea });
         this.emit('conectado_grbl', { version: linea });
+        if (this._keepAliveMs > 0) this.conectarStream(this._keepAliveMs);
         continue;
       }
 

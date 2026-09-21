@@ -333,6 +333,7 @@ class GrblClient extends EventEmitter {
         }
         if (this._lineaActual >= this._totalLineas) {
           this._enviando = false;
+          this.removeListener('_respuesta', onRespuesta);
           this._log.info?.('grbl.gcode.completado', { lineas: this._totalLineas });
           return resolve({ ok: true, lineas: this._totalLineas });
         }

@@ -93,7 +93,7 @@ function parsearStatusReport(linea) {
 // ── GrblClient ───────────────────────────────────────────────
 
 class GrblClient extends EventEmitter {
-  constructor({ host = '127.0.0.1', port = 23, logger } = {}) {
+  constructor({ host = '127.0.0.1', port = 8080, logger } = {}) {
     super();
     this._host = host;
     this._port = port;

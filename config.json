@@ -53,6 +53,7 @@
       "adaptador-avisos",
       "adaptador-confirmacion",
       "adaptador-impresora",
+      "adaptador-laser",
       "adaptador-slicing",
       "admin-panel",
       "agent-observer",

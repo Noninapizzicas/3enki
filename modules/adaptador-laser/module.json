@@ -7,6 +7,12 @@
   "language": "es",
   "main": "index.js",
 
+  "ui_handlers": [
+    { "domain": "adaptador-laser", "action": "enviar_gcode",   "handler": "onEnviarGcodeRequest" },
+    { "domain": "adaptador-laser", "action": "iniciar_trabajo", "handler": "onIniciarTrabajoRequest" },
+    { "domain": "adaptador-laser", "action": "observar_estado", "handler": "onObservarEstadoRequest" }
+  ],
+
   "subscribes": [
     { "event": "adaptador-laser.enviar_gcode.request",      "handler": "onEnviarGcodeRequest",     "description": "Envia gcode a la grabadora laser y devuelve confirmacion." },
     { "event": "adaptador-laser.iniciar_trabajo.request",    "handler": "onIniciarTrabajoRequest",   "description": "Envia un comando GRBL directo (hold, resume, reset, home, etc)." },

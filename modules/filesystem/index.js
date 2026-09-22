@@ -624,6 +624,15 @@ class FilesystemModule extends BaseModule {
   async handleList(data) {
     try {
       const dirPath = data?.path || '/';
+      // DEFENSA MULTI-TENANT — lista contra el proyecto activo global si falta project_id
+      if (!data?.project_id) {
+        this.logger?.warn?.('filesystem.list.sin_project_id', {
+          path: dirPath,
+          activo_global: this.activeProjectId || null,
+          riesgo: 'listado contra el proyecto activo global — revisa que el caller pase project_id'
+        });
+        this.metrics?.increment?.('filesystem.list.fallback_activo_global');
+      }
       const safePath = this.validatePath(dirPath, { sourceModule: data?._source_module, project_id: data?.project_id });
 
       let stats;
@@ -721,6 +730,18 @@ class FilesystemModule extends BaseModule {
       if (!filePath) {
         return this._errorResponse(400, 'INVALID_INPUT', 'path is required',
           { kind: 'domain', field: 'path' });
+      }
+      // DEFENSA MULTI-TENANT — si el caller no fija project_id, esta lectura resolvera
+      // contra el activeProjectPath GLOBAL (el ultimo proyecto activado), lo que puede
+      // leer el almacen de OTRO proyecto. No es fuga silenciosa: se marca en observabilidad
+      // para que quede detectable. Los callers legitimos siempre pasan project_id.
+      if (!data?.project_id) {
+        this.logger?.warn?.('filesystem.read.sin_project_id', {
+          path: filePath,
+          activo_global: this.activeProjectId || null,
+          riesgo: 'lectura contra el proyecto activo global — revisa que el caller pase project_id'
+        });
+        this.metrics?.increment?.('filesystem.read.fallback_activo_global');
       }
       const safePath = this.validatePath(filePath, { sourceModule: data?._source_module, project_id: data?.project_id });
 

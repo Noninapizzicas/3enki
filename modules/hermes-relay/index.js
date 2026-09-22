@@ -283,9 +283,10 @@ class HermesRelayModule extends BaseModule {
     sections.push(
       'REGLAS DE OPERACION:\n'
       + '- El project_id de esta conversacion es ' + ctx.project_id + '.\n'
-      + '- Para llamar tools de Enki que ESCRIBEN (fs.write, fs.edit, fs.delete, fs.move, productos.update, escandallo.*, etc.)\n'
-      + '  pasa SIEMPRE project_id en los ARGS de la llamada (ej. args: {project_id: "' + ctx.project_id + '", ...}).\n'
-      + '- El portal rechaza mutaciones sin project_id en scope=project (INVALID_INPUT). Las lecturas con ruta relativa resuelven solas.'
+      + '- Para llamar tools de Enki que LEEEN O ESCRIBEN EN DISCO DEL PROYECTO (fs.read, fs.list, fs.exists, fs.write, fs.edit, fs.delete, fs.move, productos.*, escandallo.*, etc.)\n'
+      + '  pasa SIEMPRE project_id en los ARGS de la llamada (ej. args: {project_id: "' + ctx.project_id + '", path: "...", ...}).\n'
+      + '  NO omitas project_id en ninguna llamada fs.*: sin el, la lectura cae al "proyecto activo" global y puedes leer/escribir el almacen de OTRO proyecto.\n'
+      + '- El portal rechaza operaciones sin project_id en scope=project (INVALID_INPUT).'
     );
 
     if (pageContext?.vista_frontend && typeof pageContext.vista_frontend === 'object'

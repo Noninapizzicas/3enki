@@ -133,8 +133,31 @@ class HermesBridge {
   // ──────────────────────────────────────────────────────────────
 
   async _dispatch(toolName, args, ctx) {
+    // PUENTE DEL INDICADOR (mente→cuerpo): cuando la mente (Hermes) ejecuta una
+    // herramienta/skill en el cuerpo, el chat debe mostrar "Agente X trabajando".
+    // Antes esto lo emitía el motor v3 (agent.execute.*); al eliminarlo nadie
+    // publica el estado. Aquí reconstruimos el puente: si la llamada trae
+    // conversation_id, avisamos working al iniciar y idle al terminar/fallar,
+    // en el formato que chat-io/agent-observer escuchan.
+    let bridgeCtx = null;
+    {
+      const convId = (args && (args.conversation_id || args.conversationId))
+        || ctx?.conversation_id || ctx?.conversationId || null;
+      if (convId) {
+        bridgeCtx = {
+          conversation_id: convId,
+          agent_name: (toolName || '').split('.')[0] || 'agente', // dominio de la tool como nombre
+          tool: toolName || null,
+          task: (args && (args.task || args.instruccion || args.prompt)) ? String(args.task || args.instruccion || args.prompt) : null
+        };
+        this._agentStatus(bridgeCtx, 'working');
+      }
+    }
+
     if (toolName === 'bus.publish' || toolName === 'bus.publishAndWait') {
-      return this._universalBusTool(toolName, args, ctx);
+      const r = await this._universalBusTool(toolName, args, ctx);
+      if (bridgeCtx) this._agentStatus(bridgeCtx, 'idle');
+      return r;
     }
 
     const enrichedArgs = this._enrichArgs(args, ctx);
@@ -144,18 +167,72 @@ class HermesBridge {
     if (toolDef?.handler && toolDef?.module) {
       const mod = this.moduleLoader?.loadedModules?.get?.(toolDef.module);
       if (mod && typeof mod[toolDef.handler] === 'function') {
-        return await mod[toolDef.handler](enrichedArgs);
+        try {
+          const r = await mod[toolDef.handler](enrichedArgs);
+          if (bridgeCtx) this._agentStatus(bridgeCtx, 'idle');
+          return r;
+        } catch (err) {
+          if (bridgeCtx) this._agentStatus(bridgeCtx, 'idle', err);
+          throw err;
+        }
       }
     }
 
     // BUS FALLBACK: publish toolName + wait ${toolName}.response
     if (!toolDef) {
+      if (bridgeCtx) this._agentStatus(bridgeCtx, 'idle', { code: 'TOOL_NOT_FOUND' });
       const err = new Error(`Tool not found: ${toolName}`);
       err.code = 'TOOL_NOT_FOUND';
       throw err;
     }
 
-    return this._busFallback(toolName, enrichedArgs);
+    try {
+      const r = await this._busFallback(toolName, enrichedArgs);
+      if (bridgeCtx) this._agentStatus(bridgeCtx, 'idle');
+      return r;
+    } catch (err) {
+      if (bridgeCtx) this._agentStatus(bridgeCtx, 'idle', err);
+      throw err;
+    }
+  }
+
+  // Emite el estado del agente hacia el cuerpo (bus) en el formato que chat-io
+  // escucha para publicar conversation/{id}/agent_status → el indicador del chat.
+  _agentStatus(ctx, status, err) {
+    try {
+      if (!this.eventBus?.publish) return;
+      if (status === 'working') {
+        this.eventBus.publish('agent.execute.request', {
+          correlation_id: ctx.conversation_id,
+          request_id: `${ctx.conversation_id}::${Date.now()}`,
+          user_id: 'hermes',
+          agent_name: ctx.agent_name,
+          project_id: null,
+          conversation_id: ctx.conversation_id,
+          task: ctx.task || `ejecutando ${ctx.tool}`,
+          tool: ctx.tool,
+          timestamp: new Date().toISOString()
+        });
+        this.metrics?.increment?.('hermes-bridge.agent_status.working');
+      } else {
+        // idle/finalizado — cerrar el marco (agent.execute.done o failed)
+        const evt = err ? 'agent.execute.failed' : 'agent.execute.response';
+        this.eventBus.publish(evt, {
+          correlation_id: ctx.conversation_id,
+          request_id: `${ctx.conversation_id}::${Date.now()}`,
+          user_id: 'hermes',
+          agent_name: ctx.agent_name,
+          project_id: null,
+          conversation_id: ctx.conversation_id,
+          timestamp: new Date().toISOString(),
+          ...(err ? { error: { code: err.code || 'UNKNOWN_ERROR', message: err.message || String(err) } }
+                  : { veredicto: ctx.tool ? `tool ${ctx.tool} completada` : 'ok', llm: null })
+        });
+        this.metrics?.increment?.('hermes-bridge.agent_status.idle');
+      }
+    } catch (e) {
+      this.logger?.warn?.('hermes-bridge.agent_status.failed', { error: e.message });
+    }
   }
 
   _enrichArgs(args, ctx) {

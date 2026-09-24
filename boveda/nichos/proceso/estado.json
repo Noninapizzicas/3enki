@@ -92,10 +92,10 @@
         "puerto-fuente-datos",
         "gestion-limites-fuente",
         "sondeo-territorio",
-        "reglas-exclusion"
+        "reglas-exclusion",
+        "perfil-limite-busqueda"
       ],
       "pendientes": [
-        "perfil-limite-busqueda",
         "conversor-fuente",
         "estudio-demanda",
         "criterio-viabilidad",
@@ -134,7 +134,7 @@
         "pulso-avance",
         "pipeline-por-nicho"
       ],
-      "proximo": "perfil-limite-busqueda",
+      "proximo": "conversor-fuente",
       "nota": "una hoja a la vez, en orden de la espina. Realizados = en modules/nichos/ y verificado"
     },
     "reutilizar": [

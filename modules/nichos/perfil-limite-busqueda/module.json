@@ -1,0 +1,34 @@
+{
+  "_doc": "Manifest de nichos/perfil-limite-busqueda — CUSTODIO CON PERSISTENCIA (B3, hoja del plan). Guarda los LIMITES DECLARABLES del dueño para la BUSQUEDA de nichos: alcance geografico/mercado, exclusiones de partida, profundidad de barrido, limites de territorio/candidatos y las reglas fijas que el dueño decide. Es el STORE de configuracion de limites de busqueda por proyecto: un solo escritor (DUEÑO), el buscador lo consume por lectura. CUSTODIO: persiste por proyecto via PosPersistencia (_shared/pos-persistencia, storage /prisma/nichos/perfil-limite-busqueda.json), restaura en project.activated y vuelca en onUnload. Proyecciones _leer()->LimitesBusqueda y _declarar(limites) con guard Rol=DUEÑO (second-writer rechazado). Publica nichos.limite.declarado (+ nichos.limite.declarar.failed si no es el DUEÑO o el payload es invalido).",
+  "name": "perfil-limite-busqueda",
+  "version": "0.1.0",
+  "description": "Custodio (B3): store por proyecto de los límites declarables del dueño para la búsqueda de nichos — alcance, exclusiones de partida, profundidad, límites de territorio/candidatos y reglas fijas. Un solo escritor (DUEÑO); el buscador consume por lectura. Persiste por proyecto vía PosPersistencia.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "nichos.limite.leer.request",
+      "handler": "onLeerRequest",
+      "description": "RPC custodio: {project_id} → {project_id, limites}. Lee el perfil de límites de búsqueda del proyecto (alcance, exclusions_base, profundidad, max_territorios, max_candidatos, limite_consulta_fuente, reglas). La lectura no muta. Lo consume el buscador (sondeo-territorio/cola)."
+    },
+    {
+      "event": "nichos.limite.declarar.request",
+      "handler": "onDeclararRequest",
+      "description": "RPC custodio: {project_id, rol:'DUEÑO', limites:{...}} → {project_id, limites, declarado}. Guard Rol=DUEÑO (second-writer rechazado). Persiste el perfil, publica nichos.limite.declarado y responde por nichos.limite.declarar.response. Si no es DUEÑO o el payload es invalido → nichos.limite.declarar.failed."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Restaura el perfil de límites del proyecto activado desde el storage (PosPersistencia)."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "nichos.limite.declarado",
+      "description": "Fire-and-forget (B3): el DUEÑO declaro los límites de búsqueda → {project_id, limites, declarado:true}. Lo consumen el buscador (sondeo-territorio/cola-candidatos) para respetar los límites vigentes."
+    },
+    {
+      "event": "nichos.limite.declarar.failed",
+      "description": "Par de fallo determinista (B3): escritura rechazada (rol != DUEÑO) o payload invalido → {status, code, message, data}. Cierra el circulo de nichos.limite.declarar.request."
+    }
+  ]
+}

@@ -108,15 +108,15 @@
         "imputacion-costes",
         "cuadro-salud-financiera",
         "reglas-aprendidas",
-        "ensamblador-solucion"
-      ],
-      "pendientes": [
+        "ensamblador-solucion",
         "canal-supervision",
         "puente-humano",
         "estudio-competencia",
         "proponedor-modelo-cobro",
         "paquete-decision",
-        "gate-decision-operar",
+        "gate-decision-operar"
+      ],
+      "pendientes": [
         "perfil-cobro-entrega",
         "motor-cobro",
         "canal-distribucion",
@@ -134,7 +134,7 @@
         "pulso-avance",
         "pipeline-por-nicho"
       ],
-      "proximo": "canal-supervision",
+      "proximo": "perfil-cobro-entrega",
       "nota": "una hoja a la vez, en orden de la espina. Realizados = en modules/nichos/ y verificado"
     },
     "reutilizar": [

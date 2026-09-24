@@ -1,0 +1,14 @@
+{
+  "_doc": "Manifest de nichos/paquete-decision — MICRO-AGENTE HIBRIDO (H1): arma un paquete de decision autocxplicado para el dueño. Dado un NICHO y la celula evidencia/riesgo/alternativa, arma un PAQUETE DE DECISION autocxplicado (nicho + evidencia + riesgo + alternativa, en estructura JSON) que el dueño puede leer y decidir (APRUEBA/RECHAZA). Lo consume el gate-decision-operar (E2) y el canal-supervision (G1) via nichos.paquete_construido. HIBRIDO: la parte REFLEJO (_hidratarReflejo: mecanicamente valida el nicho y normaliza la evidencia/riesgo/alternativa en estructura) + la parte FUZZY (_redactarSintesis: juicio LLM via llm.complete.request con guion-prompt self-contained que redacta la sintesis autocxplicada). NUNCA inventa: no fabrica evidencia/riesgo/alternativa ausentes; si el nicho viene vacio falla honesto con su par (nichos.paquete.construir.failed), con fallback reflejo que garantiza una sintesis derivada de los datos. Sin store, sin custodio: entra nicho, sale paquete de decision.",
+  "name": "paquete-decision",
+  "version": "0.1.0",
+  "description": "Micro-agente hibrido (H1): dado un nicho construido arma un paquete de decision autocxplicado (nicho + evidencia + riesgo + alternativa, reflejo: normaliza la celula) con una sintesis razonada (juicio fuzzy). Produce el paquete que el dueño lee antes de decidir. Publica nichos.paquete_construido cuando hay un paquete; nichos.paquete.construir.failed cuando el nicho viene vacio.",
+  "language": "es",
+  "subscribes": [
+    { "event": "nichos.paquete.construir.request", "handler": "onConstruirRequest", "description": "RPC hibrido: {project_id, nicho, evidencia?, riesgo?, alternativa?} → {nicho, tipo_nicho, evidencia, riesgo, alternativa, sintesis, autocxplicado, construido}. Valida el nicho y normaliza la celula evidencia/riesgo/alternativa en estructura (reflejo, numeros declarados) y redacta la sintesis autocxplicada (fuzzy llm.complete.request con fallback reflejo que deriva el resumen de los datos sin inventar). Nicho vacio → error determinista nichos.paquete.construir.failed. Exito → publica nichos.paquete_construido y responde por nichos.paquete.construir.response." }
+  ],
+  "publishes": [
+    { "event": "nichos.paquete_construido", "description": "Fire-and-forget (H1): el paquete de decision de un nicho quedo construido → {project_id, nicho, evidencia, riesgo, alternativa, sintesis, autocxplicado, construido}. Lo consume el gate-decision-operar (E2) y lo entrega el canal-supervision (G1)." },
+    { "event": "nichos.paquete.construir.failed", "description": "Par de fallo determinista (H1): el nicho llego vacio o el juicio no pudo armar el paquete → {status, code, mensaje, data}. Cierra el circulo de nichos.paquete.construir.request." }
+  ]
+}

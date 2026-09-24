@@ -1,0 +1,14 @@
+{
+  "_doc": "Manifest de nichos/puente-humano — PUENTE STATELESS (D2): EXCEPCION del sistema — cuando el sistema no sabe, presenta nicho+problema+dudas al admin por EVENTO con paquete cerrado (SolicitudDecision). Es un tapon humano de Nichos, nunca el flujo normal: se activa por un BLOQUEO que el sistema no puede resolver solo (construir sin alternativa, autorizar). Detecta/arma el paquete cerrado de dudas y enruta la solicitud hacia el dueño (via canal-supervision G1). Sin persistencia: solo enruta/comunica con el exterior; NUNCA lo resuelve.",
+  "name": "puente-humano",
+  "version": "0.1.0",
+  "description": "Puente stateless de nichos (D2), la EXCEPCION: cuando el sistema no sabe, presenta nicho+problema+dudas al admin por EVENTO con paquete cerrado (SolicitudDecision). Arma el paquete cerrado de un bloqueo que el sistema no puede resolver solo y solicita la decision humana. Sin persistencia: solo enruta/comunica con el exterior; NUNCA lo resuelve.",
+  "language": "es",
+  "subscribes": [
+    { "event": "nichos.puente.solicitar.request", "handler": "onSolicitarRequest", "description": "RPC puro: {project_id, nicho, problema, dudas?} → SolicitudDecision cerrada. Detecta el bloqueo (reflejo: valida nicho+problema), arma el paquete cerrado de dudas y enruta la solicitud hacia el dueño. Nicho o problema faltante → error determinista nichos.puente.solicitar.failed. Exito → publica nichos.puente_solicitado y responde por nichos.puente.solicitar.response." }
+  ],
+  "publishes": [
+    { "event": "nichos.puente_solicitado", "description": "Fire-and-forget (D2): un bloqueo no resoluble por el sistema fue presentado al admin → {tipo, nicho, problema, dudas, estado:'PENDIENTE', paquete_cerrado:true, solicitado_en}. Lo consume cola-decisiones-gate (K2) y la entrega el canal-supervision (G1)." },
+    { "event": "nichos.puente.solicitar.failed", "description": "Par de fallo determinista (D2): la solicitud al humano no pudo armarse (nicho o problema faltante/invalido) → {status, code, mensaje, data}. Cierra el circulo de nichos.puente.solicitar.request." }
+  ]
+}

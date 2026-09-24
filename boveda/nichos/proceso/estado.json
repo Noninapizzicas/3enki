@@ -94,10 +94,10 @@
         "sondeo-territorio",
         "reglas-exclusion",
         "perfil-limite-busqueda",
-        "conversor-fuente"
+        "conversor-fuente",
+        "estudio-demanda"
       ],
       "pendientes": [
-        "estudio-demanda",
         "criterio-viabilidad",
         "veredicto-viabilidad",
         "catalogo-capacidades",
@@ -134,7 +134,7 @@
         "pulso-avance",
         "pipeline-por-nicho"
       ],
-      "proximo": "estudio-demanda",
+      "proximo": "criterio-viabilidad",
       "nota": "una hoja a la vez, en orden de la espina. Realizados = en modules/nichos/ y verificado"
     },
     "reutilizar": [

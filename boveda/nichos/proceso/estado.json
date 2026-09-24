@@ -87,10 +87,10 @@
         "pipeline-por-nicho"
       ],
       "realizados": [
-        "captura-semilla"
+        "captura-semilla",
+        "normalizacion-semilla"
       ],
       "pendientes": [
-        "normalizacion-semilla",
         "puerto-fuente-datos",
         "gestion-limites-fuente",
         "sondeo-territorio",
@@ -134,7 +134,7 @@
         "pulso-avance",
         "pipeline-por-nicho"
       ],
-      "proximo": "normalizacion-semilla",
+      "proximo": "puerto-fuente-datos",
       "nota": "una hoja a la vez, en orden de la espina. Realizados = en modules/nichos/ y verificado"
     },
     "reutilizar": [

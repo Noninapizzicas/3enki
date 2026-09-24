@@ -95,10 +95,10 @@
         "reglas-exclusion",
         "perfil-limite-busqueda",
         "conversor-fuente",
-        "estudio-demanda"
+        "estudio-demanda",
+        "criterio-viabilidad"
       ],
       "pendientes": [
-        "criterio-viabilidad",
         "veredicto-viabilidad",
         "catalogo-capacidades",
         "camino-encontrar-construir",
@@ -134,7 +134,7 @@
         "pulso-avance",
         "pipeline-por-nicho"
       ],
-      "proximo": "criterio-viabilidad",
+      "proximo": "veredicto-viabilidad",
       "nota": "una hoja a la vez, en orden de la espina. Realizados = en modules/nichos/ y verificado"
     },
     "reutilizar": [

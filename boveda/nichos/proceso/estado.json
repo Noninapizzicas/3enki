@@ -89,10 +89,10 @@
       "realizados": [
         "captura-semilla",
         "normalizacion-semilla",
-        "puerto-fuente-datos"
+        "puerto-fuente-datos",
+        "gestion-limites-fuente"
       ],
       "pendientes": [
-        "gestion-limites-fuente",
         "sondeo-territorio",
         "reglas-exclusion",
         "perfil-limite-busqueda",
@@ -134,7 +134,7 @@
         "pulso-avance",
         "pipeline-por-nicho"
       ],
-      "proximo": "gestion-limites-fuente",
+      "proximo": "sondeo-territorio",
       "nota": "una hoja a la vez, en orden de la espina. Realizados = en modules/nichos/ y verificado"
     },
     "reutilizar": [

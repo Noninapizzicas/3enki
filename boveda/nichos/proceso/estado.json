@@ -3,7 +3,7 @@
   "ramas": "vertical/nichos",
   "persistencia": "boveda/nichos/proceso/",
   "modelo": "mente-ejecuta / chat-gestiona",
-  "fase_actual": "fase3-planificar-construccion",
+  "fase_actual": "fase3b-adaptador",
   "fase2": {
     "estado": "completada",
     "entregable": "boveda/nichos/proceso/fase2/esquemas/esquema.md",
@@ -15,8 +15,18 @@
   },
   "pendiente_dueno": [],
   "fase3": {
-    "estado": "pendiente",
+    "estado": "completada",
     "siguiente_entregable": "boveda/nichos/proceso/fase3/diseno-oop.md",
-    "skill": "planificar-construccion"
+    "skill": "planificar-construccion",
+    "entregable": "boveda/nichos/proceso/fase3/diseno-oop.md",
+    "clases": 44,
+    "puertos_abiertos": 4,
+    "decisiones_humanas": 7,
+    "nota": "PLASMA: 44 clases (42 piezas + C6/C7 eslabon), cero tecnologias Enki, eslabon limitante expandido"
+  },
+  "fase3b": {
+    "estado": "pendiente",
+    "skill": "construir-modulos (adaptador)",
+    "siguiente_entregable": "boveda/nichos/proceso/fase3b/plan-construccion.md"
   }
 }

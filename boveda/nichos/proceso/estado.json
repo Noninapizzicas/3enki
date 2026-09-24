@@ -3,7 +3,7 @@
   "ramas": "vertical/nichos",
   "persistencia": "boveda/nichos/proceso/",
   "modelo": "mente-ejecuta / chat-gestiona",
-  "fase_actual": "fase3b-adaptador",
+  "fase_actual": "fase4-construir-modulos",
   "fase2": {
     "estado": "completada",
     "entregable": "boveda/nichos/proceso/fase2/esquemas/esquema.md",
@@ -25,8 +25,19 @@
     "nota": "PLASMA: 44 clases (42 piezas + C6/C7 eslabon), cero tecnologias Enki, eslabon limitante expandido"
   },
   "fase3b": {
-    "estado": "pendiente",
+    "estado": "completada",
     "skill": "construir-modulos (adaptador)",
-    "siguiente_entregable": "boveda/nichos/proceso/fase3b/plan-construccion.md"
+    "siguiente_entregable": "boveda/nichos/proceso/fase3b/plan-construccion.md",
+    "entregable": "boveda/nichos/proceso/fase3b/plan-construccion.md",
+    "hojas_total": 51,
+    "construir": 44,
+    "reutilizar": 7,
+    "adaptar": 0,
+    "nota": "Plan de construccion contra inventario real de 198 modulos; espina enki-plan validada (JSON + topo-sort)"
+  },
+  "fase4": {
+    "estado": "pendiente",
+    "skill": "construir-modulos",
+    "mandato": "una hoja a la vez, orden de la espina, esquematizar(4a)+crear(4b)"
   }
 }

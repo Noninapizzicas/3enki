@@ -1,0 +1,29 @@
+{
+  "_doc": "Manifest de nichos/escalones-mensaje — REFLEJO STATELESS (G2): clasifica los mensajes al supervisor del nicho en el ESCALON que les toca (pulso | alerta | decision) segun la regla declarada y le asigna la cadencia de entrega. Regla DUROA, no ambigua: pulso -> informativo con cadencia (no interrumpe); alerta -> urgente al canal (interrumpe); decision -> SolicitudDecision que exige accion del dueno. Consume el tipo de mensaje (pulso-avance, alerta-sangria, gate...) y, con el perfil de supervision (H2), la cadencia declarada. Sin store: cada op entra objeto, sale objeto, proyeccion pura determinista. Publica nichos.escalon.clasificado (-> canal-supervision G1) + par determinista nichos.escalon.clasificar.failed.",
+  "name": "escalones-mensaje",
+  "version": "0.1.0",
+  "description": "Reflejo stateless (G2): decide el escalón de mensaje al supervisor del nicho — pulso | alerta | decisión — con su cadencia. Regla dura, no ambigua; proyección pura determinista. Publica nichos.escalon.clasificado y su par de fallo. Sin persistencia.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "nichos.escalon.clasificar.request",
+      "handler": "onClasificarRequest",
+      "description": "RPC puro: {project_id, tipo:'pulso'|'alerta'|'decision', mensaje?, perfil_supervision?} → {project_id, tipo, escalon:'PULSO'|'ALERTA'|'DECISION', prioridad, interrumpe, exige_accion, cadencia, mensaje, regla:'duro', clasificado:true}. Regla dura (pulso→informativo con cadencia declarada; alerta→urgente que interrumpe; decision→SolicitudDecision que exige acción). Si el tipo no es clasificable → nichos.escalon.clasificar.failed. Éxito → publica nichos.escalon.clasificado y responde por nichos.escalon.clasificar.response."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Reflejo sin estado: registra el project_id activo para scope del contexto; no persiste nada."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "nichos.escalon.clasificado",
+      "description": "Fire-and-forget (G2): un mensaje de supervisión quedó escalonado → {project_id, escalon:'PULSO'|'ALERTA'|'DECISION', prioridad, interrumpe, exige_accion, cadencia, tipo, clasificado:true}. Lo consume canal-supervision (G1) para enrutarlo al dueño con el escalón/cadencia correctos."
+    },
+    {
+      "event": "nichos.escalon.clasificar.failed",
+      "description": "Par de fallo determinista (G2): el tipo de mensaje no es clasificable → {status, code, message, data}. Cierra el círculo de nichos.escalon.clasificar.request."
+    }
+  ]
+}

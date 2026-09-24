@@ -114,15 +114,15 @@
         "estudio-competencia",
         "proponedor-modelo-cobro",
         "paquete-decision",
-        "gate-decision-operar"
-      ],
-      "pendientes": [
+        "gate-decision-operar",
         "perfil-cobro-entrega",
         "motor-cobro",
         "canal-distribucion",
         "alerta-sangria",
         "perfil-supervision",
-        "escalones-mensaje",
+        "escalones-mensaje"
+      ],
+      "pendientes": [
         "clasificador-intencion",
         "propuesta-valor-canal",
         "confirmacion-valor",
@@ -134,7 +134,7 @@
         "pulso-avance",
         "pipeline-por-nicho"
       ],
-      "proximo": "perfil-cobro-entrega",
+      "proximo": "clasificador-intencion",
       "nota": "una hoja a la vez, en orden de la espina. Realizados = en modules/nichos/ y verificado"
     },
     "reutilizar": [

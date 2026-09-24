@@ -1,0 +1,34 @@
+{
+  "_doc": "Manifest de nichos/perfil-cobro-entrega — CUSTODIO CON PERSISTENCIA (I1, hoja del plan). Guarda el CONTRATO DE PAGO Y ENTREGA declarable por pagador del nicho: plataforma de cobro aceptada, forma y canal de entrega de la solucion al pagador, precio, periodicidad y condiciones. Es el STORE del perfil de cobro/entrega por proyecto que motor-cobro (E3) y canal-distribucion (E4) consumen. Un solo escritor: CONSTRUCTOR (al construir) o DUEÑO (ajuste comercial), guard de rol; la lectura no muta. Persiste por proyecto via PosPersistencia (_shared/pos-persistencia, storage /prisma/nichos/perfil-cobro-entrega.json), restaura en project.activated y vuelca en onUnload. Publica nichos.perfil.declarado (+ nichos.perfil.declarar.failed si no es un escritor autorizado o el contrato es invalido).",
+  "name": "perfil-cobro-entrega",
+  "version": "0.1.0",
+  "description": "Custodio (I1): store por proyecto del contrato de pago y entrega por pagador del nicho — plataforma de cobro aceptada, forma/canal de entrega de la solución, precio, periodicidad y condiciones. Un solo escritor (CONSTRUCTOR o DUEÑO); motor-cobro (E3) y canal-distribucion (E4) lo consumen. Persiste por proyecto vía PosPersistencia.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "nichos.perfil.leer.request",
+      "handler": "onLeerRequest",
+      "description": "RPC custodio: {project_id} → {project_id, perfil}. Lee el perfil de cobro/entrega vigente del proyecto (pagador, contrato{plataforma_cobro, forma_entrega, precio, periodicidad, canal_entrega, condiciones}). La lectura no muta. Lo consumen motor-cobro (E3) y canal-distribucion (E4)."
+    },
+    {
+      "event": "nichos.perfil.declarar.request",
+      "handler": "onDeclararRequest",
+      "description": "RPC custodio: {project_id, rol:'CONSTRUCTOR'|'DUEÑO', contrato:{...}} → {project_id, perfil, declarado}. Guard de rol (second-writer rechazado: rol != CONSTRUCTOR/DUEÑO). Persiste el contrato, publica nichos.perfil.declarado y responde por nichos.perfil.declarar.response. Si no es un escritor autorizado o el contrato es inválido (plataforma/forma_entrega no permitidas) → nichos.perfil.declarar.failed."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Restaura el perfil de cobro/entrega del proyecto activado desde el storage (PosPersistencia)."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "nichos.perfil.declarado",
+      "description": "Fire-and-forget (I1): el contrato de cobro/entrega fue declarado → {project_id, perfil, declarado:true}. Lo consumen motor-cobro (E3) para ejecutar el cobro y canal-distribucion (E4) para entregar la solución por el canal declarado."
+    },
+    {
+      "event": "nichos.perfil.declarar.failed",
+      "description": "Par de fallo determinista (I1): declaración rechazada (rol != CONSTRUCTOR/DUEÑO) o contrato inválido → {status, code, message, data}. Cierra el círculo de nichos.perfil.declarar.request."
+    }
+  ]
+}

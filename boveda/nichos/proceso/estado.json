@@ -91,10 +91,10 @@
         "normalizacion-semilla",
         "puerto-fuente-datos",
         "gestion-limites-fuente",
-        "sondeo-territorio"
+        "sondeo-territorio",
+        "reglas-exclusion"
       ],
       "pendientes": [
-        "reglas-exclusion",
         "perfil-limite-busqueda",
         "conversor-fuente",
         "estudio-demanda",
@@ -134,7 +134,7 @@
         "pulso-avance",
         "pipeline-por-nicho"
       ],
-      "proximo": "reglas-exclusion",
+      "proximo": "perfil-limite-busqueda",
       "nota": "una hoja a la vez, en orden de la espina. Realizados = en modules/nichos/ y verificado"
     },
     "reutilizar": [

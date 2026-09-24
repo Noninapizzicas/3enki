@@ -1,0 +1,14 @@
+{
+  "_doc": "Manifest de nichos/conversor-fuente — CONVERSOR REFLEJO JS PURO (cero LLM, cero estado, cero red): la UNICA frontera de formatos entre las fuentes externas de datos y los datos internos homogeneos de nichos. Recibe datos crudos de una fuente (formato nativo del proveedor) y los convierte al formato interno canonico de nichos (senal homogenea), publicando nichos.datos_homogeneos; si el formato es invalido (DatasetBruto sin items, o item sin titulo/url) cierra el circulo con el par determinista nichos.fuente.convertir.failed. Cero logica de negocio: solo convertir formato (proyecciones puras _cruzar/_mapear).",
+  "name": "conversor-fuente",
+  "version": "0.1.0",
+  "description": "Reflejo JS puro (J2, conversor stateless): la unica frontera de formatos fuentes->internos de nichos. Convierte datos crudos de una fuente (formato nativo) a la senal homogenea interna {id, titulo, url, fuente, formato, relevancia} via _cruzar/_mapear. Publica nichos.datos_homogeneos en exito; nichos.fuente.convertir.failed si el formato es invalido.",
+  "language": "es",
+  "subscribes": [
+    { "event": "nichos.fuente.convertir.request", "handler": "onConvertirRequest", "description": "RPC puro: {nicho, fuente, formato, dataset_bruto:{items}} → DatosHomogeneos (senal homogenea interna). _cruzar valida el DatasetBruto y mapea cada item crudo a {id, titulo, url, fuente, formato, relevancia} via _mapear. Exito → publica nichos.datos_homogeneos y responde por nichos.fuente.convertir.response; formato invalido (sin nicho, sin items, o item sin titulo/url) → nichos.fuente.convertir.failed." }
+  ],
+  "publishes": [
+    { "event": "nichos.datos_homogeneos", "description": "Fire-and-forget (J2): los datos crudos de la fuente quedaron convertidos a la senal homogenea interna → {nicho, fuente, formato, total, convertidos, items:[{id,titulo,url,fuente,formato,relevancia}]}. La consume estudio-demanda (J5)." },
+    { "event": "nichos.fuente.convertir.failed", "description": "Par de fallo determinista: el DatasetBruto llego sin nicho, sin items, o un item no tiene titulo/url → {status:4xx, code, mensaje}. Cierra el circulo de nichos.fuente.convertir.request." }
+  ]
+}

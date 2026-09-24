@@ -23,16 +23,9 @@ const TIPOS_ESTACION = {
   general: {
     id: 'general',
     nombre: 'General',
-    descripcion: 'Preparacion/montaje — items nuevos (pase 0)',
+    descripcion: 'Preparacion completada — se imprime el ticket al terminar el item',
     pase_minimo: 0,
-    comportamientos: { imprime_al_completar: false, auto_preparar: false }
-  },
-  horno: {
-    id: 'horno',
-    nombre: 'Horno',
-    descripcion: 'Horneado — auto-inicia, 1 tap imprime y completa',
-    pase_minimo: 1,
-    comportamientos: { imprime_al_completar: true, auto_preparar: true }
+    comportamientos: { imprime_al_completar: true, auto_preparar: false }
   }
 };
 
@@ -591,6 +584,13 @@ class CocinaModule extends BaseModule {
         itemEncontrado.preparado_at = now;
         this.metrics?.increment?.('cocina.item_preparado.total', { via: 'terminado_directo' });
         await this._publishItemPreparado(pedidoEncontrado, itemEncontrado, estacion);
+        // Impresion del ticket de pieza al completar (estacion unica: general)
+        if (estacion && device) {
+          const tipoEst = this.tiposEstacion[tipoEstacion];
+          if (tipoEst?.comportamientos?.imprime_al_completar) {
+            await this._publishItemTicket(pedidoEncontrado, itemEncontrado, estacion, device);
+          }
+        }
 
         const completo = pedidoEncontrado.items.every(i => i.estado === 'listo');
         if (completo) await this._marcarPedidoListo(pedidoEncontrado);

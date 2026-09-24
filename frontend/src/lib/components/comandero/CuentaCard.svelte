@@ -48,7 +48,7 @@
   $: showEntregarBtn = isLlevadoo
     ? ['en_preparacion', 'para_recoger', 'listo'].includes(cuenta.estado)
     : cuenta.estado === 'listo';
-  $: showCobrarBtn = !isLlevadoo && (cuenta.estado === 'listo' || cuenta.estado === 'entregado');
+  $: showCobrarBtn = !isLlevadoo && (cuenta.estado === 'listo' || cuenta.estado === 'entregado' || cuenta.estado === 'en_preparacion');
   $: showDeleteBtn = cuenta.estado === 'pendiente' || cuenta.estado === 'cobrado';
   $: showActions = showEntregarBtn || showCobrarBtn || showDeleteBtn;
 

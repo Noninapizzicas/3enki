@@ -10,7 +10,7 @@
    */
   import { createEventDispatcher, onMount, onDestroy } from 'svelte';
   import type { Cuenta, ItemDetalle } from '$lib/stores/cuentas';
-  import { TIPO_COLORS, TIPO_ICONS, deleteCuenta, marcarEntregado } from '$lib/stores/cuentas';
+  import { TIPO_COLORS, TIPO_ICONS, deleteCuenta, marcarEntregado, cerrarCuentaPagada } from '$lib/stores/cuentas';
 
   export let cuenta: Cuenta;
   export let projectId: string = '';
@@ -117,14 +117,20 @@
   // Resto: visible cuando pedido listo, entregado o cobrado
   $: showEntregarAction = isLlevadoo
     ? ['en_preparacion', 'para_recoger', 'listo'].includes(cuenta.estado)
-    : ['en_preparacion', 'listo', 'entregado', 'para_cobrar', 'cobrado'].includes(cuenta.estado);
+    : ['en_preparacion', 'listo', 'entregado', 'para_cobrar', 'cobrado'].includes(cuenta.estado)
+      || (cuenta.pagado && !['cobrado', 'pendiente'].includes(cuenta.estado));
   // Pendiente sin items = se puede borrar
   $: showDeleteBtn = cuenta.estado === 'pendiente' && cuenta.items === 0;
 
   async function handleEntregarAction() {
     if (cuenta.pagado || cuenta.tipo === 'llevadoo') {
-      // Pagado o llevadoo (pago externo) → marcar entregado directamente
-      await marcarEntregado(projectId, cuenta.id);
+      // Pagado o llevadoo (pago externo) → marcar entregado directamente;
+      // si quedó atascada (pagada sin pasar por listo), cerrarla con el handler de cierre.
+      if (cuenta.pagado && !['listo', 'entregado', 'cobrado', 'para_cobrar'].includes(cuenta.estado)) {
+        await cerrarCuentaPagada(projectId, cuenta.id);
+      } else {
+        await marcarEntregado(projectId, cuenta.id);
+      }
     } else {
       // No pagado → abrir cobros
       handleRightTap();

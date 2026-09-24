@@ -1,0 +1,17 @@
+{
+  "proyecto": "nichos",
+  "ramas": "vertical/nichos",
+  "persistencia": "boveda/nichos/proceso/",
+  "modelo": "mente-ejecuta / chat-gestiona",
+  "fase_actual": "fase2",
+  "fase2": {
+    "estado": "esquematizado",
+    "entregable": "boveda/nichos/proceso/fase2/esquemas/esquema.md",
+    "pasadas": 16,
+    "hojas_atomicas_con_forma": 42,
+    "siguiente_fase": "fase3-planificar-construccion"
+  },
+  "pendiente_dueno": [
+    "ver guion de preguntas abiertas en boveda/nichos/proceso/fase2/ciclo.md o esquema.md"
+  ]
+}

@@ -102,15 +102,15 @@
         "camino-encontrar-construir",
         "cola-candidatos",
         "batch-validacion",
-        "corte-temprano"
-      ],
-      "pendientes": [
+        "corte-temprano",
         "registro-cobros",
         "coste-fuente",
         "imputacion-costes",
         "cuadro-salud-financiera",
         "reglas-aprendidas",
-        "ensamblador-solucion",
+        "ensamblador-solucion"
+      ],
+      "pendientes": [
         "canal-supervision",
         "puente-humano",
         "estudio-competencia",
@@ -134,7 +134,7 @@
         "pulso-avance",
         "pipeline-por-nicho"
       ],
-      "proximo": "registro-cobros",
+      "proximo": "canal-supervision",
       "nota": "una hoja a la vez, en orden de la espina. Realizados = en modules/nichos/ y verificado"
     },
     "reutilizar": [

@@ -48,7 +48,8 @@
       { "event": "cocina.pedido_listo",        "handler": "onCocinaPedidoListo",        "description": "Pedido listo en cocina — transicionar a listo cuando todos los pedidos de la cuenta terminaron." },
       { "event": "cobro.iniciado",             "handler": "onCobroIniciado",            "description": "Cobro iniciado — transicionar a para_cobrar (excepto pago_externo)." },
       { "event": "cobro.procesado",            "handler": "onCobroProcesado",           "description": "Cobro procesado — marcar pagado e idempotente; transicionar a cobrado segun flags." },
-      { "event": "cuenta.cerrada",             "handler": "onCuentaExternaCerrada",     "description": "Cuenta cerrada desde canal externo (cuentas-canales) — limpiar Map + cancelar timers." }
+      { "event": "cuenta.cerrada",             "handler": "onCuentaExternaCerrada",     "description": "Cuenta cerrada desde canal externo (cuentas-canales) — limpiar Map + cancelar timers." },
+      { "event": "cuenta.cerrada_forzada",     "handler": "onCuentaCerradaForzada",     "description": "Cierre de caja (persistencia-comandero) — limpiar Map + cancelar timers para no dejar cuentas fantasma en estado horno." }
     ]
   },
   "ui_handlers": [

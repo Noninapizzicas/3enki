@@ -117,7 +117,7 @@
   // Resto: visible cuando pedido listo, entregado o cobrado
   $: showEntregarAction = isLlevadoo
     ? ['en_preparacion', 'para_recoger', 'listo'].includes(cuenta.estado)
-    : ['listo', 'entregado', 'para_cobrar', 'cobrado'].includes(cuenta.estado);
+    : ['en_preparacion', 'listo', 'entregado', 'para_cobrar', 'cobrado'].includes(cuenta.estado);
   // Pendiente sin items = se puede borrar
   $: showDeleteBtn = cuenta.estado === 'pendiente' && cuenta.items === 0;
 

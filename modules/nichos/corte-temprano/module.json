@@ -1,0 +1,24 @@
+{
+  "_doc": "Manifest de nichos/corte-temprano — REFLEJO stateless (C6, hoja del plan). PROTEGE la salud financiera (F3): dado un VEREDICTO de viabilidad (C3, nichos.veredicto.emitido) decide si el nicho PASA A CONSTRUCCION o se CORTA a tiempo. REGLA DURA determinista: un veredicto NO_VIABLE NUNCA avanza a construccion (un NO_VIABLE -> CONSTRUIDO es ilegal en la maquina de estados). Los cortados no sangran (protege F3); solo los viables entran al tramo caro con control. PUENTE → espera decision humana (D2/K2), no corta ni avanza solo. Proyecciones _evaluar(veredicto)->PasaAConstruccion:bool y _aplicar(resultado)->corte/pase. stateless: sin estado, sin custodio, cada op es funcion pura. Publica nichos.corte.aplicado; nichos.corte.evaluar.failed cuando el veredicto llega vacio.",
+  "name": "corte-temprano",
+  "version": "0.1.0",
+  "description": "Reflejo determinista (C6): dado un veredicto de viabilidad decide el corte a tiempo — un NO_VIABLE nunca pasa a construcción (corte DURO), VIABLE entra al tramo caro con control, PUENTE espera decisión humana. Publica nichos.corte.aplicado; nichos.corte.evaluar.failed si el veredicto es inválido.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "nichos.corte.evaluar.request",
+      "handler": "onEvaluarRequest",
+      "description": "RPC reflejo: {project_id, veredicto:{veredicto:VIABLE|NO_VIABLE|PUENTE, confianza?, motivo?, candidato?}, nicho?} → {project_id, nicho, veredicto, pasa_a_construccion, cortado, decision:CORTADO|PASA_A_CONSTRUCCION|PENDIENTE_DECISION, evaluado}. REGLA DURA determinista: NO_VIABLE → pasa_a_construccion=false, cortado=true (CORTADO). VIABLE → pasa=true (control). PUENTE → pendiente (no corta ni avanza solo). Veredicto invalido → error determinista nichos.corte.evaluar.failed. Exito → publica nichos.corte.aplicado y responde por nichos.corte.evaluar.response."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "nichos.corte.aplicado",
+      "description": "Fire-and-forget (C6): el corte/pase quedo aplicado → {project_id, nicho, veredicto, decision:CORTADO|PASA_A_CONSTRUCCION|PENDIENTE_DECISION, pasa_a_construccion, cortado, motivo, aplicado}. Lo consume el pipeline-por-nicho (L1): un CORTADO no avanza a construccion (protege F3)."
+    },
+    {
+      "event": "nichos.corte.evaluar.failed",
+      "description": "Par de fallo determinista (C6): el veredicto llego vacio o sin veredicto → {status, code, mensaje, data}. Cierra el circulo de nichos.corte.evaluar.request."
+    }
+  ]
+}

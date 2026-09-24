@@ -1,0 +1,34 @@
+{
+  "_doc": "Manifest de nichos/catalogo-capacidades — CUSTODIO CON PERSISTENCIA (D3, hoja del plan). Catalogo persistente por PROYECTO de las CAPACIDADES (existentes y faltantes) para CONSTRUIR la solucion. INVARIANTE D3: lo que falta, se crea — jamas deja un hueco muerto. El ensamblador-solucion (D1) consulta (_consultar -> CapacidadesDisponibles) y, al detectar una falta, el custodio la registra como FALTANTE declarado (nichos.capacidad.faltante_declarado) para que el paso de construccion la materialice. CUSTODIO: un solo escritor (CONSTRUCTOR del ensamblador o el DUEÑO; guard de rol en _declararFaltante), lectura no muta. Persiste por proyecto via PosPersistencia (_shared/pos-persistencia, storage /prisma/nichos/catalogo-capacidades.json), restaura en project.activated y vuelca en onUnload. Proyecciones _consultar(nicho)->CapacidadesDisponibles y _declararFaltante(capacidad)->garantiza la invariante (crea la capacidad si no existia). Publica nichos.capacidad.faltante_declarado (+ nichos.capacidad.declarar.failed si el rol no es valido o el payload es invalido).",
+  "name": "catalogo-capacidades",
+  "version": "0.1.0",
+  "description": "Custodio (D3): catálogo persistente por proyecto de las capacidades existentes/faltantes para construir la solución del nicho. Invariante 'lo que falta se crea'. Un solo escritor (CONSTRUCTOR o DUEÑO); el ensamblador-solucion (D1) consulta por lectura. Persiste por proyecto vía PosPersistencia.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "nichos.capacidad.consultar.request",
+      "handler": "onConsultarRequest",
+      "description": "RPC custodio: {project_id, nicho?} → {project_id, nicho, capacidades_disponibles, capacidades_faltantes, capacidades, cantidad}. Lee el catalogo de capacidades del proyecto (las existentes para construir y las faltantes declaradas). La lectura no muta. Lo consume el ensamblador-solucion (D1) antes de materializar la solucion."
+    },
+    {
+      "event": "nichos.capacidad.declarar.request",
+      "handler": "onDeclararRequest",
+      "description": "RPC custodio: {project_id, rol:'CONSTRUCTOR'|'DUEÑO', capacidad, estado?:'existente'|'faltante', descripcion?, nicho?} → {project_id, capacidad, catalogo, creado}. Guard de escritor (solo CONSTRUCTOR/DUEÑO; second-writer rechazado). INVARIANTE: si la capacidad falta, se crea (jamas deja hueco). Publica nichos.capacidad.faltante_declarado y responde por nichos.capacidad.declarar.response. Si el rol no es valido o el payload es invalido → nichos.capacidad.declarar.failed."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Restaura el catalogo de capacidades del proyecto activado desde el storage (PosPersistencia)."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "nichos.capacidad.faltante_declarado",
+      "description": "Fire-and-forget (D3): se declaro/creo una capacidad (faltante o existente) en el catalogo del proyecto → {project_id, capacidad, catalogo, creado}. Lo consume el ensamblador-solucion (D1) y el paso de construccion para materializar lo que falta."
+    },
+    {
+      "event": "nichos.capacidad.declarar.failed",
+      "description": "Par de fallo determinista (D3): escritura rechazada (rol != CONSTRUCTOR/DUEÑO) o payload invalido → {status, code, message, data}. Cierra el circulo de nichos.capacidad.declarar.request."
+    }
+  ]
+}

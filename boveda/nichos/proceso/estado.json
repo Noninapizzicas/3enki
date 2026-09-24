@@ -96,15 +96,15 @@
         "perfil-limite-busqueda",
         "conversor-fuente",
         "estudio-demanda",
-        "criterio-viabilidad"
-      ],
-      "pendientes": [
+        "criterio-viabilidad",
         "veredicto-viabilidad",
         "catalogo-capacidades",
         "camino-encontrar-construir",
         "cola-candidatos",
         "batch-validacion",
-        "corte-temprano",
+        "corte-temprano"
+      ],
+      "pendientes": [
         "registro-cobros",
         "coste-fuente",
         "imputacion-costes",
@@ -134,7 +134,7 @@
         "pulso-avance",
         "pipeline-por-nicho"
       ],
-      "proximo": "veredicto-viabilidad",
+      "proximo": "registro-cobros",
       "nota": "una hoja a la vez, en orden de la espina. Realizados = en modules/nichos/ y verificado"
     },
     "reutilizar": [

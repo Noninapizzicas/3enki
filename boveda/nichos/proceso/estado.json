@@ -3,15 +3,20 @@
   "ramas": "vertical/nichos",
   "persistencia": "boveda/nichos/proceso/",
   "modelo": "mente-ejecuta / chat-gestiona",
-  "fase_actual": "fase2",
+  "fase_actual": "fase3-planificar-construccion",
   "fase2": {
-    "estado": "esquematizado",
+    "estado": "completada",
     "entregable": "boveda/nichos/proceso/fase2/esquemas/esquema.md",
     "pasadas": 16,
     "hojas_atomicas_con_forma": 42,
-    "siguiente_fase": "fase3-planificar-construccion"
+    "siguiente_fase": "fase3-planificar-construccion",
+    "dueño_resolvio_preguntas": true,
+    "preguntas_abiertas": "Ninguna — el dueño las rechazó; el esquema cierra con los valores que ya estaban declarados"
   },
-  "pendiente_dueno": [
-    "ver guion de preguntas abiertas en boveda/nichos/proceso/fase2/ciclo.md o esquema.md"
-  ]
+  "pendiente_dueno": [],
+  "fase3": {
+    "estado": "pendiente",
+    "siguiente_entregable": "boveda/nichos/proceso/fase3/diseno-oop.md",
+    "skill": "planificar-construccion"
+  }
 }

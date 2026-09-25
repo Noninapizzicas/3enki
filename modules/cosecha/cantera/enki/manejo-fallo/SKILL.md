@@ -1,54 +1,43 @@
 ---
 name: manejo-fallo
-description: >
-  Skill FULL del módulo REFLEJO `manejo-fallo` del proyecto 3D (taller de impresión 3D,
-  una impresora SPARKX i7 que encadena piezas; moneda STL/3MF→GCODE). Al fallar una
-  impresión avisa SIEMPRE (adaptador-avisos) y consulta la política al dueño
-  (adaptador-confirmacion); reintentar/saltar/decisión abierta, NUNCA decide solo.
-  Úsala para operar, depurar o extender el manejo de fallos, o para entender su
-  contrato de eventos y sus reglas de negocio.
-when-to-use: >
-  - Cuando necesites manejar el fallo de una impresión 3D (avisar, reintentar, saltar o
-    pedir decisión al dueño).
-  - Cuando depures por qué no se avisa de un fallo, por qué no se aplica la política del
-    dueño o por qué queda esperando decisión.
-  - Cuando quieras entender el contrato de eventos (subscribes/publishes) y las reglas
-    de negocio del manejo de fallos (CERO juicio automático).
-  - Cuando vayas a escribir/ampliar el test unitario del manejo de fallos.
-tags: [enki, modulo, reflejo, impresora-3d, manejo-fallo, fallos, reinicio, avisos, proyecto-3d]
+description: >-
+  Skill FULL del módulo PUENTE STATELESS `manejo-fallo` (L3, hoja del plan) de la
+  vertical nichos (Radar de Nichos). Reintento MECÁNICO del ciclo hasta un máximo
+  [ABIERTO] ANTES de escalar a humano: gestiona el fallo del pipeline (recibe
+  nichos.canal.envio_fallido o RPC directo) e intenta reintento; si se agota la
+  alternativa o el fallo no es reintentable, DERIVA a puente-humano (D2) por evento
+  con paquete cerrado (SolicitudDecision). Úsala para operar, depurar o extender el
+  puente, o para entender su contrato de eventos y reglas de negocio (reintento
+  mecánico antes que humano, fallos no reintentables).
+when-to-use: >-
+  - Cuando necesites manejar un fallo del ciclo del pipeline (RPC nichos.fallo.manejar.request
+    o fire-and-forget nichos.canal.envio_fallido) con reintento mecánico o deriva a puente humano.
+  - Cuando depures por qué un fallo se reintentó (REINTENTO_MECANICO), se escaló a humano
+    (PUENTE_HUMANO) o se rechazó (fallo/project_id ausente → 400 INVALID_INPUT).
+  - Cuando quieras entender el patrón PUENTE stateless (sin PosPersistencia, contadores en
+    memoria) y el desacople por evento con canal-supervision (G1) / puente-humano (D2).
+  - Cuando vayas a escribir/ampliar el test unitario del puente.
+tags: [enki, modulo, puente, stateless, nichos, radar, fallo, reintento, escalar, puente-humano, proyecto-3d]
 ---
-# manejo-fallo — REFLEJO que maneja los fallos de impresión 3D
+
+# manejo-fallo — PUENTE STATELESS (L3) del fallo del ciclo del Radar
 
 ## Qué hace el módulo
 
-`manejo-fallo` es un **REFLEJO puro** (sin store propio, sin persistencia): al fallar
-una impresión:
+`manejo-fallo` es un **PUENTE STATELESS** (L3): gestiona el **fallo del ciclo del pipeline** de
+nichos. Ante un fallo (un envío del canal que falló vía `nichos.canal.envio_fallido`, o un fallo
+declarado vía RPC directo) intenta un **REINTENTO MECÁNICO** hasta un máximo (**3**, `MAX_REINTENTOS`).
+Si se agota la alternativa o el fallo **no es reintentable** → **DERIVA a puente-humano (D2) por
+evento** con paquete cerrado (SolicitudDecision). El reintento mecánico SIEMPRE va ANTES de escalar
+a humano (regla de la hoja L3).
 
-1. **avisa SIEMPRE** (`adaptador-avisos`, fire-and-forget `aviso.solicitar` tipo `fallo`);
-2. **consulta la POLÍTICA** del dueño (`adaptador-confirmacion`, SolicitudDecision);
-3. **NUNCA decide por su cuenta** (cero juicio).
+Es un **PUENTE** (patrón real, stateless): **sin PosPersistencia**, solo cuenta intentos en memoria
+(`this._intentos` Map fallo_id → intentos). Comunica con el exterior **por evento** (canal-supervision
+G1 / puente-humano D2), **nunca con un vendor concreto**.
 
-Política de fallo (configurada por el dueño, **ABIERTO**):
-- política `reintentar` (`reintentos_max N`): si `reintentos < max` → **REINTENTAR**;
-  si agotados → **SALTAR** (no detener el taller);
-- política `saltar` → **SALTAR** siempre (no detener);
-- política **ABIERTO** o sin política conocida → **SolicitudDecision** al dueño
-  (`adaptador-confirmacion.confirmar.request`) y **ESPERA** (el sistema nunca la sustituye).
-
-Reflejo puro: cada fallo cierra su círculo; si no puede avisar ni resolver, emite
-`manejo-fallo.manejar.failed`. CERO juicio: ningún fallo se calla; ninguna acción sin
-política conocida del dueño.
-
-## Flujo típico
-
-Caso real: **la impresora falla → se avisa SIEMPRE al dueño → se aplica la política (reintentar/saltar) o se espera su decisión**.
-
-1. `ciclo-impresion` detecta el fallo físico y llama `manejo-fallo.manejar.request` con `{ project_id, tarea_id, motivo, politica }` (desde `_manejarFallo`; `panel-trabajador` también puede dispararlo con `reintentar`/`saltar`).
-2. `_manejar` **avisa SIEMPRE** publicando `aviso.solicitar` (`tipo: 'fallo'`, fire-and-forget a `adaptador-avisos`); ningún fallo se calla.
-3. Lee la política del dueño (`input.politica`/`politica_fallo` o config).
-4. Política **`reintentar`**: si `reintentos < reintentos_max` → `REINTENTAR` (incrementa el contador en memoria); si agotados → `SALTAR` (no detener el taller). Política **`saltar`** → `SALTAR` siempre.
-5. Política **ABIERTO / sin política** → `_solicitarDecision` pide al dueño por `adaptador-confirmacion.confirmar.request` (`tipo: 'reanudar_ciclo'`) y responde `{ accion: 'ESPERAR_DECISION', esperando: true }` (el sistema espera, no sustituye).
-6. Cada decisión responde en `manejo-fallo.manejar.response`; si no puede avisar/resolver → `manejo-fallo.manejar.failed` (cierra el círculo).
+Fallos **no reintentables** (`NO_REINTENTABLES`, Set): `UPSTREAM_UNREACHABLE` (recurso inexistente),
+`PERMISSION_DENIED` (sin permiso → acción humana), `INVALID_INPUT` (payload corrupto → revisión
+humana). Estos derivan directo a humano.
 
 ## Contrato de eventos (module.json real)
 
@@ -56,87 +45,157 @@ Caso real: **la impresora falla → se avisa SIEMPRE al dueño → se aplica la 
 
 | Evento | Handler | Descripción |
 |---|---|---|
-| `manejo-fallo.manejar.request` | `onManejarRequest` | Maneja un fallo: avisa SIEMPRE y decide la acción según la política del dueño (reintentar/saltar); si exige juicio, pide decisión por adaptador-confirmacion. |
+| `nichos.fallo.manejar.request` | `onManejarRequest` | RPC puro: {project_id, fallo} → reintento mecánico o deriva a puente humano. Fallo falta/inválido o project_id faltante → error determinista nichos.fallo.manejar.failed. Éxito → publica nichos.fallo_manejado (+ nichos.puente_solicitado si escala a humano) y responde por nichos.fallo.manejar.response. |
+| `nichos.canal.envio_fallido` | `onEnvioFallido` | Fire-and-forget (canal-supervision G1): un envío del canal falló → el puente lo maneja (reintento mecánico o deriva a humano). Publica nichos.fallo_manejado o nichos.fallo.manejar.failed. |
+| `project.activated` | `onProjectActivated` | Puente sin estado: solo registra el proyecto activo para enriquecer los fallos derivados. |
 
 ### Publishes
 
 | Evento | Descripción |
 |---|---|
-| `manejo-fallo.manejar.response` | Respuesta correlada: acción de fallo decidida (reintentar/saltar/esperando_decision). |
-| `manejo-fallo.manejar.failed` | Par de fallo: no se pudo manejar el fallo. |
-| `aviso.solicitar` | (fire-and-forget a adaptador-avisos) notificación de fallo siempre enviada. |
+| `nichos.fallo_manejado` | Fire-and-forget (L3): un fallo del ciclo fue tramitado → {project_id, fallo_id, reintentado, intento, max_reintentos, resolucion:'REINTENTO_MECANICO'\|'PUENTE_HUMANO'}. Reintento mecánico ANTES de escalar a humano. |
+| `nichos.puente_solicitado` | Fire-and-forget (L3→D2): el fallo no se resolvió por reintento mecánico → se deriva a puente humano con paquete cerrado (SolicitudDecision). Lo consume cola-decisiones-gate (K2) y lo entrega canal-supervision (G1). |
+| `nichos.fallo.manejar.failed` | Par de fallo determinista (L3): el fallo no pudo tramitarse (fallo faltante/inválido o project_id faltante) → {status, code, mensaje, data}. Cierra el ciclo de nichos.fallo.manejar.request. |
 
-> Nota: `aviso.solicitar` no está en el `module.json` de manejo-fallo pero sí lo publica
-> el `index.js` en `_avisar` (fire-and-forget, canal del dueño).
+> **Nota (honestidad sobre el código real)**: además del shape descrito en module.json, el evento
+> `nichos.puente_solicitado` que index.js publica en `_manejar` (línea 141) lleva un **paquete
+> cerrado real** con `{ project_id, nicho, problema, dudas:[{codigo, causa}], estado:'PENDIENTE',
+> paquete_cerrado:true, derivado_en }` — la SolicitudDecision completa. Documentado tal cual.
 
-> **Regla de cierre de círculo**: todo fallo cierra su círculo con su par de fallo
-> canónico (`manejo-fallo.manejar.failed`) si no puede avisar/resolver.
+> **Nota (honestidad sobre el código real)**: en `onEnvioFallido`, si el fallo no trae `project_id`
+> se usa `this.project_id` (activo); el `fallo` que se pasa a `_manejar` se construye con default
+> `tipo:'CANAL_ENVIO'`, `codigo: d.code || d.error?.code || 'UPSTREAM_UNREACHABLE'`, `mensaje`. El
+> resultado de `onEnvioFallido` **no** se responde por ningún `.response` (es fire-and-forget puro):
+> solo publica `nichos.fallo_manejado` o `nichos.fallo.manejar.failed`.
+
+> **Nota: no está en module.json pero sí lo emite `_atender` (modulo-hibrido-reflejo)**:
+> ante una excepción inesperada en la proyección, se responde por el canal de la response con
+> `{ status: 500, code: 'UNKNOWN_ERROR', mensaje: err.message }`.
 
 ## Reglas de negocio
 
-1. **AVISAR SIEMPRE**: `_avisar` publica `aviso.solicitar` con `tipo: 'fallo'`,
-   `aviso_id`, `nombre`, `detalle` y `correlation_id` (fire-and-forget; el ack lo
-   verifica adaptador-avisos). Ningún fallo se calla.
-2. **CERO juicio — la acción sale de la política del dueño**: `_manejar` lee
-   `input.politica`/`politica_fallo` (o config); sin política conocida → SolicitudDecision.
-3. **Política `reintentar`**: si `reintentosActuales < reintentosMax` → REINTENTAR
-   (incrementa el contador en memoria); si agotados → SALTAR (no detener el taller).
-4. **Política `saltar`**: → SALTAR siempre (no detener).
-5. **Política ABIERTO / sin política**: → `_solicitarDecision` pide al dueño por
-   `adaptador-confirmacion.confirmar.request` (`tipo: 'reanudar_ciclo'`) y responde
-   `{ accion: 'ESPERAR_DECISION', esperando: true }`. El sistema espera, no sustituye.
-6. **Reflejo puro**: reintentos en memoria por tarea (`this._reintentos`), sin
-   PosPersistencia (es política operativa del día).
+1. **Reintento mecánico ANTES de escalar a humano**: `_manejar` decide `reintentable =
+   this._esReintentable(fallo)` y `reintentado = reintentable && this._reintentarMecanico(fallo)`.
+   Si `reintentado` es true → responde `200` con `resolucion:'REINTENTO_MECANICO'` (no escala).
+2. **Límite de reintentos `MAX_REINTENTOS = 3` (ABIERTO)**: `_reintentarMecanico` incrementa el
+   contador por `fallo.id` (o `'default'`); si `actual >= 3` → `false` (agotado → escalar). El
+   `_intentos` es un Map en memoria (puente stateless, sin persistencia).
+3. **Fallos no reintentables → deriva directa a humano**: `_esReintentable` es false si `codigo`
+   (`fallo.codigo || fallo.code`) ∈ `NO_REINTENTABLES` (`UPSTREAM_UNREACHABLE` | `PERMISSION_DENIED`
+   | `INVALID_INPUT`). Un fallo no reintentable **nunca se reintenta**, escala directo a
+   puente-humano.
+4. **Escalar a humano = publicar `nichos.puente_solicitado`**: en `_manejar`, cuando no hay
+   reintento (agotado o no reintentable), se construye el paquete cerrado con `_derivarASinAlternativa`
+   `{ ...fallo, project_id: pid }` y causa (`'reintentos agotados (max 3)'` o
+   `'fallo no reintentable (<codigo>)'`), se publica `nichos.puente_solicitado` y responde `200` con
+   `resolucion:'PUENTE_HUMANO'`, `escalado_humano:true`, `paquete_cerrado:true`. module.json lo
+   marca como `nichos.fallo_manejado` + `nichos.puente_solicitado` para el mismo tramite.
+5. **Input inválido → `400 INVALID_INPUT`**: en `_manejar`, si `input.fallo` no es objeto → failed
+   con `fallo`; si `project_id` ausente (ni input ni activo) → failed con `project_id`. El handler
+   publica `nichos.fallo.manejar.failed` con `{status, code, field}`.
+6. **Regla de cierre de círculo**: en `onManejarRequest` (y `onEnvioFallido`), éxito (status 200) →
+   publica `nichos.fallo_manejado` (y si escaló, ya se publicó `nichos.puente_solicitado` en
+   `_manejar`); fallo → publica `nichos.fallo.manejar.failed`. El RPC responde por
+   `nichos.fallo.manejar.response`; el fire-and-forget no responde.
 
-## Uso / cómo invocarlo
+## Cómo se usa (RPCs)
 
-El consumidor típico es `ciclo-impresion` (`_manejarFallo`) y `panel-trabajador`
-(control `reintentar`/`saltar`). RPC request/response:
+RPC que responde en `nichos.fallo.manejar.response`:
 
-### 1. `manejar` — manejar un fallo de impresión
+### 1. `manejar` — manejar un fallo del ciclo (reintento mecánico o deriva a humano)
 
 ```json
 {
   "project_id": "e57a318a-...",
-  "tarea_id": "tarea_abc",
-  "modelo_nombre": "soporte",
-  "motivo": "thermal_runaway",
-  "politica": "reintentar",
-  "reintentos_max": 2
+  "fallo": { "id": "fallo_abc", "codigo": "TIMEOUT_ENVIO", "mensaje": "el canal no acuso en 30s" }
 }
 ```
-Respuesta `200` (política del dueño): `{ "accion": "REINTENTAR"|"SALTAR", "reintentos": N, "reintentos_max": M }`
-Respuesta `200` (espera al dueño): `{ "accion": "ESPERAR_DECISION", "confirmacion_id": "...", "esperando": true }`
-· `400` sin `project_id`.
+Respuesta `200` (reintento mecánico, primer intento) + publica `nichos.fallo_manejado`:
+```json
+{
+  "status": 200,
+  "data": {
+    "project_id": "e57a318a-...",
+    "fallo_id": "fallo_abc",
+    "reintentado": true,
+    "intento": 1,
+    "max_reintentos": 3,
+    "resolucion": "REINTENTO_MECANICO"
+  }
+}
+```
+
+### Fallo — deriva a puente humano (reintentos agotados o no reintentable)
+
+Reintentando el mismo fallo hasta agotar `max_reintentos`, la respuesta pasa a:
+```json
+{
+  "status": 200,
+  "data": {
+    "project_id": "e57a318a-...",
+    "fallo_id": "fallo_abc",
+    "reintentado": false,
+    "escalado_humano": true,
+    "resolucion": "PUENTE_HUMANO",
+    "causa": "reintentos agotados (max 3)",
+    "paquete_cerrado": true
+  }
+}
+```
+Y adicionalmente publica `nichos.puente_solicitado` con el paquete cerrado (SolicitudDecision).
+
+### Fallo — payload inválido
+
+```json
+{ "project_id": "e57a318a-..." }
+```
+Respuesta `400` + `nichos.fallo.manejar.failed`:
+```json
+{ "status": 400, "code": "INVALID_INPUT", "mensaje": "fallo requerido", "data": { "field": "fallo" } }
+```
+
+### Fire-and-forget — `nichos.canal.envio_fallido` (canal-supervision G1)
+
+```json
+{ "project_id": "e57a318a-...", "code": "TIMEOUT_ENVIO", "mensaje": "sin ack" }
+```
+`onEnvioFallido` construye `fallo={tipo:'CANAL_ENVIO', codigo:'TIMEOUT_ENVIO', mensaje:'sin ack'}`,
+origen `'canal'`, y publica `nichos.fallo_manejado` (o `nichos.fallo.manejar.failed`).
 
 ## Tests
 
 El test vive en `tests/unit/manejo-fallo.test.js`. Cubre (del código real):
 
-- `manejar` política `reintentar` dentro de límites → REINTENTAR e incrementa contador.
-- `manejar` política `reintentar` agotado → SALTAR (no detener).
-- `manejar` política `saltar` → SALTAR siempre.
-- `manejar` sin política (ABIERTO) → SolicitudDecision por `adaptador-confirmacion` y
-  responde `ESPERAR_DECISION`.
-- `manejar` SIEMPRE emite `aviso.solicitar` (aviso de fallo).
-- `manejar` sin `project_id` → `400 INVALID_INPUT`.
+- `manejar` con fallo reintentable dentro del límite → `200`, `resolucion:'REINTENTO_MECANICO'`,
+  incrementa el contador y publica `nichos.fallo_manejado`.
+- `manejar` con fallo reintentable agotado (3) → `200`, `resolucion:'PUENTE_HUMANO'`, publica
+  `nichos.puente_solicitado` y `nichos.fallo_manejado`.
+- `manejar` con fallo no reintentable (`UPSTREAM_UNREACHABLE` | `PERMISSION_DENIED` | `INVALID_INPUT`)
+  → deriva directo a humano (sin reintentar), publica `nichos.puente_solicitado`.
+- `manejar` sin `fallo` o sin `project_id` → `400 INVALID_INPUT` + `nichos.fallo.manejar.failed`.
+- `onEnvioFallido` (fire-and-forget) → construye el fallo y publica `nichos.fallo_manejado`.
+- `project.activated` registra el `project_id` activo (puente sin persistencia).
 
 Para ejecutarlo:
-
 ```bash
-cd /home/admin/3enki/modules/manejo-fallo
+cd /home/admin/3enki/modules/nichos/manejo-fallo
 node tests/unit/manejo-fallo.test.js
-# esperado: manejo-fallo: N/N OK
 ```
 
 ## Notas de implementación
 
-- Clase `ManejoFalloReflejo extends ModuloHibridoReflejo`; `name = 'manejo-fallo'`,
-  `version = 'reflejo-0.1.0'`; FASE 4 TANDA 4 (última).
-- Sin store ni persistencia; `this._reintentos` es un `Map` en memoria por tarea
-  (`${pid}:${tarea_id}` → n; `__global__` si no hay tarea).
-- `_avisar` publica `aviso.solicitar` (fire-and-forget).
-- `_solicitarDecision` llama `_rpc('adaptador-confirmacion.confirmar.request', ...)` con
-  timeout 30s.
-- Dependencias (module.json): `adaptador-avisos`, `adaptador-confirmacion`,
-  `motor-encadenamiento`.
+- Clase `ManejoFallo extends ModuloHibridoReflejo`; `name = 'manejo-fallo'`,
+  `version = 'reflejo-0.1.0'`. Sin store ni PosPersistencia (puente stateless): `this._intentos` Map
+  (fallo_id → intentos) en memoria + `this.project_id` (activo).
+- **Constantes**: `MAX_REINTENTOS = 3`; `NO_REINTENTABLES = new Set(['UPSTREAM_UNREACHABLE',
+  'PERMISSION_DENIED', 'INVALID_INPUT'])`.
+- **Escritura de dominio**: `onManejarRequest` delega en `_atender(e,'manejar',
+  'nichos.fallo.manejar.response',fn)` y publica `nichos.fallo_manejado`/`nichos.fallo.manejar.failed`;
+  `onEnvioFallido` (fire-and-forget) hace lo mismo sin response.
+- Proyecciones puras: `_manejar` (orquestador: reintento → humano), `_reintentarMecanico` (contador),
+  `_esReintentable` (Set), `_derivarASinAlternativa` (paquete cerrado D2).
+- `onUnload` es `return super.onUnload()` (no hay persistencia que volcar).
+- Tools: `toolManejar(params)`, `toolReintentarMecanico(fallo)`.
+- DEP: escucha `nichos.canal.envio_fallido` (canal-supervision G1); publica `nichos.puente_solicitado`
+  que consumen `cola-decisiones-gate` (K2) y `canal-supervision` (G1); `nichos.fallo_manejado` es el
+  tramite del fallo. Es el L3 de la cadena de soporte del `pipeline-por-nicho` (L1).

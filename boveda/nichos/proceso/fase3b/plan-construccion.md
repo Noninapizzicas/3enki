@@ -53,8 +53,8 @@
 | `filesystem` | reflejo | Base shared: stores leen/escriben via su reflejo. |
 | `project-manager` | reflejo | Lifecycle del proyecto; PosPersistencia se scopea por `project_id`. |
 | `telegram-bridge` | puente | Implementación del PuertoCanal (G1) en el sitio de despliegue. |
-| `memoria-nicho` | custodio | Sustrato shared del historial real de señales/resultados (L4, C7). |
-| `gestor-credenciales-nicho` | puente | Autoaprovisiona credenciales de fuentes/plataformas (J1). |
+| `historial-nicho` | custodio | Sustrato propio del historial real de señales/resultados (L4). Función de la vieja memoria-nicho, ya absorbida. |
+| `puerto-fuente-datos` | puente | Autoaprovisiona y autoriza credenciales de fuentes/plataformas (J1). Función del viejo gestor-credenciales-nicho, ya absorbida. |
 
 Razón de REUTILIZAR (no CONSTRUIR): su `module.json` real entrega exactamente el contrato que la pieza
 necesita con PosPersistencia per-proyecto, sin riesgo de romper su proyecto de origen.
@@ -233,7 +233,7 @@ y se CONSTRUYE para nichos.
 
 ### B2 · `reglas-exclusion` — micro-agente (CONSTRUIR)
 ```
-A. DEPENDENCIAS: + sondeo-territorio, memoria-nicho (historial de falsos positivos).
+A. DEPENDENCIAS: + sondeo-territorio. (El historial de falsos positivos vive en historial-nicho, no en la vieja memoria-nicho.)
 B. MODULE.JSON: subscribes:[nichos.reglas.excluir.request]; publishes:[nichos.candidato.excluido, ...failed].
 C/D. _aprenderDeCorridas(historial)->Reglas (blueprint/juicio); _aplicar(territorio)->excluido:bool.
 E/F. Handler _atender; publica nichos.candidato.excluido.
@@ -308,7 +308,7 @@ NO REUTILIZA: corte temprano de nichos no existe (ciclo-impresion corta otro dom
 
 ### C7 · `reglas-aprendidas` — micro-agente (CONSTRUIR)
 ```
-A. DEPENDENCIAS: + criterio-viabilidad, registro-cobros, cuadro-salud-financiera, memoria-nicho.
+A. DEPENDENCIAS: + criterio-viabilidad, registro-cobros, cuadro-salud-financiera. (El sustrato de señales reales lo aporta historial-nicho.)
 D. PROYECCIONES: _comparar(umbral, resultadosReales)->Delta (juicio); _recalibrar(umbral,delta)->
    UmbralRefinado -> C2 en caliente. Consume nichos.salud.actualizada (COBRÓ|SANGRA|NEUTRO).
 F: publica nichos.umbral.recalibrado (+ failed).
@@ -489,7 +489,7 @@ NO REUTILIZA: confirmación de valor del pagador de nicho no existe.
 
 ### J1 · `puerto-fuente-datos` — puente (CONSTRUIR)
 ```
-A. DEPENDENCIAS: + crawl4rs (REUTILIZAR), gestor-credenciales-nicho (REUTILIZAR).
+A. DEPENDENCIAS: + crawl4rs (REUTILIZAR). (El autoaprovisionamiento de credenciales se resuelve dentro de la propia proyección _autorizar de J1.)
 D. PROYECCIONES: _conectar(fuente)->ok swap sin acople; _consultar->DatasetBruto+Rate+Coste;
    _autorizar(fuentes autorizadas por el dueño).
 F: publica nichos.fuente.conectada / nichos.fuente.reemplazada (+ consultar.failed).
@@ -585,11 +585,11 @@ CONSTRUYE (patrón prestado) para no romper el manejo-fallo de impresión.
 
 ### L4 · `historial-nicho` — custodio (CONSTRUIR)
 ```
-A. DEPENDENCIAS: + memoria-nicho (REUTILIZAR como sustrato).
+A. DEPENDENCIAS: ninguna externa (store append-only propio con PosPersistencia).
 D. PROYECCIONES: _appendUnico(duenyoEscritor=pipeline, estado)->append-only inmutable; _consultar(nicho).
 F: publica nichos.historial_actualizado (+ failed).
 NO REUTILIZA: historial (3D) registra impresiones; historial de nichos (estados/decisiones) se CONSTRUYE
-sobre memoria-nicho.
+con store propio (PosPersistencia). No depende de memoria-nicho.
 ```
 
 ### L5 · `pulso-avance` — reflejo (CONSTRUIR)
@@ -604,10 +604,12 @@ NO REUTILIZA: pulso de avance de nichos no existe; escalones/pulso se clasifica 
 
 ## 7 · Resumen de decisión
 
-- **51 hojas**: **44 CONSTRUIR** + **7 REUTILIZAR** + **0 ADAPTAR**.
-- Los 7 REUTILIZAR son infraestructura/órganos compartidos con contrato real que encaja
-  (`scheduler`, `crawl4rs`, `filesystem`, `project-manager`, `telegram-bridge`, `memoria-nicho`,
-  `gestor-credenciales-nicho`).
+- **49 hojas**: **44 CONSTRUIR** + **5 REUTILIZAR** + **0 ADAPTAR**.
+- Los 5 REUTILIZAR son infraestructura/órganos compartidos con contrato real que encaja
+  (`scheduler`, `crawl4rs`, `filesystem`, `project-manager`, `telegram-bridge`).
+- Las piezas `memoria-nicho` y `gestor-credenciales-nicho` (del proyecto viejo, hoy eliminado) se
+  descartaron: su función quedó absorbida por `historial-nicho`/`reglas-aprendidas` (memoria) y
+  `puerto-fuente-datos` (credenciales). Ningún módulo construido las referencia por código.
 - Cero ADAPTAR: cualquier módulo "parecido" es de otro dominio (radar-música, 3D, prisma, pizzepos) o de
   una iteración previa sin PosPersistencia per-proyecto; ADAPTARlo rompería su proyecto -> se toma su
   patrón y se CONSTRUYE para nichos.
@@ -629,8 +631,6 @@ NO REUTILIZA: pulso de avance de nichos no existe; escalones/pulso se clasifica 
     "filesystem",
     "project-manager",
     "telegram-bridge",
-    "memoria-nicho",
-    "gestor-credenciales-nicho",
     "captura-semilla",
     "normalizacion-semilla",
     "puerto-fuente-datos",
@@ -778,49 +778,6 @@ NO REUTILIZA: pulso de avance de nichos no existe; escalones/pulso se clasifica 
       "nota": "Implementacion del PuertoCanal (G1) en el sitio de despliegue; nunca acopla G1."
     },
     {
-      "slug": "memoria-nicho",
-      "forma": "custodio",
-      "accion": "REUTILIZAR",
-      "reutiliza": [
-        "memoria-nicho"
-      ],
-      "depende_de": [],
-      "subscribes": [
-        "memoria-nicho.senal.guardar.request",
-        "memoria-nicho.consultar.request",
-        "memoria-nicho.seguimiento.programar.request",
-        "project.activated"
-      ],
-      "publishes": [
-        "memoria.senal_persistida",
-        "memoria.global_actualizada",
-        "memoria.seguimiento_programado",
-        "memoria.guardar.failed"
-      ],
-      "proyecciones_internas": [],
-      "nota": "Sustrato shared del historial real (senales/resultados) que L4 y C7 leen/escriben."
-    },
-    {
-      "slug": "gestor-credenciales-nicho",
-      "forma": "puente",
-      "accion": "REUTILIZAR",
-      "reutiliza": [
-        "gestor-credenciales-nicho"
-      ],
-      "depende_de": [],
-      "subscribes": [
-        "gestor-credenciales-nicho.canal.asegurar.request",
-        "gestor-credenciales-nicho.listar.request",
-        "project.activated"
-      ],
-      "publishes": [
-        "gestor.canal_asegurado",
-        "gestor.canal.failed"
-      ],
-      "proyecciones_internas": [],
-      "nota": "Autoaprovisiona credenciales de fuentes/plataformas para J1; adapta credential-manager al dominio nichos."
-    },
-    {
       "slug": "captura-semilla",
       "forma": "reflejo",
       "accion": "CONSTRUIR",
@@ -923,8 +880,7 @@ NO REUTILIZA: pulso de avance de nichos no existe; escalones/pulso se clasifica 
       "reutiliza": [
         "_shared/modulo-hibrido-reflejo",
         "_shared/pos-persistencia",
-        "sondeo-territorio",
-        "memoria-nicho"
+        "sondeo-territorio"
       ],
       "depende_de": [
         "sondeo-territorio"
@@ -1816,12 +1772,10 @@ NO REUTILIZA: pulso de avance de nichos no existe; escalones/pulso se clasifica 
       "reutiliza": [
         "_shared/modulo-hibrido-reflejo",
         "_shared/pos-persistencia",
-        "crawl4rs",
-        "gestor-credenciales-nicho"
+        "crawl4rs"
       ],
       "depende_de": [
-        "crawl4rs",
-        "gestor-credenciales-nicho"
+        "crawl4rs"
       ],
       "subscribes": [
         "nichos.fuente.consultar.request",
@@ -2125,12 +2079,9 @@ NO REUTILIZA: pulso de avance de nichos no existe; escalones/pulso se clasifica 
       "accion": "CONSTRUIR",
       "reutiliza": [
         "_shared/modulo-hibrido-reflejo",
-        "_shared/pos-persistencia",
-        "memoria-nicho"
+        "_shared/pos-persistencia"
       ],
-      "depende_de": [
-        "memoria-nicho"
-      ],
+      "depende_de": [],
       "subscribes": [
         "nichos.historial.append.request",
         "project.activated"
@@ -2218,6 +2169,7 @@ NO REUTILIZA: pulso de avance de nichos no existe; escalones/pulso se clasifica 
         }
       ]
     }
-  ]
+  ],
+  "nota_alineacion": "F3b revisada: las hojas memoria-nicho y gestor-credenciales-nicho (REUTILIZAR) se eliminaron — su función quedó absorbida por historial-nicho/reglas-aprendidas (memoria) y puerto-fuente-datos (credenciales). Ningún módulo construido las referencia por código."
 }
 ```

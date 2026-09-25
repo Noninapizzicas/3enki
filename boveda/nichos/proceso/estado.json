@@ -36,7 +36,7 @@
     "nota": "Plan de construccion contra inventario real de 198 modulos; espina enki-plan validada (JSON + topo-sort)"
   },
   "fase4": {
-    "estado": "en_progreso",
+    "estado": "completada",
     "skill": "construir-modulos",
     "mandato": "una hoja a la vez, orden de la espina, esquematizar(4a)+crear(4b)",
     "tracking": {
@@ -126,15 +126,14 @@
         "confirmacion-valor",
         "historial-nicho",
         "vista-portafolio",
-        "cola-decisiones-gate"
-      ],
-      "pendientes": [
+        "cola-decisiones-gate",
         "ajustador-umbrales",
         "manejo-fallo",
         "pulso-avance",
         "pipeline-por-nicho"
       ],
-      "proximo": "ajustador-umbrales",
+      "pendientes": [],
+      "proximo": null,
       "nota": "una hoja a la vez, en orden de la espina. Realizados = en modules/nichos/ y verificado"
     },
     "reutilizar": [

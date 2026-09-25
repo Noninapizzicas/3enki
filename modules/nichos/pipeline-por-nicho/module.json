@@ -1,0 +1,31 @@
+{
+  "_doc": "Manifest de nichos/pipeline-por-nicho — CUSTODIO / ORQUESTADOR (L1, hoja del plan · último): LA MAQUINA DE ESTADOS semilla→caja por nicho. Es el DUEÑO del estado de cada nicho (un unico escritor del agregado Nicho): consume eventos de dominio ajenos (semilla capturada, normalizada, sondeada, estudiada, veredicto, camino, solucion ensamblada, modelo cobro, cobro, salud) y aplica las transiciones validadas. Estados: SEMILLA→BUSCADO→VALIDANDO→VALIDADO→CONSTRUIDO→OPERANDO→COBRANDO→EN_CAJA|SANGRA; +CORTADO (corte DURO C6) y OPERANDO_EN_ESPERA (gate RECHAZA). Transicion ilegal → rechazada con par de fallo (estado ilegal imposible). PosPersistencia per-proyecto: restaura en project.activated y vuelca en onUnload. Publica nichos.pipeline.avanzado / ciclo_iniciado / ciclo_completado (+ nichos.pipeline.avanzar.failed). El scheduler (REUTILIZAR) dispara el ciclo.",
+  "name": "pipeline-por-nicho",
+  "version": "0.1.0",
+  "description": "Custodio/orquestador (L1): la maquina de estados semilla→caja por nicho; consume eventos de dominio y aplica transiciones validadas; PosPersistencia; publica nichos.pipeline.avanzado.",
+  "language": "es",
+  "subscribes": [
+    { "event": "nichos.pipeline.registrar_semilla.request", "handler": "onRegistrarSemillaRequest", "description": "RPC: {project_id, nicho} → registra la semilla en la maquina (estado SEMILLA) y publica nichos.pipeline.ciclo_iniciado. Nicho o project_id faltante → nichos.pipeline.avanzar.failed. Responde por nichos.pipeline.registrar_semilla.response." },
+    { "event": "nichos.pipeline.avanzar.request", "handler": "onAvanzarRequest", "description": "RPC: {project_id, nicho, tipo_evento, payload} → aplica la transicion validada de la maquina. Transicion ilegal → rechazada con par de fallo. Exito → nichos.pipeline.avanzado y responde por nichos.pipeline.avanzar.response." },
+    { "event": "nichos.semilla.capturada", "handler": "onSemillaCapturada", "description": "Fire-and-forget (captura-semilla A1): SEMILLA→BUSCADO. Publica nichos.pipeline.avanzado o par de fallo." },
+    { "event": "nichos.semilla.normalizada", "handler": "onSemillaNormalizada", "description": "Fire-and-forget (normalizacion-semilla A2): asegura SEMILLA→BUSCADO. Publica nichos.pipeline.avanzado o par de fallo." },
+    { "event": "nichos.territorio.sondeado", "handler": "onTerritorioSondeado", "description": "Fire-and-forget (sondeo-territorio B1): BUSCADO→VALIDANDO. Publica nichos.pipeline.avanzado o par de fallo." },
+    { "event": "nichos.candidato.encontrado", "handler": "onCandidatoEncontrado", "description": "Fire-and-forget (sondeo-territorio B1): BUSCADO→VALIDANDO. Publica nichos.pipeline.avanzado o par de fallo." },
+    { "event": "nichos.estudio.medido", "handler": "onEstudioMedido", "description": "Fire-and-forget (estudio-demanda C1): permanece en VALIDANDO (embudo). Publica nichos.pipeline.avanzado o par de fallo." },
+    { "event": "nichos.veredicto.emitido", "handler": "onVeredictoEmitido", "description": "Fire-and-forget (veredicto-viabilidad C3): VALIDANDO→VALIDADO si VIABLE|PUENTE; VALIDANDO→CORTADO si NO_VIABLE (corte DURO C6). Publica nichos.pipeline.avanzado o par de fallo." },
+    { "event": "nichos.corte.aplicado", "handler": "onCorteAplicado", "description": "Fire-and-forget (corte-temprano C6): VALIDANDO|VALIDADO→CORTADO. Publica nichos.pipeline.avanzado o par de fallo." },
+    { "event": "nichos.camino.decidido", "handler": "onCaminoDecidido", "description": "Fire-and-forget (camino-encontrar-construir C4): VALIDADO→CONSTRUIDO. Publica nichos.pipeline.avanzado o par de fallo." },
+    { "event": "nichos.solucion.construida", "handler": "onSolucionConstruida", "description": "Fire-and-forget (ensamblador-solucion D1): CONSTRUIDO→OPERANDO. Publica nichos.pipeline.avanzado o par de fallo." },
+    { "event": "nichos.modelo_cobro.propuesto", "handler": "onModeloCobroPropuesto", "description": "Fire-and-forget (proponedor-modelo-cobro D4): modelo propuesto, no muta estado (alimenta el paquete del gate). Publica nichos.pipeline.avanzado o par de fallo." },
+    { "event": "nichos.cobro.ejecutado", "handler": "onCobroEjecutado", "description": "Fire-and-forget (motor-cobro E3): COBRANDO→EN_CAJA si EFECTIVO; permanece COBRANDO si COMPROMETIDO. Publica nichos.pipeline.avanzado o par de fallo." },
+    { "event": "nichos.cobro_registrado", "handler": "onCobroRegistrado", "description": "Fire-and-forget (registro-cobros F1): COBRANDO→EN_CAJA. Publica nichos.pipeline.avanzado o par de fallo." },
+    { "event": "nichos.salud.actualizada", "handler": "onSaludActualizada", "description": "Fire-and-forget (cuadro-salud-financiera F3): COBRANDO→SANGRA si resultado SANGRA; EN_CAJA si COBRO. Publica nichos.pipeline.avanzado, ciclo_completado o par de fallo." },
+    { "event": "project.activated", "handler": "onProjectActivated", "description": "Custodio: restaura la maquina del proyecto activado via PosPersistencia." }
+  ],
+  "publishes": [
+    { "event": "nichos.pipeline.ciclo_iniciado", "description": "Fire-and-forget (L1): una semilla entro a la maquina (SEMILLA) → {project_id, nicho, estado:'SEMILLA'}. Lo consume pulso-avance (L5) y cola-candidatos (L2)." },
+    { "event": "nichos.pipeline.avanzado", "description": "Fire-and-forget (L1): el nicho avanzo de etapa por un evento de dominio → {project_id, nicho, estado, nuevo_estado, evento, transicion_valida}. Lo consume pulso-avance (L5)." },
+    { "event": "nichos.pipeline.ciclo_completado", "description": "Fire-and-forget (L1): el ciclo del nicho llego a estado terminal (EN_CAJA|SANGRA|CORTADO) → {project_id, nicho, nuevo_estado, ciclo_completado:true}. Alimenta cuadro-salud (F3) / vista-portafolio (K1)." },
+    { "event": "nichos.pipeline.avanzar.failed", "description": "Par de fallo determinista (L1): transicion ilegal (estado ilegal imposible) o input invalido → {status, code, mensaje, data}. Cierra el circulo de todas las publicaciones del pipeline." }
+  ]
+}

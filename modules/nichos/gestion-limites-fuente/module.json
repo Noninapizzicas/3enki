@@ -1,0 +1,17 @@
+{
+  "_doc": "Manifest de nichos/gestion-limites-fuente — REFLEJO JS PURO (cero LLM, cero estado, cero red): politica determinista de limites/cola/rate de consultas a las fuentes de datos. Dado el limite declarado de una fuente (J1/puerto-fuente-datos) y las consultas ya hechas (input), decide si PERMITE la siguiente consulta, la ENCOLA o la DENIEGA para no quemar el recurso. Stateless: recibe el estado como input, calcula, responde. Proyecciones: _dosificar(rate/limite -> PERMITIR|ENCOLAR|DENEGAR) y _encolar(solicitud -> cola resultante). Sin store, sin custodio: entra objeto, sale objeto. Publica nichos.fuente.dosificado cuando se dosifica un pedido y nichos.fuente.encolado cuando se encola; cada flujo cierra su circulo con su par *.failed determinista.",
+  "name": "gestion-limites-fuente",
+  "version": "0.1.0",
+  "description": "Reflejo JS puro (J3): gestiona los limites/cola/rate de las fuentes de datos para no quemar recursos. Dado el limite declarado de una fuente y las consultas ya hechas (input, stateless), decide si permite la siguiente consulta, la encola o la deniega (PERMITIR|ENCOLAR|DENEGAR). Publica nichos.fuente.dosificado / nichos.fuente.encolado y cierra cada circulo con su par *.failed determinista.",
+  "language": "es",
+  "subscribes": [
+    { "event": "nichos.fuente.dosificar.request", "handler": "onDosificarRequest", "description": "RPC puro: {fuente, limite, consultas_hechas, cola_ocupada} -> {decision: PERMITIR|ENCOLAR|DENEGAR}. Bajo limite -> PERMITIR; en o por encima -> ENCOLAR (o DENEGAR si la cola esta llena). Si falta el limite declarado -> error determinista (nichos.fuente.dosificar.failed). Exito -> publica nichos.fuente.dosificado y responde por nichos.fuente.dosificar.response." },
+    { "event": "nichos.fuente.encolar.request", "handler": "onEncolarRequest", "description": "RPC puro: {fuente, solicitud, cola:[], max_cola} -> {cola resultante, posicion}. Añade la consulta al final de la cola; si la cola esta llena (>= max_cola) -> DENEGADO con par de fallo nichos.fuente.encolar.failed. Exito -> publica nichos.fuente.encolado y responde por nichos.fuente.encolar.response." }
+  ],
+  "publishes": [
+    { "event": "nichos.fuente.dosificado", "description": "Fire-and-forget (J3): un pedido de consulta a una fuente fue dosificado -> {fuente, decision, consultas_hechas, limite}. La consumen sondeo-territorio (B1), estudio-demanda (C1) y estudio-competencia (E1) para respetar el rate antes de golpear la fuente." },
+    { "event": "nichos.fuente.dosificar.failed", "description": "Par de fallo determinista: no se pudo dosificar (falta el limite declarado o input invalido) -> {status:400|422, code, mensaje}. Cierra el circulo de nichos.fuente.dosificar.request." },
+    { "event": "nichos.fuente.encolado", "description": "Fire-and-forget (J3): una consulta fue encolada -> {fuente, solicitud, posicion, total_en_cola}. La consume el propio gestor para despachar la cola sin quemar el rate de la fuente." },
+    { "event": "nichos.fuente.encolar.failed", "description": "Par de fallo determinista: no se pudo encolar (cola llena o input invalido) -> {status, code, mensaje}. Cierra el circulo de nichos.fuente.encolar.request." }
+  ]
+}

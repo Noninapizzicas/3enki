@@ -1,0 +1,17 @@
+{
+  "_doc": "Manifest de nichos/vista-portafolio — CUSTODIO (K1, hoja del plan): dashboard que cruza la salud de TODOS los modulos/nichos en una vista agregada de portafolio para el jefe. Ingesta reflejo (_agregarSalud, cruza la salud financiera F3 de todos los nichos en una VistaPortafolio) + guardado custodio del store de vistas (_guardarVista) + lectura (_leer -> DashboardJefe). PosPersistencia per-proyecto: restaura en project.activated y vuelca en onUnload. Escucha nichos.salud.actualizada para re-agregar la vista, y el jefe pide guardar por RPC. Publica nichos.vista_portafolio; nichos.vista.guardar.failed cuando la vista no puede guardarse.",
+  "name": "vista-portafolio",
+  "version": "0.1.0",
+  "description": "Custodio (K1): dashboard que cruza la salud de todos los modulos/nichos en una vista agregada de portafolio para el jefe; ingesta reflejo + store custodio con PosPersistencia; publica nichos.vista_portafolio.",
+  "language": "es",
+  "subscribes": [
+    { "event": "nichos.vista.leer.request", "handler": "onLeerRequest", "description": "RPC custodia: {project_id} → DashboardJefe (la vista agregada actual del portafolio). No muta. Responde por nichos.vista.leer.response." },
+    { "event": "nichos.vista.guardar.request", "handler": "onGuardarRequest", "description": "RPC custodia: {project_id, salud*} → re-agrega la VistaPortafolio de la salud recibida (o del store) y la guarda. Exito → publica nichos.vista_portafolio y responde por nichos.vista.guardar.response. Fallo (sin salud) → nichos.vista.guardar.failed." },
+    { "event": "nichos.salud.actualizada", "handler": "onSaludActualizada", "description": "Fire-and-forget (F3): cuadro-salud-financiera emite la salud de un nicho → el custodia re-agrega la vista del portafolio (reflejo) y la guarda; publica nichos.vista_portafolio actualizada." },
+    { "event": "project.activated", "handler": "onProjectActivated", "description": "Custodio: restaura el store de vistas del proyecto activado via PosPersistencia." }
+  ],
+  "publishes": [
+    { "event": "nichos.vista_portafolio", "description": "Fire-and-forget (K1): la vista agregada de portafolio fue regenerada y guardada → {project_id, vista: VistaPortafolio, totales}. La consume el jefe (panel) y el canal de supervision para el dashboard." },
+    { "event": "nichos.vista.guardar.failed", "description": "Par de fallo determinista: no hay salud que cruzar o la vista no pudo guardarse → {status, code, mensaje}. Cierra el circulo de nichos.vista.guardar.request." }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "_doc": "Manifest de nichos/coste-fuente — REFLEJO JS PURO (J4, hoja del plan). Coste por fuente (consulta/scraping/API) para imputar a proyecto. Stateless: cada op es una función pura determinista. Depende de puerto-fuente-datos (J1) para conocer la cuota/coste de cada fuente por tipo. Proyecciones _calcularCoste(project_id,fuente)->Coste (a partir del tipo de fuente y su coste unitario por consulta, con descuento por tope/limite declarado) y _agregarAProyecto(project_id,fuentes)->CosteImputado (agrega el coste total de las fuentes para alimentar la imputación de costes F2). Publica nichos.fuente_costea_imputado (+ nichos.fuente.costear.failed). Sin estado, sin store, sin custodio.",
+  "name": "coste-fuente",
+  "version": "0.1.0",
+  "description": "Reflejo (J4): coste por fuente (consulta/scraping/API) para imputar al proyecto. Stateless, proyección pura determinista: calcula el coste de una fuente y agrega el coste total de un set de fuentes para alimentar la imputación de costes (F2).",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "nichos.fuente.costear.request",
+      "handler": "onCostearRequest",
+      "description": "RPC reflejo: {project_id, fuentes:[{fuente, tipo:'consulta'|'scraping'|'api', consultas, coste_unitario?}]} → {project_id, fuentes_costeadas, coste_total}. Calcula el coste por fuente (determinista) y el coste total imputable. Publica nichos.fuente_costea_imputado y responde por nichos.fuente.costear.response. Si el payload es inválido → nichos.fuente.costear.failed."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "nichos.fuente_costea_imputado",
+      "description": "Fire-and-forget (J4): el coste de las fuentes quedó calculado e imputable → {project_id, fuentes_costeadas, coste_total}. Lo consume la imputación de costes (F2) para sumar la partida de fuentes al CosteProyecto."
+    },
+    {
+      "event": "nichos.fuente.costear.failed",
+      "description": "Par de fallo determinista (J4): payload inválido o fuente no costable → {status, code, message, data}. Cierra el círculo de nichos.fuente.costear.request."
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "_doc": "Manifest de nichos/canal-supervision — PUENTE STATELESS (G1): el puerto abierto del canal de supervision (Telegram u otro). Aplicado la regla del plan: Telegram es UNA implementacion del puerto, NUNCA el portador; cada canal se registra y puede sustituirse por evento (several canales intercambiables) sin acoplarse a una plataforma concreta. Declara y conecta canales de supervision, enruta notificaciones/decisiones hacia el canal activo y emite la entrega con su par de fallo. Sin persistencia: solo enruta/comunica con el exterior.",
+  "name": "canal-supervision",
+  "version": "0.1.0",
+  "description": "Puente stateless de nichos (G1): el puerto abierto del canal de supervision (Telegram u otro, agnostico, con varios canales intercambiables por evento). Declara y conecta canales supervisados, enruta notificaciones/decisiones hacia el canal activo y emite la entrega con su par de fallo. Sin persistencia: solo enruta/comunica con el exterior.",
+  "language": "es",
+  "subscribes": [
+    { "event": "nichos.canal.conectar.request", "handler": "onConectarRequest", "description": "RPC puro: {canal, config?} → ok. Declara y CONECTA un canal de supervision de la whitelist declarable (Telegram u otro), con swap sin acople a plataforma concreta. Exito → publica nichos.canal.conectado y responde por nichos.canal.conectar.response; canal faltante → error 400." },
+    { "event": "nichos.canal.reemplazar.request", "handler": "onReemplazarRequest", "description": "RPC puro: {canal, por, config?} → ok. Sustituye un canal de supervision conectado por otro declarado (puerto reemplazable por evento, sin vendor acoplado). Exito → publica nichos.canal.reemplazado y responde por nichos.canal.reemplazar.response; canal origen no conectado → error 404." },
+    { "event": "nichos.canal.enviar.request", "handler": "onEnviarRequest", "description": "RPC puro: {canal?, tipo?, titulo?, cuerpo?} → entrega. Enruta una notificacion/decision hacia el canal activo (agnostico al proveedor); si no hay canal conectado o el pedido no esta conectado → par determinista nichos.canal.envio_fallido. Exito → publica nichos.canal.enviado y responde por nichos.canal.enviar.response." }
+  ],
+  "publishes": [
+    { "event": "nichos.canal.conectado", "description": "Fire-and-forget (G1): un canal de supervision fue conectado/declarado → {canal, conectado:true, reemplaza, tipo, config}. La consume perfil-supervision (H2) y el pipeline-por-nicho (L1)." },
+    { "event": "nichos.canal.reemplazado", "description": "Fire-and-forget (G1): un canal conectado fue sustituido por otro → {de, a, reemplazado:true, tipo, config}. La consume perfil-supervision (H2) y el pipeline-por-nicho (L1)." },
+    { "event": "nichos.canal.enviado", "description": "Fire-and-forget (G1): un mensaje fue entregado al canal activo → {canal, tipo, titulo, cuerpo, entregado:true, proveedor_tipo, escalon, enviado_en}. PULSO/ALERTA/DECISION de supervision hacia el dueño." },
+    { "event": "nichos.canal.envio_fallido", "description": "Par de fallo determinista (G1): el envio de una notificacion/decision hacia el canal no pudo completarse → {status, error:{code:'CANAL_NO_CONECTADO'|'INVALID_INPUT', message}}. Cierra el circulo de nichos.canal.enviar.request." }
+  ]
+}

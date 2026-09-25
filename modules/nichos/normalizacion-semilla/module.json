@@ -1,0 +1,14 @@
+{
+  "_doc": "Manifest de nichos/normalizacion-semilla — MICRO-AGENTE HIBRIDO (la mitad de juicio de la busqueda): recibe la semilla capturada por captura-semilla (A1) y la DESAMBIGUA a intenciones de busqueda claras (que producto/servicio/audiencia). Parte REFLEJO (_normalizarEstructura, mecanico: normaliza el texto, separa segmentos, detecta senales de audiencia/producto/lugar) + parte FUZZY (_desambiguar, juicio LLM via llm.complete.request con guion-prompt self-contained que genera una lista de intenciones). NUNCA inventa: si el LLM no cumple el contrato JSON, el reflejo determinista (por reglas de segmentacion) asegura al menos una intencion util, y si ni eso hay, falla honesto con el par de fallo. Publica nichos.semilla.normalizada cuando hay intenciones; nichos.semilla.normalizar.failed cuando la semilla viene vacia o el juicio no entrega nada interpretable. Sin store, sin custodio: entra semilla, sale intenciones.",
+  "name": "normalizacion-semilla",
+  "version": "0.1.0",
+  "description": "Micro-agente hibrido (A2): recibe la semilla capturada por captura-semilla, la desambigua a intenciones de busqueda claras y emite nichos.semilla.normalizada para que el buscador (sondeo-territorio) arranque.",
+  "language": "es",
+  "subscribes": [
+    { "event": "nichos.semilla.normalizar.request", "handler": "onNormalizarRequest", "description": "RPC hibrido: {project_id, semilla, formateada} → {semilla, intenciones:[{tipo, producto, audiencia, lugar, confianza}], normalizada}. Desambiguacion fuzzy (llm.complete.request) con fallback reflejo determinista por reglas; semilla vacia → error determinista (nichos.semilla.normalizar.failed). Exito → publica nichos.semilla.normalizada y responde por nichos.semilla.normalizar.response." }
+  ],
+  "publishes": [
+    { "event": "nichos.semilla.normalizada", "description": "Fire-and-forget (A2): la semilla fue desambiguada a N intenciones de busqueda claras → {project_id, semilla, intenciones, normalizada}. La consume sondeo-territorio (B1) y el pipeline-por-nicho (L1)." },
+    { "event": "nichos.semilla.normalizar.failed", "description": "Par de fallo determinista: la semilla llego vacia o el juicio de desambiguacion no entrego intenciones interpretables → {status, code, mensaje, data}. Cierra el circulo de nichos.semilla.normalizar.request." }
+  ]
+}

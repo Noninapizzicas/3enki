@@ -1,0 +1,21 @@
+{
+  "_doc": "Manifest de nichos/cola-decisiones-gate — CUSTODIO (K2, hoja del plan): UNA sola cola de GATES por resolver en el proyecto. Encola las solicitudes de decision del sistema (gate de operar E2, puente humano D2, alerta de sangria F4) y el jefe resuelve la siguiente en orden. PosPersistencia per-proyecto: restaura en project.activated y vuelca en onUnload. Escucha nichos.gate.solicitado / nichos.puente_solicitado / nichos.alerta.sangria para auto-encolar. Publica nichos.gate_encolado / nichos.gate_resuelto / nichos.decision.resuelta; nichos.gate.encolar.failed cuando una solicitud no puede encolarse.",
+  "name": "cola-decisiones-gate",
+  "version": "0.1.0",
+  "description": "Custodio (K2): una sola cola de gates por resolver en el proyecto; encola solicitudes de decision (gate/puente/alerta) y el jefe resuelve la siguiente en orden; PosPersistencia; publica nichos.gate_resuelto y nichos.decision.resuelta.",
+  "language": "es",
+  "subscribes": [
+    { "event": "nichos.gate.encolar.request", "handler": "onEncolarRequest", "description": "RPC custodia: {project_id, solicitud} → encola una solicitud de decision en la cola unica de gates (single-writer). Exito → publica nichos.gate_encolado y responde por nichos.gate.encolar.response. Fallo (solicitud invalida) → nichos.gate.encolar.failed." },
+    { "event": "nichos.gate.resolver.request", "handler": "onResolverRequest", "description": "RPC custodia: {project_id, resolucion, rol} → desencola la siguiente solicitud en orden y la resuelve (APRUEBA|RECHAZA|EXPIRA). Exito → publica nichos.gate_resuelto y nichos.decision.resuelta. Fallo (sin solicitudes o rol no permitido) → nichos.gate.encolar.failed." },
+    { "event": "nichos.gate.solicitado", "handler": "onSolicitudRecibida", "description": "Fire-and-forget (E2): gate-decision-operar pide resolver un gate → auto-encola la solicitud; publica nichos.gate_encolado." },
+    { "event": "nichos.puente_solicitado", "handler": "onSolicitudRecibida", "description": "Fire-and-forget (D2): puente-humano pide decision humana → auto-encola la solicitud; publica nichos.gate_encolado." },
+    { "event": "nichos.alerta.sangria", "handler": "onSolicitudRecibida", "description": "Fire-and-forget (F4): alerta-sangria cruza el techo de perdida → auto-encola la decision; publica nichos.gate_encolado." },
+    { "event": "project.activated", "handler": "onProjectActivated", "description": "Custodio: restaura la cola de decisions del proyecto activado via PosPersistencia." }
+  ],
+  "publishes": [
+    { "event": "nichos.gate_encolado", "description": "Fire-and-forget (K2): una solicitud de decision fue encolada en la cola unica → {project_id, solicitud, posicion}. " },
+    { "event": "nichos.gate_resuelto", "description": "Fire-and-forget (K2): la solicitud en cabecera fue desencolada y resuelta → {project_id, solicitud, resolucion}. " },
+    { "event": "nichos.decision.resuelta", "description": "Fire-and-forget (K2): la decision del jefe impacto el sistema → {project_id, decision, resolucion}. La consume gate-decision-operar (E2) y canal-supervision para materializar." },
+    { "event": "nichos.gate.encolar.failed", "description": "Par de fallo determinista: la solicitud esta vacia/invalida o no hay cola → {status, code, mensaje}. Cierra el circulo de los requests y fire-and-forget que encolan." }
+  ]
+}

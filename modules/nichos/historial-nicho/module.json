@@ -1,0 +1,15 @@
+{
+  "_doc": "Manifest de nichos/historial-nicho — CUSTODIO (L4, hoja del plan): registro APPEND-ONLY e inmutable de los estados y decisiones que cada nicho ha recorrido en el pipeline. Solo lo escribe el pipeline-por-nicho (L1, dueno de la maquina: single-writer); cualquier escritura se anade al final sin borrar ni mutar nada. PosPersistencia per-proyecto: restaura en project.activated y vuelca en onUnload. Publica nichos.historial_actualizado; nichos.historial.append.failed cuando la entrada no puede anadirse.",
+  "name": "historial-nicho",
+  "version": "0.1.0",
+  "description": "Custodio (L4): registro append-only e inmutable de estados/decisiones por nicho durante el pipeline; single-writer (pipeline-por-nicho); PosPersistencia; publica nichos.historial_actualizado.",
+  "language": "es",
+  "subscribes": [
+    { "event": "nichos.historial.append.request", "handler": "onAppendRequest", "description": "RPC custodio: {project_id, nicho, estado, decision?} → anade una entrada al historial (append-only inmutable, single-writer pipeline). Exito → publica nichos.historial_actualizado y responde por nichos.historial.append.response. Fallo (nicho/estado invalidos, escritor no permitido) → nichos.historial.append.failed." },
+    { "event": "project.activated", "handler": "onProjectActivated", "description": "Custodio: restaura el historial del proyecto activado via PosPersistencia." }
+  ],
+  "publishes": [
+    { "event": "nichos.historial_actualizado", "description": "Fire-and-forget (L4): se anadio una entrada al historial de un nicho → {project_id, nicho, entrada, total}. Alimenta vista-portafolio (K1) y el pipeline-por-nicho (L1)." },
+    { "event": "nichos.historial.append.failed", "description": "Par de fallo determinista: la entrada llego invalida o no pudo anadirse → {status, code, mensaje}. Cierra el circulo de nichos.historial.append.request." }
+  ]
+}

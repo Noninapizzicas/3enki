@@ -1,0 +1,34 @@
+{
+  "_doc": "Manifest de nichos/reglas-aprendidas — MICRO-AGENTE (C7, hoja del plan). Afina el umbral de validación con resultados reales: cada proyecto que cobra o sangra recalibra. Híbrido fuzzy + fallback reflejo (patrón normalizacion-semilla/estudio-demanda). Consume nichos.salud.actualizada (COBRÓ|SANGRA|NEUTRO) y nichos.cobro_registrado para aprender del resultado real. Proyecciones _comparar(umbral,resultadosReales)->Delta (juicio fuzzy) y _recalibrar(umbral,delta)->UmbralRefinado que se emite a criterio-viabilidad (C2) en caliente via nichos.umbral.recalibrado. Publica nichos.salud.recalibrado (+ nichos.reglas.recalibrar.failed). Sin store, sin custodio.",
+  "name": "reglas-aprendidas",
+  "version": "0.1.0",
+  "description": "Micro-agente (C7): afina el umbral de validación con resultados reales — cada proyecto que cobra o sangra recalibra. Híbrido fuzzy + fallback reflejo: compara el umbral contra el resultado real (COBRÓ/SANGRA/NEUTRO), calcula el delta y emite el umbral refinado al criterio-viabilidad (C2) en caliente.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "nichos.reglas.recalibrar.request",
+      "handler": "onRecalibrarRequest",
+      "description": "RPC micro-agente: {project_id, umbral, resultados_real:'COBRÓ'|'SANGRA'|'NEUTRO', metricas?} → {project_id, delta, umbral_refinado, recelibrado}. Compara el umbral con el resultado real, calcula el delta (juicio) y emite el umbral refinado a C2 via nichos.umbral.recalibrado. Si el payload es inválido → nichos.reglas.recalibrar.failed."
+    },
+    {
+      "event": "nichos.salud.actualizada",
+      "handler": "onSaludActualizada",
+      "description": "Fire-and-forget (C7): cuadro-salud-financiera (F3) publica {project_id, estado:'GENERA'|'SANGRA'|'NEUTRO', ingresos, coste_total}. Aprende del resultado real (mapea a COBRÓ/SANGRA/NEUTRO), calcula el delta y publica nichos.umbral.recalibrado hacia C2 si tiene un umbral vigente."
+    },
+    {
+      "event": "nichos.cobro_registrado",
+      "handler": "onCobroRegistrado",
+      "description": "Fire-and-forget (C7): registro-cobros (F1) asentó un cobro EFECTIVO → {project_id, cobro}. Confirma un COBRÓ real; calcula el delta (aprendizaje positivo) y publica nichos.umbral.recalibrado hacia C2."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "nichos.umbral.recalibrado",
+      "description": "Fire-and-forget (C7→C2): umbral refinado por resultado real → {project_id, delta, resultado_real, umbral_refinado}. Lo consume criterio-viabilidad (C2) para recalibrar en caliente; el siguiente lote de C1/C3 evalúa contra el umbral refinado (embudo auto-afinado gobernado por dato real)."
+    },
+    {
+      "event": "nichos.reglas.recalibrar.failed",
+      "description": "Par de fallo determinista (C7): payload inválido o sin resultado interpretable → {status, code, message, data}. Cierra el círculo de nichos.reglas.recalibrar.request."
+    }
+  ]
+}

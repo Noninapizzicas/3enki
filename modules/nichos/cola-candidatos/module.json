@@ -1,0 +1,43 @@
+{
+  "_doc": "Manifest de nichos/cola-candidatos — CUSTODIO CON PERSISTENCIA (L2, hoja del plan). COLA PERSISTENTE de candidatos a validar: el BUFFER del cuello de botella (embudo de validacion C). Sondeo-territorio (B1) encola candidatos (_encolar / nichos.candidato.encontrado) y batch-validacion (C5) los TOMA en lotes FIFO (_tomarN -> lote, SOLO C5 saca). Desacopla la produccion (barrido) del consumo (validacion en paralelo). CUSTODIO: single-writer del buffer, guard de consumidor (solo BATCH_VALIDACION extrae). Persiste por proyecto via PosPersistencia (_shared/pos-persistencia, storage /prisma/nichos/cola-candidatos.json), restaura en project.activated y vuelca en onUnload. Proyecciones _encolar(candidato)->ok, _tomarN(paralelismo)->lote, _longitud()->numeroEnCola. Publica nichos.candidato_encolado / nichos.candidato_tomado (+ nichos.candidato.encolar.failed si la cola esta llena o el consumidor no es valido).",
+  "name": "cola-candidatos",
+  "version": "0.1.0",
+  "description": "Custodio (L2): cola persistente FIFO de candidatos a validar, buffer del cuello de botella del embudo. Sondeo-territorio encola; batch-validacion (C5) toma lotes (solo C5 saca). Persiste por proyecto vía PosPersistencia.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "nichos.candidato.encolar.request",
+      "handler": "onEncolarRequest",
+      "description": "RPC custodio: {project_id, candidato:{nombre?, producto?, audiencia?, fuente?, metadata?}} → {project_id, candidato, numero_en_cola, encolado}. Encola un candidato al buffer FIFO del proyecto. Publica nichos.candidato_encolado y responde por nichos.candidato.encolar.response. Si falta project_id o candidato → nichos.candidato.encolar.failed."
+    },
+    {
+      "event": "nichos.candidato.tomar.request",
+      "handler": "onTomarRequest",
+      "description": "RPC custodio: {project_id, consumidor:'BATCH_VALIDACION', n?:int} → {project_id, lote, tomados, restantes}. Guard de consumidor: SOLO batch-validacion (C5) toma candidatos; otros → PERMISSION_DENIED. Toma los primeros N candidatos (FIFO). Publica nichos.candidato_tomado y responde por nichos.candidato.tomar.response."
+    },
+    {
+      "event": "nichos.candidato.encontrado",
+      "handler": "onCandidatoEncontrado",
+      "description": "Fire-and-forget (B1): sondeo-territorio publica {project_id, candidato}. La cola auto-encola el candidato sin RPC, publica nichos.candidato_encolado y, si falla, nichos.candidato.encolar.failed."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Restaura la cola de candidatos del proyecto activado desde el storage (PosPersistencia)."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "nichos.candidato_encolado",
+      "description": "Fire-and-forget (L2): un candidato quedo encolado en el buffer → {project_id, candidato, numero_en_cola, encolado}. Lo consume batch-validacion (C5) que tomara lotes cuando haya volumen."
+    },
+    {
+      "event": "nichos.candidato_tomado",
+      "description": "Fire-and-forget (L2): batch-validacion tomo un lote de la cola → {project_id, lote, tomados, restantes}. Marca que un lote paso a validacion (C5)."
+    },
+    {
+      "event": "nichos.candidato.encolar.failed",
+      "description": "Par de fallo determinista (L2): encolado rechazado (cola al tope, candidato invalido) o toma rechazada (consumidor != BATCH_VALIDACION) → {status, code, message, data}. Cierra el circulo de los requests de la cola."
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "_doc": "Manifest de nichos/ajustador-umbrales — CUSTODIO (K3, hoja del plan): el JEFE retunea en caliente el criterio/umbral de validacion del pipeline. Guara el nuevo umbral en su store custodio (_retunear) y lo propaga a criterio-viabilidad (C2) para que el siguiente lote evalue contra el umbral refinado; tambien recalcula (_aplicar). Es un ORQUESTADOR LIGERO: escucha el cambio de umbral del jefe y lo reenvia (publica nichos.umbral_ajustado). PosPersistencia per-proyecto: restaura en project.activated y vuelca en onUnload. Publica nichos.umbral_ajustado; nichos.umbral.retunear.failed cuando un umbral no puede aplicarse.",
+  "name": "ajustador-umbrales",
+  "version": "0.1.0",
+  "description": "Custodio (K3): el jefe retunea el criterio/umbral de validacion en caliente y lo propaga a criterio-viabilidad (C2); PosPersistencia; publica nichos.umbral_ajustado.",
+  "language": "es",
+  "subscribes": [
+    { "event": "nichos.umbral.retunear.request", "handler": "onRetunearRequest", "description": "RPC custodia: {project_id, nuevo_umbral, rol} → el jefe retunea el umbral del proyecto, lo custodia en el store y lo propaga a criterio-viabilidad. Exito → publica nichos.umbral_ajustado y responde por nichos.umbral.retunear.response. Fallo (umbral invalido, rol != DUEÑO) → nichos.umbral.retunear.failed." },
+    { "event": "project.activated", "handler": "onProjectActivated", "description": "Custodio: restaura el umbral ajustado del proyecto activado via PosPersistencia." }
+  ],
+  "publishes": [
+    { "event": "nichos.umbral_ajustado", "description": "Fire-and-forget (K3): el jefe ajusto el umbral/criterio → {project_id, nuevo_umbral, anterior, aplicado}. Lo propaga a criterio-viabilidad (C2) para el siguiente lote de validacion." },
+    { "event": "nichos.umbral.retunear.failed", "description": "Par de fallo determinista: el umbral esta fuera de rango o no puede aplicarse → {status, code, mensaje}. Cierra el circulo de nichos.umbral.retunear.request." }
+  ]
+}

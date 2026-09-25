@@ -3,7 +3,7 @@
   "ramas": "vertical/nichos",
   "persistencia": "boveda/nichos/proceso/",
   "modelo": "mente-ejecuta / chat-gestiona",
-  "fase_actual": "puta-en-servicio (pendiente, decisión del dueño)",
+  "fase_actual": "completada (vertical lista para deploy + puesta en servicio)",
   "fase2": {
     "estado": "completada",
     "entregable": "boveda/nichos/proceso/fase2/esquemas/esquema.md",
@@ -151,5 +151,20 @@
     "skill": "escribir-skills",
     "skills_escritas": 44,
     "nota": "44/44 skills FULL en cantera (modules/cosecha/cantera/enki/<slug>/SKILL.md), verificadas contra module.json (NINGUNO missing)"
+  },
+  "fase6": {
+    "estado": "completada",
+    "skill": "decidir-interfaz",
+    "nota": "3 system_panel (vista-portafolio, cola-decisiones-gate, ajustador-umbrales); resto sin UI (bus+Telegram)"
+  },
+  "fase65": {
+    "estado": "completada",
+    "skill": "esquematizar-interfaz",
+    "nota": "3 blueprints ui.* en frontend/src/lib/modules/<slug>/"
+  },
+  "fase7": {
+    "estado": "completada",
+    "skill": "construir-interfaz",
+    "nota": "3 Panel.svelte (BlueprintForm) + registro panels.ts (system-bar); compilados 0 errores"
   }
 }

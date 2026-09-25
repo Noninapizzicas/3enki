@@ -225,6 +225,17 @@ export async function deleteCuenta(projectId: string, id: string): Promise<boole
   }
 }
 
+/** Cierra una cuenta ya pagada que quedó atascada (ej: para llevar cobrada en con_pedido). */
+export async function cerrarCuentaPagada(projectId: string, id: string): Promise<boolean> {
+  try {
+    await mqttRequest<any>('cuenta', 'cerrar_pagada', { project_id: projectId, id });
+    return true;
+  } catch (err: any) {
+    cuentasStore.update(s => ({ ...s, error: err.message || 'Error al cerrar cuenta cobrada' }));
+    return false;
+  }
+}
+
 export async function marcarEntregado(projectId: string, id: string): Promise<boolean> {
   try {
     // Llevar usa su propia strategy (llevar/entregar) que cierra el ticket

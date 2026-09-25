@@ -11,7 +11,7 @@
    */
   import { createEventDispatcher } from 'svelte';
   import type { Cuenta, TipoCuenta } from '$lib/stores/cuentas';
-  import { TIPO_COLORS, TIPO_ICONS, marcarEntregado, deleteCuenta } from '$lib/stores/cuentas';
+  import { TIPO_COLORS, TIPO_ICONS, marcarEntregado, deleteCuenta, cerrarCuentaPagada } from '$lib/stores/cuentas';
 
   export let cuenta: Cuenta;
   export let projectId: string = '';
@@ -50,7 +50,9 @@
     : cuenta.estado === 'listo';
   $: showCobrarBtn = !isLlevadoo && (cuenta.estado === 'listo' || cuenta.estado === 'entregado' || cuenta.estado === 'en_preparacion');
   $: showDeleteBtn = cuenta.estado === 'pendiente' || cuenta.estado === 'cobrado';
-  $: showActions = showEntregarBtn || showCobrarBtn || showDeleteBtn;
+  // Cuenta ya pagada atascada (p.ej. para llevar cobrada en con_pedido) → botón de cierre
+  $: showCerrarPagadaBtn = !isLlevadoo && cuenta.pagado && !['cobrado', 'pendiente'].includes(cuenta.estado);
+  $: showActions = showEntregarBtn || showCobrarBtn || showDeleteBtn || showCerrarPagadaBtn;
 
   function handleLeftTap() {
     dispatch('open-comandero', { cuenta_id: cuenta.id });
@@ -72,6 +74,11 @@
   async function handleDelete() {
     if (!projectId) return;
     await deleteCuenta(projectId, cuenta.id);
+  }
+
+  async function handleCerrarPagada() {
+    if (!projectId) return;
+    await cerrarCuentaPagada(projectId, cuenta.id);
   }
 
   function formatTotal(total: number): string {
@@ -135,6 +142,11 @@
       {#if showCobrarBtn}
         <button class="action-btn action-cobrar" on:click|stopPropagation={handleCobrar} title="Cobrar">
           COBRAR
+        </button>
+      {/if}
+      {#if showCerrarPagadaBtn}
+        <button class="action-btn action-cobrar" on:click|stopPropagation={handleCerrarPagada} title="Cerrar cuenta ya pagada">
+          CERRAR
         </button>
       {/if}
       {#if showDeleteBtn}

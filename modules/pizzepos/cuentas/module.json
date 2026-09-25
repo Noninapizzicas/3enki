@@ -57,6 +57,7 @@
     { "domain": "cuenta", "action": "list",              "handler": "handleListCuentas",    "type": "workspace_module", "zone": "barra_modulos" },
     { "domain": "cuenta", "action": "get",               "handler": "handleGetCuenta",      "type": "workspace_module", "zone": "barra_modulos" },
     { "domain": "cuenta", "action": "delete",            "handler": "handleDeleteCuenta",   "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "cuenta", "action": "cerrar_pagada",     "handler": "handleCerrarCuentaPagada","type": "workspace_module", "zone": "barra_modulos" },
     { "domain": "cuenta", "action": "marcar_entregado",  "handler": "handleMarcarEntregado","type": "workspace_module", "zone": "barra_modulos" },
     { "domain": "cuenta", "action": "rename",            "handler": "handleRenameCuenta",   "type": "workspace_module", "zone": "barra_modulos" },
     { "domain": "cuenta", "action": "stats",             "handler": "handleGetStats",       "type": "workspace_module", "zone": "barra_modulos" },

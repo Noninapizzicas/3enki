@@ -1,0 +1,45 @@
+{
+  "schema": "blueprint-interfaz-v1",
+  "id": "ajustador-umbrales",
+  "version": "blueprint-1.0.0",
+  "moduleId": "ajustador-umbrales",
+  "titulo": "Retuning en caliente del criterio/umbral de validación del Radar (K3): el JEFE ajusta el umbral de ingresos (25–400 €/semana), los mínimos de demanda y la disposición a pagar, y el custodio lo propaga a criterio-viabilidad para que el siguiente lote evalúe contra el umbral refinado.",
+  "_doc": "Blueprint de INTERFAZ del modulo nichos/ajustador-umbrales (CUSTODIO, K3). Declara la seccion `ui` para BlueprintForm. Modulo real: modules/nichos/ajustador-umbrales/index.js (AjustadorUmbrales extends ModuloHibridoReflejo). Contrato verificado en codigo: RPC nichos.umbral.retunear.request -> onRetunearRequest -> _procesarRetunear -> payload REQUERIDO {project_id, rol:'DUEÑO', nuevo_umbral:{umbral_ingresos:25..400, minimos_demanda:{numero_busquedas, contactos_semana}, disposicion_a_pagar}} -> {project_id, umbral, delta, anterior, aplicado:true}. Errores: 403 PERMISSION_DENIED (rol != DUEÑO), 400 umbral_ingresos fuera 25-400. ui_handler real: domain 'ajustador-umbrales', action 'retunear', handler onRetunearRequest. SEÑAL: nichos.umbral_ajustado. NOTA: hay toolLeer (_leer) pero NO tiene RPC de bus (subscribes solo retunear.request) ni ui_handler — no hay lectura alcanzable desde el frontend; el panel declara SOLO `retunear`. nuevo_umbral se declara como JSON (objeto anidado) porque el backend lee input.nuevo_umbral como un objeto único (no campos sueltos top-level). `rol` = guard single-writer (select de un valor DUEÑO, mismo motivo que cola-decisiones-gate).",
+  "eventos_publicados": [
+    "nichos.umbral_ajustado"
+  ],
+  "eventos_que_escucho": [
+    "nichos.umbral_ajustado"
+  ],
+  "transporte": {
+    "rpc": [],
+    "salida": [
+      "nichos.umbral_ajustado"
+    ],
+    "qos": "publishAndWait (request/response correlado) en retunear via ui/request/ajustador-umbrales/retunear; señal fire-and-forget nichos.umbral_ajustado (publicada al aplicar el retune)"
+  },
+  "ui": {
+    "ops": {
+      "retunear": {
+        "titulo": "Retunear umbral de viabilidad",
+        "descripcion": "El DUEÑO ajusta en caliente el umbral de validación del pipeline. El custodio lo guarda en su store, calcula el delta y lo propaga a criterio-viabilidad (nichos.umbral_ajustado) para que el siguiente lote evalúe contra el umbral refinado. 403 si el rol no es DUEÑO; 400 si umbral_ingresos sale de 25–400.",
+        "args": [
+          {
+            "nombre": "nuevo_umbral",
+            "tipo": "json",
+            "required": true,
+            "descripcion": "Objeto con el nuevo umbral. Los campos presentes se validan y aplican; los ausentes se conservan (merge conservador). Ej: {\"umbral_ingresos\": 90, \"minimos_demanda\": {\"numero_busquedas\": 300, \"contactos_semana\": 12}, \"disposicion_a_pagar\": 20}"
+          },
+          {
+            "nombre": "rol",
+            "tipo": "select",
+            "enum": ["DUEÑO"],
+            "default": "DUEÑO",
+            "required": true,
+            "descripcion": "Rol single-writer del guard del backend (siempre DUEÑO). No es un dato de negocio: es el guard que exige el contrato; 403 si no es DUEÑO."
+          }
+        ]
+      }
+    }
+  }
+}

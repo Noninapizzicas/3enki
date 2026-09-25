@@ -299,6 +299,42 @@ export const panels: Record<string, PanelDef> = {
     order: 99,
     loader: () => import('$lib/modules/related-pages/RelatedPagesPanel.svelte')
   },
+  // === SYSTEM BAR — Vertical nichos — dashboard de control (F6½+F7) ===
+  // Tres custodios del dashboard del dueño (system_panel, zone lateral_derecha):
+  // vista-portafolio (K1, solo lectura), cola-decisiones-gate (K2, resolver gates),
+  // ajustador-umbrales (K3, retunear umbral). El botón lo pinta el manifest de
+  // cada módulo (ui_handlers type system_panel); estas entradas son los loaders.
+  'vista-portafolio': {
+    id: 'vista-portafolio',
+    title: 'Portafolio de nichos',
+    icon: '📊',
+    size: 'md',
+    position: 'right',
+    zone: 'system-bar',
+    order: 96,
+    loader: () => import('$lib/modules/vista-portafolio/VistaPortafolioPanel.svelte')
+  },
+  'cola-decisiones-gate': {
+    id: 'cola-decisiones-gate',
+    title: 'Cola de decisiones',
+    icon: '🛡️',
+    size: 'md',
+    position: 'right',
+    zone: 'system-bar',
+    order: 95,
+    loader: () => import('$lib/modules/cola-decisiones-gate/ColaDecisionesGatePanel.svelte')
+  },
+  'ajustador-umbrales': {
+    id: 'ajustador-umbrales',
+    title: 'Umbral de validación',
+    icon: '🎚️',
+    size: 'md',
+    position: 'right',
+    zone: 'system-bar',
+    order: 94,
+    loader: () => import('$lib/modules/ajustador-umbrales/AjustadorUmbralesPanel.svelte')
+  },
+
   // === VENTANA DEL AGENTE (panel embebible dentro del chat) ===
   // El mismo componente que la ruta /[project_id]/agentes/[request_id] — aquí
   // "esparcido dentro" mientras el agente trabaja. Se abre con openPanel('agente').

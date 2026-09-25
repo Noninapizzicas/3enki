@@ -3,7 +3,7 @@
   "ramas": "vertical/nichos",
   "persistencia": "boveda/nichos/proceso/",
   "modelo": "mente-ejecuta / chat-gestiona",
-  "fase_actual": "fase4-construir-modulos",
+  "fase_actual": "puta-en-servicio (pendiente, decisión del dueño)",
   "fase2": {
     "estado": "completada",
     "entregable": "boveda/nichos/proceso/fase2/esquemas/esquema.md",
@@ -145,5 +145,11 @@
       "memoria-nicho",
       "gestor-credenciales-nicho"
     ]
+  },
+  "fase5": {
+    "estado": "completada",
+    "skill": "escribir-skills",
+    "skills_escritas": 44,
+    "nota": "44/44 skills FULL en cantera (modules/cosecha/cantera/enki/<slug>/SKILL.md), verificadas contra module.json (NINGUNO missing)"
   }
 }

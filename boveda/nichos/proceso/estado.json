@@ -120,21 +120,21 @@
         "canal-distribucion",
         "alerta-sangria",
         "perfil-supervision",
-        "escalones-mensaje"
-      ],
-      "pendientes": [
+        "escalones-mensaje",
         "clasificador-intencion",
         "propuesta-valor-canal",
         "confirmacion-valor",
         "historial-nicho",
         "vista-portafolio",
-        "cola-decisiones-gate",
+        "cola-decisiones-gate"
+      ],
+      "pendientes": [
         "ajustador-umbrales",
         "manejo-fallo",
         "pulso-avance",
         "pipeline-por-nicho"
       ],
-      "proximo": "clasificador-intencion",
+      "proximo": "ajustador-umbrales",
       "nota": "una hoja a la vez, en orden de la espina. Realizados = en modules/nichos/ y verificado"
     },
     "reutilizar": [

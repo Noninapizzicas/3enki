@@ -178,6 +178,22 @@ class PersistenciaComanderoModule extends BaseModule {
     const cuentaActiva = this.cuentasActivasCache.get(cuenta_id);
     const project_id   = eventData.project_id || cuentaActiva?.project_id || null;
 
+    // Idempotencia: una cuenta = una venta. `cuenta.cerrada` puede llegar mas de
+    // una vez para la misma cuenta (p.ej. mesa.cerrar desde la UI + onCobroProcesado
+    // desde el cobro). Sin esta guarda se registraban ventas DUPLICADAS y la caja
+    // descuadraba (visto en vivo: mesa_3db79eb3, dos ventas de 11,5 con 5 ms de gap).
+    const ventaExistente = this.ventasCache.find(v => v.cuenta?.cuenta_id === cuenta_id);
+    if (ventaExistente) {
+      this.logger.warn('persistencia.venta.duplicada_ignorada', {
+        correlation_id: correlationId, cuenta_id, venta_id: ventaExistente.venta_id
+      });
+      this.metrics?.increment?.('persistencia.ventas.duplicadas_ignoradas');
+      // Igual limpiar la cuenta activa (puede seguir en cache aunque ya vendida).
+      this.cuentasActivasCache.delete(cuenta_id);
+      await this._guardarCuentasActivas();
+      return;
+    }
+
     const cobroEvento = this.eventosCache
       .filter(e => e.event_type === 'cobro.procesado')
       .find(e => e.payload?.cuenta_id === cuenta_id);
@@ -952,6 +968,18 @@ class PersistenciaComanderoModule extends BaseModule {
 
     this.eventosCache = eventos?.eventos || [];
     this.ventasCache  = ventas?.ventas  || [];
+    // Saneo en carga: deduplicar ventas por cuenta_id (una cuenta = una venta).
+    // Sin esto, las ventas duplicadas ya persistidas siguen inflando el cuadre.
+    {
+      const antes = this.ventasCache.length;
+      this.ventasCache = this._deduplicarVentas(this.ventasCache);
+      const quitadas = antes - this.ventasCache.length;
+      if (quitadas > 0) {
+        this.logger.warn('persistencia.ventas.duplicadas_saneadas', { quitadas, restantes: this.ventasCache.length });
+        this.metrics?.increment?.('persistencia.ventas.duplicadas_ignoradas', { via: 'load' });
+        try { await this._guardarVentas(); } catch (_) { /* best-effort */ }
+      }
+    }
     this.cuentasActivasCache.clear();
     if (cuentas?.cuentas) {
       for (const [cuenta_id, cuenta] of Object.entries(cuentas.cuentas)) {
@@ -1132,8 +1160,23 @@ class PersistenciaComanderoModule extends BaseModule {
     };
   }
 
+  /**
+   * Deduplica ventas por cuenta_id (una cuenta = una venta).
+   * Conserva la PRIMERA venta vista de cada cuenta.
+   */
+  _deduplicarVentas(ventas = []) {
+    const vistas = new Set();
+    return ventas.filter(v => {
+      const cid = v?.cuenta?.cuenta_id;
+      if (!cid) return true;
+      if (vistas.has(cid)) return false;
+      vistas.add(cid);
+      return true;
+    });
+  }
+
   _calcularResumenDia(ventas = null) {
-    const ventasToProcess = ventas || this.ventasCache;
+    const ventasToProcess = this._deduplicarVentas(ventas || this.ventasCache);
     const resumen = {
       total_ventas:    ventasToProcess.length,
       total_ingresos:  0,

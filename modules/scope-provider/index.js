@@ -121,7 +121,7 @@ class ScopeProviderModule extends BaseModule {
 
   // ── config helpers ──
   _defaultProvider() { return this.cfg?.default_provider || 'ollama'; }
-  _defaultModel() { return this.cfg?.default_model || 'deepseek-v4.1-flash'; }
+  _defaultModel() { return this.cfg?.default_model || 'deepseek-v4-flash:preview'; }
   _rules() { return this.cfg?.scope_rules || {}; }
 
   // Los ámbitos registrados: agents+skills+projects con regla.

@@ -18,13 +18,13 @@
   // Espejo de ai-gateway/module.json providers (ORDEN = prioridad; el 1º es el default).
   // Fuente de verdad: modules/conversacion/ai-gateway/module.json config.providers
   const providers: Provider[] = [
-    { id: 'deepseek-anthropic', name: 'DeepSeek', icon: '🔮', models: ['deepseek-flash', 'deepseek-v4-pro'] },
+    { id: 'deepseek-anthropic', name: 'DeepSeek', icon: '🔮', models: ['deepseek-v4-flash', 'deepseek-v4-pro'] },
     { id: 'kimi', name: 'Kimi (Moonshot)', icon: '🌙', models: ['kimi-k2.6', 'kimi-k2.5', 'kimi-k2-thinking', 'moonshot-v1-128k'] },
     { id: 'anthropic', name: 'Anthropic (API)', icon: '🧠', models: ['claude-opus-4-7', 'claude-sonnet-4-6', 'claude-haiku-4-5', 'claude-3-5-haiku-20241022'] },
     { id: 'openai', name: 'OpenAI', icon: '🤖', models: ['gpt-4o', 'gpt-4o-mini', 'gpt-3.5-turbo'] },
     { id: 'groq', name: 'Groq', icon: '⚡', models: ['llama-3.3-70b-versatile', 'mixtral-8x7b-32768', 'gemma2-9b-it'] },
     { id: 'gemini', name: 'Google Gemini', icon: '💎', models: ['gemini-2.5-flash', 'gemini-2.5-pro'] },
-    { id: 'ollama', name: 'Ollama (Cloud)', icon: '🦙', models: ['deepseek-v4.1-flash', 'deepseek-v4-pro:0813', 'glm-5.2', 'kimi-k2.6', 'gpt-oss:20b', 'gemma4:31b', 'nemotron-3-super', 'minimax-m2.7'] },
+    { id: 'ollama', name: 'Ollama (Cloud)', icon: '🦙', models: ['deepseek-v4-flash:preview', 'deepseek-v4-pro:preview', 'glm-5.2', 'kimi-k2.6', 'gpt-oss:20b', 'gemma4:31b', 'nemotron-3-super', 'minimax-m2.7', 'qwen3.5:397b'] },
     { id: 'claude-cli', name: 'Claude Code (1M)', icon: '🟣', models: ['sonnet', 'opus', 'haiku'] },
   ];
 

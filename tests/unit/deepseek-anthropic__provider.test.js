@@ -21,8 +21,8 @@ const DeepSeekAnthropicProvider = require('../../modules/conversacion/ai-gateway
 const CFG = {
   enabled: true,
   api_base: 'https://api.deepseek.com',
-  default_model: 'deepseek-flash',
-  models: ['deepseek-flash', 'deepseek-v4-pro']
+  default_model: 'deepseek-v4-flash',
+  models: ['deepseek-v4-flash', 'deepseek-v4-pro']
 };
 const LOG = { debug(){}, info(){}, warn(){}, error(){} };
 
@@ -104,9 +104,9 @@ test('usa el header x-api-key heredado (soportado por el endpoint /anthropic)', 
   assert.strictEqual(p.apiVersion, '2023-06-01', 'hereda anthropic-version (ignorada por deepseek, inocua)');
 });
 
-test('_coerceModel: modelo propio (deepseek-flash/v4-pro) se respeta', () => {
+test('_coerceModel: modelo propio (v4-flash/v4-pro) se respeta', () => {
   const p = new DeepSeekAnthropicProvider(CFG, LOG, null);
-  assert.strictEqual(p._coerceModel({ model: 'deepseek-flash' }).model, 'deepseek-flash');
+  assert.strictEqual(p._coerceModel({ model: 'deepseek-v4-flash' }).model, 'deepseek-v4-flash');
   assert.strictEqual(p._coerceModel({ model: 'deepseek-v4-pro' }).model, 'deepseek-v4-pro');
 });
 
@@ -117,10 +117,10 @@ test('_coerceModel: alias claude-* se respeta (el endpoint los mapea)', () => {
 
 test('_coerceModel: legacy del retirado OpenAI-compat (deepseek-chat/reasoner) -> default_model', () => {
   const p = new DeepSeekAnthropicProvider(CFG, LOG, null);
-  // el endpoint /anthropic no acepta estos nombres -> caen a deepseek-flash (no rompen conversaciones viejas)
-  assert.strictEqual(p._coerceModel({ model: 'deepseek-chat' }).model, 'deepseek-flash');
-  assert.strictEqual(p._coerceModel({ model: 'deepseek-reasoner' }).model, 'deepseek-flash');
-  assert.strictEqual(p._coerceModel({ model: 'deepseek-coder' }).model, 'deepseek-flash');
+  // el endpoint /anthropic no acepta estos nombres -> caen a v4-flash (no rompen conversaciones viejas)
+  assert.strictEqual(p._coerceModel({ model: 'deepseek-chat' }).model, 'deepseek-v4-flash');
+  assert.strictEqual(p._coerceModel({ model: 'deepseek-reasoner' }).model, 'deepseek-v4-flash');
+  assert.strictEqual(p._coerceModel({ model: 'deepseek-coder' }).model, 'deepseek-v4-flash');
 });
 
 test('_coerceModel: sin modelo no toca nada (deja que el default actue aguas abajo)', () => {

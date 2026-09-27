@@ -71,7 +71,7 @@
     const prov = provRaw === 'deepseek' ? 'deepseek-anthropic' : provRaw;
     let mdl = editingConversation.model || '';
     if (prov === 'deepseek-anthropic' && ['deepseek-chat', 'deepseek-coder', 'deepseek-reasoner'].includes(mdl)) {
-      mdl = 'deepseek-flash';
+      mdl = 'deepseek-v4-flash';
     }
     form = {
       title: editingConversation.title || '',
@@ -203,13 +203,13 @@
   // Espejo de ai-gateway/module.json config.providers. Auto = el default por prioridad (DeepSeek).
   const providerOptions = [
     { value: '',                  label: 'Auto (por defecto)',  models: [] },
-    { value: 'deepseek-anthropic', label: 'DeepSeek 🔮',        models: ['deepseek-flash', 'deepseek-v4-pro'] },
+    { value: 'deepseek-anthropic', label: 'DeepSeek 🔮',        models: ['deepseek-v4-flash', 'deepseek-v4-pro'] },
     { value: 'kimi',              label: 'Kimi (Moonshot) 🌙',  models: ['kimi-k2.6', 'kimi-k2.5', 'kimi-k2-thinking', 'moonshot-v1-128k'] },
     { value: 'anthropic',         label: 'Anthropic 🧠',        models: ['claude-opus-4-7', 'claude-sonnet-4-6', 'claude-haiku-4-5', 'claude-3-5-haiku-20241022'] },
     { value: 'openai',            label: 'OpenAI 🤖',           models: ['gpt-4o', 'gpt-4o-mini', 'gpt-3.5-turbo'] },
     { value: 'groq',              label: 'Groq ⚡',             models: ['llama-3.3-70b-versatile', 'mixtral-8x7b-32768', 'gemma2-9b-it'] },
     { value: 'gemini',            label: 'Google Gemini 💎',    models: ['gemini-2.5-flash', 'gemini-2.5-pro'] },
-    { value: 'ollama',            label: 'Ollama (Cloud) 🦙', models: ['deepseek-v4.1-flash', 'deepseek-v4-pro:0813', 'glm-5.2', 'kimi-k2.6', 'gpt-oss:20b', 'gemma4:31b', 'nemotron-3-super', 'minimax-m2.7'] },
+    { value: 'ollama',            label: 'Ollama (Cloud) 🦙', models: ['deepseek-v4-flash:preview', 'deepseek-v4-pro:preview', 'glm-5.2', 'kimi-k2.6', 'gpt-oss:20b', 'gemma4:31b', 'nemotron-3-super', 'minimax-m2.7', 'qwen3.5:397b'] },
     { value: 'claude-cli',        label: 'Claude Code (1M) 🟣', models: ['sonnet', 'opus', 'haiku'] }
   ];
 

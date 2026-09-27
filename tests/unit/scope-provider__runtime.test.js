@@ -44,7 +44,7 @@ test('context explícito → prioridad máxima', () => {
 
 test('agent con regla → usa ESE provider', () => {
   const m = nuevo();
-  m.cfg = { ...m.cfg, scope_rules: { agents: { esquematizador: { provider: 'deepseek', model: 'deepseek-v4-flash' } } } };
+  m.cfg = { ...m.cfg, scope_rules: { agents: { esquematizador: { provider: 'deepseek', model: 'deepseek-v4.1-flash' } } } };
   m._ambitosCache = null;
   const r = m._get({ scope: { agent: 'esquematizador' } });
   assert.strictEqual(r.data.provider, 'deepseek');

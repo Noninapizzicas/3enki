@@ -61,7 +61,7 @@ class NormalizacionSemilla extends ModuloHibridoReflejo {
   }
 
   // ── el juicio: normaliza (reflejo) + desambigua (fuzzy) ──
-  async _normalizar({ project_id, semilla } = {}) {
+  async _normalizar({ project_id, semilla, nicho_id } = {}) {
     project_id = project_id || this.project_id;
     const normalizada = this._normalizarEstructura(semilla);
     if (normalizada == null) {
@@ -75,7 +75,7 @@ class NormalizacionSemilla extends ModuloHibridoReflejo {
     if (!intenciones || intenciones.length === 0) {
       return this._errorResponse(502, 'SIN_INTENCIONES', 'el juicio no pudo extraer intenciones interpretables de la semilla', { project_id, semilla: normalizada });
     }
-    return { status: 200, data: { project_id, semilla: normalizada, intenciones, normalizada: true } };
+    return { status: 200, data: { project_id, nicho_id, semilla: normalizada, intenciones, normalizada: true } };
   }
 
   // ── REFLEJO (mecánico, determinista): limpia y trocea el texto en señales ──

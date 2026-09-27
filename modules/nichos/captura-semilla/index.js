@@ -14,6 +14,8 @@
 
 'use strict';
 
+const crypto = require('crypto');
+
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
 
 class CapturaSemilla extends ModuloHibridoReflejo {
@@ -47,13 +49,18 @@ class CapturaSemilla extends ModuloHibridoReflejo {
   }
 
   // Proyección pura: valida vacíos/formato y formatea la semilla.
-  _aceptar({ project_id, mensaje } = {}) {
+  // La IDENTIDAD del nicho NACE AQUÍ (origen del agregado): cada semilla aceptada
+  // recibe un nicho_id UUID estable, que viaja por toda la cadena de eventos para
+  // que el pipeline no auto-cree bajo la clave "undefined". Si el payload ya trae
+  // nicho_id (re-siembra), se respeta.
+  _aceptar({ project_id, mensaje, nicho_id } = {}) {
     project_id = project_id || this.project_id;
     const formateada = this._formatear(mensaje);
     if (formateada == null) {
       return this._errorResponse(400, 'SEMILLA_VACIA', 'la semilla esta vacia o no es un texto util', { project_id });
     }
-    return { status: 200, data: { project_id, semilla: formateada, formateada, capturada: true } };
+    const id = nicho_id || crypto.randomUUID();
+    return { status: 200, data: { project_id, nicho_id: id, semilla: formateada, formateada, capturada: true } };
   }
 
   // Proyección pura: normaliza la semilla (string no vacío). null si no es válida.

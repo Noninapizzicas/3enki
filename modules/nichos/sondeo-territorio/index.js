@@ -60,6 +60,7 @@ class SondeoTerritorio extends ModuloHibridoReflejo {
       if (res.status === 200) {
         this.eventBus?.publish('nichos.territorio.sondeado', {
           project_id: res.data.project_id,
+          nicho_id: res.data.nicho_id,
           territorio: res.data.territorio,
           total_fuentes: res.data.barrido.length,
           total_registros: res.data.barrido.reduce((n, b) => n + (b.registros ? b.registros.length : 0), 0),
@@ -67,7 +68,7 @@ class SondeoTerritorio extends ModuloHibridoReflejo {
           fuentes: res.data.barrido.map(b => b.fuente)
         });
         for (const c of res.data.candidatos) {
-          this.eventBus?.publish('nichos.candidato.encontrado', { project_id: res.data.project_id, candidato: c });
+          this.eventBus?.publish('nichos.candidato.encontrado', { project_id: res.data.project_id, nicho_id: res.data.nicho_id, candidato: c });
         }
       } else {
         this.eventBus?.publish('nichos.territorio.sondear.failed', res);
@@ -77,7 +78,7 @@ class SondeoTerritorio extends ModuloHibridoReflejo {
   }
 
   // ── el juicio: barre (reflejo) + juzga territorio (fuzzy) + propone siguientes ──
-  async _sondear({ project_id, territorio, fuentes } = {}) {
+  async _sondear({ project_id, territorio, fuentes, nicho_id } = {}) {
     project_id = project_id || this.project_id;
     if (!territorio || (typeof territorio !== 'object')) {
       return this._errorResponse(400, 'TERRITORIO_INVALIDO', 'el territorio es obligatorio para sondear (intencion de busqueda normalizada)', { project_id });
@@ -98,7 +99,7 @@ class SondeoTerritorio extends ModuloHibridoReflejo {
       return this._errorResponse(422, 'SIN_DEMANDA', 'el juicio no encontro senales de demanda en el barrido del territorio', { project_id, territorio });
     }
     const propuestos = this._proponerSiguientes(candidatos);
-    return { status: 200, data: { project_id, territorio, barrido, candidatos: propuestos, sondeado: true } };
+    return { status: 200, data: { project_id, nicho_id, territorio, barrido, candidatos: propuestos, sondeado: true } };
   }
 
   // ── REFLEJO (mecánico, determinista): barre las fuentes y parsea el dataset crudo ──

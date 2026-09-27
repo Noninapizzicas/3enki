@@ -2145,8 +2145,22 @@ NO REUTILIZA: pulso de avance de nichos no existe; escalones/pulso se clasifica 
       ],
       "depende_de": [],
       "subscribes": [
-        "nichos.pipeline.ciclo.iniciar.request",
-        "nichos.ciclo.avanzar.request"
+        "nichos.pipeline.registrar_semilla.request",
+        "nichos.pipeline.avanzar.request",
+        "nichos.semilla.capturada",
+        "nichos.semilla.normalizada",
+        "nichos.territorio.sondeado",
+        "nichos.candidato.encontrado",
+        "nichos.estudio.medido",
+        "nichos.veredicto.emitido",
+        "nichos.corte.aplicado",
+        "nichos.camino.decidido",
+        "nichos.solucion.construida",
+        "nichos.modelo_cobro.propuesto",
+        "nichos.cobro.ejecutado",
+        "nichos.cobro_registrado",
+        "nichos.salud.actualizada",
+        "project.activated"
       ],
       "publishes": [
         "nichos.pipeline.avanzado",

@@ -51,7 +51,7 @@
   "config": {
     "enabled": true,
     "default_provider": "ollama",
-    "default_model": "deepseek-v4-flash:preview",
+    "default_model": "deepseek-v4.1-flash",
     "scope_rules": {
       "_doc": "Cascada ámbito→provider. El orden de precedencia en runtime es: context (provider explícito) > agent > skill > project > default. Cada regla puede fijar provider y/o model. GLOBAL/default = Ollama Cloud.",
       "agents": {},

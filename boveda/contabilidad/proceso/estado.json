@@ -95,7 +95,17 @@
       "La silla del cliente: el negocio o el dueno? decide si Q/J8/R son una silla o tres",
       "Trabajador humano vs automatizacion: P1-P4 ambiguo; si es humano y concurrente, choca con single-writer (M2)",
       "diferencia-cambio (E12) depende de multi-moneda (pregunta abierta)"
-    ]
+    ],
+    "conflictos_resueltos": {
+      "conflicto_1_factura": {
+        "decision_del_dueno": "B — CONTABILIDAD SI EMITE LA FACTURA DE VENTA",
+        "fecha": "2026-09-28",
+        "identidad_refinada": "La identidad dice 'no produce hechos de negocio'. Se REFINA (no se contradice): contabilidad NO produce los hechos que OBSERVA (ventas, cobros, consumo — esos los emite la operacion), pero SI produce los DOCUMENTOS PROPIOS de la contabilidad y la facturacion: factura emitida, factura rectificativa, asientos, modelos. La frontera: OBSERVA la operacion, PRODUCE lo suyo.",
+        "piezas_afectadas": ["O1 emision-factura-venta", "O2 factura-rectificativa", "D8 registro-verifactu", "D9 factura-electronica", "series/numeracion (abierta, de clientes)"],
+        "riesgo_nuevo_para_el_cerrojo_1": "La factura emitida ES un hecho consumible. Si un modulo de la OPERACION la consume para ACTUAR (descontar stock, cerrar cuenta, cobrar), se abre realimentacion y se rompe el cerrojo 'frontera-planos'. A resolver: QUIEN puede consumir factura.emitida — el cliente externo si (es su documento); la operacion interna, a decidir.",
+        "estado": "DECIDIDO por el dueno; el consumo de factura.emitida queda como sub-pregunta abierta"
+      }
+    }
   },
   "fase3": { "estado": "pendiente", "skill": "planificar-construccion", "entregable": "boveda/contabilidad/proceso/fase3/diseno-oop.md" },
   "fase3b": { "estado": "pendiente", "skill": "enki-adaptador-disenos", "entregable": "boveda/contabilidad/proceso/fase3b/plan-construccion.md" },

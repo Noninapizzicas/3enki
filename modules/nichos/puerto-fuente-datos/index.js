@@ -31,10 +31,30 @@ class PuertoFuenteDatos extends ModuloHibridoReflejo {
   }
   async onUnload() { return super.onUnload(); }
 
+  // Auto-conexión de la fuente por defecto al arrancar. El puerto es stateless
+  // (las fuentes viven en memoria), así que sin esto, tras un reinicio no hay
+  // fuente conectada y el sondeo devolvería "no hay fuente conectada". La fuente
+  // por defecto es configurable (config.fuente_por_defecto) y reemplazable por evento.
+  async onLoad(context) {
+    await super.onLoad(context);
+    const cfg = (context && (context.moduleConfig || (context.config && context.config['puerto-fuente-datos']))) || {};
+    const porDefecto = cfg.fuente_por_defecto || 'buscador';
+    const tipo = cfg.fuente_tipo_por_defecto || 'search-engine';
+    if (!this.fuentes.has(porDefecto)) {
+      this.fuentes.set(porDefecto, {
+        id: porDefecto,
+        tipo,
+        estado: 'conectada',
+        conectada_en: new Date().toISOString()
+      });
+    }
+    this.logger?.info('puerto-fuente-datos.auto_conectada', { fuente: porDefecto, tipo });
+  }
+
   // Consulta de datos hacia una fuente → DatasetBruto + Rate + Coste.
   onConsultarRequest(e) {
     return this._atender(e, 'consultar', 'nichos.fuente.consultar.response', async (d) => {
-      const res = this._consultar(d);
+      const res = await this._consultar(d);
       if (res.status !== 200) this.eventBus?.publish('nichos.fuente.consultar.failed', res);
       return res;
     });
@@ -109,8 +129,10 @@ class PuertoFuenteDatos extends ModuloHibridoReflejo {
     return { status: 200, data: { de: fuente, a: por, reemplazada: true, config: this.fuentes.get(por) } };
   }
 
-  // Proyección pura: enruta el pedido de datos de un nicho hacia su fuente activa.
-  _consultar({ nicho, fuente, pagina = 1 } = {}) {
+  // Proyección (async): enruta el pedido de datos de un nicho hacia su fuente activa.
+  // Fuente 'buscador' → crawl4rs.buscar (SearXNG): devuelve DatasetBruto REAL.
+  // Fuentes 'api'/'scraping'/'comunidad' → aún sin proveedor cableado: degradan honesto.
+  async _consultar({ nicho, fuente, pagina = 1 } = {}) {
     if (!nicho) return this._errorResponse(400, 'INVALID_INPUT', 'nicho requerido', {});
     const origen = fuente || [...this.fuentes.keys()][0];
     if (!origen) {
@@ -122,19 +144,33 @@ class PuertoFuenteDatos extends ModuloHibridoReflejo {
         `la fuente '${origen}' no esta conectada`, { nicho, fuente: origen });
     }
     const activa = this.fuentes.get(origen);
-    // Enrutamiento agnóstico: el DatasetBruto llega del proveedor conectado; el puente NO
-    // asume el formato del vendor — solo transmite el resultado y el coste/rate de la petición.
-    return {
-      status: 200,
-      data: {
-        nicho,
-        fuente: origen,
-        proveedor_tipo: activa.tipo,
-        dataset_bruto: { items: [], pagina, semilla: nicho },
-        rate: { por_minuto: 10, usados_pagina: pagina <= 3 ? pagina : 3 },
-        coste: { creditos: 1, moneda: 'creditos' }
+    // Enrutamiento real agnóstico al vendor: 'buscador' habla con el órgano web
+    // crawl4rs (SearXNG). El resto de tipos aún no tienen proveedor cableado → honesto.
+    if (activa.tipo === 'search-engine' || origen === 'buscador') {
+      const resp = await this._rpc('crawl4rs.buscar.request', {
+        query: nicho, limit: 20
+      }, { timeout_ms: 30000 }).catch(() => null);
+      if (!resp || resp.status !== 200) {
+        return this._errorResponse(502, 'UPSTREAM_UNREACHABLE',
+          'la fuente buscador (crawl4rs/SearXNG) no respondio', { nicho, fuente: origen });
       }
-    };
+      const items = Array.isArray(resp.data?.resultados) ? resp.data.resultados : [];
+      return {
+        status: 200,
+        data: {
+          nicho,
+          fuente: origen,
+          proveedor_tipo: activa.tipo,
+          dataset: { items, pagina, semilla: nicho },
+          dataset_bruto: { items, pagina, semilla: nicho },
+          rate: { por_minuto: 10, usados_pagina: pagina <= 3 ? pagina : 3 },
+          coste: { creditos: 1, moneda: 'creditos' }
+        }
+      };
+    }
+    // Fuente no cableada a proveedor real → degrada honesto (no finge resultados).
+    return this._errorResponse(501, 'PROVEEDOR_NO_CABLEADO',
+      `la fuente '${origen}' (tipo ${activa.tipo}) no tiene proveedor de datos cableado`, { nicho, fuente: origen });
   }
 }
 

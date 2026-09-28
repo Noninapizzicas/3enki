@@ -48,7 +48,9 @@ Diferencia con lo convencional: "antes una persona metía los datos al ordenador
 
 - **Norte:** una **capa contable común, completa y vendible** para **todos los proyectos económicos**.
 - **Efecto de segundo orden:** se construye **UNA vez** y cada proyecto se engancha solo.
-- **Pendiente:** **cuáles** son "los proyectos económicos" (¿lista? ¿criterio?).
+- **"Los proyectos económicos" — no hace falta nombrarlos** (declarado: *"no creo que sea
+  importante nombrarlo, es indiferente"*). **Pizzepos es el 1º.** El criterio es el uso:
+  el proyecto que quiere saber de sus cuentas activa la vertical.
 
 ### 5 · ¿Quién lo va a usar y en qué momento? — ✅ declarado
 > "Lo usarán **todos los negocios que quieran saber sobre sus cuentas**."

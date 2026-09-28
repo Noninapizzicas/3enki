@@ -3,7 +3,7 @@
   "ramas": "vertical/contabilidad",
   "persistencia": "boveda/contabilidad/proceso/",
   "modelo": "mente-ejecuta / chat-gestiona",
-  "fase_actual": "F0 completada — identidad declarada por ENTREVISTA al dueño. Siguiente: F2 esquematizar-negocio",
+  "fase_actual": "F2 COMPLETADA — esquema cerrado. 118 hojas atomicas = 168% del umbral de 70 -> SALVAGUARDA ACTIVADA. Siguiente: decidir la particion y responder el guion de preguntas abiertas antes de F3",
   "nota_proceso": "Vertical transversal observadora VENDIBLE: escucha los eventos que cada negocio ya emite y reconstruye su contabilidad. Molde de proceso: boveda/nichos/proceso/ (44 modulos + 44 skills, #656).",
   "fase0": {
     "estado": "completada",
@@ -56,7 +56,43 @@
       }
     ]
   },
-  "fase2": { "estado": "pendiente", "skill": "esquematizar-negocio", "entregable": "boveda/contabilidad/proceso/fase2/esquemas/" },
+  "fase2": {
+    "estado": "completada",
+    "skill": "esquematizar-negocio",
+    "completada_el": "2026-09-28",
+    "entregable": "boveda/contabilidad/proceso/fase2/esquemas/esquema.md",
+    "gate": "COMPLETO (esquema.md + pasada-1-* + pasada-2-* + *diseccion*)",
+    "ficheros": 28,
+    "eslabon_limitante": "LA ENTRADA DE LOS HECHOS (grupo A) — no el cierre: las ventas por eventos ya estan construidas; el cierre es un hito aguas abajo que solo cuadra si la entrada esta completa. La entrada es continua, heterogenea y con juicio (cada factura/extracto/nomina llega como documento que hoy digita una persona). Es el unico punto donde se rompe la promesa 'sin operador'.",
+    "prismas_ejecutados": "1 global + 8 por interlocutor + 3 por rol = 12",
+    "hojas_atomicas": 118,
+    "hojas_abiertas": 23,
+    "nodos_total": 147,
+    "preguntas_abiertas_total": 72,
+    "diseccion": {
+      "reflejo": 60, "custodio": 29, "puente": 14, "micro_agente_fuzzy": 8, "conversor": 7,
+      "los_8_fuzzy_donde_entra_llm": ["extraccion-dato", "contrapartida-asistida", "desatasco-entrada", "partida-no-identificada", "etiquetado-analitico", "puente-lenguaje-dueno", "informe-accionable", "narrador-estados"]
+    },
+    "salvaguarda_activada": {
+      "motivo": "118 hojas atomicas = 168% del umbral de 70 fijado en F0",
+      "decision_prevista": "la vertical se PARTE por ejes de capacidad",
+      "traza_del_esquema": {
+        "nucleo": "A entrada-hechos · B libro · C estados/cierre · E tesoreria · N terceros · O facturacion · P control-proceso · L revision · M anti-bucle",
+        "fiscal": "D capa-fiscal + retenciones",
+        "analitica": "I grupo · J analitica · F inmovilizado · G personal · H existencias · K/Q/R producto-servicio"
+      },
+      "estado": "DECISION PENDIENTE DEL DUENO — la decision final se toma con el, antes de F3"
+    },
+    "conflictos_validacion_cruzada": [
+      "Dos maestros de terceros (maestro-terceros N1 vs padron-terceros N2) -> un tercero que sea cliente Y proveedor quedaria duplicado",
+      "Tres senales de cobertura (completitud-cobertura A12 / sello-cobertura Q3 / aviso-cuadre C6) pueden contradecirse si no beben de una metrica unica",
+      "Cuatro caminos de correccion que no deben confundirse (B5 interno / A13 del hecho / O2 comercial / D14 fiscal)",
+      "'Observadora que emite factura': emision-factura-venta (O1) CHOCA con la identidad declarada 'no produce hechos de negocio' — conflicto de identidad real",
+      "La silla del cliente: el negocio o el dueno? decide si Q/J8/R son una silla o tres",
+      "Trabajador humano vs automatizacion: P1-P4 ambiguo; si es humano y concurrente, choca con single-writer (M2)",
+      "diferencia-cambio (E12) depende de multi-moneda (pregunta abierta)"
+    ]
+  },
   "fase3": { "estado": "pendiente", "skill": "planificar-construccion", "entregable": "boveda/contabilidad/proceso/fase3/diseno-oop.md" },
   "fase3b": { "estado": "pendiente", "skill": "enki-adaptador-disenos", "entregable": "boveda/contabilidad/proceso/fase3b/plan-construccion.md" },
   "fase4": { "estado": "pendiente", "skill": "construir-modulos", "mandato": "una hoja a la vez, orden de la espina, esquematizar(4a)+crear(4b)",

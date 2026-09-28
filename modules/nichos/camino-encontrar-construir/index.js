@@ -70,7 +70,7 @@ class CaminoEncontrarConstruir extends ModuloHibridoReflejo {
   }
 
   // ── el juicio: decisiones base por reglas (reflejo) + asistencia fuzzy + riesgo ──
-  async _decidir({ project_id, nicho, veredicto, estudio, capacidades, riesgo = 0 } = {}) {
+  async _decidir({ project_id, nicho, veredicto, estudio, capacidades, riesgo = 0, nicho_id } = {}) {
     project_id = project_id || this.project_id;
     if (!nicho || typeof nicho !== 'object') {
       return this._errorResponse(400, 'NICHO_INVALIDO', 'la opcion de nicho es obligatoria para decidir el camino', { project_id });
@@ -97,6 +97,7 @@ class CaminoEncontrarConstruir extends ModuloHibridoReflejo {
       status: 200,
       data: {
         project_id,
+        nicho_id,
         nicho,
         camino,
         motivo,

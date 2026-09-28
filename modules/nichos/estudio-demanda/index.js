@@ -73,7 +73,7 @@ class EstudioDemanda extends ModuloHibridoReflejo {
   }
 
   // ── el juicio: consulta fuentes (reflejo) + mide 1er orden/disposicion (reflejo) + concluye (fuzzy) ──
-  async _medir({ project_id, candidato, fuentes } = {}) {
+  async _medir({ project_id, candidato, fuentes, nicho_id } = {}) {
     project_id = project_id || this.project_id;
     if (!candidato || typeof candidato !== 'object') {
       return this._errorResponse(400, 'CANDIDATO_INVALIDO', 'el candidato es obligatorio para medir la demanda', { project_id });
@@ -100,6 +100,7 @@ class EstudioDemanda extends ModuloHibridoReflejo {
       status: 200,
       data: {
         project_id,
+        nicho_id,
         candidato,
         demanda_1er_orden: demanda1erOrden,
         disposicion_pagar: disposicionPagar,

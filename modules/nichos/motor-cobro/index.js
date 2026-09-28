@@ -56,6 +56,7 @@ class MotorCobro extends ModuloHibridoReflejo {
       if (res.status === 200) {
         this.eventBus?.publish('nichos.cobro.ejecutado', {
           project_id: res.data.project_id,
+          nicho_id: d.nicho_id,
           cobro: res.data.cobro,
           ejecutado: true,
           correlation_id: d.correlation_id
@@ -68,7 +69,7 @@ class MotorCobro extends ModuloHibridoReflejo {
   }
 
   // ── proyección pura: ejecuta el cobro sobre la plataforma declarada ──
-  _ejecutarCobro({ project_id, importe, pagador, plataforma } = {}) {
+  _ejecutarCobro({ project_id, importe, pagador, plataforma, nicho_id } = {}) {
     project_id = project_id || this.project_id;
     if (!project_id) return this._invalid('project_id');
     if (!plataforma) return this._invalid('plataforma');
@@ -92,7 +93,7 @@ class MotorCobro extends ModuloHibridoReflejo {
       plataforma: pf,
       moneda: MONEDA
     });
-    return { status: 200, data: { project_id, cobro, ejecutado: true } };
+    return { status: 200, data: { project_id, nicho_id, cobro, ejecutado: true } };
   }
 
   // ── proyección pura: EFECTIVO (entró) | COMPROMETIDO (promesa/suscripción) ──

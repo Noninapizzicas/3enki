@@ -11,6 +11,10 @@ class OllamaProvider extends BaseProvider {
   constructor(config, logger, credentialResolver) {
     super(config, logger, credentialResolver);
     this.name = 'ollama';
+    // Catálogo VIVO de la cuenta (local o cloud), capturado en configure() desde
+    // /api/tags. Es la fuente de verdad para validar modelos: si Ollama añade o
+    // retira uno, aquí se refleja solo — la lista declarada en config NO manda.
+    this.catalogoVivo = [];
   }
 
   /**
@@ -18,7 +22,8 @@ class OllamaProvider extends BaseProvider {
    * Resuelve la API key (cloud) con el circuito estándar: credentialResolver
    * (eventos → credential-manager) → env OLLAMA_API_KEY → fallback 'local'
    * (Ollama local no necesita key). Verifica disponibilidad contra el base
-   * con la auth correspondiente (GET /api/tags — mismo endpoint en local y cloud).
+   * con la auth correspondiente (GET /api/tags — mismo endpoint en local y cloud)
+   * y CAPTURA el catálogo vivo de modelos de la cuenta.
    */
   async configure() {
     // 1. Resolver key cloud (si hay): resolver → env. Sin key → 'local'.
@@ -29,14 +34,18 @@ class OllamaProvider extends BaseProvider {
     }
     if (!this.apiKey) this.apiKey = 'local';
 
-    // 2. Verificar disponibilidad (local o cloud, mismo path nativo /api/tags)
+    // 2. Verificar disponibilidad + capturar el catálogo VIVO de modelos.
     try {
       const headers = this._authHeaders();
-      await this.makeRequest('GET', '/api/tags', null, headers);
+      const resp = await this.makeRequest('GET', '/api/tags', null, headers);
+      const vivos = (resp && Array.isArray(resp.models) ? resp.models : [])
+        .map(m => (m && (m.name || m.model)) || null)
+        .filter(Boolean);
+      if (vivos.length) this.catalogoVivo = vivos;
       this.logger.info('ollama.initialized', {
         available: true,
         mode: this.apiKey === 'local' ? 'local' : 'cloud',
-        models: this.config.models
+        modelos_vivos: this.catalogoVivo.length || '(config declarada)'
       });
     } catch (error) {
       this.logger.warn('ollama.not-running', {
@@ -45,6 +54,14 @@ class OllamaProvider extends BaseProvider {
       });
       this.apiKey = null;
     }
+  }
+
+  /**
+   * Catálogo de modelos elegibles: la oferta VIVA de la cuenta si se capturó;
+   * si no, la lista declarada en config. Lo consume la UI para poblar el selector.
+   */
+  catalogo() {
+    return this.catalogoVivo.length ? this.catalogoVivo.slice() : (this.config.models || []).slice();
   }
 
   /**
@@ -69,13 +86,16 @@ class OllamaProvider extends BaseProvider {
   }
 
   /**
-   * Coerce de modelo: una conversación GUARDADA con un nombre que el catálogo
-   * cloud NO acepta (modelos locales viejos, default erróneo) cae al
-   * default_model en vez de fallar con 404.
+   * Coerce de modelo: valida SOLO contra el catálogo vivo de la cuenta (o la
+   * lista declarada si no se capturó). Un nombre VIVO en Ollama se respeta
+   * siempre — así el humano elige con libertad entre TODA la oferta; solo un
+   * nombre muerto/inventado cae al default_model (evita el 404/410).
    */
   _coerceModel(options = {}) {
     const m = options.model;
-    if (m && !this.config.models.includes(m)) {
+    if (!m) return options;
+    const validos = this.catalogoVivo.length ? this.catalogoVivo : (this.config.models || []);
+    if (!validos.includes(m)) {
       return { ...options, model: this.config.default_model };
     }
     return options;

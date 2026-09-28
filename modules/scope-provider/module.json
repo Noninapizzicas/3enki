@@ -8,50 +8,83 @@
   "language": "es",
   "main": "index.js",
   "tier": "sistema",
-
   "subscribes": [
-    { "event": "scope-provider.get.request", "handler": "onGetRequest", "description": "Reflejo: devuelve el provider de UN ámbito (scope)." },
-    { "event": "scope-provider.lista_scope.request", "handler": "onListaScopeRequest", "description": "Reflejo: lista los ámbitos y su provider (índice)." },
-    { "event": "scope-provider.estado.request", "handler": "onEstadoRequest", "description": "Reflejo: totales y default." }
+    {
+      "event": "scope-provider.get.request",
+      "handler": "onGetRequest",
+      "description": "Reflejo: devuelve el provider de UN ámbito (scope)."
+    },
+    {
+      "event": "scope-provider.lista_scope.request",
+      "handler": "onListaScopeRequest",
+      "description": "Reflejo: lista los ámbitos y su provider (índice)."
+    },
+    {
+      "event": "scope-provider.estado.request",
+      "handler": "onEstadoRequest",
+      "description": "Reflejo: totales y default."
+    }
   ],
-
   "publishes": [
-    { "event": "scope-provider.get.response", "description": "{ scope, provider, model, resolvedFrom }." },
-    { "event": "scope-provider.lista_scope.response", "description": "Índice de ámbitos." },
-    { "event": "scope-provider.estado.response", "description": "Totales." }
+    {
+      "event": "scope-provider.get.response",
+      "description": "{ scope, provider, model, resolvedFrom }."
+    },
+    {
+      "event": "scope-provider.lista_scope.response",
+      "description": "Índice de ámbitos."
+    },
+    {
+      "event": "scope-provider.estado.response",
+      "description": "Totales."
+    }
   ],
-
   "tools": [
     {
       "name": "scope_provider",
       "description": "Resuelve QUÉ provider usa un ámbito (un agente, una skill, un proyecto o el default global). Devuelve { scope, provider, model, resolvedFrom }. CASCADA: contexto > agente > skill > proyecto > GLOBAL. Úsala cuando necesites saber con qué provider se ejecutará un flujo LLM (para diagnosticar '¿por qué este agente usa Ollama?', o para declarar que un agente debe ir por un provider concreto). Es el puerto de la fusión: el cerebro (Hermes) decide, pero aquí se sabe QUÉ provider toca por ámbito.",
       "parameters": {
-        "type": "object", "additionalProperties": false,
+        "type": "object",
+        "additionalProperties": false,
         "properties": {
           "scope": {
             "type": "object",
             "description": "El ámbito a resolver. Puede traer project_id, agent, skill y/o context (provider explícito por contexto).",
             "properties": {
-              "project_id": { "type": "string", "description": "Proyecto." },
-              "agent": { "type": "string", "description": "Nombre del agente/pipeline." },
-              "skill": { "type": "string", "description": "Nombre de la skill." },
-              "context": { "type": "string", "description": "Provider explícito de contexto (prioridad máxima)." }
+              "project_id": {
+                "type": "string",
+                "description": "Proyecto."
+              },
+              "agent": {
+                "type": "string",
+                "description": "Nombre del agente/pipeline."
+              },
+              "skill": {
+                "type": "string",
+                "description": "Nombre de la skill."
+              },
+              "context": {
+                "type": "string",
+                "description": "Provider explícito de contexto (prioridad máxima)."
+              }
             }
           }
         },
-        "required": ["scope"]
+        "required": [
+          "scope"
+        ]
       },
       "handler": "handleGetTool",
-      "errores_conocidos": ["INVALID_INPUT"]
+      "errores_conocidos": [
+        "INVALID_INPUT"
+      ]
     }
   ],
-
   "dependencies": [],
-
   "config": {
     "enabled": true,
     "default_provider": "ollama",
-    "default_model": "deepseek-v4-flash:preview",
+    "default_model": "deepseek-v4.1-flash",
     "scope_rules": {
       "_doc": "Cascada ámbito→provider. El orden de precedencia en runtime es: context (provider explícito) > agent > skill > project > default. Cada regla puede fijar provider y/o model. GLOBAL/default = Ollama Cloud.",
       "agents": {},
@@ -59,11 +92,15 @@
       "projects": {}
     }
   },
-
   "observability": {
     "metrics": {
-      "counters": [ "scope-provider.get.served", "scope-provider.errors.total" ],
-      "gauges": [ "scope-provider.ambitos" ]
+      "counters": [
+        "scope-provider.get.served",
+        "scope-provider.errors.total"
+      ],
+      "gauges": [
+        "scope-provider.ambitos"
+      ]
     }
   }
 }

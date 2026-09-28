@@ -203,13 +203,13 @@
   // Espejo de ai-gateway/module.json config.providers. Auto = el default por prioridad (DeepSeek).
   const providerOptions = [
     { value: '',                  label: 'Auto (por defecto)',  models: [] },
-    { value: 'deepseek-anthropic', label: 'DeepSeek 🔮',        models: ['deepseek-v4-flash', 'deepseek-v4-pro'] },
+    { value: 'deepseek-anthropic', label: 'DeepSeek 🔮',        models: ['deepseek-flash', 'deepseek-v4.1-flash', 'deepseek-pro:0813'] },
     { value: 'kimi',              label: 'Kimi (Moonshot) 🌙',  models: ['kimi-k2.6', 'kimi-k2.5', 'kimi-k2-thinking', 'moonshot-v1-128k'] },
     { value: 'anthropic',         label: 'Anthropic 🧠',        models: ['claude-opus-4-7', 'claude-sonnet-4-6', 'claude-haiku-4-5', 'claude-3-5-haiku-20241022'] },
     { value: 'openai',            label: 'OpenAI 🤖',           models: ['gpt-4o', 'gpt-4o-mini', 'gpt-3.5-turbo'] },
     { value: 'groq',              label: 'Groq ⚡',             models: ['llama-3.3-70b-versatile', 'mixtral-8x7b-32768', 'gemma2-9b-it'] },
     { value: 'gemini',            label: 'Google Gemini 💎',    models: ['gemini-2.5-flash', 'gemini-2.5-pro'] },
-    { value: 'ollama',            label: 'Ollama (Cloud) 🦙', models: ['deepseek-v4-flash:preview', 'deepseek-v4-pro:preview', 'glm-5.2', 'kimi-k2.6', 'gpt-oss:20b', 'gemma4:31b', 'nemotron-3-super', 'minimax-m2.7', 'qwen3.5:397b'] },
+    { value: 'ollama',            label: 'Ollama (Cloud) 🦙', models: ['deepseek-v4.1-flash', 'deepseek-v4-pro:0813', 'glm-5.2', 'glm-5.3', 'glm-5.3-flash', 'kimi-k2.6', 'kimi-k2.7-code', 'kimi-k3', 'gpt-oss:120b', 'gpt-oss:20b', 'gemma4:31b', 'minimax-m2.7', 'minimax-m3', 'mistral-large-3:675b', 'nemotron-3-nano:30b', 'nemotron-3-super', 'nemotron-3-ultra'] },
     { value: 'claude-cli',        label: 'Claude Code (1M) 🟣', models: ['sonnet', 'opus', 'haiku'] }
   ];
 

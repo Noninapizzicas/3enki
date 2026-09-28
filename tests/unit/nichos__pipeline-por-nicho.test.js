@@ -64,6 +64,15 @@ function aplicar(instance, evento, data) {
   return instance[handler[evento]]({ data });
 }
 
+// Helper: crea un nicho vacío con los campos nuevos (datos, etapas_disparadas).
+function nichoVacioForzado(project_id, nicho_id) {
+  return {
+    project_id, nicho: nicho_id, estado: 'SEMILLA', etapa_actual: 'SEMILLA',
+    historial: [], datos: {}, etapas_disparadas: {},
+    creado_en: new Date().toISOString(), actualizado_en: new Date().toISOString()
+  };
+}
+
 (async () => {
   console.log('nichos/pipeline-por-nicho — machine de estados (L1)\n');
 
@@ -223,6 +232,54 @@ function aplicar(instance, evento, data) {
     assert.strictEqual(res.status, 200);
     assert.strictEqual(res.data.estado, 'EN_CAJA');
     assert.strictEqual(res.data.etapa_siguiente, 'CICLO_COMPLETADO');
+  });
+
+  // ── ORQUESTACIÓN (opción c): acumulación de datos + disparo de etapa siguiente ──
+  await testAsync('orquestación: _etapaSiguiente mapea estado → etapa', () => {
+    assert.strictEqual(instance._etapaSiguiente('SEMILLA'), 'normalizar');
+    assert.strictEqual(instance._etapaSiguiente('BUSCADO'), 'sondear');
+    assert.strictEqual(instance._etapaSiguiente('VALIDANDO'), 'evaluar');
+    assert.strictEqual(instance._etapaSiguiente('VALIDADO'), 'decidir');
+    assert.strictEqual(instance._etapaSiguiente('CONSTRUIDO'), 'construir');
+    assert.strictEqual(instance._etapaSiguiente('OPERANDO'), 'solicitar');
+    assert.strictEqual(instance._etapaSiguiente('COBRANDO'), 'ejecutar');
+    assert.strictEqual(instance._etapaSiguiente('EN_CAJA'), 'CICLO_COMPLETADO');
+    assert.strictEqual(instance._etapaSiguiente('CORTADO'), 'CICLO_COMPLETADO');
+  });
+
+  await testAsync('orquestación: _rpcEtapa construye el RPC correcto con los datos acumulados', () => {
+    const st = {
+      project_id: 'p1', nicho: 'nX',
+      datos: {
+        semilla: 'salsa picante',
+        territorio: { producto: 'salsa picante', audiencia: 'restaurantes' },
+        candidato: { producto: 'salsa picante', audiencia: 'restaurantes' },
+        estudio: { demanda_1er_orden: {} },
+        veredicto: 'VIABLE'
+      }
+    };
+    const norm = instance._rpcEtapa('normalizar', st);
+    assert.strictEqual(norm.evento, 'nichos.semilla.normalizar.request');
+    assert.strictEqual(norm.payload.nicho_id, 'nX');
+    assert.strictEqual(norm.payload.semilla, 'salsa picante');
+
+    const sond = instance._rpcEtapa('sondear', st);
+    assert.strictEqual(sond.evento, 'nichos.territorio.sondear.request');
+    assert.strictEqual(sond.payload.territorio.producto, 'salsa picante');
+
+    const evalr = instance._rpcEtapa('evaluar', st);
+    assert.strictEqual(evalr.evento, 'nichos.veredicto.evaluar.request');
+    assert.strictEqual(evalr.payload.estudio, st.datos.estudio);
+  });
+
+  await testAsync('orquestación: _acumular guarda los datos del evento en el nicho', () => {
+    const pid = 'p10', nid = 'nAcum';
+    instance._mapaDe(pid).set(nid, nichoVacioForzado(pid, nid));
+    instance._acumular(pid, nid, 'semilla.capturada', { semilla: 'cerveza artesanal' });
+    instance._acumular(pid, nid, 'semilla.normalizada', { semilla: 'cerveza artesanal', intenciones: [{ producto: 'cerveza', audiencia: 'bares' }] });
+    const st = instance._mapaDe(pid).get(nid);
+    assert.strictEqual(st.datos.semilla, 'cerveza artesanal');
+    assert.strictEqual(st.datos.territorio.producto, 'cerveza');
   });
 
   await testAsync('manifest: subscribes ↔ handlers y publishes exactos de la hoja L1', () => {

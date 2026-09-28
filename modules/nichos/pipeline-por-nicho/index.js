@@ -100,6 +100,12 @@ function nichoVacio(project_id, nicho_id, origen) {
     estado: ESTADOS.SEMILLA,
     etapa_actual: 'SEMILLA',
     historial: [],
+    // datos intermedios acumulados por la cadena (territorio, estudio, veredicto…)
+    // para que cada etapa siguiente pueda dispararse con lo que la anterior produjo.
+    datos: {},
+    // etapas ya disparadas (guarda contra re-disparo en eventos múltiples, p.ej.
+    // un candidato.encontrado por cada candidato del sondeo).
+    etapas_disparadas: {},
     creado_en: new Date().toISOString(),
     actualizado_en: new Date().toISOString()
   };
@@ -215,10 +221,138 @@ class PipelinePorNicho extends ModuloHibridoReflejo {
     if (res.status === 200) {
       this._persist.marcarDirty(pid);
       this.eventBus?.publish('nichos.pipeline.avanzado', res.data);
+      // ORQUESTACIÓN (opción c autocontenido): tras avanzar, acumula datos y
+      // dispara la siguiente etapa de la cadena con lo que la anterior produjo.
+      const nicho_id = res.data?.nicho;
+      if (nicho_id) {
+        this._acumular(pid, nicho_id, tipo, d);
+        this._dispararSiguiente(pid, nicho_id);
+      }
     } else {
       this.eventBus?.publish('nichos.pipeline.avanzar.failed', res);
     }
     return res;
+  }
+
+  // ── ORQUESTACIÓN: acumula el payload del evento en los datos del nicho ──
+  // Cada etapa necesita lo que produjo la anterior; el pipeline (custodio) lo
+  // acumula en st.datos para pasárselo al disparar la siguiente etapa.
+  _acumular(pid, nicho_id, tipo, payload = {}) {
+    const st = this._mapaDe(pid).get(nicho_id);
+    if (!st) return;
+    switch (tipo) {
+      case 'semilla.capturada':
+        st.datos.semilla = payload.semilla || payload.formateada || null;
+        break;
+      case 'semilla.normalizada':
+        st.datos.semilla = payload.semilla || st.datos.semilla;
+        if (Array.isArray(payload.intenciones) && payload.intenciones.length) {
+          st.datos.territorio = payload.intenciones[0]; // 1ª intención = territorio de sondeo
+        }
+        break;
+      case 'territorio.sondeado':
+        st.datos.territorio = payload.territorio || st.datos.territorio;
+        break;
+      case 'candidato.encontrado':
+        if (payload.candidato) st.datos.candidato = payload.candidato;
+        break;
+      case 'estudio.medido':
+        st.datos.estudio = payload;
+        break;
+      case 'veredicto.emitido':
+        st.datos.veredicto = payload.veredicto;
+        st.datos.estudio = payload.estudio || st.datos.estudio;
+        break;
+      case 'camino.decidido':
+        st.datos.camino = payload.camino;
+        break;
+      case 'solucion.construida':
+        st.datos.solucion = payload.solucion;
+        break;
+      case 'cobro.ejecutado':
+      case 'cobro_registrado':
+        st.datos.cobro = payload;
+        break;
+      case 'salud.actualizada':
+        st.datos.salud = payload;
+        break;
+      default:
+        break;
+    }
+  }
+
+  // ── ORQUESTACIÓN: dispara la siguiente etapa según el estado actual ──
+  // Mapa idéntico a _orquestarEtapa, pero ahora INVOCA el RPC de la etapa
+  // siguiente (fire-and-forget best-effort). Guarda contra re-disparo.
+  _dispararSiguiente(pid, nicho_id) {
+    const st = this._mapaDe(pid).get(nicho_id);
+    if (!st) return;
+    const etapa = this._etapaSiguiente(st.estado);
+    if (!etapa || etapa === 'CICLO_COMPLETADO') return;
+    // Guarda contra re-disparo: una etapa solo se dispara una vez por nicho
+    // (los eventos múltiples —p.ej. un candidato.encontrado por candidato— no
+    // deben re-disparar el sondeo/estudio).
+    if (st.etapas_disparadas[etapa]) return;
+    st.etapas_disparadas[etapa] = true;
+
+    const rpc = this._rpcEtapa(etapa, st);
+    if (!rpc) return;
+    this._rpc(rpc.evento, rpc.payload, { timeout_ms: 15000 }).catch(() => null);
+  }
+
+  // Qué etapa sigue a cada estado (mismo mapa que _orquestarEtapa).
+  _etapaSiguiente(estado) {
+    const guia = {
+      [ESTADOS.SEMILLA]: 'normalizar',
+      [ESTADOS.BUSCADO]: 'sondear',
+      [ESTADOS.VALIDANDO]: 'evaluar',
+      [ESTADOS.VALIDADO]: 'decidir',
+      [ESTADOS.CONSTRUIDO]: 'construir',
+      [ESTADOS.OPERANDO]: 'solicitar',
+      [ESTADOS.OPERANDO_EN_ESPERA]: 'solicitar',
+      [ESTADOS.COBRANDO]: 'ejecutar',
+      [ESTADOS.EN_CAJA]: 'CICLO_COMPLETADO',
+      [ESTADOS.SANGRA]: 'CICLO_COMPLETADO',
+      [ESTADOS.CORTADO]: 'CICLO_COMPLETADO'
+    };
+    return guia[estado];
+  }
+
+  // Construye el RPC de la etapa siguiente con los datos acumulados del nicho.
+  _rpcEtapa(etapa, st) {
+    const pid = st.project_id;
+    const nicho_id = st.nicho;
+    const D = st.datos || {};
+    switch (etapa) {
+      case 'normalizar':
+        if (!D.semilla) return null;
+        return { evento: 'nichos.semilla.normalizar.request', payload: { project_id: pid, nicho_id, semilla: D.semilla } };
+      case 'sondear':
+        // territorio = intención normalizada; si no hay, no se puede sondear.
+        if (!D.territorio) return null;
+        return { evento: 'nichos.territorio.sondear.request', payload: { project_id: pid, nicho_id, territorio: D.territorio } };
+      case 'evaluar':
+        // El estudio llega por estudio-demanda; si no está, dispara el estudio primero.
+        if (!D.estudio) {
+          // estudio-demanda necesita un candidato; si no hay, no se puede medir.
+          if (!D.candidato) return null;
+          return { evento: 'nichos.estudio.medir.request', payload: { project_id: pid, candidato: D.candidato } };
+        }
+        return { evento: 'nichos.veredicto.evaluar.request', payload: { project_id: pid, estudio: D.estudio } };
+      case 'decidir':
+        if (!D.veredicto) return null;
+        return { evento: 'nichos.camino.decidir.request', payload: { project_id: pid, nicho: D.candidato || { producto: D.territorio?.producto }, veredicto: D.veredicto, estudio: D.estudio } };
+      case 'construir':
+        // consulta el catálogo de capacidades antes de ensamblar.
+        if (!D.candidato) return null;
+        return { evento: 'nichos.solucion.construir.request', payload: { project_id: pid, nicho: D.candidato } };
+      case 'solicitar':
+        return { evento: 'nichos.gate.solicitar.request', payload: { project_id: pid, nicho: D.candidato || { producto: D.territorio?.producto } } };
+      case 'ejecutar':
+        return { evento: 'nichos.motor-cobro.ejecutar.request', payload: { project_id: pid, nicho: D.candidato || { producto: D.territorio?.producto } } };
+      default:
+        return null;
+    }
   }
 
   // ── proyección: registrar una semilla (crea en SEMILLA o reusa) ──

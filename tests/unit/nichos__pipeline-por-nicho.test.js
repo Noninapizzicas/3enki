@@ -285,6 +285,30 @@ function nichoVacioForzado(project_id, nicho_id) {
     assert.strictEqual(st.datos.territorio.producto, 'cerveza');
   });
 
+  // ── BUG A: candidato.encontrado en VALIDANDO (el sondeo entra a VALIDANDO y
+  // luego emite un candidato por cada uno — antes se descartaba y se quedaba colgado) ──
+  await testAsync('VALIDANDO acepta candidato.encontrado (acumula, no se cuelga)', () => {
+    const pid = 'pVal', nid = 'nVal';
+    const st = nichoVacioForzado(pid, nid);
+    st.estado = 'VALIDANDO'; st.etapa_actual = 'VALIDANDO';
+    instance._mapaDe(pid).set(nid, st);
+    const res = instance.onCandidatoEncontrado({ data: { project_id: pid, nicho_id: nid, candidato: { producto: 'calderas', lugar: 'Zaragoza' } } });
+    assert.strictEqual(res.status, 200, 'la transición matchea');
+    assert.strictEqual(instance._mapaDe(pid).get(nid).estado, 'VALIDANDO', 'permanece en VALIDANDO');
+    assert.ok(instance._mapaDe(pid).get(nid).datos.candidato, 'el candidato SÍ se acumuló');
+  });
+
+  // ── BUG B: 'nicho' como OBJETO creaba la clave basura '[object Object]' ──
+  await testAsync('_nichoIdDe: extrae string de un nicho OBJETO (mata [object Object])', () => {
+    assert.strictEqual(instance._nichoIdDe({ nicho_id: 'abc-123' }), 'abc-123');
+    assert.strictEqual(instance._nichoIdDe({ nicho: 'xyz' }), 'xyz');
+    // El caso que rompía: nicho es un objeto {nicho_id, semilla}.
+    assert.strictEqual(instance._nichoIdDe({ nicho: { nicho_id: 'real-id', semilla: 'algo' } }), 'real-id');
+    assert.strictEqual(instance._nichoIdDe({ nicho: { nicho: 'directo' } }), 'directo');
+    assert.strictEqual(instance._nichoIdDe({}), null);
+    assert.strictEqual(instance._nichoIdDe({ nicho: { sin_id: true } }), null);
+  });
+
   await testAsync('manifest: subscribes ↔ handlers y publishes exactos de la hoja L1', () => {
     const subs = d.manifest.subscribes || [];
     const esperados = [

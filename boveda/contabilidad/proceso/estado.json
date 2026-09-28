@@ -162,6 +162,23 @@
         "conexion_con_requisito_4": "La cola de revision ES el motor de avisos por el lado que importa: el requisito del dueno 'informacion rica QUE TE AVIse' se materializa aqui (aviso de lo que necesita su ojo).",
         "principio": "El flujo NO se bloquea nunca: lo dudoso va a su cola y la operacion sigue (ya declarado en el esquema). La cola es donde el humano entra, no donde el sistema se para.",
         "estado": "DECIDIDO (delegado por el dueno)"
+      },
+      "alcance_fiscal": {
+        "decision": "COMPLETO — sin recorte. Verifactu + factura electronica + presentacion.",
+        "decidido_por": "Tot (delegado por el dueno)",
+        "freno_disuelto": "El asistente propuso 'A: solo lo que alimenta al asesor, para la primera oleada'. El dueno lo cazo ('por que ese freno?'). Aplicado FRENOS->EMPUJONES: ese freno NO protegia ningun estado deseado — era inercia del asistente ('fiscal pesa mucho'), no una restriccion del negocio. SE DISUELVE.",
+        "por_que": "El dueno declaro el alcance como 'una vertical de contabilidad REAL y PURA, que nos de TODO lo que nos pueda dar una app de contabilidad, como si fuesemos a venderla'. Una app contable real incluye Verifactu, factura electronica y presentacion. Recortarlo contradice la identidad declarada.",
+        "modo_de_uso_vs_capacidad": "Que el asesor presente con su programa es un MODO DE USO (configurable por negocio), NO un recorte de capacidad. Un cliente sin asesor querra que el sistema presente. La capacidad debe EXISTIR completa.",
+        "alcance": ["IVA (303, 390) devengado/soportado", "IRPF / IS (estimacion y modelos)", "retenciones", "calendario fiscal + avisos de plazos", "generacion de modelos", "presentacion telematica", "registro Verifactu", "factura electronica (formato estructurado)", "acuse y estado de presentacion", "rectificacion de declaraciones"],
+        "leccion": "El asistente debe vigilar este patron: NO reducir el alcance declarado por comodidad de construccion. La particion en verticales (decidida) ya resuelve el 'es mucho' — no hace falta recortar capacidades.",
+        "estado": "DECIDIDO"
+      },
+      "granularidad_de_grupo": {
+        "decision": "COMPLETO — multi-sociedad y consolidacion reales",
+        "decidido_por": "Tot (delegado por el dueno)",
+        "freno_disuelto": "El asistente pregunto '¿necesitas consolidar varias sociedades o cada negocio va por su cuenta?'. Era otro freno por comodidad. El dueno ya lo declaro: 'una gran empresa o grupo de empresas'. SE DISUELVE la duda.",
+        "alcance": ["marca-sociedad", "consolidacion de grupo", "eliminacion-intercompany", "aislamiento-negocio (multi-tenant sin fuga)", "vista agregada del grupo"],
+        "estado": "DECIDIDO"
       }
     }
   },

@@ -1,0 +1,55 @@
+{
+  "_doc": "Manifest de contabilidad/cierre-ejercicio — CUSTODIO (C4·C5, hoja del plan). EL CIERRE EN DOS NIVELES (decision del dueno): NIVEL 1 · LA JORNADA cierra la caja — consume el hecho CIERRE_JORNADA ya admitido por la puerta (A1), contabilidad LEE la operacion, no la ejecuta; clave natural (proyecto, jornada). NIVEL 2 · EL MES cierra la contabilidad — ajustes, periodificacion, amortizaciones, IVA devengado/soportado y regularizacion; clave natural (proyecto, ejercicio, mes). IRREVERSIBLE SALVO AJUSTE: un cierre NO se reabre — esIrreversible() lo declara (reabrible:false); si hay que corregir se corrige SUMANDO (B5, asiento-ajuste) y el cierre original queda en la traza. Un cierre = un asiento, y la IDEMPOTENCIA cuelga de la CLAVE NATURAL DE DOS NIVELES: reprocesar la misma jornada o el mismo mes NO duplica — devuelve 409 ERROR_PERIODO_YA_CERRADO con reabrible:false y la via de correccion declarada. C5 (AperturaEjercicio) es la cara determinista: los saldos de apertura SON los de cierre, NUNCA inventados (sin cierre anterior → 422 SIN_CIERRE_ANTERIOR, asumido:false). CUSTODIO persistente: store en memoria (cierres por clave natural de cada nivel + secuencia append-only) con PosPersistencia (storage /contabilidad/cierre-ejercicio/*.json); restaura en project.activated y vuelca en onUnload. GUARD de un solo escritor: el rol autorizado del cierre es CIERRE (mas SISTEMA para el cierre automatico de jornada) — cualquier otro se rechaza con 409 ERROR_DOS_ESCRITORES. Fire-and-forget: contabilidad.hecho_admitido (A1) → si el hecho es CIERRE_JORNADA se cierra el NIVEL 1 sin que nadie lo pida. El cierre de NIVEL 2 con ajustes se ASIENTA por EVENTO en el diario (contabilidad.asiento.cierre.request con rol ADMISION — B2 es el UNICO escritor): si B2 no confirma NO se declara el cierre realizado (se revierte el registro y se publica 503 DEPENDENCIA_NO_DISPONIBLE). Dependencia con escritor-diario (B2), mayor-balanza (B3), periodificacion (C3), inmovilizado (F2) y cola-declaraciones-criterio (K9) por EVENTO, NUNCA por require cruzado. Proyecciones puras: _cerrar(periodo, ajustes)->Cierre|ERROR_PERIODO_YA_CERRADO, _esIrreversible()->Bool, _nivel1(jornada)->caja del dia observada, _nivel2(ejercicio, mes)->ajustes/IVA/regularizacion, _generarApertura(cierreAnterior)->List<Asiento>, _arrastrarSaldos()->Balance. Publica contabilidad.cierre_realizado / contabilidad.apertura_generada (+ contabilidad.cierre.cerrar.failed / contabilidad.cierre.estado.failed / contabilidad.cierre_realizado.failed / contabilidad.apertura_generada.failed). Cierra sus RPC con contabilidad.cierre.cerrar.response / contabilidad.cierre.estado.response (emitidas por _atender, NO declaradas en publishes). NO REUTILIZA: el cierre de caja diario de la OPERACION no se toca — entra como hecho observado; el cierre contable con ajustes no existe en el inventario.",
+  "name": "cierre-ejercicio",
+  "version": "0.1.0",
+  "description": "Custodio (C4/C5): el cierre en DOS niveles — la jornada cierra la caja (nivel 1) y el mes cierra la contabilidad (nivel 2). IRREVERSIBLE salvo ajuste posterior: no se reabre, la idempotencia cuelga de la clave natural (proyecto, jornada) y (proyecto, ejercicio, mes), y la apertura siguiente son los saldos de cierre, nunca inventados. Persiste por proyecto.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "contabilidad.cierre.cerrar.request",
+      "handler": "onCerrarRequest",
+      "description": "RPC custodio: {project_id, rol:'CIERRE'|'SISTEMA', nivel:1|2, jornada? (nivel 1) | ejercicio+mes (nivel 2), ajustes:[{apuntes:[{cuenta,debe,haber}]}], cierre?/periodificacion?/amortizaciones?/iva_devengado?/iva_soportado?/regularizacion?} → {project_id, cierre:{clave_natural, nivel, unidad_de_cierre, irreversible:true, reabrible:false, asiento_cierre}, un_cierre_un_asiento:true}. Cerrojos: rol fuera de CIERRE/SISTEMA → 409 ERROR_DOS_ESCRITORES; periodo ya cerrado → 409 ERROR_PERIODO_YA_CERRADO (el cierre es IRREVERSIBLE salvo ajuste posterior B5); ajuste descuadrado → 409 DESCUADRE; sin jornada / sin ejercicio+mes → 422. El cierre de nivel 2 con ajustes se envia al libro (B2) por EVENTO: si B2 no confirma no se declara el cierre. Exito publica contabilidad.cierre_realizado y responde por contabilidad.cierre.cerrar.response; error → contabilidad.cierre.cerrar.failed."
+    },
+    {
+      "event": "contabilidad.cierre.estado.request",
+      "handler": "onEstadoRequest",
+      "description": "RPC custodio de lectura: {project_id, nivel?, jornada?|ejercicio+mes?|clave_natural?} → {project_id, clave_natural, cerrado, estado:'CERRADO'|'ABIERTO', cierre, irreversible, reabrible:false}. Sin clave devuelve el resumen (los dos niveles, ultimo de cada uno, la forma de cada clave natural). Responde por contabilidad.cierre.estado.response; si falta project_id → contabilidad.cierre.estado.failed."
+    },
+    {
+      "event": "contabilidad.hecho_admitido",
+      "handler": "onHechoAdmitido",
+      "description": "Fire-and-forget (A1 → C4): puerto-evento-vertical admitio un hecho → si el tipo es CIERRE_JORNADA se cierra el NIVEL 1 (la jornada cierra la caja) sin que nadie lo pida, con rol SISTEMA y clave natural (proyecto, jornada). El cierre de caja de la OPERACION no se ejecuta aqui: se OBSERVA. Exito publica contabilidad.cierre_realizado; si el periodo ya estaba cerrado → contabilidad.cierre_realizado.failed (no se finge un cierre nuevo)."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Restaura del storage (PosPersistencia) los cierres de los DOS niveles del proyecto activado: los cierres son POR PROYECTO, irreversibles y no borrables."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "contabilidad.cierre_realizado",
+      "description": "Fire-and-forget (C4): un periodo quedo CERRADO en su nivel → {project_id, cierre:{clave_natural, nivel:1|2, unidad_de_cierre:'JORNADA'|'MES', jornada|ejercicio+mes, saldos, ajustes, importes, asiento_cierre, irreversible:true, reabrible:false}, un_cierre_un_asiento:true, idempotente_por}. Lo consumen inmovilizado (F2, que dispara la amortizacion) y aviso-cuadre (C6). Nivel 1 no dispara amortizacion."
+    },
+    {
+      "event": "contabilidad.apertura_generada",
+      "description": "Fire-and-forget (C5): la apertura del ejercicio siguiente quedo generada DESDE el cierre anterior → {project_id, cierre_origen, apuntes, debe, haber, cuadra, saldos_de_cierre:true, inventados:false}. Los saldos de apertura SON los de cierre: nunca se inventan saldos de arranque."
+    },
+    {
+      "event": "contabilidad.cierre.cerrar.failed",
+      "description": "Par de fallo determinista: cerrar sin project_id, con rol fuera de CIERRE/SISTEMA (409 ERROR_DOS_ESCRITORES), con el periodo YA CERRADO (409 ERROR_PERIODO_YA_CERRADO — IRREVERSIBLE salvo ajuste), con ajuste descuadrado (409 DESCUADRE), sin jornada ni ejercicio+mes (422), o con el libro (B2) sin confirmar el asiento de cierre (503). Cierra el circulo de contabilidad.cierre.cerrar.request."
+    },
+    {
+      "event": "contabilidad.cierre.estado.failed",
+      "description": "Par de fallo determinista: estado sin project_id. Cierra el circulo de contabilidad.cierre.estado.request."
+    },
+    {
+      "event": "contabilidad.cierre_realizado.failed",
+      "description": "Par de fallo del evento de dominio contabilidad.cierre_realizado: el periodo ya estaba cerrado (409 ERROR_PERIODO_YA_CERRADO, reabrible:false) o el libro (B2) no confirmo el asiento de cierre. El cierre NO se reabre: se corrige sumando (B5)."
+    },
+    {
+      "event": "contabilidad.apertura_generada.failed",
+      "description": "Par de fallo del evento de dominio contabilidad.apertura_generada: no hay cierre anterior del que abrir (422 SIN_CIERRE_ANTERIOR) o la emision del hecho de dominio no se completo. Nunca se inventan saldos de arranque."
+    }
+  ]
+}

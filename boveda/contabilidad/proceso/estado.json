@@ -122,6 +122,20 @@
         "principio": "Patron single-writer aplicado a la verdad: solo una pieza tiene derecho a decir 'esta completo'. Las otras miran. Evita el problema clasico de las contabilidades: tres informes y ninguno coincide.",
         "encaja_con": "el requisito del dueno 'informacion rica QUE TE AVIse' — un aviso que no miente.",
         "estado": "DECIDIDO por el dueno"
+      },
+      "cierre_dos_niveles": {
+        "decision_del_dueno": "C — DOS NIVELES: el DIA cierra la caja · el MES cierra la contabilidad",
+        "fecha": "2026-09-28",
+        "resuelve": "unidad_de_cierre (pregunta abierta 2 de F0) — no estaba declarado que es 'un cierre' (jornada/dia/mes), y toda la idempotencia ('un cierre = un asiento') se apoyaba en ello.",
+        "nivel_1_operativo": "CIERRE DE CAJA DEL DIA — lo que ya existe en la operacion (caja.cerrada). Cuadra la caja, detecta descuadres pronto. Clave natural nivel 1: (proyecto, jornada). Es el pulso diario.",
+        "nivel_2_contable": "CIERRE DEL MES NATURAL (1 al ultimo dia) — el cierre contable clasico: ajustes, periodificacion, amortizaciones (F2), IVA devengado/soportado (D1), regularizacion de existencias (H3). Es el PERIODO QUE EL ASESOR PRESENTA. Clave natural nivel 2: (proyecto, ejercicio, mes).",
+        "como_encajan": "El dia ALIMENTA al mes: los cierres de caja diarios son la materia del cierre mensual; el mensual no re-lee los hechos, lee los dias cerrados. Un nivel no sustituye al otro.",
+        "por_que_no_solo_A": "Con solo el dia no habria cierre contable real (sin ajustes, sin IVA, sin amortizaciones) -> el asesor no podria presentar nada. Falla la medida maestra.",
+        "por_que_no_solo_B": "Con solo el mes se perderia el control diario que YA existe y que detecta descuadres pronto (y el sistema quedaria ciego 30 dias).",
+        "reutiliza": "El cierre de caja diario YA esta construido (persistencia-comandero: cuadre del dia, metodos de pago, arqueo). El nivel 1 se APOYA en lo existente, no se construye de cero.",
+        "efecto_en_idempotencia": "El cerrojo 3 (idempotencia por clave natural) pasa a tener DOS claves naturales: un cierre de caja = un asiento de caja; un cierre de mes = un asiento de cierre. Reprocesar cualquiera de los dos no duplica.",
+        "abierto_aun": "El momento exacto del cierre mensual (dia natural vs fecha de cierre declarada por el negocio) queda como detalle a fijar; y si hay periodos que no coinciden con el mes natural.",
+        "estado": "DECIDIDO por el dueno"
       }
     }
   },

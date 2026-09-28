@@ -1,0 +1,55 @@
+{
+  "_doc": "Manifest de contabilidad/cuenta-terceros — REFLEJO STATELESS (N3+N4+N6+N8, hoja del plan). Mayor AUXILIAR del tercero DERIVADO del libro: facturas vivas (N3), saldo (N3), extracto CONFRONTABLE con el tercero (N4), vencimientos desde la politica DECLARADA (N6) y antiguedad de saldos por lado — POR_COBRAR | POR_PAGAR — con tramos 0-30/31-60/61-90/90+ (N8). ES DE SOLO LECTURA: no muta nada, no tiene store y NUNCA es un almacen paralelo al libro (invariante: los saldos se DERIVAN, jamas se duplican). Calculo determinista (mismas entradas → mismo extracto; un test lo afirma). REFLEJO stateless: sin PosPersistencia ni project.activated. Las dependencias se leen POR EVENTO, NUNCA por require cruzado: mayor-balanza (B3) via contabilidad.mayor.movimientos.request, maestro-terceros (N1) via contabilidad.tercero.ficha.request, y cola-declaraciones-criterio (K9) via contabilidad.criterio.leer.request para la politica de vencimiento (E6). CONTRATO TOLERANTE (exigido por la espina): mayor-balanza AUN NO EXISTE; si no esta viva o no responde se publica 503 DEPENDENCIA_NO_DISPONIBLE y NUNCA se fabrican saldos, extractos ni antiguedades — nada de basura por relleno. Excepcion: si el payload trae su propia rebanada del libro (`movimientos`/`asientos`) o la ficha del tercero (`tercero`), el calculo procede sin tocar la dependencia. Si la politica de vencimiento no esta declarada (pieza [ABIERTO] E6/M4) se publica 422 CRITERIO_NO_DECLARADO: lo no declarado NO se estima. Proyecciones puras: _facturasVivas(idTercero)->List<IdAsiento> (N3), _saldo(idTercero)->Importe (N3), _extracto(idTercero,desde,hasta)->DocumentoConfrontable (N4), _calcularVencimiento(factura)->Fecha (N6), _estaVencido(factura,hoy)->Bool (N6), _clasificarPorVencimiento(lado,hoy)->AgingReport (N8). Publica contabilidad.cuenta_terceros_calculada (+ contabilidad.cuenta_terceros.saldo.failed / extracto.failed / vencimiento.failed / aging.failed / cuenta_terceros_calculada.failed). Cierra sus RPC con contabilidad.cuenta_terceros.<op>.response (emitidas por _atender, NO declaradas en publishes). NO REUTILIZA: las vistas por rol del tercero (auxiliar, extracto, vencimientos) cuelgan del libro de ESTA vertical.",
+  "name": "cuenta-terceros",
+  "version": "0.1.0",
+  "description": "Reflejo (N3+N4+N6+N8): mayor auxiliar del tercero derivado del libro — facturas vivas, saldo, extracto confrontable, vencimientos por politica declarada y antiguedad por lado. Solo lectura. Contrato tolerante con mayor-balanza: si no esta viva, se declara, no se fabrica.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "contabilidad.cuenta_terceros.saldo.request",
+      "handler": "onSaldoRequest",
+      "description": "RPC reflejo (N3): {project_id, id_tercero|tercero, movimientos?|asientos?, desde?, hasta?} → {project_id, id_tercero, saldo, n_movimientos, n_facturas_vivas, facturas_vivas, fuente_libro:'PAYLOAD'|'MAYOR_BALANZA', derivado_del_libro:true, almacen_paralelo:false, solo_lectura:true, no_muta:true}. El saldo se DERIVA del libro (nunca almacen paralelo). Si el payload no trae la rebanada se pide a mayor-balanza (B3) por EVENTO; si no responde → 503 DEPENDENCIA_NO_DISPONIBLE (TOLERANTE, no se fabrica). Exito publica contabilidad.cuenta_terceros_calculada y responde por contabilidad.cuenta_terceros.saldo.response; error → contabilidad.cuenta_terceros.saldo.failed."
+    },
+    {
+      "event": "contabilidad.cuenta_terceros.extracto.request",
+      "handler": "onExtractoRequest",
+      "description": "RPC reflejo (N4): {project_id, id_tercero, desde?, hasta?, movimientos?} → {project_id, id_tercero, desde, hasta, lineas:[{fecha,documento,concepto,debe,haber,saldo,saldo_acumulado}], saldo_inicial, saldo_final, n_lineas, confrontable:true, quien_confirma:'DECLARABLE'}. Extracto confrontable con el tercero (conciliacion de saldos por derivacion determinista). Quien confirma el saldo es declarable, no lo decide el sistema. Si mayor-balanza (B3) no responde → 503 DEPENDENCIA_NO_DISPONIBLE. Exito publica contabilidad.cuenta_terceros_calculada; error → contabilidad.cuenta_terceros.extracto.failed."
+    },
+    {
+      "event": "contabilidad.cuenta_terceros.vencimiento.request",
+      "handler": "onVencimientoRequest",
+      "description": "RPC reflejo (N6): {project_id, factura:{vencimiento?|fecha, ...}, politica?|condiciones?, criterio?, hoy?} → {project_id, factura, vencimiento, dias_plazo, politica_fuente, politica_estado, esta_vencido, hoy}. La fecha sale del vencimiento del hecho o de la POLITICA DECLARADA (E6 en K9, leida por EVENTO contabilidad.criterio.leer.request). Si la politica no esta declarada → 422 CRITERIO_NO_DECLARADO (lo no declarado NO se estima); si K9 no responde → 503 DEPENDENCIA_NO_DISPONIBLE. Exito publica contabilidad.cuenta_terceros_calculada; error → contabilidad.cuenta_terceros.vencimiento.failed."
+    },
+    {
+      "event": "contabilidad.cuenta_terceros.aging.request",
+      "handler": "onAgingRequest",
+      "description": "RPC reflejo (N8): {project_id, lado:'POR_COBRAR'|'POR_PAGAR', hoy?, movimientos?} → {project_id, lado, hoy, aging:{tramos:[{tramo:'0-30'|'31-60'|'61-90'|'90+', n, importe}], sin_vencimiento, total_n, total_importe}, n_facturas, derivado_del_libro:true}. Antiguedad de saldos por lado, espejo de N6 del lado del cobro. La clasificacion es PURA y determinista; el dato del libro se lee por EVENTO. Si mayor-balanza no responde → 503 DEPENDENCIA_NO_DISPONIBLE. Exito publica contabilidad.cuenta_terceros_calculada; error → contabilidad.cuenta_terceros.aging.failed."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "contabilidad.cuenta_terceros_calculada",
+      "description": "Fire-and-forget (N3/N4/N6/N8): una vista del auxiliar del tercero quedo CALCULADA → {op:'saldo'|'extracto'|'vencimiento'|'aging', project_id, ...}. Es un CALCULO derivado del libro (cero almacen paralelo, solo lectura): lo consumen la cara del dueño, la reclamacion y la politica de cobro (E6)."
+    },
+    {
+      "event": "contabilidad.cuenta_terceros.saldo.failed",
+      "description": "Par de fallo determinista: saldo sin project_id/id_tercero (400) o mayor-balanza (B3) no disponible (503 DEPENDENCIA_NO_DISPONIBLE — contrato TOLERANTE: no se fabrica el saldo). Cierra el circulo de contabilidad.cuenta_terceros.saldo.request."
+    },
+    {
+      "event": "contabilidad.cuenta_terceros.extracto.failed",
+      "description": "Par de fallo determinista: extracto con payload invalido o mayor-balanza (B3) no disponible (503). Cierra el circulo de contabilidad.cuenta_terceros.extracto.request."
+    },
+    {
+      "event": "contabilidad.cuenta_terceros.vencimiento.failed",
+      "description": "Par de fallo determinista: vencimiento con factura invalida, politica no declarada (422 CRITERIO_NO_DECLARADO) o cola-declaraciones-criterio (K9) sin responder (503 DEPENDENCIA_NO_DISPONIBLE). Cierra el circulo de contabilidad.cuenta_terceros.vencimiento.request."
+    },
+    {
+      "event": "contabilidad.cuenta_terceros.aging.failed",
+      "description": "Par de fallo determinista: aging con lado invalido (400) o mayor-balanza (B3) no disponible (503). Cierra el circulo de contabilidad.cuenta_terceros.aging.request."
+    },
+    {
+      "event": "contabilidad.cuenta_terceros_calculada.failed",
+      "description": "Par de fallo del evento de dominio contabilidad.cuenta_terceros_calculada: la emision del hecho de dominio no se completo."
+    }
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "_doc": "Manifest de contabilidad/compra-proveedor — REFLEJO STATELESS (N5+N7, hoja del plan). La compra VERIFICADA antes de asentar: (N5) cotejo pedido <-> recepcion <-> factura — lo que NO cuadra va a la cola de revision (A8.1) y JAMAS se asienta 'casi cuadrado'; (N7) ajuste del COSTE REAL por rappels, pronto-pago, descuentos y anticipos — a lo realmente pagado. El ajuste SUMA, NUNCA borra (invariante de correccion del dominio). REFLEJO stateless: sin PosPersistencia ni project.activated; cada op entra objeto, sale objeto, y el calculo es DETERMINISTA (mismas entradas → mismo cotejo/ajuste; un test lo afirma). Las dependencias se leen POR EVENTO, NUNCA por require cruzado: maestro-terceros (N1) via contabilidad.tercero.identificar.request (opcional, cuando el payload solo trae el NIF) y mayor-balanza (B3) via contabilidad.mayor.movimientos.request para los anticipos ya asentados. CONTRATO TOLERANTE: mayor-balanza AUN NO EXISTE; si no esta viva NO se fabrican anticipos — el ajuste se calcula con lo DECLARADO en el payload y la ausencia se marca (anticipos_fuente:'NO_DISPONIBLE'); si hay que CERTIFICAR 'a lo realmente pagado' (certificar:true) y falta la fuente, se publica 503 DEPENDENCIA_NO_DISPONIBLE y NUNCA se emite un coste real inventado. El COTEJO es DECLARABLE: si el negocio declara que no coteja (coteja:false, pieza [ABIERTO]) se asienta directo PERO SE DECLARA (se_declara:true). Proyecciones puras: _cotejar(pedido, recepcion, factura)->Cuadra|Descuadre (N5; difiere tambien por linea: cantidad e importe), _ajustarCosteReal(factura, descuentos, anticipos)->Importe real (N7; bruto - descuentos - anticipos; el ajuste SUMA). Publica contabilidad.compra_cotejada (tanto el cotejo como el coste real) (+ contabilidad.compra.cotejar.failed / coste_real.failed / compra_cotejada.failed). Cierra sus RPC con contabilidad.compra.cotejar.response / contabilidad.compra.coste_real.response (emitidas por _atender, NO declaradas en publishes). NO REUTILIZA: no existe cotejo compra/recepcion/factura en el inventario.",
+  "name": "compra-proveedor",
+  "version": "0.1.0",
+  "description": "Reflejo (N5+N7): la compra verificada antes de asentar — cotejo pedido/recepcion/factura (lo que no cuadra va a la cola) y ajuste del coste real por rappels y anticipos. El ajuste suma, nunca borra. Determinista y sin estado.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "contabilidad.compra.cotejar.request",
+      "handler": "onCotejarRequest",
+      "description": "RPC reflejo (N5): {project_id, pedido?, recepcion?, factura, coteja?:false, proveedor?|nif?, tolerancia?} → {project_id, coteja, cuadra, resultado:'CUADRA'|'DESCUADRE', suma_factura, vs_pedido:{total,descuadre,cuadra,lineas:[...]}, vs_recepcion:{...}, descuadres, n_descuadres, senal, proveedor, proveedor_fuente}. Coteja pedido <-> recepcion <-> factura ANTES de asentar; lo que no cuadra → senal de excepcion a la cola de revision (A8.1) y JAMAS se asienta 'casi cuadrado'. Si el negocio declara que NO coteja (coteja:false) se asienta directo pero SE DECLARA. Determinista. Publica contabilidad.compra_cotejada y responde por contabilidad.compra.cotejar.response; si falta project_id/factura o no hay pedido ni recepcion → contabilidad.compra.cotejar.failed."
+    },
+    {
+      "event": "contabilidad.compra.coste_real.request",
+      "handler": "onCoste_realRequest",
+      "description": "RPC reflejo (N7): {project_id, factura, descuentos?:[{tipo,importe}], anticipos?:[{asiento,importe}], certificar?} → {project_id, coste_bruto, descuentos, total_descuentos, anticipos, total_anticipos, coste_real, ajuste, signo_ajuste:'SUMA', no_borra:true, anticipos_fuente:'PAYLOAD'|'MAYOR_BALANZA'|'NO_DISPONIBLE'}. Ajusta el coste a lo REALMENTE pagado (rappels, pronto-pago, descuentos, anticipos); el ajuste SUMA y nunca borra. Los anticipos salen del payload o de mayor-balanza (B3) por EVENTO; si hace falta certificar y B3 no esta viva → 503 DEPENDENCIA_NO_DISPONIBLE (no se fabrica). Publica contabilidad.compra_cotejada; error → contabilidad.compra.coste_real.failed."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "contabilidad.compra_cotejada",
+      "description": "Fire-and-forget (N5/N7): la compra quedo verificada → {op:'cotejar'|'coste_real', project_id, cuadra?, resultado?, descuadres?|coste_real, ajuste, no_borra:true, ...}. El cotejo cuadra o senala excepcion a la cola (A8.1); el coste real ajusta a lo pagado SUMANDO el ajuste. Lo consume la admision/el libro para asentar con base."
+    },
+    {
+      "event": "contabilidad.compra.cotejar.failed",
+      "description": "Par de fallo determinista: cotejar sin project_id/factura (400) o sin pedido ni recepcion (400). Cierra el circulo de contabilidad.compra.cotejar.request."
+    },
+    {
+      "event": "contabilidad.compra.coste_real.failed",
+      "description": "Par de fallo determinista: coste_real sin project_id/factura (400) o mayor-balanza (B3) no disponible al certificar los anticipos (503 DEPENDENCIA_NO_DISPONIBLE — contrato TOLERANTE: no se fabrica el coste real). Cierra el circulo de contabilidad.compra.coste_real.request."
+    },
+    {
+      "event": "contabilidad.compra_cotejada.failed",
+      "description": "Par de fallo del evento de dominio contabilidad.compra_cotejada: la emision del hecho de dominio no se completo."
+    }
+  ]
+}

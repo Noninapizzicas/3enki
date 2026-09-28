@@ -1,0 +1,46 @@
+{
+  "_doc": "Manifest de contabilidad/mayor-balanza — REFLEJO STATELESS (B3, hoja del plan). LOS SALDOS SE DERIVAN DEL DIARIO: nunca un almacen paralelo. Este modulo NO muta nada — recibe el diario (en el payload o lo LEE de escritor-diario (B2) por EVENTO contabilidad.diario.leer.request) y calcula saldos por cuenta, balanza (sumas y saldos: suma_debe/suma_haber + saldo_deudor/saldo_acreedor y totales que cuadran) y movimientos por cuenta. DETERMINISTA: mismas entradas → mismo mayor (un test lo afirma). 'El asiento original no se borra': la balanza refleja la suma de TODO lo asentado. REFLEJO stateless: sin PosPersistencia ni project.activated; cada op entra objeto, sale objeto. Contrato TOLERANTE: si escritor-diario (B2) no responde, se devuelve 503 DEPENDENCIA_NO_DISPONIBLE y NUNCA se emite un mayor/balanza inventado. Proyecciones puras: _saldoPorCuenta(periodo)->{saldos, por_cuenta} (Map<IdCuenta, Importe>), _balanza(periodo)->Balanza (sumas y saldos, cuadra:bool), _movimientosDe(cuenta, periodo)->List<Apunte>. Publica contabilidad.balanza_calculada (+ contabilidad.mayor.saldo.failed / balanza.failed / movimientos.failed / balanza_calculada.failed). Cierra sus RPC con contabilidad.mayor.saldo.response / balanza.response / movimientos.response (emitidas por _atender, NO declaradas en publishes). NO REUTILIZA: derivacion del diario propia; ningun modulo del inventario lleva mayor/balanza.",
+  "name": "mayor-balanza",
+  "version": "0.1.0",
+  "description": "Reflejo stateless (B3): deriva el mayor, la balanza (sumas y saldos) y los movimientos por cuenta DESDE el diario — nunca un almacen paralelo. Determinista; sin estado. Si el diario no responde, declara la dependencia no disponible en vez de inventar saldos.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "contabilidad.mayor.saldo.request",
+      "handler": "onSaldoRequest",
+      "description": "RPC reflejo: {project_id, periodo?, diario?} → {project_id, periodo, saldos:[{cuenta, debe, haber, saldo}], por_cuenta:{cuenta:importe}, n_cuentas}. Deriva los saldos del diario (payload o EVENTO contabilidad.diario.leer.request). Proyeccion PURA de lectura (no muta). Si no hay diario → 503 DEPENDENCIA_NO_DISPONIBLE. Responde por contabilidad.mayor.saldo.response; error → contabilidad.mayor.saldo.failed."
+    },
+    {
+      "event": "contabilidad.mayor.balanza.request",
+      "handler": "onBalanzaRequest",
+      "description": "RPC reflejo: {project_id, periodo?, diario?} → {project_id, balanza:{lineas:[{cuenta, suma_debe, suma_haber, saldo_deudor, saldo_acreedor}], total_debe, total_haber, total_saldo_deudor, total_saldo_acreedor, cuadra}, n_cuentas}. Balanza de sumas y saldos DERIVADA del diario; determinista. Exito publica contabilidad.balanza_calculada y responde por contabilidad.mayor.balanza.response; sin diario → 503 → contabilidad.mayor.balanza.failed."
+    },
+    {
+      "event": "contabilidad.mayor.movimientos.request",
+      "handler": "onMovimientosRequest",
+      "description": "RPC reflejo: {project_id, cuenta, periodo?, diario?} → {project_id, cuenta, periodo, movimientos:[{asiento_id, clave_natural, tipo, fecha_operacion, debe, haber}], n}. Proyeccion PURA de lectura (no muta). Responde por contabilidad.mayor.movimientos.response; si falta cuenta o no hay diario → contabilidad.mayor.movimientos.failed."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "contabilidad.balanza_calculada",
+      "description": "Fire-and-forget (B3): la balanza de sumas y saldos quedo calculada desde el diario → {project_id, periodo, balanza:{lineas, total_debe, total_haber, cuadra}, n_cuentas}. Lo consume estados-contables (C1/C2) como base del balance y la cuenta de resultados."
+    },
+    {
+      "event": "contabilidad.mayor.saldo.failed",
+      "description": "Par de fallo determinista: saldo sin project_id, o escritor-diario (B2) no respondio (503 DEPENDENCIA_NO_DISPONIBLE). Cierra el circulo de contabilidad.mayor.saldo.request."
+    },
+    {
+      "event": "contabilidad.mayor.balanza.failed",
+      "description": "Par de fallo determinista: balanza sin project_id, o escritor-diario (B2) no respondio (503 DEPENDENCIA_NO_DISPONIBLE). Cierra el circulo de contabilidad.mayor.balanza.request."
+    },
+    {
+      "event": "contabilidad.mayor.movimientos.failed",
+      "description": "Par de fallo determinista: movimientos sin project_id/cuenta, o escritor-diario (B2) no respondio (503 DEPENDENCIA_NO_DISPONIBLE). Cierra el circulo de contabilidad.mayor.movimientos.request."
+    },
+    {
+      "event": "contabilidad.balanza_calculada.failed",
+      "description": "Par de fallo del evento de dominio contabilidad.balanza_calculada: la emision del hecho de dominio no se completo."
+    }
+  ]
+}

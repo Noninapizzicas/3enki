@@ -77,7 +77,7 @@ class EnsambladorSolucion extends ModuloHibridoReflejo {
   }
 
   // ── la construcción: decidir (fuzzy) + montar (reflejo) ──
-  async _construir({ project_id, nicho, capacidades } = {}) {
+  async _construir({ project_id, nicho, capacidades, nicho_id } = {}) {
     project_id = project_id || this.project_id;
     if (!project_id) return this._invalid('project_id');
     if (!nicho || typeof nicho !== 'object') return this._invalid('nicho');
@@ -97,7 +97,7 @@ class EnsambladorSolucion extends ModuloHibridoReflejo {
         project_id, faltante: espec.faltante
       });
     }
-    return { status: 200, data: { project_id, nicho, especificacion: espec, solucion, construida: true } };
+    return { status: 200, data: { project_id, nicho_id, nicho, especificacion: espec, solucion, construida: true } };
   }
 
   // ── FUZZY: 1 llamada llm.complete headless con el guion + contexto ──

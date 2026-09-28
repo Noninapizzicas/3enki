@@ -66,7 +66,7 @@ class VeredictoViabilidad extends ModuloHibridoReflejo {
   }
 
   // ── el juicio: evalua (reflejo) + concluye (fuzzy), con fallback reflejo ──
-  async _evaluar({ project_id, estudio, criterio } = {}) {
+  async _evaluar({ project_id, estudio, criterio, nicho_id } = {}) {
     project_id = project_id || this.project_id;
     if (!estudio || typeof estudio !== 'object') {
       return this._errorResponse(400, 'ESTUDIO_INVALIDO', 'el estudio de demanda es obligatorio para evaluar la viabilidad', { project_id });
@@ -75,12 +75,12 @@ class VeredictoViabilidad extends ModuloHibridoReflejo {
     const base = this._evaluarReflejo(estudio, criterio);
     if (base.motivo === 'SIN_CRITERIO') {
       // Sin criterio declarable no se decide por defecto: PUENTE honesto.
-      return this._emitir(project_id, estudio, criterio, 'PUENTE', 0.2, 'sin criterio de viabilidad declarado: no se asume viable');
+      return this._emitir(project_id, estudio, criterio, 'PUENTE', 0.2, 'sin criterio de viabilidad declarado: no se asume viable', nicho_id);
     }
     // Juicio fuzzy asistido (si responde y valida, refina; si no, cae al reflejo ya calculado).
     const asistido = await this._concluir(estudio, criterio, base);
     const v = asistioValido(asistido) ? asistido : base;
-    return this._emitir(project_id, estudio, criterio, v.veredicto, v.confianza, v.motivo);
+    return this._emitir(project_id, estudio, criterio, v.veredicto, v.confianza, v.motivo, nicho_id);
   }
 
   // ── REFLEJO determinista (numeros declarados): contraste estudio vs criterio ──
@@ -162,11 +162,12 @@ class VeredictoViabilidad extends ModuloHibridoReflejo {
   }
 
   // ── emisor del veredicto: estructura el dominio publicado ──
-  _emitir(project_id, estudio, criterio, veredicto, confianza, motivo) {
+  _emitir(project_id, estudio, criterio, veredicto, confianza, motivo, nicho_id) {
     return {
       status: 200,
       data: {
         project_id,
+        nicho_id,
         candidato: estudio.candidato || (estudio.producto || estudio.audiencia || ''),
         estudio,
         criterio,

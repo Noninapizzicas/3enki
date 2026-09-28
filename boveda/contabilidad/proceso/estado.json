@@ -113,6 +113,15 @@
         "piezas_afectadas": ["N1 + N2 se funden en una", "cuenta-proveedor / estado-cuenta-proveedor / vencimiento-pago / antiguedad-de-saldos pasan a ser VISTAS POR ROL sobre el maestro unico"],
         "efecto": "Evita duplicar terceros y cruzar cuentas a mano (justo el trabajo que el sistema debe automatizar). Reduce 1 hoja del grupo N.",
         "estado": "DECIDIDO por el dueno"
+      },
+      "conflicto_3_cobertura": {
+        "decision_del_dueno": "A — UNA METRICA UNICA DE COBERTURA; las otras piezas la LEEN",
+        "fecha": "2026-09-28",
+        "resuelve": "Tres piezas declaraban completitud por su cuenta: completitud-cobertura (A12, la entrada) · sello-cobertura (Q3, el dueno) · aviso-cuadre (C6, el cierre). Podian contradecirse (el dueno ve 'completo' y el cierre dice 'falta algo').",
+        "diseno": "UNA sola pieza CALCULA la cobertura (single-writer de la verdad); las demas la LEEN. completitud-cobertura (A12) pasa a ser EL CALCULO UNICO; sello-cobertura (Q3) y aviso-cuadre (C6) pasan a ser VISTAS/consumidores de esa metrica unica.",
+        "principio": "Patron single-writer aplicado a la verdad: solo una pieza tiene derecho a decir 'esta completo'. Las otras miran. Evita el problema clasico de las contabilidades: tres informes y ninguno coincide.",
+        "encaja_con": "el requisito del dueno 'informacion rica QUE TE AVIse' — un aviso que no miente.",
+        "estado": "DECIDIDO por el dueno"
       }
     }
   },

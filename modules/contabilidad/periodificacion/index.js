@@ -23,7 +23,7 @@
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
 
 // Criterios de imputacion DECLARABLES (el sistema no los asume).
-const CRITERIOS = ['DEVEGO', 'CAJA', 'FECHA_OPERACION', 'FECHA_VALOR'];
+const CRITERIOS = ['DEVENGO', 'CAJA', 'FECHA_OPERACION', 'FECHA_VALOR'];
 
 class Periodificacion extends ModuloHibridoReflejo {
   constructor() {

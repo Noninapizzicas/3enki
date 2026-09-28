@@ -359,21 +359,21 @@ class PipelinePorNicho extends ModuloHibridoReflejo {
       case 'medir':
         // 1er paso del embudo: medir la demanda con el candidato del sondeo.
         if (!D.candidato) return null;
-        return { evento: 'nichos.estudio.medir.request', payload: { project_id: pid, candidato: D.candidato } };
+        return { evento: 'nichos.estudio.medir.request', payload: { project_id: pid, nicho_id, candidato: D.candidato } };
       case 'evaluar':
         if (!D.estudio) return null;
-        return { evento: 'nichos.veredicto.evaluar.request', payload: { project_id: pid, estudio: D.estudio } };
+        return { evento: 'nichos.veredicto.evaluar.request', payload: { project_id: pid, nicho_id, estudio: D.estudio } };
       case 'decidir':
         if (!D.veredicto) return null;
-        return { evento: 'nichos.camino.decidir.request', payload: { project_id: pid, nicho: D.candidato || { producto: D.territorio?.producto }, veredicto: D.veredicto, estudio: D.estudio } };
+        return { evento: 'nichos.camino.decidir.request', payload: { project_id: pid, nicho_id, nicho: D.candidato || { producto: D.territorio?.producto }, veredicto: D.veredicto, estudio: D.estudio } };
       case 'construir':
         // consulta el catálogo de capacidades antes de ensamblar.
         if (!D.candidato) return null;
-        return { evento: 'nichos.solucion.construir.request', payload: { project_id: pid, nicho: D.candidato } };
+        return { evento: 'nichos.solucion.construir.request', payload: { project_id: pid, nicho_id, nicho: D.candidato } };
       case 'solicitar':
-        return { evento: 'nichos.gate.solicitar.request', payload: { project_id: pid, nicho: D.candidato || { producto: D.territorio?.producto } } };
+        return { evento: 'nichos.gate.solicitar.request', payload: { project_id: pid, nicho_id, nicho: D.candidato || { producto: D.territorio?.producto } } };
       case 'ejecutar':
-        return { evento: 'nichos.motor-cobro.ejecutar.request', payload: { project_id: pid, nicho: D.candidato || { producto: D.territorio?.producto } } };
+        return { evento: 'nichos.motor-cobro.ejecutar.request', payload: { project_id: pid, nicho_id, nicho: D.candidato || { producto: D.territorio?.producto } } };
       default:
         return null;
     }

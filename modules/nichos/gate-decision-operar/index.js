@@ -44,7 +44,7 @@ class GateDecisionOperar extends ModuloHibridoReflejo {
   }
 
   // ── el puente: arma el paquete-cerrado de operar y espera la decision del dueño ──
-  async _solicitar({ project_id, nicho, competencia, modelo_cobro, costo, proyeccion } = {}) {
+  async _solicitar({ project_id, nicho, competencia, modelo_cobro, costo, proyeccion, nicho_id } = {}) {
     project_id = project_id || this.project_id;
     const paquete = this._armarPaquete({ nicho, competencia, modelo_cobro, costo, proyeccion });
     if (paquete.status !== 200) {
@@ -55,6 +55,7 @@ class GateDecisionOperar extends ModuloHibridoReflejo {
       status: 200,
       data: {
         project_id,
+        nicho_id,
         tipo: 'gate_operar',
         estado: 'PENDIENTE',
         ...paquete.data,

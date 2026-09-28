@@ -148,6 +148,20 @@
         "por_que_no_solo_vuelo": "Sin consolidacion al cierre no habria ajustes ni periodo contable -> el asesor no podria presentar (falla la medida maestra).",
         "dependencia": "Se apoya en la decision 'cierre dos niveles' (C): el vuelo asienta; el cierre consolida en los dos niveles.",
         "estado": "DECIDIDO por el dueno"
+      },
+      "cola_revision": {
+        "decision": "C — DOS COLAS SEGUN LA NATURALEZA DE LA EXCEPCION (asesor / dueno)",
+        "decidido_por": "Tot (la mente), con autorizacion explicita del dueno 2026-09-28 ('yo de contabilidad no entiendo, responde tu por mi')",
+        "resuelve": "cola_revision (pregunta abierta 3 de F0: que pasa con un documento ilegible o un dato que no cuadra) y A8.3 [ABIERTO] (quien resuelve la cola).",
+        "diseno": {
+          "cola_asesor": "Excepciones de naturaleza CONTABLE: factura que no cuadra con el IVA, contrapartida que no se resuelve, descuadre, documento ilegible que impide el asiento. La resuelve el ASESOR (encaja con 'el asesor se mantiene').",
+          "cola_dueno": "Excepciones de naturaleza DEL NEGOCIO: 'este cargo de 340 EUR es un gasto tuyo?', 'esta factura es de este proveedor?', partida bancaria no identificada que solo el dueno reconoce. La resuelve el DUENO."
+        },
+        "por_que_no_todo_al_asesor": "Le llenaria la mesa de cosas que no son suyas (el asesor no sabe si un cargo es del negocio).",
+        "por_que_no_todo_al_dueno": "Tendria que hacer de contable, justo lo que el sistema debe automatizar.",
+        "conexion_con_requisito_4": "La cola de revision ES el motor de avisos por el lado que importa: el requisito del dueno 'informacion rica QUE TE AVIse' se materializa aqui (aviso de lo que necesita su ojo).",
+        "principio": "El flujo NO se bloquea nunca: lo dudoso va a su cola y la operacion sigue (ya declarado en el esquema). La cola es donde el humano entra, no donde el sistema se para.",
+        "estado": "DECIDIDO (delegado por el dueno)"
       }
     }
   },

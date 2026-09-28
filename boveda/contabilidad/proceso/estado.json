@@ -136,6 +136,18 @@
         "efecto_en_idempotencia": "El cerrojo 3 (idempotencia por clave natural) pasa a tener DOS claves naturales: un cierre de caja = un asiento de caja; un cierre de mes = un asiento de cierre. Reprocesar cualquiera de los dos no duplica.",
         "abierto_aun": "El momento exacto del cierre mensual (dia natural vs fecha de cierre declarada por el negocio) queda como detalle a fijar; y si hay periodos que no coinciden con el mes natural.",
         "estado": "DECIDIDO por el dueno"
+      },
+      "cuando_reconstruye": {
+        "decision_del_dueno": "C — AMBOS: asiento AL VUELO + consolidacion AL CIERRE",
+        "fecha": "2026-09-28",
+        "resuelve": "cuando_reconstruye (pregunta abierta 1 de F0).",
+        "nivel_vuelo": "ASIENTO AL VUELO — cada hecho que entra se asienta en cuanto llega. Da el SISTEMA VIVO que el dueno exige (requisito 10: event-driven -> vivo, actualizado, dinamico).",
+        "nivel_cierre": "CONSOLIDACION AL CIERRE — al cerrar (jornada y mes) se consolida, se cuadra y se aplican ajustes (periodificacion, amortizaciones, IVA, regularizacion de existencias).",
+        "clave_de_que_es_seguro": "Asentar al vuelo es SEGURO precisamente porque el ASIENTO NO ES UN HECHO: es un CALCULO (contabilidad.*). El riesgo de realimentacion solo existiria si algo de la OPERACION consumiera el asiento. Con la frontera de planos (cerrojo 1) en pie, el vuelo no puede disparar la operacion -> no hay bucle.",
+        "por_que_no_solo_cierre": "Con solo el cierre se tendria una app contable convencional que se actualiza de noche -> justo lo que el dueno declaro que NO quiere ('el event-driven como camino a un sistema vivo').",
+        "por_que_no_solo_vuelo": "Sin consolidacion al cierre no habria ajustes ni periodo contable -> el asesor no podria presentar (falla la medida maestra).",
+        "dependencia": "Se apoya en la decision 'cierre dos niveles' (C): el vuelo asienta; el cierre consolida en los dos niveles.",
+        "estado": "DECIDIDO por el dueno"
       }
     }
   },

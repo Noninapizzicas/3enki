@@ -1,0 +1,73 @@
+{
+  "proyecto": "contabilidad",
+  "ramas": "vertical/contabilidad",
+  "persistencia": "boveda/contabilidad/proceso/",
+  "modelo": "mente-ejecuta / chat-gestiona",
+  "fase_actual": "F0 pendiente — identidad por declarar (entrevista al dueño)",
+  "nota_proceso": "Vertical transversal observadora: escucha los eventos que cada negocio ya emite y reconstruye su contabilidad. Molde de proceso: boveda/nichos/proceso/ (44 modulos + 44 skills, #656).",
+  "fase0": {
+    "estado": "pendiente",
+    "skill": "identidad-negocio",
+    "entregable": "boveda/contabilidad/F0-identidad-contabilidad.md + fase0-identidad-contabilidad.json",
+    "nota": "F0 = entrevista al dueño (10 preguntas abiertas anti-sesgo). La ejecuta el sub-agente prisma-universal con la skill identidad-negocio; el padre fija las 3 variables (ENTRADA / ARCHIVO_FINAL / COMO+PARA). NO la escribe el padre a mano.",
+    "materia_prima": [
+      "Contabilidad = capacidad transversal observadora (no produce hechos de negocio: observa y reconstruye)",
+      "Reconstruye desde eventos + cierre: flujo de caja, ventas, consumo, stock, compras",
+      "Destino: gestion INTERNA primero, con MIRAS a capa fiscal / producto vendible",
+      "Partidas = modulos dentro de la vertical: ventas, compras, gastos, tesoreria, stock, coste, resultado",
+      "Reutiliza inventario (stock, ya multi-proyecto), facturas (compras OCR), escandallo (coste, por encima sin tocar)",
+      "Aislamiento: carpeta por proyecto (data/projects/<slug>/contabilidad/)",
+      "Anti-bucle: 3 cerrojos — planos separados, single-writer por parcela, idempotencia por clave natural"
+    ],
+    "preguntas_abiertas": [
+      {
+        "campo": "cuando_reconstruye",
+        "para": "decidir el motor de reconstruccion (tiempo real / en el cierre / ambos)",
+        "respondida": false
+      },
+      {
+        "campo": "fuente_coste_consumo",
+        "para": "reconstruir consumo de ingredientes y stock",
+        "porque": "pidiendo a escandallo/recetas de cada vertical, o cada vertical declara una ficha de producto",
+        "respondida": false
+      },
+      {
+        "campo": "alcance_fiscal",
+        "para": "dimensionar la capa fiscal",
+        "porque": "IVA/Verifactu/factura electronica hoy son CERO en Enki (verificado: 0 modulos); es un mundo, no un modulo",
+        "respondida": false
+      },
+      {
+        "campo": "vista_agregada",
+        "para": "ver todos los negocios juntos",
+        "porque": "consolidador de solo lectura vs proyecto-oficina",
+        "respondida": false
+      }
+    ]
+  },
+  "fase2": { "estado": "pendiente", "skill": "esquematizar-negocio", "entregable": "boveda/contabilidad/proceso/fase2/esquemas/" },
+  "fase3": { "estado": "pendiente", "skill": "planificar-construccion", "entregable": "boveda/contabilidad/proceso/fase3/diseno-oop.md" },
+  "fase3b": { "estado": "pendiente", "skill": "enki-adaptador-disenos", "entregable": "boveda/contabilidad/proceso/fase3b/plan-construccion.md" },
+  "fase4": { "estado": "pendiente", "skill": "construir-modulos", "mandato": "una hoja a la vez, orden de la espina, esquematizar(4a)+crear(4b)",
+    "tracking": { "orden": [], "realizados": [], "pendientes": [], "proximo": null } },
+  "fase5": { "estado": "pendiente", "skill": "escribir-skills" },
+  "fase6": { "estado": "pendiente", "skill": "decidir-interfaz" },
+  "fase65": { "estado": "pendiente", "skill": "esquematizar-interfaz" },
+  "fase7": { "estado": "pendiente", "skill": "construir-interfaz" },
+  "decisiones_cerradas": {
+    "alcance": "gestion interna primero, con miras a fiscal",
+    "arquitectura": "1 proyecto = N verticales; contabilidad = 1 vertical activable por config del proyecto",
+    "partidas": "modulos DENTRO de la vertical, no verticales separadas",
+    "aislamiento": "carpeta por proyecto (molde inventario / PosPersistencia)",
+    "ejecucion": "por proceso (F0->F7) con prisma-universal y gates de entregable en disco",
+    "molde_partidas": "vertical marketing-* (12 reflejos puros, PosPersistencia con dir por vertical)",
+    "anti_bucle": "3 cerrojos — planos separados, single-writer, idempotencia"
+  },
+  "hallazgos": {
+    "precedente_vertical_con_partidas": "marketing-* (12 modulos reflejo puro). Construido pero NO habilitado en config.json.",
+    "solape_detectado": "marketing-budget ya declara 'custodia contable' — decidir en F2/F3 si contabilidad lo absorbe o lo lee.",
+    "fiscal_en_enki": "IVA / Verifactu / factura-electronica / nominas / inmovilizado / conciliacion = 0 modulos. facturas solo es OCR de intake.",
+    "escandallo_insuficiente_para_grupo": "pizzepos/escandallo (372 lineas, receta->coste) es mono-negocio; para un grupo falta coste indirecto, multi-sociedad y periodos. No se toca: se pone por encima.",
+    "dos_logicas_de_coste": "pizzepos/escandallo (receta) y prisma/costeador (compuestos/proporciones)."
+  }
+}

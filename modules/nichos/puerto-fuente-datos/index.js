@@ -147,9 +147,12 @@ class PuertoFuenteDatos extends ModuloHibridoReflejo {
     // Enrutamiento real agnóstico al vendor: 'buscador' habla con el órgano web
     // crawl4rs (SearXNG). El resto de tipos aún no tienen proveedor cableado → honesto.
     if (activa.tipo === 'search-engine' || origen === 'buscador') {
+      // Pide 4 páginas de SearXNG (~80 registros). El volumen de señales alimenta
+      // la fuerza de demanda del estudio: con 20 topaba en 0.34 y ningún nicho
+      // llegaba a VIABLE (fuerza >= 0.4; con 80 → ~0.46, con margen).
       const resp = await this._rpc('crawl4rs.buscar.request', {
-        query: nicho, limit: 20
-      }, { timeout_ms: 30000 }).catch(() => null);
+        query: nicho, limit: 80
+      }, { timeout_ms: 45000 }).catch(() => null);
       if (!resp || resp.status !== 200) {
         return this._errorResponse(502, 'UPSTREAM_UNREACHABLE',
           'la fuente buscador (crawl4rs/SearXNG) no respondio', { nicho, fuente: origen });

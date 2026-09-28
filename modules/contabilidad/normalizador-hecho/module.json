@@ -1,0 +1,46 @@
+{
+  "_doc": "Manifest de contabilidad/normalizador-hecho — CONVERSOR STATELESS (A2 + A4.3, hoja del plan). UNICA puerta de FORMATO del hecho (invariante 10): homogeneiza el hecho CRUDO de cualquier fuente (vertical, documento, factura) a forma asentable, mapeando campos de la fuente a campos internos. Lo que FALTA no se rellena: se marca como campo ausente → excepcion a cola-revision o pregunta (invariante 7: dato ausente = desconocido). Ademas controla el CUADRE del documento (A4.3): suma de bases + suma de impuestos = total, con tolerancia DECLARABLE (0.01 por defecto); si no cuadra → excepcion a cola-revision, JAMAS se asienta 'casi cuadrado'. CONVERSOR stateless: sin PosPersistencia ni project.activated — entra objeto, sale objeto. Su dependencia con puerto-evento-vertical (A1), contrato-hecho-minimo (A11), `facturas`/`facturacion/fuentes` y lote-admision es por EVENTO, NUNCA por require cruzado. Proyecciones internas: _homogeneizar(hechoCrudo)->Hecho, _mapear(camposFuente,camposInternos)->Hecho, _detectarFaltantes(hecho)->Set<Campo>, _cuadrarDocumento(campos)->Cuadrado|Descuadre. Publica contabilidad.hecho_normalizado (+ contabilidad.documento_descuadrado cuando el cuadre falla), y sus pares de fallo. Cierra su RPC con contabilidad.hecho.normalizar.response (emitida por _atender, NO declarada en publishes). NO REUTILIZA: `facturas` entrega el dato extraido, no la forma asentable de contabilidad (contrato A11 + clave natural A14); el cuadre determinista del documento es propio.",
+  "name": "normalizador-hecho",
+  "version": "0.1.0",
+  "description": "Conversor (A2 + A4.3): unica puerta de formato del hecho — homogeneiza el crudo de cualquier fuente a forma asentable, no rellena lo que falta y jamas asienta un documento 'casi cuadrado'. Sin estado.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "contabilidad.hecho.normalizar.request",
+      "handler": "onNormalizarRequest",
+      "description": "RPC conversor: {project_id, hecho_crudo:{vertical, payload|datos, ...}, mapa?, tolerancia?} → {project_id, vertical, hecho:{...estado:'NORMALIZADO'}, faltantes, incompleto}. UNICA puerta de formato: homogeneiza a forma asentable y detecta faltantes (lo que falta NO se rellena). Si el hecho cuadra (suma bases + impuestos = total, tolerancia declarable) publica contabilidad.hecho_normalizado; si no cuadra publica contabilidad.documento_descuadrado; responde por contabilidad.hecho.normalizar.response; si el payload es invalido → contabilidad.hecho.normalizar.failed."
+    },
+    {
+      "event": "contabilidad.hecho_admitido",
+      "handler": "onHechoAdmitido",
+      "description": "Fire-and-forget (A1 → A2): puerto-evento-vertical admitio un hecho de vertical → {project_id, vertical, hecho|...}. El normalizador lo homogeneiza a forma asentable (dependencia por EVENTO, sin require cruzado) y publica contabilidad.hecho_normalizado (o su par de fallo). Lo que falte va a excepcion, no se rellena."
+    },
+    {
+      "event": "factura.procesada",
+      "handler": "onFacturaProcesada",
+      "description": "Fire-and-forget (facturas → A2): el modulo `facturas` proceso una factura (dato extraido) → {project_id, factura|datos}. Aqui se convierte en forma asentable de contabilidad (clave natural A14 + contrato A11) y se publica contabilidad.hecho_normalizado. Dependencia por EVENTO, sin require cruzado."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "contabilidad.hecho_normalizado",
+      "description": "Fire-and-forget (A2): un hecho quedo homogeneizado a forma asentable (y, si procedia, cuadrado) → {project_id, vertical, hecho, faltantes, incompleto, cuadre}. Lo consume la cadena de asiento (B2) y el rastro de historial-proceso-contable (P2)."
+    },
+    {
+      "event": "contabilidad.documento_descuadrado",
+      "description": "Fire-and-forget (A4.3): el documento NO cuadra (suma bases + suma impuestos != total, fuera de la tolerancia declarada) → {project_id, vertical, descuadre, faltantes, detalle}. Jamas se asienta 'casi cuadrado': va a excepcion a cola-revision (A8.1)."
+    },
+    {
+      "event": "contabilidad.hecho.normalizar.failed",
+      "description": "Par de fallo determinista: hecho crudo invalido (sin project_id, sin vertical o sin carga) → {status, error}. Cierra el circulo de contabilidad.hecho.normalizar.request (y de los consumos por evento hecho_admitido / factura.procesada)."
+    },
+    {
+      "event": "contabilidad.hecho_normalizado.failed",
+      "description": "Par de fallo del evento de dominio contabilidad.hecho_normalizado: la emision del hecho de dominio no se completo."
+    },
+    {
+      "event": "contabilidad.documento_descuadrado.failed",
+      "description": "Par de fallo del evento de dominio contabilidad.documento_descuadrado: la emision de la senal de descuadre no se completo."
+    }
+  ]
+}

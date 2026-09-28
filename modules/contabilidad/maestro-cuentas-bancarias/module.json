@@ -1,0 +1,42 @@
+{
+  "_doc": "Manifest de contabilidad/maestro-cuentas-bancarias — CUSTODIO (E11, hoja del plan). Catalogo DECLARABLE de cuentas bancarias y su MONEDA. Sin el, 'el banco' es un solo numero falso: cada movimiento del extracto (E2) apunta a UNA cuenta declarada y con su moneda. Multi-moneda es parametro DECLARABLE: si el dueno no la declara → una sola moneda base (la primera declarada); si la declara → tipo_cambio_requerido:true y la aritmetica entre monedas exige tipo de cambio declarado (E14). La moneda de la cuenta NO se asume: sin ella la cuenta no entra (422 PRECONDITION_FAILED). Un solo escritor del catalogo: el DUENO declara (second-writer rechazado con PERMISSION_DENIED). Persiste por proyecto via PosPersistencia (storage /contabilidad/maestro-cuentas-bancarias/*.json), restaura en project.activated y vuelca en onUnload. Proyecciones puras: _declarar(rol,cuenta,moneda)->ok (un solo escritor), _cuentas(filtro)->List<CuentaBancaria> (no muta). Publica contabilidad.cuenta_bancaria_declarada (+ contabilidad.cuenta_bancaria.declarar.failed / listar.failed / cuenta_bancaria_declarada.failed). Cierra sus RPC con contabilidad.cuenta_bancaria.declarar.response / listar.response (emitidas por _atender, NO declaradas en publishes). NO REUTILIZA: no existe maestro de cuentas bancarias; ningun modulo del inventario toca banca.",
+  "name": "maestro-cuentas-bancarias",
+  "version": "0.1.0",
+  "description": "Custodio (E11): catalogo declarable de cuentas bancarias y su moneda. Sin el, 'el banco' es un numero falso; el multi-moneda se declara. Un solo escritor (DUENO). Persiste por proyecto.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "contabilidad.cuenta_bancaria.declarar.request",
+      "handler": "onDeclararRequest",
+      "description": "RPC custodio: {project_id, rol:'DUENO', cuenta:{id_cuenta_bancaria|iban, alias, banco}, moneda} → {project_id, cuenta, moneda_base, multi_moneda, tipo_cambio_requerido}. Guard de escritor: solo el DUENO (second-writer rechazado). La moneda se DECLARA (no se asume EUR); si falta → 422 PRECONDITION_FAILED. Si la moneda difiere de la base → multi_moneda:true (E14). Publica contabilidad.cuenta_bancaria_declarada y responde por contabilidad.cuenta_bancaria.declarar.response; si el rol o el payload son invalidos → contabilidad.cuenta_bancaria.declarar.failed."
+    },
+    {
+      "event": "contabilidad.cuenta_bancaria.listar.request",
+      "handler": "onListarRequest",
+      "description": "RPC custodio: {project_id, moneda?} → {project_id, cuentas:[CuentaBancaria], n, moneda_base, multi_moneda}. Proyeccion PURA de lectura (no muta). Si falta project_id → contabilidad.cuenta_bancaria.listar.failed. Lo consume puerto-extracto (E2) para dar cuenta a los movimientos y saldo-tesoreria (E4/conciliacion E1)."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Restaura el catalogo de cuentas bancarias del proyecto activado desde el storage (PosPersistencia): el catalogo es POR PROYECTO."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "contabilidad.cuenta_bancaria_declarada",
+      "description": "Fire-and-forget (E11): una cuenta bancaria quedo declarada con su moneda → {project_id, cuenta, moneda_base, multi_moneda}. Lo consumen puerto-extracto (E2), conciliacion-bancaria (E1) y saldo-tesoreria (E4) para resolver 'que banco'."
+    },
+    {
+      "event": "contabilidad.cuenta_bancaria.declarar.failed",
+      "description": "Par de fallo determinista: declarar rechazado (rol != DUENO), payload invalido o moneda no declarada (422). Cierra el circulo de contabilidad.cuenta_bancaria.declarar.request."
+    },
+    {
+      "event": "contabilidad.cuenta_bancaria.listar.failed",
+      "description": "Par de fallo determinista: listar con payload invalido (sin project_id). Cierra el circulo de contabilidad.cuenta_bancaria.listar.request."
+    },
+    {
+      "event": "contabilidad.cuenta_bancaria_declarada.failed",
+      "description": "Par de fallo del evento de dominio contabilidad.cuenta_bancaria_declarada: la emision del hecho de dominio no se completo."
+    }
+  ]
+}

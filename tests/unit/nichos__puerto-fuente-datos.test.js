@@ -66,16 +66,34 @@ const METRICS = { increment(){}, gauge(){} };
     assert.ok(bus.published.some(([n]) => n === 'nichos.fuente.conectada'), 'publica nichos.fuente.conectada');
   });
 
-  await testAsync('RPC consultar + responde por .response (éxito)', async () => {
+  // Stub del RPC a crawl4rs (SearXNG) para el test determinista (sin red real).
+  instance._rpc = async (evento) => {
+    if (evento === 'crawl4rs.buscar.request') {
+      return { status: 200, data: { resultados: [{ titulo: 'salsa picante', url: 'https://x', resumen: 'demanda' }] } };
+    }
+    return null;
+  };
+
+  await testAsync('RPC consultar (buscador) → enruta a crawl4rs y devuelve dataset REAL', async () => {
     const res = await instance.onConsultarRequest({ data: { nicho: 'salsa picante', request_id: 'S1' } });
     assert.strictEqual(res.status, 200);
-    assert.strictEqual(res.data.dataset_bruto.semilla, 'salsa picante', 'DatasetBruto con la semilla del nicho');
     assert.strictEqual(res.data.fuente, 'buscador', 'enruta hacia la fuente conectada');
+    assert.ok(Array.isArray(res.data.dataset.items) && res.data.dataset.items.length === 1, 'dataset con items reales de SearXNG');
+    assert.strictEqual(res.data.dataset.items[0].titulo, 'salsa picante', 'el resultado real viaja en el dataset');
+    assert.strictEqual(res.data.dataset_bruto.semilla, 'salsa picante', 'DatasetBruto con la semilla del nicho');
     assert.ok(typeof res.data.rate.por_minuto === 'number', 'rate presente');
     assert.ok(typeof res.data.coste.creditos === 'number', 'coste presente');
     const respEvt = bus.published.find(([n, v]) => n === 'nichos.fuente.consultar.response' && v.request_id === 'S1');
     assert.ok(respEvt, 'publica .response correlado con request_id');
     assert.ok(!bus.published.some(([n]) => n === 'nichos.fuente.consultar.failed'), 'éxito NO dispara el par de fallo');
+  });
+
+  await testAsync('consultar con crawl4rs caído (buscador) → par de fallo honesto', async () => {
+    instance._rpc = async () => null;   // simulamos SearXNG/crawl4rs inalcanzable
+    const res = await instance.onConsultarRequest({ data: { nicho: 'cerveza', request_id: 'S5' } });
+    assert.strictEqual(res.status, 502);
+    assert.strictEqual(res.error.code, 'UPSTREAM_UNREACHABLE');
+    assert.ok(bus.published.some(([n]) => n === 'nichos.fuente.consultar.failed'), 'cierra el círculo con el par de fallo');
   });
 
   await testAsync('consultar fuente no conectada → nichos.fuente.consultar.failed', async () => {
@@ -100,9 +118,10 @@ const METRICS = { increment(){}, gauge(){} };
     assert.strictEqual(res.data.de, 'buscador');
     assert.strictEqual(res.data.a, 'api');
     assert.ok(bus.published.some(([n]) => n === 'nichos.fuente.reemplazada'), 'publica nichos.fuente.reemplazada');
-    // Ahora consultar enruta hacia la nueva fuente activa (api)
+    // 'api' (tipo generica) no tiene proveedor cableado → degrada honesto, no finge resultados.
     const q = await instance.onConsultarRequest({ data: { nicho: 'salsa', request_id: 'S4' } });
-    assert.strictEqual(q.data.fuente, 'api', 'la fuente reemplazada queda activa');
+    assert.strictEqual(q.status, 501);
+    assert.strictEqual(q.error.code, 'PROVEEDOR_NO_CABLEADO');
   });
 
   await testAsync('manifest: subscribes ↔ handlers y publishes exactos de la hoja J1', () => {

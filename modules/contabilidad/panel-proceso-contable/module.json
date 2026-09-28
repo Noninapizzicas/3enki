@@ -19,10 +19,6 @@
     {
       "event": "contabilidad.panel.latido.failed",
       "description": "Par de fallo determinista: latido sin project_id (400). Cierra el circulo de contabilidad.panel.latido.request."
-    },
-    {
-      "event": "contabilidad.panel_latido.failed",
-      "description": "Par de fallo del evento de dominio contabilidad.panel_latido: la emision del hecho de dominio no se completo."
     }
   ]
 }

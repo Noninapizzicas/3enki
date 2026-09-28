@@ -46,10 +46,6 @@
     {
       "event": "contabilidad.cuenta_terceros.aging.failed",
       "description": "Par de fallo determinista: aging con lado invalido (400) o mayor-balanza (B3) no disponible (503). Cierra el circulo de contabilidad.cuenta_terceros.aging.request."
-    },
-    {
-      "event": "contabilidad.cuenta_terceros_calculada.failed",
-      "description": "Par de fallo del evento de dominio contabilidad.cuenta_terceros_calculada: la emision del hecho de dominio no se completo."
     }
   ]
 }

@@ -46,14 +46,6 @@
     {
       "event": "contabilidad.factura.series.failed",
       "description": "Par de fallo determinista: series sin project_id (400). Cierra el circulo de contabilidad.factura.series.request."
-    },
-    {
-      "event": "contabilidad.factura_emitida.failed",
-      "description": "Par de fallo del evento de dominio contabilidad.factura_emitida: la emision del hecho de dominio no se completo."
-    },
-    {
-      "event": "contabilidad.factura_rectificada.failed",
-      "description": "Par de fallo del evento de dominio contabilidad.factura_rectificada: la emision del hecho de dominio no se completo."
     }
   ]
 }

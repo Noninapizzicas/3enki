@@ -25,10 +25,6 @@
       "description": "Par de fallo determinista: declarar un hueco con payload invalido (400). Cierra el circulo del reflejo interno de declaracion."
     },
     {
-      "event": "contabilidad.fuente_faltante_declarada.failed",
-      "description": "Par de fallo del evento de dominio contabilidad.fuente_faltante_declarada: la emision del hecho de dominio no se completo."
-    },
-    {
       "event": "contabilidad.aviso.solicitar.failed",
       "description": "Contrato TOLERANTE (K2 AUN NO EXISTE): motor-avisos no respondio o rechazo la peticion → 503 DEPENDENCIA_NO_DISPONIBLE. El hueco queda DECLARADO [ABIERTO] igualmente; NO se fabrica un aviso que K2 no ha producido."
     }

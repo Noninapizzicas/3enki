@@ -104,6 +104,15 @@
         "piezas_afectadas": ["O1 emision-factura-venta", "O2 factura-rectificativa", "D8 registro-verifactu", "D9 factura-electronica", "series/numeracion (abierta, de clientes)"],
         "riesgo_nuevo_para_el_cerrojo_1": "La factura emitida ES un hecho consumible. Si un modulo de la OPERACION la consume para ACTUAR (descontar stock, cerrar cuenta, cobrar), se abre realimentacion y se rompe el cerrojo 'frontera-planos'. A resolver: QUIEN puede consumir factura.emitida — el cliente externo si (es su documento); la operacion interna, a decidir.",
         "estado": "DECIDIDO por el dueno; el consumo de factura.emitida queda como sub-pregunta abierta"
+      },
+      "conflicto_2_terceros": {
+        "decision_del_dueno": "A — UN SOLO MAESTRO DE TERCEROS, con ROLES",
+        "fecha": "2026-09-28",
+        "resuelve": "maestro-terceros (N1) vs padron-terceros (N2): dos piezas que hacian lo mismo y duplicaban a un tercero que fuera cliente Y proveedor a la vez (caso real: un proveedor al que tambien se le vende).",
+        "diseno": "UNA pieza de terceros; el rol (cliente / proveedor / ambos / empleado / banco / administracion) es un ATRIBUTO del tercero, no una pieza. Coherente con la contabilidad real: la cuenta 430 (clientes) y 400 (proveedores) cuelgan del MISMO tercero.",
+        "piezas_afectadas": ["N1 + N2 se funden en una", "cuenta-proveedor / estado-cuenta-proveedor / vencimiento-pago / antiguedad-de-saldos pasan a ser VISTAS POR ROL sobre el maestro unico"],
+        "efecto": "Evita duplicar terceros y cruzar cuentas a mano (justo el trabajo que el sistema debe automatizar). Reduce 1 hoja del grupo N.",
+        "estado": "DECIDIDO por el dueno"
       }
     }
   },

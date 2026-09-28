@@ -1,0 +1,41 @@
+{
+  "_doc": "Manifest de contabilidad/etiquetado-analitico — MICRO-AGENTE (J1, hoja del plan). EL JUICIO ANALITICO: asigna centro/linea/producto a cada hecho con REGLA DECLARABLE (dimensiones J6 + reglas declaradas). Cuando la regla NO CUBRE, clasificar es JUICIO → lo dudoso va a la cola (A8.1) por su puerta unica; NUNCA se etiqueta a ciegas ni se ignora el hecho. El caso cubierto por regla es REFLEJO (determinista); el caso no cubierto es FUZZY (juicio). Aqui PROPONE, no decide (propone_no_decide:true): la etiqueta dudosa no se aplica sola. MICRO-AGENTE (patron hibrido real): mitad REFLEJO determinista (matching de reglas declarables por cuenta_prefijo/concepto_contiene/tercero, dimensiones declaradas) + mitad FUZZY en el cajon de blueprint del modulo (el LLM que PROPONE la etiqueta cuando la regla no cubre; el gate scripts/validate-hibridos.js exige que la op fuzzy NO vaya en module.json.subscribes). SI PERSISTE: su memoria de etiquetado es APRENDIZAJE — evita re-clasificar el mismo hecho (tercero+cuenta), es la EVIDENCIA de la regla que el jefe/asesor ratifica y la base de la explicacion analitica; por eso lleva PosPersistencia + project.activated, como pide la espina para esta hoja. NO escribe las reglas de J6 (declarables): solo LEE y PROPONE; lo dudoso se PUBLICA a la cola (contabilidad.excepcion.encolar.request). Proyecciones puras: _etiquetarConRegla(hecho)->Etiqueta|SIN_REGLA (caso cubierto por regla = reflejo determinista), _proponerEtiqueta(hecho)->Etiqueta (FUZZY: por señales declaradas + aprendizaje previo; confianza < umbral → a la cola). Publica contabilidad.etiqueta_aplicada y contabilidad.excepcion.encolar.request (+ pares de fallo). Cierra su RPC con contabilidad.etiqueta.aplicar.response (emitida por _atender, NO declarada en publishes). NO REUTILIZA: el etiquetado analitico por dimensiones declaradas no existe en el inventario.",
+  "name": "etiquetado-analitico",
+  "version": "0.1.0",
+  "description": "Micro-agente (J1): el JUICIO analitico que asigna centro/linea/producto con regla declarable y, cuando la regla no cubre, PROPONE la etiqueta (fuzzy) o la manda a cola. Persiste su memoria de aprendizaje; nunca etiqueta a ciegas.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "contabilidad.etiqueta.aplicar.request",
+      "handler": "onAplicarRequest",
+      "description": "RPC micro-agente: {project_id, hecho:{cuenta|apuntes, concepto, tercero, clave_natural}, dimensiones:[{centro, linea, claves}], reglas:[{id, cuenta_prefijo?, concepto_contiene?, tercero?, centro, linea}]} → caso CUBIERTO: {project_id, hecho_ref, etiqueta:{centro,linea,producto}, origen:'REGLA', aplicada:true, confianza:1}; caso NO CUBIERTO: se PROPONE (fuzzy por señales + aprendizaje previo) y, si la confianza no alcanza el umbral, → 409 SIN_REGLA y el hecho se ENCOLA (contabilidad.excepcion.encolar.request, naturaleza ANALITICA, cola JEFE). Nunca a ciegas. Exito publica contabilidad.etiqueta_aplicada y responde por contabilidad.etiqueta.aplicar.response; error → contabilidad.etiqueta.aplicar.failed."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Restaura la memoria del juicio analitico (etiquetas aplicadas/propuestas y excepciones encoladas) del proyecto activado desde el storage (PosPersistencia): es APRENDIZAJE por proyecto."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "contabilidad.etiqueta_aplicada",
+      "description": "Fire-and-forget (J1): un hecho quedo ETIQUETADO (por regla declarable o por juicio con confianza suficiente) → {project_id, hecho_ref, etiqueta:{centro,linea,producto}, origen:'REGLA'|'JUICIO'|'APRENDIZAJE', aplicada:true, confianza, propone_no_decide:true}. Lo consume margen-analitico (J2/J10, margen por dimension) y el cuadro de mando. PROPONE; no decide el corte duro."
+    },
+    {
+      "event": "contabilidad.excepcion.encolar.request",
+      "description": "Señal a la cola (J1 → A8.1): el hecho cuya etiqueta NO se pudo resolver (regla no cubre y juicio sin confianza) se encola con motivo ETIQUETA_NO_RESUELTA (naturaleza ANALITICA, cola JEFE) → {project_id, cola:'JEFE', excepcion:{id, naturaleza, motivo, confianza, propuesta, no_inventa:true}, encolada:true}. Lo consume cola-revision (A8.1) por su puerta unica. El hecho NUNCA se ignora."
+    },
+    {
+      "event": "contabilidad.etiqueta.aplicar.failed",
+      "description": "Par de fallo determinista: sin project_id/hecho (400) o etiqueta no resuelta (409 SIN_REGLA: la regla no cubre y el juicio no alcanza confianza → va a la cola). Cierra el circulo de contabilidad.etiqueta.aplicar.request."
+    },
+    {
+      "event": "contabilidad.etiqueta_aplicada.failed",
+      "description": "Par de fallo del evento de dominio contabilidad.etiqueta_aplicada: la emision del hecho de dominio no se completo."
+    },
+    {
+      "event": "contabilidad.excepcion.encolar.failed",
+      "description": "Par de fallo del encolado: cola-revision (A8.1) no confirmo el encolado de la etiqueta no resuelta (503 DEPENDENCIA_NO_DISPONIBLE) — se DECLARA, no se asume encolada."
+    }
+  ]
+}

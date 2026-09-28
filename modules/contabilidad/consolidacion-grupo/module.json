@@ -1,0 +1,28 @@
+{
+  "_doc": "Manifest de contabilidad/consolidacion-grupo — REFLEJO STATELESS (I1+I2+I3, hoja del plan). ESTADOS DEL CONJUNTO con CRITERIO DECLARADO: marca de sociedad (I1, mecanico), deteccion y eliminacion del cruce intercompany (I2) y agregacion (I3). Dos niveles: por negocio (AISLADO) y del grupo (CONSOLIDADO). LOS NEGOCIOS NO SE FUGAN: SOLO se consolida lo DECLARADO — la lista de sociedades y el criterio (INTEGRACION_GLOBAL / INTEGRACION_PROPORCIONAL / PUESTA_EN_EQUIVALENCIA) son PARAMETROS; sin lista declarada → NO_DECLARADO y no se consolida; sin criterio → 422 PRECONDITION_FAILED. El aislamiento por negocio lo gobierna `aislamiento-negocio` (I4): aqui no se lee ni escribe la parcela de otro negocio salvo por consolidacion declarada. REFLEJO stateless: sin PosPersistencia ni project.activated en el CODIGO; cada op entra objeto, sale objeto. Los estados por sociedad se derivan de `estados-contables` (C1/C2) por EVENTO/payload (contrato TOLERANTE: si no responden → 503 DEPENDENCIA_NO_DISPONIBLE y NUNCA se consolidan cifras inventadas); dependencia por EVENTO, NUNCA require cruzado. Proyecciones puras: _etiquetar(asiento,sociedad)->Asiento (I1 mecanico, cero juicio), _detectarCruceInterno(asientos,sociedades)->List<Cruce> (I2: par debe/haber entre DOS sociedades del grupo declarado), _eliminar(cruces)->List<Eliminacion> (I2: neutraliza solo en el consolidado, no toca el libro de cada sociedad), _agregar(sociedades)->EstadosConsolidados (I3: suma por sociedad + eliminacion intercompany, criterio declarado). Determinista: mismas entradas → mismas salidas. Publica contabilidad.grupo_consolidado (+ contabilidad.consolidacion.agregar.failed / contabilidad.grupo_consolidado.failed). Cierra su RPC con contabilidad.consolidacion.agregar.response (emitida por _atender, NO declarada en publishes). NO REUTILIZA: la consolidacion multi-sociedad no existe en el inventario (grupo = 0 modulos).",
+  "name": "consolidacion-grupo",
+  "version": "0.1.0",
+  "description": "Reflejo stateless (I1+I2+I3): estados del grupo con criterio declarado — marca de sociedad, eliminacion intercompany y agregacion. Solo consolida lo DECLARADO; el aislamiento por negocio sigue en pie. Sin estado.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "contabilidad.consolidacion.agregar.request",
+      "handler": "onAgregarRequest",
+      "description": "RPC reflejo (I1+I2+I3): {project_id, periodo?, sociedades:[IdSociedad], criterio:'INTEGRACION_GLOBAL'|'INTEGRACION_PROPORCIONAL'|'PUESTA_EN_EQUIVALENCIA', estados?|asientos?} → {project_id, criterio, sociedades, estados_por_sociedad, eliminaciones, consolidado:{activo, pasivo, patrimonio, resultado, activo_bruto, eliminado_intercompany}, aislamiento_intacto:true}. SOLO consolida lo DECLARADO: sin lista de sociedades → NO_DECLARADO (no se mezclan parcelas); sin criterio → 422 PRECONDITION_FAILED. Los estados se derivan de estados-contables (C1/C2) por EVENTO; si no responde → 503 DEPENDENCIA_NO_DISPONIBLE. Exito publica contabilidad.grupo_consolidado y responde por contabilidad.consolidacion.agregar.response; error → contabilidad.consolidacion.agregar.failed."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "contabilidad.grupo_consolidado",
+      "description": "Fire-and-forget (I3): los estados del CONJUNTO quedaron consolidados con criterio declarado y eliminacion intercompany → {project_id, periodo, criterio, sociedades, n_sociedades, eliminaciones, consolidado:{activo, pasivo, patrimonio, resultado, eliminado_intercompany}, aislamiento_intacto:true}. Lo consumen la vista agregada del grupo, el cuadro de mando y los informes. Solo lo declarado; jamas una fuga entre negocios."
+    },
+    {
+      "event": "contabilidad.consolidacion.agregar.failed",
+      "description": "Par de fallo determinista: sin project_id (400), criterio de consolidacion no declarado o no valido (422 PRECONDITION_FAILED), o estados-contables (C1/C2) no disponible (503 DEPENDENCIA_NO_DISPONIBLE). Cierra el circulo de contabilidad.consolidacion.agregar.request."
+    },
+    {
+      "event": "contabilidad.grupo_consolidado.failed",
+      "description": "Par de fallo del evento de dominio contabilidad.grupo_consolidado: la emision del hecho de dominio no se completo."
+    }
+  ]
+}

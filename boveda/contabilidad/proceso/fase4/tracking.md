@@ -33,7 +33,7 @@
 | Módulo | Qué | Estado |
 |---|---|---|
 | `modules/banco-ideas/module.json` | **`subscribes` es un DICT**, no un array (`{"evento": "handler"}`). El formato viejo. Rompe `scripts/validate-hibridos.js` **global** (`manifest.subscribes is not iterable`) → el validador de híbridos no puede correr para NADIE mientras eso siga así. | pre-existente (`be8cad7c`, generado por pipeline). **NO tocado.** |
-| `http-gateway.test.js` | `EADDRINUSE 0.0.0.0:3001` — el puerto está ocupado por un servicio vivo del host. No referencia contabilidad. | ambiental. **NO tocado.** |
+| `http-gateway.test.js` | `EADDRINUSE 0.0.0.0:3001` — el puerto está ocupado por un servicio vivo del host (`ss -ltnp` lo confirma). No referencia contabilidad. **SOLUCIÓN VERIFICADA**: la suite lee `process.env.PORT`, así que `PORT=3399 npm run test` → **PASA (exit 0, "Todos los tests pasaron")**. No hace falta matar el servicio del usuario. | ambiental, **eludible así** |
 | `arquitectura/decisiones/_outputs/eventos-publish-subscribe.json` | artefacto **auto-generado** por los validadores ("NO editar a mano"); se regenera al correrlos. | no se commitea. |
 
 ## Lecciones del proceso (aplicadas grupo a grupo)

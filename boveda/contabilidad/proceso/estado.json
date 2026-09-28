@@ -70,17 +70,44 @@
     "nodos_total": 147,
     "preguntas_abiertas_total": 72,
     "diseccion": {
-      "reflejo": 60, "custodio": 29, "puente": 14, "micro_agente_fuzzy": 8, "conversor": 7,
-      "los_8_fuzzy_donde_entra_llm": ["extraccion-dato", "contrapartida-asistida", "desatasco-entrada", "partida-no-identificada", "etiquetado-analitico", "puente-lenguaje-dueno", "informe-accionable", "narrador-estados"]
+      "reflejo": 60,
+      "custodio": 29,
+      "puente": 14,
+      "micro_agente_fuzzy": 8,
+      "conversor": 7,
+      "los_8_fuzzy_donde_entra_llm": [
+        "extraccion-dato",
+        "contrapartida-asistida",
+        "desatasco-entrada",
+        "partida-no-identificada",
+        "etiquetado-analitico",
+        "puente-lenguaje-dueno",
+        "informe-accionable",
+        "narrador-estados"
+      ]
     },
     "salvaguarda_activada": {
       "motivo": "118 hojas atomicas = 168% del umbral de 70 fijado en F0",
       "DECISION DEL DUENO 2026-09-28": "PARTIR EN CUATRO VERTICALES EQUILIBRADAS",
       "particion_elegida": {
-        "contabilidad-entrada": { "hojas": 32, "grupos": "A entrada-hechos (18) · N terceros (8) · O facturacion-emitida (2) · P control-del-proceso (4)", "nota": "LA PUERTA — contiene el eslabon limitante" },
-        "contabilidad-libro": { "hojas": 32, "grupos": "B libro-nucleo (6) · C estados-cierre (6) · E tesoreria (10) · L revision-asesor (7) · M anti-bucle (3)" },
-        "contabilidad-fiscal": { "hojas": 22, "grupos": "D capa-fiscal (13) · G personal (9)", "nota": "vendible como anadido; cada modulo pesa mas (regulacion, modelos, plazos)" },
-        "contabilidad-analitica": { "hojas": 32, "grupos": "F inmovilizado (4) · H existencias (4) · I grupo (4) · J analitica/mando (8) · K producto-servicio (5) · Q consulta-dueno (4) · R entrega-al-negocio (3)" }
+        "contabilidad-entrada": {
+          "hojas": 32,
+          "grupos": "A entrada-hechos (18) · N terceros (8) · O facturacion-emitida (2) · P control-del-proceso (4)",
+          "nota": "LA PUERTA — contiene el eslabon limitante"
+        },
+        "contabilidad-libro": {
+          "hojas": 32,
+          "grupos": "B libro-nucleo (6) · C estados-cierre (6) · E tesoreria (10) · L revision-asesor (7) · M anti-bucle (3)"
+        },
+        "contabilidad-fiscal": {
+          "hojas": 22,
+          "grupos": "D capa-fiscal (13) · G personal (9)",
+          "nota": "vendible como anadido; cada modulo pesa mas (regulacion, modelos, plazos)"
+        },
+        "contabilidad-analitica": {
+          "hojas": 32,
+          "grupos": "F inmovilizado (4) · H existencias (4) · I grupo (4) · J analitica/mando (8) · K producto-servicio (5) · Q consulta-dueno (4) · R entrega-al-negocio (3)"
+        }
       },
       "coste_de_partir": "NO multiplica el proceso: es UN proceso (F3 -> F3b -> un plan) y el plan declara a que vertical pertenece cada modulo. La construccion va POR OLEADAS.",
       "motivo_de_la_eleccion": "Oleadas del mismo tamano (32/32/22/32) -> cada una se construye y verifica en un ciclo comparable. Y modularidad comercial: 'fiscal' se puede vender como anadido, o el nucleo sin fiscal (encaja con 'vendible sola o empaquetada').",
@@ -101,7 +128,13 @@
         "decision_del_dueno": "B — CONTABILIDAD SI EMITE LA FACTURA DE VENTA",
         "fecha": "2026-09-28",
         "identidad_refinada": "La identidad dice 'no produce hechos de negocio'. Se REFINA (no se contradice): contabilidad NO produce los hechos que OBSERVA (ventas, cobros, consumo — esos los emite la operacion), pero SI produce los DOCUMENTOS PROPIOS de la contabilidad y la facturacion: factura emitida, factura rectificativa, asientos, modelos. La frontera: OBSERVA la operacion, PRODUCE lo suyo.",
-        "piezas_afectadas": ["O1 emision-factura-venta", "O2 factura-rectificativa", "D8 registro-verifactu", "D9 factura-electronica", "series/numeracion (abierta, de clientes)"],
+        "piezas_afectadas": [
+          "O1 emision-factura-venta",
+          "O2 factura-rectificativa",
+          "D8 registro-verifactu",
+          "D9 factura-electronica",
+          "series/numeracion (abierta, de clientes)"
+        ],
         "riesgo_nuevo_para_el_cerrojo_1": "La factura emitida ES un hecho consumible. Si un modulo de la OPERACION la consume para ACTUAR (descontar stock, cerrar cuenta, cobrar), se abre realimentacion y se rompe el cerrojo 'frontera-planos'. A resolver: QUIEN puede consumir factura.emitida — el cliente externo si (es su documento); la operacion interna, a decidir.",
         "estado": "DECIDIDO por el dueno; el consumo de factura.emitida queda como sub-pregunta abierta"
       },
@@ -110,7 +143,10 @@
         "fecha": "2026-09-28",
         "resuelve": "maestro-terceros (N1) vs padron-terceros (N2): dos piezas que hacian lo mismo y duplicaban a un tercero que fuera cliente Y proveedor a la vez (caso real: un proveedor al que tambien se le vende).",
         "diseno": "UNA pieza de terceros; el rol (cliente / proveedor / ambos / empleado / banco / administracion) es un ATRIBUTO del tercero, no una pieza. Coherente con la contabilidad real: la cuenta 430 (clientes) y 400 (proveedores) cuelgan del MISMO tercero.",
-        "piezas_afectadas": ["N1 + N2 se funden en una", "cuenta-proveedor / estado-cuenta-proveedor / vencimiento-pago / antiguedad-de-saldos pasan a ser VISTAS POR ROL sobre el maestro unico"],
+        "piezas_afectadas": [
+          "N1 + N2 se funden en una",
+          "cuenta-proveedor / estado-cuenta-proveedor / vencimiento-pago / antiguedad-de-saldos pasan a ser VISTAS POR ROL sobre el maestro unico"
+        ],
         "efecto": "Evita duplicar terceros y cruzar cuentas a mano (justo el trabajo que el sistema debe automatizar). Reduce 1 hoja del grupo N.",
         "estado": "DECIDIDO por el dueno"
       },
@@ -169,7 +205,18 @@
         "freno_disuelto": "El asistente propuso 'A: solo lo que alimenta al asesor, para la primera oleada'. El dueno lo cazo ('por que ese freno?'). Aplicado FRENOS->EMPUJONES: ese freno NO protegia ningun estado deseado — era inercia del asistente ('fiscal pesa mucho'), no una restriccion del negocio. SE DISUELVE.",
         "por_que": "El dueno declaro el alcance como 'una vertical de contabilidad REAL y PURA, que nos de TODO lo que nos pueda dar una app de contabilidad, como si fuesemos a venderla'. Una app contable real incluye Verifactu, factura electronica y presentacion. Recortarlo contradice la identidad declarada.",
         "modo_de_uso_vs_capacidad": "Que el asesor presente con su programa es un MODO DE USO (configurable por negocio), NO un recorte de capacidad. Un cliente sin asesor querra que el sistema presente. La capacidad debe EXISTIR completa.",
-        "alcance": ["IVA (303, 390) devengado/soportado", "IRPF / IS (estimacion y modelos)", "retenciones", "calendario fiscal + avisos de plazos", "generacion de modelos", "presentacion telematica", "registro Verifactu", "factura electronica (formato estructurado)", "acuse y estado de presentacion", "rectificacion de declaraciones"],
+        "alcance": [
+          "IVA (303, 390) devengado/soportado",
+          "IRPF / IS (estimacion y modelos)",
+          "retenciones",
+          "calendario fiscal + avisos de plazos",
+          "generacion de modelos",
+          "presentacion telematica",
+          "registro Verifactu",
+          "factura electronica (formato estructurado)",
+          "acuse y estado de presentacion",
+          "rectificacion de declaraciones"
+        ],
         "leccion": "El asistente debe vigilar este patron: NO reducir el alcance declarado por comodidad de construccion. La particion en verticales (decidida) ya resuelve el 'es mucho' — no hace falta recortar capacidades.",
         "estado": "DECIDIDO"
       },
@@ -177,19 +224,111 @@
         "decision": "COMPLETO — multi-sociedad y consolidacion reales",
         "decidido_por": "Tot (delegado por el dueno)",
         "freno_disuelto": "El asistente pregunto '¿necesitas consolidar varias sociedades o cada negocio va por su cuenta?'. Era otro freno por comodidad. El dueno ya lo declaro: 'una gran empresa o grupo de empresas'. SE DISUELVE la duda.",
-        "alcance": ["marca-sociedad", "consolidacion de grupo", "eliminacion-intercompany", "aislamiento-negocio (multi-tenant sin fuga)", "vista agregada del grupo"],
+        "alcance": [
+          "marca-sociedad",
+          "consolidacion de grupo",
+          "eliminacion-intercompany",
+          "aislamiento-negocio (multi-tenant sin fuga)",
+          "vista agregada del grupo"
+        ],
         "estado": "DECIDIDO"
+      },
+      "fiscal_legislacion_es": {
+        "decision": "RESPONDIDO con la legislacion espanola — 4 regimenes de territorio, IVA/IGIC/IPSI, IRPF/IS, Verifactu, Facturae",
+        "decidido_por": "Tot (delegado: 'respondelas tu segun la legislacion espanola y continuemos')",
+        "hallazgo_que_gobierna": "NINGUN valor legal se cablea en el codigo: tipos, plazos, coeficientes, calendario y formatos son DATOS DECLARABLES por negocio/ejercicio. La ley entra como DATO, no como logica. Consecuencia de diseno: los grupos D (fiscal) e I (grupo) llevan PUERTO DE PARAMETROS FISCALES declarables.",
+        "territorio": {
+          "regimen_comun": "IVA (AEAT)",
+          "pais_vasco": "IVA con las Diputaciones forales (Bizkaia/Gipuzkoa/Alava)",
+          "navarra": "IVA con Hacienda Foral",
+          "canarias": "IGIC (no IVA), general 7%",
+          "ceuta_melilla": "IPSI (no IVA)"
+        },
+        "iva": {
+          "tipos": "general 21 / reducido 10 / superreducido 4",
+          "regimenes": "general (303 trimestral) · simplificado · recargo equivalencia · criterio de caja · SII (grandes, >6M EUR)"
+        },
+        "sociedades": {
+          "autonomo": "IRPF + pagos fraccionados 130 (directa) / 131 (modulos)",
+          "sociedad": "IS modelo 200 + pagos 202"
+        },
+        "modelos": "303 (IVA trim) · 390 (resumen anual) · 130/131 (IRPF) · 111/115 (retenciones) · 190/180 (anuales) · 347 (>3005,06 EUR) · 349 (intracom) · 200/202 (IS) · 100 (renta) · cuentas anuales (Registro Mercantil)",
+        "retenciones": "profesionales 15% (7% ano de inicio y 2 siguientes) · trabajo segun tablas · alquileres 19%",
+        "verifactu": "RD 1007/2023 — registro inalterable + huella/hash + encadenamiento + QR + envio AEAT",
+        "factura_electronica": "Facturae (XML) estandar; FACe sector publico; B2B obligatoria por Ley 18/2022 (Crea y Crece)",
+        "series": "numeracion correlativa por serie y sin saltos; serie separada por ejercicio y tipo",
+        "ticket_vs_factura": "simplificada hasta 400 EUR (3000 en ciertos sectores); completa cuando el cliente la pide o es B2B con IVA deducible",
+        "plazo_pago": "Ley 3/2004 morosidad: max 60 dias entre empresas; 30 dias sector publico",
+        "amortizacion": "lineal (tabla simplificada) por defecto; degresiva/fiscal segun caso — parametros declarables",
+        "valoracion_existencias": "FIFO y coste medio ponderado (PMP); LIFO NO permitido en el PGC (RD 1514/2007)",
+        "multi_moneda": "SI — tipo de cambio a fecha de operacion + diferencia de cambio al cierre (se activa la pieza E12)",
+        "ajustes": "SUMAN, nunca borran (traza intacta = requisito de auditoria y Verifactu)",
+        "cobros_pagos": "registra y observa por defecto; EJECUTA solo si hay pasarela declarada (SEPA/tarjeta)",
+        "nominas": "recibe el hecho por defecto; calcula como capacidad opcional",
+        "verificar": "[VERIFICAR] por ejercicio: tipos de IVA, FECHAS de obligatoriedad de Verifactu (prorrogado) y del reglamento B2B de la Ley 18/2022, coeficientes de amortizacion, limites de factura simplificada, plazos exactos del calendario",
+        "estado": "RESPONDIDO (los [VERIFICAR] son datos declarables, se rellenan al operar cada negocio)"
+      },
+      "tanda_3_5_6_completas": {
+        "decision": "Tandas 3 (entrada), 5 (grupo/uso) y 6 (operativos) respondidas",
+        "recepcion_digital": "canales declarables: email a buzon dedicado · FACe · plataformas de intercambio · carpeta/API. Formatos: Facturae XML (entra sin interpretar) y PDF/imagen (entra por extraccion - micro-agente).",
+        "ritmo_de_uso": {
+          "dia": "el negocio, al cerrar caja",
+          "mes": "asesor + dueno (IVA, ajustes, amortizaciones)",
+          "trimestre": "asesor (303/130)",
+          "ano": "asesor (390/190/200/cuentas anuales)"
+        },
+        "catalogo_avisos": "descuadre de cobertura · excepcion en cola · IVA que no cuadra · vencimiento de pago · plazo fiscal · presupuesto desviado · cierre pendiente · amortizacion a aplicar · rectificacion necesaria",
+        "contrato_hecho_minimo": "VENTA: fecha/líneas(producto,cantidad,precio,tipo IVA)/cliente/forma de cobro. COBRO-PAGO: fecha/importe/medio/cuenta. COMPRA: proveedor/líneas/impuestos/recepcion. CONSUMO-STOCK: producto/cantidad/fecha. CIERRE JORNADA: totales/medios/descuadre. SI FALTA -> no se inventa: se declara la fuente faltante y se avisa.",
+        "formato_exportacion_asesor": "declarable (no se fija de memoria): CSV/Excel normalizado + Facturae XML + exportacion contable estandar; a cerrar con el asesor concreto (L6)",
+        "vista_agregada": "dos niveles: por negocio (aislada) y del grupo (consolidada con eliminacion intercompany)",
+        "rol_trabajador": "NO existe como rol humano — la maquina trabaja, el humano entra por las 2 colas",
+        "estado": "RESPONDIDO"
       }
+    },
+    "preguntas_abiertas_estado": {
+      "total_declaradas_en_el_esquema": 72,
+      "respondidas_por_decisiones": "tandas 1-6 completas (8 decisiones + fiscal/legal + operativos)",
+      "pendientes_reales": "SOLO valores [VERIFICAR] que son DATOS DECLARABLES (se rellenan al operar cada negocio y se actualizan cuando cambie la norma). NO bloquean el diseno.",
+      "documento": "boveda/contabilidad/proceso/fase2/preguntas-respondidas-legislacion-es.md"
     }
   },
-  "fase3": { "estado": "pendiente", "skill": "planificar-construccion", "entregable": "boveda/contabilidad/proceso/fase3/diseno-oop.md" },
-  "fase3b": { "estado": "pendiente", "skill": "enki-adaptador-disenos", "entregable": "boveda/contabilidad/proceso/fase3b/plan-construccion.md" },
-  "fase4": { "estado": "pendiente", "skill": "construir-modulos", "mandato": "una hoja a la vez, orden de la espina, esquematizar(4a)+crear(4b)",
-    "tracking": { "orden": [], "realizados": [], "pendientes": [], "proximo": null } },
-  "fase5": { "estado": "pendiente", "skill": "escribir-skills" },
-  "fase6": { "estado": "pendiente", "skill": "decidir-interfaz" },
-  "fase65": { "estado": "pendiente", "skill": "esquematizar-interfaz" },
-  "fase7": { "estado": "pendiente", "skill": "construir-interfaz" },
+  "fase3": {
+    "estado": "pendiente",
+    "skill": "planificar-construccion",
+    "entregable": "boveda/contabilidad/proceso/fase3/diseno-oop.md"
+  },
+  "fase3b": {
+    "estado": "pendiente",
+    "skill": "enki-adaptador-disenos",
+    "entregable": "boveda/contabilidad/proceso/fase3b/plan-construccion.md"
+  },
+  "fase4": {
+    "estado": "pendiente",
+    "skill": "construir-modulos",
+    "mandato": "una hoja a la vez, orden de la espina, esquematizar(4a)+crear(4b)",
+    "tracking": {
+      "orden": [],
+      "realizados": [],
+      "pendientes": [],
+      "proximo": null
+    }
+  },
+  "fase5": {
+    "estado": "pendiente",
+    "skill": "escribir-skills"
+  },
+  "fase6": {
+    "estado": "pendiente",
+    "skill": "decidir-interfaz"
+  },
+  "fase65": {
+    "estado": "pendiente",
+    "skill": "esquematizar-interfaz"
+  },
+  "fase7": {
+    "estado": "pendiente",
+    "skill": "construir-interfaz"
+  },
   "decisiones_cerradas": {
     "alcance": "gestion interna primero, con miras a fiscal",
     "arquitectura": "1 proyecto = N verticales; contabilidad = 1 vertical activable por config del proyecto",

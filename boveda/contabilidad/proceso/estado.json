@@ -75,13 +75,17 @@
     },
     "salvaguarda_activada": {
       "motivo": "118 hojas atomicas = 168% del umbral de 70 fijado en F0",
-      "decision_prevista": "la vertical se PARTE por ejes de capacidad",
-      "traza_del_esquema": {
-        "nucleo": "A entrada-hechos · B libro · C estados/cierre · E tesoreria · N terceros · O facturacion · P control-proceso · L revision · M anti-bucle",
-        "fiscal": "D capa-fiscal + retenciones",
-        "analitica": "I grupo · J analitica · F inmovilizado · G personal · H existencias · K/Q/R producto-servicio"
+      "DECISION DEL DUENO 2026-09-28": "PARTIR EN CUATRO VERTICALES EQUILIBRADAS",
+      "particion_elegida": {
+        "contabilidad-entrada": { "hojas": 32, "grupos": "A entrada-hechos (18) · N terceros (8) · O facturacion-emitida (2) · P control-del-proceso (4)", "nota": "LA PUERTA — contiene el eslabon limitante" },
+        "contabilidad-libro": { "hojas": 32, "grupos": "B libro-nucleo (6) · C estados-cierre (6) · E tesoreria (10) · L revision-asesor (7) · M anti-bucle (3)" },
+        "contabilidad-fiscal": { "hojas": 22, "grupos": "D capa-fiscal (13) · G personal (9)", "nota": "vendible como anadido; cada modulo pesa mas (regulacion, modelos, plazos)" },
+        "contabilidad-analitica": { "hojas": 32, "grupos": "F inmovilizado (4) · H existencias (4) · I grupo (4) · J analitica/mando (8) · K producto-servicio (5) · Q consulta-dueno (4) · R entrega-al-negocio (3)" }
       },
-      "estado": "DECISION PENDIENTE DEL DUENO — la decision final se toma con el, antes de F3"
+      "coste_de_partir": "NO multiplica el proceso: es UN proceso (F3 -> F3b -> un plan) y el plan declara a que vertical pertenece cada modulo. La construccion va POR OLEADAS.",
+      "motivo_de_la_eleccion": "Oleadas del mismo tamano (32/32/22/32) -> cada una se construye y verifica en un ciclo comparable. Y modularidad comercial: 'fiscal' se puede vender como anadido, o el nucleo sin fiscal (encaja con 'vendible sola o empaquetada').",
+      "alternativas_descartadas": "2 (nucleo 64 / fiscal 13 / analitica 41): desequilibrada y carga justo el eje mas pesado por modulo en el grupo pequeno. 3 (una sola, 118): sin modularidad ni oleadas comparables.",
+      "estado": "DECIDIDA por el dueno el 2026-09-28"
     },
     "conflictos_validacion_cruzada": [
       "Dos maestros de terceros (maestro-terceros N1 vs padron-terceros N2) -> un tercero que sea cliente Y proveedor quedaria duplicado",

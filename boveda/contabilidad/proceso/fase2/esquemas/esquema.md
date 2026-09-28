@@ -475,8 +475,31 @@ capacidad** (`nucleo` / `fiscal` / `analitica`). El propio esquema da la traza n
 - **`analitica`** — J (analítica/mando, incl. J8–J10) · I (grupo) · H (existencias valoradas en su
   parte de coste) · K9 (criterios) · **más las caras de actor** (Q consulta · R entrega · K producto).
 
-> No se parte aquí: **se deja declarado el desborde y la regla**. La partición se decide en F3 (PLASMA)
-> con el dueño, a la vista de este número.
+> **DECISIÓN DEL DUEÑO (2026-09-28): SE PARTE EN CUATRO VERTICALES.** La traza de arriba era la
+> sugerencia del esquema (3 ejes); el dueño eligió **cuatro equilibradas** — mejor reparto de oleadas
+> y modularidad comercial (`fiscal` vendible como añadido).
+
+## 8b · ✅ PARTICIÓN DECIDIDA — cuatro verticales
+
+| Vertical | Hojas | Grupos que agrupa |
+|---|---|---|
+| **`contabilidad-entrada`** | **32** | A entrada-hechos (18) · N terceros (8) · O facturación emitida (2) · P control del proceso (4) |
+| **`contabilidad-libro`** | **32** | B libro-núcleo (6) · C estados-cierre (6) · E tesorería (10) · L revisión-asesor (7) · M anti-bucle (3) |
+| **`contabilidad-fiscal`** | **22** | D capa-fiscal (13) · G personal (9) |
+| **`contabilidad-analitica`** | **32** | F inmovilizado (4) · H existencias (4) · I grupo (4) · J analítica/mando (8) · K producto-servicio (5) · Q consulta-dueño (4) · R entrega-al-negocio (3) |
+
+**`contabilidad-entrada` contiene el eslabón limitante** (grupo A) — es la puerta del sistema y la
+primera oleada natural.
+
+**Por qué cuatro y no tres:** oleadas del mismo tamaño (32/32/22/32) → cada una se construye y
+verifica en un ciclo comparable. La de tres dejaba `núcleo` con 64 y `fiscal` con 13, cargando el
+eje más pesado por módulo (regulación, modelos, plazos) en el grupo pequeño.
+
+**Modularidad comercial:** `fiscal` se puede vender como añadido, o el núcleo sin fiscal — encaja
+con el alcance declarado *"vendible sola o empaquetada con proyectos concretos"*.
+
+**Coste de partir:** NO multiplica el proceso. Es **UN** proceso (F3 → F3b → un plan) y el
+**plan declara a qué vertical pertenece cada módulo**. La construcción va **por oleadas**.
 
 ---
 
@@ -486,6 +509,10 @@ cuello, expandido hasta que todas sus hojas son atómicas o abiertas) + **8 pris
 **3 prismas de rol**. Ninguna hoja sin estado. El **eslabón limitante** (entrada de hechos) está
 identificado, expandido con frenos → empujones, y **reforzado** por la asimetría con la vertical
 subordinada. La validación cruzada de actores está hecha: refuerzos y **7 conflictos** declarados.
-**Siguiente encadenamiento:** FASE 3 · PLASMA (planificar-construccion → diseno-oop.md), tras
-responder/investigar el guion de 72 preguntas abiertas y resolver la **salvaguarda de alcance** (§8:
-desborde → partir por `nucleo` / `fiscal` / `analitica`). Fase lista para su cierre de gate.
+Disección **completa**: las 118 hojas con su FORMA (60 REFLEJO · 29 CUSTODIO · 14 PUENTE ·
+8 MICRO-AGENTE · 7 CONVERSOR). **Salvaguarda de alcance RESUELTA** (§8 + §8b): el dueño decidió
+partir en **cuatro verticales** (`entrada` 32 · `libro` 32 · `fiscal` 22 · `analitica` 32).
+**Siguiente encadenamiento:** responder el guion de **72 preguntas abiertas** (por tandas temáticas)
+y resolver los **7 conflictos de validación cruzada** antes de la FASE 3 · PLASMA
+(planificar-construccion → diseno-oop.md) — que será **UN** diseño OOP para el conjunto, con la
+partición declarada en el plan. Fase lista para su cierre de gate.

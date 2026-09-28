@@ -287,25 +287,28 @@ class PipelinePorNicho extends ModuloHibridoReflejo {
   _dispararSiguiente(pid, nicho_id) {
     const st = this._mapaDe(pid).get(nicho_id);
     if (!st) return;
-    const etapa = this._etapaSiguiente(st.estado);
+    const etapa = this._etapaSiguiente(st);
     if (!etapa || etapa === 'CICLO_COMPLETADO') return;
     // Guarda contra re-disparo: una etapa solo se dispara una vez por nicho
     // (los eventos múltiples —p.ej. un candidato.encontrado por candidato— no
     // deben re-disparar el sondeo/estudio).
     if (st.etapas_disparadas[etapa]) return;
-    st.etapas_disparadas[etapa] = true;
 
     const rpc = this._rpcEtapa(etapa, st);
-    if (!rpc) return;
+    if (!rpc) return;  // no marcar disparada si no hay payload (sin datos aún)
+    st.etapas_disparadas[etapa] = true;
     this._rpc(rpc.evento, rpc.payload, { timeout_ms: 15000 }).catch(() => null);
   }
 
-  // Qué etapa sigue a cada estado (mismo mapa que _orquestarEtapa).
-  _etapaSiguiente(estado) {
+  // Qué etapa sigue a cada estado. Recibe el ESTADO (objeto) completo para
+  // poder ramificar por datos acumulados (BUSCADO y VALIDANDO cubren dos pasos).
+  _etapaSiguiente(st) {
+    const estado = st && st.estado;
+    const D = (st && st.datos) || {};
     const guia = {
       [ESTADOS.SEMILLA]: 'normalizar',
       [ESTADOS.BUSCADO]: 'sondear',
-      [ESTADOS.VALIDANDO]: 'evaluar',
+      [ESTADOS.VALIDANDO]: 'medir',       // 1er paso del embudo: medir demanda
       [ESTADOS.VALIDADO]: 'decidir',
       [ESTADOS.CONSTRUIDO]: 'construir',
       [ESTADOS.OPERANDO]: 'solicitar',
@@ -315,7 +318,13 @@ class PipelinePorNicho extends ModuloHibridoReflejo {
       [ESTADOS.SANGRA]: 'CICLO_COMPLETADO',
       [ESTADOS.CORTADO]: 'CICLO_COMPLETADO'
     };
-    return guia[estado];
+    let etapa = guia[estado];
+    // BUSCADO cubre dos pasos: si la semilla aún no se normalizó (no hay
+    // territorio), la etapa real es normalizar, no sondear.
+    if (estado === ESTADOS.BUSCADO && !D.territorio) etapa = 'normalizar';
+    // VALIDANDO cubre dos pasos: si ya hay estudio medido, el paso es evaluar.
+    if (estado === ESTADOS.VALIDANDO && D.estudio) etapa = 'evaluar';
+    return etapa;
   }
 
   // Construye el RPC de la etapa siguiente con los datos acumulados del nicho.
@@ -331,13 +340,12 @@ class PipelinePorNicho extends ModuloHibridoReflejo {
         // territorio = intención normalizada; si no hay, no se puede sondear.
         if (!D.territorio) return null;
         return { evento: 'nichos.territorio.sondear.request', payload: { project_id: pid, nicho_id, territorio: D.territorio } };
+      case 'medir':
+        // 1er paso del embudo: medir la demanda con el candidato del sondeo.
+        if (!D.candidato) return null;
+        return { evento: 'nichos.estudio.medir.request', payload: { project_id: pid, candidato: D.candidato } };
       case 'evaluar':
-        // El estudio llega por estudio-demanda; si no está, dispara el estudio primero.
-        if (!D.estudio) {
-          // estudio-demanda necesita un candidato; si no hay, no se puede medir.
-          if (!D.candidato) return null;
-          return { evento: 'nichos.estudio.medir.request', payload: { project_id: pid, candidato: D.candidato } };
-        }
+        if (!D.estudio) return null;
         return { evento: 'nichos.veredicto.evaluar.request', payload: { project_id: pid, estudio: D.estudio } };
       case 'decidir':
         if (!D.veredicto) return null;

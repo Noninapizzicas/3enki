@@ -236,15 +236,18 @@ function nichoVacioForzado(project_id, nicho_id) {
 
   // ── ORQUESTACIÓN (opción c): acumulación de datos + disparo de etapa siguiente ──
   await testAsync('orquestación: _etapaSiguiente mapea estado → etapa', () => {
-    assert.strictEqual(instance._etapaSiguiente('SEMILLA'), 'normalizar');
-    assert.strictEqual(instance._etapaSiguiente('BUSCADO'), 'sondear');
-    assert.strictEqual(instance._etapaSiguiente('VALIDANDO'), 'evaluar');
-    assert.strictEqual(instance._etapaSiguiente('VALIDADO'), 'decidir');
-    assert.strictEqual(instance._etapaSiguiente('CONSTRUIDO'), 'construir');
-    assert.strictEqual(instance._etapaSiguiente('OPERANDO'), 'solicitar');
-    assert.strictEqual(instance._etapaSiguiente('COBRANDO'), 'ejecutar');
-    assert.strictEqual(instance._etapaSiguiente('EN_CAJA'), 'CICLO_COMPLETADO');
-    assert.strictEqual(instance._etapaSiguiente('CORTADO'), 'CICLO_COMPLETADO');
+    const st = (estado, datos = {}) => ({ estado, datos });
+    assert.strictEqual(instance._etapaSiguiente(st('SEMILLA')), 'normalizar');
+    assert.strictEqual(instance._etapaSiguiente(st('BUSCADO', { territorio: {} })), 'sondear');
+    assert.strictEqual(instance._etapaSiguiente(st('BUSCADO')), 'normalizar', 'sin territorio aún → normalizar');
+    assert.strictEqual(instance._etapaSiguiente(st('VALIDANDO')), 'medir', 'sin estudio → medir demanda');
+    assert.strictEqual(instance._etapaSiguiente(st('VALIDANDO', { estudio: {} })), 'evaluar', 'con estudio → evaluar veredicto');
+    assert.strictEqual(instance._etapaSiguiente(st('VALIDADO')), 'decidir');
+    assert.strictEqual(instance._etapaSiguiente(st('CONSTRUIDO')), 'construir');
+    assert.strictEqual(instance._etapaSiguiente(st('OPERANDO')), 'solicitar');
+    assert.strictEqual(instance._etapaSiguiente(st('COBRANDO')), 'ejecutar');
+    assert.strictEqual(instance._etapaSiguiente(st('EN_CAJA')), 'CICLO_COMPLETADO');
+    assert.strictEqual(instance._etapaSiguiente(st('CORTADO')), 'CICLO_COMPLETADO');
   });
 
   await testAsync('orquestación: _rpcEtapa construye el RPC correcto con los datos acumulados', () => {

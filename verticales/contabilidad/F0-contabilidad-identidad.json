@@ -1,0 +1,60 @@
+{
+  "fase": "fase0-identidad-negocio",
+  "evento": "project.created",
+  "estado": "con_identidad",
+  "completada_el": "2026-09-28",
+  "vertical": "contabilidad",
+  "nota_molde": "Sigue el molde de /home/admin/vertical-nichos/F0-nichos-identidad.{md,json}. El directorio de vertical guarda el trabajo vivo entre fases; la vertical se activa por config en cada proyecto.",
+  "resumen": {
+    "que_es": "La capacidad transversal que le falta a cualquier vertical de negocio para llevar su contabilidad: escucha los hechos que el negocio ya emite (item agregado/eliminado, cobro, cierre de caja) y reconstruye su contabilidad — flujo de caja, ventas, consumo, stock y compras. No produce hechos de negocio: observa y reconstruye.",
+    "que_vende": "Aporta la capacidad contable a cada negocio (no vende mercancia). Destino inicial: USO INTERNO — llevar la contabilidad de los negocios propios. Con MIRAS: el software que opera la contabilidad es en si un negocio; su ambicion declarada es convertirse en producto vendible, pero la capa fiscal NO se construye hasta que haya negocio que la pague.",
+    "como_lo_elabora": "Vertical de PARTIDAS-MODULO (ventas, compras, gastos, tesoreria, stock, coste, resultado): una partida = un modulo = una parcela pequena y desacoplada. Reutiliza lo que ya existe (inventario=stock multi-proyecto, facturas=compras OCR, escandallo=coste; el escandallo NO se toca, se pone por encima). Se ejecuta por el proceso (proceso-negocio F0->F7) con el motor prisma-universal, no a mano.",
+    "tipo_derivado": "capacidad_transversal",
+    "preguntas_abiertas": [
+      {
+        "campo": "cuando_reconstruye",
+        "para": "decidir el motor de reconstruccion",
+        "porque": "tiempo real (informativo) vs en el cierre (oficial) vs ambos — cambia la arquitectura del nucleo",
+        "respondida": false
+      },
+      {
+        "campo": "fuente_coste_consumo",
+        "para": "reconstruir consumo de ingredientes y stock",
+        "porque": "pidiendo a escandallo/recetas de cada vertical, o cada vertical declara una ficha de producto en formato acordado",
+        "respondida": false
+      },
+      {
+        "campo": "alcance_fiscal",
+        "para": "dimensionar la capa fiscal",
+        "porque": "IVA/Verifactu/factura electronica hoy son CERO en Enki — es un mundo, no un modulo; solo se construye si hay negocio",
+        "respondida": false
+      },
+      {
+        "campo": "vista_agregada",
+        "para": "ver todos los negocios juntos",
+        "porque": "consolidador de solo lectura vs proyecto-oficina; recomendacion: solo si duele",
+        "respondida": false
+      }
+    ]
+  },
+  "decisiones_cerradas": {
+    "alcance": "gestion interna primero, con miras a fiscal",
+    "arquitectura": "1 proyecto = N verticales; contabilidad = 1 vertical (bloque en config del proyecto)",
+    "partidas": "modulos DENTRO de la vertical, no verticales separadas",
+    "aislamiento": "carpeta por proyecto (data/projects/<slug>/contabilidad/...) — molde inventario/PosPersistencia",
+    "ejecucion": "por proceso-negocio + prisma-universal, con gates de entregable",
+    "molde_partidas": "vertical marketing-* (12 reflejos puros, PosPersistencia con dir por vertical)",
+    "anti_bucle": "3 cerrojos — planos separados (contabilidad emite calculos, nunca hechos), single-writer por parcela, idempotencia por clave natural"
+  },
+  "partidas_propuestas": {
+    "nucleo": ["contabilidad (asiento · dia · periodo)"],
+    "nuevas": ["contabilidad-ventas", "contabilidad-compras", "contabilidad-gastos", "contabilidad-tesoreria", "contabilidad-resultado"],
+    "reutilizadas": ["inventario (stock)", "facturas (compras OCR)", "escandallo (coste — por encima, sin tocar)"]
+  },
+  "hallazgos_previos": {
+    "precedente_vertical_con_partidas": "marketing-* (12 modulos reflejo puro, prefijo de vertical). Construido pero NO habilitado en config.json.",
+    "solape_detectado": "marketing-budget ya declara 'custodia contable' — decidir en F2/F3 si contabilidad lo absorbe o lo lee.",
+    "fiscal_en_enki": "IVA/Verifactu/factura-electronica/nominas/inmovilizado/conciliacion = 0 modulos. facturas solo es OCR de intake.",
+    "dos_logicas_de_coste": "pizzepos/escandallo (receta->coste) y prisma/costeador (compuestos/proporciones). Ninguna sirve tal cual para un grupo (falta coste indirecto, multi-sociedad, periodos)."
+  }
+}

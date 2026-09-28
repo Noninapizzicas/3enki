@@ -23,10 +23,10 @@
 | 3 | puerto-nomina · aislamiento-negocio · acceso-nomina · cola-declaraciones-criterio · clave-natural · deduplicacion-hecho · completitud-cobertura · hecho-rectificativo | ✅ `73fb7aee` |
 | 4 | resolucion-contrapartida · panel-proceso-contable · cuenta-terceros · desatasco-entrada · compra-proveedor · emision-factura-venta · declaracion-fuente-faltante · aviso-revision | ✅ `ed9022b9` |
 | 5 | catalogo-cuentas · escritor-diario · mayor-balanza · traza-asiento · asiento-ajuste · periodificacion · conciliacion-bancaria · partida-no-identificada | ✅ `18256606` |
-| 6 | saldo-tesoreria · vista-revisable · flujo-firma · perfil-administrativo · liquidacion-iva · registro-verifactu · factura-electronica · recibo-nomina | 🚀 en curso |
-| 7 | inmovilizado · cierre-ejercicio · onboarding-negocio · motor-avisos · aviso-cuadre · calendario-fiscal · estado-presentacion-fiscal · rectificacion-declaracion | pendiente |
-| 8 | frontera-ficha-producto · valoracion-existencia · estados-contables · retenciones-is-irpf · generador-modelo · acuse-presentacion · consolidacion-grupo · etiquetado-analitico | pendiente |
-| 9 | margen-analitico · presupuesto · cuadro-mando-contable · informe-rico · consulta-dueno · puente-lenguaje-dueno · aviso-al-negocio · informe-accionable | pendiente |
+| 6 | saldo-tesoreria · vista-revisable · flujo-firma · perfil-administrativo · liquidacion-iva · registro-verifactu · factura-electronica · recibo-nomina | ✅ `3cb9e737` |
+| 7 | inmovilizado · cierre-ejercicio · onboarding-negocio · motor-avisos · aviso-cuadre · calendario-fiscal · estado-presentacion-fiscal · rectificacion-declaracion | ✅ `2ef43d9f` |
+| 8 | frontera-ficha-producto · valoracion-existencia · estados-contables · retenciones-is-irpf · generador-modelo · acuse-presentacion · consolidacion-grupo · etiquetado-analitico | ✅ `8c2598a1` |
+| 9 | margen-analitico · presupuesto · cuadro-mando-contable · informe-rico · consulta-dueno · puente-lenguaje-dueno · aviso-al-negocio · informe-accionable | ✅ `5ecfb409` |
 
 ## Hallazgos de módulos AJENOS (no se tocan — para que el dueño los sepa)
 
@@ -42,3 +42,24 @@
 2. **Escribir los 16 ficheros COMPLETOS primero, verificar después.** El grupo 4 se quedó sin iteraciones a 7,5/8 y faltó `aviso-revision/module.json` → lo cerró el padre a mano. Los grupos 5 y 6 ya llevan esa orden.
 3. **`_rpc` / `_invalid` son helpers de la base** (`modules/_shared/modulo-hibrido-reflejo.js`), no hay que redefinirlos. El sub-agente los usó bien sin que se los listara.
 4. **Contrato tolerante** cuando la dependencia aún no existe: `503 DEPENDENCIA_NO_DISPONIBLE` y **nunca fabricar el dato** (3 módulos del grupo 4). Se desbloquean cuando llegue `motor-avisos` (grupo 7).
+
+---
+
+## 🏁 F4 CERRADA — 72/72 (100% del plan)
+
+**Verificación global del padre: CERO fallos.** Los 72 módulos pasan `node --check`, JSON con `name`/`version`/`description`, `require` resuelve, y coherencia `subscribes ↔ handlers`. Cero `require` cruzado (solo `_shared/` + `crypto` nativo x3).
+
+| Forma | N |
+|---|---|
+| custodio | 27 |
+| reflejo | 22 |
+| puente | 13 |
+| micro-agente | 6 |
+| conversor | 4 |
+
+Cobertura del plan: **72/72 CONSTRUIR** + **8 REUTILIZAR** atendidos = **80/80 hojas**.
+
+### Lo que NO se ha hecho aún
+- **F5** (escribir-skills): skill FULL por módulo. **No hecho.**
+- **F6/F7** (interfaz): no hecho.
+- **Push + PR**: la rama tiene los commits locales; el PR #676 es del hito anterior (F0→F3b).

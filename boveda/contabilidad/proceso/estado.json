@@ -3,7 +3,7 @@
   "ramas": "vertical/contabilidad",
   "persistencia": "boveda/contabilidad/proceso/",
   "modelo": "mente-ejecuta / chat-gestiona",
-  "fase_actual": "F4 COMPLETADA — 72 modulos construidos y verificados (100% del plan). Siguiente: F5 (skills) o push+PR del hito",
+  "fase_actual": "F5 COMPLETADA — 72 modulos + 72 skills FULL. Siguiente: F6/F7 (interfaz) o habilitar la vertical en un proyecto",
   "nota_proceso": "Vertical transversal observadora VENDIBLE: escucha los eventos que cada negocio ya emite y reconstruye su contabilidad. Molde de proceso: boveda/nichos/proceso/ (44 modulos + 44 skills, #656).",
   "fase0": {
     "estado": "completada",
@@ -407,8 +407,29 @@
     "pendiente_siguiente": "F5 (escribir-skills: skill FULL por modulo) o F6/F7 (interfaz) — no hecho todavia"
   },
   "fase5": {
-    "estado": "pendiente",
-    "skill": "escribir-skills"
+    "estado": "completada",
+    "skill": "escribir-skills",
+    "completada_el": "2026-09-28",
+    "entregable": "modules/cosecha/cantera/enki/<slug>/SKILL.md (72 skills FULL, PLANAS como nichos)",
+    "skills": 72,
+    "verificacion_global": "CERO fallos: 72/72 pasan el verificador (eventos, handlers, frontmatter name==slug, 6 secciones canonicas)",
+    "eventos_cubiertos": 556,
+    "handlers": 193,
+    "tamano_total_kb": 1176,
+    "grupos": {
+      "1": "2990b63a",
+      "2": "f38c348a",
+      "3": "13c2368b",
+      "4": "569c9cab",
+      "5": "30f8c099",
+      "6": "0b5d4f7f",
+      "7": "03a65f98 (14 modulos: paralelo 7+8)",
+      "8": "+aviso-al-negocio/informe-accionable",
+      "9": "3fee206d"
+    },
+    "hallazgo_script": "scripts/verificar-skill-modulo.js (el canonico de F5) esta ROTO para verticales: busca modules/<slug>/ PLANO y falla tambien con nichos. Se anade scripts/verificar-skill-contabilidad.js (ruta real + handlers + secciones). El canonico NO se toca (es de todo el repo).",
+    "hallazgo_contrato": "86 publishes declarados que el runtime NUNCA emite (pares *.failed de eventos de DOMINIO; el par real va a nivel de OP). Verificado: CERO es consumido por ningun subscribes del repo (887 eventos) -> no era bug funcional, era ruido de declaracion. Limpiados 6 duplicados claros.",
+    "nota_trazabilidad": "Los grupos 7 y 8 corrieron en paralelo y el commit 03a65f98 ('grupo 7') arrastro 6 ficheros del grupo 8. Nada perdido; la etiqueta era imprecisa (consta en el mensaje del commit)."
   },
   "fase6": {
     "estado": "pendiente",

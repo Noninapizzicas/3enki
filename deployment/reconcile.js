@@ -458,11 +458,11 @@ async function main() {
       let baseUrl, defaultModel, apiKey;
       if (ollamaKey) {
         baseUrl = 'https://ollama.com/v1';
-        defaultModel = 'deepseek-v4-flash';
+        defaultModel = 'deepseek-v4.1-flash';
         apiKey = ollamaKey;
       } else if (deepseekKey) {
         baseUrl = 'https://api.deepseek.com/v1';
-        defaultModel = 'deepseek-chat';
+        defaultModel = 'deepseek-flash';
         apiKey = deepseekKey;
       }
       let HA_rendered = HA_cfg;

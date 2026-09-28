@@ -1,0 +1,64 @@
+{
+  "_doc": "Manifest de contabilidad/regla-contrapartida — CUSTODIO (A6.2, hoja del plan). Repositorio de reglas DECLARADAS y APRENDIDAS (\"este proveedor -> esta cuenta\"). Es el CORTE DURO del dominio: una regla DECLARADA actua de inmediato sobre el volumen; una regla APRENDIDA entra HIDRATADA y queda RATIFICACION_PENDIENTE — NO actua hasta ser RATIFICADA (L10), que llega por el evento contabilidad.regla_ratificada (fire-and-forget). El bucle de aprendizaje cierra aqui: excepcion resuelta -> regla candidata -> ratificacion -> menos excepciones. Un solo escritor (DUENO/ASESOR; second-writer rechazado con PERMISSION_DENIED). Persiste por proyecto via PosPersistencia (storage /contabilidad/regla-contrapartida/*.json), restaura en project.activated y vuelca en onUnload. Proyecciones puras: _declarar(rol,regla)->ok, _leer(filtro)->List<ReglaDeclarada> (no muta), _aprender(rol,regla,evidencia)->ok (pendiente), _ratificar(regla_id)->ok (L10), _aplicar(hecho)->Contrapartida|SIN_COBERTURA (solo reglas que actuan). Publica contabilidad.regla_declarada y contabilidad.regla_aprendida (+ contabilidad.regla.leer.failed / declarar.failed / aprender.failed / regla_declarada.failed / regla_aprendida.failed). Cierra sus RPC con contabilidad.regla.leer.response / declarar.response / aprender.response (emitidas por _atender, NO declaradas en publishes). NO REUTILIZA: repositorio de reglas contables por negocio; `reglas-aprendidas` (nichos) es umbrales de viabilidad, otro dominio (patron tomado). Lo consume resolucion-contrapartida (A6.1) como corte duro.",
+  "name": "regla-contrapartida",
+  "version": "0.1.0",
+  "description": "Custodio (A6.2): repositorio de reglas declaradas/aprendidas del corte duro ('este proveedor -> esta cuenta'). Una regla aprendida no actua hasta ser ratificada (L10). Un solo escritor DUENO/ASESOR; persiste por proyecto.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "contabilidad.regla.leer.request",
+      "handler": "onLeerRequest",
+      "description": "RPC custodio: {project_id, estado?} → {project_id, reglas:[ReglaDeclarada]}. Proyeccion PURA de lectura (no muta). Si el payload es invalido → contabilidad.regla.leer.failed. Lo consume resolucion-contrapartida (A6.1) para conocer el corte duro."
+    },
+    {
+      "event": "contabilidad.regla.declarar.request",
+      "handler": "onDeclararRequest",
+      "description": "RPC custodio: {project_id, rol:'DUENO'|'ASESOR', regla:{patron, contrapartida}} → {project_id, regla}. Guard de escritor: solo DUENO/ASESOR (second-writer rechazado). La regla nace DECLARADA y actua de inmediato. Publica contabilidad.regla_declarada y responde por contabilidad.regla.declarar.response; si el rol o el payload son invalidos → contabilidad.regla.declarar.failed."
+    },
+    {
+      "event": "contabilidad.regla.aprender.request",
+      "handler": "onAprenderRequest",
+      "description": "RPC custodio: {project_id, rol:'DUENO'|'ASESOR', regla:{patron, contrapartida}, evidencia} → {project_id, regla, actua:false}. El aprendizaje entra HIDRATADO y queda RATIFICACION_PENDIENTE: NO actua hasta ser ratificado. Publica contabilidad.regla_aprendida y responde por contabilidad.regla.aprender.response; si el rol o el payload son invalidos → contabilidad.regla.aprender.failed. Lo alimenta desatasco-entrada (P3)."
+    },
+    {
+      "event": "contabilidad.regla_ratificada",
+      "handler": "onReglaRatificada",
+      "description": "Fire-and-forget (L10 → A6.2): {project_id, regla_id} ratifica una regla APRENDIDA, que pasa a RATIFICADA y ya actua sobre el volumen. Si la regla no existe → contabilidad.regla_aprendida.failed. Puerta UNICA de ratificacion compartida con regla-movimiento-bancario (E8)."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Restaura el repositorio de reglas del proyecto activado desde el storage (PosPersistencia): las reglas son POR PROYECTO."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "contabilidad.regla_declarada",
+      "description": "Fire-and-forget (A6.2): una regla quedo declarada y actua sobre el volumen → {project_id, regla}. Lo consume resolucion-contrapartida (A6.1) como corte duro."
+    },
+    {
+      "event": "contabilidad.regla_aprendida",
+      "description": "Fire-and-forget (A6.2): una regla quedo APRENDIDA y PENDIENTE de ratificacion (actua:false) → {project_id, regla, actua:false}. Cierra el bucle de aprendizaje; lo consume la puerta de ratificacion (L10)."
+    },
+    {
+      "event": "contabilidad.regla.leer.failed",
+      "description": "Par de fallo determinista: leer con payload invalido. Cierra el circulo de contabilidad.regla.leer.request."
+    },
+    {
+      "event": "contabilidad.regla.declarar.failed",
+      "description": "Par de fallo determinista: declarar rechazado (rol != DUENO/ASESOR) o payload invalido. Cierra el circulo de contabilidad.regla.declarar.request."
+    },
+    {
+      "event": "contabilidad.regla.aprender.failed",
+      "description": "Par de fallo determinista: aprender rechazado (rol != DUENO/ASESOR) o payload invalido. Cierra el circulo de contabilidad.regla.aprender.request."
+    },
+    {
+      "event": "contabilidad.regla_declarada.failed",
+      "description": "Par de fallo del evento de dominio contabilidad.regla_declarada: la emision del hecho de dominio no se completo."
+    },
+    {
+      "event": "contabilidad.regla_aprendida.failed",
+      "description": "Par de fallo del evento de dominio contabilidad.regla_aprendida: la emision no se completo, o la ratificacion (L10) apunto a una regla inexistente."
+    }
+  ]
+}

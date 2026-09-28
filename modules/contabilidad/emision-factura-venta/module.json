@@ -1,0 +1,59 @@
+{
+  "_doc": "Manifest de contabilidad/emision-factura-venta — CUSTODIO (O1+O2, hoja del plan). DECISION DEL DUENO: contabilidad SI emite la factura — es su DOCUMENTO (el asiento original NO se borra; la rectificativa SUMA). Cara EMITIDA con SERIE y NUMERACION FISCAL: numeracion CORRELATIVA SIN SALTOS; un numero duplicado es CORRUPCION del libro, por eso UN SOLO ESCRITOR — guard de la parcela con rol EMISION (otro rol → 403 PERMISSION_DENIED) — y el numero se asigna por serie (sec.ultimo+1) sin reiniciar sin abrir serie nueva. El desglose (bases + impuestos) se COMPONE desde las lineas; se emite TICKET o FACTURA completa segun el TIPO, que es DATO del hecho. La RECTIFICATIVA (O2) es COMERCIAL: ABONO | DEVOLUCION | DESCUENTO — plano 3 de los 4 planos de correccion (!= ajuste interno B5 y != rectificacion fiscal D14); el original queda INTACTO (original_intacto:true, no_borra:true) y la rectificativa asigna su propio numero correlativo en una serie propia (por defecto <serieOriginal>R). Si la factura original no consta como emitida → 404 ERROR_FACTURA_ORIGINAL_NO_HALLADA; si no se declara el original → 422 ERROR_ORIGINAL_NO_DECLARADO (se DECLARA, no se asume). CUSTODIO (patron real): store en memoria con las SERIES y los numeros emitidos por proyecto; PosPersistencia (storage /contabilidad/emision-factura-venta/*.json); restaura en project.activated; flush en onUnload. Las dependencias (maestro-terceros N1, catalogo-cuentas B1, escritor-diario B2) se leen por EVENTO, NUNCA por require cruzado: la identificacion del cliente en el maestro es TOLERANTE (si no responde, cliente_fuente:'NO_DISPONIBLE' y NO se inventa la ficha — la emision sigue con el NIF literal del hecho). Proyecciones puras: _emitir(factura)->FacturaEmitida (numero correlativo sin saltos; ticket o completa segun el TIPO), _series()->List<IdSerie> (por negocio/canal/unica — declarable), _rectificarSustitutiva(serie, rectificativa)->OK|ERROR (O2), _calcularAjuste(original, motivo)->Importe (abono/devolucion/descuento; SUMA, NO borra). Publica contabilidad.factura_emitida y contabilidad.factura_rectificada (+ contabilidad.factura.emitir.failed / rectificar.failed / series.failed / factura_emitida.failed / factura_rectificada.failed). Cierra sus RPC con contabilidad.factura.emitir.response / rectificar.response / series.response (emitidas por _atender, NO declaradas en publishes). NO REUTILIZA: no existe emision de factura con serie fiscal en el inventario (fiscal en Enki = 0 modulos); `prisma/ticket` formatea texto, no emite documento fiscal (patron de formato tomado).",
+  "name": "emision-factura-venta",
+  "version": "0.1.0",
+  "description": "Custodio (O1+O2): la cara emitida de la factura de venta con serie y numeracion fiscal correlativa SIN SALTOS — un solo escritor (EMISION). La rectificativa comercial suma sin borrar el original. Persiste las series por proyecto.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "contabilidad.factura.emitir.request",
+      "handler": "onEmitirRequest",
+      "description": "RPC custodio (O1): {project_id, rol:'EMISION', factura:{tipo?, serie?, lineas:[{concepto,base,tipo_iva}], fecha?, nif?, id_tercero?, total?}, serie?} → {project_id, factura_emitida:{id_factura, serie, numero, tipo, fecha_emision, desglose:{lineas,suma_bases,suma_cuotas,total}, cliente_identificado, no_borra:true}, serie, numero, siguiente_numero, sin_saltos:true, un_solo_escritor:true}. Asigna el numero CORRELATIVO SIN SALTOS de la serie (un numero duplicado = corrupcion) y COMPONE el desglose de bases e impuestos. Ticket o factura completa segun el TIPO (dato del hecho). Guard de un solo escritor: rol != EMISION → 403. Publica contabilidad.factura_emitida y responde por contabilidad.factura.emitir.response; si faltan project_id/factura o el tipo no es valido → contabilidad.factura.emitir.failed."
+    },
+    {
+      "event": "contabilidad.factura.rectificar.request",
+      "handler": "onRectificarRequest",
+      "description": "RPC custodio (O2): {project_id, rol:'EMISION', factura_original:'<serie>-<num>'|{id_factura,total}, rectificativa:{motivo:'ABONO'|'DEVOLUCION'|'DESCUENTO', serie?}} → {project_id, factura_original, rectificativa:{id_factura, serie, numero, motivo, importe_ajuste, no_borra:true, suma:true, original_intacto:true}, ajuste, plano_correccion:'COMERCIAL_O2'}. Correccion COMERCIAL posterior a la emision: el asiento ORIGINAL NO SE BORRA, la rectificativa SUMA (asigna su propio numero correlativo en una serie propia). Motivo fuera del catalogo → 422 MOTIVO_NO_VALIDO; original no emitido → 404 ERROR_FACTURA_ORIGINAL_NO_HALLADA; original no declarado → 422 ERROR_ORIGINAL_NO_DECLARADO. Guard de escritor: rol != EMISION → 403. Publica contabilidad.factura_rectificada; error → contabilidad.factura.rectificar.failed."
+    },
+    {
+      "event": "contabilidad.factura.series.request",
+      "handler": "onSeriesRequest",
+      "description": "RPC custodio (O1): {project_id} → {project_id, series:[{id_serie, ultimo_numero, siguiente_numero, n_emitidas}], n_series, serie_defecto:'UNICA', criterio_serie:'DECLARABLE', sin_saltos:true}. El criterio de serie (por negocio/canal/unica) es DECLARABLE ([ABIERTO]). Proyeccion PURA de lectura (no muta). Responde por contabilidad.factura.series.response; si falta project_id → contabilidad.factura.series.failed."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Restaura las SERIES y los numeros ya emitidos del proyecto activado desde el storage (PosPersistencia): la numeracion fiscal es POR PROYECTO. Sin restaurar, la correlatividad sin saltos no se puede garantizar."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "contabilidad.factura_emitida",
+      "description": "Fire-and-forget (O1): una factura de venta quedo EMITIDA con numero correlativo de su serie → {project_id, factura_emitida, serie, numero, siguiente_numero, sin_saltos:true, decision_dueno}. Es un DOCUMENTO de contabilidad (decision del dueno), no un hecho de otra vertical. Lo consume el libro (escritor-diario B2) para trazar el asiento."
+    },
+    {
+      "event": "contabilidad.factura_rectificada",
+      "description": "Fire-and-forget (O2): una rectificativa comercial quedo emitida → {project_id, factura_original, rectificativa, ajuste, no_borra:true, suma:true, original_intacto:true, plano_correccion:'COMERCIAL_O2'}. El original NO se borra: la rectificativa SUMA. Distinto del ajuste interno (B5) y de la rectificacion fiscal (D14)."
+    },
+    {
+      "event": "contabilidad.factura.emitir.failed",
+      "description": "Par de fallo determinista: emitir con rol != EMISION (403), sin project_id/factura (400), tipo de documento no valido (400) o sin lineas ni total para componer el desglose (422 PRECONDITION_FAILED). Cierra el circulo de contabilidad.factura.emitir.request."
+    },
+    {
+      "event": "contabilidad.factura.rectificar.failed",
+      "description": "Par de fallo determinista: rectificar con rol != EMISION (403), sin rectificativa (400), motivo fuera de ABONO|DEVOLUCION|DESCUENTO (422 MOTIVO_NO_VALIDO), original no emitido (404 ERROR_FACTURA_ORIGINAL_NO_HALLADA) u original no declarado (422 ERROR_ORIGINAL_NO_DECLARADO). Cierra el circulo de contabilidad.factura.rectificar.request."
+    },
+    {
+      "event": "contabilidad.factura.series.failed",
+      "description": "Par de fallo determinista: series sin project_id (400). Cierra el circulo de contabilidad.factura.series.request."
+    },
+    {
+      "event": "contabilidad.factura_emitida.failed",
+      "description": "Par de fallo del evento de dominio contabilidad.factura_emitida: la emision del hecho de dominio no se completo."
+    },
+    {
+      "event": "contabilidad.factura_rectificada.failed",
+      "description": "Par de fallo del evento de dominio contabilidad.factura_rectificada: la emision del hecho de dominio no se completo."
+    }
+  ]
+}

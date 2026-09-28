@@ -1,0 +1,36 @@
+{
+  "_doc": "Manifest de contabilidad/declaracion-fuente-faltante — PUENTE STATELESS (A15, hoja del plan). Si una vertical NO publica un hecho que se NECESITA, se DECLARA el hueco (abierto + aviso). NUNCA se obliga a la fuente a producirlo: contabilidad LEE, no impone (asimetria con la vertical subordinada). El hueco NO se rellena ni se asume vacio: se marca [ABIERTO] y se pide el aviso al motor de avisos (K2). La metrica que revela el hueco es la UNICA de cobertura (A12, completitud-cobertura): aqui NO se recalcula, se LEE su `detalle.huecos` (recalcula_metrica:false). PUENTE stateless: sin PosPersistencia ni project.activated — reacciona al evento de dominio y sigue. La dependencia con completitud-cobertura (A12) es por EVENTO (contabilidad.cobertura_calculada, fire-and-forget), NUNCA por require cruzado. La dependencia con motor-avisos (K2) AUN NO EXISTE en el proyecto: el aviso se PIDE por EVENTO (contabilidad.aviso.solicitar.request, que K2 declara en sus subscribes) y si no contesta se publica CONTRATO TOLERANTE (contabilidad.aviso.solicitar.failed, 503 DEPENDENCIA_NO_DISPONIBLE) — el hueco QUEDA DECLARADO igualmente (fuente_faltante_declarada), porque la declaracion es de contabilidad y no depende de que K2 este vivo. NO se fabrica un aviso que K2 no ha producido. Proyecciones puras: _detectarHueco(cobertura)->List<Hueco> (reflejo interno; parsea la clave `<pid>:<vertical>:<unidad>` de la metrica unica sin inventar), _declarar(hueco)->declaracion [ABIERTO] + aviso pedido (K2). Publica contabilidad.fuente_faltante_declarada y contabilidad.aviso.solicitar.request (+ contabilidad.fuente_faltante.failed / fuente_faltante_declarada.failed / aviso.solicitar.failed). NO declara ops propias (sin handlers .request): solo reacciona a eventos de dominio. NO REUTILIZA: la asimetria con la vertical subordinada es propia de esta vertical (fuente: prisma de interlocutor `verticales`).",
+  "name": "declaracion-fuente-faltante",
+  "version": "0.1.0",
+  "description": "Puente (A15): si una vertical no publica un hecho que se necesita, se declara el hueco ([ABIERTO]) y se pide el aviso — nunca se obliga a la fuente a producirlo. Lee la metrica unica de cobertura; tolerante si motor-avisos no esta vivo. Sin estado.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "contabilidad.cobertura_calculada",
+      "handler": "onCoberturaCalculada",
+      "description": "Fire-and-forget (A12 → A15): completitud-cobertura calculo la cobertura del periodo → {project_id, periodo, esperados, recibidos, huecos, tasa, detalle:{huecos:[clave]}, senal}. Por cada hueco se DECLARA la fuente faltante ([ABIERTO], no se rellena, no se obliga a la fuente) publicando contabilidad.fuente_faltante_declarada, y se PIDE el aviso a motor-avisos (K2) por contabilidad.aviso.solicitar.request. La metrica NO se recalcula: se LEE. Si K2 no responde (AUN NO CONSTRUIDO) → contabilidad.aviso.solicitar.failed (503 DEPENDENCIA_NO_DISPONIBLE, TOLERANTE) y el hueco SIGUE declarado. Sin huecos no se declara nada."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "contabilidad.fuente_faltante_declarada",
+      "description": "Fire-and-forget (A15): el hueco de una fuente quedo DECLARADO → {project_id, tipo:'FUENTE_FALTANTE', hueco:{tipo,clave,project_id,vertical,unidad,periodo,marca:'ABIERTO'}, marca:'ABIERTO', estado:'ABIERTO', vertical, periodo, no_se_obliga_a_la_fuente:true, no_se_asume_vacio:true, declarado_por:'CONTABILIDAD'}. La declaracion es de contabilidad: se emite SIEMPRE, aunque motor-avisos (K2) no este vivo."
+    },
+    {
+      "event": "contabilidad.aviso.solicitar.request",
+      "description": "Peticion de aviso por EVENTO a motor-avisos (K2): {project_id, origen:'A15_DECLARACION_FUENTE_FALTANTE', tipo:'HUECO_COBERTURA', marca:'ABIERTO', motivo, destinatario:'DUENO', contexto:{vertical, periodo, clave, cobertura}}. K2 la declara en sus subscribes y responde por contabilidad.aviso.solicitar.response. Es un PUERTO: contabilidad PIDE, K2 PRODUCE/ENTREGA el aviso."
+    },
+    {
+      "event": "contabilidad.fuente_faltante.failed",
+      "description": "Par de fallo determinista: declarar un hueco con payload invalido (400). Cierra el circulo del reflejo interno de declaracion."
+    },
+    {
+      "event": "contabilidad.fuente_faltante_declarada.failed",
+      "description": "Par de fallo del evento de dominio contabilidad.fuente_faltante_declarada: la emision del hecho de dominio no se completo."
+    },
+    {
+      "event": "contabilidad.aviso.solicitar.failed",
+      "description": "Contrato TOLERANTE (K2 AUN NO EXISTE): motor-avisos no respondio o rechazo la peticion → 503 DEPENDENCIA_NO_DISPONIBLE. El hueco queda DECLARADO [ABIERTO] igualmente; NO se fabrica un aviso que K2 no ha producido."
+    }
+  ]
+}

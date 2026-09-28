@@ -1,0 +1,45 @@
+{
+  "_doc": "Manifest de contabilidad/retenciones-is-irpf — REFLEJO STATELESS (D4+D5, hoja del plan). RETENCIONES practicadas/soportadas (D4) y ESTIMACION IS/IRPF (D5). LA LEY ENTRA COMO DATO: los tipos de retencion (profesionales, alquileres, trabajo...) son parametros DECLARABLES y el sujeto fiscal (IS sociedad | IRPF persona fisica) es parametro POR SOCIEDAD — ninguna constante legal cableada; si no se declara → 422 PRECONDITION_FAILED / [ABIERTO], jamas un tipo de memoria. REFLEJO stateless: sin PosPersistencia ni project.activated en el CODIGO; cada op entra objeto, sale objeto. Las bases se derivan del mayor (B3) o del resultado (C2) por EVENTO/payload (contrato TOLERANTE: si no responde → 503 DEPENDENCIA_NO_DISPONIBLE y NUNCA se emite una cuota inventada); dependencia por EVENTO, NUNCA require cruzado. Proyecciones puras: _retencionesDe(bases,tipos)->Retenciones{detalle,total_practicadas,total_soportadas,neto} (D4: tipos declarados por concepto), _practicadas(periodo)->Importe, _soportadas(periodo)->Importe, _estimar(periodo)->CuotaEstimada (D5: IS|IRPF por sociedad, base del resultado C2, escala de tramos declarable). Determinista: mismas entradas → mismas salidas. Publica contabilidad.retenciones_calculadas y contabilidad.cuota_estimada (+ pares de fallo). Cierra sus RPC con contabilidad.retenciones.calcular.response / contabilidad.estimacion.calcular.response (emitidas por _atender, NO declaradas en publishes). NO REUTILIZA: IRPF/IS y retenciones no existen en el inventario.",
+  "name": "retenciones-is-irpf",
+  "version": "0.1.0",
+  "description": "Reflejo stateless (D4+D5): retenciones practicadas/soportadas y estimacion IS/IRPF, con tipos y sujeto fiscal DECLARABLES por sociedad. La ley entra como dato, nunca cableada; sin base ni tipos, se declara el hueco en vez de inventar una cuota.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "contabilidad.retenciones.calcular.request",
+      "handler": "onCalcularRequest",
+      "description": "RPC reflejo (D4): {project_id, periodo?, bases:[{concepto, base, tipo?, sentido:'PRACTICADA'|'SOPORTADA'}], tipos:{PROFESIONALES:15, ALQUILERES:19,...}} → {project_id, detalle:[{concepto, base, tipo, cuota, sentido}], total_practicadas, total_soportadas, neto}. Retenciones con los porcentajes DECLARADOS (nunca de memoria): sin tipos → 422 PRECONDITION_FAILED. Exito publica contabilidad.retenciones_calculadas y responde por contabilidad.retenciones.calcular.response; error → contabilidad.retenciones.calcular.failed."
+    },
+    {
+      "event": "contabilidad.estimacion.calcular.request",
+      "handler": "onEstimarRequest",
+      "description": "RPC reflejo (D5): {project_id, periodo?, regimen:'IS'|'IRPF', sociedad?, base_fiscal?, escala:[{hasta,tipo}]} → {project_id, sociedad, regimen, base_fiscal, fuente_base, tramos, cuota_estimada, tipo_efectivo, estimacion:true, no_presenta:true}. Estimacion con base DECLARADA (resultado C2 en payload o por EVENTO) y escala de tramos declarable: sin regimen → 422 (parametro POR SOCIEDAD, no se asume); sin base/tramos → 503/422. Exito publica contabilidad.cuota_estimada y responde por contabilidad.estimacion.calcular.response; error → contabilidad.estimacion.calcular.failed."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "contabilidad.retenciones_calculadas",
+      "description": "Fire-and-forget (D4): las retenciones practicadas/soportadas quedaron calculadas con los tipos DECLARADOS → {project_id, periodo, detalle, total_practicadas, total_soportadas, neto}. Lo consumen la liquidacion (D1) y generador-modelo (D7) para el modelo correspondiente (111/190...). Determinista; jamas un tipo de memoria."
+    },
+    {
+      "event": "contabilidad.cuota_estimada",
+      "description": "Fire-and-forget (D5): la cuota estimada de IS/IRPF quedo calculada con base declarada y tramos declarables → {project_id, periodo, sociedad, regimen, base_fiscal, tramos, cuota_estimada, tipo_efectivo, estimacion:true, no_presenta:true}. Lo consumen generador-modelo (D7), el cuadro de mando y los informes. El sistema PREPARA; el asesor PRESENTA."
+    },
+    {
+      "event": "contabilidad.retenciones.calcular.failed",
+      "description": "Par de fallo determinista: sin project_id/bases (400) o tipos de retencion no declarados (422 PRECONDITION_FAILED: la ley entra como DATO). Cierra el circulo de contabilidad.retenciones.calcular.request."
+    },
+    {
+      "event": "contabilidad.estimacion.calcular.failed",
+      "description": "Par de fallo determinista: regimen/sujeto fiscal no declarado (422: parametro POR SOCIEDAD), escala no declarada (422) o base fiscal no disponible (503 DEPENDENCIA_NO_DISPONIBLE). Cierra el circulo de contabilidad.estimacion.calcular.request."
+    },
+    {
+      "event": "contabilidad.retenciones_calculadas.failed",
+      "description": "Par de fallo del evento de dominio contabilidad.retenciones_calculadas: la emision del hecho de dominio no se completo."
+    },
+    {
+      "event": "contabilidad.cuota_estimada.failed",
+      "description": "Par de fallo del evento de dominio contabilidad.cuota_estimada: la emision del hecho de dominio no se completo."
+    }
+  ]
+}

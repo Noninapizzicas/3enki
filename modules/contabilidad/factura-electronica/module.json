@@ -1,0 +1,54 @@
+{
+  "_doc": "Manifest de contabilidad/factura-electronica — CONVERSOR STATELESS (D9, hoja del plan). LA FRONTERA DEL FORMATO ESTRUCTURADO DE LA FACTURA: un SOLO cruce, en los dos sentidos. Emitir: emitirEstructurada(factura) -> DocumentoEstructurado (sale en Facturae/UBL/CII con emisor, receptor, lineas y totales). Recibir: interpretarEstructurado(documento) -> Factura — un documento YA estructurado ENTRA SIN EXTRACCION (no pasa por A4.1: el formato ya trae la forma). El formato concreto es DECLARABLE ([ABIERTO]): Facturae (3.2.2) es el valor declarable por defecto en Espana, NO una constante cableada — el escritor puede declarar otro formato y el conversor lo respeta; si falta una forma SE CREA (invariante de puerto abierto; registrarFormato). Tres cosas distintas: el conversor TRADUCE forma — NO emite el documento fiscal (O1 emision-factura-venta) ni lo registra (D8 registro-verifactu). CONVERSOR stateless: sin PosPersistencia ni project.activated; entra objeto, sale objeto; el catalogo de formatos declarados vive en memoria del propio conversor (es configuracion del adaptador de formato, no parcela persistente). Proyecciones internas: _emitirEstructurada(factura)->DocumentoEstructurado (404 + accion REGISTRAR_FORMATO si el formato no tiene adaptador), _interpretarEstructurado(documento)->Factura (sin_extraccion:true, no_pasa_por_A4_1:true), _registrarFormato(formato)->ok, _desgloseDe(factura)->Desglose. Publica contabilidad.factura_estructurada y contabilidad.factura_interpretada (+ contabilidad.factura.estructurar.failed / contabilidad.factura.interpretar.failed / contabilidad.factura.registrar_formato.failed / contabilidad.factura_estructurada.failed / contabilidad.factura_interpretada.failed). Cierra sus RPC con contabilidad.factura.estructurar.response / contabilidad.factura.interpretar.response / contabilidad.factura.registrar_formato.response (emitidas por _atender, NO declaradas en publishes). NO REUTILIZA: la factura electronica estructurada no existe en el inventario; el formato concreto es declarable.",
+  "name": "factura-electronica",
+  "version": "0.1.0",
+  "description": "Conversor stateless (D9): frontera unica del formato estructurado de la factura — emite el documento (Facturae, declarable) e interpreta un documento ya estructurado SIN extraccion. Solo traduce forma: no emite ni registra.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "contabilidad.factura.estructurar.request",
+      "handler": "onEstructurarRequest",
+      "description": "RPC conversor: {project_id, factura:{id_factura, serie?, numero?, fecha_emision?, nif?, lineas?:[{concepto, base, tipo}], total?}, formato?:'FACTURAE'|'UBL'|'CII'} → {project_id, documento:{formato, version, emisor, receptor, factura, lineas, totales}, formato}. Traduce la factura a su forma ESTRUCTURADA declarada (Facturae por defecto, declarable). 404 si el formato no tiene adaptador (accion REGISTRAR_FORMATO: la forma se crea, no se fuerza); 422 si no hay lineas ni total. Exito publica contabilidad.factura_estructurada y responde por contabilidad.factura.estructurar.response; error → contabilidad.factura.estructurar.failed."
+    },
+    {
+      "event": "contabilidad.factura.interpretar.request",
+      "handler": "onInterpretarRequest",
+      "description": "RPC conversor: {project_id, documento:{formato, emisor, receptor, factura, lineas, totales}} → {project_id, factura:{id_factura, serie, numero, fecha_emision, nif, emisor_nombre, receptor_nif, lineas, total}, formato, sin_extraccion:true, no_pasa_por_A4_1:true}. Interpreta un documento YA estructurado: ENTRA SIN extraccion (no pasa por A4.1). Exito publica contabilidad.factura_interpretada y responde por contabilidad.factura.interpretar.response; error → contabilidad.factura.interpretar.failed."
+    },
+    {
+      "event": "contabilidad.factura.registrar_formato.request",
+      "handler": "onRegistrarFormatoRequest",
+      "description": "RPC conversor: {project_id?, formato, version?, rol?} → {formato, estado, creado:true, formato_defecto:'FACTURAE'}. Catalogo DECLARABLE de formatos estructurados: si falta una forma, SE CREA (invariante de puerto abierto). Responde por contabilidad.factura.registrar_formato.response; si falta el formato → contabilidad.factura.registrar_formato.failed."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "contabilidad.factura_estructurada",
+      "description": "Fire-and-forget (D9): una factura quedo traducida a su forma estructurada declarada → {project_id, documento:{formato, version, emisor, receptor, lineas, totales}, formato}. Es la salida al formato de intercambio (Facturae); la entrega/presentacion es de otro puerto."
+    },
+    {
+      "event": "contabilidad.factura_interpretada",
+      "description": "Fire-and-forget (D9): un documento estructurado entro en el sistema → {project_id, factura:{id_factura, nif, lineas, total}, formato, sin_extraccion:true, no_pasa_por_A4_1:true}. Un documento estructurado entra SIN extraccion: no pasa por A4.1."
+    },
+    {
+      "event": "contabilidad.factura.estructurar.failed",
+      "description": "Par de fallo determinista: estructurar sin project_id/factura, sin lineas ni total (422), o con formato sin adaptador (404). Cierra el circulo de contabilidad.factura.estructurar.request."
+    },
+    {
+      "event": "contabilidad.factura.interpretar.failed",
+      "description": "Par de fallo determinista: interpretar sin project_id/documento, o con formato desconocido (404). Cierra el circulo de contabilidad.factura.interpretar.request."
+    },
+    {
+      "event": "contabilidad.factura.registrar_formato.failed",
+      "description": "Par de fallo determinista: registrar formato sin formato declarado. Cierra el circulo de contabilidad.factura.registrar_formato.request."
+    },
+    {
+      "event": "contabilidad.factura_estructurada.failed",
+      "description": "Par de fallo del evento de dominio contabilidad.factura_estructurada: la emision del hecho de dominio no se completo."
+    },
+    {
+      "event": "contabilidad.factura_interpretada.failed",
+      "description": "Par de fallo del evento de dominio contabilidad.factura_interpretada: la emision del hecho de dominio no se completo."
+    }
+  ]
+}

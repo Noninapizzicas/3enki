@@ -1,0 +1,42 @@
+{
+  "_doc": "Manifest de contabilidad/expediente-documental — CUSTODIO (L7, hoja del plan). Cada CIFRA con el DOCUMENTO ORIGEN archivado y ENLAZADO: LA PRUEBA que sostiene la firma ante una inspeccion. L2 explica; el expediente CONSERVA. Un solo escritor (la ADMISION archiva la prueba; second-writer rechazado con PERMISSION_DENIED). El almacen fisico del documento lo pone `filesystem` por EVENTO (fs.write.request → fs.write.response), NUNCA por require cruzado: `filesystem` es el almacen, el expediente es el ENLACE cifra<->prueba. APPEND-ONLY (invariante 9, registros inmutables): el enlace se apila; nunca se reescribe ni se borra. Persiste por proyecto via PosPersistencia (storage /contabilidad/expediente-documental/*.json), restaura en project.activated y vuelca en onUnload. Proyecciones puras: _archivar(cifra,documentoOrigen)->ok (single-writer, enlaza la prueba), _recuperar(cifra)->IdDocumento (404 si no hay prueba), _verificarEnlace()->ok|ERROR_CIFRA_SIN_PRUEBA (409). Publica contabilidad.cifra_archivada (+ contabilidad.expediente.archivar.failed / recuperar.failed / cifra_archivada.failed). Cierra sus RPC con contabilidad.expediente.archivar.response / recuperar.response (emitidas por _atender, NO declaradas en publishes). NO REUTILIZA: el enlace cifra<->documento de origen es propio de la vertical; `filesystem` es el almacen, no el expediente.",
+  "name": "expediente-documental",
+  "version": "0.1.0",
+  "description": "Custodio (L7): cada cifra con su documento origen archivado y enlazado — la prueba que sostiene la firma ante una inspeccion. Un solo escritor; el archivo va por filesystem. Persiste por proyecto.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "contabilidad.expediente.archivar.request",
+      "handler": "onArchivarRequest",
+      "description": "RPC custodio: {project_id, rol:'ADMISION', id_cifra, id_documento, referencia?} → {project_id, id_cifra, id_documento, prueba_enlazada, almacenado, total}. Guard de escritor: solo ADMISION (second-writer rechazado). Enlaza la PRUEBA (append-only) y materializa el documento en el almacen via EVENTO fs.write.request (filesystem, sin require cruzado). Publica contabilidad.cifra_archivada y responde por contabilidad.expediente.archivar.response; si el rol o el payload son invalidos → contabilidad.expediente.archivar.failed."
+    },
+    {
+      "event": "contabilidad.expediente.recuperar.request",
+      "handler": "onRecuperarRequest",
+      "description": "RPC custodio: {project_id, id_cifra} → {project_id, id_cifra, id_documento, enlace}. Proyeccion PURA de lectura (no muta). 404 si la cifra no tiene prueba archivada → contabilidad.expediente.recuperar.failed. Lo consume el asesor ante una inspeccion o una revision (L3/L8)."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Restaura el expediente del proyecto activado desde el storage (PosPersistencia): el expediente es POR PROYECTO."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "contabilidad.cifra_archivada",
+      "description": "Fire-and-forget (L7): una cifra quedo con su documento origen archivado y enlazado → {project_id, id_cifra, id_documento, prueba_enlazada, almacenado, total}. Es la prueba que sostiene la firma (L3) ante una inspeccion; lo anota el rastro de historial-proceso-contable (P2)."
+    },
+    {
+      "event": "contabilidad.expediente.archivar.failed",
+      "description": "Par de fallo determinista: archivar rechazado (rol != ADMISION) o payload invalido (sin id_cifra / sin id_documento). Cierra el circulo de contabilidad.expediente.archivar.request."
+    },
+    {
+      "event": "contabilidad.expediente.recuperar.failed",
+      "description": "Par de fallo determinista: recuperar una cifra sin prueba archivada (404, ERROR_CIFRA_SIN_PRUEBA) o payload invalido. Cierra el circulo de contabilidad.expediente.recuperar.request."
+    },
+    {
+      "event": "contabilidad.cifra_archivada.failed",
+      "description": "Par de fallo del evento de dominio contabilidad.cifra_archivada: la emision del hecho de dominio no se completo."
+    }
+  ]
+}

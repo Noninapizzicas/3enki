@@ -1,0 +1,41 @@
+{
+  "_doc": "Manifest de contabilidad/deduplicacion-hecho — REFLEJO STATELESS (A7, hoja del plan). ANTI-BUCLE: aplica la clave natural del hecho/documento (M3). Reprocesar NO duplica (idempotencia): si la clave ya se proceso, el hecho es DUPLICADO y no vuelve a asentarse. Si el hecho es RECTIFICATIVO (A13), su clave apunta al ORIGINAL y NO se considera duplicado — corregir no es repetir. Determinista: mismas entradas → misma salida (un test unitario lo afirma). REFLEJO stateless: sin PosPersistencia ni project.activated; el registro de claves ya procesadas vive en memoria del propio reflejo (cache de idempotencia, no parcela que persistir). La dependencia con clave-natural (M3) es por EVENTO (contabilidad.clave.calcular.request via _rpc), NUNCA por require cruzado; si ese RPC no responde se publica el par de fallo y NUNCA se asienta basura (contrato TOLERANTE: su RPC falla → publica su .failed). Proyecciones puras: _esDuplicado(hecho)->Duplicado|Nuevo (determinista; el rectificativo no es duplicado), _marcarProcesado(clave)->ok. Publica contabilidad.hecho_nuevo o contabilidad.hecho_duplicado (+ contabilidad.duplicado.verificar.failed / hecho_nuevo.failed / hecho_duplicado.failed). Cierra su RPC con contabilidad.duplicado.verificar.response (emitida por _atender, NO declarada en publishes). Lo consume resolucion-contrapartida (A6.1) por contabilidad.hecho_nuevo. NO REUTILIZA: la idempotencia por clave natural es el cerrojo 3 del dominio; ningun modulo del inventario lo aplica.",
+  "name": "deduplicacion-hecho",
+  "version": "0.1.0",
+  "description": "Reflejo (A7): anti-bucle por clave natural — reprocesar no duplica y un rectificativo no es duplicado. Si clave-natural no responde, no se asume: se publica el fallo. Sin estado.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "contabilidad.duplicado.verificar.request",
+      "handler": "onVerificarRequest",
+      "description": "RPC reflejo: {project_id, hecho:{vertical, ...}, clave?} → {project_id, vertical, clave_natural, duplicado, estado:'DUPLICADO'|'NUEVO', es_rectificativo}. Aplica la clave natural (M3): si viene en el payload se usa; si no, se pide a clave-natural por EVENTO. Si el hecho es RECTIFICATIVO (A13) NO es duplicado. Exito publica contabilidad.hecho_nuevo (o contabilidad.hecho_duplicado) y responde por contabilidad.duplicado.verificar.response; si falta project_id/hecho/vertical, o clave-natural no responde (503 TOLERANTE) → contabilidad.duplicado.verificar.failed."
+    },
+    {
+      "event": "contabilidad.hecho_normalizado",
+      "handler": "onHechoNormalizado",
+      "description": "Fire-and-forget (A2 → A7): normalizador-hecho dejo el hecho en forma asentable → {project_id, vertical, hecho, clave_natural}. Aqui se verifica la idempotencia (dependencia por EVENTO, sin require cruzado) y se publica contabilidad.hecho_nuevo o contabilidad.hecho_duplicado; si no se puede resolver la clave, contabilidad.duplicado.verificar.failed."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "contabilidad.hecho_nuevo",
+      "description": "Fire-and-forget (A7): el hecho no estaba asentado (o es rectificativo) → {project_id, vertical, clave_natural, duplicado:false, estado:'NUEVO'}. Lo consume resolucion-contrapartida (A6.1) para proponer cuenta/tercero/periodo."
+    },
+    {
+      "event": "contabilidad.hecho_duplicado",
+      "description": "Fire-and-forget (A7): la clave natural ya se asento → {project_id, vertical, clave_natural, duplicado:true, estado:'DUPLICADO'}. Reprocesar NO duplica: el hecho no vuelve a asentarse."
+    },
+    {
+      "event": "contabilidad.duplicado.verificar.failed",
+      "description": "Par de fallo determinista: verificar con payload invalido (sin hecho/vertical) o porque clave-natural (M3) no respondio (503, contrato TOLERANTE: nunca se asienta basura). Cierra el circulo de contabilidad.duplicado.verificar.request."
+    },
+    {
+      "event": "contabilidad.hecho_nuevo.failed",
+      "description": "Par de fallo del evento de dominio contabilidad.hecho_nuevo: la emision del hecho de dominio no se completo."
+    },
+    {
+      "event": "contabilidad.hecho_duplicado.failed",
+      "description": "Par de fallo del evento de dominio contabilidad.hecho_duplicado: la emision del hecho de dominio no se completo."
+    }
+  ]
+}

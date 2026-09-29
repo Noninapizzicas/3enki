@@ -1,0 +1,37 @@
+{
+  "_doc": "Manifest de contabilidad-libro/clave-natural — REFLEJO STATELESS (M3, hoja del plan). El CERROJO ANTI-BUCLE de la contabilidad: da la clave natural de un hecho o de un cierre de forma DETERMINISTA para que reprocesar NO duplique ('un cierre = un asiento'). Es la base de la idempotencia de todo el libro: deduplicacion-hecho (A7) la aplica y el escritor del diario (B2) la usa como llave del asiento. La composicion de la clave es DECLARABLE (`composicion`: campos + normalizacion + separador + prefijo); sin declararla se usa una composicion por defecto sobre los campos presentes (vertical, tipo, tercero, fecha, importe, referencia) y se declara composicion_declarada:false — nunca se cablea una forma legal. Invariantes: misma entrada → misma clave SIEMPRE (cero azar, cero estado, cero reloj); `calcular` es PURO (calcular dos veces el mismo hecho da la misma clave); `coincide` es simetrica y determinista (a y b con la misma clave natural SON el mismo hecho, es_mismo_hecho:true); los campos declarados que NO llegan no desaparecen en silencio — se listan en `abierto` y la clave se marca completa:false (nada se estima). No escribe ni recuerda: quien recuerda es deduplicacion-hecho (A7). FORMA: REFLEJO stateless. Proyecciones: `_calcular` · `_coincide`. Sin evento de dominio: su valor ES la respuesta.",
+  "name": "clave-natural",
+  "version": "0.1.0",
+  "description": "Reflejo stateless (M3): el cerrojo anti-bucle — clave natural determinista de un hecho/cierre (composicion declarable) para que reprocesar no duplique; un cierre = un asiento.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "clave-natural.calcular.request",
+      "handler": "onCalcularRequest",
+      "description": "RPC reflejo (puro): {project_id, hecho|cierre, composicion?:{campos, normalizacion, separador, prefijo}} → {clave, sello, composicion, composicion_declarada, completa, abierto}. Calcula la clave natural de forma determinista (misma entrada → misma clave); los campos declarados que no llegan se listan en `abierto` y completa queda false. Responde por clave-natural.calcular.response; sujeto ausente → clave-natural.calcular.failed."
+    },
+    {
+      "event": "clave-natural.coincide.request",
+      "handler": "onCoincideRequest",
+      "description": "RPC reflejo (puro): {project_id, a, b, composicion?} → {coinciden, es_mismo_hecho, clave_a, clave_b, sello_a, sello_b, completa, abierto}. Compara dos sujetos por su clave natural: misma clave → ES el mismo hecho (idempotencia por clave natural). Responde por clave-natural.coincide.response; a o b ausente → clave-natural.coincide.failed."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "clave-natural.calcular.response",
+      "description": "Respuesta RPC correlada de clave-natural.calcular.request → {request_id, status:200, data:{clave, sello, composicion, composicion_declarada, completa, abierto}}. Emitida por el helper _atender."
+    },
+    {
+      "event": "clave-natural.calcular.failed",
+      "description": "Par de fallo determinista (M3): hecho/cierre ausente o invalido → {status, error:{code, message, details?}}. Cierra el circulo de clave-natural.calcular.request."
+    },
+    {
+      "event": "clave-natural.coincide.response",
+      "description": "Respuesta RPC correlada de clave-natural.coincide.request → {request_id, status:200, data:{coinciden, es_mismo_hecho, clave_a, clave_b, sello_a, sello_b, completa, abierto}}. Emitida por el helper _atender."
+    },
+    {
+      "event": "clave-natural.coincide.failed",
+      "description": "Par de fallo determinista (M3): a o b ausente/invalido → {status, error:{code, message, details?}}. Cierra el circulo de clave-natural.coincide.request."
+    }
+  ]
+}

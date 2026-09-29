@@ -1,0 +1,85 @@
+{
+  "id": "tasa-cobertura-entrada",
+  "version": "blueprint-0.1.0",
+  "_nota": "FASE 6½ · la interfaz DECLARADA del módulo tasa-cobertura-entrada (REFLEJO STATELESS de contabilidad-entrada, P4, hoja del plan), tipo system_panel: CONTROL bajo demanda — dictamina/consulta, NO mesa de trabajo. La PROPORCIÓN de hechos que entran SIN intervención vs los que CAEN A COLA: es la prueba de la promesa del dueño («sin una persona digitando»). 🔴 LEE LA MÉTRICA ÚNICA, NO LA RECALCULA: la cobertura la produce completitud-cobertura (A12) y la declara en contabilidad.cobertura_medida; aquí se TOMA la tasa ya medida (declarada en la petición, cacheada de lo leído o pedida POR EVENTO a su dueño) y se PRESENTA — NO se vuelve a medir la cobertura (recalcularla sería crear una SEGUNDA métrica, y la invariante lo prohíbe). Lo que SÍ computa esta hoja es su PROPIO ratio de entrada (hechos sin intervención / total). Dato ausente = desconocido: sin total ni cuentas el ratio es null, no un 0 que afirme una medida que no se hizo. La sección `ui` es lo que el generador schema→UI (BlueprintForm, 4 zonas) necesita para renderizar el panel; sin LLM: TODO lo que produce sale de aquí. Fuente de verdad: modules/contabilidad-entrada/tasa-cobertura-entrada/{module.json,index.js}. ui_handler real: tasa-cobertura-entrada.calcular (system_panel/lateral_derecha).",
+  "schema": "blueprint-interfaz-v2",
+  "language": "es",
+  "titulo": "La tasa de cobertura de la entrada (lee la métrica única, no la recalcula)",
+  "eventos_publicados": [
+    "tasa-cobertura-entrada.calcular.response",
+    "tasa-cobertura-entrada.calcular.failed"
+  ],
+  "eventos_que_escucho": [],
+  "_escucho_nota": "VACÍO A PROPÓSITO: el reflejo ya atiende en module.json.subscribes tasa-cobertura-entrada.calcular.request (onCalcularRequest, su RPC) y contabilidad.cobertura_medida (onCoberturaMedida, la señal tolerante de A12 → P4); declarar cualquiera de los dos aquí daría ANTICOLISION-001 (lo atenderían los dos). Es un REFLEJO STATELESS determinista: no tiene cajón fuzzy y no publica ningún evento de dominio — su única salida es la respuesta RPC correlada. La señal contabilidad.cobertura_medida solo la LEE y la cachea para presentarla (no dispara ninguna medición): la sirve SU PROPIO handler, no un cajón. La cobertura se PIDE a completitud-cobertura (A12) POR EVENTO dentro del cálculo si no viene declarada (dependencia interna, best-effort), NO como suscripción viva.",
+  "transporte": {
+    "rpc": [
+      "tasa-cobertura-entrada.calcular.request -> .response",
+      "completitud-cobertura.medir.request -> .response"
+    ],
+    "entrada": [
+      "tasa-cobertura-entrada.calcular.request",
+      "contabilidad.cobertura_medida"
+    ],
+    "salida": [
+      "tasa-cobertura-entrada.calcular.response"
+    ],
+    "qos": "publishAndWait (request/response correlado) en el cálculo. contabilidad.cobertura_medida (A12 → P4) es fire-and-forget: la métrica única de cobertura quedó medida → se LEE y se guarda (cache de lectura) para presentarla sin recalcularla; ⚠️ NO dispara ninguna medición, solo LEE. La cobertura, si no viene declarada ni cacheada, se PIDE a completitud-cobertura (A12) POR EVENTO dentro del cálculo (dependencia interna, best-effort). El reflejo no publica eventos de dominio: su única salida es la respuesta RPC correlada."
+  },
+  "contrato": {
+    "CalcularInput": "{ project_id:uuid, sin_intervencion?:num|automaticos?, con_intervencion?:num|a_cola?, total?:num, cobertura?:obj, vertical?:str }",
+    "CalcularOutput": "{ project_id, tasa_entrada, ratio, sin_intervencion, con_intervencion, total, cumple_promesa, cobertura_leida, lee_metrica_unica:true, recalcula_cobertura:false, abierto:{sin_intervencion, con_intervencion, cobertura}, faltan:[str], motivo }",
+    "Errores": "project_id ausente → 400 (par tasa-cobertura-entrada.calcular.failed).",
+    "Invariantes": "LEE, NO RECALCULA: la tasa de cobertura llega declarada, cacheada de lo leído o pedida a su dueño (A12) POR EVENTO; jamás se recomputa desde esperados/llegados — eso sería una SEGUNDA métrica de cobertura. Lo que SÍ computa esta hoja es su PROPIO ratio de entrada: hechos sin intervención / total (operación de la clase P4, no la métrica única). DETERMINISTA: mismas cuentas → mismo ratio. Dato ausente = desconocido: sin total (o sin las cuentas de intervención) el ratio es null, no un 0 que afirme una medida que no se hizo. NO escribe, NO persiste."
+  },
+  "ui": {
+    "type": "system_panel",
+    "zone": "modulos",
+    "ops": {
+      "calcular": {
+        "titulo": "Dictaminar la tasa de entrada (cuánto entra sin una persona digitando)",
+        "descripcion": "Panel de CONTROL bajo demanda: dictamina la PROPORCIÓN de hechos que entran SIN intervención frente a los que caen a cola — la prueba de la promesa del dueño. Calcula el ratio PROPIO de la entrada (hechos sin intervención / total) y ADJUNTA la métrica única de cobertura (A12) LEÍDA: ⚠️ NO la recalcula — la toma tal cual la produjo completitud-cobertura (declarada, cacheada de lo leído, o pedida a su dueño por evento). Recalcularla aquí sería crear una segunda métrica de cobertura, y eso lo prohíbe la invariante. Sin total (ni las dos cuentas de intervención) el ratio es null — no un 0 que afirme una medición que no se hizo. El panel muestra el valor LEÍDO tal cual, con su procedencia.",
+        "zona": "formulario",
+        "args": [
+          {
+            "nombre": "sin_intervencion",
+            "tipo": "number",
+            "required": false,
+            "placeholder": "140 (vacío = desconocido: el ratio sale null, no un 0)",
+            "descripcion": "Cuántos hechos entraron SIN intervención (procesados solos). Es DATO de la petición: es el numerador del ratio PROPIO de la entrada. Sin esta cuenta (ni total+con_intervencion) el ratio es desconocido — no se inventa."
+          },
+          {
+            "nombre": "con_intervencion",
+            "tipo": "number",
+            "required": false,
+            "placeholder": "12 (vacío = desconocido)",
+            "descripcion": "Cuántos hechos cayeron a cola (con intervención). Es DATO: junto con `sin_intervencion` compone el total efectivo si no se declara `total`. Sin las cuentas el ratio es desconocido."
+          },
+          {
+            "nombre": "total",
+            "tipo": "number",
+            "required": false,
+            "placeholder": "152 (vacío = sin_intervencion + con_intervencion)",
+            "descripcion": "El TOTAL declarado de hechos de entrada (denominador del ratio). Es DATO: si no se declara, se compone de sin_intervencion + con_intervencion; si tampoco hay cuentas, el ratio es null (no un 0). Un total 0 no tiene proporción que calcular."
+          },
+          {
+            "nombre": "cobertura",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "{\"declarada\":true,\"completa\":false,\"tasa\":0.8} (vacío = se LEE de A12 por evento)",
+            "descripcion": "LA métrica única de cobertura DECLARADA — es el VALOR LEÍDO, no un input a recomputar. Es DATO, pero de SOLO LECTURA: se presenta tal cual la produjo completitud-cobertura (A12). No declararla no autoriza a medirla aquí: se toma de la caché de lo leído o se PIDE a A12 POR EVENTO; si no llega, cobertura_leida:null y se declara el hueco."
+          },
+          {
+            "nombre": "vertical",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "(vacío = sin acotar a una vertical)",
+            "descripcion": "La VERTICAL declarada que se propaga al pedir la cobertura a A12. Es DATO: no se deriva ni se cablea ninguna lista de verticales."
+          }
+        ]
+      }
+    },
+    "datos": [],
+    "_datos_nota": "HUECO DECLARADO (no se inventa): la respuesta de `calcular` es UN dictamen puntual de la entrada — `tasa_entrada`/`ratio`, las cuentas (sin_intervencion, con_intervencion, total), `cumple_promesa`, `cobertura_leida` y los `abierto`/`faltan` — no una COLECCIÓN tabulable sobre la que pintar una cinta. La única op RPC (`calcular`) EXIGE la petición y devuelve ese ratio, no un listado. El módulo cachea en memoria la última métrica de cobertura LEÍDA (Map por proyecto) para presentarla sin recalcular, y no persiste. La señal contabilidad.cobertura_medida (A12 → P4) da el pulso vivo (la métrica única quedó medida), pero es un evento de dominio que el propio reflejo LEE, no una tabla que el panel consuma. Un histórico de tasas por periodo necesitaría un handler RPC de listado que hoy no existe (trabajo de módulo, no de interfaz)."
+  },
+  "filosofia": "La promesa es que el papel entra sin una persona digitando, y esta hoja la mide: cuánto entra solo, cuánto cae a cola. Pero su honestidad está en lo que NO hace — no vuelve a medir la cobertura: la LEE de quien es su dueño, porque dos métricas de lo mismo no son dos verdades, son una confusión. Y cuando no hay cuentas, no escribe un cero: un cero es una medición que se hizo, y aquí no se hizo ninguna. Se enseña el valor leído, con su procedencia, y se declara el hueco cuando lo hay — que es la única forma de que una tasa signifique algo."
+}

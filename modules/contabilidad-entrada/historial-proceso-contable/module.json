@@ -3,6 +3,8 @@
   "name": "historial-proceso-contable",
   "version": "0.1.0",
   "description": "Custodio (P2): registro append-only de lo procesado y lo fallado con su rastro; un solo escritor y nada se borra — el historial del proceso de entrada, distinto de la traza del asiento.",
+  "blueprint_driven": true,
+  "blueprint_path": "historial-proceso-contable.blueprint.json",
   "language": "es",
   "subscribes": [
     {

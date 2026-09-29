@@ -1,20 +1,23 @@
 #!/usr/bin/env node
 /**
- * validar-blueprint-path.js — la regla que faltaba.
+ * validar-blueprint-path.js — la regla que faltaba (y la 2ª: el semver).
  *
- * EL HALLAZGO (2026-09-29): 9 módulos del repo declaraban `blueprint_driven: true`
- * SIN `blueprint_path`. Al arrancar la pila reventaban con:
+ * HALLAZGO 1 (2026-09-29): 9 módulos declaraban `blueprint_driven: true` SIN
+ * `blueprint_path`. Al arrancar reventaban con:
  *   ai-gateway.blueprint.load.failed
  *   'The "paths[1]" argument must be of type string. Received undefined'
- * Ninguno de los 39 validadores del repo lo detectaba: la verificación estática
- * no miraba esta pareja de campos. El error SOLO aparecía en vuelo.
  *
- * LA REGLA (derivada del loader + el canon patron/modulo-hibrido.md):
- *   blueprint_driven: true  ⟹  blueprint_path declarado  Y  el fichero existe
- *   blueprint_driven ausente/false  ⟹  el módulo carga por index.js (normal)
+ * HALLAZGO 2 (2026-09-29, mismo patrón): 7 módulos no cargan con
+ * `module.load.failed: Invalid manifest`. El loader (core/modules/loader.js
+ * 188-204) exige `name` + `version` + `description` Y que `version` case
+ * /^\d+\.\d+\.\d+$/. Cuatro módulos llevan `version: "reflejo-0.1.0"` (el prefijo
+ * invalida el semver) y tres no tienen `description`.
  *
- * NO exige que TODOS los módulos tengan blueprint: 18 lo declaran bien, 365 no lo
- * necesitan. Solo vigila la COHERENCIA de la declaración.
+ * EL HUECO COMÚN: `module-loading.validate.js` comprueba la PRESENCIA de
+ * name/version/description, pero NUNCA el FORMATO de version. Los 4 con
+ * 'reflejo-0.1.0' pasan el validador y son rechazados por el loader al arrancar.
+ * Mismo patrón que el hallazgo 1: la verificación estática mira la forma, no la
+ * coherencia con lo que el CARGADOR exige de verdad.
  *
  * Uso:  node scripts/validar-blueprint-path.js
  * Salida: exit 0 = OK · exit 1 = drift (bloquea)
@@ -26,6 +29,10 @@ const path = require('path');
 
 const REPO_ROOT = path.resolve(__dirname, '..');
 const MODULES_DIR = path.join(REPO_ROOT, 'modules');
+
+// EL MISMO regex del loader (core/modules/loader.js:198). Si el loader lo exige
+// y el validador no lo comprueba, el drift es invisible hasta el arranque.
+const SEMVER = /^\d+\.\d+\.\d+$/;
 
 const RED = '\x1b[31m', GREEN = '\x1b[32m', YEL = '\x1b[33m', CYAN = '\x1b[36m', RST = '\x1b[0m';
 
@@ -66,6 +73,20 @@ function main() {
     const rel = path.relative(REPO_ROOT, dir).replace(/\\/g, '/');
     const driven = m.blueprint_driven === true;
     const bp = typeof m.blueprint_path === 'string' ? m.blueprint_path.trim() : '';
+
+    // ── LA 2ª REGLA: lo que el LOADER exige de verdad (loader.js:188-204) ──
+    // No basta con que existan name/version/description: el loader rechaza el
+    // manifest si version no casa el semver. Sin esto, el módulo aparece "bien"
+    // en el validador y NO CARGA al arrancar (module.load.failed: Invalid manifest).
+    for (const campo of ['name', 'version', 'description']) {
+      const v = m[campo];
+      if (typeof v !== 'string' || v.trim() === '') {
+        errors.push(`drift_manifest_campo_minimo_ausente: ${rel}/module.json — campo "${campo}" ausente o vacío → el loader lo rechaza (module.load.failed: Invalid manifest)`);
+      }
+    }
+    if (typeof m.version === 'string' && m.version.trim() !== '' && !SEMVER.test(m.version)) {
+      errors.push(`drift_manifest_version_no_semver: ${rel}/module.json — version "${m.version}" NO casa /^\\d+\\.\\d+\\.\\d+$/ → el loader la rechaza (module.load.failed: Invalid manifest). Prefijos tipo "reflejo-0.1.0" invalidan el semver.`);
+    }
 
     if (driven) {
       if (!bp) {

@@ -468,17 +468,39 @@ class Crawl4rsModule extends ModuloHibridoReflejo {
   }
 
   // ── buscar en SearXNG (JSON API). Overridable en test. ──
+  // Pagina de verdad: SearXNG devuelve ~20 por página y acepta &pageno=N. El
+  // limit es el TOTAL deseado; se recorre página a página hasta juntarlo (o
+  // agotar páginas). Antes se cortaba a 20 fijos → el volumen del estudio nunca
+  // pasaba de 20 y la fuerza de demanda quedaba topada (el embudo se estrangulaba).
   async _buscarSearx(query, limit) {
-    const ctrl = new AbortController();
-    const to = setTimeout(() => ctrl.abort(), this._timeoutMs);
-    try {
-      const u = `${this._searxng}/search?q=${encodeURIComponent(query)}&format=json`;
-      const resp = await fetch(u, { signal: ctrl.signal, headers: { accept: 'application/json' } });
-      if (resp.status < 200 || resp.status >= 300) throw new Error('searxng ' + resp.status);
-      const body = await resp.json();
-      const lista = Array.isArray(body.results) ? body.results : [];
-      return lista.slice(0, limit).map((x) => ({ title: x.title, url: x.url, snippet: x.content || '' }));
-    } finally { clearTimeout(to); }
+    const total = Number.isInteger(limit) && limit > 0 ? limit : 10;
+    const porPagina = 20;   // SearXNG devuelve ~20 por página
+    const maxPaginas = Math.min(10, Math.ceil(total / porPagina)); // tope de seguridad
+    const out = [];
+    const vistos = new Set();
+    for (let pageno = 1; pageno <= maxPaginas && out.length < total; pageno++) {
+      const ctrl = new AbortController();
+      const to = setTimeout(() => ctrl.abort(), this._timeoutMs);
+      try {
+        const u = `${this._searxng}/search?q=${encodeURIComponent(query)}&format=json&pageno=${pageno}`;
+        const resp = await fetch(u, { signal: ctrl.signal, headers: { accept: 'application/json' } });
+        if (resp.status < 200 || resp.status >= 300) throw new Error('searxng ' + resp.status);
+        const body = await resp.json();
+        const lista = Array.isArray(body.results) ? body.results : [];
+        if (lista.length === 0) break;   // no hay más páginas
+        let nuevos = 0;
+        for (const x of lista) {
+          const url = x.url;
+          if (!url || vistos.has(url)) continue;  // dedupe entre páginas
+          vistos.add(url);
+          out.push({ title: x.title, url, snippet: x.content || '' });
+          nuevos++;
+          if (out.length >= total) break;
+        }
+        if (nuevos === 0) break;   // página sin resultados nuevos → cortar
+      } finally { clearTimeout(to); }
+    }
+    return out;
   }
 
   // ── GET binario directo (fetch global). Overridable en test. NO throw por tamaño (→ 413). ──

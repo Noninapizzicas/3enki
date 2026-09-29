@@ -231,7 +231,8 @@ class PipelinePorNicho extends ModuloHibridoReflejo {
       const nicho_id = res.data?.nicho;
       if (nicho_id) {
         this._acumular(pid, nicho_id, tipo, d);
-        this._dispararSiguiente(pid, nicho_id);
+        // fire-and-forget: la orquestación es best-effort (puede leer el criterio).
+        Promise.resolve(this._dispararSiguiente(pid, nicho_id)).catch(() => null);
       }
     } else {
       this.eventBus?.publish('nichos.pipeline.avanzar.failed', res);
@@ -300,7 +301,7 @@ class PipelinePorNicho extends ModuloHibridoReflejo {
   // ── ORQUESTACIÓN: dispara la siguiente etapa según el estado actual ──
   // Mapa idéntico a _orquestarEtapa, pero ahora INVOCA el RPC de la etapa
   // siguiente (fire-and-forget best-effort). Guarda contra re-disparo.
-  _dispararSiguiente(pid, nicho_id) {
+  async _dispararSiguiente(pid, nicho_id) {
     const st = this._mapaDe(pid).get(nicho_id);
     if (!st) return;
     const etapa = this._etapaSiguiente(st);
@@ -310,10 +311,11 @@ class PipelinePorNicho extends ModuloHibridoReflejo {
     // deben re-disparar el sondeo/estudio).
     if (st.etapas_disparadas[etapa]) return;
 
-    const rpc = this._rpcEtapa(etapa, st);
+    const rpc = await this._rpcEtapa(etapa, st);
     if (!rpc) return;  // no marcar disparada si no hay payload (sin datos aún)
     st.etapas_disparadas[etapa] = true;
-    this._rpc(rpc.evento, rpc.payload, { timeout_ms: 15000 }).catch(() => null);
+    this._persist.marcarDirty(pid);
+    this._rpc(rpc.evento, rpc.payload, { timeout_ms: 20000 }).catch(() => null);
   }
 
   // Qué etapa sigue a cada estado. Recibe el ESTADO (objeto) completo para
@@ -344,7 +346,10 @@ class PipelinePorNicho extends ModuloHibridoReflejo {
   }
 
   // Construye el RPC de la etapa siguiente con los datos acumulados del nicho.
-  _rpcEtapa(etapa, st) {
+  // `async` porque la etapa 'evaluar' debe LEER el criterio vigente (criterio-
+  // viabilidad) antes de disparar el veredicto: el veredicto recibe el criterio
+  // por payload, y sin él cae siempre a PUENTE ('sin criterio declarado').
+  async _rpcEtapa(etapa, st) {
     const pid = st.project_id;
     const nicho_id = st.nicho;
     const D = st.datos || {};
@@ -360,9 +365,15 @@ class PipelinePorNicho extends ModuloHibridoReflejo {
         // 1er paso del embudo: medir la demanda con el candidato del sondeo.
         if (!D.candidato) return null;
         return { evento: 'nichos.estudio.medir.request', payload: { project_id: pid, nicho_id, candidato: D.candidato } };
-      case 'evaluar':
+      case 'evaluar': {
         if (!D.estudio) return null;
-        return { evento: 'nichos.veredicto.evaluar.request', payload: { project_id: pid, nicho_id, estudio: D.estudio } };
+        // El criterio de viabilidad vive en criterio-viabilidad (C2): se LEE aquí
+        // y se pasa al veredicto. Sin él, el veredicto siempre da PUENTE.
+        const crit = await this._rpc('nichos.criterio.leer.request', { project_id: pid }, { timeout_ms: 10000 })
+          .then(r => (r && r.status === 200 && r.data && r.data.criterio) ? r.data.criterio : null)
+          .catch(() => null);
+        return { evento: 'nichos.veredicto.evaluar.request', payload: { project_id: pid, nicho_id, estudio: D.estudio, criterio: crit || undefined } };
+      }
       case 'decidir':
         if (!D.veredicto) return null;
         return { evento: 'nichos.camino.decidir.request', payload: { project_id: pid, nicho_id, nicho: D.candidato || { producto: D.territorio?.producto }, veredicto: D.veredicto, estudio: D.estudio } };

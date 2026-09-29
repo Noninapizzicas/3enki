@@ -1,0 +1,28 @@
+{
+  "_doc": "Manifest de contabilidad-libro/partida-no-identificada — MICRO-AGENTE (E7, hoja del plan). EL UNICO PUNTO DE JUICIO SOBRE LA DESCRIPCION AMBIGUA DEL BANCO: un movimiento del extracto sin contrapartida clara ('COMISION MANTENIMIENTO', 'DEV. RECIBO 4471', 'INT. ACREEDOR') llega aqui; reconoce y clasifica la partida (comision/interes/devolucion/impuesto/seguro/otro) y PROPONE el apunte (cuenta + tercero + periodo). EL JUICIO ESTA AISLADO EN ESTA HOJA: conciliacion-bancaria (E1) y cuadre-cobro-pago (E3) son puros y NO interpretan nada — todo lo que no casa por clave natural determinista aterriza aqui, y no se duplica en ningun reflejo. Invariantes: PROPONE, NO ESCRIBE (no asienta, no persiste, no marca; la escritura la hace el custodio dueño de la parcela — regla-movimiento-bancario E8 la ratifica, escritor-diario B2 la asienta); SI NO PUEDE RESOLVER → [ABIERTO] Y A LA COLA, NUNCA INVENTA (sin regla declarada que cubra y sin clasificacion del juicio devuelve propuesta:null, estado:'ABIERTO', requiere_cola:true con destino — JAMAS fabrica una cuenta); PRIMERO EL CORTE DURO (la regla declarada E8, consultada POR EVENTO — si cubre, la propuesta es determinista y no hay juicio), DESPUES EL JUICIO sobre la descripcion, y aun asi la cuenta propuesta debe estar en el PLAN declarado (catalogo-cuentas B1, POR EVENTO; si no existe → [ABIERTO]). El cajon fuzzy (reconocimiento de la descripcion) vive en el blueprint; este reflejo sirve la proyeccion determinista de fallback y el corte duro. Toda su memoria es EXTERNA (reglas E8 + plan B1), por eso es STATELESS: persistir aqui duplicaria estado ya custodido. FORMA: MICRO-AGENTE stateless, sin PosPersistencia ni onProjectActivated. Proyeccion unica `_juzgar({project_id, movimiento, clasificacion?})` → {propuesta, propuesta_por, estado, tipo_partida, requiere_cola, destino_cola}. Cierra el circulo: exito → publica contabilidad.partida_propuesta; error → partida-no-identificada.juzgar.failed.",
+  "name": "partida-no-identificada",
+  "version": "0.1.0",
+  "description": "Micro-agente (E7): el UNICO que ejerce juicio sobre la descripcion ambigua del banco — propone el apunte de la partida sin contrapartida o la deja [ABIERTO] en la cola, sin inventar nunca la cuenta.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "partida-no-identificada.juzgar.request",
+      "handler": "onJuzgarRequest",
+      "description": "RPC micro-agente: {project_id, movimiento:{clave?, fecha?, importe, signo?, concepto|descripcion, contraparte?}, clasificacion?:{tipo, cuenta, tercero?, periodo?, origen?}} → {movimiento:{clave, fecha, importe, signo, contraparte, descripcion, ambigua:true}, propuesta:{cuenta, tercero, periodo, base:{via:'regla_declarada'|'juicio_sobre_descripcion', regla_id?, tipo_partida?, plan_confirmado?}} | null, propuesta_por:'REGLA'|'JUICIO'|null, estado:'RESUELTO'|'ABIERTO', tipo_partida, corte_duro, reglas_disponibles, requiere_cola, destino_cola}. Primero consulta el corte duro (regla-movimiento-bancario E8) por EVENTO; si cubre, propuesta determinista. Si no, juzga la descripcion y verifica la cuenta contra el plan (catalogo-cuentas B1) por EVENTO. Sin resolucion → propuesta:null, estado:'ABIERTO', requiere_cola:true (NUNCA inventa). Exito → publica contabilidad.partida_propuesta y responde por partida-no-identificada.juzgar.response; project_id o movimiento ausente → partida-no-identificada.juzgar.failed."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "partida-no-identificada.juzgar.response",
+      "description": "Respuesta RPC correlada de partida-no-identificada.juzgar.request → {request_id, status:200, data:{movimiento, propuesta, propuesta_por, estado, tipo_partida, corte_duro, requiere_cola, destino_cola}}. Emitida por el helper _atender."
+    },
+    {
+      "event": "partida-no-identificada.juzgar.failed",
+      "description": "Par de fallo determinista (E7): project_id o movimiento ausente → {status, error:{code, message, details?}}. Cierra el circulo de partida-no-identificada.juzgar.request."
+    },
+    {
+      "event": "contabilidad.partida_propuesta",
+      "description": "Fire-and-forget (E7): el juicio de la partida no identificada quedo resuelto → {project_id, movimiento, propuesta, propuesta_por, estado, tipo_partida, corte_duro, requiere_cola, destino_cola, correlation_id}. Lo consume la regla (E8) para ratificar el aprendizaje ('esta comision → esta cuenta') cuando requiere_cola es false, y la cola de excepciones cuando es true."
+    }
+  ]
+}

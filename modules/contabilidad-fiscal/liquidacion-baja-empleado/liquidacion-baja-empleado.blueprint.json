@@ -1,0 +1,101 @@
+{
+  "id": "liquidacion-baja-empleado",
+  "version": "blueprint-0.1.0",
+  "_nota": "FASE 6½ · la interfaz DECLARADA del módulo liquidacion-baja-empleado (REFLEJO STATELESS de contabilidad-fiscal, G10, hoja del plan). CIERRE DE LA CUENTA DEL TRABAJADOR (finiquito / indemnizacion) PARA QUE NO QUEDE UN ACREEDOR ABIERTO. El diseno lo dice literal: `liquidar(...):Asiento`, con `empleado:Empleado`. Calculo PURO y determinista. ESTE MODULO NO DECIDE (invariante LEY/PARAMETRO COMO DATO): no decide la indemnizacion, no decide los dias de vacaciones, no decide si procede un finiquito — TODOS los conceptos llegan DECLARADOS (importe + signo) y el reflejo los agrega; la indemnizacion/el finiquito son DATO (el derecho lo declara quien sabe: la ley, el convenio, el acuerdo) y aqui NO se cablea ninguna formula legal. LA CUENTA SE CIERRA CONTRA LO ENTREGADO A CUENTA: el saldo de anticipos pendientes se trae de pagos-a-cuenta-empleado (G8) POR EVENTO (o declarado) y se RESTA del bruto de liquidacion, de modo que la cuenta del trabajador queda a cero sin acreedor abierto. AISLAMIENTO PERSONA↔PERSONA (invariante dura): si la consulta la hace una persona distinta del titular, se consulta a acceso-nomina (G7) POR EVENTO y, si NO autoriza (o G7 no responde), se DENIEGA con 403 AISLAMIENTO_PERSONA. INVARIANTE DE DATO AUSENTE = DESCONOCIDO: un concepto sin importe queda null y se declara en `faltantes`; jamas se rellena con 0 ni se estima una indemnizacion. La seccion `ui` es lo que el generador schema→UI (BlueprintForm, 4 zonas) necesita para renderizar el panel; sin LLM: TODO lo que produce sale de aqui. Fuente de verdad: modules/contabilidad-fiscal/liquidacion-baja-empleado/{module.json,index.js}. ui_handler real: liquidacion-baja-empleado.liquidar (workspace_module/barra_modulos).",
+  "schema": "blueprint-interfaz-v2",
+  "language": "es",
+  "titulo": "La liquidación de baja (finiquito sin acreedor abierto)",
+  "eventos_publicados": [
+    "liquidacion-baja-empleado.liquidar.response",
+    "liquidacion-baja-empleado.liquidar.failed"
+  ],
+  "eventos_que_escucho": [],
+  "_escucho_nota": "VACIO A PROPOSITO: el reflejo ya atiende en module.json.subscribes liquidacion-baja-empleado.liquidar.request (onLiquidarRequest, su unica RPC); repetirlo aqui daria ANTICOLISION-001 (lo atenderian los dos). Es un REFLEJO STATELESS determinista: no tiene cajon fuzzy ni evento fire-and-forget que el LLM deba procesar. El saldo de anticipos (G8) y la AUTORIZACION de acceso (G7) NO llegan como eventos que el LLM escuche por el bus: se piden DENTRO del calculo (pagos-a-cuenta-empleado.impacto.request; acceso-nomina.autorizar.request) o llegan declarados en la peticion — por eso no hay ningun cajon fuzzy que declarar aqui.",
+  "transporte": {
+    "rpc": [
+      "liquidacion-baja-empleado.liquidar.request -> .response",
+      "pagos-a-cuenta-empleado.impacto.request -> .response",
+      "acceso-nomina.autorizar.request -> .response"
+    ],
+    "entrada": [
+      "liquidacion-baja-empleado.liquidar.request"
+    ],
+    "salida": [
+      "liquidacion-baja-empleado.liquidar.response"
+    ],
+    "qos": "publishAndWait (request/response correlado) en el calculo. Los CONCEPTOS llegan DECLARADOS en la peticion. El saldo de ANTICIPOS pendientes llega declarado o se PIDE a pagos-a-cuenta-empleado (G8) POR EVENTO (dependencia interna del cierre). La AUTORIZACION de aislamiento se consulta a acceso-nomina (G7) POR EVENTO cuando la consulta la hace una persona distinta del titular — sin respuesta de G7 NO se concede. El reflejo no publica eventos de dominio: su unica salida es la respuesta RPC correlada (y su par .failed)."
+  },
+  "contrato": {
+    "LiquidarInput": "{ project_id:uuid, empleado:str (titular), conceptos|concepto (DECLARADOS: [{concepto, importe, signo?, clase?}]), indemnizacion?|vacaciones?|pagas_extra?|finiquito? (importe declarado, tambien como campo con nombre), anticipos?|anticipos_pendientes? (declarado, o se pide a pagos-a-cuenta-empleado G8 POR EVENTO), quien?:str (si pregunta una persona distinta del titular), fecha_baja?:str }",
+    "LiquidarOutput": "{ project_id, empleado, fecha_baja, conceptos:[{concepto, importe, signo, clase}], bruto_liquidacion, anticipos:{pendiente, origen:'declarado'|'pagos-a-cuenta-empleado', saldo?}, neto_liquidacion (= bruto - anticipos), asiento:{clase:'liquidacion_baja', empleado, partidas:[{concepto, cuenta, rol, importe, signo}], total_debe, total_haber, acreedor_cerrado, cuentas_cableadas:false}, decide:false, aplica_declarado:true, calculo_puro:true, faltantes:[str], abierto:bool, motivo }",
+    "Aislamiento": "quien declarado y distinto del titular → se consulta a acceso-nomina (G7) POR EVENTO; si NO autoriza (o G7 no responde) → 403 AISLAMIENTO_PERSONA (par .liquidar.failed). Sin `quien` (consulta del sistema) no hay aislamiento que aplicar (aplicado:false).",
+    "Errores": "project_id ausente (400), aislamiento persona-a-persona (403 AISLAMIENTO_PERSONA) o excepcion de la proyeccion (500) → par liquidacion-baja-empleado.liquidar.failed.",
+    "Invariantes": "ESTE MODULO NO DECIDE (invariante LEY/PARAMETRO COMO DATO): no decide la indemnizacion, ni los dias de vacaciones, ni si procede un finiquito — TODOS los conceptos llegan DECLARADOS (importe + signo) y aqui solo se agregan (decide:false, aplica_declarado:true); NO se cablea ninguna formula legal ni ninguna cuenta del PGC (cuentas_cableadas:false, partidas con cuenta:null + rol). LA CUENTA SE CIERRA CONTRA LO ENTREGADO A CUENTA: los anticipos pendientes (de pagos-a-cuenta-empleado G8 por evento, o declarados) se RESTAN del bruto de liquidacion para que el trabajador quede a cero, sin acreedor abierto (acreedor_cerrado). AISLAMIENTO PERSONA↔PERSONA: la nomina ajena no se sirve sin autorizacion declarada. INVARIANTE DE DATO AUSENTE = DESCONOCIDO: un concepto sin importe queda null y se declara en `faltantes`; jamas se rellena con 0 ni se estima una indemnizacion. Determinista."
+  },
+  "ui": {
+    "type": "workspace_module",
+    "zone": "modulos",
+    "ops": {
+      "liquidar": {
+        "titulo": "Cerrar la cuenta del trabajador (liquidación de baja)",
+        "descripcion": "Mesa de trabajo del finiquito: agrega los conceptos DECLARADOS de la liquidación (indemnización, vacaciones, pagas extra, finiquito...), descuenta los anticipos pendientes y cierra la cuenta del trabajador para que no quede un acreedor abierto. ESTE MÓDULO NO DECIDE: no decide la indemnización, ni los días de vacaciones, ni si procede un finiquito — todos los conceptos llegan declarados (importe + signo) y aquí solo se agregan; no se cablea ninguna fórmula legal ni ninguna cuenta del PGC. El saldo de ANTICIPOS se declara o se pide a pagos-a-cuenta-empleado (G8) por evento y se RESTA del bruto. AISLAMIENTO PERSONA↔PERSONA: si pregunta una persona distinta del titular, se autoriza contra acceso-nomina (G7) por evento y, si no autoriza, se DENIEGA con 403. Dato ausente = desconocido: un concepto sin importe queda null y se declara — jamás se estima una indemnización.",
+        "zona": "formulario",
+        "args": [
+          {
+            "nombre": "empleado",
+            "tipo": "string",
+            "required": true,
+            "placeholder": "E-001",
+            "descripcion": "El EMPLEADO titular cuya cuenta se cierra. Es DATO obligatorio: el módulo no deriva el titular de ninguna estructura y sin él no hay cuenta que liquidar."
+          },
+          {
+            "nombre": "conceptos",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "[{\"concepto\":\"indemnizacion\",\"importe\":4000,\"signo\":1,\"clase\":\"indemnizacion\"},{\"concepto\":\"vacaciones_no_disfrutadas\",\"importe\":300,\"signo\":1}]",
+            "descripcion": "LOS CONCEPTOS DECLARADOS de la liquidación (también se acepta uno suelto como `concepto`, o los campos con nombre `indemnizacion`, `vacaciones`, `pagas_extra`, `finiquito`). Cada uno con su importe y su `signo` (+1/-1) — el módulo NO decide el derecho ni un importe: solo agrega lo declarado. Un concepto sin importe queda null y se declara en `faltantes`."
+          },
+          {
+            "nombre": "anticipos_pendientes",
+            "tipo": "number",
+            "required": false,
+            "placeholder": "300 (vacío = se pide a pagos-a-cuenta-empleado G8)",
+            "descripcion": "El saldo de ANTICIPOS PENDIENTES declarado (también se admite `anticipos` como importe o lista). Es DATO: se RESTA del bruto para que el trabajador quede a cero. Si no se declara, se pide a pagos-a-cuenta-empleado (G8) POR EVENTO; lo ausente no se estima."
+          },
+          {
+            "nombre": "quien",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "E-002 (vacío = consulta del sistema)",
+            "descripcion": "La PERSONA que hace la consulta. Es DATO: si se declara y NO es el titular, se consulta a acceso-nomina (G7) POR EVENTO y, si no autoriza, se DENIEGA con 403 AISLAMIENTO_PERSONA. Sin `quien` (consulta del sistema/negocio) no hay aislamiento que aplicar."
+          },
+          {
+            "nombre": "fecha_baja",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "2026-09-30",
+            "descripcion": "La FECHA declarada de la baja (también se acepta como `fecha`). Es DATO: no se deriva ni se cablea ningún calendario."
+          }
+        ]
+      }
+    },
+    "datos": [
+      {
+        "op": "liquidar",
+        "titulo": "Partidas del cierre (conceptos declarados + el anticipo descontado)",
+        "refresh_on": [
+          "liquidacion-baja-empleado.liquidar.response"
+        ],
+        "columnas": [
+          "concepto",
+          "cuenta",
+          "rol",
+          "importe",
+          "signo"
+        ]
+      }
+    ],
+    "_datos_nota": "La tabla son las PARTIDAS del asiento de cierre (`asiento.partidas`): cada fila declara su concepto, su cuenta (null: las cuentas son declarables, no se cablea ningún número del PGC) y su signo. Incluye la partida del anticipo pendiente (rol 'anticipo_a_descontar') cuando lo hay — es lo que cierra la cuenta del trabajador. refresh_on = liquidacion-baja-empleado.liquidar.response: es la señal REAL que este reflejo stateless emite al cerrar una liquidación (no escucha ningún evento de dominio; los anticipos se piden DENTRO del cálculo a G8 por evento, y la autorización a G7 es dependencia interna, no una cinta que refrescar). El veredicto de cierre (bruto_liquidacion, neto_liquidacion, acreedor_cerrado, abierto, faltantes) son valores únicos de la respuesta, no filas: van en la cabecera del panel."
+  },
+  "filosofia": "Un finiquito es el acto en que un trabajador se va y su cuenta debe quedar en cero: ni él debe a la empresa, ni la empresa le debe a él. Pero qué se le debe — la indemnización, los días no disfrutados, la parte de la extra — no lo decide un módulo: lo decide la ley, el convenio, el acuerdo; aquí solo se suma lo que se declara. Por eso este reflejo se niega a calcular una indemnización que nadie declaró: preferiría dejar la cuenta abierta y decirlo, antes que cerrarla con una cifra inventada que al trabajador le parecería justa y no lo sería. Y no olvida lo ya entregado a cuenta: descontar el anticipo es lo que evita dejar un acreedor fantasma, un cobro de más que nadie reclamará pero que ensucia la contabilidad para siempre."
+}

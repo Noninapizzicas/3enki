@@ -3,6 +3,8 @@
   "name": "acceso-nomina",
   "version": "0.1.0",
   "description": "Custodio (G7): gobierna quien ve que nomina (dato personal) con aislamiento persona-a-persona — cada uno ve la suya y la de otro se deniega por defecto; un solo escritor y alcances declarables.",
+  "blueprint_driven": true,
+  "blueprint_path": "acceso-nomina.blueprint.json",
   "language": "es",
   "subscribes": [
     {

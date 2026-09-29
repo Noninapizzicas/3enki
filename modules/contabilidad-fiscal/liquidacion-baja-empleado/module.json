@@ -3,6 +3,8 @@
   "name": "liquidacion-baja-empleado",
   "version": "0.1.0",
   "description": "Reflejo (G10): cierra la cuenta del trabajador calculando el finiquito desde lo DECLARADO y descontando los anticipos, sin decidir el derecho ni quedar ningun acreedor abierto.",
+  "blueprint_driven": true,
+  "blueprint_path": "liquidacion-baja-empleado.blueprint.json",
   "language": "es",
   "subscribes": [
     {

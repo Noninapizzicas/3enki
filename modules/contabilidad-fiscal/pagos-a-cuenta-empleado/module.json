@@ -3,6 +3,8 @@
   "name": "pagos-a-cuenta-empleado",
   "version": "0.1.0",
   "description": "Reflejo (G8): deriva el impacto de los anticipos/entregas a cuenta sobre el neto del recibo y el saldo pendiente — anticipos declarables, aislamiento persona-a-persona y sin decidir nada.",
+  "blueprint_driven": true,
+  "blueprint_path": "pagos-a-cuenta-empleado.blueprint.json",
   "language": "es",
   "subscribes": [
     {

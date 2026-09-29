@@ -3,6 +3,8 @@
   "name": "lineas-nomina",
   "version": "0.1.0",
   "description": "Reflejo (G6): desglosa el recibo en lineas explicitas (bruto/retencion/cotizacion/neto + conceptos declarados) para hacer la nomina explicable — conceptos declarables, cero catalogo cableado.",
+  "blueprint_driven": true,
+  "blueprint_path": "lineas-nomina.blueprint.json",
   "language": "es",
   "subscribes": [
     {

@@ -3,6 +3,8 @@
   "name": "clave-natural",
   "version": "0.1.0",
   "description": "Reflejo stateless (M3): el cerrojo anti-bucle — clave natural determinista de un hecho/cierre (composicion declarable) para que reprocesar no duplique; un cierre = un asiento.",
+  "blueprint_driven": true,
+  "blueprint_path": "clave-natural.blueprint.json",
   "language": "es",
   "subscribes": [
     {

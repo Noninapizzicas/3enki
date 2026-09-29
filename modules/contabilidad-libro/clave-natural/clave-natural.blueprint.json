@@ -1,0 +1,97 @@
+{
+  "id": "clave-natural",
+  "version": "blueprint-0.1.0",
+  "_nota": "FASE 6½ · la interfaz DECLARADA del módulo clave-natural (REFLEJO STATELESS de contabilidad-libro, M3, hoja del plan). El CERROJO ANTI-BUCLE de la contabilidad: da la clave natural de un hecho o de un cierre de forma DETERMINISTA para que reprocesar NO duplique ('un cierre = un asiento'). La sección `ui` es lo que el generador schema→UI (BlueprintForm, 4 zonas) necesita para renderizar el panel; sin LLM: TODO lo que produce sale de aquí. Fuente de verdad: modules/contabilidad-libro/clave-natural/{module.json,index.js}. ui_handlers reales: clave-natural.calcular y clave-natural.coincide (system_panel/lateral_derecha).",
+  "schema": "blueprint-interfaz-v2",
+  "language": "es",
+  "titulo": "La clave natural (el cerrojo anti-bucle)",
+  "eventos_publicados": [
+    "clave-natural.calcular.response",
+    "clave-natural.calcular.failed",
+    "clave-natural.coincide.response",
+    "clave-natural.coincide.failed"
+  ],
+  "eventos_que_escucho": [],
+  "_escucho_nota": "VACÍO A PROPÓSITO: el reflejo ya atiende en module.json.subscribes clave-natural.calcular.request y clave-natural.coincide.request (RPC humanos); repetir cualquiera aquí daría ANTICOLISION-001 (lo atenderían los dos). Es un REFLEJO puro y sin estado: no tiene cajón fuzzy ni evento fire-and-forget que el LLM deba procesar.",
+  "transporte": {
+    "rpc": [
+      "clave-natural.calcular.request -> .response",
+      "clave-natural.coincide.request -> .response"
+    ],
+    "entrada": [
+      "clave-natural.calcular.request",
+      "clave-natural.coincide.request"
+    ],
+    "salida": [
+      "clave-natural.calcular.response",
+      "clave-natural.coincide.response"
+    ],
+    "qos": "publishAndWait (request/response correlado) en ambas proyecciones puras; cada RPC cierra su círculo con su par *.failed determinista. Sin evento de dominio: su valor ES la respuesta (de ahí que no publique ninguna señal de dominio)."
+  },
+  "contrato": {
+    "CalcularInput": "{ project_id?:uuid, hecho|cierre:obj, composicion?:{ campos?:[str], normalizacion?:'defecto'|'crudo'|'minusculas'|'mayusculas', separador?:str, prefijo?:str } }",
+    "CalcularOutput": "{ project_id, clave, sello, composicion:{campos, normalizacion, separador, prefijo}, composicion_declarada:bool, completa:bool, abierto:[campos] }",
+    "CoincideInput": "{ project_id?:uuid, a:obj, b:obj, composicion?:{...} }",
+    "CoincideOutput": "{ project_id, coinciden:bool, es_mismo_hecho:bool, clave_a, clave_b, sello_a, sello_b, completa:bool, abierto:[campos] }",
+    "Errores": "hecho/cierre ausente o inválido -> 400 INVALID_INPUT (par clave-natural.calcular.failed) · a o b ausente/inválido -> 400 INVALID_INPUT (par clave-natural.coincide.failed).",
+    "Invariantes": "Misma entrada → misma clave SIEMPRE (cero azar, cero estado, cero reloj). `calcular` es PURO (calcular dos veces el mismo hecho da la misma clave). `coincide` es simétrica y determinista (misma clave natural → SON el mismo hecho). Los campos declarados que NO llegan se listan en `abierto` y la clave se marca completa:false — nada se estima. La composición por defecto (vertical, tipo, tercero, fecha, importe, referencia) NO es una forma legal cableada: es el default declarado, y se declara como tal."
+  },
+  "ui": {
+    "type": "system_panel",
+    "zone": "modulos",
+    "ops": {
+      "calcular": {
+        "titulo": "Calcular la clave natural de un hecho/cierre",
+        "descripcion": "Panel de CONTROL bajo demanda: da la clave natural DETERMINISTA de un hecho o de un cierre, para que reprocesarlo no duplique. La composición de la clave es DECLARABLE como DATO (`composicion`: campos, normalización, separador, prefijo); sin declararla se usa la composición por defecto sobre los campos presentes y se marca `composicion_declarada:false` — nunca se cablea una forma legal. Los campos declarados que no llegan NO desaparecen en silencio: se listan en `abierto` y la clave queda `completa:false`. No escribe ni recuerda: calcular dos veces lo mismo da la misma clave.",
+        "zona": "formulario",
+        "args": [
+          {
+            "nombre": "hecho",
+            "tipo": "json",
+            "required": true,
+            "placeholder": "{\"vertical\":\"compras\",\"tipo\":\"factura_recibida\",\"tercero\":{\"nif\":\"B12345678\"},\"fecha\":\"2026-09-01\",\"importe\":121,\"referencia\":\"F-1\"}",
+            "descripcion": "El sujeto (hecho o cierre) del que se deriva la clave. Un valor compuesto (p.ej. tercero:{nif,...}) se serializa canónicamente para que la clave siga siendo determinista."
+          },
+          {
+            "nombre": "composicion",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "{\"campos\":[\"vertical\",\"tipo\",\"tercero.nif\",\"fecha\",\"importe\"],\"normalizacion\":\"defecto\",\"separador\":\"|\",\"prefijo\":\"CTB\"}",
+            "descripcion": "La ley de composición DECLARADA: `campos` (rutas, admite 'a.b'), `normalizacion` ('defecto' | 'crudo' | 'minusculas' | 'mayusculas'), `separador` y `prefijo`. Sin declararla, se usa la composición por defecto y se marca composicion_declarada:false. El orden de los campos ES la identidad: cambiarlo cambia la clave."
+          }
+        ]
+      },
+      "coincide": {
+        "titulo": "¿Son el mismo hecho? (por su clave natural)",
+        "descripcion": "Panel de CONTROL bajo demanda: compara dos sujetos por su clave natural. Determinista y SIMÉTRICO: si las claves coinciden, SON el mismo hecho (`es_mismo_hecho:true`) — así se decide la idempotencia ('un cierre = un asiento'). Se calcula cada clave con la MISMA composición declarada; lo que no llegue se lista en `abierto` y `completa` queda false (nada se estima).",
+        "zona": "formulario",
+        "args": [
+          {
+            "nombre": "a",
+            "tipo": "json",
+            "required": true,
+            "placeholder": "{\"vertical\":\"ventas\",\"tipo\":\"factura_emitida\",\"referencia\":\"F-1\"}",
+            "descripcion": "El primer sujeto a comparar."
+          },
+          {
+            "nombre": "b",
+            "tipo": "json",
+            "required": true,
+            "placeholder": "{\"vertical\":\"ventas\",\"tipo\":\"factura_emitida\",\"referencia\":\"F-1\"}",
+            "descripcion": "El segundo sujeto a comparar. La comparación es simétrica: da igual el orden."
+          },
+          {
+            "nombre": "composicion",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "{\"campos\":[\"vertical\",\"tipo\",\"referencia\"],\"normalizacion\":\"mayusculas\"}",
+            "descripcion": "La ley de composición DECLARADA, aplicada a AMBOS sujetos (comparar con composiciones distintas daría una comparación sin sentido). Sin declararla, la composición por defecto."
+          }
+        ]
+      }
+    },
+    "datos": [],
+    "_datos_nota": "HUECO DECLARADO (no se inventa): clave-natural es un REFLEJO STATELESS sin persistencia ni lectura tabulable. Sus dos ops RPC (calcular y coincide) EXIGEN el sujeto / los dos sujetos a procesar: son cálculos puntuales, no listados. No hay ninguna op de lectura en module.json.subscribes ni en index.js — 'No escribe ni recuerda: quien recuerda es deduplicacion-hecho (A7)'. La zona DATOS va vacía: el resultado (clave / coinciden / abierto) se ve en la respuesta RPC de cada op."
+  },
+  "filosofia": "Misma entrada, misma clave. SIEMPRE. Sin reloj, sin azar, sin estado: un hecho no puede tener dos identidades según cuándo se pregunte. La forma de la clave no la fija el código: la declara quien conoce el negocio — porque una forma legal cableada sería una ley escondida. Y lo que no llega no se calla: se lista como abierto, para que quien lea la clave sepa que le falta un pedazo. Este reflejo no recuerda nada: solo sella con la misma marca lo que es lo mismo."
+}

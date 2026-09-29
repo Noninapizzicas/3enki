@@ -3,6 +3,8 @@
   "name": "maestro-terceros",
   "version": "0.1.0",
   "description": "Custodio (N1): el maestro UNICO de terceros — un tercero, un registro con roles (cliente/proveedor/ambos); un solo escritor (MAESTRO_TERCEROS), upsert completa y suma sin borrar; persiste por proyecto.",
+  "blueprint_driven": true,
+  "blueprint_path": "maestro-terceros.blueprint.json",
   "language": "es",
   "subscribes": [
     {

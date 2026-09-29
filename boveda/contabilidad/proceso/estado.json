@@ -3,7 +3,7 @@
   "ramas": "vertical/contabilidad",
   "persistencia": "boveda/contabilidad/proceso/",
   "modelo": "mente-ejecuta / chat-gestiona",
-  "fase_actual": "F2 COMPLETADA — esquema cerrado. 118 hojas atomicas = 168% del umbral de 70 -> SALVAGUARDA ACTIVADA. Siguiente: decidir la particion y responder el guion de preguntas abiertas antes de F3",
+  "fase_actual": "F3 COMPLETADA — diseno OOP con 118 clases (una por hoja atomica de F2). Siguiente: F3b (adaptador a Enki) o responder las 72 preguntas abiertas",
   "nota_proceso": "Vertical transversal observadora VENDIBLE: escucha los eventos que cada negocio ya emite y reconstruye su contabilidad. Molde de proceso: boveda/nichos/proceso/ (44 modulos + 44 skills, #656).",
   "fase0": {
     "estado": "completada",
@@ -70,8 +70,21 @@
     "nodos_total": 147,
     "preguntas_abiertas_total": 72,
     "diseccion": {
-      "reflejo": 60, "custodio": 29, "puente": 14, "micro_agente_fuzzy": 8, "conversor": 7,
-      "los_8_fuzzy_donde_entra_llm": ["extraccion-dato", "contrapartida-asistida", "desatasco-entrada", "partida-no-identificada", "etiquetado-analitico", "puente-lenguaje-dueno", "informe-accionable", "narrador-estados"]
+      "reflejo": 60,
+      "custodio": 29,
+      "puente": 14,
+      "micro_agente_fuzzy": 8,
+      "conversor": 7,
+      "los_8_fuzzy_donde_entra_llm": [
+        "extraccion-dato",
+        "contrapartida-asistida",
+        "desatasco-entrada",
+        "partida-no-identificada",
+        "etiquetado-analitico",
+        "puente-lenguaje-dueno",
+        "informe-accionable",
+        "narrador-estados"
+      ]
     },
     "salvaguarda_activada": {
       "motivo": "118 hojas atomicas = 168% del umbral de 70 fijado en F0",
@@ -93,14 +106,60 @@
       "diferencia-cambio (E12) depende de multi-moneda (pregunta abierta)"
     ]
   },
-  "fase3": { "estado": "pendiente", "skill": "planificar-construccion", "entregable": "boveda/contabilidad/proceso/fase3/diseno-oop.md" },
-  "fase3b": { "estado": "pendiente", "skill": "enki-adaptador-disenos", "entregable": "boveda/contabilidad/proceso/fase3b/plan-construccion.md" },
-  "fase4": { "estado": "pendiente", "skill": "construir-modulos", "mandato": "una hoja a la vez, orden de la espina, esquematizar(4a)+crear(4b)",
-    "tracking": { "orden": [], "realizados": [], "pendientes": [], "proximo": null } },
-  "fase5": { "estado": "pendiente", "skill": "escribir-skills" },
-  "fase6": { "estado": "pendiente", "skill": "decidir-interfaz" },
-  "fase65": { "estado": "pendiente", "skill": "esquematizar-interfaz" },
-  "fase7": { "estado": "pendiente", "skill": "construir-interfaz" },
+  "fase3": {
+    "estado": "completada",
+    "skill": "planificar-construccion",
+    "completada_el": "2026-09-29",
+    "entregable": "boveda/contabilidad/proceso/fase3/diseno-oop.md (73 KB, 1178 lineas)",
+    "clases_dominio": 118,
+    "clases_soporte": 26,
+    "puertos_abiertos": 20,
+    "flujos": 7,
+    "decisiones_humanas": 14,
+    "invariantes": 14,
+    "regla_unidad": "UNA clase por CADA hoja atomica de F2. Verificado por el padre: cotejo nombre a nombre 118 piezas (diseccion F2) vs 118 clases (F3) = 118=118, cero fusiones, cero perdidas.",
+    "forma": "60 REFLEJO · 29 CUSTODIO · 14 PUENTE · 8 MICRO-AGENTE · 7 CONVERSOR = 118 (identico a pasada-diseccion.md)",
+    "agnosticismo": "VERIFICADO — 0 tecnologias (mqtt/eventbus/basemodule/svelte/frontend/blueprint = 0)",
+    "reparto": {
+      "entrada": "A18+N8+O2+P4=32",
+      "libro": "B6+C6+E10+L7+M3=32",
+      "fiscal": "D13+G9=22",
+      "analitica": "F4+H4+I4+J8+K5+Q4+R3=32"
+    },
+    "error_del_intento_anterior": "El plan F3b agrupo las 118 hojas en 72 modulos SIN auditar la transformacion, y se 'verifico' contra si mismo. Borrado por orden del dueno."
+  },
+  "fase3b": {
+    "estado": "pendiente",
+    "skill": "enki-adaptador-disenos",
+    "entregable": "boveda/contabilidad/proceso/fase3b/plan-construccion.md"
+  },
+  "fase4": {
+    "estado": "pendiente",
+    "skill": "construir-modulos",
+    "mandato": "una hoja a la vez, orden de la espina, esquematizar(4a)+crear(4b)",
+    "tracking": {
+      "orden": [],
+      "realizados": [],
+      "pendientes": [],
+      "proximo": null
+    }
+  },
+  "fase5": {
+    "estado": "pendiente",
+    "skill": "escribir-skills"
+  },
+  "fase6": {
+    "estado": "pendiente",
+    "skill": "decidir-interfaz"
+  },
+  "fase65": {
+    "estado": "pendiente",
+    "skill": "esquematizar-interfaz"
+  },
+  "fase7": {
+    "estado": "pendiente",
+    "skill": "construir-interfaz"
+  },
   "decisiones_cerradas": {
     "alcance": "gestion interna primero, con miras a fiscal",
     "arquitectura": "1 proyecto = N verticales; contabilidad = 1 vertical activable por config del proyecto",

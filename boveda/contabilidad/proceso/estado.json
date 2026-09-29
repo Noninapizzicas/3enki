@@ -3,7 +3,7 @@
   "ramas": "vertical/contabilidad",
   "persistencia": "boveda/contabilidad/proceso/",
   "modelo": "mente-ejecuta / chat-gestiona",
-  "fase_actual": "F5 COMPLETADA — 72 modulos + 72 skills FULL. Siguiente: F6/F7 (interfaz) o habilitar la vertical en un proyecto",
+  "fase_actual": "F2 COMPLETADA — esquema cerrado. 118 hojas atomicas = 168% del umbral de 70 -> SALVAGUARDA ACTIVADA. Siguiente: decidir la particion y responder el guion de preguntas abiertas antes de F3",
   "nota_proceso": "Vertical transversal observadora VENDIBLE: escucha los eventos que cada negocio ya emite y reconstruye su contabilidad. Molde de proceso: boveda/nichos/proceso/ (44 modulos + 44 skills, #656).",
   "fase0": {
     "estado": "completada",
@@ -70,49 +70,18 @@
     "nodos_total": 147,
     "preguntas_abiertas_total": 72,
     "diseccion": {
-      "reflejo": 60,
-      "custodio": 29,
-      "puente": 14,
-      "micro_agente_fuzzy": 8,
-      "conversor": 7,
-      "los_8_fuzzy_donde_entra_llm": [
-        "extraccion-dato",
-        "contrapartida-asistida",
-        "desatasco-entrada",
-        "partida-no-identificada",
-        "etiquetado-analitico",
-        "puente-lenguaje-dueno",
-        "informe-accionable",
-        "narrador-estados"
-      ]
+      "reflejo": 60, "custodio": 29, "puente": 14, "micro_agente_fuzzy": 8, "conversor": 7,
+      "los_8_fuzzy_donde_entra_llm": ["extraccion-dato", "contrapartida-asistida", "desatasco-entrada", "partida-no-identificada", "etiquetado-analitico", "puente-lenguaje-dueno", "informe-accionable", "narrador-estados"]
     },
     "salvaguarda_activada": {
       "motivo": "118 hojas atomicas = 168% del umbral de 70 fijado en F0",
-      "DECISION DEL DUENO 2026-09-28": "PARTIR EN CUATRO VERTICALES EQUILIBRADAS",
-      "particion_elegida": {
-        "contabilidad-entrada": {
-          "hojas": 32,
-          "grupos": "A entrada-hechos (18) · N terceros (8) · O facturacion-emitida (2) · P control-del-proceso (4)",
-          "nota": "LA PUERTA — contiene el eslabon limitante"
-        },
-        "contabilidad-libro": {
-          "hojas": 32,
-          "grupos": "B libro-nucleo (6) · C estados-cierre (6) · E tesoreria (10) · L revision-asesor (7) · M anti-bucle (3)"
-        },
-        "contabilidad-fiscal": {
-          "hojas": 22,
-          "grupos": "D capa-fiscal (13) · G personal (9)",
-          "nota": "vendible como anadido; cada modulo pesa mas (regulacion, modelos, plazos)"
-        },
-        "contabilidad-analitica": {
-          "hojas": 32,
-          "grupos": "F inmovilizado (4) · H existencias (4) · I grupo (4) · J analitica/mando (8) · K producto-servicio (5) · Q consulta-dueno (4) · R entrega-al-negocio (3)"
-        }
+      "decision_prevista": "la vertical se PARTE por ejes de capacidad",
+      "traza_del_esquema": {
+        "nucleo": "A entrada-hechos · B libro · C estados/cierre · E tesoreria · N terceros · O facturacion · P control-proceso · L revision · M anti-bucle",
+        "fiscal": "D capa-fiscal + retenciones",
+        "analitica": "I grupo · J analitica · F inmovilizado · G personal · H existencias · K/Q/R producto-servicio"
       },
-      "coste_de_partir": "NO multiplica el proceso: es UN proceso (F3 -> F3b -> un plan) y el plan declara a que vertical pertenece cada modulo. La construccion va POR OLEADAS.",
-      "motivo_de_la_eleccion": "Oleadas del mismo tamano (32/32/22/32) -> cada una se construye y verifica en un ciclo comparable. Y modularidad comercial: 'fiscal' se puede vender como anadido, o el nucleo sin fiscal (encaja con 'vendible sola o empaquetada').",
-      "alternativas_descartadas": "2 (nucleo 64 / fiscal 13 / analitica 41): desequilibrada y carga justo el eje mas pesado por modulo en el grupo pequeno. 3 (una sola, 118): sin modularidad ni oleadas comparables.",
-      "estado": "DECIDIDA por el dueno el 2026-09-28"
+      "estado": "DECISION PENDIENTE DEL DUENO — la decision final se toma con el, antes de F3"
     },
     "conflictos_validacion_cruzada": [
       "Dos maestros de terceros (maestro-terceros N1 vs padron-terceros N2) -> un tercero que sea cliente Y proveedor quedaria duplicado",
@@ -122,327 +91,16 @@
       "La silla del cliente: el negocio o el dueno? decide si Q/J8/R son una silla o tres",
       "Trabajador humano vs automatizacion: P1-P4 ambiguo; si es humano y concurrente, choca con single-writer (M2)",
       "diferencia-cambio (E12) depende de multi-moneda (pregunta abierta)"
-    ],
-    "conflictos_resueltos": {
-      "conflicto_1_factura": {
-        "decision_del_dueno": "B — CONTABILIDAD SI EMITE LA FACTURA DE VENTA",
-        "fecha": "2026-09-28",
-        "identidad_refinada": "La identidad dice 'no produce hechos de negocio'. Se REFINA (no se contradice): contabilidad NO produce los hechos que OBSERVA (ventas, cobros, consumo — esos los emite la operacion), pero SI produce los DOCUMENTOS PROPIOS de la contabilidad y la facturacion: factura emitida, factura rectificativa, asientos, modelos. La frontera: OBSERVA la operacion, PRODUCE lo suyo.",
-        "piezas_afectadas": [
-          "O1 emision-factura-venta",
-          "O2 factura-rectificativa",
-          "D8 registro-verifactu",
-          "D9 factura-electronica",
-          "series/numeracion (abierta, de clientes)"
-        ],
-        "riesgo_nuevo_para_el_cerrojo_1": "La factura emitida ES un hecho consumible. Si un modulo de la OPERACION la consume para ACTUAR (descontar stock, cerrar cuenta, cobrar), se abre realimentacion y se rompe el cerrojo 'frontera-planos'. A resolver: QUIEN puede consumir factura.emitida — el cliente externo si (es su documento); la operacion interna, a decidir.",
-        "estado": "DECIDIDO por el dueno; el consumo de factura.emitida queda como sub-pregunta abierta"
-      },
-      "conflicto_2_terceros": {
-        "decision_del_dueno": "A — UN SOLO MAESTRO DE TERCEROS, con ROLES",
-        "fecha": "2026-09-28",
-        "resuelve": "maestro-terceros (N1) vs padron-terceros (N2): dos piezas que hacian lo mismo y duplicaban a un tercero que fuera cliente Y proveedor a la vez (caso real: un proveedor al que tambien se le vende).",
-        "diseno": "UNA pieza de terceros; el rol (cliente / proveedor / ambos / empleado / banco / administracion) es un ATRIBUTO del tercero, no una pieza. Coherente con la contabilidad real: la cuenta 430 (clientes) y 400 (proveedores) cuelgan del MISMO tercero.",
-        "piezas_afectadas": [
-          "N1 + N2 se funden en una",
-          "cuenta-proveedor / estado-cuenta-proveedor / vencimiento-pago / antiguedad-de-saldos pasan a ser VISTAS POR ROL sobre el maestro unico"
-        ],
-        "efecto": "Evita duplicar terceros y cruzar cuentas a mano (justo el trabajo que el sistema debe automatizar). Reduce 1 hoja del grupo N.",
-        "estado": "DECIDIDO por el dueno"
-      },
-      "conflicto_3_cobertura": {
-        "decision_del_dueno": "A — UNA METRICA UNICA DE COBERTURA; las otras piezas la LEEN",
-        "fecha": "2026-09-28",
-        "resuelve": "Tres piezas declaraban completitud por su cuenta: completitud-cobertura (A12, la entrada) · sello-cobertura (Q3, el dueno) · aviso-cuadre (C6, el cierre). Podian contradecirse (el dueno ve 'completo' y el cierre dice 'falta algo').",
-        "diseno": "UNA sola pieza CALCULA la cobertura (single-writer de la verdad); las demas la LEEN. completitud-cobertura (A12) pasa a ser EL CALCULO UNICO; sello-cobertura (Q3) y aviso-cuadre (C6) pasan a ser VISTAS/consumidores de esa metrica unica.",
-        "principio": "Patron single-writer aplicado a la verdad: solo una pieza tiene derecho a decir 'esta completo'. Las otras miran. Evita el problema clasico de las contabilidades: tres informes y ninguno coincide.",
-        "encaja_con": "el requisito del dueno 'informacion rica QUE TE AVIse' — un aviso que no miente.",
-        "estado": "DECIDIDO por el dueno"
-      },
-      "cierre_dos_niveles": {
-        "decision_del_dueno": "C — DOS NIVELES: el DIA cierra la caja · el MES cierra la contabilidad",
-        "fecha": "2026-09-28",
-        "resuelve": "unidad_de_cierre (pregunta abierta 2 de F0) — no estaba declarado que es 'un cierre' (jornada/dia/mes), y toda la idempotencia ('un cierre = un asiento') se apoyaba en ello.",
-        "nivel_1_operativo": "CIERRE DE CAJA DEL DIA — lo que ya existe en la operacion (caja.cerrada). Cuadra la caja, detecta descuadres pronto. Clave natural nivel 1: (proyecto, jornada). Es el pulso diario.",
-        "nivel_2_contable": "CIERRE DEL MES NATURAL (1 al ultimo dia) — el cierre contable clasico: ajustes, periodificacion, amortizaciones (F2), IVA devengado/soportado (D1), regularizacion de existencias (H3). Es el PERIODO QUE EL ASESOR PRESENTA. Clave natural nivel 2: (proyecto, ejercicio, mes).",
-        "como_encajan": "El dia ALIMENTA al mes: los cierres de caja diarios son la materia del cierre mensual; el mensual no re-lee los hechos, lee los dias cerrados. Un nivel no sustituye al otro.",
-        "por_que_no_solo_A": "Con solo el dia no habria cierre contable real (sin ajustes, sin IVA, sin amortizaciones) -> el asesor no podria presentar nada. Falla la medida maestra.",
-        "por_que_no_solo_B": "Con solo el mes se perderia el control diario que YA existe y que detecta descuadres pronto (y el sistema quedaria ciego 30 dias).",
-        "reutiliza": "El cierre de caja diario YA esta construido (persistencia-comandero: cuadre del dia, metodos de pago, arqueo). El nivel 1 se APOYA en lo existente, no se construye de cero.",
-        "efecto_en_idempotencia": "El cerrojo 3 (idempotencia por clave natural) pasa a tener DOS claves naturales: un cierre de caja = un asiento de caja; un cierre de mes = un asiento de cierre. Reprocesar cualquiera de los dos no duplica.",
-        "abierto_aun": "El momento exacto del cierre mensual (dia natural vs fecha de cierre declarada por el negocio) queda como detalle a fijar; y si hay periodos que no coinciden con el mes natural.",
-        "estado": "DECIDIDO por el dueno"
-      },
-      "cuando_reconstruye": {
-        "decision_del_dueno": "C — AMBOS: asiento AL VUELO + consolidacion AL CIERRE",
-        "fecha": "2026-09-28",
-        "resuelve": "cuando_reconstruye (pregunta abierta 1 de F0).",
-        "nivel_vuelo": "ASIENTO AL VUELO — cada hecho que entra se asienta en cuanto llega. Da el SISTEMA VIVO que el dueno exige (requisito 10: event-driven -> vivo, actualizado, dinamico).",
-        "nivel_cierre": "CONSOLIDACION AL CIERRE — al cerrar (jornada y mes) se consolida, se cuadra y se aplican ajustes (periodificacion, amortizaciones, IVA, regularizacion de existencias).",
-        "clave_de_que_es_seguro": "Asentar al vuelo es SEGURO precisamente porque el ASIENTO NO ES UN HECHO: es un CALCULO (contabilidad.*). El riesgo de realimentacion solo existiria si algo de la OPERACION consumiera el asiento. Con la frontera de planos (cerrojo 1) en pie, el vuelo no puede disparar la operacion -> no hay bucle.",
-        "por_que_no_solo_cierre": "Con solo el cierre se tendria una app contable convencional que se actualiza de noche -> justo lo que el dueno declaro que NO quiere ('el event-driven como camino a un sistema vivo').",
-        "por_que_no_solo_vuelo": "Sin consolidacion al cierre no habria ajustes ni periodo contable -> el asesor no podria presentar (falla la medida maestra).",
-        "dependencia": "Se apoya en la decision 'cierre dos niveles' (C): el vuelo asienta; el cierre consolida en los dos niveles.",
-        "estado": "DECIDIDO por el dueno"
-      },
-      "cola_revision": {
-        "decision": "C — DOS COLAS SEGUN LA NATURALEZA DE LA EXCEPCION (asesor / dueno)",
-        "decidido_por": "Tot (la mente), con autorizacion explicita del dueno 2026-09-28 ('yo de contabilidad no entiendo, responde tu por mi')",
-        "resuelve": "cola_revision (pregunta abierta 3 de F0: que pasa con un documento ilegible o un dato que no cuadra) y A8.3 [ABIERTO] (quien resuelve la cola).",
-        "diseno": {
-          "cola_asesor": "Excepciones de naturaleza CONTABLE: factura que no cuadra con el IVA, contrapartida que no se resuelve, descuadre, documento ilegible que impide el asiento. La resuelve el ASESOR (encaja con 'el asesor se mantiene').",
-          "cola_dueno": "Excepciones de naturaleza DEL NEGOCIO: 'este cargo de 340 EUR es un gasto tuyo?', 'esta factura es de este proveedor?', partida bancaria no identificada que solo el dueno reconoce. La resuelve el DUENO."
-        },
-        "por_que_no_todo_al_asesor": "Le llenaria la mesa de cosas que no son suyas (el asesor no sabe si un cargo es del negocio).",
-        "por_que_no_todo_al_dueno": "Tendria que hacer de contable, justo lo que el sistema debe automatizar.",
-        "conexion_con_requisito_4": "La cola de revision ES el motor de avisos por el lado que importa: el requisito del dueno 'informacion rica QUE TE AVIse' se materializa aqui (aviso de lo que necesita su ojo).",
-        "principio": "El flujo NO se bloquea nunca: lo dudoso va a su cola y la operacion sigue (ya declarado en el esquema). La cola es donde el humano entra, no donde el sistema se para.",
-        "estado": "DECIDIDO (delegado por el dueno)"
-      },
-      "alcance_fiscal": {
-        "decision": "COMPLETO — sin recorte. Verifactu + factura electronica + presentacion.",
-        "decidido_por": "Tot (delegado por el dueno)",
-        "freno_disuelto": "El asistente propuso 'A: solo lo que alimenta al asesor, para la primera oleada'. El dueno lo cazo ('por que ese freno?'). Aplicado FRENOS->EMPUJONES: ese freno NO protegia ningun estado deseado — era inercia del asistente ('fiscal pesa mucho'), no una restriccion del negocio. SE DISUELVE.",
-        "por_que": "El dueno declaro el alcance como 'una vertical de contabilidad REAL y PURA, que nos de TODO lo que nos pueda dar una app de contabilidad, como si fuesemos a venderla'. Una app contable real incluye Verifactu, factura electronica y presentacion. Recortarlo contradice la identidad declarada.",
-        "modo_de_uso_vs_capacidad": "Que el asesor presente con su programa es un MODO DE USO (configurable por negocio), NO un recorte de capacidad. Un cliente sin asesor querra que el sistema presente. La capacidad debe EXISTIR completa.",
-        "alcance": [
-          "IVA (303, 390) devengado/soportado",
-          "IRPF / IS (estimacion y modelos)",
-          "retenciones",
-          "calendario fiscal + avisos de plazos",
-          "generacion de modelos",
-          "presentacion telematica",
-          "registro Verifactu",
-          "factura electronica (formato estructurado)",
-          "acuse y estado de presentacion",
-          "rectificacion de declaraciones"
-        ],
-        "leccion": "El asistente debe vigilar este patron: NO reducir el alcance declarado por comodidad de construccion. La particion en verticales (decidida) ya resuelve el 'es mucho' — no hace falta recortar capacidades.",
-        "estado": "DECIDIDO"
-      },
-      "granularidad_de_grupo": {
-        "decision": "COMPLETO — multi-sociedad y consolidacion reales",
-        "decidido_por": "Tot (delegado por el dueno)",
-        "freno_disuelto": "El asistente pregunto '¿necesitas consolidar varias sociedades o cada negocio va por su cuenta?'. Era otro freno por comodidad. El dueno ya lo declaro: 'una gran empresa o grupo de empresas'. SE DISUELVE la duda.",
-        "alcance": [
-          "marca-sociedad",
-          "consolidacion de grupo",
-          "eliminacion-intercompany",
-          "aislamiento-negocio (multi-tenant sin fuga)",
-          "vista agregada del grupo"
-        ],
-        "estado": "DECIDIDO"
-      },
-      "fiscal_legislacion_es": {
-        "decision": "RESPONDIDO con la legislacion espanola — 4 regimenes de territorio, IVA/IGIC/IPSI, IRPF/IS, Verifactu, Facturae",
-        "decidido_por": "Tot (delegado: 'respondelas tu segun la legislacion espanola y continuemos')",
-        "hallazgo_que_gobierna": "NINGUN valor legal se cablea en el codigo: tipos, plazos, coeficientes, calendario y formatos son DATOS DECLARABLES por negocio/ejercicio. La ley entra como DATO, no como logica. Consecuencia de diseno: los grupos D (fiscal) e I (grupo) llevan PUERTO DE PARAMETROS FISCALES declarables.",
-        "territorio": {
-          "regimen_comun": "IVA (AEAT)",
-          "pais_vasco": "IVA con las Diputaciones forales (Bizkaia/Gipuzkoa/Alava)",
-          "navarra": "IVA con Hacienda Foral",
-          "canarias": "IGIC (no IVA), general 7%",
-          "ceuta_melilla": "IPSI (no IVA)"
-        },
-        "iva": {
-          "tipos": "general 21 / reducido 10 / superreducido 4",
-          "regimenes": "general (303 trimestral) · simplificado · recargo equivalencia · criterio de caja · SII (grandes, >6M EUR)"
-        },
-        "sociedades": {
-          "autonomo": "IRPF + pagos fraccionados 130 (directa) / 131 (modulos)",
-          "sociedad": "IS modelo 200 + pagos 202"
-        },
-        "modelos": "303 (IVA trim) · 390 (resumen anual) · 130/131 (IRPF) · 111/115 (retenciones) · 190/180 (anuales) · 347 (>3005,06 EUR) · 349 (intracom) · 200/202 (IS) · 100 (renta) · cuentas anuales (Registro Mercantil)",
-        "retenciones": "profesionales 15% (7% ano de inicio y 2 siguientes) · trabajo segun tablas · alquileres 19%",
-        "verifactu": "RD 1007/2023 — registro inalterable + huella/hash + encadenamiento + QR + envio AEAT",
-        "factura_electronica": "Facturae (XML) estandar; FACe sector publico; B2B obligatoria por Ley 18/2022 (Crea y Crece)",
-        "series": "numeracion correlativa por serie y sin saltos; serie separada por ejercicio y tipo",
-        "ticket_vs_factura": "simplificada hasta 400 EUR (3000 en ciertos sectores); completa cuando el cliente la pide o es B2B con IVA deducible",
-        "plazo_pago": "Ley 3/2004 morosidad: max 60 dias entre empresas; 30 dias sector publico",
-        "amortizacion": "lineal (tabla simplificada) por defecto; degresiva/fiscal segun caso — parametros declarables",
-        "valoracion_existencias": "FIFO y coste medio ponderado (PMP); LIFO NO permitido en el PGC (RD 1514/2007)",
-        "multi_moneda": "SI — tipo de cambio a fecha de operacion + diferencia de cambio al cierre (se activa la pieza E12)",
-        "ajustes": "SUMAN, nunca borran (traza intacta = requisito de auditoria y Verifactu)",
-        "cobros_pagos": "registra y observa por defecto; EJECUTA solo si hay pasarela declarada (SEPA/tarjeta)",
-        "nominas": "recibe el hecho por defecto; calcula como capacidad opcional",
-        "verificar": "[VERIFICAR] por ejercicio: tipos de IVA, FECHAS de obligatoriedad de Verifactu (prorrogado) y del reglamento B2B de la Ley 18/2022, coeficientes de amortizacion, limites de factura simplificada, plazos exactos del calendario",
-        "estado": "RESPONDIDO (los [VERIFICAR] son datos declarables, se rellenan al operar cada negocio)"
-      },
-      "tanda_3_5_6_completas": {
-        "decision": "Tandas 3 (entrada), 5 (grupo/uso) y 6 (operativos) respondidas",
-        "recepcion_digital": "canales declarables: email a buzon dedicado · FACe · plataformas de intercambio · carpeta/API. Formatos: Facturae XML (entra sin interpretar) y PDF/imagen (entra por extraccion - micro-agente).",
-        "ritmo_de_uso": {
-          "dia": "el negocio, al cerrar caja",
-          "mes": "asesor + dueno (IVA, ajustes, amortizaciones)",
-          "trimestre": "asesor (303/130)",
-          "ano": "asesor (390/190/200/cuentas anuales)"
-        },
-        "catalogo_avisos": "descuadre de cobertura · excepcion en cola · IVA que no cuadra · vencimiento de pago · plazo fiscal · presupuesto desviado · cierre pendiente · amortizacion a aplicar · rectificacion necesaria",
-        "contrato_hecho_minimo": "VENTA: fecha/líneas(producto,cantidad,precio,tipo IVA)/cliente/forma de cobro. COBRO-PAGO: fecha/importe/medio/cuenta. COMPRA: proveedor/líneas/impuestos/recepcion. CONSUMO-STOCK: producto/cantidad/fecha. CIERRE JORNADA: totales/medios/descuadre. SI FALTA -> no se inventa: se declara la fuente faltante y se avisa.",
-        "formato_exportacion_asesor": "declarable (no se fija de memoria): CSV/Excel normalizado + Facturae XML + exportacion contable estandar; a cerrar con el asesor concreto (L6)",
-        "vista_agregada": "dos niveles: por negocio (aislada) y del grupo (consolidada con eliminacion intercompany)",
-        "rol_trabajador": "NO existe como rol humano — la maquina trabaja, el humano entra por las 2 colas",
-        "estado": "RESPONDIDO"
-      }
-    },
-    "preguntas_abiertas_estado": {
-      "total_declaradas_en_el_esquema": 72,
-      "respondidas_por_decisiones": "tandas 1-6 completas (8 decisiones + fiscal/legal + operativos)",
-      "pendientes_reales": "SOLO valores [VERIFICAR] que son DATOS DECLARABLES (se rellenan al operar cada negocio y se actualizan cuando cambie la norma). NO bloquean el diseno.",
-      "documento": "boveda/contabilidad/proceso/fase2/preguntas-respondidas-legislacion-es.md"
-    }
+    ]
   },
-  "fase3": {
-    "estado": "completada",
-    "skill": "planificar-construccion",
-    "completada_el": "2026-09-28",
-    "entregable": "boveda/contabilidad/proceso/fase3/diseno-oop.md",
-    "clases": 135,
-    "clases_dominio": 118,
-    "clases_soporte": 17,
-    "puertos_abiertos": 16,
-    "decisiones_humanas": 10,
-    "invariantes": 14,
-    "agnosticismo": "VERIFICADO — cero tecnologias (grep estricto: ni Enki, ni modulo, ni MQTT, ni Svelte)",
-    "nota": "PLASMA: diseno en pseudocodigo OOP estandar SIN conocer la plataforma. 19 ejes de dominio. Casos limite tratados (rectificativa, ilegible, duplicado, intracomunitaria, cierre a medianoche, divisa, cliente+proveedor)."
-  },
-  "fase3b": {
-    "estado": "completada",
-    "skill": "enki-adaptador-disenos",
-    "completada_el": "2026-09-28",
-    "entregable": "boveda/contabilidad/proceso/fase3b/plan-construccion.md (352 KB)",
-    "generador": "boveda/contabilidad/proceso/fase3b/_gen-plan.js (una sola tabla -> tablas y espina no divergen)",
-    "soporte": [
-      "reutilizables-verificados.md",
-      "inventario-modulos-enki.json (248 modulos, contrato real)"
-    ],
-    "hojas_total": 80,
-    "construir": 72,
-    "adaptar": 0,
-    "reutilizar": [
-      "facturas",
-      "facturacion/fuentes",
-      "facturacion/asesoria",
-      "inventario",
-      "metricas",
-      "filesystem",
-      "project-manager",
-      "credential-manager"
-    ],
-    "formas": {
-      "custodio": 29,
-      "reflejo": 26,
-      "puente": 15,
-      "micro-agente": 6,
-      "conversor": 4
-    },
-    "ejes": {
-      "contabilidad-entrada": 22,
-      "contabilidad-libro": 24,
-      "contabilidad-fiscal": 13,
-      "contabilidad-analitica": 18,
-      "transversal": 3
-    },
-    "espina": "enki-plan VALIDA: JSON parseable, 80 hojas, orden (80 slugs) superconjunto de slugs",
-    "hallazgo_clave": "5 clases de F3 quedan CUBIERTAS por lo reutilizado y NO se construyen: A3+A4.1 (facturas), A5+A4.2 (facturacion/fuentes), L1 (facturacion/asesoria). LA ENTRADA (eslabon limitante) NO se construye de cero: el pipeline de facturacion YA EXISTE; el cierre con el asesor tampoco.",
-    "descartados_con_motivo": {
-      "banco": "es banco de NICHOS del radar, NO banca — nombre enganoso",
-      "pizzepos/escandallo": "mono-negocio, se pone POR ENCIMA sin tocarlo",
-      "marketing-budget": "contabilidad LEE, no absorbe",
-      "planes-y-tiers": "otro producto (licencias)",
-      "cuenta-recurrente": "dominio despacho de pan",
-      "agenda-operacion": "dominio operacion diaria",
-      "lotes": "ciclo de produccion",
-      "entrega": "estimacion de reparto"
-    },
-    "bug_corregido_por_el_padre": "Los 8 REUTILIZAR declaraban el eje con clave corta (entrada/libro) y los 72 CONSTRUIR con valor largo (contabilidad-entrada) -> dos vocabularios mezclados rompian el tracking de F4 (que agrupa por vertical). Corregido con ejeV() en el generador y regenerado."
-  },
-  "fase4": {
-    "estado": "completada",
-    "skill": "construir-modulos",
-    "completada_el": "2026-09-28",
-    "entregable": "modules/contabilidad/ (72 modulos: index.js + module.json cada uno = 144 ficheros)",
-    "hojas_plan": {
-      "construir": 72,
-      "reutilizar": 8,
-      "adaptar": 0
-    },
-    "construidos": 72,
-    "cobertura_del_plan": "72/72 = 100%",
-    "grupos": {
-      "1": "3597f4fb",
-      "2": "e3b9e9b5",
-      "3": "73fb7aee",
-      "4": "ed9022b9",
-      "5": "18256606",
-      "6": "3cb9e737",
-      "7": "2ef43d9f",
-      "8": "8c2598a1",
-      "9": "5ecfb409"
-    },
-    "formas": {
-      "custodio": 27,
-      "reflejo": 22,
-      "puente": 13,
-      "micro-agente": 6,
-      "conversor": 4
-    },
-    "verificacion_global": "CERO fallos: los 72 pasan node --check, JSON con name/version/description, require resuelve, coherencia subscribes<->handlers. Cero require cruzado (solo _shared/ y 'crypto' nativo).",
-    "reutilizar_verificados": [
-      "filesystem",
-      "project-manager",
-      "credential-manager",
-      "facturas",
-      "facturacion/fuentes",
-      "facturacion/asesoria",
-      "inventario",
-      "metricas"
-    ],
-    "metodo": "grupos de 8 por el ORDEN de la espina (topologico), decision del dueno — NO por oleada estricta (las hojas de entrada dependen de libro/analitica)",
-    "incidencias": [
-      "grupo 4: el sub-agente se quedo sin iteraciones a 7,5/8; falto aviso-revision/module.json -> lo cerro el padre",
-      "grupo 9: el sub-agente escribio 16/16 pero NO verifico -> verifico el padre (los 8 pasan)",
-      "leccion aplicada: escribir los 16 ficheros completos ANTES de verificar"
-    ],
-    "pendiente_siguiente": "F5 (escribir-skills: skill FULL por modulo) o F6/F7 (interfaz) — no hecho todavia"
-  },
-  "fase5": {
-    "estado": "completada",
-    "skill": "escribir-skills",
-    "completada_el": "2026-09-28",
-    "entregable": "modules/cosecha/cantera/enki/<slug>/SKILL.md (72 skills FULL, PLANAS como nichos)",
-    "skills": 72,
-    "verificacion_global": "CERO fallos: 72/72 pasan el verificador (eventos, handlers, frontmatter name==slug, 6 secciones canonicas)",
-    "eventos_cubiertos": 556,
-    "handlers": 193,
-    "tamano_total_kb": 1176,
-    "grupos": {
-      "1": "2990b63a",
-      "2": "f38c348a",
-      "3": "13c2368b",
-      "4": "569c9cab",
-      "5": "30f8c099",
-      "6": "0b5d4f7f",
-      "7": "03a65f98 (14 modulos: paralelo 7+8)",
-      "8": "+aviso-al-negocio/informe-accionable",
-      "9": "3fee206d"
-    },
-    "hallazgo_script": "scripts/verificar-skill-modulo.js (el canonico de F5) esta ROTO para verticales: busca modules/<slug>/ PLANO y falla tambien con nichos. Se anade scripts/verificar-skill-contabilidad.js (ruta real + handlers + secciones). El canonico NO se toca (es de todo el repo).",
-    "hallazgo_contrato": "86 publishes declarados que el runtime NUNCA emite (pares *.failed de eventos de DOMINIO; el par real va a nivel de OP). Verificado: CERO es consumido por ningun subscribes del repo (887 eventos) -> no era bug funcional, era ruido de declaracion. Limpiados 6 duplicados claros.",
-    "nota_trazabilidad": "Los grupos 7 y 8 corrieron en paralelo y el commit 03a65f98 ('grupo 7') arrastro 6 ficheros del grupo 8. Nada perdido; la etiqueta era imprecisa (consta en el mensaje del commit)."
-  },
-  "fase6": {
-    "estado": "pendiente",
-    "skill": "decidir-interfaz"
-  },
-  "fase65": {
-    "estado": "pendiente",
-    "skill": "esquematizar-interfaz"
-  },
-  "fase7": {
-    "estado": "pendiente",
-    "skill": "construir-interfaz"
-  },
+  "fase3": { "estado": "pendiente", "skill": "planificar-construccion", "entregable": "boveda/contabilidad/proceso/fase3/diseno-oop.md" },
+  "fase3b": { "estado": "pendiente", "skill": "enki-adaptador-disenos", "entregable": "boveda/contabilidad/proceso/fase3b/plan-construccion.md" },
+  "fase4": { "estado": "pendiente", "skill": "construir-modulos", "mandato": "una hoja a la vez, orden de la espina, esquematizar(4a)+crear(4b)",
+    "tracking": { "orden": [], "realizados": [], "pendientes": [], "proximo": null } },
+  "fase5": { "estado": "pendiente", "skill": "escribir-skills" },
+  "fase6": { "estado": "pendiente", "skill": "decidir-interfaz" },
+  "fase65": { "estado": "pendiente", "skill": "esquematizar-interfaz" },
+  "fase7": { "estado": "pendiente", "skill": "construir-interfaz" },
   "decisiones_cerradas": {
     "alcance": "gestion interna primero, con miras a fiscal",
     "arquitectura": "1 proyecto = N verticales; contabilidad = 1 vertical activable por config del proyecto",

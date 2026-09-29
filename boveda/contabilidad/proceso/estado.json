@@ -3,7 +3,7 @@
   "ramas": "vertical/contabilidad",
   "persistencia": "boveda/contabilidad/proceso/",
   "modelo": "mente-ejecuta / chat-gestiona",
-  "fase_actual": "F4 COMPLETADA — 116 modulos construidos (1 clase = 1 modulo, 1:1 con las 118 hojas de F2). Siguiente: F5 escribir-skills",
+  "fase_actual": "F5 COMPLETADA — 116 skills FULL (1:1 con los 116 modulos). Proceso F0->F5 completo. Siguiente: F6/F7 interfaz, habilitar vertical y deploy",
   "nota_proceso": "Vertical transversal observadora VENDIBLE: escucha los eventos que cada negocio ya emite y reconstruye su contabilidad. Molde de proceso: boveda/nichos/proceso/ (44 modulos + 44 skills, #656).",
   "fase0": {
     "estado": "completada",
@@ -200,8 +200,19 @@
     ]
   },
   "fase5": {
-    "estado": "pendiente",
-    "entregable": "skills FULL de los 116 modulos en modules/cosecha/cantera/enki/<slug>/SKILL.md"
+    "estado": "completada",
+    "skill": "escribir-skills",
+    "completada_el": "2026-09-29",
+    "skills": 116,
+    "grupos": 15,
+    "ruta": "modules/cosecha/cantera/enki/<slug>/SKILL.md (PLANA)",
+    "verificador": "scripts/verificar-skill-contabilidad.js — 116/116 OK (el canonico verificar-skill-modulo.js da falso negativo en verticales)",
+    "formato": "6 secciones canonicas + frontmatter + contrato de eventos LITERAL del module.json + tipo casado con el codigo",
+    "lecciones": [
+      "verificar el CODIGO no los comentarios (el sub-agente cazo que mi heuristica /PosPersistencia/ casaba el comentario 'sin PosPersistencia')",
+      "UN sub-agente a la vez: 3 en paralelo se interrumpieron los 3 a los 62s (el proveedor no aguanta 3 sesiones)"
+    ],
+    "cotejo": "116/116 skills de los CONSTRUIR · ninguna falta"
   },
   "fase6": {
     "estado": "pendiente",

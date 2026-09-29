@@ -34,5 +34,14 @@
       "event": "contabilidad.huella_encadenada",
       "description": "Fire-and-forget (D8): un eslabon quedo apilado en la cadena inalterable → {project_id, eslabon, clave, huella, huella_anterior, encadenada, repetida, correlation_id}. Da a conocer que la factura quedo encadenada (huella del anterior)."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "registro-verifactu.encadenar",
+      "handler": "onEncadenarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

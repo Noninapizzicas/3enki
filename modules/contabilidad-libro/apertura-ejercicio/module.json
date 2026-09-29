@@ -25,5 +25,14 @@
       "event": "apertura-ejercicio.generar.failed",
       "description": "Par de fallo determinista (C5): sin cierre anterior que arrastrar (422, cierre_anterior_ausente), project_id ausente (400) → {status, error:{code, message, details?}}. Cierra el círculo de apertura-ejercicio.generar.request."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "apertura-ejercicio.generar",
+      "handler": "onGenerarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

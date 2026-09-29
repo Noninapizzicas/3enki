@@ -42,5 +42,21 @@
       "event": "contabilidad.tercero_actualizado",
       "description": "Fire-and-forget (N1): un tercero quedo actualizado en el maestro unico → {project_id, tercero, creado, roles, correlation_id}. Es la ficha unica con roles de la que cuelgan la cuenta 430 (cliente) y la 400 (proveedor)."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "maestro-terceros.ficha",
+      "handler": "onFichaRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "maestro-terceros.upsert",
+      "handler": "onUpsertRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

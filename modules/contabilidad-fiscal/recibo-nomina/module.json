@@ -29,5 +29,14 @@
       "event": "contabilidad.nomina_formada",
       "description": "Fire-and-forget (G1): el recibo de nomina quedo con forma asentable (los importes del sistema externo copiados, sin calcular aqui) → {project_id, id_recibo, clave_natural, periodo, empleado, neto, cuadra, faltantes, correlation_id}. Lo LEEN asiento-personal (G3) y la cadena de personal (obligacion-seguridad-social G2, lineas-nomina G6, pagos-a-cuenta G8)."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "recibo-nomina.dar_forma",
+      "handler": "onDarFormaRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

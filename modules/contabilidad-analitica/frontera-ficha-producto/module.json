@@ -24,5 +24,14 @@
       "event": "contabilidad.coste_interno",
       "description": "Fire-and-forget (H2): la ficha cruzo la frontera y su coste quedo con la forma interna contable → {project_id, clave_natural, producto, coste_unitario, coste_total, moneda, origen_ficha, faltantes, correlation_id}. Lo LEE valoracion-existencia (H1), que pone la capa de valor sobre el inventario existente."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "frontera-ficha-producto.entrar",
+      "handler": "onEntrarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

@@ -42,5 +42,21 @@
       "event": "contabilidad.cuota_amortizacion",
       "description": "Fire-and-forget (F2): hay cuota de amortizacion del periodo para un bien → {project_id, id_activo, periodo, cuota, acumulada, metodo, correlation_id}. Lo LEEN valor-neto-contable (F4, al balance), el cierre del ejercicio y el asiento de amortizacion."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "plan-amortizacion.cuota_del_periodo",
+      "handler": "onCuotaDelPeriodoRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "plan-amortizacion.declarar",
+      "handler": "onDeclararRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

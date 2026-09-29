@@ -25,5 +25,14 @@
       "event": "periodificacion.imputar.failed",
       "description": "Par de fallo determinista (C3): project_id ausente o hecho no resoluble (400) → {status, error:{code, message, details?}}. Cierra el círculo de periodificacion.imputar.request."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "periodificacion.imputar",
+      "handler": "onImputarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

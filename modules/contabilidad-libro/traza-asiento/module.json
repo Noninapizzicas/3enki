@@ -34,5 +34,14 @@
       "event": "contabilidad.traza_registrada",
       "description": "Fire-and-forget (B4): una marca de traza quedó registrada (append-only) → {project_id, marca, numero_asiento, quien, registrado, correlation_id}. Lo LEEN marca-borrador-validado (Q4) y la auditoría del libro."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "traza-asiento.registrar",
+      "handler": "onRegistrarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

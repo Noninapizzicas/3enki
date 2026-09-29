@@ -25,5 +25,14 @@
       "event": "contabilidad.excepcion_desatascada",
       "description": "Fire-and-forget (P3): una excepcion quedo DESATASCADA con motivo (propuesta, no escritura) → {project_id, excepcion_id, accion, motivo, escribe:false, regla_candidata, requiere_ratificacion, correlation_id}. Si regla_candidata != null, NO ACTUA hasta que el asesor la ratifique (ratificacion-regla-aprendida L10). Lo consume la cola (A8.1) para materializar la salida y el asesor para ratificar."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "desatasco-entrada.juzgar",
+      "handler": "onJuzgarRequest",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    }
   ]
 }

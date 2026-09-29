@@ -29,5 +29,14 @@
       "event": "contabilidad.factura_emitida",
       "description": "Fire-and-forget (O1): la factura de venta quedo emitida y registrada (no cobrada) → {project_id, factura, serie, numero, clave, cobrada:false, correlation_id}. Lo consume registro-verifactu (D8) para encadenar su huella."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "emision-factura-venta.emitir",
+      "handler": "onEmitirRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

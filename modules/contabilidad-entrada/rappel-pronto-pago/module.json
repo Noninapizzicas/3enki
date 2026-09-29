@@ -20,5 +20,14 @@
       "event": "rappel-pronto-pago.ajustar.failed",
       "description": "Par de fallo determinista (N7): project_id ausente → {status, error:{code, message, details?}}. Cierra el circulo de rappel-pronto-pago.ajustar.request."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "rappel-pronto-pago.ajustar",
+      "handler": "onAjustarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

@@ -29,5 +29,14 @@
       "event": "contabilidad.asiento_registrado",
       "description": "Fire-and-forget (B2): un asiento quedo en el diario (registrado:true) o ya estaba por su clave natural (registrado:false, un hecho = un asiento) → {project_id, asiento, numero, clave_natural, registrado, correlation_id}. Lo LEEN los derivados del libro (mayor-balanza B3, estados, tesoreria) y traza-asiento (B4)."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "escritor-diario.asentar",
+      "handler": "onAsentarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

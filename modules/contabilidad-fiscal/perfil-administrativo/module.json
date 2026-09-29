@@ -42,5 +42,21 @@
       "event": "contabilidad.perfil_fiscal_declarado",
       "description": "Fire-and-forget (D15): quedo declarado el perfil fiscal (territorio + regimen + obligaciones) de un ejercicio → {project_id, ejercicio, territorio, regimen, obligaciones, correlation_id}. Lo LEEN las hojas fiscales (calendario-fiscal D6 y las demas de la capa fiscal) para tomar sus parametros territoriales/regimen declarados."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "perfil-administrativo.obligaciones",
+      "handler": "onObligacionesRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "perfil-administrativo.declarar",
+      "handler": "onDeclararRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

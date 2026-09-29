@@ -42,5 +42,21 @@
       "event": "contabilidad.contrato_declarado",
       "description": "Fire-and-forget (A11): una fuente declaro su minimo exigible → {project_id, contrato, vertical, version, correlation_id}. Lo LEEN la verificacion de la entrada y completitud-cobertura (A12) para saber que esperar de cada vertical."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "contrato-hecho-minimo.exigir",
+      "handler": "onExigirRequest",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "contrato-hecho-minimo.declarar",
+      "handler": "onDeclararRequest",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    }
   ]
 }

@@ -42,5 +42,21 @@
       "event": "contabilidad.criterio_ratificado",
       "description": "Fire-and-forget (K9): un criterio quedo ratificado por el JEFE → {project_id, criterio, clave, valor, ratificado, correlation_id}. Lo LEEN las hojas que cierran declarativamente (B1/B7·C7·E6·F5·J6·D11·I5) para hidratar su parametro declarado."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "cola-declaraciones-criterio.fijar",
+      "handler": "onFijarRequest",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "cola-declaraciones-criterio.ratificar",
+      "handler": "onRatificarRequest",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    }
   ]
 }

@@ -20,5 +20,14 @@
       "event": "asiento-personal.construir.failed",
       "description": "Par de fallo determinista (G3): project_id ausente (400), sin recibo ni obligacion que asentar, o excepcion de la proyeccion (500) → {status, error:{code, message, details?}}. Cierra el circulo de asiento-personal.construir.request."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "asiento-personal.construir",
+      "handler": "onConstruirRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

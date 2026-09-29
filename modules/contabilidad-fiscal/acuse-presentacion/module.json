@@ -24,5 +24,14 @@
       "event": "contabilidad.acuse_ligado",
       "description": "Fire-and-forget (D13): un acuse de la administracion quedo ligado a su modelo y a su asiento → {project_id, acuse, modelo, asiento, justificante, presentado_por_sistema:false, correlation_id}. Lo consume estado-presentacion-fiscal (D12) para registrar el estado presentada/justificada."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "acuse-presentacion.ligar",
+      "handler": "onLigarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

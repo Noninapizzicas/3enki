@@ -42,5 +42,21 @@
       "event": "contabilidad.cuenta_bancaria_declarada",
       "description": "Fire-and-forget (E11): una cuenta bancaria quedo declarada/actualizada en la parcela → {project_id, cuenta, id_cuenta, moneda, actualizada, correlation_id}. Lo LEEN saldo-tesoreria (E4), conciliacion-bancaria (E1) y prevision-caja (E5) para dejar de tratar 'el banco' como un numero falso."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "maestro-cuentas-bancarias.declarar",
+      "handler": "onDeclararRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "maestro-cuentas-bancarias.listar",
+      "handler": "onListarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

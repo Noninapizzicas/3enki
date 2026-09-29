@@ -42,5 +42,21 @@
       "event": "contabilidad.regla_bancaria_propuesta",
       "description": "Fire-and-forget (E8): una regla bancaria quedo declarada (append-only) → {project_id, regla, cuenta_verificada, correlation_id}. La LEEN el corte duro del extracto (conciliacion-bancaria E1) y el juicio aislado (partida-no-identificada E7), que pasan a automatico en cuanto existe la regla."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "regla-movimiento-bancario.aplicar",
+      "handler": "onAplicarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "regla-movimiento-bancario.proponer",
+      "handler": "onProponerRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

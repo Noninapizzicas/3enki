@@ -29,5 +29,6 @@
       "event": "contabilidad.aviso_revision",
       "description": "Fire-and-forget (A8.2): un aviso de revision quedo empujado con su motivo y su cola de destino → {project_id, aviso, destino, naturaleza, correlation_id}. Lo consume motor-avisos (que produce el aviso al negocio)."
     }
-  ]
+  ],
+  "_ui": "sin superficie: su cara es el bus (puente/observador puro)"
 }

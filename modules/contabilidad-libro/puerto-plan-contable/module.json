@@ -35,5 +35,21 @@
       "event": "puerto-plan-contable.salir.failed",
       "description": "Par de fallo determinista (B6): formato no declarado/no declarable o plan ausente → {status, error:{code, message, details?}}. Cierra el circulo de puerto-plan-contable.salir.request."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "puerto-plan-contable.entrar",
+      "handler": "onEntrarRequest",
+      "type": "chat_tool",
+      "zone": "barra_chat_inferior"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "puerto-plan-contable.salir",
+      "handler": "onSalirRequest",
+      "type": "chat_tool",
+      "zone": "barra_chat_inferior"
+    }
   ]
 }

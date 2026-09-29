@@ -29,5 +29,14 @@
       "event": "contabilidad.sociedad_marcada",
       "description": "Fire-and-forget (I1): un asiento quedo etiquetado con su sociedad → {project_id, id_asiento, sociedad, correlation_id}. Lo consumen las hojas del grupo (eliminacion-intercompany I2, consolidacion I3) para saber a que sociedad pertenece cada partida."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "marca-sociedad.marcar",
+      "handler": "onMarcarRequest",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    }
   ]
 }

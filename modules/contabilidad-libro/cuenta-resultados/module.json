@@ -25,5 +25,14 @@
       "event": "cuenta-resultados.calcular.failed",
       "description": "Par de fallo determinista (C2): project_id ausente → {status, error:{code, message, details?}}. Cierra el círculo de cuenta-resultados.calcular.request."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "cuenta-resultados.calcular",
+      "handler": "onCalcularRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

@@ -20,5 +20,14 @@
       "event": "comparador-periodos.comparar.failed",
       "description": "Par de fallo determinista (J9): project_id ausente → {status, error:{code, message, details?}}. Cierra el circulo de comparador-periodos.comparar.request."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "comparador-periodos.comparar",
+      "handler": "onCompararRequest",
+      "type": "inline_render",
+      "zone": "area_chat"
+    }
   ]
 }

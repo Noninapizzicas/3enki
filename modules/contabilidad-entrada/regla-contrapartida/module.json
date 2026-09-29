@@ -42,5 +42,21 @@
       "event": "contabilidad.regla_contrapartida_propuesta",
       "description": "Fire-and-forget (A6.2): una regla de contrapartida quedo propuesta → {project_id, regla, cuenta_verificada, correlation_id}. Lo consume la ratificacion de reglas aprendidas (L10), que la hidrata de vuelta."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "regla-contrapartida.aplicar",
+      "handler": "onAplicarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "regla-contrapartida.proponer",
+      "handler": "onProponerRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

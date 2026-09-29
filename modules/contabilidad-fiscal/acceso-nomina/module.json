@@ -42,5 +42,21 @@
       "event": "contabilidad.acceso_nomina",
       "description": "Fire-and-forget (G7): la gobernanza de acceso quedo declarada por la autoridad de personal → {project_id, persona, alcance, empleado, ve_a, declarado_por:'AUTORIDAD_NOMINA', correlation_id}. Lo LEEN los modulos que sirven nomina a una persona y el resto de la cadena de personal."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "acceso-nomina.autorizar",
+      "handler": "onAutorizarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "acceso-nomina.declarar",
+      "handler": "onDeclararRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

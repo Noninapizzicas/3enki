@@ -42,5 +42,21 @@
       "event": "contabilidad.vencimiento_fiscal",
       "description": "Fire-and-forget (D6): un vencimiento fiscal declarado cae dentro de la ventana de aviso declarada → {project_id, ejercicio, vencimiento, hoy, correlation_id}. Lo consume motor-avisos (que produce el aviso al negocio/asesor). El sistema AVISA; no presenta."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "calendario-fiscal.proximos",
+      "handler": "onProximosRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "calendario-fiscal.declarar",
+      "handler": "onDeclararRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

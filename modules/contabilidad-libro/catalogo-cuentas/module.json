@@ -40,5 +40,21 @@
       "event": "catalogo-cuentas.buscar.failed",
       "description": "Par de fallo determinista (B1): project_id ausente → {status, error:{code, message, details?}}. Cierra el circulo de catalogo-cuentas.buscar.request."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "catalogo-cuentas.anadir",
+      "handler": "onAnadirRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "catalogo-cuentas.buscar",
+      "handler": "onBuscarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

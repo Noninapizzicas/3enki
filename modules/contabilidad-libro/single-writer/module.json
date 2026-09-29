@@ -42,5 +42,21 @@
       "event": "contabilidad.escritor_reclamado",
       "description": "Fire-and-forget (M2): un escritor reclamo el turno de una parcela → {project_id, parcela, dueno, concedido, correlation_id}. Lo LEEN los custodios que compiten por el turno del diario (escritor-diario B2) y el resto de custodios del libro."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "single-writer.reclamar",
+      "handler": "onReclamarRequest",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "single-writer.es_escritor",
+      "handler": "onEsEscritorRequest",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    }
   ]
 }

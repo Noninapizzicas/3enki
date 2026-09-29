@@ -25,5 +25,6 @@
       "event": "lote-admision.admitir.failed",
       "description": "Par de fallo determinista (A9): project_id ausente, hechos ausentes o item de hecho invalido → {status, error:{code, message, details?}}. Cierra el circulo de lote-admision.admitir.request y de contabilidad.hecho_normalizado."
     }
-  ]
+  ],
+  "_ui": "sin superficie: su cara es el bus (puente/observador puro)"
 }

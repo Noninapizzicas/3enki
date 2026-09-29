@@ -20,5 +20,14 @@
       "event": "liquidacion-baja-empleado.liquidar.failed",
       "description": "Par de fallo determinista (G10): project_id ausente (400), aislamiento persona-a-persona (403 AISLAMIENTO_PERSONA) o excepcion de la proyeccion (500) → {status, error:{code, message, details?}}. Cierra el circulo de liquidacion-baja-empleado.liquidar.request."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "liquidacion-baja-empleado.liquidar",
+      "handler": "onLiquidarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

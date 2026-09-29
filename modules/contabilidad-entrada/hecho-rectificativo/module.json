@@ -24,5 +24,6 @@
       "event": "contabilidad.hecho_rectificado",
       "description": "Fire-and-forget (A13): una rectificacion quedo emparejada append-only → {project_id, enlace, rectificativo_clave, original_clave, tipo, correlation_id}. Lo consume escritor-diario (B2) para apilar el asiento rectificativo sin tocar el original."
     }
-  ]
+  ],
+  "_ui": "sin superficie: su cara es el bus (puente/observador puro)"
 }

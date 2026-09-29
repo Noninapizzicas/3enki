@@ -24,5 +24,6 @@
       "event": "contabilidad.movimiento_bancario",
       "description": "Fire-and-forget (E2): cada movimiento bancario normalizado entra al libro → {project_id, banco, canal, movimiento, clave, correlation_id}. Lo consume cuadre-cobro-pago (E3)."
     }
-  ]
+  ],
+  "_ui": "sin superficie: su cara es el bus (puente/observador puro)"
 }

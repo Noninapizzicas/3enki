@@ -24,5 +24,14 @@
       "event": "contabilidad.contrapartida_propuesta",
       "description": "Fire-and-forget (A6.1): el juicio de contrapartida quedo resuelto → {project_id, propuesta, propuesta_por, regla, plan_disponible, tercero_disponible, requiere_cola, destino_cola, correlation_id}. Lo consume la regla (A6.2) como corte duro y la cola de excepcion (A8.1) cuando requiere_cola es true."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "contrapartida-asistida.juzgar",
+      "handler": "onJuzgarRequest",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    }
   ]
 }

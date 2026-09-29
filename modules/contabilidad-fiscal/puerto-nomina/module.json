@@ -34,5 +34,14 @@
       "event": "contabilidad.nomina_recibida",
       "description": "Fire-and-forget (G4): el hecho de nomina entro al sistema por la frontera → {project_id, origen, canal, nomina, clave_natural, faltantes, correlation_id}. Lo LEEN recibo-nomina (G1, le da forma asentable) y el resto del grupo de personal."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "puerto-nomina.recibir",
+      "handler": "onRecibirRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

@@ -43,5 +43,21 @@
       "event": "contabilidad.consulta_traducida",
       "description": "Fire-and-forget (Q2): una traducción quedó hecha en cualquiera de las dos direcciones → {project_id, direccion:'a_consulta'|'a_cifra', traduccion, origen:'mapa'|'juicio', cifra_disponible, correlation_id}. Lo consumen la puerta pull (Q1) y el sello de cobertura (Q3). NO implica escritura ni decisión: solo la traducción."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "puente-lenguaje-dueno.a_consulta",
+      "handler": "onAConsultaRequest",
+      "type": "chat_tool",
+      "zone": "barra_chat_inferior"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "puente-lenguaje-dueno.a_cifra",
+      "handler": "onACifraRequest",
+      "type": "chat_tool",
+      "zone": "barra_chat_inferior"
+    }
   ]
 }

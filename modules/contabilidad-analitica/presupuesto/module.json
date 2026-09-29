@@ -42,5 +42,21 @@
       "event": "contabilidad.presupuesto_fijado",
       "description": "Fire-and-forget (J3): el JEFE declaro (o dejo abierto) un objetivo por dimension y periodo → {project_id, clave, dimension, periodo, valor, umbral, abierto, correlation_id}. Lo consume desviacion (J4) para medir real vs presupuesto — es la DECLARACION, no una inferencia."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "presupuesto.fijar",
+      "handler": "onFijarRequest",
+      "type": "inline_render",
+      "zone": "area_chat"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "presupuesto.objetivo",
+      "handler": "onObjetivoRequest",
+      "type": "inline_render",
+      "zone": "area_chat"
+    }
   ]
 }

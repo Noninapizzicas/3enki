@@ -24,5 +24,14 @@
       "event": "contabilidad.conciliacion_cruzada",
       "description": "Fire-and-forget (E1): el cruce extracto↔diario quedo hecho (determinista) → {project_id, periodo, total_movimientos, casados, sin_contrapartida, sin_movimiento, descuadre, correlation_id}. Lo LEEN partida-conciliatoria (E9) e informe-conciliacion (E10)."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "conciliacion-bancaria.cruzar",
+      "handler": "onCruzarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

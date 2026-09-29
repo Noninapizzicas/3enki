@@ -25,5 +25,14 @@
       "event": "contabilidad.documento_descuadrado",
       "description": "Fire-and-forget (A4.3): importe+impuestos no cuadran con el total → {project_id, documento, esperado, total, descuadre, correlation_id}. Lo consume encolado-excepcion (A8.1): el documento va a la cola, NO se asienta mal."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "control-cuadre-documento.cuadra",
+      "handler": "onCuadraRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

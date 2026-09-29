@@ -24,5 +24,14 @@
       "event": "contabilidad.partida_propuesta",
       "description": "Fire-and-forget (E7): el juicio de la partida no identificada quedo resuelto → {project_id, movimiento, propuesta, propuesta_por, estado, tipo_partida, corte_duro, requiere_cola, destino_cola, correlation_id}. Lo consume la regla (E8) para ratificar el aprendizaje ('esta comision → esta cuenta') cuando requiere_cola es false, y la cola de excepciones cuando es true."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "partida-no-identificada.juzgar",
+      "handler": "onJuzgarRequest",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    }
   ]
 }

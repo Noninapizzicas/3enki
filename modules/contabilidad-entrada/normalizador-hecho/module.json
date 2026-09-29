@@ -30,5 +30,14 @@
       "event": "contabilidad.hecho_normalizado",
       "description": "Fire-and-forget (A2): un hecho quedo homogeneizado a la forma asentable → {project_id, hecho, clave_natural, abierto, correlation_id}. Lo consumen deduplicacion-hecho y lote-admision (A7/A9)."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "normalizador-hecho.normalizar",
+      "handler": "onNormalizarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

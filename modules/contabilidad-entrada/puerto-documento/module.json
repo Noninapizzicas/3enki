@@ -25,5 +25,14 @@
       "event": "contabilidad.documento_normalizado",
       "description": "Fire-and-forget (A4.2): un documento externo quedo convertido a la forma canonica → {project_id, forma, documento, abierto, correlation_id}. Alimenta la admision (captura-documento A3) y el cuadre (A4.3)."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "puerto-documento.entrar",
+      "handler": "onEntrarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

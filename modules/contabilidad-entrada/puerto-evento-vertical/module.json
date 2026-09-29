@@ -30,5 +30,6 @@
       "event": "contabilidad.hecho_crudo",
       "description": "Fire-and-forget (A1): un hecho crudo entro por el puerto desde una vertical → {project_id, crudo:{vertical, tipo, clave_natural, payload, faltantes}, vertical, tipo, clave_natural, correlation_id}. Lo consume normalizador-hecho (A2), la unica puerta de formato."
     }
-  ]
+  ],
+  "_ui": "sin superficie: su cara es el bus (puente/observador puro)"
 }

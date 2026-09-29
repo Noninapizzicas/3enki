@@ -24,5 +24,14 @@
       "event": "contabilidad.vencimiento_proximo",
       "description": "Fire-and-forget (E5, uno por tramo de la serie): un tramo de la prevision de caja quedo proyectado → {project_id, tramo, hasta, saldo_proyectado, supuestos, correlation_id}. Lo LEEN las cupulas de negocio y el aviso proactivo."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "prevision-caja.proyectar",
+      "handler": "onProyectarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

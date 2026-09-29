@@ -29,5 +29,14 @@
       "event": "contabilidad.proceso_anotado",
       "description": "Fire-and-forget (P2): el proceso de entrada quedo ANOTADO (append-only) → {project_id, registro, resultado:'PROCESADO'|'FALLADO', anotado:true, correlation_id}. Lo consume el panel del proceso (P1) para componer su latido."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "historial-proceso-contable.anotar",
+      "handler": "onAnotarRequest",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    }
   ]
 }

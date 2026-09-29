@@ -30,5 +30,14 @@
       "event": "sello-cobertura.sellar.failed",
       "description": "Par de fallo determinista (Q3): project_id ausente → {status, error:{code, message, details?}}. Cierra el circulo de sello-cobertura.sellar.request."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "sello-cobertura.sellar",
+      "handler": "onSellarRequest",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    }
   ]
 }

@@ -29,5 +29,14 @@
       "event": "contabilidad.aviso_entregado",
       "description": "Fire-and-forget (R1): un aviso quedo ENTREGADO (y confirmado) al negocio cliente por el canal declarado → {project_id, aviso_id, confirmacion, entregado, canal, correlation_id}. Es la confirmacion de entrega que motor-avisos (K2) NO podía dar (el solo PRODUCE). Lo consume el cuadro de mando (J8) y la operacion."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "aviso-al-negocio.entregar",
+      "handler": "onEntregarRequest",
+      "type": "inline_render",
+      "zone": "area_chat"
+    }
   ]
 }

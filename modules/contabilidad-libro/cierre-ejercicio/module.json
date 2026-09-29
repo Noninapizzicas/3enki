@@ -42,5 +42,21 @@
       "event": "contabilidad.ejercicio_cerrado",
       "description": "Fire-and-forget (C4): el ejercicio quedo cerrado (o ya lo estaba, idempotente) → {project_id, ejercicio, cierre, clave_natural, cerrado, ya_cerrado, correlation_id}. Lo LEE apertura-ejercicio (C5) para arrastrar los saldos al ejercicio nuevo, y los estados/auditoría."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "cierre-ejercicio.cerrar",
+      "handler": "onCerrarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "cierre-ejercicio.reabrir",
+      "handler": "onReabrirRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

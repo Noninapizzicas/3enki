@@ -3,7 +3,7 @@
   "ramas": "vertical/contabilidad",
   "persistencia": "boveda/contabilidad/proceso/",
   "modelo": "mente-ejecuta / chat-gestiona",
-  "fase_actual": "F5 COMPLETADA — 116 skills FULL (1:1 con los 116 modulos). Proceso F0->F5 completo. Siguiente: F6/F7 interfaz, habilitar vertical y deploy",
+  "fase_actual": "F6/F7 COMPLETADA — interfaz declarada (116 ui_handlers con type+zone). Siguiente: habilitar la vertical y deploy (del dueno)",
   "nota_proceso": "Vertical transversal observadora VENDIBLE: escucha los eventos que cada negocio ya emite y reconstruye su contabilidad. Molde de proceso: boveda/nichos/proceso/ (44 modulos + 44 skills, #656).",
   "fase0": {
     "estado": "completada",
@@ -215,8 +215,19 @@
     "cotejo": "116/116 skills de los CONSTRUIR · ninguna falta"
   },
   "fase6": {
-    "estado": "pendiente",
-    "skill": "decidir-interfaz"
+    "estado": "completada",
+    "skill": "decidir-interfaz",
+    "completada_el": "2026-09-29",
+    "entregable": "boveda/contabilidad/proceso/fase6/decision-interfaz.md + ui_handlers en los 116 module.json",
+    "tipos": {
+      "workspace_module": 63,
+      "system_panel": 27,
+      "inline_render": 13,
+      "chat_tool": 5,
+      "sin_superficie": 8
+    },
+    "hallazgo": "el script canonico decidir-interfaz.js decide por TOOLS; la vertical tiene 0 tools y 116 RPCs -> falso negativo en bloque. Adaptado con scripts propios.",
+    "verificacion": "frontend.validate: 607->607 drift (CERO introducido) · validate-all: 0 findings PASS"
   },
   "fase65": {
     "estado": "pendiente",

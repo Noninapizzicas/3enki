@@ -20,5 +20,14 @@
       "event": "estado-cuenta-proveedor.extracto.failed",
       "description": "Par de fallo determinista (N4): project_id ausente → {status, error:{code, message, details?}}. Cierra el circulo de estado-cuenta-proveedor.extracto.request. OJO: no hay datos para componer (disponible:false) NO es un fallo: es un no-disponible declarado en la response 200."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "estado-cuenta-proveedor.extracto",
+      "handler": "onExtractoRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

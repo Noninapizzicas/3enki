@@ -25,5 +25,14 @@
       "event": "contabilidad.narracion",
       "description": "Fire-and-forget (R3): los estados contables quedaron NARRADOS en lenguaje del negocio cliente → {project_id, narracion, origen:'plantilla'|'juicio', estados_narrados, faltan, correlation_id}. Lo consume la entrega al negocio (R1) para el informe del cliente. Narra lo que hay; no estima ni decide."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "narrador-estados.narrar",
+      "handler": "onNarrarRequest",
+      "type": "inline_render",
+      "zone": "area_chat"
+    }
   ]
 }

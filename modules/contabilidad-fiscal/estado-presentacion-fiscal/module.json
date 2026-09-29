@@ -42,5 +42,21 @@
       "event": "contabilidad.obligacion_avanzada",
       "description": "Fire-and-forget (D12): una obligacion fiscal cambio de estado → {project_id, obligacion, estado_anterior, estado, avances, correlation_id}. Lo consume el panel/proceso contable para saber en que punto esta cada modelo."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "estado-presentacion-fiscal.avanzar",
+      "handler": "onAvanzarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "estado-presentacion-fiscal.estado",
+      "handler": "onEstadoRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

@@ -42,5 +42,21 @@
       "event": "contabilidad.negocio_onboarded",
       "description": "Fire-and-forget (K1): un negocio quedo dado de alta (plan y fuentes declarados) → {project_id, negocio, config, plan, fuentes, parametros, abierto, faltan, correlation_id}. Es la ACTIVACION DE LA VERTICAL por evento: lo consume activacion-vertical (K4), que es quien enciende; onboarding-negocio solo declara el alta y emite."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "onboarding-negocio.recoger",
+      "handler": "onRecogerRequest",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "onboarding-negocio.leer",
+      "handler": "onLeerRequest",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    }
   ]
 }

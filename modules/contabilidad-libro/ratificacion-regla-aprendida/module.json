@@ -34,5 +34,6 @@
       "event": "contabilidad.regla_ratificada",
       "description": "Fire-and-forget (L10): el ASESOR ratifico o bloqueo la regla aprendida → {project_id, regla, propuesta_id, origen, decision:'ratifica'|'bloquea', actua, asesor, ratificada_por:'asesor', ratificada_en, correlation_id}. Lo LEEN regla-contrapartida (A6.2) y regla-movimiento-bancario (E8): solo ACTUAN si decision==='ratifica'. El evento NO lo emite el sistema por si mismo: sin ratificacion real no hay regla_ratificada."
     }
-  ]
+  ],
+  "_ui": "sin superficie: su cara es el bus (puente/observador puro)"
 }

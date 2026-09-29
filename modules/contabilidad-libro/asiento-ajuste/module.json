@@ -29,5 +29,14 @@
       "event": "contabilidad.asiento_ajuste_recibido",
       "description": "Fire-and-forget (B5 → B2/B4): el ajuste del asesor SALE hacia el libro como asiento de corrección NUEVO → {project_id, ajuste, rectifica_a, clave_correccion, suma:true, correlation_id}. Lo LEEN escritor-diario (B2, que lo AÑADE: la corrección suma) y traza-asiento (B4, que conserva el rastro)."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "asiento-ajuste.entrar",
+      "handler": "onEntrarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

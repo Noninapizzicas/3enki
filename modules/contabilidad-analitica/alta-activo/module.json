@@ -29,5 +29,14 @@
       "event": "contabilidad.activo_registrado",
       "description": "Fire-and-forget (F1): un bien quedo en la parcela del inmovilizado → {project_id, id_activo, activo, alta, actualizado, abierto, correlation_id}. Lo LEEN plan-amortizacion (F2, genera su tabla), valor-neto-contable (F4, al balance) y baja-activo (F3, al retirar el bien)."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "alta-activo.registrar",
+      "handler": "onRegistrarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

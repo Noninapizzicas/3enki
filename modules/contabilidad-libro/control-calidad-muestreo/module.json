@@ -25,5 +25,14 @@
       "event": "control-calidad-muestreo.seleccionar.failed",
       "description": "Par de fallo determinista (L8): project_id ausente → {status, error:{code, message, details?}}. Cierra el circulo de control-calidad-muestreo.seleccionar.request y de contabilidad.asiento_registrado."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "control-calidad-muestreo.seleccionar",
+      "handler": "onSeleccionarRequest",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    }
   ]
 }

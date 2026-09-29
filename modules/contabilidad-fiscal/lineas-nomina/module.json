@@ -20,5 +20,14 @@
       "event": "lineas-nomina.desglosar.failed",
       "description": "Par de fallo determinista (G6): project_id ausente (400), sin recibo ni conceptos que desglosar, o excepcion de la proyeccion (500) → {status, error:{code, message, details?}}. Cierra el circulo de lineas-nomina.desglosar.request."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "lineas-nomina.desglosar",
+      "handler": "onDesglosarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

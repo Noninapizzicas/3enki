@@ -39,5 +39,14 @@
       "event": "contabilidad.delta_revision",
       "description": "Fire-and-forget (L9): hubo delta desde el ultimo visto bueno → {project_id, desde, fuente_desde, sin_revision_previa, num_asientos_nuevos, num_ajustes, num_reglas_cambiadas, importe_delta, requiere_revision, abierto, correlation_id}. Lo LEEN la vista revisable (L2) y la capa de avisos (K2) para poner el ojo solo en lo nuevo. NO es una revision ni una firma: el sistema no ratifica nada."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "cambio-desde-ultima-revision.delta",
+      "handler": "onDeltaRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

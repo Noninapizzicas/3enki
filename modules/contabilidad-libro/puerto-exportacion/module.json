@@ -33,5 +33,21 @@
       "event": "puerto-exportacion.entrar.failed",
       "description": "Par de fallo determinista (L1): formato no declarado (400), formato no declarable (422), ajustes ausentes o no serializables (400/422) → {status, error:{code, message, details?}}. Cierra el circulo de puerto-exportacion.entrar.request."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "puerto-exportacion.salir",
+      "handler": "onSalirRequest",
+      "type": "chat_tool",
+      "zone": "barra_chat_inferior"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "puerto-exportacion.entrar",
+      "handler": "onEntrarRequest",
+      "type": "chat_tool",
+      "zone": "barra_chat_inferior"
+    }
   ]
 }

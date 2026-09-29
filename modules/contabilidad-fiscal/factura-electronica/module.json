@@ -33,5 +33,21 @@
       "event": "factura-electronica.salir.failed",
       "description": "Par de fallo determinista (D9): formato no declarado (400) o no declarable (422), factura invalida (400) → {status, error:{code, message, details?}}. Cierra el circulo de factura-electronica.salir.request."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "factura-electronica.entrar",
+      "handler": "onEntrarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "factura-electronica.salir",
+      "handler": "onSalirRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

@@ -24,5 +24,14 @@
       "event": "contabilidad.modelo_exportado",
       "description": "Fire-and-forget (D7): el modelo fiscal quedo exportado hacia el programa del asesor → {project_id, modelo, destino, formato, presentado:false, firmado:false, correlation_id}. Cierra el bucle hacia fuera; el asesor presenta y firma."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "generador-modelo.exportar",
+      "handler": "onExportarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

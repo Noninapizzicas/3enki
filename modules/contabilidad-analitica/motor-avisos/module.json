@@ -54,5 +54,14 @@
       "event": "contabilidad.aviso_producido",
       "description": "Fire-and-forget (K2): un Aviso quedo PRODUCIDO (no entregado: la entrega es R1) → {project_id, aviso, aviso_id, tipo, asunto, destino, canal, catalogo_disponible, correlation_id}. Lo consume aviso-negocio (R1), que lo ENTREGA y CONFIRMA."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "motor-avisos.producir",
+      "handler": "onProducirRequest",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    }
   ]
 }

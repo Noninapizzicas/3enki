@@ -24,5 +24,14 @@
       "event": "contabilidad.cobertura_medida",
       "description": "Fire-and-forget (A12): LA metrica unica quedo medida → {project_id, vertical, cobertura, correlation_id}. La LEEN SelloCobertura (Q3), AvisoCuadre (C6), TasaCoberturaEntrada (P4) y declaracion-fuente-faltante (A15) — no la recalculan."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "completitud-cobertura.medir",
+      "handler": "onMedirRequest",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    }
   ]
 }

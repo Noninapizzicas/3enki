@@ -29,5 +29,14 @@
       "event": "contabilidad.aviso_cuadre",
       "description": "Fire-and-forget (C6): la cobertura no estaba completa y el aviso de cuadre quedo empujado con su motivo y su destino declarable → {project_id, aviso, destino, correlation_id}. Lo consume motor-avisos (que produce el aviso al negocio/asesor)."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "aviso-cuadre.avisar",
+      "handler": "onAvisarRequest",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    }
   ]
 }

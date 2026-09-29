@@ -24,5 +24,14 @@
       "event": "contabilidad.salida_verificada",
       "description": "Fire-and-forget (M1): una salida paso el cerrojo — SOLO calculos, no realimenta la operacion → {project_id, salida, plano:'calculo', patron, no_realimenta:true, correlation_id}. Lo LEEN el resto de la vertical (y el test de la frontera) como testigo anti-bucle. Solo se publica con conforme:true: una salida no verificable NO se declara verificada."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "frontera-planos.verificar",
+      "handler": "onVerificarRequest",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    }
   ]
 }

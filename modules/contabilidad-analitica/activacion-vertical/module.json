@@ -29,5 +29,14 @@
       "event": "contabilidad.vertical_activada",
       "description": "Fire-and-forget (K4): una vertical de contabilidad quedo ENCENDIDA por la configuracion declarada → {project_id, negocio, vertical, plan, origen_config, correlation_id}. Lo consume el resto de la vertical para saber que debe ponerse en marcha."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "activacion-vertical.activar",
+      "handler": "onActivarRequest",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    }
   ]
 }

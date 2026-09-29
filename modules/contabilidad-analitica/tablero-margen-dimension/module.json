@@ -20,5 +20,14 @@
       "event": "tablero-margen-dimension.cruzar.failed",
       "description": "Par de fallo determinista (J10): project_id ausente → {status, error:{code, message, details?}}. Cierra el circulo de tablero-margen-dimension.cruzar.request."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "tablero-margen-dimension.cruzar",
+      "handler": "onCruzarRequest",
+      "type": "inline_render",
+      "zone": "area_chat"
+    }
   ]
 }

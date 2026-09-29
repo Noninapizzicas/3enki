@@ -25,5 +25,14 @@
       "event": "contabilidad.documento_admitido",
       "description": "Fire-and-forget (A3): el documento quedo admitido y con campos validados → {project_id, documento, origen, correlation_id}. Lo consume control-cuadre-documento (A4.3)."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "captura-documento.admitir",
+      "handler": "onAdmitirRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

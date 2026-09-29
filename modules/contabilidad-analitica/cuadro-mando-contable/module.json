@@ -24,5 +24,14 @@
       "event": "contabilidad.cuadro_compuesto",
       "description": "Fire-and-forget (J8): el cuadro del jefe quedo COMPUESTO (agregacion de cifras ya calculadas, sin bajar al asiento) → {project_id, periodo, cuadro, faltan, abierto, correlation_id}. Lo consumen los canales de entrega del negocio; el cuadro NO decide nada, solo presenta."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "cuadro-mando-contable.componer",
+      "handler": "onComponerRequest",
+      "type": "inline_render",
+      "zone": "area_chat"
+    }
   ]
 }

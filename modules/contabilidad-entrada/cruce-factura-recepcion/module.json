@@ -24,5 +24,14 @@
       "event": "contabilidad.cruce_descuadrado",
       "description": "Fire-and-forget (N5): el cotejo NO cuadra (cuadra:false) o quedo incompleto por un lado ausente (completo:false) → {project_id, cuadra, completo, lados_faltantes, diferencias, tolerancias, resuelve, correlation_id}. Lo LEEN la cola de excepciones y el aviso al asesor: las diferencias se DECLARAN y van a cola, el reflejo NO las corrige."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "cruce-factura-recepcion.cotejar",
+      "handler": "onCotejarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

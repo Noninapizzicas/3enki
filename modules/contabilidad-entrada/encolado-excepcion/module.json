@@ -47,5 +47,21 @@
       "event": "contabilidad.excepcion_encolada",
       "description": "Fire-and-forget (A8.1): lo dudoso quedo en cola y el flujo sigue → {project_id, excepcion, destino, naturaleza, encolada, correlation_id}. Lo consumen aviso-revision (A8.2) para empujar el aviso, panel-proceso-contable y desatasco-entrada."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "encolado-excepcion.encolar",
+      "handler": "onEncolarRequest",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "encolado-excepcion.tomar",
+      "handler": "onTomarRequest",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    }
   ]
 }

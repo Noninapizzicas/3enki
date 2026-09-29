@@ -24,5 +24,14 @@
       "event": "contabilidad.vencimiento_proximo",
       "description": "Fire-and-forget (N6): un vencimiento quedo calculado (o declarado [ABIERTO] si falta la politica) → {project_id, vencimiento, lado, fecha_vencimiento, abierto, correlation_id}. Lo LEEN prevision-caja (E5) y antiguedad-de-saldos (N8)."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "vencimiento-pago.calcular",
+      "handler": "onCalcularRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

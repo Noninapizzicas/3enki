@@ -42,5 +42,21 @@
       "event": "contabilidad.cifra_archivada",
       "description": "Fire-and-forget (L7): una cifra quedo con su documento origen ARCHIVADO y ENLAZADO (append-only) → {project_id, cifra, documento, documento_id, huella, correlation_id}. Solo se emite con archivo REAL (no con el idempotente). Lo LEEN la vista revisable (L2) y la auditoria/inspeccion del libro."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "expediente-documental.archivar",
+      "handler": "onArchivarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "expediente-documental.recuperar",
+      "handler": "onRecuperarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

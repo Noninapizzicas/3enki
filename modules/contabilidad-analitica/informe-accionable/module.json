@@ -25,5 +25,14 @@
       "event": "contabilidad.recomendacion",
       "description": "Fire-and-forget (R2): quedó PROPUESTA una recomendación (qué hacer con el informe) → {project_id, informe_id, recomendacion, origen:'regla'|'juicio', decide_dueno:true, correlation_id}. Lo consume la entrega al negocio (R1) para adjuntar el «qué hacer» al informe. NO implica decisión: EL DUEÑO DECIDE."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "informe-accionable.juzgar",
+      "handler": "onJuzgarRequest",
+      "type": "chat_tool",
+      "zone": "barra_chat_inferior"
+    }
   ]
 }

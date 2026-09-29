@@ -42,5 +42,6 @@
       "event": "contabilidad.firma_registrada",
       "description": "Fire-and-forget (L3): una firma REAL DEL ASESOR quedo registrada (append-only) → {project_id, ambito, firma, asesor, marca, correlation_id}. Solo se emite con firma puesta por el asesor; el sistema nunca lo emite por su cuenta. Lo LEEN marca-borrador-validado (Q4) y cambio-desde-ultima-revision (L9)."
     }
-  ]
+  ],
+  "_ui": "sin superficie: su cara es el bus (puente/observador puro)"
 }

@@ -33,5 +33,21 @@
       "event": "clave-natural.coincide.failed",
       "description": "Par de fallo determinista (M3): a o b ausente/invalido → {status, error:{code, message, details?}}. Cierra el circulo de clave-natural.coincide.request."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "clave-natural.calcular",
+      "handler": "onCalcularRequest",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "clave-natural.coincide",
+      "handler": "onCoincideRequest",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    }
   ]
 }

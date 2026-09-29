@@ -20,5 +20,14 @@
       "event": "conceptos-extra-nomina.imputar.failed",
       "description": "Par de fallo determinista (G9): project_id o concepto ausente (400), o excepcion de la proyeccion (500) → {status, error:{code, message, details?}}. Cierra el circulo de conceptos-extra-nomina.imputar.request."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "conceptos-extra-nomina.imputar",
+      "handler": "onImputarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

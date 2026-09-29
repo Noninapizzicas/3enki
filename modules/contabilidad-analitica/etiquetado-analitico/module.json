@@ -25,5 +25,14 @@
       "event": "contabilidad.dimension_propuesta",
       "description": "Fire-and-forget (J1): el micro-agente PROPUSO una dimension analitica (centro/linea/producto) para un hecho → {project_id, hecho_id, propuesta, origen:'regla'|'juicio', correlation_id}. Es la PERSISTENCIA DURADERA del juicio (la memoria en proceso no basta): lo consumen la analitica de margen (J2) y el tablero por dimension (J10). NUNCA implica escritura: solo se declara la propuesta."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "etiquetado-analitico.juzgar",
+      "handler": "onJuzgarRequest",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    }
   ]
 }

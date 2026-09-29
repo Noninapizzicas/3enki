@@ -42,5 +42,21 @@
       "event": "contabilidad.parcela_reclamada",
       "description": "Fire-and-forget (I4): una parcela quedo reclamada por su negocio (abierta o con su unico escritor) → {project_id, negocio, escritor, correlation_id}. Declara el dueño de la parcela para el resto de la vertical."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "aislamiento-negocio.parcela",
+      "handler": "onParcelaRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "aislamiento-negocio.escritor",
+      "handler": "onEscritorRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

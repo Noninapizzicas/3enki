@@ -29,5 +29,14 @@
       "event": "contabilidad.declaracion_rectificada",
       "description": "Fire-and-forget (D14): una declaracion presentada quedo rectificada (append-only, trazada) → {project_id, rectificacion, id, original_clave, tipo, borra_original:false, suma:true, correlation_id}. Deja constancia de que el original no se borro y la rectificacion sumo."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "rectificacion-declaracion.rectificar",
+      "handler": "onRectificarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

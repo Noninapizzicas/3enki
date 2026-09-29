@@ -24,5 +24,14 @@
       "event": "contabilidad.respuesta_consulta",
       "description": "Fire-and-forget (Q1): hay respuesta a una pregunta del dueño (puerta pull) → {project_id, pregunta, fuente, respuesta, disponible, correlation_id}. Lo consume sello-cobertura (Q3) para sellar la completitud de lo consultado y puente-lenguaje-dueno (Q2) para traducir la cifra al lenguaje del dueño. Disponible:false → no se inventa cifra."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "consulta-cuentas-bajo-demanda.preguntar",
+      "handler": "onPreguntarRequest",
+      "type": "chat_tool",
+      "zone": "barra_chat_inferior"
+    }
   ]
 }

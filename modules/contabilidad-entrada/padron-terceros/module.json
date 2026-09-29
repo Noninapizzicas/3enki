@@ -30,5 +30,14 @@
       "event": "contabilidad.identidad_unificada",
       "description": "Fire-and-forget (N2): una identidad de tercero quedo unificada por numero fiscal → {project_id, tercero, creada, correlation_id}. Lo consume el maestro de terceros (N1)."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "padron-terceros.unificar",
+      "handler": "onUnificarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

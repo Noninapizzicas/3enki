@@ -29,5 +29,6 @@
       "event": "contabilidad.fuente_faltante",
       "description": "Fire-and-forget (A15): una vertical no publica hechos necesarios y queda DECLARADO (abierto + aviso) → {project_id, vertical, declaracion, faltantes, correlation_id}. Lo LEEN la cola de excepciones y el bucle de declaracion de criterios (K9); no obliga a la fuente a producirlo."
     }
-  ]
+  ],
+  "_ui": "sin superficie: su cara es el bus (puente/observador puro)"
 }

@@ -29,5 +29,14 @@
       "event": "contabilidad.desviacion",
       "description": "Fire-and-forget (J4): la desviacion se salio del UMBRAL DECLARADO y hay que avisar → {project_id, desviacion, dimension, periodo, umbral, aviso, correlation_id}. Lo consume motor-avisos (K2) para producir el aviso. Sin umbral declarado NO se emite."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "desviacion.calcular",
+      "handler": "onCalcularRequest",
+      "type": "inline_render",
+      "zone": "area_chat"
+    }
   ]
 }

@@ -24,5 +24,14 @@
       "event": "contabilidad.factura_rectificada",
       "description": "Fire-and-forget (O2): quedo DERIVADA una rectificativa (correccion comercial posterior) → {project_id, rectificativa, referencia_original, original_intacta:true, corrige_por_suma:true, correlation_id}. El original NO se borra; lo consume el libro (escritor-diario B2) para asentar la correccion por SUMA."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "factura-rectificativa.calcular",
+      "handler": "onCalcularRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

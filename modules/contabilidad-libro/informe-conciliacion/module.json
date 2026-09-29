@@ -20,5 +20,14 @@
       "event": "informe-conciliacion.componer.failed",
       "description": "Par de fallo determinista (E10): project_id ausente → {status, error:{code, message, details?}}. Cierra el circulo de informe-conciliacion.componer.request."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "informe-conciliacion.componer",
+      "handler": "onComponerRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

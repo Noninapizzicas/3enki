@@ -42,5 +42,21 @@
       "event": "contabilidad.cierre_anclado",
       "description": "Fire-and-forget (A14): el cierre de una vertical quedo anclado a su unidad declarada → {project_id, anclaje, vertical, unidad_de_cierre, correlation_id}. Lo LEEN los cerrojos de cierre (C4 cierre-ejercicio, tesoreria) y el bucle de declaracion (K9)."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "anclaje-cierre-vertical.anclar",
+      "handler": "onAnclarRequest",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "anclaje-cierre-vertical.declarar",
+      "handler": "onDeclararRequest",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    }
   ]
 }

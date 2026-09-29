@@ -39,7 +39,16 @@ const completo = {
   assert.strictEqual(s3.skill, null, 'flag verificado → cierra');
 
   // 4. plan incompleto → sigue construyendo (no llega a FASE 8)
-  const incompleto = { ...completo, faltan_por_construir: 1, construidos: 2 };
+  // El progreso real trae hojas[] (lo que recorre el ciclo módulo-por-módulo):
+  // la primera hoja sin construir empuja la FASE 4.
+  const incompleto = {
+    ...completo, faltan_por_construir: 1, construidos: 2,
+    hojas: [
+      { slug: 'a', construido: true,  con_skill: true,  interfaz_necesita: false, con_interfaz: true },
+      { slug: 'b', construido: true,  con_skill: true,  interfaz_necesita: false, con_interfaz: true },
+      { slug: 'c', construido: false, con_skill: false, interfaz_necesita: false, con_interfaz: false }
+    ]
+  };
   const s4 = m._decidirSiguiente(incompleto);
   assert.strictEqual(s4.skill, 'construir-modulos', 'plan incompleto → FASE 4');
 

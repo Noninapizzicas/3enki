@@ -347,14 +347,29 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
       // construir: fantasmas que nunca existen en disco, así que
       // faltan_por_construir jamás bajaba a 0 y el rail no llegaba a completado.
       const slugs = this._hojasDelPlan(contenido);
+      const acciones = this._accionesDelPlan(contenido);
       let construidos = 0, con_skill = 0, con_interfaz_ops = 0;
+      // Una hoja REUTILIZAR apunta a un módulo que YA EXISTE en el sistema: no
+      // hay módulo que construir ni skill de cantera que escribir (y los de
+      // sistema no la tienen). Cuenta como satisfecha si el módulo está EN
+      // DISCO; sin el en disco → fantasma del plano, no hoja a construir.
+      // Antes se le exigía skill como a cualquier CONSTRUIR y por eso
+      // faltan_por_skill jamás bajaba a 0: la FASE 8 no llegaba a cerrar.
       // Estado POR HOJA, en orden del plan — lo que el ciclo módulo-por-módulo
       // recorre para actuar sobre la PRIMERA hoja incompleta. Cada hoja recorre
       // SUS fases (construir → skill → interfaz) antes de que empiece la siguiente.
       const hojas = [];
       for (const slug of slugs) {
-        const h = { slug, construido: false, con_skill: false, interfaz_necesita: false, con_interfaz: false };
+        const accion = acciones.get(slug) || '';
         const dirModulo = this._buscarModulo(slug);
+        // REUTILIZAR — el módulo del sistema ya cumple; solo cuenta si existe.
+        if (accion === 'REUTILIZAR') {
+          const satisfecha = !!dirModulo;
+          if (satisfecha) { construidos++; con_skill++; }
+          hojas.push({ slug, accion, reutiliza: true, construido: satisfecha, con_skill: satisfecha, interfaz_necesita: false, con_interfaz: true });
+          continue;
+        }
+        const h = { slug, accion, construido: false, con_skill: false, interfaz_necesita: false, con_interfaz: false };
         if (dirModulo) {
           h.construido = true; construidos++;
           if (this._skillEnCantera(slug)) { h.con_skill = true; con_skill++; }
@@ -364,13 +379,14 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
         }
         hojas.push(h);
       }
+      const total = slugs.length;
       return {
         project_id,
-        total: slugs.length,
+        total,
         construidos,
         con_skill,
         con_interfaz_ops,
-        faltan_por_construir: slugs.length - construidos,
+        faltan_por_construir: total - construidos,
         faltan_por_skill: construidos - con_skill,
         faltan_por_interfaz: con_skill - con_interfaz_ops,
         slugs,
@@ -477,6 +493,24 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
     }
     return [...new Set((contenido.match(/[a-z][a-z0-9]*(?:-[a-z0-9]+)+/g) || [])
       .filter(s => s.length > 3 && !VOCABULARIO_DEL_PATRON.has(s)))];
+  }
+
+  // La ACCIÓN que la espina declara por hoja (mapa slug → 'CONSTRUIR'|'ADAPTAR'|
+  // 'REUTILIZAR'). No forma parte del contrato de _hojasDelPlan (que devuelve
+  // slugs): esto añade el dato que el gate F8 necesita para no exigir skill a
+  // las hojas REUTILIZAR — módulos del sistema que ya existen y no la tienen.
+  // Sin espina o sin accion declarada → '' (el gate las trata como CONSTRUIR).
+  _accionesDelPlan(contenido) {
+    const mapa = new Map();
+    const espina = extraerEspina(contenido);
+    if (espina && Array.isArray(espina.hojas)) {
+      for (const h of espina.hojas) {
+        const slug = h && typeof h.slug === 'string' ? h.slug.trim() : null;
+        if (!slug || slug.includes('/')) continue;
+        mapa.set(slug, h && typeof h.accion === 'string' ? h.accion.toUpperCase() : '');
+      }
+    }
+    return mapa;
   }
 
   // Localiza el directorio de un módulo: modules/<slug>/ o anidado

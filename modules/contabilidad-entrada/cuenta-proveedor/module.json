@@ -1,0 +1,42 @@
+{
+  "_doc": "Manifest de contabilidad-entrada/cuenta-proveedor — REFLEJO STATELESS (N3, hoja del plan). LA CUENTA CORRIENTE DEL PROVEEDOR (lo que le DEBEMOS), DERIVADA del libro: mayor auxiliar del tercero con cada factura de compra VIVA y su saldo. NO almacena: el libro es escritor-diario (B2) y la ficha es maestro-terceros (N1) — aqui solo se DERIVA por EVENTO. 🔴 EL MAESTRO DE TERCEROS ES UNICO (N1, ya construido): cliente y proveedor cuelgan del MISMO tercero (un tercero, un registro con `roles`; un tercero puede ser cliente Y proveedor). Este reflejo NO crea un maestro nuevo ni una ficha paralela: pide la ficha a maestro-terceros.ficha.request POR EVENTO y trabaja sobre ESE tercero; si el maestro no responde y no se declara la ficha → tercero_disponible:false (no se inventa el tercero). 🔴 LA CUENTA CONTABLE ES DECLARABLE, NO CABLEADA: ninguna subcuenta (400.x, 410...) esta escrita en el codigo — la trae el input (`cuenta`) o la ficha del tercero (`cuenta_proveedor`); sin cuenta declarada el emparejamiento usa la CLAVE del tercero declarada en los apuntes (tercero/clave/nif) y el resultado declara `criterio_emparejamiento` con que se emparejo. ATRIBUTOS del diseno: diario:EscritorDiario, tercero:Tercero; METODOS: saldo(t):Cuantía, facturas_vivas(t):Set<Factura>. Invariantes: DETERMINISTA (mismos asientos + mismo tercero + mismo convenio → mismo saldo); dato ausente = desconocido — sin asientos NO se estima un saldo (disponible:false, saldo:null; jamas se devuelve 0 por defecto), una factura sin importe declarado no se da por viva ni por pagada y va aparte en abierto.facturas_sin_importe, y sin cuenta/clave no se afirma que un asiento sea del tercero; NO escribe, NO persiste, NO muta y NO decide — la cuenta corriente es un DERIVADO del libro. El convenio de signo es DECLARADO y visible (`acreedor` por defecto: saldo = Σhaber − Σdebe; `deudor`: Σdebe − Σhaber). Una factura es VIVA si queda pendiente distinto de cero; lo APLICADO a una factura sale de los asientos que DECLARAN aplicarla (`aplica_a`/`pago_de`). Los asientos se reciben declarados o se PIDE al diario (escritor-diario B2) POR EVENTO. Escucha contabilidad.asiento_registrado SOLO como señal tolerante (la cuenta es BAJO DEMANDA y stateless: no acumula). FORMA: REFLEJO stateless, sin PosPersistencia ni onProjectActivated. Proyecciones `_saldo` y `_facturas_vivas`. Cierra el circulo: error → cuenta-proveedor.<op>.failed.",
+  "name": "cuenta-proveedor",
+  "version": "0.1.0",
+  "description": "Reflejo (N3): la cuenta corriente del proveedor derivada del libro — lo que le debemos y sus facturas vivas, sobre el tercero UNICO del maestro (sin maestro nuevo) y con la cuenta contable declarable.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "cuenta-proveedor.saldo.request",
+      "handler": "onSaldoRequest",
+      "description": "RPC reflejo (lectura pura, determinista): {project_id, tercero?|tercero_id?|nif?, cuenta?, convenio?:'acreedor'|'deudor', asientos?|libro?, periodo?} → {project_id, tipo:'cuenta-proveedor', tercero, tercero_disponible, saldo, convenio, sum_debe, sum_haber, num_apuntes, apuntes, disponible, criterio_emparejamiento, fuente_asientos, fuente_tercero, roles, deriva_de, abierto}. El tercero viene declarado o se PIDE al MAESTRO UNICO maestro-terceros.ficha.request (N1) POR EVENTO; los asientos se reciben declarados o se PIDE a escritor-diario (B2) POR EVENTO. Sin asientos → disponible:false y saldo:null (no se devuelve 0). Responde por cuenta-proveedor.saldo.response; project_id ausente → cuenta-proveedor.saldo.failed."
+    },
+    {
+      "event": "cuenta-proveedor.facturas_vivas.request",
+      "handler": "onFacturasVivasRequest",
+      "description": "RPC reflejo (lectura pura, determinista): misma entrada → {project_id, tipo:'cuenta-proveedor', tercero, facturas_vivas:[{clave, numero, clave_natural, fecha, importe, aplicado, pendiente, viva, fecha_vencimiento, asiento}], facturas, num_facturas_vivas, num_facturas, total_pendiente, disponible, criterio_emparejamiento, abierto}. VIVA = pendiente != 0 (sin criterio cableado). Una factura sin importe declarado NO se da por viva ni por pagada: va aparte en abierto.facturas_sin_importe (nada se estima). Responde por cuenta-proveedor.facturas_vivas.response; project_id ausente → cuenta-proveedor.facturas_vivas.failed."
+    },
+    {
+      "event": "contabilidad.asiento_registrado",
+      "handler": "onAsientoRegistrado",
+      "description": "Fire-and-forget (B2 → N3): un asiento quedo registrado → se deja constancia en el log de que la cuenta corriente quedo desactualizada. El reflejo es stateless y la cuenta es BAJO DEMANDA: NO acumula asientos ni recalcula saldos proactivamente. Tolerante: sin project_id se ignora."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "cuenta-proveedor.saldo.response",
+      "description": "Respuesta RPC correlada de cuenta-proveedor.saldo.request → {request_id, status:200, data:{tercero, tercero_disponible, saldo, convenio, sum_debe, sum_haber, apuntes, disponible, criterio_emparejamiento, fuente_asientos, fuente_tercero, roles, abierto}}. Emitida por el helper _atender."
+    },
+    {
+      "event": "cuenta-proveedor.saldo.failed",
+      "description": "Par de fallo determinista (N3): project_id ausente → {status, error:{code, message, details?}}. Cierra el circulo de cuenta-proveedor.saldo.request."
+    },
+    {
+      "event": "cuenta-proveedor.facturas_vivas.response",
+      "description": "Respuesta RPC correlada de cuenta-proveedor.facturas_vivas.request → {request_id, status:200, data:{tercero, facturas_vivas, num_facturas_vivas, total_pendiente, disponible, criterio_emparejamiento, abierto}}. Emitida por el helper _atender."
+    },
+    {
+      "event": "cuenta-proveedor.facturas_vivas.failed",
+      "description": "Par de fallo determinista (N3): project_id ausente → {status, error:{code, message, details?}}. Cierra el circulo de cuenta-proveedor.facturas_vivas.request."
+    }
+  ]
+}

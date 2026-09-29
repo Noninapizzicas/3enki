@@ -1,0 +1,38 @@
+{
+  "_doc": "Manifest de contabilidad-libro/ratificacion-regla-aprendida — PUENTE STATELESS (L10, hoja del plan). 🔴 LA RATIFICACION ES DEL ASESOR: el sistema PROPONE la regla aprendida y ESPERA; NO ratifica por si mismo. Es el gate humano UNICO para A6.2 (regla-contrapartida) y E8 (regla-movimiento-bancario) — no tres puertas distintas — y el ESPEJO de flujo-firma (L3): alli la firma, aqui la ratificacion de la regla. DOS CAMINOS JAMAS CONFUNDIDOS: (a) SIN `decision` → el sistema ARMA la solicitud y ESPERA (armada:true, ratificada:false, espera_ratificacion:true, actua:false), NO ratifica ni asume el silencio; (b) CON `decision` y `asesor` → REGISTRA la decision del asesor (decision∈{ratifica,bloquea}): la regla SOLO actua con 'ratifica' (actua:true); con 'bloquea' NO actua. Cualquier rol distinto de ASESOR (el SISTEMA incluido) → 403: el sistema NO ratifica. 🔴 SI VENCE SIN RATIFICACION → EXPIRA Y SE RE-PREGUNTA, JAMAS ASUME: una solicitud cuya validez declarada pasa sin decision NO se da por ratificada ni por bloqueada — se marca EXPIRADA (vencida:true) y se ARMA una solicitud NUEVA (re_preguntada:true); la ausencia de ratificacion NUNCA se interpreta como un si. La validez es DECLARABLE (`vence_en` ISO o `validez_ms`) y el reloj tambien (`ahora`, para reproducibilidad): sin validez declarada la solicitud NO vence — cero plazos cableados. ATRIBUTOS del diseno: propuestas:Set<ReglaAprendida>; METODOS: ratificar(r, decision). La PROPUESTA es DECLARADA (no se impone formato): sin regla no hay nada que someter al gate. Sin propuesta → ratificacion-regla-aprendida.ratificar.failed; sin asesor con decision declarada o rol != ASESOR → 403 PERMISSION_DENIED. Escucha contabilidad.regla_contrapartida_propuesta (A6.2) y contabilidad.regla_bancaria_propuesta (E8) SOLO como señales tolerantes: el puente es STATELESS, NO custodia las propuestas (no las acumula) — la ratificacion se pide BAJO DEMANDA por RPC con la propuesta en la mano. FORMA: PUENTE stateless, sin PosPersistencia ni onProjectActivated. Proyeccion `_ratificar`. Cierra el circulo: exito y ratificacion real → publica contabilidad.regla_ratificada; error → ratificacion-regla-aprendida.ratificar.failed.",
+  "name": "ratificacion-regla-aprendida",
+  "version": "0.1.0",
+  "description": "Puente (L10): la ratificacion del asesor sobre una regla aprendida — el sistema propone y espera (no ratifica), la regla solo actua con 'ratifica', y si vence sin decision expira y se re-pregunta jamas asume.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "ratificacion-regla-aprendida.ratificar.request",
+      "handler": "onRatificarRequest",
+      "description": "RPC puente (gate humano): {project_id, propuesta:{id?, origen?, regla}|regla?, decision?:'ratifica'|'bloquea', asesor?, rol?, marca?, comentario?, vence_en?|validez_ms?, armada_en?, ahora?, solicitud_id?} → SIN decision {armada:true, ratificada:false, espera_ratificacion:true, actua:false, solicitud, vencida, re_preguntada} (el sistema propone y espera); CON decision+asesor {registrada:true, ratificada, bloqueada, decision, actua:decision==='ratifica', ratificacion:{asesor, decision, marca, ratificada_en}, ratificacion_del_sistema:false}. Vencida sin ratificacion → EXPIRA y se RE-PREGUNTA (vencida:true, re_preguntada:true): jamas se asume. rol != ASESOR → 403. Exito con ratificacion real → publica contabilidad.regla_ratificada y responde por ratificacion-regla-aprendida.ratificar.response; propuesta o project_id ausente → ratificacion-regla-aprendida.ratificar.failed."
+    },
+    {
+      "event": "contabilidad.regla_contrapartida_propuesta",
+      "handler": "onReglaContrapartidaPropuesta",
+      "description": "Fire-and-forget (A6.2 → L10): regla-contrapartida propuso una regla aprendida → se deja constancia en el log de que hay una regla esperando la ratificacion del asesor (espera_ratificacion:true). El puente es STATELESS: NO acumula propuestas; la ratificacion se pide BAJO DEMANDA por RPC. Tolerante: sin project_id se ignora."
+    },
+    {
+      "event": "contabilidad.regla_bancaria_propuesta",
+      "handler": "onReglaBancariaPropuesta",
+      "description": "Fire-and-forget (E8 → L10): regla-movimiento-bancario propuso una regla aprendida → mismo gate humano unico que A6.2. Solo se loguea; el puente no acumula. Tolerante: sin project_id se ignora."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "ratificacion-regla-aprendida.ratificar.response",
+      "description": "Respuesta RPC correlada de ratificacion-regla-aprendida.ratificar.request → {request_id, status:200, data:{armada|registrada, ratificada, decision, actua, solicitud, ratificacion, ratifica_por:'asesor', ratificacion_del_sistema:false, vencida, re_preguntada, abierto}}. Emitida por el helper _atender."
+    },
+    {
+      "event": "ratificacion-regla-aprendida.ratificar.failed",
+      "description": "Par de fallo determinista (L10): project_id o propuesta ausente → {status, error:{code, message, details?}}; 403 PERMISSION_DENIED si el rol no es ASESOR (el sistema NO ratifica). Cierra el circulo de ratificacion-regla-aprendida.ratificar.request."
+    },
+    {
+      "event": "contabilidad.regla_ratificada",
+      "description": "Fire-and-forget (L10): el ASESOR ratifico o bloqueo la regla aprendida → {project_id, regla, propuesta_id, origen, decision:'ratifica'|'bloquea', actua, asesor, ratificada_por:'asesor', ratificada_en, correlation_id}. Lo LEEN regla-contrapartida (A6.2) y regla-movimiento-bancario (E8): solo ACTUAN si decision==='ratifica'. El evento NO lo emite el sistema por si mismo: sin ratificacion real no hay regla_ratificada."
+    }
+  ]
+}

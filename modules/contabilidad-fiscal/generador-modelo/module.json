@@ -1,0 +1,37 @@
+{
+  "_doc": "Manifest de contabilidad-fiscal/generador-modelo — PUENTE STATELESS (D7, hoja del plan). SALIDA al programa del ASESOR: toma el modelo ya construido (modelo-303 D2, modelo-390 D3) y lo EXPORTA en el formato que el programa del asesor consuma; cruza la frontera hacia fuera, no decide el contenido del modelo ni lo presenta. EL SISTEMA PREPARA EL MODELO; EL ASESOR PRESENTA Y FIRMA: este modulo NO presenta, NO firma y NO envia a ninguna administracion — declara presentado:false, firmado:false, preparado_para_asesor:true. LA LEY ENTRA COMO DATO (invariante 5): el `destino` y el `formato` son DECLARABLES (ParametroDeclarable) — ABIERTO en el diseno (formato no declarado aun); NO hay ninguna codificacion cableada (ni XML, ni BOE, ni CSV de un programa concreto) y sin `formato` declarado NO se exporta (FORMATO_NO_DECLARADO + exportado:false). El `mapeo` (campo canonico → clave externa) tambien entra como DATO. Campos de exportacion canonicos: modelo, ejercicio, periodo, nif, casillas, datos (ausente → null, no se estima). El modelo llega por DOS vias sin require cruzado: declarado en la peticion (`modelo`) o pedido POR EVENTO a modelo-303/modelo-390 (RPC); sin modelo NO se exporta un fichero vacio ni inventado (exportado:false + motivo). FORMA: PUENTE stateless — sin PosPersistencia, sin onProjectActivated. Proyeccion `_exportar`. Publica contabilidad.modelo_exportado.",
+  "name": "generador-modelo",
+  "version": "0.1.0",
+  "description": "Puente stateless (D7): prepara el modelo fiscal para el programa del asesor en formato declarable — el sistema prepara, el asesor presenta y firma; el sistema no presenta.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "generador-modelo.exportar.request",
+      "handler": "onExportarRequest",
+      "description": "RPC puente: {project_id, formato, destino?, modelo?, modelo_slug?, ejercicio?, periodo?, regimen?, territorio?, estructura?, mapeo?} → {exportado:true, fichero, modelo_slug, origen_modelo, destino, formato, adaptador_declarado, presentado:false, firmado:false, preparado_para_asesor:true}. Sin `formato` declarado → FORMATO_NO_DECLARADO (no se adivina la codificacion). El modelo se toma declarado en la peticion o pedido POR EVENTO a modelo-303/modelo-390; sin modelo → exportado:false + motivo. Exito → publica contabilidad.modelo_exportado y responde por generador-modelo.exportar.response; fallo → generador-modelo.exportar.failed."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "generador-modelo.exportar.response",
+      "description": "Respuesta RPC correlada de generador-modelo.exportar.request → {request_id, status:200, data:{exportado, fichero, modelo_slug, origen_modelo, destino, formato, adaptador_declarado, presentado:false, firmado:false, preparado_para_asesor:true}}. Emitida por el helper _atender."
+    },
+    {
+      "event": "generador-modelo.exportar.failed",
+      "description": "Par de fallo determinista (D7): formato no declarado (400 FORMATO_NO_DECLARADO) → {status, error:{code, message, details?}}. Cierra el circulo de generador-modelo.exportar.request."
+    },
+    {
+      "event": "contabilidad.modelo_exportado",
+      "description": "Fire-and-forget (D7): el modelo fiscal quedo exportado hacia el programa del asesor → {project_id, modelo, destino, formato, presentado:false, firmado:false, correlation_id}. Cierra el bucle hacia fuera; el asesor presenta y firma."
+    }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "generador-modelo.exportar",
+      "handler": "onExportarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
+  ]
+}

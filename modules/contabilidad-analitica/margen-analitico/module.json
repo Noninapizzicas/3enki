@@ -1,0 +1,33 @@
+{
+  "_doc": "Manifest de contabilidad-analitica/margen-analitico — REFLEJO STATELESS (J2, hoja del plan). EL MARGEN POR DIMENSION: ingreso − coste imputado agrupado por la DIMENSION analitica (centro, linea, producto). Determinista: las mismas lineas etiquetadas + el mismo eje → el mismo margen (una sola respuesta correcta); no es un juicio. ATRIBUTOS del diseno: ingresos, costes:Flujo<Cuantía>; METODOS: calcular(dimension, periodo):Cuantía; REGLA: ingreso − coste imputado por dimension. LAS LINEAS SON DATO ETIQUETADO: la magnitud (importe) y el tipo (INGRESO/COSTE) y la dimension de cada linea llegan DECLARADAS — fruto del etiquetado que PROPONE J1 (etiquetado-analitico, que jamas escribe) o declaradas por el negocio; el reflejo NUNCA cablea una regla de negocio (cero constantes: aqui solo se AGRUPA y se RESTA). EL EJE ES DECLARABLE (centro|linea|producto|cualquier eje declarado): si una linea trae varias dimensiones y no hay eje declarado, el corte seria una adivinanza → la linea se declara AMBIGUA y queda fuera del margen; una linea SIN dimension no se asigna a ninguna cubeta (se declara en sin_dimension) y el margen_total queda null y abierto:true con lo que falta (nada se estima). EL CATALOGO DE DIMENSIONES ES DECLARABLE: se declara en la peticion o se pide a cola-declaraciones-criterio (K9) POR EVENTO (best-effort, clave 'dimensiones'); una linea cuya dimension no esta en el catalogo declarado se declara en no_declaradas (se ve, no se oculta, no se descarta en silencio ni se le inventa un centro). Invariantes: DETERMINISTA (una sola respuesta correcta); dato ausente = desconocido — sin lineas → margen null y abierto (un flujo vacio NO es margen 0); LEY/PARAMETRO COMO DATO (eje y catalogo son entrada); NO escribe ni persiste (el margen es DERIVADO; el asiento y la imputacion son de otros). FORMA: REFLEJO stateless, sin PosPersistencia ni onProjectActivated. Proyeccion unica `_calcular(input)` → {project_id, periodo, eje, fuente_dimensiones, ingresos_total, costes_total, margen_total, parcial, por_dimension:[{dimension, ingresos, costes, margen, ratio_margen, n_lineas}], sin_dimension, no_declaradas, ambiguas, abierto, faltan}. El tablero por dimension (J10) y el cuadro de mando (J8) BEBEN esta cifra por EVENTO — nunca la recalculan. Cierra el circulo: error → margen-analitico.calcular.failed.",
+  "name": "margen-analitico",
+  "version": "0.1.0",
+  "description": "Reflejo (J2): el margen por dimension analitica (ingreso − coste imputado) determinista sobre lineas ya etiquetadas; el eje y el catalogo de dimensiones son DECLARABLES y nada se imputa a dedo (linea sin dimension o ambigua → margen abierto).",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "margen-analitico.calcular.request",
+      "handler": "onCalcularRequest",
+      "description": "RPC reflejo (calculo puro, determinista): {project_id, periodo?, eje?, dimensiones?, lineas?|ingresos?/costes?} → {project_id, periodo, eje, fuente_dimensiones, ingresos_total, costes_total, margen_total, parcial:{ingresos, costes, margen, ratio_margen}, por_dimension:[{dimension, ingresos, costes, margen, ratio_margen, n_lineas}], n_dimensiones, n_lineas, sin_dimension, no_declaradas, ambiguas, abierto, faltan, motivo}. Agrupa las lineas etiquetadas por la dimension del eje declarado y resta ingreso − coste imputado. Sin lineas → margen:null y abierto:true (un flujo vacio no es margen 0); lineas sin dimension/eje declarado o fuera del catalogo declarado → margen_total:null y abierto:true con lo que falta (no se imputa nada a dedo). El catalogo de dimensiones se lee de la cola K9 por EVENTO si no viene declarado. Responde por margen-analitico.calcular.response; project_id ausente → margen-analitico.calcular.failed."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "margen-analitico.calcular.response",
+      "description": "Respuesta RPC correlada de margen-analitico.calcular.request → {request_id, status:200, data:{margen_total, por_dimension, parcial, faltan, abierto}}. Emitida por el helper _atender."
+    },
+    {
+      "event": "margen-analitico.calcular.failed",
+      "description": "Par de fallo determinista (J2): project_id ausente → {status, error:{code, message, details?}}. Cierra el circulo de margen-analitico.calcular.request."
+    }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "margen-analitico.calcular",
+      "handler": "onCalcularRequest",
+      "type": "inline_render",
+      "zone": "area_chat"
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "_doc": "Manifest de contabilidad-entrada/historial-proceso-contable — CUSTODIO CON PERSISTENCIA (P2, hoja del plan). Registro APPEND-ONLY e inmutable de lo PROCESADO y lo FALLADO, con su rastro (asunto, origen, motivo, fases, si cayo a cola, cuando). Es el historial del PROCESO DE ENTRADA — != traza-asiento (B4), que registra el ASIENTO, no el proceso de entrada. UN SOLO ESCRITOR de la parcela: el anotador (rol HISTORIAL_PROCESO_CONTABLE); cualquier otro rol es rechazado (segundo escritor → 403). Invariantes: APPEND-ONLY (cada registro se apila con su secuencia, NADA se borra ni se sobrescribe); el registro EXIGE su RESULTADO declarado (PROCESADO|FALLADO) — sin resultado NO se anota (dato ausente = desconocido, no se aprime un resultado que no consta); el ABIERTO se declara, no se oculta (un registro sin motivo se apila con su hueco). Persiste por proyecto con PosPersistencia (_shared/pos-persistencia, storage /contabilidad/historial-proceso-contable/historial-proceso-contable.json), restaura en project.activated y vuelca en onUnload. FORMA: CUSTODIO con PosPersistencia + onProjectActivated + flush + GUARD de escritor. Proyeccion `_anotar`. Publica contabilidad.proceso_anotado; error → historial-proceso-contable.anotar.failed.",
+  "name": "historial-proceso-contable",
+  "version": "0.1.0",
+  "description": "Custodio (P2): registro append-only de lo procesado y lo fallado con su rastro; un solo escritor y nada se borra — el historial del proceso de entrada, distinto de la traza del asiento.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "historial-proceso-contable.anotar.request",
+      "handler": "onAnotarRequest",
+      "description": "RPC custodio: {project_id, rol:'HISTORIAL_PROCESO_CONTABLE', registro:{resultado:'PROCESADO'|'FALLADO', asunto?, origen?, motivo?, fases?, en_cola?, destino_cola?, detalle?, hecho_id?, documento_id?, en?}} → {project_id, registro, anotado:true, total, append_only:true, abierto}. Guard de escritor (rol != HISTORIAL_PROCESO_CONTABLE → 403); append-only (el registro se apila, jamás se sobrescribe); sin resultado declarado → 400. Exito → publica contabilidad.proceso_anotado y responde por historial-proceso-contable.anotar.response; fallo → historial-proceso-contable.anotar.failed."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Restaura el historial del proceso (append-only) del proyecto activado desde el storage (PosPersistencia)."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "historial-proceso-contable.anotar.response",
+      "description": "Respuesta RPC correlada de historial-proceso-contable.anotar.request → {request_id, status:200, data:{registro, anotado:true, total, append_only:true, abierto}}. Emitida por el helper _atender."
+    },
+    {
+      "event": "historial-proceso-contable.anotar.failed",
+      "description": "Par de fallo determinista (P2): rol != HISTORIAL_PROCESO_CONTABLE (403 PERMISSION_DENIED), registro o project_id ausente, o registro sin resultado declarado (400) → {status, error:{code, message, details?}}. Cierra el circulo de historial-proceso-contable.anotar.request."
+    },
+    {
+      "event": "contabilidad.proceso_anotado",
+      "description": "Fire-and-forget (P2): el proceso de entrada quedo ANOTADO (append-only) → {project_id, registro, resultado:'PROCESADO'|'FALLADO', anotado:true, correlation_id}. Lo consume el panel del proceso (P1) para componer su latido."
+    }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "historial-proceso-contable.anotar",
+      "handler": "onAnotarRequest",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    }
+  ]
+}

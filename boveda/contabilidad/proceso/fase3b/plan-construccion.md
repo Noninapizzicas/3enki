@@ -1,5634 +1,4455 @@
-# PLAN DE CONSTRUCCION — Vertical CONTABILIDAD (Fase 3b · ADAPTADOR)
+# Plan de construcción — CONTABILIDAD (Fase 3b · ADAPTADOR)
 
-> **Proyecto:** contabilidad · **Vertical(es):** `contabilidad-entrada` · `contabilidad-libro` · `contabilidad-fiscal` · `contabilidad-analitica`
-> **Fase:** 3b · ADAPTADOR (adaptador de disenos Enki — traducir el diseno OOP a modulos-isla event-driven)
-> **Fecha:** 2026-09-28 · **Ejecutor:** `prisma-universal` en lente de ADAPTADOR
+> **Proyecto:** `contabilidad` (capacidad transversal observadora VENDIBLE) · **Fase:** 3b · ADAPTADOR
+> **Fecha:** 2026-09-29 · **Modelo:** prisma-universal en lente de ADAPTADOR
+> **Entrada:** `boveda/contabilidad/proceso/fase3/diseno-oop.md` (118 clases OOP) ·
+> `boveda/contabilidad/proceso/fase2/esquemas/esquema.md` (118 hojas atómicas, 18 grupos, 7 conflictos, partición 32/32/22/32) ·
+> `boveda/contabilidad/proceso/fase3b/inventario-modulos-enki.json` (**INVENTARIO REAL: 248 módulos**, contrato leído del `module.json`)
+> **Patrones vivos:** `arquitectura/cabecera/patron/modulo-real.md` · `modulo-hibrido.md`
 >
-> **Fuentes (leidas, no de memoria):**
-> 1. `fase3/diseno-oop.md` — FASE 3 · PLASMA: **135 clases** (118 de dominio, una por hoja atomica de F2, + 17 de soporte), 4 ejes (32/32/22/32), 16 puertos abiertos, 23 piezas `[ABIERTO]` como parametros declarables.
-> 2. `fase2/esquemas/esquema.md` — FASE 2: 118 hojas atomicas con su **FORMA** (60 REFLEJO · 29 CUSTODIO · 14 PUENTE · 8 MICRO-AGENTE · 7 CONVERSOR) y la particion en 4 verticales. **La forma no se negocia.**
-> 3. `fase3b/reutilizables-verificados.md` — verificacion **YA HECHA por el padre** contra el `module.json` REAL (contrato/tools/eje) + descartados con motivo. **No se re-verifica.**
-> 4. `fase3b/inventario-modulos-enki.json` — 248 modulos reales (contrato leido de `events.subscribes`/`events.publishes`).
-> 5. Molde de forma: `boveda/nichos/proceso/fase3b/plan-construccion.md` · Metodo: skill `enki-adaptador-disenos` + `references/espina-enki-plan.md`.
->
-> **Hallazgo que gobierna este plan:** YA EXISTE UN PIPELINE DE FACTURACION (`facturacion/fuentes` -> `facturas` -> `facturacion/asesoria`). La ENTRADA (eslabon limitante) esta **en parte construida**: 4 de sus clases (A3, A4.1, A4.2, A5) y la salida al asesor (L1) se CUBREN con lo reutilizado en vez de re-construirse.
+> **LEY DE LA UNIDAD (inviolable):** **118 clases → 118 hojas. UNA clase = UN módulo.**
+> Ninguna hoja agrupa dos clases. Donde el diseño vio parentesco (N1/N2 · N6/N8 · tipos transversales),
+> se conservan **dos hojas** y se dirige `[ABIERTO]` al dueño. **La decisión de fusionar es del dueño, no de esta fase.**
 
----
+## Totales
 
-## 1 · Reglas de traduccion aplicadas
-
-| Clase OOP | Traduccion Enki |
+| Métrica | Valor |
 |---|---|
-| CLASE con estado | modulo **CUSTODIO** (single-writer de su parcela) — `PosPersistencia` + `project.activated` |
-| CLASE que solo calcula | **PROYECCION INTERNA** del modulo que la usa (metodo puro `_op`) — **JAMAS en `_shared/`** |
-| CLASE que orquesta | modulo **MICRO-AGENTE / ORQUESTADOR** (op fuzzy en cajon de blueprint, gate `validate-hibridos`) |
-| CLASE que habla al exterior | modulo **PUENTE** (puerto abierto, adaptador cableado en el sitio) |
-| Frontera de formato | modulo **CONVERSOR** (unico cruce de formatos de su dominio) |
-| Dependencia entre clases | **EVENTO request/response**, nunca `import` cruzado |
-| Logica de negocio | dentro del modulo como proyeccion `_op`; `_shared/` SOLO infraestructura |
-
-**Criterio de fusion declarado (clase -> hoja).** Una hoja = un modulo-isla. Para no inflar el numero de modulos sin perder ninguna clase:
-1. **CUSTODIO** -> 1 modulo. Se funden SOLO si comparten parcela (N1+N2 = un maestro con roles, conflicto 1 resuelto).
-2. **REFLEJO** -> es PROYECCION INTERNA del modulo consumidor cuando tiene **un solo consumidor** en su cadena; es **modulo propio de forma `reflejo`** cuando lo consumen **varios** modulos o su invariante exige **UN SOLO calculador** (A12 cobertura, M3 clave natural, M1 frontera de planos).
-3. **PUENTE / CONVERSOR / MICRO-AGENTE** -> 1 modulo (hablan con el exterior, cruzan formatos o ejercen juicio).
-4. Cada fusion queda declarada en la tabla **§2.6 (clase -> hoja)**: **ninguna clase se pierde**.
-
-**Convenciones del bus (innegociables).**
-- Topicos en **ASCII** (sin tildes ni enye: `dueno`, `anadir`, `senales`, `liquidacion`, `periodificacion`).
-- RPC: `contabilidad.<modulo>.<op>.request` -> `contabilidad.<modulo>.<op>.response`; fallo: `.failed`.
-- Evento de dominio: fire-and-forget `contabilidad.<sustantivo>_<participio>`; **todo flujo cierra su circulo con su par `.failed`**.
-- El espacio `contabilidad.*` es el de **CALCULOS**: nunca realimenta la operacion (cerrojo M1 `frontera-planos`). El hecho de negocio lo emite la OPERACION.
-- `contabilidad-*` son las 4 verticales (unidad de ORGANIZACION y ACTIVACION): **no son frontera de comunicacion** — todos los modulos son del sistema y se hablan entre si.
-- **Cero supuestos:** lo no declarado no se estima; es parametro declarable en `cola-declaraciones-criterio` (K9) o queda `[ABIERTO]`.
+| Clases OOP traducidas | **118** |
+| Hojas emitidas | **118** (= CONSTRUIR + REUTILIZAR) |
+| **CONSTRUIR** | **116** |
+| **ADAPTAR** | **0** (ver §2 — los módulos mono-negocio no se adaptan: se toma su patrón) |
+| **REUTILIZAR** | **2** (`extraccion-dato` ← `facturas` · `puerto-documento-digital` ← `facturacion/fuentes`) |
+| Reparto por ejes | entrada 32 · libro 32 · fiscal 22 · analítica 32 |
+| Órden topológico (`orden`) | **118 slugs** |
 
 ---
 
-## 2 · Inventario: REUTILIZAR / ADAPTAR / CONSTRUIR
+## §1 · Reglas de traducción (innegociables)
 
-### 2.1 — REUTILIZAR (8) — contrato REAL ya verificado por el padre
-
-| slug | forma | v | que CUBRE | eje | contrato real (module.json) |
-|---|---|---|---|---|---|
-| `filesystem` | reflejo | v2.4.0 | infraestructura | `transversal` | sub `fs.read.request` · `fs.write.request` · `fs.edit.request` · `fs.list.request` · `fs.exists.request` · `project.activated` · `project.deactivated` · pub (ninguno) |
-| `project-manager` | reflejo | v4.2.0 | infraestructura | `transversal` | sub `project.activate` · `project.create` · `project.get.request` · `project.list.request` · `project.state.request` · `project.update` · pub `project.activated` · `project.created` · `project.deactivated` · `project.state` |
-| `credential-manager` | reflejo | v2.2.0 | infraestructura | `transversal` | sub `credential.resolve.request` · `credential.create.request` · `credential.update.request` · `credential.delete.request` · `credential.state.request` · pub `credential.saved` · `credential.updated` · `credential.deleted` · `credential.state` |
-| `facturas` | custodio | v3.0.0 | A3 · A4.1 | `entrada` | sub `factura.entrada` · pub `factura.recibida` · `factura.procesada` · `factura.error` · `factura.exportada` · `telegram.send_message.request` |
-| `facturacion/fuentes` | puente | v2.0.0 | A5 · A4.2 | `entrada` | sub `telegram.photo.received` · `telegram.document.received` · pub `factura.entrada` |
-| `inventario` | custodio | v1.0.0 | sustrato de stock (grupo H) | `analitica` | sub `pedido.completado` · `pedido.cancelado` · pub `inventario.reserva.creada` · `inventario.reserva.expirada` · `inventario.reserva.liberada` · `inventario.confirmado` · `inventario.ajustado` · `inventario.stock.bajo_minimo` |
-| `metricas` | reflejo | v2.0.0 | infraestructura | `libro` | sub `*.creado` · `*.actualizado` · `*.eliminado` · `*.error` · `*.completado` · pub `metricas.snapshot` |
-| `facturacion/asesoria` | puente | v2.0.0 | L1 | `libro` | sub (ninguno) · pub `asesoria.paquete.generado` · `asesoria.paquete.error` |
-
-> **Por que se REUTILIZA (y no se construye):** se leyo su `module.json` real — el contrato encaja sin romper su proyecto de origen (PosPersistencia per-proyecto donde toca).
-> El detalle de la verificacion vive en `fase3b/reutilizables-verificados.md` (trabajo del padre, no repetido aqui).
-
-### 2.2 — Clases de F3 CUBIERTAS por lo reutilizado (no se construyen)
-
-| clase | la cubre | como |
-|---|---|---|
-| `A3 captura-documento` | `facturas` | admision e integridad del documento en su pipeline Intake (v3.0.0) |
-| `A4.1 extraccion-dato` | `facturas` | `facturas.procesar` = OCR + IA: el juicio de "abrir el documento" ya existe |
-| `A4.2 puerto-documento` | `facturas` + `facturacion/fuentes` | formas/canales por adaptador (`fuentes`, strategy-pattern); el catalogo es DATO declarable (A10) |
-| `A5 puerto-documento-digital` | `facturacion/fuentes` | recepcion digital (Telegram hoy; Gmail/extension por el mismo patron) -> `factura.entrada` |
-| `L1 puerto-exportacion` | `facturacion/asesoria` | CSV formato espanol + ZIP con originales (`asesoria.generar-paquete`) |
-
-**Consecuencia de diseno:** la ENTRADA no se construye de cero. Lo que FALTA del cuello es lo que ninguna pieza cubre: **contrato minimo del hecho (A11), anclaje del cierre (A14), cuadre del documento (A4.3), resolucion de contrapartida (A6.1+A6.2), deduplicacion (A7), valvula de 2 colas (A8) y la metrica de cobertura (A12)**.
-
-### 2.3 — ADAPTAR: **0**
-
-Todo lo que "se parece" es de otro dominio o mono-negocio y ADAPTARlo romperia su proyecto. Se toma su **patron** y se CONSTRUYE para contabilidad. Ver §2.4.
-
-### 2.4 — Descartados con motivo (no se adaptan · se toma su patron)
-
-| modulo evaluado | por que NO |
+| Clase del diseño OOP | Traducción Enki |
 |---|---|
-| `pizzepos/escandallo` | **mono-negocio** (receta -> coste). Falta coste indirecto, multi-sociedad y periodos: insuficiente para un grupo. **Se pone POR ENCIMA, no se toca.** Su patron (hibrido) se toma en `margen-analitico`/`frontera-ficha-producto`. |
-| `marketing-budget` | dominio marketing; declara "custodia contable" pero es presupuesto de marketing. **Contabilidad LEE, no absorbe** (solape registrado; H6). |
-| `planes-y-tiers` | licencias de OTRO producto (Free/Pro/Agencias). Patron para `modelo-licencia` (K8, `[ABIERTO]`), no se adapta. |
-| `cuenta-recurrente` | dominio despacho de pan (cliente + pedido base + dia). Patron de custodio, dominio ajeno. |
-| `agenda-operacion` | operacion diaria de negocio (horarios, demanda). Ajeno. |
-| `lotes` | ciclo de lotes de produccion. Ajeno (util a la operacion, no a la contabilidad). |
-| `entrega` | estimacion de reparto. Ajeno. |
-| `banco` (v0.2.0) | **NOMBRE ENGANOSO**: NO es banca, es *"custodio del banco de NICHOS del radar"*. Los bancos de contabilidad se **CONSTRUYEN** (`maestro-cuentas-bancarias`, `conciliacion-bancaria`). |
-| `nichos/motor-cobro`, `prisma/cobro`, `pizzepos/cobros`, `pizzepos/pago-gateway` | cobro de OTRO dominio. Contabilidad **observa** el cobro, no lo ejecuta (salvo pasarela declarada: `[ABIERTO]` D21). |
-| `pizzepos/persistencia-comandero` / `prisma/cierre` | **cierre de caja del DIA** de la operacion, mono-negocio. **No se toca**: entra como HECHO observado (`CIERRE_JORNADA`) por la puerta (A1). El cierre CONTABLE (nivel 2) si se construye. |
+| CLASE con estado (`FORMA: CUSTODIO`) | módulo **CUSTODIO** (single-writer de su store, `PosPersistencia`) |
+| CLASE que solo calcula (`FORMA: REFLEJO`) | módulo **REFLEJO** (`ModuloHibridoReflejo`, proyección `_op` determinista) — si el diseño dice que es proyección interna de otra clase, no lleva módulo propio |
+| CLASE que orquesta / ejerce juicio (`FORMA: MICRO-AGENTE`) | módulo **MICRO-AGENTE** (reflejo + blueprint; propone, nunca escribe) |
+| CLASE que cruza formatos (`FORMA: CONVERSOR`) | módulo **CONVERSOR** (frontera única de formato) |
+| CLASE que habla con el exterior (`FORMA: PUENTE`) | módulo **PUENTE** (canal declarable; no impone, no pisa lo manual) |
+| Dependencia entre clases | **EVENTO request/response**, nunca `import` |
+| Lógica de negocio | DENTRO del módulo como proyección `_op`; `_shared/` SOLO infraestructura |
 
-### 2.5 — CONSTRUIR (72)
+**Reglas operativas:**
 
-Cada CONSTRUIR justifica por que no reutiliza (el `NO REUTILIZA` va en su bloque de §3 y en la espina). Motivo de fondo, repetido y honesto: **en el inventario de 248 modulos la contabilidad real (IVA/modelos/diario/conciliacion/nomina/inmovilizado/consolidacion) es CERO modulos**; lo unico contable que existe es el intake de facturas (`facturas`) y el paquete al asesor (`facturacion/asesoria`), ambos REUTILIZADOS.
-
-### 2.6 — Cobertura: clase (F3) -> hoja (F3b)
-
-> Garantia de que **ninguna de las 118 clases se pierde**: 118 clases mapeadas a 80 hojas (72 CONSTRUIR + 8 REUTILIZAR).
-
-**Eje `contabilidad-entrada` — 32 clases**
-
-| clase | hoja (slug) | forma |
-|---|---|---|
-| `A1` | `puerto-evento-vertical` | puente |
-| `A2` | `normalizador-hecho` | conversor |
-| `A3` | `facturas` *(REUTILIZAR)* | custodio |
-| `A4.1` | `facturas` *(REUTILIZAR)* | custodio |
-| `A4.2` | `facturacion/fuentes` *(REUTILIZAR)* | puente |
-| `A4.3` | `normalizador-hecho` | conversor |
-| `A5` | `facturacion/fuentes` *(REUTILIZAR)* | puente |
-| `A6.1` | `resolucion-contrapartida` | micro-agente |
-| `A6.2` | `regla-contrapartida` | custodio |
-| `A7` | `deduplicacion-hecho` | reflejo |
-| `A8.1` | `cola-revision` | custodio |
-| `A8.2` | `aviso-revision` | puente |
-| `A9` | `lote-admision` | reflejo |
-| `A11` | `contrato-hecho-minimo` | custodio |
-| `A12` | `completitud-cobertura` | reflejo |
-| `A13` | `hecho-rectificativo` | puente |
-| `A14` | `anclaje-cierre-vertical` | custodio |
-| `A15` | `declaracion-fuente-faltante` | puente |
-| `N1` | `maestro-terceros` | custodio |
-| `N2` | `maestro-terceros` | custodio |
-| `N3` | `cuenta-terceros` | reflejo |
-| `N4` | `cuenta-terceros` | reflejo |
-| `N5` | `compra-proveedor` | reflejo |
-| `N6` | `cuenta-terceros` | reflejo |
-| `N7` | `compra-proveedor` | reflejo |
-| `N8` | `cuenta-terceros` | reflejo |
-| `O1` | `emision-factura-venta` | custodio |
-| `O2` | `emision-factura-venta` | custodio |
-| `P1` | `panel-proceso-contable` | reflejo |
-| `P2` | `historial-proceso-contable` | custodio |
-| `P3` | `desatasco-entrada` | micro-agente |
-| `P4` | `panel-proceso-contable` | reflejo |
-
-**Eje `contabilidad-libro` — 32 clases**
-
-| clase | hoja (slug) | forma |
-|---|---|---|
-| `B1` | `catalogo-cuentas` | custodio |
-| `B2` | `escritor-diario` | custodio |
-| `B3` | `mayor-balanza` | reflejo |
-| `B4` | `traza-asiento` | custodio |
-| `B5` | `asiento-ajuste` | puente |
-| `B6` | `catalogo-cuentas` | custodio |
-| `C1` | `estados-contables` | reflejo |
-| `C2` | `estados-contables` | reflejo |
-| `C3` | `periodificacion` | reflejo |
-| `C4` | `cierre-ejercicio` | custodio |
-| `C5` | `cierre-ejercicio` | custodio |
-| `C6` | `aviso-cuadre` | puente |
-| `E1` | `conciliacion-bancaria` | reflejo |
-| `E2` | `puerto-extracto` | conversor |
-| `E3` | `conciliacion-bancaria` | reflejo |
-| `E4` | `saldo-tesoreria` | reflejo |
-| `E5` | `saldo-tesoreria` | reflejo |
-| `E7` | `partida-no-identificada` | micro-agente |
-| `E8` | `regla-movimiento-bancario` | custodio |
-| `E9` | `conciliacion-bancaria` | reflejo |
-| `E10` | `conciliacion-bancaria` | reflejo |
-| `E11` | `maestro-cuentas-bancarias` | custodio |
-| `L1` | `facturacion/asesoria` *(REUTILIZAR)* | puente |
-| `L2` | `vista-revisable` | reflejo |
-| `L3` | `flujo-firma` | custodio |
-| `L7` | `expediente-documental` | custodio |
-| `L8` | `vista-revisable` | reflejo |
-| `L9` | `flujo-firma` | custodio |
-| `L10` | `ratificacion-regla-aprendida` | puente |
-| `M1` | `frontera-planos` | reflejo |
-| `M2` | `single-writer` | custodio |
-| `M3` | `clave-natural` | reflejo |
-
-**Eje `contabilidad-fiscal` — 22 clases**
-
-| clase | hoja (slug) | forma |
-|---|---|---|
-| `D1` | `liquidacion-iva` | reflejo |
-| `D2` | `liquidacion-iva` | reflejo |
-| `D3` | `liquidacion-iva` | reflejo |
-| `D4` | `retenciones-is-irpf` | reflejo |
-| `D5` | `retenciones-is-irpf` | reflejo |
-| `D6` | `calendario-fiscal` | custodio |
-| `D7` | `generador-modelo` | puente |
-| `D8` | `registro-verifactu` | custodio |
-| `D9` | `factura-electronica` | conversor |
-| `D12` | `estado-presentacion-fiscal` | custodio |
-| `D13` | `acuse-presentacion` | puente |
-| `D14` | `rectificacion-declaracion` | custodio |
-| `D15` | `perfil-administrativo` | custodio |
-| `G1` | `recibo-nomina` | reflejo |
-| `G2` | `recibo-nomina` | reflejo |
-| `G3` | `recibo-nomina` | reflejo |
-| `G4` | `puerto-nomina` | puente |
-| `G6` | `recibo-nomina` | reflejo |
-| `G7` | `acceso-nomina` | custodio |
-| `G8` | `recibo-nomina` | reflejo |
-| `G9` | `recibo-nomina` | reflejo |
-| `G10` | `recibo-nomina` | reflejo |
-
-**Eje `contabilidad-analitica` — 32 clases**
-
-| clase | hoja (slug) | forma |
-|---|---|---|
-| `F1` | `inmovilizado` | custodio |
-| `F2` | `inmovilizado` | custodio |
-| `F3` | `inmovilizado` | custodio |
-| `F4` | `inmovilizado` | custodio |
-| `H1` | `valoracion-existencia` | reflejo |
-| `H2` | `frontera-ficha-producto` | conversor |
-| `H3` | `valoracion-existencia` | reflejo |
-| `H4` | `valoracion-existencia` | reflejo |
-| `I1` | `consolidacion-grupo` | reflejo |
-| `I2` | `consolidacion-grupo` | reflejo |
-| `I3` | `consolidacion-grupo` | reflejo |
-| `I4` | `aislamiento-negocio` | custodio |
-| `J1` | `etiquetado-analitico` | micro-agente |
-| `J2` | `margen-analitico` | reflejo |
-| `J3` | `presupuesto` | custodio |
-| `J4` | `presupuesto` | custodio |
-| `J5` | `margen-analitico` | reflejo |
-| `J8` | `cuadro-mando-contable` | reflejo |
-| `J9` | `presupuesto` | custodio |
-| `J10` | `margen-analitico` | reflejo |
-| `K1` | `onboarding-negocio` | custodio |
-| `K2` | `motor-avisos` | puente |
-| `K3` | `informe-rico` | reflejo |
-| `K4` | `onboarding-negocio` | custodio |
-| `K9` | `cola-declaraciones-criterio` | custodio |
-| `Q1` | `consulta-dueno` | puente |
-| `Q2` | `puente-lenguaje-dueno` | micro-agente |
-| `Q3` | `consulta-dueno` | puente |
-| `Q4` | `consulta-dueno` | puente |
-| `R1` | `aviso-al-negocio` | puente |
-| `R2` | `informe-accionable` | micro-agente |
-| `R3` | `informe-accionable` | micro-agente |
+1. **Slug de la hoja = slug del módulo** (el de la hoja atómica F2). ASCII, sin tildes ni ñ.
+2. **Tópicos del bus en ASCII** (`nomina`, `anadir`, `senales`). Cada módulo sirve `<slug>.<op>.request`
+   y publica el par `<slug>.<op>.response` + `<slug>.<op>.failed` (**todo flujo cierra su círculo**).
+3. **Persistencia:** toda hoja `CUSTODIO` extiende `ModuloHibridoReflejo` + `PosPersistencia` y declara
+   `project.activated` en `subscribes` (restaura estado del proyecto).
+4. **MICRO-AGENTE:** el reflejo sirve lo determinista; el blueprint (cajones) hace lo fuzzy y **delega** al
+   reflejo (`blueprint → reflejo`, nunca `blueprint → blueprint`). **Propone** (`Propuesta<Confianza>`);
+   la escritura la hace siempre el `CUSTODIO` dueño de la parcela.
+5. **`_shared/` SOLO infraestructura** (`modulo-hibrido-reflejo.js`, `pos-persistencia.js`). Ninguna hoja mete
+   lógica de negocio en `_shared`.
+6. **Acciones:** `CONSTRUIR` (módulo nuevo) · `ADAPTAR` (módulo existente modificado) · `REUTILIZAR`
+   (módulo existente cubre el contrato exacto → sin módulo nuevo). Cada `CONSTRUIR` justifica por qué no reutiliza (§2).
+7. **Los 26 tipos de soporte** (`Hecho`, `Asiento`, `Apunte`, `Cuenta`, `Tercero`, `Vencimiento`…) **NO son hojas**:
+   son value objects que viven en `_shared/` o como contrato de payload. No llevan módulo.
 
 ---
 
-## 3 · Las hojas CONSTRUIR — 7 etapas
-
-> Plantilla (skill `enki-adaptador-disenos`): **A** dependencias · **B** `module.json` · **C** `index.js` · **D** proyecciones (`_op`, DONDE VIVE LA LOGICA) · **E** handlers RPC · **F** eventos de dominio · **VERIFICACION**.
-> No se escribe codigo completo: el PLAN declara cada hoja (slug, forma, proposito, eventos, dependencias, proyecciones). La construccion es la FASE 4.
-
-### 3.0 — El eslabon limitante: LA CADENA DE ADMISION (detalle)
-
-```
-[puerto-evento-vertical]   hechos ya emitidos por las verticales (VENTA/COBRO/PAGO/COMPRA/CONSUMO/CIERRE_JORNADA/RECTIFICATIVO)
-       + [contrato-hecho-minimo]  el minimo EXIGIBLE por fuente (declarado, no impuesto)
-       |
-       +-- documentos:  [facturacion/fuentes] -> [facturas] (Intake/Convert/OCR)  == REUTILIZADO
-       v
-[normalizador-hecho]  UNICA puerta de formato (A2) + cuadre del documento (A4.3: si no cuadra -> cola)
-       v  contabilidad.hecho_normalizado
-[deduplicacion-hecho]  (A7 + M3 clave-natural): reprocesar NO duplica; un rectificativo no es duplicado
-       v  contabilidad.hecho_nuevo
-[resolucion-contrapartida]  PROPONE cuenta/tercero/periodo (fuzzy) <- [regla-contrapartida] corte DURO + [maestro-terceros] identidad
-       v  contabilidad.contrapartida_propuesta
-[escritor-diario]  EL cuello ENTREGA: partida doble verificada (suma debe = suma haber), single-writer, rechazo de duplicados
-       |
-       +-- valvula: lo dudoso NO bloquea -> [cola-revision] (2 colas: asesor | dueno) -> [aviso-revision] -> motor-avisos
-       +-- accion:  [desatasco-entrada] resuelve/descarta con motivo -> regla candidata -> [ratificacion-regla-aprendida]
-       +-- medida:  [completitud-cobertura] (metrica UNICA) -> [panel-proceso-contable] (tasa) / [aviso-cuadre] / [sello Q3]
-       +-- asimetria con la fuente: [anclaje-cierre-vertical] (la fuente declara su cierre) + [declaracion-fuente-faltante] (se DECLARA, no se exige)
-       +-- desacople: [lote-admision] (N hechos en paralelo; la serie no atasca el embudo)
-```
-
-**Bucle de aprendizaje (no de realimentacion de negocio):** `excepcion -> desatasco-entrada -> regla candidata -> ratificacion-regla-aprendida -> regla-contrapartida/regla-movimiento-bancario -> menos excepciones`. `frontera-planos` (M1) garantiza que nada de esto emite hechos de negocio.
-
-### 3.1 — Oleada 1 · `contabilidad-entrada` (20 hojas CONSTRUIR)
-
-### contrato-hecho-minimo — custodio (CONSTRUIR · contabilidad-entrada)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo + PosPersistencia + project.activated (persiste estado por proyecto).
-                       Escucha: `contabilidad.contrato.declarar.request` · `contabilidad.contrato.exigir.request` · `contabilidad.contrato.cubre.request` · `project.activated`.
-                       Depende (por EVENTO, sin require cruzado): (ninguno).
-B. MODULE.JSON         name:"contrato-hecho-minimo" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.contrato.declarar.request","contabilidad.contrato.exigir.request","contabilidad.contrato.cubre.request","project.activated"];
-                       publishes:  ["contabilidad.contrato_declarado","contabilidad.contrato.declarar.response","contabilidad.contrato.declarar.failed","contabilidad.contrato.exigir.response","contabilidad.contrato.exigir.failed","contabilidad.contrato.cubre.response","contabilidad.contrato.cubre.failed","contabilidad.contrato_declarado.failed"];
-                       _doc: "El minimo EXIGIBLE por fuente (declarado por dueno/jefe), visto desde la fuente: no un formato impuesto.".
-C. INDEX.JS            class ContratoHechoMinimo extends ModuloHibridoReflejo; onProjectActivated restaura el store; guard de escritor (rol autorizado); onUnload flush.
-D. PROYECCIONES        3 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _declarar — declarar(rol, vertical, campos) — un solo escritor del minimo por vertical
-                       · _exigir — exigir(vertical) -> Set<Campo>
-                       · _cubre — cubre(vertical, hecho) -> ok | Set<Campo> faltantes
-E. HANDLERS RPC        onDeclararRequest -> _atender(e, 'declarar', ...) | onExigirRequest -> _atender(e, 'exigir', ...) | onCubreRequest -> _atender(e, 'cubre', ...).
-F. EVENTOS DE DOMINIO  publica `contabilidad.contrato_declarado` · `contabilidad.contrato.declarar.failed` · `contabilidad.contrato.exigir.failed` · `contabilidad.contrato.cubre.failed` · `contabilidad.contrato_declarado.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + guard single-writer (segundo escritor RECHAZADO) + smoke de su RPC + `project.activated` restaura el store.
-NO REUTILIZA / NOTA    NO REUTILIZA: ningun modulo del inventario declara un contrato minimo de hecho por vertical; los contratos de entrada viven en cada vertical productora.
-```
-
-### anclaje-cierre-vertical — custodio (CONSTRUIR · contabilidad-entrada)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo + PosPersistencia + project.activated (persiste estado por proyecto).
-                       Escucha: `contabilidad.anclaje.declarar.request` · `contabilidad.anclaje.anclar.request` · `project.activated`.
-                       Depende (por EVENTO, sin require cruzado): (ninguno).
-B. MODULE.JSON         name:"anclaje-cierre-vertical" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.anclaje.declarar.request","contabilidad.anclaje.anclar.request","project.activated"];
-                       publishes:  ["contabilidad.anclaje_declarado","contabilidad.anclaje.declarar.response","contabilidad.anclaje.declarar.failed","contabilidad.anclaje.anclar.response","contabilidad.anclaje.anclar.failed","contabilidad.anclaje_declarado.failed"];
-                       _doc: "Declara POR FUENTE que es un cierre y como se identifica; ancla la clave natural. Su contenido pende de la unidad_de_cierre (M4, declarable).".
-C. INDEX.JS            class AnclajeCierreVertical extends ModuloHibridoReflejo; onProjectActivated restaura el store; guard de escritor (rol autorizado); onUnload flush.
-D. PROYECCIONES        2 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _declarar — declarar(rol, vertical, definicion) — un solo escritor (DUENO)
-                       · _anclar — anclar(vertical, hecho) -> ClaveNatural
-E. HANDLERS RPC        onDeclararRequest -> _atender(e, 'declarar', ...) | onAnclarRequest -> _atender(e, 'anclar', ...).
-F. EVENTOS DE DOMINIO  publica `contabilidad.anclaje_declarado` · `contabilidad.anclaje.declarar.failed` · `contabilidad.anclaje.anclar.failed` · `contabilidad.anclaje_declarado.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + guard single-writer (segundo escritor RECHAZADO) + smoke de su RPC + `project.activated` restaura el store.
-NO REUTILIZA / NOTA    NO REUTILIZA: la definicion de cierre por vertical no existe en el inventario; el cierre de caja existente es de la operacion (mono-negocio) y aqui llega como HECHO observado.
-```
-
-### cola-revision — custodio (CONSTRUIR · contabilidad-entrada)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo + PosPersistencia + project.activated (persiste estado por proyecto).
-                       Escucha: `contabilidad.excepcion.encolar.request` · `contabilidad.excepcion.resolver.request` · `contabilidad.excepcion.siguiente.request` · `project.activated`.
-                       Depende (por EVENTO, sin require cruzado): (ninguno).
-B. MODULE.JSON         name:"cola-revision" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.excepcion.encolar.request","contabilidad.excepcion.resolver.request","contabilidad.excepcion.siguiente.request","project.activated"];
-                       publishes:  ["contabilidad.excepcion_encolada","contabilidad.excepcion_resuelta","contabilidad.excepcion.encolar.response","contabilidad.excepcion.encolar.failed","contabilidad.excepcion.resolver.response","contabilidad.excepcion.resolver.failed","contabilidad.excepcion.siguiente.response","contabilidad.excepcion.siguiente.failed","contabilidad.excepcion_encolada.failed","contabilidad.excepcion_resuelta.failed"];
-                       _doc: "DOS colas de excepciones (asesor / dueno) por naturaleza; el flujo NUNCA se bloquea. Un solo escritor por cola.".
-C. INDEX.JS            class ColaRevision extends ModuloHibridoReflejo; onProjectActivated restaura el store; guard de escritor (rol autorizado); onUnload flush.
-D. PROYECCIONES        3 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _encolar — routing por naturaleza de la excepcion -> cola ASESOR | cola DUENO
-                       · _siguiente — siguiente(cola) -> Excepcion | VACIA
-                       · _resolver — resolver(rol, excepcion, resolucion) — guard de escritor por cola
-E. HANDLERS RPC        onEncolarRequest -> _atender(e, 'encolar', ...) | onResolverRequest -> _atender(e, 'resolver', ...) | onSiguienteRequest -> _atender(e, 'siguiente', ...).
-F. EVENTOS DE DOMINIO  publica `contabilidad.excepcion_encolada` · `contabilidad.excepcion_resuelta` · `contabilidad.excepcion.encolar.failed` · `contabilidad.excepcion.resolver.failed` · `contabilidad.excepcion.siguiente.failed` · `contabilidad.excepcion_encolada.failed` · `contabilidad.excepcion_resuelta.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + guard single-writer (segundo escritor RECHAZADO) + smoke de su RPC + `project.activated` restaura el store.
-NO REUTILIZA / NOTA    NO REUTILIZA: no existe modulo de cola de revision contable en el inventario; `manejo-fallo` (nichos) es fallo de canal, otro dominio (patron tomado).
-```
-
-### regla-contrapartida — custodio (CONSTRUIR · contabilidad-entrada)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo + PosPersistencia + project.activated (persiste estado por proyecto).
-                       Escucha: `contabilidad.regla.leer.request` · `contabilidad.regla.declarar.request` · `contabilidad.regla.aprender.request` · `contabilidad.regla_ratificada` · `project.activated`.
-                       Depende (por EVENTO, sin require cruzado): (ninguno).
-B. MODULE.JSON         name:"regla-contrapartida" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.regla.leer.request","contabilidad.regla.declarar.request","contabilidad.regla.aprender.request","contabilidad.regla_ratificada","project.activated"];
-                       publishes:  ["contabilidad.regla_declarada","contabilidad.regla_aprendida","contabilidad.regla.leer.response","contabilidad.regla.leer.failed","contabilidad.regla.declarar.response","contabilidad.regla.declarar.failed","contabilidad.regla.aprender.response","contabilidad.regla.aprender.failed","contabilidad.regla_declarada.failed","contabilidad.regla_aprendida.failed"];
-                       _doc: "Repositorio de reglas declaradas/aprendidas ("este proveedor -> esta cuenta"). Una regla APRENDIDA no actua hasta ser RATIFICADA (L10).".
-C. INDEX.JS            class ReglaContrapartida extends ModuloHibridoReflejo; onProjectActivated restaura el store; guard de escritor (rol autorizado); onUnload flush.
-D. PROYECCIONES        3 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _declarar — declarar(rol, regla) — un solo escritor (DUENO/ASESOR)
-                       · _aplicar — aplicar(hecho) -> Contrapartida | SIN_COBERTURA
-                       · _aprender — aprender(rol, regla, evidencia) — el aprendizaje entra HIDRATADO y queda PENDIENTE de ratificacion
-E. HANDLERS RPC        onLeerRequest -> _atender(e, 'leer', ...) | onDeclararRequest -> _atender(e, 'declarar', ...) | onAprenderRequest -> _atender(e, 'aprender', ...).
-F. EVENTOS DE DOMINIO  publica `contabilidad.regla_declarada` · `contabilidad.regla_aprendida` · `contabilidad.regla.leer.failed` · `contabilidad.regla.declarar.failed` · `contabilidad.regla.aprender.failed` · `contabilidad.regla_declarada.failed` · `contabilidad.regla_aprendida.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + guard single-writer (segundo escritor RECHAZADO) + smoke de su RPC + `project.activated` restaura el store.
-NO REUTILIZA / NOTA    NO REUTILIZA: repositorio de reglas contables por negocio; `reglas-aprendidas` (nichos) es umbrales de viabilidad, otro dominio (patron tomado).
-```
-
-### lote-admision — reflejo (CONSTRUIR · contabilidad-entrada)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo (sin persistencia de estado).
-                       Escucha: `contabilidad.lote.despachar.request`.
-                       Depende (por EVENTO, sin require cruzado): (ninguno).
-B. MODULE.JSON         name:"lote-admision" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.lote.despachar.request"];
-                       publishes:  ["contabilidad.lote_despachado","contabilidad.lote.despachar.response","contabilidad.lote.despachar.failed","contabilidad.lote_despachado.failed"];
-                       _doc: "DESACOPLE del cuello: la admision no se hace en serie (N hechos en paralelo). Mecanico, cero juicio.".
-C. INDEX.JS            class LoteAdmision extends ModuloHibridoReflejo; sin estado que persistir.
-D. PROYECCIONES        2 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _lotear — lotear(cola) -> List<Hecho>
-                       · _despachar — despachar(lote) -> ok — consumido por AMBAS puertas (hechos y documentos)
-E. HANDLERS RPC        onDespacharRequest -> _atender(e, 'despachar', ...).
-F. EVENTOS DE DOMINIO  publica `contabilidad.lote_despachado` · `contabilidad.lote.despachar.failed` · `contabilidad.lote_despachado.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + test unitario de la proyeccion (determinista: mismas entradas -> mismas salidas).
-NO REUTILIZA / NOTA    NO REUTILIZA: el paralelismo declarable de la admision no existe en el inventario.
-```
-
-### puerto-evento-vertical — puente (CONSTRUIR · contabilidad-entrada)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo (sin persistencia de estado).
-                       Escucha: `contabilidad.hecho.admitir.request` · `contabilidad.contrato_declarado` · `project.activated`.
-                       Depende (por EVENTO, sin require cruzado): `contrato-hecho-minimo`.
-B. MODULE.JSON         name:"puerto-evento-vertical" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.hecho.admitir.request","contabilidad.contrato_declarado","project.activated"];
-                       publishes:  ["contabilidad.hecho_admitido","contabilidad.hecho.admitir.response","contabilidad.hecho.admitir.failed","contabilidad.hecho_admitido.failed"];
-                       _doc: "PUERTA de los hechos ya emitidos por las verticales. Contabilidad LEE, no impone: la fuente manda en formato, granularidad y ritmo.".
-C. INDEX.JS            class PuertoEventoVertical extends ModuloHibridoReflejo; sin estado que persistir.
-D. PROYECCIONES        3 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _admitir — admitir(hecho) -> ok — valida la forma minima de entrada, no el contenido
-                       · _reconectar — reconectar(fuente) — el puerto es reemplazable, la fuente manda
-                       · _declararHueco — si no hay fuente -> senal a A15, nunca se fuerza
-E. HANDLERS RPC        onAdmitirRequest -> _atender(e, 'admitir', ...).
-F. EVENTOS DE DOMINIO  publica `contabilidad.hecho_admitido` · `contabilidad.hecho.admitir.failed` · `contabilidad.hecho_admitido.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + smoke contra puerto stub (cableado en el sitio) + caso de puerto ausente -> se declara, no se asume.
-NO REUTILIZA / NOTA    NO REUTILIZA: ningun modulo del inventario recibe hechos heterogeneos de otras verticales; un adaptador por fuente se pone en el sitio de despliegue.
-```
-
-### historial-proceso-contable — custodio (CONSTRUIR · contabilidad-entrada)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo + PosPersistencia + project.activated (persiste estado por proyecto).
-                       Escucha: `contabilidad.historial.anotar.request` · `contabilidad.historial.consultar.request` · `contabilidad.hecho_admitido` · `contabilidad.excepcion_encolada` · `contabilidad.excepcion_resuelta` · `project.activated`.
-                       Depende (por EVENTO, sin require cruzado): (ninguno).
-B. MODULE.JSON         name:"historial-proceso-contable" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.historial.anotar.request","contabilidad.historial.consultar.request","contabilidad.hecho_admitido","contabilidad.excepcion_encolada","contabilidad.excepcion_resuelta","project.activated"];
-                       publishes:  ["contabilidad.historial_anotado","contabilidad.historial.anotar.response","contabilidad.historial.anotar.failed","contabilidad.historial.consultar.response","contabilidad.historial.consultar.failed","contabilidad.historial_anotado.failed"];
-                       _doc: "Registro append-only de lo PROCESADO y lo FALLADO con su rastro. Solo crece; nunca se reescribe.".
-C. INDEX.JS            class HistorialProcesoContable extends ModuloHibridoReflejo; onProjectActivated restaura el store; guard de escritor (rol autorizado); onUnload flush.
-D. PROYECCIONES        2 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _anotar — anotar(entrada) — single-writer ADMISION
-                       · _consultar — consultar(desde, hasta) -> Historial
-E. HANDLERS RPC        onAnotarRequest -> _atender(e, 'anotar', ...) | onConsultarRequest -> _atender(e, 'consultar', ...).
-F. EVENTOS DE DOMINIO  publica `contabilidad.historial_anotado` · `contabilidad.historial.anotar.failed` · `contabilidad.historial.consultar.failed` · `contabilidad.historial_anotado.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + guard single-writer (segundo escritor RECHAZADO) + smoke de su RPC + `project.activated` restaura el store.
-NO REUTILIZA / NOTA    NO REUTILIZA: es el historial del PROCESO de entrada, distinto de `traza-asiento` (B4, del asiento) y de `historial-nicho` (otro dominio).
-```
-
-### maestro-terceros — custodio (CONSTRUIR · contabilidad-entrada)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo + PosPersistencia + project.activated (persiste estado por proyecto).
-                       Escucha: `contabilidad.tercero.declarar.request` · `contabilidad.tercero.ficha.request` · `contabilidad.tercero.identificar.request` · `contabilidad.tercero.historial.request` · `project.activated`.
-                       Depende (por EVENTO, sin require cruzado): (ninguno).
-B. MODULE.JSON         name:"maestro-terceros" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.tercero.declarar.request","contabilidad.tercero.ficha.request","contabilidad.tercero.identificar.request","contabilidad.tercero.historial.request","project.activated"];
-                       publishes:  ["contabilidad.tercero_declarado","contabilidad.tercero_identificado","contabilidad.tercero.declarar.response","contabilidad.tercero.declarar.failed","contabilidad.tercero.ficha.response","contabilidad.tercero.ficha.failed","contabilidad.tercero.identificar.response","contabilidad.tercero.identificar.failed","contabilidad.tercero.historial.response","contabilidad.tercero.historial.failed","contabilidad.tercero_declarado.failed","contabilidad.tercero_identificado.failed"];
-                       _doc: "MAESTRO UNICO del tercero con ROLES (conflicto 1 resuelto): ficha funcional + identidad por NIF en la MISMA parcela.".
-C. INDEX.JS            class MaestroTerceros extends ModuloHibridoReflejo; onProjectActivated restaura el store; guard de escritor (rol autorizado); onUnload flush.
-D. PROYECCIONES        6 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _declarar — declarar(rol, tercero) — un solo escritor (DUENO/ASESOR)
-                       · _ficha — ficha(idTercero) -> Tercero
-                       · _historial — historial(idTercero) -> List<IdAsiento|IdDocumento>
-                       · _anadirRol — anadirRol(idTercero, rol) — cliente+proveedor NO duplica al tercero
-                       · _identificar — identificar(nif, nombreFiscal) -> IdTercero (N2, faceta de identidad)
-                       · _unificar — unificar(idA, idB, evidencia) -> IdTercero — "un proveedor escrito de tres formas = uno"
-E. HANDLERS RPC        onDeclararRequest -> _atender(e, 'declarar', ...) | onFichaRequest -> _atender(e, 'ficha', ...) | onIdentificarRequest -> _atender(e, 'identificar', ...) | onHistorialRequest -> _atender(e, 'historial', ...).
-F. EVENTOS DE DOMINIO  publica `contabilidad.tercero_declarado` · `contabilidad.tercero_identificado` · `contabilidad.tercero.declarar.failed` · `contabilidad.tercero.ficha.failed` · `contabilidad.tercero.identificar.failed` · `contabilidad.tercero.historial.failed` · `contabilidad.tercero_declarado.failed` · `contabilidad.tercero_identificado.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + guard single-writer (segundo escritor RECHAZADO) + smoke de su RPC + `project.activated` restaura el store.
-NO REUTILIZA / NOTA    NO REUTILIZA: no existe maestro fiscal de terceros en el inventario (N1+N2 se funden en UNA parcela, decision del dueno).
-```
-
-### normalizador-hecho — conversor (CONSTRUIR · contabilidad-entrada)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo (sin persistencia de estado).
-                       Escucha: `contabilidad.hecho.normalizar.request` · `contabilidad.hecho_admitido` · `factura.procesada`.
-                       Depende (por EVENTO, sin require cruzado): `puerto-evento-vertical` · `contrato-hecho-minimo` · `facturas` · `facturacion/fuentes` · `lote-admision`.
-B. MODULE.JSON         name:"normalizador-hecho" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.hecho.normalizar.request","contabilidad.hecho_admitido","factura.procesada"];
-                       publishes:  ["contabilidad.hecho_normalizado","contabilidad.documento_descuadrado","contabilidad.hecho.normalizar.response","contabilidad.hecho.normalizar.failed","contabilidad.hecho_normalizado.failed","contabilidad.documento_descuadrado.failed"];
-                       _doc: "UNICA puerta de FORMATO (A2) + control de cuadre del documento (A4.3): homogeneiza a forma asentable y jamas asienta "casi cuadrado".".
-C. INDEX.JS            class NormalizadorHecho extends ModuloHibridoReflejo; sin estado que persistir.
-D. PROYECCIONES        4 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _homogeneizar — homogeneizar(hechoCrudo) -> Hecho — unica puerta de formato
-                       · _mapear — mapear(camposFuente, camposInternos) -> Hecho
-                       · _detectarFaltantes — detectarFaltantes(hecho) -> Set<Campo> -> excepcion/pregunta (lo que falta NO se rellena)
-                       · _cuadrarDocumento — cuadrarDocumento(campos) -> Cuadrado | Descuadre (suma bases + suma impuestos = total; tolerancia declarable)
-E. HANDLERS RPC        onNormalizarRequest -> _atender(e, 'normalizar', ...).
-F. EVENTOS DE DOMINIO  publica `contabilidad.hecho_normalizado` · `contabilidad.documento_descuadrado` · `contabilidad.hecho.normalizar.failed` · `contabilidad.hecho_normalizado.failed` · `contabilidad.documento_descuadrado.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + smoke leer/escribir en las dos direcciones del formato + caso de forma NO declarada.
-NO REUTILIZA / NOTA    NO REUTILIZA: `facturas` entrega el dato extraido, no la forma asentable de contabilidad (contrato A11 + clave natural A14). El cuadre determinista es propio.
-```
-
-### deduplicacion-hecho — reflejo (CONSTRUIR · contabilidad-entrada)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo (sin persistencia de estado).
-                       Escucha: `contabilidad.duplicado.verificar.request` · `contabilidad.hecho_normalizado`.
-                       Depende (por EVENTO, sin require cruzado): `clave-natural`.
-B. MODULE.JSON         name:"deduplicacion-hecho" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.duplicado.verificar.request","contabilidad.hecho_normalizado"];
-                       publishes:  ["contabilidad.hecho_nuevo","contabilidad.hecho_duplicado","contabilidad.duplicado.verificar.response","contabilidad.duplicado.verificar.failed","contabilidad.hecho_nuevo.failed","contabilidad.hecho_duplicado.failed"];
-                       _doc: "ANTI-BUCLE: aplica la clave natural. Reprocesar NO duplica; un rectificativo no es duplicado.".
-C. INDEX.JS            class DeduplicacionHecho extends ModuloHibridoReflejo; sin estado que persistir.
-D. PROYECCIONES        2 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _esDuplicado — esDuplicado(hecho) -> Duplicado | Nuevo (determinista, test lo afirma)
-                       · _marcarProcesado — marcarProcesado(clave) -> ok
-E. HANDLERS RPC        onVerificarRequest -> _atender(e, 'verificar', ...).
-F. EVENTOS DE DOMINIO  publica `contabilidad.hecho_nuevo` · `contabilidad.hecho_duplicado` · `contabilidad.duplicado.verificar.failed` · `contabilidad.hecho_nuevo.failed` · `contabilidad.hecho_duplicado.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + test unitario de la proyeccion (determinista: mismas entradas -> mismas salidas).
-NO REUTILIZA / NOTA    NO REUTILIZA: la idempotencia por clave natural es el cerrojo 3 del dominio; ningun modulo del inventario lo aplica.
-```
-
-### resolucion-contrapartida — micro-agente (CONSTRUIR · contabilidad-entrada)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo + PosPersistencia (hibrido: reflejo + op fuzzy en cajon de blueprint; gate validate-hibridos: la op fuzzy NO va en module.json.subscribes).
-                       Escucha: `contabilidad.contrapartida.proponer.request` · `contabilidad.hecho_nuevo`.
-                       Depende (por EVENTO, sin require cruzado): `normalizador-hecho` · `catalogo-cuentas` · `regla-contrapartida` · `maestro-terceros` · `deduplicacion-hecho`.
-B. MODULE.JSON         name:"resolucion-contrapartida" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.contrapartida.proponer.request","contabilidad.hecho_nuevo"];
-                       publishes:  ["contabilidad.contrapartida_propuesta","contabilidad.contrapartida.proponer.response","contabilidad.contrapartida.proponer.failed","contabilidad.contrapartida_propuesta.failed"];
-                       _doc: "PROPONE cuenta/tercero/periodo (juicio con ambiguedad contra el plan declarado). El corte DURO lo fija la regla (A6.2).".
-C. INDEX.JS            class ResolucionContrapartida extends ModuloHibridoReflejo; cajon de blueprint para la op fuzzy; reflejo para la parte determinista; onUnload flush.
-D. PROYECCIONES        3 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _proponer — proponer(hecho) -> ContrapartidaPropuesta {cuenta, tercero, periodo} — FUZZY (LLM)
-                       · _justificar — justificar(propuesta) -> Explicacion (base de L2)
-                       · _alzarExcepcion — ambiguedad alta y sin regla -> excepcion a cola (A8.1), no se asienta
-E. HANDLERS RPC        onProponerRequest -> _atender(e, 'proponer', ...).
-F. EVENTOS DE DOMINIO  publica `contabilidad.contrapartida_propuesta` · `contabilidad.contrapartida.proponer.failed` · `contabilidad.contrapartida_propuesta.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + smoke de la op fuzzy (entrada ambigua -> propuesta | excepcion a cola) + gate `scripts/validate-hibridos.js`.
-NO REUTILIZA / NOTA    NO REUTILIZA: no existe resolucion de contrapartida contable en el inventario (IVA/plan/diario = 0 modulos).
-```
-
-### completitud-cobertura — reflejo (CONSTRUIR · contabilidad-entrada)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo (sin persistencia de estado).
-                       Escucha: `contabilidad.cobertura.calcular.request` · `contabilidad.anclaje_declarado` · `contabilidad.hecho_admitido`.
-                       Depende (por EVENTO, sin require cruzado): `clave-natural` · `anclaje-cierre-vertical`.
-B. MODULE.JSON         name:"completitud-cobertura" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.cobertura.calcular.request","contabilidad.anclaje_declarado","contabilidad.hecho_admitido"];
-                       publishes:  ["contabilidad.cobertura_calculada","contabilidad.cobertura.calcular.response","contabilidad.cobertura.calcular.failed","contabilidad.cobertura_calculada.failed"];
-                       _doc: "EL UNICO CALCULADOR de cobertura (conflicto 2 resuelto): esperados / recibidos / huecos / tasa. Q3, P4 y C6 son VISTAS suyas.".
-C. INDEX.JS            class CompletitudCobertura extends ModuloHibridoReflejo; sin estado que persistir.
-D. PROYECCIONES        2 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _calcular — calcular(periodo) -> Cobertura {esperados, recibidos, huecos, tasa}
-                       · _huecos — huecos() -> Set<ClaveHecho> — alimenta A15, C6, Q3, P4
-E. HANDLERS RPC        onCalcularRequest -> _atender(e, 'calcular', ...).
-F. EVENTOS DE DOMINIO  publica `contabilidad.cobertura_calculada` · `contabilidad.cobertura.calcular.failed` · `contabilidad.cobertura_calculada.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + test unitario de la proyeccion (determinista: mismas entradas -> mismas salidas).
-NO REUTILIZA / NOTA    NO REUTILIZA: la metrica de cobertura de la ENTRADA es el corazon del cuello; no existe equivalente en el inventario.
-```
-
-### hecho-rectificativo — puente (CONSTRUIR · contabilidad-entrada)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo (sin persistencia de estado).
-                       Escucha: `contabilidad.rectificativo.emparejar.request` · `contabilidad.hecho_admitido`.
-                       Depende (por EVENTO, sin require cruzado): `clave-natural`.
-B. MODULE.JSON         name:"hecho-rectificativo" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.rectificativo.emparejar.request","contabilidad.hecho_admitido"];
-                       publishes:  ["contabilidad.hecho_rectificado","contabilidad.rectificativo.emparejar.response","contabilidad.rectificativo.emparejar.failed","contabilidad.hecho_rectificado.failed"];
-                       _doc: "Plano 2 de los 4 planos de correccion: el hecho posterior que corrige/anula casa con su original POR CLAVE NATURAL. NO borra: ANADE.".
-C. INDEX.JS            class HechoRectificativo extends ModuloHibridoReflejo; sin estado que persistir.
-D. PROYECCIONES        2 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _emparejar — emparejar(rectificativo, original) -> ok | ERROR_ORIGINAL_NO_HALLADO
-                       · _emitir — emitir(hecho, ajuste) -> asiento de ajuste (B5), nunca borrado
-E. HANDLERS RPC        onEmparejarRequest -> _atender(e, 'emparejar', ...).
-F. EVENTOS DE DOMINIO  publica `contabilidad.hecho_rectificado` · `contabilidad.rectificativo.emparejar.failed` · `contabilidad.hecho_rectificado.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + smoke contra puerto stub (cableado en el sitio) + caso de puerto ausente -> se declara, no se asume.
-NO REUTILIZA / NOTA    NO REUTILIZA: la correccion no destructiva por clave natural es propia del dominio contable.
-```
-
-### panel-proceso-contable — reflejo (CONSTRUIR · contabilidad-entrada)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo (sin persistencia de estado).
-                       Escucha: `contabilidad.panel.latido.request`.
-                       Depende (por EVENTO, sin require cruzado): `cola-revision` · `historial-proceso-contable` · `completitud-cobertura`.
-B. MODULE.JSON         name:"panel-proceso-contable" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.panel.latido.request"];
-                       publishes:  ["contabilidad.panel_latido","contabilidad.panel.latido.response","contabilidad.panel.latido.failed","contabilidad.panel_latido.failed"];
-                       _doc: "Latido del proceso de admision (que entra, que se procesa, que esta en cola, que falla) + la TASA que PRUEBA la promesa "sin una persona digitando".".
-C. INDEX.JS            class PanelProcesoContable extends ModuloHibridoReflejo; sin estado que persistir.
-D. PROYECCIONES        2 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _latido — latido() -> Panel — agregacion determinista
-                       · _tasaCobertura — tasaCobertura() -> Tasa (P4, vista de la metrica unica A12)
-E. HANDLERS RPC        onLatidoRequest -> _atender(e, 'latido', ...).
-F. EVENTOS DE DOMINIO  publica `contabilidad.panel_latido` · `contabilidad.panel.latido.failed` · `contabilidad.panel_latido.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + test unitario de la proyeccion (determinista: mismas entradas -> mismas salidas).
-NO REUTILIZA / NOTA    NO REUTILIZA: no existe panel de proceso contable; es el "display" de la entrada.
-```
-
-### desatasco-entrada — micro-agente (CONSTRUIR · contabilidad-entrada)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo + PosPersistencia (hibrido: reflejo + op fuzzy en cajon de blueprint; gate validate-hibridos: la op fuzzy NO va en module.json.subscribes).
-                       Escucha: `contabilidad.desatasco.resolver.request` · `contabilidad.excepcion_encolada`.
-                       Depende (por EVENTO, sin require cruzado): `cola-revision` · `catalogo-cuentas` · `regla-contrapartida` · `regla-movimiento-bancario` · `ratificacion-regla-aprendida`.
-B. MODULE.JSON         name:"desatasco-entrada" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.desatasco.resolver.request","contabilidad.excepcion_encolada"];
-                       publishes:  ["contabilidad.excepcion_desatascada","contabilidad.regla_aprendida","contabilidad.desatasco.resolver.response","contabilidad.desatasco.resolver.failed","contabilidad.excepcion_desatascada.failed","contabilidad.regla_aprendida.failed"];
-                       _doc: "LA ACCION que completa la cola: resolver / reencolar / descartar con MOTIVO. Produce la regla candidata que NO actua hasta ser ratificada (L10).".
-C. INDEX.JS            class DesatascoEntrada extends ModuloHibridoReflejo; cajon de blueprint para la op fuzzy; reflejo para la parte determinista; onUnload flush.
-D. PROYECCIONES        2 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _resolver — resolver(excepcion, decision) -> Resolucion | REENColar | DescartarConMotivo — FUZZY
-                       · _producirRegla — producirRegla(resolucion, evidencia) -> ReglaDeclarada candidata (aprendizaje hidratado)
-E. HANDLERS RPC        onResolverRequest -> _atender(e, 'resolver', ...).
-F. EVENTOS DE DOMINIO  publica `contabilidad.excepcion_desatascada` · `contabilidad.regla_aprendida` · `contabilidad.desatasco.resolver.failed` · `contabilidad.excepcion_desatascada.failed` · `contabilidad.regla_aprendida.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + smoke de la op fuzzy (entrada ambigua -> propuesta | excepcion a cola) + gate `scripts/validate-hibridos.js`.
-NO REUTILIZA / NOTA    NO REUTILIZA: el bucle excepcion -> regla -> menos excepciones es el corazon del cuello y no existe en el inventario.
-```
-
-### cuenta-terceros — reflejo (CONSTRUIR · contabilidad-entrada)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo (sin persistencia de estado).
-                       Escucha: `contabilidad.cuenta_terceros.saldo.request` · `contabilidad.cuenta_terceros.extracto.request` · `contabilidad.cuenta_terceros.vencimiento.request` · `contabilidad.cuenta_terceros.aging.request`.
-                       Depende (por EVENTO, sin require cruzado): `maestro-terceros` · `mayor-balanza` · `cola-declaraciones-criterio`.
-B. MODULE.JSON         name:"cuenta-terceros" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.cuenta_terceros.saldo.request","contabilidad.cuenta_terceros.extracto.request","contabilidad.cuenta_terceros.vencimiento.request","contabilidad.cuenta_terceros.aging.request"];
-                       publishes:  ["contabilidad.cuenta_terceros_calculada","contabilidad.cuenta_terceros.saldo.response","contabilidad.cuenta_terceros.saldo.failed","contabilidad.cuenta_terceros.extracto.response","contabilidad.cuenta_terceros.extracto.failed","contabilidad.cuenta_terceros.vencimiento.response","contabilidad.cuenta_terceros.vencimiento.failed","contabilidad.cuenta_terceros.aging.response","contabilidad.cuenta_terceros.aging.failed","contabilidad.cuenta_terceros_calculada.failed"];
-                       _doc: "Mayor AUXILIAR del tercero DERIVADO del libro (nunca almacen paralelo): facturas vivas, saldo, extracto confrontable, vencimientos y antiguedad por lado.".
-C. INDEX.JS            class CuentaTerceros extends ModuloHibridoReflejo; sin estado que persistir.
-D. PROYECCIONES        6 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _facturasVivas — facturasVivas(idTercero) -> List<IdAsiento> (N3)
-                       · _saldo — saldo(idTercero) -> Importe (N3)
-                       · _extracto — extracto(idTercero, desde, hasta) -> DocumentoConfrontable (N4)
-                       · _calcularVencimiento — calcularVencimiento(factura) -> Fecha desde la politica declarada (N6)
-                       · _estaVencido — estaVencido(factura, hoy) -> Bool (N6)
-                       · _clasificarPorVencimiento — clasificarPorVencimiento(lado, hoy) -> AgingReport POR_COBRAR | POR_PAGAR (N8)
-E. HANDLERS RPC        onSaldoRequest -> _atender(e, 'saldo', ...) | onExtractoRequest -> _atender(e, 'extracto', ...) | onVencimientoRequest -> _atender(e, 'vencimiento', ...) | onAgingRequest -> _atender(e, 'aging', ...).
-F. EVENTOS DE DOMINIO  publica `contabilidad.cuenta_terceros_calculada` · `contabilidad.cuenta_terceros.saldo.failed` · `contabilidad.cuenta_terceros.extracto.failed` · `contabilidad.cuenta_terceros.vencimiento.failed` · `contabilidad.cuenta_terceros.aging.failed` · `contabilidad.cuenta_terceros_calculada.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + test unitario de la proyeccion (determinista: mismas entradas -> mismas salidas).
-NO REUTILIZA / NOTA    NO REUTILIZA: las vistas por rol del tercero (auxiliar, extracto, vencimientos) cuelgan del libro de ESTA vertical.
-```
-
-### compra-proveedor — reflejo (CONSTRUIR · contabilidad-entrada)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo (sin persistencia de estado).
-                       Escucha: `contabilidad.compra.cotejar.request` · `contabilidad.compra.coste_real.request`.
-                       Depende (por EVENTO, sin require cruzado): `mayor-balanza` · `maestro-terceros`.
-B. MODULE.JSON         name:"compra-proveedor" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.compra.cotejar.request","contabilidad.compra.coste_real.request"];
-                       publishes:  ["contabilidad.compra_cotejada","contabilidad.compra.cotejar.response","contabilidad.compra.cotejar.failed","contabilidad.compra.coste_real.response","contabilidad.compra.coste_real.failed","contabilidad.compra_cotejada.failed"];
-                       _doc: "La compra VERIFICADA antes de asentar: cotejo pedido <-> recepcion <-> factura (N5) y ajuste del coste real por rappels/anticipos (N7).".
-C. INDEX.JS            class CompraProveedor extends ModuloHibridoReflejo; sin estado que persistir.
-D. PROYECCIONES        2 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _cotejar — cotejar(pedido, recepcion, factura) -> Cuadra | Descuadre -> cola (N5). Si el negocio no coteja (declarable), se asienta directo y SE DECLARA
-                       · _ajustarCosteReal — ajustarCosteReal(factura) -> Importe a lo realmente pagado (N7); el ajuste SUMA
-E. HANDLERS RPC        onCotejarRequest -> _atender(e, 'cotejar', ...) | onCoste_realRequest -> _atender(e, 'coste_real', ...).
-F. EVENTOS DE DOMINIO  publica `contabilidad.compra_cotejada` · `contabilidad.compra.cotejar.failed` · `contabilidad.compra.coste_real.failed` · `contabilidad.compra_cotejada.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + test unitario de la proyeccion (determinista: mismas entradas -> mismas salidas).
-NO REUTILIZA / NOTA    NO REUTILIZA: no existe cotejo compra/recepcion/factura en el inventario.
-```
-
-### emision-factura-venta — custodio (CONSTRUIR · contabilidad-entrada)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo + PosPersistencia + project.activated (persiste estado por proyecto).
-                       Escucha: `contabilidad.factura.emitir.request` · `contabilidad.factura.rectificar.request` · `contabilidad.factura.series.request` · `project.activated`.
-                       Depende (por EVENTO, sin require cruzado): `maestro-terceros` · `catalogo-cuentas` · `escritor-diario`.
-B. MODULE.JSON         name:"emision-factura-venta" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.factura.emitir.request","contabilidad.factura.rectificar.request","contabilidad.factura.series.request","project.activated"];
-                       publishes:  ["contabilidad.factura_emitida","contabilidad.factura_rectificada","contabilidad.factura.emitir.response","contabilidad.factura.emitir.failed","contabilidad.factura.rectificar.response","contabilidad.factura.rectificar.failed","contabilidad.factura.series.response","contabilidad.factura.series.failed","contabilidad.factura_emitida.failed","contabilidad.factura_rectificada.failed"];
-                       _doc: "Cara EMITIDA con serie/numeracion fiscal: numeracion correlativa SIN SALTOS. Un solo escritor (numero duplicado = corrupcion).".
-C. INDEX.JS            class EmisionFacturaVenta extends ModuloHibridoReflejo; onProjectActivated restaura el store; guard de escritor (rol autorizado); onUnload flush.
-D. PROYECCIONES        4 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _emitir — emitir(factura) -> FacturaEmitida — asigna numero correlativo; ticket o factura completa segun el TIPO (dato del hecho)
-                       · _series — series() -> List<IdSerie> (por negocio/canal/unica — declarable)
-                       · _rectificarSustitutiva — rectificarSustitutiva(serie, rectificativa) -> OK | ERROR (O2)
-                       · _calcularAjuste — calcularAjuste(original, motivo) -> Importe — abono/devolucion/descuento; NO borra (O2)
-E. HANDLERS RPC        onEmitirRequest -> _atender(e, 'emitir', ...) | onRectificarRequest -> _atender(e, 'rectificar', ...) | onSeriesRequest -> _atender(e, 'series', ...).
-F. EVENTOS DE DOMINIO  publica `contabilidad.factura_emitida` · `contabilidad.factura_rectificada` · `contabilidad.factura.emitir.failed` · `contabilidad.factura.rectificar.failed` · `contabilidad.factura.series.failed` · `contabilidad.factura_emitida.failed` · `contabilidad.factura_rectificada.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + guard single-writer (segundo escritor RECHAZADO) + smoke de su RPC + `project.activated` restaura el store.
-NO REUTILIZA / NOTA    NO REUTILIZA: no existe emision de factura con serie fiscal en el inventario (fiscal en Enki = 0 modulos). `prisma/ticket` formatea texto, no emite documento fiscal (patron de formato tomado).
-```
-
-### declaracion-fuente-faltante — puente (CONSTRUIR · contabilidad-entrada)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo (sin persistencia de estado).
-                       Escucha: `contabilidad.cobertura_calculada`.
-                       Depende (por EVENTO, sin require cruzado): `completitud-cobertura` · `motor-avisos`.
-B. MODULE.JSON         name:"declaracion-fuente-faltante" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.cobertura_calculada"];
-                       publishes:  ["contabilidad.fuente_faltante_declarada","contabilidad.aviso.solicitar.request","contabilidad.fuente_faltante.failed","contabilidad.fuente_faltante_declarada.failed","contabilidad.aviso.solicitar.failed"];
-                       _doc: "Si una vertical NO publica un hecho que se necesita, se DECLARA el hueco (abierto + aviso). NUNCA se obliga a la fuente a producirlo.".
-C. INDEX.JS            class DeclaracionFuenteFaltante extends ModuloHibridoReflejo; sin estado que persistir.
-D. PROYECCIONES        2 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _detectarHueco — detectarHueco(cobertura) -> Hueco (reflejo interno)
-                       · _declarar — declarar(hueco) -> aviso (K2) + marca [ABIERTO]
-E. HANDLERS RPC        no declara ops propias: solo reacciona a eventos de dominio.
-F. EVENTOS DE DOMINIO  publica `contabilidad.fuente_faltante_declarada` · `contabilidad.aviso.solicitar.request` · `contabilidad.fuente_faltante.failed` · `contabilidad.fuente_faltante_declarada.failed` · `contabilidad.aviso.solicitar.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + smoke contra puerto stub (cableado en el sitio) + caso de puerto ausente -> se declara, no se asume.
-NO REUTILIZA / NOTA    NO REUTILIZA: la asimetria con la vertical subordinada es propia de esta vertical (fuente: prisma de interlocutor `verticales`).
-```
-
-### aviso-revision — puente (CONSTRUIR · contabilidad-entrada)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo (sin persistencia de estado).
-                       Escucha: `contabilidad.excepcion_encolada`.
-                       Depende (por EVENTO, sin require cruzado): `cola-revision` · `motor-avisos`.
-B. MODULE.JSON         name:"aviso-revision" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.excepcion_encolada"];
-                       publishes:  ["contabilidad.aviso.solicitar.request","contabilidad.aviso_revision_solicitado","contabilidad.aviso.solicitar.failed","contabilidad.aviso_revision_solicitado.failed"];
-                       _doc: "Empujon al motor de avisos: "esto necesita revision". Conecta por senal; no resuelve ni decide nada.".
-C. INDEX.JS            class AvisoRevision extends ModuloHibridoReflejo; sin estado que persistir.
-D. PROYECCIONES        1 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _avisar — avisar(excepcion) -> senal a motor-avisos (K2) con el motivo y la cola de destino
-E. HANDLERS RPC        no declara ops propias: solo reacciona a eventos de dominio.
-F. EVENTOS DE DOMINIO  publica `contabilidad.aviso.solicitar.request` · `contabilidad.aviso_revision_solicitado` · `contabilidad.aviso.solicitar.failed` · `contabilidad.aviso_revision_solicitado.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + smoke contra puerto stub (cableado en el sitio) + caso de puerto ausente -> se declara, no se asume.
-NO REUTILIZA / NOTA    NO REUTILIZA: el aviso de revision nace de la cola de ESTA vertical; K2 (motor-avisos) solo lo produce/entrega.
-```
-
-### 3.2 — Oleada 2 · `contabilidad-libro` (22 hojas CONSTRUIR)
-
-### clave-natural — reflejo (CONSTRUIR · contabilidad-libro)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo (sin persistencia de estado).
-                       Escucha: `contabilidad.clave.calcular.request` · `contabilidad.clave.repeticion.request`.
-                       Depende (por EVENTO, sin require cruzado): `anclaje-cierre-vertical` · `cola-declaraciones-criterio`.
-B. MODULE.JSON         name:"clave-natural" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.clave.calcular.request","contabilidad.clave.repeticion.request"];
-                       publishes:  ["contabilidad.clave_calculada","contabilidad.clave.calcular.response","contabilidad.clave.calcular.failed","contabilidad.clave.repeticion.response","contabilidad.clave.repeticion.failed","contabilidad.clave_calculada.failed"];
-                       _doc: "CERROJO 3 · idempotencia: mismos componentes => mismo hecho => mismo asiento. Un solo calculador de la clave.".
-C. INDEX.JS            class ClaveNatural extends ModuloHibridoReflejo; sin estado que persistir.
-D. PROYECCIONES        2 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _calcular — calcular(hechoODocumento) -> ClaveNatural (cuelga de A14 / unidad_de_cierre)
-                       · _esRepeticion — esRepeticion(clave, yaAsentados) -> Bool — test unitario lo afirma
-E. HANDLERS RPC        onCalcularRequest -> _atender(e, 'calcular', ...) | onRepeticionRequest -> _atender(e, 'repeticion', ...).
-F. EVENTOS DE DOMINIO  publica `contabilidad.clave_calculada` · `contabilidad.clave.calcular.failed` · `contabilidad.clave.repeticion.failed` · `contabilidad.clave_calculada.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + test unitario de la proyeccion (determinista: mismas entradas -> mismas salidas).
-NO REUTILIZA / NOTA    NO REUTILIZA: la clave natural es la invariante anti-bucle de ESTA vertical; ningun modulo del inventario la calcula.
-```
-
-### single-writer — custodio (CONSTRUIR · contabilidad-libro)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo + PosPersistencia + project.activated (persiste estado por proyecto).
-                       Escucha: `contabilidad.parcela.registrar.request` · `contabilidad.parcela.autorizar.request` · `project.activated`.
-                       Depende (por EVENTO, sin require cruzado): (ninguno).
-B. MODULE.JSON         name:"single-writer" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.parcela.registrar.request","contabilidad.parcela.autorizar.request","project.activated"];
-                       publishes:  ["contabilidad.parcela_registrada","contabilidad.parcela_autorizada","contabilidad.parcela.registrar.response","contabilidad.parcela.registrar.failed","contabilidad.parcela.autorizar.response","contabilidad.parcela.autorizar.failed","contabilidad.parcela_registrada.failed","contabilidad.parcela_autorizada.failed"];
-                       _doc: "CERROJO 2 · la ley que gobierna a TODO custodio: un unico escritor por parcela. Los custodios registran su parcela y su rol autorizado.".
-C. INDEX.JS            class SingleWriter extends ModuloHibridoReflejo; onProjectActivated restaura el store; guard de escritor (rol autorizado); onUnload flush.
-D. PROYECCIONES        2 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _autorizar — autorizar(parcela, rol) -> ok
-                       · _escribir — escribir(parcela, rol, cambio) -> ok | ERROR_DOS_ESCRITORES
-E. HANDLERS RPC        onRegistrarRequest -> _atender(e, 'registrar', ...) | onAutorizarRequest -> _atender(e, 'autorizar', ...).
-F. EVENTOS DE DOMINIO  publica `contabilidad.parcela_registrada` · `contabilidad.parcela_autorizada` · `contabilidad.parcela.registrar.failed` · `contabilidad.parcela.autorizar.failed` · `contabilidad.parcela_registrada.failed` · `contabilidad.parcela_autorizada.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + guard single-writer (segundo escritor RECHAZADO) + smoke de su RPC + `project.activated` restaura el store.
-NO REUTILIZA / NOTA    NO REUTILIZA: el guard de escritor por parcela es la invariante transversal del dominio; no existe modulo que lo gobierne.
-```
-
-### frontera-planos — reflejo (CONSTRUIR · contabilidad-libro)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo (sin persistencia de estado).
-                       Escucha: `contabilidad.frontera_planos.verificar.request`.
-                       Depende (por EVENTO, sin require cruzado): (ninguno).
-B. MODULE.JSON         name:"frontera-planos" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.frontera_planos.verificar.request"];
-                       publishes:  ["contabilidad.frontera_planos_verificada","contabilidad.frontera_planos.verificar.response","contabilidad.frontera_planos.verificar.failed","contabilidad.frontera_planos_verificada.failed"];
-                       _doc: "CERROJO 1 · anti-realimentacion: contabilidad emite CALCULOS; si un contrato pretende ser un HECHO de negocio -> rechazo determinista.".
-C. INDEX.JS            class FronteraPlanos extends ModuloHibridoReflejo; sin estado que persistir.
-D. PROYECCIONES        1 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _verificar — verificar(emision) -> ok | ERROR_FUGA (prefijo del espacio de CALCULOS contabilidad.*)
-E. HANDLERS RPC        onVerificarRequest -> _atender(e, 'verificar', ...).
-F. EVENTOS DE DOMINIO  publica `contabilidad.frontera_planos_verificada` · `contabilidad.frontera_planos.verificar.failed` · `contabilidad.frontera_planos_verificada.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + test unitario de la proyeccion (determinista: mismas entradas -> mismas salidas).
-NO REUTILIZA / NOTA    NO REUTILIZA: cerrojo propio del dominio contable (la identidad "observadora que no produce hechos" se verifica aqui).
-```
-
-### catalogo-cuentas — custodio (CONSTRUIR · contabilidad-libro)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo + PosPersistencia + project.activated (persiste estado por proyecto).
-                       Escucha: `contabilidad.cuenta.declarar.request` · `contabilidad.cuenta.resolver.request` · `contabilidad.plan.importar.request` · `contabilidad.plan.exportar.request` · `project.activated`.
-                       Depende (por EVENTO, sin require cruzado): `cola-declaraciones-criterio`.
-B. MODULE.JSON         name:"catalogo-cuentas" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.cuenta.declarar.request","contabilidad.cuenta.resolver.request","contabilidad.plan.importar.request","contabilidad.plan.exportar.request","project.activated"];
-                       publishes:  ["contabilidad.cuenta_declarada","contabilidad.plan_importado","contabilidad.plan_exportado","contabilidad.cuenta.declarar.response","contabilidad.cuenta.declarar.failed","contabilidad.cuenta.resolver.response","contabilidad.cuenta.resolver.failed","contabilidad.plan.importar.response","contabilidad.plan.importar.failed","contabilidad.plan.exportar.response","contabilidad.plan.exportar.failed","contabilidad.cuenta_declarada.failed","contabilidad.plan_importado.failed","contabilidad.plan_exportado.failed"];
-                       _doc: "Plan contable DECLARABLE/IMPORTABLE (lo aporta el negocio o el asesor) + frontera unica de codificacion (B6). Un solo escritor.".
-C. INDEX.JS            class CatalogoCuentas extends ModuloHibridoReflejo; onProjectActivated restaura el store; guard de escritor (rol autorizado); onUnload flush.
-D. PROYECCIONES        4 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _declarar — declarar(rol, cuenta) — un solo escritor
-                       · _resolver — resolver(codigo) -> Cuenta | NO_EXISTE
-                       · _importar — importar(origen) -> List<Cuenta> (B6, unico cruce de formatos del plan)
-                       · _exportar — exportar(catalogo) -> DocumentoPlan (B6)
-E. HANDLERS RPC        onDeclararRequest -> _atender(e, 'declarar', ...) | onResolverRequest -> _atender(e, 'resolver', ...) | onImportarRequest -> _atender(e, 'importar', ...) | onExportarRequest -> _atender(e, 'exportar', ...).
-F. EVENTOS DE DOMINIO  publica `contabilidad.cuenta_declarada` · `contabilidad.plan_importado` · `contabilidad.plan_exportado` · `contabilidad.cuenta.declarar.failed` · `contabilidad.cuenta.resolver.failed` · `contabilidad.plan.importar.failed` · `contabilidad.plan.exportar.failed` · `contabilidad.cuenta_declarada.failed` · `contabilidad.plan_importado.failed` · `contabilidad.plan_exportado.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + guard single-writer (segundo escritor RECHAZADO) + smoke de su RPC + `project.activated` restaura el store.
-NO REUTILIZA / NOTA    NO REUTILIZA: no existe plan contable en el inventario; el formato declarable del asesor es DATO (K9).
-```
-
-### escritor-diario — custodio (CONSTRUIR · contabilidad-libro)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo + PosPersistencia + project.activated (persiste estado por proyecto).
-                       Escucha: `contabilidad.asiento.asentar.request` · `contabilidad.asiento.apertura.request` · `contabilidad.asiento.cierre.request` · `contabilidad.asiento.ajustar.request` · `contabilidad.contrapartida_propuesta` · `project.activated`.
-                       Depende (por EVENTO, sin require cruzado): `catalogo-cuentas` · `clave-natural` · `single-writer`.
-B. MODULE.JSON         name:"escritor-diario" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.asiento.asentar.request","contabilidad.asiento.apertura.request","contabilidad.asiento.cierre.request","contabilidad.asiento.ajustar.request","contabilidad.contrapartida_propuesta","project.activated"];
-                       publishes:  ["contabilidad.asiento_asentado","contabilidad.asiento_rechazado","contabilidad.asiento.asentar.response","contabilidad.asiento.asentar.failed","contabilidad.asiento.apertura.response","contabilidad.asiento.apertura.failed","contabilidad.asiento.cierre.response","contabilidad.asiento.cierre.failed","contabilidad.asiento.ajustar.response","contabilidad.asiento.ajustar.failed","contabilidad.asiento_asentado.failed","contabilidad.asiento_rechazado.failed"];
-                       _doc: "EL custodio del libro: single-writer por parcela, verifica partida doble ANTES de aceptar y rechaza duplicados por clave natural. Aqui entrega el cuello.".
-C. INDEX.JS            class EscritorDiario extends ModuloHibridoReflejo; onProjectActivated restaura el store; guard de escritor (rol autorizado); onUnload flush.
-D. PROYECCIONES        4 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _asentar — asentar(rol, asiento) -> ok | ERROR_DESCUADRE | ERROR_DUPLICADO (suma debe = suma haber)
-                       · _registrarApertura — registrarApertura(apertura) -> ok
-                       · _registrarCierre — registrarCierre(cierre) -> ok
-                       · _componerDesdeContrapartida — compone los apuntes desde el hecho + la contrapartida recibida (proyeccion interna; no hay orquestador)
-E. HANDLERS RPC        onAsentarRequest -> _atender(e, 'asentar', ...) | onAperturaRequest -> _atender(e, 'apertura', ...) | onCierreRequest -> _atender(e, 'cierre', ...) | onAjustarRequest -> _atender(e, 'ajustar', ...).
-F. EVENTOS DE DOMINIO  publica `contabilidad.asiento_asentado` · `contabilidad.asiento_rechazado` · `contabilidad.asiento.asentar.failed` · `contabilidad.asiento.apertura.failed` · `contabilidad.asiento.cierre.failed` · `contabilidad.asiento.ajustar.failed` · `contabilidad.asiento_asentado.failed` · `contabilidad.asiento_rechazado.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + guard single-writer (segundo escritor RECHAZADO) + smoke de su RPC + `project.activated` restaura el store.
-NO REUTILIZA / NOTA    NO REUTILIZA: no existe diario de partida doble en el inventario (verificado: fiscal/contable = 0 modulos).
-```
-
-### mayor-balanza — reflejo (CONSTRUIR · contabilidad-libro)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo (sin persistencia de estado).
-                       Escucha: `contabilidad.mayor.saldo.request` · `contabilidad.mayor.balanza.request` · `contabilidad.mayor.movimientos.request`.
-                       Depende (por EVENTO, sin require cruzado): `escritor-diario`.
-B. MODULE.JSON         name:"mayor-balanza" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.mayor.saldo.request","contabilidad.mayor.balanza.request","contabilidad.mayor.movimientos.request"];
-                       publishes:  ["contabilidad.balanza_calculada","contabilidad.mayor.saldo.response","contabilidad.mayor.saldo.failed","contabilidad.mayor.balanza.response","contabilidad.mayor.balanza.failed","contabilidad.mayor.movimientos.response","contabilidad.mayor.movimientos.failed","contabilidad.balanza_calculada.failed"];
-                       _doc: "Saldos por cuenta DERIVADOS del diario (nunca almacen paralelo). Determinista; un test lo afirma.".
-C. INDEX.JS            class MayorBalanza extends ModuloHibridoReflejo; sin estado que persistir.
-D. PROYECCIONES        3 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _saldoPorCuenta — saldoPorCuenta(periodo) -> Map<IdCuenta, Importe>
-                       · _balanza — balanza(periodo) -> Balanza (sumas y saldos)
-                       · _movimientosDe — movimientosDe(cuenta, periodo) -> List<Apunte>
-E. HANDLERS RPC        onSaldoRequest -> _atender(e, 'saldo', ...) | onBalanzaRequest -> _atender(e, 'balanza', ...) | onMovimientosRequest -> _atender(e, 'movimientos', ...).
-F. EVENTOS DE DOMINIO  publica `contabilidad.balanza_calculada` · `contabilidad.mayor.saldo.failed` · `contabilidad.mayor.balanza.failed` · `contabilidad.mayor.movimientos.failed` · `contabilidad.balanza_calculada.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + test unitario de la proyeccion (determinista: mismas entradas -> mismas salidas).
-NO REUTILIZA / NOTA    NO REUTILIZA: derivacion del diario propia; ningun modulo del inventario lleva mayor/balanza.
-```
-
-### traza-asiento — custodio (CONSTRUIR · contabilidad-libro)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo + PosPersistencia + project.activated (persiste estado por proyecto).
-                       Escucha: `contabilidad.traza.anotar.request` · `contabilidad.traza.consultar.request` · `contabilidad.asiento_asentado` · `project.activated`.
-                       Depende (por EVENTO, sin require cruzado): `escritor-diario`.
-B. MODULE.JSON         name:"traza-asiento" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.traza.anotar.request","contabilidad.traza.consultar.request","contabilidad.asiento_asentado","project.activated"];
-                       publishes:  ["contabilidad.traza_anotada","contabilidad.traza.anotar.response","contabilidad.traza.anotar.failed","contabilidad.traza.consultar.response","contabilidad.traza.consultar.failed","contabilidad.traza_anotada.failed"];
-                       _doc: "Registro INMUTABLE (append-only) de quien y cuando creo cada asiento. Solo crece; nunca se reescribe ni se borra.".
-C. INDEX.JS            class TrazaAsiento extends ModuloHibridoReflejo; onProjectActivated restaura el store; guard de escritor (rol autorizado); onUnload flush.
-D. PROYECCIONES        2 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _anotar — anotar(quien, cuando, que) — escritor unico: el ESCRITOR_DIARIO
-                       · _consultar — consultar(claveNatural) -> EntradaTraza
-E. HANDLERS RPC        onAnotarRequest -> _atender(e, 'anotar', ...) | onConsultarRequest -> _atender(e, 'consultar', ...).
-F. EVENTOS DE DOMINIO  publica `contabilidad.traza_anotada` · `contabilidad.traza.anotar.failed` · `contabilidad.traza.consultar.failed` · `contabilidad.traza_anotada.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + guard single-writer (segundo escritor RECHAZADO) + smoke de su RPC + `project.activated` restaura el store.
-NO REUTILIZA / NOTA    NO REUTILIZA: la traza del asiento es requisito de auditoria y de Verifactu; no existe en el inventario.
-```
-
-### asiento-ajuste — puente (CONSTRUIR · contabilidad-libro)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo (sin persistencia de estado).
-                       Escucha: `contabilidad.ajuste.recibir.request`.
-                       Depende (por EVENTO, sin require cruzado): `escritor-diario` · `traza-asiento`.
-B. MODULE.JSON         name:"asiento-ajuste" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.ajuste.recibir.request"];
-                       publishes:  ["contabilidad.asiento.ajustar.request","contabilidad.ajuste_recibido","contabilidad.ajuste.recibir.failed","contabilidad.ajuste.recibir.response","contabilidad.asiento.ajustar.failed","contabilidad.ajuste_recibido.failed"];
-                       _doc: "Plano 1 de correccion: por donde la correccion del asesor ENTRA al libro SIN BORRAR (suma). Traza intacta.".
-C. INDEX.JS            class AsientoAjuste extends ModuloHibridoReflejo; sin estado que persistir.
-D. PROYECCIONES        2 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _recibir — recibir(correccion: Asiento) -> senal al diario (B2)
-                       · _verificarNoBorrado — verificarNoBorrado() -> ok — el original sigue en la traza
-E. HANDLERS RPC        onRecibirRequest -> _atender(e, 'recibir', ...).
-F. EVENTOS DE DOMINIO  publica `contabilidad.asiento.ajustar.request` · `contabilidad.ajuste_recibido` · `contabilidad.ajuste.recibir.failed` · `contabilidad.asiento.ajustar.failed` · `contabilidad.ajuste_recibido.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + smoke contra puerto stub (cableado en el sitio) + caso de puerto ausente -> se declara, no se asume.
-NO REUTILIZA / NOTA    NO REUTILIZA: la correccion que suma sobre el libro es propia del dominio contable.
-```
-
-### estados-contables — reflejo (CONSTRUIR · contabilidad-libro)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo (sin persistencia de estado).
-                       Escucha: `contabilidad.estado.balance.request` · `contabilidad.estado.resultado.request`.
-                       Depende (por EVENTO, sin require cruzado): `mayor-balanza` · `inmovilizado` · `valoracion-existencia`.
-B. MODULE.JSON         name:"estados-contables" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.estado.balance.request","contabilidad.estado.resultado.request"];
-                       publishes:  ["contabilidad.balance_calculado","contabilidad.resultado_calculado","contabilidad.estado.balance.response","contabilidad.estado.balance.failed","contabilidad.estado.resultado.response","contabilidad.estado.resultado.failed","contabilidad.balance_calculado.failed","contabilidad.resultado_calculado.failed"];
-                       _doc: "Balance de situacion (C1) y cuenta de resultados (C2) DERIVADOS del mayor + valoraciones. No se "arregla" un resultado: se explica con su base y su cobertura.".
-C. INDEX.JS            class EstadosContables extends ModuloHibridoReflejo; sin estado que persistir.
-D. PROYECCIONES        3 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _componerBalance — componerBalance(periodo) -> Balance {activo, pasivo, patrimonio} (C1)
-                       · _cuadrar — cuadrar() -> ok | ERROR_ACTIVO_NO_CUADRA (C1)
-                       · _componerResultado — componerResultado(periodo) -> Resultado {ingresos, gastos, resultado} (C2)
-E. HANDLERS RPC        onBalanceRequest -> _atender(e, 'balance', ...) | onResultadoRequest -> _atender(e, 'resultado', ...).
-F. EVENTOS DE DOMINIO  publica `contabilidad.balance_calculado` · `contabilidad.resultado_calculado` · `contabilidad.estado.balance.failed` · `contabilidad.estado.resultado.failed` · `contabilidad.balance_calculado.failed` · `contabilidad.resultado_calculado.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + test unitario de la proyeccion (determinista: mismas entradas -> mismas salidas).
-NO REUTILIZA / NOTA    NO REUTILIZA: los estados contables no existen en el inventario; son la derivacion del mayor.
-```
-
-### periodificacion — reflejo (CONSTRUIR · contabilidad-libro)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo (sin persistencia de estado).
-                       Escucha: `contabilidad.periodo.imputar.request`.
-                       Depende (por EVENTO, sin require cruzado): `cola-declaraciones-criterio`.
-B. MODULE.JSON         name:"periodificacion" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.periodo.imputar.request"];
-                       publishes:  ["contabilidad.periodo_imputado","contabilidad.periodo.imputar.response","contabilidad.periodo.imputar.failed","contabilidad.periodo_imputado.failed"];
-                       _doc: "Imputa cada hecho a su periodo con el CRITERIO DECLARADO y CONSERVA las dos fechas (operacion != valor). No elige ni adivina.".
-C. INDEX.JS            class Periodificacion extends ModuloHibridoReflejo; sin estado que persistir.
-D. PROYECCIONES        2 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _imputarPeriodo — imputarPeriodo(hecho) -> IdPeriodo (criterio declarado, nunca cableado)
-                       · _conservarFechas — conservarFechas(hecho) -> (fechaOperacion, fechaValor)
-E. HANDLERS RPC        onImputarRequest -> _atender(e, 'imputar', ...).
-F. EVENTOS DE DOMINIO  publica `contabilidad.periodo_imputado` · `contabilidad.periodo.imputar.failed` · `contabilidad.periodo_imputado.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + test unitario de la proyeccion (determinista: mismas entradas -> mismas salidas).
-NO REUTILIZA / NOTA    NO REUTILIZA: la periodificacion con dos fechas y criterio declarable es propia de la vertical.
-```
-
-### cierre-ejercicio — custodio (CONSTRUIR · contabilidad-libro)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo + PosPersistencia + project.activated (persiste estado por proyecto).
-                       Escucha: `contabilidad.cierre.cerrar.request` · `contabilidad.cierre.estado.request` · `contabilidad.hecho_admitido` · `project.activated`.
-                       Depende (por EVENTO, sin require cruzado): `escritor-diario` · `mayor-balanza` · `periodificacion` · `inmovilizado` · `cola-declaraciones-criterio`.
-B. MODULE.JSON         name:"cierre-ejercicio" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.cierre.cerrar.request","contabilidad.cierre.estado.request","contabilidad.hecho_admitido","project.activated"];
-                       publishes:  ["contabilidad.cierre_realizado","contabilidad.apertura_generada","contabilidad.cierre.cerrar.response","contabilidad.cierre.cerrar.failed","contabilidad.cierre.estado.response","contabilidad.cierre.estado.failed","contabilidad.cierre_realizado.failed","contabilidad.apertura_generada.failed"];
-                       _doc: "Cierra el periodo con ajustes: IRREVERSIBLE salvo ajuste posterior (B5). DOS niveles de cierre (dia del negocio · mes del asesor).".
-C. INDEX.JS            class CierreEjercicio extends ModuloHibridoReflejo; onProjectActivated restaura el store; guard de escritor (rol autorizado); onUnload flush.
-D. PROYECCIONES        6 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _cerrar — cerrar(periodo, ajustes) -> Cierre | ERROR_PERIODO_YA_CERRADO
-                       · _esIrreversible — esIrreversible() -> Bool
-                       · _nivel1 — NIVEL 1 caja del dia: consume el hecho CIERRE_JORNADA admitido por la puerta (clave natural: proyecto+jornada)
-                       · _nivel2 — NIVEL 2 mes natural: ajustes, periodificacion, amortizaciones, IVA devengado/soportado, regularizacion (clave: proyecto+ejercicio+mes)
-                       · _generarApertura — generarApertura(cierreAnterior) -> List<Asiento> (C5): los saldos de apertura son los de cierre, nunca inventados
-                       · _arrastrarSaldos — arrastrarSaldos() -> Balance (C5)
-E. HANDLERS RPC        onCerrarRequest -> _atender(e, 'cerrar', ...) | onEstadoRequest -> _atender(e, 'estado', ...).
-F. EVENTOS DE DOMINIO  publica `contabilidad.cierre_realizado` · `contabilidad.apertura_generada` · `contabilidad.cierre.cerrar.failed` · `contabilidad.cierre.estado.failed` · `contabilidad.cierre_realizado.failed` · `contabilidad.apertura_generada.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + guard single-writer (segundo escritor RECHAZADO) + smoke de su RPC + `project.activated` restaura el store.
-NO REUTILIZA / NOTA    NO REUTILIZA: el cierre de caja diario de la OPERACION no se toca: entra como hecho observado. El cierre contable con ajustes no existe en el inventario.
-```
-
-### aviso-cuadre — puente (CONSTRUIR · contabilidad-libro)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo (sin persistencia de estado).
-                       Escucha: `contabilidad.cobertura_calculada` · `contabilidad.cierre_realizado`.
-                       Depende (por EVENTO, sin require cruzado): `completitud-cobertura` · `motor-avisos`.
-B. MODULE.JSON         name:"aviso-cuadre" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.cobertura_calculada","contabilidad.cierre_realizado"];
-                       publishes:  ["contabilidad.cuadre_evaluado","contabilidad.aviso.solicitar.request","contabilidad.cuadre.failed","contabilidad.cuadre_evaluado.failed","contabilidad.aviso.solicitar.failed"];
-                       _doc: "NO FINGE el cuadre: si falta cobertura, AVISA. VISTA de la metrica unica (A12), no una segunda metrica.".
-C. INDEX.JS            class AvisoCuadre extends ModuloHibridoReflejo; sin estado que persistir.
-D. PROYECCIONES        1 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _evaluar — evaluar(cierre) -> Cuadra | FaltaCobertura (lee la metrica unica, no recalcula)
-E. HANDLERS RPC        no declara ops propias: solo reacciona a eventos de dominio.
-F. EVENTOS DE DOMINIO  publica `contabilidad.cuadre_evaluado` · `contabilidad.aviso.solicitar.request` · `contabilidad.cuadre.failed` · `contabilidad.cuadre_evaluado.failed` · `contabilidad.aviso.solicitar.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + smoke contra puerto stub (cableado en el sitio) + caso de puerto ausente -> se declara, no se asume.
-NO REUTILIZA / NOTA    NO REUTILIZA: el aviso de cuadre bebe de la metrica de cobertura de ESTA vertical.
-```
-
-### puerto-extracto — conversor (CONSTRUIR · contabilidad-libro)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo (sin persistencia de estado).
-                       Escucha: `contabilidad.extracto.leer.request` · `contabilidad.extracto.registrar_forma.request`.
-                       Depende (por EVENTO, sin require cruzado): `credential-manager`.
-B. MODULE.JSON         name:"puerto-extracto" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.extracto.leer.request","contabilidad.extracto.registrar_forma.request"];
-                       publishes:  ["contabilidad.extracto_leido","contabilidad.extracto.leer.response","contabilidad.extracto.leer.failed","contabilidad.extracto.registrar_forma.response","contabilidad.extracto.registrar_forma.failed","contabilidad.extracto_leido.failed"];
-                       _doc: "Frontera del canal/formato del extracto bancario: un adaptador por fuente, puesto en el sitio. Si falta una fuente -> SE CREA.".
-C. INDEX.JS            class PuertoExtracto extends ModuloHibridoReflejo; sin estado que persistir.
-D. PROYECCIONES        2 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _leer — leer(canal) -> List<MovimientoBancario>
-                       · _registrarAdaptador — registrarAdaptador(canal) -> ok — catalogo declarable; credenciales via credential-manager
-E. HANDLERS RPC        onLeerRequest -> _atender(e, 'leer', ...) | onRegistrar_formaRequest -> _atender(e, 'registrar_forma', ...).
-F. EVENTOS DE DOMINIO  publica `contabilidad.extracto_leido` · `contabilidad.extracto.leer.failed` · `contabilidad.extracto.registrar_forma.failed` · `contabilidad.extracto_leido.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + smoke leer/escribir en las dos direcciones del formato + caso de forma NO declarada.
-NO REUTILIZA / NOTA    NO REUTILIZA: ningun modulo del inventario lee extractos bancarios (conciliacion = 0 modulos).
-```
-
-### conciliacion-bancaria — reflejo (CONSTRUIR · contabilidad-libro)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo (sin persistencia de estado).
-                       Escucha: `contabilidad.conciliacion.cruzar.request` · `contabilidad.conciliacion.informe.request`.
-                       Depende (por EVENTO, sin require cruzado): `mayor-balanza` · `puerto-extracto` · `regla-movimiento-bancario` · `maestro-cuentas-bancarias`.
-B. MODULE.JSON         name:"conciliacion-bancaria" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.conciliacion.cruzar.request","contabilidad.conciliacion.informe.request"];
-                       publishes:  ["contabilidad.conciliacion_realizada","contabilidad.movimiento_sin_cruzar","contabilidad.conciliacion.cruzar.response","contabilidad.conciliacion.cruzar.failed","contabilidad.conciliacion.informe.response","contabilidad.conciliacion.informe.failed","contabilidad.conciliacion_realizada.failed","contabilidad.movimiento_sin_cruzar.failed"];
-                       _doc: "El CRUCE extracto <-> libro por clave natural y reglas es DETERMINISTA; el juicio vive en sus satelites E7 (fuzzy) y E8 (custodio).".
-C. INDEX.JS            class ConciliacionBancaria extends ModuloHibridoReflejo; sin estado que persistir.
-D. PROYECCIONES        5 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _cruzar — cruzar(extracto, libro) -> List<Conciliacion> (E1)
-                       · _sinCruzar — sinCruzar(extracto, libro) -> List<MovimientoBancario> -> E7
-                       · _cuadrarMovimiento — cuadrarMovimiento(movimiento, cobroOPago) -> Ok | Descuadre (E3, clave natural compartida)
-                       · _explicarDesfase — explicarDesfase() -> List<PartidaEnTransito> (E9: cheque no cobrado, cobro no apuntado)
-                       · _componerInforme — componerInforme() -> DocumentoCuadre (E10: saldo banco <-> saldo contable ajustado)
-E. HANDLERS RPC        onCruzarRequest -> _atender(e, 'cruzar', ...) | onInformeRequest -> _atender(e, 'informe', ...).
-F. EVENTOS DE DOMINIO  publica `contabilidad.conciliacion_realizada` · `contabilidad.movimiento_sin_cruzar` · `contabilidad.conciliacion.cruzar.failed` · `contabilidad.conciliacion.informe.failed` · `contabilidad.conciliacion_realizada.failed` · `contabilidad.movimiento_sin_cruzar.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + test unitario de la proyeccion (determinista: mismas entradas -> mismas salidas).
-NO REUTILIZA / NOTA    NO REUTILIZA: la conciliacion bancaria no existe en el inventario; el cruce deterministico es propio.
-```
-
-### partida-no-identificada — micro-agente (CONSTRUIR · contabilidad-libro)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo + PosPersistencia (hibrido: reflejo + op fuzzy en cajon de blueprint; gate validate-hibridos: la op fuzzy NO va en module.json.subscribes).
-                       Escucha: `contabilidad.movimiento_sin_cruzar`.
-                       Depende (por EVENTO, sin require cruzado): `conciliacion-bancaria` · `regla-movimiento-bancario` · `cola-revision`.
-B. MODULE.JSON         name:"partida-no-identificada" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.movimiento_sin_cruzar"];
-                       publishes:  ["contabilidad.partida_clasificada","contabilidad.excepcion.encolar.request","contabilidad.partida_clasificada.failed","contabilidad.excepcion.encolar.failed"];
-                       _doc: "El movimiento SIN contrapartida llega con descripcion ambigua -> INTERPRETAR. Una vez existe la regla (E8) pasa a automatico; lo no reconocible va a cola. NO se ignora.".
-C. INDEX.JS            class PartidaNoIdentificada extends ModuloHibridoReflejo; cajon de blueprint para la op fuzzy; reflejo para la parte determinista; onUnload flush.
-D. PROYECCIONES        2 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _reconocer — reconocer(movimiento) -> Clasificacion | SIN_REGLA — FUZZY (comision/interes/devolucion)
-                       · _proponerContrapartida — proponerContrapartida(movimiento) -> Contrapartida
-E. HANDLERS RPC        no declara ops propias: solo reacciona a eventos de dominio.
-F. EVENTOS DE DOMINIO  publica `contabilidad.partida_clasificada` · `contabilidad.excepcion.encolar.request` · `contabilidad.partida_clasificada.failed` · `contabilidad.excepcion.encolar.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + smoke de la op fuzzy (entrada ambigua -> propuesta | excepcion a cola) + gate `scripts/validate-hibridos.js`.
-NO REUTILIZA / NOTA    NO REUTILIZA: la interpretacion de partidas bancarias es propia; no existe en el inventario.
-```
-
-### regla-movimiento-bancario — custodio (CONSTRUIR · contabilidad-libro)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo + PosPersistencia + project.activated (persiste estado por proyecto).
-                       Escucha: `contabilidad.regla_movimiento.leer.request` · `contabilidad.regla_movimiento.declarar.request` · `contabilidad.regla_movimiento.aprender.request` · `contabilidad.regla_ratificada` · `project.activated`.
-                       Depende (por EVENTO, sin require cruzado): (ninguno).
-B. MODULE.JSON         name:"regla-movimiento-bancario" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.regla_movimiento.leer.request","contabilidad.regla_movimiento.declarar.request","contabilidad.regla_movimiento.aprender.request","contabilidad.regla_ratificada","project.activated"];
-                       publishes:  ["contabilidad.regla_movimiento_declarada","contabilidad.regla_movimiento_aprendida","contabilidad.regla_movimiento.leer.response","contabilidad.regla_movimiento.leer.failed","contabilidad.regla_movimiento.declarar.response","contabilidad.regla_movimiento.declarar.failed","contabilidad.regla_movimiento.aprender.response","contabilidad.regla_movimiento.aprender.failed","contabilidad.regla_movimiento_declarada.failed","contabilidad.regla_movimiento_aprendida.failed"];
-                       _doc: "Repositorio de reglas "esta comision -> esta cuenta", declaradas o aprendidas. Comparte la PUERTA UNICA de ratificacion (L10).".
-C. INDEX.JS            class ReglaMovimientoBancario extends ModuloHibridoReflejo; onProjectActivated restaura el store; guard de escritor (rol autorizado); onUnload flush.
-D. PROYECCIONES        3 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _declarar — declarar(rol, regla) — un solo escritor (DUENO/ASESOR)
-                       · _aplicar — aplicar(movimiento) -> Contrapartida | SIN_COBERTURA
-                       · _aprender — aprender(rol, regla, evidencia) — hidratada por E7/desatasco; RATIFICADA por L10
-E. HANDLERS RPC        onLeerRequest -> _atender(e, 'leer', ...) | onDeclararRequest -> _atender(e, 'declarar', ...) | onAprenderRequest -> _atender(e, 'aprender', ...).
-F. EVENTOS DE DOMINIO  publica `contabilidad.regla_movimiento_declarada` · `contabilidad.regla_movimiento_aprendida` · `contabilidad.regla_movimiento.leer.failed` · `contabilidad.regla_movimiento.declarar.failed` · `contabilidad.regla_movimiento.aprender.failed` · `contabilidad.regla_movimiento_declarada.failed` · `contabilidad.regla_movimiento_aprendida.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + guard single-writer (segundo escritor RECHAZADO) + smoke de su RPC + `project.activated` restaura el store.
-NO REUTILIZA / NOTA    NO REUTILIZA: no existe regla de clasificacion bancaria en el inventario.
-```
-
-### saldo-tesoreria — reflejo (CONSTRUIR · contabilidad-libro)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo (sin persistencia de estado).
-                       Escucha: `contabilidad.tesoreria.saldo.request` · `contabilidad.tesoreria.prevision.request`.
-                       Depende (por EVENTO, sin require cruzado): `maestro-cuentas-bancarias` · `conciliacion-bancaria` · `cuenta-terceros` · `cola-declaraciones-criterio`.
-B. MODULE.JSON         name:"saldo-tesoreria" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.tesoreria.saldo.request","contabilidad.tesoreria.prevision.request"];
-                       publishes:  ["contabilidad.saldo_tesoreria_calculado","contabilidad.caja_proyectada","contabilidad.tesoreria.saldo.response","contabilidad.tesoreria.saldo.failed","contabilidad.tesoreria.prevision.response","contabilidad.tesoreria.prevision.failed","contabilidad.saldo_tesoreria_calculado.failed","contabilidad.caja_proyectada.failed"];
-                       _doc: "Posicion REAL de dinero por cuenta (E4) + prevision de caja desde los compromisos con la POLITICA DECLARADA (E5). Los umbrales los declara el dueno.".
-C. INDEX.JS            class SaldoTesoreria extends ModuloHibridoReflejo; sin estado que persistir.
-D. PROYECCIONES        4 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _saldoPorCuenta — saldoPorCuenta(idCuentaBancaria) -> Importe (E4)
-                       · _posicionReal — posicionReal() -> Map<IdCuentaBancaria, Importe> (E4: la real, no la contable)
-                       · _proyectar — proyectar(desde, hasta) -> CajaProyectada (E5)
-                       · _alertarUmbral — alertarUmbral(prevision, umbral) -> senal (K2); umbral declarable (Q24)
-E. HANDLERS RPC        onSaldoRequest -> _atender(e, 'saldo', ...) | onPrevisionRequest -> _atender(e, 'prevision', ...).
-F. EVENTOS DE DOMINIO  publica `contabilidad.saldo_tesoreria_calculado` · `contabilidad.caja_proyectada` · `contabilidad.tesoreria.saldo.failed` · `contabilidad.tesoreria.prevision.failed` · `contabilidad.saldo_tesoreria_calculado.failed` · `contabilidad.caja_proyectada.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + test unitario de la proyeccion (determinista: mismas entradas -> mismas salidas).
-NO REUTILIZA / NOTA    NO REUTILIZA: la posicion real de tesoreria y la prevision de caja no existen en el inventario.
-```
-
-### maestro-cuentas-bancarias — custodio (CONSTRUIR · contabilidad-libro)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo + PosPersistencia + project.activated (persiste estado por proyecto).
-                       Escucha: `contabilidad.cuenta_bancaria.declarar.request` · `contabilidad.cuenta_bancaria.listar.request` · `project.activated`.
-                       Depende (por EVENTO, sin require cruzado): (ninguno).
-B. MODULE.JSON         name:"maestro-cuentas-bancarias" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.cuenta_bancaria.declarar.request","contabilidad.cuenta_bancaria.listar.request","project.activated"];
-                       publishes:  ["contabilidad.cuenta_bancaria_declarada","contabilidad.cuenta_bancaria.declarar.response","contabilidad.cuenta_bancaria.declarar.failed","contabilidad.cuenta_bancaria.listar.response","contabilidad.cuenta_bancaria.listar.failed","contabilidad.cuenta_bancaria_declarada.failed"];
-                       _doc: "Catalogo DECLARABLE de cuentas y su MONEDA. Sin el, "el banco" es un solo numero falso. Multi-moneda: parametro declarable.".
-C. INDEX.JS            class MaestroCuentasBancarias extends ModuloHibridoReflejo; onProjectActivated restaura el store; guard de escritor (rol autorizado); onUnload flush.
-D. PROYECCIONES        2 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _declarar — declarar(rol, cuenta, moneda) — un solo escritor (DUENO)
-                       · _cuentas — cuentas() -> List<CuentaBancaria>
-E. HANDLERS RPC        onDeclararRequest -> _atender(e, 'declarar', ...) | onListarRequest -> _atender(e, 'listar', ...).
-F. EVENTOS DE DOMINIO  publica `contabilidad.cuenta_bancaria_declarada` · `contabilidad.cuenta_bancaria.declarar.failed` · `contabilidad.cuenta_bancaria.listar.failed` · `contabilidad.cuenta_bancaria_declarada.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + guard single-writer (segundo escritor RECHAZADO) + smoke de su RPC + `project.activated` restaura el store.
-NO REUTILIZA / NOTA    NO REUTILIZA: no existe maestro de cuentas bancarias; ningun modulo del inventario toca banca.
-```
-
-### vista-revisable — reflejo (CONSTRUIR · contabilidad-libro)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo (sin persistencia de estado).
-                       Escucha: `contabilidad.asiento.explicar.request` · `contabilidad.muestra.seleccionar.request`.
-                       Depende (por EVENTO, sin require cruzado): `mayor-balanza` · `traza-asiento` · `expediente-documental`.
-B. MODULE.JSON         name:"vista-revisable" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.asiento.explicar.request","contabilidad.muestra.seleccionar.request"];
-                       publishes:  ["contabilidad.vista_explicada","contabilidad.muestra_seleccionada","contabilidad.asiento.explicar.response","contabilidad.asiento.explicar.failed","contabilidad.muestra.seleccionar.response","contabilidad.muestra.seleccionar.failed","contabilidad.vista_explicada.failed","contabilidad.muestra_seleccionada.failed"];
-                       _doc: "TODO asiento/calculo EXPLICADO (cifra, base, origen, estado) + seleccion por excepcion y MUESTRA (no revisar todo). No caja negra.".
-C. INDEX.JS            class VistaRevisable extends ModuloHibridoReflejo; sin estado que persistir.
-D. PROYECCIONES        2 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _explicar — explicar(asientoOCalculo) -> Vista {cifra, base, origen, estado} (L2, composicion determinista de la traza)
-                       · _seleccionarMuestra — seleccionarMuestra(conjuntoAsientos) -> Muestra por senales DURAS DECLARADAS: alto importe, sin regla, contrapartida nueva, cuadre dudoso (L8)
-E. HANDLERS RPC        onExplicarRequest -> _atender(e, 'explicar', ...) | onSeleccionarRequest -> _atender(e, 'seleccionar', ...).
-F. EVENTOS DE DOMINIO  publica `contabilidad.vista_explicada` · `contabilidad.muestra_seleccionada` · `contabilidad.asiento.explicar.failed` · `contabilidad.muestra.seleccionar.failed` · `contabilidad.vista_explicada.failed` · `contabilidad.muestra_seleccionada.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + test unitario de la proyeccion (determinista: mismas entradas -> mismas salidas).
-NO REUTILIZA / NOTA    NO REUTILIZA: la explicabilidad de cada cifra es requisito de la medida maestra (que el asesor la acepte).
-```
-
-### flujo-firma — custodio (CONSTRUIR · contabilidad-libro)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo + PosPersistencia + project.activated (persiste estado por proyecto).
-                       Escucha: `contabilidad.firma.marcar.request` · `contabilidad.firma.delta.request` · `project.activated`.
-                       Depende (por EVENTO, sin require cruzado): `asiento-ajuste` · `regla-contrapartida` · `regla-movimiento-bancario` · `facturacion/asesoria`.
-B. MODULE.JSON         name:"flujo-firma" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.firma.marcar.request","contabilidad.firma.delta.request","project.activated"];
-                       publishes:  ["contabilidad.firma_registrada","contabilidad.delta_revision_calculado","contabilidad.firma.marcar.response","contabilidad.firma.marcar.failed","contabilidad.firma.delta.response","contabilidad.firma.delta.failed","contabilidad.firma_registrada.failed","contabilidad.delta_revision_calculado.failed"];
-                       _doc: "Marca de revisado/firmado POR EL ASESOR: el sistema NO firma, solo registra. El delta da al asesor solo lo que cambio desde su ultimo visto bueno.".
-C. INDEX.JS            class FlujoFirma extends ModuloHibridoReflejo; onProjectActivated restaura el store; guard de escritor (rol autorizado); onUnload flush.
-D. PROYECCIONES        3 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _marcarRevisado — marcarRevisado(rol, alcance) -> ok (un solo escritor: el ASESOR)
-                       · _firmar — firmar(rol, alcance) -> MarcaFirma (L3); el nivel (periodo/estado/documento) es declarable
-                       · _calcularDelta — calcularDelta(desdeUltimaFirma) -> Delta {asientosNuevos, ajustes, reglasCambiadas} (L9)
-E. HANDLERS RPC        onMarcarRequest -> _atender(e, 'marcar', ...) | onDeltaRequest -> _atender(e, 'delta', ...).
-F. EVENTOS DE DOMINIO  publica `contabilidad.firma_registrada` · `contabilidad.delta_revision_calculado` · `contabilidad.firma.marcar.failed` · `contabilidad.firma.delta.failed` · `contabilidad.firma_registrada.failed` · `contabilidad.delta_revision_calculado.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + guard single-writer (segundo escritor RECHAZADO) + smoke de su RPC + `project.activated` restaura el store.
-NO REUTILIZA / NOTA    NO REUTILIZA: no existe flujo de firma del asesor en el inventario.
-```
-
-### expediente-documental — custodio (CONSTRUIR · contabilidad-libro)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo + PosPersistencia + project.activated (persiste estado por proyecto).
-                       Escucha: `contabilidad.expediente.archivar.request` · `contabilidad.expediente.recuperar.request` · `project.activated`.
-                       Depende (por EVENTO, sin require cruzado): `filesystem`.
-B. MODULE.JSON         name:"expediente-documental" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.expediente.archivar.request","contabilidad.expediente.recuperar.request","project.activated"];
-                       publishes:  ["contabilidad.cifra_archivada","contabilidad.expediente.archivar.response","contabilidad.expediente.archivar.failed","contabilidad.expediente.recuperar.response","contabilidad.expediente.recuperar.failed","contabilidad.cifra_archivada.failed"];
-                       _doc: "Cada cifra con el documento origen ARCHIVADO y ENLAZADO: LA PRUEBA que sostiene la firma ante una inspeccion. L2 explica; el expediente CONSERVA.".
-C. INDEX.JS            class ExpedienteDocumental extends ModuloHibridoReflejo; onProjectActivated restaura el store; guard de escritor (rol autorizado); onUnload flush.
-D. PROYECCIONES        3 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _archivar — archivar(cifra, documentoOrigen) -> ok (single-writer; archivo via filesystem)
-                       · _recuperar — recuperar(cifra) -> IdDocumento
-                       · _verificarEnlace — verificarEnlace() -> ok | ERROR_CIFRA_SIN_PRUEBA
-E. HANDLERS RPC        onArchivarRequest -> _atender(e, 'archivar', ...) | onRecuperarRequest -> _atender(e, 'recuperar', ...).
-F. EVENTOS DE DOMINIO  publica `contabilidad.cifra_archivada` · `contabilidad.expediente.archivar.failed` · `contabilidad.expediente.recuperar.failed` · `contabilidad.cifra_archivada.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + guard single-writer (segundo escritor RECHAZADO) + smoke de su RPC + `project.activated` restaura el store.
-NO REUTILIZA / NOTA    NO REUTILIZA: el enlace cifra<->documento de origen es propio de la vertical; `filesystem` es el almacen, no el expediente.
-```
-
-### ratificacion-regla-aprendida — puente (CONSTRUIR · contabilidad-libro)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo (sin persistencia de estado).
-                       Escucha: `contabilidad.regla_aprendida`.
-                       Depende (por EVENTO, sin require cruzado): `regla-contrapartida` · `regla-movimiento-bancario`.
-B. MODULE.JSON         name:"ratificacion-regla-aprendida" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.regla_aprendida"];
-                       publishes:  ["contabilidad.regla.ratificar.request","contabilidad.regla_ratificada","contabilidad.regla.ratificar.failed","contabilidad.regla_ratificada.failed"];
-                       _doc: "PUERTA UNICA de ratificacion: el asesor ratifica o BLOQUEA la regla aprendida ANTES de que actue sobre el volumen. Vencida sin respuesta -> NO actua.".
-C. INDEX.JS            class RatificacionReglaAprendida extends ModuloHibridoReflejo; sin estado que persistir.
-D. PROYECCIONES        2 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _solicitarRatificacion — solicitarRatificacion(regla) -> SolicitudDecision (el sistema NO resuelve)
-                       · _aplicarRatificacion — aplicarRatificacion(regla, decision) -> ok | bloqueada
-E. HANDLERS RPC        no declara ops propias: solo reacciona a eventos de dominio.
-F. EVENTOS DE DOMINIO  publica `contabilidad.regla.ratificar.request` · `contabilidad.regla_ratificada` · `contabilidad.regla.ratificar.failed` · `contabilidad.regla_ratificada.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + smoke contra puerto stub (cableado en el sitio) + caso de puerto ausente -> se declara, no se asume.
-NO REUTILIZA / NOTA    NO REUTILIZA: cubre DOS repositorios (A6.2 contrapartida + E8 movimiento bancario) con UNA sola puerta; no existe en el inventario.
-```
-
-### 3.3 — Oleada 3 · `contabilidad-fiscal` (13 hojas CONSTRUIR)
-
-### perfil-administrativo — custodio (CONSTRUIR · contabilidad-fiscal)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo + PosPersistencia + project.activated (persiste estado por proyecto).
-                       Escucha: `contabilidad.perfil.declarar.request` · `contabilidad.perfil.aplicables.request` · `project.activated`.
-                       Depende (por EVENTO, sin require cruzado): `cola-declaraciones-criterio`.
-B. MODULE.JSON         name:"perfil-administrativo" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.perfil.declarar.request","contabilidad.perfil.aplicables.request","project.activated"];
-                       publishes:  ["contabilidad.perfil_declarado","contabilidad.perfil.declarar.response","contabilidad.perfil.declarar.failed","contabilidad.perfil.aplicables.response","contabilidad.perfil.aplicables.failed","contabilidad.perfil_declarado.failed"];
-                       _doc: "Que administraciones y obligaciones aplican al negocio (territorio + regimen). Cuatro territorios posibles; el sistema no asume uno.".
-C. INDEX.JS            class PerfilAdministrativo extends ModuloHibridoReflejo; onProjectActivated restaura el store; guard de escritor (rol autorizado); onUnload flush.
-D. PROYECCIONES        2 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _declarar — declarar(rol, sociedad, perfil) — un solo escritor (DUENO/ASESOR)
-                       · _aplicables — aplicables(sociedad) -> Set<IdObligacion>
-E. HANDLERS RPC        onDeclararRequest -> _atender(e, 'declarar', ...) | onAplicablesRequest -> _atender(e, 'aplicables', ...).
-F. EVENTOS DE DOMINIO  publica `contabilidad.perfil_declarado` · `contabilidad.perfil.declarar.failed` · `contabilidad.perfil.aplicables.failed` · `contabilidad.perfil_declarado.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + guard single-writer (segundo escritor RECHAZADO) + smoke de su RPC + `project.activated` restaura el store.
-NO REUTILIZA / NOTA    NO REUTILIZA: no existe perfil fiscal por sociedad en el inventario (fiscal = 0 modulos).
-```
-
-### calendario-fiscal — custodio (CONSTRUIR · contabilidad-fiscal)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo + PosPersistencia + project.activated (persiste estado por proyecto).
-                       Escucha: `contabilidad.calendario.declarar.request` · `contabilidad.calendario.proximos.request` · `project.activated`.
-                       Depende (por EVENTO, sin require cruzado): `perfil-administrativo` · `motor-avisos`.
-B. MODULE.JSON         name:"calendario-fiscal" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.calendario.declarar.request","contabilidad.calendario.proximos.request","project.activated"];
-                       publishes:  ["contabilidad.plazo_declarado","contabilidad.plazo_proximo","contabilidad.calendario.declarar.response","contabilidad.calendario.declarar.failed","contabilidad.calendario.proximos.response","contabilidad.calendario.proximos.failed","contabilidad.plazo_declarado.failed","contabilidad.plazo_proximo.failed"];
-                       _doc: "Plazos DECLARABLES por ejercicio (cambian: prorrogas, festivos, domiciliacion). Dispara aviso proactivo; nunca fija una fecha de memoria.".
-C. INDEX.JS            class CalendarioFiscal extends ModuloHibridoReflejo; onProjectActivated restaura el store; guard de escritor (rol autorizado); onUnload flush.
-D. PROYECCIONES        3 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _declarar — declarar(rol, ejercicio, plazos) — un solo escritor (ASESOR/DUENO)
-                       · _proximos — proximos(hoy) -> List<Plazo>
-                       · _dispararAviso — dispararAviso(plazo) -> senal a K2
-E. HANDLERS RPC        onDeclararRequest -> _atender(e, 'declarar', ...) | onProximosRequest -> _atender(e, 'proximos', ...).
-F. EVENTOS DE DOMINIO  publica `contabilidad.plazo_declarado` · `contabilidad.plazo_proximo` · `contabilidad.calendario.declarar.failed` · `contabilidad.calendario.proximos.failed` · `contabilidad.plazo_declarado.failed` · `contabilidad.plazo_proximo.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + guard single-writer (segundo escritor RECHAZADO) + smoke de su RPC + `project.activated` restaura el store.
-NO REUTILIZA / NOTA    NO REUTILIZA: el calendario fiscal con plazos declarables no existe en el inventario.
-```
-
-### liquidacion-iva — reflejo (CONSTRUIR · contabilidad-fiscal)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo (sin persistencia de estado).
-                       Escucha: `contabilidad.iva.liquidar.request` · `contabilidad.modelo.303.request` · `contabilidad.modelo.390.request`.
-                       Depende (por EVENTO, sin require cruzado): `mayor-balanza` · `perfil-administrativo` · `cola-declaraciones-criterio`.
-B. MODULE.JSON         name:"liquidacion-iva" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.iva.liquidar.request","contabilidad.modelo.303.request","contabilidad.modelo.390.request"];
-                       publishes:  ["contabilidad.iva_liquidado","contabilidad.modelo_construido","contabilidad.iva.liquidar.response","contabilidad.iva.liquidar.failed","contabilidad.modelo.303.response","contabilidad.modelo.303.failed","contabilidad.modelo.390.response","contabilidad.modelo.390.failed","contabilidad.iva_liquidado.failed","contabilidad.modelo_construido.failed"];
-                       _doc: "Impuesto indirecto DERIVADO del libro con los tipos DECLARADOS (IVA/IGIC/IPSI segun territorio) + sus modelos 303 y 390. Ningun tipo cableado.".
-C. INDEX.JS            class LiquidacionIva extends ModuloHibridoReflejo; sin estado que persistir.
-D. PROYECCIONES        5 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _devengado — devengado(periodo) -> Importe (D1)
-                       · _soportado — soportado(periodo) -> Importe (D1)
-                       · _liquidar — liquidar(periodo) -> Liquidacion {devengado, deducible, resultado} (D1)
-                       · _construir303 — construir303(periodo) -> Modelo (D2)
-                       · _resumir390 — resumir390(ejercicio) -> Modelo (D3)
-E. HANDLERS RPC        onLiquidarRequest -> _atender(e, 'liquidar', ...) | on303Request -> _atender(e, '303', ...) | on390Request -> _atender(e, '390', ...).
-F. EVENTOS DE DOMINIO  publica `contabilidad.iva_liquidado` · `contabilidad.modelo_construido` · `contabilidad.iva.liquidar.failed` · `contabilidad.modelo.303.failed` · `contabilidad.modelo.390.failed` · `contabilidad.iva_liquidado.failed` · `contabilidad.modelo_construido.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + test unitario de la proyeccion (determinista: mismas entradas -> mismas salidas).
-NO REUTILIZA / NOTA    NO REUTILIZA: IVA/modelos no existen en el inventario (verificado: 0 modulos). La ley entra como DATO declarable.
-```
-
-### retenciones-is-irpf — reflejo (CONSTRUIR · contabilidad-fiscal)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo (sin persistencia de estado).
-                       Escucha: `contabilidad.retenciones.calcular.request` · `contabilidad.estimacion.calcular.request`.
-                       Depende (por EVENTO, sin require cruzado): `mayor-balanza` · `estados-contables` · `perfil-administrativo` · `cola-declaraciones-criterio`.
-B. MODULE.JSON         name:"retenciones-is-irpf" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.retenciones.calcular.request","contabilidad.estimacion.calcular.request"];
-                       publishes:  ["contabilidad.retenciones_calculadas","contabilidad.cuota_estimada","contabilidad.retenciones.calcular.response","contabilidad.retenciones.calcular.failed","contabilidad.estimacion.calcular.response","contabilidad.estimacion.calcular.failed","contabilidad.retenciones_calculadas.failed","contabilidad.cuota_estimada.failed"];
-                       _doc: "Retenciones practicadas/soportadas (D4) y estimacion IS/IRPF con base declarada (D5). El sujeto fiscal es parametro POR SOCIEDAD.".
-C. INDEX.JS            class RetencionesIsIrpf extends ModuloHibridoReflejo; sin estado que persistir.
-D. PROYECCIONES        3 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _practicadas — practicadas(periodo) -> Importe (D4: profesionales, alquileres, trabajo — todos parametros)
-                       · _soportadas — soportadas(periodo) -> Importe (D4)
-                       · _estimar — estimar(periodo) -> CuotaEstimada (D5: IS sociedad | IRPF persona fisica, declarable)
-E. HANDLERS RPC        onCalcularRequest -> _atender(e, 'calcular', ...) | onCalcularRequest -> _atender(e, 'calcular', ...).
-F. EVENTOS DE DOMINIO  publica `contabilidad.retenciones_calculadas` · `contabilidad.cuota_estimada` · `contabilidad.retenciones.calcular.failed` · `contabilidad.estimacion.calcular.failed` · `contabilidad.retenciones_calculadas.failed` · `contabilidad.cuota_estimada.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + test unitario de la proyeccion (determinista: mismas entradas -> mismas salidas).
-NO REUTILIZA / NOTA    NO REUTILIZA: IRPF/IS y retenciones no existen en el inventario.
-```
-
-### estado-presentacion-fiscal — custodio (CONSTRUIR · contabilidad-fiscal)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo + PosPersistencia + project.activated (persiste estado por proyecto).
-                       Escucha: `contabilidad.obligacion.avanzar.request` · `contabilidad.obligacion.estado.request` · `project.activated`.
-                       Depende (por EVENTO, sin require cruzado): `perfil-administrativo` · `calendario-fiscal`.
-B. MODULE.JSON         name:"estado-presentacion-fiscal" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.obligacion.avanzar.request","contabilidad.obligacion.estado.request","project.activated"];
-                       publishes:  ["contabilidad.obligacion_avanzada","contabilidad.obligacion.avanzar.response","contabilidad.obligacion.avanzar.failed","contabilidad.obligacion.estado.response","contabilidad.obligacion.estado.failed","contabilidad.obligacion_avanzada.failed"];
-                       _doc: "Ciclo de vida de cada obligacion (pendiente -> generada -> presentada -> justificada -> atrasada): sin el, el calendario avisa pero nadie sabe en que punto esta.".
-C. INDEX.JS            class EstadoPresentacionFiscal extends ModuloHibridoReflejo; onProjectActivated restaura el store; guard de escritor (rol autorizado); onUnload flush.
-D. PROYECCIONES        2 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _avanzar — avanzar(obligacion, estado) — escritor SISTEMA+ASESOR
-                       · _estadoDe — estadoDe(obligacion) -> EstadoObligacion
-E. HANDLERS RPC        onAvanzarRequest -> _atender(e, 'avanzar', ...) | onEstadoRequest -> _atender(e, 'estado', ...).
-F. EVENTOS DE DOMINIO  publica `contabilidad.obligacion_avanzada` · `contabilidad.obligacion.avanzar.failed` · `contabilidad.obligacion.estado.failed` · `contabilidad.obligacion_avanzada.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + guard single-writer (segundo escritor RECHAZADO) + smoke de su RPC + `project.activated` restaura el store.
-NO REUTILIZA / NOTA    NO REUTILIZA: no existe estado de obligacion fiscal en el inventario.
-```
-
-### generador-modelo — puente (CONSTRUIR · contabilidad-fiscal)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo (sin persistencia de estado).
-                       Escucha: `contabilidad.modelo.generar.request`.
-                       Depende (por EVENTO, sin require cruzado): `liquidacion-iva` · `retenciones-is-irpf` · `estado-presentacion-fiscal` · `filesystem`.
-B. MODULE.JSON         name:"generador-modelo" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.modelo.generar.request"];
-                       publishes:  ["contabilidad.modelo_generado","contabilidad.modelo_entregado","contabilidad.modelo.generar.failed","contabilidad.modelo.generar.response","contabilidad.modelo_generado.failed","contabilidad.modelo_entregado.failed"];
-                       _doc: "Salida al programa del asesor por PUERTO (formato abierto y declarable). Si el sistema solo PREPARA, aqui termina su responsabilidad.".
-C. INDEX.JS            class GeneradorModelo extends ModuloHibridoReflejo; sin estado que persistir.
-D. PROYECCIONES        2 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _generar — generar(modelo) -> DocumentoModelo
-                       · _entregar — entregar(documento) -> ok | NO_DECLARADO (presentar es declarable; D34)
-E. HANDLERS RPC        onGenerarRequest -> _atender(e, 'generar', ...).
-F. EVENTOS DE DOMINIO  publica `contabilidad.modelo_generado` · `contabilidad.modelo_entregado` · `contabilidad.modelo.generar.failed` · `contabilidad.modelo_generado.failed` · `contabilidad.modelo_entregado.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + smoke contra puerto stub (cableado en el sitio) + caso de puerto ausente -> se declara, no se asume.
-NO REUTILIZA / NOTA    NO REUTILIZA: la generacion de modelos fiscales con puerto abierto no existe; hay que construirlo.
-```
-
-### registro-verifactu — custodio (CONSTRUIR · contabilidad-fiscal)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo + PosPersistencia + project.activated (persiste estado por proyecto).
-                       Escucha: `contabilidad.registro.anotar.request` · `contabilidad.registro.verificar.request` · `contabilidad.factura_emitida` · `project.activated`.
-                       Depende (por EVENTO, sin require cruzado): `emision-factura-venta`.
-B. MODULE.JSON         name:"registro-verifactu" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.registro.anotar.request","contabilidad.registro.verificar.request","contabilidad.factura_emitida","project.activated"];
-                       publishes:  ["contabilidad.registro_verifactu_anotado","contabilidad.registro.anotar.response","contabilidad.registro.anotar.failed","contabilidad.registro.verificar.response","contabilidad.registro.verificar.failed","contabilidad.registro_verifactu_anotado.failed"];
-                       _doc: "Registro INTERNO Y NO ALTERABLE de la facturacion: huella + encadenamiento. Solo crece. Distinto de la emision (O1) y del formato (D9).".
-C. INDEX.JS            class RegistroVerifactu extends ModuloHibridoReflejo; onProjectActivated restaura el store; guard de escritor (rol autorizado); onUnload flush.
-D. PROYECCIONES        3 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _encadenar — encadenar(factura) -> Huella
-                       · _anotar — anotar(factura, huella) — append-only
-                       · _verificarCadena — verificarCadena() -> ok | ERROR_CADENA_ROTA
-E. HANDLERS RPC        onAnotarRequest -> _atender(e, 'anotar', ...) | onVerificarRequest -> _atender(e, 'verificar', ...).
-F. EVENTOS DE DOMINIO  publica `contabilidad.registro_verifactu_anotado` · `contabilidad.registro.anotar.failed` · `contabilidad.registro.verificar.failed` · `contabilidad.registro_verifactu_anotado.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + guard single-writer (segundo escritor RECHAZADO) + smoke de su RPC + `project.activated` restaura el store.
-NO REUTILIZA / NOTA    NO REUTILIZA: Verifactu no existe en el inventario (0 modulos); es requisito legal de la factura emitida.
-```
-
-### factura-electronica — conversor (CONSTRUIR · contabilidad-fiscal)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo (sin persistencia de estado).
-                       Escucha: `contabilidad.factura.estructurar.request` · `contabilidad.factura.interpretar.request`.
-                       Depende (por EVENTO, sin require cruzado): `emision-factura-venta`.
-B. MODULE.JSON         name:"factura-electronica" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.factura.estructurar.request","contabilidad.factura.interpretar.request"];
-                       publishes:  ["contabilidad.factura_estructurada","contabilidad.factura_interpretada","contabilidad.factura.estructurar.response","contabilidad.factura.estructurar.failed","contabilidad.factura.interpretar.response","contabilidad.factura.interpretar.failed","contabilidad.factura_estructurada.failed","contabilidad.factura_interpretada.failed"];
-                       _doc: "Frontera del FORMATO ESTRUCTURADO de la factura (emitir y recibir). Un solo cruce; un documento estructurado entra SIN extraccion (no pasa por A4.1).".
-C. INDEX.JS            class FacturaElectronica extends ModuloHibridoReflejo; sin estado que persistir.
-D. PROYECCIONES        2 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _emitirEstructurada — emitirEstructurada(factura) -> DocumentoEstructurado
-                       · _interpretarEstructurado — interpretarEstructurado(documento) -> Factura
-E. HANDLERS RPC        onEstructurarRequest -> _atender(e, 'estructurar', ...) | onInterpretarRequest -> _atender(e, 'interpretar', ...).
-F. EVENTOS DE DOMINIO  publica `contabilidad.factura_estructurada` · `contabilidad.factura_interpretada` · `contabilidad.factura.estructurar.failed` · `contabilidad.factura.interpretar.failed` · `contabilidad.factura_estructurada.failed` · `contabilidad.factura_interpretada.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + smoke leer/escribir en las dos direcciones del formato + caso de forma NO declarada.
-NO REUTILIZA / NOTA    NO REUTILIZA: la factura electronica estructurada no existe en el inventario; el formato concreto es declarable.
-```
-
-### acuse-presentacion — puente (CONSTRUIR · contabilidad-fiscal)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo (sin persistencia de estado).
-                       Escucha: `contabilidad.acuse.recibir.request`.
-                       Depende (por EVENTO, sin require cruzado): `estado-presentacion-fiscal` · `generador-modelo` · `escritor-diario`.
-B. MODULE.JSON         name:"acuse-presentacion" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.acuse.recibir.request"];
-                       publishes:  ["contabilidad.acuse_ligado","contabilidad.acuse.recibir.failed","contabilidad.acuse.recibir.response","contabilidad.acuse_ligado.failed"];
-                       _doc: "Recoge y LIGA el justificante/acuse de la administracion a su modelo y a su asiento: cierra el bucle hacia fuera. Sin acuse -> obligacion no justificada -> aviso.".
-C. INDEX.JS            class AcusePresentacion extends ModuloHibridoReflejo; sin estado que persistir.
-D. PROYECCIONES        2 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _recibir — recibir(justificante) -> ok (canal declarable; credenciales via credential-manager)
-                       · _ligar — ligar(acuse, modelo, asiento) -> ok
-E. HANDLERS RPC        onRecibirRequest -> _atender(e, 'recibir', ...).
-F. EVENTOS DE DOMINIO  publica `contabilidad.acuse_ligado` · `contabilidad.acuse.recibir.failed` · `contabilidad.acuse_ligado.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + smoke contra puerto stub (cableado en el sitio) + caso de puerto ausente -> se declara, no se asume.
-NO REUTILIZA / NOTA    NO REUTILIZA: el retorno del acuse administrativo no existe en el inventario.
-```
-
-### rectificacion-declaracion — custodio (CONSTRUIR · contabilidad-fiscal)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo + PosPersistencia + project.activated (persiste estado por proyecto).
-                       Escucha: `contabilidad.declaracion.rectificar.request` · `project.activated`.
-                       Depende (por EVENTO, sin require cruzado): `estado-presentacion-fiscal` · `escritor-diario`.
-B. MODULE.JSON         name:"rectificacion-declaracion" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.declaracion.rectificar.request","project.activated"];
-                       publishes:  ["contabilidad.declaracion_rectificada","contabilidad.declaracion.rectificar.response","contabilidad.declaracion.rectificar.failed","contabilidad.declaracion_rectificada.failed"];
-                       _doc: "Plano 4 de correccion: correccion POSTERIOR a la presentacion (complementaria/sustitutiva). NO se confunde con el ajuste contable ni con la rectificativa comercial.".
-C. INDEX.JS            class RectificacionDeclaracion extends ModuloHibridoReflejo; onProjectActivated restaura el store; guard de escritor (rol autorizado); onUnload flush.
-D. PROYECCIONES        2 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _rectificar — rectificar(declaracionOriginal, tipo) -> Rectificacion — un solo escritor (ASESOR)
-                       · _enlazar — enlazar(original, rectificacion) -> ok
-E. HANDLERS RPC        onRectificarRequest -> _atender(e, 'rectificar', ...).
-F. EVENTOS DE DOMINIO  publica `contabilidad.declaracion_rectificada` · `contabilidad.declaracion.rectificar.failed` · `contabilidad.declaracion_rectificada.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + guard single-writer (segundo escritor RECHAZADO) + smoke de su RPC + `project.activated` restaura el store.
-NO REUTILIZA / NOTA    NO REUTILIZA: la rectificacion fiscal posterior a la presentacion no existe en el inventario.
-```
-
-### puerto-nomina — puente (CONSTRUIR · contabilidad-fiscal)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo (sin persistencia de estado).
-                       Escucha: `contabilidad.nomina.recibir.request`.
-                       Depende (por EVENTO, sin require cruzado): (ninguno).
-B. MODULE.JSON         name:"puerto-nomina" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.nomina.recibir.request"];
-                       publishes:  ["contabilidad.nomina_recibida","contabilidad.nomina.recibir.response","contabilidad.nomina.recibir.failed","contabilidad.nomina_recibida.failed"];
-                       _doc: "Origen DECLARABLE del dato de nomina. El sistema NO calcula nomina por defecto: la RECIBE (calcular es capacidad opcional, G5 declarable).".
-C. INDEX.JS            class PuertoNomina extends ModuloHibridoReflejo; sin estado que persistir.
-D. PROYECCIONES        2 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _recibir — recibir(hechoNomina) -> ok
-                       · _conectar — conectar(origen) -> ok | NO_DECLARADO; si no existe el origen -> se crea
-E. HANDLERS RPC        onRecibirRequest -> _atender(e, 'recibir', ...).
-F. EVENTOS DE DOMINIO  publica `contabilidad.nomina_recibida` · `contabilidad.nomina.recibir.failed` · `contabilidad.nomina_recibida.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + smoke contra puerto stub (cableado en el sitio) + caso de puerto ausente -> se declara, no se asume.
-NO REUTILIZA / NOTA    NO REUTILIZA: no existe puerto de nomina en el inventario (nominas = 0 modulos).
-```
-
-### recibo-nomina — reflejo (CONSTRUIR · contabilidad-fiscal)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo (sin persistencia de estado).
-                       Escucha: `contabilidad.nomina.procesar.request` · `contabilidad.nomina.desglosar.request` · `contabilidad.nomina.liquidar.request` · `contabilidad.nomina_recibida`.
-                       Depende (por EVENTO, sin require cruzado): `puerto-nomina` · `catalogo-cuentas` · `cola-declaraciones-criterio` · `escritor-diario`.
-B. MODULE.JSON         name:"recibo-nomina" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.nomina.procesar.request","contabilidad.nomina.desglosar.request","contabilidad.nomina.liquidar.request","contabilidad.nomina_recibida"];
-                       publishes:  ["contabilidad.nomina_formada","contabilidad.asiento.asentar.request","contabilidad.nomina.procesar.response","contabilidad.nomina.procesar.failed","contabilidad.nomina.desglosar.response","contabilidad.nomina.desglosar.failed","contabilidad.nomina.liquidar.response","contabilidad.nomina.liquidar.failed","contabilidad.nomina_formada.failed","contabilidad.asiento.asentar.failed"];
-                       _doc: "Del recibo al ASIENTO EQUILIBRADO y EXPLICABLE: obligacion con la Seguridad Social, desglose bruto/retencion/cotizacion/neto, anticipos, conceptos extra y liquidacion de baja.".
-C. INDEX.JS            class ReciboNomina extends ModuloHibridoReflejo; sin estado que persistir.
-D. PROYECCIONES        7 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _admitir — admitir(recibo) -> ReciboFormado (G1: cero juicio; si el negocio no calcula, el recibo LLEGA hecho)
-                       · _calcularObligacion — calcularObligacion(recibo) -> Obligacion {gastoEmpresa, obligacionTGSS} (G2, tipos declarables)
-                       · _construirAsiento — construirAsiento(recibo) -> AsientoEquilibrado (G3)
-                       · _desglosar — desglosar(recibo) -> Lineas {bruto, retencion, cotizacionTrabajador, neto} (G6)
-                       · _aplicarAnticipo — aplicarAnticipo(empleado, recibo) -> NetoAjustado (G8)
-                       · _imputarConcepto — imputarConcepto(concepto, recibo) -> List<Apunte> (G9: dietas, especie, pagas extra, finiquitos)
-                       · _liquidar — liquidar(empleado) -> AsientoCierre + SaldoCero (G10: una cuenta de empleado sin cerrar es un error de estado)
-E. HANDLERS RPC        onProcesarRequest -> _atender(e, 'procesar', ...) | onDesglosarRequest -> _atender(e, 'desglosar', ...) | onLiquidarRequest -> _atender(e, 'liquidar', ...).
-F. EVENTOS DE DOMINIO  publica `contabilidad.nomina_formada` · `contabilidad.asiento.asentar.request` · `contabilidad.nomina.procesar.failed` · `contabilidad.nomina.desglosar.failed` · `contabilidad.nomina.liquidar.failed` · `contabilidad.nomina_formada.failed` · `contabilidad.asiento.asentar.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + test unitario de la proyeccion (determinista: mismas entradas -> mismas salidas).
-NO REUTILIZA / NOTA    NO REUTILIZA: no existe modulo de nomina en el inventario; el asiento de personal y su desglose son propios.
-```
-
-### acceso-nomina — custodio (CONSTRUIR · contabilidad-fiscal)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo + PosPersistencia + project.activated (persiste estado por proyecto).
-                       Escucha: `contabilidad.nomina.autorizar.request` · `contabilidad.nomina.puede_ver.request` · `project.activated`.
-                       Depende (por EVENTO, sin require cruzado): `aislamiento-negocio`.
-B. MODULE.JSON         name:"acceso-nomina" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.nomina.autorizar.request","contabilidad.nomina.puede_ver.request","project.activated"];
-                       publishes:  ["contabilidad.acceso_nomina_autorizado","contabilidad.nomina.autorizar.response","contabilidad.nomina.autorizar.failed","contabilidad.nomina.puede_ver.response","contabilidad.nomina.puede_ver.failed","contabilidad.acceso_nomina_autorizado.failed"];
-                       _doc: "Aisla la nomina como DATO PERSONAL: cada uno ve la suya. Eje de aislamiento DENTRO del negocio (distinto de I4, entre negocios).".
-C. INDEX.JS            class AccesoNomina extends ModuloHibridoReflejo; onProjectActivated restaura el store; guard de escritor (rol autorizado); onUnload flush.
-D. PROYECCIONES        2 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _autorizar — autorizar(rol, empleado, visor) — un solo escritor (DUENO)
-                       · _puedeVer — puedeVer(visor, empleado) -> Bool
-E. HANDLERS RPC        onAutorizarRequest -> _atender(e, 'autorizar', ...) | onPuede_verRequest -> _atender(e, 'puede_ver', ...).
-F. EVENTOS DE DOMINIO  publica `contabilidad.acceso_nomina_autorizado` · `contabilidad.nomina.autorizar.failed` · `contabilidad.nomina.puede_ver.failed` · `contabilidad.acceso_nomina_autorizado.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + guard single-writer (segundo escritor RECHAZADO) + smoke de su RPC + `project.activated` restaura el store.
-NO REUTILIZA / NOTA    NO REUTILIZA: el aislamiento de la nomina como dato personal no existe en el inventario.
-```
-
-### 3.4 — Oleada 4 · `contabilidad-analitica` (17 hojas CONSTRUIR)
-
-### inmovilizado — custodio (CONSTRUIR · contabilidad-analitica)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo + PosPersistencia + project.activated (persiste estado por proyecto).
-                       Escucha: `contabilidad.activo.alta.request` · `contabilidad.amortizacion.generar.request` · `contabilidad.activo.baja.request` · `contabilidad.activo.valor_neto.request` · `contabilidad.cierre_realizado` · `project.activated`.
-                       Depende (por EVENTO, sin require cruzado): `escritor-diario` · `mayor-balanza` · `cola-declaraciones-criterio`.
-B. MODULE.JSON         name:"inmovilizado" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.activo.alta.request","contabilidad.amortizacion.generar.request","contabilidad.activo.baja.request","contabilidad.activo.valor_neto.request","contabilidad.cierre_realizado","project.activated"];
-                       publishes:  ["contabilidad.activo_dado_de_alta","contabilidad.amortizacion_generada","contabilidad.activo_dado_de_baja","contabilidad.activo.alta.response","contabilidad.activo.alta.failed","contabilidad.amortizacion.generar.response","contabilidad.amortizacion.generar.failed","contabilidad.activo.baja.response","contabilidad.activo.baja.failed","contabilidad.activo.valor_neto.response","contabilidad.activo.valor_neto.failed","contabilidad.activo_dado_de_alta.failed","contabilidad.amortizacion_generada.failed","contabilidad.activo_dado_de_baja.failed"];
-                       _doc: "El bien duradero y su amortizacion: alta declarada (no estimada), cuota que dispara EN EL CIERRE con parametros declarables, baja que calcula resultado y valor neto contable.".
-C. INDEX.JS            class Inmovilizado extends ModuloHibridoReflejo; onProjectActivated restaura el store; guard de escritor (rol autorizado); onUnload flush.
-D. PROYECCIONES        7 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _registrar — registrar(rol, activo) -> ok (F1, un solo escritor DUENO/ASESOR)
-                       · _valorarAlta — valorarAlta(activo) -> Importe (F1, reflejo hidratador)
-                       · _generarCuota — generarCuota(activo, periodo) -> AsientoAmortizacion | NADA (F2; metodo/coeficiente/anios DECLARABLES, ningun coeficiente cableado)
-                       · _dispararEnCierre — dispararEnCierre(cierre) -> ok (F2: la cuota se genera CUANDO TOCA)
-                       · _calcularResultadoBaja — calcularResultadoBaja(activo) -> Perdida | Beneficio (F3)
-                       · _imputar — imputar(resultado) -> Asiento (F3: la baja no borra la historia del bien, suma un asiento)
-                       · _calcularValorNeto — calcular(activo) -> Importe coste - amortizacion acumulada (F4, al balance C1)
-E. HANDLERS RPC        onAltaRequest -> _atender(e, 'alta', ...) | onGenerarRequest -> _atender(e, 'generar', ...) | onBajaRequest -> _atender(e, 'baja', ...) | onValor_netoRequest -> _atender(e, 'valor_neto', ...).
-F. EVENTOS DE DOMINIO  publica `contabilidad.activo_dado_de_alta` · `contabilidad.amortizacion_generada` · `contabilidad.activo_dado_de_baja` · `contabilidad.activo.alta.failed` · `contabilidad.amortizacion.generar.failed` · `contabilidad.activo.baja.failed` · `contabilidad.activo.valor_neto.failed` · `contabilidad.activo_dado_de_alta.failed` · `contabilidad.amortizacion_generada.failed` · `contabilidad.activo_dado_de_baja.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + guard single-writer (segundo escritor RECHAZADO) + smoke de su RPC + `project.activated` restaura el store.
-NO REUTILIZA / NOTA    NO REUTILIZA: el inmovilizado y la amortizacion no existen en el inventario (0 modulos); la amortizacion es un hecho que produce el TIEMPO y aqui se genera en el cierre.
-```
-
-### aislamiento-negocio — custodio (CONSTRUIR · contabilidad-analitica)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo + PosPersistencia + project.activated (persiste estado por proyecto).
-                       Escucha: `contabilidad.parcela_negocio.registrar.request` · `contabilidad.parcela_negocio.escribir.request` · `project.activated`.
-                       Depende (por EVENTO, sin require cruzado): `single-writer`.
-B. MODULE.JSON         name:"aislamiento-negocio" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.parcela_negocio.registrar.request","contabilidad.parcela_negocio.escribir.request","project.activated"];
-                       publishes:  ["contabilidad.parcela_negocio_registrada","contabilidad.parcela_negocio.registrar.response","contabilidad.parcela_negocio.registrar.failed","contabilidad.parcela_negocio.escribir.response","contabilidad.parcela_negocio.escribir.failed","contabilidad.parcela_negocio_registrada.failed"];
-                       _doc: "Multi-negocio SIN FUGA: un dueno por parcela; ningun calculo lee ni escribe la parcela de otro salvo consolidacion declarada.".
-C. INDEX.JS            class AislamientoNegocio extends ModuloHibridoReflejo; onProjectActivated restaura el store; guard de escritor (rol autorizado); onUnload flush.
-D. PROYECCIONES        2 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _parcela — parcela(negocio) -> Parcela
-                       · _escribir — escribir(negocio, rol, cambio) -> ok | ERROR_FUGA_ENTRE_NEGOCIOS
-E. HANDLERS RPC        onRegistrarRequest -> _atender(e, 'registrar', ...) | onEscribirRequest -> _atender(e, 'escribir', ...).
-F. EVENTOS DE DOMINIO  publica `contabilidad.parcela_negocio_registrada` · `contabilidad.parcela_negocio.registrar.failed` · `contabilidad.parcela_negocio.escribir.failed` · `contabilidad.parcela_negocio_registrada.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + guard single-writer (segundo escritor RECHAZADO) + smoke de su RPC + `project.activated` restaura el store.
-NO REUTILIZA / NOTA    NO REUTILIZA: el aislamiento por parcela de negocio es la invariante 13 del dominio; la capa de proyecto (PosPersistencia) NO la sustituye.
-```
-
-### cola-declaraciones-criterio — custodio (CONSTRUIR · contabilidad-analitica)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo + PosPersistencia + project.activated (persiste estado por proyecto).
-                       Escucha: `contabilidad.criterio.declarar.request` · `contabilidad.criterio.leer.request` · `contabilidad.criterio.pendientes.request` · `project.activated`.
-                       Depende (por EVENTO, sin require cruzado): (ninguno).
-B. MODULE.JSON         name:"cola-declaraciones-criterio" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.criterio.declarar.request","contabilidad.criterio.leer.request","contabilidad.criterio.pendientes.request","project.activated"];
-                       publishes:  ["contabilidad.criterio_declarado","contabilidad.criterio_pendiente","contabilidad.criterio.declarar.response","contabilidad.criterio.declarar.failed","contabilidad.criterio.leer.response","contabilidad.criterio.leer.failed","contabilidad.criterio.pendientes.response","contabilidad.criterio.pendientes.failed","contabilidad.criterio_declarado.failed","contabilidad.criterio_pendiente.failed"];
-                       _doc: "UNA sola cola declarativa donde el jefe/asesor fija o ratifica TODOS los criterios (plan, periodo, plazos, amortizacion, dimensiones, tipos fiscales, consolidacion, unidad_de_cierre).".
-C. INDEX.JS            class ColaDeclaracionesCriterio extends ModuloHibridoReflejo; onProjectActivated restaura el store; guard de escritor (rol autorizado); onUnload flush.
-D. PROYECCIONES        3 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _declarar — declarar(rol, criterio, valor) -> ParametroDeclarable — un solo escritor (JEFE/ASESOR)
-                       · _leer — leer(criterio) -> ParametroDeclarable | AUSENTE
-                       · _pendientes — pendientes() -> List<IdCriterio> — las 23 piezas [ABIERTO]; lo no declarado NO se estima
-E. HANDLERS RPC        onDeclararRequest -> _atender(e, 'declarar', ...) | onLeerRequest -> _atender(e, 'leer', ...) | onPendientesRequest -> _atender(e, 'pendientes', ...).
-F. EVENTOS DE DOMINIO  publica `contabilidad.criterio_declarado` · `contabilidad.criterio_pendiente` · `contabilidad.criterio.declarar.failed` · `contabilidad.criterio.leer.failed` · `contabilidad.criterio.pendientes.failed` · `contabilidad.criterio_declarado.failed` · `contabilidad.criterio_pendiente.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + guard single-writer (segundo escritor RECHAZADO) + smoke de su RPC + `project.activated` restaura el store.
-NO REUTILIZA / NOTA    NO REUTILIZA: es la PUERTA DECLARATIVA del dominio; ninguna pieza del inventario recoge criterios contables.
-```
-
-### onboarding-negocio — custodio (CONSTRUIR · contabilidad-analitica)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo + PosPersistencia + project.activated (persiste estado por proyecto).
-                       Escucha: `contabilidad.negocio.configurar.request` · `contabilidad.negocio.estado.request` · `contabilidad.negocio.activar.request` · `project.activated`.
-                       Depende (por EVENTO, sin require cruzado): `cola-declaraciones-criterio` · `project-manager`.
-B. MODULE.JSON         name:"onboarding-negocio" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.negocio.configurar.request","contabilidad.negocio.estado.request","contabilidad.negocio.activar.request","project.activated"];
-                       publishes:  ["contabilidad.negocio_configurado","contabilidad.vertical_activada","contabilidad.negocio.configurar.response","contabilidad.negocio.configurar.failed","contabilidad.negocio.estado.response","contabilidad.negocio.estado.failed","contabilidad.negocio.activar.response","contabilidad.negocio.activar.failed","contabilidad.negocio_configurado.failed","contabilidad.vertical_activada.failed"];
-                       _doc: "Recoge los datos DECLARABLES del negocio (plan, fuentes, parametros) y enciende la vertical. Sin parametros declarados el negocio queda INCOMPLETO: se declara el hueco.".
-C. INDEX.JS            class OnboardingNegocio extends ModuloHibridoReflejo; onProjectActivated restaura el store; guard de escritor (rol autorizado); onUnload flush.
-D. PROYECCIONES        3 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _recoger — recoger(rol, negocio, datos) -> ok (K1, un solo escritor DUENO)
-                       · _estado — estado(negocio) -> CONFIGURADO | FALTA [ABIERTO] (K1)
-                       · _activar — activar(negocio) -> ok (K4: mecanico, cero juicio; sin parametros NO se activa)
-E. HANDLERS RPC        onConfigurarRequest -> _atender(e, 'configurar', ...) | onEstadoRequest -> _atender(e, 'estado', ...) | onActivarRequest -> _atender(e, 'activar', ...).
-F. EVENTOS DE DOMINIO  publica `contabilidad.negocio_configurado` · `contabilidad.vertical_activada` · `contabilidad.negocio.configurar.failed` · `contabilidad.negocio.estado.failed` · `contabilidad.negocio.activar.failed` · `contabilidad.negocio_configurado.failed` · `contabilidad.vertical_activada.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + guard single-writer (segundo escritor RECHAZADO) + smoke de su RPC + `project.activated` restaura el store.
-NO REUTILIZA / NOTA    NO REUTILIZA: el onboarding de un negocio contable no existe; `project-manager` gestiona el proyecto, no la configuracion contable.
-```
-
-### motor-avisos — puente (CONSTRUIR · contabilidad-analitica)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo (sin persistencia de estado).
-                       Escucha: `contabilidad.aviso.solicitar.request` · `contabilidad.aviso.catalogo.declarar.request`.
-                       Depende (por EVENTO, sin require cruzado): `cola-declaraciones-criterio`.
-B. MODULE.JSON         name:"motor-avisos" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.aviso.solicitar.request","contabilidad.aviso.catalogo.declarar.request"];
-                       publishes:  ["contabilidad.aviso_producido","contabilidad.aviso.enrutar.request","contabilidad.aviso.solicitar.response","contabilidad.aviso.solicitar.failed","contabilidad.aviso.catalogo.declarar.response","contabilidad.aviso.catalogo.declarar.failed","contabilidad.aviso_producido.failed","contabilidad.aviso.enrutar.failed"];
-                       _doc: "PRODUCE el aviso a partir de senales REALES (nunca de pantalla muda): descuadre, excepcion, IVA, vencimiento, plazo, desviacion, cierre, amortizacion, rectificacion, hueco.".
-C. INDEX.JS            class MotorAvisos extends ModuloHibridoReflejo; sin estado que persistir.
-D. PROYECCIONES        2 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _producir — producir(senal) -> Aviso (catalogo declarable K6)
-                       · _enrutar — enrutar(aviso, destinatario) -> ok
-E. HANDLERS RPC        onSolicitarRequest -> _atender(e, 'solicitar', ...) | onDeclararRequest -> _atender(e, 'declarar', ...).
-F. EVENTOS DE DOMINIO  publica `contabilidad.aviso_producido` · `contabilidad.aviso.enrutar.request` · `contabilidad.aviso.solicitar.failed` · `contabilidad.aviso.catalogo.declarar.failed` · `contabilidad.aviso_producido.failed` · `contabilidad.aviso.enrutar.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + smoke contra puerto stub (cableado en el sitio) + caso de puerto ausente -> se declara, no se asume.
-NO REUTILIZA / NOTA    NO REUTILIZA: no existe motor de avisos contables en el inventario; recibe senales de A8.2, C6, D6, E5, J4, A15 y R1.
-```
-
-### consolidacion-grupo — reflejo (CONSTRUIR · contabilidad-analitica)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo (sin persistencia de estado).
-                       Escucha: `contabilidad.consolidacion.agregar.request`.
-                       Depende (por EVENTO, sin require cruzado): `estados-contables` · `aislamiento-negocio` · `cola-declaraciones-criterio`.
-B. MODULE.JSON         name:"consolidacion-grupo" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.consolidacion.agregar.request"];
-                       publishes:  ["contabilidad.grupo_consolidado","contabilidad.consolidacion.agregar.response","contabilidad.consolidacion.agregar.failed","contabilidad.grupo_consolidado.failed"];
-                       _doc: "Estados del CONJUNTO con criterio declarado: marca de sociedad, eliminacion intercompany y agregacion. Dos niveles: por negocio (aislado) y del grupo.".
-C. INDEX.JS            class ConsolidacionGrupo extends ModuloHibridoReflejo; sin estado que persistir.
-D. PROYECCIONES        4 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _etiquetar — etiquetar(asiento, sociedad) -> Asiento (I1, mecanico)
-                       · _detectarCruceInterno — detectarCruceInterno() -> List<Cruce> (I2)
-                       · _eliminar — eliminar(cruces) -> List<Eliminacion> (I2)
-                       · _agregar — agregar(sociedades) -> EstadosConsolidados (I3, criterio declarado)
-E. HANDLERS RPC        onAgregarRequest -> _atender(e, 'agregar', ...).
-F. EVENTOS DE DOMINIO  publica `contabilidad.grupo_consolidado` · `contabilidad.consolidacion.agregar.failed` · `contabilidad.grupo_consolidado.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + test unitario de la proyeccion (determinista: mismas entradas -> mismas salidas).
-NO REUTILIZA / NOTA    NO REUTILIZA: la consolidacion multi-sociedad no existe en el inventario (grupo = 0 modulos).
-```
-
-### frontera-ficha-producto — conversor (CONSTRUIR · contabilidad-analitica)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo (sin persistencia de estado).
-                       Escucha: `contabilidad.ficha.coste.request`.
-                       Depende (por EVENTO, sin require cruzado): (ninguno).
-B. MODULE.JSON         name:"frontera-ficha-producto" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.ficha.coste.request"];
-                       publishes:  ["contabilidad.coste_leido","contabilidad.ficha.coste.response","contabilidad.ficha.coste.failed","contabilidad.coste_leido.failed"];
-                       _doc: "Puerto DECLARABLE del coste de cada negocio: por donde cruza el coste de la ficha al dato interno. Si falta -> se crea. Nunca se inventa un coste.".
-C. INDEX.JS            class FronteraFichaProducto extends ModuloHibridoReflejo; sin estado que persistir.
-D. PROYECCIONES        2 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _leerCoste — leerCoste(producto) -> Coste | AUSENTE
-                       · _crearFrontera — crearFrontera(negocio) -> ok (invariante de puerto abierto)
-E. HANDLERS RPC        onCosteRequest -> _atender(e, 'coste', ...).
-F. EVENTOS DE DOMINIO  publica `contabilidad.coste_leido` · `contabilidad.ficha.coste.failed` · `contabilidad.coste_leido.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + smoke leer/escribir en las dos direcciones del formato + caso de forma NO declarada.
-NO REUTILIZA / NOTA    NO REUTILIZA: la frontera de coste (ficha/receta/otro) es declarable por negocio; `pizzepos/escandallo` es mono-negocio y se pone POR ENCIMA, no se toca.
-```
-
-### valoracion-existencia — reflejo (CONSTRUIR · contabilidad-analitica)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo (sin persistencia de estado).
-                       Escucha: `contabilidad.existencia.valorar.request` · `contabilidad.inventario.ajuste.request`.
-                       Depende (por EVENTO, sin require cruzado): `frontera-ficha-producto` · `inventario` · `cola-declaraciones-criterio`.
-B. MODULE.JSON         name:"valoracion-existencia" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.existencia.valorar.request","contabilidad.inventario.ajuste.request"];
-                       publishes:  ["contabilidad.existencia_valorada","contabilidad.ajuste_inventario_calculado","contabilidad.existencia.valorar.response","contabilidad.existencia.valorar.failed","contabilidad.inventario.ajuste.response","contabilidad.inventario.ajuste.failed","contabilidad.existencia_valorada.failed","contabilidad.ajuste_inventario_calculado.failed"];
-                       _doc: "Capa de VALOR sobre el stock existente (no duplica el inventario): metodo declarable (FIFO/PMP; LIFO no), ajuste de merma y variacion valorada.".
-C. INDEX.JS            class ValoracionExistencia extends ModuloHibridoReflejo; sin estado que persistir.
-D. PROYECCIONES        6 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _valorar — valorar(producto, cantidad, fecha) -> Importe (H1, metodo parametro declarable)
-                       · _capaDeValor — capaDeValor(inventarioExistente) -> Valoracion (H1: NO duplica el inventario)
-                       · _calcularDiferencia — calcularDiferencia() -> Importe (H3: merma/rotura)
-                       · _regularizar — regularizar(diferencia) -> Asiento + aviso (H3: el asiento SUMA)
-                       · _valorarEntrada — valorarEntrada(compra) -> Importe (H4)
-                       · _valorarSalida — valorarSalida(consumo) -> Importe (H4: el hecho de stock lo emite la fuente; contabilidad lo VALORA)
-E. HANDLERS RPC        onValorarRequest -> _atender(e, 'valorar', ...) | onAjusteRequest -> _atender(e, 'ajuste', ...).
-F. EVENTOS DE DOMINIO  publica `contabilidad.existencia_valorada` · `contabilidad.ajuste_inventario_calculado` · `contabilidad.existencia.valorar.failed` · `contabilidad.inventario.ajuste.failed` · `contabilidad.existencia_valorada.failed` · `contabilidad.ajuste_inventario_calculado.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + test unitario de la proyeccion (determinista: mismas entradas -> mismas salidas).
-NO REUTILIZA / NOTA    NO REUTILIZA: `inventario` custodia el stock real; la VALORACION contable (capa de valor, merma, coste del consumo) no existe en el inventario.
-```
-
-### etiquetado-analitico — micro-agente (CONSTRUIR · contabilidad-analitica)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo + PosPersistencia (hibrido: reflejo + op fuzzy en cajon de blueprint; gate validate-hibridos: la op fuzzy NO va en module.json.subscribes).
-                       Escucha: `contabilidad.etiqueta.aplicar.request`.
-                       Depende (por EVENTO, sin require cruzado): `cola-declaraciones-criterio` · `cola-revision`.
-B. MODULE.JSON         name:"etiquetado-analitico" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.etiqueta.aplicar.request"];
-                       publishes:  ["contabilidad.etiqueta_aplicada","contabilidad.excepcion.encolar.request","contabilidad.etiqueta.aplicar.response","contabilidad.etiqueta.aplicar.failed","contabilidad.etiqueta_aplicada.failed","contabilidad.excepcion.encolar.failed"];
-                       _doc: "Asigna centro/linea/producto con REGLA declarable; cuando la regla no cubre, clasificar es JUICIO -> lo dudoso va a cola.".
-C. INDEX.JS            class EtiquetadoAnalitico extends ModuloHibridoReflejo; cajon de blueprint para la op fuzzy; reflejo para la parte determinista; onUnload flush.
-D. PROYECCIONES        2 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _etiquetar — etiquetar(hecho) -> Etiqueta {centro, linea, producto} | SIN_REGLA (caso cubierto por regla = reflejo)
-                       · _proponerEtiqueta — proponerEtiqueta(hecho) -> Etiqueta — FUZZY
-E. HANDLERS RPC        onAplicarRequest -> _atender(e, 'aplicar', ...).
-F. EVENTOS DE DOMINIO  publica `contabilidad.etiqueta_aplicada` · `contabilidad.excepcion.encolar.request` · `contabilidad.etiqueta.aplicar.failed` · `contabilidad.etiqueta_aplicada.failed` · `contabilidad.excepcion.encolar.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + smoke de la op fuzzy (entrada ambigua -> propuesta | excepcion a cola) + gate `scripts/validate-hibridos.js`.
-NO REUTILIZA / NOTA    NO REUTILIZA: el etiquetado analitico por dimensiones declaradas no existe en el inventario.
-```
-
-### margen-analitico — reflejo (CONSTRUIR · contabilidad-analitica)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo (sin persistencia de estado).
-                       Escucha: `contabilidad.margen.calcular.request` · `contabilidad.indirecto.repartir.request` · `contabilidad.tablero.cruzar.request`.
-                       Depende (por EVENTO, sin require cruzado): `mayor-balanza` · `valoracion-existencia` · `etiquetado-analitico` · `cola-declaraciones-criterio`.
-B. MODULE.JSON         name:"margen-analitico" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.margen.calcular.request","contabilidad.indirecto.repartir.request","contabilidad.tablero.cruzar.request"];
-                       publishes:  ["contabilidad.margen_calculado","contabilidad.indirecto_repartido","contabilidad.tablero_calculado","contabilidad.margen.calcular.response","contabilidad.margen.calcular.failed","contabilidad.indirecto.repartir.response","contabilidad.indirecto.repartir.failed","contabilidad.tablero.cruzar.response","contabilidad.tablero.cruzar.failed","contabilidad.margen_calculado.failed","contabilidad.indirecto_repartido.failed","contabilidad.tablero_calculado.failed"];
-                       _doc: "Margen por dimension (ingreso - coste imputado), reparto DECLARADO de gastos no directos y cruce margen x dimension bajo lente de conjunto.".
-C. INDEX.JS            class MargenAnalitico extends ModuloHibridoReflejo; sin estado que persistir.
-D. PROYECCIONES        3 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _calcular — calcular(dimension) -> Margen (J2: enlaza existencias con analitica)
-                       · _repartir — repartir(gasto, criterio) -> Map<IdDimension, Importe> (J5: criterio declarado)
-                       · _cruzar — cruzar(margen, dimension) -> Tablero (J10: por centro, familia o sociedad)
-E. HANDLERS RPC        onCalcularRequest -> _atender(e, 'calcular', ...) | onRepartirRequest -> _atender(e, 'repartir', ...) | onCruzarRequest -> _atender(e, 'cruzar', ...).
-F. EVENTOS DE DOMINIO  publica `contabilidad.margen_calculado` · `contabilidad.indirecto_repartido` · `contabilidad.tablero_calculado` · `contabilidad.margen.calcular.failed` · `contabilidad.indirecto.repartir.failed` · `contabilidad.tablero.cruzar.failed` · `contabilidad.margen_calculado.failed` · `contabilidad.indirecto_repartido.failed` · `contabilidad.tablero_calculado.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + test unitario de la proyeccion (determinista: mismas entradas -> mismas salidas).
-NO REUTILIZA / NOTA    NO REUTILIZA: el coste indirecto multi-sociedad y por periodos NO lo cubre la pieza existente (escandallo, mono-negocio).
-```
-
-### presupuesto — custodio (CONSTRUIR · contabilidad-analitica)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo + PosPersistencia + project.activated (persiste estado por proyecto).
-                       Escucha: `contabilidad.presupuesto.declarar.request` · `contabilidad.desviacion.calcular.request` · `contabilidad.periodos.comparar.request` · `project.activated`.
-                       Depende (por EVENTO, sin require cruzado): `estados-contables` · `motor-avisos`.
-B. MODULE.JSON         name:"presupuesto" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.presupuesto.declarar.request","contabilidad.desviacion.calcular.request","contabilidad.periodos.comparar.request","project.activated"];
-                       publishes:  ["contabilidad.presupuesto_declarado","contabilidad.desviacion_calculada","contabilidad.comparacion_calculada","contabilidad.presupuesto.declarar.response","contabilidad.presupuesto.declarar.failed","contabilidad.desviacion.calcular.response","contabilidad.desviacion.calcular.failed","contabilidad.periodos.comparar.response","contabilidad.periodos.comparar.failed","contabilidad.presupuesto_declarado.failed","contabilidad.desviacion_calculada.failed","contabilidad.comparacion_calculada.failed"];
-                       _doc: "Cifra OBJETIVO por dimension (un solo escritor: el jefe) + desviacion real-vs-presupuesto con umbral declarado + comparador de periodos que REUTILIZA ambos, no los duplica.".
-C. INDEX.JS            class Presupuesto extends ModuloHibridoReflejo; onProjectActivated restaura el store; guard de escritor (rol autorizado); onUnload flush.
-D. PROYECCIONES        5 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _declarar — declarar(rol, dimension, cifra) — un solo escritor (JEFE) (J3)
-                       · _objetivo — objetivo(dimension, periodo) -> CifraObjetivo (J3)
-                       · _calcular — calcular(real, presupuesto) -> Desviacion (J4)
-                       · _dispararSiExcede — dispararSiExcede(desviacion) -> senal a K2 con el umbral declarado (J4)
-                       · _comparar — comparar(a, b) -> Delta (J9: ejercicio vs ejercicio, mes vs mes, real vs presupuesto)
-E. HANDLERS RPC        onDeclararRequest -> _atender(e, 'declarar', ...) | onCalcularRequest -> _atender(e, 'calcular', ...) | onCompararRequest -> _atender(e, 'comparar', ...).
-F. EVENTOS DE DOMINIO  publica `contabilidad.presupuesto_declarado` · `contabilidad.desviacion_calculada` · `contabilidad.comparacion_calculada` · `contabilidad.presupuesto.declarar.failed` · `contabilidad.desviacion.calcular.failed` · `contabilidad.periodos.comparar.failed` · `contabilidad.presupuesto_declarado.failed` · `contabilidad.desviacion_calculada.failed` · `contabilidad.comparacion_calculada.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + guard single-writer (segundo escritor RECHAZADO) + smoke de su RPC + `project.activated` restaura el store.
-NO REUTILIZA / NOTA    NO REUTILIZA: `marketing-budget` es presupuesto de marketing y declara "custodia contable" solo de nombre: contabilidad lo LEE, no lo absorbe (solape registrado).
-```
-
-### cuadro-mando-contable — reflejo (CONSTRUIR · contabilidad-analitica)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo (sin persistencia de estado).
-                       Escucha: `contabilidad.cuadro_mando.agregar.request`.
-                       Depende (por EVENTO, sin require cruzado): `saldo-tesoreria` · `estados-contables` · `margen-analitico` · `presupuesto` · `cierre-ejercicio`.
-B. MODULE.JSON         name:"cuadro-mando-contable" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.cuadro_mando.agregar.request"];
-                       publishes:  ["contabilidad.cuadro_mando_calculado","contabilidad.cuadro_mando.agregar.response","contabilidad.cuadro_mando.agregar.failed","contabilidad.cuadro_mando_calculado.failed"];
-                       _doc: "Agregacion de CONJUNTO para el jefe (caja, resultado, margen, desviacion, ejercicio) SIN bajar al asiento.".
-C. INDEX.JS            class CuadroMandoContable extends ModuloHibridoReflejo; sin estado que persistir.
-D. PROYECCIONES        1 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _agregar — agregar(lente: CONJUNTO) -> CuadroMando
-E. HANDLERS RPC        onAgregarRequest -> _atender(e, 'agregar', ...).
-F. EVENTOS DE DOMINIO  publica `contabilidad.cuadro_mando_calculado` · `contabilidad.cuadro_mando.agregar.failed` · `contabilidad.cuadro_mando_calculado.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + test unitario de la proyeccion (determinista: mismas entradas -> mismas salidas).
-NO REUTILIZA / NOTA    NO REUTILIZA: no existe cuadro de mando contable; reutiliza J2/J3/J4/E4/E5/C1/C2 por RPC sin duplicarlos.
-```
-
-### informe-rico — reflejo (CONSTRUIR · contabilidad-analitica)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo (sin persistencia de estado).
-                       Escucha: `contabilidad.informe.componer.request`.
-                       Depende (por EVENTO, sin require cruzado): `estados-contables` · `cierre-ejercicio` · `completitud-cobertura`.
-B. MODULE.JSON         name:"informe-rico" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.informe.componer.request"];
-                       publishes:  ["contabilidad.informe_compuesto","contabilidad.informe.componer.response","contabilidad.informe.componer.failed","contabilidad.informe_compuesto.failed"];
-                       _doc: "Nucleo de informe rico: cifra ya calculada + contexto declarado (periodo, origen, comparativas, cobertura). No un numero pelado.".
-C. INDEX.JS            class InformeRico extends ModuloHibridoReflejo; sin estado que persistir.
-D. PROYECCIONES        1 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _componer — componer(cifra, contexto) -> InformeRico — mecanico
-E. HANDLERS RPC        onComponerRequest -> _atender(e, 'componer', ...).
-F. EVENTOS DE DOMINIO  publica `contabilidad.informe_compuesto` · `contabilidad.informe.componer.failed` · `contabilidad.informe_compuesto.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + test unitario de la proyeccion (determinista: mismas entradas -> mismas salidas).
-NO REUTILIZA / NOTA    NO REUTILIZA: el nucleo de informe rico se sirve en idiomas distintos (dueno Q2 / cliente R3); no existe en el inventario.
-```
-
-### consulta-dueno — puente (CONSTRUIR · contabilidad-analitica)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo (sin persistencia de estado).
-                       Escucha: `contabilidad.consulta.responder.request`.
-                       Depende (por EVENTO, sin require cruzado): `completitud-cobertura` · `traza-asiento` · `flujo-firma` · `informe-rico`.
-B. MODULE.JSON         name:"consulta-dueno" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.consulta.responder.request"];
-                       publishes:  ["contabilidad.consulta_respondida","contabilidad.consulta.responder.response","contabilidad.consulta.responder.failed","contabilidad.consulta_respondida.failed"];
-                       _doc: "Puerta PULL: el dueno pregunta cuando quiere y el sistema contesta, con SELLO DE COBERTURA y MARCA de borrador/revisado/firmado (sin cadencia impuesta).".
-C. INDEX.JS            class ConsultaDueno extends ModuloHibridoReflejo; sin estado que persistir.
-D. PROYECCIONES        4 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _responder — responder(pregunta) -> ResultadoCalculo (Q1: puerta declarable; el canal es puerto)
-                       · _sinCadencia — sinCadencia() -> Bool (Q1: != cuadro del jefe J8, que impone cadencia)
-                       · _sellarCobertura — sellarCobertura(resultadoCalculo) -> con sello (Q3: vista de la metrica unica A12, fuera de ciclo)
-                       · _derivarEstado — derivarEstado(periodo) -> EN_CURSO | REVISADO | FIRMADO (Q4: deriva de B4 + L3)
-E. HANDLERS RPC        onResponderRequest -> _atender(e, 'responder', ...).
-F. EVENTOS DE DOMINIO  publica `contabilidad.consulta_respondida` · `contabilidad.consulta.responder.failed` · `contabilidad.consulta_respondida.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + smoke contra puerto stub (cableado en el sitio) + caso de puerto ausente -> se declara, no se asume.
-NO REUTILIZA / NOTA    NO REUTILIZA: la cara pull del dueno sobre la contabilidad no existe en el inventario.
-```
-
-### puente-lenguaje-dueno — micro-agente (CONSTRUIR · contabilidad-analitica)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo + PosPersistencia (hibrido: reflejo + op fuzzy en cajon de blueprint; gate validate-hibridos: la op fuzzy NO va en module.json.subscribes).
-                       Escucha: `contabilidad.dueno.preguntar.request` · `contabilidad.dueno.cifra.presentar.request`.
-                       Depende (por EVENTO, sin require cruzado): `informe-rico` · `consulta-dueno`.
-B. MODULE.JSON         name:"puente-lenguaje-dueno" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.dueno.preguntar.request","contabilidad.dueno.cifra.presentar.request"];
-                       publishes:  ["contabilidad.consulta.responder.request","contabilidad.cifra_presentada","contabilidad.dueno.preguntar.response","contabilidad.dueno.preguntar.failed","contabilidad.dueno.cifra.presentar.response","contabilidad.dueno.cifra.presentar.failed","contabilidad.consulta.responder.failed","contabilidad.cifra_presentada.failed"];
-                       _doc: "Traductor BIDIRECCIONAL: su pregunta -> consulta contable; calculo -> cifra en su idioma (caja, deuda, resultado, "puedo pagar X?").".
-C. INDEX.JS            class PuenteLenguajeDueno extends ModuloHibridoReflejo; cajon de blueprint para la op fuzzy; reflejo para la parte determinista; onUnload flush.
-D. PROYECCIONES        2 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _traducirPregunta — traducirPregunta(preguntaNatural) -> ConsultaContable — FUZZY
-                       · _traducirCifra — traducirCifra(resultado) -> CifraEnSuIdioma — FUZZY; vocabulario declarable
-E. HANDLERS RPC        onPreguntarRequest -> _atender(e, 'preguntar', ...) | onPresentarRequest -> _atender(e, 'presentar', ...).
-F. EVENTOS DE DOMINIO  publica `contabilidad.consulta.responder.request` · `contabilidad.cifra_presentada` · `contabilidad.dueno.preguntar.failed` · `contabilidad.dueno.cifra.presentar.failed` · `contabilidad.consulta.responder.failed` · `contabilidad.cifra_presentada.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + smoke de la op fuzzy (entrada ambigua -> propuesta | excepcion a cola) + gate `scripts/validate-hibridos.js`.
-NO REUTILIZA / NOTA    NO REUTILIZA: el puente de lenguaje del dueno no existe; comparte el nucleo de informe (K3) con R3, no el traductor.
-```
-
-### aviso-al-negocio — puente (CONSTRUIR · contabilidad-analitica)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo (sin persistencia de estado).
-                       Escucha: `contabilidad.aviso.enrutar.request`.
-                       Depende (por EVENTO, sin require cruzado): `motor-avisos`.
-B. MODULE.JSON         name:"aviso-al-negocio" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.aviso.enrutar.request"];
-                       publishes:  ["contabilidad.aviso_entregado","contabilidad.aviso_confirmado","contabilidad.aviso.enrutar.response","contabilidad.aviso.enrutar.failed","contabilidad.aviso_entregado.failed","contabilidad.aviso_confirmado.failed"];
-                       _doc: "Cara de ENTREGA del aviso al negocio cliente: sin confirmacion de entrega el aviso NO consta como recibido. El canal es un puerto.".
-C. INDEX.JS            class AvisoAlNegocio extends ModuloHibridoReflejo; sin estado que persistir.
-D. PROYECCIONES        2 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _entregar — entregar(aviso) -> ok (canal declarable: K7)
-                       · _confirmar — confirmar(entrega) -> Confirmacion (honestidad: nadie da por entregado sin confirmacion)
-E. HANDLERS RPC        onEnrutarRequest -> _atender(e, 'enrutar', ...).
-F. EVENTOS DE DOMINIO  publica `contabilidad.aviso_entregado` · `contabilidad.aviso_confirmado` · `contabilidad.aviso.enrutar.failed` · `contabilidad.aviso_entregado.failed` · `contabilidad.aviso_confirmado.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + smoke contra puerto stub (cableado en el sitio) + caso de puerto ausente -> se declara, no se asume.
-NO REUTILIZA / NOTA    NO REUTILIZA: completa K2 (que solo PRODUCE); la entrega al negocio contable no existe en el inventario.
-```
-
-### informe-accionable — micro-agente (CONSTRUIR · contabilidad-analitica)
-```
-A. DEPENDENCIAS        _shared/modulo-hibrido-reflejo + PosPersistencia (hibrido: reflejo + op fuzzy en cajon de blueprint; gate validate-hibridos: la op fuzzy NO va en module.json.subscribes).
-                       Escucha: `contabilidad.informe.accionable.request` · `contabilidad.estados.narrar.request`.
-                       Depende (por EVENTO, sin require cruzado): `informe-rico` · `estados-contables` · `aviso-al-negocio`.
-B. MODULE.JSON         name:"informe-accionable" (SIN prefijo de vertical);
-                       subscribes: ["contabilidad.informe.accionable.request","contabilidad.estados.narrar.request"];
-                       publishes:  ["contabilidad.informe_accionable","contabilidad.estados_narrados","contabilidad.informe.accionable.response","contabilidad.informe.accionable.failed","contabilidad.estados.narrar.response","contabilidad.estados.narrar.failed","contabilidad.informe_accionable.failed","contabilidad.estados_narrados.failed"];
-                       _doc: "Todo informe que recibe el cliente lleva QUE HACER con el (R2) y los estados van narrados a su lenguaje (R3).".
-C. INDEX.JS            class InformeAccionable extends ModuloHibridoReflejo; cajon de blueprint para la op fuzzy; reflejo para la parte determinista; onUnload flush.
-D. PROYECCIONES        2 metodos puros _op(input) -> {status, data} — LA LOGICA DE DOMINIO VIVE AQUI:
-                       · _recomendar — recomendar(informe) -> InformeAccionable — FUZZY
-                       · _narrar — narrar(estados) -> Narracion "esto es lo que te ha pasado y lo que viene" — FUZZY
-E. HANDLERS RPC        onAccionableRequest -> _atender(e, 'accionable', ...) | onNarrarRequest -> _atender(e, 'narrar', ...).
-F. EVENTOS DE DOMINIO  publica `contabilidad.informe_accionable` · `contabilidad.estados_narrados` · `contabilidad.informe.accionable.failed` · `contabilidad.estados.narrar.failed` · `contabilidad.informe_accionable.failed` · `contabilidad.estados_narrados.failed` (fire-and-forget + par .failed; el .response cierra su RPC).
-VERIFICACION           ficheros en disco + smoke de la op fuzzy (entrada ambigua -> propuesta | excepcion a cola) + gate `scripts/validate-hibridos.js`.
-NO REUTILIZA / NOTA    NO REUTILIZA: la recomendacion accionable y la narracion de estados son juicio (fuzzy) propio de la vertical.
-```
-
----
-
-## 4 · Contrato de eventos
-
-### 4.1 — Pares request/response (RPC del bus)
-
-| Quien pide (`*.request`) | Quien responde | Respuesta | Par de fallo |
+## §2 · Inventario — REUTILIZAR / ADAPTAR / CONSTRUIR y descartados
+
+> **Método:** se juzga por el **`module.json` REAL** (name/description/subscribes/publishes/tools del
+> inventario de 248 módulos), **nunca por el nombre**. `REUTILIZAR` exige que el contrato real **cubra
+> exactamente** la clase; si no, se **CONSTRUYE** y se documenta el motivo.
+
+### 2.1 · REUTILIZAR (justificado clase a clase)
+
+#### R1 · `extraccion-dato` (HOJA A4.1 · MICRO-AGENTE · eje `entrada`) ← módulo **`facturas`**
+
+- **Clase:** `ExtraccionDato` — `juzgar(doc:Documento):Propuesta<Hecho>`; *abre un documento NO estructurado y lo
+  vuelve dato; interpretar lo ilegible es juicio; no asienta: PROPONE.*
+- **Contrato REAL de `facturas` (v3.0.0):**
+  - `subscribes`: `["factura.entrada"]`
+  - `publishes`: `["factura.recibida","factura.procesada","factura.error","factura.exportada","telegram.send_message.request"]`
+  - `tools`: `["facturas.procesar","facturas.listar","facturas.estadisticas"]`
+  - `description`: *pipeline step-based (Intake → Convert → Prepare → OCR → Structure (IA) → Validate → Store)*.
+- **Cobertura exacta:** el módulo **ya es** la puerta "documento no estructurado → dato": su paso
+  **OCR + Structure (IA)** interpreta el documento (juicio) y **`facturas.procesar`** entrega el dato estructurado.
+  **No asienta en ningún libro contable** (guarda "procesada"): eso satisface literalmente *"no asienta: PROPONE"*.
+  Es **genérico** (procesamiento comercial de facturas — no está atado a una vertical en su `module.json`).
+- **Justificación individual:** el contrato REAL cubre la responsabilidad de la clase sin construir nada nuevo.
+  La conformación del dato extraído a `Hecho` asentable es competencia de **A2 `normalizador-hecho`** (frontera única de formato),
+  no de A4.1 — por eso la reutilización **no** desplaza responsabilidad a esta clase.
+- **Frontera declarada:** A4.1 conserva su puerto (`documento → dato`); su implementación se apoya en `facturas.procesar`.
+
+#### R2 · `puerto-documento-digital` (HOJA A5 · PUENTE · eje `entrada`) ← módulo **`facturacion/fuentes`**
+
+- **Clase:** `PuertoDocumentoDigital` — `recibir():Flujo<Documento>`; *recepción digital declarable;
+  conecta con el canal emisor; si no existe, se crea.*
+- **Contrato REAL de `facturacion/fuentes` (v2.0.0):**
+  - `subscribes`: `["telegram.document.received","telegram.photo.received"]`
+  - `publishes`: `["factura.entrada"]`
+  - `description`: *adaptador **strategy-pattern** de fuentes de entrada de facturas (Telegram push, Gmail pull, **extensible**);
+    dispatch a strategies; emite `factura.entrada` con shape canónico.*
+- **Cobertura exacta:** es exactamente el **PUENTE de recepción digital declarable y extensible** que la clase define:
+  varios canales intercambiables por estrategia, que normalizan la entrada y la emiten al bus. El diseño dice
+  *"si no existe, se crea"* — **ya existe**, luego se reutiliza.
+- **Justificación individual:** contrato real = recepción digital multi-canal declarable = contrato de A5. Un solo módulo cubre la clase.
+- **Frontera declarada:** A5 no impone canal; los canales se declaran por estrategia (declarable por negocio).
+
+> **Total REUTILIZAR: 2 clases.** Ninguna otra clase de las 118 queda cubierta exactamente por un módulo existente
+> (evaluación individual abajo).
+
+### 2.2 · ADAPTAR — **0 clases**
+
+Ninguna clase se resuelve adaptando un módulo existente. **Por qué:** los módulos candidatos del inventario son
+**mono-negocio** (`pizzepos/*`, taller 3D, radar) o **infraestructura de plataforma**; el diseño de contabilidad es
+una vertical **nueva y transversal**. Por regla explícita (`pizzepos/escandallo` es mono-negocio → **NO se adapta, se toma su patrón**),
+la vía es **CONSTRUIR copiando patrón**, no adaptar. `ADAPTAR = 0`.
+
+### 2.3 · CONSTRUIR — **116 clases**
+
+Toda clase que no esté cubierta exactamente por un módulo existente se construye como módulo-isla.
+**Total: 116.** Desglose por eje (sólo CONSTRUIR): entrada 30 · libro 32 · fiscal 22 · analítica 32.
+
+### 2.4 · Descartados con motivo (evaluados uno a uno)
+
+| Candidato del inventario | Clase(s) que parecía cubrir | Veredicto | **Motivo** |
 |---|---|---|---|
-| `fs.read.request` | `filesystem` | `fs.read.response` | `fs.read.failed` |
-| `fs.write.request` | `filesystem` | `fs.write.response` | `fs.write.failed` |
-| `fs.edit.request` | `filesystem` | `fs.edit.response` | `fs.edit.failed` |
-| `fs.list.request` | `filesystem` | `fs.list.response` | `fs.list.failed` |
-| `fs.exists.request` | `filesystem` | `fs.exists.response` | `fs.exists.failed` |
-| `project.get.request` | `project-manager` | `project.get.response` | `project.get.failed` |
-| `project.list.request` | `project-manager` | `project.list.response` | `project.list.failed` |
-| `project.state.request` | `project-manager` | `project.state.response` | `project.state.failed` |
-| `credential.resolve.request` | `credential-manager` | `credential.resolve.response` | `credential.resolve.failed` |
-| `credential.create.request` | `credential-manager` | `credential.create.response` | `credential.create.failed` |
-| `credential.update.request` | `credential-manager` | `credential.update.response` | `credential.update.failed` |
-| `credential.delete.request` | `credential-manager` | `credential.delete.response` | `credential.delete.failed` |
-| `credential.state.request` | `credential-manager` | `credential.state.response` | `credential.state.failed` |
-| `contabilidad.contrato.declarar.request` | `contrato-hecho-minimo` | `contabilidad.contrato.declarar.response` | `contabilidad.contrato.declarar.failed` |
-| `contabilidad.contrato.exigir.request` | `contrato-hecho-minimo` | `contabilidad.contrato.exigir.response` | `contabilidad.contrato.exigir.failed` |
-| `contabilidad.contrato.cubre.request` | `contrato-hecho-minimo` | `contabilidad.contrato.cubre.response` | `contabilidad.contrato.cubre.failed` |
-| `contabilidad.anclaje.declarar.request` | `anclaje-cierre-vertical` | `contabilidad.anclaje.declarar.response` | `contabilidad.anclaje.declarar.failed` |
-| `contabilidad.anclaje.anclar.request` | `anclaje-cierre-vertical` | `contabilidad.anclaje.anclar.response` | `contabilidad.anclaje.anclar.failed` |
-| `contabilidad.excepcion.encolar.request` | `cola-revision` | `contabilidad.excepcion.encolar.response` | `contabilidad.excepcion.encolar.failed` |
-| `contabilidad.excepcion.resolver.request` | `cola-revision` | `contabilidad.excepcion.resolver.response` | `contabilidad.excepcion.resolver.failed` |
-| `contabilidad.excepcion.siguiente.request` | `cola-revision` | `contabilidad.excepcion.siguiente.response` | `contabilidad.excepcion.siguiente.failed` |
-| `contabilidad.regla.leer.request` | `regla-contrapartida` | `contabilidad.regla.leer.response` | `contabilidad.regla.leer.failed` |
-| `contabilidad.regla.declarar.request` | `regla-contrapartida` | `contabilidad.regla.declarar.response` | `contabilidad.regla.declarar.failed` |
-| `contabilidad.regla.aprender.request` | `regla-contrapartida` | `contabilidad.regla.aprender.response` | `contabilidad.regla.aprender.failed` |
-| `contabilidad.clave.calcular.request` | `clave-natural` | `contabilidad.clave.calcular.response` | `contabilidad.clave.calcular.failed` |
-| `contabilidad.clave.repeticion.request` | `clave-natural` | `contabilidad.clave.repeticion.response` | `contabilidad.clave.repeticion.failed` |
-| `contabilidad.parcela.registrar.request` | `single-writer` | `contabilidad.parcela.registrar.response` | `contabilidad.parcela.registrar.failed` |
-| `contabilidad.parcela.autorizar.request` | `single-writer` | `contabilidad.parcela.autorizar.response` | `contabilidad.parcela.autorizar.failed` |
-| `contabilidad.frontera_planos.verificar.request` | `frontera-planos` | `contabilidad.frontera_planos.verificar.response` | `contabilidad.frontera_planos.verificar.failed` |
-| `contabilidad.lote.despachar.request` | `lote-admision` | `contabilidad.lote.despachar.response` | `contabilidad.lote.despachar.failed` |
-| `contabilidad.hecho.admitir.request` | `puerto-evento-vertical` | `contabilidad.hecho.admitir.response` | `contabilidad.hecho.admitir.failed` |
-| `contabilidad.historial.anotar.request` | `historial-proceso-contable` | `contabilidad.historial.anotar.response` | `contabilidad.historial.anotar.failed` |
-| `contabilidad.historial.consultar.request` | `historial-proceso-contable` | `contabilidad.historial.consultar.response` | `contabilidad.historial.consultar.failed` |
-| `contabilidad.tercero.declarar.request` | `maestro-terceros` | `contabilidad.tercero.declarar.response` | `contabilidad.tercero.declarar.failed` |
-| `contabilidad.tercero.ficha.request` | `maestro-terceros` | `contabilidad.tercero.ficha.response` | `contabilidad.tercero.ficha.failed` |
-| `contabilidad.tercero.identificar.request` | `maestro-terceros` | `contabilidad.tercero.identificar.response` | `contabilidad.tercero.identificar.failed` |
-| `contabilidad.tercero.historial.request` | `maestro-terceros` | `contabilidad.tercero.historial.response` | `contabilidad.tercero.historial.failed` |
-| `contabilidad.hecho.normalizar.request` | `normalizador-hecho` | `contabilidad.hecho.normalizar.response` | `contabilidad.hecho.normalizar.failed` |
-| `contabilidad.duplicado.verificar.request` | `deduplicacion-hecho` | `contabilidad.duplicado.verificar.response` | `contabilidad.duplicado.verificar.failed` |
-| `contabilidad.contrapartida.proponer.request` | `resolucion-contrapartida` | `contabilidad.contrapartida.proponer.response` | `contabilidad.contrapartida.proponer.failed` |
-| `contabilidad.cobertura.calcular.request` | `completitud-cobertura` | `contabilidad.cobertura.calcular.response` | `contabilidad.cobertura.calcular.failed` |
-| `contabilidad.rectificativo.emparejar.request` | `hecho-rectificativo` | `contabilidad.rectificativo.emparejar.response` | `contabilidad.rectificativo.emparejar.failed` |
-| `contabilidad.panel.latido.request` | `panel-proceso-contable` | `contabilidad.panel.latido.response` | `contabilidad.panel.latido.failed` |
-| `contabilidad.desatasco.resolver.request` | `desatasco-entrada` | `contabilidad.desatasco.resolver.response` | `contabilidad.desatasco.resolver.failed` |
-| `contabilidad.cuenta_terceros.saldo.request` | `cuenta-terceros` | `contabilidad.cuenta_terceros.saldo.response` | `contabilidad.cuenta_terceros.saldo.failed` |
-| `contabilidad.cuenta_terceros.extracto.request` | `cuenta-terceros` | `contabilidad.cuenta_terceros.extracto.response` | `contabilidad.cuenta_terceros.extracto.failed` |
-| `contabilidad.cuenta_terceros.vencimiento.request` | `cuenta-terceros` | `contabilidad.cuenta_terceros.vencimiento.response` | `contabilidad.cuenta_terceros.vencimiento.failed` |
-| `contabilidad.cuenta_terceros.aging.request` | `cuenta-terceros` | `contabilidad.cuenta_terceros.aging.response` | `contabilidad.cuenta_terceros.aging.failed` |
-| `contabilidad.compra.cotejar.request` | `compra-proveedor` | `contabilidad.compra.cotejar.response` | `contabilidad.compra.cotejar.failed` |
-| `contabilidad.compra.coste_real.request` | `compra-proveedor` | `contabilidad.compra.coste_real.response` | `contabilidad.compra.coste_real.failed` |
-| `contabilidad.factura.emitir.request` | `emision-factura-venta` | `contabilidad.factura.emitir.response` | `contabilidad.factura.emitir.failed` |
-| `contabilidad.factura.rectificar.request` | `emision-factura-venta` | `contabilidad.factura.rectificar.response` | `contabilidad.factura.rectificar.failed` |
-| `contabilidad.factura.series.request` | `emision-factura-venta` | `contabilidad.factura.series.response` | `contabilidad.factura.series.failed` |
-| `contabilidad.cuenta.declarar.request` | `catalogo-cuentas` | `contabilidad.cuenta.declarar.response` | `contabilidad.cuenta.declarar.failed` |
-| `contabilidad.cuenta.resolver.request` | `catalogo-cuentas` | `contabilidad.cuenta.resolver.response` | `contabilidad.cuenta.resolver.failed` |
-| `contabilidad.plan.importar.request` | `catalogo-cuentas` | `contabilidad.plan.importar.response` | `contabilidad.plan.importar.failed` |
-| `contabilidad.plan.exportar.request` | `catalogo-cuentas` | `contabilidad.plan.exportar.response` | `contabilidad.plan.exportar.failed` |
-| `contabilidad.asiento.asentar.request` | `escritor-diario` | `contabilidad.asiento.asentar.response` | `contabilidad.asiento.asentar.failed` |
-| `contabilidad.asiento.apertura.request` | `escritor-diario` | `contabilidad.asiento.apertura.response` | `contabilidad.asiento.apertura.failed` |
-| `contabilidad.asiento.cierre.request` | `escritor-diario` | `contabilidad.asiento.cierre.response` | `contabilidad.asiento.cierre.failed` |
-| `contabilidad.asiento.ajustar.request` | `escritor-diario` | `contabilidad.asiento.ajustar.response` | `contabilidad.asiento.ajustar.failed` |
-| `contabilidad.mayor.saldo.request` | `mayor-balanza` | `contabilidad.mayor.saldo.response` | `contabilidad.mayor.saldo.failed` |
-| `contabilidad.mayor.balanza.request` | `mayor-balanza` | `contabilidad.mayor.balanza.response` | `contabilidad.mayor.balanza.failed` |
-| `contabilidad.mayor.movimientos.request` | `mayor-balanza` | `contabilidad.mayor.movimientos.response` | `contabilidad.mayor.movimientos.failed` |
-| `contabilidad.traza.anotar.request` | `traza-asiento` | `contabilidad.traza.anotar.response` | `contabilidad.traza.anotar.failed` |
-| `contabilidad.traza.consultar.request` | `traza-asiento` | `contabilidad.traza.consultar.response` | `contabilidad.traza.consultar.failed` |
-| `contabilidad.ajuste.recibir.request` | `asiento-ajuste` | `contabilidad.ajuste.recibir.response` | `contabilidad.ajuste.recibir.failed` |
-| `contabilidad.estado.balance.request` | `estados-contables` | `contabilidad.estado.balance.response` | `contabilidad.estado.balance.failed` |
-| `contabilidad.estado.resultado.request` | `estados-contables` | `contabilidad.estado.resultado.response` | `contabilidad.estado.resultado.failed` |
-| `contabilidad.periodo.imputar.request` | `periodificacion` | `contabilidad.periodo.imputar.response` | `contabilidad.periodo.imputar.failed` |
-| `contabilidad.cierre.cerrar.request` | `cierre-ejercicio` | `contabilidad.cierre.cerrar.response` | `contabilidad.cierre.cerrar.failed` |
-| `contabilidad.cierre.estado.request` | `cierre-ejercicio` | `contabilidad.cierre.estado.response` | `contabilidad.cierre.estado.failed` |
-| `contabilidad.extracto.leer.request` | `puerto-extracto` | `contabilidad.extracto.leer.response` | `contabilidad.extracto.leer.failed` |
-| `contabilidad.extracto.registrar_forma.request` | `puerto-extracto` | `contabilidad.extracto.registrar_forma.response` | `contabilidad.extracto.registrar_forma.failed` |
-| `contabilidad.conciliacion.cruzar.request` | `conciliacion-bancaria` | `contabilidad.conciliacion.cruzar.response` | `contabilidad.conciliacion.cruzar.failed` |
-| `contabilidad.conciliacion.informe.request` | `conciliacion-bancaria` | `contabilidad.conciliacion.informe.response` | `contabilidad.conciliacion.informe.failed` |
-| `contabilidad.regla_movimiento.leer.request` | `regla-movimiento-bancario` | `contabilidad.regla_movimiento.leer.response` | `contabilidad.regla_movimiento.leer.failed` |
-| `contabilidad.regla_movimiento.declarar.request` | `regla-movimiento-bancario` | `contabilidad.regla_movimiento.declarar.response` | `contabilidad.regla_movimiento.declarar.failed` |
-| `contabilidad.regla_movimiento.aprender.request` | `regla-movimiento-bancario` | `contabilidad.regla_movimiento.aprender.response` | `contabilidad.regla_movimiento.aprender.failed` |
-| `contabilidad.tesoreria.saldo.request` | `saldo-tesoreria` | `contabilidad.tesoreria.saldo.response` | `contabilidad.tesoreria.saldo.failed` |
-| `contabilidad.tesoreria.prevision.request` | `saldo-tesoreria` | `contabilidad.tesoreria.prevision.response` | `contabilidad.tesoreria.prevision.failed` |
-| `contabilidad.cuenta_bancaria.declarar.request` | `maestro-cuentas-bancarias` | `contabilidad.cuenta_bancaria.declarar.response` | `contabilidad.cuenta_bancaria.declarar.failed` |
-| `contabilidad.cuenta_bancaria.listar.request` | `maestro-cuentas-bancarias` | `contabilidad.cuenta_bancaria.listar.response` | `contabilidad.cuenta_bancaria.listar.failed` |
-| `contabilidad.asiento.explicar.request` | `vista-revisable` | `contabilidad.asiento.explicar.response` | `contabilidad.asiento.explicar.failed` |
-| `contabilidad.muestra.seleccionar.request` | `vista-revisable` | `contabilidad.muestra.seleccionar.response` | `contabilidad.muestra.seleccionar.failed` |
-| `contabilidad.firma.marcar.request` | `flujo-firma` | `contabilidad.firma.marcar.response` | `contabilidad.firma.marcar.failed` |
-| `contabilidad.firma.delta.request` | `flujo-firma` | `contabilidad.firma.delta.response` | `contabilidad.firma.delta.failed` |
-| `contabilidad.expediente.archivar.request` | `expediente-documental` | `contabilidad.expediente.archivar.response` | `contabilidad.expediente.archivar.failed` |
-| `contabilidad.expediente.recuperar.request` | `expediente-documental` | `contabilidad.expediente.recuperar.response` | `contabilidad.expediente.recuperar.failed` |
-| `contabilidad.perfil.declarar.request` | `perfil-administrativo` | `contabilidad.perfil.declarar.response` | `contabilidad.perfil.declarar.failed` |
-| `contabilidad.perfil.aplicables.request` | `perfil-administrativo` | `contabilidad.perfil.aplicables.response` | `contabilidad.perfil.aplicables.failed` |
-| `contabilidad.calendario.declarar.request` | `calendario-fiscal` | `contabilidad.calendario.declarar.response` | `contabilidad.calendario.declarar.failed` |
-| `contabilidad.calendario.proximos.request` | `calendario-fiscal` | `contabilidad.calendario.proximos.response` | `contabilidad.calendario.proximos.failed` |
-| `contabilidad.iva.liquidar.request` | `liquidacion-iva` | `contabilidad.iva.liquidar.response` | `contabilidad.iva.liquidar.failed` |
-| `contabilidad.modelo.303.request` | `liquidacion-iva` | `contabilidad.modelo.303.response` | `contabilidad.modelo.303.failed` |
-| `contabilidad.modelo.390.request` | `liquidacion-iva` | `contabilidad.modelo.390.response` | `contabilidad.modelo.390.failed` |
-| `contabilidad.retenciones.calcular.request` | `retenciones-is-irpf` | `contabilidad.retenciones.calcular.response` | `contabilidad.retenciones.calcular.failed` |
-| `contabilidad.estimacion.calcular.request` | `retenciones-is-irpf` | `contabilidad.estimacion.calcular.response` | `contabilidad.estimacion.calcular.failed` |
-| `contabilidad.obligacion.avanzar.request` | `estado-presentacion-fiscal` | `contabilidad.obligacion.avanzar.response` | `contabilidad.obligacion.avanzar.failed` |
-| `contabilidad.obligacion.estado.request` | `estado-presentacion-fiscal` | `contabilidad.obligacion.estado.response` | `contabilidad.obligacion.estado.failed` |
-| `contabilidad.modelo.generar.request` | `generador-modelo` | `contabilidad.modelo.generar.response` | `contabilidad.modelo.generar.failed` |
-| `contabilidad.registro.anotar.request` | `registro-verifactu` | `contabilidad.registro.anotar.response` | `contabilidad.registro.anotar.failed` |
-| `contabilidad.registro.verificar.request` | `registro-verifactu` | `contabilidad.registro.verificar.response` | `contabilidad.registro.verificar.failed` |
-| `contabilidad.factura.estructurar.request` | `factura-electronica` | `contabilidad.factura.estructurar.response` | `contabilidad.factura.estructurar.failed` |
-| `contabilidad.factura.interpretar.request` | `factura-electronica` | `contabilidad.factura.interpretar.response` | `contabilidad.factura.interpretar.failed` |
-| `contabilidad.acuse.recibir.request` | `acuse-presentacion` | `contabilidad.acuse.recibir.response` | `contabilidad.acuse.recibir.failed` |
-| `contabilidad.declaracion.rectificar.request` | `rectificacion-declaracion` | `contabilidad.declaracion.rectificar.response` | `contabilidad.declaracion.rectificar.failed` |
-| `contabilidad.nomina.recibir.request` | `puerto-nomina` | `contabilidad.nomina.recibir.response` | `contabilidad.nomina.recibir.failed` |
-| `contabilidad.nomina.procesar.request` | `recibo-nomina` | `contabilidad.nomina.procesar.response` | `contabilidad.nomina.procesar.failed` |
-| `contabilidad.nomina.desglosar.request` | `recibo-nomina` | `contabilidad.nomina.desglosar.response` | `contabilidad.nomina.desglosar.failed` |
-| `contabilidad.nomina.liquidar.request` | `recibo-nomina` | `contabilidad.nomina.liquidar.response` | `contabilidad.nomina.liquidar.failed` |
-| `contabilidad.nomina.autorizar.request` | `acceso-nomina` | `contabilidad.nomina.autorizar.response` | `contabilidad.nomina.autorizar.failed` |
-| `contabilidad.nomina.puede_ver.request` | `acceso-nomina` | `contabilidad.nomina.puede_ver.response` | `contabilidad.nomina.puede_ver.failed` |
-| `contabilidad.activo.alta.request` | `inmovilizado` | `contabilidad.activo.alta.response` | `contabilidad.activo.alta.failed` |
-| `contabilidad.amortizacion.generar.request` | `inmovilizado` | `contabilidad.amortizacion.generar.response` | `contabilidad.amortizacion.generar.failed` |
-| `contabilidad.activo.baja.request` | `inmovilizado` | `contabilidad.activo.baja.response` | `contabilidad.activo.baja.failed` |
-| `contabilidad.activo.valor_neto.request` | `inmovilizado` | `contabilidad.activo.valor_neto.response` | `contabilidad.activo.valor_neto.failed` |
-| `contabilidad.parcela_negocio.registrar.request` | `aislamiento-negocio` | `contabilidad.parcela_negocio.registrar.response` | `contabilidad.parcela_negocio.registrar.failed` |
-| `contabilidad.parcela_negocio.escribir.request` | `aislamiento-negocio` | `contabilidad.parcela_negocio.escribir.response` | `contabilidad.parcela_negocio.escribir.failed` |
-| `contabilidad.criterio.declarar.request` | `cola-declaraciones-criterio` | `contabilidad.criterio.declarar.response` | `contabilidad.criterio.declarar.failed` |
-| `contabilidad.criterio.leer.request` | `cola-declaraciones-criterio` | `contabilidad.criterio.leer.response` | `contabilidad.criterio.leer.failed` |
-| `contabilidad.criterio.pendientes.request` | `cola-declaraciones-criterio` | `contabilidad.criterio.pendientes.response` | `contabilidad.criterio.pendientes.failed` |
-| `contabilidad.negocio.configurar.request` | `onboarding-negocio` | `contabilidad.negocio.configurar.response` | `contabilidad.negocio.configurar.failed` |
-| `contabilidad.negocio.estado.request` | `onboarding-negocio` | `contabilidad.negocio.estado.response` | `contabilidad.negocio.estado.failed` |
-| `contabilidad.negocio.activar.request` | `onboarding-negocio` | `contabilidad.negocio.activar.response` | `contabilidad.negocio.activar.failed` |
-| `contabilidad.aviso.solicitar.request` | `motor-avisos` | `contabilidad.aviso.solicitar.response` | `contabilidad.aviso.solicitar.failed` |
-| `contabilidad.aviso.catalogo.declarar.request` | `motor-avisos` | `contabilidad.aviso.catalogo.declarar.response` | `contabilidad.aviso.catalogo.declarar.failed` |
-| `contabilidad.consolidacion.agregar.request` | `consolidacion-grupo` | `contabilidad.consolidacion.agregar.response` | `contabilidad.consolidacion.agregar.failed` |
-| `contabilidad.ficha.coste.request` | `frontera-ficha-producto` | `contabilidad.ficha.coste.response` | `contabilidad.ficha.coste.failed` |
-| `contabilidad.existencia.valorar.request` | `valoracion-existencia` | `contabilidad.existencia.valorar.response` | `contabilidad.existencia.valorar.failed` |
-| `contabilidad.inventario.ajuste.request` | `valoracion-existencia` | `contabilidad.inventario.ajuste.response` | `contabilidad.inventario.ajuste.failed` |
-| `contabilidad.etiqueta.aplicar.request` | `etiquetado-analitico` | `contabilidad.etiqueta.aplicar.response` | `contabilidad.etiqueta.aplicar.failed` |
-| `contabilidad.margen.calcular.request` | `margen-analitico` | `contabilidad.margen.calcular.response` | `contabilidad.margen.calcular.failed` |
-| `contabilidad.indirecto.repartir.request` | `margen-analitico` | `contabilidad.indirecto.repartir.response` | `contabilidad.indirecto.repartir.failed` |
-| `contabilidad.tablero.cruzar.request` | `margen-analitico` | `contabilidad.tablero.cruzar.response` | `contabilidad.tablero.cruzar.failed` |
-| `contabilidad.presupuesto.declarar.request` | `presupuesto` | `contabilidad.presupuesto.declarar.response` | `contabilidad.presupuesto.declarar.failed` |
-| `contabilidad.desviacion.calcular.request` | `presupuesto` | `contabilidad.desviacion.calcular.response` | `contabilidad.desviacion.calcular.failed` |
-| `contabilidad.periodos.comparar.request` | `presupuesto` | `contabilidad.periodos.comparar.response` | `contabilidad.periodos.comparar.failed` |
-| `contabilidad.cuadro_mando.agregar.request` | `cuadro-mando-contable` | `contabilidad.cuadro_mando.agregar.response` | `contabilidad.cuadro_mando.agregar.failed` |
-| `contabilidad.informe.componer.request` | `informe-rico` | `contabilidad.informe.componer.response` | `contabilidad.informe.componer.failed` |
-| `contabilidad.consulta.responder.request` | `consulta-dueno` | `contabilidad.consulta.responder.response` | `contabilidad.consulta.responder.failed` |
-| `contabilidad.dueno.preguntar.request` | `puente-lenguaje-dueno` | `contabilidad.dueno.preguntar.response` | `contabilidad.dueno.preguntar.failed` |
-| `contabilidad.dueno.cifra.presentar.request` | `puente-lenguaje-dueno` | `contabilidad.dueno.cifra.presentar.response` | `contabilidad.dueno.cifra.presentar.failed` |
-| `contabilidad.aviso.enrutar.request` | `aviso-al-negocio` | `contabilidad.aviso.enrutar.response` | `contabilidad.aviso.enrutar.failed` |
-| `contabilidad.informe.accionable.request` | `informe-accionable` | `contabilidad.informe.accionable.response` | `contabilidad.informe.accionable.failed` |
-| `contabilidad.estados.narrar.request` | `informe-accionable` | `contabilidad.estados.narrar.response` | `contabilidad.estados.narrar.failed` |
+| `facturación/asesoria` (v2.0.0) | `puerto-exportacion` L1 · `generador-modelo` D7 | **DESCARTADO** | Empaqueta **facturas procesadas** en CSV+ZIP para el asesor; **no exporta el libro** (L1) ni **construye modelos fiscales** (D7). `publishes` `asesoria.paquete.generado` ≠ contrato de L1/D7. Se **CONSTRUYEN** L1 y D7. |
+| `inventario` (v1.0.0) | `valoracion-existencia` H1 · `variacion-stock-valorada` H4 | **DESCARTADO como clase** | Es el **CUSTODIO del stock** (`consultar/reservar/confirmar/liberar/ajustar`), parcela que el diseño **NO re-clasea** (H1 es una **capa de valor SOBRE** ese inventario). No cubre H1/H4 (valoración/variación). Se reutiliza como **FUENTE EXTERNA** (H1/H4 dependen de `inventario`). |
+| `metricas` (v2.0.0) | (ninguna) | **DESCARTADO** | Instrumentación **del sistema** (wildcards `*.creado/…`, `metricas.snapshot`). Ninguna clase mide métricas del sistema; `tasa-cobertura-entrada` P4 mide **cobertura de la entrada** (contrato distinto, LEE la métrica única A12). |
+| `banco` (v0.2.0) | (ninguna de tesorería) | **DESCARTADO** | ⚠️ **NO es banca**: es el **banco de nichos del radar**. Cero relación con tesorería/conciliación. |
+| `filesystem` (v2.4.0) | — | **INFRA reutilizada** | Infraestructura de plataforma (store de todo módulo vía `fs.*`); **no corresponde a ninguna clase**. Usada por todas las hojas que persisten. |
+| `project-manager` (v4.2.0) | — | **INFRA reutilizada** | Emite `project.activated` (obligatorio para restaurar estado). No es clase; es ciclo de vida. |
+| `credential-manager` (v2.2.0) | — | **INFRA reutilizada** | Credenciales/OAuth de los puertos externos (bancos, TGSS, administración). No es clase. |
+| `pizzepos/escandallo` (v2.3.0) | `valoracion-existencia` H1 | **DESCARTADO (patrón)** | Mono-negocio (vertical pizzepos). **NO se adapta** — se **toma su patrón** de reflejo determinista de coste (`_costear`) como referencia de H1/H4. |
+| `prisma/cierre` (v1.0.0) | `cierre-ejercicio` C4 | **DESCARTADO (patrón/fuente)** | Cierra la **caja diaria** (cuadre del día por método) — **≠** cierre de **ejercicio contable** con ajustes (C4). Se reutiliza como **hecho fuente** del cierre operativo (`cierre de jornada`), no como C4. |
+| `adaptador-avisos` (v0.1.0) | `aviso-al-negocio` R1 | **DESCARTADO (patrón)** | PUENTE "aviso + confirmación" **del taller 3D** (mono-negocio) → se toma su **patrón** para R1. R1 se **CONSTRUYE**. |
+| `cartero` · `telegram-service` · `channel-manager` | `aviso-al-negocio` R1 | **DESCARTADO (infra de canal)** | Son **cañería de canales** (Gmail/Telegram/registro de canales), no la cara "aviso entregado y confirmado al negocio". R1 se **CONSTRUYE** sobre ellos como canales declarables. |
+| `ocr4rs` (órgano OCR Rust) | `extraccion-dato` A4.1 | **DEPENDENCIA del reutilizado** | Órgano OCR (imagen/PDF → texto); es el **motor** que consume `facturas`/A4.1. No es clase. |
+| `agentes/bitacora` · `propiocepcion` · `log-manager` | `historial-proceso-contable` P2 | **DESCARTADO** | Son bitácoras **del motor de agentes / del sistema**, no el registro append-only del **proceso de entrada contable** (P2). P2 se **CONSTRUYE**. |
 
-### 4.2 — Fire-and-forget + par de fallo (todo flujo cierra su circulo)
+### 2.5 · `[ABIERTO]` — parentescos que NO se fusionan (decisión del dueño)
 
-| Evento de dominio | Emisor | Consumidores | Par de fallo |
+> Ley de la unidad: si dos clases parecen poder vivir en un módulo, **NO se juntan**: se emiten **dos hojas**
+> y se dirige `[ABIERTO]` al dueño. **Ninguna se ha fusionado.** Estos parentescos vienen del propio diseño (§10.4)
+> y se respetan sin excepción:
+
+| # | Pareja / tipo | Por qué NO se fusiona | `[ABIERTO]` al dueño |
 |---|---|---|---|
-| `asesoria.paquete.error` | `facturacion/asesoria` | (ninguno) | `asesoria.paquete.failed` |
-| `asesoria.paquete.generado` | `facturacion/asesoria` | (ninguno) | `asesoria.paquete.failed` |
-| `contabilidad.acceso_nomina_autorizado` | `acceso-nomina` | (ninguno) | `contabilidad.acceso_nomina_autorizado.failed` |
-| `contabilidad.activo_dado_de_alta` | `inmovilizado` | (ninguno) | `contabilidad.activo_dado_de_alta.failed` |
-| `contabilidad.activo_dado_de_baja` | `inmovilizado` | (ninguno) | `contabilidad.activo_dado_de_baja.failed` |
-| `contabilidad.acuse_ligado` | `acuse-presentacion` | (ninguno) | `contabilidad.acuse_ligado.failed` |
-| `contabilidad.ajuste_inventario_calculado` | `valoracion-existencia` | (ninguno) | `contabilidad.ajuste_inventario_calculado.failed` |
-| `contabilidad.ajuste_recibido` | `asiento-ajuste` | (ninguno) | `contabilidad.ajuste_recibido.failed` |
-| `contabilidad.amortizacion_generada` | `inmovilizado` | (ninguno) | `contabilidad.amortizacion_generada.failed` |
-| `contabilidad.anclaje_declarado` | `anclaje-cierre-vertical` | `completitud-cobertura` | `contabilidad.anclaje_declarado.failed` |
-| `contabilidad.apertura_generada` | `cierre-ejercicio` | (ninguno) | `contabilidad.apertura_generada.failed` |
-| `contabilidad.asiento_asentado` | `escritor-diario` | `traza-asiento` | `contabilidad.asiento_asentado.failed` |
-| `contabilidad.asiento_rechazado` | `escritor-diario` | (ninguno) | `contabilidad.asiento_rechazado.failed` |
-| `contabilidad.aviso_confirmado` | `aviso-al-negocio` | (ninguno) | `contabilidad.aviso_confirmado.failed` |
-| `contabilidad.aviso_entregado` | `aviso-al-negocio` | (ninguno) | `contabilidad.aviso_entregado.failed` |
-| `contabilidad.aviso_producido` | `motor-avisos` | (ninguno) | `contabilidad.aviso_producido.failed` |
-| `contabilidad.aviso_revision_solicitado` | `aviso-revision` | (ninguno) | `contabilidad.aviso_revision_solicitado.failed` |
-| `contabilidad.balance_calculado` | `estados-contables` | (ninguno) | `contabilidad.balance_calculado.failed` |
-| `contabilidad.balanza_calculada` | `mayor-balanza` | (ninguno) | `contabilidad.balanza_calculada.failed` |
-| `contabilidad.caja_proyectada` | `saldo-tesoreria` | (ninguno) | `contabilidad.caja_proyectada.failed` |
-| `contabilidad.cierre_realizado` | `cierre-ejercicio` | `aviso-cuadre` · `inmovilizado` | `contabilidad.cierre_realizado.failed` |
-| `contabilidad.cifra_archivada` | `expediente-documental` | (ninguno) | `contabilidad.cifra_archivada.failed` |
-| `contabilidad.cifra_presentada` | `puente-lenguaje-dueno` | (ninguno) | `contabilidad.cifra_presentada.failed` |
-| `contabilidad.clave_calculada` | `clave-natural` | (ninguno) | `contabilidad.clave_calculada.failed` |
-| `contabilidad.cobertura_calculada` | `completitud-cobertura` | `declaracion-fuente-faltante` · `aviso-cuadre` | `contabilidad.cobertura_calculada.failed` |
-| `contabilidad.comparacion_calculada` | `presupuesto` | (ninguno) | `contabilidad.comparacion_calculada.failed` |
-| `contabilidad.compra_cotejada` | `compra-proveedor` | (ninguno) | `contabilidad.compra_cotejada.failed` |
-| `contabilidad.conciliacion_realizada` | `conciliacion-bancaria` | (ninguno) | `contabilidad.conciliacion_realizada.failed` |
-| `contabilidad.consulta_respondida` | `consulta-dueno` | (ninguno) | `contabilidad.consulta_respondida.failed` |
-| `contabilidad.contrapartida_propuesta` | `resolucion-contrapartida` | `escritor-diario` | `contabilidad.contrapartida_propuesta.failed` |
-| `contabilidad.contrato_declarado` | `contrato-hecho-minimo` | `puerto-evento-vertical` | `contabilidad.contrato_declarado.failed` |
-| `contabilidad.coste_leido` | `frontera-ficha-producto` | (ninguno) | `contabilidad.coste_leido.failed` |
-| `contabilidad.criterio_declarado` | `cola-declaraciones-criterio` | (ninguno) | `contabilidad.criterio_declarado.failed` |
-| `contabilidad.criterio_pendiente` | `cola-declaraciones-criterio` | (ninguno) | `contabilidad.criterio_pendiente.failed` |
-| `contabilidad.cuadre_evaluado` | `aviso-cuadre` | (ninguno) | `contabilidad.cuadre_evaluado.failed` |
-| `contabilidad.cuadro_mando_calculado` | `cuadro-mando-contable` | (ninguno) | `contabilidad.cuadro_mando_calculado.failed` |
-| `contabilidad.cuenta_bancaria_declarada` | `maestro-cuentas-bancarias` | (ninguno) | `contabilidad.cuenta_bancaria_declarada.failed` |
-| `contabilidad.cuenta_declarada` | `catalogo-cuentas` | (ninguno) | `contabilidad.cuenta_declarada.failed` |
-| `contabilidad.cuenta_terceros_calculada` | `cuenta-terceros` | (ninguno) | `contabilidad.cuenta_terceros_calculada.failed` |
-| `contabilidad.cuota_estimada` | `retenciones-is-irpf` | (ninguno) | `contabilidad.cuota_estimada.failed` |
-| `contabilidad.declaracion_rectificada` | `rectificacion-declaracion` | (ninguno) | `contabilidad.declaracion_rectificada.failed` |
-| `contabilidad.delta_revision_calculado` | `flujo-firma` | (ninguno) | `contabilidad.delta_revision_calculado.failed` |
-| `contabilidad.desviacion_calculada` | `presupuesto` | (ninguno) | `contabilidad.desviacion_calculada.failed` |
-| `contabilidad.documento_descuadrado` | `normalizador-hecho` | (ninguno) | `contabilidad.documento_descuadrado.failed` |
-| `contabilidad.estados_narrados` | `informe-accionable` | (ninguno) | `contabilidad.estados_narrados.failed` |
-| `contabilidad.etiqueta_aplicada` | `etiquetado-analitico` | (ninguno) | `contabilidad.etiqueta_aplicada.failed` |
-| `contabilidad.excepcion_desatascada` | `desatasco-entrada` | (ninguno) | `contabilidad.excepcion_desatascada.failed` |
-| `contabilidad.excepcion_encolada` | `cola-revision` | `historial-proceso-contable` · `desatasco-entrada` · `aviso-revision` | `contabilidad.excepcion_encolada.failed` |
-| `contabilidad.excepcion_resuelta` | `cola-revision` | `historial-proceso-contable` | `contabilidad.excepcion_resuelta.failed` |
-| `contabilidad.existencia_valorada` | `valoracion-existencia` | (ninguno) | `contabilidad.existencia_valorada.failed` |
-| `contabilidad.extracto_leido` | `puerto-extracto` | (ninguno) | `contabilidad.extracto_leido.failed` |
-| `contabilidad.factura_emitida` | `emision-factura-venta` | `registro-verifactu` | `contabilidad.factura_emitida.failed` |
-| `contabilidad.factura_estructurada` | `factura-electronica` | (ninguno) | `contabilidad.factura_estructurada.failed` |
-| `contabilidad.factura_interpretada` | `factura-electronica` | (ninguno) | `contabilidad.factura_interpretada.failed` |
-| `contabilidad.factura_rectificada` | `emision-factura-venta` | (ninguno) | `contabilidad.factura_rectificada.failed` |
-| `contabilidad.firma_registrada` | `flujo-firma` | (ninguno) | `contabilidad.firma_registrada.failed` |
-| `contabilidad.frontera_planos_verificada` | `frontera-planos` | (ninguno) | `contabilidad.frontera_planos_verificada.failed` |
-| `contabilidad.fuente_faltante_declarada` | `declaracion-fuente-faltante` | (ninguno) | `contabilidad.fuente_faltante_declarada.failed` |
-| `contabilidad.grupo_consolidado` | `consolidacion-grupo` | (ninguno) | `contabilidad.grupo_consolidado.failed` |
-| `contabilidad.hecho_admitido` | `puerto-evento-vertical` | `historial-proceso-contable` · `normalizador-hecho` · `completitud-cobertura` · `hecho-rectificativo` · `cierre-ejercicio` | `contabilidad.hecho_admitido.failed` |
-| `contabilidad.hecho_duplicado` | `deduplicacion-hecho` | (ninguno) | `contabilidad.hecho_duplicado.failed` |
-| `contabilidad.hecho_normalizado` | `normalizador-hecho` | `deduplicacion-hecho` | `contabilidad.hecho_normalizado.failed` |
-| `contabilidad.hecho_nuevo` | `deduplicacion-hecho` | `resolucion-contrapartida` | `contabilidad.hecho_nuevo.failed` |
-| `contabilidad.hecho_rectificado` | `hecho-rectificativo` | (ninguno) | `contabilidad.hecho_rectificado.failed` |
-| `contabilidad.historial_anotado` | `historial-proceso-contable` | (ninguno) | `contabilidad.historial_anotado.failed` |
-| `contabilidad.indirecto_repartido` | `margen-analitico` | (ninguno) | `contabilidad.indirecto_repartido.failed` |
-| `contabilidad.informe_accionable` | `informe-accionable` | (ninguno) | `contabilidad.informe_accionable.failed` |
-| `contabilidad.informe_compuesto` | `informe-rico` | (ninguno) | `contabilidad.informe_compuesto.failed` |
-| `contabilidad.iva_liquidado` | `liquidacion-iva` | (ninguno) | `contabilidad.iva_liquidado.failed` |
-| `contabilidad.lote_despachado` | `lote-admision` | (ninguno) | `contabilidad.lote_despachado.failed` |
-| `contabilidad.margen_calculado` | `margen-analitico` | (ninguno) | `contabilidad.margen_calculado.failed` |
-| `contabilidad.modelo_construido` | `liquidacion-iva` | (ninguno) | `contabilidad.modelo_construido.failed` |
-| `contabilidad.modelo_entregado` | `generador-modelo` | (ninguno) | `contabilidad.modelo_entregado.failed` |
-| `contabilidad.modelo_generado` | `generador-modelo` | (ninguno) | `contabilidad.modelo_generado.failed` |
-| `contabilidad.movimiento_sin_cruzar` | `conciliacion-bancaria` | `partida-no-identificada` | `contabilidad.movimiento_sin_cruzar.failed` |
-| `contabilidad.muestra_seleccionada` | `vista-revisable` | (ninguno) | `contabilidad.muestra_seleccionada.failed` |
-| `contabilidad.negocio_configurado` | `onboarding-negocio` | (ninguno) | `contabilidad.negocio_configurado.failed` |
-| `contabilidad.nomina_formada` | `recibo-nomina` | (ninguno) | `contabilidad.nomina_formada.failed` |
-| `contabilidad.nomina_recibida` | `puerto-nomina` | `recibo-nomina` | `contabilidad.nomina_recibida.failed` |
-| `contabilidad.obligacion_avanzada` | `estado-presentacion-fiscal` | (ninguno) | `contabilidad.obligacion_avanzada.failed` |
-| `contabilidad.panel_latido` | `panel-proceso-contable` | (ninguno) | `contabilidad.panel_latido.failed` |
-| `contabilidad.parcela_autorizada` | `single-writer` | (ninguno) | `contabilidad.parcela_autorizada.failed` |
-| `contabilidad.parcela_negocio_registrada` | `aislamiento-negocio` | (ninguno) | `contabilidad.parcela_negocio_registrada.failed` |
-| `contabilidad.parcela_registrada` | `single-writer` | (ninguno) | `contabilidad.parcela_registrada.failed` |
-| `contabilidad.partida_clasificada` | `partida-no-identificada` | (ninguno) | `contabilidad.partida_clasificada.failed` |
-| `contabilidad.perfil_declarado` | `perfil-administrativo` | (ninguno) | `contabilidad.perfil_declarado.failed` |
-| `contabilidad.periodo_imputado` | `periodificacion` | (ninguno) | `contabilidad.periodo_imputado.failed` |
-| `contabilidad.plan_exportado` | `catalogo-cuentas` | (ninguno) | `contabilidad.plan_exportado.failed` |
-| `contabilidad.plan_importado` | `catalogo-cuentas` | (ninguno) | `contabilidad.plan_importado.failed` |
-| `contabilidad.plazo_declarado` | `calendario-fiscal` | (ninguno) | `contabilidad.plazo_declarado.failed` |
-| `contabilidad.plazo_proximo` | `calendario-fiscal` | (ninguno) | `contabilidad.plazo_proximo.failed` |
-| `contabilidad.presupuesto_declarado` | `presupuesto` | (ninguno) | `contabilidad.presupuesto_declarado.failed` |
-| `contabilidad.registro_verifactu_anotado` | `registro-verifactu` | (ninguno) | `contabilidad.registro_verifactu_anotado.failed` |
-| `contabilidad.regla_aprendida` | `regla-contrapartida` · `desatasco-entrada` | `ratificacion-regla-aprendida` | `contabilidad.regla_aprendida.failed` |
-| `contabilidad.regla_declarada` | `regla-contrapartida` | (ninguno) | `contabilidad.regla_declarada.failed` |
-| `contabilidad.regla_movimiento_aprendida` | `regla-movimiento-bancario` | (ninguno) | `contabilidad.regla_movimiento_aprendida.failed` |
-| `contabilidad.regla_movimiento_declarada` | `regla-movimiento-bancario` | (ninguno) | `contabilidad.regla_movimiento_declarada.failed` |
-| `contabilidad.regla_ratificada` | `ratificacion-regla-aprendida` | `regla-contrapartida` · `regla-movimiento-bancario` | `contabilidad.regla_ratificada.failed` |
-| `contabilidad.resultado_calculado` | `estados-contables` | (ninguno) | `contabilidad.resultado_calculado.failed` |
-| `contabilidad.retenciones_calculadas` | `retenciones-is-irpf` | (ninguno) | `contabilidad.retenciones_calculadas.failed` |
-| `contabilidad.saldo_tesoreria_calculado` | `saldo-tesoreria` | (ninguno) | `contabilidad.saldo_tesoreria_calculado.failed` |
-| `contabilidad.tablero_calculado` | `margen-analitico` | (ninguno) | `contabilidad.tablero_calculado.failed` |
-| `contabilidad.tercero_declarado` | `maestro-terceros` | (ninguno) | `contabilidad.tercero_declarado.failed` |
-| `contabilidad.tercero_identificado` | `maestro-terceros` | (ninguno) | `contabilidad.tercero_identificado.failed` |
-| `contabilidad.traza_anotada` | `traza-asiento` | (ninguno) | `contabilidad.traza_anotada.failed` |
-| `contabilidad.vertical_activada` | `onboarding-negocio` | (ninguno) | `contabilidad.vertical_activada.failed` |
-| `contabilidad.vista_explicada` | `vista-revisable` | (ninguno) | `contabilidad.vista_explicada.failed` |
-| `credential.deleted` | `credential-manager` | (ninguno) | `credential.failed` |
-| `credential.saved` | `credential-manager` | (ninguno) | `credential.failed` |
-| `credential.state` | `credential-manager` | (ninguno) | `credential.failed` |
-| `credential.updated` | `credential-manager` | (ninguno) | `credential.failed` |
-| `factura.entrada` | `facturacion/fuentes` | `facturas` | `factura.failed` |
-| `factura.error` | `facturas` | (ninguno) | `factura.failed` |
-| `factura.exportada` | `facturas` | (ninguno) | `factura.failed` |
-| `factura.procesada` | `facturas` | `normalizador-hecho` | `factura.failed` |
-| `factura.recibida` | `facturas` | (ninguno) | `factura.failed` |
-| `inventario.ajustado` | `inventario` | (ninguno) | `inventario.failed` |
-| `inventario.confirmado` | `inventario` | (ninguno) | `inventario.failed` |
-| `inventario.reserva.creada` | `inventario` | (ninguno) | `inventario.reserva.failed` |
-| `inventario.reserva.expirada` | `inventario` | (ninguno) | `inventario.reserva.failed` |
-| `inventario.reserva.liberada` | `inventario` | (ninguno) | `inventario.reserva.failed` |
-| `inventario.stock.bajo_minimo` | `inventario` | (ninguno) | `inventario.stock.failed` |
-| `metricas.snapshot` | `metricas` | (ninguno) | `metricas.failed` |
-| `project.activated` | `project-manager` | `filesystem` · `contrato-hecho-minimo` · `anclaje-cierre-vertical` · `cola-revision` · `regla-contrapartida` · `single-writer` · `puerto-evento-vertical` · `historial-proceso-contable` · `maestro-terceros` · `emision-factura-venta` · `catalogo-cuentas` · `escritor-diario` · `traza-asiento` · `cierre-ejercicio` · `regla-movimiento-bancario` · `maestro-cuentas-bancarias` · `flujo-firma` · `expediente-documental` · `perfil-administrativo` · `calendario-fiscal` · `estado-presentacion-fiscal` · `registro-verifactu` · `rectificacion-declaracion` · `acceso-nomina` · `inmovilizado` · `aislamiento-negocio` · `cola-declaraciones-criterio` · `onboarding-negocio` · `presupuesto` | `project.failed` |
-| `project.created` | `project-manager` | (ninguno) | `project.failed` |
-| `project.deactivated` | `project-manager` | `filesystem` | `project.failed` |
-| `project.state` | `project-manager` | (ninguno) | `project.failed` |
-
-> Eventos de la FUENTE (verticales): **no se fijan aqui** — entran por el puerto `puerto-evento-vertical` (A1) con el contrato minimo declarado (A11). Cero nombres inventados.
+| 1 | `maestro-terceros` N1 vs `padron-terceros` N2 | Dos facetas del **mismo maestro** (ficha funcional + identidad por nº fiscal); la fusión de **clase** es del dueño, no del adaptador | ¿Se fusionan N1/N2 en una sola clase? (conflicto ① ya decidido como *un solo maestro con roles*; la fusión de clase pende del dueño) |
+| 2 | `vencimiento-pago` N6 vs `antiguedad-de-saldos` N8 | Simétricas (pago/cobro) sobre el tipo `Vencimiento`; la hoja atómica no se trocea ni se agrupa | ¿Una sola lógica de vencimientos con dos lados? |
+| 3 | tipo `Vencimiento` (transversal a N6·N8·E5) | Es **tipo de soporte**, no clase → no pertenece a ninguna hoja | ¿Confirma el dueño el molde (tipo transversal, sin módulo)? |
+| 4 | `marca-borrador-validado` Q4 LEE `flujo-firma` L3 + `traza-asiento` B4 | Deriva el estado sin almacenarlo | ¿Almacén de marca por dato o derivación pura? |
+| 5 | tipo `SolicitudDecision` (14 puntos de decisión) | Es **tipo**, no hoja; 14 puntos lo comparten | ¿Puerto propio para la decisión, o cada clase gestiona la suya? |
+| 6 | 20 puertos abiertos | Ninguno tiene formato declarado; "los cablea el sitio" | ¿Cuáles entran en la **primera entrega**? (Q12/K7) |
 
 ---
 
-## 5 · Reparto por los 4 ejes (particion decidida por el dueno 2026-09-28)
+## §3 · Las HOJAS CONSTRUIR (116)
 
-| vertical | hojas | CONSTRUIR | REUTILIZAR | clases F3 |
+> Una hoja por clase. Cada hoja describe su **slug**, **forma**, **propósito**, **dependencias**, **eventos** y las
+> **7 etapas** (A dependencias · B `module.json` · C `index.js` · D proyecciones · E handlers RPC · F eventos · VERIFICACIÓN).
+> Las 2 hojas REUTILIZAR se documentan en §2. No se agrupa ninguna clase.
+
+
+### `puerto-evento-vertical` · `PUENTE` · eje `contabilidad-entrada`
+- **Clase / hoja F2:** `PuertoEventoVertical` (HOJA A1)
+- **Propósito:** Abre el puerto por el que cada vertical manda sus hechos ya emitidos; contabilidad se adapta, no impone formato ni obliga a emitir.
+- **Depende de:** — (hoja raíz)
+- **Eventos que sube:** `puerto-evento-vertical.recibir.request`, `vertical.hecho.emitido`
+- **Eventos que publica:** `puerto-evento-vertical.recibir.response`, `puerto-evento-vertical.recibir.failed`, `contabilidad.hecho_crudo`
+- **A · dependencias:** deps de módulo: (ninguna) · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `puerto-evento-vertical` · `subscribes`: 2 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class PuertoEventoVertical extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_recibir(input) → { status, data }`
+- **E · handlers RPC:** `onRecibirRequest(e) → this._atender(e, 'recibir', 'puerto-evento-vertical.recibir.response', d => this._recibir(d))`
+- **F · eventos:** **sube** → `puerto-evento-vertical.recibir.request`, `vertical.hecho.emitido` · **publica** → `puerto-evento-vertical.recibir.response`, `puerto-evento-vertical.recibir.failed`, `contabilidad.hecho_crudo` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test: el CUSTODIO rechaza el segundo escritor / MICRO-AGENTE no escribe (solo propone)
+
+### `normalizador-hecho` · `CONVERSOR` · eje `contabilidad-entrada`
+- **Clase / hoja F2:** `NormalizadorHecho` (HOJA A2)
+- **Propósito:** Unica puerta de formato: homogeneiza el hecho de cada vertical a forma asentable.
+- **Depende de:** `puerto-evento-vertical`
+- **Eventos que sube:** `normalizador-hecho.normalizar.request`, `contabilidad.hecho_crudo`
+- **Eventos que publica:** `normalizador-hecho.normalizar.response`, `normalizador-hecho.normalizar.failed`, `contabilidad.hecho_normalizado`
+- **A · dependencias:** deps de módulo: puerto-evento-vertical · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `normalizador-hecho` · `subscribes`: 2 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class NormalizadorHecho extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_normalizar(input) → { status, data }`
+- **E · handlers RPC:** `onNormalizarRequest(e) → this._atender(e, 'normalizar', 'normalizador-hecho.normalizar.response', d => this._normalizar(d))`
+- **F · eventos:** **sube** → `normalizador-hecho.normalizar.request`, `contabilidad.hecho_crudo` · **publica** → `normalizador-hecho.normalizar.response`, `normalizador-hecho.normalizar.failed`, `contabilidad.hecho_normalizado` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test unitario AFIRMA la proyección determinista (una sola respuesta correcta)
+
+### `captura-documento` · `REFLEJO` · eje `contabilidad-entrada`
+- **Clase / hoja F2:** `CapturaDocumento` (HOJA A3)
+- **Propósito:** Admite el documento (digitalizado o recibido) y valida campos; mecanico, cero juicio.
+- **Depende de:** `puerto-documento`, `puerto-documento-digital`
+- **Eventos que sube:** `captura-documento.admitir.request`
+- **Eventos que publica:** `captura-documento.admitir.response`, `captura-documento.admitir.failed`, `contabilidad.documento_admitido`
+- **A · dependencias:** deps de módulo: puerto-documento, puerto-documento-digital · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `captura-documento` · `subscribes`: 1 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class CapturaDocumento extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_admitir(input) → { status, data }`
+- **E · handlers RPC:** `onAdmitirRequest(e) → this._atender(e, 'admitir', 'captura-documento.admitir.response', d => this._admitir(d))`
+- **F · eventos:** **sube** → `captura-documento.admitir.request` · **publica** → `captura-documento.admitir.response`, `captura-documento.admitir.failed`, `contabilidad.documento_admitido` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test unitario AFIRMA la proyección determinista (una sola respuesta correcta)
+
+### `puerto-documento` · `CONVERSOR` · eje `contabilidad-entrada`
+- **Clase / hoja F2:** `PuertoDocumento` (HOJA A4.2)
+- **Propósito:** Frontera de las formas declarables del documento; el adaptador lo pone el sitio.
+- **Depende de:** `puerto-documento-digital`
+- **Eventos que sube:** `puerto-documento.entrar.request`
+- **Eventos que publica:** `puerto-documento.entrar.response`, `puerto-documento.entrar.failed`, `contabilidad.documento_normalizado`
+- **A · dependencias:** deps de módulo: puerto-documento-digital · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `puerto-documento` · `subscribes`: 1 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class PuertoDocumento extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_entrar(input) → { status, data }`
+- **E · handlers RPC:** `onEntrarRequest(e) → this._atender(e, 'entrar', 'puerto-documento.entrar.response', d => this._entrar(d))`
+- **F · eventos:** **sube** → `puerto-documento.entrar.request` · **publica** → `puerto-documento.entrar.response`, `puerto-documento.entrar.failed`, `contabilidad.documento_normalizado` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test unitario AFIRMA la proyección determinista (una sola respuesta correcta)
+
+### `control-cuadre-documento` · `REFLEJO` · eje `contabilidad-entrada`
+- **Clase / hoja F2:** `ControlCuadreDocumento` (HOJA A4.3)
+- **Propósito:** Si importe+impuestos no cuadran -> cola, NO se asienta mal; calculo determinista.
+- **Depende de:** `puerto-documento`
+- **Eventos que sube:** `control-cuadre-documento.cuadra.request`
+- **Eventos que publica:** `control-cuadre-documento.cuadra.response`, `control-cuadre-documento.cuadra.failed`, `contabilidad.documento_descuadrado`
+- **A · dependencias:** deps de módulo: puerto-documento · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `control-cuadre-documento` · `subscribes`: 1 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class ControlCuadreDocumento extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_cuadra(input) → { status, data }`
+- **E · handlers RPC:** `onCuadraRequest(e) → this._atender(e, 'cuadra', 'control-cuadre-documento.cuadra.response', d => this._cuadra(d))`
+- **F · eventos:** **sube** → `control-cuadre-documento.cuadra.request` · **publica** → `control-cuadre-documento.cuadra.response`, `control-cuadre-documento.cuadra.failed`, `contabilidad.documento_descuadrado` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test unitario AFIRMA la proyección determinista (una sola respuesta correcta)
+
+### `contrapartida-asistida` · `MICRO-AGENTE` · eje `contabilidad-entrada`
+- **Clase / hoja F2:** `ContrapartidaAsistida` (HOJA A6.1)
+- **Propósito:** Propone cuenta/tercero/periodo contra el plan declarado; PROPONE, no escribe; el corte duro lo fija A6.2.
+- **Depende de:** `catalogo-cuentas`, `maestro-terceros`
+- **Eventos que sube:** `contrapartida-asistida.juzgar.request`
+- **Eventos que publica:** `contrapartida-asistida.juzgar.response`, `contrapartida-asistida.juzgar.failed`, `contabilidad.contrapartida_propuesta`
+- **A · dependencias:** deps de módulo: catalogo-cuentas, maestro-terceros · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `contrapartida-asistida` · `subscribes`: 1 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op · `blueprint_driven: true` (cajones fuzzy + reflejo que sirve las ops)
+- **C · index.js:** `class ContrapartidaAsistida extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_juzgar(input) → { status, data }` · la proyección determinista (fallback) + cajón blueprint para el juicio fuzzy (delega al reflejo)
+- **E · handlers RPC:** `onJuzgarRequest(e) → this._atender(e, 'juzgar', 'contrapartida-asistida.juzgar.response', d => this._juzgar(d))`
+- **F · eventos:** **sube** → `contrapartida-asistida.juzgar.request` · **publica** → `contrapartida-asistida.juzgar.response`, `contrapartida-asistida.juzgar.failed`, `contabilidad.contrapartida_propuesta` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test: el CUSTODIO rechaza el segundo escritor / MICRO-AGENTE no escribe (solo propone)
+
+### `regla-contrapartida` · `CUSTODIO` · eje `contabilidad-entrada`
+- **Clase / hoja F2:** `ReglaContrapartida` (HOJA A6.2)
+- **Propósito:** Parcela de reglas declarables/aprendidas (proveedor -> cuenta); un solo escritor; entra hidratada de L10.
+- **Depende de:** `catalogo-cuentas`
+- **Eventos que sube:** `regla-contrapartida.aplicar.request`, `regla-contrapartida.proponer.request`, `project.activated`
+- **Eventos que publica:** `regla-contrapartida.aplicar.response`, `regla-contrapartida.aplicar.failed`, `regla-contrapartida.proponer.response`, `regla-contrapartida.proponer.failed`, `contabilidad.regla_contrapartida_propuesta`
+- **A · dependencias:** deps de módulo: catalogo-cuentas · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `regla-contrapartida` · `subscribes`: 3 tópicos (+ 2 `.request` propios) · `publishes`: par `.response`+`.failed` por op · + `project.activated` obligatorio (persiste estado)
+- **C · index.js:** `class ReglaContrapartida extends ModuloHibridoReflejo` · `PosPersistencia({ modulo, file: '<slug>.json', snapshot, hidratar })` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_aplicar(input) → { status, data }` · + 1 proyección(es) más (una por op): _proponer
+- **E · handlers RPC:** `onAplicarRequest(e) → this._atender(e, 'aplicar', 'regla-contrapartida.aplicar.response', d => this._aplicar(d))` · `onProponerRequest(e) → this._atender(e, 'proponer', 'regla-contrapartida.proponer.response', d => this._proponer(d))`
+- **F · eventos:** **sube** → `regla-contrapartida.aplicar.request`, `regla-contrapartida.proponer.request`, `project.activated` · **publica** → `regla-contrapartida.aplicar.response`, `regla-contrapartida.aplicar.failed`, `regla-contrapartida.proponer.response`, `regla-contrapartida.proponer.failed`, `contabilidad.regla_contrapartida_propuesta` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test: el CUSTODIO rechaza el segundo escritor / MICRO-AGENTE no escribe (solo propone)
+
+### `deduplicacion-hecho` · `REFLEJO` · eje `contabilidad-entrada`
+- **Clase / hoja F2:** `DeduplicacionHecho` (HOJA A7)
+- **Propósito:** Aplica la clave natural del hecho/documento -> no duplica; idempotencia determinista.
+- **Depende de:** `clave-natural`
+- **Eventos que sube:** `deduplicacion-hecho.es_nuevo.request`, `contabilidad.hecho_normalizado`
+- **Eventos que publica:** `deduplicacion-hecho.es_nuevo.response`, `deduplicacion-hecho.es_nuevo.failed`
+- **A · dependencias:** deps de módulo: clave-natural · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `deduplicacion-hecho` · `subscribes`: 2 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class DeduplicacionHecho extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_es_nuevo(input) → { status, data }`
+- **E · handlers RPC:** `onEsNuevoRequest(e) → this._atender(e, 'es_nuevo', 'deduplicacion-hecho.es_nuevo.response', d => this._es_nuevo(d))`
+- **F · eventos:** **sube** → `deduplicacion-hecho.es_nuevo.request`, `contabilidad.hecho_normalizado` · **publica** → `deduplicacion-hecho.es_nuevo.response`, `deduplicacion-hecho.es_nuevo.failed` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test unitario AFIRMA la proyección determinista (una sola respuesta correcta)
+
+### `encolado-excepcion` · `CUSTODIO` · eje `contabilidad-entrada`
+- **Clase / hoja F2:** `EncoladoExcepcion` (HOJA A8.1)
+- **Propósito:** Parcela de lo dudoso; el flujo CONTINUA, lo dudoso espera; un solo escritor.
+- **Depende de:** `control-cuadre-documento`
+- **Eventos que sube:** `encolado-excepcion.encolar.request`, `encolado-excepcion.tomar.request`, `project.activated`
+- **Eventos que publica:** `encolado-excepcion.encolar.response`, `encolado-excepcion.encolar.failed`, `encolado-excepcion.tomar.response`, `encolado-excepcion.tomar.failed`, `contabilidad.excepcion_encolada`
+- **A · dependencias:** deps de módulo: control-cuadre-documento · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `encolado-excepcion` · `subscribes`: 3 tópicos (+ 2 `.request` propios) · `publishes`: par `.response`+`.failed` por op · + `project.activated` obligatorio (persiste estado)
+- **C · index.js:** `class EncoladoExcepcion extends ModuloHibridoReflejo` · `PosPersistencia({ modulo, file: '<slug>.json', snapshot, hidratar })` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_encolar(input) → { status, data }` · + 1 proyección(es) más (una por op): _tomar
+- **E · handlers RPC:** `onEncolarRequest(e) → this._atender(e, 'encolar', 'encolado-excepcion.encolar.response', d => this._encolar(d))` · `onTomarRequest(e) → this._atender(e, 'tomar', 'encolado-excepcion.tomar.response', d => this._tomar(d))`
+- **F · eventos:** **sube** → `encolado-excepcion.encolar.request`, `encolado-excepcion.tomar.request`, `project.activated` · **publica** → `encolado-excepcion.encolar.response`, `encolado-excepcion.encolar.failed`, `encolado-excepcion.tomar.response`, `encolado-excepcion.tomar.failed`, `contabilidad.excepcion_encolada` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test: el CUSTODIO rechaza el segundo escritor / MICRO-AGENTE no escribe (solo propone)
+
+### `aviso-revision` · `PUENTE` · eje `contabilidad-entrada`
+- **Clase / hoja F2:** `AvisoRevision` (HOJA A8.2)
+- **Propósito:** Empejon al canal de avisos: esto necesita revision; conecta por evento.
+- **Depende de:** `encolado-excepcion`
+- **Eventos que sube:** `aviso-revision.empujar.request`, `contabilidad.excepcion_encolada`
+- **Eventos que publica:** `aviso-revision.empujar.response`, `aviso-revision.empujar.failed`, `contabilidad.aviso_revision`
+- **A · dependencias:** deps de módulo: encolado-excepcion · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `aviso-revision` · `subscribes`: 2 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class AvisoRevision extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_empujar(input) → { status, data }`
+- **E · handlers RPC:** `onEmpujarRequest(e) → this._atender(e, 'empujar', 'aviso-revision.empujar.response', d => this._empujar(d))`
+- **F · eventos:** **sube** → `aviso-revision.empujar.request`, `contabilidad.excepcion_encolada` · **publica** → `aviso-revision.empujar.response`, `aviso-revision.empujar.failed`, `contabilidad.aviso_revision` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test: el CUSTODIO rechaza el segundo escritor / MICRO-AGENTE no escribe (solo propone)
+
+### `lote-admision` · `REFLEJO` · eje `contabilidad-entrada`
+- **Clase / hoja F2:** `LoteAdmision` (HOJA A9)
+- **Propósito:** Desacople del cuello: N hechos en paralelo (la admision no se serializa).
+- **Depende de:** `normalizador-hecho`
+- **Eventos que sube:** `lote-admision.admitir.request`, `contabilidad.hecho_normalizado`
+- **Eventos que publica:** `lote-admision.admitir.response`, `lote-admision.admitir.failed`
+- **A · dependencias:** deps de módulo: normalizador-hecho · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `lote-admision` · `subscribes`: 2 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class LoteAdmision extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_admitir(input) → { status, data }`
+- **E · handlers RPC:** `onAdmitirRequest(e) → this._atender(e, 'admitir', 'lote-admision.admitir.response', d => this._admitir(d))`
+- **F · eventos:** **sube** → `lote-admision.admitir.request`, `contabilidad.hecho_normalizado` · **publica** → `lote-admision.admitir.response`, `lote-admision.admitir.failed` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test unitario AFIRMA la proyección determinista (una sola respuesta correcta)
+
+### `contrato-hecho-minimo` · `CUSTODIO` · eje `contabilidad-entrada`
+- **Clase / hoja F2:** `ContratoHechoMinimo` (HOJA A11)
+- **Propósito:** Parcela declarable del minimo exigible a cada fuente; la cara vista desde la fuente: un minimo, no un formato impuesto.
+- **Depende de:** `cola-declaraciones-criterio`
+- **Eventos que sube:** `contrato-hecho-minimo.exigir.request`, `contrato-hecho-minimo.declarar.request`, `project.activated`
+- **Eventos que publica:** `contrato-hecho-minimo.exigir.response`, `contrato-hecho-minimo.exigir.failed`, `contrato-hecho-minimo.declarar.response`, `contrato-hecho-minimo.declarar.failed`, `contabilidad.contrato_declarado`
+- **A · dependencias:** deps de módulo: cola-declaraciones-criterio · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `contrato-hecho-minimo` · `subscribes`: 3 tópicos (+ 2 `.request` propios) · `publishes`: par `.response`+`.failed` por op · + `project.activated` obligatorio (persiste estado)
+- **C · index.js:** `class ContratoHechoMinimo extends ModuloHibridoReflejo` · `PosPersistencia({ modulo, file: '<slug>.json', snapshot, hidratar })` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_exigir(input) → { status, data }` · + 1 proyección(es) más (una por op): _declarar
+- **E · handlers RPC:** `onExigirRequest(e) → this._atender(e, 'exigir', 'contrato-hecho-minimo.exigir.response', d => this._exigir(d))` · `onDeclararRequest(e) → this._atender(e, 'declarar', 'contrato-hecho-minimo.declarar.response', d => this._declarar(d))`
+- **F · eventos:** **sube** → `contrato-hecho-minimo.exigir.request`, `contrato-hecho-minimo.declarar.request`, `project.activated` · **publica** → `contrato-hecho-minimo.exigir.response`, `contrato-hecho-minimo.exigir.failed`, `contrato-hecho-minimo.declarar.response`, `contrato-hecho-minimo.declarar.failed`, `contabilidad.contrato_declarado` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test: el CUSTODIO rechaza el segundo escritor / MICRO-AGENTE no escribe (solo propone)
+
+### `completitud-cobertura` · `REFLEJO` · eje `contabilidad-entrada`
+- **Clase / hoja F2:** `CompletitudCobertura` (HOJA A12)
+- **Propósito:** Mide que hechos publico una vertical y cuales NO llegaron; produce LA metrica unica; las demas senales la LEEN.
+- **Depende de:** `contrato-hecho-minimo`
+- **Eventos que sube:** `completitud-cobertura.medir.request`
+- **Eventos que publica:** `completitud-cobertura.medir.response`, `completitud-cobertura.medir.failed`, `contabilidad.cobertura_medida`
+- **A · dependencias:** deps de módulo: contrato-hecho-minimo · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `completitud-cobertura` · `subscribes`: 1 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class CompletitudCobertura extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_medir(input) → { status, data }`
+- **E · handlers RPC:** `onMedirRequest(e) → this._atender(e, 'medir', 'completitud-cobertura.medir.response', d => this._medir(d))`
+- **F · eventos:** **sube** → `completitud-cobertura.medir.request` · **publica** → `completitud-cobertura.medir.response`, `completitud-cobertura.medir.failed`, `contabilidad.cobertura_medida` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test unitario AFIRMA la proyección determinista (una sola respuesta correcta)
+
+### `hecho-rectificativo` · `PUENTE` · eje `contabilidad-entrada`
+- **Clase / hoja F2:** `HechoRectificativo` (HOJA A13)
+- **Propósito:** Conecta el hecho posterior que corrige/anula uno anterior por clave natural; NO borra, anade.
+- **Depende de:** `clave-natural`
+- **Eventos que sube:** `hecho-rectificativo.emparejar.request`
+- **Eventos que publica:** `hecho-rectificativo.emparejar.response`, `hecho-rectificativo.emparejar.failed`, `contabilidad.hecho_rectificado`
+- **A · dependencias:** deps de módulo: clave-natural · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `hecho-rectificativo` · `subscribes`: 1 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class HechoRectificativo extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_emparejar(input) → { status, data }`
+- **E · handlers RPC:** `onEmparejarRequest(e) → this._atender(e, 'emparejar', 'hecho-rectificativo.emparejar.response', d => this._emparejar(d))`
+- **F · eventos:** **sube** → `hecho-rectificativo.emparejar.request` · **publica** → `hecho-rectificativo.emparejar.response`, `hecho-rectificativo.emparejar.failed`, `contabilidad.hecho_rectificado` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test: el CUSTODIO rechaza el segundo escritor / MICRO-AGENTE no escribe (solo propone)
+
+### `anclaje-cierre-vertical` · `CUSTODIO` · eje `contabilidad-entrada`
+- **Clase / hoja F2:** `AnclajeCierreVertical` (HOJA A14)
+- **Propósito:** Parcela declarable POR VERTICAL de que es "un cierre" y como se identifica; pende de unidad_de_cierre (dato del dueno).
+- **Depende de:** `cola-declaraciones-criterio`
+- **Eventos que sube:** `anclaje-cierre-vertical.anclar.request`, `anclaje-cierre-vertical.declarar.request`, `project.activated`
+- **Eventos que publica:** `anclaje-cierre-vertical.anclar.response`, `anclaje-cierre-vertical.anclar.failed`, `anclaje-cierre-vertical.declarar.response`, `anclaje-cierre-vertical.declarar.failed`, `contabilidad.cierre_anclado`
+- **A · dependencias:** deps de módulo: cola-declaraciones-criterio · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `anclaje-cierre-vertical` · `subscribes`: 3 tópicos (+ 2 `.request` propios) · `publishes`: par `.response`+`.failed` por op · + `project.activated` obligatorio (persiste estado)
+- **C · index.js:** `class AnclajeCierreVertical extends ModuloHibridoReflejo` · `PosPersistencia({ modulo, file: '<slug>.json', snapshot, hidratar })` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_anclar(input) → { status, data }` · + 1 proyección(es) más (una por op): _declarar
+- **E · handlers RPC:** `onAnclarRequest(e) → this._atender(e, 'anclar', 'anclaje-cierre-vertical.anclar.response', d => this._anclar(d))` · `onDeclararRequest(e) → this._atender(e, 'declarar', 'anclaje-cierre-vertical.declarar.response', d => this._declarar(d))`
+- **F · eventos:** **sube** → `anclaje-cierre-vertical.anclar.request`, `anclaje-cierre-vertical.declarar.request`, `project.activated` · **publica** → `anclaje-cierre-vertical.anclar.response`, `anclaje-cierre-vertical.anclar.failed`, `anclaje-cierre-vertical.declarar.response`, `anclaje-cierre-vertical.declarar.failed`, `contabilidad.cierre_anclado` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test: el CUSTODIO rechaza el segundo escritor / MICRO-AGENTE no escribe (solo propone)
+
+### `declaracion-fuente-faltante` · `PUENTE` · eje `contabilidad-entrada`
+- **Clase / hoja F2:** `DeclaracionFuenteFaltante` (HOJA A15)
+- **Propósito:** Detecta que una vertical NO publica un hecho necesario y lo DECLARA (abierto + aviso); no obliga a producirlo.
+- **Depende de:** `completitud-cobertura`
+- **Eventos que sube:** `declaracion-fuente-faltante.declarar.request`, `contabilidad.cobertura_medida`
+- **Eventos que publica:** `declaracion-fuente-faltante.declarar.response`, `declaracion-fuente-faltante.declarar.failed`, `contabilidad.fuente_faltante`
+- **A · dependencias:** deps de módulo: completitud-cobertura · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `declaracion-fuente-faltante` · `subscribes`: 2 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class DeclaracionFuenteFaltante extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_declarar(input) → { status, data }`
+- **E · handlers RPC:** `onDeclararRequest(e) → this._atender(e, 'declarar', 'declaracion-fuente-faltante.declarar.response', d => this._declarar(d))`
+- **F · eventos:** **sube** → `declaracion-fuente-faltante.declarar.request`, `contabilidad.cobertura_medida` · **publica** → `declaracion-fuente-faltante.declarar.response`, `declaracion-fuente-faltante.declarar.failed`, `contabilidad.fuente_faltante` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test: el CUSTODIO rechaza el segundo escritor / MICRO-AGENTE no escribe (solo propone)
+
+### `catalogo-cuentas` · `CUSTODIO` · eje `contabilidad-libro`
+- **Clase / hoja F2:** `CatalogoCuentas` (HOJA B1)
+- **Propósito:** Plan contable declarable/importable del asesor; un solo escritor.
+- **Depende de:** `puerto-plan-contable`
+- **Eventos que sube:** `catalogo-cuentas.anadir.request`, `catalogo-cuentas.buscar.request`, `project.activated`
+- **Eventos que publica:** `catalogo-cuentas.anadir.response`, `catalogo-cuentas.anadir.failed`, `catalogo-cuentas.buscar.response`, `catalogo-cuentas.buscar.failed`
+- **A · dependencias:** deps de módulo: puerto-plan-contable · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `catalogo-cuentas` · `subscribes`: 3 tópicos (+ 2 `.request` propios) · `publishes`: par `.response`+`.failed` por op · + `project.activated` obligatorio (persiste estado)
+- **C · index.js:** `class CatalogoCuentas extends ModuloHibridoReflejo` · `PosPersistencia({ modulo, file: '<slug>.json', snapshot, hidratar })` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_anadir(input) → { status, data }` · + 1 proyección(es) más (una por op): _buscar
+- **E · handlers RPC:** `onAnadirRequest(e) → this._atender(e, 'anadir', 'catalogo-cuentas.anadir.response', d => this._anadir(d))` · `onBuscarRequest(e) → this._atender(e, 'buscar', 'catalogo-cuentas.buscar.response', d => this._buscar(d))`
+- **F · eventos:** **sube** → `catalogo-cuentas.anadir.request`, `catalogo-cuentas.buscar.request`, `project.activated` · **publica** → `catalogo-cuentas.anadir.response`, `catalogo-cuentas.anadir.failed`, `catalogo-cuentas.buscar.response`, `catalogo-cuentas.buscar.failed` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test: el CUSTODIO rechaza el segundo escritor / MICRO-AGENTE no escribe (solo propone)
+
+### `escritor-diario` · `CUSTODIO` · eje `contabilidad-libro`
+- **Clase / hoja F2:** `EscritorDiario` (HOJA B2)
+- **Propósito:** ES el custodio del libro; single-writer por parcela; rechaza si suma debe != suma haber.
+- **Depende de:** `clave-natural`, `single-writer`
+- **Eventos que sube:** `escritor-diario.asentar.request`, `project.activated`
+- **Eventos que publica:** `escritor-diario.asentar.response`, `escritor-diario.asentar.failed`, `contabilidad.asiento_registrado`
+- **A · dependencias:** deps de módulo: clave-natural, single-writer · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `escritor-diario` · `subscribes`: 2 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op · + `project.activated` obligatorio (persiste estado)
+- **C · index.js:** `class EscritorDiario extends ModuloHibridoReflejo` · `PosPersistencia({ modulo, file: '<slug>.json', snapshot, hidratar })` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_asentar(input) → { status, data }`
+- **E · handlers RPC:** `onAsentarRequest(e) → this._atender(e, 'asentar', 'escritor-diario.asentar.response', d => this._asentar(d))`
+- **F · eventos:** **sube** → `escritor-diario.asentar.request`, `project.activated` · **publica** → `escritor-diario.asentar.response`, `escritor-diario.asentar.failed`, `contabilidad.asiento_registrado` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test: el CUSTODIO rechaza el segundo escritor / MICRO-AGENTE no escribe (solo propone)
+
+### `mayor-balanza` · `REFLEJO` · eje `contabilidad-libro`
+- **Clase / hoja F2:** `MayorBalanza` (HOJA B3)
+- **Propósito:** Saldos por cuenta derivados del diario; calculo determinista, un test lo afirma.
+- **Depende de:** `escritor-diario`
+- **Eventos que sube:** `mayor-balanza.saldos.request`, `mayor-balanza.balanza.request`, `contabilidad.asiento_registrado`
+- **Eventos que publica:** `mayor-balanza.saldos.response`, `mayor-balanza.saldos.failed`, `mayor-balanza.balanza.response`, `mayor-balanza.balanza.failed`
+- **A · dependencias:** deps de módulo: escritor-diario · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `mayor-balanza` · `subscribes`: 3 tópicos (+ 2 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class MayorBalanza extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_saldos(input) → { status, data }` · + 1 proyección(es) más (una por op): _balanza
+- **E · handlers RPC:** `onSaldosRequest(e) → this._atender(e, 'saldos', 'mayor-balanza.saldos.response', d => this._saldos(d))` · `onBalanzaRequest(e) → this._atender(e, 'balanza', 'mayor-balanza.balanza.response', d => this._balanza(d))`
+- **F · eventos:** **sube** → `mayor-balanza.saldos.request`, `mayor-balanza.balanza.request`, `contabilidad.asiento_registrado` · **publica** → `mayor-balanza.saldos.response`, `mayor-balanza.saldos.failed`, `mayor-balanza.balanza.response`, `mayor-balanza.balanza.failed` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test unitario AFIRMA la proyección determinista (una sola respuesta correcta)
+
+### `traza-asiento` · `CUSTODIO` · eje `contabilidad-libro`
+- **Clase / hoja F2:** `TrazaAsiento` (HOJA B4)
+- **Propósito:** Registro inmutable (quien/cuando creo cada asiento), append-only; un solo escritor.
+- **Depende de:** `escritor-diario`
+- **Eventos que sube:** `traza-asiento.registrar.request`, `project.activated`, `contabilidad.asiento_registrado`
+- **Eventos que publica:** `traza-asiento.registrar.response`, `traza-asiento.registrar.failed`, `contabilidad.traza_registrada`
+- **A · dependencias:** deps de módulo: escritor-diario · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `traza-asiento` · `subscribes`: 3 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op · + `project.activated` obligatorio (persiste estado)
+- **C · index.js:** `class TrazaAsiento extends ModuloHibridoReflejo` · `PosPersistencia({ modulo, file: '<slug>.json', snapshot, hidratar })` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_registrar(input) → { status, data }`
+- **E · handlers RPC:** `onRegistrarRequest(e) → this._atender(e, 'registrar', 'traza-asiento.registrar.response', d => this._registrar(d))`
+- **F · eventos:** **sube** → `traza-asiento.registrar.request`, `project.activated`, `contabilidad.asiento_registrado` · **publica** → `traza-asiento.registrar.response`, `traza-asiento.registrar.failed`, `contabilidad.traza_registrada` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test: el CUSTODIO rechaza el segundo escritor / MICRO-AGENTE no escribe (solo propone)
+
+### `asiento-ajuste` · `PUENTE` · eje `contabilidad-libro`
+- **Clase / hoja F2:** `AsientoAjuste` (HOJA B5)
+- **Propósito:** Camino por el que la correccion del asesor ENTRA al libro sin borrar; la traza queda intacta; el almacen es B2/B4.
+- **Depende de:** `escritor-diario`
+- **Eventos que sube:** `asiento-ajuste.entrar.request`, `contabilidad.firma_registrada`
+- **Eventos que publica:** `asiento-ajuste.entrar.response`, `asiento-ajuste.entrar.failed`, `contabilidad.asiento_ajuste_recibido`
+- **A · dependencias:** deps de módulo: escritor-diario · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `asiento-ajuste` · `subscribes`: 2 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class AsientoAjuste extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_entrar(input) → { status, data }`
+- **E · handlers RPC:** `onEntrarRequest(e) → this._atender(e, 'entrar', 'asiento-ajuste.entrar.response', d => this._entrar(d))`
+- **F · eventos:** **sube** → `asiento-ajuste.entrar.request`, `contabilidad.firma_registrada` · **publica** → `asiento-ajuste.entrar.response`, `asiento-ajuste.entrar.failed`, `contabilidad.asiento_ajuste_recibido` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test: el CUSTODIO rechaza el segundo escritor / MICRO-AGENTE no escribe (solo propone)
+
+### `puerto-plan-contable` · `CONVERSOR` · eje `contabilidad-libro`
+- **Clase / hoja F2:** `PuertoPlanContable` (HOJA B6)
+- **Propósito:** Frontera de codificacion del plan contable (import/export); cruce de formatos.
+- **Depende de:** — (hoja raíz)
+- **Eventos que sube:** `puerto-plan-contable.entrar.request`, `puerto-plan-contable.salir.request`
+- **Eventos que publica:** `puerto-plan-contable.entrar.response`, `puerto-plan-contable.entrar.failed`, `puerto-plan-contable.salir.response`, `puerto-plan-contable.salir.failed`
+- **A · dependencias:** deps de módulo: (ninguna) · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `puerto-plan-contable` · `subscribes`: 2 tópicos (+ 2 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class PuertoPlanContable extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_entrar(input) → { status, data }` · + 1 proyección(es) más (una por op): _salir
+- **E · handlers RPC:** `onEntrarRequest(e) → this._atender(e, 'entrar', 'puerto-plan-contable.entrar.response', d => this._entrar(d))` · `onSalirRequest(e) → this._atender(e, 'salir', 'puerto-plan-contable.salir.response', d => this._salir(d))`
+- **F · eventos:** **sube** → `puerto-plan-contable.entrar.request`, `puerto-plan-contable.salir.request` · **publica** → `puerto-plan-contable.entrar.response`, `puerto-plan-contable.entrar.failed`, `puerto-plan-contable.salir.response`, `puerto-plan-contable.salir.failed` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test unitario AFIRMA la proyección determinista (una sola respuesta correcta)
+
+### `balance-situacion` · `REFLEJO` · eje `contabilidad-libro`
+- **Clase / hoja F2:** `BalanceSituacion` (HOJA C1)
+- **Propósito:** Activo/pasivo/patrimonio derivado del mayor; invariante ACTIVO = PASIVO + PATRIMONIO; descuadre = ERROR.
+- **Depende de:** `mayor-balanza`
+- **Eventos que sube:** `balance-situacion.calcular.request`, `contabilidad.asiento_registrado`
+- **Eventos que publica:** `balance-situacion.calcular.response`, `balance-situacion.calcular.failed`
+- **A · dependencias:** deps de módulo: mayor-balanza · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `balance-situacion` · `subscribes`: 2 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class BalanceSituacion extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_calcular(input) → { status, data }`
+- **E · handlers RPC:** `onCalcularRequest(e) → this._atender(e, 'calcular', 'balance-situacion.calcular.response', d => this._calcular(d))`
+- **F · eventos:** **sube** → `balance-situacion.calcular.request`, `contabilidad.asiento_registrado` · **publica** → `balance-situacion.calcular.response`, `balance-situacion.calcular.failed` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test unitario AFIRMA la proyección determinista (una sola respuesta correcta)
+
+### `cuenta-resultados` · `REFLEJO` · eje `contabilidad-libro`
+- **Clase / hoja F2:** `CuentaResultados` (HOJA C2)
+- **Propósito:** Ingresos/gastos/resultado derivado del mayor; determinista.
+- **Depende de:** `mayor-balanza`
+- **Eventos que sube:** `cuenta-resultados.calcular.request`, `contabilidad.asiento_registrado`
+- **Eventos que publica:** `cuenta-resultados.calcular.response`, `cuenta-resultados.calcular.failed`
+- **A · dependencias:** deps de módulo: mayor-balanza · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `cuenta-resultados` · `subscribes`: 2 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class CuentaResultados extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_calcular(input) → { status, data }`
+- **E · handlers RPC:** `onCalcularRequest(e) → this._atender(e, 'calcular', 'cuenta-resultados.calcular.response', d => this._calcular(d))`
+- **F · eventos:** **sube** → `cuenta-resultados.calcular.request`, `contabilidad.asiento_registrado` · **publica** → `cuenta-resultados.calcular.response`, `cuenta-resultados.calcular.failed` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test unitario AFIRMA la proyección determinista (una sola respuesta correcta)
+
+### `periodificacion` · `REFLEJO` · eje `contabilidad-libro`
+- **Clase / hoja F2:** `Periodificacion` (HOJA C3)
+- **Propósito:** Imputa cada hecho a su periodo con el criterio declarado; conserva fecha operacion y fecha valor, NO elige.
+- **Depende de:** `escritor-diario`
+- **Eventos que sube:** `periodificacion.imputar.request`, `contabilidad.asiento_registrado`
+- **Eventos que publica:** `periodificacion.imputar.response`, `periodificacion.imputar.failed`
+- **A · dependencias:** deps de módulo: escritor-diario · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `periodificacion` · `subscribes`: 2 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class Periodificacion extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_imputar(input) → { status, data }`
+- **E · handlers RPC:** `onImputarRequest(e) → this._atender(e, 'imputar', 'periodificacion.imputar.response', d => this._imputar(d))`
+- **F · eventos:** **sube** → `periodificacion.imputar.request`, `contabilidad.asiento_registrado` · **publica** → `periodificacion.imputar.response`, `periodificacion.imputar.failed` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test unitario AFIRMA la proyección determinista (una sola respuesta correcta)
+
+### `cierre-ejercicio` · `CUSTODIO` · eje `contabilidad-libro`
+- **Clase / hoja F2:** `CierreEjercicio` (HOJA C4)
+- **Propósito:** Cierra el periodo con ajustes; IRREVERSIBLE salvo ajuste (reabrir solo con asiento-ajuste); un solo escritor.
+- **Depende de:** `balance-situacion`, `cuenta-resultados`, `asiento-ajuste`
+- **Eventos que sube:** `cierre-ejercicio.cerrar.request`, `cierre-ejercicio.reabrir.request`, `project.activated`
+- **Eventos que publica:** `cierre-ejercicio.cerrar.response`, `cierre-ejercicio.cerrar.failed`, `cierre-ejercicio.reabrir.response`, `cierre-ejercicio.reabrir.failed`, `contabilidad.ejercicio_cerrado`
+- **A · dependencias:** deps de módulo: balance-situacion, cuenta-resultados, asiento-ajuste · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `cierre-ejercicio` · `subscribes`: 3 tópicos (+ 2 `.request` propios) · `publishes`: par `.response`+`.failed` por op · + `project.activated` obligatorio (persiste estado)
+- **C · index.js:** `class CierreEjercicio extends ModuloHibridoReflejo` · `PosPersistencia({ modulo, file: '<slug>.json', snapshot, hidratar })` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_cerrar(input) → { status, data }` · + 1 proyección(es) más (una por op): _reabrir
+- **E · handlers RPC:** `onCerrarRequest(e) → this._atender(e, 'cerrar', 'cierre-ejercicio.cerrar.response', d => this._cerrar(d))` · `onReabrirRequest(e) → this._atender(e, 'reabrir', 'cierre-ejercicio.reabrir.response', d => this._reabrir(d))`
+- **F · eventos:** **sube** → `cierre-ejercicio.cerrar.request`, `cierre-ejercicio.reabrir.request`, `project.activated` · **publica** → `cierre-ejercicio.cerrar.response`, `cierre-ejercicio.cerrar.failed`, `cierre-ejercicio.reabrir.response`, `cierre-ejercicio.reabrir.failed`, `contabilidad.ejercicio_cerrado` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test: el CUSTODIO rechaza el segundo escritor / MICRO-AGENTE no escribe (solo propone)
+
+### `apertura-ejercicio` · `REFLEJO` · eje `contabilidad-libro`
+- **Clase / hoja F2:** `AperturaEjercicio` (HOJA C5)
+- **Propósito:** Asientos de apertura DERIVADOS del cierre anterior; determinista.
+- **Depende de:** `cierre-ejercicio`
+- **Eventos que sube:** `apertura-ejercicio.generar.request`, `contabilidad.ejercicio_cerrado`
+- **Eventos que publica:** `apertura-ejercicio.generar.response`, `apertura-ejercicio.generar.failed`
+- **A · dependencias:** deps de módulo: cierre-ejercicio · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `apertura-ejercicio` · `subscribes`: 2 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class AperturaEjercicio extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_generar(input) → { status, data }`
+- **E · handlers RPC:** `onGenerarRequest(e) → this._atender(e, 'generar', 'apertura-ejercicio.generar.response', d => this._generar(d))`
+- **F · eventos:** **sube** → `apertura-ejercicio.generar.request`, `contabilidad.ejercicio_cerrado` · **publica** → `apertura-ejercicio.generar.response`, `apertura-ejercicio.generar.failed` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test unitario AFIRMA la proyección determinista (una sola respuesta correcta)
+
+### `aviso-cuadre` · `PUENTE` · eje `contabilidad-libro`
+- **Clase / hoja F2:** `AvisoCuadre` (HOJA C6)
+- **Propósito:** NO finge el cuadre: si falta cobertura, avisa; LEE la metrica unica, no la recalcula.
+- **Depende de:** `completitud-cobertura`
+- **Eventos que sube:** `aviso-cuadre.avisar.request`, `contabilidad.cobertura_medida`
+- **Eventos que publica:** `aviso-cuadre.avisar.response`, `aviso-cuadre.avisar.failed`, `contabilidad.aviso_cuadre`
+- **A · dependencias:** deps de módulo: completitud-cobertura · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `aviso-cuadre` · `subscribes`: 2 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class AvisoCuadre extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_avisar(input) → { status, data }`
+- **E · handlers RPC:** `onAvisarRequest(e) → this._atender(e, 'avisar', 'aviso-cuadre.avisar.response', d => this._avisar(d))`
+- **F · eventos:** **sube** → `aviso-cuadre.avisar.request`, `contabilidad.cobertura_medida` · **publica** → `aviso-cuadre.avisar.response`, `aviso-cuadre.avisar.failed`, `contabilidad.aviso_cuadre` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test: el CUSTODIO rechaza el segundo escritor / MICRO-AGENTE no escribe (solo propone)
+
+### `liquidacion-iva` · `REFLEJO` · eje `contabilidad-fiscal`
+- **Clase / hoja F2:** `LiquidacionIva` (HOJA D1)
+- **Propósito:** IVA devengado/soportado DERIVADO del libro; los tipos son dato, no constante.
+- **Depende de:** `mayor-balanza`
+- **Eventos que sube:** `liquidacion-iva.calcular.request`, `contabilidad.asiento_registrado`
+- **Eventos que publica:** `liquidacion-iva.calcular.response`, `liquidacion-iva.calcular.failed`
+- **A · dependencias:** deps de módulo: mayor-balanza · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `liquidacion-iva` · `subscribes`: 2 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class LiquidacionIva extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_calcular(input) → { status, data }`
+- **E · handlers RPC:** `onCalcularRequest(e) → this._atender(e, 'calcular', 'liquidacion-iva.calcular.response', d => this._calcular(d))`
+- **F · eventos:** **sube** → `liquidacion-iva.calcular.request`, `contabilidad.asiento_registrado` · **publica** → `liquidacion-iva.calcular.response`, `liquidacion-iva.calcular.failed` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test unitario AFIRMA la proyección determinista (una sola respuesta correcta)
+
+### `modelo-303` · `REFLEJO` · eje `contabilidad-fiscal`
+- **Clase / hoja F2:** `Modelo303` (HOJA D2)
+- **Propósito:** Construye el modelo 303 desde la liquidacion; determinista.
+- **Depende de:** `liquidacion-iva`
+- **Eventos que sube:** `modelo-303.construir.request`
+- **Eventos que publica:** `modelo-303.construir.response`, `modelo-303.construir.failed`
+- **A · dependencias:** deps de módulo: liquidacion-iva · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `modelo-303` · `subscribes`: 1 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class Modelo303 extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_construir(input) → { status, data }`
+- **E · handlers RPC:** `onConstruirRequest(e) → this._atender(e, 'construir', 'modelo-303.construir.response', d => this._construir(d))`
+- **F · eventos:** **sube** → `modelo-303.construir.request` · **publica** → `modelo-303.construir.response`, `modelo-303.construir.failed` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test unitario AFIRMA la proyección determinista (una sola respuesta correcta)
+
+### `modelo-390` · `REFLEJO` · eje `contabilidad-fiscal`
+- **Clase / hoja F2:** `Modelo390` (HOJA D3)
+- **Propósito:** Idem anual (390) construido desde las liquidaciones del ejercicio; determinista.
+- **Depende de:** `liquidacion-iva`
+- **Eventos que sube:** `modelo-390.construir.request`
+- **Eventos que publica:** `modelo-390.construir.response`, `modelo-390.construir.failed`
+- **A · dependencias:** deps de módulo: liquidacion-iva · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `modelo-390` · `subscribes`: 1 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class Modelo390 extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_construir(input) → { status, data }`
+- **E · handlers RPC:** `onConstruirRequest(e) → this._atender(e, 'construir', 'modelo-390.construir.response', d => this._construir(d))`
+- **F · eventos:** **sube** → `modelo-390.construir.request` · **publica** → `modelo-390.construir.response`, `modelo-390.construir.failed` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test unitario AFIRMA la proyección determinista (una sola respuesta correcta)
+
+### `retenciones` · `REFLEJO` · eje `contabilidad-fiscal`
+- **Clase / hoja F2:** `Retenciones` (HOJA D4)
+- **Propósito:** Retenciones practicadas/soportadas calculadas desde los asientos; determinista.
+- **Depende de:** `mayor-balanza`
+- **Eventos que sube:** `retenciones.calcular.request`, `contabilidad.asiento_registrado`
+- **Eventos que publica:** `retenciones.calcular.response`, `retenciones.calcular.failed`
+- **A · dependencias:** deps de módulo: mayor-balanza · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `retenciones` · `subscribes`: 2 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class Retenciones extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_calcular(input) → { status, data }`
+- **E · handlers RPC:** `onCalcularRequest(e) → this._atender(e, 'calcular', 'retenciones.calcular.response', d => this._calcular(d))`
+- **F · eventos:** **sube** → `retenciones.calcular.request`, `contabilidad.asiento_registrado` · **publica** → `retenciones.calcular.response`, `retenciones.calcular.failed` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test unitario AFIRMA la proyección determinista (una sola respuesta correcta)
+
+### `estimacion-is-irpf` · `REFLEJO` · eje `contabilidad-fiscal`
+- **Clase / hoja F2:** `EstimacionIsIrpf` (HOJA D5)
+- **Propósito:** Estimacion del resultado fiscal con base DECLARADA; nada se estima sin base.
+- **Depende de:** `cuenta-resultados`
+- **Eventos que sube:** `estimacion-is-irpf.estimar.request`, `contabilidad.asiento_registrado`
+- **Eventos que publica:** `estimacion-is-irpf.estimar.response`, `estimacion-is-irpf.estimar.failed`
+- **A · dependencias:** deps de módulo: cuenta-resultados · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `estimacion-is-irpf` · `subscribes`: 2 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class EstimacionIsIrpf extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_estimar(input) → { status, data }`
+- **E · handlers RPC:** `onEstimarRequest(e) → this._atender(e, 'estimar', 'estimacion-is-irpf.estimar.response', d => this._estimar(d))`
+- **F · eventos:** **sube** → `estimacion-is-irpf.estimar.request`, `contabilidad.asiento_registrado` · **publica** → `estimacion-is-irpf.estimar.response`, `estimacion-is-irpf.estimar.failed` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test unitario AFIRMA la proyección determinista (una sola respuesta correcta)
+
+### `calendario-fiscal` · `CUSTODIO` · eje `contabilidad-fiscal`
+- **Clase / hoja F2:** `CalendarioFiscal` (HOJA D6)
+- **Propósito:** Parcela de plazos declarables -> dispara aviso proactivo; la ley entra como dato; un solo escritor.
+- **Depende de:** `perfil-administrativo`
+- **Eventos que sube:** `calendario-fiscal.proximos.request`, `calendario-fiscal.declarar.request`, `project.activated`
+- **Eventos que publica:** `calendario-fiscal.proximos.response`, `calendario-fiscal.proximos.failed`, `calendario-fiscal.declarar.response`, `calendario-fiscal.declarar.failed`, `contabilidad.vencimiento_fiscal`
+- **A · dependencias:** deps de módulo: perfil-administrativo · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `calendario-fiscal` · `subscribes`: 3 tópicos (+ 2 `.request` propios) · `publishes`: par `.response`+`.failed` por op · + `project.activated` obligatorio (persiste estado)
+- **C · index.js:** `class CalendarioFiscal extends ModuloHibridoReflejo` · `PosPersistencia({ modulo, file: '<slug>.json', snapshot, hidratar })` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_proximos(input) → { status, data }` · + 1 proyección(es) más (una por op): _declarar
+- **E · handlers RPC:** `onProximosRequest(e) → this._atender(e, 'proximos', 'calendario-fiscal.proximos.response', d => this._proximos(d))` · `onDeclararRequest(e) → this._atender(e, 'declarar', 'calendario-fiscal.declarar.response', d => this._declarar(d))`
+- **F · eventos:** **sube** → `calendario-fiscal.proximos.request`, `calendario-fiscal.declarar.request`, `project.activated` · **publica** → `calendario-fiscal.proximos.response`, `calendario-fiscal.proximos.failed`, `calendario-fiscal.declarar.response`, `calendario-fiscal.declarar.failed`, `contabilidad.vencimiento_fiscal` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test: el CUSTODIO rechaza el segundo escritor / MICRO-AGENTE no escribe (solo propone)
+
+### `generador-modelo` · `PUENTE` · eje `contabilidad-fiscal`
+- **Clase / hoja F2:** `GeneradorModelo` (HOJA D7)
+- **Propósito:** Salida al programa del asesor; conecta por puerto; formato ABIERTO (no declarado aun).
+- **Depende de:** `modelo-303`, `modelo-390`, `estado-presentacion-fiscal`
+- **Eventos que sube:** `generador-modelo.exportar.request`
+- **Eventos que publica:** `generador-modelo.exportar.response`, `generador-modelo.exportar.failed`, `contabilidad.modelo_exportado`
+- **A · dependencias:** deps de módulo: modelo-303, modelo-390, estado-presentacion-fiscal · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `generador-modelo` · `subscribes`: 1 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class GeneradorModelo extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_exportar(input) → { status, data }`
+- **E · handlers RPC:** `onExportarRequest(e) → this._atender(e, 'exportar', 'generador-modelo.exportar.response', d => this._exportar(d))`
+- **F · eventos:** **sube** → `generador-modelo.exportar.request` · **publica** → `generador-modelo.exportar.response`, `generador-modelo.exportar.failed`, `contabilidad.modelo_exportado` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test: el CUSTODIO rechaza el segundo escritor / MICRO-AGENTE no escribe (solo propone)
+
+### `registro-verifactu` · `CUSTODIO` · eje `contabilidad-fiscal`
+- **Clase / hoja F2:** `RegistroVerifactu` (HOJA D8)
+- **Propósito:** Huella/cadena INALTERABLE de la facturacion; registro encadenado; un solo escritor.
+- **Depende de:** `emision-factura-venta`
+- **Eventos que sube:** `registro-verifactu.encadenar.request`, `project.activated`, `contabilidad.factura_emitida`
+- **Eventos que publica:** `registro-verifactu.encadenar.response`, `registro-verifactu.encadenar.failed`, `contabilidad.huella_encadenada`
+- **A · dependencias:** deps de módulo: emision-factura-venta · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `registro-verifactu` · `subscribes`: 3 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op · + `project.activated` obligatorio (persiste estado)
+- **C · index.js:** `class RegistroVerifactu extends ModuloHibridoReflejo` · `PosPersistencia({ modulo, file: '<slug>.json', snapshot, hidratar })` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_encadenar(input) → { status, data }`
+- **E · handlers RPC:** `onEncadenarRequest(e) → this._atender(e, 'encadenar', 'registro-verifactu.encadenar.response', d => this._encadenar(d))`
+- **F · eventos:** **sube** → `registro-verifactu.encadenar.request`, `project.activated`, `contabilidad.factura_emitida` · **publica** → `registro-verifactu.encadenar.response`, `registro-verifactu.encadenar.failed`, `contabilidad.huella_encadenada` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test: el CUSTODIO rechaza el segundo escritor / MICRO-AGENTE no escribe (solo propone)
+
+### `factura-electronica` · `CONVERSOR` · eje `contabilidad-fiscal`
+- **Clase / hoja F2:** `FacturaElectronica` (HOJA D9)
+- **Propósito:** Frontera de formato estructurado de la factura.
+- **Depende de:** — (hoja raíz)
+- **Eventos que sube:** `factura-electronica.entrar.request`, `factura-electronica.salir.request`
+- **Eventos que publica:** `factura-electronica.entrar.response`, `factura-electronica.entrar.failed`, `factura-electronica.salir.response`, `factura-electronica.salir.failed`
+- **A · dependencias:** deps de módulo: (ninguna) · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `factura-electronica` · `subscribes`: 2 tópicos (+ 2 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class FacturaElectronica extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_entrar(input) → { status, data }` · + 1 proyección(es) más (una por op): _salir
+- **E · handlers RPC:** `onEntrarRequest(e) → this._atender(e, 'entrar', 'factura-electronica.entrar.response', d => this._entrar(d))` · `onSalirRequest(e) → this._atender(e, 'salir', 'factura-electronica.salir.response', d => this._salir(d))`
+- **F · eventos:** **sube** → `factura-electronica.entrar.request`, `factura-electronica.salir.request` · **publica** → `factura-electronica.entrar.response`, `factura-electronica.entrar.failed`, `factura-electronica.salir.response`, `factura-electronica.salir.failed` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test unitario AFIRMA la proyección determinista (una sola respuesta correcta)
+
+### `estado-presentacion-fiscal` · `CUSTODIO` · eje `contabilidad-fiscal`
+- **Clase / hoja F2:** `EstadoPresentacionFiscal` (HOJA D12)
+- **Propósito:** Ciclo de vida de cada obligacion (pendiente->generada->presentada->justificada->atrasada); un solo escritor.
+- **Depende de:** `calendario-fiscal`
+- **Eventos que sube:** `estado-presentacion-fiscal.avanzar.request`, `estado-presentacion-fiscal.estado.request`, `project.activated`
+- **Eventos que publica:** `estado-presentacion-fiscal.avanzar.response`, `estado-presentacion-fiscal.avanzar.failed`, `estado-presentacion-fiscal.estado.response`, `estado-presentacion-fiscal.estado.failed`, `contabilidad.obligacion_avanzada`
+- **A · dependencias:** deps de módulo: calendario-fiscal · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `estado-presentacion-fiscal` · `subscribes`: 3 tópicos (+ 2 `.request` propios) · `publishes`: par `.response`+`.failed` por op · + `project.activated` obligatorio (persiste estado)
+- **C · index.js:** `class EstadoPresentacionFiscal extends ModuloHibridoReflejo` · `PosPersistencia({ modulo, file: '<slug>.json', snapshot, hidratar })` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_avanzar(input) → { status, data }` · + 1 proyección(es) más (una por op): _estado
+- **E · handlers RPC:** `onAvanzarRequest(e) → this._atender(e, 'avanzar', 'estado-presentacion-fiscal.avanzar.response', d => this._avanzar(d))` · `onEstadoRequest(e) → this._atender(e, 'estado', 'estado-presentacion-fiscal.estado.response', d => this._estado(d))`
+- **F · eventos:** **sube** → `estado-presentacion-fiscal.avanzar.request`, `estado-presentacion-fiscal.estado.request`, `project.activated` · **publica** → `estado-presentacion-fiscal.avanzar.response`, `estado-presentacion-fiscal.avanzar.failed`, `estado-presentacion-fiscal.estado.response`, `estado-presentacion-fiscal.estado.failed`, `contabilidad.obligacion_avanzada` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test: el CUSTODIO rechaza el segundo escritor / MICRO-AGENTE no escribe (solo propone)
+
+### `acuse-presentacion` · `PUENTE` · eje `contabilidad-fiscal`
+- **Clase / hoja F2:** `AcusePresentacion` (HOJA D13)
+- **Propósito:** Recoge y liga el justificante/acuse que devuelve la administracion a su modelo y a su asiento; cierra el bucle hacia fuera.
+- **Depende de:** `estado-presentacion-fiscal`
+- **Eventos que sube:** `acuse-presentacion.ligar.request`
+- **Eventos que publica:** `acuse-presentacion.ligar.response`, `acuse-presentacion.ligar.failed`, `contabilidad.acuse_ligado`
+- **A · dependencias:** deps de módulo: estado-presentacion-fiscal · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `acuse-presentacion` · `subscribes`: 1 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class AcusePresentacion extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_ligar(input) → { status, data }`
+- **E · handlers RPC:** `onLigarRequest(e) → this._atender(e, 'ligar', 'acuse-presentacion.ligar.response', d => this._ligar(d))`
+- **F · eventos:** **sube** → `acuse-presentacion.ligar.request` · **publica** → `acuse-presentacion.ligar.response`, `acuse-presentacion.ligar.failed`, `contabilidad.acuse_ligado` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test: el CUSTODIO rechaza el segundo escritor / MICRO-AGENTE no escribe (solo propone)
+
+### `rectificacion-declaracion` · `CUSTODIO` · eje `contabilidad-fiscal`
+- **Clase / hoja F2:** `RectificacionDeclaracion` (HOJA D14)
+- **Propósito:** Camino de correccion POSTERIOR a la presentacion (complementaria/sustitutiva); != asiento-ajuste B5; un solo escritor.
+- **Depende de:** `estado-presentacion-fiscal`
+- **Eventos que sube:** `rectificacion-declaracion.rectificar.request`, `project.activated`
+- **Eventos que publica:** `rectificacion-declaracion.rectificar.response`, `rectificacion-declaracion.rectificar.failed`, `contabilidad.declaracion_rectificada`
+- **A · dependencias:** deps de módulo: estado-presentacion-fiscal · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `rectificacion-declaracion` · `subscribes`: 2 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op · + `project.activated` obligatorio (persiste estado)
+- **C · index.js:** `class RectificacionDeclaracion extends ModuloHibridoReflejo` · `PosPersistencia({ modulo, file: '<slug>.json', snapshot, hidratar })` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_rectificar(input) → { status, data }`
+- **E · handlers RPC:** `onRectificarRequest(e) → this._atender(e, 'rectificar', 'rectificacion-declaracion.rectificar.response', d => this._rectificar(d))`
+- **F · eventos:** **sube** → `rectificacion-declaracion.rectificar.request`, `project.activated` · **publica** → `rectificacion-declaracion.rectificar.response`, `rectificacion-declaracion.rectificar.failed`, `contabilidad.declaracion_rectificada` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test: el CUSTODIO rechaza el segundo escritor / MICRO-AGENTE no escribe (solo propone)
+
+### `perfil-administrativo` · `CUSTODIO` · eje `contabilidad-fiscal`
+- **Clase / hoja F2:** `PerfilAdministrativo` (HOJA D15)
+- **Propósito:** Parcela declarable de que administraciones y obligaciones aplican (territorio y regimen); un solo escritor.
+- **Depende de:** `cola-declaraciones-criterio`
+- **Eventos que sube:** `perfil-administrativo.obligaciones.request`, `perfil-administrativo.declarar.request`, `project.activated`
+- **Eventos que publica:** `perfil-administrativo.obligaciones.response`, `perfil-administrativo.obligaciones.failed`, `perfil-administrativo.declarar.response`, `perfil-administrativo.declarar.failed`, `contabilidad.perfil_fiscal_declarado`
+- **A · dependencias:** deps de módulo: cola-declaraciones-criterio · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `perfil-administrativo` · `subscribes`: 3 tópicos (+ 2 `.request` propios) · `publishes`: par `.response`+`.failed` por op · + `project.activated` obligatorio (persiste estado)
+- **C · index.js:** `class PerfilAdministrativo extends ModuloHibridoReflejo` · `PosPersistencia({ modulo, file: '<slug>.json', snapshot, hidratar })` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_obligaciones(input) → { status, data }` · + 1 proyección(es) más (una por op): _declarar
+- **E · handlers RPC:** `onObligacionesRequest(e) → this._atender(e, 'obligaciones', 'perfil-administrativo.obligaciones.response', d => this._obligaciones(d))` · `onDeclararRequest(e) → this._atender(e, 'declarar', 'perfil-administrativo.declarar.response', d => this._declarar(d))`
+- **F · eventos:** **sube** → `perfil-administrativo.obligaciones.request`, `perfil-administrativo.declarar.request`, `project.activated` · **publica** → `perfil-administrativo.obligaciones.response`, `perfil-administrativo.obligaciones.failed`, `perfil-administrativo.declarar.response`, `perfil-administrativo.declarar.failed`, `contabilidad.perfil_fiscal_declarado` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test: el CUSTODIO rechaza el segundo escritor / MICRO-AGENTE no escribe (solo propone)
+
+### `conciliacion-bancaria` · `REFLEJO` · eje `contabilidad-libro`
+- **Clase / hoja F2:** `ConciliacionBancaria` (HOJA E1)
+- **Propósito:** Cruce extracto <-> libro por clave natural y reglas; determinista; el juicio vive en E7/E8.
+- **Depende de:** `escritor-diario`, `puerto-extracto`, `regla-movimiento-bancario`
+- **Eventos que sube:** `conciliacion-bancaria.cruzar.request`
+- **Eventos que publica:** `conciliacion-bancaria.cruzar.response`, `conciliacion-bancaria.cruzar.failed`, `contabilidad.conciliacion_cruzada`
+- **A · dependencias:** deps de módulo: escritor-diario, puerto-extracto, regla-movimiento-bancario · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `conciliacion-bancaria` · `subscribes`: 1 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class ConciliacionBancaria extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_cruzar(input) → { status, data }`
+- **E · handlers RPC:** `onCruzarRequest(e) → this._atender(e, 'cruzar', 'conciliacion-bancaria.cruzar.response', d => this._cruzar(d))`
+- **F · eventos:** **sube** → `conciliacion-bancaria.cruzar.request` · **publica** → `conciliacion-bancaria.cruzar.response`, `conciliacion-bancaria.cruzar.failed`, `contabilidad.conciliacion_cruzada` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test unitario AFIRMA la proyección determinista (una sola respuesta correcta)
+
+### `puerto-extracto` · `CONVERSOR` · eje `contabilidad-libro`
+- **Clase / hoja F2:** `PuertoExtracto` (HOJA E2)
+- **Propósito:** Frontera de canal/formato del extracto; un adaptador por banco; si falta, se crea.
+- **Depende de:** — (hoja raíz)
+- **Eventos que sube:** `puerto-extracto.entrar.request`
+- **Eventos que publica:** `puerto-extracto.entrar.response`, `puerto-extracto.entrar.failed`, `contabilidad.movimiento_bancario`
+- **A · dependencias:** deps de módulo: (ninguna) · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `puerto-extracto` · `subscribes`: 1 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class PuertoExtracto extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_entrar(input) → { status, data }`
+- **E · handlers RPC:** `onEntrarRequest(e) → this._atender(e, 'entrar', 'puerto-extracto.entrar.response', d => this._entrar(d))`
+- **F · eventos:** **sube** → `puerto-extracto.entrar.request` · **publica** → `puerto-extracto.entrar.response`, `puerto-extracto.entrar.failed`, `contabilidad.movimiento_bancario` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test unitario AFIRMA la proyección determinista (una sola respuesta correcta)
+
+### `cuadre-cobro-pago` · `REFLEJO` · eje `contabilidad-libro`
+- **Clase / hoja F2:** `CuadreCobroPago` (HOJA E3)
+- **Propósito:** Clave natural compartida: un movimiento bancario = un cobro/pago; determinista.
+- **Depende de:** `escritor-diario`, `puerto-extracto`
+- **Eventos que sube:** `cuadre-cobro-pago.cuadrar.request`, `contabilidad.movimiento_bancario`
+- **Eventos que publica:** `cuadre-cobro-pago.cuadrar.response`, `cuadre-cobro-pago.cuadrar.failed`
+- **A · dependencias:** deps de módulo: escritor-diario, puerto-extracto · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `cuadre-cobro-pago` · `subscribes`: 2 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class CuadreCobroPago extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_cuadrar(input) → { status, data }`
+- **E · handlers RPC:** `onCuadrarRequest(e) → this._atender(e, 'cuadrar', 'cuadre-cobro-pago.cuadrar.response', d => this._cuadrar(d))`
+- **F · eventos:** **sube** → `cuadre-cobro-pago.cuadrar.request`, `contabilidad.movimiento_bancario` · **publica** → `cuadre-cobro-pago.cuadrar.response`, `cuadre-cobro-pago.cuadrar.failed` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test unitario AFIRMA la proyección determinista (una sola respuesta correcta)
+
+### `saldo-tesoreria` · `REFLEJO` · eje `contabilidad-libro`
+- **Clase / hoja F2:** `SaldoTesoreria` (HOJA E4)
+- **Propósito:** Posicion real de dinero por cuenta; derivacion determinista.
+- **Depende de:** `maestro-cuentas-bancarias`, `mayor-balanza`
+- **Eventos que sube:** `saldo-tesoreria.calcular.request`, `contabilidad.asiento_registrado`
+- **Eventos que publica:** `saldo-tesoreria.calcular.response`, `saldo-tesoreria.calcular.failed`
+- **A · dependencias:** deps de módulo: maestro-cuentas-bancarias, mayor-balanza · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `saldo-tesoreria` · `subscribes`: 2 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class SaldoTesoreria extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_calcular(input) → { status, data }`
+- **E · handlers RPC:** `onCalcularRequest(e) → this._atender(e, 'calcular', 'saldo-tesoreria.calcular.response', d => this._calcular(d))`
+- **F · eventos:** **sube** → `saldo-tesoreria.calcular.request`, `contabilidad.asiento_registrado` · **publica** → `saldo-tesoreria.calcular.response`, `saldo-tesoreria.calcular.failed` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test unitario AFIRMA la proyección determinista (una sola respuesta correcta)
+
+### `prevision-caja` · `REFLEJO` · eje `contabilidad-libro`
+- **Clase / hoja F2:** `PrevisionCaja` (HOJA E5)
+- **Propósito:** Proyecta entradas/salidas desde los compromisos con la politica declarada; determinista.
+- **Depende de:** `vencimiento-pago`, `saldo-tesoreria`
+- **Eventos que sube:** `prevision-caja.proyectar.request`
+- **Eventos que publica:** `prevision-caja.proyectar.response`, `prevision-caja.proyectar.failed`, `contabilidad.vencimiento_proximo`
+- **A · dependencias:** deps de módulo: vencimiento-pago, saldo-tesoreria · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `prevision-caja` · `subscribes`: 1 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class PrevisionCaja extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_proyectar(input) → { status, data }`
+- **E · handlers RPC:** `onProyectarRequest(e) → this._atender(e, 'proyectar', 'prevision-caja.proyectar.response', d => this._proyectar(d))`
+- **F · eventos:** **sube** → `prevision-caja.proyectar.request` · **publica** → `prevision-caja.proyectar.response`, `prevision-caja.proyectar.failed`, `contabilidad.vencimiento_proximo` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test unitario AFIRMA la proyección determinista (una sola respuesta correcta)
+
+### `partida-no-identificada` · `MICRO-AGENTE` · eje `contabilidad-libro`
+- **Clase / hoja F2:** `PartidaNoIdentificada` (HOJA E7)
+- **Propósito:** Reconoce y clasifica el movimiento sin contrapartida (comision/interes/devolucion); PROPONE, no escribe.
+- **Depende de:** `regla-movimiento-bancario`
+- **Eventos que sube:** `partida-no-identificada.juzgar.request`
+- **Eventos que publica:** `partida-no-identificada.juzgar.response`, `partida-no-identificada.juzgar.failed`, `contabilidad.partida_propuesta`
+- **A · dependencias:** deps de módulo: regla-movimiento-bancario · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `partida-no-identificada` · `subscribes`: 1 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op · `blueprint_driven: true` (cajones fuzzy + reflejo que sirve las ops)
+- **C · index.js:** `class PartidaNoIdentificada extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_juzgar(input) → { status, data }` · la proyección determinista (fallback) + cajón blueprint para el juicio fuzzy (delega al reflejo)
+- **E · handlers RPC:** `onJuzgarRequest(e) → this._atender(e, 'juzgar', 'partida-no-identificada.juzgar.response', d => this._juzgar(d))`
+- **F · eventos:** **sube** → `partida-no-identificada.juzgar.request` · **publica** → `partida-no-identificada.juzgar.response`, `partida-no-identificada.juzgar.failed`, `contabilidad.partida_propuesta` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test: el CUSTODIO rechaza el segundo escritor / MICRO-AGENTE no escribe (solo propone)
+
+### `regla-movimiento-bancario` · `CUSTODIO` · eje `contabilidad-libro`
+- **Clase / hoja F2:** `ReglaMovimientoBancario` (HOJA E8)
+- **Propósito:** Parcela de reglas declarables/aprendidas de movimientos bancarios; ratificacion unica por L10.
+- **Depende de:** `cola-declaraciones-criterio`
+- **Eventos que sube:** `regla-movimiento-bancario.aplicar.request`, `regla-movimiento-bancario.proponer.request`, `project.activated`
+- **Eventos que publica:** `regla-movimiento-bancario.aplicar.response`, `regla-movimiento-bancario.aplicar.failed`, `regla-movimiento-bancario.proponer.response`, `regla-movimiento-bancario.proponer.failed`, `contabilidad.regla_bancaria_propuesta`
+- **A · dependencias:** deps de módulo: cola-declaraciones-criterio · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `regla-movimiento-bancario` · `subscribes`: 3 tópicos (+ 2 `.request` propios) · `publishes`: par `.response`+`.failed` por op · + `project.activated` obligatorio (persiste estado)
+- **C · index.js:** `class ReglaMovimientoBancario extends ModuloHibridoReflejo` · `PosPersistencia({ modulo, file: '<slug>.json', snapshot, hidratar })` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_aplicar(input) → { status, data }` · + 1 proyección(es) más (una por op): _proponer
+- **E · handlers RPC:** `onAplicarRequest(e) → this._atender(e, 'aplicar', 'regla-movimiento-bancario.aplicar.response', d => this._aplicar(d))` · `onProponerRequest(e) → this._atender(e, 'proponer', 'regla-movimiento-bancario.proponer.response', d => this._proponer(d))`
+- **F · eventos:** **sube** → `regla-movimiento-bancario.aplicar.request`, `regla-movimiento-bancario.proponer.request`, `project.activated` · **publica** → `regla-movimiento-bancario.aplicar.response`, `regla-movimiento-bancario.aplicar.failed`, `regla-movimiento-bancario.proponer.response`, `regla-movimiento-bancario.proponer.failed`, `contabilidad.regla_bancaria_propuesta` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test: el CUSTODIO rechaza el segundo escritor / MICRO-AGENTE no escribe (solo propone)
+
+### `partida-conciliatoria` · `REFLEJO` · eje `contabilidad-libro`
+- **Clase / hoja F2:** `PartidaConciliatoria` (HOJA E9)
+- **Propósito:** Partidas en transito que explican el desfase (cheque no cobrado, cobro no apuntado); determinista.
+- **Depende de:** `conciliacion-bancaria`
+- **Eventos que sube:** `partida-conciliatoria.desfase.request`
+- **Eventos que publica:** `partida-conciliatoria.desfase.response`, `partida-conciliatoria.desfase.failed`
+- **A · dependencias:** deps de módulo: conciliacion-bancaria · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `partida-conciliatoria` · `subscribes`: 1 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class PartidaConciliatoria extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_desfase(input) → { status, data }`
+- **E · handlers RPC:** `onDesfaseRequest(e) → this._atender(e, 'desfase', 'partida-conciliatoria.desfase.response', d => this._desfase(d))`
+- **F · eventos:** **sube** → `partida-conciliatoria.desfase.request` · **publica** → `partida-conciliatoria.desfase.response`, `partida-conciliatoria.desfase.failed` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test unitario AFIRMA la proyección determinista (una sola respuesta correcta)
+
+### `informe-conciliacion` · `REFLEJO` · eje `contabilidad-libro`
+- **Clase / hoja F2:** `InformeConciliacion` (HOJA E10)
+- **Propósito:** Documento de cuadre saldo banco <-> saldo contable ajustado; la PRUEBA de que cuadra.
+- **Depende de:** `conciliacion-bancaria`, `partida-conciliatoria`
+- **Eventos que sube:** `informe-conciliacion.componer.request`
+- **Eventos que publica:** `informe-conciliacion.componer.response`, `informe-conciliacion.componer.failed`
+- **A · dependencias:** deps de módulo: conciliacion-bancaria, partida-conciliatoria · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `informe-conciliacion` · `subscribes`: 1 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class InformeConciliacion extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_componer(input) → { status, data }`
+- **E · handlers RPC:** `onComponerRequest(e) → this._atender(e, 'componer', 'informe-conciliacion.componer.response', d => this._componer(d))`
+- **F · eventos:** **sube** → `informe-conciliacion.componer.request` · **publica** → `informe-conciliacion.componer.response`, `informe-conciliacion.componer.failed` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test unitario AFIRMA la proyección determinista (una sola respuesta correcta)
+
+### `maestro-cuentas-bancarias` · `CUSTODIO` · eje `contabilidad-libro`
+- **Clase / hoja F2:** `MaestroCuentasBancarias` (HOJA E11)
+- **Propósito:** Parcela declarable de cuentas y su moneda; sin el, "el banco" es un numero falso.
+- **Depende de:** `cola-declaraciones-criterio`
+- **Eventos que sube:** `maestro-cuentas-bancarias.declarar.request`, `maestro-cuentas-bancarias.listar.request`, `project.activated`
+- **Eventos que publica:** `maestro-cuentas-bancarias.declarar.response`, `maestro-cuentas-bancarias.declarar.failed`, `maestro-cuentas-bancarias.listar.response`, `maestro-cuentas-bancarias.listar.failed`, `contabilidad.cuenta_bancaria_declarada`
+- **A · dependencias:** deps de módulo: cola-declaraciones-criterio · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `maestro-cuentas-bancarias` · `subscribes`: 3 tópicos (+ 2 `.request` propios) · `publishes`: par `.response`+`.failed` por op · + `project.activated` obligatorio (persiste estado)
+- **C · index.js:** `class MaestroCuentasBancarias extends ModuloHibridoReflejo` · `PosPersistencia({ modulo, file: '<slug>.json', snapshot, hidratar })` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_declarar(input) → { status, data }` · + 1 proyección(es) más (una por op): _listar
+- **E · handlers RPC:** `onDeclararRequest(e) → this._atender(e, 'declarar', 'maestro-cuentas-bancarias.declarar.response', d => this._declarar(d))` · `onListarRequest(e) → this._atender(e, 'listar', 'maestro-cuentas-bancarias.listar.response', d => this._listar(d))`
+- **F · eventos:** **sube** → `maestro-cuentas-bancarias.declarar.request`, `maestro-cuentas-bancarias.listar.request`, `project.activated` · **publica** → `maestro-cuentas-bancarias.declarar.response`, `maestro-cuentas-bancarias.declarar.failed`, `maestro-cuentas-bancarias.listar.response`, `maestro-cuentas-bancarias.listar.failed`, `contabilidad.cuenta_bancaria_declarada` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test: el CUSTODIO rechaza el segundo escritor / MICRO-AGENTE no escribe (solo propone)
+
+### `alta-activo` · `CUSTODIO` · eje `contabilidad-analitica`
+- **Clase / hoja F2:** `AltaActivo` (HOJA F1)
+- **Propósito:** Parcela del inmovilizado; un solo escritor; la valoracion del alta es reflejo hidratador.
+- **Depende de:** — (hoja raíz)
+- **Eventos que sube:** `alta-activo.registrar.request`, `project.activated`
+- **Eventos que publica:** `alta-activo.registrar.response`, `alta-activo.registrar.failed`, `contabilidad.activo_registrado`
+- **A · dependencias:** deps de módulo: (ninguna) · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `alta-activo` · `subscribes`: 2 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op · + `project.activated` obligatorio (persiste estado)
+- **C · index.js:** `class AltaActivo extends ModuloHibridoReflejo` · `PosPersistencia({ modulo, file: '<slug>.json', snapshot, hidratar })` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_registrar(input) → { status, data }`
+- **E · handlers RPC:** `onRegistrarRequest(e) → this._atender(e, 'registrar', 'alta-activo.registrar.response', d => this._registrar(d))`
+- **F · eventos:** **sube** → `alta-activo.registrar.request`, `project.activated` · **publica** → `alta-activo.registrar.response`, `alta-activo.registrar.failed`, `contabilidad.activo_registrado` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test: el CUSTODIO rechaza el segundo escritor / MICRO-AGENTE no escribe (solo propone)
+
+### `plan-amortizacion` · `CUSTODIO` · eje `contabilidad-analitica`
+- **Clase / hoja F2:** `PlanAmortizacion` (HOJA F2)
+- **Propósito:** Genera la cuota cuando toca (dispara en el cierre); metodo/coeficiente = dato; un solo escritor.
+- **Depende de:** `alta-activo`, `cola-declaraciones-criterio`
+- **Eventos que sube:** `plan-amortizacion.cuota_del_periodo.request`, `plan-amortizacion.declarar.request`, `project.activated`
+- **Eventos que publica:** `plan-amortizacion.cuota_del_periodo.response`, `plan-amortizacion.cuota_del_periodo.failed`, `plan-amortizacion.declarar.response`, `plan-amortizacion.declarar.failed`, `contabilidad.cuota_amortizacion`
+- **A · dependencias:** deps de módulo: alta-activo, cola-declaraciones-criterio · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `plan-amortizacion` · `subscribes`: 3 tópicos (+ 2 `.request` propios) · `publishes`: par `.response`+`.failed` por op · + `project.activated` obligatorio (persiste estado)
+- **C · index.js:** `class PlanAmortizacion extends ModuloHibridoReflejo` · `PosPersistencia({ modulo, file: '<slug>.json', snapshot, hidratar })` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_cuota_del_periodo(input) → { status, data }` · + 1 proyección(es) más (una por op): _declarar
+- **E · handlers RPC:** `onCuotaDelPeriodoRequest(e) → this._atender(e, 'cuota_del_periodo', 'plan-amortizacion.cuota_del_periodo.response', d => this._cuota_del_periodo(d))` · `onDeclararRequest(e) → this._atender(e, 'declarar', 'plan-amortizacion.declarar.response', d => this._declarar(d))`
+- **F · eventos:** **sube** → `plan-amortizacion.cuota_del_periodo.request`, `plan-amortizacion.declarar.request`, `project.activated` · **publica** → `plan-amortizacion.cuota_del_periodo.response`, `plan-amortizacion.cuota_del_periodo.failed`, `plan-amortizacion.declarar.response`, `plan-amortizacion.declarar.failed`, `contabilidad.cuota_amortizacion` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test: el CUSTODIO rechaza el segundo escritor / MICRO-AGENTE no escribe (solo propone)
+
+### `baja-activo` · `REFLEJO` · eje `contabilidad-analitica`
+- **Clase / hoja F2:** `BajaActivo` (HOJA F3)
+- **Propósito:** Retira el bien y calcula el resultado (perdida/beneficio) y lo imputa; determinista.
+- **Depende de:** `alta-activo`, `valor-neto-contable`
+- **Eventos que sube:** `baja-activo.calcular.request`
+- **Eventos que publica:** `baja-activo.calcular.response`, `baja-activo.calcular.failed`
+- **A · dependencias:** deps de módulo: alta-activo, valor-neto-contable · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `baja-activo` · `subscribes`: 1 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class BajaActivo extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_calcular(input) → { status, data }`
+- **E · handlers RPC:** `onCalcularRequest(e) → this._atender(e, 'calcular', 'baja-activo.calcular.response', d => this._calcular(d))`
+- **F · eventos:** **sube** → `baja-activo.calcular.request` · **publica** → `baja-activo.calcular.response`, `baja-activo.calcular.failed` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test unitario AFIRMA la proyección determinista (una sola respuesta correcta)
+
+### `valor-neto-contable` · `REFLEJO` · eje `contabilidad-analitica`
+- **Clase / hoja F2:** `ValorNetoContable` (HOJA F4)
+- **Propósito:** Coste - amortizacion acumulada; determinista, al balance.
+- **Depende de:** `plan-amortizacion`
+- **Eventos que sube:** `valor-neto-contable.calcular.request`
+- **Eventos que publica:** `valor-neto-contable.calcular.response`, `valor-neto-contable.calcular.failed`
+- **A · dependencias:** deps de módulo: plan-amortizacion · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `valor-neto-contable` · `subscribes`: 1 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class ValorNetoContable extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_calcular(input) → { status, data }`
+- **E · handlers RPC:** `onCalcularRequest(e) → this._atender(e, 'calcular', 'valor-neto-contable.calcular.response', d => this._calcular(d))`
+- **F · eventos:** **sube** → `valor-neto-contable.calcular.request` · **publica** → `valor-neto-contable.calcular.response`, `valor-neto-contable.calcular.failed` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test unitario AFIRMA la proyección determinista (una sola respuesta correcta)
+
+### `recibo-nomina` · `REFLEJO` · eje `contabilidad-fiscal`
+- **Clase / hoja F2:** `ReciboNomina` (HOJA G1)
+- **Propósito:** Admite y da forma asentable al hecho de nomina (hecho o documento); mecanico, cero juicio.
+- **Depende de:** `puerto-nomina`
+- **Eventos que sube:** `recibo-nomina.dar_forma.request`, `contabilidad.nomina_recibida`
+- **Eventos que publica:** `recibo-nomina.dar_forma.response`, `recibo-nomina.dar_forma.failed`, `contabilidad.nomina_formada`
+- **A · dependencias:** deps de módulo: puerto-nomina · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `recibo-nomina` · `subscribes`: 2 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class ReciboNomina extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_dar_forma(input) → { status, data }`
+- **E · handlers RPC:** `onDarFormaRequest(e) → this._atender(e, 'dar_forma', 'recibo-nomina.dar_forma.response', d => this._dar_forma(d))`
+- **F · eventos:** **sube** → `recibo-nomina.dar_forma.request`, `contabilidad.nomina_recibida` · **publica** → `recibo-nomina.dar_forma.response`, `recibo-nomina.dar_forma.failed`, `contabilidad.nomina_formada` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test unitario AFIRMA la proyección determinista (una sola respuesta correcta)
+
+### `obligacion-seguridad-social` · `REFLEJO` · eje `contabilidad-fiscal`
+- **Clase / hoja F2:** `ObligacionSeguridadSocial` (HOJA G2)
+- **Propósito:** Gasto de empresa + obligacion con la TGSS desde el recibo; tipos = dato; determinista.
+- **Depende de:** `recibo-nomina`
+- **Eventos que sube:** `obligacion-seguridad-social.calcular.request`
+- **Eventos que publica:** `obligacion-seguridad-social.calcular.response`, `obligacion-seguridad-social.calcular.failed`
+- **A · dependencias:** deps de módulo: recibo-nomina · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `obligacion-seguridad-social` · `subscribes`: 1 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class ObligacionSeguridadSocial extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_calcular(input) → { status, data }`
+- **E · handlers RPC:** `onCalcularRequest(e) → this._atender(e, 'calcular', 'obligacion-seguridad-social.calcular.response', d => this._calcular(d))`
+- **F · eventos:** **sube** → `obligacion-seguridad-social.calcular.request` · **publica** → `obligacion-seguridad-social.calcular.response`, `obligacion-seguridad-social.calcular.failed` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test unitario AFIRMA la proyección determinista (una sola respuesta correcta)
+
+### `asiento-personal` · `REFLEJO` · eje `contabilidad-fiscal`
+- **Clase / hoja F2:** `AsientoPersonal` (HOJA G3)
+- **Propósito:** Gasto de personal, retencion y pago -> asiento EQUILIBRADO; determinista.
+- **Depende de:** `recibo-nomina`, `obligacion-seguridad-social`
+- **Eventos que sube:** `asiento-personal.construir.request`
+- **Eventos que publica:** `asiento-personal.construir.response`, `asiento-personal.construir.failed`
+- **A · dependencias:** deps de módulo: recibo-nomina, obligacion-seguridad-social · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `asiento-personal` · `subscribes`: 1 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class AsientoPersonal extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_construir(input) → { status, data }`
+- **E · handlers RPC:** `onConstruirRequest(e) → this._atender(e, 'construir', 'asiento-personal.construir.response', d => this._construir(d))`
+- **F · eventos:** **sube** → `asiento-personal.construir.request` · **publica** → `asiento-personal.construir.response`, `asiento-personal.construir.failed` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test unitario AFIRMA la proyección determinista (una sola respuesta correcta)
+
+### `puerto-nomina` · `PUENTE` · eje `contabilidad-fiscal`
+- **Clase / hoja F2:** `PuertoNomina` (HOJA G4)
+- **Propósito:** Origen declarable del dato de nomina: conecta con el sistema de personal por evento; si no existe, se crea.
+- **Depende de:** — (hoja raíz)
+- **Eventos que sube:** `puerto-nomina.recibir.request`, `nomina.recibida`, `nomina.emitida`
+- **Eventos que publica:** `puerto-nomina.recibir.response`, `puerto-nomina.recibir.failed`, `contabilidad.nomina_recibida`
+- **A · dependencias:** deps de módulo: (ninguna) · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `puerto-nomina` · `subscribes`: 3 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class PuertoNomina extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_recibir(input) → { status, data }`
+- **E · handlers RPC:** `onRecibirRequest(e) → this._atender(e, 'recibir', 'puerto-nomina.recibir.response', d => this._recibir(d))`
+- **F · eventos:** **sube** → `puerto-nomina.recibir.request`, `nomina.recibida`, `nomina.emitida` · **publica** → `puerto-nomina.recibir.response`, `puerto-nomina.recibir.failed`, `contabilidad.nomina_recibida` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test: el CUSTODIO rechaza el segundo escritor / MICRO-AGENTE no escribe (solo propone)
+
+### `lineas-nomina` · `REFLEJO` · eje `contabilidad-fiscal`
+- **Clase / hoja F2:** `LineasNomina` (HOJA G6)
+- **Propósito:** Desglose bruto/retencion/cotizacion del trabajador/neto; hace la nomina EXPLICABLE, no un numero pelado.
+- **Depende de:** `recibo-nomina`
+- **Eventos que sube:** `lineas-nomina.desglosar.request`
+- **Eventos que publica:** `lineas-nomina.desglosar.response`, `lineas-nomina.desglosar.failed`
+- **A · dependencias:** deps de módulo: recibo-nomina · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `lineas-nomina` · `subscribes`: 1 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class LineasNomina extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_desglosar(input) → { status, data }`
+- **E · handlers RPC:** `onDesglosarRequest(e) → this._atender(e, 'desglosar', 'lineas-nomina.desglosar.response', d => this._desglosar(d))`
+- **F · eventos:** **sube** → `lineas-nomina.desglosar.request` · **publica** → `lineas-nomina.desglosar.response`, `lineas-nomina.desglosar.failed` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test unitario AFIRMA la proyección determinista (una sola respuesta correcta)
+
+### `acceso-nomina` · `CUSTODIO` · eje `contabilidad-fiscal`
+- **Clase / hoja F2:** `AccesoNomina` (HOJA G7)
+- **Propósito:** Gobernanza de quien ve que nomina (dato personal): cada uno ve la suya; eje persona; un solo escritor.
+- **Depende de:** — (hoja raíz)
+- **Eventos que sube:** `acceso-nomina.autorizar.request`, `acceso-nomina.declarar.request`, `project.activated`
+- **Eventos que publica:** `acceso-nomina.autorizar.response`, `acceso-nomina.autorizar.failed`, `acceso-nomina.declarar.response`, `acceso-nomina.declarar.failed`, `contabilidad.acceso_nomina`
+- **A · dependencias:** deps de módulo: (ninguna) · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `acceso-nomina` · `subscribes`: 3 tópicos (+ 2 `.request` propios) · `publishes`: par `.response`+`.failed` por op · + `project.activated` obligatorio (persiste estado)
+- **C · index.js:** `class AccesoNomina extends ModuloHibridoReflejo` · `PosPersistencia({ modulo, file: '<slug>.json', snapshot, hidratar })` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_autorizar(input) → { status, data }` · + 1 proyección(es) más (una por op): _declarar
+- **E · handlers RPC:** `onAutorizarRequest(e) → this._atender(e, 'autorizar', 'acceso-nomina.autorizar.response', d => this._autorizar(d))` · `onDeclararRequest(e) → this._atender(e, 'declarar', 'acceso-nomina.declarar.response', d => this._declarar(d))`
+- **F · eventos:** **sube** → `acceso-nomina.autorizar.request`, `acceso-nomina.declarar.request`, `project.activated` · **publica** → `acceso-nomina.autorizar.response`, `acceso-nomina.autorizar.failed`, `acceso-nomina.declarar.response`, `acceso-nomina.declarar.failed`, `contabilidad.acceso_nomina` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test: el CUSTODIO rechaza el segundo escritor / MICRO-AGENTE no escribe (solo propone)
+
+### `pagos-a-cuenta-empleado` · `REFLEJO` · eje `contabilidad-fiscal`
+- **Clase / hoja F2:** `PagosACuentaEmpleado` (HOJA G8)
+- **Propósito:** Anticipos/adelantos y su impacto en el neto y el IRPF; no todo es sueldo fijo; determinista.
+- **Depende de:** `recibo-nomina`
+- **Eventos que sube:** `pagos-a-cuenta-empleado.impacto.request`
+- **Eventos que publica:** `pagos-a-cuenta-empleado.impacto.response`, `pagos-a-cuenta-empleado.impacto.failed`
+- **A · dependencias:** deps de módulo: recibo-nomina · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `pagos-a-cuenta-empleado` · `subscribes`: 1 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class PagosACuentaEmpleado extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_impacto(input) → { status, data }`
+- **E · handlers RPC:** `onImpactoRequest(e) → this._atender(e, 'impacto', 'pagos-a-cuenta-empleado.impacto.response', d => this._impacto(d))`
+- **F · eventos:** **sube** → `pagos-a-cuenta-empleado.impacto.request` · **publica** → `pagos-a-cuenta-empleado.impacto.response`, `pagos-a-cuenta-empleado.impacto.failed` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test unitario AFIRMA la proyección determinista (una sola respuesta correcta)
+
+### `conceptos-extra-nomina` · `REFLEJO` · eje `contabilidad-fiscal`
+- **Clase / hoja F2:** `ConceptosExtraNomina` (HOJA G9)
+- **Propósito:** Dietas, especie, finiquito, paga extra: calculo de su imputacion; determinista.
+- **Depende de:** `recibo-nomina`
+- **Eventos que sube:** `conceptos-extra-nomina.imputar.request`
+- **Eventos que publica:** `conceptos-extra-nomina.imputar.response`, `conceptos-extra-nomina.imputar.failed`
+- **A · dependencias:** deps de módulo: recibo-nomina · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `conceptos-extra-nomina` · `subscribes`: 1 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class ConceptosExtraNomina extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_imputar(input) → { status, data }`
+- **E · handlers RPC:** `onImputarRequest(e) → this._atender(e, 'imputar', 'conceptos-extra-nomina.imputar.response', d => this._imputar(d))`
+- **F · eventos:** **sube** → `conceptos-extra-nomina.imputar.request` · **publica** → `conceptos-extra-nomina.imputar.response`, `conceptos-extra-nomina.imputar.failed` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test unitario AFIRMA la proyección determinista (una sola respuesta correcta)
+
+### `liquidacion-baja-empleado` · `REFLEJO` · eje `contabilidad-fiscal`
+- **Clase / hoja F2:** `LiquidacionBajaEmpleado` (HOJA G10)
+- **Propósito:** Cierre de la cuenta del trabajador (finiquito/indemnizacion) para que no quede un acreedor abierto; determinista.
+- **Depende de:** `recibo-nomina`, `pagos-a-cuenta-empleado`
+- **Eventos que sube:** `liquidacion-baja-empleado.liquidar.request`
+- **Eventos que publica:** `liquidacion-baja-empleado.liquidar.response`, `liquidacion-baja-empleado.liquidar.failed`
+- **A · dependencias:** deps de módulo: recibo-nomina, pagos-a-cuenta-empleado · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `liquidacion-baja-empleado` · `subscribes`: 1 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class LiquidacionBajaEmpleado extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_liquidar(input) → { status, data }`
+- **E · handlers RPC:** `onLiquidarRequest(e) → this._atender(e, 'liquidar', 'liquidacion-baja-empleado.liquidar.response', d => this._liquidar(d))`
+- **F · eventos:** **sube** → `liquidacion-baja-empleado.liquidar.request` · **publica** → `liquidacion-baja-empleado.liquidar.response`, `liquidacion-baja-empleado.liquidar.failed` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test unitario AFIRMA la proyección determinista (una sola respuesta correcta)
+
+### `valoracion-existencia` · `REFLEJO` · eje `contabilidad-analitica`
+- **Clase / hoja F2:** `ValoracionExistencia` (HOJA H1)
+- **Propósito:** Capa de valor SOBRE el inventario existente (no lo duplica); metodo = dato (FIFO/medio).
+- **Depende de:** `inventario`, `frontera-ficha-producto`
+- **Eventos que sube:** `valoracion-existencia.valorar.request`
+- **Eventos que publica:** `valoracion-existencia.valorar.response`, `valoracion-existencia.valorar.failed`
+- **A · dependencias:** deps de módulo: inventario, frontera-ficha-producto · deps externas (plataforma): inventario · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `valoracion-existencia` · `subscribes`: 1 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class ValoracionExistencia extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_valorar(input) → { status, data }`
+- **E · handlers RPC:** `onValorarRequest(e) → this._atender(e, 'valorar', 'valoracion-existencia.valorar.response', d => this._valorar(d))`
+- **F · eventos:** **sube** → `valoracion-existencia.valorar.request` · **publica** → `valoracion-existencia.valorar.response`, `valoracion-existencia.valorar.failed` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test unitario AFIRMA la proyección determinista (una sola respuesta correcta)
+
+### `frontera-ficha-producto` · `CONVERSOR` · eje `contabilidad-analitica`
+- **Clase / hoja F2:** `FronteraFichaProducto` (HOJA H2)
+- **Propósito:** Puerto declarable del coste de cada negocio: frontera donde cruza el coste de la ficha al dato interno; si falta, se crea.
+- **Depende de:** — (hoja raíz)
+- **Eventos que sube:** `frontera-ficha-producto.entrar.request`
+- **Eventos que publica:** `frontera-ficha-producto.entrar.response`, `frontera-ficha-producto.entrar.failed`, `contabilidad.coste_interno`
+- **A · dependencias:** deps de módulo: (ninguna) · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `frontera-ficha-producto` · `subscribes`: 1 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class FronteraFichaProducto extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_entrar(input) → { status, data }`
+- **E · handlers RPC:** `onEntrarRequest(e) → this._atender(e, 'entrar', 'frontera-ficha-producto.entrar.response', d => this._entrar(d))`
+- **F · eventos:** **sube** → `frontera-ficha-producto.entrar.request` · **publica** → `frontera-ficha-producto.entrar.response`, `frontera-ficha-producto.entrar.failed`, `contabilidad.coste_interno` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test unitario AFIRMA la proyección determinista (una sola respuesta correcta)
+
+### `ajuste-inventario` · `REFLEJO` · eje `contabilidad-analitica`
+- **Clase / hoja F2:** `AjusteInventario` (HOJA H3)
+- **Propósito:** Regulariza merma/rotura con asiento Y aviso; calculo de la diferencia; determinista.
+- **Depende de:** `valoracion-existencia`
+- **Eventos que sube:** `ajuste-inventario.diferencia.request`
+- **Eventos que publica:** `ajuste-inventario.diferencia.response`, `ajuste-inventario.diferencia.failed`
+- **A · dependencias:** deps de módulo: valoracion-existencia · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `ajuste-inventario` · `subscribes`: 1 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class AjusteInventario extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_diferencia(input) → { status, data }`
+- **E · handlers RPC:** `onDiferenciaRequest(e) → this._atender(e, 'diferencia', 'ajuste-inventario.diferencia.response', d => this._diferencia(d))`
+- **F · eventos:** **sube** → `ajuste-inventario.diferencia.request` · **publica** → `ajuste-inventario.diferencia.response`, `ajuste-inventario.diferencia.failed` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test unitario AFIRMA la proyección determinista (una sola respuesta correcta)
+
+### `variacion-stock-valorada` · `REFLEJO` · eje `contabilidad-analitica`
+- **Clase / hoja F2:** `VariacionStockValorada` (HOJA H4)
+- **Propósito:** Entrada por compra / salida por consumo, VALORADAS; determinista.
+- **Depende de:** `valoracion-existencia`, `inventario`
+- **Eventos que sube:** `variacion-stock-valorada.variacion.request`, `inventario.ajustado`, `inventario.reserva.creada`
+- **Eventos que publica:** `variacion-stock-valorada.variacion.response`, `variacion-stock-valorada.variacion.failed`
+- **A · dependencias:** deps de módulo: valoracion-existencia, inventario · deps externas (plataforma): inventario · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `variacion-stock-valorada` · `subscribes`: 3 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class VariacionStockValorada extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_variacion(input) → { status, data }`
+- **E · handlers RPC:** `onVariacionRequest(e) → this._atender(e, 'variacion', 'variacion-stock-valorada.variacion.response', d => this._variacion(d))`
+- **F · eventos:** **sube** → `variacion-stock-valorada.variacion.request`, `inventario.ajustado`, `inventario.reserva.creada` · **publica** → `variacion-stock-valorada.variacion.response`, `variacion-stock-valorada.variacion.failed` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test unitario AFIRMA la proyección determinista (una sola respuesta correcta)
+
+### `marca-sociedad` · `REFLEJO` · eje `contabilidad-analitica`
+- **Clase / hoja F2:** `MarcaSociedad` (HOJA I1)
+- **Propósito:** Etiqueta cada asiento con su sociedad; mecanico, cero juicio.
+- **Depende de:** `escritor-diario`
+- **Eventos que sube:** `marca-sociedad.marcar.request`, `contabilidad.asiento_registrado`
+- **Eventos que publica:** `marca-sociedad.marcar.response`, `marca-sociedad.marcar.failed`
+- **A · dependencias:** deps de módulo: escritor-diario · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `marca-sociedad` · `subscribes`: 2 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class MarcaSociedad extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_marcar(input) → { status, data }`
+- **E · handlers RPC:** `onMarcarRequest(e) → this._atender(e, 'marcar', 'marca-sociedad.marcar.response', d => this._marcar(d))`
+- **F · eventos:** **sube** → `marca-sociedad.marcar.request`, `contabilidad.asiento_registrado` · **publica** → `marca-sociedad.marcar.response`, `marca-sociedad.marcar.failed` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test unitario AFIRMA la proyección determinista (una sola respuesta correcta)
+
+### `eliminacion-intercompany` · `REFLEJO` · eje `contabilidad-analitica`
+- **Clase / hoja F2:** `EliminacionIntercompany` (HOJA I2)
+- **Propósito:** Detecta y elimina el cruce interno en la consolidacion; determinista.
+- **Depende de:** `marca-sociedad`
+- **Eventos que sube:** `eliminacion-intercompany.eliminar.request`
+- **Eventos que publica:** `eliminacion-intercompany.eliminar.response`, `eliminacion-intercompany.eliminar.failed`
+- **A · dependencias:** deps de módulo: marca-sociedad · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `eliminacion-intercompany` · `subscribes`: 1 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class EliminacionIntercompany extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_eliminar(input) → { status, data }`
+- **E · handlers RPC:** `onEliminarRequest(e) → this._atender(e, 'eliminar', 'eliminacion-intercompany.eliminar.response', d => this._eliminar(d))`
+- **F · eventos:** **sube** → `eliminacion-intercompany.eliminar.request` · **publica** → `eliminacion-intercompany.eliminar.response`, `eliminacion-intercompany.eliminar.failed` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test unitario AFIRMA la proyección determinista (una sola respuesta correcta)
+
+### `consolidacion` · `REFLEJO` · eje `contabilidad-analitica`
+- **Clase / hoja F2:** `Consolidacion` (HOJA I3)
+- **Propósito:** Estados del conjunto con criterio DECLARADO; agregacion determinista; grupo COMPLETO.
+- **Depende de:** `eliminacion-intercompany`
+- **Eventos que sube:** `consolidacion.estados.request`
+- **Eventos que publica:** `consolidacion.estados.response`, `consolidacion.estados.failed`
+- **A · dependencias:** deps de módulo: eliminacion-intercompany · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `consolidacion` · `subscribes`: 1 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class Consolidacion extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_estados(input) → { status, data }`
+- **E · handlers RPC:** `onEstadosRequest(e) → this._atender(e, 'estados', 'consolidacion.estados.response', d => this._estados(d))`
+- **F · eventos:** **sube** → `consolidacion.estados.request` · **publica** → `consolidacion.estados.response`, `consolidacion.estados.failed` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test unitario AFIRMA la proyección determinista (una sola respuesta correcta)
+
+### `aislamiento-negocio` · `CUSTODIO` · eje `contabilidad-analitica`
+- **Clase / hoja F2:** `AislamientoNegocio` (HOJA I4)
+- **Propósito:** Multi-negocio sin fuga: un dueno por parcela; los negocios NO se fugan (eje negocio).
+- **Depende de:** — (hoja raíz)
+- **Eventos que sube:** `aislamiento-negocio.parcela.request`, `aislamiento-negocio.escritor.request`, `project.activated`
+- **Eventos que publica:** `aislamiento-negocio.parcela.response`, `aislamiento-negocio.parcela.failed`, `aislamiento-negocio.escritor.response`, `aislamiento-negocio.escritor.failed`, `contabilidad.parcela_reclamada`
+- **A · dependencias:** deps de módulo: (ninguna) · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `aislamiento-negocio` · `subscribes`: 3 tópicos (+ 2 `.request` propios) · `publishes`: par `.response`+`.failed` por op · + `project.activated` obligatorio (persiste estado)
+- **C · index.js:** `class AislamientoNegocio extends ModuloHibridoReflejo` · `PosPersistencia({ modulo, file: '<slug>.json', snapshot, hidratar })` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_parcela(input) → { status, data }` · + 1 proyección(es) más (una por op): _escritor
+- **E · handlers RPC:** `onParcelaRequest(e) → this._atender(e, 'parcela', 'aislamiento-negocio.parcela.response', d => this._parcela(d))` · `onEscritorRequest(e) → this._atender(e, 'escritor', 'aislamiento-negocio.escritor.response', d => this._escritor(d))`
+- **F · eventos:** **sube** → `aislamiento-negocio.parcela.request`, `aislamiento-negocio.escritor.request`, `project.activated` · **publica** → `aislamiento-negocio.parcela.response`, `aislamiento-negocio.parcela.failed`, `aislamiento-negocio.escritor.response`, `aislamiento-negocio.escritor.failed`, `contabilidad.parcela_reclamada` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test: el CUSTODIO rechaza el segundo escritor / MICRO-AGENTE no escribe (solo propone)
+
+### `etiquetado-analitico` · `MICRO-AGENTE` · eje `contabilidad-analitica`
+- **Clase / hoja F2:** `EtiquetadoAnalitico` (HOJA J1)
+- **Propósito:** Asigna centro/linea/producto a cada hecho con regla declarable; cuando la regla no cubre, PROPONE y lo dudoso va a cola.
+- **Depende de:** `cola-declaraciones-criterio`
+- **Eventos que sube:** `etiquetado-analitico.juzgar.request`
+- **Eventos que publica:** `etiquetado-analitico.juzgar.response`, `etiquetado-analitico.juzgar.failed`, `contabilidad.dimension_propuesta`
+- **A · dependencias:** deps de módulo: cola-declaraciones-criterio · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `etiquetado-analitico` · `subscribes`: 1 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op · `blueprint_driven: true` (cajones fuzzy + reflejo que sirve las ops)
+- **C · index.js:** `class EtiquetadoAnalitico extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_juzgar(input) → { status, data }` · la proyección determinista (fallback) + cajón blueprint para el juicio fuzzy (delega al reflejo)
+- **E · handlers RPC:** `onJuzgarRequest(e) → this._atender(e, 'juzgar', 'etiquetado-analitico.juzgar.response', d => this._juzgar(d))`
+- **F · eventos:** **sube** → `etiquetado-analitico.juzgar.request` · **publica** → `etiquetado-analitico.juzgar.response`, `etiquetado-analitico.juzgar.failed`, `contabilidad.dimension_propuesta` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test: el CUSTODIO rechaza el segundo escritor / MICRO-AGENTE no escribe (solo propone)
+
+### `margen-analitico` · `REFLEJO` · eje `contabilidad-analitica`
+- **Clase / hoja F2:** `MargenAnalitico` (HOJA J2)
+- **Propósito:** Ingreso - coste imputado por dimension; determinista.
+- **Depende de:** `etiquetado-analitico`
+- **Eventos que sube:** `margen-analitico.calcular.request`
+- **Eventos que publica:** `margen-analitico.calcular.response`, `margen-analitico.calcular.failed`
+- **A · dependencias:** deps de módulo: etiquetado-analitico · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `margen-analitico` · `subscribes`: 1 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class MargenAnalitico extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_calcular(input) → { status, data }`
+- **E · handlers RPC:** `onCalcularRequest(e) → this._atender(e, 'calcular', 'margen-analitico.calcular.response', d => this._calcular(d))`
+- **F · eventos:** **sube** → `margen-analitico.calcular.request` · **publica** → `margen-analitico.calcular.response`, `margen-analitico.calcular.failed` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test unitario AFIRMA la proyección determinista (una sola respuesta correcta)
+
+### `presupuesto` · `CUSTODIO` · eje `contabilidad-analitica`
+- **Clase / hoja F2:** `Presupuesto` (HOJA J3)
+- **Propósito:** Cifra objetivo por dimension declarable; un solo escritor.
+- **Depende de:** `etiquetado-analitico`
+- **Eventos que sube:** `presupuesto.fijar.request`, `presupuesto.objetivo.request`, `project.activated`
+- **Eventos que publica:** `presupuesto.fijar.response`, `presupuesto.fijar.failed`, `presupuesto.objetivo.response`, `presupuesto.objetivo.failed`, `contabilidad.presupuesto_fijado`
+- **A · dependencias:** deps de módulo: etiquetado-analitico · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `presupuesto` · `subscribes`: 3 tópicos (+ 2 `.request` propios) · `publishes`: par `.response`+`.failed` por op · + `project.activated` obligatorio (persiste estado)
+- **C · index.js:** `class Presupuesto extends ModuloHibridoReflejo` · `PosPersistencia({ modulo, file: '<slug>.json', snapshot, hidratar })` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_fijar(input) → { status, data }` · + 1 proyección(es) más (una por op): _objetivo
+- **E · handlers RPC:** `onFijarRequest(e) → this._atender(e, 'fijar', 'presupuesto.fijar.response', d => this._fijar(d))` · `onObjetivoRequest(e) → this._atender(e, 'objetivo', 'presupuesto.objetivo.response', d => this._objetivo(d))`
+- **F · eventos:** **sube** → `presupuesto.fijar.request`, `presupuesto.objetivo.request`, `project.activated` · **publica** → `presupuesto.fijar.response`, `presupuesto.fijar.failed`, `presupuesto.objetivo.response`, `presupuesto.objetivo.failed`, `contabilidad.presupuesto_fijado` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test: el CUSTODIO rechaza el segundo escritor / MICRO-AGENTE no escribe (solo propone)
+
+### `desviacion` · `REFLEJO` · eje `contabilidad-analitica`
+- **Clase / hoja F2:** `Desviacion` (HOJA J4)
+- **Propósito:** Real vs presupuesto -> dispara aviso SI se sale del umbral declarado; determinista.
+- **Depende de:** `presupuesto`
+- **Eventos que sube:** `desviacion.calcular.request`, `contabilidad.presupuesto_fijado`
+- **Eventos que publica:** `desviacion.calcular.response`, `desviacion.calcular.failed`, `contabilidad.desviacion`
+- **A · dependencias:** deps de módulo: presupuesto · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `desviacion` · `subscribes`: 2 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class Desviacion extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_calcular(input) → { status, data }`
+- **E · handlers RPC:** `onCalcularRequest(e) → this._atender(e, 'calcular', 'desviacion.calcular.response', d => this._calcular(d))`
+- **F · eventos:** **sube** → `desviacion.calcular.request`, `contabilidad.presupuesto_fijado` · **publica** → `desviacion.calcular.response`, `desviacion.calcular.failed`, `contabilidad.desviacion` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test unitario AFIRMA la proyección determinista (una sola respuesta correcta)
+
+### `coste-indirecto` · `REFLEJO` · eje `contabilidad-analitica`
+- **Clase / hoja F2:** `CosteIndirecto` (HOJA J5)
+- **Propósito:** Aplica el reparto DECLARADO de gastos no directos; determinista; cubre lo que la pieza existente no cubre para grupo.
+- **Depende de:** `etiquetado-analitico`
+- **Eventos que sube:** `coste-indirecto.repartir.request`
+- **Eventos que publica:** `coste-indirecto.repartir.response`, `coste-indirecto.repartir.failed`
+- **A · dependencias:** deps de módulo: etiquetado-analitico · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `coste-indirecto` · `subscribes`: 1 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class CosteIndirecto extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_repartir(input) → { status, data }`
+- **E · handlers RPC:** `onRepartirRequest(e) → this._atender(e, 'repartir', 'coste-indirecto.repartir.response', d => this._repartir(d))`
+- **F · eventos:** **sube** → `coste-indirecto.repartir.request` · **publica** → `coste-indirecto.repartir.response`, `coste-indirecto.repartir.failed` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test unitario AFIRMA la proyección determinista (una sola respuesta correcta)
+
+### `cuadro-mando-contable` · `REFLEJO` · eje `contabilidad-analitica`
+- **Clase / hoja F2:** `CuadroMandoContable` (HOJA J8)
+- **Propósito:** Agregacion de conjunto (caja·resultado·margen·desviacion·ejercicio) SIN bajar al asiento; lente del jefe; determinista.
+- **Depende de:** `saldo-tesoreria`, `cuenta-resultados`, `margen-analitico`, `desviacion`
+- **Eventos que sube:** `cuadro-mando-contable.componer.request`
+- **Eventos que publica:** `cuadro-mando-contable.componer.response`, `cuadro-mando-contable.componer.failed`
+- **A · dependencias:** deps de módulo: saldo-tesoreria, cuenta-resultados, margen-analitico, desviacion · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `cuadro-mando-contable` · `subscribes`: 1 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class CuadroMandoContable extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_componer(input) → { status, data }`
+- **E · handlers RPC:** `onComponerRequest(e) → this._atender(e, 'componer', 'cuadro-mando-contable.componer.response', d => this._componer(d))`
+- **F · eventos:** **sube** → `cuadro-mando-contable.componer.request` · **publica** → `cuadro-mando-contable.componer.response`, `cuadro-mando-contable.componer.failed` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test unitario AFIRMA la proyección determinista (una sola respuesta correcta)
+
+### `comparador-periodos` · `REFLEJO` · eje `contabilidad-analitica`
+- **Clase / hoja F2:** `ComparadorPeriodos` (HOJA J9)
+- **Propósito:** Ejercicio vs ejercicio, mes vs mes, real vs presupuesto; REUTILIZA J3/J4, no los duplica.
+- **Depende de:** `presupuesto`, `desviacion`
+- **Eventos que sube:** `comparador-periodos.comparar.request`
+- **Eventos que publica:** `comparador-periodos.comparar.response`, `comparador-periodos.comparar.failed`
+- **A · dependencias:** deps de módulo: presupuesto, desviacion · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `comparador-periodos` · `subscribes`: 1 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class ComparadorPeriodos extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_comparar(input) → { status, data }`
+- **E · handlers RPC:** `onCompararRequest(e) → this._atender(e, 'comparar', 'comparador-periodos.comparar.response', d => this._comparar(d))`
+- **F · eventos:** **sube** → `comparador-periodos.comparar.request` · **publica** → `comparador-periodos.comparar.response`, `comparador-periodos.comparar.failed` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test unitario AFIRMA la proyección determinista (una sola respuesta correcta)
+
+### `tablero-margen-dimension` · `REFLEJO` · eje `contabilidad-analitica`
+- **Clase / hoja F2:** `TableroMargenDimension` (HOJA J10)
+- **Propósito:** Cruce margen x dimension bajo lente de conjunto: por centro, familia o sociedad.
+- **Depende de:** `margen-analitico`, `etiquetado-analitico`
+- **Eventos que sube:** `tablero-margen-dimension.cruzar.request`
+- **Eventos que publica:** `tablero-margen-dimension.cruzar.response`, `tablero-margen-dimension.cruzar.failed`
+- **A · dependencias:** deps de módulo: margen-analitico, etiquetado-analitico · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `tablero-margen-dimension` · `subscribes`: 1 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class TableroMargenDimension extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_cruzar(input) → { status, data }`
+- **E · handlers RPC:** `onCruzarRequest(e) → this._atender(e, 'cruzar', 'tablero-margen-dimension.cruzar.response', d => this._cruzar(d))`
+- **F · eventos:** **sube** → `tablero-margen-dimension.cruzar.request` · **publica** → `tablero-margen-dimension.cruzar.response`, `tablero-margen-dimension.cruzar.failed` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test unitario AFIRMA la proyección determinista (una sola respuesta correcta)
+
+### `onboarding-negocio` · `CUSTODIO` · eje `contabilidad-analitica`
+- **Clase / hoja F2:** `OnboardingNegocio` (HOJA K1)
+- **Propósito:** Recoge los datos declarables del negocio nuevo (plan, fuentes, parametros); un solo escritor.
+- **Depende de:** `project-manager`
+- **Eventos que sube:** `onboarding-negocio.recoger.request`, `onboarding-negocio.leer.request`, `project.activated`
+- **Eventos que publica:** `onboarding-negocio.recoger.response`, `onboarding-negocio.recoger.failed`, `onboarding-negocio.leer.response`, `onboarding-negocio.leer.failed`, `contabilidad.negocio_onboarded`
+- **A · dependencias:** deps de módulo: project-manager · deps externas (plataforma): project-manager · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `onboarding-negocio` · `subscribes`: 3 tópicos (+ 2 `.request` propios) · `publishes`: par `.response`+`.failed` por op · + `project.activated` obligatorio (persiste estado)
+- **C · index.js:** `class OnboardingNegocio extends ModuloHibridoReflejo` · `PosPersistencia({ modulo, file: '<slug>.json', snapshot, hidratar })` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_recoger(input) → { status, data }` · + 1 proyección(es) más (una por op): _leer
+- **E · handlers RPC:** `onRecogerRequest(e) → this._atender(e, 'recoger', 'onboarding-negocio.recoger.response', d => this._recoger(d))` · `onLeerRequest(e) → this._atender(e, 'leer', 'onboarding-negocio.leer.response', d => this._leer(d))`
+- **F · eventos:** **sube** → `onboarding-negocio.recoger.request`, `onboarding-negocio.leer.request`, `project.activated` · **publica** → `onboarding-negocio.recoger.response`, `onboarding-negocio.recoger.failed`, `onboarding-negocio.leer.response`, `onboarding-negocio.leer.failed`, `contabilidad.negocio_onboarded` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test: el CUSTODIO rechaza el segundo escritor / MICRO-AGENTE no escribe (solo propone)
+
+### `motor-avisos` · `PUENTE` · eje `contabilidad-analitica`
+- **Clase / hoja F2:** `MotorAvisos` (HOJA K2)
+- **Propósito:** PRODUCE el aviso (requisito 4 del dueno); conecta por evento; la ENTREGA es R1.
+- **Depende de:** — (hoja raíz)
+- **Eventos que sube:** `motor-avisos.producir.request`, `contabilidad.aviso_revision`, `contabilidad.aviso_cuadre`, `contabilidad.vencimiento_fiscal`, `contabilidad.vencimiento_proximo`, `contabilidad.desviacion`, `contabilidad.fuente_faltante`
+- **Eventos que publica:** `motor-avisos.producir.response`, `motor-avisos.producir.failed`, `contabilidad.aviso_producido`
+- **A · dependencias:** deps de módulo: (ninguna) · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `motor-avisos` · `subscribes`: 7 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class MotorAvisos extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_producir(input) → { status, data }`
+- **E · handlers RPC:** `onProducirRequest(e) → this._atender(e, 'producir', 'motor-avisos.producir.response', d => this._producir(d))`
+- **F · eventos:** **sube** → `motor-avisos.producir.request`, `contabilidad.aviso_revision`, `contabilidad.aviso_cuadre`, `contabilidad.vencimiento_fiscal`, `contabilidad.vencimiento_proximo`, `contabilidad.desviacion`, `contabilidad.fuente_faltante` · **publica** → `motor-avisos.producir.response`, `motor-avisos.producir.failed`, `contabilidad.aviso_producido` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test: el CUSTODIO rechaza el segundo escritor / MICRO-AGENTE no escribe (solo propone)
+
+### `informe-rico` · `REFLEJO` · eje `contabilidad-analitica`
+- **Clase / hoja F2:** `InformeRico` (HOJA K3)
+- **Propósito:** COMPONE la cifra ya calculada con el contexto declarado (periodo, origen, comparativas); mecanico.
+- **Depende de:** `informe-conciliacion`
+- **Eventos que sube:** `informe-rico.componer.request`
+- **Eventos que publica:** `informe-rico.componer.response`, `informe-rico.componer.failed`
+- **A · dependencias:** deps de módulo: informe-conciliacion · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `informe-rico` · `subscribes`: 1 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class InformeRico extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_componer(input) → { status, data }`
+- **E · handlers RPC:** `onComponerRequest(e) → this._atender(e, 'componer', 'informe-rico.componer.response', d => this._componer(d))`
+- **F · eventos:** **sube** → `informe-rico.componer.request` · **publica** → `informe-rico.componer.response`, `informe-rico.componer.failed` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test unitario AFIRMA la proyección determinista (una sola respuesta correcta)
+
+### `activacion-vertical` · `REFLEJO` · eje `contabilidad-analitica`
+- **Clase / hoja F2:** `ActivacionVertical` (HOJA K4)
+- **Propósito:** Enciende la vertical por la configuracion declarada; mecanico, cero juicio.
+- **Depende de:** `onboarding-negocio`
+- **Eventos que sube:** `activacion-vertical.activar.request`, `contabilidad.negocio_onboarded`
+- **Eventos que publica:** `activacion-vertical.activar.response`, `activacion-vertical.activar.failed`, `contabilidad.vertical_activada`
+- **A · dependencias:** deps de módulo: onboarding-negocio · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `activacion-vertical` · `subscribes`: 2 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class ActivacionVertical extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_activar(input) → { status, data }`
+- **E · handlers RPC:** `onActivarRequest(e) → this._atender(e, 'activar', 'activacion-vertical.activar.response', d => this._activar(d))`
+- **F · eventos:** **sube** → `activacion-vertical.activar.request`, `contabilidad.negocio_onboarded` · **publica** → `activacion-vertical.activar.response`, `activacion-vertical.activar.failed`, `contabilidad.vertical_activada` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test unitario AFIRMA la proyección determinista (una sola respuesta correcta)
+
+### `cola-declaraciones-criterio` · `CUSTODIO` · eje `contabilidad-analitica`
+- **Clase / hoja F2:** `ColaDeclaracionesCriterio` (HOJA K9)
+- **Propósito:** UNA sola cola donde el jefe fija/ratifica TODOS los criterios; cierra declarativamente B1/B7·C7·E6·F5·J6·D11·I5.
+- **Depende de:** — (hoja raíz)
+- **Eventos que sube:** `cola-declaraciones-criterio.fijar.request`, `cola-declaraciones-criterio.ratificar.request`, `project.activated`
+- **Eventos que publica:** `cola-declaraciones-criterio.fijar.response`, `cola-declaraciones-criterio.fijar.failed`, `cola-declaraciones-criterio.ratificar.response`, `cola-declaraciones-criterio.ratificar.failed`, `contabilidad.criterio_ratificado`
+- **A · dependencias:** deps de módulo: (ninguna) · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `cola-declaraciones-criterio` · `subscribes`: 3 tópicos (+ 2 `.request` propios) · `publishes`: par `.response`+`.failed` por op · + `project.activated` obligatorio (persiste estado)
+- **C · index.js:** `class ColaDeclaracionesCriterio extends ModuloHibridoReflejo` · `PosPersistencia({ modulo, file: '<slug>.json', snapshot, hidratar })` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_fijar(input) → { status, data }` · + 1 proyección(es) más (una por op): _ratificar
+- **E · handlers RPC:** `onFijarRequest(e) → this._atender(e, 'fijar', 'cola-declaraciones-criterio.fijar.response', d => this._fijar(d))` · `onRatificarRequest(e) → this._atender(e, 'ratificar', 'cola-declaraciones-criterio.ratificar.response', d => this._ratificar(d))`
+- **F · eventos:** **sube** → `cola-declaraciones-criterio.fijar.request`, `cola-declaraciones-criterio.ratificar.request`, `project.activated` · **publica** → `cola-declaraciones-criterio.fijar.response`, `cola-declaraciones-criterio.fijar.failed`, `cola-declaraciones-criterio.ratificar.response`, `cola-declaraciones-criterio.ratificar.failed`, `contabilidad.criterio_ratificado` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test: el CUSTODIO rechaza el segundo escritor / MICRO-AGENTE no escribe (solo propone)
+
+### `puerto-exportacion` · `CONVERSOR` · eje `contabilidad-libro`
+- **Clase / hoja F2:** `PuertoExportacion` (HOJA L1)
+- **Propósito:** Frontera de formatos contables estandar hacia el programa del asesor; si falta, se crea.
+- **Depende de:** — (hoja raíz)
+- **Eventos que sube:** `puerto-exportacion.salir.request`, `puerto-exportacion.entrar.request`
+- **Eventos que publica:** `puerto-exportacion.salir.response`, `puerto-exportacion.salir.failed`, `puerto-exportacion.entrar.response`, `puerto-exportacion.entrar.failed`
+- **A · dependencias:** deps de módulo: (ninguna) · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `puerto-exportacion` · `subscribes`: 2 tópicos (+ 2 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class PuertoExportacion extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_salir(input) → { status, data }` · + 1 proyección(es) más (una por op): _entrar
+- **E · handlers RPC:** `onSalirRequest(e) → this._atender(e, 'salir', 'puerto-exportacion.salir.response', d => this._salir(d))` · `onEntrarRequest(e) → this._atender(e, 'entrar', 'puerto-exportacion.entrar.response', d => this._entrar(d))`
+- **F · eventos:** **sube** → `puerto-exportacion.salir.request`, `puerto-exportacion.entrar.request` · **publica** → `puerto-exportacion.salir.response`, `puerto-exportacion.salir.failed`, `puerto-exportacion.entrar.response`, `puerto-exportacion.entrar.failed` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test unitario AFIRMA la proyección determinista (una sola respuesta correcta)
+
+### `vista-revisable` · `REFLEJO` · eje `contabilidad-libro`
+- **Clase / hoja F2:** `VistaRevisable` (HOJA L2)
+- **Propósito:** Muestra cada asiento/calculo CON su origen: composicion determinista de la traza; NO caja negra.
+- **Depende de:** `traza-asiento`
+- **Eventos que sube:** `vista-revisable.explicar.request`, `contabilidad.traza_registrada`, `contabilidad.asiento_registrado`
+- **Eventos que publica:** `vista-revisable.explicar.response`, `vista-revisable.explicar.failed`
+- **A · dependencias:** deps de módulo: traza-asiento · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `vista-revisable` · `subscribes`: 3 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class VistaRevisable extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_explicar(input) → { status, data }`
+- **E · handlers RPC:** `onExplicarRequest(e) → this._atender(e, 'explicar', 'vista-revisable.explicar.response', d => this._explicar(d))`
+- **F · eventos:** **sube** → `vista-revisable.explicar.request`, `contabilidad.traza_registrada`, `contabilidad.asiento_registrado` · **publica** → `vista-revisable.explicar.response`, `vista-revisable.explicar.failed` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test unitario AFIRMA la proyección determinista (una sola respuesta correcta)
+
+### `flujo-firma` · `CUSTODIO` · eje `contabilidad-libro`
+- **Clase / hoja F2:** `FlujoFirma` (HOJA L3)
+- **Propósito:** Parcela de estado revisado/firmado del asesor; El sistema NO firma; vence -> expira y RE-PREGUNTA, jamas asume.
+- **Depende de:** — (hoja raíz)
+- **Eventos que sube:** `flujo-firma.firmar.request`, `flujo-firma.estado.request`, `project.activated`
+- **Eventos que publica:** `flujo-firma.firmar.response`, `flujo-firma.firmar.failed`, `flujo-firma.estado.response`, `flujo-firma.estado.failed`, `contabilidad.firma_registrada`
+- **A · dependencias:** deps de módulo: (ninguna) · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `flujo-firma` · `subscribes`: 3 tópicos (+ 2 `.request` propios) · `publishes`: par `.response`+`.failed` por op · + `project.activated` obligatorio (persiste estado)
+- **C · index.js:** `class FlujoFirma extends ModuloHibridoReflejo` · `PosPersistencia({ modulo, file: '<slug>.json', snapshot, hidratar })` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_firmar(input) → { status, data }` · + 1 proyección(es) más (una por op): _estado
+- **E · handlers RPC:** `onFirmarRequest(e) → this._atender(e, 'firmar', 'flujo-firma.firmar.response', d => this._firmar(d))` · `onEstadoRequest(e) → this._atender(e, 'estado', 'flujo-firma.estado.response', d => this._estado(d))`
+- **F · eventos:** **sube** → `flujo-firma.firmar.request`, `flujo-firma.estado.request`, `project.activated` · **publica** → `flujo-firma.firmar.response`, `flujo-firma.firmar.failed`, `flujo-firma.estado.response`, `flujo-firma.estado.failed`, `contabilidad.firma_registrada` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test: el CUSTODIO rechaza el segundo escritor / MICRO-AGENTE no escribe (solo propone)
+
+### `expediente-documental` · `CUSTODIO` · eje `contabilidad-libro`
+- **Clase / hoja F2:** `ExpedienteDocumental` (HOJA L7)
+- **Propósito:** Cada cifra con el documento origen ARCHIVADO y ENLAZADO; registro inmutable, un solo escritor; L2 explica, el expediente CONSERVA.
+- **Depende de:** `puerto-documento`
+- **Eventos que sube:** `expediente-documental.archivar.request`, `expediente-documental.recuperar.request`, `project.activated`
+- **Eventos que publica:** `expediente-documental.archivar.response`, `expediente-documental.archivar.failed`, `expediente-documental.recuperar.response`, `expediente-documental.recuperar.failed`, `contabilidad.cifra_archivada`
+- **A · dependencias:** deps de módulo: puerto-documento · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `expediente-documental` · `subscribes`: 3 tópicos (+ 2 `.request` propios) · `publishes`: par `.response`+`.failed` por op · + `project.activated` obligatorio (persiste estado)
+- **C · index.js:** `class ExpedienteDocumental extends ModuloHibridoReflejo` · `PosPersistencia({ modulo, file: '<slug>.json', snapshot, hidratar })` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_archivar(input) → { status, data }` · + 1 proyección(es) más (una por op): _recuperar
+- **E · handlers RPC:** `onArchivarRequest(e) → this._atender(e, 'archivar', 'expediente-documental.archivar.response', d => this._archivar(d))` · `onRecuperarRequest(e) → this._atender(e, 'recuperar', 'expediente-documental.recuperar.response', d => this._recuperar(d))`
+- **F · eventos:** **sube** → `expediente-documental.archivar.request`, `expediente-documental.recuperar.request`, `project.activated` · **publica** → `expediente-documental.archivar.response`, `expediente-documental.archivar.failed`, `expediente-documental.recuperar.response`, `expediente-documental.recuperar.failed`, `contabilidad.cifra_archivada` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test: el CUSTODIO rechaza el segundo escritor / MICRO-AGENTE no escribe (solo propone)
+
+### `control-calidad-muestreo` · `REFLEJO` · eje `contabilidad-libro`
+- **Clase / hoja F2:** `ControlCalidadMuestreo` (HOJA L8)
+- **Propósito:** Selecciona lo que exige ojo humano por senales DURAS; excepcion + muestra, NO revisar todo; determinista.
+- **Depende de:** `escritor-diario`, `regla-contrapartida`
+- **Eventos que sube:** `control-calidad-muestreo.seleccionar.request`, `contabilidad.asiento_registrado`
+- **Eventos que publica:** `control-calidad-muestreo.seleccionar.response`, `control-calidad-muestreo.seleccionar.failed`
+- **A · dependencias:** deps de módulo: escritor-diario, regla-contrapartida · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `control-calidad-muestreo` · `subscribes`: 2 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class ControlCalidadMuestreo extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_seleccionar(input) → { status, data }`
+- **E · handlers RPC:** `onSeleccionarRequest(e) → this._atender(e, 'seleccionar', 'control-calidad-muestreo.seleccionar.response', d => this._seleccionar(d))`
+- **F · eventos:** **sube** → `control-calidad-muestreo.seleccionar.request`, `contabilidad.asiento_registrado` · **publica** → `control-calidad-muestreo.seleccionar.response`, `control-calidad-muestreo.seleccionar.failed` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test unitario AFIRMA la proyección determinista (una sola respuesta correcta)
+
+### `cambio-desde-ultima-revision` · `REFLEJO` · eje `contabilidad-libro`
+- **Clase / hoja F2:** `CambioDesdeUltimaRevision` (HOJA L9)
+- **Propósito:** Delta: asientos nuevos, ajustes y reglas cambiadas desde el ultimo visto bueno; calculo de diferencia.
+- **Depende de:** `flujo-firma`, `traza-asiento`
+- **Eventos que sube:** `cambio-desde-ultima-revision.delta.request`, `contabilidad.firma_registrada`, `contabilidad.asiento_registrado`, `contabilidad.asiento_ajuste_recibido`
+- **Eventos que publica:** `cambio-desde-ultima-revision.delta.response`, `cambio-desde-ultima-revision.delta.failed`, `contabilidad.delta_revision`
+- **A · dependencias:** deps de módulo: flujo-firma, traza-asiento · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `cambio-desde-ultima-revision` · `subscribes`: 4 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class CambioDesdeUltimaRevision extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_delta(input) → { status, data }`
+- **E · handlers RPC:** `onDeltaRequest(e) → this._atender(e, 'delta', 'cambio-desde-ultima-revision.delta.response', d => this._delta(d))`
+- **F · eventos:** **sube** → `cambio-desde-ultima-revision.delta.request`, `contabilidad.firma_registrada`, `contabilidad.asiento_registrado`, `contabilidad.asiento_ajuste_recibido` · **publica** → `cambio-desde-ultima-revision.delta.response`, `cambio-desde-ultima-revision.delta.failed`, `contabilidad.delta_revision` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test unitario AFIRMA la proyección determinista (una sola respuesta correcta)
+
+### `ratificacion-regla-aprendida` · `PUENTE` · eje `contabilidad-libro`
+- **Clase / hoja F2:** `RatificacionReglaAprendida` (HOJA L10)
+- **Propósito:** El asesor ratifica o bloquea la regla ANTES de que actue sobre el volumen; gate humano unico para A6.2 y E8.
+- **Depende de:** `regla-contrapartida`, `regla-movimiento-bancario`
+- **Eventos que sube:** `ratificacion-regla-aprendida.ratificar.request`, `contabilidad.regla_contrapartida_propuesta`, `contabilidad.regla_bancaria_propuesta`
+- **Eventos que publica:** `ratificacion-regla-aprendida.ratificar.response`, `ratificacion-regla-aprendida.ratificar.failed`, `contabilidad.regla_ratificada`
+- **A · dependencias:** deps de módulo: regla-contrapartida, regla-movimiento-bancario · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `ratificacion-regla-aprendida` · `subscribes`: 3 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class RatificacionReglaAprendida extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_ratificar(input) → { status, data }`
+- **E · handlers RPC:** `onRatificarRequest(e) → this._atender(e, 'ratificar', 'ratificacion-regla-aprendida.ratificar.response', d => this._ratificar(d))`
+- **F · eventos:** **sube** → `ratificacion-regla-aprendida.ratificar.request`, `contabilidad.regla_contrapartida_propuesta`, `contabilidad.regla_bancaria_propuesta` · **publica** → `ratificacion-regla-aprendida.ratificar.response`, `ratificacion-regla-aprendida.ratificar.failed`, `contabilidad.regla_ratificada` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test: el CUSTODIO rechaza el segundo escritor / MICRO-AGENTE no escribe (solo propone)
+
+### `frontera-planos` · `REFLEJO` · eje `contabilidad-libro`
+- **Clase / hoja F2:** `FronteraPlanos` (HOJA M1)
+- **Propósito:** Guarda verificable de que SOLO se emiten calculos, NUNCA hechos de negocio; un test lo afirma; no realimenta la operacion.
+- **Depende de:** — (hoja raíz)
+- **Eventos que sube:** `frontera-planos.verificar.request`
+- **Eventos que publica:** `frontera-planos.verificar.response`, `frontera-planos.verificar.failed`, `contabilidad.salida_verificada`
+- **A · dependencias:** deps de módulo: (ninguna) · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `frontera-planos` · `subscribes`: 1 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class FronteraPlanos extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_verificar(input) → { status, data }`
+- **E · handlers RPC:** `onVerificarRequest(e) → this._atender(e, 'verificar', 'frontera-planos.verificar.response', d => this._verificar(d))`
+- **F · eventos:** **sube** → `frontera-planos.verificar.request` · **publica** → `frontera-planos.verificar.response`, `frontera-planos.verificar.failed`, `contabilidad.salida_verificada` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test unitario AFIRMA la proyección determinista (una sola respuesta correcta)
+
+### `single-writer` · `CUSTODIO` · eje `contabilidad-libro`
+- **Clase / hoja F2:** `SingleWriter` (HOJA M2)
+- **Propósito:** La LEY que gobierna cada custodio: un solo escritor por parcela; segundo escritor = corrupcion.
+- **Depende de:** — (hoja raíz)
+- **Eventos que sube:** `single-writer.reclamar.request`, `single-writer.es_escritor.request`, `project.activated`
+- **Eventos que publica:** `single-writer.reclamar.response`, `single-writer.reclamar.failed`, `single-writer.es_escritor.response`, `single-writer.es_escritor.failed`, `contabilidad.escritor_reclamado`
+- **A · dependencias:** deps de módulo: (ninguna) · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `single-writer` · `subscribes`: 3 tópicos (+ 2 `.request` propios) · `publishes`: par `.response`+`.failed` por op · + `project.activated` obligatorio (persiste estado)
+- **C · index.js:** `class SingleWriter extends ModuloHibridoReflejo` · `PosPersistencia({ modulo, file: '<slug>.json', snapshot, hidratar })` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_reclamar(input) → { status, data }` · + 1 proyección(es) más (una por op): _es_escritor
+- **E · handlers RPC:** `onReclamarRequest(e) → this._atender(e, 'reclamar', 'single-writer.reclamar.response', d => this._reclamar(d))` · `onEsEscritorRequest(e) → this._atender(e, 'es_escritor', 'single-writer.es_escritor.response', d => this._es_escritor(d))`
+- **F · eventos:** **sube** → `single-writer.reclamar.request`, `single-writer.es_escritor.request`, `project.activated` · **publica** → `single-writer.reclamar.response`, `single-writer.reclamar.failed`, `single-writer.es_escritor.response`, `single-writer.es_escritor.failed`, `contabilidad.escritor_reclamado` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test: el CUSTODIO rechaza el segundo escritor / MICRO-AGENTE no escribe (solo propone)
+
+### `clave-natural` · `REFLEJO` · eje `contabilidad-libro`
+- **Clase / hoja F2:** `ClaveNatural` (HOJA M3)
+- **Propósito:** Idempotencia determinista: reprocesar NO duplica ("un cierre = un asiento"); un test lo afirma.
+- **Depende de:** — (hoja raíz)
+- **Eventos que sube:** `clave-natural.calcular.request`, `clave-natural.coincide.request`
+- **Eventos que publica:** `clave-natural.calcular.response`, `clave-natural.calcular.failed`, `clave-natural.coincide.response`, `clave-natural.coincide.failed`
+- **A · dependencias:** deps de módulo: (ninguna) · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `clave-natural` · `subscribes`: 2 tópicos (+ 2 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class ClaveNatural extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_calcular(input) → { status, data }` · + 1 proyección(es) más (una por op): _coincide
+- **E · handlers RPC:** `onCalcularRequest(e) → this._atender(e, 'calcular', 'clave-natural.calcular.response', d => this._calcular(d))` · `onCoincideRequest(e) → this._atender(e, 'coincide', 'clave-natural.coincide.response', d => this._coincide(d))`
+- **F · eventos:** **sube** → `clave-natural.calcular.request`, `clave-natural.coincide.request` · **publica** → `clave-natural.calcular.response`, `clave-natural.calcular.failed`, `clave-natural.coincide.response`, `clave-natural.coincide.failed` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test unitario AFIRMA la proyección determinista (una sola respuesta correcta)
+
+### `maestro-terceros` · `CUSTODIO` · eje `contabilidad-entrada`
+- **Clase / hoja F2:** `MaestroTerceros` (HOJA N1)
+- **Propósito:** Ficha unica de cliente/proveedor (identificacion fiscal, condiciones, historial); UN solo maestro con roles.
+- **Depende de:** `padron-terceros`
+- **Eventos que sube:** `maestro-terceros.ficha.request`, `maestro-terceros.upsert.request`, `project.activated`
+- **Eventos que publica:** `maestro-terceros.ficha.response`, `maestro-terceros.ficha.failed`, `maestro-terceros.upsert.response`, `maestro-terceros.upsert.failed`, `contabilidad.tercero_actualizado`
+- **A · dependencias:** deps de módulo: padron-terceros · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `maestro-terceros` · `subscribes`: 3 tópicos (+ 2 `.request` propios) · `publishes`: par `.response`+`.failed` por op · + `project.activated` obligatorio (persiste estado)
+- **C · index.js:** `class MaestroTerceros extends ModuloHibridoReflejo` · `PosPersistencia({ modulo, file: '<slug>.json', snapshot, hidratar })` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_ficha(input) → { status, data }` · + 1 proyección(es) más (una por op): _upsert
+- **E · handlers RPC:** `onFichaRequest(e) → this._atender(e, 'ficha', 'maestro-terceros.ficha.response', d => this._ficha(d))` · `onUpsertRequest(e) → this._atender(e, 'upsert', 'maestro-terceros.upsert.response', d => this._upsert(d))`
+- **F · eventos:** **sube** → `maestro-terceros.ficha.request`, `maestro-terceros.upsert.request`, `project.activated` · **publica** → `maestro-terceros.ficha.response`, `maestro-terceros.ficha.failed`, `maestro-terceros.upsert.response`, `maestro-terceros.upsert.failed`, `contabilidad.tercero_actualizado` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test: el CUSTODIO rechaza el segundo escritor / MICRO-AGENTE no escribe (solo propone)
+
+### `padron-terceros` · `CUSTODIO` · eje `contabilidad-entrada`
+- **Clase / hoja F2:** `PadronTerceros` (HOJA N2)
+- **Propósito:** Identidad unica por numero fiscal: un proveedor escrito de tres formas sigue siendo uno; faceta de identidad del MISMO maestro N1.
+- **Depende de:** — (hoja raíz)
+- **Eventos que sube:** `padron-terceros.unificar.request`, `project.activated`
+- **Eventos que publica:** `padron-terceros.unificar.response`, `padron-terceros.unificar.failed`, `contabilidad.identidad_unificada`
+- **A · dependencias:** deps de módulo: (ninguna) · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `padron-terceros` · `subscribes`: 2 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op · + `project.activated` obligatorio (persiste estado)
+- **C · index.js:** `class PadronTerceros extends ModuloHibridoReflejo` · `PosPersistencia({ modulo, file: '<slug>.json', snapshot, hidratar })` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_unificar(input) → { status, data }`
+- **E · handlers RPC:** `onUnificarRequest(e) → this._atender(e, 'unificar', 'padron-terceros.unificar.response', d => this._unificar(d))`
+- **F · eventos:** **sube** → `padron-terceros.unificar.request`, `project.activated` · **publica** → `padron-terceros.unificar.response`, `padron-terceros.unificar.failed`, `contabilidad.identidad_unificada` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test: el CUSTODIO rechaza el segundo escritor / MICRO-AGENTE no escribe (solo propone)
+
+### `cuenta-proveedor` · `REFLEJO` · eje `contabilidad-entrada`
+- **Clase / hoja F2:** `CuentaProveedor` (HOJA N3)
+- **Propósito:** Mayor auxiliar del tercero (cada factura de compra viva y su saldo) DERIVADO del diario.
+- **Depende de:** `escritor-diario`, `maestro-terceros`
+- **Eventos que sube:** `cuenta-proveedor.saldo.request`, `cuenta-proveedor.facturas_vivas.request`, `contabilidad.asiento_registrado`
+- **Eventos que publica:** `cuenta-proveedor.saldo.response`, `cuenta-proveedor.saldo.failed`, `cuenta-proveedor.facturas_vivas.response`, `cuenta-proveedor.facturas_vivas.failed`
+- **A · dependencias:** deps de módulo: escritor-diario, maestro-terceros · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `cuenta-proveedor` · `subscribes`: 3 tópicos (+ 2 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class CuentaProveedor extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_saldo(input) → { status, data }` · + 1 proyección(es) más (una por op): _facturas_vivas
+- **E · handlers RPC:** `onSaldoRequest(e) → this._atender(e, 'saldo', 'cuenta-proveedor.saldo.response', d => this._saldo(d))` · `onFacturasVivasRequest(e) → this._atender(e, 'facturas_vivas', 'cuenta-proveedor.facturas_vivas.response', d => this._facturas_vivas(d))`
+- **F · eventos:** **sube** → `cuenta-proveedor.saldo.request`, `cuenta-proveedor.facturas_vivas.request`, `contabilidad.asiento_registrado` · **publica** → `cuenta-proveedor.saldo.response`, `cuenta-proveedor.saldo.failed`, `cuenta-proveedor.facturas_vivas.response`, `cuenta-proveedor.facturas_vivas.failed` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test unitario AFIRMA la proyección determinista (una sola respuesta correcta)
+
+### `estado-cuenta-proveedor` · `REFLEJO` · eje `contabilidad-entrada`
+- **Clase / hoja F2:** `EstadoCuentaProveedor` (HOJA N4)
+- **Propósito:** Extracto CONFRONTABLE con el proveedor (conciliacion de saldos); derivacion determinista.
+- **Depende de:** `cuenta-proveedor`
+- **Eventos que sube:** `estado-cuenta-proveedor.extracto.request`
+- **Eventos que publica:** `estado-cuenta-proveedor.extracto.response`, `estado-cuenta-proveedor.extracto.failed`
+- **A · dependencias:** deps de módulo: cuenta-proveedor · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `estado-cuenta-proveedor` · `subscribes`: 1 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class EstadoCuentaProveedor extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_extracto(input) → { status, data }`
+- **E · handlers RPC:** `onExtractoRequest(e) → this._atender(e, 'extracto', 'estado-cuenta-proveedor.extracto.response', d => this._extracto(d))`
+- **F · eventos:** **sube** → `estado-cuenta-proveedor.extracto.request` · **publica** → `estado-cuenta-proveedor.extracto.response`, `estado-cuenta-proveedor.extracto.failed` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test unitario AFIRMA la proyección determinista (una sola respuesta correcta)
+
+### `cruce-factura-recepcion` · `REFLEJO` · eje `contabilidad-entrada`
+- **Clase / hoja F2:** `CruceFacturaRecepcion` (HOJA N5)
+- **Propósito:** Coteja pedido <-> recepcion <-> factura ANTES de asentar; lo que no cuadra -> cola; determinista.
+- **Depende de:** `puerto-evento-vertical`
+- **Eventos que sube:** `cruce-factura-recepcion.cotejar.request`
+- **Eventos que publica:** `cruce-factura-recepcion.cotejar.response`, `cruce-factura-recepcion.cotejar.failed`, `contabilidad.cruce_descuadrado`
+- **A · dependencias:** deps de módulo: puerto-evento-vertical · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `cruce-factura-recepcion` · `subscribes`: 1 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class CruceFacturaRecepcion extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_cotejar(input) → { status, data }`
+- **E · handlers RPC:** `onCotejarRequest(e) → this._atender(e, 'cotejar', 'cruce-factura-recepcion.cotejar.response', d => this._cotejar(d))`
+- **F · eventos:** **sube** → `cruce-factura-recepcion.cotejar.request` · **publica** → `cruce-factura-recepcion.cotejar.response`, `cruce-factura-recepcion.cotejar.failed`, `contabilidad.cruce_descuadrado` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test unitario AFIRMA la proyección determinista (una sola respuesta correcta)
+
+### `vencimiento-pago` · `REFLEJO` · eje `contabilidad-entrada`
+- **Clase / hoja F2:** `VencimientoPago` (HOJA N6)
+- **Propósito:** Fecha de vencimiento por factura desde la politica declarada -> alimenta E5 y K2; un solo tipo Vencimiento con dos lados.
+- **Depende de:** — (hoja raíz)
+- **Eventos que sube:** `vencimiento-pago.calcular.request`
+- **Eventos que publica:** `vencimiento-pago.calcular.response`, `vencimiento-pago.calcular.failed`, `contabilidad.vencimiento_proximo`
+- **A · dependencias:** deps de módulo: (ninguna) · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `vencimiento-pago` · `subscribes`: 1 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class VencimientoPago extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_calcular(input) → { status, data }`
+- **E · handlers RPC:** `onCalcularRequest(e) → this._atender(e, 'calcular', 'vencimiento-pago.calcular.response', d => this._calcular(d))`
+- **F · eventos:** **sube** → `vencimiento-pago.calcular.request` · **publica** → `vencimiento-pago.calcular.response`, `vencimiento-pago.calcular.failed`, `contabilidad.vencimiento_proximo` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test unitario AFIRMA la proyección determinista (una sola respuesta correcta)
+
+### `rappel-pronto-pago` · `REFLEJO` · eje `contabilidad-entrada`
+- **Clase / hoja F2:** `RappelProntoPago` (HOJA N7)
+- **Propósito:** Descuentos/rappels/anticipos que ajustan el coste REAL de la compra a lo realmente pagado; determinista.
+- **Depende de:** — (hoja raíz)
+- **Eventos que sube:** `rappel-pronto-pago.ajustar.request`
+- **Eventos que publica:** `rappel-pronto-pago.ajustar.response`, `rappel-pronto-pago.ajustar.failed`
+- **A · dependencias:** deps de módulo: (ninguna) · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `rappel-pronto-pago` · `subscribes`: 1 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class RappelProntoPago extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_ajustar(input) → { status, data }`
+- **E · handlers RPC:** `onAjustarRequest(e) → this._atender(e, 'ajustar', 'rappel-pronto-pago.ajustar.response', d => this._ajustar(d))`
+- **F · eventos:** **sube** → `rappel-pronto-pago.ajustar.request` · **publica** → `rappel-pronto-pago.ajustar.response`, `rappel-pronto-pago.ajustar.failed` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test unitario AFIRMA la proyección determinista (una sola respuesta correcta)
+
+### `antiguedad-de-saldos` · `REFLEJO` · eje `contabilidad-entrada`
+- **Clase / hoja F2:** `AntiguedadSaldos` (HOJA N8)
+- **Propósito:** Lo pendiente clasificado por vencimiento: quien y cuanto esta vencido; espejo de N6 del lado del cobro.
+- **Depende de:** `vencimiento-pago`
+- **Eventos que sube:** `antiguedad-de-saldos.clasificar.request`
+- **Eventos que publica:** `antiguedad-de-saldos.clasificar.response`, `antiguedad-de-saldos.clasificar.failed`
+- **A · dependencias:** deps de módulo: vencimiento-pago · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `antiguedad-de-saldos` · `subscribes`: 1 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class AntiguedadSaldos extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_clasificar(input) → { status, data }`
+- **E · handlers RPC:** `onClasificarRequest(e) → this._atender(e, 'clasificar', 'antiguedad-de-saldos.clasificar.response', d => this._clasificar(d))`
+- **F · eventos:** **sube** → `antiguedad-de-saldos.clasificar.request` · **publica** → `antiguedad-de-saldos.clasificar.response`, `antiguedad-de-saldos.clasificar.failed` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test unitario AFIRMA la proyección determinista (una sola respuesta correcta)
+
+### `emision-factura-venta` · `CUSTODIO` · eje `contabilidad-entrada`
+- **Clase / hoja F2:** `EmisionFacturaVenta` (HOJA O1)
+- **Propósito:** Cara emitida con serie/numeracion; numero duplicado = corrupcion -> un solo escritor; contabilidad SI emite SU factura.
+- **Depende de:** `maestro-terceros`, `factura-electronica`
+- **Eventos que sube:** `emision-factura-venta.emitir.request`, `project.activated`
+- **Eventos que publica:** `emision-factura-venta.emitir.response`, `emision-factura-venta.emitir.failed`, `contabilidad.factura_emitida`
+- **A · dependencias:** deps de módulo: maestro-terceros, factura-electronica · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `emision-factura-venta` · `subscribes`: 2 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op · + `project.activated` obligatorio (persiste estado)
+- **C · index.js:** `class EmisionFacturaVenta extends ModuloHibridoReflejo` · `PosPersistencia({ modulo, file: '<slug>.json', snapshot, hidratar })` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_emitir(input) → { status, data }`
+- **E · handlers RPC:** `onEmitirRequest(e) → this._atender(e, 'emitir', 'emision-factura-venta.emitir.response', d => this._emitir(d))`
+- **F · eventos:** **sube** → `emision-factura-venta.emitir.request`, `project.activated` · **publica** → `emision-factura-venta.emitir.response`, `emision-factura-venta.emitir.failed`, `contabilidad.factura_emitida` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test: el CUSTODIO rechaza el segundo escritor / MICRO-AGENTE no escribe (solo propone)
+
+### `factura-rectificativa` · `REFLEJO` · eje `contabilidad-entrada`
+- **Clase / hoja F2:** `FacturaRectificativa` (HOJA O2)
+- **Propósito:** Correccion comercial POSTERIOR a la emision (abono/devolucion/descuento) que NO borra nada; != ajuste interno B5.
+- **Depende de:** `emision-factura-venta`
+- **Eventos que sube:** `factura-rectificativa.calcular.request`
+- **Eventos que publica:** `factura-rectificativa.calcular.response`, `factura-rectificativa.calcular.failed`, `contabilidad.factura_rectificada`
+- **A · dependencias:** deps de módulo: emision-factura-venta · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `factura-rectificativa` · `subscribes`: 1 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class FacturaRectificativa extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_calcular(input) → { status, data }`
+- **E · handlers RPC:** `onCalcularRequest(e) → this._atender(e, 'calcular', 'factura-rectificativa.calcular.response', d => this._calcular(d))`
+- **F · eventos:** **sube** → `factura-rectificativa.calcular.request` · **publica** → `factura-rectificativa.calcular.response`, `factura-rectificativa.calcular.failed`, `contabilidad.factura_rectificada` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test unitario AFIRMA la proyección determinista (una sola respuesta correcta)
+
+### `panel-proceso-contable` · `REFLEJO` · eje `contabilidad-entrada`
+- **Clase / hoja F2:** `PanelProcesoContable` (HOJA P1)
+- **Propósito:** Que entra, que se procesa, que esta en cola, que falla; agregacion determinista; el "display" de la contabilidad.
+- **Depende de:** `encolado-excepcion`, `historial-proceso-contable`
+- **Eventos que sube:** `panel-proceso-contable.latido.request`, `contabilidad.excepcion_encolada`, `contabilidad.proceso_anotado`
+- **Eventos que publica:** `panel-proceso-contable.latido.response`, `panel-proceso-contable.latido.failed`
+- **A · dependencias:** deps de módulo: encolado-excepcion, historial-proceso-contable · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `panel-proceso-contable` · `subscribes`: 3 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class PanelProcesoContable extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_latido(input) → { status, data }`
+- **E · handlers RPC:** `onLatidoRequest(e) → this._atender(e, 'latido', 'panel-proceso-contable.latido.response', d => this._latido(d))`
+- **F · eventos:** **sube** → `panel-proceso-contable.latido.request`, `contabilidad.excepcion_encolada`, `contabilidad.proceso_anotado` · **publica** → `panel-proceso-contable.latido.response`, `panel-proceso-contable.latido.failed` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test unitario AFIRMA la proyección determinista (una sola respuesta correcta)
+
+### `historial-proceso-contable` · `CUSTODIO` · eje `contabilidad-entrada`
+- **Clase / hoja F2:** `HistorialProcesoContable` (HOJA P2)
+- **Propósito:** Registro append-only de lo procesado y lo fallado con su rastro; != traza-asiento B4; un solo escritor.
+- **Depende de:** — (hoja raíz)
+- **Eventos que sube:** `historial-proceso-contable.anotar.request`, `project.activated`
+- **Eventos que publica:** `historial-proceso-contable.anotar.response`, `historial-proceso-contable.anotar.failed`, `contabilidad.proceso_anotado`
+- **A · dependencias:** deps de módulo: (ninguna) · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `historial-proceso-contable` · `subscribes`: 2 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op · + `project.activated` obligatorio (persiste estado)
+- **C · index.js:** `class HistorialProcesoContable extends ModuloHibridoReflejo` · `PosPersistencia({ modulo, file: '<slug>.json', snapshot, hidratar })` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_anotar(input) → { status, data }`
+- **E · handlers RPC:** `onAnotarRequest(e) → this._atender(e, 'anotar', 'historial-proceso-contable.anotar.response', d => this._anotar(d))`
+- **F · eventos:** **sube** → `historial-proceso-contable.anotar.request`, `project.activated` · **publica** → `historial-proceso-contable.anotar.response`, `historial-proceso-contable.anotar.failed`, `contabilidad.proceso_anotado` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test: el CUSTODIO rechaza el segundo escritor / MICRO-AGENTE no escribe (solo propone)
+
+### `desatasco-entrada` · `MICRO-AGENTE` · eje `contabilidad-entrada`
+- **Clase / hoja F2:** `DesatascoEntrada` (HOJA P3)
+- **Propósito:** Resolver/reencolar/descartar una excepcion CON motivo; la ACCION que completa A8; si la silla es humana, captura su decision.
+- **Depende de:** `encolado-excepcion`
+- **Eventos que sube:** `desatasco-entrada.juzgar.request`
+- **Eventos que publica:** `desatasco-entrada.juzgar.response`, `desatasco-entrada.juzgar.failed`, `contabilidad.excepcion_desatascada`
+- **A · dependencias:** deps de módulo: encolado-excepcion · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `desatasco-entrada` · `subscribes`: 1 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op · `blueprint_driven: true` (cajones fuzzy + reflejo que sirve las ops)
+- **C · index.js:** `class DesatascoEntrada extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_juzgar(input) → { status, data }` · la proyección determinista (fallback) + cajón blueprint para el juicio fuzzy (delega al reflejo)
+- **E · handlers RPC:** `onJuzgarRequest(e) → this._atender(e, 'juzgar', 'desatasco-entrada.juzgar.response', d => this._juzgar(d))`
+- **F · eventos:** **sube** → `desatasco-entrada.juzgar.request` · **publica** → `desatasco-entrada.juzgar.response`, `desatasco-entrada.juzgar.failed`, `contabilidad.excepcion_desatascada` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test: el CUSTODIO rechaza el segundo escritor / MICRO-AGENTE no escribe (solo propone)
+
+### `tasa-cobertura-entrada` · `REFLEJO` · eje `contabilidad-entrada`
+- **Clase / hoja F2:** `TasaCoberturaEntrada` (HOJA P4)
+- **Propósito:** Proporcion de hechos que entran SIN intervencion vs caen a cola; LEE la metrica unica; prueba la promesa "sin una persona digitando".
+- **Depende de:** `completitud-cobertura`
+- **Eventos que sube:** `tasa-cobertura-entrada.calcular.request`, `contabilidad.cobertura_medida`
+- **Eventos que publica:** `tasa-cobertura-entrada.calcular.response`, `tasa-cobertura-entrada.calcular.failed`
+- **A · dependencias:** deps de módulo: completitud-cobertura · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `tasa-cobertura-entrada` · `subscribes`: 2 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class TasaCoberturaEntrada extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_calcular(input) → { status, data }`
+- **E · handlers RPC:** `onCalcularRequest(e) → this._atender(e, 'calcular', 'tasa-cobertura-entrada.calcular.response', d => this._calcular(d))`
+- **F · eventos:** **sube** → `tasa-cobertura-entrada.calcular.request`, `contabilidad.cobertura_medida` · **publica** → `tasa-cobertura-entrada.calcular.response`, `tasa-cobertura-entrada.calcular.failed` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test unitario AFIRMA la proyección determinista (una sola respuesta correcta)
+
+### `consulta-cuentas-bajo-demanda` · `PUENTE` · eje `contabilidad-analitica`
+- **Clase / hoja F2:** `ConsultaCuentasBajoDemanda` (HOJA Q1)
+- **Propósito:** Puerta pull: conecta la pregunta del dueno con el calculo por peticion; NO impone cadencia.
+- **Depende de:** — (hoja raíz)
+- **Eventos que sube:** `consulta-cuentas-bajo-demanda.preguntar.request`
+- **Eventos que publica:** `consulta-cuentas-bajo-demanda.preguntar.response`, `consulta-cuentas-bajo-demanda.preguntar.failed`, `contabilidad.respuesta_consulta`
+- **A · dependencias:** deps de módulo: (ninguna) · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `consulta-cuentas-bajo-demanda` · `subscribes`: 1 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class ConsultaCuentasBajoDemanda extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_preguntar(input) → { status, data }`
+- **E · handlers RPC:** `onPreguntarRequest(e) → this._atender(e, 'preguntar', 'consulta-cuentas-bajo-demanda.preguntar.response', d => this._preguntar(d))`
+- **F · eventos:** **sube** → `consulta-cuentas-bajo-demanda.preguntar.request` · **publica** → `consulta-cuentas-bajo-demanda.preguntar.response`, `consulta-cuentas-bajo-demanda.preguntar.failed`, `contabilidad.respuesta_consulta` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test: el CUSTODIO rechaza el segundo escritor / MICRO-AGENTE no escribe (solo propone)
+
+### `puente-lenguaje-dueno` · `MICRO-AGENTE` · eje `contabilidad-analitica`
+- **Clase / hoja F2:** `PuenteLenguajeDueno` (HOJA Q2)
+- **Propósito:** Traductor BIDIRECCIONAL: su pregunta -> consulta contable; calculo -> cifra en su idioma (caja, deuda, "puedo pagar X?").
+- **Depende de:** `consulta-cuentas-bajo-demanda`
+- **Eventos que sube:** `puente-lenguaje-dueno.a_consulta.request`, `puente-lenguaje-dueno.a_cifra.request`, `contabilidad.respuesta_consulta`
+- **Eventos que publica:** `puente-lenguaje-dueno.a_consulta.response`, `puente-lenguaje-dueno.a_consulta.failed`, `puente-lenguaje-dueno.a_cifra.response`, `puente-lenguaje-dueno.a_cifra.failed`, `contabilidad.consulta_traducida`
+- **A · dependencias:** deps de módulo: consulta-cuentas-bajo-demanda · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `puente-lenguaje-dueno` · `subscribes`: 3 tópicos (+ 2 `.request` propios) · `publishes`: par `.response`+`.failed` por op · `blueprint_driven: true` (cajones fuzzy + reflejo que sirve las ops)
+- **C · index.js:** `class PuenteLenguajeDueno extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_a_consulta(input) → { status, data }` · + 1 proyección(es) más (una por op): _a_cifra · la proyección determinista (fallback) + cajón blueprint para el juicio fuzzy (delega al reflejo)
+- **E · handlers RPC:** `onAConsultaRequest(e) → this._atender(e, 'a_consulta', 'puente-lenguaje-dueno.a_consulta.response', d => this._a_consulta(d))` · `onACifraRequest(e) → this._atender(e, 'a_cifra', 'puente-lenguaje-dueno.a_cifra.response', d => this._a_cifra(d))`
+- **F · eventos:** **sube** → `puente-lenguaje-dueno.a_consulta.request`, `puente-lenguaje-dueno.a_cifra.request`, `contabilidad.respuesta_consulta` · **publica** → `puente-lenguaje-dueno.a_consulta.response`, `puente-lenguaje-dueno.a_consulta.failed`, `puente-lenguaje-dueno.a_cifra.response`, `puente-lenguaje-dueno.a_cifra.failed`, `contabilidad.consulta_traducida` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test: el CUSTODIO rechaza el segundo escritor / MICRO-AGENTE no escribe (solo propone)
+
+### `sello-cobertura` · `REFLEJO` · eje `contabilidad-analitica`
+- **Clase / hoja F2:** `SelloCobertura` (HOJA Q3)
+- **Propósito:** Marca de completitud de lo consultado, FUERA de ciclo: si falta cobertura lo dice ANTES de decidir; LEE la metrica unica.
+- **Depende de:** `completitud-cobertura`
+- **Eventos que sube:** `sello-cobertura.sellar.request`, `contabilidad.respuesta_consulta`
+- **Eventos que publica:** `sello-cobertura.sellar.response`, `sello-cobertura.sellar.failed`
+- **A · dependencias:** deps de módulo: completitud-cobertura · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `sello-cobertura` · `subscribes`: 2 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class SelloCobertura extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_sellar(input) → { status, data }`
+- **E · handlers RPC:** `onSellarRequest(e) → this._atender(e, 'sellar', 'sello-cobertura.sellar.response', d => this._sellar(d))`
+- **F · eventos:** **sube** → `sello-cobertura.sellar.request`, `contabilidad.respuesta_consulta` · **publica** → `sello-cobertura.sellar.response`, `sello-cobertura.sellar.failed` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test unitario AFIRMA la proyección determinista (una sola respuesta correcta)
+
+### `marca-borrador-validado` · `REFLEJO` · eje `contabilidad-analitica`
+- **Clase / hoja F2:** `MarcaBorradorValidado` (HOJA Q4)
+- **Propósito:** Sello del punto en que esta lo que ve (en curso/revisado/firmado) para no decidir sobre un borrador vivo; deriva de traza y firma.
+- **Depende de:** `traza-asiento`, `flujo-firma`
+- **Eventos que sube:** `marca-borrador-validado.estado.request`, `contabilidad.traza_registrada`, `contabilidad.firma_registrada`
+- **Eventos que publica:** `marca-borrador-validado.estado.response`, `marca-borrador-validado.estado.failed`
+- **A · dependencias:** deps de módulo: traza-asiento, flujo-firma · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `marca-borrador-validado` · `subscribes`: 3 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class MarcaBorradorValidado extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_estado(input) → { status, data }`
+- **E · handlers RPC:** `onEstadoRequest(e) → this._atender(e, 'estado', 'marca-borrador-validado.estado.response', d => this._estado(d))`
+- **F · eventos:** **sube** → `marca-borrador-validado.estado.request`, `contabilidad.traza_registrada`, `contabilidad.firma_registrada` · **publica** → `marca-borrador-validado.estado.response`, `marca-borrador-validado.estado.failed` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test unitario AFIRMA la proyección determinista (una sola respuesta correcta)
+
+### `aviso-al-negocio` · `PUENTE` · eje `contabilidad-analitica`
+- **Clase / hoja F2:** `AvisoAlNegocio` (HOJA R1)
+- **Propósito:** El aviso ENTREGADO y CONFIRMADO al negocio cliente; cara de entrega que COMPLETA motor-avisos K2.
+- **Depende de:** `motor-avisos`
+- **Eventos que sube:** `aviso-al-negocio.entregar.request`, `contabilidad.aviso_producido`
+- **Eventos que publica:** `aviso-al-negocio.entregar.response`, `aviso-al-negocio.entregar.failed`, `contabilidad.aviso_entregado`
+- **A · dependencias:** deps de módulo: motor-avisos · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `aviso-al-negocio` · `subscribes`: 2 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op
+- **C · index.js:** `class AvisoAlNegocio extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_entregar(input) → { status, data }`
+- **E · handlers RPC:** `onEntregarRequest(e) → this._atender(e, 'entregar', 'aviso-al-negocio.entregar.response', d => this._entregar(d))`
+- **F · eventos:** **sube** → `aviso-al-negocio.entregar.request`, `contabilidad.aviso_producido` · **publica** → `aviso-al-negocio.entregar.response`, `aviso-al-negocio.entregar.failed`, `contabilidad.aviso_entregado` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test: el CUSTODIO rechaza el segundo escritor / MICRO-AGENTE no escribe (solo propone)
+
+### `informe-accionable` · `MICRO-AGENTE` · eje `contabilidad-analitica`
+- **Clase / hoja F2:** `InformeAccionable` (HOJA R2)
+- **Propósito:** Todo informe que recibe el cliente lleva QUE HACER con el; la recomendacion es juicio; refuerza K3.
+- **Depende de:** `informe-rico`
+- **Eventos que sube:** `informe-accionable.juzgar.request`
+- **Eventos que publica:** `informe-accionable.juzgar.response`, `informe-accionable.juzgar.failed`, `contabilidad.recomendacion`
+- **A · dependencias:** deps de módulo: informe-rico · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `informe-accionable` · `subscribes`: 1 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op · `blueprint_driven: true` (cajones fuzzy + reflejo que sirve las ops)
+- **C · index.js:** `class InformeAccionable extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_juzgar(input) → { status, data }` · la proyección determinista (fallback) + cajón blueprint para el juicio fuzzy (delega al reflejo)
+- **E · handlers RPC:** `onJuzgarRequest(e) → this._atender(e, 'juzgar', 'informe-accionable.juzgar.response', d => this._juzgar(d))`
+- **F · eventos:** **sube** → `informe-accionable.juzgar.request` · **publica** → `informe-accionable.juzgar.response`, `informe-accionable.juzgar.failed`, `contabilidad.recomendacion` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test: el CUSTODIO rechaza el segundo escritor / MICRO-AGENTE no escribe (solo propone)
+
+### `narrador-estados` · `MICRO-AGENTE` · eje `contabilidad-analitica`
+- **Clase / hoja F2:** `NarradorEstados` (HOJA R3)
+- **Propósito:** Traduce balance/resultado al LENGUAJE del negocio cliente ("esto es lo que te ha pasado y lo que viene").
+- **Depende de:** `balance-situacion`, `cuenta-resultados`
+- **Eventos que sube:** `narrador-estados.narrar.request`
+- **Eventos que publica:** `narrador-estados.narrar.response`, `narrador-estados.narrar.failed`, `contabilidad.narracion`
+- **A · dependencias:** deps de módulo: balance-situacion, cuenta-resultados · las deps se resuelven por EVENTO (request/response), nunca por import
+- **B · module.json:** `name`: `narrador-estados` · `subscribes`: 1 tópicos (+ 1 `.request` propios) · `publishes`: par `.response`+`.failed` por op · `blueprint_driven: true` (cajones fuzzy + reflejo que sirve las ops)
+- **C · index.js:** `class NarradorEstados extends ModuloHibridoReflejo` · `onUnload()` → flush; `onProjectActivated(e)` → restaurar(project_id)
+- **D · proyecciones:** `_narrar(input) → { status, data }` · la proyección determinista (fallback) + cajón blueprint para el juicio fuzzy (delega al reflejo)
+- **E · handlers RPC:** `onNarrarRequest(e) → this._atender(e, 'narrar', 'narrador-estados.narrar.response', d => this._narrar(d))`
+- **F · eventos:** **sube** → `narrador-estados.narrar.request` · **publica** → `narrador-estados.narrar.response`, `narrador-estados.narrar.failed`, `contabilidad.narracion` · todo flujo cierra su círculo con su par `*.failed`
+- **VERIFICACIÓN:** `node scripts/validate-hibridos.js` → **PASS** (sin colisión reflejo↔blueprint; handlers existen) · test: el CUSTODIO rechaza el segundo escritor / MICRO-AGENTE no escribe (solo propone)
+
+---
+
+## §4 · Contrato de eventos (request/response + fire-and-forget con par de fallo)
+
+> Convención: `<slug>.<op>.request` → `<slug>.<op>.response` (éxito) **y** `<slug>.<op>.failed` (fallo).
+> Tópicos en **ASCII**. Los fire-and-forget de dominio cierran también con su par de fallo declarado en el módulo emisor.
+
+
+### 4.1 · Pares request/response/failed (por hoja)
+
+| Hoja (slug) | Forma | Sube (`.request`) | Publica (`.response`/`.failed`) | Fire-and-forget |
 |---|---|---|---|---|
-| `contabilidad-entrada` | 20 | 20 | 0 | 32 |
-| `contabilidad-libro` | 22 | 22 | 0 | 32 |
-| `contabilidad-fiscal` | 13 | 13 | 0 | 22 |
-| `contabilidad-analitica` | 17 | 17 | 0 | 32 |
-| *(transversal)* | 3 | 0 | 3 | infraestructura (sirve a los 4) |
-| **TOTAL** | **80** | **72** | **8** | **118** |
+| `puerto-evento-vertical` | PUENTE | `puerto-evento-vertical.recibir.request` | `puerto-evento-vertical.recibir.response`, `puerto-evento-vertical.recibir.failed` | `contabilidad.hecho_crudo` |
+| `normalizador-hecho` | CONVERSOR | `normalizador-hecho.normalizar.request` | `normalizador-hecho.normalizar.response`, `normalizador-hecho.normalizar.failed` | `contabilidad.hecho_normalizado` |
+| `captura-documento` | REFLEJO | `captura-documento.admitir.request` | `captura-documento.admitir.response`, `captura-documento.admitir.failed` | `contabilidad.documento_admitido` |
+| `extraccion-dato` | MICRO-AGENTE | — | — | `factura.recibida`, `factura.procesada`, `factura.error`, `factura.exportada` |
+| `puerto-documento` | CONVERSOR | `puerto-documento.entrar.request` | `puerto-documento.entrar.response`, `puerto-documento.entrar.failed` | `contabilidad.documento_normalizado` |
+| `control-cuadre-documento` | REFLEJO | `control-cuadre-documento.cuadra.request` | `control-cuadre-documento.cuadra.response`, `control-cuadre-documento.cuadra.failed` | `contabilidad.documento_descuadrado` |
+| `puerto-documento-digital` | PUENTE | — | — | `factura.entrada` |
+| `contrapartida-asistida` | MICRO-AGENTE | `contrapartida-asistida.juzgar.request` | `contrapartida-asistida.juzgar.response`, `contrapartida-asistida.juzgar.failed` | `contabilidad.contrapartida_propuesta` |
+| `regla-contrapartida` | CUSTODIO | `regla-contrapartida.aplicar.request`, `regla-contrapartida.proponer.request` | `regla-contrapartida.aplicar.response`, `regla-contrapartida.aplicar.failed`, `regla-contrapartida.proponer.response`, `regla-contrapartida.proponer.failed` | `contabilidad.regla_contrapartida_propuesta` |
+| `deduplicacion-hecho` | REFLEJO | `deduplicacion-hecho.es_nuevo.request` | `deduplicacion-hecho.es_nuevo.response`, `deduplicacion-hecho.es_nuevo.failed` | — |
+| `encolado-excepcion` | CUSTODIO | `encolado-excepcion.encolar.request`, `encolado-excepcion.tomar.request` | `encolado-excepcion.encolar.response`, `encolado-excepcion.encolar.failed`, `encolado-excepcion.tomar.response`, `encolado-excepcion.tomar.failed` | `contabilidad.excepcion_encolada` |
+| `aviso-revision` | PUENTE | `aviso-revision.empujar.request` | `aviso-revision.empujar.response`, `aviso-revision.empujar.failed` | `contabilidad.aviso_revision` |
+| `lote-admision` | REFLEJO | `lote-admision.admitir.request` | `lote-admision.admitir.response`, `lote-admision.admitir.failed` | — |
+| `contrato-hecho-minimo` | CUSTODIO | `contrato-hecho-minimo.exigir.request`, `contrato-hecho-minimo.declarar.request` | `contrato-hecho-minimo.exigir.response`, `contrato-hecho-minimo.exigir.failed`, `contrato-hecho-minimo.declarar.response`, `contrato-hecho-minimo.declarar.failed` | `contabilidad.contrato_declarado` |
+| `completitud-cobertura` | REFLEJO | `completitud-cobertura.medir.request` | `completitud-cobertura.medir.response`, `completitud-cobertura.medir.failed` | `contabilidad.cobertura_medida` |
+| `hecho-rectificativo` | PUENTE | `hecho-rectificativo.emparejar.request` | `hecho-rectificativo.emparejar.response`, `hecho-rectificativo.emparejar.failed` | `contabilidad.hecho_rectificado` |
+| `anclaje-cierre-vertical` | CUSTODIO | `anclaje-cierre-vertical.anclar.request`, `anclaje-cierre-vertical.declarar.request` | `anclaje-cierre-vertical.anclar.response`, `anclaje-cierre-vertical.anclar.failed`, `anclaje-cierre-vertical.declarar.response`, `anclaje-cierre-vertical.declarar.failed` | `contabilidad.cierre_anclado` |
+| `declaracion-fuente-faltante` | PUENTE | `declaracion-fuente-faltante.declarar.request` | `declaracion-fuente-faltante.declarar.response`, `declaracion-fuente-faltante.declarar.failed` | `contabilidad.fuente_faltante` |
+| `catalogo-cuentas` | CUSTODIO | `catalogo-cuentas.anadir.request`, `catalogo-cuentas.buscar.request` | `catalogo-cuentas.anadir.response`, `catalogo-cuentas.anadir.failed`, `catalogo-cuentas.buscar.response`, `catalogo-cuentas.buscar.failed` | — |
+| `escritor-diario` | CUSTODIO | `escritor-diario.asentar.request` | `escritor-diario.asentar.response`, `escritor-diario.asentar.failed` | `contabilidad.asiento_registrado` |
+| `mayor-balanza` | REFLEJO | `mayor-balanza.saldos.request`, `mayor-balanza.balanza.request` | `mayor-balanza.saldos.response`, `mayor-balanza.saldos.failed`, `mayor-balanza.balanza.response`, `mayor-balanza.balanza.failed` | — |
+| `traza-asiento` | CUSTODIO | `traza-asiento.registrar.request` | `traza-asiento.registrar.response`, `traza-asiento.registrar.failed` | `contabilidad.traza_registrada` |
+| `asiento-ajuste` | PUENTE | `asiento-ajuste.entrar.request` | `asiento-ajuste.entrar.response`, `asiento-ajuste.entrar.failed` | `contabilidad.asiento_ajuste_recibido` |
+| `puerto-plan-contable` | CONVERSOR | `puerto-plan-contable.entrar.request`, `puerto-plan-contable.salir.request` | `puerto-plan-contable.entrar.response`, `puerto-plan-contable.entrar.failed`, `puerto-plan-contable.salir.response`, `puerto-plan-contable.salir.failed` | — |
+| `balance-situacion` | REFLEJO | `balance-situacion.calcular.request` | `balance-situacion.calcular.response`, `balance-situacion.calcular.failed` | — |
+| `cuenta-resultados` | REFLEJO | `cuenta-resultados.calcular.request` | `cuenta-resultados.calcular.response`, `cuenta-resultados.calcular.failed` | — |
+| `periodificacion` | REFLEJO | `periodificacion.imputar.request` | `periodificacion.imputar.response`, `periodificacion.imputar.failed` | — |
+| `cierre-ejercicio` | CUSTODIO | `cierre-ejercicio.cerrar.request`, `cierre-ejercicio.reabrir.request` | `cierre-ejercicio.cerrar.response`, `cierre-ejercicio.cerrar.failed`, `cierre-ejercicio.reabrir.response`, `cierre-ejercicio.reabrir.failed` | `contabilidad.ejercicio_cerrado` |
+| `apertura-ejercicio` | REFLEJO | `apertura-ejercicio.generar.request` | `apertura-ejercicio.generar.response`, `apertura-ejercicio.generar.failed` | — |
+| `aviso-cuadre` | PUENTE | `aviso-cuadre.avisar.request` | `aviso-cuadre.avisar.response`, `aviso-cuadre.avisar.failed` | `contabilidad.aviso_cuadre` |
+| `liquidacion-iva` | REFLEJO | `liquidacion-iva.calcular.request` | `liquidacion-iva.calcular.response`, `liquidacion-iva.calcular.failed` | — |
+| `modelo-303` | REFLEJO | `modelo-303.construir.request` | `modelo-303.construir.response`, `modelo-303.construir.failed` | — |
+| `modelo-390` | REFLEJO | `modelo-390.construir.request` | `modelo-390.construir.response`, `modelo-390.construir.failed` | — |
+| `retenciones` | REFLEJO | `retenciones.calcular.request` | `retenciones.calcular.response`, `retenciones.calcular.failed` | — |
+| `estimacion-is-irpf` | REFLEJO | `estimacion-is-irpf.estimar.request` | `estimacion-is-irpf.estimar.response`, `estimacion-is-irpf.estimar.failed` | — |
+| `calendario-fiscal` | CUSTODIO | `calendario-fiscal.proximos.request`, `calendario-fiscal.declarar.request` | `calendario-fiscal.proximos.response`, `calendario-fiscal.proximos.failed`, `calendario-fiscal.declarar.response`, `calendario-fiscal.declarar.failed` | `contabilidad.vencimiento_fiscal` |
+| `generador-modelo` | PUENTE | `generador-modelo.exportar.request` | `generador-modelo.exportar.response`, `generador-modelo.exportar.failed` | `contabilidad.modelo_exportado` |
+| `registro-verifactu` | CUSTODIO | `registro-verifactu.encadenar.request` | `registro-verifactu.encadenar.response`, `registro-verifactu.encadenar.failed` | `contabilidad.huella_encadenada` |
+| `factura-electronica` | CONVERSOR | `factura-electronica.entrar.request`, `factura-electronica.salir.request` | `factura-electronica.entrar.response`, `factura-electronica.entrar.failed`, `factura-electronica.salir.response`, `factura-electronica.salir.failed` | — |
+| `estado-presentacion-fiscal` | CUSTODIO | `estado-presentacion-fiscal.avanzar.request`, `estado-presentacion-fiscal.estado.request` | `estado-presentacion-fiscal.avanzar.response`, `estado-presentacion-fiscal.avanzar.failed`, `estado-presentacion-fiscal.estado.response`, `estado-presentacion-fiscal.estado.failed` | `contabilidad.obligacion_avanzada` |
+| `acuse-presentacion` | PUENTE | `acuse-presentacion.ligar.request` | `acuse-presentacion.ligar.response`, `acuse-presentacion.ligar.failed` | `contabilidad.acuse_ligado` |
+| `rectificacion-declaracion` | CUSTODIO | `rectificacion-declaracion.rectificar.request` | `rectificacion-declaracion.rectificar.response`, `rectificacion-declaracion.rectificar.failed` | `contabilidad.declaracion_rectificada` |
+| `perfil-administrativo` | CUSTODIO | `perfil-administrativo.obligaciones.request`, `perfil-administrativo.declarar.request` | `perfil-administrativo.obligaciones.response`, `perfil-administrativo.obligaciones.failed`, `perfil-administrativo.declarar.response`, `perfil-administrativo.declarar.failed` | `contabilidad.perfil_fiscal_declarado` |
+| `conciliacion-bancaria` | REFLEJO | `conciliacion-bancaria.cruzar.request` | `conciliacion-bancaria.cruzar.response`, `conciliacion-bancaria.cruzar.failed` | `contabilidad.conciliacion_cruzada` |
+| `puerto-extracto` | CONVERSOR | `puerto-extracto.entrar.request` | `puerto-extracto.entrar.response`, `puerto-extracto.entrar.failed` | `contabilidad.movimiento_bancario` |
+| `cuadre-cobro-pago` | REFLEJO | `cuadre-cobro-pago.cuadrar.request` | `cuadre-cobro-pago.cuadrar.response`, `cuadre-cobro-pago.cuadrar.failed` | — |
+| `saldo-tesoreria` | REFLEJO | `saldo-tesoreria.calcular.request` | `saldo-tesoreria.calcular.response`, `saldo-tesoreria.calcular.failed` | — |
+| `prevision-caja` | REFLEJO | `prevision-caja.proyectar.request` | `prevision-caja.proyectar.response`, `prevision-caja.proyectar.failed` | `contabilidad.vencimiento_proximo` |
+| `partida-no-identificada` | MICRO-AGENTE | `partida-no-identificada.juzgar.request` | `partida-no-identificada.juzgar.response`, `partida-no-identificada.juzgar.failed` | `contabilidad.partida_propuesta` |
+| `regla-movimiento-bancario` | CUSTODIO | `regla-movimiento-bancario.aplicar.request`, `regla-movimiento-bancario.proponer.request` | `regla-movimiento-bancario.aplicar.response`, `regla-movimiento-bancario.aplicar.failed`, `regla-movimiento-bancario.proponer.response`, `regla-movimiento-bancario.proponer.failed` | `contabilidad.regla_bancaria_propuesta` |
+| `partida-conciliatoria` | REFLEJO | `partida-conciliatoria.desfase.request` | `partida-conciliatoria.desfase.response`, `partida-conciliatoria.desfase.failed` | — |
+| `informe-conciliacion` | REFLEJO | `informe-conciliacion.componer.request` | `informe-conciliacion.componer.response`, `informe-conciliacion.componer.failed` | — |
+| `maestro-cuentas-bancarias` | CUSTODIO | `maestro-cuentas-bancarias.declarar.request`, `maestro-cuentas-bancarias.listar.request` | `maestro-cuentas-bancarias.declarar.response`, `maestro-cuentas-bancarias.declarar.failed`, `maestro-cuentas-bancarias.listar.response`, `maestro-cuentas-bancarias.listar.failed` | `contabilidad.cuenta_bancaria_declarada` |
+| `alta-activo` | CUSTODIO | `alta-activo.registrar.request` | `alta-activo.registrar.response`, `alta-activo.registrar.failed` | `contabilidad.activo_registrado` |
+| `plan-amortizacion` | CUSTODIO | `plan-amortizacion.cuota_del_periodo.request`, `plan-amortizacion.declarar.request` | `plan-amortizacion.cuota_del_periodo.response`, `plan-amortizacion.cuota_del_periodo.failed`, `plan-amortizacion.declarar.response`, `plan-amortizacion.declarar.failed` | `contabilidad.cuota_amortizacion` |
+| `baja-activo` | REFLEJO | `baja-activo.calcular.request` | `baja-activo.calcular.response`, `baja-activo.calcular.failed` | — |
+| `valor-neto-contable` | REFLEJO | `valor-neto-contable.calcular.request` | `valor-neto-contable.calcular.response`, `valor-neto-contable.calcular.failed` | — |
+| `recibo-nomina` | REFLEJO | `recibo-nomina.dar_forma.request` | `recibo-nomina.dar_forma.response`, `recibo-nomina.dar_forma.failed` | `contabilidad.nomina_formada` |
+| `obligacion-seguridad-social` | REFLEJO | `obligacion-seguridad-social.calcular.request` | `obligacion-seguridad-social.calcular.response`, `obligacion-seguridad-social.calcular.failed` | — |
+| `asiento-personal` | REFLEJO | `asiento-personal.construir.request` | `asiento-personal.construir.response`, `asiento-personal.construir.failed` | — |
+| `puerto-nomina` | PUENTE | `puerto-nomina.recibir.request` | `puerto-nomina.recibir.response`, `puerto-nomina.recibir.failed` | `contabilidad.nomina_recibida` |
+| `lineas-nomina` | REFLEJO | `lineas-nomina.desglosar.request` | `lineas-nomina.desglosar.response`, `lineas-nomina.desglosar.failed` | — |
+| `acceso-nomina` | CUSTODIO | `acceso-nomina.autorizar.request`, `acceso-nomina.declarar.request` | `acceso-nomina.autorizar.response`, `acceso-nomina.autorizar.failed`, `acceso-nomina.declarar.response`, `acceso-nomina.declarar.failed` | `contabilidad.acceso_nomina` |
+| `pagos-a-cuenta-empleado` | REFLEJO | `pagos-a-cuenta-empleado.impacto.request` | `pagos-a-cuenta-empleado.impacto.response`, `pagos-a-cuenta-empleado.impacto.failed` | — |
+| `conceptos-extra-nomina` | REFLEJO | `conceptos-extra-nomina.imputar.request` | `conceptos-extra-nomina.imputar.response`, `conceptos-extra-nomina.imputar.failed` | — |
+| `liquidacion-baja-empleado` | REFLEJO | `liquidacion-baja-empleado.liquidar.request` | `liquidacion-baja-empleado.liquidar.response`, `liquidacion-baja-empleado.liquidar.failed` | — |
+| `valoracion-existencia` | REFLEJO | `valoracion-existencia.valorar.request` | `valoracion-existencia.valorar.response`, `valoracion-existencia.valorar.failed` | — |
+| `frontera-ficha-producto` | CONVERSOR | `frontera-ficha-producto.entrar.request` | `frontera-ficha-producto.entrar.response`, `frontera-ficha-producto.entrar.failed` | `contabilidad.coste_interno` |
+| `ajuste-inventario` | REFLEJO | `ajuste-inventario.diferencia.request` | `ajuste-inventario.diferencia.response`, `ajuste-inventario.diferencia.failed` | — |
+| `variacion-stock-valorada` | REFLEJO | `variacion-stock-valorada.variacion.request` | `variacion-stock-valorada.variacion.response`, `variacion-stock-valorada.variacion.failed` | — |
+| `marca-sociedad` | REFLEJO | `marca-sociedad.marcar.request` | `marca-sociedad.marcar.response`, `marca-sociedad.marcar.failed` | — |
+| `eliminacion-intercompany` | REFLEJO | `eliminacion-intercompany.eliminar.request` | `eliminacion-intercompany.eliminar.response`, `eliminacion-intercompany.eliminar.failed` | — |
+| `consolidacion` | REFLEJO | `consolidacion.estados.request` | `consolidacion.estados.response`, `consolidacion.estados.failed` | — |
+| `aislamiento-negocio` | CUSTODIO | `aislamiento-negocio.parcela.request`, `aislamiento-negocio.escritor.request` | `aislamiento-negocio.parcela.response`, `aislamiento-negocio.parcela.failed`, `aislamiento-negocio.escritor.response`, `aislamiento-negocio.escritor.failed` | `contabilidad.parcela_reclamada` |
+| `etiquetado-analitico` | MICRO-AGENTE | `etiquetado-analitico.juzgar.request` | `etiquetado-analitico.juzgar.response`, `etiquetado-analitico.juzgar.failed` | `contabilidad.dimension_propuesta` |
+| `margen-analitico` | REFLEJO | `margen-analitico.calcular.request` | `margen-analitico.calcular.response`, `margen-analitico.calcular.failed` | — |
+| `presupuesto` | CUSTODIO | `presupuesto.fijar.request`, `presupuesto.objetivo.request` | `presupuesto.fijar.response`, `presupuesto.fijar.failed`, `presupuesto.objetivo.response`, `presupuesto.objetivo.failed` | `contabilidad.presupuesto_fijado` |
+| `desviacion` | REFLEJO | `desviacion.calcular.request` | `desviacion.calcular.response`, `desviacion.calcular.failed` | `contabilidad.desviacion` |
+| `coste-indirecto` | REFLEJO | `coste-indirecto.repartir.request` | `coste-indirecto.repartir.response`, `coste-indirecto.repartir.failed` | — |
+| `cuadro-mando-contable` | REFLEJO | `cuadro-mando-contable.componer.request` | `cuadro-mando-contable.componer.response`, `cuadro-mando-contable.componer.failed` | — |
+| `comparador-periodos` | REFLEJO | `comparador-periodos.comparar.request` | `comparador-periodos.comparar.response`, `comparador-periodos.comparar.failed` | — |
+| `tablero-margen-dimension` | REFLEJO | `tablero-margen-dimension.cruzar.request` | `tablero-margen-dimension.cruzar.response`, `tablero-margen-dimension.cruzar.failed` | — |
+| `onboarding-negocio` | CUSTODIO | `onboarding-negocio.recoger.request`, `onboarding-negocio.leer.request` | `onboarding-negocio.recoger.response`, `onboarding-negocio.recoger.failed`, `onboarding-negocio.leer.response`, `onboarding-negocio.leer.failed` | `contabilidad.negocio_onboarded` |
+| `motor-avisos` | PUENTE | `motor-avisos.producir.request` | `motor-avisos.producir.response`, `motor-avisos.producir.failed` | `contabilidad.aviso_producido` |
+| `informe-rico` | REFLEJO | `informe-rico.componer.request` | `informe-rico.componer.response`, `informe-rico.componer.failed` | — |
+| `activacion-vertical` | REFLEJO | `activacion-vertical.activar.request` | `activacion-vertical.activar.response`, `activacion-vertical.activar.failed` | `contabilidad.vertical_activada` |
+| `cola-declaraciones-criterio` | CUSTODIO | `cola-declaraciones-criterio.fijar.request`, `cola-declaraciones-criterio.ratificar.request` | `cola-declaraciones-criterio.fijar.response`, `cola-declaraciones-criterio.fijar.failed`, `cola-declaraciones-criterio.ratificar.response`, `cola-declaraciones-criterio.ratificar.failed` | `contabilidad.criterio_ratificado` |
+| `puerto-exportacion` | CONVERSOR | `puerto-exportacion.salir.request`, `puerto-exportacion.entrar.request` | `puerto-exportacion.salir.response`, `puerto-exportacion.salir.failed`, `puerto-exportacion.entrar.response`, `puerto-exportacion.entrar.failed` | — |
+| `vista-revisable` | REFLEJO | `vista-revisable.explicar.request` | `vista-revisable.explicar.response`, `vista-revisable.explicar.failed` | — |
+| `flujo-firma` | CUSTODIO | `flujo-firma.firmar.request`, `flujo-firma.estado.request` | `flujo-firma.firmar.response`, `flujo-firma.firmar.failed`, `flujo-firma.estado.response`, `flujo-firma.estado.failed` | `contabilidad.firma_registrada` |
+| `expediente-documental` | CUSTODIO | `expediente-documental.archivar.request`, `expediente-documental.recuperar.request` | `expediente-documental.archivar.response`, `expediente-documental.archivar.failed`, `expediente-documental.recuperar.response`, `expediente-documental.recuperar.failed` | `contabilidad.cifra_archivada` |
+| `control-calidad-muestreo` | REFLEJO | `control-calidad-muestreo.seleccionar.request` | `control-calidad-muestreo.seleccionar.response`, `control-calidad-muestreo.seleccionar.failed` | — |
+| `cambio-desde-ultima-revision` | REFLEJO | `cambio-desde-ultima-revision.delta.request` | `cambio-desde-ultima-revision.delta.response`, `cambio-desde-ultima-revision.delta.failed` | `contabilidad.delta_revision` |
+| `ratificacion-regla-aprendida` | PUENTE | `ratificacion-regla-aprendida.ratificar.request` | `ratificacion-regla-aprendida.ratificar.response`, `ratificacion-regla-aprendida.ratificar.failed` | `contabilidad.regla_ratificada` |
+| `frontera-planos` | REFLEJO | `frontera-planos.verificar.request` | `frontera-planos.verificar.response`, `frontera-planos.verificar.failed` | `contabilidad.salida_verificada` |
+| `single-writer` | CUSTODIO | `single-writer.reclamar.request`, `single-writer.es_escritor.request` | `single-writer.reclamar.response`, `single-writer.reclamar.failed`, `single-writer.es_escritor.response`, `single-writer.es_escritor.failed` | `contabilidad.escritor_reclamado` |
+| `clave-natural` | REFLEJO | `clave-natural.calcular.request`, `clave-natural.coincide.request` | `clave-natural.calcular.response`, `clave-natural.calcular.failed`, `clave-natural.coincide.response`, `clave-natural.coincide.failed` | — |
+| `maestro-terceros` | CUSTODIO | `maestro-terceros.ficha.request`, `maestro-terceros.upsert.request` | `maestro-terceros.ficha.response`, `maestro-terceros.ficha.failed`, `maestro-terceros.upsert.response`, `maestro-terceros.upsert.failed` | `contabilidad.tercero_actualizado` |
+| `padron-terceros` | CUSTODIO | `padron-terceros.unificar.request` | `padron-terceros.unificar.response`, `padron-terceros.unificar.failed` | `contabilidad.identidad_unificada` |
+| `cuenta-proveedor` | REFLEJO | `cuenta-proveedor.saldo.request`, `cuenta-proveedor.facturas_vivas.request` | `cuenta-proveedor.saldo.response`, `cuenta-proveedor.saldo.failed`, `cuenta-proveedor.facturas_vivas.response`, `cuenta-proveedor.facturas_vivas.failed` | — |
+| `estado-cuenta-proveedor` | REFLEJO | `estado-cuenta-proveedor.extracto.request` | `estado-cuenta-proveedor.extracto.response`, `estado-cuenta-proveedor.extracto.failed` | — |
+| `cruce-factura-recepcion` | REFLEJO | `cruce-factura-recepcion.cotejar.request` | `cruce-factura-recepcion.cotejar.response`, `cruce-factura-recepcion.cotejar.failed` | `contabilidad.cruce_descuadrado` |
+| `vencimiento-pago` | REFLEJO | `vencimiento-pago.calcular.request` | `vencimiento-pago.calcular.response`, `vencimiento-pago.calcular.failed` | `contabilidad.vencimiento_proximo` |
+| `rappel-pronto-pago` | REFLEJO | `rappel-pronto-pago.ajustar.request` | `rappel-pronto-pago.ajustar.response`, `rappel-pronto-pago.ajustar.failed` | — |
+| `antiguedad-de-saldos` | REFLEJO | `antiguedad-de-saldos.clasificar.request` | `antiguedad-de-saldos.clasificar.response`, `antiguedad-de-saldos.clasificar.failed` | — |
+| `emision-factura-venta` | CUSTODIO | `emision-factura-venta.emitir.request` | `emision-factura-venta.emitir.response`, `emision-factura-venta.emitir.failed` | `contabilidad.factura_emitida` |
+| `factura-rectificativa` | REFLEJO | `factura-rectificativa.calcular.request` | `factura-rectificativa.calcular.response`, `factura-rectificativa.calcular.failed` | `contabilidad.factura_rectificada` |
+| `panel-proceso-contable` | REFLEJO | `panel-proceso-contable.latido.request` | `panel-proceso-contable.latido.response`, `panel-proceso-contable.latido.failed` | — |
+| `historial-proceso-contable` | CUSTODIO | `historial-proceso-contable.anotar.request` | `historial-proceso-contable.anotar.response`, `historial-proceso-contable.anotar.failed` | `contabilidad.proceso_anotado` |
+| `desatasco-entrada` | MICRO-AGENTE | `desatasco-entrada.juzgar.request` | `desatasco-entrada.juzgar.response`, `desatasco-entrada.juzgar.failed` | `contabilidad.excepcion_desatascada` |
+| `tasa-cobertura-entrada` | REFLEJO | `tasa-cobertura-entrada.calcular.request` | `tasa-cobertura-entrada.calcular.response`, `tasa-cobertura-entrada.calcular.failed` | — |
+| `consulta-cuentas-bajo-demanda` | PUENTE | `consulta-cuentas-bajo-demanda.preguntar.request` | `consulta-cuentas-bajo-demanda.preguntar.response`, `consulta-cuentas-bajo-demanda.preguntar.failed` | `contabilidad.respuesta_consulta` |
+| `puente-lenguaje-dueno` | MICRO-AGENTE | `puente-lenguaje-dueno.a_consulta.request`, `puente-lenguaje-dueno.a_cifra.request` | `puente-lenguaje-dueno.a_consulta.response`, `puente-lenguaje-dueno.a_consulta.failed`, `puente-lenguaje-dueno.a_cifra.response`, `puente-lenguaje-dueno.a_cifra.failed` | `contabilidad.consulta_traducida` |
+| `sello-cobertura` | REFLEJO | `sello-cobertura.sellar.request` | `sello-cobertura.sellar.response`, `sello-cobertura.sellar.failed` | — |
+| `marca-borrador-validado` | REFLEJO | `marca-borrador-validado.estado.request` | `marca-borrador-validado.estado.response`, `marca-borrador-validado.estado.failed` | — |
+| `aviso-al-negocio` | PUENTE | `aviso-al-negocio.entregar.request` | `aviso-al-negocio.entregar.response`, `aviso-al-negocio.entregar.failed` | `contabilidad.aviso_entregado` |
+| `informe-accionable` | MICRO-AGENTE | `informe-accionable.juzgar.request` | `informe-accionable.juzgar.response`, `informe-accionable.juzgar.failed` | `contabilidad.recomendacion` |
+| `narrador-estados` | MICRO-AGENTE | `narrador-estados.narrar.request` | `narrador-estados.narrar.response`, `narrador-estados.narrar.failed` | `contabilidad.narracion` |
 
-**Oleadas (orden de CONSTRUCCION, no de comunicacion):**
+### 4.2 · Fire-and-forget del dominio (emisor → consumidor)
 
-| oleada | vertical | hojas | por que en este orden |
-|---|---|---|---|
-| 0 | *(transversal)* | 3 | infraestructura: `filesystem`, `project-manager`, `credential-manager` — existen y se REUTILIZAN. |
-| 1 | `contabilidad-entrada` | 22 | **EL CUELLO.** La entrada es el eslabon limitante: si la puerta no se llena sola, nada aguas abajo cuadra. |
-| 2 | `contabilidad-libro` | 24 | Donde el cuello ENTREGA: diario, mayor, cierre, tesoreria y la revision del asesor (medida maestra). |
-| 3 | `contabilidad-fiscal` | 13 | Capa fiscal completa (vendible como anadido); se calcula sobre el libro ya vivo. |
-| 4 | `contabilidad-analitica` | 18 | Inmovilizado, existencias valoradas, grupo, analitica, avisos y caras de actor: LEEN lo ya calculado. |
+| Evento | Emisor | Consumidor(es) |
+|---|---|---|
+| `contabilidad.hecho_crudo` | puerto-evento-vertical | normalizador-hecho |
+| `contabilidad.hecho_normalizado` | normalizador-hecho | deduplicacion-hecho, lote-admision |
+| `contabilidad.documento_admitido` | captura-documento | control-cuadre-documento |
+| `contabilidad.documento_descuadrado` | control-cuadre-documento | encolado-excepcion |
+| `contabilidad.excepcion_encolada` | encolado-excepcion | aviso-revision, panel-proceso-contable, desatasco-entrada |
+| `contabilidad.aviso_revision` | aviso-revision | motor-avisos |
+| `contabilidad.aviso_cuadre` | aviso-cuadre | motor-avisos |
+| `contabilidad.fuente_faltante` | declaracion-fuente-faltante | motor-avisos |
+| `contabilidad.cobertura_medida` | completitud-cobertura | aviso-cuadre, declaracion-fuente-faltante, tasa-cobertura-entrada, sello-cobertura |
+| `contabilidad.asiento_registrado` | escritor-diario | mayor-balanza, traza-asiento, cuenta-proveedor, marca-sociedad, liquidacion-iva, retenciones, estimacion-is-irpf, periodificacion, saldo-tesoreria, control-calidad-muestreo, cambio-desde-ultima-revision |
+| `contabilidad.traza_registrada` | traza-asiento | vista-revisable, cambio-desde-ultima-revision, marca-borrador-validado |
+| `contabilidad.firma_registrada` | flujo-firma | asiento-ajuste, cambio-desde-ultima-revision, marca-borrador-validado |
+| `contabilidad.asiento_ajuste_recibido` | asiento-ajuste | cambio-desde-ultima-revision |
+| `contabilidad.regla_contrapartida_propuesta` | regla-contrapartida | ratificacion-regla-aprendida |
+| `contabilidad.regla_bancaria_propuesta` | regla-movimiento-bancario | ratificacion-regla-aprendida |
+| `contabilidad.regla_ratificada` | ratificacion-regla-aprendida | regla-contrapartida, regla-movimiento-bancario |
+| `contabilidad.movimiento_bancario` | puerto-extracto | cuadre-cobro-pago |
+| `contabilidad.ejercicio_cerrado` | cierre-ejercicio | apertura-ejercicio |
+| `contabilidad.vencimiento_fiscal` | calendario-fiscal | motor-avisos |
+| `contabilidad.vencimiento_proximo` | vencimiento-pago, prevision-caja | motor-avisos |
+| `contabilidad.desviacion` | desviacion | motor-avisos |
+| `contabilidad.aviso_producido` | motor-avisos | aviso-al-negocio |
+| `contabilidad.aviso_entregado` | aviso-al-negocio | (confirmación al negocio) |
+| `contabilidad.nomina_recibida` | puerto-nomina | recibo-nomina |
+| `contabilidad.nomina_formada` | recibo-nomina | obligacion-seguridad-social, asiento-personal, lineas-nomina, pagos-a-cuenta-empleado, conceptos-extra-nomina, liquidacion-baja-empleado |
+| `contabilidad.coste_interno` | frontera-ficha-producto | valoracion-existencia |
+| `contabilidad.factura_emitida` | emision-factura-venta | registro-verifactu |
+| `contabilidad.proceso_anotado` | historial-proceso-contable | panel-proceso-contable |
+| `contabilidad.negocio_onboarded` | onboarding-negocio | activacion-vertical |
+| `contabilidad.presupuesto_fijado` | presupuesto | desviacion |
+| `contabilidad.excepcion_desatascada` | desatasco-entrada | encolado-excepcion |
+| `contabilidad.respuesta_consulta` | consulta-cuentas-bajo-demanda | puente-lenguaje-dueno, sello-cobertura |
+| `factura.entrada` | puerto-documento-digital (A5, REUTILIZAR) | extraccion-dato (A4.1, REUTILIZAR = módulo `facturas`) |
+| `factura.procesada` | extraccion-dato (A4.1, REUTILIZAR) | normalizador-hecho (vía A2) |
+---
 
-**Nota de dependencias cruzadas (honestidad):** el orden de la espina es **topologico** (dependencias primero) y las oleadas son de **despliegue por vertical**. Cuando una hoja de oleada tardia es dependencia de una temprana (p.ej. `motor-avisos` K2 o `mayor-balanza` B3), la espina la **adelanta**; mientras no exista, el consumidor construye con **contrato TOLERANTE** (su RPC falla -> publica su par `.failed`, nunca basura).
+## §5 · Reparto por los 4 ejes (partición decidida, no reabierta)
 
-**Piezas `[ABIERTO]` (23):** **no son hojas**. Son parametros declarables que viven en `cola-declaraciones-criterio` (K9) o en el `module.json` de su consumidor, y hasta que el dueno/asesor declare el valor la pieza **no actua**. Cero valores estimados.
+| Vertical | Hojas | CONSTRUIR | REUTILIZAR | Grupos (F2) |
+|---|---|---|---|---|
+| **`contabilidad-entrada`** | **32** | 30 | 2 (`extraccion-dato` · `puerto-documento-digital`) | A entrada-hechos (18) · N terceros (8) · O facturación emitida (2) · P control-proceso (4) |
+| **`contabilidad-libro`** | **32** | 32 | 0 | B libro-núcleo (6) · C estados-cierre (6) · E tesorería (10) · L revisión-asesor (7) · M anti-bucle (3) |
+| **`contabilidad-fiscal`** | **22** | 22 | 0 | D capa-fiscal (13) · G personal (9) |
+| **`contabilidad-analítica`** | **32** | 32 | 0 | F inmovilizado (4) · H existencias (4) · I grupo (4) · J analítica/mando (8) · K producto-servicio (5) · Q consulta-dueño (4) · R entrega-negocio (3) |
+| **TOTAL** | **118** | **116** | **2** | 32 + 32 + 22 + 32 = 118 |
+
+- **`contabilidad-entrada` contiene el eslabón limitante** (grupo A · la puerta) → **primera oleada**.
+- `fiscal` se vende como añadido; el núcleo se vende sin él. **Un solo proceso, cuatro oleadas.**
+- Órden topológico (`orden`): **118 slugs**, REUTILIZAR primero (`extraccion-dato`, `puerto-documento-digital`)
+  y luego por dependencias (`depende_de`), respetando que ninguna hoja precede a su dependencia.
 
 ---
 
-## 6 · ESPINA `enki-plan` (JSON embebido — la consume `construir-modulos` en F4)
+## §6 · La espina `enki-plan`
 
 ```json enki-plan
 {
-  "proyecto": "contabilidad",
-  "proyecto_id": "contabilidad",
-  "origen": "fase3/diseno-oop.md (135 clases = 118 de dominio por eje 32/32/22/32 + 17 de soporte) + fase2/esquemas/esquema.md (118 hojas con su FORMA, innegociable) + fase3b/reutilizables-verificados.md (8 REUTILIZAR verificados contra el module.json REAL) + fase3b/inventario-modulos-enki.json (248 modulos reales)",
-  "inventario": "248 modulos reales consultados en fase3b/inventario-modulos-enki.json (contrato leido de events.subscribes/events.publishes, NO por nombre; `banco` = banco de NICHOS, no banca)",
-  "regla": "modulos-isla event-driven: CLASE con estado -> CUSTODIO (single-writer); CLASE que solo calcula -> PROYECCION INTERNA del modulo que la usa (jamas en _shared/); CLASE que orquesta -> MICRO-AGENTE; CLASE que habla con el exterior -> PUENTE; frontera de formato -> CONVERSOR; dependencia entre clases -> EVENTO request/response, nunca require. _shared/ SOLO infraestructura.",
-  "verticales": [
-    "contabilidad-entrada",
-    "contabilidad-libro",
-    "contabilidad-fiscal",
-    "contabilidad-analitica"
-  ],
-  "orden": [
-    "filesystem",
-    "project-manager",
-    "credential-manager",
-    "facturas",
-    "facturacion/fuentes",
-    "metricas",
-    "facturacion/asesoria",
-    "inventario",
-    "contrato-hecho-minimo",
-    "anclaje-cierre-vertical",
-    "cola-revision",
-    "regla-contrapartida",
-    "single-writer",
-    "frontera-planos",
-    "lote-admision",
-    "puerto-evento-vertical",
-    "historial-proceso-contable",
-    "maestro-terceros",
-    "normalizador-hecho",
-    "puerto-extracto",
-    "regla-movimiento-bancario",
-    "maestro-cuentas-bancarias",
-    "expediente-documental",
-    "ratificacion-regla-aprendida",
-    "puerto-nomina",
-    "aislamiento-negocio",
-    "acceso-nomina",
-    "cola-declaraciones-criterio",
-    "clave-natural",
-    "deduplicacion-hecho",
-    "completitud-cobertura",
-    "hecho-rectificativo",
-    "panel-proceso-contable",
+ "proyecto": "contabilidad",
+ "proyecto_id": "contabilidad",
+ "origen": "boveda/contabilidad/proceso/fase3/diseno-oop.md",
+ "inventario": "boveda/contabilidad/proceso/fase3b/inventario-modulos-enki.json",
+ "regla": "UNA clase = UN modulo; 118 clases = 118 hojas; NO se agrupa ni se fusiona",
+ "verticales": [
+  "contabilidad-entrada",
+  "contabilidad-libro",
+  "contabilidad-fiscal",
+  "contabilidad-analitica"
+ ],
+ "orden": [
+  "puerto-documento-digital",
+  "puerto-documento",
+  "captura-documento",
+  "extraccion-dato",
+  "puerto-evento-vertical",
+  "normalizador-hecho",
+  "control-cuadre-documento",
+  "puerto-plan-contable",
+  "catalogo-cuentas",
+  "padron-terceros",
+  "maestro-terceros",
+  "contrapartida-asistida",
+  "regla-contrapartida",
+  "clave-natural",
+  "deduplicacion-hecho",
+  "encolado-excepcion",
+  "aviso-revision",
+  "lote-admision",
+  "cola-declaraciones-criterio",
+  "contrato-hecho-minimo",
+  "completitud-cobertura",
+  "hecho-rectificativo",
+  "anclaje-cierre-vertical",
+  "declaracion-fuente-faltante",
+  "single-writer",
+  "escritor-diario",
+  "mayor-balanza",
+  "traza-asiento",
+  "asiento-ajuste",
+  "balance-situacion",
+  "cuenta-resultados",
+  "periodificacion",
+  "cierre-ejercicio",
+  "apertura-ejercicio",
+  "aviso-cuadre",
+  "liquidacion-iva",
+  "modelo-303",
+  "modelo-390",
+  "retenciones",
+  "estimacion-is-irpf",
+  "perfil-administrativo",
+  "calendario-fiscal",
+  "estado-presentacion-fiscal",
+  "generador-modelo",
+  "factura-electronica",
+  "emision-factura-venta",
+  "registro-verifactu",
+  "acuse-presentacion",
+  "rectificacion-declaracion",
+  "puerto-extracto",
+  "regla-movimiento-bancario",
+  "conciliacion-bancaria",
+  "cuadre-cobro-pago",
+  "maestro-cuentas-bancarias",
+  "saldo-tesoreria",
+  "vencimiento-pago",
+  "prevision-caja",
+  "partida-no-identificada",
+  "partida-conciliatoria",
+  "informe-conciliacion",
+  "alta-activo",
+  "plan-amortizacion",
+  "valor-neto-contable",
+  "baja-activo",
+  "puerto-nomina",
+  "recibo-nomina",
+  "obligacion-seguridad-social",
+  "asiento-personal",
+  "lineas-nomina",
+  "acceso-nomina",
+  "pagos-a-cuenta-empleado",
+  "conceptos-extra-nomina",
+  "liquidacion-baja-empleado",
+  "frontera-ficha-producto",
+  "valoracion-existencia",
+  "ajuste-inventario",
+  "variacion-stock-valorada",
+  "marca-sociedad",
+  "eliminacion-intercompany",
+  "consolidacion",
+  "aislamiento-negocio",
+  "etiquetado-analitico",
+  "margen-analitico",
+  "presupuesto",
+  "desviacion",
+  "coste-indirecto",
+  "cuadro-mando-contable",
+  "comparador-periodos",
+  "tablero-margen-dimension",
+  "onboarding-negocio",
+  "motor-avisos",
+  "informe-rico",
+  "activacion-vertical",
+  "puerto-exportacion",
+  "vista-revisable",
+  "flujo-firma",
+  "expediente-documental",
+  "control-calidad-muestreo",
+  "cambio-desde-ultima-revision",
+  "ratificacion-regla-aprendida",
+  "frontera-planos",
+  "cuenta-proveedor",
+  "estado-cuenta-proveedor",
+  "cruce-factura-recepcion",
+  "rappel-pronto-pago",
+  "antiguedad-de-saldos",
+  "factura-rectificativa",
+  "historial-proceso-contable",
+  "panel-proceso-contable",
+  "desatasco-entrada",
+  "tasa-cobertura-entrada",
+  "consulta-cuentas-bajo-demanda",
+  "puente-lenguaje-dueno",
+  "sello-cobertura",
+  "marca-borrador-validado",
+  "aviso-al-negocio",
+  "informe-accionable",
+  "narrador-estados"
+ ],
+ "hojas": [
+  {
+   "slug": "puerto-evento-vertical",
+   "forma": "PUENTE",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-entrada",
+   "depende_de": [],
+   "eventos_sube": [
+    "puerto-evento-vertical.recibir.request",
+    "vertical.hecho.emitido"
+   ],
+   "eventos_publica": [
+    "puerto-evento-vertical.recibir.response",
+    "puerto-evento-vertical.recibir.failed",
+    "contabilidad.hecho_crudo"
+   ],
+   "proposito": "Abre el puerto por el que cada vertical manda sus hechos ya emitidos; contabilidad se adapta, no impone formato ni obliga a emitir."
+  },
+  {
+   "slug": "normalizador-hecho",
+   "forma": "CONVERSOR",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-entrada",
+   "depende_de": [
+    "puerto-evento-vertical"
+   ],
+   "eventos_sube": [
+    "normalizador-hecho.normalizar.request",
+    "contabilidad.hecho_crudo"
+   ],
+   "eventos_publica": [
+    "normalizador-hecho.normalizar.response",
+    "normalizador-hecho.normalizar.failed",
+    "contabilidad.hecho_normalizado"
+   ],
+   "proposito": "Unica puerta de formato: homogeneiza el hecho de cada vertical a forma asentable."
+  },
+  {
+   "slug": "captura-documento",
+   "forma": "REFLEJO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-entrada",
+   "depende_de": [
+    "puerto-documento",
+    "puerto-documento-digital"
+   ],
+   "eventos_sube": [
+    "captura-documento.admitir.request"
+   ],
+   "eventos_publica": [
+    "captura-documento.admitir.response",
+    "captura-documento.admitir.failed",
+    "contabilidad.documento_admitido"
+   ],
+   "proposito": "Admite el documento (digitalizado o recibido) y valida campos; mecanico, cero juicio."
+  },
+  {
+   "slug": "extraccion-dato",
+   "forma": "MICRO-AGENTE",
+   "accion": "REUTILIZAR",
+   "eje": "contabilidad-entrada",
+   "depende_de": [
+    "captura-documento"
+   ],
+   "eventos_sube": [
+    "factura.entrada"
+   ],
+   "eventos_publica": [
+    "factura.recibida",
+    "factura.procesada",
+    "factura.error",
+    "factura.exportada"
+   ],
+   "proposito": "Abre un documento NO estructurado y lo vuelve dato propuesto; interpretar lo ilegible es juicio; no asienta."
+  },
+  {
+   "slug": "puerto-documento",
+   "forma": "CONVERSOR",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-entrada",
+   "depende_de": [
+    "puerto-documento-digital"
+   ],
+   "eventos_sube": [
+    "puerto-documento.entrar.request"
+   ],
+   "eventos_publica": [
+    "puerto-documento.entrar.response",
+    "puerto-documento.entrar.failed",
+    "contabilidad.documento_normalizado"
+   ],
+   "proposito": "Frontera de las formas declarables del documento; el adaptador lo pone el sitio."
+  },
+  {
+   "slug": "control-cuadre-documento",
+   "forma": "REFLEJO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-entrada",
+   "depende_de": [
+    "puerto-documento"
+   ],
+   "eventos_sube": [
+    "control-cuadre-documento.cuadra.request"
+   ],
+   "eventos_publica": [
+    "control-cuadre-documento.cuadra.response",
+    "control-cuadre-documento.cuadra.failed",
+    "contabilidad.documento_descuadrado"
+   ],
+   "proposito": "Si importe+impuestos no cuadran -> cola, NO se asienta mal; calculo determinista."
+  },
+  {
+   "slug": "puerto-documento-digital",
+   "forma": "PUENTE",
+   "accion": "REUTILIZAR",
+   "eje": "contabilidad-entrada",
+   "depende_de": [],
+   "eventos_sube": [
+    "telegram.photo.received",
+    "telegram.document.received"
+   ],
+   "eventos_publica": [
+    "factura.entrada"
+   ],
+   "proposito": "Recepcion digital declarable de documentos; conecta con el canal emisor; si no existe, se crea."
+  },
+  {
+   "slug": "contrapartida-asistida",
+   "forma": "MICRO-AGENTE",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-entrada",
+   "depende_de": [
     "catalogo-cuentas",
-    "resolucion-contrapartida",
-    "desatasco-entrada",
+    "maestro-terceros"
+   ],
+   "eventos_sube": [
+    "contrapartida-asistida.juzgar.request"
+   ],
+   "eventos_publica": [
+    "contrapartida-asistida.juzgar.response",
+    "contrapartida-asistida.juzgar.failed",
+    "contabilidad.contrapartida_propuesta"
+   ],
+   "proposito": "Propone cuenta/tercero/periodo contra el plan declarado; PROPONE, no escribe; el corte duro lo fija A6.2."
+  },
+  {
+   "slug": "regla-contrapartida",
+   "forma": "CUSTODIO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-entrada",
+   "depende_de": [
+    "catalogo-cuentas"
+   ],
+   "eventos_sube": [
+    "regla-contrapartida.aplicar.request",
+    "regla-contrapartida.proponer.request",
+    "project.activated"
+   ],
+   "eventos_publica": [
+    "regla-contrapartida.aplicar.response",
+    "regla-contrapartida.aplicar.failed",
+    "regla-contrapartida.proponer.response",
+    "regla-contrapartida.proponer.failed",
+    "contabilidad.regla_contrapartida_propuesta"
+   ],
+   "proposito": "Parcela de reglas declarables/aprendidas (proveedor -> cuenta); un solo escritor; entra hidratada de L10."
+  },
+  {
+   "slug": "deduplicacion-hecho",
+   "forma": "REFLEJO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-entrada",
+   "depende_de": [
+    "clave-natural"
+   ],
+   "eventos_sube": [
+    "deduplicacion-hecho.es_nuevo.request",
+    "contabilidad.hecho_normalizado"
+   ],
+   "eventos_publica": [
+    "deduplicacion-hecho.es_nuevo.response",
+    "deduplicacion-hecho.es_nuevo.failed"
+   ],
+   "proposito": "Aplica la clave natural del hecho/documento -> no duplica; idempotencia determinista."
+  },
+  {
+   "slug": "encolado-excepcion",
+   "forma": "CUSTODIO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-entrada",
+   "depende_de": [
+    "control-cuadre-documento"
+   ],
+   "eventos_sube": [
+    "encolado-excepcion.encolar.request",
+    "encolado-excepcion.tomar.request",
+    "project.activated"
+   ],
+   "eventos_publica": [
+    "encolado-excepcion.encolar.response",
+    "encolado-excepcion.encolar.failed",
+    "encolado-excepcion.tomar.response",
+    "encolado-excepcion.tomar.failed",
+    "contabilidad.excepcion_encolada"
+   ],
+   "proposito": "Parcela de lo dudoso; el flujo CONTINUA, lo dudoso espera; un solo escritor."
+  },
+  {
+   "slug": "aviso-revision",
+   "forma": "PUENTE",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-entrada",
+   "depende_de": [
+    "encolado-excepcion"
+   ],
+   "eventos_sube": [
+    "aviso-revision.empujar.request",
+    "contabilidad.excepcion_encolada"
+   ],
+   "eventos_publica": [
+    "aviso-revision.empujar.response",
+    "aviso-revision.empujar.failed",
+    "contabilidad.aviso_revision"
+   ],
+   "proposito": "Empejon al canal de avisos: esto necesita revision; conecta por evento."
+  },
+  {
+   "slug": "lote-admision",
+   "forma": "REFLEJO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-entrada",
+   "depende_de": [
+    "normalizador-hecho"
+   ],
+   "eventos_sube": [
+    "lote-admision.admitir.request",
+    "contabilidad.hecho_normalizado"
+   ],
+   "eventos_publica": [
+    "lote-admision.admitir.response",
+    "lote-admision.admitir.failed"
+   ],
+   "proposito": "Desacople del cuello: N hechos en paralelo (la admision no se serializa)."
+  },
+  {
+   "slug": "contrato-hecho-minimo",
+   "forma": "CUSTODIO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-entrada",
+   "depende_de": [
+    "cola-declaraciones-criterio"
+   ],
+   "eventos_sube": [
+    "contrato-hecho-minimo.exigir.request",
+    "contrato-hecho-minimo.declarar.request",
+    "project.activated"
+   ],
+   "eventos_publica": [
+    "contrato-hecho-minimo.exigir.response",
+    "contrato-hecho-minimo.exigir.failed",
+    "contrato-hecho-minimo.declarar.response",
+    "contrato-hecho-minimo.declarar.failed",
+    "contabilidad.contrato_declarado"
+   ],
+   "proposito": "Parcela declarable del minimo exigible a cada fuente; la cara vista desde la fuente: un minimo, no un formato impuesto."
+  },
+  {
+   "slug": "completitud-cobertura",
+   "forma": "REFLEJO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-entrada",
+   "depende_de": [
+    "contrato-hecho-minimo"
+   ],
+   "eventos_sube": [
+    "completitud-cobertura.medir.request"
+   ],
+   "eventos_publica": [
+    "completitud-cobertura.medir.response",
+    "completitud-cobertura.medir.failed",
+    "contabilidad.cobertura_medida"
+   ],
+   "proposito": "Mide que hechos publico una vertical y cuales NO llegaron; produce LA metrica unica; las demas senales la LEEN."
+  },
+  {
+   "slug": "hecho-rectificativo",
+   "forma": "PUENTE",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-entrada",
+   "depende_de": [
+    "clave-natural"
+   ],
+   "eventos_sube": [
+    "hecho-rectificativo.emparejar.request"
+   ],
+   "eventos_publica": [
+    "hecho-rectificativo.emparejar.response",
+    "hecho-rectificativo.emparejar.failed",
+    "contabilidad.hecho_rectificado"
+   ],
+   "proposito": "Conecta el hecho posterior que corrige/anula uno anterior por clave natural; NO borra, anade."
+  },
+  {
+   "slug": "anclaje-cierre-vertical",
+   "forma": "CUSTODIO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-entrada",
+   "depende_de": [
+    "cola-declaraciones-criterio"
+   ],
+   "eventos_sube": [
+    "anclaje-cierre-vertical.anclar.request",
+    "anclaje-cierre-vertical.declarar.request",
+    "project.activated"
+   ],
+   "eventos_publica": [
+    "anclaje-cierre-vertical.anclar.response",
+    "anclaje-cierre-vertical.anclar.failed",
+    "anclaje-cierre-vertical.declarar.response",
+    "anclaje-cierre-vertical.declarar.failed",
+    "contabilidad.cierre_anclado"
+   ],
+   "proposito": "Parcela declarable POR VERTICAL de que es \"un cierre\" y como se identifica; pende de unidad_de_cierre (dato del dueno)."
+  },
+  {
+   "slug": "declaracion-fuente-faltante",
+   "forma": "PUENTE",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-entrada",
+   "depende_de": [
+    "completitud-cobertura"
+   ],
+   "eventos_sube": [
+    "declaracion-fuente-faltante.declarar.request",
+    "contabilidad.cobertura_medida"
+   ],
+   "eventos_publica": [
+    "declaracion-fuente-faltante.declarar.response",
+    "declaracion-fuente-faltante.declarar.failed",
+    "contabilidad.fuente_faltante"
+   ],
+   "proposito": "Detecta que una vertical NO publica un hecho necesario y lo DECLARA (abierto + aviso); no obliga a producirlo."
+  },
+  {
+   "slug": "catalogo-cuentas",
+   "forma": "CUSTODIO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-libro",
+   "depende_de": [
+    "puerto-plan-contable"
+   ],
+   "eventos_sube": [
+    "catalogo-cuentas.anadir.request",
+    "catalogo-cuentas.buscar.request",
+    "project.activated"
+   ],
+   "eventos_publica": [
+    "catalogo-cuentas.anadir.response",
+    "catalogo-cuentas.anadir.failed",
+    "catalogo-cuentas.buscar.response",
+    "catalogo-cuentas.buscar.failed"
+   ],
+   "proposito": "Plan contable declarable/importable del asesor; un solo escritor."
+  },
+  {
+   "slug": "escritor-diario",
+   "forma": "CUSTODIO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-libro",
+   "depende_de": [
+    "clave-natural",
+    "single-writer"
+   ],
+   "eventos_sube": [
+    "escritor-diario.asentar.request",
+    "project.activated"
+   ],
+   "eventos_publica": [
+    "escritor-diario.asentar.response",
+    "escritor-diario.asentar.failed",
+    "contabilidad.asiento_registrado"
+   ],
+   "proposito": "ES el custodio del libro; single-writer por parcela; rechaza si suma debe != suma haber."
+  },
+  {
+   "slug": "mayor-balanza",
+   "forma": "REFLEJO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-libro",
+   "depende_de": [
+    "escritor-diario"
+   ],
+   "eventos_sube": [
+    "mayor-balanza.saldos.request",
+    "mayor-balanza.balanza.request",
+    "contabilidad.asiento_registrado"
+   ],
+   "eventos_publica": [
+    "mayor-balanza.saldos.response",
+    "mayor-balanza.saldos.failed",
+    "mayor-balanza.balanza.response",
+    "mayor-balanza.balanza.failed"
+   ],
+   "proposito": "Saldos por cuenta derivados del diario; calculo determinista, un test lo afirma."
+  },
+  {
+   "slug": "traza-asiento",
+   "forma": "CUSTODIO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-libro",
+   "depende_de": [
+    "escritor-diario"
+   ],
+   "eventos_sube": [
+    "traza-asiento.registrar.request",
+    "project.activated",
+    "contabilidad.asiento_registrado"
+   ],
+   "eventos_publica": [
+    "traza-asiento.registrar.response",
+    "traza-asiento.registrar.failed",
+    "contabilidad.traza_registrada"
+   ],
+   "proposito": "Registro inmutable (quien/cuando creo cada asiento), append-only; un solo escritor."
+  },
+  {
+   "slug": "asiento-ajuste",
+   "forma": "PUENTE",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-libro",
+   "depende_de": [
+    "escritor-diario"
+   ],
+   "eventos_sube": [
+    "asiento-ajuste.entrar.request",
+    "contabilidad.firma_registrada"
+   ],
+   "eventos_publica": [
+    "asiento-ajuste.entrar.response",
+    "asiento-ajuste.entrar.failed",
+    "contabilidad.asiento_ajuste_recibido"
+   ],
+   "proposito": "Camino por el que la correccion del asesor ENTRA al libro sin borrar; la traza queda intacta; el almacen es B2/B4."
+  },
+  {
+   "slug": "puerto-plan-contable",
+   "forma": "CONVERSOR",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-libro",
+   "depende_de": [],
+   "eventos_sube": [
+    "puerto-plan-contable.entrar.request",
+    "puerto-plan-contable.salir.request"
+   ],
+   "eventos_publica": [
+    "puerto-plan-contable.entrar.response",
+    "puerto-plan-contable.entrar.failed",
+    "puerto-plan-contable.salir.response",
+    "puerto-plan-contable.salir.failed"
+   ],
+   "proposito": "Frontera de codificacion del plan contable (import/export); cruce de formatos."
+  },
+  {
+   "slug": "balance-situacion",
+   "forma": "REFLEJO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-libro",
+   "depende_de": [
+    "mayor-balanza"
+   ],
+   "eventos_sube": [
+    "balance-situacion.calcular.request",
+    "contabilidad.asiento_registrado"
+   ],
+   "eventos_publica": [
+    "balance-situacion.calcular.response",
+    "balance-situacion.calcular.failed"
+   ],
+   "proposito": "Activo/pasivo/patrimonio derivado del mayor; invariante ACTIVO = PASIVO + PATRIMONIO; descuadre = ERROR."
+  },
+  {
+   "slug": "cuenta-resultados",
+   "forma": "REFLEJO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-libro",
+   "depende_de": [
+    "mayor-balanza"
+   ],
+   "eventos_sube": [
+    "cuenta-resultados.calcular.request",
+    "contabilidad.asiento_registrado"
+   ],
+   "eventos_publica": [
+    "cuenta-resultados.calcular.response",
+    "cuenta-resultados.calcular.failed"
+   ],
+   "proposito": "Ingresos/gastos/resultado derivado del mayor; determinista."
+  },
+  {
+   "slug": "periodificacion",
+   "forma": "REFLEJO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-libro",
+   "depende_de": [
+    "escritor-diario"
+   ],
+   "eventos_sube": [
+    "periodificacion.imputar.request",
+    "contabilidad.asiento_registrado"
+   ],
+   "eventos_publica": [
+    "periodificacion.imputar.response",
+    "periodificacion.imputar.failed"
+   ],
+   "proposito": "Imputa cada hecho a su periodo con el criterio declarado; conserva fecha operacion y fecha valor, NO elige."
+  },
+  {
+   "slug": "cierre-ejercicio",
+   "forma": "CUSTODIO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-libro",
+   "depende_de": [
+    "balance-situacion",
+    "cuenta-resultados",
+    "asiento-ajuste"
+   ],
+   "eventos_sube": [
+    "cierre-ejercicio.cerrar.request",
+    "cierre-ejercicio.reabrir.request",
+    "project.activated"
+   ],
+   "eventos_publica": [
+    "cierre-ejercicio.cerrar.response",
+    "cierre-ejercicio.cerrar.failed",
+    "cierre-ejercicio.reabrir.response",
+    "cierre-ejercicio.reabrir.failed",
+    "contabilidad.ejercicio_cerrado"
+   ],
+   "proposito": "Cierra el periodo con ajustes; IRREVERSIBLE salvo ajuste (reabrir solo con asiento-ajuste); un solo escritor."
+  },
+  {
+   "slug": "apertura-ejercicio",
+   "forma": "REFLEJO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-libro",
+   "depende_de": [
+    "cierre-ejercicio"
+   ],
+   "eventos_sube": [
+    "apertura-ejercicio.generar.request",
+    "contabilidad.ejercicio_cerrado"
+   ],
+   "eventos_publica": [
+    "apertura-ejercicio.generar.response",
+    "apertura-ejercicio.generar.failed"
+   ],
+   "proposito": "Asientos de apertura DERIVADOS del cierre anterior; determinista."
+  },
+  {
+   "slug": "aviso-cuadre",
+   "forma": "PUENTE",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-libro",
+   "depende_de": [
+    "completitud-cobertura"
+   ],
+   "eventos_sube": [
+    "aviso-cuadre.avisar.request",
+    "contabilidad.cobertura_medida"
+   ],
+   "eventos_publica": [
+    "aviso-cuadre.avisar.response",
+    "aviso-cuadre.avisar.failed",
+    "contabilidad.aviso_cuadre"
+   ],
+   "proposito": "NO finge el cuadre: si falta cobertura, avisa; LEE la metrica unica, no la recalcula."
+  },
+  {
+   "slug": "liquidacion-iva",
+   "forma": "REFLEJO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-fiscal",
+   "depende_de": [
+    "mayor-balanza"
+   ],
+   "eventos_sube": [
+    "liquidacion-iva.calcular.request",
+    "contabilidad.asiento_registrado"
+   ],
+   "eventos_publica": [
+    "liquidacion-iva.calcular.response",
+    "liquidacion-iva.calcular.failed"
+   ],
+   "proposito": "IVA devengado/soportado DERIVADO del libro; los tipos son dato, no constante."
+  },
+  {
+   "slug": "modelo-303",
+   "forma": "REFLEJO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-fiscal",
+   "depende_de": [
+    "liquidacion-iva"
+   ],
+   "eventos_sube": [
+    "modelo-303.construir.request"
+   ],
+   "eventos_publica": [
+    "modelo-303.construir.response",
+    "modelo-303.construir.failed"
+   ],
+   "proposito": "Construye el modelo 303 desde la liquidacion; determinista."
+  },
+  {
+   "slug": "modelo-390",
+   "forma": "REFLEJO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-fiscal",
+   "depende_de": [
+    "liquidacion-iva"
+   ],
+   "eventos_sube": [
+    "modelo-390.construir.request"
+   ],
+   "eventos_publica": [
+    "modelo-390.construir.response",
+    "modelo-390.construir.failed"
+   ],
+   "proposito": "Idem anual (390) construido desde las liquidaciones del ejercicio; determinista."
+  },
+  {
+   "slug": "retenciones",
+   "forma": "REFLEJO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-fiscal",
+   "depende_de": [
+    "mayor-balanza"
+   ],
+   "eventos_sube": [
+    "retenciones.calcular.request",
+    "contabilidad.asiento_registrado"
+   ],
+   "eventos_publica": [
+    "retenciones.calcular.response",
+    "retenciones.calcular.failed"
+   ],
+   "proposito": "Retenciones practicadas/soportadas calculadas desde los asientos; determinista."
+  },
+  {
+   "slug": "estimacion-is-irpf",
+   "forma": "REFLEJO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-fiscal",
+   "depende_de": [
+    "cuenta-resultados"
+   ],
+   "eventos_sube": [
+    "estimacion-is-irpf.estimar.request",
+    "contabilidad.asiento_registrado"
+   ],
+   "eventos_publica": [
+    "estimacion-is-irpf.estimar.response",
+    "estimacion-is-irpf.estimar.failed"
+   ],
+   "proposito": "Estimacion del resultado fiscal con base DECLARADA; nada se estima sin base."
+  },
+  {
+   "slug": "calendario-fiscal",
+   "forma": "CUSTODIO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-fiscal",
+   "depende_de": [
+    "perfil-administrativo"
+   ],
+   "eventos_sube": [
+    "calendario-fiscal.proximos.request",
+    "calendario-fiscal.declarar.request",
+    "project.activated"
+   ],
+   "eventos_publica": [
+    "calendario-fiscal.proximos.response",
+    "calendario-fiscal.proximos.failed",
+    "calendario-fiscal.declarar.response",
+    "calendario-fiscal.declarar.failed",
+    "contabilidad.vencimiento_fiscal"
+   ],
+   "proposito": "Parcela de plazos declarables -> dispara aviso proactivo; la ley entra como dato; un solo escritor."
+  },
+  {
+   "slug": "generador-modelo",
+   "forma": "PUENTE",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-fiscal",
+   "depende_de": [
+    "modelo-303",
+    "modelo-390",
+    "estado-presentacion-fiscal"
+   ],
+   "eventos_sube": [
+    "generador-modelo.exportar.request"
+   ],
+   "eventos_publica": [
+    "generador-modelo.exportar.response",
+    "generador-modelo.exportar.failed",
+    "contabilidad.modelo_exportado"
+   ],
+   "proposito": "Salida al programa del asesor; conecta por puerto; formato ABIERTO (no declarado aun)."
+  },
+  {
+   "slug": "registro-verifactu",
+   "forma": "CUSTODIO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-fiscal",
+   "depende_de": [
+    "emision-factura-venta"
+   ],
+   "eventos_sube": [
+    "registro-verifactu.encadenar.request",
+    "project.activated",
+    "contabilidad.factura_emitida"
+   ],
+   "eventos_publica": [
+    "registro-verifactu.encadenar.response",
+    "registro-verifactu.encadenar.failed",
+    "contabilidad.huella_encadenada"
+   ],
+   "proposito": "Huella/cadena INALTERABLE de la facturacion; registro encadenado; un solo escritor."
+  },
+  {
+   "slug": "factura-electronica",
+   "forma": "CONVERSOR",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-fiscal",
+   "depende_de": [],
+   "eventos_sube": [
+    "factura-electronica.entrar.request",
+    "factura-electronica.salir.request"
+   ],
+   "eventos_publica": [
+    "factura-electronica.entrar.response",
+    "factura-electronica.entrar.failed",
+    "factura-electronica.salir.response",
+    "factura-electronica.salir.failed"
+   ],
+   "proposito": "Frontera de formato estructurado de la factura."
+  },
+  {
+   "slug": "estado-presentacion-fiscal",
+   "forma": "CUSTODIO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-fiscal",
+   "depende_de": [
+    "calendario-fiscal"
+   ],
+   "eventos_sube": [
+    "estado-presentacion-fiscal.avanzar.request",
+    "estado-presentacion-fiscal.estado.request",
+    "project.activated"
+   ],
+   "eventos_publica": [
+    "estado-presentacion-fiscal.avanzar.response",
+    "estado-presentacion-fiscal.avanzar.failed",
+    "estado-presentacion-fiscal.estado.response",
+    "estado-presentacion-fiscal.estado.failed",
+    "contabilidad.obligacion_avanzada"
+   ],
+   "proposito": "Ciclo de vida de cada obligacion (pendiente->generada->presentada->justificada->atrasada); un solo escritor."
+  },
+  {
+   "slug": "acuse-presentacion",
+   "forma": "PUENTE",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-fiscal",
+   "depende_de": [
+    "estado-presentacion-fiscal"
+   ],
+   "eventos_sube": [
+    "acuse-presentacion.ligar.request"
+   ],
+   "eventos_publica": [
+    "acuse-presentacion.ligar.response",
+    "acuse-presentacion.ligar.failed",
+    "contabilidad.acuse_ligado"
+   ],
+   "proposito": "Recoge y liga el justificante/acuse que devuelve la administracion a su modelo y a su asiento; cierra el bucle hacia fuera."
+  },
+  {
+   "slug": "rectificacion-declaracion",
+   "forma": "CUSTODIO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-fiscal",
+   "depende_de": [
+    "estado-presentacion-fiscal"
+   ],
+   "eventos_sube": [
+    "rectificacion-declaracion.rectificar.request",
+    "project.activated"
+   ],
+   "eventos_publica": [
+    "rectificacion-declaracion.rectificar.response",
+    "rectificacion-declaracion.rectificar.failed",
+    "contabilidad.declaracion_rectificada"
+   ],
+   "proposito": "Camino de correccion POSTERIOR a la presentacion (complementaria/sustitutiva); != asiento-ajuste B5; un solo escritor."
+  },
+  {
+   "slug": "perfil-administrativo",
+   "forma": "CUSTODIO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-fiscal",
+   "depende_de": [
+    "cola-declaraciones-criterio"
+   ],
+   "eventos_sube": [
+    "perfil-administrativo.obligaciones.request",
+    "perfil-administrativo.declarar.request",
+    "project.activated"
+   ],
+   "eventos_publica": [
+    "perfil-administrativo.obligaciones.response",
+    "perfil-administrativo.obligaciones.failed",
+    "perfil-administrativo.declarar.response",
+    "perfil-administrativo.declarar.failed",
+    "contabilidad.perfil_fiscal_declarado"
+   ],
+   "proposito": "Parcela declarable de que administraciones y obligaciones aplican (territorio y regimen); un solo escritor."
+  },
+  {
+   "slug": "conciliacion-bancaria",
+   "forma": "REFLEJO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-libro",
+   "depende_de": [
     "escritor-diario",
-    "emision-factura-venta",
-    "mayor-balanza",
-    "cuenta-terceros",
-    "compra-proveedor",
-    "traza-asiento",
-    "asiento-ajuste",
-    "periodificacion",
+    "puerto-extracto",
+    "regla-movimiento-bancario"
+   ],
+   "eventos_sube": [
+    "conciliacion-bancaria.cruzar.request"
+   ],
+   "eventos_publica": [
+    "conciliacion-bancaria.cruzar.response",
+    "conciliacion-bancaria.cruzar.failed",
+    "contabilidad.conciliacion_cruzada"
+   ],
+   "proposito": "Cruce extracto <-> libro por clave natural y reglas; determinista; el juicio vive en E7/E8."
+  },
+  {
+   "slug": "puerto-extracto",
+   "forma": "CONVERSOR",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-libro",
+   "depende_de": [],
+   "eventos_sube": [
+    "puerto-extracto.entrar.request"
+   ],
+   "eventos_publica": [
+    "puerto-extracto.entrar.response",
+    "puerto-extracto.entrar.failed",
+    "contabilidad.movimiento_bancario"
+   ],
+   "proposito": "Frontera de canal/formato del extracto; un adaptador por banco; si falta, se crea."
+  },
+  {
+   "slug": "cuadre-cobro-pago",
+   "forma": "REFLEJO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-libro",
+   "depende_de": [
+    "escritor-diario",
+    "puerto-extracto"
+   ],
+   "eventos_sube": [
+    "cuadre-cobro-pago.cuadrar.request",
+    "contabilidad.movimiento_bancario"
+   ],
+   "eventos_publica": [
+    "cuadre-cobro-pago.cuadrar.response",
+    "cuadre-cobro-pago.cuadrar.failed"
+   ],
+   "proposito": "Clave natural compartida: un movimiento bancario = un cobro/pago; determinista."
+  },
+  {
+   "slug": "saldo-tesoreria",
+   "forma": "REFLEJO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-libro",
+   "depende_de": [
+    "maestro-cuentas-bancarias",
+    "mayor-balanza"
+   ],
+   "eventos_sube": [
+    "saldo-tesoreria.calcular.request",
+    "contabilidad.asiento_registrado"
+   ],
+   "eventos_publica": [
+    "saldo-tesoreria.calcular.response",
+    "saldo-tesoreria.calcular.failed"
+   ],
+   "proposito": "Posicion real de dinero por cuenta; derivacion determinista."
+  },
+  {
+   "slug": "prevision-caja",
+   "forma": "REFLEJO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-libro",
+   "depende_de": [
+    "vencimiento-pago",
+    "saldo-tesoreria"
+   ],
+   "eventos_sube": [
+    "prevision-caja.proyectar.request"
+   ],
+   "eventos_publica": [
+    "prevision-caja.proyectar.response",
+    "prevision-caja.proyectar.failed",
+    "contabilidad.vencimiento_proximo"
+   ],
+   "proposito": "Proyecta entradas/salidas desde los compromisos con la politica declarada; determinista."
+  },
+  {
+   "slug": "partida-no-identificada",
+   "forma": "MICRO-AGENTE",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-libro",
+   "depende_de": [
+    "regla-movimiento-bancario"
+   ],
+   "eventos_sube": [
+    "partida-no-identificada.juzgar.request"
+   ],
+   "eventos_publica": [
+    "partida-no-identificada.juzgar.response",
+    "partida-no-identificada.juzgar.failed",
+    "contabilidad.partida_propuesta"
+   ],
+   "proposito": "Reconoce y clasifica el movimiento sin contrapartida (comision/interes/devolucion); PROPONE, no escribe."
+  },
+  {
+   "slug": "regla-movimiento-bancario",
+   "forma": "CUSTODIO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-libro",
+   "depende_de": [
+    "cola-declaraciones-criterio"
+   ],
+   "eventos_sube": [
+    "regla-movimiento-bancario.aplicar.request",
+    "regla-movimiento-bancario.proponer.request",
+    "project.activated"
+   ],
+   "eventos_publica": [
+    "regla-movimiento-bancario.aplicar.response",
+    "regla-movimiento-bancario.aplicar.failed",
+    "regla-movimiento-bancario.proponer.response",
+    "regla-movimiento-bancario.proponer.failed",
+    "contabilidad.regla_bancaria_propuesta"
+   ],
+   "proposito": "Parcela de reglas declarables/aprendidas de movimientos bancarios; ratificacion unica por L10."
+  },
+  {
+   "slug": "partida-conciliatoria",
+   "forma": "REFLEJO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-libro",
+   "depende_de": [
+    "conciliacion-bancaria"
+   ],
+   "eventos_sube": [
+    "partida-conciliatoria.desfase.request"
+   ],
+   "eventos_publica": [
+    "partida-conciliatoria.desfase.response",
+    "partida-conciliatoria.desfase.failed"
+   ],
+   "proposito": "Partidas en transito que explican el desfase (cheque no cobrado, cobro no apuntado); determinista."
+  },
+  {
+   "slug": "informe-conciliacion",
+   "forma": "REFLEJO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-libro",
+   "depende_de": [
     "conciliacion-bancaria",
-    "partida-no-identificada",
-    "saldo-tesoreria",
-    "vista-revisable",
-    "flujo-firma",
-    "perfil-administrativo",
-    "liquidacion-iva",
-    "registro-verifactu",
-    "factura-electronica",
+    "partida-conciliatoria"
+   ],
+   "eventos_sube": [
+    "informe-conciliacion.componer.request"
+   ],
+   "eventos_publica": [
+    "informe-conciliacion.componer.response",
+    "informe-conciliacion.componer.failed"
+   ],
+   "proposito": "Documento de cuadre saldo banco <-> saldo contable ajustado; la PRUEBA de que cuadra."
+  },
+  {
+   "slug": "maestro-cuentas-bancarias",
+   "forma": "CUSTODIO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-libro",
+   "depende_de": [
+    "cola-declaraciones-criterio"
+   ],
+   "eventos_sube": [
+    "maestro-cuentas-bancarias.declarar.request",
+    "maestro-cuentas-bancarias.listar.request",
+    "project.activated"
+   ],
+   "eventos_publica": [
+    "maestro-cuentas-bancarias.declarar.response",
+    "maestro-cuentas-bancarias.declarar.failed",
+    "maestro-cuentas-bancarias.listar.response",
+    "maestro-cuentas-bancarias.listar.failed",
+    "contabilidad.cuenta_bancaria_declarada"
+   ],
+   "proposito": "Parcela declarable de cuentas y su moneda; sin el, \"el banco\" es un numero falso."
+  },
+  {
+   "slug": "alta-activo",
+   "forma": "CUSTODIO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-analitica",
+   "depende_de": [],
+   "eventos_sube": [
+    "alta-activo.registrar.request",
+    "project.activated"
+   ],
+   "eventos_publica": [
+    "alta-activo.registrar.response",
+    "alta-activo.registrar.failed",
+    "contabilidad.activo_registrado"
+   ],
+   "proposito": "Parcela del inmovilizado; un solo escritor; la valoracion del alta es reflejo hidratador."
+  },
+  {
+   "slug": "plan-amortizacion",
+   "forma": "CUSTODIO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-analitica",
+   "depende_de": [
+    "alta-activo",
+    "cola-declaraciones-criterio"
+   ],
+   "eventos_sube": [
+    "plan-amortizacion.cuota_del_periodo.request",
+    "plan-amortizacion.declarar.request",
+    "project.activated"
+   ],
+   "eventos_publica": [
+    "plan-amortizacion.cuota_del_periodo.response",
+    "plan-amortizacion.cuota_del_periodo.failed",
+    "plan-amortizacion.declarar.response",
+    "plan-amortizacion.declarar.failed",
+    "contabilidad.cuota_amortizacion"
+   ],
+   "proposito": "Genera la cuota cuando toca (dispara en el cierre); metodo/coeficiente = dato; un solo escritor."
+  },
+  {
+   "slug": "baja-activo",
+   "forma": "REFLEJO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-analitica",
+   "depende_de": [
+    "alta-activo",
+    "valor-neto-contable"
+   ],
+   "eventos_sube": [
+    "baja-activo.calcular.request"
+   ],
+   "eventos_publica": [
+    "baja-activo.calcular.response",
+    "baja-activo.calcular.failed"
+   ],
+   "proposito": "Retira el bien y calcula el resultado (perdida/beneficio) y lo imputa; determinista."
+  },
+  {
+   "slug": "valor-neto-contable",
+   "forma": "REFLEJO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-analitica",
+   "depende_de": [
+    "plan-amortizacion"
+   ],
+   "eventos_sube": [
+    "valor-neto-contable.calcular.request"
+   ],
+   "eventos_publica": [
+    "valor-neto-contable.calcular.response",
+    "valor-neto-contable.calcular.failed"
+   ],
+   "proposito": "Coste - amortizacion acumulada; determinista, al balance."
+  },
+  {
+   "slug": "recibo-nomina",
+   "forma": "REFLEJO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-fiscal",
+   "depende_de": [
+    "puerto-nomina"
+   ],
+   "eventos_sube": [
+    "recibo-nomina.dar_forma.request",
+    "contabilidad.nomina_recibida"
+   ],
+   "eventos_publica": [
+    "recibo-nomina.dar_forma.response",
+    "recibo-nomina.dar_forma.failed",
+    "contabilidad.nomina_formada"
+   ],
+   "proposito": "Admite y da forma asentable al hecho de nomina (hecho o documento); mecanico, cero juicio."
+  },
+  {
+   "slug": "obligacion-seguridad-social",
+   "forma": "REFLEJO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-fiscal",
+   "depende_de": [
+    "recibo-nomina"
+   ],
+   "eventos_sube": [
+    "obligacion-seguridad-social.calcular.request"
+   ],
+   "eventos_publica": [
+    "obligacion-seguridad-social.calcular.response",
+    "obligacion-seguridad-social.calcular.failed"
+   ],
+   "proposito": "Gasto de empresa + obligacion con la TGSS desde el recibo; tipos = dato; determinista."
+  },
+  {
+   "slug": "asiento-personal",
+   "forma": "REFLEJO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-fiscal",
+   "depende_de": [
     "recibo-nomina",
-    "inmovilizado",
-    "cierre-ejercicio",
-    "onboarding-negocio",
-    "motor-avisos",
-    "declaracion-fuente-faltante",
-    "aviso-revision",
-    "aviso-cuadre",
-    "calendario-fiscal",
-    "estado-presentacion-fiscal",
-    "rectificacion-declaracion",
-    "frontera-ficha-producto",
+    "obligacion-seguridad-social"
+   ],
+   "eventos_sube": [
+    "asiento-personal.construir.request"
+   ],
+   "eventos_publica": [
+    "asiento-personal.construir.response",
+    "asiento-personal.construir.failed"
+   ],
+   "proposito": "Gasto de personal, retencion y pago -> asiento EQUILIBRADO; determinista."
+  },
+  {
+   "slug": "puerto-nomina",
+   "forma": "PUENTE",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-fiscal",
+   "depende_de": [],
+   "eventos_sube": [
+    "puerto-nomina.recibir.request",
+    "nomina.recibida",
+    "nomina.emitida"
+   ],
+   "eventos_publica": [
+    "puerto-nomina.recibir.response",
+    "puerto-nomina.recibir.failed",
+    "contabilidad.nomina_recibida"
+   ],
+   "proposito": "Origen declarable del dato de nomina: conecta con el sistema de personal por evento; si no existe, se crea."
+  },
+  {
+   "slug": "lineas-nomina",
+   "forma": "REFLEJO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-fiscal",
+   "depende_de": [
+    "recibo-nomina"
+   ],
+   "eventos_sube": [
+    "lineas-nomina.desglosar.request"
+   ],
+   "eventos_publica": [
+    "lineas-nomina.desglosar.response",
+    "lineas-nomina.desglosar.failed"
+   ],
+   "proposito": "Desglose bruto/retencion/cotizacion del trabajador/neto; hace la nomina EXPLICABLE, no un numero pelado."
+  },
+  {
+   "slug": "acceso-nomina",
+   "forma": "CUSTODIO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-fiscal",
+   "depende_de": [],
+   "eventos_sube": [
+    "acceso-nomina.autorizar.request",
+    "acceso-nomina.declarar.request",
+    "project.activated"
+   ],
+   "eventos_publica": [
+    "acceso-nomina.autorizar.response",
+    "acceso-nomina.autorizar.failed",
+    "acceso-nomina.declarar.response",
+    "acceso-nomina.declarar.failed",
+    "contabilidad.acceso_nomina"
+   ],
+   "proposito": "Gobernanza de quien ve que nomina (dato personal): cada uno ve la suya; eje persona; un solo escritor."
+  },
+  {
+   "slug": "pagos-a-cuenta-empleado",
+   "forma": "REFLEJO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-fiscal",
+   "depende_de": [
+    "recibo-nomina"
+   ],
+   "eventos_sube": [
+    "pagos-a-cuenta-empleado.impacto.request"
+   ],
+   "eventos_publica": [
+    "pagos-a-cuenta-empleado.impacto.response",
+    "pagos-a-cuenta-empleado.impacto.failed"
+   ],
+   "proposito": "Anticipos/adelantos y su impacto en el neto y el IRPF; no todo es sueldo fijo; determinista."
+  },
+  {
+   "slug": "conceptos-extra-nomina",
+   "forma": "REFLEJO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-fiscal",
+   "depende_de": [
+    "recibo-nomina"
+   ],
+   "eventos_sube": [
+    "conceptos-extra-nomina.imputar.request"
+   ],
+   "eventos_publica": [
+    "conceptos-extra-nomina.imputar.response",
+    "conceptos-extra-nomina.imputar.failed"
+   ],
+   "proposito": "Dietas, especie, finiquito, paga extra: calculo de su imputacion; determinista."
+  },
+  {
+   "slug": "liquidacion-baja-empleado",
+   "forma": "REFLEJO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-fiscal",
+   "depende_de": [
+    "recibo-nomina",
+    "pagos-a-cuenta-empleado"
+   ],
+   "eventos_sube": [
+    "liquidacion-baja-empleado.liquidar.request"
+   ],
+   "eventos_publica": [
+    "liquidacion-baja-empleado.liquidar.response",
+    "liquidacion-baja-empleado.liquidar.failed"
+   ],
+   "proposito": "Cierre de la cuenta del trabajador (finiquito/indemnizacion) para que no quede un acreedor abierto; determinista."
+  },
+  {
+   "slug": "valoracion-existencia",
+   "forma": "REFLEJO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-analitica",
+   "depende_de": [
+    "inventario",
+    "frontera-ficha-producto"
+   ],
+   "eventos_sube": [
+    "valoracion-existencia.valorar.request"
+   ],
+   "eventos_publica": [
+    "valoracion-existencia.valorar.response",
+    "valoracion-existencia.valorar.failed"
+   ],
+   "proposito": "Capa de valor SOBRE el inventario existente (no lo duplica); metodo = dato (FIFO/medio)."
+  },
+  {
+   "slug": "frontera-ficha-producto",
+   "forma": "CONVERSOR",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-analitica",
+   "depende_de": [],
+   "eventos_sube": [
+    "frontera-ficha-producto.entrar.request"
+   ],
+   "eventos_publica": [
+    "frontera-ficha-producto.entrar.response",
+    "frontera-ficha-producto.entrar.failed",
+    "contabilidad.coste_interno"
+   ],
+   "proposito": "Puerto declarable del coste de cada negocio: frontera donde cruza el coste de la ficha al dato interno; si falta, se crea."
+  },
+  {
+   "slug": "ajuste-inventario",
+   "forma": "REFLEJO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-analitica",
+   "depende_de": [
+    "valoracion-existencia"
+   ],
+   "eventos_sube": [
+    "ajuste-inventario.diferencia.request"
+   ],
+   "eventos_publica": [
+    "ajuste-inventario.diferencia.response",
+    "ajuste-inventario.diferencia.failed"
+   ],
+   "proposito": "Regulariza merma/rotura con asiento Y aviso; calculo de la diferencia; determinista."
+  },
+  {
+   "slug": "variacion-stock-valorada",
+   "forma": "REFLEJO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-analitica",
+   "depende_de": [
     "valoracion-existencia",
-    "estados-contables",
-    "retenciones-is-irpf",
-    "generador-modelo",
-    "acuse-presentacion",
-    "consolidacion-grupo",
-    "etiquetado-analitico",
+    "inventario"
+   ],
+   "eventos_sube": [
+    "variacion-stock-valorada.variacion.request",
+    "inventario.ajustado",
+    "inventario.reserva.creada"
+   ],
+   "eventos_publica": [
+    "variacion-stock-valorada.variacion.response",
+    "variacion-stock-valorada.variacion.failed"
+   ],
+   "proposito": "Entrada por compra / salida por consumo, VALORADAS; determinista."
+  },
+  {
+   "slug": "marca-sociedad",
+   "forma": "REFLEJO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-analitica",
+   "depende_de": [
+    "escritor-diario"
+   ],
+   "eventos_sube": [
+    "marca-sociedad.marcar.request",
+    "contabilidad.asiento_registrado"
+   ],
+   "eventos_publica": [
+    "marca-sociedad.marcar.response",
+    "marca-sociedad.marcar.failed"
+   ],
+   "proposito": "Etiqueta cada asiento con su sociedad; mecanico, cero juicio."
+  },
+  {
+   "slug": "eliminacion-intercompany",
+   "forma": "REFLEJO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-analitica",
+   "depende_de": [
+    "marca-sociedad"
+   ],
+   "eventos_sube": [
+    "eliminacion-intercompany.eliminar.request"
+   ],
+   "eventos_publica": [
+    "eliminacion-intercompany.eliminar.response",
+    "eliminacion-intercompany.eliminar.failed"
+   ],
+   "proposito": "Detecta y elimina el cruce interno en la consolidacion; determinista."
+  },
+  {
+   "slug": "consolidacion",
+   "forma": "REFLEJO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-analitica",
+   "depende_de": [
+    "eliminacion-intercompany"
+   ],
+   "eventos_sube": [
+    "consolidacion.estados.request"
+   ],
+   "eventos_publica": [
+    "consolidacion.estados.response",
+    "consolidacion.estados.failed"
+   ],
+   "proposito": "Estados del conjunto con criterio DECLARADO; agregacion determinista; grupo COMPLETO."
+  },
+  {
+   "slug": "aislamiento-negocio",
+   "forma": "CUSTODIO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-analitica",
+   "depende_de": [],
+   "eventos_sube": [
+    "aislamiento-negocio.parcela.request",
+    "aislamiento-negocio.escritor.request",
+    "project.activated"
+   ],
+   "eventos_publica": [
+    "aislamiento-negocio.parcela.response",
+    "aislamiento-negocio.parcela.failed",
+    "aislamiento-negocio.escritor.response",
+    "aislamiento-negocio.escritor.failed",
+    "contabilidad.parcela_reclamada"
+   ],
+   "proposito": "Multi-negocio sin fuga: un dueno por parcela; los negocios NO se fugan (eje negocio)."
+  },
+  {
+   "slug": "etiquetado-analitico",
+   "forma": "MICRO-AGENTE",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-analitica",
+   "depende_de": [
+    "cola-declaraciones-criterio"
+   ],
+   "eventos_sube": [
+    "etiquetado-analitico.juzgar.request"
+   ],
+   "eventos_publica": [
+    "etiquetado-analitico.juzgar.response",
+    "etiquetado-analitico.juzgar.failed",
+    "contabilidad.dimension_propuesta"
+   ],
+   "proposito": "Asigna centro/linea/producto a cada hecho con regla declarable; cuando la regla no cubre, PROPONE y lo dudoso va a cola."
+  },
+  {
+   "slug": "margen-analitico",
+   "forma": "REFLEJO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-analitica",
+   "depende_de": [
+    "etiquetado-analitico"
+   ],
+   "eventos_sube": [
+    "margen-analitico.calcular.request"
+   ],
+   "eventos_publica": [
+    "margen-analitico.calcular.response",
+    "margen-analitico.calcular.failed"
+   ],
+   "proposito": "Ingreso - coste imputado por dimension; determinista."
+  },
+  {
+   "slug": "presupuesto",
+   "forma": "CUSTODIO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-analitica",
+   "depende_de": [
+    "etiquetado-analitico"
+   ],
+   "eventos_sube": [
+    "presupuesto.fijar.request",
+    "presupuesto.objetivo.request",
+    "project.activated"
+   ],
+   "eventos_publica": [
+    "presupuesto.fijar.response",
+    "presupuesto.fijar.failed",
+    "presupuesto.objetivo.response",
+    "presupuesto.objetivo.failed",
+    "contabilidad.presupuesto_fijado"
+   ],
+   "proposito": "Cifra objetivo por dimension declarable; un solo escritor."
+  },
+  {
+   "slug": "desviacion",
+   "forma": "REFLEJO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-analitica",
+   "depende_de": [
+    "presupuesto"
+   ],
+   "eventos_sube": [
+    "desviacion.calcular.request",
+    "contabilidad.presupuesto_fijado"
+   ],
+   "eventos_publica": [
+    "desviacion.calcular.response",
+    "desviacion.calcular.failed",
+    "contabilidad.desviacion"
+   ],
+   "proposito": "Real vs presupuesto -> dispara aviso SI se sale del umbral declarado; determinista."
+  },
+  {
+   "slug": "coste-indirecto",
+   "forma": "REFLEJO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-analitica",
+   "depende_de": [
+    "etiquetado-analitico"
+   ],
+   "eventos_sube": [
+    "coste-indirecto.repartir.request"
+   ],
+   "eventos_publica": [
+    "coste-indirecto.repartir.response",
+    "coste-indirecto.repartir.failed"
+   ],
+   "proposito": "Aplica el reparto DECLARADO de gastos no directos; determinista; cubre lo que la pieza existente no cubre para grupo."
+  },
+  {
+   "slug": "cuadro-mando-contable",
+   "forma": "REFLEJO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-analitica",
+   "depende_de": [
+    "saldo-tesoreria",
+    "cuenta-resultados",
     "margen-analitico",
+    "desviacion"
+   ],
+   "eventos_sube": [
+    "cuadro-mando-contable.componer.request"
+   ],
+   "eventos_publica": [
+    "cuadro-mando-contable.componer.response",
+    "cuadro-mando-contable.componer.failed"
+   ],
+   "proposito": "Agregacion de conjunto (caja\u00b7resultado\u00b7margen\u00b7desviacion\u00b7ejercicio) SIN bajar al asiento; lente del jefe; determinista."
+  },
+  {
+   "slug": "comparador-periodos",
+   "forma": "REFLEJO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-analitica",
+   "depende_de": [
     "presupuesto",
-    "cuadro-mando-contable",
-    "informe-rico",
-    "consulta-dueno",
-    "puente-lenguaje-dueno",
-    "aviso-al-negocio",
-    "informe-accionable"
-  ],
-  "hojas": [
-    {
-      "slug": "filesystem",
-      "forma": "reflejo",
-      "accion": "REUTILIZAR",
-      "eje": "transversal",
-      "depende_de": [],
-      "eventos_sube": [
-        "fs.read.request",
-        "fs.write.request",
-        "fs.edit.request",
-        "fs.list.request",
-        "fs.exists.request",
-        "project.activated",
-        "project.deactivated"
-      ],
-      "eventos_publica": [
-        "fs.read.response",
-        "fs.write.response",
-        "fs.edit.response",
-        "fs.list.response",
-        "fs.exists.response"
-      ],
-      "proposito": "Infraestructura de storage scopeada por el project_id de la PETICION (multi-tenant real).",
-      "clases": [],
-      "proyecciones_internas": [],
-      "reutiliza": [
-        "filesystem"
-      ],
-      "nota": "v2.4.0 — 23 subs / 27 pubs / 17 tools (fs.list/read/write/edit/...). Base de TODO store de la vertical."
-    },
-    {
-      "slug": "project-manager",
-      "forma": "reflejo",
-      "accion": "REUTILIZAR",
-      "eje": "transversal",
-      "depende_de": [],
-      "eventos_sube": [
-        "project.activate",
-        "project.create",
-        "project.get.request",
-        "project.list.request",
-        "project.state.request",
-        "project.update"
-      ],
-      "eventos_publica": [
-        "project.activated",
-        "project.created",
-        "project.deactivated",
-        "project.state",
-        "project.get.response",
-        "project.list.response",
-        "project.state.response"
-      ],
-      "proposito": "Lifecycle del proyecto: la activacion de la vertical y el scope de PosPersistencia.",
-      "clases": [],
-      "proyecciones_internas": [],
-      "reutiliza": [
-        "project-manager"
-      ],
-      "nota": "v4.2.0 — 11 subs / 13 pubs. `project.activated` es el arranque de todo custodio (restaura su store por project_id)."
-    },
-    {
-      "slug": "credential-manager",
-      "forma": "reflejo",
-      "accion": "REUTILIZAR",
-      "eje": "transversal",
-      "depende_de": [],
-      "eventos_sube": [
-        "credential.resolve.request",
-        "credential.create.request",
-        "credential.update.request",
-        "credential.delete.request",
-        "credential.state.request"
-      ],
-      "eventos_publica": [
-        "credential.resolve.response",
-        "credential.saved",
-        "credential.updated",
-        "credential.deleted",
-        "credential.state",
-        "credential.create.response",
-        "credential.update.response",
-        "credential.delete.response",
-        "credential.state.response"
-      ],
-      "proposito": "Credenciales por-tenant (bancos, FACe, SII, buzon digital) resueltas por cascada.",
-      "clases": [],
-      "proyecciones_internas": [],
-      "reutiliza": [
-        "credential-manager"
-      ],
-      "nota": "v2.2.0 — tools `credential.list`. Lo consumen los puentes de extracto, acuse y recepcion digital."
-    },
-    {
-      "slug": "facturas",
-      "forma": "custodio",
-      "accion": "REUTILIZAR",
-      "eje": "contabilidad-entrada",
-      "depende_de": [],
-      "eventos_sube": [
-        "factura.entrada"
-      ],
-      "eventos_publica": [
-        "factura.recibida",
-        "factura.procesada",
-        "factura.error",
-        "factura.exportada",
-        "telegram.send_message.request"
-      ],
-      "proposito": "CUBRE la admision del documento (A3) y la conversion documento->dato (A4.1).",
-      "clases": [
-        "A3",
-        "A4.1"
-      ],
-      "proyecciones_internas": [],
-      "reutiliza": [
-        "facturas"
-      ],
-      "nota": "v3.0.0 — pipeline step-based (Intake/Convert/Prepare/OCR/Structure) + tools `facturas.procesar` (OCR+IA), `facturas.listar`, `facturas.estadisticas`. El hecho extraido entra a contabilidad por `factura.procesada`."
-    },
-    {
-      "slug": "facturacion/fuentes",
-      "forma": "puente",
-      "accion": "REUTILIZAR",
-      "eje": "contabilidad-entrada",
-      "depende_de": [],
-      "eventos_sube": [
-        "telegram.photo.received",
-        "telegram.document.received"
-      ],
-      "eventos_publica": [
-        "factura.entrada"
-      ],
-      "proposito": "CUBRE el puerto de documento digital (A5) y el canal declarable de A4.2.",
-      "clases": [
-        "A5",
-        "A4.2"
-      ],
-      "proyecciones_internas": [],
-      "reutiliza": [
-        "facturacion/fuentes"
-      ],
-      "nota": "v2.0.0 — adaptador strategy-pattern de FUENTES (Telegram push, Gmail pull, extensible). El catalogo de fuentes/formas es DATO declarable (A10)."
-    },
-    {
-      "slug": "inventario",
-      "forma": "custodio",
-      "accion": "REUTILIZAR",
-      "eje": "contabilidad-analitica",
-      "depende_de": [],
-      "eventos_sube": [
-        "pedido.completado",
-        "pedido.cancelado"
-      ],
-      "eventos_publica": [
-        "inventario.reserva.creada",
-        "inventario.reserva.expirada",
-        "inventario.reserva.liberada",
-        "inventario.confirmado",
-        "inventario.ajustado",
-        "inventario.stock.bajo_minimo"
-      ],
-      "proposito": "CUBRE el STOCK REAL por proyecto (sustrato del grupo H): contabilidad lo VALORA, nunca lo duplica.",
-      "clases": [],
-      "proyecciones_internas": [],
-      "reutiliza": [
-        "inventario"
-      ],
-      "nota": "v1.0.0 — stock_real + reservas con expiracion, data/projects/<slug>/inventario.json. Tools consultar/reservar/confirmar/liberar/ajustar."
-    },
-    {
-      "slug": "metricas",
-      "forma": "reflejo",
-      "accion": "REUTILIZAR",
-      "eje": "contabilidad-libro",
-      "depende_de": [],
-      "eventos_sube": [
-        "*.creado",
-        "*.actualizado",
-        "*.eliminado",
-        "*.error",
-        "*.completado"
-      ],
-      "eventos_publica": [
-        "metricas.snapshot"
-      ],
-      "proposito": "Instrumentacion PASIVA (wildcards): contadores y gauges que sostienen la observabilidad de la vertical.",
-      "clases": [],
-      "proyecciones_internas": [],
-      "reutiliza": [
-        "metricas"
-      ],
-      "nota": "v2.0.0 — ninguna hoja de contabilidad escribe contadores: emiten sus eventos de dominio y `metricas` los absorbe."
-    },
-    {
-      "slug": "facturacion/asesoria",
-      "forma": "puente",
-      "accion": "REUTILIZAR",
-      "eje": "contabilidad-libro",
-      "depende_de": [],
-      "eventos_sube": [],
-      "eventos_publica": [
-        "asesoria.paquete.generado",
-        "asesoria.paquete.error"
-      ],
-      "proposito": "CUBRE el puerto de exportacion al asesor (L1): CSV en formato espanol + ZIP con los originales.",
-      "clases": [
-        "L1"
-      ],
-      "proyecciones_internas": [],
-      "reutiliza": [
-        "facturacion/asesoria"
-      ],
-      "nota": "v2.0.0 — tools `asesoria.generar-paquete`, `asesoria.historial`. Lee las facturas procesadas; el FORMATO exigido por cada asesor concreto queda declarable (L6)."
-    },
-    {
-      "slug": "contrato-hecho-minimo",
-      "forma": "custodio",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-entrada",
-      "depende_de": [],
-      "eventos_sube": [
-        "contabilidad.contrato.declarar.request",
-        "contabilidad.contrato.exigir.request",
-        "contabilidad.contrato.cubre.request",
-        "project.activated"
-      ],
-      "eventos_publica": [
-        "contabilidad.contrato_declarado",
-        "contabilidad.contrato.declarar.response",
-        "contabilidad.contrato.declarar.failed",
-        "contabilidad.contrato.exigir.response",
-        "contabilidad.contrato.exigir.failed",
-        "contabilidad.contrato.cubre.response",
-        "contabilidad.contrato.cubre.failed",
-        "contabilidad.contrato_declarado.failed"
-      ],
-      "proposito": "El minimo EXIGIBLE por fuente (declarado por dueno/jefe), visto desde la fuente: no un formato impuesto.",
-      "clases": [
-        "A11"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_declarar",
-          "descripcion": "declarar(rol, vertical, campos) — un solo escritor del minimo por vertical"
-        },
-        {
-          "nombre": "_exigir",
-          "descripcion": "exigir(vertical) -> Set<Campo>"
-        },
-        {
-          "nombre": "_cubre",
-          "descripcion": "cubre(vertical, hecho) -> ok | Set<Campo> faltantes"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo",
-        "_shared/pos-persistencia"
-      ],
-      "nota": "NO REUTILIZA: ningun modulo del inventario declara un contrato minimo de hecho por vertical; los contratos de entrada viven en cada vertical productora."
-    },
-    {
-      "slug": "anclaje-cierre-vertical",
-      "forma": "custodio",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-entrada",
-      "depende_de": [],
-      "eventos_sube": [
-        "contabilidad.anclaje.declarar.request",
-        "contabilidad.anclaje.anclar.request",
-        "project.activated"
-      ],
-      "eventos_publica": [
-        "contabilidad.anclaje_declarado",
-        "contabilidad.anclaje.declarar.response",
-        "contabilidad.anclaje.declarar.failed",
-        "contabilidad.anclaje.anclar.response",
-        "contabilidad.anclaje.anclar.failed",
-        "contabilidad.anclaje_declarado.failed"
-      ],
-      "proposito": "Declara POR FUENTE que es un cierre y como se identifica; ancla la clave natural. Su contenido pende de la unidad_de_cierre (M4, declarable).",
-      "clases": [
-        "A14"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_declarar",
-          "descripcion": "declarar(rol, vertical, definicion) — un solo escritor (DUENO)"
-        },
-        {
-          "nombre": "_anclar",
-          "descripcion": "anclar(vertical, hecho) -> ClaveNatural"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo",
-        "_shared/pos-persistencia"
-      ],
-      "nota": "NO REUTILIZA: la definicion de cierre por vertical no existe en el inventario; el cierre de caja existente es de la operacion (mono-negocio) y aqui llega como HECHO observado."
-    },
-    {
-      "slug": "cola-revision",
-      "forma": "custodio",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-entrada",
-      "depende_de": [],
-      "eventos_sube": [
-        "contabilidad.excepcion.encolar.request",
-        "contabilidad.excepcion.resolver.request",
-        "contabilidad.excepcion.siguiente.request",
-        "project.activated"
-      ],
-      "eventos_publica": [
-        "contabilidad.excepcion_encolada",
-        "contabilidad.excepcion_resuelta",
-        "contabilidad.excepcion.encolar.response",
-        "contabilidad.excepcion.encolar.failed",
-        "contabilidad.excepcion.resolver.response",
-        "contabilidad.excepcion.resolver.failed",
-        "contabilidad.excepcion.siguiente.response",
-        "contabilidad.excepcion.siguiente.failed",
-        "contabilidad.excepcion_encolada.failed",
-        "contabilidad.excepcion_resuelta.failed"
-      ],
-      "proposito": "DOS colas de excepciones (asesor / dueno) por naturaleza; el flujo NUNCA se bloquea. Un solo escritor por cola.",
-      "clases": [
-        "A8.1"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_encolar",
-          "descripcion": "routing por naturaleza de la excepcion -> cola ASESOR | cola DUENO"
-        },
-        {
-          "nombre": "_siguiente",
-          "descripcion": "siguiente(cola) -> Excepcion | VACIA"
-        },
-        {
-          "nombre": "_resolver",
-          "descripcion": "resolver(rol, excepcion, resolucion) — guard de escritor por cola"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo",
-        "_shared/pos-persistencia"
-      ],
-      "nota": "NO REUTILIZA: no existe modulo de cola de revision contable en el inventario; `manejo-fallo` (nichos) es fallo de canal, otro dominio (patron tomado)."
-    },
-    {
-      "slug": "regla-contrapartida",
-      "forma": "custodio",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-entrada",
-      "depende_de": [],
-      "eventos_sube": [
-        "contabilidad.regla.leer.request",
-        "contabilidad.regla.declarar.request",
-        "contabilidad.regla.aprender.request",
-        "contabilidad.regla_ratificada",
-        "project.activated"
-      ],
-      "eventos_publica": [
-        "contabilidad.regla_declarada",
-        "contabilidad.regla_aprendida",
-        "contabilidad.regla.leer.response",
-        "contabilidad.regla.leer.failed",
-        "contabilidad.regla.declarar.response",
-        "contabilidad.regla.declarar.failed",
-        "contabilidad.regla.aprender.response",
-        "contabilidad.regla.aprender.failed",
-        "contabilidad.regla_declarada.failed",
-        "contabilidad.regla_aprendida.failed"
-      ],
-      "proposito": "Repositorio de reglas declaradas/aprendidas (\"este proveedor -> esta cuenta\"). Una regla APRENDIDA no actua hasta ser RATIFICADA (L10).",
-      "clases": [
-        "A6.2"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_declarar",
-          "descripcion": "declarar(rol, regla) — un solo escritor (DUENO/ASESOR)"
-        },
-        {
-          "nombre": "_aplicar",
-          "descripcion": "aplicar(hecho) -> Contrapartida | SIN_COBERTURA"
-        },
-        {
-          "nombre": "_aprender",
-          "descripcion": "aprender(rol, regla, evidencia) — el aprendizaje entra HIDRATADO y queda PENDIENTE de ratificacion"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo",
-        "_shared/pos-persistencia"
-      ],
-      "nota": "NO REUTILIZA: repositorio de reglas contables por negocio; `reglas-aprendidas` (nichos) es umbrales de viabilidad, otro dominio (patron tomado)."
-    },
-    {
-      "slug": "clave-natural",
-      "forma": "reflejo",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-libro",
-      "depende_de": [
-        "anclaje-cierre-vertical",
-        "cola-declaraciones-criterio"
-      ],
-      "eventos_sube": [
-        "contabilidad.clave.calcular.request",
-        "contabilidad.clave.repeticion.request"
-      ],
-      "eventos_publica": [
-        "contabilidad.clave_calculada",
-        "contabilidad.clave.calcular.response",
-        "contabilidad.clave.calcular.failed",
-        "contabilidad.clave.repeticion.response",
-        "contabilidad.clave.repeticion.failed",
-        "contabilidad.clave_calculada.failed"
-      ],
-      "proposito": "CERROJO 3 · idempotencia: mismos componentes => mismo hecho => mismo asiento. Un solo calculador de la clave.",
-      "clases": [
-        "M3"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_calcular",
-          "descripcion": "calcular(hechoODocumento) -> ClaveNatural (cuelga de A14 / unidad_de_cierre)"
-        },
-        {
-          "nombre": "_esRepeticion",
-          "descripcion": "esRepeticion(clave, yaAsentados) -> Bool — test unitario lo afirma"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo"
-      ],
-      "nota": "NO REUTILIZA: la clave natural es la invariante anti-bucle de ESTA vertical; ningun modulo del inventario la calcula."
-    },
-    {
-      "slug": "single-writer",
-      "forma": "custodio",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-libro",
-      "depende_de": [],
-      "eventos_sube": [
-        "contabilidad.parcela.registrar.request",
-        "contabilidad.parcela.autorizar.request",
-        "project.activated"
-      ],
-      "eventos_publica": [
-        "contabilidad.parcela_registrada",
-        "contabilidad.parcela_autorizada",
-        "contabilidad.parcela.registrar.response",
-        "contabilidad.parcela.registrar.failed",
-        "contabilidad.parcela.autorizar.response",
-        "contabilidad.parcela.autorizar.failed",
-        "contabilidad.parcela_registrada.failed",
-        "contabilidad.parcela_autorizada.failed"
-      ],
-      "proposito": "CERROJO 2 · la ley que gobierna a TODO custodio: un unico escritor por parcela. Los custodios registran su parcela y su rol autorizado.",
-      "clases": [
-        "M2"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_autorizar",
-          "descripcion": "autorizar(parcela, rol) -> ok"
-        },
-        {
-          "nombre": "_escribir",
-          "descripcion": "escribir(parcela, rol, cambio) -> ok | ERROR_DOS_ESCRITORES"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo",
-        "_shared/pos-persistencia"
-      ],
-      "nota": "NO REUTILIZA: el guard de escritor por parcela es la invariante transversal del dominio; no existe modulo que lo gobierne."
-    },
-    {
-      "slug": "frontera-planos",
-      "forma": "reflejo",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-libro",
-      "depende_de": [],
-      "eventos_sube": [
-        "contabilidad.frontera_planos.verificar.request"
-      ],
-      "eventos_publica": [
-        "contabilidad.frontera_planos_verificada",
-        "contabilidad.frontera_planos.verificar.response",
-        "contabilidad.frontera_planos.verificar.failed",
-        "contabilidad.frontera_planos_verificada.failed"
-      ],
-      "proposito": "CERROJO 1 · anti-realimentacion: contabilidad emite CALCULOS; si un contrato pretende ser un HECHO de negocio -> rechazo determinista.",
-      "clases": [
-        "M1"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_verificar",
-          "descripcion": "verificar(emision) -> ok | ERROR_FUGA (prefijo del espacio de CALCULOS contabilidad.*)"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo"
-      ],
-      "nota": "NO REUTILIZA: cerrojo propio del dominio contable (la identidad \"observadora que no produce hechos\" se verifica aqui)."
-    },
-    {
-      "slug": "lote-admision",
-      "forma": "reflejo",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-entrada",
-      "depende_de": [],
-      "eventos_sube": [
-        "contabilidad.lote.despachar.request"
-      ],
-      "eventos_publica": [
-        "contabilidad.lote_despachado",
-        "contabilidad.lote.despachar.response",
-        "contabilidad.lote.despachar.failed",
-        "contabilidad.lote_despachado.failed"
-      ],
-      "proposito": "DESACOPLE del cuello: la admision no se hace en serie (N hechos en paralelo). Mecanico, cero juicio.",
-      "clases": [
-        "A9"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_lotear",
-          "descripcion": "lotear(cola) -> List<Hecho>"
-        },
-        {
-          "nombre": "_despachar",
-          "descripcion": "despachar(lote) -> ok — consumido por AMBAS puertas (hechos y documentos)"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo"
-      ],
-      "nota": "NO REUTILIZA: el paralelismo declarable de la admision no existe en el inventario."
-    },
-    {
-      "slug": "puerto-evento-vertical",
-      "forma": "puente",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-entrada",
-      "depende_de": [
-        "contrato-hecho-minimo"
-      ],
-      "eventos_sube": [
-        "contabilidad.hecho.admitir.request",
-        "contabilidad.contrato_declarado",
-        "project.activated"
-      ],
-      "eventos_publica": [
-        "contabilidad.hecho_admitido",
-        "contabilidad.hecho.admitir.response",
-        "contabilidad.hecho.admitir.failed",
-        "contabilidad.hecho_admitido.failed"
-      ],
-      "proposito": "PUERTA de los hechos ya emitidos por las verticales. Contabilidad LEE, no impone: la fuente manda en formato, granularidad y ritmo.",
-      "clases": [
-        "A1"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_admitir",
-          "descripcion": "admitir(hecho) -> ok — valida la forma minima de entrada, no el contenido"
-        },
-        {
-          "nombre": "_reconectar",
-          "descripcion": "reconectar(fuente) — el puerto es reemplazable, la fuente manda"
-        },
-        {
-          "nombre": "_declararHueco",
-          "descripcion": "si no hay fuente -> senal a A15, nunca se fuerza"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo"
-      ],
-      "nota": "NO REUTILIZA: ningun modulo del inventario recibe hechos heterogeneos de otras verticales; un adaptador por fuente se pone en el sitio de despliegue."
-    },
-    {
-      "slug": "historial-proceso-contable",
-      "forma": "custodio",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-entrada",
-      "depende_de": [],
-      "eventos_sube": [
-        "contabilidad.historial.anotar.request",
-        "contabilidad.historial.consultar.request",
-        "contabilidad.hecho_admitido",
-        "contabilidad.excepcion_encolada",
-        "contabilidad.excepcion_resuelta",
-        "project.activated"
-      ],
-      "eventos_publica": [
-        "contabilidad.historial_anotado",
-        "contabilidad.historial.anotar.response",
-        "contabilidad.historial.anotar.failed",
-        "contabilidad.historial.consultar.response",
-        "contabilidad.historial.consultar.failed",
-        "contabilidad.historial_anotado.failed"
-      ],
-      "proposito": "Registro append-only de lo PROCESADO y lo FALLADO con su rastro. Solo crece; nunca se reescribe.",
-      "clases": [
-        "P2"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_anotar",
-          "descripcion": "anotar(entrada) — single-writer ADMISION"
-        },
-        {
-          "nombre": "_consultar",
-          "descripcion": "consultar(desde, hasta) -> Historial"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo",
-        "_shared/pos-persistencia"
-      ],
-      "nota": "NO REUTILIZA: es el historial del PROCESO de entrada, distinto de `traza-asiento` (B4, del asiento) y de `historial-nicho` (otro dominio)."
-    },
-    {
-      "slug": "maestro-terceros",
-      "forma": "custodio",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-entrada",
-      "depende_de": [],
-      "eventos_sube": [
-        "contabilidad.tercero.declarar.request",
-        "contabilidad.tercero.ficha.request",
-        "contabilidad.tercero.identificar.request",
-        "contabilidad.tercero.historial.request",
-        "project.activated"
-      ],
-      "eventos_publica": [
-        "contabilidad.tercero_declarado",
-        "contabilidad.tercero_identificado",
-        "contabilidad.tercero.declarar.response",
-        "contabilidad.tercero.declarar.failed",
-        "contabilidad.tercero.ficha.response",
-        "contabilidad.tercero.ficha.failed",
-        "contabilidad.tercero.identificar.response",
-        "contabilidad.tercero.identificar.failed",
-        "contabilidad.tercero.historial.response",
-        "contabilidad.tercero.historial.failed",
-        "contabilidad.tercero_declarado.failed",
-        "contabilidad.tercero_identificado.failed"
-      ],
-      "proposito": "MAESTRO UNICO del tercero con ROLES (conflicto 1 resuelto): ficha funcional + identidad por NIF en la MISMA parcela.",
-      "clases": [
-        "N1",
-        "N2"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_declarar",
-          "descripcion": "declarar(rol, tercero) — un solo escritor (DUENO/ASESOR)"
-        },
-        {
-          "nombre": "_ficha",
-          "descripcion": "ficha(idTercero) -> Tercero"
-        },
-        {
-          "nombre": "_historial",
-          "descripcion": "historial(idTercero) -> List<IdAsiento|IdDocumento>"
-        },
-        {
-          "nombre": "_anadirRol",
-          "descripcion": "anadirRol(idTercero, rol) — cliente+proveedor NO duplica al tercero"
-        },
-        {
-          "nombre": "_identificar",
-          "descripcion": "identificar(nif, nombreFiscal) -> IdTercero (N2, faceta de identidad)"
-        },
-        {
-          "nombre": "_unificar",
-          "descripcion": "unificar(idA, idB, evidencia) -> IdTercero — \"un proveedor escrito de tres formas = uno\""
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo",
-        "_shared/pos-persistencia"
-      ],
-      "nota": "NO REUTILIZA: no existe maestro fiscal de terceros en el inventario (N1+N2 se funden en UNA parcela, decision del dueno)."
-    },
-    {
-      "slug": "normalizador-hecho",
-      "forma": "conversor",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-entrada",
-      "depende_de": [
-        "puerto-evento-vertical",
-        "contrato-hecho-minimo",
-        "facturas",
-        "facturacion/fuentes",
-        "lote-admision"
-      ],
-      "eventos_sube": [
-        "contabilidad.hecho.normalizar.request",
-        "contabilidad.hecho_admitido",
-        "factura.procesada"
-      ],
-      "eventos_publica": [
-        "contabilidad.hecho_normalizado",
-        "contabilidad.documento_descuadrado",
-        "contabilidad.hecho.normalizar.response",
-        "contabilidad.hecho.normalizar.failed",
-        "contabilidad.hecho_normalizado.failed",
-        "contabilidad.documento_descuadrado.failed"
-      ],
-      "proposito": "UNICA puerta de FORMATO (A2) + control de cuadre del documento (A4.3): homogeneiza a forma asentable y jamas asienta \"casi cuadrado\".",
-      "clases": [
-        "A2",
-        "A4.3"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_homogeneizar",
-          "descripcion": "homogeneizar(hechoCrudo) -> Hecho — unica puerta de formato"
-        },
-        {
-          "nombre": "_mapear",
-          "descripcion": "mapear(camposFuente, camposInternos) -> Hecho"
-        },
-        {
-          "nombre": "_detectarFaltantes",
-          "descripcion": "detectarFaltantes(hecho) -> Set<Campo> -> excepcion/pregunta (lo que falta NO se rellena)"
-        },
-        {
-          "nombre": "_cuadrarDocumento",
-          "descripcion": "cuadrarDocumento(campos) -> Cuadrado | Descuadre (suma bases + suma impuestos = total; tolerancia declarable)"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo"
-      ],
-      "nota": "NO REUTILIZA: `facturas` entrega el dato extraido, no la forma asentable de contabilidad (contrato A11 + clave natural A14). El cuadre determinista es propio."
-    },
-    {
-      "slug": "deduplicacion-hecho",
-      "forma": "reflejo",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-entrada",
-      "depende_de": [
-        "clave-natural"
-      ],
-      "eventos_sube": [
-        "contabilidad.duplicado.verificar.request",
-        "contabilidad.hecho_normalizado"
-      ],
-      "eventos_publica": [
-        "contabilidad.hecho_nuevo",
-        "contabilidad.hecho_duplicado",
-        "contabilidad.duplicado.verificar.response",
-        "contabilidad.duplicado.verificar.failed",
-        "contabilidad.hecho_nuevo.failed",
-        "contabilidad.hecho_duplicado.failed"
-      ],
-      "proposito": "ANTI-BUCLE: aplica la clave natural. Reprocesar NO duplica; un rectificativo no es duplicado.",
-      "clases": [
-        "A7"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_esDuplicado",
-          "descripcion": "esDuplicado(hecho) -> Duplicado | Nuevo (determinista, test lo afirma)"
-        },
-        {
-          "nombre": "_marcarProcesado",
-          "descripcion": "marcarProcesado(clave) -> ok"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo"
-      ],
-      "nota": "NO REUTILIZA: la idempotencia por clave natural es el cerrojo 3 del dominio; ningun modulo del inventario lo aplica."
-    },
-    {
-      "slug": "resolucion-contrapartida",
-      "forma": "micro-agente",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-entrada",
-      "depende_de": [
-        "normalizador-hecho",
-        "catalogo-cuentas",
-        "regla-contrapartida",
-        "maestro-terceros",
-        "deduplicacion-hecho"
-      ],
-      "eventos_sube": [
-        "contabilidad.contrapartida.proponer.request",
-        "contabilidad.hecho_nuevo"
-      ],
-      "eventos_publica": [
-        "contabilidad.contrapartida_propuesta",
-        "contabilidad.contrapartida.proponer.response",
-        "contabilidad.contrapartida.proponer.failed",
-        "contabilidad.contrapartida_propuesta.failed"
-      ],
-      "proposito": "PROPONE cuenta/tercero/periodo (juicio con ambiguedad contra el plan declarado). El corte DURO lo fija la regla (A6.2).",
-      "clases": [
-        "A6.1"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_proponer",
-          "descripcion": "proponer(hecho) -> ContrapartidaPropuesta {cuenta, tercero, periodo} — FUZZY (LLM)"
-        },
-        {
-          "nombre": "_justificar",
-          "descripcion": "justificar(propuesta) -> Explicacion (base de L2)"
-        },
-        {
-          "nombre": "_alzarExcepcion",
-          "descripcion": "ambiguedad alta y sin regla -> excepcion a cola (A8.1), no se asienta"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo",
-        "_shared/pos-persistencia"
-      ],
-      "nota": "NO REUTILIZA: no existe resolucion de contrapartida contable en el inventario (IVA/plan/diario = 0 modulos)."
-    },
-    {
-      "slug": "completitud-cobertura",
-      "forma": "reflejo",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-entrada",
-      "depende_de": [
-        "clave-natural",
-        "anclaje-cierre-vertical"
-      ],
-      "eventos_sube": [
-        "contabilidad.cobertura.calcular.request",
-        "contabilidad.anclaje_declarado",
-        "contabilidad.hecho_admitido"
-      ],
-      "eventos_publica": [
-        "contabilidad.cobertura_calculada",
-        "contabilidad.cobertura.calcular.response",
-        "contabilidad.cobertura.calcular.failed",
-        "contabilidad.cobertura_calculada.failed"
-      ],
-      "proposito": "EL UNICO CALCULADOR de cobertura (conflicto 2 resuelto): esperados / recibidos / huecos / tasa. Q3, P4 y C6 son VISTAS suyas.",
-      "clases": [
-        "A12"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_calcular",
-          "descripcion": "calcular(periodo) -> Cobertura {esperados, recibidos, huecos, tasa}"
-        },
-        {
-          "nombre": "_huecos",
-          "descripcion": "huecos() -> Set<ClaveHecho> — alimenta A15, C6, Q3, P4"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo"
-      ],
-      "nota": "NO REUTILIZA: la metrica de cobertura de la ENTRADA es el corazon del cuello; no existe equivalente en el inventario."
-    },
-    {
-      "slug": "hecho-rectificativo",
-      "forma": "puente",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-entrada",
-      "depende_de": [
-        "clave-natural"
-      ],
-      "eventos_sube": [
-        "contabilidad.rectificativo.emparejar.request",
-        "contabilidad.hecho_admitido"
-      ],
-      "eventos_publica": [
-        "contabilidad.hecho_rectificado",
-        "contabilidad.rectificativo.emparejar.response",
-        "contabilidad.rectificativo.emparejar.failed",
-        "contabilidad.hecho_rectificado.failed"
-      ],
-      "proposito": "Plano 2 de los 4 planos de correccion: el hecho posterior que corrige/anula casa con su original POR CLAVE NATURAL. NO borra: ANADE.",
-      "clases": [
-        "A13"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_emparejar",
-          "descripcion": "emparejar(rectificativo, original) -> ok | ERROR_ORIGINAL_NO_HALLADO"
-        },
-        {
-          "nombre": "_emitir",
-          "descripcion": "emitir(hecho, ajuste) -> asiento de ajuste (B5), nunca borrado"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo"
-      ],
-      "nota": "NO REUTILIZA: la correccion no destructiva por clave natural es propia del dominio contable."
-    },
-    {
-      "slug": "panel-proceso-contable",
-      "forma": "reflejo",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-entrada",
-      "depende_de": [
-        "cola-revision",
-        "historial-proceso-contable",
-        "completitud-cobertura"
-      ],
-      "eventos_sube": [
-        "contabilidad.panel.latido.request"
-      ],
-      "eventos_publica": [
-        "contabilidad.panel_latido",
-        "contabilidad.panel.latido.response",
-        "contabilidad.panel.latido.failed",
-        "contabilidad.panel_latido.failed"
-      ],
-      "proposito": "Latido del proceso de admision (que entra, que se procesa, que esta en cola, que falla) + la TASA que PRUEBA la promesa \"sin una persona digitando\".",
-      "clases": [
-        "P1",
-        "P4"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_latido",
-          "descripcion": "latido() -> Panel — agregacion determinista"
-        },
-        {
-          "nombre": "_tasaCobertura",
-          "descripcion": "tasaCobertura() -> Tasa (P4, vista de la metrica unica A12)"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo"
-      ],
-      "nota": "NO REUTILIZA: no existe panel de proceso contable; es el \"display\" de la entrada."
-    },
-    {
-      "slug": "desatasco-entrada",
-      "forma": "micro-agente",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-entrada",
-      "depende_de": [
-        "cola-revision",
-        "catalogo-cuentas",
-        "regla-contrapartida",
-        "regla-movimiento-bancario",
-        "ratificacion-regla-aprendida"
-      ],
-      "eventos_sube": [
-        "contabilidad.desatasco.resolver.request",
-        "contabilidad.excepcion_encolada"
-      ],
-      "eventos_publica": [
-        "contabilidad.excepcion_desatascada",
-        "contabilidad.regla_aprendida",
-        "contabilidad.desatasco.resolver.response",
-        "contabilidad.desatasco.resolver.failed",
-        "contabilidad.excepcion_desatascada.failed",
-        "contabilidad.regla_aprendida.failed"
-      ],
-      "proposito": "LA ACCION que completa la cola: resolver / reencolar / descartar con MOTIVO. Produce la regla candidata que NO actua hasta ser ratificada (L10).",
-      "clases": [
-        "P3"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_resolver",
-          "descripcion": "resolver(excepcion, decision) -> Resolucion | REENColar | DescartarConMotivo — FUZZY"
-        },
-        {
-          "nombre": "_producirRegla",
-          "descripcion": "producirRegla(resolucion, evidencia) -> ReglaDeclarada candidata (aprendizaje hidratado)"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo",
-        "_shared/pos-persistencia"
-      ],
-      "nota": "NO REUTILIZA: el bucle excepcion -> regla -> menos excepciones es el corazon del cuello y no existe en el inventario."
-    },
-    {
-      "slug": "cuenta-terceros",
-      "forma": "reflejo",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-entrada",
-      "depende_de": [
-        "maestro-terceros",
-        "mayor-balanza",
-        "cola-declaraciones-criterio"
-      ],
-      "eventos_sube": [
-        "contabilidad.cuenta_terceros.saldo.request",
-        "contabilidad.cuenta_terceros.extracto.request",
-        "contabilidad.cuenta_terceros.vencimiento.request",
-        "contabilidad.cuenta_terceros.aging.request"
-      ],
-      "eventos_publica": [
-        "contabilidad.cuenta_terceros_calculada",
-        "contabilidad.cuenta_terceros.saldo.response",
-        "contabilidad.cuenta_terceros.saldo.failed",
-        "contabilidad.cuenta_terceros.extracto.response",
-        "contabilidad.cuenta_terceros.extracto.failed",
-        "contabilidad.cuenta_terceros.vencimiento.response",
-        "contabilidad.cuenta_terceros.vencimiento.failed",
-        "contabilidad.cuenta_terceros.aging.response",
-        "contabilidad.cuenta_terceros.aging.failed",
-        "contabilidad.cuenta_terceros_calculada.failed"
-      ],
-      "proposito": "Mayor AUXILIAR del tercero DERIVADO del libro (nunca almacen paralelo): facturas vivas, saldo, extracto confrontable, vencimientos y antiguedad por lado.",
-      "clases": [
-        "N3",
-        "N4",
-        "N6",
-        "N8"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_facturasVivas",
-          "descripcion": "facturasVivas(idTercero) -> List<IdAsiento> (N3)"
-        },
-        {
-          "nombre": "_saldo",
-          "descripcion": "saldo(idTercero) -> Importe (N3)"
-        },
-        {
-          "nombre": "_extracto",
-          "descripcion": "extracto(idTercero, desde, hasta) -> DocumentoConfrontable (N4)"
-        },
-        {
-          "nombre": "_calcularVencimiento",
-          "descripcion": "calcularVencimiento(factura) -> Fecha desde la politica declarada (N6)"
-        },
-        {
-          "nombre": "_estaVencido",
-          "descripcion": "estaVencido(factura, hoy) -> Bool (N6)"
-        },
-        {
-          "nombre": "_clasificarPorVencimiento",
-          "descripcion": "clasificarPorVencimiento(lado, hoy) -> AgingReport POR_COBRAR | POR_PAGAR (N8)"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo"
-      ],
-      "nota": "NO REUTILIZA: las vistas por rol del tercero (auxiliar, extracto, vencimientos) cuelgan del libro de ESTA vertical."
-    },
-    {
-      "slug": "compra-proveedor",
-      "forma": "reflejo",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-entrada",
-      "depende_de": [
-        "mayor-balanza",
-        "maestro-terceros"
-      ],
-      "eventos_sube": [
-        "contabilidad.compra.cotejar.request",
-        "contabilidad.compra.coste_real.request"
-      ],
-      "eventos_publica": [
-        "contabilidad.compra_cotejada",
-        "contabilidad.compra.cotejar.response",
-        "contabilidad.compra.cotejar.failed",
-        "contabilidad.compra.coste_real.response",
-        "contabilidad.compra.coste_real.failed",
-        "contabilidad.compra_cotejada.failed"
-      ],
-      "proposito": "La compra VERIFICADA antes de asentar: cotejo pedido <-> recepcion <-> factura (N5) y ajuste del coste real por rappels/anticipos (N7).",
-      "clases": [
-        "N5",
-        "N7"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_cotejar",
-          "descripcion": "cotejar(pedido, recepcion, factura) -> Cuadra | Descuadre -> cola (N5). Si el negocio no coteja (declarable), se asienta directo y SE DECLARA"
-        },
-        {
-          "nombre": "_ajustarCosteReal",
-          "descripcion": "ajustarCosteReal(factura) -> Importe a lo realmente pagado (N7); el ajuste SUMA"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo"
-      ],
-      "nota": "NO REUTILIZA: no existe cotejo compra/recepcion/factura en el inventario."
-    },
-    {
-      "slug": "emision-factura-venta",
-      "forma": "custodio",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-entrada",
-      "depende_de": [
-        "maestro-terceros",
-        "catalogo-cuentas",
-        "escritor-diario"
-      ],
-      "eventos_sube": [
-        "contabilidad.factura.emitir.request",
-        "contabilidad.factura.rectificar.request",
-        "contabilidad.factura.series.request",
-        "project.activated"
-      ],
-      "eventos_publica": [
-        "contabilidad.factura_emitida",
-        "contabilidad.factura_rectificada",
-        "contabilidad.factura.emitir.response",
-        "contabilidad.factura.emitir.failed",
-        "contabilidad.factura.rectificar.response",
-        "contabilidad.factura.rectificar.failed",
-        "contabilidad.factura.series.response",
-        "contabilidad.factura.series.failed",
-        "contabilidad.factura_emitida.failed",
-        "contabilidad.factura_rectificada.failed"
-      ],
-      "proposito": "Cara EMITIDA con serie/numeracion fiscal: numeracion correlativa SIN SALTOS. Un solo escritor (numero duplicado = corrupcion).",
-      "clases": [
-        "O1",
-        "O2"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_emitir",
-          "descripcion": "emitir(factura) -> FacturaEmitida — asigna numero correlativo; ticket o factura completa segun el TIPO (dato del hecho)"
-        },
-        {
-          "nombre": "_series",
-          "descripcion": "series() -> List<IdSerie> (por negocio/canal/unica — declarable)"
-        },
-        {
-          "nombre": "_rectificarSustitutiva",
-          "descripcion": "rectificarSustitutiva(serie, rectificativa) -> OK | ERROR (O2)"
-        },
-        {
-          "nombre": "_calcularAjuste",
-          "descripcion": "calcularAjuste(original, motivo) -> Importe — abono/devolucion/descuento; NO borra (O2)"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo",
-        "_shared/pos-persistencia"
-      ],
-      "nota": "NO REUTILIZA: no existe emision de factura con serie fiscal en el inventario (fiscal en Enki = 0 modulos). `prisma/ticket` formatea texto, no emite documento fiscal (patron de formato tomado)."
-    },
-    {
-      "slug": "declaracion-fuente-faltante",
-      "forma": "puente",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-entrada",
-      "depende_de": [
-        "completitud-cobertura",
-        "motor-avisos"
-      ],
-      "eventos_sube": [
-        "contabilidad.cobertura_calculada"
-      ],
-      "eventos_publica": [
-        "contabilidad.fuente_faltante_declarada",
-        "contabilidad.aviso.solicitar.request",
-        "contabilidad.fuente_faltante.failed",
-        "contabilidad.fuente_faltante_declarada.failed",
-        "contabilidad.aviso.solicitar.failed"
-      ],
-      "proposito": "Si una vertical NO publica un hecho que se necesita, se DECLARA el hueco (abierto + aviso). NUNCA se obliga a la fuente a producirlo.",
-      "clases": [
-        "A15"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_detectarHueco",
-          "descripcion": "detectarHueco(cobertura) -> Hueco (reflejo interno)"
-        },
-        {
-          "nombre": "_declarar",
-          "descripcion": "declarar(hueco) -> aviso (K2) + marca [ABIERTO]"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo"
-      ],
-      "nota": "NO REUTILIZA: la asimetria con la vertical subordinada es propia de esta vertical (fuente: prisma de interlocutor `verticales`)."
-    },
-    {
-      "slug": "aviso-revision",
-      "forma": "puente",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-entrada",
-      "depende_de": [
-        "cola-revision",
-        "motor-avisos"
-      ],
-      "eventos_sube": [
-        "contabilidad.excepcion_encolada"
-      ],
-      "eventos_publica": [
-        "contabilidad.aviso.solicitar.request",
-        "contabilidad.aviso_revision_solicitado",
-        "contabilidad.aviso.solicitar.failed",
-        "contabilidad.aviso_revision_solicitado.failed"
-      ],
-      "proposito": "Empujon al motor de avisos: \"esto necesita revision\". Conecta por senal; no resuelve ni decide nada.",
-      "clases": [
-        "A8.2"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_avisar",
-          "descripcion": "avisar(excepcion) -> senal a motor-avisos (K2) con el motivo y la cola de destino"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo"
-      ],
-      "nota": "NO REUTILIZA: el aviso de revision nace de la cola de ESTA vertical; K2 (motor-avisos) solo lo produce/entrega."
-    },
-    {
-      "slug": "catalogo-cuentas",
-      "forma": "custodio",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-libro",
-      "depende_de": [
-        "cola-declaraciones-criterio"
-      ],
-      "eventos_sube": [
-        "contabilidad.cuenta.declarar.request",
-        "contabilidad.cuenta.resolver.request",
-        "contabilidad.plan.importar.request",
-        "contabilidad.plan.exportar.request",
-        "project.activated"
-      ],
-      "eventos_publica": [
-        "contabilidad.cuenta_declarada",
-        "contabilidad.plan_importado",
-        "contabilidad.plan_exportado",
-        "contabilidad.cuenta.declarar.response",
-        "contabilidad.cuenta.declarar.failed",
-        "contabilidad.cuenta.resolver.response",
-        "contabilidad.cuenta.resolver.failed",
-        "contabilidad.plan.importar.response",
-        "contabilidad.plan.importar.failed",
-        "contabilidad.plan.exportar.response",
-        "contabilidad.plan.exportar.failed",
-        "contabilidad.cuenta_declarada.failed",
-        "contabilidad.plan_importado.failed",
-        "contabilidad.plan_exportado.failed"
-      ],
-      "proposito": "Plan contable DECLARABLE/IMPORTABLE (lo aporta el negocio o el asesor) + frontera unica de codificacion (B6). Un solo escritor.",
-      "clases": [
-        "B1",
-        "B6"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_declarar",
-          "descripcion": "declarar(rol, cuenta) — un solo escritor"
-        },
-        {
-          "nombre": "_resolver",
-          "descripcion": "resolver(codigo) -> Cuenta | NO_EXISTE"
-        },
-        {
-          "nombre": "_importar",
-          "descripcion": "importar(origen) -> List<Cuenta> (B6, unico cruce de formatos del plan)"
-        },
-        {
-          "nombre": "_exportar",
-          "descripcion": "exportar(catalogo) -> DocumentoPlan (B6)"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo",
-        "_shared/pos-persistencia"
-      ],
-      "nota": "NO REUTILIZA: no existe plan contable en el inventario; el formato declarable del asesor es DATO (K9)."
-    },
-    {
-      "slug": "escritor-diario",
-      "forma": "custodio",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-libro",
-      "depende_de": [
-        "catalogo-cuentas",
-        "clave-natural",
-        "single-writer"
-      ],
-      "eventos_sube": [
-        "contabilidad.asiento.asentar.request",
-        "contabilidad.asiento.apertura.request",
-        "contabilidad.asiento.cierre.request",
-        "contabilidad.asiento.ajustar.request",
-        "contabilidad.contrapartida_propuesta",
-        "project.activated"
-      ],
-      "eventos_publica": [
-        "contabilidad.asiento_asentado",
-        "contabilidad.asiento_rechazado",
-        "contabilidad.asiento.asentar.response",
-        "contabilidad.asiento.asentar.failed",
-        "contabilidad.asiento.apertura.response",
-        "contabilidad.asiento.apertura.failed",
-        "contabilidad.asiento.cierre.response",
-        "contabilidad.asiento.cierre.failed",
-        "contabilidad.asiento.ajustar.response",
-        "contabilidad.asiento.ajustar.failed",
-        "contabilidad.asiento_asentado.failed",
-        "contabilidad.asiento_rechazado.failed"
-      ],
-      "proposito": "EL custodio del libro: single-writer por parcela, verifica partida doble ANTES de aceptar y rechaza duplicados por clave natural. Aqui entrega el cuello.",
-      "clases": [
-        "B2"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_asentar",
-          "descripcion": "asentar(rol, asiento) -> ok | ERROR_DESCUADRE | ERROR_DUPLICADO (suma debe = suma haber)"
-        },
-        {
-          "nombre": "_registrarApertura",
-          "descripcion": "registrarApertura(apertura) -> ok"
-        },
-        {
-          "nombre": "_registrarCierre",
-          "descripcion": "registrarCierre(cierre) -> ok"
-        },
-        {
-          "nombre": "_componerDesdeContrapartida",
-          "descripcion": "compone los apuntes desde el hecho + la contrapartida recibida (proyeccion interna; no hay orquestador)"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo",
-        "_shared/pos-persistencia"
-      ],
-      "nota": "NO REUTILIZA: no existe diario de partida doble en el inventario (verificado: fiscal/contable = 0 modulos)."
-    },
-    {
-      "slug": "mayor-balanza",
-      "forma": "reflejo",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-libro",
-      "depende_de": [
-        "escritor-diario"
-      ],
-      "eventos_sube": [
-        "contabilidad.mayor.saldo.request",
-        "contabilidad.mayor.balanza.request",
-        "contabilidad.mayor.movimientos.request"
-      ],
-      "eventos_publica": [
-        "contabilidad.balanza_calculada",
-        "contabilidad.mayor.saldo.response",
-        "contabilidad.mayor.saldo.failed",
-        "contabilidad.mayor.balanza.response",
-        "contabilidad.mayor.balanza.failed",
-        "contabilidad.mayor.movimientos.response",
-        "contabilidad.mayor.movimientos.failed",
-        "contabilidad.balanza_calculada.failed"
-      ],
-      "proposito": "Saldos por cuenta DERIVADOS del diario (nunca almacen paralelo). Determinista; un test lo afirma.",
-      "clases": [
-        "B3"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_saldoPorCuenta",
-          "descripcion": "saldoPorCuenta(periodo) -> Map<IdCuenta, Importe>"
-        },
-        {
-          "nombre": "_balanza",
-          "descripcion": "balanza(periodo) -> Balanza (sumas y saldos)"
-        },
-        {
-          "nombre": "_movimientosDe",
-          "descripcion": "movimientosDe(cuenta, periodo) -> List<Apunte>"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo"
-      ],
-      "nota": "NO REUTILIZA: derivacion del diario propia; ningun modulo del inventario lleva mayor/balanza."
-    },
-    {
-      "slug": "traza-asiento",
-      "forma": "custodio",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-libro",
-      "depende_de": [
-        "escritor-diario"
-      ],
-      "eventos_sube": [
-        "contabilidad.traza.anotar.request",
-        "contabilidad.traza.consultar.request",
-        "contabilidad.asiento_asentado",
-        "project.activated"
-      ],
-      "eventos_publica": [
-        "contabilidad.traza_anotada",
-        "contabilidad.traza.anotar.response",
-        "contabilidad.traza.anotar.failed",
-        "contabilidad.traza.consultar.response",
-        "contabilidad.traza.consultar.failed",
-        "contabilidad.traza_anotada.failed"
-      ],
-      "proposito": "Registro INMUTABLE (append-only) de quien y cuando creo cada asiento. Solo crece; nunca se reescribe ni se borra.",
-      "clases": [
-        "B4"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_anotar",
-          "descripcion": "anotar(quien, cuando, que) — escritor unico: el ESCRITOR_DIARIO"
-        },
-        {
-          "nombre": "_consultar",
-          "descripcion": "consultar(claveNatural) -> EntradaTraza"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo",
-        "_shared/pos-persistencia"
-      ],
-      "nota": "NO REUTILIZA: la traza del asiento es requisito de auditoria y de Verifactu; no existe en el inventario."
-    },
-    {
-      "slug": "asiento-ajuste",
-      "forma": "puente",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-libro",
-      "depende_de": [
-        "escritor-diario",
-        "traza-asiento"
-      ],
-      "eventos_sube": [
-        "contabilidad.ajuste.recibir.request"
-      ],
-      "eventos_publica": [
-        "contabilidad.asiento.ajustar.request",
-        "contabilidad.ajuste_recibido",
-        "contabilidad.ajuste.recibir.failed",
-        "contabilidad.ajuste.recibir.response",
-        "contabilidad.asiento.ajustar.failed",
-        "contabilidad.ajuste_recibido.failed"
-      ],
-      "proposito": "Plano 1 de correccion: por donde la correccion del asesor ENTRA al libro SIN BORRAR (suma). Traza intacta.",
-      "clases": [
-        "B5"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_recibir",
-          "descripcion": "recibir(correccion: Asiento) -> senal al diario (B2)"
-        },
-        {
-          "nombre": "_verificarNoBorrado",
-          "descripcion": "verificarNoBorrado() -> ok — el original sigue en la traza"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo"
-      ],
-      "nota": "NO REUTILIZA: la correccion que suma sobre el libro es propia del dominio contable."
-    },
-    {
-      "slug": "estados-contables",
-      "forma": "reflejo",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-libro",
-      "depende_de": [
-        "mayor-balanza",
-        "inmovilizado",
-        "valoracion-existencia"
-      ],
-      "eventos_sube": [
-        "contabilidad.estado.balance.request",
-        "contabilidad.estado.resultado.request"
-      ],
-      "eventos_publica": [
-        "contabilidad.balance_calculado",
-        "contabilidad.resultado_calculado",
-        "contabilidad.estado.balance.response",
-        "contabilidad.estado.balance.failed",
-        "contabilidad.estado.resultado.response",
-        "contabilidad.estado.resultado.failed",
-        "contabilidad.balance_calculado.failed",
-        "contabilidad.resultado_calculado.failed"
-      ],
-      "proposito": "Balance de situacion (C1) y cuenta de resultados (C2) DERIVADOS del mayor + valoraciones. No se \"arregla\" un resultado: se explica con su base y su cobertura.",
-      "clases": [
-        "C1",
-        "C2"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_componerBalance",
-          "descripcion": "componerBalance(periodo) -> Balance {activo, pasivo, patrimonio} (C1)"
-        },
-        {
-          "nombre": "_cuadrar",
-          "descripcion": "cuadrar() -> ok | ERROR_ACTIVO_NO_CUADRA (C1)"
-        },
-        {
-          "nombre": "_componerResultado",
-          "descripcion": "componerResultado(periodo) -> Resultado {ingresos, gastos, resultado} (C2)"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo"
-      ],
-      "nota": "NO REUTILIZA: los estados contables no existen en el inventario; son la derivacion del mayor."
-    },
-    {
-      "slug": "periodificacion",
-      "forma": "reflejo",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-libro",
-      "depende_de": [
-        "cola-declaraciones-criterio"
-      ],
-      "eventos_sube": [
-        "contabilidad.periodo.imputar.request"
-      ],
-      "eventos_publica": [
-        "contabilidad.periodo_imputado",
-        "contabilidad.periodo.imputar.response",
-        "contabilidad.periodo.imputar.failed",
-        "contabilidad.periodo_imputado.failed"
-      ],
-      "proposito": "Imputa cada hecho a su periodo con el CRITERIO DECLARADO y CONSERVA las dos fechas (operacion != valor). No elige ni adivina.",
-      "clases": [
-        "C3"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_imputarPeriodo",
-          "descripcion": "imputarPeriodo(hecho) -> IdPeriodo (criterio declarado, nunca cableado)"
-        },
-        {
-          "nombre": "_conservarFechas",
-          "descripcion": "conservarFechas(hecho) -> (fechaOperacion, fechaValor)"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo"
-      ],
-      "nota": "NO REUTILIZA: la periodificacion con dos fechas y criterio declarable es propia de la vertical."
-    },
-    {
-      "slug": "cierre-ejercicio",
-      "forma": "custodio",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-libro",
-      "depende_de": [
-        "escritor-diario",
-        "mayor-balanza",
-        "periodificacion",
-        "inmovilizado",
-        "cola-declaraciones-criterio"
-      ],
-      "eventos_sube": [
-        "contabilidad.cierre.cerrar.request",
-        "contabilidad.cierre.estado.request",
-        "contabilidad.hecho_admitido",
-        "project.activated"
-      ],
-      "eventos_publica": [
-        "contabilidad.cierre_realizado",
-        "contabilidad.apertura_generada",
-        "contabilidad.cierre.cerrar.response",
-        "contabilidad.cierre.cerrar.failed",
-        "contabilidad.cierre.estado.response",
-        "contabilidad.cierre.estado.failed",
-        "contabilidad.cierre_realizado.failed",
-        "contabilidad.apertura_generada.failed"
-      ],
-      "proposito": "Cierra el periodo con ajustes: IRREVERSIBLE salvo ajuste posterior (B5). DOS niveles de cierre (dia del negocio · mes del asesor).",
-      "clases": [
-        "C4",
-        "C5"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_cerrar",
-          "descripcion": "cerrar(periodo, ajustes) -> Cierre | ERROR_PERIODO_YA_CERRADO"
-        },
-        {
-          "nombre": "_esIrreversible",
-          "descripcion": "esIrreversible() -> Bool"
-        },
-        {
-          "nombre": "_nivel1",
-          "descripcion": "NIVEL 1 caja del dia: consume el hecho CIERRE_JORNADA admitido por la puerta (clave natural: proyecto+jornada)"
-        },
-        {
-          "nombre": "_nivel2",
-          "descripcion": "NIVEL 2 mes natural: ajustes, periodificacion, amortizaciones, IVA devengado/soportado, regularizacion (clave: proyecto+ejercicio+mes)"
-        },
-        {
-          "nombre": "_generarApertura",
-          "descripcion": "generarApertura(cierreAnterior) -> List<Asiento> (C5): los saldos de apertura son los de cierre, nunca inventados"
-        },
-        {
-          "nombre": "_arrastrarSaldos",
-          "descripcion": "arrastrarSaldos() -> Balance (C5)"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo",
-        "_shared/pos-persistencia"
-      ],
-      "nota": "NO REUTILIZA: el cierre de caja diario de la OPERACION no se toca: entra como hecho observado. El cierre contable con ajustes no existe en el inventario."
-    },
-    {
-      "slug": "aviso-cuadre",
-      "forma": "puente",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-libro",
-      "depende_de": [
-        "completitud-cobertura",
-        "motor-avisos"
-      ],
-      "eventos_sube": [
-        "contabilidad.cobertura_calculada",
-        "contabilidad.cierre_realizado"
-      ],
-      "eventos_publica": [
-        "contabilidad.cuadre_evaluado",
-        "contabilidad.aviso.solicitar.request",
-        "contabilidad.cuadre.failed",
-        "contabilidad.cuadre_evaluado.failed",
-        "contabilidad.aviso.solicitar.failed"
-      ],
-      "proposito": "NO FINGE el cuadre: si falta cobertura, AVISA. VISTA de la metrica unica (A12), no una segunda metrica.",
-      "clases": [
-        "C6"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_evaluar",
-          "descripcion": "evaluar(cierre) -> Cuadra | FaltaCobertura (lee la metrica unica, no recalcula)"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo"
-      ],
-      "nota": "NO REUTILIZA: el aviso de cuadre bebe de la metrica de cobertura de ESTA vertical."
-    },
-    {
-      "slug": "puerto-extracto",
-      "forma": "conversor",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-libro",
-      "depende_de": [
-        "credential-manager"
-      ],
-      "eventos_sube": [
-        "contabilidad.extracto.leer.request",
-        "contabilidad.extracto.registrar_forma.request"
-      ],
-      "eventos_publica": [
-        "contabilidad.extracto_leido",
-        "contabilidad.extracto.leer.response",
-        "contabilidad.extracto.leer.failed",
-        "contabilidad.extracto.registrar_forma.response",
-        "contabilidad.extracto.registrar_forma.failed",
-        "contabilidad.extracto_leido.failed"
-      ],
-      "proposito": "Frontera del canal/formato del extracto bancario: un adaptador por fuente, puesto en el sitio. Si falta una fuente -> SE CREA.",
-      "clases": [
-        "E2"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_leer",
-          "descripcion": "leer(canal) -> List<MovimientoBancario>"
-        },
-        {
-          "nombre": "_registrarAdaptador",
-          "descripcion": "registrarAdaptador(canal) -> ok — catalogo declarable; credenciales via credential-manager"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo"
-      ],
-      "nota": "NO REUTILIZA: ningun modulo del inventario lee extractos bancarios (conciliacion = 0 modulos)."
-    },
-    {
-      "slug": "conciliacion-bancaria",
-      "forma": "reflejo",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-libro",
-      "depende_de": [
-        "mayor-balanza",
-        "puerto-extracto",
-        "regla-movimiento-bancario",
-        "maestro-cuentas-bancarias"
-      ],
-      "eventos_sube": [
-        "contabilidad.conciliacion.cruzar.request",
-        "contabilidad.conciliacion.informe.request"
-      ],
-      "eventos_publica": [
-        "contabilidad.conciliacion_realizada",
-        "contabilidad.movimiento_sin_cruzar",
-        "contabilidad.conciliacion.cruzar.response",
-        "contabilidad.conciliacion.cruzar.failed",
-        "contabilidad.conciliacion.informe.response",
-        "contabilidad.conciliacion.informe.failed",
-        "contabilidad.conciliacion_realizada.failed",
-        "contabilidad.movimiento_sin_cruzar.failed"
-      ],
-      "proposito": "El CRUCE extracto <-> libro por clave natural y reglas es DETERMINISTA; el juicio vive en sus satelites E7 (fuzzy) y E8 (custodio).",
-      "clases": [
-        "E1",
-        "E3",
-        "E9",
-        "E10"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_cruzar",
-          "descripcion": "cruzar(extracto, libro) -> List<Conciliacion> (E1)"
-        },
-        {
-          "nombre": "_sinCruzar",
-          "descripcion": "sinCruzar(extracto, libro) -> List<MovimientoBancario> -> E7"
-        },
-        {
-          "nombre": "_cuadrarMovimiento",
-          "descripcion": "cuadrarMovimiento(movimiento, cobroOPago) -> Ok | Descuadre (E3, clave natural compartida)"
-        },
-        {
-          "nombre": "_explicarDesfase",
-          "descripcion": "explicarDesfase() -> List<PartidaEnTransito> (E9: cheque no cobrado, cobro no apuntado)"
-        },
-        {
-          "nombre": "_componerInforme",
-          "descripcion": "componerInforme() -> DocumentoCuadre (E10: saldo banco <-> saldo contable ajustado)"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo"
-      ],
-      "nota": "NO REUTILIZA: la conciliacion bancaria no existe en el inventario; el cruce deterministico es propio."
-    },
-    {
-      "slug": "partida-no-identificada",
-      "forma": "micro-agente",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-libro",
-      "depende_de": [
-        "conciliacion-bancaria",
-        "regla-movimiento-bancario",
-        "cola-revision"
-      ],
-      "eventos_sube": [
-        "contabilidad.movimiento_sin_cruzar"
-      ],
-      "eventos_publica": [
-        "contabilidad.partida_clasificada",
-        "contabilidad.excepcion.encolar.request",
-        "contabilidad.partida_clasificada.failed",
-        "contabilidad.excepcion.encolar.failed"
-      ],
-      "proposito": "El movimiento SIN contrapartida llega con descripcion ambigua -> INTERPRETAR. Una vez existe la regla (E8) pasa a automatico; lo no reconocible va a cola. NO se ignora.",
-      "clases": [
-        "E7"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_reconocer",
-          "descripcion": "reconocer(movimiento) -> Clasificacion | SIN_REGLA — FUZZY (comision/interes/devolucion)"
-        },
-        {
-          "nombre": "_proponerContrapartida",
-          "descripcion": "proponerContrapartida(movimiento) -> Contrapartida"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo",
-        "_shared/pos-persistencia"
-      ],
-      "nota": "NO REUTILIZA: la interpretacion de partidas bancarias es propia; no existe en el inventario."
-    },
-    {
-      "slug": "regla-movimiento-bancario",
-      "forma": "custodio",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-libro",
-      "depende_de": [],
-      "eventos_sube": [
-        "contabilidad.regla_movimiento.leer.request",
-        "contabilidad.regla_movimiento.declarar.request",
-        "contabilidad.regla_movimiento.aprender.request",
-        "contabilidad.regla_ratificada",
-        "project.activated"
-      ],
-      "eventos_publica": [
-        "contabilidad.regla_movimiento_declarada",
-        "contabilidad.regla_movimiento_aprendida",
-        "contabilidad.regla_movimiento.leer.response",
-        "contabilidad.regla_movimiento.leer.failed",
-        "contabilidad.regla_movimiento.declarar.response",
-        "contabilidad.regla_movimiento.declarar.failed",
-        "contabilidad.regla_movimiento.aprender.response",
-        "contabilidad.regla_movimiento.aprender.failed",
-        "contabilidad.regla_movimiento_declarada.failed",
-        "contabilidad.regla_movimiento_aprendida.failed"
-      ],
-      "proposito": "Repositorio de reglas \"esta comision -> esta cuenta\", declaradas o aprendidas. Comparte la PUERTA UNICA de ratificacion (L10).",
-      "clases": [
-        "E8"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_declarar",
-          "descripcion": "declarar(rol, regla) — un solo escritor (DUENO/ASESOR)"
-        },
-        {
-          "nombre": "_aplicar",
-          "descripcion": "aplicar(movimiento) -> Contrapartida | SIN_COBERTURA"
-        },
-        {
-          "nombre": "_aprender",
-          "descripcion": "aprender(rol, regla, evidencia) — hidratada por E7/desatasco; RATIFICADA por L10"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo",
-        "_shared/pos-persistencia"
-      ],
-      "nota": "NO REUTILIZA: no existe regla de clasificacion bancaria en el inventario."
-    },
-    {
-      "slug": "saldo-tesoreria",
-      "forma": "reflejo",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-libro",
-      "depende_de": [
-        "maestro-cuentas-bancarias",
-        "conciliacion-bancaria",
-        "cuenta-terceros",
-        "cola-declaraciones-criterio"
-      ],
-      "eventos_sube": [
-        "contabilidad.tesoreria.saldo.request",
-        "contabilidad.tesoreria.prevision.request"
-      ],
-      "eventos_publica": [
-        "contabilidad.saldo_tesoreria_calculado",
-        "contabilidad.caja_proyectada",
-        "contabilidad.tesoreria.saldo.response",
-        "contabilidad.tesoreria.saldo.failed",
-        "contabilidad.tesoreria.prevision.response",
-        "contabilidad.tesoreria.prevision.failed",
-        "contabilidad.saldo_tesoreria_calculado.failed",
-        "contabilidad.caja_proyectada.failed"
-      ],
-      "proposito": "Posicion REAL de dinero por cuenta (E4) + prevision de caja desde los compromisos con la POLITICA DECLARADA (E5). Los umbrales los declara el dueno.",
-      "clases": [
-        "E4",
-        "E5"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_saldoPorCuenta",
-          "descripcion": "saldoPorCuenta(idCuentaBancaria) -> Importe (E4)"
-        },
-        {
-          "nombre": "_posicionReal",
-          "descripcion": "posicionReal() -> Map<IdCuentaBancaria, Importe> (E4: la real, no la contable)"
-        },
-        {
-          "nombre": "_proyectar",
-          "descripcion": "proyectar(desde, hasta) -> CajaProyectada (E5)"
-        },
-        {
-          "nombre": "_alertarUmbral",
-          "descripcion": "alertarUmbral(prevision, umbral) -> senal (K2); umbral declarable (Q24)"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo"
-      ],
-      "nota": "NO REUTILIZA: la posicion real de tesoreria y la prevision de caja no existen en el inventario."
-    },
-    {
-      "slug": "maestro-cuentas-bancarias",
-      "forma": "custodio",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-libro",
-      "depende_de": [],
-      "eventos_sube": [
-        "contabilidad.cuenta_bancaria.declarar.request",
-        "contabilidad.cuenta_bancaria.listar.request",
-        "project.activated"
-      ],
-      "eventos_publica": [
-        "contabilidad.cuenta_bancaria_declarada",
-        "contabilidad.cuenta_bancaria.declarar.response",
-        "contabilidad.cuenta_bancaria.declarar.failed",
-        "contabilidad.cuenta_bancaria.listar.response",
-        "contabilidad.cuenta_bancaria.listar.failed",
-        "contabilidad.cuenta_bancaria_declarada.failed"
-      ],
-      "proposito": "Catalogo DECLARABLE de cuentas y su MONEDA. Sin el, \"el banco\" es un solo numero falso. Multi-moneda: parametro declarable.",
-      "clases": [
-        "E11"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_declarar",
-          "descripcion": "declarar(rol, cuenta, moneda) — un solo escritor (DUENO)"
-        },
-        {
-          "nombre": "_cuentas",
-          "descripcion": "cuentas() -> List<CuentaBancaria>"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo",
-        "_shared/pos-persistencia"
-      ],
-      "nota": "NO REUTILIZA: no existe maestro de cuentas bancarias; ningun modulo del inventario toca banca."
-    },
-    {
-      "slug": "vista-revisable",
-      "forma": "reflejo",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-libro",
-      "depende_de": [
-        "mayor-balanza",
-        "traza-asiento",
-        "expediente-documental"
-      ],
-      "eventos_sube": [
-        "contabilidad.asiento.explicar.request",
-        "contabilidad.muestra.seleccionar.request"
-      ],
-      "eventos_publica": [
-        "contabilidad.vista_explicada",
-        "contabilidad.muestra_seleccionada",
-        "contabilidad.asiento.explicar.response",
-        "contabilidad.asiento.explicar.failed",
-        "contabilidad.muestra.seleccionar.response",
-        "contabilidad.muestra.seleccionar.failed",
-        "contabilidad.vista_explicada.failed",
-        "contabilidad.muestra_seleccionada.failed"
-      ],
-      "proposito": "TODO asiento/calculo EXPLICADO (cifra, base, origen, estado) + seleccion por excepcion y MUESTRA (no revisar todo). No caja negra.",
-      "clases": [
-        "L2",
-        "L8"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_explicar",
-          "descripcion": "explicar(asientoOCalculo) -> Vista {cifra, base, origen, estado} (L2, composicion determinista de la traza)"
-        },
-        {
-          "nombre": "_seleccionarMuestra",
-          "descripcion": "seleccionarMuestra(conjuntoAsientos) -> Muestra por senales DURAS DECLARADAS: alto importe, sin regla, contrapartida nueva, cuadre dudoso (L8)"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo"
-      ],
-      "nota": "NO REUTILIZA: la explicabilidad de cada cifra es requisito de la medida maestra (que el asesor la acepte)."
-    },
-    {
-      "slug": "flujo-firma",
-      "forma": "custodio",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-libro",
-      "depende_de": [
-        "asiento-ajuste",
-        "regla-contrapartida",
-        "regla-movimiento-bancario",
-        "facturacion/asesoria"
-      ],
-      "eventos_sube": [
-        "contabilidad.firma.marcar.request",
-        "contabilidad.firma.delta.request",
-        "project.activated"
-      ],
-      "eventos_publica": [
-        "contabilidad.firma_registrada",
-        "contabilidad.delta_revision_calculado",
-        "contabilidad.firma.marcar.response",
-        "contabilidad.firma.marcar.failed",
-        "contabilidad.firma.delta.response",
-        "contabilidad.firma.delta.failed",
-        "contabilidad.firma_registrada.failed",
-        "contabilidad.delta_revision_calculado.failed"
-      ],
-      "proposito": "Marca de revisado/firmado POR EL ASESOR: el sistema NO firma, solo registra. El delta da al asesor solo lo que cambio desde su ultimo visto bueno.",
-      "clases": [
-        "L3",
-        "L9"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_marcarRevisado",
-          "descripcion": "marcarRevisado(rol, alcance) -> ok (un solo escritor: el ASESOR)"
-        },
-        {
-          "nombre": "_firmar",
-          "descripcion": "firmar(rol, alcance) -> MarcaFirma (L3); el nivel (periodo/estado/documento) es declarable"
-        },
-        {
-          "nombre": "_calcularDelta",
-          "descripcion": "calcularDelta(desdeUltimaFirma) -> Delta {asientosNuevos, ajustes, reglasCambiadas} (L9)"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo",
-        "_shared/pos-persistencia"
-      ],
-      "nota": "NO REUTILIZA: no existe flujo de firma del asesor en el inventario."
-    },
-    {
-      "slug": "expediente-documental",
-      "forma": "custodio",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-libro",
-      "depende_de": [
-        "filesystem"
-      ],
-      "eventos_sube": [
-        "contabilidad.expediente.archivar.request",
-        "contabilidad.expediente.recuperar.request",
-        "project.activated"
-      ],
-      "eventos_publica": [
-        "contabilidad.cifra_archivada",
-        "contabilidad.expediente.archivar.response",
-        "contabilidad.expediente.archivar.failed",
-        "contabilidad.expediente.recuperar.response",
-        "contabilidad.expediente.recuperar.failed",
-        "contabilidad.cifra_archivada.failed"
-      ],
-      "proposito": "Cada cifra con el documento origen ARCHIVADO y ENLAZADO: LA PRUEBA que sostiene la firma ante una inspeccion. L2 explica; el expediente CONSERVA.",
-      "clases": [
-        "L7"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_archivar",
-          "descripcion": "archivar(cifra, documentoOrigen) -> ok (single-writer; archivo via filesystem)"
-        },
-        {
-          "nombre": "_recuperar",
-          "descripcion": "recuperar(cifra) -> IdDocumento"
-        },
-        {
-          "nombre": "_verificarEnlace",
-          "descripcion": "verificarEnlace() -> ok | ERROR_CIFRA_SIN_PRUEBA"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo",
-        "_shared/pos-persistencia"
-      ],
-      "nota": "NO REUTILIZA: el enlace cifra<->documento de origen es propio de la vertical; `filesystem` es el almacen, no el expediente."
-    },
-    {
-      "slug": "ratificacion-regla-aprendida",
-      "forma": "puente",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-libro",
-      "depende_de": [
-        "regla-contrapartida",
-        "regla-movimiento-bancario"
-      ],
-      "eventos_sube": [
-        "contabilidad.regla_aprendida"
-      ],
-      "eventos_publica": [
-        "contabilidad.regla.ratificar.request",
-        "contabilidad.regla_ratificada",
-        "contabilidad.regla.ratificar.failed",
-        "contabilidad.regla_ratificada.failed"
-      ],
-      "proposito": "PUERTA UNICA de ratificacion: el asesor ratifica o BLOQUEA la regla aprendida ANTES de que actue sobre el volumen. Vencida sin respuesta -> NO actua.",
-      "clases": [
-        "L10"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_solicitarRatificacion",
-          "descripcion": "solicitarRatificacion(regla) -> SolicitudDecision (el sistema NO resuelve)"
-        },
-        {
-          "nombre": "_aplicarRatificacion",
-          "descripcion": "aplicarRatificacion(regla, decision) -> ok | bloqueada"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo"
-      ],
-      "nota": "NO REUTILIZA: cubre DOS repositorios (A6.2 contrapartida + E8 movimiento bancario) con UNA sola puerta; no existe en el inventario."
-    },
-    {
-      "slug": "perfil-administrativo",
-      "forma": "custodio",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-fiscal",
-      "depende_de": [
-        "cola-declaraciones-criterio"
-      ],
-      "eventos_sube": [
-        "contabilidad.perfil.declarar.request",
-        "contabilidad.perfil.aplicables.request",
-        "project.activated"
-      ],
-      "eventos_publica": [
-        "contabilidad.perfil_declarado",
-        "contabilidad.perfil.declarar.response",
-        "contabilidad.perfil.declarar.failed",
-        "contabilidad.perfil.aplicables.response",
-        "contabilidad.perfil.aplicables.failed",
-        "contabilidad.perfil_declarado.failed"
-      ],
-      "proposito": "Que administraciones y obligaciones aplican al negocio (territorio + regimen). Cuatro territorios posibles; el sistema no asume uno.",
-      "clases": [
-        "D15"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_declarar",
-          "descripcion": "declarar(rol, sociedad, perfil) — un solo escritor (DUENO/ASESOR)"
-        },
-        {
-          "nombre": "_aplicables",
-          "descripcion": "aplicables(sociedad) -> Set<IdObligacion>"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo",
-        "_shared/pos-persistencia"
-      ],
-      "nota": "NO REUTILIZA: no existe perfil fiscal por sociedad en el inventario (fiscal = 0 modulos)."
-    },
-    {
-      "slug": "calendario-fiscal",
-      "forma": "custodio",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-fiscal",
-      "depende_de": [
-        "perfil-administrativo",
-        "motor-avisos"
-      ],
-      "eventos_sube": [
-        "contabilidad.calendario.declarar.request",
-        "contabilidad.calendario.proximos.request",
-        "project.activated"
-      ],
-      "eventos_publica": [
-        "contabilidad.plazo_declarado",
-        "contabilidad.plazo_proximo",
-        "contabilidad.calendario.declarar.response",
-        "contabilidad.calendario.declarar.failed",
-        "contabilidad.calendario.proximos.response",
-        "contabilidad.calendario.proximos.failed",
-        "contabilidad.plazo_declarado.failed",
-        "contabilidad.plazo_proximo.failed"
-      ],
-      "proposito": "Plazos DECLARABLES por ejercicio (cambian: prorrogas, festivos, domiciliacion). Dispara aviso proactivo; nunca fija una fecha de memoria.",
-      "clases": [
-        "D6"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_declarar",
-          "descripcion": "declarar(rol, ejercicio, plazos) — un solo escritor (ASESOR/DUENO)"
-        },
-        {
-          "nombre": "_proximos",
-          "descripcion": "proximos(hoy) -> List<Plazo>"
-        },
-        {
-          "nombre": "_dispararAviso",
-          "descripcion": "dispararAviso(plazo) -> senal a K2"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo",
-        "_shared/pos-persistencia"
-      ],
-      "nota": "NO REUTILIZA: el calendario fiscal con plazos declarables no existe en el inventario."
-    },
-    {
-      "slug": "liquidacion-iva",
-      "forma": "reflejo",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-fiscal",
-      "depende_de": [
-        "mayor-balanza",
-        "perfil-administrativo",
-        "cola-declaraciones-criterio"
-      ],
-      "eventos_sube": [
-        "contabilidad.iva.liquidar.request",
-        "contabilidad.modelo.303.request",
-        "contabilidad.modelo.390.request"
-      ],
-      "eventos_publica": [
-        "contabilidad.iva_liquidado",
-        "contabilidad.modelo_construido",
-        "contabilidad.iva.liquidar.response",
-        "contabilidad.iva.liquidar.failed",
-        "contabilidad.modelo.303.response",
-        "contabilidad.modelo.303.failed",
-        "contabilidad.modelo.390.response",
-        "contabilidad.modelo.390.failed",
-        "contabilidad.iva_liquidado.failed",
-        "contabilidad.modelo_construido.failed"
-      ],
-      "proposito": "Impuesto indirecto DERIVADO del libro con los tipos DECLARADOS (IVA/IGIC/IPSI segun territorio) + sus modelos 303 y 390. Ningun tipo cableado.",
-      "clases": [
-        "D1",
-        "D2",
-        "D3"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_devengado",
-          "descripcion": "devengado(periodo) -> Importe (D1)"
-        },
-        {
-          "nombre": "_soportado",
-          "descripcion": "soportado(periodo) -> Importe (D1)"
-        },
-        {
-          "nombre": "_liquidar",
-          "descripcion": "liquidar(periodo) -> Liquidacion {devengado, deducible, resultado} (D1)"
-        },
-        {
-          "nombre": "_construir303",
-          "descripcion": "construir303(periodo) -> Modelo (D2)"
-        },
-        {
-          "nombre": "_resumir390",
-          "descripcion": "resumir390(ejercicio) -> Modelo (D3)"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo"
-      ],
-      "nota": "NO REUTILIZA: IVA/modelos no existen en el inventario (verificado: 0 modulos). La ley entra como DATO declarable."
-    },
-    {
-      "slug": "retenciones-is-irpf",
-      "forma": "reflejo",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-fiscal",
-      "depende_de": [
-        "mayor-balanza",
-        "estados-contables",
-        "perfil-administrativo",
-        "cola-declaraciones-criterio"
-      ],
-      "eventos_sube": [
-        "contabilidad.retenciones.calcular.request",
-        "contabilidad.estimacion.calcular.request"
-      ],
-      "eventos_publica": [
-        "contabilidad.retenciones_calculadas",
-        "contabilidad.cuota_estimada",
-        "contabilidad.retenciones.calcular.response",
-        "contabilidad.retenciones.calcular.failed",
-        "contabilidad.estimacion.calcular.response",
-        "contabilidad.estimacion.calcular.failed",
-        "contabilidad.retenciones_calculadas.failed",
-        "contabilidad.cuota_estimada.failed"
-      ],
-      "proposito": "Retenciones practicadas/soportadas (D4) y estimacion IS/IRPF con base declarada (D5). El sujeto fiscal es parametro POR SOCIEDAD.",
-      "clases": [
-        "D4",
-        "D5"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_practicadas",
-          "descripcion": "practicadas(periodo) -> Importe (D4: profesionales, alquileres, trabajo — todos parametros)"
-        },
-        {
-          "nombre": "_soportadas",
-          "descripcion": "soportadas(periodo) -> Importe (D4)"
-        },
-        {
-          "nombre": "_estimar",
-          "descripcion": "estimar(periodo) -> CuotaEstimada (D5: IS sociedad | IRPF persona fisica, declarable)"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo"
-      ],
-      "nota": "NO REUTILIZA: IRPF/IS y retenciones no existen en el inventario."
-    },
-    {
-      "slug": "estado-presentacion-fiscal",
-      "forma": "custodio",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-fiscal",
-      "depende_de": [
-        "perfil-administrativo",
-        "calendario-fiscal"
-      ],
-      "eventos_sube": [
-        "contabilidad.obligacion.avanzar.request",
-        "contabilidad.obligacion.estado.request",
-        "project.activated"
-      ],
-      "eventos_publica": [
-        "contabilidad.obligacion_avanzada",
-        "contabilidad.obligacion.avanzar.response",
-        "contabilidad.obligacion.avanzar.failed",
-        "contabilidad.obligacion.estado.response",
-        "contabilidad.obligacion.estado.failed",
-        "contabilidad.obligacion_avanzada.failed"
-      ],
-      "proposito": "Ciclo de vida de cada obligacion (pendiente -> generada -> presentada -> justificada -> atrasada): sin el, el calendario avisa pero nadie sabe en que punto esta.",
-      "clases": [
-        "D12"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_avanzar",
-          "descripcion": "avanzar(obligacion, estado) — escritor SISTEMA+ASESOR"
-        },
-        {
-          "nombre": "_estadoDe",
-          "descripcion": "estadoDe(obligacion) -> EstadoObligacion"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo",
-        "_shared/pos-persistencia"
-      ],
-      "nota": "NO REUTILIZA: no existe estado de obligacion fiscal en el inventario."
-    },
-    {
-      "slug": "generador-modelo",
-      "forma": "puente",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-fiscal",
-      "depende_de": [
-        "liquidacion-iva",
-        "retenciones-is-irpf",
-        "estado-presentacion-fiscal",
-        "filesystem"
-      ],
-      "eventos_sube": [
-        "contabilidad.modelo.generar.request"
-      ],
-      "eventos_publica": [
-        "contabilidad.modelo_generado",
-        "contabilidad.modelo_entregado",
-        "contabilidad.modelo.generar.failed",
-        "contabilidad.modelo.generar.response",
-        "contabilidad.modelo_generado.failed",
-        "contabilidad.modelo_entregado.failed"
-      ],
-      "proposito": "Salida al programa del asesor por PUERTO (formato abierto y declarable). Si el sistema solo PREPARA, aqui termina su responsabilidad.",
-      "clases": [
-        "D7"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_generar",
-          "descripcion": "generar(modelo) -> DocumentoModelo"
-        },
-        {
-          "nombre": "_entregar",
-          "descripcion": "entregar(documento) -> ok | NO_DECLARADO (presentar es declarable; D34)"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo"
-      ],
-      "nota": "NO REUTILIZA: la generacion de modelos fiscales con puerto abierto no existe; hay que construirlo."
-    },
-    {
-      "slug": "registro-verifactu",
-      "forma": "custodio",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-fiscal",
-      "depende_de": [
-        "emision-factura-venta"
-      ],
-      "eventos_sube": [
-        "contabilidad.registro.anotar.request",
-        "contabilidad.registro.verificar.request",
-        "contabilidad.factura_emitida",
-        "project.activated"
-      ],
-      "eventos_publica": [
-        "contabilidad.registro_verifactu_anotado",
-        "contabilidad.registro.anotar.response",
-        "contabilidad.registro.anotar.failed",
-        "contabilidad.registro.verificar.response",
-        "contabilidad.registro.verificar.failed",
-        "contabilidad.registro_verifactu_anotado.failed"
-      ],
-      "proposito": "Registro INTERNO Y NO ALTERABLE de la facturacion: huella + encadenamiento. Solo crece. Distinto de la emision (O1) y del formato (D9).",
-      "clases": [
-        "D8"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_encadenar",
-          "descripcion": "encadenar(factura) -> Huella"
-        },
-        {
-          "nombre": "_anotar",
-          "descripcion": "anotar(factura, huella) — append-only"
-        },
-        {
-          "nombre": "_verificarCadena",
-          "descripcion": "verificarCadena() -> ok | ERROR_CADENA_ROTA"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo",
-        "_shared/pos-persistencia"
-      ],
-      "nota": "NO REUTILIZA: Verifactu no existe en el inventario (0 modulos); es requisito legal de la factura emitida."
-    },
-    {
-      "slug": "factura-electronica",
-      "forma": "conversor",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-fiscal",
-      "depende_de": [
-        "emision-factura-venta"
-      ],
-      "eventos_sube": [
-        "contabilidad.factura.estructurar.request",
-        "contabilidad.factura.interpretar.request"
-      ],
-      "eventos_publica": [
-        "contabilidad.factura_estructurada",
-        "contabilidad.factura_interpretada",
-        "contabilidad.factura.estructurar.response",
-        "contabilidad.factura.estructurar.failed",
-        "contabilidad.factura.interpretar.response",
-        "contabilidad.factura.interpretar.failed",
-        "contabilidad.factura_estructurada.failed",
-        "contabilidad.factura_interpretada.failed"
-      ],
-      "proposito": "Frontera del FORMATO ESTRUCTURADO de la factura (emitir y recibir). Un solo cruce; un documento estructurado entra SIN extraccion (no pasa por A4.1).",
-      "clases": [
-        "D9"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_emitirEstructurada",
-          "descripcion": "emitirEstructurada(factura) -> DocumentoEstructurado"
-        },
-        {
-          "nombre": "_interpretarEstructurado",
-          "descripcion": "interpretarEstructurado(documento) -> Factura"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo"
-      ],
-      "nota": "NO REUTILIZA: la factura electronica estructurada no existe en el inventario; el formato concreto es declarable."
-    },
-    {
-      "slug": "acuse-presentacion",
-      "forma": "puente",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-fiscal",
-      "depende_de": [
-        "estado-presentacion-fiscal",
-        "generador-modelo",
-        "escritor-diario"
-      ],
-      "eventos_sube": [
-        "contabilidad.acuse.recibir.request"
-      ],
-      "eventos_publica": [
-        "contabilidad.acuse_ligado",
-        "contabilidad.acuse.recibir.failed",
-        "contabilidad.acuse.recibir.response",
-        "contabilidad.acuse_ligado.failed"
-      ],
-      "proposito": "Recoge y LIGA el justificante/acuse de la administracion a su modelo y a su asiento: cierra el bucle hacia fuera. Sin acuse -> obligacion no justificada -> aviso.",
-      "clases": [
-        "D13"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_recibir",
-          "descripcion": "recibir(justificante) -> ok (canal declarable; credenciales via credential-manager)"
-        },
-        {
-          "nombre": "_ligar",
-          "descripcion": "ligar(acuse, modelo, asiento) -> ok"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo"
-      ],
-      "nota": "NO REUTILIZA: el retorno del acuse administrativo no existe en el inventario."
-    },
-    {
-      "slug": "rectificacion-declaracion",
-      "forma": "custodio",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-fiscal",
-      "depende_de": [
-        "estado-presentacion-fiscal",
-        "escritor-diario"
-      ],
-      "eventos_sube": [
-        "contabilidad.declaracion.rectificar.request",
-        "project.activated"
-      ],
-      "eventos_publica": [
-        "contabilidad.declaracion_rectificada",
-        "contabilidad.declaracion.rectificar.response",
-        "contabilidad.declaracion.rectificar.failed",
-        "contabilidad.declaracion_rectificada.failed"
-      ],
-      "proposito": "Plano 4 de correccion: correccion POSTERIOR a la presentacion (complementaria/sustitutiva). NO se confunde con el ajuste contable ni con la rectificativa comercial.",
-      "clases": [
-        "D14"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_rectificar",
-          "descripcion": "rectificar(declaracionOriginal, tipo) -> Rectificacion — un solo escritor (ASESOR)"
-        },
-        {
-          "nombre": "_enlazar",
-          "descripcion": "enlazar(original, rectificacion) -> ok"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo",
-        "_shared/pos-persistencia"
-      ],
-      "nota": "NO REUTILIZA: la rectificacion fiscal posterior a la presentacion no existe en el inventario."
-    },
-    {
-      "slug": "puerto-nomina",
-      "forma": "puente",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-fiscal",
-      "depende_de": [],
-      "eventos_sube": [
-        "contabilidad.nomina.recibir.request"
-      ],
-      "eventos_publica": [
-        "contabilidad.nomina_recibida",
-        "contabilidad.nomina.recibir.response",
-        "contabilidad.nomina.recibir.failed",
-        "contabilidad.nomina_recibida.failed"
-      ],
-      "proposito": "Origen DECLARABLE del dato de nomina. El sistema NO calcula nomina por defecto: la RECIBE (calcular es capacidad opcional, G5 declarable).",
-      "clases": [
-        "G4"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_recibir",
-          "descripcion": "recibir(hechoNomina) -> ok"
-        },
-        {
-          "nombre": "_conectar",
-          "descripcion": "conectar(origen) -> ok | NO_DECLARADO; si no existe el origen -> se crea"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo"
-      ],
-      "nota": "NO REUTILIZA: no existe puerto de nomina en el inventario (nominas = 0 modulos)."
-    },
-    {
-      "slug": "recibo-nomina",
-      "forma": "reflejo",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-fiscal",
-      "depende_de": [
-        "puerto-nomina",
-        "catalogo-cuentas",
-        "cola-declaraciones-criterio",
-        "escritor-diario"
-      ],
-      "eventos_sube": [
-        "contabilidad.nomina.procesar.request",
-        "contabilidad.nomina.desglosar.request",
-        "contabilidad.nomina.liquidar.request",
-        "contabilidad.nomina_recibida"
-      ],
-      "eventos_publica": [
-        "contabilidad.nomina_formada",
-        "contabilidad.asiento.asentar.request",
-        "contabilidad.nomina.procesar.response",
-        "contabilidad.nomina.procesar.failed",
-        "contabilidad.nomina.desglosar.response",
-        "contabilidad.nomina.desglosar.failed",
-        "contabilidad.nomina.liquidar.response",
-        "contabilidad.nomina.liquidar.failed",
-        "contabilidad.nomina_formada.failed",
-        "contabilidad.asiento.asentar.failed"
-      ],
-      "proposito": "Del recibo al ASIENTO EQUILIBRADO y EXPLICABLE: obligacion con la Seguridad Social, desglose bruto/retencion/cotizacion/neto, anticipos, conceptos extra y liquidacion de baja.",
-      "clases": [
-        "G1",
-        "G2",
-        "G3",
-        "G6",
-        "G8",
-        "G9",
-        "G10"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_admitir",
-          "descripcion": "admitir(recibo) -> ReciboFormado (G1: cero juicio; si el negocio no calcula, el recibo LLEGA hecho)"
-        },
-        {
-          "nombre": "_calcularObligacion",
-          "descripcion": "calcularObligacion(recibo) -> Obligacion {gastoEmpresa, obligacionTGSS} (G2, tipos declarables)"
-        },
-        {
-          "nombre": "_construirAsiento",
-          "descripcion": "construirAsiento(recibo) -> AsientoEquilibrado (G3)"
-        },
-        {
-          "nombre": "_desglosar",
-          "descripcion": "desglosar(recibo) -> Lineas {bruto, retencion, cotizacionTrabajador, neto} (G6)"
-        },
-        {
-          "nombre": "_aplicarAnticipo",
-          "descripcion": "aplicarAnticipo(empleado, recibo) -> NetoAjustado (G8)"
-        },
-        {
-          "nombre": "_imputarConcepto",
-          "descripcion": "imputarConcepto(concepto, recibo) -> List<Apunte> (G9: dietas, especie, pagas extra, finiquitos)"
-        },
-        {
-          "nombre": "_liquidar",
-          "descripcion": "liquidar(empleado) -> AsientoCierre + SaldoCero (G10: una cuenta de empleado sin cerrar es un error de estado)"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo"
-      ],
-      "nota": "NO REUTILIZA: no existe modulo de nomina en el inventario; el asiento de personal y su desglose son propios."
-    },
-    {
-      "slug": "acceso-nomina",
-      "forma": "custodio",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-fiscal",
-      "depende_de": [
-        "aislamiento-negocio"
-      ],
-      "eventos_sube": [
-        "contabilidad.nomina.autorizar.request",
-        "contabilidad.nomina.puede_ver.request",
-        "project.activated"
-      ],
-      "eventos_publica": [
-        "contabilidad.acceso_nomina_autorizado",
-        "contabilidad.nomina.autorizar.response",
-        "contabilidad.nomina.autorizar.failed",
-        "contabilidad.nomina.puede_ver.response",
-        "contabilidad.nomina.puede_ver.failed",
-        "contabilidad.acceso_nomina_autorizado.failed"
-      ],
-      "proposito": "Aisla la nomina como DATO PERSONAL: cada uno ve la suya. Eje de aislamiento DENTRO del negocio (distinto de I4, entre negocios).",
-      "clases": [
-        "G7"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_autorizar",
-          "descripcion": "autorizar(rol, empleado, visor) — un solo escritor (DUENO)"
-        },
-        {
-          "nombre": "_puedeVer",
-          "descripcion": "puedeVer(visor, empleado) -> Bool"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo",
-        "_shared/pos-persistencia"
-      ],
-      "nota": "NO REUTILIZA: el aislamiento de la nomina como dato personal no existe en el inventario."
-    },
-    {
-      "slug": "inmovilizado",
-      "forma": "custodio",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-analitica",
-      "depende_de": [
-        "escritor-diario",
-        "mayor-balanza",
-        "cola-declaraciones-criterio"
-      ],
-      "eventos_sube": [
-        "contabilidad.activo.alta.request",
-        "contabilidad.amortizacion.generar.request",
-        "contabilidad.activo.baja.request",
-        "contabilidad.activo.valor_neto.request",
-        "contabilidad.cierre_realizado",
-        "project.activated"
-      ],
-      "eventos_publica": [
-        "contabilidad.activo_dado_de_alta",
-        "contabilidad.amortizacion_generada",
-        "contabilidad.activo_dado_de_baja",
-        "contabilidad.activo.alta.response",
-        "contabilidad.activo.alta.failed",
-        "contabilidad.amortizacion.generar.response",
-        "contabilidad.amortizacion.generar.failed",
-        "contabilidad.activo.baja.response",
-        "contabilidad.activo.baja.failed",
-        "contabilidad.activo.valor_neto.response",
-        "contabilidad.activo.valor_neto.failed",
-        "contabilidad.activo_dado_de_alta.failed",
-        "contabilidad.amortizacion_generada.failed",
-        "contabilidad.activo_dado_de_baja.failed"
-      ],
-      "proposito": "El bien duradero y su amortizacion: alta declarada (no estimada), cuota que dispara EN EL CIERRE con parametros declarables, baja que calcula resultado y valor neto contable.",
-      "clases": [
-        "F1",
-        "F2",
-        "F3",
-        "F4"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_registrar",
-          "descripcion": "registrar(rol, activo) -> ok (F1, un solo escritor DUENO/ASESOR)"
-        },
-        {
-          "nombre": "_valorarAlta",
-          "descripcion": "valorarAlta(activo) -> Importe (F1, reflejo hidratador)"
-        },
-        {
-          "nombre": "_generarCuota",
-          "descripcion": "generarCuota(activo, periodo) -> AsientoAmortizacion | NADA (F2; metodo/coeficiente/anios DECLARABLES, ningun coeficiente cableado)"
-        },
-        {
-          "nombre": "_dispararEnCierre",
-          "descripcion": "dispararEnCierre(cierre) -> ok (F2: la cuota se genera CUANDO TOCA)"
-        },
-        {
-          "nombre": "_calcularResultadoBaja",
-          "descripcion": "calcularResultadoBaja(activo) -> Perdida | Beneficio (F3)"
-        },
-        {
-          "nombre": "_imputar",
-          "descripcion": "imputar(resultado) -> Asiento (F3: la baja no borra la historia del bien, suma un asiento)"
-        },
-        {
-          "nombre": "_calcularValorNeto",
-          "descripcion": "calcular(activo) -> Importe coste - amortizacion acumulada (F4, al balance C1)"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo",
-        "_shared/pos-persistencia"
-      ],
-      "nota": "NO REUTILIZA: el inmovilizado y la amortizacion no existen en el inventario (0 modulos); la amortizacion es un hecho que produce el TIEMPO y aqui se genera en el cierre."
-    },
-    {
-      "slug": "aislamiento-negocio",
-      "forma": "custodio",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-analitica",
-      "depende_de": [
-        "single-writer"
-      ],
-      "eventos_sube": [
-        "contabilidad.parcela_negocio.registrar.request",
-        "contabilidad.parcela_negocio.escribir.request",
-        "project.activated"
-      ],
-      "eventos_publica": [
-        "contabilidad.parcela_negocio_registrada",
-        "contabilidad.parcela_negocio.registrar.response",
-        "contabilidad.parcela_negocio.registrar.failed",
-        "contabilidad.parcela_negocio.escribir.response",
-        "contabilidad.parcela_negocio.escribir.failed",
-        "contabilidad.parcela_negocio_registrada.failed"
-      ],
-      "proposito": "Multi-negocio SIN FUGA: un dueno por parcela; ningun calculo lee ni escribe la parcela de otro salvo consolidacion declarada.",
-      "clases": [
-        "I4"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_parcela",
-          "descripcion": "parcela(negocio) -> Parcela"
-        },
-        {
-          "nombre": "_escribir",
-          "descripcion": "escribir(negocio, rol, cambio) -> ok | ERROR_FUGA_ENTRE_NEGOCIOS"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo",
-        "_shared/pos-persistencia"
-      ],
-      "nota": "NO REUTILIZA: el aislamiento por parcela de negocio es la invariante 13 del dominio; la capa de proyecto (PosPersistencia) NO la sustituye."
-    },
-    {
-      "slug": "cola-declaraciones-criterio",
-      "forma": "custodio",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-analitica",
-      "depende_de": [],
-      "eventos_sube": [
-        "contabilidad.criterio.declarar.request",
-        "contabilidad.criterio.leer.request",
-        "contabilidad.criterio.pendientes.request",
-        "project.activated"
-      ],
-      "eventos_publica": [
-        "contabilidad.criterio_declarado",
-        "contabilidad.criterio_pendiente",
-        "contabilidad.criterio.declarar.response",
-        "contabilidad.criterio.declarar.failed",
-        "contabilidad.criterio.leer.response",
-        "contabilidad.criterio.leer.failed",
-        "contabilidad.criterio.pendientes.response",
-        "contabilidad.criterio.pendientes.failed",
-        "contabilidad.criterio_declarado.failed",
-        "contabilidad.criterio_pendiente.failed"
-      ],
-      "proposito": "UNA sola cola declarativa donde el jefe/asesor fija o ratifica TODOS los criterios (plan, periodo, plazos, amortizacion, dimensiones, tipos fiscales, consolidacion, unidad_de_cierre).",
-      "clases": [
-        "K9"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_declarar",
-          "descripcion": "declarar(rol, criterio, valor) -> ParametroDeclarable — un solo escritor (JEFE/ASESOR)"
-        },
-        {
-          "nombre": "_leer",
-          "descripcion": "leer(criterio) -> ParametroDeclarable | AUSENTE"
-        },
-        {
-          "nombre": "_pendientes",
-          "descripcion": "pendientes() -> List<IdCriterio> — las 23 piezas [ABIERTO]; lo no declarado NO se estima"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo",
-        "_shared/pos-persistencia"
-      ],
-      "nota": "NO REUTILIZA: es la PUERTA DECLARATIVA del dominio; ninguna pieza del inventario recoge criterios contables."
-    },
-    {
-      "slug": "onboarding-negocio",
-      "forma": "custodio",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-analitica",
-      "depende_de": [
-        "cola-declaraciones-criterio",
-        "project-manager"
-      ],
-      "eventos_sube": [
-        "contabilidad.negocio.configurar.request",
-        "contabilidad.negocio.estado.request",
-        "contabilidad.negocio.activar.request",
-        "project.activated"
-      ],
-      "eventos_publica": [
-        "contabilidad.negocio_configurado",
-        "contabilidad.vertical_activada",
-        "contabilidad.negocio.configurar.response",
-        "contabilidad.negocio.configurar.failed",
-        "contabilidad.negocio.estado.response",
-        "contabilidad.negocio.estado.failed",
-        "contabilidad.negocio.activar.response",
-        "contabilidad.negocio.activar.failed",
-        "contabilidad.negocio_configurado.failed",
-        "contabilidad.vertical_activada.failed"
-      ],
-      "proposito": "Recoge los datos DECLARABLES del negocio (plan, fuentes, parametros) y enciende la vertical. Sin parametros declarados el negocio queda INCOMPLETO: se declara el hueco.",
-      "clases": [
-        "K1",
-        "K4"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_recoger",
-          "descripcion": "recoger(rol, negocio, datos) -> ok (K1, un solo escritor DUENO)"
-        },
-        {
-          "nombre": "_estado",
-          "descripcion": "estado(negocio) -> CONFIGURADO | FALTA [ABIERTO] (K1)"
-        },
-        {
-          "nombre": "_activar",
-          "descripcion": "activar(negocio) -> ok (K4: mecanico, cero juicio; sin parametros NO se activa)"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo",
-        "_shared/pos-persistencia"
-      ],
-      "nota": "NO REUTILIZA: el onboarding de un negocio contable no existe; `project-manager` gestiona el proyecto, no la configuracion contable."
-    },
-    {
-      "slug": "motor-avisos",
-      "forma": "puente",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-analitica",
-      "depende_de": [
-        "cola-declaraciones-criterio"
-      ],
-      "eventos_sube": [
-        "contabilidad.aviso.solicitar.request",
-        "contabilidad.aviso.catalogo.declarar.request"
-      ],
-      "eventos_publica": [
-        "contabilidad.aviso_producido",
-        "contabilidad.aviso.enrutar.request",
-        "contabilidad.aviso.solicitar.response",
-        "contabilidad.aviso.solicitar.failed",
-        "contabilidad.aviso.catalogo.declarar.response",
-        "contabilidad.aviso.catalogo.declarar.failed",
-        "contabilidad.aviso_producido.failed",
-        "contabilidad.aviso.enrutar.failed"
-      ],
-      "proposito": "PRODUCE el aviso a partir de senales REALES (nunca de pantalla muda): descuadre, excepcion, IVA, vencimiento, plazo, desviacion, cierre, amortizacion, rectificacion, hueco.",
-      "clases": [
-        "K2"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_producir",
-          "descripcion": "producir(senal) -> Aviso (catalogo declarable K6)"
-        },
-        {
-          "nombre": "_enrutar",
-          "descripcion": "enrutar(aviso, destinatario) -> ok"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo"
-      ],
-      "nota": "NO REUTILIZA: no existe motor de avisos contables en el inventario; recibe senales de A8.2, C6, D6, E5, J4, A15 y R1."
-    },
-    {
-      "slug": "consolidacion-grupo",
-      "forma": "reflejo",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-analitica",
-      "depende_de": [
-        "estados-contables",
-        "aislamiento-negocio",
-        "cola-declaraciones-criterio"
-      ],
-      "eventos_sube": [
-        "contabilidad.consolidacion.agregar.request"
-      ],
-      "eventos_publica": [
-        "contabilidad.grupo_consolidado",
-        "contabilidad.consolidacion.agregar.response",
-        "contabilidad.consolidacion.agregar.failed",
-        "contabilidad.grupo_consolidado.failed"
-      ],
-      "proposito": "Estados del CONJUNTO con criterio declarado: marca de sociedad, eliminacion intercompany y agregacion. Dos niveles: por negocio (aislado) y del grupo.",
-      "clases": [
-        "I1",
-        "I2",
-        "I3"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_etiquetar",
-          "descripcion": "etiquetar(asiento, sociedad) -> Asiento (I1, mecanico)"
-        },
-        {
-          "nombre": "_detectarCruceInterno",
-          "descripcion": "detectarCruceInterno() -> List<Cruce> (I2)"
-        },
-        {
-          "nombre": "_eliminar",
-          "descripcion": "eliminar(cruces) -> List<Eliminacion> (I2)"
-        },
-        {
-          "nombre": "_agregar",
-          "descripcion": "agregar(sociedades) -> EstadosConsolidados (I3, criterio declarado)"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo"
-      ],
-      "nota": "NO REUTILIZA: la consolidacion multi-sociedad no existe en el inventario (grupo = 0 modulos)."
-    },
-    {
-      "slug": "frontera-ficha-producto",
-      "forma": "conversor",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-analitica",
-      "depende_de": [],
-      "eventos_sube": [
-        "contabilidad.ficha.coste.request"
-      ],
-      "eventos_publica": [
-        "contabilidad.coste_leido",
-        "contabilidad.ficha.coste.response",
-        "contabilidad.ficha.coste.failed",
-        "contabilidad.coste_leido.failed"
-      ],
-      "proposito": "Puerto DECLARABLE del coste de cada negocio: por donde cruza el coste de la ficha al dato interno. Si falta -> se crea. Nunca se inventa un coste.",
-      "clases": [
-        "H2"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_leerCoste",
-          "descripcion": "leerCoste(producto) -> Coste | AUSENTE"
-        },
-        {
-          "nombre": "_crearFrontera",
-          "descripcion": "crearFrontera(negocio) -> ok (invariante de puerto abierto)"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo"
-      ],
-      "nota": "NO REUTILIZA: la frontera de coste (ficha/receta/otro) es declarable por negocio; `pizzepos/escandallo` es mono-negocio y se pone POR ENCIMA, no se toca."
-    },
-    {
-      "slug": "valoracion-existencia",
-      "forma": "reflejo",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-analitica",
-      "depende_de": [
-        "frontera-ficha-producto",
-        "inventario",
-        "cola-declaraciones-criterio"
-      ],
-      "eventos_sube": [
-        "contabilidad.existencia.valorar.request",
-        "contabilidad.inventario.ajuste.request"
-      ],
-      "eventos_publica": [
-        "contabilidad.existencia_valorada",
-        "contabilidad.ajuste_inventario_calculado",
-        "contabilidad.existencia.valorar.response",
-        "contabilidad.existencia.valorar.failed",
-        "contabilidad.inventario.ajuste.response",
-        "contabilidad.inventario.ajuste.failed",
-        "contabilidad.existencia_valorada.failed",
-        "contabilidad.ajuste_inventario_calculado.failed"
-      ],
-      "proposito": "Capa de VALOR sobre el stock existente (no duplica el inventario): metodo declarable (FIFO/PMP; LIFO no), ajuste de merma y variacion valorada.",
-      "clases": [
-        "H1",
-        "H3",
-        "H4"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_valorar",
-          "descripcion": "valorar(producto, cantidad, fecha) -> Importe (H1, metodo parametro declarable)"
-        },
-        {
-          "nombre": "_capaDeValor",
-          "descripcion": "capaDeValor(inventarioExistente) -> Valoracion (H1: NO duplica el inventario)"
-        },
-        {
-          "nombre": "_calcularDiferencia",
-          "descripcion": "calcularDiferencia() -> Importe (H3: merma/rotura)"
-        },
-        {
-          "nombre": "_regularizar",
-          "descripcion": "regularizar(diferencia) -> Asiento + aviso (H3: el asiento SUMA)"
-        },
-        {
-          "nombre": "_valorarEntrada",
-          "descripcion": "valorarEntrada(compra) -> Importe (H4)"
-        },
-        {
-          "nombre": "_valorarSalida",
-          "descripcion": "valorarSalida(consumo) -> Importe (H4: el hecho de stock lo emite la fuente; contabilidad lo VALORA)"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo"
-      ],
-      "nota": "NO REUTILIZA: `inventario` custodia el stock real; la VALORACION contable (capa de valor, merma, coste del consumo) no existe en el inventario."
-    },
-    {
-      "slug": "etiquetado-analitico",
-      "forma": "micro-agente",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-analitica",
-      "depende_de": [
-        "cola-declaraciones-criterio",
-        "cola-revision"
-      ],
-      "eventos_sube": [
-        "contabilidad.etiqueta.aplicar.request"
-      ],
-      "eventos_publica": [
-        "contabilidad.etiqueta_aplicada",
-        "contabilidad.excepcion.encolar.request",
-        "contabilidad.etiqueta.aplicar.response",
-        "contabilidad.etiqueta.aplicar.failed",
-        "contabilidad.etiqueta_aplicada.failed",
-        "contabilidad.excepcion.encolar.failed"
-      ],
-      "proposito": "Asigna centro/linea/producto con REGLA declarable; cuando la regla no cubre, clasificar es JUICIO -> lo dudoso va a cola.",
-      "clases": [
-        "J1"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_etiquetar",
-          "descripcion": "etiquetar(hecho) -> Etiqueta {centro, linea, producto} | SIN_REGLA (caso cubierto por regla = reflejo)"
-        },
-        {
-          "nombre": "_proponerEtiqueta",
-          "descripcion": "proponerEtiqueta(hecho) -> Etiqueta — FUZZY"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo",
-        "_shared/pos-persistencia"
-      ],
-      "nota": "NO REUTILIZA: el etiquetado analitico por dimensiones declaradas no existe en el inventario."
-    },
-    {
-      "slug": "margen-analitico",
-      "forma": "reflejo",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-analitica",
-      "depende_de": [
-        "mayor-balanza",
-        "valoracion-existencia",
-        "etiquetado-analitico",
-        "cola-declaraciones-criterio"
-      ],
-      "eventos_sube": [
-        "contabilidad.margen.calcular.request",
-        "contabilidad.indirecto.repartir.request",
-        "contabilidad.tablero.cruzar.request"
-      ],
-      "eventos_publica": [
-        "contabilidad.margen_calculado",
-        "contabilidad.indirecto_repartido",
-        "contabilidad.tablero_calculado",
-        "contabilidad.margen.calcular.response",
-        "contabilidad.margen.calcular.failed",
-        "contabilidad.indirecto.repartir.response",
-        "contabilidad.indirecto.repartir.failed",
-        "contabilidad.tablero.cruzar.response",
-        "contabilidad.tablero.cruzar.failed",
-        "contabilidad.margen_calculado.failed",
-        "contabilidad.indirecto_repartido.failed",
-        "contabilidad.tablero_calculado.failed"
-      ],
-      "proposito": "Margen por dimension (ingreso - coste imputado), reparto DECLARADO de gastos no directos y cruce margen x dimension bajo lente de conjunto.",
-      "clases": [
-        "J2",
-        "J5",
-        "J10"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_calcular",
-          "descripcion": "calcular(dimension) -> Margen (J2: enlaza existencias con analitica)"
-        },
-        {
-          "nombre": "_repartir",
-          "descripcion": "repartir(gasto, criterio) -> Map<IdDimension, Importe> (J5: criterio declarado)"
-        },
-        {
-          "nombre": "_cruzar",
-          "descripcion": "cruzar(margen, dimension) -> Tablero (J10: por centro, familia o sociedad)"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo"
-      ],
-      "nota": "NO REUTILIZA: el coste indirecto multi-sociedad y por periodos NO lo cubre la pieza existente (escandallo, mono-negocio)."
-    },
-    {
-      "slug": "presupuesto",
-      "forma": "custodio",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-analitica",
-      "depende_de": [
-        "estados-contables",
-        "motor-avisos"
-      ],
-      "eventos_sube": [
-        "contabilidad.presupuesto.declarar.request",
-        "contabilidad.desviacion.calcular.request",
-        "contabilidad.periodos.comparar.request",
-        "project.activated"
-      ],
-      "eventos_publica": [
-        "contabilidad.presupuesto_declarado",
-        "contabilidad.desviacion_calculada",
-        "contabilidad.comparacion_calculada",
-        "contabilidad.presupuesto.declarar.response",
-        "contabilidad.presupuesto.declarar.failed",
-        "contabilidad.desviacion.calcular.response",
-        "contabilidad.desviacion.calcular.failed",
-        "contabilidad.periodos.comparar.response",
-        "contabilidad.periodos.comparar.failed",
-        "contabilidad.presupuesto_declarado.failed",
-        "contabilidad.desviacion_calculada.failed",
-        "contabilidad.comparacion_calculada.failed"
-      ],
-      "proposito": "Cifra OBJETIVO por dimension (un solo escritor: el jefe) + desviacion real-vs-presupuesto con umbral declarado + comparador de periodos que REUTILIZA ambos, no los duplica.",
-      "clases": [
-        "J3",
-        "J4",
-        "J9"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_declarar",
-          "descripcion": "declarar(rol, dimension, cifra) — un solo escritor (JEFE) (J3)"
-        },
-        {
-          "nombre": "_objetivo",
-          "descripcion": "objetivo(dimension, periodo) -> CifraObjetivo (J3)"
-        },
-        {
-          "nombre": "_calcular",
-          "descripcion": "calcular(real, presupuesto) -> Desviacion (J4)"
-        },
-        {
-          "nombre": "_dispararSiExcede",
-          "descripcion": "dispararSiExcede(desviacion) -> senal a K2 con el umbral declarado (J4)"
-        },
-        {
-          "nombre": "_comparar",
-          "descripcion": "comparar(a, b) -> Delta (J9: ejercicio vs ejercicio, mes vs mes, real vs presupuesto)"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo",
-        "_shared/pos-persistencia"
-      ],
-      "nota": "NO REUTILIZA: `marketing-budget` es presupuesto de marketing y declara \"custodia contable\" solo de nombre: contabilidad lo LEE, no lo absorbe (solape registrado)."
-    },
-    {
-      "slug": "cuadro-mando-contable",
-      "forma": "reflejo",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-analitica",
-      "depende_de": [
-        "saldo-tesoreria",
-        "estados-contables",
-        "margen-analitico",
-        "presupuesto",
-        "cierre-ejercicio"
-      ],
-      "eventos_sube": [
-        "contabilidad.cuadro_mando.agregar.request"
-      ],
-      "eventos_publica": [
-        "contabilidad.cuadro_mando_calculado",
-        "contabilidad.cuadro_mando.agregar.response",
-        "contabilidad.cuadro_mando.agregar.failed",
-        "contabilidad.cuadro_mando_calculado.failed"
-      ],
-      "proposito": "Agregacion de CONJUNTO para el jefe (caja, resultado, margen, desviacion, ejercicio) SIN bajar al asiento.",
-      "clases": [
-        "J8"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_agregar",
-          "descripcion": "agregar(lente: CONJUNTO) -> CuadroMando"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo"
-      ],
-      "nota": "NO REUTILIZA: no existe cuadro de mando contable; reutiliza J2/J3/J4/E4/E5/C1/C2 por RPC sin duplicarlos."
-    },
-    {
-      "slug": "informe-rico",
-      "forma": "reflejo",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-analitica",
-      "depende_de": [
-        "estados-contables",
-        "cierre-ejercicio",
-        "completitud-cobertura"
-      ],
-      "eventos_sube": [
-        "contabilidad.informe.componer.request"
-      ],
-      "eventos_publica": [
-        "contabilidad.informe_compuesto",
-        "contabilidad.informe.componer.response",
-        "contabilidad.informe.componer.failed",
-        "contabilidad.informe_compuesto.failed"
-      ],
-      "proposito": "Nucleo de informe rico: cifra ya calculada + contexto declarado (periodo, origen, comparativas, cobertura). No un numero pelado.",
-      "clases": [
-        "K3"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_componer",
-          "descripcion": "componer(cifra, contexto) -> InformeRico — mecanico"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo"
-      ],
-      "nota": "NO REUTILIZA: el nucleo de informe rico se sirve en idiomas distintos (dueno Q2 / cliente R3); no existe en el inventario."
-    },
-    {
-      "slug": "consulta-dueno",
-      "forma": "puente",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-analitica",
-      "depende_de": [
-        "completitud-cobertura",
-        "traza-asiento",
-        "flujo-firma",
-        "informe-rico"
-      ],
-      "eventos_sube": [
-        "contabilidad.consulta.responder.request"
-      ],
-      "eventos_publica": [
-        "contabilidad.consulta_respondida",
-        "contabilidad.consulta.responder.response",
-        "contabilidad.consulta.responder.failed",
-        "contabilidad.consulta_respondida.failed"
-      ],
-      "proposito": "Puerta PULL: el dueno pregunta cuando quiere y el sistema contesta, con SELLO DE COBERTURA y MARCA de borrador/revisado/firmado (sin cadencia impuesta).",
-      "clases": [
-        "Q1",
-        "Q3",
-        "Q4"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_responder",
-          "descripcion": "responder(pregunta) -> ResultadoCalculo (Q1: puerta declarable; el canal es puerto)"
-        },
-        {
-          "nombre": "_sinCadencia",
-          "descripcion": "sinCadencia() -> Bool (Q1: != cuadro del jefe J8, que impone cadencia)"
-        },
-        {
-          "nombre": "_sellarCobertura",
-          "descripcion": "sellarCobertura(resultadoCalculo) -> con sello (Q3: vista de la metrica unica A12, fuera de ciclo)"
-        },
-        {
-          "nombre": "_derivarEstado",
-          "descripcion": "derivarEstado(periodo) -> EN_CURSO | REVISADO | FIRMADO (Q4: deriva de B4 + L3)"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo"
-      ],
-      "nota": "NO REUTILIZA: la cara pull del dueno sobre la contabilidad no existe en el inventario."
-    },
-    {
-      "slug": "puente-lenguaje-dueno",
-      "forma": "micro-agente",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-analitica",
-      "depende_de": [
-        "informe-rico",
-        "consulta-dueno"
-      ],
-      "eventos_sube": [
-        "contabilidad.dueno.preguntar.request",
-        "contabilidad.dueno.cifra.presentar.request"
-      ],
-      "eventos_publica": [
-        "contabilidad.consulta.responder.request",
-        "contabilidad.cifra_presentada",
-        "contabilidad.dueno.preguntar.response",
-        "contabilidad.dueno.preguntar.failed",
-        "contabilidad.dueno.cifra.presentar.response",
-        "contabilidad.dueno.cifra.presentar.failed",
-        "contabilidad.consulta.responder.failed",
-        "contabilidad.cifra_presentada.failed"
-      ],
-      "proposito": "Traductor BIDIRECCIONAL: su pregunta -> consulta contable; calculo -> cifra en su idioma (caja, deuda, resultado, \"puedo pagar X?\").",
-      "clases": [
-        "Q2"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_traducirPregunta",
-          "descripcion": "traducirPregunta(preguntaNatural) -> ConsultaContable — FUZZY"
-        },
-        {
-          "nombre": "_traducirCifra",
-          "descripcion": "traducirCifra(resultado) -> CifraEnSuIdioma — FUZZY; vocabulario declarable"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo",
-        "_shared/pos-persistencia"
-      ],
-      "nota": "NO REUTILIZA: el puente de lenguaje del dueno no existe; comparte el nucleo de informe (K3) con R3, no el traductor."
-    },
-    {
-      "slug": "aviso-al-negocio",
-      "forma": "puente",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-analitica",
-      "depende_de": [
-        "motor-avisos"
-      ],
-      "eventos_sube": [
-        "contabilidad.aviso.enrutar.request"
-      ],
-      "eventos_publica": [
-        "contabilidad.aviso_entregado",
-        "contabilidad.aviso_confirmado",
-        "contabilidad.aviso.enrutar.response",
-        "contabilidad.aviso.enrutar.failed",
-        "contabilidad.aviso_entregado.failed",
-        "contabilidad.aviso_confirmado.failed"
-      ],
-      "proposito": "Cara de ENTREGA del aviso al negocio cliente: sin confirmacion de entrega el aviso NO consta como recibido. El canal es un puerto.",
-      "clases": [
-        "R1"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_entregar",
-          "descripcion": "entregar(aviso) -> ok (canal declarable: K7)"
-        },
-        {
-          "nombre": "_confirmar",
-          "descripcion": "confirmar(entrega) -> Confirmacion (honestidad: nadie da por entregado sin confirmacion)"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo"
-      ],
-      "nota": "NO REUTILIZA: completa K2 (que solo PRODUCE); la entrega al negocio contable no existe en el inventario."
-    },
-    {
-      "slug": "informe-accionable",
-      "forma": "micro-agente",
-      "accion": "CONSTRUIR",
-      "eje": "contabilidad-analitica",
-      "depende_de": [
-        "informe-rico",
-        "estados-contables",
-        "aviso-al-negocio"
-      ],
-      "eventos_sube": [
-        "contabilidad.informe.accionable.request",
-        "contabilidad.estados.narrar.request"
-      ],
-      "eventos_publica": [
-        "contabilidad.informe_accionable",
-        "contabilidad.estados_narrados",
-        "contabilidad.informe.accionable.response",
-        "contabilidad.informe.accionable.failed",
-        "contabilidad.estados.narrar.response",
-        "contabilidad.estados.narrar.failed",
-        "contabilidad.informe_accionable.failed",
-        "contabilidad.estados_narrados.failed"
-      ],
-      "proposito": "Todo informe que recibe el cliente lleva QUE HACER con el (R2) y los estados van narrados a su lenguaje (R3).",
-      "clases": [
-        "R2",
-        "R3"
-      ],
-      "proyecciones_internas": [
-        {
-          "nombre": "_recomendar",
-          "descripcion": "recomendar(informe) -> InformeAccionable — FUZZY"
-        },
-        {
-          "nombre": "_narrar",
-          "descripcion": "narrar(estados) -> Narracion \"esto es lo que te ha pasado y lo que viene\" — FUZZY"
-        }
-      ],
-      "reutiliza": [
-        "_shared/modulo-hibrido-reflejo",
-        "_shared/pos-persistencia"
-      ],
-      "nota": "NO REUTILIZA: la recomendacion accionable y la narracion de estados son juicio (fuzzy) propio de la vertical."
-    }
-  ]
+    "desviacion"
+   ],
+   "eventos_sube": [
+    "comparador-periodos.comparar.request"
+   ],
+   "eventos_publica": [
+    "comparador-periodos.comparar.response",
+    "comparador-periodos.comparar.failed"
+   ],
+   "proposito": "Ejercicio vs ejercicio, mes vs mes, real vs presupuesto; REUTILIZA J3/J4, no los duplica."
+  },
+  {
+   "slug": "tablero-margen-dimension",
+   "forma": "REFLEJO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-analitica",
+   "depende_de": [
+    "margen-analitico",
+    "etiquetado-analitico"
+   ],
+   "eventos_sube": [
+    "tablero-margen-dimension.cruzar.request"
+   ],
+   "eventos_publica": [
+    "tablero-margen-dimension.cruzar.response",
+    "tablero-margen-dimension.cruzar.failed"
+   ],
+   "proposito": "Cruce margen x dimension bajo lente de conjunto: por centro, familia o sociedad."
+  },
+  {
+   "slug": "onboarding-negocio",
+   "forma": "CUSTODIO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-analitica",
+   "depende_de": [
+    "project-manager"
+   ],
+   "eventos_sube": [
+    "onboarding-negocio.recoger.request",
+    "onboarding-negocio.leer.request",
+    "project.activated"
+   ],
+   "eventos_publica": [
+    "onboarding-negocio.recoger.response",
+    "onboarding-negocio.recoger.failed",
+    "onboarding-negocio.leer.response",
+    "onboarding-negocio.leer.failed",
+    "contabilidad.negocio_onboarded"
+   ],
+   "proposito": "Recoge los datos declarables del negocio nuevo (plan, fuentes, parametros); un solo escritor."
+  },
+  {
+   "slug": "motor-avisos",
+   "forma": "PUENTE",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-analitica",
+   "depende_de": [],
+   "eventos_sube": [
+    "motor-avisos.producir.request",
+    "contabilidad.aviso_revision",
+    "contabilidad.aviso_cuadre",
+    "contabilidad.vencimiento_fiscal",
+    "contabilidad.vencimiento_proximo",
+    "contabilidad.desviacion",
+    "contabilidad.fuente_faltante"
+   ],
+   "eventos_publica": [
+    "motor-avisos.producir.response",
+    "motor-avisos.producir.failed",
+    "contabilidad.aviso_producido"
+   ],
+   "proposito": "PRODUCE el aviso (requisito 4 del dueno); conecta por evento; la ENTREGA es R1."
+  },
+  {
+   "slug": "informe-rico",
+   "forma": "REFLEJO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-analitica",
+   "depende_de": [
+    "informe-conciliacion"
+   ],
+   "eventos_sube": [
+    "informe-rico.componer.request"
+   ],
+   "eventos_publica": [
+    "informe-rico.componer.response",
+    "informe-rico.componer.failed"
+   ],
+   "proposito": "COMPONE la cifra ya calculada con el contexto declarado (periodo, origen, comparativas); mecanico."
+  },
+  {
+   "slug": "activacion-vertical",
+   "forma": "REFLEJO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-analitica",
+   "depende_de": [
+    "onboarding-negocio"
+   ],
+   "eventos_sube": [
+    "activacion-vertical.activar.request",
+    "contabilidad.negocio_onboarded"
+   ],
+   "eventos_publica": [
+    "activacion-vertical.activar.response",
+    "activacion-vertical.activar.failed",
+    "contabilidad.vertical_activada"
+   ],
+   "proposito": "Enciende la vertical por la configuracion declarada; mecanico, cero juicio."
+  },
+  {
+   "slug": "cola-declaraciones-criterio",
+   "forma": "CUSTODIO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-analitica",
+   "depende_de": [],
+   "eventos_sube": [
+    "cola-declaraciones-criterio.fijar.request",
+    "cola-declaraciones-criterio.ratificar.request",
+    "project.activated"
+   ],
+   "eventos_publica": [
+    "cola-declaraciones-criterio.fijar.response",
+    "cola-declaraciones-criterio.fijar.failed",
+    "cola-declaraciones-criterio.ratificar.response",
+    "cola-declaraciones-criterio.ratificar.failed",
+    "contabilidad.criterio_ratificado"
+   ],
+   "proposito": "UNA sola cola donde el jefe fija/ratifica TODOS los criterios; cierra declarativamente B1/B7\u00b7C7\u00b7E6\u00b7F5\u00b7J6\u00b7D11\u00b7I5."
+  },
+  {
+   "slug": "puerto-exportacion",
+   "forma": "CONVERSOR",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-libro",
+   "depende_de": [],
+   "eventos_sube": [
+    "puerto-exportacion.salir.request",
+    "puerto-exportacion.entrar.request"
+   ],
+   "eventos_publica": [
+    "puerto-exportacion.salir.response",
+    "puerto-exportacion.salir.failed",
+    "puerto-exportacion.entrar.response",
+    "puerto-exportacion.entrar.failed"
+   ],
+   "proposito": "Frontera de formatos contables estandar hacia el programa del asesor; si falta, se crea."
+  },
+  {
+   "slug": "vista-revisable",
+   "forma": "REFLEJO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-libro",
+   "depende_de": [
+    "traza-asiento"
+   ],
+   "eventos_sube": [
+    "vista-revisable.explicar.request",
+    "contabilidad.traza_registrada",
+    "contabilidad.asiento_registrado"
+   ],
+   "eventos_publica": [
+    "vista-revisable.explicar.response",
+    "vista-revisable.explicar.failed"
+   ],
+   "proposito": "Muestra cada asiento/calculo CON su origen: composicion determinista de la traza; NO caja negra."
+  },
+  {
+   "slug": "flujo-firma",
+   "forma": "CUSTODIO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-libro",
+   "depende_de": [],
+   "eventos_sube": [
+    "flujo-firma.firmar.request",
+    "flujo-firma.estado.request",
+    "project.activated"
+   ],
+   "eventos_publica": [
+    "flujo-firma.firmar.response",
+    "flujo-firma.firmar.failed",
+    "flujo-firma.estado.response",
+    "flujo-firma.estado.failed",
+    "contabilidad.firma_registrada"
+   ],
+   "proposito": "Parcela de estado revisado/firmado del asesor; El sistema NO firma; vence -> expira y RE-PREGUNTA, jamas asume."
+  },
+  {
+   "slug": "expediente-documental",
+   "forma": "CUSTODIO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-libro",
+   "depende_de": [
+    "puerto-documento"
+   ],
+   "eventos_sube": [
+    "expediente-documental.archivar.request",
+    "expediente-documental.recuperar.request",
+    "project.activated"
+   ],
+   "eventos_publica": [
+    "expediente-documental.archivar.response",
+    "expediente-documental.archivar.failed",
+    "expediente-documental.recuperar.response",
+    "expediente-documental.recuperar.failed",
+    "contabilidad.cifra_archivada"
+   ],
+   "proposito": "Cada cifra con el documento origen ARCHIVADO y ENLAZADO; registro inmutable, un solo escritor; L2 explica, el expediente CONSERVA."
+  },
+  {
+   "slug": "control-calidad-muestreo",
+   "forma": "REFLEJO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-libro",
+   "depende_de": [
+    "escritor-diario",
+    "regla-contrapartida"
+   ],
+   "eventos_sube": [
+    "control-calidad-muestreo.seleccionar.request",
+    "contabilidad.asiento_registrado"
+   ],
+   "eventos_publica": [
+    "control-calidad-muestreo.seleccionar.response",
+    "control-calidad-muestreo.seleccionar.failed"
+   ],
+   "proposito": "Selecciona lo que exige ojo humano por senales DURAS; excepcion + muestra, NO revisar todo; determinista."
+  },
+  {
+   "slug": "cambio-desde-ultima-revision",
+   "forma": "REFLEJO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-libro",
+   "depende_de": [
+    "flujo-firma",
+    "traza-asiento"
+   ],
+   "eventos_sube": [
+    "cambio-desde-ultima-revision.delta.request",
+    "contabilidad.firma_registrada",
+    "contabilidad.asiento_registrado",
+    "contabilidad.asiento_ajuste_recibido"
+   ],
+   "eventos_publica": [
+    "cambio-desde-ultima-revision.delta.response",
+    "cambio-desde-ultima-revision.delta.failed",
+    "contabilidad.delta_revision"
+   ],
+   "proposito": "Delta: asientos nuevos, ajustes y reglas cambiadas desde el ultimo visto bueno; calculo de diferencia."
+  },
+  {
+   "slug": "ratificacion-regla-aprendida",
+   "forma": "PUENTE",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-libro",
+   "depende_de": [
+    "regla-contrapartida",
+    "regla-movimiento-bancario"
+   ],
+   "eventos_sube": [
+    "ratificacion-regla-aprendida.ratificar.request",
+    "contabilidad.regla_contrapartida_propuesta",
+    "contabilidad.regla_bancaria_propuesta"
+   ],
+   "eventos_publica": [
+    "ratificacion-regla-aprendida.ratificar.response",
+    "ratificacion-regla-aprendida.ratificar.failed",
+    "contabilidad.regla_ratificada"
+   ],
+   "proposito": "El asesor ratifica o bloquea la regla ANTES de que actue sobre el volumen; gate humano unico para A6.2 y E8."
+  },
+  {
+   "slug": "frontera-planos",
+   "forma": "REFLEJO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-libro",
+   "depende_de": [],
+   "eventos_sube": [
+    "frontera-planos.verificar.request"
+   ],
+   "eventos_publica": [
+    "frontera-planos.verificar.response",
+    "frontera-planos.verificar.failed",
+    "contabilidad.salida_verificada"
+   ],
+   "proposito": "Guarda verificable de que SOLO se emiten calculos, NUNCA hechos de negocio; un test lo afirma; no realimenta la operacion."
+  },
+  {
+   "slug": "single-writer",
+   "forma": "CUSTODIO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-libro",
+   "depende_de": [],
+   "eventos_sube": [
+    "single-writer.reclamar.request",
+    "single-writer.es_escritor.request",
+    "project.activated"
+   ],
+   "eventos_publica": [
+    "single-writer.reclamar.response",
+    "single-writer.reclamar.failed",
+    "single-writer.es_escritor.response",
+    "single-writer.es_escritor.failed",
+    "contabilidad.escritor_reclamado"
+   ],
+   "proposito": "La LEY que gobierna cada custodio: un solo escritor por parcela; segundo escritor = corrupcion."
+  },
+  {
+   "slug": "clave-natural",
+   "forma": "REFLEJO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-libro",
+   "depende_de": [],
+   "eventos_sube": [
+    "clave-natural.calcular.request",
+    "clave-natural.coincide.request"
+   ],
+   "eventos_publica": [
+    "clave-natural.calcular.response",
+    "clave-natural.calcular.failed",
+    "clave-natural.coincide.response",
+    "clave-natural.coincide.failed"
+   ],
+   "proposito": "Idempotencia determinista: reprocesar NO duplica (\"un cierre = un asiento\"); un test lo afirma."
+  },
+  {
+   "slug": "maestro-terceros",
+   "forma": "CUSTODIO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-entrada",
+   "depende_de": [
+    "padron-terceros"
+   ],
+   "eventos_sube": [
+    "maestro-terceros.ficha.request",
+    "maestro-terceros.upsert.request",
+    "project.activated"
+   ],
+   "eventos_publica": [
+    "maestro-terceros.ficha.response",
+    "maestro-terceros.ficha.failed",
+    "maestro-terceros.upsert.response",
+    "maestro-terceros.upsert.failed",
+    "contabilidad.tercero_actualizado"
+   ],
+   "proposito": "Ficha unica de cliente/proveedor (identificacion fiscal, condiciones, historial); UN solo maestro con roles."
+  },
+  {
+   "slug": "padron-terceros",
+   "forma": "CUSTODIO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-entrada",
+   "depende_de": [],
+   "eventos_sube": [
+    "padron-terceros.unificar.request",
+    "project.activated"
+   ],
+   "eventos_publica": [
+    "padron-terceros.unificar.response",
+    "padron-terceros.unificar.failed",
+    "contabilidad.identidad_unificada"
+   ],
+   "proposito": "Identidad unica por numero fiscal: un proveedor escrito de tres formas sigue siendo uno; faceta de identidad del MISMO maestro N1."
+  },
+  {
+   "slug": "cuenta-proveedor",
+   "forma": "REFLEJO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-entrada",
+   "depende_de": [
+    "escritor-diario",
+    "maestro-terceros"
+   ],
+   "eventos_sube": [
+    "cuenta-proveedor.saldo.request",
+    "cuenta-proveedor.facturas_vivas.request",
+    "contabilidad.asiento_registrado"
+   ],
+   "eventos_publica": [
+    "cuenta-proveedor.saldo.response",
+    "cuenta-proveedor.saldo.failed",
+    "cuenta-proveedor.facturas_vivas.response",
+    "cuenta-proveedor.facturas_vivas.failed"
+   ],
+   "proposito": "Mayor auxiliar del tercero (cada factura de compra viva y su saldo) DERIVADO del diario."
+  },
+  {
+   "slug": "estado-cuenta-proveedor",
+   "forma": "REFLEJO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-entrada",
+   "depende_de": [
+    "cuenta-proveedor"
+   ],
+   "eventos_sube": [
+    "estado-cuenta-proveedor.extracto.request"
+   ],
+   "eventos_publica": [
+    "estado-cuenta-proveedor.extracto.response",
+    "estado-cuenta-proveedor.extracto.failed"
+   ],
+   "proposito": "Extracto CONFRONTABLE con el proveedor (conciliacion de saldos); derivacion determinista."
+  },
+  {
+   "slug": "cruce-factura-recepcion",
+   "forma": "REFLEJO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-entrada",
+   "depende_de": [
+    "puerto-evento-vertical"
+   ],
+   "eventos_sube": [
+    "cruce-factura-recepcion.cotejar.request"
+   ],
+   "eventos_publica": [
+    "cruce-factura-recepcion.cotejar.response",
+    "cruce-factura-recepcion.cotejar.failed",
+    "contabilidad.cruce_descuadrado"
+   ],
+   "proposito": "Coteja pedido <-> recepcion <-> factura ANTES de asentar; lo que no cuadra -> cola; determinista."
+  },
+  {
+   "slug": "vencimiento-pago",
+   "forma": "REFLEJO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-entrada",
+   "depende_de": [],
+   "eventos_sube": [
+    "vencimiento-pago.calcular.request"
+   ],
+   "eventos_publica": [
+    "vencimiento-pago.calcular.response",
+    "vencimiento-pago.calcular.failed",
+    "contabilidad.vencimiento_proximo"
+   ],
+   "proposito": "Fecha de vencimiento por factura desde la politica declarada -> alimenta E5 y K2; un solo tipo Vencimiento con dos lados."
+  },
+  {
+   "slug": "rappel-pronto-pago",
+   "forma": "REFLEJO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-entrada",
+   "depende_de": [],
+   "eventos_sube": [
+    "rappel-pronto-pago.ajustar.request"
+   ],
+   "eventos_publica": [
+    "rappel-pronto-pago.ajustar.response",
+    "rappel-pronto-pago.ajustar.failed"
+   ],
+   "proposito": "Descuentos/rappels/anticipos que ajustan el coste REAL de la compra a lo realmente pagado; determinista."
+  },
+  {
+   "slug": "antiguedad-de-saldos",
+   "forma": "REFLEJO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-entrada",
+   "depende_de": [
+    "vencimiento-pago"
+   ],
+   "eventos_sube": [
+    "antiguedad-de-saldos.clasificar.request"
+   ],
+   "eventos_publica": [
+    "antiguedad-de-saldos.clasificar.response",
+    "antiguedad-de-saldos.clasificar.failed"
+   ],
+   "proposito": "Lo pendiente clasificado por vencimiento: quien y cuanto esta vencido; espejo de N6 del lado del cobro."
+  },
+  {
+   "slug": "emision-factura-venta",
+   "forma": "CUSTODIO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-entrada",
+   "depende_de": [
+    "maestro-terceros",
+    "factura-electronica"
+   ],
+   "eventos_sube": [
+    "emision-factura-venta.emitir.request",
+    "project.activated"
+   ],
+   "eventos_publica": [
+    "emision-factura-venta.emitir.response",
+    "emision-factura-venta.emitir.failed",
+    "contabilidad.factura_emitida"
+   ],
+   "proposito": "Cara emitida con serie/numeracion; numero duplicado = corrupcion -> un solo escritor; contabilidad SI emite SU factura."
+  },
+  {
+   "slug": "factura-rectificativa",
+   "forma": "REFLEJO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-entrada",
+   "depende_de": [
+    "emision-factura-venta"
+   ],
+   "eventos_sube": [
+    "factura-rectificativa.calcular.request"
+   ],
+   "eventos_publica": [
+    "factura-rectificativa.calcular.response",
+    "factura-rectificativa.calcular.failed",
+    "contabilidad.factura_rectificada"
+   ],
+   "proposito": "Correccion comercial POSTERIOR a la emision (abono/devolucion/descuento) que NO borra nada; != ajuste interno B5."
+  },
+  {
+   "slug": "panel-proceso-contable",
+   "forma": "REFLEJO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-entrada",
+   "depende_de": [
+    "encolado-excepcion",
+    "historial-proceso-contable"
+   ],
+   "eventos_sube": [
+    "panel-proceso-contable.latido.request",
+    "contabilidad.excepcion_encolada",
+    "contabilidad.proceso_anotado"
+   ],
+   "eventos_publica": [
+    "panel-proceso-contable.latido.response",
+    "panel-proceso-contable.latido.failed"
+   ],
+   "proposito": "Que entra, que se procesa, que esta en cola, que falla; agregacion determinista; el \"display\" de la contabilidad."
+  },
+  {
+   "slug": "historial-proceso-contable",
+   "forma": "CUSTODIO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-entrada",
+   "depende_de": [],
+   "eventos_sube": [
+    "historial-proceso-contable.anotar.request",
+    "project.activated"
+   ],
+   "eventos_publica": [
+    "historial-proceso-contable.anotar.response",
+    "historial-proceso-contable.anotar.failed",
+    "contabilidad.proceso_anotado"
+   ],
+   "proposito": "Registro append-only de lo procesado y lo fallado con su rastro; != traza-asiento B4; un solo escritor."
+  },
+  {
+   "slug": "desatasco-entrada",
+   "forma": "MICRO-AGENTE",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-entrada",
+   "depende_de": [
+    "encolado-excepcion"
+   ],
+   "eventos_sube": [
+    "desatasco-entrada.juzgar.request"
+   ],
+   "eventos_publica": [
+    "desatasco-entrada.juzgar.response",
+    "desatasco-entrada.juzgar.failed",
+    "contabilidad.excepcion_desatascada"
+   ],
+   "proposito": "Resolver/reencolar/descartar una excepcion CON motivo; la ACCION que completa A8; si la silla es humana, captura su decision."
+  },
+  {
+   "slug": "tasa-cobertura-entrada",
+   "forma": "REFLEJO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-entrada",
+   "depende_de": [
+    "completitud-cobertura"
+   ],
+   "eventos_sube": [
+    "tasa-cobertura-entrada.calcular.request",
+    "contabilidad.cobertura_medida"
+   ],
+   "eventos_publica": [
+    "tasa-cobertura-entrada.calcular.response",
+    "tasa-cobertura-entrada.calcular.failed"
+   ],
+   "proposito": "Proporcion de hechos que entran SIN intervencion vs caen a cola; LEE la metrica unica; prueba la promesa \"sin una persona digitando\"."
+  },
+  {
+   "slug": "consulta-cuentas-bajo-demanda",
+   "forma": "PUENTE",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-analitica",
+   "depende_de": [],
+   "eventos_sube": [
+    "consulta-cuentas-bajo-demanda.preguntar.request"
+   ],
+   "eventos_publica": [
+    "consulta-cuentas-bajo-demanda.preguntar.response",
+    "consulta-cuentas-bajo-demanda.preguntar.failed",
+    "contabilidad.respuesta_consulta"
+   ],
+   "proposito": "Puerta pull: conecta la pregunta del dueno con el calculo por peticion; NO impone cadencia."
+  },
+  {
+   "slug": "puente-lenguaje-dueno",
+   "forma": "MICRO-AGENTE",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-analitica",
+   "depende_de": [
+    "consulta-cuentas-bajo-demanda"
+   ],
+   "eventos_sube": [
+    "puente-lenguaje-dueno.a_consulta.request",
+    "puente-lenguaje-dueno.a_cifra.request",
+    "contabilidad.respuesta_consulta"
+   ],
+   "eventos_publica": [
+    "puente-lenguaje-dueno.a_consulta.response",
+    "puente-lenguaje-dueno.a_consulta.failed",
+    "puente-lenguaje-dueno.a_cifra.response",
+    "puente-lenguaje-dueno.a_cifra.failed",
+    "contabilidad.consulta_traducida"
+   ],
+   "proposito": "Traductor BIDIRECCIONAL: su pregunta -> consulta contable; calculo -> cifra en su idioma (caja, deuda, \"puedo pagar X?\")."
+  },
+  {
+   "slug": "sello-cobertura",
+   "forma": "REFLEJO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-analitica",
+   "depende_de": [
+    "completitud-cobertura"
+   ],
+   "eventos_sube": [
+    "sello-cobertura.sellar.request",
+    "contabilidad.respuesta_consulta"
+   ],
+   "eventos_publica": [
+    "sello-cobertura.sellar.response",
+    "sello-cobertura.sellar.failed"
+   ],
+   "proposito": "Marca de completitud de lo consultado, FUERA de ciclo: si falta cobertura lo dice ANTES de decidir; LEE la metrica unica."
+  },
+  {
+   "slug": "marca-borrador-validado",
+   "forma": "REFLEJO",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-analitica",
+   "depende_de": [
+    "traza-asiento",
+    "flujo-firma"
+   ],
+   "eventos_sube": [
+    "marca-borrador-validado.estado.request",
+    "contabilidad.traza_registrada",
+    "contabilidad.firma_registrada"
+   ],
+   "eventos_publica": [
+    "marca-borrador-validado.estado.response",
+    "marca-borrador-validado.estado.failed"
+   ],
+   "proposito": "Sello del punto en que esta lo que ve (en curso/revisado/firmado) para no decidir sobre un borrador vivo; deriva de traza y firma."
+  },
+  {
+   "slug": "aviso-al-negocio",
+   "forma": "PUENTE",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-analitica",
+   "depende_de": [
+    "motor-avisos"
+   ],
+   "eventos_sube": [
+    "aviso-al-negocio.entregar.request",
+    "contabilidad.aviso_producido"
+   ],
+   "eventos_publica": [
+    "aviso-al-negocio.entregar.response",
+    "aviso-al-negocio.entregar.failed",
+    "contabilidad.aviso_entregado"
+   ],
+   "proposito": "El aviso ENTREGADO y CONFIRMADO al negocio cliente; cara de entrega que COMPLETA motor-avisos K2."
+  },
+  {
+   "slug": "informe-accionable",
+   "forma": "MICRO-AGENTE",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-analitica",
+   "depende_de": [
+    "informe-rico"
+   ],
+   "eventos_sube": [
+    "informe-accionable.juzgar.request"
+   ],
+   "eventos_publica": [
+    "informe-accionable.juzgar.response",
+    "informe-accionable.juzgar.failed",
+    "contabilidad.recomendacion"
+   ],
+   "proposito": "Todo informe que recibe el cliente lleva QUE HACER con el; la recomendacion es juicio; refuerza K3."
+  },
+  {
+   "slug": "narrador-estados",
+   "forma": "MICRO-AGENTE",
+   "accion": "CONSTRUIR",
+   "eje": "contabilidad-analitica",
+   "depende_de": [
+    "balance-situacion",
+    "cuenta-resultados"
+   ],
+   "eventos_sube": [
+    "narrador-estados.narrar.request"
+   ],
+   "eventos_publica": [
+    "narrador-estados.narrar.response",
+    "narrador-estados.narrar.failed",
+    "contabilidad.narracion"
+   ],
+   "proposito": "Traduce balance/resultado al LENGUAJE del negocio cliente (\"esto es lo que te ha pasado y lo que viene\")."
+  }
+ ],
+ "clases": {
+  "puerto-evento-vertical": "A1",
+  "normalizador-hecho": "A2",
+  "captura-documento": "A3",
+  "extraccion-dato": "A4.1",
+  "puerto-documento": "A4.2",
+  "control-cuadre-documento": "A4.3",
+  "puerto-documento-digital": "A5",
+  "contrapartida-asistida": "A6.1",
+  "regla-contrapartida": "A6.2",
+  "deduplicacion-hecho": "A7",
+  "encolado-excepcion": "A8.1",
+  "aviso-revision": "A8.2",
+  "lote-admision": "A9",
+  "contrato-hecho-minimo": "A11",
+  "completitud-cobertura": "A12",
+  "hecho-rectificativo": "A13",
+  "anclaje-cierre-vertical": "A14",
+  "declaracion-fuente-faltante": "A15",
+  "catalogo-cuentas": "B1",
+  "escritor-diario": "B2",
+  "mayor-balanza": "B3",
+  "traza-asiento": "B4",
+  "asiento-ajuste": "B5",
+  "puerto-plan-contable": "B6",
+  "balance-situacion": "C1",
+  "cuenta-resultados": "C2",
+  "periodificacion": "C3",
+  "cierre-ejercicio": "C4",
+  "apertura-ejercicio": "C5",
+  "aviso-cuadre": "C6",
+  "liquidacion-iva": "D1",
+  "modelo-303": "D2",
+  "modelo-390": "D3",
+  "retenciones": "D4",
+  "estimacion-is-irpf": "D5",
+  "calendario-fiscal": "D6",
+  "generador-modelo": "D7",
+  "registro-verifactu": "D8",
+  "factura-electronica": "D9",
+  "estado-presentacion-fiscal": "D12",
+  "acuse-presentacion": "D13",
+  "rectificacion-declaracion": "D14",
+  "perfil-administrativo": "D15",
+  "conciliacion-bancaria": "E1",
+  "puerto-extracto": "E2",
+  "cuadre-cobro-pago": "E3",
+  "saldo-tesoreria": "E4",
+  "prevision-caja": "E5",
+  "partida-no-identificada": "E7",
+  "regla-movimiento-bancario": "E8",
+  "partida-conciliatoria": "E9",
+  "informe-conciliacion": "E10",
+  "maestro-cuentas-bancarias": "E11",
+  "alta-activo": "F1",
+  "plan-amortizacion": "F2",
+  "baja-activo": "F3",
+  "valor-neto-contable": "F4",
+  "recibo-nomina": "G1",
+  "obligacion-seguridad-social": "G2",
+  "asiento-personal": "G3",
+  "puerto-nomina": "G4",
+  "lineas-nomina": "G6",
+  "acceso-nomina": "G7",
+  "pagos-a-cuenta-empleado": "G8",
+  "conceptos-extra-nomina": "G9",
+  "liquidacion-baja-empleado": "G10",
+  "valoracion-existencia": "H1",
+  "frontera-ficha-producto": "H2",
+  "ajuste-inventario": "H3",
+  "variacion-stock-valorada": "H4",
+  "marca-sociedad": "I1",
+  "eliminacion-intercompany": "I2",
+  "consolidacion": "I3",
+  "aislamiento-negocio": "I4",
+  "etiquetado-analitico": "J1",
+  "margen-analitico": "J2",
+  "presupuesto": "J3",
+  "desviacion": "J4",
+  "coste-indirecto": "J5",
+  "cuadro-mando-contable": "J8",
+  "comparador-periodos": "J9",
+  "tablero-margen-dimension": "J10",
+  "onboarding-negocio": "K1",
+  "motor-avisos": "K2",
+  "informe-rico": "K3",
+  "activacion-vertical": "K4",
+  "cola-declaraciones-criterio": "K9",
+  "puerto-exportacion": "L1",
+  "vista-revisable": "L2",
+  "flujo-firma": "L3",
+  "expediente-documental": "L7",
+  "control-calidad-muestreo": "L8",
+  "cambio-desde-ultima-revision": "L9",
+  "ratificacion-regla-aprendida": "L10",
+  "frontera-planos": "M1",
+  "single-writer": "M2",
+  "clave-natural": "M3",
+  "maestro-terceros": "N1",
+  "padron-terceros": "N2",
+  "cuenta-proveedor": "N3",
+  "estado-cuenta-proveedor": "N4",
+  "cruce-factura-recepcion": "N5",
+  "vencimiento-pago": "N6",
+  "rappel-pronto-pago": "N7",
+  "antiguedad-de-saldos": "N8",
+  "emision-factura-venta": "O1",
+  "factura-rectificativa": "O2",
+  "panel-proceso-contable": "P1",
+  "historial-proceso-contable": "P2",
+  "desatasco-entrada": "P3",
+  "tasa-cobertura-entrada": "P4",
+  "consulta-cuentas-bajo-demanda": "Q1",
+  "puente-lenguaje-dueno": "Q2",
+  "sello-cobertura": "Q3",
+  "marca-borrador-validado": "Q4",
+  "aviso-al-negocio": "R1",
+  "informe-accionable": "R2",
+  "narrador-estados": "R3"
+ }
 }
 ```
+
+> **Verificado:** JSON parseable (validado con `node -e`). `hojas` = **118** (una por clase OOP) · `clases` = mapa
+> `slug → código de hoja F2` · `orden` = **118** slugs en orden topológico · `verticales` = los 4 ejes.

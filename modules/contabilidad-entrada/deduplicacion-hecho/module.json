@@ -1,0 +1,38 @@
+{
+  "_doc": "Manifest de contabilidad-entrada/deduplicacion-hecho — REFLEJO STATELESS (A7, hoja del plan). Aplica la CLAVE NATURAL del hecho/documento (M3, clave-natural) → no duplica; es la cara de entrada del cerrojo anti-bucle ('un cierre = un asiento'). Invariantes: sin clave natural NO hay veredicto — es_nuevo:null con motivo, porque asumir 'nuevo' es como duplicar y asumir 'duplicado' es perder un hecho; es PURO y sin estado — pregunta la clave a M3 POR EVENTO y compara con las claves que el emisor declara (claves_vistas); quien RECUERDA los hechos ya vistos es el custodio del diario, no este reflejo; determinista — mismo hecho + misma clave registrada → mismo veredicto, siempre. FORMA: REFLEJO stateless (sin PosPersistencia, sin onProjectActivated). Proyeccion unica `_es_nuevo({project_id, hecho, clave?, claves_vistas?})` -> {es_nuevo, clave, clave_origen, motivo}. Sube tambien contabilidad.hecho_normalizado (fire-and-forget del flujo de entrada). Sin evento de dominio propio: su valor ES el veredicto, y el contrato cierra con su par *.failed.",
+  "name": "deduplicacion-hecho",
+  "version": "0.1.0",
+  "description": "Reflejo stateless (A7): aplica la clave natural (M3) para no duplicar — idempotencia determinista del hecho; sin clave natural no afirma nada en vez de asumir 'nuevo'.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "deduplicacion-hecho.es_nuevo.request",
+      "handler": "onEsNuevoRequest",
+      "description": "RPC reflejo (puro): {project_id, hecho, clave?, claves_vistas?} → {es_nuevo, clave, clave_origen:'declarada'|'clave-natural', vistas_comparadas, motivo, disponible}. Obtiene la clave natural de M3 por evento (o usa la declarada) y la compara con las claves vistas; sin clave natural → es_nuevo:null (no se asume nuevo). Responde por deduplicacion-hecho.es_nuevo.response; hecho/project_id ausente → deduplicacion-hecho.es_nuevo.failed."
+    },
+    {
+      "event": "contabilidad.hecho_normalizado",
+      "handler": "onHechoNormalizado",
+      "description": "Fire-and-forget (A7): normalizador-hecho (A2) publica un hecho en forma asentable → {project_id, hecho, clave_natural, correlation_id}. Misma proyeccion que el RPC: calcula/recibe la clave natural y dictamina es_nuevo; hecho invalido → deduplicacion-hecho.es_nuevo.failed. Cierra el circulo del flujo de entrada."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "deduplicacion-hecho.es_nuevo.response",
+      "description": "Respuesta RPC correlada de deduplicacion-hecho.es_nuevo.request → {request_id, status:200, data:{es_nuevo, clave, clave_origen, composicion, vistas_comparadas, motivo, disponible}}. Emitida por el helper _atender."
+    },
+    {
+      "event": "deduplicacion-hecho.es_nuevo.failed",
+      "description": "Par de fallo determinista (A7): hecho ausente/invalido o project_id ausente → {status, error:{code, message, details?}}. Cierra el circulo de deduplicacion-hecho.es_nuevo.request y de contabilidad.hecho_normalizado."
+    }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "deduplicacion-hecho.es_nuevo",
+      "handler": "onEsNuevoRequest",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    }
+  ]
+}

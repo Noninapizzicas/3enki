@@ -1,0 +1,33 @@
+{
+  "_doc": "Manifest de contabilidad-fiscal/asiento-personal — REFLEJO STATELESS (G3, hoja del plan). GASTO DE PERSONAL, RETENCION Y PAGO → ASIENTO EQUILIBRADO. El diseno lo dice literal: `construir(...):Asiento` con `nomina:ReciboNomina` y `ss:ObligacionSeguridadSocial`. Calculo PURO, determinista. LA CADENA DE PERSONAL ENTRA COMO DATO, por EVENTO (jamas un require cruzado): el recibo ya calculado por el sistema externo (recibo-nomina G1) y la obligacion con la SS ya derivada (obligacion-seguridad-social G2); ambas pueden venir declaradas en la peticion o pedirse al bus. LAS CUENTAS SON DECLARABLES: este reflejo NO cablea ningun numero de cuenta del PGC — si el negocio declara `cuentas`, las partidas lo usan; si no, cada partida lleva cuenta:null y su ROL, y se declara cuentas_origen:'sin_declarar' (la numeracion es del negocio). EQUILIBRIO: el asiento se cierra por construccion (Debe = Haber) y se publican total_debe, total_haber, `cuadra` y `descuadre`; un descuadre de lo declarado NO se corrige ni se parchea a ciegas — se DECLARA y lo resuelve el humano. Invariante: dato ausente = desconocido — sin retencion declarada no se estima un 0: la partida no se crea y el campo se lista en `faltantes`. FORMA: REFLEJO stateless, sin PosPersistencia ni onProjectActivated. Proyeccion unica `_construir({project_id, recibo|nomina?|clave_natural?|empleado?+periodo?, obligacion|ss?, cuentas?, tipos?, bases?, fecha?})` → {asiento:{clase:'nomina', partidas:[{rol, cuenta, importe, descripcion}], debe, haber, total_debe, total_haber, cuadra, descuadre, cuentas_origen, cuentas_cableadas:false, origen_recibo, origen_obligacion}, faltantes, abierto}. Cierra el circulo del RPC con su par de fallo: asiento-personal.construir.failed.",
+  "name": "asiento-personal",
+  "version": "0.1.0",
+  "description": "Reflejo (G3): construye el asiento de personal EQUILIBRADO (sueldos + SS + retencion + pago) desde el recibo ya calculado y la obligacion SS, con las cuentas declarables — calculo puro, sin cablear el PGC.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "asiento-personal.construir.request",
+      "handler": "onConstruirRequest",
+      "description": "RPC reflejo (calculo puro, determinista): {project_id, recibo|nomina|clave_natural|empleado+periodo (el recibo ya calculado por el sistema externo; si falta se pide a recibo-nomina G1 POR EVENTO), obligacion|ss (la obligacion TGSS; si falta se pide a obligacion-seguridad-social G2 POR EVENTO), cuentas? (DECLARABLES: {gasto_sueldos, gasto_ss_empresa, retencion, organismos, neto}), tipos?, bases?, fecha?} → {asiento:{clase:'nomina', partidas, debe, haber, total_debe, total_haber, cuadra, descuadre, cuentas_origen:'declaradas'|'sin_declarar', cuentas_cableadas:false, origen_recibo, origen_obligacion, calculo_puro:true}, faltantes, abierto}. Debe = sueldos (bruto) + SS_empresa; Haber = neto + retencion + organismos (empresa+trabajador). El asiento se cierra por construccion; ningun importe se estima. Responde por asiento-personal.construir.response; project_id ausente o sin recibo ni obligacion → asiento-personal.construir.failed."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "asiento-personal.construir.response",
+      "description": "Respuesta RPC correlada de asiento-personal.construir.request → {request_id, status:200, data:{asiento:{debe, haber, total_debe, total_haber, cuadra, descuadre}, faltantes, abierto}}. Emitida por el helper _atender."
+    },
+    {
+      "event": "asiento-personal.construir.failed",
+      "description": "Par de fallo determinista (G3): project_id ausente (400), sin recibo ni obligacion que asentar, o excepcion de la proyeccion (500) → {status, error:{code, message, details?}}. Cierra el circulo de asiento-personal.construir.request."
+    }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "asiento-personal.construir",
+      "handler": "onConstruirRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "_doc": "Manifest de contabilidad-libro/informe-conciliacion — REFLEJO STATELESS (E10, hoja del plan). El DOCUMENTO DE CUADRE: saldo del banco ↔ saldo contable AJUSTADO, la PRUEBA de que cuadra. Compone el informe a partir de lo que YA existe — NO lo produce de la nada: el CRUCE extracto↔diario (conciliacion-bancaria E1) POR EVENTO, las PARTIDAS EN TRANSITO que explican el desfase (partida-conciliatoria E9) POR EVENTO y el SALDO CONTABLE (saldo-tesoreria) POR EVENTO si esta disponible. DERIVA, NO DECIDE: no cierra la conciliacion, no ajusta el saldo, no asienta y no juzga si el descuadre es aceptable; se limita a saldo_banco + partidas_en_transito = saldo_contable_ajustado y a DECLARAR si la igualdad se cumple (cuadra:true|false) y su diferencia. Un descuadre NO se corrige aqui: se declara y su resolucion queda en la cola del humano. Invariantes: DETERMINISTA (mismas fuentes → mismo informe, una sola respuesta correcta); dato ausente = desconocido — sin cruce, sin partidas o sin saldo contable NO se estima el informe (emitido:false, fuentes.<x>_disponible:false), jamas se rellena un saldo con 0; NO escribe, NO persiste, NO muta. FORMA: REFLEJO stateless, sin PosPersistencia ni onProjectActivated. Proyeccion unica `_componer({project_id, periodo?, cruce?, partidas?, saldo_banco?, saldo_contable?, cuenta?})` → {emitido, cuadra, diferencia, saldo_banco, saldo_contable, saldo_contable_ajustado, partidas_en_transito, fuentes, abierto}. Cierra el circulo: error → informe-conciliacion.componer.failed.",
+  "name": "informe-conciliacion",
+  "version": "0.1.0",
+  "description": "Reflejo (E10): documento de cuadre saldo banco ↔ saldo contable ajustado — deriva el informe de E1/E9 y del saldo de tesoreria y DECLARA si cuadra, sin decidir ni corregir el descuadre.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "informe-conciliacion.componer.request",
+      "handler": "onComponerRequest",
+      "description": "RPC reflejo (calculo puro, determinista, deriva sin decidir): {project_id, periodo?, cruce?, partidas?, saldo_banco?, saldo_contable?, cuenta?} → {project_id, periodo, tipo:'informe-conciliacion', emitido, cuadra, diferencia, saldo_banco, saldo_contable, partidas_en_transito, suma_transito, saldo_contable_ajustado, fuentes:{cruce_disponible, partidas_disponible, saldo_disponible, fuente_cruce, fuente_partidas, fuente_saldo}, deriva_de:[...], abierto:{saldo_banco, saldo_contable, cruce, partidas, descuadre}}. El cruce se pide a conciliacion-bancaria (E1), las partidas a partida-conciliatoria (E9) y el saldo contable a saldo-tesoreria, TODOS POR EVENTO. Sin las fuentes suficientes el informe no se emite (emitido:false) y lo ausente NO se estima. Responde por informe-conciliacion.componer.response; project_id ausente → informe-conciliacion.componer.failed."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "informe-conciliacion.componer.response",
+      "description": "Respuesta RPC correlada de informe-conciliacion.componer.request → {request_id, status:200, data:{emitido, cuadra, diferencia, saldo_banco, saldo_contable_ajustado, partidas_en_transito, fuentes, abierto}}. Emitida por el helper _atender."
+    },
+    {
+      "event": "informe-conciliacion.componer.failed",
+      "description": "Par de fallo determinista (E10): project_id ausente → {status, error:{code, message, details?}}. Cierra el circulo de informe-conciliacion.componer.request."
+    }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "informe-conciliacion.componer",
+      "handler": "onComponerRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
+  ]
+}

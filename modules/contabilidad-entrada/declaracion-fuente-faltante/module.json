@@ -1,0 +1,34 @@
+{
+  "_doc": "Manifest de contabilidad-entrada/declaracion-fuente-faltante — PUENTE STATELESS (A15, hoja del plan). Detecta que una vertical NO publica un hecho necesario y lo DECLARA: queda ABIERTO y se emite un aviso; NO obliga a la vertical a producirlo (obliga_a_producir:false) — contabilidad se adapta, no manda. CONTRATO TOLERANTE: la deteccion se apoya en LA metrica unica de cobertura (completitud-cobertura A12) consultada POR EVENTO; si su dependencia NO responde (timeout/ausencia), este puente responde 503 UPSTREAM_UNREACHABLE — NUNCA fabrica el dato (no inventa una cobertura ni un hueco que no pudo medir). Si el hueco ya llega declarado por el llamante (`faltantes`), no hace falta la metrica externa. Si la metrica existe pero declara que no hay expectativa (cobertura.declarada:false), no se afirma un hueco (falta:false, motivo). FORMA: PUENTE stateless — sin PosPersistencia, sin onProjectActivated. Proyeccion `_declarar`. Publica contabilidad.fuente_faltante cuando hay faltantes declarados.",
+  "name": "declaracion-fuente-faltante",
+  "version": "0.1.0",
+  "description": "Puente stateless (A15): declara que una vertical no publica un hecho necesario (abierto + aviso, sin obligarla a producirlo); contrato tolerante — si la cobertura no responde da 503 y jamas fabrica el dato.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "declaracion-fuente-faltante.declarar.request",
+      "handler": "onDeclararRequest",
+      "description": "RPC puente (contrato tolerante): {project_id, vertical, faltantes?, esperados?, llegados?, motivo?} → {falta, declaracion:{faltantes, abierto:true, obliga_a_producir:false, aviso, motivo}, origen}. Sin faltantes declarados consulta la metrica unica (completitud-cobertura) por evento; si NO responde → 503 UPSTREAM_UNREACHABLE (nunca se fabrica el dato). Cobertura sin expectativa → falta:false (no se afirma hueco). Exito con faltantes → publica contabilidad.fuente_faltante y responde por declaracion-fuente-faltante.declarar.response; project_id/vertical ausente o 503 → declaracion-fuente-faltante.declarar.failed."
+    },
+    {
+      "event": "contabilidad.cobertura_medida",
+      "handler": "onCoberturaMedida",
+      "description": "Fire-and-forget (escucha LA metrica unica): completitud-cobertura (A12) publica {project_id, vertical, cobertura} al medir. Este puente escucha para tener la cobertura viva y poder declarar el hueco sin volver a medir; NO recalcula la metrica (la LEEN)."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "declaracion-fuente-faltante.declarar.response",
+      "description": "Respuesta RPC correlada de declaracion-fuente-faltante.declarar.request → {request_id, status:200, data:{falta, declaracion, origen}}. Emitida por el helper _atender."
+    },
+    {
+      "event": "declaracion-fuente-faltante.declarar.failed",
+      "description": "Par de fallo determinista (A15): project_id/vertical ausente (400) o dependencia completitud-cobertura sin responder (503 UPSTREAM_UNREACHABLE) → {status, error:{code, message, details?}}. Cierra el circulo de declaracion-fuente-faltante.declarar.request. Nunca sustituye el dato faltante por una invencion."
+    },
+    {
+      "event": "contabilidad.fuente_faltante",
+      "description": "Fire-and-forget (A15): una vertical no publica hechos necesarios y queda DECLARADO (abierto + aviso) → {project_id, vertical, declaracion, faltantes, correlation_id}. Lo LEEN la cola de excepciones y el bucle de declaracion de criterios (K9); no obliga a la fuente a producirlo."
+    }
+  ],
+  "_ui": "sin superficie: su cara es el bus (puente/observador puro)"
+}

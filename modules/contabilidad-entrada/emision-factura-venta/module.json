@@ -1,0 +1,42 @@
+{
+  "_doc": "Manifest de contabilidad-entrada/emision-factura-venta — CUSTODIO CON PERSISTENCIA (O1, hoja del plan). LA CARA EMITIDA de la factura de venta, con SERIE y NUMERACION. DECISION DEL DUEÑO: contabilidad SI emite la factura de venta — es SU documento (≠ D8 registro interno ≠ D9 formato estructurado). La emite y la REGISTRA; NO la cobra: el cobro es de la operacion (flujo economico de la vertical), no del libro — por eso emite `cobrada:false` y no toca caja ni banco. Gobierna la SECUENCIA: numero duplicado = CORRUPCION → UN SOLO ESCRITOR (rol EMISOR_FACTURA_VENTA, 403 si otro). Un numero ya emitido en la serie NO se reutiliza (409 NUMERO_DUPLICADO) y la factura emitida jamas se reescribe (append-only). LA LEY ENTRA COMO DATO (invariante 5): NO se cablea el desglose de impuestos (ni tipos, ni porcentajes, ni regimenes), ni el formato de serie, ni plazos — `impuestos` llega DECLARADO en la peticion o se pide POR EVENTO a liquidacion-iva (D1); base y total se COMPONEN de lo declarado, nunca de una tabla legal. Sin base declarada NO se emite (emitida:false + motivo, invariante 7). El receptor se toma declarado o de maestro-terceros (N1) POR EVENTO; el formato estructurado se delega a factura-electronica (D9) POR EVENTO — nunca require cruzado. FORMA: CUSTODIO → PosPersistencia + onProjectActivated + flush + GUARD de un solo escritor. Proyeccion `_emitir`. Publica contabilidad.factura_emitida (lo consume registro-verifactu D8).",
+  "name": "emision-factura-venta",
+  "version": "0.1.0",
+  "description": "Custodio (O1): emite la cara de la factura de venta con serie/numeracion gobernada (numero duplicado = corrupcion, un solo escritor) — contabilidad emite y registra su documento, no lo cobra.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "emision-factura-venta.emitir.request",
+      "handler": "onEmitirRequest",
+      "description": "RPC custodio (escritura, UN escritor): {project_id, rol, serie, base, numero?, paso?, fecha?, emisor?, receptor?, receptor_nif?, impuestos?, total?, moneda?} → {emitida:true, factura:{clave, serie, numero, base, impuestos, desglose, total, moneda}, secuencia, cobrada:false}. GUARD de rol: solo EMISOR_FACTURA_VENTA (403 si otro). Numero duplicado en la serie → 409 NUMERO_DUPLICADO. Sin base declarada → emitida:false + motivo. El desglose de impuestos es declarado o pedido a liquidacion-iva POR EVENTO. Exito → publica contabilidad.factura_emitida y responde por emision-factura-venta.emitir.response; fallo → emision-factura-venta.emitir.failed."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Ciclo de vida: restaura las emisiones persistidas del proyecto activado via PosPersistencia.restaurar(project_id). El custodio persiste, por eso se suscribe obligatoriamente a la activacion."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "emision-factura-venta.emitir.response",
+      "description": "Respuesta RPC correlada de emision-factura-venta.emitir.request → {request_id, status:200, data:{emitida, factura, secuencia, cobrada:false, cobro_de}}. Emitida por el helper _atender."
+    },
+    {
+      "event": "emision-factura-venta.emitir.failed",
+      "description": "Par de fallo determinista (O1): rol no autorizado (403), serie/numero/base ausente (400) o numero duplicado (409 NUMERO_DUPLICADO) → {status, error:{code, message, details?}}. Cierra el circulo de emision-factura-venta.emitir.request."
+    },
+    {
+      "event": "contabilidad.factura_emitida",
+      "description": "Fire-and-forget (O1): la factura de venta quedo emitida y registrada (no cobrada) → {project_id, factura, serie, numero, clave, cobrada:false, correlation_id}. Lo consume registro-verifactu (D8) para encadenar su huella."
+    }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "emision-factura-venta.emitir",
+      "handler": "onEmitirRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
+  ]
+}

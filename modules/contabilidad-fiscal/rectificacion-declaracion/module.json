@@ -1,0 +1,42 @@
+{
+  "_doc": "Manifest de contabilidad-fiscal/rectificacion-declaracion — CUSTODIO CON PERSISTENCIA (D14, hoja del plan). CAMINO DE CORRECCION POSTERIOR A LA PRESENTACION de una declaracion (complementaria/sustitutiva). Uno de los CUATRO planos de correccion (B5 asiento-ajuste · A13 hecho-rectificativo · O2 factura-rectificativa · D14 esta) — TRES actos, no uno; != asiento-ajuste B5. LA INVARIANTE (invariante 3): la declaracion ORIGINAL NO se borra; la rectificacion SUMA (append-only, borra_original:false, suma:true) y queda TRAZADA (liga a la original con su motivo y su autor) — este custodio no expone ninguna operacion de supresion. El sistema GENERA y REGISTRA; el ASESOR presenta y firma: cada rectificacion declara presentada_por_sistema:false y firmada_por_sistema:false. LA LEY ENTRA COMO DATO (invariante 5): el TIPO es DECLARABLE (`tipos_declarables`, sin declarar manda el vocabulario del dominio complementaria/sustitutiva; tipo no declarado → 422 TIPO_NO_DECLARABLE) y los importes entran DECLARADOS (`importes`, sin ellos no se inventan cifras); NO se cablea ningun plazo, ejercicio, escala ni importe legal. Sin motivo se declara motivo:null (no se inventa la causa). Depende de estado-presentacion-fiscal (D12) POR EVENTO: consulta su estado vigente para trazar la rectificacion (lectura best-effort; nunca un require). UN SOLO ESCRITOR: el rectificador (rol RECTIFICADOR_DECLARACION, 403 si otro). FORMA: CUSTODIO → PosPersistencia + onProjectActivated + flush + GUARD de un solo escritor. Proyeccion `_rectificar`. Publica contabilidad.declaracion_rectificada.",
+  "name": "rectificacion-declaracion",
+  "version": "0.1.0",
+  "description": "Custodio (D14): rectificacion posterior a la presentacion (complementaria/sustitutiva) — la declaracion original no se borra, la rectificacion SUMA append-only y queda trazada.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "rectificacion-declaracion.rectificar.request",
+      "handler": "onRectificarRequest",
+      "description": "RPC custodio (escritura, UN escritor): {project_id, rol, original_clave|declaracion, tipo, tipos_declarables?, motivo?, importes?, obligacion?, ejercicio?, periodo?} → {rectificada:true, rectificacion:{id, original_clave, tipo, motivo, importes, estado_vigente_al_rectificar, borra_original:false, suma:true, append_only:true, traza, presentada_por_sistema:false}, rectificaciones_de_la_original}. GUARD de rol: solo RECTIFICADOR_DECLARACION (403 si otro). Tipo no declarado → 422 TIPO_NO_DECLARABLE. Sin original_clave o tipo → 400. La declaracion original NO se borra; la rectificacion SUMA (append-only) y queda trazada. El estado vigente de la obligacion se consulta a estado-presentacion-fiscal (D12) POR EVENTO. Exito → publica contabilidad.declaracion_rectificada y responde por rectificacion-declaracion.rectificar.response; fallo → rectificacion-declaracion.rectificar.failed."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Ciclo de vida: restaura las rectificaciones persistidas del proyecto activado via PosPersistencia.restaurar(project_id). El custodio persiste, por eso se suscribe obligatoriamente a la activacion."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "rectificacion-declaracion.rectificar.response",
+      "description": "Respuesta RPC correlada de rectificacion-declaracion.rectificar.request → {request_id, status:200, data:{rectificada, rectificacion, total_rectificaciones, rectificaciones_de_la_original, borra_original:false, suma:true}}. Emitida por el helper _atender."
+    },
+    {
+      "event": "rectificacion-declaracion.rectificar.failed",
+      "description": "Par de fallo determinista (D14): rol no autorizado (403), original_clave/tipo ausente (400) o tipo no declarable (422) → {status, error:{code, message, details?}}. Cierra el circulo de rectificacion-declaracion.rectificar.request."
+    },
+    {
+      "event": "contabilidad.declaracion_rectificada",
+      "description": "Fire-and-forget (D14): una declaracion presentada quedo rectificada (append-only, trazada) → {project_id, rectificacion, id, original_clave, tipo, borra_original:false, suma:true, correlation_id}. Deja constancia de que el original no se borro y la rectificacion sumo."
+    }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "rectificacion-declaracion.rectificar",
+      "handler": "onRectificarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
+  ]
+}

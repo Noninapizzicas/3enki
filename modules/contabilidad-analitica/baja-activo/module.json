@@ -1,0 +1,33 @@
+{
+  "_doc": "Manifest de contabilidad-analitica/baja-activo — REFLEJO STATELESS (F3, hoja del plan). LA BAJA DEL BIEN: retira el bien del inmovilizado y DERIVA el RESULTADO de la operacion comparando el VALOR NETO CONTABLE (valor-neto-contable F4) con el IMPORTE DE VENTA declarado. ATRIBUTOS del diseno: activo:Activo y vnc:ValorNetoContable — el VNC se pide a F4 POR EVENTO (o llega declarado) y el IMPORTE DE VENTA es un DATO declarado por el negocio, jamas estimado: un bien dado de baja SIN venta no tiene un importe 0 inventado — si no se declara, consta como null y el resultado queda [ABIERTO]. DETERMINISTA Y SIN JUICIO: resultado = importe_venta − vnc; el SIGNO se DERIVA (>0 beneficio, <0 perdida, =0 nulo); aqui no se valora si la baja es buena o mala ni se decide su imputacion contable (cuenta, asiento, periodo) — eso lo fija el corte del diario/ajuste. Invariantes: DETERMINISTA (una sola respuesta correcta); dato ausente = desconocido → resultado:null y abierto:true con lo que falta (ningun importe se rellena con 0); NO escribe, NO persiste, NO muta, NO decide la imputacion. FORMA: REFLEJO stateless, sin PosPersistencia ni onProjectActivated. Proyeccion unica `_calcular({project_id, id_activo?, activo?, fecha_baja?, vnc?, importe_venta?, motivo_baja?})` → {vnc, importe_venta, resultado, tipo_resultado, retirado, faltan, abierto, imputacion_delegada_a}. Cierra el circulo: error → baja-activo.calcular.failed.",
+  "name": "baja-activo",
+  "version": "0.1.0",
+  "description": "Reflejo (F3): baja del inmovilizado — deriva el resultado (beneficio/perdida) comparando el valor neto contable con el importe de venta declarado, sin decidir la imputacion.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "baja-activo.calcular.request",
+      "handler": "onCalcularRequest",
+      "description": "RPC reflejo (calculo puro, determinista, sin juicio): {project_id, id_activo?, activo?, fecha_baja?, vnc?, importe_venta?, motivo_baja?} → {project_id, id_activo, fecha_baja, motivo_baja, vnc, importe_venta, resultado, fuente_vnc, tipo_resultado:'beneficio'|'perdida'|'nulo', retirado, abierto, faltan, motivo, imputacion_delegada_a:'escritor-diario'}. El VNC se pide a valor-neto-contable (F4) POR EVENTO o llega declarado; el importe de venta es DATO declarado y su ausencia NO se estima. Sin VNC o sin importe → resultado:null y abierto:true. Responde por baja-activo.calcular.response; project_id ausente → baja-activo.calcular.failed."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "baja-activo.calcular.response",
+      "description": "Respuesta RPC correlada de baja-activo.calcular.request → {request_id, status:200, data:{vnc, importe_venta, resultado, tipo_resultado, retirado, faltan, abierto, imputacion_delegada_a}}. Emitida por el helper _atender."
+    },
+    {
+      "event": "baja-activo.calcular.failed",
+      "description": "Par de fallo determinista (F3): project_id ausente → {status, error:{code, message, details?}}. Cierra el circulo de baja-activo.calcular.request."
+    }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "baja-activo.calcular",
+      "handler": "onCalcularRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
+  ]
+}

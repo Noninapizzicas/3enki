@@ -1,0 +1,43 @@
+{
+  "_doc": "Manifest de contabilidad-libro/vista-revisable — REFLEJO STATELESS (L2, hoja del plan). LA SALIDA LEGIBLE Y REVISABLE, NO CAJA NEGRA: muestra cada asiento/calculo CON su ORIGEN — la composicion determinista de la TRAZA (traza-asiento B4): quien lo creo, cuando y por que — junto con sus apuntes y sus datos declarados. El ASESOR revisa lo que ve, con su procedencia a la vista. ATRIBUTOS del diseno: asiento:Asiento, traza:TrazaAsiento; METODOS: explicar(a:Asiento):Informe. DERIVA, NO DECIDE: no juzga si un asiento esta bien, no lo corrige, no lo firma (eso es flujo-firma L3) y no conserva la prueba (eso es expediente-documental L7). Invariantes: DETERMINISTA (mismo asiento + misma traza → misma explicacion); dato ausente = desconocido — sin traza NO se afirma quien ni cuando (traza_disponible:false, ABIERTO), jamas se inventa la autoria; NO escribe, NO persiste, NO muta (L2 EXPLICA; el expediente L7 CONSERVA); la vista NO recalcula las sumas — las muestra si el asiento las trae. La traza se recibe declarada (en la peticion o en el asiento) o se PIDE a traza-asiento (B4) POR EVENTO (traza-asiento.consultar.request, best-effort). Escucha contabilidad.traza_registrada (B4) y contabilidad.asiento_registrado (B2) como señales TOLERANTES que solo avisan de que la vista quedo desactualizada (es una VISTA BAJO DEMANDA, no un acumulador: no guarda nada). FORMA: REFLEJO stateless, sin PosPersistencia ni onProjectActivated. Proyeccion `_explicar`. Cierra el circulo: error → vista-revisable.explicar.failed.",
+  "name": "vista-revisable",
+  "version": "0.1.0",
+  "description": "Reflejo (L2): la vista legible y revisable de cada asiento con su origen (traza quien/cuando/por que) — composicion determinista, jamas caja negra; no recalcula ni firma.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "vista-revisable.explicar.request",
+      "handler": "onExplicarRequest",
+      "description": "RPC reflejo (composicion pura, determinista): {project_id, asiento:{numero?, clave_natural?, fecha?, sociedad?, concepto?, apuntes?, suma_debe?, suma_haber?, cuadra?, traza?}, numero?, periodo?, traza?} → {project_id, tipo:'vista-revisable', emitida:true, explicacion:{numero, clave_natural, fecha, sociedad, concepto, apuntes, suma_debe, suma_haber, cuadra, descuadre, traza, origen:{traza_disponible, fuente_traza, quien, cuando, motivo, origen_asiento}}, procedencia:{apuntes, sumas, traza}, revisable_por:'asesor (flujo-firma L3)', firmada:false, deriva_de, abierto:{traza, sumas}}. La traza se recibe declarada o se PIDE a traza-asiento (B4) POR EVENTO; sin traza NO se inventa la autoria. La vista NO recalcula las sumas. Responde por vista-revisable.explicar.response; asiento o project_id ausente → vista-revisable.explicar.failed."
+    },
+    {
+      "event": "contabilidad.traza_registrada",
+      "handler": "onTrazaRegistrada",
+      "description": "Fire-and-forget (B4 → L2): traza-asiento publico que una marca quedo registrada → la vista quedara desactualizada; se anota en el log (sin guardar nada: L2 es stateless). Tolerante: sin project_id se ignora."
+    },
+    {
+      "event": "contabilidad.asiento_registrado",
+      "handler": "onAsientoRegistrado",
+      "description": "Fire-and-forget (B2 → L2): escritor-diario publico que un asiento quedo registrado → la vista quedara desactualizada; se anota en el log (sin guardar nada: L2 es stateless). Tolerante: sin project_id se ignora."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "vista-revisable.explicar.response",
+      "description": "Respuesta RPC correlada de vista-revisable.explicar.request → {request_id, status:200, data:{emitida, explicacion, procedencia, revisable_por, firmada:false, deriva_de, abierto}}. Emitida por el helper _atender."
+    },
+    {
+      "event": "vista-revisable.explicar.failed",
+      "description": "Par de fallo determinista (L2): project_id o asiento ausente → {status, error:{code, message, details?}}. Cierra el circulo de vista-revisable.explicar.request y de las señales B2/B4."
+    }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "vista-revisable.explicar",
+      "handler": "onExplicarRequest",
+      "type": "inline_render",
+      "zone": "area_chat"
+    }
+  ]
+}

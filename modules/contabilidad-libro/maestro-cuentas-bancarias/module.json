@@ -1,0 +1,62 @@
+{
+  "_doc": "Manifest de contabilidad-libro/maestro-cuentas-bancarias — CUSTODIO CON PERSISTENCIA (E11, hoja del plan). Parcela DECLARABLE de las CUENTAS BANCARIAS del negocio y su MONEDA: un negocio → N cuentas. Sin este maestro, 'el banco' es un numero falso — no hay contra que conciliar (E1), ni de donde derivar el saldo de tesoreria (E4), ni que cuenta cobra/paga. EL SISTEMA NO LAS INVENTA: las DECLARA el dueno/asesor; jamas se fabrica una cuenta ni se asume una moneda (la moneda es ParametroDeclarable: si no viene queda null = desconocida, no se estima). UN SOLO ESCRITOR: solo el camino de declaracion (rol DECLARACION_CUENTA) asienta cuentas; cualquier otro rol → 403. Invariantes: `listar` NO muta (lectura determinista, orden estable por orden de alta); `declarar` es UPSERT declarativo (mismo id → se ACTUALIZA con historial de cambios, nunca se borra en silencio); nada cableado — ninguna lista de bancos, pais, IBAN de ejemplo ni moneda por defecto. Persiste por proyecto con PosPersistencia (storage /contabilidad/maestro-cuentas-bancarias/maestro-cuentas-bancarias.json), restaura en project.activated y vuelca en onUnload. Proyecciones `_declarar` y `_listar`. Publica contabilidad.cuenta_bancaria_declarada.",
+  "name": "maestro-cuentas-bancarias",
+  "version": "0.1.0",
+  "description": "Custodio (E11): parcela declarable de las cuentas bancarias del negocio y su moneda — un negocio → N cuentas, con un solo escritor (declaracion del dueno/asesor) y cero cuentas inventadas.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "maestro-cuentas-bancarias.declarar.request",
+      "handler": "onDeclararRequest",
+      "description": "RPC custodio (escritura, UNICO ESCRITOR): {project_id, rol:'DECLARACION_CUENTA', cuenta:{id_cuenta|iban, moneda?, banco?, alias?, cuenta_contable?, activa?}} → {cuenta, actualizada, total_cuentas}. UPSERT declarativo: una cuenta con el mismo id se actualiza guardando historial (nunca se borra en silencio). Campos ausentes quedan null (desconocidos, no se estiman). Exito → publica contabilidad.cuenta_bancaria_declarada y responde por maestro-cuentas-bancarias.declarar.response; rol distinto de DECLARACION_CUENTA → 403; cuenta o id_cuenta ausente → 400; fallo → maestro-cuentas-bancarias.declarar.failed."
+    },
+    {
+      "event": "maestro-cuentas-bancarias.listar.request",
+      "handler": "onListarRequest",
+      "description": "RPC custodio (lectura, NO muta): {project_id} → {total, ids:[id_cuenta], cuentas:[{id_cuenta, moneda, banco, alias, cuenta_contable, activa}]} en orden estable (orden de alta). Lo beben saldo-tesoreria (E4) y prevision-caja (E5) por EVENTO. Responde por maestro-cuentas-bancarias.listar.response; project_id ausente → maestro-cuentas-bancarias.listar.failed."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Restaura el maestro de cuentas bancarias (cuentas + orden) del proyecto activado desde el storage (PosPersistencia)."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "maestro-cuentas-bancarias.declarar.response",
+      "description": "Respuesta RPC correlada de maestro-cuentas-bancarias.declarar.request → {request_id, status:200, data:{cuenta, actualizada, total_cuentas}}. Emitida por el helper _atender."
+    },
+    {
+      "event": "maestro-cuentas-bancarias.declarar.failed",
+      "description": "Par de fallo determinista (E11): segundo escritor (rol distinto de DECLARACION_CUENTA → 403), cuenta o id_cuenta ausente (400) → {status, error:{code, message, details?}}. Cierra el circulo de maestro-cuentas-bancarias.declarar.request."
+    },
+    {
+      "event": "maestro-cuentas-bancarias.listar.response",
+      "description": "Respuesta RPC correlada de maestro-cuentas-bancarias.listar.request → {request_id, status:200, data:{total, ids, cuentas}}. Emitida por el helper _atender."
+    },
+    {
+      "event": "maestro-cuentas-bancarias.listar.failed",
+      "description": "Par de fallo determinista (E11): project_id ausente → {status, error:{code, message, details?}}. Cierra el circulo de maestro-cuentas-bancarias.listar.request."
+    },
+    {
+      "event": "contabilidad.cuenta_bancaria_declarada",
+      "description": "Fire-and-forget (E11): una cuenta bancaria quedo declarada/actualizada en la parcela → {project_id, cuenta, id_cuenta, moneda, actualizada, correlation_id}. Lo LEEN saldo-tesoreria (E4), conciliacion-bancaria (E1) y prevision-caja (E5) para dejar de tratar 'el banco' como un numero falso."
+    }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "maestro-cuentas-bancarias.declarar",
+      "handler": "onDeclararRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "maestro-cuentas-bancarias.listar",
+      "handler": "onListarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
+  ]
+}

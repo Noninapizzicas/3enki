@@ -1,0 +1,42 @@
+{
+  "_doc": "Manifest de contabilidad-fiscal/recibo-nomina — REFLEJO STATELESS (G1, hoja del plan). ADMITE y DA FORMA ASENTABLE al HECHO DE NOMINA que ya entro por la frontera (puerto-nomina G4). El diseno lo dice literal: dar_forma(entrada):HechoNomina — admite el hecho lo mismo si llega como HECHO que si llega como DOCUMENTO (el registro/PDF del recibo). MECANICO, CERO JUICIO. ESTE MODULO NO CALCULA LA NOMINA: el bruto, la retencion, la cotizacion del trabajador y el neto llegan ya calculados por el sistema de personal; aqui NO se derivan, NO se retocan y NO se estiman — se COPIAN tal cual y se declaran abiertos los que no vengan. Lo que hace es REFLEJARLA contablemente: dar al hecho una forma estable (forma_asentable) que el asiento pueda consumir, con destino:'asiento-personal' (G3). LOS CONCEPTOS SON DECLARABLES: el recibo organiza los conceptos TAL CUAL llegan; no hay ningun catalogo de conceptos, tipos ni bases cableado. Invariante: dato ausente = desconocido — un importe que no llega queda null y se declara en `faltantes`; la consistencia de lo declarado (cuadra/descuadre: bruto − retencion − cotizacion = neto) se DECLARA sobre los importes tal cual vinieron, no se corrige (la nomina no se toca aqui y su resolucion es del humano). FORMA: REFLEJO stateless, sin PosPersistencia ni onProjectActivated. Proyeccion unica `_dar_forma({project_id, nomina|hecho|documento, clave_natural?, id_recibo?})` → {recibo:{id_recibo, clave_natural, clase_entrada, importes copiados, conceptos, forma_asentable, calculada_aqui:false, cuadra, descuadre, faltantes}, destino:'asiento-personal'}. Cierra el circulo: exito → publica contabilidad.nomina_formada (lo LEE asiento-personal G3); error → recibo-nomina.dar_forma.failed.",
+  "name": "recibo-nomina",
+  "version": "0.1.0",
+  "description": "Reflejo (G1): admite y da forma asentable al hecho de nomina que llega por la frontera — refleja contablemente lo que el sistema externo ya calculo, sin calcular la nomina ni tocar sus importes.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "recibo-nomina.dar_forma.request",
+      "handler": "onDarFormaRequest",
+      "description": "RPC reflejo (mecanico, cero juicio, determinista): {project_id, nomina|hecho|documento, clave_natural?, id_recibo?} → {project_id, recibo:{id_recibo, clave_natural, clase_entrada:'hecho'|'documento', origen, empleado, periodo, fecha, bruto, retencion, cotizacion_trabajador, neto, moneda, conceptos, forma_asentable:true, calculada_aqui:false, calculo_delegado_a:'sistema-de-nomina-externo', cuadra, descuadre, faltantes, abierto}, destino:'asiento-personal'}. Los importes se COPIAN de la fuente (nunca se calculan) y lo ausente queda null y se declara en `faltantes`. Exito → publica contabilidad.nomina_formada y responde por recibo-nomina.dar_forma.response; project_id o nomina ausente → recibo-nomina.dar_forma.failed."
+    },
+    {
+      "event": "contabilidad.nomina_recibida",
+      "handler": "onNominaRecibida",
+      "description": "Fire-and-forget: el hecho de nomina entro por el puerto (puerto-nomina G4) → se le da forma asentable (misma proyeccion `_dar_forma`) y se publica contabilidad.nomina_formada. Si la entrada no trae nomina, publica recibo-nomina.dar_forma.failed."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "recibo-nomina.dar_forma.response",
+      "description": "Respuesta RPC correlada de recibo-nomina.dar_forma.request → {request_id, status:200, data:{recibo, destino:'asiento-personal'}}. Emitida por el helper _atender."
+    },
+    {
+      "event": "recibo-nomina.dar_forma.failed",
+      "description": "Par de fallo determinista (G1): project_id o nomina ausente → {status, error:{code, message, details?}}. Cierra el circulo de recibo-nomina.dar_forma.request."
+    },
+    {
+      "event": "contabilidad.nomina_formada",
+      "description": "Fire-and-forget (G1): el recibo de nomina quedo con forma asentable (los importes del sistema externo copiados, sin calcular aqui) → {project_id, id_recibo, clave_natural, periodo, empleado, neto, cuadra, faltantes, correlation_id}. Lo LEEN asiento-personal (G3) y la cadena de personal (obligacion-seguridad-social G2, lineas-nomina G6, pagos-a-cuenta G8)."
+    }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "recibo-nomina.dar_forma",
+      "handler": "onDarFormaRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
+  ]
+}

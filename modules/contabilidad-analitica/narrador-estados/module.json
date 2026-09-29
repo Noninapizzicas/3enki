@@ -1,0 +1,38 @@
+{
+  "_doc": "Manifest de contabilidad-analitica/narrador-estados — MICRO-AGENTE HIBRIDO (R3, hoja del plan). Traduce el BALANCE y el RESULTADO al LENGUAJE del negocio cliente: 'esto es lo que te ha pasado y lo que viene'. Narrar en lenguaje natural es JUICIO. ATRIBUTOS del diseno: balance:EstadoDerivado, resultado:EstadoDerivado; METODOS: narrar(estados):Lenguaje; REGLA: traduce balance/resultado al lenguaje del negocio cliente — lenguaje → juicio. ⚠️ NARRA LO QUE HAY: no estima ni adorna lo que falta. Los estados llegan declarados o los calculan sus dueños (balance-situacion C1, cuenta-resultados C2) POR EVENTO; si un estado falta, la narracion LO DECLARA como hueco — jamas lo rellena con una cifra inventada (estima:false). HIBRIDO (patron etiquetado-analitico): _narrarReflejo es el REFLEJO determinista (compone la frase con las PLANTILLAS DECLARADAS estado → frase sobre los estados reales; una plantilla cuyo estado no existe NO se aplica) y _concluir es el FUZZY (1 llamada llm.complete.request con guion-prompt self-contained que narra SOLO con las cifras reales; si falla o no cumple el contrato → la narracion se declara [ABIERTO] en vez de adornar). Invariantes: NARRA LO QUE HAY (cada cifra sale de un estado REAL); NUNCA ESTIMA NI ADORNA (no se inventan valores ni se colorean los ausentes); la narracion NO decide (describe — el sistema no decide por el dueño); NO escribe, NO persiste. FORMA: MICRO-AGENTE stateless — sin PosPersistencia, sin onProjectActivated. Proyeccion `_narrar`. Consume balance-situacion.calcular.request (C1) y cuenta-resultados.calcular.request (C2) POR EVENTO; publica contabilidad.narracion. Cierra el circulo: error → narrador-estados.narrar.failed.",
+  "name": "narrador-estados",
+  "version": "0.1.0",
+  "description": "Micro-agente (R3): narra balance y resultado en lenguaje del negocio — narra lo que hay y nunca estima ni adorna lo que falta.",
+  "language": "es",
+  "blueprint_driven": true,
+  "subscribes": [
+    {
+      "event": "narrador-estados.narrar.request",
+      "handler": "onNarrarRequest",
+      "description": "RPC híbrido (narración): {project_id, balance?, resultado?, periodo?, ejercicio?, plantillas?} → {narracion, estados_narrados, balance, resultado, faltan, origen:'plantilla'|'juicio', confianza, estima:false, decide:false, abierto}. Toma los estados declarados o calculados por sus dueños (balance-situacion C1, cuenta-resultados C2) POR EVENTO; compone la narración con las PLANTILLAS DECLARADAS (reflejo) o con juicio fuzzy que narra SOLO con las cifras reales. Los estados ausentes se declaran (faltan) y NO se rellenan; sin ningún estado → narracion null (no se adorna el vacío). Éxito → publica contabilidad.narracion y responde por narrador-estados.narrar.response; project_id ausente → narrador-estados.narrar.failed."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "narrador-estados.narrar.response",
+      "description": "Respuesta RPC correlada de narrador-estados.narrar.request → {request_id, status:200, data:{narracion, estados_narrados, balance, resultado, faltan, origen, confianza, estima:false, decide:false, abierto}}. Emitida por el helper _atender."
+    },
+    {
+      "event": "narrador-estados.narrar.failed",
+      "description": "Par de fallo determinista (R3): project_id ausente → {status, error:{code, message, details?}}. Cierra el circulo de narrador-estados.narrar.request."
+    },
+    {
+      "event": "contabilidad.narracion",
+      "description": "Fire-and-forget (R3): los estados contables quedaron NARRADOS en lenguaje del negocio cliente → {project_id, narracion, origen:'plantilla'|'juicio', estados_narrados, faltan, correlation_id}. Lo consume la entrega al negocio (R1) para el informe del cliente. Narra lo que hay; no estima ni decide."
+    }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "narrador-estados.narrar",
+      "handler": "onNarrarRequest",
+      "type": "inline_render",
+      "zone": "area_chat"
+    }
+  ]
+}

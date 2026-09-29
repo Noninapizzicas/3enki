@@ -1,0 +1,38 @@
+{
+  "_doc": "Manifest de contabilidad-entrada/tasa-cobertura-entrada — REFLEJO STATELESS (P4, hoja del plan). La PROPORCION de hechos que entran SIN intervencion vs los que CAEN A COLA: es la prueba de la promesa del dueño ('sin una persona digitando'). ⚠️ LEE LA METRICA UNICA, NO LA RECALCULA: la cobertura la produce completitud-cobertura (A12) y la declara en contabilidad.cobertura_medida; aqui NO se vuelve a medir la cobertura — se TOMA la tasa ya medida (declarada en la peticion, cacheada de lo emitido o pedida POR EVENTO a su dueño) y se PRESENTA para la ENTRADA. Recalcularla seria crear una SEGUNDA metrica de cobertura — la invariante lo prohibe. ATRIBUTOS del diseno: cobertura:Cobertura; METODOS: calcular():Ratio; REGLA: proporcion de hechos que entran sin intervencion vs caen a cola — LEE la metrica unica. Invariantes: LEE, NO RECALCULA (la tasa de cobertura llega declarada o de su dueño A12 POR EVENTO; jamas se recomputa desde esperados/llegados); lo que SI computa esta hoja es su PROPIO ratio de entrada (hechos sin intervencion sobre el total) — es la operacion de la clase P4, no la metrica unica; DETERMINISTA (mismas cuentas → mismo ratio); dato ausente = desconocido (sin total o sin las cuentas de intervencion el ratio es null, no un 0 que afirme una medida que no se hizo); NO escribe, NO persiste. FORMA: REFLEJO stateless — sin PosPersistencia, sin onProjectActivated. Proyeccion `_calcular`. Consume contabilidad.cobertura_medida (fire-and-forget) para LEER la metrica unica. Cierra el circulo: error → tasa-cobertura-entrada.calcular.failed.",
+  "name": "tasa-cobertura-entrada",
+  "version": "0.1.0",
+  "description": "Reflejo stateless (P4): proporción de hechos que entran sin intervención vs caen a cola; LEE la métrica única de cobertura (A12) y nunca la recalcula.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "tasa-cobertura-entrada.calcular.request",
+      "handler": "onCalcularRequest",
+      "description": "RPC reflejo (determinista): {project_id, sin_intervencion?, con_intervencion?, total?, cobertura?, vertical?} → {tasa_entrada, ratio, sin_intervencion, con_intervencion, total, cumple_promesa, cobertura_leida, lee_metrica_unica:true, recalcula_cobertura:false, abierto, faltan, motivo}. Calcula el ratio PROPIO de la entrada (hechos sin intervencion / total) y ADJUNTA la metrica unica de cobertura (A12) LEIDA — declarada, cacheada o pedida POR EVENTO; NUNCA la recalcula. Sin total ni cuentas → tasa null (no un 0 inventado). Responde por tasa-cobertura-entrada.calcular.response; project_id ausente → tasa-cobertura-entrada.calcular.failed."
+    },
+    {
+      "event": "contabilidad.cobertura_medida",
+      "handler": "onCoberturaMedida",
+      "description": "Fire-and-forget (A12 → P4): completitud-cobertura publicó LA metrica unica de cobertura → se LEE y se guarda (cache de lectura) para presentarla sin recalcularla. Tolerante: sin project_id se ignora. ⚠️ No dispara ninguna medición: solo LEE."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "tasa-cobertura-entrada.calcular.response",
+      "description": "Respuesta RPC correlada de tasa-cobertura-entrada.calcular.request → {request_id, status:200, data:{tasa_entrada, ratio, sin_intervencion, con_intervencion, total, cumple_promesa, cobertura_leida, lee_metrica_unica, recalcula_cobertura, abierto, faltan}}. Emitida por el helper _atender."
+    },
+    {
+      "event": "tasa-cobertura-entrada.calcular.failed",
+      "description": "Par de fallo determinista (P4): project_id ausente → {status, error:{code, message, details?}}. Cierra el circulo de tasa-cobertura-entrada.calcular.request."
+    }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "tasa-cobertura-entrada.calcular",
+      "handler": "onCalcularRequest",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    }
+  ]
+}

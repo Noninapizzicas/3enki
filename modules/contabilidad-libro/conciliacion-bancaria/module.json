@@ -1,0 +1,37 @@
+{
+  "_doc": "Manifest de contabilidad-libro/conciliacion-bancaria — REFLEJO STATELESS (E1, hoja del plan). CRUCE extracto ↔ diario POR CLAVE NATURAL DETERMINISTA: toma los movimientos del banco (normalizados por puerto-extracto E2) y los aparea con los asientos del diario (escritor-diario B2), aplicando las REGLAS declaradas (regla-movimiento-bancario E8) como corte duro. Calculo PURO: misma entrada → mismo resultado. EL JUICIO ESTA AISLADO EN OTRA HOJA: lo que no casa NO se interpreta aqui — este reflejo no adivina a que corresponde una descripcion ambigua del banco, eso es competencia EXCLUSIVA de partida-no-identificada (E7, MICRO-AGENTE). Produce tres cubos: casados (aparicion determinista por clave natural o por regla), sin_contrapartida (movimiento sin apunte → va a E7) y sin_movimiento (apunte sin movimiento bancario). El corte por regla LEE el corte duro de E8 POR EVENTO; si E8 no responde se declara reglas_disponibles:false y solo se cruza por clave natural (no se inventa la regla). NO escribe, NO persiste, NO muta: el diario es de B2 y los movimientos de E2. FORMA: REFLEJO stateless, sin PosPersistencia ni onProjectActivated. Proyeccion unica `_cruzar({project_id, periodo?, movimientos?, canal?, banco?})` → {casados, sin_contrapartida, sin_movimiento, descuadre, juicio_delegado_a}. Cierra el circulo: exito → publica contabilidad.conciliacion_cruzada; error → conciliacion-bancaria.cruzar.failed.",
+  "name": "conciliacion-bancaria",
+  "version": "0.1.0",
+  "description": "Reflejo (E1): cruza extracto y diario por clave natural determinista — calculo puro que NO interpreta lo que no casa; el juicio de la partida ambigua queda aislado en partida-no-identificada (E7).",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "conciliacion-bancaria.cruzar.request",
+      "handler": "onCruzarRequest",
+      "description": "RPC reflejo (calculo puro, determinista): {project_id, periodo?, movimientos?|extracto?, canal?, banco?} → {project_id, periodo, fuente_movimientos, fuente_diario, reglas_disponibles, total_movimientos, total_asientos, casados:[{clave, via:'clave_natural'|'regla', movimiento, asiento, apunte, regla}], sin_contrapartida:[{movimiento, clave, motivo, juicio:'partida-no-identificada'}], sin_movimiento:[{clave, asiento, motivo}], descuadre, juicio_delegado_a:'partida-no-identificada'}. Los movimientos se toman declarados o se piden a puerto-extracto (E2) por EVENTO; el diario se pide a escritor-diario (B2) por EVENTO. Exito → publica contabilidad.conciliacion_cruzada y responde por conciliacion-bancaria.cruzar.response; project_id ausente → conciliacion-bancaria.cruzar.failed."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "conciliacion-bancaria.cruzar.response",
+      "description": "Respuesta RPC correlada de conciliacion-bancaria.cruzar.request → {request_id, status:200, data:{casados, sin_contrapartida, sin_movimiento, descuadre, juicio_delegado_a}}. Emitida por el helper _atender."
+    },
+    {
+      "event": "conciliacion-bancaria.cruzar.failed",
+      "description": "Par de fallo determinista (E1): project_id ausente → {status, error:{code, message, details?}}. Cierra el circulo de conciliacion-bancaria.cruzar.request."
+    },
+    {
+      "event": "contabilidad.conciliacion_cruzada",
+      "description": "Fire-and-forget (E1): el cruce extracto↔diario quedo hecho (determinista) → {project_id, periodo, total_movimientos, casados, sin_contrapartida, sin_movimiento, descuadre, correlation_id}. Lo LEEN partida-conciliatoria (E9) e informe-conciliacion (E10)."
+    }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "conciliacion-bancaria.cruzar",
+      "handler": "onCruzarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "_doc": "Manifest de contabilidad-libro/cuadre-cobro-pago — REFLEJO STATELESS (E3, hoja del plan). COTEJA cobros y pagos contra el BANCO con la clave natural COMPARTIDA: un movimiento bancario = un cobro/pago. Dado un movimiento (o un conjunto) decide deterministamente si YA tiene su cobro/pago cotejado en el diario y, si no lo tiene, lo declara pendiente. Determinista: mismo movimiento + mismo diario → mismo resultado. CERO juicio: aqui NO se interpreta una descripcion ambigua (eso es E7, partida-no-identificada) — si el movimiento no se puede cotejar por su clave natural se declara cotejado:false y va a la cola del juicio, jamas se inventa el cobro/pago. El movimiento llega por DOS vias, ninguna es un `require` cruzado: (1) `contabilidad.movimiento_bancario` fire-and-forget de E2 → se ACUMULA la muestra en un espejo en memoria (idempotente por clave natural); (2) `cuadrar.request` → se coteja lo declarado o el espejo. El diario se PIDE a escritor-diario (B2) POR EVENTO; si no responde se declara diario_disponible:false y no se afirma el cotejo (nada se estima). La direccion del apunte (debe/haber) sale del SIGNO declarado del movimiento (cargo→salida, abono→entrada), no de una constante; sin signo no se afirma la direccion. NO escribe, NO persiste, NO muta el libro. FORMA: REFLEJO stateless, sin PosPersistencia ni onProjectActivated. Proyeccion unica `_cuadrar({project_id, movimiento?|movimientos?|m?, periodo?})` → {cotejados, pendientes, cuadra, juicio_delegado_a}. Cierra el circulo: error → cuadre-cobro-pago.cuadrar.failed.",
+  "name": "cuadre-cobro-pago",
+  "version": "0.1.0",
+  "description": "Reflejo (E3): coteja cobros y pagos contra el banco por la clave natural compartida (un movimiento = un cobro/pago) — determinista, sin interpretar lo que no casa.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "cuadre-cobro-pago.cuadrar.request",
+      "handler": "onCuadrarRequest",
+      "description": "RPC reflejo (cotejo determinista): {project_id, movimiento?|movimientos?|m?, periodo?} → {project_id, periodo, fuente_asientos:'diario'|null, diario_disponible, total_movimientos, cotejados:[{clave, movimiento, asiento, lado, importe, cuadrado:true}], pendientes:[{clave, movimiento, lado, importe, motivo, requiere_cola:true, juicio:'partida-no-identificada'}], cuadra, juicio_delegado_a:'partida-no-identificada'}. Sin movimientos declarados coteja el espejo acumulado por contabilidad.movimiento_bancario; el diario se pide a escritor-diario (B2) por EVENTO. Responde por cuadre-cobro-pago.cuadrar.response; project_id ausente → cuadre-cobro-pago.cuadrar.failed."
+    },
+    {
+      "event": "contabilidad.movimiento_bancario",
+      "handler": "onMovimientoBancario",
+      "description": "Fire-and-forget (E2 → E3): el extracto publico un movimiento normalizado → se acumula su muestra en el espejo en memoria (idempotente por clave natural; un movimiento = un cobro/pago). No muta el libro, no publica evento de dominio."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "cuadre-cobro-pago.cuadrar.response",
+      "description": "Respuesta RPC correlada de cuadre-cobro-pago.cuadrar.request → {request_id, status:200, data:{cotejados, pendientes, cuadra, diario_disponible, juicio_delegado_a}}. Emitida por el helper _atender."
+    },
+    {
+      "event": "cuadre-cobro-pago.cuadrar.failed",
+      "description": "Par de fallo determinista (E3): project_id ausente → {status, error:{code, message, details?}}. Cierra el circulo de cuadre-cobro-pago.cuadrar.request."
+    }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "cuadre-cobro-pago.cuadrar",
+      "handler": "onCuadrarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
+  ]
+}

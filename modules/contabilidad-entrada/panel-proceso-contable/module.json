@@ -1,0 +1,43 @@
+{
+  "_doc": "Manifest de contabilidad-entrada/panel-proceso-contable — REFLEJO STATELESS (P1, hoja del plan). EL LATIDO del proceso de entrada: que ENTRA, que se PROCESA, que esta en COLA y que FALLA. Agregacion DETERMINISTA sobre lo que ya emitieron las piezas del proceso — NO decide nada, solo suma y ordena (el 'display' de la contabilidad). ATRIBUTOS del diseno: cola:EncoladoExcepcion, historial:HistorialProcesoContable; METODOS: latido():Panel; REGLA: que entra, que se procesa, que esta en cola, que falla — agregacion determinista. Invariantes: AGREGA, NO DECIDE (compone el panel con lo que le dan — el historial P2 o los contadores que los eventos del proceso han acumulado en memoria — o con lo declarado en la peticion; cero criterio de negocio); LEE, NO RECALCULA la cobertura (si trae tasa de cobertura, la toma de completitud-cobertura A12, LA metrica unica, POR EVENTO; jamas la recomputa aqui); DETERMINISTA (mismo estado del proceso → mismo panel); dato ausente = desconocido (los tramos sin dato salen null, no un 0 inventado); sin estado de dominio (el panel es una PROYECCION viva en memoria, no una parcela — la persistencia duradera del proceso es el historial P2). FORMA: REFLEJO stateless — sin PosPersistencia, sin onProjectActivated. Proyeccion `_latido`. Consume contabilidad.excepcion_encolada y contabilidad.proceso_anotado (fire-and-forget) para el latido en proceso. Cierra el circulo: error → panel-proceso-contable.latido.failed.",
+  "name": "panel-proceso-contable",
+  "version": "0.1.0",
+  "description": "Reflejo stateless (P1): el latido del proceso de entrada — qué entra, qué se procesa, qué está en cola y qué falla; agrega lo ya emitido y LEE la cobertura, no decide.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "panel-proceso-contable.latido.request",
+      "handler": "onLatidoRequest",
+      "description": "RPC reflejo (agregación determinista): {project_id, historial?, cola?, cobertura?, vertical?} → {panel:{entrados, procesados, en_cola, cola_dueno, fallados, cobertura, historial_disponible, cola_disponible, cobertura_disponible}, agrega, decide:false, abierto, faltan}. Compone el latido con lo declarado o con el historial (P2) y la cola (A8.1) pedidos POR EVENTO; la cobertura se LEE de completitud-cobertura (A12) — NO se recalcula. PROJECT_ID o tramos ausentes → null (no un 0 inventado). Responde por panel-proceso-contable.latido.response; project_id ausente → panel-proceso-contable.latido.failed."
+    },
+    {
+      "event": "contabilidad.excepcion_encolada",
+      "handler": "onExcepcionEncolada",
+      "description": "Fire-and-forget (A8.1 → P1): encolado-excepcion publicó que lo dudoso espera en cola → incrementa el tramo EN COLA del latido en proceso (y cola_dueno si el destino es DUENO). Tolerante: sin project_id se ignora."
+    },
+    {
+      "event": "contabilidad.proceso_anotado",
+      "handler": "onProcesoAnotado",
+      "description": "Fire-and-forget (P2 → P1): historial-proceso-contable anotó un proceso (PROCESADO|FALLADO) → incrementa el tramo correspondiente del latido en proceso. Lo agrega el panel; NO decide. Tolerante: sin project_id se ignora."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "panel-proceso-contable.latido.response",
+      "description": "Respuesta RPC correlada de panel-proceso-contable.latido.request → {request_id, status:200, data:{panel, agrega, decide:false, abierto, faltan}}. Emitida por el helper _atender."
+    },
+    {
+      "event": "panel-proceso-contable.latido.failed",
+      "description": "Par de fallo determinista (P1): project_id ausente → {status, error:{code, message, details?}}. Cierra el circulo de panel-proceso-contable.latido.request."
+    }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "panel-proceso-contable.latido",
+      "handler": "onLatidoRequest",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    }
+  ]
+}

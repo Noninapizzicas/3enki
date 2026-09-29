@@ -1,0 +1,67 @@
+{
+  "_doc": "Manifest de contabilidad-entrada/encolado-excepcion — CUSTODIO CON PERSISTENCIA (A8.1, hoja del plan). LA VALVULA del sistema: lo dudoso NO bloquea — el flujo CONTINUA y lo dudoso espera en la cola. Dos destinos, DERIVADOS de la naturaleza del asunto: lo CONTABLE (descuadre, cuenta fuera del plan, tercero desconocido, contrapartida sin regla) → ASESOR; lo del NEGOCIO (falta un dato del hecho, decision del dueno, revisar una regla) → DUENO. UN SOLO ESCRITOR de la parcela: el encolador (ROL_ESCRITOR=ENCOLADO_EXCEPCION); cualquier otro rol es rechazado (403). Invariantes: el encolado NUNCA engorda la cola por duplicado — mismo asunto (clave declarada o derivada de origen+naturaleza+motivo, determinista) devuelve la entrada existente con encolada:false; nada se borra — `tomar` MARCA en TOMADA y deja el historial (append-only), no es un cambio de escritor sino una anotacion de desatasco; dato ausente = desconocido — sin motivo ni asunto la excepcion es invalida y no se encola, nada se estima. Consume el fire-and-forget contabilidad.documento_descuadrado (control-cuadre-documento A4.3): el descuadre va derecho a la cola. Persiste por proyecto con PosPersistencia (storage /contabilidad/encolado-excepcion/encolado-excepcion.json), restaura en project.activated y vuelca en onUnload. Proyecciones: `_encolar` · `_tomar`. Publica contabilidad.excepcion_encolada.",
+  "name": "encolado-excepcion",
+  "version": "0.1.0",
+  "description": "Custodio (A8.1): la valvula de lo dudoso — el flujo continua y lo dudoso espera en cola con destino derivado de su naturaleza (contable→ASESOR, negocio→DUENO); un solo escritor y encolado idempotente.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "encolado-excepcion.encolar.request",
+      "handler": "onEncolarRequest",
+      "description": "RPC custodio (escritura, UN escritor): {project_id, rol:'ENCOLADO_EXCEPCION', excepcion:{motivo, asunto?, naturaleza:'CONTABLE'|'NEGOCIO', destino?, detalle?, origen?}} → {excepcion, encolada}. Guard Rol=ENCOLADO_EXCEPCION (segundo escritor → 403). Deriva el destino de la naturaleza (o respeta un destino declarado valido); mismo asunto ya en cola → encolada:false sin engordar la cola. Exito → publica contabilidad.excepcion_encolada y responde por encolado-excepcion.encolar.response; sin motivo/asunto valido → encolado-excepcion.encolar.failed."
+    },
+    {
+      "event": "encolado-excepcion.tomar.request",
+      "handler": "onTomarRequest",
+      "description": "RPC custodio (desatasco, NO borra): {project_id, clave?, destino?} → {excepcion} o {excepcion:null, pendientes, motivo}. Toma por clave, o la primera PENDIENTE (orden de entrada, determinista) filtrada por destino; la marca TOMADA con su historial (append-only). Cola vacia no es error: excepcion:null con pendientes. Responde por encolado-excepcion.tomar.response; clave inexistente → encolado-excepcion.tomar.failed."
+    },
+    {
+      "event": "contabilidad.documento_descuadrado",
+      "handler": "onDocumentoDescuadrado",
+      "description": "Fire-and-forget (A8.1): control-cuadre-documento (A4.3) publica un descuadre → {project_id, documento, esperado, total, descuadre, correlation_id}. Lo dudoso va DERECHO a la cola con naturaleza CONTABLE (→ ASESOR), sin bloquear el flujo. Invalido → encolado-excepcion.encolar.failed. Cierra el circulo de la entrada."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Restaura la cola de excepciones del proyecto activado desde el storage (PosPersistencia)."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "encolado-excepcion.encolar.response",
+      "description": "Respuesta RPC correlada de encolado-excepcion.encolar.request → {request_id, status:200, data:{excepcion, encolada, motivo_duplicado?}}. Emitida por el helper _atender."
+    },
+    {
+      "event": "encolado-excepcion.encolar.failed",
+      "description": "Par de fallo determinista (A8.1): rol != ENCOLADO_EXCEPCION (segundo escritor), excepcion sin motivo, o project_id ausente → {status, error:{code, message, details?}}. Cierra el circulo de encolado-excepcion.encolar.request y de contabilidad.documento_descuadrado."
+    },
+    {
+      "event": "encolado-excepcion.tomar.response",
+      "description": "Respuesta RPC correlada de encolado-excepcion.tomar.request → {request_id, status:200, data:{excepcion, pendientes?, motivo?}}. Emitida por el helper _atender."
+    },
+    {
+      "event": "encolado-excepcion.tomar.failed",
+      "description": "Par de fallo determinista (A8.1): project_id ausente o clave de excepcion inexistente (404) → {status, error:{code, message, details?}}. Cierra el circulo de encolado-excepcion.tomar.request."
+    },
+    {
+      "event": "contabilidad.excepcion_encolada",
+      "description": "Fire-and-forget (A8.1): lo dudoso quedo en cola y el flujo sigue → {project_id, excepcion, destino, naturaleza, encolada, correlation_id}. Lo consumen aviso-revision (A8.2) para empujar el aviso, panel-proceso-contable y desatasco-entrada."
+    }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "encolado-excepcion.encolar",
+      "handler": "onEncolarRequest",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "encolado-excepcion.tomar",
+      "handler": "onTomarRequest",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    }
+  ]
+}

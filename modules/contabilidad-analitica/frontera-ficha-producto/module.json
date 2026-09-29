@@ -1,0 +1,37 @@
+{
+  "_doc": "Manifest de contabilidad-analitica/frontera-ficha-producto — CONVERSOR STATELESS (H2, hoja del plan). LA UNICA PUERTA ficha-de-producto → DATO CONTABLE. El diseno lo dice literal: `entrar(ficha):CosteInterno` con `forma:ParametroDeclarable`. CRUZA EL FORMATO, NO DECIDE EL CONTENIDO NI LA VALORACION: por aqui entra la ficha de producto del negocio (la de su vertical/proveedor) y sale con la FORMA INTERNA del coste contable; el modulo NO valora el producto, NO calcula margenes y NO decide el coste — TRANSPORTA lo que la ficha declara con la forma que el negocio DECLARA (`forma`: por campo interno su ruta en la ficha + requeridos + clave_natural). Sin `forma` declarada la regla es identidad por nombre interno y se declara asi (`forma_declarada:false`) — jamas se cablea una forma de ficha. LA FRONTERA ES DECLARABLE: si el negocio no tiene puerto, se CREA para el (`puerto.frontera`, `creado:true`) y el mismo modulo sirve a todos los negocios sin conocer ninguno de memoria. Invariante: dato ausente = desconocido — el campo que no llega ni se declara queda null y se lista en `faltantes` ([ABIERTO], nada se estima); los importes se COPIAN si vienen y no se derivan del precio ni de ningun margen. Campos de la forma interna: clave_natural, producto, referencia, unidad, coste_unitario, cantidad, coste_total, moneda, proveedor, fecha, vertical, atributos (los campos extra de la ficha se conservan en `atributos`). FORMA: CONVERSOR stateless, sin PosPersistencia ni onProjectActivated. Proyeccion unica `_entrar({project_id, ficha|producto|crudo, forma?, clave_natural?, puerto?, vertical?})` → {coste:{...forma interna, forma_interna:true, valorado_aqui:false, calculado_aqui:false, faltantes}, puerto:{frontera, creado, declarable}, vertical, origen_ficha, forma_declarada, requeridos_faltantes, decide:false, valora:false, cruza_formato:true, faltantes, abierto}. Exito → publica contabilidad.coste_interno (lo LEE valoracion-existencia H1); error → frontera-ficha-producto.entrar.failed.",
+  "name": "frontera-ficha-producto",
+  "version": "0.1.0",
+  "description": "Conversor (H2): unica puerta ficha-de-producto → coste interno contable segun una forma_declarable — cruza el formato sin decidir contenido ni valoracion, y crea la frontera del negocio si falta.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "frontera-ficha-producto.entrar.request",
+      "handler": "onEntrarRequest",
+      "description": "RPC conversor (determinista): {project_id, ficha|producto|crudo (la ficha de producto de la vertical; puede venir envuelta {vertical, payload} o plana), forma? (DECLARABLE: {campos:{campo_interno: ruta_en_la_ficha}, requeridos:[...], clave_natural: ruta}), clave_natural?, puerto? (nombre declarado de la frontera; si falta, se CREA la del negocio), vertical?} → {project_id, vertical, origen_ficha, puerto:{frontera, creado, declarable}, coste:{clave_natural, producto, referencia, unidad, coste_unitario, cantidad, coste_total, moneda, proveedor, fecha, vertical, atributos, forma_interna:true, valorado_aqui:false, calculado_aqui:false, faltantes}, forma_declarada, requeridos_faltantes, decide:false, valora:false, cruza_formato:true, faltantes, abierto}. Cruza el formato y COPIA los importes; no valora, no decide y lo ausente queda null y se declara en `faltantes`. Exito → publica contabilidad.coste_interno (lo LEE valoracion-existencia H1) y responde por frontera-ficha-producto.entrar.response; ficha ausente → frontera-ficha-producto.entrar.failed."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "frontera-ficha-producto.entrar.response",
+      "description": "Respuesta RPC correlada de frontera-ficha-producto.entrar.request → {request_id, status:200, data:{coste:{clave_natural, coste_unitario, coste_total, moneda, faltantes}, puerto, faltantes, abierto}}. Emitida por el helper _atender."
+    },
+    {
+      "event": "frontera-ficha-producto.entrar.failed",
+      "description": "Par de fallo determinista (H2): ficha ausente o invalida (400) → {status, error:{code, message, details?}}. Cierra el circulo de frontera-ficha-producto.entrar.request."
+    },
+    {
+      "event": "contabilidad.coste_interno",
+      "description": "Fire-and-forget (H2): la ficha cruzo la frontera y su coste quedo con la forma interna contable → {project_id, clave_natural, producto, coste_unitario, coste_total, moneda, origen_ficha, faltantes, correlation_id}. Lo LEE valoracion-existencia (H1), que pone la capa de valor sobre el inventario existente."
+    }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "frontera-ficha-producto.entrar",
+      "handler": "onEntrarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
+  ]
+}

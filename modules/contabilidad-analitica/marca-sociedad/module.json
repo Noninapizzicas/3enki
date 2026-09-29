@@ -1,0 +1,42 @@
+{
+  "_doc": "Manifest de contabilidad-analitica/marca-sociedad — REFLEJO STATELESS (I1, hoja del plan). LA MARCA DE SOCIEDAD: etiqueta cada ASIENTO con la SOCIEDAD a la que pertenece — la BASE de todo el grupo multi-sociedad (sin la marca, ni las eliminaciones intercompany I2 ni la consolidacion I3 saben que partida es de quien). ATRIBUTOS del diseno: sociedad:Sociedad. MECANICO, CERO JUICIO: el reflejo NO decide a que sociedad pertenece un asiento — lo DICE el asiento (o la peticion); aqui solo se pega la etiqueta y se declara la pertenencia. Si la sociedad no viene declarada, el asiento queda SIN_MARCA y [ABIERTO] (marca:null, sin_marca:true, abierto:true): jamas se inventa una sociedad por defecto (una sociedad inventada contamina el grupo entero y falsea la consolidacion). Escucha contabilidad.asiento_registrado (lo publica el diario/escritor-diario) fire-and-forget para mantener en memoria un indice de marcas por proyecto — lo que despues beberan I2/I3 por su puerta (por EVENTO), nunca por require cruzado. Invariantes: DETERMINISTA (una sola respuesta correcta); dato ausente = desconocido (nada se estima); NO escribe el asiento ni lo persiste (el asiento es del diario; aqui solo se ETIQUETA y se recuerda la etiqueta en memoria). FORMA: REFLEJO stateless, sin PosPersistencia ni onProjectActivated. Proyeccion unica `_marcar({project_id, asiento|id_asiento, sociedad?, zona?, periodo?})` → {asiento etiquetado, marca, sin_marca, faltan, abierto}. Publica contabilidad.sociedad_marcada y contabilidad.marca_sociedad.marcada. Cierra el circulo: error → marca-sociedad.marcar.failed.",
+  "name": "marca-sociedad",
+  "version": "0.1.0",
+  "description": "Reflejo (I1): la marca de sociedad — etiqueta cada asiento con su sociedad (mecanico, cero juicio), base del grupo multi-sociedad; sin sociedad declarada el asiento queda sin marcar y [ABIERTO], nunca con una sociedad inventada.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "marca-sociedad.marcar.request",
+      "handler": "onMarcarRequest",
+      "description": "RPC reflejo (etiquetado puro, determinista): {project_id, asiento|id_asiento, sociedad?, zona?, periodo?} → {id_asiento, asiento etiquetado, marca:{sociedad, sociedad_id, zona, periodo}, sin_marca, abierto, faltan, motivo}. La sociedad es un DATO declarado (string u objeto); sin ella el asiento queda sin marcar — no se inventa ninguna sociedad por defecto (contaminaria el grupo). Recuerda la marca en un indice en memoria por proyecto. Responde por marca-sociedad.marcar.response; project_id ausente → marca-sociedad.marcar.failed."
+    },
+    {
+      "event": "contabilidad.asiento_registrado",
+      "handler": "onAsientoRegistrado",
+      "description": "Fire-and-forget: el diario registra un asiento → el reflejo lo ETIQUETA con su sociedad (si el evento la trae) y recuerda la marca; si quedo marcado publica contabilidad.sociedad_marcada. Alimenta el indice en memoria que beberan eliminacion-intercompany (I2) y consolidacion (I3)."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "marca-sociedad.marcar.response",
+      "description": "Respuesta RPC correlada de marca-sociedad.marcar.request → {request_id, status:200, data:{marca, sin_marca, abierto, faltan}}. Emitida por el helper _atender."
+    },
+    {
+      "event": "marca-sociedad.marcar.failed",
+      "description": "Par de fallo determinista (I1): project_id ausente → {status, error:{code, message, details?}}. Cierra el circulo de marca-sociedad.marcar.request."
+    },
+    {
+      "event": "contabilidad.sociedad_marcada",
+      "description": "Fire-and-forget (I1): un asiento quedo etiquetado con su sociedad → {project_id, id_asiento, sociedad, correlation_id}. Lo consumen las hojas del grupo (eliminacion-intercompany I2, consolidacion I3) para saber a que sociedad pertenece cada partida."
+    }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "marca-sociedad.marcar",
+      "handler": "onMarcarRequest",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    }
+  ]
+}

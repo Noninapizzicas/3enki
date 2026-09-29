@@ -1,0 +1,33 @@
+{
+  "_doc": "Manifest de contabilidad-entrada/rappel-pronto-pago — REFLEJO STATELESS (N7, hoja del plan). DESCUENTOS / RAPPELS / ANTICIPOS QUE AJUSTAN EL COSTE REAL DE LA COMPRA A LO REALMENTE PAGADO: dada la factura (o su importe declarado) y las CONDICIONES DECLARADAS, calcula el coste real (importe menos los descuentos que efectivamente se aplican) y el pendiente, de forma determinista. 🔴 LOS PORCENTAJES Y LAS CONDICIONES SON DECLARABLES — PROHIBIDO CABLEARLOS: en el codigo NO hay ningun porcentaje, plazo, umbral ni tramo escrito (ni '2% a 10 dias', ni '1% a 30', ni minimos de anticipo); todo entra como DATO (`condiciones`): pronto_pago {porcentaje, dias} · rappel {tramos:[{desde,hasta,porcentaje}], volumen} o {porcentaje} · anticipo {porcentaje, dias} · descuento {porcentaje}. Una condicion SIN porcentaje declarado NO es aplicable y se declara en condiciones_inaplicables (no se asume un porcentaje); si NO se declara ninguna condicion el coste real es el declarado y se dice que no hay descuento (un descuento inventado rebajaria el coste de la compra que el negocio no aprobo). 🔴 LA CONDICION SE APLICA SOLO SI SE CUMPLE CON LO DECLARADO: el pronto pago/anticipo con plazo exige los DIAS REALES de pago declarados (sin ese dato la condicion queda PENDIENTE de dato — condiciones_pendientes_de_dato —, ni se aplica ni se descarta) y se cumple si se pago dentro del plazo DECLARADO; el rappel por tramos exige el volumen/base declarado y aplica el tramo declarado en que cae. ATRIBUTOS del diseno: compra:Factura, condiciones:ParametroDeclarable; METODOS: ajustar(f:Factura):Cuantía. El TIPO de condicion es una IDENTIDAD de tipo (el dominio la nombra), no un criterio: QUE se aplica y CUANTO lo declara el negocio. Invariantes: DETERMINISTA (misma factura + mismas condiciones + mismos datos de pago → mismo coste real); dato ausente = desconocido (sin importe no hay coste — disponible:false; los pagos declarados se leen tal cual, sin pagos el pendiente es null y NO se estima); NO escribe, NO persiste, NO muta y NO decide — el ajuste es un DERIVADO. Cada descuento aplicado viaja con su condicion declarada y el dato que lo justifica (justificacion, auditable: no caja negra). FORMA: REFLEJO stateless, sin PosPersistencia ni onProjectActivated. Proyeccion `_ajustar`. Cierra el circulo: error → rappel-pronto-pago.ajustar.failed.",
+  "name": "rappel-pronto-pago",
+  "version": "0.1.0",
+  "description": "Reflejo (N7): ajusta el coste real de la compra con pronto pago/rappels/anticipos — con porcentajes, plazos y tramos declarables (jamas cableados) y con las condiciones sin dato declarado pendientes en vez de aplicadas.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "rappel-pronto-pago.ajustar.request",
+      "handler": "onAjustarRequest",
+      "description": "RPC reflejo (calculo puro, determinista): {project_id, factura:{importe?, clave_natural?, condiciones?, pagos?}|importe?, condiciones?:[{tipo:'pronto_pago'|'rappel'|'anticipo'|'descuento', porcentaje?, dias?, tramos?:[{desde,hasta,porcentaje}], base?, origen?}], dias_pago?, volumen?, pagos?, total_pagado?} → {project_id, tipo:'rappel-pronto-pago', factura, importe, descuento_total, coste_real, disponible, descuentos_aplicados:[{tipo, porcentaje, base, descuento, justificacion}], condiciones_inaplicables, condiciones_pendientes_de_dato, condiciones_declaradas, total_pagado, pendiente, abierto}. Los porcentajes, plazos y tramos son DECLARABLES: una condicion sin porcentaje NO es aplicable y una condicion con plazo sin dias_pago declarado queda PENDIENTE. Responde por rappel-pronto-pago.ajustar.response; project_id ausente → rappel-pronto-pago.ajustar.failed. OJO: sin importe declarado NO es un fallo — se responde 200 con disponible:false."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "rappel-pronto-pago.ajustar.response",
+      "description": "Respuesta RPC correlada de rappel-pronto-pago.ajustar.request → {request_id, status:200, data:{importe, descuento_total, coste_real, disponible, descuentos_aplicados, condiciones_inaplicables, condiciones_pendientes_de_dato, condiciones_declaradas, total_pagado, pendiente, abierto}}. Emitida por el helper _atender."
+    },
+    {
+      "event": "rappel-pronto-pago.ajustar.failed",
+      "description": "Par de fallo determinista (N7): project_id ausente → {status, error:{code, message, details?}}. Cierra el circulo de rappel-pronto-pago.ajustar.request."
+    }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "rappel-pronto-pago.ajustar",
+      "handler": "onAjustarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
+  ]
+}

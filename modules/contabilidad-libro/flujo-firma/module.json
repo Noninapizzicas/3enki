@@ -1,0 +1,47 @@
+{
+  "_doc": "Manifest de contabilidad-libro/flujo-firma — CUSTODIO CON PERSISTENCIA (L3, hoja del plan). LA PARCELA DE ESTADO REVISADO/FIRMADO DEL ASESOR. EL SISTEMA NO FIRMA Y NO DECIDE: este custodio ARMA y (a traves de la capa de avisos) ENTREGA la SOLICITUD de firma al asesor, pero la FIRMA la pone EL ASESOR — un intento de firmar con un rol que no sea el del asesor (el del SISTEMA incluido) se RECHAZA (403). SI VENCE SIN FIRMA → EXPIRA Y SE RE-PREGUNTA, JAMAS ASUME: una solicitud cuya validez declarada pasa sin firma NO se da por firmada ni por rechazada; se marca EXPIRADA y se ARMA una solicitud NUEVA (re_preguntada:true) — la ausencia de firma NUNCA se interpreta como un si. La validez es DECLARABLE (vence_en ISO o validez_ms): sin validez declarada la solicitud NO vence y se declara (cero plazos cableados). ATRIBUTOS del diseno: firmas:Map<Ambito,Firma>; METODOS: firmar(asesor, ambito, marca), estado(ambito):MarcaEstado. DOS CAMINOS en firmar, jamas confundidos: con `asesor` REGISTRA la firma del asesor (guards de rol y de escritor); sin `asesor` el SISTEMA ARMA la solicitud (pregunta) y NO firma. Invariantes: APPEND-ONLY (la firma se AÑADE; una firma previa no se borra ni se muta; un ambito puede tener varias firmas y la VIGENTE es la ultima); UN SOLO ESCRITOR por la parcela libro/firma (se pide el turno a single-writer M2 POR EVENTO y se RESPETA su GUARD → 403 si el turno es de otro; si el guard no responde se declara turno_confirmado:false y se sigue); el AMBITO es DECLARABLE (periodo/estado/documento — [ABIERTO]: no hay ambitos cableados); el DESTINATARIO de la pregunta es declarable (sin declarar → null). Persiste por proyecto con PosPersistencia (storage /contabilidad/flujo-firma/flujo-firma.json), restaura en project.activated y vuelca en onUnload. Proyecciones `_firmar` y `_estado`. Publica contabilidad.firma_registrada (solo con firma REAL del asesor). Cierra el circulo: error → flujo-firma.firmar.failed / flujo-firma.estado.failed.",
+  "name": "flujo-firma",
+  "version": "0.1.0",
+  "description": "Custodio (L3): la parcela de estado revisado/firmado del asesor — el sistema ARMA la solicitud pero NO firma ni decide; si vence sin firma, EXPIRA y RE-PREGUNTA y jamas asume el silencio.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "flujo-firma.firmar.request",
+      "handler": "onFirmarRequest",
+      "description": "RPC custodio (ARMAR o REGISTRAR, nunca confundidos): {project_id, ambito, asesor?, marca?, decision?, comentario?, rol?, id?, vence_en?, validez_ms?, asunto?, alcance?, motivo?, destinatario?}. CON `asesor` → REGISTRA la firma del asesor (append-only) con guard de rol (403 si `rol` != ASESOR: el sistema NO firma) y guard de escritor (single-writer, parcela libro/firma) → {firma, registrada:true, firmada:true, firma_del_sistema:false, turno_confirmado}. SIN `asesor` → el SISTEMA ARMA la solicitud de firma (validez declarable) → {solicitud, armada:true, registrada:false, firma_del_sistema:false}. Solo la firma REAL publica contabilidad.firma_registrada. Responde por flujo-firma.firmar.response; fallo (ambito/project_id ausente, rol no-asesor, turno ajeno) → flujo-firma.firmar.failed."
+    },
+    {
+      "event": "flujo-firma.estado.request",
+      "handler": "onEstadoRequest",
+      "description": "RPC custodio (LECTURA, EXIGE estado): {project_id, ambito, ahora?} → {project_id, ambito, revisado, estado:'FIRMADA'|'PENDIENTE'|'EXPIRADA'|'SIN_SOLICITUD', firma, firma_del_sistema:false, firma_por:'asesor', solicitud, vencida, re_preguntada, abierto}. SI LA SOLICITUD VENCIO SIN FIRMA → estado 'EXPIRADA' + re_preguntada:true y se ARMA una solicitud NUEVA (jamas se asume el silencio como firma). Responde por flujo-firma.estado.response; fallo → flujo-firma.estado.failed."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Restaura las firmas (append-only) y las solicitudes del proyecto activado desde el storage (PosPersistencia)."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "flujo-firma.firmar.response",
+      "description": "Respuesta RPC correlada de flujo-firma.firmar.request → {request_id, status:200, data:{firma, registrada, firmada, armada, firma_por:'asesor', firma_del_sistema:false, turno_confirmado} | {solicitud, armada:true, registrada:false}}. Emitida por el helper _atender."
+    },
+    {
+      "event": "flujo-firma.firmar.failed",
+      "description": "Par de fallo determinista (L3): ambito o project_id ausente (400), quien pretende firmar NO es el asesor (403 PERMISSION_DENIED — EL SISTEMA NO FIRMA) o el turno de la parcela libro/firma es de otro (403) → {status, error:{code, message, details?}}. Cierra el circulo de flujo-firma.firmar.request."
+    },
+    {
+      "event": "flujo-firma.estado.response",
+      "description": "Respuesta RPC correlada de flujo-firma.estado.request → {request_id, status:200, data:{revisado, estado, firma, solicitud, vencida, re_preguntada, abierto}}. Emitida por el helper _atender."
+    },
+    {
+      "event": "flujo-firma.estado.failed",
+      "description": "Par de fallo determinista (L3): ambito o project_id ausente → {status, error:{code, message, details?}}. Cierra el circulo de flujo-firma.estado.request."
+    },
+    {
+      "event": "contabilidad.firma_registrada",
+      "description": "Fire-and-forget (L3): una firma REAL DEL ASESOR quedo registrada (append-only) → {project_id, ambito, firma, asesor, marca, correlation_id}. Solo se emite con firma puesta por el asesor; el sistema nunca lo emite por su cuenta. Lo LEEN marca-borrador-validado (Q4) y cambio-desde-ultima-revision (L9)."
+    }
+  ],
+  "_ui": "sin superficie: su cara es el bus (puente/observador puro)"
+}

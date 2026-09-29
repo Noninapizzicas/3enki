@@ -14,9 +14,6 @@
   ],
   "tools": [
    "_template.crear"
-  ],
-  "ui": [
-   "_template/list"
   ]
  },
  {
@@ -32,8 +29,7 @@
    "adaptador-avisos.enviar.failed",
    "adaptador-avisos.enviar.response"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "adaptador-confirmacion",
@@ -49,8 +45,7 @@
    "adaptador-confirmacion.confirmar.failed",
    "adaptador-confirmacion.confirmar.response"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "adaptador-impresora",
@@ -71,8 +66,7 @@
    "observar_estado.failed",
    "subir_gcode.failed"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "adaptador-laser",
@@ -94,12 +88,7 @@
    "iniciar_trabajo.failed",
    "observar_estado.failed"
   ],
-  "tools": [],
-  "ui": [
-   "adaptador-laser/enviar_gcode",
-   "adaptador-laser/iniciar_trabajo",
-   "adaptador-laser/observar_estado"
-  ]
+  "tools": []
  },
  {
   "slug": "adaptador-slicing",
@@ -115,8 +104,7 @@
    "adaptador-slicing.slicear.failed",
    "adaptador-slicing.slicear.response"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "admin-panel",
@@ -133,21 +121,7 @@
    "admin.prompt.actualizado",
    "admin.prompt.creado"
   ],
-  "tools": [],
-  "ui": [
-   "admin-panel/dashboard",
-   "admin-panel/modules",
-   "admin-panel/plugins",
-   "admin-panel/plugin-toggle",
-   "admin-panel/agents",
-   "admin-panel/agent-create",
-   "admin-panel/agent-delete",
-   "admin-panel/prompts",
-   "admin-panel/prompt-get",
-   "admin-panel/prompt-create",
-   "admin-panel/prompt-update",
-   "admin-panel/health"
-  ]
+  "tools": []
  },
  {
   "slug": "agenda-operacion",
@@ -164,14 +138,7 @@
   "publishes": [
    "agenda.reglas.actualizadas"
   ],
-  "tools": [],
-  "ui": [
-   "agenda/reglas.leer",
-   "agenda/reglas.actualizar",
-   "agenda/horario.obtener",
-   "agenda/ciclo.obtener",
-   "agenda/demanda.predecir"
-  ]
+  "tools": []
  },
  {
   "slug": "agentes/bitacora",
@@ -193,8 +160,7 @@
    "bitacora.sellada",
    "bitacora.sellar.failed"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "agentes/registro",
@@ -214,8 +180,7 @@
    "pipeline.obtener.failed",
    "pipeline.obtener.response"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "apis-publicas",
@@ -239,8 +204,7 @@
   "tools": [
    "buscar_api",
    "obtener_api"
-  ],
-  "ui": []
+  ]
  },
  {
   "slug": "banco",
@@ -269,8 +233,7 @@
    "banco.candidato_seleccionado",
    "banco.seleccionar.failed"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "banco-ideas",
@@ -283,8 +246,7 @@
    "banco-ideas.obtener.request"
   ],
   "publishes": [],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "bibliotecario",
@@ -305,14 +267,13 @@
   "tools": [
    "bibliotecario.catalogo",
    "bibliotecario.consultar"
-  ],
-  "ui": []
+  ]
  },
  {
   "slug": "bot-manager",
   "name": "bot-manager",
   "version": "2.0.0",
-  "description": "Gestion de bots y almacenamiento. Descarga archivos, guarda en carpetas con convencion de naming (status flags R/P/V/A/X/E/D), publica eventos de lifecycle (registered/unregistered/enabled/disabled) y de actividad (file.stored/message.received/command.received). Auto-registra bots desde credential.saved (TELEGRAM_API_KEY_BOT_*). Auto-respuestas configurables por comando. NO sabe de agentes — solo gestion de bots.",
+  "description": "Gestion de bots y almacenamiento. Descarga archivos, guarda en carpetas con convencion de naming (status flags R/P/V/A/X/E/D), publica eventos de lifecycle (registered/unregistered/enabled/disabled) y de actividad (file.stored/message.received/command.received). Auto-registra bots desde credential.saved (TELEGRAM_API_KEY_BOT_*). Auto-respuestas configurables por comando. NO sabe de agentes — solo ",
   "subscribes": [
    "credential.saved",
    "telegram.audio.received",
@@ -332,13 +293,7 @@
    "bot.registered",
    "bot.unregistered"
   ],
-  "tools": [],
-  "ui": [
-   "bot-manager/list",
-   "bot-manager/get",
-   "bot-manager/set-enabled",
-   "bot-manager/health"
-  ]
+  "tools": []
  },
  {
   "slug": "buscador-repositorios",
@@ -352,10 +307,7 @@
    "buscador-repositorios.buscar.failed",
    "buscador-repositorios.buscar.response"
   ],
-  "tools": [],
-  "ui": [
-   "buscador-repositorios/buscar"
-  ]
+  "tools": []
  },
  {
   "slug": "calendario",
@@ -372,14 +324,7 @@
   "publishes": [
    "calendario.producto.actualizado"
   ],
-  "tools": [],
-  "ui": [
-   "calendario/producto.leer",
-   "calendario/producto.actualizar",
-   "calendario/productos.leer",
-   "calendario/validar",
-   "calendario/margen.leer"
-  ]
+  "tools": []
  },
  {
   "slug": "cantera-semantica",
@@ -399,8 +344,7 @@
    "embedding.generate.request",
    "interruptor.registrar"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "cartero",
@@ -418,8 +362,7 @@
    "cartero.envio_resultado",
    "cartero.verificado"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "catalogo",
@@ -442,13 +385,7 @@
    "catalogo.registrar.response",
    "modelo.registrado"
   ],
-  "tools": [],
-  "ui": [
-   "catalogo/listar",
-   "catalogo/por_id",
-   "catalogo/registrar",
-   "catalogo/actualizar"
-  ]
+  "tools": []
  },
  {
   "slug": "certificate-authority",
@@ -462,25 +399,7 @@
    "certificate.renewed",
    "certificate.revoked"
   ],
-  "tools": [],
-  "ui": [
-   "certificate-authority/status",
-   "certificate-authority/ca-cert",
-   "certificate-authority/issue",
-   "certificate-authority/enroll",
-   "certificate-authority/sign-invitation",
-   "certificate-authority/bootstrap-status",
-   "certificate-authority/claim-admin",
-   "certificate-authority/revoke",
-   "certificate-authority/renew",
-   "certificate-authority/list",
-   "certificate-authority/verify",
-   "certificate-authority/crl",
-   "certificate-authority/download-p12",
-   "certificate-authority/stats",
-   "certificate-authority/nginx-config",
-   "certificate-authority/health"
-  ]
+  "tools": []
  },
  {
   "slug": "channel-manager",
@@ -504,14 +423,6 @@
   "tools": [
    "channel.resolve",
    "channel.list"
-  ],
-  "ui": [
-   "channel/register",
-   "channel/update",
-   "channel/remove",
-   "channel/resolve",
-   "channel/list",
-   "channel/list-by-project"
   ]
  },
  {
@@ -526,8 +437,7 @@
    "chat.p2p.enviado",
    "chat.p2p.envio_fallido"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "ciclo-impresion",
@@ -553,8 +463,7 @@
    "impresion.iniciada",
    "impresion.registrada"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "code-executor",
@@ -578,8 +487,7 @@
    "shell.list",
    "code.orquestar",
    "code.orquestar_set"
-  ],
-  "ui": []
+  ]
  },
  {
   "slug": "cola",
@@ -608,8 +516,7 @@
    "cola.siguiente.response",
    "cola.terminada.response"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "composition-manager",
@@ -632,25 +539,7 @@
    "system.deleted",
    "system.updated"
   ],
-  "tools": [],
-  "ui": [
-   "system/create",
-   "system/list",
-   "system/get",
-   "system/update",
-   "system/delete",
-   "system/addProject",
-   "system/removeProject",
-   "system/getUnassigned",
-   "project/link",
-   "project/unlink",
-   "project/getLinks",
-   "project/getRelated",
-   "project/addDependency",
-   "project/removeDependency",
-   "project/getDependencies",
-   "project/getDependents"
-  ]
+  "tools": []
  },
  {
   "slug": "confluencia",
@@ -664,11 +553,7 @@
   "publishes": [
    "confluencia.pedido_resuelto"
   ],
-  "tools": [],
-  "ui": [
-   "confluencia/resolver.pedido",
-   "confluencia/validar.linea"
-  ]
+  "tools": []
  },
  {
   "slug": "confluencia-h3",
@@ -686,14 +571,13 @@
    "confluencia.h3.aviso_entregado",
    "confluencia.h3.decision_aplicada"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "conserje",
   "name": "conserje",
   "version": "0.7.0",
-  "description": "Abre el camino al comerciante. Cruza lo que el sistema OFRECE (LibroDeCapacidades) con lo que el comerciante USA (derivado del bus en vivo) y, cuando hay una brecha con intención, le ofrece el siguiente paso en POSITIVO (no señala la carencia). Sin sondas hardcodeadas: lee el grafo de capacidades + el uso real. La señal de oro es la intención — lo que el comerciante alarga la mano a tocar pero está vacío. Siempre activo. Cooldown por capacidad para no agobiar.",
+  "description": "Abre el camino al comerciante. Cruza lo que el sistema OFRECE (LibroDeCapacidades) con lo que el comerciante USA (derivado del bus en vivo) y, cuando hay una brecha con intención, le ofrece el siguiente paso en POSITIVO (no señala la carencia). Sin sondas hardcodeadas: lee el grafo de capacidades + el uso real. La señal de oro es la intención — lo que el comerciante alarga la mano a tocar pero est",
   "subscribes": [
    "conserje.empujon"
   ],
@@ -705,11 +589,6 @@
   "tools": [
    "conserje.empujon_pendiente",
    "conserje.brecha"
-  ],
-  "ui": [
-   "conserje/empujon_pendiente",
-   "conserje/brecha",
-   "conserje/health"
   ]
  },
  {
@@ -728,14 +607,13 @@
    "consumo.pronostico.failed",
    "consumo.pronostico.response"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "conversacion/agent-observer",
   "name": "agent-observer",
   "version": "2.0.0",
-  "description": "Observer canonico del subsistema agentes. Escucha los 4 eventos agent-flow (request/progress/response/failed) y los traduce a chat.assistant.saved con metadata.block.type='agent_intervention' cuando hay conversation_id presente, para que la tarjeta colapsable del agente se renderice inline en el chat. Politica fail-silent: sin conversation_id no emite nada. Sin este modulo, los agentes invocados desde modulos del dominio son silenciosos para el usuario.",
+  "description": "Observer canonico del subsistema agentes. Escucha los 4 eventos agent-flow (request/progress/response/failed) y los traduce a chat.assistant.saved con metadata.block.type='agent_intervention' cuando hay conversation_id presente, para que la tarjeta colapsable del agente se renderice inline en el chat. Politica fail-silent: sin conversation_id no emite nada. Sin este modulo, los agentes invocados d",
   "subscribes": [
    "agent.execute.failed",
    "agent.execute.progress",
@@ -745,8 +623,7 @@
   "publishes": [
    "chat.assistant.saved"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "conversacion/ai-gateway",
@@ -779,8 +656,7 @@
   "tools": [
    "page.related",
    "chat.cambiar_foco"
-  ],
-  "ui": []
+  ]
  },
  {
   "slug": "conversacion/ai-gateway-poc",
@@ -798,14 +674,13 @@
    "credential.resolve.request",
    "llm.complete.response"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "conversacion/chat-io",
   "name": "chat-io",
   "version": "2.2.0",
-  "description": "Entrada y salida del chat. Recibe mensajes via ui_handlers (send/create/list/load/delete/update_settings/toggle_context/context_stats), persiste conversaciones y mensajes en SQLite por proyecto via database-manager, aplica FIFO de contexto, y reenvia la respuesta del LLM al canal de origen (MQTT conversation/{id}/message para web). v2.0.0: 5 helpers POC2, handlers shape canonico { status, data | error: { code, message, details? } }, throws con _code canonico (los codes legacy PROJECT_REQUIRED/CO",
+  "description": "Entrada y salida del chat. Recibe mensajes via ui_handlers (send/create/list/load/delete/update_settings/toggle_context/context_stats), persiste conversaciones y mensajes en SQLite por proyecto via database-manager, aplica FIFO de contexto, y reenvia la respuesta del LLM al canal de origen (MQTT conversation/{id}/message para web). v2.0.0: 5 helpers POC2, handlers shape canonico { status, data | e",
   "subscribes": [
    "agent.execute.failed",
    "agent.execute.progress",
@@ -824,18 +699,7 @@
    "chat.message.saved",
    "db.query.request"
   ],
-  "tools": [],
-  "ui": [
-   "conversation/send",
-   "conversation/create",
-   "conversation/list",
-   "conversation/load",
-   "conversation/delete",
-   "conversation/update_settings",
-   "conversation/toggle_context",
-   "conversation/context_stats",
-   "agentes/bitacora"
-  ]
+  "tools": []
  },
  {
   "slug": "conversacion/memory-conversation-summary",
@@ -855,14 +719,13 @@
    "llm.complete.request",
    "memory.summary.leer.response"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "conversacion/memory-rag",
   "name": "memory-rag",
   "version": "2.1.0",
-  "description": "Memoria modular semantica del companero. Indexa cada mensaje del chat (user + assistant) en un vector store por proyecto, y en cada chat.message.saved hace busqueda semantica top-K en el historico para enriquecer el system prompt via chat.context.enriched (priority 500). Asi, cuando el FIFO recorta el principio, los snippets relevantes del pasado siguen disponibles para el companero. Aislamiento por (project_id, user_id) obligatorio.",
+  "description": "Memoria modular semantica del companero. Indexa cada mensaje del chat (user + assistant) en un vector store por proyecto, y en cada chat.message.saved hace busqueda semantica top-K en el historico para enriquecer el system prompt via chat.context.enriched (priority 500). Asi, cuando el FIFO recorta el principio, los snippets relevantes del pasado siguen disponibles para el companero. Aislamiento p",
   "subscribes": [
    "ai.chat.response",
    "chat.message.saved",
@@ -876,8 +739,7 @@
    "embedding.generate.request",
    "memory.rag.buscar.response"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "conversacion/memory-user-profile",
@@ -894,14 +756,13 @@
    "db.query.request",
    "memory.profile.leer.response"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "conversacion/prompt-builder",
   "name": "prompt-builder",
   "version": "2.0.0",
-  "description": "Construye el system prompt al recibir chat.message.saved. Mantiene en cache los prompt.json y context.json de los modulos (FS) y los prompts del usuario (prompt-manager). Acumula enriquecimientos de memorias modulares (chat.context.enriched) y los agrega por priority. Publica chat.prompt.ready (chat-flow v1.0.0). v2.0.0: 5 helpers POC2, _publicarEvento canoniza correlation_id + timestamp, observability completa con prefix prompt-builder.*.",
+  "description": "Construye el system prompt al recibir chat.message.saved. Mantiene en cache los prompt.json y context.json de los modulos (FS) y los prompts del usuario (prompt-manager). Acumula enriquecimientos de memorias modulares (chat.context.enriched) y los agrega por priority. Publica chat.prompt.ready (chat-flow v1.0.0). v2.0.0: 5 helpers POC2, _publicarEvento canoniza correlation_id + timestamp, observab",
   "subscribes": [
    "chat.context.enriched",
    "chat.message.saved",
@@ -916,8 +777,7 @@
    "db.query.request",
    "prompt.list.request"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "conversation-export",
@@ -934,8 +794,7 @@
    "db.query.response"
   ],
   "publishes": [],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "cosecha",
@@ -980,8 +839,7 @@
    "activar_skill",
    "crear_skill",
    "mejorar_skill"
-  ],
-  "ui": []
+  ]
  },
  {
   "slug": "crawl4rs",
@@ -1015,14 +873,13 @@
    "descargar_web",
    "entrar_web",
    "abrir_web"
-  ],
-  "ui": []
+  ]
  },
  {
   "slug": "credential-manager",
   "name": "credential-manager",
   "version": "2.2.0",
-  "description": "Core canónico: CRUD de credenciales API + resolución cascada (CUSTOM → CLIENT → PROJECT → GLOBAL) + cache .env atómico. Providers por-tenant (PROJECT_ONLY_PROVIDERS) quedan forzados a nivel PROJECT (sin global) para aislamiento multi-proyecto. Tras descomposición 2026-05-04: NO incluye test de credenciales (módulo credential-tester pendiente), NO incluye OAuth flow (credential-oauth pendiente), NO incluye configs vendor multi-campo Glovo/Telegram (credential-vendor-* pendientes). Ver arquitectur",
+  "description": "Core canónico: CRUD de credenciales API + resolución cascada (CUSTOM → CLIENT → PROJECT → GLOBAL) + cache .env atómico. Providers por-tenant (PROJECT_ONLY_PROVIDERS) quedan forzados a nivel PROJECT (sin global) para aislamiento multi-proyecto. Tras descomposición 2026-05-04: NO incluye test de credenciales (módulo credential-tester pendiente), NO incluye OAuth flow (credential-oauth pendiente), NO",
   "subscribes": [
    "credential.create.request",
    "credential.delete.request",
@@ -1039,15 +896,6 @@
   ],
   "tools": [
    "credential.list"
-  ],
-  "ui": [
-   "credential/list",
-   "credential/get",
-   "credential/create",
-   "credential/update",
-   "credential/delete",
-   "credential/glovo.save",
-   "credential/glovo.delete"
   ]
  },
  {
@@ -1065,8 +913,7 @@
    "project.activated"
   ],
   "publishes": [],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "cuenta-recurrente",
@@ -1086,8 +933,7 @@
    "cuenta-recurrente.pedido_generado",
    "cuenta-recurrente.recordatorio_enviado"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "cupula-eventos",
@@ -1113,8 +959,7 @@
    "evento_detalle",
    "evento_buscar",
    "evento_fantasma"
-  ],
-  "ui": []
+  ]
  },
  {
   "slug": "cupula-gcode",
@@ -1139,8 +984,7 @@
    "cupula-gcode.registrar.response",
    "cupula-gcode.reserva.response"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "cupula-tools",
@@ -1161,8 +1005,7 @@
    "buscar_capacidad",
    "detalle_capacidad",
    "capacidad_dominio"
-  ],
-  "ui": []
+  ]
  },
  {
   "slug": "cupulas",
@@ -1200,19 +1043,6 @@
    "cupulas.listar_cupulas",
    "cupulas.crear_cupula",
    "cupulas.add_nota"
-  ],
-  "ui": [
-   "cupulas/crear_cupula",
-   "cupulas/add_nota",
-   "cupulas/get_nota",
-   "cupulas/listar_cupulas",
-   "cupulas/listar_notas",
-   "cupulas/buscar",
-   "cupulas/grafo",
-   "cupulas/contexto",
-   "cupulas/vista_proyecto",
-   "cupulas/visibilidad",
-   "cupulas/set_visibilidad"
   ]
  },
  {
@@ -1226,15 +1056,7 @@
    "core/+/metrics/#"
   ],
   "publishes": [],
-  "tools": [],
-  "ui": [
-   "dashboard/cores",
-   "dashboard/core-detail",
-   "dashboard/logs",
-   "dashboard/events",
-   "dashboard/metrics",
-   "dashboard/health"
-  ]
+  "tools": []
  },
  {
   "slug": "database-manager",
@@ -1260,14 +1082,13 @@
    "db.tables",
    "db.schema",
    "db.execute"
-  ],
-  "ui": []
+  ]
  },
  {
   "slug": "destilador",
   "name": "destilador",
   "version": "0.7.0",
-  "description": "El lazo de aprendizaje del sistema (Minero + Cola+Publicador + Auto-mejora). HIBRIDO: el reflejo (JS) mina el bus y sella/publica skills; el blueprint (LLM) redacta la skill desde los registros. PASO 1 (Minero): agrupa eventos del scope por correlation_id en trazas, las reduce a una FIRMA y, cuando una firma se repite >= umbral, emite aprendizaje.candidata.detectada. PASO 2 (Cola+Publicador): el blueprint redacta un SKILL.md desde los registros y lo ENCOLA; la skill NO se publica sola — un human",
+  "description": "El lazo de aprendizaje del sistema (Minero + Cola+Publicador + Auto-mejora). HIBRIDO: el reflejo (JS) mina el bus y sella/publica skills; el blueprint (LLM) redacta la skill desde los registros. PASO 1 (Minero): agrupa eventos del scope por correlation_id en trazas, las reduce a una FIRMA y, cuando una firma se repite >= umbral, emite aprendizaje.candidata.detectada. PASO 2 (Cola+Publicador): el b",
   "subscribes": [
    "destilador.encolar_candidata.request",
    "destilador.leer_registros.request",
@@ -1291,15 +1112,6 @@
    "destilador.aprobar",
    "destilador.rechazar",
    "destilador.listar_salud_skills"
-  ],
-  "ui": [
-   "destilador/listar_clusters",
-   "destilador/ruta",
-   "destilador/listar_candidatas",
-   "destilador/aprobar",
-   "destilador/rechazar",
-   "destilador/listar_salud_skills",
-   "destilador/health"
   ]
  },
  {
@@ -1323,11 +1135,6 @@
    "health.dashboard",
    "health.device_history",
    "health.alerts"
-  ],
-  "ui": [
-   "health/dashboard",
-   "health/device-history",
-   "health/alerts"
   ]
  },
  {
@@ -1350,13 +1157,6 @@
    "devices.list",
    "devices.get",
    "devices.stats"
-  ],
-  "ui": [
-   "devices/list",
-   "devices/get",
-   "devices/register",
-   "devices/unregister",
-   "devices/stats"
   ]
  },
  {
@@ -1376,13 +1176,6 @@
    "shadow.get_full",
    "shadow.set_desired",
    "shadow.get_delta"
-  ],
-  "ui": [
-   "shadow/get-reported",
-   "shadow/get-desired",
-   "shadow/get-delta",
-   "shadow/set-desired",
-   "shadow/get-full"
   ]
  },
  {
@@ -1399,11 +1192,7 @@
    "disenador.generar_stl.failed",
    "disenador.stl_generado"
   ],
-  "tools": [],
-  "ui": [
-   "disenador/generar_stl",
-   "disenador/estimar_tiempo"
-  ]
+  "tools": []
  },
  {
   "slug": "ejecutor",
@@ -1421,8 +1210,7 @@
    "ejecutor.invocado",
    "interruptor.registrar"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "entrega",
@@ -1438,13 +1226,7 @@
   "publishes": [
    "entrega.reglas.actualizadas"
   ],
-  "tools": [],
-  "ui": [
-   "entrega/reglas.leer",
-   "entrega/reglas.actualizar",
-   "entrega/tiempo.estimar",
-   "entrega/reparto.obtener"
-  ]
+  "tools": []
  },
  {
   "slug": "envase-embalaje",
@@ -1460,13 +1242,7 @@
   "publishes": [
    "envase.reglas.actualizadas"
   ],
-  "tools": [],
-  "ui": [
-   "envase/reglas.leer",
-   "envase/reglas.actualizar",
-   "envase/eleccion.obtener",
-   "envase/stock.obtener"
-  ]
+  "tools": []
  },
  {
   "slug": "escribano",
@@ -1485,8 +1261,7 @@
   "tools": [
    "escribano.escribir",
    "escribano.pendientes"
-  ],
-  "ui": []
+  ]
  },
  {
   "slug": "esp32-dev",
@@ -1500,17 +1275,7 @@
    "esp32.build_started",
    "esp32.project_created"
   ],
-  "tools": [],
-  "ui": [
-   "esp32/list-templates",
-   "esp32/create-project",
-   "esp32/list-projects",
-   "esp32/get-project",
-   "esp32/build",
-   "esp32/build-status",
-   "esp32/list-boards",
-   "esp32/delete-project"
-  ]
+  "tools": []
  },
  {
   "slug": "esp32-flasher",
@@ -1536,20 +1301,6 @@
    "flash.monitor_start",
    "flash.monitor_stop",
    "flash.monitor_send"
-  ],
-  "ui": [
-   "flash/list-ports",
-   "flash/start",
-   "flash/status",
-   "flash/cancel",
-   "flash/monitor-start",
-   "flash/monitor-stop",
-   "flash/monitor-send",
-   "flash/history",
-   "flash/health",
-   "flash/debug-control",
-   "flash/debug-stream",
-   "flash/serial-relay"
   ]
  },
  {
@@ -1579,8 +1330,7 @@
    "borrar_lista",
    "fijar_objetivo",
    "evaluar_rail"
-  ],
-  "ui": []
+  ]
  },
  {
   "slug": "evaluador",
@@ -1595,8 +1345,7 @@
    "evaluador.evaluar.failed",
    "evaluador.veredicto_emitido"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "facturacion/asesoria",
@@ -1611,13 +1360,6 @@
   "tools": [
    "asesoria.generar-paquete",
    "asesoria.historial"
-  ],
-  "ui": [
-   "asesoria/generar-paquete",
-   "asesoria/historial",
-   "asesoria/descargar",
-   "asesoria/preview",
-   "asesoria/health"
   ]
  },
  {
@@ -1632,14 +1374,7 @@
   "publishes": [
    "factura.entrada"
   ],
-  "tools": [],
-  "ui": [
-   "fuentes/status",
-   "fuentes/get-config",
-   "fuentes/save-config",
-   "fuentes/check-gmail",
-   "fuentes/health"
-  ]
+  "tools": []
  },
  {
   "slug": "facturas",
@@ -1660,17 +1395,6 @@
    "facturas.procesar",
    "facturas.listar",
    "facturas.estadisticas"
-  ],
-  "ui": [
-   "facturas/procesar",
-   "facturas/subir",
-   "facturas/reprocesar",
-   "facturas/listar",
-   "facturas/obtener",
-   "facturas/actualizar",
-   "facturas/estadisticas",
-   "facturas/exportar",
-   "facturas/pipeline-metrics"
   ]
  },
  {
@@ -1692,8 +1416,7 @@
   "tools": [
    "buscar_fuera",
    "traer_skill"
-  ],
-  "ui": []
+  ]
  },
  {
   "slug": "filamento",
@@ -1717,14 +1440,13 @@
    "material.actualizado",
    "material.bajo"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "filesystem",
   "name": "filesystem",
   "version": "2.4.0",
-  "description": "Operaciones de filesystem para todo el sistema. Acceso scopeado por el project_id de la PETICIÓN (multi-tenant real; storage/ subdir) con fallback a proyecto activo + system mode (Sistema project = root). 14 ui_handlers + 14 tools del LLM + 14 bus handlers fs.*.request/response + 3 spanish handlers. v2.0.0: 5 helpers POC2, todos los handlers shape canonico { status, data | error: { code, message, details? } }, _publicarEvento canonical correlation_id + timestamp.",
+  "description": "Operaciones de filesystem para todo el sistema. Acceso scopeado por el project_id de la PETICIÓN (multi-tenant real; storage/ subdir) con fallback a proyecto activo + system mode (Sistema project = root). 14 ui_handlers + 14 tools del LLM + 14 bus handlers fs.*.request/response + 3 spanish handlers. v2.0.0: 5 helpers POC2, todos los handlers shape canonico { status, data | error: { code, message, ",
   "subscribes": [
    "archivo.borrar.solicitado",
    "archivo.leer.solicitado",
@@ -1797,23 +1519,6 @@
    "fs.set_work_dir",
    "fs.get_work_dir",
    "fs.append"
-  ],
-  "ui": [
-   "fs/list",
-   "fs/read",
-   "fs/write",
-   "fs/edit",
-   "fs/delete",
-   "fs/mkdir",
-   "fs/move",
-   "fs/copy",
-   "fs/search",
-   "fs/info",
-   "fs/append",
-   "fs/cleanup",
-   "fs/stats",
-   "fs/set_work_dir",
-   "fs/get_work_dir"
   ]
  },
  {
@@ -1832,12 +1537,6 @@
    "builder.build",
    "builder.build_status",
    "builder.list_boards"
-  ],
-  "ui": [
-   "builder/list-drivers",
-   "builder/build",
-   "builder/build-status",
-   "builder/list-boards"
   ]
  },
  {
@@ -1865,18 +1564,6 @@
    "firmware.trigger_ota",
    "firmware.ota_status",
    "firmware.update_meta"
-  ],
-  "ui": [
-   "firmware/list",
-   "firmware/register",
-   "firmware/trigger-ota",
-   "firmware/status",
-   "firmware/rollback",
-   "firmware/device-versions",
-   "firmware/cleanup-otas",
-   "firmware/update-meta",
-   "firmware/info",
-   "firmware/list-by-project"
   ]
  },
  {
@@ -1892,13 +1579,7 @@
    "gateway.started",
    "gateway.stopped"
   ],
-  "tools": [],
-  "ui": [
-   "gateways/list",
-   "gateways/status",
-   "gateways/restart",
-   "gateways/discover"
-  ]
+  "tools": []
  },
  {
   "slug": "hermes-bridge",
@@ -1909,8 +1590,7 @@
    "core.started"
   ],
   "publishes": [],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "hermes-gateway",
@@ -1919,8 +1599,7 @@
   "description": "Expone todo el toolsRegistry de Enki por MQTT. Cualquier proceso externo (motor-hermes Rust, enki-movil, motores enki-sense) puede invocar tools sin HTTP. Delega el dispatch a hermes-bridge (3 rutas: bus universal, directa, fallback).",
   "subscribes": [],
   "publishes": [],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "hermes-relay",
@@ -1935,8 +1614,7 @@
    "ai.chat.failed",
    "ai.chat.response"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "historial",
@@ -1959,8 +1637,7 @@
    "impresion.registrada",
    "pieza.imprimida"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "homeostasis",
@@ -1987,10 +1664,6 @@
   ],
   "tools": [
    "homeostasis.estado"
-  ],
-  "ui": [
-   "homeostasis/estado",
-   "homeostasis/health"
   ]
  },
  {
@@ -2007,11 +1680,7 @@
    "importacion.importar.response",
    "importacion.leer_metadatos.response"
   ],
-  "tools": [],
-  "ui": [
-   "importacion/importar",
-   "importacion/leer_metadatos"
-  ]
+  "tools": []
  },
  {
   "slug": "interfaz",
@@ -2030,20 +1699,13 @@
    "interfaz.confirmar_veredicto.failed",
    "interfaz.veredicto_confirmado"
   ],
-  "tools": [],
-  "ui": [
-   "interfaz/listar",
-   "interfaz/ver",
-   "interfaz/confirmar_veredicto",
-   "interfaz/anadir_manual",
-   "interfaz/corregir_ficha"
-  ]
+  "tools": []
  },
  {
   "slug": "interruptores",
   "name": "interruptores",
   "version": "1.2.0",
-  "description": "Registro central de on/off del sistema (el panel de control). Un solo sitio para todos los botones: cada feature registra su interruptor al cargar (interruptor.registrar); el panel de la barra lateral los pinta; al pulsarlos, interruptor.cambiado avisa al dueño para que reaccione en caliente sin reinicio. Estado global persistido en data/interruptores.json (el estado tocado por el humano manda sobre el default). La homeostasis inhibe por interruptor.set (canal del efector).",
+  "description": "Registro central de on/off del sistema (el panel de control). Un solo sitio para todos los botones: cada feature registra su interruptor al cargar (interruptor.registrar); el panel de la barra lateral los pinta; al pulsarlos, interruptor.cambiado avisa al dueño para que reaccione en caliente sin reinicio. Estado global persistido en data/interruptores.json (el estado tocado por el humano manda sob",
   "subscribes": [
    "interruptor.registrar",
    "interruptor.set",
@@ -2056,18 +1718,13 @@
   "tools": [
    "interruptores.listar",
    "interruptores.set"
-  ],
-  "ui": [
-   "interruptores/listar",
-   "interruptores/set",
-   "interruptores/health"
   ]
  },
  {
   "slug": "inventario",
   "name": "inventario",
   "version": "1.0.0",
-  "description": "Inventario por proyecto con stock_real + reservas con expiracion. Multi-proyecto: cada proyecto tiene su propio data/projects/<slug>/inventario.json con shape { productos: { <id>: { nombre, stock_real, stock_minimo, reservas: [{ pedido_id, cantidad, expira_at }] } } }. Stock disponible = stock_real - suma(reservas vivas). Cierra clase de bugs 'salmorejo perdido' (audit cross-blueprint 2026-05-25) usando services/safe-update.js (lock por path + read+mutate+atomic write tmp+rename). Job interno ca",
+  "description": "Inventario por proyecto con stock_real + reservas con expiracion. Multi-proyecto: cada proyecto tiene su propio data/projects/<slug>/inventario.json con shape { productos: { <id>: { nombre, stock_real, stock_minimo, reservas: [{ pedido_id, cantidad, expira_at }] } } }. Stock disponible = stock_real - suma(reservas vivas). Cierra clase de bugs 'salmorejo perdido' (audit cross-blueprint 2026-05-25) ",
   "subscribes": [
    "pedido.cancelado",
    "pedido.completado"
@@ -2087,27 +1744,20 @@
    "inventario.liberar",
    "inventario.ajustar",
    "inventario.estado_catalogo"
-  ],
-  "ui": []
+  ]
  },
  {
   "slug": "invitaciones",
   "name": "invitaciones",
   "version": "1.0.0",
-  "description": "Subsistema de la cadena de delegacion de capacidades. El admin del sistema (y luego los admins de proyecto) EMITEN invitaciones firmadas que otros REDIMEN para obtener un cert scopeado a {project, role}. Cablea el banco puro _shared/invitaciones con la firma real (R1: la CA raiz firma via certificate-authority.sign-invitation). Persiste las emitidas para listar/revocar/contar usos. La redencion es el corte 3c.",
+  "description": "Subsistema de la cadena de delegacion de capacidades. El admin del sistema (y luego los admins de proyecto) EMITEN invitaciones firmadas que otros REDIMEN para obtener un cert scopeado a {project, role}. Cablea el banco puro _shared/invitaciones con la firma real (R1: la CA raiz firma via certificate-authority.sign-invitation). Persiste las emitidas para listar/revocar/contar usos. La redencion es",
   "subscribes": [],
   "publishes": [
    "invitacion.emitida",
    "invitacion.redimida",
    "invitacion.revocada"
   ],
-  "tools": [],
-  "ui": [
-   "invitaciones/emitir",
-   "invitaciones/redimir",
-   "invitaciones/listar",
-   "invitaciones/revocar"
-  ]
+  "tools": []
  },
  {
   "slug": "lentes-diseno",
@@ -2133,8 +1783,7 @@
    "lentes.obtener.response",
    "negocio.pulso"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "log-manager",
@@ -2147,8 +1796,7 @@
    "core/+/logs/#"
   ],
   "publishes": [],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "lotes",
@@ -2169,16 +1817,7 @@
    "lote.creado",
    "lote.estado.avanzado"
   ],
-  "tools": [],
-  "ui": [
-   "lotes/crear",
-   "lotes/estado.consultar",
-   "lotes/avanzar",
-   "lotes/ocupacion.consultar",
-   "lotes/ventana.consultar",
-   "lotes/config.leer",
-   "lotes/config.actualizar"
-  ]
+  "tools": []
  },
  {
   "slug": "manejo-fallo",
@@ -2192,8 +1831,7 @@
    "manejo-fallo.manejar.failed",
    "manejo-fallo.manejar.response"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "marca-cliente",
@@ -2211,15 +1849,7 @@
   "publishes": [
    "marca.reglas.actualizadas"
   ],
-  "tools": [],
-  "ui": [
-   "marca/reglas.leer",
-   "marca/reglas.actualizar",
-   "marca/voz.obtener",
-   "marca/presencia.obtener",
-   "marca/cliente.obtener",
-   "marca/fidelizacion.obtener"
-  ]
+  "tools": []
  },
  {
   "slug": "marketing-analytics",
@@ -2237,10 +1867,6 @@
   "tools": [
    "marketing-analytics.get",
    "marketing-analytics.update"
-  ],
-  "ui": [
-   "marketing-analytics/get",
-   "marketing-analytics/update"
   ]
  },
  {
@@ -2260,10 +1886,6 @@
   "tools": [
    "marketing-audience.get",
    "marketing-audience.update"
-  ],
-  "ui": [
-   "marketing-audience/get",
-   "marketing-audience/update"
   ]
  },
  {
@@ -2282,10 +1904,6 @@
   "tools": [
    "marketing-automation.get",
    "marketing-automation.update"
-  ],
-  "ui": [
-   "marketing-automation/get",
-   "marketing-automation/update"
   ]
  },
  {
@@ -2305,10 +1923,6 @@
   "tools": [
    "marketing-budget.get",
    "marketing-budget.update"
-  ],
-  "ui": [
-   "marketing-budget/get",
-   "marketing-budget/update"
   ]
  },
  {
@@ -2327,10 +1941,6 @@
   "tools": [
    "marketing-calendar.get",
    "marketing-calendar.update"
-  ],
-  "ui": [
-   "marketing-calendar/get",
-   "marketing-calendar/update"
   ]
  },
  {
@@ -2349,10 +1959,6 @@
   "tools": [
    "marketing-campaigns.get",
    "marketing-campaigns.update"
-  ],
-  "ui": [
-   "marketing-campaigns/get",
-   "marketing-campaigns/update"
   ]
  },
  {
@@ -2371,10 +1977,6 @@
   "tools": [
    "marketing-channels.get",
    "marketing-channels.update"
-  ],
-  "ui": [
-   "marketing-channels/get",
-   "marketing-channels/update"
   ]
  },
  {
@@ -2393,10 +1995,6 @@
   "tools": [
    "marketing-competitors.get",
    "marketing-competitors.update"
-  ],
-  "ui": [
-   "marketing-competitors/get",
-   "marketing-competitors/update"
   ]
  },
  {
@@ -2415,10 +2013,6 @@
   "tools": [
    "marketing-content.get",
    "marketing-content.update"
-  ],
-  "ui": [
-   "marketing-content/get",
-   "marketing-content/update"
   ]
  },
  {
@@ -2437,10 +2031,6 @@
   "tools": [
    "marketing-funnel.get",
    "marketing-funnel.update"
-  ],
-  "ui": [
-   "marketing-funnel/get",
-   "marketing-funnel/update"
   ]
  },
  {
@@ -2459,10 +2049,6 @@
   "tools": [
    "marketing-relations.get",
    "marketing-relations.update"
-  ],
-  "ui": [
-   "marketing-relations/get",
-   "marketing-relations/update"
   ]
  },
  {
@@ -2481,10 +2067,6 @@
   "tools": [
    "marketing-strategy.get",
    "marketing-strategy.update"
-  ],
-  "ui": [
-   "marketing-strategy/get",
-   "marketing-strategy/update"
   ]
  },
  {
@@ -2502,14 +2084,7 @@
   "publishes": [
    "masa.reglas.actualizadas"
   ],
-  "tools": [],
-  "ui": [
-   "masa/reglas.leer",
-   "masa/reglas.actualizar",
-   "masa/gramaje.calcular",
-   "masa/rendimiento.calcular",
-   "masa/reamasado.calcular"
-  ]
+  "tools": []
  },
  {
   "slug": "metricas",
@@ -2526,14 +2101,13 @@
   "publishes": [
    "metricas.snapshot"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "mise-en-place",
   "name": "mise-en-place",
   "version": "1.0.0",
-  "description": "Planificacion previa al servicio: escalado de recetas a porciones objetivo, planes de produccion (que recetas en que franja con cuantas porciones), consolidacion de listas de compra agregando ingredientes a lo largo de un horizonte. Eventos canonicos con prefix 'produccion.*' (decision del sub-contrato). Modulo del subsistema-recetario (ver arquitectura/decisiones/_contratos/subsistema-recetario.contract.json).",
+  "description": "Planificacion previa al servicio: escalado de recetas a porciones objetivo, planes de produccion (que recetas en que franja con cuantas porciones), consolidacion de listas de compra agregando ingredientes a lo largo de un horizonte. Eventos canonicos con prefix 'produccion.*' (decision del sub-contrato). Modulo del subsistema-recetario (ver arquitectura/decisiones/_contratos/subsistema-recetario.c",
   "subscribes": [
    "fs.read.response",
    "fs.write.response",
@@ -2571,18 +2145,6 @@
    "produccion.plan.ejecutar",
    "produccion.plan.cerrar",
    "produccion.agrupar_tandas"
-  ],
-  "ui": [
-   "mise-en-place/escalado.calcular",
-   "mise-en-place/plan.publicar",
-   "mise-en-place/compra.calcular",
-   "mise-en-place/plan.obtener",
-   "mise-en-place/planes.listar",
-   "mise-en-place/retroplanning.calcular",
-   "mise-en-place/plan.aprobar",
-   "mise-en-place/plan.ejecutar",
-   "mise-en-place/plan.cerrar",
-   "mise-en-place/agrupar_tandas"
   ]
  },
  {
@@ -2598,8 +2160,7 @@
    "motor-encadenamiento.al_terminar.failed",
    "motor-encadenamiento.al_terminar.response"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "motor-oido",
@@ -2614,8 +2175,7 @@
   ],
   "tools": [
    "transcribir"
-  ],
-  "ui": []
+  ]
  },
  {
   "slug": "motor-ojo",
@@ -2630,8 +2190,7 @@
   ],
   "tools": [
    "renderizar"
-  ],
-  "ui": []
+  ]
  },
  {
   "slug": "motor-propuesta",
@@ -2645,8 +2204,7 @@
    "motor-propuesta.proponer.failed",
    "motor-propuesta.proponer.response"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "motor-sonido",
@@ -2661,8 +2219,7 @@
   ],
   "tools": [
    "analizar_sonido"
-  ],
-  "ui": []
+  ]
  },
  {
   "slug": "motor-traduce",
@@ -2677,8 +2234,7 @@
   ],
   "tools": [
    "traducir"
-  ],
-  "ui": []
+  ]
  },
  {
   "slug": "motor-trazo",
@@ -2693,9 +2249,6 @@
   ],
   "tools": [
    "interpretar_trazo"
-  ],
-  "ui": [
-   "motor-trazo/interpretar"
   ]
  },
  {
@@ -2713,10 +2266,6 @@
   "tools": [
    "decir",
    "configurar_voz"
-  ],
-  "ui": [
-   "motor-voz/decir",
-   "motor-voz/configurar_voz"
   ]
  },
  {
@@ -2732,10 +2281,7 @@
    "nichos.umbral.retunear.failed",
    "nichos.umbral_ajustado"
   ],
-  "tools": [],
-  "ui": [
-   "ajustador-umbrales/retunear"
-  ]
+  "tools": []
  },
  {
   "slug": "nichos/alerta-sangria",
@@ -2750,8 +2296,7 @@
    "nichos.alerta.monitorear.failed",
    "nichos.alerta.sangria"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "nichos/batch-validacion",
@@ -2765,14 +2310,13 @@
    "nichos.batch.lote_ejecutado",
    "nichos.batch.programar.failed"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "nichos/camino-encontrar-construir",
   "name": "camino-encontrar-construir",
   "version": "0.1.0",
-  "description": "Micro-agente hibrido (C4): decide por opción de nicho si la oportunidad se encuentra (demanda real + capacidades existentes) o se construye (crear necesidad / falta capacidad). Riesgo alto → sube SolicitudDecision (D2/K2), nunca decide solo. Reflejo por reglas con juicio fuzzy asistido y fallback determinista. Publica nichos.camino.decidido; nichos.camino.decidir.failed cuando el nicho es inválido.",
+  "description": "Micro-agente hibrido (C4): decide por opción de nicho si la oportunidad se encuentra (demanda real + capacidades existentes) o se construye (crear necesidad / falta capacidad). Riesgo alto → sube SolicitudDecision (D2/K2), nunca decide solo. Reflejo por reglas con juicio fuzzy asistido y fallback determinista. Publica nichos.camino.decidido; nichos.camino.decidir.failed cuando el nicho es inválido",
   "subscribes": [
    "nichos.camino.decidir.request"
   ],
@@ -2780,8 +2324,7 @@
    "nichos.camino.decidido",
    "nichos.camino.decidir.failed"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "nichos/canal-distribucion",
@@ -2796,8 +2339,7 @@
    "nichos.entrega.enviada",
    "nichos.entrega.enviar.failed"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "nichos/canal-supervision",
@@ -2815,8 +2357,7 @@
    "nichos.canal.envio_fallido",
    "nichos.canal.reemplazado"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "nichos/captura-semilla",
@@ -2831,8 +2372,7 @@
    "nichos.semilla.aceptar.failed",
    "nichos.semilla.capturada"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "nichos/catalogo-capacidades",
@@ -2848,8 +2388,7 @@
    "nichos.capacidad.declarar.failed",
    "nichos.capacidad.faltante_declarado"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "nichos/clasificador-intencion",
@@ -2864,8 +2403,7 @@
    "nichos.intencion.clasificada",
    "nichos.intencion.clasificar.failed"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "nichos/cola-candidatos",
@@ -2883,8 +2421,7 @@
    "nichos.candidato_encolado",
    "nichos.candidato_tomado"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "nichos/cola-decisiones-gate",
@@ -2905,10 +2442,7 @@
    "nichos.gate_encolado",
    "nichos.gate_resuelto"
   ],
-  "tools": [],
-  "ui": [
-   "cola-decisiones-gate/resolver"
-  ]
+  "tools": []
  },
  {
   "slug": "nichos/confirmacion-valor",
@@ -2924,8 +2458,7 @@
    "nichos.feedback.guardar.failed",
    "nichos.feedback_recibido"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "nichos/conversor-fuente",
@@ -2939,8 +2472,7 @@
    "nichos.datos_homogeneos",
    "nichos.fuente.convertir.failed"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "nichos/corte-temprano",
@@ -2954,8 +2486,7 @@
    "nichos.corte.aplicado",
    "nichos.corte.evaluar.failed"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "nichos/coste-fuente",
@@ -2969,8 +2500,7 @@
    "nichos.fuente.costear.failed",
    "nichos.fuente_costea_imputado"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "nichos/criterio-viabilidad",
@@ -2989,8 +2519,7 @@
    "nichos.criterio.recalibrado",
    "nichos.criterio.recalibrar.failed"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "nichos/cuadro-salud-financiera",
@@ -3009,8 +2538,7 @@
    "nichos.salud.actualizada",
    "nichos.salud.actualizar.failed"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "nichos/ensamblador-solucion",
@@ -3025,8 +2553,7 @@
    "nichos.solucion.construida",
    "nichos.solucion.construir.failed"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "nichos/escalones-mensaje",
@@ -3041,14 +2568,13 @@
    "nichos.escalon.clasificado",
    "nichos.escalon.clasificar.failed"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "nichos/estudio-competencia",
   "name": "estudio-competencia",
   "version": "0.1.0",
-  "description": "Micro-agente hibrido (E1): dado un nicho construido mide la competencia observada en las fuentes (reflejo: consulta y normaliza el dataset de competidores) y concluye la diferenciacion (juicio fuzzy). Produce un estudio de competencia estructurado que alimenta el paquete de decision (H1). Publica nichos.competencia.analizado cuando hay un analisis; nichos.competencia.analizar.failed cuando el nicho viene vacio o no hay datos que apoyen el analisis.",
+  "description": "Micro-agente hibrido (E1): dado un nicho construido mide la competencia observada en las fuentes (reflejo: consulta y normaliza el dataset de competidores) y concluye la diferenciacion (juicio fuzzy). Produce un estudio de competencia estructurado que alimenta el paquete de decision (H1). Publica nichos.competencia.analizado cuando hay un analisis; nichos.competencia.analizar.failed cuando el nich",
   "subscribes": [
    "nichos.competencia.analizar.request"
   ],
@@ -3056,14 +2582,13 @@
    "nichos.competencia.analizado",
    "nichos.competencia.analizar.failed"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "nichos/estudio-demanda",
   "name": "estudio-demanda",
   "version": "0.1.0",
-  "description": "Micro-agente hibrido (C1), la primera pieza del eslabon limitante del sistema (validacion): dado un candidato de nicho mide la demanda de 1er orden (quienes buscan y con que fuerza) y la disposicion a pagar (reflejo: numeros declarados), y redacta la conclusion de mercado (juicio fuzzy). Produce un estudio de demanda estructurado para el veredicto-viabilidad (C3). Publica nichos.estudio.medido cuando hay un estudio; nichos.estudio.medir.failed cuando el candidato viene vacio o no hay datos que a",
+  "description": "Micro-agente hibrido (C1), la primera pieza del eslabon limitante del sistema (validacion): dado un candidato de nicho mide la demanda de 1er orden (quienes buscan y con que fuerza) y la disposicion a pagar (reflejo: numeros declarados), y redacta la conclusion de mercado (juicio fuzzy). Produce un estudio de demanda estructurado para el veredicto-viabilidad (C3). Publica nichos.estudio.medido cua",
   "subscribes": [
    "nichos.estudio.medir.request"
   ],
@@ -3071,8 +2596,7 @@
    "nichos.estudio.medido",
    "nichos.estudio.medir.failed"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "nichos/gate-decision-operar",
@@ -3086,8 +2610,7 @@
    "nichos.gate.solicitado",
    "nichos.gate.solicitar.failed"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "nichos/gestion-limites-fuente",
@@ -3104,8 +2627,7 @@
    "nichos.fuente.encolado",
    "nichos.fuente.encolar.failed"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "nichos/historial-nicho",
@@ -3120,8 +2642,7 @@
    "nichos.historial.append.failed",
    "nichos.historial_actualizado"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "nichos/imputacion-costes",
@@ -3135,8 +2656,7 @@
    "nichos.coste.agregar.failed",
    "nichos.coste_imputado"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "nichos/manejo-fallo",
@@ -3153,8 +2673,7 @@
    "nichos.fallo_manejado",
    "nichos.puente_solicitado"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "nichos/motor-cobro",
@@ -3169,8 +2688,7 @@
    "nichos.cobro.ejecutado",
    "nichos.cobro.ejecutar.failed"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "nichos/normalizacion-semilla",
@@ -3184,8 +2702,7 @@
    "nichos.semilla.normalizada",
    "nichos.semilla.normalizar.failed"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "nichos/paquete-decision",
@@ -3199,8 +2716,7 @@
    "nichos.paquete.construir.failed",
    "nichos.paquete_construido"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "nichos/perfil-cobro-entrega",
@@ -3216,8 +2732,7 @@
    "nichos.perfil.declarado",
    "nichos.perfil.declarar.failed"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "nichos/perfil-limite-busqueda",
@@ -3233,8 +2748,7 @@
    "nichos.limite.declarado",
    "nichos.limite.declarar.failed"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "nichos/perfil-supervision",
@@ -3250,8 +2764,7 @@
    "nichos.supervision.declarado",
    "nichos.supervision.declarar.failed"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "nichos/pipeline-por-nicho",
@@ -3282,14 +2795,13 @@
    "nichos.pipeline.ciclo_completado",
    "nichos.pipeline.ciclo_iniciado"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "nichos/proponedor-modelo-cobro",
   "name": "proponedor-modelo-cobro",
   "version": "0.1.0",
-  "description": "Micro-agente hibrido (D4): dado un nicho construido propone el modelo de negocio/cobro (suscripcion|empresa|transaccional|abierto) y el precio sugerido (reflejo: derivado de la evidencia de disposicion a pagar), razonado (juicio fuzzy). Produce una propuesta estructurada para el gate E2. Publica nichos.modelo_cobro.propuesto cuando hay una propuesta; nichos.modelo_cobro.proponer.failed cuando el nicho viene vacio.",
+  "description": "Micro-agente hibrido (D4): dado un nicho construido propone el modelo de negocio/cobro (suscripcion|empresa|transaccional|abierto) y el precio sugerido (reflejo: derivado de la evidencia de disposicion a pagar), razonado (juicio fuzzy). Produce una propuesta estructurada para el gate E2. Publica nichos.modelo_cobro.propuesto cuando hay una propuesta; nichos.modelo_cobro.proponer.failed cuando el n",
   "subscribes": [
    "nichos.modelo_cobro.proponer.request"
   ],
@@ -3297,8 +2809,7 @@
    "nichos.modelo_cobro.proponer.failed",
    "nichos.modelo_cobro.propuesto"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "nichos/propuesta-valor-canal",
@@ -3313,8 +2824,7 @@
    "nichos.copy.proponer.failed",
    "nichos.copy_propuesto"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "nichos/puente-humano",
@@ -3328,8 +2838,7 @@
    "nichos.puente.solicitar.failed",
    "nichos.puente_solicitado"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "nichos/puerto-fuente-datos",
@@ -3346,8 +2855,7 @@
    "nichos.fuente.consultar.failed",
    "nichos.fuente.reemplazada"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "nichos/pulso-avance",
@@ -3364,8 +2872,7 @@
    "nichos.pulso.emitir.failed",
    "nichos.pulso_emitido"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "nichos/registro-cobros",
@@ -3382,8 +2889,7 @@
    "nichos.cobro.registrar.failed",
    "nichos.cobro_registrado"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "nichos/reglas-aprendidas",
@@ -3399,8 +2905,7 @@
    "nichos.reglas.recalibrar.failed",
    "nichos.umbral.recalibrado"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "nichos/reglas-exclusion",
@@ -3414,8 +2919,7 @@
    "nichos.candidato.excluido",
    "nichos.reglas.excluir.failed"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "nichos/sondeo-territorio",
@@ -3430,14 +2934,13 @@
    "nichos.territorio.sondeado",
    "nichos.territorio.sondear.failed"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "nichos/veredicto-viabilidad",
   "name": "veredicto-viabilidad",
   "version": "0.1.0",
-  "description": "Micro-agente hibrido (C3): recibe el estudio de demanda (C1) y el criterio de viabilidad vigente (C2) y decide por candidato VIABLE | NO_VIABLE | PUENTE con confianza y motivo. Reflejo por reglas (_evaluarReflejo) con juicio fuzzy asistido y fallback determinista; el corte DURO NO_VIABLE->CORTADO lo aplica C6, nunca este agente. Publica nichos.veredicto.emitido; nichos.veredicto.evaluar.failed cuando el estudio viene vacio.",
+  "description": "Micro-agente hibrido (C3): recibe el estudio de demanda (C1) y el criterio de viabilidad vigente (C2) y decide por candidato VIABLE | NO_VIABLE | PUENTE con confianza y motivo. Reflejo por reglas (_evaluarReflejo) con juicio fuzzy asistido y fallback determinista; el corte DURO NO_VIABLE->CORTADO lo aplica C6, nunca este agente. Publica nichos.veredicto.emitido; nichos.veredicto.evaluar.failed cua",
   "subscribes": [
    "nichos.veredicto.evaluar.request"
   ],
@@ -3445,8 +2948,7 @@
    "nichos.veredicto.emitido",
    "nichos.veredicto.evaluar.failed"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "nichos/vista-portafolio",
@@ -3463,10 +2965,7 @@
    "nichos.vista.guardar.failed",
    "nichos.vista_portafolio"
   ],
-  "tools": [],
-  "ui": [
-   "vista-portafolio/leer"
-  ]
+  "tools": []
  },
  {
   "slug": "notas-poc",
@@ -3479,8 +2978,7 @@
    "notas.creado",
    "notas.eliminado"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "ocr4rs",
@@ -3502,8 +3000,7 @@
   ],
   "tools": [
    "leer_imagen"
-  ],
-  "ui": []
+  ]
  },
  {
   "slug": "panel-jefe",
@@ -3522,15 +3019,7 @@
    "panel-jefe.aprobar_propuesta.failed",
    "panel-jefe.resumen.response"
   ],
-  "tools": [],
-  "ui": [
-   "panel-jefe/resumen",
-   "panel-jefe/propuestas",
-   "panel-jefe/aprobar_propuesta",
-   "panel-jefe/marcar_prioridad",
-   "panel-jefe/pedir_reposicion",
-   "panel-jefe/ver_detalle"
-  ]
+  "tools": []
  },
  {
   "slug": "panel-trabajador",
@@ -3548,14 +3037,7 @@
    "panel-trabajador.control.failed",
    "panel-trabajador.estado_vivo.response"
   ],
-  "tools": [],
-  "ui": [
-   "panel-trabajador/estado_vivo",
-   "panel-trabajador/proximo_encadenar",
-   "panel-trabajador/eventos",
-   "panel-trabajador/pendientes",
-   "panel-trabajador/control"
-  ]
+  "tools": []
  },
  {
   "slug": "pase-cocina",
@@ -3584,8 +3066,7 @@
    "pase.sustitucion.registrar",
    "pase.ficha.obtener",
    "pase.fichas.listar"
-  ],
-  "ui": []
+  ]
  },
  {
   "slug": "pdf-viewer",
@@ -3613,11 +3094,6 @@
    "pdf.extract",
    "pdf.info",
    "pdf.render"
-  ],
-  "ui": [
-   "pdf/view",
-   "pdf/metadata",
-   "pdf/list"
   ]
  },
  {
@@ -3644,18 +3120,7 @@
    "periferico.impreso",
    "periferico.listado"
   ],
-  "tools": [],
-  "ui": [
-   "perifericos/list",
-   "perifericos/get",
-   "perifericos/create",
-   "perifericos/update",
-   "perifericos/delete",
-   "perifericos/test",
-   "perifericos/status",
-   "perifericos/discover",
-   "perifericos/listar-por-capacidad"
-  ]
+  "tools": []
  },
  {
   "slug": "pizzepos/bienvenida-tienda",
@@ -3668,8 +3133,7 @@
    "telegram.text.received"
   ],
   "publishes": [],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "pizzepos/carta-design",
@@ -3684,8 +3148,7 @@
    "design.validar.request"
   ],
   "publishes": [],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "pizzepos/carta-digital",
@@ -3694,21 +3157,13 @@
   "description": "Proyector del canal digital: proyecta la carta publica al vuelo (tarifas+carta-manager+marca+contenido). Sirve get_carta_publica + get_config/update_config (config del canal). El POS no lo usa.",
   "subscribes": [],
   "publishes": [],
-  "tools": [],
-  "ui": [
-   "cartadigital/get_carta_publica",
-   "cartadigital/get_config",
-   "cartadigital/update_config",
-   "cartadigital/get_diseno",
-   "cartadigital/preview",
-   "cartadigital/publicar"
-  ]
+  "tools": []
  },
  {
   "slug": "pizzepos/carta-manager",
   "name": "carta-manager",
   "version": "2.8.0",
-  "description": "Modulo carta-manager HIBRIDO: blueprint-driven (cajones de interpretacion) para que el LLM de la pagina traduzca intencion -> op estructurada + reflejo JS (index.js) que sirve las 15 ops deterministas en el bus (carta.<op>.request). Aggregate root del subsistema-carta: CRUD/versionado/manipulacion de cartas, productos y categorias. Los hermanos del subsistema leen via carta.<op>.request pero NUNCA escriben al store (carta-manager es el unico writer).",
+  "description": "Modulo carta-manager HIBRIDO: blueprint-driven (cajones de interpretacion) para que el LLM de la pagina traduzca intencion -> op estructurada + reflejo JS (index.js) que sirve las 15 ops deterministas en el bus (carta.<op>.request). Aggregate root del subsistema-carta: CRUD/versionado/manipulacion de cartas, productos y categorias. Los hermanos del subsistema leen via carta.<op>.request pero NUNCA",
   "subscribes": [
    "carta.activar.request",
    "carta.add_category.request",
@@ -3731,8 +3186,7 @@
    "carta.versions.request"
   ],
   "publishes": [],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "pizzepos/carta-marketing",
@@ -3746,11 +3200,7 @@
    "carta-marketing.validar.request"
   ],
   "publishes": [],
-  "tools": [],
-  "ui": [
-   "carta-marketing/get_perfil",
-   "carta-marketing/update_perfil"
-  ]
+  "tools": []
  },
  {
   "slug": "pizzepos/carta-scheduler",
@@ -3759,8 +3209,7 @@
   "description": "Modulo carta-scheduler en modo blueprint-driven. Reglas (cron expression + canal + carta_id) + pendientes (cambios calculados esperando OK del usuario). El LLM en page=carta-scheduler revisa proximos_cambios, detecta conflictos, confirma o rechaza pendientes.",
   "subscribes": [],
   "publishes": [],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "pizzepos/categorias",
@@ -3775,16 +3224,7 @@
    "categoria.creada",
    "categoria.orden_actualizado"
   ],
-  "tools": [],
-  "ui": [
-   "categorias/list",
-   "categorias/get",
-   "categorias/create",
-   "categorias/update",
-   "categorias/reorder",
-   "categorias/health",
-   "categorias/metrics"
-  ]
+  "tools": []
  },
  {
   "slug": "pizzepos/cobros",
@@ -3814,17 +3254,6 @@
    "cobro.list-cajones",
    "cobro.health",
    "cobro.metrics"
-  ],
-  "ui": [
-   "cobro/create",
-   "cobro/list",
-   "cobro/get",
-   "cobro/confirm",
-   "cobro/refund",
-   "cobro/payment-methods",
-   "cobro/list-cajones",
-   "cobro/health",
-   "cobro/metrics"
   ]
  },
  {
@@ -3865,20 +3294,6 @@
    "cocina.list-displays",
    "cocina.health",
    "cocina.metrics"
-  ],
-  "ui": [
-   "cocina/list-active",
-   "cocina/get",
-   "cocina/history",
-   "cocina/prepare-item",
-   "cocina/mark-ready",
-   "cocina/register-device",
-   "cocina/unregister-device",
-   "cocina/list-devices",
-   "cocina/list-station-types",
-   "cocina/list-displays",
-   "cocina/health",
-   "cocina/metrics"
   ]
  },
  {
@@ -3897,8 +3312,7 @@
    "cocina.item_preparando",
    "cocina.pedido_listo"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "pizzepos/comandero",
@@ -3928,15 +3342,6 @@
    "comandero.eliminar_item",
    "comandero.enviar_cocina",
    "comandero.obtener_pedido"
-  ],
-  "ui": [
-   "comandero/get",
-   "comandero/add-item",
-   "comandero/remove-item",
-   "comandero/update-item",
-   "comandero/send-kitchen",
-   "comandero/buffers",
-   "comandero/health"
   ]
  },
  {
@@ -3951,13 +3356,7 @@
    "contenido.set.request"
   ],
   "publishes": [],
-  "tools": [],
-  "ui": [
-   "contenido/get",
-   "contenido/add_imagen",
-   "contenido/quitar_imagen",
-   "contenido/set"
-  ]
+  "tools": []
  },
  {
   "slug": "pizzepos/cuentas",
@@ -3982,19 +3381,7 @@
    "cuenta.eliminada",
    "cuenta.estado_cambiado"
   ],
-  "tools": [],
-  "ui": [
-   "cuenta/create",
-   "cuenta/list",
-   "cuenta/get",
-   "cuenta/delete",
-   "cuenta/cerrar_pagada",
-   "cuenta/marcar_entregado",
-   "cuenta/rename",
-   "cuenta/stats",
-   "cuenta/health",
-   "cuenta/metrics"
-  ]
+  "tools": []
  },
  {
   "slug": "pizzepos/cuentas-canales",
@@ -4083,11 +3470,6 @@
    "llevadoo.carta_delivery",
    "llevadoo.health",
    "llevadoo.metrics"
-  ],
-  "ui": [
-   "canales/list",
-   "canales/health",
-   "canales/metrics"
   ]
  },
  {
@@ -4103,14 +3485,7 @@
    "escandallo.validar.request"
   ],
   "publishes": [],
-  "tools": [],
-  "ui": [
-   "escandallo/costear",
-   "escandallo/escalar",
-   "escandallo/recalcular_siguiente",
-   "escandallo/recalcular_lote",
-   "escandallo/validar"
-  ]
+  "tools": []
  },
  {
   "slug": "pizzepos/impresion",
@@ -4135,16 +3510,7 @@
    "impresion.ticket_pieza_generado",
    "impresion.ticket_venta_generado"
   ],
-  "tools": [],
-  "ui": [
-   "impresion/ticket",
-   "impresion/ticket-venta",
-   "impresion/estado",
-   "impresion/historial",
-   "impresion/health",
-   "impresion/metrics",
-   "impresion/impresoras"
-  ]
+  "tools": []
  },
  {
   "slug": "pizzepos/ingredientes",
@@ -4161,48 +3527,33 @@
    "ingrediente.actualizado",
    "ingrediente.creado"
   ],
-  "tools": [],
-  "ui": [
-   "ingredientes/list",
-   "ingredientes/get",
-   "ingredientes/get_precio",
-   "ingredientes/search",
-   "ingredientes/alergenos",
-   "ingredientes/update",
-   "ingredientes/update_precios",
-   "ingredientes/health",
-   "ingredientes/metrics"
-  ]
+  "tools": []
  },
  {
   "slug": "pizzepos/media-generator",
   "name": "media-generator",
   "version": "1.0.0",
-  "description": "El LÍDER GENERADOR: puerto provider-agnóstico media.generar (request→response) que enruta por TIPO (imagen/audio/musica) al MOTOR concreto configurado. El motor real es un tools_http (el loader resuelve credencial + fetch + response_path). El especialista LLM (diseñador gráfico, sound designer) redacta el prompt y pide al puerto; el líder lo renderiza con el motor que esté puesto. Cambiar de motor = cambiar config, no el especialista. Degradable: tipo sin motor → NO_MOTOR (sin reventar). Motor d",
+  "description": "El LÍDER GENERADOR: puerto provider-agnóstico media.generar (request→response) que enruta por TIPO (imagen/audio/musica) al MOTOR concreto configurado. El motor real es un tools_http (el loader resuelve credencial + fetch + response_path). El especialista LLM (diseñador gráfico, sound designer) redacta el prompt y pide al puerto; el líder lo renderiza con el motor que esté puesto. Cambiar de motor",
   "subscribes": [],
   "publishes": [],
-  "tools": [],
-  "ui": [
-   "media/generar"
-  ]
+  "tools": []
  },
  {
   "slug": "pizzepos/menu-generator",
   "name": "menu-generator",
   "version": "11.2.0",
-  "description": "Generador de catalogo: de cualquier input textual (texto/dictado en lenguaje libre, o JSON ya estructurado) produce una carta estructurada en shape canonico carta-pizzepos y la entrega al custodio. Hibrido: el reflejo (index.js) estructura el catalogo ya formado de forma determinista; el LLM de pagina estructura el texto libre. Persistencia delegada en carta-manager. Sin OCR, sin agente, sin enriquecimiento — da forma a lo que el material trae y lo entrega limpio.",
+  "description": "Generador de catalogo: de cualquier input textual (texto/dictado en lenguaje libre, o JSON ya estructurado) produce una carta estructurada en shape canonico carta-pizzepos y la entrega al custodio. Hibrido: el reflejo (index.js) estructura el catalogo ya formado de forma determinista; el LLM de pagina estructura el texto libre. Persistencia delegada en carta-manager. Sin OCR, sin agente, sin enriq",
   "subscribes": [
    "menu.import.request"
   ],
   "publishes": [],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "pizzepos/mercadona-api",
   "name": "mercadona-api",
   "version": "1.0.0",
-  "description": "Cliente HTTP no oficial de la API de tienda.mercadona.es. Provee precios y catalogo de productos del supermercado para que escandallo y otros modulos del subsistema-recetario puedan estimar coste de receta sin tener catalogo de precios propio. Infraestructura JS deterministica (NO blueprint): IO HTTP externa, latencia <1s requerida, sin razonamiento del dominio. Postcode default 30840 (Murcia). Cache en memoria TTL 48h. Throttle interno max 2 req/s + backoff exponencial sobre HTTP 429. NO requie",
+  "description": "Cliente HTTP no oficial de la API de tienda.mercadona.es. Provee precios y catalogo de productos del supermercado para que escandallo y otros modulos del subsistema-recetario puedan estimar coste de receta sin tener catalogo de precios propio. Infraestructura JS deterministica (NO blueprint): IO HTTP externa, latencia <1s requerida, sin razonamiento del dominio. Postcode default 30840 (Murcia). Ca",
   "subscribes": [
    "mercadona.categorias.listar.request",
    "mercadona.producto.obtener.request",
@@ -4215,8 +3566,7 @@
   "tools": [
    "mercadona.producto.obtener",
    "mercadona.categorias.listar"
-  ],
-  "ui": []
+  ]
  },
  {
   "slug": "pizzepos/notificador-pedidos",
@@ -4227,26 +3577,22 @@
    "pedido.creado"
   ],
   "publishes": [],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "pizzepos/pago-gateway",
   "name": "pago-gateway",
   "version": "1.0.0",
-  "description": "El LÍDER DE PAGO: puerto provider-agnóstico pago.iniciar (request→response) que enruta a la PASARELA configurada (semilla: Stripe Checkout) y, al confirmarse el pago por webhook firmado, emite pago.confirmado. El dinero vive en la pasarela; aquí solo se inicia la sesión y se verifica la confirmación. Degradable: sin pasarela → NO_PASARELA. Swappable a Redsys/PayPal cambiando pasarela.kind + adapter. Capa OPCIONAL: si el proyecto no tiene pasarela, el pedido sigue el flujo de recogida (pickup) si",
+  "description": "El LÍDER DE PAGO: puerto provider-agnóstico pago.iniciar (request→response) que enruta a la PASARELA configurada (semilla: Stripe Checkout) y, al confirmarse el pago por webhook firmado, emite pago.confirmado. El dinero vive en la pasarela; aquí solo se inicia la sesión y se verifica la confirmación. Degradable: sin pasarela → NO_PASARELA. Swappable a Redsys/PayPal cambiando pasarela.kind + adapte",
   "subscribes": [],
   "publishes": [],
-  "tools": [],
-  "ui": [
-   "pago/iniciar"
-  ]
+  "tools": []
  },
  {
   "slug": "pizzepos/pedidos",
   "name": "pedidos",
   "version": "3.5.0",
-  "description": "Gestion completa de pedidos pizzepos. Dos tipos: tipo='pos' (flujo POS pizzeria con cuenta_id de cuentas-canales, items en pasos separados, enviado a cocina) y tipo='tienda' (vertical tienda PWA: plano sin cuenta_id, todos los items de una, cliente_nombre como ANCLA de recogida, estado pendiente_recogida). Recibe POS del comandero (bridge comandero.enviar_cocina) o UI handler. Recibe tienda via tool pedido.crear-tienda (auto-wire). Persiste en memoria con restauracion desde cuentas_activas.json ",
+  "description": "Gestion completa de pedidos pizzepos. Dos tipos: tipo='pos' (flujo POS pizzeria con cuenta_id de cuentas-canales, items en pasos separados, enviado a cocina) y tipo='tienda' (vertical tienda PWA: plano sin cuenta_id, todos los items de una, cliente_nombre como ANCLA de recogida, estado pendiente_recogida). Recibe POS del comandero (bridge comandero.enviar_cocina) o UI handler. Recibe tienda via to",
   "subscribes": [
    "caja.cerrada",
    "catalogo.actualizado",
@@ -4281,20 +3627,6 @@
    "pedido.total",
    "pedido.health",
    "pedido.crear-tienda"
-  ],
-  "ui": [
-   "pedido/list",
-   "pedido/get",
-   "pedido/create",
-   "pedido/add-item",
-   "pedido/update-item",
-   "pedido/delete-item",
-   "pedido/send-kitchen",
-   "pedido/complete",
-   "pedido/cancel",
-   "pedido/total",
-   "pedido/confirmar-recogida",
-   "pedido/health"
   ]
  },
  {
@@ -4336,21 +3668,7 @@
    "cuenta.cerrada_forzada",
    "dia.iniciado"
   ],
-  "tools": [],
-  "ui": [
-   "persistencia/cuentas_activas",
-   "persistencia/eventos",
-   "persistencia/eventos_fecha",
-   "persistencia/ventas",
-   "persistencia/ventas_fecha",
-   "persistencia/cuadre",
-   "persistencia/cuadre_fecha",
-   "persistencia/cierre",
-   "persistencia/iniciar_dia",
-   "persistencia/backup",
-   "persistencia/health",
-   "persistencia/metrics"
-  ]
+  "tools": []
  },
  {
   "slug": "pizzepos/productos",
@@ -4388,21 +3706,6 @@
    "productos.metrics",
    "productos.load_carta",
    "productos.carta_completa"
-  ],
-  "ui": [
-   "productos/list",
-   "productos/get",
-   "productos/search",
-   "productos/update",
-   "productos/delete",
-   "productos/categorias",
-   "productos/ingredientes",
-   "productos/pizzas",
-   "productos/stats",
-   "productos/health",
-   "productos/metrics",
-   "productos/load_carta",
-   "productos/carta_completa"
   ]
  },
  {
@@ -4419,14 +3722,7 @@
    "recetas.validar.request"
   ],
   "publishes": [],
-  "tools": [],
-  "ui": [
-   "recetas/listar",
-   "recetas/obtener",
-   "recetas/ingredientes",
-   "recetas/crear",
-   "recetas/validar"
-  ]
+  "tools": []
  },
  {
   "slug": "pizzepos/tarifas",
@@ -4447,11 +3743,6 @@
    "tarifas.get",
    "tarifas.register_variant",
    "tarifas.get_variants"
-  ],
-  "ui": [
-   "tarifas/get",
-   "tarifas/assign",
-   "tarifas/health"
   ]
  },
  {
@@ -4461,16 +3752,13 @@
   "description": "Modulo tecnicas en modo blueprint-driven. Libreria de tecnicas culinarias codificadas del proyecto (esferificacion, confitar, marinada, ahumado, etc.) con parametros tecnicos. Aggregate root con persistencia + history en data/projects/{slug}/tecnicas.json. Sin razonamiento de dominio mas alla de normalizar inputs en lenguaje natural y prevenir duplicados.",
   "subscribes": [],
   "publishes": [],
-  "tools": [],
-  "ui": [
-   "tecnicas/panel"
-  ]
+  "tools": []
  },
  {
   "slug": "pizzepos/tienda-api",
   "name": "tienda-api",
   "version": "1.1.0",
-  "description": "Canal HTTP de pedidos web — recibe POST desde la PWA generada por carta-digital/static-template y emite pedido.crear-tienda al bus. Tipo modulo_de_canal del contrato extensibilidad-modular, simetrico a whatsapp-bot pero para canal web. Stateless: ningun pedido persiste aqui — pizzepos/pedidos es el dueno del estado. Multi-proyecto: el project_slug llega como path param y se propaga al bus tal cual. CORS permisivo origin:* por diseno (PWA en subdominio del proyecto, API en dominio principal del s",
+  "description": "Canal HTTP de pedidos web — recibe POST desde la PWA generada por carta-digital/static-template y emite pedido.crear-tienda al bus. Tipo modulo_de_canal del contrato extensibilidad-modular, simetrico a whatsapp-bot pero para canal web. Stateless: ningun pedido persiste aqui — pizzepos/pedidos es el dueno del estado. Multi-proyecto: el project_slug llega como path param y se propaga al bus tal cual",
   "subscribes": [
    "pedido.crear-tienda.response"
   ],
@@ -4479,14 +3767,13 @@
    "tienda.pedido.fallido",
    "tienda.pedido.recibido"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "pizzepos/variaciones",
   "name": "variaciones",
   "version": "4.5.0",
-  "description": "Gestion de variaciones de productos pizzepos (quitar/anadir ingredientes). Reglas por producto: que se puede quitar, que se puede anadir, maximo de extras. Se configura desde la CARTA (carta.actualizada/editada). Calcula precio final consultando precios al modulo ingredientes (fuente unica via uiHandler.handle('ingredientes', ...)). Auto-valida cada comandero.item_agregado y emite variacion.{validada,rechazada}.",
+  "description": "Gestion de variaciones de productos pizzepos (quitar/anadir ingredientes). Reglas por producto: que se puede quitar, que se puede anadir, maximo de extras. Se configura desde la CARTA (carta.actualizada/editada). Calcula precio final consultando precios al modulo ingredientes (fuente unica via uiHandler.handle('ingredientes', ...)). Auto-valida cada comandero.item_agregado y emite variacion.{valid",
   "subscribes": [
    "carta.actualizada",
    "carta.editada",
@@ -4505,15 +3792,6 @@
    "variaciones.health",
    "variaciones.metrics",
    "variaciones.configurar"
-  ],
-  "ui": [
-   "variaciones/get",
-   "variaciones/validar",
-   "variaciones/calcular_precio",
-   "variaciones/health",
-   "variaciones/metrics",
-   "variaciones/evaluar",
-   "variaciones/configurar"
   ]
  },
  {
@@ -4528,8 +3806,7 @@
    "viabilidad.obtener.request"
   ],
   "publishes": [],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "planes-y-tiers",
@@ -4542,8 +3819,7 @@
    "project.activated"
   ],
   "publishes": [],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "planificador",
@@ -4559,8 +3835,7 @@
    "planificador.plan.listo",
    "planificador.validar.response"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "planos",
@@ -4576,8 +3851,7 @@
   ],
   "tools": [
    "planos.generar"
-  ],
-  "ui": []
+  ]
  },
  {
   "slug": "plugin-manager",
@@ -4596,20 +3870,13 @@
    "plugin.reloaded",
    "plugin.unloaded"
   ],
-  "tools": [],
-  "ui": [
-   "plugin-manager/get",
-   "plugin-manager/list",
-   "plugin-manager/reload",
-   "plugin-manager/health",
-   "plugin-manager/metrics"
-  ]
+  "tools": []
  },
  {
   "slug": "portal",
   "name": "portal",
   "version": "0.2.0",
-  "description": "La PUERTA de Enki hacia agentes externos (MCP) y operadores. Superficie de capacidades GUARDADA sobre getToolsForAI()+executeTool(): un cliente externo (Claude Code/Cursor) habla con esta puerta vía el bridge MCP (mcp/enki-mcp-server.js) sobre ui/request/portal/*. El poder no es nuevo (215 tools ya existen); lo nuevo es el GUARD: interruptor 'portal-mcp' (OFF=puerta cerrada), scope project|system, mode read|write, allowlist opcional, confirmación para mutaciones, y AUDIT (portal.invocado → propi",
+  "description": "La PUERTA de Enki hacia agentes externos (MCP) y operadores. Superficie de capacidades GUARDADA sobre getToolsForAI()+executeTool(): un cliente externo (Claude Code/Cursor) habla con esta puerta vía el bridge MCP (mcp/enki-mcp-server.js) sobre ui/request/portal/*. El poder no es nuevo (215 tools ya existen); lo nuevo es el GUARD: interruptor 'portal-mcp' (OFF=puerta cerrada), scope project|system,",
   "subscribes": [
    "interruptor.cambiado"
   ],
@@ -4618,12 +3885,7 @@
    "portal.confirmation.pendiente",
    "portal.invocado"
   ],
-  "tools": [],
-  "ui": [
-   "portal/list_tools",
-   "portal/call",
-   "portal/health"
-  ]
+  "tools": []
  },
  {
   "slug": "prisma/adaptador",
@@ -4634,8 +3896,7 @@
    "adaptador.adaptar.request"
   ],
   "publishes": [],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "prisma/arquetipos",
@@ -4650,8 +3911,7 @@
    "arquetipos.proponer.request"
   ],
   "publishes": [],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "prisma/boss",
@@ -4667,8 +3927,7 @@
    "project.activated"
   ],
   "publishes": [],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "prisma/calendario",
@@ -4690,8 +3949,7 @@
    "project.activated"
   ],
   "publishes": [],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "prisma/carrito",
@@ -4708,8 +3966,7 @@
    "project.activated"
   ],
   "publishes": [],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "prisma/cierre",
@@ -4723,8 +3980,7 @@
    "project.activated"
   ],
   "publishes": [],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "prisma/cobro",
@@ -4741,8 +3997,7 @@
    "project.activated"
   ],
   "publishes": [],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "prisma/comercio",
@@ -4751,8 +4006,7 @@
   "description": "Conductor universal de Prisma: el LLM opera un comercio cualquiera (catálogo → venta → preparación → entrega → cobro → escaparate) leyendo el ProductoUniversal y publicando RPC al bus. Blueprint-driven, sin runtime JS.",
   "subscribes": [],
   "publishes": [],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "prisma/compuestos",
@@ -4767,8 +4021,7 @@
    "compuestos.pendientes.request"
   ],
   "publishes": [],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "prisma/conversor",
@@ -4783,8 +4036,7 @@
    "conversor.referencia.request"
   ],
   "publishes": [],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "prisma/coste",
@@ -4796,8 +4048,7 @@
    "coste.costear.request"
   ],
   "publishes": [],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "prisma/costeador",
@@ -4810,8 +4061,7 @@
    "insumo.actualizado"
   ],
   "publishes": [],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "prisma/cuenta",
@@ -4827,8 +4077,7 @@
    "project.activated"
   ],
   "publishes": [],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "prisma/enforcement",
@@ -4841,8 +4090,7 @@
    "interruptor.solicitar_registro"
   ],
   "publishes": [],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "prisma/escaparate",
@@ -4857,8 +4105,7 @@
    "escaparate.publico.request"
   ],
   "publishes": [],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "prisma/formulador",
@@ -4871,8 +4118,7 @@
    "formulador.reconciliar.request"
   ],
   "publishes": [],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "prisma/insumos",
@@ -4887,8 +4133,7 @@
    "insumos.list.request"
   ],
   "publishes": [],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "prisma/opciones",
@@ -4899,8 +4144,7 @@
    "opciones.evaluar.request"
   ],
   "publishes": [],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "prisma/preparar",
@@ -4915,8 +4159,7 @@
    "preparar.listar.request"
   ],
   "publishes": [],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "prisma/producir",
@@ -4929,12 +4172,7 @@
    "producir.validar.request"
   ],
   "publishes": [],
-  "tools": [],
-  "ui": [
-   "producir/proyectar",
-   "producir/rendimiento",
-   "producir/validar"
-  ]
+  "tools": []
  },
  {
   "slug": "prisma/producto-manager",
@@ -4960,8 +4198,7 @@
    "producto.adaptado"
   ],
   "publishes": [],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "prisma/proyector",
@@ -4979,8 +4216,7 @@
    "vista.productos.request"
   ],
   "publishes": [],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "prisma/puente-compuesto",
@@ -4993,8 +4229,7 @@
    "compuesto.coste.calculado"
   ],
   "publishes": [],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "prisma/ticket",
@@ -5005,8 +4240,7 @@
    "ticket.formatear.request"
   ],
   "publishes": [],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "prisma/ui-forge",
@@ -5017,8 +4251,7 @@
    "ui-forge.generar.request"
   ],
   "publishes": [],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "proceso-negocio",
@@ -5036,8 +4269,7 @@
   "tools": [
    "proceso-negocio.completar_fase",
    "proceso-negocio.reiniciar_f0"
-  ],
-  "ui": []
+  ]
  },
  {
   "slug": "productor-modulos",
@@ -5057,8 +4289,7 @@
   "tools": [
    "productor.producir",
    "productor.validar"
-  ],
-  "ui": []
+  ]
  },
  {
   "slug": "project-manager",
@@ -5093,24 +4324,7 @@
    "project.state",
    "project.updated"
   ],
-  "tools": [],
-  "ui": [
-   "project/list",
-   "project/get",
-   "project/create",
-   "project/update",
-   "project/delete",
-   "project/activate",
-   "project/deactivate",
-   "project/save-session",
-   "project/restore-session",
-   "project/set-ai-config",
-   "project/set-last-conversation",
-   "project/get-default-conversation",
-   "project/get-unassigned",
-   "project/list-features",
-   "project/add-features"
-  ]
+  "tools": []
  },
  {
   "slug": "project-profile",
@@ -5129,10 +4343,6 @@
   "tools": [
    "project-profile.get",
    "project-profile.update"
-  ],
-  "ui": [
-   "project-profile/get",
-   "project-profile/update"
   ]
  },
  {
@@ -5161,28 +4371,13 @@
    "prompt.list",
    "prompt.get",
    "prompt.render"
-  ],
-  "ui": [
-   "prompt/list",
-   "prompt/get",
-   "prompt/create",
-   "prompt/update",
-   "prompt/delete",
-   "prompt/versions",
-   "preset/list",
-   "preset/get",
-   "preset/create",
-   "preset/delete",
-   "preset/apply",
-   "composer/render",
-   "prompt/analytics"
   ]
  },
  {
   "slug": "propiocepcion",
   "name": "propiocepcion",
   "version": "1.0.0",
-  "description": "Capa de propiocepcion del sistema. Reflejo JS siempre-encendido que captura del bus el historial de eventos de los modulos vinculados por proyecto (recetario) — tanto lo consciente (ops dirigidas por el LLM) como lo reflejo (ejecuciones JS) — y lo persiste por proyecto. Es la copia eferente: deja constancia de lo que paso en el mundo del modulo para que el LLM pueda ser consciente de ello (el nervio que inyecta esa constancia en el contexto del turno es la segunda mitad, en ai-gateway). Mata el ",
+  "description": "Capa de propiocepcion del sistema. Reflejo JS siempre-encendido que captura del bus el historial de eventos de los modulos vinculados por proyecto (recetario) — tanto lo consciente (ops dirigidas por el LLM) como lo reflejo (ejecuciones JS) — y lo persiste por proyecto. Es la copia eferente: deja constancia de lo que paso en el mundo del modulo para que el LLM pueda ser consciente de ello (el nerv",
   "subscribes": [
    "fs.read.response",
    "project.activated",
@@ -5193,9 +4388,6 @@
   ],
   "tools": [
    "propiocepcion.leer"
-  ],
-  "ui": [
-   "propiocepcion/leer"
   ]
  },
  {
@@ -5212,8 +4404,7 @@
    "publicador.publicado",
    "publicar.html.response"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "radar-fuente",
@@ -5227,8 +4418,7 @@
   "publishes": [
    "radar-fuente.configurada"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "recetario-creativo",
@@ -5255,8 +4445,7 @@
    "creativo.prototipo.iterar",
    "creativo.alineacion.evaluar",
    "creativo.manifiesto.actualizar"
-  ],
-  "ui": []
+  ]
  },
  {
   "slug": "redactor",
@@ -5273,8 +4462,7 @@
    "redactor.borrador_listo",
    "redactor.redactar.failed"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "reloj",
@@ -5290,8 +4478,7 @@
    "reloj.ciclo_iniciado",
    "reloj.ciclo_semana_vacia"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "rpc-index",
@@ -5303,8 +4490,7 @@
    "rpc.ver.request"
   ],
   "publishes": [],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "scheduler",
@@ -5326,8 +4512,7 @@
    "scheduler.list_jobs",
    "scheduler.create_job",
    "scheduler.trigger_job"
-  ],
-  "ui": []
+  ]
  },
  {
   "slug": "scope-provider",
@@ -5346,8 +4531,7 @@
   ],
   "tools": [
    "scope_provider"
-  ],
-  "ui": []
+  ]
  },
  {
   "slug": "security-core",
@@ -5363,10 +4547,7 @@
    "interruptor.registrar",
    "security.bus.mode_changed"
   ],
-  "tools": [],
-  "ui": [
-   "security-core/estado"
-  ]
+  "tools": []
  },
  {
   "slug": "security-p2p",
@@ -5390,14 +4571,6 @@
    "security-p2p.revoke-peer",
    "security-p2p.trusted-peers",
    "security-p2p.health"
-  ],
-  "ui": [
-   "security-p2p/status",
-   "security-p2p/public-key",
-   "security-p2p/trust-peer",
-   "security-p2p/revoke-peer",
-   "security-p2p/trusted-peers",
-   "security-p2p/health"
   ]
  },
  {
@@ -5416,8 +4589,7 @@
    "sonda.recolectar.failed",
    "sonda.senales_cosechadas"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "staff-manager",
@@ -5434,24 +4606,7 @@
    "staff.session.tap_in",
    "staff.session.tap_out"
   ],
-  "tools": [],
-  "ui": [
-   "staff-manager/status",
-   "staff-manager/employee.create",
-   "staff-manager/employee.list",
-   "staff-manager/employee.get",
-   "staff-manager/employee.update",
-   "staff-manager/employee.delete",
-   "staff-manager/session.tap_in",
-   "staff-manager/session.tap_out",
-   "staff-manager/session.active",
-   "staff-manager/session.history",
-   "staff-manager/session.stale",
-   "staff-manager/session.manager_close",
-   "staff-manager/nfc.employee_card",
-   "staff-manager/nfc.core_tag",
-   "staff-manager/nfc.parse"
-  ]
+  "tools": []
  },
  {
   "slug": "system-coherence-analyzer",
@@ -5466,8 +4621,7 @@
    "agent.execute.response",
    "fs.read.request"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "system-inspector",
@@ -5479,8 +4633,7 @@
    "core/+/events/#"
   ],
   "publishes": [],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "telegram-bridge",
@@ -5501,8 +4654,7 @@
    "telegram.bridge.envio_fallido",
    "telegram.bridge.vinculado"
   ],
-  "tools": [],
-  "ui": []
+  "tools": []
  },
  {
   "slug": "telegram-service",
@@ -5556,8 +4708,7 @@
    "telegram.get_chat",
    "telegram.set_commands",
    "telegram.list_bots"
-  ],
-  "ui": []
+  ]
  },
  {
   "slug": "text-editor",
@@ -5577,20 +4728,13 @@
    "editor.saved",
    "editor.validate.response"
   ],
-  "tools": [],
-  "ui": [
-   "editor/open",
-   "editor/save",
-   "editor/validate",
-   "editor/format",
-   "editor/health"
-  ]
+  "tools": []
  },
  {
   "slug": "verificador-visual",
   "name": "verificador-visual",
   "version": "1.3.0",
-  "description": "Órgano que abre un navegador headless (obscura, Rust, sin Chromium) y verifica que un HTML renderiza sin romperse. MULTI-ÁNGULO: motivos HARD (overflow, errores JS/consola, página en blanco, imágenes rotas → bloquea) + avisos SOFT (responsive móvil + accesibilidad: alt/lang/legibilidad/contraste → surfaced, no bloquea). El freno de RENDER que complementa el freno estructural de carta-design/carta-digital. Habla obscura por CDP; degrada elegante si no responde.",
+  "description": "Órgano que abre un navegador headless (obscura, Rust, sin Chromium) y verifica que un HTML renderiza sin romperse. MULTI-ÁNGULO: motivos HARD (overflow, errores JS/consola, página en blanco, imágenes rotas → bloquea) + avisos SOFT (responsive móvil + accesibilidad: alt/lang/legibilidad/contraste → surfaced, no bloquea). El freno de RENDER que complementa el freno estructural de carta-design/carta-",
   "subscribes": [
    "render.verificar.request"
   ],
@@ -5602,17 +4746,13 @@
   ],
   "tools": [
    "verificador-visual.verificar"
-  ],
-  "ui": [
-   "verificador-visual/verificar",
-   "verificador-visual/health"
   ]
  },
  {
   "slug": "whatsapp-bot",
   "name": "whatsapp-bot",
   "version": "1.5.0",
-  "description": "Bot escueto multi-proyecto sobre WhatsApp Cloud API (Meta). Maquina de estados pequena: webhook recibe mensaje, parser detecta si es saludo o pedido formateado de la PWA tienda; si es pedido publica pedido.crear.request a pedidos y notifica al staff via telegram-service; si es saludo responde con el link de la PWA del proyecto. Multi-proyecto: mapping phone_number_id -> project_slug construido al onLoad escaneando data/projects/*/config/project.json. Credenciales (token Cloud API + verify_token ",
+  "description": "Bot escueto multi-proyecto sobre WhatsApp Cloud API (Meta). Maquina de estados pequena: webhook recibe mensaje, parser detecta si es saludo o pedido formateado de la PWA tienda; si es pedido publica pedido.crear.request a pedidos y notifica al staff via telegram-service; si es saludo responde con el link de la PWA del proyecto. Multi-proyecto: mapping phone_number_id -> project_slug construido al ",
   "subscribes": [
    "catalogo.actualizado",
    "cocina.pedido_listo",
@@ -5638,10 +4778,6 @@
    "whatsapp.enviar_interactivo",
    "whatsapp.enviar_encuesta",
    "whatsapp.enviar_catalogo"
-  ],
-  "ui": [
-   "whatsapp/get_config",
-   "whatsapp/set_config"
   ]
  }
 ]

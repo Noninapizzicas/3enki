@@ -1,0 +1,43 @@
+{
+  "_doc": "Manifest de contabilidad-entrada/padron-terceros — CUSTODIO CON PERSISTENCIA (N2, hoja del plan). Identidad UNICA por numero fiscal: un proveedor escrito de tres formas sigue siendo UNO (faceta de identidad del mismo maestro N1). UN SOLO ESCRITOR: el escritor del maestro (MAESTRO_TERCEROS); cualquier otro rol es rechazado (403). Invariantes: un solo escritor por parcela; no se borra — unificar SUMA (las formas escritas se apilan como `variantes` append-only, la canonica solo se completa); dato ausente = desconocido (campo que no llega queda null, no se estima); la normalizacion del numero fiscal es MECANICA (mayusculas/sin separadores), no valida contra ninguna ley cableada. Persiste por proyecto con PosPersistencia (storage /contabilidad/padron-terceros/padron-terceros.json), restaura en project.activated y vuelca en onUnload. Proyeccion `_unificar` (escritura, guard de rol). Publica contabilidad.identidad_unificada.",
+  "name": "padron-terceros",
+  "version": "0.1.0",
+  "description": "Custodio (N2): identidad unica por numero fiscal — un tercero escrito de varias formas sigue siendo uno; un solo escritor (MAESTRO_TERCEROS), unificar suma y nunca borra; persiste por proyecto.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "padron-terceros.unificar.request",
+      "handler": "onUnificarRequest",
+      "description": "RPC custodio: {project_id, rol:'MAESTRO_TERCEROS', tercero:{nif, nombre?, roles?}} → {project_id, tercero, creada}. Guard Rol=MAESTRO_TERCEROS (segundo escritor → 403). Unifica por numero fiscal normalizado: si la identidad es nueva la crea; si existe APILA la forma escrita como variante (append-only, no borra) y suma roles. Publica contabilidad.identidad_unificada y responde por padron-terceros.unificar.response; nif ausente → padron-terceros.unificar.failed."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Restaura el padron de identidades del proyecto activado desde el storage (PosPersistencia)."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "padron-terceros.unificar.response",
+      "handler": "_atender",
+      "description": "Respuesta RPC correlada de padron-terceros.unificar.request → {request_id, status:200, data:{project_id, tercero, creada}}. Emitida por el helper _atender."
+    },
+    {
+      "event": "padron-terceros.unificar.failed",
+      "description": "Par de fallo determinista (N2): rol != MAESTRO_TERCEROS (segundo escritor), tercero sin numero fiscal o project_id ausente → {status, error:{code, message, details?}}. Cierra el circulo de padron-terceros.unificar.request."
+    },
+    {
+      "event": "contabilidad.identidad_unificada",
+      "description": "Fire-and-forget (N2): una identidad de tercero quedo unificada por numero fiscal → {project_id, tercero, creada, correlation_id}. Lo consume el maestro de terceros (N1)."
+    }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "padron-terceros.unificar",
+      "handler": "onUnificarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
+  ]
+}

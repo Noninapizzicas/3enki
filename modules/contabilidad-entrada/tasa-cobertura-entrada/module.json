@@ -3,6 +3,8 @@
   "name": "tasa-cobertura-entrada",
   "version": "0.1.0",
   "description": "Reflejo stateless (P4): proporción de hechos que entran sin intervención vs caen a cola; LEE la métrica única de cobertura (A12) y nunca la recalcula.",
+  "blueprint_driven": true,
+  "blueprint_path": "tasa-cobertura-entrada.blueprint.json",
   "language": "es",
   "subscribes": [
     {

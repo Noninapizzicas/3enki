@@ -3,6 +3,8 @@
   "name": "encolado-excepcion",
   "version": "0.1.0",
   "description": "Custodio (A8.1): la valvula de lo dudoso — el flujo continua y lo dudoso espera en cola con destino derivado de su naturaleza (contable→ASESOR, negocio→DUENO); un solo escritor y encolado idempotente.",
+  "blueprint_driven": true,
+  "blueprint_path": "encolado-excepcion.blueprint.json",
   "language": "es",
   "subscribes": [
     {

@@ -3,6 +3,8 @@
   "name": "liquidacion-iva",
   "version": "0.1.0",
   "description": "Reflejo stateless (D1): liquidacion de IVA devengado/soportado derivada del libro — tipos de IVA declarables por negocio y ejercicio, nunca cableados.",
+  "blueprint_driven": true,
+  "blueprint_path": "liquidacion-iva.blueprint.json",
   "language": "es",
   "subscribes": [
     {

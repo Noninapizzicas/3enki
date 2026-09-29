@@ -3,6 +3,8 @@
   "name": "puerto-nomina",
   "version": "0.1.0",
   "description": "Puente (G4): frontera con el sistema de nominas externo — recibe el hecho de nomina con origen, conceptos y tipos declarables, sin calcular la nomina ni imponer catalogo alguno.",
+  "blueprint_driven": true,
+  "blueprint_path": "puerto-nomina.blueprint.json",
   "language": "es",
   "subscribes": [
     {

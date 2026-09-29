@@ -1,0 +1,129 @@
+{
+  "id": "maestro-cuentas-bancarias",
+  "version": "blueprint-0.1.0",
+  "_nota": "FASE 6½ · la interfaz DECLARADA del módulo maestro-cuentas-bancarias (CUSTODIO CON PERSISTENCIA de contabilidad-libro, E11, hoja del plan). La parcela DECLARABLE de las CUENTAS BANCARIAS del negocio y su MONEDA: un negocio → N cuentas. Sin este maestro, 'el banco' es un número falso — no hay contra qué conciliar (E1), ni de dónde derivar el saldo de tesorería (E4). EL SISTEMA NO LAS INVENTA: las DECLARA el dueño/asesor; jamás se fabrica una cuenta ni se asume una moneda. La sección `ui` es lo que el generador schema→UI (BlueprintForm, 4 zonas) necesita para renderizar el panel; sin LLM: TODO lo que produce sale de aquí. Fuente de verdad: modules/contabilidad-libro/maestro-cuentas-bancarias/{module.json,index.js}. ui_handlers reales: maestro-cuentas-bancarias.declarar y maestro-cuentas-bancarias.listar (workspace_module/barra_modulos).",
+  "schema": "blueprint-interfaz-v2",
+  "language": "es",
+  "titulo": "Las cuentas bancarias del negocio",
+  "eventos_publicados": [
+    "maestro-cuentas-bancarias.declarar.response",
+    "maestro-cuentas-bancarias.declarar.failed",
+    "maestro-cuentas-bancarias.listar.response",
+    "maestro-cuentas-bancarias.listar.failed",
+    "contabilidad.cuenta_bancaria_declarada"
+  ],
+  "eventos_que_escucho": [],
+  "_escucho_nota": "VACÍO A PROPÓSITO: el reflejo ya atiende en module.json.subscribes maestro-cuentas-bancarias.declarar.request, maestro-cuentas-bancarias.listar.request (RPC humanas) y project.activated (restauración PosPersistencia); repetir cualquiera aquí daría ANTICOLISION-001 (lo atenderían los dos). Es un CUSTODIO determinista: no tiene cajón fuzzy ni evento fire-and-forget que el LLM deba procesar.",
+  "transporte": {
+    "rpc": [
+      "maestro-cuentas-bancarias.declarar.request -> .response",
+      "maestro-cuentas-bancarias.listar.request -> .response"
+    ],
+    "entrada": [
+      "maestro-cuentas-bancarias.declarar.request",
+      "maestro-cuentas-bancarias.listar.request"
+    ],
+    "salida": [
+      "maestro-cuentas-bancarias.declarar.response",
+      "maestro-cuentas-bancarias.listar.response",
+      "contabilidad.cuenta_bancaria_declarada"
+    ],
+    "qos": "publishAndWait (request/response correlado) en declarar y listar; contabilidad.cuenta_bancaria_declarada es fire-and-forget (lo LEEN saldo-tesoreria E4, conciliacion-bancaria E1 y prevision-caja E5 para dejar de tratar 'el banco' como un número falso). project.activated lo atiende el reflejo para restaurar el maestro del proyecto."
+  },
+  "contrato": {
+    "DeclararInput": "{ project_id:uuid, rol:'DECLARACION_CUENTA', cuenta:{ id_cuenta|iban, moneda?, banco?, alias?, cuenta_contable?, activa? } }",
+    "DeclararOutput": "{ project_id, cuenta:{ id_cuenta, moneda, banco, alias, cuenta_contable, activa, creada_en, actualizada_en, historial }, actualizada:bool, total_cuentas }",
+    "ListarInput": "{ project_id:uuid }",
+    "ListarOutput": "{ project_id, total, ids:[id_cuenta], cuentas:[{ id_cuenta, moneda, banco, alias, cuenta_contable, activa }] } en orden estable (orden de alta)",
+    "Errores": "rol != DECLARACION_CUENTA -> 403 PERMISSION_DENIED (segundo escritor) · cuenta o id_cuenta ausente -> 400. Cada error publica su par .failed (declarar.failed / listar.failed).",
+    "Invariantes": "`listar` NO muta: lectura determinista en orden estable de alta. `declarar` es UPSERT declarativo: una cuenta con el mismo id se ACTUALIZA (el dueño corrige) guardando historial de cambios — nunca se borra en silencio. Nada cableado: ninguna lista de bancos, ningún país, ningún IBAN de ejemplo, ninguna moneda por defecto. La moneda es ParametroDeclarable: si no viene queda null = desconocida (no se estima); igual que el resto de campos ausentes."
+  },
+  "ui": {
+    "type": "workspace_module",
+    "zone": "modulos",
+    "ops": {
+      "declarar": {
+        "titulo": "Declarar (o actualizar) una cuenta bancaria",
+        "descripcion": "Mesa de trabajo del maestro de cuentas bancarias. UN SOLO ESCRITOR: solo el camino de declaración (rol DECLARACION_CUENTA) asienta cuentas; cualquier otro rol es rechazado con 403. Es un UPSERT declarativo: declarar una cuenta con el mismo id la ACTUALIZA guardando historial de cambios — nunca se borra en silencio. EL SISTEMA NO INVENTA NADA: ninguna lista de bancos, ningún país, ningún IBAN de ejemplo, ninguna moneda por defecto. Todo campo ausente queda null = desconocido (no se estima); la moneda de cada cuenta es DATO declarable y si no viene queda null.",
+        "zona": "formulario",
+        "args": [
+          {
+            "nombre": "rol",
+            "tipo": "select",
+            "enum": [
+              "DECLARACION_CUENTA"
+            ],
+            "required": true,
+            "descripcion": "El rol del escritor. El maestro tiene UN solo escritor: solo el dueño/asesor (DECLARACION_CUENTA) declara cuentas; cualquier otro valor es rechazado (403)."
+          },
+          {
+            "nombre": "cuenta.id_cuenta",
+            "tipo": "string",
+            "required": true,
+            "placeholder": "ES91 2100 0418 4502 0005 1332",
+            "descripcion": "El identificador de la cuenta (la clave natural del maestro). Es DATO declarado: el módulo no deriva ni valida ningún formato de IBAN. (Alias aceptado por el contrato: `cuenta.iban`.) Debe ser único: el mismo id actualiza, no duplica."
+          },
+          {
+            "nombre": "cuenta.moneda",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "(vacío = desconocida, no se estima)",
+            "descripcion": "La MONEDA declarada de la cuenta (ParametroDeclarable, se normaliza a mayúsculas). Si no se declara, queda null = desconocida: el sistema no asume ninguna moneda por defecto. Es DATO: el módulo no cablea EUR ni ninguna divisa."
+          },
+          {
+            "nombre": "cuenta.banco",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "(vacío = desconocido)",
+            "descripcion": "El banco declarado de la cuenta. Es DATO libre: el módulo NO tiene ninguna lista de bancos cableada. Si no se declara, queda null (desconocido)."
+          },
+          {
+            "nombre": "cuenta.alias",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "Cuenta operativa",
+            "descripcion": "El alias con el que el negocio reconoce la cuenta (DATO libre). Si no se declara, queda null."
+          },
+          {
+            "nombre": "cuenta.cuenta_contable",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "5720",
+            "descripcion": "La cuenta contable del PLAN que corresponde a esta cuenta bancaria. Es el puente con el mayor (B3): sin ella declarada, el saldo de tesorería (E4) para esta cuenta queda [ABIERTO] (null), no se adivina. Dato del negocio, no una constante."
+          },
+          {
+            "nombre": "cuenta.activa",
+            "tipo": "boolean",
+            "required": false,
+            "descripcion": "Si la cuenta está activa (por defecto sí). Es DATO declarado: desmarcarla no borra la cuenta — solo la marca inactiva, y el cambio queda en el historial."
+          }
+        ]
+      },
+      "listar": {
+        "titulo": "Listar las cuentas del negocio",
+        "descripcion": "Lectura DETERMINISTA que NO muta: devuelve todas las cuentas declaradas del proyecto en su orden estable de alta. Es la fuente que beben saldo-tesoreria (E4) y prevision-caja (E5) por evento. Las cuentas y su moneda las declara el dueño/asesor — el sistema no inventa ninguna y un campo ausente vuelve null (desconocido), nunca estimado.",
+        "zona": "acciones",
+        "args": []
+      }
+    },
+    "datos": [
+      {
+        "op": "listar",
+        "titulo": "Las cuentas bancarias del negocio",
+        "refresh_on": [
+          "contabilidad.cuenta_bancaria_declarada"
+        ],
+        "columnas": [
+          "id_cuenta",
+          "moneda",
+          "banco",
+          "alias",
+          "cuenta_contable",
+          "activa"
+        ]
+      }
+    ],
+    "_refresh_nota": "refresh_on = contabilidad.cuenta_bancaria_declarada: es el evento REAL que este custodio publica al quedar una cuenta declarada/actualizada (module.json.publishes), y es la señal de que la cinta del maestro cambia. La tabla se carga/refresca con la op de LECTURA `listar` (RPC real, orden estable de alta); `declarar` es la op de ESCRITURA y no devuelve la tabla (devuelve la cuenta y el contador). Los demás publishes son respuestas RPC (.response/.failed) y no sirven para refrescar una tabla. `moneda` en la cinta puede venir null: es un campo declarable no declarado (desconocido) — no se rellena."
+  },
+  "filosofia": "El banco no es un número: son cuentas, y las cuentas las pone el dueño. Un maestro que se inventa un banco, un país o una moneda por defecto fabrica un mundo paralelo donde conciliar cuadra siempre y el saldo miente en silencio. Por eso aquí no hay ninguna lista cableada ni ningún valor por defecto: lo que se declara queda, lo que no se declara queda null a la vista, y corregir una cuenta SUMA una versión al historial en vez de borrar la anterior. Es el suelo sobre el que se apoyan el cruce (E1) y el saldo (E4): si el maestro está mal, todo lo que cuelga de él está mal."
+}

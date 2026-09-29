@@ -3,6 +3,8 @@
   "name": "emision-factura-venta",
   "version": "0.1.0",
   "description": "Custodio (O1): emite la cara de la factura de venta con serie/numeracion gobernada (numero duplicado = corrupcion, un solo escritor) — contabilidad emite y registra su documento, no lo cobra.",
+  "blueprint_driven": true,
+  "blueprint_path": "emision-factura-venta.blueprint.json",
   "language": "es",
   "subscribes": [
     {

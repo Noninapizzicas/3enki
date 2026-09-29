@@ -3,6 +3,8 @@
   "name": "regla-movimiento-bancario",
   "version": "0.1.0",
   "description": "Custodio (E8): parcela de reglas declarables de movimientos bancarios — el corte duro regla→apunte, sin inventar ninguna cuenta cuando no hay regla y con un solo escritor (ratificacion L10).",
+  "blueprint_driven": true,
+  "blueprint_path": "regla-movimiento-bancario.blueprint.json",
   "language": "es",
   "subscribes": [
     {

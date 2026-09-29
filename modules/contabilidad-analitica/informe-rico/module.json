@@ -3,6 +3,8 @@
   "name": "informe-rico",
   "version": "0.1.0",
   "description": "Reflejo (K3): compone la cifra ya calculada con el contexto declarado (periodo, origen, comparativas) — solo la composicion mecanica; la narracion y el «que hacer» son de sus satelites.",
+  "blueprint_driven": true,
+  "blueprint_path": "informe-rico.blueprint.json",
   "language": "es",
   "subscribes": [
     {

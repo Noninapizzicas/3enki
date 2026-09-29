@@ -3,6 +3,8 @@
   "name": "cuadro-mando-contable",
   "version": "0.1.0",
   "description": "Reflejo agregado del JEFE (J8): el cuadro de conjunto (caja · resultado · margen · desviacion · ejercicio) COMPONE las cifras ya calculadas por sus dueños por evento — nunca recalcula ni baja al asiento, y lo que falta queda abierto, no a 0.",
+  "blueprint_driven": true,
+  "blueprint_path": "cuadro-mando-contable.blueprint.json",
   "language": "es",
   "subscribes": [
     {

@@ -3,6 +3,8 @@
   "name": "factura-rectificativa",
   "version": "0.1.0",
   "description": "Reflejo stateless (O2): deriva la rectificativa de una factura emitida — correccion comercial posterior que NO borra nada; el original no se muta y la correccion SUMA (append-only).",
+  "blueprint_driven": true,
+  "blueprint_path": "factura-rectificativa.blueprint.json",
   "language": "es",
   "subscribes": [
     {

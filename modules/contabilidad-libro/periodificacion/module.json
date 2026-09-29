@@ -3,6 +3,8 @@
   "name": "periodificacion",
   "version": "0.1.0",
   "description": "Reflejo (C3): imputa cada hecho a su periodo con el criterio declarado (devengo/caja) y conserva fecha operación y fecha valor — no elige en silencio.",
+  "blueprint_driven": true,
+  "blueprint_path": "periodificacion.blueprint.json",
   "language": "es",
   "subscribes": [
     {

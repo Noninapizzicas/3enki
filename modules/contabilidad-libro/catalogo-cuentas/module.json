@@ -3,6 +3,8 @@
   "name": "catalogo-cuentas",
   "version": "0.1.0",
   "description": "Custodio (B1): parcela del plan contable declarable/importable del asesor — un solo escritor (PUERTO_PLAN_CONTABLE), no se sobrescribe; persiste por proyecto y sirve de base a la contrapartida y al libro.",
+  "blueprint_driven": true,
+  "blueprint_path": "catalogo-cuentas.blueprint.json",
   "language": "es",
   "subscribes": [
     {

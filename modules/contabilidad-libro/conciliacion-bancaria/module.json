@@ -3,6 +3,8 @@
   "name": "conciliacion-bancaria",
   "version": "0.1.0",
   "description": "Reflejo (E1): cruza extracto y diario por clave natural determinista — calculo puro que NO interpreta lo que no casa; el juicio de la partida ambigua queda aislado en partida-no-identificada (E7).",
+  "blueprint_driven": true,
+  "blueprint_path": "conciliacion-bancaria.blueprint.json",
   "language": "es",
   "subscribes": [
     {

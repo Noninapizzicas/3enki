@@ -3,6 +3,8 @@
   "name": "marca-sociedad",
   "version": "0.1.0",
   "description": "Reflejo (I1): la marca de sociedad — etiqueta cada asiento con su sociedad (mecanico, cero juicio), base del grupo multi-sociedad; sin sociedad declarada el asiento queda sin marcar y [ABIERTO], nunca con una sociedad inventada.",
+  "blueprint_driven": true,
+  "blueprint_path": "marca-sociedad.blueprint.json",
   "language": "es",
   "subscribes": [
     {

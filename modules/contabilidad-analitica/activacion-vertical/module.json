@@ -3,6 +3,8 @@
   "name": "activacion-vertical",
   "version": "0.1.0",
   "description": "Reflejo (K4): enciende la vertical contable cuando el alta del negocio lo pide — deriva de la configuracion declarada que verticales se activan, sin decidir ni asumir ninguna por defecto.",
+  "blueprint_driven": true,
+  "blueprint_path": "activacion-vertical.blueprint.json",
   "language": "es",
   "subscribes": [
     {

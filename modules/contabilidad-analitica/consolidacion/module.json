@@ -3,6 +3,8 @@
   "name": "consolidacion",
   "version": "0.1.0",
   "description": "Reflejo (I3): consolidacion del grupo multi-sociedad completo — estados del conjunto con criterio DECLARADO y agregacion determinista, restando las eliminaciones intercompany (I2); solo consolida lo declarado y nada se estima.",
+  "blueprint_driven": true,
+  "blueprint_path": "consolidacion.blueprint.json",
   "language": "es",
   "subscribes": [
     {

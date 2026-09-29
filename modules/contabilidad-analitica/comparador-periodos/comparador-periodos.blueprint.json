@@ -1,0 +1,156 @@
+{
+  "id": "comparador-periodos",
+  "version": "blueprint-0.1.0",
+  "_nota": "FASE 6½ · la interfaz DECLARADA del módulo comparador-periodos (REFLEJO STATELESS de contabilidad-analitica, J9, hoja del plan), tipo inline_render: NO es mesa de trabajo ni panel de control — se RENDERIZA EN LA CONVERSACIÓN del chat. COMPARAR: ejercicio vs ejercicio, mes vs mes, real vs presupuesto — la lente del jefe para poder DECIDIR (sin comparación no se sabe si el mes ha ido bien o mal). Determinista: mismos dos periodos + misma métrica → mismo delta. REUTILIZA J3/J4, NO los duplica: el modo real_vs_presupuesto DELEGA en desviacion (J4) POR EVENTO (aquí solo se PRESENTA el delta con su signo y su avisa); en ejercicio_vs_ejercicio y mes_vs_mes cada extremo se PIDE ya calculado a su dueño POR EVENTO (margen → J2, resultado → C2, caja → E4) — la única aritmética propia es la DIFERENCIA entre los dos extremos. LA MÉTRICA Y EL MODO SON DECLARABLES: sin métrica o sin modo declarado NO se elige por el jefe (delta null, faltan declarado). Sin los dos extremos → delta:null (no se compara contra un 0 que nadie midió). La sección `ui` es MÍNIMA y orientada a lo que el chat PINTA (los dos extremos y su delta), no a un formulario. Fuente de verdad: modules/contabilidad-analitica/comparador-periodos/{module.json,index.js}. ui_handler real: comparador-periodos.comparar (inline_render/area_chat).",
+  "schema": "blueprint-interfaz-v2",
+  "language": "es",
+  "titulo": "La comparación de periodos (aparece en el chat)",
+  "eventos_publicados": [
+    "comparador-periodos.comparar.response",
+    "comparador-periodos.comparar.failed"
+  ],
+  "eventos_que_escucho": [],
+  "_escucho_nota": "VACÍO A PROPÓSITO: el reflejo ya atiende en module.json.subscribes comparador-periodos.comparar.request (onCompararRequest, su única RPC); repetirlo aquí daría ANTICOLISION-001 (lo atenderían los dos). Es un REFLEJO STATELESS determinista: no persiste, no tiene cajón fuzzy y no publica ningún evento de dominio — su única salida es la respuesta RPC correlada que el chat pinta. La delegación en desviacion (J4) y la lectura de cada extremo en margen-analitico (J2) / cuenta-resultados (C2) / saldo-tesoreria (E4) se hacen POR EVENTO dentro del cálculo (dependencias internas, best-effort), NO como suscripciones vivas.",
+  "transporte": {
+    "rpc": [
+      "comparador-periodos.comparar.request -> .response",
+      "desviacion.calcular.request -> .response",
+      "margen-analitico.calcular.request -> .response",
+      "cuenta-resultados.calcular.request -> .response",
+      "saldo-tesoreria.calcular.request -> .response"
+    ],
+    "entrada": [
+      "comparador-periodos.comparar.request"
+    ],
+    "salida": [
+      "comparador-periodos.comparar.response"
+    ],
+    "qos": "publishAndWait (request/response correlado) en la comparación. El modo real_vs_presupuesto DELEGA en desviacion (J4) POR EVENTO (no recalcula la desviación ni duplica J3); en periodo vs periodo cada extremo se PIDE ya calculado a su dueño POR EVENTO (margen → J2, resultado → C2, caja → E4): esos RPC cruzados son dependencias internas de la comparación, NO superficie del chat. En modo inline_render NADA se suscribe en vivo: el chat pinta la respuesta del RPC cuando el humano lo invoca."
+  },
+  "contrato": {
+    "CompararInput": "{ project_id:uuid, modo:'ejercicio_vs_ejercicio'|'mes_vs_mes'|'real_vs_presupuesto', metrica?:'margen'|'resultado'|'caja', desde?/hasta?:str, a?/b?:num|{periodo,valor}, eje?/dimension?:str, periodo?:str, real?/objetivo?/umbral?:num }",
+    "CompararOutput": "{ project_id, modo, metrica, fuente_metrica, a:{periodo,valor,fuente,rol}, b:{periodo,valor,fuente,rol}, delta, delta_relativa, signo:'SUBE'|'BAJA'|'IGUAL', direccion, avisa?, umbral?, abierto, faltan:[str], motivo }",
+    "Errores": "project_id ausente → 400 (par comparador-periodos.comparar.failed).",
+    "Invariantes": "DETERMINISTA: mismos dos periodos + misma métrica → mismo delta. Dato ausente = desconocido: sin modo o sin métrica declarada → delta:null y abierto:true (no se elige por el jefe); sin los dos extremos → delta:null (no se compara contra un 0 que nadie midió). REUTILIZA SIN DUPLICAR: real_vs_presupuesto delega en J4; periodo vs periodo pide cada extremo ya calculado a J2/C2/E4 — cero reglas cableadas. LEY/PARÁMETRO COMO DATO. NO escribe, NO persiste."
+  },
+  "ui": {
+    "type": "inline_render",
+    "zone": "modulos",
+    "ops": {
+      "comparar": {
+        "titulo": "Comparar dos periodos",
+        "descripcion": "Lo que el chat pinta cuando el humano pregunta «¿cómo va este mes contra el anterior?» o «¿real contra presupuesto?»: los DOS extremos con su valor y su origen, y el DELTA entre ellos con su signo y su dirección. NO es un formulario: es una consulta que el chat invoca para pintar la comparación en la conversación. Es determinista y no escribe nada. El modo real_vs_presupuesto NO recalcula la desviación — la delega en desviacion (J4) POR EVENTO; en periodo vs periodo cada extremo se pide YA CALCULADO a su dueño (margen J2, resultado C2, caja E4). Sin modo o sin métrica declarada el chat pinta que no compara (no se elige por el jefe); sin los dos extremos el chat pinta que falta el valor (no se compara contra un 0 que nadie midió).",
+        "zona": "acciones",
+        "args": [
+          {
+            "nombre": "modo",
+            "tipo": "select",
+            "enum": [
+              "ejercicio_vs_ejercicio",
+              "mes_vs_mes",
+              "real_vs_presupuesto"
+            ],
+            "required": true,
+            "descripcion": "EL MODO de comparación. Es obligatorio: sin modo declarado no se compara (delta:null). Si el jefe declara real+objetivo explícitos, se asume real_vs_presupuesto. Este módulo NO elige por él."
+          },
+          {
+            "nombre": "metrica",
+            "tipo": "select",
+            "enum": [
+              "margen",
+              "resultado",
+              "caja"
+            ],
+            "required": false,
+            "descripcion": "LA MÉTRICA que se compara (en periodo vs periodo). Es DATO declarable: sin ella NO se elige por el jefe (delta:null, faltan:['metrica']). Cada métrica se pide YA CALCULADA a su dueño (margen → J2, resultado → C2, caja → E4). En real_vs_presupuesto la métrica es la desviación y no se declara."
+          },
+          {
+            "nombre": "desde",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "2026-08",
+            "descripcion": "El PERIODO del extremo A. Es DATO: no se deriva ni se cablea ningún calendario. Si el extremo A no viene declarado en `a`, se le pide su valor a la fuente de la métrica para este periodo."
+          },
+          {
+            "nombre": "hasta",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "2026-09",
+            "descripcion": "El PERIODO del extremo B. Es DATO: sin él, el extremo B se pide a su fuente sin acotar."
+          },
+          {
+            "nombre": "a",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "{\"periodo\":\"2026-08\",\"valor\":1200} | 1200",
+            "descripcion": "El EXTREMO A declarado: un número, o un objeto {periodo, valor, rol}. Es DATO: si se declara, se toma tal cual; si no, se PIDE ya calculado a la fuente de la métrica POR EVENTO. Aquí NO se recalcula la cifra de ningún periodo."
+          },
+          {
+            "nombre": "b",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "{\"periodo\":\"2026-09\",\"valor\":1500} | 1500",
+            "descripcion": "El EXTREMO B declarado (contra el que se compara A). Es DATO: si no se declara, se PIDE ya calculado a la fuente de la métrica POR EVENTO. Sin los dos extremos el delta no se computa."
+          },
+          {
+            "nombre": "eje",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "centro | linea | producto",
+            "descripcion": "El EJE declarado que se propaga a la consulta del extremo en su fuente (J2). Es DATO: no se deriva nada."
+          },
+          {
+            "nombre": "dimension",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "C1 | L1 | P1",
+            "descripcion": "La DIMENSIÓN declarada que se propaga a desviacion (J4) en el modo real_vs_presupuesto. Es DATO opcional."
+          },
+          {
+            "nombre": "real",
+            "tipo": "number",
+            "required": false,
+            "placeholder": "(vacío = lo da J4)",
+            "descripcion": "El REAL declarado para el modo real_vs_presupuesto. Es DATO: se delega en desviacion (J4); aquí NO se recalcula la desviación."
+          },
+          {
+            "nombre": "objetivo",
+            "tipo": "number",
+            "required": false,
+            "placeholder": "(vacío = lo da J4/presupuesto J3)",
+            "descripcion": "El OBJETIVO/presupuesto declarado para el modo real_vs_presupuesto. Es DATO: se delega en desviacion (J4); el presupuesto NO se duplica aquí."
+          },
+          {
+            "nombre": "umbral",
+            "tipo": "number",
+            "required": false,
+            "placeholder": "(vacío = sin umbral, no se avisa)",
+            "descripcion": "El UMBRAL de aviso declarado para el modo real_vs_presupuesto. Es DATO: se delega en desviacion (J4); sin umbral la comparación se presenta pero no se avisa — cero porcentajes cableados."
+          }
+        ]
+      }
+    },
+    "datos": [
+      {
+        "op": "comparar",
+        "titulo": "La comparación: los dos extremos y su delta (lo que el chat pinta)",
+        "refresh_on": [
+          "comparador-periodos.comparar.response"
+        ],
+        "columnas": [
+          "metrica",
+          "a_periodo",
+          "a_valor",
+          "b_periodo",
+          "b_valor",
+          "delta",
+          "delta_relativa",
+          "signo"
+        ]
+      }
+    ],
+    "_datos_nota": "La forma EXACTA de lo que el chat PINTA al comparar: los DOS extremos y el delta. `metrica` es lo que se compara (o la desviación, en real_vs_presupuesto); `a_periodo`/`a_valor` son el periodo y el valor del extremo A (con su `fuente` declarada: 'declarado' o el dueño 'margen-analitico'/'cuenta-resultados'/'saldo-tesoreria'); `b_periodo`/`b_valor` los del extremo B; `delta` es a − b (la única aritmética propia de este reflejo — comparar); `delta_relativa` es el delta respecto a |b| (null si b = 0); `signo` declara el sentido (SUBE|BAJA|IGUAL) para que el jefe no tenga que interpretar el signo. En la cabecera de la tarjeta el chat muestra además el modo, la fuente_metrica, y —en real_vs_presupuesto— el avisa y el umbral declarados (viajan en la respuesta, no como filas). `refresh_on` = comparador-periodos.comparar.response: es el único evento que este reflejo emite (module.json.publishes) y es la señal de que la tarjeta del chat cambia; al ser inline_render, el chat la re-pinta al invocar la consulta, no por suscripción viva.",
+    "_tipo_nota": "inline_render: NO es mesa de trabajo (workspace_module) ni panel de control (system_panel). Es contenido que se renderiza DENTRO del flujo de la conversación — su ui_handler real (module.json) declara type:inline_render, zone:area_chat, y por eso el bloque aparece en el chat y no en una barra. Aquí `ui.zone` es 'modulos' (el valor canónico que usan TODOS los blueprints, sea cual sea el type); la zona real del handler vive en el module.json, que no se toca. La consecuencia de interfaz: `ops.comparar` va en zona ACCIONES (una consulta que el chat dispara; solo el modo es obligatorio — métrica, periodos y los datos de real_vs_presupuesto son declarables opcionales) y NO hay zona de formulario de escritura: este módulo no escribe nada. El delta y su signo son un DATO que el chat PINTA, no un campo que alguien rellena."
+  },
+  "filosofia": "Comparar es restar dos cosas que alguien midió, y por eso aquí lo único que se hace es restar: si falta un extremo no hay comparación — hay un hueco, y se declara hueco, porque medir contra un cero que nadie midió es un delta con forma de número y sin sustancia. Y cuando la comparación es real contra presupuesto, este reflejo no vuelve a calcular la desviación ni a duplicar el presupuesto: se lo pregunta a quien sabe hacerlo, porque reutilizar no es debilidad, es no mentir dos veces con dos fórmulas distintas. Quien declara qué se compara y con qué modo es el jefe; el sistema resta, pone el signo y presenta."
+}

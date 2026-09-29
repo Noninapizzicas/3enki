@@ -3,6 +3,8 @@
   "name": "tablero-margen-dimension",
   "version": "0.1.0",
   "description": "Reflejo (J10): el cruce margen × dimension por centro/linea/producto/sociedad bajo lente de conjunto — LEE el margen ya calculado de J2 por evento (no lo recalcula) y sin eje declarado no cruza nada, porque elegirlo seria decidir por el jefe.",
+  "blueprint_driven": true,
+  "blueprint_path": "tablero-margen-dimension.blueprint.json",
   "language": "es",
   "subscribes": [
     {

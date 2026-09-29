@@ -3,6 +3,8 @@
   "name": "antiguedad-de-saldos",
   "version": "0.1.0",
   "description": "Reflejo (N8): el aging de saldos por vencimiento — lo pendiente clasificado en tramos DECLARABLES (sin inventar 30/60/90) y medido contra una fecha de referencia tambien declarada; quien y cuanto esta vencido.",
+  "blueprint_driven": true,
+  "blueprint_path": "antiguedad-de-saldos.blueprint.json",
   "language": "es",
   "subscribes": [
     {

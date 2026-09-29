@@ -3,6 +3,8 @@
   "name": "obligacion-seguridad-social",
   "version": "0.1.0",
   "description": "Reflejo (G2): deriva la obligacion con la TGSS y el gasto de empresa desde el recibo aplicando los tipos y bases DECLARADOS — la ley entra como dato, cero constantes cableadas.",
+  "blueprint_driven": true,
+  "blueprint_path": "obligacion-seguridad-social.blueprint.json",
   "language": "es",
   "subscribes": [
     {

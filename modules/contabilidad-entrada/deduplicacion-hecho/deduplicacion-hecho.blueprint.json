@@ -1,0 +1,70 @@
+{
+  "id": "deduplicacion-hecho",
+  "version": "blueprint-0.1.0",
+  "_nota": "FASE 6½ · la interfaz DECLARADA del módulo deduplicacion-hecho (REFLEJO STATELESS de contabilidad-entrada, A7, hoja del plan). Aplica la CLAVE NATURAL del hecho/documento (M3, clave-natural) → no duplica: es la cara de entrada del cerrojo anti-bucle ('un cierre = un asiento'). La sección `ui` es lo que el generador schema→UI (BlueprintForm, 4 zonas) necesita para renderizar el panel; sin LLM: TODO lo que produce sale de aquí. Fuente de verdad: modules/contabilidad-entrada/deduplicacion-hecho/{module.json,index.js}. ui_handler real: deduplicacion-hecho.es_nuevo (system_panel/lateral_derecha).",
+  "schema": "blueprint-interfaz-v2",
+  "language": "es",
+  "titulo": "El cerrojo anti-duplicado (¿este hecho es nuevo?)",
+  "eventos_publicados": [
+    "deduplicacion-hecho.es_nuevo.response",
+    "deduplicacion-hecho.es_nuevo.failed"
+  ],
+  "eventos_que_escucho": [],
+  "_escucho_nota": "VACÍO A PROPÓSITO: el reflejo ya atiende en module.json.subscribes deduplicacion-hecho.es_nuevo.request (RPC) y contabilidad.hecho_normalizado (fire-and-forget del flujo de entrada, handler onHechoNormalizado). Repetir cualquiera aquí daría ANTICOLISION-001 (lo atenderían los dos). El reflejo los procesa de forma determinista (misma proyección _es_nuevo); no hay cajón fuzzy que declarar.",
+  "transporte": {
+    "rpc": [
+      "deduplicacion-hecho.es_nuevo.request -> .response"
+    ],
+    "entrada": [
+      "deduplicacion-hecho.es_nuevo.request",
+      "contabilidad.hecho_normalizado"
+    ],
+    "salida": [
+      "deduplicacion-hecho.es_nuevo.response"
+    ],
+    "qos": "publishAndWait (request/response correlado) en el veredicto; contabilidad.hecho_normalizado es fire-and-forget (lo emite normalizador-hecho A2 y lo atiende el reflejo por onHechoNormalizado, misma proyección). Internamente pide la clave a clave-natural.calcular.request (M3) por EVENTO si no se la declaran. Sin evento de dominio propio: su valor ES el veredicto y el contrato cierra con su par *.failed."
+  },
+  "contrato": {
+    "EsNuevoInput": "{ project_id:uuid, hecho:obj, clave?:str, claves_vistas?:[str]|{clave:...} }",
+    "EsNuevoOutput": "{ project_id, es_nuevo:(bool|null), clave, clave_origen:'declarada'|'clave-natural'|null, composicion, vistas_comparadas, motivo, disponible }",
+    "EsNuevoErrores": "hecho ausente/inválido -> 400 INVALID_INPUT · project_id ausente -> 400 INVALID_INPUT. Cada error publica su par deduplicacion-hecho.es_nuevo.failed (cierra el círculo tanto del RPC como de contabilidad.hecho_normalizado).",
+    "Invariantes": "Sin clave natural NO hay veredicto: es_nuevo:null con motivo — no se asume nuevo (asumir 'nuevo' es duplicar) ni se asume duplicado. Es PURO y sin estado: pregunta la clave por EVENTO y compara con las claves que el emisor declara vistas. Quien RECUERDA los hechos vistos es el custodio del diario, no este reflejo."
+  },
+  "ui": {
+    "type": "system_panel",
+    "zone": "modulos",
+    "ops": {
+      "es_nuevo": {
+        "titulo": "¿Este hecho es nuevo o ya consta?",
+        "descripcion": "Panel de CONTROL bajo demanda: dictamina si un hecho es nuevo o duplicado aplicando su CLAVE NATURAL (M3). Obtiene la clave de M3 por evento o usa la declarada, y la compara con las claves que el emisor declara como VISTAS (la clave del propio hecho no cuenta como vista — que el hecho traiga su clave no prueba que ya se haya tratado). DETERMINISTA y sin estado: mismo hecho + misma clave registrada → mismo veredicto, siempre. Sin clave natural NO afirma nada: devuelve `es_nuevo:null` con su motivo, porque asumir 'nuevo' es como duplicar y asumir 'duplicado' es perder un hecho.",
+        "zona": "formulario",
+        "args": [
+          {
+            "nombre": "hecho",
+            "tipo": "json",
+            "required": true,
+            "placeholder": "{\"vertical\":\"compras\",\"tipo\":\"factura_recibida\",\"tercero\":{\"nif\":\"B12345678\"},\"fecha\":\"2026-09-01\",\"importe\":121,\"referencia\":\"F-1\"}",
+            "descripcion": "El hecho a dictaminar. Si no se declara `clave`, se pide su clave natural a M3 por evento; los campos que el hecho no traiga no se estiman (quedan fuera de la clave y se listan en `abierto` en la respuesta de M3)."
+          },
+          {
+            "nombre": "clave",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "(vacío = la pide a clave-natural M3)",
+            "descripcion": "La clave natural ya conocida del hecho. Si se declara, se usa tal cual (clave_origen:'declarada') y no se pregunta a M3."
+          },
+          {
+            "nombre": "claves_vistas",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "[\"COMPRAS|FACTURA_RECIBIDA|B12345678|2026-09-01|121.00|F-1\"]",
+            "descripcion": "El universo de claves ya tratadas que el emisor declara (lista o mapa clave→valor). Es DATO aportado por quien recuerda: este reflejo NO guarda memoria. Lo que no venga aquí no se considera visto."
+          }
+        ]
+      }
+    },
+    "datos": [],
+    "_datos_nota": "HUECO DECLARADO (no se inventa): deduplicacion-hecho es un REFLEJO STATELESS sin persistencia ni lectura tabulable. Su única op RPC (es_nuevo) EXIGE el `hecho` a dictaminar: es un veredicto puntual, no un listado. No hay ninguna op de lectura en module.json.subscribes ni en index.js — quien RECUERDA los hechos ya vistos es el custodio del diario, no este reflejo. La zona DATOS va vacía: el veredicto (es_nuevo / clave / clave_origen / vistas_comparadas / motivo) se ve en la respuesta RPC de la op."
+  },
+  "filosofia": "Un hecho no se procesa dos veces: para eso está el cerrojo. Pero el cerrojo no adivina — si no tiene la clave, NO dice 'nuevo' (decir 'nuevo' sin prueba es duplicar) ni dice 'duplicado' (decirlo sin prueba es perder un hecho): dice que no lo sabe, y lo razona. Este reflejo no recuerda nada: quien recuerda es el libro. Su único oficio es comparar una clave con lo ya visto, siempre igual para la misma entrada."
+}

@@ -3,6 +3,8 @@
   "name": "panel-proceso-contable",
   "version": "0.1.0",
   "description": "Reflejo stateless (P1): el latido del proceso de entrada — qué entra, qué se procesa, qué está en cola y qué falla; agrega lo ya emitido y LEE la cobertura, no decide.",
+  "blueprint_driven": true,
+  "blueprint_path": "panel-proceso-contable.blueprint.json",
   "language": "es",
   "subscribes": [
     {

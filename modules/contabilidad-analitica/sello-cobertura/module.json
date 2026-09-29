@@ -3,6 +3,8 @@
   "name": "sello-cobertura",
   "version": "0.1.0",
   "description": "Reflejo stateless (Q3): sella la completitud de lo consultado fuera de ciclo — lo dice antes de decidir; LEE la métrica única de cobertura y nunca la recalcula.",
+  "blueprint_driven": true,
+  "blueprint_path": "sello-cobertura.blueprint.json",
   "language": "es",
   "subscribes": [
     {

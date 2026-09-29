@@ -1,0 +1,111 @@
+{
+  "id": "anclaje-cierre-vertical",
+  "version": "blueprint-0.1.0",
+  "_nota": "FASE 6½ · la interfaz DECLARADA del módulo anclaje-cierre-vertical (CUSTODIO CON PERSISTENCIA de contabilidad-entrada, A14, hoja del plan). LA PARCELA DECLARABLE POR VERTICAL de QUÉ es 'un cierre' y CÓMO se identifica (sus claves). La sección `ui` es lo que el generador schema→UI (BlueprintForm, 4 zonas) necesita para renderizar el panel; sin LLM: TODO lo que produce sale de aquí. Fuente de verdad: modules/contabilidad-entrada/anclaje-cierre-vertical/{module.json,index.js}. ui_handlers reales: anclaje-cierre-vertical.anclar y anclaje-cierre-vertical.declarar (system_panel/lateral_derecha).",
+  "schema": "blueprint-interfaz-v2",
+  "language": "es",
+  "titulo": "Las claves del cierre (qué cierra y cómo se identifica)",
+  "eventos_publicados": [
+    "anclaje-cierre-vertical.anclar.response",
+    "anclaje-cierre-vertical.anclar.failed",
+    "anclaje-cierre-vertical.declarar.response",
+    "anclaje-cierre-vertical.declarar.failed",
+    "contabilidad.cierre_anclado"
+  ],
+  "eventos_que_escucho": [],
+  "_escucho_nota": "VACÍO A PROPÓSITO: el reflejo ya atiende en module.json.subscribes anclaje-cierre-vertical.anclar.request, anclaje-cierre-vertical.declarar.request y project.activated; repetir cualquiera aquí daría ANTICOLISION-001 (lo atenderían los dos). Los procesos de forma determinista: no hay cajón fuzzy que declarar.",
+  "transporte": {
+    "rpc": [
+      "anclaje-cierre-vertical.anclar.request -> .response",
+      "anclaje-cierre-vertical.declarar.request -> .response"
+    ],
+    "entrada": [
+      "anclaje-cierre-vertical.anclar.request",
+      "anclaje-cierre-vertical.declarar.request"
+    ],
+    "salida": [
+      "anclaje-cierre-vertical.anclar.response",
+      "anclaje-cierre-vertical.declarar.response",
+      "contabilidad.cierre_anclado"
+    ],
+    "qos": "publishAndWait (request/response correlado) en anclar y declarar; contabilidad.cierre_anclado es fire-and-forget (lo LEEN los cerrojos de cierre —C4 cierre-ejercicio, tesorería— y el bucle de declaración K9)."
+  },
+  "contrato": {
+    "AnclarInput": "{ project_id:uuid, vertical:str, periodo?:obj }",
+    "AnclarOutput": "{ anclado:bool, anclaje:{vertical, unidad_de_cierre, campos_clave, version, declarado_por, declarado_en}|null, clave:str|null, clave_disponible:bool, motivo? }",
+    "DeclararInput": "{ project_id:uuid, rol:'DECLARANTE_ANCLAJE', vertical:str, unidad_de_cierre:str, campos_clave?:[str] }",
+    "DeclararOutput": "{ project_id, anclaje:{vertical, unidad_de_cierre, campos_clave, version, declarado_por, declarado_en}, anclado:true, sobrescritura:bool }",
+    "Errores": "rol != DECLARANTE_ANCLAJE (segundo escritor) / vertical·unidad_de_cierre·campos_clave ausentes -> 403·400 (par anclaje-cierre-vertical.declarar.failed) · project_id o vertical ausente -> 400 (par anclaje-cierre-vertical.anclar.failed).",
+    "Invariantes": "La unidad de cierre se DECLARA, no se estima (invariante 7/13): sin definición declarada `anclar` devuelve anclado:false (el puerto existe, la clave NO se inventa) y sin periodo no se compone una clave fabricada (clave:null, clave_disponible:false). Un cierre se ANCLA a su clave: (proyecto, jornada) → el DÍA cierra la CAJA; (proyecto, ejercicio, mes) → el MES cierra la CONTABILIDAD. Un SOLO ESCRITOR: el declarante (DECLARANTE_ANCLAJE). No se sobrescribe: re-declarar APPENDEA versión nueva (historial) y fecha la vigente."
+  },
+  "ui": {
+    "type": "system_panel",
+    "zone": "modulos",
+    "ops": {
+      "anclar": {
+        "titulo": "¿A qué clave se ancla el cierre de esta vertical?",
+        "descripcion": "Panel de CONTROL bajo demanda: devuelve la UNIDAD de cierre declarada de una vertical y la CLAVE a la que se ancla, derivada del periodo. Sin unidad declarada el puerto existe pero la clave NO se inventa: devuelve `anclado:false`. Sin los datos de periodo no se compone una clave fabricada: `clave:null` con `clave_disponible:false`. La unidad es DATO (del dueño, vía la cola de criterios K9), no una constante del código. Es lectura pura: no muta nada.",
+        "zona": "formulario",
+        "args": [
+          {
+            "nombre": "vertical",
+            "tipo": "string",
+            "required": true,
+            "placeholder": "caja",
+            "descripcion": "La vertical cuyo cierre se quiere anclar."
+          },
+          {
+            "nombre": "periodo",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "{\"jornada\":\"2026-09-29\"}  ·  {\"ejercicio\":\"2026\",\"mes\":\"09\"}",
+            "descripcion": "El periodo del cierre (jornada, o ejercicio+mes). Es DATO: de él se deriva la clave. Sin periodo no se compone una clave fabricada (`clave_disponible:false`); tampoco se estima un campo que falte."
+          }
+        ]
+      },
+      "declarar": {
+        "titulo": "Declarar qué es un cierre en esta vertical",
+        "descripcion": "Panel de CONTROL bajo demanda: la ÚNICA escritura de esta parcela. El dueño DECLARA qué constituye 'un cierre' en una vertical y con qué campos se identifica — JORNADA (el día cierra la caja) o MES (el mes cierra la contabilidad). Es DATO del dueño, no lo fija el código. Re-declarar no sobrescribe en silencio: apila versión nueva en el historial. Un solo escritor: el declarante (DECLARANTE_ANCLAJE); cualquier otro rol recibe rechazo en el acto.",
+        "zona": "formulario",
+        "args": [
+          {
+            "nombre": "rol",
+            "tipo": "select",
+            "enum": [
+              "DECLARANTE_ANCLAJE"
+            ],
+            "required": true,
+            "descripcion": "El rol del único escritor de la parcela. La ley de un solo escritor vive como DATO declarable: cualquier otro rol recibe rechazo (403)."
+          },
+          {
+            "nombre": "vertical",
+            "tipo": "string",
+            "required": true,
+            "placeholder": "caja",
+            "descripcion": "La vertical cuyo cierre se declara."
+          },
+          {
+            "nombre": "unidad_de_cierre",
+            "tipo": "select",
+            "enum": [
+              "JORNADA",
+              "MES"
+            ],
+            "required": true,
+            "descripcion": "La unidad declarada: JORNADA (el día cierra la caja → clave (proyecto, jornada)) o MES (el mes cierra la contabilidad → clave (proyecto, ejercicio, mes)). Con una unidad conocida, los campos de la clave se derivan; con una desconocida se usan los `campos_clave` declarados."
+          },
+          {
+            "nombre": "campos_clave",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "[\"jornada\"]  ·  [\"ejercicio\",\"mes\"]",
+            "descripcion": "Los campos que componen la clave de este cierre, para unidades no conocidas. Con JORNADA/MES se derivan solos. Sin campos (ni derivables) no hay unidad válida y se rechaza — el código no cablea una forma legal."
+          }
+        ]
+      }
+    },
+    "datos": [],
+    "_datos_nota": "HUECO DECLARADO (no se inventa): anclaje-cierre-vertical persiste los anclajes por proyecto (PosPersistencia) y publica contabilidad.cierre_anclado — pero sus dos ops RPC EXIGEN payload: `anclar(vertical, periodo?)` devuelve la unidad y la clave de UN cierre puntual, y `declarar(vertical, unidad_de_cierre)` es una escritura. No hay ninguna op RPC de listado en module.json.subscribes ni en index.js que devuelva el conjunto de anclajes como colección tabulable. La lectura de conjunto existe en proceso (el Map de anclajes por proyecto, restaurado del storage) pero NO por el bus. La zona DATOS va vacía: el resultado (unidad declarada + clave derivada, o `anclado:false`) se ve en la respuesta RPC de la op. Montar la cinta de anclajes sería trabajo de módulo (añadir un handler RPC de listado), no de interfaz."
+  },
+  "filosofia": "Un cierre no se define cableando: se declara. El dueño dice qué es 'un cierre' en su vertical — el día que cierra la caja o el mes que cierra la contabilidad — y el sistema solo DERIVA la clave de esa declaración. Sin declaración, el puerto existe pero la clave no se inventa: mejor un hueco declarado que una clave fabricada. Re-declarar no borra: suma versión. Y la clave de un cierre es su ancla: sin ella no hay un cierre, solo una fecha sin nombre."
+}

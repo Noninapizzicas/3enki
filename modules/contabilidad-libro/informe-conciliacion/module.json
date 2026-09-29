@@ -3,6 +3,8 @@
   "name": "informe-conciliacion",
   "version": "0.1.0",
   "description": "Reflejo (E10): documento de cuadre saldo banco ↔ saldo contable ajustado — deriva el informe de E1/E9 y del saldo de tesoreria y DECLARA si cuadra, sin decidir ni corregir el descuadre.",
+  "blueprint_driven": true,
+  "blueprint_path": "informe-conciliacion.blueprint.json",
   "language": "es",
   "subscribes": [
     {

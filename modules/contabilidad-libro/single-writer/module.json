@@ -3,6 +3,8 @@
   "name": "single-writer",
   "version": "0.1.0",
   "description": "Custodio (M2): el cerrojo de escritura por parcela — un solo escritor; el segundo recibe rechazo en el acto (no espera, no hace cola) y es el guard que los demas custodios consultan.",
+  "blueprint_driven": true,
+  "blueprint_path": "single-writer.blueprint.json",
   "language": "es",
   "subscribes": [
     {

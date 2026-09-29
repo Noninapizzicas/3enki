@@ -3,6 +3,8 @@
   "name": "conceptos-extra-nomina",
   "version": "0.1.0",
   "description": "Reflejo (G9): imputa los conceptos extra de nomina (dietas, especie, finiquito, paga extra) aplicando el tratamiento DECLARADO — conceptos y reglas declarables, cero tratamiento cableado.",
+  "blueprint_driven": true,
+  "blueprint_path": "conceptos-extra-nomina.blueprint.json",
   "language": "es",
   "subscribes": [
     {

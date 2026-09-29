@@ -3,6 +3,8 @@
   "name": "cambio-desde-ultima-revision",
   "version": "0.1.0",
   "description": "Reflejo (L9): el delta desde el ultimo visto bueno del asesor — asientos nuevos, ajustes y reglas cambiadas, determinista, para revisar solo lo nuevo sin inventarse jamas una revision previa.",
+  "blueprint_driven": true,
+  "blueprint_path": "cambio-desde-ultima-revision.blueprint.json",
   "language": "es",
   "subscribes": [
     {

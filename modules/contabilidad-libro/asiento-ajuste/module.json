@@ -3,6 +3,8 @@
   "name": "asiento-ajuste",
   "version": "0.1.0",
   "description": "Puente (B5): el camino por el que la corrección del asesor entra al libro sin borrar — el ajuste SUMA (asiento nuevo con rectifica_a), la base se preserva y la traza queda intacta.",
+  "blueprint_driven": true,
+  "blueprint_path": "asiento-ajuste.blueprint.json",
   "language": "es",
   "subscribes": [
     {

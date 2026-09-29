@@ -3,6 +3,8 @@
   "name": "control-cuadre-documento",
   "version": "0.1.0",
   "description": "Reflejo stateless (A4.3): control determinista del cuadre base+impuestos frente al total con tolerancia declarable — si no cuadra va a la cola y no se asienta mal; lo ausente no se afirma.",
+  "blueprint_driven": true,
+  "blueprint_path": "control-cuadre-documento.blueprint.json",
   "language": "es",
   "subscribes": [
     {

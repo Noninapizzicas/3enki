@@ -3,6 +3,8 @@
   "name": "alta-activo",
   "version": "0.1.0",
   "description": "Custodio (F1): parcela del inmovilizado — ficha declarable de cada bien (valor, fecha, vida util y metodo como dato) con un solo escritor y sin estimar nunca lo que el negocio no declara.",
+  "blueprint_driven": true,
+  "blueprint_path": "alta-activo.blueprint.json",
   "language": "es",
   "subscribes": [
     {

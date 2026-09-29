@@ -3,6 +3,8 @@
   "name": "marca-borrador-validado",
   "version": "0.1.0",
   "description": "Reflejo stateless (Q4): sella si lo que se ve es borrador vivo o definitivo (en curso/revisado/firmado), derivado de la traza y la firma — para no decidir sobre un borrador.",
+  "blueprint_driven": true,
+  "blueprint_path": "marca-borrador-validado.blueprint.json",
   "language": "es",
   "subscribes": [
     {

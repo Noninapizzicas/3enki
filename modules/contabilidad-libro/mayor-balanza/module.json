@@ -3,6 +3,8 @@
   "name": "mayor-balanza",
   "version": "0.1.0",
   "description": "Reflejo (B3): mayor y balanza derivados del diario sin mutar nada — saldos por cuenta deterministas, con la fuente declarada y el descuadre expuesto, no escondido.",
+  "blueprint_driven": true,
+  "blueprint_path": "mayor-balanza.blueprint.json",
   "language": "es",
   "subscribes": [
     {

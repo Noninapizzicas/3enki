@@ -3,6 +3,8 @@
   "name": "balance-situacion",
   "version": "0.1.0",
   "description": "Reflejo (C1): balance de situación derivado del mayor — clasifica activo/pasivo/patrimonio y declara el descuadre (ACTIVO != PASIVO + PATRIMONIO es error, no estado).",
+  "blueprint_driven": true,
+  "blueprint_path": "balance-situacion.blueprint.json",
   "language": "es",
   "subscribes": [
     {

@@ -3,6 +3,8 @@
   "name": "puerto-exportacion",
   "version": "0.1.0",
   "description": "Conversor stateless (L1): frontera de salida al programa del asesor — serializa el libro al formato declarado y deserializa los ajustes a asientos propuestos, sin decidir contenido.",
+  "blueprint_driven": true,
+  "blueprint_path": "puerto-exportacion.blueprint.json",
   "language": "es",
   "subscribes": [
     {

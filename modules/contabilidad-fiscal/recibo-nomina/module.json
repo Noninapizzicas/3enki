@@ -3,6 +3,8 @@
   "name": "recibo-nomina",
   "version": "0.1.0",
   "description": "Reflejo (G1): admite y da forma asentable al hecho de nomina que llega por la frontera — refleja contablemente lo que el sistema externo ya calculo, sin calcular la nomina ni tocar sus importes.",
+  "blueprint_driven": true,
+  "blueprint_path": "recibo-nomina.blueprint.json",
   "language": "es",
   "subscribes": [
     {

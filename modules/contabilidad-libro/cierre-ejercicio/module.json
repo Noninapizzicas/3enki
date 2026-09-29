@@ -3,6 +3,8 @@
   "name": "cierre-ejercicio",
   "version": "0.1.0",
   "description": "Custodio (C4): EL cierre del ejercicio — irreversible salvo ajuste (el ajuste SUMA, no borra), un cierre = un asiento y single-writer por la parcela libro/cierre.",
+  "blueprint_driven": true,
+  "blueprint_path": "cierre-ejercicio.blueprint.json",
   "language": "es",
   "subscribes": [
     {

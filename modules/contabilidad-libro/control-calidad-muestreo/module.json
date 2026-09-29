@@ -3,6 +3,8 @@
   "name": "control-calidad-muestreo",
   "version": "0.1.0",
   "description": "Reflejo (L8): control por muestreo (excepcion + muestra) — selecciona lo que exige ojo humano por señales duras declarables, determinista y reproducible; jamas revisar todo.",
+  "blueprint_driven": true,
+  "blueprint_path": "control-calidad-muestreo.blueprint.json",
   "language": "es",
   "subscribes": [
     {

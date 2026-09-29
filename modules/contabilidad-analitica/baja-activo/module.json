@@ -3,6 +3,8 @@
   "name": "baja-activo",
   "version": "0.1.0",
   "description": "Reflejo (F3): baja del inmovilizado — deriva el resultado (beneficio/perdida) comparando el valor neto contable con el importe de venta declarado, sin decidir la imputacion.",
+  "blueprint_driven": true,
+  "blueprint_path": "baja-activo.blueprint.json",
   "language": "es",
   "subscribes": [
     {

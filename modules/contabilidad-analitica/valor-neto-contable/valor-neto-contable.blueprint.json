@@ -1,0 +1,98 @@
+{
+  "id": "valor-neto-contable",
+  "version": "blueprint-0.1.0",
+  "_nota": "FASE 6½ · la interfaz DECLARADA del módulo valor-neto-contable (REFLEJO STATELESS de contabilidad-analitica, F4, hoja del plan). VALOR NETO CONTABLE = COSTE − AMORTIZACIÓN ACUMULADA. Cálculo PURO, determinista: misma entrada → mismo valor; es el valor que va al BALANCE. El COSTE es ParametroDeclarable (entra declarado en la petición o con la ficha del activo — el reflejo NUNCA lo estima); la AMORTIZACIÓN ACUMULADA se AGREGA de las CUOTAS de la tabla de plan-amortizacion (F2) POR EVENTO (suma pura, sin interpretar ninguna cuota) o de cuotas declaradas. Si falta uno de los dos, el valor neto queda [ABIERTO] (vnc:null) y se declara cuál falta — jamás se rellena con 0. NO escribe, NO persiste, NO muta. La sección `ui` es lo que el generador schema→UI (BlueprintForm, 4 zonas) necesita para renderizar el panel; sin LLM: TODO lo que produce sale de aquí. Fuente de verdad: modules/contabilidad-analitica/valor-neto-contable/{module.json,index.js}. ui_handler real: valor-neto-contable.calcular (system_panel/lateral_derecha).",
+  "schema": "blueprint-interfaz-v2",
+  "language": "es",
+  "titulo": "El valor neto contable del bien",
+  "eventos_publicados": [
+    "valor-neto-contable.calcular.response",
+    "valor-neto-contable.calcular.failed"
+  ],
+  "eventos_que_escucho": [],
+  "_escucho_nota": "VACÍO A PROPÓSITO: el reflejo ya atiende en module.json.subscribes valor-neto-contable.calcular.request (onCalcularRequest, su única RPC); repetirlo aquí daría ANTICOLISION-001 (lo atenderían los dos). Es un REFLEJO STATELESS determinista: no tiene cajón fuzzy ni evento fire-and-forget que el LLM deba procesar. La amortización acumulada NO llega como evento que el LLM escuche por el bus: se pide DENTRO del cálculo a plan-amortizacion (F2) por evento (plan-amortizacion.cuota_del_periodo.request, dependencia interna del cálculo) o llega declarada en la petición — por eso no hay ningún cajón fuzzy que declarar aquí.",
+  "transporte": {
+    "rpc": [
+      "valor-neto-contable.calcular.request -> .response",
+      "plan-amortizacion.cuota_del_periodo.request -> .response"
+    ],
+    "entrada": [
+      "valor-neto-contable.calcular.request"
+    ],
+    "salida": [
+      "valor-neto-contable.calcular.response"
+    ],
+    "qos": "publishAndWait (request/response correlado) en el cálculo. La amortización acumulada llega por TRES vías sin require cruzado: declarada en la petición (`amortizacion_acumulada`), agregada de `cuotas` declaradas (suma pura), o PEDIDA a plan-amortizacion (F2) POR EVENTO (plan-amortizacion.cuota_del_periodo.request, dependencia interna del cálculo, best-effort). El coste es ParametroDeclarable: declarado en la petición o con la ficha del activo. El reflejo no publica eventos de dominio: su única salida es la respuesta RPC correlada."
+  },
+  "contrato": {
+    "CalcularInput": "{ project_id:uuid, id_activo?:str, activo?:{ id_activo?, valor? }, fecha?:str, coste?:num, amortizacion_acumulada?:num, cuotas?:[num|{importe|cuota}], periodo?:str }",
+    "CalcularOutput": "{ project_id, id_activo, fecha, vnc, coste, amortizacion_acumulada, fuente_coste:'declarado'|'activo_declarado'|null, fuente_amortizacion:'declarada'|'cuotas_declaradas'|'plan-amortizacion'|null, abierto:bool, faltan:[str], motivo, negativo:bool|null }",
+    "Errores": "project_id ausente → 400 INVALID_INPUT (par valor-neto-contable.calcular.failed).",
+    "Invariantes": "DETERMINISTA: mismo coste + misma acumulada → mismo VNC (una sola respuesta correcta). Dato ausente = desconocido: sin coste O sin acumulada → vnc:null y abierto:true con las piezas que faltan en `faltan` — jamás se rellena con 0 ni con un valor por defecto. Un valor neto NEGATIVO NO se corrige ni se recorta: se declara tal cual (`negativo:true`, señal de que la amortización acumulada excede el coste — un dato del negocio, no algo que el reflejo tape). El COSTE es ParametroDeclarable y NUNCA se estima; la AMORTIZACIÓN ACUMULADA es suma pura de lo que la tabla de F2 ya declaró. NO escribe, NO persiste, NO muta: las cuotas son de F2."
+  },
+  "ui": {
+    "type": "system_panel",
+    "zone": "modulos",
+    "ops": {
+      "calcular": {
+        "titulo": "Calcular el valor neto contable (coste − amortización acumulada)",
+        "descripcion": "Panel de CONTROL del valor neto contable: el valor que va al BALANCE. Es CÁLCULO PURO y determinista (mismo coste + misma acumulada → mismo VNC), sin escribir ni mutar nada. El COSTE es un ParámetroDeclarable: entra declarado aquí o con la ficha del activo — el reflejo NUNCA lo estima. La AMORTIZACIÓN ACUMULADA se AGREGA de las cuotas de la tabla de plan-amortizacion (F2) POR EVENTO, o llega declarada o como lista de cuotas (suma pura, sin interpretar ninguna cuota). Si falta el coste o la acumulada, el valor neto queda [ABIERTO] (vnc:null) y se declara cuál falta: NADA se estima, ningún hueco se rellena con 0. Un valor neto NEGATIVO no se corrige ni se recorta: se declara tal cual (la acumulada excede el coste, y eso es un dato del negocio, no algo que tapar).",
+        "zona": "formulario",
+        "args": [
+          {
+            "nombre": "id_activo",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "MAQ-001",
+            "descripcion": "El bien cuyo valor neto se calcula. Es la clave que permite pedir la amortización acumulada a plan-amortizacion (F2) por evento; sin él no se consulta el plan, y el VNC solo puede salir de datos declarados en la petición."
+          },
+          {
+            "nombre": "activo",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "{\"id_activo\":\"MAQ-001\",\"valor\":12000}",
+            "descripcion": "La FICHA del bien declarada (opcional). Es DATO: si trae `valor`, ese es el coste (fuente_coste:'activo_declarado'); si no, el coste debe venir declarado aparte — el reflejo no lo estima."
+          },
+          {
+            "nombre": "fecha",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "2026-12-31",
+            "descripcion": "La FECHA declarada de cálculo (la del balance). Es DATO: se propaga como referencia a la consulta del plan (F2); el cálculo no lleva reloj propio."
+          },
+          {
+            "nombre": "coste",
+            "tipo": "number",
+            "required": false,
+            "placeholder": "(vacío = desconocido, no se estima)",
+            "descripcion": "El COSTE declarado del bien (ParametroDeclarable). Es DATO, nunca estimado: si no se declara (ni aquí ni en la ficha del activo) el VNC queda [ABIERTO] y se declara que falta el coste — jamás se rellena con 0."
+          },
+          {
+            "nombre": "amortizacion_acumulada",
+            "tipo": "number",
+            "required": false,
+            "placeholder": "(vacío = se agrega del plan F2 por evento)",
+            "descripcion": "La AMORTIZACIÓN ACUMULADA declarada del bien (ParametroDeclarable). Es DATO: si se declara, se usa tal cual (fuente_amortizacion:'declarada'); si no, se agrega de las cuotas del plan de plan-amortizacion (F2) por evento, o de la lista `cuotas`. Sin ninguna de las vías, el VNC queda [ABIERTO]."
+          },
+          {
+            "nombre": "cuotas",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "[1200,1200,1200] | [{\"importe\":1200}]",
+            "descripcion": "La lista de CUOTAS declaradas que se AGREGAN (suma pura, sin interpretar ninguna cuota) para obtener la acumulada. Es DATO: cada ítem puede ser un número o un objeto con `importe`/`cuota`; lo que no sea numérico cuenta como 0 sin estimar nada."
+          },
+          {
+            "nombre": "periodo",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "2026-09",
+            "descripcion": "El PERIODO declarado que se propaga a la consulta del plan (F2) para acotar la acumulada. Es DATO: no se deriva ni se cablea ningún calendario."
+          }
+        ]
+      }
+    },
+    "datos": [],
+    "_datos_nota": "HUECO DECLARADO (no se inventa): valor-neto-contable es un REFLEJO STATELESS de cálculo puro. Su única op (calcular) devuelve UN valor neto con sus piezas (coste, amortización acumulada, faltan, negativo) — es un cálculo puntual, no un listado. No hay ninguna op de lectura tabulable en module.json.subscribes ni en index.js (toda su memoria es externa: el coste declarado y las cuotas de F2, pedidas por evento dentro del cálculo). El veredicto (vnc/coste/amortizacion_acumulada/abierto/negativo) se ve en la respuesta RPC de la op. El valor que va al balance se lee del resultado de `calcular`; no se publica ningún evento de dominio propio (el reflejo es determinista y sin estado)."
+  },
+  "filosofia": "El valor neto contable es una resta, y por eso es lo que menos se puede permitir inventar: si falta el coste o falta la amortización acumulada, no hay valor neto — hay un hueco, y se declara hueco. Cero no es lo mismo que desconocido. Por eso este reflejo no estima nada, no rellena nada y no corrige nada: si el resultado sale negativo, lo dice, porque una acumulada que supera el coste es un dato del negocio, no un error que tapar. Mismo coste y misma acumulada dan siempre el mismo valor: el balance merece una única respuesta, no una opinión."
+}

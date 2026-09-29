@@ -3,6 +3,8 @@
   "name": "perfil-administrativo",
   "version": "0.1.0",
   "description": "Custodio (D15): parcela declarable de territorio, regimen y obligaciones por negocio y ejercicio — la ley entra como dato (no se cablea ni se asume nada), un solo escritor.",
+  "blueprint_driven": true,
+  "blueprint_path": "perfil-administrativo.blueprint.json",
   "language": "es",
   "subscribes": [
     {

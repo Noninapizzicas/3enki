@@ -3,6 +3,8 @@
   "name": "modelo-303",
   "version": "0.1.0",
   "description": "Reflejo stateless (D2): construye el modelo 303 desde la liquidacion rellenando la estructura declarable — el sistema prepara, el asesor presenta y firma.",
+  "blueprint_driven": true,
+  "blueprint_path": "modelo-303.blueprint.json",
   "language": "es",
   "subscribes": [
     {

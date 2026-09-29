@@ -3,6 +3,8 @@
   "name": "retenciones",
   "version": "0.1.0",
   "description": "Reflejo stateless (D4): retenciones practicadas/soportadas derivadas del libro — tipos de retencion declarables por negocio y ejercicio, nunca cableados.",
+  "blueprint_driven": true,
+  "blueprint_path": "retenciones.blueprint.json",
   "language": "es",
   "subscribes": [
     {

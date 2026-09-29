@@ -3,6 +3,8 @@
   "name": "modelo-390",
   "version": "0.1.0",
   "description": "Reflejo stateless (D3): resumen anual 390 construido desde las liquidaciones del ejercicio rellenando la estructura declarable — el sistema prepara, el asesor presenta y firma.",
+  "blueprint_driven": true,
+  "blueprint_path": "modelo-390.blueprint.json",
   "language": "es",
   "subscribes": [
     {

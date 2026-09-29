@@ -3,6 +3,8 @@
   "name": "estimacion-is-irpf",
   "version": "0.1.0",
   "description": "Reflejo stateless (D5): estimacion del IS/IRPF sobre base declarada con escalas/tramos declarables — nada se estima sin base, y el sistema no presenta ni firma.",
+  "blueprint_driven": true,
+  "blueprint_path": "estimacion-is-irpf.blueprint.json",
   "language": "es",
   "subscribes": [
     {

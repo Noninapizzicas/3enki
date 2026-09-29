@@ -3,7 +3,7 @@
   "ramas": "vertical/contabilidad",
   "persistencia": "boveda/contabilidad/proceso/",
   "modelo": "mente-ejecuta / chat-gestiona",
-  "fase_actual": "F3b COMPLETADA — plan con 118 hojas (1:1 con las 118 clases). Siguiente: F4 construir (116 modulos)",
+  "fase_actual": "F4 COMPLETADA — 116 modulos construidos (1 clase = 1 modulo, 1:1 con las 118 hojas de F2). Siguiente: F5 escribir-skills",
   "nota_proceso": "Vertical transversal observadora VENDIBLE: escucha los eventos que cada negocio ya emite y reconstruye su contabilidad. Molde de proceso: boveda/nichos/proceso/ (44 modulos + 44 skills, #656).",
   "fase0": {
     "estado": "completada",
@@ -168,19 +168,40 @@
     "espina": "enki-plan VALIDA: JSON parseable, 118 hojas, orden 118 slugs topologico"
   },
   "fase4": {
-    "estado": "pendiente",
+    "estado": "completada",
     "skill": "construir-modulos",
-    "mandato": "una hoja a la vez, orden de la espina, esquematizar(4a)+crear(4b)",
-    "tracking": {
-      "orden": [],
-      "realizados": [],
-      "pendientes": [],
-      "proximo": null
-    }
+    "completada_el": "2026-09-29",
+    "modulos": 116,
+    "reutilizados": 2,
+    "total_hojas": 118,
+    "ficheros": 232,
+    "lineas_codigo": 25948,
+    "formas": {
+      "REFLEJO": 60,
+      "CUSTODIO": 29,
+      "PUENTE": 13,
+      "MICRO-AGENTE": 7,
+      "CONVERSOR": 7
+    },
+    "ejes": {
+      "contabilidad-entrada": 30,
+      "contabilidad-libro": 32,
+      "contabilidad-fiscal": 22,
+      "contabilidad-analitica": 32
+    },
+    "estructura": "modules/contabilidad-entrada|libro|fiscal|analitica/<slug>/ — LA PARTICION APLICADA EN DISCO (2 niveles, soportado por el loader)",
+    "verificacion": "116/116 CERO fallos: node --check + JSON con name/version/description + require (dos niveles) + coherencia subscribes<->handlers + FORMA (custodios con PosPersistencia+onProjectActivated, resto stateless) + CERO require cruzado",
+    "oleadas": 14,
+    "regla_unidad": "1 clase F3 = 1 modulo. Verificado por el padre en cada oleada.",
+    "hallazgos_ajenos": [
+      "modules/banco-ideas/module.json (subscribes dict) rompe validate-hibridos global — NO tocado",
+      "scripts/validate-hibridos.js SIN --module revienta por lo anterior — usar --module <slug>",
+      "npm run test con puerto 3001 da EADDRINUSE (pila Enki viva); PORT=3999 npm run test -> 109/109 PASS"
+    ]
   },
   "fase5": {
     "estado": "pendiente",
-    "skill": "escribir-skills"
+    "entregable": "skills FULL de los 116 modulos en modules/cosecha/cantera/enki/<slug>/SKILL.md"
   },
   "fase6": {
     "estado": "pendiente",

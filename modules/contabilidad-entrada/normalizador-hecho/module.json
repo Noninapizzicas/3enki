@@ -1,0 +1,34 @@
+{
+  "_doc": "Manifest de contabilidad-entrada/normalizador-hecho — CONVERSOR STATELESS (A2, hoja del plan). UNICA puerta de formato: homogeneiza el hecho de cada vertical a la forma asentable del dominio. La regla de forma es DECLARABLE (`regla_forma`: por campo canonico su ruta en el crudo + requeridos + clave_natural); sin declararla, la regla es identidad por nombre canonico y se declara `regla_declarada:false` — nunca se cablea una forma legal. Invariantes: el campo que no llega ni se declara queda null y se lista en `abierto` ([ABIERTO], nada se estima); no escribe ni deduplica (asentar es B2, idempotencia A7). Campos de la forma asentable: fecha, importe, moneda, tercero, referencia, concepto, lineas_impuesto, tipo, vertical + clave_natural. Proyeccion unica `_normalizar({project_id, crudo, regla_forma?})` -> {hecho, regla_declarada, requeridos_faltantes, abierto}. Cierra el circulo: exito → publica contabilidad.hecho_normalizado; error → normalizador-hecho.normalizar.failed. Sin persistencia.",
+  "name": "normalizador-hecho",
+  "version": "0.1.0",
+  "description": "Conversor stateless (A2): unica puerta de formato — homogeneiza el hecho de cada vertical a la forma asentable segun una regla_declarable; lo ausente queda abierto y no se estima.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "normalizador-hecho.normalizar.request",
+      "handler": "onNormalizarRequest",
+      "description": "RPC conversor: {project_id, crudo, regla_forma?} → {hecho, regla_declarada, requeridos_faltantes, abierto}. Da forma asentable al hecho crudo segun la regla declarable; los campos ausentes quedan null y se declaran en `abierto`. Exito → publica contabilidad.hecho_normalizado y responde por normalizador-hecho.normalizar.response; crudo ausente → normalizador-hecho.normalizar.failed."
+    },
+    {
+      "event": "contabilidad.hecho_crudo",
+      "handler": "onHechoCrudo",
+      "description": "Fire-and-forget (A2): puerto-evento-vertical (A1) publica un hecho crudo → {project_id, crudo:{vertical, tipo, clave_natural, payload, faltantes}, correlation_id}. Misma proyeccion que el RPC: normaliza a la forma asentable y publica contabilidad.hecho_normalizado; invalido → normalizador-hecho.normalizar.failed. Cierra el circulo del flujo de entrada."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "normalizador-hecho.normalizar.response",
+      "handler": "_atender",
+      "description": "Respuesta RPC correlada de normalizador-hecho.normalizar.request → {request_id, status:200, data:{hecho, regla_declarada, requeridos_faltantes, abierto}}. Emitida por el helper _atender."
+    },
+    {
+      "event": "normalizador-hecho.normalizar.failed",
+      "description": "Par de fallo determinista (A2): crudo ausente o invalido → {status, error:{code, message, details?}}. Cierra el circulo de normalizador-hecho.normalizar.request y de contabilidad.hecho_crudo."
+    },
+    {
+      "event": "contabilidad.hecho_normalizado",
+      "description": "Fire-and-forget (A2): un hecho quedo homogeneizado a la forma asentable → {project_id, hecho, clave_natural, abierto, correlation_id}. Lo consumen deduplicacion-hecho y lote-admision (A7/A9)."
+    }
+  ]
+}

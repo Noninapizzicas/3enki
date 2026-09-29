@@ -1,0 +1,149 @@
+{
+  "id": "cuadro-mando-contable",
+  "version": "blueprint-0.1.0",
+  "_nota": "FASE 6½ · la interfaz DECLARADA del módulo cuadro-mando-contable (REFLEJO STATELESS de contabilidad-analitica, J8, hoja del plan), tipo inline_render: NO es mesa de trabajo ni panel de control — se RENDERIZA EN LA CONVERSACIÓN del chat. LA LENTE DEL JEFE: el CONJUNTO económico visto desde arriba — caja, resultado, margen, desviación y ejercicio — SIN BAJAR AL ASIENTO. AGREGA. NO RECALCULA NADA: pide cada cifra YA CALCULADA a su dueño POR EVENTO y las compone en un informe — caja ← saldo-tesoreria (E4), resultado ← cuenta-resultados (C2), margen ← margen-analitico (J2), desviación ← desviacion (J4), y LEE la métrica única de cobertura ← completitud-cobertura (A12); NO vuelve a sumar partidas, NO vuelve a derivar el mayor, NO recalcula el margen ni la desviación ni el saldo (una COMPOSICIÓN, no un cálculo). Cada celda llega con su ORIGEN declarado (origen/fuente) para que el jefe sepa de dónde sale: el cuadro NO es caja negra. EL EJERCICIO ES DATO declarado (qué ejercicio está vivo): no se adivina por la fecha. Dato ausente = desconocido: cifra que su dueño no da → valor null + abierto:true + faltan; JAMÁS se rellena con 0. La sección `ui` es MÍNIMA y orientada a lo que el chat PINTA (las celdas del cuadro con su origen), no a un formulario. Fuente de verdad: modules/contabilidad-analitica/cuadro-mando-contable/{module.json,index.js}. ui_handler real: cuadro-mando-contable.componer (inline_render/area_chat).",
+  "schema": "blueprint-interfaz-v2",
+  "language": "es",
+  "titulo": "El cuadro de mando del jefe (aparece en el chat)",
+  "eventos_publicados": [
+    "cuadro-mando-contable.componer.response",
+    "cuadro-mando-contable.componer.failed",
+    "contabilidad.cuadro_compuesto"
+  ],
+  "eventos_que_escucho": [],
+  "_escucho_nota": "VACÍO A PROPÓSITO: el reflejo ya atiende en module.json.subscribes cuadro-mando-contable.componer.request (onComponerRequest, su única RPC); repetirlo aquí daría ANTICOLISION-001 (lo atenderían los dos). Es un REFLEJO STATELESS determinista: no persiste, no tiene cajón fuzzy. Su salida de dominio `contabilidad.cuadro_compuesto` la LEEN los canales de entrega del negocio — no es una suscripción de este módulo. Las cifras se piden a sus dueños POR EVENTO dentro de la composición (dependencias internas, best-effort): no son suscripciones vivas.",
+  "transporte": {
+    "rpc": [
+      "cuadro-mando-contable.componer.request -> .response",
+      "saldo-tesoreria.calcular.request -> .response",
+      "cuenta-resultados.calcular.request -> .response",
+      "margen-analitico.calcular.request -> .response",
+      "desviacion.calcular.request -> .response",
+      "completitud-cobertura.medir.request -> .response"
+    ],
+    "entrada": [
+      "cuadro-mando-contable.componer.request"
+    ],
+    "salida": [
+      "cuadro-mando-contable.componer.response",
+      "contabilidad.cuadro_compuesto"
+    ],
+    "qos": "publishAndWait (request/response correlado) en la composición. Las cinco fuentes se piden POR EVENTO sin require cruzado, en paralelo — caja a saldo-tesoreria (E4), resultado a cuenta-resultados (C2), margen a margen-analitico (J2), desviación a desviacion (J4) y la métrica de cobertura a completitud-cobertura (A12) —: esos RPC cruzados son dependencias internas de la composición, NO superficie del chat. contabilidad.cuadro_compuesto es fire-and-forget (J8): el cuadro quedó compuesto — lo consumen los canales de entrega; el cuadro NO decide nada, solo presenta. En modo inline_render NADA se suscribe en vivo: el chat pinta la respuesta del RPC cuando el humano lo invoca."
+  },
+  "contrato": {
+    "ComponerInput": "{ project_id:uuid, periodo?:str, ejercicio?:str, eje?/dimension?/vertical?/granularidad?:str, caja?/resultado?/margen?/desviacion?/cobertura? declaradas }",
+    "ComponerOutput": "{ project_id, periodo, cuadro:{ caja:{valor,origen,fuente}, resultado:{valor,origen,fuente,signo}, margen:{valor,origen,fuente}, desviacion:{valor,origen,fuente,signo,avisa,umbral}, cobertura, ejercicio, granularidad, granularidad_declarada }, fuentes:{caja,resultado,margen,desviacion,cobertura}, faltan:[str], n_piezas, n_disponibles, abierto, decide:false, publicable, motivo }",
+    "Errores": "project_id ausente → 400 (par cuadro-mando-contable.componer.failed).",
+    "Invariantes": "AGREGA, NO RECALCULA: cada cifra es la de su dueño, pedida POR EVENTO (saldo-tesoreria E4, cuenta-resultados C2, margen-analitico J2, desviacion J4) y la cobertura se LEE de completitud-cobertura (A12) — cero aritmética de dominio propia, el cuadro NO baja al asiento. Cada celda lleva su ORIGEN declarado (origen/fuente). EL EJERCICIO ES DATO: no se adivina por la fecha; sin declarar → null y a faltan. Dato ausente = desconocido: valor null + abierto:true + faltan (NUNCA 0). Lo que el jefe aún no ha declarado (granularidad I7, vista agregada I6, cadencia C7) se declara como hueco (granularidad_declarada:false), no se inventa. El cuadro NO decide (decide:false): presenta. NO escribe, NO persiste."
+  },
+  "ui": {
+    "type": "inline_render",
+    "zone": "modulos",
+    "ops": {
+      "componer": {
+        "titulo": "Ver el cuadro de mando (caja · resultado · margen · desviación)",
+        "descripcion": "Lo que el chat pinta cuando el jefe pregunta cómo va el negocio de conjunto: las cifras de caja, resultado, margen y desviación COMPUESTAS desde sus dueños (E4 · C2 · J2 · J4) y la métrica única de cobertura LEÍDA de A12 — cada celda con su origen declarado para que el cuadro no sea caja negra. NO es un formulario: es una consulta que el chat invoca para pintar el dato en la conversación. NO recalcula NADA ni baja al asiento: pide cada cifra ya calculada a su dueño POR EVENTO y las junta. Es determinista y no escribe nada. Una cifra que su dueño no da sale null y a `faltan` (jamás 0); el ejercicio es DATO declarado (no se adivina por la fecha) y lo que el jefe aún no ha declarado se pinta como hueco declarado.",
+        "zona": "acciones",
+        "args": [
+          {
+            "nombre": "periodo",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "2026-09 | 2026",
+            "descripcion": "El periodo del cuadro, propagado a las fuentes que lo usan (margen J2, desviación J4). Es DATO: no se deriva ni se cablea ningún calendario."
+          },
+          {
+            "nombre": "ejercicio",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "2026",
+            "descripcion": "El EJERCICIO declarado que está vivo. Es DATO: el cuadro NO lo adivina por la fecha; si no se declara sale null y a faltan:['ejercicio']."
+          },
+          {
+            "nombre": "eje",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "centro | linea | producto",
+            "descripcion": "El EJE declarado que se propaga a la consulta del margen (J2). Es DATO: no se deriva nada."
+          },
+          {
+            "nombre": "dimension",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "C1 | L1 | P1",
+            "descripcion": "La DIMENSIÓN declarada que se propaga a la consulta de la desviación (J4). Es DATO opcional."
+          },
+          {
+            "nombre": "vertical",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "(vacío = todas)",
+            "descripcion": "La VERTICAL declarada sobre la que se pide la métrica de cobertura (A12). Es DATO opcional; sin ella, la cobertura de todas."
+          },
+          {
+            "nombre": "granularidad",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "(vacío = no declarada)",
+            "descripcion": "La GRANULARIDAD declarada del cuadro. Es DATO: lo que el jefe no declare se pinta como hueco (granularidad_declarada:false) — no se inventa una vista."
+          },
+          {
+            "nombre": "caja",
+            "tipo": "number",
+            "required": false,
+            "placeholder": "(vacío = se lee de saldo-tesoreria E4)",
+            "descripcion": "La cifra de CAJA declarada (DATO). Si no se declara, se PIDE a saldo-tesoreria (E4) POR EVENTO; aquí NO se recalcula el saldo. Sin ninguna de las dos, sale null y a faltan."
+          },
+          {
+            "nombre": "resultado",
+            "tipo": "number",
+            "required": false,
+            "placeholder": "(vacío = se lee de cuenta-resultados C2)",
+            "descripcion": "La cifra de RESULTADO declarada (DATO). Si no se declara, se PIDE a cuenta-resultados (C2) POR EVENTO; aquí NO se recalcula la cuenta de resultados."
+          },
+          {
+            "nombre": "margen",
+            "tipo": "number",
+            "required": false,
+            "placeholder": "(vacío = se lee de margen-analitico J2)",
+            "descripcion": "La cifra de MARGEN declarada (DATO). Si no se declara, se PIDE a margen-analitico (J2) POR EVENTO; aquí NO se recalcula el margen."
+          },
+          {
+            "nombre": "desviacion",
+            "tipo": "number",
+            "required": false,
+            "placeholder": "(vacío = se lee de desviacion J4)",
+            "descripcion": "La cifra de DESVIACIÓN declarada (DATO). Si no se declara, se PIDE a desviacion (J4) POR EVENTO; aquí NO se recalcula la desviación."
+          },
+          {
+            "nombre": "cobertura",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "(vacío = se lee de completitud-cobertura A12)",
+            "descripcion": "La MÉTRICA ÚNICA de cobertura declarada (DATO). Si no se declara, se LEE de completitud-cobertura (A12) POR EVENTO; NO se recalcula. Sin métrica se declara el hueco (tasa null, declarada:false) — un 0 afirmaría una medida que no se hizo."
+          }
+        ]
+      }
+    },
+    "datos": [
+      {
+        "op": "componer",
+        "titulo": "El cuadro del jefe: cada pieza con su cifra y su origen (lo que el chat pinta)",
+        "refresh_on": [
+          "cuadro-mando-contable.componer.response"
+        ],
+        "columnas": [
+          "pieza",
+          "valor",
+          "origen",
+          "fuente",
+          "signo",
+          "avisa"
+        ]
+      }
+    ],
+    "_datos_nota": "La forma EXACTA de lo que el chat PINTA: una fila por PIEZA del cuadro (caja · resultado · margen · desviación). `pieza` es la celda; `valor` es la cifra que su dueño calculó (null = [ABIERTO], NUNCA 0); `origen` declara de dónde sale el dato ('agregado' cuando lo dio su dueño, 'declarado' cuando vino en la petición); `fuente` nombra al dueño (saldo-tesoreria · cuenta-resultados · margen-analitico · desviacion) para que el cuadro no sea caja negra; `signo` es el sentido declarado (resultado/desviación); `avisa` es el veredicto de la desviación (J4) cuando se salió del umbral declarado. La cobertura, el ejercicio y la granularidad viajan en la cabecera de la tarjeta (con granularidad_declarada:false cuando el jefe aún no la declaró), no como filas; tampoco los flags n_piezas/n_disponibles/decide:false. `refresh_on` = cuadro-mando-contable.componer.response: es el evento correlado que el chat recibe al invocar la composición, la señal de que la tarjeta cambia; contabilidad.cuadro_compuesto es la salida de dominio que consumen los canales de entrega (no pinta la tarjeta del chat). Al ser inline_render, el chat la re-pinta al invocar la consulta, no por suscripción viva.",
+    "_tipo_nota": "inline_render: NO es mesa de trabajo (workspace_module) ni panel de control (system_panel). Es contenido que se renderiza DENTRO del flujo de la conversación — su ui_handler real (module.json) declara type:inline_render, zone:area_chat, y por eso el bloque aparece en el chat y no en una barra. Aquí `ui.zone` es 'modulos' (el valor canónico que usan TODOS los blueprints, sea cual sea el type); la zona real del handler vive en el module.json, que no se toca. La consecuencia de interfaz: `ops.componer` va en zona ACCIONES (una consulta que el chat dispara; periodo/ejercicio y las cifras declarables son opcionales) y NO hay zona de formulario de escritura: este módulo no escribe nada. Cada cifra del cuadro es un DATO que el chat PINTA, no un campo que alguien rellena."
+  },
+  "filosofia": "La lente del jefe no es una suma más grande: es la decisión de NO volver a calcular. Por eso el cuadro no baja al asiento — pide a cada dueño la cifra que ya calculó y la compone, y cada celda llega con el nombre de quien la midió, porque un tablero sin origen es una caja negra con números grandes. Y cuando una cifra falta, no aparece un cero tranquilizador: aparece un hueco declarado, porque un 0 que nadie midió se lee como un dato y no lo es. El sistema presenta el conjunto; quien juzga cómo va el negocio es el jefe."
+}

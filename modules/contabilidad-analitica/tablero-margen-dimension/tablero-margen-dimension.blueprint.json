@@ -1,0 +1,89 @@
+{
+  "id": "tablero-margen-dimension",
+  "version": "blueprint-0.1.0",
+  "_nota": "FASE 6½ · la interfaz DECLARADA del módulo tablero-margen-dimension (REFLEJO STATELESS de contabilidad-analitica, J10, hoja del plan), tipo inline_render: NO es mesa de trabajo ni panel de control — se RENDERIZA EN LA CONVERSACIÓN del chat. EL CRUCE MARGEN × DIMENSIÓN: el jefe ve qué línea mueve su margen — una TABLA de conjunto por centro, por línea, por producto o por sociedad, construida cruzando la MISMA cifra de margen por cada eje declarado. NO DUPLICA J2: para cada EJE declarado PIDE a margen-analitico (J2) POR EVENTO su por_dimension YA CALCULADO y lo coloca en la tabla; cero aritmética de margen aquí (la suma, la resta y el ratio son de J2; el tablero solo pivota y presenta). EL EJE ES DECLARABLE: por qué ejes se cruza es DATO; sin ejes declarados se usan los tipos del catálogo declarado, y si tampoco hay catálogo NO se elige un eje por defecto — la tabla queda [ABIERTO] con faltan:['ejes'] (elegir el eje sería decidir por el jefe). Dato ausente = desconocido: un eje sin cubetas → fila con margen:null, NUNCA 0. La sección `ui` es MÍNIMA y orientada a lo que el chat PINTA (una fila por eje con su margen), no a un formulario. Fuente de verdad: modules/contabilidad-analitica/tablero-margen-dimension/{module.json,index.js}. ui_handler real: tablero-margen-dimension.cruzar (inline_render/area_chat).",
+  "schema": "blueprint-interfaz-v2",
+  "language": "es",
+  "titulo": "El tablero del margen por dimensión (aparece en el chat)",
+  "eventos_publicados": [
+    "tablero-margen-dimension.cruzar.response",
+    "tablero-margen-dimension.cruzar.failed"
+  ],
+  "eventos_que_escucho": [],
+  "_escucho_nota": "VACÍO A PROPÓSITO: el reflejo ya atiende en module.json.subscribes tablero-margen-dimension.cruzar.request (onCruzarRequest, su única RPC); repetirlo aquí daría ANTICOLISION-001 (lo atenderían los dos). Es un REFLEJO STATELESS determinista: no persiste, no tiene cajón fuzzy y no publica ningún evento de dominio — su única salida es la respuesta RPC correlada que el chat pinta. El margen por eje se pide a margen-analitico (J2) POR EVENTO dentro del cruce (dependencia interna, best-effort) y el catálogo de dimensiones a cola-declaraciones-criterio (K9) POR EVENTO (clave 'dimensiones'): NO son suscripciones vivas.",
+  "transporte": {
+    "rpc": [
+      "tablero-margen-dimension.cruzar.request -> .response",
+      "margen-analitico.calcular.request -> .response",
+      "cola-declaraciones-criterio.ratificar.request -> .response"
+    ],
+    "entrada": [
+      "tablero-margen-dimension.cruzar.request"
+    ],
+    "salida": [
+      "tablero-margen-dimension.cruzar.response"
+    ],
+    "qos": "publishAndWait (request/response correlado) en el cruce. Para cada eje se PIDE a margen-analitico (J2) su por_dimension YA CALCULADO POR EVENTO (dependencia interna del cruce, no superficie del chat) y el catálogo de dimensiones se pide a cola-declaraciones-criterio (K9) POR EVENTO si no viene declarado (clave 'dimensiones'). En modo inline_render NADA se suscribe en vivo: el chat pinta la respuesta del RPC cuando el humano lo invoca."
+  },
+  "contrato": {
+    "CruzarInput": "{ project_id:uuid, periodo?:str, eje?/ejes?:['centro','linea','producto','sociedad'...], dimensiones?:[obj] }",
+    "CruzarOutput": "{ project_id, periodo, fuente_dimensiones:'declarado'|'cola-declaraciones-criterio'|null, fuente_ejes:'declarado'|'catalogo_dimensiones'|null, ejes:[str], tabla:[{eje, fuente:'margen-analitico', margen, ingresos, costes, ratio_margen, dimensiones:[{dimension,ingresos,costes,margen,ratio_margen,n_lineas}], abierto, motivo}], filas, dimensiones_declaradas, sin_margen:[str], abierto, faltan:[str], lente:'conjunto', motivo }",
+    "Errores": "project_id ausente → 400 (par tablero-margen-dimension.cruzar.failed).",
+    "Invariantes": "NO RECALCULA EL MARGEN: cada fila es la cifra de J2 con su origen declarado (fuente:'margen-analitico'), pedida POR EVENTO. DETERMINISTA. Dato ausente = desconocido: un eje sin cubetas → fila con margen:null y su motivo, NUNCA 0; el catálogo declarado que no aparece en ningún eje se declara en sin_margen (se ve el hueco, no se oculta). LEY/PARÁMETRO COMO DATO: ejes y catálogo son entrada, cero constantes. NO escribe, NO persiste."
+  },
+  "ui": {
+    "type": "inline_render",
+    "zone": "modulos",
+    "ops": {
+      "cruzar": {
+        "titulo": "Ver el tablero del margen por dimensión",
+        "descripcion": "Lo que el chat pinta cuando el jefe pregunta qué centro, qué línea o qué producto le mueve el margen: una TABLA de conjunto con una fila por EJE declarado, cada una con las cubetas de margen que ya calculó margen-analitico (J2) — el tablero NO recalcula el margen, solo pivota y presenta. NO es un formulario: es una consulta que el chat invoca para pintar el dato en la conversación. Es determinista y no escribe nada. Sin ejes declarados (ni catálogo del que derivarlos) el chat pinta que no cruza: elegir el eje sería decidir por el jefe. Un eje sin cubetas se pinta con margen:null (nunca 0) y el catálogo que no aparece en ningún eje se declara en sin_margen, a la vista.",
+        "zona": "acciones",
+        "args": [
+          {
+            "nombre": "periodo",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "2026-09 | 2026",
+            "descripcion": "El periodo declarado que se propaga a cada consulta del margen (J2). Es DATO: no se deriva ni se cablea ningún calendario."
+          },
+          {
+            "nombre": "ejes",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "[\"centro\",\"producto\"]",
+            "descripcion": "LOS EJES por los que se cruza el margen (centro, línea, producto, sociedad…). Es DATO declarable: si no se declaran, se usan los tipos del catálogo declarado; si tampoco hay catálogo, la tabla queda [ABIERTO] con faltan:['ejes'] — elegir el eje sería decidir por el jefe. También admite un eje único como string."
+          },
+          {
+            "nombre": "dimensiones",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "[{\"id\":\"C1\",\"tipo\":\"centro\"},{\"id\":\"L1\",\"tipo\":\"linea\"}]",
+            "descripcion": "El CATÁLOGO de dimensiones declaradas (qué centros/líneas/productos existen y de qué tipo). Es DATO: de sus `tipo` se derivan los ejes si no se declaran aparte, y las que no aparezcan en ningún eje se declaran en `sin_margen`. Si no se declara, se PIDE a cola-declaraciones-criterio (K9) POR EVENTO (clave 'dimensiones')."
+          }
+        ]
+      }
+    },
+    "datos": [
+      {
+        "op": "cruzar",
+        "titulo": "Tabla de conjunto: una fila por eje (lo que el chat pinta)",
+        "refresh_on": [
+          "tablero-margen-dimension.cruzar.response"
+        ],
+        "columnas": [
+          "eje",
+          "margen",
+          "ingresos",
+          "costes",
+          "ratio_margen",
+          "filas",
+          "abierto"
+        ]
+      }
+    ],
+    "_datos_nota": "La forma EXACTA de lo que el chat PINTA: una fila por EJE del cruce (`tabla`). `eje` es el eje declarado (centro/línea/producto/sociedad); `margen` es el margen YA CALCULADO de J2 para ese eje (null = [ABIERTO], NUNCA 0); `ingresos`/`costes` son los totales de las cubetas de ese eje; `ratio_margen` es el ratio de J2 (null si ingresos = 0); `filas` es cuántas cubetas (dimensiones) trajo ese eje; `abierto` declara si ese eje quedó sin cerrar. Cada fila lleva su `fuente` ('margen-analitico') para que el jefe sepa que el tablero NO recalcula. Las cubetas de detalle (`dimensiones` dentro del eje, con dimension/ingresos/costes/margen/ratio_margen/n_lineas) son el desglose del eje. En la cabecera de la tarjeta el chat muestra además el periodo, los ejes, la lente ('conjunto') y la lista de dimensiones del catálogo que quedaron sin margen (sin_margen) — eso viaja en la respuesta, no como filas. `refresh_on` = tablero-margen-dimension.cruzar.response: es el único evento que este reflejo emite (module.json.publishes) y es la señal de que la tarjeta del chat cambia; al ser inline_render, el chat la re-pinta al invocar la consulta, no por suscripción viva.",
+    "_tipo_nota": "inline_render: NO es mesa de trabajo (workspace_module) ni panel de control (system_panel). Es contenido que se renderiza DENTRO del flujo de la conversación — su ui_handler real (module.json) declara type:inline_render, zone:area_chat, y por eso el bloque aparece en el chat y no en una barra. Aquí `ui.zone` es 'modulos' (el valor canónico que usan TODOS los blueprints, sea cual sea el type); la zona real del handler vive en el module.json, que no se toca. La consecuencia de interfaz: `ops.cruzar` va en zona ACCIONES (una consulta que el chat dispara; periodo, ejes y catálogo son declarables opcionales) y NO hay zona de formulario de escritura: este módulo no escribe nada. El margen de cada eje es un DATO que el chat PINTA, no un campo que alguien rellena."
+  },
+  "filosofia": "Un tablero no calcula: cruza lo que ya está calculado para que el jefe vea de un vistazo qué pieza mueve su margen. Por eso este tablero le pregunta el margen a quien lo sabe hacer (J2) y solo lo pivota — y por eso, cuando no hay ningún eje declarado, no elige uno «razonable»: el corte es la decisión del jefe, y elegirlo por él sería darle una tabla que responde a una pregunta que no hizo. Un eje sin cubetas se muestra con margen nulo, no con un cero que parecería decir que esa línea no gana ni pierde. El sistema cruza y presenta; quien decide por dónde mirar es el dueño."
+}

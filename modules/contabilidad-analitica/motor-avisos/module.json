@@ -3,6 +3,8 @@
   "name": "motor-avisos",
   "version": "0.1.0",
   "description": "Puente (K2): LA pieza que desbloquea — produce el Aviso a partir de las 6 señales de dominio (revision, cuadre, vencimientos, desviacion, fuente faltante); entrega, no decide.",
+  "blueprint_driven": true,
+  "blueprint_path": "motor-avisos.blueprint.json",
   "language": "es",
   "subscribes": [
     {

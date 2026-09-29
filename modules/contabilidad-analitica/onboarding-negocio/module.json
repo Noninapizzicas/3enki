@@ -3,6 +3,8 @@
   "name": "onboarding-negocio",
   "version": "0.1.0",
   "description": "Custodio (K1): el alta de un negocio nuevo y su aislamiento multi-tenant — recoge los datos declarables (plan, fuentes, parametros) sin inferir nada ni heredar de otro negocio, y emite por evento la activacion de la vertical.",
+  "blueprint_driven": true,
+  "blueprint_path": "onboarding-negocio.blueprint.json",
   "language": "es",
   "subscribes": [
     {

@@ -3,6 +3,8 @@
   "name": "coste-indirecto",
   "version": "0.1.0",
   "description": "Reflejo (J5): aplica el reparto DECLARADO de gastos no directos por dimension analitica — criterios de reparto declarables (metodo, bases, porcentajes) y sin criterio declarado no reparte nada, porque partir a medias es decidir por el jefe.",
+  "blueprint_driven": true,
+  "blueprint_path": "coste-indirecto.blueprint.json",
   "language": "es",
   "subscribes": [
     {

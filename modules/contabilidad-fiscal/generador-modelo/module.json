@@ -3,6 +3,8 @@
   "name": "generador-modelo",
   "version": "0.1.0",
   "description": "Puente stateless (D7): prepara el modelo fiscal para el programa del asesor en formato declarable — el sistema prepara, el asesor presenta y firma; el sistema no presenta.",
+  "blueprint_driven": true,
+  "blueprint_path": "generador-modelo.blueprint.json",
   "language": "es",
   "subscribes": [
     {

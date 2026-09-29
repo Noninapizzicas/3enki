@@ -3,6 +3,8 @@
   "name": "factura-electronica",
   "version": "0.1.0",
   "description": "Conversor stateless (D9): la frontera unica de formato estructurado de la factura (Facturae y afines) — cruza formato declarable, no decide contenido, no firma ni presenta.",
+  "blueprint_driven": true,
+  "blueprint_path": "factura-electronica.blueprint.json",
   "language": "es",
   "subscribes": [
     {

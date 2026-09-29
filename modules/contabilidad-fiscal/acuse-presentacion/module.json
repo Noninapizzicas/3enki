@@ -3,6 +3,8 @@
   "name": "acuse-presentacion",
   "version": "0.1.0",
   "description": "Puente stateless (D13): liga el acuse/justificante que el asesor trae de la administracion a su modelo y a su asiento — el sistema no presenta, solo anota la respuesta.",
+  "blueprint_driven": true,
+  "blueprint_path": "acuse-presentacion.blueprint.json",
   "language": "es",
   "subscribes": [
     {

@@ -35,6 +35,47 @@ def _leer_json(path):
         return {'_error': str(exc)}
 
 
+def espina(vertical):
+    """Lee la espina del plan de F3b (bloque ```json enki-plan```) de la bóveda.
+    Devuelve (slugs, {sin_modulo}, {sin_skill}) — el desglose que el gate de F8 usa
+    contra disco y que decide cuál de los DOS frenos está mordiendo."""
+    import re
+    p = os.path.join(DEPLOY, 'boveda', vertical, 'proceso', 'fase3b', 'plan-construccion.md')
+    if not os.path.isfile(p):
+        return [], [], []
+    m = re.search(r'```json\s+enki-plan\s*\n(.*?)```', open(p).read(), re.S)
+    if not m:
+        return [], [], []
+    try:
+        hojas = json.loads(m.group(1)).get('hojas') or []
+    except Exception:                                  # noqa: BLE001
+        return [], [], []
+    slugs = [h['slug'] for h in hojas if isinstance(h, dict) and h.get('slug')]
+    sin_mod, sin_skill = [], []
+    for s in slugs:
+        if not _buscar_modulo(s):
+            sin_mod.append(s)
+        elif not _skill_cantera(s):
+            sin_skill.append(s)
+    return slugs, sin_mod, sin_skill
+
+
+def _buscar_modulo(slug):
+    if os.path.isfile(os.path.join(DEPLOY, 'modules', slug, 'module.json')):
+        return True
+    for grupo in os.listdir(os.path.join(DEPLOY, 'modules')):
+        if os.path.isfile(os.path.join(DEPLOY, 'modules', grupo, slug, 'module.json')):
+            return True
+    return False
+
+
+def _skill_cantera(slug):
+    if os.path.isfile(os.path.join(CANTERA, slug, 'SKILL.md')):
+        return True
+    return any(os.path.isfile(os.path.join(CANTERA, f'{p}-{slug}', 'SKILL.md'))
+               for p in ('pizzepos', 'prisma'))
+
+
 def sondear(vertical):
     r = {'vertical': vertical}
 
@@ -47,6 +88,19 @@ def sondear(vertical):
         if os.path.isfile(os.path.join(base, s, 'module.json'))
     )
     r['slugs_total'] = len(slugs)
+
+    # 0) EL PLAN: el gate de F8 lo lee del STORAGE del proyecto, no de la bóveda.
+    #    Si no está ahí, F8 devuelve 409 aunque el vertical esté entero.
+    plan_storage = os.path.join(DEPLOY, 'data', 'projects', vertical,
+                                'storage', 'esquemas', 'plan-construccion.md')
+    esp, sin_mod, sin_skill = espina(vertical)
+    r['plan'] = {
+        'en_storage': os.path.isfile(plan_storage),
+        'path_esperado': plan_storage,
+        'hojas_espina': len(esp),
+        'sin_modulo': sin_mod,
+        'sin_skill_cantera': sin_skill,
+    }
 
     # 1) declarados en enabled, en LOS DOS configs (deploy + repo)
     r['declarados'] = {}
@@ -83,11 +137,15 @@ def sondear(vertical):
                  'nombres': [x.get('name') for x in (j.get('jobs') or [])]}
 
     # 5) storage persistido de la vertical (puede no existir todavía)
-    prisma = os.path.join(DEPLOY, 'storage', 'prisma', vertical)
+    #    VIVE EN data/projects/<slug>/storage/prisma/<vertical>/, NO en <deploy>/storage/.
+    #    (Corregido 28-sep-2026: la ruta previa <deploy>/storage/prisma/<v> no existe en disco
+    #    → daba falso «no existe todavía» incluso tras el primer ciclo.)
+    prisma = os.path.join(DEPLOY, 'data', 'projects', vertical, 'storage', 'prisma', vertical)
     r['storage_prisma'] = sorted(os.listdir(prisma)) if os.path.isdir(prisma) else None
 
     r['listo_para_operar'] = (not incompletos
                               and all(v['faltan'] == [] for v in r['declarados'].values())
+                              and r['plan']['en_storage']
                               and r['jobs']['total'] > 0)
     return r
 
@@ -99,6 +157,20 @@ def imprimir(r):
     v = r['vertical']
     print(f'=== puesta en servicio · vertical {v} ===')
     print(f'hojas con module.json: {r["slugs_total"]}')
+    p = r.get('plan') or {}
+    if p:
+        marca = 'OK ' if p.get('en_storage') else 'FALTA'
+        print(f'  [{marca}] plan de F3b en el STORAGE del proyecto: '
+              f'{"sí" if p.get("en_storage") else "no"} ({p.get("path_esperado")})')
+        if not p.get('en_storage'):
+            print('         → el gate de F8 dará 409 "No hay plan de construcción": '
+                  'copiar de boveda/<v>/proceso/fase3b/')
+        print(f'         espina: {p.get("hojas_espina")} hojas | '
+              f'sin módulo: {len(p.get("sin_modulo") or [])} | '
+              f'sin skill en cantera: {len(p.get("sin_skill_cantera") or [])}')
+        if p.get('sin_skill_cantera'):
+            print(f'         sin skill (¿REUTILIZAR genérico? entonces es el gate, '
+                  f'no deuda): {", ".join(p["sin_skill_cantera"][:8])}')
     for cfg, d in r['declarados'].items():
         marca = 'OK ' if not d['faltan'] else 'FALTA'
         print(f'  [{marca}] declarados en {cfg}: {d["declarados"]}/{d["total"]}')

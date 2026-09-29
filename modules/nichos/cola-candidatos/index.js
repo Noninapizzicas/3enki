@@ -112,12 +112,13 @@ class ColaCandidatos extends ModuloHibridoReflejo {
   }
 
   // ── proyección de lectura (no muta) ──
+  // NO marca dirty al crear el placeholder: persistir un estado vacío
+  // SOBRESCRIBIRÍA el real del disco (misma clase de pérdida que criterio-viabilidad).
   _obtenerOCrear(pid) {
     let c = this._colas.get(pid);
     if (!c) {
       c = colaVacia();
       this._colas.set(pid, c);
-      this._persist.marcarDirty(pid);
     }
     return c;
   }

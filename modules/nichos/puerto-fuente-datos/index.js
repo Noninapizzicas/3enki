@@ -48,7 +48,20 @@ class PuertoFuenteDatos extends ModuloHibridoReflejo {
         conectada_en: new Date().toISOString()
       });
     }
-    this.logger?.info('puerto-fuente-datos.auto_conectada', { fuente: porDefecto, tipo });
+    // Auto-conexión de la fuente 'api': es la RED DE SEGURIDAD del sondeo. Los
+    // buscadores web (SearXNG → Google/Brave/DDG/Startpage) se bloquearon por
+    // rate-limit/CAPTCHA; 'api' usa endpoints públicos SIN key y SIN CAPTCHA
+    // (autocompletado = señal de demanda pura + Wikipedia). Así el sondeo mide
+    // aunque los buscadores estén caídos (palanca del freno, no parche).
+    if (!this.fuentes.has('api')) {
+      this.fuentes.set('api', {
+        id: 'api',
+        tipo: 'api-publica',
+        estado: 'conectada',
+        conectada_en: new Date().toISOString()
+      });
+    }
+    this.logger?.info('puerto-fuente-datos.auto_conectada', { fuente: porDefecto, tipo, fuentes: [...this.fuentes.keys()] });
   }
 
   // Consulta de datos hacia una fuente → DatasetBruto + Rate + Coste.
@@ -171,9 +184,151 @@ class PuertoFuenteDatos extends ModuloHibridoReflejo {
         }
       };
     }
+    // Fuente 'api' → APIs públicas SIN key y SIN CAPTCHA. Es la red de seguridad
+    // cuando los buscadores web están rate-limitados. Devuelve DatasetBruto REAL:
+    //   · autocompletado (Google/Bing/DDG) → lo que la gente ESCRIBE = demanda pura
+    //   · Wikipedia search → cobertura temática del nicho
+    if (origen === 'api' || activa.tipo === 'api-publica') {
+      return this._consultarApiPublica({ nicho, pagina, fuente: origen, tipo: activa.tipo });
+    }
+    // Fuente 'comunidad' → comunidades abiertas (Reddit/HN/Mastodon/Lemmy) sin key.
+    if (origen === 'comunidad' || activa.tipo === 'comunidad') {
+      return this._consultarComunidad({ nicho, pagina, fuente: origen, tipo: activa.tipo });
+    }
     // Fuente no cableada a proveedor real → degrada honesto (no finge resultados).
     return this._errorResponse(501, 'PROVEEDOR_NO_CABLEADO',
       `la fuente '${origen}' (tipo ${activa.tipo}) no tiene proveedor de datos cableado`, { nicho, fuente: origen });
+  }
+
+  // ── FUENTE 'api': APIs públicas sin key (autocompletado + Wikipedia) ──
+  // El autocompletado es la señal de demanda más pura que existe: es literalmente
+  // lo que la gente teclea. No tiene CAPTCHA ni cuota (endpoints públicos).
+  async _consultarApiPublica({ nicho, pagina = 1, fuente, tipo }) {
+    const q = String(nicho || '').trim();
+    if (!q) return this._errorResponse(400, 'INVALID_INPUT', 'nicho requerido', { fuente });
+    const items = [];
+    const fuentes_ok = [];
+
+    // 1) Autocompletado Google (signal de demanda). JSON: [query, [sugerencias]]
+    const g = await this._getJson(
+      `https://suggestqueries.google.com/complete/search?client=firefox&hl=es&q=${encodeURIComponent(q)}`
+    ).catch(() => null);
+    if (Array.isArray(g) && Array.isArray(g[1])) {
+      for (const s of g[1]) items.push({ texto: String(s), fuente: 'suggest_google', clase: 'demanda' });
+      if (g[1].length) fuentes_ok.push('suggest_google');
+    }
+
+    // 2) Autocompletado Bing (osjson): [query, [sugerencias]]
+    const b = await this._getJson(
+      `https://api.bing.com/osjson.aspx?query=${encodeURIComponent(q)}`
+    ).catch(() => null);
+    if (Array.isArray(b) && Array.isArray(b[1])) {
+      for (const s of b[1]) items.push({ texto: String(s), fuente: 'suggest_bing', clase: 'demanda' });
+      if (b[1].length) fuentes_ok.push('suggest_bing');
+    }
+
+    // 3) Autocompletado DuckDuckGo (type=list): [{phrase}]
+    const d = await this._getJson(
+      `https://duckduckgo.com/ac/?q=${encodeURIComponent(q)}&type=list`
+    ).catch(() => null);
+    if (Array.isArray(d)) {
+      let n = 0;
+      for (const s of d) {
+        const txt = (s && (s.phrase || s)) || null;
+        if (txt) { items.push({ texto: String(txt), fuente: 'suggest_ddg', clase: 'demanda' }); n++; }
+      }
+      if (n) fuentes_ok.push('suggest_ddg');
+    }
+
+    // 4) Wikipedia search (cobertura temática real)
+    const w = await this._getJson(
+      `https://${(this._lang || 'es')}.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(q)}&srlimit=20&format=json&origin=*`
+    ).catch(() => null);
+    const hits = w && w.query && Array.isArray(w.query.search) ? w.query.search : [];
+    for (const h of hits) items.push({ texto: String(h.title), snippet: String(h.snippet || '').replace(/<[^>]+>/g, ''), fuente: 'wikipedia', clase: 'cobertura' });
+    if (hits.length) fuentes_ok.push('wikipedia');
+
+    if (items.length === 0) {
+      return this._errorResponse(502, 'UPSTREAM_UNREACHABLE',
+        'las APIs publicas (autocompletado/wikipedia) no devolvieron datos', { nicho: q, fuente });
+    }
+    return {
+      status: 200,
+      data: {
+        nicho: q,
+        fuente,
+        proveedor_tipo: tipo,
+        dataset: { items, pagina, semilla: q },
+        dataset_bruto: { items, pagina, semilla: q },
+        fuentes_con_datos: fuentes_ok,
+        rate: { por_minuto: 60, usados_pagina: 1 },
+        coste: { creditos: 0, moneda: 'gratis' }
+      }
+    };
+  }
+
+  // ── FUENTE 'comunidad': comunidades abiertas sin key (Reddit/HN/Mastodon/Lemmy) ──
+  async _consultarComunidad({ nicho, pagina = 1, fuente, tipo }) {
+    const q = String(nicho || '').trim();
+    if (!q) return this._errorResponse(400, 'INVALID_INPUT', 'nicho requerido', { fuente });
+    const items = [];
+    const fuentes_ok = [];
+
+    // Hacker News (Algolia): sin key, estable
+    const hn = await this._getJson(
+      `https://hn.algolia.com/api/v1/search?query=${encodeURIComponent(q)}&hitsPerPage=20`
+    ).catch(() => null);
+    const hnHits = hn && Array.isArray(hn.hits) ? hn.hits : [];
+    for (const h of hnHits) items.push({ texto: String(h.title || h.story_title || ''), url: h.url || null, fuente: 'hackernews', clase: 'comunidad' });
+    if (hnHits.length) fuentes_ok.push('hackernews');
+
+    // Lemmy (federado, abierto): posts
+    const lm = await this._getJson(
+      `https://lemmy.world/api/v3/search?q=${encodeURIComponent(q)}&type_=Posts&limit=20`
+    ).catch(() => null);
+    const lmPosts = lm && Array.isArray(lm.posts) ? lm.posts : [];
+    for (const p of lmPosts) items.push({ texto: String((p.post && p.post.name) || ''), url: (p.post && p.post.url) || null, fuente: 'lemmy', clase: 'comunidad' });
+    if (lmPosts.length) fuentes_ok.push('lemmy');
+
+    // Mastodon (búsqueda pública): cuentas/posts
+    const md = await this._getJson(
+      `https://mastodon.social/api/v2/search?q=${encodeURIComponent(q)}&limit=20`
+    ).catch(() => null);
+    const mdAcc = md && Array.isArray(md.accounts) ? md.accounts : [];
+    for (const a of mdAcc) items.push({ texto: String(a.display_name || a.username || ''), url: a.url || null, fuente: 'mastodon', clase: 'comunidad' });
+    if (mdAcc.length) fuentes_ok.push('mastodon');
+
+    if (items.length === 0) {
+      return this._errorResponse(502, 'UPSTREAM_UNREACHABLE',
+        'las comunidades abiertas no devolvieron datos', { nicho: q, fuente });
+    }
+    return {
+      status: 200,
+      data: {
+        nicho: q,
+        fuente,
+        proveedor_tipo: tipo,
+        dataset: { items, pagina, semilla: q },
+        dataset_bruto: { items, pagina, semilla: q },
+        fuentes_con_datos: fuentes_ok,
+        rate: { por_minuto: 30, usados_pagina: 1 },
+        coste: { creditos: 0, moneda: 'gratis' }
+      }
+    };
+  }
+
+  // GET JSON con timeout acotado (sin dependencias: fetch global de Node 18+).
+  async _getJson(url, timeout_ms = 12000) {
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), timeout_ms);
+    try {
+      const r = await fetch(url, {
+        signal: ctrl.signal,
+        headers: { accept: 'application/json', 'user-agent': 'enki-nichos/1.0 (+https://enki-ai.online)' }
+      });
+      if (r.status < 200 || r.status >= 300) throw new Error('http ' + r.status);
+      return await r.json();
+    } finally { clearTimeout(to); }
   }
 }
 

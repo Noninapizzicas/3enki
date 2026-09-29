@@ -3,7 +3,7 @@
   "ramas": "vertical/contabilidad",
   "persistencia": "boveda/contabilidad/proceso/",
   "modelo": "mente-ejecuta / chat-gestiona",
-  "fase_actual": "F6½ EN CURSO — 6 de 116 blueprints (grupo 1: la mesa de trabajo). Siguiente: grupo 2.",
+  "fase_actual": "F6½ COMPLETADA (108/108 blueprints). Siguiente: F7 (construir-interfaz: el trio del frontend).",
   "nota_proceso": "Vertical transversal observadora VENDIBLE: escucha los eventos que cada negocio ya emite y reconstruye su contabilidad. Molde de proceso: boveda/nichos/proceso/ (44 modulos + 44 skills, #656).",
   "fase0": {
     "estado": "completada",
@@ -230,26 +230,12 @@
     "verificacion": "frontend.validate: 607->607 drift (CERO introducido) · validate-all: 0 findings PASS"
   },
   "fase65": {
-    "estado": "en curso (grupo 1 de 6 listo)",
-    "metodo": "sub-agente prisma-universal + skill esquematizar-interfaz (mente-ejecuta)",
-    "entregable": "<slug>.blueprint.json con seccion ui.* + blueprint_driven/path en module.json",
-    "grupos": [
-      {
-        "grupo": 1,
-        "modulos": [
-          "catalogo-cuentas",
-          "escritor-diario",
-          "mayor-balanza",
-          "traza-asiento",
-          "balance-situacion",
-          "cuenta-resultados"
-        ],
-        "estado": "completado",
-        "commit": "1f6cf86d"
-      }
-    ],
-    "hallazgo": "ANTICOLISION-001: el blueprint NO debe declarar en eventos_que_escucho lo que el REFLEJO ya atiende (doble respuesta). El blueprint solo declara lo que escucha el LLM.",
-    "verificacion": "6/6 blueprint en disco + 0 eventos inventados + validate-hibridos 6/6 PASS"
+    "estado": "COMPLETADA",
+    "entregable": "108 <slug>.blueprint.json con ui.* + blueprint_driven/path en los module.json",
+    "metodo": "18 grupos por sub-agente (prisma-universal + skill esquematizar-interfaz), mente-ejecuta",
+    "alcance": "108 = 116 modulos - 8 sin superficie (su cara es el bus)",
+    "verificacion": "GATE EN LOTE 108/108 PASS · 0 eventos inventados · 0 colisiones · 0 index.js tocados",
+    "tipos": "workspace_module · system_panel · chat_tool · inline_render"
   },
   "fase7": {
     "estado": "pendiente",

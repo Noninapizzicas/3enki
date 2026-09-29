@@ -1,0 +1,58 @@
+{
+  "_doc": "Manifest de contabilidad-analitica/motor-avisos — PUENTE STATELESS (K2, hoja del plan). LA PIEZA QUE DESBLOQUEA: PRODUCE el aviso (requisito 4 del dueño). Recoge las SEÑALES que ya emiten las piezas del sistema — contabilidad.aviso_revision (A8.2), contabilidad.aviso_cuadre (C6), contabilidad.vencimiento_fiscal (D6), contabilidad.vencimiento_proximo (E5/N8), contabilidad.desviacion (J4) y contabilidad.fuente_faltante (A15) — y las convierte en un Aviso canonico con su tipo, su asunto, su motivo, su destino y su canal. PRODUCE; NO ENTREGA Y NO DECIDE: no habla con ningun canal (telegram/email/push) — la ENTREGA + CONFIRMA es R1 (aviso-negocio) —, no decide que avisos existen, a quien van ni por que canal (eso es el CATALOGO catalogo-avisos K6, consultado POR EVENTO catalogo-avisos.resolver.request best-effort) y no inventa DESTINO (es ParametroDeclarable [ABIERTO] Q70: señal > catalogo > null; sin declarar → destino:null y destino_declarado:false, jamas se asume a quien avisar). ATRIBUTOS del diseno: destino:ParametroDeclarable, catalogo:Set<Senal>; METODOS: producir(senal):Aviso. Invariantes: una señal sin naturaleza identificable NO es un aviso (400 SENAL_NO_IDENTIFICABLE, nada se estima); DETERMINISTA (misma señal + mismo catalogo → mismo aviso); LEY/PARAMETRO COMO DATO (tipos, destinos y canales declarables, cero catalogo cableado — el mapa SENALES solo fija la IDENTIDAD de cada señal, no criterio de negocio). FORMA: PUENTE stateless (sin PosPersistencia, sin onProjectActivated): no recuerda avisos, no los cuenta, no los re-emite. Proyeccion `_producir`. Publica contabilidad.aviso_producido (lo consume R1). Cierra el circulo: error → motor-avisos.producir.failed.",
+  "name": "motor-avisos",
+  "version": "0.1.0",
+  "description": "Puente (K2): LA pieza que desbloquea — produce el Aviso a partir de las 6 señales de dominio (revision, cuadre, vencimientos, desviacion, fuente faltante); entrega, no decide.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "motor-avisos.producir.request",
+      "handler": "onProducirRequest",
+      "description": "RPC puente: {project_id, evento|senal|tipo, asunto?, motivo?, destino?, canal?, vertical?, periodo?, ejercicio?, detalle?, catalogo?} → {project_id, aviso:{id, tipo, asunto, senal, motivo, detalle, destino, destino_declarado, canal, canal_declarado, requiere_revision:true, entregado:false, entregado_por:'aviso-negocio(R1)', producido_en}, aviso_id, catalogo_disponible, fuente_catalogo, abierto:{destino, canal, motivo, catalogo}}. Resuelve la politica (que aviso, a quien, por que canal) en el catalogo-avisos (K6) POR EVENTO, best-effort; sin catalogo produce con lo declarado. Sin naturaleza identificable → 400 SENAL_NO_IDENTIFICABLE. Exito → publica contabilidad.aviso_producido y responde por motor-avisos.producir.response; fallo → motor-avisos.producir.failed."
+    },
+    {
+      "event": "contabilidad.aviso_revision",
+      "handler": "onAvisoRevision",
+      "description": "Fire-and-forget (A8.2 → K2): aviso-revision empujo que algo necesita revision (con su motivo y su cola de destino) → se convierte en Aviso tipo 'revision' y se publica contabilidad.aviso_producido. Tolerante: una señal sin project_id se ignora."
+    },
+    {
+      "event": "contabilidad.aviso_cuadre",
+      "handler": "onAvisoCuadre",
+      "description": "Fire-and-forget (C6 → K2): aviso-cuadre empujo que LA metrica unica de cobertura no esta completa → se convierte en Aviso tipo 'cuadre'. Tolerante: sin project_id se ignora."
+    },
+    {
+      "event": "contabilidad.vencimiento_fiscal",
+      "handler": "onVencimientoFiscal",
+      "description": "Fire-and-forget (D6 → K2): calendario-fiscal publico un vencimiento fiscal dentro de la ventana declarada → se convierte en Aviso tipo 'vencimiento' con asunto 'vencimiento_fiscal'. Tolerante: sin project_id se ignora."
+    },
+    {
+      "event": "contabilidad.vencimiento_proximo",
+      "handler": "onVencimientoProximo",
+      "description": "Fire-and-forget (E5/N8 → K2): prevision-caja o vencimiento-pago publicaron un vencimiento de pago proximo → se convierte en Aviso tipo 'vencimiento'. Tolerante: sin project_id se ignora."
+    },
+    {
+      "event": "contabilidad.desviacion",
+      "handler": "onDesviacion",
+      "description": "Fire-and-forget (J4 → K2): desviacion publico que el real se salio del UMBRAL DECLARADO → se convierte en Aviso tipo 'desviacion'. Tolerante: sin project_id se ignora (y desviacion no emite si no hay umbral declarado)."
+    },
+    {
+      "event": "contabilidad.fuente_faltante",
+      "handler": "onFuenteFaltante",
+      "description": "Fire-and-forget (A15 → K2): declaracion-fuente-faltante publico que una vertical no entrega un hecho necesario → se convierte en Aviso tipo 'fuente_faltante'. Tolerante: sin project_id se ignora."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "motor-avisos.producir.response",
+      "description": "Respuesta RPC correlada de motor-avisos.producir.request → {request_id, status:200, data:{aviso, aviso_id, catalogo_disponible, fuente_catalogo, abierto}}. Emitida por el helper _atender."
+    },
+    {
+      "event": "motor-avisos.producir.failed",
+      "description": "Par de fallo determinista (K2): project_id ausente (400) o señal sin naturaleza identificable (400 SENAL_NO_IDENTIFICABLE) → {status, error:{code, message, details?}}. Cierra el circulo de motor-avisos.producir.request y de las 6 señales fire-and-forget."
+    },
+    {
+      "event": "contabilidad.aviso_producido",
+      "description": "Fire-and-forget (K2): un Aviso quedo PRODUCIDO (no entregado: la entrega es R1) → {project_id, aviso, aviso_id, tipo, asunto, destino, canal, catalogo_disponible, correlation_id}. Lo consume aviso-negocio (R1), que lo ENTREGA y CONFIRMA."
+    }
+  ]
+}

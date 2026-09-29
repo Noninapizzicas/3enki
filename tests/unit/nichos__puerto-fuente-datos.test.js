@@ -118,10 +118,43 @@ const METRICS = { increment(){}, gauge(){} };
     assert.strictEqual(res.data.de, 'buscador');
     assert.strictEqual(res.data.a, 'api');
     assert.ok(bus.published.some(([n]) => n === 'nichos.fuente.reemplazada'), 'publica nichos.fuente.reemplazada');
-    // 'api' (tipo generica) no tiene proveedor cableado → degrada honesto, no finge resultados.
+    // 'api' ahora SÍ tiene proveedor cableado (APIs públicas sin key: autocompletado
+    // + Wikipedia). Con red real devuelve datos; en el test (sin red) degrada honesto.
     const q = await instance.onConsultarRequest({ data: { nicho: 'salsa', request_id: 'S4' } });
-    assert.strictEqual(q.status, 501);
-    assert.strictEqual(q.error.code, 'PROVEEDOR_NO_CABLEADO');
+    assert.ok([200, 502].includes(q.status), 'api cableada: 200 con datos o 502 si el upstream cae');
+    assert.ok(!(q.status === 501 && q.error && q.error.code === 'PROVEEDOR_NO_CABLEADO'),
+      'api ya NO degrada por PROVEEDOR_NO_CABLEADO');
+  });
+
+  await testAsync('consultar fuente api → enruta a APIs publicas y devuelve dataset REAL', async () => {
+    instance._getJson = async (url) => {
+      if (url.includes('suggestqueries.google')) return ['q', ['mantenimiento de piscinas', 'mantenimiento de piscinas precio']];
+      if (url.includes('bing.com/osjson')) return ['q', ['mantenimiento de piscinas madrid']];
+      if (url.includes('duckduckgo.com/ac')) return [{ phrase: 'mantenimiento de piscinas valencia' }];
+      if (url.includes('wikipedia.org')) return { query: { search: [{ title: 'Piscina', snippet: '<b>Piscina</b> es...' }] } };
+      return null;
+    };
+    await instance.onConectarRequest({ data: { fuente: 'api', config: { tipo: 'api-publica' }, request_id: 'CA' } });
+    const res = await instance.onConsultarRequest({ data: { fuente: 'api', nicho: 'mantenimiento de piscinas', request_id: 'CA2' } });
+    assert.strictEqual(res.status, 200);
+    assert.ok(res.data.dataset.items.length >= 5, 'junta sugerencias de varias fuentes');
+    assert.ok(res.data.fuentes_con_datos.includes('suggest_google'), 'usa autocompletado google');
+    assert.ok(res.data.fuentes_con_datos.includes('wikipedia'), 'usa wikipedia');
+    assert.strictEqual(res.data.coste.creditos, 0, 'APIs publicas: coste cero');
+  });
+
+  await testAsync('consultar fuente comunidad → enruta a comunidades abiertas', async () => {
+    instance._getJson = async (url) => {
+      if (url.includes('hn.algolia')) return { hits: [{ title: 'Hilo sobre piscinas', url: 'https://x' }] };
+      if (url.includes('lemmy')) return { posts: [{ post: { name: 'Post piscinas', url: 'https://y' } }] };
+      if (url.includes('mastodon')) return { accounts: [{ display_name: 'Cuenta piscinas', url: 'https://z' }] };
+      return null;
+    };
+    await instance.onConectarRequest({ data: { fuente: 'comunidad', config: { tipo: 'comunidad' }, request_id: 'CC' } });
+    const res = await instance.onConsultarRequest({ data: { fuente: 'comunidad', nicho: 'piscinas', request_id: 'CC2' } });
+    assert.strictEqual(res.status, 200);
+    assert.ok(res.data.dataset.items.length >= 3, 'junta las 3 comunidades');
+    assert.strictEqual(res.data.coste.creditos, 0);
   });
 
   await testAsync('manifest: subscribes ↔ handlers y publishes exactos de la hoja J1', () => {

@@ -44,7 +44,7 @@ const GUION_CONCLUSION =
   'fuerza de demanda es baja o la disposicion a pagar es estrecha, dilo con honestidad. Responde ' +
   'SOLO con un parrafo breve y directo de 2-3 frases en espanol, sin bullet ni JSON.';
 
-const FUENTE_DEFAULT = 'puerto';
+const FUENTE_DEFAULT = 'buscador';
 // Rango base declarado (numeros, no inventados): cota de disposicion a pagar si no hay evidencia de precio.
 const PRECIO_COTA_BAJA = 9;
 const PRECIO_COTA_ALTA = 200;
@@ -112,14 +112,20 @@ class EstudioDemanda extends ModuloHibridoReflejo {
   }
 
   // ── REFLEJO (mecánico, determinista): consulta cada fuente y trocea el dataset ──
+  // Consulta TODAS las fuentes conectadas por defecto (no una): la fuerza de
+  // demanda premia cada fuente con datos (+0.15) y suma volumen. Con los
+  // buscadores web rate-limitados (CAPTCHA), 'api' (autocompletado+Wikipedia) y
+  // 'comunidad' (HN/Lemmy/Mastodon) son las que sostienen la medición.
   async _consultarFuentes(project_id, candidato, fuentes) {
     const termino = candidato.producto || candidato.servicio || candidato.audiencia || '';
-    const targets = (Array.isArray(fuentes) && fuentes.length > 0) ? fuentes : [null];
+    const targets = (Array.isArray(fuentes) && fuentes.length > 0)
+      ? fuentes
+      : [FUENTE_DEFAULT, 'api', 'comunidad'];
     const resultados = [];
     for (const fuente of targets) {
       const resp = await this._rpc('nichos.fuente.consultar.request', {
         project_id, nicho: termino, fuente: fuente || undefined
-      }, { timeout_ms: 15000 }).catch(() => null);
+      }, { timeout_ms: 20000 }).catch(() => null);
       if (resp && resp.status === 200) {
         const dataset = resp.data && (resp.data.dataset || resp.data.resultados || resp.data.raw || resp.data);
         resultados.push({

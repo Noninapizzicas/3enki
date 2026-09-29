@@ -1,0 +1,24 @@
+{
+  "_doc": "Manifest de contabilidad-fiscal/conceptos-extra-nomina — REFLEJO STATELESS (G9, hoja del plan). DIETAS, ESPECIE, FINIQUITO, PAGA EXTRA: calculo de SU IMPUTACION. El diseno lo dice literal: `imputar(c:Concepto):Set<Apunte>` con `conceptos:Set<Concepto>`. Calculo PURO, determinista. LOS CONCEPTOS SON DECLARABLES (invariante LEY/PARAMETRO COMO DATO): aqui NO se cablea que es una dieta, ni que la especie exonera, ni que la paga extra se prorratea, ni ningun tratamiento fiscal — el negocio DECLARA cada concepto y su TRATAMIENTO (`tratamientos`: {concepto: {cuenta|rol_destino, exento?, integra_base?, pago_unico?, signo?}}, o un `tratamiento` unico); aplicar el tratamiento declarado es puro, INVENTARLO es lo que este reflejo NO hace. ESTE MODULO NO DECIDE: no valora el concepto, no decide si esta exento y no calcula retencion; si un concepto no trae tratamiento queda [ABIERTO] (no se le asigna uno por defecto). Invariante: dato ausente = desconocido — un concepto sin importe o sin tratamiento queda declarado como abierto; jamas se rellena con 0 ni se le supone un tratamiento. FORMA: REFLEJO stateless, sin PosPersistencia ni onProjectActivated. Proyeccion unica `_imputar({project_id, conceptos|concepto, tratamientos?|reglas?, tratamiento?, empleado?, periodo?})` → {conceptos:[{concepto, importe, clase, especie, tratamiento, abierto, imputable}], apuntes:[{concepto, importe, cuenta, rol_destino, exento, integra_base, pago_unico, signo}], total_imputado, tratamiento_origen, tratamientos_cableados:false, decide:false, aplica_regla_declarada:true, faltantes, abierto}. Cierra el circulo del RPC con su par de fallo: conceptos-extra-nomina.imputar.failed.",
+  "name": "conceptos-extra-nomina",
+  "version": "0.1.0",
+  "description": "Reflejo (G9): imputa los conceptos extra de nomina (dietas, especie, finiquito, paga extra) aplicando el tratamiento DECLARADO — conceptos y reglas declarables, cero tratamiento cableado.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "conceptos-extra-nomina.imputar.request",
+      "handler": "onImputarRequest",
+      "description": "RPC reflejo (calculo puro, determinista): {project_id, conceptos|concepto (DECLARABLES: [{concepto, importe, clase?, cantidad?, precio?, especie?, tratamiento?}] o un concepto suelto), tratamientos?|reglas? (DECLARABLES: mapa {concepto: {cuenta|rol_destino, exento?, integra_base?, pago_unico?, signo?}}), tratamiento? (tratamiento unico declarado), empleado?, periodo?} → {project_id, conceptos:[{concepto, importe, clase, especie, tratamiento, abierto, imputable}], apuntes:[{concepto, importe, cuenta, rol_destino, exento, integra_base, pago_unico, signo}], total_imputado, tratamiento_origen:'declarado'|'declarado_unico', tratamientos_cableados:false, decide:false, aplica_regla_declarada:true, faltantes, abierto}. Un concepto sin importe o sin tratamiento queda abierto y se declara en `faltantes` — no se le supone nada. Responde por conceptos-extra-nomina.imputar.response; project_id ausente o concepto ausente → conceptos-extra-nomina.imputar.failed."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "conceptos-extra-nomina.imputar.response",
+      "description": "Respuesta RPC correlada de conceptos-extra-nomina.imputar.request → {request_id, status:200, data:{conceptos, apuntes, total_imputado, faltantes, abierto}}. Emitida por el helper _atender."
+    },
+    {
+      "event": "conceptos-extra-nomina.imputar.failed",
+      "description": "Par de fallo determinista (G9): project_id o concepto ausente (400), o excepcion de la proyeccion (500) → {status, error:{code, message, details?}}. Cierra el circulo de conceptos-extra-nomina.imputar.request."
+    }
+  ]
+}

@@ -1,0 +1,46 @@
+{
+  "_doc": "Manifest de contabilidad-fiscal/estado-presentacion-fiscal — CUSTODIO CON PERSISTENCIA (D12, hoja del plan). MAQUINA DE ESTADOS CON DUEÑO del ciclo de vida de cada obligacion fiscal: sin este custodio, calendario-fiscal (D6) avisa de los plazos pero NADIE sabe en que punto esta cada modelo. El sistema GENERA y REGISTRA el estado; NO presenta y NO firma — los estados presentada/justificada se registran porque el ASESOR los declara (vienen del acuse D13), jamas se infieren ni se dan por hechos. LA LEY ENTRA COMO DATO (invariante 5): los ESTADOS (`estados_declarables`) y las TRANSICIONES (`transiciones`) son DECLARABLES y entran en el payload como dato; sin declaracion manda el vocabulario del dominio declarado en el diseno OOP (pendiente → generada → presentada → justificada con `atrasada` como desvio observable). NO se cablea ningun plazo, periodicidad, ejercicio, fecha ni umbral: el estado es un dato que el escritor declara, no un calculo legal. UN SOLO ESCRITOR: el gestor de presentacion (rol GESTOR_PRESENTACION_FISCAL); cualquier otro rol es rechazado (403) sin espera ni cola. Cada avance APPENDEA al historial de la obligacion: el estado anterior no se reescribe (invariante 3). Una transicion no declarada se rechaza (422 TRANSICION_NO_DECLARADA) y un estado no declarable se rechaza (422 ESTADO_NO_DECLARABLE): no se salta el ciclo. Si la obligacion no consta, la lectura NO inventa estado (registrada:false + motivo). FORMA: CUSTODIO → PosPersistencia + onProjectActivated + flush + GUARD de un solo escritor. Proyecciones `_avanzar` (escritura) y `_estado` (lectura). Publica contabilidad.obligacion_avanzada.",
+  "name": "estado-presentacion-fiscal",
+  "version": "0.1.0",
+  "description": "Custodio (D12): maquina de estados con dueño del ciclo de vida de cada obligacion fiscal — estados y transiciones declarables, un solo escritor, el sistema registra pero no presenta ni firma.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "estado-presentacion-fiscal.avanzar.request",
+      "handler": "onAvanzarRequest",
+      "description": "RPC custodio (escritura, UN escritor): {project_id, rol, obligacion, estado, estados_declarables?, transiciones?, motivo?, documento?} → {obligacion, estado_anterior, estado, historial_avances, presentado_por_sistema:false}. Mueve la maquina de estados de una obligacion. GUARD de rol: solo GESTOR_PRESENTACION_FISCAL (403 si otro). El estado nuevo debe estar entre los declarados (422 ESTADO_NO_DECLARABLE) y, si la obligacion ya existe, la transicion debe estar declarada (422 TRANSICION_NO_DECLARADA). APPEND-ONLY al historial. Exito → publica contabilidad.obligacion_avanzada y responde por estado-presentacion-fiscal.avanzar.response; fallo → estado-presentacion-fiscal.avanzar.failed."
+    },
+    {
+      "event": "estado-presentacion-fiscal.estado.request",
+      "handler": "onEstadoRequest",
+      "description": "RPC custodio (lectura, NO muta): {project_id, obligacion?} → {obligacion, registrada, estado, historial} o, sin obligacion, {total, obligaciones:[{obligacion, estado, actualizada_en}], estados_declarados}. Sin registro no se inventa estado (registrada:false + motivo). Responde por estado-presentacion-fiscal.estado.response; fallo (project_id ausente) → estado-presentacion-fiscal.estado.failed."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Ciclo de vida: restaura el estado persistido del proyecto activado via PosPersistencia.restaurar(project_id). El custodio persiste, por eso se suscribe obligatoriamente a la activacion."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "estado-presentacion-fiscal.avanzar.response",
+      "description": "Respuesta RPC correlada de estado-presentacion-fiscal.avanzar.request → {request_id, status:200, data:{obligacion, estado_anterior, estado, historial_avances, presentado_por_sistema:false}}. Emitida por el helper _atender."
+    },
+    {
+      "event": "estado-presentacion-fiscal.avanzar.failed",
+      "description": "Par de fallo determinista (D12): rol no autorizado (403), obligacion/estado ausente (400), estado no declarable (422) o transicion no declarada (422) → {status, error:{code, message, details?}}. Cierra el circulo de estado-presentacion-fiscal.avanzar.request."
+    },
+    {
+      "event": "estado-presentacion-fiscal.estado.response",
+      "description": "Respuesta RPC correlada de estado-presentacion-fiscal.estado.request → {request_id, status:200, data:{registrada, estado, historial} | {total, obligaciones, estados_declarados}}. Emitida por el helper _atender."
+    },
+    {
+      "event": "estado-presentacion-fiscal.estado.failed",
+      "description": "Par de fallo determinista (D12): project_id ausente → {status, error:{code, message}}. Cierra el circulo de estado-presentacion-fiscal.estado.request."
+    },
+    {
+      "event": "contabilidad.obligacion_avanzada",
+      "description": "Fire-and-forget (D12): una obligacion fiscal cambio de estado → {project_id, obligacion, estado_anterior, estado, avances, correlation_id}. Lo consume el panel/proceso contable para saber en que punto esta cada modelo."
+    }
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "_doc": "Manifest de contabilidad-fiscal/factura-electronica — CONVERSOR STATELESS (D9, hoja del plan). LA FRONTERA UNICA DE FORMATO de la factura: convierte entre la representacion EXTERNA (formato estructurado que pida el sitio: Facturae, UBL, JSON de un programa externo…) y la `FacturaEmitida` canonica del dominio. Cruza FORMATO, no decide CONTENIDO: no calcula importes, no compone el desglose (eso es emision-factura-venta O1), no firma y no presenta. LA LEY ENTRA COMO DATO (invariante 5): el `formato`, el `mapeo` (campo canonico → clave externa) y los `esquemas_declarables` entran como DATO — NO hay ningun esquema Facturae cableado (ni versiones, ni etiquetas XML, ni namespaces, ni codigos de impuesto). Sin `formato` declarado NO se convierte (FORMATO_NO_DECLARADO); sin `mapeo` y sin ser canonico/esquema declarado se rechaza (422 FORMATO_NO_DECLARABLE). Campos canonicos de la FacturaEmitida: serie, numero, fecha, emisor, receptor, base, impuestos, total, moneda (ausente → null + `abierto`, jamas se estima). Dos direcciones: entrar (externo → factura) y salir (factura → externo). FORMA: CONVERSOR stateless — sin PosPersistencia, sin onProjectActivated. Proyecciones `_entrar` y `_salir`. Sin evento de dominio propio (solo responde).",
+  "name": "factura-electronica",
+  "version": "0.1.0",
+  "description": "Conversor stateless (D9): la frontera unica de formato estructurado de la factura (Facturae y afines) — cruza formato declarable, no decide contenido, no firma ni presenta.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "factura-electronica.entrar.request",
+      "handler": "onEntrarRequest",
+      "description": "RPC conversor: {project_id, formato, externo, mapeo?, esquemas_declarables?} → {formato, direccion:'entrar', factura, adaptador_declarado, contenido_compuesto:false, abierto:[faltantes]}. Traduce el formato externo a la FacturaEmitida canonica con el `mapeo` declarado. Sin formato → FORMATO_NO_DECLARADO; formato sin mapeo ni esquema declarado → 422 FORMATO_NO_DECLARABLE. Dato ausente → null + abierto (no se estima). Responde por factura-electronica.entrar.response; fallo → factura-electronica.entrar.failed."
+    },
+    {
+      "event": "factura-electronica.salir.request",
+      "handler": "onSalirRequest",
+      "description": "RPC conversor: {project_id, formato, factura, mapeo?, esquemas_declarables?} → {formato, direccion:'salir', externo, adaptador_declarado, firmado:false, presentado:false}. Traduce la FacturaEmitida canonica al formato externo con el `mapeo` declarado. Sin formato → FORMATO_NO_DECLARADO; formato sin mapeo ni esquema declarado → 422 FORMATO_NO_DECLARABLE. No firma ni presenta. Responde por factura-electronica.salir.response; fallo → factura-electronica.salir.failed."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "factura-electronica.entrar.response",
+      "description": "Respuesta RPC correlada de factura-electronica.entrar.request → {request_id, status:200, data:{formato, direccion, factura, adaptador_declarado, contenido_compuesto:false, abierto}}. Emitida por el helper _atender."
+    },
+    {
+      "event": "factura-electronica.entrar.failed",
+      "description": "Par de fallo determinista (D9): formato no declarado (400) o no declarable (422), externo invalido (400) → {status, error:{code, message, details?}}. Cierra el circulo de factura-electronica.entrar.request."
+    },
+    {
+      "event": "factura-electronica.salir.response",
+      "description": "Respuesta RPC correlada de factura-electronica.salir.request → {request_id, status:200, data:{formato, direccion, externo, adaptador_declarado, firmado:false, presentado:false}}. Emitida por el helper _atender."
+    },
+    {
+      "event": "factura-electronica.salir.failed",
+      "description": "Par de fallo determinista (D9): formato no declarado (400) o no declarable (422), factura invalida (400) → {status, error:{code, message, details?}}. Cierra el circulo de factura-electronica.salir.request."
+    }
+  ]
+}

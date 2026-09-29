@@ -3,6 +3,8 @@
   "name": "maestro-cuentas-bancarias",
   "version": "0.1.0",
   "description": "Custodio (E11): parcela declarable de las cuentas bancarias del negocio y su moneda — un negocio → N cuentas, con un solo escritor (declaracion del dueno/asesor) y cero cuentas inventadas.",
+  "blueprint_driven": true,
+  "blueprint_path": "maestro-cuentas-bancarias.blueprint.json",
   "language": "es",
   "subscribes": [
     {

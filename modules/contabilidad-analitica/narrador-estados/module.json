@@ -4,7 +4,6 @@
   "version": "0.1.0",
   "description": "Micro-agente (R3): narra balance y resultado en lenguaje del negocio — narra lo que hay y nunca estima ni adorna lo que falta.",
   "language": "es",
-  "blueprint_driven": true,
   "subscribes": [
     {
       "event": "narrador-estados.narrar.request",

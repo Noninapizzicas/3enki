@@ -4,7 +4,6 @@
   "version": "0.1.0",
   "description": "Micro-agente (J1): asigna centro/linea/producto a cada hecho con regla DECLARABLE (criterios del jefe via cola K9); cuando la regla no cubre, Juzga y PROPONE sin escribir — lo que no resuelve con honestidad va a cola, nunca se inventa una dimension.",
   "language": "es",
-  "blueprint_driven": true,
   "subscribes": [
     {
       "event": "etiquetado-analitico.juzgar.request",

@@ -4,7 +4,6 @@
   "version": "0.1.0",
   "description": "Micro-agente (Q2): traductor bidireccional dueño↔contabilidad — su pregunta a consulta contable y el cálculo a cifra en su idioma; traduce y no inventa cifras (sin dato → [ABIERTO]).",
   "language": "es",
-  "blueprint_driven": true,
   "subscribes": [
     {
       "event": "puente-lenguaje-dueno.a_consulta.request",

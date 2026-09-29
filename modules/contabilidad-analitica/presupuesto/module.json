@@ -3,6 +3,8 @@
   "name": "presupuesto",
   "version": "0.1.0",
   "description": "Custodio (J3): donde el JEFE fija los objetivos — cifra objetivo por dimension y periodo DECLARADA (nunca inferida); sin valor declarado queda [ABIERTO], un solo escritor (JEFE_PRESUPUESTO) y todo apilado en historial.",
+  "blueprint_driven": true,
+  "blueprint_path": "presupuesto.blueprint.json",
   "language": "es",
   "subscribes": [
     {

@@ -250,7 +250,7 @@ function nichoVacioForzado(project_id, nicho_id) {
     assert.strictEqual(instance._etapaSiguiente(st('CORTADO')), 'CICLO_COMPLETADO');
   });
 
-  await testAsync('orquestación: _rpcEtapa construye el RPC correcto con los datos acumulados', () => {
+  await testAsync('orquestación: _rpcEtapa construye el RPC correcto con los datos acumulados', async () => {
     const st = {
       project_id: 'p1', nicho: 'nX',
       datos: {
@@ -261,18 +261,36 @@ function nichoVacioForzado(project_id, nicho_id) {
         veredicto: 'VIABLE'
       }
     };
-    const norm = instance._rpcEtapa('normalizar', st);
+    const norm = await instance._rpcEtapa('normalizar', st);
     assert.strictEqual(norm.evento, 'nichos.semilla.normalizar.request');
     assert.strictEqual(norm.payload.nicho_id, 'nX');
     assert.strictEqual(norm.payload.semilla, 'salsa picante');
 
-    const sond = instance._rpcEtapa('sondear', st);
+    const sond = await instance._rpcEtapa('sondear', st);
     assert.strictEqual(sond.evento, 'nichos.territorio.sondear.request');
     assert.strictEqual(sond.payload.territorio.producto, 'salsa picante');
 
-    const evalr = instance._rpcEtapa('evaluar', st);
+    const evalr = await instance._rpcEtapa('evaluar', st);
     assert.strictEqual(evalr.evento, 'nichos.veredicto.evaluar.request');
     assert.strictEqual(evalr.payload.estudio, st.datos.estudio);
+  });
+
+  await testAsync('orquestación: evaluar LEE el criterio vigente y lo pasa al veredicto', async () => {
+    const pid = 'pCrit', nid = 'nCrit';
+    const st = nichoVacioForzado(pid, nid);
+    st.estado = 'VALIDANDO';
+    st.datos = { estudio: { demanda_1er_orden: { fuerza_demanda: 0.5 } } };
+    // Simula criterio-viabilidad con el umbral declarado.
+    instance._rpc = async (evento) => {
+      if (evento === 'nichos.criterio.leer.request') {
+        return { status: 200, data: { criterio: { umbral_ingresos: 150, minimos_demanda: { numero_busquedas: 15 } } } };
+      }
+      return null;
+    };
+    const rpc = await instance._rpcEtapa('evaluar', st);
+    assert.strictEqual(rpc.evento, 'nichos.veredicto.evaluar.request');
+    assert.ok(rpc.payload.criterio, 'el criterio viaja en el payload');
+    assert.strictEqual(rpc.payload.criterio.umbral_ingresos, 150);
   });
 
   await testAsync('orquestación: _acumular guarda los datos del evento en el nicho', () => {

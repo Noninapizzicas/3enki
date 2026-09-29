@@ -3,6 +3,8 @@
   "name": "puerto-plan-contable",
   "version": "0.1.0",
   "description": "Conversor stateless (B6): frontera de codificacion del plan contable — import/export de cuentas con formato y mapeo declarables; sin formato declarado no convierte y lo ausente queda abierto.",
+  "blueprint_driven": true,
+  "blueprint_path": "puerto-plan-contable.blueprint.json",
   "language": "es",
   "subscribes": [
     {

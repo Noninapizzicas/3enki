@@ -3,6 +3,8 @@
   "name": "partida-conciliatoria",
   "version": "0.1.0",
   "description": "Reflejo (E9): partidas en transito que explican el desfase extracto↔contabilidad — clasificacion determinista por origen declarable, sin inventar ninguna partida y con el juicio aislado en partida-no-identificada (E7).",
+  "blueprint_driven": true,
+  "blueprint_path": "partida-conciliatoria.blueprint.json",
   "language": "es",
   "subscribes": [
     {

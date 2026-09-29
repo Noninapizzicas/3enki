@@ -3,6 +3,8 @@
   "name": "expediente-documental",
   "version": "0.1.0",
   "description": "Custodio (L7): el expediente cifra → documento origen archivado y enlazado — registro inmutable y append-only, un solo escritor; el expediente conserva la prueba, no la explica.",
+  "blueprint_driven": true,
+  "blueprint_path": "expediente-documental.blueprint.json",
   "language": "es",
   "subscribes": [
     {

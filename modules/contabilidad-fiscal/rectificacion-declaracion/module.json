@@ -3,6 +3,8 @@
   "name": "rectificacion-declaracion",
   "version": "0.1.0",
   "description": "Custodio (D14): rectificacion posterior a la presentacion (complementaria/sustitutiva) — la declaracion original no se borra, la rectificacion SUMA append-only y queda trazada.",
+  "blueprint_driven": true,
+  "blueprint_path": "rectificacion-declaracion.blueprint.json",
   "language": "es",
   "subscribes": [
     {

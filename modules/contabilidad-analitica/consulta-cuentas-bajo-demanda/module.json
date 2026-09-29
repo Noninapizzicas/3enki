@@ -3,6 +3,8 @@
   "name": "consulta-cuentas-bajo-demanda",
   "version": "0.1.0",
   "description": "Puente stateless (Q1): la puerta PULL — conecta la pregunta del dueño con el cálculo por petición, sin imponer cadencia; consulta y no decide.",
+  "blueprint_driven": true,
+  "blueprint_path": "consulta-cuentas-bajo-demanda.blueprint.json",
   "language": "es",
   "subscribes": [
     {

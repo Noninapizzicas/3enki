@@ -3,6 +3,8 @@
   "name": "deduplicacion-hecho",
   "version": "0.1.0",
   "description": "Reflejo stateless (A7): aplica la clave natural (M3) para no duplicar — idempotencia determinista del hecho; sin clave natural no afirma nada en vez de asumir 'nuevo'.",
+  "blueprint_driven": true,
+  "blueprint_path": "deduplicacion-hecho.blueprint.json",
   "language": "es",
   "subscribes": [
     {

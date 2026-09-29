@@ -1,0 +1,80 @@
+{
+  "id": "etiquetado-analitico",
+  "version": "blueprint-0.1.0",
+  "_nota": "FASE 6½ · la interfaz DECLARADA del módulo etiquetado-analitico (MICRO-AGENTE HÍBRIDO de contabilidad-analitica, J1, hoja del plan). ASIGNA CENTRO / LÍNEA / PRODUCTO (la DIMENSIÓN analítica) a cada HECHO. La regla es DECLARABLE: los criterios los declara el JEFE en cola-declaraciones-criterio (K9) y llegan por EVENTO o declarados en la petición — el reflejo NUNCA cablea una regla de negocio. Cuando la regla NO cubre el hecho, clasificar es JUICIO: el micro-agente PROPONE (juicio fuzzy asistido por LLM) y lo que no resuelve con honestidad va a COLA como [ABIERTO]. HÍBRIDO: _juzgarReflejo aplica las REGLAS declaradas (la primera que coincide gana — una sola respuesta correcta, no es juicio) y _concluir es el FUZZY (1 llamada llm.complete.request que PROPONE una dimensión, con ids validados contra la lista DECLARADA). EL ÚNICO QUE PERSISTE EL JUICIO — justificado: una dimensión propuesta no se computa, se JUZGA; guarda en memoria los juicios ya emitidos (origen y confianza) para no re-juzgar lo mismo, y su persistencia DURADERA es el evento contabilidad.dimension_propuesta. PROPONE; NO escribe. La sección `ui` es lo que el generador schema→UI (BlueprintForm, 4 zonas) necesita para renderizar el panel lateral; sin LLM: TODO lo que produce sale de aquí. Fuente de verdad: modules/contabilidad-analitica/etiquetado-analitico/{module.json,index.js}. ui_handler real: etiquetado-analitico.juzgar (system_panel/lateral_derecha).",
+  "schema": "blueprint-interfaz-v2",
+  "language": "es",
+  "titulo": "El etiquetado analítico del hecho (centro · línea · producto)",
+  "eventos_publicados": [
+    "etiquetado-analitico.juzgar.response",
+    "etiquetado-analitico.juzgar.failed",
+    "contabilidad.dimension_propuesta"
+  ],
+  "eventos_que_escucho": [],
+  "_escucho_nota": "VACÍO A PROPÓSITO: el micro-agente ya atiende en module.json.subscribes etiquetado-analitico.juzgar.request (onJuzgarRequest, su única RPC); repetirlo aquí daría ANTICOLISION-001 (lo atenderían los dos). Aunque es HÍBRIDO (tiene cajón fuzzy interno), ese juicio fuzzy NO es una suscripción viva del módulo: se ejecuta DENTRO del handler RPC (_concluir → 1 llamada llm.complete.request) cuando ninguna regla cubre el hecho. Las reglas y dimensiones declaradas se leen de cola-declaraciones-criterio (K9) POR EVENTO dentro del cálculo (dependencia interna), no por suscripción. El módulo no escucha ningún evento fire-and-forget: por eso la lista va vacía.",
+  "transporte": {
+    "rpc": [
+      "etiquetado-analitico.juzgar.request -> .response",
+      "cola-declaraciones-criterio.ratificar.request -> .response",
+      "llm.complete.request -> .response"
+    ],
+    "entrada": [
+      "etiquetado-analitico.juzgar.request"
+    ],
+    "salida": [
+      "etiquetado-analitico.juzgar.response",
+      "contabilidad.dimension_propuesta"
+    ],
+    "qos": "publishAndWait (request/response correlado) en el juicio. El criterio (reglas + dimensiones) se pide a cola-declaraciones-criterio (K9) POR EVENTO si no viene declarado (best-effort), y el juicio fuzzy es 1 llamada llm.complete.request con guion self-contained (dependencias internas del cálculo, no superficie del panel). contabilidad.dimension_propuesta es fire-and-forget (J1): la dimensión PROPUESTA queda declarada para el resto de la vertical — es la persistencia duradera del juicio, no una escritura."
+  },
+  "contrato": {
+    "JuzgarInput": "{ project_id:uuid, hecho:{ id_hecho?|id?, ...campos }, reglas?:[obj], dimensiones?:[obj], criterio?:{ reglas?, dimensiones? } }",
+    "JuzgarOutput": "{ project_id, hecho_id, hecho, fuente_reglas:'declarado'|'cola-declaraciones-criterio'|null, propuesta:{ centro, linea, producto, origen:'regla'|'juicio', regla_id, confianza, motivo }|null, escribe:false, en_cola:bool, cola:'cola-declaraciones-criterio', abierto:bool, faltan:[str], motivo }",
+    "Errores": "project_id o hecho ausente → 400 (par etiquetado-analitico.juzgar.failed).",
+    "Invariantes": "NUNCA INVENTA: sin reglas declaradas NO se elige una dimensión por defecto → [ABIERTO] y a cola. El reflejo aplica las REGLAS declaradas (la PRIMERA que coincide gana — una sola respuesta correcta por regla, no es juicio) sobre el operador declarado (igual|prefijo|contiene|en|rango|existe). El juicio fuzzy SOLO propone ids de la lista DECLARADA (no inventa dimensiones) y se acepta únicamente si cumple el contrato (puede:true y confianza 0-1); si el LLM falla o no cumple, el hecho va a COLA. PROPONE; NO escribe (escribe:false). Sin cobertura ni juicio resoluble → cola con lo que falta declarado."
+  },
+  "ui": {
+    "type": "system_panel",
+    "zone": "modulos",
+    "ops": {
+      "juzgar": {
+        "titulo": "Juzgar el hecho (proponer su dimensión analítica)",
+        "descripcion": "Panel de CONTROL del etiquetado: PROPONE a qué centro/línea/producto corresponde un hecho, para el análisis de márgenes. Es un JUICIO — no una computación — por eso es el único módulo que conserva memoria de lo aprendido. Primero aplica el REFLEJO determinista de las REGLAS declaradas (la primera que coincide gana: una sola respuesta correcta por regla, con confianza 1). Solo si ninguna regla cubre el hecho entra el JUICIO fuzzy (1 llamada LLM con las dimensiones declaradas), y su propuesta se acepta únicamente si sus ids pertenecen a la lista DECLARADA. Si no hay reglas declaradas o el juicio no es resoluble con honestidad, el hecho va a COLA como [ABIERTO]: NUNCA se inventa una dimensión. PROPONE; NO escribe — la dimensión propuesta se publica (contabilidad.dimension_propuesta) y la materializa quien la consume.",
+        "zona": "formulario",
+        "args": [
+          {
+            "nombre": "hecho",
+            "tipo": "json",
+            "required": true,
+            "placeholder": "{\"id_hecho\":\"H-1\",\"concepto\":\"compra tinta\",\"importe\":120}",
+            "descripcion": "El HECHO a etiquetar (dato). Es la entrada del juicio: sus campos son lo que las reglas evalúan y lo que el juicio fuzzy lee. Sin hecho no hay nada que juzgar."
+          },
+          {
+            "nombre": "reglas",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "[{\"id\":\"R1\",\"cuando\":{\"campo\":\"concepto\",\"op\":\"contiene\",\"valor\":\"tinta\"},\"dimension\":{\"centro\":\"C1\"}}]",
+            "descripcion": "Las REGLAS de etiquetado DECLARADAS. Es DATO declarable: el reflejo NUNCA cablea una regla de negocio. Cada regla trae una condición (`cuando`/`condicion`: campo + op[igual|prefijo|contiene|en|rango|existe] + valor) y la dimensión que propone. La PRIMERA regla que coincide con el hecho gana. Sin reglas (aquí ni en la cola K9) → el hecho va a COLA, no se elige una dimensión por defecto."
+          },
+          {
+            "nombre": "dimensiones",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "[{\"tipo\":\"centro\",\"id\":\"C1\",\"descripcion\":\"taller\"}]",
+            "descripcion": "El CATÁLOGO de DIMENSIONES declaradas (centros, líneas, productos). Es DATO: el juicio fuzzy SOLO puede proponer ids de esta lista — no inventa dimensiones. Sin catálogo declarado, la propuesta fuzzy no tiene contra qué validarse."
+          },
+          {
+            "nombre": "criterio",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "{\"reglas\":[...],\"dimensiones\":[...]}",
+            "descripcion": "El CRITERIO completo empaquetado (reglas + dimensiones) como alternativa a declararlos sueltos. Es DATO: si no se declara, el módulo lo PIDE a cola-declaraciones-criterio (K9) POR EVENTO con la clave 'dimensiones'."
+          }
+        ]
+      }
+    },
+    "datos": [],
+    "_datos_nota": "HUECO DECLARADO (no se inventa): etiquetado-analitico es un MICRO-AGENTE que PROPONE (nunca escribe) y NO expone ninguna op RPC de LISTADO. En module.json.subscribes solo hay etiquetado-analitico.juzgar.request; la memoria de lo aprendido (`this._juicios`) se lee con `juiciosDe(pid)`, lectura directa en proceso (no un RPC), y no se expone por el bus. `juzgar` devuelve UN juicio (la propuesta de dimensión de un hecho, o su acuse de cola), no una tabla. Por eso la zona DATOS va vacía: una cinta de juicios necesitaría un handler RPC de listado que hoy no existe (trabajo de módulo, no de interfaz). La señal contabilidad.dimension_propuesta da el pulso vivo (el micro-agente propuso una dimensión para un hecho), pero como evento de dominio, no como tabla."
+  },
+  "filosofia": "Clasificar no es calcular: por eso aquí, cuando una regla declarada no cubre el hecho, el sistema no inventa — JUZGA, propone, y si no puede con honestidad, lo manda a cola y lo deja [ABIERTO]. El jefe declara el criterio; el micro-agente lo aplica sin cablearlo, propone solo ids de la lista declarada, y nunca escribe: lo que propone lo publica para que otro lo materialice. Y recuerda cada juicio —no para atesorarlo, sino para no volver a juzgar dos veces lo mismo y para que el criterio declarado pueda crecer con lo observado."
+}

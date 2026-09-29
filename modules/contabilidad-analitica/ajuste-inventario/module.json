@@ -3,6 +3,8 @@
   "name": "ajuste-inventario",
   "version": "0.1.0",
   "description": "Reflejo (H3): deriva la diferencia entre stock teorico y real y la expresa valorada, con asiento propuesto y aviso declarado — calculo puro; sin teorico/real/valor unitario nada se estima y el ajuste queda [ABIERTO].",
+  "blueprint_driven": true,
+  "blueprint_path": "ajuste-inventario.blueprint.json",
   "language": "es",
   "subscribes": [
     {

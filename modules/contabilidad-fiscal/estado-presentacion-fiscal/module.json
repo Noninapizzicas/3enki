@@ -3,6 +3,8 @@
   "name": "estado-presentacion-fiscal",
   "version": "0.1.0",
   "description": "Custodio (D12): maquina de estados con dueño del ciclo de vida de cada obligacion fiscal — estados y transiciones declarables, un solo escritor, el sistema registra pero no presenta ni firma.",
+  "blueprint_driven": true,
+  "blueprint_path": "estado-presentacion-fiscal.blueprint.json",
   "language": "es",
   "subscribes": [
     {

@@ -1,0 +1,103 @@
+{
+  "id": "lineas-nomina",
+  "version": "blueprint-0.1.0",
+  "_nota": "FASE 6½ · la interfaz DECLARADA del módulo lineas-nomina (REFLEJO STATELESS de contabilidad-fiscal, G6, hoja del plan). DESGLOSE BRUTO / RETENCION / COTIZACION DEL TRABAJADOR / NETO: hace la nomina EXPLICABLE, no un numero pelado. Calculo PURO y determinista. LOS CONCEPTOS SON DECLARABLES (invariante LEY/PARAMETRO COMO DATO): vienen del sistema externo TAL CUAL (en el recibo o en la peticion); aqui NO hay catalogo de conceptos cableado ni tipos ni bases ni signos legales impuestos — cada linea se organiza con SU signo declarado (`signo`: +1/-1) y, si no viene, queda signo:null y no se resta ni se suma por su cuenta. ESTE MODULO NO CALCULA LA NOMINA: los cuatro importes se COPIAN del recibo; el desglose los hace explicitos y comprueba que los conceptos declarados EXPLICAN el bruto — esa consistencia se DECLARA (`explica_bruto`, `descuadre`, `suma_conceptos`), no se corrige. INVARIANTE DE DATO AUSENTE = DESCONOCIDO: el importe que no venga queda null y se declara en `faltantes`; jamas se rellena con 0 ni se estima una linea. La seccion `ui` es lo que el generador schema→UI (BlueprintForm, 4 zonas) necesita para renderizar el panel; sin LLM: TODO lo que produce sale de aqui. Fuente de verdad: modules/contabilidad-fiscal/lineas-nomina/{module.json,index.js}. ui_handler real: lineas-nomina.desglosar (workspace_module/barra_modulos).",
+  "schema": "blueprint-interfaz-v2",
+  "language": "es",
+  "titulo": "El desglose de la nómina (bruto / retención / cotización / neto)",
+  "eventos_publicados": [
+    "lineas-nomina.desglosar.response",
+    "lineas-nomina.desglosar.failed"
+  ],
+  "eventos_que_escucho": [],
+  "_escucho_nota": "VACIO A PROPOSITO: el reflejo ya atiende en module.json.subscribes lineas-nomina.desglosar.request (onDesglosarRequest, su unica RPC); repetirlo aqui daria ANTICOLISION-001 (lo atenderian los dos). Es un REFLEJO STATELESS determinista: no tiene cajon fuzzy ni evento fire-and-forget que el LLM deba procesar. El RECIBO no llega como evento que el LLM escuche por el bus: llega declarado en la peticion o se pide DENTRO del desglose a recibo-nomina (G1) por evento (recibo-nomina.dar_forma.request, dependencia interna del calculo) — por eso no hay ningun cajon fuzzy que declarar aqui.",
+  "transporte": {
+    "rpc": [
+      "lineas-nomina.desglosar.request -> .response",
+      "recibo-nomina.dar_forma.request -> .response"
+    ],
+    "entrada": [
+      "lineas-nomina.desglosar.request"
+    ],
+    "salida": [
+      "lineas-nomina.desglosar.response"
+    ],
+    "qos": "publishAndWait (request/response correlado) en el desglose. El RECIBO llega por DOS vias sin require cruzado: declarado en la peticion (`recibo`/`nomina`) o PEDIDO a recibo-nomina (G1) POR EVENTO (dependencia interna del calculo, best-effort, cuando se declara clave natural o empleado+periodo). Los conceptos son DATO declarado. El reflejo no publica eventos de dominio: su unica salida es la respuesta RPC correlada (y su par .failed)."
+  },
+  "contrato": {
+    "DesglosarInput": "{ project_id:uuid, recibo|nomina?:obj, clave_natural?:str, empleado?:str, periodo?:str, conceptos?:[{concepto, importe, signo?, a_cargo?, cantidad?, precio?}] }",
+    "DesglosarOutput": "{ project_id, empleado, periodo, clave_natural, origen_recibo, magnitudes:{bruto, retencion, cotizacion_trabajador, neto}, lineas_concepto:[{tipo:'concepto', concepto, importe, signo, a_cargo, cantidad, precio}], lineas_magnitud:[{tipo:'magnitud', magnitud, concepto, importe, a_cargo}], lineas:[...], conceptos_origen:'declarados'|'recibo'|null, catalogo_cableado:false, explicable, suma_conceptos, explica_bruto, descuadre, calculada_aqui:false, calculo_delegado_a:'sistema-de-nomina-externo', faltantes:[str], abierto:bool }",
+    "SinFuente": "Sin recibo NI conceptos → lineas:[], abierto:true, faltantes:['recibo'] y motivo declarado (nada se estima).",
+    "Errores": "project_id ausente (400) o excepcion de la proyeccion (500) → par lineas-nomina.desglosar.failed.",
+    "Invariantes": "LOS CONCEPTOS SON DECLARABLES (invariante LEY/PARAMETRO COMO DATO): aqui NO se cablea ningun catalogo de conceptos, ni tipos, ni bases, ni signos legales — cada linea lleva SU signo declarado (`signo` +1/-1, o null si no viene y entonces NO se suma ni se resta por su cuenta); la respuesta declara conceptos_origen y catalogo_cableado:false. ESTE MODULO NO CALCULA LA NOMINA: los cuatro importes (bruto, retencion, cotizacion del trabajador, neto) se COPIAN del recibo — calculada_aqui:false, calculo_delegado_a:'sistema-de-nomina-externo'. LA CONSISTENCIA SE DECLARA, NO SE CORRIGE: `explica_bruto`, `suma_conceptos` y `descuadre` declaran si los conceptos con signo explican el bruto. INVARIANTE DE DATO AUSENTE = DESCONOCIDO: el importe que no venga queda null y se declara en `faltantes`; jamas se rellena con 0 ni se estima una linea. Determinista."
+  },
+  "ui": {
+    "type": "workspace_module",
+    "zone": "modulos",
+    "ops": {
+      "desglosar": {
+        "titulo": "Desglosar el recibo en líneas explícitas",
+        "descripcion": "Mesa de trabajo que hace la nomina EXPLICABLE: baja los CUATRO importes del recibo (bruto, retencion, cotizacion del trabajador, neto) a lineas y los acompaña de los CONCEPTOS declarados por el sistema externo, cada uno con SU signo (+1/-1) y su imputacion. LOS CONCEPTOS SON DECLARABLES: aqui no hay ningun catalogo de conceptos cableado ni tipos ni bases ni signos legales impuestos — el modulo no sabe que es una dieta ni que la especie exonera. ESTE MODULO NO CALCULA LA NOMINA: los cuatro importes se COPIAN del recibo (declarado o pedido a recibo-nomina G1 por evento). La consistencia se DECLARA, no se corrige: `explica_bruto`, `suma_conceptos` y `descuadre` dicen si los conceptos con signo explican el bruto. Dato ausente = desconocido: el importe que falte queda null y se declara en `faltantes`.",
+        "zona": "formulario",
+        "args": [
+          {
+            "nombre": "recibo",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "{\"empleado\":\"E-001\",\"periodo\":\"2026-09\",\"bruto\":2000,\"retencion\":240,\"cotizacion_trabajador\":127,\"neto\":1633,\"conceptos\":[{\"concepto\":\"salario_base\",\"importe\":1800,\"signo\":\"+\"},{\"concepto\":\"plus_transporte\",\"importe\":200,\"signo\":\"+\"}]}",
+            "descripcion": "El RECIBO declarado (tambien se acepta como `nomina`). Es DATO: sus cuatro importes se COPIAN — aqui NO se calcula la nomina. Si trae `conceptos`, se usan esos; sin recibo declarado se pide a recibo-nomina (G1) POR EVENTO si se declara clave natural o empleado+periodo."
+          },
+          {
+            "nombre": "conceptos",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "[{\"concepto\":\"salario_base\",\"importe\":1800,\"signo\":\"devengo\"},{\"concepto\":\"embargo\",\"importe\":100,\"signo\":\"deduccion\",\"a_cargo\":\"trabajador\"}]",
+            "descripcion": "LOS CONCEPTOS DECLARADOS del recibo (los declara el sistema externo, tal cual): cada uno con su importe, su `signo` (+1/-1, o 'devengo'/'deduccion') y, si se sabe, su `a_cargo`, `cantidad` y `precio`. Es DATO: no hay catalogo propio y el modulo NO interpreta el concepto ni le supone un signo — sin `signo` declarado, la linea no suma ni resta."
+          },
+          {
+            "nombre": "clave_natural",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "E-001|2026-09",
+            "descripcion": "La CLAVE NATURAL declarada del recibo, usada para PEDIRLO a recibo-nomina (G1) por evento cuando no se declara el recibo. Es DATO: no se inventa identidad."
+          },
+          {
+            "nombre": "empleado",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "E-001",
+            "descripcion": "El EMPLEADO declarado (con `periodo`) para pedir el recibo a recibo-nomina (G1) por evento. Es DATO: el modulo no deriva el empleado."
+          },
+          {
+            "nombre": "periodo",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "2026-09",
+            "descripcion": "El PERIODO declarado (con `empleado`) para pedir el recibo a G1 por evento. Es DATO: no se deriva ni se cablea ningun calendario."
+          }
+        ]
+      }
+    },
+    "datos": [
+      {
+        "op": "desglosar",
+        "titulo": "Líneas del desglose (conceptos declarados + las cuatro magnitudes del recibo)",
+        "refresh_on": [
+          "lineas-nomina.desglosar.response"
+        ],
+        "columnas": [
+          "tipo",
+          "concepto",
+          "magnitud",
+          "importe",
+          "signo",
+          "a_cargo",
+          "cantidad",
+          "precio"
+        ]
+      }
+    ],
+    "_datos_nota": "La tabla son las LINEAS del desglose (`lineas`, union de lineas_concepto y lineas_magnitud): cada fila declara si es un CONCEPTO declarado o una de las cuatro MAGNITUDES copiadas del recibo, con su importe, su signo (null si nadie lo declaro) y su imputacion. refresh_on = lineas-nomina.desglosar.response: es la senal REAL que este reflejo stateless emite al desglosar un recibo (no escucha ningun evento de dominio; el recibo lo pide DENTRO del desglose por evento, no como cinta que refrescar). El veredicto de consistencia (explica_bruto, suma_conceptos, descuadre, abierto, faltantes) son valores unicos de la respuesta, no filas: van en la cabecera del panel."
+  },
+  "filosofia": "Una nomina que solo es un neto es una caja negra: se paga sin poder explicarla. Desglosarla es hacerla defendible — que cada euro tenga su linea y su signo. Pero el modulo no sabe que es una dieta, ni cuando algo exonera, ni si un complemento se prorratea: eso lo declara quien lleva la nomina. Aqui solo se copian los cuatro importes ya calculados y se comprueba, sin corregir, si los conceptos declarados explican el bruto. Si no cuadran, no se ajusta una linea para que sume: se declara el descuadre, porque una nomina maquillada deja de ser un documento y pasa a ser una coartada."
+}

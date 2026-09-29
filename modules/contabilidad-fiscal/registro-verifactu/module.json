@@ -3,6 +3,8 @@
   "name": "registro-verifactu",
   "version": "0.1.0",
   "description": "Custodio (D8): cadena inalterable de la facturacion por huella del registro anterior — append-only, un registro = un eslabon, nunca se borra ni se reescribe; el sistema genera y registra, no firma ni presenta.",
+  "blueprint_driven": true,
+  "blueprint_path": "registro-verifactu.blueprint.json",
   "language": "es",
   "subscribes": [
     {

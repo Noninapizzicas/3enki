@@ -1,0 +1,139 @@
+{
+  "id": "puerto-exportacion",
+  "version": "blueprint-0.1.0",
+  "_nota": "FASE 6½ · la interfaz DECLARADA del módulo puerto-exportacion (CONVERSOR STATELESS de contabilidad-libro, L1, hoja del plan), tipo chat_tool: ACCIÓN PUNTUAL que se dispara desde el chat, NO mesa de trabajo ni panel. LA FRONTERA DE SALIDA HACIA EL ASESOR: convierte el libro/derivado canónico al FORMATO ESTÁNDAR que entiende el programa del asesor (`salir`) y convierte de vuelta los AJUSTES que el asesor devuelve (`entrar`) a asientos PROPUESTOS. Cruza FORMATO, NO DECIDE CONTENIDO: no reinterpreta cifras, no recalcula saldos, no juzga si un ajuste es correcto ni valida su contrapartida (eso es del libro y de regla-contrapartida). LA LEY ENTRA COMO DATO: el formato (y su versión, encoding, separador decimal y mapeo de campos) es DECLARABLE — sin formato declarado NO se convierte (400 FORMATO_NO_DECLARADO) y un formato sin mapeo y sin ser canónico se rechaza (422 FORMATO_NO_DECLARABLE); NO hay ningún formato de asesor cableado. Dato ausente = desconocido: un campo que no venga del origen queda null y se declara en abiertos/descartados, jamás se estima. La sección `ui` es lo que el generador schema→UI (BlueprintForm, 4 zonas) necesita para renderizar el panel; sin LLM: TODO lo que produce sale de aquí. Fuente de verdad: modules/contabilidad-libro/puerto-exportacion/{module.json,index.js}. ui_handlers reales: puerto-exportacion.salir y puerto-exportacion.entrar (chat_tool/barra_chat_inferior).",
+  "schema": "blueprint-interfaz-v2",
+  "language": "es",
+  "titulo": "El puerto de salida al asesor (y de vuelta los ajustes)",
+  "eventos_publicados": [
+    "puerto-exportacion.salir.response",
+    "puerto-exportacion.salir.failed",
+    "puerto-exportacion.entrar.response",
+    "puerto-exportacion.entrar.failed"
+  ],
+  "eventos_que_escucho": [],
+  "_escucho_nota": "VACÍO A PROPÓSITO: el conversor ya atiende puerto-exportacion.salir.request y puerto-exportacion.entrar.request en module.json.subscribes; repetirlos aquí daría ANTICOLISION-001. Sus dos ui_handlers son chat_tool (invocación directa desde el chat), no cajones: no hay evento fire-and-forget que un LLM deba procesar, así que no se declara ninguno. Los procesos de forma determinista (serializar/deserializar): no hay cajón fuzzy.",
+  "transporte": {
+    "rpc": [
+      "puerto-exportacion.salir.request -> .response",
+      "puerto-exportacion.entrar.request -> .response"
+    ],
+    "entrada": [
+      "puerto-exportacion.salir.request",
+      "puerto-exportacion.entrar.request"
+    ],
+    "salida": [
+      "puerto-exportacion.salir.response",
+      "puerto-exportacion.entrar.response"
+    ],
+    "qos": "publishAndWait (request/response correlado) en cada conversión; cada RPC cierra su círculo con su par .failed determinista (salir.failed / entrar.failed). El conversor es stateless: no se suscribe a nada en vivo."
+  },
+  "contrato": {
+    "SalirInput": "{ project_id:uuid, formato|canal:str, libro|derivado|datos:([fila]|{asientos:[...]}), mapeo?:{campo_canonico:clave_externa}, cabecera?:any, separador?:str, decimal?:str, encoding?:str, formatos?:{nombre:{mapeo,cabecera,separador,decimal,encoding}}, canonico?:bool, origen?:str }",
+    "SalirOutput": "{ project_id, tipo:'exportacion-contable', formato, formato_origen:'peticion'|'formatos_declarables'|'canonico', formato_canonico:bool, adaptador_declarado:bool, mapeo, cabecera, separador, decimal, encoding, total, filas:[{<clave_externa>:valor}], abiertos:[{indice,faltantes}], recalculado:false, derivado_de }",
+    "EntrarInput": "{ project_id:uuid, formato|canal:str, ajustes|entrante:([fila]|{filas:[...]}), mapeo?:{campo_canonico:clave_externa}, formatos?:obj }",
+    "EntrarOutput": "{ project_id, tipo:'importacion-ajustes', formato, adaptador_declarado:bool, total, total_externas, asientos:[{clave_natural,fecha,sociedad,concepto,referencia,apuntes:[{cuenta,debe,haber}],origen:'asesor',propuesto:true}], propuestos:true, escritos_por_este_puerto:false, descartados:[{indice,motivo,faltantes}], recalculado:false }",
+    "Errores": "sin `formato` → 400 FORMATO_NO_DECLARADO · formato sin mapeo y no canónico → 422 FORMATO_NO_DECLARABLE · origen/ajustes ausente o no serializable → 400/422. Cada error publica su par .failed (salir.failed / entrar.failed).",
+    "Invariantes": "LA LEY COMO DATO: el formato (versión, encoding, separador decimal, mapeo de campos) es DECLARABLE — sin formato declarado NO se convierte y no hay ningún formato de asesor cableado. CRUZA FORMATO, NO DECIDE CONTENIDO: no reinterpreta cifras, no recalcula saldos (recalculado:false), no juzga si un ajuste es correcto. Dato ausente = desconocido: un campo que no venga del origen queda null y se declara en abiertos; una fila sin cuenta o sin importe se DESCARTA y se declara (no se inventa un asiento). Los ajustes entran como asientos PROPUESTOS (propuestos:true, escritos_por_este_puerto:false): quien escribe es el libro (escritor-diario B2 / asiento-ajuste B5)."
+  },
+  "ui": {
+    "type": "chat_tool",
+    "zone": "modulos",
+    "ops": {
+      "salir": {
+        "titulo": "Exportar el libro al formato del asesor (salir)",
+        "descripcion": "Acción puntual que se dispara desde el chat: serializa el libro/derivado canónico al FORMATO que entiende el programa del asesor, mapeando cada fila con el `mapeo` declarado (campo canónico → clave externa) o con los nombres canónicos si el formato es canónico. Cruza FORMATO, no decide CONTENIDO: no reinterpreta cifras ni recalcula saldos (recalculado:false). El formato es DATO: sin declararlo no se exporta (FORMATO_NO_DECLARADO); un formato sin mapeo y sin ser canónico se rechaza (FORMATO_NO_DECLARABLE) — no hay ningún formato de asesor cableado. Un campo que no venga del origen queda null y se declara en `abiertos`: nada se estima.",
+        "zona": "formulario",
+        "args": [
+          {
+            "nombre": "formato",
+            "tipo": "string",
+            "required": true,
+            "placeholder": "canonico | asesor_x | pgc_csv",
+            "descripcion": "El FORMATO DECLARADO de salida (el del programa del asesor). Es DATO: sin declararlo no se exporta (400 FORMATO_NO_DECLARADO). 'canonico'/'canonical'/'json-contabilidad' no exigen mapeo; cualquier otro formato exige `mapeo` declarado o se rechaza (422 FORMATO_NO_DECLARABLE)."
+          },
+          {
+            "nombre": "libro",
+            "tipo": "json",
+            "required": true,
+            "placeholder": "[{\"fecha\":\"2026-09-01\",\"concepto\":\"venta\",\"apuntes\":[{\"cuenta\":\"430\",\"debe\":121,\"haber\":0}]}] | {\"asientos\":[...]}",
+            "descripcion": "El LIBRO/derivado a serializar: una lista de asientos o un objeto con `asientos`/`filas`/`apuntes`. Es DATO del origen: un asiento con `apuntes` se APLANA a una fila por apunte (así exporta un programa contable). No se reinterpreta nada; los campos que falten quedan null y se declaran en `abiertos`."
+          },
+          {
+            "nombre": "mapeo",
+            "tipo": "kv",
+            "required": false,
+            "placeholder": "{\"cuenta\":\"CUENTA\",\"debe\":\"DEBE\",\"haber\":\"HABER\"}",
+            "descripcion": "El adaptador DECLARADO de salida: por cada campo canónico (numero, fecha, clave_natural, sociedad, concepto, cuenta, debe, haber, importe, signo, descripcion, referencia), la clave externa de destino. Es DATO: sin mapeo solo vale un formato canónico; aquí NO hay mapeo de ningún asesor cableado."
+          },
+          {
+            "nombre": "formatos",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "{\"asesor_x\":{\"mapeo\":{\"cuenta\":\"CUENTA\"},\"separador\":\";\",\"decimal\":\",\",\"encoding\":\"latin1\"}}",
+            "descripcion": "El CATÁLOGO de formatos declarables del sitio, por nombre: cada uno con su `mapeo`, `cabecera`, `separador`, `decimal` y `encoding`. Es DATO: la ley entra aquí — no hay ningún formato cableado. Si el formato pedido está en el catálogo, se usa su mapeo (formato_origen:'formatos_declarables')."
+          },
+          {
+            "nombre": "separador",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "; | , | \\t",
+            "descripcion": "El SEPARADOR declarado del formato de salida. Es DATO: el puerto NO elige un separador por defecto; viaja en la respuesta para que el asesor lea la misma convención."
+          },
+          {
+            "nombre": "decimal",
+            "tipo": "string",
+            "required": false,
+            "placeholder": ", | .",
+            "descripcion": "El SEPARADOR DECIMAL declarado. Es DATO: no se asume ninguno; si no se declara, viaja null."
+          },
+          {
+            "nombre": "encoding",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "utf8 | latin1",
+            "descripcion": "El JUEGO DE CARACTERES declarado de salida. Es DATO: no se cablea ninguno."
+          }
+        ]
+      },
+      "entrar": {
+        "titulo": "Importar los ajustes que devuelve el asesor (entrar)",
+        "descripcion": "Acción puntual que se dispara desde el chat: deserializa las FILAS que devuelve el programa del asesor a asientos PROPUESTOS que el libro pueda admitir. Cruza FORMATO, no decide CONTENIDO: no juzga si un ajuste es correcto ni valida su contrapartida (eso es de regla-contrapartida). El formato y el mapeo son DATO: sin formato no se importa (FORMATO_NO_DECLARADO); sin mapeo y sin ser canónico se rechaza (FORMATO_NO_DECLARABLE). Una fila sin cuenta o sin importe NO se inventa: se DESCARTA y se declara en `descartados`. Los asientos salen PROPUESTOS (propuestos:true, escritos_por_este_puerto:false): quien decide y quien escribe es el libro (escritor-diario B2 / asiento-ajuste B5).",
+        "zona": "formulario",
+        "args": [
+          {
+            "nombre": "formato",
+            "tipo": "string",
+            "required": true,
+            "placeholder": "canonico | asesor_x | pgc_csv",
+            "descripcion": "El FORMATO DECLARADO de los ajustes que devuelve el asesor. Es DATO: sin declararlo no se importa (400 FORMATO_NO_DECLARADO). 'canonico'/'canonical'/'json-contabilidad' no exigen mapeo; cualquier otro exige `mapeo` declarado o se rechaza (422 FORMATO_NO_DECLARABLE)."
+          },
+          {
+            "nombre": "ajustes",
+            "tipo": "json",
+            "required": true,
+            "placeholder": "[{\"CUENTA\":\"629\",\"DEBE\":\"120,00\",\"CONCEPTO\":\"ajuste asesor\"}] | {\"filas\":[...]}",
+            "descripcion": "Los AJUSTES/filas externas del asesor a desmapear: una lista o un objeto con `filas`. Es DATO del origen: cada fila se traduce a un asiento PROPUESTO con su fila de apunte. La fila sin cuenta o sin importe (debe/haber, o importe+signo) se DESCARTA y se declara — no se inventa un asiento."
+          },
+          {
+            "nombre": "mapeo",
+            "tipo": "kv",
+            "required": false,
+            "placeholder": "{\"cuenta\":\"CUENTA\",\"debe\":\"DEBE\",\"haber\":\"HABER\"}",
+            "descripcion": "El adaptador DECLARADO de entrada: por cada campo canónico del asiento (cuenta, debe, haber, importe, signo, fecha, sociedad, concepto, descripcion, clave_natural, referencia), la clave externa que lo porta en las filas del asesor. Es DATO: sin mapeo solo vale un formato canónico."
+          },
+          {
+            "nombre": "formatos",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "{\"asesor_x\":{\"mapeo\":{\"cuenta\":\"CUENTA\",\"debe\":\"DEBE\"}}}",
+            "descripcion": "El CATÁLOGO de formatos declarables del sitio (el mismo que usa la salida). Es DATO: si el formato de los ajustes está en el catálogo, se usa su mapeo para desmapear."
+          }
+        ]
+      }
+    },
+    "datos": [],
+    "_datos_nota": "HUECO DECLARADO (no se inventa): puerto-exportacion es un CONVERSOR STATELESS sin lectura tabulable ni persistencia. Sus dos ops RPC (salir/entrar) EXIGEN payload (libro / ajustes): son conversiones puntuales disparadas desde el chat, no consultas. No hay ninguna op de listado en module.json.subscribes ni en index.js — el libro lo custodia escritor-diario (B2) y los asientos propuestos los materializa el libro (asiento-ajuste B5). Aquí la zona DATOS va vacía: el resultado de la conversión (las filas externas, los asientos propuestos, los `abiertos`/`descartados`) se ve en la respuesta RPC de cada acción."
+  },
+  "filosofia": "El dominio no debe aprender el idioma de cada programa del asesor, y por eso esta puerta cruza formatos con un adaptador que el sitio declara: sin formato declarado no se convierte, y lo que el formato externo no traiga queda null y se declara, nunca se rellena. Cruza formato, no contenido — no reinterpreta una cifra ni recalcula un saldo, porque eso sería decidir, y decidir no es suyo. Y lo que entra del asesor entra PROPUESTO, no escrito: la frontera traduce lo que el asesor devuelve, pero quien decide y quien firma en el libro es el libro. Un puerto que inventa una fila que faltaba no es una puerta: es un falsificador."
+}

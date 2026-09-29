@@ -3,6 +3,8 @@
   "name": "informe-accionable",
   "version": "0.1.0",
   "description": "Micro-agente (R2): propone qué hacer con cada informe — la recomendación es juicio y solo propone: EL DUEÑO DECIDE; sin base suficiente lo declara, no inventa.",
+  "blueprint_driven": true,
+  "blueprint_path": "informe-accionable.blueprint.json",
   "language": "es",
   "subscribes": [
     {

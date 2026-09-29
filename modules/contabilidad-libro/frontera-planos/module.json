@@ -3,6 +3,8 @@
   "name": "frontera-planos",
   "version": "0.1.0",
   "description": "Reflejo (M1): el cerrojo anti-bucle que separa el plano de la operacion del plano del calculo — a la salida solo viajan calculos, un hecho de negocio a la salida es 422, y sin patron declarado no aprueba lo que no puede verificar.",
+  "blueprint_driven": true,
+  "blueprint_path": "frontera-planos.blueprint.json",
   "language": "es",
   "subscribes": [
     {

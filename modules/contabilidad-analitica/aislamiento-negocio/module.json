@@ -3,6 +3,8 @@
   "name": "aislamiento-negocio",
   "version": "0.1.0",
   "description": "Custodio (I4): el aislamiento multi-negocio — INVARIANTE DURA 'un negocio no ve otro'; un solo dueño y un solo escritor por parcela, con control de acceso que deniega lo ajeno (403).",
+  "blueprint_driven": true,
+  "blueprint_path": "aislamiento-negocio.blueprint.json",
   "language": "es",
   "subscribes": [
     {

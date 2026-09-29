@@ -3,6 +3,8 @@
   "name": "plan-amortizacion",
   "version": "0.1.0",
   "description": "Custodio (F2): tabla de amortizacion del inmovilizado — metodo y coeficientes son DATO declarable (cero constantes fiscales), sin metodo declarado la cuota queda [ABIERTO] y con un solo escritor.",
+  "blueprint_driven": true,
+  "blueprint_path": "plan-amortizacion.blueprint.json",
   "language": "es",
   "subscribes": [
     {

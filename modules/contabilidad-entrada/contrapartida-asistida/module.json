@@ -3,6 +3,8 @@
   "name": "contrapartida-asistida",
   "version": "0.1.0",
   "description": "Micro-agente (A6.1): propone la contrapartida (cuenta+tercero+periodo) contra el plan y la regla declarados — PROPONE y no escribe; sin regla no inventa la cuenta y manda la duda a la cola.",
+  "blueprint_driven": true,
+  "blueprint_path": "contrapartida-asistida.blueprint.json",
   "language": "es",
   "subscribes": [
     {

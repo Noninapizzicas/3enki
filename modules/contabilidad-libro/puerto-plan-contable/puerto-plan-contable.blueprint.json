@@ -1,0 +1,102 @@
+{
+  "id": "puerto-plan-contable",
+  "version": "blueprint-0.1.0",
+  "_nota": "FASE 6½ · la interfaz DECLARADA del módulo puerto-plan-contable (CONVERSOR STATELESS de contabilidad-libro, B6, hoja del plan). Frontera de CODIFICACIÓN del plan contable: import (externo → Set<Cuenta>) y export (plan → externo) con formato y mapeo declarables. La sección `ui` es lo que el generador schema→UI (BlueprintForm, 4 zonas) necesita para renderizar el panel; sin LLM: TODO lo que produce sale de aquí. Fuente de verdad: modules/contabilidad-libro/puerto-plan-contable/{module.json,index.js}.",
+  "schema": "blueprint-interfaz-v2",
+  "language": "es",
+  "titulo": "Importar y exportar el plan contable",
+  "eventos_publicados": [
+    "puerto-plan-contable.entrar.response",
+    "puerto-plan-contable.entrar.failed",
+    "puerto-plan-contable.salir.response",
+    "puerto-plan-contable.salir.failed"
+  ],
+  "eventos_que_escucho": [],
+  "_escucho_nota": "VACÍO A PROPÓSITO: el reflejo ya atiende puerto-plan-contable.entrar.request y puerto-plan-contable.salir.request en module.json.subscribes; repetirlos aquí daría ANTICOLISION-001. Sus dos ui_handlers son chat_tool (invocación directa desde el chat), no cajones: no hay evento fire-and-forget que un LLM deba procesar, así que no se declara ninguno.",
+  "transporte": {
+    "rpc": [
+      "puerto-plan-contable.entrar.request -> .response",
+      "puerto-plan-contable.salir.request -> .response"
+    ],
+    "entrada": [
+      "puerto-plan-contable.entrar.request",
+      "puerto-plan-contable.salir.request"
+    ],
+    "salida": [
+      "puerto-plan-contable.entrar.response",
+      "puerto-plan-contable.salir.response"
+    ],
+    "qos": "publishAndWait (request/response correlado) en cada conversión; cada RPC cierra su círculo con su par .failed determinista"
+  },
+  "contrato": {
+    "EntrarInput": "{ project_id:uuid, formato:str, externo:(obj | { cuentas:[...] }), mapeo?:{ campo_canonico: clave_externa } }",
+    "EntrarOutput": "{ project_id, formato, adaptador_declarado:bool, total, abiertos:[{ codigo?, fila?, faltantes }], cuentas:[{ codigo, nombre, tipo, naturaleza, padre }] }",
+    "SalirInput": "{ project_id:uuid, formato:str, plan:([Cuenta] | { cuentas:[...] }), mapeo?:{ campo_canonico: clave_externa } }",
+    "SalirOutput": "{ project_id, formato, adaptador_declarado:bool, total, externo:[fila] }",
+    "Errores": "sin `formato` -> 400 FORMATO_NO_DECLARADO · formato no declarable sin mapeo -> 422 FORMATO_NO_DECLARABLE · externo/plan ausente -> 400 INVALID_INPUT. Cada error publica su par .failed (entrar.failed / salir.failed).",
+    "CamposCuenta": "Campos canónicos de una Cuenta del plan: codigo, nombre, tipo, naturaleza, padre. El campo externo ausente → null (no se estima); sin `codigo` no hay cuenta y la fila se aparta en `abiertos`."
+  },
+  "ui": {
+    "type": "chat_tool",
+    "zone": "modulos",
+    "ops": {
+      "entrar": {
+        "titulo": "Importar plan contable (externo → cuenta)",
+        "descripcion": "Convierte un plan externo a Set<Cuenta> con `formato` y `mapeo` DECLARABLES: no hay ninguna codificación (PGC, CSV, código de asesor) cableada. Sin `mapeo` solo se acepta el formato canónico declarado ('canonico'/'enki'); cualquier otro formato exige mapeo o devuelve FORMATO_NO_DECLARABLE. Las filas sin `codigo` se apartan en `abiertos` (sin código no hay cuenta, no se inventa) y los campos ausentes quedan null. NO custodia el plan: el almacén es catalogo-cuentas (B1) — esto solo cruza formatos.",
+        "zona": "formulario",
+        "args": [
+          {
+            "nombre": "formato",
+            "tipo": "string",
+            "required": true,
+            "placeholder": "canonico | pgc_csv | asesor_x",
+            "descripcion": "El formato DECLARADO del plan externo. Sin declararlo no se convierte (FORMATO_NO_DECLARADO). 'canonico'/'enki' no exigen mapeo; cualquier otro sí."
+          },
+          {
+            "nombre": "externo",
+            "tipo": "json",
+            "required": true,
+            "placeholder": "{\"cuentas\":[{\"codigo\":\"430\",\"nombre\":\"Clientes\",\"tipo\":\"ACTIVO\"}]}",
+            "descripcion": "El plan externo: una lista de filas o un objeto con `cuentas`. Cada fila se traduce a una Cuenta canónica usando el mapeo declarado."
+          },
+          {
+            "nombre": "mapeo",
+            "tipo": "kv",
+            "required": false,
+            "descripcion": "El adaptador DECLARADO: por cada campo canónico de la Cuenta (codigo, nombre, tipo, naturaleza, padre), la clave externa que lo porta. Sin mapeo, identidad por nombre canónico."
+          }
+        ]
+      },
+      "salir": {
+        "titulo": "Exportar plan contable (cuenta → externo)",
+        "descripcion": "Codifica el plan (Set<Cuenta>) al formato externo declarado. Los campos ausentes salen null (no se estiman). Igual que el import, el `formato` y el `mapeo` son DATO: sin mapeo solo se acepta 'canonico'/'enki'; cualquier otro formato exige mapeo declarado. No custodia ni lee el almacén: el plan a exportar entra en el payload.",
+        "zona": "formulario",
+        "args": [
+          {
+            "nombre": "formato",
+            "tipo": "string",
+            "required": true,
+            "placeholder": "canonico | pgc_csv | asesor_x",
+            "descripcion": "El formato DECLARADO de salida. Sin declararlo no se exporta (FORMATO_NO_DECLARADO). 'canonico'/'enki' no exigen mapeo; cualquier otro sí."
+          },
+          {
+            "nombre": "plan",
+            "tipo": "json",
+            "required": true,
+            "placeholder": "[{\"codigo\":\"430\",\"nombre\":\"Clientes\",\"tipo\":\"ACTIVO\"}]",
+            "descripcion": "El plan a codificar: una lista de Cuentas o un objeto con `cuentas`. Cada Cuenta se escribe en el formato externo usando el mapeo declarado."
+          },
+          {
+            "nombre": "mapeo",
+            "tipo": "kv",
+            "required": false,
+            "descripcion": "El adaptador DECLARADO de salida: por cada campo canónico de la Cuenta, la clave externa de destino. Sin mapeo, identidad por nombre canónico."
+          }
+        ]
+      }
+    },
+    "datos": [],
+    "_datos_nota": "HUECO DECLARADO (no se inventa): puerto-plan-contable es un CONVERSOR STATELESS sin lectura tabulable ni persistencia. Sus dos ops RPC (entrar/salir) EXIGEN payload (externo / plan): son conversiones puntuales, no consultas. No hay ninguna op de listado en module.json.subscribes ni en index.js — el plan lo custodia catalogo-cuentas (B1) y su blueprint ya declara la tabla del plan. Aquí la zona DATOS va vacía: el resultado de la conversión se ve en la respuesta RPC."
+  },
+  "filosofia": "Un plan contable se escribe en muchos idiomas — el del PGC, el del asesor, el de un CSV suelto — y el dominio no debe aprender ninguno. Esta puerta cruza formatos con un adaptador que el sitio declara: sin formato declarado no se convierte, y lo que el formato externo no traiga queda null, nunca rellenado. No custodia el plan: solo lo traduce, en las dos direcciones, sin inventar una sola cuenta ni una sola clave."
+}

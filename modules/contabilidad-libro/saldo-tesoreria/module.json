@@ -3,6 +3,8 @@
   "name": "saldo-tesoreria",
   "version": "0.1.0",
   "description": "Reflejo (E4): saldo de tesoreria por cuenta derivado del mayor y del maestro de cuentas bancarias — determinista y sin inventar ninguna cuenta ni saldo cuando falta el maestro.",
+  "blueprint_driven": true,
+  "blueprint_path": "saldo-tesoreria.blueprint.json",
   "language": "es",
   "subscribes": [
     {

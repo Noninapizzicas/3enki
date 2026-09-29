@@ -1,0 +1,129 @@
+{
+  "id": "alta-activo",
+  "version": "blueprint-0.1.0",
+  "_nota": "FASE 6½ · la interfaz DECLARADA del módulo alta-activo (CUSTODIO CON PERSISTENCIA de contabilidad-analitica, F1, hoja del plan). La PARCELA DEL INMOVILIZADO: la ficha de cada BIEN de la empresa (la máquina, el vehículo, el local, el ordenador); raíz del grupo F. LOS DATOS DEL BIEN SON DECLARABLES: valor, fecha_alta, vida_util y método entran como DATO declarado por el negocio; el módulo NUNCA los estima ni asume un valor por defecto. La sección `ui` es lo que el generador schema→UI (BlueprintForm, 4 zonas) necesita para renderizar el panel; sin LLM: TODO lo que produce sale de aquí. Fuente de verdad: modules/contabilidad-analitica/alta-activo/{module.json,index.js}. ui_handler real: alta-activo.registrar (workspace_module/barra_modulos).",
+  "schema": "blueprint-interfaz-v2",
+  "language": "es",
+  "titulo": "La ficha del bien (inmovilizado)",
+  "eventos_publicados": [
+    "alta-activo.registrar.response",
+    "alta-activo.registrar.failed",
+    "contabilidad.activo_registrado"
+  ],
+  "eventos_que_escucho": [],
+  "_escucho_nota": "VACÍO A PROPÓSITO: el custodio ya atiende en module.json.subscribes alta-activo.registrar.request (su RPC, onRegistrarRequest) y project.activated (restauración PosPersistencia, onProjectActivated); repetir cualquiera aquí daría ANTICOLISION-001 (lo atenderían los dos). Es un CUSTODIO determinista: no tiene cajón fuzzy ni evento fire-and-forget que el LLM deba procesar. Su salida `contabilidad.activo_registrado` es de DOMINIO y la LEEN plan-amortizacion (F2), valor-neto-contable (F4) y baja-activo (F3) en su propio subscribes — no es una suscripción de este módulo.",
+  "transporte": {
+    "rpc": [
+      "alta-activo.registrar.request -> .response"
+    ],
+    "entrada": [
+      "alta-activo.registrar.request"
+    ],
+    "salida": [
+      "alta-activo.registrar.response",
+      "contabilidad.activo_registrado"
+    ],
+    "qos": "publishAndWait (request/response correlado) en el alta. contabilidad.activo_registrado es fire-and-forget (F1): un bien quedó en la parcela del inmovilizado — lo LEEN plan-amortizacion (F2, genera su tabla), valor-neto-contable (F4, al balance) y baja-activo (F3, al retirar el bien). project.activated lo atiende el custodio para restaurar la parcela del proyecto desde el storage."
+  },
+  "contrato": {
+    "RegistrarInput": "{ project_id:uuid, rol:'ALTA_INMOVILIZADO', activo:{ id_activo, denominacion?, valor?, fecha_alta?, vida_util?, metodo?, valor_residual?, cuenta?, tipo?, moneda? } }",
+    "RegistrarOutput": "{ project_id, activo:{ id_activo, denominacion, valor, fecha_alta, vida_util, metodo, valor_residual, cuenta, tipo, moneda, estado:'ALTA', historial, abierto:[...], registrado_en, updated_at }, alta:bool, actualizado:bool, abierto:[campos no declarados] }",
+    "Errores": "rol distinto de ALTA_INMOVILIZADO → 403 PERMISSION_DENIED (segundo escritor) · project_id o activo.id_activo ausente → 400 (par alta-activo.registrar.failed).",
+    "Invariantes": "UN SOLO ESCRITOR: solo el camino de alta (rol ALTA_INMOVILIZADO) registra activos; cualquier otro rol → 403. `registrar` es UPSERT declarativo por id_activo: el mismo id ACTUALIZA la ficha (el dueño corrige) y apila el cambio en su historial — nunca se borra en silencio. NADA CABLEADO: ninguna vida útil fiscal, ningún coeficiente, ningún método, ningún tipo de bien, ninguna cuenta contable. Los campos del bien son ParametroDeclarable: un dato que no llega queda null (desconocido) y se declara en `abierto` — jamás se rellena con un valor por defecto. Persiste por proyecto con PosPersistencia."
+  },
+  "ui": {
+    "type": "workspace_module",
+    "zone": "modulos",
+    "ops": {
+      "registrar": {
+        "titulo": "Dar de alta (o corregir) un bien",
+        "descripcion": "Mesa de trabajo de la parcela del inmovilizado. UN SOLO ESCRITOR: solo el camino de alta (rol ALTA_INMOVILIZADO) registra activos; cualquier otro rol es rechazado con 403. Es un UPSERT declarativo por `id_activo`: el mismo id ACTUALIZA la ficha y apila el cambio en su historial — nunca se borra en silencio. LOS DATOS DEL BIEN SON DECLARABLES: valor, fecha, vida útil y método entran como DATO del negocio; el módulo NUNCA estima nada — un campo que no llega queda null (desconocido) y se declara en `abierto`, jamás se rellena con un valor por defecto. La valoración del alta llega YA HECHA (el valor declarado): este módulo no la calcula ni la deriva.",
+        "zona": "formulario",
+        "args": [
+          {
+            "nombre": "rol",
+            "tipo": "select",
+            "enum": [
+              "ALTA_INMOVILIZADO"
+            ],
+            "required": true,
+            "descripcion": "El rol del escritor. La parcela tiene UN solo escritor: solo el camino de alta (ALTA_INMOVILIZADO) registra; cualquier otro valor es rechazado (403)."
+          },
+          {
+            "nombre": "activo.id_activo",
+            "tipo": "string",
+            "required": true,
+            "placeholder": "MAQ-001",
+            "descripcion": "El identificador del bien (la clave del inmovilizado). Es DATO declarado por el negocio; el sistema no deriva ni valida ningún formato. Debe ser único: el mismo id ACTUALIZA la ficha, no duplica."
+          },
+          {
+            "nombre": "activo.denominacion",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "Máquina de corte láser",
+            "descripcion": "El nombre del bien (DATO libre). Si no se declara, queda null = desconocido (no se inventa)."
+          },
+          {
+            "nombre": "activo.valor",
+            "tipo": "number",
+            "required": false,
+            "placeholder": "(vacío = desconocido, no se estima)",
+            "descripcion": "El VALOR del bien, ya VALORADO por el negocio (llega declarado, no se calcula). Es DATO: si no se declara queda null = desconocido; el sistema no asume ningún importe ni valor residual."
+          },
+          {
+            "nombre": "activo.fecha_alta",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "2026-01-15",
+            "descripcion": "La fecha de alta del bien. Es DATO declarado; si no llega queda null = desconocido (no se asume la fecha de hoy)."
+          },
+          {
+            "nombre": "activo.vida_util",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "10 años | 120 meses",
+            "descripcion": "La VIDA ÚTIL declarada por el negocio. Es DATO: el módulo NO tiene ninguna vida útil fiscal cableada — si no se declara, queda null (desconocido), nunca un valor por defecto."
+          },
+          {
+            "nombre": "activo.metodo",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "lineal | ...",
+            "descripcion": "El MÉTODO de amortización DECLARADO (dato libre del negocio). El código no cablea ningún método ni coeficiente; sin declararlo queda null = desconocido y se declara en `abierto`."
+          },
+          {
+            "nombre": "activo.valor_residual",
+            "tipo": "number",
+            "required": false,
+            "placeholder": "(vacío = desconocido, no se asume)",
+            "descripcion": "El valor residual DECLARADO del bien. Es DATO: si no llega queda null = desconocido; el sistema no asume ningún residual por defecto."
+          },
+          {
+            "nombre": "activo.cuenta",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "217",
+            "descripcion": "La cuenta contable del bien (dato declarado por el negocio). El módulo NO cablea ninguna cuenta; sin declararla queda null = desconocido."
+          },
+          {
+            "nombre": "activo.tipo",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "maquinaria | vehiculo | local | ...",
+            "descripcion": "El TIPO de bien declarado. Es DATO libre: no hay ninguna taxonomía cableada; sin declararlo queda null = desconocido (no se clasifica solo)."
+          },
+          {
+            "nombre": "activo.moneda",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "(vacío = desconocida, no se estima)",
+            "descripcion": "La MONEDA declarada del bien. Es DATO: si no se declara queda null = desconocida; el sistema no asume ninguna divisa por defecto."
+          }
+        ]
+      }
+    },
+    "datos": [],
+    "_datos_nota": "HUECO DECLARADO (no se inventa): alta-activo es un CUSTODIO que ESCRIBE (registrar), pero NO expone ninguna op RPC de LISTADO. En module.json.subscribes solo hay alta-activo.registrar.request y project.activated; en index.js la lectura de conjunto es `activosDe(pid)`, lectura directa en proceso (no un RPC), y el volcado se hace por PosPersistencia al storage del proyecto (/contabilidad/alta-activo/alta-activo.json), no por el bus. `registrar` devuelve UN bien (con su `abierto` y su historial), no una tabla. Por eso la zona DATOS va vacía: la cinta del inmovilizado necesitaría un handler RPC de listado que hoy no existe en el backend (trabajo de módulo, no de interfaz). La señal contabilidad.activo_registrado da el pulso vivo (y alimenta a F2/F4/F3), pero no una tabla."
+  },
+  "filosofia": "Un bien no se valora aquí: se DECLARA. El sistema no sabe —ni debe saber— cuánto vale una máquina ni cuántos años dura: eso lo dice el dueño. Por eso no hay ni una vida útil fiscal ni un método ni un tipo cableados, y un dato que no llega no se rellena: queda desconocido y se declara a la vista. Corregir un bien no lo reescribe: le apila una versión en el historial. Esta ficha es la raíz de la amortización (F2), del valor neto (F4) y de la baja (F3) — si aquí se inventara un número, todo lo que cuelga de él nacería mintiendo."
+}

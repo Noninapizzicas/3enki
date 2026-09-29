@@ -3,6 +3,8 @@
   "name": "prevision-caja",
   "version": "0.1.0",
   "description": "Reflejo (E5): prevision de caja desde saldos y vencimientos con la politica declarada — declara sus supuestos y no estima nada sin base declarada.",
+  "blueprint_driven": true,
+  "blueprint_path": "prevision-caja.blueprint.json",
   "language": "es",
   "subscribes": [
     {

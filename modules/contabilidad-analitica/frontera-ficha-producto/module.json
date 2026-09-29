@@ -3,6 +3,8 @@
   "name": "frontera-ficha-producto",
   "version": "0.1.0",
   "description": "Conversor (H2): unica puerta ficha-de-producto → coste interno contable segun una forma_declarable — cruza el formato sin decidir contenido ni valoracion, y crea la frontera del negocio si falta.",
+  "blueprint_driven": true,
+  "blueprint_path": "frontera-ficha-producto.blueprint.json",
   "language": "es",
   "subscribes": [
     {

@@ -3,6 +3,8 @@
   "name": "regla-contrapartida",
   "version": "0.1.0",
   "description": "Custodio (A6.2): la parcela de reglas declarables/aprendidas de contrapartida — el corte duro proveedor→cuenta; un solo escritor (el aprendizaje entra por ratificacion) y lo que no cubre no se inventa.",
+  "blueprint_driven": true,
+  "blueprint_path": "regla-contrapartida.blueprint.json",
   "language": "es",
   "subscribes": [
     {

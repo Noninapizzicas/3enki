@@ -3,6 +3,8 @@
   "name": "vencimiento-pago",
   "version": "0.1.0",
   "description": "Reflejo (N6): vencimiento de una factura desde la politica de plazos declarada — determinista, con plazos que entran como dato y sin estimar ninguna fecha cuando la politica no se declara.",
+  "blueprint_driven": true,
+  "blueprint_path": "vencimiento-pago.blueprint.json",
   "language": "es",
   "subscribes": [
     {

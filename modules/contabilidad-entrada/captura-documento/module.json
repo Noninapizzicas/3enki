@@ -3,6 +3,8 @@
   "name": "captura-documento",
   "version": "0.1.0",
   "description": "Reflejo stateless (A3): admite el documento digitalizado o recibido y valida sus campos contra un minimo declarable — mecanico, cero juicio; no interpreta, no asienta.",
+  "blueprint_driven": true,
+  "blueprint_path": "captura-documento.blueprint.json",
   "language": "es",
   "subscribes": [
     {

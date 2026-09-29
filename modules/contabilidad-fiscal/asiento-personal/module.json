@@ -3,6 +3,8 @@
   "name": "asiento-personal",
   "version": "0.1.0",
   "description": "Reflejo (G3): construye el asiento de personal EQUILIBRADO (sueldos + SS + retencion + pago) desde el recibo ya calculado y la obligacion SS, con las cuentas declarables — calculo puro, sin cablear el PGC.",
+  "blueprint_driven": true,
+  "blueprint_path": "asiento-personal.blueprint.json",
   "language": "es",
   "subscribes": [
     {

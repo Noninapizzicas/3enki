@@ -3,6 +3,8 @@
   "name": "desatasco-entrada",
   "version": "0.1.0",
   "description": "Micro-agente (P3): desatasca una excepción con motivo (resolver/reencolar/descartar) — propone sin escribir; si aprende una regla candidata NO actúa hasta que el asesor la ratifique.",
+  "blueprint_driven": true,
+  "blueprint_path": "desatasco-entrada.blueprint.json",
   "language": "es",
   "subscribes": [
     {

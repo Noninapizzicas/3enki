@@ -3,6 +3,8 @@
   "name": "vista-revisable",
   "version": "0.1.0",
   "description": "Reflejo (L2): la vista legible y revisable de cada asiento con su origen (traza quien/cuando/por que) — composicion determinista, jamas caja negra; no recalcula ni firma.",
+  "blueprint_driven": true,
+  "blueprint_path": "vista-revisable.blueprint.json",
   "language": "es",
   "subscribes": [
     {

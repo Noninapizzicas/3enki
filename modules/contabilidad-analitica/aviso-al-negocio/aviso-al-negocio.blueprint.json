@@ -1,0 +1,97 @@
+{
+  "id": "aviso-al-negocio",
+  "version": "blueprint-0.1.0",
+  "_nota": "FASE 6½ · la interfaz DECLARADA del módulo aviso-al-negocio (PUENTE STATELESS de contabilidad-analitica, R1, hoja del plan), tipo inline_render: NO es mesa de trabajo ni panel de control — se RENDERIZA EN LA CONVERSACIÓN del chat. LA CARA DE ENTREGA: el aviso ENTREGADO y CONFIRMADO al negocio cliente. COMPLETA motor-avisos (K2), que solo PRODUCE el aviso — aquí se ENTREGA por el canal y se CONFIRMA la entrega. ⚠️ ENTREGAR ≠ RECIBIR: aquí se declara que el aviso SE ENTREGÓ (el canal lo confirmó); la recepción por parte del cliente es otra cosa y este módulo no la afirma. El CANAL es ParametroDeclarable (telegram/email/push/motor); sin canal declarado NO se inventa uno. La sección `ui` es lo que el generador schema→UI (BlueprintForm, 4 zonas) necesita para renderizar lo que el chat pinta; sin LLM: TODO lo que produce sale de aquí. Fuente de verdad: modules/contabilidad-analitica/aviso-al-negocio/{module.json,index.js}. ui_handler real: aviso-al-negocio.entregar (inline_render/area_chat).",
+  "schema": "blueprint-interfaz-v2",
+  "language": "es",
+  "titulo": "El aviso que llega al negocio (aparece en el chat)",
+  "eventos_publicados": [
+    "aviso-al-negocio.entregar.response",
+    "aviso-al-negocio.entregar.failed",
+    "contabilidad.aviso_entregado"
+  ],
+  "eventos_que_escucho": [],
+  "_escucho_nota": "VACÍO A PROPÓSITO: el puente ya atiende en module.json.subscribes sus DOS eventos — la RPC aviso-al-negocio.entregar.request (onEntregarRequest) y el fire-and-forget contabilidad.aviso_producido (onAvisoProducido, K2 → R1); repetir cualquiera aquí daría ANTICOLISION-001 (lo atenderían los dos). Es un PUENTE STATELESS: no persiste, no tiene cajón fuzzy (no llama al LLM) y su única salida de dominio es contabilidad.aviso_entregado (fire-and-forget), que declara la entrega confirmada. El canal de entrega es ParametroDeclarable: se declara en la petición, no se escucha. Su ui_handler es inline_render (área del chat), no un cajón. Por eso la lista va vacía.",
+  "transporte": {
+    "rpc": [
+      "aviso-al-negocio.entregar.request -> .response",
+      "telegram.send_message.request -> .response",
+      "email.send.request -> .response",
+      "push.send.request -> .response",
+      "motor-avisos.producir.request -> .response"
+    ],
+    "entrada": [
+      "aviso-al-negocio.entregar.request"
+    ],
+    "salida": [
+      "aviso-al-negocio.entregar.response",
+      "contabilidad.aviso_entregado"
+    ],
+    "qos": "publishAndWait (request/response correlado) en la entrega. El canal declarado se emite POR EVENTO dentro del handler (telegram/email/push/motor, timeout 8000ms): si el canal no confirma, entregado:false y confirmado:false — JAMÁS se afirma entregado sin confirmación. contabilidad.aviso_entregado es fire-and-forget (R1): es la confirmación de entrega que motor-avisos (K2) no podía dar (él solo PRODUCE). En modo inline_render NADA se suscribe en vivo para la superficie: el chat pinta la respuesta del RPC cuando el humano la invoca."
+  },
+  "contrato": {
+    "EntregarInput": "{ project_id:uuid, aviso:{id,tipo,asunto,motivo,destino,canal,detalle}, aviso_id?, canal?, destino? }",
+    "EntregarOutput": "{ project_id, aviso_id, aviso, confirmacion:{entregado, confirmado, canal, canal_evento, destino, id_mensaje, entregado_en, motivo}, decide:false, completa_a:'motor-avisos (K2)', abierto, faltan }",
+    "Errores": "aviso o project_id ausente → 400 (par aviso-al-negocio.entregar.failed). Sin canal declarado → entregado:false con faltan:['canal'] (no se inventa canal).",
+    "Invariantes": "ENTREGA, NO DECIDE: no decide qué avisar, a quién ni por qué canal — eso ya viene decidido en el Aviso (K2 + catálogo K6); aquí se ENVÍA por el canal y se devuelve la confirmación (decide:false). EL CANAL ES DECLARABLE (ParametroDeclarable): sin canal declarado NO se inventa uno. LA ENTREGA ES POR EL CANAL: se emite por el canal declarado POR EVENTO; si el canal no confirma, entregado:false y confirmado:false — JAMÁS se afirma entregado sin confirmación. ENTREGAR ≠ RECIBIR: este módulo declara la ENTREGA confirmada por el canal, no la recepción por el cliente. Sin estado: un puente no recuerda avisos."
+  },
+  "ui": {
+    "type": "inline_render",
+    "zone": "modulos",
+    "ops": {
+      "entregar": {
+        "titulo": "Entregar un aviso al negocio (por el canal declarado)",
+        "descripcion": "Lo que el chat pinta cuando se entrega un aviso: la CONFIRMACIÓN de la entrega por el canal declarado. Se declara el aviso (el ya PRODUCIDO por motor-avisos K2) y el canal (telegram/email/push/motor) y el puente lo ENVÍA POR EVENTO, devolviendo si el canal lo confirmó: `entregado` y `confirmado` (junto al canal, el destino y el id del mensaje). ⚠️ ENTREGAR NO ES RECIBIR: aquí se declara que el aviso SE ENTREGÓ — el canal lo confirmó; que el cliente lo haya leído o recibido es otra cosa, y este módulo no la afirma. Sin canal declarado no se inventa uno (entregado:false con faltan:['canal']); si el canal no confirma, el aviso NO se declara entregado. El puente no decide qué avisar ni a quién: eso ya venía decidido en el Aviso. No hay ningún botón de «redactar» ni de «elegir destinatario» aquí: la cara de este módulo es la de la ENTREGA.",
+        "zona": "acciones",
+        "args": [
+          {
+            "nombre": "aviso",
+            "tipo": "json",
+            "required": true,
+            "default": "",
+            "placeholder": "{\"id\":\"AV-1\",\"tipo\":\"cobertura\",\"asunto\":\"Falta cobertura de marzo\",\"motivo\":\"sin extracto bancario\",\"destino\":\"dueño\",\"canal\":\"telegram\"}",
+            "descripcion": "El AVISO ya PRODUCIDO (por motor-avisos K2) que se va a entregar: su `asunto`, `motivo`, `destino`, `canal` y `detalle`. Es DATO: el puente no decide qué avisar ni a quién — eso viene ya decidido en el propio aviso; aquí solo se ENTREGA y se confirma. Sin aviso no hay entrega."
+          },
+          {
+            "nombre": "canal",
+            "tipo": "select",
+            "enum": ["telegram", "email", "push", "motor"],
+            "required": false,
+            "default": "",
+            "placeholder": "telegram | email | push | motor",
+            "descripcion": "El CANAL declarado por el que entregar (ParametroDeclarable). Es DATO: telegram→telegram.send_message, email→email.send, push→push.send, motor→motor-avisos.producir. Si no se declara aquí, se toma el `canal` del aviso. Sin canal (ni aquí ni en el aviso) NO se inventa uno: entregado:false con faltan:['canal']."
+          },
+          {
+            "nombre": "destino",
+            "tipo": "string",
+            "required": false,
+            "default": "",
+            "placeholder": "dueño | @usuario | correo@negocio.com",
+            "descripcion": "El DESTINO declarado de la entrega (a quién va el aviso por ese canal). Es DATO: si no se declara, se toma el `destino` del aviso; si tampoco consta, la confirmación lo declara null (ParametroDeclarable). No decide a quién avisar — solo declara por dónde llega."
+          }
+        ]
+      }
+    },
+    "datos": [
+      {
+        "op": "entregar",
+        "titulo": "La entrega del aviso: si llegó y por dónde (lo que el chat pinta)",
+        "refresh_on": [
+          "aviso-al-negocio.entregar.response"
+        ],
+        "columnas": [
+          "aviso_id",
+          "entregado",
+          "confirmado",
+          "canal",
+          "destino",
+          "id_mensaje",
+          "entregado_en"
+        ]
+      }
+    ],
+    "_datos_nota": "La forma EXACTA de lo que el chat PINTA: la confirmación de UNA entrega. `aviso_id` es el aviso entregado; `entregado`/`confirmado` son el veredicto (ambos false si el canal no confirmó — jamás true sin confirmación); `canal` es el canal declarado por el que salió (telegram/email/push/motor-avisos); `destino` a quién iba; `id_mensaje` el identificador que devolvió el canal (prueba de la entrega); `entregado_en` el instante de la entrega confirmada. En la tarjeta el chat muestra además `motivo` (por qué se declara entregado o no) y `completa_a` ('motor-avisos (K2)') — eso viaja en la respuesta, no como filas. ⚠️ ENTREGAR ≠ RECIBIR: la tabla declara la ENTREGA confirmada por el canal, no la recepción por el cliente. `refresh_on` = aviso-al-negocio.entregar.response (el evento que este puente emite y la señal de que la tarjeta cambia); la entrega también emite contabilidad.aviso_entregado, el fire-and-forget de dominio que consume el cuadro de mando (J8) — la superficie del chat se re-pinta al invocar la entrega, no por suscripción viva (inline_render).",
+    "_tipo_nota": "inline_render: NO es mesa de trabajo (workspace_module) ni panel de control (system_panel). Es contenido que se renderiza DENTRO del flujo de la conversación — su ui_handler real (module.json) declara type:inline_render, zone:area_chat, y por eso el bloque aparece en el chat y no en una barra. Aquí `ui.zone` es 'modulos' (el valor canónico que usan TODOS los blueprints, sea cual sea el type); la zona real del handler vive en el module.json, que no se toca. La consecuencia de interfaz es la que importa: `ops.entregar` va en zona ACCIONES (una entrega puntual que el chat dispara; `canal`/`destino` son declarables opcionales y el `aviso` llega ya producido) — el módulo NO escribe ni persiste, así que no hay formulario de escritura ni botón de «redactar aviso»: K2 es quien produce, aquí solo se entrega y se confirma."
+  },
+  "filosofia": "Un aviso que solo se produce no sirve de nada; lo que importa es que llegue. Por eso esta cara existe y por eso comprueba: no dice «enviado», dice si el canal lo confirmó. Y dice entregado, no recibido, porque afirmar más de lo que sabe convertiría la confirmación en una promesa falsa. El canal lo declara el sitio, no lo adivina el puente, y cuando no hay canal o el canal no responde, el aviso queda sin entregar y el hueco a la vista. Es más útil un «no confirmado» honesto que un «entregado» que nadie puede respaldar."
+}

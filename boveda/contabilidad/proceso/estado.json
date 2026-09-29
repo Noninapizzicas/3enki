@@ -3,7 +3,7 @@
   "ramas": "vertical/contabilidad",
   "persistencia": "boveda/contabilidad/proceso/",
   "modelo": "mente-ejecuta / chat-gestiona",
-  "fase_actual": "F6/F7 COMPLETADA — interfaz declarada (116 ui_handlers con type+zone). Siguiente: habilitar la vertical y deploy (del dueno)",
+  "fase_actual": "F6½ COMPLETADA (108/108 blueprints). Siguiente: F7 (construir-interfaz: el trio del frontend).",
   "nota_proceso": "Vertical transversal observadora VENDIBLE: escucha los eventos que cada negocio ya emite y reconstruye su contabilidad. Molde de proceso: boveda/nichos/proceso/ (44 modulos + 44 skills, #656).",
   "fase0": {
     "estado": "completada",
@@ -230,8 +230,12 @@
     "verificacion": "frontend.validate: 607->607 drift (CERO introducido) · validate-all: 0 findings PASS"
   },
   "fase65": {
-    "estado": "pendiente",
-    "skill": "esquematizar-interfaz"
+    "estado": "COMPLETADA",
+    "entregable": "108 <slug>.blueprint.json con ui.* + blueprint_driven/path en los module.json",
+    "metodo": "18 grupos por sub-agente (prisma-universal + skill esquematizar-interfaz), mente-ejecuta",
+    "alcance": "108 = 116 modulos - 8 sin superficie (su cara es el bus)",
+    "verificacion": "GATE EN LOTE 108/108 PASS · 0 eventos inventados · 0 colisiones · 0 index.js tocados",
+    "tipos": "workspace_module · system_panel · chat_tool · inline_render"
   },
   "fase7": {
     "estado": "pendiente",

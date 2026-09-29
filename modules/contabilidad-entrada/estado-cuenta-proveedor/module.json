@@ -3,6 +3,8 @@
   "name": "estado-cuenta-proveedor",
   "version": "0.1.0",
   "description": "Reflejo (N4): el extracto confrontable con el proveedor compuesto desde su cuenta corriente (N3) — movimientos y saldo con procedencia; las diferencias se declaran, jamas se ajustan solas.",
+  "blueprint_driven": true,
+  "blueprint_path": "estado-cuenta-proveedor.blueprint.json",
   "language": "es",
   "subscribes": [
     {

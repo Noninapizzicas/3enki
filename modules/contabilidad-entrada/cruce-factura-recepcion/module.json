@@ -3,6 +3,8 @@
   "name": "cruce-factura-recepcion",
   "version": "0.1.0",
   "description": "Reflejo (N5): el 3-way match pedido/recepcion/factura antes de asentar — determinista, con tolerancias declarables (sin ellas la igualdad es exacta) y con las diferencias declaradas en vez de ajustadas solas.",
+  "blueprint_driven": true,
+  "blueprint_path": "cruce-factura-recepcion.blueprint.json",
   "language": "es",
   "subscribes": [
     {

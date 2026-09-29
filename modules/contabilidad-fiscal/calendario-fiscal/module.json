@@ -3,6 +3,8 @@
   "name": "calendario-fiscal",
   "version": "0.1.0",
   "description": "Custodio (D6): plazos fiscales declarables por ejercicio — el sistema avisa del vencimiento dentro de una ventana declarada, un solo escritor, y nada se presenta ni se cablea.",
+  "blueprint_driven": true,
+  "blueprint_path": "calendario-fiscal.blueprint.json",
   "language": "es",
   "subscribes": [
     {

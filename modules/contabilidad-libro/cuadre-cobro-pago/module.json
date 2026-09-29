@@ -3,6 +3,8 @@
   "name": "cuadre-cobro-pago",
   "version": "0.1.0",
   "description": "Reflejo (E3): coteja cobros y pagos contra el banco por la clave natural compartida (un movimiento = un cobro/pago) — determinista, sin interpretar lo que no casa.",
+  "blueprint_driven": true,
+  "blueprint_path": "cuadre-cobro-pago.blueprint.json",
   "language": "es",
   "subscribes": [
     {

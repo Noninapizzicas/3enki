@@ -1,0 +1,130 @@
+{
+  "id": "generador-modelo",
+  "version": "blueprint-0.1.0",
+  "_nota": "FASE 6½ · la interfaz DECLARADA del módulo generador-modelo (PUENTE STATELESS de contabilidad-fiscal, D7, hoja del plan). LA SALIDA al programa del ASESOR: toma el modelo ya construido (modelo-303 D2, modelo-390 D3) y lo EXPORTA en el formato que el programa del asesor consuma; cruza la frontera hacia fuera, no decide el contenido del modelo ni lo presenta. La sección `ui` es lo que el generador schema→UI (BlueprintForm, 4 zonas) necesita para renderizar el panel; sin LLM: TODO lo que produce sale de aquí. Fuente de verdad: modules/contabilidad-fiscal/generador-modelo/{module.json,index.js}. ui_handler real: generador-modelo.exportar (workspace_module/barra_modulos).",
+  "schema": "blueprint-interfaz-v2",
+  "language": "es",
+  "titulo": "El modelo preparado para el asesor",
+  "eventos_publicados": [
+    "generador-modelo.exportar.response",
+    "generador-modelo.exportar.failed",
+    "contabilidad.modelo_exportado"
+  ],
+  "eventos_que_escucho": [],
+  "_escucho_nota": "VACÍO A PROPÓSITO: el puente ya atiende en module.json.subscribes generador-modelo.exportar.request (onExportarRequest, su única RPC). Declararlo aquí daría ANTICOLISION-001 (lo atenderían los dos). No hay cajón fuzzy ni evento fire-and-forget de entrada: es un puente stateless de salida que solo se dispara bajo demanda. El modelo lo pide él mismo POR EVENTO a modelo-303 / modelo-390 (RPC `_rpc`), que no es una suscripción propia.",
+  "transporte": {
+    "rpc": [
+      "generador-modelo.exportar.request -> .response",
+      "modelo-303.construir.request -> .response",
+      "modelo-390.construir.request -> .response"
+    ],
+    "entrada": [
+      "generador-modelo.exportar.request"
+    ],
+    "salida": [
+      "generador-modelo.exportar.response",
+      "contabilidad.modelo_exportado"
+    ],
+    "qos": "publishAndWait (request/response correlado) en la exportación. El modelo llega por DOS vías sin require cruzado: declarado en la petición (`modelo`) o pedido POR EVENTO a modelo-303/modelo-390 (RPC). Sin ninguna de las dos NO se exporta un fichero vacío ni inventado (exportado:false + motivo)."
+  },
+  "contrato": {
+    "ExportarInput": "{ project_id:uuid, formato:str, destino?:str, modelo?:obj, modelo_slug?:str, ejercicio?:str, periodo?:str, regimen?:str, territorio?:str, estructura?:any, mapeo?:obj }",
+    "ExportarOutput": "{ project_id, exportado:bool, fichero:obj|null, modelo_slug, origen_modelo:'declarado_en_peticion'|'modelo-303'|'modelo-390'|null, destino, formato, adaptador_declarado:bool, presentado:false, firmado:false, preparado_para_asesor:true }",
+    "SinFormato": "Sin `formato` declarado → 400 FORMATO_NO_DECLARADO: no se adivina la codificación del programa del asesor (invariante 5).",
+    "SinModelo": "Sin modelo disponible → exportado:false + motivo; NUNCA un fichero vacío ni inventado (invariante 7).",
+    "Invariantes": "LA LEY ENTRA COMO DATO (invariante 5): el `destino` y el `formato` son DECLARABLES (ParametroDeclarable), ABIERTO en el diseño (formato no declarado aún). NO hay ninguna codificación cableada (ni XML, ni BOE, ni CSV de un programa concreto) y sin `formato` declarado NO se exporta. El `mapeo` (campo canónico → clave externa) también entra como DATO. Campos de exportación canónicos: modelo, ejercicio, periodo, nif, casillas, datos (ausente → null, no se estima). EL SISTEMA PREPARA EL MODELO; EL ASESOR PRESENTA Y FIRMA: este módulo NO presenta, NO firma y NO envía a ninguna administración — declara presentado:false, firmado:false, preparado_para_asesor:true."
+  },
+  "ui": {
+    "type": "workspace_module",
+    "zone": "modulos",
+    "ops": {
+      "exportar": {
+        "titulo": "Exportar el modelo al formato del asesor",
+        "descripcion": "Mesa de trabajo de la salida hacia el asesor: toma el modelo ya construido (declarado, o pedido por evento a modelo-303/modelo-390) y lo EXPORTA en el formato que el programa del asesor consuma. LA LEY ENTRA COMO DATO: el `formato` y el `mapeo` (campo canónico → clave externa) son DECLARABLES — no hay ninguna codificación cableada (ni XML, ni BOE, ni CSV de un programa concreto) y sin `formato` declarado NO se exporta. Sin modelo disponible NO se produce un fichero vacío ni inventado: se declara. EL SISTEMA PREPARA EL MODELO; EL ASESOR PRESENTA Y FIRMA — aquí no se presenta, no se firma y no se envía a ninguna administración.",
+        "zona": "formulario",
+        "args": [
+          {
+            "nombre": "formato",
+            "tipo": "string",
+            "required": true,
+            "placeholder": "facturae-3.2 (el del programa del asesor) [ABIERTO]",
+            "descripcion": "El formato de salida DECLARADO (el que consume el programa del asesor). Es DATO, no una codificación cableada: sin declararlo NO se exporta (400 FORMATO_NO_DECLARADO)."
+          },
+          {
+            "nombre": "destino",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "(vacío = sin destino declarado)",
+            "descripcion": "El destino DECLARABLE (a qué programa/carpeta va el fichero). Dato del negocio; no se asume ninguno."
+          },
+          {
+            "nombre": "modelo_slug",
+            "tipo": "select",
+            "enum": [
+              "modelo-303",
+              "modelo-390"
+            ],
+            "required": false,
+            "descripcion": "De qué modelo se pide el modelo POR EVENTO si no se declara uno (`modelo`). Vacío = se prueban modelo-303 y modelo-390 en orden. Son las dos fuentes reales del módulo."
+          },
+          {
+            "nombre": "modelo",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "(vacío = se pide a modelo-303/modelo-390 por evento)",
+            "descripcion": "El modelo DECLARADO en la petición (opcional). Si no se aporta, el puente PIDE el modelo a modelo-303/modelo-390 por evento. Sin ninguna de las dos vías no hay exportación."
+          },
+          {
+            "nombre": "ejercicio",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "2026",
+            "descripcion": "Ejercicio del modelo. Es DATO declarado; se propaga a la petición del modelo, no se cablea."
+          },
+          {
+            "nombre": "periodo",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "2026-3T",
+            "descripcion": "El periodo del modelo (trimestre/mes declarado). Es DATO: la periodicidad no se cablea."
+          },
+          {
+            "nombre": "regimen",
+            "tipo": "select",
+            "enum": [
+              "IVA",
+              "IGIC",
+              "IPSI"
+            ],
+            "required": false,
+            "descripcion": "El régimen/impuesto DECLARADO del negocio (común → IVA; Canarias → IGIC; Ceuta-Melilla → IPSI). Es DATO: el sistema no asume el territorio."
+          },
+          {
+            "nombre": "territorio",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "(vacío = sin declarar)",
+            "descripcion": "El territorio declarable. Dato del negocio, no una constante cableada."
+          },
+          {
+            "nombre": "estructura",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "[{\"casilla\":\"01\",\"campo\":\"total_devengado\"}]",
+            "descripcion": "La estructura declarable que se propaga al modelo pedido por evento. La estructura de la ley entra como dato."
+          },
+          {
+            "nombre": "mapeo",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "{\"nif\":\"NIF\",\"casillas\":\"Casillas\"}",
+            "descripcion": "Esquema DECLARADO de traducción (campo canónico → clave externa). Sin mapeo, el formato canónico usa los nombres canónicos tal cual. Es DATO: no se cablea la clave externa."
+          }
+        ]
+      }
+    },
+    "datos": [],
+    "_datos_nota": "SIN TABLA A PROPÓSITO (hueco DECLARADO, no olvidado): la única op RPC (`exportar`) EXIGE payload (formato + modelo) y devuelve UN resultado puntual (el fichero exportado, un objeto, no una colección). No hay op de listado de exportaciones: el histórico de exportaciones no se expone por RPC. La lectura de conjunto que existiría (qué modelos se exportaron y cuándo) requeriría un handler RPC de listado que NO existe hoy — LEY DE CERO SUPUESTOS: no se inventa una op de listado para rellenar la zona DATOS. Se declara el hueco."
+  },
+  "filosofia": "El sistema no presenta por ti — y tampoco lo insinúa. Aquí solo se PREPARA: se toma el modelo ya construido y se deja en el formato que el programa del asesor sepa leer, con presentado:false y firmado:false escritos en el propio resultado. El formato y el mapeo son del asesor, no del código: ni un XML, ni un BOE, ni un CSV de un programa concreto está cableado, porque el día que cambie el programa cambia el dato, no el módulo. Y si no hay modelo, no hay fichero: un fichero vacío que alguien firmaría es peor que un error honesto."
+}

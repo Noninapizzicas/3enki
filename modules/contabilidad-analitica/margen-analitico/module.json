@@ -3,6 +3,8 @@
   "name": "margen-analitico",
   "version": "0.1.0",
   "description": "Reflejo (J2): el margen por dimension analitica (ingreso − coste imputado) determinista sobre lineas ya etiquetadas; el eje y el catalogo de dimensiones son DECLARABLES y nada se imputa a dedo (linea sin dimension o ambigua → margen abierto).",
+  "blueprint_driven": true,
+  "blueprint_path": "margen-analitico.blueprint.json",
   "language": "es",
   "subscribes": [
     {

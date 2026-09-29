@@ -3,6 +3,8 @@
   "name": "traza-asiento",
   "version": "0.1.0",
   "description": "Custodio (B4): el registro inmutable de la traza — quién/cuándo creó cada asiento, append-only (la corrección SUMA, jamás borra) y con single-writer por la parcela libro/traza.",
+  "blueprint_driven": true,
+  "blueprint_path": "traza-asiento.blueprint.json",
   "language": "es",
   "subscribes": [
     {

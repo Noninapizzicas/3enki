@@ -3,6 +3,8 @@
   "name": "desviacion",
   "version": "0.1.0",
   "description": "Reflejo (J4): real vs presupuesto determinista — el delta contra el objetivo que el JEFE declaro (leido de J3 por evento, nunca duplicado); solo avisa si un umbral DECLARADO se supera y sin real u objetivo no computa nada.",
+  "blueprint_driven": true,
+  "blueprint_path": "desviacion.blueprint.json",
   "language": "es",
   "subscribes": [
     {

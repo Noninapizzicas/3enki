@@ -3,6 +3,8 @@
   "name": "cola-declaraciones-criterio",
   "version": "0.1.0",
   "description": "Custodio (K9): la unica cola donde el JEFE fija/ratifica TODOS los criterios (unidad_de_cierre, periodo, amortizacion, reparto, dimensiones, tipos, consolidacion); un solo escritor (JEFE_CRITERIO), el sistema pregunta y nada se estima — lo no declarado queda [ABIERTO].",
+  "blueprint_driven": true,
+  "blueprint_path": "cola-declaraciones-criterio.blueprint.json",
   "language": "es",
   "subscribes": [
     {

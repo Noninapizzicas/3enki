@@ -3,6 +3,8 @@
   "name": "comparador-periodos",
   "version": "0.1.0",
   "description": "Reflejo (J9): compara periodos (ejercicio vs ejercicio, mes vs mes, real vs presupuesto) reutilizando J3/J4 por evento — no los duplica; la metrica y el modo son declarables y sin ellos no compara nada.",
+  "blueprint_driven": true,
+  "blueprint_path": "comparador-periodos.blueprint.json",
   "language": "es",
   "subscribes": [
     {

@@ -3,6 +3,8 @@
   "name": "valor-neto-contable",
   "version": "0.1.0",
   "description": "Reflejo (F4): valor neto contable = coste − amortizacion acumulada — calculo puro al balance, sin estimar nunca el coste ni la acumulada que el negocio no declara.",
+  "blueprint_driven": true,
+  "blueprint_path": "valor-neto-contable.blueprint.json",
   "language": "es",
   "subscribes": [
     {

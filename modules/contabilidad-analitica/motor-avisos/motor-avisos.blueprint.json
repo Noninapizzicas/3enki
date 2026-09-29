@@ -1,0 +1,142 @@
+{
+  "id": "motor-avisos",
+  "version": "blueprint-0.1.0",
+  "_nota": "FASE 6½ · la interfaz DECLARADA del módulo motor-avisos (PUENTE STATELESS de contabilidad-analitica, K2, hoja del plan), tipo system_panel: la lente es GESTIÓN/ESTADO/ACCIONES BAJO DEMANDA, no mesa de trabajo. LA PIEZA QUE DESBLOQUEA: PRODUCE el aviso. Recoge las SEÑALES que ya emiten las piezas del sistema — contabilidad.aviso_revision (A8.2), contabilidad.aviso_cuadre (C6), contabilidad.vencimiento_fiscal (D6), contabilidad.vencimiento_proximo (E5/N8), contabilidad.desviacion (J4) y contabilidad.fuente_faltante (A15) — y las convierte en un Aviso canónico con su tipo, su asunto, su motivo, su destino y su canal. PRODUCE; NO ENTREGA Y NO DECIDE: no habla con ningún canal (la ENTREGA + CONFIRMA es R1 aviso-negocio), no decide qué avisos existen, a quién van ni por qué canal (eso es el CATALOGO catalogo-avisos K6, consultado POR EVENTO best-effort) y NO inventa DESTINO (es ParametroDeclarable [ABIERTO] Q70: señal > catalogo > null; sin declarar → destino:null y destino_declarado:false, jamás se asume a quién avisar). EL CANAL ES SUYO, EL CONTENIDO NO. Sin naturaleza de señal identificable NO es un aviso (400 SENAL_NO_IDENTIFICABLE): nada se estima. La sección `ui` es lo que el generador schema→UI necesita; sin LLM: TODO lo que produce sale de aquí. Fuente de verdad: modules/contabilidad-analitica/motor-avisos/{module.json,index.js}. ui_handler real: motor-avisos.producir (system_panel/lateral_derecha).",
+  "schema": "blueprint-interfaz-v2",
+  "language": "es",
+  "titulo": "El canal de avisos (producir el aviso, no entregarlo)",
+  "eventos_publicados": [
+    "motor-avisos.producir.response",
+    "motor-avisos.producir.failed",
+    "contabilidad.aviso_producido"
+  ],
+  "eventos_que_escucho": [],
+  "_escucho_nota": "VACÍO A PROPÓSITO: el puente ya atiende en module.json.subscribes motor-avisos.producir.request (onProducirRequest, su RPC) y las SEIS señales de dominio que consume — contabilidad.aviso_revision (onAvisoRevision), contabilidad.aviso_cuadre (onAvisoCuadre), contabilidad.vencimiento_fiscal (onVencimientoFiscal), contabilidad.vencimiento_proximo (onVencimientoProximo), contabilidad.desviacion (onDesviacion) y contabilidad.fuente_faltante (onFuenteFaltante); repetir cualquiera aquí daría ANTICOLISION-001 (lo atenderían los dos). El canal es suyo y las señales las atiende el REFLEJO en subscribes, no un cajón fuzzy LLM: no hay ningún evento fire-and-forget que el LLM deba procesar por su cuenta. El catálogo de avisos (K6) se consulta POR EVENTO dentro de la producción (dependencia interna, best-effort), NO como suscripción viva.",
+  "transporte": {
+    "rpc": [
+      "motor-avisos.producir.request -> .response",
+      "catalogo-avisos.resolver.request -> .response"
+    ],
+    "entrada": [
+      "motor-avisos.producir.request",
+      "contabilidad.aviso_revision",
+      "contabilidad.aviso_cuadre",
+      "contabilidad.vencimiento_fiscal",
+      "contabilidad.vencimiento_proximo",
+      "contabilidad.desviacion",
+      "contabilidad.fuente_faltante"
+    ],
+    "salida": [
+      "motor-avisos.producir.response",
+      "contabilidad.aviso_producido"
+    ],
+    "qos": "publishAndWait (request/response correlado) en la producción. Las seis señales llegan fire-and-forget (A8.2 · C6 · D6 · E5/N8 · J4 · A15) y se convierten en Aviso — tolerante: una señal sin project_id se ignora. La política (qué aviso, a quién, por qué canal) se resuelve consultando catalogo-avisos (K6) POR EVENTO (best-effort): dependencia interna de la producción, no superficie del panel. contabilidad.aviso_producido es fire-and-forget (K2): un Aviso quedó PRODUCIDO (no entregado) — lo consume aviso-negocio (R1), que lo ENTREGA y CONFIRMA."
+  },
+  "contrato": {
+    "ProducirInput": "{ project_id:uuid, evento?|senal?:str, tipo?:str, asunto?:str, motivo?:str, destino?:str, canal?:str, vertical?:str, periodo?/ejercicio?:str, detalle?:obj, catalogo?:obj }",
+    "ProducirOutput": "{ project_id, aviso:{ id, tipo, asunto, senal, motivo, detalle, vertical, ejercicio, periodo, destino, destino_declarado, canal, canal_declarado, requiere_revision:true, entregado:false, entregado_por:'aviso-negocio(R1)', producido_en }, aviso_id, catalogo_disponible, fuente_catalogo, abierto:{destino,canal,motivo,catalogo} }",
+    "Errores": "project_id ausente → 400 · señal sin naturaleza identificable (sin `evento`/`senal` conocido ni `tipo`) → 400 SENAL_NO_IDENTIFICABLE (par motor-avisos.producir.failed, cierra también el círculo de las 6 señales fire-and-forget).",
+    "Invariantes": "PRODUCE; NO ENTREGA Y NO DECIDE: no habla con ningún canal (eso es R1), no decide qué avisos existen / a quién van / por qué canal (eso es el catálogo K6, leído POR EVENTO) y NO inventa DESTINO (señal > catálogo > null; sin declarar → destino:null y destino_declarado:false). Una señal sin naturaleza identificable NO es un aviso (400, nada se estima). DETERMINISTA: misma señal + mismo catálogo → mismo aviso. LEY/PARÁMETRO COMO DATO: tipos, destinos y canales son declarables, cero catálogo cableado (el mapa de señales solo fija la IDENTIDAD de cada señal, no criterio de negocio). PUENTE sin estado: no recuerda avisos, no los cuenta, no los re-emite."
+  },
+  "ui": {
+    "type": "system_panel",
+    "zone": "modulos",
+    "ops": {
+      "producir": {
+        "titulo": "Producir un aviso desde una señal de dominio",
+        "descripcion": "Panel de CONTROL del canal de avisos: convierte en un Aviso canónico una señal que YA emitió otra pieza del sistema — revisión (A8.2), cuadre (C6), vencimiento fiscal (D6), vencimiento próximo (E5/N8), desviación (J4) o fuente faltante (A15) —, con su tipo, su asunto, su motivo, su destino y su canal. ENTREGA, NO DECIDE: NO habla con ningún canal (la entrega y la confirmación son de aviso-negocio R1), NO decide qué avisos existen ni a quién van ni por qué canal (eso es el catálogo K6, que se consulta POR EVENTO, best-effort) y NO inventa destino — si la señal y el catálogo no lo declaran, sale destino:null y destino_declarado:false. Sin una naturaleza de señal identificable (un evento conocido o un tipo declarado) NO se produce aviso: 400, nada se estima. Es determinista y no recuerda nada: produce y publica contabilidad.aviso_producido para que R1 lo entregue.",
+        "zona": "formulario",
+        "args": [
+          {
+            "nombre": "evento",
+            "tipo": "select",
+            "enum": [
+              "contabilidad.aviso_revision",
+              "contabilidad.aviso_cuadre",
+              "contabilidad.vencimiento_fiscal",
+              "contabilidad.vencimiento_proximo",
+              "contabilidad.desviacion",
+              "contabilidad.fuente_faltante"
+            ],
+            "required": false,
+            "descripcion": "LA SEÑAL de la que se produce el aviso: el evento de dominio que ya emitió otra pieza. Es DATO: de esta señal el motor toma su IDENTIDAD (tipo y asunto canónicos) — el mapa de señales solo fija qué es cada señal, no criterio de negocio. Sin un evento conocido ni un `tipo` declarado, la señal no es identificable (400 SENAL_NO_IDENTIFICABLE)."
+          },
+          {
+            "nombre": "tipo",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "revision | cuadre | vencimiento | desviacion | fuente_faltante | ...",
+            "descripcion": "El TIPO de aviso declarado (DATO). Permite producir un aviso de una señal no catalogada; si se declara `evento` conocido, el tipo se toma de él. Sin tipo y sin evento conocido → 400: el motor no inventa de qué avisa."
+          },
+          {
+            "nombre": "asunto",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "(vacío = el asunto canónico de la señal)",
+            "descripcion": "El ASUNTO declarado del aviso (DATO). Si no se declara, se toma el canónico de la señal (o el tipo). No se inventa un asunto distinto del declarado."
+          },
+          {
+            "nombre": "motivo",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "(vacío = el motivo declarado por la señal)",
+            "descripcion": "El MOTIVO declarado por la señal (por qué se avisa). Es DATO: si no llega, se declara el hueco en `abierto.motivo` — no se inventa una razón."
+          },
+          {
+            "nombre": "destino",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "(vacío = no declarado → destino null)",
+            "descripcion": "El DESTINO declarado del aviso: quién actúa ([ABIERTO] Q70). Es DATO declarable: si ni la señal ni el catálogo lo traen, sale destino:null y destino_declarado:false — JAMÁS se asume a quién avisar."
+          },
+          {
+            "nombre": "canal",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "telegram | email | push | ...",
+            "descripcion": "El CANAL declarado del aviso. Es DATO: el motor NO habla con canales (la entrega es de R1); si no se declara ni en la señal ni en el catálogo, sale canal:null y canal_declarado:false."
+          },
+          {
+            "nombre": "vertical",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "contabilidad-analitica | ...",
+            "descripcion": "La VERTICAL declarada del aviso. Es DATO: si no se declara, se toma la del catálogo (K6) o queda null."
+          },
+          {
+            "nombre": "periodo",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "2026-09",
+            "descripcion": "El PERIODO declarado al que se refiere el aviso. Es DATO: no se deriva ni se cablea ningún calendario."
+          },
+          {
+            "nombre": "ejercicio",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "2026",
+            "descripcion": "El EJERCICIO declarado al que se refiere el aviso. Es DATO: no se adivina por la fecha."
+          },
+          {
+            "nombre": "detalle",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "{\"cuenta\":\"430\",\"importe\":120}",
+            "descripcion": "El DETALLE declarado del aviso (el payload de la señal, que viaja entero para que el aviso sea trazable hasta su causa). Es DATO: si no llega, queda null."
+          },
+          {
+            "nombre": "catalogo",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "(vacío = se pide a catalogo-avisos K6 por evento)",
+            "descripcion": "La POLÍTICA declarada del aviso (qué aviso, a quién, por qué canal) como alternativa a pedirla al catálogo. Es DATO: si no se declara, se PIDE a catalogo-avisos (K6) POR EVENTO (best-effort); sin catálogo NO se inventa la política — se produce con lo declarado y catalogo_disponible:false."
+          }
+        ]
+      }
+    },
+    "datos": [],
+    "_datos_nota": "HUECO DECLARADO (no se inventa): motor-avisos es un PUENTE STATELESS — no recuerda avisos, no los cuenta, no los re-emite. No expone ninguna op RPC de LISTADO: en module.json.subscribes solo hay motor-avisos.producir.request y las 6 señales fire-and-forget, y `producir` devuelve UN aviso (con su `abierto`), no una colección de avisos producidos. Una cinta de avisos exigiría un handler RPC de listado y estado que este puente por diseño NO tiene (su estado de dominio es cero; el registro de qué se avisó y si se entregó es de aviso-negocio R1, del catálogo K6 y de los canales) — es trabajo de módulo, no de interfaz. La señal contabilidad.aviso_producido da el pulso vivo (un aviso quedó producido), pero como evento de dominio que consume R1, no como tabla.",
+    "_tipo_nota": "system_panel: NO es mesa de trabajo (workspace_module) ni contenido de chat (inline_render). Es un panel de CONTROL bajo demanda — el humano lo abre para ver/producir el aviso cuando algo lo requiere —, en zona lateral_derecha. Su `ui_handler` real (module.json) declara type:system_panel; aquí `ui.zone` es 'modulos' (el valor canónico que usan TODOS los blueprints, sea cual sea el type). `producir` va en zona FORMULARIO (tiene args: se declara la señal y, si hace falta, la política). La lente es de gestión/estado/acciones bajo demanda: el canal es suyo, el contenido no — no decide a quién avisar ni por dónde, solo produce el aviso."
+  },
+  "filosofia": "Un aviso no es un mensaje: es una decisión puesta en forma para que otro la entregue. Por eso este motor no habla con nadie, no decide qué merece aviso ni a quién va ni por dónde sale: recoge la señal que otra pieza ya emitió y la convierte en un aviso trazable hasta su causa. El canal es suyo; el contenido no. Y cuando la señal no declara el destino, no lo adivina: deja el hueco a la vista, porque un aviso enviado a quien no toca es peor que un aviso que espera a que alguien declare quién responde."
+}

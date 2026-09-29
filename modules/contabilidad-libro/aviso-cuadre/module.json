@@ -1,0 +1,33 @@
+{
+  "_doc": "Manifest de contabilidad-libro/aviso-cuadre — PUENTE STATELESS (C6, hoja del plan). El EMPUJON honesto del cuadre: si LA metrica unica de cobertura dice que FALTA algo, este puente AVISA. NO finge el cuadre y NO recalcula la metrica — la LEE. De donde LEE la cobertura, en este orden y declarando el origen: (1) lo declarado en la peticion (`cobertura`), (2) la ultima `contabilidad.cobertura_medida` del bus (espejo en memoria), (3) se la PIDE a completitud-cobertura POR EVENTO (RPC). Invariantes: si NO hay metrica NO se afirma cuadre ni descuadre (`avisa:false`, aviso null, motivo declarado) — dato ausente = desconocido, nada se estima; el DESTINO del aviso es ParametroDeclarable ([ABIERTO] Q70 quien actua) — sin destino declarado NO se inventa (`destino:null`, `destino_declarado:false`); una cobertura 'cubre' SOLO si esta declarada y completa (`declarada:true && completa:true`). Es PURO y sin estado de dominio: solo guarda el ultimo espejo de la metrica leida para avisar de forma proactiva; no recuerda avisos ni decide nada. FORMA: PUENTE stateless (sin persistencia por proyecto, sin restauracion de proyecto). Proyeccion `_avisar`. Cierra el circulo: exito con aviso → publica contabilidad.aviso_cuadre (lo consume motor-avisos); error → aviso-cuadre.avisar.failed.",
+  "name": "aviso-cuadre",
+  "version": "0.1.0",
+  "description": "Puente stateless (C6): avisa del cuadre cuando LA metrica unica de cobertura no esta completa — la LEE y no la recalcula, y si no hay metrica no finge ni el cuadre ni el descuadre.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "aviso-cuadre.avisar.request",
+      "handler": "onAvisarRequest",
+      "description": "RPC puente: {project_id, vertical?, ejercicio?, cobertura?, destino?} → {cobertura, origen_cobertura, cubre, aviso, avisa, destino_declarado}. LEE la metrica unica (peticion → espejo de contabilidad.cobertura_medida → RPC a completitud-cobertura.medir); NO la recalcula. Si la cobertura no cubre, produce el Aviso con su motivo y su destino declarable; si no hay metrica, avisa:false sin inventar. Exito con aviso → publica contabilidad.aviso_cuadre y responde por aviso-cuadre.avisar.response; fallo (project_id ausente) → aviso-cuadre.avisar.failed."
+    },
+    {
+      "event": "contabilidad.cobertura_medida",
+      "handler": "onCoberturaMedida",
+      "description": "Fire-and-forget (A12 → C6): completitud-cobertura publico que LA metrica unica quedo medida → {project_id, vertical, cobertura, correlation_id}. Se refleja la medida y, si NO esta completa, se empuja el aviso de forma proactiva por la misma proyeccion `_avisar`; si cubre, no se emite nada (el puente no finge un cuadre que no hace falta avisar)."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "aviso-cuadre.avisar.response",
+      "description": "Respuesta RPC correlada de aviso-cuadre.avisar.request → {request_id, status:200, data:{cobertura, origen_cobertura, cubre, aviso, avisa, destino_declarado}}. Emitida por el helper _atender."
+    },
+    {
+      "event": "aviso-cuadre.avisar.failed",
+      "description": "Par de fallo determinista (C6): project_id ausente → {status, error:{code, message, details?}}. Cierra el circulo de aviso-cuadre.avisar.request y de contabilidad.cobertura_medida."
+    },
+    {
+      "event": "contabilidad.aviso_cuadre",
+      "description": "Fire-and-forget (C6): la cobertura no estaba completa y el aviso de cuadre quedo empujado con su motivo y su destino declarable → {project_id, aviso, destino, correlation_id}. Lo consume motor-avisos (que produce el aviso al negocio/asesor)."
+    }
+  ]
+}

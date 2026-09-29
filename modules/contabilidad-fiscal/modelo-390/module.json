@@ -1,0 +1,24 @@
+{
+  "_doc": "Manifest de contabilidad-fiscal/modelo-390 — REFLEJO STATELESS (D3, hoja del plan). CONSTRUYE el resumen ANUAL (modelo 390) desde las LIQUIDACIONES del ejercicio (D1), una por periodo declarado. Determinista: mismas liquidaciones + misma estructura declarada → mismo resumen anual. NO liquida y NO recalcula asientos. LA LEY ENTRA COMO DATO (invariante 5): la ESTRUCTURA del resumen (casillas y su denominacion) es DECLARABLE (`estructura`, ParametroDeclarable), el FORMATO tambien (`formato`, [ABIERTO]), y los PERIODOS del ejercicio son ParametroDeclarable — el modulo NO cablea cuantos periodos tiene un ejercicio (mensual/trimestral es dato del negocio), ni numeros de casilla, ni plazos, ni ejercicios concretos. Con `estructura` declarada → `casillas:[{casilla, etiqueta, valor, campo}]` rellenadas por `campo` (total_devengado, total_soportado, cuota, y `devengado.<tipo>`/`soportado.<tipo>`); sin estructura → `casillas:null`, `estructura_declarada:false` con el ANUALIZADO por concepto para que el asesor decida el encaje — jamas se inventan casillas ni denominaciones legales (tipo ausente → null, no cero). El anualizado es determinista: se acumulan los conceptos del libro de cada liquidacion (total_devengado, total_soportado, cuota y desglose por tipo DECLARADO). Las liquidaciones llegan por dos vias sin require cruzado: declaradas en la peticion (`liquidaciones`) o pedidas a liquidacion-iva POR EVENTO, una por cada periodo DECLARADO en `periodos`; sin ninguna NO se construye con importes inventados (`construido:false`, motivo, invariante 7). El sistema PREPARA; el ASESOR presenta y firma — el modelo viaja con `presentado:false`, `firmado:false`, `preparado_para_asesor:true`. FORMA: REFLEJO stateless (sin PosPersistencia, sin onProjectActivated). Proyeccion `_construir`. Par de fallo modelo-390.construir.failed.",
+  "name": "modelo-390",
+  "version": "0.1.0",
+  "description": "Reflejo stateless (D3): resumen anual 390 construido desde las liquidaciones del ejercicio rellenando la estructura declarable — el sistema prepara, el asesor presenta y firma.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "modelo-390.construir.request",
+      "handler": "onConstruirRequest",
+      "description": "RPC reflejo (construccion determinista): {project_id, ejercicio?, regimen?, territorio?, tipos?, liquidaciones?, periodos?, estructura?, formato?} → {modelo, construido, origen_liquidaciones, periodos_pedidos}. Anualiza los conceptos del libro de las liquidaciones (declaradas o pedidas a liquidacion-iva POR EVENTO, una por periodo DECLARADO) y rellena la estructura DECLARABLE (casillas); sin estructura declarada entrega el anualizado con casillas:null y estructura_declarada:false (no se inventan casillas ni periodos). Sin liquidaciones → construido:false con motivo. El modelo viaja con presentado:false y firmado:false. Responde por modelo-390.construir.response; fallo (project_id ausente) → modelo-390.construir.failed."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "modelo-390.construir.response",
+      "description": "Respuesta RPC correlada de modelo-390.construir.request → {request_id, status:200, data:{modelo, construido, origen_liquidaciones, periodos_pedidos}}. Emitida por el helper _atender."
+    },
+    {
+      "event": "modelo-390.construir.failed",
+      "description": "Par de fallo determinista (D3): project_id ausente → {status, error:{code, message, details?}}. Cierra el circulo de modelo-390.construir.request."
+    }
+  ]
+}

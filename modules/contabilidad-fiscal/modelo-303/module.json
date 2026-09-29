@@ -1,0 +1,24 @@
+{
+  "_doc": "Manifest de contabilidad-fiscal/modelo-303 — REFLEJO STATELESS (D2, hoja del plan). CONSTRUYE el modelo 303 (autoliquidacion periodica del regimen IVA/IGIC/IPSI) DESDE la liquidacion (D1). Determinista: misma liquidacion + misma estructura declarada → mismo modelo. NO liquida (eso es D1) y NO recalcula asientos. LA LEY ENTRA COMO DATO (invariante 5): la ESTRUCTURA del modelo (que casillas tiene y como se llaman) es DECLARABLE (`estructura`, ParametroDeclarable) y el FORMATO tambien (`formato`, [ABIERTO]); este modulo NO cablea numeros de casilla, ni tipos, ni plazos, ni ejercicios — solo RELLENA la estructura que el negocio/asesor declara con los importes del libro. Con `estructura` declarada → `casillas:[{casilla, etiqueta, valor, campo}]` rellenadas por `campo` (campos soportados: total_devengado, total_soportado, cuota, signo, y `devengado.<tipo>`/`soportado.<tipo>`); sin estructura declarada → `casillas:null`, `estructura_declarada:false` con el BORRADOR de datos del libro para que el asesor decida el encaje — jamas se inventan casillas ni denominaciones legales (un campo ausente → valor null, no cero). La liquidacion llega por dos vias sin require cruzado: declarada en la peticion (`liquidacion`) o pedida a liquidacion-iva POR EVENTO (RPC `liquidacion-iva.calcular.request`); sin ninguna NO se construye con importes inventados (`construido:false`, motivo declarado, invariante 7). El sistema PREPARA el modelo; el ASESOR presenta y firma — el modulo declara `presentado:false`, `firmado:false`, `preparado_para_asesor:true` y NO presenta ni firma. FORMA: REFLEJO stateless (sin PosPersistencia, sin onProjectActivated). Proyeccion `_construir`. Par de fallo modelo-303.construir.failed.",
+  "name": "modelo-303",
+  "version": "0.1.0",
+  "description": "Reflejo stateless (D2): construye el modelo 303 desde la liquidacion rellenando la estructura declarable — el sistema prepara, el asesor presenta y firma.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "modelo-303.construir.request",
+      "handler": "onConstruirRequest",
+      "description": "RPC reflejo (construccion determinista): {project_id, ejercicio?, periodo?, regimen?, territorio?, tipos?, liquidacion?, estructura?, formato?} → {modelo, construido, origen_liquidacion}. Rellena la estructura DECLARABLE (casillas) con los importes de la liquidacion (pedida a liquidacion-iva POR EVENTO o declarada en la peticion); sin estructura declarada entrega el borrador con casillas:null y estructura_declarada:false (no se inventan casillas). Sin liquidacion → construido:false con motivo (no se construye con importes inventados). El modelo viaja con presentado:false y firmado:false. Responde por modelo-303.construir.response; fallo (project_id ausente) → modelo-303.construir.failed."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "modelo-303.construir.response",
+      "description": "Respuesta RPC correlada de modelo-303.construir.request → {request_id, status:200, data:{modelo, construido, origen_liquidacion}}. Emitida por el helper _atender."
+    },
+    {
+      "event": "modelo-303.construir.failed",
+      "description": "Par de fallo determinista (D2): project_id ausente → {status, error:{code, message, details?}}. Cierra el circulo de modelo-303.construir.request."
+    }
+  ]
+}

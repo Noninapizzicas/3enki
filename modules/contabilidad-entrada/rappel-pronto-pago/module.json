@@ -3,6 +3,8 @@
   "name": "rappel-pronto-pago",
   "version": "0.1.0",
   "description": "Reflejo (N7): ajusta el coste real de la compra con pronto pago/rappels/anticipos — con porcentajes, plazos y tramos declarables (jamas cableados) y con las condiciones sin dato declarado pendientes en vez de aplicadas.",
+  "blueprint_driven": true,
+  "blueprint_path": "rappel-pronto-pago.blueprint.json",
   "language": "es",
   "subscribes": [
     {

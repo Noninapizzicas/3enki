@@ -1,0 +1,127 @@
+{
+  "id": "estado-cuenta-proveedor",
+  "version": "blueprint-0.1.0",
+  "_nota": "FASE 6½ · la interfaz DECLARADA del módulo estado-cuenta-proveedor (REFLEJO STATELESS de contabilidad-entrada, N4, hoja del plan). EL EXTRACTO CONFRONTABLE CON EL PROVEEDOR: el estado formal de la cuenta a una fecha (movimientos ordenados + saldo con su procedencia), listo para que el proveedor lo compare con su contabilidad. COMPONE desde la cuenta corriente (cuenta-proveedor N3) POR EVENTO; NO recalcula la cuenta. La sección `ui` es lo que el generador schema→UI (BlueprintForm, 4 zonas) necesita para renderizar el panel; sin LLM: TODO lo que produce sale de aquí. Fuente de verdad: modules/contabilidad-entrada/estado-cuenta-proveedor/{module.json,index.js}. ui_handler real: estado-cuenta-proveedor.extracto (workspace_module/barra_modulos).",
+  "schema": "blueprint-interfaz-v2",
+  "language": "es",
+  "titulo": "El extracto confrontable con el proveedor",
+  "eventos_publicados": [
+    "estado-cuenta-proveedor.extracto.response",
+    "estado-cuenta-proveedor.extracto.failed"
+  ],
+  "eventos_que_escucho": [],
+  "_escucho_nota": "VACÍO A PROPÓSITO: el reflejo ya atiende en module.json.subscribes estado-cuenta-proveedor.extracto.request (su única RPC, onExtractoRequest); repetirlo aquí daría ANTICOLISION-001 (lo atenderían los dos). Es un REFLEJO stateless determinista: no persiste, no tiene cajón fuzzy y su único evento de entrada es la RPC humana. No hay ningún evento fire-and-forget que el LLM deba procesar.",
+  "transporte": {
+    "rpc": [
+      "estado-cuenta-proveedor.extracto.request -> .response"
+    ],
+    "entrada": [
+      "estado-cuenta-proveedor.extracto.request"
+    ],
+    "salida": [
+      "estado-cuenta-proveedor.extracto.response"
+    ],
+    "qos": "publishAndWait (request/response correlado) en el extracto. Al componer, este módulo es CLIENTE RPC de cuenta-proveedor (N3): pide cuenta-proveedor.facturas_vivas.request y cuenta-proveedor.saldo.request POR EVENTO para tomar las partidas y el saldo; no las recalcula."
+  },
+  "contrato": {
+    "ExtractoInput": "{ project_id:uuid, tercero?:obj|tercero_id?|nif?, cuenta?:str, convenio?:str, hasta?:str, partidas?:[...]|movimientos?:[...], saldo_derivado?:num, saldo_proveedor?:num, partidas_diferencia?:[...], asientos?:[...], periodo?:str }",
+    "ExtractoOutput": "{ project_id, tipo:'estado-cuenta-proveedor', tercero, hasta, hasta_declarada, disponible, fuente_partidas, movimientos:[{fecha, clave, numero, concepto, importe, signo}], num_movimientos, sin_fecha_o_sin_importe, saldo_derivado, deriva_de, confrontable, confrontacion:{saldo_derivado, saldo_proveedor, diferencia, cuadra, partidas_diferencia, se_ajusta_automaticamente:false, resuelve}, abierto }",
+    "Errores": "project_id ausente → 400 INVALID_INPUT (par estado-cuenta-proveedor.extracto.failed). NO tener partidas (declaradas o de N3) NO es un fallo: se responde 200 con disponible:false — jamás se inventa la cuenta.",
+    "Invariantes": "COMPONE, NO RECALCULA: el mayor auxiliar lo deriva cuenta-proveedor (N3); aquí se pide por evento y se compone el extracto. LA CONFRONTACIÓN SE DECLARA, NO SE AJUSTA: si el proveedor declara su saldo (saldo_proveedor), la diferencia (derivado − proveedor) se calcula y se DECLARA con las partidas que la explican si se declaran; el extracto NO corrige nada, NO cuadra por su cuenta y NO decide quién tiene razón (se_ajusta_automaticamente:false; resuelve proveedor/asesor). DETERMINISTA: mismas partidas + misma fecha de corte → mismo extracto (orden por fecha y, a igualdad, por orden de llegada). Dato ausente = desconocido: sin corte declarado hasta:null (todo lo conocido); sin partidas no se compone nada; una partida sin importe NO se lee como 0 (va aparte en sin_fecha_o_sin_importe); una fecha de corte inválida se declara y se compone sin corte. El SIGNO de una partida sale de su tipo DECLARADO (abono/pago/anticipo/descuento/rappel restan). NO escribe, NO persiste, NO muta y NO decide."
+  },
+  "ui": {
+    "type": "workspace_module",
+    "zone": "modulos",
+    "ops": {
+      "extracto": {
+        "titulo": "Componer el extracto confrontable del proveedor",
+        "descripcion": "Compone el estado formal de la cuenta a una fecha: los movimientos ordenados y el saldo con su procedencia, listo para que el proveedor lo CONFRONTE. NO recalcula la cuenta: toma las partidas y el saldo de cuenta-proveedor (N3) POR EVENTO (o de las partidas que se declaren). La fecha de corte es DECLARABLE (`hasta`); sin ella el extracto es de todo lo conocido. Si el proveedor declara su saldo (`saldo_proveedor`), la DIFERENCIA se calcula y se DECLARA — el extracto NO la corrige ni cuadra por su cuenta. Sin partidas no se inventa la cuenta: disponible:false.",
+        "zona": "acciones",
+        "args": [
+          {
+            "nombre": "tercero",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "{\"nif\":\"B12345678\"}",
+            "descripcion": "La ficha del tercero declarada (el MISMO tercero del maestro único N1). Se pasa a N3 al pedir las partidas; si no se declara ni se identifica, N3 lo resolverá por su cuenta o no habrá partidas (disponible:false)."
+          },
+          {
+            "nombre": "nif",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "B12345678",
+            "descripcion": "El NIF del tercero declarado, para localizarlo (se pasa a N3 por evento). Es DATO."
+          },
+          {
+            "nombre": "cuenta",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "(vacío = la que declare el tercero / N3)",
+            "descripcion": "La cuenta contable DECLARABLE del proveedor (no cableada). Se pasa a N3 para emparejar las partidas."
+          },
+          {
+            "nombre": "hasta",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "2026-09-30",
+            "descripcion": "LA FECHA DE CORTE declarada del extracto. Es DATO: sin declararla, hasta:null (todo lo conocido); si se declara y no es una fecha válida, se avisa y se compone sin corte. El sistema no asume ninguna fecha."
+          },
+          {
+            "nombre": "partidas",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "(vacío = se piden a cuenta-proveedor N3 por evento)",
+            "descripcion": "Las PARTIDAS/movimientos DECLARADOS (alternativa a pedirlos a N3). Es DATO: sin ellas y sin respuesta de N3, disponible:false (no se inventa la cuenta). Una partida sin importe no se lee como 0: va aparte en sin_fecha_o_sin_importe."
+          },
+          {
+            "nombre": "saldo_derivado",
+            "tipo": "number",
+            "required": false,
+            "placeholder": "(vacío = el que derive N3, o la suma de las partidas)",
+            "descripcion": "El SALDO derivado declarado (si ya se conoce). Es DATO: si no llega, se usa el de N3 o se suma de las partidas."
+          },
+          {
+            "nombre": "saldo_proveedor",
+            "tipo": "number",
+            "required": false,
+            "placeholder": "(vacío = el proveedor no lo ha declarado)",
+            "descripcion": "EL SALDO QUE DECLARA EL PROVEEDOR (su confrontación). Es DATO: si se declara, se calcula y DECLARA la diferencia (derivado − proveedor); el extracto NO la ajusta. Sin él no hay confrontación (diferencia:null) — no se simula."
+          },
+          {
+            "nombre": "partidas_diferencia",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "(vacío = no se declaran; no se deducen solas)",
+            "descripcion": "Las PARTIDAS que EXPLICAN el descuadre, DECLARADAS. Es DATO: el sistema NO las deduce por su cuenta; si hay diferencia y no se declaran, se avisa y quedan en abierto."
+          },
+          {
+            "nombre": "periodo",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "2026-09",
+            "descripcion": "El periodo declarado que se pasa a N3 al pedir las partidas. Es DATO."
+          }
+        ]
+      }
+    },
+    "datos": [
+      {
+        "op": "extracto",
+        "titulo": "Extracto — movimientos ordenados del proveedor (con su signo)",
+        "refresh_on": [
+          "estado-cuenta-proveedor.extracto.response"
+        ],
+        "columnas": [
+          "fecha",
+          "clave",
+          "numero",
+          "concepto",
+          "importe",
+          "signo"
+        ]
+      }
+    ],
+    "_refresh_nota": "refresh_on = estado-cuenta-proveedor.extracto.response: es la respuesta RPC que este módulo publica de verdad al componer el extracto (el módulo no se suscribe a ninguna señal de dominio ajena; su única entrada es su propia RPC humana). Al recomponerse el extracto, la cinta de movimientos se refresca con los datos de la response. El resultado no tabulable (saldo_derivado/confrontacion/abierto) se ve en la propia respuesta de la op."
+  },
+  "filosofia": "Un extracto no es una verdad que el sistema imponga: es el papel que se pone encima de la mesa para que el proveedor lo confronte con el suyo. Por eso compone en vez de recalcular, y por eso declara la procedencia de cada número. Y si el proveedor dice otra cifra, la diferencia se DECLARA — no se ajusta sola, no se cuadra por decreto: quién tiene razón lo resuelve una persona, no el módulo."
+}

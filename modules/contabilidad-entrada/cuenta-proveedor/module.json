@@ -3,6 +3,8 @@
   "name": "cuenta-proveedor",
   "version": "0.1.0",
   "description": "Reflejo (N3): la cuenta corriente del proveedor derivada del libro — lo que le debemos y sus facturas vivas, sobre el tercero UNICO del maestro (sin maestro nuevo) y con la cuenta contable declarable.",
+  "blueprint_driven": true,
+  "blueprint_path": "cuenta-proveedor.blueprint.json",
   "language": "es",
   "subscribes": [
     {

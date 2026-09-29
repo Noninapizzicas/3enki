@@ -1,0 +1,28 @@
+{
+  "_doc": "Manifest de contabilidad-entrada/factura-rectificativa — REFLEJO STATELESS (O2, hoja del plan). DERIVA la rectificativa de una factura YA emitida: la correccion comercial POSTERIOR a la emision (abono/devolucion/descuento/anulacion) que NO BORRA NADA. La ley de hierro es append-only: el ORIGINAL NO SE MUTA ni se borra — esta clase no toca la factura emitida (O1 emision-factura-venta): solo produce el documento RECTIFICATIVO que CORRIGE POR SUMA, referenciando al original por serie+numero o clave natural. ATRIBUTOS del diseno: original:FacturaEmitida, motivo:ParametroDeclarable; METODOS: calcular(original, motivo):FacturaEmitida; REGLA: correccion comercial POSTERIOR que no borra nada (!= ajuste interno B5 asiento-ajuste, que es del asesor al libro). Invariantes: EL ORIGINAL NO SE BORRA NI SE MUTA (se devuelve intacto y la rectificativa SUMA); DETERMINISTA (mismo original + mismo motivo → misma rectificativa); dato ausente = desconocido (sin base corregible — importe total o lineas del original — NO se fabrica una rectificativa con un 0: abierto:true y faltan declarados; sin referencia al original tampoco se rectifica); el MOTIVO y el TIPO de correccion son DECLARABLES (sin declararlos se emite la rectificativa y se declara el hueco — jamas se inventa la razon de la correccion); NO escribe, NO persiste (la rectificativa es un DERIVADO en memoria; quien la asienta es el custodio del libro, escritor-diario B2). FORMA: REFLEJO stateless — sin PosPersistencia, sin onProjectActivated. Proyeccion unica `_calcular`. Publica contabilidad.factura_rectificada. Cierra el circulo: error → factura-rectificativa.calcular.failed.",
+  "name": "factura-rectificativa",
+  "version": "0.1.0",
+  "description": "Reflejo stateless (O2): deriva la rectificativa de una factura emitida — correccion comercial posterior que NO borra nada; el original no se muta y la correccion SUMA (append-only).",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "factura-rectificativa.calcular.request",
+      "handler": "onCalcularRequest",
+      "description": "RPC reflejo (determinista): {project_id, original:{serie,numero,clave_natural,importe|lineas,tercero}, motivo?, tipo_correccion?} → {rectificativa:{id, tipo:'RECTIFICATIVA', serie, numero, tipo_correccion, motivo, referencia_original, base_corregida, importe (espejo negativo), signo:'CORRIGE_POR_SUMA', lineas, original_intacta:true, no_borra:true, asienta:false, asienta_por:'escritor-diario (B2)'}, original_intacta:true, corrige_por_suma:true, original, abierto, faltan}. Espeja el original con el signo cambiado; NO lo muta. Sin base corregible (importe/lineas) o sin referencia al original → se declara abierto y no se fabrica la rectificativa. Exito → publica contabilidad.factura_rectificada y responde por factura-rectificativa.calcular.response; original/project_id ausente → factura-rectificativa.calcular.failed."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "factura-rectificativa.calcular.response",
+      "description": "Respuesta RPC correlada de factura-rectificativa.calcular.request → {request_id, status:200, data:{rectificativa, referencia_original, original_intacta, corrige_por_suma, original, abierto, faltan}}. Emitida por el helper _atender."
+    },
+    {
+      "event": "factura-rectificativa.calcular.failed",
+      "description": "Par de fallo determinista (O2): original o project_id ausente, o original sin referencia (serie/numero/clave_natural) → {status, error:{code, message, details?}}. Cierra el circulo de factura-rectificativa.calcular.request."
+    },
+    {
+      "event": "contabilidad.factura_rectificada",
+      "description": "Fire-and-forget (O2): quedo DERIVADA una rectificativa (correccion comercial posterior) → {project_id, rectificativa, referencia_original, original_intacta:true, corrige_por_suma:true, correlation_id}. El original NO se borra; lo consume el libro (escritor-diario B2) para asentar la correccion por SUMA."
+    }
+  ]
+}

@@ -1,0 +1,34 @@
+{
+  "_doc": "Manifest de contabilidad-analitica/marca-borrador-validado — REFLEJO STATELESS (Q4, hoja del plan). El SELLO del PUNTO EN QUE ESTA lo que el dueño ve: EN_CURSO / REVISADO / FIRMADO. Existe para que no se decida sobre un BORRADOR VIVO como si fuera definitivo. ATRIBUTOS del diseno: traza:TrazaAsiento, firma:FlujoFirma; METODOS: estado(dato):MarcaEstado; REGLA: sello del punto en que esta lo que ve (en curso / revisado / firmado), para no decidir sobre un borrador vivo como si fuera definitivo — deriva el estado de la traza y la firma. Invariantes: DERIVA, NO ALMACENA (el estado se COMPUTA de la traza B4 contabilidad.traza_registrada y la firma L3 contabilidad.firma_registrada; no se guarda una marca por dato — no es parcela — el ¿almacén de marca por dato o derivación pura? del diseño se resuelve por DERIVACION PURA); JAMAS SE AFIRMA FIRMADO SIN FIRMA (sin evidencia de firma el estado maximo es REVISADO o EN_CURSO — no se declara definitivo lo que no lo es); dato ausente = desconocido (sin dato identificable el estado es DESCONOCIDO — no se asume borrador ni validado); DETERMINISTA (misma traza + misma firma → mismo estado). FORMA: REFLEJO stateless — sin PosPersistencia, sin onProjectActivated (una lectura cacheada de la evidencia, no una parcela). Proyeccion `_estado`. Consume contabilidad.traza_registrada (B4) y contabilidad.firma_registrada (L3) como evidencia (fire-and-forget). Cierra el circulo: error → marca-borrador-validado.estado.failed.",
+  "name": "marca-borrador-validado",
+  "version": "0.1.0",
+  "description": "Reflejo stateless (Q4): sella si lo que se ve es borrador vivo o definitivo (en curso/revisado/firmado), derivado de la traza y la firma — para no decidir sobre un borrador.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "marca-borrador-validado.estado.request",
+      "handler": "onEstadoRequest",
+      "description": "RPC reflejo (derivación determinista): {project_id, dato|dato_id, traza?, firma?} → {dato_id, marca:{estado:'DESCONOCIDO'|'EN_CURSO'|'REVISADO'|'FIRMADO', borrador, validado, firmado, seguro_para_decidir, motivo}, derivada_de:[...], almacena:false, decide:false, abierto, faltan}. DERIVA el estado de la traza (B4) y la firma (L3) — declaradas o la última observada por evento; NO almacena marca por dato. Sin dato identificable → DESCONOCIDO; sin firma NUNCA FIRMADO. Responde por marca-borrador-validado.estado.response; project_id ausente → marca-borrador-validado.estado.failed."
+    },
+    {
+      "event": "contabilidad.traza_registrada",
+      "handler": "onTrazaRegistrada",
+      "description": "Fire-and-forget (B4 → Q4): traza-asiento registró la creación de un asiento → evidencia de que el dato existe (punto de partida EN_CURSO). Se recuerda como evidencia para derivar el estado; NO se almacena una marca. Tolerante: sin project_id o sin dato identificable se ignora."
+    },
+    {
+      "event": "contabilidad.firma_registrada",
+      "handler": "onFirmaRegistrada",
+      "description": "Fire-and-forget (L3 → Q4): flujo-firma registró una firma → evidencia para derivar REVISADO/FIRMADO. Se recuerda como evidencia; NO se almacena una marca. Tolerante: sin project_id o sin dato identificable se ignora."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "marca-borrador-validado.estado.response",
+      "description": "Respuesta RPC correlada de marca-borrador-validado.estado.request → {request_id, status:200, data:{dato_id, marca, derivada_de, almacena:false, decide:false, abierto, faltan}}. Emitida por el helper _atender."
+    },
+    {
+      "event": "marca-borrador-validado.estado.failed",
+      "description": "Par de fallo determinista (Q4): project_id ausente → {status, error:{code, message, details?}}. Cierra el circulo de marca-borrador-validado.estado.request."
+    }
+  ]
+}

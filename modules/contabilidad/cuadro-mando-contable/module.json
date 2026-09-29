@@ -24,5 +24,14 @@
       "event": "contabilidad.cuadro_mando_calculado.failed",
       "description": "Par de fallo del evento de dominio contabilidad.cuadro_mando_calculado: la emision del hecho de dominio no se completo."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "cuadro-mando-contable.cuadro_mando.agregar",
+      "handler": "onAgregarRequest",
+      "type": "inline_render",
+      "zone": "area_chat"
+    }
   ]
 }

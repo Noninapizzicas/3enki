@@ -47,5 +47,35 @@
       "event": "contabilidad.cuenta_terceros.aging.failed",
       "description": "Par de fallo determinista: aging con lado invalido (400) o mayor-balanza (B3) no disponible (503). Cierra el circulo de contabilidad.cuenta_terceros.aging.request."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "cuenta-terceros.cuenta_terceros.saldo",
+      "handler": "onSaldoRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "cuenta-terceros.cuenta_terceros.extracto",
+      "handler": "onExtractoRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "cuenta-terceros.cuenta_terceros.vencimiento",
+      "handler": "onVencimientoRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "cuenta-terceros.cuenta_terceros.aging",
+      "handler": "onAgingRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

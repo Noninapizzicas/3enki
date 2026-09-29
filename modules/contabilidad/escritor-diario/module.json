@@ -69,5 +69,35 @@
       "event": "contabilidad.asiento_rechazado.failed",
       "description": "Par de fallo del evento de dominio contabilidad.asiento_rechazado: la emision del rechazo no se completo."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "escritor-diario.asiento.asentar",
+      "handler": "onAsentarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "escritor-diario.asiento.apertura",
+      "handler": "onAperturaRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "escritor-diario.asiento.cierre",
+      "handler": "onCierreRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "escritor-diario.asiento.ajustar",
+      "handler": "onAjustarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

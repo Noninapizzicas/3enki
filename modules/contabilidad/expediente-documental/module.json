@@ -38,5 +38,21 @@
       "event": "contabilidad.cifra_archivada.failed",
       "description": "Par de fallo del evento de dominio contabilidad.cifra_archivada: la emision del hecho de dominio no se completo."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "expediente-documental.expediente.archivar",
+      "handler": "onArchivarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "expediente-documental.expediente.recuperar",
+      "handler": "onRecuperarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

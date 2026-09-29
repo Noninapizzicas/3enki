@@ -50,5 +50,28 @@
       "event": "contabilidad.factura_interpretada.failed",
       "description": "Par de fallo del evento de dominio contabilidad.factura_interpretada: la emision del hecho de dominio no se completo."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "factura-electronica.factura.estructurar",
+      "handler": "onEstructurarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "factura-electronica.factura.interpretar",
+      "handler": "onInterpretarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "factura-electronica.factura.registrar_formato",
+      "handler": "onRegistrarFormatoRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

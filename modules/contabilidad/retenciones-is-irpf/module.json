@@ -41,5 +41,21 @@
       "event": "contabilidad.cuota_estimada.failed",
       "description": "Par de fallo del evento de dominio contabilidad.cuota_estimada: la emision del hecho de dominio no se completo."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "retenciones-is-irpf.retenciones.calcular",
+      "handler": "onCalcularRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "retenciones-is-irpf.estimacion.calcular",
+      "handler": "onEstimarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

@@ -46,5 +46,21 @@
       "event": "contabilidad.parcela_autorizada.failed",
       "description": "Par de fallo del evento de dominio contabilidad.parcela_autorizada: la emision del hecho de dominio no se completo."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "single-writer.parcela.registrar",
+      "handler": "onRegistrarRequest",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "single-writer.parcela.autorizar",
+      "handler": "onAutorizarRequest",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    }
   ]
 }

@@ -32,5 +32,14 @@
       "event": "contabilidad.ajuste_recibido.failed",
       "description": "Par de fallo del evento de dominio contabilidad.ajuste_recibido: la correccion se compuso pero el libro (B2) no la confirmo; no se emite como recibida."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "asiento-ajuste.ajuste.recibir",
+      "handler": "onRecibirRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

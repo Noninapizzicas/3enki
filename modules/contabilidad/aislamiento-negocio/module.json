@@ -38,5 +38,21 @@
       "event": "contabilidad.parcela_negocio_registrada.failed",
       "description": "Par de fallo del evento de dominio contabilidad.parcela_negocio_registrada: la emision del hecho de dominio no se completo."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "aislamiento-negocio.parcela_negocio.registrar",
+      "handler": "onRegistrarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "aislamiento-negocio.parcela_negocio.escribir",
+      "handler": "onEscribirRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

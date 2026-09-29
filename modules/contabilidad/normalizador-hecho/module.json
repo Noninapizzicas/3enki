@@ -42,5 +42,14 @@
       "event": "contabilidad.documento_descuadrado.failed",
       "description": "Par de fallo del evento de dominio contabilidad.documento_descuadrado: la emision de la senal de descuadre no se completo."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "normalizador-hecho.hecho.normalizar",
+      "handler": "onNormalizarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

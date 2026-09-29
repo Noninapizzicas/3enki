@@ -38,5 +38,14 @@
       "event": "contabilidad.excepcion.encolar.failed",
       "description": "Par de fallo del encolado: cola-revision (A8.1) no confirmo el encolado de la partida no identificada (503 DEPENDENCIA_NO_DISPONIBLE) — se DECLARA, no se asume encolado."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "partida-no-identificada.partida.reconocer",
+      "handler": "onReconocerRequest",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    }
   ]
 }

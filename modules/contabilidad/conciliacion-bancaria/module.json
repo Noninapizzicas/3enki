@@ -41,5 +41,21 @@
       "event": "contabilidad.movimiento_sin_cruzar.failed",
       "description": "Par de fallo del evento de dominio contabilidad.movimiento_sin_cruzar: la emision de la senal a E7 no se completo."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "conciliacion-bancaria.conciliacion.cruzar",
+      "handler": "onCruzarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "conciliacion-bancaria.conciliacion.informe",
+      "handler": "onInformeRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

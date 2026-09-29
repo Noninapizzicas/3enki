@@ -41,5 +41,21 @@
       "event": "contabilidad.resultado_calculado.failed",
       "description": "Par de fallo del evento de dominio contabilidad.resultado_calculado: la emision del hecho de dominio no se completo."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "estados-contables.estado.balance",
+      "handler": "onBalanceRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "estados-contables.estado.resultado",
+      "handler": "onResultadoRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

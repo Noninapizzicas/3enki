@@ -24,5 +24,14 @@
       "event": "contabilidad.consulta_respondida.failed",
       "description": "Par de fallo del evento de dominio contabilidad.consulta_respondida: la emision del hecho de dominio no se completo."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "consulta-dueno.consulta.responder",
+      "handler": "onResponderRequest",
+      "type": "chat_tool",
+      "zone": "barra_chat_inferior"
+    }
   ]
 }

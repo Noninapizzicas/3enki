@@ -24,5 +24,14 @@
       "event": "contabilidad.grupo_consolidado.failed",
       "description": "Par de fallo del evento de dominio contabilidad.grupo_consolidado: la emision del hecho de dominio no se completo."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "consolidacion-grupo.consolidacion.agregar",
+      "handler": "onAgregarRequest",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    }
   ]
 }

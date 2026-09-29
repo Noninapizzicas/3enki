@@ -72,5 +72,35 @@
       "event": "contabilidad.plan_exportado.failed",
       "description": "Par de fallo del evento de dominio contabilidad.plan_exportado: la emision del hecho de dominio no se completo."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "catalogo-cuentas.cuenta.declarar",
+      "handler": "onDeclararRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "catalogo-cuentas.cuenta.resolver",
+      "handler": "onResolverRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "catalogo-cuentas.plan.importar",
+      "handler": "onImportarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "catalogo-cuentas.plan.exportar",
+      "handler": "onExportarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

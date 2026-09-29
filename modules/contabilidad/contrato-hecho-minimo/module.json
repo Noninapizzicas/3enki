@@ -47,5 +47,28 @@
       "event": "contabilidad.contrato_declarado.failed",
       "description": "Par de fallo del evento de dominio contabilidad.contrato_declarado: la emision del hecho de dominio no se completo."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "contrato-hecho-minimo.contrato.declarar",
+      "handler": "onDeclararRequest",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "contrato-hecho-minimo.contrato.exigir",
+      "handler": "onExigirRequest",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "contrato-hecho-minimo.contrato.cubre",
+      "handler": "onCubreRequest",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    }
   ]
 }

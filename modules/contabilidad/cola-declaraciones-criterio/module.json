@@ -55,5 +55,28 @@
       "event": "contabilidad.criterio_pendiente.failed",
       "description": "Par de fallo del evento de dominio contabilidad.criterio_pendiente: la emision del hecho de dominio no se completo."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "cola-declaraciones-criterio.criterio.declarar",
+      "handler": "onDeclararRequest",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "cola-declaraciones-criterio.criterio.leer",
+      "handler": "onLeerRequest",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "cola-declaraciones-criterio.criterio.pendientes",
+      "handler": "onPendientesRequest",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    }
   ]
 }

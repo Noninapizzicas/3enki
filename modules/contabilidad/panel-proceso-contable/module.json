@@ -20,5 +20,14 @@
       "event": "contabilidad.panel.latido.failed",
       "description": "Par de fallo determinista: latido sin project_id (400). Cierra el circulo de contabilidad.panel.latido.request."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "panel-proceso-contable.panel.latido",
+      "handler": "onLatidoRequest",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    }
   ]
 }

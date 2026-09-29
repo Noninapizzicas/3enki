@@ -38,5 +38,21 @@
       "event": "contabilidad.acceso_nomina_autorizado.failed",
       "description": "Par de fallo del evento de dominio contabilidad.acceso_nomina_autorizado: la emision del hecho de dominio no se completo."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "acceso-nomina.nomina.autorizar",
+      "handler": "onAutorizarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "acceso-nomina.nomina.puede_ver",
+      "handler": "onPuede_verRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

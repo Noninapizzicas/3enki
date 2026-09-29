@@ -63,5 +63,28 @@
       "event": "contabilidad.comparacion_calculada.failed",
       "description": "Par de fallo del evento de dominio contabilidad.comparacion_calculada: la emision del hecho de dominio no se completo."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "presupuesto.presupuesto.declarar",
+      "handler": "onDeclararRequest",
+      "type": "inline_render",
+      "zone": "area_chat"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "presupuesto.desviacion.calcular",
+      "handler": "onDesviacionRequest",
+      "type": "inline_render",
+      "zone": "area_chat"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "presupuesto.periodos.comparar",
+      "handler": "onCompararRequest",
+      "type": "inline_render",
+      "zone": "area_chat"
+    }
   ]
 }

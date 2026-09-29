@@ -55,5 +55,28 @@
       "event": "contabilidad.excepcion_resuelta.failed",
       "description": "Par de fallo del evento de dominio contabilidad.excepcion_resuelta: la emision del hecho de dominio no se completo."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "cola-revision.excepcion.encolar",
+      "handler": "onEncolarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "cola-revision.excepcion.resolver",
+      "handler": "onResolverRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "cola-revision.excepcion.siguiente",
+      "handler": "onSiguienteRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

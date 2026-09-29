@@ -37,5 +37,14 @@
       "event": "contabilidad.hecho_duplicado.failed",
       "description": "Par de fallo del evento de dominio contabilidad.hecho_duplicado: la emision del hecho de dominio no se completo."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "deduplicacion-hecho.duplicado.verificar",
+      "handler": "onVerificarRequest",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    }
   ]
 }

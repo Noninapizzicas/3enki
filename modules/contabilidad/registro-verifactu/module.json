@@ -43,5 +43,21 @@
       "event": "contabilidad.registro_verifactu_anotado.failed",
       "description": "Par de fallo del evento de dominio contabilidad.registro_verifactu_anotado: la emision del hecho de dominio no se completo."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "registro-verifactu.registro.anotar",
+      "handler": "onAnotarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "registro-verifactu.registro.verificar",
+      "handler": "onVerificarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

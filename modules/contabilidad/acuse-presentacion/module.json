@@ -24,5 +24,14 @@
       "event": "contabilidad.acuse_ligado.failed",
       "description": "Par de fallo: la ligadura del acuse con estado-presentacion-fiscal (D12) no se confirmo — se DECLARA (NO_CONFIRMADO), no se asume que la obligacion quedo justificada."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "acuse-presentacion.acuse.recibir",
+      "handler": "onRecibirRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

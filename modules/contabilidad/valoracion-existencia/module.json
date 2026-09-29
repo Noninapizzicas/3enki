@@ -41,5 +41,21 @@
       "event": "contabilidad.ajuste_inventario_calculado.failed",
       "description": "Par de fallo del evento de dominio contabilidad.ajuste_inventario_calculado: la emision del ajuste calculado no se completo."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "valoracion-existencia.existencia.valorar",
+      "handler": "onValorarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "valoracion-existencia.inventario.ajuste",
+      "handler": "onAjusteRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

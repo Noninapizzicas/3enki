@@ -50,5 +50,28 @@
       "event": "contabilidad.modelo_construido.failed",
       "description": "Par de fallo del evento de dominio contabilidad.modelo_construido: la emision del hecho de dominio no se completo."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "liquidacion-iva.iva.liquidar",
+      "handler": "onLiquidarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "liquidacion-iva.modelo.303",
+      "handler": "on303Request",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "liquidacion-iva.modelo.390",
+      "handler": "on390Request",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

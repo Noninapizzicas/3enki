@@ -53,5 +53,21 @@
       "event": "contabilidad.historial_anotado.failed",
       "description": "Par de fallo del evento de dominio contabilidad.historial_anotado: la emision del hecho de dominio no se completo."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "historial-proceso-contable.historial.anotar",
+      "handler": "onAnotarRequest",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "historial-proceso-contable.historial.consultar",
+      "handler": "onConsultarRequest",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    }
   ]
 }

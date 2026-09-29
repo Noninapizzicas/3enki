@@ -38,5 +38,21 @@
       "event": "contabilidad.obligacion_avanzada.failed",
       "description": "Par de fallo del evento de dominio contabilidad.obligacion_avanzada: la emision del hecho de dominio no se completo."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "estado-presentacion-fiscal.obligacion.avanzar",
+      "handler": "onAvanzarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "estado-presentacion-fiscal.obligacion.estado",
+      "handler": "onEstadoRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

@@ -32,5 +32,14 @@
       "event": "contabilidad.aviso_confirmado.failed",
       "description": "Par de fallo del evento de dominio contabilidad.aviso_confirmado: el canal externo NO confirmo la entrega (SIN_CONFIRMACION_DE_ENTREGA) — el aviso quedo entregado pero NO consta como recibido (honestidad: nadie da por entregado sin confirmacion)."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "aviso-al-negocio.aviso.enrutar",
+      "handler": "onEnrutarRequest",
+      "type": "inline_render",
+      "zone": "area_chat"
+    }
   ]
 }

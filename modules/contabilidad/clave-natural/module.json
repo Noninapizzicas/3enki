@@ -33,5 +33,21 @@
       "event": "contabilidad.clave_calculada.failed",
       "description": "Par de fallo del evento de dominio contabilidad.clave_calculada: la emision del hecho de dominio no se completo."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "clave-natural.clave.calcular",
+      "handler": "onCalcularRequest",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "clave-natural.clave.repeticion",
+      "handler": "onRepeticionRequest",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    }
   ]
 }

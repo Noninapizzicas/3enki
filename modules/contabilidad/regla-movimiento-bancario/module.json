@@ -60,5 +60,28 @@
       "event": "contabilidad.regla_movimiento_aprendida.failed",
       "description": "Par de fallo del evento de dominio contabilidad.regla_movimiento_aprendida: la emision del hecho de dominio no se completo, o la ratificacion (L10) no hallo la regla."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "regla-movimiento-bancario.regla_movimiento.leer",
+      "handler": "onLeerRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "regla-movimiento-bancario.regla_movimiento.declarar",
+      "handler": "onDeclararRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "regla-movimiento-bancario.regla_movimiento.aprender",
+      "handler": "onAprenderRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

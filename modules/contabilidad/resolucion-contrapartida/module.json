@@ -29,5 +29,14 @@
       "event": "contabilidad.contrapartida_propuesta.failed",
       "description": "Par de fallo del evento de dominio contabilidad.contrapartida_propuesta: la emision del hecho de dominio no se completo (lo que no cubre ninguna regla va aqui y a la cola de revision)."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "resolucion-contrapartida.contrapartida.proponer",
+      "handler": "onProponerRequest",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    }
   ]
 }

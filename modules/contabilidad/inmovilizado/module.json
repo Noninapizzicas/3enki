@@ -77,5 +77,35 @@
       "event": "contabilidad.activo_dado_de_baja.failed",
       "description": "Par de fallo del evento de dominio contabilidad.activo_dado_de_baja: la emision del hecho de dominio no se completo."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "inmovilizado.activo.alta",
+      "handler": "onAltaRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "inmovilizado.amortizacion.generar",
+      "handler": "onGenerarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "inmovilizado.activo.baja",
+      "handler": "onBajaRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "inmovilizado.activo.valor_neto",
+      "handler": "onValor_netoRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

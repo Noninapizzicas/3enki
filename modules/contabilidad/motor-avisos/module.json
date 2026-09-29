@@ -41,5 +41,21 @@
       "event": "contabilidad.aviso.enrutar.failed",
       "description": "Par de fallo del enrutado: el aviso no tiene destinatario valido al que enrutar. NO se declara entregado lo que no se pudo enrutar."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "motor-avisos.aviso.solicitar",
+      "handler": "onSolicitarRequest",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "motor-avisos.aviso.catalogo.declarar",
+      "handler": "onDeclararRequest",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    }
   ]
 }

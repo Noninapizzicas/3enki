@@ -37,5 +37,14 @@
       "event": "contabilidad.regla_aprendida.failed",
       "description": "Par de fallo del evento de dominio contabilidad.regla_aprendida: el repositorio de reglas (A6.2/E8) no respondio (503 DEPENDENCIA_NO_DISPONIBLE) — la candidata se DECLARA, no se hidrata a ciegas."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "desatasco-entrada.desatasco.resolver",
+      "handler": "onResolverRequest",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    }
   ]
 }

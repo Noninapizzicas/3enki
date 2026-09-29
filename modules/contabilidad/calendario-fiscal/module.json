@@ -46,5 +46,21 @@
       "event": "contabilidad.plazo_proximo.failed",
       "description": "Par de fallo determinista/tolerante: motor-avisos (K2) no respondio la peticion de aviso del plazo → 503 DEPENDENCIA_NO_DISPONIBLE. El plazo queda DECLARADO igualmente; NO se fabrica un aviso que K2 no produjo."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "calendario-fiscal.calendario.declarar",
+      "handler": "onDeclararRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "calendario-fiscal.calendario.proximos",
+      "handler": "onProximosRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

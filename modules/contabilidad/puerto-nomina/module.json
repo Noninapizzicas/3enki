@@ -24,5 +24,14 @@
       "event": "contabilidad.nomina_recibida.failed",
       "description": "Par de fallo del evento de dominio contabilidad.nomina_recibida: la emision del hecho de dominio no se completo."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "puerto-nomina.nomina.recibir",
+      "handler": "onRecibirRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

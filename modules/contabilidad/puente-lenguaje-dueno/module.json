@@ -46,5 +46,21 @@
       "event": "contabilidad.cifra_presentada.failed",
       "description": "Par de fallo del evento de dominio contabilidad.cifra_presentada: la emision del hecho de dominio no se completo."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "puente-lenguaje-dueno.dueno.preguntar",
+      "handler": "onPreguntarRequest",
+      "type": "chat_tool",
+      "zone": "barra_chat_inferior"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "puente-lenguaje-dueno.dueno.cifra.presentar",
+      "handler": "onCifra_presentarRequest",
+      "type": "chat_tool",
+      "zone": "barra_chat_inferior"
+    }
   ]
 }

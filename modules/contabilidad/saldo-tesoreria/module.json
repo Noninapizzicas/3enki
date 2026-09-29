@@ -41,5 +41,21 @@
       "event": "contabilidad.caja_proyectada.failed",
       "description": "Par de fallo del evento de dominio contabilidad.caja_proyectada: la emision del hecho de dominio no se completo."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "saldo-tesoreria.tesoreria.saldo",
+      "handler": "onSaldoRequest",
+      "type": "inline_render",
+      "zone": "area_chat"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "saldo-tesoreria.tesoreria.prevision",
+      "handler": "onPrevisionRequest",
+      "type": "inline_render",
+      "zone": "area_chat"
+    }
   ]
 }

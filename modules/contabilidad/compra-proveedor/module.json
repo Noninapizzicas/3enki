@@ -29,5 +29,21 @@
       "event": "contabilidad.compra.coste_real.failed",
       "description": "Par de fallo determinista: coste_real sin project_id/factura (400) o mayor-balanza (B3) no disponible al certificar los anticipos (503 DEPENDENCIA_NO_DISPONIBLE — contrato TOLERANTE: no se fabrica el coste real). Cierra el circulo de contabilidad.compra.coste_real.request."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "compra-proveedor.compra.cotejar",
+      "handler": "onCotejarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "compra-proveedor.compra.coste_real",
+      "handler": "onCoste_realRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

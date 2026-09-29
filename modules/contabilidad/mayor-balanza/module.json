@@ -42,5 +42,28 @@
       "event": "contabilidad.balanza_calculada.failed",
       "description": "Par de fallo del evento de dominio contabilidad.balanza_calculada: la emision del hecho de dominio no se completo."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "mayor-balanza.mayor.saldo",
+      "handler": "onSaldoRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "mayor-balanza.mayor.balanza",
+      "handler": "onBalanzaRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "mayor-balanza.mayor.movimientos",
+      "handler": "onMovimientosRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

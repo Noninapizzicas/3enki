@@ -58,5 +58,28 @@
       "event": "contabilidad.tablero_calculado.failed",
       "description": "Par de fallo del evento de dominio contabilidad.tablero_calculado: la emision del hecho de dominio no se completo."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "margen-analitico.margen.calcular",
+      "handler": "onCalcularRequest",
+      "type": "inline_render",
+      "zone": "area_chat"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "margen-analitico.indirecto.repartir",
+      "handler": "onRepartirRequest",
+      "type": "inline_render",
+      "zone": "area_chat"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "margen-analitico.tablero.cruzar",
+      "handler": "onCruzarRequest",
+      "type": "inline_render",
+      "zone": "area_chat"
+    }
   ]
 }

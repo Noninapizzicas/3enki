@@ -60,5 +60,28 @@
       "event": "contabilidad.regla_aprendida.failed",
       "description": "Par de fallo del evento de dominio contabilidad.regla_aprendida: la emision no se completo, o la ratificacion (L10) apunto a una regla inexistente."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "regla-contrapartida.regla.leer",
+      "handler": "onLeerRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "regla-contrapartida.regla.declarar",
+      "handler": "onDeclararRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "regla-contrapartida.regla.aprender",
+      "handler": "onAprenderRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

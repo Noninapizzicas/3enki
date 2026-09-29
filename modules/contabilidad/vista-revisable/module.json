@@ -41,5 +41,21 @@
       "event": "contabilidad.muestra_seleccionada.failed",
       "description": "Par de fallo del evento de dominio contabilidad.muestra_seleccionada: la emision del hecho de dominio no se completo."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "vista-revisable.asiento.explicar",
+      "handler": "onExplicarRequest",
+      "type": "inline_render",
+      "zone": "area_chat"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "vista-revisable.muestra.seleccionar",
+      "handler": "onSeleccionarRequest",
+      "type": "inline_render",
+      "zone": "area_chat"
+    }
   ]
 }

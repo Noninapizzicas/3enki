@@ -38,5 +38,21 @@
       "event": "contabilidad.perfil_declarado.failed",
       "description": "Par de fallo del evento de dominio contabilidad.perfil_declarado: la emision del hecho de dominio no se completo."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "perfil-administrativo.perfil.declarar",
+      "handler": "onDeclararRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "perfil-administrativo.perfil.aplicables",
+      "handler": "onAplicablesRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

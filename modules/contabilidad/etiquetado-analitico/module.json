@@ -37,5 +37,14 @@
       "event": "contabilidad.excepcion.encolar.failed",
       "description": "Par de fallo del encolado: cola-revision (A8.1) no confirmo el encolado de la etiqueta no resuelta (503 DEPENDENCIA_NO_DISPONIBLE) — se DECLARA, no se asume encolada."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "etiquetado-analitico.etiqueta.aplicar",
+      "handler": "onAplicarRequest",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    }
   ]
 }

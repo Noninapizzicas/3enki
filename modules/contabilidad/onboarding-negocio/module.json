@@ -55,5 +55,28 @@
       "event": "contabilidad.vertical_activada.failed",
       "description": "Par de fallo del evento de dominio contabilidad.vertical_activada: la vertical no se activo (parametros sin declarar) o la emision del hecho de dominio no se completo."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "onboarding-negocio.negocio.configurar",
+      "handler": "onConfigurarRequest",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "onboarding-negocio.negocio.estado",
+      "handler": "onEstadoRequest",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "onboarding-negocio.negocio.activar",
+      "handler": "onActivarRequest",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    }
   ]
 }

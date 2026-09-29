@@ -55,5 +55,28 @@
       "event": "contabilidad.asiento.asentar.failed",
       "description": "Par de fallo determinista: el diario (B2) no pudo asentar el asiento de nomina (descuadre, clave duplicada, diario no disponible). Cierra el circulo de la peticion contabilidad.asiento.asentar.request."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "recibo-nomina.nomina.procesar",
+      "handler": "onProcesarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "recibo-nomina.nomina.desglosar",
+      "handler": "onDesglosarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "recibo-nomina.nomina.liquidar",
+      "handler": "onLiquidarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

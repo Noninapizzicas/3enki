@@ -38,5 +38,21 @@
       "event": "contabilidad.cuenta_bancaria_declarada.failed",
       "description": "Par de fallo del evento de dominio contabilidad.cuenta_bancaria_declarada: la emision del hecho de dominio no se completo."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "maestro-cuentas-bancarias.cuenta_bancaria.declarar",
+      "handler": "onDeclararRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "maestro-cuentas-bancarias.cuenta_bancaria.listar",
+      "handler": "onListarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

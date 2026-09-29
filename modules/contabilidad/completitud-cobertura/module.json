@@ -34,5 +34,14 @@
       "event": "contabilidad.cobertura_calculada.failed",
       "description": "Par de fallo del evento de dominio contabilidad.cobertura_calculada: la emision del hecho de dominio no se completo."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "completitud-cobertura.cobertura.calcular",
+      "handler": "onCalcularRequest",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    }
   ]
 }

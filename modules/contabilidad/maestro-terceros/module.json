@@ -64,5 +64,35 @@
       "event": "contabilidad.tercero_identificado.failed",
       "description": "Par de fallo del evento de dominio contabilidad.tercero_identificado: la emision del hecho de dominio no se completo."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "maestro-terceros.tercero.declarar",
+      "handler": "onDeclararRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "maestro-terceros.tercero.ficha",
+      "handler": "onFichaRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "maestro-terceros.tercero.identificar",
+      "handler": "onIdentificarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "maestro-terceros.tercero.historial",
+      "handler": "onHistorialRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

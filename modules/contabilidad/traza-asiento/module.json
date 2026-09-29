@@ -43,5 +43,21 @@
       "event": "contabilidad.traza_anotada.failed",
       "description": "Par de fallo del evento de dominio contabilidad.traza_anotada: la emision del hecho de dominio no se completo (incluye el rechazo de un intento de mutacion, 409 ERROR_TRAZA_INMUTABLE)."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "traza-asiento.traza.anotar",
+      "handler": "onAnotarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "traza-asiento.traza.consultar",
+      "handler": "onConsultarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

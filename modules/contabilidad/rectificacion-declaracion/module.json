@@ -33,5 +33,14 @@
       "event": "contabilidad.declaracion_rectificar.failed",
       "description": "Contrato TOLERANTE (D12): estado-presentacion-fiscal no respondio → 503 DEPENDENCIA_NO_DISPONIBLE porque NO consta que la declaracion este presentada. NO se inventa el permiso de rectificar."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "rectificacion-declaracion.declaracion.rectificar",
+      "handler": "onRectificarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

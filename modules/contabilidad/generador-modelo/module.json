@@ -32,5 +32,14 @@
       "event": "contabilidad.modelo_entregado.failed",
       "description": "Par de fallo: el puerto de salida NO esta declarado (NO_DECLARADO) o la entrega al programa del asesor no se confirmo — se DECLARA, no se finge la presentacion."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "generador-modelo.modelo.generar",
+      "handler": "onGenerarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

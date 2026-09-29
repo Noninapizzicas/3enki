@@ -51,5 +51,21 @@
       "event": "contabilidad.apertura_generada.failed",
       "description": "Par de fallo del evento de dominio contabilidad.apertura_generada: no hay cierre anterior del que abrir (422 SIN_CIERRE_ANTERIOR) o la emision del hecho de dominio no se completo. Nunca se inventan saldos de arranque."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "cierre-ejercicio.cierre.cerrar",
+      "handler": "onCerrarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "cierre-ejercicio.cierre.estado",
+      "handler": "onEstadoRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

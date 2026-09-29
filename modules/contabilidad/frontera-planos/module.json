@@ -24,5 +24,14 @@
       "event": "contabilidad.frontera_planos_verificada.failed",
       "description": "Par de fallo del evento de dominio contabilidad.frontera_planos_verificada: la emision del hecho de dominio no se completo."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "frontera-planos.frontera_planos.verificar",
+      "handler": "onVerificarRequest",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    }
   ]
 }

@@ -38,5 +38,21 @@
       "event": "contabilidad.anclaje_declarado.failed",
       "description": "Par de fallo del evento de dominio contabilidad.anclaje_declarado: la emision del hecho de dominio no se completo."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "anclaje-cierre-vertical.anclaje.declarar",
+      "handler": "onDeclararRequest",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "anclaje-cierre-vertical.anclaje.anclar",
+      "handler": "onAnclarRequest",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    }
   ]
 }

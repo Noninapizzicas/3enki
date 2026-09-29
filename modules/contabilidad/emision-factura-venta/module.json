@@ -47,5 +47,28 @@
       "event": "contabilidad.factura.series.failed",
       "description": "Par de fallo determinista: series sin project_id (400). Cierra el circulo de contabilidad.factura.series.request."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "emision-factura-venta.factura.emitir",
+      "handler": "onEmitirRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "emision-factura-venta.factura.rectificar",
+      "handler": "onRectificarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "emision-factura-venta.factura.series",
+      "handler": "onSeriesRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

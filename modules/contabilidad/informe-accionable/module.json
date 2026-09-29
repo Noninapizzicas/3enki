@@ -54,5 +54,21 @@
       "event": "contabilidad.aviso.enrutar.failed",
       "description": "Par de fallo del envio a R1: aviso-al-negocio no confirmo la entrega de la recomendacion (DEPENDENCIA_NO_DISPONIBLE) — se DECLARA, no se asume entregada."
     }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "informe-accionable.informe.accionable",
+      "handler": "onInforme_accionableRequest",
+      "type": "chat_tool",
+      "zone": "barra_chat_inferior"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "informe-accionable.estados.narrar",
+      "handler": "onEstados_narrarRequest",
+      "type": "chat_tool",
+      "zone": "barra_chat_inferior"
+    }
   ]
 }

@@ -1,0 +1,46 @@
+{
+  "_doc": "Manifest de contabilidad-analitica/onboarding-negocio — CUSTODIO CON PERSISTENCIA (K1, hoja del plan). LA PUERTA DE ENTRADA DE CADA NEGOCIO (multi-tenant): aqui se da de alta un negocio nuevo RECOGIENDO sus datos DECLARABLES — el plan contable, las fuentes de hechos, los parametros — y se AISLA su parcela: lo de un negocio no se fuga a otro. ATRIBUTOS del diseno: config:Map<Clave,Valor>; METODOS: recoger(negocio, datos), leer(clave):Opcion<Valor>; REGLA: recoge los datos declarables del negocio nuevo (plan, fuentes, parametros), UN escritor. LOS DATOS SON DECLARABLES Y NADA SE ESTIMA: una clave que no llega NO existe — queda [ABIERTO] con valor null y se declara en abierto/faltan; jamas se rellena con un valor por defecto NI SE HEREDA DE OTRO NEGOCIO (heredar seria una fuga y una invencion a la vez). LA PLATAFORMA SE CONSUME POR EVENTO, NUNCA POR require: la existencia del proyecto se comprueba y se LIGA pidiendosela a project-manager POR EVENTO (project.get.request, best-effort); si no responde el alta sigue siendo DECLARADA con proyecto_verificado:false (no se finge la verificacion ni se inventa el proyecto). ALTA EFECTIVA → EMITE LA ACTIVACION DE LA VERTICAL POR EVENTO: al quedar el negocio dado de alta (plan y fuentes declarados) se publica contabilidad.negocio_onboarded, que consume activacion-vertical (K4) — este modulo NO enciende nada por su cuenta: declara el alta y emite; quien enciende es K4. AISLAMIENTO POR NEGOCIO (invariante dura 'un negocio no se fuga a otro'): cada negocio tiene SU parcela; leer devuelve solo lo de ese negocio y quien declare otro negocio como solicitante → 403 (aislamiento negocio↔negocio); sin negocio declarado se toma el propio project_id (en Enki cada cliente/negocio ES un proyecto) y se declara el origen — nunca una parcela huerfana. UN SOLO ESCRITOR: solo el alta (rol ALTA_NEGOCIO) recoge datos; cualquier otro rol → 403 (el segundo escritor no espera ni hace cola). leer es LECTURA y no muta. recoger es UPSERT declarativo por negocio: la misma clave ACTUALIZA (el alta corrige) y apila en historial; una declaracion parcial no borra lo ya declarado. Invariantes: el ALTA DECIDE Y DECLARA (nada se infiere; las decisiones humanas van por SolicitudDecision); LEY/PARAMETRO COMO DATO (plan/fuentes/parametros/licencia son entrada, cero constantes); dato ausente = desconocido; persiste por proyecto con PosPersistencia (storage /contabilidad/onboarding-negocio/onboarding-negocio.json), restaura en project.activated y vuelca en onUnload. FORMA: CUSTODIO → PosPersistencia + onProjectActivated + flush + GUARD de un solo escritor. Emite contabilidad.negocio_onboarded y cierra el circulo con recoger.failed / leer.failed.",
+  "name": "onboarding-negocio",
+  "version": "0.1.0",
+  "description": "Custodio (K1): el alta de un negocio nuevo y su aislamiento multi-tenant — recoge los datos declarables (plan, fuentes, parametros) sin inferir nada ni heredar de otro negocio, y emite por evento la activacion de la vertical.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "onboarding-negocio.recoger.request",
+      "handler": "onRecogerRequest",
+      "description": "RPC custodio (UN escritor, alta multi-tenant): {project_id, rol:'ALTA_NEGOCIO', negocio?, datos:{plan?, fuentes?, parametros?, licencia?, ...extra}} → {project_id, negocio, config:{negocio, plan, fuentes, parametros, licencia, extra, estado:'ALTA'|'EN_ALTA', claves_abiertas, historial}, alta, actualizado, alta_efectiva, proyecto_verificado, fuente_plataforma, abierto, faltan, aislado}. Declara los datos del negocio nuevo (nada se estima ni se hereda de otro negocio: ausente → null y [ABIERTO]); liga el proyecto consultando project-manager POR EVENTO (best-effort; si no responde proyecto_verificado:false, no se finge); alta efectiva (plan y fuentes declarados) → publica contabilidad.negocio_onboarded (lo consume activacion-vertical K4). GUARD de aislamiento: solicitante_negocio de otro negocio → 403; rol distinto de ALTA_NEGOCIO → 403. Exito → responde por onboarding-negocio.recoger.response; fallo → onboarding-negocio.recoger.failed."
+    },
+    {
+      "event": "onboarding-negocio.leer.request",
+      "handler": "onLeerRequest",
+      "description": "RPC custodio (LECTURA, no muta): {project_id, negocio?, solicitante_negocio?, clave?} → {project_id, negocio, clave, valor, opcion:{some, valor}, config, declarado, abierto, faltan, aislado} (o, sin clave, la configuracion COMPLETA de ESE negocio). Devuelve Opcion<Valor>: una clave no declarada → opcion vacia, valor null y abierto:true (nunca un valor por defecto). GUARD de aislamiento: leer la parcela de otro negocio → 403 PERMISSION_DENIED (un negocio no ve otro). Responde por onboarding-negocio.leer.response; fallo → onboarding-negocio.leer.failed."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Restaura las parcelas de alta del proyecto activado desde el storage (PosPersistencia), para que el aislamiento multi-negocio y los datos declarados del negocio sigan vivos tras un reinicio."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "onboarding-negocio.recoger.response",
+      "description": "Respuesta RPC correlada de onboarding-negocio.recoger.request → {request_id, status:200, data:{config, alta, alta_efectiva, abierto, faltan, aislado}}. Emitida por el helper _atender."
+    },
+    {
+      "event": "onboarding-negocio.recoger.failed",
+      "description": "Par de fallo determinista (K1): project_id ausente (INVALID_INPUT), segundo escritor (PERMISSION_DENIED → 403) o parcela ajena (PERMISSION_DENIED → 403) → {status, error:{code, message, details?}}. Cierra el circulo de onboarding-negocio.recoger.request."
+    },
+    {
+      "event": "onboarding-negocio.leer.response",
+      "description": "Respuesta RPC correlada de onboarding-negocio.leer.request → {request_id, status:200, data:{valor, opcion, declarado, abierto, faltan}}. Emitida por el helper _atender."
+    },
+    {
+      "event": "onboarding-negocio.leer.failed",
+      "description": "Par de fallo determinista (K1): project_id ausente o lectura de parcela ajena (un negocio no ve otro → 403) → {status, error:{code, message, details?}}. Cierra el circulo de onboarding-negocio.leer.request."
+    },
+    {
+      "event": "contabilidad.negocio_onboarded",
+      "description": "Fire-and-forget (K1): un negocio quedo dado de alta (plan y fuentes declarados) → {project_id, negocio, config, plan, fuentes, parametros, abierto, faltan, correlation_id}. Es la ACTIVACION DE LA VERTICAL por evento: lo consume activacion-vertical (K4), que es quien enciende; onboarding-negocio solo declara el alta y emite."
+    }
+  ]
+}

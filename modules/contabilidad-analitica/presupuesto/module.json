@@ -1,0 +1,46 @@
+{
+  "_doc": "Manifest de contabilidad-analitica/presupuesto — CUSTODIO CON PERSISTENCIA (J3, hoja del plan). DONDE EL JEFE FIJA LOS OBJETIVOS: una cifra objetivo por dimension analitica (centro/linea/producto) y por periodo. Es una DECLARACION, NO una inferencia — el sistema NUNCA inventa un objetivo: un presupuesto sin cifra declarada NO existe (queda [ABIERTO], valor null y hueco declarado), jamas se rellena con lo real del periodo anterior ni con un 0 (eso seria decidir por el jefe). ATRIBUTOS del diseno: objetivos:Map<Dimension,Cuantía>; METODOS: fijar(d,v), objetivo(d, periodo):Cuantía; REGLA: cifra objetivo por dimension declarable, UN escritor. UN SOLO ESCRITOR: solo el JEFE (rol JEFE_PRESUPUESTO) fija; cualquier otro rol → 403 (el segundo escritor no espera ni hace cola). `objetivo` es LECTURA (no muta). EL UMBRAL DE AVISO TAMBIEN ES DECLARABLE: el jefe declara junto al objetivo el umbral a partir del cual una desviacion debe avisar; ausente → null y declarado (no se cablea ningun porcentaje; J4 no avisara sin umbral declarado). LOS OBJETIVOS SON DATOS APILADOS: re-fijar la misma (dimension, periodo) NO borra — se apila en historial y el vigente queda con fecha y autor (nunca se sobrescribe en silencio). Invariantes: el JEFE DECIDE Y DECLARA (las decisiones humanas van por SolicitudDecision, no por inferencia del sistema); LEY/PARAMETRO COMO DATO (cifra, periodo y umbral son entrada, cero constantes); dato ausente = desconocido; un solo escritor por parcela; persiste por proyecto con PosPersistencia (storage /contabilidad/presupuesto/presupuesto.json), restaura en project.activated y vuelca en onUnload. FORMA: CUSTODIO → PosPersistencia + onProjectActivated + flush + GUARD de un solo escritor. Emite contabilidad.presupuesto_fijado (lo consume desviacion J4) y cierra el circulo con presupuesto.fijar.failed / presupuesto.objetivo.failed.",
+  "name": "presupuesto",
+  "version": "0.1.0",
+  "description": "Custodio (J3): donde el JEFE fija los objetivos — cifra objetivo por dimension y periodo DECLARADA (nunca inferida); sin valor declarado queda [ABIERTO], un solo escritor (JEFE_PRESUPUESTO) y todo apilado en historial.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "presupuesto.fijar.request",
+      "handler": "onFijarRequest",
+      "description": "RPC custodio (UN escritor): {project_id, rol:'JEFE_PRESUPUESTO', dimension, periodo, valor?, umbral?, moneda?, tipo_dimension?} → {project_id, objetivo:{clave:'<periodo>|<dimension>', dimension, periodo, valor, umbral, estado:'DECLARADO'|'ABIERTO', historial}, fijado:true, actualizado:false, abierto}. Declara la cifra objetivo (el JEFE decide y declara). Sin valor → estado ABIERTO con valor null (no se inventa objetivo); re-fijar apila en historial sin borrar. Rol distinto de JEFE_PRESUPUESTO → 403 PERMISSION_DENIED. Exito → publica contabilidad.presupuesto_fijado y responde por presupuesto.fijar.response; fallo → presupuesto.fijar.failed."
+    },
+    {
+      "event": "presupuesto.objetivo.request",
+      "handler": "onObjetivoRequest",
+      "description": "RPC custodio (LECTURA, no muta): {project_id, dimension?, periodo?} → {project_id, periodo, dimension, objetivo:{clave, dimension, periodo, valor, umbral, estado}, declarado, abierto, faltan, motivo} o, sin dimension declarada, {objetivos:[...], declarados, abiertos}. Sin objetivo declarado devuelve valor null y abierto:true con faltan:['valor'] — el sistema pregunta, no decide. Responde por presupuesto.objetivo.response; fallo → presupuesto.objetivo.failed."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Restaura la parcela de objetivos del proyecto activado desde el storage (PosPersistencia), para que los objetivos que el JEFE declaro sigan vivos tras un reinicio."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "presupuesto.fijar.response",
+      "description": "Respuesta RPC correlada de presupuesto.fijar.request → {request_id, status:200, data:{objetivo, fijado, actualizado, abierto}}. Emitida por el helper _atender."
+    },
+    {
+      "event": "presupuesto.fijar.failed",
+      "description": "Par de fallo determinista (J3): project_id/dimension/periodo ausente (INVALID_INPUT) o segundo escritor (PERMISSION_DENIED → 403) → {status, error:{code, message, details?}}. Cierra el circulo de presupuesto.fijar.request."
+    },
+    {
+      "event": "presupuesto.objetivo.response",
+      "description": "Respuesta RPC correlada de presupuesto.objetivo.request → {request_id, status:200, data:{objetivo, declarado, abierto, faltan}}. Emitida por el helper _atender."
+    },
+    {
+      "event": "presupuesto.objetivo.failed",
+      "description": "Par de fallo determinista (J3): project_id ausente → {status, error:{code, message, details?}}. Cierra el circulo de presupuesto.objetivo.request."
+    },
+    {
+      "event": "contabilidad.presupuesto_fijado",
+      "description": "Fire-and-forget (J3): el JEFE declaro (o dejo abierto) un objetivo por dimension y periodo → {project_id, clave, dimension, periodo, valor, umbral, abierto, correlation_id}. Lo consume desviacion (J4) para medir real vs presupuesto — es la DECLARACION, no una inferencia."
+    }
+  ]
+}

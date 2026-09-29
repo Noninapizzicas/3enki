@@ -1,0 +1,33 @@
+{
+  "_doc": "Manifest de contabilidad-analitica/desviacion — REFLEJO STATELESS (J4, hoja del plan). REAL VS PRESUPUESTO: la desviacion de lo que ha pasado contra lo que el JEFE declaro — calculo PURO y determinista (delta = real − objetivo, con signo DESVIACION_POSITIVA/NEGATIVA/NULA). ATRIBUTOS del diseno: real, presupuesto:Presupuesto, umbral:Umbral; METODOS: calcular(d, periodo):Delta; REGLA: real vs presupuesto → dispara aviso SI se sale del umbral declarado. EL PRESUPUESTO NO SE DUPLICA: el objetivo sale de presupuesto (J3) POR EVENTO (presupuesto.objetivo.request, best-effort) o declarado en la peticion; este modulo NO guarda objetivos ni los infiere — solo los RESTA contra el real. El real sale declarado o de margen-analitico (J2) POR EVENTO (margen-analitico.calcular.request); aqui NO se recalcula el margen ni el resultado. EL UMBRAL ES DECLARABLE: sin umbral (ni en la peticion ni en el objetivo de J3) NO se afirma que haya que avisar — avisa:false con el motivo declarado; cero porcentajes cableados (un umbral inventado dispararia avisos que el jefe no pidio). Invariantes: DETERMINISTA (mismo real + mismo objetivo + mismo umbral → misma desviacion); dato ausente = desconocido — sin real o sin objetivo declarado → desviacion:null y abierto:true con faltan (no se mide contra un 0 que nadie declaro); LEY/PARAMETRO COMO DATO; NO escribe ni persiste (la desviacion es un DERIVADO). FORMA: REFLEJO stateless, sin PosPersistencia ni onProjectActivated. Escucha contabilidad.presupuesto_fijado (fire-and-forget) solo como señal/espejo en memoria para no re-preguntar a J3 — no es parcela. Proyeccion `_calcular` → {project_id, dimension, periodo, fuente_objetivo, fuente_real, objetivo, real, umbral, umbral_declarado, desviacion, desviacion_relativa, signo, avisa, aviso, abierto, faltan, motivo}. Publica contabilidad.desviacion cuando hay que avisar (lo consume motor-avisos K2). Cierra el circulo: error → desviacion.calcular.failed.",
+  "name": "desviacion",
+  "version": "0.1.0",
+  "description": "Reflejo (J4): real vs presupuesto determinista — el delta contra el objetivo que el JEFE declaro (leido de J3 por evento, nunca duplicado); solo avisa si un umbral DECLARADO se supera y sin real u objetivo no computa nada.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "desviacion.calcular.request",
+      "handler": "onCalcularRequest",
+      "description": "RPC reflejo (calculo puro, determinista): {project_id, dimension, periodo, real?/margen?, objetivo?, umbral?, destino?} → {project_id, dimension, periodo, fuente_objetivo:'declarado'|'presupuesto_fijado'|'presupuesto', fuente_real:'declarado'|'margen-analitico', objetivo, real, umbral, umbral_declarado, desviacion, desviacion_relativa, signo:'DESVIACION_POSITIVA'|'DESVIACION_NEGATIVA'|'NULA', avisa, aviso, abierto, faltan, motivo}. Lee el objetivo de presupuesto (J3) y el real de margen-analitico (J2) por EVENTO si no vienen declarados. Sin real o sin objetivo declarado → desviacion:null y abierto:true (no se mide contra un 0 que nadie declaro); sin umbral declarado → avisa:false con motivo. Exito con aviso → publica contabilidad.desviacion; responde por desviacion.calcular.response; project_id ausente → desviacion.calcular.failed."
+    },
+    {
+      "event": "contabilidad.presupuesto_fijado",
+      "handler": "onPresupuestoFijado",
+      "description": "Fire-and-forget (J3 → J4): el JEFE fijo (o dejo abierto) un objetivo → se refleja en un espejo en memoria por proyecto (clave '<periodo>|<dimension>') para poder medir sin re-preguntar a J3. NO es parcela ni persistencia: el dueño del objetivo sigue siendo presupuesto (J3); no muta nada ni publica evento de dominio."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "desviacion.calcular.response",
+      "description": "Respuesta RPC correlada de desviacion.calcular.request → {request_id, status:200, data:{desviacion, signo, avisa, aviso, objetivo, real, umbral, faltan}}. Emitida por el helper _atender."
+    },
+    {
+      "event": "desviacion.calcular.failed",
+      "description": "Par de fallo determinista (J4): project_id ausente → {status, error:{code, message, details?}}. Cierra el circulo de desviacion.calcular.request."
+    },
+    {
+      "event": "contabilidad.desviacion",
+      "description": "Fire-and-forget (J4): la desviacion se salio del UMBRAL DECLARADO y hay que avisar → {project_id, desviacion, dimension, periodo, umbral, aviso, correlation_id}. Lo consume motor-avisos (K2) para producir el aviso. Sin umbral declarado NO se emite."
+    }
+  ]
+}

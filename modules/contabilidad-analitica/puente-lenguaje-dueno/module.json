@@ -3,6 +3,8 @@
   "name": "puente-lenguaje-dueno",
   "version": "0.1.0",
   "description": "Micro-agente (Q2): traductor bidireccional dueño↔contabilidad — su pregunta a consulta contable y el cálculo a cifra en su idioma; traduce y no inventa cifras (sin dato → [ABIERTO]).",
+  "blueprint_driven": true,
+  "blueprint_path": "puente-lenguaje-dueno.blueprint.json",
   "language": "es",
   "subscribes": [
     {

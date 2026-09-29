@@ -3,6 +3,8 @@
   "name": "aviso-al-negocio",
   "version": "0.1.0",
   "description": "Puente stateless (R1): entrega y confirma el aviso al negocio por el canal declarable — el aviso LLEGA; completa motor-avisos y no decide.",
+  "blueprint_driven": true,
+  "blueprint_path": "aviso-al-negocio.blueprint.json",
   "language": "es",
   "subscribes": [
     {

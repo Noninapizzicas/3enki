@@ -85,7 +85,10 @@ class PerfilLimiteBusqueda extends ModuloHibridoReflejo {
 
   // ── handlers RPC (una línea, delegan a _atender) ──
   onLeerRequest(e) {
-    return this._atender(e, 'leer', 'nichos.limite.leer.response', d => this._leer(d));
+    return this._atender(e, 'leer', 'nichos.limite.leer.response', async (d) => {
+          await this._hidratarSiFalta(d && d.project_id);
+          return this._leer(d);
+        });
   }
 
   onDeclararRequest(e) {
@@ -107,12 +110,21 @@ class PerfilLimiteBusqueda extends ModuloHibridoReflejo {
   }
 
   // ── proyección de lectura (NO muta) ──
+  // NO marca dirty al crear el placeholder: persistir un estado vacío
+  // SOBRESCRIBIRÍA el real del disco (misma clase de pérdida que criterio-viabilidad).
+  // Hidrata del disco si el proyecto no está en memoria (un reinicio deja el
+  // store vacío y la persistencia solo restaura en project.activated). Sin esto,
+  // una lectura tras reiniciar devolvería vacío aunque el disco tenga el estado.
+  async _hidratarSiFalta(pid) {
+    if (!pid || this._limites.has(pid)) return;
+    try { await this._persist.restaurar(pid); } catch (_) { /* best-effort */ }
+  }
+
   _obtenerOCrear(pid) {
     let l = this._limites.get(pid);
     if (!l) {
       l = limitesVacios();
       this._limites.set(pid, l);
-      this._persist.marcarDirty(pid);
     }
     return l;
   }

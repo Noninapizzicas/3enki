@@ -105,7 +105,10 @@ class ColaDecisionesGate extends ModuloHibridoReflejo {
   }
 
   onListarRequest(e) {
-    return this._atender(e, 'listar', 'nichos.gate.listar.response', (d) => this._listar(d));
+    return this._atender(e, 'listar', 'nichos.gate.listar.response', async (d) => {
+      await this._hidratarSiFalta(d && d.project_id);
+      return this._listar(d);
+    });
   }
 
   // Fire-and-forget: gate/puente/alerta publican solicitud → se auto-encola.
@@ -138,12 +141,21 @@ class ColaDecisionesGate extends ModuloHibridoReflejo {
   }
 
   // ── proyección de lectura (no muta) ──
+  // NO marca dirty al crear el placeholder: persistir un estado vacío
+  // SOBRESCRIBIRÍA el real del disco (misma clase de pérdida que criterio-viabilidad).
+  // Hidrata del disco si el proyecto no está en memoria (un reinicio deja el
+  // store vacío y la persistencia solo restaura en project.activated). Sin esto,
+  // una lectura tras reiniciar devolvería vacío aunque el disco tenga el estado.
+  async _hidratarSiFalta(pid) {
+    if (!pid || this._colas.has(pid)) return;
+    try { await this._persist.restaurar(pid); } catch (_) { /* best-effort */ }
+  }
+
   _obtenerOCrear(pid) {
     let c = this._colas.get(pid);
     if (!c) {
       c = colaVacia();
       this._colas.set(pid, c);
-      this._persist.marcarDirty(pid);
     }
     return c;
   }

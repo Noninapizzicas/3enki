@@ -95,7 +95,7 @@ class CriterioViabilidad extends ModuloHibridoReflejo {
 
   // ── handlers RPC (una línea, delegan a _atender / fire-and-forget) ──
   onLeerRequest(e) {
-    return this._atender(e, 'leer', 'nichos.criterio.leer.response', d => this._leer(d));
+    return this._atender(e, 'leer', 'nichos.criterio.leer.response', d => this._leerConHidratacion(d));
   }
 
   onDeclararRequest(e) {
@@ -136,14 +136,31 @@ class CriterioViabilidad extends ModuloHibridoReflejo {
   }
 
   // ── proyección de lectura (NO muta); exponer el umbral vigente ──
+  // IMPORTANTE: la lectura NUNCA debe crear-y-marcar-dirty un placeholder vacío.
+  // Si el proyecto no está en memoria (p.ej. un reinicio: el criterio vive en disco
+  // y solo se hidrata en project.activated), crear un criterioVacio() y marcarlo
+  // dirty hacía que el flush DEBOUNCED SOBRESCRIBIERA el criterio real del disco
+  // con el vacío → pérdida de datos. Ahora: se hidrata del disco antes de leer.
   _obtenerOCrear(pid) {
     let c = this._criterios.get(pid);
     if (!c) {
       c = criterioVacio();
       this._criterios.set(pid, c);
-      this._persist.marcarDirty(pid);
+      // NO se marca dirty: un placeholder vacío no debe persistirse (borraría el real).
     }
     return c;
+  }
+
+  // Lectura con hidratación: si el proyecto no está en memoria, se restaura del
+  // disco antes de leer (el criterio declarado sobrevive a los reinicios).
+  async _leerConHidratacion(input) {
+    const pid = input && input.project_id;
+    if (!pid) return this._invalid('project_id');
+    if (!this._criterios.has(pid)) {
+      await this._persist.restaurar(pid);
+    }
+    const c = this._criterios.get(pid) || criterioVacio();
+    return { status: 200, data: { project_id: pid, criterio: c } };
   }
 
   _leer(input) {

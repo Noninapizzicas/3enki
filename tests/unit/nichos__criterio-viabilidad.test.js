@@ -179,6 +179,18 @@ const METRICS = { increment(){}, gauge(){} };
     assert.strictEqual(res.data.criterio.tipo, 'marginal');
   });
 
+  await testAsync('PÉRDIDA DE DATOS: _obtenerOCrear no marca dirty (no pisa el criterio del disco)', () => {
+    // Reproduce el bug real: tras un reinicio, el criterio vive en disco y NO en
+    // memoria. Antes, _obtenerOCrear creaba un vacío + marcarDirty → el flush
+    // sobrescribía el criterio real con el vacío. Ahora no debe marcar dirty.
+    const pid = 'pHuerfano';
+    let dirtyMarcado = false;
+    instance._persist.marcarDirty = () => { dirtyMarcado = true; };
+    const vacio = instance._obtenerOCrear(pid);
+    assert.strictEqual(vacio.umbral_ingresos, null, 'placeholder vacío');
+    assert.strictEqual(dirtyMarcado, false, 'NO marca dirty → no persistirá el vacío');
+  });
+
   await testAsync('manifest: subscribes ↔ handlers y publishes exactos de la hoja C2', () => {
     const subs = d.manifest.subscribes || [];
     assert.deepStrictEqual(subs.map(s => s.event).sort(), [

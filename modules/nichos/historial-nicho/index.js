@@ -93,16 +93,28 @@ class HistorialNicho extends ModuloHibridoReflejo {
   }
 
   onConsultarRequest(e) {
-    return this._atender(e, 'consultar', 'nichos.historial.consultar.response', (d) => this._consultar(d));
+    return this._atender(e, 'consultar', 'nichos.historial.consultar.response', async (d) => {
+          await this._hidratarSiFalta(d && d.project_id);
+          return this._consultar(d);
+        });
   }
 
   // ── helpers de store ──
+  // NO marca dirty al crear el placeholder: persistir un estado vacío
+  // SOBRESCRIBIRÍA el real del disco (misma clase de pérdida que criterio-viabilidad).
+  // Hidrata del disco si el proyecto no está en memoria (un reinicio deja el
+  // store vacío y la persistencia solo restaura en project.activated). Sin esto,
+  // una lectura tras reiniciar devolvería vacío aunque el disco tenga el estado.
+  async _hidratarSiFalta(pid) {
+    if (!pid || this._historial.has(pid)) return;
+    try { await this._persist.restaurar(pid); } catch (_) { /* best-effort */ }
+  }
+
   _obtenerOCrear(pid) {
     let m = this._historial.get(pid);
     if (!m) {
       m = new Map();
       this._historial.set(pid, m);
-      this._persist.marcarDirty(pid);
     }
     return m;
   }

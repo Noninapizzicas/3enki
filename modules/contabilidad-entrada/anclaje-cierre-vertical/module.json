@@ -3,6 +3,8 @@
   "name": "anclaje-cierre-vertical",
   "version": "0.1.0",
   "description": "Custodio (A14): ancla el cierre de la vertical — el dia cierra la caja (proyecto, jornada) y el mes cierra la contabilidad (proyecto, ejercicio, mes); un solo escritor (DECLARANTE_ANCLAJE) y la unidad de cierre se declara, no se estima.",
+  "blueprint_driven": true,
+  "blueprint_path": "anclaje-cierre-vertical.blueprint.json",
   "language": "es",
   "subscribes": [
     {

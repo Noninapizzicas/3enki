@@ -3,6 +3,8 @@
   "name": "completitud-cobertura",
   "version": "0.1.0",
   "description": "Reflejo stateless (A12): LA metrica unica de cobertura — que hechos publico una vertical y cuales no llegaron; lo ausente es hueco declarado y nada se estima (las demas senales la LEEN).",
+  "blueprint_driven": true,
+  "blueprint_path": "completitud-cobertura.blueprint.json",
   "language": "es",
   "subscribes": [
     {

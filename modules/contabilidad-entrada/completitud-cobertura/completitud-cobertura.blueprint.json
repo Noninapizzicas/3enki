@@ -1,0 +1,71 @@
+{
+  "id": "completitud-cobertura",
+  "version": "blueprint-0.1.0",
+  "_nota": "FASE 6½ · la interfaz DECLARADA del módulo completitud-cobertura (REFLEJO STATELESS de contabilidad-entrada, A12, hoja del plan). LA MÉTRICA ÚNICA de cobertura: mide qué hechos publicó una vertical y cuáles NO llegaron. La sección `ui` es lo que el generador schema→UI (BlueprintForm, 4 zonas) necesita para renderizar el panel; sin LLM: TODO lo que produce sale de aquí. Fuente de verdad: modules/contabilidad-entrada/completitud-cobertura/{module.json,index.js}. ui_handler real: completitud-cobertura.medir (system_panel/lateral_derecha).",
+  "schema": "blueprint-interfaz-v2",
+  "language": "es",
+  "titulo": "La métrica única de cobertura (qué llegó y qué no)",
+  "eventos_publicados": [
+    "completitud-cobertura.medir.response",
+    "completitud-cobertura.medir.failed",
+    "contabilidad.cobertura_medida"
+  ],
+  "eventos_que_escucho": [],
+  "_escucho_nota": "VACÍO A PROPÓSITO: el reflejo ya atiende en module.json.subscribes completitud-cobertura.medir.request; repetirlo aquí daría ANTICOLISION-001 (lo atenderían los dos). Es un REFLEJO puro y sin estado: su único evento es la RPC humana, no hay cajón fuzzy ni evento fire-and-forget que el LLM deba procesar. (Consulta por evento a contrato-hecho-minimo.exigir.request, que es SALIDA suya, no una escucha.)",
+  "transporte": {
+    "rpc": [
+      "completitud-cobertura.medir.request -> .response"
+    ],
+    "entrada": [
+      "completitud-cobertura.medir.request"
+    ],
+    "salida": [
+      "completitud-cobertura.medir.response",
+      "contabilidad.cobertura_medida"
+    ],
+    "qos": "publishAndWait (request/response correlado) en la medida; internamente consulta el mínimo declarado de la fuente por RPC contrato-hecho-minimo.exigir.request (A11) si no le dan esperados. contabilidad.cobertura_medida es fire-and-forget: la LEEN SelloCobertura (Q3), AvisoCuadre (C6), TasaCoberturaEntrada (P4) y declaracion-fuente-faltante (A15) — no la recalculan."
+  },
+  "contrato": {
+    "MedirInput": "{ project_id:uuid, vertical?:str, esperados?:[str], llegados?:[str] }",
+    "MedirOutput": "{ project_id, vertical, cobertura:{ declarada, esperados, llegados, cubiertos, huecos, tasa, completa, no_esperados? }, origen_esperados:'declarado'|'contrato-hecho-minimo'|null, motivo? }",
+    "Errores": "project_id ausente -> 400 INVALID_INPUT (par completitud-cobertura.medir.failed).",
+    "Invariantes": "Nada se estima: lo que no llegó es HUECO DECLARADO (`huecos`), y si no hay expectativa declarada la tasa es null — no 0, porque un 0 afirmaría una medida que no se hizo. La expectativa viene declarada en la petición (`esperados`) o, en su defecto, del mínimo declarado por la fuente (contrato-hecho-minimo A11) consultado POR EVENTO; sin contrato la cobertura se declara declarada:false con tasa null. Medida determinista por clave: cubiertos = esperados presentes en llegados; huecos = esperados ausentes (en orden de la expectativa); no_esperados = llegados fuera de la expectativa (también se declara, no se oculta); tasa = cubiertos/esperados redondeada a 4 decimales. LAS DEMÁS SEÑALES LA LEEN — no la recalculan (invariante 8)."
+  },
+  "ui": {
+    "type": "system_panel",
+    "zone": "modulos",
+    "ops": {
+      "medir": {
+        "titulo": "Medir la cobertura (qué esperábamos y qué llegó)",
+        "descripcion": "Panel de CONTROL bajo demanda: mide LA cobertura de una vertical — qué hechos se esperaban y cuáles no llegaron. Lo ausente NO se estima: es HUECO DECLARADO. Sin expectativa declarada (ni en la petición ni en el mínimo de la fuente) la tasa es null, no 0: un 0 afirmaría una medida que no se hizo. También declara lo que llegó de más (`no_esperados`) — no se oculta. Es LA métrica única: las demás señales (SelloCobertura, AvisoCuadre, TasaCoberturaEntrada) la LEEN, no la recalculan.",
+        "zona": "formulario",
+        "args": [
+          {
+            "nombre": "vertical",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "(vacío = sin acotar a una vertical)",
+            "descripcion": "La vertical cuya cobertura se mide. Es DATO de la petición; sin él, la medida no se acota a una vertical."
+          },
+          {
+            "nombre": "esperados",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "[\"F-1\",\"F-2\",\"F-3\"]",
+            "descripcion": "La expectativa DECLARADA (lista de claves que deberían haber llegado). Es DATO declarable: si no se aporta, se consulta el mínimo de la fuente (contrato-hecho-minimo A11) por evento; si tampoco hay contrato, la cobertura queda declarada:false con tasa null."
+          },
+          {
+            "nombre": "llegados",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "[\"F-1\",\"F-3\"]",
+            "descripcion": "Las claves que de verdad llegaron (lista). Se compara por CLAVE contra la expectativa: las que falten son `huecos` y las de más `no_esperados`. Sin declararla, llegan vacías (nada llegó)."
+          }
+        ]
+      }
+    },
+    "datos": [],
+    "_datos_nota": "HUECO DECLARADO (no se inventa): completitud-cobertura es un REFLEJO STATELESS sin persistencia ni lectura tabulable. Su única op RPC (medir) EXIGE la petición (esperados/llegados) y devuelve una MEDIDA puntual de una vertical — no un listado sobre el que pintar una cinta. No hay ninguna op de lectura en module.json.subscribes ni en index.js: la cobertura se mide CUANDO se pide, y el resultado (declarada/cubiertos/huecos/tasa/no_esperados) se ve en la respuesta RPC. Lo observado en vivo va por contabilidad.cobertura_medida, que emite él, no una lectura que consuma."
+  },
+  "filosofia": "Una métrica honesta declara lo que no sabe. Sin expectativa no hay tasa: null, nunca 0 — porque un cero sería una medida que no se hizo disfrazada de dato. Lo que no llegó no se calla: es hueco declarado. Y lo que llegó de más tampoco se esconde. Esta es LA cobertura: las demás señales la leen, y ninguna la reescribe — una sola fuente de verdad para lo que llegó y lo que no."
+}

@@ -3,6 +3,8 @@
   "name": "contrato-hecho-minimo",
   "version": "0.1.0",
   "description": "Custodio (A11): la parcela del minimo exigible por vertical — un minimo declarado (no un formato impuesto); un solo escritor (DECLARANTE_CONTRATO), lo que el hecho no aporta se declara en faltantes y jamas se estima.",
+  "blueprint_driven": true,
+  "blueprint_path": "contrato-hecho-minimo.blueprint.json",
   "language": "es",
   "subscribes": [
     {

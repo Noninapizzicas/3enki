@@ -3,6 +3,8 @@
   "name": "aviso-cuadre",
   "version": "0.1.0",
   "description": "Puente stateless (C6): avisa del cuadre cuando LA metrica unica de cobertura no esta completa — la LEE y no la recalcula, y si no hay metrica no finge ni el cuadre ni el descuadre.",
+  "blueprint_driven": true,
+  "blueprint_path": "aviso-cuadre.blueprint.json",
   "language": "es",
   "subscribes": [
     {

@@ -3,6 +3,8 @@
   "name": "apertura-ejercicio",
   "version": "0.1.0",
   "description": "Reflejo (C5): asientos de apertura derivados del cierre anterior — deriva los saldos al ejercicio nuevo sin decidir nada; sin cierre previo se declara, no se estima.",
+  "blueprint_driven": true,
+  "blueprint_path": "apertura-ejercicio.blueprint.json",
   "language": "es",
   "subscribes": [
     {

@@ -1,0 +1,78 @@
+{
+  "id": "apertura-ejercicio",
+  "version": "blueprint-0.1.0",
+  "_nota": "FASE 6½ · la interfaz DECLARADA del módulo apertura-ejercicio (REFLEJO STATELESS de contabilidad-libro, C5, hoja del plan). Arrastra los SALDOS DEL CIERRE ANTERIOR al EJERCICIO NUEVO — deriva, no decide. La sección `ui` es lo que el generador schema→UI (BlueprintForm, 4 zonas) necesita para renderizar el panel; sin LLM: TODO lo que produce sale de aquí. Fuente de verdad: modules/contabilidad-libro/apertura-ejercicio/{module.json,index.js}. ui_handler real: apertura-ejercicio.generar (workspace_module/barra_modulos).",
+  "schema": "blueprint-interfaz-v2",
+  "language": "es",
+  "titulo": "La apertura del ejercicio: derivar los saldos del cierre",
+  "eventos_publicados": [
+    "apertura-ejercicio.generar.response",
+    "apertura-ejercicio.generar.failed"
+  ],
+  "eventos_que_escucho": [],
+  "_escucho_nota": "VACÍO A PROPÓSITO: el reflejo ya atiende en module.json.subscribes apertura-ejercicio.generar.request (onGenerarRequest, la única RPC) y contabilidad.ejercicio_cerrado (fire-and-forget, onEjercicioCerrado, que refleja el cierre para poder generar su apertura). Declarar cualquiera aquí daría ANTICOLISION-001 (lo atenderían los dos). No hay cajón fuzzy: el reflejo es cálculo puro y determinista.",
+  "transporte": {
+    "rpc": [
+      "apertura-ejercicio.generar.request -> .response",
+      "cierre-ejercicio.cerrar.request -> .response"
+    ],
+    "entrada": [
+      "apertura-ejercicio.generar.request",
+      "contabilidad.ejercicio_cerrado"
+    ],
+    "salida": [
+      "apertura-ejercicio.generar.response"
+    ],
+    "qos": "publishAndWait (request/response correlado) en la generación; contabilidad.ejercicio_cerrado es fire-and-forget (C4 -> C5) y refleja el cierre en memoria. El cierre anterior llega por DOS vías sin require cruzado: el payload directo, o el reflejo de contabilidad.ejercicio_cerrado. Se declara la fuente."
+  },
+  "contrato": {
+    "GenerarInput": "{ project_id:uuid, ejercicio_origen?:str, ejercicio_nuevo?:str, ejercicio?:str, fecha?:str, cierre?:obj }",
+    "GenerarOutput": "{ project_id, fuente:'payload'|'cierre-ejercicio'|'ninguna', ejercicio_origen, ejercicio_nuevo, clave_natural:'APERTURA|<ej>', asientos:[{ tipo:'asiento-apertura', apuntes:[{cuenta,debe,haber}], suma_debe, suma_haber, cuadra, deriva_de }], total_asientos, abierto:[], deriva_de:'cierre-anterior', decide:false }",
+    "Errores": "sin cierre anterior que arrastrar (422, cierre_anterior_ausente) · project_id ausente (400) -> par apertura-ejercicio.generar.failed.",
+    "Invariantes": "DERIVA, NO DECIDE: los asientos de apertura son la consecuencia determinista del cierre precedente; no reinterpreta qué se arrastra ni lo reabre. Un mismo cierre -> una misma apertura (clave natural `APERTURA|<ejercicio>`). Activo al DEBE, pasivo y patrimonio al HABER; el resultado del ejercicio se incorpora al patrimonio de apertura; si el cierre no cuadraba se refleja el descuadre (cuenta DESCUADRE_APERTURA), no se inventa un ajuste. Lo que faltaba en el cierre se declara `abierto`, no se estima. No muta el cierre ni el diario."
+  },
+  "ui": {
+    "type": "workspace_module",
+    "zone": "modulos",
+    "ops": {
+      "generar": {
+        "titulo": "Generar los asientos de apertura",
+        "descripcion": "Mesa de trabajo de la apertura: arrastra los saldos del CIERRE ANTERIOR al ejercicio nuevo. DERIVA, NO DECIDE — la apertura es la consecuencia determinista del cierre, no una decisión nueva: lo que faltaba en el cierre se declara `abierto`, no se estima; si el cierre no cuadraba se refleja el descuadre, no se inventa un ajuste. Sin cierre anterior la generación se RECHAZA (422): la apertura deriva del cierre, no lo decide. Un mismo cierre -> una misma apertura (clave natural determinista). No muta el cierre ni el diario.",
+        "zona": "formulario",
+        "args": [
+          {
+            "nombre": "ejercicio_origen",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "(vacío = el cierre más reciente)",
+            "descripcion": "El ejercicio ORIGEN (el que se cerró). Sin declararlo se toma el cierre más reciente reflejado por contabilidad.ejercicio_cerrado."
+          },
+          {
+            "nombre": "ejercicio_nuevo",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "(vacío = origen + 1)",
+            "descripcion": "El ejercicio NUEVO al que se arrastran los saldos. Sin declararlo se deriva como origen+1; nunca se inventa."
+          },
+          {
+            "nombre": "fecha",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "(vacío = <ejercicio>-01-01)",
+            "descripcion": "Fecha de los asientos de apertura. Es DATO: sin declararla se usa el primer día del ejercicio nuevo."
+          },
+          {
+            "nombre": "cierre",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "(vacío = se usa el cierre reflejado)",
+            "descripcion": "El cierre anterior DECLARADO en la petición (payload directo). Si no se aporta, se usa el reflejado por contabilidad.ejercicio_cerrado y se declara la fuente."
+          }
+        ]
+      }
+    },
+    "datos": [],
+    "_datos_nota": "HUECO DECLARADO (no se inventa): apertura-ejercicio es un REFLEJO STATELESS sin persistencia ni lectura tabulable. Su única op RPC (generar) EXIGE la petición y devuelve los asientos de UNA apertura puntual — no un listado sobre el que pintar una cinta. No hay op de lectura en module.json.subscribes ni en index.js: la apertura se calcula CUANDO se pide. El reflejo de cierres (`_cierresDe`) es lectura directa en proceso, no un RPC; la cinta del libro la sirven escritor-diario (B2) y mayor-balanza (B3)."
+  },
+  "filosofia": "Abrir el ejercicio no es decidir: es heredar. Los saldos del nuevo ejercicio ya estaban determinados por el cierre del anterior, y esta pieza solo los arrastra tal como quedaron — incluido el descuadre, si lo hubo, porque reflejarlo es más honesto que taparlo con un ajuste de conveniencia. Sin cierre previo no se inventa un ejercicio en blanco: se declara que no hay de dónde derivar."
+}

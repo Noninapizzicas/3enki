@@ -1,0 +1,125 @@
+{
+  "id": "cierre-ejercicio",
+  "version": "blueprint-0.1.0",
+  "_nota": "FASE 6½ · la interfaz DECLARADA del módulo cierre-ejercicio (CUSTODIO CON PERSISTENCIA de contabilidad-libro, C4, hoja del plan). ES EL CIERRE: cierra el periodo con ajustes; irreversible salvo ajuste. La sección `ui` es lo que el generador schema→UI (BlueprintForm, 4 zonas) necesita para renderizar el panel; sin LLM: TODO lo que produce sale de aquí. Fuente de verdad: modules/contabilidad-libro/cierre-ejercicio/{module.json,index.js}. ui_handlers reales: cierre-ejercicio.cerrar y cierre-ejercicio.reabrir (workspace_module/barra_modulos).",
+  "schema": "blueprint-interfaz-v2",
+  "language": "es",
+  "titulo": "El cierre del ejercicio (irreversible salvo ajuste)",
+  "eventos_publicados": [
+    "cierre-ejercicio.cerrar.response",
+    "cierre-ejercicio.cerrar.failed",
+    "cierre-ejercicio.reabrir.response",
+    "cierre-ejercicio.reabrir.failed",
+    "contabilidad.ejercicio_cerrado"
+  ],
+  "eventos_que_escucho": [],
+  "_escucho_nota": "VACÍO A PROPÓSITO: el reflejo ya atiende en module.json.subscribes cierre-ejercicio.cerrar.request (onCerrarRequest), cierre-ejercicio.reabrir.request (onReabrirRequest) y project.activated (onProjectActivated, restauración del storage). Declarar cualquiera aquí daría ANTICOLISION-001 (lo atenderían los dos). No hay cajón fuzzy: el custodio no deja ningún evento al LLM.",
+  "transporte": {
+    "rpc": [
+      "cierre-ejercicio.cerrar.request -> .response",
+      "cierre-ejercicio.reabrir.request -> .response",
+      "single-writer.reclamar.request -> .response",
+      "asiento-ajuste.entrar.request -> .response",
+      "balance-situacion.calcular.request -> .response",
+      "cuenta-resultados.calcular.request -> .response"
+    ],
+    "entrada": [
+      "cierre-ejercicio.cerrar.request",
+      "cierre-ejercicio.reabrir.request",
+      "project.activated"
+    ],
+    "salida": [
+      "cierre-ejercicio.cerrar.response",
+      "cierre-ejercicio.reabrir.response",
+      "contabilidad.ejercicio_cerrado"
+    ],
+    "qos": "publishAndWait (request/response correlado) en cerrar/reabrir. Depende POR EVENTO (nunca por import): pide el turno a single-writer (M2), encamina los ajustes por asiento-ajuste (B5) y LEE los estados de balance-situacion (C1) y cuenta-resultados (C2). contabilidad.ejercicio_cerrado es fire-and-forget (lo LEE apertura-ejercicio C5 para arrastrar los saldos)."
+  },
+  "contrato": {
+    "CerrarInput": "{ project_id:uuid, ejercicio:str, ajustes?:[Asiento], escritor_id? }",
+    "CerrarOutput": "{ project_id, ejercicio, cierre:{ activo, pasivo, patrimonio, cuadra, resultado, signo, ajustes, abierto, completo, clave_natural:'CIERRE|<ej>' }, cerrado:bool, ya_cerrado:bool, clave_natural, abierto:[], completo:bool, irreversible:true, turno_confirmado:bool }",
+    "ReabrirInput": "{ project_id:uuid, ejercicio:str, ajuste:AsientoAjuste, motivo?, escritor_id? }",
+    "ReabrirOutput": "{ project_id, ejercicio, reapertura, reabierto:true, cierre_preservado:true, clave_ajuste, ajuste_suma:true, turno_confirmado:bool }",
+    "Errores": "turno de la parcela libro/cierre en otro escritor (403) · project_id/ejercicio ausente (400) · reapertura SIN ajuste (422, irreversible salvo ajuste) · ajuste de reapertura que no entró al libro (422) · sin cierre previo (404) -> pares .cerrar.failed / .reabrir.failed.",
+    "Invariantes": "Un CIERRE = UN ASIENTO: la clave natural `CIERRE|<ejercicio>` gobierna la idempotencia (volver a cerrar -> ya_cerrado:true, sin duplicar). El cierre es IRREVERSIBLE salvo ajuste; el ajuste SUMA y el cierre original queda PRESERVADO (append-only): la reapertura se AÑADE como marca. Un solo escritor por parcela (single-writer -> 403). Lo que no se pudo confirmar se DECLARA en `abierto`, no se finge el cierre completo."
+  },
+  "ui": {
+    "type": "workspace_module",
+    "zone": "modulos",
+    "ops": {
+      "cerrar": {
+        "titulo": "Cerrar el ejercicio",
+        "descripcion": "Mesa de trabajo del CIERRE: cierra el periodo con sus ajustes. Un CIERRE = UN ASIENTO (clave natural CIERRE)<ejercicio>): volver a cerrar el mismo ejercicio NO duplica — devuelve el cierre ya registrado (ya_cerrado:true). Los ajustes del cierre ENTRAN por su camino (la corrección SUMA, no borra). Los estados (balance y resultado) se LEEN por evento; si alguno no responde, se DECLARA en `abierto` — no se finge un cierre completo. El turno de la parcela libro/cierre lo concede single-writer: el segundo escritor no cierra (403).",
+        "zona": "formulario",
+        "args": [
+          {
+            "nombre": "ejercicio",
+            "tipo": "string",
+            "required": true,
+            "placeholder": "2026",
+            "descripcion": "El ejercicio que se cierra. Es la clave de la idempotencia: un cierre por ejercicio."
+          },
+          {
+            "nombre": "ajustes",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "[{\"apuntes\":[{\"cuenta\":\"129\",\"debe\":0,\"haber\":100}],\"concepto\":\"regularización\"}]",
+            "descripcion": "Los ajustes de cierre (lista de asientos). ENTRAN al libro por asiento-ajuste POR EVENTO: la corrección SUMA, nunca reemplaza. Si no se aportan, el cierre se registra sin ajustes."
+          },
+          {
+            "nombre": "motivo",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "cierre_ejercicio",
+            "descripcion": "Motivo declarable que acompaña a los ajustes del cierre. Dato del negocio, no una constante cableada."
+          },
+          {
+            "nombre": "escritor_id",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "(vacío = RECLAMANTE_ESCRITOR)",
+            "descripcion": "Identidad del escritor que reclama el turno de la parcela libro/cierre en single-writer. El segundo escritor recibe 403."
+          }
+        ]
+      },
+      "reabrir": {
+        "titulo": "Reabrir el ejercicio (solo con ajuste)",
+        "descripcion": "Reabre un ejercicio ya cerrado. IRREVERSIBLE SALVO AJUSTE: sin un AsientoAjuste la reapertura se RECHAZA (422) — no hay botón para deshacer un cierre. El ajuste entra al libro por su camino y SUMA; el cierre NO se borra ni muta: se AÑADE una marca de reapertura (append-only, cierre_preservado:true). Sin cierre previo de ese ejercicio -> 404. El turno lo concede single-writer; el segundo escritor no reabre (403).",
+        "zona": "formulario",
+        "args": [
+          {
+            "nombre": "ejercicio",
+            "tipo": "string",
+            "required": true,
+            "placeholder": "2026",
+            "descripcion": "El ejercicio ya cerrado que se reabre."
+          },
+          {
+            "nombre": "ajuste",
+            "tipo": "json",
+            "required": true,
+            "placeholder": "{\"apuntes\":[{\"cuenta\":\"629\",\"debe\":50,\"haber\":0},{\"cuenta\":\"410\",\"debe\":0,\"haber\":50}]}",
+            "descripcion": "El AsientoAjuste que HABILITA la reapertura. Obligatorio: sin ajuste no se reabre (422, reabrir_sin_ajuste). El ajuste SUMA y el cierre queda preservado."
+          },
+          {
+            "nombre": "motivo",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "reapertura",
+            "descripcion": "Motivo declarable de la reapertura. Dato del negocio."
+          },
+          {
+            "nombre": "escritor_id",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "(vacío = RECLAMANTE_ESCRITOR)",
+            "descripcion": "Identidad del escritor que reclama el turno de la parcela libro/cierre en single-writer."
+          }
+        ]
+      }
+    },
+    "datos": [],
+    "_datos_nota": "HUECO DECLARADO (no se inventa): el custodio persiste los cierres (PosPersistencia, /contabilidad/cierre-ejercicio/cierre-ejercicio.json) y expone `cierreDe(pid, ejercicio)` como LECTURA DIRECTA en proceso — NO es un RPC. Sus dos ops RPC (cerrar/reabrir) EXIGEN payload (ejercicio, y ajuste en reabrir) y devuelven UN cierre/reapertura puntual, no un listado. Por eso la zona DATOS va vacía: la cinta del libro la sirven escritor-diario (B2), mayor-balanza (B3) y traza-asiento (B4). Mostrar los cierres en el panel exigiría AÑADIR un handler RPC de listado al backend (trabajo de módulo, no de interfaz)."
+  },
+  "filosofia": "Cerrar un ejercicio es un acto irreversible, y el sistema lo trata como tal: un cierre es un asiento, y volver a cerrar no duplica — no hay atajos. Para deshacerlo no hay un botón: hay un ajuste, que SUMA y deja intacto el cierre original. Y si algún estado no llega, no se maquilla el cierre como completo: se declara lo que falta. Un solo escritor por parcela, porque un cierre con dos manos no es un cierre."
+}

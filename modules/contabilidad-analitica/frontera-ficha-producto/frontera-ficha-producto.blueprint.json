@@ -1,0 +1,86 @@
+{
+  "id": "frontera-ficha-producto",
+  "version": "blueprint-0.1.0",
+  "_nota": "FASE 6½ · la interfaz DECLARADA del módulo frontera-ficha-producto (CONVERSOR STATELESS de contabilidad-analitica, H2, hoja del plan). LA ÚNICA PUERTA ficha-de-producto → DATO CONTABLE: por aquí entra la ficha de producto del negocio (la de su vertical/proveedor) y sale con la FORMA INTERNA del coste contable. CRUZA EL FORMATO, NO DECIDE EL CONTENIDO NI LA VALORACIÓN: el módulo NO valora el producto, NO calcula márgenes y NO decide el coste — TRANSPORTA lo que la ficha declara con la forma que el negocio DECLARA (`forma`: por campo interno su ruta en la ficha + requeridos + clave_natural). Sin `forma` declarada la regla es identidad por nombre interno y se declara así (`forma_declarada:false`) — jamás se cablea una forma de ficha. LA FRONTERA ES DECLARABLE: si el negocio no tiene puerto, se CREA para él (`puerto.frontera`, `creado:true`). Invariante: dato ausente = desconocido — el campo que no llega ni se declara queda null y se lista en `faltantes` ([ABIERTO], nada se estima); los importes se COPIAN si vienen y no se derivan del precio ni de ningún margen. La sección `ui` es lo que el generador schema→UI (BlueprintForm, 4 zonas) necesita para renderizar el panel; sin LLM: TODO lo que produce sale de aquí. Fuente de verdad: modules/contabilidad-analitica/frontera-ficha-producto/{module.json,index.js}. ui_handler real: frontera-ficha-producto.entrar (workspace_module/barra_modulos).",
+  "schema": "blueprint-interfaz-v2",
+  "language": "es",
+  "titulo": "La puerta de la ficha de producto al dato contable",
+  "eventos_publicados": [
+    "frontera-ficha-producto.entrar.response",
+    "frontera-ficha-producto.entrar.failed",
+    "contabilidad.coste_interno"
+  ],
+  "eventos_que_escucho": [],
+  "_escucho_nota": "VACÍO A PROPÓSITO: el conversor ya atiende en module.json.subscribes frontera-ficha-producto.entrar.request (onEntrarRequest, su única RPC); repetirlo aquí daría ANTICOLISION-001 (lo atenderían los dos). Es un CONVERSOR STATELESS determinista: no tiene cajón fuzzy ni evento fire-and-forget que el LLM deba procesar. Su salida de dominio `contabilidad.coste_interno` la LEE valoracion-existencia (H1) en su propio subscribes — no es una suscripción de este módulo.",
+  "transporte": {
+    "rpc": [
+      "frontera-ficha-producto.entrar.request -> .response"
+    ],
+    "entrada": [
+      "frontera-ficha-producto.entrar.request"
+    ],
+    "salida": [
+      "frontera-ficha-producto.entrar.response",
+      "contabilidad.coste_interno"
+    ],
+    "qos": "publishAndWait (request/response correlado) en la conversión. contabilidad.coste_interno es fire-and-forget (H2): la ficha cruzó la frontera y su coste quedó con la forma interna contable — lo LEE valoracion-existencia (H1). El conversor no pide nada a ningún otro módulo por el bus y no guarda memoria: transforma lo que recibe en la petición."
+  },
+  "contrato": {
+    "EntrarInput": "{ project_id:uuid, ficha|producto|crudo:{...} (la ficha de la vertical; puede venir envuelta {vertical, payload} o plana), forma?:{campos:{campo_interno:ruta_en_la_ficha}, requeridos:[...], clave_natural:ruta}, clave_natural?:str, puerto?:str, vertical?:str }",
+    "EntrarOutput": "{ project_id, vertical, origen_ficha:'ficha'|'plana', puerto:{frontera, creado, declarable}, coste:{clave_natural, producto, referencia, unidad, coste_unitario, cantidad, coste_total, moneda, proveedor, fecha, vertical, atributos, forma_interna:true, valorado_aqui:false, calculado_aqui:false, faltantes}, forma_declarada:bool, requeridos_faltantes:[...], decide:false, valora:false, cruza_formato:true, faltantes:[...], abierto:bool }",
+    "Errores": "ficha ausente o inválida → 400 INVALID_INPUT (par frontera-ficha-producto.entrar.failed).",
+    "Invariantes": "CRUZA EL FORMATO, NO DECIDE: el módulo no valora, no calcula márgenes y no decide el coste (decide:false, valora:false, cruza_formato:true) — solo le pone a lo que la ficha declara la FORMA INTERNA contable. LA FORMA ES DECLARABLE: el mapa campo_interno → ruta, los requeridos y la clave natural entran como DATO (`forma`); sin forma declarada la regla es identidad por nombre interno y se declara así (forma_declarada:false) — jamás se cablea una forma de ficha. Dato ausente = desconocido: el campo que no llega ni se declara queda null y se lista en `faltantes` ([ABIERTO]); los importes se COPIAN si vienen (no se derivan del precio ni de ningún margen) y un importe no numérico también se declara en `faltantes`. Los campos extra de la ficha se conservan bajo `atributos` (no se pierde nada).",
+    "Cierra el circulo": "frontera-ficha-producto.entrar.request -> .response/.failed; éxito → contabilidad.coste_interno (lo LEE valoracion-existencia H1)."
+  },
+  "ui": {
+    "type": "workspace_module",
+    "zone": "modulos",
+    "ops": {
+      "entrar": {
+        "titulo": "Cruzar la frontera: ficha de producto → coste interno contable",
+        "descripcion": "Mesa de trabajo de la ÚNICA puerta ficha-de-producto → dato contable. Por aquí entra la ficha del negocio y sale con la FORMA INTERNA del coste contable: el módulo CRUZA EL FORMATO y COPIA los importes; NO valora el producto, NO calcula márgenes y NO decide el coste. La FORMA es DECLARABLE: aquí se declara el mapa de cada campo interno a su ruta en la ficha, los campos requeridos y la clave natural — sin declararla, la regla es identidad por nombre interno y el resultado lo dice (`forma_declarada:false`); jamás hay una forma de ficha cableada. LA FRONTERA TAMBIÉN ES DECLARABLE: si el negocio no tiene puerto, se CREA para él. Un campo que no llega ni se declara queda null (desconocido) y se lista en `faltantes` — nada se estima ni se rellena con 0.",
+        "zona": "formulario",
+        "args": [
+          {
+            "nombre": "ficha",
+            "tipo": "json",
+            "required": true,
+            "placeholder": "{\"referencia\":\"REF-1\",\"nombre\":\"Mesa\",\"precio_compra\":120,\"ud\":\"ud\"} | {\"vertical\":\"3d\",\"payload\":{...}}",
+            "descripcion": "La FICHA de producto declarada (el dato que cruza la frontera). Puede venir envuelta por la vertical (`{vertical, payload}`) o plana; si trae `payload`, el contenido de la ficha es ese payload. Es DATO: el módulo lo transporta tal cual, no lo interpreta. Sin ficha no hay conversión (400)."
+          },
+          {
+            "nombre": "forma",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "{\"campos\":{\"coste_unitario\":\"precio_compra\",\"producto\":\"nombre\"},\"requeridos\":[\"coste_unitario\"],\"clave_natural\":\"referencia\"}",
+            "descripcion": "La FORMA declarada de la conversión (LA LEY COMO DATO): el mapa `campo_interno → ruta en la ficha` (soporta rutas 'a.b'), la lista de `requeridos` y la ruta de la `clave_natural`. Es DATO del negocio, nunca una forma cableada; sin declararla la regla es identidad por nombre interno y el resultado lo declara (`forma_declarada:false`)."
+          },
+          {
+            "nombre": "clave_natural",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "(vacío = se deriva de referencia|producto|vertical, o de la forma declarada)",
+            "descripcion": "La CLAVE NATURAL declarada del producto. Es DATO: si no se declara se busca en la ficha/la forma y, como último recurso, se compone de referencia|producto|vertical. NO se inventa identidad: si no hay ninguna pieza, la clave queda null y se declara en `faltantes`."
+          },
+          {
+            "nombre": "puerto",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "(vacío = se CREA la frontera del negocio: frontera:<vertical>)",
+            "descripcion": "El nombre DECLARADO de la frontera (el puerto del negocio). Es DATO: si no se declara se CREA el puerto para ese negocio (`puerto.creado:true`, `declarable:true`) — el mismo módulo sirve a todos los negocios sin conocer ninguno de memoria."
+          },
+          {
+            "nombre": "vertical",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "3d | despacho-de-pan | ... (vacío = se lee de la ficha)",
+            "descripcion": "La VERTICAL declarada del negocio de origen. Es DATO: si no se declara se lee del sobre de la ficha; sin ninguna de las dos queda null (desconocida) y se declara en `faltantes`."
+          }
+        ]
+      }
+    },
+    "datos": [],
+    "_datos_nota": "HUECO DECLARADO (no se inventa): frontera-ficha-producto es un CONVERSOR STATELESS de una sola op. En module.json.subscribes solo hay frontera-ficha-producto.entrar.request y en index.js no existe ninguna lectura de conjunto (ni RPC de listado ni memoria): la proyección `_entrar(ficha)` devuelve UN coste convertido (con su `faltantes` y su `abierto`), no una tabla. Lo más parecido a una colección en la respuesta es `coste.faltantes` (una lista de nombres de campo) — no son filas de un listado. Por eso la zona DATOS va vacía: una cinta de conversiones necesitaría un handler RPC de listado que hoy no existe en el backend (trabajo de módulo, no de interfaz). La señal contabilidad.coste_interno da el pulso vivo (y alimenta a valoracion-existencia H1), pero no una tabla."
+  },
+  "filosofia": "Una frontera no valora: traduce. Aquí la ficha entra con la forma que el proveedor o la vertical le dio y sale con la forma interna del coste contable — y en medio no hay ni un juicio sobre cuánto vale nada. Por eso la forma es un DATO que el negocio declara, y cuando no la declara el sistema no la inventa: la sustituye por la regla más honesta que existe (el nombre interno es el nombre) y lo dice en la respuesta. Un campo que no llega no se rellena con 0: queda desconocido y se declara a la vista. Esta es la única puerta del gasto al dato contable; si aquí se colara una estimación, todo lo que se valora después nacería inventado."
+}

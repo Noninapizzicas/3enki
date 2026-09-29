@@ -3,6 +3,8 @@
   "name": "valoracion-existencia",
   "version": "0.1.0",
   "description": "Reflejo (H1): la capa de valor sobre el inventario existente (no lo duplica) — metodo de valoracion DECLARABLE (nombre opaco, mecanica de agregacion en el dato, cero constantes); consume `inventario` por evento y nada se estima si falta el stock o el metodo.",
+  "blueprint_driven": true,
+  "blueprint_path": "valoracion-existencia.blueprint.json",
   "language": "es",
   "subscribes": [
     {

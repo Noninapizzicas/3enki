@@ -3,6 +3,8 @@
   "name": "variacion-stock-valorada",
   "version": "0.1.0",
   "description": "Reflejo (H4): variacion de existencias valorada del periodo — entrada por compra y salida por consumo valoradas con la capa de valor (H1); escucha inventario.ajustado y inventario.reserva.creada, y sin movimientos o sin valoracion nada se estima.",
+  "blueprint_driven": true,
+  "blueprint_path": "variacion-stock-valorada.blueprint.json",
   "language": "es",
   "subscribes": [
     {

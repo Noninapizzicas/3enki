@@ -3,6 +3,8 @@
   "name": "eliminacion-intercompany",
   "version": "0.1.0",
   "description": "Reflejo (I2): las eliminaciones de operaciones internas entre sociedades del grupo — deteccion determinista del cruce interno con reglas DECLARABLES (grupo, umbral, cuentas internas); sin perimetro declarado nada se adivina.",
+  "blueprint_driven": true,
+  "blueprint_path": "eliminacion-intercompany.blueprint.json",
   "language": "es",
   "subscribes": [
     {

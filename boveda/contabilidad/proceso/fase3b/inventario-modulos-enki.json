@@ -1,0 +1,4783 @@
+[
+ {
+  "slug": "_template",
+  "name": "_template",
+  "version": "1.0.0",
+  "description": "Modulo plantilla canonico. NO se carga en runtime (prefijo '_'). Sirve de referencia visual al reescribir cualquiera de los 73 modulos del repo durante la fase horizontal. Cumple los 24 contratos transversales: declaraciones de events, tools, dependencies, observability, persistence, lifecycle. Copiar entero, renombrar (quitar prefijo '_'), y rellenar con la logica del dominio.",
+  "subscribes": [
+   "db.query.response",
+   "project.activated",
+   "project.deactivated"
+  ],
+  "publishes": [
+   "_template.entidad.creada"
+  ],
+  "tools": [
+   "_template.crear"
+  ]
+ },
+ {
+  "slug": "adaptador-avisos",
+  "name": "adaptador-avisos",
+  "version": "0.1.0",
+  "description": "Puente de avisos del taller 3D (PUENTE): recibe el evento de aviso, construye el mensaje y lo envia por Telegram con confirmacion.",
+  "subscribes": [
+   "adaptador-avisos.enviar.request",
+   "aviso.solicitar"
+  ],
+  "publishes": [
+   "adaptador-avisos.enviar.failed",
+   "adaptador-avisos.enviar.response"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "adaptador-confirmacion",
+  "name": "adaptador-confirmacion",
+  "version": "0.1.0",
+  "description": "Puente de confirmacion del taller 3D (PUENTE): recibe la confirmacion del dueno por Telegram, la interpreta y la entrega al sistema.",
+  "subscribes": [
+   "adaptador-confirmacion.confirmar.request",
+   "telegram.callback.received"
+  ],
+  "publishes": [
+   "adaptador-confirmacion.confirmacion_recibida",
+   "adaptador-confirmacion.confirmar.failed",
+   "adaptador-confirmacion.confirmar.response"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "adaptador-impresora",
+  "name": "adaptador-impresora",
+  "version": "0.2.0",
+  "description": "Puente a la impresora 3D SPARKX i7: sube gcode, inicia impresion y observa el estado por stream push, interpretandolo a estado_sistema. Delega al thin bridge remoto si no hay puerto local.",
+  "subscribes": [
+   "adaptador-impresora.iniciar_impresion.request",
+   "adaptador-impresora.observar_estado.request",
+   "adaptador-impresora.subir_gcode.request"
+  ],
+  "publishes": [
+   "adaptador-impresora.estado_crudo",
+   "bridge.moonraker.iniciar_impresion.request",
+   "bridge.moonraker.observar_estado.request",
+   "bridge.moonraker.subir_gcode.request",
+   "iniciar_impresion.failed",
+   "observar_estado.failed",
+   "subir_gcode.failed"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "adaptador-laser",
+  "name": "adaptador-laser",
+  "version": "0.1.0",
+  "description": "Puente a la grabadora laser Atomstack A20 Pro V2: envia gcode, inicia trabajos y observa el estado por stream push GRBL, interpretandolo a estado_sistema. Delega al thin bridge remoto bridge.grbl.",
+  "subscribes": [
+   "adaptador-laser.enviar_gcode.request",
+   "adaptador-laser.iniciar_trabajo.request",
+   "adaptador-laser.observar_estado.request"
+  ],
+  "publishes": [
+   "adaptador-laser.estado_crudo",
+   "adaptador-laser.progreso",
+   "bridge.grbl.enviar_gcode.request",
+   "bridge.grbl.iniciar_trabajo.request",
+   "bridge.grbl.observar_estado.request",
+   "enviar_gcode.failed",
+   "iniciar_trabajo.failed",
+   "observar_estado.failed"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "adaptador-slicing",
+  "name": "adaptador-slicing",
+  "version": "0.1.0",
+  "description": "Puente al slicer externo (CrealityPrint CLI en el PC del dueno): slicear .3mf -> gcode y leer metadatos del .3mf.",
+  "subscribes": [
+   "adaptador-slicing.leer_3mf.request",
+   "adaptador-slicing.slicear.request"
+  ],
+  "publishes": [
+   "adaptador-slicing.leer_3mf.response",
+   "adaptador-slicing.slicear.failed",
+   "adaptador-slicing.slicear.response"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "admin-panel",
+  "name": "admin-panel",
+  "version": "2.0.0",
+  "description": "Web-based admin panel para gestionar Event Core (modulos, plugins, agentes, prompts). Bus-driven via ui_handlers canonicos. Cache in-memory de 4 secciones (plugins/agents/prompts/modules) con refresh on-demand. Integra con plugin-manager + prompt-manager via HTTP loopback hasta que esos modulos canonicen su ui_handler API.",
+  "subscribes": [
+   "plugin.loaded"
+  ],
+  "publishes": [
+   "admin.agent.creado",
+   "admin.agent.eliminado",
+   "admin.plugin.toggled",
+   "admin.prompt.actualizado",
+   "admin.prompt.creado"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "agenda-operacion",
+  "name": "agenda-operacion",
+  "version": "0.1.0",
+  "description": "Operación diaria: horario por franja, ciclo de tareas del día y predicción de demanda (the-pirate).",
+  "subscribes": [
+   "agenda.ciclo.obtener.request",
+   "agenda.demanda.predecir.request",
+   "agenda.horario.obtener.request",
+   "agenda.reglas.actualizar.request",
+   "agenda.reglas.leer.request"
+  ],
+  "publishes": [
+   "agenda.reglas.actualizadas"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "agentes/bitacora",
+  "name": "agentes-bitacora",
+  "version": "1.0.0",
+  "description": "P6 · Bitácora — CUSTODIO único de los pasos de cada ejecución de agente. Todo lo que el pipeline hace queda ESCRITO (qué se hizo, qué devolvió, veredicto). La memoria verificable del motor: la vitrina y el reanudador viven de ella.",
+  "subscribes": [
+   "bitacora.abrir.request",
+   "bitacora.leer.request",
+   "bitacora.paso.request",
+   "bitacora.sellar.request"
+  ],
+  "publishes": [
+   "bitacora.abierta",
+   "bitacora.abrir.failed",
+   "bitacora.leer.response",
+   "bitacora.paso.failed",
+   "bitacora.paso.registrado",
+   "bitacora.sellada",
+   "bitacora.sellar.failed"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "agentes/registro",
+  "name": "agentes-registro",
+  "version": "1.0.0",
+  "description": "P2 · Registro de pipelines — CUSTODIO único de la definición de cada agente (pasos, validaciones, entregable, presupuesto). Un solo escritor del store; nadie define un pipeline fuera del registro.",
+  "subscribes": [
+   "pipeline.declarar.request",
+   "pipeline.listar.request",
+   "pipeline.obtener.request"
+  ],
+  "publishes": [
+   "pipeline.declarado",
+   "pipeline.declarar.failed",
+   "pipeline.listar.failed",
+   "pipeline.listar.response",
+   "pipeline.obtener.failed",
+   "pipeline.obtener.response"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "apis-publicas",
+  "name": "apis-publicas",
+  "version": "0.1.0",
+  "description": "Cúpula de APIs públicas: catálogo de servicios REST externos buscable (índice barato) + ficha a demanda + integración (traer genera tool_http + skill). La API es primera opción; el scraping, fallback.",
+  "subscribes": [
+   "apis-publicas.buscar.request",
+   "apis-publicas.estado.request",
+   "apis-publicas.importar.request",
+   "apis-publicas.listar_categorias.request",
+   "apis-publicas.obtener.request"
+  ],
+  "publishes": [
+   "apis-publicas.buscar.response",
+   "apis-publicas.estado.response",
+   "apis-publicas.importar.response",
+   "apis-publicas.listar_categorias.response",
+   "apis-publicas.obtener.response"
+  ],
+  "tools": [
+   "buscar_api",
+   "obtener_api"
+  ]
+ },
+ {
+  "slug": "banco",
+  "name": "banco",
+  "version": "0.2.0",
+  "description": "Custodio del banco de nichos del radar.",
+  "subscribes": [
+   "banco.anadir.request",
+   "banco.aparcar.request",
+   "banco.corregir_ficha.request",
+   "banco.listar.request",
+   "banco.obtener.request",
+   "banco.publicar.request",
+   "banco.seleccionar.request",
+   "evaluador.veredicto_emitido",
+   "interfaz.veredicto_confirmado",
+   "project.activated"
+  ],
+  "publishes": [
+   "banco.anadir.failed",
+   "banco.candidato_anadido",
+   "banco.candidato_aparcado",
+   "banco.candidato_ficha_corregida",
+   "banco.candidato_publicado",
+   "banco.candidato_rotado",
+   "banco.candidato_seleccionado",
+   "banco.seleccionar.failed"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "banco-ideas",
+  "name": "banco-ideas",
+  "version": "0.1.0",
+  "description": "Gestiona un banco de ideas: guardar, listar y recuperar ideas.",
+  "subscribes": [
+   "banco-ideas.crear.request",
+   "banco-ideas.listar.request",
+   "banco-ideas.obtener.request"
+  ],
+  "publishes": [],
+  "tools": []
+ },
+ {
+  "slug": "bibliotecario",
+  "name": "bibliotecario",
+  "version": "0.1.0",
+  "description": "Puente a la biblioteca externa (repo Conocimiento): sirve por el bus los libros (notas Obsidian) de la bóveda, buscables por sector o por consulta. Mirror git de solo-lectura, catálogo barato + préstamo bajo demanda. Reach-not-resident: el agente pide los libros que necesita, no carga el corpus.",
+  "subscribes": [
+   "bibliotecario.catalogo.request",
+   "bibliotecario.prestamo.request",
+   "bibliotecario.sincronizar.request"
+  ],
+  "publishes": [
+   "bibliotecario.actualizada",
+   "bibliotecario.catalogo.response",
+   "bibliotecario.prestamo.response",
+   "bibliotecario.sincronizar.response"
+  ],
+  "tools": [
+   "bibliotecario.catalogo",
+   "bibliotecario.consultar"
+  ]
+ },
+ {
+  "slug": "bot-manager",
+  "name": "bot-manager",
+  "version": "2.0.0",
+  "description": "Gestion de bots y almacenamiento. Descarga archivos, guarda en carpetas con convencion de naming (status flags R/P/V/A/X/E/D), publica eventos de lifecycle (registered/unregistered/enabled/disabled) y de actividad (file.stored/message.received/command.received). Auto-registra bots desde credential.saved (TELEGRAM_API_KEY_BOT_*). Auto-respuestas configurables por comando. NO sabe de agentes — solo ",
+  "subscribes": [
+   "credential.saved",
+   "telegram.audio.received",
+   "telegram.command.received",
+   "telegram.document.received",
+   "telegram.photo.received",
+   "telegram.text.received",
+   "telegram.video.received",
+   "telegram.voice.received"
+  ],
+  "publishes": [
+   "bot.command.received",
+   "bot.disabled",
+   "bot.enabled",
+   "bot.file.stored",
+   "bot.message.received",
+   "bot.registered",
+   "bot.unregistered"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "buscador-repositorios",
+  "name": "buscador-repositorios",
+  "version": "0.1.0",
+  "description": "Puente de busqueda en repositorios externos de modelos 3D: delega en crawl4rs/SearXNG y devuelve resultados tipados sin inventarlos.",
+  "subscribes": [
+   "buscador-repositorios.buscar.request"
+  ],
+  "publishes": [
+   "buscador-repositorios.buscar.failed",
+   "buscador-repositorios.buscar.response"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "calendario",
+  "name": "calendario",
+  "version": "0.1.0",
+  "description": "Calendario de producción por producto: días de salida y margen de antelación (panadería).",
+  "subscribes": [
+   "calendario.margen.leer.request",
+   "calendario.producto.actualizar.request",
+   "calendario.producto.leer.request",
+   "calendario.productos.leer.request",
+   "calendario.validar.request"
+  ],
+  "publishes": [
+   "calendario.producto.actualizado"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "cantera-semantica",
+  "name": "cantera-semantica",
+  "version": "0.1.0",
+  "description": "Índice vectorial de la cantera sobre Turso: buscar skills por SIGNIFICADO (embeddings + distancia coseno). Complementa el buscar por palabras de cosecha; gate por interruptor OFF, degrada limpio.",
+  "subscribes": [
+   "cantera.buscar_semantica.request",
+   "cantera.indexar.request",
+   "cantera.reindexar.request",
+   "cantera.semantica_estado.request",
+   "interruptor.cambiado",
+   "interruptor.solicitar_registro"
+  ],
+  "publishes": [
+   "cosecha.listar.request",
+   "embedding.generate.request",
+   "interruptor.registrar"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "cartero",
+  "name": "cartero",
+  "version": "0.1.0",
+  "description": "Puente reflejo con el Gmail del dueño: verifica el canal y entrega la newsletter (M7) con ack explícito del proveedor.",
+  "subscribes": [
+   "cartero.enviar.request",
+   "cartero.envios.listar.request",
+   "cartero.verificar.request",
+   "project.activated"
+  ],
+  "publishes": [
+   "cartero.enviar.failed",
+   "cartero.envio_resultado",
+   "cartero.verificado"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "catalogo",
+  "name": "catalogo",
+  "version": "0.1.0",
+  "description": "Custodio de la biblioteca de piezas del taller 3D: fichas de modelos multiformato (STL/3MF/GCODE), single-writer por proyecto.",
+  "subscribes": [
+   "catalogo.actualizar.request",
+   "catalogo.listar.request",
+   "catalogo.por_id.request",
+   "catalogo.registrar.request",
+   "project.activated"
+  ],
+  "publishes": [
+   "catalogo.actualizar.failed",
+   "catalogo.actualizar.response",
+   "catalogo.listar.response",
+   "catalogo.por_id.response",
+   "catalogo.registrar.failed",
+   "catalogo.registrar.response",
+   "modelo.registrado"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "certificate-authority",
+  "name": "certificate-authority",
+  "version": "2.0.0",
+  "description": "Internal Certificate Authority for Event Core. Issues, revokes and verifies X.509 client certificates (clientes del portal de facturacion + dispositivos de trabajo). Hook beforeRequest para autenticacion mTLS transparente cuando config.mtls_enabled. Persiste certificados + CRL en filesystem (CAManager).",
+  "subscribes": [],
+  "publishes": [
+   "certificate.expired",
+   "certificate.issued",
+   "certificate.renewed",
+   "certificate.revoked"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "channel-manager",
+  "name": "channel-manager",
+  "version": "2.0.0",
+  "description": "Registry centralizado de canales externos. Mapea identificadores externos (chat_id, email, telefono) a proyectos y propositos internos. Storage SQLite via database-manager (proyecto 'system'). v2.0.0: 5 helpers POC2, handlers shape canonico, _publicarEvento con correlation_id propagado, pendingDbRequests Map con timeout/cleanup.",
+  "subscribes": [
+   "channel-manager.resolve.request",
+   "db.query.response",
+   "db.schema.init.response"
+  ],
+  "publishes": [
+   "channel-manager.resolve.response",
+   "channel.registered",
+   "channel.removed",
+   "channel.resolved",
+   "channel.updated",
+   "db.query.request",
+   "db.schema.init.request"
+  ],
+  "tools": [
+   "channel.resolve",
+   "channel.list"
+  ]
+ },
+ {
+  "slug": "chat-p2p",
+  "name": "chat-p2p",
+  "version": "1.0.0",
+  "description": "Canal agentes→agentes: un chat de proyecto envía un mensaje a otro chat de proyecto (puente chat⇄chat sobre el circuito canónico de conversación).",
+  "subscribes": [
+   "chat.p2p.enviar.request"
+  ],
+  "publishes": [
+   "chat.p2p.enviado",
+   "chat.p2p.envio_fallido"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "ciclo-impresion",
+  "name": "ciclo-impresion",
+  "version": "reflejo-0.1.0",
+  "description": "Orquestador dueno de la maquina de estados del ciclo de impresion 3D: inicia, observa, confirma transiciones, avisa al terminar/fallar y encadena. CERO juicio automatico.",
+  "subscribes": [
+   "ciclo-impresion.abortar.request",
+   "ciclo-impresion.iniciar.request",
+   "ciclo-impresion.pausar.request",
+   "ciclo-impresion.reanudar.request"
+  ],
+  "publishes": [
+   "ciclo-impresion.abortar.failed",
+   "ciclo-impresion.abortar.response",
+   "ciclo-impresion.iniciar.failed",
+   "ciclo-impresion.iniciar.response",
+   "ciclo-impresion.pausar.response",
+   "ciclo-impresion.reanudar.response",
+   "ciclo_abortado",
+   "impresion.fallida",
+   "impresion.finalizada",
+   "impresion.iniciada",
+   "impresion.registrada"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "code-executor",
+  "name": "code-executor",
+  "version": "2.2.0",
+  "description": "Shell command and script execution for AI with security controls",
+  "subscribes": [
+   "shell.exec.request"
+  ],
+  "publishes": [
+   "shell.error",
+   "shell.executed",
+   "shell.process.started",
+   "shell.process.stopped"
+  ],
+  "tools": [
+   "shell.exec",
+   "shell.script",
+   "shell.background",
+   "shell.kill",
+   "shell.list",
+   "code.orquestar",
+   "code.orquestar_set"
+  ]
+ },
+ {
+  "slug": "cola",
+  "name": "cola",
+  "version": "0.1.0",
+  "description": "Custodio de la cola de impresion 3D (el corazon): lista FIFO+urgencia que mantiene la impresora unica ocupada; ordena segun propuesta aprobada del motor; siguiente solo con GCODE listo y una sola impresora a la vez.",
+  "subscribes": [
+   "cola.cancelar.request",
+   "cola.encolar.request",
+   "cola.imprimiendo.request",
+   "cola.marcar_urgente.request",
+   "cola.reordenar.request",
+   "cola.siguiente.request",
+   "cola.terminada.request",
+   "project.activated"
+  ],
+  "publishes": [
+   "cola.actualizada",
+   "cola.cancelar.failed",
+   "cola.cancelar.response",
+   "cola.encolar.failed",
+   "cola.encolar.response",
+   "cola.imprimiendo.response",
+   "cola.marcar_urgente.response",
+   "cola.reordenar.response",
+   "cola.siguiente.response",
+   "cola.terminada.response"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "composition-manager",
+  "name": "composition-manager",
+  "version": "2.0.0",
+  "description": "Servicio generico de composicion de entidades. Trabaja con entity_id abstracto sobre tres sub-areas del mismo dominio: systems (contenedores logicos con miembros y rol), links (relaciones direccionales tipadas) y dependencies (dependencias funcionales). Reusable por cualquier modulo via composition.request/response o via UI handlers directos.",
+  "subscribes": [
+   "composition.request",
+   "db.query.response"
+  ],
+  "publishes": [
+   "composition.response",
+   "entity.dependency.added",
+   "entity.dependency.removed",
+   "entity.joined_system",
+   "entity.left_system",
+   "entity.linked",
+   "entity.unlinked",
+   "system.created",
+   "system.deleted",
+   "system.updated"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "confluencia",
+  "name": "confluencia",
+  "version": "0.1.0",
+  "description": "Motor de confluencia: casa líneas de pedido contra el calendario de producción y clasifica confirmado/ajustado/no_disponible (panadería).",
+  "subscribes": [
+   "confluencia.resolver_pedido.request",
+   "confluencia.validar_linea.request"
+  ],
+  "publishes": [
+   "confluencia.pedido_resuelto"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "confluencia-h3",
+  "name": "confluencia-h3",
+  "version": "0.1.0",
+  "description": "Criterio de escalada + porta-aviso del Portal de llamada: decide si un resultado de confluencia abre canal humano y empaqueta el aviso (panadería).",
+  "subscribes": [
+   "confluencia.h3.aplicar_decision.request",
+   "confluencia.h3.aviso_emitido",
+   "confluencia.h3.criterio.request",
+   "confluencia.h3.porta_aviso.request"
+  ],
+  "publishes": [
+   "confluencia.h3.aviso_emitido",
+   "confluencia.h3.aviso_entregado",
+   "confluencia.h3.decision_aplicada"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "conserje",
+  "name": "conserje",
+  "version": "0.7.0",
+  "description": "Abre el camino al comerciante. Cruza lo que el sistema OFRECE (LibroDeCapacidades) con lo que el comerciante USA (derivado del bus en vivo) y, cuando hay una brecha con intención, le ofrece el siguiente paso en POSITIVO (no señala la carencia). Sin sondas hardcodeadas: lee el grafo de capacidades + el uso real. La señal de oro es la intención — lo que el comerciante alarga la mano a tocar pero est",
+  "subscribes": [
+   "conserje.empujon"
+  ],
+  "publishes": [
+   "conserje.empujon",
+   "cosecha.buscar.request",
+   "destilador.ruta.request"
+  ],
+  "tools": [
+   "conserje.empujon_pendiente",
+   "conserje.brecha"
+  ]
+ },
+ {
+  "slug": "consumo",
+  "name": "consumo",
+  "version": "0.1.0",
+  "description": "Reflejo de consumo del taller 3D: promedio de gramos/tiempo por modelo desde dato medido del historial, y pronostico de tanda (CERO estimacion sin muestras).",
+  "subscribes": [
+   "consumo.promedio.request",
+   "consumo.pronostico.request",
+   "impresion.registrada"
+  ],
+  "publishes": [
+   "consumo.promedio.failed",
+   "consumo.promedio.response",
+   "consumo.pronostico.failed",
+   "consumo.pronostico.response"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "conversacion/agent-observer",
+  "name": "agent-observer",
+  "version": "2.0.0",
+  "description": "Observer canonico del subsistema agentes. Escucha los 4 eventos agent-flow (request/progress/response/failed) y los traduce a chat.assistant.saved con metadata.block.type='agent_intervention' cuando hay conversation_id presente, para que la tarjeta colapsable del agente se renderice inline en el chat. Politica fail-silent: sin conversation_id no emite nada. Sin este modulo, los agentes invocados d",
+  "subscribes": [
+   "agent.execute.failed",
+   "agent.execute.progress",
+   "agent.execute.request",
+   "agent.execute.response"
+  ],
+  "publishes": [
+   "chat.assistant.saved"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "conversacion/ai-gateway",
+  "name": "ai-gateway",
+  "version": "2.36.0",
+  "description": "Ejecutor del LLM. Tres entry points (chat / generic / embedding) sobre el mismo agentic loop con providers fallback + tools + credentials event-driven. v2.0.0: split llm.complete.response/failed (par success/failure), helpers POC2 transferibles, _publicarEvento canonico (correlation_id propagado), _classifyExecutionError auxiliar del dominio.",
+  "subscribes": [
+   "chat.prompt.ready",
+   "credential.deleted",
+   "credential.resolve.response",
+   "credential.saved",
+   "credential.updated",
+   "embedding.generate.request",
+   "fs.read.response",
+   "interruptor.cambiado",
+   "interruptor.solicitar_registro",
+   "llm.complete.request"
+  ],
+  "publishes": [
+   "ai.chat.failed",
+   "ai.chat.response",
+   "credential.resolve.request",
+   "embedding.generate.failed",
+   "embedding.generate.response",
+   "fs.read.request",
+   "interruptor.registrar",
+   "llm.complete.failed",
+   "llm.complete.response"
+  ],
+  "tools": [
+   "page.related",
+   "chat.cambiar_foco"
+  ]
+ },
+ {
+  "slug": "conversacion/ai-gateway-poc",
+  "name": "ai-gateway",
+  "version": "2.0.0",
+  "description": "Ejecutor LLM (POC, deepseek-only). Entry point: llm.complete.request → llama deepseek con credencial event-driven → llm.complete.response. POC del rewrite aplicando los 8 contratos arquitectonicos (events, lifecycle, observability, errors, persistence, http, naming, glossary).",
+  "subscribes": [
+   "credential.deleted",
+   "credential.resolve.response",
+   "credential.saved",
+   "credential.updated",
+   "llm.complete.request"
+  ],
+  "publishes": [
+   "credential.resolve.request",
+   "llm.complete.response"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "conversacion/chat-io",
+  "name": "chat-io",
+  "version": "2.2.0",
+  "description": "Entrada y salida del chat. Recibe mensajes via ui_handlers (send/create/list/load/delete/update_settings/toggle_context/context_stats), persiste conversaciones y mensajes en SQLite por proyecto via database-manager, aplica FIFO de contexto, y reenvia la respuesta del LLM al canal de origen (MQTT conversation/{id}/message para web). v2.0.0: 5 helpers POC2, handlers shape canonico { status, data | e",
+  "subscribes": [
+   "agent.execute.failed",
+   "agent.execute.progress",
+   "agent.execute.request",
+   "agent.execute.response",
+   "ai.chat.failed",
+   "ai.chat.response",
+   "chat.assistant.saved",
+   "db.query.response",
+   "invoke_agent",
+   "invoke_agent.response",
+   "project.activated"
+  ],
+  "publishes": [
+   "chat.assistant.saved",
+   "chat.message.saved",
+   "db.query.request"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "conversacion/memory-conversation-summary",
+  "name": "memory-conversation-summary",
+  "version": "2.1.0",
+  "description": "Memoria modular del companero. Genera resumenes LLM de los tramos de conversacion que el FIFO va a recortar, y los inyecta en chat.prompt.ready via chat.context.enriched (priority 200). Sin esto, cuando una conversacion se hace larga y FIFO recorta el principio, el companero pierde la esencia del historico — con esto, el viaje sostiene memoria narrativa.",
+  "subscribes": [
+   "chat.message.saved",
+   "db.query.response",
+   "llm.complete.failed",
+   "llm.complete.response",
+   "memory.summary.leer"
+  ],
+  "publishes": [
+   "chat.context.enriched",
+   "db.query.request",
+   "llm.complete.request",
+   "memory.summary.leer.response"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "conversacion/memory-rag",
+  "name": "memory-rag",
+  "version": "2.1.0",
+  "description": "Memoria modular semantica del companero. Indexa cada mensaje del chat (user + assistant) en un vector store por proyecto, y en cada chat.message.saved hace busqueda semantica top-K en el historico para enriquecer el system prompt via chat.context.enriched (priority 500). Asi, cuando el FIFO recorta el principio, los snippets relevantes del pasado siguen disponibles para el companero. Aislamiento p",
+  "subscribes": [
+   "ai.chat.response",
+   "chat.message.saved",
+   "db.query.response",
+   "embedding.generate.failed",
+   "embedding.generate.response",
+   "memory.rag.buscar"
+  ],
+  "publishes": [
+   "db.query.request",
+   "embedding.generate.request",
+   "memory.rag.buscar.response"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "conversacion/memory-user-profile",
+  "name": "memory-user-profile",
+  "version": "2.2.0",
+  "description": "Memoria modular del companero. Acumula hechos sobre el usuario extraidos via heuristicas regex (es) de cada chat.message.saved y los inyecta en cada chat.prompt.ready via chat.context.enriched (priority 100). Primer modulo de memoria modular del subsistema — demuestra que añadir memorias futuras (memory-rag, memory-long-term, memory-project-knowledge) no requiere tocar prompt-builder.",
+  "subscribes": [
+   "chat.message.saved",
+   "db.query.response",
+   "memory.profile.leer"
+  ],
+  "publishes": [
+   "chat.context.enriched",
+   "db.query.request",
+   "memory.profile.leer.response"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "conversacion/prompt-builder",
+  "name": "prompt-builder",
+  "version": "2.0.0",
+  "description": "Construye el system prompt al recibir chat.message.saved. Mantiene en cache los prompt.json y context.json de los modulos (FS) y los prompts del usuario (prompt-manager). Acumula enriquecimientos de memorias modulares (chat.context.enriched) y los agrega por priority. Publica chat.prompt.ready (chat-flow v1.0.0). v2.0.0: 5 helpers POC2, _publicarEvento canoniza correlation_id + timestamp, observab",
+  "subscribes": [
+   "chat.context.enriched",
+   "chat.message.saved",
+   "db.query.response",
+   "prompt.created",
+   "prompt.deleted",
+   "prompt.list.response",
+   "prompt.updated"
+  ],
+  "publishes": [
+   "chat.prompt.ready",
+   "db.query.request",
+   "prompt.list.request"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "conversation-export",
+  "name": "conversation-export",
+  "version": "2.0.0",
+  "description": "Endpoints HTTP publicos para exportar conversaciones completas (mensajes + tool calls + eventos de agentes + errores) en JSON optimizado para analisis por LLMs externos. Autenticacion por token.",
+  "subscribes": [
+   "activity.logged",
+   "agent.completed",
+   "agent.execute.failed",
+   "agent.execute.request",
+   "agent.execute.response",
+   "agent.failed",
+   "db.query.response"
+  ],
+  "publishes": [],
+  "tools": []
+ },
+ {
+  "slug": "cosecha",
+  "name": "cosecha",
+  "version": "0.11.0",
+  "description": "Cantera de skills: reflejo puro que auto-descubre SKILL.md de cualquier fuente y los sirve buscables por el bus. Biblioteca viva (toda la abundancia), no cúpula (lentes activas). Alimenta cúpula y conserje por demanda.",
+  "subscribes": [
+   "aprendizaje.skill.creada",
+   "cosecha.buscar.request",
+   "cosecha.crear.request",
+   "cosecha.importar.request",
+   "cosecha.listar.request",
+   "cosecha.obtener.request",
+   "cosecha.olvidar.request",
+   "cosecha.patch.request",
+   "cosecha.promover.request",
+   "cosecha.stats.request",
+   "cosecha.traer.request",
+   "interruptor.cambiado",
+   "interruptor.solicitar_registro"
+  ],
+  "publishes": [
+   "cantera.buscar_semantica.request",
+   "cantera.indexar.request",
+   "cosecha.buscar.response",
+   "cosecha.crear.response",
+   "cosecha.importar.response",
+   "cosecha.listar.response",
+   "cosecha.obtener.response",
+   "cosecha.olvidar.response",
+   "cosecha.patch.response",
+   "cosecha.promover.response",
+   "cosecha.stats.response",
+   "cosecha.traer.response",
+   "feeder.buscar.request",
+   "feeder.instalar.request",
+   "interruptor.registrar",
+   "lentes.montar.request"
+  ],
+  "tools": [
+   "buscar_skill",
+   "activar_skill",
+   "crear_skill",
+   "mejorar_skill"
+  ]
+ },
+ {
+  "slug": "crawl4rs",
+  "name": "crawl4rs",
+  "version": "0.5.0",
+  "description": "Órgano web de Enki sobre obscura (navegador Rust nativo, sin Chromium). Lee/rastrea/mapea una URL → markdown limpio + enlaces + extracción; busca (SearXNG); login (marcha larga). Gate por interruptor OFF (egress consciente), degrada limpio si obscura no responde.",
+  "subscribes": [
+   "crawl4rs.abrir.request",
+   "crawl4rs.buscar.request",
+   "crawl4rs.descargar.request",
+   "crawl4rs.entrar.request",
+   "crawl4rs.leer.request",
+   "crawl4rs.mapear.request",
+   "crawl4rs.rastrear.request",
+   "interruptor.cambiado",
+   "interruptor.solicitar_registro"
+  ],
+  "publishes": [
+   "crawl4rs.abrir.response",
+   "crawl4rs.buscar.response",
+   "crawl4rs.descargar.response",
+   "crawl4rs.entrar.response",
+   "crawl4rs.leer.response",
+   "crawl4rs.mapear.response",
+   "crawl4rs.rastrear.response",
+   "interruptor.registrar"
+  ],
+  "tools": [
+   "buscar_web",
+   "leer_web",
+   "descargar_web",
+   "entrar_web",
+   "abrir_web"
+  ]
+ },
+ {
+  "slug": "credential-manager",
+  "name": "credential-manager",
+  "version": "2.2.0",
+  "description": "Core canónico: CRUD de credenciales API + resolución cascada (CUSTOM → CLIENT → PROJECT → GLOBAL) + cache .env atómico. Providers por-tenant (PROJECT_ONLY_PROVIDERS) quedan forzados a nivel PROJECT (sin global) para aislamiento multi-proyecto. Tras descomposición 2026-05-04: NO incluye test de credenciales (módulo credential-tester pendiente), NO incluye OAuth flow (credential-oauth pendiente), NO",
+  "subscribes": [
+   "credential.create.request",
+   "credential.delete.request",
+   "credential.resolve.request",
+   "credential.state.request",
+   "credential.update.request"
+  ],
+  "publishes": [
+   "credential.deleted",
+   "credential.resolve.response",
+   "credential.saved",
+   "credential.state",
+   "credential.updated"
+  ],
+  "tools": [
+   "credential.list"
+  ]
+ },
+ {
+  "slug": "credential-oauth",
+  "name": "credential-oauth",
+  "version": "0.1.0",
+  "description": "PUENTE OAuth2 (Google/Gmail): start/status/resolve + CRUD de configs OAuth + callback HTTP. Reflejo puro. Reactiva el provider local.gmail (cartero del radar, facturas).",
+  "subscribes": [
+   "credential.oauth.resolve.request",
+   "credential.oauth.start.request",
+   "credential.oauth.status.request",
+   "credential.oauth_config.create.request",
+   "credential.oauth_config.delete.request",
+   "credential.oauth_config.list.request",
+   "project.activated"
+  ],
+  "publishes": [],
+  "tools": []
+ },
+ {
+  "slug": "cuenta-recurrente",
+  "name": "cuenta-recurrente",
+  "version": "1.0.0",
+  "description": "Modulo cuenta-recurrente CUSTODIO: gestiona las cuentas recurrentes del despacho de pan (cliente + pedido base + dia de la semana), genera el pedido semanal clonando el base, aplica descuento 10% por recurrencia y dispara el recordatorio '¿repites esta semana?'. Single-writer de su store por proyecto via PosPersistencia.",
+  "subscribes": [
+   "cuenta-recurrente.activar.request",
+   "cuenta-recurrente.desactivar.request",
+   "cuenta-recurrente.generar_semana.request",
+   "scheduler.tick.semanal"
+  ],
+  "publishes": [
+   "cuenta-recurrente.activada",
+   "cuenta-recurrente.desactivada",
+   "cuenta-recurrente.generar_semana.failed",
+   "cuenta-recurrente.pedido_generado",
+   "cuenta-recurrente.recordatorio_enviado"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "cupula-eventos",
+  "name": "cupula-eventos",
+  "version": "0.1.0",
+  "description": "Cúpula de eventos (runtime): el contrato del bus servido al LLM — qué eventos se emiten/atienden/conducen, quién lo hace, y dónde hay fantasmas. Índice barato + detalle a demanda.",
+  "subscribes": [
+   "cupula-eventos.buscar.request",
+   "cupula-eventos.detalle.request",
+   "cupula-eventos.fantasma.request",
+   "cupula-eventos.indice.request",
+   "cupula-eventos.rescanear.request"
+  ],
+  "publishes": [
+   "cupula-eventos.buscar.response",
+   "cupula-eventos.detalle.response",
+   "cupula-eventos.fantasma.response",
+   "cupula-eventos.indice.response",
+   "cupula-eventos.rescanear.response"
+  ],
+  "tools": [
+   "evento_indice",
+   "evento_detalle",
+   "evento_buscar",
+   "evento_fantasma"
+  ]
+ },
+ {
+  "slug": "cupula-gcode",
+  "name": "cupula-gcode",
+  "version": "0.1.0",
+  "description": "Custodio de la cupula de gcode del taller 3D: almacen de la moneda preparada para imprimir (STL/3MF origen + GCODE listo), reserva para la cola, sin re-slicing de lo ya preparado.",
+  "subscribes": [
+   "cupula-gcode.listos.request",
+   "cupula-gcode.marcar_consumido.request",
+   "cupula-gcode.obtener.request",
+   "cupula-gcode.registrar.request",
+   "cupula-gcode.reserva.request",
+   "project.activated"
+  ],
+  "publishes": [
+   "archivo.preparado",
+   "cupula-gcode.listos.response",
+   "cupula-gcode.marcar_consumido.failed",
+   "cupula-gcode.marcar_consumido.response",
+   "cupula-gcode.obtener.response",
+   "cupula-gcode.registrar.failed",
+   "cupula-gcode.registrar.response",
+   "cupula-gcode.reserva.response"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "cupula-tools",
+  "name": "cupula-tools",
+  "version": "0.2.0",
+  "description": "Cúpula de tools (runtime): buscar_capacidad + detalle_capacidad + capacidad_dominio — el LLM descubre y conduce cualquier capacidad del sistema sin cargar el catálogo entero, y puede explorar un dominio completo.",
+  "subscribes": [
+   "buscar_capacidad",
+   "capacidad_dominio",
+   "detalle_capacidad"
+  ],
+  "publishes": [
+   "buscar_capacidad.response",
+   "capacidad_dominio.response",
+   "detalle_capacidad.response"
+  ],
+  "tools": [
+   "buscar_capacidad",
+   "detalle_capacidad",
+   "capacidad_dominio"
+  ]
+ },
+ {
+  "slug": "cupulas",
+  "name": "cupulas",
+  "version": "1.1.0",
+  "description": "Boveda estilo Obsidian con prosa minima. Cupulas tematicas por TIPO DE PRIMITIVA (skill/agente/handler/blueprint/clase/...) de notas-codigo enlazadas (grafo). Reflejo JS; el LLM reutiliza via cupulas.contexto/buscar/grafo y autora via crear_cupula/add_nota. Vault = ficheros navegables + _index.json. Eje abierto (tipo es string libre); lenguaje es metadato opcional.",
+  "subscribes": [
+   "cupulas.add_nota.request",
+   "cupulas.buscar.request",
+   "cupulas.contexto.request",
+   "cupulas.crear_cupula.request",
+   "cupulas.get_nota.request",
+   "cupulas.grafo.request",
+   "cupulas.listar_cupulas.request",
+   "cupulas.listar_notas.request",
+   "cupulas.set_visibilidad.request",
+   "cupulas.visibilidad.request",
+   "cupulas.vista_proyecto.request",
+   "interruptor.solicitar_registro"
+  ],
+  "publishes": [
+   "cupulas.cupula_creada",
+   "cupulas.nota_creada",
+   "cupulas.visibilidad_cambiada",
+   "cupulas.vista_computada"
+  ],
+  "tools": [
+   "cupulas.vista_proyecto",
+   "cupulas.set_visibilidad",
+   "cupulas.visibilidad",
+   "cupulas.contexto",
+   "cupulas.buscar",
+   "cupulas.grafo",
+   "cupulas.get_nota",
+   "cupulas.listar_cupulas",
+   "cupulas.crear_cupula",
+   "cupulas.add_nota"
+  ]
+ },
+ {
+  "slug": "dashboard",
+  "name": "dashboard",
+  "version": "3.0.0",
+  "description": "Observability Dashboard - Web UI bus-driven para monitorear todos los cores en la red en tiempo real (active cores via discovery, logs streaming SSE, events streaming SSE, metrics agregadas). Buffers in-memory (logBuffer, eventBuffer) populados por suscripcion al bus (core/+/logs/#, core/+/events/#).",
+  "subscribes": [
+   "core/+/events/#",
+   "core/+/logs/#",
+   "core/+/metrics/#"
+  ],
+  "publishes": [],
+  "tools": []
+ },
+ {
+  "slug": "database-manager",
+  "name": "database-manager",
+  "version": "3.0.0",
+  "description": "SQLite por proyecto: CRUD de DBs + ejecución de queries + inicialización de schemas + persist de alto nivel + tools del LLM. Una DB SQLite por proyecto en <basePath>/db/<slug>.sqlite (estructura nueva) o data/projects/<id>/db.sqlite (legacy system + _prompts).",
+  "subscribes": [
+   "db.persist.request",
+   "db.query.request",
+   "db.schema.init.request"
+  ],
+  "publishes": [
+   "db.created",
+   "db.deleted",
+   "db.persist.response",
+   "db.query.executed",
+   "db.query.response",
+   "db.schema.init.response",
+   "db.schema.initialized"
+  ],
+  "tools": [
+   "db.query",
+   "db.tables",
+   "db.schema",
+   "db.execute"
+  ]
+ },
+ {
+  "slug": "destilador",
+  "name": "destilador",
+  "version": "0.7.0",
+  "description": "El lazo de aprendizaje del sistema (Minero + Cola+Publicador + Auto-mejora). HIBRIDO: el reflejo (JS) mina el bus y sella/publica skills; el blueprint (LLM) redacta la skill desde los registros. PASO 1 (Minero): agrupa eventos del scope por correlation_id en trazas, las reduce a una FIRMA y, cuando una firma se repite >= umbral, emite aprendizaje.candidata.detectada. PASO 2 (Cola+Publicador): el b",
+  "subscribes": [
+   "destilador.encolar_candidata.request",
+   "destilador.leer_registros.request",
+   "destilador.ruta.request",
+   "fs.read.response",
+   "interruptor.cambiado",
+   "project.activated"
+  ],
+  "publishes": [
+   "aprendizaje.candidata.detectada",
+   "aprendizaje.candidata.encolada",
+   "aprendizaje.revision.requerida",
+   "aprendizaje.skill.creada",
+   "destilador.ruta.response",
+   "interruptor.registrar"
+  ],
+  "tools": [
+   "destilador.listar_clusters",
+   "destilador.ruta",
+   "destilador.listar_candidatas",
+   "destilador.aprobar",
+   "destilador.rechazar",
+   "destilador.listar_salud_skills"
+  ]
+ },
+ {
+  "slug": "device-health",
+  "name": "device-health",
+  "version": "2.0.0",
+  "description": "Observador puro de la flota IoT — uptime, alertas (offline prolongado, reconnect-loops, OTA fallidos) y reportes periódicos. NO toma acciones correctivas.",
+  "subscribes": [
+   "device.offline",
+   "device.online",
+   "firmware.ota_completed",
+   "firmware.ota_failed"
+  ],
+  "publishes": [
+   "health.alert.offline",
+   "health.alert.ota_failed",
+   "health.alert.reconnect_loop",
+   "health.report"
+  ],
+  "tools": [
+   "health.dashboard",
+   "health.device_history",
+   "health.alerts"
+  ]
+ },
+ {
+  "slug": "device-registry",
+  "name": "device-registry",
+  "version": "2.0.0",
+  "description": "Fuente única de verdad de todos los dispositivos IoT del sistema — ESP32, gateways, periféricos manuales",
+  "subscribes": [
+   "device.register",
+   "device.unregister"
+  ],
+  "publishes": [
+   "device.offline",
+   "device.online",
+   "device.registered",
+   "device.unregistered",
+   "device.updated"
+  ],
+  "tools": [
+   "devices.list",
+   "devices.get",
+   "devices.stats"
+  ]
+ },
+ {
+  "slug": "device-shadow",
+  "name": "device-shadow",
+  "version": "2.0.0",
+  "description": "Sincronización bidireccional de estado desired/reported/delta entre servidor y dispositivos IoT",
+  "subscribes": [
+   "shadow.set_desired"
+  ],
+  "publishes": [
+   "shadow.delta",
+   "shadow.synced",
+   "shadow.updated"
+  ],
+  "tools": [
+   "shadow.get_full",
+   "shadow.set_desired",
+   "shadow.get_delta"
+  ]
+ },
+ {
+  "slug": "disenador_parametrico",
+  "name": "disenador_parametrico",
+  "version": "0.1.0",
+  "description": "Diseñador paramétrico 3D: genera código OpenSCAD, exporta STL via MCP y estima tiempos de impresión.",
+  "subscribes": [
+   "disenador.estimar_tiempo.request",
+   "disenador.generar_stl.request",
+   "project.activated"
+  ],
+  "publishes": [
+   "disenador.generar_stl.failed",
+   "disenador.stl_generado"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "ejecutor",
+  "name": "ejecutor",
+  "version": "0.3.0",
+  "description": "Puerta guardada para ejecutar comandos con reja (hardline + aprobación humana graduada + audit). Reflejo puro. El chat entra por aquí; shell.exec crudo queda para uso interno de reflejos.",
+  "subscribes": [
+   "ejecutor.ejecutar.request",
+   "interruptor.cambiado",
+   "interruptor.solicitar_registro"
+  ],
+  "publishes": [
+   "ejecutor.aprobacion.pendiente",
+   "ejecutor.ejecutar.response",
+   "ejecutor.invocado",
+   "interruptor.registrar"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "entrega",
+  "name": "entrega",
+  "version": "0.1.0",
+  "description": "Entrega: estimación de tiempo de preparación/entrega y política de reparto (the-pirate).",
+  "subscribes": [
+   "entrega.reglas.actualizar.request",
+   "entrega.reglas.leer.request",
+   "entrega.reparto.obtener.request",
+   "entrega.tiempo.estimar.request"
+  ],
+  "publishes": [
+   "entrega.reglas.actualizadas"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "envase-embalaje",
+  "name": "envase-embalaje",
+  "version": "0.1.0",
+  "description": "Envase y embalaje: elección por tipo de producto y stock de envases (the-pirate).",
+  "subscribes": [
+   "envase.eleccion.obtener.request",
+   "envase.reglas.actualizar.request",
+   "envase.reglas.leer.request",
+   "envase.stock.obtener.request"
+  ],
+  "publishes": [
+   "envase.reglas.actualizadas"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "escribano",
+  "name": "escribano",
+  "version": "0.1.0",
+  "description": "Puerta de escritura de la bóveda de conocimiento: escribe notas Obsidian directamente en boveda/ del repo (el humano commitea y empuja). Hermano escritor del bibliotecario. Llamador natural: el agente acumulador-sectorial en su fase GUARDAR.",
+  "subscribes": [
+   "escribano.escribir.request",
+   "escribano.pendientes.request"
+  ],
+  "publishes": [
+   "escribano.escribir.response",
+   "escribano.nota.escrita",
+   "escribano.pendientes.response"
+  ],
+  "tools": [
+   "escribano.escribir",
+   "escribano.pendientes"
+  ]
+ },
+ {
+  "slug": "esp32-dev",
+  "name": "esp32-dev",
+  "version": "2.0.0",
+  "description": "Desarrollo ESP32: templates, scaffolding de proyectos y compilación de firmware. v2.0.0: helpers POC2, error shape canónico { code, message, details? }, tracing.propaga_correlation_id declarado.",
+  "subscribes": [],
+  "publishes": [
+   "esp32.build_completed",
+   "esp32.build_failed",
+   "esp32.build_started",
+   "esp32.project_created"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "esp32-flasher",
+  "name": "esp32-flasher",
+  "version": "2.0.0",
+  "description": "Flash de firmware a ESP32 via serial (esptool/platformio) y monitor serial en tiempo real. Tambien hace bridge MQTT enki/<project>/debug/<device> → flash.serial_output para debug remoto. Multi-tenant con project_id opcional propagado a todos los publishes.",
+  "subscribes": [
+   "firmware.build_completed"
+  ],
+  "publishes": [
+   "flash.completed",
+   "flash.failed",
+   "flash.progress",
+   "flash.serial_output",
+   "flash.started"
+  ],
+  "tools": [
+   "flash.list_ports",
+   "flash.start",
+   "flash.status",
+   "flash.history",
+   "flash.cancel",
+   "flash.monitor_start",
+   "flash.monitor_stop",
+   "flash.monitor_send"
+  ]
+ },
+ {
+  "slug": "estados",
+  "name": "estados",
+  "version": "0.4.0",
+  "description": "Cúpula de estados: listas ordenadas (notas/tareas/compras/chef/proceso) con orden libre|estricto y freno entre pasos. Custodio single-writer; la heredan por bus, por nervio y por plantilla de proceso.",
+  "subscribes": [
+   "estados.activar.request",
+   "estados.anadir.request",
+   "estados.avanzar.request",
+   "estados.borrar.request",
+   "estados.crear.request",
+   "estados.estado.request",
+   "estados.evaluar.request",
+   "estados.fijar_objetivo.request",
+   "estados.instanciar.request",
+   "estados.listar.request",
+   "estados.marcar.request"
+  ],
+  "publishes": [],
+  "tools": [
+   "crear_lista",
+   "anadir_paso",
+   "completar_paso",
+   "ver_listas",
+   "borrar_lista",
+   "fijar_objetivo",
+   "evaluar_rail"
+  ]
+ },
+ {
+  "slug": "evaluador",
+  "name": "evaluador",
+  "version": "0.1.0",
+  "description": "Dictamina fichas del radar contra los 6 criterios fijos (reglas explícitas, no inventa evidencia).",
+  "subscribes": [
+   "evaluador.evaluar.request",
+   "evaluador.ficha.request"
+  ],
+  "publishes": [
+   "evaluador.evaluar.failed",
+   "evaluador.veredicto_emitido"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "facturacion/asesoria",
+  "name": "asesoria",
+  "version": "2.0.0",
+  "description": "Genera paquetes fiscales (CSV formato espaniol + ZIP con originales) on-demand para asesoria contable. Lee facturas procesadas via local.facturas-db, empaqueta via local.zip. Topics MQTT canonicos invocados desde frontend Svelte (frontend/src/lib/stores/facturas.ts): asesoria.{generar-paquete,historial,descargar,preview}.",
+  "subscribes": [],
+  "publishes": [
+   "asesoria.paquete.error",
+   "asesoria.paquete.generado"
+  ],
+  "tools": [
+   "asesoria.generar-paquete",
+   "asesoria.historial"
+  ]
+ },
+ {
+  "slug": "facturacion/fuentes",
+  "name": "fuentes",
+  "version": "2.0.0",
+  "description": "Adaptador strategy-pattern de fuentes de entrada de facturas (Telegram push, Gmail pull, extensible). Subscribe a telegram.{photo,document}.received, dispatch a strategies, emite factura.entrada con shape canonico { projectId, filePath, source, origen, correlation_id, project_id, timestamp } consumido por el modulo facturas.",
+  "subscribes": [
+   "telegram.document.received",
+   "telegram.photo.received"
+  ],
+  "publishes": [
+   "factura.entrada"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "facturas",
+  "name": "facturas",
+  "version": "3.0.0",
+  "description": "Procesamiento comercial de facturas: pipeline step-based con agentes IA, validacion y observabilidad. Pipeline v2 (Intake → Convert → Prepare → OCR → Structure (IA) → Validate → Store).",
+  "subscribes": [
+   "factura.entrada"
+  ],
+  "publishes": [
+   "factura.error",
+   "factura.exportada",
+   "factura.procesada",
+   "factura.recibida",
+   "telegram.send_message.request"
+  ],
+  "tools": [
+   "facturas.procesar",
+   "facturas.listar",
+   "facturas.estadisticas"
+  ]
+ },
+ {
+  "slug": "feeder",
+  "name": "feeder",
+  "version": "0.4.0",
+  "description": "Alimentador público de la cantera: ingiere cualquier SKILL.md externo (skills.sh, npx skills, un .md pegado) a la cantera vía cosecha.importar. El núcleo (ingerir) es determinista y testeable; la adquisición por `npx skills` degrada limpio si el CLI no está.",
+  "subscribes": [
+   "feeder.buscar.request",
+   "feeder.ingerir.request",
+   "feeder.instalar.request"
+  ],
+  "publishes": [
+   "cosecha.importar.request",
+   "feeder.buscar.response",
+   "feeder.ingerir.response",
+   "feeder.instalar.response"
+  ],
+  "tools": [
+   "buscar_fuera",
+   "traer_skill"
+  ]
+ },
+ {
+  "slug": "filamento",
+  "name": "filamento",
+  "version": "0.1.0",
+  "description": "Custodio del stock de filamento del taller 3D: bobinas por proyecto, decremento por gramo medido, cambio de rollo y umbral de reposicion (avisa, no decide).",
+  "subscribes": [
+   "filamento.cambiar.request",
+   "filamento.descontar.request",
+   "filamento.evaluar.request",
+   "filamento.registrar.request",
+   "project.activated"
+  ],
+  "publishes": [
+   "filamento.cambiar.failed",
+   "filamento.cambiar.response",
+   "filamento.descontar.failed",
+   "filamento.descontar.response",
+   "filamento.evaluar.response",
+   "filamento.registrar.response",
+   "material.actualizado",
+   "material.bajo"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "filesystem",
+  "name": "filesystem",
+  "version": "2.4.0",
+  "description": "Operaciones de filesystem para todo el sistema. Acceso scopeado por el project_id de la PETICIÓN (multi-tenant real; storage/ subdir) con fallback a proyecto activo + system mode (Sistema project = root). 14 ui_handlers + 14 tools del LLM + 14 bus handlers fs.*.request/response + 3 spanish handlers. v2.0.0: 5 helpers POC2, todos los handlers shape canonico { status, data | error: { code, message, ",
+  "subscribes": [
+   "archivo.borrar.solicitado",
+   "archivo.leer.solicitado",
+   "archivo.listar.solicitado",
+   "fs.append.request",
+   "fs.copy.request",
+   "fs.delete.request",
+   "fs.edit.request",
+   "fs.exists.request",
+   "fs.info.request",
+   "fs.list.request",
+   "fs.list_modules.request",
+   "fs.mkdir.request",
+   "fs.move.request",
+   "fs.read.request",
+   "fs.read_module.request",
+   "fs.rename.request",
+   "fs.search.request",
+   "fs.stats.request",
+   "fs.write.commit.request",
+   "fs.write.request",
+   "interruptor.cambiado",
+   "project.activated",
+   "project.deactivated"
+  ],
+  "publishes": [
+   "archivo.borrado",
+   "archivo.borrar.fallido",
+   "archivo.leer.fallido",
+   "archivo.leido",
+   "archivo.listado",
+   "archivo.listar.fallido",
+   "fs.append.response",
+   "fs.copy.response",
+   "fs.delete.response",
+   "fs.directory.created",
+   "fs.edit.response",
+   "fs.escritura.ajena",
+   "fs.exists.response",
+   "fs.file.created",
+   "fs.file.deleted",
+   "fs.file.updated",
+   "fs.info.response",
+   "fs.list.response",
+   "fs.mkdir.response",
+   "fs.move.response",
+   "fs.read.response",
+   "fs.rename.response",
+   "fs.search.response",
+   "fs.stats.response",
+   "fs.workdir.changed",
+   "fs.write.response",
+   "interruptor.registrar"
+  ],
+  "tools": [
+   "fs.list",
+   "fs.read",
+   "fs.list_modules",
+   "fs.read_module",
+   "fs.write",
+   "fs.edit",
+   "fs.delete",
+   "fs.mkdir",
+   "fs.move",
+   "fs.copy",
+   "fs.search",
+   "fs.info",
+   "fs.cleanup",
+   "fs.stats",
+   "fs.set_work_dir",
+   "fs.get_work_dir",
+   "fs.append"
+  ]
+ },
+ {
+  "slug": "firmware-builder",
+  "name": "firmware-builder",
+  "version": "2.0.0",
+  "description": "Compilación de firmware ESP32 por convención: detecta drivers en firmware/drivers/ y compila via PlatformIO. v2.0.0 (POC2): helpers canónicos, error shape { code, message, details? }, correlation_id propagado, persistence pattern declarado.",
+  "subscribes": [],
+  "publishes": [
+   "firmware.build_completed",
+   "firmware.build_failed",
+   "firmware.build_started"
+  ],
+  "tools": [
+   "builder.list_drivers",
+   "builder.build",
+   "builder.build_status",
+   "builder.list_boards"
+  ]
+ },
+ {
+  "slug": "firmware-manager",
+  "name": "firmware-manager",
+  "version": "3.0.0",
+  "description": "Registro de firmwares, versionado con checksums, y orquestación de OTA via device-shadow",
+  "subscribes": [
+   "device.registered",
+   "esp32.build_completed",
+   "firmware.build_completed",
+   "shadow.updated"
+  ],
+  "publishes": [
+   "firmware.ota_completed",
+   "firmware.ota_failed",
+   "firmware.ota_requested",
+   "firmware.registered"
+  ],
+  "tools": [
+   "firmware.list",
+   "firmware.info",
+   "firmware.list_by_project",
+   "firmware.register",
+   "firmware.trigger_ota",
+   "firmware.ota_status",
+   "firmware.update_meta"
+  ]
+ },
+ {
+  "slug": "gateway-manager",
+  "name": "gateway-manager",
+  "version": "2.0.0",
+  "description": "Ciclo de vida de gateways software que traducen MQTT a protocolos nativos (TCP, BLE, USB, CMD). Un gateway es un 'ESP32 virtual' indistinguible de un ESP32 real (mismo contrato MQTT: birth, status, command, ack).",
+  "subscribes": [],
+  "publishes": [
+   "gateway.device_found",
+   "gateway.device_lost",
+   "gateway.error",
+   "gateway.started",
+   "gateway.stopped"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "hermes-bridge",
+  "name": "hermes-bridge",
+  "version": "1.0.0",
+  "description": "Dispatcher de tools para Hermes — extrae _executeToolCall de ai-gateway como servicio HTTP autenticado. Hermes (Python) llama POST /modules/hermes-bridge/execute con Bearer token; el bridge despacha via ruta directa (handler en módulo) o fallback por bus.",
+  "subscribes": [
+   "core.started"
+  ],
+  "publishes": [],
+  "tools": []
+ },
+ {
+  "slug": "hermes-gateway",
+  "name": "hermes-gateway",
+  "version": "1.0.0",
+  "description": "Expone todo el toolsRegistry de Enki por MQTT. Cualquier proceso externo (motor-hermes Rust, enki-movil, motores enki-sense) puede invocar tools sin HTTP. Delega el dispatch a hermes-bridge (3 rutas: bus universal, directa, fallback).",
+  "subscribes": [],
+  "publishes": [],
+  "tools": []
+ },
+ {
+  "slug": "hermes-relay",
+  "name": "hermes-relay",
+  "version": "1.0.0",
+  "description": "Pipe puro: chat.message.saved → Hermes /v1/chat/completions → ai.chat.response. Reemplaza prompt-builder + ai-gateway en la cadena conversacional.",
+  "subscribes": [
+   "chat.message.saved",
+   "db.query.response"
+  ],
+  "publishes": [
+   "ai.chat.failed",
+   "ai.chat.response"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "historial",
+  "name": "historial",
+  "version": "0.1.0",
+  "description": "Historial append-only de impresiones del taller 3D: registro de dato medido (gramos y tiempo reales) por modelo, proyecto aislado.",
+  "subscribes": [
+   "historial.borrar.request",
+   "historial.por_modelo.request",
+   "historial.recientes.request",
+   "historial.registrar.request",
+   "project.activated"
+  ],
+  "publishes": [
+   "historial.borrar.response",
+   "historial.por_modelo.response",
+   "historial.recientes.response",
+   "historial.registrar.failed",
+   "historial.registrar.response",
+   "impresion.registrada",
+   "pieza.imprimida"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "homeostasis",
+  "name": "homeostasis",
+  "version": "1.0.0",
+  "description": "El termostato del sistema: siente las señales de peligro (fantasma, *.failed, health.alert, revisión de skills), sube la temperatura de la fuente y, si cruza el umbral de fiebre, INHIBE esa facultad en caliente (interruptor.set) — soltándola al enfriarse. Respuesta graduada, conservadora, con testigo. Nace inhibida.",
+  "subscribes": [
+   "aprendizaje.revision.requerida",
+   "chat.fantasma_sospechado",
+   "health.alert.offline",
+   "health.alert.ota_failed",
+   "health.alert.reconnect_loop",
+   "interruptor.cambiado",
+   "interruptor.registrar",
+   "interruptor.solicitar_registro"
+  ],
+  "publishes": [
+   "homeostasis.accion",
+   "homeostasis.alerta",
+   "homeostasis.apoptosis",
+   "homeostasis.recuperado",
+   "interruptor.registrar",
+   "interruptor.set"
+  ],
+  "tools": [
+   "homeostasis.estado"
+  ]
+ },
+ {
+  "slug": "importacion",
+  "name": "importacion",
+  "version": "0.1.0",
+  "description": "Conversor de importacion de modelos del taller 3D: STL/3MF/GCODE entran con sus metadatos (puerto LectorArchivo) y se entregan al catalogo o a la cupula segun su formato.",
+  "subscribes": [
+   "importacion.importar.request",
+   "importacion.leer_metadatos.request"
+  ],
+  "publishes": [
+   "importacion.importar.failed",
+   "importacion.importar.response",
+   "importacion.leer_metadatos.response"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "interfaz",
+  "name": "interfaz",
+  "version": "0.1.0",
+  "description": "Superficie de dominio del dueño del radar: ver, confirmar, añadir y corregir candidatos.",
+  "subscribes": [
+   "interfaz.anadir_manual.request",
+   "interfaz.confirmar_veredicto.request",
+   "interfaz.corregir_ficha.request",
+   "interfaz.listar.request",
+   "interfaz.ver.request"
+  ],
+  "publishes": [
+   "interfaz.candidato_manual_anadido",
+   "interfaz.confirmar_veredicto.failed",
+   "interfaz.veredicto_confirmado"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "interruptores",
+  "name": "interruptores",
+  "version": "1.2.0",
+  "description": "Registro central de on/off del sistema (el panel de control). Un solo sitio para todos los botones: cada feature registra su interruptor al cargar (interruptor.registrar); el panel de la barra lateral los pinta; al pulsarlos, interruptor.cambiado avisa al dueño para que reaccione en caliente sin reinicio. Estado global persistido en data/interruptores.json (el estado tocado por el humano manda sob",
+  "subscribes": [
+   "interruptor.registrar",
+   "interruptor.set",
+   "interruptores.estado.request"
+  ],
+  "publishes": [
+   "interruptor.cambiado",
+   "interruptor.solicitar_registro"
+  ],
+  "tools": [
+   "interruptores.listar",
+   "interruptores.set"
+  ]
+ },
+ {
+  "slug": "inventario",
+  "name": "inventario",
+  "version": "1.0.0",
+  "description": "Inventario por proyecto con stock_real + reservas con expiracion. Multi-proyecto: cada proyecto tiene su propio data/projects/<slug>/inventario.json con shape { productos: { <id>: { nombre, stock_real, stock_minimo, reservas: [{ pedido_id, cantidad, expira_at }] } } }. Stock disponible = stock_real - suma(reservas vivas). Cierra clase de bugs 'salmorejo perdido' (audit cross-blueprint 2026-05-25) ",
+  "subscribes": [
+   "pedido.cancelado",
+   "pedido.completado"
+  ],
+  "publishes": [
+   "inventario.ajustado",
+   "inventario.confirmado",
+   "inventario.reserva.creada",
+   "inventario.reserva.expirada",
+   "inventario.reserva.liberada",
+   "inventario.stock.bajo_minimo"
+  ],
+  "tools": [
+   "inventario.consultar",
+   "inventario.reservar",
+   "inventario.confirmar",
+   "inventario.liberar",
+   "inventario.ajustar",
+   "inventario.estado_catalogo"
+  ]
+ },
+ {
+  "slug": "invitaciones",
+  "name": "invitaciones",
+  "version": "1.0.0",
+  "description": "Subsistema de la cadena de delegacion de capacidades. El admin del sistema (y luego los admins de proyecto) EMITEN invitaciones firmadas que otros REDIMEN para obtener un cert scopeado a {project, role}. Cablea el banco puro _shared/invitaciones con la firma real (R1: la CA raiz firma via certificate-authority.sign-invitation). Persiste las emitidas para listar/revocar/contar usos. La redencion es",
+  "subscribes": [],
+  "publishes": [
+   "invitacion.emitida",
+   "invitacion.redimida",
+   "invitacion.revocada"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "lentes-diseno",
+  "name": "lentes-diseno",
+  "version": "2.3.0",
+  "description": "Cuenco de lentes: reflejo puro que auto-descubre packs de conocimiento (packs/<dominio>/) y los sirve por el bus. Base compartida que cualquier página bebe (diseño/copy/negocio). Anatomía de órgano: memoria + motor + químico + evento.",
+  "subscribes": [
+   "lente.co_uso",
+   "lentes.desmontar.request",
+   "lentes.listar.request",
+   "lentes.montar.request",
+   "lentes.motor.request",
+   "lentes.obtener.request",
+   "lentes.vecinas.request"
+  ],
+  "publishes": [
+   "lente.co_uso",
+   "lente.registrar",
+   "lentes.desmontar.response",
+   "lentes.listar.response",
+   "lentes.montar.response",
+   "lentes.motor.response",
+   "lentes.obtener.response",
+   "negocio.pulso"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "log-manager",
+  "name": "log-manager",
+  "version": "2.1.0",
+  "description": "Sistema centralizado de logs por sesión. Cada arranque crea una nueva sesión con logs organizados por módulo. Configurable para trackear módulos específicos.",
+  "subscribes": [
+   "activity.batch",
+   "activity.logged",
+   "core/+/logs/#"
+  ],
+  "publishes": [],
+  "tools": []
+ },
+ {
+  "slug": "lotes",
+  "name": "lotes",
+  "version": "0.1.0",
+  "description": "Ciclo de vida de lotes de producción con ventana de uso, ocupación y avisos (genérico).",
+  "subscribes": [
+   "lote.avanzar.request",
+   "lote.config.actualizar.request",
+   "lote.config.leer.request",
+   "lote.crear.request",
+   "lote.estado.consultar.request",
+   "lote.ocupacion.consultar.request",
+   "lote.ventana.consultar.request"
+  ],
+  "publishes": [
+   "lote.config.actualizado",
+   "lote.creado",
+   "lote.estado.avanzado"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "manejo-fallo",
+  "name": "manejo-fallo",
+  "version": "reflejo-0.1.0",
+  "description": "Al fallar una impresion avisa SIEMPRE y consulta la politica al dueno (reintentar/saltar/decision abierta). CERO juicio: no decide la accion por su cuenta.",
+  "subscribes": [
+   "manejo-fallo.manejar.request"
+  ],
+  "publishes": [
+   "manejo-fallo.manejar.failed",
+   "manejo-fallo.manejar.response"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "marca-cliente",
+  "name": "marca-cliente",
+  "version": "0.1.0",
+  "description": "Relación con el cliente: voz de marca, presencia digital, clientes y fidelización (the-pirate).",
+  "subscribes": [
+   "marca.cliente.obtener.request",
+   "marca.fidelizacion.obtener.request",
+   "marca.presencia.obtener.request",
+   "marca.reglas.actualizar.request",
+   "marca.reglas.leer.request",
+   "marca.voz.obtener.request"
+  ],
+  "publishes": [
+   "marca.reglas.actualizadas"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "marketing-analytics",
+  "name": "marketing-analytics",
+  "version": "0.1.0",
+  "description": "Medición de marketing: métricas (KPIs), experimentación (A/B), atribución (crédito por acción) y reporting. El módulo más híbrido del ecosistema.",
+  "subscribes": [
+   "marketing.analytics.get.request",
+   "marketing.analytics.update.request",
+   "project.activated"
+  ],
+  "publishes": [
+   "marketing.analytics.actualizado"
+  ],
+  "tools": [
+   "marketing-analytics.get",
+   "marketing-analytics.update"
+  ]
+ },
+ {
+  "slug": "marketing-audience",
+  "name": "marketing-audience",
+  "version": "0.1.0",
+  "description": "Audiencia de marketing del proyecto: segmentos declarativos + personas (manuales o generadas por LLM). Híbrido reflejo + blueprint.",
+  "subscribes": [
+   "marketing.audience.get.request",
+   "marketing.audience.update.request",
+   "project.activated"
+  ],
+  "publishes": [
+   "marketing.audience.actualizada",
+   "marketing.audience.generar-persona.response"
+  ],
+  "tools": [
+   "marketing-audience.get",
+   "marketing-audience.update"
+  ]
+ },
+ {
+  "slug": "marketing-automation",
+  "name": "marketing-automation",
+  "version": "0.1.0",
+  "description": "Automatización de marketing: flujos con trigger, pasos deterministas, reglas de bifurcación e historial inmutable.",
+  "subscribes": [
+   "marketing.automation.get.request",
+   "marketing.automation.update.request",
+   "project.activated"
+  ],
+  "publishes": [
+   "marketing.automation.actualizado"
+  ],
+  "tools": [
+   "marketing-automation.get",
+   "marketing-automation.update"
+  ]
+ },
+ {
+  "slug": "marketing-budget",
+  "name": "marketing-budget",
+  "version": "0.1.0",
+  "description": "Presupuesto de marketing del proyecto: asignación por partida, registro de gastos y control presupuestario. Reflejo puro con custodia contable.",
+  "subscribes": [
+   "marketing.budget.get.request",
+   "marketing.budget.update.request",
+   "project.activated"
+  ],
+  "publishes": [
+   "marketing.budget.actualizado",
+   "marketing.budget.alerta"
+  ],
+  "tools": [
+   "marketing-budget.get",
+   "marketing-budget.update"
+  ]
+ },
+ {
+  "slug": "marketing-calendar",
+  "name": "marketing-calendar",
+  "version": "0.1.0",
+  "description": "Calendario editorial del proyecto: planificación de acciones, estacionalidad y cadencia por canal. Reflejo puro con custodia de completitud.",
+  "subscribes": [
+   "marketing.calendar.get.request",
+   "marketing.calendar.update.request",
+   "project.activated"
+  ],
+  "publishes": [
+   "marketing.calendar.actualizado"
+  ],
+  "tools": [
+   "marketing-calendar.get",
+   "marketing-calendar.update"
+  ]
+ },
+ {
+  "slug": "marketing-campaigns",
+  "name": "marketing-campaigns",
+  "version": "0.1.0",
+  "description": "Campañas de marketing: briefing, assets, lanzamiento, cierre con veredicto. Híbrido reflejo + blueprint.",
+  "subscribes": [
+   "marketing.campaigns.get.request",
+   "marketing.campaigns.update.request",
+   "project.activated"
+  ],
+  "publishes": [
+   "marketing.campaigns.actualizado"
+  ],
+  "tools": [
+   "marketing-campaigns.get",
+   "marketing-campaigns.update"
+  ]
+ },
+ {
+  "slug": "marketing-channels",
+  "name": "marketing-channels",
+  "version": "0.1.0",
+  "description": "Canales de marketing del proyecto: catálogo vivo por clasificación con estado operativo y vigilancia. Reflejo puro — registra, valida, vigila.",
+  "subscribes": [
+   "marketing.channels.get.request",
+   "marketing.channels.update.request",
+   "project.activated"
+  ],
+  "publishes": [
+   "marketing.channels.actualizado"
+  ],
+  "tools": [
+   "marketing-channels.get",
+   "marketing-channels.update"
+  ]
+ },
+ {
+  "slug": "marketing-competitors",
+  "name": "marketing-competitors",
+  "version": "0.1.0",
+  "description": "Competencia de marketing del proyecto: registro de competidores, monitorización, benchmarking y diferenciación. Reflejo puro con conversor integrado.",
+  "subscribes": [
+   "marketing.competitors.get.request",
+   "marketing.competitors.update.request",
+   "project.activated"
+  ],
+  "publishes": [
+   "marketing.competitors.actualizado"
+  ],
+  "tools": [
+   "marketing-competitors.get",
+   "marketing-competitors.update"
+  ]
+ },
+ {
+  "slug": "marketing-content",
+  "name": "marketing-content",
+  "version": "0.1.0",
+  "description": "Catálogo de piezas de contenido del proyecto: formato, canal, funnel, ciclo de vida y reutilización (fragmentación madre→hijas). Híbrido reflejo + blueprint.",
+  "subscribes": [
+   "marketing.content.get.request",
+   "marketing.content.update.request",
+   "project.activated"
+  ],
+  "publishes": [
+   "marketing.content.actualizado"
+  ],
+  "tools": [
+   "marketing-content.get",
+   "marketing-content.update"
+  ]
+ },
+ {
+  "slug": "marketing-funnel",
+  "name": "marketing-funnel",
+  "version": "0.1.0",
+  "description": "Embudo de marketing: etapas, flujos de conversión y detección de cuellos de botella. Reflejo puro con custodia y conversor JS.",
+  "subscribes": [
+   "marketing.funnel.get.request",
+   "marketing.funnel.update.request",
+   "project.activated"
+  ],
+  "publishes": [
+   "marketing.funnel.actualizado"
+  ],
+  "tools": [
+   "marketing-funnel.get",
+   "marketing-funnel.update"
+  ]
+ },
+ {
+  "slug": "marketing-relations",
+  "name": "marketing-relations",
+  "version": "0.1.0",
+  "description": "Relación con la audiencia: suscriptores, consentimiento, preferencias e historial de interacciones inmutable.",
+  "subscribes": [
+   "marketing.relations.get.request",
+   "marketing.relations.update.request",
+   "project.activated"
+  ],
+  "publishes": [
+   "marketing.relations.actualizado"
+  ],
+  "tools": [
+   "marketing-relations.get",
+   "marketing-relations.update"
+  ]
+ },
+ {
+  "slug": "marketing-strategy",
+  "name": "marketing-strategy",
+  "version": "0.1.0",
+  "description": "Estrategia de marketing del proyecto: posicionamiento y objetivos medibles. Reflejo puro — almacena, valida, no interpreta.",
+  "subscribes": [
+   "marketing.strategy.get.request",
+   "marketing.strategy.update.request",
+   "project.activated"
+  ],
+  "publishes": [
+   "marketing.strategy.actualizada"
+  ],
+  "tools": [
+   "marketing-strategy.get",
+   "marketing-strategy.update"
+  ]
+ },
+ {
+  "slug": "masa",
+  "name": "masa",
+  "version": "0.1.0",
+  "description": "Reglas y conversores de masa: gramajes, rendimiento y reamasado (the-pirate).",
+  "subscribes": [
+   "masa.gramaje.calcular.request",
+   "masa.reamasado.calcular.request",
+   "masa.reglas.actualizar.request",
+   "masa.reglas.leer.request",
+   "masa.rendimiento.calcular.request"
+  ],
+  "publishes": [
+   "masa.reglas.actualizadas"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "metricas",
+  "name": "metricas",
+  "version": "2.0.0",
+  "description": "Instrumentación pasiva del sistema — escucha wildcards de sufijo (*.creado/*.actualizado/*.eliminado/*.error/*.completado) y mantiene counters + gauges + timings agregados. Publica metricas.snapshot periódico. NO se mide a sí mismo (recursión).",
+  "subscribes": [
+   "*.actualizado",
+   "*.completado",
+   "*.creado",
+   "*.eliminado",
+   "*.error"
+  ],
+  "publishes": [
+   "metricas.snapshot"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "mise-en-place",
+  "name": "mise-en-place",
+  "version": "1.0.0",
+  "description": "Planificacion previa al servicio: escalado de recetas a porciones objetivo, planes de produccion (que recetas en que franja con cuantas porciones), consolidacion de listas de compra agregando ingredientes a lo largo de un horizonte. Eventos canonicos con prefix 'produccion.*' (decision del sub-contrato). Modulo del subsistema-recetario (ver arquitectura/decisiones/_contratos/subsistema-recetario.c",
+  "subscribes": [
+   "fs.read.response",
+   "fs.write.response",
+   "masa.gramaje.calcular.response",
+   "masa.reglas.leer.response",
+   "masa.rendimiento.calcular.response",
+   "produccion.compra.calcular",
+   "produccion.escalado.calcular",
+   "produccion.plan.aprobar",
+   "produccion.plan.cerrar",
+   "produccion.plan.ejecutar",
+   "produccion.plan.obtener",
+   "produccion.plan.publicar",
+   "produccion.planes.listar",
+   "produccion.retroplanning.calcular",
+   "project.activated",
+   "project.get.response"
+  ],
+  "publishes": [
+   "produccion.compra.calculada",
+   "produccion.escalado.calculado",
+   "produccion.plan.estado.avanzado",
+   "produccion.plan.publicado",
+   "produccion.retroplanning.calculado",
+   "produccion.tandas.agrupadas"
+  ],
+  "tools": [
+   "produccion.escalado.calcular",
+   "produccion.plan.publicar",
+   "produccion.compra.calcular",
+   "produccion.plan.obtener",
+   "produccion.planes.listar",
+   "produccion.retroplanning.calcular",
+   "produccion.plan.aprobar",
+   "produccion.plan.ejecutar",
+   "produccion.plan.cerrar",
+   "produccion.agrupar_tandas"
+  ]
+ },
+ {
+  "slug": "motor-encadenamiento",
+  "name": "motor-encadenamiento",
+  "version": "0.1.0",
+  "description": "Reflejo que al terminar una impresion 3D elige la siguiente de la cola (cabecera YA preparada) y la encadena; si nada listo emite cola_vacia. El ciclo de impresion se construye en la tanda 4 (invocacion RPC declarada).",
+  "subscribes": [
+   "motor-encadenamiento.al_terminar.request"
+  ],
+  "publishes": [
+   "cola_vacia",
+   "motor-encadenamiento.al_terminar.failed",
+   "motor-encadenamiento.al_terminar.response"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "motor-oido",
+  "name": "motor-oido",
+  "version": "0.1.0",
+  "description": "Puente al órgano de transcripción de enki-sense (Rust nativo: candle-whisper) como órgano del bus. Audio → texto, en la máquina local. SIN botón (el guard de privacidad del micro vive en el borde), degrada limpio si el motor no está.",
+  "subscribes": [
+   "motor-oido.transcribir.request"
+  ],
+  "publishes": [
+   "motor-oido.transcribir.response"
+  ],
+  "tools": [
+   "transcribir"
+  ]
+ },
+ {
+  "slug": "motor-ojo",
+  "name": "motor-ojo",
+  "version": "0.2.0",
+  "description": "Puente al órgano de render de enki-sense (Rust nativo: SVG/PDF/imagen) como órgano del bus. Datos/markup → bytes, en la máquina local. SIN botón (operativo desde el minuto 1), degrada limpio si el motor no está.",
+  "subscribes": [
+   "motor-ojo.render.request"
+  ],
+  "publishes": [
+   "motor-ojo.render.response"
+  ],
+  "tools": [
+   "renderizar"
+  ]
+ },
+ {
+  "slug": "motor-propuesta",
+  "name": "motor-propuesta",
+  "version": "0.1.0",
+  "description": "Reflejo que ordena la cola de impresion 3D (FIFO+urgencia+preparadas) y PROPONE la proxima tanda al dueno; NO decide solo, la aprueba el jefe via cola.reordenar.",
+  "subscribes": [
+   "motor-propuesta.proponer.request"
+  ],
+  "publishes": [
+   "motor-propuesta.proponer.failed",
+   "motor-propuesta.proponer.response"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "motor-sonido",
+  "name": "motor-sonido",
+  "version": "0.1.0",
+  "description": "Puente al perceptor de sonido de enki-sense (Rust nativo, DSP). Audio → prosodia (features crudas; la emoción la pone el LLM). SIN botón, degrada limpio si el motor no está.",
+  "subscribes": [
+   "motor-sonido.analizar.request"
+  ],
+  "publishes": [
+   "motor-sonido.analizar.response"
+  ],
+  "tools": [
+   "analizar_sonido"
+  ]
+ },
+ {
+  "slug": "motor-traduce",
+  "name": "motor-traduce",
+  "version": "0.1.0",
+  "description": "Puente al órgano de traducción de enki-sense (Rust nativo: candle + MarianMT) como órgano del bus. Texto → texto en otro idioma, en la máquina local. SIN botón (operativo desde el minuto 1), degrada limpio si el motor no está.",
+  "subscribes": [
+   "motor-traduce.request"
+  ],
+  "publishes": [
+   "motor-traduce.response"
+  ],
+  "tools": [
+   "traducir"
+  ]
+ },
+ {
+  "slug": "motor-trazo",
+  "name": "motor-trazo",
+  "version": "0.1.0",
+  "description": "Puente al perceptor de trazo de enki-sense (Rust nativo, geometría). Trazos de canvas → formas (geometría cruda; la intención la pone el LLM). SIN botón, degrada limpio si el motor no está.",
+  "subscribes": [
+   "motor-trazo.interpretar.request"
+  ],
+  "publishes": [
+   "motor-trazo.interpretar.response"
+  ],
+  "tools": [
+   "interpretar_trazo"
+  ]
+ },
+ {
+  "slug": "motor-voz",
+  "name": "motor-voz",
+  "version": "0.1.0",
+  "description": "Puente al órgano de voz de enki-sense (Rust nativo, Supertonic ONNX 44.1kHz) como órgano del bus. Texto → audio hablado (31 idiomas), en la máquina local. Botón 'escuchar' en el chat; degrada limpio si el motor no está.",
+  "subscribes": [
+   "motor-voz.decir.request"
+  ],
+  "publishes": [
+   "motor-voz.config.updated",
+   "motor-voz.decir.response"
+  ],
+  "tools": [
+   "decir",
+   "configurar_voz"
+  ]
+ },
+ {
+  "slug": "nichos/ajustador-umbrales",
+  "name": "ajustador-umbrales",
+  "version": "0.1.0",
+  "description": "Custodio (K3): el jefe retunea el criterio/umbral de validacion en caliente y lo propaga a criterio-viabilidad (C2); PosPersistencia; publica nichos.umbral_ajustado.",
+  "subscribes": [
+   "nichos.umbral.retunear.request",
+   "project.activated"
+  ],
+  "publishes": [
+   "nichos.umbral.retunear.failed",
+   "nichos.umbral_ajustado"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "nichos/alerta-sangria",
+  "name": "alerta-sangria",
+  "version": "0.1.0",
+  "description": "Puente stateless de nichos (F4): vigila el cuadro de salud financiera contra el techo de pérdida declarado; al cruzarlo arma una SolicitudDecision (caso a decidir, nunca mata sola) y la emite al canal de supervisión. Publica nichos.alerta.sangria y su par de fallo.",
+  "subscribes": [
+   "nichos.alerta.monitorear.request",
+   "project.activated"
+  ],
+  "publishes": [
+   "nichos.alerta.monitorear.failed",
+   "nichos.alerta.sangria"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "nichos/batch-validacion",
+  "name": "batch-validacion",
+  "version": "0.1.0",
+  "description": "Reflejo (C5): desacopla el cuello del embudo. Reparte/procesa un lote de candidatos de la cola (L2) en paralelo — no en serie —, corre estudio-demanda (C1) + veredicto-viabilidad (C3) por RPC por item y agrega la List<Veredicto>. Stateless, proyección pura determinista.",
+  "subscribes": [
+   "nichos.batch.programar.request"
+  ],
+  "publishes": [
+   "nichos.batch.lote_ejecutado",
+   "nichos.batch.programar.failed"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "nichos/camino-encontrar-construir",
+  "name": "camino-encontrar-construir",
+  "version": "0.1.0",
+  "description": "Micro-agente hibrido (C4): decide por opción de nicho si la oportunidad se encuentra (demanda real + capacidades existentes) o se construye (crear necesidad / falta capacidad). Riesgo alto → sube SolicitudDecision (D2/K2), nunca decide solo. Reflejo por reglas con juicio fuzzy asistido y fallback determinista. Publica nichos.camino.decidido; nichos.camino.decidir.failed cuando el nicho es inválido",
+  "subscribes": [
+   "nichos.camino.decidir.request"
+  ],
+  "publishes": [
+   "nichos.camino.decidido",
+   "nichos.camino.decidir.failed"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "nichos/canal-distribucion",
+  "name": "canal-distribucion",
+  "version": "0.1.0",
+  "description": "Puente stateless de nichos (E4): lleva la solución construida al pagador del nicho por su canal de entrega declarado (puerto abierto, agnóstico al proveedor). Publica nichos.entrega.enviada y su par de fallo. Sin persistencia.",
+  "subscribes": [
+   "nichos.entrega.enviar.request",
+   "project.activated"
+  ],
+  "publishes": [
+   "nichos.entrega.enviada",
+   "nichos.entrega.enviar.failed"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "nichos/canal-supervision",
+  "name": "canal-supervision",
+  "version": "0.1.0",
+  "description": "Puente stateless de nichos (G1): el puerto abierto del canal de supervision (Telegram u otro, agnostico, con varios canales intercambiables por evento). Declara y conecta canales supervisados, enruta notificaciones/decisiones hacia el canal activo y emite la entrega con su par de fallo. Sin persistencia: solo enruta/comunica con el exterior.",
+  "subscribes": [
+   "nichos.canal.conectar.request",
+   "nichos.canal.enviar.request",
+   "nichos.canal.reemplazar.request"
+  ],
+  "publishes": [
+   "nichos.canal.conectado",
+   "nichos.canal.enviado",
+   "nichos.canal.envio_fallido",
+   "nichos.canal.reemplazado"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "nichos/captura-semilla",
+  "name": "captura-semilla",
+  "version": "0.1.0",
+  "description": "Reflejo JS puro (A1): acepta/formatea la semilla del dueno para arrancar la busqueda de nichos; valida vacios, rechaza vacios con error determinista y emite nichos.semilla.capturada.",
+  "subscribes": [
+   "nichos.semilla.aceptar.request",
+   "project.activated"
+  ],
+  "publishes": [
+   "nichos.semilla.aceptar.failed",
+   "nichos.semilla.capturada"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "nichos/catalogo-capacidades",
+  "name": "catalogo-capacidades",
+  "version": "0.1.0",
+  "description": "Custodio (D3): catálogo persistente por proyecto de las capacidades existentes/faltantes para construir la solución del nicho. Invariante 'lo que falta se crea'. Un solo escritor (CONSTRUCTOR o DUEÑO); el ensamblador-solucion (D1) consulta por lectura. Persiste por proyecto vía PosPersistencia.",
+  "subscribes": [
+   "nichos.capacidad.consultar.request",
+   "nichos.capacidad.declarar.request",
+   "project.activated"
+  ],
+  "publishes": [
+   "nichos.capacidad.declarar.failed",
+   "nichos.capacidad.faltante_declarado"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "nichos/clasificador-intencion",
+  "name": "clasificador-intencion",
+  "version": "0.1.0",
+  "description": "Micro-agente (G3): clasifica el mensaje del canal del dueno en SEMILLA|DECISION|CONSULTA segun lenguaje/ambiguedad; hibrido fuzzy con fallback reflejo determinista; publica nichos.intencion.clasificada.",
+  "subscribes": [
+   "nichos.intencion.clasificar.request",
+   "project.activated"
+  ],
+  "publishes": [
+   "nichos.intencion.clasificada",
+   "nichos.intencion.clasificar.failed"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "nichos/cola-candidatos",
+  "name": "cola-candidatos",
+  "version": "0.1.0",
+  "description": "Custodio (L2): cola persistente FIFO de candidatos a validar, buffer del cuello de botella del embudo. Sondeo-territorio encola; batch-validacion (C5) toma lotes (solo C5 saca). Persiste por proyecto vía PosPersistencia.",
+  "subscribes": [
+   "nichos.candidato.encolar.request",
+   "nichos.candidato.encontrado",
+   "nichos.candidato.tomar.request",
+   "project.activated"
+  ],
+  "publishes": [
+   "nichos.candidato.encolar.failed",
+   "nichos.candidato_encolado",
+   "nichos.candidato_tomado"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "nichos/cola-decisiones-gate",
+  "name": "cola-decisiones-gate",
+  "version": "0.1.0",
+  "description": "Custodio (K2): una sola cola de gates por resolver en el proyecto; encola solicitudes de decision (gate/puente/alerta) y el jefe resuelve la siguiente en orden; PosPersistencia; publica nichos.gate_resuelto y nichos.decision.resuelta.",
+  "subscribes": [
+   "nichos.alerta.sangria",
+   "nichos.gate.encolar.request",
+   "nichos.gate.resolver.request",
+   "nichos.gate.solicitado",
+   "nichos.puente_solicitado",
+   "project.activated"
+  ],
+  "publishes": [
+   "nichos.decision.resuelta",
+   "nichos.gate.encolar.failed",
+   "nichos.gate_encolado",
+   "nichos.gate_resuelto"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "nichos/confirmacion-valor",
+  "name": "confirmacion-valor",
+  "version": "0.1.0",
+  "description": "Custodio (I3): recoge y persiste el feedback post-compra / valor recibido por el pagador de un nicho; ingesta reflejo + store custodio con PosPersistencia; publica nichos.feedback_recibido.",
+  "subscribes": [
+   "nichos.feedback.guardar.request",
+   "nichos.feedback.ingestar.request",
+   "project.activated"
+  ],
+  "publishes": [
+   "nichos.feedback.guardar.failed",
+   "nichos.feedback_recibido"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "nichos/conversor-fuente",
+  "name": "conversor-fuente",
+  "version": "0.1.0",
+  "description": "Reflejo JS puro (J2, conversor stateless): la unica frontera de formatos fuentes->internos de nichos. Convierte datos crudos de una fuente (formato nativo) a la senal homogenea interna {id, titulo, url, fuente, formato, relevancia} via _cruzar/_mapear. Publica nichos.datos_homogeneos en exito; nichos.fuente.convertir.failed si el formato es invalido.",
+  "subscribes": [
+   "nichos.fuente.convertir.request"
+  ],
+  "publishes": [
+   "nichos.datos_homogeneos",
+   "nichos.fuente.convertir.failed"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "nichos/corte-temprano",
+  "name": "corte-temprano",
+  "version": "0.1.0",
+  "description": "Reflejo determinista (C6): dado un veredicto de viabilidad decide el corte a tiempo — un NO_VIABLE nunca pasa a construcción (corte DURO), VIABLE entra al tramo caro con control, PUENTE espera decisión humana. Publica nichos.corte.aplicado; nichos.corte.evaluar.failed si el veredicto es inválido.",
+  "subscribes": [
+   "nichos.corte.evaluar.request"
+  ],
+  "publishes": [
+   "nichos.corte.aplicado",
+   "nichos.corte.evaluar.failed"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "nichos/coste-fuente",
+  "name": "coste-fuente",
+  "version": "0.1.0",
+  "description": "Reflejo (J4): coste por fuente (consulta/scraping/API) para imputar al proyecto. Stateless, proyección pura determinista: calcula el coste de una fuente y agrega el coste total de un set de fuentes para alimentar la imputación de costes (F2).",
+  "subscribes": [
+   "nichos.fuente.costear.request"
+  ],
+  "publishes": [
+   "nichos.fuente.costear.failed",
+   "nichos.fuente_costea_imputado"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "nichos/criterio-viabilidad",
+  "name": "criterio-viabilidad",
+  "version": "0.1.0",
+  "description": "Custodio (C2): store por proyecto del criterio/umbral de viabilidad declarable — umbral_ingresos (base 50-300 EUR/semana), mínimos de demanda, disposición a pagar y tipo de viabilidad. Pieza central del embudo; el DUEÑO declara (un solo escritor), el bucle C7 recalibra en caliente, y el veredicto (C3) lo consulta. Persiste por proyecto vía PosPersistencia.",
+  "subscribes": [
+   "nichos.criterio.declarar.request",
+   "nichos.criterio.leer.request",
+   "nichos.umbral.recalibrado",
+   "project.activated"
+  ],
+  "publishes": [
+   "nichos.criterio.declarado",
+   "nichos.criterio.declarar.failed",
+   "nichos.criterio.recalibrado",
+   "nichos.criterio.recalibrar.failed"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "nichos/cuadro-salud-financiera",
+  "name": "cuadro-salud-financiera",
+  "version": "0.1.0",
+  "description": "Custodio (F3): cuadro de salud financiera por proyecto — GENERA | SANGRA | NEUTRO + flujo a caja, calculado de hechos (cobros F1 + costes F2), nunca de promesas. Persiste por proyecto vía PosPersistencia y alimenta reglas-aprendidas (C7) y el portafolio (K1).",
+  "subscribes": [
+   "nichos.cobro_registrado",
+   "nichos.coste_imputado",
+   "nichos.cuadro.leer.request",
+   "nichos.salud.actualizar.request",
+   "project.activated"
+  ],
+  "publishes": [
+   "nichos.cuadro.flujo_a_caja",
+   "nichos.salud.actualizada",
+   "nichos.salud.actualizar.failed"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "nichos/ensamblador-solucion",
+  "name": "ensamblador-solucion",
+  "version": "0.1.0",
+  "description": "Micro-agente (D1): arma la solución del nicho con las capacidades del catálogo. Híbrido fuzzy + fallback reflejo — decide qué construir según el nicho y las capacidades disponibles, y ejecuta el montaje de forma determinista.",
+  "subscribes": [
+   "nichos.camino.decidido",
+   "nichos.solucion.construir.request"
+  ],
+  "publishes": [
+   "nichos.solucion.construida",
+   "nichos.solucion.construir.failed"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "nichos/escalones-mensaje",
+  "name": "escalones-mensaje",
+  "version": "0.1.0",
+  "description": "Reflejo stateless (G2): decide el escalón de mensaje al supervisor del nicho — pulso | alerta | decisión — con su cadencia. Regla dura, no ambigua; proyección pura determinista. Publica nichos.escalon.clasificado y su par de fallo. Sin persistencia.",
+  "subscribes": [
+   "nichos.escalon.clasificar.request",
+   "project.activated"
+  ],
+  "publishes": [
+   "nichos.escalon.clasificado",
+   "nichos.escalon.clasificar.failed"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "nichos/estudio-competencia",
+  "name": "estudio-competencia",
+  "version": "0.1.0",
+  "description": "Micro-agente hibrido (E1): dado un nicho construido mide la competencia observada en las fuentes (reflejo: consulta y normaliza el dataset de competidores) y concluye la diferenciacion (juicio fuzzy). Produce un estudio de competencia estructurado que alimenta el paquete de decision (H1). Publica nichos.competencia.analizado cuando hay un analisis; nichos.competencia.analizar.failed cuando el nich",
+  "subscribes": [
+   "nichos.competencia.analizar.request"
+  ],
+  "publishes": [
+   "nichos.competencia.analizado",
+   "nichos.competencia.analizar.failed"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "nichos/estudio-demanda",
+  "name": "estudio-demanda",
+  "version": "0.1.0",
+  "description": "Micro-agente hibrido (C1), la primera pieza del eslabon limitante del sistema (validacion): dado un candidato de nicho mide la demanda de 1er orden (quienes buscan y con que fuerza) y la disposicion a pagar (reflejo: numeros declarados), y redacta la conclusion de mercado (juicio fuzzy). Produce un estudio de demanda estructurado para el veredicto-viabilidad (C3). Publica nichos.estudio.medido cua",
+  "subscribes": [
+   "nichos.estudio.medir.request"
+  ],
+  "publishes": [
+   "nichos.estudio.medido",
+   "nichos.estudio.medir.failed"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "nichos/gate-decision-operar",
+  "name": "gate-decision-operar",
+  "version": "0.1.0",
+  "description": "Puente stateless de nichos (E2): entrega el paquete-cerrado de operar al dueño por EVENTO (nicho + competencia + modelo + costo + proyeccion) y espera aprueba/rechaza. El sistema NUNCA decide operar por su cuenta. Sin persistencia: solo enruta/comunica con el exterior.",
+  "subscribes": [
+   "nichos.gate.solicitar.request"
+  ],
+  "publishes": [
+   "nichos.gate.solicitado",
+   "nichos.gate.solicitar.failed"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "nichos/gestion-limites-fuente",
+  "name": "gestion-limites-fuente",
+  "version": "0.1.0",
+  "description": "Reflejo JS puro (J3): gestiona los limites/cola/rate de las fuentes de datos para no quemar recursos. Dado el limite declarado de una fuente y las consultas ya hechas (input, stateless), decide si permite la siguiente consulta, la encola o la deniega (PERMITIR|ENCOLAR|DENEGAR). Publica nichos.fuente.dosificado / nichos.fuente.encolado y cierra cada circulo con su par *.failed determinista.",
+  "subscribes": [
+   "nichos.fuente.dosificar.request",
+   "nichos.fuente.encolar.request"
+  ],
+  "publishes": [
+   "nichos.fuente.dosificado",
+   "nichos.fuente.dosificar.failed",
+   "nichos.fuente.encolado",
+   "nichos.fuente.encolar.failed"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "nichos/historial-nicho",
+  "name": "historial-nicho",
+  "version": "0.1.0",
+  "description": "Custodio (L4): registro append-only e inmutable de estados/decisiones por nicho durante el pipeline; single-writer (pipeline-por-nicho); PosPersistencia; publica nichos.historial_actualizado.",
+  "subscribes": [
+   "nichos.historial.append.request",
+   "project.activated"
+  ],
+  "publishes": [
+   "nichos.historial.append.failed",
+   "nichos.historial_actualizado"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "nichos/imputacion-costes",
+  "name": "imputacion-costes",
+  "version": "0.1.0",
+  "description": "Reflejo (F2): lo que cuesta cada proyecto — construccion + operacion + fuentes. Stateless, cálculo determinista: agrega las partidas de coste a un CosteProyecto y lo imputa para la salud financiera (F3).",
+  "subscribes": [
+   "nichos.coste.agregar.request"
+  ],
+  "publishes": [
+   "nichos.coste.agregar.failed",
+   "nichos.coste_imputado"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "nichos/manejo-fallo",
+  "name": "manejo-fallo",
+  "version": "0.1.0",
+  "description": "Puente stateless (L3): reintento mecanico del fallo del pipeline [ABIERTO]; sin alternativa → deriva a puente humano (D2) por evento; publica nichos.fallo_manejado.",
+  "subscribes": [
+   "nichos.canal.envio_fallido",
+   "nichos.fallo.manejar.request",
+   "project.activated"
+  ],
+  "publishes": [
+   "nichos.fallo.manejar.failed",
+   "nichos.fallo_manejado",
+   "nichos.puente_solicitado"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "nichos/motor-cobro",
+  "name": "motor-cobro",
+  "version": "0.1.0",
+  "description": "Reflejo stateless (E3): ejecuta y registra el cobro del nicho sobre las plataformas declaradas (agnóstico al proveedor); distingue EFECTIVO (dinero entrado) de COMPROMETIDO (promesa/suscripción). Publica nichos.cobro.ejecutado y su par de fallo. Sin store: proyección pura determinista.",
+  "subscribes": [
+   "nichos.motor-cobro.ejecutar.request",
+   "project.activated"
+  ],
+  "publishes": [
+   "nichos.cobro.ejecutado",
+   "nichos.cobro.ejecutar.failed"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "nichos/normalizacion-semilla",
+  "name": "normalizacion-semilla",
+  "version": "0.1.0",
+  "description": "Micro-agente hibrido (A2): recibe la semilla capturada por captura-semilla, la desambigua a intenciones de busqueda claras y emite nichos.semilla.normalizada para que el buscador (sondeo-territorio) arranque.",
+  "subscribes": [
+   "nichos.semilla.normalizar.request"
+  ],
+  "publishes": [
+   "nichos.semilla.normalizada",
+   "nichos.semilla.normalizar.failed"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "nichos/paquete-decision",
+  "name": "paquete-decision",
+  "version": "0.1.0",
+  "description": "Micro-agente hibrido (H1): dado un nicho construido arma un paquete de decision autocxplicado (nicho + evidencia + riesgo + alternativa, reflejo: normaliza la celula) con una sintesis razonada (juicio fuzzy). Produce el paquete que el dueño lee antes de decidir. Publica nichos.paquete_construido cuando hay un paquete; nichos.paquete.construir.failed cuando el nicho viene vacio.",
+  "subscribes": [
+   "nichos.paquete.construir.request"
+  ],
+  "publishes": [
+   "nichos.paquete.construir.failed",
+   "nichos.paquete_construido"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "nichos/perfil-cobro-entrega",
+  "name": "perfil-cobro-entrega",
+  "version": "0.1.0",
+  "description": "Custodio (I1): store por proyecto del contrato de pago y entrega por pagador del nicho — plataforma de cobro aceptada, forma/canal de entrega de la solución, precio, periodicidad y condiciones. Un solo escritor (CONSTRUCTOR o DUEÑO); motor-cobro (E3) y canal-distribucion (E4) lo consumen. Persiste por proyecto vía PosPersistencia.",
+  "subscribes": [
+   "nichos.perfil.declarar.request",
+   "nichos.perfil.leer.request",
+   "project.activated"
+  ],
+  "publishes": [
+   "nichos.perfil.declarado",
+   "nichos.perfil.declarar.failed"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "nichos/perfil-limite-busqueda",
+  "name": "perfil-limite-busqueda",
+  "version": "0.1.0",
+  "description": "Custodio (B3): store por proyecto de los límites declarables del dueño para la búsqueda de nichos — alcance, exclusiones de partida, profundidad, límites de territorio/candidatos y reglas fijas. Un solo escritor (DUEÑO); el buscador consume por lectura. Persiste por proyecto vía PosPersistencia.",
+  "subscribes": [
+   "nichos.limite.declarar.request",
+   "nichos.limite.leer.request",
+   "project.activated"
+  ],
+  "publishes": [
+   "nichos.limite.declarado",
+   "nichos.limite.declarar.failed"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "nichos/perfil-supervision",
+  "name": "perfil-supervision",
+  "version": "0.1.0",
+  "description": "Custodio (H2): store por proyecto del perfil de supervisión del nicho — cadencia de pulso (diaria|semanal|quincenal|tiempo_real) y límites (max_alertas_dia, techo_perdida_eur). Un solo escritor (DUEÑO); canal (G1) y monitor lo consumen. Persiste por proyecto vía PosPersistencia.",
+  "subscribes": [
+   "nichos.supervision.declarar.request",
+   "nichos.supervision.leer.request",
+   "project.activated"
+  ],
+  "publishes": [
+   "nichos.supervision.declarado",
+   "nichos.supervision.declarar.failed"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "nichos/pipeline-por-nicho",
+  "name": "pipeline-por-nicho",
+  "version": "0.1.0",
+  "description": "Custodio/orquestador (L1): la maquina de estados semilla→caja por nicho; consume eventos de dominio y aplica transiciones validadas; PosPersistencia; publica nichos.pipeline.avanzado.",
+  "subscribes": [
+   "nichos.camino.decidido",
+   "nichos.candidato.encontrado",
+   "nichos.cobro.ejecutado",
+   "nichos.cobro_registrado",
+   "nichos.corte.aplicado",
+   "nichos.estudio.medido",
+   "nichos.modelo_cobro.propuesto",
+   "nichos.pipeline.avanzar.request",
+   "nichos.pipeline.registrar_semilla.request",
+   "nichos.salud.actualizada",
+   "nichos.semilla.capturada",
+   "nichos.semilla.normalizada",
+   "nichos.solucion.construida",
+   "nichos.territorio.sondeado",
+   "nichos.veredicto.emitido",
+   "project.activated"
+  ],
+  "publishes": [
+   "nichos.pipeline.avanzado",
+   "nichos.pipeline.avanzar.failed",
+   "nichos.pipeline.ciclo_completado",
+   "nichos.pipeline.ciclo_iniciado"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "nichos/proponedor-modelo-cobro",
+  "name": "proponedor-modelo-cobro",
+  "version": "0.1.0",
+  "description": "Micro-agente hibrido (D4): dado un nicho construido propone el modelo de negocio/cobro (suscripcion|empresa|transaccional|abierto) y el precio sugerido (reflejo: derivado de la evidencia de disposicion a pagar), razonado (juicio fuzzy). Produce una propuesta estructurada para el gate E2. Publica nichos.modelo_cobro.propuesto cuando hay una propuesta; nichos.modelo_cobro.proponer.failed cuando el n",
+  "subscribes": [
+   "nichos.modelo_cobro.proponer.request"
+  ],
+  "publishes": [
+   "nichos.modelo_cobro.proponer.failed",
+   "nichos.modelo_cobro.propuesto"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "nichos/propuesta-valor-canal",
+  "name": "propuesta-valor-canal",
+  "version": "0.1.0",
+  "description": "Micro-agente (I2): propone el copy/propuesta de valor de un nicho para ganar confianza/compra en su territorio; hidratado por estudio-competencia y sondeo-territorio; hibrido fuzzy con fallback reflejo; publica nichos.copy_propuesto.",
+  "subscribes": [
+   "nichos.copy.proponer.request",
+   "project.activated"
+  ],
+  "publishes": [
+   "nichos.copy.proponer.failed",
+   "nichos.copy_propuesto"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "nichos/puente-humano",
+  "name": "puente-humano",
+  "version": "0.1.0",
+  "description": "Puente stateless de nichos (D2), la EXCEPCION: cuando el sistema no sabe, presenta nicho+problema+dudas al admin por EVENTO con paquete cerrado (SolicitudDecision). Arma el paquete cerrado de un bloqueo que el sistema no puede resolver solo y solicita la decision humana. Sin persistencia: solo enruta/comunica con el exterior; NUNCA lo resuelve.",
+  "subscribes": [
+   "nichos.puente.solicitar.request"
+  ],
+  "publishes": [
+   "nichos.puente.solicitar.failed",
+   "nichos.puente_solicitado"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "nichos/puerto-fuente-datos",
+  "name": "puerto-fuente-datos",
+  "version": "0.1.0",
+  "description": "Puente stateless de nichos (J1): el puerto abierto hacia las fuentes de datos de validacion/busqueda (buscadores, APIs, scraping, comunidades). Declara y conecta fuentes de forma agnostica al vendor (cada fuente se registra y se sustituye por evento), consulta datos de un nicho y emite el resultado consultado con su par de fallo. Sin persistencia: solo enruta/comunica con el exterior.",
+  "subscribes": [
+   "nichos.fuente.conectar.request",
+   "nichos.fuente.consultar.request",
+   "nichos.fuente.reemplazar.request"
+  ],
+  "publishes": [
+   "nichos.fuente.conectada",
+   "nichos.fuente.consultar.failed",
+   "nichos.fuente.reemplazada"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "nichos/pulso-avance",
+  "name": "pulso-avance",
+  "version": "0.1.0",
+  "description": "Reflejo stateless (L5): progreso por etapa → escalon de pulso al supervisor; proyeccion pura determinista; publica nichos.pulso_emitido.",
+  "subscribes": [
+   "nichos.pipeline.avanzado",
+   "nichos.pulso.emitir.request",
+   "nichos.salud.actualizada",
+   "project.activated"
+  ],
+  "publishes": [
+   "nichos.pulso.emitir.failed",
+   "nichos.pulso_emitido"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "nichos/registro-cobros",
+  "name": "registro-cobros",
+  "version": "0.1.0",
+  "description": "Custodio (F1): registro append-only e inmutable de cobros EFECTIVO vs COMPROMETIDO por proyecto. Un solo escritor (MOTOR_COBRO); cada cobro se apila y jamás se sobrescribe. Persiste por proyecto vía PosPersistencia y alimenta la salud financiera (F3).",
+  "subscribes": [
+   "nichos.cobro.consultar.request",
+   "nichos.cobro.ejecutado",
+   "nichos.cobro.registrar.request",
+   "project.activated"
+  ],
+  "publishes": [
+   "nichos.cobro.registrar.failed",
+   "nichos.cobro_registrado"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "nichos/reglas-aprendidas",
+  "name": "reglas-aprendidas",
+  "version": "0.1.0",
+  "description": "Micro-agente (C7): afina el umbral de validación con resultados reales — cada proyecto que cobra o sangra recalibra. Híbrido fuzzy + fallback reflejo: compara el umbral contra el resultado real (COBRÓ/SANGRA/NEUTRO), calcula el delta y emite el umbral refinado al criterio-viabilidad (C2) en caliente.",
+  "subscribes": [
+   "nichos.cobro_registrado",
+   "nichos.reglas.recalibrar.request",
+   "nichos.salud.actualizada"
+  ],
+  "publishes": [
+   "nichos.reglas.recalibrar.failed",
+   "nichos.umbral.recalibrado"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "nichos/reglas-exclusion",
+  "name": "reglas-exclusion",
+  "version": "0.1.0",
+  "description": "Micro-agente fuzzy (B2): afina y aplica las reglas de exclusion que descartan señales/candidatos que no interesan. Recibe candidatos del sondeo-territorio, aprende reglas de las corridas reales (falso positivos previos + criterio del dueño) y emite que se descarta y por que, publicando nichos.candidato.excluido para la cola-candidatos (L2).",
+  "subscribes": [
+   "nichos.reglas.excluir.request"
+  ],
+  "publishes": [
+   "nichos.candidato.excluido",
+   "nichos.reglas.excluir.failed"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "nichos/sondeo-territorio",
+  "name": "sondeo-territorio",
+  "version": "0.1.0",
+  "description": "Micro-agente hibrido (B1): la celula del buscador de nichos — recibe el territorio normalizado (intenciones de A2) y lo barre preguntando a las fuentes via puerto-fuente-datos, interpreta los resultados (juicio fuzzy) y deja señales de demanda y candidatos de nichos. Publica nichos.candidato.encontrado para la cola-candidatos (L2).",
+  "subscribes": [
+   "nichos.territorio.sondear.request"
+  ],
+  "publishes": [
+   "nichos.candidato.encontrado",
+   "nichos.territorio.sondeado",
+   "nichos.territorio.sondear.failed"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "nichos/veredicto-viabilidad",
+  "name": "veredicto-viabilidad",
+  "version": "0.1.0",
+  "description": "Micro-agente hibrido (C3): recibe el estudio de demanda (C1) y el criterio de viabilidad vigente (C2) y decide por candidato VIABLE | NO_VIABLE | PUENTE con confianza y motivo. Reflejo por reglas (_evaluarReflejo) con juicio fuzzy asistido y fallback determinista; el corte DURO NO_VIABLE->CORTADO lo aplica C6, nunca este agente. Publica nichos.veredicto.emitido; nichos.veredicto.evaluar.failed cua",
+  "subscribes": [
+   "nichos.veredicto.evaluar.request"
+  ],
+  "publishes": [
+   "nichos.veredicto.emitido",
+   "nichos.veredicto.evaluar.failed"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "nichos/vista-portafolio",
+  "name": "vista-portafolio",
+  "version": "0.1.0",
+  "description": "Custodio (K1): dashboard que cruza la salud de todos los modulos/nichos en una vista agregada de portafolio para el jefe; ingesta reflejo + store custodio con PosPersistencia; publica nichos.vista_portafolio.",
+  "subscribes": [
+   "nichos.salud.actualizada",
+   "nichos.vista.guardar.request",
+   "nichos.vista.leer.request",
+   "project.activated"
+  ],
+  "publishes": [
+   "nichos.vista.guardar.failed",
+   "nichos.vista_portafolio"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "notas-poc",
+  "name": "notas",
+  "version": "2.0.0",
+  "description": "Módulo de notas rápidas con persistencia JSON. POC del rewrite aplicando contratos arquitectónicos.",
+  "subscribes": [],
+  "publishes": [
+   "notas.actualizado",
+   "notas.creado",
+   "notas.eliminado"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "ocr4rs",
+  "name": "ocr4rs",
+  "version": "0.1.0",
+  "description": "Puente al motor OCR4RS (Rust puro, imagen/PDF escaneado → texto) por HTTP, como órgano del bus. Lee una imagen o PDF escaneado → texto + evidencia (la imagen re-comprobable). Gate por interruptor OFF (on-demand), degrada limpio si el servicio no está, reencamina el PDF digital a crawl4rs.",
+  "subscribes": [
+   "interruptor.cambiado",
+   "interruptor.solicitar_registro",
+   "ocr4rs.leer.request",
+   "ocr4rs.leer_lote.request"
+  ],
+  "publishes": [
+   "interruptor.registrar",
+   "ocr4rs.leer.response",
+   "ocr4rs.leer_lote.response",
+   "ocr4rs.pdf.es_digital",
+   "ocr4rs.texto.extraido"
+  ],
+  "tools": [
+   "leer_imagen"
+  ]
+ },
+ {
+  "slug": "panel-jefe",
+  "name": "panel-jefe",
+  "version": "reflejo-0.1.0",
+  "description": "Cara agregada del jefe (rol FUTURO): vision de conjunto (cola + impresion + filamento + consumo + historial) y acciones que DELEGAN (aprobar propuesta, marcar prioridad, pedir reposicion). CERO juicio: proyecta y transporta.",
+  "subscribes": [
+   "panel-jefe.aprobar_propuesta.request",
+   "panel-jefe.marcar_prioridad.request",
+   "panel-jefe.pedir_reposicion.request",
+   "panel-jefe.propuestas.request",
+   "panel-jefe.resumen.request",
+   "panel-jefe.ver_detalle.request"
+  ],
+  "publishes": [
+   "panel-jefe.aprobar_propuesta.failed",
+   "panel-jefe.resumen.response"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "panel-trabajador",
+  "name": "panel-trabajador",
+  "version": "reflejo-0.1.0",
+  "description": "Cara operativa del trabajador (rol HOY): estado en vivo de la impresion + cola + filamento + pendientes, y comandos que DELEGAN en el ciclo/filamento/manejo-fallo. Sin decision futura.",
+  "subscribes": [
+   "panel-trabajador.control.request",
+   "panel-trabajador.estado_vivo.request",
+   "panel-trabajador.eventos.request",
+   "panel-trabajador.pendientes.request",
+   "panel-trabajador.proximo_encadenar.request"
+  ],
+  "publishes": [
+   "panel-trabajador.control.failed",
+   "panel-trabajador.estado_vivo.response"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "pase-cocina",
+  "name": "pase-cocina",
+  "version": "1.0.0",
+  "description": "Modulo cara-al-servicio: materializa fichas de pase (snapshot operativo de la receta para el servicio en curso), registra incidencias y sustituciones. NO toma decisiones reactivas — solo registra; chef/jefe revisan post-servicio. Modulo del subsistema-recetario (ver arquitectura/decisiones/_contratos/subsistema-recetario.contract.json).",
+  "subscribes": [
+   "fs.read.response",
+   "fs.write.response",
+   "pase.ficha.crear",
+   "pase.ficha.obtener",
+   "pase.fichas.listar",
+   "pase.incidencia.registrar",
+   "pase.sustitucion.registrar",
+   "project.activated",
+   "project.get.response"
+  ],
+  "publishes": [
+   "pase.ficha.creada",
+   "pase.incidencia.registrada",
+   "pase.sustitucion.registrada"
+  ],
+  "tools": [
+   "pase.ficha.crear",
+   "pase.incidencia.registrar",
+   "pase.sustitucion.registrar",
+   "pase.ficha.obtener",
+   "pase.fichas.listar"
+  ]
+ },
+ {
+  "slug": "pdf-viewer",
+  "name": "pdf-viewer",
+  "version": "2.0.0",
+  "description": "PDF viewer and text extraction module",
+  "subscribes": [
+   "pdf.extract.request",
+   "pdf.list.request",
+   "pdf.metadata.request",
+   "pdf.view.request"
+  ],
+  "publishes": [
+   "db.query.request",
+   "local.pdf.create.request",
+   "pdf.extract.response",
+   "pdf.list.response",
+   "pdf.metadata.response",
+   "pdf.view.response"
+  ],
+  "tools": [
+   "pdf.create",
+   "pdf.list",
+   "pdf.metadata",
+   "pdf.extract",
+   "pdf.info",
+   "pdf.render"
+  ]
+ },
+ {
+  "slug": "perifericos",
+  "name": "perifericos",
+  "version": "2.0.0",
+  "description": "Servicio core de perifericos — descubrimiento, registro y routing de dispositivos hardware. Capacidades: imprimir, display, abrir-cajon. Auto-descubrimiento ESP32 via MQTT.",
+  "subscribes": [
+   "periferico.abrir-cajon",
+   "periferico.desregistrar",
+   "periferico.display",
+   "periferico.estado",
+   "periferico.imprimir",
+   "periferico.listar",
+   "periferico.registrar"
+  ],
+  "publishes": [
+   "periferico.cajon-abierto",
+   "periferico.displayed",
+   "periferico.dispositivo.desregistrado",
+   "periferico.dispositivo.registrado",
+   "periferico.error",
+   "periferico.estado.respuesta",
+   "periferico.impreso",
+   "periferico.listado"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "pizzepos/bienvenida-tienda",
+  "name": "bienvenida-tienda",
+  "version": "1.1.0",
+  "description": "Cara cliente del bot del negocio. Responde con saludo + link a la PWA tienda cuando el cliente final escribe al bot por primera vez (o cualquier mensaje libre). Es contraparte de notificador-pedidos (cara staff) — mismo bot, dos roles distintos.",
+  "subscribes": [
+   "project.activated",
+   "telegram.command.received",
+   "telegram.text.received"
+  ],
+  "publishes": [],
+  "tools": []
+ },
+ {
+  "slug": "pizzepos/carta-design",
+  "name": "carta-design",
+  "version": "3.3.0",
+  "description": "Modulo carta-design HIBRIDO: el reflejo JS sirve 4 ops deterministas (contexto_diseno/load_carta/save/gallery) en el bus; el LLM de pagina hace lo creativo (entrevista + composicion del HTML, SIN agente) bebiendo la identidad de la MARCA. Estudio de diseno de cartas impresas.",
+  "subscribes": [
+   "design.contexto_diseno.request",
+   "design.gallery.request",
+   "design.load_carta.request",
+   "design.save.request",
+   "design.validar.request"
+  ],
+  "publishes": [],
+  "tools": []
+ },
+ {
+  "slug": "pizzepos/carta-digital",
+  "name": "carta-digital",
+  "version": "2.24.0",
+  "description": "Proyector del canal digital: proyecta la carta publica al vuelo (tarifas+carta-manager+marca+contenido). Sirve get_carta_publica + get_config/update_config (config del canal). El POS no lo usa.",
+  "subscribes": [],
+  "publishes": [],
+  "tools": []
+ },
+ {
+  "slug": "pizzepos/carta-manager",
+  "name": "carta-manager",
+  "version": "2.8.0",
+  "description": "Modulo carta-manager HIBRIDO: blueprint-driven (cajones de interpretacion) para que el LLM de la pagina traduzca intencion -> op estructurada + reflejo JS (index.js) que sirve las 15 ops deterministas en el bus (carta.<op>.request). Aggregate root del subsistema-carta: CRUD/versionado/manipulacion de cartas, productos y categorias. Los hermanos del subsistema leen via carta.<op>.request pero NUNCA",
+  "subscribes": [
+   "carta.activar.request",
+   "carta.add_category.request",
+   "carta.add_product.request",
+   "carta.clonar.request",
+   "carta.creada",
+   "carta.delete.request",
+   "carta.get.request",
+   "carta.list.request",
+   "carta.remove_product.request",
+   "carta.restore.request",
+   "carta.save.request",
+   "carta.search.request",
+   "carta.stats.request",
+   "carta.update_extras.request",
+   "carta.update_prices.request",
+   "carta.update_product.request",
+   "carta.update_products.request",
+   "carta.validar.request",
+   "carta.versions.request"
+  ],
+  "publishes": [],
+  "tools": []
+ },
+ {
+  "slug": "pizzepos/carta-marketing",
+  "name": "carta-marketing",
+  "version": "2.6.0",
+  "description": "Modulo carta-marketing en modo blueprint-driven. Perfil de marca del proyecto + orquestador de agentes de marketing (copywriter, strategist, brand-keeper, onboarding).",
+  "subscribes": [
+   "carta-marketing.get_perfil.request",
+   "carta-marketing.guardar_copy.request",
+   "carta-marketing.update_perfil.request",
+   "carta-marketing.validar.request"
+  ],
+  "publishes": [],
+  "tools": []
+ },
+ {
+  "slug": "pizzepos/carta-scheduler",
+  "name": "carta-scheduler",
+  "version": "1.1.0",
+  "description": "Modulo carta-scheduler en modo blueprint-driven. Reglas (cron expression + canal + carta_id) + pendientes (cambios calculados esperando OK del usuario). El LLM en page=carta-scheduler revisa proximos_cambios, detecta conflictos, confirma o rechaza pendientes.",
+  "subscribes": [],
+  "publishes": [],
+  "tools": []
+ },
+ {
+  "slug": "pizzepos/categorias",
+  "name": "categorias",
+  "version": "3.0.0",
+  "description": "Catalogo multi-tenant de categorias de productos. Sincronizado desde carta.actualizada (subgrafo cartas) + CRUD manual.",
+  "subscribes": [
+   "carta.actualizada"
+  ],
+  "publishes": [
+   "categoria.actualizada",
+   "categoria.creada",
+   "categoria.orden_actualizado"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "pizzepos/cobros",
+  "name": "cobros",
+  "version": "3.0.0",
+  "description": "Gestion unificada de cobros pizzepos — 7 metodos de pago: efectivo, tarjeta, bizum, transferencia, mixto, link_pago, qr. Cuentas Llevadoo se pagan externamente (rechazo INVALID_INPUT). Idempotencia: rechaza cobro nuevo si ya hay pendiente/procesando/completado para la cuenta. Abre cajon de dinero via periferico.abrir-cajon en pagos en efectivo (best-effort).",
+  "subscribes": [
+   "caja.cerrada",
+   "cuenta.actualizada",
+   "cuenta.creada",
+   "dia.iniciado",
+   "pedido.completado"
+  ],
+  "publishes": [
+   "cobro.iniciado",
+   "cobro.procesado",
+   "cobro.reembolsado",
+   "periferico.abrir-cajon"
+  ],
+  "tools": [
+   "cobro.create",
+   "cobro.list",
+   "cobro.get",
+   "cobro.confirm",
+   "cobro.refund",
+   "cobro.payment-methods",
+   "cobro.list-cajones",
+   "cobro.health",
+   "cobro.metrics"
+  ]
+ },
+ {
+  "slug": "pizzepos/cocina",
+  "name": "cocina",
+  "version": "3.4.0",
+  "description": "Display de cocina en tiempo real - Sistema de preparacion de pedidos. Estacion unica (general) + multi-device con colores. Imprime ticket de pieza al completar. Snapshot persistente atomico. Publica periferico.display para pantallas externas.",
+  "subscribes": [
+   "caja.cerrada",
+   "cuenta.actualizada",
+   "cuenta.creada",
+   "cuenta.eliminada",
+   "dia.iniciado",
+   "pedido.cancelado",
+   "pedido.enviado_cocina"
+  ],
+  "publishes": [
+   "cocina.device_registered",
+   "cocina.device_unregistered",
+   "cocina.device_updated",
+   "cocina.item_avanzado",
+   "cocina.item_preparado",
+   "cocina.item_preparando",
+   "cocina.item_ticket",
+   "cocina.pedido_listo",
+   "periferico.display"
+  ],
+  "tools": [
+   "cocina.list-active",
+   "cocina.get",
+   "cocina.history",
+   "cocina.prepare-item",
+   "cocina.mark-ready",
+   "cocina.register-device",
+   "cocina.unregister-device",
+   "cocina.list-devices",
+   "cocina.list-station-types",
+   "cocina.list-displays",
+   "cocina.health",
+   "cocina.metrics"
+  ]
+ },
+ {
+  "slug": "pizzepos/cocina-poc",
+  "name": "cocina",
+  "version": "2.0.0",
+  "description": "Display de cocina en tiempo real (POC4). Agregador de eventos de pedidos con HTTP server canonico para el browser. POC del rewrite aplicando los 8 contratos arquitectonicos. Subset de cocina v3.1.0: sin multi-device ni pases multi-estacion ni cache de cuentaNombres (eso vendra en v2.1+). Foco: validar el patron http-server canonico que ningun POC anterior toco.",
+  "subscribes": [
+   "caja.cerrada",
+   "dia.iniciado",
+   "pedido.cancelado",
+   "pedido.enviado_cocina"
+  ],
+  "publishes": [
+   "cocina.item_preparado",
+   "cocina.item_preparando",
+   "cocina.pedido_listo"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "pizzepos/comandero",
+  "name": "comandero",
+  "version": "3.4.0",
+  "description": "Buffer de pedido por cuenta del POS — items, variaciones, envio a cocina. Persistencia transitoria atomica. Resolucion precio-por-canal via cache local hidratado por tarifas.config.actualizada (sin acceso directo a otros modulos). Las 4 operaciones principales se exponen como tools del LLM (agregar/eliminar/enviar/obtener) compartiendo los mismos handlers que los ui_handlers del frontend.",
+  "subscribes": [
+   "caja.cerrada",
+   "carta.actualizada",
+   "catalogo.actualizado",
+   "cuenta.actualizada",
+   "cuenta.creada",
+   "dia.iniciado",
+   "producto.actualizado",
+   "producto.creado",
+   "tarifas.config.actualizada"
+  ],
+  "publishes": [
+   "comandero.enviar_cocina",
+   "comandero.item_actualizado",
+   "comandero.item_agregado",
+   "comandero.item_eliminado",
+   "tarifas.config.solicitada"
+  ],
+  "tools": [
+   "comandero.agregar_item",
+   "comandero.eliminar_item",
+   "comandero.enviar_cocina",
+   "comandero.obtener_pedido"
+  ]
+ },
+ {
+  "slug": "pizzepos/contenido",
+  "name": "contenido",
+  "version": "1.3.0",
+  "description": "Base de enriquecimiento audiovisual por producto. Reflejo JS sirve get/add_imagen/quitar_imagen/set en el bus. Base compartida que beben los canales de presentacion (digital, impresion); el POS no la usa.",
+  "subscribes": [
+   "contenido.add_imagen.request",
+   "contenido.get.request",
+   "contenido.quitar_imagen.request",
+   "contenido.set.request"
+  ],
+  "publishes": [],
+  "tools": []
+ },
+ {
+  "slug": "pizzepos/cuentas",
+  "name": "cuentas",
+  "version": "3.0.0",
+  "description": "Gestion de cuentas con ciclo de vida completo (POS ticket lifecycle) — 100% Event-Driven. State machine de 7 estados orquestando items + cocina + cobro.",
+  "subscribes": [
+   "cobro.iniciado",
+   "cobro.procesado",
+   "cocina.pedido_listo",
+   "comandero.enviar_cocina",
+   "comandero.item_actualizado",
+   "comandero.item_agregado",
+   "comandero.item_eliminado",
+   "cuenta.cerrada",
+   "cuenta.cerrada_forzada"
+  ],
+  "publishes": [
+   "comandero.enviar_cocina",
+   "cuenta.actualizada",
+   "cuenta.creada",
+   "cuenta.eliminada",
+   "cuenta.estado_cambiado"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "pizzepos/cuentas-canales",
+  "name": "cuentas-canales",
+  "version": "5.1.0",
+  "description": "Sistema unificado de canales de venta pizzepos con patron Strategy: mesa, telefono, llevar, glovo, whatsapp, llevadoo. Cada strategy registra ui_handlers especificos del canal y se subscribe a sus eventos. El modulo base orquesta cobro.procesado → detectarCanal → strategy.onCobroProcesado, gestiona reseteo diario de contadores y emite cuenta.{creada,cerrada} canonicos.",
+  "subscribes": [
+   "cobro.procesado",
+   "cocina.pedido_listo",
+   "pedido.creado"
+  ],
+  "publishes": [
+   "cuenta.cerrada",
+   "cuenta.creada",
+   "glovo.pedido_aceptado",
+   "glovo.pedido_listo",
+   "glovo.pedido_recibido",
+   "llevar.ticket_creado",
+   "mesa.abierta",
+   "mesa.cerrada",
+   "telefono.pedido_creado",
+   "whatsapp.pedido_creado",
+   "whatsapp.pedido_listo"
+  ],
+  "tools": [
+   "canales.list",
+   "canales.health",
+   "canales.metrics",
+   "mesa.abrir",
+   "mesa.cerrar",
+   "mesa.renombrar",
+   "mesa.asignar_camarero",
+   "mesa.get",
+   "mesa.activas",
+   "mesa.list",
+   "mesa.health",
+   "mesa.metrics",
+   "telefono.llamada",
+   "telefono.crear_pedido",
+   "telefono.pendientes",
+   "telefono.get",
+   "telefono.marcar_listo",
+   "telefono.marcar_recogido",
+   "telefono.contactos",
+   "telefono.guardar_contacto",
+   "telefono.health",
+   "telefono.metrics",
+   "llevar.crear",
+   "llevar.marcar_listo",
+   "llevar.entregar",
+   "llevar.activos",
+   "llevar.listos",
+   "llevar.get",
+   "llevar.health",
+   "llevar.metrics",
+   "glovo.recibir",
+   "glovo.aceptar",
+   "glovo.rechazar",
+   "glovo.marcar_listo",
+   "glovo.marcar_recogido",
+   "glovo.activos",
+   "glovo.get",
+   "glovo.historial",
+   "glovo.poll",
+   "glovo.health",
+   "glovo.metrics",
+   "whatsapp.mensaje",
+   "whatsapp.crear_pedido",
+   "whatsapp.confirmar",
+   "whatsapp.marcar_listo",
+   "whatsapp.activos",
+   "whatsapp.get",
+   "whatsapp.conversaciones",
+   "whatsapp.enviar",
+   "whatsapp.health",
+   "whatsapp.metrics",
+   "llevadoo.crear_pedido",
+   "llevadoo.pendientes",
+   "llevadoo.get",
+   "llevadoo.activos",
+   "llevadoo.aceptar",
+   "llevadoo.marcar_recogido",
+   "llevadoo.cancelar",
+   "llevadoo.config_recargo",
+   "llevadoo.set_config_recargo",
+   "llevadoo.carta_delivery",
+   "llevadoo.health",
+   "llevadoo.metrics"
+  ]
+ },
+ {
+  "slug": "pizzepos/escandallo",
+  "name": "escandallo",
+  "version": "2.3.0",
+  "description": "Modulo escandallo HIBRIDO: blueprint (cajones) para lo fuzzy (calcular con Mercadona) + reflejo JS (index.js) para el costeo determinista servido en el bus (recalcular_siguiente, costear). Lo deterministico lo sirve codigo; el LLM se queda para el pricing fuzzy.",
+  "subscribes": [
+   "escandallo.costear.request",
+   "escandallo.escalar.request",
+   "escandallo.recalcular_lote.request",
+   "escandallo.recalcular_siguiente.request",
+   "escandallo.validar.request"
+  ],
+  "publishes": [],
+  "tools": []
+ },
+ {
+  "slug": "pizzepos/impresion",
+  "name": "impresion",
+  "version": "4.0.0",
+  "description": "Formateo ESC/POS y envio directo a impresoras ESP32 via MQTT. Autodescubrimiento de impresoras. Sin capas intermedias.",
+  "subscribes": [
+   "caja.cerrada",
+   "cocina.item_ticket",
+   "cuenta.actualizada",
+   "cuenta.creada",
+   "cuenta.eliminada",
+   "dia.iniciado",
+   "llevar.ticket_creado",
+   "mesa.abierta",
+   "mesa.cerrada",
+   "mesa.renombrada"
+  ],
+  "publishes": [
+   "impresion.comanda_generada",
+   "impresion.error",
+   "impresion.ticket_pieza_generado",
+   "impresion.ticket_venta_generado"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "pizzepos/ingredientes",
+  "name": "ingredientes",
+  "version": "5.0.0",
+  "description": "Catalogo de ingredientes organizado por GRUPO (categoria de producto). Fuente unica de precios (precio_extra). Sincronizado desde carta.actualizada y producto.creado.",
+  "subscribes": [
+   "carta.actualizada",
+   "ingrediente.actualizado",
+   "producto.creado",
+   "project.activated"
+  ],
+  "publishes": [
+   "ingrediente.actualizado",
+   "ingrediente.creado"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "pizzepos/media-generator",
+  "name": "media-generator",
+  "version": "1.0.0",
+  "description": "El LÍDER GENERADOR: puerto provider-agnóstico media.generar (request→response) que enruta por TIPO (imagen/audio/musica) al MOTOR concreto configurado. El motor real es un tools_http (el loader resuelve credencial + fetch + response_path). El especialista LLM (diseñador gráfico, sound designer) redacta el prompt y pide al puerto; el líder lo renderiza con el motor que esté puesto. Cambiar de motor",
+  "subscribes": [],
+  "publishes": [],
+  "tools": []
+ },
+ {
+  "slug": "pizzepos/menu-generator",
+  "name": "menu-generator",
+  "version": "11.2.0",
+  "description": "Generador de catalogo: de cualquier input textual (texto/dictado en lenguaje libre, o JSON ya estructurado) produce una carta estructurada en shape canonico carta-pizzepos y la entrega al custodio. Hibrido: el reflejo (index.js) estructura el catalogo ya formado de forma determinista; el LLM de pagina estructura el texto libre. Persistencia delegada en carta-manager. Sin OCR, sin agente, sin enriq",
+  "subscribes": [
+   "menu.import.request"
+  ],
+  "publishes": [],
+  "tools": []
+ },
+ {
+  "slug": "pizzepos/mercadona-api",
+  "name": "mercadona-api",
+  "version": "1.0.0",
+  "description": "Cliente HTTP no oficial de la API de tienda.mercadona.es. Provee precios y catalogo de productos del supermercado para que escandallo y otros modulos del subsistema-recetario puedan estimar coste de receta sin tener catalogo de precios propio. Infraestructura JS deterministica (NO blueprint): IO HTTP externa, latencia <1s requerida, sin razonamiento del dominio. Postcode default 30840 (Murcia). Ca",
+  "subscribes": [
+   "mercadona.categorias.listar.request",
+   "mercadona.producto.obtener.request",
+   "project.activated",
+   "project.deactivated"
+  ],
+  "publishes": [
+   "mercadona.precio.obtenido"
+  ],
+  "tools": [
+   "mercadona.producto.obtener",
+   "mercadona.categorias.listar"
+  ]
+ },
+ {
+  "slug": "pizzepos/notificador-pedidos",
+  "name": "notificador-pedidos",
+  "version": "2.0.0",
+  "description": "Orquesta notificaciones de pedido nuevo al staff por los canales configurados del proyecto (Telegram en v1; Discord en v2). Reemplaza la responsabilidad que tenia whatsapp-bot para la vertical tienda PWA tras pivote a Telegram-first.",
+  "subscribes": [
+   "pedido.creado"
+  ],
+  "publishes": [],
+  "tools": []
+ },
+ {
+  "slug": "pizzepos/pago-gateway",
+  "name": "pago-gateway",
+  "version": "1.0.0",
+  "description": "El LÍDER DE PAGO: puerto provider-agnóstico pago.iniciar (request→response) que enruta a la PASARELA configurada (semilla: Stripe Checkout) y, al confirmarse el pago por webhook firmado, emite pago.confirmado. El dinero vive en la pasarela; aquí solo se inicia la sesión y se verifica la confirmación. Degradable: sin pasarela → NO_PASARELA. Swappable a Redsys/PayPal cambiando pasarela.kind + adapte",
+  "subscribes": [],
+  "publishes": [],
+  "tools": []
+ },
+ {
+  "slug": "pizzepos/pedidos",
+  "name": "pedidos",
+  "version": "3.5.0",
+  "description": "Gestion completa de pedidos pizzepos. Dos tipos: tipo='pos' (flujo POS pizzeria con cuenta_id de cuentas-canales, items en pasos separados, enviado a cocina) y tipo='tienda' (vertical tienda PWA: plano sin cuenta_id, todos los items de una, cliente_nombre como ANCLA de recogida, estado pendiente_recogida). Recibe POS del comandero (bridge comandero.enviar_cocina) o UI handler. Recibe tienda via to",
+  "subscribes": [
+   "caja.cerrada",
+   "catalogo.actualizado",
+   "comandero.enviar_cocina",
+   "cuenta.creada",
+   "dia.iniciado",
+   "pago.confirmado",
+   "producto.actualizado",
+   "producto.creado",
+   "variacion.rechazada",
+   "variacion.validada"
+  ],
+  "publishes": [
+   "pedido.cancelado",
+   "pedido.completado",
+   "pedido.creado",
+   "pedido.enviado_cocina",
+   "pedido.item_actualizado",
+   "pedido.item_agregado",
+   "pedido.item_eliminado"
+  ],
+  "tools": [
+   "pedido.list",
+   "pedido.get",
+   "pedido.create",
+   "pedido.add-item",
+   "pedido.update-item",
+   "pedido.delete-item",
+   "pedido.send-kitchen",
+   "pedido.complete",
+   "pedido.cancel",
+   "pedido.total",
+   "pedido.health",
+   "pedido.crear-tienda"
+  ]
+ },
+ {
+  "slug": "pizzepos/persistencia-comandero",
+  "name": "persistencia-comandero",
+  "version": "4.0.0",
+  "description": "Event-sourcing + jornada para pizzepos. Sustrato de persistencia: captura todos los eventos del bus pizzepos, mantiene snapshots de cuentas activas, registra ventas, orquesta cierre de caja diario, multi-proyecto.",
+  "subscribes": [
+   "boton.pulsado",
+   "catalogo.actualizado",
+   "cobro.iniciado",
+   "cobro.procesado",
+   "cobro.reembolsado",
+   "cocina.item_avanzado",
+   "cocina.item_preparado",
+   "cocina.item_preparando",
+   "cocina.pedido_listo",
+   "comandero.enviar_cocina",
+   "comandero.item_agregado",
+   "comandero.item_eliminado",
+   "cuenta.actualizada",
+   "cuenta.cerrada",
+   "cuenta.creada",
+   "cuenta.eliminada",
+   "cuenta.estado_cambiado",
+   "llevar.ticket_creado",
+   "mesa.abierta",
+   "mesa.cerrada",
+   "mesa.renombrada",
+   "pedido.completado",
+   "pedido.creado",
+   "pedido.enviado_cocina",
+   "project.deleted",
+   "telefono.pedido_creado",
+   "ui.accion"
+  ],
+  "publishes": [
+   "caja.cerrada",
+   "cuenta.cerrada_forzada",
+   "dia.iniciado"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "pizzepos/productos",
+  "name": "productos",
+  "version": "5.1.0",
+  "description": "Catalogo de productos pizzepos multi-tenant. PROYECTOR SIN ESTADO: no guarda copia; proyecta la carta activa del proyecto (carta-manager, fuente unica) a formato POS al vuelo via carta.get.request. Lee la carta por su DUEÑO (carta-manager RPC), no por fs directo. Emite catalogo.actualizado como señal de refresco para que comandero/pedidos re-pull. Mutaciones delegan a carta-manager.",
+  "subscribes": [
+   "carta.actualizada",
+   "carta.borrada",
+   "carta.editada",
+   "project.activated",
+   "project.get.response",
+   "tarifas.config.actualizada"
+  ],
+  "publishes": [
+   "carta.get.request",
+   "carta.list.request",
+   "carta.remove_product.request",
+   "carta.update_product.request",
+   "catalogo.actualizado",
+   "project.get.request",
+   "tarifas.config.solicitada"
+  ],
+  "tools": [
+   "productos.list",
+   "productos.get",
+   "productos.search",
+   "productos.update",
+   "productos.delete",
+   "productos.categorias",
+   "productos.ingredientes",
+   "productos.pizzas",
+   "productos.stats",
+   "productos.health",
+   "productos.metrics",
+   "productos.load_carta",
+   "productos.carta_completa"
+  ]
+ },
+ {
+  "slug": "pizzepos/recetas",
+  "name": "recetas",
+  "version": "2.2.0",
+  "description": "Modulo recetas HIBRIDO: blueprint-driven (cajones) para lo fuzzy + reflejo JS (index.js) para las lecturas deterministas servidas en el bus. El LLM ve un CATALOGO de las operaciones (cajon.listar/abrir) en su pagina; las lecturas que otros modulos piden por RPC (recetas.{listar,ingredientes,obtener}.request) las contesta el reflejo, no un turno LLM.",
+  "subscribes": [
+   "escandallo.coste.calculado",
+   "recetas.crear.request",
+   "recetas.ingredientes.request",
+   "recetas.listar.request",
+   "recetas.obtener.request",
+   "recetas.validar.request"
+  ],
+  "publishes": [],
+  "tools": []
+ },
+ {
+  "slug": "pizzepos/tarifas",
+  "name": "tarifas",
+  "version": "3.2.0",
+  "description": "Asignacion carta+canal + registro de variantes pizzepos. Cada canal tiene su carta con precios finales escritos. Sin calculos en runtime, sin duplicacion (tarifas-creator y tarifas-sync agentes lo hacen). Publica tarifas.config.actualizada con el snapshot completo del proyecto en cada cambio; suscribe tarifas.config.solicitada para que otros modulos hidraten su cache sin acoplamiento directo.",
+  "subscribes": [
+   "project.activated",
+   "project.deactivated",
+   "tarifas.config.solicitada"
+  ],
+  "publishes": [
+   "tarifas.config.actualizada"
+  ],
+  "tools": [
+   "tarifas.set_general",
+   "tarifas.assign",
+   "tarifas.get",
+   "tarifas.register_variant",
+   "tarifas.get_variants"
+  ]
+ },
+ {
+  "slug": "pizzepos/tecnicas",
+  "name": "tecnicas",
+  "version": "1.1.0",
+  "description": "Modulo tecnicas en modo blueprint-driven. Libreria de tecnicas culinarias codificadas del proyecto (esferificacion, confitar, marinada, ahumado, etc.) con parametros tecnicos. Aggregate root con persistencia + history en data/projects/{slug}/tecnicas.json. Sin razonamiento de dominio mas alla de normalizar inputs en lenguaje natural y prevenir duplicados.",
+  "subscribes": [],
+  "publishes": [],
+  "tools": []
+ },
+ {
+  "slug": "pizzepos/tienda-api",
+  "name": "tienda-api",
+  "version": "1.1.0",
+  "description": "Canal HTTP de pedidos web — recibe POST desde la PWA generada por carta-digital/static-template y emite pedido.crear-tienda al bus. Tipo modulo_de_canal del contrato extensibilidad-modular, simetrico a whatsapp-bot pero para canal web. Stateless: ningun pedido persiste aqui — pizzepos/pedidos es el dueno del estado. Multi-proyecto: el project_slug llega como path param y se propaga al bus tal cual",
+  "subscribes": [
+   "pedido.crear-tienda.response"
+  ],
+  "publishes": [
+   "tienda.pedido.completado",
+   "tienda.pedido.fallido",
+   "tienda.pedido.recibido"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "pizzepos/variaciones",
+  "name": "variaciones",
+  "version": "4.5.0",
+  "description": "Gestion de variaciones de productos pizzepos (quitar/anadir ingredientes). Reglas por producto: que se puede quitar, que se puede anadir, maximo de extras. Se configura desde la CARTA (carta.actualizada/editada). Calcula precio final consultando precios al modulo ingredientes (fuente unica via uiHandler.handle('ingredientes', ...)). Auto-valida cada comandero.item_agregado y emite variacion.{valid",
+  "subscribes": [
+   "carta.actualizada",
+   "carta.editada",
+   "comandero.item_agregado",
+   "producto.creado",
+   "project.activated"
+  ],
+  "publishes": [
+   "variacion.rechazada",
+   "variacion.validada"
+  ],
+  "tools": [
+   "variaciones.get",
+   "variaciones.validar",
+   "variaciones.calcular_precio",
+   "variaciones.health",
+   "variaciones.metrics",
+   "variaciones.configurar"
+  ]
+ },
+ {
+  "slug": "pizzepos/viabilidad",
+  "name": "viabilidad",
+  "version": "2.0.0",
+  "description": "Modulo viabilidad HIBRIDO: el reflejo JS sirve las 4 ops deterministas (evaluar/obtener/listar/descartar) en el bus. Evaluador economico previo: recibe receta o propuesta + PVP objetivo opcional, delega el coste a escandallo, aplica reglas de food cost para emitir veredicto canonico. Persiste expediente por evaluacion (audit trail).",
+  "subscribes": [
+   "viabilidad.descartar.request",
+   "viabilidad.evaluar.request",
+   "viabilidad.listar.request",
+   "viabilidad.obtener.request"
+  ],
+  "publishes": [],
+  "tools": []
+ },
+ {
+  "slug": "planes-y-tiers",
+  "name": "planes-y-tiers",
+  "version": "0.1.0",
+  "description": "Definición de planes y tiers (Free/Pro/Agencias) con rangos declarados; consulta de plan respeta rangos.",
+  "subscribes": [
+   "planes-y-tiers.get.request",
+   "planes-y-tiers.list.request",
+   "project.activated"
+  ],
+  "publishes": [],
+  "tools": []
+ },
+ {
+  "slug": "planificador",
+  "name": "planificador",
+  "version": "0.1.0",
+  "description": "Planificador de proyecto: declaras qué quieres construir y ensambla el set de skills de la cantera, con un freno de completitud que garantiza cobertura (no skills sueltas) y nombra los huecos honestamente. blueprint-agentico; reflejo (validar+ensamblar) + blueprint (descomponer+elegir+criticar).",
+  "subscribes": [
+   "planificador.ensamblar.request",
+   "planificador.validar.request"
+  ],
+  "publishes": [
+   "planificador.ensamblar.response",
+   "planificador.plan.listo",
+   "planificador.validar.response"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "planos",
+  "name": "planos",
+  "version": "0.1.0",
+  "description": "Generador de planos CAD: JSON de entidades con medidas → DXF R12 (AutoCAD/LibreCAD/Fusion/CNC) + SVG para visualizar, con cotas automáticas. Reflejo puro.",
+  "subscribes": [
+   "planos.generar.request"
+  ],
+  "publishes": [
+   "planos.generado",
+   "planos.generar.response"
+  ],
+  "tools": [
+   "planos.generar"
+  ]
+ },
+ {
+  "slug": "plugin-manager",
+  "name": "plugin-manager",
+  "version": "2.1.0",
+  "description": "Descubre y gestiona plugins JSON con funciones ejecutables. Plugins viven en <pluginsPath>/<plugin-name>/<plugin-name>.functions.json. Expone par request/response via bus + 5 endpoints HTTP.",
+  "subscribes": [
+   "plugin.get.request",
+   "plugin.list.request"
+  ],
+  "publishes": [
+   "plugin.error",
+   "plugin.get.response",
+   "plugin.list.response",
+   "plugin.loaded",
+   "plugin.reloaded",
+   "plugin.unloaded"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "portal",
+  "name": "portal",
+  "version": "0.2.0",
+  "description": "La PUERTA de Enki hacia agentes externos (MCP) y operadores. Superficie de capacidades GUARDADA sobre getToolsForAI()+executeTool(): un cliente externo (Claude Code/Cursor) habla con esta puerta vía el bridge MCP (mcp/enki-mcp-server.js) sobre ui/request/portal/*. El poder no es nuevo (215 tools ya existen); lo nuevo es el GUARD: interruptor 'portal-mcp' (OFF=puerta cerrada), scope project|system,",
+  "subscribes": [
+   "interruptor.cambiado"
+  ],
+  "publishes": [
+   "interruptor.registrar",
+   "portal.confirmation.pendiente",
+   "portal.invocado"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "prisma/adaptador",
+  "name": "adaptador",
+  "version": "0.3.0",
+  "description": "Adaptador de Prisma: producto crudo → ProductoUniversal (5 huecos) + arquetipo. blueprint-agentico; v0.1.0 mitad reflejo (clasifica por forma, marca lo abierto, valida contra el freno). El PENSAR fuzzy (LLM) llega como blueprint después.",
+  "subscribes": [
+   "adaptador.adaptar.request"
+  ],
+  "publishes": [],
+  "tools": []
+ },
+ {
+  "slug": "prisma/arquetipos",
+  "name": "arquetipos",
+  "version": "0.1.0",
+  "description": "Registro ABIERTO de arquetipos de Prisma: semilla en código + custom propuestos por IA y aprobados por humano (anti-wipe). Sirve listar/obtener/clasificar/proponer/aprobar en el bus.",
+  "subscribes": [
+   "arquetipos.aprobar.request",
+   "arquetipos.clasificar.request",
+   "arquetipos.listar.request",
+   "arquetipos.obtener.request",
+   "arquetipos.proponer.request"
+  ],
+  "publishes": [],
+  "tools": []
+ },
+ {
+  "slug": "prisma/boss",
+  "name": "boss",
+  "version": "0.1.0",
+  "description": "Orquestador de Prisma: comercio = conjunto de arquetipos de sus productos → unión de órganos a encender. Calcula el plan y lo señala; el enforcement lo consume aparte.",
+  "subscribes": [
+   "boss.estado.request",
+   "boss.plan.request",
+   "catalogo.actualizado",
+   "catalogo.borrado",
+   "catalogo.editado",
+   "project.activated"
+  ],
+  "publishes": [],
+  "tools": []
+ },
+ {
+  "slug": "prisma/calendario",
+  "name": "calendario",
+  "version": "0.2.0",
+  "description": "Base compartida del tiempo de Prisma (órgano agenda): disponibilidad + capacidad + reservas + huecos, en un motor determinista para cita y alquiler. Product-agnóstico; los consumidores beben por RPC.",
+  "subscribes": [
+   "calendario.bloquear_dia.request",
+   "calendario.cancelar.request",
+   "calendario.devolver.request",
+   "calendario.feed_ics.request",
+   "calendario.feed_url.request",
+   "calendario.get_disponibilidad.request",
+   "calendario.huecos.request",
+   "calendario.importar_ics.request",
+   "calendario.list_reservas.request",
+   "calendario.reservar.request",
+   "calendario.set_disponibilidad.request",
+   "project.activated"
+  ],
+  "publishes": [],
+  "tools": []
+ },
+ {
+  "slug": "prisma/carrito",
+  "name": "carrito",
+  "version": "0.2.0",
+  "description": "Buffer de venta universal de Prisma (carrito): añadir/quitar/actualizar ítems, tasados por opciones, en céntimos. Copiado de comandero, sin los ganchos de cocina.",
+  "subscribes": [
+   "carrito.add_item.request",
+   "carrito.get.request",
+   "carrito.list.request",
+   "carrito.remove_item.request",
+   "carrito.update_item.request",
+   "carrito.vaciar.request",
+   "project.activated"
+  ],
+  "publishes": [],
+  "tools": []
+ },
+ {
+  "slug": "prisma/cierre",
+  "name": "cierre",
+  "version": "0.2.0",
+  "description": "Cierre de caja universal de Prisma: cuadre del día (total + por método). Copiado de persistencia-comandero, la parte del cuadre.",
+  "subscribes": [
+   "cierre.cerrar_caja.request",
+   "cierre.estado.request",
+   "cobro.procesado",
+   "project.activated"
+  ],
+  "publishes": [],
+  "tools": []
+ },
+ {
+  "slug": "prisma/cobro",
+  "name": "cobro",
+  "version": "0.2.0",
+  "description": "Pago universal de Prisma (cobro): cobra el carrito (efectivo/tarjeta/bizum/transferencia/mixto), en céntimos. Copiado de cobros, sin lo específico de pizzepos.",
+  "subscribes": [
+   "cobro.confirmar.request",
+   "cobro.crear.request",
+   "cobro.get.request",
+   "cobro.list.request",
+   "cobro.metodos.request",
+   "cobro.reembolsar.request",
+   "project.activated"
+  ],
+  "publishes": [],
+  "tools": []
+ },
+ {
+  "slug": "prisma/comercio",
+  "name": "comercio",
+  "version": "0.1.0",
+  "description": "Conductor universal de Prisma: el LLM opera un comercio cualquiera (catálogo → venta → preparación → entrega → cobro → escaparate) leyendo el ProductoUniversal y publicando RPC al bus. Blueprint-driven, sin runtime JS.",
+  "subscribes": [],
+  "publishes": [],
+  "tools": []
+ },
+ {
+  "slug": "prisma/compuestos",
+  "name": "compuestos",
+  "version": "0.1.0",
+  "description": "Custodio de la biblioteca de COMPUESTOS (formulaciones): crear/get/list/actualizar/pendientes sobre /prisma/compuestos/<id>.json, atómico, create-only (409 si el slug existe). Un compuesto guarda SOLO refs+cantidades a insumos o a otros compuestos (sub-mezclas, recursivo), nunca los datos del insumo. Biblioteca independiente del producto. Emite compuesto.creado/actualizado.",
+  "subscribes": [
+   "compuestos.actualizar.request",
+   "compuestos.crear.request",
+   "compuestos.get.request",
+   "compuestos.list.request",
+   "compuestos.pendientes.request"
+  ],
+  "publishes": [],
+  "tools": []
+ },
+ {
+  "slug": "prisma/conversor",
+  "name": "conversor",
+  "version": "0.1.0",
+  "description": "",
+  "subscribes": [
+   "conversor.convertir.request",
+   "conversor.escalar.request",
+   "conversor.formula.request",
+   "conversor.precio.request",
+   "conversor.referencia.request"
+  ],
+  "publishes": [],
+  "tools": []
+ },
+ {
+  "slug": "prisma/coste",
+  "name": "coste",
+  "version": "0.2.0",
+  "description": "Calculadora de coste/margen/pvp de Prisma (cara comerciante). Envuelve la aritmética de escandallo+viabilidad en genérico; los costes los pone el comerciante, coste no inventa.",
+  "subscribes": [
+   "coste.aplicar.request",
+   "coste.costear.request"
+  ],
+  "publishes": [],
+  "tools": []
+ },
+ {
+  "slug": "prisma/costeador",
+  "name": "costeador",
+  "version": "0.1.0",
+  "description": "Costeador de Prisma — el MOTOR que calcula coste de producción y formula el precio de venta (PVP) a partir de los compuestos y sus proporciones. Reflejo determinista.",
+  "subscribes": [
+   "costeador.costear.request",
+   "costeador.costear_todos.request",
+   "insumo.actualizado"
+  ],
+  "publishes": [],
+  "tools": []
+ },
+ {
+  "slug": "prisma/cuenta",
+  "name": "cuenta",
+  "version": "0.2.0",
+  "description": "Ticket/cuenta universal de Prisma: abre → (carrito) → cobra → cierra. Copiado de cuentas, sin los estados de hostelería.",
+  "subscribes": [
+   "cobro.procesado",
+   "cuenta.cerrar.request",
+   "cuenta.crear.request",
+   "cuenta.get.request",
+   "cuenta.list.request",
+   "project.activated"
+  ],
+  "publishes": [],
+  "tools": []
+ },
+ {
+  "slug": "prisma/enforcement",
+  "name": "enforcement",
+  "version": "0.1.0",
+  "description": "El efector del BOSS: consume boss.plan.actualizado y enciende los órganos del comercio vía el panel central de interruptores. Additivo-seguro; no apaga solo.",
+  "subscribes": [
+   "boss.plan.actualizado",
+   "enforcement.estado.request",
+   "interruptor.solicitar_registro"
+  ],
+  "publishes": [],
+  "tools": []
+ },
+ {
+  "slug": "prisma/escaparate",
+  "name": "escaparate",
+  "version": "0.2.0",
+  "description": "Escaparate público de Prisma: ProductoUniversal → vista cliente (poda lo no ofrecido, presenta precio/avisos). Gemelo generalizado de carta-digital.",
+  "subscribes": [
+   "catalogo.actualizado",
+   "catalogo.borrado",
+   "catalogo.editado",
+   "escaparate.publicar.request",
+   "escaparate.publico.request"
+  ],
+  "publishes": [],
+  "tools": []
+ },
+ {
+  "slug": "prisma/formulador",
+  "name": "formulador",
+  "version": "0.1.0",
+  "description": "",
+  "subscribes": [
+   "formulador.clasificar.request",
+   "formulador.modelar.request",
+   "formulador.reconciliar.request"
+  ],
+  "publishes": [],
+  "tools": []
+ },
+ {
+  "slug": "prisma/insumos",
+  "name": "insumos",
+  "version": "0.1.0",
+  "description": "Custodio de la biblioteca de INSUMOS (materia prima): buscar (reconciliación por similitud)/crear/get/list/actualizar sobre /prisma/insumos/<id>.json, atómico, create-only (409). Normaliza el precio a céntimos POR UNIDAD BASE (o referencia prudente p75) y preserva densidad_g_ml. Precio de referencia; sin factura (fase 1). Emite insumo.creado/actualizado.",
+  "subscribes": [
+   "insumos.actualizar.request",
+   "insumos.buscar.request",
+   "insumos.crear.request",
+   "insumos.get.request",
+   "insumos.list.request"
+  ],
+  "publishes": [],
+  "tools": []
+ },
+ {
+  "slug": "prisma/opciones",
+  "name": "opciones",
+  "version": "0.1.0",
+  "description": "Motor de opciones de Prisma: valida y precia la selección del cliente contra un ProductoUniversal (variante·modificacion·añadido·personalizacion_libre). Envuelve el banco _shared/motor-opciones.",
+  "subscribes": [
+   "opciones.evaluar.request"
+  ],
+  "publishes": [],
+  "tools": []
+ },
+ {
+  "slug": "prisma/preparar",
+  "name": "preparar",
+  "version": "0.2.0",
+  "description": "Custodio de la preparación+entrega universal de Prisma: pedidos con estados por ítem y agregado (pendiente → preparando → listo → entregado/recogido/enviado), estados custom ampliables por proyecto. La lógica de cocina/pedidos de pizzepos generalizada a cualquier negocio (encargos, empaquetado, pick&pack). Reflejo JS en el bus (preparar.<op>.request).",
+  "subscribes": [
+   "preparar.cancelar.request",
+   "preparar.crear.request",
+   "preparar.estado.request",
+   "preparar.get.request",
+   "preparar.listar.request"
+  ],
+  "publishes": [],
+  "tools": []
+ },
+ {
+  "slug": "prisma/producir",
+  "name": "producir",
+  "version": "0.1.0",
+  "description": "Motor de proyección de compuestos a objetivos físicos: calcula gramaje/rendimiento/reamasado para producir un compuesto (masa, mortero, jarabe, fórmula) según su regla de escala. REFLEJO puro sin store: lee compuestos+insumos por RPC y emite producir.proyeccion.calculada. Nacido de la hoja masa (Fase 4 de The Pirate).",
+  "subscribes": [
+   "producir.proyectar.request",
+   "producir.rendimiento.request",
+   "producir.validar.request"
+  ],
+  "publishes": [],
+  "tools": []
+ },
+ {
+  "slug": "prisma/producto-manager",
+  "name": "producto-manager",
+  "version": "0.1.0",
+  "description": "Custodio del catalogo de ProductoUniversal (Prisma). Reflejo JS que sirve las ops deterministas (CRUD + versionado + validacion) en el bus (catalogo.<op>.request). Aggregate root de la vertical universal: cualquier arquetipo de producto (comestible, pieza, servicio, uso-temporal...) vive con la misma forma de 5 huecos. Copiado de carta-manager, generalizado de pizza a producto universal.",
+  "subscribes": [
+   "catalogo.activar.request",
+   "catalogo.add_category.request",
+   "catalogo.add_product.request",
+   "catalogo.clonar.request",
+   "catalogo.delete.request",
+   "catalogo.get.request",
+   "catalogo.list.request",
+   "catalogo.remove_product.request",
+   "catalogo.restore.request",
+   "catalogo.save.request",
+   "catalogo.search.request",
+   "catalogo.stats.request",
+   "catalogo.update_product.request",
+   "catalogo.validar.request",
+   "catalogo.versions.request",
+   "producto.adaptado"
+  ],
+  "publishes": [],
+  "tools": []
+ },
+ {
+  "slug": "prisma/proyector",
+  "name": "proyector",
+  "version": "0.1.0",
+  "description": "Proyector sin estado de Prisma: ProductoUniversal (catalogo activo) -> vista de consumo, al vuelo. Gemelo generalizado de pizzepos/productos.",
+  "subscribes": [
+   "catalogo.actualizado",
+   "catalogo.borrado",
+   "catalogo.editado",
+   "project.activated",
+   "vista.buscar.request",
+   "vista.completa.request",
+   "vista.producto.request",
+   "vista.productos.request"
+  ],
+  "publishes": [],
+  "tools": []
+ },
+ {
+  "slug": "prisma/puente-compuesto",
+  "name": "puente-compuesto",
+  "version": "0.1.0",
+  "description": "",
+  "subscribes": [
+   "catalogo.actualizado",
+   "catalogo.editado",
+   "compuesto.coste.calculado"
+  ],
+  "publishes": [],
+  "tools": []
+ },
+ {
+  "slug": "prisma/ticket",
+  "name": "ticket",
+  "version": "0.1.0",
+  "description": "Recibo/ticket universal de Prisma: formatea la venta (ítems + total) en texto imprimible. Copiado de impresion, solo la parte de recibo.",
+  "subscribes": [
+   "ticket.formatear.request"
+  ],
+  "publishes": [],
+  "tools": []
+ },
+ {
+  "slug": "prisma/ui-forge",
+  "name": "ui-forge",
+  "version": "0.1.0",
+  "description": "Taller de UI de prisma: genera bundles web potentes (POS, …) dirigidos por el ProductoUniversal + marca, verificados por verificador-visual, servidos desde storage/www/prisma/<proposito>/.",
+  "subscribes": [
+   "ui-forge.generar.request"
+  ],
+  "publishes": [],
+  "tools": []
+ },
+ {
+  "slug": "proceso-negocio",
+  "name": "proceso-negocio",
+  "version": "0.1.0",
+  "description": "Orquestador del proceso de un proyecto: encadena las skills de fase por eventos (project.created → identidad-negocio · negocio.identificado → esquematizar-negocio · negocio.esquematizado → diseccionador). Tool completar_fase para que el LLM cierre fases. Empuja via conserje.empujon.",
+  "subscribes": [
+   "negocio.identificado",
+   "proceso-negocio.completar_fase.request",
+   "project.created"
+  ],
+  "publishes": [
+   "conserje.empujon"
+  ],
+  "tools": [
+   "proceso-negocio.completar_fase",
+   "proceso-negocio.reiniciar_f0"
+  ]
+ },
+ {
+  "slug": "productor-modulos",
+  "name": "productor-modulos",
+  "version": "0.1.0",
+  "description": "Brazo ejecutor: valida y escribe módulos en modules/<nombre>/ a partir de un diseño. Requiere interruptor ON para funcionar.",
+  "subscribes": [
+   "interruptor.cambiado",
+   "interruptor.solicitar_registro",
+   "project.activated"
+  ],
+  "publishes": [
+   "interruptor.registrar",
+   "productor.modulo.producido",
+   "productor.modulo.rechazado"
+  ],
+  "tools": [
+   "productor.producir",
+   "productor.validar"
+  ]
+ },
+ {
+  "slug": "project-manager",
+  "name": "project-manager",
+  "version": "4.2.0",
+  "description": "Project lifecycle management canónico: CRUD + activate/deactivate + session + AI config + bootstrap (Sistema + Mi Proyecto) + resolución 'una vía fija' de default conversation. Consume composition-manager y database-manager via events.",
+  "subscribes": [
+   "composition.response",
+   "db.query.response",
+   "project.activate",
+   "project.active.request",
+   "project.create",
+   "project.delete",
+   "project.ensure-feature.request",
+   "project.get.request",
+   "project.list.request",
+   "project.state.request",
+   "project.update"
+  ],
+  "publishes": [
+   "composition.request",
+   "db.query.request",
+   "db.schema.init.request",
+   "project.activated",
+   "project.active.response",
+   "project.created",
+   "project.deactivated",
+   "project.deleted",
+   "project.ensure-feature.response",
+   "project.get.response",
+   "project.list.response",
+   "project.state",
+   "project.updated"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "project-profile",
+  "name": "project-profile",
+  "version": "0.1.0",
+  "description": "Perfil extendido del proyecto: propósito, recursos, stakeholders, entregables, criterios de éxito y valor. Persiste por proyecto en state/project_profile.json.",
+  "subscribes": [
+   "project-profile.get.request",
+   "project-profile.update.request",
+   "project.activated"
+  ],
+  "publishes": [
+   "negocio.identificado",
+   "project-profile.actualizado"
+  ],
+  "tools": [
+   "project-profile.get",
+   "project-profile.update"
+  ]
+ },
+ {
+  "slug": "prompt-manager",
+  "name": "prompt-manager",
+  "version": "3.0.0",
+  "description": "Sistema de gestion de prompts con versionado, slots, presets y analytics. Persistencia SQLite delegada a database-manager (project_id sentinela `_prompts` para datos compartidos cross-projects). Migrado al canon POC2: handlers HTTP/UI/Tool deduplicados via internals, shape canonico {status, data | error}, helpers POC2, propagacion de correlation_id.",
+  "subscribes": [
+   "ai.completion.completed",
+   "ai.request.started",
+   "db.query.response",
+   "db.schema.init.response",
+   "prompt.get.request",
+   "prompt.list.request"
+  ],
+  "publishes": [
+   "preset.created",
+   "preset.deleted",
+   "prompt.created",
+   "prompt.deleted",
+   "prompt.get.response",
+   "prompt.list.response",
+   "prompt.updated"
+  ],
+  "tools": [
+   "prompt.list",
+   "prompt.get",
+   "prompt.render"
+  ]
+ },
+ {
+  "slug": "propiocepcion",
+  "name": "propiocepcion",
+  "version": "1.0.0",
+  "description": "Capa de propiocepcion del sistema. Reflejo JS siempre-encendido que captura del bus el historial de eventos de los modulos vinculados por proyecto (recetario) — tanto lo consciente (ops dirigidas por el LLM) como lo reflejo (ejecuciones JS) — y lo persiste por proyecto. Es la copia eferente: deja constancia de lo que paso en el mundo del modulo para que el LLM pueda ser consciente de ello (el nerv",
+  "subscribes": [
+   "fs.read.response",
+   "project.activated",
+   "project.deactivated"
+  ],
+  "publishes": [
+   "propiocepcion.registrado"
+  ],
+  "tools": [
+   "propiocepcion.leer"
+  ]
+ },
+ {
+  "slug": "publicador",
+  "name": "publicador",
+  "version": "0.2.0",
+  "description": "Publica HTML en /<ns>/<slug>/<dir>/: asegura la feature www y escribe en storage/www/<dir>/. El HTML lo da el LLM; el reflejo hace lo determinista.",
+  "subscribes": [
+   "project.activated",
+   "project.deactivated",
+   "publicar.html.request"
+  ],
+  "publishes": [
+   "publicador.publicado",
+   "publicar.html.response"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "radar-fuente",
+  "name": "radar-fuente",
+  "version": "0.1.0",
+  "description": "La célula del radar: define las 6 fuentes trinchera (bandcamp, soundcloud, sellos_micro, demos, playlists_nicho, comunidades) con su canal, métrica, frecuencia y umbral propio. REFLEJO: listar fuentes y configurarlas (merge parcial con garantía de métrica/frecuencia).",
+  "subscribes": [
+   "radar-fuente.configurar.request",
+   "radar-fuente.listar.request"
+  ],
+  "publishes": [
+   "radar-fuente.configurada"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "recetario-creativo",
+  "name": "recetario-creativo",
+  "version": "1.0.0",
+  "description": "Soporte al proceso creativo del chef: prototipos (que aun no son recetas), iteraciones anotadas, manifiesto creativo del proyecto, scoring de alineacion. Modulo del subsistema-recetario (ver arquitectura/decisiones/_contratos/subsistema-recetario.contract.json).",
+  "subscribes": [
+   "creativo.alineacion.evaluar",
+   "creativo.manifiesto.actualizar",
+   "creativo.prototipo.crear",
+   "creativo.prototipo.iterar",
+   "fs.read.response",
+   "fs.write.response",
+   "project.activated",
+   "project.get.response"
+  ],
+  "publishes": [
+   "creativo.alineacion.validada",
+   "creativo.iteracion.registrada",
+   "creativo.prototipo.creado"
+  ],
+  "tools": [
+   "creativo.prototipo.crear",
+   "creativo.prototipo.iterar",
+   "creativo.alineacion.evaluar",
+   "creativo.manifiesto.actualizar"
+  ]
+ },
+ {
+  "slug": "redactor",
+  "name": "redactor",
+  "version": "0.1.0",
+  "description": "Conversor. El blueprint redacta la newsletter (M9); el reflejo custodia el historial de borradores (p6) y la validación determinista del cajón.",
+  "subscribes": [
+   "project.activated",
+   "redactor.borrador.guardar.request",
+   "redactor.listar.request",
+   "redactor.validar.request"
+  ],
+  "publishes": [
+   "redactor.borrador_listo",
+   "redactor.redactar.failed"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "reloj",
+  "name": "reloj",
+  "version": "0.1.0",
+  "description": "Micro-agente del ciclo semanal del radar: compone la cadena sonda→banco→evaluador→redactor→cartero, elige 1 candidato (M1/M4) y cierra el ciclo con su par de fallo (ciclo_abortado).",
+  "subscribes": [
+   "reloj.ciclo.iniciar.request"
+  ],
+  "publishes": [
+   "reloj.ciclo_abortado",
+   "reloj.ciclo_completado",
+   "reloj.ciclo_iniciado",
+   "reloj.ciclo_semana_vacia"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "rpc-index",
+  "name": "rpc-index",
+  "version": "0.1.0",
+  "description": "Índice RPC del sistema: catálogo generado de los 212 RPC .request (evento + módulo + descripción) servido bajo demanda por rpc.buscar / rpc.ver. El LLM consulta el nombre exacto antes de publicar al bus — no lo inventa.",
+  "subscribes": [
+   "rpc.buscar.request",
+   "rpc.ver.request"
+  ],
+  "publishes": [],
+  "tools": []
+ },
+ {
+  "slug": "scheduler",
+  "name": "scheduler",
+  "version": "1.0.0",
+  "description": "Advanced job scheduling module with multiple trigger types (cron, interval, datetime, event-based, condition, composite)",
+  "subscribes": [],
+  "publishes": [
+   "scheduler.job.completed",
+   "scheduler.job.created",
+   "scheduler.job.deleted",
+   "scheduler.job.disabled",
+   "scheduler.job.enabled",
+   "scheduler.job.failed",
+   "scheduler.job.triggered",
+   "scheduler.job.updated"
+  ],
+  "tools": [
+   "scheduler.list_jobs",
+   "scheduler.create_job",
+   "scheduler.trigger_job"
+  ]
+ },
+ {
+  "slug": "scope-provider",
+  "name": "scope-provider",
+  "version": "0.1.0",
+  "description": "Fusión LLM pieza 1: resuelve qué provider usa un flujo según su ámbito (proyecto/agente/skill), cascada contexto>agente>skill>proyecto>GLOBAL. Reflejo puro. Hermes decide; esto dice el provider del ámbito.",
+  "subscribes": [
+   "scope-provider.estado.request",
+   "scope-provider.get.request",
+   "scope-provider.lista_scope.request"
+  ],
+  "publishes": [
+   "scope-provider.estado.response",
+   "scope-provider.get.response",
+   "scope-provider.lista_scope.response"
+  ],
+  "tools": [
+   "scope_provider"
+  ]
+ },
+ {
+  "slug": "security-core",
+  "name": "security-core",
+  "version": "1.0.0",
+  "description": "El cerebro de la puerta guardada del bus. Cablea el BusGuard del broker (core.busGuard) al verificador de certificate-authority y traduce los interruptores del dueno en el peldano de la escalera off->observe->enforce. Hace que la identidad por certificado rija la seguridad REAL de todo el bus MQTT, no solo el gateway HTTP.",
+  "subscribes": [
+   "interruptor.cambiado",
+   "security.peer.revoked",
+   "security.peer.trusted"
+  ],
+  "publishes": [
+   "interruptor.registrar",
+   "security.bus.mode_changed"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "security-p2p",
+  "name": "security-p2p",
+  "version": "2.1.0",
+  "description": "P2P Zero Trust Security para Event Core. Cifra/descifra eventos entre cores usando X25519 + AES-256-GCM via hooks transparentes (beforeEventPublish, afterEventReceive). Cache de shared_secrets in-memory con eviction LRU (max_shared_secrets, default 100). Handshake P2P over MQTT (core/+/security/handshake/{request,response}/#).",
+  "subscribes": [
+   "security.public-key.request"
+  ],
+  "publishes": [
+   "security.handshake.failed",
+   "security.handshake.timeout",
+   "security.peer.revoked",
+   "security.peer.trusted",
+   "security.public-key.response"
+  ],
+  "tools": [
+   "security-p2p.status",
+   "security-p2p.public-key",
+   "security-p2p.trust-peer",
+   "security-p2p.revoke-peer",
+   "security-p2p.trusted-peers",
+   "security-p2p.health"
+  ]
+ },
+ {
+  "slug": "sonda",
+  "name": "sonda",
+  "version": "0.1.0",
+  "description": "Micro-agente que vigila las fuentes de mercado y cosecha señales crudas (titulo, fuente, url) sin decidir si un nicho vale. Reflejo: registro de fuentes + dedupe + persistencia. Blueprint: cajón recolectar (extrae señales del markdown de crawl4rs).",
+  "subscribes": [
+   "project.activated",
+   "sonda.cosecha.guardar.request",
+   "sonda.fuentes.configurar.request",
+   "sonda.fuentes.listar.request"
+  ],
+  "publishes": [
+   "sonda.fuente.configurada",
+   "sonda.recolectar.failed",
+   "sonda.senales_cosechadas"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "staff-manager",
+  "name": "staff-manager",
+  "version": "2.1.0",
+  "description": "Control de personal con tarjetas NFC NTAG215 — jornadas (tap_in/tap_out con auto_timeout y manager_close) y onboarding de tablets via core-tag.",
+  "subscribes": [
+   "security.public-key.response"
+  ],
+  "publishes": [
+   "security.public-key.request",
+   "staff.session.auto_timeout",
+   "staff.session.manager_close",
+   "staff.session.tap_in",
+   "staff.session.tap_out"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "system-coherence-analyzer",
+  "name": "system-coherence-analyzer",
+  "version": "0.1.0",
+  "description": "Agente meta-sistema: analiza coherencia transversal del repo (patrones consistentes vs divergentes, anti-patrones implicitos, drift implicito) para un aspecto declarado (persistencia, errores, blueprint pseudocodigo, declaracion de tools, etc.). Lectura cross-modulo + razonamiento. Sin persistencia propia.",
+  "subscribes": [
+   "agent.execute.request"
+  ],
+  "publishes": [
+   "agent.execute.failed",
+   "agent.execute.response",
+   "fs.read.request"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "system-inspector",
+  "name": "system-inspector",
+  "version": "2.0.0",
+  "description": "Captura estado del sistema (HTTP, MQTT, errores, logs) en buffer circular in-memory + persiste snapshot atómico a archivo JSON. 4 APIs HTTP read-only para que la IA consulte el runtime. Dev-only: se desactiva en NODE_ENV=production salvo force_in_production.",
+  "subscribes": [
+   "core/+/errors/#",
+   "core/+/events/#"
+  ],
+  "publishes": [],
+  "tools": []
+ },
+ {
+  "slug": "telegram-bridge",
+  "name": "telegram-bridge",
+  "version": "1.0.1",
+  "description": "Puente Telegram ⇄ chat por proyecto: cada bot vinculado a un proyecto reenvía sus mensajes al chat del proyecto (misma mente de Hermes) y las respuestas del chat vuelven al hilo de Telegram.",
+  "subscribes": [
+   "ai.chat.failed",
+   "ai.chat.response",
+   "portal.confirmation.pendiente",
+   "telegram.bridge.listar.request",
+   "telegram.bridge.vincular.request",
+   "telegram.callback.received",
+   "telegram.command.received",
+   "telegram.text.received"
+  ],
+  "publishes": [
+   "telegram.bridge.envio_fallido",
+   "telegram.bridge.vinculado"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "telegram-service",
+  "name": "telegram-service",
+  "version": "3.1.0",
+  "description": "Multi-bot Telegram service - centralized management, credential-manager integration",
+  "subscribes": [
+   "credential.deleted",
+   "credential.saved",
+   "telegram.answer_callback.request",
+   "telegram.delete_message.request",
+   "telegram.edit_message.request",
+   "telegram.get_chat.request",
+   "telegram.get_file.request",
+   "telegram.list_bots.request",
+   "telegram.send_document.request",
+   "telegram.send_location.request",
+   "telegram.send_message.request",
+   "telegram.send_photo.request",
+   "telegram.send_video.request",
+   "telegram.set_commands.request"
+  ],
+  "publishes": [
+   "telegram.audio.received",
+   "telegram.bot.error",
+   "telegram.bot.started",
+   "telegram.bot.stopped",
+   "telegram.callback.received",
+   "telegram.command.received",
+   "telegram.contact.received",
+   "telegram.document.received",
+   "telegram.location.received",
+   "telegram.message.sent",
+   "telegram.photo.received",
+   "telegram.queue.overflow",
+   "telegram.send.failed",
+   "telegram.text.received",
+   "telegram.video.received",
+   "telegram.voice.received"
+  ],
+  "tools": [
+   "telegram.send_message",
+   "telegram.send_photo",
+   "telegram.send_document",
+   "telegram.send_video",
+   "telegram.send_location",
+   "telegram.edit_message",
+   "telegram.delete_message",
+   "telegram.answer_callback",
+   "telegram.get_file",
+   "telegram.get_chat",
+   "telegram.set_commands",
+   "telegram.list_bots"
+  ]
+ },
+ {
+  "slug": "text-editor",
+  "name": "text-editor",
+  "version": "2.0.0",
+  "description": "Backend de editor de archivos invocado desde el frontend Svelte (frontend/src/lib/modules/files) via topics canonicos ui/request/editor/{open,save,validate,format}. Edita archivos .md, .json, .yaml, etc dentro del directorio de cada proyecto (data/projects/<project_id>/). Path traversal validado, save atomico (.tmp + rename), validacion JSON antes de persistir.",
+  "subscribes": [
+   "editor.format.request",
+   "editor.open.request",
+   "editor.save.request",
+   "editor.validate.request"
+  ],
+  "publishes": [
+   "editor.error",
+   "editor.format.response",
+   "editor.open.response",
+   "editor.saved",
+   "editor.validate.response"
+  ],
+  "tools": []
+ },
+ {
+  "slug": "verificador-visual",
+  "name": "verificador-visual",
+  "version": "1.3.0",
+  "description": "Órgano que abre un navegador headless (obscura, Rust, sin Chromium) y verifica que un HTML renderiza sin romperse. MULTI-ÁNGULO: motivos HARD (overflow, errores JS/consola, página en blanco, imágenes rotas → bloquea) + avisos SOFT (responsive móvil + accesibilidad: alt/lang/legibilidad/contraste → surfaced, no bloquea). El freno de RENDER que complementa el freno estructural de carta-design/carta-",
+  "subscribes": [
+   "render.verificar.request"
+  ],
+  "publishes": [
+   "render.verificado",
+   "verificacion-visual.avisos",
+   "verificacion-visual.failed",
+   "verificacion-visual.sin_navegador"
+  ],
+  "tools": [
+   "verificador-visual.verificar"
+  ]
+ },
+ {
+  "slug": "whatsapp-bot",
+  "name": "whatsapp-bot",
+  "version": "1.5.0",
+  "description": "Bot escueto multi-proyecto sobre WhatsApp Cloud API (Meta). Maquina de estados pequena: webhook recibe mensaje, parser detecta si es saludo o pedido formateado de la PWA tienda; si es pedido publica pedido.crear.request a pedidos y notifica al staff via telegram-service; si es saludo responde con el link de la PWA del proyecto. Multi-proyecto: mapping phone_number_id -> project_slug construido al ",
+  "subscribes": [
+   "catalogo.actualizado",
+   "cocina.pedido_listo",
+   "credential.deleted",
+   "credential.saved",
+   "credential.updated",
+   "pedido.creado",
+   "pedido.crear-tienda.response",
+   "project.activated",
+   "tarifas.config.actualizada"
+  ],
+  "publishes": [
+   "whatsapp.envio.fallido",
+   "whatsapp.mensaje.enviado",
+   "whatsapp.mensaje.recibido",
+   "whatsapp.pedido.detectado"
+  ],
+  "tools": [
+   "whatsapp.enviar",
+   "whatsapp.enviar_plantilla",
+   "whatsapp.enviar_media",
+   "whatsapp.enviar_ubicacion",
+   "whatsapp.enviar_interactivo",
+   "whatsapp.enviar_encuesta",
+   "whatsapp.enviar_catalogo"
+  ]
+ }
+]

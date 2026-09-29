@@ -3,7 +3,7 @@
   "ramas": "vertical/contabilidad",
   "persistencia": "boveda/contabilidad/proceso/",
   "modelo": "mente-ejecuta / chat-gestiona",
-  "fase_actual": "F3 COMPLETADA — diseno OOP con 118 clases (una por hoja atomica de F2). Siguiente: F3b (adaptador a Enki) o responder las 72 preguntas abiertas",
+  "fase_actual": "F3b COMPLETADA — plan con 118 hojas (1:1 con las 118 clases). Siguiente: F4 construir (116 modulos)",
   "nota_proceso": "Vertical transversal observadora VENDIBLE: escucha los eventos que cada negocio ya emite y reconstruye su contabilidad. Molde de proceso: boveda/nichos/proceso/ (44 modulos + 44 skills, #656).",
   "fase0": {
     "estado": "completada",
@@ -129,9 +129,43 @@
     "error_del_intento_anterior": "El plan F3b agrupo las 118 hojas en 72 modulos SIN auditar la transformacion, y se 'verifico' contra si mismo. Borrado por orden del dueno."
   },
   "fase3b": {
-    "estado": "pendiente",
+    "estado": "completada",
     "skill": "enki-adaptador-disenos",
-    "entregable": "boveda/contabilidad/proceso/fase3b/plan-construccion.md"
+    "completada_el": "2026-09-29",
+    "entregable": "boveda/contabilidad/proceso/fase3b/plan-construccion.md (4455 lineas)",
+    "soporte": [
+      "inventario-modulos-enki.json (248 modulos, contrato real)"
+    ],
+    "hojas_total": 118,
+    "construir": 116,
+    "adaptar": 0,
+    "reutilizar": [
+      {
+        "clase": "extraccion-dato (A4.1)",
+        "modulo": "facturas",
+        "porque": "pipeline OCR+IA documento->dato propuesto; no asienta (PROPONE)"
+      },
+      {
+        "clase": "puerto-documento-digital (A5)",
+        "modulo": "facturacion/fuentes",
+        "porque": "strategy-pattern multi-canal declarable/extensible"
+      }
+    ],
+    "regla_unidad": "118 clases -> 118 modulos. Verificado por el padre: mapeo 'HOJA X' -> 118 refs, 118 unicas, 0 sin modulo, 0 duplicadas (ninguna agrupacion).",
+    "formas": {
+      "REFLEJO": 60,
+      "CUSTODIO": 29,
+      "PUENTE": 14,
+      "MICRO-AGENTE": 8,
+      "CONVERSOR": 7
+    },
+    "ejes": {
+      "contabilidad-entrada": 32,
+      "contabilidad-libro": 32,
+      "contabilidad-fiscal": 22,
+      "contabilidad-analitica": 32
+    },
+    "espina": "enki-plan VALIDA: JSON parseable, 118 hojas, orden 118 slugs topologico"
   },
   "fase4": {
     "estado": "pendiente",

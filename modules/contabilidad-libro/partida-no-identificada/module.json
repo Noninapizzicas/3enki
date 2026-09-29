@@ -3,6 +3,8 @@
   "name": "partida-no-identificada",
   "version": "0.1.0",
   "description": "Micro-agente (E7): el UNICO que ejerce juicio sobre la descripcion ambigua del banco — propone el apunte de la partida sin contrapartida o la deja [ABIERTO] en la cola, sin inventar nunca la cuenta.",
+  "blueprint_driven": true,
+  "blueprint_path": "partida-no-identificada.blueprint.json",
   "language": "es",
   "subscribes": [
     {

@@ -1,0 +1,33 @@
+{
+  "_doc": "Manifest de contabilidad-libro/escritor-diario — CUSTODIO CON PERSISTENCIA (B2, hoja del plan). ES EL CUSTODIO DEL LIBRO: el UNICO ESCRITOR DEL DIARIO. Recibe un Asiento {apuntes:Set<Apunte>, clave_natural, fecha, sociedad, ...} y lo asienta o lo RECHAZA. Invariante 1 — LA PARTIDA DOBLE CUADRA: Σ debe = Σ haber; un descuadre NO es un estado del libro, es un ERROR: el asiento se RECHAZA ANTES DE ESCRIBIR (no se matiza, no se apila un asiento torcido). Invariante 2 — UN HECHO = UN ASIENTO: la clave natural (clave-natural M3, por evento) gobierna la idempotencia; reproducir el mismo hecho NO duplica (registrado:false, ya_existe:true). Invariante 4 — UN SOLO ESCRITOR: pide el turno de la parcela libro/diario a single-writer (M2) POR EVENTO y RESPETA su GUARD; si el turno es de otro → 403 (el segundo escritor no escribe); si el guard no responde se declara turno_confirmado:false y se sigue (no se bloquea el libro por un timeout, no se oculta). Invariante 3 — APPEND-ONLY: el diario solo CRECE; no se borra ni reescribe un asiento (las correcciones SUMAN: hecho-rectificativo A13, asiento-ajuste B5). Invariante 5 — la ley entra como DATO: no se cablea ninguna cuenta ni tipo legal; solo se valida la FORMA (cuadre + apuntes). Persiste por proyecto con PosPersistencia (storage /contabilidad/escritor-diario/escritor-diario.json), restaura en project.activated y vuelca en onUnload. Proyeccion `_asentar`. Publica contabilidad.asiento_registrado.",
+  "name": "escritor-diario",
+  "version": "0.1.0",
+  "description": "Custodio (B2): EL unico escritor del diario — la partida doble cuadra (Σ debe = Σ haber) o el asiento se rechaza antes de escribir; un hecho = un asiento por clave natural y respeta el guard de single-writer.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "escritor-diario.asentar.request",
+      "handler": "onAsentarRequest",
+      "description": "RPC custodio (escritura, UNICO ESCRITOR del diario): {project_id, asiento:{apuntes:[{cuenta, debe, haber}], clave_natural?, fecha?, sociedad?, escritor_id?}} → {asiento:{numero, clave_natural, apuntes, suma_debe, suma_haber, cuadra:true, ...}, registrado, aceptado, turno_confirmado} o bien idempotente {ya_existe:true, registrado:false} si la clave natural ya esta en el diario. RECHAZA ANTES DE ESCRIBIR si Σ debe != Σ haber (422 PRECONDITION_FAILED, descuadre_partida_doble), si no hay apuntes/malformados (422), o si el turno de la parcela libro/diario es de otro escritor (403, guard single-writer). Exito → publica contabilidad.asiento_registrado y responde por escritor-diario.asentar.response; fallo → escritor-diario.asentar.failed."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Restaura el diario (asientos append-only + indice por clave natural) del proyecto activado desde el storage (PosPersistencia)."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "escritor-diario.asentar.response",
+      "description": "Respuesta RPC correlada de escritor-diario.asentar.request → {request_id, status:200, data:{asiento, registrado, aceptado, turno_confirmado} | {ya_existe:true, registrado:false}}. Emitida por el helper _atender."
+    },
+    {
+      "event": "escritor-diario.asentar.failed",
+      "description": "Par de fallo determinista (B2): descuadre de partida doble (Σ debe != Σ haber → 422, ES un error no un estado), asiento sin apuntes o apunte malformado (422), turno de la parcela en otro escritor (403) o project_id/asiento ausente (400) → {status, error:{code, message, details?}}. Cierra el circulo de escritor-diario.asentar.request."
+    },
+    {
+      "event": "contabilidad.asiento_registrado",
+      "description": "Fire-and-forget (B2): un asiento quedo en el diario (registrado:true) o ya estaba por su clave natural (registrado:false, un hecho = un asiento) → {project_id, asiento, numero, clave_natural, registrado, correlation_id}. Lo LEEN los derivados del libro (mayor-balanza B3, estados, tesoreria) y traza-asiento (B4)."
+    }
+  ]
+}

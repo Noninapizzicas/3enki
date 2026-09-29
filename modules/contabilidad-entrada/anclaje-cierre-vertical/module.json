@@ -1,0 +1,46 @@
+{
+  "_doc": "Manifest de contabilidad-entrada/anclaje-cierre-vertical — CUSTODIO CON PERSISTENCIA (A14, hoja del plan). LA PARCELA DECLARABLE POR VERTICAL de QUE ES 'un cierre' y COMO se identifica. El puerto es construible; su CONTENIDO pende de `unidad_de_cierre` (dato del DUENO, via cola-declaraciones-criterio K9). Un cierre se ANCLA a su clave: (proyecto, jornada) → el DIA cierra la CAJA; (proyecto, ejercicio, mes) → el MES cierra la CONTABILIDAD. Invariante 7/13: la unidad de cierre se DECLARA, no se estima; sin definicion declarada `anclar` devuelve anclado:false (el puerto existe, la clave no se inventa) y sin periodo no se compone una clave fabricada (clave:null, clave_disponible:false). UN SOLO ESCRITOR: el declarante (rol DECLARANTE_ANCLAJE); cualquier otro rol es rechazado (403). No se sobrescribe: re-declarar APPENDEA version nueva (historial) y fecha la vigente. Persiste por proyecto con PosPersistencia (storage /contabilidad/anclaje-cierre-vertical/anclaje-cierre-vertical.json), restaura en project.activated y vuelca en onUnload. Proyecciones: `_anclar` (lectura) · `_declarar` (escritura, guard). Publica contabilidad.cierre_anclado.",
+  "name": "anclaje-cierre-vertical",
+  "version": "0.1.0",
+  "description": "Custodio (A14): ancla el cierre de la vertical — el dia cierra la caja (proyecto, jornada) y el mes cierra la contabilidad (proyecto, ejercicio, mes); un solo escritor (DECLARANTE_ANCLAJE) y la unidad de cierre se declara, no se estima.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "anclaje-cierre-vertical.anclar.request",
+      "handler": "onAnclarRequest",
+      "description": "RPC custodio (lectura, NO muta): {project_id, vertical, periodo?} → {anclado:true, anclaje:{unidad_de_cierre, campos_clave, version, declarado_por, declarado_en}, clave, clave_disponible} o {anclado:false, motivo} si la vertical no declaro su unidad de cierre. La clave se deriva: (proyecto, jornada) para caja, (proyecto, ejercicio, mes) para contabilidad. Responde por anclaje-cierre-vertical.anclar.response; project_id o vertical ausente → anclaje-cierre-vertical.anclar.failed."
+    },
+    {
+      "event": "anclaje-cierre-vertical.declarar.request",
+      "handler": "onDeclararRequest",
+      "description": "RPC custodio (escritura, UN escritor): {project_id, rol:'DECLARANTE_ANCLAJE', vertical, unidad_de_cierre, campos_clave?} → {anclaje:{vertical, unidad_de_cierre, campos_clave, version, declarado_por, declarado_en}, anclado, sobrescritura}. Guard Rol=DECLARANTE_ANCLAJE (segundo escritor → 403). Append-only: re-declarar apila version nueva en el historial. Exito → publica contabilidad.cierre_anclado y responde por anclaje-cierre-vertical.declarar.response; invalido → anclaje-cierre-vertical.declarar.failed."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Restaura los anclajes de cierre del proyecto activado desde el storage (PosPersistencia)."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "anclaje-cierre-vertical.anclar.response",
+      "description": "Respuesta RPC correlada de anclaje-cierre-vertical.anclar.request → {request_id, status:200, data:{anclado, anclaje, clave, clave_disponible} | {anclado:false, motivo}}. Emitida por el helper _atender."
+    },
+    {
+      "event": "anclaje-cierre-vertical.anclar.failed",
+      "description": "Par de fallo determinista (A14): project_id o vertical ausente → {status, error:{code, message, details?}}. Cierra el circulo de anclaje-cierre-vertical.anclar.request."
+    },
+    {
+      "event": "anclaje-cierre-vertical.declarar.response",
+      "description": "Respuesta RPC correlada de anclaje-cierre-vertical.declarar.request → {request_id, status:200, data:{anclaje, anclado, sobrescritura}}. Emitida por el helper _atender."
+    },
+    {
+      "event": "anclaje-cierre-vertical.declarar.failed",
+      "description": "Par de fallo determinista (A14): rol != DECLARANTE_ANCLAJE (segundo escritor), vertical/unidad_de_cierre/campos_clave ausentes → {status, error:{code, message, details?}}. Cierra el circulo de anclaje-cierre-vertical.declarar.request."
+    },
+    {
+      "event": "contabilidad.cierre_anclado",
+      "description": "Fire-and-forget (A14): el cierre de una vertical quedo anclado a su unidad declarada → {project_id, anclaje, vertical, unidad_de_cierre, correlation_id}. Lo LEEN los cerrojos de cierre (C4 cierre-ejercicio, tesoreria) y el bucle de declaracion (K9)."
+    }
+  ]
+}

@@ -61,6 +61,18 @@ class PuertoFuenteDatos extends ModuloHibridoReflejo {
         conectada_en: new Date().toISOString()
       });
     }
+    // Auto-conexión de la fuente 'comunidad': comunidades abiertas sin key ni
+    // CAPTCHA (HN/Lemmy/Mastodon). estudio-demanda (C1) y sondeo-territorio (B1)
+    // la piden en su barrido por defecto; sin conectarla aquí, el puerto responde
+    // 404 «no esta conectada» y esa fuente no aporta señales.
+    if (!this.fuentes.has('comunidad')) {
+      this.fuentes.set('comunidad', {
+        id: 'comunidad',
+        tipo: 'comunidad',
+        estado: 'conectada',
+        conectada_en: new Date().toISOString()
+      });
+    }
     this.logger?.info('puerto-fuente-datos.auto_conectada', { fuente: porDefecto, tipo, fuentes: [...this.fuentes.keys()] });
   }
 

@@ -97,7 +97,9 @@ const METRICS = { increment(){}, gauge(){} };
   });
 
   await testAsync('consultar fuente no conectada → nichos.fuente.consultar.failed', async () => {
-    const res = await instance.onConsultarRequest({ data: { nicho: 'cerveza artesanal', fuente: 'comunidad', request_id: 'S2' } });
+    // 'scraping' esta en la whitelist (autorizable) pero NO se auto-conecta en onLoad
+    // ('buscador'/'api'/'comunidad' si). Es la fuente genuinamente no-conectada.
+    const res = await instance.onConsultarRequest({ data: { nicho: 'cerveza artesanal', fuente: 'scraping', request_id: 'S2' } });
     assert.strictEqual(res.status, 404);
     assert.strictEqual(res.error.code, 'RESOURCE_NOT_FOUND');
     assert.ok(bus.published.some(([n]) => n === 'nichos.fuente.consultar.failed'), 'cierra el círculo con el par de fallo');

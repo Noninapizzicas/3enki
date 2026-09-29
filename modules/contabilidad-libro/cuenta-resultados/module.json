@@ -3,6 +3,8 @@
   "name": "cuenta-resultados",
   "version": "0.1.0",
   "description": "Reflejo (C2): cuenta de resultados derivada del mayor — ingresos, gastos y resultado deterministas, con el signo (beneficio/pérdida) declarado.",
+  "blueprint_driven": true,
+  "blueprint_path": "cuenta-resultados.blueprint.json",
   "language": "es",
   "subscribes": [
     {

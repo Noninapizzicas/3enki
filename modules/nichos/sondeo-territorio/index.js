@@ -42,7 +42,10 @@ const GUION_JUZGAR_TERRITORIO =
   'fuente (nombre de la fuente que lo devolvio). Un territorio sin señales claras -> candidatos:[]. Responde SOLO ' +
   'JSON con la forma: {candidatos:[{producto, audiencia, lugar, senal_de_demanda:{0-1}, fuente}]}.';
 
-const FUENTE_DEFAULT = 'puerto';
+// Fuente por defecto del barrido. Debe ser un NOMBRE declarado en la whitelist
+// del puerto (buscador/api/scraping/comunidad). 'puerto' no existia en esa
+// whitelist: caia en RESOURCE_NOT_FOUND y el barrido quedaba vacio siempre.
+const FUENTE_DEFAULT = 'buscador';
 
 class SondeoTerritorio extends ModuloHibridoReflejo {
   constructor() {
@@ -107,12 +110,20 @@ class SondeoTerritorio extends ModuloHibridoReflejo {
     // Consultas atómicas al puerto. Si se indican fuentes concretas, se barre solo esa(s);
     // si no, se consulta a las conectadas con el territorio como término (la fuente decide).
     const termino = territorio.producto || territorio.servicio || territorio.audiencia || '';
-    const targets = (Array.isArray(fuentes) && fuentes.length > 0) ? fuentes : [null];
+    // Barre TODAS las fuentes por defecto (no una): los motores de SearXNG
+    // (Google/Brave/DDG/Startpage) estan rate-limitados/CON CAPTCHA y 'buscador'
+    // devuelve 0 resultados. 'api' (autocompletado = demanda pura + Wikipedia) y
+    // 'comunidad' (HN/Lemmy/Mastodon) son las que sostienen el barrido SIN key ni
+    // CAPTCHA. Es la misma palanca ya aplicada en estudio-demanda (C1): sin esto,
+    // el embudo moria en la PUERTA DE ENTRADA (BUSCADO) antes de llegar a C1.
+    const targets = (Array.isArray(fuentes) && fuentes.length > 0)
+      ? fuentes
+      : [FUENTE_DEFAULT, 'api', 'comunidad'];
     const resultados = [];
     for (const fuente of targets) {
       const resp = await this._rpc('nichos.fuente.consultar.request', {
         project_id, nicho: termino, fuente: fuente || undefined
-      }, { timeout_ms: 15000 }).catch(() => null);
+      }, { timeout_ms: 20000 }).catch(() => null);
       if (resp && resp.status === 200) {
         const dataset = resp.data && (resp.data.dataset || resp.data.resultados || resp.data.raw || resp.data);
         const registros = this._parsearDataset(dataset);

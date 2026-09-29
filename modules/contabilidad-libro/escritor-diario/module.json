@@ -3,6 +3,8 @@
   "name": "escritor-diario",
   "version": "0.1.0",
   "description": "Custodio (B2): EL unico escritor del diario — la partida doble cuadra (Σ debe = Σ haber) o el asiento se rechaza antes de escribir; un hecho = un asiento por clave natural y respeta el guard de single-writer.",
+  "blueprint_driven": true,
+  "blueprint_path": "escritor-diario.blueprint.json",
   "language": "es",
   "subscribes": [
     {

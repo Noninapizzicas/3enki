@@ -1,0 +1,123 @@
+{
+  "id": "catalogo-cuentas",
+  "version": "blueprint-0.1.0",
+  "_nota": "FASE 6½ · la interfaz DECLARADA del módulo catalogo-cuentas (CUSTODIO CON PERSISTENCIA de contabilidad-libro, B1). El plan contable del negocio: añadir cuentas y buscarlas. La sección `ui` es lo que el generador schema→UI (BlueprintForm, 4 zonas) necesita para renderizar el panel; sin LLM: TODO lo que produce sale de aquí. Fuente de verdad: modules/contabilidad-libro/catalogo-cuentas/{module.json,index.js}.",
+  "schema": "blueprint-interfaz-v2",
+  "language": "es",
+  "titulo": "Plan contable del negocio",
+  "eventos_publicados": [
+    "catalogo-cuentas.anadir.response",
+    "catalogo-cuentas.anadir.failed",
+    "catalogo-cuentas.buscar.response",
+    "catalogo-cuentas.buscar.failed"
+  ],
+  "eventos_que_escucho": [],
+  "transporte": {
+    "rpc": [
+      "catalogo-cuentas.anadir.request -> .response",
+      "catalogo-cuentas.buscar.request -> .response"
+    ],
+    "entrada": [
+      "catalogo-cuentas.anadir.request",
+      "catalogo-cuentas.buscar.request"
+    ],
+    "salida": [
+      "catalogo-cuentas.anadir.response",
+      "catalogo-cuentas.buscar.response"
+    ],
+    "qos": "publishAndWait (request/response correlado) en cada RPC"
+  },
+  "contrato": {
+    "AnadirInput": "{ project_id:uuid, rol:'PUERTO_PLAN_CONTABLE', cuenta:{ codigo:str, nombre:str?, tipo:str?, naturaleza:str?, padre:str? } }",
+    "AnadirOutput": "{ project_id, cuenta, anadida:bool } — codigo ya presente -> 409 (no se sobrescribe). Campos ausentes quedan null.",
+    "BuscarInput": "{ project_id:uuid, codigo?:str }",
+    "BuscarOutput": "sin codigo -> { project_id, total, cuentas:[...] } · con codigo -> { project_id, codigo, encontrada:bool, cuenta } (sin match -> cuenta:null)"
+  },
+  "ui": {
+    "type": "workspace_module",
+    "zone": "modulos",
+    "ops": {
+      "anadir": {
+        "titulo": "Añadir cuenta al plan",
+        "descripcion": "Registra una cuenta en el plan contable del negocio. El código es la clave: si ya existe, no se sobrescribe (409). Los campos que no declares quedan vacíos, nunca se inventan. La ley entra como DATO: tipo y naturaleza se eligen del plan, no se cablean en el código.",
+        "zona": "formulario",
+        "args": [
+          {
+            "nombre": "cuenta.codigo",
+            "tipo": "string",
+            "required": true,
+            "placeholder": "430",
+            "descripcion": "Código de la cuenta (la clave natural del plan)."
+          },
+          {
+            "nombre": "cuenta.nombre",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "Clientes",
+            "descripcion": "Nombre de la cuenta. Si no lo pones, queda vacío."
+          },
+          {
+            "nombre": "cuenta.tipo",
+            "tipo": "select",
+            "enum": [
+              "ACTIVO",
+              "PASIVO",
+              "PATRIMONIO",
+              "INGRESO",
+              "GASTO"
+            ],
+            "required": false,
+            "descripcion": "Tipo declarado por el negocio. Es DATO, no constante: el plan lo declara, el sistema no lo inventa."
+          },
+          {
+            "nombre": "cuenta.naturaleza",
+            "tipo": "select",
+            "enum": [
+              "DEUDORA",
+              "ACREEDORA"
+            ],
+            "required": false,
+            "descripcion": "Naturaleza declarada de la cuenta (dato del plan)."
+          },
+          {
+            "nombre": "cuenta.padre",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "43",
+            "descripcion": "Código de la cuenta padre (jerarquía del plan). Opcional."
+          }
+        ]
+      },
+      "buscar": {
+        "titulo": "Buscar cuenta",
+        "descripcion": "Consulta el plan contable. Sin código devuelve el plan completo; con código, esa cuenta (si no existe, la devuelve vacía — nunca la inventa).",
+        "zona": "acciones",
+        "args": [
+          {
+            "nombre": "codigo",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "(vacío = todo el plan)"
+          }
+        ]
+      }
+    },
+    "datos": [
+      {
+        "op": "buscar",
+        "titulo": "Plan contable del negocio",
+        "refresh_on": [
+          "catalogo-cuentas.anadir.response"
+        ],
+        "columnas": [
+          "codigo",
+          "nombre",
+          "tipo",
+          "naturaleza",
+          "padre"
+        ]
+      }
+    ]
+  },
+  "filosofia": "El plan contable es DATO del negocio, no una tabla fija: el sistema guarda lo que el dueño/asesor declara y nunca inventa un nombre, un tipo ni una naturaleza. El código es la clave — añadir dos veces el mismo código no sobrescribe: rechaza."
+}

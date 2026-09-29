@@ -1,0 +1,38 @@
+{
+  "_doc": "Manifest de contabilidad-fiscal/puerto-nomina — PUENTE STATELESS (G4, hoja del plan). LA FRONTERA CON EL SISTEMA DE NOMINAS EXTERNO: por aqui ENTRA el dato de nomina de fuera (la nomina que calculo el programa de personal o la gestoria, o el hecho que el sistema externo publica). Contabilidad se ADAPTA: NO impone formato, NO exige un catalogo de conceptos y NO calcula nada — RECIBE. ORIGEN DECLARABLE (atributo del diseno): que sistema/canal entrega la nomina lo DECLARA el negocio (`origen`); si el origen no existe todavia se CREA el puerto para el; sin `origen` declarado NO se adivina de donde viene el dato (ORIGEN_NO_DECLARADO) y nada se cablea — ningun proveedor, ningun formato, ningun concepto tipo. LOS CONCEPTOS, TIPOS Y BASES SON DECLARABLES: el puerto NO normaliza un concepto a un catalogo fijo ni conoce ninguna tabla legal; transporta los conceptos TAL CUAL llegan y declara en `faltantes` los campos que la propia fuente declaro como minimos y no vinieron. ESTE MODULO NO CALCULA LA NOMINA (calculado_aqui:false, calculo_delegado_a:'sistema-de-nomina-externo'): no deriva bruto, ni retencion, ni cotizacion, ni neto — eso es del sistema externo; aqui solo se RECIBE el hecho y se le da entrada al bus. Invariante: dato ausente = desconocido (se declara en `faltantes`), jamas se estima ni se completa; la fuente manda. FORMA: PUENTE stateless, sin PosPersistencia ni onProjectActivated. Proyeccion `_recibir({project_id?, origen, canal?, nomina|hecho|entrada, campos_minimos?, clave_natural?, origenes_declarables?})` → {origen, canal, contrato, minimos_faltantes, nomina:{clave_natural, empleado, periodo, bruto, retencion, cotizacion_trabajador, neto, conceptos, metadatos, faltantes, calculado_aqui:false}}. Cierra el circulo: exito → publica contabilidad.nomina_recibida (lo LEE recibo-nomina G1); error → puerto-nomina.recibir.failed.",
+  "name": "puerto-nomina",
+  "version": "0.1.0",
+  "description": "Puente (G4): frontera con el sistema de nominas externo — recibe el hecho de nomina con origen, conceptos y tipos declarables, sin calcular la nomina ni imponer catalogo alguno.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "puerto-nomina.recibir.request",
+      "handler": "onRecibirRequest",
+      "description": "RPC puente (frontera, stateless): {project_id?, origen, canal?, nomina|hecho|entrada, campos_minimos?, clave_natural?, origenes_declarables?} → {project_id, origen, canal, contrato:'declarado'|'no_declarado', minimos_faltantes, nomina:{clave_natural, empleado, periodo, bruto, retencion, cotizacion_trabajador, neto, conceptos, metadatos, faltantes, abierto, calculado_aqui:false, calculo_delegado_a:'sistema-de-nomina-externo'}}. El origen es declarable — sin el → ORIGEN_NO_DECLARADO (se dice que hay que declararlo; si el origen no existe, se crea). Los conceptos/tipos/bases viajan tal cual los entrega la fuente (cero catalogo cableado) y los importes se COPIAN, nunca se calculan. Exito → publica contabilidad.nomina_recibida y responde por puerto-nomina.recibir.response; nomina ausente → puerto-nomina.recibir.failed."
+    },
+    {
+      "event": "nomina.recibida",
+      "handler": "onNominaRecibida",
+      "description": "Fire-and-forget: el sistema de personal ya emitio su nomina en su bus → se le da entrada al puerto (misma proyeccion `_recibir`; origen declarado en el payload). Exito → publica contabilidad.nomina_recibida; no recibe entrada → puerto-nomina.recibir.failed."
+    },
+    {
+      "event": "nomina.emitida",
+      "handler": "onNominaEmitida",
+      "description": "Fire-and-forget: la nomina quedo emitida por el sistema de personal → se le da entrada al puerto (misma proyeccion `_recibir`). Exito → publica contabilidad.nomina_recibida; no recibe entrada → puerto-nomina.recibir.failed."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "puerto-nomina.recibir.response",
+      "description": "Respuesta RPC correlada de puerto-nomina.recibir.request → {request_id, status:200, data:{origen, canal, contrato, minimos_faltantes, nomina}}. Emitida por el helper _atender."
+    },
+    {
+      "event": "puerto-nomina.recibir.failed",
+      "description": "Par de fallo determinista (G4): origen no declarado (400 ORIGEN_NO_DECLARADO, con origenes_declarables) o nomina ausente → {status, error:{code, message, details?}}. Cierra el circulo de puerto-nomina.recibir.request."
+    },
+    {
+      "event": "contabilidad.nomina_recibida",
+      "description": "Fire-and-forget (G4): el hecho de nomina entro al sistema por la frontera → {project_id, origen, canal, nomina, clave_natural, faltantes, correlation_id}. Lo LEEN recibo-nomina (G1, le da forma asentable) y el resto del grupo de personal."
+    }
+  ]
+}

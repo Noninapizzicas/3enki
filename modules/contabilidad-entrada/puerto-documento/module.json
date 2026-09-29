@@ -3,6 +3,8 @@
   "name": "puerto-documento",
   "version": "0.1.0",
   "description": "Conversor stateless (A4.2): frontera de las formas declarables del documento — traduce la representacion externa al Documento canonico con mapeo declarable; sin forma declarada no convierte y lo ausente queda abierto.",
+  "blueprint_driven": true,
+  "blueprint_path": "puerto-documento.blueprint.json",
   "language": "es",
   "subscribes": [
     {

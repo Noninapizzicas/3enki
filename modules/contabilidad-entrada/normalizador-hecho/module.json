@@ -3,6 +3,8 @@
   "name": "normalizador-hecho",
   "version": "0.1.0",
   "description": "Conversor stateless (A2): unica puerta de formato — homogeneiza el hecho de cada vertical a la forma asentable segun una regla_declarable; lo ausente queda abierto y no se estima.",
+  "blueprint_driven": true,
+  "blueprint_path": "normalizador-hecho.blueprint.json",
   "language": "es",
   "subscribes": [
     {

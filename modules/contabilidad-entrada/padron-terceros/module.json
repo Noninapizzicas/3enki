@@ -3,6 +3,8 @@
   "name": "padron-terceros",
   "version": "0.1.0",
   "description": "Custodio (N2): identidad unica por numero fiscal — un tercero escrito de varias formas sigue siendo uno; un solo escritor (MAESTRO_TERCEROS), unificar suma y nunca borra; persiste por proyecto.",
+  "blueprint_driven": true,
+  "blueprint_path": "padron-terceros.blueprint.json",
   "language": "es",
   "subscribes": [
     {

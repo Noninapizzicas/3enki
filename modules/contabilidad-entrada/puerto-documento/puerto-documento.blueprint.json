@@ -1,0 +1,76 @@
+{
+  "id": "puerto-documento",
+  "version": "blueprint-0.1.0",
+  "_nota": "FASE 6½ · la interfaz DECLARADA del módulo puerto-documento (CONVERSOR STATELESS de contabilidad-entrada, A4.2, hoja del plan). Es la FRONTERA de las formas declarables del documento: convierte la representación EXTERNA (JSON de emisor, fila de CSV, salida de conector) al Documento canónico del dominio con un mapeo declarable. La sección `ui` es lo que el generador schema→UI (BlueprintForm, 4 zonas) necesita para renderizar el panel; sin LLM: TODO lo que produce sale de aquí. Fuente de verdad: modules/contabilidad-entrada/puerto-documento/{module.json,index.js}.",
+  "schema": "blueprint-interfaz-v2",
+  "language": "es",
+  "titulo": "La frontera de formas del documento externo",
+  "eventos_publicados": [
+    "puerto-documento.entrar.response",
+    "puerto-documento.entrar.failed",
+    "contabilidad.documento_normalizado"
+  ],
+  "eventos_que_escucho": [],
+  "_escucho_nota": "VACÍO A PROPÓSITO: el reflejo ya atiende puerto-documento.entrar.request en module.json.subscribes; repetirlo aquí daría ANTICOLISION-001 (responderían los dos). Este módulo no tiene cajón fuzzy que declarar, así que no hay ningún evento fire-and-forget que el LLM deba procesar.",
+  "transporte": {
+    "rpc": [
+      "puerto-documento.entrar.request -> .response"
+    ],
+    "entrada": [
+      "puerto-documento.entrar.request"
+    ],
+    "salida": [
+      "puerto-documento.entrar.response",
+      "contabilidad.documento_normalizado"
+    ],
+    "qos": "publishAndWait (request/response correlado) en la conversión; contabilidad.documento_normalizado es fire-and-forget (alimenta la admisión A3 y el cuadre A4.3)"
+  },
+  "contrato": {
+    "EntrarInput": "{ project_id:uuid, externo:obj, forma:str, formas_declarables?:[str], mapeo?:{ campo_canonico: clave_externa } }",
+    "EntrarOutput": "{ project_id, forma, documento:{ tipo, emisor, numero, fecha, base, impuestos, total, moneda, metadatos }, adaptador_declarado:bool, abierto:[campos] }",
+    "EntrarErrores": "sin `forma` -> 400 FORMA_NO_DECLARADA · forma fuera de las declarables -> 422 FORMA_NO_DECLARABLE · externo ausente/no objeto -> 400 INVALID_INPUT. Cada error publica su par puerto-documento.entrar.failed."
+  },
+  "ui": {
+    "type": "workspace_module",
+    "zone": "modulos",
+    "ops": {
+      "entrar": {
+        "titulo": "Convertir documento externo a forma canónica",
+        "descripcion": "La FRONTERA de formas: traduce una representación externa al Documento canónico del dominio. La ley entra como DATO: sin `forma` declarada no se adivina nada (ni se convierte) y las formas admitidas son las `formas_declarables` del sitio. El `mapeo` declara, por campo canónico, qué clave externa lo porta; el campo externo que no llega queda null y se lista en `abierto` — lo ausente NUNCA se estima. No asienta ni juzga: solo traduce forma.",
+        "zona": "formulario",
+        "args": [
+          {
+            "nombre": "forma",
+            "tipo": "string",
+            "required": true,
+            "placeholder": "factura_emisor | fila_csv | conector_x",
+            "descripcion": "La forma DECLARADA del documento externo. Sin declararla no se convierte (FORMA_NO_DECLARADA); si no está entre las declarables del sitio, se rechaza (FORMA_NO_DECLARABLE)."
+          },
+          {
+            "nombre": "formas_declarables",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "[\"factura_emisor\",\"fila_csv\",\"conector_x\"]",
+            "descripcion": "Las formas que el sitio declara admitir. Es DATO del sitio: la frontera se la pone el negocio, no el código. Si falta, la lista es vacía."
+          },
+          {
+            "nombre": "externo",
+            "tipo": "json",
+            "required": true,
+            "placeholder": "{\"num_factura\":\"F-1\",\"proveedor\":\"ACME\",\"importe_total\":121}",
+            "descripcion": "La representación externa cruda (objeto JSON). Sus campos extra se conservan bajo `metadatos`; los canónicos ausentes quedan null y se declaran en `abierto`."
+          },
+          {
+            "nombre": "mapeo",
+            "tipo": "kv",
+            "required": false,
+            "descripcion": "El adaptador DECLARADO: por cada campo canónico del Documento (tipo, emisor, numero, fecha, base, impuestos, total, moneda), la clave externa que lo porta. Sin mapeo, la identidad es por nombre canónico."
+          }
+        ]
+      }
+    },
+    "datos": [],
+    "_datos_nota": "HUECO DECLARADO (no se inventa): puerto-documento es un CONVERSOR STATELESS sin lectura tabulable. Su única op RPC (entrar) EXIGE un `externo` y una `forma` declarada: no es una consulta, es una transformación puntual. No hay ninguna op de listado en module.json.subscribes ni en index.js (no custodia nada — el almacén del documento es otro), así que la zona DATOS va vacía. El resultado de una conversión se ve en la respuesta RPC de la op, no en una tabla."
+  },
+  "filosofia": "Esta frontera no adivina: la forma se declara. Sin forma declarada no se convierte nada — y lo que el exterior no trae queda ABIERTO, listado, nunca estimado. El adaptador lo pone el sitio (el mapeo entra como dato), porque cada emisor habla su idioma y el dominio no debe conocerlo. Traducir es todo lo que hace: no asienta, no juzga, no guarda."
+}

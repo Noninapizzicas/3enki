@@ -110,14 +110,30 @@ const LLM_OK = { status: 200, data: { content: JSON.stringify({
     assert.ok(res.data.solucion.piezas.length >= 1, 'reflejo garantiza un ensamblaje con 1+ pieza');
   });
 
-  await testAsync('sin capacidades → la especificación no es componible → nichos.solucion.construir.failed', async () => {
-    instance._rpc = async () => LLM_OK;
+  await testAsync('sin capacidades → DERIVA del nicho y las DECLARA en D3 (invariante: lo que falta se crea)', async () => {
+    const llamadas = [];
+    instance._rpc = async (evento, payload) => {
+      llamadas.push({ evento, payload });
+      if (evento === 'nichos.capacidad.declarar.request') {
+        return { status: 200, data: { capacidad: { nombre: payload.capacidad, estado: payload.estado, descripcion: payload.descripcion } } };
+      }
+      return LLM_OK;
+    };
     const res = await instance.onConstruirRequest({ data: {
       project_id: 'p3', nicho: NICHOS, capacidades: [], request_id: 'C2'
     } });
-    assert.strictEqual(res.status, 502);
-    assert.strictEqual(res.error.code, 'SIN_ESPECIFICACION');
-    assert.ok(bus.published.some(([n]) => n === 'nichos.solucion.construir.failed'), 'cierra el círculo con el par de fallo');
+    // El módulo que debía CREAR la primera capacidad se bloqueaba por no tenerla
+    // (invariante invertida): ahora deriva la solución mínima del nicho y declara
+    // sus capacidades como faltantes. Ya NO es 502.
+    assert.strictEqual(res.status, 200, 'catálogo vacío NO bloquea: deriva del nicho');
+    assert.strictEqual(res.data.construida, true);
+    assert.deepStrictEqual(res.data.especificacion.capacidades.map(c => c.rol), ['captura', 'entrega', 'cobro']);
+    assert.strictEqual(res.data.solucion.piezas.length, 3);
+    const decl = llamadas.filter(l => l.evento === 'nichos.capacidad.declarar.request');
+    assert.strictEqual(decl.length, 3, 'declara las 3 capacidades derivadas en el catálogo (D3)');
+    assert.ok(decl.every(l => l.payload.rol === 'CONSTRUCTOR'), 'declara como CONSTRUCTOR (guard del custodio)');
+    assert.ok(decl.every(l => l.payload.project_id === 'p3'), 'declara con el project_id real');
+    assert.ok(bus.published.some(([n]) => n === 'nichos.solucion.construida'), 'publica nichos.solucion.construida');
   });
 
   await testAsync('falta capacidad esencial de entrega/cobro sin declarar faltante → no se monta a medias -> failed', async () => {

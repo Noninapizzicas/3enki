@@ -101,6 +101,51 @@ completar su trabajo:
 reporte habría dado por perdidos y **repetido 51 módulos**. La verificación del padre
 (360 aserciones sobre los 45 de los grupos 5+6, 0 fallos) es lo que lo rescató.
 
+## 🩺 VERIFICACIÓN DEL CICLO EN VIVO (30-sep) — y un FALSO POSITIVO PROPIO
+
+**La cadena K1→K4 completa FUNCIONA, verificada en vivo sobre nonina:**
+
+```
+onboarding-negocio.recoger  →  "alta_efectiva": true · "abierto": false · "faltan": []
+   ↓ publica contabilidad.negocio_onboarded
+activacion-vertical         →  REACCIONA SOLO (por evento, sin disparo manual)
+   ↓ publica contabilidad.vertical_activada
+VERTICAL CONTABILIDAD ACTIVADA ✅  (origen_config: "onboarding-negocio")
+```
+
+**⚠️ REPORTÉ UN CORTE QUE NO EXISTÍA — falso positivo mío.** Diagnóstico erróneo:
+publiqué `contabilidad.negocio_onboarded` a mano con el **envelope mal formado**
+(`source_core_id` PLANO) y, al no reaccionar el handler, concluí "la cadena se corta
+entre K1 y K4". **Falso.** El bus tira el evento como `event.invalid`.
+
+**La forma correcta del envelope** (lo que exige `EventEnvelope.validate`):
+```json
+{ "event_id": "<uuid>", "event_type": "<evento>", "timestamp": "<iso>",
+  "source": { "core_id": "external" },      ← ANIDADO
+  "data": { ... } }
+```
+y el bus **ignora** el evento si `envelope.source.core_id === this.coreId`
+(`core/events/bus.js:156`).
+
+**Lecciones:**
+1. **Antes de culpar al sistema, sospecha de TU PRUEBA.** Un falso negativo propio es
+   tan peligroso como un falso positivo ajeno: si hubiera "arreglado" el corte inventado,
+   habría tocado dos módulos que funcionan perfectamente.
+2. **La pista estaba antes**: el RPC directo de `activacion-vertical.activar` respondió
+   `200` con `verticales_activadas: ["contabilidad"]`. **Debí sospechar de mi prueba
+   cuando el módulo funcionaba por otra vía**, no de la cadena.
+3. **El alta exige `verticales` en `datos`**: `activacion-vertical` lee
+   `d.verticales` o `d.config.verticales`; sin verticales declaradas NO enciende nada
+   (`faltan:['verticales']`) — jamás asume una por defecto. Y `onboarding-negocio` NO
+   incluye `verticales` en la raíz del evento: la vía buena es dentro de `config`.
+4. **El `page-set` de un proyecto es el gate de la work-bar** (`LazyWorkBar`:
+   `d.universal || configuredSet.has(d.id)`). `system-bar` y `chat-tools` NO se gatean.
+   Se declara por la vía del sistema: `project.update` con `pages` → `metadata.pages`.
+
+**Herramienta nueva:** `.claude/skills/conexion-mqtt/publicar-evento.js` — publica un
+evento de dominio al bus real con el envelope correcto. Uso:
+`node publicar-evento.js <evento> '<json>'`.
+
 ## Bug ajeno encontrado (NO tocado)
 
 `frontend/src/lib/modules/envase-embalaje/EnvasePanel.svelte` pasa `moduleId="envase"`

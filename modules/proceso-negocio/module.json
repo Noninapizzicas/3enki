@@ -7,7 +7,9 @@
   "language": "es",
   "main": "index.js",
   "publishes": [
-    { "event": "conserje.empujon", "description": "Reutiliza el canal del conserje: { project_id, tipo:'proceso', recurso:<skill>, mensaje, accion_sugerida:'cosecha.obtener:<skill>', fase } — el nervio lo surfacea en el chat y el LLM ejecuta la skill." }
+    { "event": "conserje.empujon", "description": "Reutiliza el canal del conserje: { project_id, tipo:'proceso', recurso:<skill>, mensaje, accion_sugerida:'cosecha.obtener:<skill>', fase } — el nervio lo surfacea en el chat y el LLM ejecuta la skill." },
+    { "event": "proceso-negocio.reintentar.response", "description": "Respuesta correlada a proceso-negocio.reintentar.request (y a la tool reintentar): { project_id, reintentado, fase, skill, mensaje } — re-insiste el empujón pendiente." },
+    { "event": "proceso-negocio.reintentar.failed", "description": "Fallo al reintentar (input inválido, etc.): { error, message, field }." }
   ],
   "tools": [
     {
@@ -39,12 +41,28 @@
       },
       "handler": "toolReiniciarF0",
       "errores_conocidos": ["INVALID_INPUT"]
+    },
+    {
+      "name": "proceso-negocio.reintentar",
+      "description": "RE-INSISTENCIA: re-emite el empujón PENDIENTE del proyecto (el empujón normal es idempotente y se da UNA sola vez). Se usa cuando el proceso se quedó parado — nadie ejecutó la skill pendiente. Vuelve a publicar el empujón por el canal del conserje con el principio arquitectónico + la nota de que el proceso sigue esperando ese paso. Devuelve { reintentado, fase, skill } (reintentado=false si no hay nada pendiente). La invoca el chat cuando el dueño dice '¿sigues ahí? / reintenta / no ha avanzado'.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1, "description": "ID del proyecto." }
+        },
+        "required": ["project_id"]
+      },
+      "handler": "toolReintentar",
+      "errores_conocidos": ["INVALID_INPUT"]
     }
   ],
   "subscribes": [
     { "event": "project.created", "handler": "onProjectCreated", "description": "Un proyecto nace → FASE 0: empuja la skill identidad-negocio (dar identidad al negocio)." },
     { "event": "negocio.identificado", "handler": "onNegocioIdentificado", "description": "Identidad declarada (project-profile la emite al pasar a con_identidad) → FASE 2: empuja la skill esquematizar-negocio." },
-    { "event": "proceso-negocio.completar_fase.request", "handler": "onCompletarFaseRequest", "description": "El LLM cierra una fase de skill (fase: 'esquematizado', 'diseccionado'…) → el orquestador registra negocio.<fase> y empuja la siguiente del mapa." }
+    { "event": "proceso-negocio.completar_fase.request", "handler": "onCompletarFaseRequest", "description": "El LLM cierra una fase de skill (fase: 'esquematizado', 'diseccionado'…) → el orquestador registra negocio.<fase> y empuja la siguiente del mapa." },
+    { "event": "proceso-negocio.reiniciar_f0.request", "handler": "onReiniciarF0Request", "description": "Relanza la FASE 0 (identidad-negocio) en un proyecto existente que quedó en sin_identidad." },
+    { "event": "proceso-negocio.reintentar.request", "handler": "onReintentarRequest", "description": "Re-insistencia: vuelve a empujar el paso pendiente del proyecto cuando el proceso no avanza." }
   ],
   "dependencies": [],
   "config": {}

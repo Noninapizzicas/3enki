@@ -58,4 +58,82 @@ MSG
   exit 1
 fi
 
+# ─────────────────────────────────────────────────────────────────────────────
+# CAPA 4 · EL ADN — ningún módulo NUEVO entra derivando.
+#
+# Por qué existe: el estándar event-driven se pedía en PROSA (el empujón de
+# proceso-negocio) pero se construyó fuera del proceso (verticales por
+# sub-agentes) sin que nadie lo mirara. Resultado medido 2026-09-30: pizzepos
+# 5.4 métodos/evento, contabilidad 1.4-2.7, frente a 0.1 de nichos/prisma.
+#
+# Esta es la RED que atrapa TODO: da igual por dónde vengas (el proceso, una
+# vertical, un sub-agente) — todo entra al repo por un commit.
+#
+# CALIBRACIÓN (para no bloquear trabajo legítimo):
+#   · módulo NUEVO      → BLOQUEA si deriva (un módulo debe nacer bien)
+#   · módulo MODIFICADO → AVISA, no bloquea (la deriva puede ser pre-existente)
+#
+# Escape consciente:  ADN_IGNORAR=1 git commit ...
+# ─────────────────────────────────────────────────────────────────────────────
+[ "${ADN_IGNORAR:-0}" = "1" ] && exit 0
+
+nuevos="$(git diff --cached --name-only --diff-filter=A 2>/dev/null | grep -E '(^|/)modules/[^/]+(/[^/]+)?/module\.json$' || true)"
+modificados="$(git diff --cached --name-only --diff-filter=M 2>/dev/null | grep -E '(^|/)modules/[^/]+(/[^/]+)?/module\.json$' || true)"
+
+if [ -n "$nuevos" ] || [ -n "$modificados" ]; then
+  # La ruta del script, relativa a la raíz del worktree.
+  verificador="$raiz/scripts/verificar-adn-modulo.js"
+  if [ -f "$verificador" ] && command -v node >/dev/null 2>&1; then
+    comprobar() {
+      # $1 = ruta del module.json · $2 = 'bloquear' | 'avisar'
+      local ruta="$1" modo="$2"
+      local slug
+      slug="$(basename "$(dirname "$ruta")")"
+      local out
+      out="$(cd "$raiz" && node -e "
+        try {
+          const v = require('./scripts/verificar-adn-modulo.js');
+          const r = v.medirSlug('$slug');
+          if (!r.ok) { console.log(r.hallazgos.map(h => h.regla + ' · ' + h.msg).join('\n')); process.exit(3); }
+        } catch (e) { /* sin verificador → no bloquear */ }
+      " 2>/dev/null)" && return 0
+
+      if [ "$modo" = "bloquear" ]; then
+        cat >&2 <<MSG
+
+  ┌──────────────────────────────────────────────────────────────────┐
+  │  BLOQUEADO por el ADN del módulo (arquitectura/ADN-MODULO.md)     │
+  └──────────────────────────────────────────────────────────────────┘
+
+  El módulo NUEVO '$slug' no respeta la forma event-driven:
+
+$out
+
+  Cada línea es una regla del contrato (R2/R3/R4). Qué significa:
+    R2 · si ESCRIBE, tiene que publicar el hecho — si no, la escritura es
+         invisible y la cadena se corta ahí.
+    R3 · si ESCUCHA, tiene que haber quien emita — si no, espera en el vacío.
+    R4 · cada método declara QUIÉN lo usa y POR QUÉ (titulo + descripcion).
+
+  Cómo lo mide el sistema:  node scripts/verificar-adn-modulo.js $slug
+  El contrato completo:     arquitectura/ADN-MODULO.md
+
+  Si es un caso legítimo y consciente:  ADN_IGNORAR=1 git commit ...
+
+MSG
+        exit 1
+      else
+        echo "" >&2
+        echo "  ⚠️  ADN · el módulo '$slug' (ya existente) deriva de la forma event-driven:" >&2
+        echo "$out" | sed 's/^/        /' >&2
+        echo "        (no bloquea: es deriva pre-existente. Ver arquitectura/ADN-MODULO.md)" >&2
+        echo "" >&2
+      fi
+    }
+
+    while IFS= read -r f; do [ -n "$f" ] && comprobar "$f" bloquear; done <<< "$nuevos"
+    while IFS= read -r f; do [ -n "$f" ] && comprobar "$f" avisar;   done <<< "$modificados"
+  fi
+fi
+
 exit 0

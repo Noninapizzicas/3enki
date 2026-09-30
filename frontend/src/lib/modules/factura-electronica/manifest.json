@@ -1,0 +1,9 @@
+{
+  "id": "factura-electronica",
+  "name": "Factura electrónica",
+  "version": "0.1.0",
+  "zone": "work-bar",
+  "order": 70,
+  "icon": "🧾",
+  "label": "Facturae"
+}

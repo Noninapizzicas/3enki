@@ -1,0 +1,9 @@
+{
+  "id": "generador-modelo",
+  "name": "Generador de modelo",
+  "version": "0.1.0",
+  "zone": "work-bar",
+  "order": 69,
+  "icon": "🧾",
+  "label": "Generar modelo"
+}

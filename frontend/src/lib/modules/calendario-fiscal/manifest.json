@@ -1,0 +1,9 @@
+{
+  "id": "calendario-fiscal",
+  "name": "Calendario fiscal",
+  "version": "0.1.0",
+  "zone": "work-bar",
+  "order": 67,
+  "icon": "🧾",
+  "label": "Calendario"
+}

@@ -1,0 +1,9 @@
+{
+  "id": "retenciones",
+  "name": "Retenciones",
+  "version": "0.1.0",
+  "zone": "work-bar",
+  "order": 64,
+  "icon": "🧾",
+  "label": "Retenciones"
+}

@@ -67,7 +67,15 @@ class EnsambladorSolucion extends ModuloHibridoReflejo {
     if (!d.project_id) return null;
     // Solo CONSTRUIR pide ensamblaje; ENCONTRAR/PUENTE no.
     if (String(d.camino || '').toUpperCase() !== 'CONSTRUIR') return null;
-    const res = await this._construir({ project_id: d.project_id, nicho: d.nicho, capacidades: d.capacidades });
+    // nicho_id: la IDENTIDAD con la que el pipeline reconoce el nicho. Sin
+    // propagarlo, la solución se construye pero el pipeline no puede casarla con
+    // su máquina (misma clase de corte que los otros eslabones del embudo).
+    const res = await this._construir({
+      project_id: d.project_id,
+      nicho: d.nicho,
+      capacidades: d.capacidades,
+      nicho_id: d.nicho_id || (d.nicho && (d.nicho.nicho_id || d.nicho.id)) || null
+    });
     if (res.status === 200) {
       this.eventBus?.publish('nichos.solucion.construida', res.data);
     } else {
@@ -81,11 +89,24 @@ class EnsambladorSolucion extends ModuloHibridoReflejo {
     project_id = project_id || this.project_id;
     if (!project_id) return this._invalid('project_id');
     if (!nicho || typeof nicho !== 'object') return this._invalid('nicho');
-    const caps = Array.isArray(capacidades) ? capacidades : [];
+    let caps = Array.isArray(capacidades) ? capacidades.slice() : [];
 
     // 1) Decidir qué construir (juicio LLM); fallback reflejo por reglas.
-    let espec = await this._decidirQueConstruir(nicho, caps);
-    if (!espec) espec = this._decidirQueConstruirReflejo(nicho, caps);
+    let espec = null;
+    if (caps.length > 0) {
+      espec = await this._decidirQueConstruir(nicho, caps);
+      if (!espec) espec = this._decidirQueConstruirReflejo(nicho, caps);
+    } else {
+      // Catálogo VACÍO. La invariante D3 ("lo que falta, se crea") implica DERIVAR la
+      // especificación del propio nicho y DECLARAR sus capacidades mínimas como
+      // faltantes, en vez de rechazar por no tener catálogo. El ensamblador ES el
+      // CONSTRUCTOR: escritor legítimo del catálogo (ROLES_ESCRITOR de catalogo-
+      // capacidades). Antes devolvía 502 SIN_ESPECIFICACION y el embudo moría en
+      // CONSTRUIDO: el módulo que debía crear la primera capacidad se bloqueaba por
+      // no tenerla — la invariante invertida.
+      espec = this._derivarEspecificacionDeNicho(nicho);
+      if (espec) caps = await this._declararCapacidadesEnCatalogo(project_id, espec, nicho);
+    }
     if (!espec) {
       return this._errorResponse(502, 'SIN_ESPECIFICACION', 'el juicio no pudo componer una especificación para el nicho', { project_id, nicho });
     }
@@ -163,9 +184,66 @@ class EnsambladorSolucion extends ModuloHibridoReflejo {
     };
   }
 
+  // ── REFLEJO (catálogo vacío): deriva la especificación mínima del NICHO ──
+  // Sin catálogo, la solución mínima operable de CUALQUIER nicho es la misma terna de
+  // roles: captar la demanda, entregar la solución, cobrar por ella. Deriva un id de
+  // capacidad por rol del nombre real del nicho (nunca un id inventado de la nada: el
+  // id ES el nombre normalizado del nicho + rol). Determinista y auditable.
+  _derivarEspecificacionDeNicho(nicho) {
+    const n = nicho && typeof nicho === 'object' ? nicho : {};
+    const nombre = String(n.nombre || n.producto || n.servicio || n.id || '').trim();
+    if (!nombre) return null;
+    const slug = nombre.toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')  // sin acentos
+      .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48) || 'nicho';
+    const roles = [
+      { rol: 'captura', id: `${slug}:captura` },
+      { rol: 'entrega', id: `${slug}:entrega` },
+      { rol: 'cobro',   id: `${slug}:cobro` }
+    ];
+    return {
+      nombre: `Solución para ${nombre}`,
+      descripcion: 'Especificación derivada del nicho con catálogo vacío (invariante D3: lo que falta, se crea).',
+      capacidades: roles,
+      faltante: { id: `${slug}:entrega`, motivo: 'capacidad derivada del nicho; se declara para materializarse' }
+    };
+  }
+
+  // Declara en catalogo-capacidades (D3) las capacidades derivadas como FALTANTES
+  // (invariante "lo que falta, se crea"). Devuelve las capacidades ya EN EL FORMATO
+  // del catálogo (nombre/estado/descripcion) para que el montaje las resuelva por id.
+  // Best-effort: si el catálogo no responde, se devuelve el mínimo local para no
+  // romper el montaje — la declaración se reintentará en el siguiente ciclo.
+  async _declararCapacidadesEnCatalogo(project_id, espec, nicho) {
+    const declaradas = [];
+    const nombreNicho = String((nicho && (nicho.nombre || nicho.producto)) || '').trim() || null;
+    for (const cp of espec.capacidades) {
+      const descripcion = `capacidad ${cp.rol} para: ${nombreNicho || 'nicho'}`;
+      const resp = await this._rpc('nichos.capacidad.declarar.request', {
+        project_id,
+        rol: 'CONSTRUCTOR',
+        capacidad: cp.id,
+        estado: 'faltante',
+        descripcion,
+        nicho: nombreNicho
+      }, { timeout_ms: 15000 }).catch(() => null);
+      const cap = (resp && resp.status === 200 && resp.data && resp.data.capacidad) ? resp.data.capacidad : null;
+      declaradas.push(cap || { nombre: cp.id, estado: 'faltante', descripcion, capacidad_id: cp.id });
+    }
+    return declaradas;
+  }
+
   // ── REFLEJO: monta la SoluciónOperable (determinista) ──
   _ejecutarMontaje(project_id, nicho, espec, capacidades) {
-    const porId = new Map(capacidades.map(c => [String(c && (c.id ?? c.capacidad ?? c.nombre)).trim(), c]));
+    // El catálogo puede devolver cada capacidad como {nombre, estado, descripcion} (D3)
+    // o como {id, ...}; se indexa por TODAS las claves válidas para no depender del shape.
+    const porId = new Map();
+    for (const c of capacidades) {
+      for (const k of [c && (c.id ?? c.capacidad_id ?? c.nombre ?? c.capacidad)]) {
+        const key = String(k || '').trim();
+        if (key) porId.set(key, c);
+      }
+    }
     const piezas = [];
     for (const cp of espec.capacidades) {
       const origen = porId.get(cp.id);

@@ -106,3 +106,30 @@ audit/
 **_IGNORE_**
 # end managed by open-wa
 modules/.*/
+
+# ── Higiene del árbol (30-sep-2026) ──────────────────────────────────────────
+# Estos patrones ensuciaban `git status` con ficheros que NO deben versionarse.
+# Ver AGENTS.md para la norma de worktrees.
+
+# Instaladores / descargas voluminosas (no son fuente)
+*.deb
+*.rpm
+*.AppImage
+*.tar.gz
+*.zip
+
+# Backups y copias manuales
+*.bak
+*.bak-*
+*.old
+*.orig
+*~
+
+# Directorios de trabajo de agentes (borradores por fases, no entregables)
+.work-*/
+.work/
+
+# Salidas de runtime generadas por los módulos (no editar a mano: las regenera el validador)
+arquitectura/decisiones/_outputs/
+storage/esquemas/
+

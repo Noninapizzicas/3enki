@@ -109,6 +109,26 @@ const METRICS = { increment(){}, gauge(){} };
     assert.strictEqual(res.error.code, 'COLA_VACIA');
   });
 
+  await testAsync('PÉRDIDA DE IDENTIDAD: nicho OBJETO sin nicho_id → nicho_id STRING (nunca objeto)', async () => {
+    // Bug real medido en vivo (30-sep-2026): camino-encontrar-construir publica la
+    // solicitud con la OPCIÓN DE NICHO completa (objeto) y sin nicho_id. `nicho_id ||
+    // nicho` heredaba el OBJETO entero -> el pipeline no podía casar el nicho con su
+    // máquina (misma clase que el '[object Object]' del pipeline). Debe salir string.
+    const res = await instance.onEncolarRequest({ data: {
+      project_id: 'pobj', tipo: 'CAMINO_CONSTRUIR_ALTO_RIESGO',
+      solicitud: { tipo: 'CAMINO_CONSTRUIR_ALTO_RIESGO', nicho: { producto: 'Instalación de placas solares', audiencia: 'empresas' } },
+      request_id: 'OBJ1'
+    } });
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(typeof res.data.solicitud.nicho_id, 'string', 'nicho_id es STRING, no objeto');
+    assert.ok(res.data.solicitud.nicho_id.length > 0, 'nicho_id no vacío');
+
+    // Y al resolver, el nicho_id del evento también es string (el pipeline lo necesita).
+    const r2 = await instance.onResolverRequest({ data: { project_id: 'pobj', rol: 'DUEÑO', resolucion: 'APRUEBA', request_id: 'OBJ2' } });
+    assert.strictEqual(r2.status, 200);
+    assert.strictEqual(typeof r2.data.nicho_id, 'string', 'nicho_id string también al resolver');
+  });
+
   await testAsync('listar: devuelve la cola (no muta)', async () => {
     const res = await instance.onListarRequest({ data: { project_id: 'p1' } });
     assert.strictEqual(res.status, 200);

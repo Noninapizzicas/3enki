@@ -1,0 +1,9 @@
+{
+  "id": "completitud-cobertura",
+  "name": "Completitud y cobertura",
+  "version": "0.1.0",
+  "zone": "system-bar",
+  "order": 203,
+  "icon": "⚙️",
+  "label": "Cobertura"
+}

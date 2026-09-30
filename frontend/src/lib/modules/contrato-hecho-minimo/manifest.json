@@ -1,0 +1,9 @@
+{
+  "id": "contrato-hecho-minimo",
+  "name": "Contrato de hecho mínimo",
+  "version": "0.1.0",
+  "zone": "system-bar",
+  "order": 204,
+  "icon": "⚙️",
+  "label": "Contrato"
+}

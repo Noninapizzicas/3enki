@@ -1,0 +1,9 @@
+{
+  "id": "ajuste-inventario",
+  "name": "Ajuste de inventario",
+  "version": "0.1.0",
+  "zone": "system-bar",
+  "order": 222,
+  "icon": "📊",
+  "label": "Ajuste inv."
+}

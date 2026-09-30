@@ -1,0 +1,128 @@
+{
+  "id": "antiguedad-de-saldos",
+  "version": "blueprint-0.1.0",
+  "_nota": "FASE 6½ · la interfaz DECLARADA del módulo antiguedad-de-saldos (REFLEJO STATELESS de contabilidad-entrada, N8, hoja del plan). EL AGING: lo pendiente clasificado por vencimiento — quién y cuánto está vencido. Determinista: toma los vencimientos (tipo Vencimiento con DOS LADOS, N6) y clasifica lo pendiente en TRAMOS DE ANTIGÜEDAD DECLARABLES; es el espejo de vencimiento-pago (N6) del lado del cobro. NO calcula la fecha de vencimiento (eso es N6): CLASIFICA lo que ya vence. La sección `ui` es lo que el generador schema→UI (BlueprintForm, 4 zonas) necesita para renderizar el panel; sin LLM: TODO lo que produce sale de aquí. Fuente de verdad: modules/contabilidad-entrada/antiguedad-de-saldos/{module.json,index.js}. ui_handler real: antiguedad-de-saldos.clasificar (workspace_module/barra_modulos).",
+  "schema": "blueprint-interfaz-v2",
+  "language": "es",
+  "titulo": "La antigüedad de los saldos (aging por tramos declarados)",
+  "eventos_publicados": [
+    "antiguedad-de-saldos.clasificar.response",
+    "antiguedad-de-saldos.clasificar.failed"
+  ],
+  "eventos_que_escucho": [],
+  "_escucho_nota": "VACÍO A PROPÓSITO: el reflejo ya atiende en module.json.subscribes antiguedad-de-saldos.clasificar.request (su única RPC, onClasificarRequest); repetirlo aquí daría ANTICOLISION-001 (lo atenderían los dos). Es un REFLEJO stateless determinista: no persiste, no tiene cajón fuzzy y su único evento de entrada es la RPC humana. No hay ningún evento fire-and-forget que el LLM deba procesar.",
+  "transporte": {
+    "rpc": [
+      "antiguedad-de-saldos.clasificar.request -> .response"
+    ],
+    "entrada": [
+      "antiguedad-de-saldos.clasificar.request"
+    ],
+    "salida": [
+      "antiguedad-de-saldos.clasificar.response"
+    ],
+    "qos": "publishAndWait (request/response correlado) en la clasificación. Al componer, este módulo es CLIENTE RPC de vencimiento-pago (N6) y de escritor-diario (B2) POR EVENTO: pide vencimiento-pago.calcular.request (factura + política) o escritor-diario.asientos.request para tomar el material; no lo recalcula."
+  },
+  "contrato": {
+    "ClasificarInput": "{ project_id:uuid, vencimientos?:[...] | facturas?:[...], tramos?:[30,60,90] | [{desde,hasta,etiqueta}], hoy?|fecha_referencia?, lado?, politica?, base?, periodo? }",
+    "ClasificarOutput": "{ project_id, tipo:'antiguedad-de-saldos', lado, hoy, hoy_declarado, clasificado, tabla:[{desde, hasta, etiqueta, num, total_pendiente, terceros}], tramos_declarados, vencidos:[{clave, tercero, lado, fecha_vencimiento, pendiente, dias_vencido}], num_vencidos, total_vencido, total_no_vencido, total_pendiente, fuera_de_tramos, sin_fecha, sin_importe, fuente_vencimientos, deriva_de, alimenta:['reclamacion','politica-cobro-pago (E6)'], decide, abierto }",
+    "Errores": "project_id ausente → 400 INVALID_INPUT (par antiguedad-de-saldos.clasificar.failed). No tener vencimientos o no tener tramos declarados NO es un fallo: es un no-clasificable declarado en la response 200 (clasificado:false).",
+    "Invariantes": "LOS TRAMOS SON DECLARABLES: en el módulo NO hay ningún 30, 60 ni 90 escrito; los tramos los DECLARA el negocio (`tramos:[30,60,90]` como límites consecutivos, o `tramos:[{desde,hasta,etiqueta}]`) y si no los declara NO se clasifica — clasificado:false, tabla:[], abierto:['tramos'] — el sistema NO inventa los tramos del negocio. SIN `hoy` DECLARADO NO SE SABE QUÉ ESTÁ VENCIDO: la antigüedad se mide contra una FECHA DE REFERENCIA declarada (hoy/fecha_referencia); sin ella dias_vencido:null, vencido:null y se declara [ABIERTO] — no se usa 'hoy' por sorpresa. DETERMINISTA: mismos vencimientos + mismos tramos + misma fecha de referencia → misma tabla; los vencidos se ordenan de más antiguo a más reciente. Dato ausente = desconocido: un vencimiento sin fecha no se coloca en ningún tramo (va a sin_fecha); uno sin importe no se lee como 0 (va a sin_importe); uno vencido que no cae en ningún tramo declarado va a fuera_de_tramos (no se fuerza a un tramo). NO escribe, NO persiste, NO muta y NO decide — la tabla es un DERIVADO y reclamar es del negocio."
+  },
+  "ui": {
+    "type": "workspace_module",
+    "zone": "modulos",
+    "ops": {
+      "clasificar": {
+        "titulo": "Clasificar lo pendiente por antigüedad (tramos declarados)",
+        "descripcion": "Clasifica lo pendiente por vencimiento: QUIÉN y CUÁNTO está vencido, en los TRAMOS que el negocio DECLARA. Aquí no hay ningún 30/60/90 cableado: los tramos entran como DATO (`tramos`), y sin ellos NO se clasifica (clasificado:false). La antigüedad se mide contra una FECHA DE REFERENCIA también declarada (`hoy`): sin ella no se sabe qué está vencido (dias_vencido:null, [ABIERTO]). Los vencimientos se declaran o se piden a vencimiento-pago (N6) POR EVENTO. Nada se coloca a la fuerza en un tramo: lo que no se puede clasificar se declara aparte.",
+        "zona": "formulario",
+        "args": [
+          {
+            "nombre": "vencimientos",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "[{\"clave_natural\":\"F-1\",\"tercero\":\"B12345678\",\"fecha_vencimiento\":\"2026-07-15\",\"pendiente\":500}]",
+            "descripcion": "Los VENCIMIENTOS declarados (material del clasificado). Cada uno con su fecha de vencimiento, importe/pendiente, tercero y lado. Es DATO: sin ellos, se piden a vencimiento-pago (N6) o se leen del diario (B2) por evento; un vencimiento sin fecha va a sin_fecha y uno sin importe a sin_importe."
+          },
+          {
+            "nombre": "facturas",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "(vacío = no se calculan vencimientos)",
+            "descripcion": "Las FACTURAS de las que pedir a vencimiento-pago (N6) que CALCULE su vencimiento POR EVENTO (con la política declarada). Es DATO: sin facturas ni vencimientos, se cae al diario (B2) por evento."
+          },
+          {
+            "nombre": "tramos",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "[30,60,90] | [{\"desde\":1,\"hasta\":30,\"etiqueta\":\"0-30\"},{\"desde\":31,\"hasta\":60,\"etiqueta\":\"31-60\"}]",
+            "descripcion": "LOS TRAMOS DE ANTIGÜEDAD DECLARADOS — el corazón de 'el sistema NO inventa los tramos del negocio'. Dos formas: límites consecutivos [30,60,90] (el sistema construye los tramos contiguos) o tramos [{desde,hasta,etiqueta}]. SIN declararlos NO se clasifica: clasificado:false, tabla:[], abierto:['tramos']. NUNCA cableados."
+          },
+          {
+            "nombre": "hoy",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "2026-09-29",
+            "descripcion": "LA FECHA DE REFERENCIA declarada contra la que se mide la antigüedad (`hoy`/fecha_referencia). Es DATO: sin ella dias_vencido y vencido quedan null y se declara [ABIERTO] — no se usa la fecha del sistema por sorpresa."
+          },
+          {
+            "nombre": "lado",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "cobro | pago",
+            "descripcion": "El LADO declarado (un solo tipo Vencimiento con dos lados). Es DATO: se pasa a N6 al calcular y se declara en la salida; sin declararlo queda null."
+          },
+          {
+            "nombre": "politica",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "{\"dias\":30,\"base\":\"emision\",\"calendario\":\"natural\"}",
+            "descripcion": "La POLÍTICA DE PLAZOS declarada, que se pasa a vencimiento-pago (N6) al calcular los vencimientos de las facturas. Es DATO: el módulo no cablea ningún plazo."
+          },
+          {
+            "nombre": "periodo",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "2026-09",
+            "descripcion": "El periodo declarado que se pasa al diario (escritor-diario B2) al pedir los asientos cuando no se declaran vencimientos ni facturas. Es DATO."
+          }
+        ]
+      }
+    },
+    "datos": [
+      {
+        "op": "clasificar",
+        "titulo": "Tabla de antigüedad por tramos declarados",
+        "refresh_on": [
+          "antiguedad-de-saldos.clasificar.response"
+        ],
+        "columnas": [
+          "desde",
+          "hasta",
+          "etiqueta",
+          "num",
+          "total_pendiente",
+          "terceros"
+        ]
+      },
+      {
+        "op": "clasificar",
+        "titulo": "Vencidos — quién y cuánto (más antiguo primero)",
+        "refresh_on": [
+          "antiguedad-de-saldos.clasificar.response"
+        ],
+        "columnas": [
+          "clave",
+          "tercero",
+          "lado",
+          "fecha_vencimiento",
+          "pendiente",
+          "dias_vencido"
+        ]
+      }
+    ],
+    "_refresh_nota": "refresh_on = antiguedad-de-saldos.clasificar.response: es la respuesta RPC que este módulo publica de verdad al clasificar (el módulo no se suscribe a ninguna señal de dominio ajena; su única entrada es su propia RPC humana). Al recomponerse el clasificado, las dos cintas se refrescan con los datos de la response: la tabla por tramos y la lista de vencidos (quién y cuánto). Lo que NO se pudo clasificar viaja aparte (fuera_de_tramos, sin_fecha, sin_importe) y se ve en la propia respuesta de la op, junto a la cabecera (hoy/clasificado/totales/abierto)."
+  },
+  "filosofia": "Los tramos de antigüedad no son una ley universal: son la política del negocio. Por eso aquí no hay ni un 30, ni un 60, ni un 90 cableado — los declara quien cobra. Y sin fecha de referencia, nadie sabe qué está vencido: el módulo no adopta la fecha del sistema como si fuera un dato del negocio, la deja [ABIERTO]. Un saldo colocado a la fuerza en un tramo inventado sería una reclamación sobre una antigüedad que nadie midió."
+}

@@ -1,0 +1,100 @@
+{
+  "id": "eliminacion-intercompany",
+  "version": "blueprint-0.1.0",
+  "_nota": "FASE 6½ · la interfaz DECLARADA del módulo eliminacion-intercompany (REFLEJO STATELESS de contabilidad-analitica, I2, hoja del plan). LAS ELIMINACIONES DE OPERACIONES INTERNAS entre sociedades del grupo: detecta el CRUCE interno (una partida de una sociedad contra otra sociedad del MISMO grupo) y devuelve el conjunto de PARTIDAS A ELIMINAR en la consolidación. DETERMINISTA: la detección es un emparejamiento por reglas declaradas, no un juicio. Las partidas llegan DECLARADAS o se piden a marca-sociedad (I1) POR EVENTO (marca-sociedad.marcar.request, best-effort); la marca de sociedad es lo que hace posible saber que dos partidas son del mismo grupo y se cruzan. REGLAS DECLARABLES (LEY COMO DATO — cero constantes): criterio.grupo/sociedades (el perímetro del grupo), criterio.umbral (tolerancia declarada) y criterio.cuentas_internas (cuentas marcadas como internas). Un grupo NO declarado → [ABIERTO]: no se adivina el perímetro. La ELIMINACIÓN es una PROPUESTA de partidas: el reflejo NO escribe, NO borra, NO persiste; devuelve por cada cruce la partida, su contraparte y el importe de su anulación, con el neto del conjunto. Invariantes: DETERMINISTA (mismas entradas → mismas eliminaciones, ordenadas por id_partida); dato ausente = desconocido → sin partidas o sin grupo declarado → eliminaciones vacías y abierto:true con lo que falta (nada se estima). Es un system_panel: su lente es CONTROL bajo demanda (dictamina/consulta), no mesa de trabajo. La sección `ui` es lo que el generador schema→UI (BlueprintForm, 4 zonas) necesita para renderizar el panel; sin LLM: TODO lo que produce sale de aquí. Fuente de verdad: modules/contabilidad-analitica/eliminacion-intercompany/{module.json,index.js}. ui_handler real: eliminacion-intercompany.eliminar (system_panel/lateral_derecha).",
+  "schema": "blueprint-interfaz-v2",
+  "language": "es",
+  "titulo": "Las eliminaciones intercompany del grupo",
+  "eventos_publicados": [
+    "eliminacion-intercompany.eliminar.response",
+    "eliminacion-intercompany.eliminar.failed"
+  ],
+  "eventos_que_escucho": [],
+  "_escucho_nota": "VACÍO A PROPÓSITO: el reflejo ya atiende en module.json.subscribes eliminacion-intercompany.eliminar.request (onEliminarRequest, su única RPC); repetirlo aquí daría ANTICOLISION-001 (lo atenderían los dos). Es un REFLEJO STATELESS determinista: no tiene cajón fuzzy ni evento fire-and-forget que el LLM deba procesar. Las partidas NO llegan como evento que el LLM escuche por el bus: se PIDE a marca-sociedad (I1) por evento DENTRO del cálculo (marca-sociedad.marcar.request, dependencia interna del cálculo, best-effort) o llegan declaradas en la petición — por eso no hay ningún cajón fuzzy que declarar aquí. Su única salida propia es la respuesta RPC correlada."
+  ,
+  "transporte": {
+    "rpc": [
+      "eliminacion-intercompany.eliminar.request -> .response"
+    ],
+    "entrada": [
+      "eliminacion-intercompany.eliminar.request"
+    ],
+    "salida": [
+      "eliminacion-intercompany.eliminar.response"
+    ],
+    "qos": "publishAndWait (request/response correlado) en la detección. Las partidas llegan por DOS vías sin require cruzado: declaradas en la petición (`partidas`/`asientos`, y los asientos se aplanan a sus partidas) o PEDIDAS a marca-sociedad (I1) POR EVENTO (marca-sociedad.marcar.request con listar:true, dependencia interna del cálculo, best-effort). El criterio de grupo es ParametroDeclarable: entra declarado en la petición. El reflejo no publica eventos de dominio: su única salida es la respuesta RPC correlada (la eliminación es una PROPUESTA, no un asiento)."
+  },
+  "contrato": {
+    "EliminarInput": "{ project_id:uuid, partidas?/asientos?:[{id_partida, sociedad, sociedad_contraparte|contraparte, cuenta, importe, ...}], criterio?:{grupo|sociedades:[str|obj], umbral?:num, cuentas_internas?:[str]}, periodo?:str }",
+    "EliminarOutput": "{ project_id, fuente_partidas:'declarado'|'marca-sociedad'|null, criterio:{sociedades:[...], umbral, cuentas_internas:[...]}, eliminaciones:[{id_partida, sociedad, sociedad_contraparte, cuenta, cuenta_interna:bool|null, importe, anulacion, motivo}] (ordenadas por id_partida), n_eliminaciones, neto, abierto:bool, faltan:[str], motivo }",
+    "Errores": "project_id ausente → 400 INVALID_INPUT (par eliminacion-intercompany.eliminar.failed).",
+    "Invariantes": "LEY COMO DATO — CERO CONSTANTES DE NEGOCIO: el perímetro (criterio.grupo/sociedades), la tolerancia (criterio.umbral) y las cuentas internas (criterio.cuentas_internas) son ParametroDeclarable; el módulo no tiene ningún grupo, umbral ni cuenta cableados. El CRUCE EXISTE cuando sociedad ≠ sociedad_contraparte y AMBAS están en el grupo declarado (y hay importe: sin importe no hay cruce valorado, no se estima). DETERMINISTA: mismas entradas → mismas eliminaciones, ordenadas por id_partida. Dato ausente = desconocido: sin partidas → partidas:null y abierto:true; sin grupo declarado → eliminaciones vacías y abierto:true (NO se adivina el perímetro). NO escribe, NO borra, NO persiste: las partidas son del diario y la ELIMINACIÓN es una PROPUESTA de partidas (con el importe de su anulación), no un asiento."
+  },
+  "ui": {
+    "type": "system_panel",
+    "zone": "modulos",
+    "ops": {
+      "eliminar": {
+        "titulo": "Dictaminar las eliminaciones intercompany del grupo",
+        "descripcion": "Panel de CONTROL bajo demanda: se abre antes de consolidar para ver qué operaciones internas hay que anular. Dictamina el CRUCE interno entre sociedades del MISMO grupo declarado y devuelve la PROPUESTA de partidas a eliminar con el importe de su anulación y el neto del conjunto — detección determinista por reglas declaradas, no un juicio. LA LEY ENTRA COMO DATO: el PERÍMETRO del grupo, la TOLERANCIA (umbral) y las CUENTAS INTERNAS los declara el negocio; aquí no hay ningún grupo ni umbral cableado. Un grupo NO declarado queda [ABIERTO] — no se adivina el perímetro. El reflejo NO escribe, NO borra y NO persiste: las partidas son del diario y la eliminación es una propuesta; el asiento de anulación lo materializa quien lleva el diario.",
+        "zona": "formulario",
+        "args": [
+          {
+            "nombre": "partidas",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "[{\"id_partida\":\"P-1\",\"sociedad\":\"A\",\"sociedad_contraparte\":\"B\",\"cuenta\":\"430\",\"importe\":1200}] (vacío = se piden a marca-sociedad I1 por evento)",
+            "descripcion": "Las PARTIDAS declaradas con su sociedad y su contraparte (también admite la clave `asientos`, que se aplana a sus partidas). Es DATO: el reflejo no las reinterpreta — solo empareja por las reglas declaradas. Sin ellas se PIDE el conjunto a marca-sociedad (I1) por evento."
+          },
+          {
+            "nombre": "criterio.grupo",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "[\"SOCIEDAD-A\",\"SOCIEDAD-B\"] (o el id del grupo)",
+            "descripcion": "El PERÍMETRO declarado del grupo — el conjunto de sociedades que lo forman (LA LEY COMO DATO: aquí no hay ningún grupo cableado). Es DATO: solo se considera cruce interno el que ocurre entre sociedades de esta lista. SIN grupo declarado el resultado queda [ABIERTO]: el perímetro no se adivina. (También se acepta como `criterio.sociedades`.)"
+          },
+          {
+            "nombre": "criterio.umbral",
+            "tipo": "number",
+            "required": false,
+            "placeholder": "(vacío = sin tolerancia declarada)",
+            "descripcion": "La TOLERANCIA declarada para considerar dos importes el mismo cruce. Es DATO: la declara el negocio; el módulo no cablea ningún umbral por defecto."
+          },
+          {
+            "nombre": "criterio.cuentas_internas",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "[\"430\",\"431\"] (vacío = no se clasifica cuenta interna)",
+            "descripcion": "Las CUENTAS marcadas como INTERNAS por el negocio. Es DATO: si se declaran, cada eliminación informa si su cuenta es interna (`cuenta_interna`); si no se declaran, ese campo queda null — no se clasifica ninguna cuenta solo."
+          },
+          {
+            "nombre": "periodo",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "2026-09",
+            "descripcion": "El PERIODO declarado de la consolidación. Es DATO: se propaga como referencia cuando las partidas se piden a marca-sociedad (I1) por evento; el cálculo no lleva reloj propio."
+          }
+        ]
+      }
+    },
+    "datos": [
+      {
+        "op": "eliminar",
+        "titulo": "Eliminaciones intercompany — cruces internos a anular",
+        "refresh_on": [
+          "eliminacion-intercompany.eliminar.response"
+        ],
+        "columnas": [
+          "id_partida",
+          "sociedad",
+          "sociedad_contraparte",
+          "cuenta",
+          "importe",
+          "anulacion"
+        ]
+      }
+    ],
+    "_datos_nota": "TABLA DECLARADA (no un hueco): la respuesta de `eliminar` lleva una COLECCIÓN NOMBRADA — `eliminaciones`: la lista determinista de cruces internos (ordenada por id_partida), cada uno con su partida, su contraparte, su cuenta, su importe y su anulación. Es la detección de UNA consolidación (una op con payload), no un histórico de eliminaciones, pero su payload ES un listado y la tabla lo pinta. refresh_on = el propio `eliminacion-intercompany.eliminar.response` (el reflejo NO publica ningún fire-and-forget de dominio: su única salida es la respuesta RPC correlada). Un histórico de eliminaciones por periodo necesitaría un handler RPC de listado que hoy no existe (trabajo de módulo, no de interfaz) — aquí la tabla es la propuesta del conjunto dictaminado."
+    },
+  "filosofia": "Consolidar es, sobre todo, quitar: lo que una sociedad del grupo le vendió a otra no ha pasado para el grupo. Detectar eso no es aplicar un criterio del sistema, es aplicar el criterio que el dueño declara — su perímetro, su tolerancia, sus cuentas internas — porque solo él sabe quién está dentro. Por eso aquí no hay ningún grupo por defecto: un perímetro inventado elimina partidas que no tocaban y calla las que tocaban. El reflejo no escribe ni borra nada: propone. La anulación se declara con su signo y su importe, y quien lleva el diario decide qué hacer con ella."
+}

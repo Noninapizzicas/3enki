@@ -1,0 +1,9 @@
+{
+  "id": "liquidacion-baja-empleado",
+  "name": "Liquidación de baja",
+  "version": "0.1.0",
+  "zone": "work-bar",
+  "order": 126,
+  "icon": "👤",
+  "label": "Finiquito"
+}

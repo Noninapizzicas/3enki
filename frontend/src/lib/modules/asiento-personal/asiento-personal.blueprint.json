@@ -1,0 +1,128 @@
+{
+  "id": "asiento-personal",
+  "version": "blueprint-0.1.0",
+  "_nota": "FASE 6½ · la interfaz DECLARADA del módulo asiento-personal (REFLEJO STATELESS de contabilidad-fiscal, G3, hoja del plan). GASTO DE PERSONAL + SS + RETENCION + PAGO → ASIENTO EQUILIBRADO. Calculo PURO y determinista. LA CADENA DE PERSONAL ENTRA COMO DATO, por EVENTO (jamas un require cruzado): el recibo ya calculado por el sistema externo (recibo-nomina G1) y la obligacion con la SS ya derivada (obligacion-seguridad-social G2); ambas pueden venir declaradas en la peticion o pedirse al bus. LAS CUENTAS SON DECLARABLES: este reflejo NO cablea ningun numero del PGC (invariante LEY/PARAMETRO COMO DATO) — si el negocio declara `cuentas`, las partidas lo usan; si no, cada partida lleva cuenta:null y su ROL, y se declara cuentas_origen:'sin_declarar'. INVARIANTE DE DATO AUSENTE = DESCONOCIDO: sin retencion declarada no se estima un 0 — la partida no se crea y el campo se lista en `faltantes`. La seccion `ui` es lo que el generador schema→UI (BlueprintForm, 4 zonas) necesita para renderizar el panel; sin LLM: TODO lo que produce sale de aqui. Fuente de verdad: modules/contabilidad-fiscal/asiento-personal/{module.json,index.js}. ui_handler real: asiento-personal.construir (workspace_module/barra_modulos).",
+  "schema": "blueprint-interfaz-v2",
+  "language": "es",
+  "titulo": "El asiento de personal (sueldos + SS + retención + pago)",
+  "eventos_publicados": [
+    "asiento-personal.construir.response",
+    "asiento-personal.construir.failed"
+  ],
+  "eventos_que_escucho": [],
+  "_escucho_nota": "VACIO A PROPOSITO: el reflejo ya atiende en module.json.subscribes asiento-personal.construir.request (onConstruirRequest, su unica RPC); repetirlo aqui daria ANTICOLISION-001 (lo atenderian los dos). Es un REFLEJO STATELESS determinista: no tiene cajon fuzzy ni evento fire-and-forget que el LLM deba procesar. El recibo (G1) y la obligacion de SS (G2) NO llegan como eventos que el LLM escuche por el bus: se piden DENTRO del calculo (recibo-nomina.dar_forma.request, obligacion-seguridad-social.calcular.request) o llegan declarados en la peticion — por eso no hay ningun cajon fuzzy que declarar aqui.",
+  "transporte": {
+    "rpc": [
+      "asiento-personal.construir.request -> .response",
+      "recibo-nomina.dar_forma.request -> .response",
+      "obligacion-seguridad-social.calcular.request -> .response"
+    ],
+    "entrada": [
+      "asiento-personal.construir.request"
+    ],
+    "salida": [
+      "asiento-personal.construir.response"
+    ],
+    "qos": "publishAndWait (request/response correlado) en el calculo. El recibo y la obligacion de SS llegan por DOS vias sin require cruzado: declarados en la peticion (`recibo`/`nomina`, `obligacion`/`ss`) o PEDIDOS por EVENTO (dependencias internas del calculo, best-effort, cuando se declara clave natural o empleado+periodo). El reflejo no publica eventos de dominio: su unica salida es la respuesta RPC correlada (y su par .failed)."
+  },
+  "contrato": {
+    "ConstruirInput": "{ project_id:uuid, recibo|nomina?:obj, clave_natural?:str, empleado?:str, periodo?:str, obligacion|ss?:{cuota_empresa|gasto_empresa, cuota_trabajador}, cuentas?:{gasto_sueldos?, gasto_ss_empresa?, retencion?, organismos?, neto?}, tipos?:json, bases?:json, fecha?:str }",
+    "ConstruirOutput": "{ project_id, asiento:{ clase:'nomina', empleado, periodo, fecha, clave_natural, partidas:[{rol, cuenta, importe, descripcion}], debe, haber, total_debe, total_haber, cuadra, descuadre, cuentas_origen:'declaradas'|'sin_declarar', cuentas_cableadas:false, origen_recibo:'declarado'|'recibo-nomina'|null, origen_obligacion:'declarada'|'obligacion-seguridad-social'|'recibo.cotizacion_trabajador'|null, calculado_aqui:true, calculo_puro:true }, faltantes:[str], abierto:bool, motivo }",
+    "SinCadena": "Sin recibo NI obligacion → asiento:null, abierto:true, faltantes:['recibo','obligacion_ss'] y motivo declarado (nada se estima).",
+    "Errores": "project_id ausente (400) o excepcion de la proyeccion (500) → par asiento-personal.construir.failed.",
+    "Invariantes": "LAS CUENTAS SON DECLARABLES (invariante LEY/PARAMETRO COMO DATO): aqui NO se cablea ningun numero del PGC — cada partida declara su ROL y su cuenta viene del mapa declarado por el negocio (o null); la respuesta declara cuentas_origen y cuentas_cableadas:false. EQUILIBRIO: el asiento se cierra por construccion (Debe = sueldos bruto + SS empresa; Haber = neto + retencion + organismos empresa+trabajador) y se PUBLICAN total_debe, total_haber, `cuadra` y `descuadre`; un descuadre de lo declarado NO se corrige ni se parchea a ciegas — se DECLARA y lo resuelve el humano. INVARIANTE DE DATO AUSENTE = DESCONOCIDO: sin retencion (o sin bruto/neto) declarada NO se estima un 0 — la partida no se crea y el campo se lista en `faltantes`; el asiento queda abierto. EL RECIBO llega YA CALCULADO por el sistema externo: se COPIAN sus importes, aqui NO se calcula la nomina. Determinista."
+  },
+  "ui": {
+    "type": "workspace_module",
+    "zone": "modulos",
+    "ops": {
+      "construir": {
+        "titulo": "Construir el asiento de personal equilibrado",
+        "descripcion": "Mesa de trabajo del asiento de personal: compone el GASTO DE PERSONAL (bruto del recibo), la SS a cargo de la empresa y la deuda con la Administracion (retencion) y con la TGSS, y cierra el asiento por construccion (Debe = Haber). La CADENA DE PERSONAL entra como DATO por EVENTO: el RECIBO ya calculado (recibo-nomina G1) y la OBLIGACION de SS ya derivada (obligacion-seguridad-social G2) — declarados en el formulario o PEDIDOS al bus con clave natural o empleado+periodo. LAS CUENTAS SON DECLARABLES: si no se declaran, cada partida queda con cuenta:null pero con su ROL, y la respuesta lo dice (cuentas_origen:'sin_declarar'). Dato ausente = desconocido: sin retencion declarada no se estima un 0 — la partida no se crea y el campo se lista en `faltantes`. Se publican total_debe, total_haber, `cuadra` y `descuadre`: un descuadre NO se corrige a ciegas, se DECLARA.",
+        "zona": "formulario",
+        "args": [
+          {
+            "nombre": "recibo",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "{\"empleado\":\"E-001\",\"periodo\":\"2026-09\",\"bruto\":2000,\"retencion\":240,\"neto\":1633,\"cotizacion_trabajador\":127}",
+            "descripcion": "El RECIBO declarado (ya calculado por el sistema externo; tambien se acepta como `nomina`). Es DATO: su bruto, su retencion y su neto se COPIAN para las partidas — aqui NO se calcula la nomina. Sin recibo declarado se pide a recibo-nomina (G1) POR EVENTO si se declara clave natural o empleado+periodo."
+          },
+          {
+            "nombre": "obligacion",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "{\"cuota_empresa\":480,\"cuota_trabajador\":127}",
+            "descripcion": "La OBLIGACION con la TGSS declarada (ya derivada por obligacion-seguridad-social G2; se acepta tambien como `ss`, y `gasto_empresa` como alias de `cuota_empresa`). Es DATO: de aqui salen la SS a cargo de la empresa (Debe) y los organismos acreedores (Haber, empresa + trabajador). Sin ella se pide a G2 POR EVENTO si hay recibo o tipos declarados."
+          },
+          {
+            "nombre": "cuentas",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "{\"gasto_sueldos\":\"640\",\"gasto_ss_empresa\":\"642\",\"retencion\":\"4751\",\"organismos\":\"476\",\"neto\":\"465\"}",
+            "descripcion": "El MAPA DE CUENTAS DECLARADO del negocio (LEY/PARAMETRO COMO DATO): gasto_sueldos, gasto_ss_empresa, retencion, organismos, neto. Aqui NO hay ningun numero del PGC cableado — si no se declara, cada partida queda con cuenta:null y su ROL, y la respuesta declara cuentas_origen:'sin_declarar'. Se admiten los alias del contrato (sueldos, ss_empresa, irpf, tgss, neto_a_pagar...)."
+          },
+          {
+            "nombre": "tipos",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "[{\"concepto\":\"contingencias_comunes\",\"tipo\":0.236,\"a_cargo\":\"empresa\",\"base\":2000}]",
+            "descripcion": "LOS TIPOS DECLARADOS de cotizacion, solo para PEDIR la obligacion a obligacion-seguridad-social (G2) por evento cuando no se declara la obligacion. Es DATO: el modulo NO conoce ninguna tabla legal; los tipos se declaran, no se cablean."
+          },
+          {
+            "nombre": "bases",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "2000 | {\"contingencias_comunes\":2000}",
+            "descripcion": "LAS BASES DECLARADAS de cotizacion, para la misma peticion a G2 por evento. Es DATO: el sistema no estima ninguna base."
+          },
+          {
+            "nombre": "clave_natural",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "E-001|2026-09",
+            "descripcion": "La CLAVE NATURAL declarada del recibo, usada para PEDIRLO a recibo-nomina (G1) por evento cuando no se declara el recibo. Es DATO: no se inventa identidad."
+          },
+          {
+            "nombre": "empleado",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "E-001",
+            "descripcion": "El EMPLEADO declarado (con `periodo`) para pedir el recibo a recibo-nomina (G1) por evento. Es DATO: el modulo no deriva el empleado de ninguna estructura."
+          },
+          {
+            "nombre": "periodo",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "2026-09",
+            "descripcion": "El PERIODO declarado (con `empleado`) para pedir el recibo a G1 por evento. Es DATO: no se deriva ni se cablea ningun calendario."
+          },
+          {
+            "nombre": "fecha",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "2026-09-30",
+            "descripcion": "La FECHA declarada del asiento. Es DATO: si no viene, se copia la del recibo; nunca se inventa."
+          }
+        ]
+      }
+    },
+    "datos": [
+      {
+        "op": "construir",
+        "titulo": "Partidas del asiento de personal (rol, cuenta declarada, importe)",
+        "refresh_on": [
+          "asiento-personal.construir.response"
+        ],
+        "columnas": [
+          "rol",
+          "cuenta",
+          "importe",
+          "descripcion"
+        ]
+      }
+    ],
+    "_datos_nota": "La tabla son las PARTIDAS del asiento (`asiento.partidas`, union de debe y haber): cada fila declara su ROL de dominio y la cuenta declarada (null si el negocio no la declaro). refresh_on = asiento-personal.construir.response: es la senal REAL que este reflejo stateless emite al cerrar un asiento (no escucha ningun evento de dominio; sus dependencias —recibo G1 y obligacion G2— las pide DENTRO del calculo por evento, no como cinta que refrescar). Los totales y el veredicto de equilibrio (total_debe, total_haber, cuadra, descuadre, abierto, faltantes) son valores unicos de la respuesta, no filas: van en la cabecera del panel, no en una columna."
+  },
+  "filosofia": "El asiento de personal no se inventa: se compone. El sueldo bruto, la retencion y el neto se COPIAN del recibo que calculo otro; la cuota a la Seguridad Social se COPIA de la obligacion derivada; y lo que queda es el esqueleto de la nomina contable, con su rol cada partida y con la cuenta que el negocio quiera darle — porque el numero de cuenta es del plan del negocio, no una constante del modulo. Si falta la retencion, no se pone un cero para que cuadre: se deja la partida sin crear y se dice que falta, porque un 0 inventado es un asiento falso que ningun humano detectaria. Y si el asiento no cuadra, no se parchea: se declara el descuadre y decide quien firma."
+}

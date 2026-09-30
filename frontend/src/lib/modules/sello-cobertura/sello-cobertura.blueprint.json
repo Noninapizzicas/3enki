@@ -1,0 +1,70 @@
+{
+  "id": "sello-cobertura",
+  "version": "blueprint-0.1.0",
+  "_nota": "FASE 6½ · la interfaz DECLARADA del módulo sello-cobertura (REFLEJO STATELESS de contabilidad-analitica, Q3, hoja del plan), tipo system_panel: panel de ESTADO/gestión en la zona lateral. La MARCA DE COMPLETITUD de lo consultado, FUERA de ciclo: si falta cobertura, lo DICE ANTES de que el dueño decida — no espera al cierre (!= aviso-cuadre C6, que solo avisa al cierre). ⚠️ LEE LA MÉTRICA ÚNICA (A12 completitud-cobertura), NO LA RECALCULA: la cobertura se TOMA ya medida (declarada en la petición, cacheada de contabilidad.cobertura_medida o pedida a A12 POR EVENTO) y se SELLA con ella la respuesta consultada; recalcularla sería una SEGUNDA métrica de cobertura. La sección `ui` es lo que el generador schema→UI (BlueprintForm, 4 zonas) necesita para renderizar el panel lateral; sin LLM: TODO lo que produce sale de aquí. Fuente de verdad: modules/contabilidad-analitica/sello-cobertura/{module.json,index.js}. ui_handler real: sello-cobertura.sellar (system_panel/lateral_derecha).",
+  "schema": "blueprint-interfaz-v2",
+  "language": "es",
+  "titulo": "El sello de cobertura de lo consultado",
+  "eventos_publicados": [
+    "sello-cobertura.sellar.response",
+    "sello-cobertura.sellar.failed"
+  ],
+  "eventos_que_escucho": [],
+  "_escucho_nota": "VACÍO A PROPÓSITO: el reflejo ya atiende en module.json.subscribes sus TRES eventos — la RPC sello-cobertura.sellar.request (onSellarRequest) y los dos fire-and-forget contabilidad.cobertura_medida (onCoberturaMedida, A12 → Q3) y contabilidad.respuesta_consulta (onRespuestaConsulta, Q1 → Q3); repetir cualquiera aquí daría ANTICOLISION-001 (lo atenderían los dos). Es un REFLEJO STATELESS determinista: no persiste, no tiene cajón fuzzy (no llama al LLM) y no publica ningún evento de dominio propio — su única salida es la respuesta RPC correlada. La métrica de cobertura no se escucha: se LEE (declarada, cacheada del evento o pedida a completitud-cobertura A12 POR EVENTO dentro del sello). Su ui_handler es system_panel (panel lateral de estado), no un cajón. Por eso la lista va vacía.",
+  "transporte": {
+    "rpc": [
+      "sello-cobertura.sellar.request -> .response",
+      "completitud-cobertura.medir.request -> .response"
+    ],
+    "entrada": [
+      "sello-cobertura.sellar.request"
+    ],
+    "salida": [
+      "sello-cobertura.sellar.response"
+    ],
+    "qos": "publishAndWait (request/response correlado) en el sello. La métrica única se OBSERVA por fire-and-forget (contabilidad.cobertura_medida queda cacheada) y, si no consta ni viene declarada, se PIDE a completitud-cobertura (A12) POR EVENTO dentro del sello (timeout 4000ms, best-effort): es una LECTURA, no un recálculo. En modo system_panel la superficie es la petición del sello; el módulo ya atiende sus dos fire-and-forget en module.json.subscribes (no se re-declaran aquí)."
+  },
+  "contrato": {
+    "SellarInput": "{ project_id:uuid, respuesta?:obj, cobertura?:obj, vertical?:str }",
+    "SellarOutput": "{ project_id, respuesta:{...,sello_cobertura}|null, sello:{estado:'SELLO_COMPLETO'|'SELLO_INCOMPLETO'|'SELLO_DESCONOCIDO', completo, tasa, huecos, falta_cobertura, motivo}, cobertura, lee_metrica_unica:true, recalcula_cobertura:false, fuera_de_ciclo:true, decide:false, avisa_antes_de_decidir:true, abierto, faltan }",
+    "Errores": "project_id ausente → 400 (par sello-cobertura.sellar.failed).",
+    "Invariantes": "LEE, NO RECALCULA: la cobertura llega declarada, cacheada del evento contabilidad.cobertura_medida o pedida a completitud-cobertura (A12) POR EVENTO; JAMÁS se recomputa desde esperados/llegados (recalcularla — recalcula_cobertura:false — sería una SEGUNDA métrica de cobertura). SELLA LO QUE HAY: si la cobertura no consta, el sello es SELLO_DESCONOCIDO (no se afirma ni completo ni incompleto). FUERA DE CICLO: sella en el momento de la consulta; no depende de ningún cierre. DETERMINISTA y sin estado de dominio (una lectura cacheada, no una parcela). SELLA, no decide (decide:false): su razón de ser es decir el hueco ANTES de que el dueño decida (avisa_antes_de_decidir:true)."
+  },
+  "ui": {
+    "type": "system_panel",
+    "zone": "modulos",
+    "ops": {
+      "sellar": {
+        "titulo": "Sellar la cobertura de lo consultado",
+        "descripcion": "Panel de ESTADO de la cobertura: sella una respuesta consultada con LA métrica ÚNICA de cobertura, LEÍDA — no recalculada. Se declara la respuesta a sellar (y/o la cobertura) y el panel devuelve el sello con su estado: SELLO_COMPLETO (hay cobertura completa), SELLO_INCOMPLETO (la cobertura dice que faltan piezas — y se dice ANTES de que el dueño decida, fuera de ciclo) o SELLO_DESCONOCIDO (la cobertura no consta: no se afirma ni completo ni incompleto). La tasa y los huecos se COPIAN de la métrica única tal cual (de completitud-cobertura A12, declarada, cacheada del evento o pedida POR EVENTO); este módulo NUNCA los recomputa — recalcular sería una segunda métrica de cobertura. No decide nada (decide:false): solo sella y avisa.",
+        "zona": "formulario",
+        "args": [
+          {
+            "nombre": "respuesta",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "{\"pregunta\":\"caja\",\"valor\":1234,\"disponible\":true}",
+            "descripcion": "La RESPUESTA a sellar (típicamente la que devolvió la puerta pull Q1). Es DATO: NO se altera — el sello se añade como `sello_cobertura` sin tocar el resto (sella lo que hay). Si no se declara, el sello se calcula igual y solo se devuelve la marca."
+          },
+          {
+            "nombre": "cobertura",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "{\"completa\":false,\"tasa\":0.82,\"huecos\":[\"sin extracto de marzo\"]}",
+            "descripcion": "LA MÉTRICA ÚNICA de cobertura ya medida (declarada). Es DATO — se LEE tal cual, no se recalcula: `completa` decide el estado del sello, `tasa`/`huecos` se copian a la salida. Si no se declara, se lee de la caché de contabilidad.cobertura_medida o se PIDE a completitud-cobertura (A12) POR EVENTO; si tampoco consta, el sello es SELLO_DESCONOCIDO."
+          },
+          {
+            "nombre": "vertical",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "contabilidad-analitica",
+            "descripcion": "La vertical declarada para la lectura de la métrica (se propaga a completitud-cobertura A12 al pedirla POR EVENTO). Es DATO: no altera el cálculo del sello."
+          }
+        ]
+      }
+    },
+    "datos": [],
+    "_datos_nota": "HUECO DECLARADO (no se inventa): sello-cobertura es un REFLEJO STATELESS con una única op (sellar) que devuelve UN sello — no un listado. En module.json.subscribes solo hay su RPC y los dos fire-and-forget que ya atiende (contabilidad.cobertura_medida, contabilidad.respuesta_consulta); no existe ninguna op RPC de lectura tabulable, y la caché de cobertura (`this._cobertura`, un Map por proyecto) se consulta en proceso dentro del sello, no se expone por el bus. `sellar` NO publica ningún evento de dominio propio (su única salida es la respuesta RPC correlada). Por eso la zona DATOS va vacía: no hay colección que pintar. Lo que este panel muestra es el SELLO de una respuesta consultada; la tabla de la respuesta sellada pertenece a quien la produjo (consulta-cuentas-bajo-demanda Q1 o el módulo de origen). Una cinta de sellos necesitaría un handler RPC de listado que hoy no existe (trabajo de módulo, no de interfaz)."
+  },
+  "filosofia": "Decidir sobre una consulta incompleta es decidir a ciegas; pero medir la cobertura dos veces sería crear dos verdades. Por eso este sello no mide: LEE la métrica que ya existe, la copia y la pega sobre la respuesta — y lo hace antes del cierre, en el momento en que el dueño pregunta, no cuando ya es tarde. Y cuando la métrica no consta, no adivina: sella DESCONOCIDO. Un sello que afirmara completitud sin poder comprobarla sería peor que no sellar nada."
+}

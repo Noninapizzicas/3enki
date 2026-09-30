@@ -1,0 +1,9 @@
+{
+  "id": "aviso-cuadre",
+  "name": "Aviso de cuadre",
+  "version": "0.1.0",
+  "zone": "system-bar",
+  "order": 235,
+  "icon": "🗂️",
+  "label": "Cuadre"
+}

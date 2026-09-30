@@ -1,0 +1,9 @@
+{
+  "id": "sello-cobertura",
+  "name": "Sello de cobertura",
+  "version": "0.1.0",
+  "zone": "system-bar",
+  "order": 227,
+  "icon": "📊",
+  "label": "Sellar"
+}

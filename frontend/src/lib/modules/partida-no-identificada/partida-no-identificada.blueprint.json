@@ -1,0 +1,64 @@
+{
+  "id": "partida-no-identificada",
+  "version": "blueprint-0.1.0",
+  "_nota": "FASE 6½ · la interfaz DECLARADA del módulo partida-no-identificada (MICRO-AGENTE STATELESS de contabilidad-libro, E7, hoja del plan). EL ÚNICO PUNTO DE JUICIO SOBRE LA DESCRIPCIÓN AMBIGUA DEL BANCO: un movimiento del extracto sin contrapartida clara llega aquí; reconoce y clasifica la partida y PROPONE el apunte (cuenta + tercero + periodo). SI NO PUEDE RESOLVER → [ABIERTO] Y A LA COLA, NUNCA INVENTA. La sección `ui` es lo que el generador schema→UI (BlueprintForm, 4 zonas) necesita para renderizar el panel; sin LLM: TODO lo que produce sale de aquí. Fuente de verdad: modules/contabilidad-libro/partida-no-identificada/{module.json,index.js}. ui_handler real: partida-no-identificada.juzgar (system_panel/lateral_derecha).",
+  "schema": "blueprint-interfaz-v2",
+  "language": "es",
+  "titulo": "El juicio de la partida ambigua del banco",
+  "eventos_publicados": [
+    "partida-no-identificada.juzgar.response",
+    "partida-no-identificada.juzgar.failed",
+    "contabilidad.partida_propuesta"
+  ],
+  "eventos_que_escucho": [],
+  "_escucho_nota": "VACÍO A PROPÓSITO: el reflejo ya atiende en module.json.subscribes partida-no-identificada.juzgar.request (su única RPC, onJuzgarRequest); repetirlo aquí daría ANTICOLISION-001 (lo atenderían los dos). Todo lo demás llega PEDIDO POR EVENTO dentro del juicio (el corte duro a regla-movimiento-bancario E8 y la verificación del plan a catalogo-cuentas B1): son dependencias internas, no suscripciones vivas. El juicio fuzzy sobre la descripción entra como DATO de la petición (`clasificacion`), no como un evento que el LLM escuche por el bus — por eso no hay ningún cajón fuzzy que declarar aquí.",
+  "transporte": {
+    "rpc": [
+      "partida-no-identificada.juzgar.request -> .response"
+    ],
+    "entrada": [
+      "partida-no-identificada.juzgar.request"
+    ],
+    "salida": [
+      "partida-no-identificada.juzgar.response",
+      "contabilidad.partida_propuesta"
+    ],
+    "qos": "publishAndWait (request/response correlado) en el juicio. Dentro del cálculo consulta POR EVENTO el corte duro a regla-movimiento-bancario.aplicar.request (E8) y, si hay que proponer cuenta, verifica contra catalogo-cuentas.buscar.request (B1) — dependencias internas del juicio, NO superficie del panel, por eso no se listan en `rpc`. contabilidad.partida_propuesta es fire-and-forget (lo consume regla-movimiento-bancario E8 para ratificar el aprendizaje cuando requiere_cola:false, y la cola de excepciones cuando es true)."
+  },
+  "contrato": {
+    "JuzgarInput": "{ project_id:uuid, movimiento:{clave?, fecha?, importe, signo?, concepto|descripcion, contraparte?}, clasificacion?:{tipo:'comision'|'interes'|'devolucion'|'impuesto'|'seguro'|'otro', cuenta, tercero?, periodo?, origen?} }",
+    "JuzgarOutput": "{ project_id, movimiento:{clave, fecha, importe, signo, contraparte, descripcion, ambigua:true}, propuesta:{cuenta, tercero, periodo, base:{via:'regla_declarada'|'juicio_sobre_descripcion', regla_id?, tipo_partida?, plan_confirmado?}} | null, propuesta_por:'REGLA'|'JUICIO'|null, estado:'RESUELTO'|'ABIERTO', tipo_partida, corte_duro, reglas_disponibles, requiere_cola, destino_cola, motivo? }",
+    "Errores": "project_id o movimiento ausente → 400 INVALID_INPUT (par partida-no-identificada.juzgar.failed).",
+    "Invariantes": "PROPONE, NO ESCRIBE: no asienta, no persiste, no marca — la escritura la hace el custodio dueño de la parcela (E8 ratifica, B2 asienta). SI NO PUEDE RESOLVER → propuesta:null, estado:'ABIERTO', requiere_cola:true con destino (default honesto 'ASESOR'), NUNCA inventa la cuenta. PRIMERO EL CORTE DURO (regla E8 declarada, POR EVENTO; si cubre, la propuesta es determinista: `propuesta_por:'REGLA'`), DESPUÉS EL JUICIO sobre la descripción (`clasificacion`), y aun así la cuenta propuesta debe existir en el PLAN declarado (catalogo-cuentas B1, POR EVENTO; si no existe → [ABIERTO]). Determinista en su parte mecánica; stateless (toda su memoria es externa: reglas E8 + plan B1)."
+  },
+  "ui": {
+    "type": "system_panel",
+    "zone": "modulos",
+    "ops": {
+      "juzgar": {
+        "titulo": "Juzgar la partida ambigua (propone apunte o la deja [ABIERTO])",
+        "descripcion": "Panel de CONTROL de la partida no identificada del banco: es EL ÚNICO punto de juicio del ecosistema sobre la descripción ambigua de un movimiento. Primero intenta el CORTE DURO (la regla declarada, E8): si cubre, la propuesta es determinista y no hay juicio. Si no cubre, se apoya en el JUICIO sobre la descripción (`clasificacion`) y verifica que la cuenta propuesta exista en el PLAN declarado (catalogo-cuentas B1). SI NO PUEDE RESOLVER → [ABIERTO] Y A LA COLA (`propuesta:null`, `estado:'ABIERTO'`, `requiere_cola:true` con destino), NUNCA inventa una cuenta. PROPONE, NO ESCRIBE: no asienta, no persiste, no marca — la escritura la hacen E8/B2.",
+        "zona": "formulario",
+        "args": [
+          {
+            "nombre": "movimiento",
+            "tipo": "json",
+            "required": true,
+            "placeholder": "{\"clave\":\"2026-09-05|12.50|cargo|REF9\",\"fecha\":\"2026-09-05\",\"importe\":12.5,\"signo\":\"cargo\",\"concepto\":\"COMISION MANTENIMIENTO\"}",
+            "descripcion": "El movimiento del banco sin contrapartida clara (su descripción es lo ambiguo). Aporta clave, fecha, importe, signo y contraparte; su `concepto`/`descripcion` es el objeto del juicio. Es DATO declarado: lo que no venga queda null = desconocido (no se estima)."
+          },
+          {
+            "nombre": "clasificacion",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "{\"tipo\":\"comision\",\"cuenta\":\"626\",\"tercero\":null,\"periodo\":\"2026-09\"}",
+            "descripcion": "El resultado del JUICIO sobre la descripción (la clasificación declarada). Es DATO: `tipo` de la taxonomía (comision/interes/devolucion/impuesto/seguro/otro) y la `cuenta` propuesta, que se VERIFICA contra el plan (B1). Sin clasificación —o con una cuenta que no esté en el plan— NO se propone nada: queda [ABIERTO] y a la cola. El reflejo NUNCA adivina la cuenta solo."
+          }
+        ]
+      }
+    },
+    "datos": [],
+    "_datos_nota": "HUECO DECLARADO (no se inventa): partida-no-identificada es un MICRO-AGENTE STATELESS sin persistencia ni lectura tabulable. Su única op RPC (juzgar) exige el `movimiento` a resolver: es un juicio puntual, no un listado. No hay ninguna op de lectura en module.json.subscribes ni en index.js (toda su memoria es externa: las reglas E8 y el plan B1, consultadas por evento). El veredicto (propuesta/estado/requiere_cola/destino_cola) se ve en la respuesta RPC de la op. Lo observado en vivo va por contabilidad.partida_propuesta, que emite él (fire-and-forget)."
+  },
+  "filosofia": "Este es el único que juzga, y por eso es el único que puede equivocarse: por eso juzga poco. Primero deja hablar a la regla que el negocio ya declaró — si la regla cubre el movimiento, no hay criterio que ejercer. Solo cuando la regla calla entra el juicio sobre la descripción, y aun así la cuenta que propone tiene que existir en el plan del dueño. Y si nada lo resuelve, no inventa: lo deja [ABIERTO] y lo manda a la cola, porque una cuenta fabricada contamina el diario con una verdad que nadie declaró. Un juicio honesto sabe cuándo no puede juzgar."
+}

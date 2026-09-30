@@ -1,0 +1,9 @@
+{
+  "id": "estado-cuenta-proveedor",
+  "name": "Estado de cuenta",
+  "version": "0.1.0",
+  "zone": "work-bar",
+  "order": 152,
+  "icon": "🏭",
+  "label": "Estado cta."
+}

@@ -1,0 +1,9 @@
+{
+  "id": "cruce-factura-recepcion",
+  "name": "Cruce factura-recepción",
+  "version": "0.1.0",
+  "zone": "work-bar",
+  "order": 153,
+  "icon": "🏭",
+  "label": "Cruce"
+}

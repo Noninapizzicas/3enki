@@ -1,0 +1,9 @@
+{
+  "id": "asiento-personal",
+  "name": "Asiento de personal",
+  "version": "0.1.0",
+  "zone": "work-bar",
+  "order": 121,
+  "icon": "👤",
+  "label": "Asiento pers."
+}

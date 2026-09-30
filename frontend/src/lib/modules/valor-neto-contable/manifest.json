@@ -1,0 +1,9 @@
+{
+  "id": "valor-neto-contable",
+  "name": "Valor neto contable",
+  "version": "0.1.0",
+  "zone": "system-bar",
+  "order": 221,
+  "icon": "📊",
+  "label": "VNC"
+}

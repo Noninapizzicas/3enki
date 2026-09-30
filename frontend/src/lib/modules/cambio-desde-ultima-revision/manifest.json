@@ -1,0 +1,9 @@
+{
+  "id": "cambio-desde-ultima-revision",
+  "name": "Cambios desde la última revisión",
+  "version": "0.1.0",
+  "zone": "work-bar",
+  "order": 142,
+  "icon": "🗂️",
+  "label": "Cambios"
+}

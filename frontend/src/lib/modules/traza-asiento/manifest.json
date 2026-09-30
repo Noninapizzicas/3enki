@@ -1,0 +1,9 @@
+{
+  "id": "traza-asiento",
+  "name": "Traza del asiento",
+  "version": "0.1.0",
+  "zone": "work-bar",
+  "order": 34,
+  "icon": "📒",
+  "label": "Traza"
+}

@@ -3,7 +3,7 @@
   "ramas": "vertical/contabilidad",
   "persistencia": "boveda/contabilidad/proceso/",
   "modelo": "mente-ejecuta / chat-gestiona",
-  "fase_actual": "F6½ COMPLETADA (108/108 blueprints). Siguiente: F7 (construir-interfaz: el trio del frontend).",
+  "fase_actual": "F7 COMPLETADA (95/95 construibles). Pendiente: los 13 inline_render (pieza del frame) + habilitar la vertical en un proyecto + deploy.",
   "nota_proceso": "Vertical transversal observadora VENDIBLE: escucha los eventos que cada negocio ya emite y reconstruye su contabilidad. Molde de proceso: boveda/nichos/proceso/ (44 modulos + 44 skills, #656).",
   "fase0": {
     "estado": "completada",
@@ -238,8 +238,18 @@
     "tipos": "workspace_module · system_panel · chat_tool · inline_render"
   },
   "fase7": {
-    "estado": "pendiente",
-    "skill": "construir-interfaz"
+    "estado": "COMPLETADA",
+    "construidos": "95 de 95 construibles (116 modulos - 8 sin superficie - 13 inline_render bloqueados)",
+    "zonas": {
+      "work-bar": 63,
+      "system-bar": 27,
+      "chat-tools": 5
+    },
+    "metodo": "7 grupos por sub-agente (prisma-universal + construir-interfaz)",
+    "verificacion": "95/95 en disco: 4 ficheros + zone en ambos sitios + moduleId completo + blueprint identico + permisos 644/755",
+    "gate_real": "npm run build -> built in 22.06s + done (VERDE)",
+    "bloqueados": "13 inline_render: sin zona en el frontend (hueco del frame, no de la vertical). Ver fase7/tracking.md",
+    "leccion": "CUATRO sub-agentes murieron sin reportar tras completar; verificar en disco rescato 56 modulos"
   },
   "decisiones_cerradas": {
     "alcance": "gestion interna primero, con miras a fiscal",

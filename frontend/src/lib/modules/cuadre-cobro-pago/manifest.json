@@ -1,0 +1,9 @@
+{
+  "id": "cuadre-cobro-pago",
+  "name": "Cuadre cobro-pago",
+  "version": "0.1.0",
+  "zone": "work-bar",
+  "order": 94,
+  "icon": "🏦",
+  "label": "Cuadre pagos"
+}

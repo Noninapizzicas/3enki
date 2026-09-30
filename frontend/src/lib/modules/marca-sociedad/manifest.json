@@ -1,0 +1,9 @@
+{
+  "id": "marca-sociedad",
+  "name": "Marca de sociedad",
+  "version": "0.1.0",
+  "zone": "system-bar",
+  "order": 224,
+  "icon": "📊",
+  "label": "Sociedad"
+}

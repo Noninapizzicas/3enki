@@ -1,0 +1,132 @@
+{
+  "id": "puente-lenguaje-dueno",
+  "version": "blueprint-0.1.0",
+  "_nota": "FASE 6½ · la interfaz DECLARADA del módulo puente-lenguaje-dueno (MICRO-AGENTE HÍBRIDO de contabilidad-analitica, Q2, hoja del plan), tipo chat_tool: NO es mesa de trabajo ni panel de control — son ACCIONES PUNTUALES que el dueño dispara DESDE EL CHAT. El TRADUCTOR BIDIRECCIONAL entre el dueño y la contabilidad: a_consulta lleva su pregunta en lenguaje llano → consulta contable (tema/cuenta/periodo, para que la ejecute la puerta pull Q1); a_cifra lleva un cálculo (derivado) → la MISMA cifra en SU idioma (caja, deuda, resultado, «¿puedo pagar X?»). Traducir lenguaje es JUICIO, y por eso es HÍBRIDO: _aConsultaReflejo/_fraseReflejo aplican el MAPA DECLARADO (determinista) y _concluir es el FUZZY (1 llamada llm.complete.request que PROPONE la traducción o la frase). ⚠️ TRADUCE, NO INVENTA CIFRAS: la cifra la produce su dueño POR EVENTO; si falta, [ABIERTO]. La sección `ui` es lo que el generador schema→UI (BlueprintForm, 4 zonas) necesita para renderizar las acciones del chat; sin LLM: TODO lo que produce sale de aquí. Fuente de verdad: modules/contabilidad-analitica/puente-lenguaje-dueno/{module.json,index.js}. ui_handlers reales: puente-lenguaje-dueno.a_consulta y puente-lenguaje-dueno.a_cifra (chat_tool/barra_chat_inferior).",
+  "schema": "blueprint-interfaz-v2",
+  "language": "es",
+  "titulo": "Hablar en tu idioma (desde el chat)",
+  "eventos_publicados": [
+    "puente-lenguaje-dueno.a_consulta.response",
+    "puente-lenguaje-dueno.a_consulta.failed",
+    "puente-lenguaje-dueno.a_cifra.response",
+    "puente-lenguaje-dueno.a_cifra.failed",
+    "contabilidad.consulta_traducida"
+  ],
+  "eventos_que_escucho": [],
+  "_escucho_nota": "VACÍO A PROPÓSITO: el micro-agente ya atiende en module.json.subscribes sus DOS RPC (puente-lenguaje-dueno.a_consulta.request → onAConsultaRequest, puente-lenguaje-dueno.a_cifra.request → onACifraRequest) y también el fire-and-forget contabilidad.respuesta_consulta (onRespuestaConsulta, Q1 → Q2); repetir cualquiera de los tres aquí daría ANTICOLISION-001 (lo atenderían los dos). Aunque es HÍBRIDO (tiene cajón fuzzy interno), ese juicio fuzzy NO es una suscripción viva: se ejecuta DENTRO del handler RPC (_concluir → 1 llamada llm.complete.request) cuando el mapa declarado no cubre. El mapa lenguaje↔consulta se declara en la petición (ParametroDeclarable), no se escucha. Sus dos ui_handlers son chat_tool (invocación directa desde la barra del chat), no cajones. Por eso la lista va vacía.",
+  "transporte": {
+    "rpc": [
+      "puente-lenguaje-dueno.a_consulta.request -> .response",
+      "puente-lenguaje-dueno.a_cifra.request -> .response",
+      "llm.complete.request -> .response",
+      "saldo-tesoreria.calcular.request -> .response",
+      "mayor-balanza.saldos.request -> .response",
+      "cuenta-resultados.calcular.request -> .response"
+    ],
+    "entrada": [
+      "puente-lenguaje-dueno.a_consulta.request",
+      "puente-lenguaje-dueno.a_cifra.request"
+    ],
+    "salida": [
+      "puente-lenguaje-dueno.a_consulta.response",
+      "puente-lenguaje-dueno.a_cifra.response",
+      "contabilidad.consulta_traducida"
+    ],
+    "qos": "publishAndWait (request/response correlado) en las dos traducciones. El juicio fuzzy es 1 llamada llm.complete.request con guion self-contained (dependencia interna del handler, timeout 30000ms) y la cifra, si no viene declarada, se PIDE a su dueño POR EVENTO (timeout 4000ms): ambas son dependencias internas del cálculo, no superficie del chat. contabilidad.consulta_traducida es fire-and-forget (Q2): declara que una traducción quedó hecha, NO implica escritura ni decisión. En modo chat_tool NADA se suscribe en vivo."
+  },
+  "contrato": {
+    "AConsultaInput": "{ project_id:uuid, pregunta:str, mapa_lenguaje?:[{termino,tema,cuenta,periodo}] }",
+    "AConsultaOutput": "{ project_id, pregunta, consulta:{tema,cuenta,periodo}|null, termino_declarado, origen:'mapa'|'juicio', confianza, mapa_disponible, decide:false, abierto, faltan, motivo }",
+    "ACifraInput": "{ project_id:uuid, derivado:{valor|cifra|importe, unidad, tema, periodo}|d, valor?, unidad?, periodo?, ejercicio?, cuenta?, termino?, tema?, mapa_lenguaje? }",
+    "ACifraOutput": "{ project_id, derivado, traduccion:{frase,valor,unidad,termino}|null, cifra, cifra_disponible, fuente_cifra, origen, confianza, mapa_disponible, inventa_cifra:false, decide:false, abierto, faltan, motivo }",
+    "Errores": "pregunta/project_id ausente → 400 (par puente-lenguaje-dueno.a_consulta.failed). project_id ausente → 400 (par puente-lenguaje-dueno.a_cifra.failed).",
+    "Invariantes": "TRADUCE, NO INVENTA CIFRAS: la cifra llega declarada o de su dueño (mayor-balanza / cuenta-resultados / saldo-tesoreria) POR EVENTO; falta → [ABIERTO] con lo que falta, JAMÁS un número aproximado (inventa_cifra:false). El mapa lenguaje↔consulta es DECLARABLE: sin término en el mapa ni juicio resoluble NO se traduce → [ABIERTO]. El juicio a_cifra RECHAZA una frase cuyo valor no coincida con la cifra real. Determinista en el reflejo; el juicio va declarado como tal (origen:'juicio'). NO escribe, NO persiste, NO decide: traduce — el sistema no decide por el dueño (decide:false)."
+  },
+  "ui": {
+    "type": "chat_tool",
+    "zone": "modulos",
+    "ops": {
+      "a_consulta": {
+        "titulo": "Traducir mi pregunta a consulta contable",
+        "descripcion": "La ACCIÓN que el dueño dispara desde el chat cuando pregunta en SU idioma («¿cuánto le debo al del papel?», «¿puedo pagar la nómina?», «¿me queda caja?»): el puente la traduce al TEMA contable declarado (con su cuenta y periodo) para que la ejecute la puerta pull Q1. Primero aplica el REFLEJO determinista del MAPA DECLARADO (término del dueño → tema); solo si el mapa no cubre entra el JUICIO fuzzy (1 llamada LLM), y su propuesta se acepta únicamente si el tema pertenece a los temas DECLARADOS. Sin mapa ni juicio resoluble → [ABIERTO]: el puente NO adivina qué pregunta el dueño. TRADUCE, no decide ni ejecuta — la consulta traducida es lo que devuelve.",
+        "zona": "formulario",
+        "args": [
+          {
+            "nombre": "pregunta",
+            "tipo": "string",
+            "required": true,
+            "placeholder": "¿me queda caja?",
+            "descripcion": "La PREGUNTA del dueño en lenguaje llano. Es la entrada de la traducción: el reflejo busca sus términos en el mapa declarado y, si no cubre, el juicio fuzzy la traduce. Sin pregunta no hay nada que traducir."
+          },
+          {
+            "nombre": "mapa_lenguaje",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "[{\"termino\":\"caja\",\"tema\":\"caja\"},{\"termino\":\"el del papel\",\"tema\":\"proveedor\",\"cuenta\":\"400\"}]",
+            "descripcion": "El MAPA DECLARADO lenguaje del dueño → tema contable (ParametroDeclarable). Es DATO: cada entrada porta el `termino` que usa el dueño, el `tema` contable al que corresponde y, opcionalmente, `cuenta` y `periodo`. El reflejo NUNCA cablea semántica: sin mapa ni juicio resoluble la traducción queda [ABIERTO]. Si el mapa declara temas, la propuesta fuzzy debe pertenecer a ellos — no se inventa un tema."
+          }
+        ]
+      },
+      "a_cifra": {
+        "titulo": "Decirme una cifra en mi idioma",
+        "descripcion": "La ACCIÓN que el dueño dispara desde el chat cuando quiere una cifra contable en lenguaje llano («¿puedo pagar X?», «¿cuánto me queda de caja?»): el puente expresa la MISMA cifra en SU idioma. La cifra llega declarada en el derivado o se PIDE a su dueño POR EVENTO (saldo-tesoreria / mayor-balanza / cuenta-resultados); si no hay cifra, [ABIERTO] — el puente TRADUCE, no inventa cifras. La frase sale del REFLEJO si el término está declarado (frase: «caja: 1.234,00 EUR») o del JUICIO fuzzy, que solo se acepta si el valor que devuelve COINCIDE con la cifra real (si el LLM devuelve otro número, se rechaza). El valor de la frase ES el valor de la cifra real (inventa_cifra:false). TRADUCE, no decide.",
+        "zona": "formulario",
+        "args": [
+          {
+            "nombre": "derivado",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "{\"valor\":1234,\"unidad\":\"EUR\",\"tema\":\"caja\",\"periodo\":\"2026-03\"}",
+            "descripcion": "El DERIVADO a traducir: una cifra ya calculada con su contexto (valor/cifra/importe, unidad, tema, periodo). Es DATO: si trae valor, se usa tal cual — el puente no lo recalcula. Si no se declara, la cifra se pide a la fuente de su `tema` POR EVENTO; si tampoco aparece, [ABIERTO]."
+          },
+          {
+            "nombre": "valor",
+            "tipo": "number",
+            "required": false,
+            "placeholder": "1234",
+            "descripcion": "La cifra declarada suelta, alternativa al `derivado`. Es DATO: el valor de la frase será exactamente este — nunca uno aproximado. Se usa junto a `unidad`/`periodo`."
+          },
+          {
+            "nombre": "unidad",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "EUR",
+            "descripcion": "La unidad declarada de la cifra (por defecto EUR en el reflejo). Es DATO: se copia a la frase, no se deriva."
+          },
+          {
+            "nombre": "termino",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "caja",
+            "descripcion": "El TÉRMINO declarado del dueño con el que nombrar la cifra. Es DATO: si está declarado, el REFLEJO compone la frase («caja: <valor> <unidad>»); si no, el juicio fuzzy la redacta — siempre sobre la cifra real."
+          },
+          {
+            "nombre": "tema",
+            "tipo": "select",
+            "enum": ["caja", "saldo", "resultado"],
+            "required": false,
+            "placeholder": "caja | saldo | resultado",
+            "descripcion": "El TEMA declarado del que pedir la cifra a su dueño POR EVENTO cuando no viene en el derivado (caja→saldo-tesoreria, saldo→mayor-balanza, resultado→cuenta-resultados). Es DATO: solo fija de quién se lee la cifra, no la calcula el puente."
+          },
+          {
+            "nombre": "periodo",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "2026-03",
+            "descripcion": "El periodo declarado con el que se pide la cifra a su fuente y que viaja en el contexto de la frase. Es DATO: no se deriva ningún calendario."
+          },
+          {
+            "nombre": "mapa_lenguaje",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "[{\"termino\":\"caja\",\"tema\":\"caja\"}]",
+            "descripcion": "El MAPA declarado lenguaje↔tema que dice qué término corresponde a cada tema, para nombrar la cifra con la palabra del dueño. Es DATO: sin término declarado, la frase la redacta el juicio (nunca se inventa la cifra)."
+          }
+        ]
+      }
+    },
+    "datos": [],
+    "_datos_nota": "HUECO DECLARADO (no se inventa): puente-lenguaje-dueno es un MICRO-AGENTE STATELESS que TRADUCE y NO expone ninguna op RPC de LISTADO. Sus dos ops (a_consulta, a_cifra) devuelven UNA traducción puntual — una consulta contable o una frase con una cifra —, no una colección. En module.json.subscribes solo hay sus dos RPC y el fire-and-forget contabilidad.respuesta_consulta; no hay ningún handler de lectura tabulable, y el puente no persiste (no escribe, no custodia). Por eso la zona DATOS va vacía: no hay tabla propia que pintar. La señal contabilidad.consulta_traducida da el pulso vivo (una traducción quedó hecha, en cualquiera de las dos direcciones), pero como evento de dominio fire-and-forget, no como tabla. Lo que el chat pinta es la respuesta RPC de la traducción puntual."
+  },
+  "filosofia": "El dueño no habla en cuentas ni en epígrafes: habla de caja, de deudas y de «¿puedo pagar la nómina?». Este puente existe para que no tenga que aprender el idioma del sistema — lo traduce en las dos direcciones, con un mapa que declara el sitio y un juicio que solo entra cuando el mapa no llega. Pero traducir no es inventar: por eso la cifra siempre la pone su dueño, y por eso, si falta, el puente dice que no la tiene en vez de redondear una que suene bien. Un traductor que se inventa la cifra deja de ser un traductor y pasa a ser un mentiroso."
+}

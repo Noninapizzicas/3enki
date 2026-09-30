@@ -1,0 +1,9 @@
+{
+  "id": "partida-no-identificada",
+  "name": "Partida no identificada",
+  "version": "0.1.0",
+  "zone": "system-bar",
+  "order": 242,
+  "icon": "🔔",
+  "label": "Partidas dudosas"
+}

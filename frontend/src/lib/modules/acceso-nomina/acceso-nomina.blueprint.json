@@ -1,0 +1,138 @@
+{
+  "id": "acceso-nomina",
+  "version": "blueprint-0.1.0",
+  "_nota": "FASE 6½ · la interfaz DECLARADA del módulo acceso-nomina (CUSTODIO CON PERSISTENCIA de contabilidad-fiscal, G7, hoja del plan). GOBERNANZA DE QUIEN VE QUE NOMINA — DATO PERSONAL: cada uno ve la suya. El diseno lo dice literal: `autorizar(quien, nomina):bool` y `declarar(p)`, con `permisos:Map<Empleado,Alcance>`. UN SOLO ESCRITOR (PosPersistencia /contabilidad/acceso-nomina/acceso-nomina.json + onProjectActivated + flush + GUARD de rol). AISLAMIENTO PERSONA↔PERSONA (invariante dura): la nomina es dato personal — un negocio NO se fuga, Y UNA PERSONA TAMPOCO. La op de consulta (autorizar) EXIGE `quien` (la persona que pretende ver): sin sujeto declarado no hay respuesta, es 400. Y el acceso a la nomina de OTRO se DENIEGA por defecto: propia → permitido SIEMPRE; ajena → solo con alcance admin, o con alcance equipo + encargo declarado; en cualquier otro caso permitido:false. Ser del mismo negocio NO concede nada. LA LEY ES DATO: los ALCANCES (`self_only` el mas estrecho, `admin`, `equipo`, DECLARABLES) y los CONCEDIDOS (encargos declarados persona→empleados concretos) los declara la autoridad de personal; sin declarar se aplica SIEMPRE el mas estrecho (`self_only`, jamas 'de buena fe'). UI: dos ops, ninguna de ellas lista nominas de varias personas — `autorizar` es de UNA persona (quien x empleado) y `declarar` la gobierna la autoridad. La seccion `ui` es lo que el generador schema→UI (BlueprintForm, 4 zonas) necesita para renderizar el panel; sin LLM: TODO lo que produce sale de aqui. Fuente de verdad: modules/contabilidad-fiscal/acceso-nomina/{module.json,index.js}. ui_handlers reales: acceso-nomina.autorizar y acceso-nomina.declarar (workspace_module/barra_modulos).",
+  "schema": "blueprint-interfaz-v2",
+  "language": "es",
+  "titulo": "Quién ve qué nómina (aislamiento persona↔persona)",
+  "eventos_publicados": [
+    "acceso-nomina.autorizar.response",
+    "acceso-nomina.autorizar.failed",
+    "acceso-nomina.declarar.response",
+    "acceso-nomina.declarar.failed",
+    "contabilidad.acceso_nomina"
+  ],
+  "eventos_que_escucho": [],
+  "_escucho_nota": "VACIO A PROPOSITO: el custodio ya atiende en module.json.subscribes acceso-nomina.autorizar.request (onAutorizarRequest), acceso-nomina.declarar.request (onDeclararRequest) y project.activated (onProjectActivated) — repetir cualquiera aqui daria ANTICOLISION-001 (lo atenderian los dos). No tiene cajon fuzzy: es un custodio determinista (autorizar = lectura pura; declarar = escritura con guard de un solo escritor). Su salida de dominio propia (contabilidad.acceso_nomina, fire-and-forget al declarar) la CONSUME quien sirve nomina a una persona, pero al LLM de ESTE modulo no le toca procesarla.",
+  "transporte": {
+    "rpc": [
+      "acceso-nomina.autorizar.request -> .response",
+      "acceso-nomina.declarar.request -> .response"
+    ],
+    "entrada": [
+      "acceso-nomina.autorizar.request",
+      "acceso-nomina.declarar.request"
+    ],
+    "salida": [
+      "acceso-nomina.autorizar.response",
+      "acceso-nomina.declarar.response",
+      "contabilidad.acceso_nomina"
+    ],
+    "qos": "publishAndWait (request/response correlado) en ambas RPC. `autorizar` es LECTURA determinista (no muta): consulta la parcela de permisos y responde si `quien` puede ver la nomina de `empleado`. `declarar` es ESCRITURA de un solo escritor: con exito publica ademas contabilidad.acceso_nomina (fire-and-forget) con la gobernanza declarada. La parcela se hidrata al activar el proyecto (PosPersistencia) y se vuelca en onUnload."
+  },
+  "contrato": {
+    "AutorizarInput": "{ project_id:uuid, quien:str (OBLIGATORIO: la persona que pretende ver), empleado?:str (de quien es la nomina; por defecto, la propia), nomina?:{empleado} }",
+    "AutorizarOutput": "{ project_id, quien, empleado, alcance, es_propia, permitido:bool, motivo, ley_origen:'declarada', ley_cableada:false }",
+    "DeclararInput": "{ project_id:uuid, rol:'AUTORIDAD_NOMINA' (unico escritor), persona:str, alcance?:'self_only'|'equipo'|'admin' (DECLARABLE; sin declarar → self_only), empleado?:str, ve_a?:[str]|{str:bool} (encargos declarados persona→empleados concretos; alias concedidos) }",
+    "DeclararOutput": "{ project_id, persona, alcance, empleado, ve_a, declarado_por:'AUTORIDAD_NOMINA', accesos_efectivos:[str] (su nomina SIEMPRE + los encargos declarados), ley_origen:'declarada', ley_cableada:false }",
+    "ReglaDeAislamiento": "es_propia (empleado === quien) → permitido:true SIEMPRE ('cada uno ve la suya'). Alcance admin → permitido:true. Alcance equipo + encargo declarado (concedidos) → permitido:true. En cualquier otro caso → permitido:false con motivo declarado. A quien no se le declaro alcance se le aplica self_only (el mas estrecho): jamas se concede 'de buena fe'.",
+    "Errores": "Autorizar: project_id o quien ausente (400) → par acceso-nomina.autorizar.failed. Declarar: rol != AUTORIDAD_NOMINA (403 PERMISSION_DENIED, segundo escritor), persona ausente (400) o alcance no declarable (400 ALCANCE_NO_DECLARADO) → par acceso-nomina.declarar.failed.",
+    "Invariantes": "AISLAMIENTO PERSONA↔PERSONA (invariante dura): dentro del negocio, el acceso a la nomina de OTRO se DENIEGA por defecto. LA LEY/GOBERNANZA ES DATO: los alcances y los concedidos son DECLARABLES — cero roles cableados; sin declarar, self_only. UN SOLO ESCRITOR: solo la autoridad de personal declara; cualquier segundo escritor es rechazado con 403. autorizar NO muta (lectura determinista). Dato ausente = desconocido: sin alcance declarado se aplica el mas estrecho, no uno generoso."
+  },
+  "ui": {
+    "type": "workspace_module",
+    "zone": "modulos",
+    "ops": {
+      "autorizar": {
+        "titulo": "¿Puede esta persona ver esta nómina?",
+        "descripcion": "Consulta de aislamiento persona↔persona. Exige SIEMPRE `quien` (la persona que pretende ver): sin sujeto declarado no hay acceso que responder (400). Si la nomina que se consulta es la propia, el acceso es SIEMPRE permitido (cada uno ve la suya). Si es la de OTRO, solo se concede con alcance admin declarado, o con alcance equipo + un encargo declarado para esa persona concreta; en cualquier otro caso la respuesta es permitido:false con su motivo — la nómina es DATO PERSONAL y ser del mismo negocio NO concede nada. Es una consulta de UNA persona sobre UNA nómina: NO lista nóminas ni permite barrer la parcela.",
+        "zona": "formulario",
+        "args": [
+          {
+            "nombre": "quien",
+            "tipo": "string",
+            "required": true,
+            "placeholder": "E-002",
+            "descripcion": "La PERSONA (persona_id) que pretende ver una nómina. ES OBLIGATORIO: sin sujeto declarado no hay autorización que responder (400) — el módulo no responde 'de buena fe' a nadie anónimo. Es DATO: no se deriva el sujeto de ninguna sesión."
+          },
+          {
+            "nombre": "empleado",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "E-001 (vacío = su propia nómina)",
+            "descripcion": "De QUIÉN es la nómina que se pretende ver (persona_id del titular). Si no se declara, es la propia de `quien`. Es DATO: la titularidad no se calcula, se declara."
+          },
+          {
+            "nombre": "nomina",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "{\"empleado\":\"E-001\"}",
+            "descripcion": "Alternativa declarativa a `empleado`: la nómina cuyo titular se quiere comprobar (`nomina.empleado`). Es DATO: sirve para no duplicar el titular cuando ya se trae la nómina."
+          }
+        ]
+      },
+      "declarar": {
+        "titulo": "Declarar el alcance de acceso de una persona",
+        "descripcion": "Escritura de la gobernanza de personal (UN SOLO ESCRITOR: solo la AUTORIDAD_NOMINA). Declara qué alcance tiene una persona (`self_only` el más estrecho, `equipo`, `admin`) y, con alcance de equipo, los ENCARGOS declarados: las personas concretas cuya nómina esa persona puede ver. La ley es DATO: los alcances y los encargos los declara la autoridad, el módulo no cablea ningún rol ni concede nada por defecto. Sin declarar alcance se aplica `self_only`. Un segundo escritor (cualquier rol que no sea AUTORIDAD_NOMINA) es rechazado con 403. Al declarar se devuelven los ACCESOS EFECTIVOS: siempre la nómina propia, más los encargos.",
+        "zona": "formulario",
+        "args": [
+          {
+            "nombre": "rol",
+            "tipo": "select",
+            "enum": [
+              "AUTORIDAD_NOMINA"
+            ],
+            "required": true,
+            "descripcion": "El rol que declara. UN SOLO ESCRITOR de la parcela: solo `AUTORIDAD_NOMINA` (la autoridad de personal / el organigrama). Cualquier otro rol es un segundo escritor y se RECHAZA con 403 PERMISSION_DENIED."
+          },
+          {
+            "nombre": "persona",
+            "tipo": "string",
+            "required": true,
+            "placeholder": "E-002",
+            "descripcion": "La PERSONA (persona_id) a la que se le declara el alcance de acceso (también se acepta como `quien`). Es DATO: la identidad se declara, no se deriva."
+          },
+          {
+            "nombre": "alcance",
+            "tipo": "select",
+            "enum": [
+              "self_only",
+              "equipo",
+              "admin"
+            ],
+            "required": false,
+            "descripcion": "El ALCANCE DECLARADO de la persona: `self_only` (solo ve la suya — el MÁS ESTRECHO y el DEFAULT), `equipo` (ve las nóminas de quienes tenga encargados), `admin` (gobierna la parcela de personal). Es DATO (LEY-COMO-DATO): sin declararlo se aplica `self_only`, nunca uno más generoso. Un alcance no declarable → 400 ALCANCE_NO_DECLARADO."
+          },
+          {
+            "nombre": "empleado",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "E-002",
+            "descripcion": "El empleado asociado a la persona en el organigrama de personal. Es DATO: si no se declara, queda la propia persona."
+          },
+          {
+            "nombre": "ve_a",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "[\"E-001\",\"E-003\"]",
+            "descripcion": "Los ENCARGOS DECLARADOS: las personas concretas (persona_id) cuya nómina esta persona puede ver. Es DATO declarable (alias `concedidos`; admite array o mapa {persona:true}). SIN encargo declarado, la nómina ajena queda DENEGADA — nada se concede por pertenecer al mismo equipo."
+          }
+        ]
+      }
+    },
+    "datos": [
+      {
+        "op": "declarar",
+        "titulo": "Accesos efectivos declarados (personas cuya nómina esta persona puede ver)",
+        "refresh_on": [
+          "contabilidad.acceso_nomina"
+        ],
+        "columnas": [
+          "persona"
+        ]
+      }
+    ],
+    "_datos_nota": "La tabla NO lista nóminas: lista GOBERNANZA de acceso. Cada fila es un elemento de `accesos_efectivos` — las personas cuya nómina la `persona` declarada puede ver (SIEMPRE la suya, más los encargos declarados): es el resultado de UNA declaración de la autoridad, no un barrido de la parcela. Por eso NO existe (ni se declara) ninguna op de listado libre de nóminas de varias personas: la consulta `autorizar` es de UNA persona x UNA nómina y exige `quien`; no hay ninguna op que devuelva la parcela entera. refresh_on = contabilidad.acceso_nomina: es el evento REAL de dominio que el custodio emite al quedar declarada la gobernanza (fire-and-forget, G7); `autorizar` no emite señal de dominio (es lectura pura), por lo que no sirve para refrescar una cinta."
+  },
+  "filosofia": "La nómina de alguien no es un dato del negocio: es SU dato. Por eso este módulo existe: para que la contabilidad no sea una ventana indiscreta. Dentro de una empresa todos comparten cifras, pero el sueldo de cada uno no se comparte: ser compañeros no es un permiso. La regla por defecto no podía ser la generosidad sino el silencio — cada uno ve la suya, y para ver la de otro hace falta un encargo que alguien con autoridad haya declarado, por escrito y por persona. Y no hay puerta lateral: la propia consulta exige decir quién pregunta. Sin nombre no hay respuesta; sin encargo, no hay acceso. Es el espejo, en el eje persona, del aislamiento entre negocios: un sistema que sabe guardar un secreto vale más que uno que sabe contarlo."
+}

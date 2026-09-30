@@ -1,0 +1,9 @@
+{
+  "id": "maestro-cuentas-bancarias",
+  "name": "Cuentas bancarias",
+  "version": "0.1.0",
+  "zone": "work-bar",
+  "order": 91,
+  "icon": "🏦",
+  "label": "Bancos"
+}

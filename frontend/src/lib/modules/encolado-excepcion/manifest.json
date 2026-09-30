@@ -1,0 +1,9 @@
+{
+  "id": "encolado-excepcion",
+  "name": "Cola de excepciones",
+  "version": "0.1.0",
+  "zone": "system-bar",
+  "order": 205,
+  "icon": "⚙️",
+  "label": "Excepciones"
+}

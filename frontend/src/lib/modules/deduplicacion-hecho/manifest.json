@@ -1,0 +1,9 @@
+{
+  "id": "deduplicacion-hecho",
+  "name": "Deduplicación de hechos",
+  "version": "0.1.0",
+  "zone": "system-bar",
+  "order": 206,
+  "icon": "⚙️",
+  "label": "Deduplicar"
+}

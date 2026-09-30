@@ -1,0 +1,122 @@
+{
+  "id": "regla-movimiento-bancario",
+  "version": "blueprint-0.1.0",
+  "_nota": "FASE 6½ · la interfaz DECLARADA del módulo regla-movimiento-bancario (CUSTODIO CON PERSISTENCIA de contabilidad-libro, E8, hoja del plan). La parcela de las REGLAS DECLARABLES/APRENDIDAS de clasificación de movimientos bancarios ('esta comisión → esta cuenta'): el CORTE DURO del extracto — lo que `aplicar` devuelve como cubierta:true es lo que se puede asentar; lo que NO cubre NO se inventa y va a la cola / al juicio de partida-no-identificada (E7). La sección `ui` es lo que el generador schema→UI (BlueprintForm, 4 zonas) necesita para renderizar el panel; sin LLM: TODO lo que produce sale de aquí. Fuente de verdad: modules/contabilidad-libro/regla-movimiento-bancario/{module.json,index.js}. ui_handlers reales: regla-movimiento-bancario.aplicar y regla-movimiento-bancario.proponer (workspace_module/barra_modulos).",
+  "schema": "blueprint-interfaz-v2",
+  "language": "es",
+  "titulo": "Las reglas de los movimientos bancarios (el corte duro del extracto)",
+  "eventos_publicados": [
+    "regla-movimiento-bancario.aplicar.response",
+    "regla-movimiento-bancario.aplicar.failed",
+    "regla-movimiento-bancario.proponer.response",
+    "regla-movimiento-bancario.proponer.failed",
+    "contabilidad.regla_bancaria_propuesta"
+  ],
+  "eventos_que_escucho": [],
+  "_escucho_nota": "VACÍO A PROPÓSITO: el reflejo ya atiende en module.json.subscribes regla-movimiento-bancario.aplicar.request, regla-movimiento-bancario.proponer.request (RPC humanos) y project.activated (restauración PosPersistencia); repetir cualquiera aquí daría ANTICOLISION-001 (lo atenderían los dos). Es un CUSTODIO determinista: no tiene cajón fuzzy ni evento fire-and-forget que el LLM deba procesar.",
+  "transporte": {
+    "rpc": [
+      "regla-movimiento-bancario.aplicar.request -> .response",
+      "regla-movimiento-bancario.proponer.request -> .response"
+    ],
+    "entrada": [
+      "regla-movimiento-bancario.aplicar.request",
+      "regla-movimiento-bancario.proponer.request"
+    ],
+    "salida": [
+      "regla-movimiento-bancario.aplicar.response",
+      "regla-movimiento-bancario.proponer.response",
+      "contabilidad.regla_bancaria_propuesta"
+    ],
+    "qos": "publishAndWait (request/response correlado) en aplicar y proponer; contabilidad.regla_bancaria_propuesta es fire-and-forget (lo LEEN el corte duro del extracto —conciliacion-bancaria E1— y el juicio aislado —partida-no-identificada E7—, que pasan a automático en cuanto existe la regla). project.activated lo atiende el reflejo para restaurar la parcela del proyecto."
+  },
+  "contrato": {
+    "AplicarInput": "{ project_id:uuid, movimiento:{ fecha, importe, signo, concepto, contraparte?, cuenta? } }",
+    "AplicarOutput": "{ project_id, cubierta:bool, corte:'regla'|null, regla:{id,condicion,origen}, apunte:{cuenta,tercero,periodo}, reglas_evaluadas, motivo, requiere_cola, destino_cola } — sin regla que cubra → cubierta:false, apunte:null, requiere_cola:true (no se inventa la cuenta)",
+    "ProponerInput": "{ project_id:uuid, rol:'RATIFICACION_REGLA_APRENDIDA', regla:{ id?, condicion:{ signo?, concepto_contiene?, contraparte?, cuenta?, importe_min?, importe_max? }, apunte:{ cuenta, tercero?, periodo? }, origen? } }",
+    "ProponerOutput": "{ project_id, regla:{ id, condicion, apunte, origen, cuenta_verificada, creada_en }, cuenta_verificada:bool, anadida:bool }",
+    "ProponerErrores": "rol != RATIFICACION_REGLA_APRENDIDA -> 403 PERMISSION_DENIED (segundo escritor) · regla sin condición -> 400 · apunte sin cuenta -> 400 · id ya presente -> 409 ALREADY_EXISTS (append-only, no se sobrescribe) · cuenta fuera del plan -> 422 CUENTA_FUERA_DEL_PLAN · plan no responde -> se acepta con cuenta_verificada:false. Cada error publica su par regla-movimiento-bancario.proponer.failed.",
+    "Criterios": "Los CRITERIOS de una condición son DECLARABLES (la ley entra como DATO) y combinan en AND: signo, concepto_contiene, contraparte, cuenta, importe_min, importe_max. La LISTA de criterios es el molde fijo del módulo; los VALORES los declara el dueño/asesor. Un criterio que el movimiento no aporta NO casa (dato ausente = desconocido ≠ dato coincidente)."
+  },
+  "ui": {
+    "type": "workspace_module",
+    "zone": "modulos",
+    "ops": {
+      "aplicar": {
+        "titulo": "Aplicar el corte duro (movimiento → apunte)",
+        "descripcion": "Consulta DETERMINISTA que NO muta: aplica la PRIMERA regla (en orden de entrada) cuya condición casa el movimiento y devuelve el apunte propuesto (cuenta, tercero, periodo). Los criterios de la condición combinan en AND y un criterio que el movimiento no aporta NO casa (dato ausente ≠ dato coincidente). Si ninguna regla cubre el movimiento NO se inventa la cuenta: devuelve `cubierta:false`, `apunte:null` y manda el asunto a la cola del juicio (requiere_cola:true, destino_cola:ASESOR).",
+        "zona": "formulario",
+        "args": [
+          {
+            "nombre": "movimiento",
+            "tipo": "json",
+            "required": true,
+            "placeholder": "{\"fecha\":\"2026-09-01\",\"importe\":-12.5,\"signo\":\"cargo\",\"concepto\":\"COMISION MANTENIMIENTO\",\"contraparte\":\"BANCO X\"}",
+            "descripcion": "El movimiento bancario a cubrir. Se leen su fecha, importe, signo, concepto, contraparte y cuenta; los campos que no traiga no casan ninguna condición que los exija (dato ausente = desconocido, no coincidente)."
+          }
+        ]
+      },
+      "proponer": {
+        "titulo": "Proponer una regla bancaria (append-only)",
+        "descripcion": "UN SOLO ESCRITOR: el aprendizaje entra por la ratificación (rol RATIFICACION_REGLA_APRENDIDA); cualquier otro rol es rechazado con 403. La parcela es APPEND-ONLY: un id ya presente devuelve 409 y no se sobrescribe. La cuenta del apunte se VERIFICA contra el plan declarado (catalogo-cuentas B1) POR EVENTO: si el plan dice que no existe → 422 CUENTA_FUERA_DEL_PLAN; si el plan no responde (timeout) se acepta y se declara `cuenta_verificada:false` (nunca se asume verificado). LA LEY ENTRA COMO DATO: la condición (criterios AND) y el apunte los declara el dueño/asesor — el sistema NO inventa ninguna regla ni cablea ningún criterio.",
+        "zona": "formulario",
+        "args": [
+          {
+            "nombre": "rol",
+            "tipo": "select",
+            "enum": [
+              "RATIFICACION_REGLA_APRENDIDA"
+            ],
+            "required": true,
+            "descripcion": "El rol del escritor. La parcela tiene UN solo escritor: solo el camino de aprendizaje (RATIFICACION_REGLA_APRENDIDA) puede asentar reglas; cualquier otro valor es rechazado (403)."
+          },
+          {
+            "nombre": "regla.condicion",
+            "tipo": "json",
+            "required": true,
+            "placeholder": "{\"concepto_contiene\":\"COMISION\",\"signo\":\"cargo\"}",
+            "descripcion": "La condición DECLARABLE de la regla (criterios que combinan en AND): signo, concepto_contiene, contraparte, cuenta, importe_min, importe_max. Debe traer al menos un criterio. Es DATO del dueño/asesor: el sistema NO inventa los criterios ni los cablea."
+          },
+          {
+            "nombre": "regla.apunte.cuenta",
+            "tipo": "string",
+            "required": true,
+            "placeholder": "626",
+            "descripcion": "La cuenta del apunte (obligatoria). Se verifica contra el plan declarado por evento: fuera del plan → 422; plan no disponible → se acepta con cuenta_verificada:false."
+          },
+          {
+            "nombre": "regla.apunte.tercero",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "B12345678",
+            "descripcion": "El tercero del apunte. Si no se declara, al aplicar la regla queda null (desconocido), no se estima."
+          },
+          {
+            "nombre": "regla.apunte.periodo",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "2026-09",
+            "descripcion": "El periodo del apunte (YYYY-MM). Si no se declara, al aplicar la regla se deriva de la fecha del movimiento; si el movimiento no trae fecha, queda desconocido (null)."
+          },
+          {
+            "nombre": "regla.id",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "(vacío = id derivado del proyecto)",
+            "descripcion": "Identificador de la regla. Si no se declara, se deriva del proyecto y del número de reglas. Un id ya presente devuelve 409 (append-only: no se sobrescribe)."
+          },
+          {
+            "nombre": "regla.origen",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "APRENDIDA",
+            "descripcion": "De dónde viene la regla (por defecto APRENDIDA). Es DATO descriptivo de trazabilidad, no un enum cableado."
+          }
+        ]
+      }
+    },
+    "datos": [],
+    "_datos_nota": "HUECO DECLARADO (no se inventa): regla-movimiento-bancario es un CUSTODIO que ESCRIBE (proponer) y CONSULTA (aplicar), pero NO expone ninguna op RPC de LISTADO de la parcela. En module.json.subscribes solo hay regla-movimiento-bancario.aplicar.request, regla-movimiento-bancario.proponer.request y project.activated; en index.js la lectura de conjunto es `reglasDe(pid)`, lectura directa en proceso (no un RPC), y el volcado se hace por PosPersistencia al storage del proyecto (/contabilidad/regla-movimiento-bancario/regla-movimiento-bancario.json), no por el bus. `aplicar` devuelve UN apunte (no una tabla de reglas). Por eso la zona DATOS va vacía: la cinta de reglas necesitaría un handler RPC de listado que hoy no existe en el backend (trabajo de módulo, no de interfaz). El resultado del corte se ve en la respuesta RPC de `aplicar`."
+  },
+  "filosofia": "Este es el CORTE DURO del extracto: lo que dice que se puede asentar, se asienta; lo que no cubre, no se inventa — se declara la duda y se manda a la cola. Y las reglas NO las fabrica el sistema: las declara el dueño/asesor, y entran por un único camino de aprendizaje. Un criterio que el movimiento no aporta no casa, porque ausente no es coincidente. Aprender es APILAR, nunca pisar: una regla que ya existe se rechaza, no se sobrescribe en silencio."
+}

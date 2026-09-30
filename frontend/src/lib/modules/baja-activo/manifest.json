@@ -1,0 +1,9 @@
+{
+  "id": "baja-activo",
+  "name": "Baja de activo",
+  "version": "0.1.0",
+  "zone": "work-bar",
+  "order": 103,
+  "icon": "🏗️",
+  "label": "Baja activo"
+}

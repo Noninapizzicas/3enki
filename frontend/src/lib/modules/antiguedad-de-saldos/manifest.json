@@ -1,0 +1,9 @@
+{
+  "id": "antiguedad-de-saldos",
+  "name": "Antigüedad de saldos",
+  "version": "0.1.0",
+  "zone": "work-bar",
+  "order": 155,
+  "icon": "🏭",
+  "label": "Antigüedad"
+}

@@ -1,0 +1,108 @@
+{
+  "id": "consolidacion",
+  "version": "blueprint-0.1.0",
+  "_nota": "FASE 6½ · la interfaz DECLARADA del módulo consolidacion (REFLEJO STATELESS de contabilidad-analitica, I3, hoja del plan). LA CONSOLIDACIÓN DEL GRUPO MULTI-SOCIEDAD COMPLETA: compone los estados del CONJUNTO a partir de las sociedades DECLARADAS, aplicando el criterio DECLARADO y restando las eliminaciones intercompany (I2). Agregación DETERMINISTA, sin estimar nada. Las SOCIEDADES son DATO declarado — NO se descubren solas: sin conjunto declarado no hay perímetro y los estados quedan [ABIERTO] (inventarse una sociedad rompe el grupo). El CRITERIO (qué se agrega, moneda, método, qué se elimina) es ParametroDeclarable: el reflejo lo CONSERVA opaco. La sección `ui` es lo que el generador schema→UI (BlueprintForm, 4 zonas) necesita para renderizar el panel; sin LLM: TODO lo que produce sale de aquí. Fuente de verdad: modules/contabilidad-analitica/consolidacion/{module.json,index.js}. ui_handler real: consolidacion.estados (workspace_module/barra_modulos).",
+  "schema": "blueprint-interfaz-v2",
+  "language": "es",
+  "titulo": "La consolidación del grupo multi-sociedad",
+  "eventos_publicados": [
+    "consolidacion.estados.response",
+    "consolidacion.estados.failed"
+  ],
+  "eventos_que_escucho": [],
+  "_escucho_nota": "VACÍO A PROPÓSITO: el reflejo ya atiende en module.json.subscribes consolidacion.estados.request (onEstadosRequest, su única RPC); repetirlo aquí daría ANTICOLISION-001 (lo atenderían los dos). Es un REFLEJO STATELESS determinista: no tiene cajón fuzzy ni evento fire-and-forget que el LLM deba procesar. Las cifras de cada sociedad se piden DENTRO del cálculo a marca-sociedad (I1) POR EVENTO (marca-sociedad.marcar.request) y las eliminaciones a eliminacion-intercompany (I2) POR EVENTO (eliminacion-intercompany.eliminar.request): son dependencias internas del cálculo, NO suscripciones vivas del módulo. El módulo no publica ningún evento de dominio (solo la respuesta RPC correlada y su par de fallo).",
+  "transporte": {
+    "rpc": [
+      "consolidacion.estados.request -> .response",
+      "marca-sociedad.marcar.request -> .response",
+      "eliminacion-intercompany.eliminar.request -> .response"
+    ],
+    "entrada": [
+      "consolidacion.estados.request"
+    ],
+    "salida": [
+      "consolidacion.estados.response"
+    ],
+    "qos": "publishAndWait (request/response correlado) en la consolidación. Las cifras por sociedad se piden a marca-sociedad (I1) POR EVENTO (best-effort) y las eliminaciones a eliminacion-intercompany (I2) POR EVENTO; esas RPC cruzadas son dependencias internas del cálculo, no superficie del chat. Una sociedad de la que no se obtienen cifras queda con cifras:null y el estado del conjunto queda [ABIERTO] — nunca se rellena con 0."
+  },
+  "contrato": {
+    "EstadosInput": "{ project_id:uuid, periodo?:str, sociedades:[str|{id?|nombre?}], criterio?:obj, cifras?/por_sociedad?:obj, partidas?:[obj], eliminaciones?:[obj], neto_eliminado?:num }",
+    "EstadosOutput": "{ project_id, periodo, sociedades:[str], criterio:obj|null, fuente_eliminaciones:'declarado'|'eliminacion-intercompany'|null, aportes:[{sociedad, cifras|null}], eliminaciones:[obj], n_sociedades, estados:EstadoDerivado|null, parcial:EstadoDerivado, consolidado:bool, abierto:bool, faltan:[str], motivo }",
+    "Errores": "project_id ausente → 400 (par consolidacion.estados.failed).",
+    "Invariantes": "SOLO CONSOLIDA LO DECLARADO: sin sociedades declaradas no hay perímetro (estados:null, abierto:true, faltan:['sociedades']) y el grupo no se descubre solo. Si UNA sociedad declarada no aporta cifras, el estado del conjunto queda null y abierto (no se rellena con 0 una sociedad sin dato: falsearía el grupo) — el `parcial` se declara igual para que se vea lo que hay. El CRITERIO se conserva OPACO (el reflejo no interpreta método ni moneda). Las eliminaciones sin respuesta de I2 son cero DECLARADO, no una estimación. DETERMINISTA; NO escribe, NO persiste (los estados son DERIVADOS; el asiento es del diario)."
+  },
+  "ui": {
+    "type": "workspace_module",
+    "zone": "modulos",
+    "ops": {
+      "estados": {
+        "titulo": "Consolidar los estados del grupo (perímetro declarado)",
+        "descripcion": "Mesa de trabajo de la consolidación: compone los estados del CONJUNTO (grupo completo) a partir del PERÍMETRO que se declara aquí. Las SOCIEDADES son DATO declarado — el grupo no se descubre solo: sin ellas no hay perímetro y los estados quedan [ABIERTO]. El CRITERIO de consolidación (qué se agrega, moneda, método, qué se elimina) es ParametroDeclarable: se conserva opaco y se declara en la respuesta. Las cifras de cada sociedad llegan declaradas (cifras/por_sociedad o partidas) o se piden a marca-sociedad (I1) POR EVENTO; las eliminaciones intercompany llegan declaradas o se piden a eliminacion-intercompany (I2) POR EVENTO. Si una sociedad declarada no aporta cifras, el estado del conjunto queda [ABIERTO] con lo que falta: NO se rellena con 0 una sociedad sin dato (falsearía el grupo). Agregación determinista.",
+        "zona": "formulario",
+        "args": [
+          {
+            "nombre": "sociedades",
+            "tipo": "json",
+            "required": true,
+            "placeholder": "[\"S1\",\"S2\"] | [{\"id\":\"S1\"}]",
+            "descripcion": "El PERÍMETRO declarado del grupo: la lista de sociedades que se consolidan. Es DATO, no se descubre solo — sin él no hay grupo y los estados quedan [ABIERTO]. Cada ítem puede ser un id o un objeto con `id`/`nombre`."
+          },
+          {
+            "nombre": "periodo",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "2026-09 | 2026",
+            "descripcion": "El periodo declarado que se consolida. Es DATO: se propaga a las sociedades (I1) y a las eliminaciones (I2); no se deriva ni se cablea ningún calendario."
+          },
+          {
+            "nombre": "criterio",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "{\"metodo\":\"integracion_global\",\"moneda\":\"EUR\",\"elimina\":true}",
+            "descripcion": "El CRITERIO de consolidación DECLARADO (qué se agrega, en qué moneda, con qué método de conversión, qué se elimina). Es DATO: el reflejo lo CONSERVA OPACO y lo declara en la respuesta — cero constantes de método/moneda cableadas."
+          },
+          {
+            "nombre": "cifras",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "{\"S1\":{\"total_activo\":100,\"ingresos\":50},\"S2\":{...}}",
+            "descripcion": "Las CIFRAS declaradas por sociedad (alternativa a `por_sociedad`). Es DATO: cada entrada aporta total_activo/total_pasivo/patrimonio/ingresos/gastos de esa sociedad. Una sociedad declarada sin entrada aquí se pide a marca-sociedad (I1) POR EVENTO; si tampoco responde, su aporte es null y el conjunto queda [ABIERTO]."
+          },
+          {
+            "nombre": "partidas",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "[{\"sociedad\":\"S1\",\"tipo\":\"activo\",\"importe\":100}]",
+            "descripcion": "Las PARTIDAS declaradas, con su sociedad y tipo (activo|pasivo|patrimonio|ingreso|gasto). Es DATO: se agregan por sociedad para obtener sus cifras. Sin partidas ni cifras de una sociedad declarada, el conjunto queda [ABIERTO]."
+          },
+          {
+            "nombre": "eliminaciones",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "[{\"importe\":120,\"concepto\":\"venta intragrupo\"}]",
+            "descripcion": "Las ELIMINACIONES intercompany declaradas. Es DATO: si no se declaran, se PIDEN a eliminacion-intercompany (I2) POR EVENTO; si I2 tampoco responde, cero eliminaciones es un dato declarado, no una estimación. Se restan del conjunto."
+          }
+        ]
+      }
+    },
+    "datos": [
+      {
+        "op": "estados",
+        "titulo": "Aportes del grupo por sociedad (lo que consolida)",
+        "refresh_on": [
+          "consolidacion.estados.response"
+        ],
+        "columnas": [
+          "sociedad",
+          "total_activo",
+          "total_pasivo",
+          "patrimonio",
+          "ingresos",
+          "gastos"
+        ]
+      }
+    ],
+    "_datos_nota": "La forma tabulable EXACTA: un aporte por sociedad declarada (la fila del perímetro) con sus cifras. `sociedad` es la clave; las cinco columnas de cifras salen de `aportes[].cifras` y quedan null cuando la sociedad no aportó dato ([ABIERTO], no se rellena con 0). El estado del CONJUNTO (estados/parcial/consolidado) y los flags de fuentes (fuente_eliminaciones) viajan en la cabecera de la respuesta RPC, no como filas: el panel los pinta una vez por consolidación, no por sociedad. `refresh_on` = consolidacion.estados.response: es el único evento que este reflejo emite (module.json.publishes) y es la señal de que la mesa cambia."
+  },
+  "filosofia": "Un grupo no es la suma de lo que se supone que hay: es la suma de las sociedades que el dueño DECLARA, con el criterio que el dueño DECLARA y restando lo que se DECLARA que es interno. Por eso aquí nada se descubre solo y nada se estima: si falta el perímetro no hay grupo; si una sociedad declarada no trae cifras, el conjunto se declara [ABIERTO] y se muestra el parcial — una sociedad sin dato no se rellena con un 0 que mentiría sobre el tamaño del grupo. El sistema agrega y presenta; quien decide qué es el grupo es el que lo declara."
+}

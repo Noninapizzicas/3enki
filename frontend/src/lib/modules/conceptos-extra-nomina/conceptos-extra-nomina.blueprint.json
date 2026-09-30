@@ -1,0 +1,102 @@
+{
+  "id": "conceptos-extra-nomina",
+  "version": "blueprint-0.1.0",
+  "_nota": "FASE 6½ · la interfaz DECLARADA del módulo conceptos-extra-nomina (REFLEJO STATELESS de contabilidad-fiscal, G9, hoja del plan). DIETAS, ESPECIE, FINIQUITO, PAGA EXTRA: calculo de SU IMPUTACION. El diseno lo dice literal: `imputar(c:Concepto):Set<Apunte>`, con `conceptos:Set<Concepto>`. Calculo PURO y determinista: mismo concepto declarado + misma regla declarada → mismo apunte. LOS CONCEPTOS SON DECLARABLES (invariante LEY/PARAMETRO COMO DATO): aqui NO se cablea que es una dieta, ni que la especie exonera, ni que la paga extra se prorratea, ni ningun tratamiento fiscal — el negocio DECLARA cada concepto y su TRATAMIENTO (`tratamientos`: {concepto: {cuenta|rol_destino, exento?, integra_base?, pago_unico?, signo?}}, o un `tratamiento` unico). Aplicar el tratamiento declarado es puro; INVENTARLO es lo que este reflejo NO hace. ESTE MODULO NO DECIDE: no valora el concepto, no decide si esta exento y no calcula retencion (decide:false) — si un concepto no trae tratamiento queda [ABIERTO] (no se le asigna uno por defecto). INVARIANTE DE DATO AUSENTE = DESCONOCIDO: un concepto sin importe o sin tratamiento queda declarado como abierto; jamas se rellena con 0 ni se le supone un tratamiento. La seccion `ui` es lo que el generador schema→UI (BlueprintForm, 4 zonas) necesita para renderizar el panel; sin LLM: TODO lo que produce sale de aqui. Fuente de verdad: modules/contabilidad-fiscal/conceptos-extra-nomina/{module.json,index.js}. ui_handler real: conceptos-extra-nomina.imputar (workspace_module/barra_modulos).",
+  "schema": "blueprint-interfaz-v2",
+  "language": "es",
+  "titulo": "Conceptos extra de nómina y su imputación declarada",
+  "eventos_publicados": [
+    "conceptos-extra-nomina.imputar.response",
+    "conceptos-extra-nomina.imputar.failed"
+  ],
+  "eventos_que_escucho": [],
+  "_escucho_nota": "VACIO A PROPOSITO: el reflejo ya atiende en module.json.subscribes conceptos-extra-nomina.imputar.request (onImputarRequest, su unica RPC); repetirlo aqui daria ANTICOLISION-001 (lo atenderian los dos). Es un REFLEJO STATELESS determinista: no tiene cajon fuzzy ni evento fire-and-forget que el LLM deba procesar. Los conceptos y sus tratamientos NO llegan como eventos que el LLM escuche por el bus: llegan DECLARADOS en la peticion (que es exactamente la ley-como-dato: el tratamiento es dato del negocio, no un evento que el LLM derive) — por eso no hay ningun cajon fuzzy que declarar aqui.",
+  "transporte": {
+    "rpc": [
+      "conceptos-extra-nomina.imputar.request -> .response"
+    ],
+    "entrada": [
+      "conceptos-extra-nomina.imputar.request"
+    ],
+    "salida": [
+      "conceptos-extra-nomina.imputar.response"
+    ],
+    "qos": "publishAndWait (request/response correlado) en la imputacion. El reflejo es AUTOCONTENIDO: los conceptos y sus tratamientos llegan declarados en la peticion (no pide nada al bus — el tratamiento es DATO del negocio). No publica eventos de dominio: su unica salida es la respuesta RPC correlada (y su par .failed)."
+  },
+  "contrato": {
+    "ImputarInput": "{ project_id:uuid, conceptos|concepto (DECLARABLES: [{concepto, importe, clase?, cantidad?, precio?, especie?, tratamiento?}] o un concepto suelto), tratamientos?|reglas? (DECLARABLES: {concepto: {cuenta|rol_destino, exento?, integra_base?, pago_unico?, signo?}}), tratamiento? (tratamiento unico declarado), empleado?:str, periodo?:str }",
+    "ImputarOutput": "{ project_id, empleado, periodo, conceptos:[{concepto, importe, clase, cantidad, precio, especie, tratamiento, abierto, imputable}], apuntes:[{concepto, importe, cuenta, rol_destino, exento, integra_base, pago_unico, signo, origen_tratamiento}], total_imputado, tratamiento_origen:'declarado'|'declarado_unico'|null, tratamientos_cableados:false, decide:false, aplica_regla_declarada:true, calculo_puro:true, faltantes:[str], abierto:bool, motivo }",
+    "SinConcepto": "Sin `conceptos` ni `concepto` → 400 (project_id o concepto ausente) → par conceptos-extra-nomina.imputar.failed.",
+    "Errores": "project_id o concepto ausente (400) o excepcion de la proyeccion (500) → par conceptos-extra-nomina.imputar.failed.",
+    "Invariantes": "LOS CONCEPTOS Y SU TRATAMIENTO SON DECLARABLES (invariante LEY/PARAMETRO COMO DATO): aqui NO se cablea que es una dieta, ni que la especie exonera, ni que la paga extra se prorratea, ni ningun tratamiento fiscal — todo llega DECLARADO (por concepto, en un catalogo `tratamientos`/`reglas`, o como `tratamiento` unico) y se aplica de forma pura; la respuesta declara tratamiento_origen y tratamientos_cableados:false. ESTE MODULO NO DECIDE: no valora el concepto, no decide exenciones y no calcula retencion (decide:false, aplica_regla_declarada:true). INVARIANTE DE DATO AUSENTE = DESCONOCIDO: un concepto sin importe o sin tratamiento queda abierto (abierto:true, imputable:false) y se declara en `faltantes` — jamas se rellena con 0 ni se le supone un tratamiento. Determinista."
+  },
+  "ui": {
+    "type": "workspace_module",
+    "zone": "modulos",
+    "ops": {
+      "imputar": {
+        "titulo": "Imputar conceptos extra según el tratamiento declarado",
+        "descripcion": "Mesa de trabajo de los conceptos extra de nómina (dietas, especie, finiquito, paga extra): aplica a cada concepto el TRATAMIENTO que el negocio DECLARA y produce sus apuntes (cuenta/rol destino, exento, integra base, pago único, signo). LOS CONCEPTOS Y SU TRATAMIENTO SON DATO: aquí no se cablea qué es una dieta ni cuándo algo exonera ni si la paga extra se prorratea — todo llega declarado, y aplicarlo es puro. ESTE MÓDULO NO DECIDE: no valora el concepto, no decide exenciones y no calcula retención. Un concepto sin importe o sin tratamiento declarado queda [ABIERTO] y se dice por qué — jamás se le supone un tratamiento ni se rellena con 0.",
+        "zona": "formulario",
+        "args": [
+          {
+            "nombre": "conceptos",
+            "tipo": "json",
+            "required": true,
+            "placeholder": "[{\"concepto\":\"dieta\",\"importe\":120,\"clase\":\"extra\",\"especie\":false},{\"concepto\":\"paga_extra\",\"importe\":2000,\"clase\":\"extra\"}]",
+            "descripcion": "LOS CONCEPTOS EXTRA DECLARADOS (también se acepta uno suelto como `concepto`). Cada uno con su importe y, si se sabe, su `clase`, `cantidad`, `precio`, `especie` y su `tratamiento` propio. Es DATO obligatorio: el módulo NO conoce qué es una dieta ni qué tratamiento le corresponde."
+          },
+          {
+            "nombre": "tratamientos",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "{\"dieta\":{\"cuenta\":\"629\",\"exento\":true,\"integra_base\":false},\"paga_extra\":{\"cuenta\":\"640\",\"pago_unico\":false,\"signo\":1}}",
+            "descripcion": "EL CATÁLOGO DE TRATAMIENTOS DECLARADO (el corazón de la ley-como-dato; alias `reglas`): por concepto, su `cuenta` (o `rol_destino`), si es `exento`, si `integra_base`, si es de `pago_unico` y su `signo`. Es DATO: el negocio declara el tratamiento fiscal/contable de cada concepto — el módulo no cablea ninguno. Un tratamiento sin destino declarado (ni cuenta ni rol) no es aplicable y el concepto queda abierto."
+          },
+          {
+            "nombre": "tratamiento",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "{\"cuenta\":\"640\",\"integra_base\":true}",
+            "descripcion": "UN TRATAMIENTO ÚNICO declarado, aplicable a todos los conceptos que no traigan el suyo ni aparezcan en el catálogo. Es DATO: sirve para el caso homogéneo, nunca para suplir un tratamiento que el negocio no haya declarado."
+          },
+          {
+            "nombre": "empleado",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "E-001",
+            "descripcion": "El EMPLEADO declarado al que pertenecen los conceptos. Es DATO: no se deriva de ninguna estructura."
+          },
+          {
+            "nombre": "periodo",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "2026-09",
+            "descripcion": "El PERIODO declarado de los conceptos. Es DATO: no se deriva ni se cablea ningún calendario."
+          }
+        ]
+      }
+    },
+    "datos": [
+      {
+        "op": "imputar",
+        "titulo": "Apuntes de los conceptos extra (tratamiento declarado aplicado)",
+        "refresh_on": [
+          "conceptos-extra-nomina.imputar.response"
+        ],
+        "columnas": [
+          "concepto",
+          "importe",
+          "cuenta",
+          "rol_destino",
+          "exento",
+          "integra_base",
+          "pago_unico",
+          "signo"
+        ]
+      }
+    ],
+    "_datos_nota": "La tabla son los APUNTES que la regla DECLARADA produce (`apuntes`), no los conceptos que no llegaron a imputarse. Un concepto sin importe o sin tratamiento no aparece como apunte (queda abierto) y se declara en `faltantes` y en `conceptos[].abierto` — por eso la cinta es de apuntes y no del inventario de conceptos: mostrar una fila por cada concepto sin tratamiento invitaría a rellenarla, que es justo lo que la ley prohíbe. refresh_on = conceptos-extra-nomina.imputar.response: es la señal REAL que este reflejo stateless emite (no escucha ningún evento de dominio; el módulo es autocontenido y no pide nada al bus). total_imputado y el estado de tratamiento_origen son valores únicos de la respuesta, no filas: van en la cabecera del panel."
+  },
+  "filosofia": "Una dieta no es un sueldo, y el sistema no puede fingir que sabe por qué: el tratamiento de un concepto extra — si exime, si integra base, si se prorratea — no es una constante técnica, es una decisión que alguien declara leyendo su convenio. Meter aquí una tabla de tratamientos sería congelar la ley en el código y confundir criterio con cálculo. Por eso el módulo aplica lo que le declaran y, cuando no le declaran nada, se queda quieto: un concepto sin tratamiento queda abierto, no inventado. Preferir un hueco honesto a una cifra plausible es la diferencia entre contabilidad y maquillaje."
+}

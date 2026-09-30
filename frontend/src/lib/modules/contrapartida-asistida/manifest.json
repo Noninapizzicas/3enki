@@ -1,0 +1,9 @@
+{
+  "id": "contrapartida-asistida",
+  "name": "Contrapartida asistida",
+  "version": "0.1.0",
+  "zone": "system-bar",
+  "order": 209,
+  "icon": "⚙️",
+  "label": "Contrapartida"
+}

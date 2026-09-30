@@ -1,0 +1,92 @@
+{
+  "id": "obligacion-seguridad-social",
+  "version": "blueprint-0.1.0",
+  "_nota": "FASE 6½ · la interfaz DECLARADA del módulo obligacion-seguridad-social (REFLEJO STATELESS de contabilidad-fiscal, G2, hoja del plan). GASTO DE EMPRESA + OBLIGACIÓN CON LA TGSS derivados DEL RECIBO y de los TIPOS/BASES que el negocio DECLARA. EL RECIBO llega YA CALCULADO por el sistema externo (por EVENTO: recibo-nomina G1, o declarado en la petición): aquí NO se calcula la nómina, se COPIAN sus importes para el gasto de empresa. LOS TIPOS Y LAS BASES SON DATO (invariante LEY/PARÁMETRO COMO DATO): aquí NO se cablea ningún tipo de cotización, ninguna base, ningún grupo de tarifa ni ninguna tabla legal — todo llega declarado por el negocio (`tipos`, `bases`) y se aplica de forma pura (base × tipo). Sin TIPOS declarados no hay obligación que calcular: obligación:null, abierto:true, motivo declarado. Determinista. La sección `ui` es lo que el generador schema→UI (BlueprintForm, 4 zonas) necesita para renderizar el panel; sin LLM: TODO lo que produce sale de aquí. Fuente de verdad: modules/contabilidad-fiscal/obligacion-seguridad-social/{module.json,index.js}. ui_handler real: obligacion-seguridad-social.calcular (workspace_module/barra_modulos).",
+  "schema": "blueprint-interfaz-v2",
+  "language": "es",
+  "titulo": "La obligación con la Seguridad Social y el gasto de empresa",
+  "eventos_publicados": [
+    "obligacion-seguridad-social.calcular.response",
+    "obligacion-seguridad-social.calcular.failed"
+  ],
+  "eventos_que_escucho": [],
+  "_escucho_nota": "VACÍO A PROPÓSITO: el reflejo ya atiende en module.json.subscribes obligacion-seguridad-social.calcular.request (onCalcularRequest, su única RPC); repetirlo aquí daría ANTICOLISION-001 (lo atenderían los dos). Es un REFLEJO STATELESS determinista: no tiene cajón fuzzy ni evento fire-and-forget que el LLM deba procesar. El RECIBO NO llega como evento que el LLM escuche por el bus: se pide DENTRO del cálculo a recibo-nomina (G1) por evento (recibo-nomina.dar_forma.request, dependencia interna del cálculo) o llega declarado en la petición — por eso no hay ningún cajón fuzzy que declarar aquí.",
+  "transporte": {
+    "rpc": [
+      "obligacion-seguridad-social.calcular.request -> .response",
+      "recibo-nomina.dar_forma.request -> .response"
+    ],
+    "entrada": [
+      "obligacion-seguridad-social.calcular.request"
+    ],
+    "salida": [
+      "obligacion-seguridad-social.calcular.response"
+    ],
+    "qos": "publishAndWait (request/response correlado) en el cálculo. El RECIBO llega por DOS vías sin require cruzado: declarado en la petición (`recibo`/`nomina`) o PEDIDO a recibo-nomina (G1) POR EVENTO (recibo-nomina.dar_forma.request, dependencia interna del cálculo, best-effort, cuando se declara clave natural o empleado+periodo). Los tipos y las bases son DATO declarado. El reflejo no publica eventos de dominio: su única salida es la respuesta RPC correlada."
+  },
+  "contrato": {
+    "CalcularInput": "{ project_id:uuid, recibo|nomina?:obj, clave_natural?:str, empleado?:str, periodo?:str, tipos:([{concepto,tipo,a_cargo?,base?}]|[concepto: tipo|{tipo,a_cargo,base}]) , bases?:(num|{concepto:importe}|[{concepto,importe}]) }",
+    "CalcularOutput": "{ project_id, empleado, periodo, clave_natural, origen_recibo:'declarado'|'recibo-nomina'|null, obligacion:{ lineas:[{concepto,base,tipo,a_cargo,importe,completo}], cuota_empresa, cuota_trabajador, total_tgss, otras_lineas, moneda, tipos_origen:'declarados', regla_cableada:false }|null, gasto_empresa, bruto_origen:'recibo'|null, tipos_declarados:int, bases_declaradas:bool, faltantes:[str], abierto:bool, motivo }",
+    "SinTipos": "Sin TIPOS declarados → obligacion:null, gasto_empresa:null, abierto:true, faltantes:['tipos'] y motivo declarado (nada se calcula con tipos inventados).",
+    "Errores": "project_id ausente (400) o excepción de la proyección (500) → par obligacion-seguridad-social.calcular.failed.",
+    "Invariantes": "LA LEY ENTRA COMO DATO (invariante 5): aquí NO se cablea ningún tipo de cotización, ninguna base, ningún grupo de tarifa ni ninguna tabla legal — todo llega DECLARADO por el negocio (`tipos`, `bases`) y se aplica de forma pura (base × tipo); la respuesta declara tipos_origen:'declarados' y regla_cableada:false. EL RECIBO llega YA CALCULADO por el sistema externo: se COPIAN sus importes (bruto) para el gasto de empresa — aquí NO se calcula la nómina. INVARIANTE DE DATO AUSENTE = DESCONOCIDO: una línea de tipo cuya base o tipo no venga declarada queda importe:null y se declara en `faltantes`; los totales que dependan de ella quedan null — jamás se rellena con 0 un tipo no declarado ni se estima una base. Sin TIPOS declarados no hay obligación que calcular. Determinista."
+  },
+  "ui": {
+    "type": "workspace_module",
+    "zone": "modulos",
+    "ops": {
+      "calcular": {
+        "titulo": "Derivar la obligación con la TGSS (base × tipo declarado)",
+        "descripcion": "Mesa de trabajo de la obligación con la Seguridad Social: deriva el GASTO DE EMPRESA y la OBLIGACIÓN con la TGSS aplicando los TIPOS y las BASES que el negocio DECLARA, de forma pura (base × tipo). LA LEY ENTRA COMO DATO: aquí NO se cablea ningún tipo de cotización, ninguna base, ningún grupo de tarifa ni ninguna tabla legal — todo llega declarado. EL RECIBO llega YA CALCULADO por el sistema externo (declarado o pedido a recibo-nomina G1 por evento): aquí NO se calcula la nómina, se COPIAN sus importes para el gasto de empresa. Dato ausente = desconocido: una línea cuya base o tipo no venga declarada queda importe:null y se declara en `faltantes`, y los totales que dependan de ella quedan null — jamás se rellena con 0 un tipo no declarado. Sin TIPOS declarados no hay obligación que calcular: obligación:null, abierto:true y motivo declarado.",
+        "zona": "formulario",
+        "args": [
+          {
+            "nombre": "tipos",
+            "tipo": "json",
+            "required": true,
+            "placeholder": "[{\"concepto\":\"contingencias_comunes\",\"tipo\":0.236,\"a_cargo\":\"empresa\",\"base\":2000},{\"concepto\":\"desempleo\",\"tipo\":0.055,\"a_cargo\":\"empresa\"}]",
+            "descripcion": "LOS TIPOS DECLARADOS de cotización (el corazón de la ley-como-dato: PROHIBIDO cablear tipos, bases o grupos de tarifa). Es DATO obligatorio: sin tipos declarados NO se calcula ninguna obligación (obligación:null, abierto:true, motivo). Admite un array de líneas `{concepto, tipo, a_cargo, base?}` o un mapa `{concepto: tipo|{tipo,a_cargo,base}}`. El módulo NO conoce ninguna tabla legal: aplica base × tipo tal cual llega."
+          },
+          {
+            "nombre": "bases",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "2000 | {\"contingencias_comunes\":2000} | [{\"concepto\":\"desempleo\",\"importe\":2000}]",
+            "descripcion": "LAS BASES DECLARADAS de cotización (escalar, mapa por concepto, o array de {concepto, importe}). Es DATO: una línea de tipo cuya base no venga ni en el propio tipo ni aquí queda importe:null y se declara en `faltantes` — el sistema NO estima ninguna base."
+          },
+          {
+            "nombre": "recibo",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "(vacío = se pide a recibo-nomina G1 por evento)",
+            "descripcion": "El RECIBO declarado en la petición (ya calculado por el sistema externo; también se acepta como `nomina`). Es DATO: su `bruto` se COPIA para el gasto de empresa — aquí NO se calcula la nómina. Sin recibo declarado ni clave/empleado+periodo, el gasto de empresa queda [ABIERTO]."
+          },
+          {
+            "nombre": "clave_natural",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "E-001|2026-09",
+            "descripcion": "La CLAVE NATURAL declarada del recibo, usada para PEDIRLO a recibo-nomina (G1) por evento cuando no se declara el recibo. Es DATO: no se inventa identidad; si no hay recibo por ninguna vía, los importes dependientes quedan abiertos."
+          },
+          {
+            "nombre": "empleado",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "E-001",
+            "descripcion": "El EMPLEADO declarado del recibo (con `periodo`) para pedirlo a recibo-nomina (G1) por evento. Es DATO: el módulo no deriva el empleado de ninguna estructura."
+          },
+          {
+            "nombre": "periodo",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "2026-09",
+            "descripcion": "El PERIODO declarado del recibo (con `empleado`) para pedirlo a recibo-nomina (G1) por evento. Es DATO: no se deriva ni se cablea ningún calendario."
+          }
+        ]
+      }
+    },
+    "datos": [],
+    "_datos_nota": "HUECO DECLARADO (no se inventa): obligacion-seguridad-social es un REFLEJO STATELESS determinista. Su única op (calcular) devuelve UNA obligación con sus piezas (líneas base × tipo con su importe y `completo`, cuota_empresa, cuota_trabajador, total_tgss, gasto_empresa, faltantes) — es el cálculo puntual de un recibo, no un listado. No hay ninguna op de lectura tabulable en module.json.subscribes ni en index.js (no persiste: sin PosPersistencia ni onProjectActivated). Las LÍNEAS del detalle (concepto/base/tipo/a_cargo/importe/completo) van dentro de la respuesta RPC `obligacion.lineas`; el reflejo no publica ningún evento de dominio propio (stateless y determinista), por lo que no hay señal con la que refrescar una cinta. Una tabla de obligaciones por periodo exigiría un custodio de la parcela o un handler de listado que hoy no existen: trabajo de módulo, no de interfaz."
+  },
+  "filosofia": "Una cuota a la Seguridad Social no es un número que el sistema sepa: es una base por un tipo, y ni la base ni el tipo son suyos — los declara quien conoce su convenio y su grupo. Por eso aquí no hay ni un tipo de cotización cableado, ni una base por defecto, ni una tabla legal: si el negocio no declara los tipos, no hay obligación que calcular, y se dice por qué en vez de inventar una cuota. El recibo llega ya calculado desde fuera: copiarlo es la única forma honesta de incluirlo en el gasto de empresa, porque corregir una nómina ajena para que cuadre sería firmar el trabajo de otro. Cada línea declara si está completa o no, y lo incompleto se declara — nunca se rellena con cero un tipo que nadie declaró."
+}

@@ -1,0 +1,9 @@
+{
+  "id": "conciliacion-bancaria",
+  "name": "Conciliación bancaria",
+  "version": "0.1.0",
+  "zone": "work-bar",
+  "order": 93,
+  "icon": "🏦",
+  "label": "Conciliar"
+}

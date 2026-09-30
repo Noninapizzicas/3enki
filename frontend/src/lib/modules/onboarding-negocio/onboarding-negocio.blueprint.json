@@ -1,0 +1,146 @@
+{
+  "id": "onboarding-negocio",
+  "version": "blueprint-0.1.0",
+  "_nota": "FASE 6½ · la interfaz DECLARADA del módulo onboarding-negocio (CUSTODIO CON PERSISTENCIA de contabilidad-analitica, K1, hoja del plan), tipo system_panel: la lente es GESTIÓN/ESTADO/ACCIONES BAJO DEMANDA, no mesa de trabajo. LA PUERTA DE ENTRADA DE CADA NEGOCIO (multi-tenant): aquí se da de alta un negocio nuevo RECOGIENDO sus datos DECLARABLES — plan contable, fuentes de hechos, parámetros — y se AISLA su parcela: lo de un negocio no se fuga a otro. LOS DATOS SON DECLARABLES Y NADA SE ESTIMA: una clave que no llega NO existe — queda [ABIERTO] con valor null y se declara en abierto/faltan; jamás se rellena con un valor por defecto NI SE HEREDA DE OTRO NEGOCIO (heredar sería una fuga y una invención a la vez). UN SOLO ESCRITOR: solo el alta (rol ALTA_NEGOCIO) recoge datos; cualquier otro rol → 403. leer es LECTURA y no muta; quien declare otro negocio como solicitante → 403 (aislamiento negocio↔negocio). ALTA EFECTIVA (plan y fuentes declarados) → publica contabilidad.negocio_onboarded, que consume activacion-vertical (K4): este módulo NO enciende nada por su cuenta — declara el alta y emite. La sección `ui` es lo que el generador schema→UI (BlueprintForm, 4 zonas) necesita; sin LLM: TODO lo que produce sale de aquí. Fuente de verdad: modules/contabilidad-analitica/onboarding-negocio/{module.json,index.js}. ui_handlers reales: onboarding-negocio.recoger y onboarding-negocio.leer (system_panel/lateral_derecha).",
+  "schema": "blueprint-interfaz-v2",
+  "language": "es",
+  "titulo": "El alta de un negocio y su aislamiento",
+  "eventos_publicados": [
+    "onboarding-negocio.recoger.response",
+    "onboarding-negocio.recoger.failed",
+    "onboarding-negocio.leer.response",
+    "onboarding-negocio.leer.failed",
+    "contabilidad.negocio_onboarded"
+  ],
+  "eventos_que_escucho": [],
+  "_escucho_nota": "VACÍO A PROPÓSITO: el custodio ya atiende en module.json.subscribes onboarding-negocio.recoger.request (onRecogerRequest), onboarding-negocio.leer.request (onLeerRequest) y project.activated (restauración PosPersistencia, onProjectActivated); repetir cualquiera aquí daría ANTICOLISION-001 (lo atenderían los dos). Es un CUSTODIO determinista de alta y guardas: no tiene cajón fuzzy ni evento fire-and-forget que el LLM deba procesar. Su salida de dominio `contabilidad.negocio_onboarded` la LEEN activacion-vertical (K4) y el resto de la vertical — no es una suscripción de este módulo. La existencia del proyecto se consulta a project-manager POR EVENTO (project.get.request, best-effort) dentro del alta: dependencia interna, no suscripción viva.",
+  "transporte": {
+    "rpc": [
+      "onboarding-negocio.recoger.request -> .response",
+      "onboarding-negocio.leer.request -> .response",
+      "project.get.request -> .response"
+    ],
+    "entrada": [
+      "onboarding-negocio.recoger.request",
+      "onboarding-negocio.leer.request",
+      "project.activated"
+    ],
+    "salida": [
+      "onboarding-negocio.recoger.response",
+      "onboarding-negocio.leer.response",
+      "contabilidad.negocio_onboarded"
+    ],
+    "qos": "publishAndWait (request/response correlado) en el alta y en la lectura. La existencia del proyecto se comprueba y se LIGA pidiéndosela a project-manager POR EVENTO (project.get.request, best-effort) — si no responde el alta sigue siendo DECLARADA con proyecto_verificado:false (no se finge la verificación ni se inventa el proyecto). contabilidad.negocio_onboarded es fire-and-forget (K1): un negocio quedó dado de alta (plan y fuentes declarados) — es la ACTIVACION DE LA VERTICAL por evento; lo consume activacion-vertical (K4), que es quien enciende. project.activated lo atiende el custodio para restaurar las parcelas de alta del proyecto desde el storage (/contabilidad/onboarding-negocio/onboarding-negocio.json)."
+  },
+  "contrato": {
+    "RecogerInput": "{ project_id:uuid, rol:'ALTA_NEGOCIO', negocio?:str, datos:{ plan?, fuentes?, parametros?, licencia?, ...extra } u claves sueltas, solicitante_negocio?:str }",
+    "RecogerOutput": "{ project_id, negocio, config:{ negocio, plan, fuentes, parametros, licencia, extra, estado:'ALTA'|'EN_ALTA', claves_abiertas, historial }, alta, actualizado, alta_efectiva, proyecto_verificado, fuente_plataforma, abierto, faltan:[str], aislado, motivo }",
+    "LeerInput": "{ project_id:uuid, negocio?:str, solicitante_negocio?:str, clave?:str }",
+    "LeerOutput": "{ project_id, negocio, clave, valor, opcion:{some,valor}|null, config, declarado, abierto, faltan:[str], aislado, motivo? }",
+    "Errores": "recoger: project_id ausente (INVALID_INPUT 400) · rol distinto de ALTA_NEGOCIO → 403 PERMISSION_DENIED (segundo escritor) · solicitante_negocio declara OTRO negocio → 403 (aislamiento) → par onboarding-negocio.recoger.failed. leer: project_id ausente o lectura de parcela ajena (un negocio no ve otro → 403) → par onboarding-negocio.leer.failed.",
+    "Invariantes": "UN SOLO ESCRITOR: solo ALTA_NEGOCIO recoge datos; cualquier otro rol → 403 (el segundo escritor no espera ni hace cola). AISLAMIENTO POR NEGOCIO (invariante dura): cada negocio tiene SU parcela; leer devuelve solo lo de ese negocio y declarar otro negocio como solicitante → 403 — sin negocio declarado no se abre parcela huérfana. NADA SE ESTIMA NI SE HEREDA: dato ausente → null y [ABIERTO], jamás un valor por defecto ni el de otro negocio. recoger es UPSERT declarativo con historial (una declaración parcial no borra lo declarado). ALTA EFECTIVA (plan y fuentes declarados) → emite contabilidad.negocio_onboarded; este módulo NO enciende nada. leer NO muta."
+  },
+  "ui": {
+    "type": "system_panel",
+    "zone": "modulos",
+    "ops": {
+      "recoger": {
+        "titulo": "Dar de alta un negocio (o completar sus datos declarados)",
+        "descripcion": "Panel de CONTROL del alta multi-tenant: recoge los DATOS DECLARABLES de un negocio nuevo — el plan contable, las fuentes de hechos, los parámetros — y AISLA su parcela. UN SOLO ESCRITOR: solo el alta (rol ALTA_NEGOCIO) recoge datos; cualquier otro rol es rechazado con 403. Es un UPSERT declarativo: el mismo negocio se actualiza y apila el cambio en su historial — una declaración parcial nunca borra lo ya declarado. NADA SE ESTIMA NI SE HEREDA DE OTRO NEGOCIO: una clave que no llega queda [ABIERTO] con valor null y se declara en abierto/faltan. La existencia del proyecto se liga consultando project-manager POR EVENTO (best-effort; si no responde, proyecto_verificado:false — no se finge). Cuando el negocio ya declaró lo mínimo (plan y fuentes) el alta es EFECTIVA y se publica contabilidad.negocio_onboarded (lo consume activacion-vertical K4). Este módulo NO enciende nada por su cuenta: declara el alta y emite.",
+        "zona": "formulario",
+        "args": [
+          {
+            "nombre": "rol",
+            "tipo": "select",
+            "enum": [
+              "ALTA_NEGOCIO"
+            ],
+            "required": true,
+            "descripcion": "El rol del escritor. La parcela del alta tiene UN solo escritor: solo ALTA_NEGOCIO recoge los datos del negocio; cualquier otro valor es rechazado (403)."
+          },
+          {
+            "nombre": "negocio",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "NEG-A (vacío = el propio proyecto)",
+            "descripcion": "El NEGOCIO que se da de alta. Es DATO declarado; sin él se toma el propio project_id (en Enki cada negocio ES un proyecto) y se declara el origen — nunca se abre una parcela huérfana."
+          },
+          {
+            "nombre": "solicitante_negocio",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "NEG-A",
+            "descripcion": "El negocio que SOLICITA, declarado para que el guard de aislamiento pueda compararlo. Si declara un negocio distinto del que se da de alta → 403 (un negocio no se fuga a otro)."
+          },
+          {
+            "nombre": "datos",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "{\"plan\":{...},\"fuentes\":[...],\"parametros\":{...}}",
+            "descripcion": "LOS DATOS DECLARABLES del negocio nuevo (el molde: plan · fuentes · parametros · licencia, más claves extra). Es DATO: NADA se infiere ni se hereda de otro negocio — una clave que no llega queda null y se declara en [ABIERTO]. El alta efectiva exige plan y fuentes declarados."
+          },
+          {
+            "nombre": "plan",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "{\"cuentas\":[...]}",
+            "descripcion": "El PLAN CONTABLE declarado del negocio (clave conocida del molde). Es DATO: sin él el alta queda [ABIERTO] (no se asume ningún plan por defecto ni se copia el de otro negocio)."
+          },
+          {
+            "nombre": "fuentes",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "[\"libro\",\"facturacion\"]",
+            "descripcion": "Las FUENTES de hechos declaradas del negocio (clave conocida del molde). Es DATO: sin ellas el alta queda [ABIERTO]; con ellas y el plan, el alta es EFECTIVA."
+          },
+          {
+            "nombre": "parametros",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "{\"ejercicio\":\"2026\"}",
+            "descripcion": "Los PARÁMETROS declarados del negocio (clave conocida del molde). Es DATO: ausente → null y [ABIERTO]; no se rellena solo."
+          },
+          {
+            "nombre": "licencia",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "(vacío = no declarada)",
+            "descripcion": "La LICENCIA declarada por negocio. Es DATO: ausente → null, no se inventa ninguna licencia."
+          }
+        ]
+      },
+      "leer": {
+        "titulo": "Leer los datos declarados de MI negocio",
+        "descripcion": "Panel de CONSULTA bajo demanda de la parcela de UN negocio: devuelve una clave declarada (o, sin clave, la configuración completa de ESE negocio) como OPCION<VALOR>. Es LECTURA: no muta nada. GUARD de aislamiento: leer la parcela de otro negocio → 403 (un negocio no ve otro) — la respuesta contiene SOLO lo de ese negocio. Una clave no declarada devuelve opción vacía y valor null con abierto:true (nunca un valor por defecto); un negocio no dado de alta se declara como hueco (no se inventa una configuración).",
+        "zona": "acciones",
+        "args": [
+          {
+            "nombre": "negocio",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "NEG-A (vacío = el propio proyecto)",
+            "descripcion": "El NEGOCIO cuya configuración se lee. Es DATO declarado; sin él se toma el propio project_id. La respuesta contendrá SOLO la configuración de este negocio."
+          },
+          {
+            "nombre": "solicitante_negocio",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "NEG-A",
+            "descripcion": "El negocio que SOLICITA la lectura, declarado para el guard de aislamiento. Si declara un negocio distinto del de la parcela → 403 (un negocio no ve otro)."
+          },
+          {
+            "nombre": "clave",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "plan | fuentes | parametros (vacío = config completa)",
+            "descripcion": "La CLAVE declarada que se quiere leer (plan, fuentes, parametros…). Es DATO: si no se declara, se devuelve la configuración COMPLETA de ESE negocio; una clave no declarada devuelve opción vacía y valor null (nunca un default)."
+          }
+        ]
+      }
+    },
+    "datos": [],
+    "_datos_nota": "HUECO DECLARADO (no se inventa): onboarding-negocio es un CUSTODIO con persistencia por proyecto (PosPersistencia) pero NO expone ninguna op RPC de LISTADO de negocios. En module.json.subscribes solo hay onboarding-negocio.recoger.request, onboarding-negocio.leer.request y project.activated; la lectura de conjunto (las parcelas del proyecto) es lectura directa EN PROCESO sobre `this._parcela.negocios` (un Map), no un RPC, y el volcado va por PosPersistencia al storage (/contabilidad/onboarding-negocio/onboarding-negocio.json), no por el bus. `recoger` devuelve UN negocio (su config con `abierto`/`faltan` y su historial) y `leer` devuelve la config de UN negocio (o una clave) — no una tabla de negocios. Una cinta de negocios exigiría un handler RPC de listado que hoy no existe (trabajo de módulo, no de interfaz); además, listar negocios del proyecto cruzaría parcelas, así que cualquier tabla futura debería respetar el guard de aislamiento. La señal contabilidad.negocio_onboarded da el pulso vivo (un negocio quedó de alta y la vertical se activa), pero como evento de dominio, no como tabla.",
+    "_tipo_nota": "system_panel: NO es mesa de trabajo (workspace_module) ni contenido de chat (inline_render). Es un panel de CONTROL/ESTADO que el humano abre bajo demanda — para DAR DE ALTA un negocio o CONSULTAR sus datos declarados —, en zona lateral_derecha. Su `ui_handler` real (module.json) declara type:system_panel; aquí `ui.zone` es 'modulos' (el valor canónico que usan TODOS los blueprints, sea cual cual sea el type). `recoger` va en zona FORMULARIO (tiene args: es la ÚNICA escritura, del rol ALTA_NEGOCIO) y `leer` en zona ACCIONES (consulta, sin args obligatorios). La lente es de gestion/estado/acciones bajo demanda, no de operación diaria."
+  },
+  "filosofia": "Dar de alta un negocio no es meterlo en una tabla: es abrirle una parcela que no se mezcle con la del vecino. Por eso aquí nada se hereda ni se estima — cada dato que el dueño no declara queda nulo y a la vista, porque rellenarlo con un valor por defecto sería inventarle un negocio, y copiarlo de otro sería una fuga disfrazada de comodidad. Y el alta no enciende la vertical: la declara y emite el evento, porque quien enciende es la pieza que para eso existe. Un negocio con plan y fuentes se activa; un negocio a medias se queda [ABIERTO] y lo dice, en vez de arrancar con parámetros que nadie puso."
+}

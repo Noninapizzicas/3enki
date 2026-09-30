@@ -1,0 +1,190 @@
+{
+  "id": "cuenta-proveedor",
+  "version": "blueprint-0.1.0",
+  "_nota": "FASE 6½ · la interfaz DECLARADA del módulo cuenta-proveedor (REFLEJO STATELESS de contabilidad-entrada, N3, hoja del plan). LA CUENTA CORRIENTE DEL PROVEEDOR: lo que le DEBEMOS, DERIVADA del libro (mayor auxiliar del tercero: cada factura de compra VIVA y su saldo). Cuelga del MAESTRO ÚNICO de terceros (maestro-terceros N1): cliente y proveedor son el MISMO tercero con roles — este módulo NO crea maestro nuevo ni ficha paralela, pide la ficha POR EVENTO. La sección `ui` es lo que el generador schema→UI (BlueprintForm, 4 zonas) necesita para renderizar el panel; sin LLM: TODO lo que produce sale de aquí. Fuente de verdad: modules/contabilidad-entrada/cuenta-proveedor/{module.json,index.js}. ui_handlers reales: cuenta-proveedor.saldo y cuenta-proveedor.facturas_vivas (workspace_module/barra_modulos).",
+  "schema": "blueprint-interfaz-v2",
+  "language": "es",
+  "titulo": "La cuenta corriente del proveedor (lo que le debemos)",
+  "eventos_publicados": [
+    "cuenta-proveedor.saldo.response",
+    "cuenta-proveedor.saldo.failed",
+    "cuenta-proveedor.facturas_vivas.response",
+    "cuenta-proveedor.facturas_vivas.failed"
+  ],
+  "eventos_que_escucho": [],
+  "_escucho_nota": "VACÍO A PROPÓSITO: el reflejo ya atiende en module.json.subscribes cuenta-proveedor.saldo.request (onSaldoRequest), cuenta-proveedor.facturas_vivas.request (onFacturasVivasRequest) y contabilidad.asiento_registrado (onAsientoRegistrado); repetir cualquiera aquí daría ANTICOLISION-001 (lo atenderían los dos). Es un REFLEJO stateless determinista: no persiste, no tiene cajón fuzzy y su única vía de entrada humana son las dos RPC. La señal contabilidad.asiento_registrado la atiende el propio reflejo (deja constancia de que la cuenta quedó desactualizada); el LLM no procesa nada.",
+  "transporte": {
+    "rpc": [
+      "cuenta-proveedor.saldo.request -> .response",
+      "cuenta-proveedor.facturas_vivas.request -> .response"
+    ],
+    "entrada": [
+      "cuenta-proveedor.saldo.request",
+      "cuenta-proveedor.facturas_vivas.request",
+      "contabilidad.asiento_registrado"
+    ],
+    "salida": [
+      "cuenta-proveedor.saldo.response",
+      "cuenta-proveedor.facturas_vivas.response"
+    ],
+    "qos": "publishAndWait (request/response correlado) en el saldo y en las facturas vivas. contabilidad.asiento_registrado es fire-and-forget (lo publica escritor-diario B2): el reflejo es BAJO DEMANDA y stateless, así que NO acumula — solo deja constancia de que la cuenta quedó desactualizada."
+  },
+  "contrato": {
+    "SaldoInput": "{ project_id:uuid, tercero?:obj|tercero_id?|nif?|numero_fiscal?, cuenta?:str, convenio?:'acreedor'|'deudor', asientos?:[...]|libro?:obj, periodo?:str }",
+    "SaldoOutput": "{ project_id, tipo:'cuenta-proveedor', tercero, tercero_disponible, saldo, convenio, sum_debe, sum_haber, num_apuntes, apuntes:[{numero, fecha, concepto, cuenta, debe, haber}], disponible, criterio_emparejamiento, fuente_asientos, fuente_tercero, roles, deriva_de, abierto }",
+    "FacturasVivasInput": "misma familia que SaldoInput (tercero declarado o pedido a maestro-terceros N1 por evento; asientos declarados o pedidos a escritor-diario B2 por evento)",
+    "FacturasVivasOutput": "{ project_id, tipo:'cuenta-proveedor', tercero, tercero_disponible, facturas_vivas:[{clave, numero, clave_natural, fecha, importe, aplicado, pendiente, viva, fecha_vencimiento, asiento}], num_facturas_vivas, total_pendiente, disponible, criterio_emparejamiento, abierto }",
+    "Errores": "project_id ausente → 400 INVALID_INPUT (par cuenta-proveedor.saldo.failed y cuenta-proveedor.facturas_vivas.failed). Sin asientos (y sin diario que responda) NO es un fallo: se responde 200 con disponible:false y saldo:null — NUNCA se devuelve 0 por defecto.",
+    "Invariantes": "DETERMINISTA: mismos asientos + mismo tercero + mismo convenio → mismo saldo. Dato ausente = desconocido: sin asientos disponible:false (no se estima un saldo en 0); una factura sin importe declarado no se da por viva ni por pagada y va aparte en abierto.facturas_sin_importe; si el maestro-terceros (N1) no responde y no se declara la ficha, tercero_disponible:false — jamás se inventa el tercero. LA CUENTA CONTABLE ES DECLARABLE, NO CABLEADA: ninguna subcuenta (400.x, 410...) está escrita; la trae `cuenta` o la ficha; sin cuenta se empareja por la CLAVE del tercero declarada en los apuntes y se declara criterio_emparejamiento. El convenio de signo es DECLARADO y visible (acreedor por defecto: Σhaber − Σdebe; deudor: Σdebe − Σhaber). NO escribe, NO persiste, NO muta y NO decide."
+  },
+  "ui": {
+    "type": "workspace_module",
+    "zone": "modulos",
+    "ops": {
+      "saldo": {
+        "titulo": "Saldo de la cuenta corriente del proveedor",
+        "descripcion": "Deriva lo que le DEBEMOS al tercero: Σdebe, Σhaber y el saldo con el convenio DECLARADO (acreedor por defecto). El tercero viene declarado o se PIDE al MAESTRO ÚNICO de terceros (N1) POR EVENTO — cliente y proveedor son el mismo tercero con roles, aquí NO hay maestro nuevo. La cuenta contable es DECLARABLE, no cableada: si no se declara ni la trae la ficha, se empareja por la clave del tercero y se dice con qué criterio. Cálculo puro: no muta el libro. Sin asientos NO se estima un saldo: disponible:false y saldo:null (jamás un 0 inventado).",
+        "zona": "acciones",
+        "args": [
+          {
+            "nombre": "tercero",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "{\"nif\":\"B12345678\",\"cuenta_proveedor\":\"4100\"}",
+            "descripcion": "La ficha del tercero DECLARADA en la petición (alternativa a pedirla al maestro-terceros N1 por evento). Es el MISMO tercero del maestro único: un tercero puede ser cliente Y proveedor (roles). Si no se declara ni se identifica (nif/tercero_id), la cuenta se declara tercero_disponible:false — no se inventa la ficha."
+          },
+          {
+            "nombre": "nif",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "B12345678",
+            "descripcion": "El NIF del tercero con el que pedir la ficha al MAESTRO ÚNICO (maestro-terceros N1) POR EVENTO. Es DATO declarado; sin ficha ni NIF no se empareja el tercero."
+          },
+          {
+            "nombre": "tercero_id",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "T-001",
+            "descripcion": "La CLAVE del tercero declarada (alternativa al NIF): sirve también para emparejar los apuntes que no traen cuenta. Es DATO."
+          },
+          {
+            "nombre": "cuenta",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "(vacío = la de la ficha del tercero)",
+            "descripcion": "LA CUENTA CONTABLE DEL PROVEEDOR — DECLARABLE, NO CABLEADA. Ninguna subcuenta (400.x, 410...) está escrita en el módulo: la trae esta entrada o el campo cuenta_proveedor de la ficha del tercero. Sin ninguna, el emparejamiento usa la clave del tercero y lo declara en criterio_emparejamiento."
+          },
+          {
+            "nombre": "convenio",
+            "tipo": "select",
+            "enum": [
+              "acreedor",
+              "deudor"
+            ],
+            "required": false,
+            "descripcion": "El CONVENIO DE SIGNO declarado y visible. Es DATO: acreedor (por defecto mecánico) → saldo = Σhaber − Σdebe (lo que le debemos); deudor → Σdebe − Σhaber. El sistema no impone un convenio: se declara."
+          },
+          {
+            "nombre": "asientos",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "(vacío = se piden a escritor-diario B2 por evento)",
+            "descripcion": "Los ASIENTOS declarados con los que derivar la cuenta (material DECLARADO, alternativa a pedirlos al diario). Es DATO: sin ellos y sin diario que responda, la cuenta queda disponible:false (no se estima)."
+          },
+          {
+            "nombre": "periodo",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "2026-09",
+            "descripcion": "El periodo declarado que se pasa al diario (escritor-diario B2) al pedir los asientos. Es DATO: no se cablea ningún ejercicio."
+          }
+        ]
+      },
+      "facturas_vivas": {
+        "titulo": "Facturas de compra vivas del proveedor",
+        "descripcion": "El conjunto de FACTURAS VIVAS del tercero: cada factura de compra con su importe, lo aplicado (pagado), el pendiente y su vencimiento DECLARADO (no recalculado — eso es vencimiento-pago N6). VIVA = pendiente distinto de cero (sin criterio cableado). Una factura sin importe declarado NO se da por viva ni por pagada: va aparte en abierto.facturas_sin_importe (nada se estima). Sin asientos no se inventa ninguna factura: disponible:false.",
+        "zona": "acciones",
+        "args": [
+          {
+            "nombre": "tercero",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "{\"nif\":\"B12345678\",\"cuenta_proveedor\":\"4100\"}",
+            "descripcion": "La ficha del tercero DECLARADA (el MISMO tercero del maestro único N1 con sus roles). Si no se declara ni se identifica, tercero_disponible:false — no se inventa la ficha."
+          },
+          {
+            "nombre": "nif",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "B12345678",
+            "descripcion": "El NIF con el que pedir la ficha al maestro-terceros (N1) POR EVENTO. Es DATO."
+          },
+          {
+            "nombre": "tercero_id",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "T-001",
+            "descripcion": "La CLAVE del tercero declarada (también empareja apuntes sin cuenta). Es DATO."
+          },
+          {
+            "nombre": "cuenta",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "(vacío = la de la ficha del tercero)",
+            "descripcion": "La cuenta contable DECLARABLE del proveedor (no cableada): la trae esta entrada o la ficha. Sin ninguna, se empareja por clave del tercero."
+          },
+          {
+            "nombre": "asientos",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "(vacío = se piden a escritor-diario B2 por evento)",
+            "descripcion": "Los ASIENTOS declarados de donde derivar las facturas vivas. Es DATO: sin ellos y sin diario, disponible:false (no se inventa ninguna factura)."
+          },
+          {
+            "nombre": "periodo",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "2026-09",
+            "descripcion": "El periodo declarado que se pasa al diario al pedir los asientos. Es DATO."
+          }
+        ]
+      }
+    },
+    "datos": [
+      {
+        "op": "saldo",
+        "titulo": "Apuntes del tercero (mayor auxiliar: debe, haber)",
+        "refresh_on": [
+          "contabilidad.asiento_registrado"
+        ],
+        "columnas": [
+          "numero",
+          "fecha",
+          "concepto",
+          "cuenta",
+          "debe",
+          "haber"
+        ]
+      },
+      {
+        "op": "facturas_vivas",
+        "titulo": "Facturas de compra vivas del proveedor y su pendiente",
+        "refresh_on": [
+          "contabilidad.asiento_registrado"
+        ],
+        "columnas": [
+          "clave",
+          "numero",
+          "fecha",
+          "importe",
+          "aplicado",
+          "pendiente",
+          "viva",
+          "fecha_vencimiento"
+        ]
+      }
+    ],
+    "_refresh_nota": "refresh_on = contabilidad.asiento_registrado: es el evento REAL que publica escritor-diario (B2) al quedar un asiento en el diario, y este módulo lo escucha literalmente en module.json.subscribes (onAsientoRegistrado). Sus propias publicaciones son respuestas RPC (.response/.failed), no señales de dominio."
+  },
+  "filosofia": "La cuenta corriente del proveedor no se guarda: se DERIVA. Mismo libro y mismo tercero, misma respuesta. Y el tercero es UNO: en el maestro único, cliente y proveedor son el mismo registro con roles — así que aquí no hay ficha paralela, solo la que se pide por evento. La cuenta contable no está cableada: la declara el negocio o la ficha. Y si no hay asientos, no hay saldo: se declara desconocido en vez de inventar un cero que parecería que no debemos nada."
+}

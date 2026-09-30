@@ -1,0 +1,9 @@
+{
+  "id": "puerto-documento",
+  "name": "Frontera de documentos",
+  "version": "0.1.0",
+  "zone": "work-bar",
+  "order": 41,
+  "icon": "📥",
+  "label": "Documento"
+}

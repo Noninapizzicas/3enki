@@ -1,0 +1,9 @@
+{
+  "id": "motor-avisos",
+  "name": "Motor de avisos",
+  "version": "0.1.0",
+  "zone": "system-bar",
+  "order": 241,
+  "icon": "🔔",
+  "label": "Avisos"
+}

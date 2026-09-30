@@ -1,0 +1,9 @@
+{
+  "id": "tasa-cobertura-entrada",
+  "name": "Tasa de cobertura",
+  "version": "0.1.0",
+  "zone": "system-bar",
+  "order": 233,
+  "icon": "🗂️",
+  "label": "Tasa"
+}

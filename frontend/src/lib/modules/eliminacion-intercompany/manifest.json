@@ -1,0 +1,9 @@
+{
+  "id": "eliminacion-intercompany",
+  "name": "Eliminación intercompany",
+  "version": "0.1.0",
+  "zone": "system-bar",
+  "order": 225,
+  "icon": "📊",
+  "label": "Intercompany"
+}

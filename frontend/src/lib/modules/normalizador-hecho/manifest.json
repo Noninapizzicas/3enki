@@ -1,0 +1,9 @@
+{
+  "id": "normalizador-hecho",
+  "name": "Normalizador de hechos",
+  "version": "0.1.0",
+  "zone": "work-bar",
+  "order": 43,
+  "icon": "📥",
+  "label": "Normalizar"
+}

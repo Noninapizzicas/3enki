@@ -1,0 +1,9 @@
+{
+  "id": "control-cuadre-documento",
+  "name": "Cuadre del documento",
+  "version": "0.1.0",
+  "zone": "work-bar",
+  "order": 44,
+  "icon": "📥",
+  "label": "Cuadre"
+}

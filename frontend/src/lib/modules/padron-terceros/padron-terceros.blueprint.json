@@ -1,0 +1,79 @@
+{
+  "id": "padron-terceros",
+  "version": "blueprint-0.1.0",
+  "_nota": "FASE 6½ · la interfaz DECLARADA del módulo padron-terceros (CUSTODIO CON PERSISTENCIA de contabilidad-entrada, N2, hoja del plan). Identidad ÚNICA por número fiscal: un proveedor escrito de tres formas sigue siendo UNO. La sección `ui` es lo que el generador schema→UI (BlueprintForm, 4 zonas) necesita para renderizar el panel; sin LLM: TODO lo que produce sale de aquí. Fuente de verdad: modules/contabilidad-entrada/padron-terceros/{module.json,index.js}.",
+  "schema": "blueprint-interfaz-v2",
+  "language": "es",
+  "titulo": "El padrón de identidades por número fiscal",
+  "eventos_publicados": [
+    "padron-terceros.unificar.response",
+    "padron-terceros.unificar.failed",
+    "contabilidad.identidad_unificada"
+  ],
+  "eventos_que_escucho": [],
+  "_escucho_nota": "VACÍO A PROPÓSITO: el reflejo ya atiende en module.json.subscribes tanto padron-terceros.unificar.request (RPC, onUnificarRequest) como project.activated (restauración PosPersistencia, onProjectActivated); repetir cualquiera aquí daría ANTICOLISION-001 (lo atenderían los dos). No hay cajón fuzzy ni evento fire-and-forget que el LLM deba procesar.",
+  "transporte": {
+    "rpc": [
+      "padron-terceros.unificar.request -> .response"
+    ],
+    "entrada": [
+      "padron-terceros.unificar.request"
+    ],
+    "salida": [
+      "padron-terceros.unificar.response",
+      "contabilidad.identidad_unificada"
+    ],
+    "qos": "publishAndWait (request/response correlado) en la unificación; contabilidad.identidad_unificada es fire-and-forget (lo consume el maestro de terceros N1). project.activated lo atiende el reflejo para restaurar el padrón del proyecto."
+  },
+  "contrato": {
+    "UnificarInput": "{ project_id:uuid, rol:'MAESTRO_TERCEROS', tercero:{ nif:str, nombre?:str, roles?:[str] } }",
+    "UnificarOutput": "{ project_id, tercero:{ nif, nombre_canonico, variantes:[str], roles:[str], condiciones, creada_en, actualizada_en }, creada:bool }",
+    "UnificarErrores": "rol != MAESTRO_TERCEROS -> 403 PERMISSION_DENIED (segundo escritor) · tercero sin número fiscal -> 400 INVALID_INPUT · project_id ausente -> 400 INVALID_INPUT. Cada error publica su par padron-terceros.unificar.failed."
+  },
+  "ui": {
+    "type": "workspace_module",
+    "zone": "modulos",
+    "ops": {
+      "unificar": {
+        "titulo": "Unificar identidad de tercero (por número fiscal)",
+        "descripcion": "UN SOLO ESCRITOR: la identidad la fija solo el escritor del maestro (rol MAESTRO_TERCEROS); cualquier otro rol es rechazado con 403. Unifica por número fiscal normalizado mecánicamente (mayúsculas, sin separadores — sin validar contra ninguna ley cableada): si la identidad es nueva la crea; si ya existe APILA la forma escrita como `variantes` (append-only, no borra) y suma roles. Un campo que no llega queda null: no se estima. Persiste por proyecto.",
+        "zona": "formulario",
+        "args": [
+          {
+            "nombre": "rol",
+            "tipo": "select",
+            "enum": [
+              "MAESTRO_TERCEROS"
+            ],
+            "required": true,
+            "descripcion": "El rol del escritor. La parcela tiene UN solo escritor: solo MAESTRO_TERCEROS puede unificar; cualquier otro valor es rechazado (403)."
+          },
+          {
+            "nombre": "tercero.nif",
+            "tipo": "string",
+            "required": true,
+            "placeholder": "B12345678",
+            "descripcion": "El número fiscal: la clave de identidad. Se normaliza mecánicamente (mayúsculas, sin espacios/guiones/puntos) para unificar escrituras superficialmente distintas de un mismo número."
+          },
+          {
+            "nombre": "tercero.nombre",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "ACME S.L.",
+            "descripcion": "La forma escrita del nombre. Si la identidad ya existe, se APILA como variante (append-only, no borra); la canónica solo se completa si estaba desconocida."
+          },
+          {
+            "nombre": "tercero.roles",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "[\"proveedor\",\"cliente\"]",
+            "descripcion": "Los roles del tercero. Al unificar se SUMAN a los existentes (nunca se restan). Es DATO declarado por el negocio, no un enum cableado."
+          }
+        ]
+      }
+    },
+    "datos": [],
+    "_datos_nota": "HUECO DECLARADO (no se inventa): padron-terceros es un CUSTODIO que ESCRIBE (unificar) pero NO expone ninguna op RPC de lectura. En module.json.subscribes solo hay padron-terceros.unificar.request y project.activated; en index.js la única lectura es `identidadDe(pid, nif)`, lectura directa en proceso (no un RPC), y el volcado se hace por PosPersistencia al storage del proyecto (/contabilidad/padron-terceros/padron-terceros.json), no por el bus. Por eso la zona DATOS va vacía: no hay op de listado a la que apuntar. Nota verificada: si se quiere la tabla del padrón en el panel, primero hay que añadir un handler RPC de lectura al backend (trabajo de módulo, no de interfaz)."
+  },
+  "filosofia": "Un nombre se escribe de mil maneras; el número fiscal, de una. Este padrón no borra formas: las APILA — porque unificar no es elegir una verdad y tirar el resto, es reconocer que todas hablaban del mismo tercero y guardarlas como variantes. La historia no se pierde, se suma. Y solo un escritor toca esta parcela: la identidad no se negocia entre varios."
+}

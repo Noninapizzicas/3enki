@@ -110,14 +110,30 @@ const CRITERIO = { umbral_ingresos: 75, minimos_demanda: { numero_busquedas: 50,
     assert.ok(bus.published.some(([n]) => n === 'nichos.veredicto.evaluar.failed'), 'cierra el círculo con el par de fallo');
   });
 
-  await testAsync('LLM devuelve un veredicto válido alternativo cuando la fuerza es media y cumple', async () => {
+  await testAsync('el juicio asistido DESEMPATA cuando el reflejo NO concluye (fuerza baja)', async () => {
     instance._rpc = async (evento) => {
       if (evento === 'llm.complete.request') return { status: 200, data: { content: JSON.stringify({ veredicto: 'PUENTE', confianza: 0.6, motivo: 'fuerza intermedia, confirmar antes' }) } };
       return null;
     };
-    const res = await instance.onEvaluarRequest({ data: { project_id: 'p5', estudio: { ...ESTUDIO, demanda_1er_orden: { ...ESTUDIO.demanda_1er_orden, fuerza_demanda: 0.5 } }, criterio: CRITERIO } });
+    // Fuerza 0.35 (<0.4) → el reflejo NO concluye (PUENTE) → el fuzzy desempata.
+    const res = await instance.onEvaluarRequest({ data: { project_id: 'p5', estudio: { ...ESTUDIO, demanda_1er_orden: { ...ESTUDIO.demanda_1er_orden, fuerza_demanda: 0.35 } }, criterio: CRITERIO } });
     assert.strictEqual(res.status, 200);
     assert.strictEqual(res.data.veredicto, 'PUENTE', 'el juicio asistido gana cuando el reflejo no es concluyente');
+  });
+
+  await testAsync('el REFLEJO MANDA: con reflejo firme (VIABLE) el LLM no puede rebajarlo a PUENTE', async () => {
+    // Bug real verificado en vivo: fuerza 0.83, ingresos 12.122 €, criterio declarado →
+    // el juicio fuzzy devolvía PUENTE y PISABA el VIABLE del reflejo. Ahora el reflejo
+    // firme se emite tal cual y el fuzzy no se consulta.
+    let llmLlamado = false;
+    instance._rpc = async (evento) => {
+      if (evento === 'llm.complete.request') { llmLlamado = true; return { status: 200, data: { content: JSON.stringify({ veredicto: 'PUENTE', confianza: 0.65, motivo: 'sin precio concreto en fuentes' }) } }; }
+      return null;
+    };
+    const res = await instance.onEvaluarRequest({ data: { project_id: 'p6', estudio: ESTUDIO, criterio: CRITERIO } });
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.data.veredicto, 'VIABLE', 'el reflejo firme decide');
+    assert.strictEqual(llmLlamado, false, 'no se consulta el fuzzy cuando el reflejo es concluyente');
   });
 
   await testAsync('manifest: subscribes ↔ handlers y publishes exactos de la hoja C3', () => {

@@ -77,7 +77,15 @@ class VeredictoViabilidad extends ModuloHibridoReflejo {
       // Sin criterio declarable no se decide por defecto: PUENTE honesto.
       return this._emitir(project_id, estudio, criterio, 'PUENTE', 0.2, 'sin criterio de viabilidad declarado: no se asume viable', nicho_id);
     }
-    // Juicio fuzzy asistido (si responde y valida, refina; si no, cae al reflejo ya calculado).
+    // EL REFLEJO MANDA cuando es firme. Con veredicto firme (VIABLE/NO_VIABLE sobre
+    // números declarados) el juicio fuzzy NO puede rebajarlo a PUENTE — solo el
+    // reflejo decide. Antes el fuzzy podía CONTRADECIR el reflejo y devolver PUENTE
+    // con datos sólidos (verificado en vivo: fuerza 0.83, ingresos 12.122 €, criterio
+    // declarado → PUENTE por el juicio). El fuzzy solo DESEMPATA cuando el reflejo
+    // no concluye (PUENTE por fuerza baja): ahí sí aporta su matiz.
+    if (base.veredicto !== 'PUENTE') {
+      return this._emitir(project_id, estudio, criterio, base.veredicto, base.confianza, base.motivo, nicho_id);
+    }
     const asistido = await this._concluir(estudio, criterio, base);
     const v = asistioValido(asistido) ? asistido : base;
     return this._emitir(project_id, estudio, criterio, v.veredicto, v.confianza, v.motivo, nicho_id);

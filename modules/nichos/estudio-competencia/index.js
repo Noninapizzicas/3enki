@@ -39,7 +39,7 @@ const GUION_DIFERENCIACION =
   'un angulo estrecho. Responde SOLO con un parrafo breve y directo de 2-3 frases en espanol, ' +
   'sin bullet ni JSON.';
 
-const FUENTE_DEFAULT = 'puerto';
+const FUENTE_DEFAULT = 'buscador';
 const COMPETIDORES_COTA = 20; // tope de registros de competidores por fuente (cota conservadora)
 
 class EstudioCompetencia extends ModuloHibridoReflejo {
@@ -103,7 +103,12 @@ class EstudioCompetencia extends ModuloHibridoReflejo {
   // ── REFLEJO (mecánico, determinista): consulta cada fuente y trocea el dataset ──
   async _consultarFuentes(project_id, nicho, fuentes) {
     const termino = nicho.producto || nicho.servicio || nicho.audiencia || nicho.id || '';
-    const targets = (Array.isArray(fuentes) && fuentes.length > 0) ? fuentes : [null];
+    // Barre TODAS las fuentes por defecto (buscador muerto por CAPTCHA; api+comunidad
+    // sostienen el barrido sin key ni CAPTCHA). Misma palanca que estudio-demanda (C1)
+    // y sondeo-territorio (B1).
+    const targets = (Array.isArray(fuentes) && fuentes.length > 0)
+      ? fuentes
+      : [FUENTE_DEFAULT, 'api', 'comunidad'];
     const resultados = [];
     for (const fuente of targets) {
       const resp = await this._rpc('nichos.fuente.consultar.request', {

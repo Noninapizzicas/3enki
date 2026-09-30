@@ -79,7 +79,7 @@ async function rpcStub(evento, payload) {
     assert.strictEqual(res.status, 200);
     assert.ok(Array.isArray(res.data.candidatos) && res.data.candidatos.length === 2, '2 candidatos con señal de demanda');
     assert.ok(res.data.candidatos.every(c => c.senal_de_demanda > 0), 'todo candidato tiene señal de demanda (>0)');
-    assert.ok(Array.isArray(res.data.barrido) && res.data.barrido.length === 1, '1 fuente barrida');
+    assert.ok(Array.isArray(res.data.barrido) && res.data.barrido.length === 3, '3 fuentes barridas por defecto (buscador+api+comunidad)');
     // flujo cierra el círculo: evento de dominio + response correlado
     assert.ok(bus.published.some(([n]) => n === 'nichos.territorio.sondeado'), 'publica nichos.territorio.sondeado');
     const canEvts = bus.published.filter(([n]) => n === 'nichos.candidato.encontrado');

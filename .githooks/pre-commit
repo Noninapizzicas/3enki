@@ -1,0 +1,61 @@
+#!/bin/bash
+# .githooks/pre-commit — Haz cumplir la norma R1: el worktree principal es SOLO LECTURA.
+#
+# Por qué existe: el 30-sep-2026 un commit de la vertical contabilidad cayó sobre
+# `main` en el worktree principal (~/3enki). Eso hizo que `main` local divergiera de
+# `origin/main` y que cada `git pull` fallara con "divergent branches", además de
+# generar PRs duplicados. La norma escrita en AGENTS.md se salta por descuido; este
+# hook la hace cumplir.
+#
+# Instalación (una vez por repo; los worktrees la heredan):
+#   cd ~/3enki && git config core.hooksPath .githooks
+#
+# Escape consciente (solo si DE VERDAD toca hacerlo, p.ej. revertir un merge):
+#   NORMA_IGNORAR=1 git commit ...
+
+set -euo pipefail
+
+# Escape explícito y consciente.
+[ "${NORMA_IGNORAR:-0}" = "1" ] && exit 0
+
+raiz="$(git rev-parse --show-toplevel 2>/dev/null || echo '')"
+rama="$(git branch --show-current 2>/dev/null || echo '')"
+git_dir="$(git rev-parse --absolute-git-dir 2>/dev/null || echo '')"
+
+# El worktree principal tiene su .git como DIRECTORIO (los demás apuntan con un fichero .git).
+es_worktree_principal=0
+if [ -n "$raiz" ] && [ -d "$raiz/.git" ]; then
+  es_worktree_principal=1
+fi
+
+if [ "$es_worktree_principal" = "1" ] && [ "$rama" = "main" ]; then
+  cat >&2 <<'MSG'
+
+  ┌──────────────────────────────────────────────────────────────────┐
+  │  BLOQUEADO por la norma del repo (AGENTS.md · R1)                │
+  └──────────────────────────────────────────────────────────────────┘
+
+  Estás commiteando en `main` dentro del worktree PRINCIPAL (~/3enki).
+  Este worktree es de SOLO LECTURA: es el espejo de origin/main.
+
+  Qué hacer (tu trabajo NO se pierde):
+
+    1. Crea tu worktree con su rama:
+         cd ~/3enki && git worktree add ~/3enki-<tema> -b hermes/<tema> origin/main
+
+    2. Muévete ahí y repite el commit:
+         cd ~/3enki-<tema> && git add ... && git commit ...
+
+    3. Sube y abre PR:
+         git push -u origin hermes/<tema>
+
+  Si esto es un caso legítimo y consciente (p.ej. revertir un merge):
+         NORMA_IGNORAR=1 git commit ...
+
+  Detalle completo: AGENTS.md
+
+MSG
+  exit 1
+fi
+
+exit 0

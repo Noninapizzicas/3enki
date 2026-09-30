@@ -55,7 +55,7 @@ class GateDecisionOperar extends ModuloHibridoReflejo {
       status: 200,
       data: {
         project_id,
-        nicho_id,
+        nicho_id: nicho_id || (nicho && (nicho.nicho_id || nicho.id)) || null,
         tipo: 'gate_operar',
         estado: 'PENDIENTE',
         ...paquete.data,

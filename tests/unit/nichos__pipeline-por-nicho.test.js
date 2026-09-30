@@ -345,6 +345,10 @@ function nichoVacioForzado(project_id, nicho_id) {
       'nichos.cobro.ejecutado',
       'nichos.cobro_registrado',
       'nichos.salud.actualizada',
+      // El gate: sin estos dos el pipeline nunca salía de OPERANDO (las reglas de
+      // transición existían, pero nadie alimentaba la máquina con el evento).
+      'nichos.gate.solicitado',
+      'nichos.gate_resuelto',
       'project.activated'
     ];
     assert.deepStrictEqual(subs.map(s => s.event).sort(), [...esperados].sort());

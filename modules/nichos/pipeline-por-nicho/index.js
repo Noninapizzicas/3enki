@@ -80,12 +80,16 @@ const TRANSICIONES = {
     ['gate.aprobado', () => true, ESTADOS.COBRANDO],                  // E2 gate APRUEBA
     ['gate.rechazado', () => true, ESTADOS.OPERANDO_EN_ESPERA],      // E2 RECHAZA → re-pregunta
     ['gate.solicitado', (e) => e.decision === 'APRUEBA', ESTADOS.COBRANDO],
-    ['gate.solicitado', (e) => e.decision !== 'APRUEBA', ESTADOS.OPERANDO_EN_ESPERA]
+    ['gate.solicitado', () => true, ESTADOS.OPERANDO_EN_ESPERA],     // pregunta POSED al dueño: a la espera
+    ['gate_resuelto', (e) => String(e.resolucion || '').toUpperCase() === 'APRUEBA', ESTADOS.COBRANDO],
+    ['gate_resuelto', () => true, ESTADOS.OPERANDO_EN_ESPERA]
   ],
   [ESTADOS.OPERANDO_EN_ESPERA]: [
     ['gate.aprobado', () => true, ESTADOS.COBRANDO],
     ['gate.solicitado', (e) => e.decision === 'APRUEBA', ESTADOS.COBRANDO],
-    ['gate.solicitado', (e) => e.decision !== 'APRUEBA', ESTADOS.OPERANDO_EN_ESPERA]
+    ['gate.solicitado', () => true, ESTADOS.OPERANDO_EN_ESPERA],
+    ['gate_resuelto', (e) => String(e.resolucion || '').toUpperCase() === 'APRUEBA', ESTADOS.COBRANDO],
+    ['gate_resuelto', () => true, ESTADOS.OPERANDO_EN_ESPERA]
   ],
   [ESTADOS.COBRANDO]: [
     ['cobro.ejecutado', (e) => e.tipo !== 'COMPROMETIDO', ESTADOS.EN_CAJA], // E3 EFECTIVO → EN_CAJA
@@ -215,6 +219,12 @@ class PipelinePorNicho extends ModuloHibridoReflejo {
   onCobroEjecutado(e) { return this._consumir(e, 'nichos.cobro.ejecutado'); }
   onCobroRegistrado(e) { return this._consumir(e, 'nichos.cobro_registrado'); }
   onSaludActualizada(e) { return this._consumir(e, 'nichos.salud.actualizada'); }
+  // El GATE: gate-decision-operar pide la decisión (solicitado) y cola-decisiones-gate
+  // la resuelve (gate_resuelto). Sin estos dos consumidores el pipeline NUNCA salía de
+  // OPERANDO: las reglas de transición existían, pero nadie alimentaba la máquina con
+  // el evento que las dispara → la cadena moría en el gate.
+  onGateSolicitado(e) { return this._consumir(e, 'nichos.gate.solicitado'); }
+  onGateResuelto(e) { return this._consumir(e, 'nichos.gate_resuelto'); }
 
   // Consumidor genérico: extrae proyecto+nicho, normaliza el tipo de evento,
   // aplica la transición y publica el pulso avanzado / par de fallo.

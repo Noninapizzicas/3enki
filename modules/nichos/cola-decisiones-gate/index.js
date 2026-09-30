@@ -91,9 +91,20 @@ class ColaDecisionesGate extends ModuloHibridoReflejo {
       const res = this._resolverSiguiente(d);
       // Emisor/par de fallo: exito → resuelto + decision; error → par determinista.
       if (res.status === 200) {
-        this.eventBus?.publish('nichos.gate_resuelto', res.data);
+        // El pipeline (L1) necesita el proyecto + el NICHO_ID + la resolución en el
+        // nivel superior del evento para aplicar la transición OPERANDO→COBRANDO;
+        // antes viajaban solo dentro de `solicitud` y el pipeline no los veía.
+        this.eventBus?.publish('nichos.gate_resuelto', {
+          project_id: res.data.project_id,
+          nicho_id: res.data.nicho_id,
+          solicitud: res.data.solicitud,
+          resolucion: res.data.resolucion,
+          restantes: res.data.restantes,
+          resuelto: true
+        });
         this.eventBus?.publish('nichos.decision.resuelta', {
           project_id: res.data.project_id,
+          nicho_id: res.data.nicho_id,
           decision: res.data.solicitud,
           resolucion: res.data.resolucion
         });
@@ -119,7 +130,10 @@ class ColaDecisionesGate extends ModuloHibridoReflejo {
       project_id: d.project_id,
       solicitud: {
         tipo: d.tipo || this._inferirTipo(d, e),
-        nicho: d.nicho,
+        // El nicho_id es la IDENTIDAD (clave de la máquina del pipeline); el nombre
+        // puede desambigüarse después. Si el emisor solo manda el nombre, se usa como
+        // último recurso, pero se prefiere siempre el id.
+        nicho: d.nicho_id || d.nicho,
         descripcion: d.descripcion || d.mensaje || null
       }
     });
@@ -187,6 +201,7 @@ class ColaDecisionesGate extends ModuloHibridoReflejo {
       id: solicitud.id || `${pid}-${Date.now()}-${c.solicitudes.length + 1}`,
       tipo: solicitud.tipo || 'GATE_OPERAR',
       nicho: solicitud.nicho,
+      nicho_id: solicitud.nicho_id || solicitud.nicho,
       descripcion: solicitud.descripcion || null,
       solicitado_en: new Date().toISOString()
     };
@@ -222,7 +237,14 @@ class ColaDecisionesGate extends ModuloHibridoReflejo {
 
     return {
       status: 200,
-      data: { project_id: pid, solicitud, resolucion, restantes: c.solicitudes.length, resuelto: true }
+      data: {
+        project_id: pid,
+        nicho_id: solicitud.nicho_id || solicitud.nicho,
+        solicitud,
+        resolucion,
+        restantes: c.solicitudes.length,
+        resuelto: true
+      }
     };
   }
 

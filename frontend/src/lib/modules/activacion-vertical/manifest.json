@@ -1,9 +1,0 @@
-{
-  "id": "activacion-vertical",
-  "name": "Activación de vertical",
-  "version": "0.1.0",
-  "zone": "system-bar",
-  "order": 236,
-  "icon": "🗂️",
-  "label": "Activar"
-}

@@ -1,9 +1,0 @@
-{
-  "id": "onboarding-negocio",
-  "name": "Alta de negocio",
-  "version": "0.1.0",
-  "zone": "system-bar",
-  "order": 237,
-  "icon": "🗂️",
-  "label": "Alta negocio"
-}

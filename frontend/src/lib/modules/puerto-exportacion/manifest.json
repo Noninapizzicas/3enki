@@ -1,9 +1,0 @@
-{
-  "id": "puerto-exportacion",
-  "name": "Puerto de exportación",
-  "version": "0.1.0",
-  "zone": "chat-tools",
-  "order": 305,
-  "icon": "📋",
-  "label": "Exportar"
-}

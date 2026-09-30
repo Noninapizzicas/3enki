@@ -1,9 +1,0 @@
-{
-  "id": "periodificacion",
-  "name": "Periodificación",
-  "version": "0.1.0",
-  "zone": "work-bar",
-  "order": 52,
-  "icon": "📒",
-  "label": "Periodificar"
-}

@@ -1,9 +1,0 @@
-{
-  "id": "cuenta-resultados",
-  "name": "Cuenta de resultados",
-  "version": "0.1.0",
-  "zone": "work-bar",
-  "order": 36,
-  "icon": "📒",
-  "label": "Resultados"
-}

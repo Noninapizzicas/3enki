@@ -1,9 +1,0 @@
-{
-  "id": "frontera-planos",
-  "name": "Frontera de planos",
-  "version": "0.1.0",
-  "zone": "system-bar",
-  "order": 208,
-  "icon": "⚙️",
-  "label": "Planos"
-}

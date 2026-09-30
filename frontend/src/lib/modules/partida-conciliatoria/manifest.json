@@ -1,9 +1,0 @@
-{
-  "id": "partida-conciliatoria",
-  "name": "Partidas conciliatorias",
-  "version": "0.1.0",
-  "zone": "work-bar",
-  "order": 97,
-  "icon": "🏦",
-  "label": "Partidas"
-}

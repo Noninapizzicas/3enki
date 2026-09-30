@@ -1,9 +1,0 @@
-{
-  "id": "liquidacion-iva",
-  "name": "Liquidación de IVA",
-  "version": "0.1.0",
-  "zone": "work-bar",
-  "order": 61,
-  "icon": "🧾",
-  "label": "IVA"
-}

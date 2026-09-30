@@ -1,9 +1,0 @@
-{
-  "id": "etiquetado-analitico",
-  "name": "Etiquetado analítico",
-  "version": "0.1.0",
-  "zone": "system-bar",
-  "order": 226,
-  "icon": "📊",
-  "label": "Etiquetar"
-}

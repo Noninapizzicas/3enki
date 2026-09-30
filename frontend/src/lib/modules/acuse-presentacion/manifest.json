@@ -1,9 +1,0 @@
-{
-  "id": "acuse-presentacion",
-  "name": "Acuse de presentación",
-  "version": "0.1.0",
-  "zone": "work-bar",
-  "order": 82,
-  "icon": "🧾",
-  "label": "Acuse"
-}

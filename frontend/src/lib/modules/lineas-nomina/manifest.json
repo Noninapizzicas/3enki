@@ -1,9 +1,0 @@
-{
-  "id": "lineas-nomina",
-  "name": "Líneas de nómina",
-  "version": "0.1.0",
-  "zone": "work-bar",
-  "order": 122,
-  "icon": "👤",
-  "label": "Líneas"
-}

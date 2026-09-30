@@ -1,9 +1,0 @@
-{
-  "id": "cola-declaraciones-criterio",
-  "name": "Cola de decisiones",
-  "version": "0.1.0",
-  "zone": "system-bar",
-  "order": 210,
-  "icon": "⚙️",
-  "label": "Decisiones"
-}

@@ -1,9 +1,0 @@
-{
-  "id": "pagos-a-cuenta-empleado",
-  "name": "Pagos a cuenta",
-  "version": "0.1.0",
-  "zone": "work-bar",
-  "order": 124,
-  "icon": "👤",
-  "label": "Pagos a cuenta"
-}

@@ -1,9 +1,0 @@
-{
-  "id": "puente-lenguaje-dueno",
-  "name": "Lenguaje del dueño",
-  "version": "0.1.0",
-  "zone": "chat-tools",
-  "order": 303,
-  "icon": "📋",
-  "label": "Lenguaje"
-}

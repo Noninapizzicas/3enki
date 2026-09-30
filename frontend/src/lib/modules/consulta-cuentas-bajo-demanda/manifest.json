@@ -1,0 +1,9 @@
+{
+  "id": "consulta-cuentas-bajo-demanda",
+  "name": "Consulta de cuentas",
+  "version": "0.1.0",
+  "zone": "chat-tools",
+  "order": 302,
+  "icon": "📋",
+  "label": "Consultar"
+}

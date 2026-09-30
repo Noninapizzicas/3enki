@@ -1,0 +1,9 @@
+{
+  "id": "informe-accionable",
+  "name": "Informe accionable",
+  "version": "0.1.0",
+  "zone": "chat-tools",
+  "order": 304,
+  "icon": "📋",
+  "label": "Informe"
+}

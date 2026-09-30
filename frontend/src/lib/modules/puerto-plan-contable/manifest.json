@@ -1,0 +1,9 @@
+{
+  "id": "puerto-plan-contable",
+  "name": "Puerto de plan contable",
+  "version": "0.1.0",
+  "zone": "chat-tools",
+  "order": 301,
+  "icon": "📋",
+  "label": "Plan contable"
+}

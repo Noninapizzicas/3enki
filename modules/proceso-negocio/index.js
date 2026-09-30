@@ -52,6 +52,25 @@ const REPO_MODULES_DIR = (() => {
   } catch (_) { return null; }
 })();
 
+// ── VERIFICADOR DEL ADN (carga PEREZOSA y TOLERANTE) ──────────────────────────
+// El gate de la FASE 4 mide la FORMA del módulo recién construido con el
+// verificador REAL (scripts/verificar-adn-modulo.js) — una sola implementación,
+// dos puertas (el CLI del script y este gate dicen lo mismo). Se carga aquí,
+// perezosamente y a prueba de fallos: si el script no está o revienta, el gate
+// NO se rompe — simplemente se salta la comprobación de ADN (best-effort) y lo
+// deja en el log. Un verificador ausente no debe tumbar el proceso entero.
+let _verificadorAdn;   // undefined = no intentado · null = no disponible · objeto = cargado
+function cargarVerificadorAdn() {
+  if (_verificadorAdn !== undefined) return _verificadorAdn;
+  try {
+    // Ruta relativa al fichero: modules/proceso-negocio/index.js → ../../scripts/…
+    _verificadorAdn = require('../../scripts/verificar-adn-modulo.js');
+  } catch (_) {
+    _verificadorAdn = null;   // best-effort: sin script no hay medida de ADN
+  }
+  return _verificadorAdn;
+}
+
 // ── PRINCIPIO ARQUITECTÓNICO (antepuesto a cada mensaje de fase) ──
 // La visión del sistema: parcelas pequeñas, evento como pegamento, ensamblaje libre.
 const PRINCIPIO_ARQUITECTONICO = '[PRINCIPIO] Cada módulo es una parcela pequeña que hace SU trabajo bien hecho y punto — funciona por eventos, desacoplado. La reutilización y la potencia vienen de ahí. El ensamblaje se hace DESPUÉS, según necesidades, conectando eventos. No compliques la parcela pensando en el ensamblaje.\n\n[FRENOS → EMPUJONES] Cuando encuentres un freno (restricción, bloqueo, límite que corta), NO lo aceptes como muro. Pregunta: ¿qué estado deseado protege? Si protege algo real → conviértelo en su empujón (la acción construible que abre ese estado — una pieza, un flujo alternativo, una capacidad). Si no protege nada nombrable → se disuelve (era inercia, no restricción). El proceso no se detiene ante un freno: lo atraviesa convirtiéndolo en lo que hay que construir.\n\n';
@@ -163,6 +182,30 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
 
   async onUnload() { return super.onUnload(); }
 
+  // ── EL ESTÁNDAR EN TODAS LAS SALIDAS (no solo en el empujón) ──────────────
+  // Antes el principio arquitectónico solo se decía al empujar la siguiente
+  // skill: cualquier OTRA salida del orquestador (un 400, un 409, un 200 de
+  // cierre, el estado) devolvía un mensaje seco y el estándar se diluía. Este
+  // envoltorio antepone el principio a CUALQUIER mensaje y, si hay motivo,
+  // añade una nota que dice EN QUÉ FASE estamos y QUÉ se espera. El motivo sale
+  // del MAPA_PROCESO[fase].mensaje cuando existe (no se inventa texto).
+  _conArquitectura(mensaje, motivo) {
+    const cuerpo = String(mensaje == null ? '' : mensaje);
+    const nota = (motivo && String(motivo).trim())
+      ? `\n\n[FASE / REGLA] ${String(motivo).trim()}`
+      : '';
+    return PRINCIPIO_ARQUITECTONICO + cuerpo + nota;
+  }
+
+  // El motivo por fase: el mensaje que el MAPA_PROCESO ya declara para ese
+  // evento (la fase y qué se espera). Con la fase suelta ('construido') se
+  // prueba el evento de fase ('negocio.construido'). Sin entrada → null.
+  _motivoDeFase(fase) {
+    if (!fase) return null;
+    const paso = MAPA_PROCESO[`negocio.${fase}`] || MAPA_PROCESO[fase];
+    return paso && paso.mensaje ? paso.mensaje : null;
+  }
+
   onProjectCreated(e)       { return this._encadenar(e, 'project.created'); }
   onNegocioIdentificado(e)  { return this._encadenar(e, 'negocio.identificado'); }
 
@@ -185,6 +228,15 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
       d => this._reiniciarF0(d));
   }
 
+  // RE-INSISTENCIA: el empujón es idempotente (se da UNA vez). Si el proceso se
+  // quedó parado (nadie ejecutó la skill pendiente), esta tool vuelve a emitir
+  // el empujón con el principio + una nota de que el proceso sigue esperando.
+  // Misma puerta que el resto: el evento .request y la tool llaman al MISMO verbo.
+  async onReintentarRequest(e) {
+    return this._atender(e, 'reintentar', 'proceso-negocio.reintentar.response',
+      d => this._reintentar(d));
+  }
+
   // UNA sola implementación del verbo, dos puertas (evento .request y tool).
   async _reiniciarF0(d) {
     {
@@ -194,7 +246,39 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
       this._emitidos.delete(`${project_id}::project.created`);
       // Forzar el empujón de la F0 (identidad-negocio) por el canal del nervio.
       this._encadenar({ data: { project_id } }, 'project.created');
-      return { status: 200, data: { project_id, reiniciada: true, fase: 'project.created', skill: 'identidad-negocio', mensaje: 'FASE 0 relanzada: identidad-negocio. Entra en el chat y responde a la entrevista de identidad del negocio.' } };
+      return { status: 200, data: { project_id, reiniciada: true, fase: 'project.created', skill: 'identidad-negocio', mensaje: this._conArquitectura('FASE 0 relanzada: identidad-negocio. Entra en el chat y responde a la entrevista de identidad del negocio.', this._motivoDeFase('project.created')) } };
+    }
+  }
+
+  // RE-INSISTENCIA (UNA sola implementación del verbo, dos puertas). Si existe
+  // un empujón PENDIENTE del proyecto (nadie lo consumió / la skill no se
+  // ejecutó), lo re-emite con el principio + la nota de que sigue esperando ese
+  // paso. Sin pendiente no hay nada que re-insistir: se dice tal cual (200).
+  async _reintentar(d) {
+    {
+      const project_id = d.project_id;
+      if (!project_id) return this._invalid('project_id');
+      const pendiente = this.pendientes.get(project_id) || null;
+      if (!pendiente) {
+        return { status: 200, data: {
+          project_id, reintentado: false,
+          mensaje: this._conArquitectura('No hay empujón pendiente para este proyecto: el proceso no está esperando ningún paso concreto. Si crees que quedó atascado, consulta el estado (proceso-negocio.estado) o relanza la FASE 0 (proceso-negocio.reiniciar_f0).')
+        } };
+      }
+      // La re-emisión: mismo empujón (misma skill/lee/escribe) pero con el
+      // principio + la nota de re-insistencia para que el nervio lo vuelva a
+      // surfacear y el LLM retome el paso.
+      const paso = {
+        skill: pendiente.recurso,
+        lee: pendiente.lee || [],
+        escribe: pendiente.escribe || null,
+        mensaje: `El proceso SIGUE esperando esto (la fase '${pendiente.fase}' no ha avanzado). ${pendiente.mensaje || ''}`
+      };
+      this._empujar(project_id, pendiente.fase, paso);
+      return { status: 200, data: {
+        project_id, reintentado: true, fase: pendiente.fase, skill: pendiente.recurso,
+        mensaje: this._conArquitectura(`Re-insistencia emitida: el proceso sigue esperando '${pendiente.recurso}' (fase '${pendiente.fase}').`, pendiente.mensaje)
+      } };
     }
   }
 
@@ -211,13 +295,13 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
       // La skill declara la fase completada → el mapa la encadena.
       const paso = MAPA_PROCESO[eventoFase];
       if (!paso) {
-        return { status: 400, data: { error: 'FASE_NO_MAPEADA', message: `No hay siguiente fase para '${eventoFase}'`, fase } };
+        return { status: 400, data: { error: 'FASE_NO_MAPEADA', message: this._conArquitectura(`No hay siguiente fase para '${eventoFase}'`, this._motivoDeFase(fase)), fase } };
       }
       // GATE DE ENTREGABLE: la fase solo se cierra si el trabajo REAL existe.
       // El sistema no se fía de la palabra del LLM — verifica en disco.
       const entregable = await this._verificarEntregable(project_id, fase, d.resumen || {});
       if (!entregable.ok) {
-        return { status: 409, data: { error: 'FASE_INCOMPLETA', message: entregable.mensaje, fase, esperado: entregable.esperado } };
+        return { status: 409, data: { error: 'FASE_INCOMPLETA', message: this._conArquitectura(entregable.mensaje, this._motivoDeFase(fase)), fase, esperado: entregable.esperado } };
       }
 
       // QUIÉN DECIDE EL SIGUIENTE PASO — el plan manda desde que EXISTE.
@@ -243,9 +327,9 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
       if (fase === 'completado' && (!hayPlan || this._decidirSiguiente(progreso, fase).skill !== null)) {
         return { status: 409, data: {
           error: 'FASE_INCOMPLETA',
-          message: hayPlan
+          message: this._conArquitectura(hayPlan
             ? `El proceso NO está completo: ${progreso.faltan_por_construir} hojas sin construir, ${progreso.faltan_por_skill} sin skill (de ${progreso.total}). Sigue el ciclo por pieza.`
-            : 'No hay plan de construcción (esquemas/plan-construccion.md): no hay nada que declarar completado. Cierra antes la FASE 3b (adaptador).',
+            : 'No hay plan de construcción (esquemas/plan-construccion.md): no hay nada que declarar completado. Cierra antes la FASE 3b (adaptador).', this._motivoDeFase(fase)),
           fase, esperado: ['plan completo'], progreso
         }};
       }
@@ -261,7 +345,15 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
         }
         if (siguiente && siguiente.skill) this._empujar(project_id, eventoFase, siguiente);
       }
-      return { status: 200, data: { project_id, fase_completada: eventoFase, siguiente: siguiente?.skill || null, entregable, progreso, fin: !siguiente?.skill } };
+      return { status: 200, data: { project_id, fase_completada: eventoFase, siguiente: siguiente?.skill || null, entregable, progreso, fin: !siguiente?.skill,
+        // El estándar viaja también en la salida BUENA: cerrar una fase no exime
+        // de recordar la FORMA (parcela pequeña + evento). El motivo es la fase
+        // que AHORA toca (la que el mapa empuja), no la que se acaba de cerrar.
+        mensaje: this._conArquitectura(
+          siguiente?.skill
+            ? `Fase '${fase}' cerrada. Siguiente: '${siguiente.skill}'.`
+            : `Fase '${fase}' cerrada. No quedan pasos que empujar desde aquí.`,
+          siguiente ? siguiente.mensaje : this._motivoDeFase(fase)) } };
     }
   }
 
@@ -693,10 +785,14 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
     // Modo 1 en 1: un slug. Modo "a full": TODOS los slugs del resumen — se
     // verifican todos, no solo el primero (lección: el gate no se fía del
     // reporte del agente, y un resumen con N módulos exige N verificaciones).
-    const slugs = (extra && extra.slug ? [extra.slug] : [])
-      || (extra && Array.isArray(extra.modulos) && extra.modulos.length ? extra.modulos : [])
-      || (extra && Array.isArray(extra.skills) && extra.skills.length ? extra.skills : [])
-      || [];
+    // OJO: antes era una cadena `(cond ? [...] : []) || (...)` — un array VACÍO
+    // es TRUTHY, así que la cadena cortocircuitaba en el primer término y
+    // `resumen.modulos` NUNCA se leía: el gate de 'construido' a full decía
+    // siempre "Falta el slug". Se construye la lista explícitamente.
+    const slugs = [];
+    if (extra && extra.slug) slugs.push(extra.slug);
+    else if (extra && Array.isArray(extra.modulos)) slugs.push(...extra.modulos);
+    else if (extra && Array.isArray(extra.skills)) slugs.push(...extra.skills);
     if (!slugs.length) {
       return { ok: false, esperado: ['<slug> del módulo construido'], mensaje: 'Falta el slug del módulo en el resumen de completar_fase.' };
     }
@@ -714,15 +810,27 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
   // Verificación individual de UN módulo/skill (usada por _verificarSistema).
   _verificarUnSlug(fase, slug) {
     if (fase === 'construido') {
-      const dir = path.join(MODULES_DIR, slug);
+      // El módulo puede vivir PLANO (modules/<slug>/) o ANIDADO en su vertical
+      // (modules/<familia>/<slug>/) — el plan declara el slug sin el prefijo de
+      // familia. Se resuelve igual que _buscarModulo: si no está plano, se busca
+      // 1 nivel abajo. (Antes solo se miraba plano y un módulo real anidado se
+      // reportaba como inexistente.)
+      let dir = path.join(MODULES_DIR, slug);
+      if (!fs.existsSync(path.join(dir, 'module.json'))) {
+        const anidado = this._buscarModulo(slug);
+        if (anidado) dir = anidado;
+      }
       const indexJs = path.join(dir, 'index.js');
       const moduleJson = path.join(dir, 'module.json');
       if (!fs.existsSync(indexJs) || !fs.existsSync(moduleJson)) {
         return { ok: false, esperado: [`modules/${slug}/index.js + module.json en disco`], mensaje: `El módulo ${slug} NO existe en modules/ (verificado en disco). El agente lo reportó pero no está — el deploy pudo borrarlo o nunca se produjo.`, encontrados: fs.existsSync(dir) ? fs.readdirSync(dir) : [] };
       }
+      // La ruta RELATIVA del módulo dentro de modules/ (para git y para el
+      // mensaje): plana → <slug>, anidada → <familia>/<slug>.
+      const rel = path.relative(MODULES_DIR, dir).split(path.sep).join('/');
       // Verificar que la API es la REAL (import _shared + _atender 4 args + name/version)
       const src = fs.readFileSync(indexJs, 'utf8');
-      const apiOk = src.includes("require('../_shared/modulo-hibrido-reflejo')") && /_atender\([^)]*,\s*[^)]*,\s*[^)]*,\s*[^)]*\)/.test(src) && src.includes('this.name') && src.includes('this.version');
+      const apiOk = /require\(['"][^'"]*\/_shared\/modulo-hibrido-reflejo['"]\)/.test(src) && /_atender\([^)]*,\s*[^)]*,\s*[^)]*,\s*[^)]*\)/.test(src) && src.includes('this.name') && src.includes('this.version');
       if (!apiOk) {
         return { ok: false, esperado: ['API real: require ../_shared · _atender 4 args · this.name/version'], mensaje: `El módulo ${slug} existe pero NO carga (API interna rota: import, _atender o constructor incorrectos).` };
       }
@@ -730,16 +838,33 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
       // el deploy (rsync --delete) lo borrará. No basta con que el archivo
       // exista en el dir: se comprueba con git ls-files (¿está en el índice?).
       if (REPO_MODULES_DIR) {
-        const repoDir = path.join(REPO_MODULES_DIR, slug);
+        const repoDir = this._buscarModuloRepo(slug) || path.join(REPO_MODULES_DIR, slug);
         let trackeado = false;
         try {
           const cp = require('child_process');
-          const out = cp.execFileSync('git', ['ls-files', '--', `modules/${slug}`], { cwd: path.join(REPO_MODULES_DIR, '..'), encoding: 'utf8' }).trim();
+          const out = cp.execFileSync('git', ['ls-files', '--', `modules/${rel}`], { cwd: path.join(REPO_MODULES_DIR, '..'), encoding: 'utf8' }).trim();
           trackeado = out.length > 0;
         } catch (_) { /* git no disponible → no bloquear, confiar en la existencia */ }
         if (fs.existsSync(path.join(repoDir, 'index.js')) && !trackeado) {
-          return { ok: false, esperado: [`modules/${slug}/ COMMITEADO en el repo (~/3enki)`], mensaje: `El módulo ${slug} existe en disco pero NO está commiteado en ~/3enki (git ls-files no lo ve) → el siguiente deploy (rsync --delete) lo borrará. Commitea el módulo (rama → PR → merge) antes de cerrar la fase.` };
+          return { ok: false, esperado: [`modules/${rel}/ COMMITEADO en el repo (~/3enki)`], mensaje: `El módulo ${slug} existe en disco pero NO está commiteado en ~/3enki (git ls-files no lo ve) → el siguiente deploy (rsync --delete) lo borrará. Commitea el módulo (rama → PR → merge) antes de cerrar la fase.` };
         }
+      }
+      // ADN EVENT-DRIVEN (la FORMA, no solo la existencia): un módulo que
+      // existe y carga todavía puede DERIVAR — escribir sin anunciar el hecho, o
+      // escuchar un evento que nadie emite. El verificador mide eso. Se llama con
+      // require TOLERANTE: si el script no está o revienta, NO se rompe el gate
+      // — solo se salta la comprobación de ADN (best-effort) y queda en el log.
+      try {
+        const verificador = cargarVerificadorAdn();
+        if (verificador && typeof verificador.medirSlug === 'function') {
+          const adn = verificador.medirSlug(slug);
+          if (adn && !adn.ok) {
+            return { ok: false, esperado: ['el módulo respeta el ADN: si escribe, anuncia el hecho; si escucha, hay emisor'], mensaje: `El módulo ${slug} no respeta el ADN event-driven: ${(adn.hallazgos || []).map(h => h.regla + ' · ' + h.msg).join(' | ')}. Corrige la FORMA antes de cerrar la fase.` };
+          }
+        }
+      } catch (err) {
+        // best-effort: el verificador no debe tumbar el gate. Se deja constancia.
+        this.logger?.warn?.('proceso-negocio.adn.no_verificable', { slug, error: err && err.message });
       }
       return { ok: true, verificados: [`modules/${slug}/ existe, API real, y en el repo`] };
     }
@@ -1017,7 +1142,15 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
   _estado({ project_id } = {}) {
     if (!project_id) return this._invalid('project_id');
     const pendiente = this.pendientes.get(project_id) || null;
-    return { status: 200, data: { project_id, pendiente, emitidas: [...this._emitidos.keys()].filter(k => k.startsWith(project_id + '::')) } };
+    // RECORDATORIO: el estándar también en la CONSULTA de estado. Si hay un
+    // empujón pendiente, el recordatorio dice qué paso se espera (su mensaje);
+    // si no, recuerda la FORMA sin empujar nada.
+    const recordatorio = this._conArquitectura(
+      pendiente
+        ? `Paso pendiente: '${pendiente.recurso}' (fase '${pendiente.fase}').`
+        : 'Sin empujón pendiente: el proceso no está esperando ningún paso concreto.',
+      pendiente ? pendiente.mensaje : null);
+    return { status: 200, data: { project_id, pendiente, recordatorio, emitidas: [...this._emitidos.keys()].filter(k => k.startsWith(project_id + '::')) } };
   }
 
   // ── Tools (para el LLM del chat) ──
@@ -1032,6 +1165,13 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
   // completar_fase: el LLM no gana permisos por entrar por la tool.
   async toolReiniciarF0(params) {
     return this._reiniciarF0(params || {});
+  }
+
+  // Re-insistencia del empujón pendiente (el proceso se quedó parado). Tool del
+  // chat: el dueño dice "¿sigues ahí? / reintenta / no ha avanzado". Misma
+  // puerta que el evento: el LLM no gana permisos por entrar por la tool.
+  async toolReintentar(params) {
+    return this._reintentar(params || {});
   }
 
 }

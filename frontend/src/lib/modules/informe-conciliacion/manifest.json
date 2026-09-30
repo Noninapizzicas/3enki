@@ -1,0 +1,9 @@
+{
+  "id": "informe-conciliacion",
+  "name": "Informe de conciliación",
+  "version": "0.1.0",
+  "zone": "work-bar",
+  "order": 98,
+  "icon": "🏦",
+  "label": "Informe concil."
+}

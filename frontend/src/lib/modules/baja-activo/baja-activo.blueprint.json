@@ -1,0 +1,91 @@
+{
+  "id": "baja-activo",
+  "version": "blueprint-0.1.0",
+  "_nota": "FASE 6½ · la interfaz DECLARADA del módulo baja-activo (REFLEJO STATELESS de contabilidad-analitica, F3, hoja del plan). LA BAJA DEL BIEN: retira el bien del inmovilizado y DERIVA el RESULTADO de la operación comparando el VALOR NETO CONTABLE (valor-neto-contable F4) con el IMPORTE DE VENTA declarado. El VNC se pide a F4 POR EVENTO (o llega declarado) y el IMPORTE DE VENTA es un DATO declarado por el negocio, JAMÁS estimado: un bien dado de baja SIN venta no tiene un importe 0 inventado — si no se declara, consta como null y el resultado queda [ABIERTO]. DETERMINISTA Y SIN JUICIO: resultado = importe_venta − vnc; el SIGNO se DERIVA (>0 beneficio, <0 pérdida, =0 nulo); aquí NO se valora si la baja es buena o mala ni se decide su imputación contable (cuenta, asiento, periodo) — eso lo fija el corte del diario/ajuste. NO escribe, NO persiste, NO muta. La sección `ui` es lo que el generador schema→UI (BlueprintForm, 4 zonas) necesita para renderizar el panel; sin LLM: TODO lo que produce sale de aquí. Fuente de verdad: modules/contabilidad-analitica/baja-activo/{module.json,index.js}. ui_handler real: baja-activo.calcular (workspace_module/barra_modulos).",
+  "schema": "blueprint-interfaz-v2",
+  "language": "es",
+  "titulo": "La baja del bien (beneficio o pérdida)",
+  "eventos_publicados": [
+    "baja-activo.calcular.response",
+    "baja-activo.calcular.failed"
+  ],
+  "eventos_que_escucho": [],
+  "_escucho_nota": "VACÍO A PROPÓSITO: el reflejo ya atiende en module.json.subscribes baja-activo.calcular.request (onCalcularRequest, su única RPC); repetirlo aquí daría ANTICOLISION-001 (lo atenderían los dos). Es un REFLEJO STATELESS determinista y SIN JUICIO: no tiene cajón fuzzy ni evento fire-and-forget que el LLM deba procesar. El VNC NO llega como evento que el LLM escuche por el bus: se pide DENTRO del cálculo a valor-neto-contable (F4) por evento (valor-neto-contable.calcular.request, dependencia interna) o llega declarado en la petición — por eso no hay ningún cajón fuzzy que declarar aquí.",
+  "transporte": {
+    "rpc": [
+      "baja-activo.calcular.request -> .response",
+      "valor-neto-contable.calcular.request -> .response"
+    ],
+    "entrada": [
+      "baja-activo.calcular.request"
+    ],
+    "salida": [
+      "baja-activo.calcular.response"
+    ],
+    "qos": "publishAndWait (request/response correlado) en el cálculo. El VNC llega por DOS vías sin require cruzado: declarado en la petición (`vnc`) o PEDIDO a valor-neto-contable (F4) POR EVENTO (valor-neto-contable.calcular.request, dependencia interna del cálculo, best-effort). El importe de venta es DATO declarado. El reflejo no publica eventos de dominio: su única salida es la respuesta RPC correlada."
+  },
+  "contrato": {
+    "CalcularInput": "{ project_id:uuid, id_activo?:str, activo?:{ id_activo?, valor? }, fecha_baja?:str, vnc?:num, importe_venta?:num, motivo_baja?:str }",
+    "CalcularOutput": "{ project_id, id_activo, fecha_baja, motivo_baja, vnc, importe_venta, resultado, fuente_vnc:'declarado'|'valor-neto-contable'|null, tipo_resultado:'beneficio'|'perdida'|'nulo'|null, retirado:bool, abierto:bool, faltan:[str], motivo, imputacion_delegada_a:'escritor-diario' }",
+    "Errores": "project_id ausente → 400 INVALID_INPUT (par baja-activo.calcular.failed).",
+    "Invariantes": "DETERMINISTA: mismo VNC + mismo importe → mismo resultado (una sola respuesta correcta). Dato ausente = desconocido: sin VNC o sin importe de venta declarado → resultado:null y abierto:true con lo que falta en `faltan` — nada se estima, ningún importe se rellena con 0. SIN JUICIO: el signo se DERIVA (>0 beneficio, <0 pérdida, =0 nulo); aquí no se valora si la baja es buena o mala. NO DECIDE la imputación: la contrapartida (cuenta, asiento, periodo) NO vive aquí y se declara delegada ('escritor-diario'). NO escribe, NO persiste, NO muta."
+  },
+  "ui": {
+    "type": "workspace_module",
+    "zone": "modulos",
+    "ops": {
+      "calcular": {
+        "titulo": "Derivar el resultado de la baja (importe de venta − valor neto contable)",
+        "descripcion": "Mesa de trabajo de la baja del bien: retira el bien y DERIVA el resultado comparando el VALOR NETO CONTABLE (valor-neto-contable F4) con el IMPORTE DE VENTA declarado. Es cálculo PURO y determinista (mismo VNC + mismo importe → mismo resultado), SIN JUICIO: aquí no se valora si la baja es buena o mala. El VNC se PIDE a F4 por evento o llega declarado; el IMPORTE DE VENTA es DATO del negocio y JAMÁS se estima — un bien dado de baja sin venta no tiene un 0 inventado: si no se declara, consta null y el resultado queda [ABIERTO]. El SIGNO se deriva (>0 beneficio, <0 pérdida, =0 nulo). Y LA IMPUTACIÓN NO VIVE AQUÍ: el reflejo calcula, no decide la contrapartida — eso lo fija el corte del diario/ajuste (`imputacion_delegada_a:'escritor-diario'`).",
+        "zona": "formulario",
+        "args": [
+          {
+            "nombre": "id_activo",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "MAQ-001",
+            "descripcion": "El bien que se da de baja. Es la clave que permite pedir su VNC a valor-neto-contable (F4) por evento; sin él no se consulta F4 y el resultado solo puede salir de un VNC declarado."
+          },
+          {
+            "nombre": "activo",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "{\"id_activo\":\"MAQ-001\",\"valor\":12000}",
+            "descripcion": "La FICHA del bien declarada (opcional), que se propaga a F4 para calcular el VNC. Es DATO: lo que no venga queda desconocido, no se estima."
+          },
+          {
+            "nombre": "fecha_baja",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "2026-12-31",
+            "descripcion": "La FECHA de baja declarada (también se acepta como `fecha`). Es DATO: se propaga como referencia al cálculo del VNC; no se asume la fecha de hoy."
+          },
+          {
+            "nombre": "vnc",
+            "tipo": "number",
+            "required": false,
+            "placeholder": "(vacío = se pide a valor-neto-contable F4)",
+            "descripcion": "El VALOR NETO CONTABLE declarado del bien (también se acepta como `valor_neto_contable`). Es DATO: si se declara, se usa tal cual (fuente_vnc:'declarado'); si no, se pide a F4 por evento. Sin VNC de ninguna vía, el resultado queda [ABIERTO]."
+          },
+          {
+            "nombre": "importe_venta",
+            "tipo": "number",
+            "required": false,
+            "placeholder": "(vacío = no consta venta; NO se asume 0)",
+            "descripcion": "El IMPORTE DE VENTA declarado por el negocio (también se acepta como `venta`). Es DATO y JAMÁS se estima: un bien dado de baja sin venta no tiene un 0 inventado — si no se declara, consta null y el resultado queda [ABIERTO] con lo que falta."
+          },
+          {
+            "nombre": "motivo_baja",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "venta | siniestro | obsolescencia | ...",
+            "descripcion": "El MOTIVO de la baja declarado (dato libre). El módulo no cablea ninguna taxonomía de motivos ni juzga si la baja es procedente: no es su papel."
+          }
+        ]
+      }
+    },
+    "datos": [],
+    "_datos_nota": "HUECO DECLARADO (no se inventa): baja-activo es un REFLEJO STATELESS de cálculo puro. Su única op (calcular) devuelve UN resultado de baja con sus piezas (vnc, importe_venta, resultado, tipo_resultado, retirado, faltan) — es un cálculo puntual de un bien, no un listado. No hay ninguna op de lectura tabulable en module.json.subscribes ni en index.js (toda su memoria es externa: el VNC pedido a F4 por evento y el importe de venta declarado). El veredicto (resultado y su tipo) se ve en la respuesta RPC de la op. El reflejo no publica ningún evento de dominio propio: su imputación contable queda delegada a escritor-diario, que es quien escribe."
+  },
+  "filosofia": "Dar de baja un bien no es decidir qué hacer con él: es restar. Importe de venta menos valor neto contable, y el signo se deriva — beneficio, pérdida o nulo — sin opinar sobre si la operación fue buena. Lo que este reflejo no hace, a propósito, es rellenar los huecos: un bien sin venta no vale cero, vale lo que no consta; y la contrapartida contable no se inventa aquí, porque una baja no decide su propio asiento. El reflejo calcula; la contabilidad la escribe quien tiene la regla declarada."
+}

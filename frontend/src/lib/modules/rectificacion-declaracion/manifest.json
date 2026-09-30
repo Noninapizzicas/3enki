@@ -1,0 +1,9 @@
+{
+  "id": "rectificacion-declaracion",
+  "name": "Rectificación de declaración",
+  "version": "0.1.0",
+  "zone": "work-bar",
+  "order": 83,
+  "icon": "🧾",
+  "label": "Rectificar"
+}

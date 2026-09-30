@@ -1,0 +1,87 @@
+{
+  "id": "acuse-presentacion",
+  "version": "blueprint-0.1.0",
+  "_nota": "FASE 6½ · la interfaz DECLARADA del módulo acuse-presentacion (PUENTE STATELESS de contabilidad-fiscal, D13, hoja del plan). RECOGE Y LIGA el justificante/acuse que devuelve la ADMINISTRACIÓN a su MODELO y a su ASIENTO; cierra el bucle hacia fuera. La sección `ui` es lo que el generador schema→UI (BlueprintForm, 4 zonas) necesita para renderizar el panel; sin LLM: TODO lo que produce sale de aquí. Fuente de verdad: modules/contabilidad-fiscal/acuse-presentacion/{module.json,index.js}. ui_handler real: acuse-presentacion.ligar (workspace_module/barra_modulos).",
+  "schema": "blueprint-interfaz-v2",
+  "language": "es",
+  "titulo": "Ligar el acuse de la administración a su modelo",
+  "eventos_publicados": [
+    "acuse-presentacion.ligar.response",
+    "acuse-presentacion.ligar.failed",
+    "contabilidad.acuse_ligado"
+  ],
+  "eventos_que_escucho": [],
+  "_escucho_nota": "VACÍO A PROPÓSITO: el puente ya atiende en module.json.subscribes acuse-presentacion.ligar.request (onLigarRequest, su única RPC). Declararlo aquí daría ANTICOLISION-001 (lo atenderían los dos). No hay cajón fuzzy ni evento fire-and-forget de entrada: es un puente stateless que solo se dispara bajo demanda. Su salida `contabilidad.acuse_ligado` es de DOMINIO y la consume estado-presentacion-fiscal (D12) en su propio subscribes — no es una suscripción de este módulo.",
+  "transporte": {
+    "rpc": [
+      "acuse-presentacion.ligar.request -> .response"
+    ],
+    "entrada": [
+      "acuse-presentacion.ligar.request"
+    ],
+    "salida": [
+      "acuse-presentacion.ligar.response",
+      "contabilidad.acuse_ligado"
+    ],
+    "qos": "publishAndWait (request/response correlado) en el enlace. contabilidad.acuse_ligado es fire-and-forget: lo consume estado-presentacion-fiscal (D12) para registrar el estado presentada/justificada. El puente es stateless: no persiste."
+  },
+  "contrato": {
+    "LigarInput": "{ project_id:uuid, acuse|justificante_externo:obj, modelo?:obj, asiento?:obj, asiento_clave?:str, mapeo?:obj }",
+    "LigarOutput": "{ project_id, ligado:bool, acuse:{justificante,fecha,administracion,modelo,ejercicio,periodo,resultado,datos,abierto}, modelo:{modelo,ejercicio,periodo}|null, asiento:obj|null, adaptador_declarado:bool, abierto:[campos ausentes], presentado_por_sistema:false }",
+    "SinAcuse": "Sin acuse de la administración → ligado:false + motivo: el sistema no presenta, solo anota lo que el asesor trae.",
+    "SinJustificante": "Acuse sin justificante → ligado:false + motivo: no se liga un justificante inventado.",
+    "Errores": "project_id ausente → acuse-presentacion.ligar.failed.",
+    "Invariantes": "LA LEY ENTRA COMO DATO (invariante 5): NO se cablea ningún formato de acuse, ni código de administración, ni código de justificante, ni plazo, ni ejercicio — el acuse entra TAL CUAL lo devuelve la administración (`acuse`, alias `justificante_externo`) y el `mapeo` (campo canónico → clave del acuse) es DECLARABLE; lo que no venga queda null + `abierto`, jamás se estima (invariante 7). Campos canónicos: justificante, fecha, administración, modelo, ejercicio, periodo, resultado. EL SISTEMA NO PRESENTA: la presentación la hace el ASESOR en la sede de la administración — aquí solo se ANOTA la respuesta que el asesor trae de vuelta (presentado_por_sistema:false). No custodia nada (el estado de la obligación lo guarda estado-presentacion-fiscal D12, notificado POR EVENTO) y no muta el modelo ni el asiento (modelo_mutado:false, asiento_mutado:false)."
+  },
+  "ui": {
+    "type": "workspace_module",
+    "zone": "modulos",
+    "ops": {
+      "ligar": {
+        "titulo": "Ligar el acuse a su modelo y su asiento",
+        "descripcion": "Mesa de trabajo del cierre hacia fuera: recoge el justificante/acuse que el asesor TRAE de la administración y lo LIGA a su modelo y a su asiento. EL SISTEMA NO PRESENTA: aquí solo se ANOTA la respuesta (presentado_por_sistema:false). LA LEY ENTRA COMO DATO: no se cablea ningún formato de acuse, ni código de administración, ni código de justificante, ni plazo, ni ejercicio — el acuse entra TAL CUAL lo devuelve la administración y el `mapeo` (campo canónico → clave del acuse) es declarable; lo que no venga queda null y se declara en `abierto`, jamás se estima. Sin acuse —o sin justificante— NO se liga un justificante inventado: se declara. El puente no muta el modelo ni el asiento.",
+        "zona": "formulario",
+        "args": [
+          {
+            "nombre": "acuse",
+            "tipo": "json",
+            "required": true,
+            "placeholder": "{\"justificante\":\"J-2026-...\",\"fecha\":\"2026-10-20\",\"resultado\":\"ACEPTADO\"}",
+            "descripcion": "El acuse/justificante TAL CUAL lo devuelve la administración (alias `justificante_externo`). Entra sin completar: lo que no venga queda null + `abierto`. Sin justificante no se liga nada."
+          },
+          {
+            "nombre": "modelo",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "{\"modelo\":\"303\",\"ejercicio\":\"2026\",\"periodo\":\"3T\"}",
+            "descripcion": "A QUÉ modelo se liga el acuse (opcional). Sin declararlo se deriva del propio acuse (modelo/ejercicio/periodo); nunca se inventa."
+          },
+          {
+            "nombre": "asiento",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "(vacío = sin asiento ligado)",
+            "descripcion": "A QUÉ asiento se liga el acuse (opcional). Declarado o derivado de `asiento_clave`; si no hay ninguno, el enlace viaja con asiento:null."
+          },
+          {
+            "nombre": "asiento_clave",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "(vacío = sin clave de asiento)",
+            "descripcion": "La clave del asiento a ligar (alternativa a declarar el objeto `asiento`). Entra como dato; no se estima."
+          },
+          {
+            "nombre": "mapeo",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "{\"justificante\":\"NumJustificante\",\"resultado\":\"Estado\"}",
+            "descripcion": "El esquema DECLARADO de traducción (campo canónico → clave del acuse). Es DATO: la clave del acuse no se cablea; sin mapeo se leen los nombres canónicos."
+          }
+        ]
+      }
+    },
+    "datos": [],
+    "_datos_nota": "SIN TABLA A PROPÓSITO (hueco DECLARADO, no olvidado): la única op RPC (`ligar`) EXIGE payload (el acuse) y devuelve UN acuse ligado, no una colección de acuses. El puente es stateless y no persiste: no existe un conjunto de acuses guardado que listar. El único array de la respuesta (`abierto`: los campos canónicos que no vinieron en el acuse) es una lista DENTRO del acuse, no un listado de acuses. Un histórico de acuses ligados requeriría un custodio y un handler RPC de listado que hoy no existen — LEY DE CERO SUPUESTOS: no se inventa una op de listado para rellenar la zona DATOS. Se declara el hueco; el acuse ligado se ve en la respuesta (el panel lo muestra como informe del enlace, no como fila de cinta)."
+  },
+  "filosofia": "El sistema no presenta, y no finge que lo hizo. El asesor va a la sede, presenta, y trae de vuelta un justificante; aquí solo se ANOTA esa respuesta y se LIGA a su modelo y a su asiento para que el ciclo quede cerrado. El acuse entra tal cual —sin formato cableado, sin código de administración inventado— y lo que la administración no devolvió se declara abierto, no se rellena. Un justificante fabricado por software no es un justificante: es una coartada."
+}

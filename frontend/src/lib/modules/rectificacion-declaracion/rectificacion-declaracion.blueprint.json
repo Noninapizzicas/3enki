@@ -1,0 +1,118 @@
+{
+  "id": "rectificacion-declaracion",
+  "version": "blueprint-0.1.0",
+  "_nota": "FASE 6½ · la interfaz DECLARADA del módulo rectificacion-declaracion (CUSTODIO CON PERSISTENCIA de contabilidad-fiscal, D14, hoja del plan). El CAMINO DE CORRECCIÓN POSTERIOR A LA PRESENTACIÓN de una declaración (complementaria/sustitutiva): uno de los CUATRO planos de corrección (B5 asiento-ajuste · A13 hecho-rectificativo · O2 factura-rectificativa · D14 esta) — TRES actos, no uno. LA INVARIANTE: la declaración ORIGINAL NO se borra; la rectificación SUMA (append-only) y queda TRAZADA. La sección `ui` es lo que el generador schema→UI (BlueprintForm, 4 zonas) necesita para renderizar el panel; sin LLM: TODO lo que produce sale de aquí. Fuente de verdad: modules/contabilidad-fiscal/rectificacion-declaracion/{module.json,index.js}. ui_handler real: rectificacion-declaracion.rectificar (workspace_module/barra_modulos).",
+  "schema": "blueprint-interfaz-v2",
+  "language": "es",
+  "titulo": "La rectificación de una declaración (la original no se borra: suma)",
+  "eventos_publicados": [
+    "rectificacion-declaracion.rectificar.response",
+    "rectificacion-declaracion.rectificar.failed",
+    "contabilidad.declaracion_rectificada"
+  ],
+  "eventos_que_escucho": [],
+  "_escucho_nota": "VACÍO A PROPÓSITO: el reflejo ya atiende en module.json.subscribes rectificacion-declaracion.rectificar.request (RPC humana, la única operación) y project.activated (restauración PosPersistencia); repetir cualquiera aquí daría ANTICOLISION-001 (lo atenderían los dos). Es un CUSTODIO determinista: no tiene cajón fuzzy ni evento fire-and-forget que el LLM deba procesar.",
+  "transporte": {
+    "rpc": [
+      "rectificacion-declaracion.rectificar.request -> .response"
+    ],
+    "entrada": [
+      "rectificacion-declaracion.rectificar.request"
+    ],
+    "salida": [
+      "rectificacion-declaracion.rectificar.response",
+      "contabilidad.declaracion_rectificada"
+    ],
+    "qos": "publishAndWait (request/response correlado) en rectificar; contabilidad.declaracion_rectificada es fire-and-forget (deja constancia de que el original NO se borró y la rectificación SUMA). El estado vigente de la obligación se pide a estado-presentacion-fiscal (D12) POR EVENTO (lectura best-effort; nunca un require cruzado). project.activated lo atiende el reflejo para restaurar las rectificaciones del proyecto."
+  },
+  "contrato": {
+    "RectificarInput": "{ project_id:uuid, rol:'RECTIFICADOR_DECLARACION', original_clave|declaracion:str, tipo:str, tipos_declarables?:[str], motivo?:str, importes?:obj, obligacion?:str, ejercicio?:str, periodo?:str }",
+    "RectificarOutput": "{ project_id, rectificada:true, rectificacion:{ id, original_clave, tipo, motivo, importes, obligacion, ejercicio, periodo, estado_vigente_al_rectificar, borra_original:false, suma:true, append_only:true, traza, presentada_por_sistema:false, firmada_por_sistema:false }, total_rectificaciones, rectificaciones_de_la_original, borra_original:false, suma:true }",
+    "Errores": "rol != RECTIFICADOR_DECLARACION -> 403 PERMISSION_DENIED (segundo escritor) · original_clave/tipo ausente -> 400 · tipo no declarado -> 422 TIPO_NO_DECLARABLE. Cada error publica su par rectificacion-declaracion.rectificar.failed.",
+    "Invariantes": "LA LEY ENTRA COMO DATO (invariante 5): el TIPO es DECLARABLE (`tipos_declarables`); sin declarar manda el vocabulario del dominio (complementaria/sustitutiva) y un tipo no declarado → 422 TIPO_NO_DECLARABLE. Los importes entran DECLARADOS (`importes`) tal cual: sin ellos, la rectificación se registra SIN importes (no se inventan cifras). Sin motivo se declara motivo:null (no se inventa la causa). NO se cablea ningún plazo, ejercicio, escala ni importe legal. El sistema GENERA y REGISTRA; el ASESOR presenta y firma: cada rectificación declara presentada_por_sistema:false y firmada_por_sistema:false."
+  },
+  "ui": {
+    "type": "workspace_module",
+    "zone": "modulos",
+    "ops": {
+      "rectificar": {
+        "titulo": "Rectificar una declaración presentada (complementaria/sustitutiva)",
+        "descripcion": "Mesa de trabajo del camino de corrección POSTERIOR a la presentación. LA INVARIANTE: la declaración ORIGINAL NO se borra — la rectificación SUMA (append-only) y queda TRAZADA ligada a la original, con su motivo y su autor; este módulo no expone ninguna operación de supresión. LA LEY ENTRA COMO DATO: el TIPO de rectificación es DECLARABLE (`tipos_declarables`); sin declarar manda el vocabulario del dominio (complementaria/sustitutiva) y un tipo no declarado → 422 TIPO_NO_DECLARABLE. Los importes entran DECLARADOS (`importes`) tal cual: si no vienen, la rectificación se registra SIN importes (no se inventan cifras). El estado vigente de la obligación se consulta a estado-presentacion-fiscal (D12) por evento y se TRAZA junto a la rectificación. El sistema GENERA y REGISTRA; el asesor presenta y firma: la rectificación viaja con presentada_por_sistema:false y firmada_por_sistema:false.",
+        "zona": "formulario",
+        "args": [
+          {
+            "nombre": "rol",
+            "tipo": "select",
+            "enum": [
+              "RECTIFICADOR_DECLARACION"
+            ],
+            "required": true,
+            "descripcion": "El rol del escritor. El custodio tiene UN solo escritor: solo el rectificador (RECTIFICADOR_DECLARACION) rectifica una declaración presentada; cualquier otro valor es rechazado (403)."
+          },
+          {
+            "nombre": "original_clave",
+            "tipo": "string",
+            "required": true,
+            "placeholder": "303-2026-3T",
+            "descripcion": "La clave de la declaración ORIGINAL a la que se rectifica (obligatoria). Sin ella no hay rectificación. Es el vínculo de la TRAZA: la rectificación liga a esta original y nunca la sustituye. (Alias aceptado por el contrato: `declaracion`.)"
+          },
+          {
+            "nombre": "tipo",
+            "tipo": "select",
+            "enum": [
+              "complementaria",
+              "sustitutiva"
+            ],
+            "required": true,
+            "descripcion": "El tipo de rectificación. El enum mostrado es SOLO el vocabulario por defecto del dominio, NO una tabla legal cableada: es DATO declarable y `tipos_declarables` puede declarar otros. Un tipo no declarado → 422 TIPO_NO_DECLARABLE."
+          },
+          {
+            "nombre": "tipos_declarables",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "[\"complementaria\",\"sustitutiva\",\"rectificativa_asesor\"]",
+            "descripcion": "El vocabulario de TIPOS declarado por el negocio/asesor (la ley entra como dato). Si no se declara, manda el vocabulario del dominio (complementaria/sustitutiva). Declararlo NO cablea nada: se declara por proyecto."
+          },
+          {
+            "nombre": "motivo",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "(vacío = sin motivo declarado)",
+            "descripcion": "El motivo de la rectificación. Si no se declara, se registra motivo:null — no se inventa la causa."
+          },
+          {
+            "nombre": "importes",
+            "tipo": "json",
+            "required": false,
+            "placeholder": "{\"base\":1000,\"cuota\":210}",
+            "descripcion": "Los importes de la rectificación, DECLARADOS tal cual. Sin ellos la rectificación se registra SIN importes: no se inventan cifras ni se derivan del original."
+          },
+          {
+            "nombre": "obligacion",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "(vacío = se usa la original_clave)",
+            "descripcion": "La obligación a la que pertenece la declaración. Se usa para consultar el estado vigente a estado-presentacion-fiscal (D12) por evento; sin ella se consulta con la original_clave."
+          },
+          {
+            "nombre": "ejercicio",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "2026",
+            "descripcion": "El ejercicio declarado de la rectificación. Es DATO: no se deriva ni se cablea ningún ejercicio."
+          },
+          {
+            "nombre": "periodo",
+            "tipo": "string",
+            "required": false,
+            "placeholder": "2026-3T",
+            "descripcion": "El periodo declarado de la rectificación. Es DATO: la periodicidad no se cablea."
+          }
+        ]
+      }
+    },
+    "datos": [],
+    "_datos_nota": "HUECO DECLARADO (no se inventa): rectificacion-declaracion es un CUSTODIO que ESCRIBE (rectificar) y persiste la cadena original→rectificación, pero NO expone ninguna op RPC de LISTADO. En module.json.subscribes solo hay rectificacion-declaracion.rectificar.request y project.activated; en index.js la lectura de conjunto es `rectificacionesDe(pid, original_clave)`, lectura directa en proceso (no un RPC), y el volcado se hace por PosPersistencia al storage del proyecto (/contabilidad/rectificacion-declaracion/rectificacion-declaracion.json), no por el bus. `rectificar` devuelve UNA rectificación (+ el contador de la original), no una tabla. Por eso la zona DATOS va vacía. La CADENA original→rectificación (el dato que de verdad mueve este módulo) necesitaría un handler RPC de listado por original que hoy no existe en el backend: eso es trabajo de módulo, no de interfaz. Hasta entonces el resultado se ve en la respuesta RPC de `rectificar` y en el evento contabilidad.declaracion_rectificada."
+  },
+  "filosofia": "Corregir una declaración presentada NO es borrarla: la original se queda, y la rectificación SUMA encima, ligada a ella, con su motivo y su autor. Aquí no existe una operación de supresión — no porque esté prohibida, sino porque no está escrita. Y el tipo de rectificación no lo dicta el código: lo declara el que conoce la norma, y si declara un tipo que no había previsto, el sistema lo rechaza en vez de encajarlo a la fuerza. Los importes entran declarados: si no vienen, la rectificación se registra sin cifras, porque una cifra inventada es una firma que alguien no dio. El sistema genera y registra; el asesor presenta y firma."
+}

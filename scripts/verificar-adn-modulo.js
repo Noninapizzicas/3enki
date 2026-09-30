@@ -138,9 +138,17 @@ function medir(m, emisores) {
   const rpc = (j.ui_handlers || []).length;
   const tools = (j.tools || []).length;
 
-  // R2 · ¿escribe y calla? Sus métodos RPC cuyas ops son de ESCRITURA.
-  const opsEscritura = ops.filter(o => VERBO_ESCRITURA.test(o) && !VERBO_CONSULTA.test(o));
-  const opsConsulta = ops.filter(o => VERBO_CONSULTA.test(o));
+  // Los VERBOS de sus operaciones, para saber si ESCRIBE o PREGUNTA. Si el
+  // blueprint aún no existe (módulo recién nacido, sin F6½), salen de los
+  // ui_handlers: su `action` es '<slug>.<verbo>'. Sin esto, un módulo NUEVO sin
+  // blueprint solo daba 'revisar' y ni el hook ni el gate lo bloqueaban — el
+  // agujero por donde entra la deriva en el momento en que más importa (al nacer).
+  const verbos = ops.length ? ops
+    : (j.ui_handlers || []).map(h => String((h && h.action) || '').split('.').pop()).filter(Boolean);
+
+  // R2 · ¿escribe y calla? Sus verbos de ESCRITURA, sin evento que los anuncie.
+  const opsEscritura = verbos.filter(o => VERBO_ESCRITURA.test(o) && !VERBO_CONSULTA.test(o));
+  const opsConsulta = verbos.filter(o => VERBO_CONSULTA.test(o));
 
   // R3 · entradas huérfanas (nadie del repo emite lo que escucha)
   const huerfanas = escucha.filter(e =>
@@ -157,7 +165,7 @@ function medir(m, emisores) {
 
   return {
     slug: m.slug, familia: m.familia, rpc, tools,
-    escucha, emite, ops, opsEscritura, opsConsulta, huerfanas, sinRazon,
+    escucha, emite, ops, verbos, opsEscritura, opsConsulta, huerfanas, sinRazon,
     tipo: (b && b.ui && b.ui.type) || null,
     _j: j,
   };

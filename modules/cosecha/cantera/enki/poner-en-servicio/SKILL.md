@@ -355,6 +355,34 @@ de F8 con su salida literal y la corrección de raíz pendiente): `references/ca
   `{name, id, is_active}`; ese `id` es el UUID de ACTIVACIÓN que exigen `fs.*` y
   `telegram.bridge.vincular`. No inventarlo ni derivarlo del slug.
 - **Si el nicho se queda en `CONSTRUIDO` (`nichos.solucion.construir.failed` / `SIN_ESPECIFICACION`), TAMPOCO es un driver.** Medido 28-sep-2026 tras el restart: con el fix del `nicho_id` el embudo corre entero SOLO hasta `VALIDADO→CONSTRUIDO` y ahí muere. Causa: el pipeline (`_rpcEtapa`, caso `construir`) manda `nicho` SIN `capacidades`; `ensamblador-solucion` (D1) recibe `[]`, su `_decidirQueConstruir`/`Reflejo` devuelven null → 502. Y el ensamblador NUNCA consulta `catalogo-capacidades` (D3) —aunque su propio `_doc` y el plan D1 lo dicen (`nichos.capacidad.consultar.request`)—; ni nadie puebla el catálogo con capacidades `existente` (no hay emisor de `nichos.capacidad.declarar.request`), así que nace y vive vacío. **Discriminador:** `datos` del nicho con `estudio`+`veredicto`+`camino` y estado `CONSTRUIDO`, sin `solucion`. Dos huecos de las hojas D1/D3, no del pipeline. Sonda: `grep -rn "capacidad.consultar.request" modules/nichos/*/index.js` → 0 emisores.
+- **Si el nicho muere en `BUSCADO` (`nichos.territorio.sondear.failed` / `FUENTES_SIN_DATOS`), la causa raíz es
+  el BARRIDO DE LA PUERTA DE ENTRADA — no el embudo.** Medido 29-sep-2026 (tras arreglar D1/D3): `sondeo-territorio`
+  (B1, PRIMERA etapa) barría con `targets=[null]` → caía a la única fuente `buscador`, cuyos motores SearXNG
+  (Google CSE/Brave/DDG/Startpage) están rate-limitados/CON CAPTCHA → 0 registros → `FUENTES_SIN_DATOS` → el
+  embudo moría ANTES de llegar a C1. `estudio-demanda` (C1) YA tenía la palanca (`targets=[buscador,api,comunidad]`,
+  commit 7d5530ea 'fuentes libres sin CAPTCHA'), pero B1 **y E1 (`estudio-competencia`) quedaron fuera** del commit.
+  Además B1/E1 llevaban `FUENTE_DEFAULT='puerto'` — nombre que NO existe en la whitelist del puerto
+  (`buscador/api/scraping/comunidad`) → `RESOURCE_NOT_FOUND` silencioso. Y `comunidad` nunca se auto-conectaba en
+  `onLoad` del puerto (solo `buscador` y `api`) → 404. Fix (rama `hermes/…`): el barrido por defecto de B1 y E1 pasa
+  a `[buscador,api,comunidad]`, `FUENTE_DEFAULT`→`buscador`, y el puerto auto-conecta `comunidad`.
+  **Discriminador:** `datos` del nicho = `{semilla, territorio}` y estado `BUSCADO`; en el log, `nichos.fuente.consultar.response`
+  seguido de `nichos.territorio.sondear.failed`. Prueba: barrer a mano la fuente `api` → devuelve items (39-44, gratis).
+  **REGLA MADRE — barrer el EMBUDO ENTERO por la misma clase de bug:** `grep -rn "targets\\s*=\\|FUENTE_DEFAULT" modules/nichos/*/index.js`
+  y que TODO barrido use `[buscador,api,comunidad]`. Los 3 módulos que barren fuentes: `sondeo-territorio` (B1),
+  `estudio-demanda` (C1), `estudio-competencia` (E1). Un fix de esta clase en un solo módulo deja el embudo muerto
+  igual (murió en B1, la puerta, aunque C1 estuviera arreglado).
+- **El embudo NO necesita driver: cada evento de dominio dispara la etapa siguiente.** Verificado en vivo 29-sep-2026
+  publicando `nichos.territorio.sondeado` + `nichos.candidato.encontrado` a mano: el nicho recorrió SOLO
+  `BUSCADO→VALIDANDO→VALIDADO→CONSTRUIDO→OPERANDO→OPERANDO_EN_ESPERA` (y tras resolver el gate, `COBRANDO`). La
+  cadena la orquesta el propio pipeline (`_consumir`→`_dispararSiguiente`→`_rpcEtapa`). Un job del scheduler sirve
+  para el arranque RECURRENTE (semillas nuevas por cadencia), NO para drenar el ciclo de un nicho ya sembrado.
+- **La cola (L2) y el batch (C5) NO están cableados entre sí — pero el ciclo no los necesita.** Nadie publica
+  `nichos.candidato.tomar.request` ni `nichos.batch.programar.request` (0 emisores, medido 29-sep). Los candidatos
+  llegan al pipeline POR EVENTO (`nichos.candidato.encontrado`), sin pasar por la cola. La cola/batch (`paralelismo`)
+  es optimización de throughput, no requisito del ciclo. Cablearlo es material posterior (opcional).
+- **El frontier del ciclo completo es COBRANDO:** `motor-cobro` (E3) exige `{plataforma, importe, pagador}` — datos
+  que solo existen con un cliente real. `nichos.cobro.ejecutar.failed` ahí NO es un bug del embudo: es el borde
+  legítimo entre "nicho construido y aprobado" y "cobro real". Todo lo anterior (SEMILLA→COBRANDO) corre solo.
 - **Borrar residuos por el canal, con el UUID.** `fs.delete.request {project_id, path}` borra el
   fichero (`deleted:true`) — y sufre el MISMO fallback que `fs.write`: con slug cae al proyecto
   ACTIVO y borra en el sitio equivocado (cross-project silencioso). Al barrer un arranque fallido,

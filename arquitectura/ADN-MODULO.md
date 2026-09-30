@@ -94,6 +94,55 @@ miraba nadie. Con el hook, **todo entra al repo por el mismo sitio**.
 
 ---
 
+## 4b · El PERFIL se perfila en cada fase (y ninguna lo tira)
+
+> **La visión no se dice una vez y se olvida: se perfila, se pasa a la siguiente,
+> y cada una la respeta.** Medido 2026-09-30: el perfil **ya existe** y se pierde.
+
+F3b **ya declara, hoja por hoja**, la visión event-driven completa:
+el `tipo` (`REFLEJO`/`CUSTODIO`/`PUENTE`/`CONVERSOR`/`MICRO-AGENTE`) y **sus
+eventos** (los que sube y los que publica).
+
+```
+116 hojas · 116 declaran sus eventos · el grafo CIERRA (0 huérfanos)
+```
+
+**Y F6 no lo lee.** Decide con un mapa escrito a mano y convierte **todos** los
+RPC en `ui_handlers` — preguntas incluidas. Ahí se pierde la visión.
+
+### La cadena que debe existir
+
+| Fase | Qué perfila | Qué debe LEER de la anterior |
+|---|---|---|
+| F2 | qué piezas hay (el árbol) | — |
+| F3 | qué es cada pieza (clases, flujos) | el árbol |
+| **F3b** | **cómo habla cada pieza (sus eventos)** | las clases |
+| F4 | construye la pieza | **el perfil de F3b** (≥ los eventos declarados) |
+| F5 | documenta la pieza | el perfil + el módulo real |
+| **F6** | decide su superficie | **el perfil de F3b**: ¿pregunta o orden? |
+| F6½ | declara el `ui.*` | la decisión de F6 |
+| F7 | construye el panel | el `ui.*` |
+
+### La regla que le faltaba a F6
+
+```
+PREGUNTA / DERIVACIÓN (calcular, listar, saldos, estado…)
+   → NO cambia estado → NO hay hecho que anunciar ni orden que dar
+   → su cara es el BUS. No lleva método de interfaz.
+
+ORDEN HUMANA (declarar, cerrar, firmar, ajustar, emitir…)
+   → SÍ es superficie: el humano la opera desde el panel.
+   → y si ESCRIBE, publica el hecho (R2).
+
+PERFIL PUENTE / CONVERSOR
+   → su cara es el bus: traduce y expone. No se le inventa panel.
+```
+
+Medido con `scripts/perfilar-interfaz.js`: **14 módulos** tienen panel cuando su
+perfil dice que su cara es el bus, y **41 módulos** exponen preguntas como métodos.
+
+---
+
 ## 5 · El molde real
 
 `modules/proceso-negocio/` — **el módulo más limpio del repo**:

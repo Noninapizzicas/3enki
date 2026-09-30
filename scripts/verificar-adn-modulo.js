@@ -269,7 +269,30 @@ function main() {
 
   console.log(`\n=== RESULTADO: ${filas.length} módulos · ${conDeriva.length} con deriva · ${conRevisar.length} a revisar ===`);
   console.log('  (informe: NO bloquea. Con --gate, exit 1 si hay deriva.)\n');
-  process.exit(gate && conDeriva.length ? 1 : 0);
+  if (gate && conDeriva.length) process.exit(1);
 }
 
-main();
+// ── UNA sola implementación, dos puertas (lo que declara proceso-negocio):
+//   · CLI   → node scripts/verificar-adn-modulo.js
+//   · require → el gate de proceso-negocio mide el ADN al construir
+// Así la regla no se duplica: el gate y el script dicen lo mismo.
+module.exports = { descubrir, leer, medir, juzgar, emiteEnCodigo, arrayDe, evDe, RE_PUBLISH, VERBO_CONSULTA, VERBO_ESCRITURA };
+
+/** Mide UN módulo por su slug y devuelve {ok, hallazgos, medida}. Uso: el gate. */
+function medirSlug(slug) {
+  const m = descubrir().find(x => x.slug === slug);
+  if (!m) return { ok: false, hallazgos: [{ regla: 'R0', gravedad: 'deriva', msg: `no encuentro el módulo ${slug}` }], medida: null };
+  const emisores = new Set();
+  for (const ot of descubrir()) {
+    const { j } = leer(ot);
+    for (const e of arrayDe(j.publishes).map(evDe)) if (!esRespuesta(e)) emisores.add(e);
+    for (const e of emiteEnCodigo(ot.dir)) emisores.add(e);
+  }
+  const x = medir(m, emisores);
+  const hallazgos = juzgar(x);
+  return { ok: !hallazgos.some(h => h.gravedad === 'deriva'), hallazgos, medida: { rpc: x.rpc, eventos: x.emite.length, tipo: x.tipo } };
+}
+module.exports.medirSlug = medirSlug;
+
+// Solo ejecuta el informe si se llama como CLI (no cuando se require).
+if (require.main === module) main();

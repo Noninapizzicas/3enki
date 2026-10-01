@@ -1,0 +1,45 @@
+{
+  "_doc": "Manifest de fiscal/asiento-personal — REFLEJO STATELESS (G3, hoja del plan). GASTO DE PERSONAL, RETENCION Y PAGO -> ASIENTO EQUILIBRADO. Determinista: toma el recibo de nomina (G1, via recibo-nomina.dar_forma.request por EVENTO best-effort) y la cotizacion (G2, via obligacion-seguridad-social.calcular.request) y CONSTRUYE el asiento del coste de personal: sueldo bruto y SS de empresa al DEBE; retencion de IRPF, SS (trabajador+empresa) y neto pendiente de pago al HABER. EL CERROJO: el asiento se construye para CUADRAR POR CONSTRUCCION (neto = bruto − retencion − cotizacion_trabajador); si las cifras no sostienen el cuadre NO se inventa un ajuste para tapar la diferencia (se declara ABIERTO y no se sube a asentar). Honestidad (invariante 13): sin el sueldo bruto NO hay asiento que construir; lo que no venga declarado NO se rellena, se declara en `abierto`. R2 no aplica: el asiento lo ASIENTA escritor-diario (B2) — esta hoja SUBE best-effort escritor-diario.asentar.request con el asiento cuadrado. ESCUCHA contabilidad.nomina_recibida (puerto-nomina G4, emisor vivo; fire-and-forget). Sin store propio (STATELESS). La op construir es CLASE PREGUNTA → SIN ui_handler.",
+  "name": "asiento-personal",
+  "version": "0.1.0",
+  "description": "Reflejo (G3): asiento de personal equilibrado (sueldo+SS al debe; retencion+SS+neto al haber) desde el recibo y la cotizacion.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "asiento-personal.construir.request",
+      "handler": "onConstruirRequest",
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id, nomina?/recibo?, bruto?, retencion?, cotizacion_trabajador?, cotizacion_empresa?, ...} → {project_id, asiento, lineas, desglose, suma_debe, suma_haber, diferencia, cuadra, equilibrado, abierto}. Construye el asiento de personal equilibrado; sin bruto no lo inventa. SUBE best-effort escritor-diario.asentar.request. Responde por asiento-personal.construir.response; falta project_id → asiento-personal.construir.failed."
+    },
+    {
+      "event": "contabilidad.nomina_recibida",
+      "handler": "onNominaRecibida",
+      "description": "Fire-and-forget (puerto-nomina G4): llego una nomina del sistema de personal → se toma constancia del contexto. No responde."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "asiento-personal.construir.response",
+      "description": "Respuesta RPC correlada de la op construir (una sola cara: el bus)."
+    },
+    {
+      "event": "asiento-personal.construir.failed",
+      "description": "Par de fallo determinista: falta project_id → {status, code, message}. Cierra el circulo de construir.request."
+    },
+    {
+      "event": "escritor-diario.asentar.request",
+      "description": "Subida (REQUEST por EVENTO, SOLO si el asiento sale equilibrado): ordena asentar el asiento de personal a B2 (escritor-diario). AsientoPersonal construye; escritor-diario asienta."
+    },
+    {
+      "event": "recibo-nomina.dar_forma.request",
+      "description": "Subida (REQUEST por EVENTO, best-effort): pide a G1 la forma asentable del recibo de nomina cuando el bruto no viene declarado."
+    },
+    {
+      "event": "obligacion-seguridad-social.calcular.request",
+      "description": "Subida (REQUEST por EVENTO, best-effort): pide a G2 la cotizacion de empresa cuando no viene declarada."
+    }
+  ],
+  "tools": [
+    { "name": "asiento-personal.construir", "description": "Construye (PREGUNTA) el asiento de personal equilibrado desde el recibo y la cotizacion." }
+  ],
+  "ui_handlers": []
+}

@@ -1,0 +1,37 @@
+{
+  "_doc": "Manifest de entrada/panel-proceso-contable — REFLEJO STATELESS (P1, hoja del plan). EL 'DISPLAY DE COCINA' de la contabilidad: que entra, que se procesa, que esta en cola y que falla. ESPEJO del proceso de entrada, no escritor: OBSERVA contabilidad.hecho_recibido (puerto-evento-vertical A1) y contabilidad.excepcion_encolada (encolado-excepcion A8.1) en ventana acotada y COMPONE un latido. NO calcula la tasa (eso es tasa-cobertura-entrada P4): le SUBE por EVENTO tasa-cobertura-entrada.calcular.request. Honestidad (invariante 13): lo que no llega NO se rellena — se declara en `abierto`. NO escribe, NO persiste. NOTA R3: el plan declara escucha de contabilidad.excepcion_desatascada (desatasco-entrada P3) — su emisor AUN no existe → NO se declara (cadena colgada); y las subidas a encolado-excepcion.encolar.request/historial-proceso-contable.anotar.request NO se cablean: el panel observa, no escribe. RPC latido es CLASE PREGUNTA → va por el bus, sin panel. Publica panel-proceso-contable.latido.response y su par .failed.",
+  "name": "panel-proceso-contable",
+  "version": "0.1.0",
+  "description": "Reflejo (P1): el display de cocina de la contabilidad. Que entra, se procesa, esta en cola y falla; lo ausente se declara, no se inventa.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "panel-proceso-contable.latido.request",
+      "handler": "onLatidoRequest",
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id, pendientes?} → {project_id, entra, procesa, en_cola, desatascadas, tasa, abierto}. Compone el latido observado; la tasa la lee de P4. Responde por panel-proceso-contable.latido.response; falta project_id → panel-proceso-contable.latido.failed."
+    },
+    {
+      "event": "contabilidad.hecho_recibido",
+      "handler": "onHechoRecibido",
+      "description": "Fire-and-forget (A1 puerto-evento-vertical): entro un hecho. Se observa en ventana acotada para el latido; no se recalcula ni se escribe."
+    },
+    {
+      "event": "contabilidad.excepcion_encolada",
+      "handler": "onExcepcionEncolada",
+      "description": "Fire-and-forget (A8.1 encolado-excepcion): algo dudoso quedo en cola. Se observa en ventana acotada; no se recalcula ni se escribe."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "panel-proceso-contable.latido.response",
+      "description": "Respuesta RPC correlada de la op latido (una sola cara: el bus)."
+    },
+    {
+      "event": "panel-proceso-contable.latido.failed",
+      "description": "Par de fallo determinista: falta project_id → {status, code, message}. Cierra el circulo de latido.request."
+    }
+  ],
+  "tools": [
+    { "name": "panel-proceso-contable.latido", "description": "Compone (PREGUNTA) el latido del proceso de entrada: que entra, procesa, esta en cola y falla." }
+  ]
+}

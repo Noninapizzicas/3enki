@@ -1,0 +1,32 @@
+{
+  "_doc": "Manifest de libro/cuadre-cobro-pago — REFLEJO STATELESS (E3, hoja del plan). CLAVE NATURAL COMPARTIDA: un movimiento bancario = un cobro/pago. Determinista. Hermano puntual de E1: comprueba UN movimiento contra UN cobro/pago y, si cuadra y la peticion declara el asiento, SUBE best-effort escritor-diario.asentar.request (B2, single-writer del libro); lo que NO cuadra se DECLARA y se sube a partida-no-identificada.juzgar.request (E7, el juicio) — no se imputa a ojo. Honestidad (invariante 13): sin las dos caras el cuadre NO se afirma (queda [ABIERTO]). NO escribe, NO persiste. RPC cuadrar es CLASE PREGUNTA → va por el bus, sin panel. Publica cuadre-cobro-pago.cuadrar.response y su par .failed. Escucha contabilidad.asiento_asentado (B2 escritor-diario, emitido).",
+  "name": "cuadre-cobro-pago",
+  "version": "0.1.0",
+  "description": "Reflejo (E3): cuadre bancario por clave natural compartida (un movimiento = un cobro/pago). Sin las dos caras no se afirma el cuadre.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "cuadre-cobro-pago.cuadrar.request",
+      "handler": "onCuadrarRequest",
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id, movimiento, cobro_pago, asiento?} → {project_id, clave, importe_movimiento, importe_cobro_pago, diferencia, cuadra, abierto}. Cuadra por clave natural; si cuadra sube el asiento a B2, si no lo sube a E7. Responde por cuadre-cobro-pago.cuadrar.response; falta project_id → cuadre-cobro-pago.cuadrar.failed."
+    },
+    {
+      "event": "contabilidad.asiento_asentado",
+      "handler": "onAsientoAsentado",
+      "description": "Fire-and-forget (B2 escritor-diario): un asiento quedo en el libro. Se observa (ventana acotada); no se recalcula ni se escribe."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "cuadre-cobro-pago.cuadrar.response",
+      "description": "Respuesta RPC correlada de la op cuadrar (una sola cara: el bus)."
+    },
+    {
+      "event": "cuadre-cobro-pago.cuadrar.failed",
+      "description": "Par de fallo determinista: falta project_id → {status, code, message}. Cierra el circulo de cuadrar.request."
+    }
+  ],
+  "tools": [
+    { "name": "cuadre-cobro-pago.cuadrar", "description": "Cuadra (PREGUNTA) un movimiento bancario contra un cobro/pago por clave natural compartida." }
+  ]
+}

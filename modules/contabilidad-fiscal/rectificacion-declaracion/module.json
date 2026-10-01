@@ -1,0 +1,43 @@
+{
+  "_doc": "Manifest de fiscal/rectificacion-declaracion — CUSTODIO CON PERSISTENCIA (D14, hoja del plan). EL CAMINO DE CORRECCION POSTERIOR A LA PRESENTACION (complementaria/sustitutiva). Es el <> de B5 (asiento-ajuste) en el eje fiscal: B5 corrige el LIBRO, este corrige la DECLARACION. UN SOLO ESCRITOR (guard de rol RECTIFICACION_DECLARACION; otro → 403). APPEND-ONLY: cada rectificacion se apila con su secuencia; la declaracion ORIGINAL queda INTACTA — rectificar = AÑADIR, jamas editar. Sin declaracion original o sin motivo NO se rectifica (dato ausente = desconocido). IDEMPOTENTE por clave (at-least-once del bus). Persiste por proyecto via PosPersistencia (storage /contabilidad/rectificacion-declaracion), restaura en project.activated y vuelca en onUnload. R2: al rectificar publica contabilidad.declaracion_rectificada (lo consume estado-presentacion-fiscal) y SUBE best-effort estado-presentacion-fiscal.avanzar.request (la declaracion corregida vuelve al circuito de presentacion; este modulo NO presenta). La RPC rectificar es CLASE ORDEN → SÍ lleva ui_handler.",
+  "name": "rectificacion-declaracion",
+  "version": "0.1.0",
+  "description": "Custodio (D14): camino de correccion posterior a la presentacion (complementaria/sustitutiva). Single-writer, append-only; la declaracion original nunca se edita.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "rectificacion-declaracion.rectificar.request",
+      "handler": "onRectificarRequest",
+      "description": "RPC custodio (ORDEN, panel): {project_id, rol:'RECTIFICACION_DECLARACION', declaracion, motivo, tipo?('complementaria'|'sustitutiva'), periodo?, clave?, correccion?, base?, cuota?} → {project_id, rectificacion, rectificada, total, append_only}. Guard de UN escritor (otro rol → 403). Idempotente por clave (duplicado:true). Publica contabilidad.declaracion_rectificada (R2) y SUBE estado-presentacion-fiscal.avanzar.request. Responde por rectificacion-declaracion.rectificar.response; falta declaracion/motivo → rectificacion-declaracion.rectificar.failed."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Restaura la parcela de rectificaciones del proyecto activado desde el storage (PosPersistencia). Emitido por el core."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "contabilidad.declaracion_rectificada",
+      "description": "Fire-and-forget (D14): una declaracion quedo rectificada → {project_id, rectificacion_id, clave, tipo, declaracion, motivo}. Lo escucha estado-presentacion-fiscal."
+    },
+    {
+      "event": "estado-presentacion-fiscal.avanzar.request",
+      "description": "Subida (REQUEST por EVENTO) al circuito fiscal: la declaracion corregida vuelve a presentacion. RectificacionDeclaracion rectifica; estado-presentacion-fiscal avanza el estado."
+    },
+    {
+      "event": "rectificacion-declaracion.rectificar.response",
+      "description": "Respuesta RPC correlada de la op rectificar (una sola cara: el bus)."
+    },
+    {
+      "event": "rectificacion-declaracion.rectificar.failed",
+      "description": "Par de fallo determinista: falta project_id/declaracion/motivo o falta el rol de escritor (403) → {status, code, message}. Cierra el circulo de rectificar.request."
+    }
+  ],
+  "tools": [
+    { "name": "rectificacion-declaracion.rectificar", "description": "Rectifica (ORDEN) una declaracion ya presentada, dejando la original intacta y anunciando contabilidad.declaracion_rectificada." }
+  ],
+  "ui_handlers": [
+    { "domain": "contabilidad", "action": "rectificacion-declaracion.rectificar", "handler": "onRectificarRequest", "type": "system_panel", "zone": "lateral_derecha" }
+  ]
+}

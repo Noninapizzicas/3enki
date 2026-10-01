@@ -1,0 +1,55 @@
+{
+  "_doc": "Manifest de entrada/desatasco-entrada — MICRO-AGENTE (P3, hoja del plan). RESOLVER/REENCOLAR/DESCARTAR una excepcion CON MOTIVO: es la ACCION que completa A8, y ES EL UNICO MICRO-AGENTE QUE PUBLICA (no PROPONE — ACTUA sobre la cola de lo dudoso). A8.1 encola, A8.2 avisa; aqui se DECIDE que se hace: resolver (SUBE escritor-diario.asentar.request, se asienta), reencolar (SUBE encolado-excepcion.encolar.request con el motivo nuevo), descartar (SUBE regla-contrapartida.aplicar.request si hay contrapartida declarada). TODO desatasco se anota en historial-proceso-contable.anotar.request (append-only). SIN MOTIVO NO SE ACTUA (una excepcion resuelta/descartada sin causa es una excepcion que se tapa); sin excepcion NO hay nada que desatascar. R2: al desatascar publica el HECHO contabilidad.excepcion_desatascada (lo consume regla-contrapartida —que aprende de la resolucion— y el historial). Escucha contabilidad.excepcion_encolada (encolado-excepcion A8.1, emisor vivo; fire-and-forget, observa ventana acotada). STATELESS (sin PosPersistencia). La RPC juzgar es CLASE ORDEN → SÍ lleva ui_handler.",
+  "name": "desatasco-entrada",
+  "version": "0.1.0",
+  "description": "Micro-agente (P3): resuelve/reencola/descarta una excepcion con motivo. Unico micro-agente que publica (ACTUA, no propone).",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "desatasco-entrada.juzgar.request",
+      "handler": "onJuzgarRequest",
+      "description": "RPC micro-agente (ORDEN, panel): {project_id, excepcion?/excepcion_id?/clave?, accion?('resolver'|'reencolar'|'descartar'), motivo, asiento?, contrapartida?} → {project_id, excepcion_id, clave, accion, motivo, desatascada, resuelta, reencolada, descartada}. ACTUA sobre la excepcion y publica contabilidad.excepcion_desatascada (R2); SUBE la accion concreta (asentar/encolar/aplicar regla/anotar). Sin excepcion o sin motivo → INVALID_INPUT. Responde por desatasco-entrada.juzgar.response; par de fallo desatasco-entrada.juzgar.failed."
+    },
+    {
+      "event": "contabilidad.excepcion_encolada",
+      "handler": "onExcepcionEncolada",
+      "description": "Fire-and-forget (encolado-excepcion A8.1): quedo una excepcion en espera de revision → se observa (ventana acotada) para poder desatascarla. No responde."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "contabilidad.excepcion_desatascada",
+      "description": "Fire-and-forget (P3): una excepcion quedo desatascada con su accion y motivo → {project_id, excepcion_id, clave, accion, motivo, en}. Lo consume regla-contrapartida (registra regla aprendida) y el historial de proceso."
+    },
+    {
+      "event": "escritor-diario.asentar.request",
+      "description": "Subida (REQUEST por EVENTO, SOLO al resolver con asiento): ordena asentar el asiento de la excepcion a B2. DesatascoEntrada desatasca; escritor-diario asienta."
+    },
+    {
+      "event": "encolado-excepcion.encolar.request",
+      "description": "Subida (REQUEST por EVENTO, SOLO al reencolar): devuelve la excepcion a la cola A8.1 con el motivo nuevo."
+    },
+    {
+      "event": "regla-contrapartida.aplicar.request",
+      "description": "Subida (REQUEST por EVENTO, SOLO al descartar con contrapartida declarada): aplica la contrapartida para que el sistema aprenda de la resolucion."
+    },
+    {
+      "event": "historial-proceso-contable.anotar.request",
+      "description": "Subida (REQUEST por EVENTO, SIEMPRE): anota el desatasco en el historial del proceso (append-only, P2)."
+    },
+    {
+      "event": "desatasco-entrada.juzgar.response",
+      "description": "Respuesta RPC correlada de la op juzgar (una sola cara: el bus)."
+    },
+    {
+      "event": "desatasco-entrada.juzgar.failed",
+      "description": "Par de fallo determinista: falta project_id/excepcion/motivo → {status, code, message}. Cierra el circulo de juzgar.request."
+    }
+  ],
+  "tools": [
+    { "name": "desatasco-entrada.juzgar", "description": "Desatasca (ORDEN) una excepcion: resolver/reencolar/descartar con motivo, y anuncia contabilidad.excepcion_desatascada." }
+  ],
+  "ui_handlers": [
+    { "domain": "contabilidad", "action": "desatasco-entrada.juzgar", "handler": "onJuzgarRequest", "type": "system_panel", "zone": "lateral_derecha" }
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "_doc": "Manifest de libro/partida-no-identificada — MICRO-AGENTE (E7, hoja del plan). RECONOCE Y CLASIFICA EL MOVIMIENTO SIN CONTRAPARTIDA (comision/interes/devolucion). PROPONE, no escribe: la mitad REFLEJA (determinista) mira el movimiento, SUBE regla-movimiento-bancario.aplicar.request (E8, por EVENTO) para que la REGLA DECLARADA decida la cuenta, y expone una PROPUESTA. El corte duro lo fija regla-movimiento-bancario (E8); el que asienta es escritor-diario (B2) — esta hoja NO fija, NO apila. Dato ausente = desconocido: sin movimiento no hay nada que reconocer; sin regla declarada que lo cubra la contrapartida queda ABIERTA (no se adivina la cuenta de la comision) y SUBE encolado-excepcion.encolar.request (A8.1, lo dudoso a cola). ESCUCHA contabilidad.movimiento_regla_declarada (regla-movimiento-bancario E8, emisor vivo; fire-and-forget, observa ventana acotada). STATELESS (sin PosPersistencia). RPC juzgar es CLASE PREGUNTA → SIN ui_handler, su cara es el bus. Publica partida-no-identificada.juzgar.response y su par .failed.",
+  "name": "partida-no-identificada",
+  "version": "0.1.0",
+  "description": "Micro-agente (E7): reconoce y clasifica el movimiento sin contrapartida (comision/interes/devolucion). Propone; sin regla, a cola.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "partida-no-identificada.juzgar.request",
+      "handler": "onJuzgarRequest",
+      "description": "RPC micro-agente (PREGUNTA, por el bus): {project_id, movimiento, tipo?, contexto?, importe?} → {project_id, movimiento_id, clave, concepto, tipo, importe, contexto, propuesta{cuenta, tipo, completa}, propone:true, fija:false, regla, abierto}. SUBE regla-movimiento-bancario.aplicar.request (E8) para que la regla declarada proponga la cuenta; si no cubre, SUBE encolado-excepcion.encolar.request. Sin movimiento → INVALID_INPUT. Responde por partida-no-identificada.juzgar.response."
+    },
+    {
+      "event": "contabilidad.movimiento_regla_declarada",
+      "handler": "onMovimientoReglaDeclarada",
+      "description": "Fire-and-forget (regla-movimiento-bancario E8): quedo declarada/cambio una regla de movimiento → se observa (memoria acotada) para tener el contexto de reglas declaradas. No responde."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "partida-no-identificada.juzgar.response",
+      "description": "Respuesta RPC correlada de la op juzgar (una sola cara: el bus)."
+    },
+    {
+      "event": "partida-no-identificada.juzgar.failed",
+      "description": "Par de fallo determinista: falta project_id o movimiento → {status, code, message}. Cierra el circulo de juzgar.request."
+    },
+    {
+      "event": "regla-movimiento-bancario.aplicar.request",
+      "description": "Subida (REQUEST por EVENTO): pide a E8 la contrapartida declarada del contexto. PartidaNoIdentificada propone; regla-movimiento-bancario fija."
+    },
+    {
+      "event": "encolado-excepcion.encolar.request",
+      "description": "Subida (REQUEST por EVENTO, SOLO si NO hay regla que cubra): encola lo dudoso en A8.1. No se adivina la contrapartida."
+    }
+  ],
+  "tools": [
+    { "name": "partida-no-identificada.juzgar", "description": "Propone (PREGUNTA) la clasificacion de un movimiento sin contrapartida segun la regla declarada." }
+  ],
+  "ui_handlers": []
+}

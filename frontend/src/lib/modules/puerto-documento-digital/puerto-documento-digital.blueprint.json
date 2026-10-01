@@ -1,0 +1,64 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "puerto-documento-digital",
+  "version": "blueprint-2.0.0",
+  "moduleId": "contabilidad",
+  "titulo": "Puerto de documento digital",
+  "_doc": "Blueprint v2 de INTERFAZ del módulo contabilidad/puerto-documento-digital (F6½). Declara la sección `ui` para el BlueprintForm (patrón interfaz-dinamico). PUENTE STATELESS (A5): recepción DIGITAL declarable. Recibe un documento de una fuente declarada y lo encadena a la entrada; publica el HECHO contabilidad.documento_recibido. PUENTE/CUSTODIO de la vertical contabilidad. Las acciones van DOTTED ('<modulo>.<accion>') y el transporte.rpc va VACÍO: el RPC real es contabilidad.<accion>.request (domain 'contabilidad', action 'puerto-documento-digital.recibir' en ui_handlers) y la regex de deriveZones solo parsea acciones de 2 segmentos; el wrapper mqttRequest('contabilidad','<modulo>.<accion>') emite ui/request/contabilidad/<modulo>.<accion>, que casa con el ui_handler. Los args salen de los parámetros REALES del handler en index.js.",
+  "eventos_publicados": [
+    "contabilidad.documento_recibido"
+  ],
+  "eventos_que_escucho": [
+    "puerto-documento-digital.recibir.response",
+    "puerto-documento-digital.recibir.failed"
+  ],
+  "transporte": {
+    "rpc": [],
+    "salida": [
+      "contabilidad.documento_recibido"
+    ],
+    "qos": "publishAndWait (request/response correlado) vía ui/request/contabilidad/<modulo>.<accion>; timeout del panel 10s. transporte.rpc vacío a propósito (acciones DOTTED)."
+  },
+  "ui": {
+    "_doc": "Panel de la cara humana de puerto-documento-digital: la(s) op(s) de ESCRITURA (ORDEN) del módulo, con sus args reales. El BlueprintForm la(s) invoca por ui/request/contabilidad/<accion>.",
+    "ops": {
+      "puerto-documento-digital.recibir": {
+        "titulo": "Recibir un documento digital de una fuente declarada",
+        "descripcion": "Recepciona (ORDEN) un documento digital de una fuente/canal declarado y lo ENCADENA al pipeline de entrada (normalizador-hecho y extraccion-dato). Publica el hecho contabilidad.documento_recibido. Sin fuente no hay recepción (dato ausente = desconocido).",
+        "rol": "asesor",
+        "forma": "editor-bloque (fuente/documento/formato/metadatos)",
+        "senal_pareada": "contabilidad.documento_recibido",
+        "args": [
+          {
+            "nombre": "fuente",
+            "tipo": "text",
+            "required": true,
+            "descripcion": "Fuente/canal digital declarado (el adaptador lo pone el sitio; no se cablea)."
+          },
+          {
+            "nombre": "documento",
+            "tipo": "json",
+            "required": true,
+            "descripcion": "El documento digital recibido (objeto)."
+          },
+          {
+            "nombre": "formato",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Formato del documento (si no lo declara el propio documento)."
+          },
+          {
+            "nombre": "metadatos",
+            "tipo": "json",
+            "required": false,
+            "descripcion": "Metadatos de la recepción (objeto)."
+          }
+        ],
+        "errores": "400 INVALID_INPUT (sin documento); 400 FUENTE_NO_DECLARADA (sin fuente)"
+      }
+    },
+    "roles": {
+      "puerto-documento-digital.recibir": "asesor"
+    }
+  }
+}

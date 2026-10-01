@@ -1,0 +1,9 @@
+{
+  "id": "regla-contrapartida",
+  "name": "Regla de contrapartida",
+  "version": "0.1.0",
+  "zone": "work-bar",
+  "order": 49,
+  "icon": "🧭",
+  "label": "Regla contrapartida"
+}

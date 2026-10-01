@@ -1,0 +1,9 @@
+{
+  "id": "escritor-diario",
+  "name": "Escritor del diario",
+  "version": "0.1.0",
+  "zone": "system-bar",
+  "order": 92,
+  "icon": "📓",
+  "label": "Escritor diario"
+}

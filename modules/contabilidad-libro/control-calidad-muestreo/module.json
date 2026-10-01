@@ -1,0 +1,37 @@
+{
+  "_doc": "Manifest de libro/control-calidad-muestreo — REFLEJO STATELESS (L8, hoja del plan). Selecciona lo que exige OJO HUMANO por SEÑALES DURAS: la regla es EXCEPCION + MUESTRA, NO revisar todo (revisa_todo:false). Excepcion = señal estructural (rectificativo/ajuste/descuadre/cuenta_sin_declarar/fuera_de_periodo) o importe por encima del umbral declarable; muestra = fraccion del resto elegida por hash DETERMINISTA (mismo input + mismos umbrales → misma seleccion). Umbrales (`reglas:UmbralDeMuestreo`) son declarables; si no vienen, se usan defaults Y se declara en abierto (no se finge que fueron declarados). NO escribe, NO persiste. RPC seleccionar es CLASE PREGUNTA → va por el bus, sin panel. Publica control-calidad-muestreo.seleccionar.response y su par .failed. Escucha contabilidad.asiento_asentado (B2) y contabilidad.contrapartida_regla_declarada (A6.2), ambos emitidos.",
+  "name": "control-calidad-muestreo",
+  "version": "0.1.0",
+  "description": "Reflejo (L8): elige por señales duras (excepcion + muestra) lo que exige ojo humano; no revisa todo. Determinista.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "control-calidad-muestreo.seleccionar.request",
+      "handler": "onSeleccionarRequest",
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id, asientos?, umbral_importe?, fraccion_muestra?} → {project_id, excepciones, muestra, num_revisar, umbrales, determinista, abierto}. Selecciona por señal dura + muestra determinista del resto. Responde por control-calidad-muestreo.seleccionar.response. Payload invalido → control-calidad-muestreo.seleccionar.failed."
+    },
+    {
+      "event": "contabilidad.asiento_asentado",
+      "handler": "onAsientoAsentado",
+      "description": "Fire-and-forget (B2 escritor-diario): un asiento quedo en el libro. Se observa (ventana acotada) para poder muestrearlo; no se recalcula nada ni se escribe."
+    },
+    {
+      "event": "contabilidad.contrapartida_regla_declarada",
+      "handler": "onContrapartidaReglaDeclarada",
+      "description": "Fire-and-forget (A6.2 regla-contrapartida): una regla de contrapartida quedo declarada/cambio de estado. Se registra la marca (conviene mirar los asientos que la usan); no se decide por ella."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "control-calidad-muestreo.seleccionar.response",
+      "description": "Respuesta RPC correlada de la op seleccionar (una sola cara: el bus)."
+    },
+    {
+      "event": "control-calidad-muestreo.seleccionar.failed",
+      "description": "Par de fallo determinista: falta project_id → {status, code, message}. Cierra el circulo de seleccionar.request."
+    }
+  ],
+  "tools": [
+    { "name": "control-calidad-muestreo.seleccionar", "description": "Selecciona (PREGUNTA) por excepcion + muestra lo que exige revision humana." }
+  ]
+}

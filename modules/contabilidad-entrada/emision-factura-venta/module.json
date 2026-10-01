@@ -1,0 +1,39 @@
+{
+  "_doc": "Manifest de entrada/emision-factura-venta — CUSTODIO CON PERSISTENCIA (O1, hoja del plan). La cara EMITIDA con SERIE/NUMERACION: decision del dueno — contabilidad SI emite la factura de venta; y por eso es CUSTODIO: un NUMERO DUPLICADO = CORRUPCION → UN escritor. EL CERROJO: emitir dos veces la misma (serie, numero) se RECHAZA (409 NUMERO_DUPLICADO); no se renumera en silencio. El numero se DECLARA o se toma el SIGUIENTE de la serie (secuencia del custodio); sin base ni lineas ni total NO se emite (no se fabrica la cuantia). APPEND-ONLY: la factura emitida se apila; una rectificacion es OTRA factura (O2), no una edicion. Persiste por proyecto via PosPersistencia (storage /contabilidad/emision-factura-venta), restaura en project.activated y vuelca en onUnload. Proyeccion _emitir(serie,base,iva,lineas,tercero)->Factura (ORDEN). R2: al emitir publica contabilidad.factura_emitida (lo consumen registro-verifactu y factura-rectificativa) y SUBE best-effort verifactu/factura-electronica/asiento/tercero/archivo. RPC emitir es CLASE ORDEN → SÍ lleva ui_handler.",
+  "name": "emision-factura-venta",
+  "version": "0.1.0",
+  "description": "Custodio (O1): emite la factura de venta con serie/numeracion; numero duplicado se rechaza (corrupcion). Anuncia contabilidad.factura_emitida.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "emision-factura-venta.emitir.request",
+      "handler": "onEmitirRequest",
+      "description": "RPC custodio (ORDEN, panel): {project_id, serie?, numero?, base?, iva?, total?, lineas?, tercero?, asiento?, fecha?} → {project_id, factura, emitida, total_emitidas, ultimo_de_serie, append_only, abierto}. Numeracion unica por (serie,numero): duplicado → 409 NUMERO_DUPLICADO. Publica contabilidad.factura_emitida (R2) y responde por emision-factura-venta.emitir.response. Payload invalido o numero duplicado → emision-factura-venta.emitir.failed."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Restaura la numeracion por serie del proyecto activado desde el storage (PosPersistencia). Emitido por el core."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "contabilidad.factura_emitida",
+      "description": "Fire-and-forget (O1): una factura de venta quedo emitida → {project_id, factura, serie, numero, total}. Lo consumen registro-verifactu y factura-rectificativa."
+    },
+    {
+      "event": "emision-factura-venta.emitir.response",
+      "description": "Respuesta RPC correlada de la op emitir."
+    },
+    {
+      "event": "emision-factura-venta.emitir.failed",
+      "description": "Par de fallo determinista: falta project_id/base/lineas o la (serie,numero) ya existe (409 NUMERO_DUPLICADO) → {status, code, message}. Cierra el circulo de emitir.request."
+    }
+  ],
+  "tools": [
+    { "name": "emision-factura-venta.emitir", "description": "Emite (ORDEN) una factura de venta con su serie/numero unico y anuncia el hecho." }
+  ],
+  "ui_handlers": [
+    { "domain": "contabilidad", "action": "emision-factura-venta.emitir", "handler": "onEmitirRequest", "type": "system_panel", "zone": "lateral_derecha" }
+  ]
+}

@@ -1,0 +1,54 @@
+{
+  "_doc": "Manifest de libro/escritor-diario — CUSTODIO CON PERSISTENCIA (B2, hoja del plan). ES EL CUSTODIO DEL LIBRO: single-writer por parcela; aqui se ASIENTA y nadie mas escribe el diario. EL CERROJO ES LA PARTIDA DOBLE: un asiento SOLO entra si suma(DEBE) == suma(HABER); si no cuadra NO se inventa el descuadre — se RECHAZA (422 PARTIDA_DOBLE_ROTA con las dos sumas y la diferencia declaradas). APPEND-ONLY: cada asiento se apila con su secuencia y su huella; NADA se borra, NADA se sobrescribe — corregir = AÑADIR otro asiento. IDEMPOTENTE por huella (at-least-once del bus): el mismo asiento no se apila dos veces. Si el ejercicio esta cerrado no se asienta (409). Persiste por proyecto via PosPersistencia (storage /contabilidad/escritor-diario), restaura en project.activated y vuelca en onUnload. Proyeccion _asentar(lineas)->Asiento (ORDEN). R2: al asentar publica contabilidad.asiento_asentado (el hecho que alimenta mayor-balanza, traza-asiento, balance e informes). El RPC asentar es CLASE ORDEN → SÍ lleva ui_handler.",
+  "name": "escritor-diario",
+  "version": "0.1.0",
+  "description": "Custodio (B2): el libro. Single-writer, append-only; rechaza si la partida doble no cuadra (no inventa el descuadre); anuncia contabilidad.asiento_asentado.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "escritor-diario.asentar.request",
+      "handler": "onAsentarRequest",
+      "description": "RPC custodio (ORDEN, panel): {project_id, asiento{lineas:[{cuenta,debe,haber}], fecha?, concepto?, clave?}, origen?} → {project_id, asiento, asentado, total, append_only, abierto}. Guarda de PARTIDA DOBLE: debe != haber → 422 PARTIDA_DOBLE_ROTA (no se inventa el descuadre). Ejercicio cerrado → 409. Publica contabilidad.asiento_asentado (R2) y responde por escritor-diario.asentar.response. Payload invalido o descuadre → escritor-diario.asentar.failed."
+    },
+    {
+      "event": "contabilidad.hecho_recibido",
+      "handler": "onHechoRecibido",
+      "description": "Fire-and-forget (A1/A2): llego un hecho de la operacion ya normalizado. Si el hecho DECLARA su asiento propuesto, se asienta por la misma guarda de partida doble y se anuncia contabilidad.asiento_asentado; si no lo trae, NO se inventa un apunte (no se asienta)."
+    },
+    {
+      "event": "contabilidad.ajuste_entrado",
+      "handler": "onAjusteEntrado",
+      "description": "Fire-and-forget (B5 asiento-ajuste): la correccion del asesor entro por su camino. Si el ajuste declara su asiento, se asienta (marcado ajuste:true) por la misma guarda; no borra nada."
+    },
+    {
+      "event": "contabilidad.hecho_rectificado",
+      "handler": "onHechoRectificado",
+      "description": "Fire-and-forget (A13 hecho-rectificativo): un hecho posterior corrige/anula uno anterior SIN borrarlo. Si trae asiento, se apila (marcado rectificativo:true); el original queda intacto (append-only)."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Restaura el diario del proyecto activado desde el storage (PosPersistencia). Emitido por el core."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "contabilidad.asiento_asentado",
+      "description": "Fire-and-forget (B2): un asiento quedo en el libro → {project_id, asiento, numero, total}. Alimenta a mayor-balanza, traza-asiento, balance-situacion, cuenta-resultados, liquidacion-iva, control-calidad-muestreo, expediente-documental, informe-accionable y demas derivados."
+    },
+    {
+      "event": "escritor-diario.asentar.response",
+      "description": "Respuesta RPC correlada de la op asentar."
+    },
+    {
+      "event": "escritor-diario.asentar.failed",
+      "description": "Par de fallo determinista: falta project_id/asiento/lineas, la partida doble no cuadra (422 PARTIDA_DOBLE_ROTA) o el ejercicio esta cerrado (409) → {status, code, message}. Cierra el circulo de asentar.request."
+    }
+  ],
+  "tools": [
+    { "name": "escritor-diario.asentar", "description": "Asienta (ORDEN) un asiento en el diario si la partida doble cuadra y anuncia el hecho." }
+  ],
+  "ui_handlers": [
+    { "domain": "contabilidad", "action": "escritor-diario.asentar", "handler": "onAsentarRequest", "type": "system_panel", "zone": "lateral_derecha" }
+  ]
+}

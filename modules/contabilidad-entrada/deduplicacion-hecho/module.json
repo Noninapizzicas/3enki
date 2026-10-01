@@ -1,0 +1,27 @@
+{
+  "_doc": "Manifest de entrada/deduplicacion-hecho — REFLEJO STATELESS (A7, hoja del plan). IDEMPOTENCIA DETERMINISTA: la clave natural del hecho/documento decide si YA se vio; reprocesar NO duplica ('un cierre = un asiento' en la puerta de entrada). La clave natural NO se recalcula aqui: la SUBE a clave-natural (M3) por EVENTO (clave-natural.calcular.request), que es su custodio. El reflejo decide es_nuevo comparando la clave con las ya vistas (registro DERIVADO en memoria, por proyecto). DETERMINISTA: mismo hecho → misma clave → mismo veredicto. Sin elemento o sin clave → veredicto ABIERTO (null), nunca se adivina ni el nuevo ni el duplicado. NO escribe dominio, NO persiste. RPC PREGUNTA → sin ui_handler, su cara es el bus. ESCUCHA: ninguna (el plan no declara escucha de dominio). Publica deduplicacion-hecho.es_nuevo.response y su par .failed.",
+  "name": "deduplicacion-hecho",
+  "version": "0.1.0",
+  "description": "Reflejo (A7): idempotencia determinista — la clave natural del hecho decide si es nuevo; reprocesar no duplica. Sin estado.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "deduplicacion-hecho.es_nuevo.request",
+      "handler": "onEsNuevoRequest",
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id?, elemento|hecho|documento, componentes?} → {project_id, clave, componentes, es_nuevo, es_duplicado, vistas, determinista}. Calcula la clave natural (via clave-natural M3 por evento) y decide si ya se vio. Sin elemento → INVALID_INPUT; sin clave → veredicto abierto (null). Responde por deduplicacion-hecho.es_nuevo.response."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "deduplicacion-hecho.es_nuevo.response",
+      "description": "Respuesta RPC correlada de la op es_nuevo (una sola cara: el bus)."
+    },
+    {
+      "event": "deduplicacion-hecho.es_nuevo.failed",
+      "description": "Par de fallo determinista: falta el elemento → {status, code, message}. Cierra el circulo de es_nuevo.request."
+    }
+  ],
+  "tools": [
+    { "name": "deduplicacion-hecho.es_nuevo", "description": "Decide (PREGUNTA) si un hecho/documento es nuevo por su clave natural (idempotencia)." }
+  ]
+}

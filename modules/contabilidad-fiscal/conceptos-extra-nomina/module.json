@@ -1,0 +1,32 @@
+{
+  "_doc": "Manifest de fiscal/conceptos-extra-nomina — REFLEJO STATELESS (G9, hoja del plan). Dietas, especie, finiquito, paga extra: el CALCULO DETERMINISTA de su IMPUTACION (naturaleza + cuenta sugerida), no el importe (que lo declara la nomina). Mapa estructural de tipos conocidos (DIETAS/ESPECIE/FINIQUITO/PAGA_EXTRA) → naturaleza GASTO + cuenta sugerida; la cuenta concreta es declarable por el jefe; tipo desconocido → imputacion abierta (no se inventa). Invariante 13: concepto sin tipo/importe queda abierto — no se estima. NO escribe, NO persiste; el que escribe si toca es B2 (escritor-diario). RPC imputar es CLASE PREGUNTA → va por el bus, sin panel. Publica conceptos-extra-nomina.imputar.response y su par .failed. Escucha contabilidad.nomina_recibida (G4, emitido por puerto-nomina).",
+  "name": "conceptos-extra-nomina",
+  "version": "0.1.0",
+  "description": "Reflejo (G9): calculo determinista de la imputacion de dietas, especie, finiquito y paga extra. Lo no declarado queda abierto.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "conceptos-extra-nomina.imputar.request",
+      "handler": "onImputarRequest",
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id, conceptos:[{tipo,importe?,cuenta?}], periodo?} → {project_id, imputaciones, num, total, determinista, escritor:'escritor-diario', abierto}. Imputa cada concepto por tipo conocido; sin tipo/importe → abierto (no estima). Responde por conceptos-extra-nomina.imputar.response. Payload invalido → conceptos-extra-nomina.imputar.failed."
+    },
+    {
+      "event": "contabilidad.nomina_recibida",
+      "handler": "onNominaRecibida",
+      "description": "Fire-and-forget (G4 puerto-nomina): se recibio una nomina ya emitida por un origen externo. Si trae conceptos extra declarados, se calcula su imputacion (no escribe; informa); si no trae, no se inventa nada."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "conceptos-extra-nomina.imputar.response",
+      "description": "Respuesta RPC correlada de la op imputar (una sola cara: el bus)."
+    },
+    {
+      "event": "conceptos-extra-nomina.imputar.failed",
+      "description": "Par de fallo determinista: falta project_id o conceptos → {status, code, message}. Cierra el circulo de imputar.request."
+    }
+  ],
+  "tools": [
+    { "name": "conceptos-extra-nomina.imputar", "description": "Imputa (PREGUNTA) los conceptos extra de una nomina de forma determinista." }
+  ]
+}

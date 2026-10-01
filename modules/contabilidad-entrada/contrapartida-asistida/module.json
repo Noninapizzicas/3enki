@@ -1,0 +1,42 @@
+{
+  "_doc": "Manifest de entrada/contrapartida-asistida — MICRO-AGENTE (A6.1, hoja del plan). PROPONE cuenta/tercero/periodo contra el PLAN DECLARADO; el corte duro lo fija regla-contrapartida (A6.2) — esta hoja NO decide. Su mitad REFLEJA es determinista y honesta: junta lo DECLARADO (la regla vigente, SUBIDA a regla-contrapartida.aplicar.request por EVENTO) y lo expone como PROPUESTA; lo no cubierto por una regla declarada NO se rellena (queda en `abierto`, es juicio de la mitad fuzzy). Dato ausente = desconocido: sin hecho no hay nada que proponer. NO escribe, NO persiste. RPC PREGUNTA → sin ui_handler, su cara es el bus. ESCUCHA contabilidad.hecho_recibido (puerto-evento-vertical A1), contabilidad.plan_cuentas_declarado (catalogo-cuentas B1) y contabilidad.tercero_actualizado (maestro-terceros N1) — todos con emisor vivo; los tres handlers son fire-and-forget (toman constancia, no anuncian hecho). Publica contrapartida-asistida.juzgar.response y su par .failed.",
+  "name": "contrapartida-asistida",
+  "version": "0.1.0",
+  "description": "Micro-agente (A6.1): propone cuenta/tercero/periodo contra el plan declarado. Propone, no fija (el corte duro es regla-contrapartida A6.2). Sin estado.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "contrapartida-asistida.juzgar.request",
+      "handler": "onJuzgarRequest",
+      "description": "RPC micro-agente (PREGUNTA, por el bus): {project_id?, hecho, contexto?, tercero?, periodo?} → {project_id, hecho, contexto, propuesta{contrapartida,tercero,periodo}, completa, propone:true, fija:false}. Propone la contrapartida del hecho contra la regla declarada (via regla-contrapartida.aplicar.request). Sin hecho → INVALID_INPUT. Responde por contrapartida-asistida.juzgar.response."
+    },
+    {
+      "event": "contabilidad.hecho_recibido",
+      "handler": "onHechoRecibido",
+      "description": "Fire-and-forget (lo emite puerto-evento-vertical A1): se recibio un hecho crudo → se toma constancia del contexto (no propone ni escribe; el hecho llega por RPC). No responde."
+    },
+    {
+      "event": "contabilidad.plan_cuentas_declarado",
+      "handler": "onPlanCuentasDeclarado",
+      "description": "Fire-and-forget (lo emite catalogo-cuentas B1): el plan contable cambio → se toma constancia del contexto. No responde."
+    },
+    {
+      "event": "contabilidad.tercero_actualizado",
+      "handler": "onTerceroActualizado",
+      "description": "Fire-and-forget (lo emite maestro-terceros N1): un tercero quedo actualizado → se toma constancia del contexto. No responde."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "contrapartida-asistida.juzgar.response",
+      "description": "Respuesta RPC correlada de la op juzgar (una sola cara: el bus)."
+    },
+    {
+      "event": "contrapartida-asistida.juzgar.failed",
+      "description": "Par de fallo determinista: falta el hecho → {status, code, message}. Cierra el circulo de juzgar.request."
+    }
+  ],
+  "tools": [
+    { "name": "contrapartida-asistida.juzgar", "description": "Propone (PREGUNTA) la contrapartida de un hecho contra el plan declarado." }
+  ]
+}

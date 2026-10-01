@@ -1,0 +1,41 @@
+{
+  "_doc": "Manifest de libro/puerto-plan-contable — CONVERSOR STATELESS (B6, hoja del plan). Frontera de CODIFICACION del plan contable (import/export): cruza entre la codificacion EXTERNA (el fichero del asesor: columnas/codigos de otro programa/JSON) y el plan canonico del dominio (el que usa catalogo-cuentas B1). 🔴 ES UN CONVERSOR: TRADUCE y DEVUELVE; NO ESCRIBE (quien da de alta es catalogo-cuentas.anadir B1). Cruza FORMATO, no decide CONTENIDO. LA LEY ENTRA COMO DATO: `formato` y `mapeo` son declarables; cero esquemas cableados. Sin formato declarado no convierte (400 FORMATO_NO_DECLARADO); formato sin mapeo y no canonico → 422 FORMATO_NO_DECLARABLE. Dato ausente = desconocido (campo que no viene → null y en `abierto`); los campos extra del exterior se conservan en `metadatos`. SUBE catalogo-cuentas.buscar.request (B1) por EVENTO, best-effort, para contrastar lo traducido con el plan declarado. NO persiste. Ambas RPC son PREGUNTA → van por el bus, sin panel. Publica los pares entrar/salir .response/.failed.",
+  "name": "puerto-plan-contable",
+  "version": "0.1.0",
+  "description": "Conversor (B6): frontera de codificacion del plan contable (import/export). Traduce y devuelve el plan entre la codificacion externa y la canonica; no escribe.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "puerto-plan-contable.entrar.request",
+      "handler": "onEntrarRequest",
+      "description": "RPC conversor (PREGUNTA, por el bus): {project_id, formato, externo, mapeo?|esquemas_declarables?} → {project_id, formato, direccion:'entrar', plan, total, contraste_plan, abierto}. Traduce la codificacion externa del plan a la canonica. Sin formato → FORMATO_NO_DECLARADO; formato sin mapeo y no canonico → FORMATO_NO_DECLARABLE. Responde por puerto-plan-contable.entrar.response."
+    },
+    {
+      "event": "puerto-plan-contable.salir.request",
+      "handler": "onSalirRequest",
+      "description": "RPC conversor (PREGUNTA, por el bus): {project_id, formato, plan|cuentas, mapeo?|esquemas_declarables?} → {project_id, formato, direccion:'salir', externo, total}. Traduce el plan canonico al formato estructurado externo. No da de alta ni presenta. Responde por puerto-plan-contable.salir.response."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "puerto-plan-contable.entrar.response",
+      "description": "Respuesta RPC correlada de la op entrar (una sola cara: el bus)."
+    },
+    {
+      "event": "puerto-plan-contable.entrar.failed",
+      "description": "Par de fallo determinista: formato no declarado/no declarable o externo invalido → {status, code, message}. Cierra el circulo de entrar.request."
+    },
+    {
+      "event": "puerto-plan-contable.salir.response",
+      "description": "Respuesta RPC correlada de la op salir."
+    },
+    {
+      "event": "puerto-plan-contable.salir.failed",
+      "description": "Par de fallo determinista: formato no declarado/no declarable o plan invalido → {status, code, message}. Cierra el circulo de salir.request."
+    }
+  ],
+  "tools": [
+    { "name": "puerto-plan-contable.entrar", "description": "Traduce (PREGUNTA) la codificacion externa del plan a la canonica." },
+    { "name": "puerto-plan-contable.salir", "description": "Traduce (PREGUNTA) el plan canonico a la codificacion externa declarada." }
+  ]
+}

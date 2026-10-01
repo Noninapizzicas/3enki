@@ -201,7 +201,7 @@ class ColaDecisionesGate extends ModuloHibridoReflejo {
       id: solicitud.id || `${pid}-${Date.now()}-${c.solicitudes.length + 1}`,
       tipo: solicitud.tipo || 'GATE_OPERAR',
       nicho: solicitud.nicho,
-      nicho_id: solicitud.nicho_id || solicitud.nicho,
+      nicho_id: this._nichoIdDe(solicitud),
       descripcion: solicitud.descripcion || null,
       solicitado_en: new Date().toISOString()
     };
@@ -239,13 +239,44 @@ class ColaDecisionesGate extends ModuloHibridoReflejo {
       status: 200,
       data: {
         project_id: pid,
-        nicho_id: solicitud.nicho_id || solicitud.nicho,
+        nicho_id: this._nichoIdDe(solicitud),
         solicitud,
         resolucion,
         restantes: c.solicitudes.length,
         resuelto: true
       }
     };
+  }
+
+  // ── helper: extrae el NICHO_ID como STRING, nunca como objeto ──
+  // La identidad es la clave con la que el pipeline (L1) casa el nicho con su
+  // máquina de estados; DEBE ser un string. Cuando el emisor manda un nicho
+  // OBJETO sin nicho_id (p.ej. camino-encontrar-construir con la opción de nicho
+  // completa), `nicho_id || nicho` heredaba el OBJETO entero -> el pipeline no
+  // podía casarlo (misma clase de bug que el '[object Object]' del pipeline).
+  // Orden de preferencia: nicho_id explícito -> nicho.id -> nicho.nicho_id -> slug
+  // del nombre. Si nada sirve, null (nunca un objeto).
+  _nichoIdDe(solicitud) {
+    const s = solicitud || {};
+    const directo = s.nicho_id;
+    if (typeof directo === 'string' && directo.trim()) return directo.trim();
+    if (directo && typeof directo === 'object') {
+      const deId = directo.nicho_id || directo.id;
+      if (typeof deId === 'string' && deId.trim()) return deId.trim();
+    }
+    const n = s.nicho;
+    if (typeof n === 'string' && n.trim()) return n.trim();
+    if (n && typeof n === 'object') {
+      const id = n.nicho_id || n.id;
+      if (typeof id === 'string' && id.trim()) return id.trim();
+      const nombre = n.producto || n.servicio || n.nombre;
+      if (typeof nombre === 'string' && nombre.trim()) {
+        return nombre.trim().toLowerCase()
+          .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+          .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48) || null;
+      }
+    }
+    return null;
   }
 
   // ── Tools ──

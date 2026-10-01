@@ -153,6 +153,7 @@ test('ninguna fase del flujo cierra sobre vacío (el gate cubre las 8 costuras)'
     'esquematizado', 'planificado', 'adaptado',            // fs (esquemas/)
     'construido', 'skills', 'interfaz',                     // sistema (modules/)
     'interfaz_esquematizada', 'interfaz_construida',        // sistema (modules/ + frontend/)
+    'ensamblado',                                           // F7b: recomposición contra el plan de F3b
     'verificado', 'completado'                              // cierre (progreso del plan)
   ];
   for (const fase of FASES_DEL_FLUJO) {

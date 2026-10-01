@@ -1,0 +1,55 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "padron-terceros",
+  "version": "blueprint-2.0.0",
+  "moduleId": "contabilidad",
+  "titulo": "Padrón de terceros",
+  "_doc": "Blueprint v2 de INTERFAZ del módulo contabilidad/padron-terceros (F6½). Declara la sección `ui` para el BlueprintForm (patrón interfaz-dinamico). Identidad ÚNICA por número fiscal: un proveedor escrito de tres formas sigue siendo UNO. Un solo escritor (rol MAESTRO_TERCEROS). No se borra: unificar SUMA variantes (append-only). Persistente. Las acciones van DOTTED ('<modulo>.<accion>') y el transporte.rpc va VACÍO: el RPC real es contabilidad.<accion>.request (domain 'contabilidad', action '<modulo>.<accion>' en ui_handlers) y la regex de deriveZones solo parsea acciones de 2 segmentos; el wrapper mqttRequest('contabilidad','<modulo>.<accion>') emite ui/request/contabilidad/<modulo>.<accion>, que casa con el ui_handler. Los args salen de los parámetros REALES del handler en index.js.",
+  "eventos_publicados": [
+    "contabilidad.tercero_unificado"
+  ],
+  "eventos_que_escucho": [
+    "padron-terceros.unificar.response"
+  ],
+  "transporte": {
+    "rpc": [],
+    "salida": [
+      "contabilidad.tercero_unificado"
+    ],
+    "qos": "publishAndWait (request/response correlado) vía ui/request/contabilidad/<modulo>.<accion>; timeout del panel 10s. transporte.rpc vacío a propósito (acciones DOTTED)."
+  },
+  "ui": {
+    "_doc": "Panel de la cara humana de padron-terceros: la op de ESCRITURA (ORDEN) del módulo, con sus args reales. El BlueprintForm la invoca por ui/request/contabilidad/<accion>.",
+    "ops": {
+      "padron-terceros.unificar": {
+        "titulo": "Unificar la identidad de un tercero",
+        "descripcion": "Unifica un tercero por su número fiscal (normalización mecánica: mayúsculas, sin separadores). Si es nuevo, lo crea; si existe, SUMA la forma escrita como variante y añade roles (append-only, nada se borra). Anuncia contabilidad.tercero_unificado.",
+        "rol": "asesor",
+        "forma": "editor-bloque (tercero{nif,nombre,roles})",
+        "senal_pareada": "contabilidad.tercero_unificado",
+        "args": [
+          {
+            "nombre": "rol",
+            "tipo": "select",
+            "required": true,
+            "descripcion": "Rol single-writer del guard.",
+            "enum": [
+              "MAESTRO_TERCEROS"
+            ],
+            "default": "MAESTRO_TERCEROS"
+          },
+          {
+            "nombre": "tercero",
+            "tipo": "json",
+            "required": true,
+            "descripcion": "Tercero: {nif|numero_fiscal, nombre, roles?[]}."
+          }
+        ],
+        "errores": "403 PERMISSION_DENIED (rol != MAESTRO_TERCEROS) · 400 INVALID_INPUT (sin tercero o sin nif)"
+      }
+    },
+    "roles": {
+      "padron-terceros.unificar": "asesor"
+    }
+  }
+}

@@ -1,0 +1,93 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "estado-presentacion-fiscal",
+  "version": "blueprint-2.0.0",
+  "moduleId": "contabilidad",
+  "titulo": "Estado de presentación fiscal",
+  "_doc": "Blueprint v2 de INTERFAZ del módulo contabilidad/estado-presentacion-fiscal (F6½). Declara la sección `ui` para el BlueprintForm (patrón interfaz-dinamico). EL CICLO DE VIDA de cada obligación fiscal: pendiente → generada → presentada → justificada → atrasada. Un solo escritor (rol ESTADO_PRESENTACION_FISCAL). Transición válida (no se salta el ciclo); idempotente; append-only de la historia. Las acciones van DOTTED ('<modulo>.<accion>') y el transporte.rpc va VACÍO: el RPC real es contabilidad.<accion>.request (domain 'contabilidad', action '<modulo>.<accion>' en ui_handlers) y la regex de deriveZones solo parsea acciones de 2 segmentos; el wrapper mqttRequest('contabilidad','<modulo>.<accion>') emite ui/request/contabilidad/<modulo>.<accion>, que casa con el ui_handler. Los args salen de los parámetros REALES del handler en index.js.",
+  "eventos_publicados": [
+    "contabilidad.obligacion_avanzada",
+    "motor-avisos.producir.request"
+  ],
+  "eventos_que_escucho": [
+    "estado-presentacion-fiscal.avanzar.response"
+  ],
+  "transporte": {
+    "rpc": [],
+    "salida": [
+      "contabilidad.obligacion_avanzada",
+      "motor-avisos.producir.request"
+    ],
+    "qos": "publishAndWait (request/response correlado) vía ui/request/contabilidad/<modulo>.<accion>; timeout del panel 10s. transporte.rpc vacío a propósito (acciones DOTTED)."
+  },
+  "ui": {
+    "_doc": "Panel de la cara humana de estado-presentacion-fiscal: la op de ESCRITURA (ORDEN) del módulo, con sus args reales. El BlueprintForm la invoca por ui/request/contabilidad/<accion>.",
+    "ops": {
+      "estado-presentacion-fiscal.avanzar": {
+        "titulo": "Avanzar el estado de una obligación fiscal",
+        "descripcion": "Avanza el estado de una obligación (303/390...) por su ciclo: pendiente → generada → presentada → justificada, o a 'atrasada' por plazo. No se salta el ciclo (422). Idempotente. Anuncia contabilidad.obligacion_avanzada.",
+        "rol": "asesor",
+        "forma": "editor-bloque (clave/modelo + estado del ciclo)",
+        "senal_pareada": "contabilidad.obligacion_avanzada",
+        "args": [
+          {
+            "nombre": "clave",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Clave de la obligación (alternativa a modelo+ejercicio+periodo)."
+          },
+          {
+            "nombre": "obligacion",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Alias de clave."
+          },
+          {
+            "nombre": "modelo",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Modelo fiscal (ej: 303)."
+          },
+          {
+            "nombre": "ejercicio",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Ejercicio (ej: 2026)."
+          },
+          {
+            "nombre": "periodo",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Periodo (ej: 1T)."
+          },
+          {
+            "nombre": "estado",
+            "tipo": "select",
+            "required": true,
+            "descripcion": "Estado al que avanza.",
+            "enum": [
+              "pendiente",
+              "generada",
+              "presentada",
+              "justificada",
+              "atrasada"
+            ]
+          },
+          {
+            "nombre": "rol",
+            "tipo": "select",
+            "required": false,
+            "descripcion": "Rol single-writer del guard.",
+            "enum": [
+              "ESTADO_PRESENTACION_FISCAL"
+            ]
+          }
+        ],
+        "errores": "403 PERMISSION_DENIED · 422 TRANSICION_INVALIDA · 400 INVALID_INPUT (estado fuera del ciclo)"
+      }
+    },
+    "roles": {
+      "estado-presentacion-fiscal.avanzar": "asesor"
+    }
+  }
+}

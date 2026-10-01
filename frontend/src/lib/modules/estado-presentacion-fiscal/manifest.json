@@ -1,0 +1,9 @@
+{
+  "id": "estado-presentacion-fiscal",
+  "name": "Estado de presentación fiscal",
+  "version": "0.1.0",
+  "zone": "work-bar",
+  "order": 43,
+  "icon": "🏛️",
+  "label": "Estado fiscal"
+}

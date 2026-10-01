@@ -1,0 +1,9 @@
+{
+  "id": "puerto-nomina",
+  "name": "Puerto de nómina",
+  "version": "0.1.0",
+  "zone": "work-bar",
+  "order": 47,
+  "icon": "💼",
+  "label": "Puerto nómina"
+}

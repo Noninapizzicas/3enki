@@ -1,0 +1,913 @@
+{
+  "esquema": "ensamblaje-f7b-v1",
+  "total_hojas": 49,
+  "hojas_escritas": 49,
+  "hojas_no_escritas": 0,
+  "hojas_divergentes": 23,
+  "conexiones_rotas_count": 62,
+  "conexiones_falta_cablear": 1,
+  "conexiones_hoja_no_escrita": 0,
+  "conexiones_sobra_el_publish": 61,
+  "hojas_divergentes_detalle": [
+    {
+      "slug": "alerta-sangria",
+      "tipo": "DIVERGENTE",
+      "forma": null,
+      "falta_subscribes": [
+        "nichos.salud.actualizada"
+      ],
+      "falta_publishes": [],
+      "extra_subscribes": [
+        "project.activated"
+      ],
+      "extra_publishes": []
+    },
+    {
+      "slug": "canal-distribucion",
+      "tipo": "DIVERGENTE",
+      "forma": null,
+      "falta_subscribes": [],
+      "falta_publishes": [],
+      "extra_subscribes": [
+        "project.activated"
+      ],
+      "extra_publishes": []
+    },
+    {
+      "slug": "canal-supervision",
+      "tipo": "DIVERGENTE",
+      "forma": null,
+      "falta_subscribes": [],
+      "falta_publishes": [
+        "nichos.canal.enviar.failed"
+      ],
+      "extra_subscribes": [],
+      "extra_publishes": [
+        "nichos.canal.envio_fallido",
+        "nichos.canal.reemplazado"
+      ]
+    },
+    {
+      "slug": "captura-semilla",
+      "tipo": "DIVERGENTE",
+      "forma": null,
+      "falta_subscribes": [],
+      "falta_publishes": [],
+      "extra_subscribes": [
+        "project.activated"
+      ],
+      "extra_publishes": []
+    },
+    {
+      "slug": "clasificador-intencion",
+      "tipo": "DIVERGENTE",
+      "forma": null,
+      "falta_subscribes": [],
+      "falta_publishes": [],
+      "extra_subscribes": [
+        "project.activated"
+      ],
+      "extra_publishes": []
+    },
+    {
+      "slug": "coste-fuente",
+      "tipo": "DIVERGENTE",
+      "forma": null,
+      "falta_subscribes": [],
+      "falta_publishes": [
+        "nichos.fuente.coste.calcular.failed"
+      ],
+      "extra_subscribes": [],
+      "extra_publishes": [
+        "nichos.fuente.costear.failed"
+      ]
+    },
+    {
+      "slug": "crawl4rs",
+      "tipo": "DIVERGENTE",
+      "forma": null,
+      "falta_subscribes": [],
+      "falta_publishes": [],
+      "extra_subscribes": [
+        "interruptor.cambiado",
+        "interruptor.solicitar_registro"
+      ],
+      "extra_publishes": [
+        "interruptor.registrar"
+      ]
+    },
+    {
+      "slug": "criterio-viabilidad",
+      "tipo": "DIVERGENTE",
+      "forma": null,
+      "falta_subscribes": [],
+      "falta_publishes": [],
+      "extra_subscribes": [],
+      "extra_publishes": [
+        "nichos.criterio.recalibrar.failed"
+      ]
+    },
+    {
+      "slug": "ensamblador-solucion",
+      "tipo": "DIVERGENTE",
+      "forma": null,
+      "falta_subscribes": [],
+      "falta_publishes": [],
+      "extra_subscribes": [
+        "nichos.camino.decidido"
+      ],
+      "extra_publishes": []
+    },
+    {
+      "slug": "escalones-mensaje",
+      "tipo": "DIVERGENTE",
+      "forma": null,
+      "falta_subscribes": [],
+      "falta_publishes": [],
+      "extra_subscribes": [
+        "project.activated"
+      ],
+      "extra_publishes": []
+    },
+    {
+      "slug": "filesystem",
+      "tipo": "DIVERGENTE",
+      "forma": null,
+      "falta_subscribes": [],
+      "falta_publishes": [],
+      "extra_subscribes": [
+        "archivo.borrar.solicitado",
+        "archivo.leer.solicitado",
+        "archivo.listar.solicitado",
+        "interruptor.cambiado",
+        "project.activated",
+        "project.deactivated"
+      ],
+      "extra_publishes": [
+        "archivo.borrado",
+        "archivo.borrar.fallido",
+        "archivo.leer.fallido",
+        "archivo.leido",
+        "archivo.listado",
+        "archivo.listar.fallido",
+        "fs.directory.created",
+        "fs.escritura.ajena",
+        "fs.file.created",
+        "fs.file.deleted",
+        "fs.file.updated",
+        "fs.workdir.changed",
+        "interruptor.registrar"
+      ]
+    },
+    {
+      "slug": "gate-decision-operar",
+      "tipo": "DIVERGENTE",
+      "forma": null,
+      "falta_subscribes": [
+        "nichos.decision.resuelta"
+      ],
+      "falta_publishes": [],
+      "extra_subscribes": [],
+      "extra_publishes": []
+    },
+    {
+      "slug": "gestion-limites-fuente",
+      "tipo": "DIVERGENTE",
+      "forma": null,
+      "falta_subscribes": [],
+      "falta_publishes": [],
+      "extra_subscribes": [],
+      "extra_publishes": [
+        "nichos.fuente.encolado",
+        "nichos.fuente.encolar.failed"
+      ]
+    },
+    {
+      "slug": "manejo-fallo",
+      "tipo": "DIVERGENTE",
+      "forma": null,
+      "falta_subscribes": [],
+      "falta_publishes": [],
+      "extra_subscribes": [
+        "nichos.canal.envio_fallido",
+        "project.activated"
+      ],
+      "extra_publishes": [
+        "nichos.puente_solicitado"
+      ]
+    },
+    {
+      "slug": "motor-cobro",
+      "tipo": "DIVERGENTE",
+      "forma": null,
+      "falta_subscribes": [],
+      "falta_publishes": [],
+      "extra_subscribes": [
+        "project.activated"
+      ],
+      "extra_publishes": []
+    },
+    {
+      "slug": "pipeline-por-nicho",
+      "tipo": "DIVERGENTE",
+      "forma": null,
+      "falta_subscribes": [],
+      "falta_publishes": [
+        "nichos.pipeline.ciclo.iniciado"
+      ],
+      "extra_subscribes": [
+        "nichos.gate.solicitado",
+        "nichos.gate_resuelto"
+      ],
+      "extra_publishes": [
+        "nichos.pipeline.ciclo_iniciado"
+      ]
+    },
+    {
+      "slug": "project-manager",
+      "tipo": "DIVERGENTE",
+      "forma": null,
+      "falta_subscribes": [],
+      "falta_publishes": [],
+      "extra_subscribes": [
+        "project.activate",
+        "project.create",
+        "project.delete",
+        "project.update"
+      ],
+      "extra_publishes": [
+        "project.created",
+        "project.deleted",
+        "project.state",
+        "project.updated"
+      ]
+    },
+    {
+      "slug": "proponedor-modelo-cobro",
+      "tipo": "DIVERGENTE",
+      "forma": null,
+      "falta_subscribes": [],
+      "falta_publishes": [
+        "nichos.modelo.proponer.failed"
+      ],
+      "extra_subscribes": [],
+      "extra_publishes": [
+        "nichos.modelo_cobro.proponer.failed"
+      ]
+    },
+    {
+      "slug": "propuesta-valor-canal",
+      "tipo": "DIVERGENTE",
+      "forma": null,
+      "falta_subscribes": [],
+      "falta_publishes": [],
+      "extra_subscribes": [
+        "project.activated"
+      ],
+      "extra_publishes": []
+    },
+    {
+      "slug": "pulso-avance",
+      "tipo": "DIVERGENTE",
+      "forma": null,
+      "falta_subscribes": [],
+      "falta_publishes": [
+        "nichos.pulso.calcular.failed"
+      ],
+      "extra_subscribes": [
+        "nichos.pipeline.avanzado",
+        "nichos.salud.actualizada",
+        "project.activated"
+      ],
+      "extra_publishes": [
+        "nichos.pulso.emitir.failed"
+      ]
+    },
+    {
+      "slug": "reglas-aprendidas",
+      "tipo": "DIVERGENTE",
+      "forma": null,
+      "falta_subscribes": [
+        "nichos.cobro.ejecutado"
+      ],
+      "falta_publishes": [],
+      "extra_subscribes": [
+        "nichos.cobro_registrado"
+      ],
+      "extra_publishes": []
+    },
+    {
+      "slug": "scheduler",
+      "tipo": "DIVERGENTE",
+      "forma": null,
+      "falta_subscribes": [
+        "scheduler.job.trigger"
+      ],
+      "falta_publishes": [
+        "scheduler.fired"
+      ],
+      "extra_subscribes": [],
+      "extra_publishes": [
+        "scheduler.job.completed",
+        "scheduler.job.created",
+        "scheduler.job.deleted",
+        "scheduler.job.disabled",
+        "scheduler.job.enabled",
+        "scheduler.job.failed",
+        "scheduler.job.triggered",
+        "scheduler.job.updated"
+      ]
+    },
+    {
+      "slug": "telegram-bridge",
+      "tipo": "DIVERGENTE",
+      "forma": null,
+      "falta_subscribes": [],
+      "falta_publishes": [],
+      "extra_subscribes": [
+        "ai.chat.failed",
+        "portal.confirmation.pendiente"
+      ],
+      "extra_publishes": []
+    }
+  ],
+  "conexiones_rotas": [
+    {
+      "evento": "archivo.borrado",
+      "publica_en": [
+        "filesystem"
+      ],
+      "consumidores_disenados": [],
+      "tipo": "SOBRA_EL_PUBLISH",
+      "falta_en": null
+    },
+    {
+      "evento": "archivo.borrar.fallido",
+      "publica_en": [
+        "filesystem"
+      ],
+      "consumidores_disenados": [],
+      "tipo": "SOBRA_EL_PUBLISH",
+      "falta_en": null
+    },
+    {
+      "evento": "archivo.leer.fallido",
+      "publica_en": [
+        "filesystem"
+      ],
+      "consumidores_disenados": [],
+      "tipo": "SOBRA_EL_PUBLISH",
+      "falta_en": null
+    },
+    {
+      "evento": "archivo.leido",
+      "publica_en": [
+        "filesystem"
+      ],
+      "consumidores_disenados": [],
+      "tipo": "SOBRA_EL_PUBLISH",
+      "falta_en": null
+    },
+    {
+      "evento": "archivo.listado",
+      "publica_en": [
+        "filesystem"
+      ],
+      "consumidores_disenados": [],
+      "tipo": "SOBRA_EL_PUBLISH",
+      "falta_en": null
+    },
+    {
+      "evento": "archivo.listar.fallido",
+      "publica_en": [
+        "filesystem"
+      ],
+      "consumidores_disenados": [],
+      "tipo": "SOBRA_EL_PUBLISH",
+      "falta_en": null
+    },
+    {
+      "evento": "fs.directory.created",
+      "publica_en": [
+        "filesystem"
+      ],
+      "consumidores_disenados": [],
+      "tipo": "SOBRA_EL_PUBLISH",
+      "falta_en": null
+    },
+    {
+      "evento": "fs.escritura.ajena",
+      "publica_en": [
+        "filesystem"
+      ],
+      "consumidores_disenados": [],
+      "tipo": "SOBRA_EL_PUBLISH",
+      "falta_en": null
+    },
+    {
+      "evento": "fs.file.created",
+      "publica_en": [
+        "filesystem"
+      ],
+      "consumidores_disenados": [],
+      "tipo": "SOBRA_EL_PUBLISH",
+      "falta_en": null
+    },
+    {
+      "evento": "fs.file.deleted",
+      "publica_en": [
+        "filesystem"
+      ],
+      "consumidores_disenados": [],
+      "tipo": "SOBRA_EL_PUBLISH",
+      "falta_en": null
+    },
+    {
+      "evento": "fs.file.updated",
+      "publica_en": [
+        "filesystem"
+      ],
+      "consumidores_disenados": [],
+      "tipo": "SOBRA_EL_PUBLISH",
+      "falta_en": null
+    },
+    {
+      "evento": "fs.workdir.changed",
+      "publica_en": [
+        "filesystem"
+      ],
+      "consumidores_disenados": [],
+      "tipo": "SOBRA_EL_PUBLISH",
+      "falta_en": null
+    },
+    {
+      "evento": "interruptor.registrar",
+      "publica_en": [
+        "crawl4rs",
+        "filesystem"
+      ],
+      "consumidores_disenados": [],
+      "tipo": "SOBRA_EL_PUBLISH",
+      "falta_en": null
+    },
+    {
+      "evento": "nichos.batch.lote_ejecutado",
+      "publica_en": [
+        "batch-validacion"
+      ],
+      "consumidores_disenados": [],
+      "tipo": "SOBRA_EL_PUBLISH",
+      "falta_en": null
+    },
+    {
+      "evento": "nichos.canal.conectado",
+      "publica_en": [
+        "canal-supervision"
+      ],
+      "consumidores_disenados": [],
+      "tipo": "SOBRA_EL_PUBLISH",
+      "falta_en": null
+    },
+    {
+      "evento": "nichos.canal.enviado",
+      "publica_en": [
+        "canal-supervision"
+      ],
+      "consumidores_disenados": [],
+      "tipo": "SOBRA_EL_PUBLISH",
+      "falta_en": null
+    },
+    {
+      "evento": "nichos.canal.reemplazado",
+      "publica_en": [
+        "canal-supervision"
+      ],
+      "consumidores_disenados": [],
+      "tipo": "SOBRA_EL_PUBLISH",
+      "falta_en": null
+    },
+    {
+      "evento": "nichos.candidato_encolado",
+      "publica_en": [
+        "cola-candidatos"
+      ],
+      "consumidores_disenados": [],
+      "tipo": "SOBRA_EL_PUBLISH",
+      "falta_en": null
+    },
+    {
+      "evento": "nichos.candidato_tomado",
+      "publica_en": [
+        "cola-candidatos"
+      ],
+      "consumidores_disenados": [],
+      "tipo": "SOBRA_EL_PUBLISH",
+      "falta_en": null
+    },
+    {
+      "evento": "nichos.candidato.excluido",
+      "publica_en": [
+        "reglas-exclusion"
+      ],
+      "consumidores_disenados": [],
+      "tipo": "SOBRA_EL_PUBLISH",
+      "falta_en": null
+    },
+    {
+      "evento": "nichos.capacidad.faltante_declarado",
+      "publica_en": [
+        "catalogo-capacidades"
+      ],
+      "consumidores_disenados": [],
+      "tipo": "SOBRA_EL_PUBLISH",
+      "falta_en": null
+    },
+    {
+      "evento": "nichos.competencia.analizado",
+      "publica_en": [
+        "estudio-competencia"
+      ],
+      "consumidores_disenados": [],
+      "tipo": "SOBRA_EL_PUBLISH",
+      "falta_en": null
+    },
+    {
+      "evento": "nichos.copy_propuesto",
+      "publica_en": [
+        "propuesta-valor-canal"
+      ],
+      "consumidores_disenados": [],
+      "tipo": "SOBRA_EL_PUBLISH",
+      "falta_en": null
+    },
+    {
+      "evento": "nichos.criterio.declarado",
+      "publica_en": [
+        "criterio-viabilidad"
+      ],
+      "consumidores_disenados": [],
+      "tipo": "SOBRA_EL_PUBLISH",
+      "falta_en": null
+    },
+    {
+      "evento": "nichos.criterio.recalibrado",
+      "publica_en": [
+        "criterio-viabilidad"
+      ],
+      "consumidores_disenados": [],
+      "tipo": "SOBRA_EL_PUBLISH",
+      "falta_en": null
+    },
+    {
+      "evento": "nichos.cuadro.flujo_a_caja",
+      "publica_en": [
+        "cuadro-salud-financiera"
+      ],
+      "consumidores_disenados": [],
+      "tipo": "SOBRA_EL_PUBLISH",
+      "falta_en": null
+    },
+    {
+      "evento": "nichos.datos_homogeneos",
+      "publica_en": [
+        "conversor-fuente"
+      ],
+      "consumidores_disenados": [],
+      "tipo": "SOBRA_EL_PUBLISH",
+      "falta_en": null
+    },
+    {
+      "evento": "nichos.decision.resuelta",
+      "publica_en": [
+        "cola-decisiones-gate"
+      ],
+      "consumidores_disenados": [
+        "gate-decision-operar"
+      ],
+      "tipo": "FALTA_CABLEAR",
+      "falta_en": [
+        "gate-decision-operar"
+      ]
+    },
+    {
+      "evento": "nichos.entrega.enviada",
+      "publica_en": [
+        "canal-distribucion"
+      ],
+      "consumidores_disenados": [],
+      "tipo": "SOBRA_EL_PUBLISH",
+      "falta_en": null
+    },
+    {
+      "evento": "nichos.escalon.clasificado",
+      "publica_en": [
+        "escalones-mensaje"
+      ],
+      "consumidores_disenados": [],
+      "tipo": "SOBRA_EL_PUBLISH",
+      "falta_en": null
+    },
+    {
+      "evento": "nichos.fallo_manejado",
+      "publica_en": [
+        "manejo-fallo"
+      ],
+      "consumidores_disenados": [],
+      "tipo": "SOBRA_EL_PUBLISH",
+      "falta_en": null
+    },
+    {
+      "evento": "nichos.feedback_recibido",
+      "publica_en": [
+        "confirmacion-valor"
+      ],
+      "consumidores_disenados": [],
+      "tipo": "SOBRA_EL_PUBLISH",
+      "falta_en": null
+    },
+    {
+      "evento": "nichos.fuente_costea_imputado",
+      "publica_en": [
+        "coste-fuente"
+      ],
+      "consumidores_disenados": [],
+      "tipo": "SOBRA_EL_PUBLISH",
+      "falta_en": null
+    },
+    {
+      "evento": "nichos.fuente.conectada",
+      "publica_en": [
+        "puerto-fuente-datos"
+      ],
+      "consumidores_disenados": [],
+      "tipo": "SOBRA_EL_PUBLISH",
+      "falta_en": null
+    },
+    {
+      "evento": "nichos.fuente.dosificado",
+      "publica_en": [
+        "gestion-limites-fuente"
+      ],
+      "consumidores_disenados": [],
+      "tipo": "SOBRA_EL_PUBLISH",
+      "falta_en": null
+    },
+    {
+      "evento": "nichos.fuente.encolado",
+      "publica_en": [
+        "gestion-limites-fuente"
+      ],
+      "consumidores_disenados": [],
+      "tipo": "SOBRA_EL_PUBLISH",
+      "falta_en": null
+    },
+    {
+      "evento": "nichos.fuente.reemplazada",
+      "publica_en": [
+        "puerto-fuente-datos"
+      ],
+      "consumidores_disenados": [],
+      "tipo": "SOBRA_EL_PUBLISH",
+      "falta_en": null
+    },
+    {
+      "evento": "nichos.gate_encolado",
+      "publica_en": [
+        "cola-decisiones-gate"
+      ],
+      "consumidores_disenados": [],
+      "tipo": "SOBRA_EL_PUBLISH",
+      "falta_en": null
+    },
+    {
+      "evento": "nichos.historial_actualizado",
+      "publica_en": [
+        "historial-nicho"
+      ],
+      "consumidores_disenados": [],
+      "tipo": "SOBRA_EL_PUBLISH",
+      "falta_en": null
+    },
+    {
+      "evento": "nichos.intencion.clasificada",
+      "publica_en": [
+        "clasificador-intencion"
+      ],
+      "consumidores_disenados": [],
+      "tipo": "SOBRA_EL_PUBLISH",
+      "falta_en": null
+    },
+    {
+      "evento": "nichos.limite.declarado",
+      "publica_en": [
+        "perfil-limite-busqueda"
+      ],
+      "consumidores_disenados": [],
+      "tipo": "SOBRA_EL_PUBLISH",
+      "falta_en": null
+    },
+    {
+      "evento": "nichos.paquete_construido",
+      "publica_en": [
+        "paquete-decision"
+      ],
+      "consumidores_disenados": [],
+      "tipo": "SOBRA_EL_PUBLISH",
+      "falta_en": null
+    },
+    {
+      "evento": "nichos.perfil.declarado",
+      "publica_en": [
+        "perfil-cobro-entrega"
+      ],
+      "consumidores_disenados": [],
+      "tipo": "SOBRA_EL_PUBLISH",
+      "falta_en": null
+    },
+    {
+      "evento": "nichos.pipeline.ciclo_completado",
+      "publica_en": [
+        "pipeline-por-nicho"
+      ],
+      "consumidores_disenados": [],
+      "tipo": "SOBRA_EL_PUBLISH",
+      "falta_en": null
+    },
+    {
+      "evento": "nichos.pipeline.ciclo_iniciado",
+      "publica_en": [
+        "pipeline-por-nicho"
+      ],
+      "consumidores_disenados": [],
+      "tipo": "SOBRA_EL_PUBLISH",
+      "falta_en": null
+    },
+    {
+      "evento": "nichos.pulso_emitido",
+      "publica_en": [
+        "pulso-avance"
+      ],
+      "consumidores_disenados": [],
+      "tipo": "SOBRA_EL_PUBLISH",
+      "falta_en": null
+    },
+    {
+      "evento": "nichos.supervision.declarado",
+      "publica_en": [
+        "perfil-supervision"
+      ],
+      "consumidores_disenados": [],
+      "tipo": "SOBRA_EL_PUBLISH",
+      "falta_en": null
+    },
+    {
+      "evento": "nichos.umbral_ajustado",
+      "publica_en": [
+        "ajustador-umbrales"
+      ],
+      "consumidores_disenados": [],
+      "tipo": "SOBRA_EL_PUBLISH",
+      "falta_en": null
+    },
+    {
+      "evento": "nichos.vista_portafolio",
+      "publica_en": [
+        "vista-portafolio"
+      ],
+      "consumidores_disenados": [],
+      "tipo": "SOBRA_EL_PUBLISH",
+      "falta_en": null
+    },
+    {
+      "evento": "project.created",
+      "publica_en": [
+        "project-manager"
+      ],
+      "consumidores_disenados": [],
+      "tipo": "SOBRA_EL_PUBLISH",
+      "falta_en": null
+    },
+    {
+      "evento": "project.deleted",
+      "publica_en": [
+        "project-manager"
+      ],
+      "consumidores_disenados": [],
+      "tipo": "SOBRA_EL_PUBLISH",
+      "falta_en": null
+    },
+    {
+      "evento": "project.state",
+      "publica_en": [
+        "project-manager"
+      ],
+      "consumidores_disenados": [],
+      "tipo": "SOBRA_EL_PUBLISH",
+      "falta_en": null
+    },
+    {
+      "evento": "project.updated",
+      "publica_en": [
+        "project-manager"
+      ],
+      "consumidores_disenados": [],
+      "tipo": "SOBRA_EL_PUBLISH",
+      "falta_en": null
+    },
+    {
+      "evento": "scheduler.job.completed",
+      "publica_en": [
+        "scheduler"
+      ],
+      "consumidores_disenados": [],
+      "tipo": "SOBRA_EL_PUBLISH",
+      "falta_en": null
+    },
+    {
+      "evento": "scheduler.job.created",
+      "publica_en": [
+        "scheduler"
+      ],
+      "consumidores_disenados": [],
+      "tipo": "SOBRA_EL_PUBLISH",
+      "falta_en": null
+    },
+    {
+      "evento": "scheduler.job.deleted",
+      "publica_en": [
+        "scheduler"
+      ],
+      "consumidores_disenados": [],
+      "tipo": "SOBRA_EL_PUBLISH",
+      "falta_en": null
+    },
+    {
+      "evento": "scheduler.job.disabled",
+      "publica_en": [
+        "scheduler"
+      ],
+      "consumidores_disenados": [],
+      "tipo": "SOBRA_EL_PUBLISH",
+      "falta_en": null
+    },
+    {
+      "evento": "scheduler.job.enabled",
+      "publica_en": [
+        "scheduler"
+      ],
+      "consumidores_disenados": [],
+      "tipo": "SOBRA_EL_PUBLISH",
+      "falta_en": null
+    },
+    {
+      "evento": "scheduler.job.triggered",
+      "publica_en": [
+        "scheduler"
+      ],
+      "consumidores_disenados": [],
+      "tipo": "SOBRA_EL_PUBLISH",
+      "falta_en": null
+    },
+    {
+      "evento": "scheduler.job.updated",
+      "publica_en": [
+        "scheduler"
+      ],
+      "consumidores_disenados": [],
+      "tipo": "SOBRA_EL_PUBLISH",
+      "falta_en": null
+    },
+    {
+      "evento": "telegram.bridge.envio_fallido",
+      "publica_en": [
+        "telegram-bridge"
+      ],
+      "consumidores_disenados": [],
+      "tipo": "SOBRA_EL_PUBLISH",
+      "falta_en": null
+    },
+    {
+      "evento": "telegram.bridge.vinculado",
+      "publica_en": [
+        "telegram-bridge"
+      ],
+      "consumidores_disenados": [],
+      "tipo": "SOBRA_EL_PUBLISH",
+      "falta_en": null
+    }
+  ],
+  "trabajo": [
+    {
+      "evento": "nichos.decision.resuelta",
+      "cablear_en": [
+        "gate-decision-operar"
+      ]
+    }
+  ],
+  "ensamblado": false,
+  "vertical": "nichos",
+  "origen": "boveda/nichos/proceso/fase3b/plan-construccion.md",
+  "hojas_sin_modulo": [],
+  "aplicado_el": "2026-10-01T14:16:05.269Z",
+  "nota": "F7b (ENSAMBLAJE) aplicado a la vertical. Determinista: cruza el plan (F3b) con los módulos escritos."
+}

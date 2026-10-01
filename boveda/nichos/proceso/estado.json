@@ -166,5 +166,26 @@
     "estado": "completada",
     "skill": "construir-interfaz",
     "nota": "3 Panel.svelte (BlueprintForm) + registro panels.ts (system-bar); compilados 0 errores"
+  },
+  "fase7b": {
+    "estado": "aplicada",
+    "skill": "ensamblaje",
+    "entregable": "boveda/nichos/proceso/fase7b/ensamblaje.json",
+    "ensamblado": false,
+    "hojas": 49,
+    "hojas_escritas": 49,
+    "hojas_divergentes": 23,
+    "conexiones_rotas": 62,
+    "conexiones_falta_cablear": 1,
+    "conexiones_sobra_el_publish": 61,
+    "trabajo": [
+      {
+        "evento": "nichos.decision.resuelta",
+        "cablear_en": [
+          "gate-decision-operar"
+        ]
+      }
+    ],
+    "nota": "F7b (ENSAMBLAJE) aplicado a la vertical: cruza el plan (F3b) contra los modulos escritos. Determinista, sin LLM. ensamblado=false: 62 conexiones de dominio rotas (1 falta cablear + 61 que el plan publica y nadie consume) y 23 hojas divergentes. NO bloquea la puesta en servicio; deja el TRABAJO a la vista."
   }
 }

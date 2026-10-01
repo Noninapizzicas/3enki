@@ -109,6 +109,29 @@ const METRICS = { increment(){}, gauge(){} };
     assert.strictEqual(res.error.code, 'COLA_VACIA');
   });
 
+  await testAsync('HIDRATACIÓN: resolver tras reinicio hidrata del disco (no COLA_VACIA)', async () => {
+    // Bug real medido en vivo (1-oct-2026): tras reiniciar enki el store en
+    // MEMORIA está vacío y la persistencia solo restaura en project.activated.
+    // Resolver la primera decisión devolvía COLA_VACIA aunque el DISCO tuviera
+    // solicitudes (2 en disco, 0 en memoria). La proyección debe HIDRATAR antes
+    // de resolver (y de listar): el disco manda, la memoria es caché.
+    const pid = 'preinicio';
+    assert.ok(!instance._colas.has(pid), 'arranca con memoria vacía (simula reinicio)');
+    const orig = instance._persist.restaurar.bind(instance._persist);
+    instance._persist.restaurar = async (p) => {
+      if (p === pid) {
+        instance._colas.set(p, { esquema: 'nichos-cola-decisiones-gate-v1', solicitudes: [
+          { id: 'd1', tipo: 'GATE_OPERAR', nicho: 'pan-del-disco', solicitado_en: 't' }
+        ] });
+      }
+      return orig(p);
+    };
+    const res = await instance.onResolverRequest({ data: { project_id: pid, rol: 'DUEÑO', resolucion: 'APRUEBA' } });
+    assert.strictEqual(res.status, 200, 'resuelve la solicitud del disco, no COLA_VACIA');
+    assert.strictEqual(res.data.solicitud.nicho, 'pan-del-disco');
+    instance._persist.restaurar = orig;
+  });
+
   await testAsync('PÉRDIDA DE IDENTIDAD: nicho OBJETO sin nicho_id → nicho_id STRING (nunca objeto)', async () => {
     // Bug real medido en vivo (30-sep-2026): camino-encontrar-construir publica la
     // solicitud con la OPCIÓN DE NICHO completa (objeto) y sin nicho_id. `nicho_id ||

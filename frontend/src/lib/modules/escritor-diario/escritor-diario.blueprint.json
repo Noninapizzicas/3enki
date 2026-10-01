@@ -1,0 +1,58 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "escritor-diario",
+  "version": "blueprint-2.0.0",
+  "moduleId": "contabilidad",
+  "titulo": "Escritor del diario",
+  "_doc": "Blueprint v2 de INTERFAZ del módulo contabilidad/escritor-diario (F6½). Declara la sección `ui` para el BlueprintForm (patrón interfaz-dinamico). CUSTODIO (B2): el LIBRO. Single-writer, append-only. La op asentar (ORDEN) rechaza si la partida doble no cuadra (no inventa el descuadre) y anuncia contabilidad.asiento_asentado. PUENTE/CUSTODIO de la vertical contabilidad. Las acciones van DOTTED ('<modulo>.<accion>') y el transporte.rpc va VACÍO: el RPC real es contabilidad.<accion>.request (domain 'contabilidad', action 'escritor-diario.asentar' en ui_handlers) y la regex de deriveZones solo parsea acciones de 2 segmentos; el wrapper mqttRequest('contabilidad','<modulo>.<accion>') emite ui/request/contabilidad/<modulo>.<accion>, que casa con el ui_handler. Los args salen de los parámetros REALES del handler en index.js.",
+  "eventos_publicados": [
+    "contabilidad.asiento_asentado"
+  ],
+  "eventos_que_escucho": [
+    "escritor-diario.asentar.response",
+    "escritor-diario.asentar.failed"
+  ],
+  "transporte": {
+    "rpc": [],
+    "salida": [
+      "contabilidad.asiento_asentado"
+    ],
+    "qos": "publishAndWait (request/response correlado) vía ui/request/contabilidad/<modulo>.<accion>; timeout del panel 10s. transporte.rpc vacío a propósito (acciones DOTTED)."
+  },
+  "ui": {
+    "_doc": "Panel de la cara humana de escritor-diario: la(s) op(s) de ESCRITURA (ORDEN) del módulo, con sus args reales. El BlueprintForm la(s) invoca por ui/request/contabilidad/<accion>.",
+    "ops": {
+      "escritor-diario.asentar": {
+        "titulo": "Asentar un asiento en el diario",
+        "descripcion": "Asienta (ORDEN) un asiento en el diario (append-only) si la PARTIDA DOBLE cuadra: debe == haber. Si no cuadra, se RECHAZA (no se inventa el descuadre). Ejercicio cerrado → 409. Publica contabilidad.asiento_asentado (R2). Idempotente por huella.",
+        "rol": "jefe",
+        "forma": "editor-bloque (asiento{lineas}/origen/permitir_duplicado)",
+        "senal_pareada": "contabilidad.asiento_asentado",
+        "args": [
+          {
+            "nombre": "asiento",
+            "tipo": "json",
+            "required": true,
+            "descripcion": "El asiento {lineas:[{cuenta,debe,haber}], fecha?, concepto?, clave?}."
+          },
+          {
+            "nombre": "origen",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Origen del asiento (declarable)."
+          },
+          {
+            "nombre": "permitir_duplicado",
+            "tipo": "boolean",
+            "required": false,
+            "descripcion": "Permitir apilar un asiento con la misma huella (por defecto, no se duplica)."
+          }
+        ],
+        "errores": "400 INVALID_INPUT (sin asiento/lineas); 422 PARTIDA_DOBLE_ROTA (debe != haber); 409 CONFLICT_STATE (ejercicio cerrado)"
+      }
+    },
+    "roles": {
+      "escritor-diario.asentar": "jefe"
+    }
+  }
+}

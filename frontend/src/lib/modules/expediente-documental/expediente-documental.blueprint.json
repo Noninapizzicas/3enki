@@ -1,0 +1,52 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "expediente-documental",
+  "version": "blueprint-2.0.0",
+  "moduleId": "contabilidad",
+  "titulo": "Expediente documental",
+  "_doc": "Blueprint v2 de INTERFAZ del módulo contabilidad/expediente-documental (F6½). Declara la sección `ui` para el BlueprintForm (patrón interfaz-dinamico). CUSTODIO (L7): archivo inmutable y append-only que enlaza cada cifra del libro con su documento origen (la prueba para la inspección). Idempotente por huella; sin documento no se enlaza. PUENTE/CUSTODIO de la vertical contabilidad. Las acciones van DOTTED ('<modulo>.<accion>') y el transporte.rpc va VACÍO: el RPC real es contabilidad.<accion>.request (domain 'contabilidad', action 'expediente-documental.archivar' en ui_handlers) y la regex de deriveZones solo parsea acciones de 2 segmentos; el wrapper mqttRequest('contabilidad','<modulo>.<accion>') emite ui/request/contabilidad/<modulo>.<accion>, que casa con el ui_handler. Los args salen de los parámetros REALES del handler en index.js.",
+  "eventos_publicados": [
+    "contabilidad.documento_archivado"
+  ],
+  "eventos_que_escucho": [
+    "expediente-documental.archivar.response",
+    "expediente-documental.archivar.failed"
+  ],
+  "transporte": {
+    "rpc": [],
+    "salida": [
+      "contabilidad.documento_archivado"
+    ],
+    "qos": "publishAndWait (request/response correlado) vía ui/request/contabilidad/<modulo>.<accion>; timeout del panel 10s. transporte.rpc vacío a propósito (acciones DOTTED)."
+  },
+  "ui": {
+    "_doc": "Panel de la cara humana de expediente-documental: la(s) op(s) de ESCRITURA (ORDEN) del módulo, con sus args reales. El BlueprintForm la(s) invoca por ui/request/contabilidad/<accion>.",
+    "ops": {
+      "expediente-documental.archivar": {
+        "titulo": "Archivar el documento origen de una cifra",
+        "descripcion": "Archiva (ORDEN) el documento ORIGEN de una cifra del libro, enlazándolo (cifra→documento) con su huella y procedencia. Registro INMUTABLE y APPEND-ONLY: un documento mejor se AÑADE, no se sustituye. Idempotente por huella. Publica contabilidad.documento_archivado. Sin documento no se enlaza (dato ausente = desconocido).",
+        "rol": "jefe",
+        "forma": "editor-bloque (cifra/documento{referencia,tipo,procedencia,fecha,contenido,huella?})",
+        "senal_pareada": "contabilidad.documento_archivado",
+        "args": [
+          {
+            "nombre": "cifra",
+            "tipo": "text",
+            "required": true,
+            "descripcion": "La cifra del libro a la que se enlaza el documento."
+          },
+          {
+            "nombre": "documento",
+            "tipo": "json",
+            "required": true,
+            "descripcion": "El documento origen {referencia, tipo, procedencia, fecha, contenido, huella?, traza?}."
+          }
+        ],
+        "errores": "400 INVALID_INPUT (sin cifra); 422 PRECONDITION_FAILED (sin documento)"
+      }
+    },
+    "roles": {
+      "expediente-documental.archivar": "jefe"
+    }
+  }
+}

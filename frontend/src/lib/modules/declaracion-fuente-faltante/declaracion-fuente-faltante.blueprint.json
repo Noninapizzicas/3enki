@@ -1,0 +1,71 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "declaracion-fuente-faltante",
+  "version": "blueprint-2.0.0",
+  "moduleId": "contabilidad",
+  "titulo": "Declaración de fuente faltante",
+  "_doc": "Blueprint v2 de INTERFAZ del módulo contabilidad/declaracion-fuente-faltante (F6½). Declara la sección `ui` para el BlueprintForm (patrón interfaz-dinamico). DETECTA que una vertical NO publica un hecho necesario y lo DECLARA. NO la obliga a producirlo: no inventa los datos que faltan ni fabrica el hecho ausente. PUENTE stateless. Las acciones van DOTTED ('<modulo>.<accion>') y el transporte.rpc va VACÍO: el RPC real es contabilidad.<accion>.request (domain 'contabilidad', action '<modulo>.<accion>' en ui_handlers) y la regex de deriveZones solo parsea acciones de 2 segmentos; el wrapper mqttRequest('contabilidad','<modulo>.<accion>') emite ui/request/contabilidad/<modulo>.<accion>, que casa con el ui_handler. Los args salen de los parámetros REALES del handler en index.js.",
+  "eventos_publicados": [
+    "contabilidad.fuente_faltante_declarada",
+    "motor-avisos.producir.request"
+  ],
+  "eventos_que_escucho": [
+    "declaracion-fuente-faltante.declarar.response"
+  ],
+  "transporte": {
+    "rpc": [],
+    "salida": [
+      "contabilidad.fuente_faltante_declarada",
+      "motor-avisos.producir.request"
+    ],
+    "qos": "publishAndWait (request/response correlado) vía ui/request/contabilidad/<modulo>.<accion>; timeout del panel 10s. transporte.rpc vacío a propósito (acciones DOTTED)."
+  },
+  "ui": {
+    "_doc": "Panel de la cara humana de declaracion-fuente-faltante: la op de ESCRITURA (ORDEN) del módulo, con sus args reales. El BlueprintForm la invoca por ui/request/contabilidad/<accion>.",
+    "ops": {
+      "declaracion-fuente-faltante.declarar": {
+        "titulo": "Declarar que falta una fuente",
+        "descripcion": "Declara que una fuente esperada no llegó (o que un hecho llegó sin su fuente). NO crea la fuente: solo declara su ausencia. Sin fuente señalada NO se inventa una declaración. Anuncia contabilidad.fuente_faltante_declarada y sube motor-avisos.producir.request.",
+        "rol": "asesor",
+        "forma": "editor-bloque (fuente + motivo + vertical)",
+        "senal_pareada": "contabilidad.fuente_faltante_declarada (+ motor-avisos.producir.request)",
+        "args": [
+          {
+            "nombre": "fuente",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Qué fuente falta (nombre/identificador)."
+          },
+          {
+            "nombre": "fuente_esperada",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Alternativa: la fuente que se esperaba."
+          },
+          {
+            "nombre": "vertical",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Vertical a la que corresponde la fuente."
+          },
+          {
+            "nombre": "motivo",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Por qué se declara (el hueco se anota, no se inventa)."
+          },
+          {
+            "nombre": "ref",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Referencia/clave del hecho observado sin fuente."
+          }
+        ],
+        "errores": "400 INVALID_INPUT (falta project_id)"
+      }
+    },
+    "roles": {
+      "declaracion-fuente-faltante.declarar": "asesor"
+    }
+  }
+}

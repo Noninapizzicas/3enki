@@ -1,0 +1,9 @@
+{
+  "id": "anclaje-cierre-vertical",
+  "name": "Anclaje de cierre",
+  "version": "0.1.0",
+  "zone": "system-bar",
+  "order": 80,
+  "icon": "⚓",
+  "label": "Anclaje cierre"
+}

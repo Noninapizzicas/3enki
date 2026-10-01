@@ -1,0 +1,45 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "historial-proceso-contable",
+  "version": "blueprint-2.0.0",
+  "moduleId": "contabilidad",
+  "titulo": "Historial del proceso contable",
+  "_doc": "Blueprint v2 de INTERFAZ del módulo contabilidad/historial-proceso-contable (F6½). Declara la sección `ui` para el BlueprintForm (patrón interfaz-dinamico). Registro APPEND-ONLY e inmutable de lo PROCESADO y lo FALLADO, con su rastro. Es el historial del PROCESO DE ENTRADA — no del asiento. Cada registro exige su RESULTADO declarado (PROCESADO|FALLADO). Las acciones van DOTTED ('<modulo>.<accion>') y el transporte.rpc va VACÍO: el RPC real es contabilidad.<accion>.request (domain 'contabilidad', action '<modulo>.<accion>' en ui_handlers) y la regex de deriveZones solo parsea acciones de 2 segmentos; el wrapper mqttRequest('contabilidad','<modulo>.<accion>') emite ui/request/contabilidad/<modulo>.<accion>, que casa con el ui_handler. Los args salen de los parámetros REALES del handler en index.js.",
+  "eventos_publicados": [
+    "contabilidad.proceso_anotado"
+  ],
+  "eventos_que_escucho": [
+    "historial-proceso-contable.anotar.response"
+  ],
+  "transporte": {
+    "rpc": [],
+    "salida": [
+      "contabilidad.proceso_anotado"
+    ],
+    "qos": "publishAndWait (request/response correlado) vía ui/request/contabilidad/<modulo>.<accion>; timeout del panel 10s. transporte.rpc vacío a propósito (acciones DOTTED)."
+  },
+  "ui": {
+    "_doc": "Panel de la cara humana de historial-proceso-contable: la op de ESCRITURA (ORDEN) del módulo, con sus args reales. El BlueprintForm la invoca por ui/request/contabilidad/<accion>.",
+    "ops": {
+      "historial-proceso-contable.anotar": {
+        "titulo": "Anotar un registro del proceso",
+        "descripcion": "Apila un registro append-only del proceso de entrada con su resultado obligatorio (PROCESADO|FALLADO), asunto, origen, motivo, fases y si cayó a cola. Sin resultado NO se anota. Anuncia contabilidad.proceso_anotado.",
+        "rol": "asesor",
+        "forma": "editor-bloque (registro json)",
+        "senal_pareada": "contabilidad.proceso_anotado",
+        "args": [
+          {
+            "nombre": "registro",
+            "tipo": "json",
+            "required": true,
+            "descripcion": "Objeto del registro: {resultado:'PROCESADO'|'FALLADO', asunto?, origen?, motivo?, fases?[], en_cola?, destino_cola?, detalle?, hecho_id?, documento_id?, en?}."
+          }
+        ],
+        "errores": "400 INVALID_INPUT (falta registro o registro.resultado fuera de PROCESADO|FALLADO)"
+      }
+    },
+    "roles": {
+      "historial-proceso-contable.anotar": "asesor"
+    }
+  }
+}

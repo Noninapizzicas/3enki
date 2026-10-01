@@ -1,0 +1,9 @@
+{
+  "id": "puerto-documento-digital",
+  "name": "Puerto de documento digital",
+  "version": "0.1.0",
+  "zone": "system-bar",
+  "order": 89,
+  "icon": "📥",
+  "label": "Documento digital"
+}

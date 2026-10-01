@@ -1,0 +1,70 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "plan-amortizacion",
+  "version": "blueprint-2.0.0",
+  "moduleId": "contabilidad",
+  "titulo": "Plan de amortización",
+  "_doc": "Blueprint v2 de INTERFAZ del módulo contabilidad/plan-amortizacion (F6½). Workspace del custodio F2: la op de ESCRITURA (ORDEN) `generar_cuota`, que registra el plan si viene, calcula la cuota del periodo y la APILA (append-only). El método y el coeficiente son DATO (declarables). Sin base o vida útil no se inventa el importe (422). Publica contabilidad.cuota_amortizacion_generada. La op `cuota_del_periodo` es PREGUNTA (sin ui_handler). Acciones DOTTED, transporte.rpc VACÍO. Args del handler REAL (index.js).",
+  "eventos_publicados": [
+    "contabilidad.cuota_amortizacion_generada"
+  ],
+  "eventos_que_escucho": [
+    "plan-amortizacion.generar_cuota.response"
+  ],
+  "transporte": {
+    "entrada": "reflejo RPC via ui_handlers (module.json) — las ops se conducen por ui/request/contabilidad/<accion>. transporte.rpc vacio a proposito.",
+    "rpc": [],
+    "salida": [
+      "contabilidad.cuota_amortizacion_generada"
+    ],
+    "qos": "publishAndWait (request/response correlado) en cada operacion; timeout 8s"
+  },
+  "ui": {
+    "_doc": "Panel de la cara humana de plan-amortizacion: la(s) op(s) de ESCRITURA (ORDEN) del módulo, con sus args reales. El BlueprintForm la invoca por ui/request/contabilidad/<accion>.",
+    "ops": {
+      "plan-amortizacion.generar_cuota": {
+        "titulo": "Generar la cuota de amortización",
+        "descripcion": "Registra el plan si viene, calcula la cuota del periodo y la APILA (append-only). Sin base/vida útil → 422 CUOTA_NO_DETERMINABLE. Publica contabilidad.cuota_amortizacion_generada.",
+        "rol": "asesor",
+        "forma": "editor-bloque (project_id/activo|activo_id/periodo/asiento)",
+        "senal_pareada": "contabilidad.cuota_amortizacion_generada",
+        "args": [
+          {
+            "nombre": "project_id",
+            "tipo": "text",
+            "required": true,
+            "descripcion": "Proyecto."
+          },
+          {
+            "nombre": "activo",
+            "tipo": "json",
+            "required": false,
+            "descripcion": "Ficha del activo (si viene con su plan)."
+          },
+          {
+            "nombre": "activo_id",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Identidad del activo a amortizar."
+          },
+          {
+            "nombre": "periodo",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Periodo de la cuota."
+          },
+          {
+            "nombre": "asiento",
+            "tipo": "json",
+            "required": false,
+            "descripcion": "Asiento asociado a la cuota, si toca."
+          }
+        ],
+        "errores": "400 INVALID_INPUT (sin project_id/activo) · 422 CUOTA_NO_DETERMINABLE"
+      }
+    },
+    "roles": {
+      "plan-amortizacion.generar_cuota": "asesor"
+    }
+  }
+}

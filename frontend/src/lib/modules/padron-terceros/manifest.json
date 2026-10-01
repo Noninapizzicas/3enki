@@ -1,0 +1,9 @@
+{
+  "id": "padron-terceros",
+  "name": "Padrón de terceros",
+  "version": "0.1.0",
+  "zone": "work-bar",
+  "order": 45,
+  "icon": "🪪",
+  "label": "Padrón terceros"
+}

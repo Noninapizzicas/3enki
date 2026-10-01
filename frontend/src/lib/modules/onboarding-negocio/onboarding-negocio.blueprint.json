@@ -1,0 +1,91 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "onboarding-negocio",
+  "version": "blueprint-2.0.0",
+  "moduleId": "contabilidad",
+  "titulo": "Onboarding de negocio",
+  "_doc": "Blueprint v2 de INTERFAZ del módulo contabilidad/onboarding-negocio (F6½). Declara la sección `ui` para el BlueprintForm (patrón interfaz-dinamico). RECOGE los datos DECLARABLES del negocio nuevo: su plan, sus fuentes y sus parámetros. Un solo escritor (rol ONBOARDING_NEGOCIO). La parcela la crea aislamiento-negocio y el plan lo custodia catalogo-cuentas (sube por evento). Persistente. Las acciones van DOTTED ('<modulo>.<accion>') y el transporte.rpc va VACÍO: el RPC real es contabilidad.<accion>.request (domain 'contabilidad', action '<modulo>.<accion>' en ui_handlers) y la regex de deriveZones solo parsea acciones de 2 segmentos; el wrapper mqttRequest('contabilidad','<modulo>.<accion>') emite ui/request/contabilidad/<modulo>.<accion>, que casa con el ui_handler. Los args salen de los parámetros REALES del handler en index.js.",
+  "eventos_publicados": [
+    "contabilidad.negocio_registrado"
+  ],
+  "eventos_que_escucho": [
+    "onboarding-negocio.recoger.response"
+  ],
+  "transporte": {
+    "rpc": [],
+    "salida": [
+      "contabilidad.negocio_registrado"
+    ],
+    "qos": "publishAndWait (request/response correlado) vía ui/request/contabilidad/<modulo>.<accion>; timeout del panel 10s. transporte.rpc vacío a propósito (acciones DOTTED)."
+  },
+  "ui": {
+    "_doc": "Panel de la cara humana de onboarding-negocio: la op de ESCRITURA (ORDEN) del módulo, con sus args reales. El BlueprintForm la invoca por ui/request/contabilidad/<accion>.",
+    "ops": {
+      "onboarding-negocio.recoger": {
+        "titulo": "Recoger los datos declarables del negocio",
+        "descripcion": "Da de alta/actualiza un negocio con sus datos declarables (nombre, NIF, plan contable, fuentes, parámetros). Lo ausente queda null y se declara en abierto (no se estima). Re-recoger APPENDEA. Anuncia contabilidad.negocio_registrado.",
+        "rol": "jefe",
+        "forma": "editor-bloque (negocio_id + datos declarables)",
+        "senal_pareada": "contabilidad.negocio_registrado",
+        "args": [
+          {
+            "nombre": "rol",
+            "tipo": "select",
+            "required": true,
+            "descripcion": "Rol single-writer del guard.",
+            "enum": [
+              "ONBOARDING_NEGOCIO"
+            ],
+            "default": "ONBOARDING_NEGOCIO"
+          },
+          {
+            "nombre": "negocio_id",
+            "tipo": "text",
+            "required": true,
+            "descripcion": "ID del negocio a dar de alta."
+          },
+          {
+            "nombre": "nombre",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Nombre del negocio."
+          },
+          {
+            "nombre": "nif",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "NIF del negocio."
+          },
+          {
+            "nombre": "plan",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Plan contable declarado."
+          },
+          {
+            "nombre": "fuentes",
+            "tipo": "json",
+            "required": false,
+            "descripcion": "Fuentes de datos del negocio (array)."
+          },
+          {
+            "nombre": "parametros",
+            "tipo": "json",
+            "required": false,
+            "descripcion": "Parámetros del negocio (objeto)."
+          },
+          {
+            "nombre": "datos",
+            "tipo": "json",
+            "required": false,
+            "descripcion": "Bolsa alternativa con todos los campos declarables."
+          }
+        ],
+        "errores": "403 PERMISSION_DENIED (rol != ONBOARDING_NEGOCIO) · 400 INVALID_INPUT (sin negocio_id)"
+      }
+    },
+    "roles": {
+      "onboarding-negocio.recoger": "jefe"
+    }
+  }
+}

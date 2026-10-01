@@ -1,0 +1,93 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "desatasco-entrada",
+  "version": "blueprint-2.0.0",
+  "moduleId": "contabilidad",
+  "titulo": "Desatasco de entrada",
+  "_doc": "Blueprint v2 de INTERFAZ del módulo contabilidad/desatasco-entrada (F6½). Declara la sección `ui` para el BlueprintForm (patrón interfaz-dinamico). RESOLVER / REENCOLAR / DESCARTAR una excepción CON MOTIVO. Es la ACCIÓN que completa la cola de lo dudoso: una excepción encolada NO se resuelve sola. SIN MOTIVO NO SE ACTÚA. MICRO-AGENTE stateless que ACTÚA (no propone). Las acciones van DOTTED ('<modulo>.<accion>') y el transporte.rpc va VACÍO: el RPC real es contabilidad.<accion>.request (domain 'contabilidad', action '<modulo>.<accion>' en ui_handlers) y la regex de deriveZones solo parsea acciones de 2 segmentos; el wrapper mqttRequest('contabilidad','<modulo>.<accion>') emite ui/request/contabilidad/<modulo>.<accion>, que casa con el ui_handler. Los args salen de los parámetros REALES del handler en index.js.",
+  "eventos_publicados": [
+    "contabilidad.excepcion_desatascada",
+    "escritor-diario.asentar.request",
+    "encolado-excepcion.encolar.request",
+    "historial-proceso-contable.anotar.request"
+  ],
+  "eventos_que_escucho": [
+    "desatasco-entrada.juzgar.response"
+  ],
+  "transporte": {
+    "rpc": [],
+    "salida": [
+      "contabilidad.excepcion_desatascada",
+      "escritor-diario.asentar.request",
+      "encolado-excepcion.encolar.request",
+      "historial-proceso-contable.anotar.request"
+    ],
+    "qos": "publishAndWait (request/response correlado) vía ui/request/contabilidad/<modulo>.<accion>; timeout del panel 10s. transporte.rpc vacío a propósito (acciones DOTTED)."
+  },
+  "ui": {
+    "_doc": "Panel de la cara humana de desatasco-entrada: la op de ESCRITURA (ORDEN) del módulo, con sus args reales. El BlueprintForm la invoca por ui/request/contabilidad/<accion>.",
+    "ops": {
+      "desatasco-entrada.juzgar": {
+        "titulo": "Juzgar (resolver/reencolar/descartar) una excepción",
+        "descripcion": "DECIDE y ACTÚA sobre una excepción dudosa: resolver (asienta por evento), reencolar (vuelve a la cola con motivo nuevo) o descartar (con motivo). SIN MOTIVO NO SE ACTÚA. Anuncia contabilidad.excepcion_desatascada y sube la acción concreta al custodio correspondiente.",
+        "rol": "asesor",
+        "forma": "editor-bloque (excepcion_id/clave + accion + motivo)",
+        "senal_pareada": "contabilidad.excepcion_desatascada (+ asentar/encolar/regla/anotar según acción)",
+        "args": [
+          {
+            "nombre": "excepcion",
+            "tipo": "json",
+            "required": false,
+            "descripcion": "La excepción completa (objeto)."
+          },
+          {
+            "nombre": "excepcion_id",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "ID de la excepción a desatascar."
+          },
+          {
+            "nombre": "clave",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Clave de la excepción (alternativa al id)."
+          },
+          {
+            "nombre": "accion",
+            "tipo": "select",
+            "required": true,
+            "descripcion": "Qué se hace con la excepción.",
+            "enum": [
+              "resolver",
+              "reencolar",
+              "descartar"
+            ],
+            "default": "resolver"
+          },
+          {
+            "nombre": "motivo",
+            "tipo": "text",
+            "required": true,
+            "descripcion": "Por qué se resuelve/reencola/descarta (obligatorio)."
+          },
+          {
+            "nombre": "asiento",
+            "tipo": "json",
+            "required": false,
+            "descripcion": "Asiento a asentar si se resuelve."
+          },
+          {
+            "nombre": "contrapartida",
+            "tipo": "json",
+            "required": false,
+            "descripcion": "Contrapartida declarada (aprendizaje si se descarta)."
+          }
+        ],
+        "errores": "400 INVALID_INPUT (sin excepcion_id/clave o sin motivo)"
+      }
+    },
+    "roles": {
+      "desatasco-entrada.juzgar": "asesor"
+    }
+  }
+}

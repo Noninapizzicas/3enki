@@ -1,0 +1,105 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "puerto-evento-vertical",
+  "version": "blueprint-2.0.0",
+  "moduleId": "contabilidad",
+  "titulo": "Puerto de evento de vertical",
+  "_doc": "Blueprint v2 de INTERFAZ del módulo contabilidad/puerto-evento-vertical (F6½). Declara la sección `ui` para el BlueprintForm (patrón interfaz-dinamico). LA PUERTA. La vertical MANDA y contabilidad se ADAPTA: por aquí entra el HECHO CRUDO ya emitido por una vertical de operación. Contabilidad NO produce esos hechos: los RECIBE. PUENTE stateless, dos caras: abrir (declarar canal) y recibir (admitir el hecho crudo). Las acciones van DOTTED ('<modulo>.<accion>') y el transporte.rpc va VACÍO: el RPC real es contabilidad.<accion>.request (domain 'contabilidad', action '<modulo>.<accion>' en ui_handlers) y la regex de deriveZones solo parsea acciones de 2 segmentos; el wrapper mqttRequest('contabilidad','<modulo>.<accion>') emite ui/request/contabilidad/<modulo>.<accion>, que casa con el ui_handler. Los args salen de los parámetros REALES del handler en index.js.",
+  "eventos_publicados": [
+    "contabilidad.hecho_recibido"
+  ],
+  "eventos_que_escucho": [
+    "puerto-evento-vertical.abrir.response",
+    "puerto-evento-vertical.recibir.response"
+  ],
+  "transporte": {
+    "rpc": [],
+    "salida": [
+      "contabilidad.hecho_recibido"
+    ],
+    "qos": "publishAndWait (request/response correlado) vía ui/request/contabilidad/<modulo>.<accion>; timeout del panel 10s. transporte.rpc vacío a propósito (acciones DOTTED)."
+  },
+  "ui": {
+    "_doc": "Panel de la cara humana de puerto-evento-vertical: la op de ESCRITURA (ORDEN) del módulo, con sus args reales. El BlueprintForm la invoca por ui/request/contabilidad/<accion>.",
+    "ops": {
+      "puerto-evento-vertical.abrir": {
+        "titulo": "Abrir la puerta de una vertical",
+        "descripcion": "La vertical DECLARA el canal por el que mandará hechos (y, si lo trae, su contrato de hecho mínimo). La puerta NO inventa el contrato: si no viene, lo deja abierto.",
+        "rol": "asesor",
+        "forma": "editor-bloque (vertical + contrato)",
+        "senal_pareada": "— (no publica hecho; solo .failed si falla)",
+        "args": [
+          {
+            "nombre": "vertical",
+            "tipo": "text",
+            "required": true,
+            "descripcion": "Vertical que abre la puerta (emisor)."
+          },
+          {
+            "nombre": "origen",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Alternativa a vertical."
+          },
+          {
+            "nombre": "contrato",
+            "tipo": "json",
+            "required": false,
+            "descripcion": "Contrato de hecho mínimo declarado por la vertical."
+          }
+        ],
+        "errores": "400 INVALID_INPUT (falta vertical)"
+      },
+      "puerto-evento-vertical.recibir": {
+        "titulo": "Recibir un hecho crudo de la vertical",
+        "descripcion": "Admite TAL CUAL un hecho crudo ya emitido por una vertical (lo normaliza el normalizador después, no esta puerta) y anuncia contabilidad.hecho_recibido para que arranque la cadena de entrada. Sin hecho no se fabrica nada.",
+        "rol": "asesor",
+        "forma": "editor-bloque (hecho json + vertical/tipo)",
+        "senal_pareada": "contabilidad.hecho_recibido",
+        "args": [
+          {
+            "nombre": "hecho",
+            "tipo": "json",
+            "required": true,
+            "descripcion": "El hecho crudo ya emitido por la vertical."
+          },
+          {
+            "nombre": "evento",
+            "tipo": "json",
+            "required": false,
+            "descripcion": "Alternativa a hecho."
+          },
+          {
+            "nombre": "vertical",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Vertical de origen (se anota el hueco si falta)."
+          },
+          {
+            "nombre": "origen",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Alias de vertical."
+          },
+          {
+            "nombre": "tipo",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Tipo de hecho declarado."
+          },
+          {
+            "nombre": "recibido_en",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Marca temporal declarada de recepción."
+          }
+        ],
+        "errores": "400 INVALID_INPUT (sin hecho)"
+      }
+    },
+    "roles": {
+      "puerto-evento-vertical.abrir": "asesor",
+      "puerto-evento-vertical.recibir": "asesor"
+    }
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "id": "maestro-terceros",
+  "name": "Maestro de terceros",
+  "version": "0.1.0",
+  "zone": "work-bar",
+  "order": 48,
+  "icon": "👥",
+  "label": "Maestro terceros"
+}

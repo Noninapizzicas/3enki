@@ -87,6 +87,7 @@ const ARCHIVO_FASE = {
   'negocio.interfaz':             'fase6-decidir-interfaz',
   'negocio.interfaz_esquematizada': 'fase6h-esquematizar-interfaz',
   'negocio.interfaz_construida':  'fase7-construir-interfaz',
+  'negocio.ensamblado':           'fase7b-ensamblaje',
   'negocio.verificado':           'fase8-verificar-en-vivo',
   'negocio.completado':           'fase-completado'
 };
@@ -154,6 +155,18 @@ const MAPA_PROCESO = {
     lee: ['esquemas/plan-construccion.md'],
     escribe: 'modules/<slug>/',
     mensaje: 'Hoja completa (módulo + skill + interfaz). FASE 4: construir la SIGUIENTE hoja del plan — lee esquemas/plan-construccion.md, la siguiente sin módulo en el repo. Al terminar: proceso-negocio.completar_fase { fase: "construido" }. Si no quedan hojas: proceso-negocio.completar_fase { fase: "completado" }.'
+  },
+  // ── F7b · ENSAMBLAJE ──
+  // La fase que RECOMPONE la realidad escrita: cruza el CONTRATO DISEÑADO
+  // (el bloque enki-plan de F3b: subscribes/publishes por hoja) contra lo que
+  // los módulos e interfaces ESCRITOS declaran de verdad. Determinista, sin LLM.
+  // Sin esta fase el proceso construye islas y solo comprueba que cargan (F8) —
+  // medido en nichos: 81 conexiones de dominio rotas y 18 hojas divergentes.
+  'negocio.ensamblado': {
+    skill: 'ensamblaje',
+    lee: ['esquemas/plan-construccion.md', 'modules/<slug>/module.json'],
+    escribe: 'proceso-negocio/fase7b-ensamblaje.json',
+    mensaje: 'COMPLETO: todas las hojas tienen módulo, skill e interfaz, y el ensamblaje está recomponido contra el plan de F3b.'
   },
   'negocio.verificado': {
     skill: null,
@@ -399,6 +412,16 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
       }
       // hoja completa (módulo + skill + interfaz) → continúa a la siguiente
     }
+    // ── F7b · ENSAMBLAJE (determinista, sin LLM) ──
+    // Antes de la verificación final, RECOMPONER: ¿lo escrito HABLA como el plan
+    // (F3b) lo diseñó? Cruza el contrato diseñado (bloque enki-plan) contra los
+    // module.json reales. Sin esto el proceso solo comprueba que los módulos
+    // CARGAN (F8), no que se hablen — nichos llegó a F8 con 81 conexiones rotas.
+    if (!this._ensambladoRecomponer(progreso)) {
+      return { skill: 'ensamblaje', lee: ['esquemas/plan-construccion.md', 'modules/'], escribe: 'proceso-negocio/fase7b-ensamblaje.json',
+        mensaje: `FASE 7b · ENSAMBLAJE: recomponer la realidad escrita — cruza el plan de F3b (subscribes/publishes por hoja) contra los module.json reales. Determinista, sin LLM. Al terminar: proceso-negocio.completar_fase { fase: "ensamblado" }.` };
+    }
+
     // FASE 8 — VERIFICACIÓN FINAL EN VIVO (determinista, sin LLM).
     // Todo el plan está construido (módulo + skill + interfaz). Antes de declarar
     // 'completado', el orquestador VERIFICA EN DISCO que el negocio realmente
@@ -425,6 +448,72 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
   // Flag persistido en _emitidos (idempotente, como el resto de fases).
   _verificado(project_id) {
     return this._emitidos.has(`${project_id}::negocio.verificado`);
+  }
+
+  // ¿La FASE 7b (ensamblaje) ya se completó? Flag persistido en _emitidos.
+  _ensamblado(project_id) {
+    return this._emitidos.has(`${project_id}::negocio.ensamblado`);
+  }
+
+  // ── F7b · ENSAMBLAJE — RECOMPONE la realidad escrita (determinista, sin LLM) ──
+  // Cruza el CONTRATO DISEÑADO (el bloque enki-plan de F3b, con subscribes/
+  // publishes por hoja) contra lo ESCRITO (los module.json reales de módulos y
+  // las interfaces en el frontend). Devuelve true si está ensamblado (sin
+  // conexiones de dominio rotas ni hojas divergentes); si no, deja el informe
+  // en disco y devuelve false para que el proceso lo trate como freno → empujón.
+  async _ensambladoRecomponer(progreso) {
+    const project_id = progreso.project_id;
+    try {
+      const r = await this._rpc('fs.read.request', { project_id, path: 'esquemas/plan-construccion.md' });
+      const contenido = (r && (r.content || r.data?.content)) || '';
+      // SIN PLAN no hay contrato contra el que recomponer → NO se puede declarar
+      // ensamblado. Es el mismo principio que F8 ("sin plan no hay nada que
+      // verificar"): no se cierra una fase sobre vacío. Lo canta el test de
+      // blindaje de la cadena (ninguna fase cierra sin su entregable en disco).
+      if (!contenido) return false;
+      const m = contenido.match(/```json enki-plan\s*([\s\S]*?)```/);
+      if (!m) return false;         // plan sin bloque estructurado → no recomponible
+      let plan;
+      try { plan = JSON.parse(m[1]); } catch (_) { return false; }
+
+      // La realidad escrita: los módulos del plan, leídos del repo real.
+      const real = {};
+      for (const h of (plan.hojas || [])) {
+        if (!h || !h.slug) continue;
+        const dir = this._buscarModulo(h.slug);
+        if (!dir) continue;         // no escrito → lo cubre _progresoPlan, no aquí
+        let mj = null;
+        try { mj = JSON.parse(fs.readFileSync(path.join(dir, 'module.json'), 'utf8')); } catch (_) {}
+        real[h.slug] = {
+          existe: true,
+          subscribes: (mj && (mj.subscribes || mj.events?.subscribes)) || [],
+          publishes: (mj && (mj.publishes || mj.events?.publishes)) || [],
+          tiene_interfaz: this._interfazOperativaEnDisco(h.slug)
+        };
+      }
+      const { Ensamblaje } = require('./ensamblaje');
+      const informe = new Ensamblaje(plan, real).recomponer();
+
+      // Persistir el informe (evidencia en disco, no solo la palabra del proceso).
+      try {
+        await this._rpc('fs.write.request', {
+          project_id, path: 'proceso-negocio/fase7b-ensamblaje.json',
+          content: JSON.stringify({ ...informe, completada_el: new Date().toISOString(), project_id }, null, 2)
+        });
+      } catch (_) { /* best-effort: el informe no debe tumbar el proceso */ }
+
+      // El freno es el hallazgo, no el muro: si hay conexiones rotas o hojas
+      // divergentes, NO está ensamblado y el proceso lo dice con números.
+      return informe.ensamblado === true;
+    } catch (err) {
+      // NO SE PUDO VERIFICAR → NO SE CERTIFICA. Fail-SAFE, nunca fail-open.
+      // Doctrina del cimiento: "success = ENTREGABLE VERIFICADO". Un fallo de
+      // infraestructura (RPC caído, require roto) NO puede declarar el proceso
+      // ensamblado en verde — sería un falso verde sobre trabajo no comprobado.
+      // Es la misma regla que F8 ("sin plan no hay nada que verificar").
+      this._ultimoFalloEnsamblaje = (err && err.message) || String(err);
+      return false;
+    }
   }
 
   async _progresoPlan(project_id) {
@@ -724,10 +813,46 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
         // el frontend. No se fía del reporte del agente — cuenta en disco.
         tipo: 'sistema',
         mensaje: 'La verificación final no pasa: se espera que TODAS las hojas del plan tengan su módulo (modules/<slug>/index.js que carga), su skill (cosecha/cantera/enki/<slug>/SKILL.md) y su interfaz operativa (frontend/src/lib/modules/<slug>/). El reporte del agente no cuenta.'
+      },
+      'ensamblado': {
+        // FASE 7b — ENSAMBLAJE (determinista, sin LLM): lo escrito HABLA como el
+        // plan (F3b) lo diseñó. Se acepta si el recomponedor no encuentra ni
+        // conexiones de dominio rotas ni hojas divergentes. El informe queda en
+        // disco (proceso-negocio/fase7b-ensamblaje.json).
+        tipo: 'sistema',
+        mensaje: 'El ensamblaje no pasa: el plan de F3b declara conexiones (subscribes/publishes) que los módulos escritos no cumplen. Revisa proceso-negocio/fase7b-ensamblaje.json: conexiones de dominio rotas y hojas divergentes.'
       }
     };
     const spec = ESPERADOS[fase];
     if (!spec) return { ok: true };   // fase sin gate declarado → se acepta
+    // FASE 7b — ENSAMBLAJE: el gate es el recomponedor determinista. Acepta solo
+    // si lo escrito cuadra con el contrato diseñado (F3b): sin conexiones de
+    // dominio rotas ni hojas divergentes. El informe queda en disco.
+    if (fase === 'ensamblado') {
+      const ok = await this._ensambladoRecomponer({ project_id });
+      if (ok) return { ok: true, verificados: ['ensamblaje: lo escrito cuadra con el plan de F3b'] };
+      let informe = null;
+      try {
+        const rr = await this._rpc('fs.read.request', { project_id, path: 'proceso-negocio/fase7b-ensamblaje.json' });
+        informe = JSON.parse((rr && (rr.content || rr.data?.content)) || 'null');
+      } catch (_) {}
+      const rotas = informe ? informe.conexiones_rotas_count : '?';
+      const diverg = informe ? informe.hojas_divergentes : '?';
+      const cablear = (informe && informe.trabajo) || [];
+      // FRENO → EMPUJÓN: el 409 no es un muro, es la lista de trabajo. El
+      // ensamblaje no "arregla" (adivinaría la conexión correcta); entrega el
+      // trabajo concreto para que se ejecute y la fase se cierre al corregirlo.
+      const detalleTrabajo = cablear.length
+        ? ` Trabajo: ${cablear.slice(0, 5).map((t) => `'${t.evento}' engancharlo en ${t.cablear_en.join(',')}`).join(' · ')}`
+        : '';
+      return { ok: false,
+        esperado: ['conexiones de dominio completas', 'módulos fieles al plan'],
+        mensaje: `${spec.mensaje} (medido: ${rotas} conexiones de dominio rotas, ${diverg} hojas divergentes).${detalleTrabajo}`,
+        // El EMPUJÓN viaja estructurado, no solo como prosa: quién lo consuma
+        // (el chat, un agente de cosido futuro) tiene la lista accionable.
+        trabajo: cablear,
+        informe };
+    }
     // FASE 8 — verificación final: TODAS las hojas del plan deben estar
     // construidas + con skill. No se fía del resumen del agente: cuenta el
     // progreso REAL en disco (_progresoPlan). Las fases de interfaz se quitaron.

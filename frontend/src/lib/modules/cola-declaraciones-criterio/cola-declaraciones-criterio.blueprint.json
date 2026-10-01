@@ -1,0 +1,94 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "cola-declaraciones-criterio",
+  "version": "blueprint-2.0.0",
+  "moduleId": "contabilidad",
+  "titulo": "Cola de criterios",
+  "_doc": "Blueprint v2 de INTERFAZ del módulo contabilidad/cola-declaraciones-criterio (F6½). Panel del custodio K9: la cola donde el JEFE fija (ORDEN `fijar`) y ratifica (ORDEN `ratificar`) TODOS los criterios [ABIERTO] del sistema. El criterio se DECLARA, no se estima (valor ausente → estado ABIERTO). Un solo escritor (rol JEFE_CRITERIO; otro → 403). APPEND-ONLY. Publica contabilidad.criterio_fijado. Acciones DOTTED, transporte.rpc VACÍO. Args del handler REAL (index.js).",
+  "eventos_publicados": [
+    "contabilidad.criterio_fijado"
+  ],
+  "eventos_que_escucho": [
+    "cola-declaraciones-criterio.fijar.response",
+    "cola-declaraciones-criterio.ratificar.response"
+  ],
+  "transporte": {
+    "entrada": "reflejo RPC via ui_handlers (module.json) — las ops se conducen por ui/request/contabilidad/<accion>. transporte.rpc vacio a proposito.",
+    "rpc": [],
+    "salida": [
+      "contabilidad.criterio_fijado"
+    ],
+    "qos": "publishAndWait (request/response correlado) en cada operacion; timeout 8s"
+  },
+  "ui": {
+    "_doc": "Panel de la cara humana de cola-declaraciones-criterio: la(s) op(s) de ESCRITURA (ORDEN) del módulo, con sus args reales. El BlueprintForm la invoca por ui/request/contabilidad/<accion>.",
+    "ops": {
+      "cola-declaraciones-criterio.fijar": {
+        "titulo": "Fijar un criterio",
+        "descripcion": "Fija (declara) el valor de un criterio del sistema (rol JEFE_CRITERIO; otro rol → 403). Valor ausente → el criterio queda [ABIERTO] (no se estima un default). Publica contabilidad.criterio_fijado.",
+        "rol": "jefe",
+        "forma": "editor-bloque (project_id/rol/clave/valor)",
+        "senal_pareada": "contabilidad.criterio_fijado",
+        "args": [
+          {
+            "nombre": "project_id",
+            "tipo": "text",
+            "required": true,
+            "descripcion": "Proyecto."
+          },
+          {
+            "nombre": "rol",
+            "tipo": "text",
+            "required": true,
+            "descripcion": "Rol escritor (debe ser 'JEFE_CRITERIO')."
+          },
+          {
+            "nombre": "clave",
+            "tipo": "text",
+            "required": true,
+            "descripcion": "Clave del criterio (unidad_de_cierre, periodo, amortizacion, …)."
+          },
+          {
+            "nombre": "valor",
+            "tipo": "json",
+            "required": false,
+            "descripcion": "Valor declarado; ausente → queda [ABIERTO]."
+          }
+        ],
+        "errores": "403 PERMISSION_DENIED (rol != JEFE_CRITERIO) · 400 INVALID_INPUT (sin clave)"
+      },
+      "cola-declaraciones-criterio.ratificar": {
+        "titulo": "Ratificar un criterio",
+        "descripcion": "Acto del JEFE sobre un criterio YA declarado. Sobre un criterio [ABIERTO] no se inventa ratificación (ratificado:false). Publica contabilidad.criterio_fijado.",
+        "rol": "jefe",
+        "forma": "boton-accion (project_id/rol/clave)",
+        "senal_pareada": "contabilidad.criterio_fijado",
+        "args": [
+          {
+            "nombre": "project_id",
+            "tipo": "text",
+            "required": true,
+            "descripcion": "Proyecto."
+          },
+          {
+            "nombre": "rol",
+            "tipo": "text",
+            "required": true,
+            "descripcion": "Rol escritor (debe ser 'JEFE_CRITERIO')."
+          },
+          {
+            "nombre": "clave",
+            "tipo": "text",
+            "required": true,
+            "descripcion": "Clave del criterio ya declarado."
+          }
+        ],
+        "errores": "403 PERMISSION_DENIED (rol != JEFE_CRITERIO) · 400 INVALID_INPUT (sin clave)"
+      }
+    },
+    "roles": {
+      "cola-declaraciones-criterio.fijar": "jefe",
+      "cola-declaraciones-criterio.ratificar": "jefe"
+    }
+  }
+}

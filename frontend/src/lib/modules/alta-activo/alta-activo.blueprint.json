@@ -1,0 +1,58 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "alta-activo",
+  "version": "blueprint-2.0.0",
+  "moduleId": "contabilidad",
+  "titulo": "Alta de activo",
+  "_doc": "Blueprint v2 de INTERFAZ del módulo contabilidad/alta-activo (F6½). Panel del custodio F1: la op de ESCRITURA (ORDEN) `registrar`, que da de ALTA un activo del inmovilizado y apila su ficha (append-only). La valoración se ANOTA (no se recalcula). El cerrojo: la identidad es el activo_id/codigo declarado; sin ella NO se da de alta. Publica contabilidad.activo_alta y sube a escritor-diario.asentar.request, plan-amortizacion.cuota_del_periodo.request y expediente-documental.archivar.request. Acciones DOTTED, transporte.rpc VACÍO. Args del handler REAL (index.js).",
+  "eventos_publicados": [
+    "contabilidad.activo_alta",
+    "escritor-diario.asentar.request",
+    "plan-amortizacion.cuota_del_periodo.request",
+    "expediente-documental.archivar.request"
+  ],
+  "eventos_que_escucho": [
+    "alta-activo.registrar.response"
+  ],
+  "transporte": {
+    "entrada": "reflejo RPC via ui_handlers (module.json) — las ops se conducen por ui/request/contabilidad/<accion>. transporte.rpc vacio a proposito.",
+    "rpc": [],
+    "salida": [
+      "contabilidad.activo_alta",
+      "escritor-diario.asentar.request",
+      "plan-amortizacion.cuota_del_periodo.request",
+      "expediente-documental.archivar.request"
+    ],
+    "qos": "publishAndWait (request/response correlado) en cada operacion; timeout 8s"
+  },
+  "ui": {
+    "_doc": "Panel de la cara humana de alta-activo: la(s) op(s) de ESCRITURA (ORDEN) del módulo, con sus args reales. El BlueprintForm la invoca por ui/request/contabilidad/<accion>.",
+    "ops": {
+      "alta-activo.registrar": {
+        "titulo": "Dar de alta un activo",
+        "descripcion": "Da de alta (o actualiza, append-only) un activo del inmovilizado. Sin identidad (activo_id|codigo) → INVALID_INPUT. Publica contabilidad.activo_alta y delega asiento/cuota/documento por evento.",
+        "rol": "asesor",
+        "forma": "editor-bloque (project_id/activo{activo_id|codigo,descripcion,cuenta,valor,fecha_alta,vida_util,metodo_amortizacion,documento})",
+        "senal_pareada": "contabilidad.activo_alta",
+        "args": [
+          {
+            "nombre": "project_id",
+            "tipo": "text",
+            "required": true,
+            "descripcion": "Proyecto."
+          },
+          {
+            "nombre": "activo",
+            "tipo": "json",
+            "required": true,
+            "descripcion": "Ficha del activo: activo_id|codigo (identidad), descripcion, cuenta, valor, fecha_alta, vida_util, metodo_amortizacion, documento."
+          }
+        ],
+        "errores": "400 INVALID_INPUT (sin project_id o identidad del activo)"
+      }
+    },
+    "roles": {
+      "alta-activo.registrar": "asesor"
+    }
+  }
+}

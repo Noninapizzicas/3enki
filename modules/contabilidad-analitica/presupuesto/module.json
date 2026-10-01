@@ -44,10 +44,22 @@
     }
   ],
   "tools": [
-    { "name": "presupuesto.fijar", "description": "Fija (ORDEN) la cifra objetivo por dimension; importe ausente → queda [ABIERTO]." },
-    { "name": "presupuesto.objetivo", "description": "Lee (PREGUNTA) la cifra objetivo vigente; si no esta fijada, lo declara abierto." }
+    {
+      "name": "presupuesto.fijar",
+      "description": "Fija (ORDEN) la cifra objetivo por dimension; importe ausente → queda [ABIERTO]."
+    },
+    {
+      "name": "presupuesto.objetivo",
+      "description": "Lee (PREGUNTA) la cifra objetivo vigente; si no esta fijada, lo declara abierto."
+    }
   ],
   "ui_handlers": [
-    { "domain": "contabilidad", "action": "presupuesto.fijar", "handler": "onFijarRequest", "type": "inline_render", "zone": "area_chat" }
+    {
+      "domain": "contabilidad",
+      "action": "presupuesto.fijar",
+      "handler": "onFijarRequest",
+      "type": "chat_tool",
+      "zone": "chat_tools"
+    }
   ]
 }

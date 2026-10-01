@@ -1,0 +1,9 @@
+{
+  "id": "aviso-al-negocio",
+  "name": "Aviso al negocio",
+  "version": "0.1.0",
+  "zone": "system-bar",
+  "order": 108,
+  "icon": "📣",
+  "label": "Aviso negocio"
+}

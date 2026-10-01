@@ -1,0 +1,9 @@
+{
+  "id": "alta-activo",
+  "name": "Alta de activo",
+  "version": "0.1.0",
+  "zone": "system-bar",
+  "order": 107,
+  "icon": "🏗️",
+  "label": "Alta activo"
+}

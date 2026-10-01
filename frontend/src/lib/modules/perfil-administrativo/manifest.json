@@ -1,0 +1,9 @@
+{
+  "id": "perfil-administrativo",
+  "name": "Perfil administrativo",
+  "version": "0.1.0",
+  "zone": "system-bar",
+  "order": 105,
+  "icon": "🏛️",
+  "label": "Perfil admin."
+}

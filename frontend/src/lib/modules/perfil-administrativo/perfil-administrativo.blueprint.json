@@ -1,0 +1,74 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "perfil-administrativo",
+  "version": "blueprint-2.0.0",
+  "moduleId": "contabilidad",
+  "titulo": "Perfil administrativo",
+  "_doc": "Blueprint v2 de INTERFAZ del módulo contabilidad/perfil-administrativo (F6½). Mesa del asesor: la op de ESCRITURA (ORDEN) `declarar`, donde SOLO el rol ADMINISTRATIVO declara qué administraciones y obligaciones aplican (territorio y régimen). No calcula obligaciones: las declara; dato ausente = desconocido, nunca se estima. Publica contabilidad.perfil_administrativo_declarado y sube cola-declaraciones-criterio.fijar.request + calendario-fiscal.declarar.request. La op `obligaciones` es PREGUNTA (sin ui_handler). Acciones DOTTED, transporte.rpc VACÍO. Args del handler REAL (index.js).",
+  "eventos_publicados": [
+    "contabilidad.perfil_administrativo_declarado",
+    "cola-declaraciones-criterio.fijar.request",
+    "calendario-fiscal.declarar.request"
+  ],
+  "eventos_que_escucho": [
+    "perfil-administrativo.declarar.response"
+  ],
+  "transporte": {
+    "entrada": "reflejo RPC via ui_handlers (module.json) — las ops se conducen por ui/request/contabilidad/<accion>. transporte.rpc vacio a proposito.",
+    "rpc": [],
+    "salida": [
+      "contabilidad.perfil_administrativo_declarado",
+      "cola-declaraciones-criterio.fijar.request",
+      "calendario-fiscal.declarar.request"
+    ],
+    "qos": "publishAndWait (request/response correlado) en cada operacion; timeout 8s"
+  },
+  "ui": {
+    "_doc": "Panel de la cara humana de perfil-administrativo: la(s) op(s) de ESCRITURA (ORDEN) del módulo, con sus args reales. El BlueprintForm la invoca por ui/request/contabilidad/<accion>.",
+    "ops": {
+      "perfil-administrativo.declarar": {
+        "titulo": "Declarar el perfil administrativo",
+        "descripcion": "Declara régimen, territorio y obligaciones del proyecto (rol ADMINISTRATIVO; otro rol → 403). Lo no declarado queda [ABIERTO]: el sistema pregunta, no decide. Publica contabilidad.perfil_administrativo_declarado y sube a cola-declaraciones-criterio y calendario-fiscal.",
+        "rol": "asesor",
+        "forma": "editor-bloque (project_id/rol/regimen/territorio/obligaciones)",
+        "senal_pareada": "contabilidad.perfil_administrativo_declarado",
+        "args": [
+          {
+            "nombre": "project_id",
+            "tipo": "text",
+            "required": true,
+            "descripcion": "Proyecto."
+          },
+          {
+            "nombre": "rol",
+            "tipo": "text",
+            "required": true,
+            "descripcion": "Rol escritor (debe ser 'ADMINISTRATIVO')."
+          },
+          {
+            "nombre": "regimen",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Régimen fiscal declarado."
+          },
+          {
+            "nombre": "territorio",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Territorio declarado."
+          },
+          {
+            "nombre": "obligaciones",
+            "tipo": "json",
+            "required": false,
+            "descripcion": "Obligaciones declaradas (no se estiman)."
+          }
+        ],
+        "errores": "403 PERMISSION_DENIED (rol != ADMINISTRATIVO) · 400 INVALID_INPUT (sin project_id)"
+      }
+    },
+    "roles": {
+      "perfil-administrativo.declarar": "asesor"
+    }
+  }
+}

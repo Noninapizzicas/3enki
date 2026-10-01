@@ -1,0 +1,76 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "acuse-presentacion",
+  "version": "blueprint-2.0.0",
+  "moduleId": "contabilidad",
+  "titulo": "Acuse de presentación",
+  "_doc": "Blueprint v2 de INTERFAZ del módulo contabilidad/acuse-presentacion (F6½). Panel del puente D13: la op de ESCRITURA (ORDEN) `ligar`, que recoge el justificante/acuse de la administración y lo LIGA a su modelo y a su asiento, cerrando el bucle hacia fuera. Sin acuse declarado NO se liga nada (no se finge una justificación). Sube estado-presentacion-fiscal.avanzar.request, escritor-diario.asentar.request y expediente-documental.archivar.request. Acciones DOTTED, transporte.rpc VACÍO. Args del handler REAL (index.js).",
+  "eventos_publicados": [
+    "contabilidad.declaracion_justificada",
+    "estado-presentacion-fiscal.avanzar.request",
+    "escritor-diario.asentar.request",
+    "expediente-documental.archivar.request"
+  ],
+  "eventos_que_escucho": [
+    "acuse-presentacion.ligar.response"
+  ],
+  "transporte": {
+    "entrada": "reflejo RPC via ui_handlers (module.json) — las ops se conducen por ui/request/contabilidad/<accion>. transporte.rpc vacio a proposito.",
+    "rpc": [],
+    "salida": [
+      "contabilidad.declaracion_justificada",
+      "estado-presentacion-fiscal.avanzar.request",
+      "escritor-diario.asentar.request",
+      "expediente-documental.archivar.request"
+    ],
+    "qos": "publishAndWait (request/response correlado) en cada operacion; timeout 8s"
+  },
+  "ui": {
+    "_doc": "Panel de la cara humana de acuse-presentacion: la(s) op(s) de ESCRITURA (ORDEN) del módulo, con sus args reales. El BlueprintForm la invoca por ui/request/contabilidad/<accion>.",
+    "ops": {
+      "acuse-presentacion.ligar": {
+        "titulo": "Ligar el acuse de una declaración",
+        "descripcion": "Liga el acuse/justificante de la administración a su modelo y a su asiento. Sin acuse → no liga (no se finge). Publica contabilidad.declaracion_justificada y sube a estado-presentacion-fiscal, escritor-diario y expediente-documental.",
+        "rol": "asesor",
+        "forma": "editor-bloque (project_id/acuse/modelo/asiento)",
+        "senal_pareada": "contabilidad.declaracion_justificada",
+        "args": [
+          {
+            "nombre": "project_id",
+            "tipo": "text",
+            "required": true,
+            "descripcion": "Proyecto."
+          },
+          {
+            "nombre": "acuse",
+            "tipo": "json",
+            "required": false,
+            "descripcion": "El acuse/justificante de la administración."
+          },
+          {
+            "nombre": "justificante",
+            "tipo": "json",
+            "required": false,
+            "descripcion": "Alias del acuse/justificante."
+          },
+          {
+            "nombre": "modelo",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Modelo fiscal al que se liga el acuse."
+          },
+          {
+            "nombre": "asiento",
+            "tipo": "json",
+            "required": false,
+            "descripcion": "Asiento de la declaración, si el acuse lo trae."
+          }
+        ],
+        "errores": "400 INVALID_INPUT (sin project_id o acuse)"
+      }
+    },
+    "roles": {
+      "acuse-presentacion.ligar": "asesor"
+    }
+  }
+}

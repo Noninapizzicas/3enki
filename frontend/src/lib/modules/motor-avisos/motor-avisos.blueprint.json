@@ -1,0 +1,90 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "motor-avisos",
+  "version": "blueprint-2.0.0",
+  "moduleId": "contabilidad",
+  "titulo": "Motor de avisos",
+  "_doc": "Blueprint v2 de INTERFAZ del módulo contabilidad/motor-avisos (F6½). Panel del puente K2: la op de ESCRITURA (ORDEN) `producir`, que PRODUCE el aviso a partir de una señal y lo ENTREGA subiendo aviso-al-negocio.entregar.request (R1 es quien entrega). Sin señal declarada NO se inventa un aviso (dato ausente = desconocido). Publica contabilidad.aviso_producido. Acciones DOTTED, transporte.rpc VACÍO. Args del handler REAL (index.js).",
+  "eventos_publicados": [
+    "contabilidad.aviso_producido",
+    "aviso-al-negocio.entregar.request"
+  ],
+  "eventos_que_escucho": [
+    "motor-avisos.producir.response"
+  ],
+  "transporte": {
+    "entrada": "reflejo RPC via ui_handlers (module.json) — las ops se conducen por ui/request/contabilidad/<accion>. transporte.rpc vacio a proposito.",
+    "rpc": [],
+    "salida": [
+      "contabilidad.aviso_producido",
+      "aviso-al-negocio.entregar.request"
+    ],
+    "qos": "publishAndWait (request/response correlado) en cada operacion; timeout 8s"
+  },
+  "ui": {
+    "_doc": "Panel de la cara humana de motor-avisos: la(s) op(s) de ESCRITURA (ORDEN) del módulo, con sus args reales. El BlueprintForm la invoca por ui/request/contabilidad/<accion>.",
+    "ops": {
+      "motor-avisos.producir": {
+        "titulo": "Producir un aviso",
+        "descripcion": "PRODUCE un aviso desde una señal declarada (no lo entrega: eso es de aviso-al-negocio R1) y sube aviso-al-negocio.entregar.request. Sin señal → no se inventa el aviso. Publica contabilidad.aviso_producido.",
+        "rol": "asesor",
+        "forma": "editor-bloque (project_id/tipo/titulo/detalle/severidad/senal|hecho/origen)",
+        "senal_pareada": "contabilidad.aviso_producido (+ aviso-al-negocio.entregar.request)",
+        "args": [
+          {
+            "nombre": "project_id",
+            "tipo": "text",
+            "required": true,
+            "descripcion": "Proyecto."
+          },
+          {
+            "nombre": "tipo",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Tipo de aviso (revision, cuadre, plazo, presupuesto, hecho…)."
+          },
+          {
+            "nombre": "titulo",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Título del aviso."
+          },
+          {
+            "nombre": "detalle",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Detalle del aviso."
+          },
+          {
+            "nombre": "severidad",
+            "tipo": "select",
+            "required": false,
+            "descripcion": "Severidad declarada del aviso."
+          },
+          {
+            "nombre": "senal",
+            "tipo": "json",
+            "required": false,
+            "descripcion": "La señal declarada que dispara el aviso."
+          },
+          {
+            "nombre": "hecho",
+            "tipo": "json",
+            "required": false,
+            "descripcion": "El hecho declarado (si el origen es un hecho)."
+          },
+          {
+            "nombre": "origen",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Origen declarado del aviso."
+          }
+        ],
+        "errores": "400 INVALID_INPUT (sin project_id)"
+      }
+    },
+    "roles": {
+      "motor-avisos.producir": "asesor"
+    }
+  }
+}

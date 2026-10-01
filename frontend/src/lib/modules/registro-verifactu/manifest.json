@@ -1,0 +1,9 @@
+{
+  "id": "registro-verifactu",
+  "name": "Registro Verifactu",
+  "version": "0.1.0",
+  "zone": "system-bar",
+  "order": 106,
+  "icon": "🔗",
+  "label": "Verifactu"
+}

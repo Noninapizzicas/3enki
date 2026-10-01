@@ -1,0 +1,49 @@
+{
+  "_doc": "Manifest de entrada/puerto-evento-vertical — PUENTE (A1, hoja del plan). LA PUERTA de entrada del dominio: la vertical MANDA y contabilidad se ADAPTA. abrir (ORDEN) declara el canal por el que una vertical mandara hechos (y su contrato de hecho minimo, si lo trae); recibir (ORDEN) admite UN hecho crudo ya emitido y ANUNCIA el hecho de dominio contabilidad.hecho_recibido para arrancar la cadena de entrada (normalizador-hecho A2, deduplicacion-hecho, completitud-cobertura, escritor-diario...). El hecho entra CRUDO: la puerta admite, NO normaliza (eso es A2). Dato ausente = desconocido: sin hecho no se recibe nada; el contrato que no venga se declara en `abierto`. STATELESS: sin PosPersistencia (no guarda estado; el hecho de dominio y su anotacion los hacen otros). Publica abrir.response/.failed, recibir.response/.failed y contabilidad.hecho_recibido.",
+  "name": "puerto-evento-vertical",
+  "version": "0.1.0",
+  "description": "Puente (A1): la puerta de entrada. La vertical manda su hecho crudo y contabilidad lo admite y anuncia contabilidad.hecho_recibido.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "puerto-evento-vertical.abrir.request",
+      "handler": "onAbrirRequest",
+      "description": "RPC puente (ORDEN, panel): {project_id, vertical, contrato?} → {project_id, vertical, gate_abierta, contrato, contrato_declarado, abierto}. Declara el canal de entrada de una vertical; no inventa el contrato de hecho minimo. Responde por puerto-evento-vertical.abrir.response."
+    },
+    {
+      "event": "puerto-evento-vertical.recibir.request",
+      "handler": "onRecibirRequest",
+      "description": "RPC puente (ORDEN, panel): {project_id, hecho, vertical?, tipo?, recibido_en?} → {project_id, hecho, vertical, tipo_hecho, recibido, adaptado:false, abierto}. Admite el hecho crudo ya emitido por la vertical y publica contabilidad.hecho_recibido. El hecho entra sin normalizar. Responde por puerto-evento-vertical.recibir.response."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "contabilidad.hecho_recibido",
+      "description": "Fire-and-forget (A1): la puerta admitio un hecho crudo de una vertical → {project_id, hecho, origen, vertical, recibido_en}. Arranca la cadena de entrada: lo consumen normalizador-hecho (A2), deduplicacion-hecho (A6), completitud-cobertura (A12), contrapartida-asistida (A5), hecho-rectificativo (A13), declaracion-fuente-faltante (A16), escritor-diario (B2), ajuste-inventario, variacion-stock-valorada, cruce-factura-recepcion, etiquetado-analitico, motor-avisos, panel-proceso-contable, historial-proceso-contable, tasa-cobertura-entrada, sello-cobertura."
+    },
+    {
+      "event": "puerto-evento-vertical.abrir.response",
+      "description": "Respuesta RPC correlada de la op abrir (una sola cara: el bus)."
+    },
+    {
+      "event": "puerto-evento-vertical.abrir.failed",
+      "description": "Par de fallo determinista: falta project_id o vertical → {status, code, message}. Cierra el circulo de abrir.request."
+    },
+    {
+      "event": "puerto-evento-vertical.recibir.response",
+      "description": "Respuesta RPC correlada de la op recibir."
+    },
+    {
+      "event": "puerto-evento-vertical.recibir.failed",
+      "description": "Par de fallo determinista: falta project_id o hecho → {status, code, message}. Cierra el circulo de recibir.request."
+    }
+  ],
+  "tools": [
+    { "name": "puerto-evento-vertical.abrir", "description": "Abre (ORDEN) el canal de entrada de una vertical, declara su contrato de hecho minimo si lo trae." },
+    { "name": "puerto-evento-vertical.recibir", "description": "Recibe (ORDEN) un hecho crudo ya emitido por una vertical y anuncia contabilidad.hecho_recibido." }
+  ],
+  "ui_handlers": [
+    { "domain": "contabilidad", "action": "puerto-evento-vertical.abrir", "handler": "onAbrirRequest", "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "contabilidad", "action": "puerto-evento-vertical.recibir", "handler": "onRecibirRequest", "type": "workspace_module", "zone": "barra_modulos" }
+  ]
+}

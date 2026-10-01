@@ -1,0 +1,34 @@
+{
+  "_doc": "Manifest de libro/ratificacion-regla-aprendida — PUENTE (L10, hoja del plan). EL GATE HUMANO UNICO para A6.2 (contrapartida-asistida) y E8 (regla-movimiento-bancario): una regla APRENDIDA no actua sobre el volumen hasta que el ASESOR la ratifica o la bloquea. La op ratificar (ORDEN, panel) registra la decision del humano (RATIFICADA actua / BLOQUEADA no actua) con su autor y fecha, y ANUNCIA el hecho de dominio contabilidad.regla_ratificada para que los consumidores (regla-contrapartida, regla-movimiento-bancario) la apliquen o la dejen inerte. Sin decision declarada NO se asume ratificacion (dato ausente = desconocido). PUENTE stateless: no persiste el cuerpo de las reglas (eso es de quien las aprende); su cara es el acto y el hecho. Publica ratificar.response/.failed y contabilidad.regla_ratificada.",
+  "name": "ratificacion-regla-aprendida",
+  "version": "0.1.0",
+  "description": "Puente (L10): gate humano unico. El asesor ratifica (actua) o bloquea (no actua) una regla aprendida antes de que opere; anuncia contabilidad.regla_ratificada.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "ratificacion-regla-aprendida.ratificar.request",
+      "handler": "onRatificarRequest",
+      "description": "RPC puente (ORDEN, panel): {project_id, regla, decision:'RATIFICAR'|'BLOQUEAR', rol?} → {project_id, regla, decision, actua, por, en, pendiente:false, abierto}. El asesor se pronuncia sobre una regla aprendida; RATIFICADA opera, BLOQUEADA no. Publica contabilidad.regla_ratificada. Responde por ratificacion-regla-aprendida.ratificar.response."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "contabilidad.regla_ratificada",
+      "description": "Fire-and-forget (L10): el asesor se pronuncio sobre una regla aprendida → {project_id, regla, decision, actua, por, en}. Lo consumen regla-contrapartida (E8) y regla-movimiento-bancario: solo la regla con actua:true opera sobre el volumen."
+    },
+    {
+      "event": "ratificacion-regla-aprendida.ratificar.response",
+      "description": "Respuesta RPC correlada de la op ratificar (una sola cara: el bus)."
+    },
+    {
+      "event": "ratificacion-regla-aprendida.ratificar.failed",
+      "description": "Par de fallo determinista: falta project_id, regla o decision (o decision desconocida) → {status, code, message}. Cierra el circulo de ratificar.request."
+    }
+  ],
+  "tools": [
+    { "name": "ratificacion-regla-aprendida.ratificar", "description": "Ratifica o bloquea (ORDEN) una regla aprendida antes de que actue sobre el volumen." }
+  ],
+  "ui_handlers": [
+    { "domain": "contabilidad", "action": "ratificacion-regla-aprendida.ratificar", "handler": "onRatificarRequest", "type": "system_panel", "zone": "lateral_derecha" }
+  ]
+}

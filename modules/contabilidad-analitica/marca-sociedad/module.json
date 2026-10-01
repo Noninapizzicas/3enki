@@ -1,0 +1,27 @@
+{
+  "_doc": "Manifest de analitica/marca-sociedad — REFLEJO STATELESS (I1, hoja del plan). Etiqueta cada asiento con su SOCIEDAD: apone la marca DECLARADA a la cabeza y a cada renglon del asiento. Mecanico, cero juicio: NO decide a que sociedad pertenece un asiento. Sirve a la consolidacion (eliminacion-intercompany I2 y consolidacion I3 operan por sociedad). Invariante: dato ausente = desconocido → sin sociedad declarada NO se marca con un default: se declara `sin_marca` y queda en `abierto`. Una sola cara: el bus (PREGUNTA). Publica marca-sociedad.marcar.response y su par .failed.",
+  "name": "marca-sociedad",
+  "version": "0.1.0",
+  "description": "Reflejo (I1): etiqueta cada asiento con su sociedad (declarada). Mecanico, cero juicio; sin sociedad no inventa marca.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "marca-sociedad.marcar.request",
+      "handler": "onMarcarRequest",
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id, asiento, sociedad?} → {project_id, asiento, sociedad, marcado, sin_marca, abierto}. Apone la sociedad declarada a la cabeza y a los renglones; sin sociedad → marcado:false (no se inventa). Responde por marca-sociedad.marcar.response."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "marca-sociedad.marcar.response",
+      "description": "Respuesta RPC correlada de la op marcar (una sola cara: el bus)."
+    },
+    {
+      "event": "marca-sociedad.marcar.failed",
+      "description": "Par de fallo determinista: falta project_id o asiento → {status, code, message}. Cierra el circulo de marcar.request."
+    }
+  ],
+  "tools": [
+    { "name": "marca-sociedad.marcar", "description": "Marca (PREGUNTA) un asiento con su sociedad declarada." }
+  ]
+}

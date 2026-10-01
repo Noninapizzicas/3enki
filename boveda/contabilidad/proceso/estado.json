@@ -3,7 +3,7 @@
   "ramas": "vertical/contabilidad",
   "persistencia": "boveda/contabilidad/proceso/",
   "modelo": "mente-ejecuta / chat-gestiona",
-  "fase_actual": "F7 COMPLETADA (95/95 construibles). Pendiente: los 13 inline_render (pieza del frame) + habilitar la vertical en un proyecto + deploy.",
+  "fase_actual": "F8 COMPLETADA — vertical contabilidad COMPLETA (118 modulos + 118 skills + 43 paneles + ensamblaje). En main (PR #710 F4, PR #715 F5+F6b+F7+F7b). Pendiente SOLO el deploy (lo ejecuta el dueno).",
   "nota_proceso": "Vertical transversal observadora VENDIBLE: escucha los eventos que cada negocio ya emite y reconstruye su contabilidad. Molde de proceso: boveda/nichos/proceso/ (44 modulos + 44 skills, #656).",
   "fase0": {
     "estado": "completada",
@@ -266,5 +266,24 @@
     "fiscal_en_enki": "IVA / Verifactu / factura-electronica / nominas / inmovilizado / conciliacion = 0 modulos. facturas solo es OCR de intake.",
     "escandallo_insuficiente_para_grupo": "pizzepos/escandallo (372 lineas, receta->coste) es mono-negocio; para un grupo falta coste indirecto, multi-sociedad y periodos. No se toca: se pone por encima.",
     "dos_logicas_de_coste": "pizzepos/escandallo (receta) y prisma/costeador (compuestos/proporciones)."
-  }
+  },
+  "fases": {
+    "F0": "completada (conservada: la entrevista al dueno)",
+    "F2": "completada (conservada: el prisma de 118 hojas + diseccion)",
+    "F3": "REHECHA — 118 clases CON HABLA (SUBE/PUBLICA/ESCUCHA)",
+    "F3b": "REHECHA — 118 hojas + 149 RPC CLASIFICADOS (103 PREGUNTA / 46 ORDEN)",
+    "F4": "REHECHA — 118 modulos, 15 grupos, CERO deriva (PR #710)",
+    "F5": "COMPLETA — 118 skills FULL, escritas desde el CODIGO (907 KB)",
+    "F6": "HECHA — 118/118 respetan el perfil de F3b (no se invento ningun panel)",
+    "F6b": "COMPLETA — los blueprints con ui.ops",
+    "F7": "COMPLETA — 43/43 paneles, build VERDE (PR #715)",
+    "F7b": "ENSAMBLAJE — 118 escritas, 0 faltantes; 16 SOBRA_EL_PUBLISH (para fuera)",
+    "F8": "COMPLETADA — CERO fallos: 118 modulo + cargan + 118 skill + 43/43 interfaz"
+  },
+  "hallazgos_F8": [
+    "Los 3 \"escritores mudos\" eran 1 real (catalogo-cuentas, ya publica) + 2 mal clasificados por mi (sello-cobertura y rappel-pronto-pago NO escriben segun el diseno F3).",
+    "area_chat NO es una zona real del frontend (solo work-bar/system-bar/chat-tools/chat-config): presupuesto tenia inline_render/area_chat -> su panel no se habria mostrado. Alineado a chat_tool/chat_tools.",
+    "La espina de F3b NO vuelca las escuchas de dominio (el ESCUCHA del diseno F3). Por eso el ensamblaje da 83 \"divergentes\" — pero son escuchas de MAS y todas con emisor real. HUECO DEL ARTEFACTO, no de los modulos.",
+    "moduleId del panel = \"contabilidad\" (el DOMINIO MQTT real), NO el slug; ops dotted; transporte.rpc=[] (deriveZones solo parsea 2 segmentos)."
+  ]
 }

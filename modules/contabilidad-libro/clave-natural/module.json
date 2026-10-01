@@ -1,0 +1,42 @@
+{
+  "_doc": "Manifest de libro/clave-natural — REFLEJO STATELESS (M3, hoja del plan). Idempotencia determinista: reprocesar NO duplica ('un cierre = un asiento'). Calcula la CLAVE NATURAL de un hecho/documento a partir de sus COMPONENTES DECLARADOS y decide si dos elementos COINCIDEN. Determinsta: mismas componentes + mismos valores -> misma clave. Si no se declaran `componentes`, se usan todos los campos del elemento salvo los VOLATILES (en/timestamp/request_id/correlation_id/autor); jamas se cablea un subconjunto de dominio. Normalizacion MECANICA (trim/colapsa espacios/case), no de negocio. Sin elemento no hay clave (dato ausente = desconocido). Ambas RPC son PREGUNTA -> su cara es el bus (sin ui_handler). Cuando falta el criterio de componentes, sube una peticion best-effort a cola-declaraciones-criterio.fijar.request (sin suplantar al JEFE). Publica clave-natural.calcular.response y su par .failed; clave-natural.coincide.response y su par .failed. NOTA R3: el plan declara escucha de contabilidad.anclaje_cierre_declarado, pero NINGUN modulo del repo lo emite AUN (anclaje-cierre-vertical es de grupo posterior): declararlo daria cadena colgada, asi que NO se declara hasta que su emisor exista.",
+  "name": "clave-natural",
+  "version": "0.1.0",
+  "description": "Reflejo (M3): clave natural determinista para idempotencia — reprocesar no duplica. Componentes declarables; sin estado.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "clave-natural.calcular.request",
+      "handler": "onCalcularRequest",
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id?, elemento, componentes?} → {project_id, clave, componentes, partes, componentes_declarados, determinista}. Mismos componentes + mismos valores → misma clave. Sin elemento → INVALID_INPUT. Responde por clave-natural.calcular.response. Payload invalido → clave-natural.calcular.failed."
+    },
+    {
+      "event": "clave-natural.coincide.request",
+      "handler": "onCoincideRequest",
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id?, a, b, componentes?} → {project_id, coincide, clave_a, clave_b, es_duplicado}. Compara las claves naturales de dos elementos. Responde por clave-natural.coincide.response. Payload invalido → clave-natural.coincide.failed."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "clave-natural.calcular.response",
+      "description": "Respuesta RPC correlada de la op calcular (una sola cara: el bus)."
+    },
+    {
+      "event": "clave-natural.calcular.failed",
+      "description": "Par de fallo determinista: falta el elemento o no hay componentes → {status, code, message}. Cierra el circulo de calcular.request."
+    },
+    {
+      "event": "clave-natural.coincide.response",
+      "description": "Respuesta RPC correlada de la op coincide."
+    },
+    {
+      "event": "clave-natural.coincide.failed",
+      "description": "Par de fallo determinista: faltan a o b → {status, code, message}. Cierra el circulo de coincide.request."
+    }
+  ],
+  "tools": [
+    { "name": "clave-natural.calcular", "description": "Calcula (PREGUNTA) la clave natural determinista de un hecho/documento." },
+    { "name": "clave-natural.coincide", "description": "Decide (PREGUNTA) si dos elementos coinciden por su clave natural." }
+  ],
+  "ui_handlers": []
+}

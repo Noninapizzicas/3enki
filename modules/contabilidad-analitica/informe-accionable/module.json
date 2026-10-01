@@ -1,0 +1,27 @@
+{
+  "_doc": "Manifest de analitica/informe-accionable — MICRO-AGENTE (R2, hoja del plan). Todo informe que recibe el cliente lleva QUE HACER con el. La RECOMENDACION es juicio (mitad fuzzy del blueprint); esta mitad REFLEJA es determinista y honesta: aplica las REGLAS DE ACCION DECLARADAS (campo · operador · umbral → recomendacion) al informe/cifra YA compuesto (informe-rico K3) y adjunta las acciones que disparan. Motor de reglas puro: NO inventa una accion donde no hay regla declarada (lo no cubierto queda declarado como juicio fuzzy). DETERMINISTA: mismo informe + mismas reglas → mismas acciones. Dato ausente = desconocido: sin informe no se adjunta nada; sin reglas → 0 acciones y el hueco se declara. NO escribe, NO persiste. RPC juzgar es CLASE PREGUNTA → va por el bus, sin panel. NOTA R3: el plan declara escucha de contabilidad.aviso_producido (motor-avisos K2) y contabilidad.asiento_asentado (escritor-diario B2), pero NINGUN modulo del repo los emite AUN (grupos posteriores): declararlos daria cadena colgada, asi que NO se declaran. Publica informe-accionable.juzgar.response y su par .failed.",
+  "name": "informe-accionable",
+  "version": "0.1.0",
+  "description": "Micro-agente (R2): adjunta el \"que hacer\" a un informe. Aplica reglas de accion declaradas (determinista); no inventa recomendaciones sin regla.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "informe-accionable.juzgar.request",
+      "handler": "onJuzgarRequest",
+      "description": "RPC micro-agente (PREGUNTA, por el bus): {project_id, informe, reglas[{campo,operador,umbral,entonces,motivo?,severidad?}]} → {project_id, informe, acciones[], num_acciones, reglas_declaradas, abierto}. Aplica las reglas declaradas al informe y devuelve las acciones que disparan. Sin reglas → 0 acciones (el hueco se declara). Responde por informe-accionable.juzgar.response; payload invalido → informe-accionable.juzgar.failed."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "informe-accionable.juzgar.response",
+      "description": "Respuesta RPC correlada de la op juzgar (una sola cara: el bus)."
+    },
+    {
+      "event": "informe-accionable.juzgar.failed",
+      "description": "Par de fallo determinista: falta project_id o informe → {status, code, message}. Cierra el circulo de juzgar.request."
+    }
+  ],
+  "tools": [
+    { "name": "informe-accionable.juzgar", "description": "Adjunta (PREGUNTA) el \"que hacer\" a un informe aplicando reglas de accion declaradas." }
+  ]
+}

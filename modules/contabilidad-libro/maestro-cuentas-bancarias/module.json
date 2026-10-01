@@ -1,0 +1,53 @@
+{
+  "_doc": "Manifest de libro/maestro-cuentas-bancarias — CUSTODIO CON PERSISTENCIA (E11, hoja del plan). Parcela DECLARABLE de cuentas bancarias y su MONEDA. UN escritor. Sin este maestro, 'el banco' es un numero falso: la cuenta y su moneda se DECLARAN, no se adivinan. La identidad es su identificador (cuenta_id/iban) declarado: sin el no se declara. La moneda es declarable; ausente = desconocida (se declara en `abierto`, NO se asume EUR). `declarar` es ESCRITURA -> anuncia contabilidad.cuenta_bancaria_declarada; `listar` es PREGUNTA -> no anuncia. No se pisa en silencio: re-declarar una cuenta appendea al historial. Persiste por proyecto via PosPersistencia (_shared/pos-persistencia, storage /contabilidad/maestro-cuentas-bancarias), restaura en project.activated y vuelca en onUnload. Proyecciones _declarar(cuenta_id,moneda,...)->Cuenta (ORDEN) y _listar(filtros)->Cuentas (PREGUNTA). El RPC listar es CLASE PREGUNTA → NO lleva ui_handler; declarar es ORDEN → SÍ.",
+  "name": "maestro-cuentas-bancarias",
+  "version": "0.1.0",
+  "description": "Custodio (E11): maestro declarable de cuentas bancarias y su moneda. Declarar anuncia el hecho; un solo escritor; persistente por proyecto.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "maestro-cuentas-bancarias.declarar.request",
+      "handler": "onDeclararRequest",
+      "description": "RPC custodio (ORDEN, panel): {project_id, cuenta_id|iban, alias?, banco?, moneda?} → {project_id, cuenta, declarada, total}. Declara (UN escritor) una cuenta bancaria y su moneda; sin cuenta_id → INVALID_INPUT. PUBLICA contabilidad.cuenta_bancaria_declarada y responde por maestro-cuentas-bancarias.declarar.response. Payload invalido → maestro-cuentas-bancarias.declarar.failed."
+    },
+    {
+      "event": "maestro-cuentas-bancarias.listar.request",
+      "handler": "onListarRequest",
+      "description": "RPC custodio (PREGUNTA, por el bus): {project_id, moneda?, banco?} → {project_id, cuentas, total, total_maestro}. Lista las cuentas declaradas; no muta. Responde por maestro-cuentas-bancarias.listar.response. Payload invalido → maestro-cuentas-bancarias.listar.failed."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Restaura el maestro de cuentas bancarias del proyecto activado desde el storage (PosPersistencia)."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "contabilidad.cuenta_bancaria_declarada",
+      "description": "Fire-and-forget (E11): quedo declarada una cuenta bancaria y su moneda → {project_id, cuenta_id, cuenta, moneda, declarada}. Lo consume saldo-tesoreria (para saber que cuentas existen y en que moneda)."
+    },
+    {
+      "event": "maestro-cuentas-bancarias.declarar.response",
+      "description": "Respuesta RPC correlada de la op declarar."
+    },
+    {
+      "event": "maestro-cuentas-bancarias.declarar.failed",
+      "description": "Par de fallo determinista: falta project_id o cuenta_id → {status, code, message}. Cierra el circulo de declarar.request."
+    },
+    {
+      "event": "maestro-cuentas-bancarias.listar.response",
+      "description": "Respuesta RPC correlada de la op listar."
+    },
+    {
+      "event": "maestro-cuentas-bancarias.listar.failed",
+      "description": "Par de fallo determinista: falta project_id → {status, code, message}. Cierra el circulo de listar.request."
+    }
+  ],
+  "tools": [
+    { "name": "maestro-cuentas-bancarias.declarar", "description": "Declara (ORDEN) una cuenta bancaria y su moneda, y anuncia el hecho." },
+    { "name": "maestro-cuentas-bancarias.listar", "description": "Lista (PREGUNTA) las cuentas bancarias declaradas." }
+  ],
+  "ui_handlers": [
+    { "domain": "contabilidad", "action": "maestro-cuentas-bancarias.declarar", "handler": "onDeclararRequest", "type": "system_panel", "zone": "lateral_derecha" }
+  ]
+}

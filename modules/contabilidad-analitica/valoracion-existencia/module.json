@@ -1,0 +1,27 @@
+{
+  "_doc": "Manifest de analitica/valoracion-existencia — REFLEJO STATELESS (H1, hoja del plan). Capa de VALOR sobre el inventario existente (NO lo duplica: el store de stock es `inventario`, infra reutilizada como base): recibe las existencias declaradas y les aplica el METODO DE VALORACION declarado (FIFO/PMP/medio...) para devolver su valor. El metodo es DATO (ParametroDeclarable), no una constante cableada. DETERMINISTA: mismas existencias + mismo metodo → mismo valor; cero juicio. Dato ausente = desconocido: una linea sin cantidad o sin coste NO se valora con un cero (valor:null, valoracion_completa:false); el total solo se declara si TODAS las lineas tienen valor (no una suma parcial). Sin metodo declarado se valora lo declarado y se declara el hueco. NO escribe, NO persiste, NO muta el inventario. RPC valorar es CLASE PREGUNTA → va por el bus, sin panel. Publica valoracion-existencia.valorar.response y su par .failed.",
+  "name": "valoracion-existencia",
+  "version": "0.1.0",
+  "description": "Reflejo (H1): capa de valor sobre el inventario existente. Valora las existencias declaradas con el metodo declarado; determinista, no duplica el inventario ni escribe.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "valoracion-existencia.valorar.request",
+      "handler": "onValorarRequest",
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id, existencias, metodo?} → {project_id, fuente, metodo, lineas[], num_lineas, total, valoracion_completa, abierto, faltan}. Valora las existencias declaradas con el metodo declarado (cantidad x coste). Sin existencias → valoracion vacia con el hueco declarado; lineas incompletas → total:null. Responde por valoracion-existencia.valorar.response; payload invalido → valoracion-existencia.valorar.failed."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "valoracion-existencia.valorar.response",
+      "description": "Respuesta RPC correlada de la op valorar (una sola cara: el bus)."
+    },
+    {
+      "event": "valoracion-existencia.valorar.failed",
+      "description": "Par de fallo determinista: falta project_id o payload invalido → {status, code, message}. Cierra el circulo de valorar.request."
+    }
+  ],
+  "tools": [
+    { "name": "valoracion-existencia.valorar", "description": "Valora (PREGUNTA) las existencias declaradas con el metodo de valoracion declarado." }
+  ]
+}

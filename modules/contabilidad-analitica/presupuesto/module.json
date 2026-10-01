@@ -1,0 +1,53 @@
+{
+  "_doc": "Manifest de analitica/presupuesto — CUSTODIO CON PERSISTENCIA (J3, hoja del plan). La parcela de la CIFRA OBJETIVO por dimension declarable: el jefe/asesor fija (ORDEN, panel) el objetivo (dimension · periodo · importe) y queda como la vara contra la que desviacion (J4) y comparador-periodos (J9) miden el real. El objetivo NO se estima: sin cifra declarada queda [ABIERTO] (el sistema pregunta, no decide). UN solo escritor (guard rol PRESUPUESTO; segundo escritor → 403). No se borra: re-fijar appendea al historial. Persiste por proyecto via PosPersistencia (_shared/pos-persistencia, storage /contabilidad/presupuesto), restaura en project.activated y vuelca en onUnload. Proyecciones _fijar (ORDEN) y _objetivo (PREGUNTA, por el bus). Publica contabilidad.presupuesto_fijado (+ pares *.failed).",
+  "name": "presupuesto",
+  "version": "0.1.0",
+  "description": "Custodio (J3): parcela de la cifra objetivo por dimension declarable. Fija el objetivo (o lo deja [ABIERTO]); un solo escritor y persistente por proyecto.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "presupuesto.fijar.request",
+      "handler": "onFijarRequest",
+      "description": "RPC custodio (ORDEN, panel): {project_id, rol:'PRESUPUESTO', dimension, periodo?, importe?, moneda?} → {project_id, clave, objetivo, fijado, abierto}. Guard de escritor (solo PRESUPUESTO; otro rol → PERMISSION_DENIED). Fija la cifra objetivo (o la deja [ABIERTO] si no llega importe). Publica contabilidad.presupuesto_fijado y responde por presupuesto.fijar.response. Payload/rol invalido → presupuesto.fijar.failed."
+    },
+    {
+      "event": "presupuesto.objetivo.request",
+      "handler": "onObjetivoRequest",
+      "description": "RPC custodio (PREGUNTA, por el bus): {project_id, dimension, periodo?} → {project_id, clave, dimension, periodo, objetivo, abierto}. Devuelve el objetivo vigente; si no esta fijado, objetivo:null y abierto:true (no inventa una cifra). Responde por presupuesto.objetivo.response; payload invalido → presupuesto.objetivo.failed."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Restaura el presupuesto del proyecto activado desde el storage (PosPersistencia)."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "contabilidad.presupuesto_fijado",
+      "description": "Fire-and-forget (J3): un objetivo quedo fijado (o sigue [ABIERTO]) → {project_id, clave, dimension, periodo, importe, moneda, estado, abierto}. Lo consumen desviacion (J4) y comparador-periodos (J9) para medir el real contra el objetivo."
+    },
+    {
+      "event": "presupuesto.fijar.response",
+      "description": "Respuesta RPC correlada de la op fijar (una sola cara: el bus)."
+    },
+    {
+      "event": "presupuesto.fijar.failed",
+      "description": "Par de fallo determinista: rol != PRESUPUESTO, falta project_id o dimension → {status, code, message}. Cierra el circulo de fijar.request."
+    },
+    {
+      "event": "presupuesto.objetivo.response",
+      "description": "Respuesta RPC correlada de la op objetivo (PREGUNTA)."
+    },
+    {
+      "event": "presupuesto.objetivo.failed",
+      "description": "Par de fallo determinista: falta project_id o dimension → {status, code, message}. Cierra el circulo de objetivo.request."
+    }
+  ],
+  "tools": [
+    { "name": "presupuesto.fijar", "description": "Fija (ORDEN) la cifra objetivo por dimension; importe ausente → queda [ABIERTO]." },
+    { "name": "presupuesto.objetivo", "description": "Lee (PREGUNTA) la cifra objetivo vigente; si no esta fijada, lo declara abierto." }
+  ],
+  "ui_handlers": [
+    { "domain": "contabilidad", "action": "presupuesto.fijar", "handler": "onFijarRequest", "type": "inline_render", "zone": "area_chat" }
+  ]
+}

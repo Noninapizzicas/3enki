@@ -1,0 +1,39 @@
+{
+  "_doc": "Manifest de libro/traza-asiento — CUSTODIO CON PERSISTENCIA (B4, hoja del plan). Registro INMUTABLE (quien/cuando creo cada asiento), append-only. UN escritor. != historial-proceso-contable (P2), que registra el PROCESO DE ENTRADA, no el asiento. Exige su asiento_id: sin asiento no se anota. NADA se borra: cada traza se apila con su secuencia. El autor ausente se declara en `abierto`, no se inventa. Persiste por proyecto via PosPersistencia (_shared/pos-persistencia, storage /contabilidad/traza-asiento), restaura en project.activated y vuelca en onUnload. Proyeccion _registrar(asiento_id, actor)->Traza (ORDEN). Publica contabilidad.traza_registrada (+ par .failed). NOTA R3: el plan declara escucha de contabilidad.asiento_asentado y contabilidad.ajuste_entrado, pero NINGUN modulo del repo los emite AUN (escritor-diario B2 / asiento-ajuste son de grupos posteriores): declararlos daria cadena colgada, asi que NO se declaran hasta que su emisor exista.",
+  "name": "traza-asiento",
+  "version": "0.1.0",
+  "description": "Custodio (B4): registro inmutable y append-only de quien/cuando creo cada asiento. Un solo escritor; persistente por proyecto.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "traza-asiento.registrar.request",
+      "handler": "onRegistrarRequest",
+      "description": "RPC custodio (ORDEN, panel): {project_id, asiento_id, actor?, rol?, accion?, detalle?, en?} → {project_id, registro, registrada, total, append_only}. Apila (append-only) la traza del asiento; sin asiento_id → INVALID_INPUT. Publica contabilidad.traza_registrada y responde por traza-asiento.registrar.response. Payload invalido → traza-asiento.registrar.failed."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Restaura la traza del proyecto activado desde el storage (PosPersistencia)."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "contabilidad.traza_registrada",
+      "description": "Fire-and-forget (B4): quedo registrada (append-only) la traza de un asiento → {project_id, asiento_id, traza, registrada}. Lo consume marca-borrador-validado."
+    },
+    {
+      "event": "traza-asiento.registrar.response",
+      "description": "Respuesta RPC correlada de la op registrar."
+    },
+    {
+      "event": "traza-asiento.registrar.failed",
+      "description": "Par de fallo determinista: falta project_id o asiento_id → {status, code, message}. Cierra el circulo de registrar.request."
+    }
+  ],
+  "tools": [
+    { "name": "traza-asiento.registrar", "description": "Registra (append-only) quien/cuando creo un asiento. Exige asiento_id." }
+  ],
+  "ui_handlers": [
+    { "domain": "contabilidad", "action": "traza-asiento.registrar", "handler": "onRegistrarRequest", "type": "system_panel", "zone": "lateral_derecha" }
+  ]
+}

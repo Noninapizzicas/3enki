@@ -1,0 +1,27 @@
+{
+  "_doc": "Manifest de fiscal/lineas-nomina — REFLEJO STATELESS (G6, hoja del plan). DESGLOSE de la nomina: bruto · retencion (IRPF) · cotizacion del trabajador · neto. Hace la nomina EXPLICABLE. Mecanico y DETERMINISTA: NO decide bases ni tipos (eso es del motor de personal, fuera de esta hoja); TOMA los importes DECLARADOS del recibo (G1) y los CLASIFICA en las cuatro cubetas con la clasificacion DECLARABLE (palabra/tipo → cubeta). Lo que no se puede clasificar con una regla declarada NO se inventa: cae en `otras`; el neto se declara complete o no (neto_completo), nunca se cierra a ciegas. neto = bruto − retencion − cotizacion (segun signos declarados). Dato ausente = desconocido (importe sin declarar → null, no 0). NO escribe, NO persiste. RPC desglosar es CLASE PREGUNTA → va por el bus, sin panel. NOTA R3: el plan declara escucha de contabilidad.nomina_recibida, pero NINGUN modulo del repo lo emite AUN (lo emite puerto-nomina G4, grupo posterior): declararlo daria cadena colgada, asi que NO se declara. Publica lineas-nomina.desglosar.response y su par .failed.",
+  "name": "lineas-nomina",
+  "version": "0.1.0",
+  "description": "Reflejo (G6): desglose explicable de la nomina (bruto · retencion · cotizacion · neto) por clasificacion declarada. Determinista; no decide bases ni tipos.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "lineas-nomina.desglosar.request",
+      "handler": "onDesglosarRequest",
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id, nomina|recibo, clasificacion?} → {project_id, desglose{bruto,retencion,cotizacion,neto}, otras, neto, neto_completo, neto_derivado, num_lineas, abierto}. Clasifica los conceptos declarados en las cuatro cubetas y calcula los totales; lo no clasificable cae en `otras` (no se inventa). Responde por lineas-nomina.desglosar.response; sin nomina → lineas-nomina.desglosar.failed."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "lineas-nomina.desglosar.response",
+      "description": "Respuesta RPC correlada de la op desglosar (una sola cara: el bus)."
+    },
+    {
+      "event": "lineas-nomina.desglosar.failed",
+      "description": "Par de fallo determinista: falta project_id o nomina → {status, code, message}. Cierra el circulo de desglosar.request."
+    }
+  ],
+  "tools": [
+    { "name": "lineas-nomina.desglosar", "description": "Desglosa (PREGUNTA) la nomina en bruto · retencion · cotizacion · neto con clasificacion declarada." }
+  ]
+}

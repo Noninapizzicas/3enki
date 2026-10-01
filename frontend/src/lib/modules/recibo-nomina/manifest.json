@@ -1,9 +1,0 @@
-{
-  "id": "recibo-nomina",
-  "name": "Recibo de nómina",
-  "version": "0.1.0",
-  "zone": "work-bar",
-  "order": 112,
-  "icon": "👤",
-  "label": "Recibo"
-}

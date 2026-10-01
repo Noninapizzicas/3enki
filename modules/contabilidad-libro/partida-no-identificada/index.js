@@ -1,32 +1,24 @@
 /**
  * contabilidad-libro/partida-no-identificada — MICRO-AGENTE (E7, hoja del plan).
  *
- * EL UNICO PUNTO DE JUICIO SOBRE LA DESCRIPCION AMBIGUA DEL BANCO. Un movimiento del extracto
- * que no tiene contrapartida clara ("COMISION MANTENIMIENTO", "DEV. RECIBO 4471", "INT. ACREEDOR")
- * llega aqui. Reconoce y clasifica esa partida (comision / interes / devolucion / ...) y PROPONE
- * el apunte (cuenta + tercero + periodo).
- *
- * EL JUICIO ESTA AISLADO EN ESTA HOJA: conciliacion-bancaria (E1) y cuadre-cobro-pago (E3) son
- * puros y NO interpretan nada; todo lo que no casa por clave natural determinista aterriza aqui.
- * Esto NO se duplica en ningun reflejo.
+ * ══════════════════════════════════════════════════════════════════════════════════════
+ * RECONOCE Y CLASIFICA EL MOVIMIENTO SIN CONTRAPARTIDA (comision/interes/devolucion). PROPONE.
+ * ══════════════════════════════════════════════════════════════════════════════════════
+ * Un movimiento bancario que llega sin contrapartida (una comision, un interes, una devolucion)
+ * no tiene aun su cuenta. Esta hoja MIRA el movimiento, busca la REGLA declarada que lo cubre
+ * (E8, via `regla-movimiento-bancario.aplicar.request` por EVENTO) y expone una PROPUESTA.
  *
  * Invariantes:
- *  - PROPONE, NO ESCRIBE: no asienta, no persiste, no marca nada. La escritura la hace el custodio
- *    dueño de la parcela (regla-movimiento-bancario E8 la ratifica; escritor-diario B2 la asienta).
- *  - SI NO PUEDE RESOLVER → `[ABIERTO]` Y A LA COLA, NUNCA INVENTA: si no hay regla declarada (E8,
- *    corte duro) que cubra el movimiento y la descripcion no es reconocible, devuelve `propuesta:null`,
- *    `estado:'ABIERTO'` y `requiere_cola:true` con su destino. JAMAS fabrica una cuenta.
- *  - PRIMERO EL CORTE DURO, DESPUES EL JUICIO: la regla declarada (E8) se consulta POR EVENTO. Si
- *    E8 cubre → la propuesta es determinista (no es juicio). Solo si E8 no cubre se ejerce el juicio
- *    sobre la descripcion, y aun asi la cuenta propuesta debe estar en el PLAN declarado (B1).
- *  - La cuenta propuesta se VERIFICA contra catalogo-cuentas (B1) POR EVENTO. Si el plan dice que
- *    no existe → no se propone (se declara `[ABIERTO]`).
+ *  - PROPONE, no escribe: `juzgar` deriva una propuesta; NUNCA apila un asiento ni fija la regla
+ *    (el corte duro lo fija regla-movimiento-bancario E8). El que asienta es escritor-diario (B2).
+ *  - Dato ausente = desconocido: sin movimiento NO hay nada que reconocer; sin regla declarada que
+ *    lo cubra, la contrapartida queda ABIERTA (no se adivina la cuenta de la comision).
+ *  - Cuando NO hay regla que cubra → SUBE `encolado-excepcion.encolar.request` (lo dudoso a cola).
  *
- * El cajon fuzzy (el reconocimiento de la descripcion ambigua) vive en el blueprint; este reflejo
- * sirve la proyeccion determinista de fallback y el corte duro. Toda su memoria es EXTERNA (reglas
- * E8 + plan B1), por eso es STATELESS: persistir aqui duplicaria estado ya custodido.
+ * ESCUCHA (R3): contabilidad.movimiento_regla_declarada, emitido por regla-movimiento-bancario
+ * (E8) → emisor vivo. El handler es fire-and-forget (toma constancia; no anuncia hecho).
  *
- * Forma: MICRO-AGENTE → STATELESS (sin PosPersistencia, sin onProjectActivated).
+ * Forma: MICRO-AGENTE (mitad refleja) → STATELESS. Sin PosPersistencia. RPC juzgar es PREGUNTA → SIN ui_handler.
  * Ver hoja E7 del plan-construccion y diseno-oop.md (CLASE PartidaNoIdentificada).
  */
 
@@ -34,202 +26,143 @@
 
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
 
-// Tipos de partida NO IDENTIFICADA reconocibles. El RECONOCIMIENTO es juicio (blueprint);
-// aqui solo se declara la taxonomia canonica a la que el juicio puede llegar.
-const TIPOS_PARTIDA = ['comision', 'interes', 'devolucion', 'impuesto', 'seguro', 'otro'];
+// Los TIPOS reconocidos de partida sin contrapartida. El `tipo` es DATO declarable; no se cablea
+// una regla de negocio oculta — solo se nombra lo que la operacion bancaria declara.
+const TIPOS = new Set(['comision', 'interes', 'interés', 'devolucion', 'devolución', 'abono', 'cargo', 'otro']);
 
 class PartidaNoIdentificada extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'partida-no-identificada';
     this.version = 'reflejo-0.1.0';
+    // Reglas declaradas observadas por proyecto (memoria acotada, no store).
+    this._reglas = new Map(); // project_id -> [regla]
   }
 
   async onUnload() { return super.onUnload(); }
 
+  // ── handler RPC PREGUNTA (sin ui_handler: su cara es el bus) ──
   onJuzgarRequest(e) {
     return this._atender(e, 'juzgar', 'partida-no-identificada.juzgar.response', async (d) => {
       const res = await this._juzgar(d);
-      if (res.status === 200) {
-        // Exito → evento de dominio: hay propuesta (o hay [ABIERTO] razonado si no se pudo resolver).
-        this.eventBus?.publish('contabilidad.partida_propuesta', {
-          project_id: res.data.project_id,
-          movimiento: res.data.movimiento,
-          propuesta: res.data.propuesta,
-          propuesta_por: res.data.propuesta_por,
-          estado: res.data.estado,
-          tipo_partida: res.data.tipo_partida,
-          corte_duro: res.data.corte_duro,
-          requiere_cola: res.data.requiere_cola,
-          destino_cola: res.data.destino_cola,
-          correlation_id: d.correlation_id
-        });
-      } else {
+      // Micro-agente (mitad refleja): PROPONE; no escribe dominio → no hay hecho que anunciar (R2).
+      if (res.status !== 200) {
         this.eventBus?.publish('partida-no-identificada.juzgar.failed', res);
+        return res;
+      }
+      // SUBE a regla-movimiento-bancario (E8) por EVENTO: la regla declarada es la que decide.
+      if (res.data.contexto) {
+        const regla = await this._rpc('regla-movimiento-bancario.aplicar.request', {
+          project_id: res.data.project_id, contexto: res.data.contexto, movimiento: res.data.movimiento
+        });
+        const aplicada = Boolean(regla && regla.status === 200 && regla.data && regla.data.aplicada === true);
+        const cuenta = aplicada ? (regla.data.cuenta != null ? regla.data.cuenta : (regla.data.contrapartida != null ? regla.data.contrapartida : null)) : null;
+        res.data.propuesta.cuenta = cuenta;
+        res.data.propuesta.completa = cuenta != null;
+        if (aplicada) res.data.regla = regla.data.regla || null;
+        if (!aplicada) {
+          res.data.abierto = 'no hay regla declarada que cubra este movimiento: la contrapartida queda abierta (no se adivina la cuenta)';
+          // Lo dudoso va a la cola (A8.1): no se adivina.
+          this.eventBus?.publish('encolado-excepcion.encolar.request', {
+            project_id: res.data.project_id,
+            rol: 'PARTIDA_NO_IDENTIFICADA',
+            clave: res.data.clave || `partida:${res.data.movimiento_id || 's/ref'}`,
+            motivo: 'movimiento sin contrapartida y sin regla declarada: la clasificacion queda abierta (no se adivina)',
+            origen: 'partida-no-identificada',
+            payload: { tipo: res.data.tipo, importe: res.data.importe },
+            correlation_id: d.correlation_id
+          });
+        }
       }
       return res;
     });
   }
 
-  // ── proyeccion: juzgar(m:Movimiento) → Propuesta<Apunte> | [ABIERTO] ──
+  // ── handler FIRE-AND-FORGET: una regla de movimiento quedo declarada → se observa ──
+  onMovimientoReglaDeclarada(e) {
+    const d = (e && (e.data || e)) || {};
+    const pid = d.project_id || this.project_id;
+    if (!pid) return;
+    const lista = this._reglas.get(pid) || [];
+    lista.push(d.regla || d);
+    if (lista.length > 500) lista.shift();
+    this._reglas.set(pid, lista);
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // juzgar(movimiento) → PROPUESTA de clasificacion (PREGUNTA; PROPONE, no fija)
+  // ══════════════════════════════════════════════════════════════════════
   async _juzgar(input = {}) {
     const pid = input.project_id || this.project_id;
     if (!pid) return this._invalid('project_id');
 
-    const movimiento = input.movimiento || input.m || input.mov;
+    const movimiento = input.movimiento !== undefined ? input.movimiento
+      : (input.partida !== undefined ? input.partida : (input.movimiento_bancario !== undefined ? input.movimiento_bancario : null));
     if (!movimiento || typeof movimiento !== 'object') return this._invalid('movimiento');
 
-    const descripcion = movimiento.concepto != null ? String(movimiento.concepto)
-      : (movimiento.descripcion != null ? String(movimiento.descripcion) : null);
+    const movimiento_id = movimiento.movimiento_id != null ? String(movimiento.movimiento_id)
+      : (movimiento.id != null ? String(movimiento.id) : null);
+    const clave = input.clave != null ? String(input.clave) : (movimiento.clave != null ? String(movimiento.clave) : null);
 
-    // ── 1 · EL CORTE DURO PRIMERO (regla declarada E8, POR EVENTO). Si cubre, NO hay juicio. ──
-    const r_regla = await this._rpc('regla-movimiento-bancario.aplicar.request',
-      { project_id: pid, movimiento }, { timeout_ms: 4000 });
-    const corte = r_regla && r_regla.data ? r_regla.data : null;
+    // El TIPO reconocido (declarado o inferido del concepto). Es DATO, no una regla oculta.
+    const tipo = this._tipo(input.tipo ?? movimiento.tipo, movimiento);
+    const importe = this._num(input.importe ?? movimiento.importe ?? movimiento.total ?? movimiento.cargo ?? movimiento.abono);
 
-    if (corte && corte.cubierta === true && corte.apunte) {
-      return {
-        status: 200,
-        data: {
-          project_id: pid,
-          movimiento: this._resumen(movimiento, descripcion),
-          propuesta: {
-            cuenta: corte.apunte.cuenta,
-            tercero: corte.apunte.tercero != null ? corte.apunte.tercero : null,
-            periodo: corte.apunte.periodo != null ? corte.apunte.periodo : this._periodoDe(movimiento),
-            base: { regla_id: corte.regla ? corte.regla.id : null, via: 'regla_declarada' }
-          },
-          propuesta_por: 'REGLA',
-          estado: 'RESUELTO',
-          tipo_partida: null,
-          corte_duro: corte.regla || null,
-          reglas_disponibles: true,
-          requiere_cola: false,
-          destino_cola: null
-        }
-      };
-    }
-
-    // El corte duro no responde o no cubre: ahora SI se ejerce el juicio, pero con DOS reglas —
-    // (a) solo se puede proponer una cuenta que exista en el PLAN declarado (B1);
-    // (b) si el blueprint no aporto clasificacion, NO se inventa: [ABIERTO] y a la cola.
-
-    // ── 2 · El JUICIO lo aporta el cajon fuzzy del blueprint; el reflejo no adivina solo. ──
-    // `clasificacion` es la salida del juicio (descripcion ambigua + catalogo de tipos declarado).
-    const clasificacion = input.clasificacion && typeof input.clasificacion === 'object' ? input.clasificacion : null;
-    const tipo_partida = clasificacion && clasificacion.tipo != null
-      ? String(clasificacion.tipo).toLowerCase().trim() : null;
-
-    // Sin clasificacion (el juicio no se pudo/pudo ejercer) → [ABIERTO], NUNCA se inventa.
-    if (!clasificacion || !tipo_partida || !TIPOS_PARTIDA.includes(tipo_partida)) {
-      return this._abierto(pid, movimiento, descripcion, {
-        motivo: !corte
-          ? 'ni el corte duro (E8) ni el juicio (blueprint) resolvieron la partida: no se inventa la cuenta'
-          : (corte.cubierta !== true
-            ? 'el corte duro (E8) declaro que ninguna regla cubre el movimiento y no hay clasificacion del juicio'
-            : 'clasificacion del juicio ausente o fuera de la taxonomia declarada'),
-        corte_duro: corte ? corte.regla : null,
-        reglas_disponibles: Boolean(corte)
-      });
-    }
-
-    // La cuenta la propone el JUICIO (clasificacion), no una constante.
-    const cuenta = clasificacion.cuenta != null ? String(clasificacion.cuenta).trim() : null;
-    if (!cuenta) {
-      return this._abierto(pid, movimiento, descripcion, {
-        motivo: 'el juicio reconocio el tipo pero no propuso cuenta: [ABIERTO], no se inventa',
-        corte_duro: corte ? corte.regla : null,
-        reglas_disponibles: Boolean(corte)
-      });
-    }
-
-    // ── 3 · La cuenta propuesta debe estar en el PLAN declarado (B1), POR EVENTO. ──
-    const r_plan = await this._rpc('catalogo-cuentas.buscar.request', { project_id: pid, codigo: cuenta }, { timeout_ms: 4000 });
-    const plan = r_plan && r_plan.data ? r_plan.data : null;
-    if (plan && plan.encontrada === false) {
-      return this._abierto(pid, movimiento, descripcion, {
-        motivo: `el juicio propuso la cuenta ${cuenta}, que no existe en el plan declarado`,
-        corte_duro: corte ? corte.regla : null,
-        reglas_disponibles: Boolean(corte),
-        plan_disponible: true
-      });
-    }
+    // El CONTEXTO contra el que se aplica la regla declarada (concepto/texto del movimiento).
+    const contexto = input.contexto != null ? String(input.contexto)
+      : this._contexto(movimiento);
 
     return {
       status: 200,
       data: {
         project_id: pid,
-        movimiento: this._resumen(movimiento, descripcion),
+        tipo_movimiento: 'partida-no-identificada',
+        movimiento_id,
+        clave,
+        movimiento,
+        concepto: tipo,
+        tipo,
+        importe,
+        contexto,
         propuesta: {
-          cuenta,
-          tercero: clasificacion.tercero != null ? String(clasificacion.tercero) : null,
-          periodo: clasificacion.periodo != null ? String(clasificacion.periodo) : this._periodoDe(movimiento),
-          base: {
-            regla_id: null,
-            via: 'juicio_sobre_descripcion',
-            tipo_partida,
-            plan_confirmado: plan ? plan.encontrada === true : null,
-            clasificacion_origen: clasificacion.origen != null ? String(clasificacion.origen) : 'blueprint'
-          }
+          // La CUENTA la propone la regla declarada (E8); aqui nace null y el handler la rellena.
+          cuenta: null,
+          tipo,
+          completa: false
         },
-        propuesta_por: 'JUICIO',
-        estado: 'RESUELTO',
-        tipo_partida,
-        corte_duro: null,
-        reglas_disponibles: Boolean(corte),
-        plan_disponible: Boolean(plan),
-        requiere_cola: false,
-        destino_cola: null
+        // PROPONE; el corte duro (fijar la regla) es de regla-movimiento-bancario (E8). Esta hoja NO fija.
+        propone: true,
+        fija: false,
+        reglas_observadas: (this._reglas.get(pid) || []).length,
+        // Determinista en lo declarado; lo no cubierto es juicio (mitad fuzzy del micro-agente).
+        abierto: 'no hay regla declarada que cubra este movimiento: la contrapartida queda abierta (no se adivina la cuenta)'
       }
     };
   }
 
-  // [ABIERTO]: no se pudo resolver → a la cola, NUNCA se inventa. La escritura la hara el custodio.
-  _abierto(pid, movimiento, descripcion, extra = {}) {
-    return {
-      status: 200,
-      data: {
-        project_id: pid,
-        movimiento: this._resumen(movimiento, descripcion),
-        propuesta: null,
-        propuesta_por: null,
-        estado: 'ABIERTO',
-        tipo_partida: null,
-        corte_duro: extra.corte_duro || null,
-        reglas_disponibles: extra.reglas_disponibles === true,
-        plan_disponible: extra.plan_disponible === true,
-        motivo: extra.motivo || 'no se pudo identificar la partida: [ABIERTO], no se inventa',
-        requiere_cola: true,
-        // El destino de la duda es ParametroDeclarable; sin declarar se propone el default honesto.
-        destino_cola: 'ASESOR'
-      }
-    };
+  // El tipo: declarado (normalizado) o inferido del texto del concepto. Nunca una constante oculta.
+  _tipo(declarado, movimiento) {
+    const d = declarado != null ? String(declarado).toLowerCase().trim() : '';
+    if (TIPOS.has(d)) return d;
+    const texto = String((movimiento && (movimiento.concepto || movimiento.descripcion || movimiento.texto)) || '').toLowerCase();
+    if (texto.includes('comision') || texto.includes('comisión')) return 'comision';
+    if (texto.includes('interes') || texto.includes('interés')) return 'interes';
+    if (texto.includes('devolucion') || texto.includes('devolución')) return 'devolucion';
+    return 'otro';
   }
 
-  _resumen(movimiento, descripcion) {
-    return {
-      clave: movimiento.clave != null ? String(movimiento.clave) : null,
-      fecha: movimiento.fecha != null ? String(movimiento.fecha) : null,
-      importe: this._num(movimiento.importe),
-      signo: movimiento.signo != null ? String(movimiento.signo).toLowerCase().trim() : null,
-      contraparte: movimiento.contraparte != null ? String(movimiento.contraparte) : null,
-      descripcion,
-      // La ambiguedad de la descripcion es el objeto del juicio: se declara que esta sin resolver.
-      ambigua: true
-    };
-  }
-
-  _periodoDe(movimiento) {
-    const f = movimiento.fecha;
-    if (f === undefined || f === null || f === '') return null;
-    const s = String(f);
-    return /^\d{4}-\d{2}/.test(s) ? s.slice(0, 7) : null;
+  // El contexto declarado del movimiento (lo que la regla usa para casar). Ausente → null.
+  _contexto(movimiento) {
+    for (const k of ['concepto', 'descripcion', 'texto', 'referencia', 'contraparte']) {
+      if (movimiento[k] != null && String(movimiento[k]).trim() !== '') return String(movimiento[k]).trim();
+    }
+    return null;
   }
 
   _num(v) {
     if (v === undefined || v === null || v === '') return null;
     const n = Number(v);
-    return Number.isFinite(n) ? Math.abs(n) : null;
+    return Number.isFinite(n) ? n : null;
   }
 
   // ── Tools ──

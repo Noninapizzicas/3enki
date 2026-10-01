@@ -1,35 +1,27 @@
 {
-  "_doc": "Manifest de contabilidad-analitica/informe-rico — REFLEJO STATELESS (K3, hoja del plan). COMPONE cifra + contexto: toma una CIFRA ya calculada por otra pieza y la viste con el CONTEXTO DECLARADO (periodo, fechas, unidad, moneda, origen, comparativa, dimension, sociedad, notas). Mecanico y determinista: AQUI SOLO LA COMPOSICION. La NARRACION fuzzy, el «que hacer» y el lenguaje del dueño NO viven aqui — son satelites posteriores (informe-accionable K14, narrador-estados K15, puente-lenguaje-dueno oleada 14); este reflejo NO interpreta, NO recomienda y NO decide. ATRIBUTOS del diseno: cifra:Derivado, contexto:ParametroDeclarable; METODOS: componer(cifra, contexto):Informe. Invariantes: DETERMINISTA (misma cifra + mismo contexto → mismo informe, una sola respuesta correcta); dato ausente = desconocido — sin cifra NO se compone un informe con un 0 (emitido:false con faltan), y la cifra NO se recalcula aqui: se recibe declarada (objeto o escalar) o se PIDE por EVENTO a informe-conciliacion E10 (best-effort); LEY/PARAMETRO COMO DATO (periodo, unidad, comparativa y notas declarables, cero plantillas de informe cableadas); NO escribe, NO persiste, NO muta (el informe es un DERIVADO en memoria). FORMA: REFLEJO stateless, sin PosPersistencia ni onProjectActivated. Proyeccion unica `_componer` → {emitido, informe:{cifra, contexto, narracion:null, narracion_por, que_hacer:null}, cifra, fuente_cifra, cifra_disponible, contexto, compone, delega_a:{narracion, que_hacer}, faltan, abierto}. Cierra el circulo: error → informe-rico.componer.failed.",
+  "_doc": "Manifest de analitica/informe-rico — REFLEJO STATELESS (K3, hoja del plan). COMPONE la cifra YA CALCULADA con el contexto DECLARADO (periodo, unidad, criterio, comparativa, dimension, sociedad, nota). NO calcula la cifra (eso es de mayor-balanza/balance-situacion/cuenta-resultados): la RECIBE y la rodea de contexto. NO narra (la narracion fuzzy es R3) y NO propone accion (el 'que hacer' es R2). Invariante: dato ausente = desconocido → sin cifra no compone nada, y el contexto que falta NO se rellena: se declara en `abierto`. Una sola cara: el bus (PREGUNTA). NOTA R3: el plan declara escucha de contabilidad.asiento_asentado y contabilidad.ejercicio_cerrado, pero NINGUN modulo del repo los emite AUN (los emite escritor-diario B2 y cierre-ejercicio C4, de grupos posteriores): declararlos daria cadena colgada, asi que NO se declaran hasta que su emisor exista. Publica informe-rico.componer.response y su par .failed.",
   "name": "informe-rico",
   "version": "0.1.0",
-  "description": "Reflejo (K3): compone la cifra ya calculada con el contexto declarado (periodo, origen, comparativas) — solo la composicion mecanica; la narracion y el «que hacer» son de sus satelites.",
-  "blueprint_driven": true,
-  "blueprint_path": "informe-rico.blueprint.json",
+  "description": "Reflejo (K3): compone la cifra ya calculada con el contexto declarado. No calcula, no narra, no acciona; lo que falta se declara abierto.",
   "language": "es",
   "subscribes": [
     {
       "event": "informe-rico.componer.request",
       "handler": "onComponerRequest",
-      "description": "RPC reflejo (composicion pura, determinista): {project_id, cifra?|informe?, periodo?, fecha_desde?, fecha_hasta?, unidad?, moneda?, origen?, comparativa?, dimension?, sociedad?, notas?, cuenta?} → {project_id, tipo:'informe-rico', emitido, informe:{cifra, contexto, narracion:null, narracion_por, que_hacer:null} | null, cifra, fuente_cifra, cifra_disponible, contexto, compone:['cifra','contexto'], delega_a:{narracion, que_hacer}, faltan, abierto:{cifra, periodo, narracion, que_hacer}}. La cifra se recibe declarada (objeto o escalar) o se PIDE a informe-conciliacion (E10) POR EVENTO; NO se recalcula aqui. Sin cifra NO se compone un informe con un 0 (emitido:false y faltan). Responde por informe-rico.componer.response; project_id ausente → informe-rico.componer.failed."
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id, cifra, contexto?, titulo?, calculo_de?} → {project_id, titulo, cifra, contexto, compuesto, recalculo:false, narracion_incluida:false, accion_incluida:false, abierto}. La cifra llega ya calculada; el contexto solo se compone, no se estima. Responde por informe-rico.componer.response."
     }
   ],
   "publishes": [
     {
       "event": "informe-rico.componer.response",
-      "description": "Respuesta RPC correlada de informe-rico.componer.request → {request_id, status:200, data:{emitido, informe, cifra, fuente_cifra, cifra_disponible, contexto, compone, delega_a, faltan, abierto}}. Emitida por el helper _atender."
+      "description": "Respuesta RPC correlada de la op componer (una sola cara: el bus)."
     },
     {
       "event": "informe-rico.componer.failed",
-      "description": "Par de fallo determinista (K3): project_id ausente → {status, error:{code, message, details?}}. Cierra el circulo de informe-rico.componer.request."
+      "description": "Par de fallo determinista: falta project_id o cifra → {status, code, message}. Cierra el circulo de componer.request."
     }
   ],
-  "ui_handlers": [
-    {
-      "domain": "contabilidad",
-      "action": "informe-rico.componer",
-      "handler": "onComponerRequest",
-      "type": "inline_render",
-      "zone": "area_chat"
-    }
+  "tools": [
+    { "name": "informe-rico.componer", "description": "Compone (PREGUNTA) la cifra ya calculada con su contexto declarado." }
   ]
 }

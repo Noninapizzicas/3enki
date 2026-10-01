@@ -1,39 +1,32 @@
 {
-  "_doc": "Manifest de contabilidad-analitica/cuadro-mando-contable — REFLEJO STATELESS (J8, hoja del plan). LA LENTE DEL JEFE: el CONJUNTO economico visto desde arriba — caja, resultado, margen, desviacion y ejercicio — SIN BAJAR AL ASIENTO. AGREGA. NO RECALCULA NADA: es un AGREGADO DE CONJUNTO que pide cada cifra YA CALCULADA a su dueño POR EVENTO y las compone en un informe — caja ← saldo-tesoreria.calcular.request (E4), resultado ← cuenta-resultados.calcular.request (C2), margen ← margen-analitico.calcular.request (J2), desviacion ← desviacion.calcular.request (J4); NO vuelve a sumar partidas, NO vuelve a derivar el mayor, NO recalcula el margen ni la desviacion ni el saldo (una COMPOSICION, no un calculo). Cada celda llega con su ORIGEN declarado (origen/fuente) para que el jefe sepa de donde sale: el cuadro NO es caja negra. ATRIBUTOS del diseno: caja:SaldoTesoreria, resultado:CuentaResultados, margen, desviacion, ejercicio; METODOS: componer(periodo):Informe; REGLA: agregacion de conjunto SIN bajar al asiento, lente del jefe, determinista. EL EJERCICIO ES DATO declarado (que ejercicio esta vivo): no se adivina por la fecha; sin declarar → null y a faltan. EL JEFE DECIDE Y DECLARA: el cuadro no decide nada (decide:false) — presenta. Lo que el jefe aun no ha declarado (granularidad del grupo I7, vista agregada I6, cadencia C7) se DECLARA como hueco (granularidad_declarada:false), no se inventa. UNA SOLA METRICA DE COBERTURA: si el cuadro muestra cobertura, LEE completitud-cobertura (A12) POR EVENTO — NO la recalcula; sin metrica la muestra declara el hueco (declarada:false, tasa null; un 0 afirmaria una medida que no se hizo). Dato ausente = desconocido: cifra que su dueño no da → valor null + abierto:true + faltan; JAMAS se rellena con 0. NO escribe ni persiste (el cuadro es un DERIVADO de lectura). FORMA: REFLEJO stateless, sin PosPersistencia ni onProjectActivated. Proyeccion unica `_componer({project_id, periodo?, ejercicio?, caja?/resultado?/margen?/desviacion?/cobertura? declaradas, eje?, dimension?, vertical?, granularidad?})` → {project_id, periodo, cuadro:{caja, resultado, margen, desviacion, cobertura, ejercicio, granularidad}, fuentes:{caja, resultado, margen, desviacion, cobertura}, faltan, n_piezas, n_disponibles, abierto, decide:false, publicable, motivo}. Publica contabilidad.cuadro_compuesto. Cierra el circulo: error → cuadro-mando-contable.componer.failed.",
+  "_doc": "Manifest de analitica/cuadro-mando-contable — REFLEJO STATELESS (J8, hoja del plan). Agregacion de CONJUNTO (caja · resultado · margen · desviacion · ejercicio) SIN bajar al asiento: la LENTE DEL JEFE. NO calcula ninguna cifra — las COMPONE subiendo por EVENTO a quien si las calcula y agrupando sus respuestas: saldo-tesoreria.calcular.request (caja), cuenta-resultados.calcular.request (resultado), margen-analitico.calcular.request (margen), desviacion.calcular.request (desviacion) — o usa lo DECLARADO. Honestidad (invariante 13): la cifra que no llega NO se rellena con 0: queda `abierta`. RPC componer es CLASE PREGUNTA → va por el bus, SIN ui_handler. Escucha contabilidad.asiento_asentado (escritor-diario B2, emitido). NOTA R3: el plan declara tambien escucha de contabilidad.ejercicio_cerrado (cierre-ejercicio C4), pero C4 AUN NO existe en el repo → NO se declara (cadena colgada). Publica cuadro-mando-contable.componer.response y su par .failed.",
   "name": "cuadro-mando-contable",
   "version": "0.1.0",
-  "description": "Reflejo agregado del JEFE (J8): el cuadro de conjunto (caja · resultado · margen · desviacion · ejercicio) COMPONE las cifras ya calculadas por sus dueños por evento — nunca recalcula ni baja al asiento, y lo que falta queda abierto, no a 0.",
-  "blueprint_driven": true,
-  "blueprint_path": "cuadro-mando-contable.blueprint.json",
+  "description": "Reflejo (J8): cuadro de mando que agrega caja, resultado, margen y desviacion sin bajar al asiento; lo que no llega queda abierto.",
   "language": "es",
   "subscribes": [
     {
       "event": "cuadro-mando-contable.componer.request",
       "handler": "onComponerRequest",
-      "description": "RPC reflejo agregado (composicion pura, determinista): {project_id, periodo?, ejercicio?, eje?, dimension?, vertical?, granularidad?, caja?/resultado?/margen?/desviacion?/cobertura? declaradas} → {project_id, periodo, cuadro:{caja:{valor,origen,fuente}, resultado:{valor,origen,fuente,signo}, margen:{valor,origen,fuente}, desviacion:{valor,origen,fuente,signo,avisa,umbral}, cobertura, ejercicio, granularidad, granularidad_declarada}, fuentes:{caja:'saldo-tesoreria', resultado:'cuenta-resultados', margen:'margen-analitico', desviacion:'desviacion', cobertura:'completitud-cobertura'}, faltan, n_piezas, n_disponibles, abierto, decide:false, publicable, motivo}. AGREGA SIN RECALCULAR: pide cada cifra a su dueño POR EVENTO (saldo-tesoreria E4, cuenta-resultados C2, margen-analitico J2, desviacion J4) y LEE la metrica unica de cobertura (completitud-cobertura A12); una cifra no disponible queda valor:null y en faltan (nunca 0). Exito → publica contabilidad.cuadro_compuesto y responde por cuadro-mando-contable.componer.response; project_id ausente → cuadro-mando-contable.componer.failed."
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id, ejercicio?, periodo?, dimension?, caja?, resultado?, margen?, desviacion?} → {project_id, cuadro, disponible, faltan, sin_bajar_al_asiento, abierto}. Compone las cuatro cifras subiendo por EVENTO a sus calculadores; las que no lleguen quedan abiertas (no se rellenan con cero). Responde por cuadro-mando-contable.componer.response. Payload invalido → cuadro-mando-contable.componer.failed."
+    },
+    {
+      "event": "contabilidad.asiento_asentado",
+      "handler": "onAsientoAsentado",
+      "description": "Fire-and-forget (escritor-diario B2): un asiento quedo en el libro. Se observa (ventana acotada) como senal de material nuevo; no se recalcula ni se escribe."
     }
   ],
   "publishes": [
     {
       "event": "cuadro-mando-contable.componer.response",
-      "description": "Respuesta RPC correlada de cuadro-mando-contable.componer.request → {request_id, status:200, data:{cuadro, fuentes, faltan, abierto, decide:false}}. Emitida por el helper _atender."
+      "description": "Respuesta RPC correlada de la op componer (una sola cara: el bus)."
     },
     {
       "event": "cuadro-mando-contable.componer.failed",
-      "description": "Par de fallo determinista (J8): project_id ausente → {status, error:{code, message, details?}}. Cierra el circulo de cuadro-mando-contable.componer.request."
-    },
-    {
-      "event": "contabilidad.cuadro_compuesto",
-      "description": "Fire-and-forget (J8): el cuadro del jefe quedo COMPUESTO (agregacion de cifras ya calculadas, sin bajar al asiento) → {project_id, periodo, cuadro, faltan, abierto, correlation_id}. Lo consumen los canales de entrega del negocio; el cuadro NO decide nada, solo presenta."
+      "description": "Par de fallo determinista: falta project_id → {status, code, message}. Cierra el circulo de componer.request."
     }
   ],
-  "ui_handlers": [
-    {
-      "domain": "contabilidad",
-      "action": "cuadro-mando-contable.componer",
-      "handler": "onComponerRequest",
-      "type": "inline_render",
-      "zone": "area_chat"
-    }
+  "tools": [
+    { "name": "cuadro-mando-contable.componer", "description": "Compone (PREGUNTA) el cuadro de mando agregando caja, resultado, margen y desviacion por evento." }
   ]
 }

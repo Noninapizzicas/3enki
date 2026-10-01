@@ -1,40 +1,28 @@
 {
-  "_doc": "Manifest de contabilidad-libro/periodificacion — REFLEJO STATELESS (C3, hoja del plan). Imputa cada hecho a su PERIODO con el CRITERIO DECLARADO (devengo vs caja). Los criterios son PARÁMETROS DECLARABLES, no constantes cableadas: DEVENGO → fecha_operacion; CAJA → fecha_valor; se puede declarar un `campo_fecha` a mano. SIN criterio declarado NO se elige — se devuelve `elegido:false`, `periodo:null` y `abierto:['criterio']` (devengo vs caja es una decisión, no un default silencioso). CONSERVA SIEMPRE la fecha de operación y la fecha valor; no elige por su cuenta. La unidad de cierre (mes|anio|dia) es declarable (defecto mes). Determinista: mismo hecho + mismo criterio → mismo periodo. No muta el hecho. Sin PosPersistencia ni onProjectActivated (reflejo puro). Proyección `_imputar`. Par de fallo periodificacion.imputar.failed.",
+  "_doc": "Manifest de libro/periodificacion — REFLEJO STATELESS (C3, hoja del plan). Imputa cada hecho a su PERIODO con el criterio DECLARADO; CONSERVA fecha operacion y fecha valor. No estima el periodo: lo deriva del hecho y del criterio declarado. El criterio es DECLARABLE (`por`: fecha_operacion por defecto o fecha_valor; `mes_corte`: 1..12, por defecto 12 = año natural; `granularidad`: mensual/anual). Sin la fecha que gobierna el periodo → periodo:null (dato ausente = desconocido), no un periodo inventado. Se conservan SIEMPRE ambas fechas. Sin estado. RPC PREGUNTA → sin ui_handler (su cara es el bus). Cuando falta el criterio declarado, sube una peticion best-effort a cola-declaraciones-criterio.fijar.request (sin suplantar al JEFE). Publica periodificacion.imputar.response y su par .failed.",
   "name": "periodificacion",
   "version": "0.1.0",
-  "description": "Reflejo (C3): imputa cada hecho a su periodo con el criterio declarado (devengo/caja) y conserva fecha operación y fecha valor — no elige en silencio.",
-  "blueprint_driven": true,
-  "blueprint_path": "periodificacion.blueprint.json",
+  "description": "Reflejo (C3): imputa cada hecho a su periodo con el criterio declarado, conservando fecha operación y fecha valor. Sin estado.",
   "language": "es",
   "subscribes": [
     {
       "event": "periodificacion.imputar.request",
       "handler": "onImputarRequest",
-      "description": "RPC reflejo (cálculo puro): {project_id, hecho:{fecha_operacion?, fecha_valor?, ...}, criterio?:'DEVENGO'|'CAJA', campo_fecha?, unidad_cierre?:'mes'|'anio'|'dia'} → {project_id, fecha_operacion, fecha_valor, criterio, campo_fecha, unidad_cierre, elegido, fecha_imputada, periodo, abierto, motivo}. ConserVA ambas fechas; sin criterio declarado no elige (`elegido:false`, `abierto:['criterio']`). Responde por periodificacion.imputar.response; fallo (project_id/hecho ausente) → periodificacion.imputar.failed."
-    },
-    {
-      "event": "contabilidad.asiento_registrado",
-      "handler": "onAsientoRegistrado",
-      "description": "Fire-and-forget (B2 → C3): el diario registró un asiento → se refleja el hecho en el espejo en memoria (idempotente por clave natural/numero), para poder imputarlo por su clave. No muta el libro ni decide."
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id?, hecho, criterio?, por?, mes_corte?, granularidad?} → {project_id, fecha_operacion, fecha_valor, periodo, por, granularidad, mes_corte, criterio_declarado, abierto}. Deriva el periodo con el criterio declarado; sin la fecha que gobierna → periodo:null. Sin hecho → INVALID_INPUT. Responde por periodificacion.imputar.response. Payload invalido → periodificacion.imputar.failed."
     }
   ],
   "publishes": [
     {
       "event": "periodificacion.imputar.response",
-      "description": "Respuesta RPC correlada de periodificacion.imputar.request → {request_id, status:200, data:{fecha_operacion, fecha_valor, criterio, elegido, fecha_imputada, periodo, abierto, motivo}}. Emitida por el helper _atender."
+      "description": "Respuesta RPC correlada de la op imputar (una sola cara: el bus)."
     },
     {
       "event": "periodificacion.imputar.failed",
-      "description": "Par de fallo determinista (C3): project_id ausente o hecho no resoluble (400) → {status, error:{code, message, details?}}. Cierra el círculo de periodificacion.imputar.request."
+      "description": "Par de fallo determinista: falta el hecho → {status, code, message}. Cierra el circulo de imputar.request."
     }
   ],
-  "ui_handlers": [
-    {
-      "domain": "contabilidad",
-      "action": "periodificacion.imputar",
-      "handler": "onImputarRequest",
-      "type": "workspace_module",
-      "zone": "barra_modulos"
-    }
-  ]
+  "tools": [
+    { "name": "periodificacion.imputar", "description": "Imputa (PREGUNTA) un hecho a su periodo con el criterio declarado, conservando fecha operación y fecha valor." }
+  ],
+  "ui_handlers": []
 }

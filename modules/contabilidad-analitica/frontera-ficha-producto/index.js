@@ -44,27 +44,12 @@ class FronteraFichaProducto extends ModuloHibridoReflejo {
 
   async onUnload() { return super.onUnload(); }
 
-  // ── handler RPC (una linea, delega a _atender) ──
+  // ── handler RPC (una linea, delega a _atender). CLASE PREGUNTA → sin ui_handler ──
   onEntrarRequest(e) {
     return this._atender(e, 'entrar', 'frontera-ficha-producto.entrar.response', async (d) => {
       const res = this._entrar(d);
-      if (res.status === 200) {
-        // Exito → evento de dominio: el coste interno quedo disponible. Lo LEE valoracion-existencia (H1).
-        this.eventBus?.publish('contabilidad.coste_interno', {
-          project_id: res.data.project_id,
-          clave_natural: res.data.coste.clave_natural,
-          producto: res.data.coste.producto,
-          coste_unitario: res.data.coste.coste_unitario,
-          coste_total: res.data.coste.coste_total,
-          moneda: res.data.coste.moneda,
-          origen_ficha: res.data.origen_ficha,
-          faltantes: res.data.coste.faltantes,
-          correlation_id: (d && d.correlation_id) || null
-        });
-      } else {
-        // Ficha ausente / frontera no declarada → par determinista.
-        this.eventBus?.publish('frontera-ficha-producto.entrar.failed', res);
-      }
+      // Conversor puro: no valora, no decide, no escribe → no hay hecho que anunciar (R2).
+      if (res.status !== 200) this.eventBus?.publish('frontera-ficha-producto.entrar.failed', res);
       return res;
     });
   }

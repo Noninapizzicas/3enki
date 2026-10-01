@@ -1,20 +1,21 @@
 /**
  * contabilidad-entrada/puerto-documento — CONVERSOR STATELESS (A4.2, hoja del plan).
  *
- * Frontera de las FORMAS DECLARABLES del documento: convierte una representacion
- * EXTERNA (lo que el sitio tenga: JSON de un emisor, fila de un CSV, salida de un
- * conector) en el `Documento` canonico del dominio. El adaptador lo pone el sitio:
- * el `mapeo` (campo canonico → clave externa) y las `formas_declarables` entran
- * como DATO en el payload — NO hay ninguna forma cableada en el codigo.
+ * FRONTERA de las FORMAS DECLARABLES del documento de entrada. El ADAPTADOR lo pone
+ * el SITIO (se declara), no el modulo: aqui solo se traduce la FORMA.
  *
- * Invariantes respetadas:
- *  - La ley/formatos entran como DATO: sin `forma` declarada → no se convierte nada.
- *  - Dato ausente = desconocido: un campo que no viene del exterior queda `null` y
- *    se declara en `abierto` (jamas se estima).
- *  - No asienta, no juzga: solo traduce forma. La conformacion a Hecho es competencia
- *    de normalizador-hecho (A2); la contrapartida se resuelve despues.
+ * LA LEY / LA FORMA ENTRA COMO DATO: el `formato` y el `mapeo` (campo canonico →
+ * clave externa) son DECLARABLES. NO hay NINGUN esquema cableado. Sin `formato`
+ * declarado NO se traduce; si el formato no tiene `mapeo` declarado y no es el
+ * canonico → 422 FORMATO_NO_DECLARABLE.
  *
- * Forma: CONVERSOR → STATELESS. Sin PosPersistencia, sin onProjectActivated.
+ * Invariante: dato ausente = desconocido. Un campo que no viene del exterior queda
+ * `null` y se declara en `abierto` (jamas se estima).
+ *
+ * NO interpreta el CONTENIDO (eso es `extraccion-dato` A4.1): si el documento trae
+ * algo interpretable, lo SUBE por EVENTO a `extraccion-dato.juzgar.request`.
+ *
+ * Forma: CONVERSOR → STATELESS. Sin PosPersistencia. PREGUNTA (entrar) → sin ui_handler.
  * Ver hoja A4.2 del plan-construccion y diseno-oop.md (CLASE PuertoDocumento).
  */
 
@@ -22,8 +23,8 @@
 
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
 
-// Campos canonicos del Documento. Su ORIGEN externo es declarable (mapeo).
-const CAMPOS_DOCUMENTO = ['tipo', 'emisor', 'numero', 'fecha', 'base', 'impuestos', 'total', 'moneda'];
+// Campos canonicos de un DOCUMENTO de entrada. Su ORIGEN externo es declarable (mapeo).
+const CAMPOS_DOCUMENTO = ['tipo', 'contenido', 'file_path', 'mime', 'origen', 'fecha', 'importe_total', 'tercero'];
 
 class PuertoDocumento extends ModuloHibridoReflejo {
   constructor() {
@@ -34,87 +35,103 @@ class PuertoDocumento extends ModuloHibridoReflejo {
 
   async onUnload() { return super.onUnload(); }
 
-  // ── handler RPC (una linea: delega a _atender) ──
+  // ── handler RPC (PREGUNTA → sin ui_handler) ──
   onEntrarRequest(e) {
     return this._atender(e, 'entrar', 'puerto-documento.entrar.response', async (d) => {
       const res = this._entrar(d);
-      // Cierra el circulo: exito → evento de dominio; error → par determinista.
-      if (res.status === 200) {
-        this.eventBus?.publish('contabilidad.documento_normalizado', {
-          project_id: d.project_id || null,
-          forma: res.data.forma,
-          documento: res.data.documento,
-          abierto: res.data.abierto,
-          correlation_id: d.correlation_id
-        });
-      } else {
-        this.eventBus?.publish('puerto-documento.entrar.failed', res);
-      }
+      // Conversor puro: no escribe → no hay hecho que anunciar. Su cara es el bus.
+      if (res.status !== 200) this.eventBus?.publish('puerto-documento.entrar.failed', res);
+      // Si el documento trae algo interpretable, se encadena a extraccion-dato (best-effort).
+      else this._encadenar(res, d);
       return res;
     });
   }
 
-  // ── proyeccion determinista: externo → Documento canonico ──
+  // ── entrar: forma externa → forma canonica del documento ──
   _entrar(input = {}) {
-    const externo = input.externo;
-    if (!externo || typeof externo !== 'object') return this._invalid('externo');
-
-    const formas = Array.isArray(input.formas_declarables)
-      ? input.formas_declarables.map((f) => String(f))
-      : [];
-    const forma = input.forma != null ? String(input.forma) : null;
-
-    // La frontera de formas es DECLARABLE: sin forma declarada no se adivina.
-    if (!forma) {
-      return this._errorResponse(400, 'FORMA_NO_DECLARADA',
-        'hay que declarar la forma del documento externo', { formas_declarables: formas });
+    const formato = this._formato(input);
+    if (!formato) {
+      return this._errorResponse(400, 'FORMATO_NO_DECLARADO',
+        'hay que declarar el formato del documento de entrada', { esquemas_declarables: this._esquemas(input) });
     }
-    if (!formas.includes(forma)) {
-      return this._errorResponse(422, 'FORMA_NO_DECLARABLE',
-        'la forma no esta entre las declarables del sitio', { forma, formas_declarables: formas });
+    const externo = input.documento || input.externo;
+    if (!externo || typeof externo !== 'object') return this._invalid('documento');
+
+    const mapeo = this._mapeoDe(input, formato, this._esquemas(input));
+    if (!mapeo) {
+      return this._errorResponse(422, 'FORMATO_NO_DECLARABLE',
+        'formato no declarable: declara `mapeo` (campo canonico → clave externa) o un `esquema` declarado',
+        { formato, esquemas_declarables: this._esquemas(input) });
     }
 
-    const mapeo = (input.mapeo && typeof input.mapeo === 'object') ? input.mapeo : null;
-    const doc = this._aDocumento(externo, mapeo);
-    if (!doc.ok) return doc.res;
+    const documento = {};
+    const faltantes = [];
+    for (const campo of CAMPOS_DOCUMENTO) {
+      const clave = mapeo[campo] != null ? String(mapeo[campo]) : campo;
+      const raw = externo[clave];
+      if (raw === undefined || raw === null || raw === '') { documento[campo] = null; faltantes.push(campo); }
+      else documento[campo] = raw;
+    }
+    // Los campos extra del exterior se conservan bajo `metadatos` (no se pierde nada).
+    const conocidas = new Set(CAMPOS_DOCUMENTO.map((c) => (mapeo[c] != null ? String(mapeo[c]) : c)));
+    const metadatos = {};
+    for (const [k, v] of Object.entries(externo)) if (!conocidas.has(k)) metadatos[k] = v;
+    documento.metadatos = metadatos;
 
     return {
       status: 200,
       data: {
-        project_id: input.project_id || null,
-        forma,
-        documento: doc.value,
-        adaptador_declarado: Boolean(mapeo),
-        abierto: doc.faltantes
+        project_id: input.project_id || this.project_id || null,
+        formato,
+        direccion: 'entrar',
+        documento,
+        adaptador_declarado: Boolean(input.mapeo),
+        // Cruza FORMA, no decide CONTENIDO: se declara que no se interpreto nada.
+        contenido_interpretado: false,
+        abierto: faltantes
       }
     };
   }
 
-  // Traduce una representacion externa al Documento canonico.
-  // El `mapeo` declara, por campo canonico, la clave externa que lo porta.
-  _aDocumento(externo, mapeo) {
-    const value = {};
-    const faltantes = [];
-    for (const campo of CAMPOS_DOCUMENTO) {
-      const clave = mapeo && mapeo[campo] != null ? String(mapeo[campo]) : campo;
-      const raw = externo[clave];
-      if (raw === undefined || raw === null || raw === '') {
-        value[campo] = null;              // desconocido — NO se estima
-        faltantes.push(campo);
-      } else {
-        value[campo] = raw;
-      }
-    }
-    // Los campos extra del exterior se conservan bajo `metadatos` (no se pierde nada).
-    const conocidas = new Set(CAMPOS_DOCUMENTO.map((c) => (mapeo && mapeo[c] != null ? String(mapeo[c]) : c)));
-    const metadatos = {};
-    for (const [k, v] of Object.entries(externo)) if (!conocidas.has(k)) metadatos[k] = v;
-    value.metadatos = metadatos;
-
-    return { ok: true, value, faltantes };
+  // La frontera TRADUCE la forma; si el documento trae algo interpretable se sube a
+  // extraccion-dato (A4.1) por EVENTO, que es quien lo vuelve DATO. No se inventa nada.
+  _encadenar(res, d) {
+    const doc = res.data.documento || {};
+    if (!doc.tipo && !doc.contenido && !doc.file_path && !doc.mime) return;   // sin documento NO se fabrica
+    try {
+      this.eventBus?.publish('extraccion-dato.juzgar.request', {
+        project_id: res.data.project_id,
+        documento: doc,
+        formato: res.data.formato,
+        origen: 'puerto-documento',
+        correlation_id: d.correlation_id
+      });
+    } catch (_) { /* best-effort */ }
   }
 
-  // Tool directa (misma proyeccion, sin bus).
+  _formato(input = {}) {
+    const f = input.formato != null ? String(input.formato).trim() : '';
+    return f || null;
+  }
+
+  _esquemas(input = {}) {
+    return Array.isArray(input.esquemas_declarables)
+      ? input.esquemas_declarables.map((f) => String(f)).filter(Boolean)
+      : [];
+  }
+
+  _mapeoDe(input, formato, esquemas) {
+    if (input.mapeo && typeof input.mapeo === 'object') return input.mapeo;
+    const canonico = formato === 'canonico' || formato === 'enki';
+    if (canonico || esquemas.includes(formato)) {
+      const identidad = {};
+      for (const c of CAMPOS_DOCUMENTO) identidad[c] = c;
+      return identidad;
+    }
+    return null;
+  }
+
+  // ── Tools ──
   toolEntrar(params) { return this._entrar(params); }
 }
 

@@ -1,17 +1,23 @@
 /**
  * contabilidad-entrada/deduplicacion-hecho — REFLEJO STATELESS (A7, hoja del plan).
  *
- * Aplica la CLAVE NATURAL del hecho/documento (M3, `clave-natural`) → no duplica.
- * Es la cara de entrada del cerrojo anti-bucle: un hecho ya visto no se vuelve a tratar.
+ * IDEMPOTENCIA DETERMINISTA. La clave natural del hecho/documento decide si YA se vio: reprocesar
+ * NO duplica. Cierra 'un cierre = un asiento' en la PUERTA de entrada.
+ *
+ * La clave natural NO se recalcula aqui: la calcula `clave-natural` (M3) y esta hoja la SUBE por
+ * EVENTO (`clave-natural.calcular.request`). El reflejo decide si el hecho es NUEVO comparando su
+ * clave con las ya vistas (su propio registro de claves, en memoria, por proyecto).
  *
  * Invariantes:
- *  - Sin clave natural no hay veredicto: `es_nuevo:null` con `motivo` — no se ASUME nuevo
- *    (asumir "nuevo" es como duplicar) ni se asume duplicado. La clave la da M3.
- *  - Es PURO y sin estado: pregunta la clave por EVENTO y compara con la clave que le dan.
- *    Quien RECUERDA los hechos ya vistos es el custode del diario, no este reflejo.
- *  - Determinista: mismo hecho + misma clave registrada → mismo veredicto, siempre.
+ *  - DETERMINISTA: mismo hecho → misma clave → mismo veredicto (nuevo/duplicado).
+ *  - Sin elemento NO hay clave ni veredicto (dato ausente = desconocido): no se marca como nuevo
+ *    ni como duplicado lo que no se pudo identificar.
+ *  - NO escribe dominio, NO persiste, NO muta el hecho: decide y declara. Su registro de claves
+ *    vistas es un DERIVADO en memoria (no un hecho de negocio).
  *
- * Forma: REFLEJO → STATELESS. Sin PosPersistencia, sin onProjectActivated.
+ * R3 · ESCUCHA: el plan NO declara escucha de dominio (—) y no se anade ninguna sin emisor.
+ *
+ * Forma: REFLEJO → STATELESS. Sin PosPersistencia, sin onProjectActivated. RPC PREGUNTA → sin ui_handler.
  * Ver hoja A7 del plan-construccion y diseno-oop.md (CLASE DeduplicacionHecho).
  */
 
@@ -24,104 +30,105 @@ class DeduplicacionHecho extends ModuloHibridoReflejo {
     super();
     this.name = 'deduplicacion-hecho';
     this.version = 'reflejo-0.1.0';
+    // Registro DERIVADO de claves naturales vistas: project_id -> Map<clave, {primera_vez, visto}>
+    this._vistas = new Map();
   }
 
   async onUnload() { return super.onUnload(); }
 
+  // ── handler RPC PREGUNTA (sin ui_handler: su cara es el bus) ──
   onEsNuevoRequest(e) {
     return this._atender(e, 'es_nuevo', 'deduplicacion-hecho.es_nuevo.response', async (d) => {
       const res = await this._es_nuevo(d);
+      // PREGUNTA: decide; no escribe dominio → no hay hecho que anunciar (R2).
       if (res.status !== 200) this.eventBus?.publish('deduplicacion-hecho.es_nuevo.failed', res);
       return res;
     });
   }
 
-  // ── Fire-and-forget del flujo: un hecho normalizado se comprueba contra lo visto ──
-  onHechoNormalizado(e) {
-    const d = (e && (e.data || e)) || {};
-    if (!d.project_id) return null;
-    return this._es_nuevo({
-      project_id: d.project_id,
-      hecho: d.hecho,
-      clave: d.clave_natural,
-      claves_vistas: d.claves_vistas,
-      correlation_id: d.correlation_id
-    });
-  }
-
-  // ── proyeccion determinista: es_nuevo(h) → bool | null ──
+  // ══════════════════════════════════════════════════════════════════════
+  // es_nuevo(elemento, componentes?) → veredicto de idempotencia (PREGUNTA)
+  // ══════════════════════════════════════════════════════════════════════
   async _es_nuevo(input = {}) {
-    const hecho = input.hecho || input.h;
-    if (!hecho || typeof hecho !== 'object') return this._invalid('hecho');
+    const pid = input.project_id || this.project_id || null;
 
-    const pid = input.project_id || this.project_id;
-    if (!pid) return this._invalid('project_id');
+    const elemento = input.elemento !== undefined ? input.elemento
+      : (input.hecho !== undefined ? input.hecho
+        : (input.documento !== undefined ? input.documento : null));
+    if (!elemento || typeof elemento !== 'object') return this._invalid('elemento');
 
-    // 1) Clave natural: la declarada en la peticion o, por EVENTO, la de M3. NO se inventa.
-    let clave = input.clave != null && String(input.clave).trim() !== '' ? String(input.clave).trim() : null;
-    let clave_origen = 'declarada';
-    let composicion = null;
+    // SUBE a clave-natural (M3) por EVENTO: la clave natural la calcula su custodio, no este reflejo.
+    const claveResp = await this._rpc('clave-natural.calcular.request', {
+      project_id: pid,
+      elemento,
+      componentes: Array.isArray(input.componentes) && input.componentes.length ? input.componentes : undefined
+    });
 
-    if (!clave) {
-      const resp = await this._rpc('clave-natural.calcular.request',
-        { project_id: pid, hecho, composicion: input.composicion }, { timeout_ms: 4000 });
-      const data = resp && resp.data ? resp.data : null;
-      if (data && data.clave) {
-        clave = String(data.clave);
-        clave_origen = 'clave-natural';
-        composicion = data.composicion || null;
-      }
-    }
-
-    if (!clave) {
-      // Sin clave natural NO se afirma nada: ni nuevo ni duplicado.
+    if (!claveResp || claveResp.status !== 200 || !claveResp.data || !claveResp.data.clave) {
+      // Sin clave natural NO hay veredicto (dato ausente = desconocido): no se inventa ni el nuevo ni el duplicado.
       return {
         status: 200,
         data: {
           project_id: pid,
-          es_nuevo: null,
+          elemento,
           clave: null,
-          clave_origen: null,
-          motivo: 'sin clave natural no hay veredicto: no se asume nuevo (asumir nuevo es duplicar)',
-          disponible: false
+          es_nuevo: null,
+          es_duplicado: null,
+          vistas: null,
+          abierto: {
+            clave: 'no se pudo calcular la clave natural (clave-natural no respondio): el veredicto queda declarado abierto, no se adivina'
+          }
         }
       };
     }
 
-    // 2) Claves ya vistas: SOLO las que el emisor declara como VISTAS. La clave
-    // natural del propio hecho NO cuenta como vista: que el hecho traiga su clave no
-    // prueba que ya se haya tratado (asumirlo seria no procesar nunca un hecho nuevo).
-    const vistas = this._vistas(input.claves_vistas);
-    const duplicado = vistas.includes(clave);
+    const clave = String(claveResp.data.clave);
+    const componentes = claveResp.data.componentes || [];
+    const registro = this._registro(pid);
+
+    const previa = registro.get(clave) || null;
+    const es_nuevo = previa === null;
+
+    // Se anota la clave vista (registro DERIVADO en memoria; no es un hecho de negocio).
+    registro.set(clave, {
+      primera_vez: previa ? previa.primera_vez : new Date().toISOString(),
+      visto: (previa ? previa.visto : 0) + 1
+    });
 
     return {
       status: 200,
       data: {
         project_id: pid,
-        es_nuevo: !duplicado,
+        elemento,
         clave,
-        clave_origen,
-        composicion,
-        vistas_comparadas: vistas.length,
-        motivo: duplicado
-          ? 'la clave natural ya consta: un hecho = un asiento, no se reprocesa'
-          : 'la clave natural no consta: el hecho es nuevo',
-        disponible: true
+        componentes,
+        es_nuevo,
+        es_duplicado: !es_nuevo,
+        vistas: registro.get(clave).visto,
+        // Determinista: misma clave → mismo veredicto. Reprocesar NO duplica.
+        determinista: true,
+        idempotente: true,
+        abierto: { clave: null }
       }
     };
   }
 
-  // Universo de claves vistas que el emisor aporta (lista o mapa clave→valor).
-  _vistas(claves) {
-    const out = [];
-    if (Array.isArray(claves)) {
-      for (const c of claves) if (c !== undefined && c !== null && c !== '') out.push(String(c));
-    } else if (claves && typeof claves === 'object') {
-      for (const c of Object.keys(claves)) out.push(String(c));
+  _registro(pid) {
+    let r = this._vistas.get(pid);
+    if (!r) {
+      r = new Map();
+      this._vistas.set(pid, r);
     }
-    return [...new Set(out)];
+    return r;
   }
 
+  // Claves vistas del proyecto (mismo proceso) — solo lectura, derivado.
+  clavesDe(pid) {
+    const r = pid ? this._vistas.get(pid) : null;
+    return r ? [...r.keys()] : [];
+  }
+
+  // ── Tools ──
   toolEsNuevo(params) { return this._es_nuevo(params); }
 }
 

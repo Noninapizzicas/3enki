@@ -1,28 +1,19 @@
 /**
  * contabilidad-entrada/contrato-hecho-minimo — CUSTODIO CON PERSISTENCIA (A11, hoja del plan).
  *
- * LA CARA VISTA DESDE LA FUENTE. La parcela declarable del MINIMO exigible a cada
- * vertical: no un formato impuesto, un minimo declarado. Contabilidad se adapta; no
- * obliga a la fuente a emitir de una forma concreta.
- *
- * Invariante 13 (el minimo se DECLARA, no se estima): el contrato de una vertical solo
- * existe si la fuente (o el asesor, con su rol) lo declara. `exigir` verifica el minimo
- * DECLARADO contra el hecho que llega y lista lo que FALTA en `faltantes`; jamas rellena
- * un campo ausente con una estimacion.
- *
- * UN SOLO ESCRITOR de la parcela: el declarante (rol DECLARANTE_CONTRATO); cualquier
- * otro rol es rechazado (segundo escritor → 403). `exigir` es lectura determinista:
- * no muta.
+ * Parcela DECLARABLE del MÍNIMO exigible: la cara vista desde la FUENTE. UN escritor.
+ * Responde a la pregunta "¿qué campos mínimos debe traer un hecho de esta vertical?" — y la
+ * respuesta la DECLARA el JEFE/asesor; el módulo NO inventa un mínimo cableado.
  *
  * Invariantes:
- *  - Sin contrato declarado → `declarado:false` y no se exige nada cableado.
- *  - Un campo declarado que el hecho no aporta se lista en `faltantes`; nada se rellena.
- *  - No se sobrescribe un contrato en silencio: re-declarar APPENDEA version nueva
- *    (historial) y el contrato vigente queda fechado.
- *  - Persiste por proyecto con PosPersistencia, restaura en project.activated y
- *    vuelca en onUnload.
+ *  - `exigir` es PREGUNTA: contrasta un hecho contra el contrato declarado. No escribe → no anuncia hecho.
+ *  - `declarar` es ORDEN/ESCRITURA: fija el contrato de una vertical → anuncia el HECHO.
+ *  - SIN contrato declarado: `verificable:false` y `conforme:null` (no true). Un mínimo que no consta
+ *    NO se da por cumplido por silencio (dato ausente = desconocido).
+ *  - No se pisa en silencio: re-declarar APPENDEA al historial del contrato.
+ *  - Persiste por proyecto con PosPersistencia, restaura en project.activated y vuelca en onUnload.
  *
- * Forma: CUSTODIO → PosPersistencia + onProjectActivated + flush + GUARD de escritor.
+ * Forma: CUSTODIO → PosPersistencia + onProjectActivated + flush + UN escritor.
  * Ver hoja A11 del plan-construccion y diseno-oop.md (CLASE ContratoHechoMinimo).
  */
 
@@ -31,31 +22,30 @@
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
 const PosPersistencia = require('../../_shared/pos-persistencia');
 
-// Rol unico escritor de la parcela: quien declara el minimo de una fuente.
-const ROL_ESCRITOR = 'DECLARANTE_CONTRATO';
-
 class ContratoHechoMinimo extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'contrato-hecho-minimo';
     this.version = 'reflejo-0.1.0';
     // store: project_id -> { esquema, contratos: Map<vertical, Contrato> }
-    this._parcelas = new Map();
+    this._contratos = new Map();
 
     this._persist = new PosPersistencia({
       modulo: this,
       file: 'contrato-hecho-minimo.json',
       dir: '/contabilidad/contrato-hecho-minimo',
       snapshot: (pid) => {
-        const p = this._parcelas.get(pid);
-        if (!p) return null;
-        return { project_id: pid, esquema: p.esquema, contratos: [...p.contratos.values()] };
+        const c = this._contratos.get(pid);
+        if (!c) return null;
+        return { project_id: pid, esquema: c.esquema, contratos: [...c.contratos.values()] };
       },
       hidratar: (pid, data) => {
         if (!data) return;
         const contratos = new Map();
-        for (const c of (data.contratos || [])) if (c && c.vertical != null) contratos.set(String(c.vertical), c);
-        this._parcelas.set(pid, { esquema: data.esquema || 'contabilidad-contrato-hecho-minimo-v1', contratos });
+        for (const ct of (data.contratos || [])) {
+          if (ct && ct.vertical != null) contratos.set(String(ct.vertical), ct);
+        }
+        this._contratos.set(pid, { esquema: data.esquema || 'contabilidad-contrato-hecho-minimo-v1', contratos });
       }
     });
   }
@@ -66,31 +56,37 @@ class ContratoHechoMinimo extends ModuloHibridoReflejo {
     return super.onUnload();
   }
 
-  // Restaura los contratos del proyecto activado.
+  // Restaura los contratos de hecho mínimo del proyecto activado.
   onProjectActivated(e) {
     const d = (e && (e.data || e)) || {};
     return this._persist.restaurar(d.project_id);
   }
 
-  // ── handlers RPC (una linea, delegan a _atender) ──
+  // ── handler RPC: exigir (PREGUNTA → sin ui_handler; su cara es el bus) ──
   onExigirRequest(e) {
     return this._atender(e, 'exigir', 'contrato-hecho-minimo.exigir.response', async (d) => {
       const res = this._exigir(d);
+      // PREGUNTA: no escribe → no hay hecho que anunciar (R2).
       if (res.status !== 200) this.eventBus?.publish('contrato-hecho-minimo.exigir.failed', res);
+      else if (res.data && res.data.verificable === false) {
+        // Falta el contrato declarado: se deja la peticion en la cola (sin suplantar al JEFE).
+        this._subirPeticionCriterio(res.data.project_id, res.data.vertical);
+      }
       return res;
     });
   }
 
+  // ── handler RPC: declarar (ORDEN → ui_handler panel) ──
   onDeclararRequest(e) {
     return this._atender(e, 'declarar', 'contrato-hecho-minimo.declarar.response', async (d) => {
       const res = this._declarar(d);
       if (res.status === 200) {
-        // Exito → evento de dominio: el minimo de una fuente quedo declarado.
-        this.eventBus?.publish('contabilidad.contrato_declarado', {
+        // R2 · si ESCRIBE, anuncia el HECHO: quedo declarado el mínimo exigible de una vertical.
+        this.eventBus?.publish('contabilidad.contrato_hecho_declarado', {
           project_id: res.data.project_id,
-          contrato: res.data.contrato,
           vertical: res.data.contrato.vertical,
-          version: res.data.contrato.version,
+          contrato: res.data.contrato,
+          declarado: true,
           correlation_id: d.correlation_id
         });
       } else {
@@ -100,7 +96,7 @@ class ContratoHechoMinimo extends ModuloHibridoReflejo {
     });
   }
 
-  // ── proyeccion de lectura (determinista, NO muta): exigir(f:Fuente) → Contrato ──
+  // ── proyeccion PREGUNTA: contrastar un hecho contra el contrato declarado ──
   _exigir(input = {}) {
     const pid = input.project_id || this.project_id;
     if (!pid) return this._invalid('project_id');
@@ -108,121 +104,109 @@ class ContratoHechoMinimo extends ModuloHibridoReflejo {
     const vertical = input.vertical != null ? String(input.vertical).trim() : '';
     if (!vertical) return this._invalid('vertical');
 
-    const parcela = this._obtenerOCrear(pid);
-    const contrato = parcela.contratos.get(vertical) || null;
+    const hecho = input.hecho;
+    if (!hecho || typeof hecho !== 'object') return this._invalid('hecho');
 
-    // Sin contrato declarado: no se exige ningun minimo cableado.
+    const contratos = this._contratos.get(pid);
+    const contrato = contratos ? (contratos.contratos.get(vertical) || null) : null;
+
+    // SIN contrato declarado: NO se da por cumplido. El silencio no es conformidad.
     if (!contrato) {
       return {
         status: 200,
         data: {
           project_id: pid,
           vertical,
-          declarado: false,
-          contrato: null,
-          campos: [],
+          conforme: null,
+          verificable: false,
+          campos_exigidos: [],
           faltantes: [],
-          completo: false,
-          motivo: 'la fuente no ha declarado aun su minimo'
+          abierto: { contrato: 'no se declaró el contrato de hecho mínimo de esta vertical' }
         }
       };
     }
 
-    // Minimo declarado vs hecho que llega: lo que falta se DECLARA (no se rellena).
-    const hecho = input.hecho && typeof input.hecho === 'object' ? input.hecho : null;
-    const faltantes = hecho
-      ? contrato.campos.filter(c => {
-          const v = hecho[c];
-          return v === undefined || v === null || v === '';
-        })
-      : [];
+    const campos = Array.isArray(contrato.campos_exigidos) ? contrato.campos_exigidos : [];
+    const faltantes = campos.filter((c) => {
+      const v = hecho[c];
+      return v === undefined || v === null || (typeof v === 'string' && v.trim() === '');
+    });
 
     return {
       status: 200,
       data: {
         project_id: pid,
         vertical,
-        declarado: true,
-        contrato: {
-          vertical,
-          campos: contrato.campos,
-          version: contrato.version,
-          declarado_por: contrato.declarado_por,
-          declarado_en: contrato.declarado_en
-        },
-        campos: contrato.campos,
+        conforme: faltantes.length === 0,
+        verificable: true,
+        campos_exigidos: campos,
         faltantes,
-        completo: hecho ? faltantes.length === 0 : false,
-        evaluado: Boolean(hecho)
+        contrato,
+        abierto: null
       }
     };
   }
 
-  // ── proyeccion de escritura (UN escritor): el minimo se declara ──
+  // ── proyeccion ORDEN (UN escritor): declarar el contrato de hecho mínimo de una vertical ──
   _declarar(input = {}) {
     const pid = input.project_id || this.project_id;
     if (!pid) return this._invalid('project_id');
 
-    // GUARD de escritor: solo el declarante asienta contratos.
-    if (input.rol !== ROL_ESCRITOR) {
-      return this._errorResponse(403, 'PERMISSION_DENIED',
-        'solo el declarante (DECLARANTE_CONTRATO) puede declarar el minimo de una fuente',
-        { rol_esperado: ROL_ESCRITOR, rol_recibido: input.rol ?? null });
-    }
-
     const vertical = input.vertical != null ? String(input.vertical).trim() : '';
     if (!vertical) return this._invalid('vertical');
 
-    const campos = Array.isArray(input.campos)
-      ? input.campos.map(c => String(c).trim()).filter(Boolean)
-      : null;
-    if (!campos || campos.length === 0) return this._invalid('campos');
+    const campos_exigidos = Array.isArray(input.campos_exigidos)
+      ? input.campos_exigidos.map((x) => String(x)).filter(Boolean)
+      : [];
+    if (campos_exigidos.length === 0) return this._invalid('campos_exigidos');
 
-    const parcelas = this._obtenerOCrear(pid);
-    const previo = parcelas.contratos.get(vertical) || null;
+    const store = this._obtenerOCrear(pid);
+    const existente = store.contratos.get(vertical) || null;
     const ahora = new Date().toISOString();
 
-    const contrato = {
-      vertical,
-      campos,
-      version: previo ? previo.version + 1 : 1,
-      declarado_por: ROL_ESCRITOR,
-      declarado_en: ahora,
-      // Re-declarar NO borra el minimo anterior: se apila su historial.
-      historial: previo && Array.isArray(previo.historial) ? previo.historial : [],
-      actualizado_en: ahora
-    };
-    contrato.historial.push({ campos, version: contrato.version, por: ROL_ESCRITOR, en: ahora });
+    const contrato = existente || { vertical, campos_exigidos: [], declarado_en: null, historial: [] };
+    contrato.campos_exigidos = campos_exigidos;
+    contrato.descripcion = input.descripcion != null ? String(input.descripcion) : (contrato.descripcion || null);
+    contrato.declarado_en = ahora;
+    contrato.historial = Array.isArray(contrato.historial) ? contrato.historial : [];
+    // No se pisa en silencio: re-declarar apila el estado anterior.
+    contrato.historial.push({ campos_exigidos: [...campos_exigidos], en: ahora });
 
-    parcelas.contratos.set(vertical, contrato);
-    parcelas.updated_at = ahora;
+    store.contratos.set(vertical, contrato);
+    store.updated_at = ahora;
     this._persist.marcarDirty(pid);
 
     return {
       status: 200,
-      data: {
-        project_id: pid,
-        contrato: { vertical, campos, version: contrato.version, declarado_por: ROL_ESCRITOR, declarado_en: ahora },
-        declarado: true,
-        sobrescritura: Boolean(previo)
-      }
+      data: { project_id: pid, contrato, declarado: true, abierto: null }
     };
   }
 
-  // Contrato vigente de una fuente (mismo proceso) — no muta.
-  contratoDe(pid, vertical) {
-    const p = pid ? this._parcelas.get(pid) : null;
-    return p && vertical != null ? (p.contratos.get(String(vertical)) || null) : null;
-  }
-
   _obtenerOCrear(pid) {
-    let p = this._parcelas.get(pid);
-    if (!p) {
-      p = { esquema: 'contabilidad-contrato-hecho-minimo-v1', contratos: new Map() };
-      this._parcelas.set(pid, p);
+    let c = this._contratos.get(pid);
+    if (!c) {
+      c = { esquema: 'contabilidad-contrato-hecho-minimo-v1', contratos: new Map() };
+      this._contratos.set(pid, c);
       this._persist.marcarDirty(pid);
     }
-    return p;
+    return c;
+  }
+
+  // Contrato de una vertical (mismo proceso) — no muta.
+  contratoDe(pid, vertical) {
+    const c = pid ? this._contratos.get(pid) : null;
+    return c && vertical != null ? (c.contratos.get(String(vertical)) || null) : null;
+  }
+
+  // Peticion best-effort a la cola declarativa cuando falta el contrato (sin suplantar al JEFE).
+  _subirPeticionCriterio(pid, vertical) {
+    try {
+      if (pid) this._rpc('cola-declaraciones-criterio.fijar.request', {
+        project_id: pid,
+        clave: `contrato_hecho_minimo:${vertical}`,
+        origen: 'contrato-hecho-minimo'
+      }, { timeout_ms: 2000 });
+    } catch (_) { /* best-effort */ }
   }
 
   // ── Tools ──

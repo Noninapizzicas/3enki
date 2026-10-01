@@ -1,9 +1,0 @@
-{
-  "id": "obligacion-seguridad-social",
-  "name": "Obligación Seguridad Social",
-  "version": "0.1.0",
-  "zone": "work-bar",
-  "order": 113,
-  "icon": "👤",
-  "label": "Seg. Social"
-}

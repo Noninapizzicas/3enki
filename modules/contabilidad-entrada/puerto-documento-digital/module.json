@@ -1,0 +1,34 @@
+{
+  "_doc": "Manifest de entrada/puerto-documento-digital — PUENTE STATELESS (A5, hoja del plan). Recepcion DIGITAL declarable: el puente de la frontera hacia los canales que ya entregan un documento digital a un pipeline (Telegram push / Gmail pull). ADAPTA el strategy-pattern REAL de `facturacion/fuentes` (adapta su contrato: `factura.entrada` → el contrato contable `contabilidad.*`), NO lo reescribe. En su lugar, el `_fuentes_declaradas` de la recibida declara las fuentes del sitio (su adaptador lo pone el sitio: aqui CERO canales cableados). Recibe por RPC ORDEN (panel): declara la fuente y ENCADENA la recepcion por EVENTO a normalizador-hecho.entrar.request (A2, normaliza el hecho) y extraccion-dato.juzgar.request (A4.1, lo vuelve dato). Al RECIBIR publica el HECHO contabilidad.documento_recibido (R2: ESCRIBE estado de dominio → su hecho), que escucha captura-documento (A3, este mismo grupo). PUENTE STATELESS: sin PosPersistencia. R3: NO declara escuchas de dominio (el plan tampoco las declara: -). Publica puerto-documento-digital.recibir.response/.failed y contabilidad.documento_recibido.",
+  "name": "puerto-documento-digital",
+  "version": "0.1.0",
+  "description": "Puente (A5): recepcion digital declarable. Adapta el strategy-pattern de facturacion/fuentes; encadena el documento y publica contabilidad.documento_recibido.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "puerto-documento-digital.recibir.request",
+      "handler": "onRecibirRequest",
+      "description": "RPC puente (ORDEN, panel): {project_id, fuente, documento{...}, formato?, metadatos?} → {project_id, fuente, recibido, documento, encadenado_a, abierto}. Recepcion digital declarable; encadena a normalizador-hecho.entrar.request y extraccion-dato.juzgar.request. Publica el HECHO contabilidad.documento_recibido. Responde por puerto-documento-digital.recibir.response; falta project_id/documento → puerto-documento-digital.recibir.failed."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "contabilidad.documento_recibido",
+      "description": "Fire-and-forget (A5): se RECIBIO un documento por el canal digital → {project_id, documento, fuente, formato, origen, recibido_en}. Lo escucha captura-documento (A3). Es el hecho del puente."
+    },
+    {
+      "event": "puerto-documento-digital.recibir.response",
+      "description": "Respuesta RPC correlada de la op recibir (una sola cara: el bus)."
+    },
+    {
+      "event": "puerto-documento-digital.recibir.failed",
+      "description": "Par de fallo determinista: falta project_id, documento, o la fuente no esta declarada → {status, code, message}. Cierra el circulo de recibir.request."
+    }
+  ],
+  "tools": [
+    { "name": "puerto-documento-digital.recibir", "description": "Recibe (ORDEN) un documento digital de una fuente declarada y lo encadena a la entrada." }
+  ],
+  "ui_handlers": [
+    { "domain": "contabilidad", "action": "puerto-documento-digital.recibir", "handler": "onRecibirRequest", "type": "system_panel", "zone": "lateral_derecha" }
+  ]
+}

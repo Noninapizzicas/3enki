@@ -1,17 +1,14 @@
 /**
  * contabilidad-libro/cuenta-resultados — REFLEJO STATELESS (C2, hoja del plan).
  *
- * Deriva la CUENTA DE RESULTADOS (ingresos / gastos / resultado) del MAYOR.
- * NO recalcula los asientos: parte del mayor-balanza (B3) y solo CLASIFICA.
+ * Ingresos / gastos / resultado DERIVADO del mayor. Determinista.
+ * No calcula la cifra por cuenta (eso es mayor-balanza): RECIBE los saldos (o los sube por EVENTO)
+ * y los AGREGA en ingresos y gastos del periodo; el resultado es ingresos − gastos.
  *
- * La ley entra como DATO: el sentido de las cuentas de resultado (qué prefijo es
- * ingreso y qué prefijo es gasto) es DECLARABLE (`reglas`); sin declararlas se usa
- * la composición por defecto sobre grupos estándar. Nada se cablea de forma rígida.
+ * Honestidad (invariante 13): solo cuenta como ingreso/gasto lo CLASIFICABLE (masa declarada o
+ * grupo 6/7 del PGC). Lo inclasificable NO se suma a ciegas: se declara en `abierto`.
  *
- * Determinista: mismo mayor → misma cuenta de resultados. El resultado SUMA de
- * ingresos − gastos (un resultado negativo es una pérdida declarada, no un error).
- *
- * Forma: REFLEJO → STATELESS. Sin PosPersistencia, sin onProjectActivated.
+ * Forma: REFLEJO → STATELESS. Sin PosPersistencia. PREGUNTA (calcular) → sin ui_handler.
  * Ver hoja C2 del plan-construccion y diseno-oop.md (CLASE CuentaResultados).
  */
 
@@ -19,38 +16,16 @@
 
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
 
-// Clasificación por defecto (declarable). Prefijo de cuenta → naturaleza de resultado.
-const REGLAS_DEFECTO = [
-  { prefijo: '7', grupo: 'INGRESO' },
-  { prefijo: '6', grupo: 'GASTO' }
-];
-
 class CuentaResultados extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'cuenta-resultados';
     this.version = 'reflejo-0.1.0';
-    // espejo en memoria de los asientos (fallback si mayor-balanza no responde)
-    this._espejo = new Map();
   }
 
   async onUnload() { return super.onUnload(); }
 
-  // ── fire-and-forget: el diario publicó un asiento → se refleja la muestra (no decide) ──
-  onAsientoRegistrado(e) {
-    const d = (e && (e.data || e)) || {};
-    const pid = d.project_id;
-    const asiento = d.asiento;
-    if (!pid || !asiento || typeof asiento !== 'object') return null;
-    const clave = asiento.clave_natural != null ? String(asiento.clave_natural)
-      : (asiento.numero != null ? String(asiento.numero) : null);
-    if (!clave) return null;
-    const m = this._espejoDe(pid);
-    m.set(clave, asiento);
-    return null;
-  }
-
-  // ── handler RPC (una línea, delega a _atender) ──
+  // ── handler RPC (una linea). CLASE PREGUNTA → sin ui_handler ──
   onCalcularRequest(e) {
     return this._atender(e, 'calcular', 'cuenta-resultados.calcular.response', async (d) => {
       const res = await this._calcular(d);
@@ -59,112 +34,87 @@ class CuentaResultados extends ModuloHibridoReflejo {
     });
   }
 
-  // ── RESULTADOS: ingresos/gastos/resultado derivado del mayor (clasifica, no recalcula) ──
+  // ── handler de dominio: el libro cambio → se observa (ventana acotada) ──
+  onAsientoAsentado(e) {
+    const d = (e && (e.data || e)) || {};
+    this._vistos = this._vistos || [];
+    if (d.asiento) this._vistos.push(d.asiento);
+    if (this._vistos.length > 1000) this._vistos.shift();
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // calcular(saldos) → { ingresos, gastos, resultado }
+  // ══════════════════════════════════════════════════════════════════════
   async _calcular(input = {}) {
     const pid = input.project_id || this.project_id;
     if (!pid) return this._invalid('project_id');
 
-    const { mayor, fuente } = await this._mayor(pid, input);
-    const reglas = this._reglas(input.reglas);
+    const { saldos, fuente } = await this._saldosDe(input);
 
-    const ingresos = [];
-    const gastos = [];
-    const otro = [];
-    for (const linea of mayor) {
-      const grupo = this._grupoDe(linea.cuenta, reglas);
-      const item = { cuenta: linea.cuenta, saldo: linea.saldo, debe: linea.debe, haber: linea.haber };
-      if (grupo === 'INGRESO') ingresos.push(item);
-      else if (grupo === 'GASTO') gastos.push(item);
-      else otro.push(item);
+    let ingresos = 0, gastos = 0;
+    const lineas = [];
+    const noClasificables = [];
+
+    for (const s of saldos) {
+      const cuenta = s && s.cuenta != null ? String(s.cuenta) : null;
+      // Convencion DECLARADA: saldo entrante = DEBE − HABER (firmado). Ingresos son acreedores
+      // (natural = haber−debe = −raw); gastos son deudores (natural = debe−haber = raw).
+      const raw = this._round(this._num(s && (s.saldo != null ? s.saldo : (Number(s.debe || 0) - Number(s.haber || 0)))), 2);
+      const grupo = this._grupo(s, cuenta);
+      if (grupo === 'ingreso') { ingresos += -raw; lineas.push({ cuenta, saldo: raw, grupo, natural: this._round(-raw, 2) }); }
+      else if (grupo === 'gasto') { gastos += raw; lineas.push({ cuenta, saldo: raw, grupo, natural: this._round(raw, 2) }); }
+      else noClasificables.push({ cuenta, saldo: raw });
     }
 
-    // Ingresos por naturaleza acreedora (saldo negativo → positivo); gastos deudores.
-    const total_ingresos = this._round(-ingresos.reduce((s, x) => s + x.saldo, 0), 2);
-    const total_gastos = this._round(gastos.reduce((s, x) => s + x.saldo, 0), 2);
-    const resultado = this._round(total_ingresos - total_gastos, 2);
+    ingresos = this._round(ingresos, 2);
+    gastos = this._round(gastos, 2);
+    const resultado = this._round(ingresos - gastos, 2);
 
     return {
       status: 200,
       data: {
         project_id: pid,
-        ejercicio: input.ejercicio != null ? input.ejercicio : null,
-        fuente,
-        total_ingresos,
-        total_gastos,
+        tipo: 'cuenta-resultados',
+        fuente: fuente || null,
+        ingresos,
+        gastos,
         resultado,
-        // El resultado negativo es una pérdida declarada, no un error.
-        signo: resultado > 0 ? 'BENEFICIO' : (resultado < 0 ? 'PERDIDA' : 'NULO'),
-        detalle: { ingresos, gastos, otro }
+        total_cuentas: saldos.length,
+        determinista: true,
+        lineas,
+        abierto: {
+          fuente: fuente ? null : 'no se recibieron saldos (ni declarados ni de mayor-balanza): el resultado no se inventa',
+          clasificacion: noClasificables.length
+            ? `${noClasificables.length} cuenta(s) fuera de grupo 6/7 y sin masa declarada: no se suman al resultado`
+            : null
+        }
       }
     };
   }
 
-  // Pide el mayor a mayor-balanza POR EVENTO; si no responde, lo deriva del espejo.
-  async _mayor(pid, input = {}) {
-    const r = await this._rpc('mayor-balanza.saldos.request',
-      { project_id: pid, ejercicio: input.ejercicio ?? null }, { timeout_ms: 4000 });
-    if (r && r.status === 200 && r.data && Array.isArray(r.data.mayor)) {
-      return { mayor: r.data.mayor, fuente: 'mayor-balanza' };
+  async _saldosDe(input) {
+    if (Array.isArray(input.saldos)) return { saldos: input.saldos, fuente: 'declarado' };
+    const resp = await this._rpc('mayor-balanza.saldos.request', {
+      project_id: input.project_id || this.project_id,
+      fecha: input.fecha, ejercicio: input.ejercicio
+    }, { timeout_ms: 800 });
+    if (resp && Array.isArray(resp.saldos)) return { saldos: resp.saldos, fuente: 'mayor-balanza' };
+    return { saldos: [], fuente: null };
+  }
+
+  _grupo(s, cuenta) {
+    const declarada = s && (s.grupo || s.masa);
+    if (declarada) {
+      const g = String(declarada).toLowerCase().trim();
+      if (g === 'ingreso' || g === 'gasto') return g;
     }
-    return { mayor: this._derivarMayor(pid), fuente: 'espejo' };
+    const c = String(cuenta || '');
+    if (c[0] === '7') return 'ingreso';
+    if (c[0] === '6') return 'gasto';
+    return 'desconocido';
   }
 
-  _derivarMayor(pid) {
-    const por = new Map();
-    for (const a of this._espejoDe(pid).values()) {
-      if (!a || !Array.isArray(a.apuntes)) continue;
-      for (const ap of a.apuntes) {
-        if (!ap || ap.cuenta == null) continue;
-        const cuenta = String(ap.cuenta);
-        const debe = this._num(ap.debe);
-        const haber = this._num(ap.haber);
-        if (debe === null || haber === null) continue;
-        let s = por.get(cuenta);
-        if (!s) { s = { cuenta, debe: 0, haber: 0 }; por.set(cuenta, s); }
-        s.debe = this._round(s.debe + debe, 2);
-        s.haber = this._round(s.haber + haber, 2);
-      }
-    }
-    return [...por.values()].sort((x, y) => x.cuenta.localeCompare(y.cuenta)).map(s => {
-      const saldo = this._round(s.debe - s.haber, 2);
-      return {
-        cuenta: s.cuenta, debe: s.debe, haber: s.haber, saldo,
-        saldo_deudor: saldo > 0 ? saldo : 0,
-        saldo_acreedor: saldo < 0 ? this._round(-saldo, 2) : 0
-      };
-    });
-  }
-
-  // Reglas declarables; sin declarar → las de defecto.
-  _reglas(raw) {
-    if (!Array.isArray(raw)) return REGLAS_DEFECTO;
-    const reglas = raw
-      .filter(r => r && r.prefijo != null && r.grupo != null)
-      .map(r => ({ prefijo: String(r.prefijo), grupo: String(r.grupo).toUpperCase() }));
-    return reglas.length ? reglas : REGLAS_DEFECTO;
-  }
-
-  // Clasifica por el prefijo MÁS LARGO que casa (determinista).
-  _grupoDe(cuenta, reglas) {
-    const codigo = String(cuenta);
-    let mejor = null;
-    for (const r of reglas) {
-      if (codigo.startsWith(r.prefijo) && (!mejor || r.prefijo.length > mejor.prefijo.length)) mejor = r;
-    }
-    return mejor ? mejor.grupo : 'OTRO';
-  }
-
-  _espejoDe(pid) {
-    let m = this._espejo.get(pid);
-    if (!m) { m = new Map(); this._espejo.set(pid, m); }
-    return m;
-  }
-
-  _num(v) {
-    if (v === undefined || v === null || v === '') return 0;
-    const n = Number(v);
-    return Number.isFinite(n) ? n : null;
-  }
+  _num(v) { const n = Number(v); return Number.isFinite(n) ? n : 0; }
 
   // ── Tools ──
   toolCalcular(params) { return this._calcular(params); }

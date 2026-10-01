@@ -1,64 +1,72 @@
 {
-  "_doc": "Manifest de contabilidad-analitica/aislamiento-negocio — CUSTODIO CON PERSISTENCIA (I4, hoja del plan). INVARIANTE DURA: UN NEGOCIO NO VE OTRO. Esta parcela garantiza que los datos de un negocio NO se fugan a otro (eje del aislamiento multi-negocio, espejo de G7: eje negocio ↔ eje persona). UN solo dueño por parcela y UN solo escritor. ATRIBUTOS del diseno: parcelas:Map<Negocio,Parcela>. METODOS/ops: `parcela(negocio)` abre/devuelve la parcela de un negocio CON CONTROL DE ACCESO — solo el propio negocio (o su escritor reclamado) obtiene su parcela; quien declare otro negocio como solicitante → RECHAZADO (403, aislamiento negocio↔negocio); `escritor(negocio)` RECLAMA (o devuelve) el UNICO escritor de la parcela — el segundo escritor NO espera ni hace cola (403). Sin negocio declarado NO se abre parcela ([ABIERTO]/invalid: una parcela huerfana seria una puerta a todo); nada se estima y jamas se mezclan dos negocios en una misma parcela. Invariantes: UN NEGOCIO NO SE FUGA A OTRO (toda lectura de parcela ajena → 403; toda parcela es de un negocio y solo de ese); UN SOLO ESCRITOR por parcela (reclamado una vez; otra reclamacion desde otro actor → 403); persiste por proyecto con PosPersistencia (storage /contabilidad/aislamiento-negocio/aislamiento-negocio.json), restaura en project.activated y vuelca en onUnload. FORMA: CUSTODIO → PosPersistencia + onProjectActivated + flush + GUARD de un solo escritor. Proyecciones: `_parcela` (guard de aislamiento) y `_escritor` (guard de escritor unico). Publica contabilidad.parcela_reclamada al abrir/reclamar una parcela.",
+  "_doc": "Manifest de analitica/aislamiento-negocio — CUSTODIO CON PERSISTENCIA (I4, hoja del plan). Multi-negocio SIN FUGA: cada negocio tiene su PARCELA (frontera de aislamiento) con UN dueño; un negocio NUNCA se fuga a la parcela de otro (espejo de la pareja eje negocio <-> persona). La LEY de escritura NO se reimplementa: se RECLAMA la parcela en single-writer (M2) por EVENTO (single-writer.reclamar.request), que es el unico que concede titularidad; este modulo guarda la relacion negocio → parcela. AISLAMIENTO: una parcela es de UN negocio; un segundo negocio sobre la misma parcela → 409 PARCELA_OCUPADA. Dato ausente = desconocido: sin negocio_id no hay parcela (no se inventa). No se borra: re-crear la parcela del MISMO negocio es idempotente. Persiste por proyecto via PosPersistencia (_shared/pos-persistencia, storage /contabilidad/aislamiento-negocio), restaura en project.activated y vuelca en onUnload. Proyecciones _parcela (PREGUNTA, por el bus), _escritor (PREGUNTA, por el bus) y _crear_parcela (ORDEN, panel). Publica contabilidad.negocio_parcela_creada (+ pares *.failed). ESCUCHA contabilidad.negocio_registrado (emitido por onboarding-negocio K1, grupo 5).",
   "name": "aislamiento-negocio",
   "version": "0.1.0",
-  "description": "Custodio (I4): el aislamiento multi-negocio — INVARIANTE DURA 'un negocio no ve otro'; un solo dueño y un solo escritor por parcela, con control de acceso que deniega lo ajeno (403).",
-  "blueprint_driven": true,
-  "blueprint_path": "aislamiento-negocio.blueprint.json",
+  "description": "Custodio (I4): multi-negocio sin fuga. Cada negocio con su parcela aislada y un solo dueño; crear_parcela reclama en single-writer y anuncia el hecho. Persistente por proyecto.",
   "language": "es",
   "subscribes": [
     {
       "event": "aislamiento-negocio.parcela.request",
       "handler": "onParcelaRequest",
-      "description": "RPC custodio (control de acceso a la parcela): {project_id, negocio, solicitante_negocio?, escritor?} → {parcela:{negocio, escritor, creada_en, accesos}, aislada:true}. Abre/devuelve la parcela del negocio. GUARD DE AISLAMIENTO: si solicitante_negocio declara OTRO negocio → 403 PERMISSION_DENIED (un negocio no ve otro). Sin negocio → INVALID_INPUT (no se abre parcela huerfana). Exito → publica contabilidad.parcela_reclamada y responde por aislamiento-negocio.parcela.response; fallo → aislamiento-negocio.parcela.failed."
+      "description": "RPC custodio (PREGUNTA, por el bus): {project_id, negocio_id|parcela} → {project_id, negocio_id, parcela, escritor, existe, aislado}. Devuelve la frontera (parcela) del negocio; si no tiene, parcela:null y existe:false (no se inventa). Responde por aislamiento-negocio.parcela.response; payload invalido → aislamiento-negocio.parcela.failed."
     },
     {
       "event": "aislamiento-negocio.escritor.request",
       "handler": "onEscritorRequest",
-      "description": "RPC custodio (UN SOLO ESCRITOR por parcela): {project_id, negocio, escritor} → {negocio, escritor, reclamado, ya_era}. Reclama el escritor unico de la parcela; si ya estaba reclamado por otro actor → 403 PERMISSION_DENIED (el segundo escritor no espera ni hace cola). Idempotente si reclama el mismo actor. Exito con reclamacion → publica contabilidad.parcela_reclamada; responde por aislamiento-negocio.escritor.response; fallo → aislamiento-negocio.escritor.failed."
+      "description": "RPC custodio (PREGUNTA, por el bus): {project_id, negocio_id|parcela} → {project_id, negocio_id, parcela, escritor, unico_escritor}. Devuelve el UNICO escritor de la parcela del negocio; sin parcela, escritor:null (no se asume). Responde por aislamiento-negocio.escritor.response; payload invalido → aislamiento-negocio.escritor.failed."
+    },
+    {
+      "event": "aislamiento-negocio.crear_parcela.request",
+      "handler": "onCrearParcelaRequest",
+      "description": "RPC custodio (ORDEN, panel): {project_id, negocio_id, escritor?, parcela?} → {project_id, negocio_id, parcela, escritor, creada, aislada, reclamada}. Crea la parcela del negocio (por defecto 'negocio:<id>') y la reclama en single-writer por EVENTO. Una parcela ya ocupada por OTRO negocio → 409 PARCELA_OCUPADA. Publica contabilidad.negocio_parcela_creada y responde por aislamiento-negocio.crear_parcela.response. Payload invalido → aislamiento-negocio.crear_parcela.failed."
+    },
+    {
+      "event": "contabilidad.negocio_registrado",
+      "handler": "onNegocioRegistrado",
+      "description": "Fire-and-forget (lo emite onboarding-negocio K1): un negocio quedo registrado → deja constancia de que el negocio existe para su parcela. No responde (no es RPC)."
     },
     {
       "event": "project.activated",
       "handler": "onProjectActivated",
-      "description": "Restaura las parcelas del proyecto activado desde el storage (PosPersistencia), para que el aislamiento multi-negocio siga vivo tras un reinicio."
+      "description": "Restaura la parcela por negocio del proyecto activado desde el storage (PosPersistencia)."
     }
   ],
   "publishes": [
     {
+      "event": "contabilidad.negocio_parcela_creada",
+      "description": "Fire-and-forget (I4): la parcela aislada de un negocio quedo creada (y reclamada) → {project_id, negocio_id, parcela, escritor, creada}. Lo consumen los custodios multi-negocio para operar por parcela sin fuga."
+    },
+    {
       "event": "aislamiento-negocio.parcela.response",
-      "description": "Respuesta RPC correlada de aislamiento-negocio.parcela.request → {request_id, status:200, data:{parcela, aislada}}. Emitida por el helper _atender."
+      "description": "Respuesta RPC correlada de la op parcela (PREGUNTA)."
     },
     {
       "event": "aislamiento-negocio.parcela.failed",
-      "description": "Par de fallo determinista (I4): negocio ausente (INVALID_INPUT) o parcela ajena (PERMISSION_DENIED → 403, un negocio no ve otro) → {status, error:{code, message, details?}}. Cierra el circulo de aislamiento-negocio.parcela.request."
+      "description": "Par de fallo determinista: falta project_id o negocio_id → {status, code, message}. Cierra el circulo de parcela.request."
     },
     {
       "event": "aislamiento-negocio.escritor.response",
-      "description": "Respuesta RPC correlada de aislamiento-negocio.escritor.request → {request_id, status:200, data:{negocio, escritor, reclamado, ya_era}}. Emitida por el helper _atender."
+      "description": "Respuesta RPC correlada de la op escritor (PREGUNTA)."
     },
     {
       "event": "aislamiento-negocio.escritor.failed",
-      "description": "Par de fallo determinista (I4): segundo escritor (PERMISSION_DENIED → 403) o falta project_id/negocio/escritor → {status, error:{code, message, details?}}. Cierra el circulo de aislamiento-negocio.escritor.request."
+      "description": "Par de fallo determinista: falta project_id o negocio_id → {status, code, message}. Cierra el circulo de escritor.request."
     },
     {
-      "event": "contabilidad.parcela_reclamada",
-      "description": "Fire-and-forget (I4): una parcela quedo reclamada por su negocio (abierta o con su unico escritor) → {project_id, negocio, escritor, correlation_id}. Declara el dueño de la parcela para el resto de la vertical."
+      "event": "aislamiento-negocio.crear_parcela.response",
+      "description": "Respuesta RPC correlada de la op crear_parcela (ORDEN)."
+    },
+    {
+      "event": "aislamiento-negocio.crear_parcela.failed",
+      "description": "Par de fallo determinista: falta project_id/negocio_id o la parcela ya es de otro negocio (409 PARCELA_OCUPADA) → {status, code, message}. Cierra el circulo de crear_parcela.request."
     }
   ],
+  "tools": [
+    { "name": "aislamiento-negocio.parcela", "description": "Lee (PREGUNTA) la parcela (frontera de aislamiento) del negocio." },
+    { "name": "aislamiento-negocio.escritor", "description": "Lee (PREGUNTA) el unico escritor de la parcela del negocio." },
+    { "name": "aislamiento-negocio.crear_parcela", "description": "Crea (ORDEN) la parcela aislada del negocio y la reclama en single-writer." }
+  ],
   "ui_handlers": [
-    {
-      "domain": "contabilidad",
-      "action": "aislamiento-negocio.parcela",
-      "handler": "onParcelaRequest",
-      "type": "workspace_module",
-      "zone": "barra_modulos"
-    },
-    {
-      "domain": "contabilidad",
-      "action": "aislamiento-negocio.escritor",
-      "handler": "onEscritorRequest",
-      "type": "workspace_module",
-      "zone": "barra_modulos"
-    }
+    { "domain": "contabilidad", "action": "aislamiento-negocio.crear_parcela", "handler": "onCrearParcelaRequest", "type": "system_panel", "zone": "lateral_derecha" }
   ]
 }

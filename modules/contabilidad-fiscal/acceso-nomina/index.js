@@ -1,27 +1,18 @@
 /**
  * contabilidad-fiscal/acceso-nomina — CUSTODIO CON PERSISTENCIA (G7, hoja del plan).
  *
- * GOBERNANZA DE QUIEN VE QUE NOMINA (DATO PERSONAL): cada uno ve la suya.
- * El diseno lo dice literal: `autorizar(quien, nomina):bool` y `declarar(p)`, con
- * `permisos:Map<Empleado,Alcance>`. UN SOLO ESCRITOR.
+ * Gobernanza de QUIÉN VE QUÉ nómina: cada uno ve la suya. UN escritor.
+ * Complementa I4 (eje persona). La parcela se DECLARA por empleado; el módulo no
+ * inventa una política por defecto, la aplica (y sin política declarada responde abierto).
  *
- * AISLAMIENTO PERSONA↔PERSONA (invariante dura): la nomina es dato personal. Un negocio NO se
- * fuga, Y UNA PERSONA TAMPOCO. Aqui no vale "soy del mismo negocio": dentro del negocio, el
- * acceso a la nomina de OTRO se DENIEGA por defecto. Es el espejo de AislamientoNegocio (I4) en
- * el eje PERSONA (complementa el eje negocio).
+ * Invariantes:
+ *  - El DEFAULT es `propio`: cada empleado ve su nómina; ver la de otro exige declararlo.
+ *  - Dato ausente = desconocido: sin regla declarada, `autorizado:null` (no true) — un acceso
+ *    que no consta NO se concede por silencio.
+ *  - No se borra: re-declarar APPENDEA al historial de la regla; el vigente queda con su fecha.
+ *  - Persiste por proyecto con PosPersistencia, restaura en project.activated y vuelca en onUnload.
  *
- * LA LEY ES DATO: los ALCANCES (`self_only` para el trabajador, `admin`/`responsable` para quien
- * gobierna la parcela) y los CONCEDIDOS (un encargo declarado: quien ve la nomina de quien) son
- * DECLARABLES. Cero roles cableados. El default SIN declarar es el MAS ESTRECHO: `self_only`.
- *
- * UN SOLO ESCRITOR de la parcela: el escritor del organigrama (`rol: AUTORIDAD_NOMINA`) declara
- * alcances y concedidos; cualquier otro rol es un SEGUNDO ESCRITOR → se le RECHAZA en el acto
- * (403). La autorizacion (`autorizar`) es LECTURA determinista: NO muta.
- *
- * Invariante: dato ausente = desconocido. A quien no se le ha declarado alcance se le aplica
- * `self_only` (el mas estrecho), no se le concede un acceso "de buena fe".
- *
- * Forma: CUSTODIO → PosPersistencia + onProjectActivated + flush + GUARD de un solo escritor.
+ * Forma: CUSTODIO → PosPersistencia + onProjectActivated + flush + UN escritor.
  * Ver hoja G7 del plan-construccion y diseno-oop.md (CLASE AccesoNomina).
  */
 
@@ -30,53 +21,30 @@
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
 const PosPersistencia = require('../../_shared/pos-persistencia');
 
-// Rol unico escritor de la parcela: la AUTORIDAD DE PERSONAL (el organigrama / quien gobierna).
-const ROL_AUTORIDAD = 'AUTORIDAD_NOMINA';
-
-// Alcances DECLARABLES (no cableados como ley): el mas estrecho es el default.
-const ALCANCE_DEFAULT = 'self_only';
-const ALCANCES_VALIDOS = new Set([ALCANCE_DEFAULT, 'equipo', 'admin']);
-
 class AccesoNomina extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'acceso-nomina';
     this.version = 'reflejo-0.1.0';
-    // store en memoria: project_id -> { esquema, permisos: Map<persona,{alcance,empleado,ve_a}>, concedidos: [] }
-    this._parcelas = new Map();
+    // store: project_id -> { esquema, reglas: Map<empleado_id, Regla> }
+    this._accesos = new Map();
 
     this._persist = new PosPersistencia({
       modulo: this,
       file: 'acceso-nomina.json',
       dir: '/contabilidad/acceso-nomina',
       snapshot: (pid) => {
-        const p = this._parcelas.get(pid);
-        if (!p) return null;
-        return {
-          project_id: pid,
-          esquema: p.esquema,
-          permisos: [...p.permisos.entries()].map(([persona, v]) => ({ persona, ...v })),
-          concedidos: p.concedidos
-        };
+        const a = this._accesos.get(pid);
+        if (!a) return null;
+        return { project_id: pid, esquema: a.esquema, reglas: [...a.reglas.values()] };
       },
       hidratar: (pid, data) => {
         if (!data) return;
-        const permisos = new Map();
-        for (const d of (data.permisos || [])) {
-          if (d && d.persona != null) {
-            permisos.set(String(d.persona), {
-              alcance: d.alcance != null ? String(d.alcance) : ALCANCE_DEFAULT,
-              empleado: d.empleado != null ? String(d.empleado) : null,
-              ve_a: Array.isArray(d.ve_a) ? d.ve_a.map(String) : [],
-              declarado_en: d.declarado_en ?? null
-            });
-          }
+        const reglas = new Map();
+        for (const r of (data.reglas || [])) {
+          if (r && r.empleado_id != null) reglas.set(String(r.empleado_id), r);
         }
-        this._parcelas.set(pid, {
-          esquema: data.esquema || 'contabilidad-acceso-nomina-v1',
-          permisos,
-          concedidos: Array.isArray(data.concedidos) ? data.concedidos : []
-        });
+        this._accesos.set(pid, { esquema: data.esquema || 'contabilidad-acceso-nomina-v1', reglas });
       }
     });
   }
@@ -87,194 +55,143 @@ class AccesoNomina extends ModuloHibridoReflejo {
     return super.onUnload();
   }
 
-  // Restaura los permisos del proyecto activado.
+  // Restaura las reglas de acceso del proyecto activado.
   onProjectActivated(e) {
     const d = (e && (e.data || e)) || {};
     return this._persist.restaurar(d.project_id);
   }
 
-  // ── handler RPC de LECTURA (NO muta): ¿puede `quien` ver la nomina de `empleado`? ──
+  // ── handler RPC: autorizar (PREGUNTA → sin ui_handler; su cara es el bus) ──
   onAutorizarRequest(e) {
     return this._atender(e, 'autorizar', 'acceso-nomina.autorizar.response', async (d) => {
       const res = this._autorizar(d);
+      // PREGUNTA: no escribe → no hay hecho que anunciar (R2).
       if (res.status !== 200) this.eventBus?.publish('acceso-nomina.autorizar.failed', res);
       return res;
     });
   }
 
-  // ── handler RPC de ESCRITURA (UN escritor: la autoridad de personal): declara permisos ──
+  // ── handler RPC: declarar (ORDEN → ui_handler panel) ──
   onDeclararRequest(e) {
     return this._atender(e, 'declarar', 'acceso-nomina.declarar.response', async (d) => {
       const res = this._declarar(d);
       if (res.status === 200) {
-        // Exito → evento de dominio: la gobernanza de acceso quedo declarada.
-        this.eventBus?.publish('contabilidad.acceso_nomina', {
+        // R2 · si ESCRIBE, anuncia el HECHO: quedo declarada la regla de acceso de una nómina.
+        this.eventBus?.publish('contabilidad.acceso_nomina_declarado', {
           project_id: res.data.project_id,
-          persona: res.data.persona,
-          alcance: res.data.alcance,
-          empleado: res.data.empleado,
-          ve_a: res.data.ve_a,
-          declarado_por: ROL_AUTORIDAD,
+          empleado_id: res.data.regla.empleado_id,
+          regla: res.data.regla,
+          declarado: true,
           correlation_id: d.correlation_id
         });
       } else {
-        // Falta de declaracion, guard de escritor violado → par determinista.
         this.eventBus?.publish('acceso-nomina.declarar.failed', res);
       }
       return res;
     });
   }
 
-  // ── PROYECCION DE LECTURA (NO muta): autorizar(quien, empleado) → bool + motivo ──
+  // ── proyeccion PREGUNTA: autorizar(quien, sobre quien) ──
   _autorizar(input = {}) {
     const pid = input.project_id || this.project_id;
     if (!pid) return this._invalid('project_id');
 
-    const quien = input.quien != null ? String(input.quien).trim() : '';
-    if (!quien) return this._invalid('quien');
-    // `empleado` = de quien es la nomina que se pretende ver; `nomina.empleado` tambien vale.
-    const empleado = input.empleado != null ? String(input.empleado).trim()
-      : (input.nomina && input.nomina.empleado != null ? String(input.nomina.empleado).trim() : quien);
+    const empleado_id = input.empleado_id != null ? String(input.empleado_id).trim() : '';
+    if (!empleado_id) return this._invalid('empleado_id');
 
-    const parcela = this._obtenerOCrear(pid);
-    const alcance = this._alcanceDe(parcela, quien);
+    const solicitante = input.solicitante != null ? String(input.solicitante).trim()
+      : (input.rol != null ? String(input.rol).trim() : '');
 
-    // AISLAMIENTO PERSONA↔PERSONA: lo primero es el EJE PERSONA — uno ve la suya SIEMPRE.
-    const es_propia = empleado === quien;
+    const acceso = this._accesos.get(pid);
+    const regla = acceso ? (acceso.reglas.get(empleado_id) || null) : null;
 
-    let permitido;
-    let motivo;
-    if (es_propia) {
-      permitido = true;
-      motivo = 'cada uno ve la suya (eje persona)';
-    } else if (alcance === 'admin') {
-      permitido = true;
-      motivo = 'alcance admin declarado: gobierna la parcela de personal';
-    } else if (alcance === 'equipo' && this._enConcedido(parcela, quien, empleado)) {
-      permitido = true;
-      motivo = 'alcance de equipo y encargo declarado para esa persona';
-    } else {
-      // Sin encargo declarado, la nomina de OTRO queda DENEGADA. Nada se concede de buena fe.
-      permitido = false;
-      motivo = 'la nomina es dato personal: sin encargo declarado no se ve la de otro (aislamiento persona-a-persona)';
+    // DEFAULT declarado del dominio: cada uno ve la suya.
+    if (!regla) {
+      const propio = solicitante !== '' && solicitante === empleado_id;
+      return {
+        status: 200,
+        data: {
+          project_id: pid,
+          empleado_id,
+          solicitante: solicitante || null,
+          autorizado: propio ? true : null,
+          motivo: propio ? 've su propia nomina (default propio)' : 'sin regla declarada: el acceso no consta',
+          regla_declarada: false,
+          abierto: propio ? null : { regla: 'no se declaro regla de acceso para este empleado' }
+        }
+      };
     }
 
+    const quien_puede_ver = Array.isArray(regla.quien_puede_ver) ? regla.quien_puede_ver : [];
+    const autorizado = quien_puede_ver.includes(solicitante);
     return {
       status: 200,
       data: {
         project_id: pid,
-        quien,
-        empleado,
-        alcance,
-        es_propia,
-        permitido,
-        motivo,
-        // La gobernanza es DATO declarable: la autoridad declara; el modulo no cablea la ley.
-        ley_origen: 'declarada',
-        ley_cableada: false
+        empleado_id,
+        solicitante: solicitante || null,
+        autorizado,
+        motivo: autorizado ? 'está declarado en quien_puede_ver' : 'no está declarado en quien_puede_ver',
+        regla_declarada: true,
+        regla,
+        abierto: null
       }
     };
   }
 
-  // ── PROYECCION DE ESCRITURA (UN escritor: la AUTORIDAD_NOMINA): declarar un permiso ──
+  // ── proyeccion ORDEN (UN escritor): declarar la regla de acceso de un empleado ──
   _declarar(input = {}) {
     const pid = input.project_id || this.project_id;
     if (!pid) return this._invalid('project_id');
 
-    // GUARD de un solo escritor: solo la autoridad de personal declara la parcela de personal.
-    if (input.rol !== ROL_AUTORIDAD) {
-      return this._errorResponse(403, 'PERMISSION_DENIED',
-        'solo la autoridad de personal (AUTORIDAD_NOMINA) declara el acceso a la nomina; un segundo escritor es corrupcion',
-        { rol_esperado: ROL_AUTORIDAD, rol_recibido: input.rol ?? null });
-    }
+    const empleado_id = input.empleado_id != null ? String(input.empleado_id).trim() : '';
+    if (!empleado_id) return this._invalid('empleado_id');
 
-    const persona = input.persona != null ? String(input.persona).trim()
-      : (input.quien != null ? String(input.quien).trim() : '');
-    if (!persona) return this._invalid('persona');
+    // Quien puede ver esta nómina: lista declarada (el propio empleado siempre puede).
+    const quien_puede_ver = Array.isArray(input.quien_puede_ver)
+      ? input.quien_puede_ver.map((x) => String(x)).filter(Boolean)
+      : [];
+    if (!quien_puede_ver.includes(empleado_id)) quien_puede_ver.push(empleado_id);
 
-    // El alcance es DECLARABLE; sin declarar → self_only (el mas estrecho, jamas "de buena fe").
-    const alcance = input.alcance != null ? String(input.alcance).trim() : ALCANCE_DEFAULT;
-    if (!ALCANCES_VALIDOS.has(alcance)) {
-      return this._errorResponse(400, 'ALCANCE_NO_DECLARADO',
-        `alcance '${alcance}' no es un alcance declarable`,
-        { alcances_declarables: [...ALCANCES_VALIDOS] });
-    }
+    const acceso = this._obtenerOCrear(pid);
+    const existente = acceso.reglas.get(empleado_id) || null;
+    const ahora = new Date().toISOString();
 
-    const ve_a = this._normalizarVeA(input.ve_a != null ? input.ve_a : input.concedidos);
-    // Los concedidos: el encargo DECLARADO persona→empleados concretos (nada de "todo el equipo").
-    const parcela = this._obtenerOCrear(pid);
-    for (const empleado of ve_a) {
-      if (!parcela.concedidos.some((c) => c.quien === persona && c.empleado === empleado)) {
-        parcela.concedidos.push({ quien: persona, empleado, declarado_en: new Date().toISOString() });
-      }
-    }
-
-    const permiso = {
-      alcance,
-      empleado: input.empleado != null ? String(input.empleado) : persona,
-      ve_a,
-      declarado_en: new Date().toISOString()
+    const regla = existente || {
+      empleado_id,
+      quien_puede_ver: [],
+      declarado_en: null,
+      historial: []
     };
-    parcela.permisos.set(persona, permiso);
-    parcela.updated_at = permiso.declarado_en;
+    regla.quien_puede_ver = quien_puede_ver;
+    regla.declarado_en = ahora;
+    regla.historial = Array.isArray(regla.historial) ? regla.historial : [];
+    // No se borra: re-declarar apila el estado anterior en el historial.
+    regla.historial.push({ quien_puede_ver: [...quien_puede_ver], en: ahora });
+
+    acceso.reglas.set(empleado_id, regla);
+    acceso.updated_at = ahora;
     this._persist.marcarDirty(pid);
 
     return {
       status: 200,
       data: {
         project_id: pid,
-        persona,
-        alcance: permiso.alcance,
-        empleado: permiso.empleado,
-        ve_a: permiso.ve_a,
-        declarado_por: ROL_AUTORIDAD,
-        // Cada uno ve la suya, siempre: se declara el acceso propio junto al concedido.
-        accesos_efectivos: this._efectivos(persona, permiso),
-        ley_origen: 'declarada',
-        ley_cableada: false
+        regla,
+        declarado: true,
+        abierto: null
       }
     };
   }
 
-  // Los accesos efectivos de la persona: su propia nomina SIEMPRE + los encargos declarados.
-  _efectivos(persona, permiso) {
-    const propios = new Set([persona]);
-    if (permiso.alcance === 'admin' || permiso.alcance === 'equipo') {
-      for (const e of permiso.ve_a) propios.add(e);
-    }
-    return [...propios].sort();
-  }
-
-  _normalizarVeA(raw) {
-    if (raw === undefined || raw === null || raw === '') return [];
-    if (Array.isArray(raw)) return raw.map((v) => String(v)).filter(Boolean);
-    if (typeof raw === 'object') return Object.keys(raw).filter((k) => raw[k]).map(String);
-    return [String(raw)];
-  }
-
-  _alcanceDe(parcela, persona) {
-    const p = parcela.permisos.get(persona);
-    return p && p.alcance ? p.alcance : ALCANCE_DEFAULT;   // sin declarar → el mas estrecho
-  }
-
-  _enConcedido(parcela, quien, empleado) {
-    return parcela.concedidos.some((c) => c.quien === quien && c.empleado === empleado);
-  }
-
   _obtenerOCrear(pid) {
-    let p = this._parcelas.get(pid);
-    if (!p) {
-      p = { esquema: 'contabilidad-acceso-nomina-v1', permisos: new Map(), concedidos: [] };
-      this._parcelas.set(pid, p);
+    let a = this._accesos.get(pid);
+    if (!a) {
+      a = { esquema: 'contabilidad-acceso-nomina-v1', reglas: new Map() };
+      this._accesos.set(pid, a);
       this._persist.marcarDirty(pid);
     }
-    return p;
-  }
-
-  // Lectura directa (mismo proceso) para otros custodios — NO muta.
-  alcanceDe(pid, persona) {
-    const p = pid ? this._parcelas.get(pid) : null;
-    return p ? this._alcanceDe(p, String(persona)) : ALCANCE_DEFAULT;
+    return a;
   }
 
   // ── Tools ──

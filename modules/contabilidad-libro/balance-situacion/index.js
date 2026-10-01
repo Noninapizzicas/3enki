@@ -1,20 +1,16 @@
 /**
  * contabilidad-libro/balance-situacion — REFLEJO STATELESS (C1, hoja del plan).
  *
- * Deriva el BALANCE DE SITUACIÓN (activo / pasivo / patrimonio) del MAYOR.
- * NO recalcula los asientos: parte del mayor-balanza (B3) y solo CLASIFICA.
+ * Activo / pasivo / patrimonio DERIVADO del mayor. La invariante que lo define:
+ *   ACTIVO = PASIVO + PATRIMONIO
+ * No calcula por su cuenta la cifra de cada cuenta (eso es mayor-balanza): RECIBE los saldos
+ * (o los sube por EVENTO a mayor-balanza.saldos.request) y los AGRUPA en las masas.
  *
- * Invariante 1 (la partida doble cuadra): ACTIVO = PASIVO + PATRIMONIO. Un descuadre
- * NO es un estado del balance: es un ERROR — se declara (`cuadra:false`), no se matiza.
+ * Honestidad (invariante 13): lo que no se puede clasificar NO se adivina — se declara en
+ * `abierto`. La masa de cada cuenta sale de su `masa` declarada; si no, de una heurística PGC
+ * por prefijo (documentada y sustituible). Ambiguo (grupo 4) → `desconocido`, no una masa inventada.
  *
- * La ley entra como DATO: la clasificación de cuentas por prefijo es DECLARABLE
- * (`reglas`); sin declararlas se usa la composición por defecto sobre grupos estándar.
- * Nada se cablea en el código de forma rígida.
- *
- * Invariante 2 (el asiento original no se borra): el balance no reescribe asientos.
- * Determinista: mismo mayor → mismo balance.
- *
- * Forma: REFLEJO → STATELESS. Sin PosPersistencia, sin onProjectActivated.
+ * Forma: REFLEJO → STATELESS. Sin PosPersistencia. PREGUNTA (calcular) → sin ui_handler.
  * Ver hoja C1 del plan-construccion y diseno-oop.md (CLASE BalanceSituacion).
  */
 
@@ -22,168 +18,145 @@
 
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
 
-// Clasificación por defecto (declarable). Prefijo de cuenta → grupo del balance.
-const REGLAS_DEFECTO = [
-  { prefijo: '1', grupo: 'ACTIVO' },
-  { prefijo: '2', grupo: 'ACTIVO' },
-  { prefijo: '3', grupo: 'PATRIMONIO' },
-  { prefijo: '4', grupo: 'PASIVO' },
-  { prefijo: '5', grupo: 'PATRIMONIO' }
-];
+const EPSILON = 0.005;
 
 class BalanceSituacion extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'balance-situacion';
     this.version = 'reflejo-0.1.0';
-    // espejo en memoria de los asientos (fallback si mayor-balanza no responde)
-    this._espejo = new Map();
   }
 
   async onUnload() { return super.onUnload(); }
 
-  // ── fire-and-forget: el diario publicó un asiento → se refleja la muestra (no decide) ──
-  onAsientoRegistrado(e) {
-    const d = (e && (e.data || e)) || {};
-    const pid = d.project_id;
-    const asiento = d.asiento;
-    if (!pid || !asiento || typeof asiento !== 'object') return null;
-    const clave = asiento.clave_natural != null ? String(asiento.clave_natural)
-      : (asiento.numero != null ? String(asiento.numero) : null);
-    if (!clave) return null;
-    const m = this._espejoDe(pid);
-    m.set(clave, asiento);
-    return null;
-  }
-
-  // ── handler RPC (una línea, delega a _atender) ──
+  // ── handler RPC (una linea, delega a _atender). CLASE PREGUNTA → sin ui_handler ──
   onCalcularRequest(e) {
     return this._atender(e, 'calcular', 'balance-situacion.calcular.response', async (d) => {
       const res = await this._calcular(d);
+      // Reflejo: calcula; no escribe → no hay hecho que anunciar (R2).
       if (res.status !== 200) this.eventBus?.publish('balance-situacion.calcular.failed', res);
       return res;
     });
   }
 
-  // ── BALANCE: activo/pasivo/patrimonio derivado del mayor (clasifica, no recalcula) ──
+  // ── handler de dominio (fire-and-forget): el libro cambio → se observa (ventana acotada) ──
+  onAsientoAsentado(e) {
+    const d = (e && (e.data || e)) || {};
+    this._vistos = this._vistos || [];
+    if (d.asiento) this._vistos.push(d.asiento);
+    if (this._vistos.length > 1000) this._vistos.shift();
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // calcular(saldos) → { activo, pasivo, patrimonio, cuadra }
+  // ══════════════════════════════════════════════════════════════════════
   async _calcular(input = {}) {
     const pid = input.project_id || this.project_id;
     if (!pid) return this._invalid('project_id');
 
-    const { mayor, fuente } = await this._mayor(pid, input);
-    const reglas = this._reglas(input.reglas);
+    const { saldos, fuente } = await this._saldosDe(input);
 
-    const buckets = { ACTIVO: [], PASIVO: [], PATRIMONIO: [], OTRO: [] };
-    for (const linea of mayor) {
-      const grupo = this._grupoDe(linea.cuenta, reglas);
-      buckets[grupo].push({
-        cuenta: linea.cuenta,
-        saldo: linea.saldo,
-        saldo_deudor: linea.saldo_deudor,
-        saldo_acreedor: linea.saldo_acreedor
-      });
+    let activo = 0, pasivo = 0, patrimonio = 0, gasto = 0, ingreso = 0;
+    const desconocidas = [];
+    const partidas = [];
+
+    for (const s of saldos) {
+      const cuenta = s && s.cuenta != null ? String(s.cuenta) : null;
+      // Convencion DECLARADA: el saldo entrante es DEBE − HABER (firmado, estandar contable).
+      const raw = this._round(this._num(s && (s.saldo != null ? s.saldo : (Number(s.debe || 0) - Number(s.haber || 0)))), 2);
+      const masa = this._masa(cuenta, s);
+      // Saldo NATURAL: activo/gasto son deudoras (debe−haber); pasivo/patrimonio/ingreso son
+      // acreedoras (haber−debe). Asi cada masa se acumula en positivo.
+      const natural = (masa === 'activo' || masa === 'gasto') ? raw : -raw;
+      partidas.push({ cuenta, saldo: raw, masa, saldo_natural: masa === 'desconocido' ? null : this._round(natural, 2) });
+      switch (masa) {
+        case 'activo': activo += natural; break;
+        case 'pasivo': pasivo += natural; break;
+        case 'patrimonio': patrimonio += natural; break;
+        case 'gasto': gasto += natural; break;
+        case 'ingreso': ingreso += natural; break;
+        default: desconocidas.push({ cuenta, saldo: raw }); break;
+      }
     }
 
-    // Activo = suma de saldos deudores netos; pasivo/patrimonio = saldos acreedores netos.
-    const activo = this._round(buckets.ACTIVO.reduce((s, x) => s + x.saldo, 0), 2);
-    const pasivo = this._round(-buckets.PASIVO.reduce((s, x) => s + x.saldo, 0), 2);
-    const patrimonio = this._round(-buckets.PATRIMONIO.reduce((s, x) => s + x.saldo, 0), 2);
-    const pasivo_patrimonio = this._round(pasivo + patrimonio, 2);
-    const descuadre = this._round(activo - pasivo_patrimonio, 2);
-    // Invariante 1: el descuadre ES un error, no un estado → se declara.
-    const cuadra = Math.abs(descuadre) < 0.01;
+    const resultado = this._round(ingreso - gasto, 2);
+    activo = this._round(activo, 2);
+    pasivo = this._round(pasivo, 2);
+    patrimonio = this._round(patrimonio, 2);
+    // El resultado del ejercicio forma parte del patrimonio hasta su distribucion.
+    const patrimonio_total = this._round(patrimonio + resultado, 2);
+
+    // La invariante solo es afirmable si NO hay partidas sin clasificar (dato ausente = desconocido).
+    const verificable = desconocidas.length === 0 && saldos.length > 0;
+    const diferencia = this._round(activo - (pasivo + patrimonio_total), 2);
+    const cuadra = verificable ? Math.abs(diferencia) <= EPSILON : null;
 
     return {
       status: 200,
       data: {
         project_id: pid,
-        ejercicio: input.ejercicio != null ? input.ejercicio : null,
-        fuente,
+        tipo: 'balance-situacion',
+        fuente: fuente || null,
         activo,
         pasivo,
         patrimonio,
-        pasivo_patrimonio,
-        descuadre,
+        resultado,
+        patrimonio_total,
+        convenio_saldo: 'DEBE - HABER (firmado); natural por naturaleza (activo/gasto deudora, pasivo/patrimonio/ingreso acreedora)',
+        total_cuentas: saldos.length,
         cuadra,
-        // Se declara el descuadre; el balance no lo esconde ni lo cuadra por el usuario.
-        aviso: cuadra ? null : 'ACTIVO != PASIVO + PATRIMONIO: descuadre declarado (error, no estado)',
-        detalle: {
-          activo: buckets.ACTIVO,
-          pasivo: buckets.PASIVO,
-          patrimonio: buckets.PATRIMONIO,
-          otro: buckets.OTRO
+        verificable,
+        invariante: 'ACTIVO = PASIVO + PATRIMONIO (incluye el resultado del ejercicio)',
+        diferencia: verificable ? diferencia : null,
+        partidas,
+        abierto: {
+          fuente: fuente ? null : 'no se recibieron saldos (ni declarados ni de mayor-balanza): el balance no se inventa',
+          clasificacion: desconocidas.length
+            ? `${desconocidas.length} cuenta(s) sin masa declarada ni clasificable por prefijo: no se suman (invariante no verificable)`
+            : null
         }
       }
     };
   }
 
-  // Pide el mayor a mayor-balanza POR EVENTO; si no responde, lo deriva del espejo.
-  async _mayor(pid, input = {}) {
-    const r = await this._rpc('mayor-balanza.saldos.request',
-      { project_id: pid, ejercicio: input.ejercicio ?? null }, { timeout_ms: 4000 });
-    if (r && r.status === 200 && r.data && Array.isArray(r.data.mayor)) {
-      return { mayor: r.data.mayor, fuente: 'mayor-balanza' };
+  // Trae los saldos: declarados en el input, o subidos por EVENTO a mayor-balanza.
+  async _saldosDe(input) {
+    if (Array.isArray(input.saldos)) return { saldos: input.saldos, fuente: 'declarado' };
+    const resp = await this._rpc('mayor-balanza.saldos.request', {
+      project_id: input.project_id || this.project_id,
+      fecha: input.fecha, ejercicio: input.ejercicio
+    }, { timeout_ms: 800 });
+    if (resp && Array.isArray(resp.saldos)) return { saldos: resp.saldos, fuente: 'mayor-balanza' };
+    return { saldos: [], fuente: null };
+  }
+
+  // Masa de una cuenta: declarada (`masa`/`plano`), o heuristica PGC por prefijo. Ambiguo → desconocido.
+  _masa(cuenta, s) {
+    const declarada = s && (s.masa || s.plano);
+    if (declarada) {
+      const m = String(declarada).toLowerCase().trim();
+      if (['activo', 'pasivo', 'patrimonio', 'gasto', 'ingreso'].includes(m)) return m;
     }
-    return { mayor: this._derivarMayor(pid), fuente: 'espejo' };
-  }
-
-  // Derivación mínima del mayor desde el espejo (fallback, mismo cálculo puro).
-  _derivarMayor(pid) {
-    const por = new Map();
-    for (const a of this._espejoDe(pid).values()) {
-      if (!a || !Array.isArray(a.apuntes)) continue;
-      for (const ap of a.apuntes) {
-        if (!ap || ap.cuenta == null) continue;
-        const cuenta = String(ap.cuenta);
-        const debe = this._num(ap.debe);
-        const haber = this._num(ap.haber);
-        if (debe === null || haber === null) continue;
-        let s = por.get(cuenta);
-        if (!s) { s = { cuenta, debe: 0, haber: 0 }; por.set(cuenta, s); }
-        s.debe = this._round(s.debe + debe, 2);
-        s.haber = this._round(s.haber + haber, 2);
-      }
+    const c = String(cuenta || '');
+    switch (c[0]) {
+      case '1':
+        // Grupo 1 (financiacion basica): PGC 10-15 = patrimonio neto; 16-19 = pasivo (no corriente).
+        if (c.startsWith('1') && c >= '10' && c < '16') return 'patrimonio';
+        return 'pasivo';
+      case '2': return 'activo';
+      case '3': return 'activo';
+      case '5': return 'patrimonio';
+      case '6': return 'gasto';
+      case '7': return 'ingreso';
+      case '4':
+        if (c.startsWith('43') || c.startsWith('44')) return 'activo';
+        if (c.startsWith('40') || c.startsWith('41')) return 'pasivo';
+        return 'desconocido';
+      default: return 'desconocido';
     }
-    return [...por.values()].sort((x, y) => x.cuenta.localeCompare(y.cuenta)).map(s => {
-      const saldo = this._round(s.debe - s.haber, 2);
-      return {
-        cuenta: s.cuenta, debe: s.debe, haber: s.haber, saldo,
-        saldo_deudor: saldo > 0 ? saldo : 0,
-        saldo_acreedor: saldo < 0 ? this._round(-saldo, 2) : 0
-      };
-    });
   }
 
-  // Reglas declarables; sin declarar → las de defecto.
-  _reglas(raw) {
-    if (!Array.isArray(raw)) return REGLAS_DEFECTO;
-    const reglas = raw
-      .filter(r => r && r.prefijo != null && r.grupo != null)
-      .map(r => ({ prefijo: String(r.prefijo), grupo: String(r.grupo).toUpperCase() }));
-    return reglas.length ? reglas : REGLAS_DEFECTO;
-  }
-
-  // Clasifica por el prefijo MÁS LARGO que casa (determinista).
-  _grupoDe(cuenta, reglas) {
-    const codigo = String(cuenta);
-    let mejor = null;
-    for (const r of reglas) {
-      if (codigo.startsWith(r.prefijo) && (!mejor || r.prefijo.length > mejor.prefijo.length)) mejor = r;
-    }
-    return mejor ? mejor.grupo : 'OTRO';
-  }
-
-  _espejoDe(pid) {
-    let m = this._espejo.get(pid);
-    if (!m) { m = new Map(); this._espejo.set(pid, m); }
-    return m;
-  }
-
-  _num(v) {
-    if (v === undefined || v === null || v === '') return 0;
-    const n = Number(v);
-    return Number.isFinite(n) ? n : null;
-  }
+  _num(v) { const n = Number(v); return Number.isFinite(n) ? n : 0; }
 
   // ── Tools ──
   toolCalcular(params) { return this._calcular(params); }

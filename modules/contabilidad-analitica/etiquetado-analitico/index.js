@@ -1,37 +1,25 @@
 /**
- * contabilidad-analitica/etiquetado-analitico — MICRO-AGENTE HIBRIDO (J1, hoja del plan).
+ * contabilidad-analitica/etiquetado-analitico — MICRO-AGENTE (J1, hoja del plan).
  *
- * ASIGNA CENTRO / LINEA / PRODUCTO (la DIMENSION analitica) a cada HECHO. La regla es
- * DECLARABLE: los criterios los declara el JEFE en `cola-declaraciones-criterio` (K9) y llegan
- * aqui por EVENTO o declarados en la peticion — el reflejo NUNCA cablea una regla de negocio.
- * Cuando la regla NO cubre el hecho, clasificar es JUICIO: el micro-agente PROPONE (juicio
- * fuzzy asistido) y lo que no puede resolver con honestidad va a COLA como `[ABIERTO]`.
+ * ══════════════════════════════════════════════════════════════════════════════════════
+ * ASIGNA centro/linea/producto a cada hecho con REGLA DECLARABLE. PROPONE.
+ * ══════════════════════════════════════════════════════════════════════════════════════
+ * Es la mitad REFLEJA (determinista) del micro-agente: aplica las reglas DECLARADAS de
+ * etiquetado a un hecho y expone la ETIQUETA PROPUESTA. NO fija nada por su cuenta: lo que
+ * las reglas declaran se aplica; lo que NO cubren NO se rellena — va a la cola (A8.1).
  *
- * ATRIBUTOS del diseno: `reglas:ParametroDeclarable` y `dimensiones:Set<Dimension>`.
- *   METODOS: juzgar(h:Hecho):Propuesta<Dimension> — PROPONE; NO escribe.
+ * Invariantes:
+ *  - PROPONE, no escribe: `juzgar` deriva una propuesta; NUNCA la apila en el dominio.
+ *  - Dato ausente = desconocido: sin hecho NO hay nada que etiquetar; sin regla que cubra,
+ *    la etiqueta queda ABIERTA (no se adivina el centro de coste).
+ *  - Cuando la regla NO cubre → SUBE `encolado-excepcion.encolar.request` (lo dudoso a cola).
  *
- * HIBRIDO (patron veredicto-viabilidad):
- *   _juzgarReflejo — REFLEJO determinista: aplica las REGLAS declaradas al hecho (la primera
- *                    que coincide gana). Una sola respuesta correcta por regla → no es juicio.
- *   _concluir      — FUZZY (juicio LLM): cuando ninguna regla cubre, 1 llamada
- *                    llm.complete.request con guion-prompt self-contained PROPONE una dimension.
- *                    Si el LLM falla o no cumple el contrato, NO se inventa: el hecho va a COLA.
+ * ESCUCHA (R3): contabilidad.hecho_recibido (puerto-evento-vertical A1) y
+ * contabilidad.criterio_fijado (cola-declaraciones-criterio) → ambos con emisor vivo.
+ * Los handlers son fire-and-forget (toman constancia del contexto; no anuncian hecho).
  *
- * EL UNICO QUE PERSISTE EL JUICIO — y se JUSTIFICA: es la unica pieza cuya salida es
- * IRREDUCIBLE a aritmetica (una dimension propuesta no se computa, se JUZGA). Por eso conserva
- * en memoria (`this._juicios`) la MEMORIA DE LO APRENDIDO — cada juicio emitido, con su origen
- * (regla o juicio fuzzy) y su confianza — para no re-juzgar lo mismo dos veces y para que el
- * criterio declarado pueda crecer a partir de lo observado. Esa memoria es PROCESO, no parcela:
- * la persistencia DURADERA del juicio es el EVENTO de dominio que publica (contabilidad.dimension_propuesta),
- * que el resto de la vertical consume. La forma (MICRO-AGENTE) es STATELESS respecto de
- * PosPersistencia: sin store en disco, sin custodiar parcela ajena.
- *
- * NUNCA INVENTA: sin reglas declaradas → `[ABIERTO]` (no se elige una dimension por defecto);
- * sin cobertura de regla y sin juicio resoluble → el hecho va a COLA, con lo que falta declarado.
- * Si no puede resolver → `[ABIERTO]`/cola, jamas una dimension inventada.
- *
- * Forma: MICRO-AGENTE → STATELESS (sin PosPersistencia, sin onProjectActivated). Memoria de lo
- * aprendido en proceso; persistencia duradera via evento de dominio.
+ * Forma: MICRO-AGENTE (mitad refleja) → STATELESS. Sin PosPersistencia.
+ * RPC juzgar es CLASE PREGUNTA → SIN ui_handler.
  * Ver hoja J1 del plan-construccion y diseno-oop.md (CLASE EtiquetadoAnalitico).
  */
 
@@ -39,291 +27,148 @@
 
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
 
-// ── guion-prompt del micro-agente (self-contained) ──
-const GUION_ETIQUETADO =
-  'Eres el ETIQUETADOR ANALITICO de un sistema de contabilidad. Recibes un HECHO (dato) y un ' +
-  'conjunto de DIMENSIONES declaradas (centros de coste, lineas, productos) con sus descripciones. ' +
-  'Tu tarea es PROPONER a que centro, linea y producto corresponde el hecho, para el analisis de ' +
-  'margenes. Usa SOLO la informacion del hecho y las dimensiones que te dan; NO inventes centros, ' +
-  'lineas ni productos que no esten en la lista declarada. Si la informacion no basta para proponer ' +
-  'con honestidad, NO adivines: devuelve puede=false. Responde SOLO JSON: ' +
-  '{"puede":<true|false>,"centro":"<id de la lista o null>","linea":"<id o null>","producto":"<id o null>",' +
-  '"confianza":<0-1>,"motivo":"<frase breve en espanol>"}.';
-
 class EtiquetadoAnalitico extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'etiquetado-analitico';
     this.version = 'reflejo-0.1.0';
-    // MEMORIA DE LO APRENDIDO (en proceso): project_id → [Juicio] emitidos.
-    // Es lo unico que este micro-agente conserva: el juicio ya hecho, para no repetirlo.
-    this._juicios = new Map();
+    // Criterios/reglas de etiquetado observados por proyecto (memoria acotada, no store).
+    this._criterios = new Map(); // project_id -> [criterio]
   }
 
   async onUnload() { return super.onUnload(); }
 
-  // ── handler RPC (una linea, delega a _atender) ──
+  // ── handler RPC PREGUNTA (sin ui_handler: su cara es el bus) ──
   onJuzgarRequest(e) {
-    return this._atender(e, 'juzgar', 'etiquetado-analitico.juzgar.response', async (d) => {
-      const res = await this._juzgar(d);
-      if (res.status === 200) {
-        // Exito → evento de dominio: la dimension PROPUESTA (nunca escrita) queda declarada.
-        if (res.data.propuesta) {
-          this.eventBus?.publish('contabilidad.dimension_propuesta', {
-            project_id: res.data.project_id,
-            hecho_id: res.data.hecho_id,
-            propuesta: res.data.propuesta,
-            origen: res.data.propuesta.origen,
-            correlation_id: d.correlation_id
-          });
-        }
-      } else {
+    return this._atender(e, 'juzgar', 'etiquetado-analitico.juzgar.response', (d) => {
+      const res = this._juzgar(d);
+      // Micro-agente (mitad refleja): PROPONE; no escribe dominio → no hay hecho que anunciar (R2).
+      if (res.status !== 200) {
         this.eventBus?.publish('etiquetado-analitico.juzgar.failed', res);
+      } else if (res.data && res.data.propuesta && !res.data.propuesta.completa) {
+        // La regla NO cubre el hecho → lo dudoso va a la cola (A8.1). No se adivina la etiqueta.
+        this.eventBus?.publish('encolado-excepcion.encolar.request', {
+          project_id: res.data.project_id,
+          rol: 'ETIQUETADO_ANALITICO',
+          clave: res.data.clave || `etiquetado:${res.data.hecho_id || 's/ref'}`,
+          motivo: 'ninguna regla declarada cubre este hecho: la etiqueta analitica queda abierta (no se adivina)',
+          origen: 'etiquetado-analitico',
+          payload: { dimensiones: res.data.propuesta.dimensiones, faltan: res.data.propuesta.faltan },
+          correlation_id: d.correlation_id
+        });
       }
       return res;
     });
   }
 
-  // ── el juicio: reglas (reflejo) + juicio fuzzy con fallback a cola ──
-  async _juzgar(input = {}) {
+  // ── handlers FIRE-AND-FORGET: contexto declarado (hecho / criterio) ──
+  onHechoRecibido(e) {
+    const d = (e && (e.data || e)) || {};
+    try {
+      this.logger?.info(`${this.name}.contexto.hecho`, { project_id: d.project_id || null });
+    } catch (err) {
+      this.logger?.error(`${this.name}.hecho_recibido.error`, { error: err.message });
+    }
+  }
+
+  // Se fijo un criterio declarable de etiquetado → se observa (memoria acotada) para aplicar.
+  onCriterioFijado(e) {
+    const d = (e && (e.data || e)) || {};
+    const pid = d.project_id || this.project_id;
+    if (!pid) return;
+    const lista = this._criterios.get(pid) || [];
+    lista.push(d.criterio || d);
+    if (lista.length > 500) lista.shift();
+    this._criterios.set(pid, lista);
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // juzgar(hecho) → PROPUESTA de etiqueta (PREGUNTA; PROPONE, no fija)
+  // ══════════════════════════════════════════════════════════════════════
+  _juzgar(input = {}) {
     const pid = input.project_id || this.project_id;
     if (!pid) return this._invalid('project_id');
 
-    const hecho = input.hecho && typeof input.hecho === 'object' ? input.hecho : null;
-    if (!hecho) return this._invalid('hecho');
-    const hecho_id = hecho.id_hecho != null ? hecho.id_hecho : (hecho.id ?? null);
+    const hecho = input.hecho !== undefined ? input.hecho
+      : (input.evento !== undefined ? input.evento : null);
+    if (!hecho || typeof hecho !== 'object') return this._invalid('hecho');
 
-    // 1) Las REGLAS: ParametroDeclarable del jefe (declaradas o traidas de la cola K9 POR EVENTO).
-    const { reglas, dimensiones, fuente_reglas } = await this._criterio(pid, input);
+    const hecho_id = hecho.hecho_id != null ? String(hecho.hecho_id) : null;
+    const clave = input.clave != null ? String(input.clave) : (hecho.clave != null ? String(hecho.clave) : null);
 
-    // Sin reglas declaradas NO se elige una dimension por defecto: [ABIERTO] y a cola.
-    if (reglas.length === 0) {
-      return this._acolar(pid, hecho, hecho_id, input, {
-        fuente_reglas,
-        motivo: 'no hay reglas de etiquetado declaradas: la clasificacion iria a cola (el jefe debe declarar el criterio)',
-        faltan: ['reglas']
-      });
+    // Las DIMENSIONES declarables (centro/linea/producto). El conjunto es DATO, no constante oculta.
+    const dimensiones = this._dimensiones(input.dimensiones);
+
+    // Las reglas: declaradas en el input, o los criterios observados (fire-and-forget).
+    const reglas = Array.isArray(input.reglas) && input.reglas.length
+      ? input.reglas
+      : (this._criterios.get(pid) || []);
+
+    const propuesta = [];
+    const faltan = [];
+    for (const dim of dimensiones) {
+      const valor = this._aplica(reglas, dim, hecho, input);
+      if (valor != null) {
+        propuesta.push({ dimension: dim, valor: String(valor), fuente: 'regla_declarada' });
+      } else {
+        propuesta.push({ dimension: dim, valor: null, fuente: null });
+        faltan.push(dim);
+      }
     }
 
-    // 2) REFLEJO determinista: la PRIMERA regla declarada que coincide gana (una sola respuesta).
-    const porRegla = this._juzgarReflejo(hecho, reglas);
-    if (porRegla) {
-      return this._proponer(pid, hecho, hecho_id, {
-        ...porRegla.dimension,
-        origen: 'regla',
-        regla_id: porRegla.regla_id,
-        confianza: 1
-      }, { fuente_reglas, motivo: null });
-    }
+    const completa = faltan.length === 0 && propuesta.length > 0;
 
-    // 3) FUZZY: ninguna regla cubre → el juicio PROPONE (asistido por LLM, con las dimensiones declaradas).
-    const asistido = await this._concluir(hecho, dimensiones, reglas);
-    const dim = this._dimDe(asistido, dimensiones);
-    if (dim) {
-      return this._proponer(pid, hecho, hecho_id, {
-        ...dim,
-        origen: 'juicio',
-        regla_id: null,
-        confianza: asistido.confianza,
-        motivo: asistido.motivo || null
-      }, { fuente_reglas, motivo: null });
-    }
-
-    // 4) Ni regla ni juicio resoluble con honestidad → A COLA. Nunca se inventa una dimension.
-    return this._acolar(pid, hecho, hecho_id, input, {
-      fuente_reglas,
-      motivo: 'ninguna regla cubre el hecho y el juicio no es resoluble con honestidad: va a cola',
-      faltan: ['cobertura_regla_o_juicio']
-    });
+    return {
+      status: 200,
+      data: {
+        project_id: pid,
+        tipo: 'etiquetado-analitico',
+        hecho_id,
+        clave,
+        dimensiones,
+        propuesta: {
+          etiquetas: propuesta,
+          dimensiones: propuesta.reduce((acc, p) => { acc[p.dimension] = p.valor; return acc; }, {}),
+          completa,
+          faltan: faltan.length ? faltan : null
+        },
+        // PROPONE; el corte duro (fijar la etiqueta) NO es de esta hoja.
+        propone: true,
+        fija: false,
+        reglas_aplicadas: reglas.length,
+        // Lo no cubierto por una regla declarada es juicio: queda abierto (no se estima).
+        abierto: completa ? null
+          : `no hay regla declarada que cubra: ${faltan.join(', ')} — la etiqueta queda abierta (es juicio, no se adivina)`
+      }
+    };
   }
 
-  // ── REFLEJO: aplica las reglas declaradas (condiciones sobre campos del hecho) ──
-  _juzgarReflejo(hecho, reglas = []) {
+  // Las dimensiones a etiquetar: declaradas en el input, o las canonicas (dato por defecto).
+  _dimensiones(v) {
+    if (Array.isArray(v) && v.length) return v.map((x) => String(x));
+    return ['centro', 'linea', 'producto'];
+  }
+
+  // Aplica la primera regla declarada que CUBRE la dimension. Sin regla → null (no se adivina).
+  _aplica(reglas, dim, hecho, input) {
     for (const r of reglas) {
       if (!r || typeof r !== 'object') continue;
-      const cond = r.cuando || r.condicion || null;
-      if (!cond || typeof cond !== 'object') continue;
-      if (!this._coincide(hecho, cond)) continue;
-      const dim = r.dimension || r.propuesta || {};
-      const centro = this._id(dim.centro != null ? dim.centro : r.centro);
-      const linea = this._id(dim.linea != null ? dim.linea : r.linea);
-      const producto = this._id(dim.producto != null ? dim.producto : r.producto);
-      if (centro === null && linea === null && producto === null) continue; // regla sin dimension: no etiqueta
-      return { dimension: { centro, linea, producto }, regla_id: r.id ?? r.regla_id ?? null };
+      // La regla declara que dimension etiqueta y con que valor.
+      if (r.dimension && String(r.dimension) !== dim) continue;
+      // La condicion: un campo del hecho que debe igualar al valor declarado (si viene).
+      if (r.campo != null) {
+        const v = hecho[String(r.campo)] !== undefined ? hecho[String(r.campo)]
+          : input[String(r.campo)];
+        if (r.igual != null && String(v) !== String(r.igual)) continue;
+        if (r.en != null && !Array.isArray(r.en)) continue;
+        if (Array.isArray(r.en) && !r.en.map(String).includes(String(v))) continue;
+      }
+      const valor = r.valor ?? r[dim] ?? r.etiqueta;
+      if (valor != null && String(valor).trim() !== '') return valor;
     }
+    // Valor declarado directamente en el hecho (no es adivinar: es leer lo declarado).
+    if (hecho[dim] != null && String(hecho[dim]).trim() !== '') return hecho[dim];
     return null;
-  }
-
-  // Evalua UNA condicion declarada contra el hecho. Cero semantica cableada: el operador es dato.
-  _coincide(hecho, cond) {
-    const campo = cond.campo != null ? String(cond.campo) : null;
-    if (!campo) return false;
-    const valorHecho = this._campo(hecho, campo);
-    const op = String(cond.op || cond.operador || 'igual').toLowerCase();
-    const esperado = cond.valor;
-
-    switch (op) {
-      case 'igual': return valorHecho !== undefined && String(valorHecho) === String(esperado);
-      case 'prefijo': return valorHecho !== undefined && String(valorHecho).startsWith(String(esperado));
-      case 'contiene': return valorHecho !== undefined && String(valorHecho).includes(String(esperado));
-      case 'en': return Array.isArray(esperado) && esperado.map(String).includes(String(valorHecho));
-      case 'rango': {
-        if (!esperado || typeof esperado !== 'object') return false;
-        const v = Number(valorHecho);
-        if (!Number.isFinite(v)) return false;
-        const min = esperado.min != null ? Number(esperado.min) : -Infinity;
-        const max = esperado.max != null ? Number(esperado.max) : Infinity;
-        return v >= min && v <= max;
-      }
-      case 'existe': return valorHecho !== undefined && valorHecho !== null && valorHecho !== '';
-      default: return false; // operador no declarado: no coincide (no se adivina la intencion)
-    }
-  }
-
-  // Acceso a un campo del hecho, con ruta por puntos (a.b.c) — solo lectura.
-  _campo(hecho, ruta) {
-    return String(ruta).split('.').reduce((o, k) => (o && typeof o === 'object' ? o[k] : undefined), hecho);
-  }
-
-  // ── FUZZY: 1 llamada llm.complete.request con el guion + el hecho + las dimensiones declaradas ──
-  async _concluir(hecho, dimensiones, reglas) {
-    const resp = await this._rpc('llm.complete.request', {
-      system: GUION_ETIQUETADO,
-      messages: [{ role: 'user', content: JSON.stringify({ hecho, dimensiones_declaradas: dimensiones, reglas_no_cubren: reglas }) }],
-      tools: [], settings: { temperature: 0.2 }
-    }, { timeout_ms: 30000 }).catch(() => null);
-    if (!resp || resp.status >= 400) return null;
-    return this._parse(resp);
-  }
-
-  _parse(resp) {
-    let c = resp?.data?.content ?? resp?.content ?? resp?.data?.text ?? resp?.text ?? '';
-    if (c && typeof c === 'object') return c;
-    if (typeof c !== 'string') return null;
-    c = c.replace(/```json/gi, '').replace(/```/g, '').trim();
-    const i = c.indexOf('{'), j = c.lastIndexOf('}');
-    if (i < 0 || j < 0 || j < i) return null;
-    try { return JSON.parse(c.slice(i, j + 1)); } catch { return null; }
-  }
-
-  // Valida el juicio fuzzy: solo propone ids de la lista DECLARADA (no inventa dimensiones).
-  _dimDe(asistido, dimensiones = []) {
-    if (!asistido || asistido.puede !== true) return null;
-    if (typeof asistido.confianza !== 'number' || asistido.confianza < 0 || asistido.confianza > 1) return null;
-    const ids = this._ids(dimensiones);
-    const centro = this._idEn(asistido.centro, ids.centro);
-    const linea = this._idEn(asistido.linea, ids.linea);
-    const producto = this._idEn(asistido.producto, ids.producto);
-    if (centro === null && linea === null && producto === null) return null;
-    return { centro, linea, producto };
-  }
-
-  // Las dimensiones declaradas, normalizadas a ids por tipo (para validar la propuesta fuzzy).
-  _ids(dimensiones = []) {
-    const out = { centro: new Set(), linea: new Set(), producto: new Set() };
-    for (const d of (Array.isArray(dimensiones) ? dimensiones : [])) {
-      if (!d || typeof d !== 'object') continue;
-      const tipo = String(d.tipo || '').toLowerCase();
-      const id = this._id(d.id != null ? d.id : d.nombre);
-      if (id === null) continue;
-      if (out[tipo]) out[tipo].add(id);
-      else { out.centro.add(id); out.linea.add(id); out.producto.add(id); } // sin tipo: vale para cualquiera
-    }
-    return out;
-  }
-
-  _idEn(v, conjunto) {
-    const id = this._id(v);
-    if (id === null) return null;
-    return conjunto.has(id) ? id : null;
-  }
-
-  // El CRITERIO: reglas + dimensiones declaradas, o traidas de la cola K9 POR EVENTO.
-  async _criterio(pid, input = {}) {
-    const reglasDecl = input.reglas || (input.criterio && input.criterio.reglas);
-    const dimsDecl = input.dimensiones || (input.criterio && input.criterio.dimensiones);
-    if (Array.isArray(reglasDecl)) {
-      return { reglas: reglasDecl, dimensiones: Array.isArray(dimsDecl) ? dimsDecl : [], fuente_reglas: 'declarado' };
-    }
-    // Sin criterio declarado, se PIDE a cola-declaraciones-criterio (K9) POR EVENTO (best-effort).
-    const r = await this._rpc('cola-declaraciones-criterio.ratificar.request',
-      { project_id: pid, clave: 'dimensiones' }, { timeout_ms: 4000 });
-    const valor = r && r.data && r.data.criterio ? r.data.criterio.valor : null;
-    if (valor && typeof valor === 'object') {
-      return {
-        reglas: Array.isArray(valor.reglas) ? valor.reglas : [],
-        dimensiones: Array.isArray(valor.dimensiones) ? valor.dimensiones : [],
-        fuente_reglas: 'cola-declaraciones-criterio'
-      };
-    }
-    return { reglas: [], dimensiones: [], fuente_reglas: null };
-  }
-
-  // Emite la PROPUESTA (no escribe) y la recuerda en la memoria de lo aprendido.
-  _proponer(pid, hecho, hecho_id, propuesta, { fuente_reglas, motivo }) {
-    const juicio = {
-      hecho_id,
-      propuesta,
-      origen: propuesta.origen,
-      confianza: propuesta.confianza,
-      en: new Date().toISOString()
-    };
-    this._recordar(pid, juicio);
-    return {
-      status: 200,
-      data: {
-        project_id: pid,
-        hecho_id,
-        hecho,
-        fuente_reglas,
-        propuesta,
-        // PROPONE; no escribe. La imputacion la materializa quien consume el evento.
-        escribe: false,
-        en_cola: false,
-        abierto: false,
-        faltan: [],
-        motivo
-      }
-    };
-  }
-
-  // No resoluble con honestidad: el hecho va a COLA como [ABIERTO]. NUNCA se inventa.
-  _acolar(pid, hecho, hecho_id, input, { fuente_reglas, motivo, faltan }) {
-    return {
-      status: 200,
-      data: {
-        project_id: pid,
-        hecho_id,
-        hecho,
-        fuente_reglas,
-        propuesta: null,
-        escribe: false,
-        en_cola: true,
-        // El jefe lo declarara en la cola de criterios (K9); aqui solo se encola lo dudoso.
-        cola: 'cola-declaraciones-criterio',
-        abierto: true,
-        faltan,
-        motivo
-      }
-    };
-  }
-
-  _recordar(pid, juicio) {
-    const lista = this._juicios.get(pid) || [];
-    lista.push(juicio);
-    if (lista.length > 5000) lista.splice(0, lista.length - 5000); // cota honesta de la memoria
-    this._juicios.set(pid, lista);
-  }
-
-  // Lectura de la memoria de lo aprendido (mismo proceso) — no muta.
-  juiciosDe(pid) {
-    return pid ? [...(this._juicios.get(pid) || [])] : [];
-  }
-
-  _id(v) {
-    if (v === undefined || v === null || v === '') return null;
-    if (typeof v === 'object') return this._id(v.id ?? v.nombre);
-    return String(v);
   }
 
   // ── Tools ──

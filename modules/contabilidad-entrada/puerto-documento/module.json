@@ -1,40 +1,28 @@
 {
-  "_doc": "Manifest de contabilidad-entrada/puerto-documento — CONVERSOR STATELESS (A4.2, hoja del plan). Frontera de las FORMAS DECLARABLES del documento: convierte una representacion EXTERNA (JSON de emisor, fila de CSV, salida de conector) en el Documento canonico del dominio. El adaptador lo pone el sitio: `forma`, `formas_declarables` y `mapeo` (campo canonico → clave externa) entran como DATO; no hay ninguna forma cableada. Invariante: sin forma declarada no se adivina (FORMATO/FORMA_NO_DECLARADA); el campo externo ausente queda null y se lista en `abierto` (nada se estima). No asienta ni juzga: la conformacion a Hecho es de normalizador-hecho (A2). Proyeccion unica `_entrar({externo, forma, formas_declarables, mapeo, project_id})` -> {forma, documento, adaptador_declarado, abierto}. Emisor/par de fallo (publica contabilidad.documento_normalizado / puerto-documento.entrar.failed). Sin persistencia.",
+  "_doc": "Manifest de entrada/puerto-documento — CONVERSOR STATELESS (A4.2, hoja del plan). Frontera de las FORMAS DECLARABLES del documento de entrada; el adaptador lo pone el SITIO (declarado), no el modulo. LA LEY ENTRA COMO DATO: `formato` y `mapeo` (campo canonico → clave externa) son declarables; CERO esquemas cableados (ni PDF/XML/CSV/…). Sin formato declarado no traduce; formato sin mapeo y no canonico → 422 FORMATO_NO_DECLARABLE. Traduce la forma externa a la forma CANONICA del documento y, si el documento entrante trae algo interpretable, lo SUBE por EVENTO a extraccion-dato.juzgar.request (A4.1) — que es quien lo vuelve DATO. Aqui NO se interpreta el contenido (contenido_interpretado:false). Dato ausente = desconocido. NO escribe, NO persiste. RPC entrar es CLASE PREGUNTA → va por el bus, SIN panel. Publica puerto-documento.entrar.response y su par .failed.",
   "name": "puerto-documento",
   "version": "0.1.0",
-  "description": "Conversor stateless (A4.2): frontera de las formas declarables del documento — traduce la representacion externa al Documento canonico con mapeo declarable; sin forma declarada no convierte y lo ausente queda abierto.",
-  "blueprint_driven": true,
-  "blueprint_path": "puerto-documento.blueprint.json",
+  "description": "Conversor (A4.2): frontera de las formas declarables del documento. La forma entra como dato (formato+mapeo); traduce y devuelve, no interpreta ni escribe.",
   "language": "es",
   "subscribes": [
     {
       "event": "puerto-documento.entrar.request",
       "handler": "onEntrarRequest",
-      "description": "RPC conversor: {project_id, externo, forma, formas_declarables?, mapeo?} → {forma, documento, adaptador_declarado, abierto}. Convierte el documento externo a la forma canonica usando el mapeo declarado; los campos externos ausentes quedan null y se declaran en `abierto`. Sin `forma` → FORMA_NO_DECLARADA y par de fallo; forma fuera de las declarables → FORMA_NO_DECLARABLE. Exito → publica contabilidad.documento_normalizado y responde por puerto-documento.entrar.response."
+      "description": "RPC conversor (PREGUNTA, por el bus): {project_id, formato, documento|externo, mapeo?|esquemas_declarables?} → {project_id, formato, direccion:'entrar', documento, abierto[]}. Traduce la forma externa a la forma canonica del documento; sin formato → FORMATO_NO_DECLARADO, formato sin mapeo y no canonico → FORMATO_NO_DECLARABLE. Si el documento trae algo interpretable, lo sube a extraccion-dato.juzgar.request. Responde por puerto-documento.entrar.response."
     }
   ],
   "publishes": [
     {
       "event": "puerto-documento.entrar.response",
-      "handler": "_atender",
-      "description": "Respuesta RPC correlada de puerto-documento.entrar.request → {request_id, status:200, data:{forma, documento, adaptador_declarado, abierto}}. Emitida por el helper _atender."
+      "description": "Respuesta RPC correlada de la op entrar (una sola cara: el bus)."
     },
     {
       "event": "puerto-documento.entrar.failed",
-      "description": "Par de fallo determinista (A4.2): forma no declarada/no declarable o externo ausente → {status, error:{code, message, details?}}. Cierra el circulo de puerto-documento.entrar.request."
-    },
-    {
-      "event": "contabilidad.documento_normalizado",
-      "description": "Fire-and-forget (A4.2): un documento externo quedo convertido a la forma canonica → {project_id, forma, documento, abierto, correlation_id}. Alimenta la admision (captura-documento A3) y el cuadre (A4.3)."
+      "description": "Par de fallo determinista: formato no declarado/no declarable o documento invalido → {status, code, message}. Cierra el circulo de entrar.request."
     }
   ],
-  "ui_handlers": [
-    {
-      "domain": "contabilidad",
-      "action": "puerto-documento.entrar",
-      "handler": "onEntrarRequest",
-      "type": "workspace_module",
-      "zone": "barra_modulos"
-    }
-  ]
+  "tools": [
+    { "name": "puerto-documento.entrar", "description": "Traduce (PREGUNTA) la forma externa de un documento a la forma canonica declarada." }
+  ],
+  "ui_handlers": []
 }

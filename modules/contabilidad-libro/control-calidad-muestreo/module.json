@@ -1,40 +1,37 @@
 {
-  "_doc": "Manifest de contabilidad-libro/control-calidad-muestreo — REFLEJO STATELESS (L8, hoja del plan). CONTROL POR MUESTREO: excepcion + muestra, NO revisar todo. Selecciona los asientos que EXIGEN OJO HUMANO por SEÑALES DURAS (alto_importe, sin_regla, contrapartida_nueva, cuadre_dudoso, sin_documento, fuera_de_plantilla) y, ademas, una MUESTRA aleatoria del resto; el asesor revisa ESA seleccion, no el volumen entero. ATRIBUTOS del diseno: umbrales:Set<Umbral>, reglas:ReglaContrapartida; METODOS: seleccionar(periodo):Set<Asiento>. LOS CRITERIOS Y EL TAMANO DE MUESTRA SON DECLARABLES (ley/parametro como dato): no se cablea ningun importe, porcentaje ni tamano — un criterio de umbral SIN umbral declarado NO es aplicable (criterios_inaplicables) y sin tamano declarado no hay muestra (solo excepciones); un umbral inventado mandaria al asesor a revisar lo que no pidio. Invariantes: DETERMINISTA (mismos asientos + mismos criterios + misma semilla → misma seleccion, reproducible); excepcion + muestra jamas 'todo' (un asiento ya seleccionado por señal dura no se repite en la muestra); dato ausente = desconocido — sin asientos no se selecciona nada (asientos_disponible:false) y la señal 'contrapartida_nueva' no dispara sin contrapartidas conocidas declaradas; NO escribe, NO persiste, NO muta y NO decide (la seleccion es un DERIVADO; revisar es del asesor). Los asientos se reciben declarados o se PIDE al diario (escritor-diario B2) POR EVENTO; las contrapartidas conocidas se declaran o se PIDE a regla-contrapartida (A6) POR EVENTO. La semilla es declarable o derivada de proyecto+periodo (reproducible: cero aleatoriedad oculta). Escucha contabilidad.asiento_registrado (B2) SOLO como señal tolerante (la seleccion es BAJO DEMANDA y stateless: no acumula). FORMA: REFLEJO stateless, sin PosPersistencia ni onProjectActivated. Proyeccion `_seleccionar`. Cierra el circulo: error → control-calidad-muestreo.seleccionar.failed.",
+  "_doc": "Manifest de libro/control-calidad-muestreo — REFLEJO STATELESS (L8, hoja del plan). Selecciona lo que exige OJO HUMANO por SEÑALES DURAS: la regla es EXCEPCION + MUESTRA, NO revisar todo (revisa_todo:false). Excepcion = señal estructural (rectificativo/ajuste/descuadre/cuenta_sin_declarar/fuera_de_periodo) o importe por encima del umbral declarable; muestra = fraccion del resto elegida por hash DETERMINISTA (mismo input + mismos umbrales → misma seleccion). Umbrales (`reglas:UmbralDeMuestreo`) son declarables; si no vienen, se usan defaults Y se declara en abierto (no se finge que fueron declarados). NO escribe, NO persiste. RPC seleccionar es CLASE PREGUNTA → va por el bus, sin panel. Publica control-calidad-muestreo.seleccionar.response y su par .failed. Escucha contabilidad.asiento_asentado (B2) y contabilidad.contrapartida_regla_declarada (A6.2), ambos emitidos.",
   "name": "control-calidad-muestreo",
   "version": "0.1.0",
-  "description": "Reflejo (L8): control por muestreo (excepcion + muestra) — selecciona lo que exige ojo humano por señales duras declarables, determinista y reproducible; jamas revisar todo.",
-  "blueprint_driven": true,
-  "blueprint_path": "control-calidad-muestreo.blueprint.json",
+  "description": "Reflejo (L8): elige por señales duras (excepcion + muestra) lo que exige ojo humano; no revisa todo. Determinista.",
   "language": "es",
   "subscribes": [
     {
       "event": "control-calidad-muestreo.seleccionar.request",
       "handler": "onSeleccionarRequest",
-      "description": "RPC reflejo (seleccion pura, determinista): {project_id, periodo?, asientos?|libro?, criterios?|umbrales?, contrapartidas_conocidas?, muestra_tamano?|tamano_muestra?|muestra?, semilla?} → {project_id, tipo:'control-calidad-muestreo', seleccionados (union de excepcion + muestra), total_asientos, total_seleccionados, fuente_asientos, excepciones:[{numero, importe, motivos, asiento}], muestra:[{numero, importe, motivos, asiento}], criterios_declarados:[{senal, umbral, aplicable}], criterios_inaplicables, contrapartidas_conocidas, fuente_contrapartidas, muestreo:{tamano_declarado, semilla, universo_restante}, exhaustivo:false, revisa:'asesor', abierto}. Los asientos se reciben declarados o se PIDE a escritor-diario (B2) POR EVENTO; las contrapartidas conocidas se declaran o se PIDE a regla-contrapartida (A6). Sin asientos no se selecciona nada (asientos_disponible:false). Responde por control-calidad-muestreo.seleccionar.response; project_id ausente → control-calidad-muestreo.seleccionar.failed."
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id, asientos?, umbral_importe?, fraccion_muestra?} → {project_id, excepciones, muestra, num_revisar, umbrales, determinista, abierto}. Selecciona por señal dura + muestra determinista del resto. Responde por control-calidad-muestreo.seleccionar.response. Payload invalido → control-calidad-muestreo.seleccionar.failed."
     },
     {
-      "event": "contabilidad.asiento_registrado",
-      "handler": "onAsientoRegistrado",
-      "description": "Fire-and-forget (B2 → L8): escritor-diario publico que un asiento quedo registrado → se deja constancia en el log de que hay material nuevo que muestrear. La seleccion es BAJO DEMANDA y el reflejo es stateless: NO acumula asientos ni lanza selecciones proactivas. Tolerante: sin project_id se ignora."
+      "event": "contabilidad.asiento_asentado",
+      "handler": "onAsientoAsentado",
+      "description": "Fire-and-forget (B2 escritor-diario): un asiento quedo en el libro. Se observa (ventana acotada) para poder muestrearlo; no se recalcula nada ni se escribe."
+    },
+    {
+      "event": "contabilidad.contrapartida_regla_declarada",
+      "handler": "onContrapartidaReglaDeclarada",
+      "description": "Fire-and-forget (A6.2 regla-contrapartida): una regla de contrapartida quedo declarada/cambio de estado. Se registra la marca (conviene mirar los asientos que la usan); no se decide por ella."
     }
   ],
   "publishes": [
     {
       "event": "control-calidad-muestreo.seleccionar.response",
-      "description": "Respuesta RPC correlada de control-calidad-muestreo.seleccionar.request → {request_id, status:200, data:{seleccionados, excepciones, muestra, criterios_declarados, criterios_inaplicables, muestreo, exhaustivo:false, abierto}}. Emitida por el helper _atender."
+      "description": "Respuesta RPC correlada de la op seleccionar (una sola cara: el bus)."
     },
     {
       "event": "control-calidad-muestreo.seleccionar.failed",
-      "description": "Par de fallo determinista (L8): project_id ausente → {status, error:{code, message, details?}}. Cierra el circulo de control-calidad-muestreo.seleccionar.request y de contabilidad.asiento_registrado."
+      "description": "Par de fallo determinista: falta project_id → {status, code, message}. Cierra el circulo de seleccionar.request."
     }
   ],
-  "ui_handlers": [
-    {
-      "domain": "contabilidad",
-      "action": "control-calidad-muestreo.seleccionar",
-      "handler": "onSeleccionarRequest",
-      "type": "system_panel",
-      "zone": "lateral_derecha"
-    }
+  "tools": [
+    { "name": "control-calidad-muestreo.seleccionar", "description": "Selecciona (PREGUNTA) por excepcion + muestra lo que exige revision humana." }
   ]
 }

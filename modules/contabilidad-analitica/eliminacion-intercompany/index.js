@@ -6,9 +6,9 @@
  * conjunto de PARTIDAS A ELIMINAR en la consolidacion. DETERMINISTA: la deteccion es un
  * emparejamiento por reglas, no un juicio.
  *
- * ATRIBUTOS del diseno: `asientos:Flujo<Asiento>`. Las partidas llegan DECLARADAS o se piden
- * a `marca-sociedad` (I1) POR EVENTO — la marca de sociedad es lo que hace posible saber que
- * dos partidas son del mismo grupo y se cruzan.
+ * ATRIBUTOS del diseno: `asientos:Flujo<Asiento>`. Las partidas llegan DECLARADAS (en la
+ * peticion) — la marca de sociedad (I1) es lo que hace posible saber que dos partidas son del
+ * mismo grupo y se cruzan.
  *
  * REGLAS DECLARABLES (LEY COMO DATO — cero constantes):
  *   - `criterio.grupo` → el conjunto de sociedades que forman el grupo (o su id).
@@ -16,7 +16,7 @@
  *   - `criterio.cuentas_internas` → cuentas marcadas como internas (si se declaran).
  * Si no vienen declaradas, el reflejo aplica el unico criterio que NO es un parametro de
  * negocio: el cruce EXISTE cuando la contraparte de una partida pertenece al grupo declarado
- * por la propia partida (sociedad ≠ sociedad_contraparte y ambas en `sociedades`). Un grupo
+ * por la propia partida (sociedad != sociedad_contraparte y ambas en `sociedades`). Un grupo
  * NO declarado → `[ABIERTO]`: no se adivina el perimetro.
  *
  * La ELIMINACION es una PROPUESTA de partidas: el reflejo NO escribe, NO borra, NO persiste.
@@ -45,10 +45,11 @@ class EliminacionIntercompany extends ModuloHibridoReflejo {
 
   async onUnload() { return super.onUnload(); }
 
-  // ── handler RPC (una linea, delega a _atender) ──
+  // ── handler RPC (una linea, delega a _atender). CLASE PREGUNTA → no lleva ui_handler ──
   onEliminarRequest(e) {
     return this._atender(e, 'eliminar', 'eliminacion-intercompany.eliminar.response', async (d) => {
       const res = await this._eliminar(d);
+      // Reflejo PURO: no escribe → no hay hecho que anunciar (R2). Su cara es el resultado.
       if (res.status !== 200) this.eventBus?.publish('eliminacion-intercompany.eliminar.failed', res);
       return res;
     });
@@ -59,15 +60,15 @@ class EliminacionIntercompany extends ModuloHibridoReflejo {
     const pid = input.project_id || this.project_id;
     if (!pid) return this._invalid('project_id');
 
-    // 1) Las PARTIDAS: declaradas, o pedidas a marca-sociedad (I1) POR EVENTO.
-    const { partidas, fuente_partidas } = await this._partidas(pid, input);
+    // 1) Las PARTIDAS: DECLARADAS en la peticion (asientos o partidas planas).
+    const partidas = this._partidas(input);
     if (partidas === null) {
       return {
         status: 200,
         data: {
           project_id: pid, fuente_partidas: null, eliminaciones: [], neto: null,
           abierto: true, faltan: ['partidas'],
-          motivo: 'no hay partidas declaradas ni marcas de sociedad que consultar: no se derivan eliminaciones'
+          motivo: 'no hay partidas declaradas: no se derivan eliminaciones'
         }
       };
     }
@@ -78,7 +79,7 @@ class EliminacionIntercompany extends ModuloHibridoReflejo {
       return {
         status: 200,
         data: {
-          project_id: pid, fuente_partidas, criterio, eliminaciones: [], neto: null,
+          project_id: pid, fuente_partidas: 'declarado', criterio, eliminaciones: [], neto: null,
           abierto: true, faltan: ['criterio.grupo'],
           motivo: 'no se adivina el perimetro: falta el grupo declarado (criterio.grupo / sociedades)'
         }
@@ -114,7 +115,7 @@ class EliminacionIntercompany extends ModuloHibridoReflejo {
       status: 200,
       data: {
         project_id: pid,
-        fuente_partidas,
+        fuente_partidas: 'declarado',
         criterio: { sociedades: criterio.sociedades, umbral: criterio.umbral, cuentas_internas: [...criterio.internas] },
         // Set<Partida> → lista determinista (ordenada por id_partida para reproducibilidad).
         eliminaciones: eliminaciones.sort((a, b) => String(a.id_partida ?? '').localeCompare(String(b.id_partida ?? ''))),
@@ -127,25 +128,17 @@ class EliminacionIntercompany extends ModuloHibridoReflejo {
     };
   }
 
-  // Las partidas: declaradas en la peticion o PEDIDAS a marca-sociedad (I1) POR EVENTO.
-  async _partidas(pid, input = {}) {
+  // Las partidas: DECLARADAS en la peticion. `null` si no hay ninguna que derivar.
+  _partidas(input = {}) {
     const declaradas = input.partidas || input.asientos;
-    if (Array.isArray(declaradas)) {
-      // Los "asientos" pueden traer sus partidas dentro: se aplanan, no se reinterpretan.
-      const out = [];
-      for (const a of declaradas) {
-        if (a && Array.isArray(a.partidas)) out.push(...a.partidas.map(p => ({ ...p, sociedad: p.sociedad ?? a.sociedad })));
-        else if (a && typeof a === 'object') out.push(a);
-      }
-      return { partidas: out, fuente_partidas: 'declarado' };
+    if (!Array.isArray(declaradas)) return null;
+    // Los "asientos" pueden traer sus partidas dentro: se aplanan, no se reinterpretan.
+    const out = [];
+    for (const a of declaradas) {
+      if (a && Array.isArray(a.partidas)) out.push(...a.partidas.map(p => ({ ...p, sociedad: p.sociedad ?? a.sociedad })));
+      else if (a && typeof a === 'object') out.push(a);
     }
-    const r = await this._rpc('marca-sociedad.marcar.request',
-      { project_id: pid, listar: true, periodo: input.periodo }, { timeout_ms: 4000 });
-    const data = r && r.data ? r.data : null;
-    if (data && Array.isArray(data.marcas)) {
-      return { partidas: data.marcas.map(m => ({ ...m })), fuente_partidas: 'marca-sociedad' };
-    }
-    return { partidas: null, fuente_partidas: null };
+    return out;
   }
 
   // El criterio de grupo: ParametroDeclarable. Cero constantes de negocio cableadas.

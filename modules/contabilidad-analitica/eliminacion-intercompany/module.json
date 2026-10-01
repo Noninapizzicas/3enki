@@ -1,35 +1,27 @@
 {
-  "_doc": "Manifest de contabilidad-analitica/eliminacion-intercompany — REFLEJO STATELESS (I2, hoja del plan). LAS ELIMINACIONES DE OPERACIONES INTERNAS entre sociedades del grupo: detecta el CRUCE interno (una partida de una sociedad contra otra sociedad del MISMO grupo) y devuelve el conjunto de PARTIDAS A ELIMINAR en la consolidacion. DETERMINISTA: la deteccion es un emparejamiento por reglas declaradas, no un juicio. ATRIBUTOS del diseno: asientos:Flujo<Asiento> — las partidas llegan DECLARADAS o se piden a marca-sociedad (I1) POR EVENTO (marca-sociedad.marcar.request via _rpc, best-effort); la marca de sociedad es lo que hace posible saber que dos partidas son del mismo grupo y se cruzan. REGLAS DECLARABLES (LEY COMO DATO — cero constantes): criterio.grupo/sociedades (el perimetro del grupo), criterio.umbral (tolerancia declarada) y criterio.cuentas_internas (cuentas marcadas como internas). Un grupo NO declarado → [ABIERTO]: no se adivina el perimetro. La ELIMINACION es una PROPUESTA de partidas: el reflejo NO escribe, NO borra, NO persiste; devuelve por cada cruce la partida, su contraparte y el importe de su anulacion, con el neto del conjunto. Invariantes: DETERMINISTA (mismas entradas → mismas eliminaciones, ordenadas por id_partida); dato ausente = desconocido → sin partidas o sin grupo declarado → eliminaciones vacias y abierto:true con lo que falta (nada se estima); NO escribe, NO persiste. FORMA: REFLEJO stateless, sin PosPersistencia ni onProjectActivated. Proyeccion unica `_eliminar({project_id, partidas?/asientos?, criterio?:{grupo|sociedades, umbral, cuentas_internas}})`. Cierra el circulo: error → eliminacion-intercompany.eliminar.failed.",
+  "_doc": "Manifest de analitica/eliminacion-intercompany — REFLEJO STATELESS (I2, hoja del plan). Detecta el CRUCE interno entre sociedades del grupo declarado y devuelve el conjunto de PARTIDAS A ELIMINAR en la consolidacion, con su importe neto y su anulacion. DETERMINISTA: emparejamiento por reglas declaradas (criterio.grupo, criterio.umbral, criterio.cuentas_internas), cero constantes de negocio cableadas. Dato ausente = desconocido: sin asientos o sin grupo declarado → eliminaciones vacias con abierto:true. NO escribe, NO persiste. RPC eliminar es CLASE PREGUNTA → va por el bus, sin panel. Publica eliminacion-intercompany.eliminar.response y su par .failed.",
   "name": "eliminacion-intercompany",
   "version": "0.1.0",
-  "description": "Reflejo (I2): las eliminaciones de operaciones internas entre sociedades del grupo — deteccion determinista del cruce interno con reglas DECLARABLES (grupo, umbral, cuentas internas); sin perimetro declarado nada se adivina.",
-  "blueprint_driven": true,
-  "blueprint_path": "eliminacion-intercompany.blueprint.json",
+  "description": "Reflejo (I2): detecta el cruce interno entre sociedades del grupo y devuelve las partidas a eliminar en la consolidacion. Determinista y declarable con cero constantes; no escribe.",
   "language": "es",
   "subscribes": [
     {
       "event": "eliminacion-intercompany.eliminar.request",
       "handler": "onEliminarRequest",
-      "description": "RPC reflejo (deteccion pura, determinista): {project_id, partidas?/asientos?, criterio?:{grupo|sociedades, umbral, cuentas_internas}} → {project_id, fuente_partidas, criterio, eliminaciones:[{id_partida, sociedad, sociedad_contraparte, cuenta, importe, anulacion, motivo}], n_eliminaciones, neto, abierto, faltan, motivo}. Detecta el cruce interno (sociedad ≠ sociedad_contraparte, ambas en el grupo declarado) y devuelve el Set<Partida> a eliminar con su anulacion. Las partidas llegan declaradas o se piden a marca-sociedad (I1) POR EVENTO. Sin partidas o sin grupo declarado → eliminaciones vacias y abierto:true (nada se estima; el perimetro no se adivina). Responde por eliminacion-intercompany.eliminar.response; project_id ausente → eliminacion-intercompany.eliminar.failed."
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id, asientos|partidas?, criterio{grupo,umbral,cuentas_internas}} → {project_id, eliminaciones[], n_eliminaciones, neto, abierto, faltan}. Empareja deterministamente el cruce interno del grupo declarado. Sin asientos/grupo → eliminatorias vacias con lo que falta (nada se estima). Responde por eliminacion-intercompany.eliminar.response; payload invalido → eliminacion-intercompany.eliminar.failed."
     }
   ],
   "publishes": [
     {
       "event": "eliminacion-intercompany.eliminar.response",
-      "description": "Respuesta RPC correlada de eliminacion-intercompany.eliminar.request → {request_id, status:200, data:{eliminaciones, n_eliminaciones, neto, faltan, abierto}}. Emitida por el helper _atender."
+      "description": "Respuesta RPC correlada de la op eliminar (una sola cara: el bus)."
     },
     {
       "event": "eliminacion-intercompany.eliminar.failed",
-      "description": "Par de fallo determinista (I2): project_id ausente → {status, error:{code, message, details?}}. Cierra el circulo de eliminacion-intercompany.eliminar.request."
+      "description": "Par de fallo determinista: falta project_id o payload invalido → {status, code, message}. Cierra el circulo de eliminar.request."
     }
   ],
-  "ui_handlers": [
-    {
-      "domain": "contabilidad",
-      "action": "eliminacion-intercompany.eliminar",
-      "handler": "onEliminarRequest",
-      "type": "system_panel",
-      "zone": "lateral_derecha"
-    }
+  "tools": [
+    { "name": "eliminacion-intercompany.eliminar", "description": "Deriva (PREGUNTA) las partidas del cruce interno a eliminar en la consolidacion para el grupo declarado." }
   ]
 }

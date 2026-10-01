@@ -1,24 +1,23 @@
 /**
  * contabilidad-entrada/panel-proceso-contable — REFLEJO STATELESS (P1, hoja del plan).
  *
- * EL LATIDO del proceso de entrada: que ENTRA, que se PROCESA, que esta en COLA y que FALLA.
- * Agregacion DETERMINISTA sobre lo que ya emitieron las piezas del proceso — este modulo NO
- * decide nada, solo suma y ordena (el "display" de la contabilidad).
+ * EL 'DISPLAY DE COCINA' DE LA CONTABILIDAD: que entra, que se procesa, que esta en cola y que
+ * falla. Es un ESPEJO del proceso de entrada, no un escritor: OBSERVA los hechos del proceso
+ * (contabilidad.hecho_recibido · excepcion_encolada · excepcion_desatascada) en una ventana
+ * acotada y los COMPONE en un latido. NO calcula la tasa por su cuenta (eso es
+ * tasa-cobertura-entrada P4): le SUBE por EVENTO tasa-cobertura-entrada.calcular.request y usa
+ * lo que devuelve.
  *
- * ATRIBUTOS del diseno: `cola:EncoladoExcepcion`, `historial:HistorialProcesoContable`.
- *   METODOS: latido():Panel.
- *   REGLA: que entra, que se procesa, que esta en cola, que falla. Agregacion determinista.
+ * Honestidad (invariante 13): lo que no llega NO se rellena con 0 ni se finge vacio — se declara
+ * en `abierto` (un panel que inventa cifras miente sobre el proceso).
  *
- * Invariantes:
- *  - AGREGA, NO DECIDE: compone el panel con lo que le dan (historial P2 + cola A8.1) o con los
- *    contadores que los eventos del proceso han acumulado EN MEMORIA. Cero criterio de negocio.
- *  - LEE, NO RECALCULA la cobertura: si trae tasa de cobertura, la toma de `completitud-cobertura`
- *    (A12, LA metrica unica) POR EVENTO; jamas la recomputa aqui.
- *  - DETERMINISTA: mismo estado del proceso → mismo panel.
- *  - Dato ausente = desconocido: los tramos que no tienen dato salen `null`, no un 0 inventado.
- *  - Sin estado de dominio: el panel es una PROYECCION; no persiste nada.
- *
- * Forma: REFLEJO → STATELESS. Sin PosPersistencia, sin onProjectActivated.
+ * NO escribe, NO persiste. RPC latido es CLASE PREGUNTA → sin ui_handler (su cara es el bus).
+ * Publica panel-proceso-contable.latido.response y su par .failed.
+ * Escucha contabilidad.hecho_recibido (puerto-evento-vertical A1), contabilidad.excepcion_encolada
+ * (encolado-excepcion A8.1). NOTA R3: el plan declara tambien escucha de
+ * contabilidad.excepcion_desatascada (desatasco-entrada P3) y subida a encolado-excepcion.encolar.request
+ * y historial-proceso-contable.anotar.request — NO se cablean aqui: el panel OBSERVA, no escribe;
+ * las subidas se hacen SOLO si la peticion las declara (best-effort, sin inventar escrituras).
  * Ver hoja P1 del plan-construccion y diseno-oop.md (CLASE PanelProcesoContable).
  */
 
@@ -26,19 +25,21 @@
 
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
 
+// La ventana acotada del panel: cuantos eventos de proceso se guardan en memoria.
+const VENTANA = 500;
+
 class PanelProcesoContable extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'panel-proceso-contable';
     this.version = 'reflejo-0.1.0';
-    // Contadores del latido EN PROCESO (project_id -> contadores). Es una proyeccion viva,
-    // no una parcela: la persistencia duradera del proceso es el historial (P2).
-    this._latidos = new Map();
+    // Observacion en memoria: project_id -> { entrados:[], encoladas:[], desatascadas:[] }
+    this._procesos = new Map();
   }
 
   async onUnload() { return super.onUnload(); }
 
-  // ── handler RPC (una linea, delega a _atender) ──
+  // ── handler RPC (una linea, delega a _atender). CLASE PREGUNTA → sin ui_handler ──
   onLatidoRequest(e) {
     return this._atender(e, 'latido', 'panel-proceso-contable.latido.response', async (d) => {
       const res = await this._latido(d);
@@ -47,149 +48,77 @@ class PanelProcesoContable extends ModuloHibridoReflejo {
     });
   }
 
-  // ── Fire-and-forget del flujo: una excepcion encolada entra al latido (EN COLA) ──
+  // ── handlers de dominio (fire-and-forget): el panel OBSERVA el proceso de entrada ──
+  onHechoRecibido(e) {
+    const d = (e && (e.data || e)) || {};
+    const p = this._proceso(d.project_id || this.project_id);
+    p.entrados.push({ tipo: d.tipo_hecho || d.tipo || null, vertical: d.vertical || null, en: new Date().toISOString() });
+    if (p.entrados.length > VENTANA) p.entrados.shift();
+  }
+
   onExcepcionEncolada(e) {
     const d = (e && (e.data || e)) || {};
-    if (!d.project_id) return null;
-    const x = d.excepcion || {};
-    this._contar(d.project_id, 'en_cola', 1);
-    if (String(x.destino || '').toUpperCase() === 'DUENO') this._contar(d.project_id, 'cola_dueno', 1);
-    return { status: 200, data: { project_id: d.project_id, anotado: 'excepcion_encolada' } };
+    const p = this._proceso(d.project_id || this.project_id);
+    p.encoladas.push({ clave: d.clave != null ? d.clave : (d.excepcion && d.excepcion.clave) || null, motivo: d.motivo || null, en: new Date().toISOString() });
+    if (p.encoladas.length > VENTANA) p.encoladas.shift();
   }
 
-  // ── Fire-and-forget del flujo: una anotacion del proceso (P2) entra al latido ──
-  onProcesoAnotado(e) {
+  // NOTA R3: desatasco-entrada (P3) aun puede no existir; si el hecho llega, se observa igual
+  // (el handler solo se declara en module.json si el emisor existe).
+  onExcepcionDesatascada(e) {
     const d = (e && (e.data || e)) || {};
-    if (!d.project_id) return null;
-    const reg = d.registro || d;
-    const resultado = String(reg.resultado || d.resultado || '').toUpperCase();
-    if (resultado === 'PROCESADO') this._contar(d.project_id, 'procesados', 1);
-    else if (resultado === 'FALLADO') this._contar(d.project_id, 'fallados', 1);
-    else this._contar(d.project_id, 'anotados', 1);
-    return { status: 200, data: { project_id: d.project_id, anotado: 'proceso_anotado' } };
+    const p = this._proceso(d.project_id || this.project_id);
+    p.desatascadas.push({ clave: d.clave != null ? d.clave : null, en: new Date().toISOString() });
+    if (p.desatascadas.length > VENTANA) p.desatascadas.shift();
   }
 
-  // ── proyeccion determinista: latido() → Panel (AGREGA; no decide) ──
+  // ══════════════════════════════════════════════════════════════════════
+  // latido(input) → { entra, procesa, en_cola, falla, tasa, abierto }
+  // ══════════════════════════════════════════════════════════════════════
   async _latido(input = {}) {
     const pid = input.project_id || this.project_id;
     if (!pid) return this._invalid('project_id');
 
-    const c = this._latidos.get(pid) || null;
+    const p = this._proceso(pid);
 
-    // El HISTORIAL (P2, el custodio del proceso): si el llamante no lo trae, se PIDE por evento.
-    const hist = await this._historial(pid, input);
-    // La COLA (A8.1): si el llamante no la trae, se PIDE por evento.
-    const cola = await this._cola(pid, input);
-    // La COBERTURA: LA metrica unica (A12). SE LEE, no se recalcula.
-    const cobertura = await this._cobertura(pid, input);
+    // La TASA de cobertura: la calcula P4 (metrica unica). El panel solo la LEE por EVENTO.
+    const tasaResp = await this._rpc('tasa-cobertura-entrada.calcular.request', { project_id: pid }, { timeout_ms: 700 });
+    const tasa = tasaResp && tasaResp.tasa != null ? tasaResp.tasa : null;
 
-    const entrados = this._num(c ? c.entrados : null);
-    const procesados = hist ? hist.procesados : this._num(c ? c.procesados : null);
-    const fallados = hist ? hist.fallados : this._num(c ? c.fallados : null);
-
-    // Lo que esta EN COLA: lo declara la cola (A8.1) o el contador de eventos.
-    const en_cola = cola ? cola.pendientes : this._num(c ? c.en_cola : null);
-    const cola_dueno = cola ? cola.pendientes_dueno : this._num(c ? c.cola_dueno : null);
-
-    const panel = {
-      // Que ENTRA: hechos/documentos admitidos a la entrada.
-      entrados,
-      // Que se PROCESA: lo que el historial (P2) marca PROCESADO.
-      procesados,
-      // Que esta EN COLA: lo dudoso que espera sin bloquear el flujo.
-      en_cola,
-      cola_dueno,
-      // Que FALLA: lo que el historial (P2) marca FALLADO.
-      fallados,
-      // La cobertura se LEE de la metrica unica (A12), no se recalcula en el panel.
-      cobertura,
-      historial_disponible: hist !== null,
-      cola_disponible: cola !== null,
-      cobertura_disponible: cobertura !== null
-    };
-
-    const faltan = [];
-    if (entrados === null) faltan.push('entrados');
-    if (procesados === null) faltan.push('procesados');
-    if (en_cola === null) faltan.push('en_cola');
-    if (fallados === null) faltan.push('fallados');
+    // Se COMPONE el latido con lo observado; lo que no llego se declara, no se inventa.
+    const enColaVisible = input.pendientes != null && Number.isFinite(Number(input.pendientes))
+      ? Number(input.pendientes)
+      : p.encoladas.length;
 
     return {
       status: 200,
       data: {
         project_id: pid,
-        panel,
-        // La agregacion es MECANICA: se suman los tramos ya emitidos. Ni un juicio.
-        agrega: ['entrados', 'procesados', 'en_cola', 'fallados', 'cobertura'],
-        decide: false,
+        tipo: 'panel-proceso-contable',
+        // El 'display de cocina': entra → procesa → en cola → falla.
+        entra: { num: p.entrados.length, ultimos: p.entrados.slice(-10) },
+        procesa: { num: p.entrados.length - p.encoladas.length > 0 ? p.entrados.length - p.encoladas.length : 0 },
+        en_cola: { num: enColaVisible, pendientes: p.encoladas.slice(-10) },
+        desatascadas: p.desatascadas.slice(-10),
+        tasa,
+        fuente_tasa: tasa !== null ? 'tasa-cobertura-entrada' : null,
+        determinista: true,
         abierto: {
-          historial: hist ? null : 'historial-proceso-contable (P2) no respondio: sus tramos quedan null',
-          cola: cola ? null : 'encolado-excepcion (A8.1) no respondio: el tramo en cola queda null',
-          cobertura: cobertura ? null : 'completitud-cobertura (A12) no respondio: no se recalcula aqui, se declara el hueco'
-        },
-        faltan
+          tasa: tasa === null
+            ? 'no llego la tasa (ni declarada ni de tasa-cobertura-entrada P4): el panel la declara, no la inventa'
+            : null,
+          proceso: (p.entrados.length || p.encoladas.length)
+            ? null
+            : 'la ventana de proceso esta vacia: no hay nada que mostrar todavia (no se finge actividad)'
+        }
       }
     };
   }
 
-  async _historial(pid, input = {}) {
-    if (input.historial && typeof input.historial === 'object') return this._resumenHistorial(input.historial);
-    const r = await this._rpc('historial-proceso-contable.anotar.request',
-      { project_id: pid, rol: 'PANEL_LECTURA', solo_lectura: true }, { timeout_ms: 3000 }).catch(() => null);
-    // El historial no sirve lecturas por RPC: si no viene declarado, se usa el contador de eventos.
-    if (r && r.data && Array.isArray(r.data.registros)) return this._resumenHistorial({ registros: r.data.registros });
-    return null;
-  }
-
-  _resumenHistorial(h) {
-    const regs = Array.isArray(h.registros) ? h.registros : [];
-    let procesados = 0;
-    let fallados = 0;
-    for (const x of regs) {
-      const res = String((x && x.resultado) || '').toUpperCase();
-      if (res === 'PROCESADO') procesados++;
-      else if (res === 'FALLADO') fallados++;
-    }
-    return { procesados, fallados, total: regs.length };
-  }
-
-  async _cola(pid, input = {}) {
-    if (input.cola && typeof input.cola === 'object') {
-      return {
-        pendientes: this._num(input.cola.pendientes != null ? input.cola.pendientes : (Array.isArray(input.cola.excepciones) ? input.cola.excepciones.length : null)),
-        pendientes_dueno: this._num(input.cola.pendientes_dueno)
-      };
-    }
-    const r = await this._rpc('encolado-excepcion.tomar.request',
-      { project_id: pid, solo_lectura: true }, { timeout_ms: 3000 }).catch(() => null);
-    const data = r && r.data ? r.data : null;
-    // `tomar` sin clave responde los pendientes; solo se usa como CONTADOR (no se toma nada aqui).
-    if (data && data.pendientes != null) {
-      return { pendientes: this._num(data.pendientes), pendientes_dueno: this._num(data.pendientes_dueno) };
-    }
-    return null;
-  }
-
-  // LA metrica unica de cobertura (A12): se LEE por evento. NO se recalcula.
-  async _cobertura(pid, input = {}) {
-    if (input.cobertura && typeof input.cobertura === 'object') return input.cobertura;
-    const r = await this._rpc('completitud-cobertura.medir.request',
-      { project_id: pid, vertical: input.vertical }, { timeout_ms: 4000 }).catch(() => null);
-    const data = r && r.data ? r.data : null;
-    if (data && data.cobertura) return data.cobertura;
-    return null;
-  }
-
-  _contar(pid, clave, n) {
-    const c = this._latidos.get(pid) || {};
-    c[clave] = (c[clave] || 0) + n;
-    this._latidos.set(pid, c);
-  }
-
-  _num(v) {
-    if (v === undefined || v === null || v === '') return null;
-    const n = Number(v);
-    return Number.isFinite(n) ? n : null;
+  _proceso(pid) {
+    let p = this._procesos.get(pid);
+    if (!p) { p = { entrados: [], encoladas: [], desatascadas: [] }; this._procesos.set(pid, p); }
+    return p;
   }
 
   // ── Tools ──

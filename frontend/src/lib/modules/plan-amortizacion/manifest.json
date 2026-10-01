@@ -1,9 +1,0 @@
-{
-  "id": "plan-amortizacion",
-  "name": "Plan de amortización",
-  "version": "0.1.0",
-  "zone": "work-bar",
-  "order": 102,
-  "icon": "🏗️",
-  "label": "Amortización"
-}

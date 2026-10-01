@@ -1,40 +1,37 @@
 {
-  "_doc": "Manifest de contabilidad-fiscal/liquidacion-iva — REFLEJO STATELESS (D1, hoja del plan). LIQUIDA el IVA de un periodo: IVA DEVENGADO (repercutido) menos IVA SOPORTADO (deducible) → CUOTA. Deriva del MAYOR (B3); NO recalcula ni reescribe asientos. LA LEY ENTRA COMO DATO (invariante 5): los TIPOS de IVA NO son constantes cableadas — llegan DECLARADOS por negocio y ejercicio (`tipos`, catalogo declarable del regimen comun/foral/Canarias/Ceuta-Melilla → IVA/IGIC/IPSI), y sin catalogo declarado cada apunte se agrupa por su propio `tipo_iva` declarado en el asiento, NUNCA inventado. El sentido de las cuentas tampoco se cablea: `reglas` es declarable; sin declarar se usa la composicion por defecto por GRUPO de cuenta (477 devengado / 472 soportado / 470 devengado). La cuota por linea respeta base/tipo/cuota DECLARADOS en el asiento; si solo hay base+tipo declarados, se deriva la cuota de ellos (el tipo sigue siendo dato); si no hay nada declarado, el importe del IVA ES el saldo de la cuenta de IVA del libro y se declara `procedencia:'derivada_del_saldo'`. Determinista: mismo mayor + mismos tipos declarados → misma liquidacion; cero reloj. El mayor llega por dos vias sin require cruzado: (1) `contabilidad.asiento_registrado` fire-and-forget → espejo en memoria idempotente por clave natural; (2) `liquidacion-iva.calcular.request` → se PIDE a mayor-balanza POR EVENTO y, si no responde, se deriva del espejo (fuente declarada). FORMA: REFLEJO stateless (sin PosPersistencia, sin onProjectActivated). Proyeccion `_calcular`. Par de fallo liquidacion-iva.calcular.failed.",
+  "_doc": "Manifest de fiscal/liquidacion-iva — REFLEJO STATELESS (D1, hoja del plan). IVA devengado/soportado DERIVADO del libro; el IVA va por DEVENGO (C3 separa caja/devengo). LOS TIPOS SON DATO: la ley entra como dato declarado, NUNCA se cablean tipos de IVA aqui (tipos_cableados:false). NO calcula la cifra por su cuenta (eso es mayor-balanza): RECIBE los saldos/lineas (o los sube por EVENTO a mayor-balanza.saldos.request) y AISLA las cuentas de IVA (477 devengado/repercutido · 472 soportado/deducible). Honestidad (invariante 13): sin saldos no se inventa la liquidacion; una cuenta de IVA sin naturaleza declarada ni prefijo reconocible NO se cuenta, se declara en `abierto`; una linea sin tipo declarado computa la cuota pero el tipo queda sin desglosar. NO escribe, NO persiste. RPC calcular es CLASE PREGUNTA → va por el bus, sin panel. Publica liquidacion-iva.calcular.response y su par .failed. Escucha contabilidad.asiento_asentado (B2) y contabilidad.ejercicio_cerrado (C4), ambos emitidos.",
   "name": "liquidacion-iva",
   "version": "0.1.0",
-  "description": "Reflejo stateless (D1): liquidacion de IVA devengado/soportado derivada del libro — tipos de IVA declarables por negocio y ejercicio, nunca cableados.",
-  "blueprint_driven": true,
-  "blueprint_path": "liquidacion-iva.blueprint.json",
+  "description": "Reflejo (D1): liquidacion de IVA (devengado/soportado) derivada del libro, por devengo. Los tipos son dato, nunca cableados; lo inclasificable se declara abierto.",
   "language": "es",
   "subscribes": [
     {
       "event": "liquidacion-iva.calcular.request",
       "handler": "onCalcularRequest",
-      "description": "RPC reflejo (calculo puro, determinista): {project_id, ejercicio?, periodo?, regimen?, territorio?, tipos?, reglas?} → {regimen, territorio, fuente:'mayor-balanza'|'espejo', tipos_declarados, reglas_declaradas, total_devengado, total_soportado, cuota, signo:'A_INGRESAR'|'A_COMPENSAR_O_DEVOLVER'|'NULA', detalle:{devengado, soportado, otro}}. Pide el mayor a mayor-balanza POR EVENTO; si no responde, lo deriva del espejo de asientos registrados. Los TIPOS de IVA son catalogo DECLARABLE (por negocio y ejercicio), no constante. Responde por liquidacion-iva.calcular.response; fallo (project_id ausente) → liquidacion-iva.calcular.failed."
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id, saldos?/lineas?, tipos?, fecha?, ejercicio?} → {project_id, devengado, soportado, resultado, a_ingresar, a_compensar, por_tipo, abierto}. Aisla las cuentas de IVA; el tipo es dato declarado. Responde por liquidacion-iva.calcular.response; falta project_id → liquidacion-iva.calcular.failed."
     },
     {
-      "event": "contabilidad.asiento_registrado",
-      "handler": "onAsientoRegistrado",
-      "description": "Fire-and-forget (B2 → D1): el diario registro un asiento → se acumula la muestra en el espejo en memoria (idempotente por clave natural o numero; un hecho = un asiento). No muta el libro ni recalcula asientos."
+      "event": "contabilidad.asiento_asentado",
+      "handler": "onAsientoAsentado",
+      "description": "Fire-and-forget (B2 escritor-diario): un asiento quedo en el libro. Se observa (ventana acotada) como fuente alternativa; no se recalcula ni se escribe."
+    },
+    {
+      "event": "contabilidad.ejercicio_cerrado",
+      "handler": "onEjercicioCerrado",
+      "description": "Fire-and-forget (cierre-ejercicio C4): un periodo quedo cerrado. Se observa como contexto de la liquidacion; no se recalcula."
     }
   ],
   "publishes": [
     {
       "event": "liquidacion-iva.calcular.response",
-      "description": "Respuesta RPC correlada de liquidacion-iva.calcular.request → {request_id, status:200, data:{fuente, total_devengado, total_soportado, cuota, signo, tipos_declarados, detalle:{devengado, soportado, otro}}}. Emitida por el helper _atender."
+      "description": "Respuesta RPC correlada de la op calcular (una sola cara: el bus)."
     },
     {
       "event": "liquidacion-iva.calcular.failed",
-      "description": "Par de fallo determinista (D1): project_id ausente → {status, error:{code, message, details?}}. Cierra el circulo de liquidacion-iva.calcular.request."
+      "description": "Par de fallo determinista: falta project_id → {status, code, message}. Cierra el circulo de calcular.request."
     }
   ],
-  "ui_handlers": [
-    {
-      "domain": "contabilidad",
-      "action": "liquidacion-iva.calcular",
-      "handler": "onCalcularRequest",
-      "type": "workspace_module",
-      "zone": "barra_modulos"
-    }
+  "tools": [
+    { "name": "liquidacion-iva.calcular", "description": "Calcula (PREGUNTA) el IVA devengado/soportado y el resultado de la liquidacion." }
   ]
 }

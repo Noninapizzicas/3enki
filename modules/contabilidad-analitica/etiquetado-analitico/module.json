@@ -1,39 +1,42 @@
 {
-  "_doc": "Manifest de contabilidad-analitica/etiquetado-analitico — MICRO-AGENTE HIBRIDO (J1, hoja del plan). ASIGNA CENTRO / LINEA / PRODUCTO (la DIMENSION analitica) a cada HECHO. La regla es DECLARABLE: los criterios los declara el JEFE en cola-declaraciones-criterio (K9) y llegan aqui por EVENTO (cola-declaraciones-criterio.ratificar.request via _rpc, best-effort) o declarados en la peticion — el reflejo NUNCA cablea una regla de negocio. Cuando la regla NO cubre el hecho, clasificar es JUICIO: el micro-agente PROPONE (juicio fuzzy asistido via llm.complete.request) y lo que no puede resolver con honestidad va a COLA como [ABIERTO]. ATRIBUTOS del diseno: reglas:ParametroDeclarable y dimensiones:Set<Dimension>; metodo juzgar(h:Hecho):Propuesta<Dimension> — PROPONE; NO escribe. HIBRIDO (patron veredicto-viabilidad): _juzgarReflejo es el REFLEJO determinista (aplica las REGLAS declaradas al hecho — la primera que coincide gana, operando sobre el operador declarado: igual/prefijo/contiene/en/rango/existe; una sola respuesta correcta por regla, no es juicio) y _concluir es el FUZZY (1 llamada llm.complete.request con guion-prompt self-contained que PROPONE una dimension; la propuesta fuzzy SOLO se acepta si sus ids pertenecen a la lista DECLARADA — no inventa dimensiones; si el LLM falla o no cumple el contrato, NO se inventa: el hecho va a COLA). EL UNICO QUE PERSISTE EL JUICIO — JUSTIFICADO: es la unica pieza cuya salida es IRREDUCIBLE a aritmetica (una dimension propuesta no se computa, se JUZGA); por eso conserva en memoria (this._juicios) la MEMORIA DE LO APRENDIDO — cada juicio emitido, con su origen (regla o juicio fuzzy) y su confianza — para no re-juzgar lo mismo dos veces y para que el criterio declarado pueda crecer a partir de lo observado. Esa memoria es PROCESO, no parcela: la persistencia DURADERA del juicio es el EVENTO de dominio que publica (contabilidad.dimension_propuesta), que consume el resto de la vertical. NUNCA INVENTA: sin reglas declaradas → [ABIERTO] (no se elige una dimension por defecto); sin cobertura de regla y sin juicio resoluble → el hecho va a COLA con lo que falta declarado (nunca una dimension inventada). FORMA: MICRO-AGENTE → STATELESS respecto de PosPersistencia (sin store en disco, sin custodiar parcela ajena, sin onProjectActivated). Proyeccion unica `_juzgar({project_id, hecho, reglas?, dimensiones?, criterio?})` → {hecho_id, propuesta, origen, confianza, escribe:false, en_cola, cola, faltan, abierto}. Publica contabilidad.dimension_propuesta cuando hay propuesta. Cierra el circulo: error → etiquetado-analitico.juzgar.failed.",
+  "_doc": "Manifest de analitica/etiquetado-analitico — MICRO-AGENTE (J1, hoja del plan). ASIGNA centro/linea/producto a cada hecho con REGLA DECLARABLE; cuando la regla no cubre, lo dudoso va a COLA. PROPONE, no escribe: la mitad REFLEJA (determinista) aplica las reglas DECLARADAS y expone la ETIQUETA PROPUESTA; NO fija nada por su cuenta. Sin regla que cubra la etiqueta queda ABIERTA (no se adivina el centro de coste) y SUBE encolado-excepcion.encolar.request (A8.1, lo dudoso a cola). Dato ausente = desconocido: sin hecho no hay nada que etiquetar. ESCUCHA contabilidad.hecho_recibido (puerto-evento-vertical A1) y contabilidad.criterio_fijado (cola-declaraciones-criterio) — ambos con emisor vivo; los handlers son fire-and-forget (toman constancia, no anuncian hecho). STATELESS (sin PosPersistencia). RPC juzgar es CLASE PREGUNTA → SIN ui_handler, su cara es el bus. Publica etiquetado-analitico.juzgar.response y su par .failed.",
   "name": "etiquetado-analitico",
   "version": "0.1.0",
-  "description": "Micro-agente (J1): asigna centro/linea/producto a cada hecho con regla DECLARABLE (criterios del jefe via cola K9); cuando la regla no cubre, Juzga y PROPONE sin escribir — lo que no resuelve con honestidad va a cola, nunca se inventa una dimension.",
-  "blueprint_driven": true,
-  "blueprint_path": "etiquetado-analitico.blueprint.json",
+  "description": "Micro-agente (J1): propone centro/linea/producto por regla declarada; lo no cubierto va a cola. Propone, no fija.",
   "language": "es",
   "subscribes": [
     {
       "event": "etiquetado-analitico.juzgar.request",
       "handler": "onJuzgarRequest",
-      "description": "RPC hibrido (juicio): {project_id, hecho:{...}, reglas?, dimensiones?, criterio?} → {project_id, hecho_id, fuente_reglas, propuesta:{centro, linea, producto, origen:'regla'|'juicio', regla_id, confianza}, escribe:false, en_cola, cola:'cola-declaraciones-criterio', abierto, faltan, motivo}. Aplica las reglas DECLARADAS (reflejo determinista, primera que coincide) y, si ninguna cubre, PROPONE con el juicio fuzzy (llm.complete.request, ids validados contra las dimensiones declaradas). Sin reglas declaradas → [ABIERTO]; sin cobertura ni juicio resoluble → el hecho va a COLA (nunca una dimension inventada). PROPONE; no escribe. Exito con propuesta → publica contabilidad.dimension_propuesta y responde por etiquetado-analitico.juzgar.response; fallo → etiquetado-analitico.juzgar.failed."
+      "description": "RPC micro-agente (PREGUNTA, por el bus): {project_id, hecho, dimensiones?, reglas?} → {project_id, hecho_id, dimensiones, propuesta{etiquetas, dimensiones, completa, faltan}, propone:true, fija:false, abierto}. Aplica las reglas declaradas; lo NO cubierto queda abierto y SUBE encolado-excepcion.encolar.request. Sin hecho → INVALID_INPUT. Responde por etiquetado-analitico.juzgar.response."
+    },
+    {
+      "event": "contabilidad.hecho_recibido",
+      "handler": "onHechoRecibido",
+      "description": "Fire-and-forget (puerto-evento-vertical A1): se recibio un hecho → se toma constancia del contexto (no propone ni escribe; el hecho llega por RPC). No responde."
+    },
+    {
+      "event": "contabilidad.criterio_fijado",
+      "handler": "onCriterioFijado",
+      "description": "Fire-and-forget (cola-declaraciones-criterio): se fijo un criterio declarable de etiquetado → se observa (memoria acotada) para aplicar sin que se declaren las reglas en cada RPC."
     }
   ],
   "publishes": [
     {
       "event": "etiquetado-analitico.juzgar.response",
-      "description": "Respuesta RPC correlada de etiquetado-analitico.juzgar.request → {request_id, status:200, data:{propuesta, escribe:false, en_cola, faltan, abierto}}. Emitida por el helper _atender."
+      "description": "Respuesta RPC correlada de la op juzgar (una sola cara: el bus)."
     },
     {
       "event": "etiquetado-analitico.juzgar.failed",
-      "description": "Par de fallo determinista (J1): project_id o hecho ausente → {status, error:{code, message, details?}}. Cierra el circulo de etiquetado-analitico.juzgar.request."
+      "description": "Par de fallo determinista: falta project_id o hecho → {status, code, message}. Cierra el circulo de juzgar.request."
     },
     {
-      "event": "contabilidad.dimension_propuesta",
-      "description": "Fire-and-forget (J1): el micro-agente PROPUSO una dimension analitica (centro/linea/producto) para un hecho → {project_id, hecho_id, propuesta, origen:'regla'|'juicio', correlation_id}. Es la PERSISTENCIA DURADERA del juicio (la memoria en proceso no basta): lo consumen la analitica de margen (J2) y el tablero por dimension (J10). NUNCA implica escritura: solo se declara la propuesta."
+      "event": "encolado-excepcion.encolar.request",
+      "description": "Subida (REQUEST por EVENTO, SOLO si la regla no cubre el hecho): encola lo dudoso en A8.1 para que el humano lo etiquete. EtiquetadoAnalitico propone; encolado-excepcion encola."
     }
   ],
-  "ui_handlers": [
-    {
-      "domain": "contabilidad",
-      "action": "etiquetado-analitico.juzgar",
-      "handler": "onJuzgarRequest",
-      "type": "system_panel",
-      "zone": "lateral_derecha"
-    }
-  ]
+  "tools": [
+    { "name": "etiquetado-analitico.juzgar", "description": "Propone (PREGUNTA) la etiqueta analitica (centro/linea/producto) de un hecho segun la regla declarada." }
+  ],
+  "ui_handlers": []
 }

@@ -1,45 +1,37 @@
 {
-  "_doc": "Manifest de contabilidad-analitica/marca-borrador-validado — REFLEJO STATELESS (Q4, hoja del plan). El SELLO del PUNTO EN QUE ESTA lo que el dueño ve: EN_CURSO / REVISADO / FIRMADO. Existe para que no se decida sobre un BORRADOR VIVO como si fuera definitivo. ATRIBUTOS del diseno: traza:TrazaAsiento, firma:FlujoFirma; METODOS: estado(dato):MarcaEstado; REGLA: sello del punto en que esta lo que ve (en curso / revisado / firmado), para no decidir sobre un borrador vivo como si fuera definitivo — deriva el estado de la traza y la firma. Invariantes: DERIVA, NO ALMACENA (el estado se COMPUTA de la traza B4 contabilidad.traza_registrada y la firma L3 contabilidad.firma_registrada; no se guarda una marca por dato — no es parcela — el ¿almacén de marca por dato o derivación pura? del diseño se resuelve por DERIVACION PURA); JAMAS SE AFIRMA FIRMADO SIN FIRMA (sin evidencia de firma el estado maximo es REVISADO o EN_CURSO — no se declara definitivo lo que no lo es); dato ausente = desconocido (sin dato identificable el estado es DESCONOCIDO — no se asume borrador ni validado); DETERMINISTA (misma traza + misma firma → mismo estado). FORMA: REFLEJO stateless — sin PosPersistencia, sin onProjectActivated (una lectura cacheada de la evidencia, no una parcela). Proyeccion `_estado`. Consume contabilidad.traza_registrada (B4) y contabilidad.firma_registrada (L3) como evidencia (fire-and-forget). Cierra el circulo: error → marca-borrador-validado.estado.failed.",
+  "_doc": "Manifest de analitica/marca-borrador-validado — REFLEJO STATELESS (Q4, hoja del plan). El SELLO del punto en que esta lo que se ve: 'en curso' (EN_CURSO) / 'revisado' (REVISADO) / 'firmado' (FIRMADO). Existe para que NO se decida sobre un borrador vivo. El sello se DERIVA de los hechos ya ocurridos, sin recalcul de dominio: contabilidad.traza_registrada (traza-asiento B4) → al menos REVISADO; contabilidad.revision_firmada (flujo-firma L3) → FIRMADO. El reflejo NO impone la marca: la acumula de los hechos que ESCUCHA y la DECLARA. El sello SOLO sube (EN_CURSO < REVISADO < FIRMADO): re-trazar no degrada lo firmado. Dato ausente = desconocido: sin hechos vistos el sello es EN_CURSO y se declara borrador vivo (no se inventa validacion). NO escribe dominio, NO persiste (registro derivado en memoria). RPC PREGUNTA → sin ui_handler, su cara es el bus. ESCUCHA contabilidad.traza_registrada y contabilidad.revision_firmada (ambos con emisor vivo). Publica marca-borrador-validado.estado.response y su par .failed.",
   "name": "marca-borrador-validado",
   "version": "0.1.0",
-  "description": "Reflejo stateless (Q4): sella si lo que se ve es borrador vivo o definitivo (en curso/revisado/firmado), derivado de la traza y la firma — para no decidir sobre un borrador.",
-  "blueprint_driven": true,
-  "blueprint_path": "marca-borrador-validado.blueprint.json",
+  "description": "Reflejo (Q4): sello del punto en que esta lo que se ve (en curso/revisado/firmado) para no decidir sobre un borrador vivo. Sin estado.",
   "language": "es",
   "subscribes": [
     {
       "event": "marca-borrador-validado.estado.request",
       "handler": "onEstadoRequest",
-      "description": "RPC reflejo (derivación determinista): {project_id, dato|dato_id, traza?, firma?} → {dato_id, marca:{estado:'DESCONOCIDO'|'EN_CURSO'|'REVISADO'|'FIRMADO', borrador, validado, firmado, seguro_para_decidir, motivo}, derivada_de:[...], almacena:false, decide:false, abierto, faltan}. DERIVA el estado de la traza (B4) y la firma (L3) — declaradas o la última observada por evento; NO almacena marca por dato. Sin dato identificable → DESCONOCIDO; sin firma NUNCA FIRMADO. Responde por marca-borrador-validado.estado.response; project_id ausente → marca-borrador-validado.estado.failed."
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id, clave|referencia} → {project_id, clave, sello, validado, borrador_vivo, firmado}. Devuelve el sello del punto en que esta lo que se ve; sin hechos vistos → EN_CURSO y borrador_vivo:true (no se inventa validacion). Responde por marca-borrador-validado.estado.response; payload invalido → marca-borrador-validado.estado.failed."
     },
     {
       "event": "contabilidad.traza_registrada",
       "handler": "onTrazaRegistrada",
-      "description": "Fire-and-forget (B4 → Q4): traza-asiento registró la creación de un asiento → evidencia de que el dato existe (punto de partida EN_CURSO). Se recuerda como evidencia para derivar el estado; NO se almacena una marca. Tolerante: sin project_id o sin dato identificable se ignora."
+      "description": "Fire-and-forget (lo emite traza-asiento B4): un asiento quedo trazado → sube el sello a REVISADO (nunca lo baja). No responde."
     },
     {
-      "event": "contabilidad.firma_registrada",
-      "handler": "onFirmaRegistrada",
-      "description": "Fire-and-forget (L3 → Q4): flujo-firma registró una firma → evidencia para derivar REVISADO/FIRMADO. Se recuerda como evidencia; NO se almacena una marca. Tolerante: sin project_id o sin dato identificable se ignora."
+      "event": "contabilidad.revision_firmada",
+      "handler": "onRevisionFirmada",
+      "description": "Fire-and-forget (lo emite flujo-firma L3): el asesor firmo → sube el sello a FIRMADO (nunca lo baja). No responde."
     }
   ],
   "publishes": [
     {
       "event": "marca-borrador-validado.estado.response",
-      "description": "Respuesta RPC correlada de marca-borrador-validado.estado.request → {request_id, status:200, data:{dato_id, marca, derivada_de, almacena:false, decide:false, abierto, faltan}}. Emitida por el helper _atender."
+      "description": "Respuesta RPC correlada de la op estado (una sola cara: el bus)."
     },
     {
       "event": "marca-borrador-validado.estado.failed",
-      "description": "Par de fallo determinista (Q4): project_id ausente → {status, error:{code, message, details?}}. Cierra el circulo de marca-borrador-validado.estado.request."
+      "description": "Par de fallo determinista: falta project_id o clave → {status, code, message}. Cierra el circulo de estado.request."
     }
   ],
-  "ui_handlers": [
-    {
-      "domain": "contabilidad",
-      "action": "marca-borrador-validado.estado",
-      "handler": "onEstadoRequest",
-      "type": "inline_render",
-      "zone": "area_chat"
-    }
+  "tools": [
+    { "name": "marca-borrador-validado.estado", "description": "Lee (PREGUNTA) el sello del punto en que esta lo que se ve (en curso/revisado/firmado)." }
   ]
 }

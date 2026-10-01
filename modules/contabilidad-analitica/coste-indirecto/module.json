@@ -1,35 +1,37 @@
 {
-  "_doc": "Manifest de contabilidad-analitica/coste-indirecto — REFLEJO STATELESS (J5, hoja del plan). EL REPARTO DE LOS GASTOS NO DIRECTOS: la luz, el alquiler, la direccion no son de un centro, son de todos — este reflejo APLICA el reparto que el negocio ha DECLARADO y devuelve cuanto toca a cada dimension analitica. Determinista: mismo coste + mismo criterio + mismas bases → el mismo reparto (una sola respuesta correcta). ATRIBUTOS del diseno: reparto:ParametroDeclarable; METODOS: repartir(coste, dimensiones):Map<Dimension,Cuantía>; REGLA: aplica el reparto DECLARADO de gastos no directos. LOS CRITERIOS DE REPARTO SON DECLARABLES (LEY/PARAMETRO COMO DATO): el metodo, las bases y los pesos entran como DATO en `criterio` (o se piden a cola-declaraciones-criterio K9 POR EVENTO, best-effort, clave 'reparto'); el reflejo NO cablea ningun metodo ni ningun porcentaje. SIN CRITERIO DECLARADO NO SE REPARTE: reparto:null, abierto:true con lo que falta — jamas se reparte a partes iguales por defecto (partir a medias es una DECISION, y es del jefe). Metodos DECLARADOS admitidos (el metodo es dato, no logica cableada): 'proporcional'|'base' (en proporcion a la base declarada de cada dimension — m2, horas…), 'porcentaje' (segun el porcentaje declarado; debe sumar 1, si no el reparto se DECLARA inconsistente en vez de normalizarse solo), 'manual'|'importe' (cada dimension declara su importe; no puede superar el coste). Metodo desconocido → [ABIERTO] (no se adivina la intencion del jefe). CUBRE LO QUE LA PIEZA EXISTENTE NO CUBRE PARA GRUPO: el reparto se hace por DIMENSION analitica declarada (centro, linea, producto, sociedad…), sin tocar escandallo ni ficha de producto. Invariantes: DETERMINISTA; dato ausente = desconocido (sin coste, sin dimensiones o sin criterio → [ABIERTO], nada se estima) y el RESTO se declara (no se reasigna a dedo); NO escribe ni persiste (el reparto es un DERIVADO; la imputacion al asiento es de otro). FORMA: REFLEJO stateless, sin PosPersistencia ni onProjectActivated. Proyeccion unica `_repartir({project_id, coste|importe, dimensiones:[...], criterio?:{metodo, bases?/porcentajes?/importes?}, periodo?})` → {project_id, periodo, coste, fuente_criterio, criterio, metodo, reparto:[{dimension, base?, cuota, importe}], importe_repartido, resto, abierto, faltan, motivo}. Cierra el circulo: error → coste-indirecto.repartir.failed.",
+  "_doc": "Manifest de analitica/coste-indirecto — REFLEJO STATELESS (J5, hoja del plan). Aplica el REPARTO DECLARADO de los gastos NO directos (los que no se imputan a un solo destino). EL CERROJO: NO se reparte con un criterio inventado — el reparto (base + pesos por destino) se DECLARA; si no viene, se SUBE el hueco a cola-declaraciones-criterio.fijar.request (best-effort) y el resultado queda `repartido:false` con `abierto` (NO hay 50/50 por defecto; dato ausente = desconocido). Determinista: reparto proporcional a la base declarada, con el resto del redondeo al destino de mayor importe. NO escribe, NO persiste. RPC repartir es CLASE PREGUNTA → va por el bus, sin panel. Publica coste-indirecto.repartir.response y su par .failed. Escucha contabilidad.asiento_asentado (B2) y contabilidad.criterio_fijado (K9), ambos emitidos.",
   "name": "coste-indirecto",
   "version": "0.1.0",
-  "description": "Reflejo (J5): aplica el reparto DECLARADO de gastos no directos por dimension analitica — criterios de reparto declarables (metodo, bases, porcentajes) y sin criterio declarado no reparte nada, porque partir a medias es decidir por el jefe.",
-  "blueprint_driven": true,
-  "blueprint_path": "coste-indirecto.blueprint.json",
+  "description": "Reflejo (J5): reparte gastos indirectos segun el reparto DECLARADO. Sin reparto no se inventa criterio; se sube el hueco y queda abierto.",
   "language": "es",
   "subscribes": [
     {
       "event": "coste-indirecto.repartir.request",
       "handler": "onRepartirRequest",
-      "description": "RPC reflejo (calculo puro, determinista): {project_id, coste|importe, dimensiones:[{id|clave, base?/porcentaje?/importe?}] u objeto por clave, criterio?:{metodo:'proporcional'|'base'|'porcentaje'|'manual'|'importe', bases?/porcentajes?/importes?}, periodo?} → {project_id, periodo, coste, fuente_criterio, criterio, metodo, reparto:[{dimension, base?, cuota, importe}], importe_repartido, resto, abierto, faltan, motivo}. Aplica el reparto DECLARADO (no cablea ningun metodo ni porcentaje): el criterio entra declarado o se pide a cola-declaraciones-criterio (K9) POR EVENTO. Sin coste, sin dimensiones o sin criterio declarado → reparto:null y abierto:true (jamas a partes iguales por defecto); porcentajes que no suman 1 o importes que superan el coste → [ABIERTO] declarado, no normalizado. Responde por coste-indirecto.repartir.response; project_id ausente → coste-indirecto.repartir.failed."
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id, importe, reparto?{destinos:[{destino,base}]}} → {project_id, importe, imputaciones, imputado, repartido, determinista, abierto}. Reparte proporcional a la base declarada; sin reparto declarado NO se inventa (repartido:false). Responde por coste-indirecto.repartir.response. Payload invalido → coste-indirecto.repartir.failed."
+    },
+    {
+      "event": "contabilidad.asiento_asentado",
+      "handler": "onAsientoAsentado",
+      "description": "Fire-and-forget (B2 escritor-diario): un asiento quedo en el libro. Se observa (ventana acotada); no se escribe."
+    },
+    {
+      "event": "contabilidad.criterio_fijado",
+      "handler": "onCriterioFijado",
+      "description": "Fire-and-forget (K9 cola-declaraciones-criterio): el jefe fijo un criterio (p.ej. el reparto). Se registra para aplicar el reparto declarado sin inventarlo."
     }
   ],
   "publishes": [
     {
       "event": "coste-indirecto.repartir.response",
-      "description": "Respuesta RPC correlada de coste-indirecto.repartir.request → {request_id, status:200, data:{metodo, reparto, importe_repartido, resto, abierto, faltan}}. Emitida por el helper _atender."
+      "description": "Respuesta RPC correlada de la op repartir (una sola cara: el bus)."
     },
     {
       "event": "coste-indirecto.repartir.failed",
-      "description": "Par de fallo determinista (J5): project_id ausente → {status, error:{code, message, details?}}. Cierra el circulo de coste-indirecto.repartir.request."
+      "description": "Par de fallo determinista: falta project_id o importe → {status, code, message}. Cierra el circulo de repartir.request."
     }
   ],
-  "ui_handlers": [
-    {
-      "domain": "contabilidad",
-      "action": "coste-indirecto.repartir",
-      "handler": "onRepartirRequest",
-      "type": "inline_render",
-      "zone": "area_chat"
-    }
+  "tools": [
+    { "name": "coste-indirecto.repartir", "description": "Reparte (PREGUNTA) un gasto indirecto segun el reparto declarado por destino." }
   ]
 }

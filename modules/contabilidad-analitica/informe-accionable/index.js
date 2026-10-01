@@ -1,33 +1,28 @@
 /**
- * contabilidad-analitica/informe-accionable — MICRO-AGENTE HIBRIDO (R2, hoja del plan).
+ * contabilidad-analitica/informe-accionable — MICRO-AGENTE (R2, hoja del plan).
  *
- * TODO informe que recibe el cliente lleva QUE HACER con el. Toma el informe ya compuesto por
- * `informe-rico` (K3) y PROPONE una RECOMENDACION — la quita de adorno.
+ * Todo informe que recibe el cliente lleva QUE HACER con el. La RECOMENDACION es
+ * JUICIO: la mitad FUZZY del hibrido vive en el blueprint; esta mitad REFLEJA es la
+ * parte DETERMINISTA y HONESTA — aplica las REGLAS DE ACCION **DECLARADAS** al
+ * informe/cifra (un motor de reglas puro: campo · operador · umbral → recomendacion)
+ * y NO inventa una accion donde no hay regla declarada.
  *
- * ⚠️ EL SISTEMA NO DECIDE: PROPONE. **EL DUENO DECIDE.** Esta clase juzga (la recomendacion es
- * juicio) y devuelve una PROPUESTA con su base; jamas ejecuta, jamas escribe, jamas decide por el
- * dueno. Si NO hay base suficiente para recomendar con honestidad, LO DECLARA — no inventa.
- *
- * ATRIBUTOS del diseno: `informe:Informe`.
- *   METODOS: juzgar(i:Informe):Recomendacion.
- *   REGLA: todo informe que recibe el cliente lleva QUE HACER con el. La recomendacion es juicio.
- *          Refuerza K3 y lo quita de adorno.
- *
- * HIBRIDO (patron etiquetado-analitico):
- *   _juzgarReflejo — REFLEJO determinista: aplica las REGLAS DECLARADAS (informe → recomendacion);
- *                    la primera que coincide gana. Una sola respuesta correcta → no es juicio.
- *   _concluir      — FUZZY: cuando ninguna regla cubre, 1 llamada llm.complete.request PROPONE
- *                    QUE HACER sobre el informe. Si falla o no cumple el contrato → NO se inventa.
+ *   · informe_rico (K3) compone la cifra; esta hoja le adjunta el "que hacer".
+ *   · Lo no cubierto por una regla declarada NO se rellena: queda declarado como
+ *     juicio (mitad fuzzy), nunca estimado.
  *
  * Invariantes:
- *  - EL DUENO DECIDE: la salida es una PROPUESTA (`decide:false`, `decide_dueno:true`); no se ejecuta.
- *  - NUNCA INVENTA: sin informe o sin base declarada NO se fabrica una recomendacion — se declara
- *    `[ABIERTO]` con lo que falta.
- *  - La recomendacion va ANCORADA al informe (su cifra/contexto): si el informe no trae base,
- *    el juicio lo declara en vez de adivinar.
- *  - NO escribe, NO persiste: refuerza K3, no lo sustituye.
+ *  - DETERMINISTA: mismo informe + mismas reglas → mismas acciones.
+ *  - Dato ausente = desconocido: sin informe no hay nada a lo que adjuntar accion (no se
+ *    fabrica); sin reglas declaradas → 0 acciones y el hueco se DECLARA.
+ *  - NO escribe, NO persiste.
  *
- * Forma: MICRO-AGENTE → STATELESS. Sin PosPersistencia, sin onProjectActivated.
+ * ESCUCHA (R3): el plan declara escucha de `contabilidad.aviso_producido` (motor-avisos K2)
+ * y `contabilidad.asiento_asentado` (escritor-diario B2). NINGUN modulo del repo los emite
+ * AUN (grupos posteriores): declararlos daria cadena colgada. NO se declaran hasta que su
+ * emisor exista.
+ *
+ * Forma: MICRO-AGENTE (mitad refleja) → STATELESS. Sin PosPersistencia, sin onProjectActivated.
  * Ver hoja R2 del plan-construccion y diseno-oop.md (CLASE InformeAccionable).
  */
 
@@ -35,17 +30,9 @@
 
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
 
-// ── guion-prompt del micro-agente (self-contained) ──
-const GUION_INFORME =
-  'Eres el ANALISTA que PROPONE QUE HACER con un informe contable. Recibes un INFORME ya compuesto ' +
-  '(una cifra con su contexto: periodo, unidad, comparativa) y las REGLAS declaradas. Tu tarea es ' +
-  'PROPONER una RECOMENDACION concreta y accionable ("que hacer con el"), con su MOTIVO. ' +
-  'REGLAS DE HIERRO: (1) NO decides nada — PROPONES; la decision es del DUENO. ' +
-  '(2) NO inventes cifras ni datos que no esten en el informe: usa EXCLUSIVAMENTE lo que te dan. ' +
-  '(3) Si el informe no trae base suficiente para recomendar con honestidad, NO adivines: ' +
-  'devuelve puede=false y declara que falta. Responde SOLO JSON: ' +
-  '{"puede":<true|false>,"recomendacion":"<qué hacer, breve y accionable>","motivo":"<por qué>",' +
-  '"base":"<de qué dato del informe sale>","prioridad":"alta|media|baja","confianza":<0-1>}.';
+// Los operadores que el motor de reglas declara. Ninguno cablea un criterio de negocio:
+// el umbral y el campo los declara la regla; aqui solo vive el como se compara.
+const OPERADORES = new Set(['<', '<=', '>', '>=', '==', '!=', 'existe', 'no_existe']);
 
 class InformeAccionable extends ModuloHibridoReflejo {
   constructor() {
@@ -56,232 +43,123 @@ class InformeAccionable extends ModuloHibridoReflejo {
 
   async onUnload() { return super.onUnload(); }
 
-  // ── handler RPC (una linea, delega a _atender) ──
+  // ── handler RPC (una linea, delega a _atender). CLASE PREGUNTA → sin ui_handler ──
   onJuzgarRequest(e) {
     return this._atender(e, 'juzgar', 'informe-accionable.juzgar.response', async (d) => {
-      const res = await this._juzgar(d);
-      if (res.status === 200) {
-        // Exito → evento de dominio: hay una RECOMENDACION PROPUESTA (no decidida).
-        this.eventBus?.publish('contabilidad.recomendacion', {
-          project_id: res.data.project_id,
-          informe_id: res.data.informe_id,
-          recomendacion: res.data.recomendacion,
-          origen: res.data.recomendacion ? res.data.recomendacion.origen : null,
-          decide_dueno: true,
-          correlation_id: d.correlation_id
-        });
-      } else {
-        this.eventBus?.publish('informe-accionable.juzgar.failed', res);
-      }
+      const res = this._juzgar(d);
+      // Micro-agente (mitad refleja): aplica reglas declaradas; no escribe dominio → sin hecho (R2).
+      if (res.status !== 200) this.eventBus?.publish('informe-accionable.juzgar.failed', res);
       return res;
     });
   }
 
-  // ── el juicio: reglas declaradas (reflejo) + juicio fuzzy, con declaracion honesta si no hay base ──
-  async _juzgar(input = {}) {
+  // ══════════════════════════════════════════════════════════════════════
+  // juzgar(informe, reglas) → informe con su "que hacer" (reglas declaradas)
+  // ══════════════════════════════════════════════════════════════════════
+  _juzgar(input = {}) {
     const pid = input.project_id || this.project_id;
     if (!pid) return this._invalid('project_id');
 
-    // 1) EL INFORME: el declarado o, si no, el que COMPONE su dueno (informe-rico K3) POR EVENTO.
-    const informe = await this._informe(pid, input);
-    if (!informe) {
-      // Sin informe NO se fabrica una recomendacion: se declara el hueco.
-      return {
-        status: 200,
-        data: {
-          project_id: pid,
-          informe_id: null,
-          informe: null,
-          recomendacion: null,
-          base_suficiente: false,
-          decide: false,
-          decide_dueno: true,
-          escribe: false,
-          abierto: true,
-          faltan: ['informe'],
-          motivo: 'no hay informe sobre el que recomendar (ni declarado ni compuesto por informe-rico K3): no se inventa una recomendacion'
-        }
-      };
-    }
+    // El INFORME: viene YA compuesto (informe-rico K3) o es el aviso/cifra declarado.
+    const informe = input.informe !== undefined ? input.informe
+      : (input.aviso !== undefined ? input.aviso
+        : (input.cifra !== undefined ? input.cifra : undefined));
+    if (informe === undefined || informe === null) return this._invalid('informe');
 
-    const informe_id = informe.id != null ? String(informe.id) : (input.informe_id != null ? String(input.informe_id) : null);
-
-    // 2) REFLEJO determinista: la PRIMERA regla declarada que coincide gana (una sola respuesta).
+    // Las REGLAS DE ACCION: DECLARADAS. Sin ellas, el "que hacer" es juicio (fuzzy), no se adivina.
     const reglas = this._reglas(input);
-    const porRegla = this._juzgarReflejo(informe, reglas);
-    if (porRegla) {
-      return this._proponer(pid, informe, informe_id, { ...porRegla, origen: 'regla', confianza: 1 });
-    }
 
-    // 3) FUZZY: ninguna regla cubre → el juicio PROPONE que hacer (ancorado al informe real).
-    const asistido = await this._concluir(informe, reglas);
-    const propuesta = this._recomendacionDe(asistido);
-    if (propuesta) {
-      return this._proponer(pid, informe, informe_id, { ...propuesta, origen: 'juicio' });
-    }
-
-    // 4) Sin base suficiente para recomendar con honestidad → SE DECLARA. Nunca se inventa.
-    return {
-      status: 200,
-      data: {
-        project_id: pid,
-        informe_id,
-        informe,
-        recomendacion: null,
-        base_suficiente: this._baseSuficiente(informe),
-        decide: false,
-        decide_dueno: true,
-        escribe: false,
-        abierto: true,
-        faltan: ['base'],
-        motivo: 'el informe no trae base suficiente para recomendar con honestidad: se declara el hueco en vez de inventar una recomendacion'
-      }
-    };
-  }
-
-  _proponer(pid, informe, informe_id, r) {
-    return {
-      status: 200,
-      data: {
-        project_id: pid,
-        informe_id,
-        informe,
-        recomendacion: {
-          que_hacer: r.que_hacer,
-          motivo: r.motivo,
-          base: r.base != null ? String(r.base) : null,
-          prioridad: r.prioridad != null ? String(r.prioridad) : null,
-          origen: r.origen,
-          regla_id: r.regla_id != null ? r.regla_id : null,
-          confianza: r.confianza != null ? r.confianza : null
-        },
-        base_suficiente: true,
-        // ⚠️ EL SISTEMA NO DECIDE: PROPONE. **EL DUENO DECIDE.**
-        decide: false,
-        decide_dueno: true,
-        escribe: false,
-        ejecuta: false,
-        abierto: { recomendacion: null }
-      }
-    };
-  }
-
-  // ── REFLEJO: aplica las reglas declaradas (condiciones sobre el informe) ──
-  _juzgarReflejo(informe, reglas = []) {
+    const acciones = [];
     for (const r of reglas) {
       if (!r || typeof r !== 'object') continue;
-      const cond = r.cuando || r.condicion || null;
-      if (!cond || typeof cond !== 'object') continue;
-      if (!this._coincide(informe, cond)) continue;
-      const que_hacer = r.que_hacer != null ? String(r.que_hacer)
-        : (r.recomendacion != null ? String(r.recomendacion) : null);
-      if (!que_hacer) continue;
-      return {
-        que_hacer,
-        motivo: r.motivo != null ? String(r.motivo) : null,
-        base: r.base != null ? String(r.base) : null,
-        prioridad: r.prioridad != null ? String(r.prioridad) : null,
-        regla_id: r.id ?? r.regla_id ?? null
-      };
+      if (this._dispara(r, informe)) {
+        acciones.push({
+          regla: r.id != null ? String(r.id) : (r.clave != null ? String(r.clave) : null),
+          recomendacion: r.entonces != null ? String(r.entonces)
+            : (r.recomendacion != null ? String(r.recomendacion) : null),
+          motivo: r.motivo != null ? String(r.motivo) : null,
+          severidad: r.severidad != null ? String(r.severidad) : null
+        });
+      }
     }
-    return null;
+
+    return {
+      status: 200,
+      data: {
+        project_id: pid,
+        tipo: 'informe-accionable',
+        informe,
+        acciones,
+        num_acciones: acciones.length,
+        reglas_declaradas: reglas.length,
+        // Determinista: aplica reglas; jamas inventa una accion.
+        deterministico: true,
+        abierto: {
+          reglas: reglas.length > 0 ? null
+            : 'no se declararon reglas de accion: el "que hacer" de lo no cubierto es juicio (mitad fuzzy del micro-agente)'
+        }
+      }
+    };
   }
 
-  // Evalua UNA condicion declarada contra el informe. Cero semantica cableada: el operador es dato.
-  _coincide(informe, cond) {
-    const campo = cond.campo != null ? String(cond.campo) : null;
+  // Evalua una regla DECLARADA contra el informe. Sin campo/operador no dispara (no se adivina).
+  _dispara(regla, informe) {
+    if (!regla || typeof regla !== 'object') return false;
+    const operador = regla.operador != null ? String(regla.operador).trim() : (regla.op != null ? String(regla.op).trim() : null);
+    if (!operador || !OPERADORES.has(operador)) return false;
+    const campo = regla.campo != null ? String(regla.campo) : (regla.clave != null ? String(regla.clave) : null);
     if (!campo) return false;
-    const valor = this._campo(informe, campo);
-    const op = String(cond.op || cond.operador || 'igual').toLowerCase();
-    const esperado = cond.valor;
-    switch (op) {
-      case 'igual': return valor !== undefined && String(valor) === String(esperado);
-      case 'contiene': return valor !== undefined && String(valor).includes(String(esperado));
-      case 'en': return Array.isArray(esperado) && esperado.map(String).includes(String(valor));
-      case 'rango': {
-        if (!esperado || typeof esperado !== 'object') return false;
-        const v = Number(valor);
-        if (!Number.isFinite(v)) return false;
-        const min = esperado.min != null ? Number(esperado.min) : -Infinity;
-        const max = esperado.max != null ? Number(esperado.max) : Infinity;
-        return v >= min && v <= max;
-      }
-      case 'existe': return valor !== undefined && valor !== null && valor !== '';
+
+    const actual = this._leerCampo(informe, campo);
+
+    if (operador === 'existe') return actual !== undefined && actual !== null;
+    if (operador === 'no_existe') return actual === undefined || actual === null;
+    if (actual === undefined || actual === null) return false; // sin valor no se dispara (no se estima)
+
+    const umbral = regla.umbral !== undefined ? regla.umbral : regla.valor;
+    const a = this._num(actual);
+    const b = this._num(umbral);
+    if (a === null || b === null) {
+      // Comparacion no numerica: igualdad estricta de texto.
+      const sa = String(actual);
+      const sb = String(umbral);
+      if (operador === '==') return sa === sb;
+      if (operador === '!=') return sa !== sb;
+      return false;
+    }
+    switch (operador) {
+      case '<': return a < b;
+      case '<=': return a <= b;
+      case '>': return a > b;
+      case '>=': return a >= b;
+      case '==': return a === b;
+      case '!=': return a !== b;
       default: return false;
     }
   }
 
-  _campo(obj, ruta) {
-    return String(ruta).split('.').reduce((o, k) => (o && typeof o === 'object' ? o[k] : undefined), obj);
-  }
-
-  // ── FUZZY: 1 llamada llm.complete.request con el guion + el informe + las reglas ──
-  async _concluir(informe, reglas) {
-    const resp = await this._rpc('llm.complete.request', {
-      system: GUION_INFORME,
-      messages: [{ role: 'user', content: JSON.stringify({ informe, reglas_declaradas: reglas }) }],
-      tools: [], settings: { temperature: 0.3 }
-    }, { timeout_ms: 30000 }).catch(() => null);
-    if (!resp || resp.status >= 400) return null;
-    return this._parse(resp);
-  }
-
-  _parse(resp) {
-    let c = resp?.data?.content ?? resp?.content ?? resp?.data?.text ?? resp?.text ?? '';
-    if (c && typeof c === 'object') return c;
-    if (typeof c !== 'string') return null;
-    c = c.replace(/```json/gi, '').replace(/```/g, '').trim();
-    const i = c.indexOf('{'), j = c.lastIndexOf('}');
-    if (i < 0 || j < 0 || j < i) return null;
-    try { return JSON.parse(c.slice(i, j + 1)); } catch { return null; }
-  }
-
-  // Valida la propuesta fuzzy: exige qué hacer; acepta prioridad declarada.
-  _recomendacionDe(a) {
-    if (!a || a.puede !== true) return null;
-    const que_hacer = a.recomendacion != null ? String(a.recomendacion).trim() : '';
-    if (!que_hacer) return null;
-    const prioridad = a.prioridad != null ? String(a.prioridad).toLowerCase() : null;
-    const confianza = typeof a.confianza === 'number' && a.confianza >= 0 && a.confianza <= 1 ? a.confianza : null;
-    return {
-      que_hacer,
-      motivo: a.motivo != null ? String(a.motivo) : null,
-      base: a.base != null ? String(a.base) : null,
-      prioridad: ['alta', 'media', 'baja'].includes(prioridad) ? prioridad : null,
-      confianza
-    };
-  }
-
-  // El informe declarado o, si no, el que COMPONE informe-rico (K3) POR EVENTO. No se recalcula.
-  async _informe(pid, input = {}) {
-    const inf = input.informe || input.i;
-    if (inf && typeof inf === 'object') return inf;
-    const r = await this._rpc('informe-rico.componer.request', {
-      project_id: pid,
-      cifra: input.cifra,
-      periodo: input.periodo,
-      origen: input.origen,
-      unidad: input.unidad,
-      comparativa: input.comparativa,
-      notas: input.notas
-    }, { timeout_ms: 5000 }).catch(() => null);
-    const data = r && r.data ? r.data : null;
-    if (data && data.informe) return data.informe;
-    return null;
-  }
-
-  // ¿El informe trae base sobre la que recomendar? Cifra + contexto, o al menos cifra.
-  _baseSuficiente(informe) {
-    if (!informe || typeof informe !== 'object') return false;
-    if (informe.cifra !== undefined && informe.cifra !== null) return true;
-    if (informe.contexto && typeof informe.contexto === 'object') return true;
-    // Un informe con narracion/valores declarados tambien vale como base.
-    return informe.valor !== undefined && informe.valor !== null;
+  // Lee un campo del informe por ruta con puntos (a.b.c). Ausente → undefined.
+  _leerCampo(obj, ruta) {
+    if (!obj || typeof obj !== 'object') return undefined;
+    let cur = obj;
+    for (const parte of String(ruta).split('.')) {
+      if (cur === null || cur === undefined || typeof cur !== 'object') return undefined;
+      cur = cur[parte];
+    }
+    return cur;
   }
 
   _reglas(input = {}) {
-    const r = input.reglas || (input.criterio && input.criterio.reglas);
-    return Array.isArray(r) ? r : [];
+    const raw = Array.isArray(input.reglas) ? input.reglas
+      : (Array.isArray(input.acciones) ? input.acciones
+        : (input.criterio && Array.isArray(input.criterio.reglas) ? input.criterio.reglas : []));
+    return raw;
+  }
+
+  _num(v) {
+    if (v === undefined || v === null || v === '') return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
   }
 
   // ── Tools ──

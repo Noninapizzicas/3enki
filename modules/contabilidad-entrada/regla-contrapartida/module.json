@@ -1,21 +1,29 @@
 {
-  "_doc": "Manifest de contabilidad-entrada/regla-contrapartida — CUSTODIO CON PERSISTENCIA (A6.2, hoja del plan). Parcela de las REGLAS DECLARABLES/APRENDIDAS de contrapartida ('este proveedor → esta cuenta'). Es el CORTE DURO: lo que `aplicar` devuelve como cubierta:true es lo que se puede asentar; lo que no cubre NO se inventa (queda sin propuesta y va a la cola de excepcion A8.1). UN SOLO ESCRITOR: el camino de aprendizaje (ratificacion desde fuera L10, ROL_ESCRITOR=RATIFICACION_REGLA_APRENDIDA); cualquier otro rol es rechazado (403). Invariantes: `aplicar` NO muta (consulta determinista regla→apunte, primera regla en orden de entrada cuya condicion casa, criterios AND: tercero_nif, vertical, tipo, concepto_contiene); `proponer` es la escritura y es APPEND-ONLY (id ya presente → 409, no se sobrescribe); la cuenta se verifica contra el plan declarado (catalogo-cuentas B1) POR EVENTO — si el plan dice que no existe → 422 CUENTA_FUERA_DEL_PLAN, si el plan no esta disponible (timeout) se acepta y se declara cuenta_verificada:false (nunca se asume verificado); un criterio que el hecho no aporta NO casa (dato ausente ≠ dato coincidente). Persiste por proyecto con PosPersistencia (storage /contabilidad/regla-contrapartida/regla-contrapartida.json), restaura en project.activated y vuelca en onUnload. Proyecciones: `_aplicar` · `_proponer`. Publica contabilidad.regla_contrapartida_propuesta.",
+  "_doc": "Manifest de entrada/regla-contrapartida — CUSTODIO CON PERSISTENCIA (A6.2, hoja del plan). La parcela de REGLAS declarables/aprendidas ('este proveedor → esta cuenta'): UN solo escritor. La op declarar (ORDEN, panel) registra una regla con su contexto y su cuenta; si nace APRENDIDA NO opera hasta que el asesor la ratifique (gate L10 ratificacion-regla-aprendida). Las ops aplicar y proponer son PREGUNTA y van por el bus. ESCUCHA contabilidad.regla_ratificada (ratificacion-regla-aprendida L10) para dejar la regla operativa/inerte, y contabilidad.excepcion_desatascada (desatasco-entrada P3) para registrar una regla aprendida nueva — ambos handlers fire-and-forget (no-RPC) que, al ESCRIBIR, anuncian contabilidad.contrapartida_regla_declarada (R2). Dato ausente = desconocido: sin regla declarada no se inventa contrapartida. No se borra: re-declarar appendea al historial. Persiste por proyecto via PosPersistencia (_shared/pos-persistencia, storage /contabilidad/regla-contrapartida), restaura en project.activated y vuelca en onUnload. Guard de escritor (solo rol REGLA_CONTRAPARTIDA; segundo escritor → 403). Publica *.response/*.failed y contabilidad.contrapartida_regla_declarada.",
   "name": "regla-contrapartida",
   "version": "0.1.0",
-  "description": "Custodio (A6.2): la parcela de reglas declarables/aprendidas de contrapartida — el corte duro proveedor→cuenta; un solo escritor (el aprendizaje entra por ratificacion) y lo que no cubre no se inventa.",
-  "blueprint_driven": true,
-  "blueprint_path": "regla-contrapartida.blueprint.json",
+  "description": "Custodio (A6.2): parcela de reglas de contrapartida (contexto → cuenta). Declara, propone y aplica; las reglas aprendidas no operan hasta su ratificacion. Persistente por proyecto.",
   "language": "es",
   "subscribes": [
     {
       "event": "regla-contrapartida.aplicar.request",
       "handler": "onAplicarRequest",
-      "description": "RPC custodio (corte duro, NO muta): {project_id, hecho} → {cubierta, corte:'regla', regla, apunte:{cuenta, tercero, periodo}, reglas_evaluadas}. Aplica la primera regla (orden de entrada, determinista) cuya condicion casa el hecho (criterios AND). Sin regla que cubra → {cubierta:false, apunte:null, motivo, requiere_cola:true, destino_cola:'ASESOR'}: NO se inventa la cuenta. Responde por regla-contrapartida.aplicar.response; project_id o hecho ausente → regla-contrapartida.aplicar.failed."
+      "description": "RPC custodio (PREGUNTA, por el bus): {project_id, contexto?} → {project_id, contexto, contrapartida, regla, aplicada, opera, abierto, motivo}. Aplica la contrapartida del contexto declarado segun la regla vigente (solo operan las declaradas o las aprendidas ratificadas). Sin regla → contrapartida:null (no se inventa). Responde por regla-contrapartida.aplicar.response."
     },
     {
       "event": "regla-contrapartida.proponer.request",
       "handler": "onProponerRequest",
-      "description": "RPC custodio (escritura, UN escritor): {project_id, rol:'RATIFICACION_REGLA_APRENDIDA', regla:{id?, condicion, apunte:{cuenta, tercero?, periodo?}, origen?}} → {regla, cuenta_verificada, anadida}. Guard Rol=RATIFICACION_REGLA_APRENDIDA (segundo escritor → 403). Append-only: id ya presente → 409. La cuenta se verifica contra el plan declarado por evento: fuera del plan → 422; plan no disponible → se acepta con cuenta_verificada:false. Exito → publica contabilidad.regla_contrapartida_propuesta y responde por regla-contrapartida.proponer.response; invalido → regla-contrapartida.proponer.failed."
+      "description": "RPC custodio (PREGUNTA, por el bus): {project_id, hecho?, contexto?} → {project_id, contexto, propuesta, propuesta_disponible, abierto}. Propone la contrapartida para un hecho; el sistema propone y el humano declara. Sin regla → propuesta:null. Responde por regla-contrapartida.proponer.response."
+    },
+    {
+      "event": "regla-contrapartida.declarar.request",
+      "handler": "onDeclararRequest",
+      "description": "RPC custodio (ORDEN, panel): {project_id, rol:'REGLA_CONTRAPARTIDA', regla{contexto?, cuenta?, origen?}} → {project_id, clave, regla, declarada, pendiente_ratificacion, abierto}. Guard de escritor (solo REGLA_CONTRAPARTIDA; otro rol → PERMISSION_DENIED). Registra la regla; si nace APRENDIDA queda pendiente del asesor (L10). Publica contabilidad.contrapartida_regla_declarada y responde por regla-contrapartida.declarar.response."
+    },
+    {
+      "event": "contabilidad.regla_ratificada",
+      "handler": "onReglaRatificada",
+      "description": "Fire-and-forget (lo emite ratificacion-regla-aprendida L10): el asesor se pronuncio sobre una regla aprendida → {project_id, regla, decision, actua, por}. Deja la regla operativa (actua:true) o inerte y publica contabilidad.contrapartida_regla_declarada (R2). No responde (no es RPC)."
     },
     {
       "event": "project.activated",
@@ -25,40 +33,40 @@
   ],
   "publishes": [
     {
+      "event": "contabilidad.contrapartida_regla_declarada",
+      "description": "Fire-and-forget (A6.2): una regla de contrapartida quedo declarada, o cambio de estado (ratificada/bloqueada, aprendida) → {project_id, clave, regla, ratificada?}. Lo consume control-calidad-muestreo."
+    },
+    {
       "event": "regla-contrapartida.aplicar.response",
-      "description": "Respuesta RPC correlada de regla-contrapartida.aplicar.request → {request_id, status:200, data:{cubierta, corte, regla, apunte, motivo, requiere_cola, destino_cola, reglas_evaluadas}}. Emitida por el helper _atender."
+      "description": "Respuesta RPC correlada de la op aplicar (PREGUNTA)."
     },
     {
       "event": "regla-contrapartida.aplicar.failed",
-      "description": "Par de fallo determinista (A6.2): project_id o hecho ausente → {status, error:{code, message, details?}}. Cierra el circulo de regla-contrapartida.aplicar.request."
+      "description": "Par de fallo determinista: falta project_id → {status, code, message}. Cierra el circulo de aplicar.request."
     },
     {
       "event": "regla-contrapartida.proponer.response",
-      "description": "Respuesta RPC correlada de regla-contrapartida.proponer.request → {request_id, status:200, data:{regla, cuenta_verificada, anadida}}. Emitida por el helper _atender."
+      "description": "Respuesta RPC correlada de la op proponer (PREGUNTA)."
     },
     {
       "event": "regla-contrapartida.proponer.failed",
-      "description": "Par de fallo determinista (A6.2): rol != RATIFICACION_REGLA_APRENDIDA (segundo escritor), regla sin condicion o sin cuenta de apunte, id ya presente (409) o cuenta fuera del plan (422) → {status, error:{code, message, details?}}. Cierra el circulo de regla-contrapartida.proponer.request."
+      "description": "Par de fallo determinista: falta project_id → {status, code, message}. Cierra el circulo de proponer.request."
     },
     {
-      "event": "contabilidad.regla_contrapartida_propuesta",
-      "description": "Fire-and-forget (A6.2): una regla de contrapartida quedo propuesta → {project_id, regla, cuenta_verificada, correlation_id}. Lo consume la ratificacion de reglas aprendidas (L10), que la hidrata de vuelta."
+      "event": "regla-contrapartida.declarar.response",
+      "description": "Respuesta RPC correlada de la op declarar."
+    },
+    {
+      "event": "regla-contrapartida.declarar.failed",
+      "description": "Par de fallo determinista: rol != REGLA_CONTRAPARTIDA, falta la regla o su contexto/cuenta → {status, code, message}. Cierra el circulo de declarar.request."
     }
   ],
+  "tools": [
+    { "name": "regla-contrapartida.aplicar", "description": "Aplica (PREGUNTA) la contrapartida del contexto segun la regla vigente." },
+    { "name": "regla-contrapartida.proponer", "description": "Propone (PREGUNTA) la contrapartida para un hecho segun la regla vigente." },
+    { "name": "regla-contrapartida.declarar", "description": "Declara (ORDEN) una regla de contrapartida (contexto → cuenta)." }
+  ],
   "ui_handlers": [
-    {
-      "domain": "contabilidad",
-      "action": "regla-contrapartida.aplicar",
-      "handler": "onAplicarRequest",
-      "type": "workspace_module",
-      "zone": "barra_modulos"
-    },
-    {
-      "domain": "contabilidad",
-      "action": "regla-contrapartida.proponer",
-      "handler": "onProponerRequest",
-      "type": "workspace_module",
-      "zone": "barra_modulos"
-    }
+    { "domain": "contabilidad", "action": "regla-contrapartida.declarar", "handler": "onDeclararRequest", "type": "workspace_module", "zone": "barra_modulos" }
   ]
 }

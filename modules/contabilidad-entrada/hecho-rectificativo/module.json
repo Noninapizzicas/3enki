@@ -1,29 +1,39 @@
 {
-  "_doc": "Manifest de contabilidad-entrada/hecho-rectificativo — PUENTE STATELESS (A13, hoja del plan). Conecta el hecho POSTERIOR que corrige/anula uno anterior POR CLAVE NATURAL. Invariante 3: el original NO se borra; la correccion SUMA (append-only); este puente no muta el asiento original — emite la RECTIFICACION (enlace Hecho↔Hecho) que el libro apilara. Uno de los cuatro planos de correccion (B5·A13·O2·D14), ligados por mapa canonico; TRES actos, no uno. La clave natural la da clave-natural (M3) POR EVENTO (nunca se cablea una forma). Si no se puede determinar el objetivo (la clave a la que rectifica), NO se inventa el enlace: se declara emparejado:false con su motivo. El tipo RECTIFICA vs ANULA se DERIVA del hecho (o se declara); no se asume — default honesto RECTIFICA. FORMA: PUENTE stateless — sin PosPersistencia, sin onProjectActivated. Proyeccion `_emparejar`. Publica contabilidad.hecho_rectificado.",
+  "_doc": "Manifest de entrada/hecho-rectificativo — PUENTE (A13, hoja del plan). Conecta el hecho POSTERIOR que corrige/anula uno ANTERIOR por CLAVE NATURAL: NO borra, AÑADE (borra_original:false; el original se apunta, nunca se edita). Frontera: empareja y ANUNCIA contabilidad.hecho_rectificado; quien ESCRIBE el libro es B2 (escritor-diario), que ESCUCHA el hecho. Sube best-effort clave-natural.calcular.request para que el calculador canonico confirme la clave. Sin clave natural NO se empareja (no se adivina contra que corrige). NO escribe, NO persiste. RPC emparejar es CLASE ORDEN → SÍ lleva ui_handler. Publica hecho-rectificativo.emparejar.response y su par .failed ademas del hecho contabilidad.hecho_rectificado. Escucha contabilidad.hecho_recibido (A1/A2).",
   "name": "hecho-rectificativo",
   "version": "0.1.0",
-  "description": "Puente stateless (A13): conecta el hecho posterior que corrige/anula uno anterior por clave natural — el original no se borra, la correccion SUMA (append-only); se declara, nunca se fabrica, el enlace.",
+  "description": "Puente (A13): une el hecho posterior que corrige/anula uno anterior por clave natural. No borra, anade; anuncia contabilidad.hecho_rectificado.",
   "language": "es",
   "subscribes": [
     {
       "event": "hecho-rectificativo.emparejar.request",
       "handler": "onEmparejarRequest",
-      "description": "RPC puente: {project_id, rectificativo, original?, rectifica_a?, tipo?, motivo?} → {emparejado:true, enlace:{original_clave, rectificativo_clave, tipo:'RECTIFICA'|'ANULA', borra_original:false, anade:true, append_only:true}, origen_clave, original_mutado:false}. Empareja por clave natural (clave-natural M3, por evento). Sin objetivo determinable → {emparejado:false, motivo} (no se inventa el enlace). Exito → publica contabilidad.hecho_rectificado y responde por hecho-rectificativo.emparejar.response; rectificativo ausente → hecho-rectificativo.emparejar.failed."
+      "description": "RPC puente (ORDEN, panel): {project_id, hecho{clave_natural?,accion?,asiento?}, clave?, accion?} → {project_id, emparejado, clave, accion, rectificativo, escritor:'escritor-diario', abierto}. Empareja por clave natural y publica contabilidad.hecho_rectificado (no borra el original). Sin hecho → INVALID_INPUT; sin clave → emparejado:false (no se adivina). Responde por hecho-rectificativo.emparejar.response. Payload invalido → hecho-rectificativo.emparejar.failed."
+    },
+    {
+      "event": "contabilidad.hecho_recibido",
+      "handler": "onHechoRecibido",
+      "description": "Fire-and-forget (A1/A2): llego un hecho de la operacion. Si el hecho SE DECLARA rectificativo (es_rectificativo/tipo='rectificativo'/corrige), se empareja automaticamente por su clave natural y se anuncia contabilidad.hecho_rectificado; si no, se ignora."
     }
   ],
   "publishes": [
     {
+      "event": "contabilidad.hecho_rectificado",
+      "description": "Fire-and-forget (A13): un hecho posterior corrige/anula uno anterior por clave natural → {project_id, rectificativo, clave, accion, asiento}. Lo consume escritor-diario (B2), que asienta lo que traiga el hecho rectificativo."
+    },
+    {
       "event": "hecho-rectificativo.emparejar.response",
-      "description": "Respuesta RPC correlada de hecho-rectificativo.emparejar.request → {request_id, status:200, data:{emparejado, enlace, origen_clave, original_mutado}}. Emitida por el helper _atender."
+      "description": "Respuesta RPC correlada de la op emparejar."
     },
     {
       "event": "hecho-rectificativo.emparejar.failed",
-      "description": "Par de fallo determinista (A13): rectificativo ausente/invalido → {status, error:{code, message, details?}}. Cierra el circulo de hecho-rectificativo.emparejar.request."
-    },
-    {
-      "event": "contabilidad.hecho_rectificado",
-      "description": "Fire-and-forget (A13): una rectificacion quedo emparejada append-only → {project_id, enlace, rectificativo_clave, original_clave, tipo, correlation_id}. Lo consume escritor-diario (B2) para apilar el asiento rectificativo sin tocar el original."
+      "description": "Par de fallo determinista: falta project_id o hecho → {status, code, message}. Cierra el circulo de emparejar.request."
     }
   ],
-  "_ui": "sin superficie: su cara es el bus (puente/observador puro)"
+  "tools": [
+    { "name": "hecho-rectificativo.emparejar", "description": "Empareja (ORDEN) un hecho rectificativo con el anterior por clave natural y anuncia el hecho." }
+  ],
+  "ui_handlers": [
+    { "domain": "contabilidad", "action": "hecho-rectificativo.emparejar", "handler": "onEmparejarRequest", "type": "system_panel", "zone": "lateral_derecha" }
+  ]
 }

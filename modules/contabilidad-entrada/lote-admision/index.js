@@ -1,25 +1,27 @@
 /**
  * contabilidad-entrada/lote-admision — REFLEJO STATELESS (A9, hoja del plan).
  *
- * DESACOPLE DEL CUELLO: la admision de hechos no se serializa. Parte una entrada de N
- * hechos en LOTES de tamano declarable, cada uno con su `hecho_id` estable, para que se
- * admitan EN PARALELO.
+ * DESACOPLE DEL CUELLO: N hechos en paralelo. El paralelismo es de ADMISION;
+ * la ESCRITURA sigue unica (la hace escritor-diario B2, single-writer del libro).
+ *
+ * Esta hoja NO escribe el libro ni normaliza: REPARTE el lote y SUBE cada elemento
+ * por EVENTO a quien le toca (normalizador-hecho A2 y, si el elemento ya trae su
+ * asiento, escritor-diario B2). El reflejo decide y declara; el trabajo lo hacen
+ * los custodios por su propio camino.
  *
  * Invariantes:
- *  - DETERMINISTA: misma entrada + mismo tamano → EXACTAMENTE los mismos lotes, con los
- *    mismos ids y el mismo orden. No hay azar, ni reloj, ni estado.
- *  - El hecho_id es estable (sello de la posicion + la clave del hecho): reprocesar la
- *    misma entrada da los mismos ids.
- *  - No se pierde ni se inventa nada: la union de los lotes es exactamente la entrada.
- *  - Tamano no declarado o invalido → 1 (sin lote no hay desacople; se declara `tamano_declarado:false`).
+ *  - SIN lote declarado NO se admite nada (dato ausente = desconocido): no se fabrica un lote vacio.
+ *  - UN solo escritor del libro: la admision encola contra `escritor-diario`, no escribe ella.
+ *  - `paralelo` es un HECHO de la admision (cuantas ramas se abrieron), no una promesa.
+ *  - Determinista: mismo lote → mismo reparto.
  *
- * Forma: REFLEJO → STATELESS. Sin PosPersistencia, sin onProjectActivated.
+ * R3 · ESCUCHA: el plan declara `—` (ninguno); no se anade ninguna sin emisor.
+ * Forma: REFLEJO → STATELESS. Sin PosPersistencia, sin onProjectActivated. RPC PREGUNTA → sin ui_handler.
  * Ver hoja A9 del plan-construccion y diseno-oop.md (CLASE LoteAdmision).
  */
 
 'use strict';
 
-const crypto = require('crypto');
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
 
 class LoteAdmision extends ModuloHibridoReflejo {
@@ -31,99 +33,83 @@ class LoteAdmision extends ModuloHibridoReflejo {
 
   async onUnload() { return super.onUnload(); }
 
+  // ── handler RPC (una linea, delega a _atender). CLASE PREGUNTA → sin ui_handler ──
   onAdmitirRequest(e) {
     return this._atender(e, 'admitir', 'lote-admision.admitir.response', async (d) => {
       const res = this._admitir(d);
+      // Reflejo: reparte y declara; no escribe el libro → no hay hecho de dominio que anunciar (R2).
       if (res.status !== 200) this.eventBus?.publish('lote-admision.admitir.failed', res);
+      else this._encolar(res, d);
       return res;
     });
   }
 
-  // ── Fire-and-forget del flujo: cada hecho normalizado entra como lote de uno ──
-  onHechoNormalizado(e) {
-    const d = (e && (e.data || e)) || {};
-    if (!d.project_id) return null;
-    return this._admitir({
-      project_id: d.project_id,
-      hechos: d.hecho ? [d.hecho] : [],
-      tamano_lote: d.tamano_lote,
-      correlation_id: d.correlation_id
-    });
-  }
-
-  // ── proyeccion determinista: admitir(entrada) → Flujo<Lote> ──
+  // ══════════════════════════════════════════════════════════════════════
+  // admitir(lote) → reparto del lote (paralelismo de ADMISION)
+  // ══════════════════════════════════════════════════════════════════════
   _admitir(input = {}) {
     const pid = input.project_id || this.project_id;
     if (!pid) return this._invalid('project_id');
 
-    // La entrada: lista de hechos, o un hecho suelto.
-    const hechos = Array.isArray(input.hechos)
-      ? input.hechos
-      : (input.hecho && typeof input.hecho === 'object' ? [input.hecho] : null);
-    if (!hechos) return this._invalid('hechos');
-    if (hechos.some(h => !h || typeof h !== 'object')) return this._invalid('hechos[i]');
+    const lote = Array.isArray(input.lote) ? input.lote
+      : (Array.isArray(input.hechos) ? input.hechos
+        : (Array.isArray(input.elementos) ? input.elementos : null));
+    if (lote === null) return this._invalid('lote');
 
-    // Tamano DECLARABLE. Sin declarar o invalido → 1, y se declara en la salida.
-    const tamano_declarado = Number.isInteger(input.tamano_lote) && input.tamano_lote > 0;
-    const tamano = tamano_declarado ? input.tamano_lote : 1;
+    const elementos = lote.filter((h) => h && typeof h === 'object');
+    const descartados = lote.length - elementos.length;
 
-    const total_lotes = Math.ceil(hechos.length / tamano);
-    const lotes = [];
-    for (let i = 0; i < total_lotes; i++) {
-      const rebanada = hechos.slice(i * tamano, (i + 1) * tamano);
-      const items = rebanada.map((h, j) => {
-        const pos = i * tamano + j;
-        // hecho_id ESTABLE: sello de la posicion + la clave natural del hecho (si la trae).
-        const clave = this._claveDe(h);
-        return {
-          pos,
-          hecho_id: this._sello(`${pid}|${pos}|${clave || ''}`),
-          clave,
-          hecho: h,
-          en_abierto: this._enAbierto(h)
-        };
-      });
-      lotes.push({
-        indice: i,
-        lote_id: this._sello(`${pid}|lote|${i}|${tamano}`),
-        tamano: items.length,
-        items
-      });
-    }
+    // El reparto es determinista: cada elemento se admite con su indice (su rama).
+    const ramas = elementos.map((hecho, i) => ({
+      indice: i,
+      hecho,
+      destino: input.destino != null ? String(input.destino) : 'normalizador-hecho',
+      con_asiento: Boolean(hecho.asiento)
+    }));
 
     return {
       status: 200,
       data: {
         project_id: pid,
-        total_hechos: hechos.length,
-        tamano,
-        tamano_declarado,
-        total_lotes,
-        lotes,
-        // La union de los lotes ES la entrada: nada se pierde ni se inventa.
-        cubre_entrada: lotes.reduce((n, l) => n + l.items.length, 0) === hechos.length
+        admitidos: ramas.length,
+        descartados,
+        paralelo: ramas.length > 1,
+        ramas,
+        // Un solo escritor del libro: la admision NO asienta; encola contra escritor-diario.
+        escritura: 'unica (escritor-diario)',
+        determinista: true,
+        abierto: {
+          lote: ramas.length ? null : 'el lote no traia elementos declarados (no se admite nada, no se inventa)',
+          descartados: descartados ? `${descartados} elemento(s) sin forma de objeto fueron descartados` : null
+        }
       }
     };
   }
 
-  _claveDe(h) {
-    if (h.clave_natural !== undefined && h.clave_natural !== null && h.clave_natural !== '') {
-      return String(h.clave_natural);
+  // SUBE (best-effort) cada rama por EVENTO: el trabajo lo hacen los custodios, no esta hoja.
+  _encolar(res, d) {
+    const pid = res.data.project_id;
+    for (const rama of res.data.ramas) {
+      try {
+        this.eventBus?.publish('normalizador-hecho.entrar.request', {
+          project_id: pid,
+          hecho: rama.hecho,
+          correlation_id: d.correlation_id
+        });
+        // Solo encola contra el libro si el elemento YA DECLARA su asiento: no se inventa un apunte.
+        if (rama.con_asiento) {
+          this.eventBus?.publish('escritor-diario.asentar.request', {
+            project_id: pid,
+            asiento: rama.hecho.asiento,
+            origen: 'lote-admision',
+            correlation_id: d.correlation_id
+          });
+        }
+      } catch (_) { /* best-effort */ }
     }
-    return null;
   }
 
-  // Campos que el hecho trae abiertos (null), si los declara. Nada se estima.
-  _enAbierto(h) {
-    if (!Array.isArray(h.abierto)) return [];
-    return h.abierto.map(String);
-  }
-
-  // Sello estable y corto (determinista, sin reloj ni azar).
-  _sello(semilla) {
-    return crypto.createHash('sha1').update(semilla, 'utf8').digest('hex').slice(0, 16);
-  }
-
+  // ── Tools ──
   toolAdmitir(params) { return this._admitir(params); }
 }
 

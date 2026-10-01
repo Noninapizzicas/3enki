@@ -1,17 +1,19 @@
 /**
  * contabilidad-libro/periodificacion — REFLEJO STATELESS (C3, hoja del plan).
  *
- * Imputa cada hecho a su PERIODO con el CRITERIO DECLARADO (devengo vs caja).
- * Los criterios son PARÁMETROS DECLARABLES, no constantes cableadas: sin criterio
- * declarado no se elige — se declara `elegido:false` y se conservan ambas fechas.
+ * Imputa cada hecho a su PERIODO con el criterio DECLARADO; CONSERVA fecha operación y fecha valor.
+ * No estima el periodo: lo deriva del hecho y del criterio declarado. Sin criterio, el hecho NO se
+ * imputa a un periodo inventado: queda `periodo:null` y se declara ABIERTO.
  *
- * Invariante (C3): CONSERVA la fecha de operación y la fecha valor; NO elige por su
- * cuenta. Se puede pedir la imputación por devengo (fecha_operacion) o por caja
- * (fecha_valor) declarándolo; si no se declara, no se decide en silencio.
+ * Invariantes:
+ *  - El CRITERIO de imputación es DECLARABLE: `fecha_operacion` (por defecto — el día en que ocurrió),
+ *    `fecha_valor` o un `criterio` con `mes_corte` (mes de cierre, p.ej. 12 = año natural). No se cablea
+ *    un criterio de negocio: entra como dato.
+ *  - Se CONSERVAN SIEMPRE ambas fechas (fecha_operacion y fecha_valor): no se pierde ninguna.
+ *  - Sin `fecha_operacion` → `periodo:null` (dato ausente = desconocido), no un periodo por defecto.
+ *  - El periodo se expresa como `AAAA-MM` (o `AAAA` con `granularidad:'anual'`), recortado al `mes_corte`.
  *
- * Determinista: mismo hecho + mismo criterio → mismo periodo. No muta el hecho.
- *
- * Forma: REFLEJO → STATELESS. Sin PosPersistencia, sin onProjectActivated.
+ * Forma: REFLEJO → STATELESS. Sin PosPersistencia, sin onProjectActivated. RPC PREGUNTA → sin ui_handler.
  * Ver hoja C3 del plan-construccion y diseno-oop.md (CLASE Periodificacion).
  */
 
@@ -19,116 +21,138 @@
 
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
 
-// Criterios declarables conocidos (el DATO, no la constante). Se puede declarar otro.
-const CRITERIOS = { DEVENGO: 'fecha_operacion', CAJA: 'fecha_valor' };
-// Unidad de cierre por defecto (declarable): el periodo al que se imputa.
-const UNIDAD_DEFECTO = 'mes';
+function esFecha(v) {
+  if (v == null || v === '') return null;
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
 
 class Periodificacion extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'periodificacion';
     this.version = 'reflejo-0.1.0';
-    // espejo en memoria de los hechos (fallback si no viene el hecho en el payload)
-    this._espejo = new Map();
   }
 
   async onUnload() { return super.onUnload(); }
 
-  // ── fire-and-forget: el diario registró un asiento → se refleja la muestra del hecho ──
-  onAsientoRegistrado(e) {
-    const d = (e && (e.data || e)) || {};
-    const pid = d.project_id;
-    const asiento = d.asiento;
-    if (!pid || !asiento || typeof asiento !== 'object') return null;
-    const clave = asiento.clave_natural != null ? String(asiento.clave_natural)
-      : (asiento.numero != null ? String(asiento.numero) : null);
-    if (!clave) return null;
-    const m = this._espejoDe(pid);
-    m.set(clave, asiento);
-    return null;
-  }
-
-  // ── handler RPC (una línea, delega a _atender) ──
+  // ── handler RPC (una linea, delega a _atender). CLASE PREGUNTA → sin ui_handler ──
   onImputarRequest(e) {
     return this._atender(e, 'imputar', 'periodificacion.imputar.response', async (d) => {
       const res = this._imputar(d);
+      // PREGUNTA: no escribe → no hay hecho que anunciar (R2). Su cara es el bus.
       if (res.status !== 200) this.eventBus?.publish('periodificacion.imputar.failed', res);
+      else if (res.data && res.data.criterio_declarado === false) {
+        this._subirPeticionCriterio(res.data.project_id);
+      }
       return res;
     });
   }
 
-  // ── IMPUTAR: cada hecho a su periodo con el criterio declarado (CONSERVA ambas fechas) ──
+  // ══════════════════════════════════════════════════════════════════════
+  // imputar(hecho) → periodo, conservando fecha operación y fecha valor
+  // ══════════════════════════════════════════════════════════════════════
   _imputar(input = {}) {
-    const pid = input.project_id || this.project_id;
-    if (!pid) return this._invalid('project_id');
+    const pid = input.project_id || this.project_id || null;
 
-    // El hecho puede venir en el payload; si no, se toma del espejo por su clave.
-    let hecho = input.hecho || input.asiento || null;
-    if (!hecho && input.clave_natural != null) hecho = this._espejoDe(pid).get(String(input.clave_natural)) || null;
-    if (!hecho || typeof hecho !== 'object') return this._invalid('hecho');
+    const hecho = input.hecho && typeof input.hecho === 'object' ? input.hecho
+      : (input.elemento && typeof input.elemento === 'object' ? input.elemento : null);
+    if (!hecho) return this._invalid('hecho');
 
-    // ── CONSERVA las dos fechas; no elige. ──
-    const fecha_operacion = this._fecha(
-      input.fecha_operacion ?? hecho.fecha_operacion ?? hecho.fecha ?? null);
-    const fecha_valor = this._fecha(
-      input.fecha_valor ?? hecho.fecha_valor ?? hecho.fecha ?? null);
+    // Las dos fechas SIEMPRE se conservan; admiten variantes de nombre.
+    const fOperacion = this._fecha(input.fecha_operacion != null ? input.fecha_operacion
+      : (hecho.fecha_operacion != null ? hecho.fecha_operacion : hecho.fecha));
+    const fValor = this._fecha(input.fecha_valor != null ? input.fecha_valor : hecho.fecha_valor);
 
-    // ── El CRITERIO es declarable (devengo|caja|declarado a mano). Sin criterio → no elige. ──
-    const criterio = input.criterio != null ? String(input.criterio).toUpperCase() : null;
-    const unidad = input.unidad_cierre != null ? String(input.unidad_cierre) : UNIDAD_DEFECTO;
-    const campo = criterio && CRITERIOS[criterio] ? CRITERIOS[criterio]
-      : (input.campo_fecha != null ? String(input.campo_fecha) : null);
+    // Criterio DECLARABLE: qué fecha gobierna el periodo + mes de corte.
+    const criterio = input.criterio && typeof input.criterio === 'object' ? input.criterio : null;
+    const por = this._por(input, criterio);              // 'operacion' | 'valor'
+    const gran = input.granularidad != null ? String(input.granularidad) : 'mensual';
+    const mesCorte = this._mesCorte(input.mes_corte != null ? input.mes_corte : (criterio ? criterio.mes_corte : null));
 
-    let elegido = false;
-    let fecha_imputada = null;
-    if (campo === 'fecha_operacion') { fecha_imputada = fecha_operacion; elegido = fecha_operacion != null; }
-    else if (campo === 'fecha_valor') { fecha_imputada = fecha_valor; elegido = fecha_valor != null; }
+    const fechaGobierna = por === 'valor' ? fValor : fOperacion;
 
-    const periodo = elegido ? this._periodo(fecha_imputada, unidad) : null;
+    // Sin la fecha que gobierna el periodo NO se inventa uno: se declara ABIERTO.
+    if (!fechaGobierna) {
+      return {
+        status: 200,
+        data: {
+          project_id: pid,
+          fecha_operacion: fOperacion ? fOperacion.toISOString() : null,
+          fecha_valor: fValor ? fValor.toISOString() : null,
+          periodo: null,
+          por,
+          granularidad: gran,
+          mes_corte: mesCorte,
+          criterio_declarado: Boolean(criterio),
+          abierto: {
+            periodo: `no hay fecha de ${por === 'valor' ? 'valor' : 'operación'}: el periodo no se estima`
+          }
+        }
+      };
+    }
+
+    const periodo = this._periodo(fechaGobierna, gran, mesCorte);
 
     return {
       status: 200,
       data: {
         project_id: pid,
-        clave_natural: hecho.clave_natural != null ? String(hecho.clave_natural) : null,
-        // Se CONSERVAN las dos fechas aunque se elija una para imputar.
-        fecha_operacion,
-        fecha_valor,
-        criterio: criterio,
-        unidad_cierre: unidad,
-        campo_fecha: campo,
-        // Sin criterio declarado no se elige: se declara el [ABIERTO].
-        elegido,
-        fecha_imputada: elegido ? fecha_imputada : null,
+        // Se CONSERVA todo: la fecha operación y la fecha valor viajan siempre.
+        fecha_operacion: fOperacion ? fOperacion.toISOString() : null,
+        fecha_valor: fValor ? fValor.toISOString() : null,
         periodo,
-        abierto: elegido ? [] : ['criterio'],
-        motivo: elegido ? `imputado por ${criterio}` : 'sin criterio declarado: no se elige (devengo vs caja es una decisión, no un default)'
+        por,
+        granularidad: gran,
+        mes_corte: mesCorte,
+        criterio_declarado: Boolean(criterio),
+        abierto: {
+          criterio: criterio ? null : 'no se declaró `criterio`: se imputa por fecha de operación',
+          fecha_valor: fValor ? null : 'el hecho no trae fecha valor (se conserva como null)'
+        }
       }
     };
   }
 
-  // Periodo determinista (YYYY-MM para mes, YYYY para año, YYYY-MM-DD para dia).
-  _periodo(fecha, unidad) {
-    if (!fecha) return null;
-    const s = String(fecha).slice(0, 10);
-    if (unidad === 'anio' || unidad === 'ejercicio') return s.slice(0, 4);
-    if (unidad === 'dia') return s;
-    return s.slice(0, 7);   // mes (defecto)
+  // Criterio por defecto: fecha de OPERACIÓN (el día en que ocurrió). Declarable a 'valor'.
+  _por(input = {}, criterio = null) {
+    const raw = input.por != null ? input.por : (criterio && criterio.por != null ? criterio.por : null);
+    const v = raw != null ? String(raw).toLowerCase().trim() : '';
+    return v === 'valor' ? 'valor' : 'operacion';
   }
 
-  // Normaliza una fecha a ISO YYYY-MM-DD; inválida → null (no se estima).
+  // Mes de corte: 1..12. Ausente o inválido → 12 (año natural), declarado como tal.
+  _mesCorte(raw) {
+    const n = Number(raw);
+    return Number.isInteger(n) && n >= 1 && n <= 12 ? n : 12;
+  }
+
+  // Periodo AAAA-MM (mensual) o AAAA (anual), ajustado por el mes de corte del ejercicio.
+  _periodo(fecha, granularidad, mesCorte) {
+    const d = new Date(fecha);
+    const y = d.getUTCFullYear();
+    const m = d.getUTCMonth() + 1;               // 1..12
+    // Ejercicio: si el mes es anterior al mes de corte, pertenece al ejercicio anterior.
+    const anioEjercicio = m >= mesCorte ? y : y - 1;
+    if (String(granularidad).toLowerCase() === 'anual') return `${anioEjercicio}`;
+    return `${y}-${String(m).padStart(2, '0')}`;
+  }
+
   _fecha(v) {
-    if (v === undefined || v === null || v === '') return null;
-    const s = String(v);
-    const t = Date.parse(s);
-    return Number.isFinite(t) ? new Date(t).toISOString().slice(0, 10) : s;
+    if (v == null || v === '') return null;
+    const d = v instanceof Date ? v : new Date(v);
+    return Number.isNaN(d.getTime()) ? null : d;
   }
 
-  _espejoDe(pid) {
-    let m = this._espejo.get(pid);
-    if (!m) { m = new Map(); this._espejo.set(pid, m); }
-    return m;
+  // Peticion best-effort a la cola declarativa cuando falta el criterio de imputacion.
+  _subirPeticionCriterio(pid) {
+    try {
+      if (pid) this._rpc('cola-declaraciones-criterio.fijar.request', {
+        project_id: pid,
+        clave: 'periodo',
+        origen: 'periodificacion'
+      }, { timeout_ms: 2000 });
+    } catch (_) { /* best-effort */ }
   }
 
   // ── Tools ──

@@ -1,9 +1,0 @@
-{
-  "id": "cuenta-proveedor",
-  "name": "Cuenta de proveedor",
-  "version": "0.1.0",
-  "zone": "work-bar",
-  "order": 151,
-  "icon": "🏭",
-  "label": "Cta. proveedor"
-}

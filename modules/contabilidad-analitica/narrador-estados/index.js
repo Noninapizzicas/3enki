@@ -1,48 +1,31 @@
 /**
- * contabilidad-analitica/narrador-estados — MICRO-AGENTE HIBRIDO (R3, hoja del plan).
+ * contabilidad-analitica/narrador-estados — MICRO-AGENTE (R3, hoja del plan).
  *
- * Traduce el BALANCE y el RESULTADO al LENGUAJE del negocio cliente: "esto es lo que te ha pasado
- * y lo que viene". Narrar en lenguaje natural es JUICIO.
+ * TRADUCE balance/resultado al LENGUAJE DEL NEGOCIO CLIENTE. Lenguaje → juicio.
  *
- * ATRIBUTOS del diseno: `balance:EstadoDerivado`, `resultado:EstadoDerivado`.
- *   METODOS: narrar(estados):Lenguaje.
- *   REGLA: traduce balance/resultado al LENGUAJE del negocio cliente. Lenguaje → juicio.
+ * El JUICIO linguistico (elegir QUE contar y como, segun el negocio) es la mitad FUZZY del
+ * hibrido y vive en el blueprint del modulo. Esta mitad REFLEJA es la parte DETERMINISTA y
+ * HONESTA: compone la narracion con las PLANTILLAS y el VOCABULARIO **DECLARADOS** por el
+ * sitio, y cita SOLO las cifras reales que recibe — NUNCA inventa un numero, ni un juicio
+ * de valor que no venga de una plantilla declarada.
  *
- * ⚠️ NARRA LO QUE HAY: no estima ni adorna lo que falta. Los estados llegan declarados o los
- * calculan sus duenos (`balance-situacion` C1, `cuenta-resultados` C2) POR EVENTO. Si un estado
- * falta, la narracion LO DECLARA como hueco — jamas lo rellena con una cifra inventada.
+ * No calcula el balance ni el resultado por su cuenta: SUBE por EVENTO a
+ * `balance-situacion.calcular.request` (C1) y `cuenta-resultados.calcular.request` (C2).
  *
- * HIBRIDO (patron etiquetado-analitico):
- *   _narrarReflejo — REFLEJO determinista: compone la frase con las PLANTILLAS DECLARADAS
- *                    (estado → frase) sobre los estados reales. Una sola respuesta → no es juicio.
- *   _concluir      — FUZZY: cuando no hay plantilla que cubra, 1 llamada llm.complete.request
- *                    narra los estados en lenguaje llano. Si falla o no cumple el contrato → la
- *                    narracion se declara `[ABIERTO]`.
+ * Honestidad (invariante 13): un dato ausente NO se narra (0 no es "no hay"): queda en
+ * `abierto`. Sin plantillas declaradas se usa la estructura por defecto (que solo cita
+ * cifras reales); lo que no tiene cifra no se rellena con una frase inventada.
  *
- * Invariantes:
- *  - NARRA LO QUE HAY: cada cifra de la narracion sale de un estado REAL; lo que falta se declara.
- *  - NUNCA ESTIMA NI ADORNA: no se inventan valores ni se "colorean" los ausentes.
- *  - La narracion no decide: describe. El sistema no decide por el dueno.
- *  - NO escribe, NO persiste.
+ * ESCUCHA (R3): el plan declara la escucha de `contabilidad.ejercicio_cerrado`; su emisor
+ * (`cierre-ejercicio`, C4) aun NO existe: no se declara. Se declarara cuando exista.
  *
- * Forma: MICRO-AGENTE → STATELESS. Sin PosPersistencia, sin onProjectActivated.
+ * Forma: MICRO-AGENTE (mitad refleja) → STATELESS. Sin PosPersistencia, sin onProjectActivated. PREGUNTA (narrar) → sin ui_handler.
  * Ver hoja R3 del plan-construccion y diseno-oop.md (CLASE NarradorEstados).
  */
 
 'use strict';
 
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
-
-// ── guion-prompt del micro-agente (self-contained) ──
-const GUION_NARRAR =
-  'Eres el NARRADOR de estados contables de un negocio. Recibes el BALANCE (activo/pasivo/' +
-  'patrimonio) y el RESULTADO (ingresos/gastos/resultado) ya calculados, con su periodo. Tu tarea ' +
-  'es NARRAR en lenguaje llano, claro y simple "esto es lo que te ha pasado y lo que viene". ' +
-  'REGLAS DE HIERRO: (1) NARRA SOLO LO QUE HAY — usa EXCLUSIVAMENTE las cifras que te dan; ' +
-  '(2) NO estimes ni adornes lo que falta: si un estado viene null, dilo ("no consta"), NO lo ' +
-  'rellenes; (3) NO decidas por el dueño — describes, no recomiendas acciones. ' +
-  'Responde SOLO JSON: {"puede":<true|false>,"narracion":"<párrafo en lenguaje llano>",' +
-  '"faltan":["<estado ausente>"],"confianza":<0-1>}.';
 
 class NarradorEstados extends ModuloHibridoReflejo {
   constructor() {
@@ -53,202 +36,149 @@ class NarradorEstados extends ModuloHibridoReflejo {
 
   async onUnload() { return super.onUnload(); }
 
-  // ── handler RPC (una linea, delega a _atender) ──
+  // ── handler RPC (una linea, delega a _atender). CLASE PREGUNTA → sin ui_handler ──
   onNarrarRequest(e) {
     return this._atender(e, 'narrar', 'narrador-estados.narrar.response', async (d) => {
       const res = await this._narrar(d);
-      if (res.status === 200) {
-        // Exito → evento de dominio: los estados quedaron NARRADOS (narra lo que hay).
-        this.eventBus?.publish('contabilidad.narracion', {
-          project_id: res.data.project_id,
-          narracion: res.data.narracion,
-          origen: res.data.origen,
-          estados_narrados: res.data.estados_narrados,
-          faltan: res.data.faltan,
-          correlation_id: d.correlation_id
-        });
-      } else {
-        this.eventBus?.publish('narrador-estados.narrar.failed', res);
-      }
+      // Reflejo: narra; no escribe → no hay hecho de dominio que anunciar (R2).
+      if (res.status !== 200) this.eventBus?.publish('narrador-estados.narrar.failed', res);
       return res;
     });
   }
 
-  // ── el juicio: plantillas declaradas (reflejo) + juicio fuzzy, narrando solo lo que hay ──
+  // ══════════════════════════════════════════════════════════════════════
+  // narrar(estados) → balance/resultado en el lenguaje del negocio
+  // ══════════════════════════════════════════════════════════════════════
   async _narrar(input = {}) {
     const pid = input.project_id || this.project_id;
     if (!pid) return this._invalid('project_id');
 
-    // 1) Los ESTADOS: declarados o los que calculan sus duenos (C1 balance, C2 resultado) POR EVENTO.
-    const balance = await this._balance(pid, input);
-    const resultado = await this._resultado(pid, input);
+    const { balance, resultado, fuente } = await this._estadosDe(input);
 
-    // Narra SOLO lo que hay: lo ausente se declara, no se rellena.
-    const faltan = [];
-    if (!balance) faltan.push('balance');
-    if (!resultado) faltan.push('resultado');
+    const cifras = {
+      activo: this._num(balance && balance.activo),
+      pasivo: this._num(balance && balance.pasivo),
+      patrimonio: this._num(balance && (balance.patrimonio_total != null ? balance.patrimonio_total : balance.patrimonio)),
+      ingreso: this._num(resultado && resultado.ingreso),
+      gasto: this._num(resultado && resultado.gasto),
+      resultado: this._num(resultado && (resultado.resultado != null ? resultado.resultado : (balance && balance.resultado)))
+    };
 
-    if (!balance && !resultado) {
-      // Sin ningun estado NO se narra: no hay nada que contar (no se adorna el vacio).
+    const ausentes = Object.entries(cifras).filter(([, v]) => v == null).map(([k]) => k);
+    if (Object.values(cifras).every((v) => v == null)) {
       return {
         status: 200,
         data: {
           project_id: pid,
-          narracion: null,
-          estados_narrados: [],
-          balance: null,
-          resultado: null,
-          faltan: ['balance', 'resultado'],
-          abierto: true,
-          decide: false,
-          motivo: 'no hay estados que narrar (ni balance C1 ni resultado C2): el narrador narra lo que hay, no lo que falta'
+          tipo: 'narrador-estados',
+          frases: [],
+          cifras,
+          narrado: false,
+          abierto: { estados: 'no se recibieron balance ni resultado (ni declarados ni de C1/C2): no hay nada que narrar' }
         }
       };
     }
 
-    const estados = { balance, resultado };
+    const negocio = input.negocio != null ? String(input.negocio) : (input.cliente != null ? String(input.cliente) : null);
+    const frases = this._componer(cifras, input.plantillas || input.vocabulario || null, negocio);
 
-    // 2) REFLEJO determinista: compone con las PLANTILLAS DECLARADAS sobre los estados reales.
-    const plantillas = this._plantillas(input);
-    const porReflejo = this._narrarReflejo(estados, plantillas);
-    if (porReflejo) {
-      return this._salida(pid, estados, faltan, { ...porReflejo, origen: 'plantilla' });
-    }
-
-    // 3) FUZZY: ninguna plantilla cubre → el juicio narra (solo con las cifras reales).
-    const asistido = await this._concluir(estados, plantillas);
-    const narracion = this._narracionDe(asistido);
-    if (narracion) {
-      return this._salida(pid, estados, faltan, { texto: narracion, origen: 'juicio', confianza: asistido.confianza });
-    }
-
-    // 4) Ni plantilla ni juicio → la narracion se declara [ABIERTO] (no se adorna).
     return {
       status: 200,
       data: {
         project_id: pid,
-        narracion: null,
-        estados_narrados: this._narrados(estados),
-        balance,
-        resultado,
-        faltan,
-        abierto: true,
-        decide: false,
-        motivo: 'no se pudo narrar con honestidad (sin plantilla ni juicio valido): se declara el hueco en vez de adornar'
-      }
-    };
-  }
-
-  _salida(pid, estados, faltan, n) {
-    return {
-      status: 200,
-      data: {
-        project_id: pid,
-        narracion: n.texto,
-        estados_narrados: this._narrados(estados),
-        balance: estados.balance,
-        resultado: estados.resultado,
-        // Narra LO QUE HAY: lo ausente se declara aqui, no se rellena.
-        faltan,
-        origen: n.origen,
-        confianza: n.confianza != null ? n.confianza : (n.origen === 'plantilla' ? 1 : null),
-        // Narra; no estima, no decide.
-        estima: false,
-        decide: false,
+        tipo: 'narrador-estados',
+        negocio,
+        tono: input.tono != null ? String(input.tono) : 'llano',
+        frases,
+        texto: frases.join(' '),
+        cifras,
+        fuente: fuente || null,
+        narrado: true,
+        determinista: true,
         abierto: {
-          balance: estados.balance ? null : 'el balance (C1) no consta: se narra sin él, no se estima',
-          resultado: estados.resultado ? null : 'el resultado (C2) no consta: se narra sin él, no se estima'
+          cifras_ausentes: ausentes.length ? `${ausentes.join(', ')} sin dato: no se narran (0 no es "no hay")` : null,
+          plantillas: (input.plantillas || input.vocabulario) ? null : 'sin plantillas/vocabulario declarados: se usa la estructura por defecto (solo cita cifras reales)'
         }
       }
     };
   }
 
-  // ── REFLEJO: compone la narracion con las PLANTILLAS declaradas (estado → frase) ──
-  _narrarReflejo(estados, plantillas = []) {
-    const partes = [];
-    for (const p of plantillas) {
-      if (!p || typeof p !== 'object') continue;
-      const estado = p.estado != null ? String(p.estado).toLowerCase() : null;
-      const frase = p.frase != null ? String(p.frase) : null;
-      if (!estado || !frase) continue;
-      const dato = estados[estado];
-      // La plantilla SOLO se aplica si su estado existe: no se narra lo ausente con una frase.
-      if (!dato) continue;
-      partes.push(this._rellenar(frase, dato));
+  // Compone la narracion. Si hay plantillas DECLARADAS se aplican; si no, estructura por
+  // defecto. En NINGUN caso se inventa una cifra ni un juicio: solo se citan datos reales.
+  _componer(cifras, plantillas, negocio) {
+    const frases = [];
+    const money = (v) => (v == null ? null : this._round(v, 2).toFixed(2));
+
+    const plantilla = (clave) => {
+      if (!plantillas || typeof plantillas !== 'object') return null;
+      const p = plantillas[clave];
+      return (typeof p === 'string' && p.trim()) ? p : null;
+    };
+
+    const sustituir = (tpl, vars) => tpl.replace(/\{(\w+)\}/g, (_, k) => (vars[k] != null ? String(vars[k]) : '—'));
+
+    const vars = {
+      negocio: negocio || '',
+      activo: money(cifras.activo),
+      pasivo: money(cifras.pasivo),
+      patrimonio: money(cifras.patrimonio),
+      ingreso: money(cifras.ingreso),
+      gasto: money(cifras.gasto),
+      resultado: money(cifras.resultado)
+    };
+
+    const cabecera = plantilla('cabecera');
+    if (cabecera) frases.push(sustituir(cabecera, vars));
+    else if (negocio) frases.push(`Situacion de ${negocio}:`);
+
+    if (cifras.activo != null || cifras.pasivo != null || cifras.patrimonio != null) {
+      const t = plantilla('situacion');
+      if (t) frases.push(sustituir(t, vars));
+      else {
+        const partes = [];
+        if (cifras.activo != null) partes.push(`activo ${money(cifras.activo)}`);
+        if (cifras.pasivo != null) partes.push(`pasivo ${money(cifras.pasivo)}`);
+        if (cifras.patrimonio != null) partes.push(`patrimonio ${money(cifras.patrimonio)}`);
+        frases.push(`En el balance: ${partes.join(', ')}.`);
+      }
     }
-    if (partes.length === 0) return null;
-    return { texto: partes.join(' '), confianza: 1 };
+
+    if (cifras.ingreso != null || cifras.gasto != null || cifras.resultado != null) {
+      const t = plantilla('resultado');
+      if (t) frases.push(sustituir(t, vars));
+      else {
+        const partes = [];
+        if (cifras.ingreso != null) partes.push(`ingresos ${money(cifras.ingreso)}`);
+        if (cifras.gasto != null) partes.push(`gastos ${money(cifras.gasto)}`);
+        if (cifras.resultado != null) {
+          const signo = cifras.resultado >= 0 ? 'beneficio' : 'perdida';
+          partes.push(`${signo} de ${money(Math.abs(cifras.resultado))}`);
+        }
+        frases.push(`En el resultado: ${partes.join(', ')}.`);
+      }
+    }
+
+    return frases;
   }
 
-  // Rellena una plantilla declarada con los campos del estado ({{campo}}). No inventa: lo ausente
-  // deja el marcador tal cual, para que se VEA que falta.
-  _rellenar(frase, dato) {
-    return String(frase).replace(/\{\{(\w+)\}\}/g, (m, k) => {
-      const v = dato && dato[k] !== undefined && dato[k] !== null ? dato[k] : null;
-      return v === null ? m : String(v);
-    });
+  async _estadosDe(input) {
+    if (input.balance || input.resultado) {
+      return { balance: input.balance || null, resultado: input.resultado || null, fuente: 'declarado' };
+    }
+    const pid = input.project_id || this.project_id;
+    const b = await this._rpc('balance-situacion.calcular.request', { project_id: pid, saldos: input.saldos, ejercicio: input.ejercicio }, { timeout_ms: 3000 });
+    const r = await this._rpc('cuenta-resultados.calcular.request', { project_id: pid, saldos: input.saldos, ejercicio: input.ejercicio }, { timeout_ms: 3000 });
+    return {
+      balance: b && (b.data || b),
+      resultado: r && (r.data || r),
+      fuente: (b || r) ? 'balance-situacion+cuenta-resultados' : null
+    };
   }
 
-  // ── FUZZY: 1 llamada llm.complete.request con el guion + los estados + las plantillas ──
-  async _concluir(estados, plantillas) {
-    const resp = await this._rpc('llm.complete.request', {
-      system: GUION_NARRAR,
-      messages: [{ role: 'user', content: JSON.stringify({ estados, plantillas_declaradas: plantillas }) }],
-      tools: [], settings: { temperature: 0.4 }
-    }, { timeout_ms: 30000 }).catch(() => null);
-    if (!resp || resp.status >= 400) return null;
-    return this._parse(resp);
-  }
-
-  _parse(resp) {
-    let c = resp?.data?.content ?? resp?.content ?? resp?.data?.text ?? resp?.text ?? '';
-    if (c && typeof c === 'object') return c;
-    if (typeof c !== 'string') return null;
-    c = c.replace(/```json/gi, '').replace(/```/g, '').trim();
-    const i = c.indexOf('{'), j = c.lastIndexOf('}');
-    if (i < 0 || j < 0 || j < i) return null;
-    try { return JSON.parse(c.slice(i, j + 1)); } catch { return null; }
-  }
-
-  // Valida la narracion fuzzy: exige un parrafo; los estados ausentes los declara el propio juicio.
-  _narracionDe(a) {
-    if (!a || a.puede !== true) return null;
-    const texto = a.narracion != null ? String(a.narracion).trim() : '';
-    if (!texto) return null;
-    const confianza = typeof a.confianza === 'number' && a.confianza >= 0 && a.confianza <= 1 ? a.confianza : null;
-    return { texto, confianza };
-  }
-
-  // El BALANCE declarado o el que calcula su dueno (C1) POR EVENTO. No se recalcula.
-  async _balance(pid, input = {}) {
-    const b = input.balance;
-    if (b && typeof b === 'object') return b;
-    const r = await this._rpc('balance-situacion.calcular.request',
-      { project_id: pid, periodo: input.periodo, ejercicio: input.ejercicio != null ? input.ejercicio : input.periodo }, { timeout_ms: 5000 }).catch(() => null);
-    const data = r && r.data ? r.data : null;
-    return data && (data.balance || data.balance_situacion) ? (data.balance || data.balance_situacion) : (data && data.activo !== undefined ? data : null);
-  }
-
-  // El RESULTADO declarado o el que calcula su dueno (C2) POR EVENTO. No se recalcula.
-  async _resultado(pid, input = {}) {
-    const res = input.resultado;
-    if (res && typeof res === 'object') return res;
-    const r = await this._rpc('cuenta-resultados.calcular.request',
-      { project_id: pid, periodo: input.periodo, ejercicio: input.ejercicio != null ? input.ejercicio : input.periodo }, { timeout_ms: 5000 }).catch(() => null);
-    const data = r && r.data ? r.data : null;
-    return data && data.resultado !== undefined ? data : null;
-  }
-
-  _narrados(estados) {
-    const out = [];
-    if (estados.balance) out.push('balance');
-    if (estados.resultado) out.push('resultado');
-    return out;
-  }
-
-  _plantillas(input = {}) {
-    const p = input.plantillas || input.narracion_plantillas || (input.criterio && input.criterio.plantillas);
-    return Array.isArray(p) ? p : [];
+  _num(v) {
+    if (v == null || v === '') return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
   }
 
   // ── Tools ──

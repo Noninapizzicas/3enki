@@ -3,9 +3,9 @@
  *
  * **LA PRUEBA PARA LA INSPECCION.** Cada cifra del libro queda con su documento ORIGEN
  * ARCHIVADO y ENLAZADO: `cifra → documento` con su huella, su procedencia y su enlace. Es un
- * registro INMUTABLE y APPEND-ONLY: un documento NO se borra jamas (invariante 10: los registros
- * inmutables solo crecen). Si hay que sustituir un documento por uno mejor, se AÑADE el nuevo y
- * el anterior queda como historial — la correccion SUMA.
+ * registro INMUTABLE y APPEND-ONLY: un documento NO se borra jamas (los registros inmutables
+ * solo crecen). Si hay que sustituir un documento por uno mejor, se AÑADE el nuevo y el
+ * anterior queda como historial — la correccion SUMA.
  *
  * L2 (`vista-revisable`) EXPLICA el asiento con su traza; EL EXPEDIENTE CONSERVA la prueba.
  * No se solapan: L2 compone una vista, L7 archiva el documento origen.
@@ -16,13 +16,11 @@
  * Invariantes:
  *  - APPEND-ONLY e INMUTABLE: un documento archivado no se borra ni se muta. Otra copia del
  *    mismo documento NO se re-archiva (idempotente por huella); un documento NUEVO se AÑADE.
- *  - UN SOLO ESCRITOR por la parcela `libro/expediente`: se pide el turno a single-writer (M2)
- *    POR EVENTO y se RESPETA su GUARD (403 si el turno es de otro).
  *  - Dato ausente = desconocido: sin documento NO se enlaza una cifra a un documento inventado;
  *    se declara `faltan` y no se archiva.
  *  - Persiste por proyecto con PosPersistencia, restaura en project.activated y vuelca en onUnload.
  *
- * Forma: CUSTODIO → PosPersistencia + onProjectActivated + flush + GUARD (single-writer + escritor).
+ * Forma: CUSTODIO → PosPersistencia + onProjectActivated + flush + APPEND-ONLY.
  * Ver hoja L7 del plan-construccion y diseno-oop.md (CLASE ExpedienteDocumental).
  */
 
@@ -32,17 +30,12 @@ const crypto = require('crypto');
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
 const PosPersistencia = require('../../_shared/pos-persistencia');
 
-// La parcela del expediente. El turno lo concede single-writer (M2).
-const PARCELA = 'libro/expediente';
-// Rol que reclama el turno en single-writer.
-const ROL_RECLAMANTE = 'RECLAMANTE_ESCRITOR';
-
 class ExpedienteDocumental extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'expediente-documental';
     this.version = 'reflejo-0.1.0';
-    // store: project_id -> { esquema, documentos:[append-only], por_cifra:Map<cifra, [doc_id]> }
+    // store: project_id -> { esquema, documentos:[append-only], por_cifra:Map<cifra,[doc_id]> }
     this._expedientes = new Map();
 
     this._persist = new PosPersistencia({
@@ -85,16 +78,16 @@ class ExpedienteDocumental extends ModuloHibridoReflejo {
   // ── handlers RPC (una linea, delegan a _atender) ──
   onArchivarRequest(e) {
     return this._atender(e, 'archivar', 'expediente-documental.archivar.response', async (d) => {
-      const res = await this._archivar(d);
+      const res = this._archivar(d);
       if (res.status === 200) {
-        // Solo un documento REALMENTE archivado (no idempotente) emite el evento de dominio.
+        // R2 · si ESCRIBE, anuncia el HECHO: solo cuando el documento REALMENTE se archivo.
         if (res.data.archivado === true) {
-          this.eventBus?.publish('contabilidad.cifra_archivada', {
+          this.eventBus?.publish('contabilidad.documento_archivado', {
             project_id: res.data.project_id,
             cifra: res.data.cifra,
-            documento: res.data.documento,
             documento_id: res.data.documento.id,
             huella: res.data.documento.huella,
+            procedencia: res.data.documento.procedencia,
             correlation_id: d.correlation_id
           });
         }
@@ -116,34 +109,22 @@ class ExpedienteDocumental extends ModuloHibridoReflejo {
   // ══════════════════════════════════════════════════════════════════════
   // archivar(cifra, doc) → Referencia (UNICO ESCRITOR del expediente)
   // ══════════════════════════════════════════════════════════════════════
-  async _archivar(input = {}) {
+  _archivar(input = {}) {
     const pid = input.project_id || this.project_id;
     if (!pid) return this._invalid('project_id');
 
     const cifra = input.cifra != null ? String(input.cifra).trim() : '';
     if (!cifra) return this._invalid('cifra');
 
-    // El DOCUMENTO: el que viene declarado, o el que entrega puerto-documento POR EVENTO.
-    const { documento, fuente_documento } = await this._documento(pid, input);
+    // El DOCUMENTO: el que viene DECLARADO en la peticion. Nunca se inventa.
+    const documento = (input.documento && typeof input.documento === 'object') ? input.documento
+      : ((input.doc && typeof input.doc === 'object') ? input.doc : null);
     if (!documento) {
       // Sin documento NO se enlaza una cifra a un documento inventado.
       return this._errorResponse(422, 'PRECONDITION_FAILED',
         'no hay documento que archivar para esta cifra (dato ausente = desconocido: nada se inventa)',
-        { cifra, fuente_documento, motivo: 'sin_documento' });
+        { cifra, motivo: 'sin_documento' });
     }
-
-    // ── GUARD: UN SOLO ESCRITOR de la parcela libro/expediente (se RESPETA el de M2). ──
-    const escritor_id = input.id != null ? String(input.id)
-      : (input.escritor_id != null ? String(input.escritor_id) : ROL_RECLAMANTE);
-    const turno = await this._rpc('single-writer.reclamar.request',
-      { project_id: pid, rol: ROL_RECLAMANTE, parcela: PARCELA, id: escritor_id }, { timeout_ms: 4000 });
-    const turno_data = turno && turno.data ? turno.data : null;
-    if (turno_data && turno_data.concedido === false) {
-      return this._errorResponse(403, 'PERMISSION_DENIED',
-        'solo el escritor con el turno de la parcela libro/expediente puede archivar documentos',
-        { parcela: PARCELA, dueno: turno_data.dueno ?? null, solicitante: escritor_id });
-    }
-    const turno_confirmado = Boolean(turno_data && turno_data.concedido === true);
 
     // La HUELLA del documento: declarada o derivada de su contenido declarado. Identidad, no juicio.
     const huella = this._huella(documento, input);
@@ -157,7 +138,6 @@ class ExpedienteDocumental extends ModuloHibridoReflejo {
         status: 200,
         data: {
           project_id: pid, cifra, documento: ya, archivado: false, ya_existe: true,
-          turno_confirmado,
           motivo: 'el mismo documento ya estaba archivado para esta cifra (el expediente no duplica)'
         }
       };
@@ -171,7 +151,7 @@ class ExpedienteDocumental extends ModuloHibridoReflejo {
       // Datos DECLARADOS del documento: referencia, tipo, procedencia, fecha, contenido.
       referencia: documento.referencia != null ? String(documento.referencia) : null,
       tipo: documento.tipo != null ? String(documento.tipo) : null,
-      procedencia: documento.procedencia != null ? String(documento.procedencia) : fuente_documento,
+      procedencia: documento.procedencia != null ? String(documento.procedencia) : (input.procedencia != null ? String(input.procedencia) : null),
       fecha: documento.fecha != null ? String(documento.fecha) : null,
       contenido: documento.contenido !== undefined ? documento.contenido : null,
       metadatos: documento.metadatos && typeof documento.metadatos === 'object' ? documento.metadatos : null,
@@ -180,7 +160,6 @@ class ExpedienteDocumental extends ModuloHibridoReflejo {
       traza: documento.traza && typeof documento.traza === 'object' ? documento.traza : null,
       // Inmutable: nunca se sustituye. Un documento mejor se AÑADE como archivo NUEVO.
       inmutable: true,
-      archivado_por: escritor_id,
       archivado_en: ahora
     };
     e.documentos.push(archivo);
@@ -192,12 +171,12 @@ class ExpedienteDocumental extends ModuloHibridoReflejo {
 
     return {
       status: 200,
-      data: { project_id: pid, cifra, documento: archivo, archivado: true, aceptado: true, turno_confirmado }
+      data: { project_id: pid, cifra, documento: archivo, archivado: true, aceptado: true }
     };
   }
 
   // ══════════════════════════════════════════════════════════════════════
-  // recuperar(cifra) → Documento (LECTURA, no muta)
+  // recuperar(cifra) → Documento (LECTURA, no muta) — CLASE PREGUNTA
   // ══════════════════════════════════════════════════════════════════════
   _recuperar(input = {}) {
     const pid = input.project_id || this.project_id;
@@ -222,27 +201,9 @@ class ExpedienteDocumental extends ModuloHibridoReflejo {
         documento,
         historial: docs,
         total: docs.length,
-        abierto: {
-          documento: documento ? null : 'no hay documento archivado para esta cifra: el expediente conserva, no inventa'
-        }
+        abierto: { documento: documento ? null : 'no hay documento archivado para esta cifra: el expediente conserva, no inventa' }
       }
     };
-  }
-
-  // El documento declarado en la peticion, o el que da puerto-documento POR EVENTO. Nunca se inventa.
-  async _documento(pid, input) {
-    if (input.documento && typeof input.documento === 'object') {
-      return { documento: input.documento, fuente_documento: 'declarado' };
-    }
-    if (input.doc && typeof input.doc === 'object') {
-      return { documento: input.doc, fuente_documento: 'declarado' };
-    }
-    const r = await this._rpc('puerto-documento.entrar.request',
-      { project_id: pid, cifra: input.cifra, referencia: input.referencia, documento_id: input.documento_id }, { timeout_ms: 4000 });
-    const data = r && r.data ? r.data : null;
-    const doc = data && data.documento ? data.documento : (data && data.documentos && data.documentos[0] ? data.documentos[0] : null);
-    if (doc) return { documento: doc, fuente_documento: 'puerto-documento' };
-    return { documento: null, fuente_documento: null };
   }
 
   // Huella identitaria del documento: la declarada, o el hash de su contenido declarado.

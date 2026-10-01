@@ -1,9 +1,0 @@
-{
-  "id": "aislamiento-negocio",
-  "name": "Aislamiento de negocio",
-  "version": "0.1.0",
-  "zone": "work-bar",
-  "order": 134,
-  "icon": "📦",
-  "label": "Aislamiento"
-}

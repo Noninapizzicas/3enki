@@ -1,52 +1,46 @@
 /**
  * contabilidad-fiscal/rectificacion-declaracion — CUSTODIO CON PERSISTENCIA (D14, hoja del plan).
  *
- * CAMINO DE CORRECCION **POSTERIOR A LA PRESENTACION** de una declaracion (complementaria /
- * sustitutiva). Uno de los CUATRO planos de correccion (B5 asiento-ajuste · A13 hecho-rectificativo
- * · O2 factura-rectificativa · D14 esta) — TRES actos, no uno; **!= asiento-ajuste B5**.
+ * ══════════════════════════════════════════════════════════════════════════════════════
+ * EL CAMINO DE CORRECCION POSTERIOR A LA PRESENTACION. SINGLE-WRITER POR PARCELA.
+ * ══════════════════════════════════════════════════════════════════════════════════════
+ * Cuando una declaracion YA presentada hay que corregirla (complementaria o sustitutiva),
+ * se entra por AQUI — no se edita la presentacion original. Es el <> de B5 (asiento-ajuste)
+ * en el eje fiscal: B5 corrige el LIBRO, este modulo corrige la DECLARACION.
  *
- * LA INVARIANTE (invariante 3 aplicada aqui): **la declaracion ORIGINAL NO se borra**; la
- * rectificacion **SUMA** (append-only) y queda **TRAZADA** (liga a la original, con su motivo y su
- * autor). Este custodio nunca emite ninguna operacion de supresion: solo apila rectificaciones y
- * conserva la cadena original→rectificacion.
+ * Invariantes:
+ *  - UN ESCRITOR por parcela (guard de rol RECTIFICACION_DECLARACION; segundo escritor → 403).
+ *  - APPEND-ONLY: cada rectificacion se APILA con su secuencia. NADA se borra, NADA se
+ *    sobrescribe: la declaracion original queda INTACTA; rectificar = AÑADIR una correccion.
+ *  - SIN declaracion original o sin motivo NO se rectifica (dato ausente = desconocido).
+ *  - IDEMPOTENTE por clave: la misma rectificacion no se apila dos veces (at-least-once del bus).
+ *  - Persiste por proyecto con PosPersistencia, restaura en project.activated y vuelca en onUnload.
  *
- * El sistema GENERA y REGISTRA; el ASESOR presenta y firma la rectificacion. Aqui NO se presenta:
- * cada rectificacion declara `presentada_por_sistema:false` y `firmada_por_sistema:false`.
+ * R2 · ESCRIBE → ANUNCIA: al rectificar publica `contabilidad.declaracion_rectificada` (el hecho
+ * que cierra el circulo: lo consume estado-presentacion-fiscal). Y SUBE por EVENTO el avance de
+ * presentacion (estado-presentacion-fiscal.avanzar.request) — la declaracion corregida vuelve al
+ * circuito de presentacion; este modulo NO presenta.
  *
- * LA LEY ENTRA COMO DATO (invariante 5): el TIPO de rectificacion es DECLARABLE (`tipos_declarables`);
- * sin declarar manda el vocabulario del dominio del diseño OOP (complementaria / sustitutiva). NO se
- * cablea ningun plazo, ejercicio, escala ni importe legal: los importes de la rectificacion entran
- * DECLARADOS (`importes`) tal cual; si no vienen, la rectificacion se registra SIN importes (no se
- * inventan cifras). Sin motivo no se inventa la causa: se declara `motivo:null`.
- *
- * Depende de estado-presentacion-fiscal (D12) POR EVENTO: se consulta el estado vigente de la
- * obligacion para TRAZARLO junto a la rectificacion (lectura best-effort; nunca un `require`).
- *
- * UN SOLO ESCRITOR: el rectificador (rol RECTIFICADOR_DECLARACION). Cualquier otro rol es rechazado (403).
- *
- * Persiste por proyecto con PosPersistencia, restaura en project.activated y vuelca en onUnload.
- *
- * Forma: CUSTODIO → PosPersistencia + onProjectActivated + flush + GUARD de escritor.
+ * Forma: CUSTODIO → PosPersistencia + onProjectActivated + flush + single-writer + append-only.
+ * RPC rectificar es CLASE ORDEN → SÍ lleva ui_handler.
  * Ver hoja D14 del plan-construccion y diseno-oop.md (CLASE RectificacionDeclaracion).
  */
 
 'use strict';
 
+const crypto = require('crypto');
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
 const PosPersistencia = require('../../_shared/pos-persistencia');
 
-// Rol unico escritor: el rectificador de declaraciones.
-const ROL_ESCRITOR = 'RECTIFICADOR_DECLARACION';
-
-// Tipos de rectificacion del dominio (vocabulario del diseño OOP, NO tabla legal). Declarables.
-const TIPOS_POR_DEFECTO = ['complementaria', 'sustitutiva'];
+// El rol UNICO con permiso de escritura en esta parcela.
+const ROL_ESCRITOR = 'RECTIFICACION_DECLARACION';
 
 class RectificacionDeclaracion extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'rectificacion-declaracion';
     this.version = 'reflejo-0.1.0';
-    // store: project_id -> { esquema, rectificaciones: [append-only], por_original: Map<clave, [ids]> }
+    // store: project_id -> { esquema, rectificaciones: [append-only], claves:Set }
     this._rectificaciones = new Map();
 
     this._persist = new PosPersistencia({
@@ -54,24 +48,18 @@ class RectificacionDeclaracion extends ModuloHibridoReflejo {
       file: 'rectificacion-declaracion.json',
       dir: '/contabilidad/rectificacion-declaracion',
       snapshot: (pid) => {
-        const c = this._rectificaciones.get(pid);
-        if (!c) return null;
-        return { project_id: pid, esquema: c.esquema, rectificaciones: c.rectificaciones };
+        const d = this._rectificaciones.get(pid);
+        if (!d) return null;
+        return { project_id: pid, esquema: d.esquema, rectificaciones: d.rectificaciones };
       },
       hidratar: (pid, data) => {
         if (!data) return;
         const rectificaciones = Array.isArray(data.rectificaciones) ? data.rectificaciones : [];
-        const por_original = new Map();
-        for (const r of rectificaciones) {
-          if (!r || r.original_clave == null) continue;
-          const k = String(r.original_clave);
-          if (!por_original.has(k)) por_original.set(k, []);
-          por_original.get(k).push(r.id);
-        }
+        const claves = new Set(rectificaciones.map((r) => r && r.clave).filter(Boolean));
         this._rectificaciones.set(pid, {
           esquema: data.esquema || 'contabilidad-rectificacion-declaracion-v1',
           rectificaciones,
-          por_original
+          claves
         });
       }
     });
@@ -83,152 +71,157 @@ class RectificacionDeclaracion extends ModuloHibridoReflejo {
     return super.onUnload();
   }
 
-  // Restaura las rectificaciones del proyecto activado.
+  // Restaura la parcela de rectificaciones del proyecto activado.
   onProjectActivated(e) {
     const d = (e && (e.data || e)) || {};
     return this._persist.restaurar(d.project_id);
   }
 
-  // ── handler RPC (una linea, delega a _atender) ──
+  // ── handler RPC unico: rectificar (ORDEN → ui_handler panel) ──
   onRectificarRequest(e) {
-    return this._atender(e, 'rectificar', 'rectificacion-declaracion.rectificar.response', async (d) => {
-      const res = await this._rectificar(d);
-      if (res.status === 200 && res.data.rectificada) {
-        // Exito → evento de dominio: la declaracion quedo rectificada (append-only, trazada).
+    return this._atender(e, 'rectificar', 'rectificacion-declaracion.rectificar.response', (d) => {
+      const res = this._rectificar(d);
+      if (res.status === 200 && res.data && res.data.rectificada) {
+        // R2 · si ESCRIBE, anuncia el HECHO: una declaracion quedo rectificada.
         this.eventBus?.publish('contabilidad.declaracion_rectificada', {
           project_id: res.data.project_id,
-          rectificacion: res.data.rectificacion,
-          id: res.data.rectificacion.id,
-          original_clave: res.data.rectificacion.original_clave,
+          rectificacion_id: res.data.rectificacion.rectificacion_id,
+          clave: res.data.rectificacion.clave,
           tipo: res.data.rectificacion.tipo,
-          // El original NO se borra: la rectificacion SUMA y queda trazada.
-          borra_original: false,
-          suma: true,
+          declaracion: res.data.rectificacion.declaracion,
+          motivo: res.data.rectificacion.motivo,
+          correlation_id: d.correlation_id
+        });
+        // SUBE (best-effort por EVENTO) el avance de presentacion: la declaracion corregida
+        // vuelve al circuito de presentacion. RectificacionDeclaracion NO presenta.
+        this.eventBus?.publish('estado-presentacion-fiscal.avanzar.request', {
+          project_id: res.data.project_id,
+          declaracion: res.data.rectificacion.declaracion,
+          tipo: res.data.rectificacion.tipo,
+          rectificacion_id: res.data.rectificacion.rectificacion_id,
           correlation_id: d.correlation_id
         });
       } else if (res.status !== 200) {
+        // Par de fallo determinista.
         this.eventBus?.publish('rectificacion-declaracion.rectificar.failed', res);
       }
       return res;
     });
   }
 
-  // ── proyeccion de escritura (UN escritor): rectifica posterior a la presentacion ──
-  async _rectificar(input = {}) {
+  // ══════════════════════════════════════════════════════════════════════
+  // _rectificar(input) → { status, data }  ·  APILA una correccion
+  // ══════════════════════════════════════════════════════════════════════
+  _rectificar(input = {}) {
     const pid = input.project_id || this.project_id;
     if (!pid) return this._invalid('project_id');
 
-    // GUARD de escritor: solo el rectificador rectifica declaraciones.
-    if (input.rol !== ROL_ESCRITOR) {
+    // Guard de UN escritor: solo el rol de esta parcela rectifica.
+    if (input.rol != null && String(input.rol) !== ROL_ESCRITOR) {
       return this._errorResponse(403, 'PERMISSION_DENIED',
-        'solo el rectificador (RECTIFICADOR_DECLARACION) rectifica una declaracion presentada',
-        { rol_esperado: ROL_ESCRITOR, rol_recibido: input.rol ?? null });
+        `solo el rol ${ROL_ESCRITOR} rectifica declaraciones (otro escritor → 403)`,
+        { project_id: pid, rol: input.rol });
     }
 
-    // La declaracion ORIGINAL a la que se rectifica: obligatoria. Sin ella no hay rectificacion.
-    const original_clave = input.original_clave != null ? String(input.original_clave).trim()
-      : (input.declaracion != null ? String(input.declaracion).trim() : '');
-    if (!original_clave) return this._invalid('original_clave');
-
-    // El tipo es DECLARABLE; sin declarar manda el vocabulario del dominio.
-    const tipos = this._tiposDe(input);
-    const tipo = input.tipo != null ? String(input.tipo).toLowerCase() : null;
-    if (!tipo) return this._invalid('tipo');
-    if (!tipos.includes(tipo)) {
-      return this._errorResponse(422, 'TIPO_NO_DECLARABLE',
-        'tipo de rectificacion no declarado', { tipo, tipos_declarables: tipos });
+    // Sin la declaracion original NO se rectifica (no se corrige lo que no se declaro).
+    const declaracion = input.declaracion !== undefined ? input.declaracion
+      : (input.original !== undefined ? input.original : (input.modelo !== undefined ? input.modelo : null));
+    if (declaracion === null || declaracion === undefined || String(declaracion).trim() === '') {
+      return this._invalid('declaracion');
     }
 
-    // Los importes de la rectificacion entran DECLARADOS tal cual; sin ellos, no se inventan cifras.
-    const importes = (input.importes && typeof input.importes === 'object') ? input.importes : null;
+    // Sin motivo NO se rectifica: una correccion sin causa es una correccion que miente.
+    const motivo = input.motivo !== undefined ? input.motivo
+      : (input.causa !== undefined ? input.causa : (input.razon !== undefined ? input.razon : null));
+    if (motivo === null || motivo === undefined || String(motivo).trim() === '') {
+      return this._invalid('motivo');
+    }
 
-    // El estado vigente de la obligacion se TRAZA junto a la rectificacion (D12, POR EVENTO,
-    // best-effort de lectura: nunca un require cruzado; sin respuesta queda null, no se finge).
-    const estado_vigente = await this._estadoVigente(pid, input.obligacion || original_clave);
+    const tipo = this._tipo(input.tipo);
+    const parcela = this._obtenerOCrear(pid);
 
-    const c = this._obtenerOCrear(pid);
+    // Clave de la rectificacion: declarada, o derivada (declaracion+tipo+periodo).
+    const clave = input.clave != null
+      ? String(input.clave)
+      : crypto.createHash('sha1').update(JSON.stringify([String(declaracion), tipo, input.periodo != null ? String(input.periodo) : null, String(motivo)])).digest('hex').slice(0, 16);
+
+    // Idempotente por clave: la misma rectificacion no se apila dos veces.
+    if (!input.permitir_duplicado && parcela.claves.has(clave)) {
+      return {
+        status: 200,
+        data: {
+          project_id: pid,
+          rectificacion: { clave },
+          rectificada: false,
+          duplicado: true,
+          total: parcela.rectificaciones.length,
+          motivo: 'la rectificacion ya estaba registrada (misma clave): no se duplica (append-only)'
+        }
+      };
+    }
+
     const ahora = new Date().toISOString();
-
-    // LA RECTIFICACION: append-only, ligada a la original, con su motivo y su autor.
-    // NUNCA sustituye a la original (borra_original:false); SUMA (suma:true).
-    const rectificacion = {
-      id: `${pid}-r${c.rectificaciones.length + 1}`,
-      original_clave,
-      tipo,
-      motivo: input.motivo != null ? String(input.motivo) : null,
-      importes,
-      obligacion: input.obligacion != null ? String(input.obligacion) : null,
-      ejercicio: input.ejercicio != null ? String(input.ejercicio) : null,
+    const registro = {
+      rectificacion_id: `${pid}-r${parcela.rectificaciones.length + 1}`,
+      secuencia: parcela.rectificaciones.length + 1,
+      clave,
+      tipo,                                  // complementaria | sustitutiva
+      declaracion: String(declaracion),      // la declaracion ORIGINAL, intacta
       periodo: input.periodo != null ? String(input.periodo) : null,
-      estado_vigente_al_rectificar: estado_vigente,
-      // Invariante: el original NO se borra; la rectificacion SUMA y queda trazada.
-      borra_original: false,
-      suma: true,
-      append_only: true,
-      traza: { original_clave, por: ROL_ESCRITOR, en: ahora },
-      // El sistema GENERA y REGISTRA; el ASESOR presenta y firma.
-      presentada_por_sistema: false,
-      firmada_por_sistema: false,
-      rectificada_por: ROL_ESCRITOR,
-      rectificada_en: ahora
+      motivo: String(motivo),
+      // Lo que cambia: declarado en el input; ausente → null (no se inventa la correccion).
+      correccion: input.correccion !== undefined ? input.correccion : (input.nuevo !== undefined ? input.nuevo : null),
+      base: input.base != null ? this._num(input.base) : null,
+      cuota: input.cuota != null ? this._num(input.cuota) : null,
+      // NO se edita la declaracion original: la rectificacion es un registro NUEVO.
+      original_intacta: true,
+      presentada: false,                     // este modulo NO presenta; presenta el circuito fiscal
+      en: ahora
     };
-
-    // APPEND-ONLY: se apila. La original permanece; no se reescribe ninguna rectificacion anterior.
-    c.rectificaciones.push(rectificacion);
-    if (!c.por_original.has(original_clave)) c.por_original.set(original_clave, []);
-    c.por_original.get(original_clave).push(rectificacion.id);
-    c.updated_at = ahora;
+    // APPEND-ONLY: se apila; NUNCA se sobrescribe ni se borra.
+    parcela.rectificaciones.push(registro);
+    parcela.claves.add(clave);
+    parcela.updated_at = ahora;
     this._persist.marcarDirty(pid);
 
     return {
       status: 200,
       data: {
         project_id: pid,
+        rectificacion: registro,
         rectificada: true,
-        rectificacion,
-        total_rectificaciones: c.rectificaciones.length,
-        rectificaciones_de_la_original: c.por_original.get(original_clave).length,
-        // El original NO se borra: la rectificacion SUMA y queda trazada.
-        borra_original: false,
-        suma: true
+        duplicado: false,
+        total: parcela.rectificaciones.length,
+        append_only: true,
+        abierto: {
+          correccion: registro.correccion != null ? null : 'la rectificacion no declaro el detalle de la correccion (se anota el hueco, no se inventa)'
+        }
       }
     };
   }
 
-  // El estado vigente de la obligacion se pide a estado-presentacion-fiscal (D12) POR EVENTO.
-  async _estadoVigente(pid, obligacion) {
-    if (!obligacion) return null;
-    const r = await this._rpc('estado-presentacion-fiscal.estado.request',
-      { project_id: pid, obligacion: String(obligacion) }, { timeout_ms: 4000 });
-    const d = r && r.status === 200 ? r.data : null;
-    return (d && d.registrada) ? d.estado : null;
-  }
-
-  // Los tipos son DECLARABLES; sin declaracion manda el vocabulario del dominio.
-  _tiposDe(input = {}) {
-    const t = Array.isArray(input.tipos_declarables)
-      ? input.tipos_declarables.map(x => String(x).toLowerCase()).filter(Boolean)
-      : null;
-    if (t && t.length) return t;
-    return TIPOS_POR_DEFECTO;
+  // El tipo de rectificacion: complementaria (añade) o sustitutiva (reemplaza). Declarado, o complementaria.
+  _tipo(v) {
+    const t = v != null ? String(v).toLowerCase().trim() : '';
+    return ['complementaria', 'sustitutiva'].includes(t) ? t : 'complementaria';
   }
 
   _obtenerOCrear(pid) {
-    let c = this._rectificaciones.get(pid);
-    if (!c) {
-      c = { esquema: 'contabilidad-rectificacion-declaracion-v1', rectificaciones: [], por_original: new Map() };
-      this._rectificaciones.set(pid, c);
+    let d = this._rectificaciones.get(pid);
+    if (!d) {
+      d = { esquema: 'contabilidad-rectificacion-declaracion-v1', rectificaciones: [], claves: new Set() };
+      this._rectificaciones.set(pid, d);
       this._persist.marcarDirty(pid);
     }
-    return c;
+    return d;
   }
 
-  // Lectura directa para otras hojas (no muta): rectificaciones de una declaracion original.
-  rectificacionesDe(pid, original_clave) {
-    const c = pid ? this._rectificaciones.get(pid) : null;
-    if (!c || original_clave == null) return [];
-    const ids = c.por_original.get(String(original_clave)) || [];
-    return c.rectificaciones.filter(r => ids.includes(r.id));
+  _num(v) { const n = Number(v); return Number.isFinite(n) ? n : null; }
+
+  // Lectura directa (mismo proceso) — solo lectura.
+  rectificacionesDe(pid) {
+    const d = pid ? this._rectificaciones.get(pid) : null;
+    return d ? [...d.rectificaciones] : [];
   }
 
   // ── Tools ──

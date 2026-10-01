@@ -1,39 +1,42 @@
 {
-  "_doc": "Manifest de contabilidad-entrada/contrapartida-asistida — MICRO-AGENTE (A6.1, hoja del plan). PROPONE la contrapartida de un hecho (cuenta + tercero + periodo) contra el PLAN DECLARADO (catalogo-cuentas, B1) y la ficha del tercero (maestro-terceros, N1), ambas consultadas POR EVENTO (request/response), nunca por import cruzado. Es la cara ASISTIDA: PROPONE, no escribe, no decide; el CORTE DURO lo fija la REGLA (regla-contrapartida A6.2). Invariantes: JAMAS fabrica una cuenta — sin regla que cubra el hecho devuelve propuesta:null y lo manda a la cola de excepcion (A8.1) con destino derivado de la naturaleza (contable→ASESOR, negocio→DUENO); el plan manda — una cuenta propuesta fuera del plan no se propone; si el plan o el maestro de terceros no responden, no se inventa dato (plan_disponible:false) sino que se manda a cola; la propuesta es determinista y auditable (regla_id, plan_confirmado, tercero_conocido). FORMA: MICRO-AGENTE stateless en este contrato — no persiste estado propio: su cajon fuzzy vive en el blueprint y toda su memoria relevante es EXTERNA (plan + reglas + terceros), asi que persistir aqui duplicaria estado ya custodido por A6.2/N1 sin ganar nada. Proyeccion unica `_juzgar({project_id, hecho, naturaleza?})` -> {propuesta, propuesta_por, requiere_cola, destino_cola}. Cierra el circulo: exito → publica contabilidad.contrapartida_propuesta; error → contrapartida-asistida.juzgar.failed.",
+  "_doc": "Manifest de entrada/contrapartida-asistida — MICRO-AGENTE (A6.1, hoja del plan). PROPONE cuenta/tercero/periodo contra el PLAN DECLARADO; el corte duro lo fija regla-contrapartida (A6.2) — esta hoja NO decide. Su mitad REFLEJA es determinista y honesta: junta lo DECLARADO (la regla vigente, SUBIDA a regla-contrapartida.aplicar.request por EVENTO) y lo expone como PROPUESTA; lo no cubierto por una regla declarada NO se rellena (queda en `abierto`, es juicio de la mitad fuzzy). Dato ausente = desconocido: sin hecho no hay nada que proponer. NO escribe, NO persiste. RPC PREGUNTA → sin ui_handler, su cara es el bus. ESCUCHA contabilidad.hecho_recibido (puerto-evento-vertical A1), contabilidad.plan_cuentas_declarado (catalogo-cuentas B1) y contabilidad.tercero_actualizado (maestro-terceros N1) — todos con emisor vivo; los tres handlers son fire-and-forget (toman constancia, no anuncian hecho). Publica contrapartida-asistida.juzgar.response y su par .failed.",
   "name": "contrapartida-asistida",
   "version": "0.1.0",
-  "description": "Micro-agente (A6.1): propone la contrapartida (cuenta+tercero+periodo) contra el plan y la regla declarados — PROPONE y no escribe; sin regla no inventa la cuenta y manda la duda a la cola.",
-  "blueprint_driven": true,
-  "blueprint_path": "contrapartida-asistida.blueprint.json",
+  "description": "Micro-agente (A6.1): propone cuenta/tercero/periodo contra el plan declarado. Propone, no fija (el corte duro es regla-contrapartida A6.2). Sin estado.",
   "language": "es",
   "subscribes": [
     {
       "event": "contrapartida-asistida.juzgar.request",
       "handler": "onJuzgarRequest",
-      "description": "RPC micro-agente: {project_id, hecho, naturaleza?} → {propuesta, propuesta_por:'REGLA', regla, plan_disponible, plan_confirmado, tercero_disponible, requiere_cola, destino_cola}. Consulta la REGLA (A6.2) por evento y confirma la cuenta contra el PLAN (B1) y el tercero (N1); sin regla que cubra NO inventa la cuenta — propuesta:null y requiere_cola:true. Exito → publica contabilidad.contrapartida_propuesta y responde por contrapartida-asistida.juzgar.response; hecho/project_id ausente → contrapartida-asistida.juzgar.failed."
+      "description": "RPC micro-agente (PREGUNTA, por el bus): {project_id?, hecho, contexto?, tercero?, periodo?} → {project_id, hecho, contexto, propuesta{contrapartida,tercero,periodo}, completa, propone:true, fija:false}. Propone la contrapartida del hecho contra la regla declarada (via regla-contrapartida.aplicar.request). Sin hecho → INVALID_INPUT. Responde por contrapartida-asistida.juzgar.response."
+    },
+    {
+      "event": "contabilidad.hecho_recibido",
+      "handler": "onHechoRecibido",
+      "description": "Fire-and-forget (lo emite puerto-evento-vertical A1): se recibio un hecho crudo → se toma constancia del contexto (no propone ni escribe; el hecho llega por RPC). No responde."
+    },
+    {
+      "event": "contabilidad.plan_cuentas_declarado",
+      "handler": "onPlanCuentasDeclarado",
+      "description": "Fire-and-forget (lo emite catalogo-cuentas B1): el plan contable cambio → se toma constancia del contexto. No responde."
+    },
+    {
+      "event": "contabilidad.tercero_actualizado",
+      "handler": "onTerceroActualizado",
+      "description": "Fire-and-forget (lo emite maestro-terceros N1): un tercero quedo actualizado → se toma constancia del contexto. No responde."
     }
   ],
   "publishes": [
     {
       "event": "contrapartida-asistida.juzgar.response",
-      "description": "Respuesta RPC correlada de contrapartida-asistida.juzgar.request → {request_id, status:200, data:{propuesta, propuesta_por, regla, plan_disponible, plan_confirmado, tercero_disponible, motivo, requiere_cola, destino_cola, disponible}}. Emitida por el helper _atender."
+      "description": "Respuesta RPC correlada de la op juzgar (una sola cara: el bus)."
     },
     {
       "event": "contrapartida-asistida.juzgar.failed",
-      "description": "Par de fallo determinista (A6.1): hecho o project_id ausente → {status, error:{code, message, details?}}. Cierra el circulo de contrapartida-asistida.juzgar.request."
-    },
-    {
-      "event": "contabilidad.contrapartida_propuesta",
-      "description": "Fire-and-forget (A6.1): el juicio de contrapartida quedo resuelto → {project_id, propuesta, propuesta_por, regla, plan_disponible, tercero_disponible, requiere_cola, destino_cola, correlation_id}. Lo consume la regla (A6.2) como corte duro y la cola de excepcion (A8.1) cuando requiere_cola es true."
+      "description": "Par de fallo determinista: falta el hecho → {status, code, message}. Cierra el circulo de juzgar.request."
     }
   ],
-  "ui_handlers": [
-    {
-      "domain": "contabilidad",
-      "action": "contrapartida-asistida.juzgar",
-      "handler": "onJuzgarRequest",
-      "type": "system_panel",
-      "zone": "lateral_derecha"
-    }
+  "tools": [
+    { "name": "contrapartida-asistida.juzgar", "description": "Propone (PREGUNTA) la contrapartida de un hecho contra el plan declarado." }
   ]
 }

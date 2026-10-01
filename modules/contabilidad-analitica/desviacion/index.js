@@ -1,32 +1,18 @@
 /**
  * contabilidad-analitica/desviacion — REFLEJO STATELESS (J4, hoja del plan).
  *
- * REAL VS PRESUPUESTO: la desviacion de lo que ha pasado contra lo que el JEFE declaro. Calculo
- * PURO y determinista: el real − el objetivo, y el signo declarado (DESVIACION_POSITIVA si el real
- * va por encima del objetivo, NEGATIVA si por debajo, NULA si coinciden).
+ * ══════════════════════════════════════════════════════════════════════════════════════
+ * Real vs PRESUPUESTO. Dispara aviso SI se sale del umbral DECLARADO. Determinista.
+ * ══════════════════════════════════════════════════════════════════════════════════════
+ * No calcula el real (eso es margen-analitico) ni fija el objetivo (eso es presupuesto):
+ * RECIBE ambas cifras (o las sube por EVENTO) y las COMPARA. La desviacion es
+ * real − presupuesto, y el aviso solo se produce si el umbral declarado se rebasa.
  *
- * ATRIBUTOS del diseno: `real`, `presupuesto:Presupuesto`, `umbral:Umbral`.
- *   METODOS: calcular(d, periodo):Delta.
- *   REGLA: real vs presupuesto → dispara aviso SI se sale del umbral declarado. Determinista.
+ * Honestidad (invariante 13): sin AMBAS cifras (real y presupuesto) NO se inventa la
+ * desviacion: se declara ABIERTO. Sin umbral declarado NO se decide si "se sale": se
+ * declara (la desviacion se calcula, pero nadie ha dicho que sea inaceptable).
  *
- * EL PRESUPUESTO NO SE DUPLICA: el objetivo sale de `presupuesto` (J3) POR EVENTO
- * (`presupuesto.objetivo.request`, best-effort) o declarado en la peticion. Este modulo NO guarda
- * objetivos ni los infiere — solo los RESTA contra el real. El real sale declarado en la peticion
- * o de `margen-analitico` (J2) POR EVENTO. Aqui no se recalcula el margen ni el resultado.
- *
- * EL UMBRAL ES DECLARABLE: sin umbral declarado (ni en la peticion ni en el objetivo de J3) NO se
- * afirma que haya que avisar — `avisa:false` con el motivo declarado. Cero porcentajes cableados:
- * un umbral inventado dispararia avisos que el jefe no pidio.
- *
- * Invariantes:
- *  - DETERMINISTA: mismo real + mismo objetivo + mismo umbral → misma desviacion.
- *  - Dato ausente = desconocido: sin real o sin objetivo declarado → `desviacion:null`, `abierto:true`
- *    (no se computa contra 0: un objetivo 0 no declarado no es un objetivo 0).
- *  - LEY/PARAMETRO COMO DATO: el objetivo y el umbral son datos declarados; cero constantes.
- *  - NO escribe, NO persiste: la desviacion es un DERIVADO.
- *
- * Forma: REFLEJO → STATELESS. Sin PosPersistencia, sin onProjectActivated.
- * Emite `contabilidad.desviacion` cuando hay que avisar (lo consume `motor-avisos` K2).
+ * Forma: REFLEJO → STATELESS. Sin PosPersistencia. PREGUNTA (calcular) → sin ui_handler.
  * Ver hoja J4 del plan-construccion y diseno-oop.md (CLASE Desviacion).
  */
 
@@ -39,194 +25,147 @@ class Desviacion extends ModuloHibridoReflejo {
     super();
     this.name = 'desviacion';
     this.version = 'reflejo-0.1.0';
-    // Espejo en memoria de lo que el JEFE declaro (contabilidad.presupuesto_fijado): es solo una
-    // SENAL para poder atender una peticion sin volver a preguntar; no es parcela ni persistencia.
-    this._objetivos = new Map(); // project_id → Map<clave, Objetivo>
+    // Ultima senal observada por proyecto (memoria acotada, no store).
+    this._senales = new Map(); // project_id -> { real, objetivo, umbral, concepto }
   }
 
   async onUnload() { return super.onUnload(); }
 
-  // ── handler RPC (una linea, delega a _atender) ──
+  // ── handler RPC (una linea, delega a _atender). CLASE PREGUNTA → sin ui_handler ──
   onCalcularRequest(e) {
     return this._atender(e, 'calcular', 'desviacion.calcular.response', async (d) => {
       const res = await this._calcular(d);
-      if (res.status !== 200) {
-        this.eventBus?.publish('desviacion.calcular.failed', res);
-      } else if (res.data.avisa && res.data.aviso) {
-        // Exito CON aviso → evento de dominio (lo consume motor-avisos K2).
-        this.eventBus?.publish('contabilidad.desviacion', {
-          project_id: res.data.project_id,
-          desviacion: res.data.desviacion,
-          dimension: res.data.dimension,
-          periodo: res.data.periodo,
-          umbral: res.data.umbral,
-          aviso: res.data.aviso,
-          correlation_id: d.correlation_id
-        });
-      }
+      if (res.status !== 200) this.eventBus?.publish('desviacion.calcular.failed', res);
       return res;
     });
   }
 
-  // ── fire-and-forget: el JEFE fijo un objetivo → se refleja como señal (no se persiste) ──
+  // ── handler de dominio (fire-and-forget): se fijo el presupuesto → hay objetivo ──
   onPresupuestoFijado(e) {
     const d = (e && (e.data || e)) || {};
-    const pid = d.project_id;
-    if (!pid) return null;
-    const o = d.objetivo || d;
-    const clave = o.clave || (o.periodo != null && o.dimension != null ? `${o.periodo}|${o.dimension}` : null);
-    if (!clave) return null;
-    let m = this._objetivos.get(pid);
-    if (!m) { m = new Map(); this._objetivos.set(pid, m); }
-    m.set(String(clave), {
-      clave: String(clave),
-      dimension: o.dimension ?? null,
-      periodo: o.periodo != null ? String(o.periodo) : null,
-      valor: this._num(o.valor),
-      umbral: this._num(o.umbral)
-    });
-    return null;
+    const pid = d.project_id || this.project_id;
+    if (!pid) return;
+    const s = this._senales.get(pid) || {};
+    s.objetivo = this._num(d.importe ?? d.objetivo ?? d.total ?? (d.presupuesto && d.presupuesto.importe));
+    s.umbral = this._num(d.umbral ?? d.tolerancia ?? (d.presupuesto && d.presupuesto.umbral));
+    s.concepto = d.concepto != null ? String(d.concepto) : s.concepto;
+    this._senales.set(pid, s);
   }
 
-  // ── proyeccion determinista: calcular(d, periodo) → Delta ──
+  // ── handler de dominio (fire-and-forget): el libro cambio → se observa (ventana acotada) ──
+  onAsientoAsentado(e) {
+    const d = (e && (e.data || e)) || {};
+    if (d.asiento) {
+      this._vistos = this._vistos || new Map();
+      const pid = d.project_id || this.project_id || '_';
+      const lista = this._vistos.get(pid) || [];
+      lista.push(d.asiento);
+      if (lista.length > 1000) lista.shift();
+      this._vistos.set(pid, lista);
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // _calcular(input) → { status, data }  ·  real vs presupuesto + umbral
+  // ══════════════════════════════════════════════════════════════════════
   async _calcular(input = {}) {
     const pid = input.project_id || this.project_id;
     if (!pid) return this._invalid('project_id');
 
-    const dimension = this._clave(input.dimension != null ? input.dimension : (input.centro ?? input.linea ?? input.producto));
-    const periodo = input.periodo != null ? String(input.periodo).trim() : null;
+    const obs = this._senales.get(pid) || {};
 
-    // 1) El OBJETIVO: declarado en la peticion o traido de presupuesto (J3) POR EVENTO. NO se duplica.
-    const { objetivo, fuente_objetivo } = await this._objetivo(pid, dimension, periodo, input);
+    // El REAL: declarado, o subido por EVENTO al margen-analitico (best-effort).
+    let real = this._num(input.real ?? input.importe_real ?? input.total);
+    let fuente_real = real != null ? 'declarado' : null;
+    if (real == null) {
+      const r = await this._rpc('margen-analitico.calcular.request', {
+        project_id: pid, concepto: input.concepto, periodo: input.periodo
+      }, { timeout_ms: 800 });
+      const v = r && this._num(r.margen ?? r.total ?? r.importe);
+      if (v != null) { real = v; fuente_real = 'margen-analitico'; }
+    }
 
-    // 2) El REAL: declarado en la peticion o derivado de margen-analitico (J2) POR EVENTO.
-    const { real, fuente_real } = await this._real(pid, dimension, periodo, input);
+    // El OBJETIVO (presupuesto): declarado, o el observado del evento.
+    let presupuesto = this._num(input.presupuesto ?? input.objetivo ?? input.importe_presupuestado);
+    let fuente_obj = presupuesto != null ? 'declarado' : null;
+    if (presupuesto == null) {
+      const r = await this._rpc('presupuesto.objetivo.request', {
+        project_id: pid, concepto: input.concepto, periodo: input.periodo
+      }, { timeout_ms: 800 });
+      const v = r && this._num(r.importe ?? r.objetivo ?? r.total);
+      if (v != null) { presupuesto = v; fuente_obj = 'presupuesto'; }
+      else if (obs.objetivo != null) { presupuesto = obs.objetivo; fuente_obj = 'observado'; }
+    }
 
-    // 3) El UMBRAL: declarado en la peticion o con el objetivo de J3. Sin umbral NO se avisa.
-    const umbral = this._umbral(input, objetivo);
+    // El UMBRAL declarado (tolerancia). Sin el NO se decide "se sale".
+    const umbral = this._num(input.umbral ?? input.tolerancia ?? obs.umbral);
 
-    // Sin real o sin objetivo declarado NO se computa nada: 0 seria una cifra que nadie declaro.
-    if (real === null || objetivo === null) {
-      const faltan = [];
-      if (real === null) faltan.push('real');
-      if (objetivo === null) faltan.push('objetivo');
+    const hayAmbas = real != null && presupuesto != null;
+    if (!hayAmbas) {
       return {
         status: 200,
         data: {
-          project_id: pid, dimension, periodo,
-          fuente_objetivo, fuente_real,
-          objetivo, real, umbral,
-          desviacion: null, desviacion_relativa: null, signo: null,
-          avisa: false, aviso: null,
-          abierto: true, faltan,
-          motivo: 'no se computa desviacion: falta ' + faltan.join(' y ')
-            + ' (no se mide contra un 0 que nadie declaro)'
+          project_id: pid,
+          tipo: 'desviacion',
+          real: real != null ? real : null,
+          presupuesto: presupuesto != null ? presupuesto : null,
+          desviacion: null,
+          dentro_umbral: null,
+          senal_presente: false,
+          abierto: {
+            real: real != null ? null : 'no llego el real (ni declarado ni de margen-analitico)',
+            presupuesto: presupuesto != null ? null : 'no llego el presupuesto (ni declarado ni de presupuesto)',
+            nota: 'faltan cifras: la desviacion no se inventa'
+          }
         }
       };
     }
 
-    const delta = this._round(real - objetivo, 2);
-    const signo = delta > 0 ? 'DESVIACION_POSITIVA' : (delta < 0 ? 'DESVIACION_NEGATIVA' : 'NULA');
-    const relativa = objetivo !== 0 ? this._round(delta / Math.abs(objetivo), 4) : null;
+    const desviacion = this._round(real - presupuesto, 2);
+    const relativa = presupuesto !== 0 ? this._round(desviacion / Math.abs(presupuesto), 4) : null;
+    const hayUmbral = umbral != null;
+    const desviacion_abs = Math.abs(desviacion);
+    // Se sale si la desviacion ABSOLUTA supera el umbral declarado.
+    const fuera_umbral = hayUmbral ? desviacion_abs > Math.abs(umbral) : null;
 
-    // 4) El AVISO: solo si hay umbral DECLARADO y la desviacion se sale (en valor absoluto).
-    //    Sin umbral no se afirma que haya que avisar (el jefe no ha fijado cuando).
-    let avisa = false;
-    let aviso = null;
-    if (umbral !== null) {
-      avisa = Math.abs(delta) > umbral;
-      if (avisa) {
-        aviso = {
-          tipo: 'DESVIACION',
-          dimension, periodo,
-          real, objetivo, umbral,
-          desviacion: delta,
-          signo,
-          // El destino lo declara el jefe; aqui no se inventa quien actua (Q70 [ABIERTO]).
-          destino: input.destino != null ? String(input.destino) : null,
-          destino_declarado: input.destino != null && String(input.destino).trim().length > 0,
-          emitido_en: new Date().toISOString()
-        };
-      }
-    }
-
-    return {
+    const data = {
       status: 200,
       data: {
         project_id: pid,
-        dimension,
-        periodo,
-        fuente_objetivo,
-        fuente_real,
-        objetivo,
+        tipo: 'desviacion',
+        concepto: input.concepto != null ? String(input.concepto) : null,
         real,
-        umbral,
-        umbral_declarado: umbral !== null,
-        // Delta: real − objetivo. Una sola respuesta correcta.
-        desviacion: delta,
+        presupuesto,
+        desviacion,
+        desviacion_abs,
         desviacion_relativa: relativa,
-        signo,
-        avisa,
-        aviso,
-        abierto: false,
-        faltan: umbral === null ? ['umbral'] : [],
-        motivo: umbral === null
-          ? 'la desviacion se mide, pero no se avisa: no hay umbral declarado por el jefe'
-          : null
+        umbral: hayUmbral ? umbral : null,
+        fuera_umbral,
+        dentro_umbral: fuera_umbral == null ? null : !fuera_umbral,
+        fuente: { real: fuente_real, presupuesto: fuente_obj },
+        senal_presente: true,
+        formula: 'desviacion = real - presupuesto; se sale si |desviacion| > |umbral| declarado',
+        abierto: {
+          umbral: hayUmbral ? null : 'no se declaró umbral: se calcula la desviacion pero no se decide si es inaceptable'
+        }
       }
     };
-  }
 
-  // El objetivo: dato declarado o de J3 (presupuesto) POR EVENTO. Nunca se infiere.
-  async _objetivo(pid, dimension, periodo, input = {}) {
-    const decl = this._num(input.objetivo);
-    if (decl !== null) return { objetivo: decl, fuente_objetivo: 'declarado' };
-    if (input.presupuesto && typeof input.presupuesto === 'object' && dimension && periodo) {
-      const k = `${periodo}|${dimension}`;
-      if (input.presupuesto[k] != null) {
-        return { objetivo: this._num(input.presupuesto[k]), fuente_objetivo: 'declarado' };
-      }
+    // Dispara aviso SOLO si se sale del umbral DECLARADO.
+    if (fuera_umbral === true) {
+      this.eventBus?.publish('motor-avisos.producir.request', {
+        project_id: pid,
+        tipo: 'presupuesto',
+        severidad: 'warn',
+        titulo: `Desviacion fuera de umbral: ${desviacion}`,
+        detalle: `real=${real} vs presupuesto=${presupuesto} (umbral ${umbral})`,
+        origen: 'desviacion',
+        ref: input.concepto != null ? String(input.concepto) : null,
+        correlation_id: input.correlation_id
+      });
     }
-    if (dimension && periodo) {
-      const espejo = this._objetivos.get(pid);
-      const o = espejo ? espejo.get(`${periodo}|${dimension}`) : null;
-      if (o && o.valor !== null) return { objetivo: o.valor, fuente_objetivo: 'presupuesto_fijado' };
-    }
-    const r = await this._rpc('presupuesto.objetivo.request',
-      { project_id: pid, dimension, periodo }, { timeout_ms: 4000 });
-    const data = r && r.data ? r.data : null;
-    const valor = data && data.objetivo ? this._num(data.objetivo.valor) : (data ? this._num(data.valor) : null);
-    if (valor !== null) return { objetivo: valor, fuente_objetivo: 'presupuesto' };
-    return { objetivo: null, fuente_objetivo: null };
-  }
 
-  // El real: dato declarado o de margen-analitico (J2) POR EVENTO. Aqui NO se recalcula el margen.
-  async _real(pid, dimension, periodo, input = {}) {
-    const decl = this._num(input.real != null ? input.real : input.margen);
-    if (decl !== null) return { real: decl, fuente_real: 'declarado' };
-    const r = await this._rpc('margen-analitico.calcular.request',
-      { project_id: pid, periodo, dimension, eje: input.eje }, { timeout_ms: 4000 });
-    const data = r && r.data ? r.data : null;
-    if (!data) return { real: null, fuente_real: null };
-    // Se LEE el margen ya calculado por J2: la cubeta de esa dimension, o el total si no hay dimension.
-    if (dimension && Array.isArray(data.por_dimension)) {
-      const c = data.por_dimension.find(x => this._clave(x.dimension) === dimension);
-      return { real: c ? this._num(c.margen) : null, fuente_real: 'margen-analitico' };
-    }
-    return { real: this._num(data.margen_total), fuente_real: 'margen-analitico' };
-  }
-
-  _umbral(input = {}, objetivoTraido) {
-    const u = this._num(input.umbral);
-    if (u !== null) return u;
-    if (objetivoTraido && typeof objetivoTraido === 'object') return this._num(objetivoTraido.umbral);
-    return null;
-  }
-
-  _clave(v) {
-    if (v === undefined || v === null || v === '') return null;
-    if (typeof v === 'object') return this._clave(v.id ?? v.clave ?? v.nombre ?? v.dimension ?? v.centro ?? v.linea ?? v.producto);
-    return String(v);
+    return data;
   }
 
   _num(v) {

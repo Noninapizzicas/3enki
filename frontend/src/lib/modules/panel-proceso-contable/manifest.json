@@ -1,9 +1,0 @@
-{
-  "id": "panel-proceso-contable",
-  "name": "Panel del proceso",
-  "version": "0.1.0",
-  "zone": "system-bar",
-  "order": 231,
-  "icon": "🗂️",
-  "label": "Proceso"
-}

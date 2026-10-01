@@ -1,39 +1,55 @@
 {
-  "_doc": "Manifest de contabilidad-entrada/desatasco-entrada — MICRO-AGENTE HIBRIDO (P3, hoja del plan). LA ACCION que completa A8: resuelve / reencola / descarta una EXCEPCION CON MOTIVO. A8.1 (encolado-excepcion) solo ENCOLA; aqui se decide QUE HACER con lo encolado, y el motivo es obligatorio. ATRIBUTOS del diseno: cola:EncoladoExcepcion; METODOS: juzgar(e:Excepcion):Decision<resolver|reencolar|descartar>; REGLA: resolver/reencolar/descartar una excepcion CON motivo — decidir la resolucion (contrapartida, importe) es juicio; es la ACCION que completa A8. LA REGLA CANDIDATA NO ACTUA HASTA QUE EL ASESOR LA RATIFICA: cuando el desatasco aprende algo de la resolucion, PROPONE una REGLA CANDIDATA (regla_candidata) y la publica — pero NO la aplica; la ratificacion es del ASESOR (ratificacion-regla-aprendida, L10); mientras no se ratifique, la regla candidata NO ACTUA (regla_candidata_actua:false). HIBRIDO (patron etiquetado-analitico): _juzgarReflejo es el REFLEJO determinista (aplica las REGLAS ya declaradas Y RATIFICADAS al caso — una regla candidata no ratificada se IGNORA para el corte — la primera que coincide gana, operando sobre el operador declarado igual/prefijo/contiene/en/existe) y _concluir es el FUZZY (1 llamada llm.complete.request con guion-prompt self-contained que PROPONE la accion con su motivo; si el LLM falla o no cumple el contrato, NO se inventa). Invariantes: NUNCA INVENTA (sin base para resolver → REENCOLA; no fabrica contrapartida ni importe); CON MOTIVO (toda decision lleva su motivo — sin motivo la propuesta fuzzy se rechaza y no hay decision); LA REGLA CANDIDATA NO ACTUA (se propone y se declara que requiere ratificacion del ASESOR); PROPONE, NO ESCRIBE (no toca la cola A8.1 ni el libro — escribe:false). FORMA: MICRO-AGENTE stateless (sin PosPersistencia, sin onProjectActivated); la memoria de lo aprendido vive en proceso y la persistencia duradera es el EVENTO de dominio que publica (contabilidad.excepcion_desatascada). Proyeccion `_juzgar`. Cierra el circulo: error → desatasco-entrada.juzgar.failed.",
+  "_doc": "Manifest de entrada/desatasco-entrada — MICRO-AGENTE (P3, hoja del plan). RESOLVER/REENCOLAR/DESCARTAR una excepcion CON MOTIVO: es la ACCION que completa A8, y ES EL UNICO MICRO-AGENTE QUE PUBLICA (no PROPONE — ACTUA sobre la cola de lo dudoso). A8.1 encola, A8.2 avisa; aqui se DECIDE que se hace: resolver (SUBE escritor-diario.asentar.request, se asienta), reencolar (SUBE encolado-excepcion.encolar.request con el motivo nuevo), descartar (SUBE regla-contrapartida.aplicar.request si hay contrapartida declarada). TODO desatasco se anota en historial-proceso-contable.anotar.request (append-only). SIN MOTIVO NO SE ACTUA (una excepcion resuelta/descartada sin causa es una excepcion que se tapa); sin excepcion NO hay nada que desatascar. R2: al desatascar publica el HECHO contabilidad.excepcion_desatascada (lo consume regla-contrapartida —que aprende de la resolucion— y el historial). Escucha contabilidad.excepcion_encolada (encolado-excepcion A8.1, emisor vivo; fire-and-forget, observa ventana acotada). STATELESS (sin PosPersistencia). La RPC juzgar es CLASE ORDEN → SÍ lleva ui_handler.",
   "name": "desatasco-entrada",
   "version": "0.1.0",
-  "description": "Micro-agente (P3): desatasca una excepción con motivo (resolver/reencolar/descartar) — propone sin escribir; si aprende una regla candidata NO actúa hasta que el asesor la ratifique.",
-  "blueprint_driven": true,
-  "blueprint_path": "desatasco-entrada.blueprint.json",
+  "description": "Micro-agente (P3): resuelve/reencola/descarta una excepcion con motivo. Unico micro-agente que publica (ACTUA, no propone).",
   "language": "es",
   "subscribes": [
     {
       "event": "desatasco-entrada.juzgar.request",
       "handler": "onJuzgarRequest",
-      "description": "RPC híbrido (juicio): {project_id, excepcion:{id|clave, asunto, naturaleza, motivo, detalle}, reglas?:[...]} → {project_id, excepcion_id, decision:{accion:'resolver'|'reencolar'|'descartar', motivo, resolucion:{contrapartida, importe}|null, origen:'regla'|'juicio'|'fallback', regla_id, confianza}, regla_candidata, regla_candidata_actua:false, ratifica_por:'ratificacion-regla-aprendida (L10)', aprendido, escribe:false, abierto, faltan}. Aplica las REGLAS declaradas y ratificadas (reflejo determinista); si ninguna cubre, PROPONE con el juicio fuzzy (llm.complete.request, exige motivo); sin cobertura ni juicio resoluble → REENCOLA (nunca inventa). Puede proponer una regla candidata que NO ACTÚA hasta ratificación del asesor. Exito → publica contabilidad.excepcion_desatascada y responde por desatasco-entrada.juzgar.response; excepcion/project_id ausente → desatasco-entrada.juzgar.failed."
+      "description": "RPC micro-agente (ORDEN, panel): {project_id, excepcion?/excepcion_id?/clave?, accion?('resolver'|'reencolar'|'descartar'), motivo, asiento?, contrapartida?} → {project_id, excepcion_id, clave, accion, motivo, desatascada, resuelta, reencolada, descartada}. ACTUA sobre la excepcion y publica contabilidad.excepcion_desatascada (R2); SUBE la accion concreta (asentar/encolar/aplicar regla/anotar). Sin excepcion o sin motivo → INVALID_INPUT. Responde por desatasco-entrada.juzgar.response; par de fallo desatasco-entrada.juzgar.failed."
+    },
+    {
+      "event": "contabilidad.excepcion_encolada",
+      "handler": "onExcepcionEncolada",
+      "description": "Fire-and-forget (encolado-excepcion A8.1): quedo una excepcion en espera de revision → se observa (ventana acotada) para poder desatascarla. No responde."
     }
   ],
   "publishes": [
     {
+      "event": "contabilidad.excepcion_desatascada",
+      "description": "Fire-and-forget (P3): una excepcion quedo desatascada con su accion y motivo → {project_id, excepcion_id, clave, accion, motivo, en}. Lo consume regla-contrapartida (registra regla aprendida) y el historial de proceso."
+    },
+    {
+      "event": "escritor-diario.asentar.request",
+      "description": "Subida (REQUEST por EVENTO, SOLO al resolver con asiento): ordena asentar el asiento de la excepcion a B2. DesatascoEntrada desatasca; escritor-diario asienta."
+    },
+    {
+      "event": "encolado-excepcion.encolar.request",
+      "description": "Subida (REQUEST por EVENTO, SOLO al reencolar): devuelve la excepcion a la cola A8.1 con el motivo nuevo."
+    },
+    {
+      "event": "regla-contrapartida.aplicar.request",
+      "description": "Subida (REQUEST por EVENTO, SOLO al descartar con contrapartida declarada): aplica la contrapartida para que el sistema aprenda de la resolucion."
+    },
+    {
+      "event": "historial-proceso-contable.anotar.request",
+      "description": "Subida (REQUEST por EVENTO, SIEMPRE): anota el desatasco en el historial del proceso (append-only, P2)."
+    },
+    {
       "event": "desatasco-entrada.juzgar.response",
-      "description": "Respuesta RPC correlada de desatasco-entrada.juzgar.request → {request_id, status:200, data:{excepcion_id, decision, regla_candidata, regla_candidata_actua:false, ratifica_por, aprendido, escribe:false, abierto}}. Emitida por el helper _atender."
+      "description": "Respuesta RPC correlada de la op juzgar (una sola cara: el bus)."
     },
     {
       "event": "desatasco-entrada.juzgar.failed",
-      "description": "Par de fallo determinista (P3): project_id o excepcion ausente → {status, error:{code, message, details?}}. Cierra el circulo de desatasco-entrada.juzgar.request."
-    },
-    {
-      "event": "contabilidad.excepcion_desatascada",
-      "description": "Fire-and-forget (P3): una excepcion quedo DESATASCADA con motivo (propuesta, no escritura) → {project_id, excepcion_id, accion, motivo, escribe:false, regla_candidata, requiere_ratificacion, correlation_id}. Si regla_candidata != null, NO ACTUA hasta que el asesor la ratifique (ratificacion-regla-aprendida L10). Lo consume la cola (A8.1) para materializar la salida y el asesor para ratificar."
+      "description": "Par de fallo determinista: falta project_id/excepcion/motivo → {status, code, message}. Cierra el circulo de juzgar.request."
     }
   ],
+  "tools": [
+    { "name": "desatasco-entrada.juzgar", "description": "Desatasca (ORDEN) una excepcion: resolver/reencolar/descartar con motivo, y anuncia contabilidad.excepcion_desatascada." }
+  ],
   "ui_handlers": [
-    {
-      "domain": "contabilidad",
-      "action": "desatasco-entrada.juzgar",
-      "handler": "onJuzgarRequest",
-      "type": "system_panel",
-      "zone": "lateral_derecha"
-    }
+    { "domain": "contabilidad", "action": "desatasco-entrada.juzgar", "handler": "onJuzgarRequest", "type": "system_panel", "zone": "lateral_derecha" }
   ]
 }

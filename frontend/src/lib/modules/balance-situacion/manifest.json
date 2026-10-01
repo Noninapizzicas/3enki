@@ -1,9 +1,0 @@
-{
-  "id": "balance-situacion",
-  "name": "Balance de situación",
-  "version": "0.1.0",
-  "zone": "work-bar",
-  "order": 35,
-  "icon": "📒",
-  "label": "Balance"
-}

@@ -1,53 +1,42 @@
 /**
- * contabilidad-analitica/motor-avisos — PUENTE STATELESS (K2, hoja del plan).
+ * contabilidad-analitica/motor-avisos — PUENTE (K2, hoja del plan).
  *
- * **LA PIEZA QUE DESBLOQUEA.** PRODUCE el aviso (requisito 4 del dueño): recoge las
- * SEÑALES que ya emiten las piezas del sistema (`contabilidad.aviso_revision`,
- * `contabilidad.aviso_cuadre`, `contabilidad.vencimiento_fiscal`,
- * `contabilidad.vencimiento_proximo`, `contabilidad.desviacion`,
- * `contabilidad.fuente_faltante`) y las CONVIERTE en un `Aviso` canonico con su asunto,
- * su motivo, su destino y su canal.
+ * ══════════════════════════════════════════════════════════════════════════════════════
+ * LA PIEZA QUE CIERRA EL CIRCULO DE LOS AVISOS.
+ * ══════════════════════════════════════════════════════════════════════════════════════
+ * PRODUCE el aviso (requisito 4 del dueño): conecta por EVENTO y ENTREGA el aviso a
+ * `aviso-al-negocio` R1, que es quien lo hace llegar al negocio. Este modulo solo
+ * PRODUCE; la ENTREGA es del puente R1 (no se pisan).
  *
- * **PRODUCE; NO ENTREGA Y NO DECIDE.** El motor es el CANAL DE AVISOS, no el mensajero:
- *   - NO habla con ningun canal (telegram, email, push): la ENTREGA + CONFIRMA es R1
- *     (`aviso-negocio`, oleada posterior). Aqui solo se produce el aviso y se publica.
- *   - NO decide QUE avisos existen, A QUIEN van ni POR QUE CANAL: eso es el CATALOGO
- *     (`catalogo-avisos` K6), que se consulta POR EVENTO (`catalogo-avisos.resolver.request`,
- *     best-effort). Sin catalogo NO se inventa la politica: se produce el aviso con lo que la
- *     señal ya traia declarado y se marca `catalogo_disponible:false`.
- *   - NO inventa DESTINO: el destino es `ParametroDeclarable` ([ABIERTO] Q70 quien actua).
- *     Si la señal no lo trae y el catalogo no lo resuelve → `destino:null`,
- *     `destino_declarado:false`. Jamas se asume a quien avisar.
+ * CIRCULO:
+ *   señales (revision_solicitada · cuadre_no_cuadra · plazo_declarado · fuente_faltante_declarada)
+ *      → motor-avisos.producir  (PRODUCE)
+ *      → aviso-al-negocio.entregar (ENTREGA)
+ *      → contabilidad.aviso_entregado
+ *   y ademas el hecho `contabilidad.aviso_producido` (lo escuchan aviso-al-negocio R1 e
+ *   informe-accionable R2).
  *
- * ATRIBUTOS del diseno: `destino:ParametroDeclarable`, `catalogo:Set<Senal>`.
- * METODOS: `producir(senal):Aviso`. REGLA: PRODUCE el aviso; conecta por evento.
+ * R3 (honestidad de la escucha): el plan declara tambien escucha de
+ * `contabilidad.presupuesto_fijado` (presupuesto) y `contabilidad.hecho_recibido`
+ * (puerto-evento-vertical) — AMBOS emisores YA existen → SI se declaran. En cambio
+ * `contabilidad.fuente_faltante_declarada` (declaracion-fuente-faltante) aun no tiene
+ * emisor en el repo → NO se declara (daria cadena colgada).
  *
- * Invariantes:
- *  - Una señal sin naturaleza identificable NO es un aviso: se declara y cierra el circulo
- *    con el par `.failed` (nada se estima).
- *  - DETERMINISTA: misma señal + mismo catalogo declarado → mismo aviso.
- *  - LEY/PARAMETRO COMO DATO: los tipos de aviso, destinos y canales son DECLARABLES; cero
- *    catalogo cableado en el codigo.
- *  - Sin estado de dominio: no recuerda avisos, no los cuenta, no los re-emite. Un puente.
+ * Invariante: dato ausente = desconocido. Sin SENAL declarada NO se inventa un aviso: se
+ * declara ABIERTO (nada que producir) — un aviso fabricado de la nada es un aviso que miente.
  *
- * Forma: PUENTE → STATELESS. Sin PosPersistencia, sin onProjectActivated.
+ * Forma: PUENTE → STATELESS. Sin PosPersistencia. RPC producir = ORDEN → ui_handler.
  * Ver hoja K2 del plan-construccion y diseno-oop.md (CLASE MotorAvisos).
  */
 
 'use strict';
 
+const crypto = require('crypto');
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
 
-// Las señales que el motor escucha, cada una con la naturaleza que DECLARA su emisor.
-// El mapeo señal → tipo/asunto NO es criterio de negocio: es la IDENTIDAD de la señal.
-const SENALES = {
-  'contabilidad.aviso_revision': { tipo: 'revision', asunto: 'revision' },
-  'contabilidad.aviso_cuadre': { tipo: 'cuadre', asunto: 'cuadre' },
-  'contabilidad.vencimiento_fiscal': { tipo: 'vencimiento', asunto: 'vencimiento_fiscal' },
-  'contabilidad.vencimiento_proximo': { tipo: 'vencimiento', asunto: 'vencimiento' },
-  'contabilidad.desviacion': { tipo: 'desviacion', asunto: 'desviacion' },
-  'contabilidad.fuente_faltante': { tipo: 'fuente_faltante', asunto: 'fuente_faltante' }
-};
+// Las SEÑALES que producen un aviso. El `tipo` es DATO declarable; el emisor de cada
+// señal se documenta (no se cablea ninguna regla de negocio oculta).
+const TIPOS = new Set(['revision', 'cuadre', 'plazo', 'fuente', 'presupuesto', 'hecho', 'aviso', 'otro']);
 
 class MotorAvisos extends ModuloHibridoReflejo {
   constructor() {
@@ -58,185 +47,154 @@ class MotorAvisos extends ModuloHibridoReflejo {
 
   async onUnload() { return super.onUnload(); }
 
-  // ── handler RPC (una linea, delega a _atender) ──
+  // ── handler RPC (una linea, delega a _atender). CLASE ORDEN → ui_handler ──
   onProducirRequest(e) {
-    return this._atender(e, 'producir', 'motor-avisos.producir.response', async (d) => {
-      const res = await this._producir(d);
+    return this._atender(e, 'producir', 'motor-avisos.producir.response', (d) => {
+      const res = this._producir(d);
       if (res.status === 200) {
-        this._emitirProducido(res.data, d.correlation_id);
+        // R2 · si PRODUCE, anuncia el HECHO: hay un aviso listo para entregar/incorporar.
+        this.eventBus?.publish('contabilidad.aviso_producido', {
+          project_id: res.data.project_id,
+          aviso_id: res.data.aviso.aviso_id,
+          tipo: res.data.aviso.tipo,
+          severidad: res.data.aviso.severidad,
+          titulo: res.data.aviso.titulo,
+          detalle: res.data.aviso.detalle,
+          origen: res.data.aviso.origen,
+          correlation_id: d.correlation_id
+        });
+        // SUBE (best-effort por EVENTO) la ENTREGA al puente R1 (aviso-al-negocio).
+        this.eventBus?.publish('aviso-al-negocio.entregar.request', {
+          project_id: res.data.project_id,
+          aviso: res.data.aviso,
+          correlation_id: d.correlation_id
+        });
       } else {
+        // Si la señal es de tipo señal-de-aviso y no hay aviso → par de fallo determinista.
         this.eventBus?.publish('motor-avisos.producir.failed', res);
       }
       return res;
     });
   }
 
-  // ══════════════════════════════════════════════════════════════════════
-  // SEÑALES (fire-and-forget): cada pieza ya emitio su señal de dominio.
-  // El motor la convierte en Aviso. Todas son TOLERANTES: si la señal llega
-  // malformada se ignora (no se cuelga el bus por una señal suelta).
-  // ══════════════════════════════════════════════════════════════════════
-
-  // A8.2 (aviso-revision): una excepcion necesita revision.
-  async onAvisoRevision(e) {
-    return this._senal('contabilidad.aviso_revision', e);
-  }
-
-  // C6 (aviso-cuadre): LA metrica unica de cobertura no esta completa.
-  async onAvisoCuadre(e) {
-    return this._senal('contabilidad.aviso_cuadre', e);
-  }
-
-  // D6 (calendario-fiscal): un vencimiento fiscal entra en la ventana declarada.
-  async onVencimientoFiscal(e) {
-    return this._senal('contabilidad.vencimiento_fiscal', e);
-  }
-
-  // E5/N8 (prevision-caja / vencimiento-pago): un vencimiento de pago se acerca.
-  async onVencimientoProximo(e) {
-    return this._senal('contabilidad.vencimiento_proximo', e);
-  }
-
-  // J4 (desviacion): el real se salio del umbral DECLARADO.
-  async onDesviacion(e) {
-    return this._senal('contabilidad.desviacion', e);
-  }
-
-  // A15 (declaracion-fuente-faltante): una vertical no publica un hecho necesario.
-  async onFuenteFaltante(e) {
-    return this._senal('contabilidad.fuente_faltante', e);
-  }
-
-  // ── conversion señal → aviso (una sola proyeccion, misma para las 6 señales) ──
-  async _senal(evento, e) {
+  // ── handlers de DOMINIO (fire-and-forget): cada señal produce su aviso ──
+  // Una EXCEPCION SIEMPRE genera aviso (aviso-revision A8.1 la solicito).
+  onRevisionSolicitada(e) { return this._producirDeSenal(e, 'revision'); }
+  // El cuadre que NO cuadra avisa (aviso-cuadre C6).
+  onCuadreNoCuadra(e) { return this._producirDeSenal(e, 'cuadre'); }
+  // El plazo declarado dispara el aviso proactivo (calendario-fiscal D6).
+  onPlazoDeclarado(e) { return this._producirDeSenal(e, 'plazo'); }
+  // El presupuesto fijado se incorpora como aviso informativo (presupuesto J3).
+  onPresupuestoFijado(e) { return this._producirDeSenal(e, 'presupuesto'); }
+  // Un hecho recibido se puede querer avisar: SOLO se produce si el hecho lo declara.
+  onHechoRecibido(e) {
     const d = (e && (e.data || e)) || {};
-    if (!d.project_id) return null;
-    const res = await this._producir({ ...d, project_id: d.project_id, evento, senal: evento });
-    if (res.status === 200) {
-      this._emitirProducido(res.data, d.correlation_id);
-      return res;
-    }
-    this.eventBus?.publish('motor-avisos.producir.failed', res);
-    return res;
+    const hecho = d.hecho && typeof d.hecho === 'object' ? d.hecho : null;
+    if (!hecho) return;
+    // No se inventa un aviso para cada hecho: solo si el hecho pide aviso explicitamente.
+    if (!(hecho.aviso === true || (hecho.aviso && typeof hecho.aviso === 'object'))) return;
+    const detalle_aviso = hecho.aviso && typeof hecho.aviso === 'object' ? hecho.aviso : {};
+    return this._producirDeSenal({ data: { project_id: d.project_id, tipo: 'hecho', titulo: detalle_aviso.titulo, detalle: detalle_aviso.detalle, severidad: detalle_aviso.severidad, origen: d.origen || d.vertical, correlation_id: d.correlation_id } }, 'hecho');
   }
 
-  // Se emite UNA vez por aviso producido. Lo consume R1 (aviso-negocio: ENTREGA + CONFIRMA).
-  _emitirProducido(data, correlation_id) {
+  // Comun a los handlers de dominio: produce localmente y ANUNCIA el hecho si hay señal.
+  _producirDeSenal(e, tipo) {
+    const d = (e && (e.data || e)) || {};
+    let res;
+    try {
+      res = this._producir({ ...d, tipo: d.tipo != null ? d.tipo : tipo });
+    } catch (err) {
+      this.logger?.error(`${this.name}.senal.error`, { tipo, error: err.message });
+      return;
+    }
+    // Sin señal NO se inventa: no hay hecho que anunciar (no se publica un aviso vacio).
+    if (res.status !== 200 || !res.data || !res.data.aviso) return;
     this.eventBus?.publish('contabilidad.aviso_producido', {
-      project_id: data.project_id,
-      aviso: data.aviso,
-      aviso_id: data.aviso.id,
-      tipo: data.aviso.tipo,
-      asunto: data.aviso.asunto,
-      destino: data.aviso.destino,
-      canal: data.aviso.canal,
-      catalogo_disponible: data.catalogo_disponible,
-      correlation_id
+      project_id: res.data.project_id,
+      aviso_id: res.data.aviso.aviso_id,
+      tipo: res.data.aviso.tipo,
+      severidad: res.data.aviso.severidad,
+      titulo: res.data.aviso.titulo,
+      detalle: res.data.aviso.detalle,
+      origen: res.data.aviso.origen,
+      correlation_id: d.correlation_id
+    });
+    // SUBE la ENTREGA al puente R1.
+    this.eventBus?.publish('aviso-al-negocio.entregar.request', {
+      project_id: res.data.project_id,
+      aviso: res.data.aviso,
+      correlation_id: d.correlation_id
     });
   }
 
   // ══════════════════════════════════════════════════════════════════════
-  // PROYECCION: producir(senal) → Aviso (PRODUCE, no entrega y no decide)
+  // _producir(input) → { status, data }  ·  PRODUCE el aviso (no lo entrega)
   // ══════════════════════════════════════════════════════════════════════
-  async _producir(input = {}) {
+  _producir(input = {}) {
     const pid = input.project_id || this.project_id;
     if (!pid) return this._invalid('project_id');
 
-    // La SEÑAL: de que evento viene, o declarada explicitamente en la peticion.
-    const evento = input.evento != null ? String(input.evento) : (input.senal != null ? String(input.senal) : null);
-    const identidad = evento && SENALES[evento] ? SENALES[evento] : null;
+    const tipo = this._tipo(input);
 
-    // Sin identidad de señal declarada, el TIPO y el ASUNTO deben venir declarados: nada se estima.
-    const tipo = input.tipo != null ? String(input.tipo).trim()
-      : (identidad ? identidad.tipo : '');
-    const asunto = input.asunto != null ? String(input.asunto).trim()
-      : (identidad ? identidad.asunto : tipo);
-    if (!tipo) {
-      return this._errorResponse(400, 'SENAL_NO_IDENTIFICABLE',
-        'la señal no declara su naturaleza (tipo/asunto): el motor no inventa de que avisa',
-        { evento_declarado: evento });
-    }
+    // La SEÑAL: el dato que dispara el aviso. Sin señal NO se inventa nada (dato ausente = desconocido).
+    const senal = this._senal(input);
+    const tieneSenal = senal && Object.keys(senal).length > 0;
 
-    // El MOTIVO es el porque declarado por la señal. Sin motivo, se declara que falta.
-    const motivo = input.motivo != null ? String(input.motivo)
-      : (input.aviso && input.aviso.motivo != null ? String(input.aviso.motivo) : null);
-
-    // El CATALOGO (K6) resuelve QUE avisos, A QUIEN y POR QUE CANAL — POR EVENTO.
-    // Sin catalogo NO se inventa la politica: se produce con lo declarado.
-    const catalogo = await this._catalogo(pid, input, tipo);
-
-    // El DESTINO es ParametroDeclarable ([ABIERTO] Q70): señal > catalogo > null. Jamas se asume.
-    const destino_declarado = this._declarado(input.destino) || this._declarado(input.aviso && input.aviso.destino)
-      || this._declarado(catalogo && catalogo.destino);
-    const destino = destino_declarado
-      ? String(input.destino != null ? input.destino
-        : (input.aviso && input.aviso.destino != null ? input.aviso.destino : catalogo.destino)).trim()
-      : null;
-
-    // El CANAL tambien es declarable: el motor NO habla con canales (eso es R1).
-    const canal_declarado = this._declarado(input.canal) || this._declarado(catalogo && catalogo.canal);
-    const canal = canal_declarado
-      ? String(input.canal != null ? input.canal : catalogo.canal).trim()
-      : null;
-
-    const ahora = new Date().toISOString();
     const aviso = {
-      id: `aviso_${pid}_${ahora}_${tipo}`,
+      aviso_id: `aviso_${pid}_${crypto.randomUUID().slice(0, 8)}`,
       tipo,
-      asunto,
-      // La señal ORIGINAL viaja entera: el aviso es trazable hasta su causa.
-      senal: evento,
-      motivo,
-      detalle: input.detalle && typeof input.detalle === 'object' ? input.detalle
-        : (input.aviso && input.aviso.detalle && typeof input.aviso.detalle === 'object' ? input.aviso.detalle : null),
-      vertical: input.vertical != null ? input.vertical : (catalogo ? catalogo.vertical ?? null : null),
-      ejercicio: input.ejercicio != null ? input.ejercicio : null,
-      periodo: input.periodo != null ? input.periodo : null,
-      // Destino y canal: declarables. Sin declarar → null (no se asume a quien avisar).
-      destino,
-      destino_declarado,
-      canal,
-      canal_declarado,
-      requiere_revision: true,
-      // El aviso ES producido; su ENTREGA y su CONFIRMACION son de R1.
+      severidad: input.severidad != null ? String(input.severidad)
+        : (senal && senal.severidad != null ? String(senal.severidad) : 'info'),
+      titulo: input.titulo != null ? String(input.titulo)
+        : (senal && senal.titulo != null ? String(senal.titulo) : null),
+      detalle: input.detalle != null ? String(input.detalle)
+        : (senal && senal.detalle != null ? String(senal.detalle) : null),
+      // El ORIGEN declarado (que señal lo disparo). No se inventa: si no viene, se declara.
+      origen: input.origen != null ? String(input.origen) : tipo,
+      ref: input.ref != null ? String(input.ref)
+        : (senal && senal.ref != null ? String(senal.ref) : null),
+      // PRODUCIDO, aun no ENTREGADO (la entrega es de aviso-al-negocio R1).
+      producido: true,
       entregado: false,
-      entregado_por: 'aviso-negocio(R1)',
-      producido_en: ahora
+      producido_en: new Date().toISOString()
     };
 
     return {
       status: 200,
       data: {
         project_id: pid,
+        tipo: 'motor-avisos',
         aviso,
-        aviso_id: aviso.id,
-        catalogo_disponible: Boolean(catalogo),
-        fuente_catalogo: catalogo ? catalogo.origen : null,
+        producido: true,
+        // La ENTREGA la hace R1 (aviso-al-negocio): aqui NO se finge entregado.
+        entregador: 'aviso-al-negocio',
+        senal_presente: tieneSenal,
+        senal: tieneSenal ? senal : null,
         abierto: {
-          destino: destino_declarado ? null : 'el destino del aviso no esta declarado ([ABIERTO] Q70 quien actua)',
-          canal: canal_declarado ? null : 'el canal no esta declarado en la señal ni en el catalogo (K6)',
-          motivo: motivo ? null : 'la señal no declaro un motivo',
-          catalogo: catalogo ? null : 'catalogo-avisos (K6) no respondio: la politica de avisos no se inventa'
+          senal: tieneSenal ? null : 'no llego ninguna senal declarada: no se inventa un aviso (nada que producir)',
+          titulo: aviso.titulo ? null : 'el aviso no declaro titulo (se anota el hueco, no se inventa)'
         }
       }
     };
   }
 
-  // El catalogo (K6) declarado en la peticion o pedido POR EVENTO. Best-effort.
-  async _catalogo(pid, input, tipo) {
-    if (input.catalogo && typeof input.catalogo === 'object') {
-      return { ...input.catalogo, origen: 'declarado' };
-    }
-    const r = await this._rpc('catalogo-avisos.resolver.request',
-      { project_id: pid, tipo, evento: input.evento != null ? input.evento : null }, { timeout_ms: 4000 });
-    const data = r && r.data && r.data.aviso ? r.data.aviso : (r && r.data ? r.data : null);
-    if (data && typeof data === 'object') return { ...data, origen: 'catalogo-avisos' };
-    return null;
+  // El tipo del aviso: declarado, o inferido de la señal. Nunca una constante oculta de negocio.
+  _tipo(input) {
+    const raw = input.tipo != null ? String(input.tipo).toLowerCase().trim() : '';
+    if (TIPOS.has(raw)) return raw;
+    return 'aviso';
   }
 
-  _declarado(raw) {
-    if (raw === undefined || raw === null) return false;
-    return String(raw).trim().length > 0;
+  // La señal: lo DECLARADO en el input, o el hecho/objeto que venga. Ausente → {} (hueco).
+  _senal(input = {}) {
+    if (input.senal && typeof input.senal === 'object') return input.senal;
+    if (input.hecho && typeof input.hecho === 'object') return input.hecho;
+    // Cualquier dato declarado cuenta como señal (el aviso no se inventa si NO hay ninguno).
+    const declarado = {};
+    for (const k of ['titulo', 'detalle', 'severidad', 'ref', 'motivo', 'causa', 'importe']) {
+      if (input[k] !== undefined && input[k] !== null) declarado[k] = input[k];
+    }
+    return declarado;
   }
 
   // ── Tools ──

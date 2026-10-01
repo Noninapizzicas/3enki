@@ -1,35 +1,32 @@
 {
-  "_doc": "Manifest de contabilidad-fiscal/obligacion-seguridad-social — REFLEJO STATELESS (G2, hoja del plan). GASTO DE EMPRESA + OBLIGACION CON LA TGSS derivados DEL RECIBO y de los TIPOS/BASES que el negocio DECLARA. El diseno lo dice literal: `calcular(n:ReciboNomina):Obligacion` con `tipos:ParametroDeclarable`. Determinista. LOS TIPOS Y LAS BASES SON DATO (invariante LEY/PARAMETRO COMO DATO): aqui NO se cablea ningun tipo de cotizacion, ninguna base, ningun grupo de tarifa ni ninguna tabla legal — todo llega declarado por el negocio (`tipos`, `bases`) y se aplica de forma pura (base x tipo). EL RECIBO llega YA CALCULADO por el sistema externo (por EVENTO: recibo-nomina G1, o declarado en la peticion): aqui NO se calcula la nomina, se COPIAN sus importes para el gasto de empresa. Invariante: dato ausente = desconocido — una linea de tipo cuya base o tipo no venga declarada queda importe:null y se declara en `faltantes`; los totales que dependan de ella quedan null; jamas se rellena con 0 un tipo no declarado ni se estima una base. Sin TIPOS declarados no hay obligacion que calcular: obligacion:null, abierto:true, motivo declarado. FORMA: REFLEJO stateless, sin PosPersistencia ni onProjectActivated. Proyeccion unica `_calcular({project_id, recibo|nomina?|clave_natural?|empleado?+periodo?, tipos, bases?})` → {obligacion:{lineas:[{concepto, base, tipo, a_cargo, importe, completo}], cuota_empresa, cuota_trabajador, total_tgss, moneda, tipos_origen:'declarados', regla_cableada:false}, gasto_empresa, faltantes, abierto}. Cierra el circulo del RPC con su par de fallo: obligacion-seguridad-social.calcular.failed.",
+  "_doc": "Manifest de fiscal/obligacion-seguridad-social — REFLEJO STATELESS (G2, hoja del plan). Deriva el GASTO DE EMPRESA + la OBLIGACION con la TGSS desde el recibo de nomina: aportacion_empresa = suma(base_i * tipo_i) para cada par (base, tipo) DECLARADO. Los TIPOS son DATO declarable (nunca una constante oculta de negocio) y las BASES vienen declaradas en el recibo. Honestidad (invariante 13): si falta una base o su tipo, esa contingencia queda `abierto` y NO se estima un tipo por defecto — un tipo inventado produce una obligacion falsa ante la TGSS. NO escribe, NO persiste: es un calculo determinista (PREGUNTA). RPC calcular es CLASE PREGUNTA → va por el bus, SIN ui_handler. Escucha contabilidad.nomina_recibida (su emisor puerto-nomina G7 SI existe en el repo → R3 OK). Sube best-effort recibo-nomina.dar_forma.request (via _rpc) y, SOLO si el input lo pide explicitamente (subir_calendario:true), calendario-fiscal.declarar.request — una PREGUNTA no muta estado por defecto. Publica obligacion-seguridad-social.calcular.response y su par .failed.",
   "name": "obligacion-seguridad-social",
   "version": "0.1.0",
-  "description": "Reflejo (G2): deriva la obligacion con la TGSS y el gasto de empresa desde el recibo aplicando los tipos y bases DECLARADOS — la ley entra como dato, cero constantes cableadas.",
-  "blueprint_driven": true,
-  "blueprint_path": "obligacion-seguridad-social.blueprint.json",
+  "description": "Reflejo (G2): gasto de empresa + obligacion con la TGSS derivados del recibo. Aplica bases y tipos declarados; lo que falta se declara abierto, no se estima.",
   "language": "es",
   "subscribes": [
     {
       "event": "obligacion-seguridad-social.calcular.request",
       "handler": "onCalcularRequest",
-      "description": "RPC reflejo (determinista): {project_id, recibo|nomina|clave_natural|empleado+periodo, tipos (DECLARABLES: [{concepto, tipo, a_cargo, base?}] o mapa {concepto: tipo|{tipo,a_cargo}}), bases? (DECLARABLES: escalar | mapa {concepto: importe} | [{concepto, importe}])} → {project_id, empleado, periodo, origen_recibo:'declarado'|'recibo-nomina', obligacion:{lineas, cuota_empresa, cuota_trabajador, total_tgss, moneda, tipos_origen:'declarados', regla_cableada:false}, gasto_empresa (= bruto del recibo + cuota de empresa), tipos_declarados, bases_declaradas, faltantes, abierto} o, sin tipos declarados, obligacion:null + motivo. Los tipos y las bases son dato: nada se cablea y lo ausente queda null y se declara en `faltantes`. Responde por obligacion-seguridad-social.calcular.response; project_id ausente o calculo invalido → obligacion-seguridad-social.calcular.failed."
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id, nomina?/recibo?, bases?, tipos?, periodo?} → {project_id, periodo, contingencias, aportacion_empresa, aportacion_trabajador, obligacion_tgss, gasto_empresa, abierto}. Aplica bases*tipos DECLARADOS; lo que falte queda abierto (no se estima). Responde por obligacion-seguridad-social.calcular.response. Payload invalido → obligacion-seguridad-social.calcular.failed."
+    },
+    {
+      "event": "contabilidad.nomina_recibida",
+      "handler": "onNominaRecibida",
+      "description": "Fire-and-forget (G7 puerto-nomina): llego una nomina. Se DERIVA su obligacion en memoria (calculo determinista) y, si el evento lo pide, se sube best-effort al calendario. No escribe ni publica hecho (es un reflejo)."
     }
   ],
   "publishes": [
     {
       "event": "obligacion-seguridad-social.calcular.response",
-      "description": "Respuesta RPC correlada de obligacion-seguridad-social.calcular.request → {request_id, status:200, data:{obligacion, gasto_empresa, faltantes, abierto}}. Emitida por el helper _atender."
+      "description": "Respuesta RPC correlada de la op calcular (una sola cara: el bus)."
     },
     {
       "event": "obligacion-seguridad-social.calcular.failed",
-      "description": "Par de fallo determinista (G2): project_id ausente (400) o excepcion de la proyeccion (500) → {status, error:{code, message, details?}}. Cierra el circulo de obligacion-seguridad-social.calcular.request."
+      "description": "Par de fallo determinista: falta project_id o no hay recibo/bases/tipos declarados → {status, code, message}. Cierra el circulo de calcular.request."
     }
   ],
-  "ui_handlers": [
-    {
-      "domain": "contabilidad",
-      "action": "obligacion-seguridad-social.calcular",
-      "handler": "onCalcularRequest",
-      "type": "workspace_module",
-      "zone": "barra_modulos"
-    }
+  "tools": [
+    { "name": "obligacion-seguridad-social.calcular", "description": "Calcula (PREGUNTA) el gasto de empresa y la obligacion con la TGSS desde el recibo de nomina." }
   ]
 }

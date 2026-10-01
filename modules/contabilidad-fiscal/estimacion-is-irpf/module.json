@@ -1,40 +1,32 @@
 {
-  "_doc": "Manifest de contabilidad-fiscal/estimacion-is-irpf — REFLEJO STATELESS (D5, hoja del plan). ESTIMA la cuota del Impuesto sobre Sociedades (IS) o del IRPF segun el REGIMEN DECLARADO por el negocio, partiendo del RESULTADO contable del ejercicio (C2 cuenta-resultados). NO determina la base fiscal por su cuenta ni recalcula asientos. LA LEY ENTRA COMO DATO (invariante 5): NO se cablea NINGUNA escala, NINGUN tramo, NINGUN tipo ni NINGUN modulo de estimacion objetiva — todo llega DECLARADO (`base`, `escalas`/`tramos` o `tipo`, `ajustes`, ParametroDeclarable por negocio y ejercicio). Sin `base` declarada NO se estima: `estimado:false`, `cuota:null`, motivo declarado (invariante 7: nada se estima sin base). Con `base` y `tramos` declarados se aplica la escala DECLARADA de forma determinista por tramos (limites y tipos son datos, no ley); con `tipo` unico declarado, tramo unico; con `base` pero SIN escala/tipo → se entrega la base imponible y `cuota:null` (el sistema no inventa el tipo). Los ajustes extracontables son DECLARADOS (sin declarar → 0, neutro, no un ajuste inventado). El resultado contable llega por dos vias sin require cruzado: declarado en la peticion (`resultado`) o pedido a cuenta-resultados POR EVENTO (RPC `cuenta-resultados.calcular.request`). El sistema PREPARA la estimacion; el ASESOR presenta y firma — la salida viaja con `presentada:false`, `firmada:false`, `preparada_para_asesor:true`. FORMA: REFLEJO stateless (sin PosPersistencia, sin onProjectActivated). Proyeccion `_estimar`. Par de fallo estimacion-is-irpf.estimar.failed.",
+  "_doc": "Manifest de fiscal/estimacion-is-irpf — REFLEJO STATELESS (D5, hoja del plan). Estimacion del resultado fiscal con BASE DECLARADA: nada se estima sin base. La BASE y los TRAMOS/TIPOS son DATO declarado por el negocio — NUNCA cableados aqui (la ley entra como dato). sube cuenta-resultados.calcular.request (C2, resultado contable) y perfil-administrativo.obligaciones.request (D15) — o usa lo declarado. Honestidad (invariante 13): sin base o sin tramos declarados la cuota NO se inventa — queda [ABIERTO]. NO escribe, NO persiste. RPC estimar es CLASE PREGUNTA → va por el bus, sin panel. Publica estimacion-is-irpf.estimar.response y su par .failed. Escucha contabilidad.ejercicio_cerrado (cierre-ejercicio C4, emitido).",
   "name": "estimacion-is-irpf",
   "version": "0.1.0",
-  "description": "Reflejo stateless (D5): estimacion del IS/IRPF sobre base declarada con escalas/tramos declarables — nada se estima sin base, y el sistema no presenta ni firma.",
-  "blueprint_driven": true,
-  "blueprint_path": "estimacion-is-irpf.blueprint.json",
+  "description": "Reflejo (D5): estimacion del resultado fiscal con base declarada. Tramos y tipos son dato (nunca cableados); sin base o sin tramos queda ABIERTO.",
   "language": "es",
   "subscribes": [
     {
       "event": "estimacion-is-irpf.estimar.request",
       "handler": "onEstimarRequest",
-      "description": "RPC reflejo (calculo determinista): {project_id, ejercicio?, regimen?('IS'|'IRPF'), resultado?, base?{imponible}, escalas?|tramos?|[tipo], ajustes?} → {regimen, origen_resultado, resultado_contable, base_declarada, estimado, cuota, estimacion?, motivo}. Sin base imponible declarada → estimado:false, cuota:null, motivo (nada se estima sin base). Con base y tramos/tipo declarados aplica la escala por tramos (los limites y tipos son DATO, no ley cableada); con base pero sin escala/tipo → cuota:null (no se inventa el tipo). El resultado se toma declarado o pedido a cuenta-resultados POR EVENTO. Responde por estimacion-is-irpf.estimar.response; fallo (project_id ausente) → estimacion-is-irpf.estimar.failed."
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id, base?/resultado?/ajustes?, tramos?, deducciones?, retenciones_pagadas?, regimen?} → {project_id, base_imponible, tramos_aplicados, cuota, a_ingresar, abierto}. Calcula con los tramos DECLARADOS; sin base o sin tramos queda [ABIERTO]. Responde por estimacion-is-irpf.estimar.response; falta project_id → estimacion-is-irpf.estimar.failed."
     },
     {
-      "event": "contabilidad.asiento_registrado",
-      "handler": "onAsientoRegistrado",
-      "description": "Fire-and-forget (B2 → D5): el diario registro un asiento → se acumula la muestra en el espejo en memoria (idempotente por clave natural o numero). No estima nada; sin base declarada no hay estimacion."
+      "event": "contabilidad.ejercicio_cerrado",
+      "handler": "onEjercicioCerrado",
+      "description": "Fire-and-forget (cierre-ejercicio C4): un periodo quedo cerrado. Se observa (ventana acotada) como contexto de la estimacion; no se recalcula ni se escribe."
     }
   ],
   "publishes": [
     {
       "event": "estimacion-is-irpf.estimar.response",
-      "description": "Respuesta RPC correlada de estimacion-is-irpf.estimar.request → {request_id, status:200, data:{regimen, origen_resultado, resultado_contable, base_declarada, estimado, cuota, estimacion?, motivo}}. Emitida por el helper _atender."
+      "description": "Respuesta RPC correlada de la op estimar (una sola cara: el bus)."
     },
     {
       "event": "estimacion-is-irpf.estimar.failed",
-      "description": "Par de fallo determinista (D5): project_id ausente → {status, error:{code, message, details?}}. Cierra el circulo de estimacion-is-irpf.estimar.request."
+      "description": "Par de fallo determinista: falta project_id → {status, code, message}. Cierra el circulo de estimar.request."
     }
   ],
-  "ui_handlers": [
-    {
-      "domain": "contabilidad",
-      "action": "estimacion-is-irpf.estimar",
-      "handler": "onEstimarRequest",
-      "type": "workspace_module",
-      "zone": "barra_modulos"
-    }
+  "tools": [
+    { "name": "estimacion-is-irpf.estimar", "description": "Estima (PREGUNTA) el resultado fiscal con la base y los tramos declarados." }
   ]
 }

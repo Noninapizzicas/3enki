@@ -1,39 +1,41 @@
 {
-  "_doc": "Manifest de contabilidad-entrada/cruce-factura-recepcion — REFLEJO STATELESS (N5, hoja del plan). EL COTEJO PEDIDO ↔ RECEPCION ↔ FACTURA ANTES DE ASENTAR (3-way match), determinista: se comparan los TRES documentos del hecho de compra por sus LINEAS y la salida dice, linea a linea, si cuadran y en que NO cuadran. 🔴 LAS DIFERENCIAS SE DECLARAN, NO SE AJUSTAN SOLAS: lo que no cuadra va a cola como DIFERENCIA DECLARADA (`diferencias_a_cola:true`, `se_ajusta_automaticamente:false`); este reflejo NO modifica la factura, NO modifica la recepcion y NO asienta nada (`asentado:false`, `antes_de_asentar:true`) — resolver la diferencia es un acto humano/asesor. 🔴 LAS TOLERANCIAS Y CRITERIOS SON DECLARABLES, NO CABLEADOS: no hay ninguna tolerancia escrita en el codigo (ni 0, ni un %, ni centimos); si el negocio declara `tolerancias` ({cantidad?, importe?, general?}) se aplican, y si NO las declara la igualdad es EXACTA y se declara que no hay tolerancia (tolerancias:null) — una tolerancia inventada dejaria pasar diferencias que el negocio no autorizo. 🔴 SI UNO DE LOS TRES LADOS NO LLEGA, NO SE ASUME: las tres vias son DECLARADAS, las que falten se declaran en lados_faltantes y el cotejo queda completo:false con cuadra:null (ni conforme ni descuadrado: no se sabe), `se_asume_lado_faltante:false` — no se rellena la recepcion con el pedido ni la factura con la recepcion: un 3-way match sin tres lados no es match. ATRIBUTOS del diseno: pedido, recepcion, factura; METODOS: cotejar():Resultado. Emparejamiento de lineas por la CLAVE DECLARADA en cada item (clave/clave_natural/referencia/sku/codigo; sin clave → por indice), determinista. Invariantes: DETERMINISTA (mismos tres documentos + mismas tolerancias → mismo resultado); dato ausente = desconocido (sin lineas que comparar no se coteja, un lado ausente se declara, un valor sin declarar no se lee como 0); NO escribe, NO persiste, NO muta y NO decide — declara el cotejo, no corrige ni aprueba. La dependencia puerto-evento-vertical (A1) es de DOMINIO (por EVENTO, nunca por import): de ahi vienen los documentos del hecho. FORMA: REFLEJO stateless, sin PosPersistencia ni onProjectActivated. Proyeccion `_cotejar`. Cierra el circulo: descuadre o cotejo incompleto → publica contabilidad.cruce_descuadrado; error → cruce-factura-recepcion.cotejar.failed.",
+  "_doc": "Manifest de entrada/cruce-factura-recepcion — REFLEJO STATELESS (N5, hoja del plan). COTEJA pedido <-> recepcion <-> factura ANTES DE ASENTAR; lo que no cuadra -> COLA. El hecho de una compra llega con TRES caras (pedido/recepcion/factura); este control comprueba que concuerdan (importes y, si vienen, cantidades) con tolerancia de centimos. Decision determinista: cuadra -> devuelve cuadra:true y SUBE best-effort el asiento a escritor-diario.asentar.request (B2, que es quien asienta; este modulo NUNCA asienta); NO cuadra -> SUBE encolado-excepcion.encolar.request (A8.1, la cola de lo dudoso); falta una cara -> NO verificable (no se inventa el cotejo, no se encola por adivinar). Invariante: un cotejo que 'arregla' la diferencia es un cotejo que miente — la diferencia se declara con las dos cifras, no se reparte. Escucha contabilidad.hecho_recibido (puerto-evento-vertical A1, emisor vivo; fire-and-forget, observa en ventana acotada). NO escribe el libro → R2 no aplica. Sin store propio (STATELESS). La op cotejar es CLASE PREGUNTA → SIN ui_handler.",
   "name": "cruce-factura-recepcion",
   "version": "0.1.0",
-  "description": "Reflejo (N5): el 3-way match pedido/recepcion/factura antes de asentar — determinista, con tolerancias declarables (sin ellas la igualdad es exacta) y con las diferencias declaradas en vez de ajustadas solas.",
-  "blueprint_driven": true,
-  "blueprint_path": "cruce-factura-recepcion.blueprint.json",
+  "description": "Reflejo (N5): coteja pedido/recepcion/factura antes de asentar; lo que no cuadra va a la cola, no se asienta mal.",
   "language": "es",
   "subscribes": [
     {
       "event": "cruce-factura-recepcion.cotejar.request",
       "handler": "onCotejarRequest",
-      "description": "RPC reflejo (cotejo puro, determinista): {project_id, pedido, recepcion, factura, tolerancias?:{cantidad?, importe?, general?}} → {project_id, tipo:'cruce-factura-recepcion', cuadra, completo, lados:{pedido,recepcion,factura}, lados_faltantes, lineas:[{clave, cantidades, importes, cuadra, diferencias}], num_lineas, diferencias, num_diferencias, tolerancias, diferencias_a_cola, se_ajusta_automaticamente:false, asentado:false, antes_de_asentar:true, resuelve, abierto}. Con un lado ausente → completo:false y cuadra:null (no se asume el lado que falta). Sin tolerancias declaradas la igualdad es EXACTA. Descuadre o cotejo incompleto → publica contabilidad.cruce_descuadrado; responde por cruce-factura-recepcion.cotejar.response; project_id ausente → cruce-factura-recepcion.cotejar.failed."
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id, hecho?, pedido?, recepcion?, factura?, clave?} → {project_id, hecho_id, importe_pedido, importe_recepcion, importe_factura, diferencia, cuadra, verificable, caras_completas, diferencias, abierto}. Cuadra → SUBE escritor-diario.asentar.request; no cuadra → SUBE encolado-excepcion.encolar.request; falta una cara → cuadra:null (no verificable). Responde por cruce-factura-recepcion.cotejar.response; falta project_id → cruce-factura-recepcion.cotejar.failed."
+    },
+    {
+      "event": "contabilidad.hecho_recibido",
+      "handler": "onHechoRecibido",
+      "description": "Fire-and-forget (puerto-evento-vertical A1): se recibio un hecho de la operacion → se observa (ventana acotada) como fuente de caras a cotejar. No responde."
     }
   ],
   "publishes": [
     {
       "event": "cruce-factura-recepcion.cotejar.response",
-      "description": "Respuesta RPC correlada de cruce-factura-recepcion.cotejar.request → {request_id, status:200, data:{cuadra, completo, lados, lados_faltantes, lineas, diferencias, tolerancias, diferencias_a_cola, se_ajusta_automaticamente:false, asentado:false, abierto}}. Emitida por el helper _atender."
+      "description": "Respuesta RPC correlada de la op cotejar (una sola cara: el bus)."
     },
     {
       "event": "cruce-factura-recepcion.cotejar.failed",
-      "description": "Par de fallo determinista (N5): project_id ausente → {status, error:{code, message, details?}}. Cierra el circulo de cruce-factura-recepcion.cotejar.request. OJO: un cotejo que descuadra NO es un fallo — es un cotejo hecho con diferencias declaradas (cuadra:false)."
+      "description": "Par de fallo determinista: falta project_id → {status, code, message}. Cierra el circulo de cotejar.request."
     },
     {
-      "event": "contabilidad.cruce_descuadrado",
-      "description": "Fire-and-forget (N5): el cotejo NO cuadra (cuadra:false) o quedo incompleto por un lado ausente (completo:false) → {project_id, cuadra, completo, lados_faltantes, diferencias, tolerancias, resuelve, correlation_id}. Lo LEEN la cola de excepciones y el aviso al asesor: las diferencias se DECLARAN y van a cola, el reflejo NO las corrige."
+      "event": "escritor-diario.asentar.request",
+      "description": "Subida (REQUEST por EVENTO, SOLO si el cotejo cuadra): ordena asentar el asiento del hecho a B2 (escritor-diario). CruceFacturaRecepcion coteja; escritor-diario asienta."
+    },
+    {
+      "event": "encolado-excepcion.encolar.request",
+      "description": "Subida (REQUEST por EVENTO, SOLO si NO cuadra): encola el hecho que no coteja en A8.1. No se asienta lo que no cuadra."
     }
   ],
-  "ui_handlers": [
-    {
-      "domain": "contabilidad",
-      "action": "cruce-factura-recepcion.cotejar",
-      "handler": "onCotejarRequest",
-      "type": "workspace_module",
-      "zone": "barra_modulos"
-    }
-  ]
+  "tools": [
+    { "name": "cruce-factura-recepcion.cotejar", "description": "Coteja (PREGUNTA) pedido/recepcion/factura antes de asentar; cuadra -> asienta, no cuadra -> cola." }
+  ],
+  "ui_handlers": []
 }

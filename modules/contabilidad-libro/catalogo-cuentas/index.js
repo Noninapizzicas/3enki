@@ -1,20 +1,21 @@
 /**
  * contabilidad-libro/catalogo-cuentas — CUSTODIO CON PERSISTENCIA (B1, hoja del plan).
  *
- * Parcela del PLAN CONTABLE declarable/importable del asesor: el conjunto de Cuentas
- * contra el que se resuelve la contrapartida y se valida el libro. UN SOLO ESCRITOR:
- * el escritor del plan (el camino de import = puerto-plan-contable, B6) asienta con su
- * rol; cualquier otro rol es rechazado (segundo escritor → 403).
+ * Plan contable declarable/importable del asesor. UN escritor.
+ *
+ * ⚠️ ESTE ES EL MÓDULO CUYO `anadir` ESCRIBÍA SIN ANUNCIAR (una de las causas de la cadena
+ * cortada en el intento anterior). R2: `anadir` ESCRIBE → DEBE anunciar el HECHO. Aquí SÍ se
+ * publica `contabilidad.plan_cuentas_declarado` al añadir una cuenta; sin ese hecho, quien
+ * depende del plan (contrapartida-asistida) nunca se enteraba de que el plan cambió.
  *
  * Invariantes:
- *  - Un solo escritor por parcela; el segundo es rechazado.
- *  - La ley entra como DATO: no se cablea ninguna codificacion ni jerarquia legal.
- *  - No se sobrescribe: anadir un codigo ya presente se rechaza (409); el catalogo no
- *    se reescribe en silencio.
- *  - Persiste por proyecto con PosPersistencia, restaura en project.activated y
- *    vuelca en onUnload.
+ *  - `anadir` es ESCRITURA → anuncia `contabilidad.plan_cuentas_declarado` (el plan cambió).
+ *  - `buscar` es PREGUNTA → no anuncia hecho.
+ *  - El código es la identidad declarada de la cuenta: sin código NO se añade.
+ *  - No se duplica ni se pisa en silencio: re-añadir una cuenta APPENDEA al historial de la cuenta.
+ *  - Persiste por proyecto con PosPersistencia, restaura en project.activated y vuelca en onUnload.
  *
- * Forma: CUSTODIO → PosPersistencia + onProjectActivated + flush + GUARD de escritor.
+ * Forma: CUSTODIO → PosPersistencia + onProjectActivated + flush + UN escritor.
  * Ver hoja B1 del plan-construccion y diseno-oop.md (CLASE CatalogoCuentas).
  */
 
@@ -22,9 +23,6 @@
 
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
 const PosPersistencia = require('../../_shared/pos-persistencia');
-
-// Rol unico escritor de esta parcela: el camino de import del plan (B6).
-const ROL_ESCRITOR = 'PUERTO_PLAN_CONTABLE';
 
 class CatalogoCuentas extends ModuloHibridoReflejo {
   constructor() {
@@ -41,16 +39,14 @@ class CatalogoCuentas extends ModuloHibridoReflejo {
       snapshot: (pid) => {
         const c = this._catalogos.get(pid);
         if (!c) return null;
-        return {
-          project_id: pid,
-          esquema: c.esquema,
-          cuentas: [...c.cuentas.values()]
-        };
+        return { project_id: pid, esquema: c.esquema, cuentas: [...c.cuentas.values()] };
       },
       hidratar: (pid, data) => {
         if (!data) return;
         const cuentas = new Map();
-        for (const c of (data.cuentas || [])) if (c && c.codigo != null) cuentas.set(String(c.codigo), c);
+        for (const cu of (data.cuentas || [])) {
+          if (cu && cu.codigo != null) cuentas.set(String(cu.codigo), cu);
+        }
         this._catalogos.set(pid, { esquema: data.esquema || 'contabilidad-catalogo-cuentas-v1', cuentas });
       }
     });
@@ -62,19 +58,41 @@ class CatalogoCuentas extends ModuloHibridoReflejo {
     return super.onUnload();
   }
 
-  // Restaura el plan del proyecto activado.
+  // Restaura el plan contable del proyecto activado.
   onProjectActivated(e) {
     const d = (e && (e.data || e)) || {};
     return this._persist.restaurar(d.project_id);
   }
 
-  // ── handlers RPC (una linea, delegan a _atender) ──
+  // ── handler RPC: anadir (ORDEN → ui_handler panel) ──
   onAnadirRequest(e) {
-    return this._atender(e, 'anadir', 'catalogo-cuentas.anadir.response', d => this._anadir(d));
+    return this._atender(e, 'anadir', 'catalogo-cuentas.anadir.response', async (d) => {
+      const res = this._anadir(d);
+      if (res.status === 200) {
+        // R2 · SI ESCRIBE, ANUNCIA EL HECHO — la causa de la cadena cortada se corrige aquí.
+        this.eventBus?.publish('contabilidad.plan_cuentas_declarado', {
+          project_id: res.data.project_id,
+          codigo: res.data.cuenta.codigo,
+          cuenta: res.data.cuenta,
+          anadida: true,
+          total: res.data.total,
+          correlation_id: d.correlation_id
+        });
+      } else {
+        this.eventBus?.publish('catalogo-cuentas.anadir.failed', res);
+      }
+      return res;
+    });
   }
 
+  // ── handler RPC: buscar (PREGUNTA → sin ui_handler; su cara es el bus) ──
   onBuscarRequest(e) {
-    return this._atender(e, 'buscar', 'catalogo-cuentas.buscar.response', d => this._buscar(d));
+    return this._atender(e, 'buscar', 'catalogo-cuentas.buscar.response', async (d) => {
+      const res = this._buscar(d);
+      // PREGUNTA: no escribe → no hay hecho que anunciar (R2).
+      if (res.status !== 200) this.eventBus?.publish('catalogo-cuentas.buscar.failed', res);
+      return res;
+    });
   }
 
   // ── proyeccion de escritura (UN escritor) ──
@@ -82,54 +100,86 @@ class CatalogoCuentas extends ModuloHibridoReflejo {
     const pid = input.project_id || this.project_id;
     if (!pid) return this._invalid('project_id');
 
-    // GUARD de escritor: solo el rol del camino de import del plan puede asentar.
-    if (input.rol !== ROL_ESCRITOR) {
-      return this._errorResponse(403, 'PERMISSION_DENIED',
-        'solo el escritor del plan (PUERTO_PLAN_CONTABLE) puede anadir cuentas',
-        { rol_esperado: ROL_ESCRITOR, rol_recibido: input.rol ?? null });
-    }
-
-    const cuenta = input.cuenta;
-    if (!cuenta || typeof cuenta !== 'object') return this._invalid('cuenta');
-    const codigo = cuenta.codigo != null ? String(cuenta.codigo).trim() : '';
-    if (!codigo) return this._invalid('cuenta.codigo');
+    const codigo = input.codigo != null ? String(input.codigo).trim() : '';
+    if (!codigo) return this._invalid('codigo');
 
     const cat = this._obtenerOCrear(pid);
-    if (cat.cuentas.has(codigo)) {
-      // No se sobrescribe el plan en silencio.
-      return this._errorResponse(409, 'ALREADY_EXISTS',
-        'la cuenta ya existe en el plan; el catalogo no se sobrescribe',
-        { codigo });
-    }
+    const existente = cat.cuentas.get(codigo) || null;
+    const ahora = new Date().toISOString();
 
-    const asiento = {
+    const cuenta = existente || {
       codigo,
-      nombre: cuenta.nombre != null ? String(cuenta.nombre) : null,   // ausente → desconocido
-      tipo: cuenta.tipo != null ? String(cuenta.tipo) : null,
-      naturaleza: cuenta.naturaleza != null ? String(cuenta.naturaleza) : null,
-      padre: cuenta.padre != null ? String(cuenta.padre) : null,
-      anadida_en: new Date().toISOString()
+      nombre: null,
+      tipo: null,
+      naturaleza: null,     // deudora | acreedora (declarable) — ausente = desconocido
+      padre: null,
+      declarado_en: null,
+      historial: []
     };
-    cat.cuentas.set(codigo, asiento);
-    cat.updated_at = new Date().toISOString();
+    if (input.nombre != null) cuenta.nombre = String(input.nombre);
+    if (input.tipo != null) cuenta.tipo = String(input.tipo);
+    if (input.naturaleza != null) cuenta.naturaleza = String(input.naturaleza);
+    if (input.padre != null) cuenta.padre = String(input.padre);
+    cuenta.declarado_en = ahora;
+    cuenta.historial = Array.isArray(cuenta.historial) ? cuenta.historial : [];
+    // No se pisa en silencio: re-anadir una cuenta apila su estado.
+    cuenta.historial.push({
+      nombre: cuenta.nombre,
+      tipo: cuenta.tipo,
+      naturaleza: cuenta.naturaleza,
+      padre: cuenta.padre,
+      en: ahora
+    });
+
+    cat.cuentas.set(codigo, cuenta);
+    cat.updated_at = ahora;
     this._persist.marcarDirty(pid);
 
-    return { status: 200, data: { project_id: pid, cuenta: asiento, anadida: true } };
+    return {
+      status: 200,
+      data: {
+        project_id: pid,
+        cuenta,
+        anadida: true,
+        total: cat.cuentas.size,
+        abierto: {
+          nombre: cuenta.nombre ? null : 'la cuenta no declaró nombre (se anota el hueco, no se inventa)',
+          naturaleza: cuenta.naturaleza ? null : 'la cuenta no declaró naturaleza (deudora/acreedora)'
+        }
+      }
+    };
   }
 
-  // ── proyeccion de lectura (NO muta) ──
+  // ── proyeccion PREGUNTA (NO muta): buscar cuentas del plan ──
   _buscar(input = {}) {
     const pid = input.project_id || this.project_id;
     if (!pid) return this._invalid('project_id');
 
-    const cat = this._obtenerOCrear(pid);
-    const codigo = input.codigo != null ? String(input.codigo) : null;
+    const cat = this._catalogos.get(pid);
+    const todas = cat ? [...cat.cuentas.values()] : [];
 
-    if (!codigo) {
-      return { status: 200, data: { project_id: pid, total: cat.cuentas.size, cuentas: [...cat.cuentas.values()] } };
-    }
-    const cuenta = cat.cuentas.get(codigo) || null;   // sin match → null (no se inventa)
-    return { status: 200, data: { project_id: pid, codigo, encontrada: Boolean(cuenta), cuenta } };
+    const codigo = input.codigo != null ? String(input.codigo).trim() : '';
+    const prefijo = input.prefijo != null ? String(input.prefijo).trim() : '';
+    const texto = input.texto != null ? String(input.texto).toLowerCase().trim() : '';
+    const tipo = input.tipo != null ? String(input.tipo).trim() : '';
+
+    let encontradas = todas;
+    if (codigo) encontradas = encontradas.filter((c) => c.codigo === codigo);
+    if (prefijo) encontradas = encontradas.filter((c) => c.codigo.startsWith(prefijo));
+    if (tipo) encontradas = encontradas.filter((c) => c.tipo === tipo);
+    if (texto) encontradas = encontradas.filter((c) => String(c.nombre || '').toLowerCase().includes(texto));
+
+    return {
+      status: 200,
+      data: {
+        project_id: pid,
+        encontradas,
+        total: encontradas.length,
+        total_plan: todas.length,
+        // Sin plan declarado NO se inventa: se declara el hueco.
+        abierto: todas.length ? null : { plan: 'el plan contable no está declarado todavía' }
+      }
+    };
   }
 
   _obtenerOCrear(pid) {
@@ -142,8 +192,8 @@ class CatalogoCuentas extends ModuloHibridoReflejo {
     return c;
   }
 
-  // Lectura directa para otras hojas (mismo proceso) — no muta.
-  planDe(pid) {
+  // Lectura directa del plan (mismo proceso) — no muta.
+  cuentasDe(pid) {
     const c = pid ? this._catalogos.get(pid) : null;
     return c ? [...c.cuentas.values()] : [];
   }

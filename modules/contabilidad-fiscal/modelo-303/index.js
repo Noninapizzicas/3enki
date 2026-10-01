@@ -1,33 +1,35 @@
 /**
  * contabilidad-fiscal/modelo-303 — REFLEJO STATELESS (D2, hoja del plan).
  *
- * CONSTRUYE el modelo 303 (autoliquidacion periodica del regimen de IVA/IGIC/IPSI) DESDE
- * la liquidacion (D1). Determinista: misma liquidacion + misma estructura declarada →
- * mismo modelo. NO liquida (eso es D1) y NO recalcula asientos.
+ * Construye el modelo trimestral (303) DESDE la liquidacion. Determinista: misma liquidacion →
+ * mismo modelo. NO calcula el IVA por su cuenta (eso es liquidacion-iva D1): le SUBE por EVENTO
+ * liquidacion-iva.calcular.request y COMPONE las casillas del modelo con lo que devuelve — o con
+ * lo DECLARADO en el input.
  *
- * LA LEY ENTRA COMO DATO (invariante 5): la ESTRUCTURA del modelo (que casillas tiene y
- * como se llaman) es DECLARABLE (`estructura`, `ParametroDeclarable`). Este modulo NO
- * cablea numeros de casilla, ni tipos, ni plazos, ni el ejercicio: solo RELLENA la
- * estructura que el negocio/asesor declara con los importes del libro.
- *   - Con `estructura` declarada → `casillas:[{casilla, valor}]` rellenadas por `campo`.
- *   - Sin `estructura` declarada → `casillas:null`, `estructura_declarada:false`, y se
- *     entrega el BORRADOR con los datos del libro para que el asesor decida el encaje.
- *     Jamas se inventan casillas ni denominaciones legales.
+ * Los CASILLEROS y los TIPOS son DATO: el mapeo concepto→casilla sale de lo declarado (o de un
+ * mapeo por defecto de los bloques devengado/soportado/resultado del 303, que NO es un tipo de IVA).
+ * Aqui no se cablea ningun tipo ni tramo de la ley.
  *
- * El sistema PREPARA el modelo; el ASESOR presenta y firma. Aqui NO se presenta ni firma.
+ * Honestidad (invariante 13): sin liquidacion (ni declarada ni de liquidacion-iva D1) el modelo
+ * NO se rellena con ceros — queda [ABIERTO] (0 no es "sin IVA", es "desconocido").
  *
- * La liquidacion llega por DOS vias, ninguna es un `require` cruzado:
- *   - declarada en la peticion (`liquidacion`),
- *   - pedida a liquidacion-iva POR EVENTO (RPC `liquidacion-iva.calcular.request`).
- * Si no hay ninguna, NO se construye un modelo con importes inventados: se declara.
- *
- * Forma: REFLEJO → STATELESS. Sin PosPersistencia, sin onProjectActivated.
+ * NO escribe, NO persiste. RPC construir es CLASE PREGUNTA → sin ui_handler.
+ * Publica modelo-303.construir.response y su par .failed.
+ * Escucha contabilidad.asiento_asentado (B2) y contabilidad.ejercicio_cerrado (C4), ambos emitidos.
  * Ver hoja D2 del plan-construccion y diseno-oop.md (CLASE Modelo303).
  */
 
 'use strict';
 
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
+
+// El mapeo por defecto de los BLOQUES del 303 a los campos de la liquidacion (estructura, no ley).
+// Los casilleros numericos concretos son DATO declarable (no se cablean).
+const BLOQUES = [
+  { casilla: 'devengado_repercutido', de: 'devengado' },
+  { casilla: 'soportado_deducible', de: 'soportado' },
+  { casilla: 'resultado_regimen_general', de: 'resultado' }
+];
 
 class Modelo303 extends ModuloHibridoReflejo {
   constructor() {
@@ -38,7 +40,7 @@ class Modelo303 extends ModuloHibridoReflejo {
 
   async onUnload() { return super.onUnload(); }
 
-  // ── handler RPC (una linea, delega a _atender) ──
+  // ── handler RPC (una linea). CLASE PREGUNTA → sin ui_handler ──
   onConstruirRequest(e) {
     return this._atender(e, 'construir', 'modelo-303.construir.response', async (d) => {
       const res = await this._construir(d);
@@ -47,119 +49,120 @@ class Modelo303 extends ModuloHibridoReflejo {
     });
   }
 
-  // ── CONSTRUIR: liquidacion + estructura declarada → modelo (rellena, no inventa) ──
+  // ── handlers de dominio (fire-and-forget): se observa el libro (ventana acotada) ──
+  onAsientoAsentado(e) {
+    const d = (e && (e.data || e)) || {};
+    this._vistos = this._vistos || [];
+    if (d.asiento) this._vistos.push(d.asiento);
+    if (this._vistos.length > 1000) this._vistos.shift();
+  }
+
+  onEjercicioCerrado(e) {
+    const d = (e && (e.data || e)) || {};
+    this._cierres = this._cierres || [];
+    if (d.estado === 'cerrado') this._cierres.push(d);
+    if (this._cierres.length > 100) this._cierres.shift();
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // construir(input) → { casillas, liquidacion, abierto }
+  // ══════════════════════════════════════════════════════════════════════
   async _construir(input = {}) {
     const pid = input.project_id || this.project_id;
     if (!pid) return this._invalid('project_id');
 
-    const liq = await this._liquidacion(pid, input);
+    // La LIQUIDACION: declarada, o traida por EVENTO de liquidacion-iva (D1).
+    const { liquidacion, fuente } = await this._liquidacionDe(input);
 
-    // Sin liquidacion NO se construye un modelo con importes inventados (invariante 7).
-    if (!liq.liquidacion) {
+    if (!liquidacion) {
+      // Sin liquidacion el modelo NO se rellena con ceros: 0 no es "sin IVA", es desconocido.
       return {
         status: 200,
         data: {
           project_id: pid,
-          ejercicio: input.ejercicio != null ? input.ejercicio : null,
-          periodo: input.periodo != null ? String(input.periodo) : null,
-          modelo: null,
-          construido: false,
-          motivo: 'no hay liquidacion disponible: el modelo no se construye con importes inventados'
+          tipo: 'modelo-303',
+          periodo: this._periodo(input),
+          casillas: [],
+          fuente: null,
+          total_a_ingresar: null,
+          total_a_compensar: null,
+          determinista: true,
+          abierto: {
+            liquidacion: 'no hay liquidacion (ni declarada ni de liquidacion-iva D1): el modelo no se rellena con ceros (0 no es "sin IVA", es desconocido)'
+          }
         }
       };
     }
 
-    const liquidacion = liq.liquidacion;
-    const estructura = this._estructura(input.estructura);
-    const formato = input.formato != null ? input.formato : null;   // declarable ([ABIERTO])
-
-    // Con estructura declarada: se rellena casilla a casilla desde los campos del libro.
-    const casillas = estructura ? estructura.map(c => ({
-      casilla: c.casilla,
-      etiqueta: c.etiqueta != null ? c.etiqueta : null,
-      valor: this._valorDe(liquidacion, c.campo),
-      campo: c.campo
-    })) : null;
-
-    const modelo = {
-      modelo: '303',
-      ejercicio: input.ejercicio != null ? input.ejercicio : null,
-      periodo: input.periodo != null ? String(input.periodo) : null,
-      regimen: liquidacion.regimen != null ? liquidacion.regimen : null,
-      territorio: liquidacion.territorio != null ? liquidacion.territorio : null,
-      formato,
-      estructura_declarada: Boolean(estructura),
-      casillas,
-      // El borrador con los datos del libro SIEMPRE viaja: el asesor decide el encaje.
-      datos: {
-        total_devengado: liquidacion.total_devengado,
-        total_soportado: liquidacion.total_soportado,
-        cuota: liquidacion.cuota,
-        signo: liquidacion.signo
-      },
-      // El sistema NO presenta ni firma: lo declara aqui, no lo asume.
-      presentado: false,
-      firmado: false,
-      preparado_para_asesor: true
-    };
+    // Los CASILLEROS: mapeo declarado, o el mapeo por defecto de los bloques del 303 (estructura).
+    const casillas = this._casillas(input, liquidacion);
 
     return {
       status: 200,
       data: {
         project_id: pid,
-        ejercicio: modelo.ejercicio,
-        periodo: modelo.periodo,
-        modelo,
-        construido: true,
-        origen_liquidacion: liq.origen
+        tipo: 'modelo-303',
+        periodo: this._periodo(input),
+        fuente,
+        casillas,
+        total_a_ingresar: liquidacion.a_ingresar != null ? liquidacion.a_ingresar : null,
+        total_a_compensar: liquidacion.a_compensar != null ? liquidacion.a_compensar : null,
+        // El modelo se DERIVA de la liquidacion; no recablea ningun tipo.
+        derivado_de: 'liquidacion-iva',
+        tipos_cableados: false,
+        determinista: true,
+        abierto: {
+          casilla: casillas.some((c) => c.valor === null)
+            ? 'hay casillas sin valor declarado en la liquidacion: quedan null, no se rellenan'
+            : null
+        }
       }
     };
   }
 
-  // La liquidacion: declarada en la peticion o pedida a D1 POR EVENTO. Nunca inventada.
-  async _liquidacion(pid, input = {}) {
-    if (input.liquidacion && typeof input.liquidacion === 'object') {
-      return { liquidacion: input.liquidacion, origen: 'declarada_en_peticion' };
+  async _liquidacionDe(input) {
+    if (input.liquidacion && typeof input.liquidacion === 'object') return { liquidacion: input.liquidacion, fuente: 'declarado' };
+    // Declarada por sus cifras basicas.
+    if (input.devengado != null || input.soportado != null || input.resultado != null) {
+      return {
+        liquidacion: {
+          devengado: input.devengado != null ? Number(input.devengado) : null,
+          soportado: input.soportado != null ? Number(input.soportado) : null,
+          resultado: input.resultado != null ? Number(input.resultado)
+            : (input.devengado != null && input.soportado != null ? this._round(Number(input.devengado) - Number(input.soportado), 2) : null),
+          a_ingresar: input.a_ingresar != null ? Number(input.a_ingresar) : null,
+          a_compensar: input.a_compensar != null ? Number(input.a_compensar) : null
+        },
+        fuente: 'declarado'
+      };
     }
-    const r = await this._rpc('liquidacion-iva.calcular.request', {
-      project_id: pid,
-      ejercicio: input.ejercicio ?? null,
-      periodo: input.periodo ?? null,
-      regimen: input.regimen ?? null,
-      territorio: input.territorio ?? null,
-      tipos: input.tipos ?? null
-    }, { timeout_ms: 5000 });
-    if (r && r.status === 200 && r.data) {
-      return { liquidacion: r.data, origen: 'liquidacion-iva' };
+    const resp = await this._rpc('liquidacion-iva.calcular.request', {
+      project_id: input.project_id || this.project_id,
+      fecha: input.fecha, ejercicio: input.ejercicio, periodo: input.periodo
+    }, { timeout_ms: 800 });
+    if (resp && (resp.devengado != null || resp.resultado != null)) {
+      return { liquidacion: resp, fuente: 'liquidacion-iva' };
     }
-    return { liquidacion: null, origen: null };
+    return { liquidacion: null, fuente: null };
   }
 
-  // La estructura es DECLARABLE: array de {casilla, campo, etiqueta?}. Sin declarar → null.
-  _estructura(raw) {
-    if (!Array.isArray(raw)) return null;
-    const est = raw
-      .filter(c => c && c.casilla != null && c.campo != null)
-      .map(c => ({
-        casilla: String(c.casilla),
-        campo: String(c.campo),
-        etiqueta: c.etiqueta != null ? String(c.etiqueta) : null
-      }));
-    return est.length ? est : null;
+  // Compone las casillas: mapeo declarado (lista {casilla, campo}) o los bloques por defecto.
+  _casillas(input, liq) {
+    const mapeo = Array.isArray(input.casillas) ? input.casillas
+      : (input.mapeo && Array.isArray(input.mapeo) ? input.mapeo : BLOQUES);
+    return mapeo
+      .filter((m) => m && typeof m === 'object')
+      .map((m) => {
+        const casilla = m.casilla != null ? String(m.casilla) : (m.clave != null ? String(m.clave) : null);
+        const de = m.de != null ? String(m.de) : (m.campo != null ? String(m.campo) : null);
+        const valor = de != null && liq[de] != null ? liq[de] : null;
+        return { casilla, de, valor };
+      });
   }
 
-  // Rellena un campo del modelo desde la liquidacion; campo ausente → null (desconocido).
-  _valorDe(liquidacion, campo) {
-    if (campo === 'total_devengado') return liquidacion.total_devengado ?? null;
-    if (campo === 'total_soportado') return liquidacion.total_soportado ?? null;
-    if (campo === 'cuota') return liquidacion.cuota ?? null;
-    if (campo === 'signo') return liquidacion.signo ?? null;
-    if (campo.startsWith('devengado.') || campo.startsWith('soportado.')) {
-      const [lado, tipo] = campo.split('.');
-      const lista = (liquidacion.detalle && Array.isArray(liquidacion.detalle[lado])) ? liquidacion.detalle[lado] : [];
-      const hit = lista.find(x => String(x.tipo) === String(tipo));
-      return hit ? hit.cuota : null;   // tipo no presente → null, no cero
-    }
+  _periodo(input = {}) {
+    if (input.periodo != null) return String(input.periodo);
+    if (input.trimestre != null) return `T${input.trimestre}`;
     return null;
   }
 

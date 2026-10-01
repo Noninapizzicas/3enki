@@ -1,40 +1,33 @@
 {
-  "_doc": "Manifest de contabilidad-entrada/captura-documento — REFLEJO STATELESS (A3, hoja del plan). Admite el documento (digitalizado o recibido) y valida sus campos: MECANICO, CERO JUICIO. No interpreta lo ilegible (extraccion-dato A4.1) ni asienta. El minimo exigible es DECLARABLE (`campos_minimos`, cara de contrato-hecho-minimo A11); sin declararlo la admision es estructural (hay documento con algun campo) y se declara `contrato:'no_declarado'` — no se inventa un minimo. Proyeccion unica `_admitir({project_id, documento, origen, campos_minimos?})` -> {admitido, contrato, campos_presentes, faltantes, documento}. Exito (admitido) → publica contabilidad.documento_admitido (lo consume control-cuadre-documento A4.3); rechazo → captura-documento.admitir.failed. Sin persistencia.",
+  "_doc": "Manifest de entrada/captura-documento — REFLEJO STATELESS (A3, hoja del plan). Admite y VALIDA el documento recibido: MECANICO, cero juicio (no interpreta el contenido — eso es extraccion-dato A4.1). Comprueba que el documento existe y trae al menos un anclaje (tipo/file_path/contenido/mime); si no, RECHAZA con motivo declarado, no lo inventa. Al admitir, ENCADENA la entrada por EVENTO: si declara `formato`, lo sube a puerto-documento.entrar.request (A4.2, que traduce la forma y sigue a extraccion-dato); si ya viene canonico, lo sube a extraccion-dato.juzgar.request (A4.1). NO escribe, NO persiste. RPC admitir es CLASE PREGUNTA → va por el bus, SIN panel. Publica captura-documento.admitir.response y su par .failed. R3: escucha contabilidad.documento_recibido — su emisor puerto-documento-digital (A5) se construye en ESTE MISMO grupo → SI se declara (RPC admitir es el camino directo; la escucha es reaccion al puente digital).",
   "name": "captura-documento",
   "version": "0.1.0",
-  "description": "Reflejo stateless (A3): admite el documento digitalizado o recibido y valida sus campos contra un minimo declarable — mecanico, cero juicio; no interpreta, no asienta.",
-  "blueprint_driven": true,
-  "blueprint_path": "captura-documento.blueprint.json",
+  "description": "Reflejo (A3): admite y valida el documento recibido (mecanico, cero juicio). Encadena la entrada por evento a puerto-documento/extraccion-dato; no escribe.",
   "language": "es",
   "subscribes": [
     {
       "event": "captura-documento.admitir.request",
       "handler": "onAdmitirRequest",
-      "description": "RPC reflejo: {project_id, documento, origen?, campos_minimos?} → {admitido, contrato, campos_presentes, faltantes, documento}. Valida mecanicamente los campos del documento frente al minimo declarado; sin juicio ni interpretacion. Admitido → publica contabilidad.documento_admitido y responde por captura-documento.admitir.response; documento ausente o faltantes → captura-documento.admitir.failed."
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id, documento{...}, formato?, origen?} → {project_id, admitido, documento, encadenado_a, abierto}. Valida mecanicamente el documento (anclaje tipo/file_path/contenido/mime); si no lo trae, RECHAZA con motivo (no se inventa). Al admitir, sube puerto-documento.entrar.request o extraccion-dato.juzgar.request segun formato. Responde por captura-documento.admitir.response. Payload invalido → captura-documento.admitir.failed."
+    },
+    {
+      "event": "contabilidad.documento_recibido",
+      "handler": "onDocumentoRecibido",
+      "description": "Fire-and-forget (A5 puerto-documento-digital): llego un documento por el canal digital. Se admite mecanicamente y se encadena; no se interpreta ni se escribe."
     }
   ],
   "publishes": [
     {
       "event": "captura-documento.admitir.response",
-      "handler": "_atender",
-      "description": "Respuesta RPC correlada de captura-documento.admitir.request → {request_id, status:200, data:{admitido, contrato, campos_presentes, faltantes, documento}}. Emitida por el helper _atender."
+      "description": "Respuesta RPC correlada de la op admitir (una sola cara: el bus)."
     },
     {
       "event": "captura-documento.admitir.failed",
-      "description": "Par de fallo determinista (A3): documento ausente/invalido o minimo declarado incompleto → {status, error:{code, message, details?}}. Cierra el circulo de captura-documento.admitir.request."
-    },
-    {
-      "event": "contabilidad.documento_admitido",
-      "description": "Fire-and-forget (A3): el documento quedo admitido y con campos validados → {project_id, documento, origen, correlation_id}. Lo consume control-cuadre-documento (A4.3)."
+      "description": "Par de fallo determinista: falta project_id o el documento no es admisible → {status, code, message}. Cierra el circulo de admitir.request."
     }
   ],
-  "ui_handlers": [
-    {
-      "domain": "contabilidad",
-      "action": "captura-documento.admitir",
-      "handler": "onAdmitirRequest",
-      "type": "workspace_module",
-      "zone": "barra_modulos"
-    }
-  ]
+  "tools": [
+    { "name": "captura-documento.admitir", "description": "Admite (PREGUNTA) y valida mecanicamente un documento recibido antes de encadenarlo." }
+  ],
+  "ui_handlers": []
 }

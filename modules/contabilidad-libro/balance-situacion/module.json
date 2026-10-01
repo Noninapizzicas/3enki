@@ -1,40 +1,32 @@
 {
-  "_doc": "Manifest de contabilidad-libro/balance-situacion — REFLEJO STATELESS (C1, hoja del plan). Deriva el BALANCE DE SITUACIÓN (activo / pasivo / patrimonio) del MAYOR. NO recalcula los asientos: parte de mayor-balanza (B3) POR EVENTO y solo CLASIFICA por prefijo de cuenta. Invariante 1 (la partida doble cuadra): ACTIVO = PASIVO + PATRIMONIO; un descuadre NO es un estado del balance, es un ERROR — se declara (`cuadra:false`, `aviso`), no se matiza. La ley entra como DATO: la clasificación por prefijo es DECLARABLE (`reglas`); sin declararlas se usa la composición por defecto sobre grupos estándar. Si mayor-balanza no responde en timeout, deriva el mayor de un espejo en memoria de los asientos registrados (`contabilidad.asiento_registrado`) y declara `fuente:'espejo'`. Determinista: mismo mayor → mismo balance. Sin PosPersistencia ni onProjectActivated (reflejo puro). Proyección `_calcular`. Par de fallo balance-situacion.calcular.failed.",
+  "_doc": "Manifest de libro/balance-situacion — REFLEJO STATELESS (C1, hoja del plan). Activo/pasivo/patrimonio DERIVADO del mayor; invariante ACTIVO = PASIVO + PATRIMONIO. NO calcula la cifra por cuenta (eso es mayor-balanza): RECIBE los saldos (o los sube por EVENTO a mayor-balanza.saldos.request, best-effort) y los AGRUPA en masas. Honestidad (invariante 13): la masa sale de `masa` declarada o de una heuristica PGC por prefijo; lo ambiguo (grupo 4) queda `desconocido` y NO se suma — entonces la invariante queda NO verificable (cuadra:null), no se finge un balance. NO escribe, NO persiste. RPC calcular es CLASE PREGUNTA → va por el bus, sin panel. Publica balance-situacion.calcular.response y su par .failed. Escucha contabilidad.asiento_asentado (B2 escritor-diario, emitido). La escucha de contabilidad.ejercicio_cerrado del plan NO se declara: su emisor cierre-ejercicio (C4) aun no existe (R3).",
   "name": "balance-situacion",
   "version": "0.1.0",
-  "description": "Reflejo (C1): balance de situación derivado del mayor — clasifica activo/pasivo/patrimonio y declara el descuadre (ACTIVO != PASIVO + PATRIMONIO es error, no estado).",
-  "blueprint_driven": true,
-  "blueprint_path": "balance-situacion.blueprint.json",
+  "description": "Reflejo (C1): balance activo/pasivo/patrimonio derivado del mayor. Invariante ACTIVO=PASIVO+PATRIMONIO; lo inclasificable se declara abierto.",
   "language": "es",
   "subscribes": [
     {
       "event": "balance-situacion.calcular.request",
       "handler": "onCalcularRequest",
-      "description": "RPC reflejo (cálculo puro): {project_id, ejercicio?, reglas?:[{prefijo, grupo}]} → {project_id, fuente:'mayor-balanza'|'espejo', activo, pasivo, patrimonio, pasivo_patrimonio, descuadre, cuadra, aviso, detalle:{activo, pasivo, patrimonio, otro}}. Pide el mayor a mayor-balanza POR EVENTO (no recalcula los asientos); clasifica por prefijo con `reglas` declarables. Invariante 1: si no cuadra, se declara el descuadre. Responde por balance-situacion.calcular.response; fallo (project_id ausente) → balance-situacion.calcular.failed."
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id, saldos?, fecha?, ejercicio?} → {project_id, activo, pasivo, patrimonio, resultado, cuadra, verificable, invariante, partidas, abierto}. Agrupa los saldos en masas; lo inclasificable queda abierto y la invariante no se afirma. Responde por balance-situacion.calcular.response. Payload invalido → balance-situacion.calcular.failed."
     },
     {
-      "event": "contabilidad.asiento_registrado",
-      "handler": "onAsientoRegistrado",
-      "description": "Fire-and-forget (B2 → C1): el diario registró un asiento → se refleja la muestra en el espejo en memoria (idempotente por clave natural/numero), por si mayor-balanza no responde. No muta el libro ni decide."
+      "event": "contabilidad.asiento_asentado",
+      "handler": "onAsientoAsentado",
+      "description": "Fire-and-forget (B2 escritor-diario): un asiento quedo en el libro. Se observa (ventana acotada) como fuente alternativa de saldos; no se recalcula ni se escribe."
     }
   ],
   "publishes": [
     {
       "event": "balance-situacion.calcular.response",
-      "description": "Respuesta RPC correlada de balance-situacion.calcular.request → {request_id, status:200, data:{activo, pasivo, patrimonio, pasivo_patrimonio, descuadre, cuadra, aviso, detalle}}. Emitida por el helper _atender."
+      "description": "Respuesta RPC correlada de la op calcular (una sola cara: el bus)."
     },
     {
       "event": "balance-situacion.calcular.failed",
-      "description": "Par de fallo determinista (C1): project_id ausente → {status, error:{code, message, details?}}. Cierra el círculo de balance-situacion.calcular.request."
+      "description": "Par de fallo determinista: falta project_id → {status, code, message}. Cierra el circulo de calcular.request."
     }
   ],
-  "ui_handlers": [
-    {
-      "domain": "contabilidad",
-      "action": "balance-situacion.calcular",
-      "handler": "onCalcularRequest",
-      "type": "workspace_module",
-      "zone": "barra_modulos"
-    }
+  "tools": [
+    { "name": "balance-situacion.calcular", "description": "Calcula (PREGUNTA) el balance de situacion (activo/pasivo/patrimonio) agrupando los saldos del mayor." }
   ]
 }

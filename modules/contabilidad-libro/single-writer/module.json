@@ -1,64 +1,53 @@
 {
-  "_doc": "Manifest de contabilidad-libro/single-writer — CUSTODIO CON PERSISTENCIA (M2, hoja del plan). LA LEY que gobierna cada custodio de contabilidad: UN SOLO ESCRITOR POR PARCELA. El segundo escritor es CORRUPCION — no espera, no hace cola: se le RECHAZA en el acto. Es el guard que los demas custodios consultan (`es_escritor`) y al que piden el turno (`reclamar`) antes de escribir. Invariante 4: el dueno de una parcela se reclama UNA vez y no se cede en silencio; reclamar una parcela ya ajena NO despoja al dueno — declara concedido:false y quien era el dueno; jamas dos duenos a la vez. `es_escritor` es lectura determinista (NO muta). Reclamar la misma parcela por el mismo id es idempotente (concedido:true, ya_era:true). UN SOLO ESCRITOR del REGISTRO de parcelas: quien reclama con el rol del camino (RECLAMANTE_ESCRITOR); cualquier otro rol es rechazado (403). Persiste por proyecto con PosPersistencia (storage /contabilidad/single-writer/single-writer.json), restaura en project.activated y vuelca en onUnload. Proyecciones: `_reclamar` (escritura, guard) · `_es_escritor` (lectura). Publica contabilidad.escritor_reclamado.",
+  "_doc": "Manifest de libro/single-writer — CUSTODIO CON PERSISTENCIA (M2, hoja del plan). LA LEY que gobierna cada Custodio: UN SOLO ESCRITOR por parcela; el segundo escritor se RECHAZA (409 SEGUNDO_ESCRITOR) porque dos escritores sobre la misma parcela = corrupcion. reclamar (ORDEN, panel) concede la parcela libre a un escritor y ANUNCIA contabilidad.parcela_reclamada; el mismo escritor re-reclamando es idempotente; otro escritor no la roba. es_escritor (PREGUNTA, por el bus) deriva si un escritor tiene la parcela (no muta). Persiste por proyecto via PosPersistencia (_shared/pos-persistencia, storage /contabilidad/single-writer), restaura en project.activated y vuelca en onUnload. Invariante: dato ausente = desconocido (sin parcela/escritor no se concede); la parcela no se libera sola. Publica reclamar.response/.failed, es_escritor.response/.failed y contabilidad.parcela_reclamada.",
   "name": "single-writer",
   "version": "0.1.0",
-  "description": "Custodio (M2): el cerrojo de escritura por parcela — un solo escritor; el segundo recibe rechazo en el acto (no espera, no hace cola) y es el guard que los demas custodios consultan.",
-  "blueprint_driven": true,
-  "blueprint_path": "single-writer.blueprint.json",
+  "description": "Custodio (M2): la ley de un solo escritor por parcela. Concede la parcela, rechaza al segundo escritor, deriva quien la tiene. Persistente por proyecto.",
   "language": "es",
   "subscribes": [
     {
       "event": "single-writer.reclamar.request",
       "handler": "onReclamarRequest",
-      "description": "RPC custodio (escritura, UN escritor del registro): {project_id, rol:'RECLAMANTE_ESCRITOR', parcela, id} → {concedido:true, dueno, reclamado_en, ya_era} o {concedido:false, dueno, solicitante, motivo} (parcela ocupada → 409; no se despoja al dueno, el segundo escritor es corrupcion). Guard Rol=RECLAMANTE_ESCRITOR (403). Misma parcela+mismo id → idempotente. Exito → publica contabilidad.escritor_reclamado y responde por single-writer.reclamar.response; fallo → single-writer.reclamar.failed."
+      "description": "RPC custodio (ORDEN, panel): {project_id, parcela, escritor} → {project_id, parcela, escritor, reclamada, ya_era, unico_escritor, reclamada_en}. Concede la parcela libre; el mismo escritor → idempotente; otro escritor → 409 SEGUNDO_ESCRITOR. Publica contabilidad.parcela_reclamada. Responde por single-writer.reclamar.response."
     },
     {
       "event": "single-writer.es_escritor.request",
       "handler": "onEsEscritorRequest",
-      "description": "RPC custodio (lectura, NO muta): {project_id, parcela, id} → {parcela, id, es_escritor, dueno}. El guard que consultan los demas custodios antes de escribir. Responde por single-writer.es_escritor.response; fallo → single-writer.es_escritor.failed."
+      "description": "RPC custodio (PREGUNTA, por el bus): {project_id, parcela, escritor} → {project_id, parcela, escritor, es_escritor, titular, libre, reclamada_en, abierto}. Deriva si un escritor tiene la parcela; no muta. Responde por single-writer.es_escritor.response."
     },
     {
       "event": "project.activated",
       "handler": "onProjectActivated",
-      "description": "Restaura el registro de duenos de parcela del proyecto activado desde el storage (PosPersistencia)."
+      "description": "Restaura la ley de escritura (parcelas reclamadas) del proyecto activado desde el storage (PosPersistencia)."
     }
   ],
   "publishes": [
     {
+      "event": "contabilidad.parcela_reclamada",
+      "description": "Fire-and-forget (M2): una parcela quedo concedida a un escritor → {project_id, parcela, escritor, reclamada_en}. Es la ley que gobierna cada Custodio del dominio (un segundo escritor sobre la parcela se rechaza)."
+    },
+    {
       "event": "single-writer.reclamar.response",
-      "description": "Respuesta RPC correlada de single-writer.reclamar.request → {request_id, status, data:{concedido, dueno, reclamado_en, ya_era} | {concedido:false, dueno, solicitante, motivo}}. Emitida por el helper _atender."
+      "description": "Respuesta RPC correlada de la op reclamar (una sola cara: el bus)."
     },
     {
       "event": "single-writer.reclamar.failed",
-      "description": "Par de fallo determinista (M2): rol != RECLAMANTE_ESCRITOR (403), project_id/parcela/id ausente (400) → {status, error:{code, message, details?}}. Cierra el circulo de single-writer.reclamar.request."
+      "description": "Par de fallo determinista: falta project_id/parcela/escritor o la parcela ya tiene otro titular (409 SEGUNDO_ESCRITOR) → {status, code, message}. Cierra el circulo de reclamar.request."
     },
     {
       "event": "single-writer.es_escritor.response",
-      "description": "Respuesta RPC correlada de single-writer.es_escritor.request → {request_id, status:200, data:{parcela, id, es_escritor, dueno}}. Emitida por el helper _atender."
+      "description": "Respuesta RPC correlada de la op es_escritor."
     },
     {
       "event": "single-writer.es_escritor.failed",
-      "description": "Par de fallo determinista (M2): project_id/parcela/id ausente → {status, error:{code, message, details?}}. Cierra el circulo de single-writer.es_escritor.request."
-    },
-    {
-      "event": "contabilidad.escritor_reclamado",
-      "description": "Fire-and-forget (M2): un escritor reclamo el turno de una parcela → {project_id, parcela, dueno, concedido, correlation_id}. Lo LEEN los custodios que compiten por el turno del diario (escritor-diario B2) y el resto de custodios del libro."
+      "description": "Par de fallo determinista: falta project_id/parcela/escritor → {status, code, message}. Cierra el circulo de es_escritor.request."
     }
   ],
+  "tools": [
+    { "name": "single-writer.reclamar", "description": "Reclama (ORDEN) una parcela para un escritor; rechaza al segundo escritor." },
+    { "name": "single-writer.es_escritor", "description": "Deriva (PREGUNTA) si un escritor tiene una parcela." }
+  ],
   "ui_handlers": [
-    {
-      "domain": "contabilidad",
-      "action": "single-writer.reclamar",
-      "handler": "onReclamarRequest",
-      "type": "system_panel",
-      "zone": "lateral_derecha"
-    },
-    {
-      "domain": "contabilidad",
-      "action": "single-writer.es_escritor",
-      "handler": "onEsEscritorRequest",
-      "type": "system_panel",
-      "zone": "lateral_derecha"
-    }
+    { "domain": "contabilidad", "action": "single-writer.reclamar", "handler": "onReclamarRequest", "type": "system_panel", "zone": "lateral_derecha" }
   ]
 }

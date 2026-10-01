@@ -1,26 +1,23 @@
 /**
  * contabilidad-libro/conciliacion-bancaria — REFLEJO STATELESS (E1, hoja del plan).
  *
- * CRUCE extracto ↔ diario POR CLAVE NATURAL DETERMINISTA. Toma los movimientos del banco
- * (los que entraron normalizados por puerto-extracto E2) y los aparea con los apuntes/asientos
- * del diario (escritor-diario B2), aplicando las REGLAS declaradas (regla-movimiento-bancario
- * E8) como corte duro. Calculo PURO: misma entrada → mismo resultado.
+ * CRUCE extracto <-> libro por CLAVE NATURAL y reglas. Determinista: mismo extracto + mismo libro
+ * → mismo cruce. EL JUICIO vive en E7/E8 (partida-no-identificada / regla-movimiento-bancario), NO
+ * se duplica aqui: esta hoja EMPAREJA por clave natural (importe + fecha + referencia) y lo que no
+ * empareja lo DECLARA — no lo imputa a ojo.
  *
- * El JUICIO ESTA AISLADO EN OTRA HOJA: lo que NO casa NO se interpreta aqui. Este reflejo
- * NO adivina a que corresponde una descripcion ambigua del banco — eso es competencia EXCLUSIVA
- * de `partida-no-identificada` (E7, MICRO-AGENTE). Aqui solo se producen tres cubos:
- *   - casados      (aparicion determinista por clave natural o por regla)
- *   - sin_contrapartida (movimiento del banco que no tiene apunte en el diario → va a E7)
- *   - sin_movimiento    (apunte del diario sin movimiento bancario en el periodo)
+ *   · cuando un par cuadra y la peticion declara el asiento propuesto, SUBE por EVENTO
+ *     escritor-diario.asentar.request (B2, single-writer del libro);
+ *   · lo que NO empareja se SUBE a partida-no-identificada.juzgar.request (E7, el juicio);
+ *   · el desfase agregado se SUBE a partida-conciliatoria.desfase.request (E9, que lo explica).
  *
- * Invariantes:
- *  - DETERMINISTA: mismo extracto + mismo diario + mismas reglas → mismo resultado.
- *  - El corte por regla LEE el corte duro de E8 POR EVENTO; si E8 no responde, se declara
- *    `reglas_disponibles:false` y solo se cruza por clave natural (no se inventa la regla).
- *  - NO escribe, NO persiste, NO muta: es un reflejo. El diario es de B2; los movimientos son de E2.
- *  - La clave natural del movimiento es la que trae E2 (`movimiento.clave`); no se recalcula distinto.
+ * Honestidad (invariante 13): un movimiento sin contrapartida NO se casa con una inventada; queda
+ * declarado en `sin_emparejar` y el cruce se declara PARCIAL.
  *
- * Forma: REFLEJO → STATELESS. Sin PosPersistencia, sin onProjectActivated.
+ * NO escribe, NO persiste. RPC cruzar es CLASE PREGUNTA → sin ui_handler.
+ * Publica conciliacion-bancaria.cruzar.response y su par .failed.
+ * Escucha contabilidad.asiento_asentado (B2 escritor-diario, emitido) y
+ * contabilidad.movimiento_regla_declarada (E8 regla-movimiento-bancario, emitido).
  * Ver hoja E1 del plan-construccion y diseno-oop.md (CLASE ConciliacionBancaria).
  */
 
@@ -37,186 +34,141 @@ class ConciliacionBancaria extends ModuloHibridoReflejo {
 
   async onUnload() { return super.onUnload(); }
 
-  // ── handler RPC (una linea, delega a _atender) ──
+  // ── handler RPC (una linea, delega a _atender). CLASE PREGUNTA → sin ui_handler ──
   onCruzarRequest(e) {
     return this._atender(e, 'cruzar', 'conciliacion-bancaria.cruzar.response', async (d) => {
-      const res = await this._cruzar(d);
-      if (res.status === 200) {
-        // Exito → evento de dominio: el cruce quedo hecho (determinista). Lo LEEN
-        // partida-conciliatoria (E9) e informe-conciliacion (E10).
-        this.eventBus?.publish('contabilidad.conciliacion_cruzada', {
-          project_id: res.data.project_id,
-          periodo: res.data.periodo,
-          total_movimientos: res.data.total_movimientos,
-          casados: res.data.casados.length,
-          sin_contrapartida: res.data.sin_contrapartida.length,
-          sin_movimiento: res.data.sin_movimiento.length,
-          descuadre: res.data.descuadre,
-          correlation_id: d.correlation_id
-        });
-      } else {
+      const res = this._cruzar(d);
+      if (res.status !== 200) {
         this.eventBus?.publish('conciliacion-bancaria.cruzar.failed', res);
+        return res;
       }
+      // SUBE (best-effort) lo que NO empareja al juicio (E7) y el desfase a E9.
+      for (const h of res.data.sin_emparejar) {
+        this.eventBus?.publish('partida-no-identificada.juzgar.request', {
+          project_id: res.data.project_id, movimiento: h, origen: 'conciliacion-bancaria', correlation_id: d.correlation_id
+        });
+      }
+      this.eventBus?.publish('partida-conciliatoria.desfase.request', {
+        project_id: res.data.project_id,
+        saldo_banco: res.data.saldo_banco,
+        saldo_contable: res.data.saldo_contable,
+        desfase: res.data.desfase,
+        correlation_id: d.correlation_id
+      });
       return res;
     });
   }
 
-  // ── proyeccion determinista: cruzar(periodo) → ResultadoConciliacion ──
-  async _cruzar(input = {}) {
+  // ── handlers de dominio (fire-and-forget): se observa el libro y las reglas del banco ──
+  onAsientoAsentado(e) {
+    const d = (e && (e.data || e)) || {};
+    this._libro = this._libro || [];
+    if (d.asiento) this._libro.push(d.asiento);
+    if (this._libro.length > 2000) this._libro.shift();
+  }
+
+  onMovimientoReglaDeclarada(e) {
+    const d = (e && (e.data || e)) || {};
+    this._reglas = this._reglas || [];
+    if (d.regla) this._reglas.push(d.regla);
+    if (this._reglas.length > 500) this._reglas.shift();
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // cruzar(extracto, libro) → { emparejados, sin_emparejar, desfase, cuadrado }
+  // ══════════════════════════════════════════════════════════════════════
+  _cruzar(input = {}) {
     const pid = input.project_id || this.project_id;
     if (!pid) return this._invalid('project_id');
 
-    const periodo = input.periodo != null ? String(input.periodo) : null;
-
-    // 1) Los MOVIMIENTOS del banco: los trae declarados la peticion o se PIDE el extracto a E2.
-    const { movimientos, fuente_movimientos } = await this._movimientos(pid, input, periodo);
-
-    // 2) Los APUNTES del diario: se PIDE a escritor-diario (B2) POR EVENTO (nunca import cruzado).
-    const { asientos, fuente_diario } = await this._diario(pid, periodo);
-
-    // 3) El CORTE DURO de las reglas declaradas (E8) por EVENTO. Sin el, no se inventa regla.
-    const reglas = await this._reglas(pid, input);
-    const reglas_disponibles = reglas && reglas.disponible === true;
-
-    // Indice de apuntes del diario por su clave natural (clave del asiento) para el cruce.
-    const apuntes_por_clave = new Map();
-    for (const a of asientos) {
-      if (!a || a.clave_natural == null) continue;
-      apuntes_por_clave.set(String(a.clave_natural), a);
+    const extracto = this._extracto(input);
+    if (!extracto.length) {
+      return {
+        status: 200,
+        data: {
+          project_id: pid, tipo: 'conciliacion-bancaria',
+          emparejados: [], sin_emparejar: [], num_emparejados: 0,
+          desfase: null, cuadrado: null,
+          abierto: { extracto: 'no se recibieron movimientos del extracto: no hay nada que cruzar (no se inventa)' }
+        }
+      };
     }
 
-    const casados = [];
-    const sin_contrapartida = [];
-    const claves_casadas = new Set();
+    const libro = this._libroDe(input);
+    const usados = new Set();
+    const emparejados = [];
+    const sinEmparejar = [];
 
-    // 4) CRUCE por clave natural (determinista): un movimiento = un apunte del diario.
-    for (const m of movimientos) {
-      const clave = this._claveDe(m);
-      if (clave && apuntes_por_clave.has(clave)) {
-        casados.push(this._par(m, apuntes_por_clave.get(clave), 'clave_natural'));
-        claves_casadas.add(clave);
-        continue;
+    for (const mov of extracto) {
+      const clave = this._claveNatural(mov);
+      // El cruce es por CLAVE NATURAL COMPARTIDA: mismo importe + fecha + referencia.
+      const idx = libro.findIndex((l, i) => !usados.has(i) && this._claveNatural(l) === clave);
+      if (idx >= 0) {
+        usados.add(idx);
+        emparejados.push({ clave, banco: mov, libro: libro[idx] });
+      } else {
+        // Sin contrapartida NO se casa con una inventada: se declara (el juicio es de E7/E8).
+        sinEmparejar.push({ clave, movimiento: mov, motivo: 'sin contrapartida en el libro por clave natural' });
       }
-      // Sin casar por clave natural: se prueba el corte por REGLA declarada (E8).
-      const corte = this._porRegla(m, reglas);
-      if (corte) {
-        casados.push(this._par(m, null, 'regla', corte));
-        continue;
-      }
-      // No casa por ninguna via determinista → va al JUICIO (E7), no se interpreta aqui.
-      sin_contrapartida.push({
-        movimiento: m,
-        clave: clave || null,
-        motivo: reglas_disponibles
-          ? 'sin apunte en el diario ni regla declarada que lo cubra: el juicio es de partida-no-identificada (E7)'
-          : 'sin apunte en el diario; las reglas (E8) no respondieron, no se inventa el corte',
-        juicio: 'partida-no-identificada'
-      });
     }
 
-    // 5) APUNTES del diario sin movimiento bancario en el periodo (el otro lado del desfase).
-    const sin_movimiento = [];
-    for (const [clave, a] of apuntes_por_clave) {
-      if (claves_casadas.has(clave)) continue;
-      sin_movimiento.push({ clave, asiento: a, motivo: 'apunte del diario sin movimiento bancario en el periodo' });
-    }
-
-    const total_movimientos = movimientos.length;
-    const total_asientos = asientos.length;
+    const saldoBanco = this._saldoFinal(input, 'banco', extracto);
+    const saldoContable = this._saldoFinal(input, 'contable', libro);
+    const desfase = (saldoBanco !== null && saldoContable !== null) ? this._round(saldoBanco - saldoContable, 2) : null;
+    const cuadrado = (sinEmparejar.length === 0 && desfase !== null) ? Math.abs(desfase) <= 0.005 : null;
 
     return {
       status: 200,
       data: {
         project_id: pid,
-        periodo,
-        fuente_movimientos,
-        fuente_diario,
-        reglas_disponibles,
-        total_movimientos,
-        total_asientos,
-        casados,
-        sin_contrapartida,
-        sin_movimiento,
-        // Cuantia cruda del desfase (los importes de lo no casado). El ajuste fino es E9.
-        descuadre: this._round(
-          sin_contrapartida.reduce((s, x) => s + (this._num(x.movimiento.importe) || 0), 0),
-          2
-        ),
-        // El JUICIO NO vive aqui: se declara la frontera.
-        juicio_delegado_a: 'partida-no-identificada'
+        tipo: 'conciliacion-bancaria',
+        emparejados,
+        sin_emparejar: sinEmparejar,
+        num_emparejados: emparejados.length,
+        num_sin_emparejar: sinEmparejar.length,
+        saldo_banco: saldoBanco,
+        saldo_contable: saldoContable,
+        desfase,
+        cuadrado,
+        // El JUICIO de lo no identificado es de E7/E8; aqui solo se EMPAREJA y se DECLARA.
+        juicio_delegado: ['partida-no-identificada', 'regla-movimiento-bancario'],
+        determinista: true,
+        abierto: {
+          libro: libro.length ? null : 'no se recibio el libro (ni declarado ni observado): solo se declaran los movimientos del extracto',
+          desfase: desfase === null ? 'faltan saldos (banco y/o contable): el desfase no se calcula (dato ausente = desconocido)' : null
+        }
       }
     };
   }
 
-  // Los movimientos vienen declarados o se piden al extracto (E2) por EVENTO.
-  async _movimientos(pid, input, periodo) {
-    const declarados = Array.isArray(input.movimientos) ? input.movimientos
-      : (input.extracto && Array.isArray(input.extracto.movimientos) ? input.extracto.movimientos : null);
-    if (declarados) return { movimientos: declarados, fuente_movimientos: 'declarados' };
-
-    const r = await this._rpc('puerto-extracto.entrar.request',
-      { project_id: pid, canal: input.canal, banco: input.banco, periodo }, { timeout_ms: 4000 });
-    const movs = r && r.data && Array.isArray(r.data.movimientos) ? r.data.movimientos : null;
-    if (movs) return { movimientos: movs, fuente_movimientos: 'puerto-extracto' };
-    return { movimientos: [], fuente_movimientos: null };
+  // CLAVE NATURAL COMPARTIDA de un movimiento: canonica y determinista (no se adivina).
+  _claveNatural(m) {
+    const importe = this._round(this._num(m && (m.importe != null ? m.importe : m.cuota)), 2);
+    const fecha = String((m && (m.fecha != null ? m.fecha : m.fecha_valor)) || '').slice(0, 10);
+    const ref = String((m && (m.referencia != null ? m.referencia : (m.ref != null ? m.ref : (m.concepto || '')))) || '').trim().toLowerCase();
+    return `${importe}|${fecha}|${ref}`;
   }
 
-  // El diario se pide a escritor-diario (B2) por EVENTO.
-  async _diario(pid, periodo) {
-    const r = await this._rpc('escritor-diario.asientos.request',
-      { project_id: pid, periodo }, { timeout_ms: 4000 });
-    const asientos = r && r.data && Array.isArray(r.data.asientos) ? r.data.asientos
-      : (Array.isArray(r) ? r : null);
-    if (asientos) return { asientos, fuente_diario: 'diario' };
-    return { asientos: [], fuente_diario: null };
+  _extracto(input) {
+    if (Array.isArray(input.extracto)) return input.extracto;
+    if (Array.isArray(input.movimientos)) return input.movimientos;
+    return [];
   }
 
-  // El corte duro (E8) se pide por EVENTO para cada movimiento. Si no responde, se declara.
-  async _reglas(pid, input) {
-    if (input.movimientos && input.reglas_aplicadas) return { disponible: true, aplicadas: input.reglas_aplicadas };
-    // Sondeo de disponibilidad del custodio de reglas (una consulta, sin inventar corte).
-    const r = await this._rpc('regla-movimiento-bancario.aplicar.request',
-      { project_id: pid, movimiento: { fecha: null, importe: null } }, { timeout_ms: 4000 });
-    if (r && r.data) return { disponible: true, cache: r.data };
-    return { disponible: false };
+  _libroDe(input) {
+    if (Array.isArray(input.libro)) return input.libro;
+    if (Array.isArray(input.asientos)) return input.asientos;
+    return Array.isArray(this._libro) ? this._libro : [];
   }
 
-  // Aplica el corte por regla si el custodio respondio. NUNCA inventa el corte.
-  _porRegla(m, reglas) {
-    if (!reglas || reglas.disponible !== true) return null;
-    if (Array.isArray(reglas.aplicadas)) {
-      const hit = reglas.aplicadas.find(x => x && x.clave === this._claveDe(m));
-      return hit || null;
-    }
-    // Con el sondeo disponible pero sin corte por movimiento, no se afirma cobertura.
+  _saldoFinal(input, lado, movs) {
+    const declarado = lado === 'banco' ? input.saldo_banco : input.saldo_contable;
+    if (declarado != null && Number.isFinite(Number(declarado))) return this._round(Number(declarado), 2);
+    if (Array.isArray(movs) && movs.length) return this._round(movs.reduce((a, m) => a + this._num(m && (m.importe != null ? m.importe : m.saldo)), 0), 2);
     return null;
   }
 
-  _par(m, asiento, via, corte = null) {
-    return {
-      clave: this._claveDe(m) || null,
-      via,
-      movimiento: m,
-      asiento: asiento || null,
-      apunte: corte ? corte.apunte : null,
-      regla: corte ? corte.regla : null
-    };
-  }
-
-  // Clave natural del movimiento: la que normalizo E2 (no se recalcula distinto).
-  _claveDe(m) {
-    if (!m || typeof m !== 'object') return null;
-    if (m.clave != null) return String(m.clave);
-    const partes = [m.fecha, m.importe, m.signo, (m.referencia != null ? m.referencia : m.concepto)];
-    if (partes.every(v => v === null || v === undefined)) return null;
-    return partes.map(v => (v === null || v === undefined ? '-' : String(v))).join('|');
-  }
-
-  _num(v) {
-    if (v === undefined || v === null || v === '') return null;
-    const n = Number(v);
-    return Number.isFinite(n) ? Math.abs(n) : null;
-  }
+  _num(v) { const n = Number(v); return Number.isFinite(n) ? n : 0; }
 
   // ── Tools ──
   toolCruzar(params) { return this._cruzar(params); }

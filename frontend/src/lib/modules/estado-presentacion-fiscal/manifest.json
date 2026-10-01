@@ -1,9 +1,0 @@
-{
-  "id": "estado-presentacion-fiscal",
-  "name": "Estado de presentación",
-  "version": "0.1.0",
-  "zone": "work-bar",
-  "order": 68,
-  "icon": "🧾",
-  "label": "Presentación"
-}

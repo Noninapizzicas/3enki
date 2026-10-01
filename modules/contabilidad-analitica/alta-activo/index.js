@@ -1,29 +1,24 @@
 /**
  * contabilidad-analitica/alta-activo — CUSTODIO CON PERSISTENCIA (F1, hoja del plan).
  *
- * La PARCELA DEL INMOVILIZADO: la ficha de cada BIEN de la empresa (la maquina, el vehiculo,
- * el local, el ordenador). Es la raiz del grupo F — sin esta ficha no hay amortizacion (F2),
- * ni valor neto (F4), ni baja (F3).
+ * Parcela del INMOVILIZADO. UN escritor. Aqui se da de ALTA un activo (bien durable) y se apila su
+ * ficha; NADA se sobreescribe. La valoracion del alta es reflejo hidratador: se ANOTA lo declarado,
+ * no se recalcula por cuenta propia.
  *
- * LOS DATOS DEL BIEN SON DECLARABLES: su valor, su fecha de alta, su vida util y su metodo
- * entran como DATO declarado por el negocio. El modulo NUNCA los estima, NUNCA inventa una
- * vida util, NUNCA asume un valor residual ni un metodo. Un dato que no llega queda `null` =
- * desconocido y se declara en `abierto` — jamas se rellena con un valor por defecto.
+ * EL CERROJO: la identidad del activo es su identificador declarado (activo_id/codigo); sin el NO se
+ * da de alta. La fecha de alta se declara; ausente = desconocida (se anota el hueco, no se inventa).
  *
- * LA VALORACION DEL ALTA ES REFLEJO HIDRATADOR: el modulo RECIBE la valoracion ya hecha
- * (el valor del bien llega declarado); no la calcula ni la deriva.
- *
- * UN SOLO ESCRITOR: solo el camino de alta (rol ALTA_INMOVILIZADO) registra activos;
- * cualquier otro rol es rechazado (segundo escritor → 403).
+ * R2 · ESCRIBE → ANUNCIA: al dar de alta publica `contabilidad.activo_alta` (el hecho que alimenta
+ * amortizacion, informes y expediente). Ademas, por EVENTO (best-effort, respetando el single-writer
+ * de cada custodio), SUBE: el asiento del alta a escritor-diario, la primera cuota a plan-amortizacion
+ * y el documento origen a expediente-documental — este modulo NUNCA escribe esas parcelas.
  *
  * Invariantes:
- *  - `registrar` es UPSERT declarativo por `id_activo`: el mismo id ACTUALIZA la ficha (el dueno
- *    corrige) y apila el cambio en su historial; nunca se borra en silencio.
- *  - Nada cableado: ninguna vida util fiscal, ningun coeficiente, ningun metodo, ningun tipo de
- *    bien, ninguna cuenta contable. Todo entra como dato declarado.
+ *  - SIN identidad declarada no se da de alta (no hay activo anonimo).
+ *  - APPEND-ONLY por activo: re-dar de alta el mismo activo APILA su historial; no se pisa en silencio.
  *  - Persiste por proyecto con PosPersistencia, restaura en project.activated y vuelca en onUnload.
  *
- * Forma: CUSTODIO → PosPersistencia + onProjectActivated + flush + GUARD de escritor.
+ * Forma: CUSTODIO → PosPersistencia + onProjectActivated + flush + UN escritor.
  * Ver hoja F1 del plan-construccion y diseno-oop.md (CLASE AltaActivo).
  */
 
@@ -32,18 +27,12 @@
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
 const PosPersistencia = require('../../_shared/pos-persistencia');
 
-// Rol unico escritor: el alta del inmovilizado la declara el dueno/asesor.
-const ROL_ESCRITOR = 'ALTA_INMOVILIZADO';
-
-// Campos DECLARABLES del bien (el molde). Ningun valor cableado: solo los nombres del molde.
-const CAMPOS_ACTIVO = ['id_activo', 'denominacion', 'valor', 'fecha_alta', 'vida_util', 'metodo', 'valor_residual', 'cuenta', 'tipo', 'moneda'];
-
 class AltaActivo extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'alta-activo';
     this.version = 'reflejo-0.1.0';
-    // store: project_id -> { esquema, activos: Map<id_activo, Activo>, orden: [id, ...] }
+    // store: project_id -> { esquema, activos: Map<activo_id, Activo> }
     this._parcelas = new Map();
 
     this._persist = new PosPersistencia({
@@ -53,22 +42,15 @@ class AltaActivo extends ModuloHibridoReflejo {
       snapshot: (pid) => {
         const p = this._parcelas.get(pid);
         if (!p) return null;
-        return { project_id: pid, esquema: p.esquema, activos: [...p.activos.values()], orden: p.orden };
+        return { project_id: pid, esquema: p.esquema, activos: [...p.activos.values()] };
       },
       hidratar: (pid, data) => {
         if (!data) return;
         const activos = new Map();
-        const orden = [];
         for (const a of (data.activos || [])) {
-          if (!a || a.id_activo == null) continue;
-          activos.set(String(a.id_activo), a);
-          orden.push(String(a.id_activo));
+          if (a && a.activo_id != null) activos.set(String(a.activo_id), a);
         }
-        this._parcelas.set(pid, {
-          esquema: data.esquema || 'contabilidad-alta-activo-v1',
-          activos,
-          orden: Array.isArray(data.orden) ? data.orden.map(String) : orden
-        });
+        this._parcelas.set(pid, { esquema: data.esquema || 'contabilidad-alta-activo-v1', activos });
       }
     });
   }
@@ -79,28 +61,29 @@ class AltaActivo extends ModuloHibridoReflejo {
     return super.onUnload();
   }
 
-  // Restaura la parcela del inmovilizado del proyecto activado.
+  // Restaura el inmovilizado del proyecto activado.
   onProjectActivated(e) {
     const d = (e && (e.data || e)) || {};
     return this._persist.restaurar(d.project_id);
   }
 
-  // ── handler RPC (una linea, delega a _atender) ──
+  // ── handler RPC: registrar (ORDEN → ui_handler panel) ──
   onRegistrarRequest(e) {
     return this._atender(e, 'registrar', 'alta-activo.registrar.response', async (d) => {
       const res = this._registrar(d);
       if (res.status === 200) {
-        // Exito → evento de dominio: el bien quedo en la parcela. Lo LEEN plan-amortizacion (F2),
-        // valor-neto-contable (F4) y baja-activo (F3).
-        this.eventBus?.publish('contabilidad.activo_registrado', {
+        // R2 · si ESCRIBE, anuncia el HECHO: quedo dado de alta un activo.
+        this.eventBus?.publish('contabilidad.activo_alta', {
           project_id: res.data.project_id,
-          id_activo: res.data.activo.id_activo,
+          activo_id: res.data.activo.activo_id,
           activo: res.data.activo,
-          alta: res.data.alta,
-          actualizado: res.data.actualizado,
-          abierto: res.data.activo.abierto,
+          valor: res.data.activo.valor,
+          alta: true,
           correlation_id: d.correlation_id
         });
+        // Por EVENTO (best-effort): el asiento del alta, la primera cuota y el documento origen se
+        // SUBEN a sus custodios; este modulo NO escribe esas parcelas (single-writer ajeno).
+        await this._delegarAlta(res.data, d);
       } else {
         this.eventBus?.publish('alta-activo.registrar.failed', res);
       }
@@ -108,69 +91,53 @@ class AltaActivo extends ModuloHibridoReflejo {
     });
   }
 
-  // ── proyeccion de escritura (UN escritor): el alta del bien ──
+  // ══════════════════════════════════════════════════════════════════════
+  // _registrar(input) → { status, data }  ·  UN escritor (append-only)
+  // ══════════════════════════════════════════════════════════════════════
   _registrar(input = {}) {
     const pid = input.project_id || this.project_id;
     if (!pid) return this._invalid('project_id');
 
-    // GUARD de escritor: solo el camino de alta registra inmovilizado.
-    const rol = input.rol;
-    if (rol !== ROL_ESCRITOR) {
-      return this._errorResponse(403, 'PERMISSION_DENIED',
-        'solo el camino de alta (ALTA_INMOVILIZADO) registra activos en la parcela del inmovilizado',
-        { rol_esperado: ROL_ESCRITOR, rol_recibido: rol ?? null });
-    }
+    const raw = input.activo && typeof input.activo === 'object' ? input.activo
+      : (input.activo_id != null || input.codigo != null ? input : null);
+    if (!raw) return this._invalid('activo');
 
-    const fuente = (input.activo && typeof input.activo === 'object') ? input.activo : input;
-    const id_activo = fuente.id_activo != null ? String(fuente.id_activo).trim() : '';
-    if (!id_activo) return this._invalid('activo.id_activo');
+    const activo_id = raw.activo_id != null ? String(raw.activo_id).trim()
+      : (raw.codigo != null ? String(raw.codigo).trim() : '');
+    if (!activo_id) return this._invalid('activo_id');   // sin identidad no hay activo
 
     const parcela = this._obtenerOCrear(pid);
-    const existente = parcela.activos.get(id_activo) || null;
+    const existente = parcela.activos.get(activo_id) || null;
     const ahora = new Date().toISOString();
 
-    // Los CAMPOS del bien se toman DECLARADOS. Un campo ausente queda null y se declara abierto.
-    const declarado = {};
-    const abierto = [];
-    for (const campo of CAMPOS_ACTIVO) {
-      const raw = fuente[campo];
-      if (raw === undefined || raw === null || raw === '') {
-        declarado[campo] = (existente && campo !== 'id_activo') ? existente[campo] : null;
-        abierto.push(campo);
-      } else {
-        declarado[campo] = (campo === 'valor' || campo === 'valor_residual') ? this._num(raw) : raw;
-      }
-    }
-    // Un valor que no es numero NO se estima: queda null (desconocido).
-    if (declarado.valor === undefined) declarado.valor = null;
-
     const activo = existente || {
-      id_activo,
-      denominacion: null,
-      valor: null,
+      activo_id,
+      descripcion: null,
+      cuenta: null,            // cuenta de inmovilizado (declarable)
+      valor: null,             // valoracion del alta (reflejo hidratador: se anota, no se recalcula)
       fecha_alta: null,
       vida_util: null,
-      metodo: null,
-      valor_residual: null,
-      cuenta: null,
-      tipo: null,
-      moneda: null,
-      estado: 'ALTA',
+      metodo_amortizacion: null,
+      documentado: false,
+      registrado_en: null,
       historial: []
     };
-
-    for (const campo of CAMPOS_ACTIVO) {
-      if (campo === 'id_activo') continue;
-      activo[campo] = declarado[campo];
-    }
-    activo.abierto = abierto.filter((c) => c !== 'id_activo');
-    activo.registrado_en = activo.registrado_en || ahora;
-    activo.updated_at = ahora;
+    if (raw.descripcion != null) activo.descripcion = String(raw.descripcion);
+    if (raw.cuenta != null) activo.cuenta = String(raw.cuenta);
+    if (raw.valor != null) activo.valor = this._round(this._num(raw.valor), 2);
+    if (raw.fecha_alta != null) activo.fecha_alta = String(raw.fecha_alta);
+    if (raw.vida_util != null) activo.vida_util = this._num(raw.vida_util);
+    if (raw.metodo_amortizacion != null) activo.metodo_amortizacion = String(raw.metodo_amortizacion);
+    activo.documentado = raw.documento != null || raw.documento_id != null || activo.documentado === true;
+    activo.registrado_en = ahora;
     activo.historial = Array.isArray(activo.historial) ? activo.historial : [];
-    activo.historial.push({ estado: activo.estado, valor: activo.valor, por: ROL_ESCRITOR, en: ahora });
+    // APPEND-ONLY: re-dar de alta el mismo activo apila su estado; no se pisa en silencio.
+    activo.historial.push({
+      valor: activo.valor, fecha_alta: activo.fecha_alta, vida_util: activo.vida_util,
+      metodo_amortizacion: activo.metodo_amortizacion, en: ahora
+    });
 
-    parcela.activos.set(id_activo, activo);
-    if (!parcela.orden.includes(id_activo)) parcela.orden.push(id_activo);
+    parcela.activos.set(activo_id, activo);
     parcela.updated_at = ahora;
     this._persist.marcarDirty(pid);
 
@@ -179,35 +146,66 @@ class AltaActivo extends ModuloHibridoReflejo {
       data: {
         project_id: pid,
         activo,
-        alta: !existente,
-        actualizado: Boolean(existente),
-        // Lo que el negocio aun no ha declarado del bien (nada se rellena solo).
-        abierto
+        registrado: true,
+        total: parcela.activos.size,
+        append_only: true,
+        abierto: {
+          valor: activo.valor != null ? null : 'el alta no declaro valor (se anota el hueco, no se inventa la valoracion)',
+          fecha_alta: activo.fecha_alta ? null : 'el alta no declaro fecha (se anota el hueco)',
+          documento: activo.documentado ? null : 'el alta no trae documento origen (no se enlaza prueba)'
+        }
       }
     };
+  }
+
+  // Sube (best-effort) a los custodios ajenos: asiento, primera cuota, documento. NUNCA escribe aqui.
+  async _delegarAlta(data, input) {
+    const pid = data.project_id;
+    const a = data.activo;
+    try {
+      if (a.valor != null && a.cuenta != null) {
+        await this._rpc('escritor-diario.asentar.request', {
+          project_id: pid,
+          asiento: {
+            fecha: a.fecha_alta || new Date().toISOString().slice(0, 10),
+            concepto: `Alta de activo ${a.activo_id}`,
+            clave: `alta-activo:${a.activo_id}`,
+            lineas: [{ cuenta: a.cuenta, debe: a.valor, haber: 0 }]
+          },
+          origen: 'alta-activo', correlation_id: input.correlation_id
+        }, { timeout_ms: 800 });
+      }
+      await this._rpc('plan-amortizacion.cuota_del_periodo.request', {
+        project_id: pid, activo_id: a.activo_id, periodo: (a.fecha_alta || '').slice(0, 7),
+        correlation_id: input.correlation_id
+      }, { timeout_ms: 800 });
+      if (a.documentado) {
+        await this._rpc('expediente-documental.archivar.request', {
+          project_id: pid, cifra: `alta-activo:${a.activo_id}`,
+          documento: input.documento || input.activo.documento || null,
+          correlation_id: input.correlation_id
+        }, { timeout_ms: 800 });
+      }
+    } catch (_) { /* best-effort: el alta ya quedo registrada y anunciada */ }
   }
 
   _obtenerOCrear(pid) {
     let p = this._parcelas.get(pid);
     if (!p) {
-      p = { esquema: 'contabilidad-alta-activo-v1', activos: new Map(), orden: [] };
+      p = { esquema: 'contabilidad-alta-activo-v1', activos: new Map() };
       this._parcelas.set(pid, p);
       this._persist.marcarDirty(pid);
     }
     return p;
   }
 
-  // Lectura directa de la parcela (mismo proceso) — no muta.
-  activosDe(pid) {
+  // Activo concreto (mismo proceso) — no muta.
+  activoDe(pid, activo_id) {
     const p = pid ? this._parcelas.get(pid) : null;
-    return p ? [...p.activos.values()] : [];
+    return p && activo_id != null ? (p.activos.get(String(activo_id)) || null) : null;
   }
 
-  _num(v) {
-    if (v === undefined || v === null || v === '') return null;
-    const n = Number(v);
-    return Number.isFinite(n) ? n : null;
-  }
+  _num(v) { const n = Number(v); return Number.isFinite(n) ? n : 0; }
 
   // ── Tools ──
   toolRegistrar(params) { return this._registrar(params); }

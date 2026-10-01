@@ -1,64 +1,53 @@
 {
-  "_doc": "Manifest de contabilidad-analitica/plan-amortizacion — CUSTODIO CON PERSISTENCIA (F2, hoja del plan). LA TABLA DE AMORTIZACION del inmovilizado: el PLAN de cuotas de cada bien (F1) y la CUOTA QUE TOCA en un periodo (dispara en el cierre). Custodio de la parcela `planes`. LOS COEFICIENTES Y METODOS SON DECLARABLES (invariante 5 — la ley entra como DATO): el metodo (lineal, porcentaje declarado, cuota declarada...) y sus COEFICIENTES entran como ParametroDeclarable del negocio — la tabla la DECLARA el dueno/asesor. PROHIBIDO CABLEAR COEFICIENTES FISCALES: en este modulo NO hay ninguna tabla legal, ningun porcentaje fijo, ninguna vida util por defecto, ningun cuadro ministerio; sin metodo declarado NO se genera la tabla y la cuota queda [ABIERTO] (cuota:null, motivo) — el sistema PREGUNTA, no decide. El METODO ES TAMBIEN DECLARABLE POR PLAN y la generacion es DETERMINISTA. UN SOLO ESCRITOR: solo el camino de declaracion (rol DECLARACION_AMORTIZACION) fija planes; cualquier otro rol → 403. Invariantes: `cuota_del_periodo` NO muta el plan declarado (calcula la cuota determinista del periodo); sin metodo/coeficiente declarado NO se inventa la cuota; el coste del bien entra DECLARADO en la tabla del negocio (plan o peticion) — lo ausente queda [ABIERTO]. Persiste por proyecto con PosPersistencia (storage /contabilidad/plan-amortizacion/plan-amortizacion.json), restaura en project.activated y vuelca en onUnload. Proyecciones `_cuota_del_periodo` y `_declarar`. Publica contabilidad.cuota_amortizacion.",
+  "_doc": "Manifest de analitica/plan-amortizacion — CUSTODIO CON PERSISTENCIA (F2, hoja del plan). Genera la CUOTA de amortizacion cuando toca (dispara en el CIERRE); el METODO y el COEFICIENTE son DATO (declarables), no constantes cableadas. UN escritor de la parcela. `cuota_del_periodo` es PREGUNTA (deriva, no escribe); `generar_cuota` es ORDEN: apila la cuota (APPEND-ONLY, nada se borra) y ANUNCIA el HECHO contabilidad.cuota_amortizacion_generada (R2: lo consumen baja-activo y valor-neto-contable). Dato ausente = desconocido: sin base o vida util no se inventa el importe (422). Persiste por proyecto via PosPersistencia (_shared/pos-persistencia, storage /contabilidad/plan-amortizacion), restaura en project.activated y vuelca en onUnload. Generar_cuota es CLASE ORDEN → SÍ lleva ui_handler (F6: workspace_module, el asesor trabaja aqui).",
   "name": "plan-amortizacion",
   "version": "0.1.0",
-  "description": "Custodio (F2): tabla de amortizacion del inmovilizado — metodo y coeficientes son DATO declarable (cero constantes fiscales), sin metodo declarado la cuota queda [ABIERTO] y con un solo escritor.",
-  "blueprint_driven": true,
-  "blueprint_path": "plan-amortizacion.blueprint.json",
+  "description": "Custodio (F2): plan de amortizacion por activo. Genera la cuota cuando toca (append-only) y anuncia contabilidad.cuota_amortizacion_generada; metodo/coeficiente son dato.",
   "language": "es",
   "subscribes": [
     {
       "event": "plan-amortizacion.cuota_del_periodo.request",
       "handler": "onCuotaDelPeriodoRequest",
-      "description": "RPC custodio (calculo determinista, NO muta): {project_id, id_activo, periodo, plan?, valor?, porcentaje?, cuota?, amortizacion_acumulada?} → {project_id, id_activo, periodo, cuota, acumulada, metodo, base, plan, fuente_valor, abierto, motivo}. La cuota se DERIVA del metodo y los coeficientes DECLARADOS en la tabla del plan (o en la peticion): lineal = base/vida_util declarada, porcentaje = base x coeficiente declarado, cuota declarada = importe fijado por el negocio. Sin plan declarado, sin metodo declarado, sin coeficiente declarado o (cuando el metodo deriva de una base) sin coste declarado, NO se inventa la cuota: cuota:null y abierto:true con su motivo (nada se estima, ninguna tabla fiscal cableada). Exito con cuota → publica contabilidad.cuota_amortizacion y responde por plan-amortizacion.cuota_del_periodo.response; project_id o id_activo ausente → plan-amortizacion.cuota_del_periodo.failed."
+      "description": "RPC custodio (PREGUNTA, por el bus): {project_id, activo_id?, periodo?} → {project_id, activo_id, periodo, cuota, metodo, calculada}. Deriva la cuota del periodo sin escribir; si falta base/vida util, cuota:null y abierto declarado. Responde por plan-amortizacion.cuota_del_periodo.response."
     },
     {
-      "event": "plan-amortizacion.declarar.request",
-      "handler": "onDeclararRequest",
-      "description": "RPC custodio (escritura, UNICO ESCRITOR): {project_id, rol:'DECLARACION_AMORTIZACION', plan:{id_activo, metodo?, coeficientes?, vida_util?, valor_residual?, coste?, valor?, porcentaje?, cuota?, base?, periodicidad?}} → {project_id, plan, declarado:true, abierto:[parametros no declarados]}. El metodo, sus coeficientes, la vida util, el valor residual y el coste del bien son ParametroDeclarable del negocio; lo ausente queda null y se declara en `abierto`. UPSERT por id_activo con historial de declaraciones. Responde por plan-amortizacion.declarar.response; rol distinto de DECLARACION_AMORTIZACION → 403; project_id o plan.id_activo ausente → plan-amortizacion.declarar.failed."
+      "event": "plan-amortizacion.generar_cuota.request",
+      "handler": "onGenerarCuotaRequest",
+      "description": "RPC custodio (ORDEN, panel): {project_id, activo|activo_id, periodo?, asiento?} → {project_id, cuota, generada, total, append_only}. Registra el plan si viene, calcula la cuota del periodo y la APILA (append-only). Sin base/vida util → 422 CUOTA_NO_DETERMINABLE. Publica contabilidad.cuota_amortizacion_generada (R2) y responde por plan-amortizacion.generar_cuota.response. Payload invalido → plan-amortizacion.generar_cuota.failed."
     },
     {
       "event": "project.activated",
       "handler": "onProjectActivated",
-      "description": "Restaura la parcela de planes de amortizacion del proyecto activado desde el storage (PosPersistencia)."
+      "description": "Restaura los planes y las cuotas del proyecto activado desde el storage (PosPersistencia)."
     }
   ],
   "publishes": [
     {
+      "event": "contabilidad.cuota_amortizacion_generada",
+      "description": "Fire-and-forget (F2): se genero la cuota de amortizacion de un activo en un periodo → {project_id, activo_id, periodo, cuota, total}. Lo consumen baja-activo y valor-neto-contable."
+    },
+    {
       "event": "plan-amortizacion.cuota_del_periodo.response",
-      "description": "Respuesta RPC correlada de plan-amortizacion.cuota_del_periodo.request → {request_id, status:200, data:{cuota, acumulada, metodo, base, plan, abierto, motivo}}. Emitida por el helper _atender."
+      "description": "Respuesta RPC correlada de la op cuota_del_periodo (PREGUNTA)."
     },
     {
       "event": "plan-amortizacion.cuota_del_periodo.failed",
-      "description": "Par de fallo determinista (F2): project_id o id_activo ausente → {status, error:{code, message, details?}}. Cierra el circulo de plan-amortizacion.cuota_del_periodo.request."
+      "description": "Par de fallo determinista: falta project_id → {status, code, message}. Cierra el circulo de cuota_del_periodo.request."
     },
     {
-      "event": "plan-amortizacion.declarar.response",
-      "description": "Respuesta RPC correlada de plan-amortizacion.declarar.request → {request_id, status:200, data:{plan, declarado:true, abierto}}. Emitida por el helper _atender."
+      "event": "plan-amortizacion.generar_cuota.response",
+      "description": "Respuesta RPC correlada de la op generar_cuota (ORDEN)."
     },
     {
-      "event": "plan-amortizacion.declarar.failed",
-      "description": "Par de fallo determinista (F2): segundo escritor (rol distinto de DECLARACION_AMORTIZACION → 403) o plan.id_activo/project_id ausente → {status, error:{code, message, details?}}. Cierra el circulo de plan-amortizacion.declarar.request."
-    },
-    {
-      "event": "contabilidad.cuota_amortizacion",
-      "description": "Fire-and-forget (F2): hay cuota de amortizacion del periodo para un bien → {project_id, id_activo, periodo, cuota, acumulada, metodo, correlation_id}. Lo LEEN valor-neto-contable (F4, al balance), el cierre del ejercicio y el asiento de amortizacion."
+      "event": "plan-amortizacion.generar_cuota.failed",
+      "description": "Par de fallo determinista: falta project_id/activo o la cuota no es determinable (422) → {status, code, message}. Cierra el circulo de generar_cuota.request."
     }
   ],
+  "tools": [
+    { "name": "plan-amortizacion.cuota_del_periodo", "description": "Deriva (PREGUNTA) la cuota de amortizacion del periodo sin escribir." },
+    { "name": "plan-amortizacion.generar_cuota", "description": "Genera (ORDEN) y registra la cuota del periodo y anuncia el hecho." }
+  ],
   "ui_handlers": [
-    {
-      "domain": "contabilidad",
-      "action": "plan-amortizacion.cuota_del_periodo",
-      "handler": "onCuotaDelPeriodoRequest",
-      "type": "workspace_module",
-      "zone": "barra_modulos"
-    },
-    {
-      "domain": "contabilidad",
-      "action": "plan-amortizacion.declarar",
-      "handler": "onDeclararRequest",
-      "type": "workspace_module",
-      "zone": "barra_modulos"
-    }
+    { "domain": "contabilidad", "action": "plan-amortizacion.generar_cuota", "handler": "onGenerarCuotaRequest", "type": "workspace_module", "zone": "barra_modulos" }
   ]
 }

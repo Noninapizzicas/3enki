@@ -1,40 +1,37 @@
 {
-  "_doc": "Manifest de contabilidad-entrada/tasa-cobertura-entrada — REFLEJO STATELESS (P4, hoja del plan). La PROPORCION de hechos que entran SIN intervencion vs los que CAEN A COLA: es la prueba de la promesa del dueño ('sin una persona digitando'). ⚠️ LEE LA METRICA UNICA, NO LA RECALCULA: la cobertura la produce completitud-cobertura (A12) y la declara en contabilidad.cobertura_medida; aqui NO se vuelve a medir la cobertura — se TOMA la tasa ya medida (declarada en la peticion, cacheada de lo emitido o pedida POR EVENTO a su dueño) y se PRESENTA para la ENTRADA. Recalcularla seria crear una SEGUNDA metrica de cobertura — la invariante lo prohibe. ATRIBUTOS del diseno: cobertura:Cobertura; METODOS: calcular():Ratio; REGLA: proporcion de hechos que entran sin intervencion vs caen a cola — LEE la metrica unica. Invariantes: LEE, NO RECALCULA (la tasa de cobertura llega declarada o de su dueño A12 POR EVENTO; jamas se recomputa desde esperados/llegados); lo que SI computa esta hoja es su PROPIO ratio de entrada (hechos sin intervencion sobre el total) — es la operacion de la clase P4, no la metrica unica; DETERMINISTA (mismas cuentas → mismo ratio); dato ausente = desconocido (sin total o sin las cuentas de intervencion el ratio es null, no un 0 que afirme una medida que no se hizo); NO escribe, NO persiste. FORMA: REFLEJO stateless — sin PosPersistencia, sin onProjectActivated. Proyeccion `_calcular`. Consume contabilidad.cobertura_medida (fire-and-forget) para LEER la metrica unica. Cierra el circulo: error → tasa-cobertura-entrada.calcular.failed.",
+  "_doc": "Manifest de entrada/tasa-cobertura-entrada — REFLEJO STATELESS (P4, hoja del plan). La PROPORCION de hechos que entran SIN intervencion vs los que caen a cola: es la vista de TASA de la metrica unica. LEE la metrica (completitud-cobertura A12) y calcula la tasa; NO la recalcula, NO cuenta hechos por su cuenta, NO escribe. Los dos sucesos que la alimentan llegan por EVENTO: contabilidad.hecho_recibido (A1) y contabilidad.excepcion_encolada (encolado-excepcion) — se observan en memoria (ventana acotada) para contrastar con la metrica declarada. Honestidad (invariante 13): sin metrica NO se inventa una tasa — queda INDETERMINADA. RPC calcular es CLASE PREGUNTA → va por el bus, SIN ui_handler. Sube best-effort completitud-cobertura.medir.request (PREGUNTA→PREGUNTA). R3 OK: ambos emisores (puerto-evento-vertical A1, encolado-excepcion) existen en el repo. Publica tasa-cobertura-entrada.calcular.response y su par .failed.",
   "name": "tasa-cobertura-entrada",
   "version": "0.1.0",
-  "description": "Reflejo stateless (P4): proporción de hechos que entran sin intervención vs caen a cola; LEE la métrica única de cobertura (A12) y nunca la recalcula.",
-  "blueprint_driven": true,
-  "blueprint_path": "tasa-cobertura-entrada.blueprint.json",
+  "description": "Reflejo (P4): proporcion de hechos que entran sin intervencion vs caen a cola. Lee la metrica unica; sin metrica la tasa queda indeterminada.",
   "language": "es",
   "subscribes": [
     {
       "event": "tasa-cobertura-entrada.calcular.request",
       "handler": "onCalcularRequest",
-      "description": "RPC reflejo (determinista): {project_id, sin_intervencion?, con_intervencion?, total?, cobertura?, vertical?} → {tasa_entrada, ratio, sin_intervencion, con_intervencion, total, cumple_promesa, cobertura_leida, lee_metrica_unica:true, recalcula_cobertura:false, abierto, faltan, motivo}. Calcula el ratio PROPIO de la entrada (hechos sin intervencion / total) y ADJUNTA la metrica unica de cobertura (A12) LEIDA — declarada, cacheada o pedida POR EVENTO; NUNCA la recalcula. Sin total ni cuentas → tasa null (no un 0 inventado). Responde por tasa-cobertura-entrada.calcular.response; project_id ausente → tasa-cobertura-entrada.calcular.failed."
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id, metrica?/cobertura?, ejercicio?, desde?, hasta?} → {project_id, fuente, metrica, tasa, tasa_intervencion, entrados, encolados, total, recalcula_metrica:false, abierto}. Calcula la tasa desde la metrica unica; sin metrica queda INDETERMINADA. Responde por tasa-cobertura-entrada.calcular.response. Payload invalido → tasa-cobertura-entrada.calcular.failed."
     },
     {
-      "event": "contabilidad.cobertura_medida",
-      "handler": "onCoberturaMedida",
-      "description": "Fire-and-forget (A12 → P4): completitud-cobertura publicó LA metrica unica de cobertura → se LEE y se guarda (cache de lectura) para presentarla sin recalcularla. Tolerante: sin project_id se ignora. ⚠️ No dispara ninguna medición: solo LEE."
+      "event": "contabilidad.hecho_recibido",
+      "handler": "onHechoRecibido",
+      "description": "Fire-and-forget (A1 puerto-evento-vertical): un hecho entro sin intervencion. Se observa en memoria (ventana acotada); no se escribe ni se recalcula la metrica."
+    },
+    {
+      "event": "contabilidad.excepcion_encolada",
+      "handler": "onExcepcionEncolada",
+      "description": "Fire-and-forget (encolado-excepcion): un hecho cayo a cola (necesito intervencion). Se observa en memoria (ventana acotada); la metrica fina la produce completitud-cobertura, no este contador de conveniencia."
     }
   ],
   "publishes": [
     {
       "event": "tasa-cobertura-entrada.calcular.response",
-      "description": "Respuesta RPC correlada de tasa-cobertura-entrada.calcular.request → {request_id, status:200, data:{tasa_entrada, ratio, sin_intervencion, con_intervencion, total, cumple_promesa, cobertura_leida, lee_metrica_unica, recalcula_cobertura, abierto, faltan}}. Emitida por el helper _atender."
+      "description": "Respuesta RPC correlada de la op calcular (una sola cara: el bus)."
     },
     {
       "event": "tasa-cobertura-entrada.calcular.failed",
-      "description": "Par de fallo determinista (P4): project_id ausente → {status, error:{code, message, details?}}. Cierra el circulo de tasa-cobertura-entrada.calcular.request."
+      "description": "Par de fallo determinista: falta project_id → {status, code, message}. Cierra el circulo de calcular.request."
     }
   ],
-  "ui_handlers": [
-    {
-      "domain": "contabilidad",
-      "action": "tasa-cobertura-entrada.calcular",
-      "handler": "onCalcularRequest",
-      "type": "system_panel",
-      "zone": "lateral_derecha"
-    }
+  "tools": [
+    { "name": "tasa-cobertura-entrada.calcular", "description": "Calcula (PREGUNTA) la tasa de cobertura de entrada leyendo la metrica unica (sin intervencion / total)." }
   ]
 }

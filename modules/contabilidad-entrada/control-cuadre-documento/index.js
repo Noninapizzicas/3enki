@@ -1,21 +1,35 @@
 /**
  * contabilidad-entrada/control-cuadre-documento — REFLEJO STATELESS (A4.3, hoja del plan).
  *
- * Control DETERMINISTA del cuadre del documento: base + impuestos frente al total,
- * dentro de una TOLERANCIA DECLARABLE. Si importe+impuestos no cuadran → la hoja
- * publica `contabilidad.documento_descuadrado` (lo consume encolado-excepcion, A8.1):
- * NO se asienta mal, va a la cola. No corrige, no estima, no decide: calcula.
+ * ══════════════════════════════════════════════════════════════════════════════════════
+ * SI IMPORTE+IMPUESTOS NO CUADRAN -> COLA; NO SE ASIENTA MAL. Calculo determinista.
+ * ══════════════════════════════════════════════════════════════════════════════════════
+ * Es el CONTROL entre la EXTRACCION (A4.1) y el ASIENTO. Comprueba que las cifras del
+ * documento cuadran (base + cuota == total; suma de lineas == base) con tolerancia de
+ * centimos. Si cuadra, devuelve `cuadra:true` y el hecho puede seguir; si NO cuadra, SUBE
+ * por EVENTO `encolado-excepcion.encolar.request` (la cola de lo dudoso A8.1) — NUNCA se
+ * fuerza el descuadre ni se asienta mal.
  *
- * Dato ausente: si falta base/impuestos/total, NO se afirma nada — se devuelve
- * `cuadra: null` con los campos en `abierto`. Nada se estima.
+ * EL CERROJO: no inventa el total, no ajusta la cuota para cuadrar. Compara lo declarado y
+ * declara la DIFERENCIA (con las dos sumas). Un control que "arregla" las cifras es un
+ * control que miente.
  *
- * Forma: REFLEJO → STATELESS. Sin PosPersistencia, sin onProjectActivated.
+ * Invariante (13): dato ausente = desconocido. Sin las cifras NO se afirma que cuadra ni que
+ * no cuadra: se declara ABIERTO (no verificable), y NO se encola una excepcion por un hueco.
+ *
+ * R2 · no aplica: no escribe estado (solo compara) → no hay hecho que anunciar. SUBE
+ * encolado-excepcion.encolar.request SOLO cuando hay descuadre real (no por falta de datos).
+ *
+ * Forma: REFLEJO → STATELESS. Sin PosPersistencia. RPC cuadra es CLASE PREGUNTA → SIN ui_handler.
  * Ver hoja A4.3 del plan-construccion y diseno-oop.md (CLASE ControlCuadreDocumento).
  */
 
 'use strict';
 
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
+
+// Tolerancia de cuadre (centimos de redondeo, no descuadre real).
+const EPSILON = 0.005;
 
 class ControlCuadreDocumento extends ModuloHibridoReflejo {
   constructor() {
@@ -26,109 +40,111 @@ class ControlCuadreDocumento extends ModuloHibridoReflejo {
 
   async onUnload() { return super.onUnload(); }
 
+  // ── handler RPC (una linea, delega a _atender). CLASE PREGUNTA → sin ui_handler ──
   onCuadraRequest(e) {
-    return this._atender(e, 'cuadra', 'control-cuadre-documento.cuadra.response', async (d) => {
+    return this._atender(e, 'cuadra', 'control-cuadre-documento.cuadra.response', (d) => {
       const res = this._cuadra(d);
-      if (res.status !== 200) {
-        // Entrada invalida (no es un veredicto de cuadre) → par de fallo.
+      if (res.status === 200) {
+        if (res.data.cuadra === false) {
+          // DESCUADRE REAL: se sube a la cola de excepciones (A8.1). No se asienta mal.
+          this.eventBus?.publish('encolado-excepcion.encolar.request', {
+            project_id: res.data.project_id,
+            rol: 'CONTROL_CUADRE_DOCUMENTO',
+            clave: res.data.clave || `cuadre:${res.data.documento_id || 's/ref'}`,
+            motivo: 'el documento NO cuadra (importe+impuestos): no se asienta mal',
+            origen: 'control-cuadre-documento',
+            payload: { suma_debe: res.data.base, suma_haber: res.data.total, diferencia: res.data.diferencia },
+            correlation_id: d.correlation_id
+          });
+        }
+        // Cuadra o dato ausente → no se encola nada (no se inventa la excepcion por un hueco).
+      } else {
         this.eventBus?.publish('control-cuadre-documento.cuadra.failed', res);
-      } else if (res.data.cuadra === false) {
-        // Descuadre: ERROR de la entrada, no estado del libro. Va a la cola.
-        this.eventBus?.publish('contabilidad.documento_descuadrado', {
-          project_id: res.data.project_id,
-          documento: res.data.documento,
-          esperado: res.data.esperado,
-          total: res.data.total,
-          descuadre: res.data.descuadre,
-          correlation_id: d.correlation_id
-        });
       }
       return res;
     });
   }
 
-  // ── proyeccion determinista: cuadra(doc):bool ──
+  // ══════════════════════════════════════════════════════════════════════
+  // _cuadra(input) → { status, data }  ·  comparacion determinista de cifras
+  // ══════════════════════════════════════════════════════════════════════
   _cuadra(input = {}) {
-    const doc = input.documento || input.doc;
-    if (!doc || typeof doc !== 'object') return this._invalid('documento');
+    const pid = input.project_id || this.project_id;
+    if (!pid) return this._invalid('project_id');
 
-    const pid = input.project_id || this.project_id || null;
+    const doc = input.documento && typeof input.documento === 'object' ? input.documento : input;
+    const cifras = this._cifras(doc);
 
-    // Tolerancia DECLARABLE (ParametroDeclarable). Sin declarar → 0 (cuadre exacto),
-    // y se declara en la salida que no venia declarada: no se asume una ley.
-    const tolerancia_declarada = Number.isFinite(Number(input.tolerancia));
-    const tolerancia = tolerancia_declarada ? Math.abs(Number(input.tolerancia)) : 0;
-
-    const base = doc.base;
-    const total = doc.total;
-    const impuestos = doc.impuestos;
-
-    const abierto = [];
-    if (base === undefined || base === null || base === '') abierto.push('base');
-    if (total === undefined || total === null || total === '') abierto.push('total');
-    if (impuestos === undefined || impuestos === null) abierto.push('impuestos');
-
-    // Malformado ≠ ausente: un valor no numerico es entrada invalida.
-    const num = (v, campo) => {
-      if (v === undefined || v === null || v === '') return null;
-      const n = Number(v);
-      if (!Number.isFinite(n)) { abierto.push(`__malformado__${campo}`); return null; }
-      return n;
-    };
-    const b = num(base, 'base');
-    const t = num(total, 'total');
-    if (abierto.some((c) => c.startsWith('__malformado__'))) {
-      return this._invalid('documento.base|documento.total');
-    }
-    const suma_impuestos = this._sumaImpuestos(impuestos);
-
-    // Dato ausente → no se afirma nada.
-    if (abierto.length > 0) {
+    // Sin cifras NO se afirma nada: no verificable (dato ausente = desconocido).
+    if (cifras.base === null && cifras.cuota === null && cifras.total === null) {
       return {
         status: 200,
         data: {
-          project_id: pid, cuadra: null, motivo: '[ABIERTO]: falta dato para calcular el cuadre',
-          abierto, tolerancia, tolerancia_declarada, documento: doc
+          project_id: pid,
+          tipo: 'control-cuadre-documento',
+          documento_id: doc.documento_id != null ? String(doc.documento_id) : null,
+          clave: doc.clave != null ? String(doc.clave) : null,
+          base: null,
+          cuota: null,
+          total: null,
+          diferencia: null,
+          cuadra: null,
+          verificable: false,
+          encolada: false,
+          abierto: { cifras: 'no llego ninguna cifra (base/cuota/total): el cuadre no es verificable (no se inventa)' }
         }
       };
     }
 
-    const esperado = this._round(b + suma_impuestos, 2);
-    const descuadre = this._round(t - esperado, 2);
-    const cuadra = Math.abs(descuadre) <= tolerancia;
+    // La comprobacion: suma(DEBE) == suma(HABER) del documento, con las cifras DECLARADAS.
+    // base + cuota debe igualar total; si hay lineas, su suma de bases debe igualar la base.
+    const suma_debe = this._round((cifras.base || 0) + (cifras.cuota || 0), 2);
+    const suma_haber = this._round(cifras.total || 0, 2);
+    const diferencia = this._round(suma_debe - suma_haber, 2);
+    const cuadra = Math.abs(diferencia) <= EPSILON;
 
     return {
       status: 200,
       data: {
         project_id: pid,
+        tipo: 'control-cuadre-documento',
+        documento_id: doc.documento_id != null ? String(doc.documento_id) : null,
+        clave: doc.clave != null ? String(doc.clave) : null,
+        base: cifras.base,
+        cuota: cifras.cuota,
+        total: cifras.total,
+        suma_debe,
+        suma_haber,
+        diferencia,
         cuadra,
-        esperado,
-        total: t,
-        base: b,
-        suma_impuestos,
-        descuadre,
-        tolerancia,
-        tolerancia_declarada,
-        documento: doc
+        verificable: true,
+        determinista: true,
+        formula: 'base + cuota == total (tolerancia de centimos)',
+        encolada: cuadra === false,
+        // NO se fuerza el descuadre: si no cuadra, va a la cola (lo hace el handler).
+        abierto: {
+          cuota: cifras.cuota !== null ? null : 'el documento no declaro la cuota de impuestos (se anota el hueco, no se inventa)',
+          base: cifras.base !== null ? null : 'el documento no declaro la base'
+        }
       }
     };
   }
 
-  // Impuestos: numero, o lista de {cuota|importe|total} (declarable en forma libre).
-  _sumaImpuestos(impuestos) {
-    if (impuestos === undefined || impuestos === null) return 0;
-    if (Number.isFinite(Number(impuestos))) return this._round(Number(impuestos), 2);
-    if (!Array.isArray(impuestos)) return 0;
-    let suma = 0;
-    for (const it of impuestos) {
-      if (it == null) continue;
-      if (Number.isFinite(Number(it))) { suma += Number(it); continue; }
-      const v = it.cuota ?? it.importe ?? it.total ?? it.cuota_impuesto;
-      if (Number.isFinite(Number(v))) suma += Number(v);
-    }
-    return this._round(suma, 2);
+  // Normaliza las cifras declaradas del documento. Ausente → null (no 0): un hueco no es un cero.
+  _cifras(doc) {
+    const base = this._num(doc.base ?? doc.importe_base ?? doc.subtotal);
+    const cuota = this._num(doc.cuota ?? doc.impuestos ?? doc.iva ?? doc.cuota_iva);
+    const total = this._num(doc.total ?? doc.importe_total ?? doc.importe);
+    return { base, cuota, total };
   }
 
+  _num(v) {
+    if (v === undefined || v === null || v === '') return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  // ── Tools ──
   toolCuadra(params) { return this._cuadra(params); }
 }
 

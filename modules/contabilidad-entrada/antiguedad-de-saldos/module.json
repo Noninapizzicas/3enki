@@ -1,35 +1,41 @@
 {
-  "_doc": "Manifest de contabilidad-entrada/antiguedad-de-saldos — REFLEJO STATELESS (N8, hoja del plan). LO PENDIENTE CLASIFICADO POR VENCIMIENTO (aging): quien y cuanto esta vencido. Determinista: toma los vencimientos (el tipo Vencimiento con DOS LADOS, N6) y clasifica lo pendiente en tramos de antiguedad; es el ESPEJO de vencimiento-pago (N6) del lado del cobro — aqui NO se calcula la fecha de vencimiento (eso es N6), se CLASIFICA lo que ya vence. 🔴 LOS TRAMOS SON DECLARABLES: en el codigo NO hay ningun 30, 60 ni 90 escrito; los tramos los DECLARA el negocio (`tramos:[30,60,90]` limites consecutivos, o `tramos:[{desde,hasta,etiqueta}]`), y si no los declara NO se clasifica por tramos — clasificado:false, tabla:[], abierto:['tramos'] — el sistema NO inventa los tramos del negocio. 🔴 SIN `hoy` DECLARADO NO SE SABE QUE ESTA VENCIDO: la antiguedad se mide contra una FECHA DE REFERENCIA declarada (`hoy`/`fecha_referencia`); sin ella dias_vencido:null, vencido:null y se declara [ABIERTO] — no se usa 'hoy' por sorpresa como si fuera un dato del negocio. ATRIBUTOS del diseno: vencimientos:Set<Vencimiento>; METODOS: clasificar():Tabla. Invariantes: DETERMINISTA (mismos vencimientos + mismos tramos + misma fecha de referencia → misma tabla; los vencidos se ordenan de mas antiguo a mas reciente); dato ausente = desconocido — un vencimiento sin fecha no se coloca en ningun tramo (va a sin_fecha), uno sin importe no se lee como 0 (va a sin_importe), y uno vencido que no cae en ningun tramo declarado va a fuera_de_tramos (no se fuerza a un tramo); NO escribe, NO persiste, NO muta y NO decide — la tabla es un DERIVADO, reclamar es del negocio. Solo lo VENCIDO (dias_vencido > 0) entra en los tramos; el no vencido y los totales se agregan aparte. Los vencimientos se reciben declarados o se PIDEN a vencimiento-pago (N6) POR EVENTO (facturas + politica) o se leen del diario (escritor-diario B2) POR EVENTO. Alimenta la reclamacion del cobro y la politica declarada (E6): lo LEEN, no lo recalculan. FORMA: REFLEJO stateless, sin PosPersistencia ni onProjectActivated. Proyeccion `_clasificar`. Cierra el circulo: error → antiguedad-de-saldos.clasificar.failed.",
+  "_doc": "Manifest de entrada/antiguedad-de-saldos — REFLEJO STATELESS (N8, hoja del plan). LO PENDIENTE CLASIFICADO POR VENCIMIENTO: quien y cuanto esta vencido. Es el ESPEJO de N6 (vencimiento-pago) del lado del cobro/pago: N6 dice CUANDO vence cada factura; N8 dice CUANTO y de QUIEN esta vencido, repartido en tramos (corriente / 1_30 / 31_60 / 61_90 / mas_90). Determinista: para cada factura toma su fecha_vencimiento (declarada, o SUBIDA best-effort por EVENTO a vencimiento-pago.calcular.request) y la clasifica por los dias transcurridos hasta la fecha de corte (dias = corte - vencimiento; > 0 = VENCIDO). Escucha contabilidad.asiento_asentado (escritor-diario B2, ventana acotada, fuente alternativa de facturas). Honestidad (invariante 13): sin facturas NO se inventa una antiguedad (dato ausente = desconocido); una factura sin fecha_vencimiento NO se mete en un tramo a ojo — se declara en `abierto`/`sin_vencimiento` y la suma solo se afirma sobre lo CLASIFICABLE. NO escribe estado → no hay hecho que anunciar (R2); SUBE best-effort motor-avisos.producir.request si hay vencido que avisar. Sin store propio (STATELESS). La op clasificar es CLASE PREGUNTA → SIN ui_handler.",
   "name": "antiguedad-de-saldos",
   "version": "0.1.0",
-  "description": "Reflejo (N8): el aging de saldos por vencimiento — lo pendiente clasificado en tramos DECLARABLES (sin inventar 30/60/90) y medido contra una fecha de referencia tambien declarada; quien y cuanto esta vencido.",
-  "blueprint_driven": true,
-  "blueprint_path": "antiguedad-de-saldos.blueprint.json",
+  "description": "Reflejo (N8): pendiente clasificado por vencimiento (tramos de antiguedad). Sin datos no inventa; lo no clasificable queda abierto.",
   "language": "es",
   "subscribes": [
     {
       "event": "antiguedad-de-saldos.clasificar.request",
       "handler": "onClasificarRequest",
-      "description": "RPC reflejo (clasificacion pura, determinista): {project_id, vencimientos?:[...]|facturas?:[...], tramos?|[30,60,90]|[{desde,hasta,etiqueta}], hoy?|fecha_referencia?, lado?, politica?, base?, periodo?} → {project_id, tipo:'antiguedad-de-saldos', lado, hoy, hoy_declarado, clasificado, tabla:[{desde,hasta,etiqueta,num,total_pendiente,terceros}], tramos_declarados, vencidos:[{clave,tercero,lado,fecha_vencimiento,pendiente,dias_vencido}], num_vencidos, total_vencido, total_no_vencido, total_pendiente, fuera_de_tramos, sin_fecha, sin_importe, fuente_vencimientos, alimenta, decide, abierto}. Sin `hoy` declarado no se sabe que esta vencido ([ABIERTO]); sin tramos declarados no se clasifica (no se inventan 30/60/90). Los vencimientos se declaran o se PIDEN a vencimiento-pago (N6) POR EVENTO. Responde por antiguedad-de-saldos.clasificar.response; project_id ausente → antiguedad-de-saldos.clasificar.failed."
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id, facturas?/saldos?, fecha_corte?, tramos?} → {project_id, fuente, fecha_corte, tramos, tramos_con_saldo, pendiente_total, vencido_total, clasificable, abierto, sin_vencimiento}. Clasifica el pendiente por tramos de antiguedad; sin vencimiento no se clasifica a ojo. Sube best-effort vencimiento-pago.calcular.request y motor-avisos.producir.request. Responde por antiguedad-de-saldos.clasificar.response; falta project_id → antiguedad-de-saldos.clasificar.failed."
+    },
+    {
+      "event": "contabilidad.asiento_asentado",
+      "handler": "onAsientoAsentado",
+      "description": "Fire-and-forget (escritor-diario B2): el libro cambio → se observa el asiento (ventana acotada) como fuente alternativa de facturas. El reflejo no reescribe el libro; solo mira."
     }
   ],
   "publishes": [
     {
       "event": "antiguedad-de-saldos.clasificar.response",
-      "description": "Respuesta RPC correlada de antiguedad-de-saldos.clasificar.request → {request_id, status:200, data:{hoy, clasificado, tabla, tramos_declarados, vencidos, num_vencidos, total_vencido, total_no_vencido, total_pendiente, fuera_de_tramos, sin_fecha, sin_importe, abierto}}. Emitida por el helper _atender."
+      "description": "Respuesta RPC correlada de la op clasificar (una sola cara: el bus)."
     },
     {
       "event": "antiguedad-de-saldos.clasificar.failed",
-      "description": "Par de fallo determinista (N8): project_id ausente → {status, error:{code, message, details?}}. Cierra el circulo de antiguedad-de-saldos.clasificar.request. OJO: no tener vencimientos o no tener tramos declarados NO es un fallo: es un no-disponible/no-clasificable declarado en la response 200."
+      "description": "Par de fallo determinista: falta project_id → {status, code, message}. Cierra el circulo de clasificar.request."
+    },
+    {
+      "event": "vencimiento-pago.calcular.request",
+      "description": "Subida (best-effort por EVENTO) a N6: pide las fechas de vencimiento de las facturas para clasificarlas. Si no responde, se usa la observacion del libro."
+    },
+    {
+      "event": "motor-avisos.producir.request",
+      "description": "Subida (best-effort por EVENTO) a K2: avisa del pendiente vencido cuando lo hay. AntiguedadSaldos clasifica; motor-avisos produce el aviso."
     }
   ],
-  "ui_handlers": [
-    {
-      "domain": "contabilidad",
-      "action": "antiguedad-de-saldos.clasificar",
-      "handler": "onClasificarRequest",
-      "type": "workspace_module",
-      "zone": "barra_modulos"
-    }
-  ]
+  "tools": [
+    { "name": "antiguedad-de-saldos.clasificar", "description": "Clasifica (PREGUNTA) el pendiente por tramos de antiguedad segun el vencimiento." }
+  ],
+  "ui_handlers": []
 }

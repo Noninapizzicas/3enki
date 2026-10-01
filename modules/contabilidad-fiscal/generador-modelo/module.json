@@ -1,39 +1,38 @@
 {
-  "_doc": "Manifest de contabilidad-fiscal/generador-modelo — PUENTE STATELESS (D7, hoja del plan). SALIDA al programa del ASESOR: toma el modelo ya construido (modelo-303 D2, modelo-390 D3) y lo EXPORTA en el formato que el programa del asesor consuma; cruza la frontera hacia fuera, no decide el contenido del modelo ni lo presenta. EL SISTEMA PREPARA EL MODELO; EL ASESOR PRESENTA Y FIRMA: este modulo NO presenta, NO firma y NO envia a ninguna administracion — declara presentado:false, firmado:false, preparado_para_asesor:true. LA LEY ENTRA COMO DATO (invariante 5): el `destino` y el `formato` son DECLARABLES (ParametroDeclarable) — ABIERTO en el diseno (formato no declarado aun); NO hay ninguna codificacion cableada (ni XML, ni BOE, ni CSV de un programa concreto) y sin `formato` declarado NO se exporta (FORMATO_NO_DECLARADO + exportado:false). El `mapeo` (campo canonico → clave externa) tambien entra como DATO. Campos de exportacion canonicos: modelo, ejercicio, periodo, nif, casillas, datos (ausente → null, no se estima). El modelo llega por DOS vias sin require cruzado: declarado en la peticion (`modelo`) o pedido POR EVENTO a modelo-303/modelo-390 (RPC); sin modelo NO se exporta un fichero vacio ni inventado (exportado:false + motivo). FORMA: PUENTE stateless — sin PosPersistencia, sin onProjectActivated. Proyeccion `_exportar`. Publica contabilidad.modelo_exportado.",
+  "_doc": "Manifest de fiscal/generador-modelo — PUENTE STATELESS (D7, hoja del plan). La SALIDA AL PROGRAMA DEL ASESOR: conecta por PUERTO y produce un artefacto en FORMATO ABIERTO (json/csv/xml/txt). Aqui PREPARA, NO presenta: monta el modelo exportable (modelo 303/390/… declarado) con sus casillas/partidas DECLARADAS. La PRESENTACION (avanzar el estado del modelo) es de estado-presentacion-fiscal (D12), a quien se le SUBE por EVENTO. Es un PUENTE, no un custodio: NO guarda estado propio. RECOGE lo declarado, lo COMPONE en forma exportable, SUBE estado-presentacion-fiscal.avanzar.request y anuncia el hecho contabilidad.modelo_exportado (R2). Honestidad (invariante 13): sin CASILLAS declaradas no se inventa una cifra — el modelo sale con lo declarado y lo que falte queda abierto (un modelo rellenado a ojo es una declaracion fiscal falsa). RPC exportar es CLASE ORDEN → SI lleva ui_handler (system_panel/lateral_derecha). Publica generador-modelo.exportar.response, generador-modelo.exportar.failed y contabilidad.modelo_exportado.",
   "name": "generador-modelo",
   "version": "0.1.0",
-  "description": "Puente stateless (D7): prepara el modelo fiscal para el programa del asesor en formato declarable — el sistema prepara, el asesor presenta y firma; el sistema no presenta.",
-  "blueprint_driven": true,
-  "blueprint_path": "generador-modelo.blueprint.json",
+  "description": "Puente (D7): prepara el modelo fiscal exportable (formato abierto) para el asesor y avanza el estado de presentacion. No presenta: prepara.",
   "language": "es",
   "subscribes": [
     {
       "event": "generador-modelo.exportar.request",
       "handler": "onExportarRequest",
-      "description": "RPC puente: {project_id, formato, destino?, modelo?, modelo_slug?, ejercicio?, periodo?, regimen?, territorio?, estructura?, mapeo?} → {exportado:true, fichero, modelo_slug, origen_modelo, destino, formato, adaptador_declarado, presentado:false, firmado:false, preparado_para_asesor:true}. Sin `formato` declarado → FORMATO_NO_DECLARADO (no se adivina la codificacion). El modelo se toma declarado en la peticion o pedido POR EVENTO a modelo-303/modelo-390; sin modelo → exportado:false + motivo. Exito → publica contabilidad.modelo_exportado y responde por generador-modelo.exportar.response; fallo → generador-modelo.exportar.failed."
+      "description": "RPC puente (ORDEN, panel): {project_id, modelo, ejercicio?, periodo?, formato?, casillas?/partidas?} → {project_id, modelo, formato, casillas, contenido, num_casillas, persistido:false, abierto}. PREPARA el artefacto en formato abierto; sin casillas NO se inventan cifras. Publica contabilidad.modelo_exportado (R2) y SUBE estado-presentacion-fiscal.avanzar.request. Responde por generador-modelo.exportar.response; falta project_id/modelo → generador-modelo.exportar.failed."
     }
   ],
   "publishes": [
     {
+      "event": "contabilidad.modelo_exportado",
+      "description": "Fire-and-forget (D7): un modelo quedo exportado en formato abierto → {project_id, modelo, ejercicio, periodo, formato, casillas, abierto}. Alimenta a estado-presentacion-fiscal."
+    },
+    {
+      "event": "estado-presentacion-fiscal.avanzar.request",
+      "description": "Subida (REQUEST por EVENTO) a D12: el modelo exportado queda preparado → el estado de presentacion avanza."
+    },
+    {
       "event": "generador-modelo.exportar.response",
-      "description": "Respuesta RPC correlada de generador-modelo.exportar.request → {request_id, status:200, data:{exportado, fichero, modelo_slug, origen_modelo, destino, formato, adaptador_declarado, presentado:false, firmado:false, preparado_para_asesor:true}}. Emitida por el helper _atender."
+      "description": "Respuesta RPC correlada de la op exportar (una sola cara: el bus)."
     },
     {
       "event": "generador-modelo.exportar.failed",
-      "description": "Par de fallo determinista (D7): formato no declarado (400 FORMATO_NO_DECLARADO) → {status, error:{code, message, details?}}. Cierra el circulo de generador-modelo.exportar.request."
-    },
-    {
-      "event": "contabilidad.modelo_exportado",
-      "description": "Fire-and-forget (D7): el modelo fiscal quedo exportado hacia el programa del asesor → {project_id, modelo, destino, formato, presentado:false, firmado:false, correlation_id}. Cierra el bucle hacia fuera; el asesor presenta y firma."
+      "description": "Par de fallo determinista: falta project_id o modelo → {status, code, message}. Cierra el circulo de exportar.request."
     }
   ],
+  "tools": [
+    { "name": "generador-modelo.exportar", "description": "Prepara (ORDEN) el modelo fiscal exportable en formato abierto para el programa del asesor." }
+  ],
   "ui_handlers": [
-    {
-      "domain": "contabilidad",
-      "action": "generador-modelo.exportar",
-      "handler": "onExportarRequest",
-      "type": "workspace_module",
-      "zone": "barra_modulos"
-    }
+    { "domain": "contabilidad", "action": "generador-modelo.exportar", "handler": "onExportarRequest", "type": "system_panel", "zone": "lateral_derecha" }
   ]
 }

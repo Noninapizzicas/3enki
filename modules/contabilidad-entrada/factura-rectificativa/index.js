@@ -1,30 +1,21 @@
 /**
  * contabilidad-entrada/factura-rectificativa — REFLEJO STATELESS (O2, hoja del plan).
  *
- * DERIVA la rectificativa de una factura YA emitida: la correccion comercial POSTERIOR a la
- * emision (abono / devolucion / descuento / anulacion) que NO BORRA NADA.
+ * Correccion comercial POSTERIOR a la emision (abono / devolucion / descuento) que NO BORRA
+ * NADA. Una rectificacion es OTRA factura, jamas una edicion de la original (append-only del
+ * libro O1). Esta hoja CALCULA la rectificativa a partir de la factura original.
  *
- * Ley de hierro (append-only): el ORIGINAL NO SE MUTA. Esta clase no toca la factura emitida
- * (O1, `emision-factura-venta`): solo produce el documento RECTIFICATIVO que CORRIGE POR SUMA.
- * Un asiento original no se reescribe; la correccion entra como documento NUEVO que referencia
- * al original por su clave natural/serie+numero.
- *
- * ATRIBUTOS del diseno: `original:FacturaEmitida`, `motivo:ParametroDeclarable`.
- *   METODOS: calcular(original, motivo):FacturaEmitida.
- *   REGLA: correccion comercial POSTERIOR a la emision (abono/devolucion/descuento) que NO
- *          borra nada. != ajuste interno B5 (`asiento-ajuste`), que es del asesor al libro.
+ * ESCUCHA `contabilidad.factura_emitida` (O1 emision-factura-venta) para tener a mano las
+ * facturas que se pueden rectificar; su registro es un DERIVADO en memoria, no un hecho.
  *
  * Invariantes:
- *  - EL ORIGINAL NO SE BORRA NI SE MUTA: se devuelve intacto y la rectificativa SUMA.
- *  - DETERMINISTA: mismo original + mismo motivo → misma rectificativa (una sola respuesta).
- *  - Dato ausente = desconocido: sin base corregible (importe/lineas del original) NO se fabrica
- *    una rectificativa con un 0; se declara `abierto:true` y lo que falta.
- *  - El MOTIVO/TIPO de correccion es DECLARABLE: sin declararlo, se emite la rectificativa y se
- *    declara el hueco (`motivo:null`) — jamas se inventa la razon de la correccion.
- *  - NO escribe, NO persiste: la rectificativa es un DERIVADO en memoria; quien la asienta es el
- *    custodio del libro.
+ *  - Dato ausente = desconocido: sin factura original o sin importe a rectificar NO se inventa
+ *    la rectificativa; queda ABIERTA (se declara, no se estima).
+ *  - LA POLARIDAD ES FIJA: la rectificativa CORRIGE (signo negativo). No se suma al original.
+ *  - NO escribe, NO persiste: solo calcula. La emision de la rectificativa la hace O1 (se SUBE
+ *    por EVENTO `emision-factura-venta.emitir.request`) y el asiento, escritor-diario (B2).
  *
- * Forma: REFLEJO → STATELESS. Sin PosPersistencia, sin onProjectActivated.
+ * Forma: REFLEJO → STATELESS. Sin PosPersistencia, sin onProjectActivated. RPC PREGUNTA → sin ui_handler.
  * Ver hoja O2 del plan-construccion y diseno-oop.md (CLASE FacturaRectificativa).
  */
 
@@ -32,166 +23,176 @@
 
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
 
-// Tipos de correccion comercial DECLARABLES (la lista no decide, solo reconoce lo declarado).
-const TIPOS_CORRECCION = new Set(['ABONO', 'DEVOLUCION', 'DESCUENTO', 'ANULACION']);
+const TIPOS = new Set(['abono', 'devolucion', 'descuento', 'anulacion']);
 
 class FacturaRectificativa extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'factura-rectificativa';
     this.version = 'reflejo-0.1.0';
+    // Derivado en memoria: project_id -> Map<factura_id, factura emitida>
+    this._emitidas = new Map();
   }
 
   async onUnload() { return super.onUnload(); }
 
-  // ── handler RPC (una linea, delega a _atender) ──
+  // ── handler RPC (PREGUNTA → sin ui_handler) ──
   onCalcularRequest(e) {
     return this._atender(e, 'calcular', 'factura-rectificativa.calcular.response', async (d) => {
       const res = this._calcular(d);
-      if (res.status === 200) {
-        // Exito → evento de dominio: la correccion SUMA; el original queda intacto.
-        this.eventBus?.publish('contabilidad.factura_rectificada', {
-          project_id: res.data.project_id,
-          rectificativa: res.data.rectificativa,
-          referencia_original: res.data.referencia_original,
-          original_intacta: res.data.original_intacta,
-          corrige_por_suma: res.data.corrige_por_suma,
-          correlation_id: d.correlation_id
-        });
-      } else {
-        this.eventBus?.publish('factura-rectificativa.calcular.failed', res);
-      }
+      // Reflejo: calcula y declara; no escribe → no hay hecho que anunciar (R2).
+      if (res.status !== 200) this.eventBus?.publish('factura-rectificativa.calcular.failed', res);
+      else this._encadenar(res, d);
       return res;
     });
   }
 
-  // ── proyeccion determinista: calcular(original, motivo) → FacturaRectificativa ──
+  // ── handler de dominio (fire-and-forget): una factura quedo emitida (O1) ──
+  onFacturaEmitida(e) {
+    const d = (e && (e.data || e)) || {};
+    try {
+      const pid = d.project_id || this.project_id;
+      if (!pid) return;
+      const factura = d.factura || null;
+      if (!factura) return;
+      const id = this._idFactura(factura);
+      if (!id) return;
+      this._almacen(pid).set(id, factura);
+    } catch (err) {
+      this.logger?.error(`${this.name}.factura_emitida.error`, { error: err.message });
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // calcular(rectificacion) → rectificativa derivada de la factura original
+  // ══════════════════════════════════════════════════════════════════════
   _calcular(input = {}) {
     const pid = input.project_id || this.project_id;
     if (!pid) return this._invalid('project_id');
 
-    const original = input.original || input.factura || input.factura_original;
-    if (!original || typeof original !== 'object') return this._invalid('original');
+    const original = input.factura || this._buscarOriginal(pid, input);
+    if (!original) return this._invalid('factura');
 
-    // La REFERENCIA al original: por serie+numero o por clave natural. Sin referencia NO se
-    // rectifica (una correccion que no dice a que corrige no es una rectificativa).
-    const referencia_original = this._referencia(original);
-    if (!referencia_original.serie && !referencia_original.numero && !referencia_original.clave_natural) {
-      return this._invalid('original.serie|numero|clave_natural');
-    }
+    const tipo = this._tipo(input.tipo);
+    const baseOriginal = this._num(original.base);
+    const ivaOriginal = this._num(original.impuestos != null ? original.impuestos : original.iva);
+    const totalOriginal = this._num(original.total);
 
-    // La BASE corregible: el importe total del original, o la suma de sus lineas. Nunca se
-    // supone un importe: si no hay base computable, no se fabrica la rectificativa.
-    const base = this._base(original);
-    const motivo = input.motivo != null ? String(input.motivo).trim() : null;
-    const tipo_correccion = this._tipo(input.tipo_correccion != null ? input.tipo_correccion : input.tipo);
+    // La rectificacion puede ser PARCIAL (declarada) o TOTAL (la del original). No se estima si no hay nada.
+    const base = this._num(input.base) != null ? this._num(input.base) : baseOriginal;
+    const iva = this._num(input.iva) != null ? this._num(input.iva)
+      : (baseOriginal && ivaOriginal != null && this._num(input.base) != null
+        ? this._round(ivaOriginal * (base / baseOriginal), 2)
+        : ivaOriginal);
+    const total = this._num(input.total) != null ? this._num(input.total)
+      : (base != null && iva != null ? this._round(base + iva, 2) : totalOriginal);
 
-    if (base === null) {
+    if (total == null && base == null) {
+      // Sin original ni importe declarado no hay rectificativa: se declara ABIERTO.
       return {
         status: 200,
         data: {
-          project_id: pid,
-          rectificativa: null,
-          referencia_original,
-          original_intacta: true,
-          corrige_por_suma: true,
-          abierto: true,
-          faltan: ['original.importe|original.lineas'],
-          motivo_declarado: motivo,
-          motivo_no_emitida: 'el original no declara base corregible (importe total o lineas): no se fabrica una rectificativa con un 0 que nadie emitio'
+          project_id: pid, original_id: this._idFactura(original), tipo,
+          rectificativa: null, calculada: false,
+          abierto: { importe: 'no hay factura original con importes ni importe a rectificar declarado: no se inventa la rectificativa' }
         }
       };
     }
 
-    // La RECTIFICATIVA: espejo del original con el SIGNO cambiado. NO muta el original.
-    const lineas = this._lineas(original);
+    // LA POLARIDAD: la rectificativa CORRIGE — signo negativo respecto al original.
     const rectificativa = {
-      id: `rect_${pid}_${referencia_original.clave_natural || (referencia_original.serie || 'S') + '-' + (referencia_original.numero || '?')}`,
-      tipo: 'RECTIFICATIVA',
-      serie: input.serie != null ? String(input.serie) : (referencia_original.serie ? String(referencia_original.serie) + '-R' : null),
-      numero: input.numero != null ? String(input.numero) : null,
-      tipo_correccion,
-      motivo,
-      // TRAZABILIDAD: a que corrige, con su clave natural.
-      referencia_original,
-      // LA CORRECCION SUMA: el importe es el espejo negativo de la base corregible.
-      base_corregida: base,
-      importe: this._round(-base, 2),
-      signo: 'CORRIGE_POR_SUMA',
-      lineas: lineas ? lineas.map((l) => ({ ...l, importe: l.importe === null ? null : this._round(-l.importe, 2) })) : null,
-      // El original NO se borra: se declara su integridad explicitamente.
-      original_intacta: true,
-      no_borra: true,
-      asienta: false,
-      asienta_por: 'escritor-diario (B2, custodio del libro)',
-      derivada_en: new Date().toISOString()
+      tipo,
+      original_id: this._idFactura(original),
+      original_serie: original.serie != null ? String(original.serie) : null,
+      original_numero: original.numero != null ? original.numero : null,
+      base: base != null ? this._round(-Math.abs(base), 2) : null,
+      iva: iva != null ? this._round(-Math.abs(iva), 2) : null,
+      total: total != null ? this._round(-Math.abs(total), 2) : null,
+      signo: -1,
+      motivo: input.motivo != null ? String(input.motivo) : null,
+      asiento: original.asiento || null,
+      en: new Date().toISOString()
     };
 
     return {
       status: 200,
       data: {
         project_id: pid,
+        original_id: rectificativa.original_id,
+        tipo,
         rectificativa,
-        referencia_original,
-        original_intacta: true,
-        corrige_por_suma: true,
-        // El original viaja SIN TOCAR: esta hoja solo DERIVA; no lo reescribe.
-        original,
+        calculada: true,
+        // La rectificacion NUNCA borra: es OTRA factura (O1 la emitira por su camino).
+        borra_original: false,
+        determinista: true,
         abierto: {
-          motivo: motivo ? null : 'el motivo de la correccion no esta declarado: se emite la rectificativa y se declara el hueco',
-          tipo_correccion: tipo_correccion ? null : 'el tipo de correccion no esta declarado (ABONO|DEVOLUCION|DESCUENTO|ANULACION)'
-        },
-        faltan: [
-          ...(motivo ? [] : ['motivo']),
-          ...(tipo_correccion ? [] : ['tipo_correccion'])
-        ]
+          motivo: rectificativa.motivo ? null : 'la rectificativa no declara motivo (se anota el hueco, no se inventa)',
+          original: this._idFactura(original) ? null : 'la factura original no declara identificador'
+        }
       }
     };
   }
 
-  _referencia(original) {
-    return {
-      serie: original.serie != null ? String(original.serie) : null,
-      numero: original.numero != null ? String(original.numero) : null,
-      clave_natural: original.clave_natural != null ? String(original.clave_natural) : null,
-      nif: original.nif != null ? String(original.nif) : (original.tercero && original.tercero.nif != null ? String(original.tercero.nif) : null)
-    };
+  // SUBE (best-effort) la rectificativa a emitir (O1) y su asiento (B2). No inventa nada.
+  _encadenar(res, d) {
+    const r = res.data.rectificativa;
+    if (!r) return;
+    const pid = res.data.project_id;
+    try {
+      this.eventBus?.publish('emision-factura-venta.emitir.request', {
+        project_id: pid,
+        factura: {
+          rectificativa: true,
+          rectifica_a: r.original_id,
+          tipo: r.tipo,
+          base: r.base, impuestos: r.iva, total: r.total,
+          motivo: r.motivo
+        },
+        origen: 'factura-rectificativa',
+        correlation_id: d.correlation_id
+      });
+      this.eventBus?.publish('escritor-diario.asentar.request', {
+        project_id: pid, asiento: r.asiento, origen: 'factura-rectificativa', correlation_id: d.correlation_id
+      });
+    } catch (_) { /* best-effort */ }
   }
 
-  // Base corregible: importe/total declarado, o suma de lineas. null si no hay nada computable.
-  _base(original) {
-    const directo = this._num(original.importe != null ? original.importe : (original.total != null ? original.total : original.base));
-    if (directo !== null) return directo;
-    const lineas = this._lineas(original);
-    if (!lineas || lineas.length === 0) return null;
-    let suma = 0;
-    let hay = false;
-    for (const l of lineas) {
-      if (l.importe === null) continue;
-      suma += l.importe;
-      hay = true;
+  _buscarOriginal(pid, input) {
+    const m = this._emitidas.get(pid);
+    if (!m) return null;
+    const id = input.factura_id != null ? String(input.factura_id) : null;
+    if (id) return m.get(id) || null;
+    const serie = input.serie != null ? String(input.serie) : null;
+    const numero = input.numero != null ? String(input.numero) : null;
+    if (serie && numero) {
+      for (const f of m.values()) {
+        if (String(f.serie) === serie && String(f.numero) === numero) return f;
+      }
     }
-    return hay ? this._round(suma, 2) : null;
+    return null;
   }
 
-  _lineas(original) {
-    const raw = original.lineas || original.line_items || original.detalle;
-    if (!Array.isArray(raw)) return null;
-    return raw.map((l) => ({
-      concepto: l && l.concepto != null ? String(l.concepto) : null,
-      cantidad: l && l.cantidad != null ? this._num(l.cantidad) : null,
-      importe: l ? this._num(l.importe != null ? l.importe : l.total) : null
-    }));
+  _idFactura(f) {
+    if (!f || typeof f !== 'object') return null;
+    if (f.id != null) return String(f.id);
+    if (f.documento_id != null) return String(f.documento_id);
+    if (f.serie != null && f.numero != null) return `${f.serie}-${f.numero}`;
+    return null;
+  }
+
+  _almacen(pid) {
+    let m = this._emitidas.get(pid);
+    if (!m) { m = new Map(); this._emitidas.set(pid, m); }
+    return m;
   }
 
   _tipo(raw) {
-    if (raw === undefined || raw === null || raw === '') return null;
-    const t = String(raw).toUpperCase().trim();
-    return TIPOS_CORRECCION.has(t) ? t : null;
+    const t = String(raw || 'abono').toLowerCase().trim();
+    return TIPOS.has(t) ? t : 'abono';
   }
 
   _num(v) {
-    if (v === undefined || v === null || v === '') return null;
+    if (v == null || v === '') return null;
     const n = Number(v);
     return Number.isFinite(n) ? n : null;
   }

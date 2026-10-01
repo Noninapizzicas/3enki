@@ -1,26 +1,21 @@
 /**
  * contabilidad-fiscal/generador-modelo — PUENTE STATELESS (D7, hoja del plan).
  *
- * SALIDA al programa del ASESOR: toma el modelo ya construido (modelo-303 D2, modelo-390 D3)
- * y lo EXPORTA en el formato que el programa del asesor consuma. Es un puente: cruza la
- * frontera hacia fuera; no decide el contenido del modelo ni lo presenta.
+ * La SALIDA AL PROGRAMA DEL ASESOR. Conecta por PUERTO y produce un artefacto en FORMATO
+ * ABIERTO. Aqui PREPARA, NO presenta: monta el modelo exportable (modelo 303/390/… declarado)
+ * con sus casillas/partidas DECLARADAS y lo deja listo para que el asesor lo use. La
+ * PRESENTACION (avanzar el estado del modelo) es de estado-presentacion-fiscal (D12), a quien
+ * se le SUBE por EVENTO.
  *
- * EL SISTEMA **PREPARA** EL MODELO; EL **ASESOR PRESENTA Y FIRMA**. Este modulo NO presenta,
- * NO firma y NO envia a ninguna administracion: solo deja el modelo exportado en el formato
- * declarado para que el asesor lo meta en su programa.
+ * Es un PUENTE, no un custodio: NO guarda estado propio. RECOGE lo declarado, lo COMPONE en
+ * forma exportable y SUBE `estado-presentacion-fiscal.avanzar.request`; anuncia el hecho
+ * `contabilidad.modelo_exportado`.
  *
- * LA LEY ENTRA COMO DATO (invariante 5): el `destino` y el `formato` son DECLARABLES
- * (`ParametroDeclarable`) — ABIERTO en el diseño (formato no declarado aun). NO hay ninguna
- * codificacion cableada (ni XML, ni BOE, ni CSV de un programa concreto): sin `formato`
- * declarado NO se exporta — se declara `exportado:false` con su motivo. El `mapeo`
- * (campo canonico → clave externa) tambien entra como DATO, igual que en puerto-plan-contable.
+ * Invariante (13): sin CASILLAS/partidas DECLARADAS no se inventa una cifra — el modelo sale
+ * con lo declarado y lo que falte queda `abierto`. Un modelo rellenado a ojo es una declaracion
+ * fiscal falsa.
  *
- * El modelo llega por DOS vias, ninguna es un `require` cruzado:
- *   - declarado en la peticion (`modelo`),
- *   - pedido POR EVENTO a modelo-303 / modelo-390 (RPC). Si no hay ninguno, se declara.
- * Sin modelo NO se exporta un fichero vacio ni inventado.
- *
- * Forma: PUENTE → STATELESS. Sin PosPersistencia, sin onProjectActivated.
+ * Forma: PUENTE → STATELESS. Sin PosPersistencia, sin onProjectActivated. ORDEN → ui_handler.
  * Ver hoja D7 del plan-construccion y diseno-oop.md (CLASE GeneradorModelo).
  */
 
@@ -28,8 +23,7 @@
 
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
 
-// Campos canonicos de la exportacion. Su clave externa es declarable (mapeo).
-const CAMPOS_EXPORT = ['modelo', 'ejercicio', 'periodo', 'nif', 'casillas', 'datos'];
+const FORMATOS = ['json', 'csv', 'xml', 'txt'];
 
 class GeneradorModelo extends ModuloHibridoReflejo {
   constructor() {
@@ -40,138 +34,137 @@ class GeneradorModelo extends ModuloHibridoReflejo {
 
   async onUnload() { return super.onUnload(); }
 
-  // ── handler RPC (una linea, delega a _atender) ──
+  // ── handler RPC (una linea, delega a _atender). CLASE ORDEN → ui_handler ──
   onExportarRequest(e) {
     return this._atender(e, 'exportar', 'generador-modelo.exportar.response', async (d) => {
-      const res = await this._exportar(d);
-      if (res.status === 200 && res.data.exportado) {
-        // Exito → evento de dominio: el modelo quedo exportado hacia el asesor.
+      const res = this._exportar(d);
+      if (res.status === 200) {
+        // R2 · el puente PREPARA y ANUNCIA que el modelo quedo exportado (artefacto listo).
         this.eventBus?.publish('contabilidad.modelo_exportado', {
           project_id: res.data.project_id,
-          modelo: res.data.modelo_slug,
-          destino: res.data.destino,
+          modelo: res.data.modelo,
+          ejercicio: res.data.ejercicio,
+          periodo: res.data.periodo,
           formato: res.data.formato,
-          // El sistema PREPARA; el asesor presenta y firma. Se declara aqui.
-          presentado: false,
-          firmado: false,
+          casillas: res.data.casillas.length,
+          abierto: res.data.abierto,
           correlation_id: d.correlation_id
         });
-      } else if (res.status !== 200) {
+        // SUBE por EVENTO a D12: el modelo exportado queda preparado → el estado avanza.
+        this.eventBus?.publish('estado-presentacion-fiscal.avanzar.request', {
+          project_id: res.data.project_id,
+          modelo: res.data.modelo,
+          ejercicio: res.data.ejercicio,
+          periodo: res.data.periodo,
+          preparado: true,
+          correlation_id: d.correlation_id
+        });
+      } else {
         this.eventBus?.publish('generador-modelo.exportar.failed', res);
       }
       return res;
     });
   }
 
-  // ── proyeccion: modelo → fichero externo del programa del asesor ──
-  async _exportar(input = {}) {
-    const pid = input.project_id || this.project_id || null;
+  // ══════════════════════════════════════════════════════════════════════
+  // _exportar(input) → { status, data }  ·  PREPARA el modelo (no lo presenta)
+  // ══════════════════════════════════════════════════════════════════════
+  _exportar(input = {}) {
+    const pid = input.project_id || this.project_id;
+    if (!pid) return this._invalid('project_id');
 
-    // El destino y el formato son DECLARABLES (ABIERTO en el diseño). Sin formato NO se
-    // exporta: jamas se adivina la codificacion del programa del asesor (invariante 5).
-    const formato = input.formato != null ? String(input.formato) : null;
-    const destino = input.destino != null ? String(input.destino) : null;
-    if (!formato) {
-      return this._errorResponse(400, 'FORMATO_NO_DECLARADO',
-        'hay que declarar el formato de salida (el del programa del asesor); esta ABIERTO como ParametroDeclarable',
-        { destino });
-    }
+    // El MODELO declarado (303/390/…). Sin modelo no se sabe que exportar.
+    const modelo = input.modelo != null ? String(input.modelo)
+      : (input.tipo_modelo != null ? String(input.tipo_modelo) : null);
+    if (!modelo) return this._invalid('modelo');
 
-    // El modelo: declarado o pedido POR EVENTO a modelo-303 / modelo-390. Nunca inventado.
-    const m = await this._modelo(pid, input);
-    if (!m.modelo) {
-      return {
-        status: 200,
-        data: {
-          project_id: pid,
-          destino,
-          formato,
-          exportado: false,
-          fichero: null,
-          motivo: 'no hay modelo disponible: no se exporta un fichero vacio ni inventado',
-          // El sistema NO presenta ni firma: lo declara, no lo asume.
-          presentado: false,
-          firmado: false,
-          preparado_para_asesor: true
-        }
-      };
-    }
+    const formato = this._formato(input.formato);
+    const ejercicio = input.ejercicio != null ? String(input.ejercicio) : null;
+    const periodo = input.periodo != null ? String(input.periodo) : null;
 
-    const modelo = m.modelo;
-    const mapeo = this._mapeoDe(input, formato);
+    // Las CASILLAS/partidas: DECLARADAS. Ausente → [] y se declara (no se rellena).
+    const casillas = this._casillas(input);
 
-    // El fichero externo se compone desde los campos canonicos con el mapeo DECLARADO.
-    // Sin mapeo, el formato canonico usa los nombres canonicos tal cual.
-    const fichero = this._componer(modelo, mapeo);
+    // El cuerpo exportable: la forma ABIERTA que el asesor puede consumir.
+    const contenido = {
+      modelo, ejercicio, periodo, formato,
+      casillas,
+      generado_en: new Date().toISOString()
+    };
+
+    // La SERIALIZACION: ABIERTA (el puerto la conecta al programa del asesor).
+    const serializado = this._serializar(contenido, formato);
 
     return {
       status: 200,
       data: {
         project_id: pid,
-        modelo_slug: modelo.modelo != null ? String(modelo.modelo) : null,
-        origen_modelo: m.origen,
-        destino,
+        tipo: 'generador-modelo',
+        modelo,
+        ejercicio,
+        periodo,
         formato,
-        adaptador_declarado: Boolean(input.mapeo),
-        exportado: true,
-        fichero,
-        // El sistema PREPARA el modelo; el ASESOR presenta y firma.
-        presentado: false,
-        firmado: false,
-        preparado_para_asesor: true
+        casillas,
+        num_casillas: casillas.length,
+        // El artefacto exportable (formato ABIERTO). Aqui PREPARA; la presentacion es D12.
+        contenido: serializado,
+        // El puente NO guarda estado: su cara es el bus.
+        persistido: false,
+        presentacion: 'estado-presentacion-fiscal (D12)',
+        sube: ['estado-presentacion-fiscal.avanzar.request'],
+        abierto: {
+          casillas: casillas.length > 0 ? null : 'el modelo no declara casillas/partidas: se exporta vacio (no se inventan cifras fiscales)',
+          huecos: casillas.some((c) => c.valor === null)
+            ? 'hay casillas sin valor declarado: se exportan en null (no se rellenan a ojo)'
+            : null
+        }
       }
     };
   }
 
-  // El modelo: declarado en la peticion o pedido POR EVENTO a modelo-303 / modelo-390.
-  async _modelo(pid, input = {}) {
-    if (input.modelo && typeof input.modelo === 'object') {
-      return { modelo: input.modelo, origen: 'declarado_en_peticion' };
-    }
-
-    const slug = input.modelo_slug != null ? String(input.modelo_slug) : null;
-    const candidatos = slug ? [slug] : ['modelo-303', 'modelo-390'];
-
-    for (const candidato of candidatos) {
-      const r = await this._rpc(`${candidato}.construir.request`, {
-        project_id: pid,
-        ejercicio: input.ejercicio ?? null,
-        periodo: input.periodo ?? null,
-        regimen: input.regimen ?? null,
-        territorio: input.territorio ?? null,
-        estructura: input.estructura ?? null,
-        formato: null
-      }, { timeout_ms: 5000 });
-      const data = r && r.status === 200 ? r.data : null;
-      if (data && data.modelo) return { modelo: data.modelo, origen: candidato };
-    }
-    return { modelo: null, origen: null };
+  // Casillas/partidas declaradas: cada una con su valor COPIADO (nunca calculado). Sin valor → null.
+  _casillas(input) {
+    const raw = Array.isArray(input.casillas) ? input.casillas
+      : (Array.isArray(input.partidas) ? input.partidas
+        : (Array.isArray(input.datos) ? input.datos : []));
+    return raw.filter((c) => c && typeof c === 'object').map((c, i) => ({
+      orden: i + 1,
+      casilla: c.casilla != null ? String(c.casilla) : (c.clave != null ? String(c.clave) : null),
+      concepto: c.concepto != null ? String(c.concepto) : null,
+      // El valor es DECLARADO; ausente → null (no se estima).
+      valor: (c.valor !== undefined && c.valor !== null) ? c.valor : null
+    }));
   }
 
-  // Compone el fichero externo: campo canonico → clave externa (mapeo DECLARADO).
-  _componer(modelo, mapeo) {
-    const out = {};
-    for (const campo of CAMPOS_EXPORT) {
-      out[campo] = modelo?.[campo] ?? null;   // ausente → null, no se estima
-    }
-    if (!mapeo) return out;
-    const mapeado = {};
-    for (const campo of CAMPOS_EXPORT) {
-      const clave = mapeo[campo] != null ? String(mapeo[campo]) : campo;
-      mapeado[clave] = out[campo];
-    }
-    return mapeado;
+  _formato(v) {
+    const f = v != null ? String(v).toLowerCase().trim() : 'json';
+    return FORMATOS.includes(f) ? f : 'json';
   }
 
-  // Resuelve el mapeo declarado. Sin mapeo, solo el formato canonico declarado.
-  _mapeoDe(input, formato) {
-    if (input.mapeo && typeof input.mapeo === 'object') return input.mapeo;
-    if (formato === 'canonico' || formato === 'enki') {
-      const identidad = {};
-      for (const c of CAMPOS_EXPORT) identidad[c] = c;
-      return identidad;
+  // Serializa a un formato ABIERTO. Devuelve el artefacto como string + su mime declarado.
+  _serializar(contenido, formato) {
+    switch (formato) {
+      case 'csv': {
+        const filas = ['casilla,concepto,valor'];
+        for (const c of contenido.casillas) {
+          filas.push([c.casilla, c.concepto, c.valor].map((x) => (x == null ? '' : String(x))).join(','));
+        }
+        return { mime: 'text/csv', datos: filas.join('\n') };
+      }
+      case 'xml': {
+        const esc = (s) => String(s == null ? '' : s).replace(/[<>&]/g, (m) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[m]));
+        const body = contenido.casillas
+          .map((c) => `  <casilla numero="${esc(c.casilla)}" concepto="${esc(c.concepto)}">${esc(c.valor)}</casilla>`)
+          .join('\n');
+        return { mime: 'application/xml', datos: `<modelo tipo="${esc(contenido.modelo)}" ejercicio="${esc(contenido.ejercicio)}" periodo="${esc(contenido.periodo)}">\n${body}\n</modelo>` };
+      }
+      case 'txt': {
+        const lineas = contenido.casillas.map((c) => `${c.casilla ?? ''}\t${c.concepto ?? ''}\t${c.valor ?? ''}`);
+        return { mime: 'text/plain', datos: [`${contenido.modelo} ${contenido.ejercicio || ''} ${contenido.periodo || ''}`.trim(), ...lineas].join('\n') };
+      }
+      default:
+        return { mime: 'application/json', datos: contenido };
     }
-    return null;
   }
 
   // ── Tools ──

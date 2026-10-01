@@ -1,22 +1,22 @@
 /**
  * contabilidad-fiscal/lineas-nomina — REFLEJO STATELESS (G6, hoja del plan).
  *
- * DESGLOSE BRUTO / RETENCION / COTIZACION DEL TRABAJADOR / NETO. El diseno lo dice literal:
- * `desglosar(n:ReciboNomina):Set<Linea>`. Hace la nomina EXPLICABLE — no un numero pelado.
- * Calculo PURO, determinista.
+ * DESGLOSE de la nomina: bruto · retencion (IRPF) · cotizacion del trabajador · neto.
+ * Hace la nomina EXPLICABLE — convierte el recibo (G1) en sus lineas con su naturaleza.
  *
- * LOS CONCEPTOS SON DECLARABLES: vienen del sistema externo TAL CUAL (en el recibo o en la
- * peticion). Aqui NO hay ningun catalogo de conceptos cableado, ni tipos, ni bases, ni signos
- * legales impuestos. Cada linea de concepto se organiza con SU signo declarado (`signo`: +1/−1)
- * o, si no viene, se declara sin signo (`signo:null`) y NO se resta ni se suma por su cuenta.
+ * Mecanico y DETERMINISTA: NO decide las bases ni los tipos (eso es del motor de
+ * personal, fuera de esta hoja); TOMA los importes DECLARADOS y los CLASIFICA en las
+ * cuatro cubetas. Lo que no pueda clasificar con una regla declarada NO se inventa:
+ * cae en `otras` y el neto se declara COMPLETO o NO (nunca se cierra a ciegas).
  *
- * ESTE MODULO NO CALCULA LA NOMINA: los cuatro importes (bruto, retencion, cotizacion del
- * trabajador, neto) se COPIAN del recibo. Lo que se hace es desglosarlos y comprobar que los
- * conceptos declarados EXPLICAN el bruto — esa consistencia se DECLARA (`explica_bruto`,
- * `descuadre`), no se corrige.
+ *   neto = bruto − retencion − cotizacion + otras (segun los signos declarados)
  *
- * Invariante: dato ausente = desconocido. El importe que no venga queda `null` y se declara en
- * `faltantes`; jamas se rellena con 0 ni se estima una linea.
+ * Invariante: dato ausente = desconocido. Sin nomina/recibo no hay desglose (no se fabrica);
+ * un importe sin declarar queda null, no 0.
+ *
+ * ESCUCHA (R3): el plan declara escucha de `contabilidad.nomina_recibida`; NINGUN modulo del
+ * repo lo emite AUN (lo emite puerto-nomina G4, de un grupo posterior): declararlo daria
+ * cadena colgada. NO se declara hasta que su emisor exista.
  *
  * Forma: REFLEJO → STATELESS. Sin PosPersistencia, sin onProjectActivated.
  * Ver hoja G6 del plan-construccion y diseno-oop.md (CLASE LineasNomina).
@@ -26,8 +26,9 @@
 
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
 
-// Las CUATRO magnitudes del recibo que hay que hacer explicitas (los NOMBRES, no valores legales).
-const MAGNITUDES = ['bruto', 'retencion', 'cotizacion_trabajador', 'neto'];
+// Las cuatro CUBETAS del desglose. La clasificacion por palabra clave es DECLARABLE
+// (`clasificacion`); esto es solo el suelo por defecto cuando no se declara ninguna.
+const CUBETAS = ['bruto', 'retencion', 'cotizacion', 'neto'];
 
 class LineasNomina extends ModuloHibridoReflejo {
   constructor() {
@@ -38,133 +39,131 @@ class LineasNomina extends ModuloHibridoReflejo {
 
   async onUnload() { return super.onUnload(); }
 
-  // ── handler RPC (una linea, delega a _atender) ──
+  // ── handler RPC (una linea, delega a _atender). CLASE PREGUNTA → sin ui_handler ──
   onDesglosarRequest(e) {
     return this._atender(e, 'desglosar', 'lineas-nomina.desglosar.response', async (d) => {
-      const res = await this._desglosar(d);
+      const res = this._desglosar(d);
+      // Reflejo: desglosa y declara; no escribe → no hay hecho que anunciar (R2).
       if (res.status !== 200) this.eventBus?.publish('lineas-nomina.desglosar.failed', res);
       return res;
     });
   }
 
-  // ── proyeccion determinista: desglosar(recibo) → Set<Linea> explicables ──
-  async _desglosar(input = {}) {
+  // ══════════════════════════════════════════════════════════════════════
+  // desglosar(nomina|recibo, clasificacion?) → lineas {bruto, retencion, cotizacion, neto}
+  // ══════════════════════════════════════════════════════════════════════
+  _desglosar(input = {}) {
     const pid = input.project_id || this.project_id;
     if (!pid) return this._invalid('project_id');
 
-    const { recibo, origen_recibo } = await this._recibo(pid, input);
-    if (!recibo && !Array.isArray(input.conceptos)) {
-      return {
-        status: 200,
-        data: {
-          project_id: pid,
-          lineas: [],
-          abierto: true,
-          faltantes: ['recibo'],
-          motivo: 'no hay recibo ni conceptos que desglosar (nada se estima)'
-        }
-      };
+    // La nomina/recibo: viene DECLARADO. Sin el no se fabrica un desglose.
+    const nomina = this._nomina(input);
+    if (!nomina) return this._invalid('nomina');
+
+    const clasificacion = this._clasificacion(input);
+    const conceptos = this._conceptos(nomina);
+
+    const cubetas = { bruto: [], retencion: [], cotizacion: [], neto: [] };
+    const otras = [];
+    for (const c of conceptos) {
+      const cubeta = this._clasificar(c, clasificacion);
+      if (cubeta) cubetas[cubeta].push(c); else otras.push(c);
     }
 
-    const fuente = recibo || {};
-    const faltantes = [];
+    // Los totales: suma de lo declarado. Sin ninguna linea → null (no un 0 inventado).
+    const total = (arr) => {
+      const vals = arr.map(x => this._num(x.importe)).filter(v => v !== null);
+      return vals.length ? this._round(vals.reduce((a, b) => a + b, 0), 2) : null;
+    };
+    const bruto = total(cubetas.bruto);
+    const retencion = total(cubetas.retencion);
+    const cotizacion = total(cubetas.cotizacion);
+    const neto_declarado = total(cubetas.neto);
+    const otras_total = total(otras);
 
-    // 1) Las CUATRO magnitudes del recibo, COPIADAS (no calculadas aqui).
-    const magnitudes = {};
-    for (const m of MAGNITUDES) {
-      const raw = fuente[m] !== undefined ? fuente[m] : (m === 'cotizacion_trabajador' ? fuente.cotizacion : undefined);
-      const n = this._num(raw);
-      magnitudes[m] = n;
-      if (n === null) faltantes.push(m);
+    // El neto: el declarado si viene; si no, se DERIVA de bruto − retencion − cotizacion.
+    let neto = neto_declarado;
+    let neto_derivado = false;
+    if (neto === null && (bruto !== null || retencion !== null || cotizacion !== null)) {
+      neto = this._round((bruto || 0) - (retencion || 0) - (cotizacion || 0), 2);
+      neto_derivado = true;
     }
-
-    // 2) Los CONCEPTOS declarados, tal cual llegan (cero catalogo cableado).
-    const conceptos = Array.isArray(input.conceptos) ? input.conceptos
-      : (Array.isArray(fuente.conceptos) ? fuente.conceptos : []);
-    const lineas_concepto = conceptos.map((c, i) => {
-      const obj = (c && typeof c === 'object') ? c : { concepto: c };
-      const importe = this._num(obj.importe);
-      if (importe === null) faltantes.push(`conceptos[${i}].importe`);
-      return {
-        tipo: 'concepto',
-        concepto: obj.concepto != null ? String(obj.concepto) : null,
-        importe,
-        signo: this._signo(obj.signo),
-        a_cargo: obj.a_cargo != null ? String(obj.a_cargo) : null,
-        cantidad: this._num(obj.cantidad),
-        precio: this._num(obj.precio)
-      };
-    });
-
-    // 3) Las cuatro magnitudes como lineas explicitas (la nomina deja de ser un numero pelado).
-    const lineas_magnitud = MAGNITUDES.map((m) => ({
-      tipo: 'magnitud',
-      magnitud: m,
-      concepto: m,
-      importe: magnitudes[m],
-      a_cargo: m === 'cotizacion_trabajador' ? 'trabajador' : null
-    }));
-
-    // 4) CONSISTENCIA DECLARADA: los conceptos con signo declarado vs el bruto (se declara, no se corrige).
-    const con_signo = lineas_concepto.filter((l) => l.signo !== null && l.importe !== null);
-    const suma_conceptos = con_signo.reduce((s, l) => s + l.signo * l.importe, 0);
-    const cuadra_conceptos = con_signo.length === lineas_concepto.length && lineas_concepto.length > 0
-      ? this._round(suma_conceptos, 2) === this._round(magnitudes.bruto !== null ? magnitudes.bruto : NaN, 2)
-      : null;
-    const descuadre = (magnitudes.bruto !== null && con_signo.length === lineas_concepto.length && lineas_concepto.length > 0)
-      ? this._round(suma_conceptos - magnitudes.bruto, 2) : null;
 
     return {
       status: 200,
       data: {
         project_id: pid,
-        empleado: fuente.empleado != null ? fuente.empleado : null,
-        periodo: fuente.periodo != null ? fuente.periodo : null,
-        clave_natural: fuente.clave_natural != null ? fuente.clave_natural : null,
-        origen_recibo,
-        magnitudes,
-        lineas_concepto,
-        lineas_magnitud,
-        // El desglose completo: conceptos declarados + las cuatro magnitudes explicitas.
-        lineas: [...lineas_concepto, ...lineas_magnitud],
-        // Los conceptos son DECLARABLES: se declara de donde salieron y que no hay catalogo propio.
-        conceptos_origen: Array.isArray(input.conceptos) ? 'declarados' : (Array.isArray(fuente.conceptos) ? 'recibo' : null),
-        catalogo_cableado: false,
-        explicable: lineas_concepto.length > 0,
-        // Consistencia de lo declarado: se declara, no se ajusta.
-        suma_conceptos: this._round(suma_conceptos, 2),
-        explica_bruto: cuadra_conceptos,
-        descuadre,
-        calculada_aqui: false,
-        calculo_delegado_a: 'sistema-de-nomina-externo',
-        faltantes,
-        abierto: faltantes.length > 0
+        tipo: 'lineas-nomina',
+        // El desglose con su naturaleza: cada cubeta con sus lineas.
+        desglose: {
+          bruto: { total: bruto, lineas: cubetas.bruto },
+          retencion: { total: retencion, lineas: cubetas.retencion },
+          cotizacion: { total: cotizacion, lineas: cubetas.cotizacion },
+          neto: { total: neto, lineas: cubetas.neto }
+        },
+        otras: { total: otras_total, lineas: otras },
+        // Completitud HONESTA: el neto esta completo solo si sus tres terminos constan.
+        neto_completo: bruto !== null && retencion !== null && cotizacion !== null,
+        neto,
+        neto_derivado,
+        num_lineas: conceptos.length,
+        determinista: true,
+        abierto: {
+          clasificacion: (clasificacion.declarada || Object.keys(clasificacion.mapa).length > 0) ? null
+            : 'no se declaro clasificacion de conceptos: los no reconocidos caen en `otras` (no se inventan)',
+          neto: (bruto !== null && retencion !== null && cotizacion !== null) ? null
+            : 'falta algun termino del neto (bruto/retencion/cotizacion): no se cierra a ciegas'
+        }
       }
     };
   }
 
-  // El RECIBO: declarado en la peticion, o pedido a recibo-nomina (G1) POR EVENTO.
-  async _recibo(pid, input = {}) {
-    const declarado = input.recibo || input.nomina || null;
-    if (declarado && typeof declarado === 'object') return { recibo: declarado, origen_recibo: 'declarado' };
-    const clave = input.clave_natural != null ? String(input.clave_natural) : null;
-    if (clave || (input.empleado != null && input.periodo != null)) {
-      const r = await this._rpc('recibo-nomina.dar_forma.request', {
-        project_id: pid, clave_natural: clave, empleado: input.empleado, periodo: input.periodo
-      }, { timeout_ms: 4000 });
-      const rec = r && r.data ? r.data.recibo : null;
-      if (rec) return { recibo: rec, origen_recibo: 'recibo-nomina' };
-    }
-    return { recibo: null, origen_recibo: null };
+  // La nomina declarada (nomina|recibo|hecho). null si no viene.
+  _nomina(input = {}) {
+    const n = input.nomina || input.recibo || input.hecho || input.recibo_nomina;
+    return (n && typeof n === 'object') ? n : null;
   }
 
-  // El signo es DECLARABLE: +1/−1 (o '+'/'−'/devengo/deduccion). Sin declarar → null (no se interpreta).
-  _signo(raw) {
-    if (raw === undefined || raw === null || raw === '') return null;
-    if (typeof raw === 'number') return raw < 0 ? -1 : (raw > 0 ? 1 : null);
-    const s = String(raw).trim().toLowerCase();
-    if (s === '+1' || s === '+' || s === '1' || s === 'positivo' || s === 'devengo' || s === 'haber') return 1;
-    if (s === '-1' || s === '-' || s === 'negativo' || s === 'deduccion' || s === 'debe') return -1;
+  _conceptos(nomina) {
+    const raw = Array.isArray(nomina.desglose) ? nomina.desglose
+      : (Array.isArray(nomina.conceptos) ? nomina.conceptos
+        : (Array.isArray(nomina.lineas) ? nomina.lineas : []));
+    return raw.map((c, i) => {
+      const o = (c && typeof c === 'object') ? c : { concepto: c };
+      return {
+        orden: i + 1,
+        concepto: o.concepto != null ? String(o.concepto) : (o.clave != null ? String(o.clave) : (o.tipo != null ? String(o.tipo) : null)),
+        tipo: o.tipo != null ? String(o.tipo) : null,
+        importe: this._num(o.importe !== undefined ? o.importe : (o.cuantia !== undefined ? o.cuantia : null)),
+        signo: o.signo != null ? String(o.signo) : null
+      };
+    });
+  }
+
+  // Clasificacion DECLARABLE: {palabra_o_tipo → cubeta}. Sin ella, no se adivina.
+  _clasificacion(input = {}) {
+    const raw = (input.clasificacion && typeof input.clasificacion === 'object') ? input.clasificacion : {};
+    const mapa = {};
+    for (const [k, v] of Object.entries(raw)) {
+      if (CUBETAS.includes(String(v))) mapa[String(k).toLowerCase()] = String(v);
+      else if (CUBETAS.includes(String(k))) mapa[String(v).toLowerCase()] = String(k);
+    }
+    return { mapa, declarada: Object.keys(mapa).length > 0 };
+  }
+
+  // Clasifica un concepto: por su tipo declarado, o por palabra clave del mapa declarado.
+  // Sin regla declarada NO se inventa cubeta → null (cae en `otras`).
+  _clasificar(c, clasificacion) {
+    const mapa = clasificacion.mapa;
+    const tipo = c.tipo != null ? String(c.tipo).toLowerCase() : null;
+    const concepto = c.concepto != null ? String(c.concepto).toLowerCase() : null;
+    if (tipo && mapa[tipo]) return mapa[tipo];
+    if (concepto && mapa[concepto]) return mapa[concepto];
+    if (concepto) {
+      for (const [k, v] of Object.entries(mapa)) {
+        if (concepto.includes(k)) return v;
+      }
+    }
     return null;
   }
 

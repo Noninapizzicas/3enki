@@ -1,64 +1,41 @@
 {
-  "_doc": "Manifest de contabilidad-analitica/puente-lenguaje-dueno — MICRO-AGENTE HIBRIDO (Q2, hoja del plan). El TRADUCTOR BIDIRECCIONAL entre el dueño y la contabilidad: a_consulta traduce su pregunta en lenguaje llano → consulta contable (tema/cuenta/periodo, para que la ejecute la puerta pull Q1); a_cifra traduce un calculo (derivado) → la MISMA cifra en SU idioma (caja, deuda, resultado, '¿puedo pagar X?'). Traducir lenguaje es JUICIO. ATRIBUTOS del diseno: mapa_lenguaje:ParametroDeclarable; REGLA: traductor BIDIRECCIONAL, lenguaje → juicio. TRADUCE, NO INVENTA CIFRAS: el mapa lenguaje↔consulta es DECLARABLE y la CIFRA la produce su dueño (mayor-balanza, cuenta-resultados, saldo-tesoreria, margen-analitico, estado-cuenta-proveedor) POR EVENTO; este puente jamas fabrica un numero — si falta el dato, devuelve [ABIERTO]. HIBRIDO (patron etiquetado-analitico): _aConsultaReflejo/_fraseReflejo son el REFLEJO determinista (aplican el MAPA declarado — termino del dueño → tema contable; tema → su termino; una sola respuesta) y _concluir es el FUZZY (1 llamada llm.complete.request con guion-prompt self-contained que PROPONE la traduccion o la frase; si falla o no cumple el contrato → NO se inventa). Invariantes: LA CIFRA NO SE INVENTA (llega declarada o de su dueño POR EVENTO; falta → [ABIERTO] con lo que falta — el juicio a_cifra RECHAZA una frase cuyo valor no coincida con la cifra real); el mapa es DECLARABLE (sin mapa ni juicio resoluble NO se traduce → [ABIERTO]); DETERMINISTA en el reflejo, el juicio va declarado como tal (origen:'juicio'); NO escribe, NO persiste, NO decide (traduce — el sistema no decide por el dueño). FORMA: MICRO-AGENTE stateless — sin PosPersistencia, sin onProjectActivated. Proyecciones `_a_consulta` y `_a_cifra`. Publica contabilidad.consulta_traducida. Cierra el circulo: error → puente-lenguaje-dueno.<op>.failed.",
+  "_doc": "Manifest de analitica/puente-lenguaje-dueno — MICRO-AGENTE (Q2, hoja del plan). Traductor BIDIRECCIONAL: a_consulta (su pregunta en lenguaje natural → consulta contable estructurada) y a_cifra (un calculo/cifra contable → la cifra en SU idioma). El JUICIO linguistico es la mitad FUZZY (blueprint); esta mitad refleja es la DETERMINISTA y HONESTA: traduce con el VOCABULARIO y las PLANTILLAS DECLARADOS, sin adivinar significado ni inventar frases. Terminos no reconocidos y cifras sin plantilla se declaran (no_reconocido/abierto); jamas se estiman. Dos RPC, ambas CLASE PREGUNTA → van por el bus (sin ui_handler). NOTA R3: el plan declara escucha de contabilidad.asiento_asentado, pero NINGUN modulo del repo lo emite AUN (lo emite escritor-diario B2, grupo posterior): declararlo daria cadena colgada, asi que NO se declara. Publica a_consulta.response/.failed y a_cifra.response/.failed.",
   "name": "puente-lenguaje-dueno",
   "version": "0.1.0",
-  "description": "Micro-agente (Q2): traductor bidireccional dueño↔contabilidad — su pregunta a consulta contable y el cálculo a cifra en su idioma; traduce y no inventa cifras (sin dato → [ABIERTO]).",
-  "blueprint_driven": true,
-  "blueprint_path": "puente-lenguaje-dueno.blueprint.json",
+  "description": "Micro-agente (Q2): traduce en ambos sentidos entre el lenguaje del dueno y la contabilidad, con vocabulario/plantillas declarados; lo no reconocido se declara.",
   "language": "es",
   "subscribes": [
     {
       "event": "puente-lenguaje-dueno.a_consulta.request",
       "handler": "onAConsultaRequest",
-      "description": "RPC híbrido (traducción a consulta): {project_id, pregunta, mapa_lenguaje?:[{termino,tema,cuenta,periodo}]} → {pregunta, consulta:{tema,cuenta,periodo}, termino_declarado, origen:'mapa'|'juicio', confianza, decide:false, abierto, faltan, motivo}. Traduce la pregunta del dueño al TEMA contable declarado (reflejo: el mapa) o con juicio fuzzy; sin mapa ni juicio resoluble → [ABIERTO] (no adivina qué pregunta el dueño). Éxito → publica contabilidad.consulta_traducida y responde por puente-lenguaje-dueno.a_consulta.response; pregunta/project_id ausente → puente-lenguaje-dueno.a_consulta.failed."
+      "description": "RPC (PREGUNTA, por el bus): {project_id, pregunta, vocabulario?} → {project_id, pregunta, consulta, terminos_reconocidos, no_reconocido, abierto}. Traduce solo los terminos del vocabulario declarado; el resto es juicio (mitad fuzzy) y se declara. Responde por puente-lenguaje-dueno.a_consulta.response."
     },
     {
       "event": "puente-lenguaje-dueno.a_cifra.request",
       "handler": "onACifraRequest",
-      "description": "RPC híbrido (traducción a cifra): {project_id, derivado:{valor|cifra|importe, unidad, tema, periodo}|valor, termino?, tema?, mapa_lenguaje?} → {derivado, traduccion:{frase, valor, unidad, termino}, cifra, cifra_disponible, fuente_cifra, origen, inventa_cifra:false, decide:false, abierto, faltan, motivo}. Expresa la MISMA cifra en lenguaje llano (reflejo por término declarado o juicio fuzzy); el valor de la frase ES el valor real — sin cifra (ni declarada ni de su fuente) → [ABIERTO], nunca se inventa. Éxito → publica contabilidad.consulta_traducida y responde por puente-lenguaje-dueno.a_cifra.response; project_id ausente → puente-lenguaje-dueno.a_cifra.failed."
-    },
-    {
-      "event": "contabilidad.respuesta_consulta",
-      "handler": "onRespuestaConsulta",
-      "description": "Fire-and-forget (Q1 → Q2): consulta-cuentas-bajo-demanda publicó la respuesta a la pregunta del dueño → se traduce a su lenguaje con a_cifra (la cifra ES la de la respuesta; si viene vacía, [ABIERTO]). Tolerante: sin project_id se ignora."
+      "description": "RPC (PREGUNTA, por el bus): {project_id, cifra, clave?, plantillas?} → {project_id, clave, cifra, frase, plantilla_usada, traducido, abierto}. Viste la cifra con la plantilla declarada; sin plantilla → traducido:false (no se inventa la frase). Responde por puente-lenguaje-dueno.a_cifra.response."
     }
   ],
   "publishes": [
     {
       "event": "puente-lenguaje-dueno.a_consulta.response",
-      "description": "Respuesta RPC correlada de puente-lenguaje-dueno.a_consulta.request → {request_id, status:200, data:{consulta, origen, mapa_disponible, decide:false, abierto, faltan}}. Emitida por el helper _atender."
+      "description": "Respuesta RPC correlada de la op a_consulta (una sola cara: el bus)."
     },
     {
       "event": "puente-lenguaje-dueno.a_consulta.failed",
-      "description": "Par de fallo determinista (Q2): pregunta o project_id ausente → {status, error:{code, message, details?}}. Cierra el circulo de puente-lenguaje-dueno.a_consulta.request."
+      "description": "Par de fallo determinista: falta project_id o pregunta → {status, code, message}. Cierra el circulo de a_consulta.request."
     },
     {
       "event": "puente-lenguaje-dueno.a_cifra.response",
-      "description": "Respuesta RPC correlada de puente-lenguaje-dueno.a_cifra.request → {request_id, status:200, data:{traduccion, cifra, cifra_disponible, fuente_cifra, inventa_cifra:false, decide:false, abierto, faltan}}. Emitida por el helper _atender."
+      "description": "Respuesta RPC correlada de la op a_cifra."
     },
     {
       "event": "puente-lenguaje-dueno.a_cifra.failed",
-      "description": "Par de fallo determinista (Q2): project_id ausente → {status, error:{code, message, details?}}. Cierra el circulo de puente-lenguaje-dueno.a_cifra.request."
-    },
-    {
-      "event": "contabilidad.consulta_traducida",
-      "description": "Fire-and-forget (Q2): una traducción quedó hecha en cualquiera de las dos direcciones → {project_id, direccion:'a_consulta'|'a_cifra', traduccion, origen:'mapa'|'juicio', cifra_disponible, correlation_id}. Lo consumen la puerta pull (Q1) y el sello de cobertura (Q3). NO implica escritura ni decisión: solo la traducción."
+      "description": "Par de fallo determinista: falta project_id o cifra → {status, code, message}. Cierra el circulo de a_cifra.request."
     }
   ],
-  "ui_handlers": [
-    {
-      "domain": "contabilidad",
-      "action": "puente-lenguaje-dueno.a_consulta",
-      "handler": "onAConsultaRequest",
-      "type": "chat_tool",
-      "zone": "barra_chat_inferior"
-    },
-    {
-      "domain": "contabilidad",
-      "action": "puente-lenguaje-dueno.a_cifra",
-      "handler": "onACifraRequest",
-      "type": "chat_tool",
-      "zone": "barra_chat_inferior"
-    }
+  "tools": [
+    { "name": "puente-lenguaje-dueno.a_consulta", "description": "Traduce (PREGUNTA) una pregunta del dueno a una consulta contable estructurada." },
+    { "name": "puente-lenguaje-dueno.a_cifra", "description": "Traduce (PREGUNTA) una cifra contable al idioma del dueno (plantilla declarada)." }
   ]
 }

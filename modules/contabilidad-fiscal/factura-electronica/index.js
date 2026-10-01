@@ -6,11 +6,11 @@
  * la `FacturaEmitida` canonica del dominio. Cruza FORMATO, no decide CONTENIDO: no calcula
  * importes, no compone el desglose (eso es emision-factura-venta O1), no firma y no presenta.
  *
- * LA LEY ENTRA COMO DATO (invariante 5): el `formato` y el `mapeo` (campo canonico → clave
- * externa) son DECLARABLES y entran como DATO. NO hay ningun esquema Facturae cableado — ni
- * versiones, ni etiquetas XML, ni namespaces, ni codigos de impuesto. Sin `formato` declarado
- * NO se convierte; si el formato no tiene `mapeo` declarado y no es el canonico, se rechaza
- * (422 FORMATO_NO_DECLARABLE). Los `esquemas_declarables` los declara el sitio.
+ * LA LEY ENTRA COMO DATO: el `formato` y el `mapeo` (campo canonico → clave externa) son
+ * DECLARABLES y entran como DATO. NO hay ningun esquema Facturae cableado — ni versiones, ni
+ * etiquetas XML, ni namespaces, ni codigos de impuesto. Sin `formato` declarado NO se convierte;
+ * si el formato no tiene `mapeo` declarado y no es el canonico, se rechaza (422
+ * FORMATO_NO_DECLARABLE). Los `esquemas_declarables` los declara el sitio.
  *
  * Invariante: dato ausente = desconocido. Un campo que no viene del exterior queda `null` y
  * se declara en `abierto` (jamas se estima ni se completa).
@@ -35,10 +35,11 @@ class FacturaElectronica extends ModuloHibridoReflejo {
 
   async onUnload() { return super.onUnload(); }
 
-  // ── handlers RPC (una linea cada uno: delegan a _atender) ──
+  // ── handlers RPC (una linea cada uno: delegan a _atender). CLASE PREGUNTA → sin ui_handler ──
   onEntrarRequest(e) {
     return this._atender(e, 'entrar', 'factura-electronica.entrar.response', async (d) => {
       const res = this._entrar(d);
+      // Conversor puro: no escribe → no hay hecho que anunciar. Su cara es el bus (traduce y expone).
       if (res.status !== 200) this.eventBus?.publish('factura-electronica.entrar.failed', res);
       return res;
     });

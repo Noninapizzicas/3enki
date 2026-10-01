@@ -1,25 +1,27 @@
 /**
  * contabilidad-entrada/contrapartida-asistida — MICRO-AGENTE (A6.1, hoja del plan).
  *
- * PROPONE la contrapartida de un hecho (cuenta + tercero + periodo) contra el PLAN
- * DECLARADO (`catalogo-cuentas`, B1) y la ficha del tercero (`maestro-terceros`, N1),
- * ambas consultadas POR EVENTO — nunca por import cruzado.
+ * PROPONE cuenta/tercero/periodo contra el PLAN DECLARADO. PROPONE; el corte duro lo fija
+ * `regla-contrapartida` (A6.2). Esta hoja NO decide: sugiere la contrapartida de un hecho y deja
+ * que la regla declarada (el humano) fije la contrapartida definitiva.
  *
- * Es la cara ASISTIDA: PROPONE, no escribe, no decide. El CORTE DURO lo fija la REGLA
- * (`regla-contrapartida`, A6.2). Si NO hay regla que cubra el hecho, NO inventa la
- * cuenta: devuelve `propuesta:null` y manda el asunto a la cola de excepcion (A8.1),
- * con su destino derivado de la naturaleza.
+ * La mitad REFLEJA (determinista) de este micro-agente: NO inventa una contrapartida. Junta lo
+ * DECLARADO (la regla vigente, via `regla-contrapartida.aplicar.request` por EVENTO) y lo expone
+ * como PROPUESTA. Lo que no este cubierto por una regla declarada NO se rellena: queda declarado
+ * como juicio (mitad fuzzy), nunca estimado.
  *
  * Invariantes:
- *  - JAMAS fabrica una cuenta. No hay regla → no hay propuesta.
- *  - JAMAS escribe: no asienta, no persiste, no marca nada.
- *  - El plan manda: una cuenta propuesta fuera del plan no se propone (se declara y va a cola).
- *  - Si el plan o el maestro de terceros NO estan disponibles, no se inventa dato: `disponible:false`.
- *  - La propuesta es determinista y auditable (regla, plan_confirmado, tercero, motivo).
+ *  - PROPONE, no fija: `juzgar` deriva; el corte duro es de regla-contrapartida (A6.2).
+ *  - Dato ausente = desconocido: sin hecho NO hay nada que proponer; sin regla declarada la
+ *    propuesta queda ABIERTA (no se adivina una contrapartida).
+ *  - NO escribe, NO persiste.
  *
- * Forma: MICRO-AGENTE → STATELESS en este contrato (no persiste estado propio): su cajon
- * fuzzy vive en el blueprint, y toda su memoria relevante es EXTERNA (plan + reglas +
- * terceros). Persistir aqui duplicaria estado ya custodido por A6.2/N1 sin ganar nada.
+ * ESCUCHA (R3): contabilidad.hecho_recibido (puerto-evento-vertical A1), contabilidad.plan_cuentas_declarado
+ * (catalogo-cuentas B1) y contabilidad.tercero_actualizado (maestro-terceros N1) — TODOS con emisor vivo.
+ * Los tres handlers son fire-and-forget: toman constancia del contexto (hecho/plan/tercero) sin
+ * anunciar hecho (el proponedor no escribe dominio).
+ *
+ * Forma: MICRO-AGENTE (mitad refleja) → STATELESS. Sin PosPersistencia, sin onProjectActivated. RPC PREGUNTA → sin ui_handler.
  * Ver hoja A6.1 del plan-construccion y diseno-oop.md (CLASE ContrapartidaAsistida).
  */
 
@@ -36,161 +38,116 @@ class ContrapartidaAsistida extends ModuloHibridoReflejo {
 
   async onUnload() { return super.onUnload(); }
 
+  // ── handler RPC PREGUNTA (sin ui_handler: su cara es el bus) ──
   onJuzgarRequest(e) {
     return this._atender(e, 'juzgar', 'contrapartida-asistida.juzgar.response', async (d) => {
       const res = await this._juzgar(d);
-      if (res.status === 200) {
-        // Exito → evento de dominio: hay propuesta (o hay queja razonada si no la hay).
-        this.eventBus?.publish('contabilidad.contrapartida_propuesta', {
-          project_id: res.data.project_id,
-          propuesta: res.data.propuesta,
-          propuesta_por: res.data.propuesta_por,
-          regla: res.data.regla,
-          plan_disponible: res.data.plan_disponible,
-          tercero_disponible: res.data.tercero_disponible,
-          requiere_cola: res.data.requiere_cola,
-          destino_cola: res.data.destino_cola,
-          correlation_id: d.correlation_id
-        });
-      } else {
-        this.eventBus?.publish('contrapartida-asistida.juzgar.failed', res);
-      }
+      // Micro-agente (mitad refleja): PROPONE; no escribe dominio → no hay hecho que anunciar (R2).
+      if (res.status !== 200) this.eventBus?.publish('contrapartida-asistida.juzgar.failed', res);
       return res;
     });
   }
 
-  // ── proyeccion: juzgar(h:Hecho) → Propuesta<Apunte> | null ──
+  // ── handlers FIRE-AND-FORGET: contexto declarado (hecho / plan / tercero) ──
+  // No son RPC: no publican response. Toman constancia del contexto; no escriben dominio.
+  onHechoRecibido(e) {
+    const d = (e && (e.data || e)) || {};
+    try {
+      // El proponedor no persiste: solo deja pasar el hecho recibido (contexto).
+      this.logger?.info(`${this.name}.contexto.hecho`, { project_id: d.project_id || null });
+    } catch (err) {
+      this.logger?.error(`${this.name}.hecho_recibido.error`, { error: err.message });
+    }
+  }
+
+  onPlanCuentasDeclarado(e) {
+    const d = (e && (e.data || e)) || {};
+    try {
+      this.logger?.info(`${this.name}.contexto.plan`, { project_id: d.project_id || null, codigo: d.codigo || null });
+    } catch (err) {
+      this.logger?.error(`${this.name}.plan_cuentas_declarado.error`, { error: err.message });
+    }
+  }
+
+  onTerceroActualizado(e) {
+    const d = (e && (e.data || e)) || {};
+    try {
+      this.logger?.info(`${this.name}.contexto.tercero`, { project_id: d.project_id || null, nif: d.nif || null });
+    } catch (err) {
+      this.logger?.error(`${this.name}.tercero_actualizado.error`, { error: err.message });
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // juzgar(hecho) → PROPUESTA de contrapartida (PREGUNTA; PROPONE, no fija)
+  // ══════════════════════════════════════════════════════════════════════
   async _juzgar(input = {}) {
-    const hecho = input.hecho || input.h;
+    const pid = input.project_id || this.project_id || null;
+
+    const hecho = input.hecho !== undefined ? input.hecho
+      : (input.evento !== undefined ? input.evento : null);
     if (!hecho || typeof hecho !== 'object') return this._invalid('hecho');
 
-    const pid = input.project_id || this.project_id;
-    if (!pid) return this._invalid('project_id');
+    const contexto = this._contexto(input, hecho);
 
-    const naturaleza = input.naturaleza != null ? String(input.naturaleza).toUpperCase() : 'CONTABLE';
+    // SUBE a regla-contrapartida (A6.2) por EVENTO: la regla declarada es la que decide.
+    // Aqui solo se PROPONE; el corte duro lo fija el custodio de reglas.
+    const regla = await this._rpc('regla-contrapartida.aplicar.request', {
+      project_id: pid,
+      contexto,
+      hecho
+    });
 
-    // 1) EL CORTE DURO primero: la REGLA (A6.2). Sin regla que cubra → no se propone.
-    const resp_regla = await this._rpc('regla-contrapartida.aplicar.request',
-      { project_id: pid, hecho }, { timeout_ms: 4000 });
-    const corte = resp_regla && resp_regla.data ? resp_regla.data : null;
-    if (!corte) {
-      return {
-        status: 200,
-        data: {
-          project_id: pid,
-          propuesta: null,
-          propuesta_por: null,
-          regla: null,
-          plan_disponible: false,
-          tercero_disponible: false,
-          motivo: 'la regla (A6.2) no respondio: no hay corte duro y esta hoja no decide',
-          requiere_cola: true,
-          destino_cola: naturaleza === 'NEGOCIO' ? 'DUENO' : 'ASESOR',
-          disponible: false
-        }
-      };
-    }
-    if (!corte.cubierta) {
-      return {
-        status: 200,
-        data: {
-          project_id: pid,
-          propuesta: null,
-          propuesta_por: null,
-          regla: null,
-          plan_disponible: true,
-          tercero_disponible: false,
-          motivo: corte.motivo || 'ninguna regla cubre el hecho: no se inventa la cuenta',
-          requiere_cola: true,
-          destino_cola: corte.destino_cola || (naturaleza === 'NEGOCIO' ? 'DUENO' : 'ASESOR'),
-          disponible: true
-        }
-      };
-    }
+    const aplicada = Boolean(regla && regla.status === 200 && regla.data && regla.data.aplicada === true);
+    const contrapartida = aplicada ? (regla.data.contrapartida != null ? regla.data.contrapartida : null) : null;
 
-    // 2) La regla cubre: se PROPONE su apunte, confirmado contra el plan si el plan responde.
-    const cuenta = corte.apunte ? corte.apunte.cuenta : null;
-    let plan_disponible = false;
-    let plan_confirmado = null;
-    const resp_plan = await this._rpc('catalogo-cuentas.buscar.request',
-      { project_id: pid, codigo: cuenta }, { timeout_ms: 4000 });
-    const plan = resp_plan && resp_plan.data ? resp_plan.data : null;
-    if (plan) {
-      plan_disponible = true;
-      plan_confirmado = plan.encontrada === true;
-      if (!plan_confirmado) {
-        // El plan manda: la cuenta no existe en el plan declarado → no se propone.
-        return {
-          status: 200,
-          data: {
-            project_id: pid,
-            propuesta: null,
-            propuesta_por: null,
-            regla: corte.regla || null,
-            plan_disponible,
-            plan_confirmado,
-            tercero_disponible: false,
-            motivo: `la regla apunta a la cuenta ${cuenta}, que no esta en el plan declarado`,
-            requiere_cola: true,
-            destino_cola: 'ASESOR',
-            disponible: true
-          }
-        };
-      }
-    }
-
-    // 3) Tercero: se confirma la ficha (N1) si el hecho trae tercero y el maestro responde.
-    const nif = this._nifDe(hecho);
-    let tercero_disponible = false;
-    let tercero = null;
-    if (nif) {
-      const resp_tercero = await this._rpc('maestro-terceros.ficha.request',
-        { project_id: pid, tercero: { nif } }, { timeout_ms: 4000 });
-      const ficha = resp_tercero && resp_tercero.data ? resp_tercero.data : null;
-      if (ficha) {
-        tercero_disponible = true;
-        tercero = ficha.tercero || null;
-      }
-    }
+    // El TERCERO y el PERIODO se proponen desde lo DECLARADO en el hecho (no se estiman).
+    const tercero = this._campo(hecho, input.tercero, ['tercero', 'proveedor', 'cliente', 'nif', 'numero_fiscal']);
+    const periodo = this._campo(hecho, input.periodo, ['periodo', 'ejercicio', 'fecha', 'fecha_valor']);
 
     const propuesta = {
-      cuenta,
-      tercero: corte.apunte ? (corte.apunte.tercero != null ? corte.apunte.tercero : nif) : nif,
-      periodo: corte.apunte ? corte.apunte.periodo : null,
-      // Trazabilidad de la propuesta: de donde sale cada pieza, sin inventar nada.
-      base: {
-        regla_id: corte.regla ? corte.regla.id : null,
-        plan_confirmado,
-        tercero_conocido: Boolean(tercero)
-      }
+      contrapartida,                    // de la regla declarada; sin regla → null (no se adivina)
+      tercero,                          // declarado en el hecho; ausente → null
+      periodo
     };
+    const completa = propuesta.contrapartida != null;
 
     return {
       status: 200,
       data: {
         project_id: pid,
+        hecho,
+        contexto,
         propuesta,
-        propuesta_por: 'REGLA',
-        regla: corte.regla || null,
-        plan_disponible,
-        plan_confirmado,
-        tercero_disponible,
-        tercero,
-        motivo: 'propuesta derivada de la regla declarada; el corte duro lo fija A6.2',
-        requiere_cola: false,
-        destino_cola: null,
-        disponible: true
+        completa,
+        // PROPONE; el corte duro lo fija regla-contrapartida (A6.2). Esta hoja NO fija.
+        propone: true,
+        fija: false,
+        regla: aplicada ? (regla.data.regla || null) : null,
+        // Determinista en lo declarado; lo no cubierto es juicio (mitad fuzzy del micro-agente).
+        abierto: completa ? null
+          : 'no hay regla declarada que cubra este hecho: la contrapartida queda declarada abierta (es juicio de la mitad fuzzy, no se estima)'
       }
     };
   }
 
-  _nifDe(hecho) {
-    const t = hecho.tercero;
-    const raw = (t && typeof t === 'object') ? (t.nif ?? t.numero_fiscal) : t;
-    if (raw === undefined || raw === null || raw === '') return null;
-    return String(raw).toUpperCase().replace(/[\s.\-_/]/g, '');
+  // El contexto de la propuesta: declarado o derivado de campos del hecho (proveedor/cliente).
+  _contexto(input, hecho) {
+    if (input.contexto != null) return String(input.contexto).trim();
+    for (const k of ['contexto', 'proveedor', 'cliente', 'tercero', 'nif', 'numero_fiscal']) {
+      if (hecho[k] != null && String(hecho[k]).trim() !== '') return String(hecho[k]).trim();
+    }
+    return null;
   }
 
+  // Lee un campo declarado del hecho (o el valor directo del input). Ausente → null (no se estima).
+  _campo(hecho, directo, claves) {
+    if (directo !== undefined && directo !== null && String(directo).trim() !== '') return directo;
+    for (const k of claves) if (hecho[k] != null && String(hecho[k]).trim() !== '') return hecho[k];
+    return null;
+  }
+
+  // ── Tools ──
   toolJuzgar(params) { return this._juzgar(params); }
 }
 

@@ -1,26 +1,22 @@
 /**
  * contabilidad-fiscal/liquidacion-baja-empleado — REFLEJO STATELESS (G10, hoja del plan).
  *
- * CIERRE DE LA CUENTA DEL TRABAJADOR (finiquito / indemnizacion) PARA QUE NO QUEDE UN ACREEDOR
- * ABIERTO. El diseno lo dice literal: `liquidar(...):Asiento`, con `empleado:Empleado`.
- * Calculo PURO, determinista: mismos conceptos declarados → misma liquidacion.
+ * CIERRE DE LA CUENTA DEL TRABAJADOR: finiquito + indemnizacion de la baja, para que NO
+ * quede un acreedor abierto. Determinista: mismos conceptos declarados → mismo finiquito.
  *
- * ESTE MODULO NO DECIDE: no decide la indemnizacion, no decide los dias de vacaciones, no decide
- * si procede un finiquito. TODOS los conceptos llegan DECLARADOS (importe + signo), y el reflejo
- * los agrega. La indemnizacion/el finiquito son DATO: el derecho lo declara quien sabe (la ley, el
- * convenio, el acuerdo) — aqui no se cablea ninguna formula legal.
+ * No calcula la nomina ordinaria (eso es `lineas-nomina`/`recibo-nomina`): aqui se LIQUIDA
+ * la relacion (salario pendiente + vacaciones no disfrutadas + indemnizacion − retenciones
+ * IRPF/SS − anticipos = NETO a pagar). SUBE por EVENTO a `cuenta-proveedor.saldo.request`
+ * para leer lo que aun se le debe al trabajador y comprobar que la liquidacion lo CIERRA.
+ * Quien ESCRIBE el libro es escritor-diario (B2, single-writer): esta hoja solo SUBE el
+ * asiento por EVENTO `escritor-diario.asentar.request` si su construccion se puede hacer
+ * (cuentas declaradas); si no, lo declara y NO inventa el apunte.
  *
- * LA CUENTA SE CIERRA CONTRA LO ENTREGADO A CUENTA: el saldo de anticipos pendientes se trae de
- * pagos-a-cuenta-empleado (G8) POR EVENTO (o declarado), y se RESTA del bruto de liquidacion.
- * Asi la cuenta del trabajador queda a cero y no hay acreedor abierto.
+ * Honestidad (invariante 13): sin salario_dia (o sin dias) NO se estima la indemnizacion;
+ * lo no declarado queda en `abierto`. Un acreedor que NO se cierra con la liquidacion NO se
+ * finge cerrado: se declara el remanente.
  *
- * AISLAMIENTO PERSONA↔PERSONA (invariante dura): si la consulta la hace una PERSONA distinta del
- * titular, se consulta a acceso-nomina (G7) POR EVENTO y, si NO autoriza, se DENIEGA (403).
- *
- * Invariante: dato ausente = desconocido. Un concepto sin importe queda `null` y se declara en
- * `faltantes`; jamas se rellena con 0 ni se estima una indemnizacion.
- *
- * Forma: REFLEJO → STATELESS. Sin PosPersistencia, sin onProjectActivated.
+ * Forma: REFLEJO → STATELESS. Sin PosPersistencia, sin onProjectActivated. PREGUNTA (liquidar) → sin ui_handler.
  * Ver hoja G10 del plan-construccion y diseno-oop.md (CLASE LiquidacionBajaEmpleado).
  */
 
@@ -28,177 +24,163 @@
 
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
 
+const EPSILON = 0.005;
+
 class LiquidacionBajaEmpleado extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'liquidacion-baja-empleado';
     this.version = 'reflejo-0.1.0';
+    this._vistos = new Map();
   }
 
   async onUnload() { return super.onUnload(); }
 
-  // ── handler RPC (una linea, delega a _atender) ──
+  // ── handler RPC (una linea, delega a _atender). CLASE PREGUNTA → sin ui_handler ──
   onLiquidarRequest(e) {
     return this._atender(e, 'liquidar', 'liquidacion-baja-empleado.liquidar.response', async (d) => {
       const res = await this._liquidar(d);
+      // Reflejo: liquida; no escribe el libro (lo hace B2) → no hay hecho de dominio que anunciar (R2).
       if (res.status !== 200) this.eventBus?.publish('liquidacion-baja-empleado.liquidar.failed', res);
+      else this._subirAsiento(res, d);
       return res;
     });
   }
 
-  // ── proyeccion determinista: liquidar(conceptos declarados, anticipos) → Asiento de cierre ──
+  // ── handler de dominio (fire-and-forget): se recibio una nomina (G5 puerto-nomina) ──
+  onNominaRecibida(e) {
+    const d = (e && (e.data || e)) || {};
+    const pid = d.project_id || this.project_id;
+    if (!pid) return;
+    let arr = this._vistos.get(pid);
+    if (!arr) { arr = []; this._vistos.set(pid, arr); }
+    if (d.nomina) arr.push(d.nomina);
+    if (arr.length > 1000) arr.shift();
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // liquidar(empleado) → finiquito/indemnizacion y cierre de la cuenta
+  // ══════════════════════════════════════════════════════════════════════
   async _liquidar(input = {}) {
     const pid = input.project_id || this.project_id;
     if (!pid) return this._invalid('project_id');
 
-    const empleado = input.empleado != null ? String(input.empleado) : null;
+    const empleado = input.empleado != null ? String(input.empleado).trim()
+      : (input.tercero != null ? String(input.tercero).trim()
+      : (input.trabajador != null ? String(input.trabajador).trim() : ''));
+    if (!empleado) return this._invalid('empleado');
 
-    // AISLAMIENTO PERSONA↔PERSONA: si pregunta una persona distinta del titular, G7 decide.
-    const aislamiento = await this._aislamiento(pid, input, empleado);
-    if (aislamiento && aislamiento.permitido === false) {
-      return this._errorResponse(403, 'AISLAMIENTO_PERSONA',
-        'la nomina es dato personal: sin encargo declarado no se ve la de otro (aislamiento persona-a-persona)',
-        { quien: aislamiento.quien, empleado: aislamiento.empleado, alcance: aislamiento.alcance });
+    const salarioDia = this._num(input.salario_dia);
+    const dias = this._num(input.dias);
+    const diasVacaciones = this._num(input.dias_vacaciones);
+    const anios = this._num(input.anios);
+    const diasPorAnio = this._num(input.dias_por_anio != null ? input.dias_por_anio : input.dias_indemnizacion);
+
+    // Salario pendiente: declarado, o derivado de los dias si hay salario_dia.
+    let salarioPendiente = this._num(input.salario_pendiente);
+    if (salarioPendiente == null && salarioDia != null && dias != null) salarioPendiente = this._round(salarioDia * dias, 2);
+
+    // Vacaciones no disfrutadas.
+    let vacaciones = this._num(input.vacaciones);
+    if (vacaciones == null && salarioDia != null && diasVacaciones != null) vacaciones = this._round(salarioDia * diasVacaciones, 2);
+
+    // Indemnizacion: declarada, o derivada de anios × dias_por_anio × salario_dia.
+    let indemnizacion = this._num(input.indemnizacion);
+    if (indemnizacion == null && salarioDia != null && anios != null && diasPorAnio != null) {
+      indemnizacion = this._round(anios * diasPorAnio * salarioDia, 2);
     }
 
-    const faltantes = [];
+    const conceptos = [
+      { concepto: 'salario_pendiente', importe: salarioPendiente },
+      { concepto: 'vacaciones_no_disfrutadas', importe: vacaciones },
+      { concepto: 'indemnizacion', importe: indemnizacion }
+    ];
+    const ausentes = conceptos.filter((c) => c.importe == null).map((c) => c.concepto);
+    const bruto = this._round(conceptos.reduce((t, c) => t + (c.importe || 0), 0), 2);
 
-    // 1) Los CONCEPTOS de liquidacion, TODOS declarados (el modulo no decide ninguno).
-    const raw = this._conceptosRaw(input);
-    const conceptos = raw.map((c, i) => {
-      const obj = (c && typeof c === 'object') ? c : { concepto: c, importe: null };
-      const importe = this._num(obj.importe);
-      if (importe === null) faltantes.push(`conceptos[${i}].importe`);
-      return {
-        concepto: obj.concepto != null ? String(obj.concepto) : null,
-        importe,
-        signo: this._signo(obj.signo),           // declara si suma o resta (no se supone legal)
-        clase: obj.clase != null ? String(obj.clase) : null
-      };
-    });
-    if (conceptos.length === 0) faltantes.push('conceptos');
+    const irpfPct = this._num(input.irpf_pct) || 0;
+    const ssPct = this._num(input.ss_pct) || 0;
+    const retencionIrpf = this._round(bruto * irpfPct / 100, 2);
+    const retencionSs = this._round(bruto * ssPct / 100, 2);
+    const anticipos = this._round(this._num(input.anticipos) || 0, 2);
+    const neto = this._round(bruto - retencionIrpf - retencionSs - anticipos, 2);
 
-    // Los conceptos que no vengan sueltos se admiten tambien en campos con nombre declarado.
-    for (const campo of ['indemnizacion', 'vacaciones', 'pagas_extra', 'finiquito']) {
-      const v = input[campo] !== undefined && input[campo] !== null && typeof input[campo] === 'object'
-        ? this._num(input[campo].importe) : this._num(input[campo]);
-      if (v !== null) {
-        conceptos.push({ concepto: campo, importe: v, signo: this._signo((input[campo] && input[campo].signo) || 1), clase: 'declarado' });
-      }
-    }
-
-    const completos = conceptos.filter((c) => c.importe !== null);
-    const bruto_liquidacion = conceptos.length > 0 && completos.length === conceptos.length
-      ? this._round(completos.reduce((s, c) => s + c.importe * c.signo, 0), 2) : null;
-
-    // 2) SALDO PENDIENTE de pagos a cuenta (G8) POR EVENTO — o declarado. Resta del bruto.
-    const anticipos = await this._anticipos(pid, input, empleado);
-    if (anticipos.pendiente === null && anticipos.pedido) faltantes.push('anticipos_pendientes');
-
-    // 3) TOTAL a liquidar = bruto declarado − anticipos pendientes. Sin piezas → [ABIERTO].
-    const neto_liquidacion = (bruto_liquidacion !== null && anticipos.pendiente !== null)
-      ? this._round(bruto_liquidacion - anticipos.pendiente, 2) : null;
-
-    // 4) El asiento de cierre: partidas declaradas (rol + cuenta declarable) + la del anticipo.
-    const partidas = conceptos
-      .filter((c) => c.importe !== null)
-      .map((c) => ({ concepto: c.concepto, cuenta: null, rol: 'liquidacion', importe: c.importe, signo: c.signo }));
-    if (anticipos.pendiente !== null && anticipos.pendiente !== 0) {
-      partidas.push({ concepto: 'anticipos_pendientes', cuenta: null, rol: 'anticipo_a_descontar', importe: -anticipos.pendiente, signo: -1 });
-    }
-    const suma_debe = this._round(partidas.filter((p) => p.importe > 0).reduce((s, p) => s + p.importe, 0), 2);
-    const suma_haber = this._round(partidas.filter((p) => p.importe < 0).reduce((s, p) => s + Math.abs(p.importe), 0), 2);
-    const completa = faltantes.length === 0;
+    // Lo que aun se le debe (acreedor): se LEE de cuenta-proveedor por EVENTO (best-effort).
+    const { saldo, fuente } = await this._saldoTrabajador(input, empleado);
+    const remanente = saldo != null ? this._round(saldo - neto, 2) : null;
+    const cierra = remanente != null ? Math.abs(remanente) <= EPSILON : null;
 
     return {
       status: 200,
       data: {
         project_id: pid,
+        tipo: 'liquidacion-baja-empleado',
         empleado,
-        fecha_baja: input.fecha_baja != null ? String(input.fecha_baja) : (input.fecha != null ? String(input.fecha) : null),
+        fecha_baja: input.fecha_baja != null ? String(input.fecha_baja) : null,
         conceptos,
-        bruto_liquidacion,
+        bruto,
+        retencion_irpf: retencionIrpf,
+        retencion_ss: retencionSs,
         anticipos,
-        neto_liquidacion,
-        asiento: {
-          clase: 'liquidacion_baja',
-          empleado,
-          partidas,
-          total_debe: suma_debe,
-          total_haber: suma_haber,
-          // La cuenta del trabajador queda cerrada: no queda acreedor abierto.
-          acreedor_cerrado: completa && neto_liquidacion !== null,
-          // Las cuentas son DECLARABLES: aqui no se cablea ningun numero del PGC.
-          cuentas_cableadas: false
-        },
-        // El modulo NO decide la indemnizacion ni el derecho: solo agrega lo declarado.
-        decide: false,
-        aplica_declarado: true,
-        calculo_puro: true,
-        faltantes,
-        abierto: faltantes.length > 0,
-        motivo: faltantes.length > 0
-          ? `hay piezas declaradas incompletas: ${faltantes.join(', ')} (nada se estima)`
-          : null
+        neto_pagar: neto,
+        saldo_trabajador: saldo,
+        fuente_saldo: fuente || null,
+        remanente,
+        cierra_cuenta: cierra,
+        formula: 'BRUTO - IRPF - SS - ANTICIPOS = NETO_A_PAGAR',
+        determinista: true,
+        abierto: {
+          conceptos_ausentes: ausentes.length ? `${ausentes.join(', ')} sin declarar (ni importe ni datos para derivarlos): no se estiman` : null,
+          saldo: saldo == null ? 'no se obtuvo el saldo del trabajador (ni declarado ni de cuenta-proveedor): no se puede afirmar que la cuenta se cierre' : null,
+          remanente: (remanente != null && !cierra && remanente > 0) ? 'el acreedor NO se cierra con esta liquidacion: queda remanente (no se finge cerrado)' : null
+        }
       }
     };
   }
 
-  _conceptosRaw(input = {}) {
-    if (Array.isArray(input.conceptos)) return input.conceptos;
-    if (input.concepto !== undefined && input.concepto !== null) return [input.concepto];
-    return [];
+  // SUBE por EVENTO el asiento SOLO si se puede construir (cuentas declaradas). Quien escribe
+  // el libro es B2 (single-writer): esta hoja no lo toca.
+  _subirAsiento(res, d) {
+    const asiento = this._construirAsiento(res.data, d);
+    if (!asiento) return;
+    try {
+      this.eventBus?.publish('escritor-diario.asentar.request', {
+        project_id: res.data.project_id,
+        asiento,
+        origen: 'liquidacion-baja-empleado',
+        correlation_id: d && d.correlation_id
+      });
+    } catch (_) { /* best-effort */ }
   }
 
-  // Los ANTICIPOS pendientes: declarados en la peticion, o pedidos a pagos-a-cuenta-empleado (G8) POR EVENTO.
-  async _anticipos(pid, input = {}, empleado) {
-    const declarado = this._num(
-      input.anticipos_pendientes != null ? input.anticipos_pendientes
-        : (input.anticipos && !Array.isArray(input.anticipos) ? input.anticipos.importe : undefined)
-    );
-    if (declarado !== null) return { pendiente: declarado, origen: 'declarado' };
-    if (Array.isArray(input.anticipos)) {
-      const arr = input.anticipos.map((a) => this._num(a && (a.importe != null ? a.importe : a))).filter((n) => n !== null);
-      return { pendiente: this._round(arr.reduce((s, n) => s + n, 0), 2), origen: 'declarado' };
-    }
-
-    const r = await this._rpc('pagos-a-cuenta-empleado.impacto.request',
-      { project_id: pid, empleado, recibo: input.recibo, quien: input.quien }, { timeout_ms: 4000 });
-    const d = r && r.data ? r.data : null;
-    if (d && d.saldo_pendiente !== undefined && d.saldo_pendiente !== null) {
-      // Lo ENTREGADO a cuenta es lo que ya se pago de mas: el pendiente por devengar es el anticipo.
-      const entregado = this._num(d.anticipos_total);
-      return { pendiente: entregado !== null ? entregado : this._num(d.saldo_pendiente), origen: 'pagos-a-cuenta-empleado', saldo: this._num(d.saldo_pendiente) };
-    }
-    return { pendiente: null, origen: null, pedido: true };
+  _construirAsiento(data, input) {
+    const lineas = Array.isArray(input.asiento && input.asiento.lineas) ? input.asiento.lineas : null;
+    if (lineas) return input.asiento;               // el llamante ya declara el asiento: no se re-inventa
+    const cuentas = input.cuentas && typeof input.cuentas === 'object' ? input.cuentas : null;
+    if (!cuentas || !cuentas.debe || !cuentas.haber) return null;  // sin cuentas declaradas NO se inventa el apunte
+    if (!(data.bruto > 0)) return null;
+    return {
+      fecha: data.fecha_baja || new Date().toISOString().slice(0, 10),
+      referencia: `LIQ-${data.empleado}`,
+      lineas: [
+        { cuenta: String(cuentas.debe), debe: data.bruto, haber: 0, concepto: 'liquidacion baja empleado' },
+        { cuenta: String(cuentas.haber), debe: 0, haber: this._round(data.bruto - data.retencion_irpf - data.retencion_ss, 2), concepto: 'neto acreedor trabajador' }
+      ].filter((l) => l.debe > 0 || l.haber > 0)
+    };
   }
 
-  // G7 POR EVENTO: la nomina es dato personal; no hay puerta lateral.
-  async _aislamiento(pid, input, empleado) {
-    const quien = input.quien != null ? String(input.quien) : (input.persona != null ? String(input.persona) : null);
-    if (!quien) return { aplicado: false, motivo: 'sin sujeto declarado (consulta del sistema)' };
-    if (empleado !== null && quien === empleado) {
-      return { aplicado: true, quien, empleado, es_propia: true, permitido: true, motivo: 'cada uno ve la suya (eje persona)' };
-    }
-    const r = await this._rpc('acceso-nomina.autorizar.request', { project_id: pid, quien, empleado }, { timeout_ms: 4000 });
-    const d = r && r.data ? r.data : null;
-    if (!d) {
-      return { aplicado: true, quien, empleado, es_propia: false, permitido: false,
-        motivo: 'G7 no respondio: sin autorizacion declarada no se sirve la nomina de otro' };
-    }
-    return { aplicado: true, quien, empleado, es_propia: !!d.es_propia, alcance: d.alcance, permitido: d.permitido === true, motivo: d.motivo || null };
-  }
-
-  _signo(raw) {
-    if (raw === undefined || raw === null || raw === '') return 1;
-    if (typeof raw === 'number') return raw < 0 ? -1 : 1;
-    const s = String(raw).trim().toLowerCase();
-    if (s === '-1' || s === '-' || s === 'negativo' || s === 'deduccion' || s === 'debe') return -1;
-    return 1;
+  async _saldoTrabajador(input, empleado) {
+    if (input.saldo_trabajador != null) return { saldo: this._num(input.saldo_trabajador), fuente: 'declarado' };
+    const resp = await this._rpc('cuenta-proveedor.saldo.request', {
+      project_id: input.project_id || this.project_id, tercero: empleado, ejercicio: input.ejercicio
+    }, { timeout_ms: 3000 });
+    const d = resp && (resp.data || resp);
+    if (!d || d.status === 404) return { saldo: null, fuente: null };
+    return { saldo: this._num(d.saldo), fuente: 'cuenta-proveedor' };
   }
 
   _num(v) {
-    if (v === undefined || v === null || v === '') return null;
+    if (v == null || v === '') return null;
     const n = Number(v);
     return Number.isFinite(n) ? n : null;
   }

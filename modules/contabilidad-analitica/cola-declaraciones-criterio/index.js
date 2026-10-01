@@ -94,7 +94,19 @@ class ColaDeclaracionesCriterio extends ModuloHibridoReflejo {
   onFijarRequest(e) {
     return this._atender(e, 'fijar', 'cola-declaraciones-criterio.fijar.response', async (d) => {
       const res = this._fijar(d);
-      if (res.status !== 200) this.eventBus?.publish('cola-declaraciones-criterio.fijar.failed', res);
+      if (res.status === 200) {
+        // R2 · si ESCRIBE, anuncia el HECHO: un criterio quedo declarado/actualizado.
+        this.eventBus?.publish('contabilidad.criterio_fijado', {
+          project_id: res.data.project_id,
+          clave: res.data.criterio.clave,
+          valor: res.data.criterio.valor,
+          estado: res.data.criterio.estado,
+          abierto: res.data.abierto,
+          correlation_id: d.correlation_id
+        });
+      } else {
+        this.eventBus?.publish('cola-declaraciones-criterio.fijar.failed', res);
+      }
       return res;
     });
   }
@@ -102,17 +114,17 @@ class ColaDeclaracionesCriterio extends ModuloHibridoReflejo {
   onRatificarRequest(e) {
     return this._atender(e, 'ratificar', 'cola-declaraciones-criterio.ratificar.response', async (d) => {
       const res = this._ratificar(d);
-      if (res.status === 200) {
-        // Exito → evento de dominio: un criterio quedo ratificado por el JEFE.
-        this.eventBus?.publish('contabilidad.criterio_ratificado', {
+      if (res.status === 200 && res.data.ratificado === true) {
+        // R2 · la ratificacion es un acto del JEFE sobre lo declarado: se anuncia el hecho.
+        this.eventBus?.publish('contabilidad.criterio_fijado', {
           project_id: res.data.project_id,
-          criterio: res.data.criterio,
           clave: res.data.criterio.clave,
           valor: res.data.criterio.valor,
-          ratificado: res.data.ratificado,
+          estado: res.data.criterio.estado,
+          ratificado: true,
           correlation_id: d.correlation_id
         });
-      } else {
+      } else if (res.status !== 200) {
         this.eventBus?.publish('cola-declaraciones-criterio.ratificar.failed', res);
       }
       return res;

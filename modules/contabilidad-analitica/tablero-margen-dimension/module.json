@@ -1,35 +1,41 @@
 {
-  "_doc": "Manifest de contabilidad-analitica/tablero-margen-dimension — REFLEJO STATELESS (J10, hoja del plan). EL CRUCE MARGEN × DIMENSION: el jefe ve que linea mueve su margen — una TABLA de conjunto por centro, por linea, por producto o por sociedad, construida cruzando la MISMA cifra de margen por cada eje declarado. ATRIBUTOS del diseno: margen:MargenAnalitico, dimensiones:Set<Dimension>; METODOS: cruzar():Tabla; REGLA: cruce margen × dimension bajo lente de conjunto. NO DUPLICA J2: no calcula margen — para cada EJE declarado PIDE a margen-analitico (J2) POR EVENTO (margen-analitico.calcular.request) su por_dimension YA CALCULADO y lo coloca en la tabla; cero aritmetica de margen aqui (la suma, la resta y el ratio son de J2; el tablero solo pivota y presenta). Los hechos etiquetados (lo que hace posible el corte) proceden del etiquetado de J1 (etiquetado-analitico, que PROPONE y jamas escribe) a traves de J2. EL EJE ES DECLARABLE: por que ejes se cruza es DATO; sin ejes declarados se usan los que declare el TIPO de cada dimension del CATALOGO declarado, y si tampoco hay catalogo NO se elige un eje por defecto — la tabla queda [ABIERTO] con faltan:['ejes'] (elegir el eje seria decidir por el jefe). El catalogo de dimensiones se declara en la peticion o se pide a cola-declaraciones-criterio (K9) POR EVENTO (best-effort, clave 'dimensiones'). Invariantes: NO RECALCULA MARGEN (cada fila es la cifra de J2 con su origen declarado); DETERMINISTA; dato ausente = desconocido (un eje sin cubetas → fila con margen:null y su motivo, NUNCA 0); LEY/PARAMETRO COMO DATO; NO escribe ni persiste (la tabla es un DERIVADO de lectura). FORMA: REFLEJO stateless, sin PosPersistencia ni onProjectActivated. Proyeccion unica `_cruzar({project_id, periodo?, eje?/ejes?, dimensiones?})` → {project_id, periodo, fuente_dimensiones, fuente_ejes, ejes, tabla:[{eje, fuente:'margen-analitico', margen, ingresos, costes, ratio_margen, dimensiones:[{dimension, ingresos, costes, margen, ratio_margen, n_lineas}], abierto, motivo}], filas, dimensiones_declaradas, sin_margen, abierto, faltan, lente:'conjunto', motivo}. Cierra el circulo: error → tablero-margen-dimension.cruzar.failed.",
+  "_doc": "Manifest de analitica/tablero-margen-dimension — REFLEJO STATELESS (J10, hoja del plan). El CRUCE margen x DIMENSION bajo LENTE DE CONJUNTO: por centro, familia o sociedad. NO calcula el margen (eso es margen-analitico H2, al que SUBE por EVENTO): AGREGA el margen YA calculado por cada dimension declarada y compone el tablero. Invariante: dato ausente = desconocido (sin margen no se compone tablero → ABIERTO); la dimension es DATO declarable, no una lista cableada de negocio. ESCUCHA contabilidad.asiento_asentado (escritor-diario B2) y contabilidad.criterio_fijado (cola-declaraciones-criterio) — ambos emisores YA existen → SI se declaran. RPC cruzar es CLASE PREGUNTA → sin ui_handler. STATELESS: sin PosPersistencia.",
   "name": "tablero-margen-dimension",
   "version": "0.1.0",
-  "description": "Reflejo (J10): el cruce margen × dimension por centro/linea/producto/sociedad bajo lente de conjunto — LEE el margen ya calculado de J2 por evento (no lo recalcula) y sin eje declarado no cruza nada, porque elegirlo seria decidir por el jefe.",
-  "blueprint_driven": true,
-  "blueprint_path": "tablero-margen-dimension.blueprint.json",
+  "description": "Reflejo (J10): cruza el margen por dimension (centro/familia/sociedad) bajo lente de conjunto; agrega, no recalcula.",
   "language": "es",
   "subscribes": [
     {
       "event": "tablero-margen-dimension.cruzar.request",
       "handler": "onCruzarRequest",
-      "description": "RPC reflejo (cruce puro, determinista): {project_id, periodo?, eje?/ejes?:['centro','linea','producto','sociedad'...], dimensiones?} → {project_id, periodo, fuente_dimensiones, fuente_ejes, ejes, tabla:[{eje, fuente:'margen-analitico', margen, ingresos, costes, ratio_margen, dimensiones:[{dimension, ingresos, costes, margen, ratio_margen, n_lineas}], abierto, motivo}], filas, dimensiones_declaradas, sin_margen, abierto, faltan, lente:'conjunto', motivo}. Para cada eje PIDE a margen-analitico (J2) su por_dimension YA CALCULADO por EVENTO — el tablero NO recalcula el margen; sin ejes declarados usa los tipos del catalogo declarado y si no hay catalogo deja la tabla abierta (faltan:['ejes']); un eje sin cubetas → fila con margen:null (nunca 0). Responde por tablero-margen-dimension.cruzar.response; project_id ausente → tablero-margen-dimension.cruzar.failed."
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id, filas?/periodo?/ejercicio?, dimensiones?/dimension?} → {project_id, dimensiones, tablero, total_filas, fuente_margen, abierto}. Agrega el margen (declarado o de margen-analitico) por cada dimension. Responde por tablero-margen-dimension.cruzar.response; payload invalido → tablero-margen-dimension.cruzar.failed."
+    },
+    {
+      "event": "contabilidad.asiento_asentado",
+      "handler": "onAsientoAsentado",
+      "description": "Señal (fire-and-forget) de escritor-diario B2: el libro cambio → se observa (ventana acotada) para el tablero."
+    },
+    {
+      "event": "contabilidad.criterio_fijado",
+      "handler": "onCriterioFijado",
+      "description": "Señal (fire-and-forget) de cola-declaraciones-criterio: se fijo un criterio → se observa (ventana acotada)."
     }
   ],
   "publishes": [
     {
+      "event": "margen-analitico.calcular.request",
+      "description": "Subida (REQUEST por EVENTO) a H2: el margen ya calculado por fila. TableroMargenDimension NO lo calcula; lo AGREGA."
+    },
+    {
       "event": "tablero-margen-dimension.cruzar.response",
-      "description": "Respuesta RPC correlada de tablero-margen-dimension.cruzar.request → {request_id, status:200, data:{tabla, ejes, sin_margen, faltan, lente:'conjunto'}}. Emitida por el helper _atender."
+      "description": "Respuesta RPC correlada de la op cruzar (una sola cara: el bus)."
     },
     {
       "event": "tablero-margen-dimension.cruzar.failed",
-      "description": "Par de fallo determinista (J10): project_id ausente → {status, error:{code, message, details?}}. Cierra el circulo de tablero-margen-dimension.cruzar.request."
+      "description": "Par de fallo determinista: falta project_id o dimensiones → {status, code, message}. Cierra el circulo de cruzar.request."
     }
   ],
-  "ui_handlers": [
-    {
-      "domain": "contabilidad",
-      "action": "tablero-margen-dimension.cruzar",
-      "handler": "onCruzarRequest",
-      "type": "inline_render",
-      "zone": "area_chat"
-    }
+  "tools": [
+    { "name": "tablero-margen-dimension.cruzar", "description": "Cruza (PREGUNTA) el margen por dimension (centro/familia/sociedad) agregando lo ya calculado." }
   ]
 }

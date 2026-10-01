@@ -1,21 +1,24 @@
 {
-  "_doc": "Manifest de contabilidad-entrada/maestro-terceros — CUSTODIO CON PERSISTENCIA (N1, hoja del plan). EL MAESTRO UNICO de terceros: decision del dueno (conflicto 1 resuelto) = UN TERCERO, UN REGISTRO; la cuenta 430 (cliente) y la 400 (proveedor) cuelgan del MISMO tercero, y un tercero que es cliente Y proveedor sigue siendo UNO con `roles` acumulados (es_ambos). NO hay dos maestros: padron-terceros (N2) es la faceta de IDENTIDAD por numero fiscal de este mismo maestro. UN SOLO ESCRITOR: el escritor del maestro (MAESTRO_TERCEROS); cualquier otro rol es rechazado (403). Invariantes: un tercero un registro (la ficha se completa y SUMA roles, nunca se parte en dos); no se borra (historial append-only, las condiciones solo se completan); dato ausente = desconocido (campo que no llega queda null, no se estima); la normalizacion del numero fiscal es MECANICA (mayusculas/sin separadores) y no cablea ninguna ley ni codigo de cuenta. Persiste por proyecto con PosPersistencia (storage /contabilidad/maestro-terceros/maestro-terceros.json), restaura en project.activated y vuelca en onUnload. Proyecciones: `_ficha` (lectura, no muta) · `_upsert` (escritura, guard de rol). Publica contabilidad.tercero_actualizado.",
+  "_doc": "Manifest de entrada/maestro-terceros — CUSTODIO CON PERSISTENCIA (N1, hoja del plan). La FICHA UNICA de cliente/proveedor: UN solo maestro con roles (conflicto 1 resuelto) — el mismo tercero es cliente Y proveedor sin duplicarse. Es la cara de MAESTRO; la identidad por numero fiscal vive en padron-terceros (N2), cuyo hecho contabilidad.tercero_unificado ESCUCHA esta ficha para completarse (handler onTerceroUnificado, no-RPC; al escribir anuncia contabilidad.tercero_actualizado, R2). La op upsert (ORDEN, panel) da de alta/actualiza la ficha con guard de escritor (solo rol MAESTRO_TERCEROS; segundo escritor → 403); la op ficha (PREGUNTA, por el bus) la lee por NIF normalizado. No se borra: upsert SUMA (roles se funden, variantes se apilan). Dato ausente = desconocido. Persiste por proyecto via PosPersistencia (_shared/pos-persistencia, storage /contabilidad/maestro-terceros), restaura en project.activated y vuelca en onUnload. Publica contabilidad.tercero_actualizado (+ pares *.failed).",
   "name": "maestro-terceros",
   "version": "0.1.0",
-  "description": "Custodio (N1): el maestro UNICO de terceros — un tercero, un registro con roles (cliente/proveedor/ambos); un solo escritor (MAESTRO_TERCEROS), upsert completa y suma sin borrar; persiste por proyecto.",
-  "blueprint_driven": true,
-  "blueprint_path": "maestro-terceros.blueprint.json",
+  "description": "Custodio (N1): ficha unica de cliente/proveedor. Un solo maestro con roles; se completa con el padron (identidad) y es uno solo por numero fiscal. Persistente por proyecto.",
   "language": "es",
   "subscribes": [
     {
       "event": "maestro-terceros.ficha.request",
       "handler": "onFichaRequest",
-      "description": "RPC custodio (lectura): {project_id, tercero:{nif|numero_fiscal}} → {clave, encontrado, tercero, roles}. Devuelve la ficha unica del tercero por numero fiscal normalizado; sin match → encontrado:false y tercero:null (no se inventa ficha). Responde por maestro-terceros.ficha.response; nif ausente → maestro-terceros.ficha.failed."
+      "description": "RPC custodio (PREGUNTA, por el bus): {project_id, nif|numero_fiscal} → {project_id, nif, ficha, existe}. Lee la ficha del tercero por su NIF normalizado; si no existe, ficha:null y existe:false (no se inventa). Responde por maestro-terceros.ficha.response; sin NIF → maestro-terceros.ficha.failed."
     },
     {
       "event": "maestro-terceros.upsert.request",
       "handler": "onUpsertRequest",
-      "description": "RPC custodio (escritura, UN escritor): {project_id, rol:'MAESTRO_TERCEROS', tercero:{nif, nombre?, roles?, condiciones?, historial_nota?}} → {tercero, creado}. Guard Rol=MAESTRO_TERCEROS (segundo escritor → 403). Un tercero, un registro: la ficha se completa y los roles se SUMAN (cliente+proveedor = uno con es_ambos); las condiciones se completan campo a campo y el historial es append-only. Exito → publica contabilidad.tercero_actualizado y responde por maestro-terceros.upsert.response; invalido → maestro-terceros.upsert.failed."
+      "description": "RPC custodio (ORDEN, panel): {project_id, rol:'MAESTRO_TERCEROS', tercero{nombre?, nif|numero_fiscal, roles?, condiciones?}} → {project_id, tercero, creada}. Guard de escritor (solo MAESTRO_TERCEROS; otro rol → PERMISSION_DENIED). Da de alta o actualiza (SUMA: roles se funden, variantes se apilan). Publica contabilidad.tercero_actualizado y responde por maestro-terceros.upsert.response. Sin NIF/tercero → maestro-terceros.upsert.failed."
+    },
+    {
+      "event": "contabilidad.tercero_unificado",
+      "handler": "onTerceroUnificado",
+      "description": "Fire-and-forget (lo emite padron-terceros N2): una identidad de tercero quedo unificada por su numero fiscal → completa la ficha del maestro sin borrar lo que hubiera y publica contabilidad.tercero_actualizado (R2). No responde (no es RPC)."
     },
     {
       "event": "project.activated",
@@ -25,40 +28,31 @@
   ],
   "publishes": [
     {
+      "event": "contabilidad.tercero_actualizado",
+      "description": "Fire-and-forget (N1): un tercero quedo actualizado en el maestro → {project_id, nif, tercero, creada}. Lo consumen contrapartida-asistida (A6.2) y cuenta-proveedor (N3) para operar con la ficha vigente."
+    },
+    {
       "event": "maestro-terceros.ficha.response",
-      "description": "Respuesta RPC correlada de maestro-terceros.ficha.request → {request_id, status:200, data:{clave, encontrado, tercero, roles}}. Emitida por el helper _atender."
+      "description": "Respuesta RPC correlada de la op ficha (PREGUNTA)."
     },
     {
       "event": "maestro-terceros.ficha.failed",
-      "description": "Par de fallo determinista (N1): project_id o numero fiscal del tercero ausente → {status, error:{code, message, details?}}. Cierra el circulo de maestro-terceros.ficha.request."
+      "description": "Par de fallo determinista: falta project_id o nif → {status, code, message}. Cierra el circulo de ficha.request."
     },
     {
       "event": "maestro-terceros.upsert.response",
-      "description": "Respuesta RPC correlada de maestro-terceros.upsert.request → {request_id, status:200, data:{tercero, creado}}. Emitida por el helper _atender."
+      "description": "Respuesta RPC correlada de la op upsert."
     },
     {
       "event": "maestro-terceros.upsert.failed",
-      "description": "Par de fallo determinista (N1): rol != MAESTRO_TERCEROS (segundo escritor), tercero sin numero fiscal o project_id ausente → {status, error:{code, message, details?}}. Cierra el circulo de maestro-terceros.upsert.request."
-    },
-    {
-      "event": "contabilidad.tercero_actualizado",
-      "description": "Fire-and-forget (N1): un tercero quedo actualizado en el maestro unico → {project_id, tercero, creado, roles, correlation_id}. Es la ficha unica con roles de la que cuelgan la cuenta 430 (cliente) y la 400 (proveedor)."
+      "description": "Par de fallo determinista: rol != MAESTRO_TERCEROS, falta el NIF o el tercero es invalido → {status, code, message}. Cierra el circulo de upsert.request."
     }
   ],
+  "tools": [
+    { "name": "maestro-terceros.ficha", "description": "Lee (PREGUNTA) la ficha unica del tercero por su numero fiscal normalizado." },
+    { "name": "maestro-terceros.upsert", "description": "Da de alta o actualiza (ORDEN) la ficha unica del tercero (un maestro con roles)." }
+  ],
   "ui_handlers": [
-    {
-      "domain": "contabilidad",
-      "action": "maestro-terceros.ficha",
-      "handler": "onFichaRequest",
-      "type": "workspace_module",
-      "zone": "barra_modulos"
-    },
-    {
-      "domain": "contabilidad",
-      "action": "maestro-terceros.upsert",
-      "handler": "onUpsertRequest",
-      "type": "workspace_module",
-      "zone": "barra_modulos"
-    }
+    { "domain": "contabilidad", "action": "maestro-terceros.upsert", "handler": "onUpsertRequest", "type": "workspace_module", "zone": "barra_modulos" }
   ]
 }

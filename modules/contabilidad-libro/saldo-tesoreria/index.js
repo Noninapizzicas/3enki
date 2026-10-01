@@ -1,25 +1,16 @@
 /**
  * contabilidad-libro/saldo-tesoreria — REFLEJO STATELESS (E4, hoja del plan).
  *
- * POSICION REAL DE DINERO POR CUENTA. Derivacion DETERMINISTA: el saldo de tesoreria de cada
- * cuenta bancaria sale del MAYOR (saldos por cuenta contable, derivados del diario B3) cruzado
- * con el MAESTRO DE CUENTAS BANCARIAS (E11), que dice que cuenta contable corresponde a cada
- * cuenta bancaria y en que moneda. Calculo PURO.
+ * Posicion real de DINERO por cuenta. Derivacion determinista.
+ * El dinero vive en cuentas (grupo 5 del PGC): aqui se agrupa el saldo del mayor POR cuenta
+ * bancaria. Que cuentas existen y su MONEDA lo DECLARA maestro-cuentas-bancarias (E11) — este
+ * reflejo NO adivina la moneda: la recibe del hecho `contabilidad.cuenta_bancaria_declarada`,
+ * y si no esta declarada lo dice en `abierto`.
  *
- * Ambas fuentes se piden POR EVENTO (nunca un `require` cruzado):
- *   - `maestro-cuentas-bancarias.listar.request` (E11) → las cuentas declaradas del negocio.
- *   - `mayor-balanza.saldos.request` (B3) → los saldos por cuenta contable derivados del diario.
+ * Honestidad (invariante 13): sin saldos no se inventa una posicion; sin moneda declarada no se
+ * asume EUR; si hay varias monedas, el total se declara como NO agregable.
  *
- * Invariantes:
- *  - SIN MAESTRO NO HAY SALDO: si el maestro de cuentas bancarias no esta disponible, no se
- *    inventa ninguna cuenta ni saldo: `disponible:false`, `cuentas:[]` (invariante 7: dato
- *    ausente = desconocido; nada se estima).
- *  - Una cuenta del maestro sin `cuenta_contable` declarada queda `saldo:null` (`[ABIERTO]`):
- *    no se adivina de que cuenta del mayor sale su dinero.
- *  - Determinista: mismo mayor + mismo maestro → mismo saldo.
- *  - NO escribe, NO persiste, NO muta.
- *
- * Forma: REFLEJO → STATELESS. Sin PosPersistencia, sin onProjectActivated.
+ * Forma: REFLEJO → STATELESS. Sin PosPersistencia. PREGUNTA (calcular) → sin ui_handler.
  * Ver hoja E4 del plan-construccion y diseno-oop.md (CLASE SaldoTesoreria).
  */
 
@@ -32,11 +23,13 @@ class SaldoTesoreria extends ModuloHibridoReflejo {
     super();
     this.name = 'saldo-tesoreria';
     this.version = 'reflejo-0.1.0';
+    // Monedas de cuenta DECLARADAS por el hecho E11 (no adivinadas).
+    this._monedas = new Map();           // project_id -> Map<cuenta_id, {moneda, cuenta}>
   }
 
   async onUnload() { return super.onUnload(); }
 
-  // ── handler RPC (una linea, delega a _atender) ──
+  // ── handler RPC (una linea). CLASE PREGUNTA → sin ui_handler ──
   onCalcularRequest(e) {
     return this._atender(e, 'calcular', 'saldo-tesoreria.calcular.response', async (d) => {
       const res = await this._calcular(d);
@@ -45,114 +38,105 @@ class SaldoTesoreria extends ModuloHibridoReflejo {
     });
   }
 
-  // ── fire-and-forget: el diario (B2) registro un asiento → señal de que el mayor cambio ──
-  // No muta nada ni estima: la derivacion determinista se hace en calcular.request.
-  onAsientoRegistrado(e) {
+  // ── handler de dominio: el libro cambio → se observa (ventana acotada) ──
+  onAsientoAsentado(e) {
     const d = (e && (e.data || e)) || {};
-    if (!d.project_id) return null;
-    this.logger?.debug('saldo-tesoreria.asiento.observado', {
-      project_id: d.project_id, numero: d.numero ?? null
-    });
-    return null;
+    this._vistos = this._vistos || [];
+    if (d.asiento) this._vistos.push(d.asiento);
+    if (this._vistos.length > 1000) this._vistos.shift();
   }
 
-  // ── proyeccion determinista: calcular(cuenta?, fecha?) → Cuantía por cuenta ──
+  // ── handler de dominio: E11 declaro una cuenta bancaria y su moneda → se registra ──
+  onCuentaBancariaDeclarada(e) {
+    const d = (e && (e.data || e)) || {};
+    const pid = d.project_id;
+    if (!pid || d.cuenta_id == null) return;
+    let m = this._monedas.get(pid);
+    if (!m) { m = new Map(); this._monedas.set(pid, m); }
+    m.set(String(d.cuenta_id), { moneda: d.moneda || (d.cuenta && d.cuenta.moneda) || null, cuenta: d.cuenta || null });
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // calcular(saldos) → { posicion, por_cuenta }
+  // ══════════════════════════════════════════════════════════════════════
   async _calcular(input = {}) {
     const pid = input.project_id || this.project_id;
     if (!pid) return this._invalid('project_id');
 
-    const fecha = input.fecha != null ? String(input.fecha) : null;
-    const cuenta_pedida = input.cuenta != null ? String(input.cuenta) : null;
+    const { saldos, fuente } = await this._saldosDe(input);
+    const monedas = this._monedas.get(pid) || new Map();
 
-    // 1) El MAESTRO de cuentas bancarias (E11) POR EVENTO. Sin el, no se inventa nada.
-    const maestro = await this._maestro(pid);
-    if (!maestro.disponible) {
-      return {
-        status: 200,
-        data: {
-          project_id: pid,
-          fecha,
-          maestro_disponible: false,
-          mayor_disponible: false,
-          disponible: false,
-          saldo_total: null,
-          cuentas: [],
-          motivo: 'el maestro de cuentas bancarias (E11) no respondio: sin el, el banco es un numero falso'
-        }
-      };
+    // Solo el dinero: cuentas de tesoreria (grupo 5 declarado, o prefijo 57x si no hay declaracion).
+    const porCuenta = new Map();
+    const noDinero = [];
+    for (const s of saldos) {
+      const cuenta = s && s.cuenta != null ? String(s.cuenta) : null;
+      if (!this._esDinero(s, cuenta)) { noDinero.push({ cuenta }); continue; }
+      const saldo = this._round(this._num(s && (s.saldo != null ? s.saldo : (Number(s.debe || 0) - Number(s.haber || 0)))), 2);
+      const acc = porCuenta.get(cuenta) || { cuenta, saldo: 0 };
+      acc.saldo = this._round(acc.saldo + saldo, 2);
+      porCuenta.set(cuenta, acc);
     }
 
-    // 2) El MAYOR (B3) POR EVENTO: saldos por cuenta contable derivados del diario.
-    const mayor = await this._mayor(pid, fecha, input);
+    const cuentas = [...porCuenta.values()].map((c) => {
+      const decl = monedas.get(c.cuenta) || null;
+      return { cuenta: c.cuenta, saldo: c.saldo, moneda: decl ? decl.moneda : null, declarada: !!decl };
+    });
 
-    // Indice del mayor: cuenta contable → saldo.
-    const saldo_por_cuenta = new Map();
-    for (const m of mayor.lineas) {
-      if (m && m.cuenta != null) saldo_por_cuenta.set(String(m.cuenta), m.saldo);
-    }
-
-    // 3) Derivacion determinista: por cada cuenta declarada, su saldo (si su cuenta contable
-    //    esta declarada y el mayor la conoce). Dato ausente = desconocido (null), no se estima.
-    const cuentas = [];
-    for (const c of maestro.cuentas) {
-      const cuenta_contable = c.cuenta_contable != null ? String(c.cuenta_contable) : null;
-      const abierto = [];
-      if (cuenta_contable === null) abierto.push('cuenta_contable');
-      if (!mayor.disponible) abierto.push('saldo');
-
-      const bruto = cuenta_contable !== null && saldo_por_cuenta.has(cuenta_contable)
-        ? saldo_por_cuenta.get(cuenta_contable) : null;
-      const saldo = bruto !== null ? this._round(bruto, 2) : null;
-
-      cuentas.push({
-        id_cuenta: c.id_cuenta,
-        moneda: c.moneda != null ? c.moneda : null,
-        banco: c.banco != null ? c.banco : null,
-        cuenta_contable,
-        saldo,
-        // Saldo de la cuenta contable puede ser deudor(>0)/acreedor(<0): se declara el signo.
-        naturaleza: saldo === null ? null : (saldo > 0 ? 'deudor' : (saldo < 0 ? 'acreedor' : 'cero')),
-        abierto
-      });
-    }
-
-    const con_saldo = cuentas.filter(c => c.saldo !== null);
-    const filtradas = cuenta_pedida ? cuentas.filter(c => c.id_cuenta === cuenta_pedida) : cuentas;
+    const sinMoneda = cuentas.filter((c) => c.moneda == null);
+    const monedasDistintas = [...new Set(cuentas.map((c) => c.moneda).filter((m) => m != null))];
+    const agregable = sinMoneda.length === 0 && monedasDistintas.length <= 1 && cuentas.length > 0;
+    const posicion = agregable ? this._round(cuentas.reduce((t, c) => t + c.saldo, 0), 2) : null;
 
     return {
       status: 200,
       data: {
         project_id: pid,
-        fecha,
-        maestro_disponible: true,
-        mayor_disponible: mayor.disponible,
-        fuente_mayor: mayor.fuente,
-        disponible: mayor.disponible,
-        // Solo se suma lo conocido: si alguna cuenta quedo [ABIERTO], el total se declara parcial.
-        saldo_total: con_saldo.length ? this._round(con_saldo.reduce((s, c) => s + c.saldo, 0), 2) : null,
-        total_conocidas: con_saldo.length,
+        tipo: 'saldo-tesoreria',
+        fuente: fuente || null,
+        posicion,                       // null si no es agregable (varias monedas o moneda sin declarar)
+        moneda: monedasDistintas.length === 1 ? monedasDistintas[0] : null,
+        agregable,
+        monedas: monedasDistintas,
+        cuentas,
         total_cuentas: cuentas.length,
-        completo: con_saldo.length === cuentas.length && mayor.disponible,
-        cuentas: filtradas
+        determinista: true,
+        abierto: {
+          fuente: fuente ? null : 'no se recibieron saldos (ni declarados ni de mayor-balanza): la posicion no se inventa',
+          moneda: sinMoneda.length
+            ? `${sinMoneda.length} cuenta(s) sin moneda declarada (E11): NO se asume EUR ni se agrega a ciegas`
+            : null,
+          mezcla_monedas: monedasDistintas.length > 1
+            ? 'hay mas de una moneda: el total no es agregable sin tipo de cambio declarado'
+            : null
+        }
       }
     };
   }
 
-  // El maestro (E11) se pide por EVENTO.
-  async _maestro(pid) {
-    const r = await this._rpc('maestro-cuentas-bancarias.listar.request', { project_id: pid }, { timeout_ms: 4000 });
-    if (r && r.data && Array.isArray(r.data.cuentas)) return { disponible: true, cuentas: r.data.cuentas };
-    return { disponible: false, cuentas: [] };
+  async _saldosDe(input) {
+    if (Array.isArray(input.saldos)) return { saldos: input.saldos, fuente: 'declarado' };
+    const resp = await this._rpc('mayor-balanza.saldos.request', {
+      project_id: input.project_id || this.project_id,
+      fecha: input.fecha, ejercicio: input.ejercicio
+    }, { timeout_ms: 800 });
+    if (resp && Array.isArray(resp.saldos)) return { saldos: resp.saldos, fuente: 'mayor-balanza' };
+    return { saldos: [], fuente: null };
   }
 
-  // El mayor (B3) se pide por EVENTO. Si no responde, se declara y no se estima.
-  async _mayor(pid, fecha, input) {
-    const r = await this._rpc('mayor-balanza.saldos.request',
-      { project_id: pid, ejercicio: input.ejercicio ?? null, fecha }, { timeout_ms: 4000 });
-    const lineas = r && r.data && Array.isArray(r.data.mayor) ? r.data.mayor : null;
-    if (lineas) return { disponible: true, fuente: r.data.fuente || 'diario', lineas };
-    return { disponible: false, fuente: null, lineas: [] };
+  // Dinero = masa/grupo declarado 'tesoreria' o 'activo' con naturaleza declarada, o prefijo 57x.
+  _esDinero(s, cuenta) {
+    const declarado = s && (s.masa || s.grupo);
+    if (declarado) {
+      const g = String(declarado).toLowerCase().trim();
+      if (g === 'tesoreria' || g === 'dinero') return true;
+    }
+    if (s && s.tesoreria === true) return true;
+    const c = String(cuenta || '');
+    return c.startsWith('57');
   }
+
+  _num(v) { const n = Number(v); return Number.isFinite(n) ? n : 0; }
 
   // ── Tools ──
   toolCalcular(params) { return this._calcular(params); }

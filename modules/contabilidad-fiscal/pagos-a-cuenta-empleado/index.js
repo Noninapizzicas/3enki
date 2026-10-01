@@ -1,24 +1,26 @@
 /**
  * contabilidad-fiscal/pagos-a-cuenta-empleado — REFLEJO STATELESS (G8, hoja del plan).
  *
- * ANTICIPOS / ENTREGAS A CUENTA Y SU IMPACTO EN EL NETO Y EL IRPF. No todo es sueldo fijo.
- * El diseno lo dice literal: `impacto(n:ReciboNomina):Cuantía`, con `anticipos:Set<Anticipo>`.
- * Calculo PURO, determinista: mismo neto declarado + mismos anticipos → mismo saldo pendiente.
+ * ANTICIPOS/ADELANTOS y su IMPACTO en el neto y en el IRPF. No todo es sueldo fijo: un
+ * pago a cuenta adelantado reduce lo que se paga hoy, pero NO borra la base del IRPF (el
+ * devengo manda). Esta hoja calcula ese impacto de forma DETERMINISTA.
  *
- * ESTE MODULO NO DECIDE: no aprueba el anticipo, no lo paga y no recalcula el IRPF. Deriva el
- * IMPACTO declarado: cuanto se entrego a cuenta y que SALDO PENDIENTE queda sobre el neto del
- * recibo. El neto se COPIA del recibo (lo calculo el sistema externo).
+ *   · pago a cuenta (anticipo)  → reduce el NETO a percibir.
+ *   · la RETENCION de IRPF      → se calcula sobre la base de devengo, NO sobre el neto
+ *     tras el anticipo (el anticipo no es un menor devengo): anticipar NO baja el IRPF.
  *
- * LO QUE IMPACTA ES DECLARABLE: que concepto sufre el pago a cuenta (`concepto_pago_a_cuenta`:
- * por defecto el neto) y la NATURALEZA de cada anticipo (anticipo / entrega / retribucion_flexible)
- * los declara el negocio. Cero tipos cableados.
+ * Mecanico: los importes (bruto, retencion, anticipos) llegan DECLARADOS; aqui solo se
+ * recomponen. Cero decisiones.
  *
- * AISLAMIENTO PERSONA↔PERSONA (invariante dura): si la consulta la hace una PERSONA (`quien`
- * distinta del titular), se consulta a acceso-nomina (G7) POR EVENTO y, si NO autoriza, se
- * DENIEGA (403) — la nomina es dato personal y este reflejo no es una puerta lateral.
+ * Invariantes:
+ *  - DETERMINISTA: mismos importes → mismo impacto.
+ *  - Dato ausente = desconocido: sin base/retencion/anticipos declarados el impacto es
+ *    PARCIAL y se declara (`impacto_completo:false`); nada se estima con un cero silencioso.
+ *  - NO escribe, NO persiste.
  *
- * Invariante: dato ausente = desconocido. Un anticipo sin importe queda `null` y se declara; sin
- * el neto del recibo, el saldo pendiente queda `[ABIERTO]` — no se estima.
+ * ESCUCHA (R3): el plan declara escucha de `contabilidad.nomina_recibida`; NINGUN modulo del
+ * repo lo emite AUN (lo emite puerto-nomina G4, grupo posterior): declararlo daria cadena
+ * colgada. NO se declara.
  *
  * Forma: REFLEJO → STATELESS. Sin PosPersistencia, sin onProjectActivated.
  * Ver hoja G8 del plan-construccion y diseno-oop.md (CLASE PagosACuentaEmpleado).
@@ -37,141 +39,105 @@ class PagosACuentaEmpleado extends ModuloHibridoReflejo {
 
   async onUnload() { return super.onUnload(); }
 
-  // ── handler RPC (una linea, delega a _atender) ──
+  // ── handler RPC (una linea, delega a _atender). CLASE PREGUNTA → sin ui_handler ──
   onImpactoRequest(e) {
     return this._atender(e, 'impacto', 'pagos-a-cuenta-empleado.impacto.response', async (d) => {
-      const res = await this._impacto(d);
+      const res = this._impacto(d);
+      // Reflejo: calcula y declara; no escribe → no hay hecho que anunciar (R2).
       if (res.status !== 200) this.eventBus?.publish('pagos-a-cuenta-empleado.impacto.failed', res);
       return res;
     });
   }
 
-  // ── proyeccion determinista: impacto(neto del recibo, anticipos) → Cuantía (saldo pendiente) ──
-  async _impacto(input = {}) {
+  // ══════════════════════════════════════════════════════════════════════
+  // impacto(base, retencion, anticipos) → neto e IRPF tras los pagos a cuenta
+  // ══════════════════════════════════════════════════════════════════════
+  _impacto(input = {}) {
     const pid = input.project_id || this.project_id;
     if (!pid) return this._invalid('project_id');
 
-    const { recibo, recibos, origen_recibo } = await this._recibos(pid, input);
-    const titular = this._titular(recibo, recibos, input);
+    // El PAGO A CUENTA es la materia de esta hoja: sin el declarado no hay impacto que calcular.
+    const anticipos = this._anticipos(input);
+    if (anticipos === null) return this._invalid('anticipos');
 
-    // AISLAMIENTO PERSONA↔PERSONA: si pregunta una persona distinta del titular, G7 decide.
-    const aislamiento = await this._aislamiento(pid, input, titular);
-    if (aislamiento && aislamiento.permitido === false) {
-      return this._errorResponse(403, 'AISLAMIENTO_PERSONA',
-        'la nomina es dato personal: sin encargo declarado no se ve la de otro (aislamiento persona-a-persona)',
-        { quien: aislamiento.quien, empleado: aislamiento.empleado, alcance: aislamiento.alcance });
-    }
+    // Los terminos de la nomina: DECLARADOS (vienen del recibo G1). Ausente → null.
+    const base = this._num(input.base != null ? input.base
+      : (input.bruto != null ? input.bruto
+        : (input.nomina && input.nomina.bruto != null ? input.nomina.bruto : null)));
+    const retencion = this._num(input.retencion != null ? input.retencion
+      : (input.irpf != null ? input.irpf
+        : (input.nomina && input.nomina.retencion != null ? input.nomina.retencion : null)));
 
-    const faltantes = [];
+    const total_anticipos = this._round(anticipos.reduce((a, b) => a + b.importe, 0), 2);
 
-    // 1) El NETO del recibo (o la suma de los recibos del periodo) — COPIADO, no calculado aqui.
-    const netos = [];
-    for (const r of recibos) {
-      const n = this._num(r.neto);
-      if (n === null) faltantes.push(`recibo(${r.clave_natural != null ? r.clave_natural : '?'}).neto`);
-      else netos.push(n);
-    }
-    const neto_total = recibos.length > 0 && netos.length === recibos.length
-      ? this._round(netos.reduce((s, n) => s + n, 0), 2)
-      : (recibos.length === 0 ? null : null);
-    if (recibos.length === 0) faltantes.push('recibo');
+    // El NETO a percibir hoy = devengo − retencion − anticipos (lo declarado; ausente = null).
+    const neto_sin_anticipos = (base !== null && retencion !== null) ? this._round(base - retencion, 2) : null;
+    const neto_a_percibir = (neto_sin_anticipos !== null) ? this._round(neto_sin_anticipos - total_anticipos, 2) : null;
 
-    // 2) Los ANTICIPOS declarados, tal cual: importe + su NATURALEZA declarada (cero tipos cableados).
-    const raw_anticipos = Array.isArray(input.anticipos) ? input.anticipos
-      : (input.anticipo ? [input.anticipo] : []);
-    const anticipos = raw_anticipos.map((a, i) => {
-      const obj = (a && typeof a === 'object') ? a : { importe: a };
-      const importe = this._num(obj.importe);
-      if (importe === null) faltantes.push(`anticipos[${i}].importe`);
-      return {
-        id: obj.id != null ? String(obj.id) : null,
-        importe,
-        naturaleza: obj.naturaleza != null ? String(obj.naturaleza) : (obj.tipo != null ? String(obj.tipo) : null),
-        concepto: obj.concepto != null ? String(obj.concepto) : null,
-        fecha: obj.fecha != null ? String(obj.fecha) : null,
-        aprobado: obj.aprobado === true ? true : (obj.aprobado === false ? false : null)
-      };
-    });
-    const con_importe = anticipos.filter((a) => a.importe !== null);
-    const anticipos_total = anticipos.length === 0 ? 0
-      : (con_importe.length === anticipos.length ? this._round(con_importe.reduce((s, a) => s + a.importe, 0), 2) : null);
+    // El IRPF NO se recalcula por el anticipo: se retiene sobre la BASE DE DEVENGO (el
+    // anticipo no es un menor devengo). Por eso la retencion queda INTACTA.
+    const irpf = retencion;
+    const irpf_sobre_base_devengo = retencion !== null;
 
-    // 3) El SALDO PENDIENTE = neto − anticipos. Sin una de las dos piezas → [ABIERTO] (nada se estima).
-    const completo = neto_total !== null && anticipos_total !== null;
-    const saldo_pendiente = completo ? this._round(neto_total - anticipos_total, 2) : null;
+    const completo = base !== null && retencion !== null;
 
     return {
       status: 200,
       data: {
         project_id: pid,
-        empleado: titular,
-        periodo: input.periodo != null ? String(input.periodo) : (recibo ? recibo.periodo : null),
-        origen_recibo,
-        concepto_pago_a_cuenta: input.concepto_pago_a_cuenta != null ? String(input.concepto_pago_a_cuenta) : 'neto',
-        // La NATURALEZA del anticipo es declarable: se declara de donde salio (no hay catalogo propio).
-        naturaleza_origen: anticipos.some((a) => a.naturaleza !== null) ? 'declarada' : null,
-        tipos_cableados: false,
-        neto_total,
+        tipo: 'pagos-a-cuenta-empleado',
         anticipos,
-        anticipos_total,
-        saldo_pendiente,
-        // Un saldo negativo se DECLARA (se entrego mas de lo devengado), no se recorta.
-        excede_neto: saldo_pendiente !== null ? saldo_pendiente < 0 : null,
-        // El modulo NO aprueba ni paga: lo declara.
-        decide: false,
-        paga: false,
-        calculo_puro: true,
-        aislamiento,
-        faltantes,
-        abierto: faltantes.length > 0,
-        motivo: faltantes.length > 0
-          ? `hay piezas declaradas incompletas: ${faltantes.join(', ')} (nada se estima)`
-          : null
+        num_anticipos: anticipos.length,
+        total_anticipos,
+        base_devengo: base,
+        retencion: retencion,
+        // Impacto en el NETO: el anticipo REDUCE lo percibido hoy.
+        neto_sin_anticipos,
+        neto_a_percibir,
+        impacto_neto: neto_a_percibir !== null && neto_sin_anticipos !== null
+          ? this._round(neto_a_percibir - neto_sin_anticipos, 2) : null,
+        // Impacto en el IRPF: NINGUNO — se retiene sobre el devengo, no sobre lo percibido.
+        irpf,
+        retencion_declarada: retencion,
+        impacto_irpf: (retencion !== null) ? 0 : null,
+        irpf_sobre_base_devengo,
+        // El anticipo no altera el hecho generador: se declara explicitamente.
+        anticipo_afecta_irpf: false,
+        impacto_completo: completo,
+        determinista: true,
+        abierto: {
+          terminos: completo ? null
+            : 'faltan base de devengo o retencion declaradas: el impacto se calcula solo sobre lo declarado'
+        }
       }
     };
   }
 
-  // Los recibos: declarados (recibo o lista) o pedidos a recibo-nomina (G1) POR EVENTO.
-  async _recibos(pid, input = {}) {
-    if (Array.isArray(input.recibos)) return { recibo: input.recibos[0] || null, recibos: input.recibos, origen_recibo: 'declarado' };
-    const declarado = input.recibo || input.nomina || null;
-    if (declarado && typeof declarado === 'object') return { recibo: declarado, recibos: [declarado], origen_recibo: 'declarado' };
-
-    const clave = input.clave_natural != null ? String(input.clave_natural) : null;
-    if (clave || (input.empleado != null && input.periodo != null)) {
-      const r = await this._rpc('recibo-nomina.dar_forma.request', {
-        project_id: pid, clave_natural: clave, empleado: input.empleado, periodo: input.periodo
-      }, { timeout_ms: 4000 });
-      const rec = r && r.data ? r.data.recibo : null;
-      if (rec) return { recibo: rec, recibos: [rec], origen_recibo: 'recibo-nomina' };
+  // Los anticipos declarados: array (o un unico objeto). Normaliza cada uno a {importe,...}.
+  // Devuelve null si no hay NINGUN anticipo declarado (materia de esta hoja).
+  _anticipos(input = {}) {
+    let raw = input.anticipos !== undefined ? input.anticipos
+      : (input.pagos_a_cuenta !== undefined ? input.pagos_a_cuenta
+        : (input.pagos !== undefined ? input.pagos : null));
+    if (raw === null || raw === undefined) {
+      // Tambien se acepta un unico anticipo declarado en la raiz.
+      if (input.importe !== undefined || input.anticipo !== undefined) raw = [input.anticipo != null ? input.anticipo : input];
+      else return null;
     }
-    return { recibo: null, recibos: [], origen_recibo: null };
-  }
-
-  _titular(recibo, recibos, input) {
-    if (recibo && recibo.empleado != null) return String(recibo.empleado);
-    const enLista = recibos.find((r) => r && r.empleado != null);
-    if (enLista) return String(enLista.empleado);
-    return input.empleado != null ? String(input.empleado) : null;
-  }
-
-  // Consulta a acceso-nomina (G7) POR EVENTO: no es una puerta lateral a la nomina de otro.
-  async _aislamiento(pid, input, titular) {
-    const quien = input.quien != null ? String(input.quien) : (input.persona != null ? String(input.persona) : null);
-    // Sin sujeto declarado (consulta del sistema/negocio) no hay aislamiento que aplicar aqui.
-    if (!quien) return { aplicado: false, motivo: 'sin sujeto declarado (consulta del sistema)' };
-    if (titular !== null && quien === titular) {
-      return { aplicado: true, quien, empleado: titular, es_propia: true, permitido: true, motivo: 'cada uno ve la suya (eje persona)' };
+    const arr = Array.isArray(raw) ? raw : [raw];
+    const out = [];
+    for (const a of arr) {
+      const o = (a && typeof a === 'object') ? a : { importe: a };
+      const importe = this._num(o.importe !== undefined ? o.importe : (o.cuantia !== undefined ? o.cuantia : null));
+      if (importe === null) continue; // un anticipo sin importe no se estima con 0
+      out.push({
+        concepto: o.concepto != null ? String(o.concepto) : null,
+        fecha: o.fecha != null ? String(o.fecha) : null,
+        importe: this._round(importe, 2),
+        reembolsable: o.reembolsable === true
+      });
     }
-    const r = await this._rpc('acceso-nomina.autorizar.request',
-      { project_id: pid, quien, empleado: titular }, { timeout_ms: 4000 });
-    const d = r && r.data ? r.data : null;
-    if (!d) {
-      // Sin respuesta de G7 NO se concede de buena fe: la nomina es dato personal.
-      return { aplicado: true, quien, empleado: titular, es_propia: false, permitido: false,
-        motivo: 'G7 no respondio: sin autorizacion declarada no se sirve la nomina de otro' };
-    }
-    return { aplicado: true, quien, empleado: titular, es_propia: !!d.es_propia, alcance: d.alcance, permitido: d.permitido === true, motivo: d.motivo || null };
+    return out.length ? out : null;
   }
 
   _num(v) {

@@ -1,9 +1,0 @@
-{
-  "id": "single-writer",
-  "name": "Escritor único",
-  "version": "0.1.0",
-  "zone": "system-bar",
-  "order": 201,
-  "icon": "⚙️",
-  "label": "Escritor"
-}

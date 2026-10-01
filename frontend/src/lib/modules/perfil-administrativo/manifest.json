@@ -1,9 +1,0 @@
-{
-  "id": "perfil-administrativo",
-  "name": "Perfil administrativo",
-  "version": "0.1.0",
-  "zone": "work-bar",
-  "order": 66,
-  "icon": "🧾",
-  "label": "Perfil fiscal"
-}

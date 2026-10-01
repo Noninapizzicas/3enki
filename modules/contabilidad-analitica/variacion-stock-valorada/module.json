@@ -1,45 +1,33 @@
 {
-  "_doc": "Manifest de contabilidad-analitica/variacion-stock-valorada — REFLEJO STATELESS (H4, hoja del plan). LA VARIACION DE EXISTENCIAS VALORADA de un periodo: la ENTRADA por compra y la SALIDA por consumo, ambas VALORADAS con la capa de valor (valoracion-existencia H1). Determinista. ATRIBUTOS del diseno: entradas y salidas:Flujo<MovimientoStock> + valoracion:ValoracionExistencia. Los movimientos pueden llegar DECLARADOS (entradas/salidas/movimientos en la peticion) o derivarse de los ACONTECIMIENTOS REALES del inventario que este modulo ESCUCHA: inventario.ajustado (entrada de proveedor / merma / recuento — el delta que publica inventario ES el movimiento) e inventario.reserva.creada (salida comprometida, acumulada como movimiento negativo). El delta no se reinterpreta: solo se acumula. La VALORACION del movimiento es ParametroDeclarable: valor unitario declarado, por movimiento, o traido de H1 POR EVENTO (valoracion-existencia.valorar.request via _rpc, best-effort, solo cuando el flujo tiene un unico producto — con varios seria ambiguo y no se inventa). Sin valoracion, la variacion en CANTIDAD se declara igual pero el FLUJO VALORADO (entradas/salidas/variacion en valor) queda [ABIERTO]. Invariantes: DETERMINISTA (misma entrada → mismo resultado); dato ausente = desconocido → sin movimientos declarados y sin nada recibido por evento → variacion:null y abierto:true (un flujo vacio NO se interpreta como variacion 0); NO escribe, NO persiste (los movimientos son de `inventario`; solo se acumulan en un buffer en memoria acotado a 5000). FORMA: REFLEJO stateless, sin PosPersistencia ni onProjectActivated. Proyeccion unica `_variacion({project_id, periodo?, entradas?, salidas?, movimientos?, valor_unitario?, metodo?})` → {entradas_cantidad, salidas_cantidad, variacion_cantidad, entradas_valor, salidas_valor, variacion_valor, faltan, abierto}. Cierra el circulo: error → variacion-stock-valorada.variacion.failed.",
+  "_doc": "Manifest de analitica/variacion-stock-valorada — REFLEJO STATELESS (H4, hoja del plan). Entrada por COMPRA / salida por CONSUMO, VALORADAS. Determinista. NO duplica el inventario (infra `inventario`) ni el valor (eso es valoracion-existencia H1, al que SUBE por EVENTO para pedir el valor unitario). Deriva la variacion del movimiento: entrada SUMA, salida RESTA (la polaridad la decide el tipo declarado). Dato ausente = desconocido: sin cantidad o sin valor unitario la variacion queda sin valorar (valor:null, abierto). ESCUCHA contabilidad.hecho_recibido (A1 puerto-evento-vertical) y deriva la variacion; NO escribe el diario (B2) — solo sube el asiento si el hecho YA lo declara. NO escribe, NO persiste (su acumulado es un DERIVADO en memoria). RPC variacion es CLASE PREGUNTA → va por el bus, sin panel. Publica variacion-stock-valorada.variacion.response y su par .failed.",
   "name": "variacion-stock-valorada",
   "version": "0.1.0",
-  "description": "Reflejo (H4): variacion de existencias valorada del periodo — entrada por compra y salida por consumo valoradas con la capa de valor (H1); escucha inventario.ajustado y inventario.reserva.creada, y sin movimientos o sin valoracion nada se estima.",
-  "blueprint_driven": true,
-  "blueprint_path": "variacion-stock-valorada.blueprint.json",
+  "description": "Reflejo (H4): variacion de stock valorada (entrada por compra / salida por consumo). Determinista; no duplica inventario ni valor.",
   "language": "es",
   "subscribes": [
     {
       "event": "variacion-stock-valorada.variacion.request",
       "handler": "onVariacionRequest",
-      "description": "RPC reflejo (calculo puro, determinista): {project_id, periodo?, entradas?, salidas?, movimientos?, valor_unitario?, metodo?} → {project_id, periodo, fuente_movimientos, valor_unitario, fuente_valor, entradas_cantidad, salidas_cantidad, variacion_cantidad, entradas_valor, salidas_valor, variacion_valor, desglose, abierto, faltan, motivo}. Los movimientos llegan declarados o del buffer alimentado por los eventos de inventario; la valoracion es ParametroDeclarable (declarada, por movimiento, o traida de valoracion-existencia H1 POR EVENTO). Sin movimientos → variacion:null y abierto:true (un flujo vacio no es variacion 0); sin valoracion → cantidad declarada pero flujo valorado [ABIERTO]. Responde por variacion-stock-valorada.variacion.response; project_id ausente → variacion-stock-valorada.variacion.failed."
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id, movimiento|hecho, tipo?, cantidad?, valor_unitario?, metodo?} → {project_id, variacion:{articulo, tipo, cantidad, valor_unitario, valor, signo, fuente_valor}, valorada, abierto}. Deriva la variacion valorada; sin cantidad/valor unitario → valorada:false y abierto. Sube a valoracion-existencia para pedir el valor. Responde por variacion-stock-valorada.variacion.response."
     },
     {
-      "event": "inventario.ajustado",
-      "handler": "onInventarioAjustado",
-      "description": "Fire-and-forget: acumula el delta real publicado por `inventario` (entrada de proveedor, merma, recuento) como MovimientoStock del proyecto. El delta ES el movimiento (signo incluido): aqui no se reinterpreta."
-    },
-    {
-      "event": "inventario.reserva.creada",
-      "handler": "onInventarioReservaCreada",
-      "description": "Fire-and-forget: acumula la reserva creada como SALIDA comprometida (movimiento negativo, −cantidad) del proyecto. Alimenta el flujo de salidas del periodo."
+      "event": "contabilidad.hecho_recibido",
+      "handler": "onHechoRecibido",
+      "description": "Fire-and-forget (lo emite puerto-evento-vertical A1): llego un hecho de la operacion → se deriva su variacion valorada y se acumula el derivado; si el hecho ya declara su asiento, se sube a escritor-diario. No responde (no es RPC)."
     }
   ],
   "publishes": [
     {
       "event": "variacion-stock-valorada.variacion.response",
-      "description": "Respuesta RPC correlada de variacion-stock-valorada.variacion.request → {request_id, status:200, data:{variacion_cantidad, variacion_valor, faltan, abierto}}. Emitida por el helper _atender."
+      "description": "Respuesta RPC correlada de la op variacion (una sola cara: el bus)."
     },
     {
       "event": "variacion-stock-valorada.variacion.failed",
-      "description": "Par de fallo determinista (H4): project_id ausente → {status, error:{code, message, details?}}. Cierra el circulo de variacion-stock-valorada.variacion.request."
+      "description": "Par de fallo determinista: falta project_id o el movimiento declarado es invalido → {status, code, message}. Cierra el circulo de variacion.request."
     }
   ],
-  "ui_handlers": [
-    {
-      "domain": "contabilidad",
-      "action": "variacion-stock-valorada.variacion",
-      "handler": "onVariacionRequest",
-      "type": "system_panel",
-      "zone": "lateral_derecha"
-    }
-  ]
+  "tools": [
+    { "name": "variacion-stock-valorada.variacion", "description": "Deriva (PREGUNTA) la variacion de stock valorada de un movimiento." }
+  ],
+  "ui_handlers": []
 }

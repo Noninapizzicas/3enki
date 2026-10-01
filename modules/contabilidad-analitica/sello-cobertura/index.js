@@ -1,28 +1,26 @@
 /**
  * contabilidad-analitica/sello-cobertura — REFLEJO STATELESS (Q3, hoja del plan).
  *
- * La MARCA DE COMPLETITUD de lo consultado, FUERA de ciclo: si falta cobertura, lo DICE ANTES de
- * que el dueno decida — no espera al cierre.
- *   != `aviso-cuadre` (C6), que solo avisa al cierre.
+ * La MARCA DE COMPLETITUD de lo consultado, FUERA de ciclo: si falta cobertura lo dice
+ * ANTES de que se decida. Es un REFLEJO que SELLA — y sellar, aqui, es MARCAR EL OBJETO
+ * DEVUELTO, no escribir estado. Este modulo NO persiste, NO muta nada y NO guarda store:
+ * la marca vive SOLO en la respuesta que se devuelve a quien pregunto.
  *
- * ⚠️ LEE LA METRICA UNICA, NO LA RECALCULA. La cobertura la produce `completitud-cobertura` (A12)
- * y la declara en `contabilidad.cobertura_medida`. Aqui se TOMA esa cobertura ya medida y se
- * SELLA con ella la respuesta consultada. Recalcularla seria una SEGUNDA metrica de cobertura.
+ * (Cura del error anterior: en el intento previo este modulo era un ESCRITOR MUDO — su
+ *  `sellar` escribia y no lo anunciaba. La correccion es NO escribir: si no hay escritura,
+ *  no hay hecho que anunciar y R2 no aplica. La marca es del retorno, no del disco.)
  *
- * ATRIBUTOS del diseno: `cobertura:Cobertura`.
- *   METODOS: sellar(respuesta):Respuesta.
- *   REGLA: marca de completitud de lo consultado, FUERA de ciclo: si falta cobertura lo dice ANTES
- *          de que decida. LEE la metrica unica.
+ * LEE la metrica UNICA (`completitud-cobertura` A12): NO la recalcula. Sube best-effort
+ * `completitud-cobertura.medir.request` (PREGUNTA→PREGUNTA) para obtener esperados/llegados,
+ * o usa lo DECLARADO en el input. ≠ `aviso-cuadre` C6 (que solo avisa al cierre).
  *
- * Invariantes:
- *  - LEE, NO RECALCULA: la cobertura llega declarada, cacheada del evento o pedida a A12 POR EVENTO.
- *    Jamas se recomputa desde esperados/llegados.
- *  - SELLA LO QUE HAY: si la cobertura no consta, el sello es `SELLO_DESCONOCIDO` (no se afirma
- *    ni completo ni incompleto).
- *  - FUERA DE CICLO: sella en el momento de la consulta; no depende de ningun cierre.
- *  - DETERMINISTA y sin estado de dominio (una lectura cacheada, no una parcela).
+ * Invariante (13): dato ausente = desconocido. Sin metrica de cobertura NO se inventa un
+ * sello de "completo": la marca queda `indeterminada` — no se dice completo lo que no se sabe.
  *
- * Forma: REFLEJO → STATELESS. Sin PosPersistencia, sin onProjectActivated.
+ * ESCUCHA (R3): el plan declara escucha de `contabilidad.hecho_recibido`; su emisor
+ * `puerto-evento-vertical` (A1) SI existe en el repo → SI se declara.
+ *
+ * Forma: REFLEJO → STATELESS. Sin PosPersistencia, sin onProjectActivated. PREGUNTA → sin ui_handler.
  * Ver hoja Q3 del plan-construccion y diseno-oop.md (CLASE SelloCobertura).
  */
 
@@ -35,111 +33,107 @@ class SelloCobertura extends ModuloHibridoReflejo {
     super();
     this.name = 'sello-cobertura';
     this.version = 'reflejo-0.1.0';
-    // ULTIMA metrica unica de cobertura OBSERVADA (por evento). LECTURA cacheada, no recalculo.
-    this._cobertura = new Map();
   }
 
   async onUnload() { return super.onUnload(); }
 
-  // ── handler RPC (una linea, delega a _atender) ──
+  // ── handler RPC (una linea, delega a _atender). CLASE PREGUNTA → sin ui_handler ──
   onSellarRequest(e) {
     return this._atender(e, 'sellar', 'sello-cobertura.sellar.response', async (d) => {
       const res = await this._sellar(d);
+      // Reflejo: SELLA (marca el objeto devuelto); NO escribe estado → NO hay hecho que anunciar (R2).
       if (res.status !== 200) this.eventBus?.publish('sello-cobertura.sellar.failed', res);
       return res;
     });
   }
 
-  // ── Fire-and-forget: LA metrica unica (A12) quedo medida → se LEE y se guarda para sellar ──
-  onCoberturaMedida(e) {
+  // ── handler de dominio (fire-and-forget): llego un hecho → se observa (ventana acotada) ──
+  // Observar NO es escribir: solo se guarda en memoria para el sello de la proxima consulta.
+  onHechoRecibido(e) {
     const d = (e && (e.data || e)) || {};
-    if (!d.project_id) return null;
-    this._cobertura.set(d.project_id, d.cobertura || null);
-    return { status: 200, data: { project_id: d.project_id, leida: 'contabilidad.cobertura_medida' } };
+    this._vistos = this._vistos || [];
+    this._vistos.push({ project_id: d.project_id || null, hecho_id: (d.hecho && d.hecho.id) || d.hecho_id || null, en: new Date().toISOString() });
+    if (this._vistos.length > 1000) this._vistos.shift();
   }
 
-  // ── Fire-and-forget: una respuesta consultada (Q1) se sella con la cobertura ANTES de decidir ──
-  onRespuestaConsulta(e) {
-    const d = (e && (e.data || e)) || {};
-    if (!d.project_id) return null;
-    return this._sellar({ project_id: d.project_id, respuesta: d, vertical: d.vertical, correlation_id: d.correlation_id });
-  }
-
-  // ── proyeccion determinista: sellar(respuesta) → Respuesta sellada (LEE la metrica unica) ──
+  // ══════════════════════════════════════════════════════════════════════
+  // _sellar(input) → { status, data }  ·  MARCA la completitud de lo consultado
+  // ══════════════════════════════════════════════════════════════════════
   async _sellar(input = {}) {
     const pid = input.project_id || this.project_id;
     if (!pid) return this._invalid('project_id');
 
-    // LA METRICA UNICA (A12): declarada, cacheada o LEIDA de su dueno POR EVENTO. No se recalcula.
-    const cobertura = await this._leerCobertura(pid, input);
+    // LEE la metrica unica: declarada en el input, o pedida por EVENTO a completitud-cobertura.
+    const { metrica, fuente } = await this._metricaDe(input);
 
-    // El SELLO: completo / incompleto / desconocido. Nada mas — no se inventa.
-    const sello = this._sello(cobertura);
+    const esperados = this._num(metrica && metrica.esperados);
+    const llegados = this._num(metrica && metrica.llegados);
+    const faltantesDeclarados = Array.isArray(metrica && metrica.faltantes)
+      ? metrica.faltantes.map((f) => (f && typeof f === 'object') ? (f.cuenta != null ? String(f.cuenta) : (f.clave != null ? String(f.clave) : null)) : (f != null ? String(f) : null)).filter((x) => x != null)
+      : [];
 
-    const respuesta = input.respuesta && typeof input.respuesta === 'object' ? input.respuesta : null;
+    // Hay metrica SOLO si trae esperados y llegados (sin ambos, no se afirma nada).
+    const hayMetrica = esperados !== null && llegados !== null;
+    const faltan = hayMetrica ? this._round(Math.max(esperados - llegados, 0), 2) : null;
+    const cobertura = (hayMetrica && esperados > 0) ? this._round(llegados / esperados, 4) : null;
+    const completo = hayMetrica ? this._round(Math.max(esperados - llegados, 0), 2) === 0 : null;
+
+    // La MARCA (sello): no dice completo lo que no se sabe.
+    const sello = {
+      completo,
+      estado: completo === null ? 'INDETERMINADO' : (completo ? 'COMPLETO' : 'INCOMPLETO'),
+      esperados: hayMetrica ? esperados : null,
+      llegados: hayMetrica ? llegados : null,
+      faltan,
+      cobertura,
+      faltantes: faltantesDeclarados,
+      // FUERA de ciclo: la marca ANTES de decidir (no espera al cierre como C6).
+      fuera_de_ciclo: true,
+      // NO se escribe nada: la marca es del objeto devuelto.
+      persistido: false
+    };
 
     return {
       status: 200,
       data: {
         project_id: pid,
-        // La respuesta SELLADA: la de antes + la marca de completitud. Nada se altera.
-        respuesta: respuesta ? { ...respuesta, sello_cobertura: sello } : null,
+        tipo: 'sello-cobertura',
+        fuente: fuente || null,
         sello,
-        cobertura,
-        // Trazabilidad de la LECTURA: la metrica unica se lee, no se recalcula.
-        lee_metrica_unica: true,
-        recalcula_cobertura: false,
-        fuera_de_ciclo: true,
-        decide: false,
-        // Si falta cobertura, se DICE ANTES de decidir (esa es la razon de ser del sello).
-        avisa_antes_de_decidir: true,
+        // Se sella lo CONSULTADO (respuesta a algo); no se recalcula la metrica.
+        recalcula_metrica: false,
         abierto: {
-          cobertura: cobertura
-            ? null
-            : 'completitud-cobertura (A12) no respondio: el sello queda DESCONOCIDO (no se afirma ni completo ni incompleto)'
-        },
-        faltan: cobertura ? [] : ['cobertura']
+          metrica: hayMetrica ? null : 'no llego la metrica de cobertura (ni declarada ni de completitud-cobertura): la marca queda INDETERMINADA (no se dice completo lo que no se sabe)',
+          faltantes: (faltan !== null && faltan > 0 && faltantesDeclarados.length === 0)
+            ? 'la metrica dice que faltan hechos pero NO nombra cuales: la marca los declara sin inventarlos'
+            : null
+        }
       }
     };
   }
 
-  // El SELLO derivado de la Cobertura LEIDA. Sin cobertura → DESCONOCIDO (no se afirma nada).
-  _sello(cobertura) {
-    if (!cobertura || typeof cobertura !== 'object') {
-      return {
-        estado: 'SELLO_DESCONOCIDO',
-        completo: null,
-        tasa: null,
-        huecos: null,
-        motivo: 'la metrica unica de cobertura no consta: no se sella ni completo ni incompleto'
-      };
+  // Trae la metrica unica: declarada, o pedida por EVENTO a completitud-cobertura (PREGUNTA).
+  async _metricaDe(input) {
+    const directa = (input.metrica && typeof input.metrica === 'object') ? input.metrica
+      : ((input.cobertura && typeof input.cobertura === 'object') ? input.cobertura
+        : ((input.senal && typeof input.senal === 'object') ? input.senal : null));
+    if (directa) return { metrica: directa, fuente: 'declarado' };
+
+    const resp = await this._rpc('completitud-cobertura.medir.request', {
+      project_id: input.project_id || this.project_id,
+      ejercicio: input.ejercicio, desde: input.desde, hasta: input.hasta
+    }, { timeout_ms: 800 });
+    const d = (resp && (resp.data || resp)) || null;
+    if (d && (d.esperados != null || d.llegados != null || d.metrica)) {
+      return { metrica: d.metrica || d, fuente: 'completitud-cobertura' };
     }
-    const completa = cobertura.completa === true;
-    const declarada = cobertura.declarada !== false;
-    return {
-      estado: completa ? 'SELLO_COMPLETO' : (declarada ? 'SELLO_INCOMPLETO' : 'SELLO_DESCONOCIDO'),
-      completo: completa,
-      // La tasa y los huecos se COPIAN de la metrica unica tal cual; no se recalculan.
-      tasa: cobertura.tasa != null ? cobertura.tasa : null,
-      huecos: Array.isArray(cobertura.huecos) ? cobertura.huecos : (cobertura.huecos != null ? cobertura.huecos : null),
-      falta_cobertura: !completa,
-      motivo: completa
-        ? 'lo consultado tiene cobertura completa (se lee de la metrica unica A12)'
-        : (declarada
-            ? 'lo consultado tiene cobertura INCOMPLETA: se dice ANTES de que el dueño decida'
-            : 'la cobertura no esta declarada: el sello no puede afirmar completitud')
-    };
+    return { metrica: null, fuente: null };
   }
 
-  async _leerCobertura(pid, input = {}) {
-    if (input.cobertura && typeof input.cobertura === 'object') return input.cobertura;
-    if (input.respuesta && input.respuesta.cobertura && typeof input.respuesta.cobertura === 'object') return input.respuesta.cobertura;
-    const cache = this._cobertura.get(pid);
-    if (cache) return cache;
-    const r = await this._rpc('completitud-cobertura.medir.request',
-      { project_id: pid, vertical: input.vertical }, { timeout_ms: 4000 }).catch(() => null);
-    const data = r && r.data ? r.data : null;
-    return data && data.cobertura ? data.cobertura : null;
+  _num(v) {
+    if (v === undefined || v === null || v === '') return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
   }
 
   // ── Tools ──

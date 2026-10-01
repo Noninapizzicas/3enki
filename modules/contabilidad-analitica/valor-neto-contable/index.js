@@ -1,26 +1,20 @@
 /**
  * contabilidad-analitica/valor-neto-contable — REFLEJO STATELESS (F4, hoja del plan).
  *
- * VALOR NETO CONTABLE = COSTE − AMORTIZACION ACUMULADA. Calculo PURO, determinista: misma
- * entrada → mismo valor. Es el valor que va al BALANCE.
+ * VALOR NETO CONTABLE del inmovilizado: COSTE − AMORTIZACION ACUMULADA. Determinista,
+ * al balance.
  *
- * ATRIBUTOS del diseno: `coste:ParametroDeclarable` y `amort_acumulada:PlanAmortizacion`.
- *   - El COSTE es un PARAMETRO DECLARABLE: entra declarado en la peticion (o con la ficha del
- *     activo). El reflejo NUNCA lo estima.
- *   - La AMORTIZACION ACUMULADA se agrega de las CUOTAS del plan (plan-amortizacion F2) POR
- *     EVENTO — suma pura de lo que la tabla ya declaro, sin interpretar ninguna cuota.
+ * No calcula las cuotas por su cuenta (eso es `plan-amortizacion`, al que SUBE por EVENTO
+ * `plan-amortizacion.cuota_del_periodo.request`): RECIBE las cuotas/la amortizacion
+ * acumulada y las RESTA del coste. La cuota que genera `plan-amortizacion` llega tambien
+ * como HECHO (`contabilidad.cuota_amortizacion_generada`) y se observa (ventana acotada).
  *
- * Ni el coste ni la acumulada se estiman: si falta uno de los dos, el valor neto queda
- * `[ABIERTO]` (`vnc:null`) y se declara cual falta — jamas se rellena con 0 ni con un default.
+ * Honestidad (invariante 13): sin coste NO se inventa el valor (dato ausente = desconocido);
+ * sin cuotas ni amortizacion acumulada declaradas, el VNC se declara ABIERTO (no se asume
+ * que la amortizacion sea 0). Nunca un VNC negativo se "arregla": se declara tal cual
+ * (podria senalar un error de datos — se declara en `abierto`).
  *
- * Invariantes:
- *  - DETERMINISTA: mismo coste + misma acumulada → mismo VNC (una sola respuesta correcta).
- *  - Dato ausente = desconocido: sin coste O sin acumulada → `vnc:null` y `abierto:true`.
- *    Un valor neto NEGATIVO no se corrige ni se recorta: se declara tal cual (es senal de que
- *    la amortizacion acumulada excede el coste — un dato del negocio, no algo que el reflejo tape).
- *  - NO escribe, NO persiste, NO muta: las cuotas son de F2.
- *
- * Forma: REFLEJO → STATELESS. Sin PosPersistencia, sin onProjectActivated.
+ * Forma: REFLEJO → STATELESS. Sin PosPersistencia, sin onProjectActivated. PREGUNTA (calcular) → sin ui_handler.
  * Ver hoja F4 del plan-construccion y diseno-oop.md (CLASE ValorNetoContable).
  */
 
@@ -33,107 +27,120 @@ class ValorNetoContable extends ModuloHibridoReflejo {
     super();
     this.name = 'valor-neto-contable';
     this.version = 'reflejo-0.1.0';
+    // Derivado en memoria: project_id -> [cuotas amortizacion observadas]
+    this._cuotas = new Map();
   }
 
   async onUnload() { return super.onUnload(); }
 
-  // ── handler RPC (una linea, delega a _atender) ──
+  // ── handler RPC (una linea, delega a _atender). CLASE PREGUNTA → sin ui_handler ──
   onCalcularRequest(e) {
     return this._atender(e, 'calcular', 'valor-neto-contable.calcular.response', async (d) => {
       const res = await this._calcular(d);
+      // Reflejo: calcula; no escribe → no hay hecho de dominio que anunciar (R2).
       if (res.status !== 200) this.eventBus?.publish('valor-neto-contable.calcular.failed', res);
       return res;
     });
   }
 
-  // ── proyeccion determinista: calcular(activo, fecha) → Cuantía (VNC) ──
+  // ── handler de dominio (fire-and-forget): se genero una cuota de amortizacion (B3) ──
+  onCuotaAmortizacionGenerada(e) {
+    const d = (e && (e.data || e)) || {};
+    const pid = d.project_id || this.project_id;
+    if (!pid) return;
+    const cuota = d.cuota && typeof d.cuota === 'object' ? d.cuota : d;
+    let arr = this._cuotas.get(pid);
+    if (!arr) { arr = []; this._cuotas.set(pid, arr); }
+    arr.push(cuota);
+    if (arr.length > 1000) arr.shift();
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // calcular(activo) → valor neto contable = coste − amortizacion acumulada
+  // ══════════════════════════════════════════════════════════════════════
   async _calcular(input = {}) {
     const pid = input.project_id || this.project_id;
     if (!pid) return this._invalid('project_id');
 
-    const id_activo = input.id_activo != null ? String(input.id_activo).trim()
-      : (input.activo && input.activo.id_activo != null ? String(input.activo.id_activo) : null);
-    const fecha = input.fecha != null ? String(input.fecha) : null;
+    const activo = input.activo && typeof input.activo === 'object' ? input.activo : input;
+    const coste = this._num(input.coste != null ? input.coste : activo.coste);
+    if (coste == null) {
+      return {
+        status: 200,
+        data: {
+          project_id: pid,
+          tipo: 'valor-neto-contable',
+          valor_neto_contable: null,
+          abierto: { coste: 'el activo no declara coste: el valor neto contable no se inventa' }
+        }
+      };
+    }
 
-    // 1) La AMORTIZACION ACUMULADA: agregada del plan (F2) POR EVENTO, o de cuotas declaradas.
-    const { acumulada, fuente_amortizacion } = await this._amortizacion(pid, id_activo, input, fecha);
+    // La amortizacion acumulada puede venir declarada, o derivarse de las cuotas declaradas,
+    // o pedirse a plan-amortizacion (B3) por EVENTO. Si no hay ninguna fuente → no se asume 0.
+    let acumulada = this._num(input.amortizacion_acumulada != null ? input.amortizacion_acumulada : activo.amortizacion_acumulada);
+    let fuente = acumulada != null ? 'declarado' : null;
 
-    // 2) El COSTE: ParametroDeclarable — declarado en la peticion (o con la ficha del activo).
-    const { coste, fuente_coste } = this._coste(input);
+    if (acumulada == null) {
+      const cuotas = Array.isArray(input.cuotas) ? input.cuotas
+        : (Array.isArray(activo.cuotas) ? activo.cuotas : null);
+      if (cuotas) {
+        acumulada = this._round(cuotas.reduce((t, c) => t + this._num(c && (c.cuota != null ? c.cuota : c.importe)) || 0, 0), 2);
+        fuente = 'cuotas_declaradas';
+      } else if (this._cuotas.get(pid) && this._cuotas.get(pid).length) {
+        acumulada = this._round(this._cuotas.get(pid).reduce((t, c) => t + this._num(c.cuota != null ? c.cuota : c.importe) || 0, 0), 2);
+        fuente = 'cuota_amortizacion_generada';
+      } else {
+        const resp = await this._rpc('plan-amortizacion.cuota_del_periodo.request', {
+          project_id: pid, activo_id: input.activo_id || activo.id, periodo: input.periodo
+        }, { timeout_ms: 3000 });
+        const r = resp && resp.data ? resp.data : resp;
+        const a = this._num(r && (r.amortizacion_acumulada != null ? r.amortizacion_acumulada : r.acumulada));
+        if (a != null) { acumulada = a; fuente = 'plan-amortizacion'; }
+      }
+    }
 
-    // 3) El VNC solo existe con las dos piezas. Sin una de ellas, `[ABIERTO]` (nada se estima).
-    const faltan = [];
-    if (coste === null) faltan.push('coste');
-    if (acumulada === null) faltan.push('amortizacion_acumulada');
+    if (acumulada == null) {
+      return {
+        status: 200,
+        data: {
+          project_id: pid,
+          tipo: 'valor-neto-contable',
+          coste,
+          amortizacion_acumulada: null,
+          valor_neto_contable: null,
+          determinista: true,
+          abierto: {
+            amortizacion: 'no hay amortizacion acumulada (ni declarada, ni de cuotas, ni de plan-amortizacion): no se asume 0'
+          }
+        }
+      };
+    }
 
-    const vnc = faltan.length === 0 ? this._round(coste - acumulada, 2) : null;
+    const vnc = this._round(coste - acumulada, 2);
 
     return {
       status: 200,
       data: {
         project_id: pid,
-        id_activo,
-        fecha,
-        vnc,
+        tipo: 'valor-neto-contable',
+        activo_id: input.activo_id != null ? String(input.activo_id) : (activo.id != null ? String(activo.id) : null),
         coste,
         amortizacion_acumulada: acumulada,
-        fuente_coste,
-        fuente_amortizacion,
-        abierto: faltan.length > 0,
-        faltan,
-        motivo: faltan.length > 0
-          ? `no se estima el valor neto: falta ${faltan.join(' y ')}`
-          : null,
-        // Un VNC negativo se DECLARA, no se recorta: senal de acumulada > coste.
-        negativo: vnc !== null ? vnc < 0 : null
+        valor_neto_contable: vnc,
+        fuente,
+        formula: 'COSTE - AMORTIZACION_ACUMULADA',
+        determinista: true,
+        abierto: {
+          negativo: vnc < 0 ? 'el valor neto contable es NEGATIVO: no se corrige, se declara (posible error de datos)' : null,
+          sobre_amortizacion: acumulada > coste ? 'la amortizacion acumulada supera el coste' : null
+        }
       }
     };
   }
 
-  // El COSTE es ParametroDeclarable: declarado en la peticion (o con la ficha del activo).
-  _coste(input = {}) {
-    const declarado = this._num(input.coste);
-    if (declarado !== null) return { coste: declarado, fuente_coste: 'declarado' };
-
-    const enActivo = this._num(input.activo && input.activo.valor);
-    if (enActivo !== null) return { coste: enActivo, fuente_coste: 'activo_declarado' };
-
-    // Sin coste declarado NO se estima (jamas se lee por una puerta que no sea de lectura).
-    return { coste: null, fuente_coste: null };
-  }
-
-  // La amortizacion acumulada: cuotas declaradas o agregadas del plan (F2) POR EVENTO.
-  async _amortizacion(pid, id_activo, input, fecha) {
-    const declarada = this._num(
-      input.amortizacion_acumulada != null ? input.amortizacion_acumulada : input.amort_acumulada
-    );
-    if (declarada !== null) return { acumulada: declarada, fuente_amortizacion: 'declarada' };
-
-    // Cuotas declaradas en la peticion: se AGREGAN (suma pura, sin interpretar ninguna cuota).
-    if (Array.isArray(input.cuotas)) {
-      return { acumulada: this._round(this._suma(input.cuotas), 2), fuente_amortizacion: 'cuotas_declaradas' };
-    }
-
-    if (!id_activo) return { acumulada: null, fuente_amortizacion: null };
-    const r = await this._rpc('plan-amortizacion.cuota_del_periodo.request',
-      { project_id: pid, id_activo, periodo: input.periodo, hasta: fecha }, { timeout_ms: 4000 });
-    const data = r && r.data ? r.data : null;
-
-    // La tabla puede llegar como lista de cuotas (se agrega) o como acumulada ya declarada.
-    if (data && Array.isArray(data.cuotas)) {
-      return { acumulada: this._round(this._suma(data.cuotas), 2), fuente_amortizacion: 'plan-amortizacion' };
-    }
-    const acumulada = data ? this._num(data.acumulada) : null;
-    if (acumulada !== null) return { acumulada, fuente_amortizacion: 'plan-amortizacion' };
-    return { acumulada: null, fuente_amortizacion: null };
-  }
-
-  _suma(cuotas) {
-    return cuotas.reduce((s, c) => s + (this._num(c && (c.importe != null ? c.importe : c.cuota)) || 0), 0);
-  }
-
   _num(v) {
-    if (v === undefined || v === null || v === '') return null;
+    if (v == null || v === '') return null;
     const n = Number(v);
     return Number.isFinite(n) ? n : null;
   }

@@ -18,8 +18,8 @@
  *     Contabilidad los PRODUCE; NUNCA deben realimentar la operacion.
  *
  * Esta es la FRONTERA: **a la salida solo viajan calculos**. Un hecho de negocio a la salida
- * del sistema contable = FALLO (invariante 14: contabilidad observa los hechos y produce SUS
- * documentos; no produce los hechos que observa).
+ * del sistema contable = FALLO (contabilidad observa los hechos y produce SUS documentos; no
+ * produce los hechos que observa).
  *
  * ══════════════════════════════════════════════════════════════════════════════════════
  * COMO GUARDA (fail-safe, sin cablear nada)
@@ -28,8 +28,8 @@
  *      (`plano:'hecho'`/`plano:'operacion'`, `es_hecho:true`) o DECLARA que realimenta/escribe
  *      la operacion (`realimenta:true`, `escribe_operacion:true`), el cerrojo RECHAZA (422): el
  *      bucle queda cortado aunque no haya patron declarado. Es un fallo, no una advertencia.
- *  2 · PATRON DECLARADO (`permitido:PatronDeCalculo`, atributo del diseno): el patron dice QUE
- *      planos estan permitidos a la salida. Con patron, cada salida se clasifica contra el.
+ *  2 · PATRON DECLARADO (`permitido:PatronDeCalculo`): el patron dice QUE planos estan permitidos
+ *      a la salida. Con patron, cada salida se clasifica contra el.
  *  3 · SIN PATRON: el cerrojo NO puede verificar. Y NO se da por bueno: se declara
  *      `verificable:false`, `conforme:null` y `abierto:['patron']`. El silencio NO es
  *      conformidad — un cerrojo que aprueba lo que no sabe verificar es un cerrojo falso.
@@ -64,27 +64,12 @@ class FronteraPlanos extends ModuloHibridoReflejo {
 
   async onUnload() { return super.onUnload(); }
 
-  // ── handler RPC (una linea, delega a _atender) ──
+  // ── handler RPC (una linea, delega a _atender). CLASE PREGUNTA → sin ui_handler ──
   onVerificarRequest(e) {
     return this._atender(e, 'verificar', 'frontera-planos.verificar.response', async (d) => {
       const res = this._verificar(d);
-      if (res.status === 200 && res.data.conforme === true) {
-        // La salida paso el cerrojo: SOLO calculos a la salida. Lo LEEN el resto de la vertical
-        // (y el test) para saber que el derivado no realimenta la operacion.
-        this.eventBus?.publish('contabilidad.salida_verificada', {
-          project_id: res.data.project_id,
-          salida: res.data.salida,
-          plano: res.data.plano,
-          patron: res.data.patron_aplicado,
-          no_realimenta: true,
-          correlation_id: d.correlation_id
-        });
-      } else if (res.status !== 200) {
-        // RECHAZO (422): un hecho de negocio a la salida — el bucle se corta aqui.
-        this.eventBus?.publish('frontera-planos.verificar.failed', res);
-      }
-      // conforme:null (no verificable por falta de patron): NO se publica salida_verificada —
-      // no esta verificada. El silencio no se hace pasar por conformidad.
+      // Reflejo: verifica y declara; no escribe → no hay hecho que anunciar (R2).
+      if (res.status !== 200) this.eventBus?.publish('frontera-planos.verificar.failed', res);
       return res;
     });
   }
@@ -197,7 +182,7 @@ class FronteraPlanos extends ModuloHibridoReflejo {
         ev.push({ senal: 'plano_declarado', plano, motivo: 'la salida se declara un hecho de negocio: contabilidad observa hechos, no los produce' });
       }
       if (o.es_hecho === true) {
-        ev.push({ senal: 'es_hecho', motivo: 'la salida se declara un hecho de negocio (invariante 14)' });
+        ev.push({ senal: 'es_hecho', motivo: 'la salida se declara un hecho de negocio' });
       }
       if (o.realimenta === true || o.realimenta_operacion === true) {
         ev.push({ senal: 'realimenta', motivo: 'la salida declara realimentar la operacion: seria el bucle' });
@@ -215,43 +200,38 @@ class FronteraPlanos extends ModuloHibridoReflejo {
     const raw = input.permitido !== undefined ? input.permitido
       : (input.patron !== undefined ? input.patron : null);
     if (raw === null || raw === undefined) return null;
+    let planos = null;
+    let permite_operacion = false;
     if (Array.isArray(raw)) {
-      return { planos: raw.map((x) => String(x).toLowerCase().trim()), permite_operacion: false, fuente: 'declarado' };
+      planos = raw.map((x) => String(x).toLowerCase().trim());
+    } else if (typeof raw === 'object') {
+      if (Array.isArray(raw.planos)) planos = raw.planos.map((x) => String(x).toLowerCase().trim());
+      permite_operacion = raw.permite_operacion === true;
+    } else if (typeof raw === 'string') {
+      planos = [raw.toLowerCase().trim()];
     }
-    if (typeof raw === 'object') {
-      const planos = Array.isArray(raw.planos) ? raw.planos.map((x) => String(x).toLowerCase().trim()) : null;
-      if (!planos) return null;
-      // `permite_operacion` es DECLARADO por el negocio; por defecto la frontera NO se cruza.
-      return { planos, permite_operacion: raw.permite_operacion === true, fuente: 'declarado' };
-    }
-    if (typeof raw === 'string') {
-      return { planos: [raw.toLowerCase().trim()], permite_operacion: false, fuente: 'declarado' };
-    }
-    return null;
+    if (!planos || planos.length === 0) return null;
+    return { planos, permite_operacion };
   }
 
-  // El plano de una salida: el declarado. Ausente → null (desconocido, no se asume calculo).
   _planoDe(x) {
     if (x && typeof x === 'object' && x.plano != null) return String(x.plano).toLowerCase().trim();
+    // Sin plano declarado: la salida es un derivado por defecto del cerrojo (el calculo no se declara).
     return null;
   }
 
-  // ¿La salida cae en un plano permitido por el patron declarado?
+  // Una salida esta permitida si el patron admite su plano (y `operacion` solo si el patron lo admite
+  // explicitamente — que por defecto NO, porque es la frontera).
   _permitido(x, patron) {
+    if (!patron) return false;
     const plano = this._planoDe(x);
-    // Sin plano declarado en la salida no se puede afirmar que sea un calculo.
-    if (plano === null) return false;
-    if (plano === PLANO_OPERACION || plano === 'hecho' || plano === 'hecho_negocio') {
-      // Un hecho de negocio SOLO pasa si el patron lo declara explicitamente (frontera cruzada a proposito).
-      return patron.permite_operacion === true;
-    }
-    return patron.planos.includes(plano);
+    const p = plano === null ? PLANO_CALCULO : plano;   // sin plano declarado → derivado (calculo)
+    if (p === PLANO_OPERACION) return patron.permite_operacion === true;
+    return patron.planos.includes(p);
   }
 
   _items(salida) {
     if (Array.isArray(salida)) return salida;
-    if (salida && typeof salida === 'object' && Array.isArray(salida.salidas)) return salida.salidas;
-    if (salida && typeof salida === 'object' && Array.isArray(salida.items)) return salida.items;
     return [salida];
   }
 

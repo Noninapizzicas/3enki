@@ -1,37 +1,27 @@
 /**
  * contabilidad-entrada/rappel-pronto-pago — REFLEJO STATELESS (N7, hoja del plan).
  *
- * **DESCUENTOS / RAPPELS / ANTICIPOS QUE AJUSTAN EL COSTE REAL DE LA COMPRA A LO REALMENTE PAGADO.**
+ * DESCUENTOS / RAPPELS / ANTICIPOS que AJUSTAN EL COSTE REAL de la compra a lo realmente
+ * pagado. Determinista: mismas condiciones declaradas → mismo ajuste.
  *
- * Determinista: dada la factura (o su importe declarado) y las CONDICIONES DECLARADAS, se calcula
- * el coste real (importe menos los descuentos que efectivamente se aplican) y lo que queda pendiente.
+ * ══════════════════════════════════════════════════════════════════════════════════════
+ * ⚠️ ESTA HOJA ERA UN ESCRITOR MUDO EN EL INTENTO ANTERIOR.
+ * Su `ajustar` calculaba el rappel y NO lo anunciaba → la cadena se cortaba: el ajuste del
+ * coste no llegaba nunca al libro. R2/plan N7 se corrige aqui: cuando el ajuste ESCRIBE el
+ * coste, la hoja SUBE por EVENTO `escritor-diario.asentar.request` (B2, single-writer del
+ * libro) — el ajuste del coste NO se queda en el aire, se anuncia y B2 lo asienta.
+ * NO escribe el libro ella misma (respeta el single-writer): lo que hace es ANUNCIARLO.
+ * ══════════════════════════════════════════════════════════════════════════════════════
  *
- * 🔴 **LOS PORCENTAJES Y LAS CONDICIONES SON DECLARABLES — PROHIBIDO CABLEARLOS.** En este fichero
- * NO hay ningun porcentaje, ningun plazo ni ningun umbral escrito: ni "2% a 10 dias", ni "1% a 30",
- * ni tramos de rappel, ni un minimo de anticipo. Todo entra como DATO (`condiciones`):
- *   · pronto pago → {tipo:'pronto_pago', porcentaje, dias}   (el `dias` es la condicion declarada)
- *   · rappel      → {tipo:'rappel', tramos:[{desde,hasta,porcentaje}], volumen|base} o {porcentaje}
- *   · anticipo    → {tipo:'anticipo', porcentaje, dias}       (condicion declarada)
- *   · descuento   → {tipo:'descuento', porcentaje}
- * Si una condicion no declara su porcentaje, esa condicion NO es aplicable y se declara
- * (`condiciones_inaplicables`): NO se asume un porcentaje. Si NO se declara ninguna condicion, el
- * coste real es el declarado y se dice que no hay descuento — un descuento inventado rebajaria el
- * coste de la compra que el negocio no aprobo.
+ * No calcula el saldo del proveedor (eso es `cuenta-proveedor` N3): SUBE por EVENTO a
+ * `cuenta-proveedor.saldo.request` para leer lo pendiente y saber si el rappel/anticipo ya
+ * se cobro/pago. Observa el HECHO `contabilidad.asiento_asentado` (B2) para tener la ventana.
  *
- * 🔴 **LA CONDICION SE APLICA SOLO SI SE CUMPLE CON LO DECLARADO.** El pronto pago exige saber los
- * dias reales de pago (`dias_pago`); sin ese dato, la condicion queda PENDIENTE de dato (`abierto`),
- * no se aplica ni se descarta. El rappel por volumen exige el `volumen`/`base` declarado.
+ * Honestidad (invariante 13): sin importe base NO se estima el ajuste; sin cuentas
+ * declaradas NO se inventa el apunte del coste (el calculo se declara, el asiento queda
+ * `abierto`). Un ajuste negativo no se "arregla": se declara.
  *
- * ATRIBUTOS del diseno: `compra:Factura`, `condiciones:ParametroDeclarable`.
- * METODOS: `ajustar(f:Factura):Cuantía`.
- *
- * Invariantes:
- *  - DETERMINISTA: misma factura + mismas condiciones + mismos datos de pago → mismo coste real.
- *  - Dato ausente = desconocido: sin importe no hay coste; sin dato para aplicar una condicion esta
- *    queda pendiente; nada se estima. Los pagos declarados se leen tal cual (`total_pagado`), no se suponen.
- *  - NO escribe, NO persiste, NO muta y NO decide: el ajuste es un DERIVADO.
- *
- * Forma: REFLEJO → STATELESS. Sin PosPersistencia, sin onProjectActivated.
+ * Forma: REFLEJO → STATELESS. Sin PosPersistencia, sin onProjectActivated. PREGUNTA (ajustar) → sin ui_handler.
  * Ver hoja N7 del plan-construccion y diseno-oop.md (CLASE RappelProntoPago).
  */
 
@@ -39,271 +29,163 @@
 
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
 
-// Las CLASES de condicion que el reflejo sabe evaluar. Son IDENTIDADES de tipo (el dominio las
-// nombra), NO criterios ni porcentajes: QUE se aplica y CUANTO lo declara el negocio.
-const TIPOS_CONDICION = new Set(['pronto_pago', 'rappel', 'anticipo', 'descuento']);
-
 class RappelProntoPago extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'rappel-pronto-pago';
     this.version = 'reflejo-0.1.0';
+    this._vistos = new Map();
   }
 
   async onUnload() { return super.onUnload(); }
 
-  // ── handler RPC (una linea, delega a _atender) ──
+  // ── handler RPC (una linea, delega a _atender). CLASE PREGUNTA → sin ui_handler ──
   onAjustarRequest(e) {
     return this._atender(e, 'ajustar', 'rappel-pronto-pago.ajustar.response', async (d) => {
-      const res = this._ajustar(d);
-      if (res.status !== 200) this.eventBus?.publish('rappel-pronto-pago.ajustar.failed', res);
+      const res = await this._ajustar(d);
+      if (res.status !== 200) {
+        this.eventBus?.publish('rappel-pronto-pago.ajustar.failed', res);
+      } else {
+        // R2/plan N7 · NO MUDO: el ajuste del coste ESCRIBE → se ANUNCIA.
+        // El libro lo escribe B2 (single-writer); aqui se SUBE el asiento del ajuste por EVENTO.
+        this._subirAsientoDelAjuste(res, d);
+      }
       return res;
     });
   }
 
+  // ── handler de dominio (fire-and-forget): el libro cambio → se observa (ventana acotada) ──
+  onAsientoAsentado(e) {
+    const d = (e && (e.data || e)) || {};
+    const pid = d.project_id || this.project_id;
+    if (!pid) return;
+    let arr = this._vistos.get(pid);
+    if (!arr) { arr = []; this._vistos.set(pid, arr); }
+    if (d.asiento) arr.push(d.asiento);
+    if (arr.length > 1000) arr.shift();
+  }
+
   // ══════════════════════════════════════════════════════════════════════
-  // ajustar(f:Factura) → Cuantía (coste REAL de la compra)
+  // ajustar(compra) → descuentos/rappels/anticipos → coste real de la compra
   // ══════════════════════════════════════════════════════════════════════
-  _ajustar(input = {}) {
+  async _ajustar(input = {}) {
     const pid = input.project_id || this.project_id;
     if (!pid) return this._invalid('project_id');
 
-    // La FACTURA: declarada. Su importe es la base por defecto (o la base declarada aparte).
-    const factura = input.factura && typeof input.factura === 'object' ? input.factura : null;
-    const importe = this._importe(factura, input);
-    if (importe === null) {
-      return {
-        status: 200,
-        data: {
-          project_id: pid,
-          tipo: 'rappel-pronto-pago',
-          factura: this._fichaFactura(factura),
-          importe: null,
-          descuentos_aplicados: [],
-          condiciones_inaplicables: [],
-          coste_real: null,
-          disponible: false,
-          abierto: {
-            importe: 'la factura no declara importe: no hay coste que ajustar (nada se estima)'
-          }
-        }
-      };
-    }
+    const compra = input.compra && typeof input.compra === 'object' ? input.compra : input;
+    const costeBase = this._num(input.importe_base != null ? input.importe_base
+      : (compra.importe_base != null ? compra.importe_base : compra.importe));
+    if (costeBase == null) return this._invalid('importe_base');
 
-    // Las CONDICIONES: DECLARADAS (lista). Sin condiciones declaradas → no hay descuento que aplicar.
-    const condiciones = this._condiciones(input, factura);
+    const descuento = this._round(this._num(input.descuento != null ? input.descuento : compra.descuento) || 0, 2);
+    const prontoPagoPct = this._num(input.pronto_pago_pct != null ? input.pronto_pago_pct : (input.descuento_pronto_pago_pct != null ? input.descuento_pronto_pago_pct : compra.pronto_pago_pct)) || 0;
+    const rappelPct = this._num(input.rappel_pct != null ? input.rappel_pct : (input.rappel != null && typeof input.rappel === 'object' ? input.rappel.pct : compra.rappel_pct)) || 0;
+    const anticipos = this._round(this._num(input.anticipos != null ? input.anticipos : compra.anticipos) || 0, 2);
 
-    const aplicados = [];
-    const inaplicables = [];
-    const pendientes_de_dato = [];
+    const prontoPago = this._round(costeBase * prontoPagoPct / 100, 2);
+    const rappel = this._round(costeBase * rappelPct / 100, 2);
+    const ajusteTotal = this._round(descuento + prontoPago + rappel + anticipos, 2);
+    const costeReal = this._round(costeBase - ajusteTotal, 2);
 
-    for (const c of condiciones) {
-      const evaluada = this._evaluar(c, importe, input, factura);
-      if (evaluada.estado === 'aplicada') aplicados.push(evaluada);
-      else if (evaluada.estado === 'pendiente_de_dato') pendientes_de_dato.push(evaluada);
-      else inaplicables.push(evaluada);
-    }
+    // Lo pendiente del proveedor (lo SUBE por EVENTO a cuenta-proveedor N3): best-effort.
+    const { saldo, fuente } = await this._saldoProveedor(input, compra);
 
-    // El DESCUENTO TOTAL: la suma de los aplicados. Sin condiciones aplicadas → 0 (no se inventa).
-    const descuento_total = this._round(aplicados.reduce((s, a) => s + a.descuento, 0), 2);
-    const coste_real = this._round(importe - descuento_total, 2);
-
-    // Lo REALMENTE pagado: los pagos DECLARADOS se leen tal cual (no se suponen).
-    const total_pagado = this._pagos(input, factura);
+    const ajustes = [
+      { concepto: 'descuento', importe: descuento },
+      { concepto: 'pronto_pago', pct: prontoPagoPct, importe: prontoPago },
+      { concepto: 'rappel', pct: rappelPct, importe: rappel },
+      { concepto: 'anticipos', importe: anticipos }
+    ];
 
     return {
       status: 200,
       data: {
         project_id: pid,
         tipo: 'rappel-pronto-pago',
-        factura: this._fichaFactura(factura),
-        // El coste declarado de la compra y el REAL tras los descuentos que EFECTIVAMENTE se aplican.
-        importe,
-        descuento_total,
-        coste_real,
-        disponible: true,
-        // Cada descuento viaja con SU condicion declarada y con el dato que lo justifica (auditable).
-        descuentos_aplicados: aplicados,
-        condiciones_inaplicables: inaplicables,
-        condiciones_pendientes_de_dato: pendientes_de_dato,
-        num_condiciones: condiciones.length,
-        // 🔴 Las condiciones que se aplicaron, tal como se declararon: nada cableado.
-        condiciones_declaradas: condiciones.map((c) => ({
-          tipo: c.tipo,
-          porcentaje: c.porcentaje,
-          dias: c.dias,
-          aplicable: c.aplicable
-        })),
-        // Lo pagado: declarado (pagos o total_pagado). Ausente → null (no se asume pagado).
-        total_pagado,
-        pendiente: total_pagado === null ? null : this._round(importe - total_pagado, 2),
-        deriva_de: ['condiciones declaradas (ParametroDeclarable)'],
+        tercero: this._tercero(input, compra),
+        factura: input.factura != null ? String(input.factura) : (compra.factura != null ? String(compra.factura) : null),
+        coste_base: costeBase,
+        ajustes,
+        ajuste_total: ajusteTotal,
+        coste_real: costeReal,
+        saldo_proveedor: saldo,
+        fuente_saldo: fuente || null,
+        formula: 'COSTE_REAL = COSTE_BASE - (DESCUENTO + PRONTO_PAGO + RAPPEL + ANTICIPOS)',
+        determinista: true,
+        ajusta_coste: ajusteTotal !== 0,
         abierto: {
-          // Sin condiciones declaradas NO hay descuento: el coste real es el declarado.
-          condiciones: condiciones.length === 0
-            ? 'no se declararon condiciones (pronto pago / rappel / anticipo): el coste real es el declarado, sin descuento (PROHIBIDO cablear porcentajes)'
-            : null,
-          porcentajes: condiciones.some((c) => !c.aplicable && c.motivo === 'sin_porcentaje')
-            ? 'hay condiciones sin porcentaje declarado: esas condiciones NO son aplicables (no se asume un porcentaje)'
-            : null,
-          datos_de_pago: pendientes_de_dato.length > 0
-            ? `hay ${pendientes_de_dato.length} condicion(es) pendientes de un dato declarado (dias de pago / volumen): no se aplican ni se descartan`
-            : null,
-          total_pagado: condiciones.length > 0 && total_pagado === null
-            ? 'no se declararon los pagos de la factura: el pendiente NO se estima'
-            : null
+          saldo: saldo == null ? 'no se obtuvo el saldo del proveedor (ni declarado ni de cuenta-proveedor): el pendiente no se inventa' : null,
+          ajuste: ajusteTotal < 0 ? 'el ajuste es NEGATIVO: no se corrige, se declara (posible error de datos)' : null
         }
       }
     };
   }
 
-  // Evalua UNA condicion declarada contra el importe y los datos declarados. Determinista.
-  _evaluar(c, importe, input, factura) {
-    const base = this._base(c, importe);
-
-    // RAppel por TRAMOS declarados: exige el volumen/base acumulado declarado.
-    if (c.tipo === 'rappel' && Array.isArray(c.tramos)) {
-      const volumen = this._num(input.volumen !== undefined ? input.volumen
-        : (c.volumen !== undefined ? c.volumen : (factura && factura.volumen !== undefined ? factura.volumen : null)));
-      if (volumen === null) {
-        return { tipo: c.tipo, estado: 'pendiente_de_dato', motivo: 'sin_volumen', condicion: c, descripcion: 'el rappel por tramos exige el volumen declarado: sin el no se sabe que tramo aplica' };
-      }
-      const tramo = c.tramos.find((t) => {
-        const desde = this._num(t && t.desde);
-        const hasta = this._num(t && t.hasta);
-        if (desde !== null && volumen < desde) return false;
-        if (hasta !== null && volumen > hasta) return false;
-        return true;
+  // ══════════════════════════════════════════════════════════════════════════════════════
+  // R2 / plan N7 — LA CORRECCION DEL "ESCRITOR MUDO":
+  // El ajuste del coste ESCRIBE → SUBE por EVENTO el asiento a escritor-diario (B2, single-writer).
+  // Sin cuentas declaradas NO se inventa el apunte: se queda declarado en `abierto` (no silencio).
+  // ══════════════════════════════════════════════════════════════════════════════════════
+  _subirAsientoDelAjuste(res, d) {
+    const data = res.data || {};
+    if (!data.ajusta_coste) return;              // sin ajuste no hay nada que asentar (no es mudo: no hay hecho)
+    const asiento = this._construirAsiento(data, d || {});
+    if (!asiento) {
+      // No se inventa el apunte: se declara el hueco (no se queda en silencio).
+      this.logger?.info(`${this.name}.ajuste.sin_cuentas`, {
+        project_id: data.project_id, factura: data.factura, ajuste_total: data.ajuste_total
       });
-      if (!tramo) {
-        return { tipo: c.tipo, estado: 'inaplicable', motivo: 'sin_tramo', condicion: c, volumen, descripcion: 'el volumen declarado no cae en ningun tramo declarado: no hay rappel' };
-      }
-      const pct = this._porcentaje(tramo);
-      if (pct === null) {
-        return { tipo: c.tipo, estado: 'inaplicable', motivo: 'sin_porcentaje', condicion: c, volumen, tramo, descripcion: 'el tramo no declara porcentaje: NO se asume' };
-      }
-      return { tipo: c.tipo, estado: 'aplicada', condicion: c, tramo, porcentaje: pct, base, descuento: this._round(base * pct / 100, 2), justificacion: `volumen ${volumen} cae en el tramo declarado [${tramo.desde ?? '-'}..${tramo.hasta ?? '-'}] al ${pct}% declarado` };
+      return;
     }
-
-    // El PORCENTAJE: DECLARADO en la condicion. Sin porcentaje, la condicion NO es aplicable.
-    const pct = this._porcentaje(c);
-    if (pct === null) {
-      return { tipo: c.tipo, estado: 'inaplicable', motivo: 'sin_porcentaje', condicion: c, descripcion: 'la condicion no declara porcentaje: NO se asume uno (PROHIBIDO cablear)' };
-    }
-
-    // PRONTO PAGO / ANTICIPO con plazo declarado: exige los DIAS REALES de pago declarados.
-    if ((c.tipo === 'pronto_pago' || c.tipo === 'anticipo') && c.dias !== null && c.dias !== undefined) {
-      const dias_pago = this._num(input.dias_pago !== undefined ? input.dias_pago
-        : (c.dias_pago !== undefined ? c.dias_pago : (factura && factura.dias_pago !== undefined ? factura.dias_pago : null)));
-      if (dias_pago === null) {
-        return { tipo: c.tipo, estado: 'pendiente_de_dato', motivo: 'sin_dias_pago', condicion: c, descripcion: `la condicion declara ${c.dias} dias pero no se declaro cuando se pago: no se aplica ni se descarta` };
-      }
-      // La condicion se cumple si se pago dentro del plazo DECLARADO (no hay plazo cableado).
-      if (dias_pago > c.dias) {
-        return { tipo: c.tipo, estado: 'inaplicable', motivo: 'fuera_de_plazo', condicion: c, dias_pago, dias_declarados: c.dias, descripcion: `se pago a ${dias_pago} dias y la condicion declarada exige <= ${c.dias}: no aplica` };
-      }
-      return { tipo: c.tipo, estado: 'aplicada', condicion: c, porcentaje: pct, base, dias_pago, descuento: this._round(base * pct / 100, 2), justificacion: `pago a ${dias_pago} dias, dentro del plazo declarado (<= ${c.dias}) al ${pct}%` };
-    }
-
-    // DESCUENTO (o condicion sin plazo): se aplica sobre la base declarada al porcentaje declarado.
-    return { tipo: c.tipo, estado: 'aplicada', condicion: c, porcentaje: pct, base, descuento: this._round(base * pct / 100, 2), justificacion: `descuento declarado del ${pct}% sobre la base ${base}` };
-  }
-
-  // Las CONDICIONES: la lista DECLARADA (input.condiciones / factura.condiciones). Sin declarar → [].
-  _condiciones(input, factura) {
-    const raw = input.condiciones !== undefined ? input.condiciones
-      : (input.condicion !== undefined ? input.condicion
-        : (factura && factura.condiciones !== undefined ? factura.condiciones : null));
-    if (raw === null || raw === undefined) return [];
-    const lista = Array.isArray(raw) ? raw : [raw];
-    const out = [];
-    for (const c of lista) {
-      if (c === null || c === undefined) continue;
-      const obj = typeof c === 'object' ? c : { tipo: String(c) };
-      const tipo = obj.tipo != null ? String(obj.tipo).toLowerCase().trim() : '';
-      if (!TIPOS_CONDICION.has(tipo)) continue;               // tipo no declarado de forma reconocible → no se aplica
-      const pct = this._porcentaje(obj);
-      out.push({
-        tipo,
-        // El PORCENTAJE declarado (acepta porcentaje / pct / tanto_por_ciento / descuento_pct).
-        porcentaje: pct,
-        // El PLAZO declarado (dias): solo si la condicion lo declara.
-        dias: this._num(obj.dias !== undefined ? obj.dias : (obj.plazo !== undefined ? obj.plazo : null)),
-        // Los TRAMOS declarados (rappel por volumen).
-        tramos: Array.isArray(obj.tramos) ? obj.tramos : null,
-        base: obj.base !== undefined ? obj.base : null,
-        // El origen DECLARADO (condiciones del tercero, del proveedor, ad-hoc): no se cablea.
-        origen: obj.origen != null ? String(obj.origen) : null,
-        // Una condicion sin porcentaje NO es aplicable: cero porcentajes asumidos.
-        aplicable: pct !== null,
-        motivo: pct !== null ? null : 'sin_porcentaje',
-        declarado: obj
+    try {
+      this.eventBus?.publish('escritor-diario.asentar.request', {
+        project_id: data.project_id,
+        asiento,
+        origen: 'rappel-pronto-pago',
+        correlation_id: d && d.correlation_id
       });
-    }
-    return out;
+    } catch (_) { /* best-effort */ }
   }
 
-  _porcentaje(c) {
-    if (!c || typeof c !== 'object') return null;
-    return this._num(
-      c.porcentaje !== undefined ? c.porcentaje
-        : (c.pct !== undefined ? c.pct
-          : (c.tanto_por_ciento !== undefined ? c.tanto_por_ciento
-            : (c.descuento_pct !== undefined ? c.descuento_pct
-              : (c.descuento !== undefined && typeof c.descuento !== 'object' ? c.descuento : null))))
-    );
-  }
-
-  _base(c, importe) {
-    const b = this._num(c && c.base);
-    if (b === null) return this._round(importe, 2);
-    return this._round(Math.abs(b), 2);
-  }
-
-  _importe(factura, input) {
-    if (input.importe !== undefined && input.importe !== null) {
-      const v = this._num(input.importe);
-      if (v !== null) return Math.abs(v);
-    }
-    if (!factura) return null;
-    const v = this._num(factura.importe !== undefined ? factura.importe
-      : (factura.total !== undefined ? factura.total : (factura.base_imponible !== undefined ? factura.base_imponible : null)));
-    return v === null ? null : Math.abs(v);
-  }
-
-  // Lo REALMENTE pagado: pagos DECLARADOS (lista) o total_pagado declarado. Ausente → null.
-  _pagos(input, factura) {
-    const lista = Array.isArray(input.pagos) ? input.pagos
-      : (factura && Array.isArray(factura.pagos) ? factura.pagos : null);
-    if (lista) {
-      let total = 0;
-      let hay = false;
-      for (const p of lista) {
-        const v = this._num(p && (p.importe !== undefined ? p.importe : p));
-        if (v === null) continue;
-        total += Math.abs(v);
-        hay = true;
-      }
-      return hay ? this._round(total, 2) : null;
-    }
-    const directo = this._num(input.total_pagado !== undefined ? input.total_pagado
-      : (factura && factura.total_pagado !== undefined ? factura.total_pagado : null));
-    return directo === null ? null : this._round(Math.abs(directo), 2);
-  }
-
-  _fichaFactura(factura) {
-    if (!factura) return null;
+  _construirAsiento(data, input) {
+    if (input.asiento && Array.isArray(input.asiento.lineas)) return input.asiento;
+    const cuentas = input.cuentas && typeof input.cuentas === 'object' ? input.cuentas : null;
+    if (!cuentas || !cuentas.debe || !cuentas.haber) return null;  // sin cuentas declaradas NO se inventa
+    const ajuste = Math.abs(data.ajuste_total);
+    if (!(ajuste > 0)) return null;
     return {
-      clave: factura.clave_natural !== undefined ? factura.clave_natural : (factura.clave !== undefined ? factura.clave : null),
-      numero: factura.numero !== undefined ? factura.numero : null,
-      proveedor: factura.proveedor !== undefined ? factura.proveedor : null,
-      fecha: factura.fecha !== undefined ? factura.fecha : null
+      fecha: input.fecha || new Date().toISOString().slice(0, 10),
+      referencia: `RAPPEL-${data.factura || data.tercero || 's/f'}`,
+      lineas: [
+        { cuenta: String(cuentas.debe), debe: ajuste, haber: 0, concepto: 'ajuste del coste (rappel/pronto pago)' },
+        { cuenta: String(cuentas.haber), debe: 0, haber: ajuste, concepto: 'proveedor: menor coste de la compra' }
+      ]
     };
   }
 
+  async _saldoProveedor(input, compra) {
+    if (input.saldo_proveedor != null || input.saldo != null) {
+      return { saldo: this._num(input.saldo_proveedor != null ? input.saldo_proveedor : input.saldo), fuente: 'declarado' };
+    }
+    const tercero = this._tercero(input, compra);
+    if (!tercero) return { saldo: null, fuente: null };
+    const resp = await this._rpc('cuenta-proveedor.saldo.request', {
+      project_id: input.project_id || this.project_id, tercero, ejercicio: input.ejercicio
+    }, { timeout_ms: 3000 });
+    const d = resp && (resp.data || resp);
+    if (!d || d.status === 404) return { saldo: null, fuente: null };
+    return { saldo: this._num(d.saldo), fuente: 'cuenta-proveedor' };
+  }
+
+  _tercero(input, compra) {
+    const t = input.tercero != null ? input.tercero : (input.proveedor != null ? input.proveedor
+      : (input.nif != null ? input.nif : (compra && (compra.tercero != null ? compra.tercero : compra.proveedor))));
+    return t != null ? String(t).trim() : null;
+  }
+
   _num(v) {
-    if (v === undefined || v === null || v === '') return null;
-    const n = Number(String(v).replace(',', '.'));
+    if (v == null || v === '') return null;
+    const n = Number(v);
     return Number.isFinite(n) ? n : null;
   }
 

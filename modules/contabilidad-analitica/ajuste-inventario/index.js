@@ -1,31 +1,23 @@
 /**
  * contabilidad-analitica/ajuste-inventario — REFLEJO STATELESS (H3, hoja del plan).
  *
- * LA REGULARIZACION de la merma/rotura: deriva la DIFERENCIA entre el stock TEORICO y el
- * stock REAL y la expresa VALORADA, con su asiento PROPUESTO y la marca de AVISO. Calculo
- * PURO, determinista.
+ * REGULARIZA la merma/rotura con ASIENTO Y AVISO. Calcula la DIFERENCIA de inventario:
+ *   diferencia = cantidad_teorica − cantidad_real   (merma/rotura si > 0)
+ * DETERMINISTA: mismas cifras → misma diferencia.
  *
- * ATRIBUTOS del diseno: `teorico:Cuantía` y `real:Cuantía`.
- *   - Ambas son CANTIDADES DECLARADAS por el negocio (lo que el sistema cree que hay y lo
- *     que el recuento encontro). El reflejo NUNCA estima una de las dos: si falta una, la
- *     diferencia queda `[ABIERTO]` — jamas se asume 0 (un teorico 0 inventado convertiria
- *     toda la merma en una compra fantasma).
- *   - El VALOR UNITARIO del ajuste es ParametroDeclarable: entra declarado, o lo trae la
- *     capa de valor de `valoracion-existencia` (H1) POR EVENTO. Sin el, la diferencia en
- *     CANTIDAD se declara igual, pero el ajuste en VALOR queda `[ABIERTO]`.
+ *   · Diferencia → SUBE el asiento a escritor-diario B2 (si las cuentas son declarables).
+ *   · Diferencia relevante → SUBE un aviso a motor-avisos K2.
  *
- * El ASIENTO y el AVISO son la SALIDA del calculo, no su efecto: el reflejo PROPONE el
- * asiento (cuenta + importe derivados) y DECLARA el aviso; NO escribe, NO persiste, NO
- * decide la contrapartida. Quien lo materializa es `escritor-diario` (por EVENTO) y quien
- * lo entrega es la capa de avisos — aqui solo se calcula y se declara que hay desviacion.
+ * No duplica el inventario (infra reutilizada) ni el valor (valoracion-existencia H1): solo
+ * DERIVA la diferencia de lo declarado y la regulariza por EVENTO.
  *
- * Invariantes:
- *  - DETERMINISTA: mismo teorico + mismo real → misma diferencia (una sola respuesta).
- *  - Dato ausente = desconocido: falta teorico o real → `diferencia:null` y `abierto:true`.
- *    Nada se estima; ningun valor se rellena con 0.
- *  - NO escribe, NO persiste, NO muta: el stock es de `inventario`.
+ * Invariante: dato ausente = desconocido. Sin cantidad teorica o sin cantidad real NO se
+ * estima la merma: se declara ABIERTO.
  *
- * Forma: REFLEJO → STATELESS. Sin PosPersistencia, sin onProjectActivated.
+ * R3 (honestidad de la escucha): el plan declara escucha de `contabilidad.hecho_recibido`
+ * (puerto-evento-vertical A1) — ese emisor YA existe → SI se declara.
+ *
+ * Forma: REFLEJO → STATELESS. Sin PosPersistencia. RPC diferencia = PREGUNTA → sin ui_handler.
  * Ver hoja H3 del plan-construccion y diseno-oop.md (CLASE AjusteInventario).
  */
 
@@ -38,106 +30,155 @@ class AjusteInventario extends ModuloHibridoReflejo {
     super();
     this.name = 'ajuste-inventario';
     this.version = 'reflejo-0.1.0';
+    this._vistos = [];
   }
 
   async onUnload() { return super.onUnload(); }
 
-  // ── handler RPC (una linea, delega a _atender) ──
+  // ── handler RPC (PREGUNTA → sin ui_handler) ──
   onDiferenciaRequest(e) {
     return this._atender(e, 'diferencia', 'ajuste-inventario.diferencia.response', async (d) => {
       const res = await this._diferencia(d);
+      // Reflejo: calcula y declara; no escribe dominio → no hay hecho que anunciar (R2).
       if (res.status !== 200) this.eventBus?.publish('ajuste-inventario.diferencia.failed', res);
       return res;
     });
   }
 
-  // ── proyeccion determinista: diferencia(teorico, real) → Asiento propuesto ──
+  // ── handler de dominio (fire-and-forget): llego un hecho de la operacion (A1) ──
+  async onHechoRecibido(e) {
+    const d = (e && (e.data || e)) || {};
+    const hecho = d.hecho && typeof d.hecho === 'object' ? d.hecho : null;
+    if (!hecho) return;
+    // Solo se reacciona si el hecho declara el recuento del inventario (no se inventa la merma).
+    const recuento = hecho.inventario || hecho.recuento || null;
+    if (!recuento) return;
+    try {
+      const res = await this._diferencia({
+        project_id: d.project_id, articulo: recuento.articulo || hecho.articulo,
+        cantidad_teorica: recuento.cantidad_teorica != null ? recuento.cantidad_teorica : recuento.teorica,
+        cantidad_real: recuento.cantidad_real != null ? recuento.cantidad_real : recuento.real,
+        coste_unitario: recuento.coste_unitario != null ? recuento.coste_unitario : recuento.coste,
+        cuentas: recuento.cuentas, umbral: recuento.umbral,
+        correlation_id: d.correlation_id
+      });
+      if (res.status === 200 && res.data && res.data.diferencia) await this._regularizar(res.data, d);
+    } catch (err) {
+      this.logger?.error(`${this.name}.hecho_recibido.error`, { error: err.message });
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // _diferencia(input) → { diferencia, merma, valor, asiento? }  (DETERMINISTA)
+  // ══════════════════════════════════════════════════════════════════════
   async _diferencia(input = {}) {
     const pid = input.project_id || this.project_id;
     if (!pid) return this._invalid('project_id');
 
-    const producto_id = input.producto_id != null ? String(input.producto_id) : null;
-    const teorico = this._num(input.teorico != null ? input.teorico : input.stock_teorico);
-    const real = this._num(input.real != null ? input.real : input.stock_real);
-
-    // 1) El VALOR UNITARIO del ajuste: declarado, o traido de valoracion-existencia (H1) POR EVENTO.
-    const { valor_unitario, fuente_valor } = await this._valorUnitario(pid, producto_id, input);
-
-    // 2) La DIFERENCIA existe con las dos cantidades. Sin una, `[ABIERTO]`.
-    const faltan = [];
-    if (teorico === null) faltan.push('teorico');
-    if (real === null) faltan.push('real');
-
-    const diferencia = faltan.length === 0 ? this._round(real - teorico, 6) : null;
-
-    // 3) El AJUSTE VALORADO: solo con la diferencia Y el valor unitario. Sin valor → abierto.
-    let ajuste_valorado = null;
-    if (diferencia !== null && valor_unitario !== null) {
-      ajuste_valorado = this._round(diferencia * valor_unitario, 2);
+    const teorica = this._num(input.cantidad_teorica != null ? input.cantidad_teorica : (input.inventario && input.inventario.teorica));
+    const real = this._num(input.cantidad_real != null ? input.cantidad_real : (input.inventario && input.inventario.real));
+    if (teorica == null || real == null) {
+      // Sin las dos cifras NO se estima la merma (dato ausente = desconocido).
+      return {
+        status: 200,
+        data: {
+          project_id: pid, tipo: 'ajuste-inventario', diferencia: null, merma: null, valor: null,
+          determinista: true,
+          abierto: { diferencia: 'faltan cantidad teorica y/o real: la merma no se estima', articulo: input.articulo == null ? 'no se declara articulo' : null }
+        }
+      };
     }
-    const valor_abierto = diferencia !== null && valor_unitario === null;
 
-    // 4) El ASIENTO PROPUESTO: se DERIVA (cuenta por el tipo declarado), no se decide aqui.
-    const asiento_propuesto = ajuste_valorado === null ? null : {
-      concepto: input.concepto || input.motivo || 'regularizacion de inventario',
-      producto_id,
-      cantidad: diferencia,
-      valor_unitario,
-      importe: ajuste_valorado,
-      // El SIGNO se DERIVA: merma/rotura (real<teorico) → negativo; sobrante → positivo.
-      signo: ajuste_valorado > 0 ? 'sobrante' : (ajuste_valorado < 0 ? 'merma' : 'nulo'),
-      // El corte (cuenta/contrapartida/periodo) NO vive aqui: lo fija el escritor del diario.
-      imputacion_delegada_a: 'escritor-diario'
+    const diferencia = this._round(teorica - real, 4);   // > 0 → falta genero (merma/rotura)
+    const esMerma = diferencia > 0;
+    const costeUnitario = this._num(input.coste_unitario != null ? input.coste_unitario : (input.inventario && input.inventario.coste));
+    const valor = costeUnitario != null ? this._round(diferencia * costeUnitario, 2) : null;
+
+    const articulo = input.articulo != null ? String(input.articulo) : (input.inventario && input.inventario.articulo != null ? String(input.inventario.articulo) : null);
+
+    const ajuste = {
+      articulo,
+      cantidad_teorica: teorica,
+      cantidad_real: real,
+      diferencia,
+      merma: esMerma,
+      sobrante: diferencia < 0,
+      coste_unitario: costeUnitario,
+      valor,
+      fecha: input.fecha != null ? String(input.fecha) : null,
+      en: new Date().toISOString()
     };
+
+    // El ASIENTO lo escribe B2. Se PROPONE solo si las cuentas vienen declaradas (no se inventan).
+    const asiento = this._asiento(input, ajuste);
+    if (asiento) {
+      this.eventBus?.publish('escritor-diario.asentar.request', {
+        project_id: pid, asiento, origen: 'ajuste-inventario', correlation_id: input.correlation_id
+      });
+    }
+
+    // El AVISO: se SUBE a K2 si la diferencia es relevante (umbral DECLARADO; por defecto 0 = cualquiera).
+    const umbral = this._num(input.umbral != null ? input.umbral : (input.inventario && input.inventario.umbral));
+    const relevante = umbral == null ? Math.abs(diferencia) > 0 : Math.abs(diferencia) >= umbral;
+    if (relevante && diferencia !== 0) {
+      this.eventBus?.publish('motor-avisos.producir.request', {
+        project_id: pid,
+        tipo: 'hecho',
+        titulo: `ajuste de inventario (${esMerma ? 'merma' : 'sobrante'})`,
+        detalle: `${articulo || 'articulo'}: diferencia ${diferencia}${valor != null ? ` (valor ${valor})` : ''}`,
+        severidad: esMerma ? 'media' : 'info',
+        origen: 'ajuste-inventario',
+        ref: articulo,
+        correlation_id: input.correlation_id
+      });
+    }
 
     return {
       status: 200,
       data: {
         project_id: pid,
-        producto_id,
-        teorico,
-        real,
+        tipo: 'ajuste-inventario',
+        ajuste,
         diferencia,
-        valor_unitario,
-        fuente_valor,
-        ajuste_valorado,
-        asiento_propuesto,
-        // El AVISO se DECLARA (hay desviacion), no se entrega: la entrega es de otra capa.
-        aviso: diferencia !== null && diferencia !== 0 ? 'desviacion_inventario' : null,
-        hay_desviacion: diferencia !== null ? diferencia !== 0 : null,
-        tipo: diferencia === null ? null
-          : (diferencia < 0 ? 'merma' : (diferencia > 0 ? 'sobrante' : 'sin_desviacion')),
-        abierto: faltan.length > 0 || valor_abierto,
-        faltan: valor_abierto ? [...faltan, 'valor_unitario'] : faltan,
-        motivo: faltan.length > 0
-          ? `no se deriva la diferencia: falta ${faltan.join(' y ')}`
-          : (valor_abierto ? 'la diferencia se declara, pero el ajuste valorado queda [ABIERTO]: falta valor_unitario' : null)
+        merma: esMerma,
+        sobrante: diferencia < 0,
+        valor,
+        determinista: true,
+        asiento_propuesto: asiento,
+        aviso_subido: relevante && diferencia !== 0,
+        escrito_por: 'escritor-diario',
+        avisado_por: 'motor-avisos',
+        abierto: {
+          articulo: articulo ? null : 'el ajuste no declara articulo (se anota el hueco, no se inventa)',
+          valor: (valor != null || costeUnitario != null) ? null : 'no hay coste unitario: la diferencia se declara sin valorar',
+          asiento: asiento ? null : 'no se propuso asiento: faltan las cuentas declaradas'
+        }
       }
     };
   }
 
-  // El valor unitario: declarado, o traido de la capa de valor (H1) POR EVENTO.
-  async _valorUnitario(pid, producto_id, input = {}) {
-    const declarado = this._num(input.valor_unitario != null ? input.valor_unitario : input.coste_unitario);
-    if (declarado !== null) return { valor_unitario: declarado, fuente_valor: 'declarado' };
+  // Propone el asiento de regularizacion SOLO si las cuentas vienen declaradas.
+  _asiento(input, ajuste) {
+    const ctaExistencias = input.cuenta_existencias != null ? String(input.cuenta_existencias)
+      : (input.cuentas && input.cuentas.existencias != null ? String(input.cuentas.existencias) : null);
+    const ctaMerma = input.cuenta_merma != null ? String(input.cuenta_merma)
+      : (input.cuentas && input.cuentas.merma != null ? String(input.cuentas.merma) : null);
+    if (!ctaExistencias || !ctaMerma || ajuste.valor == null || ajuste.valor === 0) return null;
+    const importe = Math.abs(ajuste.valor);
+    // Merma: existe menos genero (haber existencias / debe merma). Sobrante: al reves.
+    const lineas = ajuste.diferencia > 0
+      ? [{ cuenta: ctaMerma, debe: importe, haber: 0 }, { cuenta: ctaExistencias, debe: 0, haber: importe }]
+      : [{ cuenta: ctaExistencias, debe: importe, haber: 0 }, { cuenta: ctaMerma, debe: 0, haber: importe }];
+    return { concepto: `ajuste de inventario ${ajuste.articulo || ''}`.trim(), fecha: ajuste.fecha, lineas };
+  }
 
-    if (!producto_id) return { valor_unitario: null, fuente_valor: null };
-    const r = await this._rpc('valoracion-existencia.valorar.request',
-      { project_id: pid, producto_id, fecha: input.fecha, metodo: input.metodo }, { timeout_ms: 4000 });
-    const data = r && r.data ? r.data : null;
-    if (!data) return { valor_unitario: null, fuente_valor: null };
-    // La capa de valor devuelve un total; el unitario se DERIVA dividiendo por la cantidad
-    // ya valorada (no se estima: si no hay cantidad > 0, no hay unitario).
-    const total = this._num(data.valor);
-    const cant = this._num(data.cantidad);
-    if (total !== null && cant !== null && cant > 0) {
-      return { valor_unitario: this._round(total / cant, 6), fuente_valor: 'valoracion-existencia' };
-    }
-    return { valor_unitario: null, fuente_valor: null };
+  async _regularizar(data, d) {
+    // Si el origen ya declara cuentas, el asiento se subio en _diferencia; no se duplica.
+    return data;
   }
 
   _num(v) {
-    if (v === undefined || v === null || v === '') return null;
+    if (v == null || v === '') return null;
     const n = Number(v);
     return Number.isFinite(n) ? n : null;
   }

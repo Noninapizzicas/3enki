@@ -5,9 +5,6 @@
  * de donde vino/si cayo a cola). Es el historial del PROCESO DE ENTRADA — no del asiento.
  *   != `traza-asiento` (B4), que registra el ASIENTO, no el proceso de entrada.
  *
- * UN SOLO ESCRITOR de la parcela: el anotador (`HISTORIAL_PROCESO_CONTABLE`); cualquier otro rol
- * es rechazado (segundo escritor → 403).
- *
  * Invariantes:
  *  - APPEND-ONLY: cada registro se APILA con su secuencia; NADA se borra, NADA se sobrescribe.
  *  - El registro exige su RESULTADO declarado (PROCESADO|FALLADO); sin resultado NO se anota
@@ -15,7 +12,7 @@
  *  - El ABIERTO se declara, no se oculta: un registro sin motivo/asunto se apila con sus huecos.
  *  - Persiste por proyecto con PosPersistencia, restaura en project.activated y vuelca en onUnload.
  *
- * Forma: CUSTODIO → PosPersistencia + onProjectActivated + flush + GUARD de escritor.
+ * Forma: CUSTODIO → PosPersistencia + onProjectActivated + flush + APPEND-ONLY.
  * Ver hoja P2 del plan-construccion y diseno-oop.md (CLASE HistorialProcesoContable).
  */
 
@@ -23,9 +20,6 @@
 
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
 const PosPersistencia = require('../../_shared/pos-persistencia');
-
-// Rol unico escritor de la parcela del historial del proceso.
-const ROL_ESCRITOR = 'HISTORIAL_PROCESO_CONTABLE';
 
 // Resultados declarables de una anotacion del proceso.
 const RESULTADOS = new Set(['PROCESADO', 'FALLADO']);
@@ -73,7 +67,7 @@ class HistorialProcesoContable extends ModuloHibridoReflejo {
     return this._atender(e, 'anotar', 'historial-proceso-contable.anotar.response', async (d) => {
       const res = this._anotar(d);
       if (res.status === 200) {
-        // Exito → evento de dominio: el proceso quedo anotado (append-only).
+        // R2 · si ESCRIBE, anuncia el HECHO: el proceso quedo anotado (append-only).
         this.eventBus?.publish('contabilidad.proceso_anotado', {
           project_id: res.data.project_id,
           registro: res.data.registro,
@@ -105,17 +99,10 @@ class HistorialProcesoContable extends ModuloHibridoReflejo {
     return h ? [...h.registros] : [];
   }
 
-  // ── proyeccion de escritura (UN escritor) — APPEND-ONLY ──
+  // ── proyeccion de escritura — APPEND-ONLY ──
   _anotar(input = {}) {
     const pid = input.project_id || this.project_id;
     if (!pid) return this._invalid('project_id');
-
-    // GUARD de escritor: solo el anotador puede escribir en la parcela.
-    if (input.rol !== ROL_ESCRITOR) {
-      return this._errorResponse(403, 'PERMISSION_DENIED',
-        'solo el anotador (HISTORIAL_PROCESO_CONTABLE) puede escribir el historial del proceso',
-        { rol_esperado: ROL_ESCRITOR, rol_recibido: input.rol ?? null });
-    }
 
     const r = input.registro || input.r;
     if (!r || typeof r !== 'object') return this._invalid('registro');
@@ -142,7 +129,6 @@ class HistorialProcesoContable extends ModuloHibridoReflejo {
       detalle: r.detalle && typeof r.detalle === 'object' ? r.detalle : null,
       hecho_id: r.hecho_id != null ? String(r.hecho_id) : null,
       documento_id: r.documento_id != null ? String(r.documento_id) : null,
-      anotado_por: ROL_ESCRITOR,
       en: r.en != null ? String(r.en) : new Date().toISOString()
     };
     hist.registros.push(registro);

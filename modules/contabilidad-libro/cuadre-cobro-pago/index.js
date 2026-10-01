@@ -1,29 +1,19 @@
 /**
  * contabilidad-libro/cuadre-cobro-pago — REFLEJO STATELESS (E3, hoja del plan).
  *
- * COTEJA cobros y pagos contra el BANCO. La clave natural es COMPARTIDA: **un movimiento
- * bancario = un cobro/pago**. Dado un movimiento (o un conjunto), decide deterministamente
- * si YA tiene su cobro/pago cotejado en el diario y, si no lo tiene, cual es el apunte que le
- * corresponde SEGUN LA EVIDENCIA del propio movimiento (signo → lado, importe → cuantia).
+ * CLAVE NATURAL COMPARTIDA: un movimiento bancario = un cobro/pago. Determinista: mismo movimiento
+ * + mismo cobro/pago → mismo cuadre. Es el hermano puntual de E1 (conciliacion-bancaria): E1 cruza
+ * el EXTRACTO entero por clave natural; aqui se comprueba UN movimiento contra UN cobro/pago y, si
+ * cuadra y la peticion declara el asiento, se SUBE por EVENTO escritor-diario.asentar.request (B2,
+ * single-writer del libro). Lo que NO cuadra se DECLARA y se SUBE a partida-no-identificada.juzgar.request
+ * (E7, el juicio) — no se imputa a ojo.
  *
- * Determinista: mismo movimiento + mismo diario → mismo resultado. Cero juicio: aqui NO se
- * interpreta una descripcion ambigua (eso es E7). Si el movimiento NO se puede cotejar con
- * nada del diario por su clave natural, se declara `cotejado:false` y se manda a la cola del
- * juicio (E7), jamas se inventa el cobro/pago.
+ * Honestidad (invariante 13): sin las dos caras (movimiento y cobro/pago) el cuadre NO se afirma —
+ * queda [ABIERTO] (no se finge un cuadre con una cara ausente).
  *
- * El movimiento llega por DOS vias, ninguna es un `require` cruzado:
- *   - `contabilidad.movimiento_bancario` (fire-and-forget de E2): se ACUMULA la muestra en un
- *     espejo en memoria (idempotente por su clave natural).
- *   - `cuadre-cobro-pago.cuadrar.request`: se COTEJA lo que venga declarado o el espejo.
- *
- * Invariantes:
- *  - El diario se PIDE a escritor-diario (B2) POR EVENTO; si no responde, se declara
- *    `diario_disponible:false` y no se afirma el cotejo (nada se estima).
- *  - La direccion del apunte (debe/haber) sale del SIGNO declarado del movimiento, no de una
- *    constante: `cargo` → salida, `abono` → entrada. Sin signo → no se afirma la direccion.
- *  - NO escribe, NO persiste, NO muta el libro.
- *
- * Forma: REFLEJO → STATELESS. Sin PosPersistencia, sin onProjectActivated.
+ * NO escribe, NO persiste. RPC cuadrar es CLASE PREGUNTA → sin ui_handler.
+ * Publica cuadre-cobro-pago.cuadrar.response y su par .failed.
+ * Escucha contabilidad.asiento_asentado (B2 escritor-diario, emitido).
  * Ver hoja E3 del plan-construccion y diseno-oop.md (CLASE CuadreCobroPago).
  */
 
@@ -36,139 +26,116 @@ class CuadreCobroPago extends ModuloHibridoReflejo {
     super();
     this.name = 'cuadre-cobro-pago';
     this.version = 'reflejo-0.1.0';
-    // espejo en memoria de los movimientos que entraron por el bus: project_id -> Map<clave, Movimiento>
-    this._espejo = new Map();
   }
 
   async onUnload() { return super.onUnload(); }
 
-  // ── fire-and-forget: el extracto (E2) publico un movimiento → se refleja (no muta nada) ──
-  onMovimientoBancario(e) {
-    const d = (e && (e.data || e)) || {};
-    const pid = d.project_id;
-    const movimiento = d.movimiento;
-    if (!pid || !movimiento || typeof movimiento !== 'object') return null;
-    const clave = d.clave != null ? String(d.clave) : this._claveDe(movimiento);
-    if (!clave) return null;
-    this._espejoDe(pid).set(clave, movimiento);   // idempotente: un movimiento = una clave
-    return null;
-  }
-
-  // ── handler RPC (una linea, delega a _atender) ──
+  // ── handler RPC (una linea, delega a _atender). CLASE PREGUNTA → sin ui_handler ──
   onCuadrarRequest(e) {
     return this._atender(e, 'cuadrar', 'cuadre-cobro-pago.cuadrar.response', async (d) => {
-      const res = await this._cuadrar(d);
-      if (res.status !== 200) this.eventBus?.publish('cuadre-cobro-pago.cuadrar.failed', res);
+      const res = this._cuadrar(d);
+      if (res.status !== 200) {
+        this.eventBus?.publish('cuadre-cobro-pago.cuadrar.failed', res);
+        return res;
+      }
+      const pid = res.data.project_id;
+      if (res.data.cuadra === true && res.data.asiento) {
+        // SUBE (best-effort) el asiento al single-writer del libro (B2); aqui no se escribe.
+        this.eventBus?.publish('escritor-diario.asentar.request', {
+          project_id: pid, asiento: res.data.asiento, origen: 'cuadre-cobro-pago', correlation_id: d.correlation_id
+        });
+      } else if (res.data.cuadra === false) {
+        // Sin cuadre NO se imputa a ojo: se sube al juicio (E7).
+        this.eventBus?.publish('partida-no-identificada.juzgar.request', {
+          project_id: pid, movimiento: res.data.movimiento, cobro_pago: res.data.cobro_pago,
+          motivo: res.data.motivo_descuadre, origen: 'cuadre-cobro-pago', correlation_id: d.correlation_id
+        });
+      }
       return res;
     });
   }
 
-  // ── proyeccion determinista: cuadrar(m:Movimiento) → Opcion<Asiento cotejado> ──
-  async _cuadrar(input = {}) {
+  // ── handler de dominio (fire-and-forget): se observa el libro (ventana acotada) ──
+  onAsientoAsentado(e) {
+    const d = (e && (e.data || e)) || {};
+    this._vistos = this._vistos || [];
+    if (d.asiento) this._vistos.push(d.asiento);
+    if (this._vistos.length > 2000) this._vistos.shift();
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // cuadrar(movimiento, cobro_pago) → { cuadra, diferencia, abierto }
+  // ══════════════════════════════════════════════════════════════════════
+  _cuadrar(input = {}) {
     const pid = input.project_id || this.project_id;
     if (!pid) return this._invalid('project_id');
 
-    // Los movimientos a cotejar: los declarados en la peticion o el espejo acumulado.
-    const declarados = Array.isArray(input.movimientos) ? input.movimientos
-      : (input.movimiento && typeof input.movimiento === 'object' ? [input.movimiento]
-        : (input.m ? [input.m] : null));
-    const movimientos = declarados || [...this._espejoDe(pid).values()];
+    const movimiento = input.movimiento && typeof input.movimiento === 'object' ? input.movimiento : null;
+    const cobroPago = (input.cobro_pago && typeof input.cobro_pago === 'object') ? input.cobro_pago
+      : (input.cobro && typeof input.cobro === 'object' ? input.cobro
+        : (input.pago && typeof input.pago === 'object' ? input.pago : null));
 
-    // El diario (B2) se pide POR EVENTO. Sin el, no se afirma el cotejo.
-    const { asientos, diario_disponible } = await this._diario(pid, input);
-
-    const por_clave = new Map();
-    for (const a of asientos) {
-      if (a && a.clave_natural != null) por_clave.set(String(a.clave_natural), a);
+    // Sin las DOS caras el cuadre NO se afirma (dato ausente = desconocido).
+    if (!movimiento || !cobroPago) {
+      return {
+        status: 200,
+        data: {
+          project_id: pid, tipo: 'cuadre-cobro-pago',
+          movimiento, cobro_pago: cobroPago,
+          cuadra: null, diferencia: null,
+          abierto: {
+            caras: !movimiento && !cobroPago
+              ? 'faltan las dos caras (movimiento bancario y cobro/pago): el cuadre no se afirma'
+              : (!movimiento ? 'falta el movimiento bancario: el cuadre no se afirma' : 'falta el cobro/pago: el cuadre no se afirma')
+          }
+        }
+      };
     }
 
-    const cotejados = [];
-    const pendientes = [];
-    for (const m of movimientos) {
-      if (!m || typeof m !== 'object') continue;
-      const clave = this._claveDe(m);
-      if (!clave) { pendientes.push({ movimiento: m, motivo: 'movimiento sin clave natural: no se puede cotejar' }); continue; }
+    // CLAVE NATURAL COMPARTIDA: un movimiento bancario = un cobro/pago.
+    const claveBanco = this._clave(movimiento);
+    const claveCobro = this._clave(cobroPago);
+    const importeBanco = this._round(this._num(movimiento.importe != null ? movimiento.importe : movimiento.cuota), 2);
+    const importeCobro = this._round(this._num(cobroPago.importe != null ? cobroPago.importe : cobroPago.total), 2);
+    const diferencia = this._round(importeBanco - importeCobro, 2);
 
-      const asiento = por_clave.get(clave) || null;
-      if (asiento) {
-        // Un movimiento bancario = un cobro/pago: ya tiene su asiento.
-        cotejados.push({
-          clave,
-          movimiento: m,
-          asiento,
-          lado: this._lado(m),
-          importe: this._num(m.importe),
-          cuadrado: true
-        });
-      } else {
-        // Sin asiento que le corresponda: NO se inventa el cobro/pago — va a la cola del juicio.
-        pendientes.push({
-          clave,
-          movimiento: m,
-          lado: this._lado(m),
-          importe: this._num(m.importe),
-          motivo: diario_disponible
-            ? 'el movimiento no tiene cobro/pago cotejado en el diario: un movimiento = un cobro/pago'
-            : 'el diario (B2) no respondio: no se afirma el cotejo',
-          requiere_cola: true,
-          juicio: 'partida-no-identificada'
-        });
-      }
-    }
+    // Cuadra si la clave natural coincide (o, sin clave, si el importe coincide) dentro del epsilon.
+    const mismaClave = claveBanco && claveCobro && claveBanco === claveCobro;
+    const cuadra = mismaClave || Math.abs(diferencia) <= 0.005;
 
     return {
       status: 200,
       data: {
         project_id: pid,
-        periodo: input.periodo != null ? String(input.periodo) : null,
-        fuente_asientos: diario_disponible ? 'diario' : null,
-        diario_disponible,
-        total_movimientos: movimientos.length,
-        cotejados,
-        pendientes,
-        cuadra: pendientes.length === 0 && diario_disponible,
-        juicio_delegado_a: 'partida-no-identificada'
+        tipo: 'cuadre-cobro-pago',
+        clave: claveBanco,
+        clave_cobro_pago: claveCobro,
+        movimiento,
+        cobro_pago: cobroPago,
+        importe_movimiento: importeBanco,
+        importe_cobro_pago: importeCobro,
+        diferencia,
+        cuadra,
+        // El asiento propuesto lo declara la peticion; si cuadra se SUBE a B2 (no se escribe aqui).
+        asiento: input.asiento && typeof input.asiento === 'object' ? input.asiento : null,
+        motivo_descuadre: cuadra ? null : 'la clave natural (o el importe) del movimiento y el cobro/pago no coinciden',
+        determinista: true,
+        abierto: {
+          asiento: (cuadra && !input.asiento) ? 'cuadra pero no se declaro el asiento propuesto: no se inventa el apunte (lo propone quien lo tenga)' : null
+        }
       }
     };
   }
 
-  // El diario se pide a escritor-diario (B2) por EVENTO (nunca require cruzado).
-  async _diario(pid, input) {
-    const r = await this._rpc('escritor-diario.asientos.request',
-      { project_id: pid, periodo: input.periodo != null ? String(input.periodo) : null }, { timeout_ms: 4000 });
-    const asientos = r && r.data && Array.isArray(r.data.asientos) ? r.data.asientos
-      : (Array.isArray(r) ? r : null);
-    if (asientos) return { asientos, diario_disponible: true };
-    return { asientos: [], diario_disponible: false };
+  // La clave natural COMPARTIDA (importe|fecha|referencia): canonica y determinista.
+  _clave(m) {
+    const importe = this._round(this._num(m && (m.importe != null ? m.importe : m.cuota)), 2);
+    const fecha = String((m && (m.fecha != null ? m.fecha : m.fecha_valor)) || '').slice(0, 10);
+    const ref = String((m && (m.referencia != null ? m.referencia : (m.ref != null ? m.ref : (m.concepto || '')))) || '').trim().toLowerCase();
+    return `${importe}|${fecha}|${ref}`;
   }
 
-  // El lado del apunte lo dice el SIGNO del movimiento (dato declarado), no una constante.
-  _lado(m) {
-    const s = m && m.signo != null ? String(m.signo).toLowerCase().trim() : null;
-    if (s === 'cargo' || s === 'debito' || s === 'salida') return 'salida';
-    if (s === 'abono' || s === 'credito' || s === 'entrada') return 'entrada';
-    return null;   // sin signo → no se afirma la direccion (dato ausente = desconocido)
-  }
-
-  _claveDe(m) {
-    if (!m || typeof m !== 'object') return null;
-    if (m.clave != null) return String(m.clave);
-    const partes = [m.fecha, m.importe, m.signo, (m.referencia != null ? m.referencia : m.concepto)];
-    if (partes.every(v => v === null || v === undefined)) return null;
-    return partes.map(v => (v === null || v === undefined ? '-' : String(v))).join('|');
-  }
-
-  _espejoDe(pid) {
-    let m = this._espejo.get(pid);
-    if (!m) { m = new Map(); this._espejo.set(pid, m); }
-    return m;
-  }
-
-  _num(v) {
-    if (v === undefined || v === null || v === '') return null;
-    const n = Number(v);
-    return Number.isFinite(n) ? Math.abs(n) : null;
-  }
+  _num(v) { const n = Number(v); return Number.isFinite(n) ? n : 0; }
 
   // ── Tools ──
   toolCuadrar(params) { return this._cuadrar(params); }

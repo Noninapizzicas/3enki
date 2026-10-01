@@ -1,64 +1,53 @@
 {
-  "_doc": "Manifest de contabilidad-entrada/contrato-hecho-minimo — CUSTODIO CON PERSISTENCIA (A11, hoja del plan). LA CARA VISTA DESDE LA FUENTE: la parcela declarable del MINIMO exigible a cada vertical — no un formato impuesto, un minimo declarado. Invariante 13: el minimo se DECLARA, no se estima; el contrato de una vertical solo existe si la fuente (rol DECLARANTE_CONTRATO) lo declara. `exigir` es lectura determinista (NO muta): verifica el minimo declarado contra el hecho que llega y lista en `faltantes` los campos que el hecho no aporta — jamas rellena un campo ausente con una estimacion; sin contrato declarado devuelve declarado:false y no exige nada cableado. `declarar` es la escritura, append-only: re-declarar NO sobrescribe en silencio, apila una version nueva en el historial y el contrato vigente queda fechado. UN SOLO ESCRITOR: el declarante (rol DECLARANTE_CONTRATO); cualquier otro rol es rechazado (403). Persiste por proyecto con PosPersistencia (storage /contabilidad/contrato-hecho-minimo/contrato-hecho-minimo.json), restaura en project.activated y vuelca en onUnload. Proyecciones: `_exigir` · `_declarar`. Publica contabilidad.contrato_declarado.",
+  "_doc": "Manifest de entrada/contrato-hecho-minimo — CUSTODIO CON PERSISTENCIA (A11, hoja del plan). Parcela DECLARABLE del MINIMO exigible: la cara vista desde la fuente. UN escritor. Responde 'que campos minimos debe traer un hecho de esta vertical' — y lo DECLARA el JEFE/asesor; el modulo NO cablea un minimo. `exigir` es PREGUNTA: contrasta un hecho contra el contrato declarado, no escribe, no anuncia. `declarar` es ORDEN/ESCRITURA: fija el contrato de una vertical y anuncia contabilidad.contrato_hecho_declarado. SIN contrato declarado: verificable:false y conforme:null (no se da por cumplido por silencio). No se pisa en silencio: re-declarar appendea al historial. Persiste por proyecto via PosPersistencia (_shared/pos-persistencia, storage /contabilidad/contrato-hecho-minimo), restaura en project.activated y vuelca en onUnload. Proyecciones _exigir(vertical,hecho)->{conforme,verificable,faltantes} (PREGUNTA) y _declarar(vertical,campos_exigidos)->Contrato (ORDEN). El RPC exigir es CLASE PREGUNTA → NO lleva ui_handler; declarar es ORDEN → SÍ. Cuando falta el contrato, se sube una peticion best-effort a cola-declaraciones-criterio (sin suplantar al JEFE).",
   "name": "contrato-hecho-minimo",
   "version": "0.1.0",
-  "description": "Custodio (A11): la parcela del minimo exigible por vertical — un minimo declarado (no un formato impuesto); un solo escritor (DECLARANTE_CONTRATO), lo que el hecho no aporta se declara en faltantes y jamas se estima.",
-  "blueprint_driven": true,
-  "blueprint_path": "contrato-hecho-minimo.blueprint.json",
+  "description": "Custodio (A11): parcela declarable del mínimo exigible a un hecho por vertical. Exigir contrasta (pregunta); declarar fija el contrato y anuncia el hecho. Un solo escritor; persistente por proyecto.",
   "language": "es",
   "subscribes": [
     {
       "event": "contrato-hecho-minimo.exigir.request",
       "handler": "onExigirRequest",
-      "description": "RPC custodio (lectura, NO muta): {project_id, vertical, hecho?} → {declarado, contrato, campos, faltantes, completo, evaluado} o {declarado:false, motivo} si la fuente no declaro minimo. Verifica el minimo declarado contra el hecho y lista en faltantes los campos ausentes (nada se rellena). Responde por contrato-hecho-minimo.exigir.response; project_id o vertical ausente → contrato-hecho-minimo.exigir.failed."
+      "description": "RPC custodio (PREGUNTA, por el bus): {project_id, vertical, hecho} → {project_id, vertical, conforme, verificable, campos_exigidos, faltantes, abierto}. Contrasta el hecho contra el contrato declarado; sin contrato → verificable:false, conforme:null. Responde por contrato-hecho-minimo.exigir.response. Payload invalido → contrato-hecho-minimo.exigir.failed."
     },
     {
       "event": "contrato-hecho-minimo.declarar.request",
       "handler": "onDeclararRequest",
-      "description": "RPC custodio (escritura, UN escritor): {project_id, rol:'DECLARANTE_CONTRATO', vertical, campos:[...]} → {contrato:{vertical, campos, version, declarado_por, declarado_en}, declarado, sobrescritura}. Guard Rol=DECLARANTE_CONTRATO (segundo escritor → 403). Append-only: re-declarar apila version nueva en el historial, no sobrescribe en silencio. Exito → publica contabilidad.contrato_declarado y responde por contrato-hecho-minimo.declarar.response; invalido → contrato-hecho-minimo.declarar.failed."
+      "description": "RPC custodio (ORDEN, panel): {project_id, vertical, campos_exigidos, descripcion?} → {project_id, contrato, declarado}. Declara (UN escritor) el contrato de hecho minimo de una vertical. Publica contabilidad.contrato_hecho_declarado y responde por contrato-hecho-minimo.declarar.response. Payload invalido → contrato-hecho-minimo.declarar.failed."
     },
     {
       "event": "project.activated",
       "handler": "onProjectActivated",
-      "description": "Restaura los contratos de minimo del proyecto activado desde el storage (PosPersistencia)."
+      "description": "Restaura los contratos de hecho minimo del proyecto activado desde el storage (PosPersistencia)."
     }
   ],
   "publishes": [
     {
+      "event": "contabilidad.contrato_hecho_declarado",
+      "description": "Fire-and-forget (A11): quedo declarado el minimo exigible de una vertical → {project_id, vertical, contrato, declarado}. Lo consume puerto-evento-vertical (para contrastar lo que admite)."
+    },
+    {
       "event": "contrato-hecho-minimo.exigir.response",
-      "description": "Respuesta RPC correlada de contrato-hecho-minimo.exigir.request → {request_id, status:200, data:{declarado, contrato, campos, faltantes, completo, evaluado} | {declarado:false, motivo}}. Emitida por el helper _atender."
+      "description": "Respuesta RPC correlada de la op exigir."
     },
     {
       "event": "contrato-hecho-minimo.exigir.failed",
-      "description": "Par de fallo determinista (A11): project_id o vertical ausente → {status, error:{code, message, details?}}. Cierra el circulo de contrato-hecho-minimo.exigir.request."
+      "description": "Par de fallo determinista: falta project_id, vertical o hecho → {status, code, message}. Cierra el circulo de exigir.request."
     },
     {
       "event": "contrato-hecho-minimo.declarar.response",
-      "description": "Respuesta RPC correlada de contrato-hecho-minimo.declarar.request → {request_id, status:200, data:{contrato, declarado, sobrescritura}}. Emitida por el helper _atender."
+      "description": "Respuesta RPC correlada de la op declarar."
     },
     {
       "event": "contrato-hecho-minimo.declarar.failed",
-      "description": "Par de fallo determinista (A11): rol != DECLARANTE_CONTRATO (segundo escritor), vertical ausente o campos vacios → {status, error:{code, message, details?}}. Cierra el circulo de contrato-hecho-minimo.declarar.request."
-    },
-    {
-      "event": "contabilidad.contrato_declarado",
-      "description": "Fire-and-forget (A11): una fuente declaro su minimo exigible → {project_id, contrato, vertical, version, correlation_id}. Lo LEEN la verificacion de la entrada y completitud-cobertura (A12) para saber que esperar de cada vertical."
+      "description": "Par de fallo determinista: falta project_id, vertical o campos_exigidos → {status, code, message}. Cierra el circulo de declarar.request."
     }
   ],
+  "tools": [
+    { "name": "contrato-hecho-minimo.exigir", "description": "Contrasta (PREGUNTA) un hecho contra el contrato minimo declarado de una vertical." },
+    { "name": "contrato-hecho-minimo.declarar", "description": "Declara (ORDEN) el contrato de hecho minimo de una vertical." }
+  ],
   "ui_handlers": [
-    {
-      "domain": "contabilidad",
-      "action": "contrato-hecho-minimo.exigir",
-      "handler": "onExigirRequest",
-      "type": "system_panel",
-      "zone": "lateral_derecha"
-    },
-    {
-      "domain": "contabilidad",
-      "action": "contrato-hecho-minimo.declarar",
-      "handler": "onDeclararRequest",
-      "type": "system_panel",
-      "zone": "lateral_derecha"
-    }
+    { "domain": "contabilidad", "action": "contrato-hecho-minimo.declarar", "handler": "onDeclararRequest", "type": "system_panel", "zone": "lateral_derecha" }
   ]
 }

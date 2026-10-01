@@ -1,9 +1,0 @@
-{
-  "id": "control-calidad-muestreo",
-  "name": "Control de calidad",
-  "version": "0.1.0",
-  "zone": "system-bar",
-  "order": 211,
-  "icon": "⚙️",
-  "label": "Calidad"
-}

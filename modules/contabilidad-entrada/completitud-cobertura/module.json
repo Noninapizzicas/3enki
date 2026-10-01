@@ -1,39 +1,33 @@
 {
-  "_doc": "Manifest de contabilidad-entrada/completitud-cobertura — REFLEJO STATELESS (A12, hoja del plan). LA METRICA UNICA de cobertura: mide que hechos publico una vertical y cuales NO llegaron; produce LA Cobertura. Las demas senales (SelloCobertura Q3, AvisoCuadre C6, TasaCoberturaEntrada P4) la LEEN — no la recalculan (invariante 8, conflicto 2 resuelto). Invariante 7: nada se estima — lo que no llego es HUECO DECLARADO (`huecos`), y si no hay expectativa declarada la tasa es null (no 0: un 0 afirmaria una medida que no se hizo). La expectativa viene declarada en la peticion (`esperados`) o, en su defecto, del minimo declarado por la fuente (contrato-hecho-minimo A11) consultado POR EVENTO; sin contrato declarado la cobertura se declara declarada:false con tasa null — jamas se inventa la expectativa. Medida determinista por clave: cubiertos = esperados presentes en llegados; huecos = esperados ausentes en llegados (en orden de la expectativa); no_esperados = llegados fuera de la expectativa (tambien se declara, no se oculta); tasa = cubiertos/esperados redondeada a 4 decimales. FORMA: REFLEJO stateless — sin PosPersistencia, sin onProjectActivated. Proyeccion `_medir`. Publica contabilidad.cobertura_medida.",
+  "_doc": "Manifest de entrada/completitud-cobertura — REFLEJO STATELESS (A12, hoja del plan). PRODUCE LA METRICA UNICA DE COBERTURA que Q3/C6/P4 LEEN (no la recalculan): cobertura = min(recibidos, esperados) / esperados, acotada a [0,1], determinista, sin ponderaciones ocultas. Escucha contabilidad.hecho_recibido (fire-and-forget) y guarda una ventana acotada en memoria para medir cuando no se declaran los totales. Honestidad (invariante 13): si no llega lo esperado ni lo recibido, la metrica NO se inventa — cobertura:null y `abierto` declarado (dato ausente = desconocido). Sin store propio (STATELESS). La op medir es CLASE PREGUNTA → SIN ui_handler.",
   "name": "completitud-cobertura",
   "version": "0.1.0",
-  "description": "Reflejo stateless (A12): LA metrica unica de cobertura — que hechos publico una vertical y cuales no llegaron; lo ausente es hueco declarado y nada se estima (las demas senales la LEEN).",
-  "blueprint_driven": true,
-  "blueprint_path": "completitud-cobertura.blueprint.json",
+  "description": "Reflejo (A12): la metrica unica de cobertura. Determinista; sin dato no inventa el porcentaje. PREGUNTA.",
   "language": "es",
   "subscribes": [
     {
       "event": "completitud-cobertura.medir.request",
       "handler": "onMedirRequest",
-      "description": "RPC reflejo (determinista): {project_id, vertical?, esperados?, llegados?} → {vertical, cobertura:{declarada, esperados, llegados, cubiertos, huecos, tasa, completa, no_esperados?}, origen_esperados}. Mide la cobertura por clave; lo ausente es hueco declarado; sin expectativa declarada → declarada:false, tasa null (no se inventa). Si faltan esperados consulta el minimo de la fuente por evento (contrato-hecho-minimo). Exito → publica contabilidad.cobertura_medida y responde por completitud-cobertura.medir.response; project_id ausente → completitud-cobertura.medir.failed."
+      "description": "RPC reflejo (PREGUNTA): {project_id, esperados?|claves_esperadas?, recibidos?|claves_recibidas?, umbral?} → {project_id, cobertura, recibidos, esperados, faltantes, completa, bajo_umbral}. Determinista: min(recibidos,esperados)/esperados. Sin dato declarado ni observado → cobertura:null y `abierto` (no se inventa). Responde por completitud-cobertura.medir.response; entrada invalida → completitud-cobertura.medir.failed."
+    },
+    {
+      "event": "contabilidad.hecho_recibido",
+      "handler": "onHechoRecibido",
+      "description": "Fire-and-forget (puerto-evento-vertical A1): llego un hecho de la operacion. Se observa su clave en una ventana acotada para poder medir la cobertura sin que se declaren los totales. No publica hecho (solo observa)."
     }
   ],
   "publishes": [
     {
       "event": "completitud-cobertura.medir.response",
-      "description": "Respuesta RPC correlada de completitud-cobertura.medir.request → {request_id, status:200, data:{vertical, cobertura, origen_esperados}}. Emitida por el helper _atender."
+      "description": "Respuesta RPC correlada de la op medir (una sola cara: el bus)."
     },
     {
       "event": "completitud-cobertura.medir.failed",
-      "description": "Par de fallo determinista (A12): project_id ausente → {status, error:{code, message, details?}}. Cierra el circulo de completitud-cobertura.medir.request."
-    },
-    {
-      "event": "contabilidad.cobertura_medida",
-      "description": "Fire-and-forget (A12): LA metrica unica quedo medida → {project_id, vertical, cobertura, correlation_id}. La LEEN SelloCobertura (Q3), AvisoCuadre (C6), TasaCoberturaEntrada (P4) y declaracion-fuente-faltante (A15) — no la recalculan."
+      "description": "Par de fallo determinista: falta project_id → {status, code, message}. Cierra el circulo de medir.request."
     }
   ],
-  "ui_handlers": [
-    {
-      "domain": "contabilidad",
-      "action": "completitud-cobertura.medir",
-      "handler": "onMedirRequest",
-      "type": "system_panel",
-      "zone": "lateral_derecha"
-    }
-  ]
+  "tools": [
+    { "name": "completitud-cobertura.medir", "description": "Mide (PREGUNTA) la cobertura de la entrada: recibidos/esperados, determinista." }
+  ],
+  "ui_handlers": []
 }

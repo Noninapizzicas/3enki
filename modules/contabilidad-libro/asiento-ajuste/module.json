@@ -1,44 +1,34 @@
 {
-  "_doc": "Manifest de contabilidad-libro/asiento-ajuste — PUENTE STATELESS (B5, hoja del plan). ES EL CAMINO POR EL QUE LA CORRECCIÓN DEL ASESOR ENTRA AL LIBRO SIN BORRAR. La corrección SUMA: nunca sobrescribe ni borra el asiento original (invariante 3). Este módulo NO almacena — el almacén es escritor-diario (B2) y traza-asiento (B4); aquí solo se cruza el ajuste del asesor hacia el diario. El ajuste sale como un asiento NUEVO con `rectifica_a` (la base se PRESERVA, `base_preservada:true`) y clave de corrección determinista (misma corrección sobre la misma base → misma clave). La corrección también cuadra (Σ debe = Σ haber) o se rechaza (422). Se dispara con contabilidad.firma_registrada (fire-and-forget: firma del asesor) y con asiento-ajuste.entrar.request (RPC); publica contabilidad.asiento_ajuste_recibido — el diario lo AÑADE. La traza queda intacta. La ley entra como DATO: motivo/criterio declarables. Sin PosPersistencia ni onProjectActivated (puente puro). Proyección `_entrar`. Par de fallo asiento-ajuste.entrar.failed.",
+  "_doc": "Manifest de libro/asiento-ajuste — PUENTE (B5, hoja del plan). El CAMINO por el que la correccion del ASESOR entra al libro SIN BORRAR: un ajuste no edita el asiento equivocado, AÑADE el asiento de correccion y deja el original (traza intacta; borra_original:false). Frontera: da forma al ajuste y ANUNCIA contabilidad.ajuste_entrado; quien ESCRIBE el libro es B2 (escritor-diario) y quien apila la traza es B4 (traza-asiento) — ellos ESCUCHAN el hecho. El puente NO toca el libro (respeta el single-writer): no sube asentar.request directo porque B2 ya reacciona al hecho (subirlo duplicaria el asiento). Sin asiento no hay ajuste. NO persiste. RPC entrar es CLASE ORDEN → SÍ lleva ui_handler. Publica asiento-ajuste.entrar.response y su par .failed ademas del hecho contabilidad.ajuste_entrado.",
   "name": "asiento-ajuste",
   "version": "0.1.0",
-  "description": "Puente (B5): el camino por el que la corrección del asesor entra al libro sin borrar — el ajuste SUMA (asiento nuevo con rectifica_a), la base se preserva y la traza queda intacta.",
-  "blueprint_driven": true,
-  "blueprint_path": "asiento-ajuste.blueprint.json",
+  "description": "Puente (B5): la correccion del asesor entra al libro sin borrar. Da forma al ajuste y anuncia contabilidad.ajuste_entrado; el libro lo escribe B2.",
   "language": "es",
   "subscribes": [
     {
       "event": "asiento-ajuste.entrar.request",
       "handler": "onEntrarRequest",
-      "description": "RPC puente: {project_id, ajuste:{apuntes:[{cuenta, debe, haber}], concepto?, fecha?, base?|rectifica_a?}, base?, motivo?='ajuste_asesor', firmado_por?} → {project_id, ajuste:{tipo:'asiento-ajuste', rectifica_a, base_preservada:true, suma:true, clave_natural, apuntes, ...}, rectifica_a, clave_correccion, original_preservado:true, encaminado}. El ajuste NO sustituye el original: se emite como asiento NUEVO (append-only) con `rectifica_a`. Rechaza (422) si el ajuste no cuadra (Σ debe != Σ haber) o si no trae apuntes. Publica contabilidad.asiento_ajuste_recibido (el diario lo AÑADE) y responde por asiento-ajuste.entrar.response; fallo → asiento-ajuste.entrar.failed."
-    },
-    {
-      "event": "contabilidad.firma_registrada",
-      "handler": "onFirmaRegistrada",
-      "description": "Fire-and-forget (flujo-firma L3 → B5): la firma del asesor quedó registrada → el ajuste firmado entra al libro por el mismo camino (la corrección SUMA). Requiere {project_id, ajuste}; se ignora si falta alguno."
+      "description": "RPC puente (ORDEN, panel): {project_id, asiento{lineas,...}, referencia?, motivo?, por?} → {project_id, ajuste, asiento, referencia, por, escritores:[escritor-diario,traza-asiento], abierto}. Da forma al ajuste (no lo asienta) y publica contabilidad.ajuste_entrado; sin asiento → INVALID_INPUT. Responde por asiento-ajuste.entrar.response. Payload invalido → asiento-ajuste.entrar.failed."
     }
   ],
   "publishes": [
     {
+      "event": "contabilidad.ajuste_entrado",
+      "description": "Fire-and-forget (B5): la correccion del asesor entro al dominio → {project_id, ajuste, asiento, por, referencia}. Lo consumen escritor-diario (B2, lo asienta) y traza-asiento (B4, apila la traza)."
+    },
+    {
       "event": "asiento-ajuste.entrar.response",
-      "description": "Respuesta RPC correlada de asiento-ajuste.entrar.request → {request_id, status:200, data:{ajuste, rectifica_a, clave_correccion, suma, original_preservado, encaminado}}. Emitida por el helper _atender."
+      "description": "Respuesta RPC correlada de la op entrar."
     },
     {
       "event": "asiento-ajuste.entrar.failed",
-      "description": "Par de fallo determinista (B5): ajuste sin apuntes o malformado (422), ajuste que no cuadra (422, descuadre de partida doble), ajuste/base ausente (400) → {status, error:{code, message, details?}}. Cierra el círculo de asiento-ajuste.entrar.request."
-    },
-    {
-      "event": "contabilidad.asiento_ajuste_recibido",
-      "description": "Fire-and-forget (B5 → B2/B4): el ajuste del asesor SALE hacia el libro como asiento de corrección NUEVO → {project_id, ajuste, rectifica_a, clave_correccion, suma:true, correlation_id}. Lo LEEN escritor-diario (B2, que lo AÑADE: la corrección suma) y traza-asiento (B4, que conserva el rastro)."
+      "description": "Par de fallo determinista: falta project_id o asiento → {status, code, message}. Cierra el circulo de entrar.request."
     }
   ],
+  "tools": [
+    { "name": "asiento-ajuste.entrar", "description": "Entra (ORDEN) un ajuste del asesor al dominio y anuncia contabilidad.ajuste_entrado." }
+  ],
   "ui_handlers": [
-    {
-      "domain": "contabilidad",
-      "action": "asiento-ajuste.entrar",
-      "handler": "onEntrarRequest",
-      "type": "workspace_module",
-      "zone": "barra_modulos"
-    }
+    { "domain": "contabilidad", "action": "asiento-ajuste.entrar", "handler": "onEntrarRequest", "type": "system_panel", "zone": "lateral_derecha" }
   ]
 }

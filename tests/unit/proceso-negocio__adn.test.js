@@ -98,17 +98,58 @@ test('200 de estado lleva un RECORDATORIO con el PRINCIPIO', async () => {
   assert.match(conPendiente.data.recordatorio, /construir-modulos/);
 });
 
+
+// ————————————————————————————————————————————————————————————————
+// Un módulo que DERIVA, fabricado por el test (no depende del estado del repo).
+// Antes se usaba `catalogo-cuentas`, que YA NO deriva (el proceso lo arregló) —
+// el test quedó obsoleto y fallaba acusando a un módulo correcto. Un test que
+// depende del estado del repo envejece mal: fabrica su propio caso.
+// ————————————————————————————————————————————————————————————————
+const os = require('os');
+const fsx = require('fs');
+const pathx = require('path');
+// Fabrica una raíz temporal con UN módulo que deriva (escribe `anadir` y no
+// anuncia el hecho → R2). Devuelve la raíz.
+function raizConModuloQueDeriva() {
+  const dir = fsx.mkdtempSync(pathx.join(os.tmpdir(), 'adn-deriva-'));
+  const md = pathx.join(dir, 'modules', 'deriva-falsa');
+  fsx.mkdirSync(md, { recursive: true });
+  fsx.writeFileSync(pathx.join(md, 'module.json'), JSON.stringify({
+    name: 'deriva-falsa', version: '0.1.0', description: 'fabricada por el test',
+    ui_handlers: [{ domain: 'contabilidad', action: 'deriva-falsa.anadir', handler: 'onAnadirRequest', type: 'workspace_module', zone: 'barra_modulos' }],
+    subscribes: [], publishes: [],
+  }));
+  fsx.writeFileSync(pathx.join(md, 'index.js'), "'use strict';\nmodule.exports = class {};\n");
+  return dir;
+}
+
+
 // ————————————————————————————————————————————————————————————————
 // CAMBIO 2 · el gate de la FASE 4 ('construido') MIDE el ADN
 // ————————————————————————————————————————————————————————————————
 
+test('el VERIFICADOR caza un módulo que deriva (fabricado por el test)', () => {
+  const raiz = raizConModuloQueDeriva();
+  const v = require('../../scripts/verificar-adn-modulo.js').medirSlug('deriva-falsa', raiz);
+  assert.strictEqual(v.ok, false, 'escribe (anadir) y no anuncia el hecho → deriva');
+  assert.ok(v.hallazgos.some(h => h.regla === 'R2'), 'la regla rota es R2');
+});
+
 test('gate de construido: un módulo que DERIVA (escribe y calla) → 409 con la regla rota', () => {
   const m = modulo({});
-  const v = m._verificarUnSlug('construido', 'catalogo-cuentas');   // CUSTODIO que escribe sin anunciar (R2)
-  assert.strictEqual(v.ok, false, 'un módulo real que deriva NO debe pasar el gate');
-  assert.match(v.mensaje, /no respeta el ADN/);
-  assert.match(v.mensaje, /R2/, 'el mensaje nombra la regla rota (R2 · escritor mudo)');
-  assert.ok(Array.isArray(v.esperado) && v.esperado.some(e => /ADN/.test(e)));
+  // El gate delega en el verificador: se inyecta un veredicto de deriva para
+  // probar la REACCIÓN del gate (que es lo que este test cubre).
+  const rutaV = require.resolve('../../scripts/verificar-adn-modulo.js');
+  const cache = require.cache[rutaV];
+  const orig = cache.exports.medirSlug;
+  cache.exports.medirSlug = () => ({ ok: false, hallazgos: [{ regla: 'R2', gravedad: 'deriva', msg: 'escribe (anadir) y NO anuncia el hecho' }] });
+  try {
+    const v = m._verificarUnSlug('construido', 'escritor-diario');
+    assert.strictEqual(v.ok, false, 'un módulo que deriva NO debe pasar el gate');
+    assert.match(v.mensaje, /no respeta el ADN/);
+    assert.match(v.mensaje, /R2/, 'el mensaje nombra la regla rota (R2 · escritor mudo)');
+    assert.ok(Array.isArray(v.esperado) && v.esperado.some(e => /ADN/.test(e)));
+  } finally { cache.exports.medirSlug = orig; }
 });
 
 test('gate de construido: un módulo que CUMPLE el ADN → ok', () => {
@@ -120,11 +161,17 @@ test('gate de construido: un módulo que CUMPLE el ADN → ok', () => {
 
 test("completar_fase 'construido' con módulo que deriva → 409 FASE_INCOMPLETA (ADN) y con el principio", async () => {
   const m = modulo({ ficheros: ['plan-construccion.md'], plan: PLAN });
-  const r = await m._completarFase({ project_id: 'adn-gate', fase: 'construido', resumen: { modulos: ['catalogo-cuentas'] } });
-  assert.strictEqual(r.status, 409);
-  assert.strictEqual(r.data.error, 'FASE_INCOMPLETA');
-  assert.match(r.data.message, /ADN event-driven/);
-  assert.ok(r.data.message.startsWith(MARCA), 'el freno del ADN también lleva el principio');
+  const rutaV = require.resolve('../../scripts/verificar-adn-modulo.js');
+  const cache = require.cache[rutaV];
+  const orig = cache.exports.medirSlug;
+  cache.exports.medirSlug = () => ({ ok: false, hallazgos: [{ regla: 'R2', gravedad: 'deriva', msg: 'escribe y NO anuncia el hecho' }] });
+  try {
+    const r = await m._completarFase({ project_id: 'adn-gate', fase: 'construido', resumen: { modulos: ['escritor-diario'] } });
+    assert.strictEqual(r.status, 409);
+    assert.strictEqual(r.data.error, 'FASE_INCOMPLETA');
+    assert.match(r.data.message, /ADN event-driven/);
+    assert.ok(r.data.message.startsWith(MARCA), 'el freno del ADN también lleva el principio');
+  } finally { cache.exports.medirSlug = orig; }
 });
 
 test("completar_fase 'construido' con módulo que cumple → 200", async () => {

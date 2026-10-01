@@ -1,35 +1,32 @@
 {
-  "_doc": "Manifest de contabilidad-analitica/valor-neto-contable — REFLEJO STATELESS (F4, hoja del plan). VALOR NETO CONTABLE = COSTE − AMORTIZACION ACUMULADA. Calculo PURO, determinista: misma entrada → mismo valor; es el valor que va al BALANCE. ATRIBUTOS del diseno: coste:ParametroDeclarable (entra declarado en la peticion o con la ficha del activo — el reflejo NUNCA lo estima) y amort_acumulada:PlanAmortizacion (se AGREGA de las CUOTAS de la tabla de plan-amortizacion F2 POR EVENTO — suma pura, sin interpretar ninguna cuota). Ni el coste ni la acumulada se estiman: si falta uno de los dos, el valor neto queda [ABIERTO] (vnc:null) y se declara cual falta — jamas se rellena con 0 ni con un valor por defecto. Invariantes: DETERMINISTA (una sola respuesta correcta); dato ausente = desconocido → vnc:null y abierto:true; un valor neto NEGATIVO NO se corrige ni se recorta, se declara tal cual (senal de acumulada > coste); NO escribe, NO persiste, NO muta. FORMA: REFLEJO stateless, sin PosPersistencia ni onProjectActivated. Proyeccion unica `_calcular({project_id, id_activo?, activo?, fecha?, coste?, amortizacion_acumulada?, cuotas?, periodo?})` → {vnc, coste, amortizacion_acumulada, faltan, abierto, negativo}. Cierra el circulo: error → valor-neto-contable.calcular.failed.",
+  "_doc": "Manifest de analitica/valor-neto-contable — REFLEJO STATELESS (F4, hoja del plan). Valor neto contable del inmovilizado = COSTE − AMORTIZACION ACUMULADA. Determinista. NO calcula las cuotas (eso es plan-amortizacion): RECIBE las cuotas/la amortizacion acumulada (declaradas, de cuotas, o subidas por EVENTO a plan-amortizacion.cuota_del_periodo.request; tambien observa el HECHO contabilidad.cuota_amortizacion_generada de B3). Honestidad (invariante 13): sin coste NO se inventa el valor; sin ninguna fuente de amortizacion el VNC queda ABIERTO (no se asume 0); un VNC negativo no se corrige, se declara. NO escribe, NO persiste. RPC calcular es CLASE PREGUNTA → va por el bus, sin panel. Publica valor-neto-contable.calcular.response y su par .failed. Escucha contabilidad.cuota_amortizacion_generada (plan-amortizacion, emitido).",
   "name": "valor-neto-contable",
   "version": "0.1.0",
-  "description": "Reflejo (F4): valor neto contable = coste − amortizacion acumulada — calculo puro al balance, sin estimar nunca el coste ni la acumulada que el negocio no declara.",
-  "blueprint_driven": true,
-  "blueprint_path": "valor-neto-contable.blueprint.json",
+  "description": "Reflejo (F4): valor neto contable = coste − amortizacion acumulada. Determinista; sin fuente de amortizacion se declara abierto.",
   "language": "es",
   "subscribes": [
     {
       "event": "valor-neto-contable.calcular.request",
       "handler": "onCalcularRequest",
-      "description": "RPC reflejo (calculo puro, determinista): {project_id, id_activo?, activo?, fecha?, coste?, amortizacion_acumulada?, cuotas?, periodo?} → {project_id, id_activo, fecha, vnc, coste, amortizacion_acumulada, fuente_coste, fuente_amortizacion, abierto, faltan, motivo, negativo}. El coste es ParametroDeclarable (declarado o en la ficha del activo); la amortizacion acumulada se agrega de las cuotas de plan-amortizacion (F2) POR EVENTO o de cuotas declaradas. Sin coste o sin acumulada → vnc:null y abierto:true con las piezas que faltan (nada se estima). Responde por valor-neto-contable.calcular.response; project_id ausente → valor-neto-contable.calcular.failed."
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id, activo_id?, coste?, activo{coste,amortizacion_acumulada?,cuotas?}, amortizacion_acumulada?, cuotas?, periodo?} → {project_id, coste, amortizacion_acumulada, valor_neto_contable, fuente, formula, abierto}. Resta la amortizacion acumulada al coste; sin coste o sin amortizacion → abierto. Responde por valor-neto-contable.calcular.response. Payload invalido → valor-neto-contable.calcular.failed."
+    },
+    {
+      "event": "contabilidad.cuota_amortizacion_generada",
+      "handler": "onCuotaAmortizacionGenerada",
+      "description": "Fire-and-forget (B3 plan-amortizacion): se genero una cuota de amortizacion. Se observa (ventana acotada) como fuente de la amortizacion acumulada; no se recalcula ni se escribe."
     }
   ],
   "publishes": [
     {
       "event": "valor-neto-contable.calcular.response",
-      "description": "Respuesta RPC correlada de valor-neto-contable.calcular.request → {request_id, status:200, data:{vnc, coste, amortizacion_acumulada, faltan, abierto, negativo}}. Emitida por el helper _atender."
+      "description": "Respuesta RPC correlada de la op calcular (una sola cara: el bus)."
     },
     {
       "event": "valor-neto-contable.calcular.failed",
-      "description": "Par de fallo determinista (F4): project_id ausente → {status, error:{code, message, details?}}. Cierra el circulo de valor-neto-contable.calcular.request."
+      "description": "Par de fallo determinista: falta project_id → {status, code, message}. Cierra el circulo de calcular.request."
     }
   ],
-  "ui_handlers": [
-    {
-      "domain": "contabilidad",
-      "action": "valor-neto-contable.calcular",
-      "handler": "onCalcularRequest",
-      "type": "system_panel",
-      "zone": "lateral_derecha"
-    }
+  "tools": [
+    { "name": "valor-neto-contable.calcular", "description": "Calcula (PREGUNTA) el valor neto contable = coste − amortizacion acumulada." }
   ]
 }

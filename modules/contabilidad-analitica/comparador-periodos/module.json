@@ -1,35 +1,32 @@
 {
-  "_doc": "Manifest de contabilidad-analitica/comparador-periodos — REFLEJO STATELESS (J9, hoja del plan). COMPARAR: ejercicio vs ejercicio, mes vs mes, real vs presupuesto — la lente del jefe para poder DECIDIR (sin comparacion no se sabe si el mes ha ido bien o mal). Determinista: mismos dos periodos + misma metrica → mismo delta. ATRIBUTOS del diseno: presupuesto:Presupuesto, desviacion:Desviacion; METODOS: comparar(a,b):Delta; REGLA: ejercicio vs ejercicio, mes vs mes, real vs presupuesto — REUTILIZA J3/J4, NO los duplica. El modo real_vs_presupuesto NO recalcula nada: DELEGA en desviacion (J4) POR EVENTO (desviacion.calcular.request), que ya compone el real (de J2) contra el objetivo que el JEFE declaro (de J3); aqui solo se PRESENTA el delta con su signo, su umbral y su avisa (cero aritmetica propia del dominio). En ejercicio_vs_ejercicio y mes_vs_mes NO se recalcula la cifra de ningun periodo: cada extremo se PIDE ya calculado a su dueño POR EVENTO (segun la metrica: margen → margen-analitico J2, resultado → cuenta-resultados C2, caja → saldo-tesoreria E4) o llega declarado; la unica aritmetica de este reflejo es la DIFERENCIA entre los dos extremos — comparar, que es su oficio. LA METRICA ES DECLARABLE: que se compara lo declara el jefe; sin metrica declarada NO se elige por el (faltan:['metrica'], delta null). Sin los dos extremos → delta:null y abierto:true con lo que falta (no se compara contra un 0 que nadie midio). El MODO es declarable (ejercicio_vs_ejercicio | mes_vs_mes | real_vs_presupuesto); sin modo declarado no se compara. Invariantes: DETERMINISTA; dato ausente = desconocido; REUTILIZA SIN DUPLICAR (J3/J4 y J2/C2/E4 se piden por evento, cero reglas cableadas); NO escribe ni persiste (la comparacion es un DERIVADO). FORMA: REFLEJO stateless, sin PosPersistencia ni onProjectActivated. Proyeccion unica `_comparar({project_id, modo, metrica?, desde?/hasta?, a?/b?, dimension?, real?/objetivo?/umbral?})` → {project_id, modo, metrica, fuente_metrica, a:{periodo,valor,fuente}, b:{periodo,valor,fuente}, delta, delta_relativa, signo:'SUBE'|'BAJA'|'IGUAL', direccion, abierto, faltan, motivo}. Cierra el circulo: error → comparador-periodos.comparar.failed.",
+  "_doc": "Manifest de analitica/comparador-periodos — REFLEJO STATELESS (J9, hoja del plan). Ejercicio vs ejercicio, mes vs mes, real vs presupuesto. REUTILIZA J3 (presupuesto) y J4 (desviacion), NO los duplica: sube best-effort presupuesto.objetivo.request (trae la cifra objetivo) y desviacion.calcular.request (mide el real contra ella) — o usa lo DECLARADO. Este modulo COMPARA lo que ambos devuelven; no fija objetivos ni recalcula desviaciones. Honestidad (invariante 13): si falta uno de los dos lados, la comparacion queda `abierta` — NO se rellena con un cero (una comparacion contra un cero inventado es una desviacion falsa). RPC comparar es CLASE PREGUNTA → va por el bus, SIN ui_handler. Escucha contabilidad.presupuesto_fijado (presupuesto J3, emitido). NOTA R3: el plan declara tambien escucha de contabilidad.ejercicio_cerrado (cierre-ejercicio C4), pero C4 AUN NO existe en el repo → NO se declara (cadena colgada). Publica comparador-periodos.comparar.response y su par .failed.",
   "name": "comparador-periodos",
   "version": "0.1.0",
-  "description": "Reflejo (J9): compara periodos (ejercicio vs ejercicio, mes vs mes, real vs presupuesto) reutilizando J3/J4 por evento — no los duplica; la metrica y el modo son declarables y sin ellos no compara nada.",
-  "blueprint_driven": true,
-  "blueprint_path": "comparador-periodos.blueprint.json",
+  "description": "Reflejo (J9): compara periodos (ejercicio/mes) y real vs presupuesto reutilizando J3/J4; si falta un lado, la comparacion queda abierta.",
   "language": "es",
   "subscribes": [
     {
       "event": "comparador-periodos.comparar.request",
       "handler": "onCompararRequest",
-      "description": "RPC reflejo (comparacion pura, determinista): {project_id, modo:'ejercicio_vs_ejercicio'|'mes_vs_mes'|'real_vs_presupuesto', metrica?, desde?/hasta?, a?/b? (valor declarado o {periodo,valor}), dimension?, real?/objetivo?/umbral?} → {project_id, modo, metrica, fuente_metrica, a:{periodo,valor,fuente}, b:{periodo,valor,fuente}, delta, delta_relativa, signo:'SUBE'|'BAJA'|'IGUAL', direccion, avisa?, umbral?, abierto, faltan, motivo}. real_vs_presupuesto DELEGA en desviacion (J4) por EVENTO (no recalcula la desviacion ni duplica J3); periodo vs periodo pide cada extremo YA CALCULADO a su dueño por evento (margen→J2, resultado→C2, caja→E4) y solo resta los dos extremos. Sin modo o sin metrica declarada → delta:null y abierto:true (no se elige por el jefe); sin los dos extremos → delta:null (no se compara contra un 0 que nadie midio). Responde por comparador-periodos.comparar.response; project_id ausente → comparador-periodos.comparar.failed."
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id, modo?, dimension?, a?/b?/objetivos?, periodo?, periodo_a?, periodo_b?} → {project_id, modo, dimension, a, b, comparable, diferencia, variacion_pct, desviacion, abierto}. Compara dos lados reutilizando J3/J4; si falta un lado queda abierto (no se rellena con cero). Responde por comparador-periodos.comparar.response. Payload invalido → comparador-periodos.comparar.failed."
+    },
+    {
+      "event": "contabilidad.presupuesto_fijado",
+      "handler": "onPresupuestoFijado",
+      "description": "Fire-and-forget (presupuesto J3): un objetivo quedo fijado. Se observa en memoria (ventana acotada) para la proxima comparacion; no se recalcula ni se escribe."
     }
   ],
   "publishes": [
     {
       "event": "comparador-periodos.comparar.response",
-      "description": "Respuesta RPC correlada de comparador-periodos.comparar.request → {request_id, status:200, data:{delta, delta_relativa, signo, a, b, fuente_metrica, faltan}}. Emitida por el helper _atender."
+      "description": "Respuesta RPC correlada de la op comparar (una sola cara: el bus)."
     },
     {
       "event": "comparador-periodos.comparar.failed",
-      "description": "Par de fallo determinista (J9): project_id ausente → {status, error:{code, message, details?}}. Cierra el circulo de comparador-periodos.comparar.request."
+      "description": "Par de fallo determinista: falta project_id → {status, code, message}. Cierra el circulo de comparar.request."
     }
   ],
-  "ui_handlers": [
-    {
-      "domain": "contabilidad",
-      "action": "comparador-periodos.comparar",
-      "handler": "onCompararRequest",
-      "type": "inline_render",
-      "zone": "area_chat"
-    }
+  "tools": [
+    { "name": "comparador-periodos.comparar", "description": "Compara (PREGUNTA) dos periodos o el real contra el presupuesto reutilizando J3/J4." }
   ]
 }

@@ -1,35 +1,27 @@
 {
-  "_doc": "Manifest de contabilidad-fiscal/pagos-a-cuenta-empleado — REFLEJO STATELESS (G8, hoja del plan). ANTICIPOS / ENTREGAS A CUENTA Y SU IMPACTO EN EL NETO Y EL IRPF: no todo es sueldo fijo. El diseno lo dice literal: `impacto(n:ReciboNomina):Cuantía` con `anticipos:Set<Anticipo>`. Calculo PURO, determinista: mismo neto declarado + mismos anticipos → mismo saldo pendiente. ESTE MODULO NO DECIDE: no aprueba el anticipo, no lo paga y no recalcula el IRPF — deriva el IMPACTO declarado (cuanto se entrego a cuenta y que SALDO PENDIENTE queda sobre el neto del recibo). El neto se COPIA del recibo (lo calculo el sistema externo). LO QUE IMPACTA ES DECLARABLE: el concepto que sufre el pago a cuenta (`concepto_pago_a_cuenta`, por defecto el neto) y la NATURALEZA de cada anticipo (anticipo/entrega/retribucion_flexible) los declara el negocio — cero tipos cableados. AISLAMIENTO PERSONA↔PERSONA (invariante dura): si la consulta la hace una PERSONA (`quien` distinta del titular), se consulta a acceso-nomina (G7) POR EVENTO y, si NO autoriza (o G7 no responde), se DENIEGA con 403 AISLAMIENTO_PERSONA — este reflejo no es una puerta lateral al dato personal. Invariante: dato ausente = desconocido — un anticipo sin importe queda null y se declara; sin el neto del recibo el saldo pendiente queda [ABIERTO] y no se estima. FORMA: REFLEJO stateless, sin PosPersistencia ni onProjectActivated. Proyeccion unica `_impacto({project_id, recibo|recibos?|clave_natural?|empleado?+periodo?, anticipos?, quien?, concepto_pago_a_cuenta?})` → {empleado, neto_total, anticipos, anticipos_total, saldo_pendiente, excede_neto, naturaleza_origen, tipos_cableados:false, decide:false, paga:false, aislamiento, faltantes, abierto}. Cierra el circulo del RPC con su par de fallo: pagos-a-cuenta-empleado.impacto.failed.",
+  "_doc": "Manifest de fiscal/pagos-a-cuenta-empleado — REFLEJO STATELESS (G8, hoja del plan). ANTICIPOS/ADELANTOS y su IMPACTO en el neto y el IRPF. No todo es sueldo fijo: un pago a cuenta adelantado REDUCE el neto a percibir hoy (neto_a_percibir = base − retencion − anticipos) pero NO borra la base del IRPF — la retencion se calcula sobre el DEVENGO, no sobre lo percibido (anticipo_afecta_irpf:false, impacto_irpf:0). Mecanico y DETERMINISTA: los importes (base/bruto, retencion, anticipos) llegan DECLARADOS del recibo (G1); aqui solo se recomponen. Dato ausente = desconocido: sin base/retencion declaradas el impacto es PARCIAL (impacto_completo:false); un anticipo sin importe no se estima con 0. NO escribe, NO persiste. RPC impacto es CLASE PREGUNTA → va por el bus, sin panel. NOTA R3: el plan declara escucha de contabilidad.nomina_recibida, pero NINGUN modulo del repo lo emite AUN (lo emite puerto-nomina G4, grupo posterior): declararlo daria cadena colgada, asi que NO se declara. Publica pagos-a-cuenta-empleado.impacto.response y su par .failed.",
   "name": "pagos-a-cuenta-empleado",
   "version": "0.1.0",
-  "description": "Reflejo (G8): deriva el impacto de los anticipos/entregas a cuenta sobre el neto del recibo y el saldo pendiente — anticipos declarables, aislamiento persona-a-persona y sin decidir nada.",
-  "blueprint_driven": true,
-  "blueprint_path": "pagos-a-cuenta-empleado.blueprint.json",
+  "description": "Reflejo (G8): impacto de los anticipos/pagos a cuenta en el neto y el IRPF. El anticipo reduce el neto pero no el IRPF (retencion sobre devengo). Determinista.",
   "language": "es",
   "subscribes": [
     {
       "event": "pagos-a-cuenta-empleado.impacto.request",
       "handler": "onImpactoRequest",
-      "description": "RPC reflejo (calculo puro, determinista): {project_id, recibo|recibos|clave_natural|empleado+periodo (el/los recibos ya calculados; si faltan se piden a recibo-nomina G1 POR EVENTO), anticipos? (DECLARABLES: [{importe, naturaleza?, concepto?, fecha?, id?, aprobado?}]), quien? (si la consulta la hace una persona distinta del titular, se autoriza contra acceso-nomina G7 POR EVENTO), concepto_pago_a_cuenta? (por defecto 'neto')} → {project_id, empleado, neto_total, anticipos, anticipos_total, saldo_pendiente (= neto - anticipos), excede_neto, naturaleza_origen, tipos_cableados:false, decide:false, paga:false, aislamiento:{aplicado, quien, empleado, es_propia, permitido, motivo}, faltantes, abierto}. Sin autorizacion de G7 para la nomina de otro → 403 AISLAMIENTO_PERSONA. El modulo no aprueba, no paga y no estima: lo ausente queda null y se declara. Responde por pagos-a-cuenta-empleado.impacto.response; project_id ausente o calculo invalido → pagos-a-cuenta-empleado.impacto.failed."
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id, anticipos|pagos_a_cuenta, base|bruto?, retencion?} → {project_id, anticipos[], total_anticipos, base_devengo, neto_sin_anticipos, neto_a_percibir, impacto_neto, irpf, impacto_irpf, anticipo_afecta_irpf, impacto_completo, abierto}. Calcula el impacto del anticipo sobre el neto (reduce) y el IRPF (no afecta). Responde por pagos-a-cuenta-empleado.impacto.response; sin anticipos → pagos-a-cuenta-empleado.impacto.failed."
     }
   ],
   "publishes": [
     {
       "event": "pagos-a-cuenta-empleado.impacto.response",
-      "description": "Respuesta RPC correlada de pagos-a-cuenta-empleado.impacto.request → {request_id, status:200, data:{neto_total, anticipos_total, saldo_pendiente, excede_neto, aislamiento, faltantes, abierto}}. Emitida por el helper _atender."
+      "description": "Respuesta RPC correlada de la op impacto (una sola cara: el bus)."
     },
     {
       "event": "pagos-a-cuenta-empleado.impacto.failed",
-      "description": "Par de fallo determinista (G8): project_id ausente (400), aislamiento persona-a-persona (403 AISLAMIENTO_PERSONA) o excepcion de la proyeccion (500) → {status, error:{code, message, details?}}. Cierra el circulo de pagos-a-cuenta-empleado.impacto.request."
+      "description": "Par de fallo determinista: falta project_id o anticipos → {status, code, message}. Cierra el circulo de impacto.request."
     }
   ],
-  "ui_handlers": [
-    {
-      "domain": "contabilidad",
-      "action": "pagos-a-cuenta-empleado.impacto",
-      "handler": "onImpactoRequest",
-      "type": "workspace_module",
-      "zone": "barra_modulos"
-    }
+  "tools": [
+    { "name": "pagos-a-cuenta-empleado.impacto", "description": "Calcula (PREGUNTA) el impacto de los pagos a cuenta en el neto y el IRPF." }
   ]
 }

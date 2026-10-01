@@ -1,21 +1,21 @@
 /**
  * contabilidad-libro/mayor-balanza — REFLEJO STATELESS (B3, hoja del plan).
  *
- * Deriva el MAYOR (saldos por cuenta) y la BALANZA (sumas y saldos) del diario.
- * NO muta nada: es cálculo puro desde los asientos. El almacén de los asientos es
- * escritor-diario (B2); aquí solo se proyecta.
+ * Saldos por CUENTA y BALANZA de comprobacion DERIVADOS del diario. Calculo
+ * DETERMINISTA (mismo diario → mismos saldos); un test lo afirma.
  *
- * El diario llega por DOS vías, ninguna es un `require` cruzado:
- *   - `contabilidad.asiento_registrado` (fire-and-forget): se ACUMULA la muestra
- *     del asiento en memoria (los hechos registrados se reflejan).
- *   - `mayor-balanza.saldos.request` / `.balanza.request`: se PIDE el diario a
- *     escritor-diario POR EVENTO (RPC `escritor-diario.*`) y, si no responde, se
- *     derivan los saldos de los asientos acumulados. Se declara de dónde salió.
+ * La hoja ESCUCHA `contabilidad.asiento_asentado` (B2 escritor-diario) y va
+ * acumulando su DERIVADO en memoria (el mayor): no escribe el libro, lo LEE.
+ * La escritura del diario es de escritor-diario; aqui solo se DERIVA.
  *
- * Invariante 2 (el asiento original no se borra): el mayor no reescribe asientos;
- * solo suma debe/haber por cuenta. Determinista: mismo diario → mismo mayor.
+ * Invariantes:
+ *  - Dato ausente = desconocido: una linea sin cuenta NO se imputa a una cuenta inventada;
+ *    se conserva como suma `sin_cuenta` y se declara en `abierto`.
+ *  - Debe/Haber se conservan SEPARADOS y se deriva el saldo por cuenta.
+ *  - NO escribe, NO persiste, NO muta el diario: solo calcula. Su acumulado es un DERIVADO.
  *
  * Forma: REFLEJO → STATELESS. Sin PosPersistencia, sin onProjectActivated.
+ * RPC saldos/balanza son CLASE PREGUNTA → sin ui_handler.
  * Ver hoja B3 del plan-construccion y diseno-oop.md (CLASE MayorBalanza).
  */
 
@@ -28,32 +28,16 @@ class MayorBalanza extends ModuloHibridoReflejo {
     super();
     this.name = 'mayor-balanza';
     this.version = 'reflejo-0.1.0';
-    // espejo en memoria de los asientos registrados: project_id -> Map<numero|clave, asiento>
-    this._espejo = new Map();
+    // Derivado en memoria: project_id -> Map<cuenta, {debe, haber, movimientos}>
+    this._mayores = new Map();
   }
 
   async onUnload() { return super.onUnload(); }
 
-  // ── fire-and-forget: el diario publicó un asiento → se refleja la muestra (no muta el libro) ──
-  onAsientoRegistrado(e) {
-    const d = (e && (e.data || e)) || {};
-    const pid = d.project_id;
-    const asiento = d.asiento;
-    if (!pid || !asiento || typeof asiento !== 'object') return null;
-    // Idempotente: un hecho = un asiento; el mismo numero/clave no se duplica en el espejo.
-    const clave = asiento.clave_natural != null ? String(asiento.clave_natural)
-      : (asiento.numero != null ? String(asiento.numero) : null);
-    if (!clave) return null;
-    const m = this._espejoDe(pid);
-    m.set(clave, asiento);
-    this.logger?.debug('mayor-balanza.asiento.reflejado', { project_id: pid, clave });
-    return this._saldos({ project_id: pid });
-  }
-
-  // ── handlers RPC (una línea, delegan a _atender) ──
+  // ── handlers RPC (PREGUNTA → sin ui_handler) ──
   onSaldosRequest(e) {
     return this._atender(e, 'saldos', 'mayor-balanza.saldos.response', async (d) => {
-      const res = await this._saldos(d);
+      const res = this._saldos(d);
       if (res.status !== 200) this.eventBus?.publish('mayor-balanza.saldos.failed', res);
       return res;
     });
@@ -61,123 +45,131 @@ class MayorBalanza extends ModuloHibridoReflejo {
 
   onBalanzaRequest(e) {
     return this._atender(e, 'balanza', 'mayor-balanza.balanza.response', async (d) => {
-      const res = await this._balanza(d);
+      const res = this._balanza(d);
       if (res.status !== 200) this.eventBus?.publish('mayor-balanza.balanza.failed', res);
       return res;
     });
   }
 
-  // ── MAYOR: saldos por cuenta derivados del diario (cálculo puro, no muta) ──
-  async _saldos(input = {}) {
-    const pid = input.project_id || this.project_id;
-    if (!pid) return this._invalid('project_id');
-
-    const { asientos, fuente } = await this._diario(pid, input);
-    const por_cuenta = new Map();
-    for (const a of asientos) {
-      if (!a || !Array.isArray(a.apuntes)) continue;
-      for (const ap of a.apuntes) {
-        if (!ap || ap.cuenta == null) continue;
-        const cuenta = String(ap.cuenta);
-        const debe = this._num(ap.debe);
-        const haber = this._num(ap.haber);
-        if (debe === null || haber === null) continue;
-        let s = por_cuenta.get(cuenta);
-        if (!s) { s = { cuenta, debe: 0, haber: 0, movimientos: 0 }; por_cuenta.set(cuenta, s); }
-        s.debe = this._round(s.debe + debe, 2);
-        s.haber = this._round(s.haber + haber, 2);
-        s.movimientos += 1;
-      }
+  // ── handler de dominio (fire-and-forget): un asiento quedo en el libro (B2) ──
+  // Deriva y acumula; NO publica response (no es RPC).
+  onAsientoAsentado(e) {
+    const d = (e && (e.data || e)) || {};
+    try {
+      const pid = d.project_id || this.project_id;
+      if (!pid) return;
+      const asiento = d.asiento || null;
+      if (!asiento) return;
+      this._acumular(pid, asiento);
+    } catch (err) {
+      this.logger?.error(`${this.name}.asiento_asentado.error`, { error: err.message });
     }
-
-    // Orden determinista por código de cuenta.
-    const mayores = [...por_cuenta.values()]
-      .sort((x, y) => x.cuenta.localeCompare(y.cuenta))
-      .map(s => {
-        const saldo = this._round(s.debe - s.haber, 2);
-        return {
-          cuenta: s.cuenta,
-          debe: s.debe,
-          haber: s.haber,
-          saldo,
-          saldo_deudor: saldo > 0 ? saldo : 0,
-          saldo_acreedor: saldo < 0 ? this._round(-saldo, 2) : 0,
-          movimientos: s.movimientos
-        };
-      });
-
-    return {
-      status: 200,
-      data: {
-        project_id: pid,
-        ejercicio: input.ejercicio != null ? input.ejercicio : null,
-        fuente,
-        total_cuentas: mayores.length,
-        suma_debe: this._round(mayores.reduce((s, m) => s + m.debe, 0), 2),
-        suma_haber: this._round(mayores.reduce((s, m) => s + m.haber, 0), 2),
-        mayor: mayores
-      }
-    };
   }
 
-  // ── BALANZA: sumas y saldos (misma derivación, más los descuadres declarados) ──
-  async _balanza(input = {}) {
+  // Acumula un asiento en el mayor derivado (solo lectura del diario).
+  _acumular(pid, asiento) {
+    const lineas = Array.isArray(asiento.lineas) ? asiento.lineas : [];
+    const mayor = this._mayor(pid);
+    for (const l of lineas) {
+      if (!l || typeof l !== 'object') continue;
+      const cuenta = l.cuenta != null ? String(l.cuenta) : null;
+      const clave = cuenta || '(sin_cuenta)';
+      const acc = mayor.get(clave) || { cuenta, debe: 0, haber: 0, movimientos: 0 };
+      acc.debe = this._round(acc.debe + this._num(l.debe), 2);
+      acc.haber = this._round(acc.haber + this._num(l.haber), 2);
+      acc.movimientos += 1;
+      mayor.set(clave, acc);
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // saldos(filtro?) → saldos por cuenta derivados del diario
+  // ══════════════════════════════════════════════════════════════════════
+  _saldos(input = {}) {
     const pid = input.project_id || this.project_id;
     if (!pid) return this._invalid('project_id');
 
-    const res = await this._saldos(input);
-    if (res.status !== 200) return res;
-    const s = res.data;
+    const mayor = this._mayores.get(pid);
+    let cuentas = mayor ? [...mayor.values()] : [];
 
-    // La balanza no es un estado del libro: es una proyección del mayor.
-    const descuadre_sumas = this._round(s.suma_debe - s.suma_haber, 2);
-    const total_deudor = this._round(s.mayor.reduce((x, m) => x + m.saldo_deudor, 0), 2);
-    const total_acreedor = this._round(s.mayor.reduce((x, m) => x + m.saldo_acreedor, 0), 2);
-    const descuadre_saldos = this._round(total_deudor - total_acreedor, 2);
-    // La partida doble cuadra: si no, se DECLARA el descuadre; no se matiza.
-    const cuadra = Math.abs(descuadre_sumas) < 0.01 && Math.abs(descuadre_saldos) < 0.01;
+    const prefijo = input.prefijo != null ? String(input.prefijo).trim() : '';
+    const cuenta = input.cuenta != null ? String(input.cuenta).trim() : '';
+    if (prefijo) cuentas = cuentas.filter((c) => c.cuenta && c.cuenta.startsWith(prefijo));
+    if (cuenta) cuentas = cuentas.filter((c) => c.cuenta === cuenta);
+
+    const saldos = cuentas.map((c) => ({
+      cuenta: c.cuenta,
+      debe: c.debe,
+      haber: c.haber,
+      saldo: this._round(c.debe - c.haber, 2),
+      movimientos: c.movimientos
+    }));
+
+    const totalDebe = this._round(saldos.reduce((a, s) => a + s.debe, 0), 2);
+    const totalHaber = this._round(saldos.reduce((a, s) => a + s.haber, 0), 2);
+    const sinCuenta = mayor ? (mayor.get('(sin_cuenta)') || null) : null;
 
     return {
       status: 200,
       data: {
         project_id: pid,
-        ejercicio: s.ejercicio,
-        fuente: s.fuente,
-        num_cuentas: s.total_cuentas,
-        suma_debe: s.suma_debe,
-        suma_haber: s.suma_haber,
-        total_saldo_deudor: total_deudor,
-        total_saldo_acreedor: total_acreedor,
-        descuadre_sumas,
-        descuadre_saldos,
-        cuadra,
-        // Si no cuadra, se declara el descuadre; la balanza no lo esconde.
-        aviso: cuadra ? null : 'la balanza no cuadra: se declara el descuadre, no se matiza',
-        lineas: s.mayor
+        saldos,
+        num_cuentas: saldos.length,
+        total_debe: totalDebe,
+        total_haber: totalHaber,
+        cuadra: Math.abs(this._round(totalDebe - totalHaber, 2)) <= 0.005,
+        determinista: true,
+        abierto: {
+          mayor: saldos.length ? null : 'no hay asientos derivados todavia (el mayor esta vacio; no se inventa)',
+          sin_cuenta: sinCuenta
+            ? `hay ${sinCuenta.movimientos} movimiento(s) sin cuenta declarada (se agrupan aparte, no se imputan a una cuenta inventada)`
+            : null
+        }
       }
     };
   }
 
-  // Pide el diario a escritor-diario POR EVENTO; si no responde, usa el espejo.
-  async _diario(pid, input = {}) {
-    const r = await this._rpc('escritor-diario.asientos.request',
-      { project_id: pid, ejercicio: input.ejercicio ?? null }, { timeout_ms: 4000 });
-    const asientos = r && r.data && Array.isArray(r.data.asientos) ? r.data.asientos
-      : (r && Array.isArray(r) ? r : null);
-    if (asientos) return { asientos, fuente: 'diario' };
-    return { asientos: [...this._espejoDe(pid).values()], fuente: 'espejo' };
+  // ══════════════════════════════════════════════════════════════════════
+  // balanza() → balanza de comprobacion (sumas y saldos por cuenta)
+  // ══════════════════════════════════════════════════════════════════════
+  _balanza(input = {}) {
+    const pid = input.project_id || this.project_id;
+    if (!pid) return this._invalid('project_id');
+
+    const base = this._saldos({ project_id: pid });
+    const filas = base.data.saldos.map((s) => ({
+      cuenta: s.cuenta,
+      suma_debe: s.debe,
+      suma_haber: s.haber,
+      saldo_deudor: s.saldo > 0 ? s.saldo : 0,
+      saldo_acreedor: s.saldo < 0 ? this._round(-s.saldo, 2) : 0
+    }));
+
+    return {
+      status: 200,
+      data: {
+        project_id: pid,
+        balanza: filas,
+        num_cuentas: filas.length,
+        total_debe: base.data.total_debe,
+        total_haber: base.data.total_haber,
+        // La balanza CUADRA cuando las sumas de debe y haber coinciden (la partida doble lo garantiza).
+        cuadra: base.data.cuadra,
+        determinista: true,
+        abierto: base.data.abierto
+      }
+    };
   }
 
-  _espejoDe(pid) {
-    let m = this._espejo.get(pid);
-    if (!m) { m = new Map(); this._espejo.set(pid, m); }
+  _mayor(pid) {
+    let m = this._mayores.get(pid);
+    if (!m) { m = new Map(); this._mayores.set(pid, m); }
     return m;
   }
 
   _num(v) {
-    if (v === undefined || v === null || v === '') return 0;
     const n = Number(v);
-    return Number.isFinite(n) ? n : null;
+    return Number.isFinite(n) ? n : 0;
   }
 
   // ── Tools ──

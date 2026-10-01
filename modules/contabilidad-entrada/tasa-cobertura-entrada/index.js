@@ -1,30 +1,24 @@
 /**
  * contabilidad-entrada/tasa-cobertura-entrada — REFLEJO STATELESS (P4, hoja del plan).
  *
- * La PROPORCION de hechos que entran SIN intervencion vs los que CAEN A COLA. Es la prueba de
- * la promesa del dueno: "sin una persona digitando".
+ * La PROPORCION de hechos que entran SIN intervencion vs los que caen a cola. Es la vista
+ * de TASA de la metrica unica: LEE la metrica (`completitud-cobertura` A12) y calcula la
+ * tasa — NO la recalcula, NO cuenta hechos por su cuenta, NO escribe nada.
  *
- * ⚠️ LEE LA METRICA UNICA, NO LA RECALCULA. La cobertura la produce `completitud-cobertura` (A12)
- * y la declara en `contabilidad.cobertura_medida`. Aqui NO se vuelve a medir la cobertura: se TOMA
- * la tasa ya medida (declarada en la peticion o pedida POR EVENTO a su dueno) y se PRESENTA para
- * la ENTRADA. Recalcularla seria crear una SEGUNDA metrica de cobertura — la invariante lo prohibe.
+ * Los dos sucesos que la alimentan (por EVENTO, no por computo propio):
+ *   contabilidad.hecho_recibido    → un hecho entro
+ *   contabilidad.excepcion_encolada → un hecho cayo a cola (necesito intervencion)
+ * Se observan en memoria (ventana acotada) para poder contrastar con la metrica declarada;
+ * el calculo FINO sale de la metrica unica, no de este contador de conveniencia.
  *
- * ATRIBUTOS del diseno: `cobertura:Cobertura`.
- *   METODOS: calcular():Ratio.
- *   REGLA: proporcion de hechos que entran SIN intervencion vs caen a cola. LEE la metrica unica.
+ * Invariante (13): dato ausente = desconocido. Sin metrica NO se inventa una tasa: se
+ * declara INDETERMINADA — una tasa de cobertura fabricada es una mentira sobre el proceso.
  *
- * Invariantes:
- *  - LEE, NO RECALCULA: la tasa de cobertura llega declarada o de su dueno (A12) POR EVENTO; aqui
- *    jamas se recomputa desde esperados/llegados.
- *  - Lo que SI computa esta hoja es su PROPIO ratio de entrada: hechos sin intervencion (procesados
- *    solos, con la intervencion declarada `0`) sobre el total. Es la operacion de la clase P4, no la
- *    metrica unica.
- *  - DETERMINISTA: mismas cuentas → mismo ratio.
- *  - Dato ausente = desconocido: sin total (o sin las cuentas de intervencion) el ratio es `null`,
- *    no un 0 que afirme una medida que no se hizo.
- *  - NO escribe, NO persiste.
+ * ESCUCHA (R3): el plan declara escucha de `contabilidad.hecho_recibido`
+ * (puerto-evento-vertical A1) y `contabilidad.excepcion_encolada` (encolado-excepcion, que
+ * SI existe en el repo) → ambos emisores existen → SI se declaran.
  *
- * Forma: REFLEJO → STATELESS. Sin PosPersistencia, sin onProjectActivated.
+ * Forma: REFLEJO → STATELESS. Sin PosPersistencia, sin onProjectActivated. PREGUNTA → sin ui_handler.
  * Ver hoja P4 del plan-construccion y diseno-oop.md (CLASE TasaCoberturaEntrada).
  */
 
@@ -37,107 +31,107 @@ class TasaCoberturaEntrada extends ModuloHibridoReflejo {
     super();
     this.name = 'tasa-cobertura-entrada';
     this.version = 'reflejo-0.1.0';
-    // ULTIMA metrica unica de cobertura OBSERVADA (por evento de dominio). Es una LECTURA
-    // cacheada, no un recalculo: las demas piezas la LEEN, no la producen aqui.
-    this._cobertura = new Map();
   }
 
   async onUnload() { return super.onUnload(); }
 
-  // ── handler RPC (una linea, delega a _atender) ──
+  // ── handler RPC (una linea, delega a _atender). CLASE PREGUNTA → sin ui_handler ──
   onCalcularRequest(e) {
     return this._atender(e, 'calcular', 'tasa-cobertura-entrada.calcular.response', async (d) => {
       const res = await this._calcular(d);
+      // Reflejo: calcula la tasa; no escribe estado → no hay hecho que anunciar (R2).
       if (res.status !== 200) this.eventBus?.publish('tasa-cobertura-entrada.calcular.failed', res);
       return res;
     });
   }
 
-  // ── Fire-and-forget: LA metrica unica (A12) quedo medida → se LEE y se guarda para presentar ──
-  onCoberturaMedida(e) {
+  // ── handlers de dominio (fire-and-forget): observan los dos sucesos de la tasa ──
+  // Observar NO es escribir: solo se cuenta en memoria para contrastar con la metrica unica.
+  onHechoRecibido(e) {
     const d = (e && (e.data || e)) || {};
-    if (!d.project_id) return null;
-    this._cobertura.set(d.project_id, d.cobertura || null);
-    return { status: 200, data: { project_id: d.project_id, leida: 'contabilidad.cobertura_medida' } };
+    this._obs = this._obs || [];
+    this._obs.push({ tipo: 'entrado', project_id: d.project_id || null, en: new Date().toISOString() });
+    if (this._obs.length > 2000) this._obs.shift();
   }
 
-  // ── proyeccion determinista: calcular() → Ratio (LEE la metrica unica; no la recalcula) ──
+  onExcepcionEncolada(e) {
+    const d = (e && (e.data || e)) || {};
+    this._obs = this._obs || [];
+    this._obs.push({ tipo: 'encolado', project_id: d.project_id || null, motivo: d.motivo || null, en: new Date().toISOString() });
+    if (this._obs.length > 2000) this._obs.shift();
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // _calcular(input) → { status, data }  ·  la TASA (lee la metrica, no la recalcula)
+  // ══════════════════════════════════════════════════════════════════════
   async _calcular(input = {}) {
     const pid = input.project_id || this.project_id;
     if (!pid) return this._invalid('project_id');
 
-    // 1) LA METRICA UNICA (A12): declarada, o LEIDA (de lo emitido o pedida a su dueno POR EVENTO).
-    //    ⚠️ No se recalcula: se TOMA tal cual la produjo `completitud-cobertura`.
-    const cobertura = await this._leerCobertura(pid, input);
+    // LEE la metrica unica: declarada, o pedida por EVENTO a completitud-cobertura.
+    const { metrica, fuente } = await this._metricaDe(input);
 
-    // 2) Las CUENTAS de intervencion de la entrada: cuantos hechos entraron SIN intervencion y
-    //    cuantos cayeron a cola. Es el ratio PROPIO de P4 (la prueba de "sin una persona digitando").
-    const sin_intervencion = this._num(input.sin_intervencion != null ? input.sin_intervencion : input.automaticos);
-    const con_intervencion = this._num(input.con_intervencion != null ? input.con_intervencion : input.a_cola);
-    const total = this._num(input.total);
+    const entrados = this._num(metrica && (metrica.entrados != null ? metrica.entrados : metrica.llegados));
+    const encolados = this._num(metrica && (metrica.encolados != null ? metrica.encolados : metrica.excepciones));
+    const totalDeclarado = this._num(metrica && metrica.total);
 
-    const totalEfectivo = total !== null ? total
-      : (sin_intervencion !== null && con_intervencion !== null ? sin_intervencion + con_intervencion : null);
+    const hayDatos = (entrados !== null || encolados !== null || totalDeclarado !== null);
+    const total = (entrados !== null && encolados !== null) ? entrados + encolados
+      : (totalDeclarado !== null ? totalDeclarado : null);
 
-    // Sin total (ni las dos cuentas) no hay ratio: null, jamas un 0 inventado.
-    if (totalEfectivo === null || totalEfectivo === 0) {
-      return {
-        status: 200,
-        data: {
-          project_id: pid,
-          tasa_entrada: null,
-          ratio: null,
-          cobertura_leida: cobertura,
-          lee_metrica_unica: true,
-          recalcula_cobertura: false,
-          abierto: true,
-          faltan: totalEfectivo === null ? ['total|sin_intervencion+con_intervencion'] : [],
-          motivo: totalEfectivo === null
-            ? 'no hay cuenta de hechos de entrada: el ratio es desconocido (no se afirma un 0)'
-            : 'el total es 0: no hay proporcion que calcular'
-        }
-      };
-    }
+    // La TASA: entrados SIN intervencion / total. Sin total > 0 → indeterminada (no se inventa).
+    const sin_intervencion = (entrados !== null) ? entrados : null;
+    const con_intervencion = (encolados !== null) ? encolados : null;
+    const tasa = (total !== null && total > 0 && sin_intervencion !== null)
+      ? this._round(sin_intervencion / total, 4) : null;
+    const tasa_intervencion = (total !== null && total > 0 && con_intervencion !== null)
+      ? this._round(con_intervencion / total, 4) : null;
 
-    const tasa = this._round(sin_intervencion / totalEfectivo, 4);
     return {
       status: 200,
       data: {
         project_id: pid,
-        // El RATIO de la entrada (P4): hechos que entran sin intervencion / total.
-        tasa_entrada: tasa,
-        ratio: tasa,
-        sin_intervencion,
-        con_intervencion,
-        total: totalEfectivo,
-        // La proporcion que la promesa exige: cuanto entra SIN una persona digitando.
-        cumple_promesa: tasa >= 1,
-        // La metrica unica de cobertura (A12) se LEE y se adjunta; NO se recalcula aqui.
-        cobertura_leida: cobertura,
-        lee_metrica_unica: true,
-        recalcula_cobertura: false,
+        tipo: 'tasa-cobertura-entrada',
+        fuente: fuente || null,
+        // La metrica unica tal cual se LEYO (no se recalcula).
+        metrica: metrica ? {
+          entrados: sin_intervencion, encolados: con_intervencion, total,
+          esperados: this._num(metrica.esperados), llegados: this._num(metrica.llegados)
+        } : null,
+        // La TASA de cobertura de entrada: sin intervencion / total.
+        tasa: tasa !== null ? tasa : 'INDETERMINADA',
+        tasa_intervencion,
+        entrados: sin_intervencion,
+        encolados: con_intervencion,
+        total,
+        // NO se recalcula la metrica ni se cuentan hechos por cuenta propia.
+        recalcula_metrica: false,
+        observados_en_memoria: this._obs ? this._obs.length : 0,
         abierto: {
-          sin_intervencion: sin_intervencion === null ? 'no se declaro cuantos hechos entraron sin intervencion' : null,
-          con_intervencion: con_intervencion === null ? 'no se declaro cuantos hechos cayeron a cola' : null,
-          cobertura: cobertura ? null : 'completitud-cobertura (A12) no respondio: la metrica unica se declara ausente, no se recalcula'
-        },
-        faltan: [
-          ...(sin_intervencion === null ? ['sin_intervencion'] : []),
-          ...(con_intervencion === null ? ['con_intervencion'] : [])
-        ]
+          metrica: hayDatos ? null : 'no llego la metrica de cobertura (ni declarada ni de completitud-cobertura): la tasa queda INDETERMINADA (no se inventa)',
+          total: (hayDatos && (total === null || total === 0))
+            ? 'la metrica no declara un total > 0: la tasa no es calculable (no se finge)'
+            : null
+        }
       }
     };
   }
 
-  // Lee LA metrica unica: declarada en la peticion, la ultima observada, o pedida a A12 POR EVENTO.
-  async _leerCobertura(pid, input = {}) {
-    if (input.cobertura && typeof input.cobertura === 'object') return input.cobertura;
-    const cache = this._cobertura.get(pid);
-    if (cache) return cache;
-    const r = await this._rpc('completitud-cobertura.medir.request',
-      { project_id: pid, vertical: input.vertical }, { timeout_ms: 4000 }).catch(() => null);
-    const data = r && r.data ? r.data : null;
-    return data && data.cobertura ? data.cobertura : null;
+  // Trae la metrica unica: declarada, o pedida por EVENTO a completitud-cobertura (PREGUNTA).
+  async _metricaDe(input) {
+    const directa = (input.metrica && typeof input.metrica === 'object') ? input.metrica
+      : ((input.cobertura && typeof input.cobertura === 'object') ? input.cobertura : null);
+    if (directa) return { metrica: directa, fuente: 'declarado' };
+
+    const resp = await this._rpc('completitud-cobertura.medir.request', {
+      project_id: input.project_id || this.project_id,
+      ejercicio: input.ejercicio, desde: input.desde, hasta: input.hasta
+    }, { timeout_ms: 800 });
+    const d = (resp && (resp.data || resp)) || null;
+    if (d && (d.metrica || d.entrados != null || d.llegados != null || d.total != null)) {
+      return { metrica: d.metrica || d, fuente: 'completitud-cobertura' };
+    }
+    return { metrica: null, fuente: null };
   }
 
   _num(v) {

@@ -1,38 +1,17 @@
 /**
  * contabilidad-analitica/coste-indirecto — REFLEJO STATELESS (J5, hoja del plan).
  *
- * EL REPARTO DE LOS GASTOS NO DIRECTOS: la luz, el alquiler, el sueldo de direccion... no son de
- * un centro, son de todos. Este reflejo APLICA el reparto que el negocio ha DECLARADO y devuelve
- * cuanto toca a cada dimension. Determinista: mismo coste + mismo criterio + mismas bases → el
- * mismo reparto, una sola respuesta correcta.
+ * Aplica el REPARTO DECLARADO de los gastos NO directos (los que no se pueden imputar a un solo
+ * destino). Cubre, para grupo, lo que la pieza existente no cubre.
  *
- * ATRIBUTOS del diseno: `reparto:ParametroDeclarable`.
- *   METODOS: repartir(coste, dimensiones):Map<Dimension,Cuantía>.
- *   REGLA: aplica el reparto DECLARADO de gastos no directos. Determinista.
+ * EL CERROJO: no se reparte con un criterio inventado. El reparto (base + porcentajes por destino)
+ * se DECLARA (atributo `reparto`); si no viene declarado, se SUBE por EVENTO a
+ * cola-declaraciones-criterio.fijar.request (best-effort, el jefe lo fija) y el resultado queda
+ * `imputado:0` con `abierto` — NO se usa un 50/50 por defecto (dato ausente = desconocido).
  *
- * LOS CRITERIOS DE REPARTO SON DECLARABLES (invariante: LEY/PARAMETRO COMO DATO). El reflejo NO
- * cablea ningun metodo de reparto ni ningun porcentaje: el metodo, las bases y los pesos entran
- * como DATO en `criterio` — o se piden a `cola-declaraciones-criterio` (K9) POR EVENTO (best-effort,
- * clave 'reparto'). Sin criterio declarado NO se reparte: `reparto:null`, `abierto:true` con lo que
- * falta. Jamas se reparte a partes iguales por defecto: partir a medias es una DECISION, y esa
- * decision es del jefe.
+ * Determinista: mismo importe + mismo reparto declarado → misma imputacion por destino.
  *
- * Metodos DECLARADOS admitidos (el metodo es dato, no logica cableada):
- *   'proporcional' | 'base'  → en proporcion a la BASE declarada de cada dimension (ej. m2, horas).
- *   'porcentaje'             → segun el porcentaje declarado de cada dimension (debe sumar 1).
- *   'manual' | 'importe'     → cada dimension declara su importe directamente.
- * Cualquier metodo no declarado/desconocido → `[ABIERTO]` (no se adivina la intencion del jefe).
- *
- * CUBRE LO QUE LA PIEZA EXISTENTE NO CUBRE PARA GRUPO: el reparto se hace por DIMENSION analitica
- * declarada (centro, linea, producto, sociedad...), sin tocar el escandallo ni la ficha de producto.
- *
- * Invariantes:
- *  - DETERMINISTA: mismo coste + mismo criterio + mismas bases → mismo reparto.
- *  - Dato ausente = desconocido: sin coste, sin dimensiones o sin criterio → `[ABIERTO]`, nada se
- *    estima; un porcentaje que no cierra al 100% se DECLARA inconsistente en vez de normalizarse solo.
- *  - NO escribe, NO persiste: el reparto es un DERIVADO; la imputacion al asiento es de otro.
- *
- * Forma: REFLEJO → STATELESS. Sin PosPersistencia, sin onProjectActivated.
+ * Forma: REFLEJO → STATELESS. Sin PosPersistencia. PREGUNTA (repartir) → sin ui_handler.
  * Ver hoja J5 del plan-construccion y diseno-oop.md (CLASE CosteIndirecto).
  */
 
@@ -40,23 +19,17 @@
 
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
 
-// Los NOMBRES de los metodos de reparto que pueden venir declarados (cero porcentajes cableados).
-const METODOS_ADMITIDOS = new Set(['proporcional', 'base', 'porcentaje', 'manual', 'importe']);
-
-// Tolerancia declarada para dar por cerrado un reparto por porcentajes (una constante aritmetica
-// de comparacion, no una regla de negocio; el criterio de reparto sigue siendo dato).
-const TOLERANCIA = 1e-6;
-
 class CosteIndirecto extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'coste-indirecto';
     this.version = 'reflejo-0.1.0';
+    this._criterios = new Map();   // project_id -> Map<clave, valor declarado>
   }
 
   async onUnload() { return super.onUnload(); }
 
-  // ── handler RPC (una linea, delega a _atender) ──
+  // ── handler RPC (una linea). CLASE PREGUNTA → sin ui_handler ──
   onRepartirRequest(e) {
     return this._atender(e, 'repartir', 'coste-indirecto.repartir.response', async (d) => {
       const res = await this._repartir(d);
@@ -65,207 +38,140 @@ class CosteIndirecto extends ModuloHibridoReflejo {
     });
   }
 
-  // ── proyeccion determinista: repartir(coste, dimensiones) → Map<Dimension,Cuantía> ──
+  // ── handler de dominio: el libro cambio → se observa (ventana acotada) ──
+  onAsientoAsentado(e) {
+    const d = (e && (e.data || e)) || {};
+    this._vistos = this._vistos || [];
+    if (d.asiento) this._vistos.push(d.asiento);
+    if (this._vistos.length > 1000) this._vistos.shift();
+  }
+
+  // ── handler de dominio: K9 fijo un criterio → se registra (p.ej. el reparto) ──
+  onCriterioFijado(e) {
+    const d = (e && (e.data || e)) || {};
+    const pid = d.project_id;
+    const clave = d.clave != null ? String(d.clave) : (d.criterio && d.criterio.clave ? String(d.criterio.clave) : null);
+    if (!pid || !clave) return;
+    let m = this._criterios.get(pid);
+    if (!m) { m = new Map(); this._criterios.set(pid, m); }
+    m.set(clave, (d.criterio && d.criterio.valor) != null ? d.criterio.valor : d.valor);
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // repartir(importe, reparto) → { imputaciones por destino }
+  // ══════════════════════════════════════════════════════════════════════
   async _repartir(input = {}) {
     const pid = input.project_id || this.project_id;
     if (!pid) return this._invalid('project_id');
 
-    const periodo = input.periodo != null ? String(input.periodo) : null;
-    const coste = this._num(input.coste != null ? input.coste : input.importe);
+    const importe = this._num(input.importe != null ? input.importe : input.gasto);
+    if (input.importe === undefined && input.gasto === undefined) return this._invalid('importe');
 
-    // 1) El CRITERIO de reparto: declarado, o pedido a la cola K9 POR EVENTO. Nunca se cablea.
-    const { criterio, fuente_criterio } = await this._criterio(pid, input);
+    const reparto = this._repartoDe(input, pid);
 
-    // 2) Las DIMENSIONES a repartir: dato declarado (centro/linea/producto/sociedad...).
-    const dimensiones = this._dimensiones(input);
-
-    const faltan = [];
-    if (coste === null) faltan.push('coste');
-    if (dimensiones.length === 0) faltan.push('dimensiones');
-    if (criterio === null) faltan.push('criterio_reparto');
-
-    // Sin lo minimo NO se reparte: a partes iguales por defecto seria decidir por el jefe.
-    if (faltan.length > 0) {
+    // SIN REPARTO DECLARADO: no se inventa. Se sube el hueco a la cola (best-effort) y se declara.
+    if (!reparto) {
+      await this._subirHueco(pid, input);
       return {
         status: 200,
         data: {
-          project_id: pid, periodo, coste, n_dimensiones: dimensiones.length,
-          fuente_criterio, criterio: criterio || null, metodo: criterio ? this._metodo(criterio) : null,
-          reparto: null, importe_repartido: null, resto: null,
-          abierto: true, faltan,
-          motivo: 'no se reparte el coste indirecto: falta ' + faltan.join(', ')
-            + ' (un reparto sin criterio declarado por el jefe no es un reparto)'
+          project_id: pid,
+          tipo: 'coste-indirecto',
+          importe,
+          reparto: null,
+          imputaciones: [],
+          imputado: 0,
+          repartido: false,
+          determinista: true,
+          abierto: {
+            reparto: 'no hay reparto declarado: NO se usa un criterio por defecto. Se subio el hueco a cola-declaraciones-criterio y queda ABIERTO hasta que el jefe lo declare'
+          }
         }
       };
     }
 
-    const metodo = this._metodo(criterio);
-    // Metodo no declarado/desconocido: no se adivina la intencion del jefe.
-    if (!METODOS_ADMITIDOS.has(metodo)) {
+    const destinos = this._destinos(reparto);
+    const suma_base = destinos.reduce((t, d) => t + this._num(d.base != null ? d.base : d.peso), 0);
+    if (destinos.length === 0 || suma_base === 0) {
       return {
         status: 200,
         data: {
-          project_id: pid, periodo, coste, n_dimensiones: dimensiones.length,
-          fuente_criterio, criterio, metodo,
-          reparto: null, importe_repartido: null, resto: null,
-          abierto: true, faltan: ['metodo_declarado'],
-          motivo: 'el metodo de reparto declarado no es uno admitido: no se adivina la intencion del jefe'
+          project_id: pid,
+          tipo: 'coste-indirecto',
+          importe,
+          reparto,
+          imputaciones: [],
+          imputado: 0,
+          repartido: false,
+          determinista: true,
+          abierto: { reparto: 'el reparto declarado no trae destinos con base/peso > 0: no se reparte' }
         }
       };
     }
 
-    // 3) El reparto DETERMINISTA segun el metodo declarado. Cero constantes de negocio.
-    const r = this._aplicar(metodo, coste, dimensiones, criterio);
+    // Reparto determinista proporcional a la base declarada (redondeo con resto al mayor).
+    const imputaciones = destinos.map((d) => ({
+      destino: d.destino,
+      base: this._num(d.base != null ? d.base : d.peso),
+      importe: this._round(importe * (this._num(d.base != null ? d.base : d.peso) / suma_base), 2)
+    }));
+    this._cuadrarResto(imputaciones, importe);
 
-    if (r.error) {
-      return {
-        status: 200,
-        data: {
-          project_id: pid, periodo, coste, n_dimensiones: dimensiones.length,
-          fuente_criterio, criterio, metodo,
-          reparto: null, importe_repartido: null, resto: null,
-          abierto: true, faltan: r.faltan, detalle: r.detalle || null,
-          motivo: r.motivo
-        }
-      };
-    }
-
-    const lineas = r.lineas;
-    const asignado = this._round(lineas.reduce((s, l) => s + l.importe, 0), 2);
+    const imputado = this._round(imputaciones.reduce((t, i) => t + i.importe, 0), 2);
 
     return {
       status: 200,
       data: {
         project_id: pid,
-        periodo,
-        coste,
-        n_dimensiones: dimensiones.length,
-        fuente_criterio,
-        criterio,
-        metodo,
-        // Map<Dimension,Cuantía>: cuanto coste indirecto toca a cada dimension.
-        reparto: lineas,
-        importe_repartido: asignado,
-        // El resto (si lo hay) se DECLARA: no se esconde ni se reasigna a dedo.
-        resto: this._round(coste - asignado, 2),
-        abierto: false,
-        faltan: [],
-        motivo: null
+        tipo: 'coste-indirecto',
+        importe,
+        reparto,
+        imputaciones,
+        imputado,
+        repartido: true,
+        determinista: true,
+        abierto: { reparto: null }
       }
     };
   }
 
-  _aplicar(metodo, coste, dimensiones, criterio) {
-    const lineas = [];
+  _repartoDe(input, pid) {
+    if (input.reparto && typeof input.reparto === 'object') return input.reparto;
+    const m = this._criterios.get(pid);
+    if (m && m.has('reparto')) return m.get('reparto');
+    if (m && m.has('reparto_costes_indirectos')) return m.get('reparto_costes_indirectos');
+    return null;
+  }
 
-    if (metodo === 'proporcional' || metodo === 'base') {
-      const bases = criterio.bases && typeof criterio.bases === 'object' ? criterio.bases : null;
-      const suma = dimensiones.reduce((s, d) => s + (this._num(bases ? bases[d.dimension] : d.base) ?? 0), 0);
-      // Sin base declarada (>0) no hay proporcion: no se reparte a medias.
-      if (!(suma > 0)) {
-        return { error: true, faltan: ['bases_de_reparto'],
-          motivo: 'el metodo declarado reparte en proporcion a una base, pero no hay base declarada (>0) por dimension' };
-      }
-      for (const d of dimensiones) {
-        const base = this._num(bases ? bases[d.dimension] : d.base) ?? 0;
-        lineas.push({
-          dimension: d.dimension,
-          base,
-          cuota: this._round(base / suma, 6),
-          importe: this._round(coste * (base / suma), 2)
-        });
-      }
-      return { lineas };
+  _destinos(reparto) {
+    const raw = Array.isArray(reparto) ? reparto
+      : (Array.isArray(reparto.destinos) ? reparto.destinos
+      : (reparto.destino != null ? [reparto] : []));
+    return raw.filter((d) => d && typeof d === 'object' && d.destino != null);
+  }
+
+  // El redondeo puede dejar centimos fuera: el resto va al destino de mayor importe (determinista).
+  _cuadrarResto(imputaciones, importe) {
+    const suma = this._round(imputaciones.reduce((t, i) => t + i.importe, 0), 2);
+    const dif = this._round(importe - suma, 2);
+    if (dif !== 0 && imputaciones.length) {
+      let idx = 0;
+      for (let i = 1; i < imputaciones.length; i++) if (imputaciones[i].importe > imputaciones[idx].importe) idx = i;
+      imputaciones[idx].importe = this._round(imputaciones[idx].importe + dif, 2);
     }
-
-    if (metodo === 'porcentaje') {
-      const pcts = criterio.porcentajes && typeof criterio.porcentajes === 'object' ? criterio.porcentajes : null;
-      const cuotas = dimensiones.map(d => this._num(pcts ? pcts[d.dimension] : d.porcentaje));
-      if (cuotas.some(c => c === null)) {
-        return { error: true, faltan: ['porcentajes_de_reparto'],
-          motivo: 'el metodo declarado reparte por porcentaje, pero alguna dimension no lo declara' };
-      }
-      const suma = cuotas.reduce((s, c) => s + c, 0);
-      // Un reparto que no cierra al 100% se DECLARA inconsistente: no se normaliza en silencio.
-      if (Math.abs(suma - 1) > TOLERANCIA) {
-        return { error: true, faltan: ['porcentajes_que_suman_1'], detalle: { suma: this._round(suma, 6) },
-          motivo: 'los porcentajes declarados no suman 1: el reparto no cierra (no se normaliza por defecto)' };
-      }
-      dimensiones.forEach((d, i) => {
-        lineas.push({
-          dimension: d.dimension,
-          cuota: this._round(cuotas[i], 6),
-          importe: this._round(coste * cuotas[i], 2)
-        });
-      });
-      return { lineas };
-    }
-
-    // metodo === 'manual' | 'importe': cada dimension declara su importe directamente.
-    const importes = criterio.importes && typeof criterio.importes === 'object' ? criterio.importes : null;
-    const vals = dimensiones.map(d => this._num(importes ? importes[d.dimension] : d.importe));
-    if (vals.some(v => v === null)) {
-      return { error: true, faltan: ['importes_de_reparto'],
-        motivo: 'el metodo declarado reparte por importes, pero alguna dimension no declara su importe' };
-    }
-    const suma = vals.reduce((s, v) => s + v, 0);
-    // Los importes declarados NO pueden superar el coste a repartir (el resto se declara, no se tapa).
-    if (suma - coste > TOLERANCIA) {
-      return { error: true, faltan: ['importes_que_no_superen_el_coste'], detalle: { suma: this._round(suma, 2), coste },
-        motivo: 'los importes declarados suman mas que el coste a repartir: el reparto no cierra' };
-    }
-    dimensiones.forEach((d, i) => {
-      lineas.push({ dimension: d.dimension, cuota: this._round(suma > 0 ? vals[i] / suma : 0, 6), importe: this._round(vals[i], 2) });
-    });
-    return { lineas };
   }
 
-  // ── El criterio de reparto: declarado, o pedido a la cola K9 POR EVENTO (best-effort) ──
-  async _criterio(pid, input = {}) {
-    const decl = input.criterio && typeof input.criterio === 'object' ? input.criterio : null;
-    if (decl) return { criterio: { ...decl }, fuente_criterio: 'declarado' };
-    const r = await this._rpc('cola-declaraciones-criterio.ratificar.request',
-      { project_id: pid, clave: 'reparto' }, { timeout_ms: 4000 });
-    const valor = r && r.data && r.data.criterio ? r.data.criterio.valor : null;
-    if (valor && typeof valor === 'object') return { criterio: { ...valor }, fuente_criterio: 'cola-declaraciones-criterio' };
-    // Sin criterio declarado NO se reparte: no hay metodo por defecto.
-    return { criterio: null, fuente_criterio: null };
+  // Sube (best-effort) el hueco del criterio para que el jefe lo declare.
+  async _subirHueco(pid, input) {
+    try {
+      await this._rpc('cola-declaraciones-criterio.fijar.request', {
+        project_id: pid, rol: 'JEFE_CRITERIO', clave: 'reparto', valor: null,
+        nota: 'coste-indirecto necesita el reparto declarado', correlation_id: input.correlation_id
+      }, { timeout_ms: 800 });
+    } catch (_) { /* best-effort: el reflejo no cuelga */ }
   }
 
-  _metodo(criterio = {}) {
-    return String(criterio.metodo || criterio.criterio || criterio.tipo || '').toLowerCase();
-  }
-
-  _dimensiones(input = {}) {
-    const raw = input.dimensiones;
-    const lista = Array.isArray(raw) ? raw : (raw && typeof raw === 'object' ? Object.keys(raw).map(k => ({ id: k })) : []);
-    const out = [];
-    for (const d of lista) {
-      if (d === null || d === undefined || d === '') continue;
-      const clave = this._clave(d);
-      if (clave === null || out.some(x => x.dimension === clave)) continue;
-      const obj = (d && typeof d === 'object') ? d : {};
-      out.push({
-        dimension: clave,
-        base: this._num(obj.base != null ? obj.base : (obj.peso != null ? obj.peso : obj.horas ?? obj.m2)),
-        porcentaje: this._num(obj.porcentaje != null ? obj.porcentaje : (obj.pct != null ? obj.pct : obj.cuota)),
-        importe: this._num(obj.importe != null ? obj.importe : obj.coste)
-      });
-    }
-    return out;
-  }
-
-  _clave(v) {
-    if (v === undefined || v === null || v === '') return null;
-    if (typeof v === 'object') return this._clave(v.id ?? v.clave ?? v.nombre ?? v.dimension ?? v.centro ?? v.linea ?? v.producto ?? v.sociedad);
-    return String(v);
-  }
-
-  _num(v) {
-    if (v === undefined || v === null || v === '') return null;
-    const n = Number(v);
-    return Number.isFinite(n) ? n : null;
-  }
+  _num(v) { const n = Number(v); return Number.isFinite(n) ? n : 0; }
 
   // ── Tools ──
   toolRepartir(params) { return this._repartir(params); }

@@ -1,29 +1,20 @@
 /**
  * contabilidad-fiscal/estimacion-is-irpf — REFLEJO STATELESS (D5, hoja del plan).
  *
- * ESTIMA la cuota del Impuesto sobre Sociedades (IS) o del IRPF segun el REGIMEN
- * DECLARADO por el negocio, partiendo del RESULTADO contable del ejercicio (C2,
- * cuenta-resultados). NO determina la base fiscal por su cuenta ni recalcula asientos.
+ * Estimacion del resultado fiscal del Impuesto sobre Sociedades / IRPF con BASE DECLARADA.
+ * EL CERROJO: nada se estima sin base — la BASE y los TRAMOS/TIPOS son DATO declarado por el
+ * negocio, NUNCA cableados aqui (la ley entra como dato, no como constante en el codigo).
  *
- * LA LEY ENTRA COMO DATO (invariante 5): aqui NO se cablea NINGUNA escala, NINGUN tramo,
- * NINGUN tipo y NINGUN modulo de estimacion objetiva. Todo eso llega DECLARADO
- * (`base`, `escalas`, `tramos`, `ajustes` — ParametroDeclarable por negocio y ejercicio).
+ *   · sube cuenta-resultados.calcular.request (C2) para traer el resultado contable, y
+ *     perfil-administrativo.obligaciones.request (D15) para saber que regimen/obligaciones aplican
+ *     — o usa lo DECLARADO en el input.
+ *   · la base imponible = base declarada, o resultado contable + ajustes declarados.
+ *   · la cuota se aplica con los TRAMOS declarados (progresivos). Sin tramos declarados la cuota
+ *     NO se inventa: queda [ABIERTO] (dato ausente = desconocido).
  *
- *   - Sin `base` declarada → NO se estima: `estimado:false`, `motivo` declarado,
- *     `cuota:null` (invariante 7: nada se estima sin base declarada).
- *   - Con `base` y `tramos` declarados → se aplica la escala declarada de forma
- *     determinista (por tramos), SIN conocer la ley: los limites y los tipos son datos.
- *   - Con `base` y `tipo` unico declarado → tramo unico.
- *   - Con `base` declarada y SIN escala/tipo → se entrega la base imponible declarada y
- *     `cuota:null` (el sistema no inventa el tipo).
- *
- * El resultado contable llega por DOS vias, ninguna es un `require` cruzado:
- *   - declarado en la peticion (`resultado`),
- *   - pedido a cuenta-resultados POR EVENTO (RPC `cuenta-resultados.calcular.request`).
- *
- * El sistema PREPARA la estimacion; el ASESOR presenta y firma. Aqui NO se presenta ni firma.
- *
- * Forma: REFLEJO → STATELESS. Sin PosPersistencia, sin onProjectActivated.
+ * NO escribe, NO persiste. RPC estimar es CLASE PREGUNTA → sin ui_handler (su cara es el bus).
+ * Publica estimacion-is-irpf.estimar.response y su par .failed.
+ * Escucha contabilidad.ejercicio_cerrado (cierre-ejercicio C4, emitido) — exento de R3 por el plan.
  * Ver hoja D5 del plan-construccion y diseno-oop.md (CLASE EstimacionIsIrpf).
  */
 
@@ -36,187 +27,139 @@ class EstimacionIsIrpf extends ModuloHibridoReflejo {
     super();
     this.name = 'estimacion-is-irpf';
     this.version = 'reflejo-0.1.0';
-    // espejo en memoria del resultado contable publicado por el diario: pid -> acumulado
-    this._espejo = new Map();
-    // ultima base/escala DECLARADA por proyecto (dato; no se inventa ninguna)
-    this._declarado = new Map();
   }
 
   async onUnload() { return super.onUnload(); }
 
-  // ── fire-and-forget: asiento registrado → se refleja la muestra (no estima nada) ──
-  onAsientoRegistrado(e) {
-    const d = (e && (e.data || e)) || {};
-    const pid = d.project_id;
-    const asiento = d.asiento;
-    if (!pid || !asiento || typeof asiento !== 'object') return null;
-    // Sin base declarada no hay estimacion: aqui solo se refleja la muestra del libro.
-    const m = this._espejoDe(pid);
-    const clave = asiento.clave_natural != null ? String(asiento.clave_natural)
-      : (asiento.numero != null ? String(asiento.numero) : null);
-    if (clave) m.set(clave, asiento);
-    return null;
-  }
-
-  // ── handler RPC (una linea, delega a _atender) ──
+  // ── handler RPC (una linea, delega a _atender). CLASE PREGUNTA → sin ui_handler ──
   onEstimarRequest(e) {
     return this._atender(e, 'estimar', 'estimacion-is-irpf.estimar.response', async (d) => {
       const res = await this._estimar(d);
+      // Reflejo: estima; no escribe dominio → no hay hecho que anunciar (R2).
       if (res.status !== 200) this.eventBus?.publish('estimacion-is-irpf.estimar.failed', res);
       return res;
     });
   }
 
-  // ── ESTIMAR: resultado contable + base/escala DECLARADAS → estimacion (nada sin base) ──
+  // ── handler de dominio (fire-and-forget): cerro el ejercicio → se observa ──
+  onEjercicioCerrado(e) {
+    const d = (e && (e.data || e)) || {};
+    this._cierres = this._cierres || [];
+    if (d.estado === 'cerrado') this._cierres.push(d);
+    if (this._cierres.length > 100) this._cierres.shift();
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // estimar(input) → { base_imponible, cuota, tramos_aplicados, abierto }
+  // ══════════════════════════════════════════════════════════════════════
   async _estimar(input = {}) {
     const pid = input.project_id || this.project_id;
     if (!pid) return this._invalid('project_id');
 
-    const res = await this._resultado(pid, input);
-    const regimen = input.regimen != null ? String(input.regimen) : null;   // declarable (IS | IRPF)
-    const base = this._base(input.base);
+    // El perfil administrativo (regimen/obligaciones) — dato declarado o subido por EVENTO.
+    const perfil = await this._perfil(input);
 
-    // Sin BASE declarada NO se estima (invariante 7): se declara y se devuelve cuota null.
-    if (!base || base.imponible === null) {
-      return {
-        status: 200,
-        data: {
-          project_id: pid,
-          ejercicio: input.ejercicio != null ? input.ejercicio : null,
-          regimen,
-          origen_resultado: res.origen,
-          resultado_contable: res.resultado,
-          base_declarada: null,
-          estimado: false,
-          cuota: null,
-          motivo: 'no hay base imponible declarada: nada se estima sin base (invariante 7)'
-        }
-      };
+    // La BASE IMPONIBLE: declarada, o derivada del resultado contable + ajustes DECLARADOS.
+    const { base, fuente_base, resultado, ajustes } = await this._base(input);
+
+    // Los TRAMOS/TIPOS son DATO: nunca cableados (la ley entra como dato).
+    const tramos = this._tramos(input);
+
+    let cuota = null;
+    const tramos_aplicados = [];
+    if (base !== null && tramos.length > 0) {
+      let restante = base;
+      let anterior = 0;
+      for (const t of tramos) {
+        const hasta = t.hasta === null ? Infinity : Number(t.hasta);
+        const tipo = Number(t.tipo);
+        // El ultimo tramo puede ser Abierto (hasta:null → Infinity): NO se descarta por no ser finito.
+        if ((t.hasta !== null && !Number.isFinite(hasta)) || !Number.isFinite(tipo)) continue;
+        const enTramo = Math.max(0, Math.min(base, hasta) - anterior);
+        if (enTramo <= 0) { anterior = hasta === Infinity ? anterior : hasta; continue; }
+        const cuotaTramo = this._round(enTramo * (tipo / 100), 2);
+        tramos_aplicados.push({ desde: anterior, hasta: t.hasta === null ? null : hasta, tipo, base_en_tramo: this._round(enTramo, 2), cuota: cuotaTramo });
+        cuota = this._round((cuota || 0) + cuotaTramo, 2);
+        anterior = hasta === Infinity ? anterior : hasta;
+        restante -= enTramo;
+        if (restante <= 0) break;
+      }
     }
 
-    const escala = this._escala(input.escalas, input.tramos, input.tipo);
-    const ajustes = this._ajustes(input.ajustes);
-    const base_ajustada = this._round(base.imponible + ajustes, 2);
-
-    // Con escala/tramos DECLARADOS: se aplican por tramos (determinista; la ley es el dato).
-    const cuota = escala ? this._aplicarEscala(base_ajustada, escala) : null;
-
-    const estimacion = {
-      regimen,
-      base: {
-        imponible: base.imponible,
-        ajustes_declarados: ajustes,
-        imponible_ajustada: base_ajustada
-      },
-      escala: escala ? { tramos: escala, origen: 'declarada' } : null,
-      cuota,                                    // null si no hay escala/tipo declarado
-      tipo_efectivo: (cuota !== null && base_ajustada !== 0) ? this._round(cuota / base_ajustada, 6) : null,
-      // El sistema NO presenta ni firma la estimacion: lo declara aqui.
-      presentada: false,
-      firmada: false,
-      preparada_para_asesor: true
-    };
+    // Las DEDUCCIONES y RETENCIONES declaradas. El resultado a ingresar = cuota - deducciones - retenciones.
+    const deducciones = this._round(input.deducciones != null ? Number(input.deducciones) : 0, 2);
+    const retenciones = this._round(input.retenciones_pagadas != null ? Number(input.retenciones_pagadas) : 0, 2);
+    const a_ingresar = cuota === null ? null : this._round(cuota - deducciones - retenciones, 2);
 
     return {
       status: 200,
       data: {
         project_id: pid,
-        ejercicio: input.ejercicio != null ? input.ejercicio : null,
-        regimen,
-        origen_resultado: res.origen,
-        resultado_contable: res.resultado,
-        base_declarada: base,
-        estimado: true,
+        tipo: 'estimacion-is-irpf',
+        regimen: perfil ? perfil.regimen : (input.regimen != null ? String(input.regimen) : null),
+        fuente_perfil: perfil ? perfil.fuente : null,
+        base_imponible: base,
+        fuente_base,
+        resultado_contable: resultado,
+        ajustes,
+        tramos_aplicados,
         cuota,
-        estimacion,
-        motivo: escala ? null : 'hay base declarada pero no escala/tipo declarado: el sistema no inventa el tipo'
+        deducciones,
+        retenciones,
+        a_ingresar,
+        determinista: true,
+        // El cerrojo: sin base o sin tramos declarados NO se finge una cuota.
+        abierto: {
+          base: base === null
+            ? 'no hay base (ni declarada ni derivable del resultado contable): la estimacion no se inventa'
+            : null,
+          tramos: tramos.length > 0
+            ? null
+            : 'no se declararon tramos/tipos (la ley entra como DATO): sin tramos la cuota queda sin calcular'
+        }
       }
     };
   }
 
-  // El resultado: declarado en la peticion o pedido a cuenta-resultados POR EVENTO.
-  async _resultado(pid, input = {}) {
-    if (input.resultado !== undefined && input.resultado !== null) {
-      const n = Number(input.resultado);
-      return { resultado: Number.isFinite(n) ? n : null, origen: 'declarado_en_peticion' };
+  // Trae la base: declarada, o resultado contable (C2) + ajustes declarados.
+  async _base(input) {
+    const ajustes = this._round(input.ajustes != null ? Number(input.ajustes) : 0, 2);
+    if (input.base != null && Number.isFinite(Number(input.base))) {
+      return { base: this._round(Number(input.base), 2), fuente_base: 'declarado', resultado: null, ajustes };
     }
-    const r = await this._rpc('cuenta-resultados.calcular.request',
-      { project_id: pid, ejercicio: input.ejercicio ?? null }, { timeout_ms: 5000 });
-    if (r && r.status === 200 && r.data && r.data.resultado !== undefined) {
-      return { resultado: Number(r.data.resultado), origen: 'cuenta-resultados' };
+    let resultado = null;
+    if (input.resultado != null && Number.isFinite(Number(input.resultado))) {
+      resultado = this._round(Number(input.resultado), 2);
+    } else {
+      const resp = await this._rpc('cuenta-resultados.calcular.request', {
+        project_id: input.project_id || this.project_id,
+        fecha: input.fecha, ejercicio: input.ejercicio
+      }, { timeout_ms: 800 });
+      if (resp && resp.resultado != null && Number.isFinite(Number(resp.resultado))) resultado = this._round(Number(resp.resultado), 2);
     }
-    return { resultado: null, origen: null };
+    if (resultado === null) return { base: null, fuente_base: null, resultado: null, ajustes };
+    return { base: this._round(resultado + ajustes, 2), fuente_base: 'resultado+ajustes', resultado, ajustes };
   }
 
-  // La base imponible es DECLARADA. Sin base declarada → null (no se deriva del resultado).
-  _base(raw) {
-    if (!raw || typeof raw !== 'object') return null;
-    const n = Number(raw.imponible);
-    if (!Number.isFinite(n)) return null;
-    return { imponible: n, origen: 'declarada' };
-  }
-
-  // Los ajustes extracontables son DECLARADOS. Sin declarar → 0 (neutro, no un ajuste inventado).
-  _ajustes(raw) {
-    if (Array.isArray(raw)) {
-      return this._round(raw.reduce((s, a) => {
-        const n = Number(a && a.importe);
-        return s + (Number.isFinite(n) ? n : 0);
-      }, 0), 2);
+  async _perfil(input) {
+    if (input.regimen != null || Array.isArray(input.obligaciones)) {
+      return { regimen: input.regimen != null ? String(input.regimen) : null, obligaciones: input.obligaciones || [], fuente: 'declarado' };
     }
-    const n = Number(raw);
-    return Number.isFinite(n) ? this._round(n, 2) : 0;
-  }
-
-  // La escala/tramos es DECLARABLE: [ {hasta, tipo} ] o un tipo unico declarado.
-  // Sin escala ni tipo → null (jamas se cablea una escala legal).
-  _escala(escalas, tramos, tipo) {
-    const raw = Array.isArray(escalas) ? escalas : (Array.isArray(tramos) ? tramos : null);
-    if (raw) {
-      const esc = raw
-        .filter(t => t && t.tipo != null)
-        .map(t => ({
-          hasta: t.hasta != null && t.hasta !== '' ? Number(t.hasta) : null,   // null = tramo final abierto
-          tipo: Number(t.tipo)
-        }))
-        .filter(t => Number.isFinite(t.tipo));
-      if (esc.length) {
-        // Orden determinista por limite superior; el abierto (null) va al final.
-        return esc.sort((a, b) => {
-          if (a.hasta === null) return 1;
-          if (b.hasta === null) return -1;
-          return a.hasta - b.hasta;
-        });
-      }
-    }
-    if (tipo !== undefined && tipo !== null && tipo !== '') {
-      const t = Number(tipo);
-      if (Number.isFinite(t)) return [{ hasta: null, tipo: t }];
-    }
+    const resp = await this._rpc('perfil-administrativo.obligaciones.request', {
+      project_id: input.project_id || this.project_id
+    }, { timeout_ms: 800 });
+    if (resp && !resp.abierto) return { regimen: resp.regimen || null, obligaciones: resp.obligaciones || [], fuente: 'perfil-administrativo' };
     return null;
   }
 
-  // Aplica la escala DECLARADA por tramos, de forma determinista.
-  _aplicarEscala(base, escala) {
-    let restante = base;
-    let anterior = 0;
-    let cuota = 0;
-    for (const tramo of escala) {
-      if (restante <= 0) break;
-      const limite = tramo.hasta === null ? Infinity : tramo.hasta;
-      const ancho = limite - anterior;
-      const gravado = Math.min(restante, ancho);
-      cuota += gravado * tramo.tipo;
-      restante -= gravado;
-      anterior = limite;
-    }
-    return this._round(cuota, 2);
-  }
-
-  _espejoDe(pid) {
-    let m = this._espejo.get(pid);
-    if (!m) { m = new Map(); this._espejo.set(pid, m); }
-    return m;
+  // Los tramos DECLARADOS. Ninguno cableado: la ley es dato.
+  _tramos(input) {
+    const raw = Array.isArray(input.tramos) ? input.tramos
+      : (input.regimen && Array.isArray(input.regimen.tramos) ? input.regimen.tramos
+        : (input.tipos && Array.isArray(input.tipos) ? input.tipos : []));
+    return raw.filter((t) => t && typeof t === 'object')
+      .map((t) => ({ hasta: t.hasta === undefined ? null : t.hasta, tipo: t.tipo !== undefined ? t.tipo : t.tipo_pct }))
+      .sort((a, b) => (a.hasta === null ? Infinity : Number(a.hasta)) - (b.hasta === null ? Infinity : Number(b.hasta)));
   }
 
   // ── Tools ──

@@ -1,9 +1,0 @@
-{
-  "id": "clave-natural",
-  "name": "Clave natural",
-  "version": "0.1.0",
-  "zone": "system-bar",
-  "order": 207,
-  "icon": "⚙️",
-  "label": "Clave"
-}

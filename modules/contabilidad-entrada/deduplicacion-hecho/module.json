@@ -1,40 +1,27 @@
 {
-  "_doc": "Manifest de contabilidad-entrada/deduplicacion-hecho — REFLEJO STATELESS (A7, hoja del plan). Aplica la CLAVE NATURAL del hecho/documento (M3, clave-natural) → no duplica; es la cara de entrada del cerrojo anti-bucle ('un cierre = un asiento'). Invariantes: sin clave natural NO hay veredicto — es_nuevo:null con motivo, porque asumir 'nuevo' es como duplicar y asumir 'duplicado' es perder un hecho; es PURO y sin estado — pregunta la clave a M3 POR EVENTO y compara con las claves que el emisor declara (claves_vistas); quien RECUERDA los hechos ya vistos es el custodio del diario, no este reflejo; determinista — mismo hecho + misma clave registrada → mismo veredicto, siempre. FORMA: REFLEJO stateless (sin PosPersistencia, sin onProjectActivated). Proyeccion unica `_es_nuevo({project_id, hecho, clave?, claves_vistas?})` -> {es_nuevo, clave, clave_origen, motivo}. Sube tambien contabilidad.hecho_normalizado (fire-and-forget del flujo de entrada). Sin evento de dominio propio: su valor ES el veredicto, y el contrato cierra con su par *.failed.",
+  "_doc": "Manifest de entrada/deduplicacion-hecho — REFLEJO STATELESS (A7, hoja del plan). IDEMPOTENCIA DETERMINISTA: la clave natural del hecho/documento decide si YA se vio; reprocesar NO duplica ('un cierre = un asiento' en la puerta de entrada). La clave natural NO se recalcula aqui: la SUBE a clave-natural (M3) por EVENTO (clave-natural.calcular.request), que es su custodio. El reflejo decide es_nuevo comparando la clave con las ya vistas (registro DERIVADO en memoria, por proyecto). DETERMINISTA: mismo hecho → misma clave → mismo veredicto. Sin elemento o sin clave → veredicto ABIERTO (null), nunca se adivina ni el nuevo ni el duplicado. NO escribe dominio, NO persiste. RPC PREGUNTA → sin ui_handler, su cara es el bus. ESCUCHA: ninguna (el plan no declara escucha de dominio). Publica deduplicacion-hecho.es_nuevo.response y su par .failed.",
   "name": "deduplicacion-hecho",
   "version": "0.1.0",
-  "description": "Reflejo stateless (A7): aplica la clave natural (M3) para no duplicar — idempotencia determinista del hecho; sin clave natural no afirma nada en vez de asumir 'nuevo'.",
-  "blueprint_driven": true,
-  "blueprint_path": "deduplicacion-hecho.blueprint.json",
+  "description": "Reflejo (A7): idempotencia determinista — la clave natural del hecho decide si es nuevo; reprocesar no duplica. Sin estado.",
   "language": "es",
   "subscribes": [
     {
       "event": "deduplicacion-hecho.es_nuevo.request",
       "handler": "onEsNuevoRequest",
-      "description": "RPC reflejo (puro): {project_id, hecho, clave?, claves_vistas?} → {es_nuevo, clave, clave_origen:'declarada'|'clave-natural', vistas_comparadas, motivo, disponible}. Obtiene la clave natural de M3 por evento (o usa la declarada) y la compara con las claves vistas; sin clave natural → es_nuevo:null (no se asume nuevo). Responde por deduplicacion-hecho.es_nuevo.response; hecho/project_id ausente → deduplicacion-hecho.es_nuevo.failed."
-    },
-    {
-      "event": "contabilidad.hecho_normalizado",
-      "handler": "onHechoNormalizado",
-      "description": "Fire-and-forget (A7): normalizador-hecho (A2) publica un hecho en forma asentable → {project_id, hecho, clave_natural, correlation_id}. Misma proyeccion que el RPC: calcula/recibe la clave natural y dictamina es_nuevo; hecho invalido → deduplicacion-hecho.es_nuevo.failed. Cierra el circulo del flujo de entrada."
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id?, elemento|hecho|documento, componentes?} → {project_id, clave, componentes, es_nuevo, es_duplicado, vistas, determinista}. Calcula la clave natural (via clave-natural M3 por evento) y decide si ya se vio. Sin elemento → INVALID_INPUT; sin clave → veredicto abierto (null). Responde por deduplicacion-hecho.es_nuevo.response."
     }
   ],
   "publishes": [
     {
       "event": "deduplicacion-hecho.es_nuevo.response",
-      "description": "Respuesta RPC correlada de deduplicacion-hecho.es_nuevo.request → {request_id, status:200, data:{es_nuevo, clave, clave_origen, composicion, vistas_comparadas, motivo, disponible}}. Emitida por el helper _atender."
+      "description": "Respuesta RPC correlada de la op es_nuevo (una sola cara: el bus)."
     },
     {
       "event": "deduplicacion-hecho.es_nuevo.failed",
-      "description": "Par de fallo determinista (A7): hecho ausente/invalido o project_id ausente → {status, error:{code, message, details?}}. Cierra el circulo de deduplicacion-hecho.es_nuevo.request y de contabilidad.hecho_normalizado."
+      "description": "Par de fallo determinista: falta el elemento → {status, code, message}. Cierra el circulo de es_nuevo.request."
     }
   ],
-  "ui_handlers": [
-    {
-      "domain": "contabilidad",
-      "action": "deduplicacion-hecho.es_nuevo",
-      "handler": "onEsNuevoRequest",
-      "type": "system_panel",
-      "zone": "lateral_derecha"
-    }
+  "tools": [
+    { "name": "deduplicacion-hecho.es_nuevo", "description": "Decide (PREGUNTA) si un hecho/documento es nuevo por su clave natural (idempotencia)." }
   ]
 }

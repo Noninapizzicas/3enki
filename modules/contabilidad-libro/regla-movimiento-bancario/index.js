@@ -1,28 +1,23 @@
 /**
  * contabilidad-libro/regla-movimiento-bancario — CUSTODIO CON PERSISTENCIA (E8, hoja del plan).
  *
- * Parcela de las REGLAS DECLARABLES/APRENDIDAS de clasificacion de MOVIMIENTOS BANCARIOS
- * ("esta comision → esta cuenta", "esta devolucion → esta cuenta"). Es el CORTE DURO del
- * extracto: lo que `aplicar` devuelve como `cubierta:true` es lo que se puede asentar; lo que
- * NO cubre NO se inventa — va a la cola / al juicio de partida-no-identificada (E7).
+ * La parcela de REGLAS DECLARABLES/APRENDIDAS del banco ('esta comision -> esta cuenta').
+ * UN escritor. La regla PROPONE/APLICA la contrapartida de un movimiento bancario; mientras
+ * no exista, el sistema PREGUNTA. Una regla APRENDIDA no actua hasta que el asesor la
+ * RATIFICA: `ratificacion-regla-aprendida` (L10) emite `contabilidad.regla_ratificada`, que
+ * esta hoja ESCUCHA. Ratificacion UNICA por L10 (un solo gate humano para todo el dominio).
  *
- * EL SISTEMA NO LAS INVENTA: las reglas las declara el DUENO/ASESOR y entran por el camino de
- * aprendizaje (ratificacion unica por L10 — rol RATIFICACION_REGLA_APRENDIDA). El modulo JAMAS
- * fabrica una regla.
- *
- * UN SOLO ESCRITOR: solo el camino de aprendizaje asienta reglas; cualquier otro rol es
- * rechazado (segundo escritor → 403).
+ *   · declarar — el jefe declara una regla; si nace APRENDIDA queda pendiente de ratificacion.
+ *   · proponer — el sistema propone la contrapartida del movimiento (calcula; no escribe).
+ *   · aplicar  — la contraparida del movimiento segun la regla vigente (calcula; no escribe).
  *
  * Invariantes:
- *  - `aplicar` NO muta: consulta determinista regla → apunte (misma entrada → mismo corte).
- *  - `proponer` es append-only: las reglas se APILAN; un id ya presente → 409 (no se sobrescribe).
- *  - Los CRITERIOS de una condicion (signo, concepto_contiene, importe_min/max, contraparte,
- *    cuenta) son DECLARABLES: ninguna constante cableada; un criterio que el movimiento no
- *    aporta NO casa (dato ausente = desconocido, no coincidente).
- *  - La cuenta de la regla se verifica contra el plan declarado (catalogo-cuentas B1) POR EVENTO.
- *    Si el plan dice que no existe → 422 CUENTA_FUERA_DEL_PLAN. Si el plan no responde →
- *    se acepta y se declara `cuenta_verificada:false` (nunca se asume verificado).
+ *  - UN escritor por parcela (guard rol REGLA_MOVIMIENTO_BANCARIO; segundo escritor → 403).
+ *  - Dato ausente = desconocido: sin regla declarada NO se inventa la contrapartida.
+ *  - No se borra: re-declarar APPENDEA al historial; la regla guarda su autor y su fecha.
  *  - Persiste por proyecto con PosPersistencia, restaura en project.activated y vuelca en onUnload.
+ *
+ * R2 · ESCRIBE → ANUNCIA: al declarar publica `contabilidad.movimiento_regla_declarada`.
  *
  * Forma: CUSTODIO → PosPersistencia + onProjectActivated + flush + GUARD de escritor.
  * Ver hoja E8 del plan-construccion y diseno-oop.md (CLASE ReglaMovimientoBancario).
@@ -33,19 +28,16 @@
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
 const PosPersistencia = require('../../_shared/pos-persistencia');
 
-// Rol unico escritor: el aprendizaje entra hidratado desde fuera (ratificacion unica por L10).
-const ROL_ESCRITOR = 'RATIFICACION_REGLA_APRENDIDA';
-
-// Criterios declarables de una condicion de regla bancaria (todos AND).
-// La LISTA es fija (el molde); los VALORES son ParametroDeclarable del dueno/asesor.
-const CRITERIOS = ['signo', 'concepto_contiene', 'contraparte', 'cuenta', 'importe_min', 'importe_max'];
+// Rol unico escritor de la parcela de reglas de movimiento bancario.
+const ROL_ESCRITOR = 'REGLA_MOVIMIENTO_BANCARIO';
+const ORIGENES = new Set(['DECLARADA', 'APRENDIDA']);
 
 class ReglaMovimientoBancario extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'regla-movimiento-bancario';
     this.version = 'reflejo-0.1.0';
-    // store: project_id -> { esquema, reglas: Map<id, Regla> }
+    // store: project_id -> { esquema, reglas: Map<clave, Regla> }
     this._parcelas = new Map();
 
     this._persist = new PosPersistencia({
@@ -60,7 +52,7 @@ class ReglaMovimientoBancario extends ModuloHibridoReflejo {
       hidratar: (pid, data) => {
         if (!data) return;
         const reglas = new Map();
-        for (const r of (data.reglas || [])) if (r && r.id != null) reglas.set(String(r.id), r);
+        for (const r of (data.reglas || [])) if (r && r.clave != null) reglas.set(String(r.clave), r);
         this._parcelas.set(pid, { esquema: data.esquema || 'contabilidad-regla-movimiento-bancario-v1', reglas });
       }
     });
@@ -72,13 +64,12 @@ class ReglaMovimientoBancario extends ModuloHibridoReflejo {
     return super.onUnload();
   }
 
-  // Restaura la parcela de reglas bancarias del proyecto activado.
   onProjectActivated(e) {
     const d = (e && (e.data || e)) || {};
     return this._persist.restaurar(d.project_id);
   }
 
-  // ── handlers RPC (una linea, delegan a _atender) ──
+  // ── handler RPC PREGUNTA (sin ui_handler): aplicar ──
   onAplicarRequest(e) {
     return this._atender(e, 'aplicar', 'regla-movimiento-bancario.aplicar.response', async (d) => {
       const res = this._aplicar(d);
@@ -87,198 +78,205 @@ class ReglaMovimientoBancario extends ModuloHibridoReflejo {
     });
   }
 
+  // ── handler RPC PREGUNTA (sin ui_handler): proponer ──
   onProponerRequest(e) {
     return this._atender(e, 'proponer', 'regla-movimiento-bancario.proponer.response', async (d) => {
-      const res = await this._proponer(d);
+      const res = this._proponer(d);
+      if (res.status !== 200) this.eventBus?.publish('regla-movimiento-bancario.proponer.failed', res);
+      return res;
+    });
+  }
+
+  // ── handler RPC ORDEN (ui_handler: el asesor declara la regla) ──
+  onDeclararRequest(e) {
+    return this._atender(e, 'declarar', 'regla-movimiento-bancario.declarar.response', async (d) => {
+      const res = this._declarar(d);
       if (res.status === 200) {
-        // Exito → evento de dominio: una regla bancaria quedo declarada (la ratifica L10).
-        this.eventBus?.publish('contabilidad.regla_bancaria_propuesta', {
+        // R2 · si ESCRIBE, anuncia el HECHO.
+        this.eventBus?.publish('contabilidad.movimiento_regla_declarada', {
           project_id: res.data.project_id,
+          clave: res.data.clave,
           regla: res.data.regla,
-          cuenta_verificada: res.data.cuenta_verificada,
           correlation_id: d.correlation_id
         });
+        // Una regla APRENDIDA sube la peticion al gate humano L10 (best-effort).
+        if (res.data.pendiente_ratificacion) {
+          this._rpc('ratificacion-regla-aprendida.ratificar.request', {
+            project_id: res.data.project_id, regla: res.data.clave, origen: 'regla-movimiento-bancario'
+          }, { timeout_ms: 2000 });
+        }
       } else {
-        this.eventBus?.publish('regla-movimiento-bancario.proponer.failed', res);
+        this.eventBus?.publish('regla-movimiento-bancario.declarar.failed', res);
       }
       return res;
     });
   }
 
-  // ── CORTE DURO (consulta determinista, NO muta): movimiento → apunte ──
+  // ── handler FIRE-AND-FORGET: el asesor ratifico/bloqueo la regla aprendida (L10) ──
+  onReglaRatificada(e) {
+    const d = (e && (e.data || e)) || {};
+    try {
+      const pid = d.project_id || this.project_id;
+      if (!pid) return;
+      const clave = d.regla != null ? String(d.regla) : null;
+      if (!clave) return;
+
+      const p = this._parcelas.get(pid);
+      const regla = p ? (p.reglas.get(clave) || null) : null;
+      if (!regla) return; // sin regla registrada no se inventa nada
+
+      const ahora = new Date().toISOString();
+      regla.ratificada = d.actua === true;
+      regla.ratificada_en = ahora;
+      regla.ratificada_por = d.por != null ? String(d.por) : null;
+      regla.ratificada_decision = d.decision != null ? String(d.decision) : null;
+      regla.historial = Array.isArray(regla.historial) ? regla.historial : [];
+      regla.historial.push({ estado: regla.ratificada ? 'RATIFICADA' : 'BLOQUEADA', por: regla.ratificada_por, en: ahora });
+
+      p.reglas.set(clave, regla);
+      p.updated_at = ahora;
+      this._persist.marcarDirty(pid);
+
+      // R2 · la regla cambio de estado → anuncia el hecho.
+      this.eventBus?.publish('contabilidad.movimiento_regla_declarada', {
+        project_id: pid, clave, regla, ratificada: regla.ratificada, correlation_id: d.correlation_id
+      });
+      // Si la regla quedo OPERATIVA, el movimiento bancario puede contabilizarse (best-effort).
+      if (regla.ratificada) {
+        this.eventBus?.publish('escritor-diario.asentar.request', {
+          project_id: pid, asiento: regla.asiento || null, origen: 'regla-movimiento-bancario', correlation_id: d.correlation_id
+        });
+      }
+    } catch (err) {
+      this.logger?.error(`${this.name}.regla_ratificada.error`, { error: err.message });
+    }
+  }
+
+  // ── proyeccion PREGUNTA: aplicar — la contrapartida del movimiento segun la regla vigente ──
   _aplicar(input = {}) {
     const pid = input.project_id || this.project_id;
     if (!pid) return this._invalid('project_id');
 
-    const movimiento = input.movimiento || input.m || input.mov;
-    if (!movimiento || typeof movimiento !== 'object') return this._invalid('movimiento');
+    const p = this._parcelas.get(pid) || null;
+    const operativas = p ? [...p.reglas.values()].filter((r) => this._opera(r)) : [];
+    const contexto = this._contexto(input);
+    const regla = operativas.find((r) => !contexto || (r.contexto != null && String(r.contexto) === contexto)) || null;
 
-    const parcela = this._obtenerOCrear(pid);
-    const reglas = [...parcela.reglas.values()];
-
-    // Primera regla (en orden de entrada: determinista) cuya condicion casa el movimiento.
-    let motivo_ultimo = null;
-    for (const regla of reglas) {
-      const m = this._casa(regla.condicion, movimiento);
-      if (m.ok) {
-        return {
-          status: 200,
-          data: {
-            project_id: pid,
-            cubierta: true,
-            corte: 'regla',
-            regla: { id: regla.id, condicion: regla.condicion, origen: regla.origen || null },
-            apunte: {
-              cuenta: regla.apunte.cuenta,
-              tercero: regla.apunte.tercero != null ? regla.apunte.tercero : null,
-              periodo: regla.apunte.periodo != null ? regla.apunte.periodo : this._periodoDe(movimiento)
-            },
-            reglas_evaluadas: reglas.length
-          }
-        };
-      }
-      if (m.motivo) motivo_ultimo = m.motivo;
+    if (!regla) {
+      return {
+        status: 200,
+        data: {
+          project_id: pid, contexto, contrapartida: null, regla: null,
+          aplicada: false, opera: false, abierto: true,
+          motivo: operativas.length === 0
+            ? 'no hay regla operativa declarada (las aprendidas no operan hasta ser ratificadas): el sistema pregunta'
+            : 'ninguna regla operativa cubre el movimiento declarado'
+        }
+      };
     }
+    return {
+      status: 200,
+      data: { project_id: pid, contexto, contrapartida: regla.cuenta, regla, aplicada: true, opera: true, abierto: false, motivo: null }
+    };
+  }
 
-    // Sin regla que cubra: NO se inventa la cuenta. La duda va a la cola / al juicio (E7).
+  // ── proyeccion PREGUNTA: proponer — propone la contrapartida del movimiento ──
+  _proponer(input = {}) {
+    const pid = input.project_id || this.project_id;
+    if (!pid) return this._invalid('project_id');
+
+    const p = this._parcelas.get(pid) || null;
+    const operativas = p ? [...p.reglas.values()].filter((r) => this._opera(r)) : [];
+    const movimiento = input.movimiento && typeof input.movimiento === 'object' ? input.movimiento : null;
+    const contexto = this._contexto(input, movimiento);
+    const regla = operativas.find((r) => !contexto || (r.contexto != null && String(r.contexto) === contexto)) || null;
+
     return {
       status: 200,
       data: {
         project_id: pid,
-        cubierta: false,
-        corte: null,
-        regla: null,
-        apunte: null,
-        motivo: reglas.length === 0
-          ? 'no hay reglas declaradas que cubran el movimiento'
-          : (motivo_ultimo || 'ninguna regla casa el movimiento'),
-        requiere_cola: true,
-        destino_cola: 'ASESOR',
-        reglas_evaluadas: reglas.length
+        contexto,
+        propuesta: regla ? { contrapartida: regla.cuenta, regla: regla.clave } : null,
+        propuesta_disponible: Boolean(regla),
+        abierto: regla ? null : 'no hay regla operativa para este movimiento: la propuesta queda declarada abierta (no se inventa)'
       }
     };
   }
 
-  // ── Escritura (UN escritor): la regla se APILA (append-only) ──
-  async _proponer(input = {}) {
+  // ── proyeccion ORDEN: declarar — el jefe declara una regla ──
+  _declarar(input = {}) {
     const pid = input.project_id || this.project_id;
     if (!pid) return this._invalid('project_id');
 
-    // GUARD de escritor: el sistema NO inventa reglas; entran por la ratificacion (L10).
     if (input.rol !== ROL_ESCRITOR) {
       return this._errorResponse(403, 'PERMISSION_DENIED',
-        'solo el camino de aprendizaje (RATIFICACION_REGLA_APRENDIDA) puede asentar reglas bancarias',
+        'solo el escritor de la parcela (REGLA_MOVIMIENTO_BANCARIO) declara reglas de movimiento bancario',
         { rol_esperado: ROL_ESCRITOR, rol_recibido: input.rol ?? null });
     }
 
     const r = input.regla || input.r;
     if (!r || typeof r !== 'object') return this._invalid('regla');
 
-    const condicion = this._condicion(r.condicion);
-    if (!condicion) return this._invalid('regla.condicion');
-    const apunte = r.apunte;
-    if (!apunte || typeof apunte !== 'object' || apunte.cuenta == null || String(apunte.cuenta).trim() === '') {
-      return this._invalid('regla.apunte.cuenta');
-    }
+    const contexto = r.contexto != null ? String(r.contexto).trim() : null;
+    const cuenta = r.cuenta != null ? String(r.cuenta).trim() : null;
+    if (!contexto && !cuenta) return this._invalid('regla.contexto|regla.cuenta');
 
-    const cuenta = String(apunte.cuenta).trim();
-    // Verificacion contra el PLAN declarado, por EVENTO (no hay import cruzado).
-    let cuenta_verificada = false;
-    const plan = await this._rpc('catalogo-cuentas.buscar.request', { project_id: pid, codigo: cuenta }, { timeout_ms: 4000 });
-    const plan_data = plan && plan.data ? plan.data : null;
-    if (plan_data) {
-      cuenta_verificada = true;
-      if (plan_data.encontrada === false) {
-        return this._errorResponse(422, 'PRECONDITION_FAILED',
-          'la cuenta no existe en el plan declarado; la regla no se asienta',
-          { cuenta, project_id: pid });
-      }
-    }
+    const clave = this._clave(contexto, cuenta);
+    if (!clave || clave === '*::*') return this._invalid('regla');
 
-    const id = r.id != null
-      ? String(r.id)
-      : `rb${String(pid)}-${this._obtenerOCrear(pid).reglas.size + 1}`;
+    const origenRaw = r.origen != null ? String(r.origen).toUpperCase().trim() : 'DECLARADA';
+    const origen = ORIGENES.has(origenRaw) ? origenRaw : 'DECLARADA';
+    const opera = origen === 'DECLARADA';
 
-    const parcela = this._obtenerOCrear(pid);
-    if (parcela.reglas.has(id)) {
-      // No se sobrescribe en silencio: la parcela es append-only.
-      return this._errorResponse(409, 'ALREADY_EXISTS', 'la regla ya existe; no se sobrescribe', { id });
-    }
+    const p = this._obtenerOCrear(pid);
+    const ahora = new Date().toISOString();
+    const existente = p.reglas.get(clave) || null;
 
-    const regla = {
-      id,
-      condicion,
-      apunte: {
-        cuenta,
-        tercero: apunte.tercero != null ? String(apunte.tercero) : null,
-        periodo: apunte.periodo != null ? String(apunte.periodo) : null
-      },
-      origen: r.origen != null ? String(r.origen) : 'APRENDIDA',
-      cuenta_verificada,
-      creada_en: new Date().toISOString()
-    };
-    parcela.reglas.set(id, regla);
-    parcela.updated_at = regla.creada_en;
+    const regla = existente || { clave, contexto, cuenta, origen, opera, ratificada: false, historial: [], creada_en: ahora };
+    regla.contexto = contexto;
+    regla.cuenta = cuenta;
+    regla.origen = origen;
+    regla.opera = opera;
+    regla.ratificada = opera;
+    regla.asiento = r.asiento || (existente ? existente.asiento : null) || null;
+    regla.historial = Array.isArray(regla.historial) ? regla.historial : [];
+    regla.historial.push({ estado: origen, por: ROL_ESCRITOR, en: ahora });
+    regla.actualizada_en = ahora;
+
+    p.reglas.set(clave, regla);
+    p.updated_at = ahora;
     this._persist.marcarDirty(pid);
 
-    return { status: 200, data: { project_id: pid, regla, cuenta_verificada, anadida: true } };
-  }
-
-  // Condicion declarable: al menos un criterio; los que lleguen se normalizan.
-  _condicion(raw) {
-    if (!raw || typeof raw !== 'object') return null;
-    const cond = {};
-    for (const c of CRITERIOS) {
-      if (raw[c] === undefined || raw[c] === null || raw[c] === '') continue;
-      if (c === 'importe_min' || c === 'importe_max') {
-        const n = Number(raw[c]);
-        if (Number.isFinite(n)) cond[c] = n;
-        continue;
+    return {
+      status: 200,
+      data: {
+        project_id: pid, clave, regla, declarada: true,
+        pendiente_ratificacion: origen === 'APRENDIDA',
+        abierto: origen === 'APRENDIDA'
+          ? 'la regla nacio APRENDIDA: no opera hasta que el asesor la ratifique (gate L10)'
+          : null
       }
-      if (c === 'signo') { cond[c] = String(raw[c]).toLowerCase().trim(); continue; }
-      cond[c] = String(raw[c]).toUpperCase().trim();
-    }
-    return Object.keys(cond).length ? cond : null;
-  }
-
-  // ¿La condicion casa el movimiento? Todos los criterios son AND y deben resolverse.
-  // Un criterio que el movimiento no aporta NO casa (dato ausente ≠ dato coincidente).
-  _casa(condicion, movimiento) {
-    if (!condicion || typeof condicion !== 'object') return { ok: false, motivo: 'regla sin condicion' };
-    const importe = this._num(movimiento.importe);
-    const mapa = {
-      signo: movimiento.signo != null ? String(movimiento.signo).toLowerCase().trim() : null,
-      concepto_contiene: movimiento.concepto != null ? String(movimiento.concepto).toUpperCase() : null,
-      contraparte: movimiento.contraparte != null ? String(movimiento.contraparte).toUpperCase().replace(/[\s.\-_/]/g, '') : null,
-      cuenta: movimiento.cuenta != null ? String(movimiento.cuenta).trim() : null,
-      importe_min: importe,
-      importe_max: importe
     };
-    for (const [c, esperado] of Object.entries(condicion)) {
-      const real = mapa[c];
-      if (real === null || real === undefined) return { ok: false, motivo: `el movimiento no aporta ${c}` };
-      let casa;
-      if (c === 'concepto_contiene') casa = real.includes(esperado);
-      else if (c === 'importe_min') casa = real >= esperado;
-      else if (c === 'importe_max') casa = real <= esperado;
-      else casa = real === esperado;
-      if (!casa) return { ok: false, motivo: `${c} no casa` };
+  }
+
+  _opera(regla) {
+    if (!regla) return false;
+    if (regla.origen === 'DECLARADA') return true;
+    return regla.ratificada === true;
+  }
+
+  _contexto(input, movimiento = null) {
+    if (input.contexto != null) return String(input.contexto).trim();
+    const m = movimiento || (input.movimiento && typeof input.movimiento === 'object' ? input.movimiento : null);
+    if (m) {
+      if (m.contexto != null) return String(m.contexto);
+      if (m.concepto != null) return String(m.concepto);
+      if (m.descripcion != null) return String(m.descripcion);
     }
-    return { ok: true };
+    return null;
   }
 
-  _num(v) {
-    if (v === undefined || v === null || v === '') return null;
-    const n = Number(v);
-    return Number.isFinite(n) ? n : null;
-  }
-
-  _periodoDe(movimiento) {
-    const f = movimiento.fecha;
-    if (f === undefined || f === null || f === '') return null;    // ausente → desconocido
-    const s = String(f);
-    return /^\d{4}-\d{2}/.test(s) ? s.slice(0, 7) : null;
-  }
+  _clave(contexto, cuenta) { return `${contexto || '*'}::${cuenta || '*'}`; }
 
   _obtenerOCrear(pid) {
     let p = this._parcelas.get(pid);
@@ -290,15 +288,10 @@ class ReglaMovimientoBancario extends ModuloHibridoReflejo {
     return p;
   }
 
-  // Lectura directa de la parcela (mismo proceso) — no muta.
-  reglasDe(pid) {
-    const p = pid ? this._parcelas.get(pid) : null;
-    return p ? [...p.reglas.values()] : [];
-  }
-
   // ── Tools ──
   toolAplicar(params) { return this._aplicar(params); }
   toolProponer(params) { return this._proponer(params); }
+  toolDeclarar(params) { return this._declarar(params); }
 }
 
 module.exports = ReglaMovimientoBancario;

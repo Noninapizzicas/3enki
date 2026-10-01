@@ -1,39 +1,37 @@
 {
-  "_doc": "Manifest de contabilidad-analitica/consulta-cuentas-bajo-demanda — PUENTE STATELESS (Q1, hoja del plan). LA PUERTA *PULL*: la pregunta del dueño, cuando él quiera. Conecta su pregunta con el calculo POR PETICION — NO impone cadencia (distinto del cuadro del jefe J8, que si la impone). ATRIBUTOS del diseno: fuente:ParametroDeclarable; METODOS: preguntar(q:Consulta):Respuesta; REGLA: puerta pull — conecta la pregunta del dueño con el calculo por peticion, NO impone cadencia. Invariantes: CONSULTA, NO DECIDE (enruta la pregunta a la pieza que ya calcula ese dato POR EVENTO y devuelve su respuesta — no interpreta, no juzga, no decide por el dueño); LA FUENTE ES DECLARABLE (el mapa tema→fuente es ParametroDeclarable: saldo/balanza→mayor-balanza, resultado→cuenta-resultados, caja→saldo-tesoreria, margen→margen-analitico, proveedor→estado-cuenta-proveedor; sin fuente declarada NO se inventa el calculo — [ABIERTO]); NO RECALCULA (no duplica la aritmetica de las piezas — su oficio es ENRUTAR, no computar); dato ausente = desconocido (sin tema o si la fuente no responde → respuesta null con lo que falta, jamas un 0); sin estado (un puente: no recuerda preguntas ni respuestas). FORMA: PUENTE stateless — sin PosPersistencia, sin onProjectActivated. Proyeccion `_preguntar`. Publica contabilidad.respuesta_consulta (lo consume puente-lenguaje-dueno Q2 para traducir la cifra al lenguaje del dueño). Cierra el circulo: error → consulta-cuentas-bajo-demanda.preguntar.failed.",
+  "_doc": "Manifest de analitica/consulta-cuentas-bajo-demanda — PUENTE STATELESS (Q1, hoja del plan). LA PUERTA PULL: conecta la PREGUNTA del dueno con el CALCULO por peticion; NO impone cadencia (modo pull). Interpreta la pregunta subiendo puente-lenguaje-dueno.a_consulta.request (Q2), pide la cifra al calculador que le toca por EVENTO (mayor-balanza.saldos.request B3 / saldo-tesoreria.calcular.request E4 / cuenta-resultados.calcular.request C2) y sella cobertura (sello-cobertura.sellar.request Q3) + estado (marca-borrador-validado.estado.request L1). NO calcula por su cuenta ni inventa. Honestidad (invariante 13): sin cifra la cuenta queda [ABIERTO] (0 no es 'no hay', es desconocido). PUENTE STATELESS: sin PosPersistencia. RPC preguntar es CLASE PREGUNTA → va por el bus, sin panel. Publica consulta-cuentas-bajo-demanda.preguntar.response y su par .failed. Escucha contabilidad.asiento_asentado (B2) y contabilidad.ejercicio_cerrado (C4), ambos emitidos.",
   "name": "consulta-cuentas-bajo-demanda",
   "version": "0.1.0",
-  "description": "Puente stateless (Q1): la puerta PULL — conecta la pregunta del dueño con el cálculo por petición, sin imponer cadencia; consulta y no decide.",
-  "blueprint_driven": true,
-  "blueprint_path": "consulta-cuentas-bajo-demanda.blueprint.json",
+  "description": "Puente (Q1): puerta pull. Conecta la pregunta del dueno con el calculo por peticion; no impone cadencia; sin cifra queda abierto.",
   "language": "es",
   "subscribes": [
     {
       "event": "consulta-cuentas-bajo-demanda.preguntar.request",
       "handler": "onPreguntarRequest",
-      "description": "RPC puente: {project_id, pregunta:{tema|texto}|tema, fuente?, cuenta?, periodo?, ejercicio?, desde?, hasta?, dimension?, eje?} → {pregunta, tema, fuente, evento_fuente, campo, respuesta, valor, disponible, cadencia:null, impone_cadencia:false, decide:false, abierto, faltan}. Enruta la pregunta a la fuente declarable (por defecto el mapa tema→dueño) POR EVENTO y devuelve su respuesta; NO recalcula nada. Sin tema → [ABIERTO]; fuente sin responder → respuesta null. Éxito → publica contabilidad.respuesta_consulta y responde por consulta-cuentas-bajo-demanda.preguntar.response; project_id ausente → consulta-cuentas-bajo-demanda.preguntar.failed."
+      "description": "RPC puente (PREGUNTA, por el bus): {project_id, pregunta?/consulta?, tipo?, cuenta?, cifra?} → {project_id, consulta, cifra, cobertura, abierto}. Interpreta la pregunta (Q2) y pide la cifra al calculador que le toca. Responde por consulta-cuentas-bajo-demanda.preguntar.response; falta project_id → consulta-cuentas-bajo-demanda.preguntar.failed."
+    },
+    {
+      "event": "contabilidad.asiento_asentado",
+      "handler": "onAsientoAsentado",
+      "description": "Fire-and-forget (B2 escritor-diario): un asiento quedo en el libro. Se observa (ventana acotada); no se recalcula ni se escribe."
+    },
+    {
+      "event": "contabilidad.ejercicio_cerrado",
+      "handler": "onEjercicioCerrado",
+      "description": "Fire-and-forget (cierre-ejercicio C4): un periodo quedo cerrado. Se observa como contexto; no se recalcula."
     }
   ],
   "publishes": [
     {
       "event": "consulta-cuentas-bajo-demanda.preguntar.response",
-      "description": "Respuesta RPC correlada de consulta-cuentas-bajo-demanda.preguntar.request → {request_id, status:200, data:{pregunta, tema, fuente, respuesta, valor, disponible, impone_cadencia:false, decide:false}}. Emitida por el helper _atender."
+      "description": "Respuesta RPC correlada de la op preguntar (una sola cara: el bus)."
     },
     {
       "event": "consulta-cuentas-bajo-demanda.preguntar.failed",
-      "description": "Par de fallo determinista (Q1): project_id ausente → {status, error:{code, message, details?}}. Cierra el circulo de consulta-cuentas-bajo-demanda.preguntar.request."
-    },
-    {
-      "event": "contabilidad.respuesta_consulta",
-      "description": "Fire-and-forget (Q1): hay respuesta a una pregunta del dueño (puerta pull) → {project_id, pregunta, fuente, respuesta, disponible, correlation_id}. Lo consume sello-cobertura (Q3) para sellar la completitud de lo consultado y puente-lenguaje-dueno (Q2) para traducir la cifra al lenguaje del dueño. Disponible:false → no se inventa cifra."
+      "description": "Par de fallo determinista: falta project_id → {status, code, message}. Cierra el circulo de preguntar.request."
     }
   ],
-  "ui_handlers": [
-    {
-      "domain": "contabilidad",
-      "action": "consulta-cuentas-bajo-demanda.preguntar",
-      "handler": "onPreguntarRequest",
-      "type": "chat_tool",
-      "zone": "barra_chat_inferior"
-    }
+  "tools": [
+    { "name": "consulta-cuentas-bajo-demanda.preguntar", "description": "Responde (PREGUNTA) a la pregunta del dueno con la cifra calculada por peticion (pull)." }
   ]
 }

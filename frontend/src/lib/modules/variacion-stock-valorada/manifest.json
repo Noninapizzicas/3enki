@@ -1,9 +1,0 @@
-{
-  "id": "variacion-stock-valorada",
-  "name": "Variación de stock",
-  "version": "0.1.0",
-  "zone": "system-bar",
-  "order": 223,
-  "icon": "📊",
-  "label": "Variación"
-}

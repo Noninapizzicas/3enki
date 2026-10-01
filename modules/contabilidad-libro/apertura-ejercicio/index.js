@@ -1,23 +1,15 @@
 /**
  * contabilidad-libro/apertura-ejercicio — REFLEJO STATELESS (C5, hoja del plan).
  *
- * Arrastra los SALDOS DEL CIERRE ANTERIOR al EJERCICIO NUEVO. **Deriva, no decide**:
- * los asientos de apertura son la consecuencia determinista del cierre precedente.
- * NO decide qué se arrastra ni lo reabre: si el cierre no está, lo declara [ABIERTO].
+ * Asientos de APERTURA DERIVADOS del CIERRE anterior. LA CLAVE DE ESTE MODULO:
+ *   quien ESCRIBE y ANUNCIA es B2 (escritor-diario), NO este.
+ * Aqui solo se DERIVA el asiento propuesto (los saldos de cierre que abren el ejercicio
+ * siguiente) y se sube `escritor-diario.asentar.request` para que el custodio lo asiente.
+ * Este modulo NUNCA toca el libro: respeta el single-writer.
  *
- * El cierre anterior llega por DOS vías, ninguna es un `require` cruzado:
- *   - `contabilidad.ejercicio_cerrado` (fire-and-forget, C4 → C5): se refleja el
- *     cierre para poder generar su apertura.
- *   - `apertura-ejercicio.generar.request`: se PIDE el cierre a cierre-ejercicio POR
- *     EVENTO (RPC); si no responde, se usa el reflejo. Se declara la fuente.
+ * Invariante: sin cierre anterior NO se inventan saldos de apertura (debe=haber=0, abierto).
  *
- * Invariantes:
- *  - Deriva, no decide: la apertura refleja los saldos de cierre, no los reinterpreta.
- *  - Un mismo cierre → una misma apertura (clave natural `APERTURA|<ejercicio>`): determinista.
- *  - No muta el cierre ni el diario; es una proyección pura.
- *  - Lo que falta se declara (`abierto`), no se estima.
- *
- * Forma: REFLEJO → STATELESS. Sin PosPersistencia, sin onProjectActivated.
+ * Forma: REFLEJO → STATELESS. Sin PosPersistencia, sin onProjectActivated. PREGUNTA → sin ui_handler.
  * Ver hoja C5 del plan-construccion y diseno-oop.md (CLASE AperturaEjercicio).
  */
 
@@ -30,159 +22,95 @@ class AperturaEjercicio extends ModuloHibridoReflejo {
     super();
     this.name = 'apertura-ejercicio';
     this.version = 'reflejo-0.1.0';
-    // reflejo en memoria de los cierres: project_id -> Map<ejercicio, cierre>
-    this._cierres = new Map();
   }
 
   async onUnload() { return super.onUnload(); }
 
-  // ── fire-and-forget: el cierre publicó el ejercicio cerrado → se refleja para la apertura ──
-  onEjercicioCerrado(e) {
-    const d = (e && (e.data || e)) || {};
-    const pid = d.project_id;
-    const cierre = d.cierre;
-    const ejercicio = d.ejercicio != null ? String(d.ejercicio)
-      : (cierre && cierre.ejercicio != null ? String(cierre.ejercicio) : null);
-    if (!pid || !cierre || ejercicio == null) return null;
-    this._cierresDe(pid).set(ejercicio, cierre);
-    this.logger?.debug('apertura-ejercicio.cierre.reflejado', { project_id: pid, ejercicio });
-    return null;
-  }
-
-  // ── handler RPC (una línea, delega a _atender) ──
+  // ── handler RPC (una linea, delega a _atender). CLASE PREGUNTA → sin ui_handler ──
   onGenerarRequest(e) {
     return this._atender(e, 'generar', 'apertura-ejercicio.generar.response', async (d) => {
-      const res = await this._generar(d);
+      const res = this._generar(d);
+      // Reflejo: deriva y delega; no escribe → no hay hecho que anunciar (B2 lo anuncia).
       if (res.status !== 200) this.eventBus?.publish('apertura-ejercicio.generar.failed', res);
       return res;
     });
   }
 
-  // ── GENERAR: asientos de apertura DERIVADOS del cierre anterior (deriva, no decide) ──
-  async _generar(input = {}) {
+  // ── handler de dominio (fire-and-forget): al cerrarse un ejercicio, se prepara la apertura ──
+  async onEjercicioCerrado(e) {
+    const d = (e && (e.data || e)) || {};
+    if (!d.project_id) return;
+    this._generar({ project_id: d.project_id, cierre: d.cierre || d.saldos || d, origen: 'cierre-ejercicio' });
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // _generar(input) → { status, data }  ·  deriva el asiento de apertura y lo delega a B2
+  // ══════════════════════════════════════════════════════════════════════
+  _generar(input = {}) {
     const pid = input.project_id || this.project_id;
     if (!pid) return this._invalid('project_id');
 
-    // ── El cierre anterior: POR EVENTO a cierre-ejercicio; si no responde, del reflejo. ──
-    const { cierre, fuente } = await this._cierreAnterior(pid, input);
-    if (!cierre) {
-      // No hay cierre que arrastrar: se declara [ABIERTO]. No se decide un ejercicio en blanco.
-      return this._errorResponse(422, 'PRECONDITION_FAILED',
-        'no hay cierre anterior que arrastrar: la apertura deriva del cierre, no lo decide',
-        { ejercicio_origen: input.ejercicio_origen ?? null, motivo: 'cierre_anterior_ausente' });
+    // Los saldos de CIERRE del ejercicio anterior: DECLARADOS. Sin ellos no hay apertura.
+    const cierre = (input.cierre && typeof input.cierre === 'object') ? input.cierre
+      : (input.saldos && typeof input.saldos === 'object' ? input.saldos : null);
+
+    // El asiento propuesto: una linea por saldo, cada una a su lado natural (saldo>0 → debe).
+    const lineas = this._lineasDeSaldos(cierre);
+
+    const asiento = {
+      fecha: input.fecha != null ? String(input.fecha) : new Date().toISOString().slice(0, 10),
+      concepto: 'Apertura de ejercicio (derivada del cierre anterior)',
+      lineas,
+      clave: `apertura:${pid}:${input.ejercicio != null ? String(input.ejercicio) : 'siguiente'}`
+    };
+
+    // NO se escribe aqui: se SUBE la orden a escritor-diario (B2 = el unico que asienta y anuncia).
+    if (lineas.length > 0 && this.eventBus?.publish) {
+      this.eventBus.publish('escritor-diario.asentar.request', {
+        project_id: pid,
+        asiento,
+        origen: input.origen || 'apertura-ejercicio',
+        correlation_id: input.correlation_id
+      });
     }
-
-    const ejercicio_origen = cierre.ejercicio != null ? String(cierre.ejercicio)
-      : (input.ejercicio_origen != null ? String(input.ejercicio_origen) : null);
-    const ejercicio_nuevo = input.ejercicio_nuevo != null ? String(input.ejercicio_nuevo)
-      : (input.ejercicio != null ? String(input.ejercicio) : this._siguiente(ejercicio_origen));
-
-    // ── DERIVA los saldos del cierre a asientos de apertura. No decide qué se arrastra. ──
-    const asientos = this._asientosDeApertura(cierre, ejercicio_origen, ejercicio_nuevo, input.fecha);
-
-    // Clave natural determinista: un mismo cierre → una misma apertura (idempotencia).
-    const clave_natural = `APERTURA|${ejercicio_nuevo}`;
 
     return {
       status: 200,
       data: {
         project_id: pid,
-        fuente,
-        ejercicio_origen,
-        ejercicio_nuevo,
-        clave_natural,
-        asientos,
-        total_asientos: asientos.length,
-        // Lo que faltaba en el cierre se declara [ABIERTO]; no se estima.
-        abierto: Array.isArray(cierre.abierto) ? cierre.abierto : [],
-        deriva_de: 'cierre-anterior',
-        decide: false
+        tipo: 'apertura-ejercicio',
+        asiento,
+        lineas: lineas.length,
+        // Quien escribe y anuncia es B2, no este reflejo.
+        escritor: 'escritor-diario',
+        delegado: lineas.length > 0,
+        abierto: {
+          cierre: cierre ? null
+            : 'no hay cierre anterior declarado: no se inventan saldos de apertura (0 lineas, no un default)'
+        }
       }
     };
   }
 
-  // Construye el/los asiento(s) de apertura desde los saldos del cierre (cálculo puro).
-  _asientosDeApertura(cierre, origen, nuevo, fecha) {
-    const fecha_apertura = fecha != null ? String(fecha)
-      : (nuevo ? `${String(nuevo).slice(0, 4)}-01-01` : null);
-
-    const apuntes = [];
-    // Activo al DEBE (saldo deudor); pasivo y patrimonio al HABER (saldo acreedor).
-    const activo = this._num(cierre.activo);
-    const pasivo = this._num(cierre.pasivo);
-    const patrimonio = this._num(cierre.patrimonio);
-    const resultado = this._num(cierre.resultado);
-
-    if (activo) apuntes.push({ cuenta: 'ACTIVO', debe: this._round(Math.abs(activo), 2), haber: 0 });
-    if (pasivo) apuntes.push({ cuenta: 'PASIVO', debe: 0, haber: this._round(Math.abs(pasivo), 2) });
-    // El resultado del ejercicio cierra contra patrimonio: el patrimonio de apertura lo incorpora.
-    const patrimonio_apertura = this._round((patrimonio || 0) + (resultado || 0), 2);
-    if (patrimonio_apertura) {
-      apuntes.push({ cuenta: 'PATRIMONIO', debe: 0, haber: this._round(Math.abs(patrimonio_apertura), 2) });
+  // Una linea por cuenta con saldo declarado; saldo > 0 abre por el DEBE.
+  _lineasDeSaldos(cierre) {
+    if (!cierre || typeof cierre !== 'object') return [];
+    const cuentas = Array.isArray(cierre.cuentas) ? cierre.cuentas
+      : (Array.isArray(cierre.saldos) ? cierre.saldos : null);
+    if (!cuentas) {
+      // Objeto {cuenta: saldo} tambien vale.
+      return Object.entries(cierre)
+        .filter(([k, v]) => k !== 'cuentas' && k !== 'saldos' && Number.isFinite(Number(v)))
+        .map(([cuenta, saldo]) => this._linea(cuenta, Number(saldo)));
     }
-
-    if (apuntes.length === 0) return [];
-    const suma_debe = this._round(apuntes.reduce((s, x) => s + x.debe, 0), 2);
-    const suma_haber = this._round(apuntes.reduce((s, x) => s + x.haber, 0), 2);
-    // La apertura también cuadra: la partida doble no se rompe al abrir.
-    const descuadre = this._round(suma_debe - suma_haber, 2);
-    if (Math.abs(descuadre) >= 0.01) {
-      // El cierre no cuadraba: se refleja el descuadre, no se inventa un ajuste.
-      apuntes.push({ cuenta: 'DESCUADRE_APERTURA', debe: descuadre < 0 ? this._round(-descuadre, 2) : 0, haber: descuadre > 0 ? descuadre : 0 });
-    }
-
-    return [{
-      tipo: 'asiento-apertura',
-      clave_natural: `APERTURA|${nuevo}`,
-      concepto: `Apertura del ejercicio ${nuevo} (derivada del cierre ${origen})`,
-      fecha: fecha_apertura,
-      ejercicio: nuevo,
-      deriva_de: { ejercicio: origen, clave_natural: cierre.clave_natural ?? `CIERRE|${origen}` },
-      apuntes,
-      suma_debe: this._round(apuntes.reduce((s, x) => s + x.debe, 0), 2),
-      suma_haber: this._round(apuntes.reduce((s, x) => s + x.haber, 0), 2),
-      cuadra: true,
-      decide: false
-    }];
+    return cuentas
+      .filter((c) => c && (c.cuenta != null))
+      .map((c) => this._linea(c.cuenta, Number(c.saldo)));
   }
 
-  // El cierre anterior llega POR EVENTO: cierre-ejercicio (C4) publica
-  // contabilidad.ejercicio_cerrado y aquí queda reflejado. Si el payload trae el
-  // cierre directo, se usa; si no, se toma el reflejado por el evento.
-  async _cierreAnterior(pid, input = {}) {
-    const origen = input.ejercicio_origen != null ? String(input.ejercicio_origen) : null;
-    const directo = input.cierre && typeof input.cierre === 'object' ? input.cierre : null;
-    if (directo) return { cierre: directo, fuente: 'payload' };
-    const local = this._cierreReflejado(pid, origen);
-    if (local) return { cierre: local, fuente: 'cierre-ejercicio' };
-    return { cierre: null, fuente: 'ninguna' };
-  }
-
-  _cierreReflejado(pid, origen) {
-    const m = this._cierresDe(pid);
-    if (origen != null && m.has(origen)) return m.get(origen);
-    // Sin ejercicio declarado: el cierre más reciente reflejado (determinista por ejercicio).
-    const claves = [...m.keys()].sort();
-    return claves.length ? m.get(claves[claves.length - 1]) : null;
-  }
-
-  _cierresDe(pid) {
-    let m = this._cierres.get(pid);
-    if (!m) { m = new Map(); this._cierres.set(pid, m); }
-    return m;
-  }
-
-  // Ejercicio siguiente determinista (YYYY → YYYY+1).
-  _siguiente(origen) {
-    if (origen == null) return null;
-    const n = Number(String(origen).slice(0, 4));
-    return Number.isFinite(n) ? String(n + 1) : null;
-  }
-
-  _num(v) {
-    if (v === undefined || v === null || v === '') return 0;
-    const n = Number(v);
-    return Number.isFinite(n) ? n : 0;
+  _linea(cuenta, saldo) {
+    const n = Number.isFinite(saldo) ? saldo : 0;
+    return { cuenta: String(cuenta), debe: n > 0 ? this._round(n, 2) : 0, haber: n < 0 ? this._round(-n, 2) : 0 };
   }
 
   // ── Tools ──

@@ -1,9 +1,0 @@
-{
-  "id": "estimacion-is-irpf",
-  "name": "Estimación IS/IRPF",
-  "version": "0.1.0",
-  "zone": "work-bar",
-  "order": 65,
-  "icon": "🧾",
-  "label": "IS/IRPF"
-}

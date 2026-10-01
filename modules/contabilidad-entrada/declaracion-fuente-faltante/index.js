@@ -1,21 +1,21 @@
 /**
- * contabilidad-entrada/declaracion-fuente-faltante — PUENTE STATELESS (A15, hoja del plan).
+ * contabilidad-entrada/declaracion-fuente-faltante — PUENTE (A15, hoja del plan).
  *
- * Detecta que una vertical NO publica un hecho necesario y lo DECLARA: queda ABIERTO y
- * se emite un aviso. NO obliga a la vertical a producirlo (`obliga_a_producir:false`):
- * contabilidad se adapta, no manda.
+ * ══════════════════════════════════════════════════════════════════════════════════════
+ * DETECTA que una vertical NO publica un hecho necesario **y lo DECLARA**. NO la obliga
+ * a producirlo: no inventa los datos que faltan ni fabrica el hecho ausente.
+ * ══════════════════════════════════════════════════════════════════════════════════════
+ * CIRCULO:
+ *   señal (fuente que se sabe esperada pero no llego, o hecho observado sin su fuente)
+ *      → declaracion-fuente-faltante.declarar  (DECLARA — no rellena)
+ *      → aviso (motor-avisos.producir)  para que el negocio lo vea
+ *   y ademas el hecho `contabilidad.fuente_faltante_declarada` (lo lee motor-avisos).
  *
- * **CONTRATO TOLERANTE:** la deteccion se apoya en LA metrica unica de cobertura
- * (completitud-cobertura A12) consultada POR EVENTO. Si su dependencia NO responde
- * (timeout/ausencia), este puente responde `503 UPSTREAM_UNREACHABLE` — **NUNCA fabrica
- * el dato** (no inventa una cobertura ni un hueco que no pudo medir).
+ * Honestidad (invariante 13): SIN señal NO se inventa una declaracion. Si nada declara
+ * que falte una fuente, se devuelve ABIERTO (nada que declarar) — una fuente "faltante"
+ * inventada seria una acusacion falsa a la vertical.
  *
- * Invariantes:
- *  - Sin cobertura medida no se declara un hueco: se dice que no se pudo medir (503).
- *  - La declaracion es un AVISO (abierto + aviso), no una orden a la fuente.
- *  - No recuerda: es un puente; declara lo que la metrica le dice, en el momento.
- *
- * Forma: PUENTE → STATELESS. Sin PosPersistencia, sin onProjectActivated.
+ * Forma: PUENTE → STATELESS. Sin PosPersistencia. RPC declarar = ORDEN → ui_handler.
  * Ver hoja A15 del plan-construccion y diseno-oop.md (CLASE DeclaracionFuenteFaltante).
  */
 
@@ -32,126 +32,118 @@ class DeclaracionFuenteFaltante extends ModuloHibridoReflejo {
 
   async onUnload() { return super.onUnload(); }
 
-  // ── handler RPC (una linea, delega a _atender) ──
+  // ── handler RPC (una linea, delega a _atender). CLASE ORDEN → ui_handler ──
   onDeclararRequest(e) {
-    return this._atender(e, 'declarar', 'declaracion-fuente-faltante.declarar.response', async (d) => {
-      const res = await this._declarar(d);
-      if (res.status === 200) {
-        // Solo un hueco DECLARADO (falta>0) emite el aviso de dominio.
-        if (res.data.falta && res.data.declaracion.faltantes.length > 0) {
-          this.eventBus?.publish('contabilidad.fuente_faltante', {
-            project_id: res.data.project_id,
-            vertical: res.data.vertical,
-            declaracion: res.data.declaracion,
-            faltantes: res.data.declaracion.faltantes,
-            correlation_id: d.correlation_id
-          });
-        }
-      } else {
-        // Incluye el caso 503 UPSTREAM_UNREACHABLE (dependencia sin responder): nunca se fabrica.
+    return this._atender(e, 'declarar', 'declaracion-fuente-faltante.declarar.response', (d) => {
+      const res = this._declarar(d);
+      if (res.status === 200 && res.data && res.data.declarada) {
+        // R2 · si DECLARA (escribe una declaracion), anuncia el HECHO.
+        this.eventBus?.publish('contabilidad.fuente_faltante_declarada', {
+          project_id: res.data.project_id,
+          vertical: res.data.declaracion.vertical,
+          fuente: res.data.declaracion.fuente,
+          motivo: res.data.declaracion.motivo,
+          declaracion_id: res.data.declaracion.declaracion_id,
+          correlation_id: d.correlation_id
+        });
+        // SUBE la señal al motor de avisos (best-effort por EVENTO; no se cablea la entrega).
+        this.eventBus?.publish('motor-avisos.producir.request', {
+          project_id: res.data.project_id,
+          tipo: 'fuente',
+          severidad: 'warn',
+          titulo: `Fuente faltante: ${res.data.declaracion.fuente}`,
+          detalle: res.data.declaracion.motivo,
+          origen: 'declaracion-fuente-faltante',
+          ref: res.data.declaracion.declaracion_id,
+          correlation_id: d.correlation_id
+        });
+      } else if (res.status !== 200) {
         this.eventBus?.publish('declaracion-fuente-faltante.declarar.failed', res);
       }
       return res;
     });
   }
 
-  // ── proyeccion: declarar(hueco) → Aviso de fuente faltante (CONTRATO TOLERANTE) ──
-  async _declarar(input = {}) {
+  // ── handler de dominio (fire-and-forget): un hecho llego sin su fuente declarada ──
+  // NO rellena el hueco: si el hecho DECLARA que su fuente falta, se declara.
+  onHechoRecibido(e) {
+    const d = (e && (e.data || e)) || {};
+    const h = d.hecho && typeof d.hecho === 'object' ? d.hecho : null;
+    if (!h) return;
+    const fuente = h.fuente_faltante != null ? h.fuente_faltante
+      : (h.fuente == null && h.fuente_esperada != null ? h.fuente_esperada : null);
+    if (!fuente) return; // el hecho no declara fuente faltante → no se inventa la acusacion
+    try {
+      const res = this._declarar({
+        project_id: d.project_id || this.project_id,
+        vertical: h.vertical || d.vertical || d.origen,
+        fuente,
+        motivo: h.motivo || 'el hecho llego sin su fuente declarada',
+        ref: h.clave != null ? String(h.clave) : (h.id != null ? String(h.id) : null),
+        correlation_id: d.correlation_id
+      });
+      if (res.status === 200 && res.data && res.data.declarada) {
+        this.eventBus?.publish('contabilidad.fuente_faltante_declarada', {
+          project_id: res.data.project_id,
+          vertical: res.data.declaracion.vertical,
+          fuente: res.data.declaracion.fuente,
+          motivo: res.data.declaracion.motivo,
+          declaracion_id: res.data.declaracion.declaracion_id,
+          correlation_id: d.correlation_id
+        });
+      }
+    } catch (err) {
+      this.logger?.error(`${this.name}.hecho_recibido.error`, { error: err.message });
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // _declarar(input) → { status, data }  ·  DECLARA la fuente faltante (no la crea)
+  // ══════════════════════════════════════════════════════════════════════
+  _declarar(input = {}) {
     const pid = input.project_id || this.project_id;
     if (!pid) return this._invalid('project_id');
 
-    const vertical = input.vertical != null ? String(input.vertical).trim() : '';
-    if (!vertical) return this._invalid('vertical');
-
-    // Si el hueco YA llega declarado por el llamante, no hace falta la metrica externa.
-    const faltantesDeclarados = Array.isArray(input.faltantes)
-      ? input.faltantes.map(f => String(f)).filter(Boolean)
-      : null;
-
-    let faltantes = faltantesDeclarados;
-    let origen = faltantesDeclarados ? 'declarado' : null;
-
-    // Sin huecos declarados: se PIDE LA METRICA UNICA (A12) por evento. Contrato tolerante:
-    // si no responde, 503 — NUNCA se fabrica la cobertura.
-    if (!faltantes) {
-      const r = await this._rpc('completitud-cobertura.medir.request',
-        { project_id: pid, vertical, esperados: input.esperados, llegados: input.llegados },
-        { timeout_ms: 4000 });
-      const data = r && r.data ? r.data : null;
-      if (!data || !data.cobertura) {
-        return this._errorResponse(503, 'UPSTREAM_UNREACHABLE',
-          'completitud-cobertura no respondio; no se puede declarar el hueco sin fabricar el dato',
-          { dependencia: 'completitud-cobertura', project_id: pid, vertical });
-      }
-      // La metrica existe pero declara que no hay expectativa: no hay hueco que afirmar.
-      if (!data.cobertura.declarada) {
-        return {
-          status: 200,
-          data: {
-            project_id: pid,
-            vertical,
-            falta: false,
-            declaracion: null,
-            origen: 'completitud-cobertura',
-            motivo: 'la cobertura no esta declarada (sin expectativa); no se afirma un hueco'
-          }
-        };
-      }
-      faltantes = Array.isArray(data.cobertura.huecos) ? data.cobertura.huecos.map(f => String(f)) : [];
-      origen = 'completitud-cobertura';
+    const fuente = input.fuente != null ? String(input.fuente).trim()
+      : (input.fuente_esperada != null ? String(input.fuente_esperada).trim() : null);
+    if (!fuente) {
+      // Sin fuente señalada NO se inventa la declaracion.
+      return {
+        status: 200,
+        data: {
+          project_id: pid,
+          tipo: 'declaracion-fuente-faltante',
+          declarada: false,
+          declaracion: null,
+          abierto: { fuente: 'no se señaló qué fuente falta: no se inventa una declaracion (nada que declarar)' }
+        }
+      };
     }
 
-    // El AVISO: declara que falta, ABIERTO, sin obligar a la fuente a producirlo.
     const declaracion = {
-      vertical,
-      faltantes,
-      falta: faltantes.length > 0,
-      abierto: true,
-      obliga_a_producir: false,
-      aviso: faltantes.length > 0
-        ? `la vertical ${vertical} no publica ${faltantes.length} hecho(s) necesario(s)`
-        : null,
+      declaracion_id: `ff_${pid}_${Date.now().toString(36)}`,
+      vertical: input.vertical != null ? String(input.vertical) : (this.project_id || null),
+      fuente,
+      // POR QUE se declara: el motivo declarado; si no lo hay, se declara el hueco.
       motivo: input.motivo != null ? String(input.motivo) : null,
-      declarado_en: new Date().toISOString()
+      ref: input.ref != null ? String(input.ref) : null,
+      // NO se obliga a la vertical: la declaracion es informativa, no un requerimiento.
+      obliga: false,
+      declarada_en: new Date().toISOString()
     };
 
     return {
       status: 200,
       data: {
         project_id: pid,
-        vertical,
-        falta: declaracion.falta,
+        tipo: 'declaracion-fuente-faltante',
         declaracion,
-        origen
+        declarada: true,
+        // La fuente NO se crea aqui: solo se declara su ausencia.
+        creada_fuente: false,
+        abierto: { motivo: declaracion.motivo ? null : 'la declaracion no declaro motivo (se anota el hueco, no se inventa)' }
       }
     };
-  }
-
-  // ── Fire-and-forget: escucha LA metrica unica (A12). NO la recalcula (la LEE) ni recuerda. ──
-  // Si la cobertura trae huecos, DECLARA el hecho faltante en el acto (sin estado).
-  onCoberturaMedida(e) {
-    const d = (e && (e.data || e)) || {};
-    const cov = d.cobertura;
-    if (!d.project_id || !d.vertical || !cov || !cov.declarada) return null;
-    const faltantes = Array.isArray(cov.huecos) ? cov.huecos.map(f => String(f)) : [];
-    if (faltantes.length === 0) return { falta: false, vertical: d.vertical };
-    this.eventBus?.publish('contabilidad.fuente_faltante', {
-      project_id: d.project_id,
-      vertical: d.vertical,
-      declaracion: {
-        vertical: d.vertical,
-        faltantes,
-        falta: true,
-        abierto: true,
-        obliga_a_producir: false,
-        aviso: `la vertical ${d.vertical} no publica ${faltantes.length} hecho(s) necesario(s)`,
-        motivo: null,
-        declarado_en: new Date().toISOString()
-      },
-      faltantes,
-      correlation_id: d.correlation_id
-    });
-    return { falta: true, vertical: d.vertical, faltantes: faltantes.length };
   }
 
   // ── Tools ──

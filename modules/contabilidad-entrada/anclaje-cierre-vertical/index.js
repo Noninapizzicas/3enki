@@ -1,25 +1,25 @@
 /**
  * contabilidad-entrada/anclaje-cierre-vertical — CUSTODIO CON PERSISTENCIA (A14, hoja del plan).
  *
- * LA PARCELA DECLARABLE POR VERTICAL de QUE ES "un cierre" y COMO se identifica. Su
- * puerto es construible; su CONTENIDO pende de `unidad_de_cierre` (dato del DUENO, via
- * cola-declaraciones-criterio K9). Un cierre se ANCLA a su clave:
- *   - `(proyecto, jornada)`          → el DIA cierra la CAJA.
- *   - `(proyecto, ejercicio, mes)`   → el MES cierra la CONTABILIDAD.
+ * La PARCELA declarable POR VERTICAL de QUE ES 'un cierre' y COMO se identifica. UN escritor.
  *
- * Invariante 7/13: la unidad de cierre se DECLARA, no se estima. Sin definicion
- * declarada para una vertical, `anclar` devuelve `anclado:false` — el puerto existe,
- * pero no se inventa la clave de un cierre que el dueno no definio.
+ * Un cierre no se adivina: cada vertical declara su anclaje (que hecho/que campo/que clave marca
+ * el cierre). Sin anclaje declarado, el sistema PREGUNTA y NO inventa un criterio de cierre.
  *
- * UN SOLO ESCRITOR de la parcela: el declarante (rol DECLARANTE_ANCLAJE); cualquier
- * otro rol es rechazado (segundo escritor → 403).
+ *   · anclar  — PREGUNTA: dada una senal de cierre, ¿es un cierre segun el anclaje declarado?
+ *                Calcula la clave natural de la senal (clave-natural M3, por EVENTO) y la
+ *                contrasta con el anclaje de la vertical. Deriva; no muta.
+ *   · declarar — ORDEN: la vertical declara su anclaje de cierre (que es y como se identifica).
  *
  * Invariantes:
- *  - Una definicion de cierre es `{unidad_de_cierre, campos_clave}` — declarada, no cableada.
- *  - No se sobrescribe: re-declarar APPENDEA version nueva (historial) y fecha la vigente.
- *  - La clave se DERIVA de la unidad declarada; sin unidad no hay clave inventada.
- *  - Persiste por proyecto con PosPersistencia, restaura en project.activated y
- *    vuelca en onUnload.
+ *  - SIN ANCLAJE DECLARADO no hay cierre: `anclar` devuelve es_cierre:false y `abierto` (no se
+ *    estima); y se SUBE una peticion best-effort a la cola declarativa (cola-declaraciones-criterio).
+ *  - Dato ausente = desconocido: sin vertical o sin anclaje NO se declara nada.
+ *  - No se borra: re-declarar APPENDEA al historial; el anclaje vigente es el ultimo declarado.
+ *  - UN escritor por parcela (guard rol ANCLAJE_CIERRE; segundo escritor → 403).
+ *  - Persiste por proyecto con PosPersistencia, restaura en project.activated y vuelca en onUnload.
+ *
+ * R3 · ESCUCHA: `contabilidad.criterio_fijado` lo emite cola-declaraciones-criterio (K9) — existe.
  *
  * Forma: CUSTODIO → PosPersistencia + onProjectActivated + flush + GUARD de escritor.
  * Ver hoja A14 del plan-construccion y diseno-oop.md (CLASE AnclajeCierreVertical).
@@ -30,23 +30,15 @@
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
 const PosPersistencia = require('../../_shared/pos-persistencia');
 
-// Rol unico escritor de la parcela: quien declara que es "un cierre" por vertical.
-const ROL_ESCRITOR = 'DECLARANTE_ANCLAJE';
-
-// Unidades de cierre conocidas y su forma de clave (dato del diseno; NO el valor).
-//  - JORNADA: el dia cierra la caja     → (proyecto, jornada)
-//  - MES:     el mes cierra la contabilidad → (proyecto, ejercicio, mes)
-const CLAVES_POR_UNIDAD = {
-  JORNADA: ['jornada'],
-  MES: ['ejercicio', 'mes']
-};
+// Rol unico escritor de la parcela de anclaje de cierre.
+const ROL_ESCRITOR = 'ANCLAJE_CIERRE';
 
 class AnclajeCierreVertical extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'anclaje-cierre-vertical';
     this.version = 'reflejo-0.1.0';
-    // store: project_id -> { esquema, anclajes: Map<vertical, DefinicionCierre> }
+    // store: project_id -> { esquema, verticales: Map<vertical, Anclaje> }
     this._parcelas = new Map();
 
     this._persist = new PosPersistencia({
@@ -56,13 +48,13 @@ class AnclajeCierreVertical extends ModuloHibridoReflejo {
       snapshot: (pid) => {
         const p = this._parcelas.get(pid);
         if (!p) return null;
-        return { project_id: pid, esquema: p.esquema, anclajes: [...p.anclajes.values()] };
+        return { project_id: pid, esquema: p.esquema, verticales: [...p.verticales.values()] };
       },
       hidratar: (pid, data) => {
         if (!data) return;
-        const anclajes = new Map();
-        for (const a of (data.anclajes || [])) if (a && a.vertical != null) anclajes.set(String(a.vertical), a);
-        this._parcelas.set(pid, { esquema: data.esquema || 'contabilidad-anclaje-cierre-vertical-v1', anclajes });
+        const verticales = new Map();
+        for (const v of (data.verticales || [])) if (v && v.vertical != null) verticales.set(String(v.vertical), v);
+        this._parcelas.set(pid, { esquema: data.esquema || 'contabilidad-anclaje-cierre-vertical-v1', verticales });
       }
     });
   }
@@ -79,25 +71,47 @@ class AnclajeCierreVertical extends ModuloHibridoReflejo {
     return this._persist.restaurar(d.project_id);
   }
 
-  // ── handlers RPC (una linea, delegan a _atender) ──
+  // ── handler FIRE-AND-FORGET: el JEFE fijo un criterio (cola-declaraciones-criterio K9) ──
+  // Si el criterio fijado es el tipo de cierre de una vertical, se anota la variacion (R2 no aplica:
+  // no se crea un anclaje, solo se toma constancia para que la parcela no quede ciega).
+  onCriterioFijado(e) {
+    const d = (e && (e.data || e)) || {};
+    try {
+      const pid = d.project_id || this.project_id;
+      if (!pid) return;
+      const clave = d.clave != null ? String(d.clave).trim() : '';
+      // Solo interesa el criterio de cierre/anclaje; el resto de la cola no toca esta parcela.
+      if (!/cierre|anclaje/i.test(clave)) return;
+      const p = this._obtenerOCrear(pid);
+      p.updated_at = new Date().toISOString();
+      this._persist.marcarDirty(pid);
+    } catch (err) {
+      this.logger?.error(`${this.name}.criterio_fijado.error`, { error: err.message });
+    }
+  }
+
+  // ── handler RPC PREGUNTA (sin ui_handler: su cara es el bus) ──
   onAnclarRequest(e) {
     return this._atender(e, 'anclar', 'anclaje-cierre-vertical.anclar.response', async (d) => {
-      const res = this._anclar(d);
+      const res = await this._anclar(d);
+      // PREGUNTA: deriva (contrasta la senal con el anclaje); no escribe → sin hecho (R2).
       if (res.status !== 200) this.eventBus?.publish('anclaje-cierre-vertical.anclar.failed', res);
+      else if (res.data && res.data.anclaje_declarado === false) this._subirPeticionCriterio(res.data.project_id, res.data.vertical);
       return res;
     });
   }
 
+  // ── handler RPC ORDEN (ui_handler: la vertical declara su anclaje) ──
   onDeclararRequest(e) {
     return this._atender(e, 'declarar', 'anclaje-cierre-vertical.declarar.response', async (d) => {
       const res = this._declarar(d);
       if (res.status === 200) {
-        // Exito → evento de dominio: el cierre de una vertical quedo anclado.
-        this.eventBus?.publish('contabilidad.cierre_anclado', {
+        // R2 · si ESCRIBE, anuncia el HECHO: la vertical declaro que es 'un cierre'.
+        this.eventBus?.publish('contabilidad.anclaje_cierre_declarado', {
           project_id: res.data.project_id,
+          vertical: res.data.vertical,
           anclaje: res.data.anclaje,
-          vertical: res.data.anclaje.vertical,
-          unidad_de_cierre: res.data.anclaje.unidad_de_cierre,
+          declarado: true,
           correlation_id: d.correlation_id
         });
       } else {
@@ -107,146 +121,169 @@ class AnclajeCierreVertical extends ModuloHibridoReflejo {
     });
   }
 
-  // ── proyeccion de lectura (NO muta): anclar(f:Fuente) → DefinicionCierre ──
-  _anclar(input = {}) {
+  // ══════════════════════════════════════════════════════════════════════
+  // anclar(senal, vertical) → ¿es un cierre? (PREGUNTA, deriva contra el anclaje declarado)
+  // ══════════════════════════════════════════════════════════════════════
+  async _anclar(input = {}) {
     const pid = input.project_id || this.project_id;
     if (!pid) return this._invalid('project_id');
 
     const vertical = input.vertical != null ? String(input.vertical).trim() : '';
     if (!vertical) return this._invalid('vertical');
 
-    const parcela = this._obtenerOCrear(pid);
-    const def = parcela.anclajes.get(vertical) || null;
+    const sign = input.senal !== undefined ? input.senal
+      : (input.hecho !== undefined ? input.hecho : input.cierre);
+    if (sign === undefined || sign === null) return this._invalid('senal');
 
-    // Sin definicion declarada: el puerto existe; la clave NO se inventa.
-    if (!def) {
+    const p = this._parcelas.get(pid) || null;
+    const anclaje = p ? (p.verticales.get(vertical) || null) : null;
+
+    // SIN anclaje declarado NO hay cierre: no se estima; el sistema pregunta.
+    if (!anclaje) {
       return {
         status: 200,
         data: {
           project_id: pid,
           vertical,
-          anclado: false,
+          senal: sign,
+          es_cierre: false,
+          anclaje_declarado: false,
           anclaje: null,
-          motivo: 'la vertical no ha declarado su unidad de cierre (dato del dueno, pendiente)'
+          clave_senal: null,
+          abierto: { anclaje: `${vertical} no ha declarado su anclaje de cierre: el sistema pregunta, no decide` }
         }
       };
     }
 
-    // Clave DERIVADA de la unidad declarada; sin unidad → null (no una clave fabricada).
-    const clave = this._claveDe(pid, def, input.periodo);
+    // Calcula la clave natural de la senal (clave-natural M3) por EVENTO — best-effort.
+    const claveResp = await this._rpc('clave-natural.calcular.request', {
+      project_id: pid,
+      elemento: sign,
+      componentes: Array.isArray(anclaje.componentes) && anclaje.componentes.length ? anclaje.componentes : undefined
+    });
+    const clave_senal = (claveResp && claveResp.status === 200 && claveResp.data) ? claveResp.data.clave : null;
+
+    // El cierre se identifica por el CAMPO/CAMPO+VALOR declarado en el anclaje.
+    const es_cierre = this._coincideAnclaje(anclaje, sign, clave_senal);
+
     return {
       status: 200,
       data: {
         project_id: pid,
         vertical,
-        anclado: true,
-        anclaje: {
-          vertical,
-          unidad_de_cierre: def.unidad_de_cierre,
-          campos_clave: def.campos_clave,
-          version: def.version,
-          declarado_por: def.declarado_por,
-          declarado_en: def.declarado_en
-        },
-        clave,
-        clave_disponible: clave != null
+        senal: sign,
+        es_cierre,
+        anclaje_declarado: true,
+        anclaje,
+        clave_senal,
+        // El anclaje se DECLARA; el sistema solo lo aplica.
+        criterio_declarado_por: anclaje.declarado_por || ROL_ESCRITOR,
+        abierto: { anclaje: null }
       }
     };
   }
 
-  // ── proyeccion de escritura (UN escritor): se declara QUE es un cierre ──
+  // ══════════════════════════════════════════════════════════════════════
+  // declarar(vertical, anclaje) → que es 'un cierre' y como se identifica (ORDEN)
+  // ══════════════════════════════════════════════════════════════════════
   _declarar(input = {}) {
     const pid = input.project_id || this.project_id;
     if (!pid) return this._invalid('project_id');
 
-    // GUARD de escritor: solo el declarante asienta anclajes.
     if (input.rol !== ROL_ESCRITOR) {
       return this._errorResponse(403, 'PERMISSION_DENIED',
-        'solo el declarante (DECLARANTE_ANCLAJE) puede anclar el cierre de una vertical',
+        'solo el escritor de la parcela (ANCLAJE_CIERRE) declara el anclaje de cierre de una vertical',
         { rol_esperado: ROL_ESCRITOR, rol_recibido: input.rol ?? null });
     }
 
     const vertical = input.vertical != null ? String(input.vertical).trim() : '';
     if (!vertical) return this._invalid('vertical');
 
-    const unidad = input.unidad_de_cierre != null ? String(input.unidad_de_cierre).toUpperCase().trim() : '';
-    if (!unidad) return this._invalid('unidad_de_cierre');
+    const a = input.anclaje || input.a;
+    if (!a || typeof a !== 'object') return this._invalid('anclaje');
 
-    const campos = Object.prototype.hasOwnProperty.call(CLAVES_POR_UNIDAD, unidad)
-      ? [...CLAVES_POR_UNIDAD[unidad]]
-      : (Array.isArray(input.campos_clave) ? input.campos_clave.map(c => String(c).trim()).filter(Boolean) : null);
-    if (!campos || campos.length === 0) return this._invalid('campos_clave');
-
-    const parcela = this._obtenerOCrear(pid);
-    const previo = parcela.anclajes.get(vertical) || null;
+    const p = this._obtenerOCrear(pid);
     const ahora = new Date().toISOString();
+    const existente = p.verticales.get(vertical) || null;
 
-    const def = {
-      vertical,
-      unidad_de_cierre: unidad,
-      campos_clave: campos,
-      version: previo ? previo.version + 1 : 1,
-      declarado_por: ROL_ESCRITOR,
-      declarado_en: ahora,
-      // Re-declarar NO borra el anclaje anterior: se apila su historial.
-      historial: previo && Array.isArray(previo.historial) ? previo.historial : [],
-      actualizado_en: ahora
-    };
-    def.historial.push({ unidad_de_cierre: unidad, campos_clave: campos, version: def.version, por: ROL_ESCRITOR, en: ahora });
+    const anclaje = existente || { vertical, historial: [], declarado_en: null };
+    // El anclaje DECLARA como se identifica un cierre: campo (+ valor) y/o componentes de la clave.
+    anclaje.campo = a.campo != null ? String(a.campo) : (anclaje.campo ?? null);
+    anclaje.valor = a.valor !== undefined ? a.valor : (anclaje.valor ?? null);
+    anclaje.componentes = Array.isArray(a.componentes) ? a.componentes.map((c) => String(c)) : (anclaje.componentes || []);
+    anclaje.descripcion = a.descripcion != null ? String(a.descripcion) : (anclaje.descripcion ?? null);
+    anclaje.declarado_por = ROL_ESCRITOR;
+    anclaje.declarado_en = ahora;
+    anclaje.historial = Array.isArray(anclaje.historial) ? anclaje.historial : [];
+    anclaje.historial.push({ campo: anclaje.campo, valor: anclaje.valor, componentes: anclaje.componentes, en: ahora });
 
-    parcela.anclajes.set(vertical, def);
-    parcela.updated_at = ahora;
+    p.verticales.set(vertical, anclaje);
+    p.updated_at = ahora;
     this._persist.marcarDirty(pid);
 
     return {
       status: 200,
       data: {
         project_id: pid,
-        anclaje: { vertical, unidad_de_cierre: unidad, campos_clave: campos, version: def.version, declarado_por: ROL_ESCRITOR, declarado_en: ahora },
-        anclado: true,
-        sobrescritura: Boolean(previo)
+        vertical,
+        anclaje,
+        declarado: true,
+        total_verticales: p.verticales.size,
+        abierto: {
+          campo: anclaje.campo ? null : 'no se declaro el campo que marca el cierre: el anclaje queda abierto',
+          componentes: anclaje.componentes.length ? null : 'no se declararon componentes de la clave natural del cierre'
+        }
       }
     };
   }
 
-  // Clave del cierre DERIVADA: (proyecto, jornada) para caja · (proyecto, ejercicio, mes) para contabilidad.
-  // Con una unidad declarada desconocida, la clave se compone con los campos_clave declarados
-  // (si llegan en el periodo); si no llegan, devuelve null — nunca una clave fabricada.
-  _claveDe(pid, def, periodo) {
-    const p = periodo && typeof periodo === 'object' ? periodo : {};
-    const unidad = def.unidad_de_cierre;
-    if (unidad === 'JORNADA') {
-      if (p.jornada === undefined || p.jornada === null || p.jornada === '') return null;
-      return `${pid}|${String(p.jornada)}`;
+  // Decide si la senal es un cierre segun el anclaje: por campo/valor declarado y/o clave natural.
+  _coincideAnclaje(anclaje, sign, clave_senal) {
+    if (!anclaje || typeof anclaje !== 'object') return false;
+    const obj = (sign && typeof sign === 'object') ? sign : {};
+    let coincide = false;
+
+    if (anclaje.campo) {
+      const actual = obj[anclaje.campo];
+      if (anclaje.valor === undefined || anclaje.valor === null) {
+        coincide = actual !== undefined && actual !== null;
+      } else {
+        coincide = String(actual) === String(anclaje.valor);
+      }
     }
-    if (unidad === 'MES') {
-      if (p.ejercicio === undefined || p.mes === undefined) return null;
-      return `${pid}|${String(p.ejercicio)}|${String(p.mes)}`;
+    // Si el anclaje declara tambien una clave natural esperada, tambien debe coincidir.
+    if (anclaje.clave != null && clave_senal != null) {
+      coincide = coincide || String(clave_senal) === String(anclaje.clave);
     }
-    const campos = Array.isArray(def.campos_clave) ? def.campos_clave : [];
-    if (campos.length === 0) return null;
-    const partes = [];
-    for (const c of campos) {
-      if (p[c] === undefined || p[c] === null || p[c] === '') return null;
-      partes.push(String(p[c]));
-    }
-    return [pid, ...partes].join('|');
+    return coincide;
+  }
+
+  // Peticion best-effort a la cola declarativa cuando falta el anclaje. NO suplanta al JEFE.
+  _subirPeticionCriterio(pid, vertical) {
+    try {
+      if (pid) this._rpc('cola-declaraciones-criterio.fijar.request', {
+        project_id: pid,
+        clave: 'unidad_de_cierre',
+        origen: 'anclaje-cierre-vertical',
+        vertical: vertical || null
+      }, { timeout_ms: 2000 });
+    } catch (_) { /* best-effort */ }
   }
 
   _obtenerOCrear(pid) {
     let p = this._parcelas.get(pid);
     if (!p) {
-      p = { esquema: 'contabilidad-anclaje-cierre-vertical-v1', anclajes: new Map() };
+      p = { esquema: 'contabilidad-anclaje-cierre-vertical-v1', verticales: new Map() };
       this._parcelas.set(pid, p);
       this._persist.marcarDirty(pid);
     }
     return p;
   }
 
-  // Definicion declarada de una vertical (mismo proceso) — no muta.
-  anclajeDe(pid, vertical) {
+  // Lectura directa (mismo proceso) — no muta.
+  anclajesDe(pid) {
     const p = pid ? this._parcelas.get(pid) : null;
-    return p && vertical != null ? (p.anclajes.get(String(vertical)) || null) : null;
+    return p ? [...p.verticales.values()] : [];
   }
 
   // ── Tools ──

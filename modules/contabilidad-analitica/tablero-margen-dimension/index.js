@@ -1,34 +1,19 @@
 /**
  * contabilidad-analitica/tablero-margen-dimension — REFLEJO STATELESS (J10, hoja del plan).
  *
- * EL CRUCE MARGEN × DIMENSION: el jefe ve que linea mueve su margen. Una TABLA de conjunto — por
- * centro, por linea, por producto, por sociedad — construida cruzando la MISMA cifra de margen por
- * cada eje declarado.
+ * El CRUCE margen x DIMENSION bajo LENTE DE CONJUNTO: por centro, familia o sociedad. No
+ * calcula el margen (eso es margen-analitico H2, al que SUBE por EVENTO): AGREGA el margen YA
+ * calculado por cada dimension declarada y compone el tablero.
  *
- * ATRIBUTOS del diseno: `margen:MargenAnalitico`, `dimensiones:Set<Dimension>`.
- *   METODOS: cruzar():Tabla.
- *   REGLA: cruce margen × dimension bajo lente de conjunto: por centro, familia o sociedad.
+ * Invariante: dato ausente = desconocido. Sin margen no se compone tablero (no se estima); lo
+ * que falta (margen, dimension) se declara ABIERTO. La dimension es DATO declarable
+ * (`centro`/`familia`/`sociedad`/…): no se cablea una lista cerrada.
  *
- * =============== NO DUPLICA J2: LEE EL MARGEN YA CALCULADO ===============
- * Este modulo NO calcula margen: para cada EJE declarado PIDE a `margen-analitico` (J2) POR EVENTO
- * (`margen-analitico.calcular.request`) su `por_dimension` ya calculado y lo COLOCA en la tabla.
- * Cero aritmetica de margen aqui: la suma, la resta y el ratio son de J2. El tablero solo pivota y
- * presenta. Los hechos etiquetados (lo que hace posible el corte) proceden del etiquetado de J1
- * (`etiquetado-analitico`, que PROPONE y jamas escribe) a traves de J2.
+ * R3 (honestidad de la escucha): el plan declara escucha de `contabilidad.asiento_asentado`
+ * (escritor-diario B2) y `contabilidad.criterio_fijado` (cola-declaraciones-criterio) — AMBOS
+ * emisores YA existen → SI se declaran.
  *
- * EL EJE ES DECLARABLE: por que ejes se cruza (centro | linea | producto | sociedad | cualquier eje
- * declarado) es DATO. Sin ejes declarados se usan los que declare el CATALOGO de dimensiones
- * (cada dimension declara su `tipo`); si tampoco hay catalogo, NO se elige un eje por defecto — la
- * tabla queda `[ABIERTO]` con lo que falta (elegir el eje seria decidir por el jefe).
- *
- * Invariantes:
- *  - NO RECALCULA MARGEN: cada fila es la cifra de J2, con su ORIGEN declarado.
- *  - DETERMINISTA: mismo margen + mismos ejes → misma tabla.
- *  - Dato ausente = desconocido: un eje sin cubetas → fila con `margen:null` y su motivo, NUNCA 0.
- *  - LEY/PARAMETRO COMO DATO: ejes y catalogo de dimensiones son entrada; cero constantes.
- *  - NO escribe, NO persiste: la tabla es un DERIVADO de lectura.
- *
- * Forma: REFLEJO → STATELESS. Sin PosPersistencia, sin onProjectActivated.
+ * Forma: REFLEJO → STATELESS. Sin PosPersistencia. RPC cruzar = PREGUNTA → sin ui_handler.
  * Ver hoja J10 del plan-construccion y diseno-oop.md (CLASE TableroMargenDimension).
  */
 
@@ -36,183 +21,139 @@
 
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
 
+const DIMENSIONES = ['centro', 'familia', 'sociedad', 'producto', 'canal', 'periodo', 'dimension', 'proyecto'];
+
 class TableroMargenDimension extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'tablero-margen-dimension';
     this.version = 'reflejo-0.1.0';
+    // Observacion acotada (fire-and-forget)
+    this._vistos = { asientos: [], criterios: [] };
   }
 
   async onUnload() { return super.onUnload(); }
 
-  // ── handler RPC (una linea, delega a _atender) ──
+  // ── handler RPC (PREGUNTA → sin ui_handler) ──
   onCruzarRequest(e) {
     return this._atender(e, 'cruzar', 'tablero-margen-dimension.cruzar.response', async (d) => {
       const res = await this._cruzar(d);
+      // Reflejo: agrega y declara; no escribe → no hay hecho que anunciar (R2).
       if (res.status !== 200) this.eventBus?.publish('tablero-margen-dimension.cruzar.failed', res);
       return res;
     });
   }
 
-  // ── proyeccion determinista: cruzar() → Tabla (LEE el margen de J2, no lo recalcula) ──
+  // ── handlers de dominio (fire-and-forget): el libro cambio / se fijo un criterio ──
+  onAsientoAsentado(e) {
+    const d = (e && (e.data || e)) || {};
+    if (d.asiento) { this._vistos.asientos.push(d.asiento); if (this._vistos.asientos.length > 2000) this._vistos.asientos.shift(); }
+  }
+
+  onCriterioFijado(e) {
+    const d = (e && (e.data || e)) || {};
+    if (d.criterio || d.clave) { this._vistos.criterios.push(d.criterio || d); if (this._vistos.criterios.length > 1000) this._vistos.criterios.shift(); }
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // _cruzar(input) → tablero: margen agregado por cada DIMENSION declarada
+  // ══════════════════════════════════════════════════════════════════════
   async _cruzar(input = {}) {
     const pid = input.project_id || this.project_id;
     if (!pid) return this._invalid('project_id');
-    const periodo = input.periodo != null ? String(input.periodo) : null;
 
-    // 1) Las DIMENSIONES declaradas (el catalogo): que centros/lineas/productos existen.
-    const { dimensiones, fuente_dimensiones } = await this._dimensiones(pid, input);
+    // Las dimensiones a cruzar: DECLARADAS (por defecto, las reconocidas). No se cablea la de negocio.
+    const dimensiones = this._dimensiones(input);
+    if (dimensiones.length === 0) return this._invalid('dimensiones');
 
-    // 2) Los EJES del cruce: declarados, o los tipos del catalogo declarado. NUNCA un default.
-    const { ejes, fuente_ejes } = this._ejes(input, dimensiones);
+    // El MARGEN por fila: declarado en el input, o subido por EVENTO a margen-analitico (H2).
+    const { filas, fuente } = await this._filasDe(input);
 
-    if (ejes.length === 0) {
+    // Sin margen NO se compone tablero (dato ausente = desconocido): se declara ABIERTO.
+    if (filas.length === 0) {
       return {
         status: 200,
         data: {
-          project_id: pid, periodo, fuente_dimensiones, fuente_ejes,
-          ejes: [], tabla: [], filas: 0,
-          abierto: true, faltan: ['ejes'],
-          motivo: 'no se cruza el tablero: el eje (centro | linea | producto | sociedad) es DECLARABLE y no se declaro (elegirlo seria decidir por el jefe)'
+          project_id: pid,
+          tipo: 'tablero-margen-dimension',
+          dimensiones,
+          tablero: [],
+          total: 0,
+          calcula_margen: false,
+          abierto: { margen: 'no hay margen (ni declarado ni de margen-analitico): el tablero no se inventa' }
         }
       };
     }
 
-    // 3) Por cada EJE, se PIDE a J2 su margen YA CALCULADO (por evento) y se coloca en la tabla.
-    const tabla = [];
-    const faltan = [];
-    for (const eje of ejes) {
-      const r = await this._rpc('margen-analitico.calcular.request',
-        { project_id: pid, periodo, eje, dimensiones }, { timeout_ms: 5000 });
-      const data = r && r.data ? r.data : null;
-
-      if (!data || !Array.isArray(data.por_dimension) || data.por_dimension.length === 0) {
-        // Sin margen para ese eje: la fila se DECLARA sin cifra. No se rellena con 0.
-        faltan.push(eje);
-        tabla.push({
-          eje,
-          fuente: 'margen-analitico',
-          margen: null,
-          ingresos: null,
-          costes: null,
-          ratio_margen: null,
-          dimensiones: [],
-          abierto: true,
-          motivo: data
-            ? 'el margen por ese eje no esta cerrado (J2 lo devolvio abierto): el tablero no lo completa por su cuenta'
-            : 'margen-analitico (J2) no respondio: el tablero no recalcula el margen'
-        });
-        continue;
+    // Cruce: por cada dimension, agrega el margen de las filas que la declaran.
+    const tablero = [];
+    for (const dim of dimensiones) {
+      const porValor = new Map();
+      let sinDimension = 0, margenSinDimension = 0;
+      for (const f of filas) {
+        const valor = f[dim] != null ? String(f[dim]) : null;
+        const margen = this._num(f.margen != null ? f.margen : (this._num(f.ingreso) != null ? this._num(f.ingreso) - (this._num(f.coste) || 0) : null));
+        if (valor === null) { sinDimension++; if (margen != null) margenSinDimension += margen; continue; }
+        const acc = porValor.get(valor) || { valor, margen: 0, filas: 0 };
+        if (margen != null) acc.margen += margen;
+        acc.filas++;
+        porValor.set(valor, acc);
       }
-
-      // La fila del eje: las cubetas de J2 TAL CUAL (su cifra, su origen).
-      tabla.push({
-        eje,
-        fuente: 'margen-analitico',
-        margen: this._num(data.margen_total),
-        ingresos: this._num(data.ingresos_total),
-        costes: this._num(data.costes_total),
-        ratio_margen: data.parcial ? this._num(data.parcial.ratio_margen) : null,
-        dimensiones: data.por_dimension.map(c => ({
-          dimension: c.dimension,
-          ingresos: this._num(c.ingresos),
-          costes: this._num(c.costes),
-          margen: this._num(c.margen),
-          ratio_margen: this._num(c.ratio_margen),
-          n_lineas: c.n_lineas ?? null
-        })),
-        abierto: data.abierto === true,
-        motivo: data.motivo ?? null
+      const celdas = [...porValor.values()]
+        .map((c) => ({ valor: c.valor, margen: this._round(c.margen, 2), filas: c.filas }))
+        .sort((a, b) => b.margen - a.margen);
+      tablero.push({
+        dimension: dim,
+        celdas,
+        total_margen: this._round(celdas.reduce((a, c) => a + c.margen, 0), 2),
+        sin_dimension: sinDimension
       });
     }
-
-    // El catalogo declarado que NO aparece en ningun eje: se declara (se ve el hueco, no se oculta).
-    const vistas = new Set();
-    for (const fila of tabla) for (const d of fila.dimensiones) vistas.add(String(d.dimension));
-    const sin_margen = dimensiones.filter(d => !vistas.has(d.clave)).map(d => d.clave);
-
-    const abierto = faltan.length > 0 || sin_margen.length > 0;
-    if (sin_margen.length > 0) faltan.push('margen_de_' + sin_margen.length + '_dimension(es)');
 
     return {
       status: 200,
       data: {
         project_id: pid,
-        periodo,
-        fuente_dimensiones,
-        fuente_ejes,
-        ejes,
-        // Tabla: una fila por eje, con sus cubetas (cifra de J2) bajo la lente de conjunto.
-        tabla,
-        filas: tabla.length,
-        dimensiones_declaradas: dimensiones.map(d => d.clave),
-        sin_margen,
-        abierto,
-        faltan,
-        // La lente de conjunto del jefe: mismo margen, cortado por todos los ejes que declaro.
-        lente: 'conjunto',
-        motivo: abierto
-          ? 'el tablero se compone con lo disponible; queda [ABIERTO] ' + faltan.join(', ')
-          : null
+        tipo: 'tablero-margen-dimension',
+        fuente_margen: fuente,
+        dimensiones,
+        tablero,
+        total_filas: filas.length,
+        // Este modulo NO calcula el margen: lo AGREGA (eso es de margen-analitico H2).
+        calcula_margen: false,
+        abierto: {
+          dimensiones_sin_valor: tablero.some((t) => t.sin_dimension > 0)
+            ? `${tablero.filter((t) => t.sin_dimension > 0).map((t) => t.dimension).join(', ')}: hay filas sin ese valor declarado (no se reparten, se declaran)`
+            : null
+        }
       }
     };
   }
 
-  // ── Las dimensiones: catalogo declarado, o pedido a la cola K9 POR EVENTO (best-effort) ──
-  async _dimensiones(pid, input = {}) {
-    const decl = input.dimensiones || (input.criterio && input.criterio.dimensiones);
-    if (Array.isArray(decl)) return { dimensiones: this._catalogo(decl), fuente_dimensiones: 'declarado' };
-    const r = await this._rpc('cola-declaraciones-criterio.ratificar.request',
-      { project_id: pid, clave: 'dimensiones' }, { timeout_ms: 4000 });
-    const valor = r && r.data && r.data.criterio ? r.data.criterio.valor : null;
-    const lista = Array.isArray(valor) ? valor : (valor && typeof valor === 'object' && Array.isArray(valor.dimensiones) ? valor.dimensiones : null);
-    if (lista) return { dimensiones: this._catalogo(lista), fuente_dimensiones: 'cola-declaraciones-criterio' };
-    return { dimensiones: [], fuente_dimensiones: null };
+  // Trae las filas con margen: declaradas, o subidas por EVENTO a margen-analitico (H2).
+  async _filasDe(input) {
+    if (Array.isArray(input.filas)) return { filas: input.filas, fuente: 'declarado' };
+    const resp = await this._rpc('margen-analitico.calcular.request', {
+      project_id: input.project_id || this.project_id,
+      periodo: input.periodo, ejercicio: input.ejercicio, granularidad: input.granularidad
+    }, { timeout_ms: 3000 });
+    const v = resp && resp.data ? resp.data : null;
+    if (v && Array.isArray(v.filas)) return { filas: v.filas, fuente: 'margen-analitico' };
+    if (v && Array.isArray(v.margenes)) return { filas: v.margenes, fuente: 'margen-analitico' };
+    return { filas: [], fuente: null };
   }
 
-  _catalogo(lista = []) {
-    const out = [];
-    for (const d of (Array.isArray(lista) ? lista : [])) {
-      if (d === null || d === undefined || d === '') continue;
-      const clave = this._clave(d);
-      if (clave === null || out.some(x => x.clave === clave)) continue;
-      out.push({
-        clave,
-        tipo: (d && typeof d === 'object') ? (d.tipo != null ? String(d.tipo) : (d.eje != null ? String(d.eje) : null)) : null
-      });
-    }
-    return out;
-  }
-
-  // ── Los ejes del cruce: declarados, o los tipos del catalogo declarado. Cero defaults. ──
-  _ejes(input = {}, dimensiones = []) {
-    const raw = input.ejes != null ? input.ejes : (input.eje != null ? [input.eje] : null);
-    if (raw != null) {
-      const lista = Array.isArray(raw) ? raw : [raw];
-      const out = [];
-      for (const e of lista) {
-        if (e === null || e === undefined || e === '') continue;
-        const s = String(e).trim();
-        if (s && !out.includes(s)) out.push(s);
-      }
-      if (out.length > 0) return { ejes: out, fuente_ejes: 'declarado' };
-    }
-    // Sin ejes declarados: los que declare el TIPO de cada dimension del catalogo (dato declarado).
-    const delCatalogo = [];
-    for (const d of dimensiones) {
-      if (d.tipo && !delCatalogo.includes(d.tipo)) delCatalogo.push(d.tipo);
-    }
-    return { ejes: delCatalogo, fuente_ejes: delCatalogo.length > 0 ? 'catalogo_dimensiones' : null };
-  }
-
-  _clave(v) {
-    if (v === undefined || v === null || v === '') return null;
-    if (typeof v === 'object') return this._clave(v.id ?? v.clave ?? v.nombre ?? v.centro ?? v.linea ?? v.producto ?? v.sociedad);
-    return String(v);
+  // Las dimensiones a cruzar: declaradas, o las reconocidas por defecto (subconjunto generico).
+  _dimensiones(input) {
+    const raw = Array.isArray(input.dimensiones) ? input.dimensiones
+      : (input.dimension != null ? [input.dimension] : null);
+    if (raw) return raw.map((d) => String(d).trim()).filter(Boolean);
+    // Por defecto: el cruce mas comun (centro/familia/sociedad) — declarable, no cableado de negocio.
+    return ['centro', 'familia', 'sociedad'];
   }
 
   _num(v) {
-    if (v === undefined || v === null || v === '') return null;
+    if (v == null || v === '') return null;
     const n = Number(v);
     return Number.isFinite(n) ? n : null;
   }

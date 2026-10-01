@@ -1,27 +1,28 @@
 /**
  * contabilidad-fiscal/calendario-fiscal — CUSTODIO CON PERSISTENCIA (D6, hoja del plan).
  *
- * Parcela de PLAZOS DECLARABLES por ejercicio: que obligacion vence cuando. Desde aqui
- * se dispara el AVISO PROACTIVO de vencimiento (lo consume motor-avisos). NO presenta
- * nada: el sistema AVISA; el ASESOR presenta y firma.
+ * ══════════════════════════════════════════════════════════════════════════════════════
+ * LA LEY ENTRA COMO DATO. Parcela de PLAZOS DECLARABLES.
+ * ══════════════════════════════════════════════════════════════════════════════════════
+ * Los plazos/obligaciones fiscales (modelo, periodo, fecha limite, periodicidad, importe) se
+ * DECLARAN; NUNCA se cablean. Ni una fecha, ni un modelo, ni una periodicidad vive en el
+ * codigo: el calendario de un negocio concreto es DATO del negocio, no una constante nuestra.
  *
- * LA LEY ENTRA COMO DATO (invariante 5): este modulo NO cablea NINGUNA fecha, NINGUN
- * plazo, NINGUNA periodicidad ni NINGUN festivo. Los plazos son `ParametroDeclarable`
- * (los declara el negocio/asesor, por ejercicio) porque CAMBIAN: prorrogas, festivos,
- * domiciliacion. Tampoco se cablea la VENTANA de aviso (`ventana_dias`): es declarable.
- * Sin ventana declarada NO se dispara aviso proactivo (no se inventa un umbral).
+ *   · declarar  — ESCRIBE un plazo declarable (ORDEN) → anuncia el HECHO y dispara el aviso
+ *                 proactivo subiendo motor-avisos.producir.request (K2).
+ *   · proximos  — PREGUNTA (por el bus): los plazos declarados que caen en la ventana pedida.
  *
- * Invariante 7: sin plazos declarados para un ejercicio, `proximos` devuelve lista vacia
- * con `declarado:false` y el motivo — NUNCA una lista de fechas de memoria.
+ * UN SOLO ESCRITOR de la parcela (este custodio). APPEND-ONLY: nada se borra; re-declarar el
+ * mismo plazo (misma clave) APILA su estado. Persiste por proyecto con PosPersistencia,
+ * restaura en project.activated y vuelca en onUnload.
  *
- * UN SOLO ESCRITOR: el declarante de plazos (rol DECLARANTE_PLAZOS_FISCALES). Cualquier
- * otro rol es rechazado (403) y no espera ni hace cola. Re-declarar APPENDEA al historial
- * (invariante 3): el plazo vigente queda con su fecha y su autor.
+ * Invariante (honestidad): sin FECHA LIMITE declarada no se inventa el plazo (dato ausente =
+ * desconocido). El `modelo` es DATO declarable, no una lista cableada: puede venir cualquiera.
  *
- * Persiste por proyecto con PosPersistencia, restaura en project.activated y vuelca en
- * onUnload.
+ * R3 (honestidad de la escucha): el plan declara escucha de `contabilidad.perfil_administrativo_declarado`
+ * (perfil-administrativo D11), pero ese modulo AUN NO EXISTE en el repo → NO se declara.
  *
- * Forma: CUSTODIO → PosPersistencia + onProjectActivated + flush + GUARD de escritor.
+ * Forma: CUSTODIO → PosPersistencia + onProjectActivated + flush + single-writer + append-only.
  * Ver hoja D6 del plan-construccion y diseno-oop.md (CLASE CalendarioFiscal).
  */
 
@@ -30,15 +31,12 @@
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
 const PosPersistencia = require('../../_shared/pos-persistencia');
 
-// Rol unico escritor de la parcela: el declarante de plazos (dueño o asesor).
-const ROL_ESCRITOR = 'DECLARANTE_PLAZOS_FISCALES';
-
 class CalendarioFiscal extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'calendario-fiscal';
     this.version = 'reflejo-0.1.0';
-    // store: project_id -> { esquema, por_ejercicio: Map<ejercicio, {plazos:[], ventana_dias, ...}>, historial: [] }
+    // store: project_id -> { esquema, plazos: Map<clave, Plazo>, historial:[append-only] }
     this._calendarios = new Map();
 
     this._persist = new PosPersistencia({
@@ -48,24 +46,15 @@ class CalendarioFiscal extends ModuloHibridoReflejo {
       snapshot: (pid) => {
         const c = this._calendarios.get(pid);
         if (!c) return null;
-        return {
-          project_id: pid,
-          esquema: c.esquema,
-          calendarios: [...c.por_ejercicio.entries()].map(([ejercicio, cal]) => ({ ejercicio, ...cal })),
-          historial: c.historial
-        };
+        return { project_id: pid, esquema: c.esquema, plazos: [...c.plazos.values()], historial: c.historial };
       },
       hidratar: (pid, data) => {
         if (!data) return;
-        const por_ejercicio = new Map();
-        for (const cal of (data.calendarios || [])) {
-          if (!cal || cal.ejercicio == null) continue;
-          const { ejercicio, ...resto } = cal;
-          por_ejercicio.set(String(ejercicio), resto);
-        }
+        const plazos = new Map();
+        for (const p of (data.plazos || [])) if (p && p.clave != null) plazos.set(String(p.clave), p);
         this._calendarios.set(pid, {
           esquema: data.esquema || 'contabilidad-calendario-fiscal-v1',
-          por_ejercicio,
+          plazos,
           historial: Array.isArray(data.historial) ? data.historial : []
         });
       }
@@ -84,199 +73,188 @@ class CalendarioFiscal extends ModuloHibridoReflejo {
     return this._persist.restaurar(d.project_id);
   }
 
-  // ── handlers RPC (una linea, delegan a _atender) ──
-  onProximosRequest(e) {
-    return this._atender(e, 'proximos', 'calendario-fiscal.proximos.response', async (d) => {
-      const res = this._proximos(d);
-      if (res.status !== 200) {
-        this.eventBus?.publish('calendario-fiscal.proximos.failed', res);
-        return res;
-      }
-      // Aviso proactivo: si hay vencimientos dentro de la ventana DECLARADA, se publican.
-      for (const vencimiento of res.data.dentro_de_ventana) {
-        this.eventBus?.publish('contabilidad.vencimiento_fiscal', {
-          project_id: res.data.project_id,
-          ejercicio: res.data.ejercicio,
-          vencimiento,
-          hoy: res.data.hoy,
-          correlation_id: d.correlation_id
-        });
-      }
-      return res;
-    });
-  }
-
+  // ── handler RPC: declarar (ORDEN → ui_handler panel) ──
   onDeclararRequest(e) {
     return this._atender(e, 'declarar', 'calendario-fiscal.declarar.response', async (d) => {
       const res = this._declarar(d);
-      if (res.status !== 200) this.eventBus?.publish('calendario-fiscal.declarar.failed', res);
+      if (res.status === 200) {
+        // R2 · si ESCRIBE, anuncia el HECHO: un plazo quedo declarado (la ley entro como dato).
+        this.eventBus?.publish('contabilidad.plazo_declarado', {
+          project_id: res.data.project_id,
+          clave: res.data.plazo.clave,
+          modelo: res.data.plazo.modelo,
+          periodo: res.data.plazo.periodo,
+          fecha_limite: res.data.plazo.fecha_limite,
+          periodicidad: res.data.plazo.periodicidad,
+          estado: res.data.plazo.estado,
+          correlation_id: d.correlation_id
+        });
+        // AVISO PROACTIVO: sube (best-effort por EVENTO) la produccion del aviso a K2.
+        this.eventBus?.publish('motor-avisos.producir.request', {
+          project_id: res.data.project_id,
+          tipo: 'plazo',
+          titulo: `plazo fiscal: ${res.data.plazo.modelo || 'modelo'} ${res.data.plazo.periodo || ''}`.trim(),
+          detalle: `vence ${res.data.plazo.fecha_limite}${res.data.plazo.periodicidad ? ' (' + res.data.plazo.periodicidad + ')' : ''}`,
+          severidad: 'info',
+          origen: 'calendario-fiscal',
+          ref: res.data.plazo.clave,
+          correlation_id: d.correlation_id
+        });
+      } else {
+        this.eventBus?.publish('calendario-fiscal.declarar.failed', res);
+      }
       return res;
     });
   }
 
-  // ── proyeccion de lectura (NO muta): que vence y cuando, segun los plazos DECLARADOS ──
-  _proximos(input = {}) {
-    const pid = input.project_id || this.project_id;
-    if (!pid) return this._invalid('project_id');
-
-    const ejercicio = input.ejercicio != null ? String(input.ejercicio) : null;
-    const hoy = input.hoy != null ? String(input.hoy) : null;   // fecha de referencia DECLARADA
-
-    const c = this._calendarios.get(pid);
-    const cal = (c && ejercicio != null) ? (c.por_ejercicio.get(ejercicio) || null) : null;
-
-    // Sin plazos declarados: NO se inventan fechas de memoria (invariante 7).
-    if (!cal) {
-      return {
-        status: 200,
-        data: {
-          project_id: pid,
-          ejercicio,
-          hoy,
-          declarado: false,
-          ventana_dias: null,
-          total: 0,
-          proximos: [],
-          dentro_de_ventana: [],
-          motivo: 'no hay plazos declarados para este ejercicio (la ley entra como dato, no se cablea)'
-        }
-      };
-    }
-
-    const plazos = Array.isArray(cal.plazos) ? cal.plazos : [];
-    const ventana = Number.isFinite(Number(cal.ventana_dias)) ? Number(cal.ventana_dias) : null;
-
-    // Orden determinista por fecha declarada; el resto de campos se copian tal cual.
-    const ordenados = [...plazos].sort((a, b) => this._cf(a.fecha, b.fecha));
-
-    // La ventana es DATO declarable: sin ventana declarada NO se marca ningun aviso.
-    const dentro = ventana === null ? [] : ordenados.filter(p => {
-      const d = this._diasHasta(hoy, p.fecha);
-      return d !== null && d >= 0 && d <= ventana;
+  // ── handler RPC: proximos (PREGUNTA → sin ui_handler; su cara es el bus) ──
+  onProximosRequest(e) {
+    return this._atender(e, 'proximos', 'calendario-fiscal.proximos.response', (d) => {
+      const res = this._proximos(d);
+      // PREGUNTA: no escribe → no hay hecho que anunciar (R2).
+      if (res.status !== 200) this.eventBus?.publish('calendario-fiscal.proximos.failed', res);
+      return res;
     });
-
-    return {
-      status: 200,
-      data: {
-        project_id: pid,
-        ejercicio,
-        hoy,
-        declarado: true,
-        ventana_dias: ventana,
-        total: ordenados.length,
-        proximos: ordenados,
-        dentro_de_ventana: dentro,
-        // Se declara que no hay umbral declarado: sin el, no hay aviso proactivo.
-        aviso_proactivo: ventana !== null,
-        motivo: ventana === null ? 'sin ventana_dias declarada no se dispara aviso proactivo' : null
-      }
-    };
   }
 
-  // ── proyeccion de escritura (UN escritor): el declarante fija los plazos del ejercicio ──
+  // ══════════════════════════════════════════════════════════════════════
+  // _declarar(input) → Plazo (UNICO ESCRITOR del calendario)
+  // ══════════════════════════════════════════════════════════════════════
   _declarar(input = {}) {
     const pid = input.project_id || this.project_id;
     if (!pid) return this._invalid('project_id');
 
-    // GUARD de escritor: solo el declarante de plazos declara el calendario.
-    if (input.rol !== ROL_ESCRITOR) {
-      return this._errorResponse(403, 'PERMISSION_DENIED',
-        'solo el declarante de plazos (DECLARANTE_PLAZOS_FISCALES) declara el calendario fiscal',
-        { rol_esperado: ROL_ESCRITOR, rol_recibido: input.rol ?? null });
-    }
+    // El MODELO y la FECHA LIMITE son DATO. Sin fecha limite NO se inventa el plazo.
+    const fecha_limite = this._fecha(input.fecha_limite != null ? input.fecha_limite : input.vence);
+    if (!fecha_limite) return this._invalid('fecha_limite');
 
-    // El ejercicio es DATO obligatorio (los plazos son por anualidad).
-    if (input.ejercicio === undefined || input.ejercicio === null || String(input.ejercicio).trim() === '') {
-      return this._invalid('ejercicio');
-    }
-    const ejercicio = String(input.ejercicio).trim();
-
-    // Los plazos llegan DECLARADOS y se guardan tal cual (con su modelo, fecha y nota).
-    // NO se valida contra ninguna tabla legal: no existe.
-    const plazos = Array.isArray(input.plazos)
-      ? input.plazos.filter(p => p && typeof p === 'object' && p.fecha != null).map(p => {
-          const out = {};
-          for (const [k, v] of Object.entries(p)) out[k] = v;
-          out.fecha = String(p.fecha);
-          return out;
-        })
-      : [];
-
-    // La ventana de aviso es declarable; sin declarar queda null (no se inventa umbral).
-    const ventana_dias = Number.isFinite(Number(input.ventana_dias)) ? Number(input.ventana_dias) : null;
-
+    const cal = this._obtenerOCrear(pid);
+    const modelo = input.modelo != null ? String(input.modelo) : null;
+    const periodo = input.periodo != null ? String(input.periodo) : null;
+    const periodicidad = input.periodicidad != null ? String(input.periodicidad) : null;
+    const clave = input.clave != null ? String(input.clave)
+      : this._clave(modelo, periodo, fecha_limite);
     const ahora = new Date().toISOString();
-    const c = this._obtenerOCrear(pid);
-    const vigente = c.por_ejercicio.get(ejercicio) || null;
 
-    const cal = {
-      plazos,
-      ventana_dias,
-      declarado_por: ROL_ESCRITOR,
-      declarado_en: ahora,
-      vigente_desde: vigente && vigente.declarado_en ? vigente.declarado_en : ahora
+    const existente = cal.plazos.get(clave) || null;
+    const plazo = existente || {
+      clave,
+      modelo: null,
+      periodo: null,
+      periodicidad: null,
+      fecha_limite: null,
+      importe: null,
+      historial: []
     };
-    c.por_ejercicio.set(ejercicio, cal);
+    if (modelo != null) plazo.modelo = modelo;
+    if (periodo != null) plazo.periodo = periodo;
+    if (periodicidad != null) plazo.periodicidad = periodicidad;
+    plazo.fecha_limite = fecha_limite;
+    if (input.importe != null) {
+      const n = Number(input.importe);
+      plazo.importe = Number.isFinite(n) ? n : null;
+    }
+    // El estado es DECLARADO (no cableado); por defecto 'declarado' (un hecho, no una opinion).
+    plazo.estado = input.estado != null ? String(input.estado) : (existente ? existente.estado : 'declarado');
+    plazo.declarado_en = ahora;
+    // No se pisa en silencio: re-declarar el mismo plazo APILA su estado.
+    plazo.historial = Array.isArray(plazo.historial) ? plazo.historial : [];
+    plazo.historial.push({ fecha_limite: plazo.fecha_limite, estado: plazo.estado, importe: plazo.importe, en: ahora });
 
-    // Re-declarar no borra: se APPENDEA al historial (invariante 3).
-    c.historial.push({
-      ejercicio,
-      plazos: plazos.length,
-      ventana_dias,
-      por: ROL_ESCRITOR,
-      en: ahora
-    });
-    c.updated_at = ahora;
+    cal.plazos.set(clave, plazo);
+    cal.historial.push({ clave, accion: existente ? 'redeclarado' : 'declarado', en: ahora });
+    cal.updated_at = ahora;
     this._persist.marcarDirty(pid);
 
     return {
       status: 200,
       data: {
         project_id: pid,
-        ejercicio,
-        calendario: cal,
+        tipo: 'calendario-fiscal',
+        plazo,
         declarado: true,
-        total_plazos: plazos.length,
-        ventana_declarada: ventana_dias !== null
+        total: cal.plazos.size,
+        append_only: true,
+        abierto: {
+          modelo: plazo.modelo ? null : 'el plazo no declaro modelo (se anota el hueco, no se cablea)',
+          importe: plazo.importe != null ? null : 'el plazo no declaro importe (dato ausente = desconocido)'
+        }
       }
     };
   }
 
-  // Diferencia en dias entre la fecha de referencia y la fecha del plazo (datos declarados).
-  _diasHasta(hoy, fecha) {
-    if (!hoy || !fecha) return null;
-    const a = Date.parse(`${hoy}T00:00:00Z`);
-    const b = Date.parse(`${String(fecha)}T00:00:00Z`);
-    if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
-    return Math.round((b - a) / 86400000);
+  // ══════════════════════════════════════════════════════════════════════
+  // _proximos(input) → plazos en la ventana (PREGUNTA, no muta)
+  // ══════════════════════════════════════════════════════════════════════
+  _proximos(input = {}) {
+    const pid = input.project_id || this.project_id;
+    if (!pid) return this._invalid('project_id');
+
+    const cal = this._calendarios.get(pid);
+    const todos = cal ? [...cal.plazos.values()] : [];
+
+    const desde = this._fecha(input.desde) || null;
+    const hasta = this._fecha(input.hasta) || null;
+    const modelo = input.modelo != null ? String(input.modelo) : null;
+
+    let plazos = todos;
+    if (modelo) plazos = plazos.filter((p) => p.modelo === modelo);
+    plazos = plazos.filter((p) => {
+      if (desde && p.fecha_limite < desde) return false;
+      if (hasta && p.fecha_limite > hasta) return false;
+      return true;
+    });
+    plazos = plazos.slice().sort((a, b) => (a.fecha_limite < b.fecha_limite ? -1 : a.fecha_limite > b.fecha_limite ? 1 : 0));
+
+    return {
+      status: 200,
+      data: {
+        project_id: pid,
+        tipo: 'calendario-fiscal',
+        ventana: { desde, hasta },
+        plazos,
+        total: plazos.length,
+        total_calendario: todos.length,
+        // Sin plazos declarados NO se inventa el calendario: se declara el hueco.
+        abierto: todos.length ? null : { calendario: 'no hay plazos declarados todavia (la ley entra como dato)' }
+      }
+    };
   }
 
-  // Comparacion determinista por fecha declarada en texto.
-  _cf(a, b) {
-    return String(a).localeCompare(String(b));
+  // Normaliza una fecha a 'YYYY-MM-DD'. Invalida → null (no se inventa una fecha).
+  _fecha(v) {
+    if (v == null || v === '') return null;
+    const s = String(v).trim();
+    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+    const d = new Date(s);
+    if (Number.isNaN(d.getTime())) return null;
+    return d.toISOString().slice(0, 10);
+  }
+
+  _clave(modelo, periodo, fecha) {
+    return `${modelo || 'modelo'}|${periodo || 'periodo'}|${fecha}`;
   }
 
   _obtenerOCrear(pid) {
     let c = this._calendarios.get(pid);
     if (!c) {
-      c = { esquema: 'contabilidad-calendario-fiscal-v1', por_ejercicio: new Map(), historial: [] };
+      c = { esquema: 'contabilidad-calendario-fiscal-v1', plazos: new Map(), historial: [] };
       this._calendarios.set(pid, c);
       this._persist.marcarDirty(pid);
     }
     return c;
   }
 
-  // Lectura directa para otras hojas del proceso (no muta): plazos vigentes de un ejercicio.
-  plazosDe(pid, ejercicio) {
+  // Lectura directa (mismo proceso) — no muta.
+  plazosDe(pid) {
     const c = pid ? this._calendarios.get(pid) : null;
-    if (!c || ejercicio == null) return [];
-    const cal = c.por_ejercicio.get(String(ejercicio));
-    return cal && Array.isArray(cal.plazos) ? cal.plazos : [];
+    return c ? [...c.plazos.values()] : [];
   }
 
   // ── Tools ──
-  toolProximos(params) { return this._proximos(params); }
   toolDeclarar(params) { return this._declarar(params); }
+  toolProximos(params) { return this._proximos(params); }
 }
 
 module.exports = CalendarioFiscal;

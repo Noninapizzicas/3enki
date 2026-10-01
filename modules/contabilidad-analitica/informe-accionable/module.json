@@ -1,39 +1,27 @@
 {
-  "_doc": "Manifest de contabilidad-analitica/informe-accionable — MICRO-AGENTE HIBRIDO (R2, hoja del plan). TODO informe que recibe el cliente lleva QUE HACER con él: toma el informe ya compuesto por informe-rico (K3) y PROPONE una RECOMENDACION — la quita de adorno y refuerza K3. ⚠️ EL SISTEMA NO DECIDE: PROPONE. EL DUEÑO DECIDE (decide:false, decide_dueno:true, escribe:false, ejecuta:false): juzga (la recomendacion es juicio) y devuelve una PROPUESTA con su base; jamas ejecuta, jamas escribe, jamas decide por el dueño. Si NO hay base suficiente para recomendar con honestidad, LO DECLARA — no inventa. ATRIBUTOS del diseno: informe:Informe; METODOS: juzgar(i:Informe):Recomendacion; REGLA: todo informe que recibe el cliente lleva que hacer con él — la recomendacion es juicio. HIBRIDO (patron etiquetado-analitico): _juzgarReflejo es el REFLEJO determinista (aplica las REGLAS DECLARADAS informe → recomendacion, la primera que coincide, operando sobre el operador declarado igual/contiene/en/rango/existe) y _concluir es el FUZZY (1 llamada llm.complete.request con guion-prompt self-contained que PROPONE que hacer ANCLADO al informe real; si falla o no cumple el contrato → NO se inventa). Invariantes: EL DUEÑO DECIDE (la salida es una PROPUESTA, no una ejecucion); NUNCA INVENTA (sin informe ni base declarada NO se fabrica una recomendacion — se declara [ABIERTO] con lo que falta); la recomendacion va ANCLADA al informe (su cifra/contexto; si el informe no trae base, el juicio lo declara en vez de adivinar); NO escribe, NO persiste (refuerza K3, no lo sustituye). FORMA: MICRO-AGENTE stateless — sin PosPersistencia, sin onProjectActivated. Proyeccion `_juzgar`. Consume informe-rico.componer.request (K3) POR EVENTO y publica contabilidad.recomendacion. Cierra el circulo: error → informe-accionable.juzgar.failed.",
+  "_doc": "Manifest de analitica/informe-accionable — MICRO-AGENTE (R2, hoja del plan). Todo informe que recibe el cliente lleva QUE HACER con el. La RECOMENDACION es juicio (mitad fuzzy del blueprint); esta mitad REFLEJA es determinista y honesta: aplica las REGLAS DE ACCION DECLARADAS (campo · operador · umbral → recomendacion) al informe/cifra YA compuesto (informe-rico K3) y adjunta las acciones que disparan. Motor de reglas puro: NO inventa una accion donde no hay regla declarada (lo no cubierto queda declarado como juicio fuzzy). DETERMINISTA: mismo informe + mismas reglas → mismas acciones. Dato ausente = desconocido: sin informe no se adjunta nada; sin reglas → 0 acciones y el hueco se declara. NO escribe, NO persiste. RPC juzgar es CLASE PREGUNTA → va por el bus, sin panel. NOTA R3: el plan declara escucha de contabilidad.aviso_producido (motor-avisos K2) y contabilidad.asiento_asentado (escritor-diario B2), pero NINGUN modulo del repo los emite AUN (grupos posteriores): declararlos daria cadena colgada, asi que NO se declaran. Publica informe-accionable.juzgar.response y su par .failed.",
   "name": "informe-accionable",
   "version": "0.1.0",
-  "description": "Micro-agente (R2): propone qué hacer con cada informe — la recomendación es juicio y solo propone: EL DUEÑO DECIDE; sin base suficiente lo declara, no inventa.",
-  "blueprint_driven": true,
-  "blueprint_path": "informe-accionable.blueprint.json",
+  "description": "Micro-agente (R2): adjunta el \"que hacer\" a un informe. Aplica reglas de accion declaradas (determinista); no inventa recomendaciones sin regla.",
   "language": "es",
   "subscribes": [
     {
       "event": "informe-accionable.juzgar.request",
       "handler": "onJuzgarRequest",
-      "description": "RPC híbrido (juicio): {project_id, informe?, informe_id?, reglas?, cifra?, periodo?, origen?, unidad?, comparativa?, notas?} → {informe_id, informe, recomendacion:{que_hacer, motivo, base, prioridad, origen:'regla'|'juicio', regla_id, confianza}, base_suficiente, decide:false, decide_dueno:true, escribe:false, ejecuta:false, abierto, faltan}. Toma el informe declarado o compuesto por informe-rico (K3) POR EVENTO; aplica las REGLAS declaradas (reflejo) o PROPONE con juicio fuzzy anclado al informe. Sin informe o sin base suficiente → recomendacion null y el hueco declarado (NUNCA se inventa). PROPONE; NO decide (la decisión es del dueño). Éxito → publica contabilidad.recomendacion y responde por informe-accionable.juzgar.response; project_id ausente → informe-accionable.juzgar.failed."
+      "description": "RPC micro-agente (PREGUNTA, por el bus): {project_id, informe, reglas[{campo,operador,umbral,entonces,motivo?,severidad?}]} → {project_id, informe, acciones[], num_acciones, reglas_declaradas, abierto}. Aplica las reglas declaradas al informe y devuelve las acciones que disparan. Sin reglas → 0 acciones (el hueco se declara). Responde por informe-accionable.juzgar.response; payload invalido → informe-accionable.juzgar.failed."
     }
   ],
   "publishes": [
     {
       "event": "informe-accionable.juzgar.response",
-      "description": "Respuesta RPC correlada de informe-accionable.juzgar.request → {request_id, status:200, data:{informe_id, informe, recomendacion, base_suficiente, decide:false, decide_dueno:true, escribe:false, abierto, faltan}}. Emitida por el helper _atender."
+      "description": "Respuesta RPC correlada de la op juzgar (una sola cara: el bus)."
     },
     {
       "event": "informe-accionable.juzgar.failed",
-      "description": "Par de fallo determinista (R2): project_id ausente → {status, error:{code, message, details?}}. Cierra el circulo de informe-accionable.juzgar.request."
-    },
-    {
-      "event": "contabilidad.recomendacion",
-      "description": "Fire-and-forget (R2): quedó PROPUESTA una recomendación (qué hacer con el informe) → {project_id, informe_id, recomendacion, origen:'regla'|'juicio', decide_dueno:true, correlation_id}. Lo consume la entrega al negocio (R1) para adjuntar el «qué hacer» al informe. NO implica decisión: EL DUEÑO DECIDE."
+      "description": "Par de fallo determinista: falta project_id o informe → {status, code, message}. Cierra el circulo de juzgar.request."
     }
   ],
-  "ui_handlers": [
-    {
-      "domain": "contabilidad",
-      "action": "informe-accionable.juzgar",
-      "handler": "onJuzgarRequest",
-      "type": "chat_tool",
-      "zone": "barra_chat_inferior"
-    }
+  "tools": [
+    { "name": "informe-accionable.juzgar", "description": "Adjunta (PREGUNTA) el \"que hacer\" a un informe aplicando reglas de accion declaradas." }
   ]
 }

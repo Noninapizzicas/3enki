@@ -1,20 +1,17 @@
 /**
  * contabilidad-fiscal/obligacion-seguridad-social — REFLEJO STATELESS (G2, hoja del plan).
  *
- * GASTO DE EMPRESA + OBLIGACION CON LA TGSS, derivados DEL RECIBO y de los TIPOS/BASES que
- * el negocio DECLARA. El diseno lo dice literal: `calcular(n:ReciboNomina):Obligacion`, con
- * `tipos:ParametroDeclarable`. Determinista.
+ * El GASTO DE EMPRESA + la OBLIGACION con la TGSS, derivados del recibo de nomina.
+ * Mecanico y determinista: NO decide tipos ni bases — los TIPOS son DATO declarable y
+ * las BASES vienen declaradas en el recibo. Este modulo solo APLICA lo declarado:
+ *   aportacion_empresa = suma(base_i * tipo_i)  para cada par (base, tipo) DECLARADO.
  *
- * LOS TIPOS Y LAS BASES SON DATO (invariante LEY/PARAMETRO COMO DATO): aqui NO se cablea NINGUN
- * tipo de cotizacion, NINGUNA base, NINGUN grupo de tarifa, NINGUNA tabla legal. Todo eso llega
- * DECLARADO por el negocio (`tipos`, `bases`) y se aplica de forma pura (base x tipo).
+ * La invariante que lo define (13): dato ausente = desconocido. Si falta una base o su
+ * tipo, esa contingencia queda `abierto` y NO se estima con un tipo por defecto — un tipo
+ * inventado produce una obligacion falsa ante la TGSS. Lo que no se puede sumar se declara.
  *
- * EL RECIBO LLEGA YA CALCULADO por el sistema externo (por EVENTO: recibo-nomina G1, o declarado
- * en la peticion). Aqui NO se calcula la nomina: se COPIAN sus importes para el gasto de empresa.
- *
- * Invariante: dato ausente = desconocido. Una linea de tipo cuya base o tipo no venga declarada
- * queda `importe:null` y se declara en `faltantes`; los totales que dependan de ella quedan null.
- * Jamas se rellena con 0 un tipo que no se declaro, ni se estima una base.
+ * ESCUCHA (R3): el plan declara escucha de `contabilidad.nomina_recibida`; su emisor
+ * `puerto-nomina` (G7) SI existe en el repo → SI se declara.
  *
  * Forma: REFLEJO → STATELESS. Sin PosPersistencia, sin onProjectActivated.
  * Ver hoja G2 del plan-construccion y diseno-oop.md (CLASE ObligacionSeguridadSocial).
@@ -23,6 +20,10 @@
 'use strict';
 
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
+
+// Las CONTINGENCIAS de la cotizacion. La lista es ESTRUCTURA (nombre los conceptos);
+// sus BASES y sus TIPOS son DATO declarable (no constantes de negocio ocultas).
+const CONTINGENCIAS = ['contingencias_comunes', 'desempleo', 'fogasa', 'formacion_profesional', 'at_ep'];
 
 class ObligacionSeguridadSocial extends ModuloHibridoReflejo {
   constructor() {
@@ -33,186 +34,141 @@ class ObligacionSeguridadSocial extends ModuloHibridoReflejo {
 
   async onUnload() { return super.onUnload(); }
 
-  // ── handler RPC (una linea, delega a _atender) ──
+  // ── handler RPC (una linea, delega a _atender). CLASE PREGUNTA → sin ui_handler ──
   onCalcularRequest(e) {
     return this._atender(e, 'calcular', 'obligacion-seguridad-social.calcular.response', async (d) => {
       const res = await this._calcular(d);
+      // Reflejo: calcula la obligacion; no escribe estado → no hay hecho que anunciar (R2).
       if (res.status !== 200) this.eventBus?.publish('obligacion-seguridad-social.calcular.failed', res);
       return res;
     });
   }
 
-  // ── proyeccion determinista: calcular(recibo, tipos declarados, bases declaradas) → Obligacion ──
+  // ── handler de dominio (fire-and-forget): llego una nomina → se DERIVA su obligacion ──
+  // Una PREGUNTA no muta estado: solo se recalcula en memoria para quien lo pida. El
+  // resultado NO se publica como hecho (este modulo no escribe). Si el recibo declara
+  // plazo y se pide explicitamente, se sube best-effort al calendario (ver _subirCalendario).
+  async onNominaRecibida(e) {
+    const d = (e && (e.data || e)) || {};
+    if (!d.project_id) return;
+    try {
+      const res = await this._calcular({ ...d, nomina: d.nomina || d.recibo || null });
+      await this._subirCalendario(d, res);
+    } catch (err) {
+      this.logger?.error(`${this.name}.nomina.error`, { error: err.message });
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // _calcular(input) → { status, data }  ·  gasto de empresa + obligacion TGSS
+  // ══════════════════════════════════════════════════════════════════════
   async _calcular(input = {}) {
     const pid = input.project_id || this.project_id;
     if (!pid) return this._invalid('project_id');
 
-    const { recibo, origen_recibo } = await this._recibo(pid, input);
-    const lineas_tipo = this._tipos(input.tipos);
-    const bases = input.bases !== undefined && input.bases !== null ? input.bases : null;
+    // El recibo/nomina: declarado, o pedido por EVENTO a recibo-nomina (PREGUNTA→PREGUNTA).
+    const { nomina, fuente } = await this._reciboDe(input);
 
-    // Sin TIPOS declarados no hay obligacion que calcular (la ley es dato; cero constantes).
-    if (lineas_tipo.length === 0) {
-      return {
-        status: 200,
-        data: {
-          project_id: pid,
-          empleado: recibo ? recibo.empleado : (input.empleado != null ? input.empleado : null),
-          periodo: recibo ? recibo.periodo : (input.periodo != null ? input.periodo : null),
-          origen_recibo,
-          obligacion: null,
-          gasto_empresa: null,
-          tipos_declarados: 0,
-          bases_declaradas: bases !== null,
-          regla_cableada: false,
-          abierto: true,
-          faltantes: ['tipos'],
-          motivo: 'no hay tipos declarados: nada se calcula (los tipos y las bases de cotizacion son dato)'
-        }
-      };
-    }
+    // Las BASES y los TIPOS declarados: en la nomina, o en el propio input (el asesor
+    // puede declararlos aparte). Ausente → null (no se rellena).
+    const bases = this._declarado(input.bases, nomina && nomina.bases);
+    const tipos = this._declarado(input.tipos, nomina && nomina.tipos);
 
-    const faltantes = [];
-    const lineas = lineas_tipo.map((t, i) => {
-      const base = t.base !== null ? t.base : this._baseDeclarada(t.concepto, bases);
-      if (base === null) faltantes.push(`tipos[${i}].base`);
-      if (t.tipo === null) faltantes.push(`tipos[${i}].tipo`);
-      if (t.a_cargo === null) faltantes.push(`tipos[${i}].a_cargo`);
-      const importe = (base !== null && t.tipo !== null) ? this._round(base * t.tipo, 2) : null;
+    let aportacion_empresa = 0;
+    let algua_empresa = false;
+    const contingencias = CONTINGENCIAS.map((k) => {
+      const base = this._num(bases[k]);
+      const tipo = this._num(tipos[k]);
+      const aplicable = base !== null && tipo !== null;
+      const importe = aplicable ? this._round(base * tipo, 2) : null;
+      if (aplicable) { aportacion_empresa += importe; algua_empresa = true; }
       return {
-        concepto: t.concepto,
-        base,
-        tipo: t.tipo,
-        a_cargo: t.a_cargo,
-        importe,
-        completo: importe !== null && t.a_cargo !== null
+        contingencia: k,
+        base,                       // declarada; ausente → null
+        tipo,                       // DATO declarable; ausente → null
+        importe,                    // null si falta base o tipo (no se estima)
+        aplicable,
+        abierto: aplicable ? null : `falta ${base === null ? 'la base' : ''}${base === null && tipo === null ? ' y ' : ''}${tipo === null ? 'el tipo' : ''} de ${k} (no se estima)`
       };
     });
 
-    const cargo = (c) => {
-      const ls = lineas.filter((l) => this._esCargo(l.a_cargo, c));
-      if (ls.length === 0) return { cuota: 0, lineas: 0, incompleta: false };
-      const incompleta = ls.some((l) => l.importe === null);
-      return {
-        cuota: incompleta ? null : this._round(ls.reduce((s, l) => s + l.importe, 0), 2),
-        lineas: ls.length,
-        incompleta
-      };
-    };
+    // La aportacion del TRABAJADOR: declarada en el recibo (no se recalcula aqui).
+    const aportacion_trabajador = this._num(nomina && (nomina.aportacion_trabajador != null ? nomina.aportacion_trabajador : nomina.ss_trabajador));
+    // El bruto declarado, para el gasto de empresa (bruto + aportacion patronal).
+    const bruto = this._num(nomina && (nomina.bruto != null ? nomina.bruto : nomina.total_devengado));
 
-    const empresa = cargo('empresa');
-    const trabajador = cargo('trabajador');
-    const otros = lineas.filter((l) => l.a_cargo !== null && !this._esCargo(l.a_cargo, 'empresa') && !this._esCargo(l.a_cargo, 'trabajador'));
+    const empresa_final = algua_empresa ? this._round(aportacion_empresa, 2) : null;
+    const obligacion_tgss = (empresa_final !== null && aportacion_trabajador !== null)
+      ? this._round(empresa_final + aportacion_trabajador, 2) : null;
+    const gasto_empresa = (bruto !== null && empresa_final !== null)
+      ? this._round(bruto + empresa_final, 2) : null;
 
-    const total = (empresa.cuota !== null && trabajador.cuota !== null)
-      ? this._round(empresa.cuota + trabajador.cuota, 2) : null;
-
-    // El BRUTO se COPIA del recibo (no se calcula aqui); sin el, el gasto de empresa queda abierto.
-    const bruto = recibo ? this._num(recibo.bruto) : null;
-    if (recibo && bruto === null) faltantes.push('recibo.bruto');
-    const gasto_empresa = (bruto !== null && empresa.cuota !== null)
-      ? this._round(bruto + empresa.cuota, 2) : null;
+    const periodo = input.periodo != null ? String(input.periodo)
+      : (nomina && nomina.periodo != null ? String(nomina.periodo) : null);
 
     return {
       status: 200,
       data: {
         project_id: pid,
-        empleado: recibo ? recibo.empleado : (input.empleado != null ? input.empleado : null),
-        periodo: recibo ? recibo.periodo : (input.periodo != null ? input.periodo : null),
-        clave_natural: recibo ? recibo.clave_natural : null,
-        origen_recibo,
-        obligacion: {
-          lineas,
-          cuota_empresa: empresa.cuota,
-          cuota_trabajador: trabajador.cuota,
-          total_tgss: total,
-          otras_lineas: otros,
-          moneda: recibo ? recibo.moneda : null,
-          // La ley/los tipos son DATO: se declara de donde salieron, no se cablea nada.
-          tipos_origen: 'declarados',
-          regla_cableada: false
-        },
-        // gasto de empresa = bruto del recibo + cuota a cargo de la empresa
+        tipo: 'obligacion-seguridad-social',
+        fuente: fuente || null,
+        periodo,
+        contingencias,
+        // El GASTO de empresa y la OBLIGACION con la TGSS (null si faltan datos → declarado).
+        aportacion_empresa: empresa_final,
+        aportacion_trabajador,
+        obligacion_tgss,
         gasto_empresa,
-        bruto_origen: recibo ? 'recibo' : null,
-        tipos_declarados: lineas.length,
-        bases_declaradas: bases !== null,
-        faltantes,
-        abierto: faltantes.length > 0,
-        motivo: faltantes.length > 0
-          ? `hay piezas declaradas incompletas: ${faltantes.join(', ')} (nada se estima)`
-          : null
+        // Determinista: mismas bases+tipos → misma obligacion.
+        determinista: true,
+        // El TIPO es DATO: no se asume ningun tipo por defecto.
+        tipos_declarados: Object.keys(tipos).filter((k) => this._num(tipos[k]) !== null),
+        abierto: {
+          recibo: nomina ? null : 'no se recibio el recibo de nomina (ni declarado ni de recibo-nomina): la obligacion no se inventa',
+          tipos: algua_empresa ? null : 'ninguna contingencia tiene base Y tipo declarados: la obligacion queda abierta (no se estiman tipos por defecto)',
+          trabajador: aportacion_trabajador !== null ? null : 'la aportacion del trabajador no viene declarada en el recibo',
+          bruto: bruto !== null ? null : 'el bruto no viene declarado: el gasto de empresa queda abierto'
+        }
       }
     };
   }
 
-  // El RECIBO: declarado en la peticion, o pedido a recibo-nomina (G1) POR EVENTO. Nunca import cruzado.
-  async _recibo(pid, input = {}) {
-    const declarado = input.recibo || input.nomina || null;
-    if (declarado && typeof declarado === 'object') return { recibo: declarado, origen_recibo: 'declarado' };
+  // Trae el recibo: declarado en el input, o pedido por EVENTO a recibo-nomina (PREGUNTA).
+  async _reciboDe(input) {
+    const directo = (input.nomina && typeof input.nomina === 'object') ? input.nomina
+      : ((input.recibo && typeof input.recibo === 'object') ? input.recibo
+        : ((input.hecho && typeof input.hecho === 'object') ? input.hecho : null));
+    if (directo) return { nomina: directo, fuente: 'declarado' };
 
-    const clave = input.clave_natural != null ? String(input.clave_natural) : null;
-    if (clave || (input.empleado != null && input.periodo != null)) {
-      const r = await this._rpc('recibo-nomina.dar_forma.request', {
-        project_id: pid,
-        clave_natural: clave,
-        empleado: input.empleado,
-        periodo: input.periodo
-      }, { timeout_ms: 4000 });
-      const rec = r && r.data ? r.data.recibo : null;
-      if (rec) return { recibo: rec, origen_recibo: 'recibo-nomina' };
+    const resp = await this._rpc('recibo-nomina.dar_forma.request', {
+      project_id: input.project_id || this.project_id,
+      empleado: input.empleado, periodo: input.periodo
+    }, { timeout_ms: 800 });
+    const forma = (resp && (resp.data || resp)) || null;
+    if (forma && (forma.forma || forma.cabeza || forma.conceptos)) {
+      return { nomina: { ...(forma.forma || {}), periodo: (forma.cabeza && forma.cabeza.periodo) || input.periodo }, fuente: 'recibo-nomina' };
     }
-    return { recibo: null, origen_recibo: null };
+    return { nomina: null, fuente: null };
   }
 
-  // Los TIPOS son DECLARABLES: array de lineas {concepto, tipo, a_cargo, base?} o mapa {concepto: tipo|{tipo,a_cargo}}.
-  _tipos(raw) {
-    const lineas = [];
-    if (Array.isArray(raw)) {
-      for (const t of raw) {
-        if (!t || typeof t !== 'object') continue;
-        lineas.push({
-          concepto: t.concepto != null ? String(t.concepto) : null,
-          base: this._num(t.base),
-          tipo: this._num(t.tipo != null ? t.tipo : t.cuota),
-          a_cargo: t.a_cargo != null ? String(t.a_cargo) : (t.cargo != null ? String(t.cargo) : null)
-        });
-      }
-    } else if (raw && typeof raw === 'object') {
-      for (const [concepto, v] of Object.entries(raw)) {
-        if (v && typeof v === 'object') {
-          lineas.push({
-            concepto,
-            base: this._num(v.base),
-            tipo: this._num(v.tipo),
-            a_cargo: v.a_cargo != null ? String(v.a_cargo) : (v.cargo != null ? String(v.cargo) : null)
-          });
-        } else {
-          lineas.push({ concepto, base: null, tipo: this._num(v), a_cargo: null });
-        }
-      }
-    }
-    return lineas;
+  // Sube la obligacion al calendario SOLO si el input lo pide explicitamente.
+  // Una PREGUNTA no muta estado por defecto: por eso es condicional y declarado.
+  async _subirCalendario(input, res) {
+    if (input.subir_calendario !== true) return;
+    if (!res || res.status !== 200 || !res.data || !res.data.periodo) return;
+    this.eventBus?.publish('calendario-fiscal.declarar.request', {
+      project_id: res.data.project_id,
+      obligacion: 'seguridad_social',
+      periodo: res.data.periodo,
+      importe: res.data.obligacion_tgss,
+      correlation_id: input.correlation_id
+    });
   }
 
-  // Las BASES son DECLARABLES: escalar, mapa por concepto, o array de {concepto, importe}.
-  _baseDeclarada(concepto, bases) {
-    if (bases === null) return null;
-    if (Array.isArray(bases)) {
-      const hit = bases.find((b) => b && String(b.concepto) === concepto);
-      return hit ? this._num(hit.importe != null ? hit.importe : hit.base) : null;
-    }
-    if (typeof bases === 'object') {
-      const v = bases[concepto];
-      if (v === undefined || v === null) return null;
-      if (typeof v === 'object') return this._num(v.importe != null ? v.importe : v.base);
-      return this._num(v);
-    }
-    return this._num(bases);
-  }
-
-  _esCargo(a_cargo, esperado) {
-    return String(a_cargo || '').trim().toLowerCase() === esperado;
+  // Los valores declarados: preferencia al input explicito; si no, los de la nomina.
+  _declarado(a, b) {
+    const o = (a && typeof a === 'object') ? a : ((b && typeof b === 'object') ? b : {});
+    return o || {};
   }
 
   _num(v) {

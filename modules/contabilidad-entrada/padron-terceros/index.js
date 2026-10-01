@@ -69,7 +69,8 @@ class PadronTerceros extends ModuloHibridoReflejo {
     return this._atender(e, 'unificar', 'padron-terceros.unificar.response', async (d) => {
       const res = this._unificar(d);
       if (res.status === 200) {
-        this.eventBus?.publish('contabilidad.identidad_unificada', {
+        // R2 · si ESCRIBE, anuncia el HECHO: una identidad quedo unificada por numero fiscal.
+        this.eventBus?.publish('contabilidad.tercero_unificado', {
           project_id: res.data.project_id,
           tercero: res.data.tercero,
           creada: res.data.creada,

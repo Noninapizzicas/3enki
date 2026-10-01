@@ -1,21 +1,19 @@
 {
-  "_doc": "Manifest de contabilidad-libro/catalogo-cuentas — CUSTODIO CON PERSISTENCIA (B1, hoja del plan). Parcela del PLAN CONTABLE declarable/importable del asesor: el conjunto de Cuentas contra el que se resuelve la contrapartida y se valida el libro. UN SOLO ESCRITOR: el camino de import del plan (PUERTO_PLAN_CONTABLE) asienta con su rol; cualquier otro rol es rechazado (403). Invariantes: un solo escritor por parcela; la ley entra como DATO (sin codificacion ni jerarquia legal cableada); no se sobrescribe (codigo ya presente → 409). Persiste por proyecto con PosPersistencia (storage /contabilidad/catalogo-cuentas/catalogo-cuentas.json), restaura en project.activated y vuelca en onUnload. Proyecciones `_anadir` (escritura, guard de rol) y `_buscar` (lectura, no muta). Sin fire-and-forget de dominio.",
+  "_doc": "Manifest de libro/catalogo-cuentas — CUSTODIO CON PERSISTENCIA (B1, hoja del plan). Plan contable declarable/importable del asesor. UN escritor. CRITICO: `anadir` ESCRIBE y por eso ANUNCIA el HECHO contabilidad.plan_cuentas_declarado (el intento anterior escribia sin anunciar y cortaba la cadena). `buscar` es PREGUNTA y no anuncia. El codigo es la identidad declarada de la cuenta: sin codigo no se anade. No se pisa en silencio: re-anadir una cuenta appendea al historial. Persiste por proyecto via PosPersistencia (_shared/pos-persistencia, storage /contabilidad/catalogo-cuentas), restaura en project.activated y vuelca en onUnload. Proyecciones _anadir(codigo,nombre,tipo,naturaleza)->Cuenta (ORDEN) y _buscar(filtros)->Cuentas (PREGUNTA). Publica contabilidad.plan_cuentas_declarado (+ pares .failed). El RPC buscar es CLASE PREGUNTA → NO lleva ui_handler; anadir es ORDEN → SÍ.",
   "name": "catalogo-cuentas",
   "version": "0.1.0",
-  "description": "Custodio (B1): parcela del plan contable declarable/importable del asesor — un solo escritor (PUERTO_PLAN_CONTABLE), no se sobrescribe; persiste por proyecto y sirve de base a la contrapartida y al libro.",
-  "blueprint_driven": true,
-  "blueprint_path": "catalogo-cuentas.blueprint.json",
+  "description": "Custodio (B1): plan contable declarable/importable del asesor. Anadir anuncia el hecho (R2); un solo escritor; persistente por proyecto.",
   "language": "es",
   "subscribes": [
     {
       "event": "catalogo-cuentas.anadir.request",
       "handler": "onAnadirRequest",
-      "description": "RPC custodio: {project_id, rol:'PUERTO_PLAN_CONTABLE', cuenta:{codigo, nombre?, tipo?, naturaleza?, padre?}} → {project_id, cuenta, anadida}. Guard Rol=PUERTO_PLAN_CONTABLE (segundo escritor → 403). Codigo ya presente → 409 (no se sobrescribe). Campos ausentes quedan null. Responde por catalogo-cuentas.anadir.response; fallo → catalogo-cuentas.anadir.failed."
+      "description": "RPC custodio (ORDEN, panel): {project_id, codigo, nombre?, tipo?, naturaleza?, padre?} → {project_id, cuenta, anadida, total}. Anade/actualiza una cuenta del plan; sin codigo → INVALID_INPUT. PUBLICA contabilidad.plan_cuentas_declarado (R2: si escribe, anuncia el hecho) y responde por catalogo-cuentas.anadir.response. Payload invalido → catalogo-cuentas.anadir.failed."
     },
     {
       "event": "catalogo-cuentas.buscar.request",
       "handler": "onBuscarRequest",
-      "description": "RPC custodio (lectura, no muta): {project_id, codigo?} → {project_id, total, cuentas} si no hay codigo, o {codigo, encontrada, cuenta} si lo hay (sin match → cuenta null). Responde por catalogo-cuentas.buscar.response; fallo → catalogo-cuentas.buscar.failed."
+      "description": "RPC custodio (PREGUNTA, por el bus): {project_id, codigo?, prefijo?, texto?, tipo?} → {project_id, encontradas, total, total_plan}. Busca en el plan declarado; no muta. Responde por catalogo-cuentas.buscar.response. Payload invalido → catalogo-cuentas.buscar.failed."
     },
     {
       "event": "project.activated",
@@ -25,38 +23,31 @@
   ],
   "publishes": [
     {
+      "event": "contabilidad.plan_cuentas_declarado",
+      "description": "Fire-and-forget (B1): el plan contable cambio (se anadio/actualizo una cuenta) → {project_id, codigo, cuenta, anadida, total}. Lo consume contrapartida-asistida (para resolver la contrapartida contra el plan declarado)."
+    },
+    {
       "event": "catalogo-cuentas.anadir.response",
-      "handler": "_atender",
-      "description": "Respuesta RPC correlada de catalogo-cuentas.anadir.request → {request_id, status:200, data:{project_id, cuenta, anadida}}. Emitida por el helper _atender."
+      "description": "Respuesta RPC correlada de la op anadir."
     },
     {
       "event": "catalogo-cuentas.anadir.failed",
-      "description": "Par de fallo determinista (B1): rol != PUERTO_PLAN_CONTABLE (segundo escritor), cuenta sin codigo o codigo ya existente → {status, error:{code, message, details?}}. Cierra el circulo de catalogo-cuentas.anadir.request."
+      "description": "Par de fallo determinista: falta project_id o codigo → {status, code, message}. Cierra el circulo de anadir.request."
     },
     {
       "event": "catalogo-cuentas.buscar.response",
-      "handler": "_atender",
-      "description": "Respuesta RPC correlada de catalogo-cuentas.buscar.request → {request_id, status:200, data:{project_id, total, cuentas} | {codigo, encontrada, cuenta}}. Emitida por el helper _atender."
+      "description": "Respuesta RPC correlada de la op buscar."
     },
     {
       "event": "catalogo-cuentas.buscar.failed",
-      "description": "Par de fallo determinista (B1): project_id ausente → {status, error:{code, message, details?}}. Cierra el circulo de catalogo-cuentas.buscar.request."
+      "description": "Par de fallo determinista: falta project_id → {status, code, message}. Cierra el circulo de buscar.request."
     }
   ],
+  "tools": [
+    { "name": "catalogo-cuentas.anadir", "description": "Anade (ORDEN) una cuenta al plan contable y anuncia el hecho." },
+    { "name": "catalogo-cuentas.buscar", "description": "Busca (PREGUNTA) cuentas en el plan contable declarado." }
+  ],
   "ui_handlers": [
-    {
-      "domain": "contabilidad",
-      "action": "catalogo-cuentas.anadir",
-      "handler": "onAnadirRequest",
-      "type": "workspace_module",
-      "zone": "barra_modulos"
-    },
-    {
-      "domain": "contabilidad",
-      "action": "catalogo-cuentas.buscar",
-      "handler": "onBuscarRequest",
-      "type": "workspace_module",
-      "zone": "barra_modulos"
-    }
+    { "domain": "contabilidad", "action": "catalogo-cuentas.anadir", "handler": "onAnadirRequest", "type": "system_panel", "zone": "lateral_derecha" }
   ]
 }

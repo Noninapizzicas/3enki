@@ -1,35 +1,27 @@
 {
-  "_doc": "Manifest de contabilidad-analitica/valoracion-existencia — REFLEJO STATELESS (H1, hoja del plan). LA CAPA DE VALOR sobre el inventario EXISTENTE: NO lo duplica (el stock sigue siendo del modulo REAL `inventario`, REUTILIZADO, que se consume por EVENTO — inventario.stock.request via _rpc, best-effort — jamas por require cruzado; el stock tambien puede llegar declarado en la peticion). ATRIBUTOS del diseno: stock:InventarioExistente y metodo:ParametroDeclarable. EL METODO DE VALORACION ES DECLARABLE — PROHIBIDO CABLEARLO: el reflejo NUNCA decide que se valora por FIFO o por precio medio; eso es dato del negocio (o del JEFE via cola-declaraciones-criterio). Lo unico que el reflejo conoce es la MECANICA generica de agregacion que el propio metodo DECLARA en su campo `base` ('capas' = suma de capas cantidad x coste_unitario · 'unitario' = suma de items cantidad x coste_unitario · 'agregado' = suma de valores ya agregados). El NOMBRE del metodo viaja OPACO (se declara en la respuesta, jamas se compara contra un literal en el codigo); una base no reconocida o ausente NO se sustituye por una por defecto. Invariantes: DETERMINISTA (una sola respuesta correcta); LEY COMO DATO (cero constantes de metodo); dato ausente = desconocido → sin stock, sin metodo o sin base declarada → valor:null, abierto:true y faltan con las piezas (nada se estima, ningun valor se rellena con 0); NO escribe, NO persiste, NO muta. FORMA: REFLEJO stateless, sin PosPersistencia ni onProjectActivated. Proyeccion unica `_valorar({project_id, producto_id?, fecha?, metodo?, capas?/existencias?/items?/stock?})` → {metodo, base, cantidad, valor, desglose, fuente_stock, faltan, abierto}. Cierra el circulo: error → valoracion-existencia.valorar.failed.",
+  "_doc": "Manifest de analitica/valoracion-existencia — REFLEJO STATELESS (H1, hoja del plan). Capa de VALOR sobre el inventario existente (NO lo duplica: el store de stock es `inventario`, infra reutilizada como base): recibe las existencias declaradas y les aplica el METODO DE VALORACION declarado (FIFO/PMP/medio...) para devolver su valor. El metodo es DATO (ParametroDeclarable), no una constante cableada. DETERMINISTA: mismas existencias + mismo metodo → mismo valor; cero juicio. Dato ausente = desconocido: una linea sin cantidad o sin coste NO se valora con un cero (valor:null, valoracion_completa:false); el total solo se declara si TODAS las lineas tienen valor (no una suma parcial). Sin metodo declarado se valora lo declarado y se declara el hueco. NO escribe, NO persiste, NO muta el inventario. RPC valorar es CLASE PREGUNTA → va por el bus, sin panel. Publica valoracion-existencia.valorar.response y su par .failed.",
   "name": "valoracion-existencia",
   "version": "0.1.0",
-  "description": "Reflejo (H1): la capa de valor sobre el inventario existente (no lo duplica) — metodo de valoracion DECLARABLE (nombre opaco, mecanica de agregacion en el dato, cero constantes); consume `inventario` por evento y nada se estima si falta el stock o el metodo.",
-  "blueprint_driven": true,
-  "blueprint_path": "valoracion-existencia.blueprint.json",
+  "description": "Reflejo (H1): capa de valor sobre el inventario existente. Valora las existencias declaradas con el metodo declarado; determinista, no duplica el inventario ni escribe.",
   "language": "es",
   "subscribes": [
     {
       "event": "valoracion-existencia.valorar.request",
       "handler": "onValorarRequest",
-      "description": "RPC reflejo (calculo puro, determinista): {project_id, producto_id?, fecha?, metodo?:{nombre, base}, capas?/existencias?/items?} → {project_id, producto_id, fecha, metodo, base, fuente_stock, cantidad, valor, desglose, stock_propiedad:'inventario', abierto, faltan, motivo}. El metodo es ParametroDeclarable y viaja opaco; su campo `base` ('capas'|'unitario'|'agregado') decide la mecanica de agregacion, y una base no reconocida no se sustituye por ninguna por defecto. El stock se declara en la peticion o se pide a `inventario` POR EVENTO (inventario.stock.request, best-effort). Sin stock, sin metodo o sin base → valor:null y abierto:true con las piezas que faltan (nada se estima). Responde por valoracion-existencia.valorar.response; project_id ausente → valoracion-existencia.valorar.failed."
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id, existencias, metodo?} → {project_id, fuente, metodo, lineas[], num_lineas, total, valoracion_completa, abierto, faltan}. Valora las existencias declaradas con el metodo declarado (cantidad x coste). Sin existencias → valoracion vacia con el hueco declarado; lineas incompletas → total:null. Responde por valoracion-existencia.valorar.response; payload invalido → valoracion-existencia.valorar.failed."
     }
   ],
   "publishes": [
     {
       "event": "valoracion-existencia.valorar.response",
-      "description": "Respuesta RPC correlada de valoracion-existencia.valorar.request → {request_id, status:200, data:{metodo, base, cantidad, valor, desglose, fuente_stock, faltan, abierto}}. Emitida por el helper _atender."
+      "description": "Respuesta RPC correlada de la op valorar (una sola cara: el bus)."
     },
     {
       "event": "valoracion-existencia.valorar.failed",
-      "description": "Par de fallo determinista (H1): project_id ausente → {status, error:{code, message, details?}}. Cierra el circulo de valoracion-existencia.valorar.request."
+      "description": "Par de fallo determinista: falta project_id o payload invalido → {status, code, message}. Cierra el circulo de valorar.request."
     }
   ],
-  "ui_handlers": [
-    {
-      "domain": "contabilidad",
-      "action": "valoracion-existencia.valorar",
-      "handler": "onValorarRequest",
-      "type": "workspace_module",
-      "zone": "barra_modulos"
-    }
+  "tools": [
+    { "name": "valoracion-existencia.valorar", "description": "Valora (PREGUNTA) las existencias declaradas con el metodo de valoracion declarado." }
   ]
 }

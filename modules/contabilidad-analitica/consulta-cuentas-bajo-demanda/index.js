@@ -1,23 +1,21 @@
 /**
  * contabilidad-analitica/consulta-cuentas-bajo-demanda — PUENTE STATELESS (Q1, hoja del plan).
  *
- * LA PUERTA *PULL*: la pregunta del dueno, cuando el quiera. Conecta su pregunta con el calculo
- * POR PETICION — NO impone cadencia (distinto del cuadro del jefe J8, que si la impone).
+ * LA PUERTA PULL: conecta la PREGUNTA del dueno con el CALCULO por peticion. NO impone cadencia
+ * (nada de informes periodicos: el dueno pregunta, el sistema calcula ESE calculo y responde).
+ *   · su pregunta (lenguaje natural) la interpreta puente-lenguaje-dueno (Q2) → consulta estructurada;
+ *   · la consulta pide la cifra a quien la calcula: mayor-balanza.saldos.request (B3, saldos),
+ *     saldo-tesoreria.calcular.request (E4, caja), cuenta-resultados.calcular.request (C2, resultado);
+ *   · sella la cobertura con sello-cobertura.sellar.request (Q3) y consulta el estado borrador/validado
+ *     con marca-borrador-validado.estado.request (L1).
+ * Recibe las cifras por EVENTO; NO las calcula por su cuenta ni las inventa.
  *
- * ATRIBUTOS del diseno: `fuente:ParametroDeclarable`.
- *   METODOS: preguntar(q:Consulta):Respuesta.
- *   REGLA: puerta *pull*: conecta la pregunta del dueno con el calculo por peticion. NO impone cadencia.
+ * Honestidad (invariante 13): sin cifra (ni declarada ni de un calculador vivo) la cuenta queda
+ * [ABIERTO] — no se rellena con 0 (0 no es "no hay", es "desconocido").
  *
- * Invariantes:
- *  - CONSULTA, NO DECIDE: enruta la pregunta a la pieza que ya calcula ese dato POR EVENTO y
- *    devuelve su respuesta. No interpreta, no juzga, no decide nada por el dueno.
- *  - LA FUENTE ES DECLARABLE: el mapa pregunta→fuente es `ParametroDeclarable`; sin fuente
- *    declarada para esa pregunta NO se inventa el calculo — se declara `[ABIERTO]`.
- *  - NO RECALCULA: no duplica la aritmetica de las piezas; su oficio es ENRUTAR, no computar.
- *  - Dato ausente = desconocido: si la fuente no responde, la respuesta es `null` con lo que falta.
- *  - Sin estado: un puente. No recuerda preguntas ni respuestas.
- *
- * Forma: PUENTE → STATELESS. Sin PosPersistencia, sin onProjectActivated.
+ * PUENTE → STATELESS. Sin PosPersistencia. RPC preguntar es CLASE PREGUNTA → sin ui_handler.
+ * Publica consulta-cuentas-bajo-demanda.preguntar.response y su par .failed.
+ * Escucha contabilidad.asiento_asentado (B2) y contabilidad.ejercicio_cerrado (C4), ambos emitidos.
  * Ver hoja Q1 del plan-construccion y diseno-oop.md (CLASE ConsultaCuentasBajoDemanda).
  */
 
@@ -25,15 +23,15 @@
 
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
 
-// Mapa pregunta → FUENTE que la calcula (por EVENTO). `fuente` es ParametroDeclarable: esto solo
-// fija la IDENTIDAD de cada pregunta conocida, no criterio de negocio.
-const FUENTES = {
-  saldo: { evento: 'mayor-balanza.saldos.request', dueno: 'mayor-balanza', campo: 'saldos' },
-  balanza: { evento: 'mayor-balanza.balanza.request', dueno: 'mayor-balanza', campo: 'balanza' },
-  resultado: { evento: 'cuenta-resultados.calcular.request', dueno: 'cuenta-resultados', campo: 'resultado' },
-  caja: { evento: 'saldo-tesoreria.calcular.request', dueno: 'saldo-tesoreria', campo: 'saldo_total' },
-  margen: { evento: 'margen-analitico.calcular.request', dueno: 'margen-analitico', campo: 'margen_total' },
-  proveedor: { evento: 'estado-cuenta-proveedor.calcular.request', dueno: 'estado-cuenta-proveedor', campo: 'saldo' }
+// Los CALCULADORES por tipo de cuenta: quien sabe la cifra. El tipo es DATO declarable.
+const CALCULADORES = {
+  saldos: 'mayor-balanza.saldos.request',
+  mayor: 'mayor-balanza.saldos.request',
+  caja: 'saldo-tesoreria.calcular.request',
+  tesoreria: 'saldo-tesoreria.calcular.request',
+  resultado: 'cuenta-resultados.calcular.request',
+  ingresos: 'cuenta-resultados.calcular.request',
+  gastos: 'cuenta-resultados.calcular.request'
 };
 
 class ConsultaCuentasBajoDemanda extends ModuloHibridoReflejo {
@@ -45,142 +43,109 @@ class ConsultaCuentasBajoDemanda extends ModuloHibridoReflejo {
 
   async onUnload() { return super.onUnload(); }
 
-  // ── handler RPC (una linea, delega a _atender) ──
+  // ── handler RPC (una linea, delega a _atender). CLASE PREGUNTA → sin ui_handler ──
   onPreguntarRequest(e) {
     return this._atender(e, 'preguntar', 'consulta-cuentas-bajo-demanda.preguntar.response', async (d) => {
       const res = await this._preguntar(d);
-      if (res.status === 200) {
-        // Exito → evento de dominio: hay respuesta a la pregunta del dueno (puerta pull).
-        this.eventBus?.publish('contabilidad.respuesta_consulta', {
-          project_id: res.data.project_id,
-          pregunta: res.data.pregunta,
-          fuente: res.data.fuente,
-          respuesta: res.data.respuesta,
-          disponible: res.data.disponible,
-          correlation_id: d.correlation_id
-        });
-      } else {
-        this.eventBus?.publish('consulta-cuentas-bajo-demanda.preguntar.failed', res);
-      }
+      // Puente pull: compone y responde; no escribe → no hay hecho que anunciar (R2).
+      if (res.status !== 200) this.eventBus?.publish('consulta-cuentas-bajo-demanda.preguntar.failed', res);
       return res;
     });
   }
 
-  // ── proyeccion: preguntar(q:Consulta) → Respuesta (enruta; no decide, no recalcula) ──
+  // ── handlers de dominio (fire-and-forget): la puerta pull observa (ventana acotada) ──
+  onAsientoAsentado(e) {
+    const d = (e && (e.data || e)) || {};
+    this._vistos = this._vistos || [];
+    if (d.asiento) this._vistos.push(d.asiento);
+    if (this._vistos.length > 1000) this._vistos.shift();
+  }
+
+  onEjercicioCerrado(e) {
+    const d = (e && (e.data || e)) || {};
+    this._cierres = this._cierres || [];
+    if (d.estado === 'cerrado') this._cierres.push(d);
+    if (this._cierres.length > 100) this._cierres.shift();
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // preguntar(input) → { consulta, cuenta, cobertura, estado, abierto }
+  // ══════════════════════════════════════════════════════════════════════
   async _preguntar(input = {}) {
     const pid = input.project_id || this.project_id;
     if (!pid) return this._invalid('project_id');
 
-    // La PREGUNTA: su TEMA declarado (o el texto). Sin tema NO se elige una fuente.
-    const pregunta = input.pregunta && typeof input.pregunta === 'object' ? input.pregunta : { tema: input.tema, texto: input.texto };
-    const tema = this._tema(input, pregunta);
+    const pregunta = input.pregunta != null ? String(input.pregunta).trim() : null;
+    // La CONSULTA: declarada, o interpretada por el puente de lenguaje (Q2, best-effort).
+    const consulta = await this._consulta(input, pregunta, pid);
 
-    if (!tema) {
-      return {
-        status: 200,
-        data: {
-          project_id: pid,
-          pregunta,
-          tema: null,
-          fuente: null,
-          respuesta: null,
-          disponible: false,
-          abierto: true,
-          faltan: ['tema'],
-          motivo: 'no se enruta la pregunta: falta declarar su tema (saldo|balanza|resultado|caja|margen|proveedor) — el puente no adivina que se pregunta'
-        }
-      };
-    }
+    // La CIFRA: declarada, o pedida por EVENTO al calculador que le toca (segun el tipo).
+    const { cifra, cuenta, calculador } = await this._cifra(input, consulta, pid);
 
-    const f = this._fuente(tema, input);
-    if (!f) {
-      return {
-        status: 200,
-        data: {
-          project_id: pid,
-          pregunta,
-          tema,
-          fuente: null,
-          respuesta: null,
-          disponible: false,
-          abierto: true,
-          faltan: ['fuente'],
-          motivo: `no hay fuente declarada para la pregunta '${tema}': la fuente es ParametroDeclarable y no se inventa el calculo`
-        }
-      };
-    }
+    // La MARCA: cobertura (sellada por Q3) y estado borrador/validado (L1).
+    const cobertura = await this._sellos(input, consulta, pid);
 
-    // LA PUERTA *PULL*: se consulta la pieza que ya calcula ese dato POR EVENTO. Aqui nada se computa.
-    const r = await this._rpc(f.evento, {
-      project_id: pid,
-      cuenta: input.cuenta,
-      periodo: input.periodo,
-      ejercicio: input.ejercicio != null ? input.ejercicio : input.periodo,
-      desde: input.desde,
-      hasta: input.hasta,
-      dimension: input.dimension,
-      eje: input.eje
-    }, { timeout_ms: 5000 }).catch(() => null);
+    const sinCifra = cifra === null || cifra === undefined;
 
-    const data = r && r.data ? r.data : null;
-    if (!data) {
-      return {
-        status: 200,
-        data: {
-          project_id: pid,
-          pregunta,
-          tema,
-          fuente: f.dueno,
-          evento_fuente: f.evento,
-          respuesta: null,
-          disponible: false,
-          // La puerta es PULL y CONSULTA: no decide nada por el dueno.
-          impone_cadencia: false,
-          decide: false,
-          abierto: true,
-          faltan: [f.dueno],
-          motivo: `la fuente ${f.dueno} no respondio a la pregunta (el puente NO recalcula: se declara el hueco)`
-        }
-      };
-    }
-
-    // La respuesta es la de la FUENTE, con su dato. No se interpreta ni se re-formula aqui
-    // (el lenguaje llano lo hace puente-lenguaje-dueno Q2); la puerta solo CONECTA.
     return {
       status: 200,
       data: {
         project_id: pid,
-        pregunta,
-        tema,
-        fuente: f.dueno,
-        evento_fuente: f.evento,
-        campo: f.campo,
-        respuesta: data,
-        valor: data[f.campo] !== undefined ? data[f.campo] : null,
-        disponible: true,
-        // La puerta es PULL: la pide el dueno cuando quiere. Cero cadencia impuesta.
-        cadencia: null,
+        tipo: 'consulta-cuentas-bajo-demanda',
+        // Es una PUERTA PULL: no impone cadencia, responde a la pregunta del dueno.
+        modo: 'pull',
         impone_cadencia: false,
-        decide: false,
-        abierto: { respuesta: null }
+        pregunta,
+        consulta,
+        cuenta,
+        calculador,
+        cifra: sinCifra ? null : cifra,
+        cobertura,
+        abierto: {
+          consulta: consulta ? null : 'no hay consulta (ni declarada ni interpretada por Q2): no se adivina que calcular',
+          cifra: sinCifra
+            ? 'no llego la cifra (ni declarada ni de un calculador vivo): la cuenta queda ABIERTA (0 no es "no hay", es desconocido)'
+            : null
+        }
       }
     };
   }
 
-  _tema(input, pregunta = {}) {
-    const raw = input.tema != null ? input.tema
-      : (pregunta.tema != null ? pregunta.tema : null);
-    if (raw === undefined || raw === null || raw === '') return null;
-    return String(raw).toLowerCase().trim();
+  // Interpreta la pregunta: declarada como objeto, o SUBIDA por EVENTO a puente-lenguaje-dueno (Q2).
+  async _consulta(input, pregunta, pid) {
+    if (input.consulta && typeof input.consulta === 'object') return input.consulta;
+    if (pregunta) {
+      const resp = await this._rpc('puente-lenguaje-dueno.a_consulta.request', { project_id: pid, pregunta }, { timeout_ms: 800 });
+      if (resp && resp.consulta && Object.keys(resp.consulta).length > 0) return resp.consulta;
+    }
+    return null;
   }
 
-  // La fuente: declarada en la peticion (ParametroDeclarable) o la del mapa de temas conocidos.
-  _fuente(tema, input = {}) {
-    if (input.fuente && typeof input.fuente === 'object' && input.fuente.evento) {
-      return { evento: String(input.fuente.evento), dueno: input.fuente.dueno != null ? String(input.fuente.dueno) : null, campo: input.fuente.campo != null ? String(input.fuente.campo) : null };
-    }
-    const f = FUENTES[tema];
-    return f ? { evento: f.evento, dueno: f.dueno, campo: f.campo } : null;
+  // La cifra: declarada, o pedida al calculador que le toca por tipo.
+  async _cifra(input, consulta, pid) {
+    if (input.cifra !== undefined && input.cifra !== null) return { cifra: input.cifra, cuenta: input.cuenta != null ? String(input.cuenta) : null, calculador: 'declarado' };
+    const tipo = (input.tipo != null ? String(input.tipo).toLowerCase() : (consulta && consulta.tipo != null ? String(consulta.tipo).toLowerCase() : 'saldos'));
+    const evento = CALCULADORES[tipo] || CALCULADORES.saldos;
+    const resp = await this._rpc(evento, {
+      project_id: pid,
+      fecha: input.fecha, ejercicio: input.ejercicio,
+      cuenta: input.cuenta, prefijo: input.prefijo
+    }, { timeout_ms: 800 });
+    if (!resp) return { cifra: null, cuenta: input.cuenta != null ? String(input.cuenta) : null, calculador: evento };
+    const cifra = resp.resultado != null ? resp.resultado
+      : (resp.saldo != null ? resp.saldo
+        : (Array.isArray(resp.saldos) ? resp.saldos : null));
+    return { cifra: cifra === undefined ? null : cifra, cuenta: input.cuenta != null ? String(input.cuenta) : null, calculador: evento };
+  }
+
+  // Los sellos: cobertura (Q3) y estado borrador/validado (L1). Best-effort por EVENTO.
+  async _sellos(input, consulta, pid) {
+    const sello = await this._rpc('sello-cobertura.sellar.request', { project_id: pid, objeto: input.objeto }, { timeout_ms: 700 });
+    const estado = await this._rpc('marca-borrador-validado.estado.request', { project_id: pid, objeto: input.objeto }, { timeout_ms: 700 });
+    return {
+      sello: sello || null,
+      estado: estado || null
+    };
   }
 
   // ── Tools ──

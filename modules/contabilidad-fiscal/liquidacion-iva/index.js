@@ -1,26 +1,21 @@
 /**
  * contabilidad-fiscal/liquidacion-iva — REFLEJO STATELESS (D1, hoja del plan).
  *
- * LIQUIDA el IVA de un periodo: IVA DEVENGADO (repercutido) − IVA SOPORTADO (deducible)
- * → CUOTA. Deriva del MAYOR (B3); NO recalcula ni reescribe asientos.
+ * IVA devengado / soportado DERIVADO del libro. El IVA va por DEVENGO (C3 separa caja/devengo).
+ * LOS TIPOS SON DATO: la ley entra como dato declarado, NUNCA cableamos tipos de IVA aqui.
  *
- * LA LEY ENTRA COMO DATO (invariante 5): los TIPOS de IVA no son constantes cableadas.
- * Llegan DECLARADOS por negocio y ejercicio (`tipos`, catálogo declarable del régimen:
- * comun/foral/Canarias/Ceuta-Melilla → IVA/IGIC/IPSI). Sin catálogo declarado, cada
- * apunte de cuota se agrupa por su propio `tipo` declarado en el asiento — NUNCA se
- * inventa un tipo. Tampoco se cablea el sentido de las cuentas: `reglas` es declarable,
- * y sin declarar se usa la composición por defecto sobre grupos estándar (47x deudor /
- * 477 acreedor), que es la MISMA regla declarable que ya usa cuenta-resultados.
+ *   · NO calcula la cifra por su cuenta (eso es mayor-balanza): RECIBE los saldos/lineas (o los
+ *     sube por EVENTO a mayor-balanza.saldos.request) y AISLA las cuentas de IVA.
+ *   · devengado = IVA repercutido (salida, cuentas 477); soportado = IVA deducible (entrada, 472).
+ *   · si las lineas traen su TIPO declarado, se desglosa por tipo; el tipo NO se adivina.
+ *   · resultado = devengado − soportado (a ingresar si > 0, a compensar/devolver si < 0).
  *
- * Determinista: mismo mayor + mismos tipos declarados → misma liquidación. Cero reloj.
+ * Honestidad (invariante 13): sin saldos no se inventa la liquidacion; una cuenta de IVA sin
+ * naturaleza declarada ni prefijo reconocible NO se cuenta — se declara en `abierto`.
  *
- * El mayor llega por DOS vías, ninguna es un `require` cruzado:
- *   - `contabilidad.asiento_registrado` (fire-and-forget): se ACUMULA la muestra del
- *     asiento en un espejo en memoria (idempotente por clave natural).
- *   - `liquidacion-iva.calcular.request`: se PIDE el mayor a mayor-balanza POR EVENTO;
- *     si no responde, se deriva del espejo. Se declara la fuente.
- *
- * Forma: REFLEJO → STATELESS. Sin PosPersistencia, sin onProjectActivated.
+ * NO escribe, NO persiste. RPC calcular es CLASE PREGUNTA → sin ui_handler.
+ * Publica liquidacion-iva.calcular.response y su par .failed.
+ * Escucha contabilidad.asiento_asentado (escritor-diario B2) y contabilidad.ejercicio_cerrado (C4).
  * Ver hoja D1 del plan-construccion y diseno-oop.md (CLASE LiquidacionIva).
  */
 
@@ -28,41 +23,16 @@
 
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
 
-// Composicion por defecto de las cuentas de IVA (declarable; NO es una ley cableada,
-// es la particion estandar del plan por GRUPO de cuenta). Declararla sobrescribe esto.
-const REGLAS_DEFECTO = [
-  { prefijo: '477', lado: 'DEVENGADO' },   // IVA repercutido (acreedor)
-  { prefijo: '472', lado: 'SOPORTADO' },   // IVA deducible (deudor)
-  { prefijo: '470', lado: 'DEVENGADO' }
-];
-
 class LiquidacionIva extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'liquidacion-iva';
     this.version = 'reflejo-0.1.0';
-    // espejo en memoria de los asientos registrados: project_id -> Map<clave, asiento>
-    this._espejo = new Map();
-    // ultimo catalogo de tipos declarado por proyecto: pid -> { ejercicio -> [tipo,...] }
-    this._tipos = new Map();
   }
 
   async onUnload() { return super.onUnload(); }
 
-  // ── fire-and-forget: el diario publico un asiento → se refleja (idempotente, no decide) ──
-  onAsientoRegistrado(e) {
-    const d = (e && (e.data || e)) || {};
-    const pid = d.project_id;
-    const asiento = d.asiento;
-    if (!pid || !asiento || typeof asiento !== 'object') return null;
-    const clave = asiento.clave_natural != null ? String(asiento.clave_natural)
-      : (asiento.numero != null ? String(asiento.numero) : null);
-    if (!clave) return null;
-    this._espejoDe(pid).set(clave, asiento);
-    return null;
-  }
-
-  // ── handler RPC (una linea, delega a _atender) ──
+  // ── handler RPC (una linea). CLASE PREGUNTA → sin ui_handler ──
   onCalcularRequest(e) {
     return this._atender(e, 'calcular', 'liquidacion-iva.calcular.response', async (d) => {
       const res = await this._calcular(d);
@@ -71,165 +41,133 @@ class LiquidacionIva extends ModuloHibridoReflejo {
     });
   }
 
-  // ── LIQUIDACION: devengado/soportado → cuota (deriva del mayor, no recalcula asientos) ──
+  // ── handlers de dominio (fire-and-forget): se observa el libro (ventana acotada) ──
+  onAsientoAsentado(e) {
+    const d = (e && (e.data || e)) || {};
+    this._vistos = this._vistos || [];
+    if (d.asiento) this._vistos.push(d.asiento);
+    if (this._vistos.length > 1000) this._vistos.shift();
+  }
+
+  onEjercicioCerrado(e) {
+    const d = (e && (e.data || e)) || {};
+    this._cierres = this._cierres || [];
+    if (d.estado === 'cerrado') this._cierres.push(d);
+    if (this._cierres.length > 100) this._cierres.shift();
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // calcular(saldos) → { devengado, soportado, resultado, por_tipo, abierto }
+  // ══════════════════════════════════════════════════════════════════════
   async _calcular(input = {}) {
     const pid = input.project_id || this.project_id;
     if (!pid) return this._invalid('project_id');
 
-    const { mayor, fuente } = await this._mayor(pid, input);
-    const reglas = this._reglas(input.reglas);
+    const { saldos, fuente } = await this._saldosDe(input);
 
-    const devengado = [];
-    const soportado = [];
-    const otro = [];
+    let devengado = 0, soportado = 0;
+    const porTipo = new Map();
+    const detalle = [];
+    const noClasificables = [];
 
-    for (const linea of mayor) {
-      const lado = this._ladoDe(linea.cuenta, reglas);
-      const cuota = this._cuotaDeclarada(linea);
-      const item = {
-        cuenta: linea.cuenta,
-        tipo: cuota.tipo,                    // tipo DECLARADO en el dato (puede ser null)
-        base: cuota.base,
-        cuota: cuota.cuota,
-        procedencia: cuota.procedencia      // 'declarada' | 'derivada_del_saldo'
-      };
-      if (lado === 'DEVENGADO') devengado.push(item);
-      else if (lado === 'SOPORTADO') soportado.push(item);
-      else otro.push(item);
+    for (const s of saldos) {
+      const cuenta = s && s.cuenta != null ? String(s.cuenta) : null;
+      const lado = this._lado(s, cuenta);
+      if (!lado) { if (this._esIva(s, cuenta)) noClasificables.push({ cuenta, saldo: this._saldo(s) }); continue; }
+      const base = s && s.base_imponible != null ? Number(s.base_imponible) : null;
+      const cuota = Math.abs(s && s.cuota != null ? Number(s.cuota) : this._saldo(s));
+      const tipo = await this._tipo(s, input, lado);
+
+      const acc = porTipo.get(tipo === null ? '(sin_tipo)' : String(tipo)) || { tipo, base: 0, cuota: 0, lado };
+      if (base !== null) acc.base = this._round(acc.base + base, 2);
+      acc.cuota = this._round(acc.cuota + cuota, 2);
+      porTipo.set(tipo === null ? '(sin_tipo)' : String(tipo), acc);
+
+      if (lado === 'devengado') devengado += cuota; else soportado += cuota;
+      detalle.push({ cuenta, lado, tipo, base_imponible: base, cuota: this._round(cuota, 2) });
     }
 
-    // Los importes SON los del libro; el signo viene del lado, no de un tipo cableado.
-    const total_devengado = this._round(devengado.reduce((s, x) => s + x.cuota, 0), 2);
-    const total_soportado = this._round(soportado.reduce((s, x) => s + x.cuota, 0), 2);
-    const cuota = this._round(total_devengado - total_soportado, 2);
+    devengado = this._round(devengado, 2);
+    soportado = this._round(soportado, 2);
+    const resultado = this._round(devengado - soportado, 2);
+    const sinTipo = detalle.filter((d) => d.tipo === null).length;
 
     return {
       status: 200,
       data: {
         project_id: pid,
-        ejercicio: input.ejercicio != null ? input.ejercicio : null,
-        periodo: input.periodo != null ? String(input.periodo) : null,
-        regimen: input.regimen != null ? String(input.regimen) : null,   // declarable (IVA/IGIC/IPSI)
-        territorio: input.territorio != null ? String(input.territorio) : null,
-        fuente,
-        // Los TIPOS son dato: se devuelve el catalogo declarado que se uso, o null.
-        tipos_declarados: this._tiposDe(pid, input.ejercicio, input.tipos),
-        reglas_declaradas: Array.isArray(input.reglas) ? input.reglas : null,
-        total_devengado,
-        total_soportado,
-        cuota,
-        // Un resultado negativo es una cuota A COMPENSAR/DEVOLVER declarada, no un error.
-        signo: cuota > 0 ? 'A_INGRESAR' : (cuota < 0 ? 'A_COMPENSAR_O_DEVOLVER' : 'NULA'),
-        detalle: { devengado, soportado, otro }
+        tipo: 'liquidacion-iva',
+        fuente: fuente || null,
+        // El IVA va por DEVENGO (C3 separa caja/devengo).
+        criterio: 'devengo',
+        devengado,
+        soportado,
+        resultado,
+        a_ingresar: resultado > 0 ? resultado : 0,
+        a_compensar: resultado < 0 ? this._round(-resultado, 2) : 0,
+        por_tipo: [...porTipo.values()].map((t) => ({ ...t, base: this._round(t.base, 2), cuota: this._round(t.cuota, 2) })),
+        detalle,
+        determinista: true,
+        // La ley entra como DATO: sin tipo declarado la cuota se computa pero el tipo queda ABIERTO.
+        tipos_cableados: false,
+        abierto: {
+          fuente: fuente ? null : 'no se recibieron saldos (ni declarados ni de mayor-balanza): la liquidacion no se inventa',
+          tipo: sinTipo
+            ? `${sinTipo} linea(s) sin tipo declarado: la cuota se computa pero el tipo queda sin desglosar (la ley entra como DATO)`
+            : null,
+          clasificacion: noClasificables.length
+            ? `${noClasificables.length} cuenta(s) de IVA sin naturaleza declarada ni prefijo reconocible (477 devengado / 472 soportado): no se suman`
+            : null
+        }
       }
     };
   }
 
-  // Cuota por linea: si el asiento DECLARA base/tipo/cuota, se respetan tal cual; si no,
-  // se toma el saldo de la cuenta y se declara que se derivo del saldo (no se estima tipo).
-  _cuotaDeclarada(linea) {
-    const baseDeclarada = this._num(linea.base_iva);
-    const tipoDeclarado = linea.tipo_iva != null && linea.tipo_iva !== '' ? linea.tipo_iva : null;
-    const cuotaDeclarada = this._num(linea.cuota_iva);
-    if (cuotaDeclarada !== null) {
-      return { tipo: tipoDeclarado, base: baseDeclarada, cuota: cuotaDeclarada, procedencia: 'declarada' };
+  async _saldosDe(input) {
+    if (Array.isArray(input.saldos)) return { saldos: input.saldos, fuente: 'declarado' };
+    if (Array.isArray(input.lineas)) return { saldos: input.lineas, fuente: 'declarado' };
+    const resp = await this._rpc('mayor-balanza.saldos.request', {
+      project_id: input.project_id || this.project_id,
+      fecha: input.fecha, ejercicio: input.ejercicio
+    }, { timeout_ms: 800 });
+    if (resp && Array.isArray(resp.saldos)) return { saldos: resp.saldos, fuente: 'mayor-balanza' };
+    return { saldos: [], fuente: null };
+  }
+
+  _esIva(s, cuenta) {
+    const decl = s && (s.tipo || s.naturaleza);
+    if (decl && /iva/i.test(String(decl))) return true;
+    const c = String(cuenta || '');
+    return c.startsWith('472') || c.startsWith('477') || c.startsWith('4700');
+  }
+
+  // Lado: declarado, o por prefijo PGC (477 devengado/repercutido · 472 soportado/deducible).
+  _lado(s, cuenta) {
+    const decl = s && (s.lado || s.naturaleza || s.tipo);
+    if (decl) {
+      const v = String(decl).toLowerCase();
+      if (v.includes('deveng') || v.includes('repercut') || v.includes('salid')) return 'devengado';
+      if (v.includes('soport') || v.includes('deducib') || v.includes('entrad')) return 'soportado';
     }
-    // Sin cuota declarada: el importe del IVA ES el saldo de la cuenta de IVA del libro.
-    const saldo = Math.abs(linea.saldo != null ? Number(linea.saldo) : 0);
-    const cuota = Number.isFinite(saldo) ? this._round(saldo, 2) : 0;
-    // Con base y tipo declarados, la cuota se deriva; el TIPO sigue siendo dato, no constante.
-    if (baseDeclarada !== null && tipoDeclarado !== null) {
-      const t = this._num(tipoDeclarado);
-      if (t !== null) {
-        return { tipo: tipoDeclarado, base: baseDeclarada, cuota: this._round(baseDeclarada * t, 2), procedencia: 'derivada_de_base_y_tipo_declarados' };
-      }
-      return { tipo: tipoDeclarado, base: baseDeclarada, cuota, procedencia: 'derivada_del_saldo' };
-    }
-    return { tipo: tipoDeclarado, base: baseDeclarada, cuota, procedencia: 'derivada_del_saldo' };
+    const c = String(cuenta || '');
+    if (c.startsWith('477')) return 'devengado';
+    if (c.startsWith('472')) return 'soportado';
+    return null;
   }
 
-  // Pide el mayor a mayor-balanza POR EVENTO; si no responde, lo deriva del espejo.
-  async _mayor(pid, input = {}) {
-    const r = await this._rpc('mayor-balanza.saldos.request',
-      { project_id: pid, ejercicio: input.ejercicio ?? null }, { timeout_ms: 4000 });
-    if (r && r.status === 200 && r.data && Array.isArray(r.data.mayor)) {
-      return { mayor: r.data.mayor, fuente: 'mayor-balanza' };
-    }
-    return { mayor: this._derivarMayor(pid), fuente: 'espejo' };
-  }
-
-  _derivarMayor(pid) {
-    const por = new Map();
-    for (const a of this._espejoDe(pid).values()) {
-      if (!a || !Array.isArray(a.apuntes)) continue;
-      for (const ap of a.apuntes) {
-        if (!ap || ap.cuenta == null) continue;
-        const cuenta = String(ap.cuenta);
-        const debe = this._num(ap.debe);
-        const haber = this._num(ap.haber);
-        if (debe === null || haber === null) continue;
-        let s = por.get(cuenta);
-        if (!s) { s = { cuenta, debe: 0, haber: 0, base_iva: null, tipo_iva: null, cuota_iva: null }; por.set(cuenta, s); }
-        s.debe = this._round(s.debe + debe, 2);
-        s.haber = this._round(s.haber + haber, 2);
-        // Los tipos/bases del asiento se conservan como DATO si vienen declarados.
-        if (s.tipo_iva == null && ap.tipo_iva != null) s.tipo_iva = ap.tipo_iva;
-        if (s.base_iva == null && ap.base_iva != null) s.base_iva = this._num(ap.base_iva);
-        if (s.cuota_iva == null && ap.cuota_iva != null) s.cuota_iva = this._num(ap.cuota_iva);
-      }
-    }
-    return [...por.values()].sort((x, y) => x.cuenta.localeCompare(y.cuenta)).map(s => {
-      const saldo = this._round(s.debe - s.haber, 2);
-      return {
-        cuenta: s.cuenta, debe: s.debe, haber: s.haber, saldo,
-        base_iva: s.base_iva, tipo_iva: s.tipo_iva, cuota_iva: s.cuota_iva
-      };
-    });
-  }
-
-  // Reglas declarables; sin declarar → las de defecto (particion estandar por grupo).
-  _reglas(raw) {
-    if (!Array.isArray(raw)) return REGLAS_DEFECTO;
-    const reglas = raw
-      .filter(r => r && r.prefijo != null && r.lado != null)
-      .map(r => ({ prefijo: String(r.prefijo), lado: String(r.lado).toUpperCase() }));
-    return reglas.length ? reglas : REGLAS_DEFECTO;
-  }
-
-  // Clasifica por el prefijo MAS LARGO que casa (determinista).
-  _ladoDe(cuenta, reglas) {
-    const codigo = String(cuenta);
-    let mejor = null;
-    for (const r of reglas) {
-      if (codigo.startsWith(r.prefijo) && (!mejor || r.prefijo.length > mejor.prefijo.length)) mejor = r;
-    }
-    return mejor ? mejor.lado : 'OTRO';
-  }
-
-  // El catalogo de tipos es DATO declarable; se recuerda por proyecto+ejercicio.
-  _tiposDe(pid, ejercicio, declarados) {
-    if (Array.isArray(declarados)) {
-      if (!this._tipos.has(pid)) this._tipos.set(pid, new Map());
-      const ej = ejercicio != null ? String(ejercicio) : 'sin-ejercicio';
-      this._tipos.get(pid).set(ej, declarados);
-      return declarados;
-    }
-    const porEj = this._tipos.get(pid);
-    if (!porEj) return null;
-    const ej = ejercicio != null ? String(ejercicio) : 'sin-ejercicio';
-    return porEj.get(ej) || null;
-  }
-
-  _espejoDe(pid) {
-    let m = this._espejo.get(pid);
-    if (!m) { m = new Map(); this._espejo.set(pid, m); }
-    return m;
-  }
-
-  _num(v) {
-    if (v === undefined || v === null || v === '') return null;
-    const n = Number(v);
+  // El TIPO es DATO declarado por la linea o por la peticion. Nunca cableado.
+  async _tipo(s, input, lado) {
+    const raw = (s && (s.tipo_iva != null ? s.tipo_iva : (s.tipo_impositivo != null ? s.tipo_impositivo : s.tipo_declarado))) != null
+      ? (s.tipo_iva != null ? s.tipo_iva : (s.tipo_impositivo != null ? s.tipo_impositivo : s.tipo_declarado))
+      : (input && input.tipos && input.tipos[lado] != null ? input.tipos[lado] : null);
+    if (raw === null || raw === undefined || raw === '') return null;
+    const n = Number(raw);
     return Number.isFinite(n) ? n : null;
+  }
+
+  _saldo(s) {
+    const n = Number(s && (s.saldo != null ? s.saldo : (Number(s.debe || 0) - Number(s.haber || 0))));
+    return Number.isFinite(n) ? n : 0;
   }
 
   // ── Tools ──

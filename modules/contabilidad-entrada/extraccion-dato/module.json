@@ -1,0 +1,27 @@
+{
+  "_doc": "Manifest de entrada/extraccion-dato — MICRO-AGENTE (A4.1, hoja del plan). Abre un documento NO estructurado y lo vuelve DATO. Interpreta y PROPONE; no asienta. La mitad REFLEJA (determinista y honesta) extrae los campos con el ESQUEMA y los PATRONES DECLARADOS; un campo que no casa con ningun patron declarado NO se inventa: se declara en `abierto` (es juicio, mitad fuzzy). SUBE best-effort control-cuadre-documento.cuadra.request (A5) para cuadrar el documento y, si queda incompleto/ambiguo, encolado-excepcion.encolar.request (A8.1). ADAPTA `facturas` (su pipeline real de OCR/IA): toma su salida como documento declarado sin romper su proyecto. NO escribe, NO persiste (su extraccion es una PROPUESTA en la respuesta). RPC juzgar es CLASE PREGUNTA → va por el bus, sin panel. Publica extraccion-dato.juzgar.response y su par .failed. Escucha de dominio: — (ninguna; su entrada es la peticion).",
+  "name": "extraccion-dato",
+  "version": "0.1.0",
+  "description": "Micro-agente (A4.1): extrae dato de un documento no estructurado con el esquema declarado y lo PROPONE. No asienta; lo no extraible se declara abierto.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "extraccion-dato.juzgar.request",
+      "handler": "onJuzgarRequest",
+      "description": "RPC micro-agente (PREGUNTA, por el bus): {project_id, documento{...}/texto?, esquema{campo:regla}, obligatorios?} → {project_id, extraido, faltantes, propuesta, encolar, abierto}. Extrae con el esquema DECLARADO y PROPONE. Sube a cuadre (A5) y a cola (A8.1) si procede. Responde por extraccion-dato.juzgar.response; falta project_id/documento → extraccion-dato.juzgar.failed."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "extraccion-dato.juzgar.response",
+      "description": "Respuesta RPC correlada de la op juzgar (una sola cara: el bus)."
+    },
+    {
+      "event": "extraccion-dato.juzgar.failed",
+      "description": "Par de fallo determinista: falta project_id o documento → {status, code, message}. Cierra el circulo de juzgar.request."
+    }
+  ],
+  "tools": [
+    { "name": "extraccion-dato.juzgar", "description": "Extrae (PREGUNTA) dato de un documento con el esquema declarado y lo propone (no asienta)." }
+  ]
+}

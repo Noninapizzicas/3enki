@@ -1,9 +1,0 @@
-{
-  "id": "regla-movimiento-bancario",
-  "name": "Reglas de movimiento",
-  "version": "0.1.0",
-  "zone": "work-bar",
-  "order": 92,
-  "icon": "🏦",
-  "label": "Reglas banco"
-}

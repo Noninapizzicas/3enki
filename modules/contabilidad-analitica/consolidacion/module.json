@@ -1,35 +1,27 @@
 {
-  "_doc": "Manifest de contabilidad-analitica/consolidacion — REFLEJO STATELESS (I3, hoja del plan). LA CONSOLIDACION DEL GRUPO MULTI-SOCIEDAD COMPLETA (decision del dueno): compone los estados del CONJUNTO a partir de las sociedades declaradas, aplicando el criterio DECLARADO y las eliminaciones intercompany (I2). Agregacion DETERMINISTA, sin estimar nada. ATRIBUTOS del diseno: sociedades:Set<Sociedad> y criterio:ParametroDeclarable. Las SOCIEDADES son DATO declarado — NO se descubren solas: sin conjunto declarado no hay perimetro y los estados quedan [ABIERTO] (inventarse una sociedad rompe el grupo). El CRITERIO (que se agrega, moneda, metodo de conversion, que se elimina) es ParametroDeclarable: el reflejo lo CONSERVA opaco y lo declara en la respuesta. SOLO CONSOLIDA LO DECLARADO: cada sociedad aporta sus cifras declaradas (cifras/por_sociedad) o las pide a marca-sociedad (I1) POR EVENTO; los estados se suman y se restan las ELIMINACIONES INTERCOMPANY pedidas a I2 POR EVENTO (eliminacion-intercompany.eliminar.request). Si una sociedad declarada no trae cifras, el estado del conjunto queda [ABIERTO] con lo que falta — no se rellena con 0 una sociedad sin dato (falsearia el grupo). Invariantes: DETERMINISTA (misma entrada → mismo resultado); LEY COMO DATO (criterio como entrada, cero constantes); dato ausente = desconocido; NO escribe, NO persiste (los estados son DERIVADOS; el asiento es del diario). FORMA: REFLEJO stateless, sin PosPersistencia ni onProjectActivated. Proyeccion unica `_estados({project_id, periodo?, sociedades, criterio?, cifras?/por_sociedad?, partidas?, eliminaciones?})` → {sociedades, criterio, aportes, eliminaciones, estados, parcial, consolidado, faltan, abierto}. Cierra el circulo: error → consolidacion.estados.failed.",
+  "_doc": "Manifest de analitica/consolidacion — REFLEJO STATELESS (I3, hoja del plan). Estados del conjunto (grupo COMPLETO, multi-sociedad) con criterio DECLARADO. La consolidacion es AL CIERRE. NO calcula los estados por su cuenta: SUBE por EVENTO mayor-balanza.saldos.request (B6), balance-situacion.calcular.request (C1) y cuenta-resultados.calcular.request (C2) (estados por sociedad), eliminacion-intercompany.eliminar.request (I1, intragrupo) y cola-declaraciones-criterio.fijar.request (K9, criterio). Honestidad (invariante 13): SIN criterio declarado NO se consolida a ojo (se declara abierto); una sociedad sin estado queda declarada faltante y el agregado se declara PARCIAL (completo:false). NO escribe, NO persiste. RPC estados es CLASE PREGUNTA → va por el bus, sin panel. Publica consolidacion.estados.response y su par .failed. La escucha de contabilidad.ejercicio_cerrado del plan NO se declara: su emisor cierre-ejercicio (C4) aun no existe (R3).",
   "name": "consolidacion",
   "version": "0.1.0",
-  "description": "Reflejo (I3): consolidacion del grupo multi-sociedad completo — estados del conjunto con criterio DECLARADO y agregacion determinista, restando las eliminaciones intercompany (I2); solo consolida lo declarado y nada se estima.",
-  "blueprint_driven": true,
-  "blueprint_path": "consolidacion.blueprint.json",
+  "description": "Reflejo (I3): estados consolidados del grupo multi-sociedad con criterio declarado; sin criterio no consolida y sin sociedad el agregado es parcial.",
   "language": "es",
   "subscribes": [
     {
       "event": "consolidacion.estados.request",
       "handler": "onEstadosRequest",
-      "description": "RPC reflejo (agregacion pura, determinista): {project_id, periodo?, sociedades, criterio?, cifras?/por_sociedad?, partidas?, eliminaciones?} → {project_id, periodo, sociedades, criterio, fuente_eliminaciones, aportes, eliminaciones, n_sociedades, estados, parcial, consolidado, abierto, faltan, motivo}. Compone el EstadoDerivado del CONJUNTO (grupo completo): suma las cifras declaradas de cada sociedad y resta las eliminaciones intercompany pedidas a I2 POR EVENTO; las cifras pueden venir declaradas o de marca-sociedad (I1) POR EVENTO. Sin sociedades declaradas o sin cifras de alguna sociedad → estados:null y abierto:true (solo se consolida lo declarado; el grupo no se descubre solo y nada se rellena con 0). Responde por consolidacion.estados.response; project_id ausente → consolidacion.estados.failed."
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id, criterio|criterio_consolidacion, sociedades[{sociedad_id,participacion_pct?,estado?}], eliminaciones?, ejercicio?} → {project_id, criterio, sociedades[], activo, pasivo, patrimonio, ingreso, gasto, resultado, eliminaciones, completo, parcial, abierto}. Agrega por criterio declarado, resta eliminaciones; sin criterio → abierto. Responde por consolidacion.estados.response. Payload invalido → consolidacion.estados.failed."
     }
   ],
   "publishes": [
     {
       "event": "consolidacion.estados.response",
-      "description": "Respuesta RPC correlada de consolidacion.estados.request → {request_id, status:200, data:{sociedades, criterio, estados, parcial, consolidado, faltan, abierto}}. Emitida por el helper _atender."
+      "description": "Respuesta RPC correlada de la op estados (una sola cara: el bus)."
     },
     {
       "event": "consolidacion.estados.failed",
-      "description": "Par de fallo determinista (I3): project_id ausente → {status, error:{code, message, details?}}. Cierra el circulo de consolidacion.estados.request."
+      "description": "Par de fallo determinista: falta project_id o sociedades → {status, code, message}. Cierra el circulo de estados.request."
     }
   ],
-  "ui_handlers": [
-    {
-      "domain": "contabilidad",
-      "action": "consolidacion.estados",
-      "handler": "onEstadosRequest",
-      "type": "workspace_module",
-      "zone": "barra_modulos"
-    }
+  "tools": [
+    { "name": "consolidacion.estados", "description": "Compone (PREGUNTA) los estados consolidados del grupo segun el criterio declarado." }
   ]
 }

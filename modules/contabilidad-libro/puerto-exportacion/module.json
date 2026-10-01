@@ -1,55 +1,42 @@
 {
-  "_doc": "Manifest de contabilidad-libro/puerto-exportacion — CONVERSOR STATELESS (L1, hoja del plan). LA FRONTERA DE SALIDA HACIA EL ASESOR: convierte el libro/derivado canonico al FORMATO ESTANDAR que entiende el programa del asesor (salir) y convierte de vuelta los AJUSTES que el asesor devuelve (entrar) a asientos PROPUESTOS. Cruza FORMATO, NO DECIDE CONTENIDO: no reinterpreta cifras, no recalcula saldos, no juzga si un ajuste es correcto ni valida su contrapartida (eso es del libro y de regla-contrapartida); solo serializa/deserializa y la DECISION sigue siendo del asesor. ATRIBUTOS del diseno: formato:ParametroDeclarable; METODOS: salir(libro):Externo, entrar(ajustes):Set<Asiento>. LA LEY ENTRA COMO DATO (invariante 5): el formato (y su version, encoding, separador decimal y mapeo de campos) es DECLARABLE — sin formato declarado NO se convierte (400 FORMATO_NO_DECLARADO) y un formato sin mapeo y sin ser canonico se rechaza (422 FORMATO_NO_DECLARABLE); NO hay ningun formato de asesor cableado. Dato ausente = desconocido: un campo que no venga del origen queda null y se declara en abiertos/descartados, jamas se estima. NOTA DE REUTILIZACION (documentada en el plan, §Reutilizacion): en el repo existe facturacion/asesoria (v2.0.0) que empaqueta FACTURAS PROCESADAS en CSV+ZIP y publica asesoria.paquete.generado — su contrato NO encaja con L1 (no exporta el LIBRO ni cruza formatos contables estandar) por lo que L1 se CONSTRUYE reutilizando su PATRON de paquete/mapeo declarable, SIN adaptar ni tocar facturacion/asesoria. FORMA: CONVERSOR stateless, sin PosPersistencia ni onProjectActivated. Proyecciones `_salir` y `_entrar`. Los ajustes entran como asientos PROPUESTOS (propuestos:true, escritos_por_este_puerto:false): quien escribe es el libro (escritor-diario B2 / asiento-ajuste B5). Cierra el circulo: error → puerto-exportacion.salir.failed / puerto-exportacion.entrar.failed.",
+  "_doc": "Manifest de libro/puerto-exportacion — CONVERSOR STATELESS (L1, hoja del plan). Frontera de FORMATOS contables estandar hacia el programa del asesor; si falta un formato, se CREA declarandolo. Cruza FORMATO, no decide CONTENIDO (no calcula saldos, no compone el asiento, no firma, no presenta). LA LEY ENTRA COMO DATO: `formato` y `mapeo` (campo canonico → clave externa) son declarables; cero esquemas cableados. Sin formato declarado no convierte; formato sin mapeo y no canonico → 422 FORMATO_NO_DECLARABLE. `salir` (canonico → externo) y `entrar` (externo → canonico); entrar, si el paquete YA declara su asiento, lo sube a asiento-ajuste (B5) por EVENTO. Dato ausente = desconocido. NO escribe, NO persiste. Ambas ops CLASE PREGUNTA → van por el bus, sin panel. Publica los pares salir/entrar .response/.failed.",
   "name": "puerto-exportacion",
   "version": "0.1.0",
-  "description": "Conversor stateless (L1): frontera de salida al programa del asesor — serializa el libro al formato declarado y deserializa los ajustes a asientos propuestos, sin decidir contenido.",
-  "blueprint_driven": true,
-  "blueprint_path": "puerto-exportacion.blueprint.json",
+  "description": "Conversor (L1): frontera de formatos contables hacia el programa del asesor. La ley entra como dato (formato+mapeo declarables); traduce y devuelve, no escribe.",
   "language": "es",
   "subscribes": [
     {
       "event": "puerto-exportacion.salir.request",
       "handler": "onSalirRequest",
-      "description": "RPC conversor (salida): {project_id, formato|canal, libro|derivado|datos, mapeo?, cabecera?, separador?, decimal?, encoding?, formatos?, canonico?, origen?} → {project_id, tipo:'exportacion-contable', formato, formato_origen:'peticion'|'formatos_declarables'|'canonico', formato_canonico, adaptador_declarado, mapeo, cabecera, separador, decimal, encoding, total, filas:[{<clave externa>: valor}], abiertos:[{indice, faltantes}], recalculado:false, derivado_de}. Mapea cada fila con el `mapeo` declarado (campo canonico → clave externa) o con los nombres canonicos si el formato es canonico. Sin formato → 400 FORMATO_NO_DECLARADO; formato sin mapeo ni canonico → 422 FORMATO_NO_DECLARABLE; origen no serializable → 422. Responde por puerto-exportacion.salir.response; fallo → puerto-exportacion.salir.failed."
+      "description": "RPC conversor (PREGUNTA, por el bus): {project_id, formato, paquete, mapeo?|esquemas_declarables?} → {project_id, formato, direccion:'salir', externo}. Traduce el paquete canonico al formato externo declarado. Sin formato → FORMATO_NO_DECLARADO; formato sin mapeo y no canonico → FORMATO_NO_DECLARABLE. Responde por puerto-exportacion.salir.response."
     },
     {
       "event": "puerto-exportacion.entrar.request",
       "handler": "onEntrarRequest",
-      "description": "RPC conversor (entrada): {project_id, formato|canal, ajustes|entrante, mapeo?, formatos?} → {project_id, tipo:'importacion-ajustes', formato, adaptador_declarado, total, total_externas, asientos:[{clave_natural, fecha, sociedad, concepto, referencia, apuntes:[{cuenta, debe, haber}], origen:'asesor', propuesto:true}], propuestos:true, escritos_por_este_puerto:false, descartados:[{indice, motivo, faltantes}], recalculado:false}. Desmapea las filas del asesor a asientos PROPUESTOS (no los escribe: eso es del libro). Una fila sin cuenta o sin importe NO se inventa: se DESCARTA y se declara. Sin formato → 400; formato sin mapeo ni canonico → 422. Responde por puerto-exportacion.entrar.response; fallo → puerto-exportacion.entrar.failed."
+      "description": "RPC conversor (PREGUNTA, por el bus): {project_id, formato, externo, mapeo?|esquemas_declarables?} → {project_id, formato, direccion:'entrar', paquete, abierto[]}. Traduce la representacion externa al paquete canonico; si el paquete ya declara su asiento, lo sube a asiento-ajuste. Responde por puerto-exportacion.entrar.response."
     }
   ],
   "publishes": [
     {
       "event": "puerto-exportacion.salir.response",
-      "description": "Respuesta RPC correlada de puerto-exportacion.salir.request → {request_id, status:200, data:{formato, filas, abiertos, recalculado:false, ...}}. Emitida por el helper _atender."
+      "description": "Respuesta RPC correlada de la op salir (una sola cara: el bus)."
     },
     {
       "event": "puerto-exportacion.salir.failed",
-      "description": "Par de fallo determinista (L1): formato no declarado (400 FORMATO_NO_DECLARADO), formato no declarable (422 FORMATO_NO_DECLARABLE), libro ausente o no serializable (400/422) → {status, error:{code, message, details?}}. Cierra el circulo de puerto-exportacion.salir.request."
+      "description": "Par de fallo determinista: formato no declarado/no declarable o paquete invalido → {status, code, message}. Cierra el circulo de salir.request."
     },
     {
       "event": "puerto-exportacion.entrar.response",
-      "description": "Respuesta RPC correlada de puerto-exportacion.entrar.request → {request_id, status:200, data:{asientos, propuestos:true, descartados, recalculado:false, ...}}. Emitida por el helper _atender."
+      "description": "Respuesta RPC correlada de la op entrar (una sola cara: el bus)."
     },
     {
       "event": "puerto-exportacion.entrar.failed",
-      "description": "Par de fallo determinista (L1): formato no declarado (400), formato no declarable (422), ajustes ausentes o no serializables (400/422) → {status, error:{code, message, details?}}. Cierra el circulo de puerto-exportacion.entrar.request."
+      "description": "Par de fallo determinista de entrar.request: formato no declarado/no declarable o externo invalido → {status, code, message}."
     }
   ],
-  "ui_handlers": [
-    {
-      "domain": "contabilidad",
-      "action": "puerto-exportacion.salir",
-      "handler": "onSalirRequest",
-      "type": "chat_tool",
-      "zone": "barra_chat_inferior"
-    },
-    {
-      "domain": "contabilidad",
-      "action": "puerto-exportacion.entrar",
-      "handler": "onEntrarRequest",
-      "type": "chat_tool",
-      "zone": "barra_chat_inferior"
-    }
-  ]
+  "tools": [
+    { "name": "puerto-exportacion.salir", "description": "Traduce (PREGUNTA) el paquete canonico al formato externo declarado (para el asesor)." },
+    { "name": "puerto-exportacion.entrar", "description": "Traduce (PREGUNTA) una representacion externa al paquete canonico." }
+  ],
+  "ui_handlers": []
 }

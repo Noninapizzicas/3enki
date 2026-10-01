@@ -1,44 +1,27 @@
 {
-  "_doc": "Manifest de contabilidad-analitica/activacion-vertical — REFLEJO STATELESS (K4, hoja del plan). ENCIENDE LA VERTICAL por la configuracion DECLARADA. Cuando onboarding-negocio (K1) publica contabilidad.negocio_onboarded, este reflejo DERIVA de la config que el alta declaro QUE verticales de contabilidad se encienden y publica contabilidad.vertical_activada (una por vertical encendida) para que el resto del sistema se enganche por evento. MECANICO, CERO JUICIO: no decide si el negocio debe tener tal o cual vertical, no inventa planes, no habilita nada que la configuracion no declare. ATRIBUTOS del diseno: config:OnboardingNegocio; METODOS: activar(vertical):bool. Invariantes: DETERMINISTA (misma config declarada → mismas verticales encendidas); LEY/PARAMETRO COMO DATO (la lista de verticales es ENTRADA — declarada por el alta o en la peticion — no hay catalogo de verticales cableado; se aceptan strings o {nombre|vertical|id, activa|habilitada|on}); dato ausente = desconocido — sin verticales declaradas NO se enciende nada ni se asume una por defecto (verticales_activadas:[], activada:false, faltan:['verticales']); NO escribe, NO persiste (la vertical se ENCIENDE publicando; no guarda estado). FORMA: REFLEJO stateless, sin PosPersistencia ni onProjectActivated. Proyeccion `_activar`. Publica contabilidad.vertical_activada. Cierra el circulo: error → activacion-vertical.activar.failed.",
+  "_doc": "Manifest de analitica/activacion-vertical — REFLEJO STATELESS (K4, hoja del plan). Enciende la VERTICAL por la CONFIGURACION DECLARADA; la regla que lo define: si contabilidad NO esta activada, la vertical FUNCIONA IGUAL (contabilidad es observador opcional, bloquea_operacion:false). Lee la config declarada por la vertical (onboarding-negocio) y dice si la observacion contable queda activa y con que alcance. Invariante 13: sin config legible NO se estima un default — activa:false + abierto.config. NO escribe, NO persiste. RPC activar es CLASE PREGUNTA → va por el bus, sin panel. Publica activacion-vertical.activar.response y su par .failed. (La escucha de contabilidad.negocio_registrado del plan NO se declara aun: su emisor onboarding-negocio no existe todavia — R3.)",
   "name": "activacion-vertical",
   "version": "0.1.0",
-  "description": "Reflejo (K4): enciende la vertical contable cuando el alta del negocio lo pide — deriva de la configuracion declarada que verticales se activan, sin decidir ni asumir ninguna por defecto.",
-  "blueprint_driven": true,
-  "blueprint_path": "activacion-vertical.blueprint.json",
+  "description": "Reflejo (K4): enciende la observacion contable por configuracion declarada; si contabilidad no esta activada, la vertical funciona igual.",
   "language": "es",
   "subscribes": [
     {
       "event": "activacion-vertical.activar.request",
       "handler": "onActivarRequest",
-      "description": "RPC reflejo (derivacion pura, determinista, cero juicio): {project_id, negocio?, config?, plan?, verticales?} → {project_id, negocio, plan, origen_config:'onboarding-negocio'|'declarado'|null, verticales_declaradas, verticales_activadas, total, activada, deriva, faltan, abierto:{verticales, origen_config}}. Enciende EXACTAMENTE las verticales declaradas (acepta strings o {nombre|vertical|id, activa|habilitada|on}); una vertical explicitamente apagada NO se enciende. Sin verticales declaradas no se enciende nada ni se asume una por defecto. Exito → publica contabilidad.vertical_activada por cada vertical y responde por activacion-vertical.activar.response; project_id ausente → activacion-vertical.activar.failed."
-    },
-    {
-      "event": "contabilidad.negocio_onboarded",
-      "handler": "onNegocioOnboarded",
-      "description": "Fire-and-forget (K1 → K4): el alta del negocio (onboarding-negocio) declaro su configuracion → se DERIVA la activacion de las verticales declaradas y se publica contabilidad.vertical_activada por cada una. Si el alta no declara verticales, no se enciende nada (faltan:['verticales']) — jamas se asume una vertical por defecto. Tolerante: sin project_id se ignora."
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id, config?, alcance?, activa?} → {project_id, activa, bloquea_operacion:false, alcance, config_declarada, abierto}. Resuelve la activacion por lo declarado; sin config NO se estima un default. Responde por activacion-vertical.activar.response. Payload invalido → activacion-vertical.activar.failed."
     }
   ],
   "publishes": [
     {
       "event": "activacion-vertical.activar.response",
-      "description": "Respuesta RPC correlada de activacion-vertical.activar.request → {request_id, status:200, data:{verticales_declaradas, verticales_activadas, total, activada, deriva, faltan, abierto}}. Emitida por el helper _atender."
+      "description": "Respuesta RPC correlada de la op activar (una sola cara: el bus)."
     },
     {
       "event": "activacion-vertical.activar.failed",
-      "description": "Par de fallo determinista (K4): project_id ausente → {status, error:{code, message, details?}}. Cierra el circulo de activacion-vertical.activar.request y de contabilidad.negocio_onboarded."
-    },
-    {
-      "event": "contabilidad.vertical_activada",
-      "description": "Fire-and-forget (K4): una vertical de contabilidad quedo ENCENDIDA por la configuracion declarada → {project_id, negocio, vertical, plan, origen_config, correlation_id}. Lo consume el resto de la vertical para saber que debe ponerse en marcha."
+      "description": "Par de fallo determinista: falta project_id → {status, code, message}. Cierra el circulo de activar.request."
     }
   ],
-  "ui_handlers": [
-    {
-      "domain": "contabilidad",
-      "action": "activacion-vertical.activar",
-      "handler": "onActivarRequest",
-      "type": "system_panel",
-      "zone": "lateral_derecha"
-    }
+  "tools": [
+    { "name": "activacion-vertical.activar", "description": "Activa (PREGUNTA) la observacion contable de la vertical por su configuracion declarada." }
   ]
 }

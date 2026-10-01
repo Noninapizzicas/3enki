@@ -1,31 +1,26 @@
 /**
  * contabilidad-fiscal/acuse-presentacion — PUENTE STATELESS (D13, hoja del plan).
  *
- * RECOGE Y LIGA el justificante/acuse que devuelve la ADMINISTRACION a su MODELO y a su ASIENTO.
- * Cierra el bucle hacia fuera, por evento.
+ * Recoge y LIGA el justificante/acuse de la administracion a su modelo y a su asiento.
+ * CIERRA EL BUCLE HACIA FUERA: lo presentado queda justificado.
  *
- * EL SISTEMA **NO PRESENTA**: la presentacion la hace el ASESOR en la sede de la administracion.
- * Aqui solo se ANOTA la respuesta que el asesor trae de vuelta: un acuse llega y este puente lo
- * LIGA a su modelo (D2/D3) y a su asiento (B2). Sin acuse no se inventa un justificante.
+ * Es un PUENTE, no un custodio: NO guarda estado propio. RECOGE lo que le declaran, lo LIGA
+ * (modelo ↔ acuse ↔ asiento) y SUBE por EVENTO a los tres modulos que si actuan:
+ *   estado-presentacion-fiscal.avanzar.request  (el modelo avanza de estado)
+ *   escritor-diario.asentar.request             (el asiento de la declaracion, si toca)
+ *   expediente-documental.archivar.request      (el acuse queda archivado)
+ * y anuncia el hecho `contabilidad.declaracion_justificada`.
  *
- * LA LEY ENTRA COMO DATO (invariante 5): NO se cablea ningun formato de acuse, ni codigo de
- * administracion, ni codigo de justificante, ni plazo, ni ejercicio. El acuse entra TAL CUAL lo
- * devuelve la administracion (`datos`), y el `mapeo` (campo canonico → clave del acuse) es
- * DECLARABLE. Lo que no venga, queda `null` y se declara en `abierto` — jamas se estima.
+ * Invariante (13): sin ACUSE declarado NO se liga nada — no se finge una justificacion. Un
+ * acuse sin modelo ni asiento referenciados se liga a medias y se declara `abierto`.
  *
- * No custodia nada (el estado de la obligacion lo guarda estado-presentacion-fiscal D12, que este
- * puente NOTIFICA POR EVENTO). No muta el modelo ni el asiento: solo emite el enlace.
- *
- * Forma: PUENTE → STATELESS. Sin PosPersistencia, sin onProjectActivated.
+ * Forma: PUENTE → STATELESS. Sin PosPersistencia, sin onProjectActivated. ORDEN → ui_handler.
  * Ver hoja D13 del plan-construccion y diseno-oop.md (CLASE AcusePresentacion).
  */
 
 'use strict';
 
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
-
-// Campos canonicos del acuse ligado. Su ORIGEN externo es declarable (mapeo).
-const CAMPOS_ACUSE = ['justificante', 'fecha', 'administracion', 'modelo', 'ejercicio', 'periodo', 'resultado'];
 
 class AcusePresentacion extends ModuloHibridoReflejo {
   constructor() {
@@ -36,130 +31,92 @@ class AcusePresentacion extends ModuloHibridoReflejo {
 
   async onUnload() { return super.onUnload(); }
 
-  // ── handler RPC (una linea, delega a _atender) ──
+  // ── handler RPC (una linea, delega a _atender). CLASE ORDEN → ui_handler ──
   onLigarRequest(e) {
     return this._atender(e, 'ligar', 'acuse-presentacion.ligar.response', async (d) => {
       const res = this._ligar(d);
-      if (res.status === 200 && res.data.ligado) {
-        // Exito → evento de dominio: el acuse quedo ligado a su modelo y a su asiento.
-        this.eventBus?.publish('contabilidad.acuse_ligado', {
+      if (res.status === 200) {
+        // R2 · el puente CIERRA el bucle: anuncia el HECHO de que la declaracion quedo justificada.
+        this.eventBus?.publish('contabilidad.declaracion_justificada', {
           project_id: res.data.project_id,
+          modelo: res.data.modelo,
           acuse: res.data.acuse,
-          modelo: res.data.acuse.modelo,
-          asiento: res.data.asiento,
-          justificante: res.data.acuse.justificante,
-          // El sistema NO presento: el acuse lo trajo el asesor de la sede.
-          presentado_por_sistema: false,
+          ligado: res.data.ligado,
+          abierto: res.data.abierto,
           correlation_id: d.correlation_id
         });
-      } else if (res.status !== 200) {
+        // SUBE por EVENTO a los tres que si actuan (no guarda estado propio).
+        this.eventBus?.publish('estado-presentacion-fiscal.avanzar.request', {
+          project_id: res.data.project_id, modelo: res.data.modelo,
+          justificada: res.data.ligado, acuse: res.data.acuse, correlation_id: d.correlation_id
+        });
+        if (res.data.asiento) {
+          this.eventBus?.publish('escritor-diario.asentar.request', {
+            project_id: res.data.project_id, asiento: res.data.asiento, origen: 'acuse-presentacion', correlation_id: d.correlation_id
+          });
+        }
+        if (res.data.acuse) {
+          this.eventBus?.publish('expediente-documental.archivar.request', {
+            project_id: res.data.project_id, documento: res.data.acuse, ref: res.data.modelo, correlation_id: d.correlation_id
+          });
+        }
+      } else {
         this.eventBus?.publish('acuse-presentacion.ligar.failed', res);
       }
       return res;
     });
   }
 
-  // ── proyeccion: justificante de la administracion → enlace {acuse, modelo, asiento} ──
+  // ══════════════════════════════════════════════════════════════════════
+  // _ligar(input) → { status, data }  ·  liga acuse ↔ modelo ↔ asiento
+  // ══════════════════════════════════════════════════════════════════════
   _ligar(input = {}) {
-    const pid = input.project_id || this.project_id || null;
+    const pid = input.project_id || this.project_id;
+    if (!pid) return this._invalid('project_id');
 
-    // El acuse es lo que devuelve la administracion: se acepta TAL CUAL. Si falta, no se inventa.
-    const datos = input.acuse || input.justificante_externo || null;
-    if (!datos || typeof datos !== 'object') {
-      return {
-        status: 200,
-        data: {
-          project_id: pid,
-          ligado: false,
-          acuse: null,
-          asiento: null,
-          motivo: 'no hay acuse de la administracion: el sistema no presenta, solo anota lo que el asesor trae',
-          presentado_por_sistema: false
-        }
-      };
+    // El ACUSE/justificante: DECLARADO. Sin el no hay nada que ligar (no se finge).
+    const acuse = (input.acuse != null ? input.acuse
+      : (input.justificante != null ? input.justificante : input.documento));
+    if (acuse === undefined || acuse === null || (typeof acuse === 'object' && Object.keys(acuse).length === 0)) {
+      return this._invalid('acuse');
     }
 
-    const mapeo = (input.mapeo && typeof input.mapeo === 'object') ? input.mapeo : null;
-    const acuse = this._aAcuse(datos, mapeo);
+    // El MODELO al que pertenece el acuse (referencia). Ausente → se declara el hueco.
+    const modelo = input.modelo != null ? String(input.modelo)
+      : (input.obligacion != null ? String(input.obligacion) : null);
+    // El ASIENTO con el que se liga (si toca). Ausente → no se sube asiento.
+    const asiento = (input.asiento && typeof input.asiento === 'object') ? input.asiento : null;
 
-    // A QUE se liga: declarado (modelo / asiento) o derivado del propio acuse. Nunca inventado.
-    const modelo_ref = input.modelo != null ? input.modelo
-      : (acuse.modelo != null
-        ? { modelo: acuse.modelo, ejercicio: acuse.ejercicio, periodo: acuse.periodo }
-        : null);
-    const asiento_ref = input.asiento != null ? input.asiento
-      : (input.asiento_clave != null ? { clave: String(input.asiento_clave) } : null);
-
-    // Sin justificante no hay acuse ligable: se declara, no se fabrica.
-    if (acuse.justificante == null) {
-      return {
-        status: 200,
-        data: {
-          project_id: pid,
-          ligado: false,
-          acuse,
-          asiento: null,
-          motivo: 'el acuse no trae justificante: no se liga un justificante inventado',
-          presentado_por_sistema: false
-        }
-      };
-    }
-
-    const enlace = {
-      acuse,
-      modelo: modelo_ref ? this._modeloRef(modelo_ref) : null,
-      asiento: asiento_ref || null,
-      // El puente NO muta: declara que ni el modelo ni el asiento se tocan.
-      modelo_mutado: false,
-      asiento_mutado: false,
-      // El sistema NO presento: lo hizo el asesor. Se declara, no se asume.
-      presentado_por_sistema: false,
-      ligado_en: new Date().toISOString()
-    };
+    const ligado = Boolean(modelo);
+    // Normaliza el acuse: id/ref + fecha si vienen; lo ausente queda null (no se inventa).
+    const acuseNorm = (typeof acuse === 'object')
+      ? {
+        ref: acuse.ref != null ? String(acuse.ref) : (acuse.id != null ? String(acuse.id) : null),
+        fecha: acuse.fecha != null ? String(acuse.fecha) : null,
+        csv: acuse.csv != null ? String(acuse.csv) : null,
+        tipo: acuse.tipo != null ? String(acuse.tipo) : null
+      }
+      : { ref: String(acuse), fecha: null, csv: null, tipo: null };
 
     return {
       status: 200,
       data: {
         project_id: pid,
-        ligado: true,
-        acuse: enlace.acuse,
-        modelo: enlace.modelo,
-        asiento: enlace.asiento,
-        adaptador_declarado: Boolean(mapeo),
-        abierto: acuse.abierto,
-        presentado_por_sistema: false
+        tipo: 'acuse-presentacion',
+        modelo,
+        acuse: acuseNorm,
+        asiento,
+        // Ligado = el acuse queda atado a su modelo (y asiento si vino).
+        ligado,
+        liga: { modelo: Boolean(modelo), asiento: Boolean(asiento) },
+        // El puente NO guarda estado: su cara es el bus.
+        persistido: false,
+        sube: ['estado-presentacion-fiscal.avanzar.request', 'escritor-diario.asentar.request', 'expediente-documental.archivar.request'],
+        abierto: {
+          modelo: modelo ? null : 'el acuse no declara el modelo al que pertenece: se liga a medias (no se inventa el modelo)',
+          asiento: asiento ? null : 'el acuse no trae asiento: no se sube asiento al libro (no se fabrica)'
+        }
       }
-    };
-  }
-
-  // Traduce el justificante externo al acuse canonico con el mapeo DECLARADO.
-  _aAcuse(datos, mapeo) {
-    const value = {};
-    const abierto = [];
-    for (const campo of CAMPOS_ACUSE) {
-      const clave = mapeo && mapeo[campo] != null ? String(mapeo[campo]) : campo;
-      const raw = datos[clave];
-      if (raw === undefined || raw === null || raw === '') {
-        value[campo] = null;              // desconocido — NO se estima
-        abierto.push(campo);
-      } else {
-        value[campo] = raw;
-      }
-    }
-    // Los campos extra del acuse se conservan bajo `datos` (no se pierde nada).
-    const conocidas = new Set(CAMPOS_ACUSE.map((c) => (mapeo && mapeo[c] != null ? String(mapeo[c]) : c)));
-    const extra = {};
-    for (const [k, v] of Object.entries(datos)) if (!conocidas.has(k)) extra[k] = v;
-    value.datos = extra;
-    value.abierto = abierto;
-    return value;
-  }
-
-  _modeloRef(m) {
-    return {
-      modelo: m.modelo != null ? String(m.modelo) : null,
-      ejercicio: m.ejercicio != null ? String(m.ejercicio) : null,
-      periodo: m.periodo != null ? String(m.periodo) : null
     };
   }
 

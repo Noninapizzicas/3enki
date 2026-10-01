@@ -1,23 +1,20 @@
 /**
- * contabilidad-entrada/hecho-rectificativo — PUENTE STATELESS (A13, hoja del plan).
+ * contabilidad-entrada/hecho-rectificativo — PUENTE (A13, hoja del plan).
  *
- * Conecta el hecho POSTERIOR que corrige/anula uno anterior POR CLAVE NATURAL.
- * Invariante 3: **el original NO se borra; la correccion SUMA** (append-only).
- * Este puente no muta el asiento original: emite la RECTIFICACION (un enlace
- * Hecho↔Hecho) que el libro apilara. Uno de los cuatro planos de correccion, ligados
- * por mapa canonico (conflicto 3 resuelto) — TRES actos, no uno.
+ * Conecta el hecho POSTERIOR que corrige/anula uno ANTERIOR por CLAVE NATURAL.
+ *   NO borra: AÑADE.
+ * Este es el principio que hace auditable el sistema: el pasado no se reescribe. Un hecho
+ * rectificativo NO edita el original — lo APUNTA (por su clave natural) y se declara como
+ * la correccion. El original queda donde estaba; el nuevo hecho se apila.
  *
- * La clave natural la da clave-natural (M3) POR EVENTO; nunca se cablea una forma.
- * Si no se puede determinar el objetivo (la clave a la que rectifica), NO se inventa
- * el enlace: se declara `emparejado:false` con su motivo. Un puente no impone; no pisa
- * lo manual.
+ * Frontera: este puente EMPAREJA (une el hecho posterior con el anterior por clave natural)
+ * y ANUNCIA `contabilidad.hecho_rectificado`. Quien ESCRIBE el libro es B2 (escritor-diario,
+ * que ESCUCHA este hecho y asienta lo que traiga). El puente NO toca el libro.
  *
- * Invariantes:
- *  - `borra_original:false` SIEMPRE: la correccion se anade, jamas sustituye.
- *  - Sin objetivo determinable no hay enlace inventado (declarado, no fabricado).
- *  - `tipo` RECTIFICA vs ANULA se DERIVA del hecho (o se declara); no se asume.
+ * Invariante: sin clave natural NO hay emparejamiento (no se adivina contra que corrige);
+ * el original ausente se declara en `abierto`, nunca se inventa su estado.
  *
- * Forma: PUENTE → STATELESS. Sin PosPersistencia, sin onProjectActivated.
+ * Forma: PUENTE → STATELESS. Sin PosPersistencia, sin onProjectActivated. ORDEN → ui_handler.
  * Ver hoja A13 del plan-construccion y diseno-oop.md (CLASE HechoRectificativo).
  */
 
@@ -25,8 +22,8 @@
 
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
 
-// Tipos de rectificacion (declarables): corrige o anula. Derivado, nunca cableado el valor.
-const TIPOS = new Set(['RECTIFICA', 'ANULA']);
+// Acciones declarables de un hecho rectificativo (no son criterios cableados: el hecho las declara).
+const ACCIONES = new Set(['CORRIGE', 'ANULA']);
 
 class HechoRectificativo extends ModuloHibridoReflejo {
   constructor() {
@@ -37,102 +34,113 @@ class HechoRectificativo extends ModuloHibridoReflejo {
 
   async onUnload() { return super.onUnload(); }
 
-  // ── handler RPC (una linea, delega a _atender) ──
+  // ── handler RPC (una linea, delega a _atender). CLASE ORDEN → ui_handler ──
   onEmparejarRequest(e) {
     return this._atender(e, 'emparejar', 'hecho-rectificativo.emparejar.response', async (d) => {
-      const res = await this._emparejar(d);
-      if (res.status === 200 && res.data.emparejado) {
-        // Exito → evento de dominio: la rectificacion quedo emparejada (append-only).
+      const res = this._emparejar(d);
+      if (res.status === 200) {
+        // R2 · el hecho rectificativo ENTRA al dominio → anuncia el HECHO. B2 lo escucha y asienta.
         this.eventBus?.publish('contabilidad.hecho_rectificado', {
           project_id: res.data.project_id,
-          enlace: res.data.enlace,
-          rectificativo_clave: res.data.enlace.rectificativo_clave,
-          original_clave: res.data.enlace.original_clave,
-          tipo: res.data.enlace.tipo,
+          rectificativo: res.data.rectificativo,
+          clave: res.data.clave,
+          accion: res.data.accion,
+          asiento: res.data.rectificativo.asiento,
           correlation_id: d.correlation_id
         });
-      } else if (res.status !== 200) {
+      } else {
         this.eventBus?.publish('hecho-rectificativo.emparejar.failed', res);
       }
       return res;
     });
   }
 
-  // ── proyeccion: emparejar(rect) → Enlace<Hecho, Hecho> ──
-  async _emparejar(input = {}) {
-    const pid = input.project_id || this.project_id || null;
+  // ── handler de dominio (fire-and-forget): un hecho recibido puede declararse rectificativo ──
+  async onHechoRecibido(e) {
+    const d = (e && (e.data || e)) || {};
+    if (!d.project_id) return;
+    const hecho = d.hecho || {};
+    // Solo se empareja si el hecho SE DECLARA rectificativo (no todo hecho lo es).
+    const esRect = d.es_rectificativo === true || hecho.es_rectificativo === true
+      || hecho.tipo === 'rectificativo' || hecho.corrige != null;
+    if (!esRect) return;
+    this._emparejar({ project_id: d.project_id, hecho, clave: hecho.clave_natural, accion: hecho.accion, correlation_id: d.correlation_id });
+  }
 
-    const rect = input.rectificativo || input.rectificado || input.rect;
-    if (!rect || typeof rect !== 'object') return this._invalid('rectificativo');
+  // ══════════════════════════════════════════════════════════════════════
+  // _emparejar(input) → { status, data }  ·  une posterior con anterior por clave natural
+  // ══════════════════════════════════════════════════════════════════════
+  _emparejar(input = {}) {
+    const pid = input.project_id || this.project_id;
+    if (!pid) return this._invalid('project_id');
 
-    // Clave natural del hecho rectificativo (declarada o calculada por M3, POR EVENTO).
-    let clave_rect = rect.clave_natural != null ? String(rect.clave_natural) : null;
-    let origen_clave = clave_rect ? 'declarada' : null;
-    if (!clave_rect) {
-      const r = await this._rpc('clave-natural.calcular.request',
-        { project_id: pid, hecho: rect }, { timeout_ms: 4000 });
-      const cd = r && r.data ? r.data : null;
-      if (cd && cd.clave != null) { clave_rect = String(cd.clave); origen_clave = 'clave-natural'; }
+    const hecho = input.hecho !== undefined ? input.hecho : input.rectificativo;
+    if (!hecho || typeof hecho !== 'object') return this._invalid('hecho');
+
+    // La CLAVE NATURAL: la identidad del hecho anterior al que este se refiere. DECLARADA.
+    const clave = input.clave != null ? String(input.clave)
+      : (hecho.clave_natural != null ? String(hecho.clave_natural)
+        : (hecho.clave != null ? String(hecho.clave) : null));
+
+    // Sube (best-effort) al calculador canonico de clave natural para que la confirme. No se espera.
+    if (this.eventBus?.publish) {
+      this.eventBus.publish('clave-natural.calcular.request', {
+        project_id: pid,
+        hecho,
+        clave,
+        correlation_id: input.correlation_id
+      });
     }
 
-    // A QUE rectifica: declarado (rectifica_a / original.clave_natural) o calculado del original.
-    const original = input.original && typeof input.original === 'object' ? input.original : null;
-    let objetivo = input.rectifica_a != null ? String(input.rectifica_a)
-      : (rect.rectifica_a != null ? String(rect.rectifica_a)
-        : (original && original.clave_natural != null ? String(original.clave_natural) : null));
-    if (!objetivo && original) {
-      const r = await this._rpc('clave-natural.calcular.request',
-        { project_id: pid, hecho: original }, { timeout_ms: 4000 });
-      const cd = r && r.data ? r.data : null;
-      if (cd && cd.clave != null) objetivo = String(cd.clave);
-    }
-
-    // Sin objetivo determinable: NO se inventa el enlace (se declara).
-    if (!objetivo) {
+    // Sin clave natural NO se empareja: no se adivina contra que corrige.
+    if (!clave) {
       return {
         status: 200,
         data: {
           project_id: pid,
+          tipo: 'hecho-rectificativo',
           emparejado: false,
-          enlace: null,
-          motivo: 'no se pudo determinar el hecho original (clave natural no declarada ni disponible)'
+          clave: null,
+          accion: null,
+          rectificativo: { hecho, corrige: null, borra_original: false },
+          abierto: { clave: 'el hecho no declara su clave natural: no se empareja (no se adivina contra que corrige)' }
         }
       };
     }
 
-    // Tipo DERIVADO del hecho (o declarado); default honesto = RECTIFICA.
-    const tipo = this._tipo(input.tipo != null ? input.tipo : rect.tipo_rectificacion);
+    const accionRaw = input.accion != null ? String(input.accion).toUpperCase().trim()
+      : (hecho.accion != null ? String(hecho.accion).toUpperCase().trim() : 'CORRIGE');
+    const accion = ACCIONES.has(accionRaw) ? accionRaw : null;
 
-    // EL ENLACE: append-only. El original NO se borra; la correccion SUMA.
-    const enlace = {
-      original_clave: objetivo,
-      rectificativo_clave: clave_rect,
-      tipo,
+    const rectificativo = {
+      hecho,
+      clave,
+      // El hecho ANTERIOR: apuntado, jamas editado.
+      corrige: clave,
+      accion,
+      asiento: hecho.asiento && typeof hecho.asiento === 'object' ? hecho.asiento : null,
+      // NO borra: AÑADE. El original permanece.
       borra_original: false,
-      anade: true,
-      append_only: true,
-      motivo: input.motivo != null ? String(input.motivo) : (rect.motivo != null ? String(rect.motivo) : null),
-      original: original ? { clave_natural: objetivo } : null,
-      rectificativo: { clave_natural: clave_rect },
-      emparejado_en: new Date().toISOString()
+      emparejado_en: input.en != null ? String(input.en) : new Date().toISOString()
     };
 
     return {
       status: 200,
       data: {
         project_id: pid,
+        tipo: 'hecho-rectificativo',
         emparejado: true,
-        enlace,
-        origen_clave,
-        // El puente NO muta: declara que el original queda intacto.
-        original_mutado: false
+        clave,
+        accion,
+        rectificativo,
+        // Quien escribe el libro (B2) reacciona al hecho y asienta lo que traiga.
+        escritor: 'escritor-diario',
+        abierto: {
+          accion: accion ? null : 'la accion del rectificativo no es declarable (CORRIGE|ANULA): queda abierta',
+          original: 'el estado del hecho original no se consulta aqui: se apunta y NO se borra'
+        }
       }
     };
-  }
-
-  _tipo(raw) {
-    const t = raw != null ? String(raw).toUpperCase() : 'RECTIFICA';
-    return TIPOS.has(t) ? t : 'RECTIFICA';
   }
 
   // ── Tools ──

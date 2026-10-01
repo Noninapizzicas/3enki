@@ -15,9 +15,16 @@ const path = require('path');
 const { Ensamblaje } = require('../../modules/proceso-negocio/ensamblaje');
 
 let pasados = 0, fallados = 0;
-function test(desc, fn) {
-  try { fn(); console.log(`✓ ${desc}`); pasados++; }
-  catch (e) { console.log(`✗ ${desc}\n    ${e.message}`); fallados++; }
+const _tests = [];
+// Acepta tests SÍNCRONOS y ASÍNCRONOS (los de robustez esperan RPCs).
+function test(desc, fn) { _tests.push({ desc, fn }); }
+async function _correr() {
+  for (const { desc, fn } of _tests) {
+    try { await fn(); console.log(`✓ ${desc}`); pasados++; }
+    catch (e) { console.log(`✗ ${desc}\n    ${e.message}`); fallados++; }
+  }
+  console.log(`\n${pasados} pasados, ${fallados} fallados`);
+  process.exit(fallados ? 1 : 0);
 }
 
 // ── 1. Todo ensamblado: el plan declara, el módulo cumple → ensamblado=true ──
@@ -116,7 +123,48 @@ test('acepta subscribes como {event, handler} y como string', () => {
   assert.strictEqual(r.hojas_divergentes, 0, 'normaliza las dos formas');
 });
 
-// ── 7. CASO REAL: el plan de nichos, si está disponible ──
+// ── 8. ROBUSTEZ ANTE FALLOS — fail-SAFE, nunca fail-open ──
+// Doctrina del cimiento: "success = ENTREGABLE VERIFICADO". Un fallo de
+// infraestructura NO puede declarar ensamblado en verde (falso verde).
+test('ROBUSTEZ: fs.read LANZA (RPC caído) → NO certifica (false)', async () => {
+  const M = require('../../modules/proceso-negocio/index.js');
+  const m = new M();
+  if (m.iniciar) m.iniciar();
+  m._rpc = async () => { throw new Error('RPC timeout'); };
+  const ok = await m._ensambladoRecomponer({ project_id: 'fallo' });
+  assert.strictEqual(ok, false, 'un RPC caído NO puede dar verde');
+});
+
+test('ROBUSTEZ: plan sin bloque enki-plan → NO certifica (false)', async () => {
+  const M = require('../../modules/proceso-negocio/index.js');
+  const m = new M();
+  if (m.iniciar) m.iniciar();
+  m._rpc = async () => ({ content: '# plan sin bloque json' });
+  assert.strictEqual(await m._ensambladoRecomponer({ project_id: 'p' }), false);
+});
+
+test('ROBUSTEZ: JSON malformado en el plan → NO certifica (false)', async () => {
+  const M = require('../../modules/proceso-negocio/index.js');
+  const m = new M();
+  if (m.iniciar) m.iniciar();
+  m._rpc = async () => ({ content: '```json enki-plan\n{roto:\n```' });
+  assert.strictEqual(await m._ensambladoRecomponer({ project_id: 'p' }), false);
+});
+
+test('ROBUSTEZ: escribir el informe falla → no tumba, pero el veredicto manda', async () => {
+  const M = require('../../modules/proceso-negocio/index.js');
+  const m = new M();
+  if (m.iniciar) m.iniciar();
+  m._rpc = async (ev) => {
+    if (ev === 'fs.write.request') throw new Error('disco lleno');
+    // plan VÁLIDO (con fence) y sin divergencias → ensamblado=true
+    return { content: '```json enki-plan\n' + JSON.stringify({ hojas: [] }) + '\n```' };
+  };
+  const ok = await m._ensambladoRecomponer({ project_id: 'p' });
+  assert.strictEqual(ok, true, 'un fallo al PERSISTIR no cambia el veredicto (best-effort)');
+});
+
+// ── 9. CASO REAL: el plan de nichos, si está disponible ──
 test('caso real — el plan de nichos produce un informe coherente', () => {
   const planPath = '/home/admin/3enki/boveda/nichos/proceso/fase3b/plan-construccion.md';
   if (!fs.existsSync(planPath)) { console.log('    (saltado: sin plan en disco)'); return; }
@@ -143,5 +191,4 @@ test('caso real — el plan de nichos produce un informe coherente', () => {
   console.log(`    → ${r.total_hojas} hojas · ${r.hojas_divergentes} divergentes · ${r.conexiones_rotas_count} conexiones rotas`);
 });
 
-console.log(`\n${pasados} pasados, ${fallados} fallados`);
-process.exit(fallados ? 1 : 0);
+_correr();

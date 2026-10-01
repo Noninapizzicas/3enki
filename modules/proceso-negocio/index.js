@@ -505,8 +505,14 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
       // El freno es el hallazgo, no el muro: si hay conexiones rotas o hojas
       // divergentes, NO está ensamblado y el proceso lo dice con números.
       return informe.ensamblado === true;
-    } catch (_) {
-      return true;  // best-effort: un fallo de lectura no debe tumbar el proceso
+    } catch (err) {
+      // NO SE PUDO VERIFICAR → NO SE CERTIFICA. Fail-SAFE, nunca fail-open.
+      // Doctrina del cimiento: "success = ENTREGABLE VERIFICADO". Un fallo de
+      // infraestructura (RPC caído, require roto) NO puede declarar el proceso
+      // ensamblado en verde — sería un falso verde sobre trabajo no comprobado.
+      // Es la misma regla que F8 ("sin plan no hay nada que verificar").
+      this._ultimoFalloEnsamblaje = (err && err.message) || String(err);
+      return false;
     }
   }
 

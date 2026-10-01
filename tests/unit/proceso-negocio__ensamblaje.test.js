@@ -1,0 +1,147 @@
+/**
+ * Test del RECOMPONEDOR F7b (ensamblaje).
+ *
+ * Cubre: el cruce diseñado (F3b) vs escrito (módulos reales), la clasificación de
+ * divergencias por hoja, las conexiones de dominio rotas, y el veredicto
+ * 'ensamblado'. Casos construidos a mano + un caso real si existe el plan.
+ *
+ *   node tests/unit/proceso-negocio__ensamblaje.test.js
+ */
+'use strict';
+
+const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
+const { Ensamblaje } = require('../../modules/proceso-negocio/ensamblaje');
+
+let pasados = 0, fallados = 0;
+function test(desc, fn) {
+  try { fn(); console.log(`✓ ${desc}`); pasados++; }
+  catch (e) { console.log(`✗ ${desc}\n    ${e.message}`); fallados++; }
+}
+
+// ── 1. Todo ensamblado: el plan declara, el módulo cumple → ensamblado=true ──
+test('plan y módulo coinciden → ensamblado', () => {
+  const plan = { hojas: [
+    { slug: 'captura', subscribes: ['nichos.semilla.aceptar.request'], publishes: ['nichos.semilla.capturada'] },
+    { slug: 'pipeline', subscribes: ['nichos.semilla.capturada'], publishes: [] }
+  ] };
+  const real = {
+    captura: { existe: true, subscribes: ['nichos.semilla.aceptar.request'], publishes: ['nichos.semilla.capturada'] },
+    // pipeline escucha lo que captura publica → la conexión existe
+    pipeline: { existe: true, subscribes: ['nichos.semilla.capturada'], publishes: [] }
+  };
+  const r = new Ensamblaje(plan, real).recomponer();
+  assert.strictEqual(r.hojas_divergentes, 0, 'sin divergencias por hoja');
+  assert.strictEqual(r.conexiones_rotas_count, 0, 'sin conexiones rotas');
+  assert.strictEqual(r.ensamblado, true, 'está ensamblado');
+});
+
+// ── 2. El plan declara escuchar algo que el módulo NO escucha → divergencia ──
+test('módulo no escucha lo que el plan declaró → DIVERGENTE', () => {
+  const plan = { hojas: [
+    { slug: 'alerta-sangria', subscribes: ['nichos.salud.actualizada'], publishes: ['nichos.alerta.sangria'] }
+  ] };
+  const real = {
+    // el módulo real NO escucha salud.actualizada (bug real medido en nichos)
+    'alerta-sangria': { existe: true, subscribes: [], publishes: ['nichos.alerta.sangria'] }
+  };
+  const r = new Ensamblaje(plan, real).recomponer();
+  assert.strictEqual(r.hojas_divergentes, 1);
+  const h = r.hojas_divergentes_detalle[0];
+  assert.strictEqual(h.slug, 'alerta-sangria');
+  assert.deepStrictEqual(h.falta_subscribes, ['nichos.salud.actualizada'], 'detecta el subscribe que falta');
+});
+
+test('módulo no publica lo que el plan declaró → DIVERGENTE', () => {
+  const plan = { hojas: [
+    { slug: 'pipeline', subscribes: [], publishes: ['nichos.pipeline.ciclo_completado'] }
+  ] };
+  const real = {
+    // el módulo real publica otra cosa (bug real: 'ciclo.iniciado' en vez de 'ciclo_iniciado')
+    pipeline: { existe: true, subscribes: [], publishes: ['nichos.pipeline.ciclo_iniciado'] }
+  };
+  const r = new Ensamblaje(plan, real).recomponer();
+  const h = r.hojas_divergentes_detalle[0];
+  assert.deepStrictEqual(h.falta_publishes, ['nichos.pipeline.ciclo_completado']);
+  assert.deepStrictEqual(h.extra_publishes, ['nichos.pipeline.ciclo_iniciado']);
+});
+
+// ── 3. CONEXIÓN ROTA: alguien publica, nadie escucha → se pierde silenciosa ──
+test('evento de dominio publicado y nadie lo escucha → conexión rota', () => {
+  const plan = { hojas: [
+    { slug: 'estudio-competencia', subscribes: [], publishes: ['nichos.competencia.analizado'] },
+    { slug: 'paquete-decision', subscribes: ['nichos.competencia.analizado'], publishes: [] }
+  ] };
+  const real = {
+    'estudio-competencia': { existe: true, subscribes: [], publishes: ['nichos.competencia.analizado'] },
+    // el consumidor diseñado NO lo escucha → el evento se pierde
+    'paquete-decision': { existe: true, subscribes: [], publishes: [] }
+  };
+  const r = new Ensamblaje(plan, real).recomponer();
+  assert.strictEqual(r.conexiones_rotas_count, 1);
+  assert.strictEqual(r.conexiones_rotas[0].evento, 'nichos.competencia.analizado');
+  assert.deepStrictEqual(r.conexiones_rotas[0].publica_en, ['estudio-competencia']);
+});
+
+// ── 4. Los eventos de TRANSPORTE (.request/.response) NO cuentan como rotos ──
+test('los .request/.response del bus no cuentan como conexiones rotas', () => {
+  const plan = { hojas: [
+    { slug: 'm', subscribes: ['nichos.x.leer.request'], publishes: ['nichos.x.leer.response'] }
+  ] };
+  const real = { m: { existe: true, subscribes: ['nichos.x.leer.request'], publishes: ['nichos.x.leer.response'] } };
+  const r = new Ensamblaje(plan, real).recomponer();
+  assert.strictEqual(r.conexiones_rotas_count, 0, 'el transporte lo atiende el propio módulo');
+  assert.strictEqual(r.ensamblado, true);
+});
+
+// ── 5. Hoja diseñada pero no escrita → NO_ESCRITA ──
+test('hoja del plan sin módulo escrito → NO_ESCRITA', () => {
+  const plan = { hojas: [
+    { slug: 'fantasma', subscribes: ['nichos.a.b'], publishes: ['nichos.c.d'] }
+  ] };
+  const r = new Ensamblaje(plan, {}).recomponer();
+  assert.strictEqual(r.hojas_no_escritas, 1);
+  assert.strictEqual(r.hojas_divergentes_detalle[0].tipo, 'NO_ESCRITA');
+  assert.strictEqual(r.ensamblado, false);
+});
+
+// ── 6. Tolerancia de forma: subscribes como objeto {event, handler} ──
+test('acepta subscribes como {event, handler} y como string', () => {
+  const plan = { hojas: [
+    { slug: 'm', subscribes: [{ event: 'nichos.a.creada', handler: 'onCreada' }], publishes: ['nichos.b.lista'] }
+  ] };
+  const real = { m: { existe: true, subscribes: [{ event: 'nichos.a.creada', handler: 'onCreada' }], publishes: ['nichos.b.lista'] } };
+  const r = new Ensamblaje(plan, real).recomponer();
+  assert.strictEqual(r.hojas_divergentes, 0, 'normaliza las dos formas');
+});
+
+// ── 7. CASO REAL: el plan de nichos, si está disponible ──
+test('caso real — el plan de nichos produce un informe coherente', () => {
+  const planPath = '/home/admin/3enki/boveda/nichos/proceso/fase3b/plan-construccion.md';
+  if (!fs.existsSync(planPath)) { console.log('    (saltado: sin plan en disco)'); return; }
+  const md = fs.readFileSync(planPath, 'utf8');
+  const m = md.match(/```json enki-plan\s*([\s\S]*?)```/);
+  assert.ok(m, 'el plan tiene bloque enki-plan');
+  const plan = JSON.parse(m[1]);
+  // construir el mapa real leyendo los module.json de nichos
+  const base = '/home/admin/3enki/modules/nichos';
+  const real = {};
+  for (const slug of fs.readdirSync(base)) {
+    const mj = path.join(base, slug, 'module.json');
+    if (!fs.existsSync(mj)) continue;
+    try {
+      const d = JSON.parse(fs.readFileSync(mj, 'utf8'));
+      real[slug] = { existe: true, subscribes: d.subscribes || [], publishes: d.publishes || [] };
+    } catch (_) {}
+  }
+  const r = new Ensamblaje(plan, real).recomponer();
+  assert.strictEqual(r.esquema, 'ensamblaje-f7b-v1');
+  assert.ok(r.total_hojas > 0, 'el plan tiene hojas');
+  assert.ok(r.conexiones_rotas_count > 0, 'la realidad de nichos tiene conexiones rotas (medido: 89 eventos diseñados sin consumidor)');
+  assert.strictEqual(r.ensamblado, false, 'nichos NO está ensamblado — por eso existe esta fase');
+  console.log(`    → ${r.total_hojas} hojas · ${r.hojas_divergentes} divergentes · ${r.conexiones_rotas_count} conexiones rotas`);
+});
+
+console.log(`\n${pasados} pasados, ${fallados} fallados`);
+process.exit(fallados ? 1 : 0);

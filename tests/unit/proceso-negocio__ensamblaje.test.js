@@ -202,6 +202,31 @@ test('evento sin consumidor en el plan → SOBRA_EL_PUBLISH (decisión de diseñ
   assert.strictEqual(r.trabajo.length, 0);
 });
 
+test('el 409 del proceso PROPAGA el trabajo (no solo prosa en el mensaje)', async () => {
+  const M = require('../../modules/proceso-negocio/index.js');
+  const fs = require('fs');
+  const m = new M();
+  if (m.iniciar) m.iniciar();
+  let inf = null;
+  const plan = '```json enki-plan\n' + JSON.stringify({ hojas: [
+    { slug: 'cola-decisiones-gate', subscribes: [], publishes: ['nichos.decision.resuelta'] },
+    { slug: 'gate-decision-operar', subscribes: ['nichos.decision.resuelta'], publishes: [] }
+  ] }) + '\n```';
+  m._rpc = async (ev, p) => {
+    if (ev === 'fs.write.request') { inf = JSON.parse(p.content); return { ok: true }; }
+    if (p.path === 'esquemas/plan-construccion.md') return { content: plan };
+    if (p.path === 'proceso-negocio/fase7b-ensamblaje.json') return { content: JSON.stringify(inf) };
+    return {};
+  };
+  // _buscarModulo resuelve los módulos reales; forzamos el mundo para el test
+  m._interfazOperativaEnDisco = () => false;
+  const res = await m._completarFase({ project_id: 'p-409', fase: 'ensamblado' });
+  assert.strictEqual(res.status, 409);
+  assert.strictEqual(res.data.error, 'FASE_INCOMPLETA');
+  // el freno NO es un muro: el trabajo accionable viaja en el payload
+  assert.ok(Array.isArray(res.data.trabajo), 'el 409 lleva trabajo[] estructurado');
+});
+
 // ── 11. CASO REAL: el plan de nichos, si está disponible ──
 test('caso real — el plan de nichos produce un informe coherente', () => {
   const planPath = '/home/admin/3enki/boveda/nichos/proceso/fase3b/plan-construccion.md';

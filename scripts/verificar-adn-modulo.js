@@ -175,15 +175,15 @@ function medir(m, emisores) {
 function juzgar(x) {
   const h = [];
 
-  // R2 · escritor mudo: tiene métodos, no publica NINGÚN evento de dominio.
-  if (x.rpc > 0 && x.emite.length === 0) {
-    // Excepción: un puerto/conversor puro cuyo único trabajo es traducir y
-    // responder (su salida es el .response) — sigue siendo deriva si sus ops
-    // son de ESCRITURA sin evento, pero se reporta como tal, no como mudo.
-    const esc = x.opsEscritura.length > 0
-      ? `escribe (${x.opsEscritura.slice(0, 3).join(', ')}) y NO anuncia el hecho`
-      : 'expone métodos y no publica ningún evento de dominio';
-    h.push({ regla: 'R2', gravedad: x.opsEscritura.length ? 'deriva' : 'revisar', msg: `${x.rpc} método(s); ${esc}` });
+  // R2 · escritor mudo: ESCRIBE y no publica el hecho.
+  //
+  // R2 SOLO aplica si escribe. Un módulo que únicamente PREGUNTA (calcular,
+  // listar, saldos…) no tiene hecho que anunciar: no es deriva, es un reflejo.
+  // Medido 2026-09-30: sin este corte, 45 módulos de contabilidad salían como
+  // 'revisar' cuando 42 eran reflejos legítimos (calcular saldos, estados…).
+  // Un verificador que acusa sin motivo se deja de mirar.
+  if (x.opsEscritura.length > 0 && x.emite.length === 0) {
+    h.push({ regla: 'R2', gravedad: 'deriva', msg: `${x.rpc} método(s); escribe (${x.opsEscritura.slice(0, 3).join(', ')}) y NO anuncia el hecho` });
   }
 
   // R3 · entrada huérfana

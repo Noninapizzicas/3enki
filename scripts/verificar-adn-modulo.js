@@ -42,6 +42,8 @@
 const fs = require('fs');
 const path = require('path');
 
+// La raíz del repo a medir. Las funciones aceptan `raiz` explícita (lo usa el
+// test para FABRICAR un módulo que deriva y no depender del estado del repo).
 const RAIZ = path.resolve(__dirname, '..');
 const MODULES_DIR = path.join(RAIZ, 'modules');
 
@@ -98,6 +100,11 @@ function esRpc(e) { return e.endsWith('.request'); }
 function esRespuesta(e) { return e.endsWith('.response') || e.endsWith('.failed'); }
 
 // ── Descubrir todos los módulos (1 o 2 niveles: modules/<slug>/ o modules/<familia>/<slug>/)
+// Descubre los módulos bajo `raiz` (por defecto, la del repo).
+function descubrirEn(raiz, familia = null, out = []) {
+  return descubrir(path.join(raiz, 'modules'), familia, out);
+}
+
 function descubrir(dir = MODULES_DIR, familia = null, out = []) {
   for (const nombre of fs.readdirSync(dir).sort()) {
     if (nombre === '_template') continue;   // es la plantilla, no un módulo real
@@ -284,14 +291,16 @@ function main() {
 //   · CLI   → node scripts/verificar-adn-modulo.js
 //   · require → el gate de proceso-negocio mide el ADN al construir
 // Así la regla no se duplica: el gate y el script dicen lo mismo.
-module.exports = { descubrir, leer, medir, juzgar, emiteEnCodigo, arrayDe, evDe, RE_PUBLISH, VERBO_CONSULTA, VERBO_ESCRITURA };
+module.exports = { descubrir, descubrirEn, leer, medir, juzgar, emiteEnCodigo, arrayDe, evDe, RE_PUBLISH, VERBO_CONSULTA, VERBO_ESCRITURA };
 
-/** Mide UN módulo por su slug y devuelve {ok, hallazgos, medida}. Uso: el gate. */
-function medirSlug(slug) {
-  const m = descubrir().find(x => x.slug === slug);
+/** Mide UN módulo por su slug y devuelve {ok, hallazgos, medida}. Uso: el gate.
+ *  `raiz` es opcional (por defecto la del repo): permite medir una raíz fabricada. */
+function medirSlug(slug, raiz) {
+  const lista = raiz ? descubrirEn(raiz) : descubrir();
+  const m = lista.find(x => x.slug === slug);
   if (!m) return { ok: false, hallazgos: [{ regla: 'R0', gravedad: 'deriva', msg: `no encuentro el módulo ${slug}` }], medida: null };
   const emisores = new Set();
-  for (const ot of descubrir()) {
+  for (const ot of lista) {
     const { j } = leer(ot);
     for (const e of arrayDe(j.publishes).map(evDe)) if (!esRespuesta(e)) emisores.add(e);
     for (const e of emiteEnCodigo(ot.dir)) emisores.add(e);

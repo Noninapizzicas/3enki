@@ -1,0 +1,38 @@
+{
+  "_doc": "Manifest de libro/aviso-cuadre — PUENTE (C6, hoja del plan). NO finge el cuadre: si falta cobertura, AVISA. LEE la metrica unica del cuadre (cuadra · cobertura · descuadre) que llega DECLARADA; NO la recalcula (el juicio del cuadre vive en su dueno). Si el cuadre NO cuadra o FALTA cobertura, anuncia el HECHO contabilidad.cuadre_no_cuadra y SUBE best-effort motor-avisos.producir.request (K2, que produce el aviso). Si cuadra Y hay cobertura → silencio legitimo (no se inventa un aviso). Sin metrica NO se finge: se declara ABIERTO. PUENTE STATELESS: sin PosPersistencia. RPC avisar es CLASE ORDEN → ui_handler. Dep por EVENTO de motor-avisos K2.",
+  "name": "aviso-cuadre",
+  "version": "0.1.0",
+  "description": "Puente (C6): no finge el cuadre. Lee la metrica unica y, si no cuadra o falta cobertura, avisa (hecho cuadre_no_cuadra + subida a motor-avisos).",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "aviso-cuadre.avisar.request",
+      "handler": "onAvisarRequest",
+      "description": "RPC puente (ORDEN, panel): {project_id, cuadre?/metrica?, cuadra?, cobertura?, descuadre?} → {project_id, cuadra, cobertura, descuadre, avisa, aviso, recalcula, abierto}. LEE la metrica (no la recalcula); si no cuadra o falta cobertura anuncia contabilidad.cuadre_no_cuadra y sube motor-avisos.producir.request. Responde por aviso-cuadre.avisar.response; falta project_id → aviso-cuadre.avisar.failed."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "contabilidad.cuadre_no_cuadra",
+      "description": "Fire-and-forget (C6): el cuadre no cuadra o falta cobertura → {project_id, cuadra, cobertura, descuadre, motivo}. Lo ESCUCHA motor-avisos (K2) para producir el aviso."
+    },
+    {
+      "event": "motor-avisos.producir.request",
+      "description": "Subida (REQUEST por EVENTO, best-effort) a K2: produce el aviso del cuadre. Solo cuando avisa (no cuando hay silencio legitimo)."
+    },
+    {
+      "event": "aviso-cuadre.avisar.response",
+      "description": "Respuesta RPC correlada de la op avisar (una sola cara: el bus)."
+    },
+    {
+      "event": "aviso-cuadre.avisar.failed",
+      "description": "Par de fallo determinista: falta project_id → {status, code, message}. Cierra el circulo de avisar.request."
+    }
+  ],
+  "tools": [
+    { "name": "aviso-cuadre.avisar", "description": "Lee (ORDEN) la metrica unica del cuadre y avisa si no cuadra o falta cobertura." }
+  ],
+  "ui_handlers": [
+    { "domain": "contabilidad", "action": "aviso-cuadre.avisar", "handler": "onAvisarRequest", "type": "system_panel", "zone": "lateral_derecha" }
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "_doc": "Manifest de entrada/aviso-revision — PUENTE (A8.2, hoja del plan). El EMPUJON al canal de avisos: 'esto necesita revision'. Una EXCEPCION SIEMPRE genera aviso: una pieza dudosa no se queda muda — se pide revision del asesor. Da forma al empujon, anuncia el HECHO contabilidad.revision_solicitada y SUBE best-effort motor-avisos.producir.request (K2, que produce el aviso). PUENTE STATELESS: sin PosPersistencia. Nota R3: el plan declara escucha de contabilidad.excepcion_encolada (encolado-excepcion A8.1), pero ESE MODULO AUN NO EXISTE en el repo (grupo posterior) → NO se declara (cadena colgada). Invariante: sin excepcion declarada no se inventa una revision. RPC empujar es CLASE ORDEN → ui_handler. Dep por EVENTO de motor-avisos K2.",
+  "name": "aviso-revision",
+  "version": "0.1.0",
+  "description": "Puente (A8.2): una excepcion siempre genera aviso. Empuja 'esto necesita revision' (hecho revision_solicitada + subida a motor-avisos).",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "aviso-revision.empujar.request",
+      "handler": "onEmpujarRequest",
+      "description": "RPC puente (ORDEN, panel): {project_id, excepcion?/excepcion_id?, motivo?, dudoso?} → {project_id, excepcion_id, motivo, dudoso, empujado, abierto}. Da forma al empujon de revision; anuncia contabilidad.revision_solicitada y sube motor-avisos.producir.request. Responde por aviso-revision.empujar.response; falta project_id/excepcion → aviso-revision.empujar.failed."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "contabilidad.revision_solicitada",
+      "description": "Fire-and-forget (A8.2): una excepcion pide revision del asesor → {project_id, excepcion_id, motivo, dudoso}. Lo ESCUCHA motor-avisos (K2) para producir el aviso."
+    },
+    {
+      "event": "motor-avisos.producir.request",
+      "description": "Subida (REQUEST por EVENTO, best-effort) a K2: produce el aviso de revision."
+    },
+    {
+      "event": "aviso-revision.empujar.response",
+      "description": "Respuesta RPC correlada de la op empujar (una sola cara: el bus)."
+    },
+    {
+      "event": "aviso-revision.empujar.failed",
+      "description": "Par de fallo determinista: falta project_id o excepcion → {status, code, message}. Cierra el circulo de empujar.request."
+    }
+  ],
+  "tools": [
+    { "name": "aviso-revision.empujar", "description": "Empuja (ORDEN) al canal de avisos 'esto necesita revision' (una excepcion siempre avisa)." }
+  ],
+  "ui_handlers": [
+    { "domain": "contabilidad", "action": "aviso-revision.empujar", "handler": "onEmpujarRequest", "type": "system_panel", "zone": "lateral_derecha" }
+  ]
+}

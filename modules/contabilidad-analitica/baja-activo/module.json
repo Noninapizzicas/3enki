@@ -1,0 +1,41 @@
+{
+  "_doc": "Manifest de analitica/baja-activo — REFLEJO STATELESS (F3, hoja del plan). RETIRA el bien y CALCULA el resultado (perdida/beneficio) de la baja y lo imputa. El ASIENTO lo escribe B2 (escritor-diario): este reflejo NO toca el diario — le SUBE el asiento por EVENTO. DERIVA: valor_neto_contable = coste − amortizacion_acumulada (o lo sube por EVENTO a valor-neto-contable F4); resultado = valor_de_baja − valor_neto_contable (perdida si <0, beneficio si >0). DETERMINISTA: mismos datos → mismo resultado. Invariante: dato ausente = desconocido (sin coste no hay valor neto; sin valor de baja no hay resultado → ABIERTO). NO calcula cada cuota (eso es plan-amortizacion F2); NO escribe el diario (eso es escritor-diario B2). ESCUCHA contabilidad.activo_alta (alta-activo) y contabilidad.cuota_amortizacion_generada (plan-amortizacion) — ambos emisores YA existen → SI se declaran. RPC calcular es CLASE PREGUNTA → sin ui_handler. STATELESS: sin PosPersistencia.",
+  "name": "baja-activo",
+  "version": "0.1.0",
+  "description": "Reflejo (F3): retira un activo y calcula el resultado (perdida/beneficio) de la baja; sube el asiento a escritor-diario.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "baja-activo.calcular.request",
+      "handler": "onCalcularRequest",
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id, activo?/activo_id?, coste?, valor_neto_contable?, amortizacion_acumulada?, valor_baja?/precio_venta?, cuentas?} → {project_id, baja, valor_neto_contable, resultado, perdida, beneficio, asiento_propuesto, abierto}. Calcula el valor neto y el resultado de la baja (determinista); sube escritor-diario.asentar.request si el asiento es declarable. Responde por baja-activo.calcular.response; payload invalido → baja-activo.calcular.failed."
+    },
+    {
+      "event": "contabilidad.activo_alta",
+      "handler": "onActivoAlta",
+      "description": "Señal (fire-and-forget) de alta-activo F1: se dio de alta un activo → se observa para las bajas (ventana acotada en memoria)."
+    },
+    {
+      "event": "contabilidad.cuota_amortizacion_generada",
+      "handler": "onCuotaAmortizacionGenerada",
+      "description": "Señal (fire-and-forget) de plan-amortizacion F2: se genero una cuota de amortizacion → se observa para el valor neto de la baja."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "escritor-diario.asentar.request",
+      "description": "Subida (REQUEST por EVENTO) a B2: el asiento de la baja (solo si las cuentas declaradas cuadran). BajaActivo NO escribe el diario; le sube el asiento."
+    },
+    {
+      "event": "baja-activo.calcular.response",
+      "description": "Respuesta RPC correlada de la op calcular (una sola cara: el bus)."
+    },
+    {
+      "event": "baja-activo.calcular.failed",
+      "description": "Par de fallo determinista: falta project_id o activo → {status, code, message}. Cierra el circulo de calcular.request."
+    }
+  ],
+  "tools": [
+    { "name": "baja-activo.calcular", "description": "Calcula (PREGUNTA) el resultado de la baja de un activo y sube su asiento a escritor-diario." }
+  ]
+}

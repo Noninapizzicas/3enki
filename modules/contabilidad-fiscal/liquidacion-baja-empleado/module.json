@@ -1,0 +1,32 @@
+{
+  "_doc": "Manifest de fiscal/liquidacion-baja-empleado — REFLEJO STATELESS (G10, hoja del plan). Cierre de la cuenta del trabajador: finiquito + indemnizacion de la baja (salario pendiente + vacaciones no disfrutadas + indemnizacion − IRPF − SS − anticipos = neto a pagar) para que NO quede un acreedor abierto. Determinista. NO calcula la nomina ordinaria (lineas/recibo-nomina): LIQUIDA la relacion. SUBE por EVENTO cuenta-proveedor.saldo.request para leer lo que aun se le debe y comprobar si la liquidacion cierra la cuenta. SUBE escritor-diario.asentar.request SOLO si puede construir el asiento (cuentas declaradas); quien ESCRIBE el libro es B2 (single-writer). Honestidad (invariante 13): sin salario_dia/dias no se estima la indemnizacion; un acreedor que no se cierra se declara (no se finge cerrado). NO escribe, NO persiste. RPC liquidar es CLASE PREGUNTA → va por el bus, sin panel. Publica liquidacion-baja-empleado.liquidar.response y su par .failed. Escucha contabilidad.nomina_recibida (G5 puerto-nomina, emitido).",
+  "name": "liquidacion-baja-empleado",
+  "version": "0.1.0",
+  "description": "Reflejo (G10): liquidacion de baja del empleado (finiquito/indemnizacion); cierra la cuenta del trabajador sin dejarla abierta ni fingir el cierre.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "liquidacion-baja-empleado.liquidar.request",
+      "handler": "onLiquidarRequest",
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id, empleado, salario_dia?, dias?, dias_vacaciones?, anios?, dias_por_anio?, salario_pendiente?, vacaciones?, indemnizacion?, irpf_pct?, ss_pct?, anticipos?, cuentas?, asiento?, saldo_trabajador?, fecha_baja?} → {project_id, empleado, conceptos, bruto, retenciones, neto_pagar, saldo_trabajador, remanente, cierra_cuenta, abierto}. Responde por liquidacion-baja-empleado.liquidar.response. Payload invalido → liquidacion-baja-empleado.liquidar.failed."
+    },
+    {
+      "event": "contabilidad.nomina_recibida",
+      "handler": "onNominaRecibida",
+      "description": "Fire-and-forget (G5 puerto-nomina): llego una nomina. Se observa (ventana acotada); no se recalcula ni se escribe."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "liquidacion-baja-empleado.liquidar.response",
+      "description": "Respuesta RPC correlada de la op liquidar (una sola cara: el bus)."
+    },
+    {
+      "event": "liquidacion-baja-empleado.liquidar.failed",
+      "description": "Par de fallo determinista: falta project_id o empleado → {status, code, message}. Cierra el circulo de liquidar.request."
+    }
+  ],
+  "tools": [
+    { "name": "liquidacion-baja-empleado.liquidar", "description": "Liquida (PREGUNTA) la baja del empleado (finiquito/indemnizacion) y comprueba el cierre de su cuenta." }
+  ]
+}

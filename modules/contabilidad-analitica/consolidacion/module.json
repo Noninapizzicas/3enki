@@ -1,0 +1,27 @@
+{
+  "_doc": "Manifest de analitica/consolidacion — REFLEJO STATELESS (I3, hoja del plan). Estados del conjunto (grupo COMPLETO, multi-sociedad) con criterio DECLARADO. La consolidacion es AL CIERRE. NO calcula los estados por su cuenta: SUBE por EVENTO mayor-balanza.saldos.request (B6), balance-situacion.calcular.request (C1) y cuenta-resultados.calcular.request (C2) (estados por sociedad), eliminacion-intercompany.eliminar.request (I1, intragrupo) y cola-declaraciones-criterio.fijar.request (K9, criterio). Honestidad (invariante 13): SIN criterio declarado NO se consolida a ojo (se declara abierto); una sociedad sin estado queda declarada faltante y el agregado se declara PARCIAL (completo:false). NO escribe, NO persiste. RPC estados es CLASE PREGUNTA → va por el bus, sin panel. Publica consolidacion.estados.response y su par .failed. La escucha de contabilidad.ejercicio_cerrado del plan NO se declara: su emisor cierre-ejercicio (C4) aun no existe (R3).",
+  "name": "consolidacion",
+  "version": "0.1.0",
+  "description": "Reflejo (I3): estados consolidados del grupo multi-sociedad con criterio declarado; sin criterio no consolida y sin sociedad el agregado es parcial.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "consolidacion.estados.request",
+      "handler": "onEstadosRequest",
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id, criterio|criterio_consolidacion, sociedades[{sociedad_id,participacion_pct?,estado?}], eliminaciones?, ejercicio?} → {project_id, criterio, sociedades[], activo, pasivo, patrimonio, ingreso, gasto, resultado, eliminaciones, completo, parcial, abierto}. Agrega por criterio declarado, resta eliminaciones; sin criterio → abierto. Responde por consolidacion.estados.response. Payload invalido → consolidacion.estados.failed."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "consolidacion.estados.response",
+      "description": "Respuesta RPC correlada de la op estados (una sola cara: el bus)."
+    },
+    {
+      "event": "consolidacion.estados.failed",
+      "description": "Par de fallo determinista: falta project_id o sociedades → {status, code, message}. Cierra el circulo de estados.request."
+    }
+  ],
+  "tools": [
+    { "name": "consolidacion.estados", "description": "Compone (PREGUNTA) los estados consolidados del grupo segun el criterio declarado." }
+  ]
+}

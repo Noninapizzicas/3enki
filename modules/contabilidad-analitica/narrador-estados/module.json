@@ -1,0 +1,27 @@
+{
+  "_doc": "Manifest de analitica/narrador-estados — MICRO-AGENTE (R3, hoja del plan). Traduce balance/resultado al LENGUAJE del negocio cliente. La mitad REFLEJA (determinista y honesta) compone la narracion con PLANTILLAS y VOCABULARIO DECLARADOS, citando SOLO cifras reales; el juicio linguistico (que contar y como) es la mitad FUZZY del blueprint. NO calcula el balance ni el resultado: los SUBE por EVENTO a balance-situacion.calcular.request (C1) y cuenta-resultados.calcular.request (C2). Honestidad (invariante 13): un dato ausente NO se narra (0 no es 'no hay'); sin plantillas se usa estructura por defecto que solo cita cifras reales. NO escribe, NO persiste. RPC narrar es CLASE PREGUNTA → va por el bus, sin panel. Publica narrador-estados.narrar.response y su par .failed. La escucha de contabilidad.ejercicio_cerrado del plan NO se declara: su emisor cierre-ejercicio (C4) aun no existe (R3).",
+  "name": "narrador-estados",
+  "version": "0.1.0",
+  "description": "Micro-agente (R3): narra balance/resultado en el lenguaje del negocio con plantillas declaradas; solo cita cifras reales y declara lo ausente.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "narrador-estados.narrar.request",
+      "handler": "onNarrarRequest",
+      "description": "RPC micro-agente (PREGUNTA, por el bus): {project_id, balance?, resultado?, saldos?, plantillas?|vocabulario?, negocio?, tono?, ejercicio?} → {project_id, frases[], texto, cifras, fuente, narrado, abierto}. Narra con plantillas declaradas o estructura por defecto; solo cita cifras reales. Responde por narrador-estados.narrar.response. Payload invalido → narrador-estados.narrar.failed."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "narrador-estados.narrar.response",
+      "description": "Respuesta RPC correlada de la op narrar (una sola cara: el bus)."
+    },
+    {
+      "event": "narrador-estados.narrar.failed",
+      "description": "Par de fallo determinista: falta project_id → {status, code, message}. Cierra el circulo de narrar.request."
+    }
+  ],
+  "tools": [
+    { "name": "narrador-estados.narrar", "description": "Narra (PREGUNTA) balance/resultado en el lenguaje del negocio con plantillas declaradas." }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "_doc": "Manifest de entrada/estado-cuenta-proveedor — REFLEJO STATELESS (N4, hoja del plan). Extracto CONFRONTABLE con el proveedor (conciliacion de saldos). Derivacion determinista. NO calcula el saldo (eso es cuenta-proveedor N3): le SUBE por EVENTO cuenta-proveedor.saldo.request y ARMA el extracto (cabecera + movimientos + saldo de cierre). NO afirma cuadre: solo publica NUESTRO saldo; confronta el proveedor. Honestidad (invariante 13): sin tercero no se inventa cuenta; sin saldo el extracto queda ABIERTO (0 no es 'sin deuda', es desconocido). NO escribe, NO persiste. RPC extracto es CLASE PREGUNTA → va por el bus, sin panel. Publica estado-cuenta-proveedor.extracto.response y su par .failed. Escucha contabilidad.asiento_asentado (B2 escritor-diario, emitido).",
+  "name": "estado-cuenta-proveedor",
+  "version": "0.1.0",
+  "description": "Reflejo (N4): extracto confrontable con el proveedor; deriva el saldo de cuenta-proveedor y lo arma sin afirmar cuadre.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "estado-cuenta-proveedor.extracto.request",
+      "handler": "onExtractoRequest",
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id, tercero|proveedor|nif, desde?, hasta?, movimientos?, facturas?, saldo?} → {project_id, tercero, cabecera, movimientos[], saldo_cierre, confrontable, abierto}. Arma el extracto; sin saldo queda abierto. Responde por estado-cuenta-proveedor.extracto.response. Payload invalido → estado-cuenta-proveedor.extracto.failed."
+    },
+    {
+      "event": "contabilidad.asiento_asentado",
+      "handler": "onAsientoAsentado",
+      "description": "Fire-and-forget (B2 escritor-diario): un asiento quedo en el libro. Se observa (ventana acotada) como fuente alternativa; no se recalcula ni se escribe."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "estado-cuenta-proveedor.extracto.response",
+      "description": "Respuesta RPC correlada de la op extracto (una sola cara: el bus)."
+    },
+    {
+      "event": "estado-cuenta-proveedor.extracto.failed",
+      "description": "Par de fallo determinista: falta project_id o tercero → {status, code, message}. Cierra el circulo de extracto.request."
+    }
+  ],
+  "tools": [
+    { "name": "estado-cuenta-proveedor.extracto", "description": "Arma (PREGUNTA) el extracto confrontable de la cuenta del proveedor." }
+  ]
+}

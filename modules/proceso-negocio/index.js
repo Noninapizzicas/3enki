@@ -314,7 +314,10 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
       // El sistema no se fía de la palabra del LLM — verifica en disco.
       const entregable = await this._verificarEntregable(project_id, fase, d.resumen || {});
       if (!entregable.ok) {
-        return { status: 409, data: { error: 'FASE_INCOMPLETA', message: this._conArquitectura(entregable.mensaje, this._motivoDeFase(fase)), fase, esperado: entregable.esperado } };
+        // El EMPUJÓN viaja en el 409: si la fase tiene trabajo accionable (p.ej.
+        // F7b lista qué conexión enganchar y dónde), se propaga estructurado —
+        // no solo como prosa en el mensaje. Frenar sin decir el trabajo = muro.
+        return { status: 409, data: { error: 'FASE_INCOMPLETA', message: this._conArquitectura(entregable.mensaje, this._motivoDeFase(fase)), fase, esperado: entregable.esperado, ...(entregable.trabajo ? { trabajo: entregable.trabajo } : {}) } };
       }
 
       // QUIÉN DECIDE EL SIGUIENTE PASO — el plan manda desde que EXISTE.

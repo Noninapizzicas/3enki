@@ -1,0 +1,39 @@
+{
+  "_doc": "Manifest de entrada/declaracion-fuente-faltante — PUENTE (A15, hoja del plan). DETECTA que una vertical NO publica un hecho necesario Y LO DECLARA — NUNCA la obliga a producirlo ni inventa el dato que falta (creada_fuente:false, obliga:false). Escucha contabilidad.hecho_recibido (fire-and-forget): si el hecho DECLARA que su fuente falta, se declara; si no lo declara, NO se inventa la acusacion. Honestidad (invariante 13): sin fuente señalada → declarada:false y `abierto` (nada que declarar). R2: al declarar publica el hecho contabilidad.fuente_faltante_declarada y SUBE la señal a motor-avisos.producir.request. Sin store propio (PUENTE). La op declarar es CLASE ORDEN → SÍ lleva ui_handler (workspace_module).",
+  "name": "declaracion-fuente-faltante",
+  "version": "0.1.0",
+  "description": "Puente (A15): declara que una vertical no publica un hecho necesario, sin obligarla ni inventar datos. ORDEN.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "declaracion-fuente-faltante.declarar.request",
+      "handler": "onDeclararRequest",
+      "description": "RPC puente (ORDEN, barra de modulos): {project_id, fuente|fuente_esperada, vertical?, motivo?, ref?} → {project_id, declaracion, declarada}. Declara la ausencia de una fuente; NO la crea ni obliga a la vertical. Publica contabilidad.fuente_faltante_declarada y sube motor-avisos.producir.request. Responde por declaracion-fuente-faltante.declarar.response; sin fuente señalada o entrada invalida → declaracion-fuente-faltante.declarar.failed."
+    },
+    {
+      "event": "contabilidad.hecho_recibido",
+      "handler": "onHechoRecibido",
+      "description": "Fire-and-forget (puerto-evento-vertical A1): llego un hecho. Si el hecho DECLARA que su fuente falta (fuente_faltante/fuente_esperada), se declara; si no lo declara, NO se inventa la declaracion."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "contabilidad.fuente_faltante_declarada",
+      "description": "Fire-and-forget (A15): se declaro que una vertical no publica un hecho necesario → {project_id, vertical, fuente, motivo, declaracion_id}. Lo lee motor-avisos (K2)."
+    },
+    {
+      "event": "declaracion-fuente-faltante.declarar.response",
+      "description": "Respuesta RPC correlada de la op declarar (una sola cara: el bus)."
+    },
+    {
+      "event": "declaracion-fuente-faltante.declarar.failed",
+      "description": "Par de fallo determinista: falta project_id, no se señalo la fuente o entrada invalida → {status, code, message}. Cierra el circulo de declarar.request."
+    }
+  ],
+  "tools": [
+    { "name": "declaracion-fuente-faltante.declarar", "description": "Declara (ORDEN) que falta una fuente, sin obligar a la vertical ni inventar el dato." }
+  ],
+  "ui_handlers": [
+    { "domain": "contabilidad", "action": "declaracion-fuente-faltante.declarar", "handler": "onDeclararRequest", "type": "workspace_module", "zone": "barra_modulos" }
+  ]
+}

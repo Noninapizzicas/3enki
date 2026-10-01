@@ -1,0 +1,37 @@
+{
+  "_doc": "Manifest de entrada/tasa-cobertura-entrada — REFLEJO STATELESS (P4, hoja del plan). La PROPORCION de hechos que entran SIN intervencion vs los que caen a cola: es la vista de TASA de la metrica unica. LEE la metrica (completitud-cobertura A12) y calcula la tasa; NO la recalcula, NO cuenta hechos por su cuenta, NO escribe. Los dos sucesos que la alimentan llegan por EVENTO: contabilidad.hecho_recibido (A1) y contabilidad.excepcion_encolada (encolado-excepcion) — se observan en memoria (ventana acotada) para contrastar con la metrica declarada. Honestidad (invariante 13): sin metrica NO se inventa una tasa — queda INDETERMINADA. RPC calcular es CLASE PREGUNTA → va por el bus, SIN ui_handler. Sube best-effort completitud-cobertura.medir.request (PREGUNTA→PREGUNTA). R3 OK: ambos emisores (puerto-evento-vertical A1, encolado-excepcion) existen en el repo. Publica tasa-cobertura-entrada.calcular.response y su par .failed.",
+  "name": "tasa-cobertura-entrada",
+  "version": "0.1.0",
+  "description": "Reflejo (P4): proporcion de hechos que entran sin intervencion vs caen a cola. Lee la metrica unica; sin metrica la tasa queda indeterminada.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "tasa-cobertura-entrada.calcular.request",
+      "handler": "onCalcularRequest",
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id, metrica?/cobertura?, ejercicio?, desde?, hasta?} → {project_id, fuente, metrica, tasa, tasa_intervencion, entrados, encolados, total, recalcula_metrica:false, abierto}. Calcula la tasa desde la metrica unica; sin metrica queda INDETERMINADA. Responde por tasa-cobertura-entrada.calcular.response. Payload invalido → tasa-cobertura-entrada.calcular.failed."
+    },
+    {
+      "event": "contabilidad.hecho_recibido",
+      "handler": "onHechoRecibido",
+      "description": "Fire-and-forget (A1 puerto-evento-vertical): un hecho entro sin intervencion. Se observa en memoria (ventana acotada); no se escribe ni se recalcula la metrica."
+    },
+    {
+      "event": "contabilidad.excepcion_encolada",
+      "handler": "onExcepcionEncolada",
+      "description": "Fire-and-forget (encolado-excepcion): un hecho cayo a cola (necesito intervencion). Se observa en memoria (ventana acotada); la metrica fina la produce completitud-cobertura, no este contador de conveniencia."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "tasa-cobertura-entrada.calcular.response",
+      "description": "Respuesta RPC correlada de la op calcular (una sola cara: el bus)."
+    },
+    {
+      "event": "tasa-cobertura-entrada.calcular.failed",
+      "description": "Par de fallo determinista: falta project_id → {status, code, message}. Cierra el circulo de calcular.request."
+    }
+  ],
+  "tools": [
+    { "name": "tasa-cobertura-entrada.calcular", "description": "Calcula (PREGUNTA) la tasa de cobertura de entrada leyendo la metrica unica (sin intervencion / total)." }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "_doc": "Manifest de fiscal/obligacion-seguridad-social — REFLEJO STATELESS (G2, hoja del plan). Deriva el GASTO DE EMPRESA + la OBLIGACION con la TGSS desde el recibo de nomina: aportacion_empresa = suma(base_i * tipo_i) para cada par (base, tipo) DECLARADO. Los TIPOS son DATO declarable (nunca una constante oculta de negocio) y las BASES vienen declaradas en el recibo. Honestidad (invariante 13): si falta una base o su tipo, esa contingencia queda `abierto` y NO se estima un tipo por defecto — un tipo inventado produce una obligacion falsa ante la TGSS. NO escribe, NO persiste: es un calculo determinista (PREGUNTA). RPC calcular es CLASE PREGUNTA → va por el bus, SIN ui_handler. Escucha contabilidad.nomina_recibida (su emisor puerto-nomina G7 SI existe en el repo → R3 OK). Sube best-effort recibo-nomina.dar_forma.request (via _rpc) y, SOLO si el input lo pide explicitamente (subir_calendario:true), calendario-fiscal.declarar.request — una PREGUNTA no muta estado por defecto. Publica obligacion-seguridad-social.calcular.response y su par .failed.",
+  "name": "obligacion-seguridad-social",
+  "version": "0.1.0",
+  "description": "Reflejo (G2): gasto de empresa + obligacion con la TGSS derivados del recibo. Aplica bases y tipos declarados; lo que falta se declara abierto, no se estima.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "obligacion-seguridad-social.calcular.request",
+      "handler": "onCalcularRequest",
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id, nomina?/recibo?, bases?, tipos?, periodo?} → {project_id, periodo, contingencias, aportacion_empresa, aportacion_trabajador, obligacion_tgss, gasto_empresa, abierto}. Aplica bases*tipos DECLARADOS; lo que falte queda abierto (no se estima). Responde por obligacion-seguridad-social.calcular.response. Payload invalido → obligacion-seguridad-social.calcular.failed."
+    },
+    {
+      "event": "contabilidad.nomina_recibida",
+      "handler": "onNominaRecibida",
+      "description": "Fire-and-forget (G7 puerto-nomina): llego una nomina. Se DERIVA su obligacion en memoria (calculo determinista) y, si el evento lo pide, se sube best-effort al calendario. No escribe ni publica hecho (es un reflejo)."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "obligacion-seguridad-social.calcular.response",
+      "description": "Respuesta RPC correlada de la op calcular (una sola cara: el bus)."
+    },
+    {
+      "event": "obligacion-seguridad-social.calcular.failed",
+      "description": "Par de fallo determinista: falta project_id o no hay recibo/bases/tipos declarados → {status, code, message}. Cierra el circulo de calcular.request."
+    }
+  ],
+  "tools": [
+    { "name": "obligacion-seguridad-social.calcular", "description": "Calcula (PREGUNTA) el gasto de empresa y la obligacion con la TGSS desde el recibo de nomina." }
+  ]
+}

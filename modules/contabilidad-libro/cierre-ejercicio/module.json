@@ -1,0 +1,54 @@
+{
+  "_doc": "Manifest de libro/cierre-ejercicio — CUSTODIO CON PERSISTENCIA (C4, hoja del plan). EL CIERRE EN DOS NIVELES (decision del dueno): el DIA cierra la CAJA (nivel 'dia', clave (proyecto, ejercicio, mes, dia)) y el MES cierra la CONTABILIDAD (nivel 'mes', clave (proyecto, ejercicio, mes)). Cierra con AJUSTES: el cierre del mes pide la cuota del periodo a plan-amortizacion (plan-amortizacion.cuota_del_periodo.request, best-effort) y pide el asiento de cierre a escritor-diario (escritor-diario.asentar.request) — NO escribe el diario aqui. IRREVERSIBLE salvo ajuste: `reabrir` es explicito y se registra en la historia (append-only). UN SOLO ESCRITOR (guard rol CIERRE_EJERCICIO). IDEMPOTENTE por nivel+clave: un periodo ya cerrado no se vuelve a cerrar. APPEND-ONLY de la historia. Honestidad (invariante 13): sin cifras declaradas el periodo se cierra VACIO (0) y se declara `abierto`; no se inventa el resultado. Persiste por proyecto via PosPersistencia (storage /contabilidad/cierre-ejercicio), restaura en project.activated y vuelca en onUnload. R2: al cambiar el estado publica contabilidad.ejercicio_cerrado ({estado:'cerrado'|'reabierto'}), que escucha apertura-ejercicio (C5). NOTA R3: el plan declara escucha de un evento de cierre diario que AUN NO EXISTE como emisor → NO se declara (evita cadena colgada). Ambas ops (cerrar/reabrir) son CLASE ORDEN → con ui_handler.",
+  "name": "cierre-ejercicio",
+  "version": "0.1.0",
+  "description": "Custodio (C4): el cierre en DOS niveles (dia=caja, mes=contabilidad). Single-writer, persistente; anuncia contabilidad.ejercicio_cerrado.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "cierre-ejercicio.cerrar.request",
+      "handler": "onCerrarRequest",
+      "description": "RPC custodio (ORDEN, barra de modulos): {project_id, nivel:'dia'|'mes', ejercicio, mes?, dia?, rol?, resultado?|saldo_caja?|ingresos?/gastos?, lineas?} → {project_id, nivel, clave, cerrado, resultado, amortizaciones, asiento}. El DIA cierra la caja (clave YYYY-MM-DD); el MES cierra la contabilidad (clave YYYY-MM) pidiendo cuota a plan-amortizacion y asiento a escritor-diario. UN escritor (rol CIERRE_EJERCICIO; otro → 403). Idempotente (ya_cerrado:true). Publica contabilidad.ejercicio_cerrado (R2). Responde por cierre-ejercicio.cerrar.response; entrada invalida → cierre-ejercicio.cerrar.failed."
+    },
+    {
+      "event": "cierre-ejercicio.reabrir.request",
+      "handler": "onReabrirRequest",
+      "description": "RPC custodio (ORDEN, barra de modulos): {project_id, nivel, ejercicio, mes?, dia?, rol?, motivo?} → {project_id, nivel, clave, reabierto, aviso}. Reapertura EXPLICITA (el cierre es irreversible salvo ajuste); queda en la historia (append-only), el cierre previo NO se borra. Publica contabilidad.ejercicio_cerrado con estado 'reabierto' (R2). Responde por cierre-ejercicio.reabrir.response; entrada invalida → cierre-ejercicio.reabrir.failed."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Restaura los cierres del proyecto activado desde el storage (PosPersistencia). Emitido por el core."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "contabilidad.ejercicio_cerrado",
+      "description": "Fire-and-forget (C4): cambio el estado de cierre de un periodo → {project_id, nivel, clave, ejercicio, mes, dia, estado:'cerrado'|'reabierto', resultado}. Lo escucha apertura-ejercicio (C5) y demas derivados."
+    },
+    {
+      "event": "cierre-ejercicio.cerrar.response",
+      "description": "Respuesta RPC correlada de la op cerrar (una sola cara: el bus)."
+    },
+    {
+      "event": "cierre-ejercicio.cerrar.failed",
+      "description": "Par de fallo determinista: falta project_id/nivel/mes/dia o falta el rol de escritor (403) → {status, code, message}. Cierra el circulo de cerrar.request."
+    },
+    {
+      "event": "cierre-ejercicio.reabrir.response",
+      "description": "Respuesta RPC correlada de la op reabrir (una sola cara: el bus)."
+    },
+    {
+      "event": "cierre-ejercicio.reabrir.failed",
+      "description": "Par de fallo determinista: falta project_id/nivel o falta el rol de escritor (403) → {status, code, message}. Cierra el circulo de reabrir.request."
+    }
+  ],
+  "tools": [
+    { "name": "cierre-ejercicio.cerrar", "description": "Cierra (ORDEN) el periodo en dos niveles: el dia la caja, el mes la contabilidad." },
+    { "name": "cierre-ejercicio.reabrir", "description": "Reabre (ORDEN) un periodo cerrado de forma explicita; queda en la historia." }
+  ],
+  "ui_handlers": [
+    { "domain": "contabilidad", "action": "cierre-ejercicio.cerrar", "handler": "onCerrarRequest", "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "contabilidad", "action": "cierre-ejercicio.reabrir", "handler": "onReabrirRequest", "type": "workspace_module", "zone": "barra_modulos" }
+  ]
+}

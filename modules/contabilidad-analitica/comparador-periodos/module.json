@@ -1,0 +1,32 @@
+{
+  "_doc": "Manifest de analitica/comparador-periodos — REFLEJO STATELESS (J9, hoja del plan). Ejercicio vs ejercicio, mes vs mes, real vs presupuesto. REUTILIZA J3 (presupuesto) y J4 (desviacion), NO los duplica: sube best-effort presupuesto.objetivo.request (trae la cifra objetivo) y desviacion.calcular.request (mide el real contra ella) — o usa lo DECLARADO. Este modulo COMPARA lo que ambos devuelven; no fija objetivos ni recalcula desviaciones. Honestidad (invariante 13): si falta uno de los dos lados, la comparacion queda `abierta` — NO se rellena con un cero (una comparacion contra un cero inventado es una desviacion falsa). RPC comparar es CLASE PREGUNTA → va por el bus, SIN ui_handler. Escucha contabilidad.presupuesto_fijado (presupuesto J3, emitido). NOTA R3: el plan declara tambien escucha de contabilidad.ejercicio_cerrado (cierre-ejercicio C4), pero C4 AUN NO existe en el repo → NO se declara (cadena colgada). Publica comparador-periodos.comparar.response y su par .failed.",
+  "name": "comparador-periodos",
+  "version": "0.1.0",
+  "description": "Reflejo (J9): compara periodos (ejercicio/mes) y real vs presupuesto reutilizando J3/J4; si falta un lado, la comparacion queda abierta.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "comparador-periodos.comparar.request",
+      "handler": "onCompararRequest",
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id, modo?, dimension?, a?/b?/objetivos?, periodo?, periodo_a?, periodo_b?} → {project_id, modo, dimension, a, b, comparable, diferencia, variacion_pct, desviacion, abierto}. Compara dos lados reutilizando J3/J4; si falta un lado queda abierto (no se rellena con cero). Responde por comparador-periodos.comparar.response. Payload invalido → comparador-periodos.comparar.failed."
+    },
+    {
+      "event": "contabilidad.presupuesto_fijado",
+      "handler": "onPresupuestoFijado",
+      "description": "Fire-and-forget (presupuesto J3): un objetivo quedo fijado. Se observa en memoria (ventana acotada) para la proxima comparacion; no se recalcula ni se escribe."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "comparador-periodos.comparar.response",
+      "description": "Respuesta RPC correlada de la op comparar (una sola cara: el bus)."
+    },
+    {
+      "event": "comparador-periodos.comparar.failed",
+      "description": "Par de fallo determinista: falta project_id → {status, code, message}. Cierra el circulo de comparar.request."
+    }
+  ],
+  "tools": [
+    { "name": "comparador-periodos.comparar", "description": "Compara (PREGUNTA) dos periodos o el real contra el presupuesto reutilizando J3/J4." }
+  ]
+}

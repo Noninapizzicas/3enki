@@ -1,0 +1,39 @@
+{
+  "_doc": "Manifest de fiscal/estado-presentacion-fiscal — CUSTODIO CON PERSISTENCIA (D12, hoja del plan). EL CICLO DE VIDA DE CADA OBLIGACION FISCAL, UN SOLO ESCRITOR: pendiente → generada → presentada → justificada (y 'atrasada' por plazo). Guard rol ESTADO_PRESENTACION_FISCAL (otro → 403). TRANSICION VALIDA: no se salta el ciclo (saltarse un paso → 422 TRANSICION_INVALIDA). IDEMPOTENTE al mismo estado. APPEND-ONLY de la historia: cada avance se apila. Persiste por proyecto via PosPersistencia (storage /contabilidad/estado-presentacion-fiscal), restaura en project.activated y vuelca en onUnload. R2: al avanzar publica contabilidad.obligacion_avanzada; si queda 'atrasada' sube motor-avisos.producir.request. NOTA R3: el plan declara escucha de contabilidad.modelo_exportado (generador-modelo) y de contabilidad.declaracion_justificada (acuse-presentacion) / contabilidad.declaracion_rectificada (rectificacion-declaracion), pero NINGUNO de esos emisores existe AUN en el repo → NO se declaran (evita cadena colgada). La op avanzar es CLASE ORDEN → con ui_handler.",
+  "name": "estado-presentacion-fiscal",
+  "version": "0.1.0",
+  "description": "Custodio (D12): ciclo de vida de cada obligacion fiscal. Single-writer, persistente; anuncia contabilidad.obligacion_avanzada.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "estado-presentacion-fiscal.avanzar.request",
+      "handler": "onAvanzarRequest",
+      "description": "RPC custodio (ORDEN, barra de modulos): {project_id, rol, clave|obligacion|modelo, estado, ejercicio?, periodo?} → {project_id, obligacion, avanzada, estado_anterior, estado, ciclo}. UN escritor (rol ESTADO_PRESENTACION_FISCAL; otro → 403). Ciclo pendiente→generada→presentada→justificada (+atrasada); saltar un paso → 422 TRANSICION_INVALIDA; mismo estado → idempotente. Publica contabilidad.obligacion_avanzada (R2); si queda 'atrasada' sube motor-avisos. Responde por estado-presentacion-fiscal.avanzar.response; entrada invalida → estado-presentacion-fiscal.avanzar.failed."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Restaura el estado fiscal del proyecto activado desde el storage (PosPersistencia). Emitido por el core."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "contabilidad.obligacion_avanzada",
+      "description": "Fire-and-forget (D12): una obligacion fiscal avanzo de estado → {project_id, clave, modelo, estado, estado_anterior}. Lo escuchan acuse-presentacion (D13) y rectificacion-declaracion."
+    },
+    {
+      "event": "estado-presentacion-fiscal.avanzar.response",
+      "description": "Respuesta RPC correlada de la op avanzar (una sola cara: el bus)."
+    },
+    {
+      "event": "estado-presentacion-fiscal.avanzar.failed",
+      "description": "Par de fallo determinista: falta project_id/obligacion/estado, estado fuera del ciclo, transicion invalida (422) o falta el rol de escritor (403) → {status, code, message}. Cierra el circulo de avanzar.request."
+    }
+  ],
+  "tools": [
+    { "name": "estado-presentacion-fiscal.avanzar", "description": "Avanza (ORDEN) el estado de una obligacion fiscal por su ciclo de vida." }
+  ],
+  "ui_handlers": [
+    { "domain": "contabilidad", "action": "estado-presentacion-fiscal.avanzar", "handler": "onAvanzarRequest", "type": "workspace_module", "zone": "barra_modulos" }
+  ]
+}

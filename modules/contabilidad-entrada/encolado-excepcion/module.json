@@ -1,0 +1,53 @@
+{
+  "_doc": "Manifest de entrada/encolado-excepcion — CUSTODIO CON PERSISTENCIA (A8.1, hoja del plan). LA PARCELA DE LO DUDOSO: UN SOLO ESCRITOR. El flujo CONTINUA; lo dudoso espera — encolar NO bloquea nada (flujo_continua:true). Guard rol ENCOLADO_EXCEPCION (segundo escritor → 403). IDEMPOTENTE por clave (at-least-once del bus): la misma excepcion no se encola dos veces. APPEND-ONLY de la historia: encolar AÑADE y tomar NO borra — MARCA (estado:tomada); la excepcion sigue visible con quien la tomo. Persiste por proyecto via PosPersistencia (storage /contabilidad/encolado-excepcion), restaura en project.activated y vuelca en onUnload. R2: al encolar publica contabilidad.excepcion_encolada (lo escucha aviso-revision A8.2, que es quien empuja el aviso — este modulo NO empuja, para no pisarse). La op encolar es ORDEN (ui_handler); tomar es PREGUNTA (sin ui_handler).",
+  "name": "encolado-excepcion",
+  "version": "0.1.0",
+  "description": "Custodio (A8.1): la parcela de lo dudoso. Single-writer, persistente, append-only; anuncia contabilidad.excepcion_encolada.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "encolado-excepcion.encolar.request",
+      "handler": "onEncolarRequest",
+      "description": "RPC custodio (ORDEN, barra de modulos): {project_id, rol, clave, motivo?, origen?, payload?} → {project_id, excepcion, encolada, pendientes, flujo_continua}. Guard de UN escritor (rol ENCOLADO_EXCEPCION; otro → 403). Idempotente por clave (duplicada:true). Publica contabilidad.excepcion_encolada (R2). Responde por encolado-excepcion.encolar.response; entrada invalida o falta de rol → encolado-excepcion.encolar.failed."
+    },
+    {
+      "event": "encolado-excepcion.tomar.request",
+      "handler": "onTomarRequest",
+      "description": "RPC custodio (PREGUNTA, sin ui_handler): {project_id, clave?, revisor?} → {project_id, excepcion, pendientes}. Marca la primera pendiente (o la de la clave) como TOMADA sin borrarla (append-only). Sin cola o sin pendientes → excepcion:null. Responde por encolado-excepcion.tomar.response; entrada invalida → encolado-excepcion.tomar.failed."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Restaura la cola de excepciones del proyecto activado desde el storage (PosPersistencia). Emitido por el core."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "contabilidad.excepcion_encolada",
+      "description": "Fire-and-forget (A8.1): quedo una excepcion en espera de revision → {project_id, excepcion_id, clave, motivo, origen, pendientes}. Lo escucha aviso-revision (A8.2), que empuja el aviso al canal."
+    },
+    {
+      "event": "encolado-excepcion.encolar.response",
+      "description": "Respuesta RPC correlada de la op encolar (una sola cara: el bus)."
+    },
+    {
+      "event": "encolado-excepcion.encolar.failed",
+      "description": "Par de fallo determinista: falta project_id/clave o falta el rol de escritor (403) → {status, code, message}. Cierra el circulo de encolar.request."
+    },
+    {
+      "event": "encolado-excepcion.tomar.response",
+      "description": "Respuesta RPC correlada de la op tomar (una sola cara: el bus)."
+    },
+    {
+      "event": "encolado-excepcion.tomar.failed",
+      "description": "Par de fallo determinista: falta project_id o entrada invalida → {status, code, message}. Cierra el circulo de tomar.request."
+    }
+  ],
+  "tools": [
+    { "name": "encolado-excepcion.encolar", "description": "Encuela (ORDEN) una excepcion para revision, sin parar el flujo." },
+    { "name": "encolado-excepcion.tomar", "description": "Toma (PREGUNTA) una excepcion pendiente y la marca como tomada sin borrarla." }
+  ],
+  "ui_handlers": [
+    { "domain": "contabilidad", "action": "encolado-excepcion.encolar", "handler": "onEncolarRequest", "type": "workspace_module", "zone": "barra_modulos" }
+  ]
+}

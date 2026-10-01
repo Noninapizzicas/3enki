@@ -1,0 +1,46 @@
+{
+  "_doc": "Manifest de fiscal/acuse-presentacion — PUENTE STATELESS (D13, hoja del plan). Recoge y LIGA el justificante/acuse de la administracion a su modelo y a su asiento: CIERRA EL BUCLE HACIA FUERA (lo presentado queda justificado). Es un PUENTE, no un custodio: NO guarda estado propio. RECOGE lo declarado, lo LIGA (modelo ↔ acuse ↔ asiento) y SUBE por EVENTO a los tres que si actuan — estado-presentacion-fiscal.avanzar.request (el modelo avanza), escritor-diario.asentar.request (el asiento de la declaracion, si toca) y expediente-documental.archivar.request (el acuse queda archivado) — y anuncia el hecho contabilidad.declaracion_justificada (R2). Honestidad (invariante 13): sin ACUSE declarado NO se liga nada (no se finge una justificacion); un acuse sin modelo queda ligado a medias y se declara abierto. RPC ligar es CLASE ORDEN → SI lleva ui_handler (system_panel/lateral_derecha). Publica acuse-presentacion.ligar.response, acuse-presentacion.ligar.failed y contabilidad.declaracion_justificada.",
+  "name": "acuse-presentacion",
+  "version": "0.1.0",
+  "description": "Puente (D13): liga el acuse/justificante de la administracion a su modelo y a su asiento y cierra el bucle hacia fuera.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "acuse-presentacion.ligar.request",
+      "handler": "onLigarRequest",
+      "description": "RPC puente (ORDEN, panel): {project_id, acuse/justificante, modelo?, asiento?} → {project_id, modelo, acuse, asiento, ligado, liga, persistido:false, abierto}. Liga el acuse a su modelo y asiento; sin acuse → no liga (no se finge). Publica contabilidad.declaracion_justificada (R2) y SUBE estado-presentacion-fiscal.avanzar.request, escritor-diario.asentar.request y expediente-documental.archivar.request. Responde por acuse-presentacion.ligar.response; fallo → acuse-presentacion.ligar.failed."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "contabilidad.declaracion_justificada",
+      "description": "Fire-and-forget (D13): la declaracion quedo justificada por su acuse → {project_id, modelo, acuse, ligado, abierto}. Lo escuchan estado-presentacion-fiscal y expediente-documental."
+    },
+    {
+      "event": "estado-presentacion-fiscal.avanzar.request",
+      "description": "Subida (REQUEST por EVENTO) a D12: el modelo presentado avanza de estado al quedar justificado."
+    },
+    {
+      "event": "escritor-diario.asentar.request",
+      "description": "Subida (REQUEST por EVENTO) a B2: el asiento de la declaracion, si el acuse lo trae."
+    },
+    {
+      "event": "expediente-documental.archivar.request",
+      "description": "Subida (REQUEST por EVENTO) a B11: el acuse/justificante queda archivado como documento origen."
+    },
+    {
+      "event": "acuse-presentacion.ligar.response",
+      "description": "Respuesta RPC correlada de la op ligar (una sola cara: el bus)."
+    },
+    {
+      "event": "acuse-presentacion.ligar.failed",
+      "description": "Par de fallo determinista: falta project_id o acuse → {status, code, message}. Cierra el circulo de ligar.request."
+    }
+  ],
+  "tools": [
+    { "name": "acuse-presentacion.ligar", "description": "Liga (ORDEN) el acuse de la administracion a su modelo y asiento y cierra el bucle." }
+  ],
+  "ui_handlers": [
+    { "domain": "contabilidad", "action": "acuse-presentacion.ligar", "handler": "onLigarRequest", "type": "system_panel", "zone": "lateral_derecha" }
+  ]
+}

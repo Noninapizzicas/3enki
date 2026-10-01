@@ -163,7 +163,7 @@ const MAPA_PROCESO = {
   // Sin esta fase el proceso construye islas y solo comprueba que cargan (F8) —
   // medido en nichos: 81 conexiones de dominio rotas y 18 hojas divergentes.
   'negocio.ensamblado': {
-    skill: null,
+    skill: 'ensamblaje',
     lee: ['esquemas/plan-construccion.md', 'modules/<slug>/module.json'],
     escribe: 'proceso-negocio/fase7b-ensamblaje.json',
     mensaje: 'COMPLETO: todas las hojas tienen módulo, skill e interfaz, y el ensamblaje está recomponido contra el plan de F3b.'
@@ -466,11 +466,15 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
     try {
       const r = await this._rpc('fs.read.request', { project_id, path: 'esquemas/plan-construccion.md' });
       const contenido = (r && (r.content || r.data?.content)) || '';
-      if (!contenido) return true;  // sin plan no hay contrato contra el que recomponer
+      // SIN PLAN no hay contrato contra el que recomponer → NO se puede declarar
+      // ensamblado. Es el mismo principio que F8 ("sin plan no hay nada que
+      // verificar"): no se cierra una fase sobre vacío. Lo canta el test de
+      // blindaje de la cadena (ninguna fase cierra sin su entregable en disco).
+      if (!contenido) return false;
       const m = contenido.match(/```json enki-plan\s*([\s\S]*?)```/);
-      if (!m) return true;          // plan sin bloque estructurado → no recomponible aquí
+      if (!m) return false;         // plan sin bloque estructurado → no recomponible
       let plan;
-      try { plan = JSON.parse(m[1]); } catch (_) { return true; }
+      try { plan = JSON.parse(m[1]); } catch (_) { return false; }
 
       // La realidad escrita: los módulos del plan, leídos del repo real.
       const real = {};

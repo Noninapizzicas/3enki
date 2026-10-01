@@ -164,7 +164,45 @@ test('ROBUSTEZ: escribir el informe falla → no tumba, pero el veredicto manda'
   assert.strictEqual(ok, true, 'un fallo al PERSISTIR no cambia el veredicto (best-effort)');
 });
 
-// ── 9. CASO REAL: el plan de nichos, si está disponible ──
+// ── 10. FRENO → EMPUJÓN: la rotura viene CLASIFICADA con su trabajo ──
+test('la conexión rota trae el TRABAJO (falta_cablear + dónde), no solo el aviso', () => {
+  const plan = { hojas: [
+    { slug: 'cola-decisiones-gate', subscribes: [], publishes: ['nichos.decision.resuelta'] },
+    { slug: 'gate-decision-operar', subscribes: ['nichos.decision.resuelta'], publishes: [] }
+  ] };
+  const real = {
+    'cola-decisiones-gate': { existe: true, subscribes: [], publishes: ['nichos.decision.resuelta'] },
+    // el consumidor EXISTE pero no lo escucha → falta cablear
+    'gate-decision-operar': { existe: true, subscribes: [], publishes: [] }
+  };
+  const r = new Ensamblaje(plan, real).recomponer();
+  assert.strictEqual(r.conexiones_rotas_count, 1);
+  const c = r.conexiones_rotas[0];
+  assert.strictEqual(c.tipo, 'FALTA_CABLEAR');
+  assert.deepStrictEqual(c.falta_en, ['gate-decision-operar'], 'dice DÓNDE engancharlo');
+  assert.strictEqual(r.conexiones_falta_cablear, 1);
+  assert.strictEqual(r.trabajo.length, 1);
+  assert.strictEqual(r.trabajo[0].evento, 'nichos.decision.resuelta');
+});
+
+test('pares de fallo (.failed) NO cuentan como conexiones rotas', () => {
+  const plan = { hojas: [{ slug: 'm', subscribes: [], publishes: ['nichos.x.analizar.failed'] }] };
+  const real = { m: { existe: true, subscribes: [], publishes: ['nichos.x.analizar.failed'] } };
+  const r = new Ensamblaje(plan, real).recomponer();
+  assert.strictEqual(r.conexiones_rotas_count, 0, '.failed es cierre de círculo del propio módulo');
+  assert.strictEqual(r.ensamblado, true);
+});
+
+test('evento sin consumidor en el plan → SOBRA_EL_PUBLISH (decisión de diseño, sin falta_en)', () => {
+  const plan = { hojas: [{ slug: 'm', subscribes: [], publishes: ['nichos.nadie.lo.quiere'] }] };
+  const real = { m: { existe: true, subscribes: [], publishes: ['nichos.nadie.lo.quiere'] } };
+  const r = new Ensamblaje(plan, real).recomponer();
+  assert.strictEqual(r.conexiones_sobra_el_publish, 1);
+  assert.strictEqual(r.conexiones_rotas[0].falta_en, null, 'sin destino escrito: es decisión, no cable');
+  assert.strictEqual(r.trabajo.length, 0);
+});
+
+// ── 11. CASO REAL: el plan de nichos, si está disponible ──
 test('caso real — el plan de nichos produce un informe coherente', () => {
   const planPath = '/home/admin/3enki/boveda/nichos/proceso/fase3b/plan-construccion.md';
   if (!fs.existsSync(planPath)) { console.log('    (saltado: sin plan en disco)'); return; }

@@ -838,8 +838,20 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
       } catch (_) {}
       const rotas = informe ? informe.conexiones_rotas_count : '?';
       const diverg = informe ? informe.hojas_divergentes : '?';
-      return { ok: false, esperado: ['conexiones de dominio completas', 'módulos fieles al plan'],
-        mensaje: `${spec.mensaje} (medido: ${rotas} conexiones de dominio rotas, ${diverg} hojas divergentes)`, informe };
+      const cablear = (informe && informe.trabajo) || [];
+      // FRENO → EMPUJÓN: el 409 no es un muro, es la lista de trabajo. El
+      // ensamblaje no "arregla" (adivinaría la conexión correcta); entrega el
+      // trabajo concreto para que se ejecute y la fase se cierre al corregirlo.
+      const detalleTrabajo = cablear.length
+        ? ` Trabajo: ${cablear.slice(0, 5).map((t) => `'${t.evento}' engancharlo en ${t.cablear_en.join(',')}`).join(' · ')}`
+        : '';
+      return { ok: false,
+        esperado: ['conexiones de dominio completas', 'módulos fieles al plan'],
+        mensaje: `${spec.mensaje} (medido: ${rotas} conexiones de dominio rotas, ${diverg} hojas divergentes).${detalleTrabajo}`,
+        // El EMPUJÓN viaja estructurado, no solo como prosa: quién lo consuma
+        // (el chat, un agente de cosido futuro) tiene la lista accionable.
+        trabajo: cablear,
+        informe };
     }
     // FASE 8 — verificación final: TODAS las hojas del plan deben estar
     // construidas + con skill. No se fía del resumen del agente: cuenta el

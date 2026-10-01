@@ -65,11 +65,37 @@ Determinista, sin LLM, **sin efectos** (solo lee y produce un informe):
    - `extra_subscribes` / `extra_publishes`: el módulo hace algo que el plan no declaró.
    - `NO_ESCRITA`: la hoja está en el plan y no hay módulo.
 2. **CONEXIONES DE DOMINIO ROTAS** — sobre lo escrito: un evento de dominio que
-   alguien publica y **nadie escucha** (se pierde silenciosamente).
-3. **Veredicto** `ensamblado: true|false` — true solo sin rotas y sin divergentes.
+   alguien publica y **nadie escucha**, **clasificado por el trabajo que exige**:
+   - `FALTA_CABLEAR` — el consumidor EXISTE (el plan lo declara y está escrito):
+     solo falta engancharlo. **Trabajo accionable** (`falta_en` dice dónde).
+   - `HOJA_NO_ESCRITA` — el consumidor lo declara el plan pero no está escrito.
+   - `SOBRA_EL_PUBLISH` — nadie lo declara consumir: o sobra, o falta quien lo
+     consuma (decisión de diseño, sin destino de cable).
+3. **El TRABAJO** (`trabajo[]`) — la lista accionable: las roturas con destino
+   escrito (`{evento, cablear_en}`). No es el muro: es lo que hay que hacer.
+4. **Veredicto** `ensamblado: true|false` — true solo sin rotas y sin divergentes.
 
 > Los eventos `.request` / `.response` del bus **NO cuentan**: los atiende el
-> propio módulo por su handler RPC, no son conexiones entre piezas.
+> propio módulo por su handler RPC.
+> Los pares de fallo **`.failed`** tampoco: son el cierre de círculo del propio
+> módulo (diagnóstico), no una conexión entre piezas. Contarlos inflaba el
+> informe (80 de 81 en nichos) y escondía el trabajo real (1).
+
+## 3b · Comportamiento ante fallos (fail-SAFE, nunca fail-open)
+
+Doctrina del cimiento: **`success = ENTREGABLE VERIFICADO`**. El ensamblaje
+**nunca certifica lo que no ha podido comprobar**:
+
+| Situación | Resultado |
+|---|---|
+| RPC caído (`fs.read` lanza) | **false** → 409 (no certifica) |
+| Plan inexistente / vacío | **false** → 409 |
+| Plan sin bloque `enki-plan` | **false** → 409 |
+| JSON malformado | **false** → 409 |
+| Fallo al PERSISTIR el informe | no cambia el veredicto (es un extra, best-effort) |
+
+El motivo del fallo queda en `_ultimoFalloEnsamblaje` para que el diagnóstico no
+sea ciego. **No se cierra una fase sobre vacío.**
 
 ## 4 · Cómo se conduce (determinista)
 

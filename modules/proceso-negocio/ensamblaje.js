@@ -36,6 +36,11 @@
 // Un evento de transporte del bus (RPC) no es una CONEXIÓN de dominio:
 // su consumidor es el `on<Op>Request` del propio módulo. Se excluyen del cruce.
 const ES_TRANSPORTE = (e) => typeof e === 'string' && (e.endsWith('.request') || e.endsWith('.response'));
+// Un PAR DE FALLO (`*.failed`) NO es una conexión de dominio: es el cierre del
+// círculo del propio módulo (diagnóstico/observabilidad). Nadie tiene por qué
+// escucharlo. Contarlo como "conexión rota" inflaba el informe (80 de 81 en
+// nichos eran esto o pares de fallo) y escondía el trabajo REAL.
+const ES_PAR_DE_FALLO = (e) => typeof e === 'string' && e.endsWith('.failed');
 
 // Normaliza una entrada de subscribes/publishes a {evento, handler?} sin importar
 // si viene como string, {event} u {evento}.
@@ -142,26 +147,53 @@ class Ensamblaje {
 
     // ── 4. CONEXIONES DE DOMINIO ROTAS (el cruce global) ──
     // Un evento de dominio lo publica alguien y nadie lo escucha → se pierde.
-    // Se calcula sobre lo ESCRITO (la realidad), que es lo que importa.
+    // Se calcula sobre lo ESCRITO (la realidad), que es lo que importa. Se
+    // excluyen el transporte (.request/.response) y los pares de fallo (.failed).
     const pubsReal = new Map(); // evento → [slug]
     const subsReal = new Set();
     for (const [slug, esc] of escritos) {
       for (const e of esc.pub) {
-        if (ES_TRANSPORTE(e)) continue;
+        if (ES_TRANSPORTE(e) || ES_PAR_DE_FALLO(e)) continue;
         if (!pubsReal.has(e)) pubsReal.set(e, []);
         pubsReal.get(e).push(slug);
       }
-      for (const e of esc.sub) if (!ES_TRANSPORTE(e)) subsReal.add(e);
+      for (const e of esc.sub) if (!ES_TRANSPORTE(e) && !ES_PAR_DE_FALLO(e)) subsReal.add(e);
     }
+
+    // Para cada rotura, clasificar el TRABAJO que exige (freno → empujón):
+    //  · FALTA_CABLEAR   — el módulo consumidor EXISTE (el plan lo declara y está
+    //                      escrito): solo falta engancharlo. Trabajo concreto.
+    //  · HOJA_NO_ESCRITA — el consumidor lo declara el plan pero no está escrito.
+    //  · SOBRA_EL_PUBLISH— nadie lo declara consumir: o el evento sobra, o falta
+    //                      quien lo consuma (decisión de diseño).
+    const escritoSet = new Set(escritos.keys());
     const conexiones_rotas = [...pubsReal.entries()]
       .filter(([e]) => !subsReal.has(e))
-      .map(([evento, publica_en]) => ({ evento, publica_en: publica_en.sort() }))
+      .map(([evento, publica_en]) => {
+        const consumidoresDiseñados = [...disenados.entries()]
+          .filter(([, d]) => d.sub.has(evento)).map(([s]) => s).sort();
+        let tipo;
+        if (!consumidoresDiseñados.length) tipo = 'SOBRA_EL_PUBLISH';
+        else if (consumidoresDiseñados.some((c) => escritoSet.has(c))) tipo = 'FALTA_CABLEAR';
+        else tipo = 'HOJA_NO_ESCRITA';
+        return {
+          evento,
+          publica_en: publica_en.sort(),
+          consumidores_disenados: consumidoresDiseñados,
+          tipo,
+          // El trabajo: dónde hay que engancharlo (null si es decisión de diseño).
+          falta_en: tipo === 'FALTA_CABLEAR'
+            ? consumidoresDiseñados.filter((c) => escritoSet.has(c)).sort()
+            : null
+        };
+      })
       .sort((a, b) => a.evento.localeCompare(b.evento));
 
     // ── 5. Resumen ──
     const total_hojas = hojas.length;
     const escritas = [...disenados.keys()].filter((s) => escritos.has(s)).length;
     const divergentes = hojas_divergentes.filter((h) => h.tipo === 'DIVERGENTE').length;
+    const porTipo = (t) => conexiones_rotas.filter((c) => c.tipo === t).length;
 
     return {
       esquema: 'ensamblaje-f7b-v1',
@@ -170,8 +202,14 @@ class Ensamblaje {
       hojas_no_escritas: total_hojas - escritas,
       hojas_divergentes: divergentes,
       conexiones_rotas_count: conexiones_rotas.length,
+      conexiones_falta_cablear: porTipo('FALTA_CABLEAR'),
+      conexiones_hoja_no_escrita: porTipo('HOJA_NO_ESCRITA'),
+      conexiones_sobra_el_publish: porTipo('SOBRA_EL_PUBLISH'),
       hojas_divergentes_detalle: hojas_divergentes.sort((a, b) => a.slug.localeCompare(b.slug)),
       conexiones_rotas,
+      // El TRABAJO concreto (el empujón): lo que tiene consumidor escrito y solo
+      // necesita el cable. Es la lista accionable, no el muro.
+      trabajo: conexiones_rotas.filter((c) => c.falta_en).map((c) => ({ evento: c.evento, cablear_en: c.falta_en })),
       // El veredicto: ¿se puede poner en servicio ENSAMBLADO?
       ensamblado: (total_hojas - escritas) === 0 && divergentes === 0 && conexiones_rotas.length === 0
     };

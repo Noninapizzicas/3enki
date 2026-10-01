@@ -1,0 +1,39 @@
+{
+  "_doc": "Manifest de entrada/historial-proceso-contable — CUSTODIO CON PERSISTENCIA (P2, hoja del plan). Registro APPEND-ONLY e inmutable de lo PROCESADO y lo FALLADO de la entrada, con su rastro (asunto/origen/motivo/fases/en_cola). Es el historial del PROCESO de entrada, no del asiento (eso es traza-asiento B4). El resultado (PROCESADO|FALLADO) es obligatorio: sin el no se anota (dato ausente = desconocido). NADA se borra ni se sobrescribe. Persiste por proyecto via PosPersistencia (_shared/pos-persistencia, storage /contabilidad/historial-proceso-contable), restaura en project.activated y vuelca en onUnload. Proyeccion _anotar(registro)->Registro (ORDEN). Publica contabilidad.proceso_anotado (+ par .failed).",
+  "name": "historial-proceso-contable",
+  "version": "0.1.0",
+  "description": "Custodio (P2): registro append-only e inmutable del proceso de entrada (procesado y fallado con su rastro). Resultado obligatorio; persistente por proyecto.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "historial-proceso-contable.anotar.request",
+      "handler": "onAnotarRequest",
+      "description": "RPC custodio (ORDEN, panel): {project_id, registro{resultado:'PROCESADO'|'FALLADO', asunto?, origen?, motivo?, fases?, en_cola?, destino_cola?, hecho_id?, documento_id?}} → {project_id, registro, anotado, total, append_only}. Apila el registro del proceso (append-only; sin resultado → INVALID_INPUT). Publica contabilidad.proceso_anotado y responde por historial-proceso-contable.anotar.response. Payload invalido → historial-proceso-contable.anotar.failed."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Restaura el historial del proceso del proyecto activado desde el storage (PosPersistencia)."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "contabilidad.proceso_anotado",
+      "description": "Fire-and-forget (P2): quedo anotado (append-only) un paso del proceso de entrada con su resultado → {project_id, registro, resultado, anotado}. Lo consume panel-proceso-contable (P1) para mostrar el proceso."
+    },
+    {
+      "event": "historial-proceso-contable.anotar.response",
+      "description": "Respuesta RPC correlada de la op anotar."
+    },
+    {
+      "event": "historial-proceso-contable.anotar.failed",
+      "description": "Par de fallo determinista: falta project_id, registro invalido o resultado no declarado → {status, code, message}. Cierra el circulo de anotar.request."
+    }
+  ],
+  "tools": [
+    { "name": "historial-proceso-contable.anotar", "description": "Anota (append-only) un paso del proceso de entrada con su resultado y su rastro." }
+  ],
+  "ui_handlers": [
+    { "domain": "contabilidad", "action": "historial-proceso-contable.anotar", "handler": "onAnotarRequest", "type": "system_panel", "zone": "lateral_derecha" }
+  ]
+}

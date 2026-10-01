@@ -1,0 +1,27 @@
+{
+  "_doc": "Manifest de analitica/frontera-ficha-producto — CONVERSOR STATELESS (H2, hoja del plan). La UNICA puerta ficha-de-producto → DATO CONTABLE: cruza la ficha del negocio y la devuelve con la FORMA INTERNA del coste contable (CosteInterno). Cruza FORMATO, no valora, no decide, no calcula margenes (los importes se copian). La forma de la ficha es DECLARABLE (`forma`: campos+requeridos+clave_natural); sin forma, identidad por nombre interno. El puerto es declarable (si falta, se crea). Dato ausente = desconocido (faltantes[]). NO escribe, NO persiste. RPC entrar es CLASE PREGUNTA → va por el bus, sin panel. Publica frontera-ficha-producto.entrar.response y su par .failed.",
+  "name": "frontera-ficha-producto",
+  "version": "0.1.0",
+  "description": "Conversor (H2): puerto declarable que cruza la ficha de producto del negocio a la forma interna del coste contable. Cruza formato, no valora ni decide; los importes se copian.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "frontera-ficha-producto.entrar.request",
+      "handler": "onEntrarRequest",
+      "description": "RPC conversor (PREGUNTA, por el bus): {project_id, ficha|producto|crudo, forma?, vertical?, clave_natural?} → {project_id, vertical, puerto, coste{...forma_interna, faltantes}, forma_declarada, faltantes, abierto}. Cruza la ficha a la forma interna del coste. Dato ausente = desconocido (se declara en faltantes). Responde por frontera-ficha-producto.entrar.response; ficha invalida → frontera-ficha-producto.entrar.failed."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "frontera-ficha-producto.entrar.response",
+      "description": "Respuesta RPC correlada de la op entrar (una sola cara: el bus)."
+    },
+    {
+      "event": "frontera-ficha-producto.entrar.failed",
+      "description": "Par de fallo determinista: falta la ficha o es invalida → {status, code, message}. Cierra el circulo de entrar.request."
+    }
+  ],
+  "tools": [
+    { "name": "frontera-ficha-producto.entrar", "description": "Cruza (PREGUNTA) la ficha de producto a la forma interna del coste contable." }
+  ]
+}

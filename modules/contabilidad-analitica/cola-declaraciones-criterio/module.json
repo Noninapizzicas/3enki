@@ -1,0 +1,54 @@
+{
+  "_doc": "Manifest de analitica/cola-declaraciones-criterio — CUSTODIO CON PERSISTENCIA (K9, hoja del plan). UNA sola cola donde el JEFE fija (ORDEN) y ratifica (ORDEN) TODOS los criterios [ABIERTO] del sistema (unidad_de_cierre, periodo, amortizacion, reparto, dimensiones, tipos, consolidacion) — cierra declarativamente B1/B7·C7·E6·F5·J6·D11·I5. Invariante 13: el criterio se DECLARA, no se estima (valor ausente → estado ABIERTO, jamas un default). UN solo escritor (guard rol JEFE_CRITERIO; segundo escritor → 403). No se borra: re-fijar appendea al historial. Persiste por proyecto via PosPersistencia (_shared/pos-persistencia, storage /contabilidad/cola-declaraciones-criterio), restaura en project.activated y vuelca en onUnload. Proyecciones _fijar(clave,valor)->Criterio y _ratificar(clave)->Criterio. Publica contabilidad.criterio_fijado (+ pares *.failed).",
+  "name": "cola-declaraciones-criterio",
+  "version": "0.1.0",
+  "description": "Custodio (K9): una sola cola donde el JEFE fija y ratifica todos los criterios del sistema. El criterio se declara, no se estima; valor ausente queda [ABIERTO]. Un solo escritor, persistente por proyecto.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "cola-declaraciones-criterio.fijar.request",
+      "handler": "onFijarRequest",
+      "description": "RPC custodio: {project_id, rol:'JEFE_CRITERIO', clave, valor?} → {project_id, criterio, fijado, abierto}. Guard de escritor (solo JEFE_CRITERIO; otro rol → PERMISSION_DENIED). Guarda el valor declarado del criterio (o lo deja [ABIERTO] si no llega valor). Publica contabilidad.criterio_fijado y responde por cola-declaraciones-criterio.fijar.response. Payload/rol invalido → cola-declaraciones-criterio.fijar.failed."
+    },
+    {
+      "event": "cola-declaraciones-criterio.ratificar.request",
+      "handler": "onRatificarRequest",
+      "description": "RPC custodio: {project_id, rol:'JEFE_CRITERIO', clave} → {project_id, criterio, ratificado, ya_estaba, abierto}. Acto del JEFE sobre un criterio YA declarado; sobre un criterio [ABIERTO] no se inventa ratificacion (ratificado:false). Publica contabilidad.criterio_fijado y responde por cola-declaraciones-criterio.ratificar.response. Error → cola-declaraciones-criterio.ratificar.failed."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Restaura la cola de criterios del proyecto activado desde el storage (PosPersistencia)."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "contabilidad.criterio_fijado",
+      "description": "Fire-and-forget (K9): un criterio quedo declarado y/o ratificado por el JEFE → {project_id, clave, valor, estado, abierto?}. Lo consumen anclaje-cierre-vertical, prevision-caja, etiquetado-analitico, coste-indirecto, tablero-margen-dimension, vencimiento-pago (leen el criterio declarado para operar)."
+    },
+    {
+      "event": "cola-declaraciones-criterio.fijar.response",
+      "description": "Respuesta RPC correlada de la op fijar (una sola cara: el bus)."
+    },
+    {
+      "event": "cola-declaraciones-criterio.fijar.failed",
+      "description": "Par de fallo determinista: rol != JEFE_CRITERIO o payload invalido (clave ausente) → {status, code, message}. Cierra el circulo de fijar.request."
+    },
+    {
+      "event": "cola-declaraciones-criterio.ratificar.response",
+      "description": "Respuesta RPC correlada de la op ratificar."
+    },
+    {
+      "event": "cola-declaraciones-criterio.ratificar.failed",
+      "description": "Par de fallo determinista de ratificar.request."
+    }
+  ],
+  "tools": [
+    { "name": "cola-declaraciones-criterio.fijar", "description": "Fija (declara) el valor de un criterio. Rol JEFE_CRITERIO. Valor ausente → queda [ABIERTO]." },
+    { "name": "cola-declaraciones-criterio.ratificar", "description": "Ratifica un criterio ya declarado por el JEFE." }
+  ],
+  "ui_handlers": [
+    { "domain": "contabilidad", "action": "cola-declaraciones-criterio.fijar", "handler": "onFijarRequest", "type": "system_panel", "zone": "lateral_derecha" },
+    { "domain": "contabilidad", "action": "cola-declaraciones-criterio.ratificar", "handler": "onRatificarRequest", "type": "system_panel", "zone": "lateral_derecha" }
+  ]
+}

@@ -1,0 +1,53 @@
+{
+  "_doc": "Manifest de libro/expediente-documental — CUSTODIO CON PERSISTENCIA (L7, hoja del plan). Cada cifra del libro queda con su documento ORIGEN archivado y enlazado (cifra→documento) con su huella, su procedencia y su enlace: la PRUEBA para la inspeccion. Registro INMUTABLE y APPEND-ONLY (un documento no se borra jamas; un documento mejor se AÑADE). Idempotente por huella (la misma copia no se re-archiva). Sin documento → no se enlaza (dato ausente = desconocido). Persiste por proyecto via PosPersistencia (_shared/pos-persistencia, storage /contabilidad/expediente-documental), restaura en project.activated y vuelca en onUnload. Proyecciones _archivar(cifra,doc)->Referencia (ORDEN) y _recuperar(cifra)->Documento (PREGUNTA). Publica contabilidad.documento_archivado (+ pares *.failed).",
+  "name": "expediente-documental",
+  "version": "0.1.0",
+  "description": "Custodio (L7): archivo inmutable y append-only que enlaza cada cifra del libro con su documento origen (la prueba para la inspeccion). Idempotente por huella; persistente por proyecto.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "expediente-documental.archivar.request",
+      "handler": "onArchivarRequest",
+      "description": "RPC custodio (ORDEN, panel): {project_id, cifra, documento{referencia,tipo,procedencia,fecha,contenido,huella?,traza?}} → {project_id, cifra, documento, archivado, aceptado}. Archiva el documento origen de la cifra (append-only, idempotente por huella). Publica contabilidad.documento_archivado y responde por expediente-documental.archivar.response. Sin documento → expediente-documental.archivar.failed."
+    },
+    {
+      "event": "expediente-documental.recuperar.request",
+      "handler": "onRecuperarRequest",
+      "description": "RPC custodio (PREGUNTA, por el bus): {project_id, cifra} → {project_id, cifra, archivado, documento, historial, total}. Devuelve el documento vigente y el historial de la cifra (append-only). La lectura no muta. Responde por expediente-documental.recuperar.response."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Restaura el expediente del proyecto activado desde el storage (PosPersistencia)."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "contabilidad.documento_archivado",
+      "description": "Fire-and-forget (L7): un documento origen quedo archivado y enlazado a su cifra → {project_id, cifra, documento_id, huella, procedencia}. La inspeccion lo recupera; lo consumen los flujos de revision/exportacion."
+    },
+    {
+      "event": "expediente-documental.archivar.response",
+      "description": "Respuesta RPC correlada de la op archivar."
+    },
+    {
+      "event": "expediente-documental.archivar.failed",
+      "description": "Par de fallo determinista: falta project_id/cifra o no hay documento que archivar → {status, code, message}. Cierra el circulo de archivar.request."
+    },
+    {
+      "event": "expediente-documental.recuperar.response",
+      "description": "Respuesta RPC correlada de la op recuperar."
+    },
+    {
+      "event": "expediente-documental.recuperar.failed",
+      "description": "Par de fallo determinista de recuperar.request."
+    }
+  ],
+  "tools": [
+    { "name": "expediente-documental.archivar", "description": "Archiva (append-only) el documento origen de una cifra del libro." },
+    { "name": "expediente-documental.recuperar", "description": "Recupera (PREGUNTA) el documento vigente y el historial de una cifra." }
+  ],
+  "ui_handlers": [
+    { "domain": "contabilidad", "action": "expediente-documental.archivar", "handler": "onArchivarRequest", "type": "workspace_module", "zone": "barra_modulos" }
+  ]
+}

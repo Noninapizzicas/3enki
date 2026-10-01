@@ -88,6 +88,11 @@ class ColaDecisionesGate extends ModuloHibridoReflejo {
 
   onResolverRequest(e) {
     return this._atender(e, 'resolver', 'nichos.gate.resolver.response', async (d) => {
+      // Hidratar ANTES de resolver: tras un reinicio el store está vacío y la
+      // persistencia solo restaura en project.activated. Sin esto, resolver la
+      // primera decisión tras un reinicio devolvía COLA_VACIA aunque el disco
+      // tuviera solicitudes (bug real medido 1-oct-2026: 2 en disco, memoria vacía).
+      await this._hidratarSiFalta(d && d.project_id);
       const res = this._resolverSiguiente(d);
       // Emisor/par de fallo: exito → resuelto + decision; error → par determinista.
       if (res.status === 200) {

@@ -1,0 +1,72 @@
+{
+  "_doc": "Manifest de libro/regla-movimiento-bancario — CUSTODIO CON PERSISTENCIA (E8, hoja del plan). La parcela de REGLAS declarables/aprendidas del banco ('esta comision -> esta cuenta'): UN solo escritor. `declarar` es ORDEN (panel): registra una regla con su contexto y su cuenta; si nace APRENDIDA NO opera hasta que el asesor la ratifique (gate L10 ratificacion-regla-aprendida). `aplicar` y `proponer` son PREGUNTA y van por el bus. ESCUCHA contabilidad.regla_ratificada (L10) para dejar la regla operativa/inerte — handler fire-and-forget (no-RPC) que, si ESCRIBE, anuncia contabilidad.movimiento_regla_declarada (R2). Ratificacion UNICA por L10. Dato ausente = desconocido: sin regla declarada no se inventa la contrapartida. Guard de escritor (solo rol REGLA_MOVIMIENTO_BANCARIO; segundo escritor → 403). Persiste por proyecto via PosPersistencia (storage /contabilidad/regla-movimiento-bancario), restaura en project.activated y vuelca en onUnload. Declarar es CLASE ORDEN → SÍ lleva ui_handler (F6: workspace_module).",
+  "name": "regla-movimiento-bancario",
+  "version": "0.1.0",
+  "description": "Custodio (E8): reglas declarables/aprendidas del banco. Un solo escritor; las aprendidas no operan hasta la ratificacion del asesor; anuncia contabilidad.movimiento_regla_declarada.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "regla-movimiento-bancario.aplicar.request",
+      "handler": "onAplicarRequest",
+      "description": "RPC custodio (PREGUNTA, por el bus): {project_id, contexto?, movimiento?} → {project_id, contexto, contrapartida, regla, aplicada, opera, abierto}. Devuelve la contrapartida del movimiento segun la regla vigente; sin regla operativa, contrapartida:null y abierto (no se inventa). Responde por regla-movimiento-bancario.aplicar.response."
+    },
+    {
+      "event": "regla-movimiento-bancario.proponer.request",
+      "handler": "onProponerRequest",
+      "description": "RPC custodio (PREGUNTA, por el bus): {project_id, contexto?, movimiento?} → {project_id, contexto, propuesta, propuesta_disponible, abierto}. Propone la contrapartida del movimiento; sin regla, propuesta:null. Responde por regla-movimiento-bancario.proponer.response."
+    },
+    {
+      "event": "regla-movimiento-bancario.declarar.request",
+      "handler": "onDeclararRequest",
+      "description": "RPC custodio (ORDEN, panel): {project_id, rol:'REGLA_MOVIMIENTO_BANCARIO', regla{contexto?, cuenta?, origen?, asiento?}} → {project_id, clave, regla, declarada, pendiente_ratificacion, abierto}. Guard de escritor (otro rol → PERMISSION_DENIED). Re-declarar APPENDEA al historial. Publica contabilidad.movimiento_regla_declarada (R2) y responde por regla-movimiento-bancario.declarar.response. Sin project_id/regla → regla-movimiento-bancario.declarar.failed."
+    },
+    {
+      "event": "contabilidad.regla_ratificada",
+      "handler": "onReglaRatificada",
+      "description": "Fire-and-forget (lo emite ratificacion-regla-aprendida L10): el asesor ratifico/bloqueo una regla aprendida → deja la regla operativa o inerte y anuncia contabilidad.movimiento_regla_declarada (R2). No responde (no es RPC)."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Restaura la parcela de reglas del proyecto activado desde el storage (PosPersistencia)."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "contabilidad.movimiento_regla_declarada",
+      "description": "Fire-and-forget (E8): la parcela de reglas de movimiento bancario cambio (regla declarada o ratificada) → {project_id, clave, regla}. Lo consume la conciliacion bancaria para contabilizar el movimiento."
+    },
+    {
+      "event": "regla-movimiento-bancario.aplicar.response",
+      "description": "Respuesta RPC correlada de la op aplicar (PREGUNTA)."
+    },
+    {
+      "event": "regla-movimiento-bancario.aplicar.failed",
+      "description": "Par de fallo determinista: falta project_id → {status, code, message}. Cierra el circulo de aplicar.request."
+    },
+    {
+      "event": "regla-movimiento-bancario.proponer.response",
+      "description": "Respuesta RPC correlada de la op proponer (PREGUNTA)."
+    },
+    {
+      "event": "regla-movimiento-bancario.proponer.failed",
+      "description": "Par de fallo determinista: falta project_id → {status, code, message}. Cierra el circulo de proponer.request."
+    },
+    {
+      "event": "regla-movimiento-bancario.declarar.response",
+      "description": "Respuesta RPC correlada de la op declarar (ORDEN)."
+    },
+    {
+      "event": "regla-movimiento-bancario.declarar.failed",
+      "description": "Par de fallo determinista: rol != REGLA_MOVIMIENTO_BANCARIO, falta project_id o la regla es invalida → {status, code, message}. Cierra el circulo de declarar.request."
+    }
+  ],
+  "tools": [
+    { "name": "regla-movimiento-bancario.aplicar", "description": "Aplica (PREGUNTA) la contrapartida de un movimiento bancario segun la regla vigente." },
+    { "name": "regla-movimiento-bancario.proponer", "description": "Propone (PREGUNTA) la contrapartida de un movimiento bancario." },
+    { "name": "regla-movimiento-bancario.declarar", "description": "Declara (ORDEN) una regla de movimiento bancario y anuncia el hecho." }
+  ],
+  "ui_handlers": [
+    { "domain": "contabilidad", "action": "regla-movimiento-bancario.declarar", "handler": "onDeclararRequest", "type": "workspace_module", "zone": "barra_modulos" }
+  ]
+}

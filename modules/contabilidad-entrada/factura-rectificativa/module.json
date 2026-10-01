@@ -1,0 +1,33 @@
+{
+  "_doc": "Manifest de entrada/factura-rectificativa — REFLEJO STATELESS (O2, hoja del plan). Correccion comercial POSTERIOR a la emision (abono/devolucion/descuento) que NO BORRA NADA: una rectificacion es OTRA factura (O1), jamas una edicion de la original (append-only). Esta hoja CALCULA la rectificativa a partir de la factura original. ESCUCHA contabilidad.factura_emitida (O1 emision-factura-venta) para tener a mano las facturas rectificables (registro DERIVADO en memoria, no un hecho). LA POLARIDAD ES FIJA: la rectificativa CORRIGE (signo negativo); no se suma al original. Dato ausente = desconocido: sin original ni importe declarado la rectificativa queda ABIERTA (no se estima). NO escribe, NO persiste: la emision la hace O1 (sube emision-factura-venta.emitir.request) y el asiento escritor-diario (B2) — por EVENTO, no import. RPC calcular es CLASE PREGUNTA → va por el bus, sin panel. Publica factura-rectificativa.calcular.response y su par .failed.",
+  "name": "factura-rectificativa",
+  "version": "0.1.0",
+  "description": "Reflejo (O2): calcula la factura rectificativa (abono/devolucion/descuento) posterior a la emision sin borrar la original. Determinista.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "factura-rectificativa.calcular.request",
+      "handler": "onCalcularRequest",
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id, factura?|factura_id?|serie+numero?, tipo?, base?, iva?, total?, motivo?} → {project_id, original_id, tipo, rectificativa:{base, iva, total, signo:-1, motivo}, calculada, borra_original:false, abierto}. Calcula la rectificativa desde el original (la sube a O1/B2 por evento). Sin original ni importe → rectificativa:null y abierto. Responde por factura-rectificativa.calcular.response."
+    },
+    {
+      "event": "contabilidad.factura_emitida",
+      "handler": "onFacturaEmitida",
+      "description": "Fire-and-forget (lo emite emision-factura-venta O1): una factura de venta quedo emitida → se guarda su referencia (derivado en memoria) para poder rectificarla. No responde (no es RPC)."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "factura-rectificativa.calcular.response",
+      "description": "Respuesta RPC correlada de la op calcular (una sola cara: el bus)."
+    },
+    {
+      "event": "factura-rectificativa.calcular.failed",
+      "description": "Par de fallo determinista: falta project_id o no hay factura original que rectificar → {status, code, message}. Cierra el circulo de calcular.request."
+    }
+  ],
+  "tools": [
+    { "name": "factura-rectificativa.calcular", "description": "Calcula (PREGUNTA) la factura rectificativa a partir de la original, sin borrar nada." }
+  ],
+  "ui_handlers": []
+}

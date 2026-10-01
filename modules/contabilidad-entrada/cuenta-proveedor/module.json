@@ -1,0 +1,51 @@
+{
+  "_doc": "Manifest de entrada/cuenta-proveedor — REFLEJO STATELESS (N3, hoja del plan). Mayor AUXILIAR del tercero: cada factura de compra viva y su saldo, DERIVADO del diario. NO calcula la cifra por su cuenta (eso es mayor-balanza): RECIBE los saldos (o los sube por EVENTO a mayor-balanza.saldos.request, best-effort) y AISLA los del TERCERO pedido. Honestidad: sin tercero declarado no se inventa una cuenta; sin saldos no se inventa un saldo (0 no es 'sin deuda', es 'desconocido') → se declara en `abierto`. NO escribe, NO persiste. Los RPC saldo y facturas_vivas son CLASE PREGUNTA → van por el bus, sin panel. Publica cuenta-proveedor.saldo.response, cuenta-proveedor.facturas_vivas.response y sus pares .failed. Escucha contabilidad.asiento_asentado (B2) y contabilidad.tercero_actualizado (N1), ambos emitidos.",
+  "name": "cuenta-proveedor",
+  "version": "0.1.0",
+  "description": "Reflejo (N3): mayor auxiliar del tercero (saldo y facturas vivas de compra) derivado del diario. Determinista; lo ausente se declara abierto.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "cuenta-proveedor.saldo.request",
+      "handler": "onSaldoRequest",
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id, tercero|proveedor|nif, saldos?, fecha?, ejercicio?} → {project_id, tercero, saldo, debe, haber, num_cuentas, abierto}. Aisla los saldos del tercero; sin tercero → INVALID_INPUT. Responde por cuenta-proveedor.saldo.response. Payload invalido → cuenta-proveedor.saldo.failed."
+    },
+    {
+      "event": "cuenta-proveedor.facturas_vivas.request",
+      "handler": "onFacturasVivasRequest",
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id, tercero|proveedor|nif, saldos?, fecha?} → {project_id, tercero, facturas, total_pendiente, abierto}. Lista las facturas de compra vivas del tercero con su saldo y vencimiento. Responde por cuenta-proveedor.facturas_vivas.response. Payload invalido → cuenta-proveedor.facturas_vivas.failed."
+    },
+    {
+      "event": "contabilidad.asiento_asentado",
+      "handler": "onAsientoAsentado",
+      "description": "Fire-and-forget (B2 escritor-diario): un asiento quedo en el libro. Se observa (ventana acotada) para poder derivar el auxiliar; no se escribe."
+    },
+    {
+      "event": "contabilidad.tercero_actualizado",
+      "handler": "onTerceroActualizado",
+      "description": "Fire-and-forget (N1 maestro-terceros): la ficha de un tercero cambio. Se registra la marca (conviene re-derivar); no se escribe."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "cuenta-proveedor.saldo.response",
+      "description": "Respuesta RPC correlada de la op saldo (una sola cara: el bus)."
+    },
+    {
+      "event": "cuenta-proveedor.saldo.failed",
+      "description": "Par de fallo determinista: falta project_id o tercero → {status, code, message}. Cierra el circulo de saldo.request."
+    },
+    {
+      "event": "cuenta-proveedor.facturas_vivas.response",
+      "description": "Respuesta RPC correlada de la op facturas_vivas (una sola cara: el bus)."
+    },
+    {
+      "event": "cuenta-proveedor.facturas_vivas.failed",
+      "description": "Par de fallo determinista: falta project_id o tercero → {status, code, message}. Cierra el circulo de facturas_vivas.request."
+    }
+  ],
+  "tools": [
+    { "name": "cuenta-proveedor.saldo", "description": "Deriva (PREGUNTA) el saldo del tercero (mayor auxiliar de proveedor)." },
+    { "name": "cuenta-proveedor.facturas_vivas", "description": "Lista (PREGUNTA) las facturas de compra vivas del tercero con su saldo." }
+  ]
+}

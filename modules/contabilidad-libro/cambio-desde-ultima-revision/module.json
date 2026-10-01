@@ -1,0 +1,43 @@
+{
+  "_doc": "Manifest de libro/cambio-desde-ultima-revision — REFLEJO STATELESS (L9, hoja del plan). Asientos NUEVOS, AJUSTES y REGLAS CAMBIADAS desde el ultimo visto bueno: calculo de DIFERENCIA (delta). ESCUCHA los tres hechos que mueven el delta: contabilidad.asiento_asentado (B2 escritor-diario), contabilidad.ajuste_entrado (B5 asiento-ajuste) y contabilidad.revision_firmada (flujo-firma), que MUEVE LA MARCA desde la que se cuenta. Sin revision firmada previa NO se inventa la marca: el delta se declara ABIERTO (desde el inicio). El delta es un DERIVADO en memoria (no escribe, no persiste, no muta el libro). DETERMINISTA. RPC delta es CLASE PREGUNTA → va por el bus, sin panel. Publica cambio-desde-ultima-revision.delta.response y su par .failed.",
+  "name": "cambio-desde-ultima-revision",
+  "version": "0.1.0",
+  "description": "Reflejo (L9): delta de lo cambiado desde el ultimo visto bueno (asientos, ajustes, reglas). Determinista; sin marca previa queda abierto.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "cambio-desde-ultima-revision.delta.request",
+      "handler": "onDeltaRequest",
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id} → {project_id, marca, marca_seq, delta:{asientos_nuevos, ajustes_nuevos, reglas_cambiadas}, num_asientos, num_ajustes, num_reglas, hay_cambio, abierto}. Cuenta lo cambiado desde el ultimo visto bueno; sin marca previa, se declara abierto. Responde por cambio-desde-ultima-revision.delta.response."
+    },
+    {
+      "event": "contabilidad.asiento_asentado",
+      "handler": "onAsientoAsentado",
+      "description": "Fire-and-forget (lo emite escritor-diario B2): un asiento entro en el libro → se anota en el delta. No responde (no es RPC)."
+    },
+    {
+      "event": "contabilidad.ajuste_entrado",
+      "handler": "onAjusteEntrado",
+      "description": "Fire-and-forget (lo emite asiento-ajuste B5): la correccion del asesor entro → se anota como ajuste del delta. No responde (no es RPC)."
+    },
+    {
+      "event": "contabilidad.revision_firmada",
+      "handler": "onRevisionFirmada",
+      "description": "Fire-and-forget (lo emite flujo-firma): el asesor dio su visto bueno → MUEVE LA MARCA desde la que se cuenta el delta. No responde (no es RPC)."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "cambio-desde-ultima-revision.delta.response",
+      "description": "Respuesta RPC correlada de la op delta (una sola cara: el bus)."
+    },
+    {
+      "event": "cambio-desde-ultima-revision.delta.failed",
+      "description": "Par de fallo determinista: falta project_id → {status, code, message}. Cierra el circulo de delta.request."
+    }
+  ],
+  "tools": [
+    { "name": "cambio-desde-ultima-revision.delta", "description": "Calcula (PREGUNTA) la diferencia desde el ultimo visto bueno." }
+  ],
+  "ui_handlers": []
+}

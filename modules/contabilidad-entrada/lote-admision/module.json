@@ -1,0 +1,28 @@
+{
+  "_doc": "Manifest de entrada/lote-admision — REFLEJO STATELESS (A9, hoja del plan). DESACOPLE DEL CUELLO: N hechos en paralelo; el paralelismo es de ADMISION y la ESCRITURA sigue unica (escritor-diario B2, single-writer del libro). Esta hoja NO escribe el libro ni normaliza: REPARTE el lote y SUBE cada elemento por EVENTO (normalizador-hecho.entrar.request y, si el elemento ya trae su asiento, escritor-diario.asentar.request). Sin lote declarado NO se admite nada (dato ausente = desconocido); `paralelo` es un hecho de la admision, no una promesa. DETERMINISTA. NO escribe, NO persiste. RPC admitir es CLASE PREGUNTA → va por el bus, sin panel (F6: sin superficie). Publica lote-admision.admitir.response y su par .failed.",
+  "name": "lote-admision",
+  "version": "0.1.0",
+  "description": "Reflejo (A9): desacople del cuello. Admiten N hechos en paralelo, pero la escritura sigue unica; reparte el lote y lo sube por evento.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "lote-admision.admitir.request",
+      "handler": "onAdmitirRequest",
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id, lote:[hechos], destino?} → {project_id, admitidos, descartados, paralelo, ramas:[{indice, hecho, destino, con_asiento}], escritura:'unica (escritor-diario)'}. Reparte el lote y lo sube por evento. Sin lote → INVALID_INPUT. Responde por lote-admision.admitir.response."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "lote-admision.admitir.response",
+      "description": "Respuesta RPC correlada de la op admitir (una sola cara: el bus)."
+    },
+    {
+      "event": "lote-admision.admitir.failed",
+      "description": "Par de fallo determinista: falta project_id o el lote declarado es invalido → {status, code, message}. Cierra el circulo de admitir.request."
+    }
+  ],
+  "tools": [
+    { "name": "lote-admision.admitir", "description": "Admite (PREGUNTA) un lote de N hechos repartiendolo en paralelo contra los custodios." }
+  ],
+  "ui_handlers": []
+}

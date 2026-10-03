@@ -334,13 +334,13 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
       // Y VERIFICADO sin haber construido nada.
       const progreso = await this._progresoPlan(project_id);
       const hayPlan  = progreso.total > 0;
-      const siguiente = hayPlan ? this._decidirSiguiente(progreso, fase) : paso;
+      const siguiente = hayPlan ? await this._decidirSiguiente(progreso, fase) : paso;
 
       // GATE DE COMPLETITUD DEL PLAN (decisión del sistema, no del LLM):
       // 'completado' SOLO se acepta con el plan COMPLETO en disco. Sin plan no
       // hay nada que declarar completo — el juicio sigue siendo del ciclo por
       // pieza aunque el empujón lo dé el mapa.
-      if (fase === 'completado' && (!hayPlan || this._decidirSiguiente(progreso, fase).skill !== null)) {
+      if (fase === 'completado' && (!hayPlan || (await this._decidirSiguiente(progreso, fase)).skill !== null)) {
         return { status: 409, data: {
           error: 'FASE_INCOMPLETA',
           message: this._conArquitectura(hayPlan
@@ -385,7 +385,7 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
   //                                           → construir-interfaz (F7)
   //   hoja completa (módulo+skill+interfaz)  → la siguiente hoja
   //   todas las hojas completas      → verificación final → completado
-  _decidirSiguiente(progreso, faseActual = null) {
+  async _decidirSiguiente(progreso, faseActual = null) {
     const hojas = progreso.hojas || [];
     const n = progreso.total || hojas.length;
     for (let i = 0; i < hojas.length; i++) {
@@ -413,16 +413,21 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
         }
         return { skill: 'construir-interfaz', lee: [`esquemas/interfaz-${h.slug}.md`, `modules/${h.slug}/module.json`], escribe: `frontend/src/lib/modules/${h.slug}/`, mensaje: `MÓDULO POR MÓDULO — ${pos}: construir la interfaz de ${h.slug} — CONSUME esquemas/interfaz-${h.slug}.md → trío frontend (manifest.json + index.ts + ${h.slug.charAt(0).toUpperCase()+h.slug.slice(1)}Panel.svelte + store) en frontend/src/lib/modules/${h.slug}/. Al terminar: proceso-negocio.completar_fase { fase: "interfaz_construida", resumen: { modulos: ["${h.slug}"] } }.` };
       }
-      // hoja completa (módulo + skill + interfaz) → continúa a la siguiente
-    }
-    // ── F7b · ENSAMBLAJE (determinista, sin LLM) ──
-    // Antes de la verificación final, RECOMPONER: ¿lo escrito HABLA como el plan
-    // (F3b) lo diseñó? Cruza el contrato diseñado (bloque enki-plan) contra los
-    // module.json reales. Sin esto el proceso solo comprueba que los módulos
-    // CARGAN (F8), no que se hablen — nichos llegó a F8 con 81 conexiones rotas.
-    if (!this._ensambladoRecomponer(progreso)) {
-      return { skill: 'ensamblaje', lee: ['esquemas/plan-construccion.md', 'modules/'], escribe: 'proceso-negocio/fase7b-ensamblaje.json',
-        mensaje: `FASE 7b · ENSAMBLAJE: recomponer la realidad escrita — cruza el plan de F3b (subscribes/publishes por hoja) contra los module.json reales. Determinista, sin LLM. Al terminar: proceso-negocio.completar_fase { fase: "ensamblado" }.` };
+      // Hoja con módulo + skill + interfaz construidos: ANTES de pasar a la
+      // siguiente, F7b INTEGRA esta hoja en el bus vivo (publique quien
+      // publique, oiga quien oiga). El reflejo lee todos los manifests del
+      // repo, el LLM elige qué eventos vivos suscribir, y el reflejo escribe
+      // los subscribes y los handlers esqueleto en el módulo nuevo. Jamás
+      // toca módulos viejos.
+      if (!this._estaHojaIntegrada(progreso.project_id, h.slug)) {
+        const r = await this._integrarHoja(progreso.project_id, h.slug);
+        if (!r.ok) {
+          return { skill: 'ensamblaje', lee: [`modules/${h.slug}/module.json`, `modules/${h.slug}/index.js`, 'modules/'], escribe: 'proceso-negocio/fase7b-ensamblaje.json',
+            mensaje: `FASE 7b · INTEGRAR ${pos}: la integración automática falló — ${r.code}: ${r.mensaje}. Revisa el log y vuelve a correr; o integra a mano publicando ensamblaje.integrar.request con slug="${h.slug}".` };
+        }
+        // integrada OK — continuar el bucle para evaluar la siguiente hoja
+      }
+      // hoja completa e integrada → continúa a la siguiente
     }
 
     // FASE 8 — VERIFICACIÓN FINAL EN VIVO (determinista, sin LLM).
@@ -458,65 +463,123 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
     return this._emitidos.has(`${project_id}::negocio.ensamblado`);
   }
 
-  // ── F7b · ENSAMBLAJE — RECOMPONE la realidad escrita (determinista, sin LLM) ──
-  // Cruza el CONTRATO DISEÑADO (el bloque enki-plan de F3b, con subscribes/
-  // publishes por hoja) contra lo ESCRITO (los module.json reales de módulos y
-  // las interfaces en el frontend). Devuelve true si está ensamblado (sin
-  // conexiones de dominio rotas ni hojas divergentes); si no, deja el informe
-  // en disco y devuelve false para que el proceso lo trate como freno → empujón.
-  async _ensambladoRecomponer(progreso) {
-    const project_id = progreso.project_id;
+  // ── F7b · INTEGRACIÓN POR HOJA — publique quien publique, oiga quien oiga ──
+  // Cada hoja recién completada (módulo + skill + interfaz) se integra en el
+  // bus vivo del repo: el reflejo lee TODOS los manifests, un LLM elige qué
+  // eventos vivos necesita suscribir, y el reflejo escribe esos subscribes al
+  // manifest de la hoja nueva y los handlers esqueleto en su index.js. Jamás
+  // toca módulos viejos. Event-driven puro: un publish sin oyente HOY es
+  // futuro abierto. Un subscribe que no case con voz viva se descarta.
+
+  // ¿La hoja ya está integrada? Lo lee del informe incremental en disco.
+  _estaHojaIntegrada(project_id, slug) {
     try {
-      const r = await this._rpc('fs.read.request', { project_id, path: 'esquemas/plan-construccion.md' });
-      const contenido = (r && (r.content || r.data?.content)) || '';
-      // SIN PLAN no hay contrato contra el que recomponer → NO se puede declarar
-      // ensamblado. Es el mismo principio que F8 ("sin plan no hay nada que
-      // verificar"): no se cierra una fase sobre vacío. Lo canta el test de
-      // blindaje de la cadena (ninguna fase cierra sin su entregable en disco).
-      if (!contenido) return false;
-      const m = contenido.match(/```json enki-plan\s*([\s\S]*?)```/);
-      if (!m) return false;         // plan sin bloque estructurado → no recomponible
-      let plan;
-      try { plan = JSON.parse(m[1]); } catch (_) { return false; }
-
-      // La realidad escrita: los módulos del plan, leídos del repo real.
-      const real = {};
-      for (const h of (plan.hojas || [])) {
-        if (!h || !h.slug) continue;
-        const dir = this._buscarModulo(h.slug);
-        if (!dir) continue;         // no escrito → lo cubre _progresoPlan, no aquí
-        let mj = null;
-        try { mj = JSON.parse(fs.readFileSync(path.join(dir, 'module.json'), 'utf8')); } catch (_) {}
-        real[h.slug] = {
-          existe: true,
-          subscribes: (mj && (mj.subscribes || mj.events?.subscribes)) || [],
-          publishes: (mj && (mj.publishes || mj.events?.publishes)) || [],
-          tiene_interfaz: this._interfazOperativaEnDisco(h.slug)
-        };
-      }
-      const { Ensamblaje } = require('./ensamblaje');
-      const informe = new Ensamblaje(plan, real).recomponer();
-
-      // Persistir el informe (evidencia en disco, no solo la palabra del proceso).
+      const abs = path.join(this._reposRoot(), 'proceso-negocio', 'fase7b-ensamblaje.json');
+      // Primero intento ruta scopeada al proyecto (storage/<slug>/proceso-negocio/...)
+      // y si no, la ruta plana. El reflejo persiste en la plana del repo.
+      const candidatos = [];
       try {
-        await this._rpc('fs.write.request', {
-          project_id, path: 'proceso-negocio/fase7b-ensamblaje.json',
-          content: JSON.stringify({ ...informe, completada_el: new Date().toISOString(), project_id }, null, 2)
-        });
-      } catch (_) { /* best-effort: el informe no debe tumbar el proceso */ }
-
-      // El freno es el hallazgo, no el muro: si hay conexiones rotas o hojas
-      // divergentes, NO está ensamblado y el proceso lo dice con números.
-      return informe.ensamblado === true;
-    } catch (err) {
-      // NO SE PUDO VERIFICAR → NO SE CERTIFICA. Fail-SAFE, nunca fail-open.
-      // Doctrina del cimiento: "success = ENTREGABLE VERIFICADO". Un fallo de
-      // infraestructura (RPC caído, require roto) NO puede declarar el proceso
-      // ensamblado en verde — sería un falso verde sobre trabajo no comprobado.
-      // Es la misma regla que F8 ("sin plan no hay nada que verificar").
-      this._ultimoFalloEnsamblaje = (err && err.message) || String(err);
+        const base = this._basePathDelProyecto(project_id);
+        if (base) candidatos.push(path.join(base, 'proceso-negocio', 'fase7b-ensamblaje.json'));
+      } catch (_) {}
+      candidatos.push(abs);
+      for (const ruta of candidatos) {
+        if (!fs.existsSync(ruta)) continue;
+        try {
+          const obj = JSON.parse(fs.readFileSync(ruta, 'utf8'));
+          const arr = Array.isArray(obj.integraciones) ? obj.integraciones : [];
+          if (arr.some((e) => e && e.slug === slug)) return true;
+        } catch (_) { /* informe roto: tratar como no integrada */ }
+      }
       return false;
+    } catch (_) { return false; }
+  }
+
+  // Integra UNA hoja en el bus vivo. Instancia el Integrador, le inyecta
+  // pedirAlLLM (RPC a llm.complete.request vía ai-gateway), ejecuta.integrar()
+  // y publica el pulso al bus.
+  async _integrarHoja(project_id, slug) {
+    try {
+      const { Integrador } = require('./ensamblaje');
+      const integrador = new Integrador({
+        reposRoot: this._reposRoot(),
+        slug,
+        vertical: this._verticalDeSlug(slug),
+        pedirAlLLM: ({ sistema, user }) => this._pedirAlLLMViaBus(sistema, user, project_id),
+        informePath: 'proceso-negocio/fase7b-ensamblaje.json'
+      });
+      const resultado = await integrador.integrar();
+      if (resultado && resultado.pulso && this.eventBus) {
+        try { this.eventBus.publish(resultado.pulso.evento, resultado.pulso.payload); } catch (_) {}
+      }
+      return { ok: true, data: resultado.data };
+    } catch (err) {
+      const mensaje = (err && err.message) || String(err);
+      const code = (err && err.code) || 'PERSISTENCIA_FALLIDA';
+      // Pulso de fallo canónico — el bus se entera del motivo medido.
+      if (this.eventBus) {
+        try {
+          const vertical = this._verticalDeSlug(slug) || 'proceso';
+          this.eventBus.publish(`${vertical}.hoja.integrar.failed`, {
+            slug, project_id, code, mensaje, el: new Date().toISOString()
+          });
+        } catch (_) {}
+      }
+      this._ultimoFalloEnsamblaje = mensaje;
+      return { ok: false, code, mensaje };
     }
+  }
+
+  // Puente al LLM — publica llm.complete.request y devuelve content de la
+  // response. ai-gateway consume este request y correla por request_id.
+  async _pedirAlLLMViaBus(sistema, user, project_id) {
+    const req_id = `f7b-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    const payload = {
+      correlation_id: req_id,
+      request_id: req_id,
+      system_prompt: sistema,
+      messages: [{ role: 'user', content: user }],
+      source: 'proceso-negocio.ensamblaje',
+      timestamp: new Date().toISOString(),
+      ...(project_id ? { project_id } : {})
+    };
+    const r = await this._rpc('llm.complete.request', payload, { timeout_ms: 60000 });
+    const content = (r && (r.content || r.data?.content)) || '';
+    if (!content) throw new Error('llm.complete.response sin content');
+    return content;
+  }
+
+  // Raíz del repo donde vive modules/.
+  _reposRoot() {
+    // index.js vive en modules/proceso-negocio/; subimos dos niveles para la raíz.
+    return path.resolve(__dirname, '..', '..');
+  }
+
+  // ¿Bajo qué vertical vive el módulo? modules/<vertical>/<slug> → <vertical>;
+  // modules/<slug> → null (módulo del core, sin vertical).
+  _verticalDeSlug(slug) {
+    try {
+      const modulesDir = path.join(this._reposRoot(), 'modules');
+      // ruta plana
+      if (this._esModuloEn(path.join(modulesDir, slug))) return null;
+      // bajo vertical
+      for (const ent of fs.readdirSync(modulesDir, { withFileTypes: true })) {
+        if (!ent.isDirectory()) continue;
+        if (this._esModuloEn(path.join(modulesDir, ent.name, slug))) return { nombre: ent.name };
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  _esModuloEn(dir) {
+    try { return fs.statSync(dir).isDirectory() && fs.existsSync(path.join(dir, 'module.json')); }
+    catch { return false; }
+  }
+
+  _basePathDelProyecto(_project_id) {
+    // Hoy el informe lo persiste el reflejo contra el reposRoot. Reservamos el
+    // helper para futura persistencia scopeada por proyecto; por ahora null.
+    return null;
   }
 
   async _progresoPlan(project_id) {
@@ -818,43 +881,36 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
         mensaje: 'La verificación final no pasa: se espera que TODAS las hojas del plan tengan su módulo (modules/<slug>/index.js que carga), su skill (cosecha/cantera/enki/<slug>/SKILL.md) y su interfaz operativa (frontend/src/lib/modules/<slug>/). El reporte del agente no cuenta.'
       },
       'ensamblado': {
-        // FASE 7b — ENSAMBLAJE (determinista, sin LLM): lo escrito HABLA como el
-        // plan (F3b) lo diseñó. Se acepta si el recomponedor no encuentra ni
-        // conexiones de dominio rotas ni hojas divergentes. El informe queda en
-        // disco (proceso-negocio/fase7b-ensamblaje.json).
+        // FASE 7b — INTEGRACIÓN en el bus vivo. Cada hoja se integra en su
+        // propio ciclo (al cerrar interfaz_construida). El gate GLOBAL de la
+        // vertical solo CONFIRMA que todas las hojas del plan están integradas
+        // en proceso-negocio/fase7b-ensamblaje.json. Event-driven puro: F7b
+        // no juzga el ecosistema, integra cada hoja en el bus que ya existe.
         tipo: 'sistema',
-        mensaje: 'El ensamblaje no pasa: el plan de F3b declara conexiones (subscribes/publishes) que los módulos escritos no cumplen. Revisa proceso-negocio/fase7b-ensamblaje.json: conexiones de dominio rotas y hojas divergentes.'
+        mensaje: 'La integración no está completa: hay hojas del plan sin entrada en proceso-negocio/fase7b-ensamblaje.json. Cada hoja se integra al cerrar interfaz_construida; revisa el informe y los pulsos *.hoja.integrar.failed del bus.'
       }
     };
     const spec = ESPERADOS[fase];
     if (!spec) return { ok: true };   // fase sin gate declarado → se acepta
-    // FASE 7b — ENSAMBLAJE: el gate es el recomponedor determinista. Acepta solo
-    // si lo escrito cuadra con el contrato diseñado (F3b): sin conexiones de
-    // dominio rotas ni hojas divergentes. El informe queda en disco.
+    // FASE 7b — INTEGRACIÓN GLOBAL: cada hoja se integró en su momento (dentro
+    // del ciclo por pieza del rail). El gate solo confirma que TODAS las hojas
+    // del plan están en el informe incremental. No vuelve a integrar.
     if (fase === 'ensamblado') {
-      const ok = await this._ensambladoRecomponer({ project_id });
-      if (ok) return { ok: true, verificados: ['ensamblaje: lo escrito cuadra con el plan de F3b'] };
-      let informe = null;
-      try {
-        const rr = await this._rpc('fs.read.request', { project_id, path: 'proceso-negocio/fase7b-ensamblaje.json' });
-        informe = JSON.parse((rr && (rr.content || rr.data?.content)) || 'null');
-      } catch (_) {}
-      const rotas = informe ? informe.conexiones_rotas_count : '?';
-      const diverg = informe ? informe.hojas_divergentes : '?';
-      const cablear = (informe && informe.trabajo) || [];
-      // FRENO → EMPUJÓN: el 409 no es un muro, es la lista de trabajo. El
-      // ensamblaje no "arregla" (adivinaría la conexión correcta); entrega el
-      // trabajo concreto para que se ejecute y la fase se cierre al corregirlo.
-      const detalleTrabajo = cablear.length
-        ? ` Trabajo: ${cablear.slice(0, 5).map((t) => `'${t.evento}' engancharlo en ${t.cablear_en.join(',')}`).join(' · ')}`
-        : '';
+      const progreso = await this._progresoPlan(project_id);
+      if (progreso.total === 0) {
+        return { ok: false, esperado: ['un plan con hojas que integrar'], mensaje: 'No hay plan de construcción con hojas: no hay nada que integrar en el bus.' };
+      }
+      const faltantes = [];
+      for (const h of (progreso.hojas || [])) {
+        if (h && h.slug && !this._estaHojaIntegrada(project_id, h.slug)) faltantes.push(h.slug);
+      }
+      if (faltantes.length === 0) {
+        return { ok: true, verificados: [`${progreso.total} hojas integradas en el bus vivo`] };
+      }
       return { ok: false,
-        esperado: ['conexiones de dominio completas', 'módulos fieles al plan'],
-        mensaje: `${spec.mensaje} (medido: ${rotas} conexiones de dominio rotas, ${diverg} hojas divergentes).${detalleTrabajo}`,
-        // El EMPUJÓN viaja estructurado, no solo como prosa: quién lo consuma
-        // (el chat, un agente de cosido futuro) tiene la lista accionable.
-        trabajo: cablear,
-        informe };
+        esperado: ['todas las hojas integradas en el bus vivo'],
+        mensaje: `${spec.mensaje} Hojas sin integrar: ${faltantes.join(', ')}.`,
+        faltantes };
     }
     // FASE 8 — verificación final: TODAS las hojas del plan deben estar
     // construidas + con skill. No se fía del resumen del agente: cuenta el

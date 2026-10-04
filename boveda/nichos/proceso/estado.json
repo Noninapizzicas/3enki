@@ -3,7 +3,7 @@
   "ramas": "vertical/nichos",
   "persistencia": "boveda/nichos/proceso/",
   "modelo": "mente-ejecuta / chat-gestiona",
-  "fase_actual": "fase3-planificar-construccion",
+  "fase_actual": "fase3b-adaptador",
   "nota_reset": "2026-10-04 — reinicio desde F3 con la maquinaria nueva (F3b con canon + F7b INTEGRADOR por hoja). Borrados: modules/nichos/* (44), skills de cantera (44), panels frontend (3), tests nichos__* (43), fases 3/3b/7b. Conservados: F0 identidad + F2 esquematizacion (entregable de prisma).",
   "fase0": {
     "estado": "completada",
@@ -20,7 +20,17 @@
     "preguntas_abiertas": "Ninguna — el dueño las rechazó; el esquema cierra con los valores que ya estaban declarados"
   },
   "pendiente_dueno": [],
-  "fase3": { "estado": "por_hacer", "skill": "planificar-construccion" },
+  "fase3": {
+    "estado": "completada",
+    "skill": "planificar-construccion",
+    "entregable": "boveda/nichos/proceso/fase3/diseno-oop.md",
+    "lineas": 2190,
+    "clases_y_vo": 84,
+    "clases_diseñadas": 44,
+    "puertos_abiertos": 6,
+    "decisiones_abiertas": 25,
+    "nota": "PLASMA: 44 clases + value objects compartidos; cero tecnologías Enki; 6 puertos abiertos (p1..p6); ciclo semilla→caja cubierto; cumple regla del plasma (sin bus/MQTT/módulo); 2 tapones humanos (puente D2 + gate E2) consistentes con F0."
+  },
   "fase3b": { "estado": "por_hacer", "skill": "enki-adaptador-disenos" },
   "fase4": { "estado": "por_hacer", "skill": "construir-modulos" },
   "fase5": { "estado": "por_hacer", "skill": "escribir-skills" },

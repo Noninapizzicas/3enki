@@ -1,0 +1,19 @@
+{
+  "name": "camino-encontrar-construir",
+  "version": "0.1.0",
+  "description": "MICRO-AGENTE del vertical NICHOS: decide el camino ENCONTRAR o CONSTRUIR para un nicho viable. Cruza informe y veredicto con el catalogo de capacidades disponibles (nichos.catalogo.capacidad.disponibles.request). Si capacidades existen → ENCONTRAR. Si no → CONSTRUIR. Si ambiguo → solicitud de decision al dueno. RPC nichos.camino.decidir; pulso .decidido.",
+  "_doc": "modules/nichos/camino-encontrar-construir — MICRO-AGENTE del vertical NICHOS.\n\nQue hace: recibe informe + veredicto de un nicho y consulta el catalogo de capacidades existentes. Si hay capacidades que encajan → ENCONTRAR (reusar). Si no → CONSTRUIR (crear). Si la situacion es ambigua → emite solicitud de decision al dueno. Sin estado persistido.\n\nPatron: ModuloHibridoReflejo (micro-agente — consulta catalogo por bus, sin estado persistido).",
+  "ui_decision": {
+    "necesita": false,
+    "razon": "Micro-agente sin cara propia. Decide camino y emite al bus. Cuando es ambiguo, solicita decision al dueno por el bus (nichos.decision.solicitud.abierta). Sin interaccion directa."
+  },
+  "publishes": [
+    { "event": "nichos.camino.decidido", "description": "PULSO fire-and-forget: camino decidido para un nicho. Payload: {id_nicho, tipo: ENCONTRAR|CONSTRUIR}." },
+    { "event": "nichos.camino.decidir.response", "description": "Response correlada por request_id al RPC nichos.camino.decidir.request. Payload: {status, data:{camino:{tipo}}} o {status, data:{solicitud_decision:{razon, opciones}}}." },
+    { "event": "nichos.catalogo.capacidad.disponibles.request", "description": "RPC saliente: consulta capacidades disponibles en el catalogo. Payload: {request_id, project_id, criterios}." },
+    { "event": "nichos.decision.solicitud.abierta", "description": "PULSO: solicitud de decision al dueno cuando el camino es ambiguo. Payload: {id_nicho, razon, opciones: [ENCONTRAR, CONSTRUIR]}." }
+  ],
+  "subscribes": [
+    { "event": "nichos.camino.decidir.request", "handler": "onDecidirRequest", "description": "RPC: decide el camino ENCONTRAR o CONSTRUIR para un nicho viable y devuelve la decision via response correlada." }
+  ]
+}

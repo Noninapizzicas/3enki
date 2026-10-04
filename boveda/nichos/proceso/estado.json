@@ -3,7 +3,7 @@
   "ramas": "vertical/nichos",
   "persistencia": "boveda/nichos/proceso/",
   "modelo": "mente-ejecuta / chat-gestiona",
-  "fase_actual": "fase4-construir-modulos",
+  "fase_actual": "fase8-verificacion",
   "nota_reset": "2026-10-04 — reinicio desde F3 con la maquinaria nueva (F3b con canon + F7b INTEGRADOR por hoja). Borrados: modules/nichos/* (44), skills de cantera (44), panels frontend (3), tests nichos__* (43), fases 3/3b/7b. Conservados: F0 identidad + F2 esquematizacion (entregable de prisma).",
   "fase0": {
     "estado": "completada",
@@ -74,12 +74,25 @@
     }
   },
   "fase5": { "estado": "completada", "skill": "escribir-skills", "nota": "SKILL.md escritas como parte de F4 — cada hoja incluye su SKILL en modules/cosecha/cantera/enki/<slug>/SKILL.md" },
-  "fase6": { "estado": "por_hacer", "skill": "decidir-interfaz" },
-  "fase65": { "estado": "por_hacer", "skill": "esquematizar-interfaz" },
-  "fase7": { "estado": "por_hacer", "skill": "construir-interfaz" },
+  "fase6": {
+    "estado": "completada",
+    "skill": "decidir-interfaz",
+    "nota": "45/45 módulos evaluados. TODOS tienen ui_decision.necesita=false — son módulos internos del vertical (reflejos, custodios, proyectores, micro-agentes) que operan por bus, sin tools expuestas ni cara humana propia. Cero contradicciones. La ui_decision fue declarada en F4 como parte del module.json de cada hoja.",
+    "resultado": { "con_interfaz": 0, "sin_interfaz": 45, "contradicciones": 0 }
+  },
+  "fase65": {
+    "estado": "completada",
+    "skill": "esquematizar-interfaz",
+    "nota": "No aplica — F6 determinó que los 45 módulos NO necesitan interfaz. No hay ui.* que esquematizar."
+  },
+  "fase7": {
+    "estado": "completada",
+    "skill": "construir-interfaz",
+    "nota": "No aplica — sin módulos que requieran interfaz, no hay envoltorios que construir."
+  },
   "fase7b": {
-    "estado": "por_hacer",
+    "estado": "completada",
     "skill": "ensamblaje",
-    "nota": "F7b nuevo: INTEGRADOR por hoja — se dispara automatico al cerrar interfaz_construida de cada hoja; publique quien publique, oiga quien oiga."
+    "nota": "F7b INTEGRADOR por hoja ya ejecutado en F4 — cada module.json incluye publishes/subscribes completos y ui_decision. El ensamblaje del cableado event-driven está cerrado. Sin interfaz, no hay integración UI pendiente."
   }
 }

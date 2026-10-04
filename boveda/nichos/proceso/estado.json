@@ -3,7 +3,7 @@
   "ramas": "vertical/nichos",
   "persistencia": "boveda/nichos/proceso/",
   "modelo": "mente-ejecuta / chat-gestiona",
-  "fase_actual": "fase8-verificacion",
+  "fase_actual": "completado",
   "nota_reset": "2026-10-04 — reinicio desde F3 con la maquinaria nueva (F3b con canon + F7b INTEGRADOR por hoja). Borrados: modules/nichos/* (44), skills de cantera (44), panels frontend (3), tests nichos__* (43), fases 3/3b/7b. Conservados: F0 identidad + F2 esquematizacion (entregable de prisma).",
   "fase0": {
     "estado": "completada",
@@ -100,5 +100,10 @@
     "estado": "completada",
     "skill": "ensamblaje",
     "nota": "dashboard-nichos registrado en panels.ts (system-bar, order 97, lg). 3 entradas huérfanas eliminadas (vista-portafolio, cola-decisiones-gate, ajustador-umbrales — apuntaban a paneles borrados en el reset F3)."
+  },
+  "fase8": {
+    "estado": "completada",
+    "skill": "verificacion",
+    "nota": "45/45 módulos con module.json+index.js+SKILL.md. Dashboard-nichos: 4 archivos, registrado en panels.ts, 0 huérfanos. 12/12 contratos de eventos alineados (5 RPCs + 7 refresh). Vertical nichos completo."
   }
 }

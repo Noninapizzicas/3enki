@@ -31,7 +31,17 @@
     "decisiones_abiertas": 25,
     "nota": "PLASMA: 44 clases + value objects compartidos; cero tecnologías Enki; 6 puertos abiertos (p1..p6); ciclo semilla→caja cubierto; cumple regla del plasma (sin bus/MQTT/módulo); 2 tapones humanos (puente D2 + gate E2) consistentes con F0."
   },
-  "fase3b": { "estado": "por_hacer", "skill": "enki-adaptador-disenos" },
+  "fase3b": {
+    "estado": "en_curso_parcial",
+    "skill": "enki-adaptador-disenos",
+    "entregable_parcial": "boveda/nichos/proceso/fase3b/plan-construccion.md",
+    "lineas_escritas": 262,
+    "lineas_esperadas": "~1500",
+    "secciones_completas": ["§1 Canon aplicado", "§2 Traducción 44 clases → forma Enki", "§3 Tabla de eventos canónicos del dominio"],
+    "secciones_pendientes": ["§4 Hojas CONSTRUIR (plantilla 7 etapas)", "§5 Hojas REUTILIZAR", "§6 Hojas ADAPTAR", "§7 Espina enki-plan JSON embebida"],
+    "bloqueo": "rate limit del subagente (session limit resets 4:40 UTC 2026-10-04)",
+    "siguiente_paso": "al reanudarse la cuota, lanzar subagente nuevo que CONTINÚE desde §4; NO empezar de cero"
+  },
   "fase4": { "estado": "por_hacer", "skill": "construir-modulos" },
   "fase5": { "estado": "por_hacer", "skill": "escribir-skills" },
   "fase6": { "estado": "por_hacer", "skill": "decidir-interfaz" },

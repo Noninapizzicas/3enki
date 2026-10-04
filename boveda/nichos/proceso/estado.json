@@ -48,21 +48,32 @@
     "nota": "Plan de construcción completo en dos pasadas (parcial + continuación tras rate limit). 203 eventos cableados en la espina (182 nichos.* + 21 de infra). Alineado con la maquinaria nueva (canon + 4 patrones). Listo como entrada de F4."
   },
   "fase4": {
-    "estado": "en_curso",
+    "estado": "completada",
     "skill": "construir-modulos",
     "hojas_construir_total": 45,
-    "construidas": 5,
-    "parciales": 1,
-    "pendientes": 39,
+    "construidas": 45,
+    "parciales": 0,
+    "pendientes": 0,
+    "nota": "45/45 hojas CONSTRUIR completadas. Cada hoja tiene module.json + index.js + SKILL.md en cantera. Smoke tests OK en todas. Construidas en 12 batches paralelos (A-L) entre 2026-10-04.",
     "detalle": {
-      "completas": ["perfil-limite-busqueda", "reglas-exclusion", "criterio-viabilidad", "perfil-supervision", "perfil-cobro-entrega"],
-      "parcial": { "slug": "catalogo-capacidades", "falta": "SKILL.md en cantera (manifest + index.js ya escritos y smoke OK)" },
-      "siguiente": "conversor-fuente (#17)"
-    },
-    "bloqueo_actual": "session limit resets 11am UTC",
-    "cadencia": "batches de 3 hojas por subagente; cada batch consume ~160K tokens / ~6min"
+      "completas": [
+        "perfil-limite-busqueda", "reglas-exclusion", "criterio-viabilidad", "perfil-supervision", "perfil-cobro-entrega",
+        "catalogo-capacidades", "conversor-fuente", "gestion-limites-fuente", "imputacion-coste-fuente",
+        "puerto-fuente-datos", "puerto-canal", "escalones-mensaje",
+        "clasificador-intencion", "historial", "pipeline",
+        "cola-candidatos", "registro-cobros", "cuadro-salud",
+        "imputacion-costes", "vista-portafolio", "cola-decisiones",
+        "ajustador-umbrales", "paquetador-decision", "propuesta-valor-canal", "confirmacion-valor",
+        "estudio-demanda", "veredicto-viabilidad", "camino-encontrar-construir",
+        "reglas-aprendidas-validacion", "cortador-temprano", "batch-validacion", "sondeador-territorio",
+        "estudio-competencia", "proponedor-modelo-cobro", "ensamblador-solucion",
+        "puente-humano", "gate-decision-operar", "motor-cobro",
+        "canal-distribucion", "alerta-sangria", "manejo-fallo", "pulso-avance",
+        "capturador-semilla", "normalizador-semilla", "orquestador"
+      ]
+    }
   },
-  "fase5": { "estado": "por_hacer", "skill": "escribir-skills" },
+  "fase5": { "estado": "completada", "skill": "escribir-skills", "nota": "SKILL.md escritas como parte de F4 — cada hoja incluye su SKILL en modules/cosecha/cantera/enki/<slug>/SKILL.md" },
   "fase6": { "estado": "por_hacer", "skill": "decidir-interfaz" },
   "fase65": { "estado": "por_hacer", "skill": "esquematizar-interfaz" },
   "fase7": { "estado": "por_hacer", "skill": "construir-interfaz" },

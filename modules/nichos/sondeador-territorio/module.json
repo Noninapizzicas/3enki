@@ -1,0 +1,22 @@
+{
+  "name": "sondeador-territorio",
+  "version": "0.1.0",
+  "description": "MICRO-AGENTE del vertical NICHOS: sondea un territorio a partir de una semilla normalizada, consulta reglas de exclusion y limites, consume fuentes externas, filtra duplicados y emite candidatos detectados.",
+  "_doc": "modules/nichos/sondeador-territorio — MICRO-AGENTE del vertical NICHOS.\n\nQue hace: recibe nichos.territorio.sondear.request con {semilla_normalizada} y orquesta el sondeo:\n  1. Consulta reglas de exclusion (nichos.reglas.exclusion.consultar.request).\n  2. Consulta limites del perfil (nichos.perfil.limite.leer.request).\n  3. Consume fuentes externas (nichos.fuente.consumir.request).\n  4. Filtra candidatos contra exclusiones (dedupe).\n  5. Emite nichos.candidato.detectado por cada candidato valido.\n  6. Emite nichos.sondeo.completado o nichos.sondeo.failed.\n\nSin estado persistido — micro-agente puro (orquesta consultas y emite candidatos).\n\nPatron: ModuloHibridoReflejo (micro-agente).",
+  "ui_decision": {
+    "necesita": false,
+    "razon": "Micro-agente interno del motor de descubrimiento. Lo dispara el planificador o el Jefe tras una semilla normalizada. Sin cara propia al usuario."
+  },
+  "publishes": [
+    { "event": "nichos.candidato.detectado", "description": "PULSO fire-and-forget: un candidato a nicho fue detectado en el sondeo. Payload: {id_nicho, titulo, territorio, senal, evidencia[], timestamp}." },
+    { "event": "nichos.sondeo.completado", "description": "PULSO fire-and-forget: el sondeo de un territorio se completo. Payload: {id_nicho, candidatos_total, timestamp}." },
+    { "event": "nichos.sondeo.failed", "description": "PULSO fire-and-forget: el sondeo fallo. Payload: {id_nicho, razon_codigo, detalle, timestamp}." },
+    { "event": "nichos.territorio.sondear.response", "description": "Response correlada por request_id al RPC nichos.territorio.sondear.request. Payload: {status, data:{candidatos[]|solicitud_decision}}." },
+    { "event": "nichos.reglas.exclusion.consultar.request", "description": "RPC hacia reglas de exclusion: consulta exclusiones vigentes. Payload: {request_id, project_id}." },
+    { "event": "nichos.perfil.limite.leer.request", "description": "RPC hacia perfil de limites: consulta topes de operacion. Payload: {request_id, project_id}." },
+    { "event": "nichos.fuente.consumir.request", "description": "RPC hacia fuente de datos: consume una fuente externa para obtener datos del territorio. Payload: {request_id, project_id, semilla, territorio}." }
+  ],
+  "subscribes": [
+    { "event": "nichos.territorio.sondear.request", "handler": "onSondearRequest", "description": "RPC: sondea un territorio a partir de una semilla normalizada. Consulta exclusiones y limites, consume fuentes, filtra y emite candidatos. Payload: {request_id, semilla_normalizada, project_id}." }
+  ]
+}

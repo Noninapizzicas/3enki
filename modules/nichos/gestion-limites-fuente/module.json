@@ -1,0 +1,19 @@
+{
+  "name": "gestion-limites-fuente",
+  "version": "0.1.0",
+  "description": "REFLEJO del vertical NICHOS (bloque J · interlocutor proveedor): gestiona el presupuesto de consumo por fuente externa y proyecto. Pre-check de si una fuente puede consumirse (hay margen) y descuento tras consumo efectivo. Store persistido por proyecto con ventana temporal.",
+  "_doc": "modules/nichos/gestion-limites-fuente — REFLEJO + CUSTODIO ligero (bloque J · interlocutor proveedor) del vertical NICHOS. Controla el presupuesto de consumo por fuente externa y proyecto: quién puede consumir y cuánto queda.\n\nQué guarda (per-proyecto, PosPersistencia): /prisma/pos/nichos/limites-fuente.json\n  {\n    _version, _updated,\n    limites: {\n      por_fuente: {\n        '<nombre_fuente>': {\n          presupuesto:    Number,\n          consumido:      Number,\n          ventana_inicio: ISO,\n          ventana_fin:    ISO\n        }\n      }\n    }\n  }\n\nQué atiende:\n  - nichos.fuente.limites.puede.consumir.request → pre-check: ¿hay margen para esta fuente?\n    Devuelve { puede: Boolean, margen: Number }.\n  - nichos.fuente.coste.registrado (fire-and-forget) → descuenta el importe del presupuesto\n    de la fuente correspondiente. Emite PULSO nichos.fuente.consumida si el descuento se aplica.\n  - project.activated → restaura el store del proyecto.\n\nPatrón: ModuloHibridoReflejo + PosPersistencia. Sin mitad blueprint — la lógica es aritmética de presupuesto + guard de margen.\n\nConvenio de ventana: el presupuesto se define por ventana temporal (ej: por hora, por día). Fuera de ventana, se resetea el consumido a 0 y se abre nueva ventana. Si una fuente no tiene presupuesto declarado, puede=true con margen=Infinity (abierto).",
+  "ui_decision": {
+    "necesita": false,
+    "razon": "Bloque J fontanería interna del vertical NICHOS. El pre-check lo llama nichos-puerto-fuente-datos (J1) antes de consumir una fuente. Sin cara propia al usuario. El dueño ajusta presupuestos desde el panel del Jefe (K), no desde este módulo."
+  },
+  "publishes": [
+    { "event": "nichos.fuente.consumida", "description": "PULSO fire-and-forget: se descontó un consumo del presupuesto de una fuente. Payload: {project_id, fuente, importe, margen_restante, timestamp}. Lo consume nichos-imputacion-coste-fuente (J4) para registrar la entrada de coste." },
+    { "event": "nichos.fuente.limites.puede.consumir.response", "description": "Response correlada por request_id al RPC nichos.fuente.limites.puede.consumir.request. Payload: {status:200, data:{puede:Boolean, margen:Number}} | {status, error}." }
+  ],
+  "subscribes": [
+    { "event": "nichos.fuente.limites.puede.consumir.request", "handler": "onPuedeConsumirRequest", "description": "Reflejo JS: pre-check de presupuesto por fuente. Devuelve {puede, margen}. Si la fuente no tiene presupuesto declarado, puede=true con margen=Infinity." },
+    { "event": "nichos.fuente.coste.registrado", "handler": "onCosteRegistrado", "description": "Reflejo JS (fire-and-forget): descuenta el importe del presupuesto de la fuente correspondiente y emite PULSO nichos.fuente.consumida." },
+    { "event": "project.activated", "handler": "onProjectActivated", "description": "Reflejo JS: restaura los límites persistidos del proyecto desde /prisma/pos/nichos/limites-fuente.json (PosPersistencia)." }
+  ]
+}

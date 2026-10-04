@@ -1,0 +1,18 @@
+{
+  "name": "veredicto-viabilidad",
+  "version": "0.1.0",
+  "description": "MICRO-AGENTE del vertical NICHOS: emite veredicto de viabilidad (VIABLE, NO_VIABLE o PUENTE) sobre un informe de nicho. Consulta el criterio vigente (nichos.criterio.viabilidad.leer.request) y usa ai-gateway (llm.complete.request) para evaluar el informe contra el criterio. RPC nichos.veredicto.emitir; pulso .emitido.",
+  "_doc": "modules/nichos/veredicto-viabilidad — MICRO-AGENTE del vertical NICHOS.\n\nQue hace: recibe un informe de nicho (con demanda, competencia, costes), consulta el criterio de viabilidad vigente y emite un veredicto VIABLE, NO_VIABLE o PUENTE. Usa LLM para la evaluacion semantica contra criterio.\n\nPatron: ModuloHibridoReflejo (micro-agente — usa LLM via ai-gateway, sin estado persistido).",
+  "ui_decision": {
+    "necesita": false,
+    "razon": "Micro-agente sin cara propia. Evalua informe contra criterio y emite veredicto al bus. Los consumidores (pipeline, camino) reaccionan al pulso. Sin interaccion directa con el humano."
+  },
+  "publishes": [
+    { "event": "nichos.veredicto.emitido", "description": "PULSO fire-and-forget: veredicto de viabilidad emitido. Payload: {id_nicho, decision: VIABLE|NO_VIABLE|PUENTE, razon}." },
+    { "event": "nichos.veredicto.emitir.response", "description": "Response correlada por request_id al RPC nichos.veredicto.emitir.request. Payload: {status, data:{veredicto:{decision, razon, criterio_aplicado}}}." },
+    { "event": "nichos.criterio.viabilidad.leer.request", "description": "RPC saliente: consulta el criterio de viabilidad vigente. Payload: {request_id, project_id}." }
+  ],
+  "subscribes": [
+    { "event": "nichos.veredicto.emitir.request", "handler": "onEmitirRequest", "description": "RPC: evalua un informe de nicho contra el criterio de viabilidad y devuelve el veredicto via response correlada." }
+  ]
+}

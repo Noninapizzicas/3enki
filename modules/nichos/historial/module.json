@@ -1,0 +1,21 @@
+{
+  "name": "historial",
+  "version": "0.1.0",
+  "description": "CUSTODIO del vertical NICHOS: log append-only de eventos por nicho. Registra cada evento relevante del ciclo de vida de un nicho y sirve la cronologia completa por RPC. Persistencia per-proyecto via PosPersistencia.",
+  "_doc": "modules/nichos/historial — CUSTODIO del vertical NICHOS.\n\nQue guarda (per-proyecto, PosPersistencia): /prisma/pos/nichos/historial.json\n  {\n    _version, _updated,\n    historial: {\n      version: Int,\n      logs: { <id_nicho>: [ { evento, at } ] },\n      total_registros: Int\n    }\n  }\n\nQue atiende:\n  - nichos.historial.registrar.request → append del evento al log del nicho. Emite nichos.historial.registrado.\n  - nichos.historial.cronologia.request → devuelve el log completo del nicho en orden cronologico.\n  - project.activated → restaura el store del proyecto.\n\nInvariante: append-only — los eventos registrados NUNCA se mutan ni se borran. Cada registro lleva timestamp de ingreso.\n\nPatron: ModuloHibridoReflejo + PosPersistencia. REFLEJO puro.",
+  "ui_decision": {
+    "necesita": false,
+    "razon": "Custodio de log append-only. Sin cara propia; se consulta por RPC desde el panel del vertical NICHOS o desde cualquier modulo que necesite la cronologia de un nicho."
+  },
+  "publishes": [
+    { "event": "nichos.historial.registrado", "description": "PULSO fire-and-forget: evento registrado en el log de un nicho. Payload: {project_id, id, evento, at, timestamp}." },
+    { "event": "nichos.historial.registrado.failed", "description": "Par .failed del PULSO: el registro fallo (input invalido). Payload: {project_id, code, message, timestamp}." },
+    { "event": "nichos.historial.registrar.response", "description": "Response correlada por request_id al RPC nichos.historial.registrar.request. Payload: {status, data:{registrado:true, total}}." },
+    { "event": "nichos.historial.cronologia.response", "description": "Response correlada por request_id al RPC nichos.historial.cronologia.request. Payload: {status, data:{eventos[]}}." }
+  ],
+  "subscribes": [
+    { "event": "nichos.historial.registrar.request", "handler": "onRegistrarRequest", "description": "RPC: registra un evento en el log append-only del nicho indicado." },
+    { "event": "nichos.historial.cronologia.request", "handler": "onCronologiaRequest", "description": "RPC: devuelve la cronologia completa de eventos del nicho indicado." },
+    { "event": "project.activated", "handler": "onProjectActivated", "description": "Reflejo JS: restaura el store del proyecto desde /prisma/pos/nichos/historial.json (PosPersistencia)." }
+  ]
+}

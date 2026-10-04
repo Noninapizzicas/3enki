@@ -1,0 +1,20 @@
+{
+  "name": "manejo-fallo",
+  "version": "0.1.0",
+  "description": "REFLEJO del vertical NICHOS (bloque K): clasifica fallos (transitorio, grave, fatal) y decide acción (REINTENTAR, ESCALAR, CORTAR). Registra en historial y escala via puente humano si procede. Sin estado.",
+  "_doc": "modules/nichos/manejo-fallo — REFLEJO (bloque K) del vertical NICHOS.\n\nQué hace: recibe nichos.fallo.gestionar.request con {id_nicho, origen, error, contexto?}. Clasifica el fallo en transitorio (reintentar pipeline), grave (escalar via puente humano) o fatal (cortar pipeline). Registra en historial.\n\nSin estado. REFLEJO puro, determinista.\n\nPatrón: ModuloHibridoReflejo (mitad REFLEJO, JS determinista).",
+  "ui_decision": {
+    "necesita": false,
+    "razon": "Fontanería de gestión de fallos del vertical NICHOS, sin cara propia. Clasifica y despacha acciones de recuperación."
+  },
+  "publishes": [
+    { "event": "nichos.fallo.gestionado", "description": "PULSO fire-and-forget: fallo gestionado con acción tomada. Payload: {id_nicho, origen, accion_tomada: REINTENTAR|ESCALAR|CORTAR, timestamp}." },
+    { "event": "nichos.fallo.gestionar.response", "description": "Response correlada por request_id al RPC nichos.fallo.gestionar.request. Payload: {status, data:{accion_tomada}} | {status, error}." },
+    { "event": "nichos.pipeline.transitar.request", "description": "RPC hacia pipeline: solicita transición (reintentar o cortar). Payload: {request_id, id_nicho, accion}." },
+    { "event": "nichos.historial.registrar.request", "description": "RPC hacia historial: registra el fallo y la acción tomada. Payload: {request_id, id_nicho, tipo, detalle}." },
+    { "event": "nichos.puente.humano.alzar.request", "description": "RPC hacia puente-humano: escala fallo grave para decisión del dueño. Payload: {request_id, tipo, prioridad, detalle}." }
+  ],
+  "subscribes": [
+    { "event": "nichos.fallo.gestionar.request", "handler": "onGestionarRequest", "description": "REFLEJO: clasifica fallo y decide acción (REINTENTAR|ESCALAR|CORTAR). Payload: {request_id, id_nicho, origen, error, contexto?}." }
+  ]
+}

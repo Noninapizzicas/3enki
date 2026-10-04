@@ -1,0 +1,18 @@
+{
+  "name": "escalones-mensaje",
+  "version": "0.1.0",
+  "description": "REFLEJO del vertical NICHOS (bloque G · comunicación — G2): clasifica cada evento de dominio en uno de cuatro escalones de notificación (PULSO | ALERTA | DECISION | SILENCIO) según el perfil de supervisión del dueño (H2). Determina la urgencia y forma del mensaje antes de que G1 (puerto-canal) lo envíe.",
+  "_doc": "modules/nichos/escalones-mensaje — REFLEJO (bloque G · comunicación / G2) del vertical NICHOS.\n\nQué hace: recibe nichos.escalon.clasificar.request con un evento de dominio y lo clasifica en un escalón de notificación:\n\n  PULSO    — informativo de fondo (el dueño lo ve cuando quiera).\n  ALERTA   — requiere atención pronto (notificación activa).\n  DECISION — requiere respuesta del dueño (se encola en K2).\n  SILENCIO — el perfil de supervisión pide no notificar este tipo.\n\nLa clasificación se basa en el tipo de evento y los umbrales/preferencias del perfil de supervisión (H2). El módulo lee el perfil via RPC (nichos.perfil.supervision.leer.request) para consultar las reglas de escalón del dueño.\n\nSin estado propio — es REFLEJO puro. La lógica es determinista: tipo de evento + reglas del perfil → escalón.\n\nPatrón: ModuloHibridoReflejo (mitad REFLEJO, JS determinista). Sin mitad blueprint.",
+  "ui_decision": {
+    "necesita": false,
+    "razon": "Bloque G fontanería de comunicación del vertical NICHOS, sin cara propia. Clasificador interno que alimenta a G1 (puerto-canal) y G3 (clasificador-intencion). El dueño configura sus preferencias en H2 (perfil-supervision), no interactúa con este módulo."
+  },
+  "publishes": [
+    { "event": "nichos.escalon.clasificado", "description": "PULSO fire-and-forget: un evento de dominio fue clasificado en un escalón de notificación. Payload: {evento_ref, escalon: PULSO|ALERTA|DECISION|SILENCIO, timestamp}." },
+    { "event": "nichos.escalon.clasificar.response", "description": "Response correlada por request_id al RPC nichos.escalon.clasificar.request. Payload: {status, data:{escalon}} | {status, error}." },
+    { "event": "nichos.perfil.supervision.leer.request", "description": "RPC hacia H2 (perfil-supervision): consulta las reglas de escalón del dueño. Payload: {request_id, project_id}." }
+  ],
+  "subscribes": [
+    { "event": "nichos.escalon.clasificar.request", "handler": "onClasificarRequest", "description": "REFLEJO: clasifica un evento de dominio en PULSO|ALERTA|DECISION|SILENCIO según el perfil de supervisión. Payload: {request_id, evento_dominio:{tipo, fuente, payload}, project_id?, correlation_id}." }
+  ]
+}

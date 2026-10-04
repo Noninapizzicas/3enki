@@ -4,8 +4,11 @@
   "description": "CUSTODIO del vertical NICHOS: snapshot agregado de salud por portafolio. Persiste la vista con los proyectos, cuantos generan, cuantos sangran y el flujo total. Se recalcula al recibir nichos.salud.recalculada.",
   "_doc": "modules/nichos/vista-portafolio — CUSTODIO del vertical NICHOS.\n\nQue guarda (per-proyecto, PosPersistencia): /prisma/pos/nichos/vista-portafolio.json\n  {\n    _version, _updated,\n    vista: {\n      version:      Int,\n      proyectos:    [ { id, estado, flujo } ],\n      generan:      Int,\n      sangran:      Int,\n      flujo_total:  Number\n    }\n  }\n\nQue atiende:\n  - nichos.portafolio.vista.request → devuelve la vista actual del portafolio.\n  - nichos.salud.recalculada → actualiza la vista al recalcular salud de un proyecto.\n  - project.activated → restaura el store del proyecto.\n\nEmite:\n  - nichos.portafolio.recalculado — PULSO tras recalcular la vista.\n\nPatron: ModuloHibridoReflejo + PosPersistencia. CUSTODIO.",
   "ui_decision": {
-    "necesita": false,
-    "razon": "Custodio de snapshot agregado. Sin cara propia; se consulta por RPC desde el panel del vertical NICHOS o desde cualquier modulo que necesite la foto del portafolio."
+    "necesita": true,
+    "tipo": "system_panel",
+    "zone": "lateral_derecha",
+    "razon": "El dueño necesita VER el estado de la vertical de un vistazo: cuántos nichos generan, sangran, estado del pipeline, decisiones pendientes, alertas. Dashboard solo lectura — la operación es por Telegram. Este módulo es el ANCLA del dashboard; consume por RPC a cuadro-salud, pipeline, cola-decisiones, historial y alerta-sangria.",
+    "alimentado_por": ["vista-portafolio", "cuadro-salud", "pipeline", "cola-decisiones", "historial", "alerta-sangria"]
   },
   "publishes": [
     { "event": "nichos.portafolio.vista.response", "description": "Response correlada por request_id al RPC nichos.portafolio.vista.request. Payload: {status, data:{vista_portafolio}}." },

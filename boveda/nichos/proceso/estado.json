@@ -77,22 +77,28 @@
   "fase6": {
     "estado": "completada",
     "skill": "decidir-interfaz",
-    "nota": "45/45 módulos evaluados. TODOS tienen ui_decision.necesita=false — son módulos internos del vertical (reflejos, custodios, proyectores, micro-agentes) que operan por bus, sin tools expuestas ni cara humana propia. Cero contradicciones. La ui_decision fue declarada en F4 como parte del module.json de cada hoja.",
-    "resultado": { "con_interfaz": 0, "sin_interfaz": 45, "contradicciones": 0 }
+    "nota": "45 módulos evaluados por ROL del dueño. 44 sin interfaz (infra, motores, reflejos internos — su cara es el bus). 1 con interfaz: vista-portafolio como ANCLA de un dashboard solo lectura (system_panel, zone lateral_derecha). El dueño opera por Telegram; el dashboard es observabilidad. Alimentado por RPCs de lectura de: cuadro-salud, pipeline, cola-decisiones, historial, alerta-sangria.",
+    "resultado": { "con_interfaz": 1, "sin_interfaz": 44, "dashboard": "dashboard-nichos", "tipo": "system_panel", "solo_lectura": true }
   },
   "fase65": {
     "estado": "completada",
     "skill": "esquematizar-interfaz",
-    "nota": "No aplica — F6 determinó que los 45 módulos NO necesitan interfaz. No hay ui.* que esquematizar."
+    "entregable": "frontend/src/lib/modules/dashboard-nichos/dashboard-nichos.blueprint.json",
+    "nota": "Blueprint del dashboard-nichos: 5 ops solo lectura (portafolio, salud, pipeline, decisiones, cronología), 7 señales de refresco, system_panel en lateral_derecha. Sin escritura — el dueño opera por Telegram."
   },
   "fase7": {
     "estado": "completada",
     "skill": "construir-interfaz",
-    "nota": "No aplica — sin módulos que requieran interfaz, no hay envoltorios que construir."
+    "entregables": [
+      "frontend/src/lib/modules/dashboard-nichos/DashboardNichosPanel.svelte",
+      "frontend/src/lib/modules/dashboard-nichos/manifest.json",
+      "frontend/src/lib/modules/dashboard-nichos/index.ts"
+    ],
+    "nota": "Wrapper BlueprintForm sobre dashboard-nichos.blueprint.json. moduleId=nichos, zone=system-bar, lg. Sin store propio — BlueprintForm gestiona RPCs y suscripciones."
   },
   "fase7b": {
     "estado": "completada",
     "skill": "ensamblaje",
-    "nota": "F7b INTEGRADOR por hoja ya ejecutado en F4 — cada module.json incluye publishes/subscribes completos y ui_decision. El ensamblaje del cableado event-driven está cerrado. Sin interfaz, no hay integración UI pendiente."
+    "nota": "dashboard-nichos registrado en panels.ts (system-bar, order 97, lg). 3 entradas huérfanas eliminadas (vista-portafolio, cola-decisiones-gate, ajustador-umbrales — apuntaban a paneles borrados en el reset F3)."
   }
 }

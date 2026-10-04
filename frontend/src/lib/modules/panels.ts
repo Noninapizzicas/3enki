@@ -299,40 +299,18 @@ export const panels: Record<string, PanelDef> = {
     order: 99,
     loader: () => import('$lib/modules/related-pages/RelatedPagesPanel.svelte')
   },
-  // === SYSTEM BAR — Vertical nichos — dashboard de control (F6½+F7) ===
-  // Tres custodios del dashboard del dueño (system_panel, zone lateral_derecha):
-  // vista-portafolio (K1, solo lectura), cola-decisiones-gate (K2, resolver gates),
-  // ajustador-umbrales (K3, retunear umbral). El botón lo pinta el manifest de
-  // cada módulo (ui_handlers type system_panel); estas entradas son los loaders.
-  'vista-portafolio': {
-    id: 'vista-portafolio',
-    title: 'Portafolio de nichos',
+  // === SYSTEM BAR — Vertical nichos — dashboard solo lectura (F6½+F7) ===
+  // Un solo panel: dashboard-nichos (system_panel, observabilidad). Consume 5 RPCs
+  // de lectura del vertical nichos vía BlueprintForm. El dueño opera por Telegram.
+  'dashboard-nichos': {
+    id: 'dashboard-nichos',
+    title: 'Dashboard nichos',
     icon: '📊',
-    size: 'md',
+    size: 'lg',
     position: 'right',
     zone: 'system-bar',
-    order: 96,
-    loader: () => import('$lib/modules/vista-portafolio/VistaPortafolioPanel.svelte')
-  },
-  'cola-decisiones-gate': {
-    id: 'cola-decisiones-gate',
-    title: 'Cola de decisiones',
-    icon: '🛡️',
-    size: 'md',
-    position: 'right',
-    zone: 'system-bar',
-    order: 95,
-    loader: () => import('$lib/modules/cola-decisiones-gate/ColaDecisionesGatePanel.svelte')
-  },
-  'ajustador-umbrales': {
-    id: 'ajustador-umbrales',
-    title: 'Umbral de validación',
-    icon: '🎚️',
-    size: 'md',
-    position: 'right',
-    zone: 'system-bar',
-    order: 94,
-    loader: () => import('$lib/modules/ajustador-umbrales/AjustadorUmbralesPanel.svelte')
+    order: 97,
+    loader: () => import('$lib/modules/dashboard-nichos/DashboardNichosPanel.svelte')
   },
 
   // === VENTANA DEL AGENTE (panel embebible dentro del chat) ===

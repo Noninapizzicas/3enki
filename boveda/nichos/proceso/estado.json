@@ -3,7 +3,7 @@
   "ramas": "vertical/nichos",
   "persistencia": "boveda/nichos/proceso/",
   "modelo": "mente-ejecuta / chat-gestiona",
-  "fase_actual": "fase4-construir-modulos",
+  "fase_actual": "completado",
   "nota_reset": "2026-10-04 — reinicio desde F3 con la maquinaria nueva (F3b con canon + F7b INTEGRADOR por hoja). Borrados: modules/nichos/* (44), skills de cantera (44), panels frontend (3), tests nichos__* (43), fases 3/3b/7b. Conservados: F0 identidad + F2 esquematizacion (entregable de prisma).",
   "fase0": {
     "estado": "completada",
@@ -74,12 +74,36 @@
     }
   },
   "fase5": { "estado": "completada", "skill": "escribir-skills", "nota": "SKILL.md escritas como parte de F4 — cada hoja incluye su SKILL en modules/cosecha/cantera/enki/<slug>/SKILL.md" },
-  "fase6": { "estado": "por_hacer", "skill": "decidir-interfaz" },
-  "fase65": { "estado": "por_hacer", "skill": "esquematizar-interfaz" },
-  "fase7": { "estado": "por_hacer", "skill": "construir-interfaz" },
+  "fase6": {
+    "estado": "completada",
+    "skill": "decidir-interfaz",
+    "nota": "45 módulos evaluados por ROL del dueño. 44 sin interfaz (infra, motores, reflejos internos — su cara es el bus). 1 con interfaz: vista-portafolio como ANCLA de un dashboard solo lectura (system_panel, zone lateral_derecha). El dueño opera por Telegram; el dashboard es observabilidad. Alimentado por RPCs de lectura de: cuadro-salud, pipeline, cola-decisiones, historial, alerta-sangria.",
+    "resultado": { "con_interfaz": 1, "sin_interfaz": 44, "dashboard": "dashboard-nichos", "tipo": "system_panel", "solo_lectura": true }
+  },
+  "fase65": {
+    "estado": "completada",
+    "skill": "esquematizar-interfaz",
+    "entregable": "frontend/src/lib/modules/dashboard-nichos/dashboard-nichos.blueprint.json",
+    "nota": "Blueprint del dashboard-nichos: 5 ops solo lectura (portafolio, salud, pipeline, decisiones, cronología), 7 señales de refresco, system_panel en lateral_derecha. Sin escritura — el dueño opera por Telegram."
+  },
+  "fase7": {
+    "estado": "completada",
+    "skill": "construir-interfaz",
+    "entregables": [
+      "frontend/src/lib/modules/dashboard-nichos/DashboardNichosPanel.svelte",
+      "frontend/src/lib/modules/dashboard-nichos/manifest.json",
+      "frontend/src/lib/modules/dashboard-nichos/index.ts"
+    ],
+    "nota": "Wrapper BlueprintForm sobre dashboard-nichos.blueprint.json. moduleId=nichos, zone=system-bar, lg. Sin store propio — BlueprintForm gestiona RPCs y suscripciones."
+  },
   "fase7b": {
-    "estado": "por_hacer",
+    "estado": "completada",
     "skill": "ensamblaje",
-    "nota": "F7b nuevo: INTEGRADOR por hoja — se dispara automatico al cerrar interfaz_construida de cada hoja; publique quien publique, oiga quien oiga."
+    "nota": "dashboard-nichos registrado en panels.ts (system-bar, order 97, lg). 3 entradas huérfanas eliminadas (vista-portafolio, cola-decisiones-gate, ajustador-umbrales — apuntaban a paneles borrados en el reset F3)."
+  },
+  "fase8": {
+    "estado": "completada",
+    "skill": "verificacion",
+    "nota": "45/45 módulos con module.json+index.js+SKILL.md. Dashboard-nichos: 4 archivos, registrado en panels.ts, 0 huérfanos. 12/12 contratos de eventos alineados (5 RPCs + 7 refresh). Vertical nichos completo."
   }
 }

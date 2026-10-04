@@ -1,177 +1,127 @@
 ---
 name: historial
-description: >
-  Skill FULL del módulo REFLEJO `historial` del proyecto 3D (taller de impresión 3D,
-  una impresora SPARKX i7 que encadena piezas; moneda STL/3MF→GCODE). Registro APPEND-ONLY
-  de impresiones: cada asiento es dato MEDIDO (gramos_reales, tiempo_real, nunca estimado)
-  y base del consumo agregado. Emite impresion.registrada y, si el resultado es OK,
-  pieza.imprimida (dispara el encadenamiento del motor). Úsala para operar, depurar o
-  extender el historial, o para entender su contrato de eventos y sus reglas de negocio.
-when-to-use: >
-  - Cuando necesites registrar una impresión, listar por modelo, ver los recientes o borrar
-    un asiento erróneo del historial del taller 3D.
-  - Cuando depures por qué un asiento no se registra, por qué falta pieza.imprimida o por
-    qué se admitió un dato sin medir.
-  - Cuando quieras entender el contrato de eventos (subscribes/publishes: impresion.registrada,
-    pieza.imprimida) y las reglas append-only del historial.
-  - Cuando vayas a escribir/ampliar el test unitario del historial.
-tags: [enki, modulo, reflejo, impresora-3d, historial, append-only, proyecto-3d]
+description: >-
+  CUSTODIO del vertical NICHOS: log append-only de eventos por nicho.
+  Registra cada evento relevante del ciclo de vida de un nicho y sirve la
+  cronologia completa por RPC. Persistencia per-proyecto via PosPersistencia.
+  Carga este modulo cuando necesites registrar un evento del ciclo de vida
+  de un nicho, consultar su cronologia, o cuando otro modulo quiera
+  reaccionar al pulso nichos.historial.registrado.
+fuente: enki
+dominio: nichos
+lente_dominio: nichos
+lente_tarea: custodio
+tags: [nichos, custodio, historial, append-only, log, pos-persistencia, bus, mqtt]
 ---
 
-# historial — REFLEJO append-only de impresiones del taller 3D
+# nichos - historial
 
-## Qué hace el módulo
+> **Que es.** CUSTODIO del vertical NICHOS que mantiene un log append-only
+> de eventos por nicho. Cada hito del ciclo de vida (transicion de estado,
+> decision, sondeo, etc.) se registra como entrada inmutable.
+>
+> Codigo: `modules/nichos/historial/index.js`. La verdad viva es el codigo;
+> esta skill es la referencia de uso.
 
-`historial` es un **REFLEJO append-only** con store persistente por proyecto (vía
-`PosPersistencia`, `/3d/historial`, `historial.json`, single-file, scope project,
-single-writer). Es la **memoria del taller** y la **base del consumo agregado**: el
-registro solo se **añade**, jamás se reescribe. El **único borrado permitido** es el
-**asiento erróneo** (`_borrarAsiento`).
+---
 
-Cada `RegistroImpresion` es **dato MEDIDO** (gramos_reales y tiempo_real por pesaje /
-longitud del gcode), **nunca estimado** (regla CERO estimación, honestidad M11).
+## Forma Enki
 
-Al registrar emite `impresion.registrada` **siempre** (con dato medido) y, si el
-`resultado === OK`, `pieza.imprimida` (dispara el encadenamiento del motor).
+- Patron: **CUSTODIO** (append-only, estado persistido).
+- Base: `ModuloHibridoReflejo` + `PosPersistencia` (per-proyecto).
+- Store: `/prisma/pos/nichos/historial.json` dentro del storage del proyecto.
+- Invariante: **append-only** — los eventos registrados NUNCA se mutan ni
+  se borran. Cada registro lleva timestamp de ingreso (`at`).
 
-## Flujo típico
-
-Caso real: **registrar una impresión terminada → se guarda como histórico → dispara el encadenamiento y alimenta el consumo**.
-
-1. `ciclo-impresion` termina una pieza OK y llama `historial.registrar.request` con `{ modelo_id, resultado: 'OK', gramos_reales, tiempo_real }` (dato MEDIDO del estado real).
-2. `_registrar` valida: sin `gramos_reales` o `tiempo_real` → `400` (CERO estimación); `resultado` no válido → `400`. Crea el asiento append-only (`201`).
-3. Emite `impresion.registrada` (lo consume `consumo` para promedios y los paneles para repintar).
-4. Como `resultado === OK` emite además `pieza.imprimida`, que `motor-encadenamiento` consume para encadenar la siguiente pieza.
-5. Consultas: `historial.por_modelo.request` (registros de un modelo, más recientes primero), `historial.recientes.request` (N recientes del proyecto).
-6. Si un asiento es erróneo, `historial.borrar.request`: si era OK (ya disparó encadenamiento) → se **corrige** a CANCELADA (`corregido:true`); si era FALLIDA/CANCELADA → se elimina (`eliminado:true`); desconocido → `404`.
-
-Cada flujo cierra su círculo en `historial.<accion>.response`; ante error responde el código HTTP exacto con su par `*.failed`.
-
-## Contrato de eventos (module.json real)
-
-### Subscribes (RPCs request/response)
-
-| Evento | Handler | Descripción |
-|---|---|---|
-| `historial.registrar.request` | `onRegistrarRequest` | Registra una impresión (append-only). Emite `impresion.registrada` y, si resultado es OK, `pieza.imprimida`. |
-| `historial.por_modelo.request` | `onPorModeloRequest` | Registros de un modelo (más recientes primero). |
-| `historial.recientes.request` | `onRecientesRequest` | N registros más recientes del proyecto. |
-| `historial.borrar.request` | `onBorrarRequest` | Borra un asiento erróneo (único borrado permitido). |
-| `project.activated` | `onProjectActivated` | Restaura el store del proyecto activado (PosPersistencia). |
-
-### Publishes
-
-| Evento | Descripción |
-|---|---|
-| `historial.registrar.response` | Respuesta correlada: asiento registrado. |
-| `historial.por_modelo.response` | Respuesta correlada: registros del modelo. |
-| `historial.recientes.response` | Respuesta correlada: recientes. |
-| `historial.borrar.response` | Respuesta correlada: asiento borrado/corregido. |
-| `impresion.registrada` | Registro append-only con dato MEDIDO del historial. |
-| `pieza.imprimida` | Éxito (resultado OK): dispara el encadenamiento del motor. |
-| `historial.registrar.failed` | Par de fallo: no se pudo registrar. |
-
-> **Regla de cierre de círculo**: `historial.registrar.failed` es el par de fallo canónico
-> del flujo de registro; responde en `historial.registrar.response`.
-
-## Reglas de negocio
-
-1. **Append-only**: solo se añade; jamás se reescribe ni se borra un asiento con resultado.
-2. **CERO estimación (honestidad M11)**: todo registro exige dato MEDIDO. Si faltan
-   `gramos_reales` o `tiempo_real` → `400 INVALID_INPUT` (`'gramos_reales (dato medido)
-   requerido'` / `'tiempo_real (dato medido) requerido'`).
-3. **Resultado válido**: solo `OK | FALLIDA | CANCELADA`; otro valor → `400 INVALID_INPUT`.
-4. **`pieza.imprimida` solo con resultado OK**: `_registrar` emite siempre
-   `impresion.registrada`, pero `pieza.imprimida` (encadenamiento) **solo** cuando
-   `resultado === 'OK'`.
-5. **Borrado = asiento erróneo únicamente** (`_borrarAsiento`): si el asiento ya
-   `resultado === OK` (ya se emitió `pieza.imprimida` que alimentó el encadenamiento),
-   **no se elimina**: se **corrige** a `CANCELADA` y se marca `corregido_en` +
-   `asiento_erroneo:true`. Solo los asientos no-OK (FALLIDA/CANCELADA) se eliminan de verdad.
-6. **Ordenamiento**: `_porModelo` de **más reciente a más antiguo**; `_recientes` toma los N
-   más recientes del proyecto (default `n=10`).
-7. **Persistencia single-writer por proyecto**: `PosPersistencia` `historial.json` en
-   `/3d/historial`, hidrata/restaura por `project_id` en `project.activated`, `flush()` en
-   `onUnload`.
-
-## Uso / cómo invocarlo
-
-RPCs request/response que responden en `*.response`:
-
-### 1. `registrar` — registrar una impresión (append-only, dato medido)
+## Estructura del store
 
 ```json
 {
-  "project_id": "e57a318a-...",
-  "modelo_id": "mod_xxx",
-  "resultado": "OK",
-  "gramos_reales": 3.42,
-  "tiempo_real": 7200,
-  "formato_origen": "GCODE",
-  "filamento": "PETG"
+  "version": 0,
+  "logs": {
+    "<id_nicho>": [
+      { "evento": { "tipo": "transicion", "desde": "semilla", "hasta": "normalizada" }, "at": "2026-..." }
+    ]
+  },
+  "total_registros": 0
 }
 ```
-Respuesta `201`: `{ "registro": {...} }`. Siempre emite `impresion.registrada`; si
-`resultado === OK`, además `pieza.imprimida`.
 
-### 2. `por_modelo` — registros de un modelo, más recientes primero
+## Eventos que atiende (request -> response)
 
-```json
-{ "project_id": "e57a318a-...", "modelo_id": "mod_xxx" }
-```
-Respuesta `200`: `{ "registros": [...], "total": N }`.
+| Evento | Handler | Que devuelve |
+|---|---|---|
+| `nichos.historial.registrar.request` | `onRegistrarRequest` | `{status:200, data:{registrado:true, total}}` |
+| `nichos.historial.cronologia.request` | `onCronologiaRequest` | `{status:200, data:{eventos:[]}}` |
 
-### 3. `recientes` — N registros más recientes del proyecto
+### Payload de `.registrar.request`
 
 ```json
-{ "project_id": "e57a318a-...", "n": 10 }
+{
+  "request_id": "uuid",
+  "project_id": "prj_xxx",
+  "id": "nicho_abc",
+  "evento": { "tipo": "transicion", "desde": "semilla", "hasta": "normalizada", "causa": "normalizador" }
+}
 ```
-Respuesta `200`: `{ "registros": [...] }`.
 
-### 4. `borrar` — borrar/corregir un asiento erróneo
+### Payload de `.cronologia.request`
 
 ```json
-{ "project_id": "e57a318a-...", "registro_id": "reg_xxx" }
-```
-Respuesta `200`:
-- si el asiento era OK → `{ "registro": {...CANCELADA...}, "corregido": true }`
-- si era FALLIDA/CANCELADA → `{ "eliminado": true, "registro_id": "reg_xxx" }`
-· `404 NOT_FOUND` si no existe.
-
-## Tests
-
-El test vive en `tests/unit/historial.test.js`. Cubre:
-
-- `registrar` ok (`201`) emite `impresion.registrada` (con dato medido); con resultado OK
-  emite además `pieza.imprimida`.
-- `registrar` con resultado `FALLIDA`/`CANCELADA` emite `impresion.registrada` **sin**
-  `pieza.imprimida`.
-- `registrar` sin `gramos_reales` o sin `tiempo_real` → `400` (`CERO estimación`).
-- `registrar` con resultado no válido → `400`.
-- `por_modelo` ordena más reciente primero; `recientes` con `n`.
-- `borrar_asiento`: asiento OK → se **corrige** a CANCELADA (no se elimina); asiento
-  FALLIDA/CANCELADA → se elimina; desconocido → 404.
-- Append-only y persistencia por proyecto (`project.activated` restaura; `onUnload` flush).
-
-Para ejecutarlo:
-
-```bash
-cd /home/admin/3enki/modules/historial
-node tests/unit/historial.test.js
-# esperado: historial: N/N OK
+{
+  "request_id": "uuid",
+  "project_id": "prj_xxx",
+  "id": "nicho_abc"
+}
 ```
 
-> En el runtime real esto corrió desde `/opt/enki/modules/historial`; en este repo, el test
-> se ejecuta desde `modules/historial`.
+## Senales que escucha (fire-and-forget)
 
-## Notas de implementación
+- `project.activated` -> `onProjectActivated` — restaura el historial
+  persistido del proyecto desde `/prisma/pos/nichos/historial.json`.
 
-- Clase `HistorialReflejo extends ModuloHibridoReflejo`; `name = 'historial'`,
-  `version = 'reflejo-0.1.0'`.
-- Store en `this.registros` (`Map` `${project_id}:${id}` → RegistroImpresion);
-  `PosPersistencia` `historial.json` en `/3d/historial`.
-- Handlers RPC de una línea que delegan en `_atender(e, accion, 'historial.<accion>.response', fn)`.
-- Consumidores: `consumo` (acumula `impresion.registrada` para promedios) y
-  `motor-encadenamiento` (escucha `pieza.imprimida`). `filamento` se alimenta también del
-  dato medido del historial para descontar.
-- `eventBus.publish` añade `timestamp` ISO a los eventos publicados.
+## Pulsos que emite
+
+| Evento | Cuando | Payload |
+|---|---|---|
+| `nichos.historial.registrado` | tras registrar un evento | `{project_id, id, evento, at, timestamp}` |
+| `nichos.historial.registrado.failed` | registro fallido (input invalido) | `{project_id, code, message, timestamp}` |
+
+## Invariantes
+
+- **Append-only**: los eventos registrados NUNCA se mutan ni se borran.
+- **Degradacion honesta**: sin `project_id` el store queda solo en memoria.
+
+## Integracion (patron RPC del bus)
+
+```javascript
+// REGISTRAR un evento
+await bus.publishAndWait('nichos.historial.registrar.request', {
+  project_id,
+  id: 'nicho_abc',
+  evento: { tipo: 'transicion', desde: 'semilla', hasta: 'normalizada' }
+});
+
+// LEER cronologia
+const resp = await bus.publishAndWait('nichos.historial.cronologia.request', {
+  project_id,
+  id: 'nicho_abc'
+});
+const { eventos } = resp.data;
+```
+
+## Donde encaja en el vertical NICHOS
+
+- **Registro central de eventos**: todo modulo que produce un hito del
+  ciclo de vida del nicho (pipeline, clasificador, sondeador, jefe) emite
+  `nichos.historial.registrar.request` para dejar constancia.
+- Los paneles y el jefe consultan la cronologia para tomar decisiones
+  informadas y mostrar la historia del nicho al dueno.
+- No depende de otro modulo del vertical para arrancar (solo
+  `project.activated` del core).
+
+## Errores conocidos
+
+| Status | Code | Causa |
+|---|---|---|
+| 400 | `INVALID_INPUT` | falta `project_id`, `id` o `evento` |

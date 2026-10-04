@@ -1,0 +1,16 @@
+{
+  "name": "conversor-fuente",
+  "version": "0.1.0",
+  "description": "CONVERSOR del vertical NICHOS (bloque J · interlocutor proveedor): homogeneiza crudo heterogéneo de fuentes externas (crawl4rs, APIs, scrapers) en un dato con esquema estable para los consumidores del vertical. RPC puro sin estado — recibe crudo + origen y devuelve dato_homogeneo.",
+  "_doc": "modules/nichos/conversor-fuente — CONVERSOR (bloque J · interlocutor proveedor) del vertical NICHOS. Recibe el crudo heterogéneo tal como llega de cada fuente externa y lo normaliza a un esquema estable que el resto del vertical puede consumir sin saber de qué fuente vino.\n\nQué hace (RPC puro, sin estado):\n  - nichos.conversor.normalizar.request → recibe { crudo, origen } y devuelve { dato_homogeneo }.\n    El campo 'origen' identifica la fuente (ej: 'crawl4rs', 'google-trends', 'api-mercado');\n    el conversor aplica la regla de normalización correspondiente al origen.\n    Si el origen es desconocido, devuelve el crudo envuelto en el esquema estable\n    con marca 'origen_desconocido: true' (degradación honesta, no falla).\n\nEsquema del dato_homogeneo:\n  {\n    titulo:    String | null,\n    contenido: String | null,\n    url:       String | null,\n    meta:      Object,\n    origen:    String,\n    normalizado_en: ISO,\n    origen_desconocido: Boolean\n  }\n\nPatrón: ModuloHibridoReflejo (CONVERSOR puro). Sin estado, sin PosPersistencia,\nsin mitad blueprint. La lógica es transformación determinista crudo→estable.\nEl consumidor principal es nichos-puerto-fuente-datos (J1), que llama a este\nconversor tras recibir el crudo de crawl4rs u otra fuente.",
+  "ui_decision": {
+    "necesita": false,
+    "razon": "Bloque J conversión interna del vertical NICHOS: transformación crudo→esquema estable invocada por RPC desde nichos-puerto-fuente-datos. Sin cara propia. Función de fontanería invisible al usuario."
+  },
+  "publishes": [
+    { "event": "nichos.conversor.normalizar.response", "description": "Response correlada por request_id al RPC nichos.conversor.normalizar.request. Payload: {status:200, data:{dato_homogeneo:{titulo, contenido, url, meta, origen, normalizado_en, origen_desconocido}}} | {status, error}." }
+  ],
+  "subscribes": [
+    { "event": "nichos.conversor.normalizar.request", "handler": "onNormalizarRequest", "description": "Reflejo JS: recibe { crudo, origen } y devuelve { dato_homogeneo } con esquema estable. Si el origen es desconocido, envuelve el crudo con marca origen_desconocido:true." }
+  ]
+}

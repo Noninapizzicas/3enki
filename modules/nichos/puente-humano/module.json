@@ -1,0 +1,19 @@
+{
+  "name": "puente-humano",
+  "version": "0.1.0",
+  "description": "PUENTE del vertical NICHOS: bridge hacia el dueño humano. Traduce solicitudes de decisión del sistema al canal del dueño, formatea la pregunta con opciones y re-emite la respuesta por el bus para que el flujo original continúe.",
+  "_doc": "modules/nichos/puente-humano — PUENTE del vertical NICHOS.\n\nQué hace: dos operaciones.\n\n1. ALZAR (nichos.puente.humano.alzar.request): formatea la pregunta + opciones para el canal humano y emite una solicitud de decisión al bus. Pulsa nichos.puente.humano.alzado.\n\n2. ESCUCHAR RESPUESTA (nichos.decision.solicitud.respondida): cuando el dueño responde, re-emite por el bus para que el flujo original continúe.\n\nSin estado propio — PUENTE puro, traduce entre el sistema y el canal del dueño.\n\nPatrón: ModuloHibridoReflejo (mitad REFLEJO, JS determinista).",
+  "ui_decision": {
+    "necesita": false,
+    "razon": "Bloque F fontanería de decisiones del vertical NICHOS. El dueño interactúa por su canal (Telegram, etc.), no con este módulo directamente."
+  },
+  "publishes": [
+    { "event": "nichos.puente.humano.alzado", "description": "PULSO fire-and-forget: una solicitud de decisión fue alzada al canal del dueño. Payload: {id_nicho, solicitud_id, pregunta, timestamp}." },
+    { "event": "nichos.puente.humano.alzar.response", "description": "Response correlada por request_id al RPC nichos.puente.humano.alzar.request. Payload: {status, data:{solicitud_id}} | {status, error}." },
+    { "event": "nichos.decision.solicitud.abierta", "description": "PULSO fire-and-forget: solicitud de decisión emitida al bus. Payload: {solicitud_id, tipo, contexto, opciones, timestamp}." }
+  ],
+  "subscribes": [
+    { "event": "nichos.puente.humano.alzar.request", "handler": "onAlzarRequest", "description": "PUENTE: formatea pregunta + opciones para el canal del dueño y emite solicitud de decisión. Payload: {request_id, id_nicho, contexto, pregunta, opciones?}." },
+    { "event": "nichos.decision.solicitud.respondida", "handler": "onSolicitudRespondida", "description": "Listener fire-and-forget: cuando el dueño responde, re-emite por el bus para que el flujo original continúe. Payload: {solicitud_id, opcion_elegida, dueno, nota_libre, timestamp}." }
+  ]
+}

@@ -47,7 +47,21 @@
     "espina_parseable": true,
     "nota": "Plan de construcción completo en dos pasadas (parcial + continuación tras rate limit). 203 eventos cableados en la espina (182 nichos.* + 21 de infra). Alineado con la maquinaria nueva (canon + 4 patrones). Listo como entrada de F4."
   },
-  "fase4": { "estado": "por_hacer", "skill": "construir-modulos" },
+  "fase4": {
+    "estado": "en_curso",
+    "skill": "construir-modulos",
+    "hojas_construir_total": 45,
+    "construidas": 5,
+    "parciales": 1,
+    "pendientes": 39,
+    "detalle": {
+      "completas": ["perfil-limite-busqueda", "reglas-exclusion", "criterio-viabilidad", "perfil-supervision", "perfil-cobro-entrega"],
+      "parcial": { "slug": "catalogo-capacidades", "falta": "SKILL.md en cantera (manifest + index.js ya escritos y smoke OK)" },
+      "siguiente": "conversor-fuente (#17)"
+    },
+    "bloqueo_actual": "session limit resets 11am UTC",
+    "cadencia": "batches de 3 hojas por subagente; cada batch consume ~160K tokens / ~6min"
+  },
   "fase5": { "estado": "por_hacer", "skill": "escribir-skills" },
   "fase6": { "estado": "por_hacer", "skill": "decidir-interfaz" },
   "fase65": { "estado": "por_hacer", "skill": "esquematizar-interfaz" },

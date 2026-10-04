@@ -3,7 +3,7 @@
   "ramas": "vertical/nichos",
   "persistencia": "boveda/nichos/proceso/",
   "modelo": "mente-ejecuta / chat-gestiona",
-  "fase_actual": "fase3b-adaptador",
+  "fase_actual": "fase4-construir-modulos",
   "nota_reset": "2026-10-04 — reinicio desde F3 con la maquinaria nueva (F3b con canon + F7b INTEGRADOR por hoja). Borrados: modules/nichos/* (44), skills de cantera (44), panels frontend (3), tests nichos__* (43), fases 3/3b/7b. Conservados: F0 identidad + F2 esquematizacion (entregable de prisma).",
   "fase0": {
     "estado": "completada",
@@ -31,7 +31,22 @@
     "decisiones_abiertas": 25,
     "nota": "PLASMA: 44 clases + value objects compartidos; cero tecnologías Enki; 6 puertos abiertos (p1..p6); ciclo semilla→caja cubierto; cumple regla del plasma (sin bus/MQTT/módulo); 2 tapones humanos (puente D2 + gate E2) consistentes con F0."
   },
-  "fase3b": { "estado": "por_hacer", "skill": "enki-adaptador-disenos" },
+  "fase3b": {
+    "estado": "completada",
+    "skill": "enki-adaptador-disenos",
+    "entregable": "boveda/nichos/proceso/fase3b/plan-construccion.md",
+    "lineas": 1813,
+    "hojas_totales": 55,
+    "construir": 45,
+    "reutilizar": 10,
+    "adaptar": 0,
+    "orden_topologico_slugs": 55,
+    "orden_cubre_todas": true,
+    "reutiliza": ["scheduler", "filesystem", "project-manager", "credential-manager", "ai-gateway", "crawl4rs", "channel-manager", "telegram-bridge", "ejecutor", "prisma/calendario"],
+    "canon_aplicado": "<dominio>.<objeto>.<verbo>[.<modo>] con dominio=nichos; PULSO en participio; RPC terna cerrada .request/.response/.failed; separador siempre punto",
+    "espina_parseable": true,
+    "nota": "Plan de construcción completo en dos pasadas (parcial + continuación tras rate limit). 203 eventos cableados en la espina (182 nichos.* + 21 de infra). Alineado con la maquinaria nueva (canon + 4 patrones). Listo como entrada de F4."
+  },
   "fase4": { "estado": "por_hacer", "skill": "construir-modulos" },
   "fase5": { "estado": "por_hacer", "skill": "escribir-skills" },
   "fase6": { "estado": "por_hacer", "skill": "decidir-interfaz" },

@@ -788,8 +788,11 @@ class ModuleLoader {
 
     const modulePath = moduleData.path;
 
-    // Crear watcher
-    const watcher = fs.watch(modulePath, { recursive: true }, async (eventType, filename) => {
+    // NO recursivo a propósito: solo interesan index.js y module.json, que
+    // viven en la RAÍZ del módulo. Un watch recursivo sobre 150+ módulos
+    // agotaría los inotify watches (y si un módulo tuviera node_modules,
+    // sería catastrófico). El handler ya filtra por filename.
+    const watcher = fs.watch(modulePath, { persistent: false }, async (eventType, filename) => {
       if (filename === 'module.json' || filename === 'index.js') {
         if (this.logger) {
           this.logger.info('module.changed', {

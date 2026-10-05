@@ -53,6 +53,12 @@ class ModuleLoader {
     this.watchers = new Map();
 
     /**
+     * Debounce por módulo para hot-reload
+     * Map: moduleName -> Timeout
+     */
+    this.reloadTimeouts = new Map();
+
+    /**
      * Tools registry for AI
      * Map: toolName -> { name, description, parameters, handler, module, confirmation }
      */
@@ -340,8 +346,10 @@ class ModuleLoader {
         throw new Error('index.js not found');
       }
 
-      // Clear require cache para hot-reload
-      delete require.cache[require.resolve(path.resolve(indexPath))];
+      // Limpia la caché de require del módulo ENTERO — index.js Y sus
+      // dependencias locales (p.ej. ../../_shared/*). Sin esto la recarga es
+      // parcial: el fichero raíz se refresca pero los helpers quedan cacheados.
+      this.clearModuleCache(modulePath);
 
       const ModuleClass = require(path.resolve(indexPath));
 
@@ -539,6 +547,12 @@ class ModuleLoader {
         this.watchers.delete(moduleName);
       }
 
+      // Cancelar debounce pendiente
+      if (this.reloadTimeouts.has(moduleName)) {
+        clearTimeout(this.reloadTimeouts.get(moduleName));
+        this.reloadTimeouts.delete(moduleName);
+      }
+
       // Remover del mapa
       this.loadedModules.delete(moduleName);
 
@@ -565,6 +579,35 @@ class ModuleLoader {
   }
 
   /**
+   * Limpia la caché de require de un módulo y sus dependencias locales.
+   *
+   * Node cachea cada require por ruta absoluta. Al recargar hay que soltar
+   * tanto el index.js del módulo como los ficheros LOCALES que importa
+   * (rutas relativas dentro del propio módulo o hacia _shared). Las
+   * dependencias de node_modules NO se tocan: son estables y soltarlas
+   * provoca fugas (cada require crea un contexto nuevo).
+   *
+   * @param {string} modulePath - Ruta absoluta al directorio del módulo
+   */
+  clearModuleCache(modulePath) {
+    const absModulePath = path.resolve(modulePath);
+    const rootModulesPath = path.resolve(this.modulesPath);
+    const prefix = absModulePath + path.sep;
+    const sharedPrefix = path.join(rootModulesPath, '_shared') + path.sep;
+
+    for (const key of Object.keys(require.cache)) {
+      // Dependencia de node_modules → se respeta (estable, sin fugas)
+      if (key.includes(`${path.sep}node_modules${path.sep}`)) continue;
+
+      // Fichero propio del módulo (dentro de su carpeta) o helper compartido
+      // bajo modules/_shared/. Ambos son locales y seguros de soltar.
+      if (key.startsWith(prefix) || key.startsWith(sharedPrefix)) {
+        delete require.cache[key];
+      }
+    }
+  }
+
+  /**
    * Recarga un módulo (unload + load)
    *
    * @param {string} moduleName - Nombre del módulo
@@ -582,6 +625,10 @@ class ModuleLoader {
     const modulePath = moduleData.path;
     const manifestPath = path.join(modulePath, 'module.json');
 
+    // ¿Estaba siendo observado? unload() cierra el watcher — hay que re-armarlo
+    // al terminar o el módulo se queda sin hot-reload tras la primera recarga.
+    const estabaObservado = this.watchers.has(moduleName);
+
     // Leer manifest actualizado
     const manifestContent = fs.readFileSync(manifestPath, 'utf8');
     const manifest = JSON.parse(manifestContent);
@@ -591,6 +638,11 @@ class ModuleLoader {
 
     // Load
     await this.load(moduleName, modulePath, manifest);
+
+    // Re-armar el watcher si lo tenía (mantiene la vigilancia viva)
+    if (estabaObservado) {
+      this.watch(moduleName);
+    }
 
     if (this.logger) {
       this.logger.info('module.reloaded', {
@@ -746,9 +798,10 @@ class ModuleLoader {
           });
         }
 
-        // Debounce: esperar 500ms antes de recargar
-        clearTimeout(this.reloadTimeout);
-        this.reloadTimeout = setTimeout(async () => {
+        // Debounce POR MÓDULO: editar varios ficheros a la vez no debe
+        // pisarse entre módulos (un temporizador global perdía recargas).
+        clearTimeout(this.reloadTimeouts.get(moduleName));
+        this.reloadTimeouts.set(moduleName, setTimeout(async () => {
           try {
             await this.reload(moduleName);
           } catch (error) {
@@ -759,7 +812,7 @@ class ModuleLoader {
               }, error);
             }
           }
-        }, 500);
+        }, 500));
       }
     });
 

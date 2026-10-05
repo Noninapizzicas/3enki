@@ -5,10 +5,22 @@ resumen: El core event-driven: EventBus, MQTTClient, EmbeddedBroker, ModuleLoade
 fuentes:
   - core/**
   - index.js
-verificado: 2026-07-14
+verificado: 2026-10-05
 ---
 
 # Capa de Aterrizaje — Análisis del Core (Event-Driven Framework)
+
+> **Novedad (2026-10-05) — el hot-reload de módulos está VIVO.** `config.json` prometía
+> `modules.hot_reload: true` pero nadie leía esa clave: `watchAll()` existía y no lo llamaba
+> nadie → editar un módulo exigía `systemctl restart enki` + sudo. Ahora `index.js` arranca
+> `moduleLoader.watchAll()` al terminar `loadAll()` si `hot_reload === true`: editar el
+> `index.js` de un módulo (o un helper de `modules/_shared/` del que dependa) lo recarga en
+> caliente. Tres arreglos en `loader.js`: (1) `clearModuleCache()` suelta la caché de require
+> del módulo ENTERO — index.js Y sus dependencias locales bajo `_shared/` — sin tocar
+> `node_modules` (soltar esas provoca fugas); (2) el debounce es por módulo (`reloadTimeouts`)
+> en vez de un temporizador global que perdía recargas simultáneas; (3) `reload()` re-arma el
+> watcher que `unload()` cerraba (sin esto, el módulo se quedaba ciego tras la 1ª recarga).
+> Verificado por `tests/unit/core__hot-reload.test.js` (7/7).
 
 > **Novedad (2026-07-14) — el broker embebido admite un guard opcional.** `EmbeddedBroker` acepta
 > `opts.guard`; si está, cablea `aedes.authenticate/authorizePublish/authorizeSubscribe` (sin guard →
@@ -344,6 +356,7 @@ CLASE ModuleLoader IMPLEMENTA ModuleLoaderContract {
     metrics: Metrics
     loadedModules: Map<moduleName, {manifest, instance, path, loadedAt, _eventUnsubs?, _uiRegistrations?}>
     watchers: Map<moduleName, FSWatcher>
+    reloadTimeouts: Map<moduleName, Timeout>
     toolsRegistry: Map<toolName, {name, description, parameters, handler, module, confirmation}>
     intentRegistry: IntentRegistry
   }
@@ -383,7 +396,13 @@ CLASE ModuleLoader IMPLEMENTA ModuleLoaderContract {
       ELIMINA DE loadedModules
 
     async reload(moduleName: String): Promise<Void>
-      UNLOAD + LOAD
+      RECUERDA si estaba observado
+      UNLOAD + LOAD (load() limpia la caché del módulo entero vía clearModuleCache)
+      RE-ARMA el watcher si lo tenía
+
+    clearModuleCache(modulePath: String): Void
+      SUELTA la caché de require del módulo (index.js) Y de sus dependencias
+        locales bajo modules/_shared/ — RESPETA node_modules
 
     async loadAll(): Promise<Array<{name, success, error?}>>
       DESCUBRE todos módulos
@@ -396,11 +415,11 @@ CLASE ModuleLoader IMPLEMENTA ModuleLoaderContract {
       UNLOAD todos los módulos
 
     watch(moduleName: String): Void
-      fs.watch(modulePath) CON debounce 500ms
-      on change: RELOAD
+      fs.watch(modulePath) CON debounce 500ms POR MÓDULO
+      on change (index.js|module.json): RELOAD
 
     watchAll(): Void
-      watch() PARA cada módulo
+      watch() PARA cada módulo — arrancado por index.js si config.modules.hot_reload === true
 
     normalizeSubscriptions(manifest: Object): Array<{event, handler}>
     wireEventSubscriptions(manifest: Object, instance: Object): Array<Function>

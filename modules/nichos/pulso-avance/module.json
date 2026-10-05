@@ -2,16 +2,16 @@
   "name": "pulso-avance",
   "version": "0.1.0",
   "description": "REFLEJO del vertical NICHOS (bloque K): calcula métricas de avance (duración en estado, velocidad) a partir de cada transición del pipeline y actualiza el cuadro de salud. Sin estado.",
-  "_doc": "modules/nichos/pulso-avance — REFLEJO (bloque K) del vertical NICHOS.\n\nQué hace: escucha nichos.pipeline.transitado (cada transición del pipeline). Calcula duración en el estado anterior y formatea un pulso de avance. Publica nichos.pulso.avance.emitido y solicita actualización del cuadro de salud.\n\nSin estado. REFLEJO puro, determinista.\n\nPatrón: ModuloHibridoReflejo (mitad REFLEJO, JS determinista).",
+  "_doc": "modules/nichos/pulso-avance — REFLEJO (bloque K) del vertical NICHOS.\n\nQué hace: escucha nichos.pipeline.transicion.aplicada (cada transición del pipeline). Calcula duración en el estado anterior y formatea un pulso de avance. Publica nichos.pulso.avance.emitido y solicita recálculo del cuadro de salud.\n\nSin estado. REFLEJO puro, determinista.\n\nPatrón: ModuloHibridoReflejo (mitad REFLEJO, JS determinista).",
   "ui_decision": {
     "necesita": false,
     "razon": "Fontanería de métricas de avance del vertical NICHOS, sin cara propia. Reacciona a transiciones del pipeline y alimenta al cuadro de salud."
   },
   "publishes": [
     { "event": "nichos.pulso.avance.emitido", "description": "PULSO fire-and-forget: pulso de avance emitido tras transición del pipeline. Payload: {id_nicho, estado_anterior, estado_nuevo, timestamp, duracion_en_estado_ms}." },
-    { "event": "nichos.cuadro.salud.actualizar.request", "description": "RPC hacia cuadro-salud: actualiza métricas de avance. Payload: {request_id, id_nicho, metrica, valor}." }
+    { "event": "nichos.cuadro.salud.recalcular.request", "description": "RPC hacia cuadro-salud: recalcula métricas de avance. Payload: {request_id, id_nicho, metrica, valor}." }
   ],
   "subscribes": [
-    { "event": "nichos.pipeline.transitado", "handler": "onPipelineTransitado", "description": "REFLEJO: calcula métricas de avance y emite pulso. Payload: {id_nicho, estado_anterior, estado_nuevo, timestamp, timestamp_anterior?}." }
+    { "event": "nichos.pipeline.transicion.aplicada", "handler": "onPipelineTransitado", "description": "REFLEJO: calcula métricas de avance y emite pulso. Payload: {id_nicho, estado_anterior, estado_nuevo, timestamp, timestamp_anterior?}." }
   ]
 }

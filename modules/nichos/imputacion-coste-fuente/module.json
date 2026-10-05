@@ -2,18 +2,17 @@
   "name": "imputacion-coste-fuente",
   "version": "0.1.0",
   "description": "REFLEJO del vertical NICHOS (bloque J · interlocutor proveedor): registra y agrega el coste imputado por consumo de fuentes externas. Append-only por proyecto: cada consumo de fuente queda registrado con importe, fuente e instante. Consulta agrega coste por proyecto/fuente hasta un instante dado.",
-  "_doc": "modules/nichos/imputacion-coste-fuente — REFLEJO append-only (bloque J · interlocutor proveedor) del vertical NICHOS. Registra cada consumo de fuente como entrada de coste imputado y ofrece consulta agregada por proyecto/fuente.\n\nQué guarda (per-proyecto, PosPersistencia): /prisma/pos/nichos/costes-fuente.json\n  {\n    _version, _updated,\n    costes: {\n      entradas: [\n        { fuente, importe, concepto?, registrado_en: ISO }\n      ]\n    }\n  }\n\nQué atiende:\n  - nichos.fuente.coste.consultar.request → agrega coste por proyecto/fuente hasta un instante.\n    Devuelve { coste: { total, por_fuente:{<fuente>: Number}, entradas_count } }.\n  - nichos.fuente.consumida (fire-and-forget) → append de entrada de coste.\n    Emite PULSO nichos.fuente.coste.registrado tras registrar.\n  - project.activated → restaura el store del proyecto.\n\nPatrón: ModuloHibridoReflejo + PosPersistencia. Sin mitad blueprint — la lógica es append + agregación aritmética.\n\nConvenio: las entradas son append-only. No se borran. La consulta filtra por 'hasta' (ISO); sin 'hasta', agrega todo.",
+  "_doc": "modules/nichos/imputacion-coste-fuente — REFLEJO append-only (bloque J · interlocutor proveedor) del vertical NICHOS. Registra cada consumo de fuente como entrada de coste imputado y ofrece consulta agregada por proyecto/fuente.\n\nQué guarda (per-proyecto, PosPersistencia): /prisma/pos/nichos/costes-fuente.json\n  {\n    _version, _updated,\n    costes: {\n      entradas: [\n        { fuente, importe, concepto?, registrado_en: ISO }\n      ]\n    }\n  }\n\nQué atiende:\n  - nichos.fuente.coste.consultar.request → agrega coste por proyecto/fuente hasta un instante.\n    Devuelve { coste: { total, por_fuente:{<fuente>: Number}, entradas_count } }.\n  - nichos.fuente.consumida (fire-and-forget) → append de entrada de coste.\n  - project.activated → restaura el store del proyecto.\n\nPatrón: ModuloHibridoReflejo + PosPersistencia. Sin mitad blueprint — la lógica es append + agregación aritmética.\n\nConvenio: las entradas son append-only. No se borran. La consulta filtra por 'hasta' (ISO); sin 'hasta', agrega todo.",
   "ui_decision": {
     "necesita": false,
     "razon": "Bloque J fontanería interna del vertical NICHOS. La consulta la llama nichos-cuadro-salud (F3) y el Jefe (K). El registro lo dispara nichos-puerto-fuente-datos (J1) al consumir. Sin cara propia al usuario."
   },
   "publishes": [
-    { "event": "nichos.fuente.coste.registrado", "description": "PULSO fire-and-forget: se registró una entrada de coste imputado. Payload: {project_id, fuente, importe, concepto, timestamp}. Lo consume nichos-gestion-limites-fuente (J3) para descontar del presupuesto." },
     { "event": "nichos.fuente.coste.consultar.response", "description": "Response correlada por request_id al RPC nichos.fuente.coste.consultar.request. Payload: {status:200, data:{coste:{total, por_fuente, entradas_count}}} | {status, error}." }
   ],
   "subscribes": [
     { "event": "nichos.fuente.coste.consultar.request", "handler": "onConsultarRequest", "description": "Reflejo JS: agrega coste por proyecto/fuente hasta un instante. Devuelve {coste:{total, por_fuente, entradas_count}}." },
-    { "event": "nichos.fuente.consumida", "handler": "onFuenteConsumida", "description": "Reflejo JS (fire-and-forget): append de entrada de coste imputado. Emite PULSO nichos.fuente.coste.registrado." },
+    { "event": "nichos.fuente.consumida", "handler": "onFuenteConsumida", "description": "Reflejo JS (fire-and-forget): append de entrada de coste imputado." },
     { "event": "project.activated", "handler": "onProjectActivated", "description": "Reflejo JS: restaura los costes persistidos del proyecto desde /prisma/pos/nichos/costes-fuente.json (PosPersistencia)." }
   ]
 }

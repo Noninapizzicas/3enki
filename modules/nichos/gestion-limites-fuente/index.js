@@ -165,18 +165,6 @@ class GestionLimitesFuente extends ModuloHibridoReflejo {
     entrada.consumido = this._round((entrada.consumido || 0) + importe, 4);
 
     this._persist.marcarDirty(input.project_id);
-
-    const margen_restante = entrada.presupuesto != null
-      ? this._round(Math.max(0, entrada.presupuesto - entrada.consumido), 4)
-      : Infinity;
-
-    this.eventBus?.publish('nichos.fuente.consumida', {
-      project_id: input.project_id,
-      fuente,
-      importe,
-      margen_restante,
-      timestamp: nowISO()
-    });
   }
 }
 

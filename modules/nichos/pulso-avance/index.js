@@ -61,7 +61,7 @@ class PulsoAvance extends ModuloHibridoReflejo {
 
     // Actualizar cuadro de salud con métricas de avance
     try {
-      await this._publishAlBus('nichos.cuadro.salud.actualizar.request', {
+      await this._publishAlBus('nichos.cuadro.salud.recalcular.request', {
         id_nicho: input.id_nicho,
         metrica: 'avance',
         valor: {

@@ -202,6 +202,15 @@ class CuadroSalud extends ModuloHibridoReflejo {
 
     this._persist.marcarDirty(project_id);
 
+    if (store.estado === 'SANGRA') {
+      this.eventBus?.publish('nichos.sangria.detectada', {
+        id_proyecto: project_id,
+        flujo: store.flujo,
+        estado: store.estado,
+        timestamp: store.recalculado_at
+      });
+    }
+
     this.eventBus?.publish('nichos.salud.recalculada', {
       id_proyecto: project_id,
       estado: store.estado,

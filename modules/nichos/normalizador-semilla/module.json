@@ -2,7 +2,7 @@
   "name": "normalizador-semilla",
   "version": "0.1.0",
   "description": "MICRO-AGENTE del vertical NICHOS: normaliza la semilla cruda via LLM (ai-gateway) extrayendo campos estructurados (territorio, senal, intencion). Encola candidato tras normalizar. Atiende el RPC nichos.semilla.normalizar y emite el pulso nichos.semilla.normalizada.",
-  "_doc": "modules/nichos/normalizador-semilla — MICRO-AGENTE del vertical NICHOS.\n\nQue hace: recibe una semilla cruda (texto libre capturado), la envia al LLM via ai-gateway (llm.complete.request) para extraer campos estructurados (territorio, senal, intencion), emite el pulso nichos.semilla.normalizada y encola el candidato en la cola (nichos.cola.candidatos.meter.request).\n\nSin estado persistido — micro-agente puro (request → LLM → response).\n\nPatron: ModuloHibridoReflejo (micro-agente — usa LLM via ai-gateway, sin estado persistido).",
+  "_doc": "modules/nichos/normalizador-semilla — MICRO-AGENTE del vertical NICHOS.\n\nQue hace: recibe una semilla cruda (texto libre capturado), la envia al LLM via ai-gateway (llm.complete.request) para extraer campos estructurados (territorio, senal, intencion), emite el pulso nichos.semilla.normalizada y encola el candidato en la cola (nichos.cola.candidatos.encolar.request).\n\nSin estado persistido — micro-agente puro (request → LLM → response).\n\nPatron: ModuloHibridoReflejo (micro-agente — usa LLM via ai-gateway, sin estado persistido).",
   "ui_decision": {
     "necesita": false,
     "razon": "Micro-agente sin cara propia. Normaliza semillas internamente via LLM y emite el resultado al bus. Sin interaccion directa con el humano."
@@ -10,7 +10,7 @@
   "publishes": [
     { "event": "nichos.semilla.normalizada", "description": "PULSO fire-and-forget: semilla normalizada con campos estructurados. Payload: {semilla_cruda, semilla_normalizada, campos_extraidos, timestamp}." },
     { "event": "nichos.semilla.normalizar.response", "description": "Response correlada por request_id al RPC nichos.semilla.normalizar.request. Payload: {status, data:{semilla_normalizada}}." },
-    { "event": "nichos.cola.candidatos.meter.request", "description": "Encola candidato tras normalizar la semilla. Payload: {request_id, candidato, correlation_id}." },
+    { "event": "nichos.cola.candidatos.encolar.request", "description": "Encola candidato tras normalizar la semilla. Payload: {request_id, candidato, correlation_id}." },
     { "event": "llm.complete.request", "description": "Pide al ai-gateway clasificacion/estructuracion de la semilla cruda via LLM. Payload: {request_id, messages, options}." }
   ],
   "subscribes": [

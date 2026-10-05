@@ -42,15 +42,22 @@ class BatchValidacion extends ModuloHibridoReflejo {
 
     const lote_id = `lote-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const projectId = input.project_id;
+    const correlationId = input.correlation_id;
 
     // 1. Sacar candidatos de la cola.
+    // La cola recibe el tamaño como `n` (su parámetro canónico). Se envía
+    // también `tamano` por compatibilidad. La respuesta trae `lote` y su
+    // alias `candidatos` — se aceptan ambos (antes solo se leía `candidatos`
+    // y la cola solo devolvía `lote` → el lote salía vacío siempre).
     const colResp = await this._rpc('nichos.cola.candidatos.sacar.request', {
       project_id: projectId,
+      n: tamano,
       tamano
     }, { timeout_ms: 10000 });
 
-    const candidatos = (colResp && colResp.data && Array.isArray(colResp.data.candidatos))
-      ? colResp.data.candidatos
+    const cd = (colResp && colResp.data) || {};
+    const candidatos = Array.isArray(cd.candidatos) ? cd.candidatos
+      : Array.isArray(cd.lote) ? cd.lote
       : [];
 
     if (candidatos.length === 0) {
@@ -72,6 +79,7 @@ class BatchValidacion extends ModuloHibridoReflejo {
     let viables = 0;
     let no_viables = 0;
     let puentes = 0;
+    const viablesIds = [];
 
     for (const candidato of candidatos) {
       const id_nicho = candidato.id_nicho || candidato.id;
@@ -79,10 +87,10 @@ class BatchValidacion extends ModuloHibridoReflejo {
 
       try {
         const resultado = await this._procesarCandidato(id_nicho, projectId);
-        if (resultado === 'VIABLE') viables++;
+        if (resultado === 'VIABLE') { viables++; viablesIds.push(id_nicho); }
         else if (resultado === 'NO_VIABLE') no_viables++;
         else if (resultado === 'PUENTE') puentes++;
-        else viables++; // default seguro
+        else { viables++; viablesIds.push(id_nicho); } // default seguro
       } catch (err) {
         this.logger?.error('batch-validacion.candidato.error', {
           id_nicho, error: err.message
@@ -92,12 +100,18 @@ class BatchValidacion extends ModuloHibridoReflejo {
     }
 
     // PULSO: lote completado.
+    // Lleva `correlation_id` (el orquestador lo exige para hallar el ciclo)
+    // y `viables`/`resultados` (la lista de nichos viables que encadena a
+    // construccion). Sin ellos el ciclo moria aqui: validacion OK, pero el
+    // orquestador no arrancaba el ensamblaje.
     this.eventBus?.publish('nichos.validacion.lote.completado', {
       project_id: projectId,
       lote_id,
+      correlation_id: correlationId || null,
       viables,
       no_viables,
       puentes,
+      resultados: viablesIds,
       timestamp: nowISO()
     });
 

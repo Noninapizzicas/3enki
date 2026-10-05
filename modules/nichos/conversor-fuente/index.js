@@ -34,7 +34,7 @@ const NORMALIZADORES = {
   crawl4rs(crudo) {
     return {
       titulo:    crudo.title || crudo.titulo || null,
-      contenido: crudo.text || crudo.content || crudo.contenido || null,
+      contenido: crudo.text || crudo.content || crudo.contenido || crudo.resumen || null,
       url:       crudo.url || crudo.link || null,
       meta:      crudo.meta || {}
     };
@@ -57,8 +57,8 @@ const NORMALIZADORES = {
   },
   searxng(crudo) {
     return {
-      titulo:    crudo.title || null,
-      contenido: crudo.content || crudo.snippet || null,
+      titulo:    crudo.title || crudo.titulo || null,
+      contenido: crudo.content || crudo.snippet || crudo.resumen || null,
       url:       crudo.url || crudo.href || null,
       meta:      { engine: crudo.engine, score: crudo.score, ...(crudo.meta || {}) }
     };

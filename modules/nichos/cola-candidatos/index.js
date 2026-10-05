@@ -140,7 +140,12 @@ class ColaCandidatos extends ModuloHibridoReflejo {
   _sacar(input) {
     if (!input.project_id) return this._invalid('project_id');
 
-    const n = (typeof input.n === 'number' && input.n > 0) ? input.n : 1;
+    // El tamaño del lote llega como `n` (canónico de la cola) o `tamano`
+    // (el que envía batch-validacion). Se aceptan ambos.
+    const crudo = (typeof input.n === 'number' && input.n > 0) ? input.n
+      : (typeof input.tamano === 'number' && input.tamano > 0) ? input.tamano
+      : 1;
+    const n = crudo;
     const store = this._store(input.project_id);
 
     const lote = store.items.splice(0, n);
@@ -149,10 +154,13 @@ class ColaCandidatos extends ModuloHibridoReflejo {
       this._persist.marcarDirty(input.project_id);
     }
 
+    // Devuelve `lote` (canónico) + `candidatos` (alias): el batch-validacion
+    // leía `data.candidatos` y nunca veía nada → cola_vacia silenciosa.
     return {
       status: 200,
       data: {
-        lote
+        lote,
+        candidatos: lote
       }
     };
   }

@@ -137,14 +137,6 @@ class ImputacionCosteFuente extends ModuloHibridoReflejo {
 
     costes.entradas.push(entrada);
     this._persist.marcarDirty(project_id);
-
-    this.eventBus?.publish('nichos.fuente.coste.registrado', {
-      project_id,
-      fuente: input.fuente,
-      importe,
-      concepto: entrada.concepto,
-      timestamp: entrada.registrado_en
-    });
   }
 }
 

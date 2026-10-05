@@ -13,7 +13,7 @@
     { "event": "nichos.territorio.sondear.request", "description": "Dispara sondeo del territorio tras normalizar semilla. Payload: {request_id, semilla_normalizada, correlation_id}." },
     { "event": "nichos.validacion.lote.correr.request", "description": "Dispara batch-validacion tras sondeo completado. Payload: {request_id, candidatos, correlation_id}." },
     { "event": "nichos.solucion.ensamblar.request", "description": "Dispara ensamblaje de viables tras validacion completada. Payload: {request_id, viables, correlation_id}." },
-    { "event": "nichos.cuadro.salud.actualizar.request", "description": "Actualiza cuadro de salud tras construccion completada. Payload: {request_id, resultado, correlation_id}." },
+    { "event": "nichos.cuadro.salud.recalcular.request", "description": "Recalcula cuadro de salud tras construccion completada. Payload: {request_id, resultado, correlation_id}." },
     { "event": "llm.complete.request", "description": "Consulta al LLM para decisiones de orquestacion (priorizacion, filtrado). Payload: {request_id, messages, options}." }
   ],
   "subscribes": [

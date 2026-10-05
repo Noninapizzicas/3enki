@@ -4,7 +4,7 @@
  * Normaliza la semilla cruda via LLM (ai-gateway): extrae campos
  * estructurados (territorio, senal, intencion) del texto libre capturado.
  * Emite el pulso nichos.semilla.normalizada y encola candidato en la cola
- * (nichos.cola.candidatos.meter.request).
+ * (nichos.cola.candidatos.encolar.request).
  *
  * Sin estado persistido — micro-agente puro (request -> LLM -> response).
  * Patron: ModuloHibridoReflejo.
@@ -101,7 +101,7 @@ class NormalizadorSemilla extends ModuloHibridoReflejo {
       });
 
       // Encolar candidato
-      this.eventBus?.publish('nichos.cola.candidatos.meter.request', {
+      this.eventBus?.publish('nichos.cola.candidatos.encolar.request', {
         request_id: `cola-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         candidato: {
           semilla: semilla_normalizada,

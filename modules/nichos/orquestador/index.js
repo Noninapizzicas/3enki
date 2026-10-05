@@ -204,7 +204,7 @@ class Orquestador extends ModuloHibridoReflejo {
     if (!ciclo) return;
 
     // Actualizar cuadro de salud
-    this.eventBus?.publish('nichos.cuadro.salud.actualizar.request', {
+    this.eventBus?.publish('nichos.cuadro.salud.recalcular.request', {
       request_id: `salud-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       resultado: d.resultado || d,
       correlation_id: correlationId,

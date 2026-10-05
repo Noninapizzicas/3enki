@@ -12,6 +12,7 @@
     { "event": "nichos.salud.recalculada.failed", "description": "Par .failed del PULSO: el recalculo fallo. Payload: {project_id, code, message, timestamp}." },
     { "event": "nichos.cuadro.salud.estado.response", "description": "Response correlada por request_id al RPC nichos.cuadro.salud.estado.request. Payload: {status, data:{vista_proyecto}}." },
     { "event": "nichos.cuadro.salud.recalcular.response", "description": "Response correlada por request_id al RPC nichos.cuadro.salud.recalcular.request. Payload: {status, data:{vista_proyecto}}." },
+    { "event": "nichos.sangria.detectada", "description": "PULSO fire-and-forget: el proyecto sangra (flujo negativo tras recalculo). Lo consume alerta-sangria. Payload: {id_proyecto, flujo, estado, timestamp}." },
     { "event": "nichos.costes.imputar.request", "description": "RPC saliente: solicita costes imputados al modulo de imputacion." },
     { "event": "nichos.registro.cobros.consultar.request", "description": "RPC saliente: consulta entradas de cobro al registro-cobros." }
   ],

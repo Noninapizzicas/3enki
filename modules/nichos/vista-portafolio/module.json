@@ -1,48 +1,23 @@
 {
-  "_doc": "Manifest de nichos/vista-portafolio — CUSTODIO (K1, hoja del plan): dashboard que cruza la salud de TODOS los modulos/nichos en una vista agregada de portafolio para el jefe. Ingesta reflejo (_agregarSalud, cruza la salud financiera F3 de todos los nichos en una VistaPortafolio) + guardado custodio del store de vistas (_guardarVista) + lectura (_leer -> DashboardJefe). PosPersistencia per-proyecto: restaura en project.activated y vuelca en onUnload. Escucha nichos.salud.actualizada para re-agregar la vista, y el jefe pide guardar por RPC. Publica nichos.vista_portafolio; nichos.vista.guardar.failed cuando la vista no puede guardarse.",
   "name": "vista-portafolio",
   "version": "0.1.0",
-  "description": "Custodio (K1): dashboard que cruza la salud de todos los modulos/nichos en una vista agregada de portafolio para el jefe; ingesta reflejo + store custodio con PosPersistencia; publica nichos.vista_portafolio.",
-  "language": "es",
-  "subscribes": [
-    {
-      "event": "nichos.vista.leer.request",
-      "handler": "onLeerRequest",
-      "description": "RPC custodia: {project_id} → DashboardJefe (la vista agregada actual del portafolio). No muta. Responde por nichos.vista.leer.response."
-    },
-    {
-      "event": "nichos.vista.guardar.request",
-      "handler": "onGuardarRequest",
-      "description": "RPC custodia: {project_id, salud*} → re-agrega la VistaPortafolio de la salud recibida (o del store) y la guarda. Exito → publica nichos.vista_portafolio y responde por nichos.vista.guardar.response. Fallo (sin salud) → nichos.vista.guardar.failed."
-    },
-    {
-      "event": "nichos.salud.actualizada",
-      "handler": "onSaludActualizada",
-      "description": "Fire-and-forget (F3): cuadro-salud-financiera emite la salud de un nicho → el custodia re-agrega la vista del portafolio (reflejo) y la guarda; publica nichos.vista_portafolio actualizada."
-    },
-    {
-      "event": "project.activated",
-      "handler": "onProjectActivated",
-      "description": "Custodio: restaura el store de vistas del proyecto activado via PosPersistencia."
-    }
-  ],
+  "description": "CUSTODIO del vertical NICHOS: snapshot agregado de salud por portafolio. Persiste la vista con los proyectos, cuantos generan, cuantos sangran y el flujo total. Se recalcula al recibir nichos.salud.recalculada.",
+  "_doc": "modules/nichos/vista-portafolio — CUSTODIO del vertical NICHOS.\n\nQue guarda (per-proyecto, PosPersistencia): /prisma/pos/nichos/vista-portafolio.json\n  {\n    _version, _updated,\n    vista: {\n      version:      Int,\n      proyectos:    [ { id, estado, flujo } ],\n      generan:      Int,\n      sangran:      Int,\n      flujo_total:  Number\n    }\n  }\n\nQue atiende:\n  - nichos.portafolio.vista.request → devuelve la vista actual del portafolio.\n  - nichos.salud.recalculada → actualiza la vista al recalcular salud de un proyecto.\n  - project.activated → restaura el store del proyecto.\n\nEmite:\n  - nichos.portafolio.recalculado — PULSO tras recalcular la vista.\n\nPatron: ModuloHibridoReflejo + PosPersistencia. CUSTODIO.",
+  "ui_decision": {
+    "necesita": true,
+    "tipo": "system_panel",
+    "zone": "lateral_derecha",
+    "razon": "El dueño necesita VER el estado de la vertical de un vistazo: cuántos nichos generan, sangran, estado del pipeline, decisiones pendientes, alertas. Dashboard solo lectura — la operación es por Telegram. Este módulo es el ANCLA del dashboard; consume por RPC a cuadro-salud, pipeline, cola-decisiones, historial y alerta-sangria.",
+    "alimentado_por": ["vista-portafolio", "cuadro-salud", "pipeline", "cola-decisiones", "historial", "alerta-sangria"]
+  },
   "publishes": [
-    {
-      "event": "nichos.vista_portafolio",
-      "description": "Fire-and-forget (K1): la vista agregada de portafolio fue regenerada y guardada → {project_id, vista: VistaPortafolio, totales}. La consume el jefe (panel) y el canal de supervision para el dashboard."
-    },
-    {
-      "event": "nichos.vista.guardar.failed",
-      "description": "Par de fallo determinista: no hay salud que cruzar o la vista no pudo guardarse → {status, code, mensaje}. Cierra el circulo de nichos.vista.guardar.request."
-    }
+    { "event": "nichos.portafolio.vista.response", "description": "Response correlada por request_id al RPC nichos.portafolio.vista.request. Payload: {status, data:{vista_portafolio}}." },
+    { "event": "nichos.portafolio.recalculado", "description": "PULSO fire-and-forget: la vista del portafolio fue recalculada. Payload: {vista, generan, sangran, flujo_total, timestamp}." },
+    { "event": "nichos.cuadro.salud.estado.request", "description": "RPC hacia cuadro-salud: consulta el estado de salud de cada proyecto. Payload: {request_id, ahora}." }
   ],
-  "ui_handlers": [
-    {
-      "domain": "vista-portafolio",
-      "action": "leer",
-      "handler": "onLeerRequest",
-      "type": "system_panel",
-      "zone": "lateral_derecha"
-    }
+  "subscribes": [
+    { "event": "nichos.portafolio.vista.request", "handler": "onVistaRequest", "description": "RPC: devuelve la vista agregada del portafolio con proyectos, generan, sangran y flujo_total." },
+    { "event": "nichos.salud.recalculada", "handler": "onSaludRecalculada", "description": "PULSO: recalcula la vista del portafolio al recibir nueva salud de un proyecto." },
+    { "event": "project.activated", "handler": "onProjectActivated", "description": "Reflejo JS: restaura el store del proyecto desde /prisma/pos/nichos/vista-portafolio.json (PosPersistencia)." }
   ]
 }

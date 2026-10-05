@@ -1,0 +1,18 @@
+{
+  "name": "capturador-semilla",
+  "version": "0.1.0",
+  "description": "REFLEJO del vertical NICHOS: captura la semilla cruda del input del dueno (texto libre), la valida, y la encadena al normalizador. Sin estado. Atiende el RPC nichos.semilla.capturar y emite el pulso nichos.semilla.capturada.",
+  "_doc": "modules/nichos/capturador-semilla — REFLEJO (sin estado) del vertical NICHOS.\n\nQue hace: recibe texto libre del dueno (via RPC nichos.semilla.capturar.request), extrae la semilla cruda, emite el pulso nichos.semilla.capturada y encadena al normalizador publicando nichos.semilla.normalizar.request.\n\nSin estado — REFLEJO puro determinista.\n\nPatron: ModuloHibridoReflejo (mitad REFLEJO, JS determinista). Sin mitad blueprint.",
+  "ui_decision": {
+    "necesita": false,
+    "razon": "Reflejo sin cara propia. Captura la semilla del input del dueno y la pasa al normalizador. El dueno interactua por el canal, no con este modulo."
+  },
+  "publishes": [
+    { "event": "nichos.semilla.capturada", "description": "PULSO fire-and-forget: semilla cruda capturada del input del dueno. Payload: {texto, origen, timestamp}." },
+    { "event": "nichos.semilla.capturar.response", "description": "Response correlada por request_id al RPC nichos.semilla.capturar.request. Payload: {status, data:{semilla_cruda}}." },
+    { "event": "nichos.semilla.normalizar.request", "description": "Encadena al normalizador: pide normalizar la semilla cruda recien capturada. Payload: {request_id, semilla_cruda, correlation_id}." }
+  ],
+  "subscribes": [
+    { "event": "nichos.semilla.capturar.request", "handler": "onCapturarRequest", "description": "RPC: captura la semilla cruda del texto del dueno, emite pulso .capturada y encadena normalizar. Payload: {request_id, texto, origen?, meta?}." }
+  ]
+}

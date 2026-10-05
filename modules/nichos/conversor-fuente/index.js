@@ -1,111 +1,115 @@
 /**
- * nichos/conversor-fuente — CONVERSOR REFLEJO JS PURO: cero pensar, solo cruzar formato.
+ * nichos/conversor-fuente — CONVERSOR (bloque J · interlocutor proveedor).
  *
- * J2 del plan: la UNICA frontera de formatos entre las fuentes externas de datos y los
- * datos internos homogeneos del sistema. Recibe los datos crudos de una fuente en su
- * formato nativo (el DatasetBruto de puerto-fuente-datos) y los convierte a la señal
- * homogenea interna de nichos. Sin estado, sin red, sin store: cada op es una función
- * pura (entra objeto, sale objeto). Cero logica de negocio: solo convertir formato.
+ * Homogeneiza crudo heterogéneo de fuentes externas (crawl4rs, APIs, scrapers)
+ * en un dato con esquema estable para los consumidores del vertical NICHOS.
  *
- * Proyecciones puras:
- *   _cruzar  la unica frontera: valida el DatasetBruto y deriva los DatosHomogeneos.
- *   _mapear  mapea un item crudo de un formatoOrigen al formato interno canonico
- *            (titulo/url desde los campos nativos; id derivado; senal de relevancia).
+ * RPC puro sin estado: recibe { crudo, origen } → devuelve { dato_homogeneo }.
+ * Si el origen es desconocido, envuelve el crudo con marca origen_desconocido:true
+ * (degradación honesta, no falla).
  *
- * Al convertir con exito publica nichos.datos_homogeneos; si el formato es invalido
- * (sin nicho, sin items, o un item sin titulo ni url) cierra el circulo con el par
- * determinista nichos.fuente.convertir.failed.
+ * Esquema dato_homogeneo:
+ *   {
+ *     titulo:    String | null,
+ *     contenido: String | null,
+ *     url:       String | null,
+ *     meta:      Object,
+ *     origen:    String,
+ *     normalizado_en: ISO,
+ *     origen_desconocido: Boolean
+ *   }
+ *
+ * Patrón: ModuloHibridoReflejo (CONVERSOR puro). Sin estado, sin PosPersistencia,
+ * sin mitad blueprint. Transformación determinista crudo→estable.
  */
 
 'use strict';
 
-const crypto = require('crypto');
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
+
+const nowISO = () => new Date().toISOString();
+
+// ── Normalizadores por origen ──
+const NORMALIZADORES = {
+  crawl4rs(crudo) {
+    return {
+      titulo:    crudo.title || crudo.titulo || null,
+      contenido: crudo.text || crudo.content || crudo.contenido || null,
+      url:       crudo.url || crudo.link || null,
+      meta:      crudo.meta || {}
+    };
+  },
+  'google-trends'(crudo) {
+    return {
+      titulo:    crudo.query || crudo.keyword || null,
+      contenido: crudo.summary || crudo.description || null,
+      url:       crudo.url || null,
+      meta:      { interest: crudo.interest, region: crudo.region, ...(crudo.meta || {}) }
+    };
+  },
+  'api-mercado'(crudo) {
+    return {
+      titulo:    crudo.name || crudo.titulo || null,
+      contenido: crudo.body || crudo.contenido || null,
+      url:       crudo.endpoint || crudo.url || null,
+      meta:      crudo.meta || {}
+    };
+  },
+  searxng(crudo) {
+    return {
+      titulo:    crudo.title || null,
+      contenido: crudo.content || crudo.snippet || null,
+      url:       crudo.url || crudo.href || null,
+      meta:      { engine: crudo.engine, score: crudo.score, ...(crudo.meta || {}) }
+    };
+  }
+};
+
+function normalizarDesconocido(crudo) {
+  return {
+    titulo:    crudo.title || crudo.titulo || crudo.name || null,
+    contenido: crudo.content || crudo.contenido || crudo.text || crudo.body || null,
+    url:       crudo.url || crudo.link || null,
+    meta:      crudo.meta || {}
+  };
+}
 
 class ConversorFuente extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'conversor-fuente';
-    this.version = 'reflejo-0.1.0';
-  }
-  async onUnload() { return super.onUnload(); }
-
-  // Convierte el DatasetBruto (formato nativo de la fuente) a la señal homogenea interna.
-  onConvertirRequest(e) {
-    return this._atender(e, 'convertir', 'nichos.fuente.convertir.response', (d) => {
-      const res = this._cruzar(d);
-      // Fire-and-forget de dominio: exito → datos homogeneos; fallo → par determinista.
-      if (res.status === 200) this.eventBus?.publish('nichos.datos_homogeneos', res.data);
-      else this.eventBus?.publish('nichos.fuente.convertir.failed', res);
-      return res;
-    });
+    this.version = '0.1.0';
   }
 
-  // Proyección pura: la UNICA frontera de formatos externos->internos -> DatosHomogeneos.
-  _cruzar({ nicho, fuente, formato, dataset_bruto } = {}) {
-    if (!nicho || typeof nicho !== 'string') return this._invalid('nicho');
-    if (!formato || typeof formato !== 'string') return this._invalid('formato');
-    if (!dataset_bruto || !Array.isArray(dataset_bruto.items)) {
-      return this._errorResponse(422, 'FORMATO_INVALIDO',
-        'el DatasetBruto debe traer items[] para poder cruzar al formato interno', { nicho, fuente, formato });
-    }
-    if (dataset_bruto.items.length === 0) {
-      return this._errorResponse(422, 'FORMATO_INVALIDO',
-        'el DatasetBruto no trae ningun item crudo que convertir', { nicho, fuente, formato });
-    }
+  // ── RPC HANDLER ──
+  onNormalizarRequest(e) {
+    return this._atender(e, 'normalizar', 'nichos.conversor.normalizar.response', d => this._normalizar(d));
+  }
 
-    const ctx = { fuente: fuente || 'desconocida', formato, nicho };
-    const items = [];
-    let rechazados = 0;
-    for (const bruto of dataset_bruto.items) {
-      const canonico = this._mapear(bruto, ctx);
-      if (canonico == null) { rechazados++; continue; }
-      items.push(canonico);
-    }
+  // ── PROYECCION ──
+  _normalizar(input) {
+    if (!input.crudo || typeof input.crudo !== 'object') return this._invalid('crudo');
+    if (!input.origen) return this._invalid('origen');
 
-    if (items.length === 0) {
-      return this._errorResponse(422, 'FORMATO_INVALIDO',
-        'ningun item del DatasetBruto pudo convertirse al formato interno (faltan titulo o url)', { nicho, fuente, formato });
-    }
+    const origen = String(input.origen).toLowerCase();
+    const fn = NORMALIZADORES[origen];
+    const origenDesconocido = !fn;
+    const parcial = fn ? fn(input.crudo) : normalizarDesconocido(input.crudo);
+
+    const dato_homogeneo = {
+      titulo:             parcial.titulo,
+      contenido:          parcial.contenido,
+      url:                parcial.url,
+      meta:               parcial.meta || {},
+      origen:             input.origen,
+      normalizado_en:     nowISO(),
+      origen_desconocido: origenDesconocido
+    };
 
     return {
       status: 200,
-      data: {
-        nicho,
-        fuente: ctx.fuente,
-        formato,
-        total: dataset_bruto.items.length,
-        convertidos: items.length,
-        rechazados,
-        items
-      }
+      data: { dato_homogeneo }
     };
-  }
-
-  // Proyección pura: mapea un item crudo de un formatoOrigen al formato interno canonico.
-  // null si el item no es convertible (le falta titulo y url) — no inventa, lo rechaza.
-  _mapear(item, { fuente, formato, nicho }) {
-    if (!item || typeof item !== 'object') return null;
-    const titulo = this._primer(item, ['titulo', 'title', 'nombre', 'name']);
-    const url = this._primer(item, ['url', 'link', 'href', 'enlace']);
-    if (!titulo || !url) return null;
-    const relevancia = Number(item.relevancia) && Number(item.relevancia) > 0 ? Number(item.relevancia) : 0;
-    const id = this._id(`${fuente}:${url}`);
-    return { id, nicho, fuente, formato, titulo, url, relevancia, convertido: true };
-  }
-
-  // Devuelve el primer campo presente y no vacío de una lista de nombres de campo.
-  _primer(obj, campos) {
-    for (const c of campos) {
-      const v = obj[c];
-      if (v != null && String(v).trim().length > 0) return String(v).trim();
-    }
-    return null;
-  }
-
-  // id determinista derivado del origen (fuente:url) — estable entre conversiones.
-  _id(clave) {
-    return crypto.createHash('sha1').update(clave).digest('hex').slice(0, 12);
   }
 }
 

@@ -1,153 +1,112 @@
-/**
- * nichos/pulso-avance — REFLEJO STATELESS (L5, hoja del plan).
- *
- * Emite el avance del ciclo del nicho por etapa → pulso escalonado al supervisor.
- * Dado el estado/etapa en que va la máquina del nicho (SEMILLA → ... → EN_CAJA),
- * calcula un PROGRESO determinista (0-100, mecánico por regla declarada) y lo
- * traduce a un ESCALÓN de mensaje que escala a escalones-mensaje / canal-supervision.
- *
- * Consumidor de nichos.salud.actualizada (estado real COBRÓ|SANGRA|NEUTRO) y de
- * nichos.pipeline.avanzado (etapa). Cada etapa mapea a un % de avance del ciclo:
- *   SEMILLA 5 · BUSCADO 15 · VALIDANDO 35 · VALIDADO 55 · CONSTRUIDO 70
- *   OPERANDO 85 · COBRANDO 93 · EN_CAJA 100 · SANGRA 100 · CORTADO 100
- *
- * REFLEJO (patrón real, stateless): sin store, sin PosPersistencia, cada op entra
- * objeto, sale objeto — proyección pura determinista. Publica nichos.pulso_emitido
- * (+ par determinista nichos.pulso.emitir.failed). Ver hoja L5 del plan.
- */
-
 'use strict';
+
+/**
+ * nichos/pulso-avance — REFLEJO JS (bloque K del vertical NICHOS, #52).
+ *
+ * Calcula métricas de avance (duración en estado, velocidad) a partir de
+ * cada transición del pipeline y actualiza el cuadro de salud.
+ *
+ * Sin estado. REFLEJO puro, determinista.
+ *
+ * Patrón: ModuloHibridoReflejo (mitad REFLEJO, JS determinista).
+ */
 
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
 
-// Etapas del ciclo del nicho → % de avance hacia EN_CAJA (regla dura, determinista).
-const PROGRESO_POR_ETAPA = {
-  SEMILLA: 5,
-  BUSCADO: 15,
-  VALIDANDO: 35,
-  VALIDADO: 55,
-  CONSTRUIDO: 70,
-  OPERANDO: 85,
-  COBRANDO: 93,
-  EN_CAJA: 100,
-  SANGRA: 100,
-  CORTADO: 100,
-  OPERANDO_EN_ESPERA: 85
-};
-
-// Etapas terminales (el pulso avisa de cierre, no de avance).
-const TERMINALES = new Set(['EN_CAJA', 'SANGRA', 'CORTADO']);
-
-// Escalón que corresponde según el estado del avance (informa | urge | cierra).
-function escalonDe(etapa, avance) {
-  if (TERMINALES.has(etapa)) return { escalon: 'PULSO', prioridad: 1, tipo: 'cierre' };
-  if (avance >= 85) return { escalon: 'PULSO', prioridad: 2, tipo: 'avance' };
-  if (etapa === 'VALIDANDO' || etapa === 'CONSTRUIDO') return { escalon: 'PULSO', prioridad: 1, tipo: 'avance' };
-  return { escalon: 'PULSO', prioridad: 0, tipo: 'avance' };
-}
+const nowISO = () => new Date().toISOString();
 
 class PulsoAvance extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'pulso-avance';
-    this.version = 'reflejo-0.1.0';
-    this.project_id = null;
+    this.version = '0.1.0';
   }
 
-  async onUnload() { return super.onUnload(); }
-
-  // project.activated — reflejo sin estado: solo registra el proyecto activo.
-  onProjectActivated(e) {
+  // ── LISTENER (fire-and-forget entrante) ──
+  onPipelineTransitado(e) {
     const d = (e && (e.data || e)) || {};
-    this.project_id = d.project_id || this.project_id;
-    this.logger?.info(`${this.name}.reflejo.project_activated`, { project_id: this.project_id });
-    return { status: 200, data: { project_id: this.project_id } };
+    this._emitir(d);
   }
 
-  // ── handler RPC (una línea, delega a _atender / fire-and-forget) ──
-  onEmitirRequest(e) {
-    return this._atender(e, 'emitir', 'nichos.pulso.emitir.response', (d) => {
-      const res = this._emitirEscalon(d);
-      if (res.status === 200) {
-        this.eventBus?.publish('nichos.pulso_emitido', res.data);
-      } else {
-        this.eventBus?.publish('nichos.pulso.emitir.failed', res);
-      }
-      return res;
-    });
-  }
+  // =============================================================
+  // PROYECCIÓN — calcula duración y formatea pulso de avance
+  // =============================================================
 
-  // Fire-and-forget: la máquina del pipeline avanzó de etapa → emite pulso.
-  onPipelineAvanzado(e) {
-    const d = (e && (e.data || e)) || {};
-    const res = this._emitirEscalon({
-      project_id: d.project_id || this.project_id,
-      nicho: d.nicho || d.nicho_id,
-      etapa: d.estado || d.nuevo_estado || d.etapa
-    });
-    if (res.status === 200) this.eventBus?.publish('nichos.pulso_emitido', res.data);
-    else this.eventBus?.publish('nichos.pulso.emitir.failed', res);
-    return res;
-  }
+  /**
+   * _emitir — calcula duración en el estado anterior y emite pulso de avance.
+   *
+   * @param {Object} input
+   * @param {string} input.id_nicho          - identificador del nicho
+   * @param {string} input.estado_anterior   - estado antes de la transición
+   * @param {string} input.estado_nuevo      - estado después de la transición
+   * @param {string} input.timestamp         - momento de la transición
+   * @param {string} [input.timestamp_anterior] - momento en que entró al estado anterior
+   */
+  async _emitir(input) {
+    if (!input.id_nicho || !input.estado_nuevo) return;
 
-  // Fire-and-forget: el resultado real del nicho (COBRÓ|SANGRA|NEUTRO) → pulso de cierre.
-  onSaludActualizada(e) {
-    const d = (e && (e.data || e)) || {};
-    const resultado = d.resultado || d.salud || d.estado;
-    const etapa = d.etapa || (resultado === 'COBRO' ? 'EN_CAJA' : (resultado === 'SANGRA' ? 'SANGRA' : 'OPERANDO'));
-    const res = this._emitirEscalon({
-      project_id: d.project_id || this.project_id,
-      nicho: d.nicho || d.nicho_id,
-      etapa,
-      resultado_real: resultado
-    });
-    if (res.status === 200) this.eventBus?.publish('nichos.pulso_emitido', res.data);
-    else this.eventBus?.publish('nichos.pulso.emitir.failed', res);
-    return res;
-  }
+    const ahora = input.timestamp || nowISO();
+    const duracion_en_estado_ms = this._calcularDuracion(input.timestamp_anterior, ahora);
 
-  // ── proyección pura: calcula el % de avance desde la etapa ──
-  _calcularProgreso({ project_id, nicho, etapa } = {}) {
-    project_id = project_id || this.project_id;
-    if (!project_id) return this._invalid('project_id');
-    const et = String(etapa || '').toUpperCase();
-    const avance = PROGRESO_POR_ETAPA[et];
-    if (avance == null) {
-      return this._errorResponse(400, 'INVALID_INPUT', 'etapa del ciclo no reconocida', { etapa });
+    const pulso = {
+      id_nicho: input.id_nicho,
+      estado_anterior: input.estado_anterior || null,
+      estado_nuevo: input.estado_nuevo,
+      timestamp: ahora,
+      duracion_en_estado_ms
+    };
+
+    // PULSO de avance emitido
+    this.eventBus?.publish('nichos.pulso.avance.emitido', pulso);
+
+    // Actualizar cuadro de salud con métricas de avance
+    try {
+      await this._publishAlBus('nichos.cuadro.salud.recalcular.request', {
+        id_nicho: input.id_nicho,
+        metrica: 'avance',
+        valor: {
+          estado_anterior: input.estado_anterior || null,
+          estado_nuevo: input.estado_nuevo,
+          duracion_en_estado_ms,
+          timestamp: ahora
+        }
+      });
+    } catch (_) {
+      // Degradación honesta: el pulso se emitió, la actualización del cuadro falló
+      this.logger?.warn('pulso-avance.cuadro.salud.failed', {
+        id_nicho: input.id_nicho
+      });
     }
-    return {
-      status: 200,
-      data: { project_id, nicho: nicho || null, etapa: et, avance, terminal: TERMINALES.has(et) }
-    };
   }
 
-  // ── proyección pura: emite el pulso escalonado al supervisor ──
-  _emitirEscalon(input) {
-    const calc = this._calcularProgreso(input);
-    if (calc.status !== 200) return calc;
-    const { project_id, nicho, etapa: et, avance } = calc.data;
-    const escalon = escalonDe(et, avance);
-    return {
-      status: 200,
-      data: {
-        project_id,
-        nicho,
-        etapa: et,
-        avance,
-        escalon: escalon.escalon,
-        prioridad: escalon.prioridad,
-        tipo: escalon.tipo,
-        // pulso hacia canal-supervision (G1) / escalones-mensaje (G2)
-        cuerpo: `nicho ${nicho || '—'} avanza a ${et} (${avance}% del ciclo)`,
-        regla: 'duro',
-        emitido: true
-      }
-    };
+  // =============================================================
+  // Utilidades
+  // =============================================================
+
+  /**
+   * Calcula la duración en milisegundos entre dos timestamps ISO.
+   * Si falta timestamp_anterior, devuelve 0 (primera transición).
+   */
+  _calcularDuracion(timestamp_anterior, timestamp_actual) {
+    if (!timestamp_anterior) return 0;
+    try {
+      const inicio = new Date(timestamp_anterior).getTime();
+      const fin = new Date(timestamp_actual).getTime();
+      if (isNaN(inicio) || isNaN(fin)) return 0;
+      return Math.max(0, fin - inicio);
+    } catch (_) {
+      return 0;
+    }
   }
 
-  // ── Tools ──
-  toolCalcularProgreso(params) { return this._calcularProgreso(params); }
-  toolEmitirEscalon(params) { return this._emitirEscalon(params); }
+  async _publishAlBus(topic, payload) {
+    if (this.eventBus?.publishAndWait) {
+      try {
+        return await this.eventBus.publishAndWait(topic, payload);
+      } catch (_) { /* degradación: fire-and-forget */ }
+    }
+    this.eventBus?.publish(topic, payload);
+  }
 }
 
 module.exports = PulsoAvance;

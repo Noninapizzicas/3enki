@@ -1,178 +1,133 @@
 ---
 name: perfil-supervision
-description: >
-  Skill FULL del módulo CUSTODIO CON PERSISTENCIA `perfil-supervision` de la vertical
-  nichos (Radar de Nichos). Guarda el PERFIL DE SUPERVISIÓN por proyecto: cadencia de pulso
-  (diaria|semanal|quincenal|tiempo_real) y límites declarables (max_alertas_dia,
-  techo_perdida_eur). Es el STORE que canal-supervision (G1) y el monitor/pulso consumen
-  para decidir cuándo y cómo avisar al dueño. Un solo escritor (DUEÑO, guard de rol);
-  la lectura no muta. Persiste por proyecto vía PosPersistencia. Úsala para operar, depurar
-  o extender el custodio, o para entender su contrato de eventos y sus reglas de negocio.
-when-to-use: >
-  - Cuando necesites declarar o consultar el perfil de supervisión de un proyecto
-    (RPC nichos.supervision.declarar.request / nichos.supervision.leer.request).
-  - Cuando depures por qué una declaración se rechaza (PERMISSION_DENIED si el rol no es
-    DUEÑO, INVALID_INPUT si la cadencia no está permitida o los límites están vacíos).
-  - Cuando quieras entender el contrato de eventos (subscribes/publishes) y las reglas de
-    negocio (un solo escritor, cadencias/límites validados, merge conservador).
-  - Cuando vayas a escribir/ampliar el test unitario del custodio.
-tags: [enki, modulo, custodio, persistencia, nichos, radar, supervision, proyecto-3d]
+description: >-
+  CUSTODIO del vertical NICHOS (bloque H · interlocutor dueño): ranura única
+  autorizada que guarda el perfil de supervisión del dueño (cadencia_pulso,
+  decide_siempre, umbral_nitidez_semilla, canales_elegidos,
+  techo_perdida_proyecto, cadencia_cuadro) con inmutabilidad por versión. El
+  dueño declara por el canal (único escritor); lectores libres por RPC. Carga
+  este módulo cuando escalones-mensaje, puerto-canal, gate-decision-operar,
+  alerta-sangria, paquetador-decision o normalizador-semilla necesiten leer la
+  cadencia, los umbrales o los canales elegidos del dueño antes de actuar.
+fuente: enki
+dominio: nichos
+lente_dominio: nichos
+lente_tarea: custodio
+tags: [nichos, custodio, perfil, supervision, cadencia, canales, bloque-h, pos-persistencia, bus, mqtt]
 ---
 
-# perfil-supervision — CUSTODIO CON PERSISTENCIA del perfil de supervisión del nicho
+# nichos · perfil-supervision
 
-## Qué hace el módulo
+> **Qué es.** CUSTODIO único (bloque H interlocutor dueño) del perfil de
+> supervisión del vertical NICHOS. Snapshot inmutable por versión con los seis
+> campos que gobiernan cadencia, escalones, umbrales y canales de interlocución
+> con el dueño.
+>
+> Código: `modules/nichos/perfil-supervision/index.js`. La verdad viva es el
+> código; esta skill es la referencia de uso.
 
-`perfil-supervision` es un **CUSTODIO CON PERSISTENCIA** (H2, hoja del plan): el dueño del
-store del perfil de supervisión **por proyecto**. Guarda la **cadencia de pulso** de la
-supervisión del nicho (`diaria|semanal|quincenal|tiempo_real`) y los **límites declarables**:
-`max_alertas_dia` (tope de alertas al día) y `techo_perdida_eur` (tope de pérdida económica).
-Es el **STORE** que **canal-supervision (G1)** y el **monitor/pulso (G2/escalones-mensaje)**
-consumen para decidir cuándo y cómo avisar al dueño.
+---
 
-Un **solo escritor** del store: el **DUEÑO** declara la cadencia y los límites (guard de rol en
-`_declarar`); el canal y el monitor son solo **lectores** (`_leer` no muta). Persiste por
-proyecto con **PosPersistencia** (storage `/prisma/nichos/perfil-supervision.json`), restaura
-en `project.activated` y vuelca en `onUnload`. Emite `nichos.supervision.declarado` en éxito y
-su par de fallo `nichos.supervision.declarar.failed` en rechazo.
+## Forma Enki
 
-## Contrato de eventos (module.json real)
+- Patrón: **CUSTODIO** (único escritor, estado persistido).
+- Base: `ModuloHibridoReflejo` + `PosPersistencia` (per-proyecto).
+- Store: `/prisma/pos/nichos/perfil-supervision.json`.
+- Autor autorizado: `dueño` (regla F3: *"un solo escritor por el canal"*).
+  K3 (ajustador-umbrales) NO toca este perfil; aquí solo manda el dueño porque
+  gobierna la cadencia y la cara del sistema.
+- Esqueleto por defecto: todo campo nace `ABIERTO` (salvo `decide_siempre` que
+  nace `[]` por tipo) — el consumidor decide qué hacer con un ABIERTO.
 
-### Subscribes (RPCs request/response)
+## Campos del perfil
 
-| Evento | Handler | Descripción |
+| Campo | Tipo | Semántica |
 |---|---|---|
-| `nichos.supervision.leer.request` | `onLeerRequest` | RPC custodio: {project_id} → {project_id, perfil}. Lee el perfil de supervisión vigente del proyecto (cadencia_pulso, limites{max_alertas_dia, techo_perdida_eur}). La lectura no muta. Lo consumen el canal de supervisión (G1) y el monitor/pulso de nicho. |
-| `nichos.supervision.declarar.request` | `onDeclararRequest` | RPC custodio: {project_id, rol:'DUEÑO', perfil:{cadencia_pulso?, limites?}} → {project_id, perfil, declarado}. Guard Rol=DUEÑO (second-writer rechazado). Persiste el perfil, publica `nichos.supervision.declarado` y responde por `nichos.supervision.declarar.response`. Si no es DUEÑO o el perfil es inválido (cadencia no permitida, límites vacíos) → `nichos.supervision.declarar.failed`. |
-| `project.activated` | `onProjectActivated` | Restaura el perfil de supervisión del proyecto activado desde el storage (PosPersistencia). |
+| `cadencia_pulso` | `Cadencia \| 'ABIERTO'` | con qué frecuencia el dueño quiere pulsos de avance (diario, semanal, …) |
+| `decide_siempre` | `Array<TipoDecision>` | tipos que SIEMPRE suben al dueño (ej.: GATE_OPERAR, PUENTE_HUMANO, ALERTA_SANGRIA) |
+| `umbral_nitidez_semilla` | `Decimal \| 'ABIERTO'` | debajo del cual el normalizador-semilla abre `SolicitudDecision` en vez de autoexpandir |
+| `canales_elegidos` | `Array<NombrePuerto> \| 'ABIERTO'` | puertos de canal por los que el dueño quiere ser alcanzado |
+| `techo_perdida_proyecto` | `Dinero \| 'ABIERTO'` | techo de pérdida acumulada por proyecto antes de alerta-sangria |
+| `cadencia_cuadro` | `Cadencia \| 'ABIERTO'` | con qué frecuencia recalcular/entregar el cuadro de salud |
 
-### Publishes
+## Eventos que atiende (request → response)
 
-| Evento | Descripción |
-|---|---|
-| `nichos.supervision.declarado` | Fire-and-forget (H2): el DUEÑO declaró el perfil de supervisión → {project_id, perfil, declarado:true}. Lo consumen el canal de supervisión (G1) y el monitor/pulso (G2/escalones-mensaje) para aplicar la cadencia y límites vigentes. |
-| `nichos.supervision.declarar.failed` | Par de fallo determinista (H2): declaración rechazada (rol != DUEÑO) o perfil inválido → {status, code, message, data}. Cierra el círculo de nichos.supervision.declarar.request. |
+| Evento | Handler | Qué devuelve |
+|---|---|---|
+| `nichos.perfil.supervision.leer.request` | `onLeerRequest` | `{status:200, data:{perfil_supervision:{version, perfil, por_autor}}}` |
+| `nichos.perfil.supervision.declarar.request` | `onDeclararRequest` | `{status:200, data:{nueva_version, perfil_supervision}}` o `{status:403, error:{code:'PERMISSION_DENIED'}}` |
 
-> **Regla de cierre de círculo**: el par `nichos.supervision.declarar.failed` cierra el círculo de
-> `nichos.supervision.declarar.request`. En éxito `onDeclararRequest` propaga el fire-and-forget de
-> dominio `nichos.supervision.declarado` (con `correlation_id` del request) además de la `.response`.
-
-> **Nota: los eventos de dominio que emite index.js en `onDeclararRequest` (nichos.supervision.declarado,
-> nichos.supervision.declarar.failed) coinciden exactamente con los publicados en module.json** — no hay
-> sub-declaración en este módulo. Además `index.js` define el alias semántico `leerPerfil(pid)` (helper
-> público, NO un RPC del manifest) que canal-supervision (G1) puede invocar en proceso.
-
-## Reglas de negocio
-
-1. **Un solo escritor (guard de rol)**: `_declarar` exige `rol === 'DUEÑO'` (constante `ROL_DUENYO`).
-   Si el rol es cualquiera otro (p. ej. `'CANAL'`, `'MONITOR'`) → `403 PERMISSION_DENIED` con
-   `{ status:403, code:'PERMISSION_DENIED', mensaje:'solo el DUEÑO puede declarar el perfil de supervisión', rol_esperado:'DUEÑO', rol_recibido:<rol> }`
-   + `nichos.supervision.declarar.failed`. Second-writer rechazado.
-2. **Perfil obligatorio → `400 INVALID_INPUT`**: si `perfil` falta o no es objeto →
-   `{ status:400, code:'INVALID_INPUT', mensaje:'perfil requerido', field:'perfil' }` + failed.
-3. **Cadencias cerradas**: `perfil.cadencia_pulso` debe estar en `['diaria','semanal','quincenal','tiempo_real']`
-   (Set `CADENCIAS`). Si se declara una no permitida (p. ej. `'mensual'`) → `400 INVALID_INPUT`
-   `perfil.cadencia_pulso`. El valor se normaliza a minúsculas.
-4. **Límites con al menos un valor positivo**: `perfil.limites.max_alertas_dia` y
-   `perfil.limites.techo_perdida_eur` se normalizan con `numPos` (entero estrictamente `> 0`). Si
-   AMBOS quedan `null` (vacíos o no positivos) → `400 INVALID_INPUT` `perfil.limites`. Cero límites
-   ≤ 0.
-5. **`project_id` obligatorio → `400 INVALID_INPUT`**: si falta `project_id` → `_invalid('project_id')`
-   (mismo shape `{status:400, code:'INVALID_INPUT', field:'project_id'}`) + failed.
-6. **Merge conservador sobre el molde**: `_declarar` preserva el valor previo de cada campo si no viene
-   en la nueva declaración (cadencia previa, límites previos). Marca `updated_at` ISO y `declarado_por:'DUEÑO'`.
-7. **La lectura no muta**: `_leer` obtiene o crea el perfil (`_obtenerOCrear`, que solo crea el
-   `perfilVacio()` si no existe) y devuelve `200 {project_id, perfil}` sin tocar el perfil.
-8. **HTTP exacto**: éxito `200`; rol inválido → `403`; campos inválidos → `400`;
-   excepción en `_atender` → `500 UNKNOWN_ERROR`.
-
-## Cómo se usa (RPCs)
-
-RPC request/response que responde en `nichos.supervision.declarar.response` y `nichos.supervision.leer.response`:
-
-### 1. `declarar` — declarar/ajustar el perfil de supervisión (solo DUEÑO)
+### Payload de `.declarar.request`
 
 ```json
 {
-  "project_id": "e57a318a-...",
-  "rol": "DUEÑO",
-  "perfil": {
-    "cadencia_pulso": "diaria",
-    "limites": { "max_alertas_dia": 3, "techo_perdida_eur": 150 }
-  },
-  "correlation_id": "abc-123"
+  "request_id": "uuid",
+  "project_id": "prj_xxx",
+  "por_autor": "dueño",
+  "cambio": {
+    "cadencia_pulso": "diario",
+    "decide_siempre": ["GATE_OPERAR", "PUENTE_HUMANO", "ALERTA_SANGRIA"],
+    "umbral_nitidez_semilla": 0.6,
+    "canales_elegidos": ["telegram"],
+    "techo_perdida_proyecto": 100,
+    "cadencia_cuadro": "semanal"
+  }
 }
 ```
-Respuesta `200`:
-```json
-{
-  "project_id": "e57a318a-...",
-  "perfil": {
-    "esquema": "nichos-perfil-supervision-v1",
-    "cadencia_pulso": "diaria",
-    "limites": { "max_alertas_dia": 3, "techo_perdida_eur": 150 },
-    "updated_at": "2026-09-25T10:00:00.000Z",
-    "declarado_por": "DUEÑO"
-  },
-  "declarado": true
-}
-```
-Emite `nichos.supervision.declarado`:
-```json
-{ "project_id": "e57a318a-...", "perfil": { "esquema": "nichos-perfil-supervision-v1", "cadencia_pulso": "diaria", "limites": { "max_alertas_dia": 3, "techo_perdida_eur": 150 }, "updated_at": "...", "declarado_por": "DUEÑO" }, "declarado": true, "correlation_id": "abc-123" }
-```
 
-### 2. `leer` — consultar el perfil vigente (no muta)
+Campos del `cambio` no incluidos → se conservan del snapshot anterior. Campos
+fuera del esquema → 400 `INVALID_INPUT`.
 
-```json
-{ "project_id": "e57a318a-..." }
-```
-Respuesta `200`:
-```json
-{ "project_id": "e57a318a-...", "perfil": { "esquema": "nichos-perfil-supervision-v1", "cadencia_pulso": "diaria", "limites": { "max_alertas_dia": 3, "techo_perdida_eur": 150 }, "updated_at": "...", "declarado_por": "DUEÑO" } }
-```
+## Señales que escucha (fire-and-forget)
 
-### Fallos típicos
+- `project.activated` → `onProjectActivated` — restaura el perfil persistido
+  desde `/prisma/pos/nichos/perfil-supervision.json`.
 
-- Rol distinto de DUEÑO (p. ej. `'CANAL'`) → `403` + `nichos.supervision.declarar.failed` (`PERMISSION_DENIED`).
-- Cadencia no permitida (`'mensual'`) → `400` + failed (`INVALID_INPUT`).
-- Límites vacíos o no positivos → `400` + failed (`INVALID_INPUT`).
-- Falta `project_id` o `perfil` → `400` + failed (`INVALID_INPUT`).
+## Pulsos que emite
 
-## Tests
+| Evento | Cuándo | Payload |
+|---|---|---|
+| `nichos.perfil.supervision.declarado` | tras aplicar una declaración válida | `{project_id, version, por_autor, timestamp}` |
+| `nichos.perfil.supervision.declarado.failed` | rechazo por autor no autorizado o cambio inválido | `{project_id, code, message, timestamp}` |
 
-El test vive en `tests/unit/nichos__perfil-supervision.test.js`. Cubre:
+## Invariantes
 
-- `declarar` con rol DUEÑO y perfil válido → `200`, guarda cadencia/límites, publica
-  `nichos.supervision.declarado` y su `.response` correlado con `request_id`.
-- `leer` → `200 {project_id, perfil}` sin mutar.
-- `declarar` de ajuste → **merge conservador** (preserva cadencia/límites previos) y `declarado_por:'DUEÑO'`.
-- Rol distinto → `403 PERMISSION_DENIED` + `nichos.supervision.declarar.failed`.
-- Perfil inválido (cadencia no permitida / límites vacíos) → `400 INVALID_INPUT` + failed.
-- `project.activated` restaura el perfil de otro proyecto vía PosPersistencia.
-- Manifest: subscribes (leer/declarar/project.activated) ↔ handlers y publishes exactos de la hoja H2.
+- **Único escritor**: solo `por_autor === 'dueño'` muta el store.
+- **Inmutabilidad por versión**: cada declaración crea un snapshot nuevo
+  (`version++`); el historial queda en `por_autor[]`.
+- **ABIERTO explícito**: la ausencia de un valor se nombra como `'ABIERTO'`.
+- **Degradación honesta**: sin `project_id` el store queda en memoria.
 
-Para ejecutarlo (test central del repo):
+## Errores conocidos
 
-```bash
-cd /home/admin/3enki
-node tests/unit/nichos__perfil-supervision.test.js
+| Status | Code | Causa |
+|---|---|---|
+| 400 | `INVALID_INPUT` | falta `project_id`/`por_autor`/`cambio`, o `cambio` trae campos fuera del esquema |
+| 403 | `PERMISSION_DENIED` | `por_autor` no es `'dueño'` |
+
+## Integración (patrón RPC del bus)
+
+```javascript
+// LEER (escalones-mensaje antes de clasificar escalón)
+const r = await bus.publishAndWait('nichos.perfil.supervision.leer.request', { project_id });
+const p = r.data.perfil_supervision.perfil;
+if (p.decide_siempre.includes('ALERTA_SANGRIA')) escalon = 'DECISION';
+
+// DECLARAR (dueño cambia a modo silencioso)
+await bus.publishAndWait('nichos.perfil.supervision.declarar.request', {
+  project_id, por_autor: 'dueño',
+  cambio: { cadencia_pulso: 'semanal', decide_siempre: ['GATE_OPERAR'] }
+});
 ```
 
-## Notas de implementación
+## Dónde encaja en el vertical NICHOS
 
-- Clase `PerfilSupervision extends ModuloHibridoReflejo`; `name = 'perfil-supervision'`,
-  `version = 'reflejo-0.1.0'`. Store en memoria `this._perfiles` (Map project_id → perfil).
-- **PosPersistencia**: `this._persist = new PosPersistencia({ modulo: this, file:
-  'perfil-supervision.json', dir: '/prisma/nichos', snapshot, hidratar })`.
-  `onProjectActivated` → `restaurar(project_id)`; `onUnload` → `flush()` + `detener()`. Las
-  escrituras/lecturas con creación marcan `marcarDirty(pid)`.
-- `onDeclararRequest` delega en `_atender(e, 'declarar', 'nichos.supervision.declarar.response', fn)` y
-  hace el fire-and-forget de dominio (`nichos.supervision.declarado` en 200 o
-  `nichos.supervision.declarar.failed` si no) dentro del handler, propagando `correlation_id`.
-- `onLeerRequest` delega en `_atender(e, 'leer', 'nichos.supervision.leer.response', d => this._leer(d))`.
-- Proyecciones: `_leer` (lectura, no muta) y `_declarar` (escritura con guard de rol + merge
-  conservador); alias semántico `leerPerfil(pid)` para G1 (canal-supervision). Helpers
-  `perfilVacio()`/`numPos`. `_invalid`/`_errorResponse` vienen de `modulo-hibrido-reflejo`.
-- Tools: `toolLeer` → `_leer`, `toolDeclarar` → `_declarar`.
-- DEP hacia delante: lo consumen canal-supervision (G1) y el monitor/pulso (G2/escalones-mensaje).
+- **Bloque H — interlocutor dueño**: su mando a distancia sobre todo lo que
+  llega al dueño (ritmo, qué le despierta y qué no, por qué canal).
+- Lectores habituales: `nichos-escalones-mensaje` (G2) para clasificar
+  PULSO/ALERTA/DECISION/SILENCIO; `nichos-puerto-canal` (G1) para elegir
+  canal; `nichos-gate-decision-operar` (E2) y `nichos-alerta-sangria` (F4)
+  para saber si suben siempre; `nichos-paquetador-decision` (H1) para elegir
+  tono/longitud; `nichos-normalizador-semilla` (A2) para el corte de nitidez.
+- No depende de otro módulo del vertical para arrancar (solo
+  `project.activated` del core). Es raíz del grafo del bloque H.

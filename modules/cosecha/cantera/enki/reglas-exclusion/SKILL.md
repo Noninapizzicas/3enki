@@ -1,167 +1,137 @@
 ---
 name: reglas-exclusion
-description: >
-  Skill FULL del módulo MICRO-AGENTE (fuzzy) `reglas-exclusion` de la vertical nichos
-  (Radar de Nichos). Es la célula que aprende a FILTRAR: recibe los candidatos que
-  sondeo-territorio (B1) detectó (señales de demanda), aprende reglas de exclusion de
-  las corridas reales (falsos positivos previos + criterio del dueño) y decide si se
-  EXCLUYEN o pasan. Úsala para operar, depurar o extender el filtro, o para entender su
-  contrato de eventos y sus reglas de negocio.
-when-to-use: >
-  - Cuando necesites excluir (o validar) un candidato de nicho contra las reglas de
-    exclusión (RPC nichos.reglas.excluir.request).
-  - Cuando depures por qué un candidato se excluye (regla aprendida/declarada/umbral de
-    señal) o por qué se rechaza un candidato malformed (CANDIDATO_INVALIDO).
-  - Cuando quieras entender el patrón híbrido reflejo+fuzzy de aprendizaje de reglas
-    (llm.complete.request con fallback reflejo por firmas) y su contrato.
-  - Cuando vayas a escribir/ampliar el test unitario del micro-agente.
-tags: [enki, modulo, micro-agente, fuzzy, nichos, radar, exclusion, proyecto-3d]
+description: >-
+  CUSTODIO del vertical NICHOS (bloque B · búsqueda): guarda las reglas
+  aprendidas de EXCLUSIÓN por firma de semilla y las sirve al sondeador. Carga
+  este módulo cuando el sondeador necesite consultar qué patrones NO explorar
+  para una semilla, cuando el dueño o el ajustador-umbrales (K3) añada/quite
+  patrones a una firma, o cuando otro módulo reaccione al PULSO
+  nichos.reglas.exclusion.actualizadas. Ingiere los sondeos cerrados como
+  feedback para una futura destilación semántica de patrones.
+fuente: enki
+dominio: nichos
+lente_dominio: nichos
+lente_tarea: custodio
+tags: [nichos, custodio, reglas, exclusion, aprendizaje, busqueda, bloque-b, pos-persistencia, bus, mqtt]
 ---
 
-# reglas-exclusion — MICRO-AGENTE (fuzzy) que aprende a filtrar
+# nichos · reglas-exclusion
 
-## Qué hace el módulo
+> **Qué es.** CUSTODIO (bloque B búsqueda) del vertical NICHOS. Mantiene por
+> firma de semilla el conjunto activo de patrones que el sondeador debe
+> EXCLUIR de los candidatos, y archiva los sondeos cerrados como feedback.
+>
+> Código: `modules/nichos/reglas-exclusion/index.js`. La verdad viva es el
+> código; esta skill es la referencia de uso.
 
-`reglas-exclusion` es un **MICRO-AGENTE HÍBRIDO** (B2, aprende a FILTRAR): recibe los
-candidatos que `sondeo-territorio` (B1) detectó (las señales de demanda) y decide si se
-**EXCLUYEN o pasan**, descartando los falsos positivos que no interesan — por experiencia
-previa (corridas reales / falsos positivos del pasado), por criterio del dueño (reglas
-explícitas) o por patrones (señal de demanda muy baja).
+---
 
-Tres mitades (patrón real de `normalizacion-semilla` + `sondeo-territorio`):
+## Forma Enki
 
-- **FUZZY** (`_aprenderDeCorridas`): juicio LLM. Un guion-prompt self-contained
-  (`GUION_APRENDER_REGLA`) + historial de corridas/falsos positivos → `llm.complete.request`
-  → reglas de exclusión. Si el LLM falla, el reflejo por reglas asegura al menos la firma
-  de cada falso positivo previo como regla.
-- **REFLEJO** (`_aprenderDeCorridasReflejo`): mecánico. Convierte cada falso positivo previo
-  en una regla de firma (los campos que lo caracterizaron), respeta las reglas explícitas del
-  dueño y marca un umbral mínimo de señal.
-- **REFLEJO** (`_aplicar`): mecánico. Cruza el candidato contra las reglas y emite
-  `{ excluido:bool, motivo, regla }`.
+- Patrón: **CUSTODIO** (append-only de feedback + conjunto activo versionado).
+- Base: `ModuloHibridoReflejo` + `PosPersistencia` (per-proyecto).
+- Store: `/prisma/pos/nichos/reglas-exclusion.json`.
+- Autores autorizados a mutar: `dueño` | `ajustador-umbrales` (K3).
+- Sin mitad blueprint — la destilación de patrones queda deferida a K3 o al
+  blueprint cuando se cablee la fuzzy.
 
-**NUNCA decide solo sin base**: solo excluye lo que una regla justifica (aprendida, declarada
-por el dueño o de umbral de señal); sin reglas, el candidato pasa. Candidato vacío/malformed →
-par de fallo honesto. Sin store, sin custodio: entra candidato + historial, sale veredicto.
+## Shape del store
 
-## Contrato de eventos (module.json real)
+```json
+{
+  "version": 7,
+  "reglas_por_firma": {
+    "<firma_semilla>": {
+      "patrones": ["adulto", "cripto-estafa"],
+      "actualizada_por": "dueño",
+      "at": "2026-..."
+    }
+  },
+  "sondeos_ingeridos": [
+    { "semilla_firma": "...", "candidatos_total": 42, "at": "2026-..." }
+  ],
+  "por_autor": [ { "version", "autor", "firma", "cambio", "at" } ]
+}
+```
 
-### Subscribes (RPCs request/response)
+## Eventos que atiende (request → response)
 
-| Evento | Handler | Descripción |
+| Evento | Handler | Qué devuelve |
 |---|---|---|
-| `nichos.reglas.excluir.request` | `onExcluirRequest` | RPC híbrido: {project_id, candidato, historial?, reglas?} → {project_id, candidato, excluido:bool, motivo, regla, reglas:{explicitas, aprendidas, total}}. Aplica/actualiza las reglas de exclusión: la parte fuzzy (`_aprenderDeCorridas` vía llm.complete.request) deriva reglas de las corridas reales; el reflejo determinista reusa la firma de cada falso positivo previo y las reglas explícitas del dueño + umbral de señal. `_aplicar` cruza el candidato contra las reglas → excluido:bool, motivo y regla que lo descartó. Candidato vacío/malformed → error determinista `nichos.reglas.excluir.failed`. Éxito → publica `nichos.candidato.excluido` y responde por `nichos.reglas.excluir.response`. |
+| `nichos.reglas.exclusion.consultar.request` | `onConsultarRequest` | `{status:200, data:{conjunto_reglas:{semilla_firma, patrones_excluir, version}}}` — conjunto vacío si la firma no tiene aún reglas (no inventa). |
+| `nichos.reglas.exclusion.actualizar.request` | `onActualizarRequest` | `{status:200, data:{nueva_version, conjunto_reglas}}` o `{status:403, error:{code:'PERMISSION_DENIED'}}`. |
 
-### Publishes
-
-| Evento | Descripción |
-|---|---|
-| `nichos.candidato.excluido` | Fire-and-forget (B2): la aplicación de reglas de exclusión terminó → {project_id, candidato, excluido:bool, motivo, regla}. Emite qué se descarta y por qué. Lo consumen la cola-candidatos (L2) — que no encola lo excluido — y el pipeline-por-nicho (L1). |
-| `nichos.reglas.excluir.failed` | Par de fallo determinista (B2): el candidato llegó vacío o malformed (sin señal identificable del candidato a excluir) → {status, code, mensaje, data}. Cierra el círculo de nichos.reglas.excluir.request. |
-
-> **Regla de cierre de círculo**: el par `nichos.reglas.excluir.failed` cierra el círculo de
-> `nichos.reglas.excluir.request`. En éxito siempre se emite `nichos.candidato.excluido` (con
-> `excluido: true` o `false` — el veredicto siempre se publica, no solo cuando se excluye).
-
-## Reglas de negocio
-
-1. **NUNCA excluye sin base (honestidad)**: solo se excluye lo que una regla justifica
-   (aprendida, declarada por el dueño o umbral de señal). Sin reglas vigenentes, `_aplicar`
-   devuelve `excluido: false` con `motivo: 'ninguna regla de exclusion aplica'`.
-2. **Candidato obligatorio → `400 CANDIDATO_INVALIDO`**: si `candidato` falta o no es objeto →
-   `{ status:400, code:'CANDIDATO_INVALIDO', mensaje:'el candidato a excluir es obligatorio (objeto con producto/audiencia/lugar/senal)' }`
-   + `nichos.reglas.excluir.failed`.
-3. **Fallback reflejo por firmas (no romper el pipeline)**: si el LLM no deriva reglas
-   (`_aprenderDeCorridas` devuelve null), `_aprenderDeCorridasReflejo` construye las reglas:
-   (a) las reglas explícitas del dueño primero (`_validarReglas`), (b) una regla de firma por
-   cada falso positivo previo (producto/audiencia/lugar a `confianza 0.6`, motivo por defecto
-   `'falso positivo previo: mismo <campo>'`), y (c) siempre una regla de umbral de señal con
-   `valor: UMBRAL_SENAL_DEFAULT (0.12)` (`confianza 0.8`, motivo
-   `'senal de demanda por debajo del umbral minimo (0.12)'`). El dueño siempre manda.
-4. **`_aplicar` cruza candidato contra reglas (mecánico)**: normaliza valores a minúsculas y
-   compara. Para regla tipo `senal`, excluye si `senal < Number(regla.valor)`. Para `fuente`,
-   coincide `campos.fuente === norm(regla.valor)`. Para `producto/audiencia/lugar`, coincide
-   `campos[tipo] === norm(regla.valor)`. La primera regla que aplica gana (devuelve su motivo y regla).
-5. **La señal del candidato se lee de varios campos**: `senal_de_demanda` (número) →
-   `senal` → `Number(senal_de_demanda)`; si no hay señal interpretable → `0`.
-6. **Contrato de reglas validado**: `_validarReglas` acepta `tipo` ∈ {producto, audiencia,
-   lugar, senal, fuente}, exige un `valor` no vacío, y normaliza `confianza` a `(0,1]`
-   (default `0.5`); `motivo` por defecto `excluido por regla de <tipo>`.
-7. **Resultado rico**: `_excluir` devuelve también `reglas: { explicitas, aprendidas, total }`
-   (conteo), donde `total = veredicto.normReglas`.
-
-## Cómo se usa (RPCs)
-
-RPC request/response que responde en `nichos.reglas.excluir.response`:
-
-### 1. `excluir` — aplicar/actualizar reglas y decidir sobre un candidato
+### Payload de `.actualizar.request`
 
 ```json
 {
-  "project_id": "e57a318a-...",
-  "candidato": { "producto": "salsa picante", "audiencia": "restaurantes", "senal_de_demanda": 0.9, "fuente": "puerto" },
-  "historial": [ { "producto": "impresion 3d barata", "motivo": "margen nulo", "audiencia": "consumidor" } ],
-  "reglas": [ { "tipo": "producto", "valor": "impresion 3d barata", "motivo": "regla del dueno", "confianza": 1 } ]
+  "request_id": "uuid",
+  "project_id": "prj_xxx",
+  "semilla_firma": "<firma>",
+  "por_autor": "dueño",
+  "cambio": {
+    "añadir":   ["patron1", "patron2"],
+    "quitar":   ["patron_viejo"],
+    "reemplazar": null
+  }
 }
 ```
-Respuesta `200`:
-```json
-{
-  "project_id": "e57a318a-...",
-  "candidato": { "producto": "salsa picante", "audiencia": "restaurantes", "senal_de_demanda": 0.9, "fuente": "puerto" },
-  "excluido": false,
-  "motivo": "ninguna regla de exclusion aplica",
-  "regla": null,
-  "reglas": { "explicitas": 1, "aprendidas": 4, "total": 4 }
-}
+
+`reemplazar` sustituye el conjunto entero; `añadir`/`quitar` operan sobre el
+conjunto previo. Mezclarlos no está prohibido pero `reemplazar` gana.
+
+## Señales que escucha (fire-and-forget)
+
+- `nichos.sondeo.completado` → `onSondeoCompletado` — ingiere el sondeo cerrado
+  en `sondeos_ingeridos` (feedback para destilación futura). No muta el
+  conjunto activo por sí solo.
+- `project.activated` → `onProjectActivated` — restaura el store del proyecto
+  desde `/prisma/pos/nichos/reglas-exclusion.json`.
+
+## Pulsos que emite
+
+| Evento | Cuándo | Payload |
+|---|---|---|
+| `nichos.reglas.exclusion.actualizadas` | tras aplicar un cambio válido | `{project_id, semilla_firma, patrones_total, actualizada_por, timestamp}` |
+| `nichos.reglas.exclusion.actualizadas.failed` | rechazo por autor no autorizado o cambio vacío | `{project_id, code, message, timestamp}` |
+
+## Invariantes
+
+- **Autor autorizado**: solo `dueño` o `ajustador-umbrales`. Otro autor → 403.
+- **Append-only de feedback**: `sondeos_ingeridos` nunca se mutan ni se podan
+  aquí; el destilador los lee cuando toque.
+- **Vacío ≠ invento**: si una firma no tiene reglas, `patrones_excluir = []`.
+  El sondeador decide qué hacer con un conjunto vacío.
+- **Degradación honesta**: sin `project_id` el store queda en memoria.
+
+## Errores conocidos
+
+| Status | Code | Causa |
+|---|---|---|
+| 400 | `INVALID_INPUT` | falta `project_id`/`semilla_firma`/`por_autor`/`cambio`, o `cambio` vacío |
+| 403 | `PERMISSION_DENIED` | `por_autor` no está en `['dueño','ajustador-umbrales']` |
+
+## Integración (patrón RPC del bus)
+
+```javascript
+// CONSULTAR (sondeador-territorio antes de filtrar candidatos)
+const r = await bus.publishAndWait('nichos.reglas.exclusion.consultar.request', {
+  project_id, semilla_firma
+});
+const bloqueados = r.data.conjunto_reglas.patrones_excluir;
+
+// ACTUALIZAR (dueño añade un patrón manual)
+await bus.publishAndWait('nichos.reglas.exclusion.actualizar.request', {
+  project_id, semilla_firma, por_autor: 'dueño',
+  cambio: { añadir: ['nicho-X-irrelevante'] }
+});
 ```
-Emite `nichos.candidato.excluido` con el mismo conjunto.
 
-Si el candidato cae bajo el umbral de señal (`senal_de_demanda: 0.05`), el veredicto sería
-`excluido: true`, `motivo: "senal de demanda por debajo del umbral minimo (0.12)"`,
-`regla: { tipo: "senal", valor: "0.12" }`.
+## Dónde encaja en el vertical NICHOS
 
-### Fallo — candidato vacío o malformed
-
-```json
-{ "project_id": "e57a318a-...", "candidato": null }
-```
-Respuesta `400` + `nichos.reglas.excluir.failed`:
-```json
-{ "status": 400, "code": "CANDIDATO_INVALIDO", "mensaje": "el candidato a excluir es obligatorio (objeto con producto/audiencia/lugar/senal)", "project_id": "e57a318a-..." }
-```
-
-## Tests
-
-El test vive en `tests/unit/reglas-exclusion.test.js`. Cubre:
-
-- `excluir` con candidato válido → `200`, emite `nichos.candidato.excluido`; sin reglas que
-  apliquen → `excluido: false` (`'ninguna regla de exclusion aplica'`).
-- Un candidato que coincide con una regla de firma/umbral → `excluido: true` con motivo y regla.
-- Si el LLM falla/incumple contrato → fallback `_aprenderDeCorridasReflejo` (reglas explícitas +
-  firmas + umbral de señal).
-- `_aplicar` cruza por campo normalizado y por umbral de señal.
-- Candidato vacío/malformed → `400 CANDIDATO_INVALIDO` + `nichos.reglas.excluir.failed`.
-
-Para ejecutarlo:
-
-```bash
-cd /home/admin/3enki/modules/nichos/reglas-exclusion
-node tests/unit/reglas-exclusion.test.js
-```
-
-## Notas de implementación
-
-- Clase `ReglasExclusion extends ModuloHibridoReflejo`; `name = 'reglas-exclusion'`,
-  `version = 'reflejo-0.1.0'`. Sin store ni PosPersistencia (stateless).
-- `onExcluirRequest` delega en `_atender(e, 'excluir', 'nichos.reglas.excluir.response', fn)`;
-  con `status === 200` publica `nichos.candidato.excluido` (veredicto completo), si no
-  `nichos.reglas.excluir.failed`.
-- `_aprenderDeCorridas` hace 1 llamada `this._rpc('llm.complete.request', ...)` headless
-  (`GUION_APRENDER_REGLA`, `temperature: 0.2`, `timeout_ms: 30000`, tools vacíos) con
-  `messages: [{role:'user', content: JSON.stringify({ historial, reglas_explicitas })}]`.
-- `_parse` / `_validarReglas` son los guardas de contrato (tolera fences ```json, exige tipo+valor).
-- `_aprenderDeCorridasReflejo`/`_aplicar` son proyecciones puras (sin IO), deterministas.
-- Constante `UMBRAL_SENAL_DEFAULT = 0.12` (umbral mínimo de señal para interesar).
-- DEP hacia delante: lo consumen `cola-candidatos` (L2) y `pipeline-por-nicho` (L1) vía
-  `nichos.candidato.excluido`.
+- **Bloque B — búsqueda**: alimenta al `nichos-sondeador-territorio` con los
+  patrones que debe EXCLUIR al dedupar candidatos.
+- **K3 (ajustador-umbrales)** promueve propuestas de patrones aceptadas por el
+  dueño llamando a `.actualizar.request` con `por_autor:'ajustador-umbrales'`.
+- No depende de otro módulo del vertical para arrancar (solo `project.activated`
+  del core).

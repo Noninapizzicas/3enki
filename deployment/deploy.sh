@@ -58,7 +58,13 @@ fi
 # 3) Frontend
 if [ "$NEED_BUILD" = true ]; then
     log "Frontend cambió → rebuild..."
-    (cd "${INSTALL_DIR}/frontend" && npm install --silent 2>/dev/null && npm run build --silent 2>/dev/null)
+    # Heap del build ADAPTADO a la memoria real de la máquina: total − 1 GB de
+    # reserva (mínimo, la mitad). El build AJUSTA su heap a la máquina; nunca lo
+    # impone por encima de ella (un valor fijo > RAM hace que el OOM killer tumbe
+    # el VPS a mitad de build).
+    _TOTAL_MB=$(awk '/MemTotal/{print int($2/1024)}' /proc/meminfo)
+    _HEAP_MB=$(( _TOTAL_MB > 2048 ? _TOTAL_MB - 1024 : _TOTAL_MB / 2 ))
+    (cd "${INSTALL_DIR}/frontend" && npm install --silent 2>/dev/null && NODE_OPTIONS="--max-old-space-size=${_HEAP_MB}" npm run build --silent 2>/dev/null)
 else
     log "Frontend sin cambios"
 fi

@@ -1,22 +1,32 @@
 /**
- * nichos/catalogo-capacidades — CUSTODIO CON PERSISTENCIA (D3, hoja del plan).
+ * nichos/catalogo-capacidades — REFLEJO JS (CUSTODIO del vertical NICHOS, bloque D).
  *
- * Catalogo persistente por PROYECTO de las CAPACIDADES (tanto existentes como
- * faltantes) para construir la SOLUCION del nicho. Invariante D3: "lo que falta,
- * se crea" — jamas deja un hueco muerto. El ensamblador-solucion (D1) consulta
- * (_consultar -> CapacidadesDisponibles) y, cuando detecta que falta algo, el
- * custodio lo registra como FALTANTE declarado (nichos.capacidad.faltante_declarado)
- * para que el paso de construccion lo materialice.
+ * Materializa la invariante F3 'si no existe, se crea': cada falta de capacidad
+ * se encola como ENCARGO; cuando se cubre, pasa a DISPONIBLE. Nada se asume.
  *
- * CUSTODIO (patrón real de /perfil-limite-busqueda y /criterio-viabilidad): un solo
- * escritor — el CONSTRUCTOR (ensamblador) o el DUEÑO via el guard de rol en
- * _declararFaltante. La lectura (_consultar) no muta. La escritura (_declararFaltante)
- * valida, normaliza y garantiza la invariante (crea la capacidad faltante si no
- * existia). Persiste por proyecto con PosPersistencia (storage
- * /prisma/nichos/catalogo-capacidades.json), restaura en project.activated y
- * vuelca en onUnload. Emisor/par de fallo en errores.
+ * Store (per-proyecto, PosPersistencia): /prisma/pos/nichos/catalogo-capacidades.json
+ *   {
+ *     _version, _updated,
+ *     catalogo: {
+ *       version:     Int,
+ *       disponibles: [{ id, descripcion, cableada_por, cableada_en, meta? }],
+ *       encargos:    [{ id, descripcion, encargada_por, encargada_en, estado:'PENDIENTE', meta? }],
+ *       por_autor:   [{ version, autor, op:'ENCARGAR'|'PROMOVER', capacidad_id, at }]
+ *     }
+ *   }
  *
- * Ver hoja D3 del plan-construccion y arquitectura/decisiones/propuestas/prisma.md.
+ * REGLA F3 (adaptada al D3 del diseño): autores autorizados:
+ *   'ensamblador' — D1 ensamblador-solucion (el flujo normal).
+ *   'dueño'       — el dueño por el canal (registra manualmente).
+ *   'constructor' — un operador que cableó una capacidad fuera del flujo.
+ * Cualquier otro autor → 403 ESCRITOR_NO_AUTORIZADO.
+ *
+ * Factory: toda falta nace como EncargoCapacidad; promover() es la única puerta
+ * por la que un encargo se convierte en disponible. El id de la capacidad es su
+ * identidad: encargar() es IDEMPOTENTE por id — repetir no duplica.
+ *
+ * Patrón: ModuloHibridoReflejo (REFLEJO puro). Sin mitad blueprint — la lógica
+ * es CRUD + aritmética de versión + guard de legalidad del estado del encargo.
  */
 
 'use strict';
@@ -24,45 +34,34 @@
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
 const PosPersistencia = require('../../_shared/pos-persistencia');
 
-// Roles autorizados a ESCRIBIR el catalogo (single-writer: el ensamblador de la
-// solucion D1 y el DUEÑO; los demas solo leen).
-const ROLES_ESCRITOR = new Set(['CONSTRUCTOR', 'DUEÑO']);
+const nowISO = () => new Date().toISOString();
+const AUTORES_AUTORIZADOS = ['ensamblador', 'dueño', 'constructor'];
 
-// Shape base del catalogo por proyecto.
-function catalogoVacio() {
+function esqueletoVacio() {
   return {
-    esquema: 'nichos-capacidades-v1',
-    capacidades: [],   // [{ nombre, estado: 'existente'|'faltante', descripcion, creado_para, updated_at }]
-    updated_at: null,
-    declarado_por: null
+    version: 0,
+    disponibles: [],
+    encargos: [],
+    por_autor: []
   };
-}
-
-const ESTADOS = new Set(['existente', 'faltante']);
-
-// Normaliza un nombre de capacidad (string no vacio).
-function strNoVacio(v) {
-  return (typeof v === 'string' && v.trim().length > 0) ? v.trim() : null;
 }
 
 class CatalogoCapacidades extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'catalogo-capacidades';
-    this.version = 'reflejo-0.1.0';
-    // store en memoria: project_id -> catalogo (un solo estado por proyecto)
-    this._catalogos = new Map();
+    this.version = '0.1.0';
+    this.catalogoPorProyecto = new Map();   // project_id → esqueleto
 
     this._persist = new PosPersistencia({
       modulo: this,
       file: 'catalogo-capacidades.json',
-      dir: '/prisma/nichos',
-      snapshot: (pid) => {
-        const c = this._catalogos.get(pid);
-        return c ? { project_id: pid, catalogo: c } : null;
-      },
+      dir: '/prisma/pos/nichos',
+      snapshot: (pid) => ({ catalogo: this.catalogoPorProyecto.get(pid) || null }),
       hidratar: (pid, data) => {
-        if (data && data.catalogo) this._catalogos.set(pid, data.catalogo);
+        if (data && data.catalogo && typeof data.catalogo === 'object') {
+          this.catalogoPorProyecto.set(pid, data.catalogo);
+        }
       }
     });
   }
@@ -73,135 +72,216 @@ class CatalogoCapacidades extends ModuloHibridoReflejo {
     return super.onUnload();
   }
 
-  // Restaura el catalogo del proyecto activado.
   onProjectActivated(e) {
     const d = (e && (e.data || e)) || {};
     return this._persist.restaurar(d.project_id);
   }
 
-  // ── handlers RPC (una línea, delegan a _atender / fire-and-forget) ──
-  onConsultarRequest(e) {
-    return this._atender(e, 'consultar', 'nichos.capacidad.consultar.response', async (d) => {
-          await this._hidratarSiFalta(d && d.project_id);
-          return this._consultar(d);
-        });
+  // ── RPC HANDLERS ──
+  onDisponiblesRequest(e) {
+    return this._atender(e, 'disponibles', 'nichos.catalogo.capacidad.disponibles.response', d => this._disponibles(d));
   }
 
-  onDeclararRequest(e) {
-    return this._atender(e, 'declarar', 'nichos.capacidad.declarar.response', async (d) => {
-      const res = await this._declararFaltante(d);
-      // Emisor/par de fallo: exito → dominio (invariante: se crea lo que falta); fallo → par determinista.
-      if (res.status === 200) {
-        this.eventBus?.publish('nichos.capacidad.faltante_declarado', {
-          project_id: res.data.project_id,
-          capacidad: res.data.capacidad,
-          catalogo: res.data.catalogo,
-          creado: res.data.creado,
-          correlation_id: d.correlation_id
-        });
-      } else {
-        this.eventBus?.publish('nichos.capacidad.declarar.failed', res);
-      }
-      return res;
-    });
+  onEncargarRequest(e) {
+    return this._atender(e, 'encargar', 'nichos.catalogo.capacidad.encargar.response', d => this._encargar(d));
   }
 
-  // ── proyección de lectura (NO muta) ──
-  // NO marca dirty al crear el placeholder: persistir un estado vacío
-  // SOBRESCRIBIRÍA el real del disco (misma clase de pérdida que criterio-viabilidad).
-  // Hidrata del disco si el proyecto no está en memoria (un reinicio deja el
-  // store vacío y la persistencia solo restaura en project.activated). Sin esto,
-  // una lectura tras reiniciar devolvería vacío aunque el disco tenga el estado.
-  async _hidratarSiFalta(pid) {
-    if (!pid || this._catalogos.has(pid)) return;
-    try { await this._persist.restaurar(pid); } catch (_) { /* best-effort */ }
+  onPromoverRequest(e) {
+    return this._atender(e, 'promover', 'nichos.catalogo.capacidad.promover.response', d => this._promover(d));
   }
 
-  _obtenerOCrear(pid) {
-    let c = this._catalogos.get(pid);
+  // =============================================================
+  // Estado — snapshot por proyecto. Esqueleto vacío si no hay fichero.
+  // =============================================================
+  _catalogo(project_id) {
+    let c = this.catalogoPorProyecto.get(project_id);
     if (!c) {
-      c = catalogoVacio();
-      this._catalogos.set(pid, c);
+      c = esqueletoVacio();
+      this.catalogoPorProyecto.set(project_id, c);
     }
     return c;
   }
 
-  _consultar(input) {
-    const pid = input && input.project_id;
-    if (!pid) return this._invalid('project_id');
-    const c = this._obtenerOCrear(pid);
-    const nicho = (input && input.nicho) || null;
+  // =============================================================
+  // PROYECCIONES — lógica de dominio pura
+  // =============================================================
+  _disponibles(input) {
+    if (!input.project_id) return this._invalid('project_id');
+    const catalogo = this._catalogo(input.project_id);
     return {
       status: 200,
       data: {
-        project_id: pid,
-        nicho,
-        capacidades_disponibles: c.capacidades.filter(x => x.estado === 'existente'),
-        capacidades_faltantes: c.capacidades.filter(x => x.estado === 'faltante'),
-        capacidades: c.capacidades,
-        cantidad: c.capacidades.length
+        capacidades: catalogo.disponibles.slice()
       }
     };
   }
 
-  // Alias semantico para ensamblador (D1).
-  consultarDisponibles(pid, nicho) {
-    return this._consultar({ project_id: pid, nicho });
+  _encargar(input) {
+    if (!input.project_id) return this._invalid('project_id');
+    if (!input.por_autor) return this._invalid('por_autor');
+    if (!input.capacidad || typeof input.capacidad !== 'object') return this._invalid('capacidad');
+    if (!input.capacidad.id) return this._invalid('capacidad.id');
+    if (!input.capacidad.descripcion) return this._invalid('capacidad.descripcion');
+
+    // Guard F3: autores autorizados.
+    if (!AUTORES_AUTORIZADOS.includes(input.por_autor)) {
+      return this._errorResponse(
+        403,
+        'PERMISSION_DENIED',
+        'escritor_no_autorizado — solo el ensamblador, el dueño o el constructor escriben el catálogo de capacidades',
+        { por_autor: input.por_autor, autores_autorizados: AUTORES_AUTORIZADOS }
+      );
+    }
+
+    const catalogo = this._catalogo(input.project_id);
+    const id = input.capacidad.id;
+
+    // Idempotencia: si ya está DISPONIBLE, devuelve la vigente sin tocar.
+    const yaDisponible = catalogo.disponibles.find(c => c.id === id);
+    if (yaDisponible) {
+      return {
+        status: 200,
+        data: {
+          encargo: {
+            id,
+            descripcion: yaDisponible.descripcion,
+            encargada_por: input.por_autor,
+            encargada_en: nowISO(),
+            estado: 'YA_DISPONIBLE'
+          }
+        }
+      };
+    }
+
+    // Idempotencia: si ya hay un encargo pendiente, devuelve el vigente.
+    const yaEncargada = catalogo.encargos.find(c => c.id === id);
+    if (yaEncargada) {
+      return {
+        status: 200,
+        data: {
+          encargo: yaEncargada
+        }
+      };
+    }
+
+    // Factory: nace el encargo.
+    const encargo = {
+      id,
+      descripcion: input.capacidad.descripcion,
+      encargada_por: input.por_autor,
+      encargada_en: nowISO(),
+      estado: 'PENDIENTE',
+      meta: (input.capacidad.meta && typeof input.capacidad.meta === 'object') ? input.capacidad.meta : null
+    };
+    catalogo.version += 1;
+    catalogo.encargos.push(encargo);
+    catalogo.por_autor.push({
+      version: catalogo.version,
+      autor: input.por_autor,
+      op: 'ENCARGAR',
+      capacidad_id: id,
+      at: nowISO()
+    });
+
+    this._persist.marcarDirty(input.project_id);
+
+    this.eventBus?.publish('nichos.catalogo.capacidad.encargada', {
+      project_id: input.project_id,
+      capacidad_id: id,
+      descripcion: encargo.descripcion,
+      encargada_por: input.por_autor,
+      timestamp: nowISO()
+    });
+
+    return { status: 200, data: { encargo } };
   }
 
-  // ── proyección de escritura (un solo escritor; INVARIANTE: lo que falta se crea) ──
-  _declararFaltante(input) {
-    const pid = input && input.project_id;
-    if (!pid) return this._invalid('project_id');
+  _promover(input) {
+    if (!input.project_id) return this._invalid('project_id');
+    if (!input.por_autor) return this._invalid('por_autor');
+    if (!input.capacidad || typeof input.capacidad !== 'object') return this._invalid('capacidad');
+    if (!input.capacidad.id) return this._invalid('capacidad.id');
 
-    // GUARD de escritor: solo CONSTRUCTOR (ensamblador D1) o DUEÑO.
-    if (!ROLES_ESCRITOR.has(input.rol)) {
-      return this._errorResponse(403, 'PERMISSION_DENIED', 'solo el CONSTRUCTOR o el DUEÑO pueden declarar capacidades', {
-        rol_esperado: [...ROLES_ESCRITOR].join('|'), rol_recibido: input.rol
-      });
+    // Guard F3: autores autorizados.
+    if (!AUTORES_AUTORIZADOS.includes(input.por_autor)) {
+      return this._errorResponse(
+        403,
+        'PERMISSION_DENIED',
+        'escritor_no_autorizado — solo el ensamblador, el dueño o el constructor escriben el catálogo de capacidades',
+        { por_autor: input.por_autor, autores_autorizados: AUTORES_AUTORIZADOS }
+      );
     }
 
-    const nombre = strNoVacio(input.capacidad) || strNoVacio(input.nombre);
-    if (!nombre) return this._invalid('capacidad');
+    const catalogo = this._catalogo(input.project_id);
+    const id = input.capacidad.id;
 
-    const c = this._obtenerOCrear(pid);
-    const estado = input.estado && ESTADOS.has(input.estado) ? input.estado : 'faltante';
-
-    // Busca si la capacidad ya estaba registrada (cualquier estado).
-    const existente = c.capacidades.find(x => x.nombre === nombre);
-    let creado = false;
-    if (existente) {
-      // INVARIANTE: si estaba como faltante y ahora se declara existente (o viceversa),
-      // solo se actualiza el estado/descripcion, no se crea un duplicado.
-      existente.estado = estado;
-      existente.updated_at = new Date().toISOString();
-      if (input.descripcion) existente.descripcion = String(input.descripcion).trim();
-    } else {
-      // INVARIANTE CORE: lo que falta, se crea — jamas deja un hueco muerto.
-      c.capacidades.push({
-        nombre,
-        estado,
-        descripcion: input.descripcion ? String(input.descripcion).trim() : `capacidad declarada para construir la solucion`,
-        creado_para: input.nicho ? String(input.nicho).trim() : null,
-        updated_at: new Date().toISOString()
-      });
-      creado = true;
+    // Idempotencia: si ya está disponible, devuelve el estado vigente sin tocar.
+    const yaDisponible = catalogo.disponibles.find(c => c.id === id);
+    if (yaDisponible) {
+      return {
+        status: 200,
+        data: {
+          estado_catalogo: {
+            version: catalogo.version,
+            disponibles: catalogo.disponibles.slice(),
+            encargos: catalogo.encargos.slice(),
+            ya_disponible: true
+          }
+        }
+      };
     }
 
-    c.updated_at = new Date().toISOString();
-    c.declarado_por = input.rol;
-    this._catalogos.set(pid, c);
-    this._persist.marcarDirty(pid);
+    // Guard de legalidad: solo se promueve lo que estaba ENCARGADO.
+    const idxEncargo = catalogo.encargos.findIndex(c => c.id === id);
+    if (idxEncargo < 0) {
+      return this._errorResponse(
+        404,
+        'CAPACIDAD_NO_ENCARGADA',
+        'no hay encargo pendiente para esta capacidad; encargar primero',
+        { capacidad_id: id }
+      );
+    }
+
+    const encargo = catalogo.encargos[idxEncargo];
+    const disponible = {
+      id: encargo.id,
+      descripcion: (input.capacidad.descripcion || encargo.descripcion),
+      cableada_por: input.por_autor,
+      cableada_en: nowISO(),
+      meta: (input.capacidad.meta && typeof input.capacidad.meta === 'object') ? input.capacidad.meta : encargo.meta
+    };
+    catalogo.encargos.splice(idxEncargo, 1);
+    catalogo.disponibles.push(disponible);
+    catalogo.version += 1;
+    catalogo.por_autor.push({
+      version: catalogo.version,
+      autor: input.por_autor,
+      op: 'PROMOVER',
+      capacidad_id: id,
+      at: nowISO()
+    });
+
+    this._persist.marcarDirty(input.project_id);
+
+    this.eventBus?.publish('nichos.catalogo.capacidad.disponible', {
+      project_id: input.project_id,
+      capacidad_id: id,
+      descripcion: disponible.descripcion,
+      promovida_por: input.por_autor,
+      timestamp: nowISO()
+    });
 
     return {
       status: 200,
-      data: { project_id: pid, capacidad: c.capacidades.find(x => x.nombre === nombre), catalogo: c, creado }
+      data: {
+        estado_catalogo: {
+          version: catalogo.version,
+          disponibles: catalogo.disponibles.slice(),
+          encargos: catalogo.encargos.slice()
+        }
+      }
     };
   }
-
-  // ── Tools ──
-  toolConsultar(params) { return this._consultar(params); }
-  toolDeclarar(params) { return this._declararFaltante(params); }
 }
 
 module.exports = CatalogoCapacidades;

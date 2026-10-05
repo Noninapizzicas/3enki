@@ -1,179 +1,149 @@
 ---
 name: ensamblador-solucion
-description: >
-  Skill FULL del módulo MICRO-AGENTE (fuzzy) `ensamblador-solucion` de la vertical
-  nichos (Radar de Nichos, proyecto 3D). Arma la SOLUCIÓN del nicho con las
-  capacidades del catálogo (D3): decide QUÉ construir según el nicho (juicio fuzzy
-  con fallback reflejo) y ejecuta el montaje de forma determinista en una
-  SoluciónOperable. Nunca inventa: no usa una capacidad que no esté en el catálogo;
-  si falta la capacidad esencial de entrega/cobro → par de fallo honesto
-  (INVARIANTE 'se crea lo que falta'). Úsala para operar, depurar o extender el
-  micro-agente, o para entender su contrato de eventos y sus reglas de negocio.
-when-to-use: >
-  - Cuando necesites armar la solución operable de un nicho (RPC nichos.solucion.construir.request).
-  - Cuando depures por qué un ensamblaje falla (SIN_ESPECIFICACION si ni el LLM ni
-    el reflejo componen especificación, FALTA_CAPACIDAD_ESENCIAL si falta entrega/cobro).
-  - Cuando quieras entender el patrón híbrido reflejo+fuzzy del montaje (decidir con
-    llm.complete + ejecutar montaje determinista sobre el catálogo) y su contrato.
-  - Cuando vayas a escribir/ampliar el test unitario del micro-agente.
-tags: [enki, modulo, micro-agente, fuzzy, nichos, radar, solucion, ensamblador, proyecto-3d]
+description: >-
+  MICRO-AGENTE del vertical NICHOS (bloque D, el mas complejo): ensambla una
+  solucion a partir de un veredicto y un camino. Consulta el catalogo de
+  capacidades (disponibles/encargar), alza puente humano si hay bloqueo, y
+  usa ai-gateway (llm.complete.request) para fuzzy matching de requisitos vs
+  capacidades. Carga este modulo cuando el pipeline del vertical NICHOS
+  necesite construir una solucion concreta, cuando otro modulo quiera
+  reaccionar a los PULSOs nichos.construccion.*, o cuando se necesite
+  entender el flujo de ensamblaje de soluciones.
+fuente: enki
+dominio: nichos
+lente_dominio: nichos
+lente_tarea: micro-agente
+tags: [nichos, micro-agente, ensamblador, solucion, bloque-d, capacidades, puente-humano, llm, bus, mqtt]
 ---
 
-# ensamblador-solucion — MICRO-AGENTE (fuzzy) que arma la solución del nicho
+# nichos · ensamblador-solucion
 
-## Qué hace el módulo
+> **Que es.** MICRO-AGENTE (bloque D, el mas complejo) del vertical NICHOS.
+> Ensambla una solucion a partir de un veredicto y un camino: consulta
+> capacidades disponibles, encarga las faltantes, alza puente humano ante
+> bloqueos, y usa ai-gateway para fuzzy matching.
+>
+> Codigo: `modules/nichos/ensamblador-solucion/index.js`. La verdad viva es
+> el codigo; esta skill es la referencia de uso.
 
-`ensamblador-solucion` es un **MICRO-AGENTE HÍBRIDO** (D1, hoja del plan): el que
-**materializa la solución** de un nicho `CONSTRUIR`. Decide **QUÉ construir** según
-el nicho y las capacidades disponibles del catálogo (D3), y ejecuta el **montaje**
-de forma determinista para obtener una **SoluciónOperable**.
+---
 
-Dos mitades (patrón real de `normalizacion-semilla`):
+## Forma Enki
 
-- **FUZZY** (`_decidirQueConstruir`): juicio LLM. Un guion-prompt self-contained
-  (`GUION_MONTAR`) + el nicho y las capacidades → **ESPECIFICACIÓN** (nombre,
-  descripción, `1-4` capacidades ordenadas por rol `captura|entrega|cobro`, y la
-  `faltante` si no hay esencial). Fallback reflejo si el LLM falla.
-- **REFLEJO** (`_ejecutarMontaje`): monta la **SoluciónOperable** de forma
-  determinista a partir de la especificación **sobre las capacidades reales del
-  catálogo**.
+- Patron: **MICRO-AGENTE** (sin estado persistido, request -> catalogo -> LLM -> response).
+- Base: `ModuloHibridoReflejo`.
+- Sin store — micro-agente puro.
+- Dos proyecciones: `_ensamblar` (principal) y `_detectarCapacidadesFaltantes` (cruce).
 
-**NUNCA inventa**: no usa una capacidad que no esté en el catálogo; si falta una
-capacidad esencial → par de fallo honesto (la crea el catálogo D3,
-**INVARIANTE 'se crea lo que falta'**). Sin store, sin custodio (solo registra el
-`project_id` activo en contexto).
+## Eventos que atiende (request -> response)
 
-## Contrato de eventos (module.json real)
-
-### Subscribes (RPCs request/response)
-
-| Evento | Handler | Descripción |
+| Evento | Handler | Que devuelve |
 |---|---|---|
-| `nichos.solucion.construir.request` | `onConstruirRequest` | RPC micro-agente: {project_id, nicho, capacidades} → {project_id, especificacion, solucion, construida}. Decide qué construir (juicio) y ejecuta el montaje (reflejo determinista). Publica `nichos.solucion.construida` y responde por `nichos.solucion.construir.response`. Si el payload es inválido o falta capacidad esencial → `nichos.solucion.construir.failed`. |
-| `nichos.camino.decidido` | `onCaminoDecidido` | Fire-and-forget (D1): camino-encontrar-construir (C4) decidió CONSTRUIR → {project_id, nicho, camino:'CONSTRUIR', capacidades?}. Arma la solución del nicho y publica `nichos.solucion.construida`. |
+| `nichos.solucion.ensamblar.request` | `onEnsamblarRequest` | `{status:200, data:{solucion\|puente_humano_aviso\|solicitud_decision}}` |
 
-### Publishes
+### Payload de `.ensamblar.request`
 
-| Evento | Descripción |
+```json
+{
+  "request_id": "uuid",
+  "project_id": "prj_xxx",
+  "id_nicho": "nicho_peluquerias",
+  "veredicto": {
+    "viable": true,
+    "puntuacion": 0.85,
+    "factores": ["demanda_alta", "competencia_baja"]
+  },
+  "camino": {
+    "requisitos": ["reservas_online", "pagos_stripe", "notificaciones_push"],
+    "pasos": [
+      {"nombre": "reservas_online", "capacidad": "booking-engine"},
+      {"nombre": "pagos_stripe", "capacidad": "payment-gateway"},
+      {"nombre": "notificaciones_push", "capacidad": "push-service"}
+    ]
+  }
+}
+```
+
+## Pulsos que emite
+
+| Evento | Cuando | Payload |
+|---|---|---|
+| `nichos.construccion.iniciada` | al comenzar el ensamblaje | `{id_proyecto, timestamp}` |
+| `nichos.construccion.completada` | ensamblaje exitoso | `{id_proyecto, capacidades_creadas[], capacidades_pendientes[], timestamp}` |
+| `nichos.construccion.failed` | ensamblaje fallido | `{id_proyecto, razon_codigo, detalle, timestamp}` |
+
+## Flujo interno
+
+1. Emite pulso `nichos.construccion.iniciada`.
+2. Consulta `nichos.catalogo.capacidad.disponibles.request` para obtener capacidades.
+3. Extrae requisitos del camino y cruza vs disponibles via LLM (fuzzy match).
+4. Si hay ambiguas sin faltantes -> devuelve `solicitud_decision`.
+5. Si faltan capacidades -> encarga via `nichos.catalogo.capacidad.encargar.request`.
+6. Si hay bloqueadas en el encargo -> alza `nichos.puente.humano.alzar.request` y emite `.failed`.
+7. Si todo resuelto -> emite `.completada` y devuelve `solucion`.
+
+### Tres posibles respuestas del RPC
+
+| Campo en `data` | Cuando |
 |---|---|
-| `nichos.solucion.construida` | Fire-and-forget (D1): la solución del nicho quedó construida con las capacidades del catálogo → {project_id, nicho, especificacion, solucion, construida:true}. Lo consumen proponedor-modelo-cobro (D4), motor-cobro (E3) y el pipeline. |
-| `nichos.solucion.construir.failed` | Par de fallo determinista (D1): payload inválido o sin capacidades para montar → {status, code, message, data}. Cierra el círculo de `nichos.solucion.construir.request`. |
+| `solucion` | todas las capacidades cubiertas o encargadas |
+| `puente_humano_aviso` | capacidades bloqueadas o encargo fallido — se alzo puente humano |
+| `solicitud_decision` | capacidades ambiguas — se necesita eleccion del operador |
 
-> **Regla de cierre de círculo**: cada flujo responde su par `*.failed` canónico.
-> Aquí `nichos.solucion.construir.failed` cierra `nichos.solucion.construir.request`
-> cuando `_construir` devuelve status ≠ 200 (INVALID_INPUT, SIN_ESPECIFICACION o
-> FALTA_CAPACIDAD_ESENCIAL).
+## Proyecciones
 
-> **Nota: no está en module.json pero sí lo escucha index.js en `onProjectActivated`
-> (líneas 44-49)**: el micro-agente registra el `project_id` activo en contexto
-> (respondiendo `200 {project_id}`). Es sub-declaración de module.json: el índice
-> sí escucha `project.activated` pero el manifest no lo lista como subscribe.
+### `_ensamblar(input)` — principal
+Monta la solucion completa: consulta catalogo, cruza, encarga, alza puente.
 
-## Reglas de negocio
+### `_detectarCapacidadesFaltantes(requisitos, disponibles, projectId)` — cruce
+Cruza requisitos vs capacidades disponibles usando LLM para fuzzy match.
+Fallback sin LLM: match exacto por nombre.
 
-1. **Nicho obligatorio → `400 INVALID_INPUT`**: si `nicho` falta o no es objeto →
-   `{ status:400, code:'INVALID_INPUT', mensaje:'nicho requerido', field:'nicho' }`
-   + `nichos.solucion.construir.failed`.
-2. **Sin especificación → `502 SIN_ESPECIFICACION`**: si ni el juicio fuzzy ni el
-   fallback reflejo componen una especificación → `{ status:502, code:'SIN_ESPECIFICACION', mensaje:'el juicio no pudo componer una especificación para el nicho', project_id, nicho }`
-   + failed.
-3. **Solo capacidades del catálogo (honestidad)**: `_validarEspecificacion` descarta
-   todo `id` que no exista entre las capacidades recibidas (`nombres`); si queda
-   `capacidades.length === 0` → devuelve `null` (dispara el fallback/sin-espec).
-4. **Falta capacidad esencial → `400 FALTA_CAPACIDAD_ESENCIAL`**: `_ejecutarMontaje`
-   devuelve `null` si no hay ninguna pieza con rol `entrega` o `cobro`
-   (`INVARIANTE D3: se crea lo que falta`) →
-   `{ status:400, code:'FALTA_CAPACIDAD_ESENCIAL', mensaje:'falta una capacidad esencial para montar la solución (INVARIANTE: se crea)', project_id, faltante: espec.faltante }`
-   + failed. No se monta a medias.
-5. **Solo CONSTRUIR pide ensamblaje**: `onCaminoDecidido` ignora los caminos
-   `ENCONTRAR`/`PUENTE` (y `CONSTRUIR` en minúsculas normaliza a mayúsculas); solo
-   arma la solución cuando `camino === 'CONSTRUIR'`.
-6. **Fallback reflejo por catálogo**: `_decidirQueConstruirReflejo` compone a partir
-   de las capacidades existentes asignando roles por posición (`0→captura`, `1→entrega`,
-   `2→cobro`); si `capacidades` está vacío → `null`.
-7. **Montaje determinista**: `_ejecutarMontaje` descarta piezas sin capacidad real
-   (`porId.get(cp.id)` ausente → `continue`) — no inventa — y construye
-   `{ nombre, descripcion, piezas:[{id, rol, capacidad}], operativa:true, montada_el }`.
-8. **Roles cerrados**: el rol de cada pieza solo puede ser `captura | entrega |
-   cobro`; si el LLM no lo cumple, por defecto `captura`.
-9. **HTTP exacto**: éxito `200`; sin `project_id` → `400 INVALID_INPUT project_id`;
-   nicho inválido → `400`; sin especificación → `502`; falta esencial → `400`;
-   excepción en `_atender` → `500 UNKNOWN_ERROR`.
+## Dependencias por bus
 
-## Cómo se usa (RPCs)
+| Evento consumido | Modulo proveedor | Para que |
+|---|---|---|
+| `nichos.catalogo.capacidad.disponibles.request` | catalogo-capacidades | listar capacidades disponibles |
+| `nichos.catalogo.capacidad.encargar.request` | catalogo-capacidades | encargar capacidades faltantes |
+| `nichos.puente.humano.alzar.request` | puente-humano (bloque K) | alzar intervencion humana ante bloqueo |
+| `llm.complete.request` | ai-gateway | fuzzy matching requisitos vs capacidades |
 
-RPC request/response que responde en `nichos.solucion.construir.response`:
+## Errores conocidos
 
-### 1. `construir` — armar la solución de un nicho
+| Status | Code | Causa |
+|---|---|---|
+| 400 | `INVALID_INPUT` | falta `id_nicho`, `veredicto` o `camino` |
+| 500 | `UNKNOWN_ERROR` | error interno durante el ensamblaje |
+| razon_codigo | `CAPACIDADES_BLOQUEADAS` | capacidades que no se pueden encargar |
+| razon_codigo | `ENCARGO_FALLIDO` | el servicio de encargo no respondio |
+| razon_codigo | `ERROR_INTERNO` | error inesperado en el flujo |
 
-```json
-{
-  "project_id": "e57a318a-...",
-  "nicho": { "producto": "salsa picante", "audiencia": "restaurantes" },
-  "capacidades": [
-    { "id": "web", "descripcion": "Landing de producto" },
-    { "id": "pedidos", "descripcion": "Procesador de pedidos" },
-    { "id": "pago", "descripcion": "Pasarela de pago" }
-  ]
+## Integracion (patron RPC del bus)
+
+```javascript
+const resp = await bus.publishAndWait('nichos.solucion.ensamblar.request', {
+  project_id,
+  id_nicho: 'nicho_peluquerias',
+  veredicto: { viable: true, puntuacion: 0.85 },
+  camino: { requisitos: ['reservas', 'pagos', 'notificaciones'] }
+});
+
+if (resp.data.solucion) {
+  // Exito — solucion ensamblada
+  const { capacidades_creadas, capacidades_pendientes } = resp.data.solucion;
+} else if (resp.data.puente_humano_aviso) {
+  // Bloqueo — se alzo puente humano
+  console.log(resp.data.puente_humano_aviso.mensaje);
+} else if (resp.data.solicitud_decision) {
+  // Ambiguedad — presentar opciones al operador
+  const { ambiguas } = resp.data.solicitud_decision;
 }
 ```
-Respuesta `200`:
-```json
-{
-  "project_id": "e57a318a-...",
-  "nicho": { "producto": "salsa picante", "audiencia": "restaurantes" },
-  "especificacion": { "nombre": "Tienda de salsa picante para restaurantes", "descripcion": "...", "capacidades": [ { "id": "web", "rol": "captura" }, { "id": "pedidos", "rol": "entrega" }, { "id": "pago", "rol": "cobro" } ], "faltante": null },
-  "solucion": { "nombre": "Tienda de salsa picante para restaurantes", "descripcion": "...", "piezas": [ { "id": "web", "rol": "captura", "capacidad": "Landing de producto" }, { "id": "pedidos", "rol": "entrega", "capacidad": "Procesador de pedidos" }, { "id": "pago", "rol": "cobro", "capacidad": "Pasarela de pago" } ], "operativa": true, "montada_el": "2026-09-25T..." },
-  "construida": true
-}
-```
-Emite `nichos.solucion.construida` con ese mismo `data`.
 
-### Fallo — falta capacidad esencial
+## Donde encaja en el vertical NICHOS
 
-```json
-{ "project_id": "e57a318a-...", "nicho": { "producto": "salsa" }, "capacidades": [ { "id": "web", "descripcion": "Landing" } ] }
-```
-Respuesta `400` + `nichos.solucion.construir.failed`:
-```json
-{ "status": 400, "code": "FALTA_CAPACIDAD_ESENCIAL", "mensaje": "falta una capacidad esencial para montar la solución (INVARIANTE: se crea)", "project_id": "e57a318a-...", "faltante": { "id": "pago", "motivo": "..." } }
-```
-
-## Tests
-
-El test vive en `tests/unit/ensamblador-solucion.test.js`. Cubre:
-
-- `construir` con nicho + capacidades → `200`, decide especificación, monta la
-  SoluciónOperable y emite `nichos.solucion.construida`.
-- `nicho` ausente/no objeto → `400 INVALID_INPUT` + failed.
-- Si el LLM falla/incumple contrato → fallback `_decidirQueConstruirReflejo`
-  (asigna roles por posición 0→captura, 1→entrega, 2→cobro).
-- Ni LLM ni reflejo componen especificación → `502 SIN_ESPECIFICACION` + failed.
-- No hay capacidad de entrega/cobro → `400 FALTA_CAPACIDAD_ESENCIAL` + failed.
-- `_validarEspecificacion` descarta capacidades no del catálogo.
-- `onCaminoDecidido` solo ensambla con camino CONSTRUIR (ignora ENCONTRAR/PUENTE).
-
-Para ejecutarlo:
-
-```bash
-cd /home/admin/3enki/modules/nichos/ensamblador-solucion
-node tests/unit/ensamblador-solucion.test.js
-```
-
-## Notas de implementación
-
-- Clase `EnsambladorSolucion extends ModuloHibridoReflejo`; `name =
-  'ensamblador-solucion'`, `version = 'reflejo-0.1.0'`. Sin store ni PosPersistencia
-  (stateless); `this.project_id` (memoria) como único estado.
-- `GUION_MONTAR`: guion-prompt self-contained que exige JSON
-  `{"especificacion":{"nombre":"<s>","descripcion":"<d>","capacidades":[{"id":"<id>","rol":"captura|entrega|cobro"}],"faltante":{"id":"<id o null>","motivo":"<m>"}}}`
-  con `1-4` capacidades SOLO del catálogo y regla `NO inventes capacidades ausentes`.
-- `_decidirQueConstruir` hace 1 llamada `this._rpc('llm.complete.request', ...)`
-  headless (`system=GUION`, `temperature: 0.2`, `timeout_ms: 30000`, `tools: []`).
-  `_parse` tolera fences ```json; `_validarEspecificacion` valida contra el catálogo.
-- `_construir` es la operación maestra: decidir (fuzzy→reflejo) + montar (reflejo).
-- `onConstruirRequest` delega en `_atender(e, 'construir',
-  'nichos.solucion.construir.response', fn)`; `onCaminoDecidido` (fire-and-forget)
-  hace el mismo publicar `nichos.solucion.construida` / `nichos.solucion.construir.failed`.
-- DEP hacia delante: lo consumen proponedor-modelo-cobro (D4), motor-cobro (E3) y
-  el pipeline; depende de catalogo-capacidades (D3); entra por `nichos.camino.decidido` (C4).
+- **Bloque D**: construccion de solucion. Es el orquestador final que
+  convierte veredicto + camino en una solucion concreta con capacidades reales.
+- Invocado por el pipeline tras la evaluacion (criterio-viabilidad, estudio-competencia).
+- Si necesita intervencion humana, el Jefe (bloque K) recibe el puente y
+  lo presenta al dueno.

@@ -1,0 +1,20 @@
+{
+  "name": "reglas-aprendidas-validacion",
+  "version": "0.1.0",
+  "description": "MICRO-AGENTE del vertical NICHOS: tras cada lote de validacion completado, destila patrones recurrentes del historial y propone reglas de validacion aprendidas via ai-gateway. Persiste historial de patrones con PosPersistencia.",
+  "_doc": "modules/nichos/reglas-aprendidas-validacion — MICRO-AGENTE del vertical NICHOS.\n\nQue hace: escucha nichos.validacion.lote.completado (F7b) y analiza el historial de patrones acumulados para proponer reglas de validacion aprendidas. Usa ai-gateway (llm.complete.request) para destilar patron sobre historial.\n\nAtender RPC nichos.aprendizaje.proponer: analiza el historial y propone reglas.\n\nStore (per-proyecto, PosPersistencia): /prisma/pos/nichos/reglas-aprendidas.json\n\nPatron: ModuloHibridoReflejo (micro-agente — usa LLM via ai-gateway + PosPersistencia).",
+  "ui_decision": {
+    "necesita": false,
+    "razon": "Micro-agente interno. Destila reglas de validacion de forma autonoma tras cada lote. Las propuestas se encolan como solicitud de decision para el dueno; no tiene cara propia."
+  },
+  "publishes": [
+    { "event": "nichos.regla.aprendida.propuesta", "description": "PULSO fire-and-forget: regla de validacion propuesta destilada del historial. Payload: {project_id, patron, umbral_actual, umbral_sugerido, timestamp}." },
+    { "event": "nichos.aprendizaje.proponer.response", "description": "Response correlada por request_id al RPC nichos.aprendizaje.proponer.request. Payload: {status, data:{solicitud_decision?|vacio}}." },
+    { "event": "nichos.decision.solicitud.abierta", "description": "PULSO fire-and-forget: solicitud de decision abierta para el dueno cuando se propone una regla aprendida. Payload: {project_id, tipo, patron, timestamp}." },
+    { "event": "llm.complete.request", "description": "Request al ai-gateway para destilar patron sobre historial. Payload: {request_id, project_id, messages[], options}." }
+  ],
+  "subscribes": [
+    { "event": "nichos.aprendizaje.proponer.request", "handler": "onProponerRequest", "description": "RPC: analiza el historial de patrones y propone reglas de validacion aprendidas via LLM." },
+    { "event": "nichos.validacion.lote.completado", "handler": "onLoteCompletado", "description": "Fire-and-forget reactivo (F7b): al completarse un lote de validacion, registra resultados en historial y analiza patrones." }
+  ]
+}

@@ -1,34 +1,23 @@
 {
-  "_doc": "Manifest de nichos/catalogo-capacidades — CUSTODIO CON PERSISTENCIA (D3, hoja del plan). Catalogo persistente por PROYECTO de las CAPACIDADES (existentes y faltantes) para CONSTRUIR la solucion. INVARIANTE D3: lo que falta, se crea — jamas deja un hueco muerto. El ensamblador-solucion (D1) consulta (_consultar -> CapacidadesDisponibles) y, al detectar una falta, el custodio la registra como FALTANTE declarado (nichos.capacidad.faltante_declarado) para que el paso de construccion la materialice. CUSTODIO: un solo escritor (CONSTRUCTOR del ensamblador o el DUEÑO; guard de rol en _declararFaltante), lectura no muta. Persiste por proyecto via PosPersistencia (_shared/pos-persistencia, storage /prisma/nichos/catalogo-capacidades.json), restaura en project.activated y vuelca en onUnload. Proyecciones _consultar(nicho)->CapacidadesDisponibles y _declararFaltante(capacidad)->garantiza la invariante (crea la capacidad si no existia). Publica nichos.capacidad.faltante_declarado (+ nichos.capacidad.declarar.failed si el rol no es valido o el payload es invalido).",
   "name": "catalogo-capacidades",
   "version": "0.1.0",
-  "description": "Custodio (D3): catálogo persistente por proyecto de las capacidades existentes/faltantes para construir la solución del nicho. Invariante 'lo que falta se crea'. Un solo escritor (CONSTRUCTOR o DUEÑO); el ensamblador-solucion (D1) consulta por lectura. Persiste por proyecto vía PosPersistencia.",
-  "language": "es",
-  "subscribes": [
-    {
-      "event": "nichos.capacidad.consultar.request",
-      "handler": "onConsultarRequest",
-      "description": "RPC custodio: {project_id, nicho?} → {project_id, nicho, capacidades_disponibles, capacidades_faltantes, capacidades, cantidad}. Lee el catalogo de capacidades del proyecto (las existentes para construir y las faltantes declaradas). La lectura no muta. Lo consume el ensamblador-solucion (D1) antes de materializar la solucion."
-    },
-    {
-      "event": "nichos.capacidad.declarar.request",
-      "handler": "onDeclararRequest",
-      "description": "RPC custodio: {project_id, rol:'CONSTRUCTOR'|'DUEÑO', capacidad, estado?:'existente'|'faltante', descripcion?, nicho?} → {project_id, capacidad, catalogo, creado}. Guard de escritor (solo CONSTRUCTOR/DUEÑO; second-writer rechazado). INVARIANTE: si la capacidad falta, se crea (jamas deja hueco). Publica nichos.capacidad.faltante_declarado y responde por nichos.capacidad.declarar.response. Si el rol no es valido o el payload es invalido → nichos.capacidad.declarar.failed."
-    },
-    {
-      "event": "project.activated",
-      "handler": "onProjectActivated",
-      "description": "Restaura el catalogo de capacidades del proyecto activado desde el storage (PosPersistencia)."
-    }
-  ],
+  "description": "CUSTODIO del vertical NICHOS (bloque D · construcción): catálogo autorizado de lo que el sistema SABE construir. Guarda, por proyecto, las capacidades DISPONIBLES (cableadas y listas) y los ENCARGOS pendientes (faltantes que alguien pidió crear). Snapshot inmutable por versión; escritores autorizados: ensamblador (D1 ensamblador-solucion) | dueño | constructor. Lectores libres por RPC.",
+  "_doc": "modules/nichos/catalogo-capacidades — CUSTODIO (bloque D · construcción) del vertical NICHOS. Materializa la invariante F3 'si no existe, se crea': cada falta de capacidad se encola como ENCARGO; cuando se cubre, pasa a DISPONIBLE. Nada se asume.\n\nQué guarda (per-proyecto, PosPersistencia): /prisma/pos/nichos/catalogo-capacidades.json\n  {\n    _version, _updated,\n    catalogo: {\n      version: Int,\n      disponibles: [{ id, descripcion, cableada_por, cableada_en, meta? }],\n      encargos:    [{ id, descripcion, encargada_por, encargada_en, estado:'PENDIENTE', meta? }],\n      por_autor:   [{ version, autor, op:'ENCARGAR'|'PROMOVER', capacidad_id, at }]\n    }\n  }\n\nQué atiende (los tres RPCs del canon):\n  - nichos.catalogo.capacidad.disponibles.request → devuelve { capacidades:[Capacidad] } con las capacidades listas para ensamblar. Si no hay fichero → lista vacía (no inventa).\n  - nichos.catalogo.capacidad.encargar.request → el ensamblador (o el dueño/constructor) crea un ENCARGO cuando detecta una capacidad faltante. Idempotente por id de capacidad: si la capacidad ya existe (disponible o encargada) devuelve el encargo vigente. Emite PULSO 'nichos.catalogo.capacidad.encargada'.\n  - nichos.catalogo.capacidad.promover.request → mueve un encargo PENDIENTE a DISPONIBLE (lo cableó alguien). Emite PULSO 'nichos.catalogo.capacidad.disponible'.\n  - project.activated → restaura el store del proyecto.\n\nAutores autorizados: 'ensamblador' (D1) escribe el flujo normal (encarga lo que le falta); 'dueño' escribe cuando el panel registra manualmente una capacidad ya cableada; 'constructor' escribe cuando promueve una capacidad construida fuera del flujo del ensamblador (ej.: un operador cableó un nuevo PuertoFuenteDatos y lo promueve a DISPONIBLE). Rechazo 403 ESCRITOR_NO_AUTORIZADO si otro autor.\n\nPersistencia: PosPersistencia por proyecto, debounced 800 ms, flush en onUnload, restauración en project.activated. Degradación honesta: sin project_id, store sólo en memoria.\n\nPatrón: ModuloHibridoReflejo (REFLEJO puro). Sin mitad blueprint — la lógica es CRUD + aritmética de versión + guard de legalidad del estado del encargo. Lo fuzzy (QUÉ capacidad falta, cómo describirla) lo hace el ensamblador cuando llama a .encargar. El catálogo es memoria pura: dice qué hay listo y qué está pedido.\n\nFactory pattern (F3 D3): toda falta nace como EncargoCapacidad; promover() es la única puerta por la que un encargo se convierte en disponible. El id de la capacidad es su identidad: dos encargos con el mismo id son el mismo encargo (idempotencia).",
+  "ui_decision": {
+    "necesita": false,
+    "razon": "Bloque D construcción del vertical NICHOS, sin cara propia. El ensamblador-solucion (D1) encarga y lee por bus; el dueño/constructor pueden promover desde el panel central (jefe) o desde el panel del vertical cuando exista. El custodio no interpreta intención, solo CRUDa el catálogo. Una futura UI de 'qué sabe hacer el sistema' leería este custodio por su RPC .disponibles.request, no sustituye al custodio."
+  },
   "publishes": [
-    {
-      "event": "nichos.capacidad.faltante_declarado",
-      "description": "Fire-and-forget (D3): se declaro/creo una capacidad (faltante o existente) en el catalogo del proyecto → {project_id, capacidad, catalogo, creado}. Lo consume el ensamblador-solucion (D1) y el paso de construccion para materializar lo que falta."
-    },
-    {
-      "event": "nichos.capacidad.declarar.failed",
-      "description": "Par de fallo determinista (D3): escritura rechazada (rol != CONSTRUCTOR/DUEÑO) o payload invalido → {status, code, message, data}. Cierra el circulo de nichos.capacidad.declarar.request."
-    }
+    { "event": "nichos.catalogo.capacidad.encargada", "description": "PULSO fire-and-forget: una capacidad faltante se encoló como ENCARGO. Payload: {project_id, capacidad_id, descripcion, encargada_por, timestamp}. Lo consume cualquier órgano humano/sistema que vigile 'qué hay que cablear' (dashboard, feeder de skills, panel del vertical)." },
+    { "event": "nichos.catalogo.capacidad.disponible", "description": "PULSO fire-and-forget: un encargo pasó a DISPONIBLE (alguien cableó la capacidad). Payload: {project_id, capacidad_id, descripcion, promovida_por, timestamp}. Lo consume el ensamblador-solucion (D1) que reintenta ensamblajes bloqueados por esa capacidad, y cualquier órgano que vigile el inventario de capacidades vivas." },
+    { "event": "nichos.catalogo.capacidad.disponibles.response", "description": "Response correlada por request_id al RPC nichos.catalogo.capacidad.disponibles.request. Payload: {status, data:{capacidades:[{id, descripcion, cableada_por, cableada_en, meta}]}}." },
+    { "event": "nichos.catalogo.capacidad.encargar.response", "description": "Response correlada por request_id al RPC nichos.catalogo.capacidad.encargar.request. Payload: {status, data:{encargo:{id, descripcion, encargada_por, encargada_en, estado}}} | {status, error}. Idempotente: si la capacidad ya existe, devuelve el encargo/disponible vigente sin duplicar." },
+    { "event": "nichos.catalogo.capacidad.promover.response", "description": "Response correlada por request_id al RPC nichos.catalogo.capacidad.promover.request. Payload: {status, data:{estado_catalogo:{version, disponibles[], encargos[]}}} | {status, error}." }
+  ],
+  "subscribes": [
+    { "event": "nichos.catalogo.capacidad.disponibles.request", "handler": "onDisponiblesRequest", "description": "Reflejo JS: lista las capacidades DISPONIBLES del proyecto (vacío si no hay nada cableado aún; nunca inventa)." },
+    { "event": "nichos.catalogo.capacidad.encargar.request", "handler": "onEncargarRequest", "description": "Reflejo JS: crea un ENCARGO para una capacidad faltante (idempotente por capacidad_id). Rechaza con 403 si el autor no es {ensamblador, dueño, constructor}." },
+    { "event": "nichos.catalogo.capacidad.promover.request", "handler": "onPromoverRequest", "description": "Reflejo JS: mueve un encargo PENDIENTE a DISPONIBLE. Rechaza con 404 CAPACIDAD_NO_ENCARGADA si la capacidad no estaba encargada ni ya disponible. Rechaza con 403 si el autor no es {ensamblador, dueño, constructor}." },
+    { "event": "project.activated", "handler": "onProjectActivated", "description": "Reflejo JS: restaura el catálogo persistido del proyecto activado desde /prisma/pos/nichos/catalogo-capacidades.json (PosPersistencia)." }
   ]
 }

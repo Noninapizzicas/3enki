@@ -1,87 +1,129 @@
 /**
- * nichos/gate-decision-operar — PUENTE STATELESS: cero persistencia, solo entrega la
- * decision al dueño por EVENTO y espera aprueba/rechaza.
+ * nichos/gate-decision-operar — PUENTE JS del vertical NICHOS.
  *
- * E2 del plan: es el gate de operar — el SISTEMA NUNCA decide operar por su cuenta.
- * Dado un nicho construido + el paquete de decision y la proyeccion, arma el
- * paquete-cerrado (nicho + competencia + modelo + costo + proyeccion) y lo entrega
- * al dueño por EVENTO como SolicitudDecision; el dueño aprueba/rechaza. No es una
- * reunion sincrona: viaja por el bus y espera la decision.
+ * Gate de arranque del vertical. Controla si el vertical opera o está en pausa.
+ * Dos operaciones:
  *
- * Proyecciones puras:
- *   _armarPaquete   valida el nicho y arma/consolida el paquete-cerrado autocxplicado
- *                   con la celula de evidencia (competencia, modelo, costo,
- *                   proyeccion). Entrega la solicitud por evento.
+ *   1. OPERAR — valida acción ABRIR|CERRAR y transita estado. Si ABRIR sin
+ *              confirmación del dueño → emite solicitud de decisión.
+ *   2. ESCUCHAR — suscribe nichos.decision.solicitud.respondida; cuando el
+ *                 dueño responde, completa la transición de apertura.
  *
- * Sin store, sin custodio: cada op entra objeto, sale objeto. El puente comunica con
- * el exterior (el dueño via canal-supervision G1), no decide ni lo resuelve.
+ * Sin estado persistido — el estado del gate vive en memoria por proyecto.
+ * Patrón: ModuloHibridoReflejo (mitad REFLEJO, JS determinista).
  */
 
 'use strict';
 
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
 
+const crypto = require('crypto');
+
+const nowISO = () => new Date().toISOString();
+
+const ACCIONES_VALIDAS = ['ABRIR', 'CERRAR'];
+const ESTADOS = { ABIERTO: 'ABIERTO', CERRADO: 'CERRADO', PENDIENTE: 'PENDIENTE' };
+
 class GateDecisionOperar extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'gate-decision-operar';
-    this.version = 'reflejo-0.1.0';
+    this.version = '0.1.0';
+    // Estado en memoria por project_id: { estado, solicitud_pendiente? }
+    this.gates = new Map();
   }
-  async onUnload() { return super.onUnload(); }
 
-  // Solicitar la decision de operar: arma el paquete-cerrado y lo entrega por evento.
-  onSolicitarRequest(e) {
-    return this._atender(e, 'solicitar', 'nichos.gate.solicitar.response', async (d) => {
-      const res = await this._solicitar(d);
-      // Fire-and-forget de dominio: exito → solicitado; fallo → par determinista.
-      if (res.status === 200) {
-        this.eventBus?.publish('nichos.gate.solicitado', res.data);
-      } else {
-        this.eventBus?.publish('nichos.gate.solicitar.failed', res);
+  // ── RPC HANDLER ──
+  onOperarRequest(e) {
+    return this._atender(e, 'operar', 'nichos.gate.operar.response', d => this._operar(d));
+  }
+
+  // ── LISTENER (fire-and-forget) ──
+  onSolicitudRespondida(e) {
+    const d = (e && (e.data || e)) || {};
+    if (!d.solicitud_id) return;
+
+    // Buscar si esta solicitud corresponde a un gate pendiente
+    for (const [project_id, gate] of this.gates.entries()) {
+      if (gate.solicitud_pendiente === d.solicitud_id) {
+        const aceptado = d.opcion_elegida === 'SI' || d.opcion_elegida === 'ABRIR';
+        if (aceptado) {
+          gate.estado = ESTADOS.ABIERTO;
+          gate.solicitud_pendiente = null;
+          this.eventBus?.publish('nichos.gate.operacion.abierto', {
+            project_id,
+            timestamp: nowISO()
+          });
+          this.logger?.info('gate-decision-operar.abierto.por-respuesta', { project_id });
+        } else {
+          gate.estado = ESTADOS.CERRADO;
+          gate.solicitud_pendiente = null;
+          this.logger?.info('gate-decision-operar.apertura.rechazada', { project_id });
+        }
+        break;
       }
-      return res;
+    }
+  }
+
+  // =============================================================
+  // PROYECCIÓN — lógica de dominio pura
+  // =============================================================
+
+  /**
+   * _operar — valida acción y transita estado del gate.
+   *
+   * @param {Object} input
+   * @param {string} input.project_id   - proyecto del vertical
+   * @param {string} input.accion       - 'ABRIR' | 'CERRAR'
+   * @param {string} [input.correlation_id]
+   * @returns {{ status:number, data?:Object, error?:Object }}
+   */
+  _operar(input) {
+    if (!input.project_id) return this._invalid('project_id');
+    if (!input.accion) return this._invalid('accion');
+
+    const accion = String(input.accion).toUpperCase();
+    if (!ACCIONES_VALIDAS.includes(accion)) {
+      return this._errorResponse(
+        400,
+        'ACCION_INVALIDA',
+        `accion debe ser ABRIR o CERRAR, recibido: '${input.accion}'`,
+        { accion: input.accion, validas: ACCIONES_VALIDAS }
+      );
+    }
+
+    const gate = this.gates.get(input.project_id) || { estado: ESTADOS.CERRADO, solicitud_pendiente: null };
+
+    if (accion === 'CERRAR') {
+      gate.estado = ESTADOS.CERRADO;
+      gate.solicitud_pendiente = null;
+      this.gates.set(input.project_id, gate);
+
+      this.eventBus?.publish('nichos.gate.operacion.cerrado', {
+        project_id: input.project_id,
+        timestamp: nowISO()
+      });
+
+      return { status: 200, data: { estado: ESTADOS.CERRADO } };
+    }
+
+    // ABRIR → solicitar confirmación del dueño
+    const solicitud_id = crypto.randomUUID();
+    gate.estado = ESTADOS.PENDIENTE;
+    gate.solicitud_pendiente = solicitud_id;
+    this.gates.set(input.project_id, gate);
+
+    this.eventBus?.publish('nichos.decision.solicitud.abierta', {
+      solicitud_id,
+      tipo: 'gate-operar',
+      contexto: `Abrir el vertical NICHOS para el proyecto ${input.project_id}`,
+      opciones: ['SI', 'NO'],
+      timestamp: nowISO()
     });
-  }
 
-  // ── el puente: arma el paquete-cerrado de operar y espera la decision del dueño ──
-  async _solicitar({ project_id, nicho, competencia, modelo_cobro, costo, proyeccion, nicho_id } = {}) {
-    project_id = project_id || this.project_id;
-    const paquete = this._armarPaquete({ nicho, competencia, modelo_cobro, costo, proyeccion });
-    if (paquete.status !== 200) {
-      return this._errorResponse(paquete.status, paquete.error?.code, paquete.error?.message, { project_id });
-    }
-    // Paquete-cerrado autocxplicado hacia el dueño (APRUEBA/RECHAZA). No reunion sincrona.
     return {
       status: 200,
-      data: {
-        project_id,
-        nicho_id: nicho_id || (nicho && (nicho.nicho_id || nicho.id)) || null,
-        tipo: 'gate_operar',
-        estado: 'PENDIENTE',
-        ...paquete.data,
-        decision_esperada: 'APRUEBA|RECHAZA',
-        solicitado_en: new Date().toISOString()
-      }
-    };
-  }
-
-  // ── REFLEJO (mecánico, determinista): consolida la celula del paquete-cerrado ──
-  _armarPaquete({ nicho, competencia, modelo_cobro, costo, proyeccion } = {}) {
-    if (!nicho || typeof nicho !== 'object') {
-      return this._errorResponse(400, 'NICHO_INVALIDO', 'el nicho es obligatorio para armar el paquete del gate', {});
-    }
-    const nombre = nicho.producto || nicho.servicio || nicho.nombre || nicho.id || null;
-    // Celula de evidencia: SOLO lo declarado; el sistema no fabrica numeros ausentes.
-    return {
-      status: 200,
-      data: {
-        nicho: nombre,
-        competencia: competencia || { conclusion_diferenciacion: null },
-        modelo_cobro: modelo_cobro || { modelo: null, precio_sugerido_eur: null },
-        costo: costo || null,
-        proyeccion: proyeccion || null,
-        paquete_cerrado: true
-      }
+      data: { estado: ESTADOS.PENDIENTE, solicitud_id }
     };
   }
 }

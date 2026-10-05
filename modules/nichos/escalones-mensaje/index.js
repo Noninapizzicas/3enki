@@ -1,115 +1,169 @@
 /**
- * nichos/escalones-mensaje — REFLEJO STATELESS (G2, hoja del plan).
+ * nichos/escalones-mensaje — REFLEJO JS (bloque G del vertical NICHOS, G2).
  *
- * Clasifica los mensajes al supervisor del nicho en el ESCALÓN que les toca:
- * decide qué tipo de mensaje es (pulso | alerta | decisión) según la regla
- * declarada y le asigna la cadencia/escalón de entrega. Consume el tipo de
- * mensaje (origen de escalones-mensaje: pulso-avance, alerta-sangria, gate, ...)
- * y, con el perfil de supervisión (H2), determina el escalón sin ambigüedad.
+ * Clasifica cada evento de dominio en uno de cuatro escalones de notificación:
+ *   PULSO    — informativo de fondo.
+ *   ALERTA   — requiere atención pronto.
+ *   DECISION — requiere respuesta del dueño.
+ *   SILENCIO — el perfil pide no notificar este tipo.
  *
- * REFLEJO (patrón real, stateless): sin store, sin persistencia, cada op entra
- * objeto, sale objeto — proyección pura determinista. Regla DUROA, no ambigua:
- *   pulso    → notificación informativa con cadencia (no interrumpe)
- *   alerta   → notificación urgente al canal (interrumpe)
- *   decisión → SolicitudDecision que espera respuesta del dueño (exige acción)
+ * La clasificación combina:
+ *   1. Tipo de evento → escalón por defecto (tabla canónica).
+ *   2. Perfil de supervisión del dueño (H2) → override si el dueño ajustó.
  *
- * Publica nichos.escalon.clasificado (-> canal-supervision G1 para enrutar) +
- * par determinista nichos.escalon.clasificar.failed. Ver hoja G2 del plan.
+ * Sin estado propio — REFLEJO puro, determinista. La tabla canónica mapea
+ * familias de eventos a escalones por defecto; el perfil del dueño puede
+ * subir o bajar el escalón.
+ *
+ * Patrón: ModuloHibridoReflejo (mitad REFLEJO, JS determinista).
  */
 
 'use strict';
 
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
 
-// Tipos de mensaje de supervisión que escalones-mensaje sabe clasificar.
-const TIPOS_MENSAJE = new Set(['pulso', 'alerta', 'decision']);
+const nowISO = () => new Date().toISOString();
 
-// Escalón que le toca a cada tipo de mensaje — regla dura, no ambigua.
-const ESCALON_POR_TIPO = {
-  pulso: { escalon: 'PULSO', prioridad: 1, interrumpe: false, exige_accion: false, cadencia: 'declarada' },
-  alerta: { escalon: 'ALERTA', prioridad: 2, interrumpe: true, exige_accion: false, cadencia: 'inmediata' },
-  decision: { escalon: 'DECISION', prioridad: 3, interrumpe: true, exige_accion: true, cadencia: 'inmediata' }
+/**
+ * Escalones válidos, de menor a mayor urgencia.
+ */
+const ESCALONES = ['SILENCIO', 'PULSO', 'ALERTA', 'DECISION'];
+
+/**
+ * Tabla canónica: familia de evento → escalón por defecto.
+ * El tipo del evento se normaliza tomando los dos primeros segmentos tras 'nichos.'
+ * (p.ej. 'nichos.sangria.alerta.emitida' → 'sangria.alerta').
+ */
+const TABLA_DEFECTO = {
+  // -- DECISION (requiere respuesta del dueño)
+  'decision.solicitud':     'DECISION',
+  'gate.operar':            'DECISION',
+  'puente.humano':          'DECISION',
+
+  // -- ALERTA (atención pronta)
+  'sangria.alerta':         'ALERTA',
+  'cobro.failed':           'ALERTA',
+  'distribucion.failed':    'ALERTA',
+  'construccion.failed':    'ALERTA',
+  'sondeo.failed':          'ALERTA',
+  'fallo.reintentado':      'ALERTA',
+
+  // -- PULSO (informativo de fondo)
+  'semilla.capturada':      'PULSO',
+  'semilla.normalizada':    'PULSO',
+  'candidato.detectado':    'PULSO',
+  'sondeo.completado':      'PULSO',
+  'veredicto.emitido':      'PULSO',
+  'construccion.completada':'PULSO',
+  'cobro.registrado':       'PULSO',
+  'distribucion.realizada': 'PULSO',
+  'salud.recalculada':      'PULSO',
+  'pulso.avance':           'PULSO',
+  'pipeline.transicion':    'PULSO',
+  'portafolio.recalculado': 'PULSO',
+  'umbral.ajustado':        'PULSO',
+  'fuente.consumida':       'PULSO',
+  'canal.registrado':       'PULSO'
 };
 
 class EscalonesMensaje extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'escalones-mensaje';
-    this.version = 'reflejo-0.1.0';
-    this.project_id = null;
-  }
-  async onUnload() { return super.onUnload(); }
-
-  // project.activated — reflejo sin estado: solo registra el project activo.
-  async onProjectActivated(e) {
-    const d = (e && (e.data || e)) || {};
-    this.project_id = d.project_id || this.project_id;
-    this.logger?.info(`${this.name}.reflejo.project_activated`, { project_id: this.project_id });
-    return { status: 200, data: { project_id: this.project_id } };
+    this.version = '0.1.0';
   }
 
+  // ── RPC HANDLER ──
   onClasificarRequest(e) {
-    return this._atender(e, 'clasificar', 'nichos.escalon.clasificar.response', async (d) => {
-      const res = this._clasificar(d);
-      // Emisor/par de fallo: exito → dominio; error → par determinista.
-      if (res.status === 200) {
-        this.eventBus?.publish('nichos.escalon.clasificado', {
-          project_id: res.data.project_id,
-          escalon: res.data.escalon,
-          clasificado: true,
-          correlation_id: d.correlation_id
-        });
-      } else {
-        this.eventBus?.publish('nichos.escalon.clasificar.failed', res);
-      }
-      return res;
-    });
+    return this._atender(e, 'clasificar', 'nichos.escalon.clasificar.response', d => this._clasificar(d));
   }
 
-  // ── proyección pura: clasifica el tipo → escalón (regla dura, determinista) ──
-  _clasificar({ project_id, tipo, mensaje, perfil_supervision } = {}) {
-    project_id = project_id || this.project_id;
-    if (!project_id) return this._invalid('project_id');
-    if (!tipo) return this._invalid('tipo');
-    const t = String(tipo).toLowerCase();
-    if (!TIPOS_MENSAJE.has(t)) {
-      return this._errorResponse(400, 'INVALID_INPUT', 'tipo de mensaje no clasificable', { tipo });
+  // =============================================================
+  // PROYECCIÓN — clasificación determinista
+  // =============================================================
+
+  /**
+   * _clasificar — clasifica un evento de dominio en PULSO|ALERTA|DECISION|SILENCIO.
+   *
+   * @param {Object} input
+   * @param {Object} input.evento_dominio - { tipo, fuente?, payload? }
+   * @param {string} [input.project_id]
+   * @param {string} [input.correlation_id]
+   * @returns {{ status:number, data?:Object, error?:Object }}
+   */
+  async _clasificar(input) {
+    if (!input.evento_dominio || typeof input.evento_dominio !== 'object') {
+      return this._invalid('evento_dominio');
     }
 
-    const regla = this._clasificarTipo(t);
-    const cuerpo = String(mensaje || '').trim();
+    const evento = input.evento_dominio;
+    if (!evento.tipo) return this._invalid('evento_dominio.tipo');
 
-    // Si hay perfil de supervision, aplica la cadencia declarada del dueño (H2).
-    const cadencia = (perfil_supervision && perfil_supervision.cadencia_pulso)
-      ? perfil_supervision.cadencia_pulso
-      : regla.cadencia;
+    // 1. Escalón por defecto (tabla canónica)
+    const clave = this._claveEvento(evento.tipo);
+    let escalon = TABLA_DEFECTO[clave] || 'PULSO';
+
+    // 2. Override por perfil de supervisión (H2)
+    const perfil = await this._leerPerfilSupervision(input.project_id, input.correlation_id);
+    if (perfil && perfil.escalones && perfil.escalones[clave]) {
+      const override = perfil.escalones[clave];
+      if (ESCALONES.includes(override)) {
+        escalon = override;
+      }
+    }
+
+    // Si el perfil está en modo silencioso, todo baja a SILENCIO excepto DECISION
+    if (perfil && perfil.modo === 'silencioso' && escalon !== 'DECISION') {
+      escalon = 'SILENCIO';
+    }
+
+    const evento_ref = evento.tipo;
+
+    // PULSO
+    this.eventBus?.publish('nichos.escalon.clasificado', {
+      evento_ref,
+      escalon,
+      timestamp: nowISO()
+    });
 
     return {
       status: 200,
-      data: {
-        project_id,
-        tipo: t,
-        escalon: regla.escalon,
-        prioridad: regla.prioridad,
-        interrumpe: regla.interrumpe,
-        exige_accion: regla.exige_accion,
-        cadencia,
-        mensaje: cuerpo,
-        regla: 'duro',
-        clasificado: true
-      }
+      data: { escalon, evento_ref }
     };
   }
 
-  // ── proyección pura: rotula/escala un tipo → regla (mecánica, sin juicio) ──
-  _clasificarTipo(tipo) {
-    const t = String(tipo || '').toLowerCase();
-    return ESCALON_POR_TIPO[t] || { escalon: 'PULSO', prioridad: 0, interrumpe: false, exige_accion: false, cadencia: 'declarada' };
+  // =============================================================
+  // Utilidades
+  // =============================================================
+
+  /**
+   * Extrae la clave de familia del evento para buscar en la tabla canónica.
+   * 'nichos.sangria.alerta.emitida' → 'sangria.alerta'
+   * 'nichos.cobro.registrado' → 'cobro.registrado'
+   */
+  _claveEvento(tipo) {
+    if (!tipo || typeof tipo !== 'string') return '';
+    const partes = tipo.replace(/^nichos\./, '').split('.');
+    // Tomar los dos primeros segmentos (familia + subfamilia)
+    return partes.slice(0, 2).join('.');
   }
 
-  // ── Tools ──
-  toolClasificar(params) { return this._clasificar(params); }
-  toolClasificarTipo(params) { return this._clasificarTipo(params); }
+  /**
+   * Lee el perfil de supervisión del dueño via RPC a H2.
+   */
+  async _leerPerfilSupervision(project_id, correlation_id) {
+    if (!this.eventBus?.publishAndWait) return null;
+    try {
+      const resp = await this.eventBus.publishAndWait(
+        'nichos.perfil.supervision.leer.request',
+        { project_id, correlation_id }
+      );
+      return (resp && resp.data && resp.data.perfil_supervision) || null;
+    } catch (_) {
+      // Degradación honesta: sin perfil, se usa la tabla por defecto
+      return null;
+    }
+  }
 }
 
 module.exports = EscalonesMensaje;

@@ -1,17 +1,22 @@
 {
-  "_doc": "Manifest de nichos/puerto-fuente-datos — PUENTE STATELESS (J1): el puerto abierto hacia las fuentes de datos de validacion/busqueda (buscadores, APIs, scraping, comunidades). Declara y conecta fuentes de forma AGNOSTICA al vendor (cada fuente se registra y se puede sustituir por evento, sin acoplar a una API concreta), consulta datos de un nicho y emite el resultado consultado con su par de fallo. Sin persistencia, sin custodio: solo enruta/comunica con el exterior y devuelve el resultado por evento con su par de fallo.",
   "name": "puerto-fuente-datos",
   "version": "0.1.0",
-  "description": "Puente stateless de nichos (J1): el puerto abierto hacia las fuentes de datos de validacion/busqueda (buscadores, APIs, scraping, comunidades). Declara y conecta fuentes de forma agnostica al vendor (cada fuente se registra y se sustituye por evento), consulta datos de un nicho y emite el resultado consultado con su par de fallo. Sin persistencia: solo enruta/comunica con el exterior.",
-  "language": "es",
-  "subscribes": [
-    { "event": "nichos.fuente.consultar.request", "handler": "onConsultarRequest", "description": "RPC puro: {nicho, fuente?, pagina?} → DatasetBruto + Rate + Coste. Enruta hacia la fuente activa conectada (agnostico al vendor); si no hay fuente conectada o la pedida no esta conectada → par determinista nichos.fuente.consultar.failed. Exito → responde por nichos.fuente.consultar.response." },
-    { "event": "nichos.fuente.conectar.request", "handler": "onConectarRequest", "description": "RPC puro: {fuente, config?} → ok. Declara y CONECTA una fuente de la whitelist autorizada por el duenyo, con swap sin acople a vendor. Exito → publica nichos.fuente.conectada y responde por nichos.fuente.conectar.response; fuente no autorizada → error 403." },
-    { "event": "nichos.fuente.reemplazar.request", "handler": "onReemplazarRequest", "description": "RPC puro: {fuente, por, config?} → ok. Sustituye una fuente conectada por otra declarada (puerto reemplazable por evento, sin vendor acoplado). Exito → publica nichos.fuente.reemplazada y responde por nichos.fuente.reemplazar.response; fuente origen no conectada → error 404." }
-  ],
+  "description": "PUENTE del vertical NICHOS (bloque J · fuentes de datos — J1): fachada que orquesta el consumo de fuentes externas (crawl4rs, APIs) sin que el consumidor conozca el proveedor. Pre-chequea límites (J3), delega la llamada externa via bus (crawl4rs.buscar/leer), imputa el coste (J4) y devuelve el resultado crudo al solicitante.",
+  "_doc": "modules/nichos/puerto-fuente-datos — PUENTE (bloque J · fuentes de datos / J1) del vertical NICHOS.\n\nQué hace: recibe nichos.fuente.consumir.request, pre-chequea que la fuente pueda consumirse (nichos.fuente.limites.puede.consumir.request a J3), orquesta la llamada externa publicando crawl4rs.buscar.request o crawl4rs.leer.request al bus (nunca HTTP directo — desacoplamiento total), solicita normalización al conversor (nichos.conversor.normalizar.request a J2), imputa coste al proyecto y devuelve el resultado crudo.\n\nPatrón: ModuloHibridoReflejo (mitad REFLEJO, JS determinista). El PUENTE no hace HTTP directo: orquesta vía bus hacia crawl4rs y credential-manager. Sin estado persistido propio — es orquestador de paso.\n\nFlujo _consumir:\n  1. Pre-check: publica nichos.fuente.limites.puede.consumir.request → espera response {puede, margen}. Si puede=false → 429 LIMITE_EXCEDIDO.\n  2. Llamada externa: según fuente.tipo, publica crawl4rs.buscar.request o crawl4rs.leer.request → espera response con resultado crudo.\n  3. Normalización: publica nichos.conversor.normalizar.request → espera response con dato homogéneo.\n  4. Imputación: publica nichos.fuente.coste.registrado (fire-and-forget) para que J4 lo registre.\n  5. PULSO: emite nichos.fuente.consumida {fuente, importe, margen_restante}.\n  6. Response: devuelve {status:200, data:{resultado_crudo}} al solicitante.",
+  "ui_decision": {
+    "necesita": false,
+    "razon": "Bloque J fontanería de fuentes del vertical NICHOS, sin cara propia. Orquesta llamadas al bus (crawl4rs) y publica resultados. El consumidor (B1 sondeador, C1 estudio-demanda, E1 competencia) lo invoca por RPC; el dueño no interactúa directamente con este módulo."
+  },
   "publishes": [
-    { "event": "nichos.fuente.conectada", "description": "Fire-and-forget (J1): una fuente fue conectada/declarada → {fuente, conectada:true, reemplaza, config}. La consumen gestion-limites-fuente (J3), coste-fuente (J4) y el pipeline-por-nicho (L1)." },
-    { "event": "nichos.fuente.reemplazada", "description": "Fire-and-forget (J1): una fuente conectada fue sustituida por otra → {de, a, reemplazada:true, config}. La consumen gestion-limites-fuente (J3), coste-fuente (J4) y el pipeline-por-nicho (L1)." },
-    { "event": "nichos.fuente.consultar.failed", "description": "Par de fallo determinista (J1): la consulta de datos a una fuente no pudo completarse → {status, error:{code:'FUENTE_NO_CONECTADA'|'INVALID_INPUT', message}}. Cierra el circulo de nichos.fuente.consultar.request." }
+    { "event": "nichos.fuente.consumir.response", "description": "Response correlada por request_id al RPC nichos.fuente.consumir.request. Payload: {status, data:{resultado_crudo}} | {status, error}." },
+    { "event": "nichos.fuente.limites.puede.consumir.request", "description": "RPC hacia J3 (gestion-limites-fuente): pre-check de que la fuente puede consumirse dentro de los límites vigentes. Payload: {request_id, fuente}." },
+    { "event": "nichos.conversor.normalizar.request", "description": "RPC hacia J2 (conversor-fuente): solicita normalización del crudo obtenido. Payload: {request_id, crudo, origen}." },
+    { "event": "nichos.fuente.coste.registrado", "description": "PULSO fire-and-forget hacia J4 (imputacion-coste-fuente): registra el coste de esta consulta. Payload: {id_proyecto, fuente, importe, timestamp}." },
+    { "event": "nichos.fuente.consumida", "description": "PULSO fire-and-forget: una fuente externa fue consumida con éxito. Lo escucha J3 para descontar margen. Payload: {fuente, importe, margen_restante}." },
+    { "event": "crawl4rs.buscar.request", "description": "RPC al módulo crawl4rs: búsqueda web (SearXNG). Payload: {request_id, query, opciones}." },
+    { "event": "crawl4rs.leer.request", "description": "RPC al módulo crawl4rs: lectura de URL concreta. Payload: {request_id, url, opciones}." }
+  ],
+  "subscribes": [
+    { "event": "nichos.fuente.consumir.request", "handler": "onConsumirRequest", "description": "PUENTE: orquesta pre-check de límites + llamada externa via bus (crawl4rs) + imputación de coste. Payload: {request_id, fuente, peticion, project_id?, correlation_id}." }
   ]
 }

@@ -1,15 +1,19 @@
 {
-  "_doc": "Manifest de nichos/clasificador-intencion — MICRO-AGENTE (G3, hoja del plan): clasifica el mensaje que llega del canal del dueno (via captura-semilla) en SEMILLA | DECISION | CONSULTA segun el lenguaje y la ambiguedad. Hibrido: pasada fuzzy (LLM, guion-prompt self-contained) para el juicio de lengua natural + fallback reflejo determinista por reglas si el LLM falla o no cumple el contrato. Sin store, sin custodio: entra objeto, sale objeto. Publica nichos.intencion.clasificada en exito; nichos.intencion.clasificar.failed cuando el mensaje es vacio/malformado o no se puede clasificar.",
   "name": "clasificador-intencion",
   "version": "0.1.0",
-  "description": "Micro-agente (G3): clasifica el mensaje del canal del dueno en SEMILLA|DECISION|CONSULTA segun lenguaje/ambiguedad; hibrido fuzzy con fallback reflejo determinista; publica nichos.intencion.clasificada.",
-  "language": "es",
-  "subscribes": [
-    { "event": "nichos.intencion.clasificar.request", "handler": "onClasificarRequest", "description": "RPC hibrido: {project_id, mensaje} → intento {tipo: SEMILLA|DECISION|CONSULTA, confianza, senales}. Fuzzy via llm.complete.request con guion; si el LLM falla o no cumple contrato, fallback reflejo por reglas (palabras/marcadores). Mensaje vacio o sin clasificar → error determinista (nichos.intencion.clasificar.failed). Exito → publica nichos.intencion.clasificada y responde por nichos.intencion.clasificar.response." },
-    { "event": "project.activated", "handler": "onProjectActivated", "description": "Micro-agente sin estado: registra el project_id activo para scope del contexto; no persiste nada." }
-  ],
+  "description": "MICRO-AGENTE del vertical NICHOS: clasifica cada mensaje entrante del canal en 5 intenciones canonicas (SEMILLA, RESPUESTA_DECISION, CONSULTA, AJUSTE_CONFIG, DESCONOCIDO) via ai-gateway. Reactivo: escucha nichos.canal.mensaje.recibido y emite el pulso nichos.intencion.clasificada; tambien atiende el RPC nichos.intencion.clasificar.",
+  "_doc": "modules/nichos/clasificador-intencion — MICRO-AGENTE del vertical NICHOS.\n\nQue hace: recibe un mensaje (texto libre del canal o request RPC) y devuelve la intencion clasificada entre 5 tipos canonicos. Usa ai-gateway (llm.complete.request) para la clasificacion semantica.\n\n5 intenciones canonicas:\n  SEMILLA             — idea nueva de nicho.\n  RESPUESTA_DECISION  — respuesta a solicitud pendiente del sistema.\n  CONSULTA            — pregunta del dueno.\n  AJUSTE_CONFIG       — cambio de perfil/umbral.\n  DESCONOCIDO         — no encaja en ninguna.\n\nPatron: ModuloHibridoReflejo (micro-agente — usa LLM via ai-gateway, sin estado persistido).",
+  "ui_decision": {
+    "necesita": false,
+    "razon": "Micro-agente sin cara propia. Clasifica mensajes internamente y emite la intencion al bus. Los consumidores (jefe, pipeline) reaccionan al pulso. Sin interaccion directa con el humano."
+  },
   "publishes": [
-    { "event": "nichos.intencion.clasificada", "description": "Fire-and-forget (G3): un mensaje del canal fue clasificado como SEMILLA|DECISION|CONSULTA → {project_id, mensaje, tipo, confianza, senales}. Lo consume captura-semilla (A1) y canal-supervision (G1) para enrutar la intencion." },
-    { "event": "nichos.intencion.clasificar.failed", "description": "Par de fallo determinista: el mensaje llego vacio/malformado o no pudo clasificarse → {status, code, mensaje}. Cierra el circulo de nichos.intencion.clasificar.request." }
+    { "event": "nichos.intencion.clasificada", "description": "PULSO fire-and-forget: intencion clasificada de un mensaje entrante. Payload: {project_id, mensaje_ref, tipo: SEMILLA|RESPUESTA_DECISION|CONSULTA|AJUSTE_CONFIG|DESCONOCIDO, confianza, timestamp}." },
+    { "event": "nichos.intencion.clasificada.failed", "description": "Par .failed del PULSO: la clasificacion fallo (LLM no respondio, payload invalido). Payload: {project_id, code, message, timestamp}." },
+    { "event": "nichos.intencion.clasificar.response", "description": "Response correlada por request_id al RPC nichos.intencion.clasificar.request. Payload: {status, data:{intencion_entrante:{tipo, confianza}}}." }
+  ],
+  "subscribes": [
+    { "event": "nichos.intencion.clasificar.request", "handler": "onClasificarRequest", "description": "RPC: clasifica un mensaje entrante y devuelve la intencion via response correlada." },
+    { "event": "nichos.canal.mensaje.recibido", "handler": "onMensajeRecibido", "description": "Fire-and-forget reactivo (F7b): al llegar un mensaje del canal, clasifica su intencion y emite nichos.intencion.clasificada." }
   ]
 }

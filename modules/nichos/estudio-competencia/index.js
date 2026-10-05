@@ -1,236 +1,200 @@
-/**
- * nichos/estudio-competencia — MICRO-AGENTE (fuzzy): el estudio de competencia del
- * nicho ANTES del gate de operar (E1).
- *
- * Dado un NICHO (construido) y las fuentes declaradas, produce un ESTUDIO DE
- * COMPETENCIA estructurado: el dataset de competidores observados en las fuentes
- * (quien compite y con que fuerza) + la CONCLUSION de diferenciacion (donde puede
- * entrar el nicho). Alimenta el paquete de decision (H1/paquete-decision) via
- * nichos.competencia.analizado.
- *
- * Híbrido (patrón real de nichos/estudio-demanda):
- *   _analizarFuentes         — REFLEJO (mecánico, determinista): consulta las fuentes
- *                              (via nichos.fuente.consultar.request) y trocea el dataset
- *                              en registros de competidores observados.
- *   _concluirDiferenciacion  — FUZZY (juicio LLM): un guion-prompt self-contained +
- *                              el dataset -> llm.complete.request -> CONCLUSION de
- *                              diferenciacion. Si el LLM falla, el reflejo determinista
- *                              (_concluirReflejo) asegura una conclusion derivada de
- *                              los datos observados.
- *
- * SIEMPRE devuelve datos ESTRUCTURADOS (competidores, metricas, diferenciacion) —
- * jamas un texto suelto. NUNCA inventa: no fabrica competidores que las fuentes no
- * apoyen; si no hay datos que apoyen el analisis → par de fallo honesto
- * (nichos.competencia.analizar.failed). Sin store, sin custodio.
- */
-
 'use strict';
+
+/**
+ * nichos/estudio-competencia — REFLEJO JS (MICRO-AGENTE del vertical NICHOS).
+ *
+ * Estudia la competencia de una solucion propuesta: consume fuentes externas
+ * por bus, las pasa al LLM (llm.complete.request) y sintetiza un informe
+ * con panorama competitivo + diferencial.
+ *
+ * RPC: nichos.competencia.estudiar
+ *   req: { solucion }
+ *   resp: { informe_competencia: { panorama, diferencial, fuentes_usadas[] } }
+ *
+ * PULSO: nichos.competencia.estudiada
+ *   { id_proyecto, panorama, diferencial, fuentes_usadas[], timestamp }
+ *
+ * Sin estado persistido — micro-agente puro (request → fuentes → LLM → response).
+ * Patron: ModuloHibridoReflejo.
+ */
 
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
 
-// ── guion-prompt del micro-agente (self-contained) ──
-const GUION_DIFERENCIACION =
-  'Eres el ANALISTA DE COMPETENCIA de un buscador de nichos de negocio. Recibes un NICHO ' +
-  'y el DATASET de competidores ya observados en las fuentes (quien compite, con que fuerza ' +
-  'y en que territorio). Tu trabajo es redactar la CONCLUSION DE DIFERENCIACION: si el nicho ' +
-  'puede entrar y por que angulo (precio, calidad, especializacion, territorio, servicio). ' +
-  'Reglas: usa SOLO los competidores que te dan, NO inventes competidores, precios ni ' +
-  'fortalezas ausentes; si hay muchos competidores fuertes, dilo con honestidad y sugiere ' +
-  'un angulo estrecho. Responde SOLO con un parrafo breve y directo de 2-3 frases en espanol, ' +
-  'sin bullet ni JSON.';
+const nowISO = () => new Date().toISOString();
 
-const FUENTE_DEFAULT = 'buscador';
-const COMPETIDORES_COTA = 20; // tope de registros de competidores por fuente (cota conservadora)
+const PROMPT_SISTEMA = [
+  'Eres un analista de competencia para nichos de mercado.',
+  'Se te entrega una solucion propuesta junto con datos de fuentes externas.',
+  'Analiza la competencia y responde SOLO con un JSON:',
+  '{',
+  '  "panorama": "<descripcion del panorama competitivo: jugadores, cuota, tendencias>",',
+  '  "diferencial": "<que hace unica a esta solucion frente a la competencia>"',
+  '}',
+  'Sin explicacion adicional. Solo el JSON.'
+].join('\n');
 
 class EstudioCompetencia extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'estudio-competencia';
-    this.version = 'reflejo-0.1.0';
-    this.project_id = null;
-  }
-  async onUnload() { return super.onUnload(); }
-
-  onAnalizarRequest(e) {
-    return this._atender(e, 'analizar', 'nichos.competencia.analizar.response', async (d) => {
-      const res = await this._analizar(d);
-      // Fire-and-forget de dominio: exito → analizado; fallo → par determinista.
-      if (res.status === 200) {
-        this.eventBus?.publish('nichos.competencia.analizado', res.data);
-      } else {
-        this.eventBus?.publish('nichos.competencia.analizar.failed', res);
-      }
-      return res;
-    });
+    this.version = '0.1.0';
+    this._pendientes = new Map(); // correlation_id → { resolve, reject }
   }
 
-  // ── el juicio: consulta fuentes (reflejo) + analiza dataset (reflejo) + concluye (fuzzy) ──
-  async _analizar({ project_id, nicho, fuentes } = {}) {
-    project_id = project_id || this.project_id;
-    if (!nicho || typeof nicho !== 'object') {
-      return this._errorResponse(400, 'NICHO_INVALIDO', 'el nicho es obligatorio para analizar la competencia', { project_id });
-    }
-    // Barrido reflejo: consulta las fuentes y trocea el dataset en registros de competidores.
-    const barrido = await this._consultarFuentes(project_id, nicho, fuentes);
-    const registrosTotales = barrido.reduce((n, b) => n + (b.registros ? b.registros.length : 0), 0);
-    if (registrosTotales === 0) {
-      return this._errorResponse(422, 'SIN_DATOS', 'ninguna fuente devolvio datos que apoyen el analisis de competencia', { project_id, nicho });
-    }
-    // Reflejo (numeros declarados): dataset de competidores observados.
-    const competidores = this._extraerCompetidores(barrido);
-    const metricas = this._medirMetricas(barrido, competidores);
-    // Juicio fuzzy: concluye la diferenciacion de los datos. Si falla → fallback reflejo por reglas.
-    let conclusion = await this._concluirDiferenciacion(nicho, competidores, metricas);
-    if (!conclusion) {
-      conclusion = this._concluirReflejo(competidores, metricas);
-    }
-    if (!conclusion) {
-      return this._errorResponse(502, 'SIN_CONCLUSION', 'el juicio no pudo concluir la diferenciacion', { project_id, nicho });
-    }
-    return {
-      status: 200,
-      data: {
-        project_id,
-        nicho: nicho.producto || nicho.servicio || nicho.nombre || nicho.id || null,
-        competidores,
-        metricas,
-        conclusion_diferenciacion: conclusion,
-        analizado: true
-      }
-    };
+  onLoad(context) {
+    const r = super.onLoad(context);
+    this.eventBus?.subscribe('llm.complete.response', (e) => this._onLLMResponse(e));
+    return r;
   }
 
-  // ── REFLEJO (mecánico, determinista): consulta cada fuente y trocea el dataset ──
-  async _consultarFuentes(project_id, nicho, fuentes) {
-    const termino = nicho.producto || nicho.servicio || nicho.audiencia || nicho.id || '';
-    // Barre TODAS las fuentes por defecto (buscador muerto por CAPTCHA; api+comunidad
-    // sostienen el barrido sin key ni CAPTCHA). Misma palanca que estudio-demanda (C1)
-    // y sondeo-territorio (B1).
-    const targets = (Array.isArray(fuentes) && fuentes.length > 0)
-      ? fuentes
-      : [FUENTE_DEFAULT, 'api', 'comunidad'];
-    const resultados = [];
-    for (const fuente of targets) {
-      const resp = await this._rpc('nichos.fuente.consultar.request', {
-        project_id, nicho: termino, fuente: fuente || undefined
-      }, { timeout_ms: 15000 }).catch(() => null);
-      if (resp && resp.status === 200) {
-        const dataset = resp.data && (resp.data.dataset || resp.data.resultados || resp.data.raw || resp.data);
-        resultados.push({
-          fuente: (resp.data && resp.data.fuente) || fuente || FUENTE_DEFAULT,
-          registros: this._parsearRegistros(dataset)
-        });
-      } else {
-        resultados.push({ fuente: fuente || FUENTE_DEFAULT, registros: [], error: (resp && resp.code) || 'FUENTE_NO_DATOS' });
-      }
-    }
-    return resultados;
+  // ── RPC HANDLER ──
+  onEstudiarRequest(e) {
+    return this._atender(e, 'estudiar', 'nichos.competencia.estudiar.response', d => this._estudiar(d));
   }
 
-  // ── REFLEJO: normaliza el dataset en una lista plana de registros de competidores ──
-  _parsearRegistros(dataset) {
-    if (!dataset) return [];
-    if (Array.isArray(dataset)) {
-      return dataset.map(r => {
-        if (typeof r === 'string') return { nombre: r, intensidad: 0.5 };
-        return {
-          nombre: r.nombre || r.competidor || r.puesto || r.titulo || r.texto || null,
-          intensidad: (typeof r.intensidad === 'number') ? r.intensidad : 0.5,
-          fortaleza: r.fortaleza || r.foco || r.angulo || null
-        };
-      }).filter(r => r.nombre).slice(0, COMPETIDORES_COTA);
-    }
-    if (typeof dataset === 'string') {
-      return dataset.split(/\n+/).map(t => t.trim()).filter(Boolean)
-        .map(t => ({ nombre: t, intensidad: 0.5 })).slice(0, COMPETIDORES_COTA);
-    }
-    if (typeof dataset === 'object') {
-      if (Array.isArray(dataset.items)) return this._parsearRegistros(dataset.items);
-      for (const k of Object.keys(dataset)) if (Array.isArray(dataset[k])) return this._parsearRegistros(dataset[k]);
-      return [{ nombre: dataset.nombre || dataset.titulo || null, intensidad: 0.5 }].filter(r => r.nombre);
-    }
-    return [];
-  }
+  // ── PROYECCION: _estudiar (mapea panorama + diferencial) ──
+  async _estudiar(input) {
+    if (!input.solucion) return this._invalid('solucion');
 
-  // ── REFLEJO: deja la lista plana de competidores observados (normalizados) ──
-  _extraerCompetidores(barrido) {
-    const vistos = new Map();
-    for (const b of barrido) {
-      for (const r of (b.registros || [])) {
-        const clave = String(r.nombre || 'competidor').toLowerCase().trim();
-        if (vistos.has(clave)) {
-          vistos.get(clave).fuentes.add(b.fuente);
-        } else {
-          vistos.set(clave, { nombre: String(r.nombre), intensidad: r.intensidad, fortaleza: r.fortaleza || null, fuentes: new Set([b.fuente]) });
+    const projectId = input.project_id || input.id_proyecto;
+
+    // 1. Consultar si podemos consumir fuentes
+    const puedeConsumir = await this._rpc('nichos.fuente.limites.puede.consumir.request', {
+      project_id: projectId
+    }, { timeout_ms: 5000 });
+
+    // 2. Consumir fuentes si hay permiso
+    const fuentes_usadas = [];
+    if (puedeConsumir && puedeConsumir.status === 200 && puedeConsumir.data?.puede) {
+      const fuenteResp = await this._rpc('nichos.fuente.consumir.request', {
+        project_id: projectId,
+        tipo: 'competencia',
+        query: input.solucion
+      }, { timeout_ms: 15000 });
+
+      if (fuenteResp && fuenteResp.status === 200 && fuenteResp.data?.resultados) {
+        for (const r of fuenteResp.data.resultados) {
+          fuentes_usadas.push({
+            nombre: r.nombre || r.fuente || 'desconocida',
+            tipo: r.tipo || 'web'
+          });
         }
       }
     }
-    return [...vistos.values()].map(c => ({
-      nombre: c.nombre,
-      intensidad: c.intensidad,
-      fortaleza: c.fortaleza,
-      fuentes: [...c.fuentes]
-    }));
-  }
 
-  // ── REFLEJO (numeros declarados): metricas del grado de competencia observado ──
-  _medirMetricas(barrido, competidores) {
-    const fuentesConDatos = barrido.filter(b => (b.registros || []).length > 0).length;
-    const numCompetidores = competidores.length;
-    const alta = competidores.filter(c => c.intensidad >= 0.7).length;
-    // Grado de competencia 0-1: mas competidores y mas intensidad alta → mas saturado (ancla en lo real).
-    const grado = numCompetidores === 0 ? 0 : Math.min(1, this._round(0.3 + Math.min(0.4, numCompetidores * 0.08) + alta * 0.1, 2));
-    return {
-      competidores_observados: numCompetidores,
-      fuentes_con_datos: fuentesConDatos,
-      competidores_intensidad_alta: alta,
-      grado_competencia: grado,
-      saturado: grado >= 0.7
-    };
-  }
+    // 3. Preparar contexto para el LLM
+    const contextoFuentes = fuentes_usadas.length > 0
+      ? `\n\nDatos de fuentes externas:\n${JSON.stringify(fuentes_usadas)}`
+      : '';
 
-  // ── FUZZY: 1 llamada llm.complete.request con el guion + los datos ──
-  async _concluirDiferenciacion(nicho, competidores, metricas) {
-    const resp = await this._rpc('llm.complete.request', {
-      system: GUION_DIFERENCIACION,
-      messages: [{ role: 'user', content: JSON.stringify({ nicho, competidores, metricas }) }],
-      tools: [], settings: { temperature: 0.2 }
-    }, { timeout_ms: 30000 }).catch(() => null);
-    if (!resp || resp.status >= 400) return null;
-    const texto = this._parseConclusion(resp);
-    return texto && texto.trim() ? texto.trim() : null;
-  }
+    // 4. Pedir analisis al LLM
+    try {
+      const resultado = await this._pedirAlLLM(
+        `Solucion a analizar: ${JSON.stringify(input.solucion)}${contextoFuentes}`,
+        projectId
+      );
 
-  // ── FUZZY: extrae el JSON de la conclusion (tolera fences ```json y texto) y devuelve el parrafo ──
-  _parseConclusion(resp) {
-    let c = resp?.data?.content ?? resp?.content ?? resp?.data?.text ?? resp?.text ?? resp?.data?.message ?? '';
-    if (c && typeof c === 'object' && c.conclusion && typeof c.conclusion === 'string') return c.conclusion;
-    if (typeof c !== 'string') return null;
-    const original = c;
-    c = c.replace(/```json/gi, '').replace(/```/g, '').trim();
-    const i = c.indexOf('{'), j = c.lastIndexOf('}');
-    if (i >= 0 && j > i) {
-      try {
-        const o = JSON.parse(c.slice(i, j + 1));
-        if (o && o.conclusion && typeof o.conclusion === 'string') return o.conclusion;
-      } catch (_) { /* cae al final */ }
+      // 5. Emitir pulso
+      this.eventBus?.publish('nichos.competencia.estudiada', {
+        id_proyecto: projectId,
+        panorama: resultado.panorama,
+        diferencial: resultado.diferencial,
+        fuentes_usadas,
+        timestamp: nowISO()
+      });
+
+      return {
+        status: 200,
+        data: {
+          informe_competencia: {
+            panorama: resultado.panorama,
+            diferencial: resultado.diferencial,
+            fuentes_usadas
+          }
+        }
+      };
+    } catch (err) {
+      this.eventBus?.publish('nichos.competencia.estudiada.failed', {
+        id_proyecto: projectId,
+        code: 'ESTUDIO_FALLIDO',
+        message: err.message || 'error al estudiar competencia',
+        timestamp: nowISO()
+      });
+      return this._errorResponse(
+        502,
+        'LLM_ERROR',
+        err.message || 'el LLM no devolvio un analisis valido',
+        {}
+      );
     }
-    if (original && typeof original === 'string' && original.trim().length > 1) return original.trim();
-    return null;
   }
 
-  // ── REFLEJO (fallback determinista): concluye la diferenciacion de los datos, nunca inventa ──
-  _concluirReflejo(competidores, metricas) {
-    const n = metricas.competidores_observados;
-    const grado = metricas.grado_competencia;
-    if (n === 0) return 'Sin competidores observados en las fuentes: el nicho aparece desatendido, un hueco posible con ventaja de primer movimiento, aunque exige confirmar la demanda.';
-    if (grado >= 0.7) {
-      return `Competencia alta en el nicho (${n} competidores observados, ${metricas.competidores_intensidad_alta} con intensidad alta): la entrada exige un angulo diferencial estrecho — especializacion o territorio — para no competir de frente.`;
+  // =============================================================
+  // LLM — pide analisis competitivo via ai-gateway
+  // =============================================================
+  _pedirAlLLM(texto, projectId) {
+    return new Promise((resolve, reject) => {
+      const correlationId = `comp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const timeout = setTimeout(() => {
+        this._pendientes.delete(correlationId);
+        reject(new Error('timeout esperando respuesta del LLM'));
+      }, 30000);
+
+      this._pendientes.set(correlationId, {
+        resolve: (resultado) => {
+          clearTimeout(timeout);
+          this._pendientes.delete(correlationId);
+          resolve(resultado);
+        },
+        reject: (err) => {
+          clearTimeout(timeout);
+          this._pendientes.delete(correlationId);
+          reject(err);
+        }
+      });
+
+      this.eventBus?.publish('llm.complete.request', {
+        request_id: correlationId,
+        project_id: projectId,
+        messages: [
+          { role: 'system', content: PROMPT_SISTEMA },
+          { role: 'user', content: texto }
+        ],
+        options: {
+          temperature: 0.3,
+          max_tokens: 800
+        }
+      });
+    });
+  }
+
+  _onLLMResponse(e) {
+    const d = (e && (e.data || e)) || {};
+    const correlationId = d.request_id;
+    if (!correlationId) return;
+
+    const pendiente = this._pendientes.get(correlationId);
+    if (!pendiente) return;
+
+    if (d.error) {
+      pendiente.reject(new Error(d.error.message || 'error del LLM'));
+      return;
     }
-    if (grado >= 0.4) {
-      return `Competencia moderada en el nicho (${n} competidores observados): hay espacio para entrar con un angulo de calidad/servicio o territorio, sin enfrentarse a jugadores consolidados.`;
+
+    const contenido = (d.content || d.text || '').trim();
+    try {
+      const parsed = JSON.parse(contenido);
+      pendiente.resolve({
+        panorama: parsed.panorama || 'sin datos',
+        diferencial: parsed.diferencial || 'sin datos'
+      });
+    } catch (_parseErr) {
+      // Fallback: usar el texto crudo como panorama
+      pendiente.resolve({
+        panorama: contenido || 'sin datos',
+        diferencial: 'no se pudo extraer del LLM'
+      });
     }
-    return `Competencia baja en el nicho (${n} competidores observados, grado ${grado}): el territorio esta poco saturado y es viable entrar con ventaja, con margen para diferenciarse por calidad o especializacion.`;
   }
 }
 

@@ -1,20 +1,38 @@
 /**
- * nichos/perfil-cobro-entrega — CUSTODIO CON PERSISTENCIA (I1, hoja del plan).
+ * nichos/perfil-cobro-entrega — REFLEJO JS (CUSTODIO del vertical NICHOS, bloque I).
  *
- * Guarda el CONTRATO DE PAGO Y ENTREGA declarable por pagador del nicho: las
- * plataformas de cobro aceptadas, el método/momento de entrega de la solución
- * al pagador y el resto de términos del contrato comercial. Es el STORE del
- * perfil de cobro/entrega POR PROYECTO que motor-cobro (E3) y
- * canal-distribucion (E4) consumen.
+ * Guarda, POR tipo_nicho (empresa | persona | organismo), la plantilla declarada
+ * de preferencias de cobro+entrega: {esquema, frecuencia, canal_cobro_default,
+ * canal_entrega, tiempo_entrega_max}. Snapshot inmutable por versión: cada
+ * declaración muta el store aplicando el cambio sobre el último snapshot del
+ * tipo_nicho afectado, sellándolo con autor + instante, y PULSA
+ * 'nichos.perfil.cobro.declarado'.
  *
- * CUSTODIO (patrón real, distinto del reflejo stateless): un solo escritor del
- * store — el CONSTRUCTOR declara el contrato al construir el nicho y el DUEÑO
- * puede declararlo/ajustarlo (guard de rol en _declarar). La lectura (_leer)
- * no muta. Persiste por proyecto con PosPersistencia (storage
- * /prisma/nichos/perfil-cobro-entrega.json), restaura en project.activated y
- * vuelca en onUnload. Emisor/par de fallo en errores.
+ * Store (per-proyecto, PosPersistencia): /prisma/pos/nichos/perfil-cobro-entrega.json
+ *   {
+ *     _version, _updated,
+ *     plantillas: {
+ *       empresa:   { version, perfil:{...}, por_autor:[{version,autor,cambio,at}] },
+ *       persona:   { version, perfil:{...}, por_autor:[...] },
+ *       organismo: { version, perfil:{...}, por_autor:[...] }
+ *     }
+ *   }
  *
- * Ver hoja I1 del plan-construccion.
+ * REGLA F3 (adaptada al I1 del diseño: "autor = Constructor | Dueño"):
+ * escritores autorizados declarados en lista. Los autores previstos son:
+ *   'dueño'       — el dueño por el canal.
+ *   'constructor' — D1 ensamblador-solucion, cuando un nicho recién ensamblado
+ *                   necesita sembrar un perfil inicial deducido.
+ * Cualquier otro autor → 403 ESCRITOR_NO_AUTORIZADO.
+ *
+ * ABIERTO: todo campo puede nacer ABIERTO. El esqueleto por defecto entrega el
+ * perfil del tipo_nicho con todos sus campos en 'ABIERTO'; el consumidor
+ * (D4 proponedor-modelo-cobro, E3 motor-cobro, E4 canal-distribucion) decide
+ * qué hacer con un ABIERTO — jamás se asume contrato de pago/entrega ausente.
+ *
+ * Patrón: ModuloHibridoReflejo (mitad REFLEJO, JS determinista). Sin mitad
+ * blueprint — la lógica es CRUD + aritmética de versión + indexado por tipo.
+ * Lo fuzzy lo hace D4 o el dueño directamente desde su canal.
  */
 
 'use strict';
@@ -22,53 +40,46 @@
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
 const PosPersistencia = require('../../_shared/pos-persistencia');
 
-// Roles que pueden ser único escritor del store: el CONSTRUCTOR (D1 al
-// construir) y el DUEÑO (ajuste comercial). Ambos son el "single-writer".
-const ROLES_ESCRITOR = new Set(['CONSTRUCTOR', 'DUEÑO']);
+const nowISO = () => new Date().toISOString();
+const AUTORES_AUTORIZADOS = ['dueño', 'constructor'];
 
-// Plataformas de cobro aceptadas por el contrato ([ABIERTO], declarables por
-// evento). El motor las ejecuta de forma agnóstica al proveedor.
-const PLATAFORMAS_COBRO = new Set(['efectivo', 'transferencia', 'paypal', 'stripe', 'suscripcion', 'cripto']);
+const TIPOS_NICHO = ['empresa', 'persona', 'organismo'];
 
-// Formas de entrega de la solución al pagador.
-const FORMAS_ENTREGA = new Set(['digital', 'fisico', 'híbrido', 'hibrido']);
+const CAMPOS_PERFIL = [
+  'esquema',
+  'frecuencia',
+  'canal_cobro_default',
+  'canal_entrega',
+  'tiempo_entrega_max'
+];
 
-// Shape base del contrato de pago/entrega declarable. El constructor/dueño
-// declara todo o un subset; cada campo se valida y normaliza sobre este molde.
-function perfilVacio() {
+function esqueletoAbierto() {
   return {
-    esquema: 'nichos-perfil-cobro-entrega-v1',
-    pagador: null,               // string — identidad del pagador del nicho
-    contrato: null,              // { plataforma_cobro, forma_entrega, ... términos }
-    updated_at: null,
-    declarado_por: null
+    esquema: 'ABIERTO',
+    frecuencia: 'ABIERTO',
+    canal_cobro_default: 'ABIERTO',
+    canal_entrega: 'ABIERTO',
+    tiempo_entrega_max: 'ABIERTO'
   };
-}
-
-// Normalizador de un número (entero/float) estrictamente positivo, o null.
-function numPos(v) {
-  const n = Number(v);
-  return Number.isFinite(n) && n > 0 ? n : null;
 }
 
 class PerfilCobroEntrega extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'perfil-cobro-entrega';
-    this.version = 'reflejo-0.1.0';
-    // store en memoria: project_id -> { pagador, contrato, ... } (un estado por proyecto)
-    this._perfiles = new Map();
+    this.version = '0.1.0';
+    // project_id → { empresa:{version,perfil,por_autor[]}, persona:{...}, organismo:{...} }
+    this.plantillasPorProyecto = new Map();
 
     this._persist = new PosPersistencia({
       modulo: this,
       file: 'perfil-cobro-entrega.json',
-      dir: '/prisma/nichos',
-      snapshot: (pid) => {
-        const p = this._perfiles.get(pid);
-        return p ? { project_id: pid, perfil: p } : null;
-      },
+      dir: '/prisma/pos/nichos',
+      snapshot: (pid) => ({ plantillas: this.plantillasPorProyecto.get(pid) || null }),
       hidratar: (pid, data) => {
-        if (data && data.perfil) this._perfiles.set(pid, data.perfil);
+        if (data && data.plantillas && typeof data.plantillas === 'object') {
+          this.plantillasPorProyecto.set(pid, data.plantillas);
+        }
       }
     });
   }
@@ -79,130 +90,173 @@ class PerfilCobroEntrega extends ModuloHibridoReflejo {
     return super.onUnload();
   }
 
-  // Restaura el perfil de cobro/entrega del proyecto activado.
   onProjectActivated(e) {
     const d = (e && (e.data || e)) || {};
     return this._persist.restaurar(d.project_id);
   }
 
-  // ── handlers RPC (una línea, delegan a _atender) ──
-  onLeerRequest(e) {
-    return this._atender(e, 'leer', 'nichos.perfil.leer.response', d => this._leer(d));
+  // ── RPC HANDLERS ──
+  onPlantillaRequest(e) {
+    return this._atender(e, 'plantilla', 'nichos.perfil.cobro.plantilla.response', d => this._plantilla(d));
   }
 
   onDeclararRequest(e) {
-    return this._atender(e, 'declarar', 'nichos.perfil.declarar.response', async (d) => {
-      const res = await this._declarar(d);
-      // Emisor/par de fallo: exito → dominio; error → par determinista.
-      if (res.status === 200) {
-        this.eventBus?.publish('nichos.perfil.declarado', {
-          project_id: res.data.project_id,
-          perfil: res.data.perfil,
-          declarado: true,
-          correlation_id: d.correlation_id
-        });
-      } else {
-        this.eventBus?.publish('nichos.perfil.declarar.failed', res);
-      }
-      return res;
-    });
+    return this._atender(e, 'declarar', 'nichos.perfil.cobro.declarar.response', d => this._declarar(d));
   }
 
-  // ── proyección de lectura (NO muta) ──
-  _obtenerOCrear(pid) {
-    let p = this._perfiles.get(pid);
+  // =============================================================
+  // Estado — plantillas por proyecto indexadas por tipo_nicho.
+  // =============================================================
+  _plantillas(project_id) {
+    let p = this.plantillasPorProyecto.get(project_id);
     if (!p) {
-      p = perfilVacio();
-      p.pagador = pid; // por defecto el pagador es el proyecto; lo puede ajustar el contrato
-      this._perfiles.set(pid, p);
-      this._persist.marcarDirty(pid);
+      p = {};
+      this.plantillasPorProyecto.set(project_id, p);
     }
     return p;
   }
 
-  _leer(input) {
-    const pid = input && input.project_id;
-    if (!pid) return this._invalid('project_id');
-    const p = this._obtenerOCrear(pid);
-    return { status: 200, data: { project_id: pid, perfil: p } };
+  _plantillaDe(project_id, tipo_nicho) {
+    const p = this._plantillas(project_id);
+    if (!p[tipo_nicho]) {
+      p[tipo_nicho] = { version: 0, perfil: esqueletoAbierto(), por_autor: [] };
+    }
+    return p[tipo_nicho];
   }
 
-  // Alias semántico para E3/E4: devuelve el perfil de cobro/entrega del proyecto.
-  perfilPagador(pid) {
-    if (!pid) return null;
-    const p = this._perfiles.get(pid);
-    return p && p.contrato ? p : perfilVacio();
-  }
-
-  // ── proyección de escritura (el único escritor: CONSTRUCTOR | DUEÑO) ──
-  _declarar(input) {
-    const pid = input && input.project_id;
-    if (!pid) return this._invalid('project_id');
-
-    // GUARD de escritor: solo el CONSTRUCTOR o el DUEÑO pueden declarar el contrato.
-    if (!ROLES_ESCRITOR.has(input.rol)) {
-      return this._errorResponse(403, 'PERMISSION_DENIED', 'solo el CONSTRUCTOR o el DUEÑO pueden declarar el contrato de cobro/entrega', {
-        roles_esperados: [...ROLES_ESCRITOR], rol_recibido: input.rol
-      });
+  // =============================================================
+  // PROYECCIONES — lógica de dominio pura
+  // =============================================================
+  _plantilla(input) {
+    if (!input.project_id) return this._invalid('project_id');
+    if (!input.tipo_nicho) return this._invalid('tipo_nicho');
+    if (!TIPOS_NICHO.includes(input.tipo_nicho)) {
+      return this._errorResponse(
+        400,
+        'TIPO_NICHO_DESCONOCIDO',
+        `tipo_nicho fuera del catálogo canónico; recibido '${input.tipo_nicho}'`,
+        { tipo_nicho: input.tipo_nicho, tipos_validos: TIPOS_NICHO }
+      );
     }
-
-    const contrato = input.contrato;
-    if (!contrato || typeof contrato !== 'object') {
-      return this._invalid('contrato');
-    }
-
-    const actual = this._obtenerOCrear(pid);
-    const previo = this._perfiles.get(pid) || perfilVacio();
-
-    // Merge conservador sobre el molde; valida y normaliza cada campo declarable.
-    actual.pagador = (contrato.pagador && String(contrato.pagador).trim())
-      ? String(contrato.pagador).trim()
-      : (previo.pagador || pid);
-
-    let plataforma = String(contrato.plataforma_cobro || '').toLowerCase();
-    if (plataforma) {
-      if (!PLATAFORMAS_COBRO.has(plataforma)) return this._invalid('contrato.plataforma_cobro');
-    } else if (previo.contrato && previo.contrato.plataforma_cobro) {
-      plataforma = previo.contrato.plataforma_cobro;
-    }
-
-    let formaEntrega = String(contrato.forma_entrega || '').toLowerCase();
-    if (formaEntrega) {
-      if (formaEntrega === 'híbrido') formaEntrega = 'hibrido';
-      if (!FORMAS_ENTREGA.has(formaEntrega)) return this._invalid('contrato.forma_entrega');
-    } else if (previo.contrato && previo.contrato.forma_entrega) {
-      formaEntrega = previo.contrato.forma_entrega;
-    }
-
-    const precio = numPos(contrato.precio) ?? (previo.contrato && previo.contrato.precio);
-
-    actual.contrato = {
-      plataforma_cobro: plataforma,
-      forma_entrega: formaEntrega,
-      precio,
-      periodicidad: (contrato.periodicidad && String(contrato.periodicidad).trim())
-        ? String(contrato.periodicidad).trim()
-        : (previo.contrato && previo.contrato.periodicidad) || null,
-      canal_entrega: (contrato.canal_entrega && String(contrato.canal_entrega).trim())
-        ? String(contrato.canal_entrega).trim()
-        : (previo.contrato && previo.contrato.canal_entrega) || null,
-      condiciones: Array.isArray(contrato.condiciones)
-        ? contrato.condiciones.map(c => (c && String(c).trim()) ? String(c).trim() : null).filter(Boolean)
-        : (previo.contrato && previo.contrato.condiciones) || []
+    const plantilla = this._plantillaDe(input.project_id, input.tipo_nicho);
+    return {
+      status: 200,
+      data: {
+        perfil_cobro_entrega: {
+          tipo_nicho: input.tipo_nicho,
+          version: plantilla.version,
+          perfil: plantilla.perfil,
+          por_autor: plantilla.por_autor
+        }
+      }
     };
-
-    actual.updated_at = new Date().toISOString();
-    actual.declarado_por = input.rol;
-
-    this._perfiles.set(pid, actual);
-    this._persist.marcarDirty(pid);
-
-    return { status: 200, data: { project_id: pid, perfil: actual, declarado: true } };
   }
 
-  // ── Tools ──
-  toolLeer(params) { return this._leer(params); }
-  toolDeclarar(params) { return this._declarar(params); }
+  _declarar(input) {
+    if (!input.project_id) return this._invalid('project_id');
+    if (!input.tipo_nicho) return this._invalid('tipo_nicho');
+    if (!input.por_autor) return this._invalid('por_autor');
+    if (!input.cambio || typeof input.cambio !== 'object') return this._invalid('cambio');
+
+    // Guard: tipo_nicho canónico.
+    if (!TIPOS_NICHO.includes(input.tipo_nicho)) {
+      const err = this._errorResponse(
+        400,
+        'TIPO_NICHO_DESCONOCIDO',
+        `tipo_nicho fuera del catálogo canónico; recibido '${input.tipo_nicho}'`,
+        { tipo_nicho: input.tipo_nicho, tipos_validos: TIPOS_NICHO }
+      );
+      this.eventBus?.publish('nichos.perfil.cobro.declarado.failed', {
+        project_id: input.project_id,
+        tipo_nicho: input.tipo_nicho,
+        code: 'TIPO_NICHO_DESCONOCIDO',
+        message: err.error.message,
+        timestamp: nowISO()
+      });
+      return err;
+    }
+
+    // Guard F3: escritores autorizados.
+    if (!AUTORES_AUTORIZADOS.includes(input.por_autor)) {
+      const err = this._errorResponse(
+        403,
+        'PERMISSION_DENIED',
+        'escritor_no_autorizado — solo el dueño o el constructor declaran el perfil de cobro+entrega',
+        { por_autor: input.por_autor, autores_autorizados: AUTORES_AUTORIZADOS }
+      );
+      this.eventBus?.publish('nichos.perfil.cobro.declarado.failed', {
+        project_id: input.project_id,
+        tipo_nicho: input.tipo_nicho,
+        code: 'PERMISSION_DENIED',
+        message: err.error.message,
+        timestamp: nowISO()
+      });
+      return err;
+    }
+
+    // Validación de forma: cualquier campo del cambio debe pertenecer al esquema.
+    const cambio = input.cambio;
+    const camposDesconocidos = Object.keys(cambio).filter(k => !CAMPOS_PERFIL.includes(k));
+    if (camposDesconocidos.length) {
+      const err = this._errorResponse(
+        400,
+        'INVALID_INPUT',
+        'cambio contiene campos fuera del esquema del perfil de cobro+entrega',
+        { campos_desconocidos: camposDesconocidos, campos_validos: CAMPOS_PERFIL }
+      );
+      this.eventBus?.publish('nichos.perfil.cobro.declarado.failed', {
+        project_id: input.project_id,
+        tipo_nicho: input.tipo_nicho,
+        code: 'INVALID_INPUT',
+        message: err.error.message,
+        timestamp: nowISO()
+      });
+      return err;
+    }
+
+    // Aplica el cambio sobre el último snapshot del tipo_nicho — inmutabilidad por versión.
+    const actual = this._plantillaDe(input.project_id, input.tipo_nicho);
+    const perfilNuevo = Object.assign({}, actual.perfil);
+    for (const k of CAMPOS_PERFIL) {
+      if (Object.prototype.hasOwnProperty.call(cambio, k)) {
+        perfilNuevo[k] = cambio[k];
+      }
+    }
+    const nueva = {
+      version: actual.version + 1,
+      perfil: perfilNuevo,
+      por_autor: actual.por_autor.concat([{
+        version: actual.version + 1,
+        autor: input.por_autor,
+        cambio,
+        at: nowISO()
+      }])
+    };
+    const plantillas = this._plantillas(input.project_id);
+    plantillas[input.tipo_nicho] = nueva;
+    this._persist.marcarDirty(input.project_id);
+
+    this.eventBus?.publish('nichos.perfil.cobro.declarado', {
+      project_id: input.project_id,
+      tipo_nicho: input.tipo_nicho,
+      version: nueva.version,
+      por_autor: input.por_autor,
+      timestamp: nowISO()
+    });
+
+    return {
+      status: 200,
+      data: {
+        nueva_version: nueva.version,
+        perfil_cobro_entrega: {
+          tipo_nicho: input.tipo_nicho,
+          version: nueva.version,
+          perfil: nueva.perfil,
+          por_autor: nueva.por_autor
+        }
+      }
+    };
+  }
 }
 
 module.exports = PerfilCobroEntrega;

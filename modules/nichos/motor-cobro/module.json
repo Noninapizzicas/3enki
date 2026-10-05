@@ -1,29 +1,20 @@
 {
-  "_doc": "Manifest de nichos/motor-cobro — REFLEJO STATELESS (E3): ejecuta y registra el cobro del nicho sobre las plataformas DECLARADAS (agnostico al proveedor). Sin store, sin persistencia, cada op entra objeto, sale objeto; proyeccion pura determinista. Distingue EFECTIVO (el dinero entro: pagos directos) de COMPROMETIDO (promesa/suscripcion recurrente que genera flujo a caja futuro). Publica nichos.cobro.ejecutado (-> registro-cobros append-only) + par determinista nichos.cobro.ejecutar.failed. El pago-gateway (lider provider-agnostico) es el puerto reutilizable que se llama por RPC; el motor de NICHOS se construye encima del puerto, nunca acoplado al proveedor.",
   "name": "motor-cobro",
   "version": "0.1.0",
-  "description": "Reflejo stateless (E3): ejecuta y registra el cobro del nicho sobre las plataformas declaradas (agnóstico al proveedor); distingue EFECTIVO (dinero entrado) de COMPROMETIDO (promesa/suscripción). Publica nichos.cobro.ejecutado y su par de fallo. Sin store: proyección pura determinista.",
-  "language": "es",
-  "subscribes": [
-    {
-      "event": "nichos.motor-cobro.ejecutar.request",
-      "handler": "onEjecutarRequest",
-      "description": "RPC puro: {project_id, importe, pagador, plataforma} → {project_id, cobro:{importe, pagador, plataforma, tipo:EFECTIVO|COMPROMETIDO, moneda, ejecutado_en}, ejecutado:true}. Ejecuta el cobro sobre la plataforma declarada (del perfil de cobro/entrega I1) de forma agnóstica al proveedor. Importe <= 0, pagador vacío o plataforma no declarada → nichos.cobro.ejecutar.failed. Éxito → publica nichos.cobro.ejecutado y responde por nichos.motor-cobro.ejecutar.response."
-    },
-    {
-      "event": "project.activated",
-      "handler": "onProjectActivated",
-      "description": "Reflejo sin estado: registra el project_id activo para scope del contexto; no persiste nada."
-    }
-  ],
+  "description": "REFLEJO sin estado del vertical NICHOS: ejecuta cobros según modelo, consulta plantilla de cobro por bus y registra en registro-cobros por bus. Formatea recibo.",
+  "_doc": "modules/nichos/motor-cobro — REFLEJO sin estado del vertical NICHOS.\n\nQué hace: una operación.\n\n1. EJECUTAR (nichos.cobro.ejecutar.request): consulta la plantilla de cobro al bus (nichos.perfil.cobro.plantilla.request), aplica el modelo de cobro al cliente, registra en registro-cobros por bus (nichos.registro.cobros.registrar.request) y devuelve recibo. Pulsa nichos.cobro.ejecutado o nichos.cobro.fallido.\n\nSin estado propio — REFLEJO puro, determinista.\n\nPatrón: ModuloHibridoReflejo (mitad REFLEJO, JS determinista).",
+  "ui_decision": {
+    "necesita": false,
+    "razon": "Motor de cobro sin cara propia. Se invoca por RPC desde el pipeline o flujos de monetización."
+  },
   "publishes": [
-    {
-      "event": "nichos.cobro.ejecutado",
-      "description": "Fire-and-forget (E3): el cobro del nicho fue ejecutado sobre una plataforma declarada → {project_id, cobro:{importe, pagador, plataforma, tipo:EFECTIVO|COMPROMETIDO, moneda}, ejecutado:true}. Lo consume registro-cobros (F1) para asentarlo append-only y el pipeline-por-nicho (L1)."
-    },
-    {
-      "event": "nichos.cobro.ejecutar.failed",
-      "description": "Par de fallo determinista (E3): cobro rechazado (importe <= 0, pagador vacío o plataforma no declarada) → {status, code, message, data}. Cierra el círculo de nichos.motor-cobro.ejecutar.request."
-    }
+    { "event": "nichos.cobro.ejecutado", "description": "PULSO fire-and-forget: cobro ejecutado con éxito. Payload: {id_nicho, recibo, timestamp}." },
+    { "event": "nichos.cobro.fallido", "description": "PULSO fire-and-forget: cobro falló. Payload: {id_nicho, razon_codigo, detalle, timestamp}." },
+    { "event": "nichos.cobro.ejecutar.response", "description": "Response correlada por request_id al RPC nichos.cobro.ejecutar.request. Payload: {status, data:{recibo}} | {status, error}." },
+    { "event": "nichos.registro.cobros.registrar.request", "description": "RPC delegado: registra el cobro en registro-cobros. Payload: {request_id, id_nicho, recibo, timestamp}." },
+    { "event": "nichos.perfil.cobro.plantilla.request", "description": "RPC delegado: consulta la plantilla de cobro vigente. Payload: {request_id, id_nicho, modelo_cobro}." }
+  ],
+  "subscribes": [
+    { "event": "nichos.cobro.ejecutar.request", "handler": "onEjecutarRequest", "description": "REFLEJO: ejecuta cobro según modelo, consulta plantilla, registra en registro-cobros. Payload: {request_id, id_nicho, modelo_cobro, cliente}." }
   ]
 }

@@ -1,171 +1,169 @@
-/**
- * nichos/camino-encontrar-construir — MICRO-AGENTE (juicio asistido): la pieza C4.
- *
- * Decide, para cada OPCION de nicho, si la oportunidad se ENCUENTRA o se CONSTRUYE:
- *   ENCONTRAR — hay demanda real (veredicto VIABLE / demanda de 1er orden suficiente)
- *               y la solucion se puede servir con las CAPACIDADES existentes del
- *               proyecto (catalogo-capacidades D3): no hay que crear nada, se aprovecha.
- *   CONSTRUIR — la necesidad no existe todavia o falta CAPACIDAD para materializarla
- *               (invariante D3 "lo que falta se crea"): hay que construir la solucion.
- *   PUENTE    — el riesgo declarado es ALTO o no hay datos para decidir con honestidad:
- *               en vez de decidir solo, SUBE una SolicitudDecision (D2/K2) y no decide
- *               por cuenta propia (REGLA del sistema, ver 5.3 - decision humana).
- *
- * Recibe: { project_id, nicho, veredicto?, estudio?, capacidades? } —
- *   veredicto: el de veredicto-viabilidad (C3, VIABLE|NO_VIABLE|PUENTE), si ya se emitio.
- *   capacidades: la respuesta de catalogo-capacidades (D3, disponibles/faltantes), si se consulto.
- *   riesgo:  0-1 declarado por el dueño/ensamblador (riesgo alto -> sube decision).
- *
- * HIBRIDO (patrón real de nichos/veredicto-viabilidad + estudio-demanda):
- *   _decidirReflejo — REFLEJO determinista: de veredicto y capacidades deriva el camino
- *                     base por reglas (no inventa: solo usa lo que llega).
- *   _concluir       — FUZZY (juicio LLM): guion-prompt + el caso -> llm.complete.request
- *                     -> camino asistido en JSON tipado. Si falla, el reflejo asegura el camino.
- *   _subirRiesgo    — riesgo alto -> emite la SolicitudDecision (payload a K2/D2), NO decide.
- *
- * NUNCA decide solo un camino de alto riesgo: lo SUBE. Sin store, sin custodio.
- */
-
 'use strict';
+
+/**
+ * nichos/camino-encontrar-construir — REFLEJO JS (MICRO-AGENTE del vertical NICHOS).
+ *
+ * Decide el camino ENCONTRAR o CONSTRUIR para un nicho viable. Cruza informe
+ * y veredicto con el catalogo de capacidades disponibles. Si existen
+ * capacidades que encajan → ENCONTRAR. Si no → CONSTRUIR. Si ambiguo →
+ * solicitud de decision al dueno.
+ *
+ * Sin estado persistido — micro-agente puro (request → catalogo → decision).
+ * Patron: ModuloHibridoReflejo.
+ */
 
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
 
-// ── guion-prompt del micro-agente (self-contained) ──
-const GUION_CAMINO =
-  'Eres el DECISOR DE CAMINO de un buscador de nichos de negocio. Recibes la OPORTUNIDAD de un ' +
-  'nicho con su VEREDICTO DE VIABILIDAD (VIABLE|NO_VIABLE|PUENTE), el ESTUDIO DE DEMANDA (si mide ' +
-  'demanda real) y el CATALOGO DE CAPACIDADES del proyecto (existentes y faltantes para construir la ' +
-  'solucion). Decide si la oportunidad se ENCUENTRA (hay demanda real y la solucion se sirve con las ' +
-  'capacidades existentes, sin construir nada nuevo) o se CONSTRUYE (la necesidad no existe todavia o ' +
-  'falta capacidad para materializarla -> hay que construir la solucion). Reglas: usa SOLO los datos que ' +
-  'te dan. Si hay demanda real y capacidades existentes -> ENCONTRAR; si falta capacidad o no hay demanda ' +
-  'establecida -> CONSTRUIR; si no hay datos suficientes para decidir con honestidad -> PUENTE. Responde ' +
-  'SOLO JSON: {"camino":"ENCONTRAR|CONSTRUIR|PUENTE","riesgo":<0-1>,"motivo":"<frase breve en espanol>"}.';
+const nowISO = () => new Date().toISOString();
 
-// Constante de la SolicitudDecision (evento de dominio a K2/D2).
-const EVENTO_SOLICITUD = 'nichos.gate.solicitado';
+const TIPOS_CAMINO = ['ENCONTRAR', 'CONSTRUIR'];
 
 class CaminoEncontrarConstruir extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'camino-encontrar-construir';
-    this.version = 'reflejo-0.1.0';
-    this.project_id = null;
+    this.version = '0.1.0';
+    this._pendientes = new Map();
   }
-  async onUnload() { return super.onUnload(); }
 
+  onLoad() {
+    this.eventBus?.subscribe('nichos.catalogo.capacidad.disponibles.response', (e) => this._onCatalogoResponse(e));
+    return super.onLoad ? super.onLoad() : undefined;
+  }
+
+  // ── RPC HANDLER ──
   onDecidirRequest(e) {
-    return this._atender(e, 'decidir', 'nichos.camino.decidir.response', async (d) => {
-      const res = await this._decidir(d);
-      // Fire-and-forget de dominio: exito → decidido; fallo → par determinista.
-      if (res.status === 200) {
-        this.eventBus?.publish('nichos.camino.decidido', res.data);
-        // Riesgo alto declarado → sube la SolicitudDecision (NUNCA decide solo).
-        if (res.data.riesgo_alto) this._subirRiesgo(res.data);
-      } else {
-        this.eventBus?.publish('nichos.camino.decidir.failed', res);
+    return this._atender(e, 'decidir', 'nichos.camino.decidir.response', d => this._decidir(d));
+  }
+
+  // ── PROYECCION: _decidir (cruza informe/veredicto con catalogo) ──
+  async _decidir(input) {
+    if (!input.informe) return this._invalid('informe');
+    if (!input.veredicto) return this._invalid('veredicto');
+
+    const projectId = input.project_id;
+    const idNicho = input.informe.id_nicho || input.id_nicho || 'sin-id';
+
+    try {
+      // 1. Consultar catalogo de capacidades disponibles
+      const capacidades = await this._consultarCatalogo(input.informe, projectId);
+
+      // 2. Decidir camino
+      const hayCapacidades = Array.isArray(capacidades) && capacidades.length > 0;
+      const cobertura = hayCapacidades
+        ? this._evaluarCobertura(capacidades, input.informe)
+        : { nivel: 'NINGUNA', detalle: 'sin capacidades en catalogo' };
+
+      if (cobertura.nivel === 'TOTAL' || cobertura.nivel === 'ALTA') {
+        // Capacidades existentes cubren la necesidad → ENCONTRAR
+        this.eventBus?.publish('nichos.camino.decidido', {
+          id_nicho: idNicho,
+          tipo: 'ENCONTRAR',
+          timestamp: nowISO()
+        });
+        return {
+          status: 200,
+          data: {
+            camino: {
+              tipo: 'ENCONTRAR',
+              capacidades_encontradas: capacidades,
+              cobertura: cobertura.nivel
+            }
+          }
+        };
       }
-      return res;
+
+      if (cobertura.nivel === 'NINGUNA') {
+        // Sin capacidades → CONSTRUIR
+        this.eventBus?.publish('nichos.camino.decidido', {
+          id_nicho: idNicho,
+          tipo: 'CONSTRUIR',
+          timestamp: nowISO()
+        });
+        return {
+          status: 200,
+          data: {
+            camino: {
+              tipo: 'CONSTRUIR',
+              razon: cobertura.detalle
+            }
+          }
+        };
+      }
+
+      // Cobertura PARCIAL → solicitud de decision al dueno
+      this.eventBus?.publish('nichos.decision.solicitud.abierta', {
+        id_nicho: idNicho,
+        razon: `Cobertura parcial (${cobertura.nivel}): ${cobertura.detalle}`,
+        opciones: TIPOS_CAMINO,
+        timestamp: nowISO()
+      });
+
+      return {
+        status: 200,
+        data: {
+          solicitud_decision: {
+            razon: `Cobertura parcial: ${cobertura.detalle}`,
+            opciones: TIPOS_CAMINO,
+            capacidades_parciales: capacidades
+          }
+        }
+      };
+    } catch (err) {
+      return this._errorResponse(502, 'ERROR_CAMINO', err.message || 'error al decidir camino', {});
+    }
+  }
+
+  // ── Evaluar cobertura de capacidades contra informe ──
+  _evaluarCobertura(capacidades, informe) {
+    if (!capacidades || capacidades.length === 0) {
+      return { nivel: 'NINGUNA', detalle: 'sin capacidades en catalogo' };
+    }
+
+    const totalRequeridas = informe.requisitos?.length || 1;
+    const cubiertas = capacidades.filter(c => c.activa !== false).length;
+    const ratio = cubiertas / totalRequeridas;
+
+    if (ratio >= 0.8) return { nivel: 'TOTAL', detalle: `${cubiertas}/${totalRequeridas} requisitos cubiertos` };
+    if (ratio >= 0.4) return { nivel: 'PARCIAL', detalle: `${cubiertas}/${totalRequeridas} requisitos cubiertos` };
+    return { nivel: 'NINGUNA', detalle: `${cubiertas}/${totalRequeridas} requisitos cubiertos — insuficiente` };
+  }
+
+  // =============================================================
+  // BUS — consultar catalogo de capacidades
+  // =============================================================
+  _consultarCatalogo(informe, projectId) {
+    return new Promise((resolve) => {
+      const correlationId = `cec-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const timeout = setTimeout(() => {
+        this._pendientes.delete(correlationId);
+        resolve([]); // sin respuesta → asumir sin capacidades
+      }, 15000);
+
+      this._pendientes.set(correlationId, {
+        resolve: (data) => {
+          clearTimeout(timeout);
+          this._pendientes.delete(correlationId);
+          resolve(data);
+        }
+      });
+
+      this.eventBus?.publish('nichos.catalogo.capacidad.disponibles.request', {
+        request_id: correlationId,
+        project_id: projectId,
+        criterios: {
+          dominio: informe.dominio || informe.id_nicho || null,
+          demanda: informe.demanda_1er_orden || null
+        }
+      });
     });
   }
 
-  // ── el juicio: decisiones base por reglas (reflejo) + asistencia fuzzy + riesgo ──
-  async _decidir({ project_id, nicho, veredicto, estudio, capacidades, riesgo = 0, nicho_id } = {}) {
-    project_id = project_id || this.project_id;
-    if (!nicho || typeof nicho !== 'object') {
-      return this._errorResponse(400, 'NICHO_INVALIDO', 'la opcion de nicho es obligatoria para decidir el camino', { project_id });
-    }
-    riesgo = Number(riesgo);
-    riesgo = Number.isFinite(riesgo) ? Math.min(1, Math.max(0, riesgo)) : 0;
-
-    // Reflejo determinista primero: ancla el camino en los datos que llegan.
-    const base = this._decidirReflejo({ veredicto, estudio, capacidades });
-    let camino = base.camino;
-    let motivo = base.motivo;
-
-    // Asistencia fuzzy: si el LLM responde con un camino valido, refina (solo si riesgo < alto).
-    if (riesgo < 0.7) {
-      const asistido = await this._concluir({ veredicto, estudio, capacidades, riesgo, base });
-      if (asistido && ['ENCONTRAR', 'CONSTRUIR', 'PUENTE'].includes(asistido.camino)) {
-        camino = asistido.camino;
-        motivo = asistido.motivo;
-      }
-    }
-
-    const riesgoAlto = camino === 'PUENTE' || riesgo >= 0.7;
-    return {
-      status: 200,
-      data: {
-        project_id,
-        nicho_id,
-        nicho,
-        camino,
-        motivo,
-        riesgo,
-        riesgo_alto: riesgoAlto,
-        capacidad_faltante: (capacidades && capacidades.capacidades_faltantes && capacidades.capacidades_faltantes.length) || 0,
-        decidido: true
-      }
-    };
-  }
-
-  // ── REFLEJO determinista: deriva el camino de veredicto + capacidades ──
-  _decidirReflejo({ veredicto, estudio, capacidades }) {
-    const hayDemanda = (veredicto && veredicto === 'VIABLE') ||
-      (estudio && estudio.demanda_1er_orden && estudio.demanda_1er_orden.fuerza_demanda >= 0.4);
-    // Faltantes del catalogo (si el ensamblador consulto capacidades).
-    const faltantes = (capacidades && Array.isArray(capacidades.capacidades_faltantes))
-      ? capacidades.capacidades_faltantes.length : 0;
-    const existeCapacidad = (capacidades && Array.isArray(capacidades.capacidades_disponibles)
-      && capacidades.capacidades_disponibles.length > 0);
-
-    if (hayDemanda && existeCapacidad && faltantes === 0) {
-      return { camino: 'ENCONTRAR', motivo: 'hay demanda real y la solucion se sirve con las capacidades existentes del proyecto' };
-    }
-    if (hayDemanda && faltantes > 0) {
-      return { camino: 'CONSTRUIR', motivo: 'hay demanda pero falta capacidad para materializar la solucion: se construye (D3)' };
-    }
-    if (!hayDemanda && (estudio || veredicto)) {
-      return { camino: 'CONSTRUIR', motivo: 'la necesidad no esta establecida: hay que crear la demanda (construir)' };
-    }
-    return { camino: 'PUENTE', motivo: 'sin datos suficientes de demanda o capacidades: no se decide por defecto' };
-  }
-
-  // ── FUZZY: 1 llamada llm.complete.request con el guion + el caso ──
-  async _concluir(caso) {
-    const resp = await this._rpc('llm.complete.request', {
-      system: GUION_CAMINO,
-      messages: [{ role: 'user', content: JSON.stringify(caso) }],
-      tools: [], settings: { temperature: 0.2 }
-    }, { timeout_ms: 30000 }).catch(() => null);
-    if (!resp || resp.status >= 400) return null;
-    return this._parse(resp);
-  }
-
-  // ── FUZZY: extrae el JSON del completado (tolera fences y texto) ──
-  _parse(resp) {
-    let c = resp?.data?.content ?? resp?.content ?? resp?.data?.text ?? resp?.text ?? resp?.data?.message ?? '';
-    if (c && typeof c === 'object' && c.camino) return c;
-    if (c && typeof c === 'object') return c;
-    if (typeof c !== 'string') return null;
-    c = c.replace(/```json/gi, '').replace(/```/g, '').trim();
-    const i = c.indexOf('{'), j = c.lastIndexOf('}');
-    if (i < 0 || j < 0 || j < i) return null;
-    try { return JSON.parse(c.slice(i, j + 1)); } catch { return null; }
-  }
-
-  // ── riesgo alto: emite la SolicitudDecision a K2/D2 (NUNCA decide el sistema solo) ──
-  _subirRiesgo(d) {
-    this.eventBus?.publish(EVENTO_SOLICITUD, {
-      tipo: 'CAMINO_CONSTRUIR_ALTO_RIESGO',
-      project_id: d.project_id,
-      nicho: d.nicho,
-      camino_propuesto: d.camino,
-      riesgo: d.riesgo,
-      motivo: d.motivo,
-      estado: 'PENDIENTE',
-      decision: null
-    });
+  _onCatalogoResponse(e) {
+    const d = (e && (e.data || e)) || {};
+    const pendiente = this._pendientes.get(d.request_id);
+    if (!pendiente) return;
+    pendiente.resolve(d.data?.capacidades || d.data || []);
   }
 }
 

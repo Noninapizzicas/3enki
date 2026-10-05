@@ -1,19 +1,24 @@
 /**
- * nichos/registro-cobros — CUSTODIO CON PERSISTENCIA (F1, hoja del plan).
+ * nichos/registro-cobros — REFLEJO JS (CUSTODIO del vertical NICHOS).
  *
- * Registro APPEND-ONLY e inmutable de los cobros por proyecto: cada cobro se
- * asienta distinguiendo EFECTIVO (entró el dinero) vs COMPROMETIDO (promesa/
- * suscripción que genera flujo a caja). JAMAS se sobrescribe: el historial es
- * la fuente de verdad de la salud financiera (F3) y del bucle de reglas
- * aprendidas (C7).
+ * Registro append-only de cobros por proyecto. Registra entradas de cobro
+ * (EFECTIVO, COMPROMETIDO, DEVUELTO) con referencia unica y sirve
+ * consultas filtradas por rango/tipo.
  *
- * CUSTODIO (patrón real, distinto del reflejo stateless): un solo escritor del
- * store — el MOTOR_COBRO (E3) asienta vía guard de rol en _appendUnico; la
- * lectura (_consultar) no muta; la escritura valida, apila y guarda. Persiste
- * por proyecto con PosPersistencia (storage /prisma/nichos/registro-cobros.json),
- * restaura en project.activated y vuelca en onUnload. Emisor/par de fallo.
+ * Store (per-proyecto, PosPersistencia): /prisma/pos/nichos/registro-cobros.json
+ *   {
+ *     _version, _updated,
+ *     registro: {
+ *       version:         Int,
+ *       entradas:        [ { ref, tipo, importe, moneda, timestamp, por_autor, meta } ],
+ *       total_entradas:  Int
+ *     }
+ *   }
  *
- * Ver hoja F1 del plan-construccion y arquitectura/decisiones/propuestas/prisma.md.
+ * Invariante: append-only — las entradas registradas NUNCA se mutan ni
+ * se borran.
+ *
+ * Patron: ModuloHibridoReflejo + PosPersistencia. REFLEJO puro.
  */
 
 'use strict';
@@ -21,30 +26,34 @@
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
 const PosPersistencia = require('../../_shared/pos-persistencia');
 
-// Rol único escritor — el MOTOR_COBRO (E3). Los demás son solo lectores.
-const ROL_MOTOR_COBRO = 'MOTOR_COBRO';
+const nowISO = () => new Date().toISOString();
 
-// Tipos de cobro permitidos — EFECTIVO (entró el dinero) | COMPROMETIDO (promesa).
-const TIPOS_COBRO = new Set(['EFECTIVO', 'COMPROMETIDO']);
+const TIPOS_VALIDOS = ['EFECTIVO', 'COMPROMETIDO', 'DEVUELTO'];
+
+function esqueletoVacio() {
+  return {
+    version: 0,
+    entradas: [],
+    total_entradas: 0
+  };
+}
 
 class RegistroCobros extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'registro-cobros';
-    this.version = 'reflejo-0.1.0';
-    // store en memoria: project_id -> { esquema, cobros: [append-only] }
-    this._historiales = new Map();
+    this.version = '0.1.0';
+    this.registroPorProyecto = new Map();   // project_id → esqueleto
 
     this._persist = new PosPersistencia({
       modulo: this,
       file: 'registro-cobros.json',
-      dir: '/prisma/nichos',
-      snapshot: (pid) => {
-        const h = this._historiales.get(pid);
-        return h ? { project_id: pid, historial: h } : null;
-      },
+      dir: '/prisma/pos/nichos',
+      snapshot: (pid) => ({ registro: this.registroPorProyecto.get(pid) || null }),
       hidratar: (pid, data) => {
-        if (data && data.historial) this._historiales.set(pid, data.historial);
+        if (data && data.registro && typeof data.registro === 'object') {
+          this.registroPorProyecto.set(pid, data.registro);
+        }
       }
     });
   }
@@ -55,127 +64,109 @@ class RegistroCobros extends ModuloHibridoReflejo {
     return super.onUnload();
   }
 
-  // Restaura el historial del proyecto activado.
   onProjectActivated(e) {
     const d = (e && (e.data || e)) || {};
     return this._persist.restaurar(d.project_id);
   }
 
-  // ── handlers RPC (una línea, delegan a _atender) ──
+  // ── RPC HANDLERS ──
   onRegistrarRequest(e) {
-    return this._atender(e, 'registrar', 'nichos.cobro.registrar.response', async (d) => {
-      const res = this._appendUnico(d);
-      // Emisor/par de fallo: exito → dominio; error → par determinista.
-      if (res.status === 200) {
-        this.eventBus?.publish('nichos.cobro_registrado', {
-          project_id: res.data.project_id,
-          cobro: res.data.cobro,
-          registrado: true,
-          correlation_id: d.correlation_id
-        });
-      } else {
-        this.eventBus?.publish('nichos.cobro.registrar.failed', res);
-      }
-      return res;
-    });
+    return this._atender(e, 'registrar', 'nichos.registro.cobros.registrar.response', d => this._registrar(d));
   }
 
   onConsultarRequest(e) {
-    return this._atender(e, 'consultar', 'nichos.cobro.consultar.response', d => this._consultar(d));
+    return this._atender(e, 'consultar', 'nichos.registro.cobros.consultar.response', d => this._consultar(d));
   }
 
-  // Fire-and-forget del flujo de cobro (E3 -> F1): motor-cobro publicó ejecutado.
-  onCobroEjecutado(e) {
-    const d = (e && (e.data || e)) || {};
-    if (!d.project_id) return null;
-    const res = this._appendUnico({
-      project_id: d.project_id,
-      rol: d.duenyo || ROL_MOTOR_COBRO,
-      cobro: d.cobro
+  // =============================================================
+  // Estado — snapshot por proyecto. Esqueleto vacio si no hay fichero.
+  // =============================================================
+  _store(project_id) {
+    let s = this.registroPorProyecto.get(project_id);
+    if (!s) {
+      s = esqueletoVacio();
+      this.registroPorProyecto.set(project_id, s);
+    }
+    return s;
+  }
+
+  // =============================================================
+  // PROYECCIONES — logica pura
+  // =============================================================
+  _registrar(input) {
+    if (!input.project_id) return this._invalid('project_id');
+    if (!input.entrada_cobro || typeof input.entrada_cobro !== 'object') return this._invalid('entrada_cobro');
+    if (!input.por_autor) return this._invalid('por_autor');
+
+    const ec = input.entrada_cobro;
+    if (!TIPOS_VALIDOS.includes(ec.tipo)) return this._invalid('entrada_cobro.tipo (EFECTIVO|COMPROMETIDO|DEVUELTO)');
+    if (typeof ec.importe !== 'number' || ec.importe < 0) return this._invalid('entrada_cobro.importe');
+
+    const store = this._store(input.project_id);
+
+    const ref = `cobro_${Date.now()}_${store.total_entradas}`;
+
+    const entrada = {
+      ref,
+      tipo: ec.tipo,
+      importe: ec.importe,
+      moneda: ec.moneda || 'EUR',
+      timestamp: nowISO(),
+      por_autor: input.por_autor,
+      meta: ec.meta || {}
+    };
+
+    store.entradas.push(entrada);
+    store.version += 1;
+    store.total_entradas += 1;
+
+    this._persist.marcarDirty(input.project_id);
+
+    this.eventBus?.publish('nichos.cobro.registrado', {
+      id_proyecto: input.project_id,
+      tipo: entrada.tipo,
+      importe: entrada.importe,
+      cobro_ref: ref,
+      timestamp: entrada.timestamp
     });
-    if (res.status === 200) {
-      this.eventBus?.publish('nichos.cobro_registrado', {
-        project_id: res.data.project_id,
-        cobro: res.data.cobro,
-        registrado: true,
-        correlation_id: d.correlation_id
-      });
-    } else {
-      this.eventBus?.publish('nichos.cobro.registrar.failed', res);
-    }
-    return res;
-  }
 
-  // ── proyección de lectura (NO muta) ──
-  _obtenerOCrear(pid) {
-    let h = this._historiales.get(pid);
-    if (!h) {
-      h = { esquema: 'nichos-registro-cobros-v1', cobros: [] };
-      this._historiales.set(pid, h);
-      this._persist.marcarDirty(pid);
-    }
-    return h;
+    return {
+      status: 200,
+      data: {
+        ref_cobro: ref
+      }
+    };
   }
 
   _consultar(input) {
-    const pid = input && input.project_id;
-    if (!pid) return this._invalid('project_id');
-    const h = this._obtenerOCrear(pid);
-    return { status: 200, data: { project_id: pid, historial: h } };
-  }
+    if (!input.project_id) return this._invalid('project_id');
 
-  // Alias semántico para F3/K1: historial plano de cobros del proyecto.
-  historialCobros(pid) {
-    if (!pid) return [];
-    const h = this._historiales.get(pid);
-    return h ? h.cobros : [];
-  }
+    const store = this._store(input.project_id);
+    const filtro = input.filtro || {};
+    let entradas = store.entradas.slice();
 
-  // ── proyección de escritura (el único escritor: MOTOR_COBRO) — APPEND-ONLY ──
-  _appendUnico(input) {
-    const pid = input && input.project_id;
-    if (!pid) return this._invalid('project_id');
-
-    // GUARD de escritor: solo el MOTOR_COBRO (E3) puede asentar un cobro.
-    if (input.rol !== ROL_MOTOR_COBRO) {
-      return this._errorResponse(403, 'PERMISSION_DENIED', 'solo el MOTOR_COBRO puede asentar cobros', {
-        rol_esperado: ROL_MOTOR_COBRO, rol_recibido: input.rol
-      });
+    // Filtrar por tipo
+    if (filtro.tipo && TIPOS_VALIDOS.includes(filtro.tipo)) {
+      entradas = entradas.filter(e => e.tipo === filtro.tipo);
     }
 
-    const cobro = input.cobro;
-    if (!cobro || typeof cobro !== 'object') {
-      return this._invalid('cobro');
+    // Filtrar por rango de fechas
+    if (filtro.desde) {
+      const desde = new Date(filtro.desde).getTime();
+      entradas = entradas.filter(e => new Date(e.timestamp).getTime() >= desde);
     }
-    const importe = Number(cobro.importe);
-    if (!Number.isFinite(importe) || importe <= 0) {
-      return this._invalid('cobro.importe');
-    }
-    const tipo = String(cobro.tipo || '').toUpperCase();
-    if (!TIPOS_COBRO.has(tipo)) {
-      return this._invalid('cobro.tipo');
+    if (filtro.hasta) {
+      const hasta = new Date(filtro.hasta).getTime();
+      entradas = entradas.filter(e => new Date(e.timestamp).getTime() <= hasta);
     }
 
-    const hist = this._obtenerOCrear(pid);
-    // Append-only: el cobro se apila con su secuencia; NUNCA se sobrescribe.
-    const asiento = {
-      id: `${pid}-c${hist.cobros.length + 1}`,
-      importe,
-      tipo,
-      pagador: (cobro.pagador && String(cobro.pagador).trim()) ? String(cobro.pagador).trim() : null,
-      fecha: cobro.fecha || new Date().toISOString(),
-      registrado_por: ROL_MOTOR_COBRO
+    return {
+      status: 200,
+      data: {
+        entradas
+      }
     };
-    hist.cobros.push(asiento);
-    hist.updated_at = new Date().toISOString();
-    this._persist.marcarDirty(pid);
-
-    return { status: 200, data: { project_id: pid, cobro: asiento, registrado: true } };
   }
-
-  // ── Tools ──
-  toolRegistrar(params) { return this._appendUnico(params); }
-  toolConsultar(params) { return this._consultar(params); }
 }
 
 module.exports = RegistroCobros;

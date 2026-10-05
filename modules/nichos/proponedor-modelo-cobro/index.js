@@ -1,165 +1,190 @@
-/**
- * nichos/proponedor-modelo-cobro — MICRO-AGENTE (fuzzy): propone el modelo de
- * negocio/cobro por nicho antes del gate de operar (D4).
- *
- * Dado un NICHO (construido, D1) y (opcionalmente) el estudio de competencia (E1),
- * propone un MODELO DE COBRO estructurado: la opcion recomendada (suscripcion |
- * empresa | transaccional | abierto), el porqué en 1 frase y el precio sugerido
- * derivado del estudio. NO lo impone: lo confirma el gate E2, no se autoimpone.
- *
- * Híbrido (patrón real de nichos/estudio-demanda + estudio-competencia):
- *   _proponerEstructura   — REFLEJO (mecánico, determinista): valida el nicho y
- *                           deriva las opciones de modelo declaradas + el precio
- *                           sugerido de la evidencia.
- *   _redactarPropuesta    — FUZZY (juicio LLM): un guion-prompt self-contained +
- *                           los datos -> llm.complete.request -> propuesta razonada.
- *                           Si el LLM falla → fallback reflejo (_redactarReflejo)
- *                           garantiza una propuesta derivada de la evidencia.
- *
- * NUNCA inventa: no fabrica precio ni modelo que la evidencia no apoye; si el nicho
- * viene vacio → par de fallo honesto (nichos.modelo_cobro.proponer.failed).
- * Sin store, sin custodio.
- */
-
 'use strict';
+
+/**
+ * nichos/proponedor-modelo-cobro — REFLEJO JS (MICRO-AGENTE del vertical NICHOS).
+ *
+ * Propone un modelo de cobro para un nicho: consulta la plantilla de cobro
+ * base por bus (nichos.perfil.cobro.plantilla.request) y la ajusta via LLM
+ * (llm.complete.request) al nicho y la solucion concretos.
+ *
+ * RPC: nichos.modelo.cobro.proponer
+ *   req: { id_nicho, solucion }
+ *   resp: { modelo_cobro }
+ *
+ * PULSO: nichos.modelo.cobro.propuesto
+ *   { id_proyecto, modelo, timestamp }
+ *
+ * Sin estado persistido — micro-agente puro (request → plantilla → LLM → response).
+ * Patron: ModuloHibridoReflejo.
+ */
 
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
 
-// ── guion-prompt del micro-agente (self-contained) ──
-const GUION_PROPUESTA =
-  'Eres el ASESOR DE MODELO DE COBRO de un buscador de nichos de negocio. Recibes un NICHO ' +
-  'construido y (si aplica) el estudio de su competencia. Debes PROPONER el MODELO DE COBRO ' +
-  'adecuado para ese nicho. Reglas: elige SOLO entre [suscripcion, empresa, transaccional, ' +
-  'abierto]; razona con los datos que te dan (tipo de producto/servicio, audiencia, competencia, ' +
-  'disposicion a pagar estimada), NO inventes numeros ausentes; si no hay evidencia suficiente, ' +
-  'marca la opcion como provisional. Responde SOLO JSON: ' +
-  '{"modelo":"<suscripcion|empresa|transaccional|abierto>","razon":"<1 frase>","precio_sugerido_eur":<0-? num o null>,' +
-  '"provisional":<true|false>}.';
+const nowISO = () => new Date().toISOString();
 
-// Modelo por tipo de entrega (reglas declaradas, no inventadas).
-const POR_TIPO = {
-  servicio: 'suscripcion',
-  producto: 'transaccional',
-  empresa: 'empresa',
-  contenido: 'suscripcion'
-};
+const PROMPT_SISTEMA = [
+  'Eres un experto en modelos de negocio y monetizacion.',
+  'Se te entrega una plantilla base de cobro y una solucion/nicho concreto.',
+  'Ajusta la plantilla al nicho y responde SOLO con un JSON:',
+  '{',
+  '  "tipo": "<freemium|suscripcion|pago_unico|comision|publicidad|mixto>",',
+  '  "precio_sugerido": "<rango o cifra>",',
+  '  "frecuencia": "<mensual|anual|por_uso|unico>",',
+  '  "justificacion": "<por que este modelo encaja con el nicho>",',
+  '  "variantes": ["<alternativa_1>", "<alternativa_2>"]',
+  '}',
+  'Sin explicacion adicional. Solo el JSON.'
+].join('\n');
 
 class ProponedorModeloCobro extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'proponedor-modelo-cobro';
-    this.version = 'reflejo-0.1.0';
-    this.project_id = null;
+    this.version = '0.1.0';
+    this._pendientes = new Map(); // correlation_id → { resolve, reject }
   }
-  async onUnload() { return super.onUnload(); }
 
+  onLoad(context) {
+    const r = super.onLoad(context);
+    this.eventBus?.subscribe('llm.complete.response', (e) => this._onLLMResponse(e));
+    return r;
+  }
+
+  // ── RPC HANDLER ──
   onProponerRequest(e) {
-    return this._atender(e, 'proponer', 'nichos.modelo_cobro.proponer.response', async (d) => {
-      const res = await this._proponer(d);
-      // Fire-and-forget de dominio: exito → propuesto; fallo → par determinista.
-      if (res.status === 200) {
-        this.eventBus?.publish('nichos.modelo_cobro.propuesto', res.data);
-      } else {
-        this.eventBus?.publish('nichos.modelo_cobro.proponer.failed', res);
-      }
-      return res;
+    return this._atender(e, 'proponer', 'nichos.modelo.cobro.proponer.response', d => this._proponer(d));
+  }
+
+  // ── PROYECCION: _proponer (aplica plantilla + ajuste LLM) ──
+  async _proponer(input) {
+    if (!input.id_nicho) return this._invalid('id_nicho');
+    if (!input.solucion) return this._invalid('solucion');
+
+    const projectId = input.project_id || input.id_proyecto;
+
+    // 1. Consultar plantilla de cobro base
+    const plantillaResp = await this._rpc('nichos.perfil.cobro.plantilla.request', {
+      project_id: projectId,
+      id_nicho: input.id_nicho
+    }, { timeout_ms: 5000 });
+
+    const plantilla = (plantillaResp && plantillaResp.status === 200)
+      ? plantillaResp.data?.plantilla || {}
+      : {};
+
+    // 2. Pedir ajuste al LLM
+    const contexto = [
+      `Nicho: ${JSON.stringify(input.id_nicho)}`,
+      `Solucion: ${JSON.stringify(input.solucion)}`,
+      plantilla && Object.keys(plantilla).length > 0
+        ? `Plantilla base de cobro: ${JSON.stringify(plantilla)}`
+        : 'No hay plantilla base — proponer desde cero.'
+    ].join('\n');
+
+    try {
+      const resultado = await this._pedirAlLLM(contexto, projectId);
+
+      // 3. Emitir pulso
+      this.eventBus?.publish('nichos.modelo.cobro.propuesto', {
+        id_proyecto: projectId,
+        modelo: resultado,
+        timestamp: nowISO()
+      });
+
+      return {
+        status: 200,
+        data: {
+          modelo_cobro: resultado
+        }
+      };
+    } catch (err) {
+      this.eventBus?.publish('nichos.modelo.cobro.propuesto.failed', {
+        id_proyecto: projectId,
+        code: 'PROPUESTA_FALLIDA',
+        message: err.message || 'error al proponer modelo de cobro',
+        timestamp: nowISO()
+      });
+      return this._errorResponse(
+        502,
+        'LLM_ERROR',
+        err.message || 'el LLM no devolvio un modelo de cobro valido',
+        {}
+      );
+    }
+  }
+
+  // =============================================================
+  // LLM — pide ajuste de modelo de cobro via ai-gateway
+  // =============================================================
+  _pedirAlLLM(texto, projectId) {
+    return new Promise((resolve, reject) => {
+      const correlationId = `cobro-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const timeout = setTimeout(() => {
+        this._pendientes.delete(correlationId);
+        reject(new Error('timeout esperando respuesta del LLM'));
+      }, 30000);
+
+      this._pendientes.set(correlationId, {
+        resolve: (resultado) => {
+          clearTimeout(timeout);
+          this._pendientes.delete(correlationId);
+          resolve(resultado);
+        },
+        reject: (err) => {
+          clearTimeout(timeout);
+          this._pendientes.delete(correlationId);
+          reject(err);
+        }
+      });
+
+      this.eventBus?.publish('llm.complete.request', {
+        request_id: correlationId,
+        project_id: projectId,
+        messages: [
+          { role: 'system', content: PROMPT_SISTEMA },
+          { role: 'user', content: texto }
+        ],
+        options: {
+          temperature: 0.4,
+          max_tokens: 600
+        }
+      });
     });
   }
 
-  // ── el juicio: estructura el modelo (reflejo) + lo razona (fuzzy) ──
-  async _proponer({ project_id, nicho, competencia } = {}) {
-    project_id = project_id || this.project_id;
-    if (!nicho || typeof nicho !== 'object') {
-      return this._errorResponse(400, 'NICHO_INVALIDO', 'el nicho es obligatorio para proponer el modelo de cobro', { project_id });
+  _onLLMResponse(e) {
+    const d = (e && (e.data || e)) || {};
+    const correlationId = d.request_id;
+    if (!correlationId) return;
+
+    const pendiente = this._pendientes.get(correlationId);
+    if (!pendiente) return;
+
+    if (d.error) {
+      pendiente.reject(new Error(d.error.message || 'error del LLM'));
+      return;
     }
-    // Reflejo (mecánico, determinista): opciones declaradas + precio derivado de la evidencia.
-    const estructura = this._proponerEstructura(nicho, competencia);
-    // Juicio fuzzy: razona la propuesta. Si falla → fallback reflejo por reglas.
-    let propuesta = await this._redactarPropuesta(nicho, estructura, competencia);
-    const provisional = estructura.provisional;
-    if (!propuesta) {
-      propuesta = this._redactarReflejo(nicho, estructura, provisional);
+
+    const contenido = (d.content || d.text || '').trim();
+    try {
+      const parsed = JSON.parse(contenido);
+      pendiente.resolve({
+        tipo: parsed.tipo || 'mixto',
+        precio_sugerido: parsed.precio_sugerido || 'por determinar',
+        frecuencia: parsed.frecuencia || 'mensual',
+        justificacion: parsed.justificacion || 'sin justificacion',
+        variantes: Array.isArray(parsed.variantes) ? parsed.variantes : []
+      });
+    } catch (_parseErr) {
+      // Fallback: modelo basico
+      pendiente.resolve({
+        tipo: 'mixto',
+        precio_sugerido: 'por determinar',
+        frecuencia: 'mensual',
+        justificacion: contenido || 'respuesta no estructurada del LLM',
+        variantes: []
+      });
     }
-    if (!propuesta) {
-      return this._errorResponse(502, 'SIN_PROPUESTA', 'el juicio no pudo proponer un modelo de cobro', { project_id, nicho });
-    }
-    return { status: 200, data: { project_id, nicho: nicho.producto || nicho.servicio || nicho.nombre || nicho.id || null, ...estructura, ...propuesta, propuesto: true } };
-  }
-
-  // ── REFLEJO (mecánico, determinista): valida el nicho y deriva opciones + precio ──
-  _proponerEstructura(nicho, competencia) {
-    const tipo = nicho.tipo || (nicho.producto ? 'producto' : (nicho.servicio ? 'servicio' : 'abierto'));
-    const opcion = POR_TIPO[tipo] || (tipo === 'abierto' ? 'abierto' : 'transaccional');
-    // Precio sugerido derivado de la evidencias de disposicion a pagar/competencia (numeros declarados).
-    let precio = null;
-    const pagar = competencia && competencia.disposicion_pagar;
-    if (pagar && typeof pagar.precio_medio_eur === 'number') precio = this._round(pagar.precio_medio_eur, 2);
-    const provisional = !pagar || typeof pagar.precio_medio_eur !== 'number';
-    const opciones = ['suscripcion', 'empresa', 'transaccional', 'abierto'];
-    return {
-      modelo: opcion,
-      opciones,
-      precio_sugerido_eur: precio,
-      provisional,
-      basado_en: competencia ? 'estudio de competencia (D4 -> E1)' : 'tipo de entrega del nicho'
-    };
-  }
-
-  // ── FUZZY: 1 llamada llm.complete.request con el guion + los datos ──
-  async _redactarPropuesta(nicho, estructura, competencia) {
-    const resp = await this._rpc('llm.complete.request', {
-      system: GUION_PROPUESTA,
-      messages: [{ role: 'user', content: JSON.stringify({ nicho, estructura, competencia }) }],
-      tools: [], settings: { temperature: 0.2 }
-    }, { timeout_ms: 30000 }).catch(() => null);
-    if (!resp || resp.status >= 400) return null;
-    return this._validarPropuesta(this._parse(resp));
-  }
-
-  // ── FUZZY: extrae el JSON del completado (tolera fences ```json y texto) ──
-  _parse(resp) {
-    let c = resp?.data?.content ?? resp?.content ?? resp?.data?.text ?? resp?.text ?? resp?.data?.message ?? '';
-    if (c && typeof c === 'object' && c.modelo) return c;
-    if (typeof c !== 'string') return null;
-    c = c.replace(/```json/gi, '').replace(/```/g, '').trim();
-    const i = c.indexOf('{'), j = c.lastIndexOf('}');
-    if (i < 0 || j < 0 || j < i) return null;
-    try { return JSON.parse(c.slice(i, j + 1)); } catch { return null; }
-  }
-
-  // Validador de contrato: modelo valido + razon presente; nunca suelta un modelo invalido.
-  _validarPropuesta(o) {
-    const modelos = ['suscripcion', 'empresa', 'transaccional', 'abierto'];
-    if (!o || !o.modelo || !modelos.includes(o.modelo)) return null;
-    // Solo usa precios numericos validos si vienen del LLM; si no, lo marca provisional.
-    const precio = (typeof o.precio_sugerido_eur === 'number' && o.precio_sugerido_eur >= 0)
-      ? this._round(o.precio_sugerido_eur, 2) : null;
-    return {
-      modelo: o.modelo,
-      razon: (typeof o.razon === 'string' && o.razon.trim()) ? o.razon.trim() : 'modelo razonado para este nicho',
-      precio_sugerido_eur: precio,
-      provisional: precio === null
-    };
-  }
-
-  // ── REFLEJO (fallback determinista): propuesta derivada de la evidencia, nunca inventa ──
-  _redactarReflejo(nicho, estructura, provisional) {
-    const nombres = nicho.producto || nicho.servicio || nicho.nombre || nicho.id || 'el nicho';
-    const base = `Para ${nombres} el modelo de cobro recomendado es ${estructura.modelo}: encaja con su tipo de entrega.`;
-    if (provisional) {
-      return {
-        modelo: estructura.modelo,
-        razon: `${base} Aun sin precio confirmado, queda provisional y lo confirma el gate E2 con la evidencia de disposicion a pagar.`,
-        precio_sugerido_eur: null,
-        provisional: true
-      };
-    }
-    return {
-      modelo: estructura.modelo,
-      razon: `${base} Precio sugerido de ${estructura.precio_sugerido_eur} EUR, derivado de la disposicion a pagar observada.`,
-      precio_sugerido_eur: estructura.precio_sugerido_eur,
-      provisional: false
-    };
   }
 }
 

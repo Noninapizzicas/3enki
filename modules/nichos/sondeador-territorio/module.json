@@ -9,7 +9,7 @@
   },
   "publishes": [
     { "event": "nichos.candidato.detectado", "description": "PULSO fire-and-forget: un candidato a nicho fue detectado en el sondeo. Payload: {id_nicho, titulo, territorio, senal, evidencia[], timestamp}." },
-    { "event": "nichos.sondeo.completado", "description": "PULSO fire-and-forget: el sondeo de un territorio se completo. Payload: {id_nicho, candidatos_total, timestamp}." },
+    { "event": "nichos.sondeo.completado", "description": "PULSO fire-and-forget: el sondeo de un territorio se completo. Payload: {id_nicho, candidatos_total, candidatos, correlation_id, project_id, timestamp}. `candidatos` + `correlation_id` los exige el orquestador para encadenar el batch de validacion." },
     { "event": "nichos.sondeo.failed", "description": "PULSO fire-and-forget: el sondeo fallo. Payload: {id_nicho, razon_codigo, detalle, timestamp}." },
     { "event": "nichos.territorio.sondear.response", "description": "Response correlada por request_id al RPC nichos.territorio.sondear.request. Payload: {status, data:{candidatos[]|solicitud_decision}}." },
     { "event": "nichos.reglas.exclusion.consultar.request", "description": "RPC hacia reglas de exclusion: consulta exclusiones vigentes. Payload: {request_id, project_id}." },

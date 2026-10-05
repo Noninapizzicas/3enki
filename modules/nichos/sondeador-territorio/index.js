@@ -38,6 +38,7 @@ class SondeadorTerritorio extends ModuloHibridoReflejo {
     if (!input.semilla_normalizada) return this._invalid('semilla_normalizada');
 
     const projectId = input.project_id;
+    const correlationId = input.correlation_id;
     const semilla = input.semilla_normalizada;
     const territorio = semilla.territorio || semilla.nombre || String(semilla);
     const id_nicho = semilla.id_nicho || `sondeo-${Date.now()}`;
@@ -88,9 +89,15 @@ class SondeadorTerritorio extends ModuloHibridoReflejo {
       }
 
       // PULSO: sondeo completado.
+      // Lleva `candidatos` + `correlation_id` porque el orquestador
+      // (onSondeoCompletado) los exige para disparar el batch de validacion.
+      // Sin ellos, la cadena moría aquí (sondeo OK, validacion nunca arrancaba).
       this.eventBus?.publish('nichos.sondeo.completado', {
         id_nicho,
         candidatos_total: candidatos.length,
+        candidatos,
+        correlation_id: correlationId || null,
+        project_id: projectId || null,
         timestamp: ts
       });
 

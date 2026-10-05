@@ -623,7 +623,7 @@ if [ -f "${INSTALL_DIR}/frontend/package.json" ]; then
     log "Construyendo frontend..."
     cd "${INSTALL_DIR}/frontend"
     npm install --silent 2>/dev/null
-    npm run build 2>&1 || warn "Frontend build falló"
+    NODE_OPTIONS="--max-old-space-size=4096" npm run build 2>&1 || warn "Frontend build falló"
     log "Frontend construido en frontend/build/"
     cd "${INSTALL_DIR}"
 fi

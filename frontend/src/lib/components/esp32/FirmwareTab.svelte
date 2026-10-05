@@ -213,21 +213,24 @@
       <div class="ota-form">
         <h3 class="form-title">Enviar OTA</h3>
         <div class="form-row">
-          <label class="form-label">Device ID</label>
-          <input class="input" bind:value={otaDeviceId} placeholder="esp32-cocina-01" />
+          <label class="form-label">Device ID
+            <input class="input" bind:value={otaDeviceId} placeholder="esp32-cocina-01" />
+          </label>
         </div>
         <div class="form-row">
-          <label class="form-label">Tipo firmware</label>
-          <select class="input" bind:value={otaType}>
-            <option value="">— selecciona —</option>
-            {#each firmwareTypes as fw}
-              <option value={fw.type}>{fw.type} (v{fw.latest})</option>
-            {/each}
-          </select>
+          <label class="form-label">Tipo firmware
+            <select class="input" bind:value={otaType}>
+              <option value="">— selecciona —</option>
+              {#each firmwareTypes as fw}
+                <option value={fw.type}>{fw.type} (v{fw.latest})</option>
+              {/each}
+            </select>
+          </label>
         </div>
         <div class="form-row">
-          <label class="form-label">Version (vacio = latest)</label>
-          <input class="input" bind:value={otaVersion} placeholder="2.2.0" />
+          <label class="form-label">Version (vacio = latest)
+            <input class="input" bind:value={otaVersion} placeholder="2.2.0" />
+          </label>
         </div>
         <div class="form-actions">
           <button class="btn-cancel" on:click={() => showOtaForm = false}>Cancelar</button>

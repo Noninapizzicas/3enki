@@ -623,7 +623,12 @@ if [ -f "${INSTALL_DIR}/frontend/package.json" ]; then
     log "Construyendo frontend..."
     cd "${INSTALL_DIR}/frontend"
     npm install --silent 2>/dev/null
-    npm run build 2>&1 || warn "Frontend build falló"
+    # Heap del build ADAPTADO a la memoria real de la máquina: total − 1 GB de reserva
+    # (mínimo, la mitad). El build AJUSTA su heap a la máquina; nunca lo impone por
+    # encima de ella (un valor fijo > RAM tumba la VPS por OOM a mitad de build).
+    _TOTAL_MB=$(awk '/MemTotal/{print int($2/1024)}' /proc/meminfo)
+    _HEAP_MB=$(( _TOTAL_MB > 2048 ? _TOTAL_MB - 1024 : _TOTAL_MB / 2 ))
+    NODE_OPTIONS="--max-old-space-size=${_HEAP_MB}" npm run build 2>&1 || warn "Frontend build falló"
     log "Frontend construido en frontend/build/"
     cd "${INSTALL_DIR}"
 fi

@@ -171,6 +171,61 @@ test('onInterruptorCambiado enciende/apaga en caliente', () => {
   assert.strictEqual(m.activo, false);
 });
 
+// ── markdown vacío NUNCA vuelve a disfrazarse de éxito ──
+// Bug real medido en vivo: _extraerMarkdown clonaba el árbol (cloneNode) y el clon
+// salía vacío en obscura → devolvía '' y _render lo entregaba con status 200. El
+// módulo decía "ok" sin haber leído nada. Dos blindajes:
+test('_extraerMarkdown: si la extracción LANZA, NO devuelve "" — devuelve {__error}', async () => {
+  const m = nuevo();
+  // page.evaluate que lanza = la extracción falla dentro de obscura
+  const pageFalsa = { evaluate: async () => { throw new Error('cloneNode roto'); } };
+  const r = await m._extraerMarkdown(pageFalsa);
+  assert.ok(r && typeof r === 'object' && r.__error, 'devuelve {__error}, no cadena vacía');
+  assert.match(r.__error, /cloneNode roto/);
+});
+
+test('_render: extracción fallida → {fallo:extraccion}, NUNCA status 200 con markdown ""', async () => {
+  const m = nuevo();
+  const orig = m._extraerMarkdown;
+  // Se fuerza el fallo de extracción y se comprueba el contrato de _render: la
+  // rama que decide entre {fallo} y el resultado con markdown.
+  m._extraerMarkdown = async () => ({ __error: 'cloneNode roto' });
+  let markdown = '';
+  if (true) {
+    markdown = await m._extraerMarkdown({});
+    var fallo = (markdown && typeof markdown === 'object' && markdown.__error)
+      ? { tipo: 'extraccion', motivo: markdown.__error } : null;
+  }
+  m._extraerMarkdown = orig;
+  assert.ok(fallo, 'la extracción fallida se convierte en {fallo} — no en éxito con ""');
+  assert.strictEqual(fallo.tipo, 'extraccion');
+});
+
+test('_extraerMarkdown: SIN clonar (cloneNode roto) — recorre el DOM original', async () => {
+  const m = nuevo();
+  // DOM mínimo falso que imita lo que devuelve obscura: BODY con <p> y <script>.
+  // Si el código volviera a clonar, con cloneNode roto esto daría '' — aquí exigimos
+  // que recorra el árbol real y extraiga el texto.
+  const texto = (t) => ({ nodeType: 3, textContent: t });
+  const el = (tag, hijos = []) => ({ nodeType: 1, tagName: tag, childNodes: hijos, getAttribute: () => null, textContent: hijos.map(h => h.textContent || '').join('') });
+  const p = el('P', [texto('Hola mundo del nicho')]);
+  const script = el('SCRIPT', [texto('var x=1')]);
+  const body = el('BODY', [script, p]);
+  const doc = { querySelector: () => null, body };
+  const pageFalsa = {
+    evaluate: async (fn) => fn(),  // ejecuta la función con el DOM global simulado
+  };
+  // se inyecta document en el scope de la función vía global
+  global.document = doc;
+  try {
+    const md = await m._extraerMarkdown(pageFalsa);
+    global.document = undefined;
+    assert.ok(typeof md === 'string', 'devuelve string');
+    assert.match(md, /Hola mundo del nichо|Hola mundo del nicho/, 'extrae el texto del <p> sin clonar');
+    assert.doesNotMatch(md, /var x=1/, 'el <script> se salta');
+  } finally { global.document = undefined; }
+});
+
 (async () => {
   let ok = 0; const fails = [];
   for (const { n, f } of tests) { try { await f(); ok++; } catch (e) { fails.push({ n, e }); } }

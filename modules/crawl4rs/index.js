@@ -321,8 +321,16 @@ class Crawl4rsModule extends ModuloHibridoReflejo {
       }
 
       let resp;
-      try { resp = await page.goto(url, { waitUntil: 'load', timeout: this._timeoutMs }); }
-      catch (e) { return { fallo: { tipo: /timeout/i.test(e.message) ? 'timeout' : 'nav', motivo: e.message } }; }
+      // Navegación robusta: 'load' espera TODOS los recursos y en páginas pesadas
+      // expira (medido: 1 de 3 fallos con timeout de 30s). 'domcontentloaded' basta
+      // para extraer: el markdown se lee del DOM, no de la red. Si aun así expira,
+      // se reintenta UNA vez antes de declarar el fallo.
+      const nav = { waitUntil: 'domcontentloaded', timeout: this._timeoutMs };
+      try { resp = await page.goto(url, nav); }
+      catch (e1) {
+        try { resp = await page.goto(url, nav); }
+        catch (e2) { return { fallo: { tipo: /timeout/i.test(e2.message) ? 'timeout' : 'nav', motivo: e2.message } }; }
+      }
 
       // localStorage best-effort tras estar en el origen
       if (ss && Array.isArray(ss.origins)) {
@@ -343,15 +351,24 @@ class Crawl4rsModule extends ModuloHibridoReflejo {
       const html = await page.content().catch(() => '');
       const enlaces = await this._extraerEnlaces(page);
       let markdown = '';
-      if (!opts.soloEnlaces) markdown = await this._extraerMarkdown(page);
-      // extracción CSS opcional (selector → texto)
+      if (!opts.soloEnlaces) {
+        markdown = await this._extraerMarkdown(page);
+        // La extracción puede devolver {__error} si falló dentro de obscura. Eso NO
+        // es un markdown vacío legítimo: se reporta como fallo medido (antes se
+        // tragaba y la página salía con status 200 y markdown '' — mentira).
+        if (markdown && typeof markdown === 'object' && markdown.__error) {
+          return { fallo: { tipo: 'extraccion', motivo: markdown.__error } };
+        }
+      }
+      // extracción CSS opcional (selector → texto) — textContent primero: el nodo
+      // puede estar fuera del flujo de render y innerText devolvería ''.
       let extraido = null;
       if (opts.extract_css && Object.keys(opts.extract_css).length) {
         extraido = await page.evaluate((mapa) => {
           const out = {};
           for (const [clave, sel] of Object.entries(mapa)) {
             const el = document.querySelector(sel);
-            out[clave] = el ? (el.innerText || el.textContent || '').trim() : null;
+            out[clave] = el ? (el.textContent || el.innerText || '').trim() : null;
           }
           return out;
         }, opts.extract_css).catch(() => null);
@@ -441,30 +458,38 @@ class Crawl4rsModule extends ModuloHibridoReflejo {
       return await page.evaluate(() => {
         const raiz = document.querySelector('article, main, [role="main"]') || document.body;
         if (!raiz) return '';
-        const clon = raiz.cloneNode(true);
-        for (const sel of ['script', 'style', 'noscript', 'nav', 'header', 'footer', 'aside', 'svg', 'form']) {
-          for (const el of clon.querySelectorAll(sel)) el.remove();
-        }
+        // NO se clona el árbol: `cloneNode(true)` está ROTO en este motor (medido en
+        // obscura: un BODY con 11 hijos clona a 2 nodos sueltos → clon vacío →
+        // markdown ''). Se recorre el DOM ORIGINAL y se SALTAN los nodos que el clon
+        // intentaba quitar (script/style/nav/...). Mismo resultado, sin clonar.
+        const SALTAR = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'NAV', 'HEADER', 'FOOTER', 'ASIDE', 'SVG', 'FORM']);
+        const texto = (el) => (el.textContent || '').replace(/\s+/g, ' ').trim();
         const out = [];
         const md = (el) => {
           for (const n of el.childNodes) {
             if (n.nodeType === 3) { const t = n.textContent.replace(/\s+/g, ' '); if (t.trim()) out.push(t); continue; }
             if (n.nodeType !== 1) continue;
-            const tag = n.tagName.toLowerCase();
-            if (/^h[1-6]$/.test(tag)) { out.push('\n\n' + '#'.repeat(+tag[1]) + ' ' + n.innerText.trim() + '\n'); continue; }
-            if (tag === 'p') { out.push('\n\n' + n.innerText.trim() + '\n'); continue; }
-            if (tag === 'li') { out.push('\n- ' + n.innerText.trim()); continue; }
-            if (tag === 'br') { out.push('\n'); continue; }
-            if (tag === 'a' && n.getAttribute('href')) { const t = n.innerText.trim(); if (t) out.push(`[${t}](${n.href})`); continue; }
-            if (tag === 'pre' || tag === 'code') { out.push('\n\n```\n' + n.innerText + '\n```\n'); continue; }
-            if (tag === 'img' && n.getAttribute('src')) { out.push(`![${n.alt || ''}](${n.src})`); continue; }
+            const tag = n.tagName;
+            if (SALTAR.has(tag)) continue;
+            const lc = tag.toLowerCase();
+            if (/^h[1-6]$/.test(lc)) { const t = texto(n); if (t) out.push('\n\n' + '#'.repeat(+lc[1]) + ' ' + t + '\n'); continue; }
+            if (lc === 'p') { const t = texto(n); if (t) out.push('\n\n' + t + '\n'); continue; }
+            if (lc === 'li') { const t = texto(n); if (t) out.push('\n- ' + t); continue; }
+            if (lc === 'br') { out.push('\n'); continue; }
+            if (lc === 'a' && n.getAttribute('href')) { const t = texto(n); if (t) out.push(`[${t}](${n.href})`); continue; }
+            if (lc === 'pre' || lc === 'code') { out.push('\n\n```\n' + (n.textContent || '').trim() + '\n```\n'); continue; }
+            if (lc === 'img' && n.getAttribute('src')) { out.push(`![${n.alt || ''}](${n.src})`); continue; }
             md(n);
           }
         };
-        md(clon);
+        md(raiz);
         return out.join(' ').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
       });
-    } catch (_) { return ''; }
+    } catch (e) {
+      // NO se traga el error: si la extracción falla, el fallo se propaga para que
+      // _render lo reporte. Un markdown vacío NUNCA vuelve a disfrazarse de éxito.
+      return { __error: (e && e.message) || String(e) };
+    }
   }
 
   // ── buscar en SearXNG (JSON API). Overridable en test. ──

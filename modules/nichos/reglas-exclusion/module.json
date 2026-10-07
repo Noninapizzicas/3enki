@@ -1,0 +1,15 @@
+{
+  "_doc": "Manifest de nichos/reglas-exclusion — MICRO-AGENTE FUZZY (B2): la celula que aprende a FILTRAR. Recibe los candidatos que sondeo-territorio (B1) detecto (signals de demanda) y decide si se EXCLUYEN o pasan, descartando los falsos positivos que no interesan (por experiencia previa - memorias de corridas reales/memoria-nicho, por criterio del dueño o por patrones de demanda muy baja). Parte FUZZY (_aprenderDeCorridas, juicio LLM via llm.complete.request con guion-prompt self-contained que deriva REGLAS de exclusion de las corridas reales) + parte REFLEJO determinista (_aprenderDeCorridasReflejo: reusa la firma de cada falso positivo previo como regla de exclusion, regla de señal minima, reglas explicitas del dueño) + _aplicar (proyeccion reflejo pura: cruza el candidato contra las reglas y emite excluido:bool + motivo + regla). NUNCA decide solo sin base: solo excluye lo que una regla (aprendida, declarada o de señal) justifica; sin reglas, el candidato pasa. Publica nichos.candidato.excluido (que se descarta y por que -> cola-candidatos L2) y nichos.reglas.excluir.failed cuando el candidato llega malformed o vacio. Sin store, sin custodio: entra candidato + historial/reglas, sale veredicto de exclusion.",
+  "name": "reglas-exclusion",
+  "version": "0.1.0",
+  "description": "Micro-agente fuzzy (B2): afina y aplica las reglas de exclusion que descartan señales/candidatos que no interesan. Recibe candidatos del sondeo-territorio, aprende reglas de las corridas reales (falso positivos previos + criterio del dueño) y emite que se descarta y por que, publicando nichos.candidato.excluido para la cola-candidatos (L2).",
+  "language": "es",
+  "subscribes": [
+    { "event": "nichos.reglas.excluir.request", "handler": "onExcluirRequest", "description": "RPC hibrido: {project_id, candidato, historial?, reglas?} → {project_id, candidato, excluido:bool, motivo, regla, reglas:{explicitas, aprendidas, total}}. Aplica/actualiza las reglas de exclusion: la parte fuzzy (_aprenderDeCorridas via llm.complete.request) deriva reglas de las corridas reales (memorias de falsos positivos/memoria-nicho); el reflejo determinista reusa la firma de cada falso positivo previo y las reglas explicitas del dueño + umbral de señal. _aplicar cruza el candidato contra las reglas → excluido:bool, motivo y regla que lo descarto. Candidato vacio/malformed → error determinista nichos.reglas.excluir.failed. Exito → publica nichos.candidato.excluido y responde por nichos.reglas.excluir.response."
+    }
+  ],
+  "publishes": [
+    { "event": "nichos.candidato.excluido", "description": "Fire-and-forget (B2): la aplicacion de reglas de exclusion termino → {project_id, candidato, excluido:bool, motivo, regla}. Emite que se descarta y por que. Lo consumen la cola-candidatos (L2) - que no encola lo excluido - y el pipeline-por-nicho (L1)." },
+    { "event": "nichos.reglas.excluir.failed", "description": "Par de fallo determinista (B2): el candidato llego vacio o malformed (sin señal identifcable del candidato a excluir) → {status, code, mensaje, data}. Cierra el circulo de nichos.reglas.excluir.request." }
+  ]
+}

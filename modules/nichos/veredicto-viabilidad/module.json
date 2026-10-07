@@ -1,0 +1,24 @@
+{
+  "_doc": "Manifest de nichos/veredicto-viabilidad — MICRO-AGENTE HIBRIDO (C3): el juicio asistido del ESLABON LIMITANTE (validacion, embudo C). Recibe el ESTUDIO DE DEMANDA ya medido (estudio-demanda C1, nichos.estudio.medido) y el CRITERIO DE VIABILIDAD vigente (criterio-viabilidad C2, umbral de ingresos y minimos de demanda) y decide por candidato VIABLE | NO_VIABLE | PUENTE. VIABLE: la demanda medida alcanza el criterio (entra al tramo caro con control). NO_VIABLE: la demanda no alcanza el criterio (el corte DURO lo aplica C6 corte-temprano, NO este agente; un NO_VIABLE NUNCA avanza a construccion). PUENTE: sin criterio declarado o sin datos suficientes no se asume viable, se sube a decision humana (D2/K2). HIBRIDO: la parte REFLEJO (_evaluarReflejo: numeros declarados deterministas que contrastan el estudio de la demanda_1er_orden y disposicion_pagar contra el umbral/minimos vigentes y derivan el veredicto base) + la parte FUZZY (_concluir: juicio LLM via llm.complete.request con guion-prompt self-contained que refina el veredicto en JSON tipado). Si el LLM falla o no valida, el reflejo determinista asegura el veredicto (no rompe el embudo). NUNCA inventa: si el estudio viene vacio falla honesto (nichos.veredicto.evaluar.failed); sin criterio declarado emite PUENTE con motivo explicito. Publica nichos.veredicto.emitido (-> corte-temprano y pipeline). Sin store, sin custodio: entra estudio+criterio, sale veredicto.",
+  "name": "veredicto-viabilidad",
+  "version": "0.1.0",
+  "description": "Micro-agente hibrido (C3): recibe el estudio de demanda (C1) y el criterio de viabilidad vigente (C2) y decide por candidato VIABLE | NO_VIABLE | PUENTE con confianza y motivo. Reflejo por reglas (_evaluarReflejo) con juicio fuzzy asistido y fallback determinista; el corte DURO NO_VIABLE->CORTADO lo aplica C6, nunca este agente. Publica nichos.veredicto.emitido; nichos.veredicto.evaluar.failed cuando el estudio viene vacio.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "nichos.veredicto.evaluar.request",
+      "handler": "onEvaluarRequest",
+      "description": "RPC hibrido: {project_id, estudio:{demanda_1er_orden, disposicion_pagar, candidato}, criterio:{umbral_ingresos, minimos_demanda}} → {candidato, estudio, criterio, veredicto:VIABLE|NO_VIABLE|PUENTE, confianza, motivo}. Evalua la demanda medida contra el criterio vigente (reflejo por numeros) y refina el veredicto con juicio fuzzy (llm.complete.request con fallback reflejo). Estudio vacio → error determinista nichos.veredicto.evaluar.failed; sin criterio declarado → veredicto PUENTE con motivo (no asume viable). Exito → publica nichos.veredicto.emitido y responde por nichos.veredicto.evaluar.response."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "nichos.veredicto.emitido",
+      "description": "Fire-and-forget (C3): el veredicto de viabilidad de un candidato quedo emitido → {project_id, candidato, estudio, criterio, veredicto:VIABLE|NO_VIABLE|PUENTE, confianza, motivo, emitido}. Lo consumen corte-temprano (C6) y el pipeline-por-nicho (L1). Un NO_VIABLE no avanza a construccion: lo corta C6."
+    },
+    {
+      "event": "nichos.veredicto.evaluar.failed",
+      "description": "Par de fallo determinista (C3): el estudio llego vacio o no es un objeto util → {status, code, mensaje, data}. Cierra el circulo de nichos.veredicto.evaluar.request."
+    }
+  ]
+}

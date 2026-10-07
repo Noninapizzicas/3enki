@@ -1,0 +1,17 @@
+{
+  "_doc": "Manifest de nichos/manejo-fallo — PUENTE STATELESS (L3, hoja del plan): reintento MECANICO del ciclo hasta un maximo [ABIERTO] ANTES de escalar a humano. Gestiona el fallo del pipeline (recibe nichos.canal.envio_fallido o RPC directo) e intenta reintento; si se agota la alternativa o el fallo no es reintentable, DERIVA a puente humano (D2) por EVENTO con paquete cerrado (SolicitudDecision). Sin persistencia (solo contadores en memoria): comunica con el exterior por evento (canal-supervision G1 / puente-humano D2), nunca con un vendor concreto. Publica nichos.fallo_manejado; par determinista nichos.fallo.manejar.failed.",
+  "name": "manejo-fallo",
+  "version": "0.1.0",
+  "description": "Puente stateless (L3): reintento mecanico del fallo del pipeline [ABIERTO]; sin alternativa → deriva a puente humano (D2) por evento; publica nichos.fallo_manejado.",
+  "language": "es",
+  "subscribes": [
+    { "event": "nichos.fallo.manejar.request", "handler": "onManejarRequest", "description": "RPC puro: {project_id, fallo} → reintento mecanico o deriva a puente humano. Fallo falta/invalido o project_id faltante → error determinista nichos.fallo.manejar.failed. Exito → publica nichos.fallo_manejado (+ nichos.puente_solicitado si escala a humano) y responde por nichos.fallo.manejar.response." },
+    { "event": "nichos.canal.envio_fallido", "handler": "onEnvioFallido", "description": "Fire-and-forget (canal-supervision G1): un envio del canal fallo → el puente lo maneja (reintento mecanico o deriva a humano). Publica nichos.fallo_manejado o nichos.fallo.manejar.failed." },
+    { "event": "project.activated", "handler": "onProjectActivated", "description": "Puente sin estado: solo registra el proyecto activo para enriquecer los fallos derivados." }
+  ],
+  "publishes": [
+    { "event": "nichos.fallo_manejado", "description": "Fire-and-forget (L3): un fallo del ciclo fue tramitado → {project_id, fallo_id, reintentado, intento, max_reintentos, resolucion:'REINTENTO_MECANICO'|'PUENTE_HUMANO'}. Reintento mecanico ANTES de escalar a humano." },
+    { "event": "nichos.puente_solicitado", "description": "Fire-and-forget (L3→D2): el fallo no se resolvio por reintento mecanico → se deriva a puente humano con paquete cerrado (SolicitudDecision). Lo consume cola-decisiones-gate (K2) y lo entrega canal-supervision (G1)." },
+    { "event": "nichos.fallo.manejar.failed", "description": "Par de fallo determinista (L3): el fallo no pudo tramitarse (fallo faltante/invalido o project_id faltante) → {status, code, mensaje, data}. Cierra el ciclo de nichos.fallo.manejar.request." }
+  ]
+}

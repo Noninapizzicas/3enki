@@ -1,0 +1,29 @@
+{
+  "_doc": "Manifest de nichos/canal-distribucion — PUENTE STATELESS (E4): lleva la SOLUCION construida al pagador del nicho por su canal de entrega declarado (del perfil de cobro/entrega I1). Stateless: sin store, sin persistencia, cada op entra objeto, sale objeto. El canal declarado es un PUERTO ABIERTO — agnostico al proveedor: nunca se acopla a una plataforma de entrega concreta; el canal se declara y puede sustituirse por evento. Proyeccion pura _emitirEntrega(project_id, solucion, canal, pagador) -> entrega que enruta hacia el canal del pagador. Publica nichos.entrega.enviada (exito) y su par determinista nichos.entrega.enviar.failed (sin canal, sin solucion o sin pagador).",
+  "name": "canal-distribucion",
+  "version": "0.1.0",
+  "description": "Puente stateless de nichos (E4): lleva la solución construida al pagador del nicho por su canal de entrega declarado (puerto abierto, agnóstico al proveedor). Publica nichos.entrega.enviada y su par de fallo. Sin persistencia.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "nichos.entrega.enviar.request",
+      "handler": "onEnviarRequest",
+      "description": "RPC puro: {project_id, solucion, canal, pagador} → {project_id, entrega:{proyecto, pagador, canal, solucion_id, entregada, entregado_en}, enviada:true}. Enruta la solución hacia el canal del pagador (del perfil de cobro/entrega I1). Sin canal, sin solución o sin pagador → nichos.entrega.enviar.failed. Éxito → publica nichos.entrega.enviada y responde por nichos.entrega.enviar.response."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Puente sin estado: registra el project_id activo para scope del contexto; no persiste nada."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "nichos.entrega.enviada",
+      "description": "Fire-and-forget (E4): la solución fue entregada al pagador por su canal → {project_id, entrega:{pagador, canal, solucion_id, entregada, entregado_en}, enviada:true}. Lo consumen el pipeline-por-nicho (L1) y registro-cobros/confirmacion-valor."
+    },
+    {
+      "event": "nichos.entrega.enviar.failed",
+      "description": "Par de fallo determinista (E4): entrega rechazada (sin canal, sin solución o sin pagador) → {status, code, message, data}. Cierra el círculo de nichos.entrega.enviar.request."
+    }
+  ]
+}

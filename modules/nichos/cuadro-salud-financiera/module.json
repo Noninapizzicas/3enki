@@ -1,0 +1,48 @@
+{
+  "_doc": "Manifest de nichos/cuadro-salud-financiera — CUSTODIO CON PERSISTENCIA (F3, hoja del plan). Declara GENERA|SANGRA|NEUTRO + flujo a caja por proyecto, calculado de hechos (F1 cobros + F2 costes), nunca de promesas. Un solo escritor del store: el flujo F1/F2 consume y este cuadro agrega por proyecto (guard rol SISTEMA_SALUD). Lo persiste via PosPersistencia (_shared/pos-persistencia, storage /prisma/nichos/cuadro-salud-financiera.json), restaura en project.activated y vuelca en onUnload. Proyecciones _agregarPorProyecto(cobros,costes)->GENERA|SANGRA|NEUTRO (reflejo, medida maestra inalterable), _registrarFlujoACaja(nicho)->Flujo y _leer()->CuadroGlobal. Publica nichos.salud.actualizada / nichos.cuadro.flujo_a_caja (+ failed). Alimenta reglas-aprendidas (C7), alerta-sangria (F4), vista-portafolio (K1) y pulso-avance.",
+  "name": "cuadro-salud-financiera",
+  "version": "0.1.0",
+  "description": "Custodio (F3): cuadro de salud financiera por proyecto — GENERA | SANGRA | NEUTRO + flujo a caja, calculado de hechos (cobros F1 + costes F2), nunca de promesas. Persiste por proyecto vía PosPersistencia y alimenta reglas-aprendidas (C7) y el portafolio (K1).",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "nichos.salud.actualizar.request",
+      "handler": "onActualizarRequest",
+      "description": "RPC custodio: {project_id, rol:'SISTEMA_SALUD', cobros, costes} → {project_id, saludo, estado, flujo_a_caja}. Calcula el estado GENERA|SANGRA|NEUTRO con coste+cobro real y persiste el cuadro. Publica nichos.salud.actualizada y responde por nichos.salud.actualizar.response. Si rol inválido o datos inválidos → nichos.salud.actualizar.failed."
+    },
+    {
+      "event": "nichos.cuadro.leer.request",
+      "handler": "onLeerRequest",
+      "description": "RPC custodio: {project_id} → {project_id, cuadro}. Lee el CuadroGlobal del proyecto (estado, coste_total, ingresos, flujo_a_caja). La lectura no muta. Lo consume reglas-aprendidas (C7), alerta-sangria (F4) y vista-portafolio (K1)."
+    },
+    {
+      "event": "nichos.cobro_registrado",
+      "handler": "onCobroRegistrado",
+      "description": "Fire-and-forget (F3): registro-cobros (F1) asentó un cobro → {project_id, cobro}. Acumula el ingreso real del proyecto (caja) sin recalcular el estado completo. Publica nichos.salud.actualizada si el proyecto está activo."
+    },
+    {
+      "event": "nichos.coste_imputado",
+      "handler": "onCosteImputado",
+      "description": "Fire-and-forget (F3): imputacion-costes (F2) imputó el coste → {project_id, coste_proyecto}. Acumula el coste real del proyecto y recalcula el estado GENERA|SANGRA|NEUTRO. Publica nichos.salud.actualizada."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Restaura el cuadro de salud del proyecto activado desde el storage (PosPersistencia)."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "nichos.salud.actualizada",
+      "description": "Fire-and-forget (F3): estado de salud financiera del proyecto declarado → {project_id, estado:'GENERA'|'SANGRA'|'NEUTRO', coste_total, ingresos, flujo_a_caja}. Lo consumen reglas-aprendidas (C7), alerta-sangria (F4), vista-portafolio (K1) y pulso-avance."
+    },
+    {
+      "event": "nichos.cuadro.flujo_a_caja",
+      "description": "Fire-and-forget (F3): el flujo a caja del proyecto quedó registrado → {project_id, flujo_a_caja, periodo}. Complementa la medida maestra de salud financiera por proyecto."
+    },
+    {
+      "event": "nichos.salud.actualizar.failed",
+      "description": "Par de fallo determinista (F3): escritura rechazada (rol != SISTEMA_SALUD) o payload inválido → {status, code, message, data}. Cierra el círculo de nichos.salud.actualizar.request."
+    }
+  ]
+}

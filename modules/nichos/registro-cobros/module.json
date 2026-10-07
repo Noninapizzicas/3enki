@@ -1,0 +1,39 @@
+{
+  "_doc": "Manifest de nichos/registro-cobros — CUSTODIO CON PERSISTENCIA (F1, hoja del plan). Registro APPEND-ONLY e inmutable de los cobros EFECTIVO vs COMPROMETIDO asentados por proyecto. Un solo escritor del store: el MOTOR_COBRO (E3) asienta el cobro consumiendo nichos.cobro.ejecutado o por RPC registrar con rol MOTOR_COBRO (guard; second-writer rechazado). Cada cobro se apila, JAMAS se sobrescribe. Lo persiste via PosPersistencia (_shared/pos-persistencia, storage /prisma/nichos/registro-cobros.json), restaura en project.activated y vuelca en onUnload. Proyecciones _appendUnico(duenyoEscritor,cobro)->append-only y _consultar(nicho)->HistorialCobros. Publica nichos.cobro_registrado (+ nichos.cobro.registrar.failed). Alimenta la salud financiera (F3).",
+  "name": "registro-cobros",
+  "version": "0.1.0",
+  "description": "Custodio (F1): registro append-only e inmutable de cobros EFECTIVO vs COMPROMETIDO por proyecto. Un solo escritor (MOTOR_COBRO); cada cobro se apila y jamás se sobrescribe. Persiste por proyecto vía PosPersistencia y alimenta la salud financiera (F3).",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "nichos.cobro.registrar.request",
+      "handler": "onRegistrarRequest",
+      "description": "RPC custodio: {project_id, rol:'MOTOR_COBRO', cobro:{importe, tipo:'EFECTIVO'|'COMPROMETIDO', pagador}} → {project_id, cobro, registrado}. Guard Rol=MOTOR_COBRO (second-writer rechazado). Hace append-only (el cobro se apila, jamás sobrescribe), publica nichos.cobro_registrado y responde por nichos.cobro.registrar.response. Si rol inválido o payload inválido → nichos.cobro.registrar.failed."
+    },
+    {
+      "event": "nichos.cobro.ejecutado",
+      "handler": "onCobroEjecutado",
+      "description": "Fire-and-forget (F1): motor-cobro (E3) publica {project_id, cobro, duenyo:'MOTOR_COBRO'} tras ejecutar el cobro. Asienta append-only el cobro, publica nichos.cobro_registrado y, si el payload es inválido, nichos.cobro.registrar.failed. Cierra el círculo del flujo de cobro."
+    },
+    {
+      "event": "nichos.cobro.consultar.request",
+      "handler": "onConsultarRequest",
+      "description": "RPC custodio: {project_id} → {project_id, historial:[{...cobros}]}. Consulta el HistorialCobros del proyecto (append-only). La lectura no muta. Lo consume la salud financiera (F3) y el portafolio (K1)."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Restaura el historial de cobros del proyecto activado desde el storage (PosPersistencia)."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "nichos.cobro_registrado",
+      "description": "Fire-and-forget (F1): un cobro (EFECTIVO o COMPROMETIDO) quedó asentado append-only → {project_id, cobro, registrado:true}. Lo consume la salud financiera (F3) y reglas-aprendidas (C7) para recalibrar el umbral."
+    },
+    {
+      "event": "nichos.cobro.registrar.failed",
+      "description": "Par de fallo determinista (F1): asiento rechazado (rol != MOTOR_COBRO) o payload inválido → {status, code, message, data}. Cierra el círculo de nichos.cobro.registrar.request. Un cobro jamás se sobrescribe."
+    }
+  ]
+}

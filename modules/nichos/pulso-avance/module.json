@@ -1,0 +1,17 @@
+{
+  "_doc": "Manifest de nichos/pulso-avance — REFLEJO STATELESS (L5, hoja del plan): progreso del ciclo del nicho por ETAPA → escalon de pulso al supervisor. Calcula un % de avance determinista (0-100) segun la etapa de la maquina (SEMILLA→EN_CAJA|SANGRA|CORTADO) y lo traduce a un escalon (informa/urge/cierre) que escala a escalones-mensaje (G2) / canal-supervision (G1). Consume nichos.salud.actualizada (resultado real COBRÓ|SANGRA|NEUTRO) y nichos.pipeline.avanzado (etapa). Proyeccion pura determinista, sin store ni PosPersistencia. Publica nichos.pulso_emitido (+ failed).",
+  "name": "pulso-avance",
+  "version": "0.1.0",
+  "description": "Reflejo stateless (L5): progreso por etapa → escalon de pulso al supervisor; proyeccion pura determinista; publica nichos.pulso_emitido.",
+  "language": "es",
+  "subscribes": [
+    { "event": "nichos.pulso.emitir.request", "handler": "onEmitirRequest", "description": "RPC puro: {project_id, nicho, etapa} → calcula el % de avance y emite el pulso escalonado. Etapa no reconocida o project_id faltante → error determinista nichos.pulso.emitir.failed. Exito → publica nichos.pulso_emitido y responde por nichos.pulso.emitir.response." },
+    { "event": "nichos.pipeline.avanzado", "handler": "onPipelineAvanzado", "description": "Fire-and-forget (pipeline-por-nicho): la maquina avanzo a una etapa → emite pulso de avance al supervisor. Publica nichos.pulso_emitido o nichos.pulso.emitir.failed." },
+    { "event": "nichos.salud.actualizada", "handler": "onSaludActualizada", "description": "Fire-and-forget (cuadro-salud-financiera): el resultado real del nicho (COBRÓ|SANGRA|NEUTRO) → pulso de cierre. Publica nichos.pulso_emitido o nichos.pulso.emitir.failed." },
+    { "event": "project.activated", "handler": "onProjectActivated", "description": "Reflejo sin estado: solo registra el proyecto activo para enriquecer los pulsos." }
+  ],
+  "publishes": [
+    { "event": "nichos.pulso_emitido", "description": "Fire-and-forget (L5): avance del ciclo del nicho → {project_id, nicho, etapa, avance, escalon, prioridad, tipo, cuerpo, emitido}. Lo escala escalones-mensaje (G2) / canal-supervision (G1)." },
+    { "event": "nichos.pulso.emitir.failed", "description": "Par de fallo determinista (L5): la etapa no se reconoce o falta project_id → {status, code, mensaje, data}. Cierra el circulo de nichos.pulso.emitir.request." }
+  ]
+}

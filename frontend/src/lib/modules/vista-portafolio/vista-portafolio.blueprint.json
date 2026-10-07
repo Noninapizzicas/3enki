@@ -1,0 +1,37 @@
+{
+  "schema": "blueprint-interfaz-v1",
+  "id": "vista-portafolio",
+  "version": "blueprint-1.0.0",
+  "moduleId": "vista-portafolio",
+  "titulo": "Dashboard de salud financiera del portafolio de nichos (K1): el JEFE ve de un vistazo cuántos nichos GENERA / SANGRA / NEUTRO, cuántos están en caja y el estado de cada uno, sin mirar nicho a nicho. SOLO LECTURA: la vista la re-agrega y guarda el custodio por evento nichos.salud.actualizada y publica nichos.vista_portafolio; este panel la lee por RPC (leer) y se refresca con esa señal.",
+  "_doc": "Blueprint de INTERFAZ del modulo nichos/vista-portafolio (CUSTODIO CON PERSISTENCIA, K1). Declara SOLO la seccion `ui` para el generador schema→UI (BlueprintForm). El modulo real vive en modules/nichos/vista-portafolio/index.js (VistaPortafolio extends ModuloHibridoReflejo). Contrato verificado en codigo: RPC nichos.vista.leer.request -> onLeerRequest -> _leer -> {status:200, data:{project_id, vista:{esquema, total_nichos, en_caja, salud:{GENERA,SANGRA,NEUTRO}, por_estado:{}, actualizada_en}, dashboard_jefe:true}}. No hay operacion de escritura expuesta por el dueno (guarda por evento nichos.salud.actualizada -> onSaludActualizada -> publica nichos.vista_portafolio). ui_handler real del module.json: domain 'vista-portafolio', action 'leer', handler onLeerRequest, type system_panel, zone lateral_derecha. transporte.rpc VA VACIO a proposito: el dominio lleva GUION ('vista-portafolio') y la regex de deriveZones solo parsea dominios [a-z0-9_]+ (sin guion) — declarar aqui romperia el parser. El dominio real viaja por el campo moduleId del blueprint (bpModuleId) y por el prop moduleId del Panel.svelte.",
+  "eventos_publicados": [
+    "nichos.vista_portafolio"
+  ],
+  "eventos_que_escucho": [
+    "nichos.vista_portafolio"
+  ],
+  "transporte": {
+    "rpc": [],
+    "salida": [
+      "nichos.vista_portafolio"
+    ],
+    "qos": "publishAndWait (request/response correlado) en leer via ui/request/vista-portafolio/leer; señal fire-and-forget nichos.vista_portafolio (publicada por el custodio al re-agregar/guardar) refresca la zona DATOS y el estado vivo"
+  },
+  "ui": {
+    "ops": {
+      "leer": {
+        "titulo": "Ver portafolio",
+        "descripcion": "Lectura del DashboardJefe agregado (no muta): total de nichos, en caja, salud GENERA/SANGRA/NEUTRO y estado por nicho (por_estado). Devuelve {project_id, vista, dashboard_jefe:true}.",
+        "args": []
+      }
+    },
+    "datos": {
+      "op": "leer",
+      "titulo": "Portafolio de nichos (vista agregada)",
+      "refresh_on": [
+        "nichos.vista_portafolio"
+      ]
+    }
+  }
+}

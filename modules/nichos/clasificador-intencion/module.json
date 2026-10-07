@@ -1,0 +1,15 @@
+{
+  "_doc": "Manifest de nichos/clasificador-intencion — MICRO-AGENTE (G3, hoja del plan): clasifica el mensaje que llega del canal del dueno (via captura-semilla) en SEMILLA | DECISION | CONSULTA segun el lenguaje y la ambiguedad. Hibrido: pasada fuzzy (LLM, guion-prompt self-contained) para el juicio de lengua natural + fallback reflejo determinista por reglas si el LLM falla o no cumple el contrato. Sin store, sin custodio: entra objeto, sale objeto. Publica nichos.intencion.clasificada en exito; nichos.intencion.clasificar.failed cuando el mensaje es vacio/malformado o no se puede clasificar.",
+  "name": "clasificador-intencion",
+  "version": "0.1.0",
+  "description": "Micro-agente (G3): clasifica el mensaje del canal del dueno en SEMILLA|DECISION|CONSULTA segun lenguaje/ambiguedad; hibrido fuzzy con fallback reflejo determinista; publica nichos.intencion.clasificada.",
+  "language": "es",
+  "subscribes": [
+    { "event": "nichos.intencion.clasificar.request", "handler": "onClasificarRequest", "description": "RPC hibrido: {project_id, mensaje} → intento {tipo: SEMILLA|DECISION|CONSULTA, confianza, senales}. Fuzzy via llm.complete.request con guion; si el LLM falla o no cumple contrato, fallback reflejo por reglas (palabras/marcadores). Mensaje vacio o sin clasificar → error determinista (nichos.intencion.clasificar.failed). Exito → publica nichos.intencion.clasificada y responde por nichos.intencion.clasificar.response." },
+    { "event": "project.activated", "handler": "onProjectActivated", "description": "Micro-agente sin estado: registra el project_id activo para scope del contexto; no persiste nada." }
+  ],
+  "publishes": [
+    { "event": "nichos.intencion.clasificada", "description": "Fire-and-forget (G3): un mensaje del canal fue clasificado como SEMILLA|DECISION|CONSULTA → {project_id, mensaje, tipo, confianza, senales}. Lo consume captura-semilla (A1) y canal-supervision (G1) para enrutar la intencion." },
+    { "event": "nichos.intencion.clasificar.failed", "description": "Par de fallo determinista: el mensaje llego vacio/malformado o no pudo clasificarse → {status, code, mensaje}. Cierra el circulo de nichos.intencion.clasificar.request." }
+  ]
+}

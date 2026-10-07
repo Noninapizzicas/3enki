@@ -1,0 +1,34 @@
+{
+  "_doc": "Manifest de nichos/perfil-supervision — CUSTODIO CON PERSISTENCIA (H2, hoja del plan). Guarda el PERFIL DE SUPERVISION por proyecto: cadencia de pulso y limites declarables de la supervision del nicho (max_alertas_dia, techo_perdida_eur). Lo consumen el canal de supervision (G1) y el monitor/pulso para decidir cuando y como avisar al dueno. Un solo escritor: el DUEÑO (guard de rol); la lectura no muta. Persiste por proyecto via PosPersistencia (_shared/pos-persistencia, storage /prisma/nichos/perfil-supervision.json), restaura en project.activated y vuelca en onUnload. Publica nichos.supervision.declarado (+ nichos.supervision.declarar.failed si no es el DUEÑO o el perfil es invalido).",
+  "name": "perfil-supervision",
+  "version": "0.1.0",
+  "description": "Custodio (H2): store por proyecto del perfil de supervisión del nicho — cadencia de pulso (diaria|semanal|quincenal|tiempo_real) y límites (max_alertas_dia, techo_perdida_eur). Un solo escritor (DUEÑO); canal (G1) y monitor lo consumen. Persiste por proyecto vía PosPersistencia.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "nichos.supervision.leer.request",
+      "handler": "onLeerRequest",
+      "description": "RPC custodio: {project_id} → {project_id, perfil}. Lee el perfil de supervisión vigente del proyecto (cadencia_pulso, limites{max_alertas_dia, techo_perdida_eur}). La lectura no muta. Lo consumen el canal de supervisión (G1) y el monitor/pulso de nicho."
+    },
+    {
+      "event": "nichos.supervision.declarar.request",
+      "handler": "onDeclararRequest",
+      "description": "RPC custodio: {project_id, rol:'DUEÑO', perfil:{cadencia_pulso?, limites?}} → {project_id, perfil, declarado}. Guard Rol=DUEÑO (second-writer rechazado). Persiste el perfil, publica nichos.supervision.declarado y responde por nichos.supervision.declarar.response. Si no es DUEÑO o el perfil es inválido (cadencia no permitida, límites vacíos) → nichos.supervision.declarar.failed."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Restaura el perfil de supervisión del proyecto activado desde el storage (PosPersistencia)."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "nichos.supervision.declarado",
+      "description": "Fire-and-forget (H2): el DUEÑO declaró el perfil de supervisión → {project_id, perfil, declarado:true}. Lo consumen el canal de supervisión (G1) y el monitor/pulso (G2/escalones-mensaje) para aplicar la cadencia y límites vigentes."
+    },
+    {
+      "event": "nichos.supervision.declarar.failed",
+      "description": "Par de fallo determinista (H2): declaración rechazada (rol != DUEÑO) o perfil inválido → {status, code, message, data}. Cierra el círculo de nichos.supervision.declarar.request."
+    }
+  ]
+}

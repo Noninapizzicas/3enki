@@ -1,0 +1,49 @@
+{
+  "schema": "blueprint-interfaz-v1",
+  "id": "cola-decisiones-gate",
+  "version": "blueprint-1.0.0",
+  "moduleId": "cola-decisiones-gate",
+  "titulo": "Ventanilla única de decisiones del JEFE (K2): UNA sola cola de gates por resolver (gate de operar, puente humano, alerta de sangría). El jefe resuelve la siguiente en orden FIFO con APRUEBA / RECHAZA / EXPIRA. El sistema NUNCA resuelve solo: siempre es decisión del DUEÑO.",
+  "_doc": "Blueprint de INTERFAZ del modulo nichos/cola-decisiones-gate (CUSTODIO CON PERSISTENCIA, K2). Declara la seccion `ui` para BlueprintForm. Modulo real: modules/nichos/cola-decisiones-gate/index.js (ColaDecisionesGate extends ModuloHibridoReflejo). Contrato verificado en codigo: RPC nichos.gate.resolver.request -> onResolverRequest -> _resolverSiguiente -> payload REQUERIDO {project_id, rol:'DUEÑO', resolucion:'APRUEBA'|'RECHAZA'|'EXPIRA'} -> {project_id, solicitud, resolucion, restantes, resuelto:true}. Errores: 403 PERMISSION_DENIED (rol != DUEÑO), 404 COLA_VACIA, 400 resolucion invalida. ui_handler real: domain 'cola-decisiones-gate', action 'resolver', handler onResolverRequest. SEÑALES: nichos.gate_encolado / nichos.gate_resuelto. NOTA CRITICA: el modulo tiene onListarRequest (nichos.gate.listar.request) pero NO esta cableado a ui_handlers ni a subscribes del module.json — la lectura de la cola NO es alcanzable desde el frontend aun; por eso el panel declara SOLO la op de escritura `resolver`. El campo `rol` se declara como select de un solo valor 'DUEÑO' porque el BlueprintForm del repo NO tiene store/inyeccion de rol (solo inyecta project_id): es el guard single-writer del backend, no un dato de negocio elegible.",
+  "eventos_publicados": [
+    "nichos.gate_encolado",
+    "nichos.gate_resuelto"
+  ],
+  "eventos_que_escucho": [
+    "nichos.gate_encolado",
+    "nichos.gate_resuelto"
+  ],
+  "transporte": {
+    "rpc": [],
+    "salida": [
+      "nichos.gate_encolado",
+      "nichos.gate_resuelto"
+    ],
+    "qos": "publishAndWait (request/response correlado) en resolver via ui/request/cola-decisiones-gate/resolver; señales fire-and-forget nichos.gate_encolado / nichos.gate_resuelto"
+  },
+  "ui": {
+    "ops": {
+      "resolver": {
+        "titulo": "Resolver siguiente gate",
+        "descripcion": "Desencola y resuelve la solicitud en cabecera (FIFO). Solo el DUEÑO puede resolver: 403 si el rol no es DUEÑO, 404 si la cola está vacía, 400 si la resolución no es válida. Devuelve {project_id, solicitud, resolucion, restantes, resuelto:true}.",
+        "args": [
+          {
+            "nombre": "resolucion",
+            "tipo": "select",
+            "enum": ["APRUEBA", "RECHAZA", "EXPIRA"],
+            "required": true,
+            "descripcion": "Resolución del gate en cabecera: APRUEBA (da luz verde), RECHAZA (frena), EXPIRA (la deja caducar)."
+          },
+          {
+            "nombre": "rol",
+            "tipo": "select",
+            "enum": ["DUEÑO"],
+            "default": "DUEÑO",
+            "required": true,
+            "descripcion": "Rol single-writer del guard del backend (siempre DUEÑO). No es un dato de negocio: es el guard que exige el contrato; 403 si no es DUEÑO."
+          }
+        ]
+      }
+    }
+  }
+}

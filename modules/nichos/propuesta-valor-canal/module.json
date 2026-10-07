@@ -1,0 +1,15 @@
+{
+  "_doc": "Manifest de nichos/propuesta-valor-canal — MICRO-AGENTE (I2, hoja del plan): propone el COPY/POSICIONAMIENTO de como el nicho gana confianza y compra en su territorio. Se hidrata de los datos del canal (estudio-competencia y sondeo-territorio) y escribe el mensaje de propuesta de valor. Hibrido: pasada fuzzy (LLM, guion self-contained) para el juicio de copy + fallback reflejo determinista por plantilla cuando el LLM falla o no cumple el contrato. Sin store, sin custodio: entra objeto, sale objeto. Publica nichos.copy_propuesto en exito; nichos.copy.proponer.failed cuando falta el nicho o no se puede proponer.",
+  "name": "propuesta-valor-canal",
+  "version": "0.1.0",
+  "description": "Micro-agente (I2): propone el copy/propuesta de valor de un nicho para ganar confianza/compra en su territorio; hidratado por estudio-competencia y sondeo-territorio; hibrido fuzzy con fallback reflejo; publica nichos.copy_propuesto.",
+  "language": "es",
+  "subscribes": [
+    { "event": "nichos.copy.proponer.request", "handler": "onProponerRequest", "description": "RPC hibrido: {project_id, nicho} → propuesta {copy, posicionamiento, promesa, canal_target}. Fuzzy via llm.complete.request; fallback reflejo por plantilla si el LLM falla. Nicho vacio o sin datos de canal → error determinista (nichos.copy.proponer.failed). Exito → publica nichos.copy_propuesto y responde por nichos.copy.proponer.response." },
+    { "event": "project.activated", "handler": "onProjectActivated", "description": "Micro-agente sin estado: registra el project_id activo para scope del contexto; no persiste nada." }
+  ],
+  "publishes": [
+    { "event": "nichos.copy_propuesto", "description": "Fire-and-forget (I2): se propuso el copy/propuesta de valor para un nicho → {project_id, nicho, copy, posicionamiento, promesa, canal_target, propuesto}. Lo consume canal-distribucion (E4) y el pipeline-por-nicho (L1) para materializar el canal." },
+    { "event": "nichos.copy.proponer.failed", "description": "Par de fallo determinista: el nicho llego vacio o no hay datos de canal para proponer → {status, code, mensaje}. Cierra el circulo de nichos.copy.proponer.request." }
+  ]
+}

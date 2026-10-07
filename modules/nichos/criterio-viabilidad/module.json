@@ -1,0 +1,47 @@
+{
+  "_doc": "Manifest de nichos/criterio-viabilidad — CUSTODIO CON PERSISTENCIA (C2, hoja del plan). Pieza CENTRAL del eslabón limitante (embudo de validación): guarda el CRITERIO/UMBRAL DE VIABILIDAD declarable que decide qué nicho es viable. Almacena por proyecto: umbral_ingresos (base 50-300 EUR/semana), minimos_demanda (búsquedas y contactos por semana), disposicion_a_pagar, y el tipo/segmento de viabilidad ([ABIERTO]). Lo persiste via PosPersistencia (_shared/pos-persistencia, storage /prisma/nichos/criterio-viabilidad.json), restaura en project.activated y vuelca en onUnload. Un solo escritor del store: el DUEÑO declara el umbral (guard Rol=DUEÑO via K3); el bucle C7->C2 recalibra en caliente (nichos.umbral.recalibrado consume el delta y refina el umbral). Lo expone por lectura para que el veredicto de viabilidad (C3) lo consulte. Proyecciones _leer()->Criterio, _declarar(umbral) con guard, _recalibrar(delta)->umbral refinado. Publica nichos.criterio.declarado / nichos.criterio.recalibrado (+ pares de fallo). El corte DURO 'no viable no pasa' vive aquí + C6, nunca en el agente.",
+  "name": "criterio-viabilidad",
+  "version": "0.1.0",
+  "description": "Custodio (C2): store por proyecto del criterio/umbral de viabilidad declarable — umbral_ingresos (base 50-300 EUR/semana), mínimos de demanda, disposición a pagar y tipo de viabilidad. Pieza central del embudo; el DUEÑO declara (un solo escritor), el bucle C7 recalibra en caliente, y el veredicto (C3) lo consulta. Persiste por proyecto vía PosPersistencia.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "nichos.criterio.leer.request",
+      "handler": "onLeerRequest",
+      "description": "RPC custodio: {project_id} → {project_id, criterio}. Lee el criterio de viabilidad vigente del proyecto (umbral_ingresos, minimos_demanda, disposicion_a_pagar, tipo, recalibrado_por). La lectura no muta. Lo consume el veredicto de viabilidad (C3) antes de evaluar."
+    },
+    {
+      "event": "nichos.criterio.declarar.request",
+      "handler": "onDeclararRequest",
+      "description": "RPC custodio: {project_id, rol:'DUEÑO', criterio:{...}} → {project_id, criterio, declarado}. Guard Rol=DUEÑO (second-writer rechazado; canal K3). Persiste el umbral, publica nichos.criterio.declarado y responde por nichos.criterio.declarar.response. Si no es DUEÑO o el payload es inválido → nichos.criterio.declarar.failed."
+    },
+    {
+      "event": "nichos.umbral.recalibrado",
+      "handler": "onUmbralRecalibrado",
+      "description": "Fire-and-forget (bucle C7->C2): reglas-aprendidas publica {project_id, delta, resultado_real} tras un COBRÓ/SANGRA/NEUTRO. Recalibra el umbral del proyecto en caliente (refina umbral_ingresos/minimos con el delta), publica nichos.criterio.recalibrado y, si el delta es inválido, nichos.criterio.recalibrar.failed. Bucle de sistema autorizado; el siguiente lote evalúa contra el umbral refinado."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Restaura el criterio de viabilidad del proyecto activado desde el storage (PosPersistencia)."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "nichos.criterio.declarado",
+      "description": "Fire-and-forget (C2): el DUEÑO declaró el criterio/umbral de viabilidad → {project_id, criterio, declarado:true}. Lo consume el veredicto (C3) y el resto del embudo para aplicar el corte de viabilidad vigente."
+    },
+    {
+      "event": "nichos.criterio.declarar.failed",
+      "description": "Par de fallo determinista (C2): escritura rechazada (rol != DUEÑO) o payload inválido → {status, code, message, data}. Cierra el círculo de nichos.criterio.declarar.request."
+    },
+    {
+      "event": "nichos.criterio.recalibrado",
+      "description": "Fire-and-forget (C2): el bucle C7 recalibró el umbral en caliente → {project_id, criterio, recalibrado:true, delta}. El siguiente lote de C1/C3 evalúa contra el umbral refinado."
+    },
+    {
+      "event": "nichos.criterio.recalibrar.failed",
+      "description": "Par de fallo determinista (C2): recalibración rechazada (delta inválido) → {status, code, message, data}. Cierra el círculo de nichos.umbral.recalibrado."
+    }
+  ]
+}

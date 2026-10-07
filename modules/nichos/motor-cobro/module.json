@@ -1,0 +1,29 @@
+{
+  "_doc": "Manifest de nichos/motor-cobro — REFLEJO STATELESS (E3): ejecuta y registra el cobro del nicho sobre las plataformas DECLARADAS (agnostico al proveedor). Sin store, sin persistencia, cada op entra objeto, sale objeto; proyeccion pura determinista. Distingue EFECTIVO (el dinero entro: pagos directos) de COMPROMETIDO (promesa/suscripcion recurrente que genera flujo a caja futuro). Publica nichos.cobro.ejecutado (-> registro-cobros append-only) + par determinista nichos.cobro.ejecutar.failed. El pago-gateway (lider provider-agnostico) es el puerto reutilizable que se llama por RPC; el motor de NICHOS se construye encima del puerto, nunca acoplado al proveedor.",
+  "name": "motor-cobro",
+  "version": "0.1.0",
+  "description": "Reflejo stateless (E3): ejecuta y registra el cobro del nicho sobre las plataformas declaradas (agnóstico al proveedor); distingue EFECTIVO (dinero entrado) de COMPROMETIDO (promesa/suscripción). Publica nichos.cobro.ejecutado y su par de fallo. Sin store: proyección pura determinista.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "nichos.motor-cobro.ejecutar.request",
+      "handler": "onEjecutarRequest",
+      "description": "RPC puro: {project_id, importe, pagador, plataforma} → {project_id, cobro:{importe, pagador, plataforma, tipo:EFECTIVO|COMPROMETIDO, moneda, ejecutado_en}, ejecutado:true}. Ejecuta el cobro sobre la plataforma declarada (del perfil de cobro/entrega I1) de forma agnóstica al proveedor. Importe <= 0, pagador vacío o plataforma no declarada → nichos.cobro.ejecutar.failed. Éxito → publica nichos.cobro.ejecutado y responde por nichos.motor-cobro.ejecutar.response."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Reflejo sin estado: registra el project_id activo para scope del contexto; no persiste nada."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "nichos.cobro.ejecutado",
+      "description": "Fire-and-forget (E3): el cobro del nicho fue ejecutado sobre una plataforma declarada → {project_id, cobro:{importe, pagador, plataforma, tipo:EFECTIVO|COMPROMETIDO, moneda}, ejecutado:true}. Lo consume registro-cobros (F1) para asentarlo append-only y el pipeline-por-nicho (L1)."
+    },
+    {
+      "event": "nichos.cobro.ejecutar.failed",
+      "description": "Par de fallo determinista (E3): cobro rechazado (importe <= 0, pagador vacío o plataforma no declarada) → {status, code, message, data}. Cierra el círculo de nichos.motor-cobro.ejecutar.request."
+    }
+  ]
+}

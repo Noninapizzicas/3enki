@@ -1,0 +1,24 @@
+{
+  "_doc": "Manifest de nichos/batch-validacion — REFLEJO stateless (C5, hoja del plan). DESACOPLA el cuello de botella del sistema (embudo de validacion C): dado N candidatos de la cola (cola-candidatos L2), los REPARTE/PROCESA en un LOTE en PARALELO — no en serie. Cada candidato del lote pasa por estudio-demanda (C1, nichos.estudio.medir.request) y veredicto-viabilidad (C3, nichos.veredicto.evaluar.request) por RPC, y el batch agrega la List<Veredicto>. REFLEJO puro y determinista en la ORGANIZACION (_programar, _repartir en N grupos paralelos), aunque el juicio de cada item lo delega por RPC a los micro-agentes C1/C3 (el batch NO decide por si mismo: solo coordina). Stateless: sin estado, sin custodio. Si el lote viene vacio responde honesto (nichos.batch.programar.failed). Publica nichos.batch.lote_ejecutado.",
+  "name": "batch-validacion",
+  "version": "0.1.0",
+  "description": "Reflejo (C5): desacopla el cuello del embudo. Reparte/procesa un lote de candidatos de la cola (L2) en paralelo — no en serie —, corre estudio-demanda (C1) + veredicto-viabilidad (C3) por RPC por item y agrega la List<Veredicto>. Stateless, proyección pura determinista.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "nichos.batch.programar.request",
+      "handler": "onProgramarRequest",
+      "description": "RPC reflejo: {project_id, lote:[candidato], criterio?, paralelismo?:int} → {batch_id, lote_en_ejecucion, veredictos, fallidos, total, ejecutado}. Programa el lote EnEjecucion (reparte items en N grupos paralelos con distribucion justa) y ejecuta la cadena estudio-demanda (C1) + veredicto-viabilidad (C3) por item en paralelo (Promise.all), agregando la List<Veredicto>. Fallos por item se marcan sin romper el lote. Lote vacio → error determinista nichos.batch.programar.failed. Exito → publica nichos.batch.lote_ejecutado y responde por nichos.batch.programar.response."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "nichos.batch.lote_ejecutado",
+      "description": "Fire-and-forget (C5): un lote de validacion quedo ejecutado en paralelo → {project_id, batch_id, lote_en_ejecucion, veredictos, fallidos, total, ejecutado}. Lo consume el pipeline-por-nicho (L1) y los siguientes pasos del embudo (C6 corte-temprano)."
+    },
+    {
+      "event": "nichos.batch.programar.failed",
+      "description": "Par de fallo determinista (C5): el lote llego vacio o no es un array → {status, code, mensaje, data}. Cierra el circulo de nichos.batch.programar.request."
+    }
+  ]
+}

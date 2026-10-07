@@ -1,0 +1,24 @@
+{
+  "_doc": "Manifest de nichos/camino-encontrar-construir — MICRO-AGENTE HIBRIDO (C4): decide por OPCION de nicho si la oportunidad se ENCUENTRA o se CONSTRUYE. ENCONTRAR: hay demanda real (veredicto VIABLE / demanda de 1er orden suficiente) y la solucion se sirve con las CAPACIDADES EXISTENTES del proyecto (catalogo-capacidades D3, sin construir nada nuevo). CONSTRUIR: la necesidad no existe todavia o falta CAPACIDAD para materializarla (invariante D3 'lo que falta se crea') -> hay que construir la solucion. PUENTE / riesgo ALTO: en vez de decidir solo, SUBE una SolicitudDecision (D2/K2) y NO decide por cuenta propia (REGLA del sistema, ver 5.3). HIBRIDO: REFLEJO (_decidirReflejo: reglas deterministas de veredicto+capacidades) + FUZZY (_concluir: llm.complete.request con guion-prompt self-contained y fallback reflejo que asegura el camino). Si el riesgo es alto (riesgo>=0.7 o camino PUENTE), emite ademas nichos.gate.solicitado (SolicitudDecision PENDIENTE) y NO decide solo. NUNCA inventa: sin nicho falla honesto (nichos.camino.decidir.failed); sin datos suficientes emite PUENTE, no asume. Publica nichos.camino.decidido (-> ensamblador-solucion y pipeline). Sin store, sin custodio: entra opcion, sale camino decidido.",
+  "name": "camino-encontrar-construir",
+  "version": "0.1.0",
+  "description": "Micro-agente hibrido (C4): decide por opción de nicho si la oportunidad se encuentra (demanda real + capacidades existentes) o se construye (crear necesidad / falta capacidad). Riesgo alto → sube SolicitudDecision (D2/K2), nunca decide solo. Reflejo por reglas con juicio fuzzy asistido y fallback determinista. Publica nichos.camino.decidido; nichos.camino.decidir.failed cuando el nicho es inválido.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "nichos.camino.decidir.request",
+      "handler": "onDecidirRequest",
+      "description": "RPC hibrido: {project_id, nicho:{...}, veredicto?:VIABLE|NO_VIABLE|PUENTE, estudio?:{demanda_1er_orden}, capacidades?:{capacidades_disponibles, capacidades_faltantes}, riesgo?:0-1} → {nicho, camino:ENCONTRAR|CONSTRUIR|PUENTE, motivo, riesgo, riesgo_alto}. Decide si encontrar (demanda real + capacidades existentes) o construir (falta capacidad / crear demanda). Reflejo por reglas con asistencia fuzzy (llm.complete.request) y fallback determinista. Riesgo alto (>=0.7 o camino PUENTE) → emite nichos.gate.solicitado (SolicitudDecision, no decide solo). Nicho invalido → error determinista nichos.camino.decidir.failed. Exito → publica nichos.camino.decidido y responde por nichos.camino.decidir.response."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "nichos.camino.decidido",
+      "description": "Fire-and-forget (C4): el camino de una opcion de nicho quedo decidido → {project_id, nicho, camino:ENCONTRAR|CONSTRUIR|PUENTE, motivo, riesgo, riesgo_alto, decidido}. Lo consumen ensamblador-solucion (D1) y el pipeline-por-nicho (L1). Si riesgo_alto, ademas se emite la SolicitudDecision."
+    },
+    {
+      "event": "nichos.camino.decidir.failed",
+      "description": "Par de fallo determinista (C4): el nicho llego vacio o no es una opcion util → {status, code, mensaje, data}. Cierra el circulo de nichos.camino.decidir.request."
+    }
+  ]
+}

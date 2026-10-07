@@ -1,0 +1,14 @@
+{
+  "_doc": "Manifest de nichos/gate-decision-operar — PUENTE STATELESS (E2): el gate de operar — el SISTEMA NUNCA decide operar por su cuenta. Dado un nicho construido + competencia/modelo/costo/proyeccion, arma el paquete-cerrado (nicho + competencia + modelo + costo + proyeccion) y lo entrega al dueño por EVENTO como SolicitudDecision (APRUEBA/RECHAZA). No es una reunion sincrona: viaja por el bus y espera la decision del dueño via canal-supervision (G1). Sin persistencia: solo enruta/comunica con el exterior; NUNCA resuelve la decision.",
+  "name": "gate-decision-operar",
+  "version": "0.1.0",
+  "description": "Puente stateless de nichos (E2): entrega el paquete-cerrado de operar al dueño por EVENTO (nicho + competencia + modelo + costo + proyeccion) y espera aprueba/rechaza. El sistema NUNCA decide operar por su cuenta. Sin persistencia: solo enruta/comunica con el exterior.",
+  "language": "es",
+  "subscribes": [
+    { "event": "nichos.gate.solicitar.request", "handler": "onSolicitarRequest", "description": "RPC puro: {project_id, nicho, competencia?, modelo_cobro?, costo?, proyeccion?} → SolicitudDecision (APRUEBA|RECHAZA). Arma el paquete-cerrado autocxplicado (nicho + competencia + modelo + costo + proyeccion; reflejo: solo lo declarado, nunca fabrica numeros) y enruta la solicitud hacia el dueño. Nicho faltante/invalido → error determinista nichos.gate.solicitar.failed. Exito → publica nichos.gate.solicitado y responde por nichos.gate.solicitar.response." }
+  ],
+  "publishes": [
+    { "event": "nichos.gate.solicitado", "description": "Fire-and-forget (E2): el paquete-cerrado de operar fue solicitado al dueño → {project_id, tipo:'gate_operar', estado:'PENDIENTE', nicho, competencia, modelo_cobro, costo, proyeccion, paquete_cerrado, decision_esperada:'APRUEBA|RECHAZA'}. Lo consume cola-decisiones-gate (K2) y lo entrega el canal-supervision (G1). El sistema NUNCA resuelve por su cuenta." },
+    { "event": "nichos.gate.solicitar.failed", "description": "Par de fallo determinista (E2): el paquete del gate no pudo armarse (nicho faltante/invalido) → {status, code, mensaje, data}. Cierra el circulo de nichos.gate.solicitar.request." }
+  ]
+}

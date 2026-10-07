@@ -1,0 +1,29 @@
+{
+  "_doc": "Manifest de nichos/ensamblador-solucion — MICRO-AGENTE (D1, hoja del plan). Arma la SOLUCIÓN del nicho con las capacidades del catálogo. Híbrido fuzzy + fallback reflejo (patrón normalizacion-semilla/estudio-demanda). Consume nichos.camino.decidido (C4) y catalogo-capacidades (D3). Proyecciones _decidirQueConstruir(nicho)->Especificacion (juicio fuzzy: qué construir según el nicho y las capacidades disponibles) y _ejecutarMontaje(espec)->SolucionOperable (reflejo determinista: monta la solución usando las capacidades). Publica nichos.solucion.construida (+ nichos.solucion.construir.failed). Sin store, sin custodio.",
+  "name": "ensamblador-solucion",
+  "version": "0.1.0",
+  "description": "Micro-agente (D1): arma la solución del nicho con las capacidades del catálogo. Híbrido fuzzy + fallback reflejo — decide qué construir según el nicho y las capacidades disponibles, y ejecuta el montaje de forma determinista.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "nichos.solucion.construir.request",
+      "handler": "onConstruirRequest",
+      "description": "RPC micro-agente: {project_id, nicho, capacidades} → {project_id, especificacion, solucion, construida}. Decide qué construir (juicio) y ejecuta el montaje (reflejo determinista). Publica nichos.solucion.construida y responde por nichos.solucion.construir.response. Si el payload es inválido o falta capacidad esencial → nichos.solucion.construir.failed."
+    },
+    {
+      "event": "nichos.camino.decidido",
+      "handler": "onCaminoDecidido",
+      "description": "Fire-and-forget (D1): camino-encontrar-construir (C4) decidió CONSTRUIR → {project_id, nicho, camino:'CONSTRUIR', capacidades?}. Arma la solución del nicho y publica nichos.solucion.construida."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "nichos.solucion.construida",
+      "description": "Fire-and-forget (D1): la solución del nicho quedó construida con las capacidades del catálogo → {project_id, nicho, especificacion, solucion, construida:true}. Lo consumen proponedor-modelo-cobro (D4), motor-cobro (E3) y el pipeline."
+    },
+    {
+      "event": "nichos.solucion.construir.failed",
+      "description": "Par de fallo determinista (D1): payload inválido o sin capacidades para montar → {status, code, message, data}. Cierra el círculo de nichos.solucion.construir.request."
+    }
+  ]
+}

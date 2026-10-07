@@ -1,0 +1,16 @@
+{
+  "_doc": "Manifest de nichos/confirmacion-valor — CUSTODIO (I3, hoja del plan): recoge el FEEDBACK post-compra / el valor que el pagador recibio de verdad del nicho. Ingreso reflejo (_ingestar, estructura el feedback crudo del canal) + guardado custodio del store de feedback (_guardar) + consulta por nicho (_consultar). PosPersistencia per-proyecto: restaura en project.activated y vuelca en onUnload. El store de feedback lo escribe el CUSTODIO (single-writer); el campo feedback lo ingiere el reflejo sin estado. Publica nichos.feedback_recibido; nichos.feedback.guardar.failed cuando un feedback no puede guardarse.",
+  "name": "confirmacion-valor",
+  "version": "0.1.0",
+  "description": "Custodio (I3): recoge y persiste el feedback post-compra / valor recibido por el pagador de un nicho; ingesta reflejo + store custodio con PosPersistencia; publica nichos.feedback_recibido.",
+  "language": "es",
+  "subscribes": [
+    { "event": "nichos.feedback.ingestar.request", "handler": "onIngestarRequest", "description": "RPC reflejo: {project_id, nicho, feedback_crudo} → feedback estructurado {valor_recibido, puntuacion, comentario}. Estructura sintetica sin guardar; no toca el store. Si el crudo es vacio/invalido → error (nichos.feedback.guardar.failed). Responde por nichos.feedback.ingestar.response." },
+    { "event": "nichos.feedback.guardar.request", "handler": "onGuardarRequest", "description": "RPC custodio: {project_id, nicho, feedback} → persiste el feedback en el store del proyecto (single-writer; append de confirmaciones de valor). Exito → publica nichos.feedback_recibido y responde por nichos.feedback.guardar.response. Fallo (nicho o feedback invalido, escritor no permitido) → nichos.feedback.guardar.failed." },
+    { "event": "project.activated", "handler": "onProjectActivated", "description": "Custodio: restaura el store de feedback del proyecto activado via PosPersistencia." }
+  ],
+  "publishes": [
+    { "event": "nichos.feedback_recibido", "description": "Fire-and-forget (I3): se guardo el feedback post-compra / valor recibido de un nicho → {project_id, nicho, valor_recibido, puntuacion, comentario, confirmado}. Alimenta la salud financiera del nicho (F3) y la retroalimentacion del canal." },
+    { "event": "nichos.feedback.guardar.failed", "description": "Par de fallo determinista: el feedback llego vacio/invalido o no pudo guardarse → {status, code, mensaje}. Cierra el circulo de nichos.feedback.ingestar/guardar.request." }
+  ]
+}

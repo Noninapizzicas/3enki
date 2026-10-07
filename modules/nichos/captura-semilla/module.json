@@ -1,0 +1,15 @@
+{
+  "_doc": "Manifest de nichos/captura-semilla — REFLEJO JS PURO (cero LLM, cero estado, cero red): acepta/formatea la semilla (la palabra/idea que el dueño da para arrancar la busqueda), valida que no este vacia, rechaza vacios con error determinista, y emite que la semilla fue capturada. Acepta {project_id, mensaje} → {semilla formateada}. Publica nichos.semilla.capturada cuando la semilla es valida; nichos.semilla.aceptar.failed cuando viene vacia o malformada. Sin store, sin custodio: entra objeto, sale objeto.",
+  "name": "captura-semilla",
+  "version": "0.1.0",
+  "description": "Reflejo JS puro (A1): acepta/formatea la semilla del dueno para arrancar la busqueda de nichos; valida vacios, rechaza vacios con error determinista y emite nichos.semilla.capturada.",
+  "language": "es",
+  "subscribes": [
+    { "event": "nichos.semilla.aceptar.request", "handler": "onAcceptRequest", "description": "RPC puro: {project_id, mensaje} → semilla formateada. Valida vacios/formato; mensaje vacio o no string → error determinista (nichos.semilla.aceptar.failed). Exito → publica nichos.semilla.capturada y responde por nichos.semilla.aceptar.response." },
+    { "event": "project.activated", "handler": "onProjectActivated", "description": "Reflejo sin estado: registra el project_id activo para scope del contexto; no persiste nada." }
+  ],
+  "publishes": [
+    { "event": "nichos.semilla.capturada", "description": "Fire-and-forget (A1): la semilla del dueño fue aceptada y formateada → {project_id, semilla, formateada}. La consume normalizacion-semilla (A2) y el pipeline-por-nicho (L1)." },
+    { "event": "nichos.semilla.aceptar.failed", "description": "Par de fallo determinista: la semilla llego vacia o malformada → {status:400, code:'SEMILLA_VACIA', mensaje}. Cierra el circulo de nichos.semilla.aceptar.request." }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "_doc": "Manifest de nichos/alerta-sangria — PUENTE STATELESS (F4): techo de perdida. Vigila el CUADRO de salud financiera del nicho (F3) y, al cruzar el techo de sangria declarado, arma una SolicitudDecision y la entrega al canal de supervision (G1) — el SISTEMA NUNCA mata el proyecto por su cuenta, siempre es caso a decidir por el dueno. Proyeccion pura _monitorear(cuadro, techo_de_perdida_eur) -> CruzaTecho:bool; al cruzar emite la SolicitudDecision por evento. Stateless: sin store, sin persistencia, cada op entra objeto, sale objeto. Publica nichos.alerta.sangria (-> cola-decisiones-gate) + par determinista nichos.alerta.monitorear.failed. Sin techo declarado o sin canal → failed honesto.",
+  "name": "alerta-sangria",
+  "version": "0.1.0",
+  "description": "Puente stateless de nichos (F4): vigila el cuadro de salud financiera contra el techo de pérdida declarado; al cruzarlo arma una SolicitudDecision (caso a decidir, nunca mata sola) y la emite al canal de supervisión. Publica nichos.alerta.sangria y su par de fallo.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "nichos.alerta.monitorear.request",
+      "handler": "onMonitorearRequest",
+      "description": "RPC puro: {project_id, cuadro, techo_perdida_eur, canal, pagador?} → {project_id, estado:'PENDIENTE', tipo:'sangria', cuadro, techo_perdida_eur, perdida_eur, cruza_techo, canal, decision_esperada, alertado_en} y, si cruza, además decision:{solicitud_id, ...SolicitudDecision}. CruzaTecho se calcula de hechos (perdida real del cuadro F3 vs techo). Al cruzar emite nichos.alerta.sangria; sin techo válido o sin canal → nichos.alerta.monitorear.failed. Éxito → responde por nichos.alerta.monitorear.response."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Puente sin estado: registra el project_id activo para scope del contexto; no persiste nada."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "nichos.alerta.sangria",
+      "description": "Fire-and-forget (F4): el nicho cruzó el techo de pérdida → SolicitudDecision {project_id, tipo:'sangria', estado:'PENDIENTE', perdida_eur, techo_perdida_eur, decision_esperada:'MANTENER_A_PERDIDA|MATA_PROYECTO', canal, ...}. Caso a decidir: la consume cola-decisiones-gate (K2) y el canal de supervisión (G1) para pedir al dueño. El sistema no mata sola."
+    },
+    {
+      "event": "nichos.alerta.monitorear.failed",
+      "description": "Par de fallo determinista (F4): el monitoreo de sangría no pudo evaluarse (sin techo válido, sin canal o cuadro inválido) → {status, code, message, data}. Cierra el círculo de nichos.alerta.monitorear.request."
+    }
+  ]
+}

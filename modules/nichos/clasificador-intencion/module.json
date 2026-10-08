@@ -1,0 +1,19 @@
+{
+  "name": "clasificador-intencion",
+  "version": "0.1.0",
+  "description": "MICRO-AGENTE del vertical NICHOS: clasifica cada mensaje entrante del canal en 5 intenciones canonicas (SEMILLA, RESPUESTA_DECISION, CONSULTA, AJUSTE_CONFIG, DESCONOCIDO) via ai-gateway. Reactivo: escucha nichos.canal.mensaje.recibido y emite el pulso nichos.intencion.clasificada; tambien atiende el RPC nichos.intencion.clasificar.",
+  "_doc": "modules/nichos/clasificador-intencion — MICRO-AGENTE del vertical NICHOS.\n\nQue hace: recibe un mensaje (texto libre del canal o request RPC) y devuelve la intencion clasificada entre 5 tipos canonicos. Usa ai-gateway (llm.complete.request) para la clasificacion semantica.\n\n5 intenciones canonicas:\n  SEMILLA             — idea nueva de nicho.\n  RESPUESTA_DECISION  — respuesta a solicitud pendiente del sistema.\n  CONSULTA            — pregunta del dueno.\n  AJUSTE_CONFIG       — cambio de perfil/umbral.\n  DESCONOCIDO         — no encaja en ninguna.\n\nPatron: ModuloHibridoReflejo (micro-agente — usa LLM via ai-gateway, sin estado persistido).",
+  "ui_decision": {
+    "necesita": false,
+    "razon": "Micro-agente sin cara propia. Clasifica mensajes internamente y emite la intencion al bus. Los consumidores (jefe, pipeline) reaccionan al pulso. Sin interaccion directa con el humano."
+  },
+  "publishes": [
+    { "event": "nichos.intencion.clasificada", "description": "PULSO fire-and-forget: intencion clasificada de un mensaje entrante. Payload: {project_id, mensaje_ref, tipo: SEMILLA|RESPUESTA_DECISION|CONSULTA|AJUSTE_CONFIG|DESCONOCIDO, confianza, timestamp}." },
+    { "event": "nichos.intencion.clasificada.failed", "description": "Par .failed del PULSO: la clasificacion fallo (LLM no respondio, payload invalido). Payload: {project_id, code, message, timestamp}." },
+    { "event": "nichos.intencion.clasificar.response", "description": "Response correlada por request_id al RPC nichos.intencion.clasificar.request. Payload: {status, data:{intencion_entrante:{tipo, confianza}}}." }
+  ],
+  "subscribes": [
+    { "event": "nichos.intencion.clasificar.request", "handler": "onClasificarRequest", "description": "RPC: clasifica un mensaje entrante y devuelve la intencion via response correlada." },
+    { "event": "nichos.canal.mensaje.recibido", "handler": "onMensajeRecibido", "description": "Fire-and-forget reactivo (F7b): al llegar un mensaje del canal, clasifica su intencion y emite nichos.intencion.clasificada." }
+  ]
+}

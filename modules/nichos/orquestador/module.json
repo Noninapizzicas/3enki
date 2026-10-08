@@ -1,0 +1,28 @@
+{
+  "name": "orquestador",
+  "version": "0.1.0",
+  "description": "MICRO-AGENTE del vertical NICHOS: cerebro reactivo del vertical. Escucha pulsos del bus y encadena el ciclo completo (semilla → sondeo → validacion → construccion → salud). Correlaciona ciclos activos en memoria. Gate de operacion para degradacion honesta.",
+  "_doc": "modules/nichos/orquestador — MICRO-AGENTE (el mas complejo) del vertical NICHOS.\n\nQue hace: reacciona a pulsos del bus y encadena el ciclo completo del vertical:\n  1. semilla.capturada → espera normalizada\n  2. semilla.normalizada → dispara sondeo\n  3. sondeo.completado → dispara batch-validacion\n  4. validacion.lote.completado → dispara ensamblaje de viables\n  5. construccion.completada → actualiza cuadro salud, cierra ciclo\n\nSin estado persistido — correlaciona ciclos activos via Map en memoria. Si reinicia, los ciclos activos se pierden.\n\nGate: si gate.cerrado → no arranca nuevos ciclos (degradacion honesta).\n\nPatron: ModuloHibridoReflejo (micro-agente reactivo por bus).",
+  "ui_decision": {
+    "necesita": false,
+    "razon": "Cerebro reactivo sin cara propia. Orquesta el ciclo del vertical por el bus. El dueno interactua por el canal y el jefe; el orquestador es fontaneria interna."
+  },
+  "publishes": [
+    { "event": "nichos.orquestador.ciclo.iniciado", "description": "PULSO: nuevo ciclo de descubrimiento iniciado. Payload: {ciclo_id, semilla, timestamp}." },
+    { "event": "nichos.orquestador.ciclo.completado", "description": "PULSO: ciclo de descubrimiento completado. Payload: {ciclo_id, resultado, duracion_ms, timestamp}." },
+    { "event": "nichos.territorio.sondear.request", "description": "Dispara sondeo del territorio tras normalizar semilla. Payload: {request_id, semilla_normalizada, correlation_id}." },
+    { "event": "nichos.validacion.lote.correr.request", "description": "Dispara batch-validacion tras sondeo completado. Payload: {request_id, candidatos, correlation_id}." },
+    { "event": "nichos.solucion.ensamblar.request", "description": "Dispara ensamblaje de viables tras validacion completada. Payload: {request_id, viables, correlation_id}." },
+    { "event": "nichos.cuadro.salud.recalcular.request", "description": "Recalcula cuadro de salud tras construccion completada. Payload: {request_id, resultado, correlation_id}." },
+    { "event": "llm.complete.request", "description": "Consulta al LLM para decisiones de orquestacion (priorizacion, filtrado). Payload: {request_id, messages, options}." }
+  ],
+  "subscribes": [
+    { "event": "nichos.semilla.capturada", "handler": "onSemillaCapturada", "description": "Reacciona a semilla capturada: registra ciclo pendiente esperando normalizacion." },
+    { "event": "nichos.semilla.normalizada", "handler": "onSemillaNormalizada", "description": "Reacciona a semilla normalizada: dispara sondeo del territorio." },
+    { "event": "nichos.sondeo.completado", "handler": "onSondeoCompletado", "description": "Reacciona a sondeo completado: dispara batch-validacion de candidatos." },
+    { "event": "nichos.validacion.lote.completado", "handler": "onValidacionCompletada", "description": "Reacciona a validacion completada: dispara ensamblaje de viables." },
+    { "event": "nichos.construccion.completada", "handler": "onConstruccionCompletada", "description": "Reacciona a construccion completada: actualiza cuadro salud y cierra ciclo." },
+    { "event": "nichos.gate.operacion.abierto", "handler": "onGateAbierto", "description": "Gate abierto: permite arrancar nuevos ciclos." },
+    { "event": "nichos.gate.operacion.cerrado", "handler": "onGateCerrado", "description": "Gate cerrado: degradacion honesta, no arranca nuevos ciclos." }
+  ]
+}

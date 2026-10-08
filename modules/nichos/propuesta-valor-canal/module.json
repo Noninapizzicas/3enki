@@ -1,0 +1,19 @@
+{
+  "name": "propuesta-valor-canal",
+  "version": "0.1.0",
+  "description": "MICRO-AGENTE del vertical NICHOS: redacta una propuesta de valor (tono + gancho) adecuada al canal destino via ai-gateway. Atiende el RPC nichos.propuesta.valor.redactar y emite el pulso nichos.propuesta.valor.redactada. Sin estado propio.",
+  "_doc": "modules/nichos/propuesta-valor-canal — MICRO-AGENTE del vertical NICHOS.\n\nQue hace: dado un nicho, su panorama y un canal destino (email, whatsapp, landing, redes...), redacta el tono y el gancho adecuados a ese canal. Usa ai-gateway (llm.complete.request) para la redaccion semantica.\n\nSin estado persistido — micro-agente puro (request -> LLM -> response).\n\nPatron: ModuloHibridoReflejo (micro-agente — usa LLM via ai-gateway, sin estado persistido).",
+  "ui_decision": {
+    "necesita": false,
+    "razon": "Micro-agente sin cara propia. Redacta propuestas de valor internamente y las emite al bus. Los consumidores (jefe, pipeline de contenido) usan la propuesta para comunicar con el canal."
+  },
+  "publishes": [
+    { "event": "nichos.propuesta.valor.redactada", "description": "PULSO fire-and-forget: propuesta de valor redactada para un canal. Payload: {id_proyecto, canal, tono, gancho, timestamp}." },
+    { "event": "nichos.propuesta.valor.redactada.failed", "description": "Par .failed del PULSO: la redaccion fallo (LLM no respondio, payload invalido). Payload: {id_proyecto, code, message, timestamp}." },
+    { "event": "nichos.propuesta.valor.redactar.response", "description": "Response correlada por request_id al RPC nichos.propuesta.valor.redactar.request. Payload: {status, data:{propuesta_valor}}." },
+    { "event": "llm.complete.request", "description": "Peticion al ai-gateway para redactar la propuesta de valor." }
+  ],
+  "subscribes": [
+    { "event": "nichos.propuesta.valor.redactar.request", "handler": "onRedactarRequest", "description": "Reflejo JS: redacta una propuesta de valor (tono + gancho) adecuada al canal destino via ai-gateway y devuelve el resultado." }
+  ]
+}

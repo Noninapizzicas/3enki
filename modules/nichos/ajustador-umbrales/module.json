@@ -1,0 +1,23 @@
+{
+  "name": "ajustador-umbrales",
+  "version": "0.1.0",
+  "description": "REFLEJO del vertical NICHOS: traduce respuestas de decision en declaraciones de ajuste a custodios (criterio-viabilidad, perfil-limite, perfil-supervision). Escucha nichos.decision.solicitud.respondida (F7b auto-ajuste) y atiende el RPC nichos.umbrales.ajustar. Guarda historial de ajustes por proyecto con PosPersistencia.",
+  "_doc": "modules/nichos/ajustador-umbrales — REFLEJO del vertical NICHOS.\n\nQue hace: cuando el dueno responde una decision (nichos.decision.solicitud.respondida), interpreta la respuesta y propaga declaraciones a los custodios pertinentes (criterio-viabilidad, perfil-limite, perfil-supervision). Tambien atiende el RPC nichos.umbrales.ajustar para ajustes manuales.\n\nStore (per-proyecto, PosPersistencia): /prisma/pos/nichos/ajustador-umbrales.json\n  { _version, _updated, historial: [ {destino, cambio, por_autor, at} ] }\n\nPatron: ModuloHibridoReflejo + PosPersistencia (historial append-only de ajustes aplicados).",
+  "ui_decision": {
+    "necesita": false,
+    "razon": "Reflejo interno del vertical NICHOS. Traduce respuestas de decision en declaraciones a custodios. Sin cara propia al usuario — el dueno ajusta umbrales por el canal (jefe) y este modulo propaga las declaraciones pertinentes."
+  },
+  "publishes": [
+    { "event": "nichos.umbral.ajustado", "description": "PULSO fire-and-forget: un umbral fue ajustado y propagado al custodio destino. Payload: {project_id, destino: CRITERIO|PERFIL_LIMITE|PERFIL_SUPERVISION, cambio, por_autor, timestamp}." },
+    { "event": "nichos.umbral.ajustado.failed", "description": "Par .failed del PULSO: el ajuste fallo (destino desconocido, payload invalido). Payload: {project_id, code, message, timestamp}." },
+    { "event": "nichos.umbrales.ajustar.response", "description": "Response correlada por request_id al RPC nichos.umbrales.ajustar.request. Payload: {status, data:{aplicados[]}} | {status, error}." },
+    { "event": "nichos.criterio.viabilidad.declarar.request", "description": "RPC emitido hacia el custodio criterio-viabilidad para propagar un ajuste de umbral." },
+    { "event": "nichos.perfil.limite.declarar.request", "description": "RPC emitido hacia el custodio perfil-limite-busqueda para propagar un ajuste de limite." },
+    { "event": "nichos.perfil.supervision.declarar.request", "description": "RPC emitido hacia el custodio perfil-supervision para propagar un ajuste de supervision." }
+  ],
+  "subscribes": [
+    { "event": "nichos.umbrales.ajustar.request", "handler": "onAjustarRequest", "description": "Reflejo JS: traduce una respuesta de decision en declaraciones a custodios y devuelve los ajustes aplicados." },
+    { "event": "nichos.decision.solicitud.respondida", "handler": "onDecisionRespondida", "description": "Fire-and-forget reactivo (F7b): al responder una decision, auto-ajusta umbrales propagando declaraciones a los custodios pertinentes." },
+    { "event": "project.activated", "handler": "onProjectActivated", "description": "Reflejo JS: restaura el historial de ajustes del proyecto desde /prisma/pos/nichos/ajustador-umbrales.json (PosPersistencia)." }
+  ]
+}

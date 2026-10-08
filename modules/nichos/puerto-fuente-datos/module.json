@@ -1,0 +1,22 @@
+{
+  "name": "puerto-fuente-datos",
+  "version": "0.1.0",
+  "description": "PUENTE del vertical NICHOS (bloque J · fuentes de datos — J1): fachada que orquesta el consumo de fuentes externas (crawl4rs, APIs) sin que el consumidor conozca el proveedor. Pre-chequea límites (J3), delega la llamada externa via bus (crawl4rs.buscar/leer), imputa el coste (J4) y devuelve el resultado crudo al solicitante.",
+  "_doc": "modules/nichos/puerto-fuente-datos — PUENTE (bloque J · fuentes de datos / J1) del vertical NICHOS.\n\nQué hace: recibe nichos.fuente.consumir.request, pre-chequea que la fuente pueda consumirse (nichos.fuente.limites.puede.consumir.request a J3), orquesta la llamada externa publicando crawl4rs.buscar.request o crawl4rs.leer.request al bus (nunca HTTP directo — desacoplamiento total), solicita normalización al conversor (nichos.conversor.normalizar.request a J2), imputa coste al proyecto y devuelve el resultado crudo.\n\nPatrón: ModuloHibridoReflejo (mitad REFLEJO, JS determinista). El PUENTE no hace HTTP directo: orquesta vía bus hacia crawl4rs y credential-manager. Sin estado persistido propio — es orquestador de paso.\n\nFlujo _consumir:\n  1. Pre-check: publica nichos.fuente.limites.puede.consumir.request → espera response {puede, margen}. Si puede=false → 429 LIMITE_EXCEDIDO.\n  2. Llamada externa: según fuente.tipo, publica crawl4rs.buscar.request o crawl4rs.leer.request → espera response con resultado crudo.\n  3. Normalización: publica nichos.conversor.normalizar.request → espera response con dato homogéneo.\n  4. Imputación: publica nichos.fuente.coste.registrado (fire-and-forget) para que J4 lo registre.\n  5. PULSO: emite nichos.fuente.consumida {fuente, importe, margen_restante}.\n  6. Response: devuelve {status:200, data:{resultado_crudo}} al solicitante.",
+  "ui_decision": {
+    "necesita": false,
+    "razon": "Bloque J fontanería de fuentes del vertical NICHOS, sin cara propia. Orquesta llamadas al bus (crawl4rs) y publica resultados. El consumidor (B1 sondeador, C1 estudio-demanda, E1 competencia) lo invoca por RPC; el dueño no interactúa directamente con este módulo."
+  },
+  "publishes": [
+    { "event": "nichos.fuente.consumir.response", "description": "Response correlada por request_id al RPC nichos.fuente.consumir.request. Payload: {status, data:{resultados:[DatoHomogeneo], resultado_crudo}} | {status, error}. 'resultados' = array homogéneo (J2) con alias de consumo (nombre/fuente/tipo/evidencia); 'resultado_crudo' = crudo tal cual (compat)." },
+    { "event": "nichos.fuente.limites.puede.consumir.request", "description": "RPC hacia J3 (gestion-limites-fuente): pre-check de que la fuente puede consumirse dentro de los límites vigentes. Payload: {request_id, fuente}." },
+    { "event": "nichos.conversor.normalizar.request", "description": "RPC hacia J2 (conversor-fuente): solicita normalización del crudo obtenido. Payload: {request_id, crudo, origen}." },
+    { "event": "nichos.fuente.coste.registrado", "description": "PULSO fire-and-forget hacia J4 (imputacion-coste-fuente): registra el coste de esta consulta. Payload: {id_proyecto, fuente, importe, timestamp}." },
+    { "event": "nichos.fuente.consumida", "description": "PULSO fire-and-forget: una fuente externa fue consumida con éxito. Lo escucha J3 para descontar margen. Payload: {fuente, importe, margen_restante}." },
+    { "event": "crawl4rs.buscar.request", "description": "RPC al módulo crawl4rs: búsqueda web (SearXNG). Payload: {request_id, query, opciones}." },
+    { "event": "crawl4rs.leer.request", "description": "RPC al módulo crawl4rs: lectura de URL concreta. Payload: {request_id, url, opciones}." }
+  ],
+  "subscribes": [
+    { "event": "nichos.fuente.consumir.request", "handler": "onConsumirRequest", "description": "PUENTE: orquesta pre-check de límites + llamada externa via bus (crawl4rs) + imputación de coste. Acepta DOS formas de payload (reconciliadas 2026-10-05): A) {request_id, fuente:{tipo:'buscar'|'leer',nombre?,coste_unitario?}, peticion:{query|url}, project_id?, correlation_id}; B) forma semántica de los consumidores del vertical {request_id, query? | candidato? | semilla+territorio? | solucion?, project_id?}." }
+  ]
+}

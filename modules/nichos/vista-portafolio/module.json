@@ -1,0 +1,23 @@
+{
+  "name": "vista-portafolio",
+  "version": "0.1.0",
+  "description": "CUSTODIO del vertical NICHOS: snapshot agregado de salud por portafolio. Persiste la vista con los proyectos, cuantos generan, cuantos sangran y el flujo total. Se recalcula al recibir nichos.salud.recalculada.",
+  "_doc": "modules/nichos/vista-portafolio — CUSTODIO del vertical NICHOS.\n\nQue guarda (per-proyecto, PosPersistencia): /prisma/pos/nichos/vista-portafolio.json\n  {\n    _version, _updated,\n    vista: {\n      version:      Int,\n      proyectos:    [ { id, estado, flujo } ],\n      generan:      Int,\n      sangran:      Int,\n      flujo_total:  Number\n    }\n  }\n\nQue atiende:\n  - nichos.portafolio.vista.request → devuelve la vista actual del portafolio.\n  - nichos.salud.recalculada → actualiza la vista al recalcular salud de un proyecto.\n  - project.activated → restaura el store del proyecto.\n\nEmite:\n  - nichos.portafolio.recalculado — PULSO tras recalcular la vista.\n\nPatron: ModuloHibridoReflejo + PosPersistencia. CUSTODIO.",
+  "ui_decision": {
+    "necesita": true,
+    "tipo": "system_panel",
+    "zone": "lateral_derecha",
+    "razon": "El dueño necesita VER el estado de la vertical de un vistazo: cuántos nichos generan, sangran, estado del pipeline, decisiones pendientes, alertas. Dashboard solo lectura — la operación es por Telegram. Este módulo es el ANCLA del dashboard; consume por RPC a cuadro-salud, pipeline, cola-decisiones, historial y alerta-sangria.",
+    "alimentado_por": ["vista-portafolio", "cuadro-salud", "pipeline", "cola-decisiones", "historial", "alerta-sangria"]
+  },
+  "publishes": [
+    { "event": "nichos.portafolio.vista.response", "description": "Response correlada por request_id al RPC nichos.portafolio.vista.request. Payload: {status, data:{vista_portafolio}}." },
+    { "event": "nichos.portafolio.recalculado", "description": "PULSO fire-and-forget: la vista del portafolio fue recalculada. Payload: {vista, generan, sangran, flujo_total, timestamp}." },
+    { "event": "nichos.cuadro.salud.estado.request", "description": "RPC hacia cuadro-salud: consulta el estado de salud de cada proyecto. Payload: {request_id, ahora}." }
+  ],
+  "subscribes": [
+    { "event": "nichos.portafolio.vista.request", "handler": "onVistaRequest", "description": "RPC: devuelve la vista agregada del portafolio con proyectos, generan, sangran y flujo_total." },
+    { "event": "nichos.salud.recalculada", "handler": "onSaludRecalculada", "description": "PULSO: recalcula la vista del portafolio al recibir nueva salud de un proyecto." },
+    { "event": "project.activated", "handler": "onProjectActivated", "description": "Reflejo JS: restaura el store del proyecto desde /prisma/pos/nichos/vista-portafolio.json (PosPersistencia)." }
+  ]
+}

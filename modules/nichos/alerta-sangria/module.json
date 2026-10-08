@@ -1,0 +1,18 @@
+{
+  "name": "alerta-sangria",
+  "version": "0.1.0",
+  "description": "PUENTE del vertical NICHOS (bloque K): cuando el cuadro de salud detecta sangría (métricas de pérdida), evalúa el indicador contra el umbral y alza puente humano con alerta urgente. Sin estado.",
+  "_doc": "modules/nichos/alerta-sangria — PUENTE (bloque K) del vertical NICHOS.\n\nQué hace: escucha nichos.sangria.detectada (del cuadro-salud cuando métricas indican pérdida) y nichos.cuadro.salud.estado.request (para consultar estado). Al detectar sangría, evalúa indicador contra umbral y alza puente humano con alerta urgente.\n\nSin estado. Puente reactivo: detecta, evalúa y escala.\n\nPatrón: ModuloHibridoReflejo (mitad REFLEJO, JS determinista).",
+  "ui_decision": {
+    "necesita": false,
+    "razon": "Fontanería de alertas del vertical NICHOS, sin cara propia. Reacciona a sangría detectada y escala via puente humano."
+  },
+  "publishes": [
+    { "event": "nichos.alerta.sangria.emitida", "description": "PULSO fire-and-forget: alerta de sangría emitida tras evaluación. Payload: {id_nicho, indicador, umbral, valor_actual, timestamp}." },
+    { "event": "nichos.puente.humano.alzar.request", "description": "RPC hacia puente-humano: alza alerta urgente de sangría para el dueño. Payload: {request_id, tipo, prioridad, detalle}." }
+  ],
+  "subscribes": [
+    { "event": "nichos.sangria.detectada", "handler": "onSangriaDetectada", "description": "PUENTE: evalúa indicador contra umbral y alza puente humano si procede. Payload: {id_nicho, indicador, umbral, valor_actual, timestamp}." },
+    { "event": "nichos.cuadro.salud.estado.request", "handler": "onEstadoRequest", "description": "RPC: consulta el estado del cuadro de salud para evaluar sangría. Payload: {request_id, id_nicho}." }
+  ]
+}

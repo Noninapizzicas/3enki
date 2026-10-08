@@ -1,0 +1,18 @@
+{
+  "name": "imputacion-costes",
+  "version": "0.1.0",
+  "description": "REFLEJO del vertical NICHOS: agrega coste de un proyecto hasta un instante dado por categoria. Sin estado propio — consulta por bus a registro-cobros e imputacion-coste-fuente, agrega y responde.",
+  "_doc": "modules/nichos/imputacion-costes — REFLEJO del vertical NICHOS.\n\nQue hace: recibe nichos.costes.imputar.request con {id_proyecto, hasta} y agrega el coste total del proyecto consultando por bus a registro-cobros (nichos.registro.cobros.consultar.request) e imputacion-coste-fuente (nichos.fuente.coste.consultar.request). Suma ambas fuentes y devuelve {coste_total}.\n\nSin estado propio — es REFLEJO puro. La logica es determinista: consulta fuentes + agrega.\n\nPatron: ModuloHibridoReflejo (mitad REFLEJO, JS determinista). Sin persistencia.",
+  "ui_decision": {
+    "necesita": false,
+    "razon": "Agregador interno sin cara propia. Se consulta por RPC desde cualquier modulo que necesite el coste total de un proyecto."
+  },
+  "publishes": [
+    { "event": "nichos.costes.imputar.response", "description": "Response correlada por request_id al RPC nichos.costes.imputar.request. Payload: {status, data:{coste_total}}." },
+    { "event": "nichos.fuente.coste.consultar.request", "description": "RPC hacia imputacion-coste-fuente: consulta el coste de fuentes del proyecto. Payload: {request_id, id_proyecto, hasta}." },
+    { "event": "nichos.registro.cobros.consultar.request", "description": "RPC hacia registro-cobros: consulta los cobros del proyecto. Payload: {request_id, id_proyecto, hasta}." }
+  ],
+  "subscribes": [
+    { "event": "nichos.costes.imputar.request", "handler": "onImputarRequest", "description": "REFLEJO: agrega coste proyecto hasta instante por categoria consultando registro-cobros e imputacion-coste-fuente." }
+  ]
+}

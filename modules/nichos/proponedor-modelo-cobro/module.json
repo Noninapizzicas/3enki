@@ -1,0 +1,19 @@
+{
+  "name": "proponedor-modelo-cobro",
+  "version": "0.1.0",
+  "description": "MICRO-AGENTE del vertical NICHOS: propone un modelo de cobro para un nicho. Consulta la plantilla de cobro por bus (nichos.perfil.cobro.plantilla.request) y usa ai-gateway (llm.complete.request) para ajustar la plantilla al nicho y la solucion. Atiende el RPC nichos.modelo.cobro.proponer y emite el pulso nichos.modelo.cobro.propuesto.",
+  "_doc": "modules/nichos/proponedor-modelo-cobro — MICRO-AGENTE del vertical NICHOS.\n\nQue hace: recibe un id_nicho y una solucion, consulta la plantilla de cobro adecuada por bus, y usa ai-gateway para ajustarla. Devuelve un modelo de cobro adaptado.\n\nSin estado persistido. Patron: ModuloHibridoReflejo (micro-agente — usa LLM via ai-gateway).",
+  "ui_decision": {
+    "necesita": false,
+    "razon": "Micro-agente sin cara propia. Propone modelos de cobro internamente y emite la propuesta al bus. Sin interaccion directa con el humano."
+  },
+  "publishes": [
+    { "event": "nichos.modelo.cobro.propuesto", "description": "PULSO fire-and-forget: modelo de cobro propuesto. Payload: {id_proyecto, modelo, timestamp}." },
+    { "event": "nichos.modelo.cobro.proponer.response", "description": "Response correlada por request_id al RPC nichos.modelo.cobro.proponer.request. Payload: {status, data:{modelo_cobro}}." },
+    { "event": "nichos.perfil.cobro.plantilla.request", "description": "RPC al perfil de cobro: solicita la plantilla base de cobro para adaptarla." },
+    { "event": "llm.complete.request", "description": "Solicitud al ai-gateway para ajustar la plantilla de cobro via LLM." }
+  ],
+  "subscribes": [
+    { "event": "nichos.modelo.cobro.proponer.request", "handler": "onProponerRequest", "description": "RPC: propone un modelo de cobro para un nicho y devuelve la propuesta via response correlada." }
+  ]
+}

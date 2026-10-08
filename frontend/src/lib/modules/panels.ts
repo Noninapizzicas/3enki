@@ -299,11 +299,19 @@ export const panels: Record<string, PanelDef> = {
     order: 99,
     loader: () => import('$lib/modules/related-pages/RelatedPagesPanel.svelte')
   },
-  // === SYSTEM BAR — Vertical nichos (reset a F2, e1bbf727) ===
-  // Los tríos (vista-portafolio, cola-decisiones-gate, ajustador-umbrales) fueron
-  // borrados por el reset de nichos a F2. Cuando la vertical se reconstruya y sus
-  // tríos vuelvan a frontend/src/lib/modules/, RESTAURAR estas tres entradas.
-  // (Commit de referencia con las entradas originales: 8a73d92e)
+  // === SYSTEM BAR — Vertical nichos — dashboard solo lectura (F6½+F7) ===
+  // Un solo panel: dashboard-nichos (system_panel, observabilidad). Consume 5 RPCs
+  // de lectura del vertical nichos vía BlueprintForm. El dueño opera por Telegram.
+  'dashboard-nichos': {
+    id: 'dashboard-nichos',
+    title: 'Dashboard nichos',
+    icon: '📊',
+    size: 'lg',
+    position: 'right',
+    zone: 'system-bar',
+    order: 97,
+    loader: () => import('$lib/modules/dashboard-nichos/DashboardNichosPanel.svelte')
+  },
 
   // === VENTANA DEL AGENTE (panel embebible dentro del chat) ===
   // El mismo componente que la ruta /[project_id]/agentes/[request_id] — aquí

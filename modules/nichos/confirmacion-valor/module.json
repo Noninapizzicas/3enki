@@ -1,0 +1,22 @@
+{
+  "name": "confirmacion-valor",
+  "version": "0.1.0",
+  "description": "CUSTODIO del vertical NICHOS: store append-only de feedback por proyecto. Ingiere feedback crudo (RPC o F7b desde el canal) y lo consulta como cronologia. Persistido con PosPersistencia en /prisma/pos/nichos/confirmacion-valor.json.",
+  "_doc": "modules/nichos/confirmacion-valor — CUSTODIO del vertical NICHOS.\n\nQue hace: acumula feedback del dueno o del canal en un store append-only por proyecto. Dos RPCs: ingerir (append) y consultar (leer cronologia). Tambien ingiere automaticamente feedback que llega del canal (F7b: nichos.canal.mensaje.recibido).\n\nStore (per-proyecto, PosPersistencia): /prisma/pos/nichos/confirmacion-valor.json\n  { _version, _updated, entradas: [ {id, feedback_crudo, fuente, at} ] }\n\nPatron: ModuloHibridoReflejo + PosPersistencia (custodio — append-only, lectores libres).",
+  "ui_decision": {
+    "necesita": false,
+    "razon": "Custodio interno del vertical NICHOS. Acumula feedback sin cara propia. La cronologia se consume por bus desde el jefe o el cuadro de mando."
+  },
+  "publishes": [
+    { "event": "nichos.feedback.ingerido", "description": "PULSO fire-and-forget: una entrada de feedback fue ingerida. Payload: {id_proyecto, entrada_ref, timestamp}." },
+    { "event": "nichos.feedback.ingerido.failed", "description": "Par .failed del PULSO: la ingestion fallo (payload invalido). Payload: {id_proyecto, code, message, timestamp}." },
+    { "event": "nichos.feedback.ingerir.response", "description": "Response correlada por request_id al RPC nichos.feedback.ingerir.request. Payload: {status, data:{entrada_feedback}}." },
+    { "event": "nichos.feedback.consultar.response", "description": "Response correlada por request_id al RPC nichos.feedback.consultar.request. Payload: {status, data:{entradas[]}}." }
+  ],
+  "subscribes": [
+    { "event": "nichos.feedback.ingerir.request", "handler": "onIngerirRequest", "description": "Reflejo JS: ingiere feedback crudo en el store append-only y devuelve la entrada creada." },
+    { "event": "nichos.feedback.consultar.request", "handler": "onConsultarRequest", "description": "Reflejo JS: devuelve la cronologia de feedback del proyecto." },
+    { "event": "nichos.canal.mensaje.recibido", "handler": "onMensajeRecibido", "description": "Fire-and-forget reactivo (F7b): al llegar un mensaje del canal, lo ingiere como feedback automaticamente." },
+    { "event": "project.activated", "handler": "onProjectActivated", "description": "Reflejo JS: restaura las entradas de feedback del proyecto desde /prisma/pos/nichos/confirmacion-valor.json (PosPersistencia)." }
+  ]
+}

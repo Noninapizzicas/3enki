@@ -1,0 +1,22 @@
+{
+  "name": "cola-candidatos",
+  "version": "0.1.0",
+  "description": "CUSTODIO del vertical NICHOS: cola FIFO de candidatos por proyecto. Encola candidatos detectados (manual o automatico via nichos.candidato.detectado) y sirve lotes FIFO por RPC. Persistencia per-proyecto via PosPersistencia.",
+  "_doc": "modules/nichos/cola-candidatos — CUSTODIO del vertical NICHOS.\n\nQue guarda (per-proyecto, PosPersistencia): /prisma/pos/nichos/cola-candidatos.json\n  {\n    _version, _updated,\n    cola: {\n      version:  Int,\n      items:    [ { id_nicho, payload, encolado_at } ],\n      total_encolados: Int\n    }\n  }\n\nQue atiende:\n  - nichos.cola.candidatos.encolar.request → añade candidato al final de la cola. Emite nichos.candidato.encolado.\n  - nichos.cola.candidatos.sacar.request → extrae N candidatos FIFO (desde la cabeza).\n  - nichos.candidato.detectado → encola automaticamente el candidato del sondeador (F7b).\n  - project.activated → restaura el store del proyecto.\n\nInvariante: FIFO estricto — el primer candidato encolado es el primero en salir.\n\nPatron: ModuloHibridoReflejo + PosPersistencia. REFLEJO puro.",
+  "ui_decision": {
+    "necesita": false,
+    "razon": "Custodio de cola FIFO. Sin cara propia; se consulta por RPC desde el panel del vertical NICHOS o desde cualquier modulo que necesite candidatos."
+  },
+  "publishes": [
+    { "event": "nichos.candidato.encolado", "description": "PULSO fire-and-forget: candidato encolado en la cola. Payload: {project_id, id_nicho, posicion, timestamp}." },
+    { "event": "nichos.candidato.encolado.failed", "description": "Par .failed del PULSO: el encolado fallo (input invalido). Payload: {project_id, code, message, timestamp}." },
+    { "event": "nichos.cola.candidatos.encolar.response", "description": "Response correlada por request_id al RPC nichos.cola.candidatos.encolar.request. Payload: {status, data:{encolado}}." },
+    { "event": "nichos.cola.candidatos.sacar.response", "description": "Response correlada por request_id al RPC nichos.cola.candidatos.sacar.request. Payload: {status, data:{lote[]}}." }
+  ],
+  "subscribes": [
+    { "event": "nichos.cola.candidatos.encolar.request", "handler": "onEncolarRequest", "description": "RPC: añade un candidato al final de la cola FIFO." },
+    { "event": "nichos.cola.candidatos.sacar.request", "handler": "onSacarRequest", "description": "RPC: extrae N candidatos desde la cabeza de la cola (FIFO)." },
+    { "event": "nichos.candidato.detectado", "handler": "onCandidatoDetectado", "description": "F7b: encola automaticamente candidatos detectados por el sondeador." },
+    { "event": "project.activated", "handler": "onProjectActivated", "description": "Reflejo JS: restaura el store del proyecto desde /prisma/pos/nichos/cola-candidatos.json (PosPersistencia)." }
+  ]
+}

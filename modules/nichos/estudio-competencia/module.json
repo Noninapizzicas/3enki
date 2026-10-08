@@ -1,0 +1,20 @@
+{
+  "name": "estudio-competencia",
+  "version": "0.1.0",
+  "description": "MICRO-AGENTE del vertical NICHOS: estudia la competencia de una solucion propuesta. Consume fuentes externas por bus y usa ai-gateway (llm.complete.request) para analizar el panorama competitivo y el diferencial. Atiende el RPC nichos.competencia.estudiar y emite el pulso nichos.competencia.estudiada.",
+  "_doc": "modules/nichos/estudio-competencia — MICRO-AGENTE del vertical NICHOS.\n\nQue hace: recibe una solucion y estudia su competencia. Consume fuentes de datos externas via bus (nichos.fuente.consumir.request, nichos.fuente.limites.puede.consumir.request) y usa ai-gateway para sintetizar el panorama competitivo y el diferencial.\n\nSin estado persistido. Patron: ModuloHibridoReflejo (micro-agente — usa LLM via ai-gateway).",
+  "ui_decision": {
+    "necesita": false,
+    "razon": "Micro-agente sin cara propia. Estudia la competencia internamente y emite el informe al bus. Sin interaccion directa con el humano."
+  },
+  "publishes": [
+    { "event": "nichos.competencia.estudiada", "description": "PULSO fire-and-forget: estudio de competencia completado. Payload: {id_proyecto, panorama, diferencial, fuentes_usadas[], timestamp}." },
+    { "event": "nichos.competencia.estudiar.response", "description": "Response correlada por request_id al RPC nichos.competencia.estudiar.request. Payload: {status, data:{informe_competencia:{panorama, diferencial, fuentes_usadas[]}}}." },
+    { "event": "nichos.fuente.consumir.request", "description": "RPC al puerto de fuentes: solicita consumir una fuente externa para obtener datos de competencia." },
+    { "event": "nichos.fuente.limites.puede.consumir.request", "description": "RPC al gestor de limites: consulta si puede consumir una fuente antes de hacerlo." },
+    { "event": "llm.complete.request", "description": "Solicitud al ai-gateway para analisis competitivo via LLM." }
+  ],
+  "subscribes": [
+    { "event": "nichos.competencia.estudiar.request", "handler": "onEstudiarRequest", "description": "RPC: estudia la competencia de una solucion y devuelve el informe via response correlada." }
+  ]
+}

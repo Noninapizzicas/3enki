@@ -582,6 +582,63 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
     return null;
   }
 
+  // ── F7b · LA SEGUNDA MITAD: recomponer la vertical contra su plan ──
+  // Cruza el CONTRATO DISEÑADO (la espina enki-plan del F3b) contra los
+  // module.json REALES y devuelve el informe del recomponedor: veredicto,
+  // cifras y trabajo concreto. Determinista — una cuenta, no un juicio.
+  _recomponerVertical(progreso) {
+    const { Ensamblaje: Recomponedor } = require('./recomponedor');
+
+    // 1. El plan: la espina enki-plan (el mismo contenido que lee _progresoPlan).
+    const raiz = this._reposRoot();
+    const rutaPlan = path.join(raiz, 'esquemas', 'plan-construccion.md');
+    let plan = null;
+    // Rutas candidatas: la plana del repo y la de la bóveda de la vertical
+    // (camino B, PR #743). El plan vive donde la vertical lo escribió.
+    const candidatos = [rutaPlan];
+    const vertical = (progreso && progreso.vertical) || null;
+    if (vertical) candidatos.unshift(path.join(raiz, 'boveda', vertical, 'proceso', 'fase3b', 'plan-construccion.md'));
+    for (const ruta of candidatos) {
+      try {
+        const contenido = fs.readFileSync(ruta, 'utf8');
+        plan = this._extraerEspinaPlan(contenido);
+        if (plan && Array.isArray(plan.hojas) && plan.hojas.length) break;
+        plan = null;
+      } catch (_) { /* siguiente candidato */ }
+    }
+    if (!plan || !Array.isArray(plan.hojas) || !plan.hojas.length) {
+      throw new Error('no se pudo leer la espina enki-plan del plan de construcción');
+    }
+
+    // 2. Lo real: los module.json de cada hoja (CONSTRUIR y REUTILIZAR).
+    const real = {};
+    for (const h of (progreso.hojas || [])) {
+      if (!h || !h.slug) continue;
+      const dirModulo = this._buscarModulo(h.slug) || this._buscarModuloRepo(h.slug);
+      const entry = { existe: !!dirModulo, subscribes: [], publishes: [], tiene_interfaz: !!h.con_interfaz };
+      if (dirModulo) {
+        try {
+          const m = JSON.parse(fs.readFileSync(path.join(dirModulo, 'module.json'), 'utf8'));
+          entry.subscribes = m.subscribes || (m.events && m.events.subscribes) || [];
+          entry.publishes = m.publishes || (m.events && m.events.publishes) || [];
+        } catch (_) { /* manifest ilegible: entra vacío — el cruce lo dirá */ }
+      }
+      real[h.slug] = entry;
+    }
+
+    // 3. El cruce.
+    return new Recomponedor(plan, real).recomponer();
+  }
+
+  // Extrae el bloque ```json enki-plan``` del plan (la espina).
+  _extraerEspinaPlan(contenido) {
+    try {
+      const m = String(contenido).match(/```json enki-plan\n([\s\S]*?)\n```/);
+      if (!m) return null;
+      return JSON.parse(m[1]);
+    } catch (_) { return null; }
+  }
+
   async _progresoPlan(project_id) {
     try {
       const r = await this._rpc('fs.read.request', { project_id, path: 'esquemas/plan-construccion.md' });
@@ -904,13 +961,44 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
       for (const h of (progreso.hojas || [])) {
         if (h && h.slug && !this._estaHojaIntegrada(project_id, h.slug)) faltantes.push(h.slug);
       }
-      if (faltantes.length === 0) {
-        return { ok: true, verificados: [`${progreso.total} hojas integradas en el bus vivo`] };
+      if (faltantes.length > 0) {
+        return { ok: false,
+          esperado: ['todas las hojas integradas en el bus vivo'],
+          mensaje: `${spec.mensaje} Hojas sin integrar: ${faltantes.join(', ')}.`,
+          faltantes };
       }
-      return { ok: false,
-        esperado: ['todas las hojas integradas en el bus vivo'],
-        mensaje: `${spec.mensaje} Hojas sin integrar: ${faltantes.join(', ')}.`,
-        faltantes };
+      // ── LA SEGUNDA MITAD DE F7b: RECOMPONER (verdad, no fe) ──
+      // Todas las hojas están en el informe incremental; ahora hay que comprobar
+      // que lo ESCRITO habla con lo DISEÑADO. El recomponedor cruza el contrato
+      // del plan (F3b) contra los module.json reales y devuelve veredicto +
+      // cifras + trabajo concreto. Sin esto el gate daba verde con verticales
+      // cuya divergencia nadie midió (nichos 8-oct: estado "completada" mintiendo).
+      try {
+        const informe = this._recomponerVertical(progreso);
+        if (!informe.ensamblado) {
+          return { ok: false,
+            esperado: ['la vertical cierra contra su plan (F3b)'],
+            mensaje: this._conArquitectura(
+              `El ensamblaje NO cierra: ${informe.hojas_no_escritas} hojas sin escribir, ${informe.hojas_divergentes} divergentes, ${informe.conexiones_rotas_count} conexiones rotas (${informe.conexiones_falta_cablear} falta_cablear · ${informe.conexiones_hoja_no_escrita} hoja_no_escrita · ${informe.conexiones_sobra_el_publish} sobra_el_publish).`,
+              'ensamblado'),
+            ensamblaje: {
+              total_hojas: informe.total_hojas,
+              hojas_escritas: informe.hojas_escritas,
+              hojas_divergentes: informe.hojas_divergentes,
+              conexiones_rotas_count: informe.conexiones_rotas_count,
+              trabajo: informe.trabajo
+            } };
+        }
+        return { ok: true, verificados: [
+          `${progreso.total} hojas integradas en el bus vivo`,
+          `recomposición: ${informe.total_hojas} hojas, 0 divergencias de dominio, ${informe.conexiones_rotas_count} conexiones rotas` ] };
+      } catch (e) {
+        // El recomponedor es verificación, no freno de infraestructura: si no
+        // puede correr (plan ilegible, etc.) el gate avisa pero no miente.
+        return { ok: false,
+          esperado: ['la vertical cierra contra su plan (F3b)'],
+          mensaje: this._conArquitectura(`La recomposición no pudo correr (${e.message}) — no se puede declarar ensamblado sin cruzar el plan contra lo escrito.`, 'ensamblado') };
+      }
     }
     // FASE 8 — verificación final: TODAS las hojas del plan deben estar
     // construidas + con skill. No se fía del resumen del agente: cuenta el

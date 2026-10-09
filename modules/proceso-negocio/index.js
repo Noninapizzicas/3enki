@@ -1226,8 +1226,21 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
     } catch (_) { /* best-effort */ }
   }
 
-  // ── ESCRIBIR ARCHIVO DE FASE en el storage del proyecto ──
-  // Cada fase completada deja su registro JSON determinista en <proyecto>/proceso-negocio/<archivo>.json
+  // ── ESCRIBIR ARCHIVO DE FASE ──
+  // Cada fase completada deja su registro JSON determinista. DOS destinos (2026-10):
+  //   · CON vertical  → boveda/<vertical>/proceso/<archivo>.json   (LA VERTICAL SIN
+  //     PROYECTO: se construye una vez en el repo, los proyectos la ACTIVAN —
+  //     convención de la skill enki-vertical-por-subagentes, persistencia en la
+  //     bóveda del repo, FUERA de data/projects/<proyecto>).
+  //   · SIN vertical  → <proyecto>/proceso-negocio/<archivo>.json    (el modo
+  //     original: proceso dentro de un proyecto).
+  // La ruta SIEMPRE es relativa — nunca una ruta absoluta de máquina.
+  _rutaArchivoFase(vertical, nombre) {
+    return vertical
+      ? `boveda/${vertical}/proceso/${nombre}.json`
+      : `proceso-negocio/${nombre}.json`;
+  }
+
   async _escribirArchivoFase(project_id, fase, eventoFase, entregable, resumen) {
     const nombre = ARCHIVO_FASE[eventoFase];
     if (!nombre) return;  // F2 pasadas se gestionan aparte
@@ -1243,7 +1256,7 @@ class ProcesoNegocioReflejo extends ModuloHibridoReflejo {
     try {
       await this._rpc('fs.write.request', {
         project_id,
-        path: `proceso-negocio/${nombre}.json`,
+        path: this._rutaArchivoFase(resumen && resumen.vertical, nombre),
         content: JSON.stringify(registro, null, 2)
       });
     } catch (_) { /* best-effort — no bloquea el proceso */ }

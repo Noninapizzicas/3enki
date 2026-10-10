@@ -25,9 +25,10 @@ class CaminoEncontrarConstruir extends ModuloHibridoReflejo {
     this.version = '0.1.0';
     this._pendientes = new Map();
   }
-  onLoad(context) {
+  async onLoad(context) {
+    // this.eventBus lo asigna super.onLoad → suscribir DESPUES.
+    await super.onLoad(context);
     this.eventBus?.subscribe('nichos.catalogo.capacidad.disponibles.response', (e) => this._onCatalogoResponse(e));
-    return super.onLoad(context);
   }
 
   // ── RPC HANDLER ──

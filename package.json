@@ -204,7 +204,8 @@
     "cabecera:ensamblar": "node scripts/cabecera/doc-sync.js --ensamblar",
     "cabecera:check": "node scripts/cabecera/doc-sync.js --check",
     "validate:cabecera": "node scripts/cabecera/validate-cabecera.js",
-    "test:cabecera__doc-sync": "node tests/unit/cabecera__doc-sync.test.js"
+    "test:cabecera__doc-sync": "node tests/unit/cabecera__doc-sync.test.js",
+    "test:nichos__juicio-contratos": "node tests/unit/nichos__juicio-contratos.test.js"
   },
   "keywords": [
     "event-driven",

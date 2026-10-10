@@ -169,26 +169,39 @@ class Orquestador extends ModuloHibridoReflejo {
     if (!ciclo) return;
 
     ciclo.estado = ESTADO_CICLO.CONSTRUYENDO;
-    const viables = d.viables || d.resultados || [];
+    // `viables` puede venir como número (contrato nuevo) o como la lista de
+    // ids (`resultados`, contrato viejo). `detalle` es la lista de viables
+    // CON su informe/veredicto/camino — lo que el ensamblador necesita.
+    const detalle = Array.isArray(d.detalle) ? d.detalle : [];
+    const viables = (typeof d.viables === 'number')
+      ? d.viables
+      : (Array.isArray(d.resultados) ? d.resultados.length : 0);
     ciclo.viables = viables;
 
-    if (viables.length === 0) {
-      // Sin viables — cerrar ciclo sin ensamblaje
+    if (viables === 0 || detalle.length === 0) {
+      // Sin viables — cerrar ciclo sin ensamblaje.
       this._cerrarCiclo(correlationId, { viables: 0, razon: 'sin_viables' });
       return;
     }
 
-    // Disparar ensamblaje
-    this.eventBus?.publish('nichos.solucion.ensamblar.request', {
-      request_id: `ens-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      viables,
-      correlation_id: correlationId,
-      project_id: ciclo.project_id || null
-    });
+    // Disparar UN ensamblaje por nicho viable, con el CONTRATO que el
+    // ensamblador exige: id_nicho + veredicto + camino. Antes se le pasaba
+    // `viables: <n>` (un número) → "id_nicho requerido" (400) y el ciclo
+    // moría aquí sin producir solución.
+    for (const item of detalle) {
+      this.eventBus?.publish('nichos.solucion.ensamblar.request', {
+        request_id: `ens-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        id_nicho: item.id_nicho,
+        veredicto: item.veredicto || { codigo: 'VIABLE' },
+        camino: item.camino || { tipo: 'CONSTRUIR' },
+        correlation_id: correlationId,
+        project_id: ciclo.project_id || null
+      });
+    }
 
     this.logger?.info('orquestador.ensamblaje.disparado', {
       correlation_id: correlationId,
-      num_viables: viables.length
+      num_viables: detalle.length
     });
   }
 

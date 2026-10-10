@@ -70,7 +70,7 @@ sub.on('message', (topic, msg) => {
   let d; try { d = JSON.parse(msg.toString()); } catch { return; }
   const data = d.data !== undefined ? d.data : d;
   const et = d.event_type || topic.split('/').pop();
-  if (data.request_id === request_id && et.startsWith(eventType.replace(/\.request$/, ''))) {
+  if (data.request_id === request_id && et.endsWith('.response') && et.startsWith(eventType.replace(/\.request$/, ''))) {
     clearTimeout(to);
     console.log(`✅ RESPUESTA REAL (topic ${topic}, event_type ${et}):`);
     console.log(JSON.stringify(data, null, 2));

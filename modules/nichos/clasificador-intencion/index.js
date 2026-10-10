@@ -72,13 +72,30 @@ class ClasificadorIntencion extends ModuloHibridoReflejo {
 
     try {
       const resultado = await this._pedirAlLLM(texto, projectId);
+      const mensajeRef = d.mensaje_ref || d.id || null;
+
       this.eventBus?.publish('nichos.intencion.clasificada', {
         project_id: projectId,
-        mensaje_ref: d.mensaje_ref || d.id || null,
+        mensaje_ref: mensajeRef,
         tipo: resultado.tipo,
         confianza: resultado.confianza,
         timestamp: nowISO()
       });
+
+      // CABLE: una idea nueva de nicho (SEMILLA) ARRANCA la vertical.
+      // Este salto no existia: el clasificador clasificaba y la intencion
+      // moria en el bus (nadie consumia nichos.intencion.clasificada). Es el
+      // eslabon que une el bot de la vertical con la cadena reflectiva
+      // (capturador → normalizador → orquestador → ...).
+      if (resultado.tipo === 'SEMILLA') {
+        this.eventBus?.publish('nichos.semilla.capturar.request', {
+          texto,
+          project_id: projectId,
+          origen: 'telegram',
+          meta: { mensaje_ref: mensajeRef, confianza: resultado.confianza },
+          correlation_id: `sem-canal-${Date.now()}`
+        });
+      }
     } catch (err) {
       this.eventBus?.publish('nichos.intencion.clasificada.failed', {
         project_id: projectId,

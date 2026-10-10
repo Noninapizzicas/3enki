@@ -24,6 +24,15 @@ const nowISO = () => new Date().toISOString();
 
 const CANALES_CONOCIDOS = ['telegram', 'whatsapp', 'email'];
 
+// ── QUE BOT SIRVE A QUE VERTICAL ───────────────────────────────────────────
+// El bot de la vertical es un bot APARTE del bot del proyecto: por eso su
+// mensaje no va al chat del proyecto (no esta vinculado en telegram-bridge)
+// sino a la cadena reflectiva de la vertical. El evento entrante trae botName
+// pero NO project_id, asi que aqui se resuelve a que proyecto sirve cada bot.
+const SERVICIO_POR_BOT = {
+  Vertical_nichos_bot: 'e4bcbab9-654a-41e2-9bbd-bde6c2744379' // proyecto Futuro
+};
+
 class PuertoCanal extends ModuloHibridoReflejo {
   constructor() {
     super();
@@ -42,17 +51,35 @@ class PuertoCanal extends ModuloHibridoReflejo {
     return this._atender(e, 'registrar', 'nichos.canal.registrar.response', d => this._registrar(d));
   }
 
-  // ── LISTENER (fire-and-forget entrante) ──
+  // ── LISTENER (fire-and-forget entrante) — LA OREJA DE LA VERTICAL ──
+  //
+  // El bot del proyecto y el bot de la vertical son DOS identidades: el
+  // primero lleva el mensaje al chat, este segundo lo lleva a la vertical.
+  // Como el dueno escribe a los dos desde el MISMO chat, el chat_id no
+  // discrimina: la identidad que separa es el botName. Solo los mensajes de
+  // un bot de vertical entran aqui; los demas siguen su camino.
   onTelegramText(e) {
     const d = (e && (e.data || e)) || {};
+
+    const projectId = SERVICIO_POR_BOT[d.botName];
+    if (!projectId) return; // no es un bot de la vertical → no es asunto mio
+
+    const texto = d.text || '';
     this.eventBus?.publish('nichos.canal.mensaje.recibido', {
+      // CONTRATO: project_id + mensaje_entrante son los campos que consumen
+      // clasificador-intencion y confirmacion-valor (leen d.mensaje_entrante
+      // || d.texto, y exigen project_id). Sin ellos el mensaje se perdia
+      // en silencio.
+      project_id: projectId,
+      mensaje_entrante: texto,
       canal: 'telegram',
-      autor: d.from || d.chat_id || 'desconocido',
-      cuerpo: d.text || '',
+      autor: d.from || d.chatId || d.chat_id || 'desconocido',
+      cuerpo: texto,
       meta: {
-        chat_id: d.chat_id,
+        bot: d.botName,
+        chat_id: d.chatId || d.chat_id,
         date: d.date,
-        message_id: d.message_id
+        message_id: d.messageId || d.message_id
       },
       timestamp: nowISO()
     });

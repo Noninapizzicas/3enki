@@ -7,8 +7,8 @@
  * capturar la respuesta filtrando por request_id.
  *
  * Claves (resueltas en vivo, 2026-08-06):
- *  - El core PUBLICAR las respuestas en `core/*/events/<evento>` — el `*` es
- *    LITERAL en el topic. Suscribirse a `core/#` (o `core/*/events/#`).
+ *  - El core PUBLICAR las respuestas en `core/<cualquiera>/events/<evento>` —
+ *    el `*` es LITERAL en el topic. Suscribirse a `core/#` (o `core/<*>/events/#`).
  *  - Passwords planos NO valen; solo `enki:token:<jws>` o `enki:cert:<b64pem>`.
  *
  * Uso:

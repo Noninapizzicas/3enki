@@ -4,12 +4,14 @@
  * nichos/batch-validacion — REFLEJO JS (orquestador de micro-flujo) del vertical NICHOS.
  *
  * Saca candidatos de la cola, y por cada uno encadena:
- *   1. nichos.demanda.estudiar.request
- *   2. nichos.veredicto.emitir.request
- *   3. nichos.camino.decidir.request
- *   4. nichos.cortar.temprano.request (si NO_VIABLE)
+ *   1. nichos.demanda.estudiar.request      → { informe }
+ *   2. nichos.veredicto.emitir.request      → { veredicto }
+ *   3. nichos.camino.decidir.request        → { camino }
+ *   4. nichos.cortar.temprano.request       (si NO_VIABLE)
  *
- * Emite pulsos .lote.iniciado y .lote.completado con contadores.
+ * Emite pulsos .lote.iniciado y .lote.completado con contadores + `detalle`
+ * (la lista de viables con su informe/veredicto/camino) para que el
+ * orquestador pueda encadenar el ensamblaje con el contrato correcto.
  *
  * Sin estado propio — orquesta via _rpc sobre el bus.
  * Patron: ModuloHibridoReflejo.
@@ -47,8 +49,7 @@ class BatchValidacion extends ModuloHibridoReflejo {
     // 1. Sacar candidatos de la cola.
     // La cola recibe el tamaño como `n` (su parámetro canónico). Se envía
     // también `tamano` por compatibilidad. La respuesta trae `lote` y su
-    // alias `candidatos` — se aceptan ambos (antes solo se leía `candidatos`
-    // y la cola solo devolvía `lote` → el lote salía vacío siempre).
+    // alias `candidatos` — se aceptan ambos.
     const colResp = await this._rpc('nichos.cola.candidatos.sacar.request', {
       project_id: projectId,
       n: tamano,
@@ -80,30 +81,40 @@ class BatchValidacion extends ModuloHibridoReflejo {
     let no_viables = 0;
     let puentes = 0;
     const viablesIds = [];
+    const detalle = []; // { id_nicho, informe, veredicto, camino } por cada VIABLE
 
     for (const candidato of candidatos) {
       const id_nicho = candidato.id_nicho || candidato.id;
       if (!id_nicho) continue;
 
       try {
-        const resultado = await this._procesarCandidato(id_nicho, projectId);
-        if (resultado === 'VIABLE') { viables++; viablesIds.push(id_nicho); }
-        else if (resultado === 'NO_VIABLE') no_viables++;
-        else if (resultado === 'PUENTE') puentes++;
-        else { viables++; viablesIds.push(id_nicho); } // default seguro
+        const r = await this._procesarCandidato(candidato, projectId);
+        if (r.codigo === 'VIABLE') {
+          viables++; viablesIds.push(id_nicho);
+          detalle.push({
+            id_nicho: r.id_nicho,
+            informe: r.informe,
+            veredicto: r.veredicto,
+            camino: r.camino
+          });
+        } else if (r.codigo === 'NO_VIABLE') {
+          no_viables++;
+        } else {
+          puentes++;
+        }
       } catch (err) {
         this.logger?.error('batch-validacion.candidato.error', {
           id_nicho, error: err.message
         });
-        // Continuar con el siguiente candidato.
+        // Honesto: un candidato que no se pudo evaluar NO es un viable.
+        puentes++;
       }
     }
 
     // PULSO: lote completado.
-    // Lleva `correlation_id` (el orquestador lo exige para hallar el ciclo)
-    // y `viables`/`resultados` (la lista de nichos viables que encadena a
-    // construccion). Sin ellos el ciclo moria aqui: validacion OK, pero el
-    // orquestador no arrancaba el ensamblaje.
+    // Lleva `correlation_id` (el orquestador lo exige para hallar el ciclo),
+    // los contadores y `detalle` (los nichos viables CON su informe/veredicto/
+    // camino) para que el ensamblaje se dispare con el contrato correcto.
     this.eventBus?.publish('nichos.validacion.lote.completado', {
       project_id: projectId,
       lote_id,
@@ -112,6 +123,7 @@ class BatchValidacion extends ModuloHibridoReflejo {
       no_viables,
       puentes,
       resultados: viablesIds,
+      detalle,
       timestamp: nowISO()
     });
 
@@ -122,47 +134,72 @@ class BatchValidacion extends ModuloHibridoReflejo {
   }
 
   // =============================================================
-  // Micro-flujo por candidato
+  // Micro-flujo por candidato — CADA SALTO CON EL CONTRATO DEL CONSUMIDOR
   // =============================================================
-  async _procesarCandidato(id_nicho, projectId) {
-    // 2a. Estudiar demanda.
+  async _procesarCandidato(candidato, projectId) {
+    const id_nicho = candidato.id_nicho || candidato.id;
+    const semilla = (candidato.payload && candidato.payload.semilla) || {};
+
+    // El estudio de demanda exige un OBJETO candidato con `.nombre`
+    // (lo usa como query de fuentes externas y como etiqueta del prompt).
+    // Antes se le pasaba solo `id_nicho` → "candidato requerido" (400) y
+    // toda la validación se saltaba en silencio.
+    const candidatoObj = {
+      id: id_nicho,
+      nombre: semilla.vertical_sugerido || semilla.titulo
+        || semilla.texto_original || id_nicho,
+      ...semilla
+    };
+
+    // 2a. Estudiar demanda → devuelve { informe }.
     const demandaResp = await this._rpc('nichos.demanda.estudiar.request', {
       project_id: projectId,
-      id_nicho
-    }, { timeout_ms: 15000 });
+      candidato: candidatoObj
+    }, { timeout_ms: 120000 });
+    const informe = (demandaResp && demandaResp.data && demandaResp.data.informe) || null;
 
-    const estudio_demanda = (demandaResp && demandaResp.data) || {};
+    // 2b. Emitir veredicto — exige `informe` (antes se le pasaba
+    //     `estudio_demanda`, nombre que no reconoce → 400). Si no hay
+    //     informe, NO se inventa un VIABLE: degradación honesta → PUENTE.
+    let veredicto;
+    if (!informe) {
+      veredicto = { codigo: 'PUENTE', razon: 'sin_informe_demanda' };
+    } else {
+      const veredictoResp = await this._rpc('nichos.veredicto.emitir.request', {
+        project_id: projectId,
+        id_nicho,
+        informe
+      }, { timeout_ms: 90000 });
+      veredicto = (veredictoResp && veredictoResp.data && veredictoResp.data.veredicto)
+        || { codigo: 'PUENTE', razon: 'veredicto_no_emitido' };
+    }
 
-    // 2b. Emitir veredicto.
-    const veredictoResp = await this._rpc('nichos.veredicto.emitir.request', {
-      project_id: projectId,
-      id_nicho,
-      estudio_demanda
-    }, { timeout_ms: 10000 });
-
-    const veredicto = (veredictoResp && veredictoResp.data && veredictoResp.data.veredicto)
-      || { codigo: 'VIABLE' };
-
-    // 2c. Decidir camino.
-    await this._rpc('nichos.camino.decidir.request', {
-      project_id: projectId,
-      id_nicho,
-      veredicto
-    }, { timeout_ms: 10000 });
+    const codigo = (veredicto && veredicto.codigo) || 'PUENTE';
 
     // 2d. Cortar si NO_VIABLE.
-    const codigo = veredicto.codigo || veredicto;
     if (codigo === 'NO_VIABLE') {
       await this._rpc('nichos.cortar.temprano.request', {
         project_id: projectId,
         id_nicho,
         veredicto
       }, { timeout_ms: 10000 });
-      return 'NO_VIABLE';
+      return { id_nicho, codigo };
     }
 
-    if (codigo === 'PUENTE') return 'PUENTE';
-    return 'VIABLE';
+    // Ni VIABLE ni NO_VIABLE → PUENTE (necesita humano). No ensambla.
+    if (codigo !== 'VIABLE') return { id_nicho, codigo };
+
+    // 2c. Decidir camino — exige `informe` + `veredicto`.
+    const caminoResp = await this._rpc('nichos.camino.decidir.request', {
+      project_id: projectId,
+      id_nicho,
+      informe,
+      veredicto
+    }, { timeout_ms: 30000 });
+    const camino = (caminoResp && caminoResp.data && caminoResp.data.camino)
+      || { tipo: 'CONSTRUIR', razon: 'camino_no_decidido' };
+
+    return { id_nicho, codigo, informe, veredicto, camino };
   }
 }
 

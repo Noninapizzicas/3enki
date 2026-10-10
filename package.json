@@ -116,6 +116,7 @@
     "test:proceso-negocio-cadena": "node tests/unit/proceso-negocio__cadena-fases.test.js",
     "test:nichos__puerto-fuente-datos": "node tests/unit/nichos__puerto-fuente-datos.test.js",
     "test:nichos__conversor-fuente": "node tests/unit/nichos__conversor-fuente.test.js",
+    "test:nichos__clasificador-intencion": "node tests/unit/nichos__clasificador-intencion.test.js",
     "test:hot-reload": "node tests/unit/core__hot-reload.test.js",
     "validate:espejo-skills": "node scripts/cantera/validate-espejo-skills.js",
     "validate:naming": "node arquitectura/convenciones/_validators/naming.validate.js",

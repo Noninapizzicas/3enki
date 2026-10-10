@@ -51,10 +51,14 @@ class ClasificadorIntencion extends ModuloHibridoReflejo {
     this.version = '0.1.0';
     this._pendientes = new Map(); // correlation_id → { resolve, reject, context }
   }
-  onLoad(context) {
+  async onLoad(context) {
+    // OJO: this.eventBus lo asigna super.onLoad. Si se llama al subscribe
+    // ANTES, this.eventBus es undefined y el optional-chaining traga la
+    // suscripcion EN SILENCIO: el modulo pedia al LLM y nunca oia la
+    // respuesta (→ timeout de 30s y nichos.intencion.clasificada.failed).
+    await super.onLoad(context);
     // Escuchar respuestas del LLM correladas.
     this.eventBus?.subscribe('llm.complete.response', (e) => this._onLLMResponse(e));
-    return super.onLoad(context);
   }
 
   // ── RPC HANDLER ──

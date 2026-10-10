@@ -10,8 +10,7 @@
   "publishes": [
     { "event": "nichos.intencion.clasificada", "description": "PULSO fire-and-forget: intencion clasificada de un mensaje entrante. Payload: {project_id, mensaje_ref, tipo: SEMILLA|RESPUESTA_DECISION|CONSULTA|AJUSTE_CONFIG|DESCONOCIDO, confianza, timestamp}." },
     { "event": "nichos.intencion.clasificada.failed", "description": "Par .failed del PULSO: la clasificacion fallo (LLM no respondio, payload invalido). Payload: {project_id, code, message, timestamp}." },
-    { "event": "nichos.intencion.clasificar.response", "description": "Response correlada por request_id al RPC nichos.intencion.clasificar.request. Payload: {status, data:{intencion_entrante:{tipo, confianza}}}." },
-    { "event": "nichos.semilla.capturar.request", "description": "CABLE (F7b): si la intencion clasificada es SEMILLA, arranca la cadena reflectiva publicando la captura de la semilla. Payload: {texto, project_id, origen, meta, correlation_id}." }
+    { "event": "nichos.intencion.clasificar.response", "description": "Response correlada por request_id al RPC nichos.intencion.clasificar.request. Payload: {status, data:{intencion_entrante:{tipo, confianza}}}." }
   ],
   "subscribes": [
     { "event": "nichos.intencion.clasificar.request", "handler": "onClasificarRequest", "description": "RPC: clasifica un mensaje entrante y devuelve la intencion via response correlada." },

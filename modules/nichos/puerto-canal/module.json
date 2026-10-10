@@ -17,6 +17,6 @@
   "subscribes": [
     { "event": "nichos.canal.enviar.request", "handler": "onEnviarRequest", "description": "PUENTE: resuelve canal por propósito/destino, delega al bridge correspondiente y confirma. Payload: {request_id, canal?, destino, mensaje, correlation_id}." },
     { "event": "nichos.canal.registrar.request", "handler": "onRegistrarRequest", "description": "PUENTE: registra canal↔proyecto↔propósito. Payload: {request_id, canal, external_id, project_id, purpose}." },
-    { "event": "telegram.text.received", "handler": "onTelegramText", "description": "Mensaje entrante de Telegram: SOLO si viene de un bot de vertical (SERVICIO_POR_BOT[botName]) se republica como nichos.canal.mensaje.recibido, resolviendo su project_id (el evento trae botName, no project_id). Los bots de proyecto y cualquier otro bot se ignoran. Payload entrante: {botName, chatId, from, text, date}. Payload emitido: {project_id, mensaje_entrante, canal, autor, cuerpo, meta, timestamp}." }
+    { "event": "telegram.text.received", "handler": "onTelegramText", "description": "Mensaje entrante de Telegram: se republica como nichos.canal.mensaje.recibido. Payload: {chat_id, text, from, date}." }
   ]
 }

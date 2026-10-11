@@ -99,6 +99,12 @@ class ClasificadorIntencion extends ModuloHibridoReflejo {
           meta: { mensaje_ref: mensajeRef, confianza: resultado.confianza },
           correlation_id: `sem-canal-${Date.now()}`
         });
+      } else {
+        // LA VOZ — sin esto el dueno escribia "Hola", "No" o una pregunta y no
+        // le volvia NADA: la intencion se clasificaba y moria en el bus (nadie
+        // consume nichos.intencion.clasificada). La vertical solo respondia a
+        // las ideas nuevas; todo lo demas era silencio -> "no me responde".
+        this._responderAlDueno(projectId, resultado.tipo, mensajeRef);
       }
     } catch (err) {
       this.eventBus?.publish('nichos.intencion.clasificada.failed', {
@@ -108,6 +114,27 @@ class ClasificadorIntencion extends ModuloHibridoReflejo {
         timestamp: nowISO()
       });
     }
+  }
+
+  // ── LA VOZ del puerto — respuesta a un mensaje que NO arranca ciclo ──
+  // Publica por la boca NATIVA del vertical (nichos.canal.enviar.request); el
+  // puerto resuelve el destino del origen aprendido por la oreja (bot:chat de
+  // quien escribio), asi que aqui NO se clava ningun chat_id.
+  _responderAlDueno(projectId, tipo, mensajeRef) {
+    const cuerpo = {
+      CONSULTA: '🧭 Soy la vertical de nichos. Dime una idea de negocio (ej. "quiero montar un taller de crochet en Lorca") y la evalúo: competencia, demanda y precio.',
+      RESPUESTA_DECISION: '🧭 Anotado. Lo tengo en cuenta como tu decisión.',
+      AJUSTE_CONFIG: '🧭 Anotado el ajuste.',
+      DESCONOCIDO: '🧭 No te he entendido. Dime una idea de nicho y la evalúo.'
+    }[tipo] || '🧭 Anotado.';
+
+    this.eventBus?.publish('nichos.canal.enviar.request', {
+      request_id: `resp-int-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      project_id: projectId,
+      proposito: 'respuesta',
+      mensaje: { cuerpo, escalon: 'intencion' },
+      correlation_id: `int-${mensajeRef || Date.now()}`
+    });
   }
 
   // ── PROYECCION: clasificar (usada por RPC) ──

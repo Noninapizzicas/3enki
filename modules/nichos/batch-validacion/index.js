@@ -82,6 +82,7 @@ class BatchValidacion extends ModuloHibridoReflejo {
     let puentes = 0;
     const viablesIds = [];
     const detalle = []; // { id_nicho, informe, veredicto, camino } por cada VIABLE
+    const evaluados = []; // { id_nicho, codigo, veredicto } por cada candidato evaluado
 
     for (const candidato of candidatos) {
       const id_nicho = candidato.id_nicho || candidato.id;
@@ -89,6 +90,11 @@ class BatchValidacion extends ModuloHibridoReflejo {
 
       try {
         const r = await this._procesarCandidato(candidato, projectId);
+        // Registro de TODO lo evaluado (con su código y veredicto) para que el
+        // orquestador pueda citar el motivo de un PUENTE al avisar al dueño.
+        // El veredicto real trae `decision` (campo canónico) y su alias `codigo`.
+        // Leer solo `codigo` (que era undefined) mandaba TODO a PUENTE.
+        evaluados.push({ id_nicho: r.id_nicho || id_nicho, codigo: r.codigo, veredicto: r.veredicto || null, informe: r.informe || null });
         if (r.codigo === 'VIABLE') {
           viables++; viablesIds.push(id_nicho);
           detalle.push({
@@ -124,6 +130,7 @@ class BatchValidacion extends ModuloHibridoReflejo {
       puentes,
       resultados: viablesIds,
       detalle,
+      evaluados,
       timestamp: nowISO()
     });
 
@@ -174,7 +181,7 @@ class BatchValidacion extends ModuloHibridoReflejo {
         || { codigo: 'PUENTE', razon: 'veredicto_no_emitido' };
     }
 
-    const codigo = (veredicto && veredicto.codigo) || 'PUENTE';
+    const codigo = (veredicto && (veredicto.decision || veredicto.codigo)) || 'PUENTE';
 
     // 2d. Cortar si NO_VIABLE.
     if (codigo === 'NO_VIABLE') {
@@ -183,11 +190,12 @@ class BatchValidacion extends ModuloHibridoReflejo {
         id_nicho,
         veredicto
       }, { timeout_ms: 10000 });
-      return { id_nicho, codigo };
+      return { id_nicho, codigo, veredicto };
     }
 
     // Ni VIABLE ni NO_VIABLE → PUENTE (necesita humano). No ensambla.
-    if (codigo !== 'VIABLE') return { id_nicho, codigo };
+    // Se devuelve el veredicto para que el aviso al dueño pueda citar el motivo.
+    if (codigo !== 'VIABLE') return { id_nicho, codigo, veredicto };
 
     // 2c. Decidir camino — exige `informe` + `veredicto`.
     const caminoResp = await this._rpc('nichos.camino.decidir.request', {

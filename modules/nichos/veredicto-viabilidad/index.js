@@ -64,8 +64,14 @@ class VeredictoViabilidad extends ModuloHibridoReflejo {
       // 2. Pedir al LLM que evalúe
       const resultado = await this._pedirAlLLM(input.informe, criterio, projectId);
 
+      // `decision` es el campo CANÓNICO del veredicto; `codigo` viaja como
+      // ALIAS para los consumidores que leen `codigo` (batch-validacion). Sin
+      // el alias el juicio no se propagaba: batch leía `codigo` (undefined) →
+      // TODO candidato caía a PUENTE y la vertical JAMÁS emitía un VIABLE.
+      // Era el motivo real de "viables 0 · puentes 1" en cada ciclo.
       const veredicto = {
         decision: resultado.decision,
+        codigo: resultado.decision,
         razon: resultado.razon,
         criterio_aplicado: criterio
       };
@@ -73,6 +79,7 @@ class VeredictoViabilidad extends ModuloHibridoReflejo {
       this.eventBus?.publish('nichos.veredicto.emitido', {
         id_nicho: idNicho,
         decision: veredicto.decision,
+        codigo: veredicto.decision,
         razon: veredicto.razon,
         timestamp: nowISO()
       });

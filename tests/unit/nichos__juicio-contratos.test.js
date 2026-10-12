@@ -27,7 +27,7 @@ const ok = (t) => { console.log('✓', t); pas++; };
       return { data: { candidatos: [{ id_nicho: 'c1', payload: { semilla: { vertical_sugerido: 'taller ebike' } } }] } };
     }
     if (ev === 'nichos.demanda.estudiar.request') return { data: { informe: { demanda_1er_orden: 'x' } } };
-    if (ev === 'nichos.veredicto.emitir.request') return { data: { veredicto: { codigo: 'VIABLE' } } };
+    if (ev === 'nichos.veredicto.emitir.request') return { data: { veredicto: { decision: 'VIABLE' } } };
     if (ev === 'nichos.camino.decidir.request') return { data: { camino: { tipo: 'CONSTRUIR' } } };
     return { data: {} };
   };
@@ -77,7 +77,7 @@ const ok = (t) => { console.log('✓', t); pas++; };
   o.eventBus = { publish: (e, p) => po.push({ e, p }) };
   o.logger = { info() {}, error() {} };
   o._ciclos.set('cor', { project_id: 'p' });
-  o.onValidacionCompletada({ data: { correlation_id: 'cor', viables: 1, detalle: [{ id_nicho: 'c1', veredicto: { codigo: 'VIABLE' }, camino: { tipo: 'CONSTRUIR' } }] } });
+  o.onValidacionCompletada({ data: { correlation_id: 'cor', viables: 1, detalle: [{ id_nicho: 'c1', veredicto: { decision: 'VIABLE' }, camino: { tipo: 'CONSTRUIR' } }] } });
   const ens = po.find(p => p.e === 'nichos.solucion.ensamblar.request');
   assert.ok(ens, 'orquestador dispara ensamblar');
   assert.strictEqual(ens.p.id_nicho, 'c1', 'ensamblar recibe `id_nicho`');

@@ -8,7 +8,9 @@
  *      entregar y cobrar) y lo usa como iman de seleccion.
  *   1. Consulta reglas de exclusion.
  *   2. Consulta limites del perfil.
- *   3. Consume fuentes externas.
+ *   3. Consume fuentes externas — con la CONSULTA que nombra QUÉ buscamos y
+ *      DÓNDE ("<nicho> en <territorio>"), no el territorio pelado: buscar
+ *      "Lorca" a secas devuelve la Wikipedia de Lorca, no mercado.
  *   4. Filtra duplicados contra exclusiones.
  *   5. Ordena por encaje con el norte y ANOTA cada candidato (nunca descarta).
  *   6. Emite nichos.candidato.detectado por cada candidato valido.
@@ -367,11 +369,30 @@ class SondeadorTerritorio extends ModuloHibridoReflejo {
     const resp = await this._rpc('nichos.fuente.consumir.request', {
       project_id: projectId,
       semilla,
-      territorio
+      territorio,
+      // La fuente recibe la CONSULTA, no el territorio pelado: buscar "Lorca"
+      // devuelve "Lorca" de Wikipedia. Ver _consultaDe.
+      query: this._consultaDe(semilla, territorio)
     }, { timeout_ms: 20000 });
     return (resp && resp.data && Array.isArray(resp.data.resultados))
       ? resp.data.resultados
       : [];
+  }
+
+  /**
+   * _consultaDe — la consulta que sale a la fuente nombra QUÉ buscamos y DÓNDE:
+   * "<nicho> en <territorio>". El territorio solo es una localizacion, no una
+   * pregunta: sondeado en pelota, la fuente devolvia la Wikipedia de "Lorca"
+   * (ruido) en vez de mercado. Sin nicho declarado, cae al territorio — nunca
+   * se inventa uno.
+   */
+  _consultaDe(semilla, territorio) {
+    const nicho = String(
+      (semilla && (semilla.vertical_sugerido || semilla.nombre || semilla.descripcion)) || ''
+    ).trim();
+    const donde = String(territorio || '').trim();
+    if (nicho && donde) return `${nicho} en ${donde}`;
+    return nicho || donde || String(semilla || '');
   }
 }
 

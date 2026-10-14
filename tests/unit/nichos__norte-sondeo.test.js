@@ -243,6 +243,40 @@ const corre = (s) => s._sondear({ project_id: PROJECT_ID, correlation_id: 'cor-1
     assert.strictEqual(cap[0].descripcion, 'x', 'y no lo pisa');
   });
 
+
+  // ── 13-14. LA CONSULTA SALE CON EL NICHO, NO CON EL TERRITORIO PELADO ────
+  // Sondear "Lorca" a secas devolvia "Lorca" de Wikipedia: la fuente recibia un
+  // toponimo donde esperaba una pregunta. La consulta nombra que buscamos y donde.
+
+  async function conSondaFuente(semilla, territorio) {
+    const s = new (load('sondeador-territorio'))();
+    const pub = [];
+    let peticionFuente = null;
+    s.eventBus = { publish: (e, p) => pub.push({ e, p }) };
+    s.logger = { info() {}, error() {} };
+    s._rpc = async (ev, payload) => {
+      if (ev === 'nichos.catalogo.capacidad.disponibles.request') return { status: 200, data: { capacidades: [] } };
+      if (ev === 'nichos.reglas.exclusion.consultar.request') return { data: { conjunto_reglas: { patrones_excluir: [] } } };
+      if (ev === 'nichos.perfil.limite.leer.request') return { data: { perfil_limite: { limites: { max_candidatos_por_semilla: 10 } } } };
+      if (ev === 'nichos.fuente.consumir.request') { peticionFuente = payload; return { data: { resultados: [] } }; }
+      return null;
+    };
+    await s._sondear({ project_id: PROJECT_ID, correlation_id: 'c', semilla_normalizada: semilla });
+    return peticionFuente;
+  }
+
+  await test('la fuente recibe la consulta "<nicho> en <territorio>"', async () => {
+    const p = await conSondaFuente({ territorio: 'Lorca', vertical_sugerido: 'taller de crochet para principiantes' });
+    assert.ok(p, 'el sondeo consulta la fuente');
+    assert.strictEqual(p.query, 'taller de crochet para principiantes en Lorca',
+      'la consulta nombra el nicho Y el territorio');
+  });
+
+  await test('sin nicho declarado la consulta cae al territorio (no inventa)', async () => {
+    const p = await conSondaFuente({ territorio: 'Lorca' });
+    assert.strictEqual(p.query, 'Lorca', 'sin nicho no se inventa pregunta: queda el territorio');
+  });
+
   if (fallos) { console.error(`\n❌ ${fallos} test(s) fallaron`); process.exit(1); }
   console.log('\n✅ NORTE del buscador NICHOS OK');
 })().catch((e) => { console.error('✗ FALLO:', e.message); process.exit(1); });

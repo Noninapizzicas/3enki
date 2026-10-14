@@ -219,9 +219,30 @@ class CatalogoCapacidades extends ModuloHibridoReflejo {
     const catalogo = this._catalogo(input.project_id);
     const id = input.capacidad.id;
 
-    // Idempotencia: si ya está disponible, devuelve el estado vigente sin tocar.
+    // Idempotencia: si ya está disponible, la declaración se REFRESCA — promover
+    // otra vez es el acto de volver a declararla (el catálogo es una declaración
+    // viva, no una lápida). Si trae meta nueva, entra; el resto no se toca.
     const yaDisponible = catalogo.disponibles.find(c => c.id === id);
     if (yaDisponible) {
+      const metaNueva = (input.capacidad.meta && typeof input.capacidad.meta === 'object')
+        ? input.capacidad.meta
+        : null;
+      const metaCambia = metaNueva && JSON.stringify(metaNueva) !== JSON.stringify(yaDisponible.meta || null);
+      if (metaCambia) {
+        yaDisponible.meta = metaNueva;
+        yaDisponible.descripcion = input.capacidad.descripcion || yaDisponible.descripcion;
+        yaDisponible.cableada_por = input.por_autor;
+        yaDisponible.cableada_en = nowISO();
+        catalogo.version += 1;
+        catalogo.por_autor.push({
+          version: catalogo.version,
+          autor: input.por_autor,
+          op: 'REFRESCAR',
+          capacidad_id: id,
+          at: nowISO()
+        });
+        this._persist.marcarDirty(input.project_id);
+      }
       return {
         status: 200,
         data: {
@@ -229,7 +250,8 @@ class CatalogoCapacidades extends ModuloHibridoReflejo {
             version: catalogo.version,
             disponibles: catalogo.disponibles.slice(),
             encargos: catalogo.encargos.slice(),
-            ya_disponible: true
+            ya_disponible: true,
+            meta_actualizada: Boolean(metaCambia)
           }
         }
       };

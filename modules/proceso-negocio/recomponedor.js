@@ -64,6 +64,10 @@ class Ensamblaje {
   }
 
   // Los slugs del plan, con su contrato declarado.
+  // TOLERANTE a los DOS vocabularios de espina que conviven en el repo:
+  //  · canon del adaptador (nichos): subscribes[] / publishes[]
+  //  · habla de F3 (contabilidad):   sube[] / publica[]
+  // La hoja trae el que trajo su F3b — el recomponedor lee ambos.
   _hojasDisenadas() {
     const hojas = Array.isArray(this.plan.hojas) ? this.plan.hojas : [];
     return hojas
@@ -72,8 +76,8 @@ class Ensamblaje {
         slug: h.slug.trim(),
         forma: h.forma || null,
         accion: h.accion || null,
-        subscribes: normalizar(h.subscribes),
-        publishes: normalizar(h.publishes)
+        subscribes: normalizar(h.subscribes || h.sube),
+        publishes: normalizar(h.publishes || h.publica)
       }));
   }
 

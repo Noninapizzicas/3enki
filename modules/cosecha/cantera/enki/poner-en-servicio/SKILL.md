@@ -45,6 +45,64 @@ deploy + puesta en servicio)"*), es material NUEVO: hay que construirlo y DECIRL
 No inventar que existía ni fabricar un duplicado de algo que ya existe con otro nombre
 (`verificar-en-vivo` ya cubre la parte de verificación de F8).
 
+## Regla −1 — la vertical puede NO estar en el DEPLOY porque nunca llegó a `main` (medido 7-oct-2026, `nichos`)
+
+**Síntoma:** «pon en marcha la vertical X» → el vertical no responde, y **ningún restart lo resucita**.
+
+**Antes de tocar nada, distinguir los DOS mundos** (son distintos y se confunden siempre):
+
+```bash
+ls /opt/enki/modules/<V>          # ¿existe en el DEPLOY?
+ls ~/3enki/modules/<V>            # ¿existe en el REPO (working tree de main)?
+cd ~/3enki && git ls-tree -r --name-only origin/main modules/<V> | head    # ¿está en MAIN (git)?
+# y el log del core: ¿cuántos eventos de <V> hoy?
+grep -ac "<V>\\." /opt/enki/data/logs/current.jsonl
+```
+
+**La trampa medida:** el reset de una vertical (`chore(V): reset de la vertical a F2`) borra
+`modules/<V>/*`, su cantera, sus panels y sus tests **de `main`** — y si nadie la reconstruye,
+el `deploy.sh` (que sincroniza DESDE el repo con `rsync -a --delete`) **borra la vertical del
+deploy** en el siguiente deploy. Resultado: el vertical existe en ramas sin mergear, **no en
+main**, y por tanto no en el core vivo. Cero eventos de dominio del vertical en el log; la
+última actividad fue días atrás. Ningún restart ayuda: no hay nada que cargar.
+
+**Restaurar (rama desde `origin/main` REAL, sin tocar main):**
+
+```bash
+cd ~/3enki && git fetch origin          # puede fallar el ref local (permiso): usar git ls-remote origin main
+git worktree add --detach /home/hermes/3enki-<V>-restaurado $(git ls-remote origin main | cut -f1)
+cd /home/hermes/3enki-<V>-restaurado && git checkout -b hermes/<V>-restaurado
+git checkout <rama-con-la-vertical> -- modules/<V>                                  # los módulos
+git checkout <rama-con-la-vertical> -- 'tests/unit/<V>__*'                          # los tests
+# + cada SKILL.md de cantera + el trío frontend + su entrada en frontend/src/lib/modules/panels.ts
+git checkout <rama-con-la-vertical> -- frontend/src/lib/modules/<panel> frontend/src/lib/modules/panels.ts
+```
+
+Elegir la rama CONTANDO contra la espina del plan (`extraerEspina` del bloque `enki-plan`):
+`plan CONSTRUIR` debe ser EXACTAMENTE el conjunto de `modules/<V>/*/module.json` de la rama
+(la rama buena tiene N/… hojas, ni una de más — las ramas viejas arrastran nombres divergentes).
+Verificar antes del PR: `node --check` de cada `index.js`, `git diff --diff-filter=D <main> HEAD`
+**vacío** (la restauración solo AÑADE), y `git diff origin/main <rama> -- frontend/src/lib/modules/panels.ts`
+que solo traiga las entradas del vertical.
+
+### Pre-staging del deploy (para que un restart BASTE)
+
+Si el dueño solo va a dar UN restart, dejar el deploy ya sincronizado **sin parar el core**: el
+loader descubre los módulos al boot, así que basta con que estén en `/opt/enki/modules/` antes.
+
+```bash
+# módulos (un rsync POR MÓDULO — el `cd` del shell no cambia el cwd de un bucle con globs)
+rsync -a modules/<V>/ /opt/enki/modules/<V>/
+# cantera: por skill, con la ruta ABSOLUTA en el origen
+rsync -a /ruta/repo/modules/<V>/modules/cosecha/cantera/enki/<skill>/ \
+         /opt/enki/modules/cosecha/cantera/enki/<skill>/
+```
+
+**`/opt/enki` es parcialmente escribible:** `modules/` SÍ (www-data:www-data 2775). Pero
+**`/opt/enki/index.js`, `/opt/enki/package.json` y `/opt/enki/core/**` NO** (`www-data:www-data 644`,
+sin `g+w`) → cambiar el core exige `sudo cp` o el deploy. Y `execute_code` NO puede escribir ahí
+(el sandbox lo bloquea); usar `terminal`.
+
 ## Los seis pasos, en orden
 
 ### 1 · Escribir la skill en los TRES sitios (y hacer que la cantera la INDEXE)

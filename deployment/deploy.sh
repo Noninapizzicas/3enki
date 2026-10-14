@@ -45,6 +45,11 @@ rsync -a --delete \
     --exclude='data' \
     --exclude='public' \
     --exclude='.hermes' \
+    --exclude='.work*' \
+    --exclude='*.bak-*' \
+    --exclude='frontend/build' \
+    --exclude='frontend/.svelte-kit' \
+    --exclude='frontend/package-lock.json' \
     "${REPO_DIR}/" "${INSTALL_DIR}/"
 
 # 2) Deps backend

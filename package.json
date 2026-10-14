@@ -206,7 +206,11 @@
     "validate:cabecera": "node scripts/cabecera/validate-cabecera.js",
     "test:cabecera__doc-sync": "node tests/unit/cabecera__doc-sync.test.js",
     "test:nichos__juicio-contratos": "node tests/unit/nichos__juicio-contratos.test.js",
-    "test:nichos__bucle-decision": "node tests/unit/nichos__bucle-decision.test.js"
+    "test:nichos__bucle-decision": "node tests/unit/nichos__bucle-decision.test.js",
+    "test:nichos__norte-sondeo": "node tests/unit/nichos__norte-sondeo.test.js",
+    "test:nichos__sembrador-norte": "node tests/unit/nichos__sembrador-norte.test.js",
+    "test:nichos__clasificador-voz": "node tests/unit/nichos__clasificador-voz.test.js",
+    "test:telegram-bridge__user-id": "node tests/unit/telegram-bridge__user-id.test.js"
   },
   "keywords": [
     "event-driven",

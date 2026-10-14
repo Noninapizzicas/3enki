@@ -21,9 +21,13 @@
  *   'constructor' — un operador que cableó una capacidad fuera del flujo.
  * Cualquier otro autor → 403 ESCRITOR_NO_AUTORIZADO.
  *
- * Factory: toda falta nace como EncargoCapacidad; promover() es la única puerta
- * por la que un encargo se convierte en disponible. El id de la capacidad es su
- * identidad: encargar() es IDEMPOTENTE por id — repetir no duplica.
+ * Factory: toda falta nace como EncargoCapacidad. El id de la capacidad es su
+ * identidad: encargar() es IDEMPOTENTE por id — repetir no duplica. Y promover()
+ * es FÁBRICA, no puerta: promover es el acto que trae la capacidad a la
+ * existencia, así que una capacidad NO encargada también nace DISPONIBLE si
+ * quien la declara está autorizado (quien la cablea la declara). Nada de
+ * 'declara antes de actuar': la autoridad vive en el guard de autores, no en un
+ * pre-registro que te trata como sospechoso.
  *
  * Patrón: ModuloHibridoReflejo (REFLEJO puro). Sin mitad blueprint — la lógica
  * es CRUD + aritmética de versión + guard de legalidad del estado del encargo.
@@ -215,9 +219,30 @@ class CatalogoCapacidades extends ModuloHibridoReflejo {
     const catalogo = this._catalogo(input.project_id);
     const id = input.capacidad.id;
 
-    // Idempotencia: si ya está disponible, devuelve el estado vigente sin tocar.
+    // Idempotencia: si ya está disponible, la declaración se REFRESCA — promover
+    // otra vez es el acto de volver a declararla (el catálogo es una declaración
+    // viva, no una lápida). Si trae meta nueva, entra; el resto no se toca.
     const yaDisponible = catalogo.disponibles.find(c => c.id === id);
     if (yaDisponible) {
+      const metaNueva = (input.capacidad.meta && typeof input.capacidad.meta === 'object')
+        ? input.capacidad.meta
+        : null;
+      const metaCambia = metaNueva && JSON.stringify(metaNueva) !== JSON.stringify(yaDisponible.meta || null);
+      if (metaCambia) {
+        yaDisponible.meta = metaNueva;
+        yaDisponible.descripcion = input.capacidad.descripcion || yaDisponible.descripcion;
+        yaDisponible.cableada_por = input.por_autor;
+        yaDisponible.cableada_en = nowISO();
+        catalogo.version += 1;
+        catalogo.por_autor.push({
+          version: catalogo.version,
+          autor: input.por_autor,
+          op: 'REFRESCAR',
+          capacidad_id: id,
+          at: nowISO()
+        });
+        this._persist.marcarDirty(input.project_id);
+      }
       return {
         status: 200,
         data: {
@@ -225,32 +250,33 @@ class CatalogoCapacidades extends ModuloHibridoReflejo {
             version: catalogo.version,
             disponibles: catalogo.disponibles.slice(),
             encargos: catalogo.encargos.slice(),
-            ya_disponible: true
+            ya_disponible: true,
+            meta_actualizada: Boolean(metaCambia)
           }
         }
       };
     }
 
-    // Guard de legalidad: solo se promueve lo que estaba ENCARGADO.
+    // El encargo, si lo hubiera, se salda con esta promoción.
     const idxEncargo = catalogo.encargos.findIndex(c => c.id === id);
-    if (idxEncargo < 0) {
-      return this._errorResponse(
-        404,
-        'CAPACIDAD_NO_ENCARGADA',
-        'no hay encargo pendiente para esta capacidad; encargar primero',
-        { capacidad_id: id }
-      );
-    }
+    const encargo = idxEncargo >= 0 ? catalogo.encargos[idxEncargo] : null;
 
-    const encargo = catalogo.encargos[idxEncargo];
+    // La capacidad NACE DISPONIBLE del acto de promover: quien la cablea la
+    // declara, y declararla ES el acto que la trae a la existencia. No hay
+    // puerta previa de pre-registro (el viejo 404 'encargar primero' era el
+    // antipatrón 'declara antes de actuar': te trataba como sospechoso y
+    // centralizaba el permiso). La autoridad sigue donde importa — en el
+    // guard de autores de arriba, que no se toca.
     const disponible = {
-      id: encargo.id,
-      descripcion: (input.capacidad.descripcion || encargo.descripcion),
+      id: input.capacidad.id,
+      descripcion: input.capacidad.descripcion || encargo?.descripcion || '',
       cableada_por: input.por_autor,
       cableada_en: nowISO(),
-      meta: (input.capacidad.meta && typeof input.capacidad.meta === 'object') ? input.capacidad.meta : encargo.meta
+      meta: (input.capacidad.meta && typeof input.capacidad.meta === 'object')
+        ? input.capacidad.meta
+        : (encargo ? encargo.meta : null) || null
     };
-    catalogo.encargos.splice(idxEncargo, 1);
+    if (encargo) catalogo.encargos.splice(idxEncargo, 1);
     catalogo.disponibles.push(disponible);
     catalogo.version += 1;
     catalogo.por_autor.push({

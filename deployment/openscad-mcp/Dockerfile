@@ -30,6 +30,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 ENV PATH="/root/.local/bin:${PATH}"
 
+# ── Librerías de modelado (BOSL2) ───────────────────────────
+# BOSL2 = primitivas avanzadas: snap_pin/rabbit_clip, screw_hole/nut_trap,
+# threaded_rod, spur_gear/ring_gear/worm_gear, knuckle_hinge, fillets.
+# Se instala en la imagen para que sobreviva a la recreación del contenedor.
+RUN mkdir -p /usr/share/openscad/libraries \
+    && (git clone --depth 1 https://github.com/BelfrySCAD/BOSL2.git \
+        /usr/share/openscad/libraries/BOSL2 || true)
+
 RUN useradd -m -u 1000 mcp \
     && mkdir -p /tmp/openscad-renders /tmp/openscad-cache /tmp/openscad-output /app/models \
     && chown -R mcp:mcp /tmp/openscad-* /app

@@ -9,7 +9,7 @@
   },
   "publishes": [
     { "event": "nichos.validacion.lote.iniciado", "description": "PULSO fire-and-forget: se inicio un lote de validacion. Payload: {lote_id, candidatos_total, timestamp}." },
-    { "event": "nichos.validacion.lote.completado", "description": "PULSO fire-and-forget: un lote de validacion se completo. Payload: {lote_id, viables, no_viables, puentes, timestamp}." },
+    { "event": "nichos.validacion.lote.completado", "description": "PULSO fire-and-forget: un lote de validacion se completo. Payload: {lote_id, viables, no_viables, puentes, detalle, evaluados, correlation_id, timestamp}." },
     { "event": "nichos.validacion.lote.correr.response", "description": "Response correlada por request_id al RPC nichos.validacion.lote.correr.request. Payload: {status, data:{lote_id, procesados}}." },
     { "event": "nichos.cola.candidatos.sacar.request", "description": "RPC hacia cola: saca N candidatos para validar. Payload: {request_id, tamano}." },
     { "event": "nichos.demanda.estudiar.request", "description": "RPC hacia estudio de demanda: analiza la demanda del candidato. Payload: {request_id, id_nicho}." },

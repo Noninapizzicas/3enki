@@ -417,6 +417,19 @@ async function main() {
 
       await core.moduleLoader.loadAll();
 
+      // Hot-reload de módulos: si config.modules.hot_reload === true, observar
+      // cada módulo cargado para que editar su index.js (o un helper del que
+      // dependa) lo recargue EN CALIENTE — sin reiniciar enki.service ni sudo.
+      // El loader cachea el código (require); el watcher + reload() lo sueltan
+      // y vuelven a cargar. Sin esto, hot_reload:true es una promesa vacía.
+      if (config.modules?.hot_reload === true) {
+        core.moduleLoader.watchAll();
+        core.logger.info('core.modules.watching', {
+          count: core.moduleLoader.watchers.size
+        });
+        console.log(`   👁️  Hot-reload ACTIVO — observando ${core.moduleLoader.watchers.size} módulo(s)`);
+      }
+
       const loadedModules = core.moduleLoader.getLoadedModules();
 
       core.logger.info('core.modules.loaded', {

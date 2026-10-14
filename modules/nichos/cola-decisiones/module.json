@@ -1,0 +1,25 @@
+{
+  "name": "cola-decisiones",
+  "version": "0.1.0",
+  "description": "CUSTODIO del vertical NICHOS: cola de solicitudes de decision pendientes por proyecto. Encola, lista por dueno/vencimiento, cierra con respuesta y barre caducadas via scheduler. Persiste el array de solicitudes con estado ABIERTA|RESPONDIDA|CADUCADA.",
+  "_doc": "modules/nichos/cola-decisiones — CUSTODIO del vertical NICHOS.\n\nQue guarda (per-proyecto, PosPersistencia): /prisma/pos/nichos/cola-decisiones.json\n  {\n    _version, _updated,\n    cola: {\n      version:       Int,\n      solicitudes:   [ { id, tipo, contexto, opciones, caducidad, estado, respuesta? } ]\n    }\n  }\n\nQue atiende:\n  - nichos.cola.decisiones.encolar.request → anade solicitud al store.\n  - nichos.cola.decisiones.siguientes.request → lista por dueno/vencimiento.\n  - nichos.cola.decisiones.cerrar.request → marca respondida y persiste la eleccion.\n  - scheduler.job.triggered → barre caducadas periodicamente.\n  - project.activated → restaura el store del proyecto.\n\nEmite:\n  - nichos.decision.solicitud.abierta — PULSO al encolar.\n  - nichos.decision.solicitud.respondida — PULSO al cerrar.\n  - nichos.decision.solicitud.caducada — PULSO al barrer caducada.\n\nPatron: ModuloHibridoReflejo + PosPersistencia. CUSTODIO.",
+  "ui_decision": {
+    "necesita": false,
+    "razon": "Custodio de cola de decisiones. Sin cara propia; se consulta por RPC desde el panel del vertical NICHOS o desde el jefe (K) que presenta decisiones al dueno."
+  },
+  "publishes": [
+    { "event": "nichos.cola.decisiones.encolar.response", "description": "Response correlada por request_id al RPC nichos.cola.decisiones.encolar.request. Payload: {status, data:{encolada}}." },
+    { "event": "nichos.cola.decisiones.siguientes.response", "description": "Response correlada por request_id al RPC nichos.cola.decisiones.siguientes.request. Payload: {status, data:{solicitudes[]}}." },
+    { "event": "nichos.cola.decisiones.cerrar.response", "description": "Response correlada por request_id al RPC nichos.cola.decisiones.cerrar.request. Payload: {status, data:{cerrada}}." },
+    { "event": "nichos.decision.solicitud.abierta", "description": "PULSO fire-and-forget: solicitud de decision encolada. Payload: {solicitud_id, tipo, contexto, opciones, caducidad, timestamp}." },
+    { "event": "nichos.decision.solicitud.respondida", "description": "PULSO fire-and-forget: solicitud cerrada con respuesta. Payload: {solicitud_id, opcion_elegida, dueno, nota_libre, timestamp}." },
+    { "event": "nichos.decision.solicitud.caducada", "description": "PULSO fire-and-forget: solicitud caducada sin respuesta. Payload: {solicitud_id, caducidad, timestamp}." }
+  ],
+  "subscribes": [
+    { "event": "nichos.cola.decisiones.encolar.request", "handler": "onEncolarRequest", "description": "RPC: anade una solicitud de decision al store." },
+    { "event": "nichos.cola.decisiones.siguientes.request", "handler": "onSiguientesRequest", "description": "RPC: lista solicitudes abiertas por dueno/vencimiento." },
+    { "event": "nichos.cola.decisiones.cerrar.request", "handler": "onCerrarRequest", "description": "RPC: marca una solicitud como respondida y persiste la eleccion." },
+    { "event": "scheduler.job.triggered", "handler": "onSchedulerTriggered", "description": "Reflejo JS: barre solicitudes caducadas periodicamente." },
+    { "event": "project.activated", "handler": "onProjectActivated", "description": "Reflejo JS: restaura el store del proyecto desde /prisma/pos/nichos/cola-decisiones.json (PosPersistencia)." }
+  ]
+}

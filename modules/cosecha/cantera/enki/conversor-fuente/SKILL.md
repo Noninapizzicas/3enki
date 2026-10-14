@@ -1,156 +1,99 @@
 ---
 name: conversor-fuente
-description: >
-  Skill FULL del módulo CONVERSOR (reflejo stateless) `conversor-fuente` de la vertical
-  nichos (Radar de Nichos). Es la ÚNICA frontera de formatos entre las fuentes externas
-  de datos y los datos internos homogéneos de nichos: recibe datos crudos de una fuente
-  (formato nativo del proveedor) y los convierte a la señal homogénea interna
-  {id, titulo, url, fuente, formato, relevancia}. Úsala para operar, depurar o extender
-  el conversor, o para entender su contrato de eventos y sus reglas de negocio.
-when-to-use: >
-  - Cuando necesites convertir el DatasetBruto de una fuente a la señal homogénea interna
-    (RPC nichos.fuente.convertir.request).
-  - Cuando depures por qué un dataset no se cruza (sin nicho/items, o item sin titulo/url)
-    y se rechaza con el par FORMATO_INVALIDO (422).
-  - Cuando quieras entender el patrón de CONVERSOR (proyecciones puras _cruzar/_mapear, cero
-    lógica de negocio) y su contrato de eventos como frontera de formatos del sistema.
-  - Cuando vayas a escribir/ampliar el test unitario del conversor.
-tags: [enki, modulo, conversor, reflejo, nichos, radar, formato, proyecto-3d]
+description: >-
+  CONVERSOR del vertical NICHOS (bloque J · interlocutor proveedor):
+  homogeneiza crudo heterogeneo de fuentes externas (crawl4rs, APIs,
+  scrapers) en un dato con esquema estable para los consumidores del
+  vertical. RPC puro sin estado.
+fuente: enki
+dominio: nichos
+lente_dominio: nichos
+lente_tarea: conversor
+tags: [nichos, conversor, fuente, bloque-j, interlocutor-proveedor, bus, mqtt, normalizacion]
 ---
 
-# conversor-fuente — CONVERSOR (frontera de formatos) del Radar
+# nichos · conversor-fuente
 
-## Qué hace el módulo
+> **Que es.** CONVERSOR puro (bloque J interlocutor proveedor) del vertical
+> NICHOS. Recibe el crudo heterogeneo de cada fuente externa y lo normaliza
+> a un esquema estable (`dato_homogeneo`) que el resto del vertical consume
+> sin saber de que fuente vino.
+>
+> Codigo: `modules/nichos/conversor-fuente/index.js`. La verdad viva es
+> el codigo; esta skill es la referencia de uso.
 
-`conversor-fuente` es un **CONVERSOR REFLEJO JS PURO** (J2): cero pensar, solo cruzar
-formato. Es la **ÚNICA frontera de formatos** entre las fuentes externas de datos y los
-datos internos homogéneos del sistema. Recibe los datos crudos de una fuente en su formato
-nativo (el `DatasetBruto` de `puerto-fuente-datos`) y los convierte a la **señal homogénea
-interna** de nichos.
+---
 
-Sin estado, sin red, sin store: cada op es una función pura (entra objeto, sale objeto).
-**Cero lógica de negocio**: solo convertir formato. Dos proyecciones puras:
+## Forma Enki
 
-- `_cruzar`: la única frontera — valida el `DatasetBruto` y deriva los `DatosHomogeneos`.
-- `_mapear`: mapea un `item` crudo de un `formato`Origen al formato interno canónico
-  (`titulo`/`url` desde los campos nativos; `id` derivado determinista; `relevancia`).
+- Patron: **CONVERSOR** (transformacion determinista, sin estado).
+- Base: `ModuloHibridoReflejo` (sin `PosPersistencia`).
+- RPC puro: recibe crudo + origen, devuelve dato_homogeneo.
+- Degradacion honesta: si el origen es desconocido, envuelve el crudo con
+  `origen_desconocido: true` en lugar de fallar.
 
-Al convertir con éxito publica `nichos.datos_homogeneos`; si el formato es inválido (sin
-nicho, sin items, o un item sin titulo ni url) cierra el círculo con el par determinista
-`nichos.fuente.convertir.failed`. **No inventa**: un item que no se puede convertir se cuenta
-como `rechazado`, nunca se rellena con datos falsos.
+## Campos del dato_homogeneo
 
-## Contrato de eventos (module.json real)
-
-### Subscribes (RPCs request/response)
-
-| Evento | Handler | Descripción |
+| Campo | Tipo | Semantica |
 |---|---|---|
-| `nichos.fuente.convertir.request` | `onConvertirRequest` | RPC puro: {nicho, fuente, formato, dataset_bruto:{items}} → DatosHomogeneos (señal homogénea interna). `_cruzar` valida el DatasetBruto y mapea cada item crudo a {id, titulo, url, fuente, formato, relevancia} vía `_mapear`. Éxito → publica `nichos.datos_homogeneos` y responde por `nichos.fuente.convertir.response`; formato inválido (sin nicho, sin items, o item sin titulo/url) → `nichos.fuente.convertir.failed`. |
+| `titulo` | `String \| null` | titulo o nombre extraido del crudo |
+| `contenido` | `String \| null` | cuerpo o texto principal |
+| `url` | `String \| null` | URL de procedencia |
+| `meta` | `Object` | metadatos adicionales segun origen |
+| `origen` | `String` | identificador de la fuente (crawl4rs, google-trends, etc.) |
+| `normalizado_en` | `ISO` | timestamp de la normalizacion |
+| `origen_desconocido` | `Boolean` | true si no hay normalizador especifico para el origen |
 
-### Publishes
+## Eventos que atiende (request -> response)
 
-| Evento | Descripción |
+| Evento | Handler | Que devuelve |
+|---|---|---|
+| `nichos.conversor.normalizar.request` | `onNormalizarRequest` | `{status:200, data:{dato_homogeneo:{titulo, contenido, url, meta, origen, normalizado_en, origen_desconocido}}}` |
+
+### Payload de `.normalizar.request`
+
+```json
+{
+  "request_id": "uuid",
+  "crudo": { "title": "...", "text": "...", "url": "..." },
+  "origen": "crawl4rs"
+}
+```
+
+## Eventos que emite
+
+Ninguno (RPC puro sin pulsos propios).
+
+## Cuando se usa
+
+- **nichos-puerto-fuente-datos (J1)** llama a este conversor tras recibir el
+  crudo de crawl4rs u otra fuente, para entregar un dato homogeneo al resto
+  del vertical.
+- Cualquier modulo que reciba datos crudos de una fuente externa y necesite
+  normalizarlos antes de procesarlos.
+
+## Origenes soportados
+
+| Origen | Campos que extrae |
 |---|---|
-| `nichos.datos_homogeneos` | Fire-and-forget (J2): los datos crudos de la fuente quedaron convertidos a la señal homogénea interna → {nicho, fuente, formato, total, convertidos, items:[{id,titulo,url,fuente,formato,relevancia}]}. La consume estudio-demanda (J5). |
-| `nichos.fuente.convertir.failed` | Par de fallo determinista: el DatasetBruto llegó sin nicho, sin items, o un item no tiene titulo/url → {status:4xx, code, mensaje}. Cierra el círculo de nichos.fuente.convertir.request. |
+| `crawl4rs` | title/titulo, text/content/contenido, url/link, meta |
+| `google-trends` | query/keyword, summary/description, url, interest+region |
+| `api-mercado` | name/titulo, body/contenido, endpoint/url, meta |
+| `searxng` | title, content/snippet, url/href, engine+score |
+| _(desconocido)_ | intenta title/titulo/name, content/contenido/text/body, url/link; marca `origen_desconocido: true` |
 
-> **Regla de cierre de círculo**: el par `nichos.fuente.convertir.failed` cierra el círculo de
-> `nichos.fuente.convertir.request`, emitido por `onConvertirRequest` cuando `_cruzar` devuelve
-> un status distinto de 200 (cualquier `FORMATO_INVALIDO` o `INVALID_INPUT`).
+## Errores conocidos
 
-> **Nota: el `.response` (`nichos.fuente.convertir.response`) no figura como event en publishes de
-> module.json**, pero index.js lo usa como destino de respuesta en `_atender(...)`, como es el
-> estándar del framework (todo flujo request responde su `.response`).
+| Status | Code | Causa |
+|---|---|---|
+| 400 | `INVALID_INPUT` | falta `crudo` (o no es objeto) o falta `origen` |
 
-## Reglas de negocio
+## Integracion (patron RPC del bus)
 
-1. **Frontera única de formatos**: `_cruzar` exige `nicho` (string) y `formato` (string);
-   sin ellos → `400 INVALID_INPUT` (`_invalid('nicho')` / `_invalid('formato')`).
-2. **DatasetBruto con items[] obligatorio → `422 FORMATO_INVALIDO`**:
-   sin `dataset_bruto.items` array → `{ status:422, code:'FORMATO_INVALIDO', mensaje:'el DatasetBruto debe traer items[] para poder cruzar al formato interno' }`.
-   Con `items: []` → `{ status:422, code:'FORMATO_INVALIDO', mensaje:'el DatasetBruto no trae ningun item crudo que convertir' }`.
-3. **Item no convertible se RECHAZA, no se inventa**: `_mapear` devuelve `null` si al item
-   le falta título y url (`titulo`/`title`/`nombre`/`name` y `url`/`link`/`href`/`enlace`,
-   vía `_primer`). Si al final `items.length === 0` → `422 FORMATO_INVALIDO`
-   (`'ningun item del DatasetBruto pudo convertirse al formato interno (faltan titulo o url)'`).
-4. **id determinista y estable**: `_id('${fuente}:${url}')` → `sha1(...).slice(0,12)`. El mismo
-   origen produce el mismo `id` entre conversiones (deduplicación estable).
-5. **relevancia saneada**: `Number(item.relevancia) > 0 ? ... : 0` (si no es numérico positivo → 0).
-6. **Respuesta con métricas de conversión**: éxito → `{ nicho, fuente, formato, total: items de entrada, convertidos, rechazados, items }`.
-7. **Sin estado (conversor stateless)**: sin store, sin PosPersistencia, sin `project.activated`.
-
-## Cómo se usa (RPCs)
-
-RPC request/response que responde en `nichos.fuente.convertir.response`:
-
-### 1. `convertir` — cruzar el DatasetBruto a datos homogéneos
-
-```json
-{
-  "nicho": "salsa picante para restaurantes",
-  "fuente": "buscador",
-  "formato": "serp",
-  "dataset_bruto": {
-    "items": [
-      { "title": "Salsa la Casera", "link": "https://tienda.com/salsa-casera", "relevancia": 3 },
-      { "nombre": "Chiles el Taco", "url": "https://chiles.com", "relevancia": 2 },
-      { "titulo": "Sin url" }
-    ]
-  }
-}
+```javascript
+const resp = await bus.publishAndWait('nichos.conversor.normalizar.request', {
+  crudo: { title: 'Mi pagina', text: 'Contenido...', url: 'https://...' },
+  origen: 'crawl4rs'
+});
+const { dato_homogeneo } = resp.data;
 ```
-Respuesta `200`:
-```json
-{
-  "nicho": "salsa picante para restaurantes",
-  "fuente": "buscador",
-  "formato": "serp",
-  "total": 3,
-  "convertidos": 2,
-  "rechazados": 1,
-  "items": [
-    { "id": "<sha1 12chars>", "nicho": "salsa picante para restaurantes", "fuente": "buscador", "formato": "serp", "titulo": "Salsa la Casera", "url": "https://tienda.com/salsa-casera", "relevancia": 3, "convertido": true },
-    { "id": "<sha1 12chars>", "nicho": "salsa picante para restaurantes", "fuente": "buscador", "formato": "serp", "titulo": "Chiles el Taco", "url": "https://chiles.com", "relevancia": 2, "convertido": true }
-  ]
-}
-```
-El tercer item (`{ titulo: "Sin url" }`) se rechaza (le falta `url`). Emite `nichos.datos_homogeneos` con ese `data`.
-
-### Fallos típicos
-
-- Sin `nicho` o `formato` → `400 INVALID_INPUT` + `nichos.fuente.convertir.failed`.
-- `dataset_bruto` sin `items` o con `items: []` → `422 FORMATO_INVALIDO` + failed.
-- Ningún item convertible (todos sin título/url) → `422 FORMATO_INVALIDO` + failed.
-
-## Tests
-
-El test vive en `tests/unit/conversor-fuente.test.js`. Cubre:
-
-- `convertir` con DatasetBruto válido → `200`, mapea cada item a {id, titulo, url, fuente,
-  formato, relevancia} (id derivado `sha1(fuente:url)`), cuenta `convertidos`/`rechazados`,
-  emite `nichos.datos_homogeneos`.
-- Item sin título o url → se rechaza (contado en `rechazados`); si todos se rechazan → `422
-  FORMATO_INVALIDO` + `nichos.fuente.convertir.failed`.
-- `dataset_bruto` sin `items[]` o vacío → `422 FORMATO_INVALIDO` + failed.
-- Sin `nicho`/`formato` → `400 INVALID_INPUT` + failed.
-- Mismo origen produce id estable entre conversiones.
-
-Para ejecutarlo:
-
-```bash
-cd /home/admin/3enki/modules/nichos/conversor-fuente
-node tests/unit/conversor-fuente.test.js
-```
-
-## Notas de implementación
-
-- Clase `ConversorFuente extends ModuloHibridoReflejo`; `name = 'conversor-fuente'`,
-  `version = 'reflejo-0.1.0'`. Sin store ni PosPersistencia (stateless).
-- `onConvertirRequest` delega en `_atender(e, 'convertir', 'nichos.fuente.convertir.response', fn)`;
-  publica `nichos.datos_homogeneos` con `status === 200` y `nichos.fuente.convertir.failed` si no.
-- Proyecciones puras: `_cruzar` (valida + deriva) y `_mapear` (mapea item → canónico, null si
-  no convertible). Ayudantes `_primer` (primer campo no vacío) y `_id` (`sha1` slice 12).
-- Usa `crypto` para el `id` determinista (deduplicación estable entre conversiones).
-- DEP hacia delante: la consume `estudio-demanda` (J5) vía `nichos.datos_homogeneos`; recibe el
-  `DatasetBruto` de `puerto-fuente-datos` (J1).

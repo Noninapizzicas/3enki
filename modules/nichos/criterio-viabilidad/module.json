@@ -1,47 +1,22 @@
 {
-  "_doc": "Manifest de nichos/criterio-viabilidad — CUSTODIO CON PERSISTENCIA (C2, hoja del plan). Pieza CENTRAL del eslabón limitante (embudo de validación): guarda el CRITERIO/UMBRAL DE VIABILIDAD declarable que decide qué nicho es viable. Almacena por proyecto: umbral_ingresos (base 50-300 EUR/semana), minimos_demanda (búsquedas y contactos por semana), disposicion_a_pagar, y el tipo/segmento de viabilidad ([ABIERTO]). Lo persiste via PosPersistencia (_shared/pos-persistencia, storage /prisma/nichos/criterio-viabilidad.json), restaura en project.activated y vuelca en onUnload. Un solo escritor del store: el DUEÑO declara el umbral (guard Rol=DUEÑO via K3); el bucle C7->C2 recalibra en caliente (nichos.umbral.recalibrado consume el delta y refina el umbral). Lo expone por lectura para que el veredicto de viabilidad (C3) lo consulte. Proyecciones _leer()->Criterio, _declarar(umbral) con guard, _recalibrar(delta)->umbral refinado. Publica nichos.criterio.declarado / nichos.criterio.recalibrado (+ pares de fallo). El corte DURO 'no viable no pasa' vive aquí + C6, nunca en el agente.",
   "name": "criterio-viabilidad",
   "version": "0.1.0",
-  "description": "Custodio (C2): store por proyecto del criterio/umbral de viabilidad declarable — umbral_ingresos (base 50-300 EUR/semana), mínimos de demanda, disposición a pagar y tipo de viabilidad. Pieza central del embudo; el DUEÑO declara (un solo escritor), el bucle C7 recalibra en caliente, y el veredicto (C3) lo consulta. Persiste por proyecto vía PosPersistencia.",
-  "language": "es",
-  "subscribes": [
-    {
-      "event": "nichos.criterio.leer.request",
-      "handler": "onLeerRequest",
-      "description": "RPC custodio: {project_id} → {project_id, criterio}. Lee el criterio de viabilidad vigente del proyecto (umbral_ingresos, minimos_demanda, disposicion_a_pagar, tipo, recalibrado_por). La lectura no muta. Lo consume el veredicto de viabilidad (C3) antes de evaluar."
-    },
-    {
-      "event": "nichos.criterio.declarar.request",
-      "handler": "onDeclararRequest",
-      "description": "RPC custodio: {project_id, rol:'DUEÑO', criterio:{...}} → {project_id, criterio, declarado}. Guard Rol=DUEÑO (second-writer rechazado; canal K3). Persiste el umbral, publica nichos.criterio.declarado y responde por nichos.criterio.declarar.response. Si no es DUEÑO o el payload es inválido → nichos.criterio.declarar.failed."
-    },
-    {
-      "event": "nichos.umbral.recalibrado",
-      "handler": "onUmbralRecalibrado",
-      "description": "Fire-and-forget (bucle C7->C2): reglas-aprendidas publica {project_id, delta, resultado_real} tras un COBRÓ/SANGRA/NEUTRO. Recalibra el umbral del proyecto en caliente (refina umbral_ingresos/minimos con el delta), publica nichos.criterio.recalibrado y, si el delta es inválido, nichos.criterio.recalibrar.failed. Bucle de sistema autorizado; el siguiente lote evalúa contra el umbral refinado."
-    },
-    {
-      "event": "project.activated",
-      "handler": "onProjectActivated",
-      "description": "Restaura el criterio de viabilidad del proyecto activado desde el storage (PosPersistencia)."
-    }
-  ],
+  "description": "CUSTODIO del vertical NICHOS (bloque C · validación): ranura autorizada que fija el umbral de viabilidad (ingresos_semana_min, ingresos_semana_objetivo, disposicion_pagar_min, por_tipo_nicho, exige_vb_previo_construir). Snapshot inmutable por versión; escritores autorizados: dueño | ajustador-umbrales (K3). Lectores libres por RPC.",
+  "_doc": "modules/nichos/criterio-viabilidad — CUSTODIO (bloque C · validación) del vertical NICHOS.\n\nQué guarda: un snapshot inmutable por versión del umbral de viabilidad {ingresos_semana_min, ingresos_semana_objetivo, disposicion_pagar_min, por_tipo_nicho, exige_vb_previo_construir}. Cualquier campo puede nacer 'ABIERTO' (sin declarar): el VeredictoViabilidad (C3) LEE y, si algún campo está ABIERTO, degrada a Veredicto.PUENTE('umbral_sin_declarar') — jamás asume valor.\n\nQué publica: cada declaración muta el store con autor+timestamp y PULSA 'nichos.criterio.viabilidad.declarado' (o su .failed) para que el veredicto, el camino, el batch-validacion y cualquier reflejo que gobierne la decisión de 'operar o no' refresque su criterio sin acoplarse al custodio.\n\nQuiénes escriben: dueño (por el canal) | ajustador-umbrales (K3, cuando promueve una propuesta aceptada). Rechazo 403 ESCRITOR_NO_AUTORIZADO si otro autor. Lectores: libres por RPC nichos.criterio.viabilidad.leer.request → .response.\n\nPersistencia: PosPersistencia por proyecto, snapshot JSON /prisma/pos/nichos/criterio-viabilidad.json (debounced 800 ms, flush en onUnload, restauración en project.activated). Si no existe fichero → esqueleto por defecto {version:0, umbral:esqueletoABIERTO, por_autor:[]}. Degradación honesta: sin project_id lee/escribe en memoria.\n\nPatrón: ModuloHibridoReflejo (mitad REFLEJO, JS determinista). Sin mitad blueprint — toda la lógica es CRUD + aritmética de versión. Lo fuzzy (qué umbral tiene sentido para este dominio) lo decide el dueño directamente o lo propone K3 observando el histórico."
+  ,
+  "ui_decision": {
+    "necesita": false,
+    "razon": "Bloque C validación del vertical NICHOS, sin cara propia. El dueño declara/consulta por bus desde el panel central (jefe) o desde el panel de configuración del vertical cuando exista; el custodio no interpreta intención, solo CRUDa snapshots inmutables."
+  },
   "publishes": [
-    {
-      "event": "nichos.criterio.declarado",
-      "description": "Fire-and-forget (C2): el DUEÑO declaró el criterio/umbral de viabilidad → {project_id, criterio, declarado:true}. Lo consume el veredicto (C3) y el resto del embudo para aplicar el corte de viabilidad vigente."
-    },
-    {
-      "event": "nichos.criterio.declarar.failed",
-      "description": "Par de fallo determinista (C2): escritura rechazada (rol != DUEÑO) o payload inválido → {status, code, message, data}. Cierra el círculo de nichos.criterio.declarar.request."
-    },
-    {
-      "event": "nichos.criterio.recalibrado",
-      "description": "Fire-and-forget (C2): el bucle C7 recalibró el umbral en caliente → {project_id, criterio, recalibrado:true, delta}. El siguiente lote de C1/C3 evalúa contra el umbral refinado."
-    },
-    {
-      "event": "nichos.criterio.recalibrar.failed",
-      "description": "Par de fallo determinista (C2): recalibración rechazada (delta inválido) → {status, code, message, data}. Cierra el círculo de nichos.umbral.recalibrado."
-    }
+    { "event": "nichos.criterio.viabilidad.declarado", "description": "PULSO fire-and-forget: una declaración autorizada cambió el umbral de viabilidad. Payload: {project_id, version, por_autor, timestamp}. Lo consume el veredicto-viabilidad, el camino-encontrar-construir y cualquier reflejo del bloque C." },
+    { "event": "nichos.criterio.viabilidad.declarado.failed", "description": "Par .failed del PULSO: la declaración fue rechazada (escritor no autorizado, forma inválida). Payload: {project_id, code, message, timestamp}." },
+    { "event": "nichos.criterio.viabilidad.leer.response", "description": "Response correlada por request_id al RPC nichos.criterio.viabilidad.leer.request. Payload: {status, data:{umbral_viabilidad:{version, umbral, por_autor}}}." },
+    { "event": "nichos.criterio.viabilidad.declarar.response", "description": "Response correlada por request_id al RPC nichos.criterio.viabilidad.declarar.request. Payload: {status, data:{nueva_version, umbral_viabilidad}} | {status, error}." }
+  ],
+  "subscribes": [
+    { "event": "nichos.criterio.viabilidad.leer.request", "handler": "onLeerRequest", "description": "Reflejo JS: devuelve el umbral vigente (esqueleto por defecto con todo ABIERTO si no se declaró nada aún)." },
+    { "event": "nichos.criterio.viabilidad.declarar.request", "handler": "onDeclararRequest", "description": "Reflejo JS: aplica un cambio sobre el último snapshot (por_autor ∈ {'dueño','ajustador-umbrales'}), lo sella con instante actual y lo persiste (version++). Rechaza con 403 si el autor no es autorizado." },
+    { "event": "project.activated", "handler": "onProjectActivated", "description": "Reflejo JS: restaura el umbral persistido del proyecto activado desde /prisma/pos/nichos/criterio-viabilidad.json (PosPersistencia)." }
   ]
 }

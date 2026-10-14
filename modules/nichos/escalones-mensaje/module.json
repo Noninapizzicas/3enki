@@ -1,29 +1,18 @@
 {
-  "_doc": "Manifest de nichos/escalones-mensaje — REFLEJO STATELESS (G2): clasifica los mensajes al supervisor del nicho en el ESCALON que les toca (pulso | alerta | decision) segun la regla declarada y le asigna la cadencia de entrega. Regla DUROA, no ambigua: pulso -> informativo con cadencia (no interrumpe); alerta -> urgente al canal (interrumpe); decision -> SolicitudDecision que exige accion del dueno. Consume el tipo de mensaje (pulso-avance, alerta-sangria, gate...) y, con el perfil de supervision (H2), la cadencia declarada. Sin store: cada op entra objeto, sale objeto, proyeccion pura determinista. Publica nichos.escalon.clasificado (-> canal-supervision G1) + par determinista nichos.escalon.clasificar.failed.",
   "name": "escalones-mensaje",
   "version": "0.1.0",
-  "description": "Reflejo stateless (G2): decide el escalón de mensaje al supervisor del nicho — pulso | alerta | decisión — con su cadencia. Regla dura, no ambigua; proyección pura determinista. Publica nichos.escalon.clasificado y su par de fallo. Sin persistencia.",
-  "language": "es",
-  "subscribes": [
-    {
-      "event": "nichos.escalon.clasificar.request",
-      "handler": "onClasificarRequest",
-      "description": "RPC puro: {project_id, tipo:'pulso'|'alerta'|'decision', mensaje?, perfil_supervision?} → {project_id, tipo, escalon:'PULSO'|'ALERTA'|'DECISION', prioridad, interrumpe, exige_accion, cadencia, mensaje, regla:'duro', clasificado:true}. Regla dura (pulso→informativo con cadencia declarada; alerta→urgente que interrumpe; decision→SolicitudDecision que exige acción). Si el tipo no es clasificable → nichos.escalon.clasificar.failed. Éxito → publica nichos.escalon.clasificado y responde por nichos.escalon.clasificar.response."
-    },
-    {
-      "event": "project.activated",
-      "handler": "onProjectActivated",
-      "description": "Reflejo sin estado: registra el project_id activo para scope del contexto; no persiste nada."
-    }
-  ],
+  "description": "REFLEJO del vertical NICHOS (bloque G · comunicación — G2): clasifica cada evento de dominio en uno de cuatro escalones de notificación (PULSO | ALERTA | DECISION | SILENCIO) según el perfil de supervisión del dueño (H2). Determina la urgencia y forma del mensaje antes de que G1 (puerto-canal) lo envíe.",
+  "_doc": "modules/nichos/escalones-mensaje — REFLEJO (bloque G · comunicación / G2) del vertical NICHOS.\n\nQué hace: recibe nichos.escalon.clasificar.request con un evento de dominio y lo clasifica en un escalón de notificación:\n\n  PULSO    — informativo de fondo (el dueño lo ve cuando quiera).\n  ALERTA   — requiere atención pronto (notificación activa).\n  DECISION — requiere respuesta del dueño (se encola en K2).\n  SILENCIO — el perfil de supervisión pide no notificar este tipo.\n\nLa clasificación se basa en el tipo de evento y los umbrales/preferencias del perfil de supervisión (H2). El módulo lee el perfil via RPC (nichos.perfil.supervision.leer.request) para consultar las reglas de escalón del dueño.\n\nSin estado propio — es REFLEJO puro. La lógica es determinista: tipo de evento + reglas del perfil → escalón.\n\nPatrón: ModuloHibridoReflejo (mitad REFLEJO, JS determinista). Sin mitad blueprint.",
+  "ui_decision": {
+    "necesita": false,
+    "razon": "Bloque G fontanería de comunicación del vertical NICHOS, sin cara propia. Clasificador interno que alimenta a G1 (puerto-canal) y G3 (clasificador-intencion). El dueño configura sus preferencias en H2 (perfil-supervision), no interactúa con este módulo."
+  },
   "publishes": [
-    {
-      "event": "nichos.escalon.clasificado",
-      "description": "Fire-and-forget (G2): un mensaje de supervisión quedó escalonado → {project_id, escalon:'PULSO'|'ALERTA'|'DECISION', prioridad, interrumpe, exige_accion, cadencia, tipo, clasificado:true}. Lo consume canal-supervision (G1) para enrutarlo al dueño con el escalón/cadencia correctos."
-    },
-    {
-      "event": "nichos.escalon.clasificar.failed",
-      "description": "Par de fallo determinista (G2): el tipo de mensaje no es clasificable → {status, code, message, data}. Cierra el círculo de nichos.escalon.clasificar.request."
-    }
+    { "event": "nichos.escalon.clasificado", "description": "PULSO fire-and-forget: un evento de dominio fue clasificado en un escalón de notificación. Payload: {evento_ref, escalon: PULSO|ALERTA|DECISION|SILENCIO, timestamp}." },
+    { "event": "nichos.escalon.clasificar.response", "description": "Response correlada por request_id al RPC nichos.escalon.clasificar.request. Payload: {status, data:{escalon}} | {status, error}." },
+    { "event": "nichos.perfil.supervision.leer.request", "description": "RPC hacia H2 (perfil-supervision): consulta las reglas de escalón del dueño. Payload: {request_id, project_id}." }
+  ],
+  "subscribes": [
+    { "event": "nichos.escalon.clasificar.request", "handler": "onClasificarRequest", "description": "REFLEJO: clasifica un evento de dominio en PULSO|ALERTA|DECISION|SILENCIO según el perfil de supervisión. Payload: {request_id, evento_dominio:{tipo, fuente, payload}, project_id?, correlation_id}." }
   ]
 }

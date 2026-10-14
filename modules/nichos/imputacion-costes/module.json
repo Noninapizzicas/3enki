@@ -1,24 +1,18 @@
 {
-  "_doc": "Manifest de nichos/imputacion-costes — REFLEJO JS PURO (F2, hoja del plan). Lo que cuesta cada proyecto: construccion + operacion + fuentes. Stateless: cada op es una función pura determinista. Depende de coste-fuente (J4) para la partida de fuentes. Proyecciones _agregar(project_id,costes)->CosteProyecto (suma construccion + operacion + fuentes en coste_total) y _calcularCosteProyecto (desglose partidas). Publica nichos.coste_imputado (+ nichos.coste.agregar.failed). Sin store, sin custodio. Cada proyecto absorbe su coste real.",
   "name": "imputacion-costes",
   "version": "0.1.0",
-  "description": "Reflejo (F2): lo que cuesta cada proyecto — construccion + operacion + fuentes. Stateless, cálculo determinista: agrega las partidas de coste a un CosteProyecto y lo imputa para la salud financiera (F3).",
-  "language": "es",
-  "subscribes": [
-    {
-      "event": "nichos.coste.agregar.request",
-      "handler": "onAgregarRequest",
-      "description": "RPC reflejo: {project_id, costes:{construccion, operacion, fuentes}} → {project_id, coste_proyecto, coste_total}. Calcula el CosteProyecto determinista (construccion + operacion + fuentes) y publica nichos.coste_imputado, responde por nichos.coste.agregar.response. Si el payload es inválido → nichos.coste.agregar.failed."
-    }
-  ],
+  "description": "REFLEJO del vertical NICHOS: agrega coste de un proyecto hasta un instante dado por categoria. Sin estado propio — consulta por bus a registro-cobros e imputacion-coste-fuente, agrega y responde.",
+  "_doc": "modules/nichos/imputacion-costes — REFLEJO del vertical NICHOS.\n\nQue hace: recibe nichos.costes.imputar.request con {id_proyecto, hasta} y agrega el coste total del proyecto consultando por bus a registro-cobros (nichos.registro.cobros.consultar.request) e imputacion-coste-fuente (nichos.fuente.coste.consultar.request). Suma ambas fuentes y devuelve {coste_total}.\n\nSin estado propio — es REFLEJO puro. La logica es determinista: consulta fuentes + agrega.\n\nPatron: ModuloHibridoReflejo (mitad REFLEJO, JS determinista). Sin persistencia.",
+  "ui_decision": {
+    "necesita": false,
+    "razon": "Agregador interno sin cara propia. Se consulta por RPC desde cualquier modulo que necesite el coste total de un proyecto."
+  },
   "publishes": [
-    {
-      "event": "nichos.coste_imputado",
-      "description": "Fire-and-forget (F2): el coste del proyecto quedó calculado/imputado → {project_id, coste_proyecto, coste_total}. Lo consume la salud financiera (F3) para declarar GENERA|SANGRA|NEUTRO con coste real."
-    },
-    {
-      "event": "nichos.coste.agregar.failed",
-      "description": "Par de fallo determinista (F2): payload inválido o partidas negativas → {status, code, message, data}. Cierra el círculo de nichos.coste.agregar.request."
-    }
+    { "event": "nichos.costes.imputar.response", "description": "Response correlada por request_id al RPC nichos.costes.imputar.request. Payload: {status, data:{coste_total}}." },
+    { "event": "nichos.fuente.coste.consultar.request", "description": "RPC hacia imputacion-coste-fuente: consulta el coste de fuentes del proyecto. Payload: {request_id, id_proyecto, hasta}." },
+    { "event": "nichos.registro.cobros.consultar.request", "description": "RPC hacia registro-cobros: consulta los cobros del proyecto. Payload: {request_id, id_proyecto, hasta}." }
+  ],
+  "subscribes": [
+    { "event": "nichos.costes.imputar.request", "handler": "onImputarRequest", "description": "REFLEJO: agrega coste proyecto hasta instante por categoria consultando registro-cobros e imputacion-coste-fuente." }
   ]
 }

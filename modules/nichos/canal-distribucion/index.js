@@ -1,80 +1,141 @@
-/**
- * nichos/canal-distribucion — PUENTE STATELESS (E4, hoja del plan).
- *
- * Lleva la SOLUCIÓN construida al pagador del nicho por su canal de entrega
- * declarado (del perfil de cobro/entrega I1). Stateless: sin store, sin
- * persistencia, cada op entra objeto, sale objeto. El canal declarado es un
- * puerto ABIERTO — agnóstico al proveedor: nunca se acopla a una plataforma de
- * entrega concreta; el canal se declara y puede sustituirse por evento.
- *
- * Proyección pura: _emitirEntrega(project_id, solucion) → entrega que enruta
- * hacia el canal del pagador. Publica nichos.entrega.enviada (éxito) y su par
- * determinista nichos.entrega.enviar.failed (sin canal o sin solución/sin
- * pagador). Ver hoja E4 del plan-construccion.
- */
-
 'use strict';
 
+/**
+ * nichos/canal-distribucion — PUENTE JS (bloque K del vertical NICHOS, #49).
+ *
+ * Bridge hacia canales externos (telegram, whatsapp, email) vía bus del core.
+ * Recibe un mensaje con destinatario, canal_tipo y contenido, formatea el
+ * contenido según el canal y publica al bridge correspondiente.
+ *
+ * Sin estado. Bridge puro: transforma y reenvía.
+ *
+ * Patrón: ModuloHibridoReflejo (mitad REFLEJO, JS determinista).
+ * No hace HTTP directo: toda comunicación se delega al bus.
+ */
+
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
+
+const nowISO = () => new Date().toISOString();
+
+const CANALES_SOPORTADOS = ['telegram', 'whatsapp', 'email'];
 
 class CanalDistribucion extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'canal-distribucion';
-    this.version = 'reflejo-0.1.0';
-    this.project_id = null;
-  }
-  async onUnload() { return super.onUnload(); }
-
-  // project.activated — puente sin estado: solo registra el project activo.
-  async onProjectActivated(e) {
-    const d = (e && (e.data || e)) || {};
-    this.project_id = d.project_id || this.project_id;
-    this.logger?.info(`${this.name}.reflejo.project_activated`, { project_id: this.project_id });
-    return { status: 200, data: { project_id: this.project_id } };
+    this.version = '0.1.0';
   }
 
+  // ── RPC HANDLER ──
   onEnviarRequest(e) {
-    return this._atender(e, 'enviar', 'nichos.entrega.enviar.response', async (d) => {
-      const res = this._emitirEntrega(d);
-      // Emisor/par de fallo: exito → dominio; error → par determinista.
-      if (res.status === 200) {
-        this.eventBus?.publish('nichos.entrega.enviada', {
-          project_id: res.data.project_id,
-          entrega: res.data.entrega,
-          enviada: true,
-          correlation_id: d.correlation_id
-        });
-      } else {
-        this.eventBus?.publish('nichos.entrega.enviar.failed', res);
-      }
-      return res;
-    });
+    return this._atender(e, 'enviar', 'nichos.canal.mensaje.enviar.response', d => this._enviar(d));
   }
 
-  // ── proyección pura: enruta la solución hacia el canal del pagador ──
-  _emitirEntrega({ project_id, solucion, canal, pagador } = {}) {
-    project_id = project_id || this.project_id;
-    if (!project_id) return this._invalid('project_id');
-    if (!solucion || typeof solucion !== 'object') return this._invalid('solucion');
-    if (!pagador || typeof pagador !== 'string' || !pagador.trim()) return this._invalid('pagador');
-    if (!canal || typeof canal !== 'string' || !canal.trim()) {
-      return this._errorResponse(400, 'INVALID_INPUT', 'canal de entrega requerido (decláralo en el perfil de cobro/entrega I1)', {});
+  // =============================================================
+  // PROYECCIÓN — formatea contenido por canal_tipo y publica
+  // =============================================================
+
+  /**
+   * _enviar — formatea contenido por canal_tipo y publica al canal correspondiente.
+   *
+   * @param {Object} input
+   * @param {string} input.destinatario  - destinatario (chat_id, email, phone)
+   * @param {string} input.canal_tipo    - 'telegram', 'whatsapp', 'email'
+   * @param {Object|string} input.contenido - contenido del mensaje
+   * @param {string} [input.correlation_id]
+   * @returns {{ status:number, data?:Object, error?:Object }}
+   */
+  async _enviar(input) {
+    if (!input.destinatario) return this._invalid('destinatario');
+    if (!input.canal_tipo) return this._invalid('canal_tipo');
+    if (!input.contenido) return this._invalid('contenido');
+
+    if (!CANALES_SOPORTADOS.includes(input.canal_tipo)) {
+      return this._errorResponse(
+        400,
+        'CANAL_NO_SOPORTADO',
+        `canal_tipo '${input.canal_tipo}' fuera del catálogo soportado`,
+        { canal_tipo: input.canal_tipo, canales_validos: CANALES_SOPORTADOS }
+      );
     }
 
-    const entrega = {
-      proyecto: project_id,
-      pagador: pagador.trim(),
-      canal: canal.trim(),
-      solucion_id: solucion.id || solucion.slug || `${project_id}-sol`,
-      entregada: true,
-      entregado_en: new Date().toISOString()
+    const mensaje_id = `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const contenidoFormateado = this._formatearContenido(input.canal_tipo, input.contenido);
+
+    // Delegar al bridge via bus
+    const topicBridge = `${input.canal_tipo}.send.request`;
+    const payloadBridge = {
+      destino: input.destinatario,
+      cuerpo: contenidoFormateado,
+      correlation_id: input.correlation_id
     };
-    return { status: 200, data: { project_id, entrega, enviada: true } };
+
+    try {
+      await this._publishAlBus(topicBridge, payloadBridge);
+    } catch (err) {
+      // PULSO de fallo
+      this.eventBus?.publish('nichos.canal.mensaje.enviar.failed', {
+        mensaje_id,
+        razon_codigo: 'ENVIO_FALLIDO',
+        detalle: err.message || 'error al publicar al bridge',
+        timestamp: nowISO()
+      });
+
+      return this._errorResponse(
+        502,
+        'ENVIO_FALLIDO',
+        'error al publicar al bridge del canal',
+        { canal_tipo: input.canal_tipo, destinatario: input.destinatario }
+      );
+    }
+
+    // PULSO de éxito
+    this.eventBus?.publish('nichos.canal.mensaje.enviado', {
+      mensaje_id,
+      canal_tipo: input.canal_tipo,
+      destinatario: input.destinatario,
+      timestamp: nowISO()
+    });
+
+    return {
+      status: 200,
+      data: { mensaje_id, estado: 'enviado' }
+    };
   }
 
-  // ── Tools ──
-  toolEmitir(params) { return this._emitirEntrega(params); }
+  // =============================================================
+  // Utilidades
+  // =============================================================
+
+  /**
+   * Formatea el contenido según el canal_tipo.
+   * Telegram: texto plano. WhatsApp: texto plano. Email: objeto con asunto+cuerpo.
+   */
+  _formatearContenido(canal_tipo, contenido) {
+    if (typeof contenido === 'string') return contenido;
+
+    switch (canal_tipo) {
+      case 'telegram':
+      case 'whatsapp':
+        return contenido.cuerpo || contenido.texto || String(contenido);
+      case 'email':
+        return JSON.stringify({
+          asunto: contenido.asunto || 'Notificación',
+          cuerpo: contenido.cuerpo || contenido.texto || ''
+        });
+      default:
+        return String(contenido);
+    }
+  }
+
+  async _publishAlBus(topic, payload) {
+    if (this.eventBus?.publishAndWait) {
+      try {
+        return await this.eventBus.publishAndWait(topic, payload);
+      } catch (_) { /* degradación: fire-and-forget */ }
+    }
+    this.eventBus?.publish(topic, payload);
+  }
 }
 
 module.exports = CanalDistribucion;

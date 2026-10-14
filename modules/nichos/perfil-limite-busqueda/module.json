@@ -1,34 +1,21 @@
 {
-  "_doc": "Manifest de nichos/perfil-limite-busqueda — CUSTODIO CON PERSISTENCIA (B3, hoja del plan). Guarda los LIMITES DECLARABLES del dueño para la BUSQUEDA de nichos: alcance geografico/mercado, exclusiones de partida, profundidad de barrido, limites de territorio/candidatos y las reglas fijas que el dueño decide. Es el STORE de configuracion de limites de busqueda por proyecto: un solo escritor (DUEÑO), el buscador lo consume por lectura. CUSTODIO: persiste por proyecto via PosPersistencia (_shared/pos-persistencia, storage /prisma/nichos/perfil-limite-busqueda.json), restaura en project.activated y vuelca en onUnload. Proyecciones _leer()->LimitesBusqueda y _declarar(limites) con guard Rol=DUEÑO (second-writer rechazado). Publica nichos.limite.declarado (+ nichos.limite.declarar.failed si no es el DUEÑO o el payload es invalido).",
   "name": "perfil-limite-busqueda",
   "version": "0.1.0",
-  "description": "Custodio (B3): store por proyecto de los límites declarables del dueño para la búsqueda de nichos — alcance, exclusiones de partida, profundidad, límites de territorio/candidatos y reglas fijas. Un solo escritor (DUEÑO); el buscador consume por lectura. Persiste por proyecto vía PosPersistencia.",
-  "language": "es",
-  "subscribes": [
-    {
-      "event": "nichos.limite.leer.request",
-      "handler": "onLeerRequest",
-      "description": "RPC custodio: {project_id} → {project_id, limites}. Lee el perfil de límites de búsqueda del proyecto (alcance, exclusions_base, profundidad, max_territorios, max_candidatos, limite_consulta_fuente, reglas). La lectura no muta. Lo consume el buscador (sondeo-territorio/cola)."
-    },
-    {
-      "event": "nichos.limite.declarar.request",
-      "handler": "onDeclararRequest",
-      "description": "RPC custodio: {project_id, rol:'DUEÑO', limites:{...}} → {project_id, limites, declarado}. Guard Rol=DUEÑO (second-writer rechazado). Persiste el perfil, publica nichos.limite.declarado y responde por nichos.limite.declarar.response. Si no es DUEÑO o el payload es invalido → nichos.limite.declarar.failed."
-    },
-    {
-      "event": "project.activated",
-      "handler": "onProjectActivated",
-      "description": "Restaura el perfil de límites del proyecto activado desde el storage (PosPersistencia)."
-    }
-  ],
+  "description": "CUSTODIO del perfil de límites de búsqueda del dueño para el vertical NICHOS: ranura única autorizada que fija topes de descubrimiento (max_candidatos_por_semilla, presupuesto_fuentes_por_hr, territorios_vetados, fuentes_autorizadas). Lectores libres; escritor único (el dueño por el canal).",
+  "_doc": "modules/nichos/perfil-limite-busqueda — CUSTODIO (bloque A · entrada) del vertical NICHOS.\n\nQué guarda: un snapshot inmutable por versión del perfil de límites de búsqueda {max_candidatos_por_semilla, presupuesto_fuentes_por_hr, territorios_vetados, fuentes_autorizadas}. Cualquier valor puede nacer 'ABIERTO' (sin declarar): el motor de descubrimiento LEE y, al topar con ABIERTO, degrada a norma por defecto o pide puente — jamás se asume dato ausente.\n\nQué publica: cada declaración muta el store con autor+timestamp y PULSA 'nichos.perfil.limite.declarado' (o su .failed) para que buscador-nichos, planificador-de-fuentes y cualquier otro consumidor del vertical refresquen su configuración sin acoplarse al custodio.\n\nQuién escribe: el dueño por el canal (regla F3 — 'un solo escritor'). Rechazo 403 ESCRITOR_NO_AUTORIZADO si viene otro autor. Lectores: libres por RPC nichos.perfil.limite.leer.request → .response.\n\nPersistencia: PosPersistencia por proyecto, snapshot JSON /prisma/pos/nichos/perfil-limite.json (debounced 800 ms, flush en onUnload, restauración en project.activated). Si no existe fichero → esqueleto por defecto {version:0, limites:esqueletoABIERTO, por_autor:[]}. Degradación honesta: si falta project_id, lee/escribe en memoria.\n\nPatrón: ModuloHibridoReflejo (mitad REFLEJO, JS determinista). No tiene mitad blueprint — toda la lógica es CRUD + inmutabilidad por versión (una respuesta correcta computable). Lo fuzzy (interpretar qué significa un límite para el usuario) lo hará el Jefe o el panel-central cuando lo necesite, llamando a este reflejo por su puerta RPC.",
+  "ui_decision": {
+    "necesita": false,
+    "razon": "Bloque A entrada del vertical NICHOS, sin cara propia. El dueño declara/consulta por bus desde el panel central (jefe) o desde el panel de configuración del vertical cuando exista; el custodio no interpreta intención, solo CRUDa snapshots inmutables."
+  },
   "publishes": [
-    {
-      "event": "nichos.limite.declarado",
-      "description": "Fire-and-forget (B3): el DUEÑO declaro los límites de búsqueda → {project_id, limites, declarado:true}. Lo consumen el buscador (sondeo-territorio/cola-candidatos) para respetar los límites vigentes."
-    },
-    {
-      "event": "nichos.limite.declarar.failed",
-      "description": "Par de fallo determinista (B3): escritura rechazada (rol != DUEÑO) o payload invalido → {status, code, message, data}. Cierra el circulo de nichos.limite.declarar.request."
-    }
+    { "event": "nichos.perfil.limite.declarado", "description": "PULSO fire-and-forget: una declaración del dueño cambió el perfil de límites. Payload: {project_id, version, por_autor, timestamp}. Lo consume cualquier buscador/planificador que quiera refrescar su configuración." },
+    { "event": "nichos.perfil.limite.declarado.failed", "description": "Par .failed del PULSO: la declaración fue rechazada (escritor no autorizado, forma inválida). Payload: {project_id, code, message, timestamp}." },
+    { "event": "nichos.perfil.limite.leer.response", "description": "Response correlada por request_id al RPC nichos.perfil.limite.leer.request. Payload: {status, data:{perfil_limite:{version, limites, por_autor}}}." },
+    { "event": "nichos.perfil.limite.declarar.response", "description": "Response correlada por request_id al RPC nichos.perfil.limite.declarar.request. Payload: {status, data:{nueva_version, perfil_limite}} | {status, error}." }
+  ],
+  "subscribes": [
+    { "event": "nichos.perfil.limite.leer.request", "handler": "onLeerRequest", "description": "Reflejo JS: devuelve el perfil vigente del store (esqueleto por defecto con todo ABIERTO si no se declaró nada aún)." },
+    { "event": "nichos.perfil.limite.declarar.request", "handler": "onDeclararRequest", "description": "Reflejo JS: aplica un cambio sobre el último snapshot (por_autor=dueño), lo sella con instante actual y lo persiste (version++). Rechaza con 403 ESCRITOR_NO_AUTORIZADO si el autor no es el dueño." },
+    { "event": "project.activated", "handler": "onProjectActivated", "description": "Reflejo JS: restaura el perfil persistido del proyecto activado desde /prisma/pos/nichos/perfil-limite.json (PosPersistencia)." }
   ]
 }

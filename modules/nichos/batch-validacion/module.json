@@ -1,24 +1,23 @@
 {
-  "_doc": "Manifest de nichos/batch-validacion — REFLEJO stateless (C5, hoja del plan). DESACOPLA el cuello de botella del sistema (embudo de validacion C): dado N candidatos de la cola (cola-candidatos L2), los REPARTE/PROCESA en un LOTE en PARALELO — no en serie. Cada candidato del lote pasa por estudio-demanda (C1, nichos.estudio.medir.request) y veredicto-viabilidad (C3, nichos.veredicto.evaluar.request) por RPC, y el batch agrega la List<Veredicto>. REFLEJO puro y determinista en la ORGANIZACION (_programar, _repartir en N grupos paralelos), aunque el juicio de cada item lo delega por RPC a los micro-agentes C1/C3 (el batch NO decide por si mismo: solo coordina). Stateless: sin estado, sin custodio. Si el lote viene vacio responde honesto (nichos.batch.programar.failed). Publica nichos.batch.lote_ejecutado.",
   "name": "batch-validacion",
   "version": "0.1.0",
-  "description": "Reflejo (C5): desacopla el cuello del embudo. Reparte/procesa un lote de candidatos de la cola (L2) en paralelo — no en serie —, corre estudio-demanda (C1) + veredicto-viabilidad (C3) por RPC por item y agrega la List<Veredicto>. Stateless, proyección pura determinista.",
-  "language": "es",
-  "subscribes": [
-    {
-      "event": "nichos.batch.programar.request",
-      "handler": "onProgramarRequest",
-      "description": "RPC reflejo: {project_id, lote:[candidato], criterio?, paralelismo?:int} → {batch_id, lote_en_ejecucion, veredictos, fallidos, total, ejecutado}. Programa el lote EnEjecucion (reparte items en N grupos paralelos con distribucion justa) y ejecuta la cadena estudio-demanda (C1) + veredicto-viabilidad (C3) por item en paralelo (Promise.all), agregando la List<Veredicto>. Fallos por item se marcan sin romper el lote. Lote vacio → error determinista nichos.batch.programar.failed. Exito → publica nichos.batch.lote_ejecutado y responde por nichos.batch.programar.response."
-    }
-  ],
+  "description": "REFLEJO del vertical NICHOS (orquestador de micro-flujo): saca candidatos de la cola, encadena estudio de demanda, emision de veredicto, decision de camino y corte temprano si NO_VIABLE. Sin estado propio.",
+  "_doc": "modules/nichos/batch-validacion — REFLEJO sin estado (orquestador de micro-flujo) del vertical NICHOS.\n\nQue hace: recibe nichos.validacion.lote.correr.request y orquesta un lote de validacion:\n  1. Saca N candidatos de la cola (nichos.cola.candidatos.sacar.request).\n  2. Por cada candidato: estudia demanda → emite veredicto → decide camino → corta si NO_VIABLE.\n  3. Emite pulsos .lote.iniciado y .lote.completado con contadores.\n\nSin estado propio — orquesta via _rpc sobre el bus.\n\nPatron: ModuloHibridoReflejo (mitad REFLEJO, JS determinista). Sin mitad blueprint.",
+  "ui_decision": {
+    "necesita": false,
+    "razon": "Orquestador de fontaneria interna del pipeline de validacion. El scheduler o el Jefe dispara el lote. Sin cara propia al usuario."
+  },
   "publishes": [
-    {
-      "event": "nichos.batch.lote_ejecutado",
-      "description": "Fire-and-forget (C5): un lote de validacion quedo ejecutado en paralelo → {project_id, batch_id, lote_en_ejecucion, veredictos, fallidos, total, ejecutado}. Lo consume el pipeline-por-nicho (L1) y los siguientes pasos del embudo (C6 corte-temprano)."
-    },
-    {
-      "event": "nichos.batch.programar.failed",
-      "description": "Par de fallo determinista (C5): el lote llego vacio o no es un array → {status, code, mensaje, data}. Cierra el circulo de nichos.batch.programar.request."
-    }
+    { "event": "nichos.validacion.lote.iniciado", "description": "PULSO fire-and-forget: se inicio un lote de validacion. Payload: {lote_id, candidatos_total, timestamp}." },
+    { "event": "nichos.validacion.lote.completado", "description": "PULSO fire-and-forget: un lote de validacion se completo. Payload: {lote_id, viables, no_viables, puentes, timestamp}." },
+    { "event": "nichos.validacion.lote.correr.response", "description": "Response correlada por request_id al RPC nichos.validacion.lote.correr.request. Payload: {status, data:{lote_id, procesados}}." },
+    { "event": "nichos.cola.candidatos.sacar.request", "description": "RPC hacia cola: saca N candidatos para validar. Payload: {request_id, tamano}." },
+    { "event": "nichos.demanda.estudiar.request", "description": "RPC hacia estudio de demanda: analiza la demanda del candidato. Payload: {request_id, id_nicho}." },
+    { "event": "nichos.veredicto.emitir.request", "description": "RPC hacia veredicto: emite veredicto sobre el candidato. Payload: {request_id, id_nicho, estudio_demanda}." },
+    { "event": "nichos.camino.decidir.request", "description": "RPC hacia decision de camino: decide siguiente paso del candidato. Payload: {request_id, id_nicho, veredicto}." },
+    { "event": "nichos.cortar.temprano.request", "description": "RPC hacia cortador: corta el nicho si NO_VIABLE. Payload: {request_id, id_nicho, veredicto}." }
+  ],
+  "subscribes": [
+    { "event": "nichos.validacion.lote.correr.request", "handler": "onCorrerRequest", "description": "RPC: ejecuta un lote de validacion. Saca N candidatos de cola y encadena micro-flujos de validacion. Payload: {request_id, tamano?}." }
   ]
 }

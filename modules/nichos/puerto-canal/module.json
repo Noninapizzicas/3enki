@@ -1,0 +1,22 @@
+{
+  "name": "puerto-canal",
+  "version": "0.1.0",
+  "description": "PUENTE del vertical NICHOS (bloque G · comunicación — G1): fachada de canales de comunicación (Telegram, WhatsApp, email) que desacopla al vertical del proveedor concreto. Envía mensajes por canal resuelto por propósito/destino, registra canales por proyecto y recibe mensajes entrantes.",
+  "_doc": "modules/nichos/puerto-canal — PUENTE (bloque G · comunicación / G1) del vertical NICHOS.\n\nQué hace: tres operaciones.\n\n1. ENVIAR (nichos.canal.enviar.request): resuelve el canal apropiado por propósito o destino, publica al bridge correspondiente (telegram, whatsapp, email) y confirma el envío. Pulsa nichos.canal.mensaje.enviado.\n\n2. REGISTRAR (nichos.canal.registrar.request): da de alta la asociación canal↔project_id↔purpose (p.ej. 'telegram:chat_123' → proyecto X, propósito 'soporte'). Pulsa nichos.canal.registrado.\n\n3. RECIBIR (telegram.text.received y otros entrantes): recibe mensajes del bridge y los republica como nichos.canal.mensaje.recibido para que G3 (clasificador-intencion) los consuma.\n\nStore opcional /nichos/canales.json (atajos por propósito). Usa channel-manager (registry) y telegram-bridge via bus. Sin HTTP directo.\n\nPatrón: ModuloHibridoReflejo (mitad REFLEJO, JS determinista). El PUENTE no hace HTTP directo: orquesta vía bus hacia los bridges de canal y credential-manager.",
+  "ui_decision": {
+    "necesita": false,
+    "razon": "Bloque G fontanería de comunicación del vertical NICHOS, sin cara propia. Los consumidores (G3 clasificador-intencion, H1 paquetador-decision, E4 canal-distribucion) lo invocan por RPC. El dueño interactúa con su canal (Telegram, etc.), no con este módulo."
+  },
+  "publishes": [
+    { "event": "nichos.canal.mensaje.recibido", "description": "PULSO fire-and-forget: un mensaje entrante fue recibido por un canal registrado. Lo consume G3 (clasificador-intencion). Payload: {canal, autor, cuerpo, meta, timestamp}." },
+    { "event": "nichos.canal.mensaje.enviado", "description": "PULSO fire-and-forget: un mensaje fue enviado con éxito por un canal. Payload: {canal, destino, escalon, confirmacion_ref, timestamp}." },
+    { "event": "nichos.canal.registrado", "description": "PULSO fire-and-forget: un canal fue asociado a un proyecto con un propósito. Payload: {canal, external_id, project_id, timestamp}." },
+    { "event": "nichos.canal.enviar.response", "description": "Response correlada por request_id al RPC nichos.canal.enviar.request. Payload: {status, data:{confirmacion}} | {status, error}." },
+    { "event": "nichos.canal.registrar.response", "description": "Response correlada por request_id al RPC nichos.canal.registrar.request. Payload: {status, data:{registrado}} | {status, error}." }
+  ],
+  "subscribes": [
+    { "event": "nichos.canal.enviar.request", "handler": "onEnviarRequest", "description": "PUENTE: resuelve canal por propósito/destino, delega al bridge correspondiente y confirma. Payload: {request_id, canal?, destino, mensaje, correlation_id}." },
+    { "event": "nichos.canal.registrar.request", "handler": "onRegistrarRequest", "description": "PUENTE: registra canal↔proyecto↔propósito. Payload: {request_id, canal, external_id, project_id, purpose}." },
+    { "event": "telegram.text.received", "handler": "onTelegramText", "description": "Mensaje entrante de Telegram: se republica como nichos.canal.mensaje.recibido. Payload: {chat_id, text, from, date}." }
+  ]
+}

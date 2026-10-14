@@ -1,18 +1,25 @@
 /**
- * nichos/perfil-limite-busqueda — CUSTODIO CON PERSISTENCIA (B3, hoja del plan).
+ * nichos/perfil-limite-busqueda — REFLEJO JS (CUSTODIO del vertical NICHOS, bloque A entrada).
  *
- * Guarda los LIMITES DECLARABLES del dueño para la BUSQUEDA de nichos: alcance,
- * exclusiones de partida, profundidad de barrido, limites de territorio/candidatos
- * y las reglas fijas que el dueño decide. Es el STORE de configuracion de limites
- * de busqueda POR PROYECTO que el buscador consume.
+ * Único escritor del perfil de límites de búsqueda del dueño. Snapshot inmutable
+ * por versión: cada declaración muta el store aplicando el cambio sobre el último
+ * snapshot, sellándolo con autor + instante, y PULSA 'nichos.perfil.limite.declarado'.
  *
- * CUSTODIO (patrón real, distinto del reflejo stateless): un solo escritor — el
- * DUEÑO — via el guard de rol en _declarar. La lectura (_leer) no muta. La
- * escritura (_declarar) valida y guarda. Persiste por proyecto con PosPersistencia
- * (storage /prisma/nichos/perfil-limite-busqueda.json), restaura en
- * project.activated y vuelca en onUnload. Emisor/par de fallo en errores.
+ * Store (per-proyecto, PosPersistencia): /prisma/pos/nichos/perfil-limite.json
+ *   { _version, _updated, version, limites:{...}, por_autor:[ {version, autor, cambio, at} ] }
  *
- * Ver arquitectura/decisiones/propuestas/prisma.md y hoja B3 del plan-construccion.
+ * REGLA F3: "un solo escritor (el dueño por el canal). Lectores: libres." El autor
+ * declarante debe venir como 'dueño' en el payload (por_autor === 'dueño'); otro
+ * autor → 403 ESCRITOR_NO_AUTORIZADO (expresión en positivo: la ranura la rellena
+ * sólo quien tiene la llave; cualquier otro acceso de escritura queda sin molde).
+ *
+ * ABIERTO: todo campo puede nacer ABIERTO (sin declarar). El esqueleto por defecto
+ * entrega el perfil con todos sus campos en 'ABIERTO'; el consumidor (buscador,
+ * planificador) decide qué hacer con un ABIERTO — jamás se asume dato ausente.
+ *
+ * Patrón: ModuloHibridoReflejo (mitad REFLEJO, JS determinista). No tiene mitad
+ * blueprint — la lógica es CRUD + aritmética de versión (una respuesta correcta
+ * computable). Lo fuzzy lo hará el Jefe/panel desde su propia página LLM.
  */
 
 'use strict';
@@ -20,53 +27,41 @@
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
 const PosPersistencia = require('../../_shared/pos-persistencia');
 
-// Rol único escritor — el DUEÑO. El buscador y el resto son solo lectores.
-const ROL_DUENYO = 'DUEÑO';
+const nowISO = () => new Date().toISOString();
+const AUTOR_AUTORIZADO = 'dueño';
 
-// Shape base de los límites declarables. El dueño puede declarar todo o un subset;
-// cada campo se valida y normaliza sobre este molde.
-function limitesVacios() {
+const CAMPOS_PERFIL = [
+  'max_candidatos_por_semilla',
+  'presupuesto_fuentes_por_hr',
+  'territorios_vetados',
+  'fuentes_autorizadas'
+];
+
+function esqueletoAbierto() {
   return {
-    esquema: 'nichos-limites-busqueda-v1',
-    alcance: null,                 // { geografia, mercado } — ámbito de la búsqueda
-    exclusions_base: [],           // [String] — qué NO buscar de partida
-    profundidad: null,             // 1|2|3 — profundidad de barrido por territorio
-    max_territorios: null,         // { number } — tope de territorios por corrida
-    max_candidatos: null,          // { number } — tope de candidatos por territorio
-    limite_consulta_fuente: null, // { number } — cuota de consultas por fuente
-    reglas: [],                    // [{ tipo, valor, motivo }] — reglas fijas del dueño
-    updated_at: null,
-    declarado_por: null
+    max_candidatos_por_semilla: 'ABIERTO',
+    presupuesto_fuentes_por_hr: 'ABIERTO',
+    territorios_vetados: [],
+    fuentes_autorizadas: 'ABIERTO'
   };
-}
-
-const PROFUNDIDADES = new Set([1, 2, 3]);
-const TIPOS_REGLA = new Set(['producto', 'audiencia', 'territorio', 'fuente', 'profundidad']);
-
-// Normalizador de un número entero positivo (o null si no trae valor).
-function numPos(v) {
-  const n = Number(v);
-  return Number.isInteger(n) && n > 0 ? n : null;
 }
 
 class PerfilLimiteBusqueda extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'perfil-limite-busqueda';
-    this.version = 'reflejo-0.1.0';
-    // store en memoria: project_id -> objeto de límites (un solo estado por proyecto)
-    this._limites = new Map();
+    this.version = '0.1.0';
+    this.perfilPorProyecto = new Map();   // project_id → { version, limites, por_autor:[] }
 
     this._persist = new PosPersistencia({
       modulo: this,
-      file: 'perfil-limite-busqueda.json',
-      dir: '/prisma/nichos',
-      snapshot: (pid) => {
-        const l = this._limites.get(pid);
-        return l ? { project_id: pid, limites: l } : null;
-      },
+      file: 'perfil-limite.json',
+      dir: '/prisma/pos/nichos',
+      snapshot: (pid) => ({ perfil: this.perfilPorProyecto.get(pid) || null }),
       hidratar: (pid, data) => {
-        if (data && data.limites) this._limites.set(pid, data.limites);
+        if (data && data.perfil && typeof data.perfil === 'object') {
+          this.perfilPorProyecto.set(pid, data.perfil);
+        }
       }
     });
   }
@@ -77,141 +72,112 @@ class PerfilLimiteBusqueda extends ModuloHibridoReflejo {
     return super.onUnload();
   }
 
-  // Restaura el perfil del proyecto activado.
   onProjectActivated(e) {
     const d = (e && (e.data || e)) || {};
     return this._persist.restaurar(d.project_id);
   }
 
-  // ── handlers RPC (una línea, delegan a _atender) ──
+  // ── RPC HANDLERS ──
   onLeerRequest(e) {
-    return this._atender(e, 'leer', 'nichos.limite.leer.response', async (d) => {
-          await this._hidratarSiFalta(d && d.project_id);
-          return this._leer(d);
-        });
+    return this._atender(e, 'leer', 'nichos.perfil.limite.leer.response', d => this._leer(d));
   }
 
   onDeclararRequest(e) {
-    return this._atender(e, 'declarar', 'nichos.limite.declarar.response', async (d) => {
-      const res = await this._declarar(d);
-      // Emisor/par de fallo: exito → dominio; error → par determinista.
-      if (res.status === 200) {
-        this.eventBus?.publish('nichos.limite.declarado', {
-          project_id: res.data.project_id,
-          limites: res.data.limites,
-          declarado: true,
-          correlation_id: d.correlation_id
-        });
-      } else {
-        this.eventBus?.publish('nichos.limite.declarar.failed', res);
-      }
-      return res;
-    });
+    return this._atender(e, 'declarar', 'nichos.perfil.limite.declarar.response', d => this._declarar(d));
   }
 
-  // ── proyección de lectura (NO muta) ──
-  // NO marca dirty al crear el placeholder: persistir un estado vacío
-  // SOBRESCRIBIRÍA el real del disco (misma clase de pérdida que criterio-viabilidad).
-  // Hidrata del disco si el proyecto no está en memoria (un reinicio deja el
-  // store vacío y la persistencia solo restaura en project.activated). Sin esto,
-  // una lectura tras reiniciar devolvería vacío aunque el disco tenga el estado.
-  async _hidratarSiFalta(pid) {
-    if (!pid || this._limites.has(pid)) return;
-    try { await this._persist.restaurar(pid); } catch (_) { /* best-effort */ }
-  }
-
-  _obtenerOCrear(pid) {
-    let l = this._limites.get(pid);
-    if (!l) {
-      l = limitesVacios();
-      this._limites.set(pid, l);
+  // =============================================================
+  // Estado — snapshot por proyecto. Esqueleto por defecto si no hay fichero.
+  // =============================================================
+  _perfil(project_id) {
+    let p = this.perfilPorProyecto.get(project_id);
+    if (!p) {
+      p = { version: 0, limites: esqueletoAbierto(), por_autor: [] };
+      this.perfilPorProyecto.set(project_id, p);
     }
-    return l;
+    return p;
   }
 
+  // =============================================================
+  // PROYECCIONES — lógica de dominio pura
+  // =============================================================
   _leer(input) {
-    const pid = input && input.project_id;
-    if (!pid) return this._invalid('project_id');
-    const l = this._obtenerOCrear(pid);
-    return { status: 200, data: { project_id: pid, limites: l } };
+    if (!input.project_id) return this._invalid('project_id');
+    const perfil = this._perfil(input.project_id);
+    return { status: 200, data: { perfil_limite: perfil } };
   }
 
-  // ── proyección de escritura (el único escritor: DUEÑO) ──
   _declarar(input) {
-    const pid = input && input.project_id;
-    if (!pid) return this._invalid('project_id');
+    if (!input.project_id) return this._invalid('project_id');
+    if (!input.por_autor) return this._invalid('por_autor');
+    if (!input.cambio || typeof input.cambio !== 'object') return this._invalid('cambio');
 
-    // GUARD de escritor: solo el DUEÑO puede declarar límites.
-    if (input.rol !== ROL_DUENYO) {
-      return this._errorResponse(403, 'PERMISSION_DENIED', 'solo el DUEÑO puede declarar los límites de búsqueda', {
-        rol_esperado: ROL_DUENYO, rol_recibido: input.rol
+    // Guard F3: un solo escritor — el dueño por el canal.
+    if (input.por_autor !== AUTOR_AUTORIZADO) {
+      const err = this._errorResponse(
+        403,
+        'PERMISSION_DENIED',
+        'escritor_no_autorizado — solo el dueño declara el perfil de límites de búsqueda',
+        { por_autor: input.por_autor, autor_autorizado: AUTOR_AUTORIZADO }
+      );
+      this.eventBus?.publish('nichos.perfil.limite.declarado.failed', {
+        project_id: input.project_id,
+        code: 'PERMISSION_DENIED',
+        message: err.error.message,
+        timestamp: nowISO()
       });
+      return err;
     }
 
-    const limite = input.limites;
-    if (!limite || typeof limite !== 'object') {
-      return this._invalid('limites');
+    // Validación de forma: cualquier campo del cambio debe pertenecer al esquema.
+    const cambio = input.cambio;
+    const camposDesconocidos = Object.keys(cambio).filter(k => !CAMPOS_PERFIL.includes(k));
+    if (camposDesconocidos.length) {
+      const err = this._errorResponse(
+        400,
+        'INVALID_INPUT',
+        'cambio contiene campos fuera del esquema del perfil',
+        { campos_desconocidos: camposDesconocidos, campos_validos: CAMPOS_PERFIL }
+      );
+      this.eventBus?.publish('nichos.perfil.limite.declarado.failed', {
+        project_id: input.project_id,
+        code: 'INVALID_INPUT',
+        message: err.error.message,
+        timestamp: nowISO()
+      });
+      return err;
     }
 
-    const actual = limitesVacios();
-    const previo = this._limites.get(pid) || limitesVacios();
-
-    // Merge conservador sobre el molde; valida y normaliza cada campo declarable.
-    if (limite.alcance && typeof limite.alcance === 'object') {
-      actual.alcance = {
-        geografia: limite.alcance.geografia != null ? String(limite.alcance.geografia).trim() || null : (previo.alcance && previo.alcance.geografia) || null,
-        mercado: limite.alcance.mercado != null ? String(limite.alcance.mercado).trim() || null : (previo.alcance && previo.alcance.mercado) || null
-      };
-      if (!actual.alcance.geografia && !actual.alcance.mercado) return this._invalid('limites.alcance');
-    } else if (previo.alcance) {
-      actual.alcance = previo.alcance;
-    }
-
-    if (Array.isArray(limite.exclusions_base)) {
-      actual.exclusions_base = limite.exclusions_base
-        .map(x => (x && String(x).trim()) ? String(x).trim() : null)
-        .filter(Boolean);
-    } else if (Array.isArray(previo.exclusions_base)) {
-      actual.exclusions_base = previo.exclusions_base;
-    }
-
-    const prof = numPos(limite.profundidad);
-    if (limite.profundidad != null && limite.profundidad !== '') {
-      if (!PROFUNDIDADES.has(prof)) return this._invalid('limites.profundidad');
-      actual.profundidad = prof;
-    } else if (previo.profundidad != null) {
-      actual.profundidad = previo.profundidad;
-    }
-
-    actual.max_territorios = numPos(limite.max_territorios) ?? previo.max_territorios;
-    actual.max_candidatos = numPos(limite.max_candidatos) ?? previo.max_candidatos;
-    actual.limite_consulta_fuente = numPos(limite.limite_consulta_fuente) ?? previo.limite_consulta_fuente;
-
-    if (Array.isArray(limite.reglas)) {
-      const reglas = [];
-      for (const r of limite.reglas) {
-        const tipo = r && TIPOS_REGLA.has(r.tipo) ? r.tipo : null;
-        const valor = r && r.valor != null && String(r.valor).trim() ? String(r.valor).trim() : null;
-        if (!tipo || !valor) continue; // descarta regla malformada, no rompe la declaración
-        reglas.push({ tipo, valor, motivo: (r.motivo && String(r.motivo).trim()) ? String(r.motivo).trim() : `límite fijo de ${tipo}` });
+    // Aplica el cambio sobre el último snapshot — inmutabilidad por versión.
+    const actual = this._perfil(input.project_id);
+    const limitesNuevos = Object.assign({}, actual.limites);
+    for (const k of CAMPOS_PERFIL) {
+      if (Object.prototype.hasOwnProperty.call(cambio, k)) {
+        limitesNuevos[k] = cambio[k];
       }
-      actual.reglas = reglas;
-    } else if (Array.isArray(previo.reglas)) {
-      actual.reglas = previo.reglas;
     }
+    const nueva = {
+      version: actual.version + 1,
+      limites: limitesNuevos,
+      por_autor: actual.por_autor.concat([{
+        version: actual.version + 1,
+        autor: input.por_autor,
+        cambio,
+        at: nowISO()
+      }])
+    };
+    this.perfilPorProyecto.set(input.project_id, nueva);
+    this._persist.marcarDirty(input.project_id);
 
-    actual.updated_at = new Date().toISOString();
-    actual.declarado_por = ROL_DUENYO;
+    this.eventBus?.publish('nichos.perfil.limite.declarado', {
+      project_id: input.project_id,
+      version: nueva.version,
+      por_autor: input.por_autor,
+      timestamp: nowISO()
+    });
 
-    this._limites.set(pid, actual);
-    this._persist.marcarDirty(pid);
-
-    return { status: 200, data: { project_id: pid, limites: actual, declarado: true } };
+    return { status: 200, data: { nueva_version: nueva.version, perfil_limite: nueva } };
   }
-
-  // ── Tools ──
-  toolLeer(params) { return this._leer(params); }
-  toolDeclarar(params) { return this._declarar(params); }
 }
 
 module.exports = PerfilLimiteBusqueda;

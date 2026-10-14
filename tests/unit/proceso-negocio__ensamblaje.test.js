@@ -1,9 +1,10 @@
 /**
- * Test del RECOMPONEDOR F7b (ensamblaje).
+ * Test del INTEGRADOR F7b (ensamblaje).
  *
- * Cubre: el cruce diseñado (F3b) vs escrito (módulos reales), la clasificación de
- * divergencias por hoja, las conexiones de dominio rotas, y el veredicto
- * 'ensamblado'. Casos construidos a mano + un caso real si existe el plan.
+ * Cubre: el reflejo lee el ecosistema vivo, un LLM elige qué eventos del bus
+ * necesita suscribir el módulo nuevo, y el reflejo escribe los subscribes al
+ * manifest y los handlers esqueleto al index.js — SIN tocar módulos viejos.
+ * Patrón agente-perspectiva-c (determinista fuera, fuzzy dentro).
  *
  *   node tests/unit/proceso-negocio__ensamblaje.test.js
  */
@@ -11,247 +12,422 @@
 
 const assert = require('assert');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
-const { Ensamblaje } = require('../../modules/proceso-negocio/ensamblaje');
+
+const {
+  Integrador,
+  normalizarEntrada,
+  sacarContrato,
+  handlerCanonico
+} = require('../../modules/proceso-negocio/ensamblaje');
 
 let pasados = 0, fallados = 0;
 const _tests = [];
-// Acepta tests SÍNCRONOS y ASÍNCRONOS (los de robustez esperan RPCs).
 function test(desc, fn) { _tests.push({ desc, fn }); }
 async function _correr() {
   for (const { desc, fn } of _tests) {
     try { await fn(); console.log(`✓ ${desc}`); pasados++; }
-    catch (e) { console.log(`✗ ${desc}\n    ${e.message}`); fallados++; }
+    catch (e) { console.log(`✗ ${desc}\n    ${e.stack || e.message}`); fallados++; }
   }
   console.log(`\n${pasados} pasados, ${fallados} fallados`);
   process.exit(fallados ? 1 : 0);
 }
 
-// ── 1. Todo ensamblado: el plan declara, el módulo cumple → ensamblado=true ──
-test('plan y módulo coinciden → ensamblado', () => {
-  const plan = { hojas: [
-    { slug: 'captura', subscribes: ['nichos.semilla.aceptar.request'], publishes: ['nichos.semilla.capturada'] },
-    { slug: 'pipeline', subscribes: ['nichos.semilla.capturada'], publishes: [] }
-  ] };
-  const real = {
-    captura: { existe: true, subscribes: ['nichos.semilla.aceptar.request'], publishes: ['nichos.semilla.capturada'] },
-    // pipeline escucha lo que captura publica → la conexión existe
-    pipeline: { existe: true, subscribes: ['nichos.semilla.capturada'], publishes: [] }
+// ─── montaje de fixtures ───────────────────────────────────────────────────
+function hacerRepoFixture() {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'f7b-repo-'));
+  fs.mkdirSync(path.join(root, 'modules'), { recursive: true });
+  return root;
+}
+function limpiarRepo(root) {
+  try { fs.rmSync(root, { recursive: true, force: true }); } catch (_) {}
+}
+function escribirModuloViejo(root, slug, manifest, indexSrc) {
+  const dir = path.join(root, 'modules', slug);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'module.json'), JSON.stringify(manifest, null, 2), 'utf8');
+  fs.writeFileSync(path.join(dir, 'index.js'), indexSrc, 'utf8');
+}
+function slugAPascal(slug) {
+  return slug.split(/[-_]+/).map((s) => s.charAt(0).toUpperCase() + s.slice(1)).join('');
+}
+function moduloNuevoSinOrejas(root, slug, descripcion, publishes = []) {
+  const nombreClase = slugAPascal(slug) + 'Module';
+  const manifest = {
+    name: slug,
+    version: '0.1.0',
+    description: descripcion,
+    publishes: publishes.map((e) => ({ event: e })),
+    subscribes: []
   };
-  const r = new Ensamblaje(plan, real).recomponer();
-  assert.strictEqual(r.hojas_divergentes, 0, 'sin divergencias por hoja');
-  assert.strictEqual(r.conexiones_rotas_count, 0, 'sin conexiones rotas');
-  assert.strictEqual(r.ensamblado, true, 'está ensamblado');
-});
-
-// ── 2. El plan declara escuchar algo que el módulo NO escucha → divergencia ──
-test('módulo no escucha lo que el plan declaró → DIVERGENTE', () => {
-  const plan = { hojas: [
-    { slug: 'alerta-sangria', subscribes: ['nichos.salud.actualizada'], publishes: ['nichos.alerta.sangria'] }
-  ] };
-  const real = {
-    // el módulo real NO escucha salud.actualizada (bug real medido en nichos)
-    'alerta-sangria': { existe: true, subscribes: [], publishes: ['nichos.alerta.sangria'] }
+  const indexSrc = [
+    "'use strict';",
+    `class ${nombreClase} {`,
+    '  constructor() { this.name = "' + slug + '"; }',
+    '}',
+    `module.exports = ${nombreClase};`,
+    ''
+  ].join('\n');
+  escribirModuloViejo(root, slug, manifest, indexSrc);
+  return {
+    dir: path.join(root, 'modules', slug),
+    manifestPath: path.join(root, 'modules', slug, 'module.json'),
+    indexPath: path.join(root, 'modules', slug, 'index.js')
   };
-  const r = new Ensamblaje(plan, real).recomponer();
-  assert.strictEqual(r.hojas_divergentes, 1);
-  const h = r.hojas_divergentes_detalle[0];
-  assert.strictEqual(h.slug, 'alerta-sangria');
-  assert.deepStrictEqual(h.falta_subscribes, ['nichos.salud.actualizada'], 'detecta el subscribe que falta');
+}
+function leerManifest(ruta) { return JSON.parse(fs.readFileSync(ruta, 'utf8')); }
+function leerTexto(ruta)    { return fs.readFileSync(ruta, 'utf8'); }
+
+// ─── helpers de salida del LLM ─────────────────────────────────────────────
+function llmQueDevuelve(obj) {
+  return async () => JSON.stringify(obj);
+}
+function llmQueDevuelveTextoCrudo(txt) {
+  return async () => txt;
+}
+
+// ─── 1 · helpers puros ─────────────────────────────────────────────────────
+test('handlerCanonico: evento normal → onCamelCase', () => {
+  assert.strictEqual(handlerCanonico('puertas.abierta'), 'onAbierta');
+  assert.strictEqual(handlerCanonico('carta.get.response'), 'onGetResponse');
+  assert.strictEqual(handlerCanonico('nichos.pipeline.ciclo.iniciado'), 'onPipelineCicloIniciado');
 });
 
-test('módulo no publica lo que el plan declaró → DIVERGENTE', () => {
-  const plan = { hojas: [
-    { slug: 'pipeline', subscribes: [], publishes: ['nichos.pipeline.ciclo_completado'] }
-  ] };
-  const real = {
-    // el módulo real publica otra cosa (bug real: 'ciclo.iniciado' en vez de 'ciclo_iniciado')
-    pipeline: { existe: true, subscribes: [], publishes: ['nichos.pipeline.ciclo_iniciado'] }
-  };
-  const r = new Ensamblaje(plan, real).recomponer();
-  const h = r.hojas_divergentes_detalle[0];
-  assert.deepStrictEqual(h.falta_publishes, ['nichos.pipeline.ciclo_completado']);
-  assert.deepStrictEqual(h.extra_publishes, ['nichos.pipeline.ciclo_iniciado']);
+test('handlerCanonico: evento sin segmentos → onEvento', () => {
+  assert.strictEqual(handlerCanonico(''), 'onEvento');
+  assert.strictEqual(handlerCanonico(null), 'onEvento');
 });
 
-// ── 3. CONEXIÓN ROTA: alguien publica, nadie escucha → se pierde silenciosa ──
-test('evento de dominio publicado y nadie lo escucha → conexión rota', () => {
-  const plan = { hojas: [
-    { slug: 'estudio-competencia', subscribes: [], publishes: ['nichos.competencia.analizado'] },
-    { slug: 'paquete-decision', subscribes: ['nichos.competencia.analizado'], publishes: [] }
-  ] };
-  const real = {
-    'estudio-competencia': { existe: true, subscribes: [], publishes: ['nichos.competencia.analizado'] },
-    // el consumidor diseñado NO lo escucha → el evento se pierde
-    'paquete-decision': { existe: true, subscribes: [], publishes: [] }
-  };
-  const r = new Ensamblaje(plan, real).recomponer();
-  assert.strictEqual(r.conexiones_rotas_count, 1);
-  assert.strictEqual(r.conexiones_rotas[0].evento, 'nichos.competencia.analizado');
-  assert.deepStrictEqual(r.conexiones_rotas[0].publica_en, ['estudio-competencia']);
+test('normalizarEntrada: acepta string u objeto', () => {
+  assert.deepStrictEqual(normalizarEntrada('a.b.c'), { event: 'a.b.c' });
+  assert.deepStrictEqual(normalizarEntrada({ event: 'a.b', handler: 'onB' }), { event: 'a.b', handler: 'onB' });
+  assert.strictEqual(normalizarEntrada({ noEvent: 'x' }), null);
 });
 
-// ── 4. Los eventos de TRANSPORTE (.request/.response) NO cuentan como rotos ──
-test('los .request/.response del bus no cuentan como conexiones rotas', () => {
-  const plan = { hojas: [
-    { slug: 'm', subscribes: ['nichos.x.leer.request'], publishes: ['nichos.x.leer.response'] }
-  ] };
-  const real = { m: { existe: true, subscribes: ['nichos.x.leer.request'], publishes: ['nichos.x.leer.response'] } };
-  const r = new Ensamblaje(plan, real).recomponer();
-  assert.strictEqual(r.conexiones_rotas_count, 0, 'el transporte lo atiende el propio módulo');
-  assert.strictEqual(r.ensamblado, true);
+test('sacarContrato: lee publishes/subscribes de raíz o events{}', () => {
+  const plano = { publishes: ['a'], subscribes: ['b'] };
+  const anidado = { events: { publishes: ['a'], subscribes: ['b'] } };
+  const r1 = sacarContrato(plano);
+  const r2 = sacarContrato(anidado);
+  assert.strictEqual(r1.publishes[0].event, 'a');
+  assert.strictEqual(r2.publishes[0].event, 'a');
+  assert.strictEqual(r1.subscribes[0].event, 'b');
+  assert.strictEqual(r2.subscribes[0].event, 'b');
 });
 
-// ── 5. Hoja diseñada pero no escrita → NO_ESCRITA ──
-test('hoja del plan sin módulo escrito → NO_ESCRITA', () => {
-  const plan = { hojas: [
-    { slug: 'fantasma', subscribes: ['nichos.a.b'], publishes: ['nichos.c.d'] }
-  ] };
-  const r = new Ensamblaje(plan, {}).recomponer();
-  assert.strictEqual(r.hojas_no_escritas, 1);
-  assert.strictEqual(r.hojas_divergentes_detalle[0].tipo, 'NO_ESCRITA');
-  assert.strictEqual(r.ensamblado, false);
+// ─── 2 · flujo feliz: control-puertas se integra con puertas ──────────────
+test('control-puertas se integra con puertas viejo — ecosistema vivo manda', async () => {
+  const root = hacerRepoFixture();
+  try {
+    // módulo viejo "puertas" — publica desde hace meses
+    escribirModuloViejo(root, 'puertas', {
+      name: 'puertas',
+      version: '1.0.0',
+      description: 'Control físico de puertas; publica cambios de estado',
+      publishes: ['puertas.abierta', 'puertas.cerrada'],
+      subscribes: []
+    }, "'use strict';\nclass Puertas{}\nmodule.exports = Puertas;\n");
+
+    // módulo nuevo "control-puertas" — nace sin orejas
+    const n = moduloNuevoSinOrejas(root, 'control-puertas',
+      'Decide abrir o cerrar puertas según el estado actual del edificio',
+      ['control-puertas.apertura.solicitada', 'control-puertas.cierre.solicitado']);
+
+    // LLM elige las dos voces vivas
+    const llm = llmQueDevuelve({
+      subscribes_a_anadir: [
+        { event: 'puertas.abierta', handler: 'onAbierta' },
+        { event: 'puertas.cerrada', handler: 'onCerrada' }
+      ]
+    });
+
+    const integ = new Integrador({ reposRoot: root, slug: 'control-puertas', pedirAlLLM: llm });
+    const r = await integ.integrar();
+
+    assert.strictEqual(r.status, 200);
+    assert.strictEqual(r.data.subscribes_añadidos.length, 2);
+    assert.deepStrictEqual(r.data.handlers_creados.sort(), ['onAbierta', 'onCerrada']);
+
+    // manifest actualizado
+    const mNuevo = leerManifest(n.manifestPath);
+    const subs = mNuevo.subscribes.map((s) => s.event).sort();
+    assert.deepStrictEqual(subs, ['puertas.abierta', 'puertas.cerrada']);
+
+    // index.js con handlers esqueleto
+    const idx = leerTexto(n.indexPath);
+    assert.ok(idx.includes('onAbierta(e)'), 'onAbierta falta en index.js');
+    assert.ok(idx.includes('onCerrada(e)'), 'onCerrada falta en index.js');
+
+    // módulo viejo intacto
+    const mViejo = leerManifest(path.join(root, 'modules', 'puertas', 'module.json'));
+    assert.deepStrictEqual(mViejo.publishes.sort(), ['puertas.abierta', 'puertas.cerrada']);
+    assert.deepStrictEqual(mViejo.subscribes || [], []);
+
+    // pulso coherente
+    assert.strictEqual(r.pulso.evento, 'proceso.hoja.integrada');
+    assert.strictEqual(r.pulso.payload.slug, 'control-puertas');
+  } finally { limpiarRepo(root); }
 });
 
-// ── 6. Tolerancia de forma: subscribes como objeto {event, handler} ──
-test('acepta subscribes como {event, handler} y como string', () => {
-  const plan = { hojas: [
-    { slug: 'm', subscribes: [{ event: 'nichos.a.creada', handler: 'onCreada' }], publishes: ['nichos.b.lista'] }
-  ] };
-  const real = { m: { existe: true, subscribes: [{ event: 'nichos.a.creada', handler: 'onCreada' }], publishes: ['nichos.b.lista'] } };
-  const r = new Ensamblaje(plan, real).recomponer();
-  assert.strictEqual(r.hojas_divergentes, 0, 'normaliza las dos formas');
+// ─── 3 · lista vacía: no toca ficheros ─────────────────────────────────────
+test('LLM devuelve lista vacía → no se tocan ficheros', async () => {
+  const root = hacerRepoFixture();
+  try {
+    escribirModuloViejo(root, 'puertas', {
+      name: 'puertas', version: '1.0.0', description: '…',
+      publishes: ['puertas.abierta'], subscribes: []
+    }, "class P{}\nmodule.exports = P;\n");
+
+    const n = moduloNuevoSinOrejas(root, 'otro', 'Módulo que no necesita oír nada', []);
+    const manifestOrig = leerTexto(n.manifestPath);
+    const indexOrig = leerTexto(n.indexPath);
+
+    const llm = llmQueDevuelve({ subscribes_a_anadir: [] });
+    const integ = new Integrador({ reposRoot: root, slug: 'otro', pedirAlLLM: llm });
+    const r = await integ.integrar();
+
+    assert.strictEqual(r.status, 200);
+    assert.strictEqual(r.data.subscribes_añadidos.length, 0);
+    assert.strictEqual(r.data.handlers_creados.length, 0);
+    assert.strictEqual(leerTexto(n.manifestPath), manifestOrig);
+    assert.strictEqual(leerTexto(n.indexPath), indexOrig);
+  } finally { limpiarRepo(root); }
 });
 
-// ── 8. ROBUSTEZ ANTE FALLOS — fail-SAFE, nunca fail-open ──
-// Doctrina del cimiento: "success = ENTREGABLE VERIFICADO". Un fallo de
-// infraestructura NO puede declarar ensamblado en verde (falso verde).
-test('ROBUSTEZ: fs.read LANZA (RPC caído) → NO certifica (false)', async () => {
-  const M = require('../../modules/proceso-negocio/index.js');
-  const m = new M();
-  if (m.iniciar) m.iniciar();
-  m._rpc = async () => { throw new Error('RPC timeout'); };
-  const ok = await m._ensambladoRecomponer({ project_id: 'fallo' });
-  assert.strictEqual(ok, false, 'un RPC caído NO puede dar verde');
+// ─── 4 · LLM propone evento inexistente: se descarta ───────────────────────
+test('LLM propone evento sin voz viva → se descarta', async () => {
+  const root = hacerRepoFixture();
+  try {
+    escribirModuloViejo(root, 'puertas', {
+      name: 'puertas', version: '1.0.0', description: '…',
+      publishes: ['puertas.abierta'], subscribes: []
+    }, "class P{}\nmodule.exports = P;\n");
+
+    const n = moduloNuevoSinOrejas(root, 'ctrl', 'nuevo', []);
+    const llm = llmQueDevuelve({
+      subscribes_a_anadir: [
+        { event: 'puertas.abierta' },               // válido
+        { event: 'inexistente.evento.inventado' },  // ← debe descartarse
+        { event: 'tambien.inventado' }              // ← también
+      ]
+    });
+
+    const integ = new Integrador({ reposRoot: root, slug: 'ctrl', pedirAlLLM: llm });
+    const r = await integ.integrar();
+
+    assert.strictEqual(r.status, 200);
+    const subs = r.data.subscribes_añadidos.map((s) => s.event);
+    assert.deepStrictEqual(subs, ['puertas.abierta']);
+    assert.strictEqual(r.data.descartados.length, 2);
+  } finally { limpiarRepo(root); }
 });
 
-test('ROBUSTEZ: plan sin bloque enki-plan → NO certifica (false)', async () => {
-  const M = require('../../modules/proceso-negocio/index.js');
-  const m = new M();
-  if (m.iniciar) m.iniciar();
-  m._rpc = async () => ({ content: '# plan sin bloque json' });
-  assert.strictEqual(await m._ensambladoRecomponer({ project_id: 'p' }), false);
+// ─── 5 · no duplica suscripciones existentes ───────────────────────────────
+test('LLM propone un evento ya suscrito → se descarta', async () => {
+  const root = hacerRepoFixture();
+  try {
+    escribirModuloViejo(root, 'puertas', {
+      name: 'puertas', version: '1.0.0', description: '…',
+      publishes: ['puertas.abierta'], subscribes: []
+    }, "class P{}\nmodule.exports = P;\n");
+
+    // módulo nuevo YA tiene 'puertas.abierta' en su manifest
+    escribirModuloViejo(root, 'nuevo', {
+      name: 'nuevo', version: '0.1.0', description: 'Ya escucho puertas',
+      publishes: [],
+      subscribes: [{ event: 'puertas.abierta', handler: 'onAbierta' }]
+    }, [
+      "class N {",
+      "  onAbierta(e) { return e; }",
+      "}",
+      "module.exports = N;",
+      ''
+    ].join('\n'));
+
+    const llm = llmQueDevuelve({
+      subscribes_a_anadir: [{ event: 'puertas.abierta', handler: 'onAbierta' }]
+    });
+    const integ = new Integrador({ reposRoot: root, slug: 'nuevo', pedirAlLLM: llm });
+    const r = await integ.integrar();
+
+    assert.strictEqual(r.status, 200);
+    assert.strictEqual(r.data.subscribes_añadidos.length, 0);
+    assert.strictEqual(r.data.descartados.length, 1);
+  } finally { limpiarRepo(root); }
 });
 
-test('ROBUSTEZ: JSON malformado en el plan → NO certifica (false)', async () => {
-  const M = require('../../modules/proceso-negocio/index.js');
-  const m = new M();
-  if (m.iniciar) m.iniciar();
-  m._rpc = async () => ({ content: '```json enki-plan\n{roto:\n```' });
-  assert.strictEqual(await m._ensambladoRecomponer({ project_id: 'p' }), false);
+// ─── 6 · CONTRATO: slug inexistente ────────────────────────────────────────
+test('slug sin modules/<slug>/ → 409 FASE_INCOMPLETA', async () => {
+  const root = hacerRepoFixture();
+  try {
+    const integ = new Integrador({ reposRoot: root, slug: 'no-existo', pedirAlLLM: llmQueDevuelve({ subscribes_a_anadir: [] }) });
+    await assert.rejects(() => integ.integrar(), (err) => err.code === 'FASE_INCOMPLETA' && err.status === 409);
+  } finally { limpiarRepo(root); }
 });
 
-test('ROBUSTEZ: escribir el informe falla → no tumba, pero el veredicto manda', async () => {
-  const M = require('../../modules/proceso-negocio/index.js');
-  const m = new M();
-  if (m.iniciar) m.iniciar();
-  m._rpc = async (ev) => {
-    if (ev === 'fs.write.request') throw new Error('disco lleno');
-    // plan VÁLIDO (con fence) y sin divergencias → ensamblado=true
-    return { content: '```json enki-plan\n' + JSON.stringify({ hojas: [] }) + '\n```' };
-  };
-  const ok = await m._ensambladoRecomponer({ project_id: 'p' });
-  assert.strictEqual(ok, true, 'un fallo al PERSISTIR no cambia el veredicto (best-effort)');
+// ─── 7 · LLM responde texto crudo (sin JSON) → fail-safe ───────────────────
+test('LLM responde sin JSON → LLM_RESPUESTA_NO_JSON', async () => {
+  const root = hacerRepoFixture();
+  try {
+    moduloNuevoSinOrejas(root, 'x', 'desc', []);
+    const integ = new Integrador({ reposRoot: root, slug: 'x', pedirAlLLM: llmQueDevuelveTextoCrudo('texto sin json aquí') });
+    await assert.rejects(() => integ.integrar(), (err) => err.code === 'LLM_RESPUESTA_NO_JSON');
+  } finally { limpiarRepo(root); }
 });
 
-// ── 10. FRENO → EMPUJÓN: la rotura viene CLASIFICADA con su trabajo ──
-test('la conexión rota trae el TRABAJO (falta_cablear + dónde), no solo el aviso', () => {
-  const plan = { hojas: [
-    { slug: 'cola-decisiones-gate', subscribes: [], publishes: ['nichos.decision.resuelta'] },
-    { slug: 'gate-decision-operar', subscribes: ['nichos.decision.resuelta'], publishes: [] }
-  ] };
-  const real = {
-    'cola-decisiones-gate': { existe: true, subscribes: [], publishes: ['nichos.decision.resuelta'] },
-    // el consumidor EXISTE pero no lo escucha → falta cablear
-    'gate-decision-operar': { existe: true, subscribes: [], publishes: [] }
-  };
-  const r = new Ensamblaje(plan, real).recomponer();
-  assert.strictEqual(r.conexiones_rotas_count, 1);
-  const c = r.conexiones_rotas[0];
-  assert.strictEqual(c.tipo, 'FALTA_CABLEAR');
-  assert.deepStrictEqual(c.falta_en, ['gate-decision-operar'], 'dice DÓNDE engancharlo');
-  assert.strictEqual(r.conexiones_falta_cablear, 1);
-  assert.strictEqual(r.trabajo.length, 1);
-  assert.strictEqual(r.trabajo[0].evento, 'nichos.decision.resuelta');
+// ─── 8 · LLM responde JSON envuelto en ``` → tolerante ────────────────────
+test('LLM envuelve el JSON en bloque markdown → parsea igual', async () => {
+  const root = hacerRepoFixture();
+  try {
+    escribirModuloViejo(root, 'p', {
+      name: 'p', version: '1.0', description: '…', publishes: ['p.evento'], subscribes: []
+    }, "class P{}\nmodule.exports = P;\n");
+    moduloNuevoSinOrejas(root, 'n', 'desc', []);
+
+    const envuelto = 'Claro, aquí tienes:\n```json\n{"subscribes_a_anadir":[{"event":"p.evento"}]}\n```\nEso es todo.';
+    const integ = new Integrador({ reposRoot: root, slug: 'n', pedirAlLLM: llmQueDevuelveTextoCrudo(envuelto) });
+    const r = await integ.integrar();
+    assert.strictEqual(r.status, 200);
+    assert.strictEqual(r.data.subscribes_añadidos[0].event, 'p.evento');
+  } finally { limpiarRepo(root); }
 });
 
-test('pares de fallo (.failed) NO cuentan como conexiones rotas', () => {
-  const plan = { hojas: [{ slug: 'm', subscribes: [], publishes: ['nichos.x.analizar.failed'] }] };
-  const real = { m: { existe: true, subscribes: [], publishes: ['nichos.x.analizar.failed'] } };
-  const r = new Ensamblaje(plan, real).recomponer();
-  assert.strictEqual(r.conexiones_rotas_count, 0, '.failed es cierre de círculo del propio módulo');
-  assert.strictEqual(r.ensamblado, true);
+// ─── 9 · informe incremental ───────────────────────────────────────────────
+test('dos integraciones consecutivas → informe acumula', async () => {
+  const root = hacerRepoFixture();
+  try {
+    escribirModuloViejo(root, 'bus-vivo', {
+      name: 'bus-vivo', version: '1.0', description: '…',
+      publishes: ['evento.uno', 'evento.dos'], subscribes: []
+    }, "class B{}\nmodule.exports = B;\n");
+
+    moduloNuevoSinOrejas(root, 'uno', 'oye uno', []);
+    moduloNuevoSinOrejas(root, 'dos', 'oye dos', []);
+
+    const i1 = new Integrador({
+      reposRoot: root, slug: 'uno',
+      pedirAlLLM: llmQueDevuelve({ subscribes_a_anadir: [{ event: 'evento.uno' }] })
+    });
+    const i2 = new Integrador({
+      reposRoot: root, slug: 'dos',
+      pedirAlLLM: llmQueDevuelve({ subscribes_a_anadir: [{ event: 'evento.dos' }] })
+    });
+    await i1.integrar();
+    await i2.integrar();
+
+    const informePath = path.join(root, 'proceso-negocio', 'fase7b-ensamblaje.json');
+    assert.ok(fs.existsSync(informePath), 'informe no persistido');
+    const informe = JSON.parse(fs.readFileSync(informePath, 'utf8'));
+    assert.strictEqual(informe.integraciones.length, 2);
+    assert.deepStrictEqual(informe.integraciones.map((e) => e.slug).sort(), ['dos', 'uno']);
+  } finally { limpiarRepo(root); }
 });
 
-test('evento sin consumidor en el plan → SOBRA_EL_PUBLISH (decisión de diseño, sin falta_en)', () => {
-  const plan = { hojas: [{ slug: 'm', subscribes: [], publishes: ['nichos.nadie.lo.quiere'] }] };
-  const real = { m: { existe: true, subscribes: [], publishes: ['nichos.nadie.lo.quiere'] } };
-  const r = new Ensamblaje(plan, real).recomponer();
-  assert.strictEqual(r.conexiones_sobra_el_publish, 1);
-  assert.strictEqual(r.conexiones_rotas[0].falta_en, null, 'sin destino escrito: es decisión, no cable');
-  assert.strictEqual(r.trabajo.length, 0);
+// ─── 10 · vertical nombra el pulso ────────────────────────────────────────
+test('vertical nombra el pulso: puertas.hoja.integrada', async () => {
+  const root = hacerRepoFixture();
+  try {
+    escribirModuloViejo(root, 'puertas', {
+      name: 'puertas', version: '1.0', description: '…', publishes: ['x.y'], subscribes: []
+    }, "class P{}\nmodule.exports = P;\n");
+    moduloNuevoSinOrejas(root, 'n', 'd', []);
+
+    const integ = new Integrador({
+      reposRoot: root, slug: 'n',
+      vertical: { nombre: 'puertas' },
+      pedirAlLLM: llmQueDevuelve({ subscribes_a_anadir: [] })
+    });
+    const r = await integ.integrar();
+    assert.strictEqual(r.pulso.evento, 'puertas.hoja.integrada');
+  } finally { limpiarRepo(root); }
 });
 
-test('el 409 del proceso PROPAGA el trabajo (no solo prosa en el mensaje)', async () => {
-  const M = require('../../modules/proceso-negocio/index.js');
-  const fs = require('fs');
-  const m = new M();
-  if (m.iniciar) m.iniciar();
-  let inf = null;
-  const plan = '```json enki-plan\n' + JSON.stringify({ hojas: [
-    { slug: 'cola-decisiones-gate', subscribes: [], publishes: ['nichos.decision.resuelta'] },
-    { slug: 'gate-decision-operar', subscribes: ['nichos.decision.resuelta'], publishes: [] }
-  ] }) + '\n```';
-  m._rpc = async (ev, p) => {
-    if (ev === 'fs.write.request') { inf = JSON.parse(p.content); return { ok: true }; }
-    if (p.path === 'esquemas/plan-construccion.md') return { content: plan };
-    if (p.path === 'proceso-negocio/fase7b-ensamblaje.json') return { content: JSON.stringify(inf) };
-    return {};
-  };
-  // _buscarModulo resuelve los módulos reales; forzamos el mundo para el test
-  m._interfazOperativaEnDisco = () => false;
-  const res = await m._completarFase({ project_id: 'p-409', fase: 'ensamblado' });
-  assert.strictEqual(res.status, 409);
-  assert.strictEqual(res.data.error, 'FASE_INCOMPLETA');
-  // el freno NO es un muro: el trabajo accionable viaja en el payload
-  assert.ok(Array.isArray(res.data.trabajo), 'el 409 lleva trabajo[] estructurado');
+// ─── 11 · handler ya existente → se renombra con sufijo ───────────────────
+test('handler propuesto colisiona con uno existente → se renombra con sufijo', async () => {
+  const root = hacerRepoFixture();
+  try {
+    escribirModuloViejo(root, 'puertas', {
+      name: 'puertas', version: '1.0', description: '…', publishes: ['puertas.abierta'], subscribes: []
+    }, "class P{}\nmodule.exports = P;\n");
+
+    // módulo nuevo ya tiene onAbierta declarado para OTRA cosa
+    escribirModuloViejo(root, 'nuevo', {
+      name: 'nuevo', version: '0.1', description: 'tiene onAbierta previo',
+      publishes: [], subscribes: []
+    }, [
+      "class N {",
+      "  onAbierta(e) { return 'esto es otra cosa'; }",
+      "}",
+      "module.exports = N;",
+      ''
+    ].join('\n'));
+
+    const integ = new Integrador({
+      reposRoot: root, slug: 'nuevo',
+      pedirAlLLM: llmQueDevuelve({ subscribes_a_anadir: [{ event: 'puertas.abierta', handler: 'onAbierta' }] })
+    });
+    const r = await integ.integrar();
+    assert.strictEqual(r.status, 200);
+    // handler final no debe ser onAbierta (ya existía) sino onAbierta2
+    assert.strictEqual(r.data.subscribes_añadidos[0].handler, 'onAbierta2');
+    const idx = leerTexto(path.join(root, 'modules', 'nuevo', 'index.js'));
+    assert.ok(idx.includes('onAbierta2(e)'));
+  } finally { limpiarRepo(root); }
 });
 
-// ── 11. CASO REAL: el plan de nichos, si está disponible ──
-test('caso real — el plan de nichos produce un informe coherente', () => {
-  const planPath = '/home/admin/3enki/boveda/nichos/proceso/fase3b/plan-construccion.md';
-  if (!fs.existsSync(planPath)) { console.log('    (saltado: sin plan en disco)'); return; }
-  const md = fs.readFileSync(planPath, 'utf8');
-  const m = md.match(/```json enki-plan\s*([\s\S]*?)```/);
-  assert.ok(m, 'el plan tiene bloque enki-plan');
-  const plan = JSON.parse(m[1]);
-  // construir el mapa real leyendo los module.json de nichos
-  const base = '/home/admin/3enki/modules/nichos';
-  const real = {};
-  for (const slug of fs.readdirSync(base)) {
-    const mj = path.join(base, slug, 'module.json');
-    if (!fs.existsSync(mj)) continue;
-    try {
-      const d = JSON.parse(fs.readFileSync(mj, 'utf8'));
-      real[slug] = { existe: true, subscribes: d.subscribes || [], publishes: d.publishes || [] };
-    } catch (_) {}
-  }
-  const r = new Ensamblaje(plan, real).recomponer();
-  assert.strictEqual(r.esquema, 'ensamblaje-f7b-v1');
-  assert.ok(r.total_hojas > 0, 'el plan tiene hojas');
-  assert.ok(r.conexiones_rotas_count > 0, 'la realidad de nichos tiene conexiones rotas (medido: 89 eventos diseñados sin consumidor)');
-  assert.strictEqual(r.ensamblado, false, 'nichos NO está ensamblado — por eso existe esta fase');
-  console.log(`    → ${r.total_hojas} hojas · ${r.hojas_divergentes} divergentes · ${r.conexiones_rotas_count} conexiones rotas`);
+// ─── 12 · rollback: index.js sin module.exports → retroceso total ────────
+test('index.js sin module.exports → retroceso total, 500', async () => {
+  const root = hacerRepoFixture();
+  try {
+    escribirModuloViejo(root, 'puertas', {
+      name: 'puertas', version: '1.0', description: '…', publishes: ['puertas.abierta'], subscribes: []
+    }, "class P{}\nmodule.exports = P;\n");
+
+    const dir = path.join(root, 'modules', 'malo');
+    fs.mkdirSync(dir, { recursive: true });
+    const manifestOrig = JSON.stringify({ name: 'malo', version: '0.1', description: 'd', publishes: [], subscribes: [] }, null, 2);
+    const indexOrig = 'class M{}\n// SIN module.exports\n';
+    fs.writeFileSync(path.join(dir, 'module.json'), manifestOrig, 'utf8');
+    fs.writeFileSync(path.join(dir, 'index.js'), indexOrig, 'utf8');
+
+    const integ = new Integrador({
+      reposRoot: root, slug: 'malo',
+      pedirAlLLM: llmQueDevuelve({ subscribes_a_anadir: [{ event: 'puertas.abierta' }] })
+    });
+    await assert.rejects(() => integ.integrar(), (err) => err.code === 'PERSISTENCIA_FALLIDA');
+
+    // ambos ficheros intactos
+    assert.strictEqual(fs.readFileSync(path.join(dir, 'module.json'), 'utf8'), manifestOrig);
+    assert.strictEqual(fs.readFileSync(path.join(dir, 'index.js'), 'utf8'), indexOrig);
+  } finally { limpiarRepo(root); }
+});
+
+// ─── 13 · un publish sin oyente HOY sigue ahí tras integrar (futuro abierto) ─
+test('un publish sin oyente queda como futuro abierto — no se "arregla"', async () => {
+  const root = hacerRepoFixture();
+  try {
+    // módulo viejo publica sin oyente (ejemplo "puertas" de la filosofía)
+    escribirModuloViejo(root, 'solitario', {
+      name: 'solitario', version: '1.0', description: '…',
+      publishes: ['solitario.grito'], subscribes: []
+    }, "class S{}\nmodule.exports = S;\n");
+
+    // módulo nuevo que NO escucha solitario.grito
+    moduloNuevoSinOrejas(root, 'otro', 'no tiene nada que ver', []);
+
+    const integ = new Integrador({
+      reposRoot: root, slug: 'otro',
+      pedirAlLLM: llmQueDevuelve({ subscribes_a_anadir: [] })
+    });
+    const r = await integ.integrar();
+    assert.strictEqual(r.status, 200);
+
+    // 'solitario' sigue publicando sin oyentes, su manifest intacto
+    const mSol = leerManifest(path.join(root, 'modules', 'solitario', 'module.json'));
+    assert.deepStrictEqual(mSol.publishes, ['solitario.grito']);
+    assert.deepStrictEqual(mSol.subscribes || [], []);
+  } finally { limpiarRepo(root); }
 });
 
 _correr();

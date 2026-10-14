@@ -1,34 +1,21 @@
 {
-  "_doc": "Manifest de nichos/perfil-cobro-entrega — CUSTODIO CON PERSISTENCIA (I1, hoja del plan). Guarda el CONTRATO DE PAGO Y ENTREGA declarable por pagador del nicho: plataforma de cobro aceptada, forma y canal de entrega de la solucion al pagador, precio, periodicidad y condiciones. Es el STORE del perfil de cobro/entrega por proyecto que motor-cobro (E3) y canal-distribucion (E4) consumen. Un solo escritor: CONSTRUCTOR (al construir) o DUEÑO (ajuste comercial), guard de rol; la lectura no muta. Persiste por proyecto via PosPersistencia (_shared/pos-persistencia, storage /prisma/nichos/perfil-cobro-entrega.json), restaura en project.activated y vuelca en onUnload. Publica nichos.perfil.declarado (+ nichos.perfil.declarar.failed si no es un escritor autorizado o el contrato es invalido).",
   "name": "perfil-cobro-entrega",
   "version": "0.1.0",
-  "description": "Custodio (I1): store por proyecto del contrato de pago y entrega por pagador del nicho — plataforma de cobro aceptada, forma/canal de entrega de la solución, precio, periodicidad y condiciones. Un solo escritor (CONSTRUCTOR o DUEÑO); motor-cobro (E3) y canal-distribucion (E4) lo consumen. Persiste por proyecto vía PosPersistencia.",
-  "language": "es",
-  "subscribes": [
-    {
-      "event": "nichos.perfil.leer.request",
-      "handler": "onLeerRequest",
-      "description": "RPC custodio: {project_id} → {project_id, perfil}. Lee el perfil de cobro/entrega vigente del proyecto (pagador, contrato{plataforma_cobro, forma_entrega, precio, periodicidad, canal_entrega, condiciones}). La lectura no muta. Lo consumen motor-cobro (E3) y canal-distribucion (E4)."
-    },
-    {
-      "event": "nichos.perfil.declarar.request",
-      "handler": "onDeclararRequest",
-      "description": "RPC custodio: {project_id, rol:'CONSTRUCTOR'|'DUEÑO', contrato:{...}} → {project_id, perfil, declarado}. Guard de rol (second-writer rechazado: rol != CONSTRUCTOR/DUEÑO). Persiste el contrato, publica nichos.perfil.declarado y responde por nichos.perfil.declarar.response. Si no es un escritor autorizado o el contrato es inválido (plataforma/forma_entrega no permitidas) → nichos.perfil.declarar.failed."
-    },
-    {
-      "event": "project.activated",
-      "handler": "onProjectActivated",
-      "description": "Restaura el perfil de cobro/entrega del proyecto activado desde el storage (PosPersistencia)."
-    }
-  ],
+  "description": "CUSTODIO del vertical NICHOS (bloque I · interlocutor cliente — M1/M2/M3 refuerzan el mismo cuerpo): ranura autorizada que guarda, por tipo_nicho (empresa | persona | organismo), el perfil declarado de preferencias de cobro+entrega (esquema, frecuencia, canal_cobro_default, canal_entrega, tiempo_entrega_max). Snapshot inmutable por versión; escritores autorizados: dueño | constructor (D1 ensamblador-solucion). Lectores libres por RPC.",
+  "_doc": "modules/nichos/perfil-cobro-entrega — CUSTODIO (bloque I · interlocutor cliente / M1/M2/M3) del vertical NICHOS.\n\nQué guarda: un snapshot inmutable por versión del PerfilCobroEntrega POR tipo_nicho. El store se indexa por tipo_nicho (empresa | persona | organismo) y, dentro de cada entrada, lleva {esquema, frecuencia, canal_cobro_default, canal_entrega, tiempo_entrega_max}. Cualquier campo puede nacer 'ABIERTO' (sin declarar): el ProponedorModeloCobro (D4) y el OperadorCobro (E) LEEN la plantilla; si algún campo está ABIERTO, degradan o abren puente — jamás asumen contrato.\n\nQué publica: cada declaración muta el store con autor+timestamp y PULSA 'nichos.perfil.cobro.declarado' (o su .failed) para que D4 (proponedor-modelo-cobro), E3 (motor-cobro), E4 (canal-distribucion) o cualquier reflejo que consuma la plantilla refresque su configuración sin acoplarse al custodio.\n\nQuiénes escriben: dueño (por el canal, declara la plantilla deseada) | constructor (D1 ensamblador-solucion, cuando un nicho recién ensamblado necesita un perfil inicial deducido). Rechazo 403 ESCRITOR_NO_AUTORIZADO si otro autor. Lectores: libres por RPC nichos.perfil.cobro.plantilla.request → .response.\n\nPersistencia: PosPersistencia por proyecto, snapshot JSON /prisma/pos/nichos/perfil-cobro-entrega.json (debounced 800 ms, flush en onUnload, restauración en project.activated). Si no existe fichero → store vacío (cada tipo_nicho pedido genera esqueleto por defecto en primera lectura). Degradación honesta: sin project_id lee/escribe en memoria.\n\nPatrón: ModuloHibridoReflejo (mitad REFLEJO, JS determinista). Sin mitad blueprint — toda la lógica es CRUD + aritmética de versión + indexado por tipo_nicho. Lo fuzzy (afinar la plantilla al nicho concreto, redactar condiciones) lo hace D4 (proponedor-modelo-cobro) o el dueño directamente desde su canal.\n\nTipos de nicho reconocidos: empresa | persona | organismo. Cambios sobre un tipo_nicho desconocido → 400 TIPO_NICHO_DESCONOCIDO.",
+  "ui_decision": {
+    "necesita": false,
+    "razon": "Bloque I interlocutor cliente del vertical NICHOS, sin cara propia. El dueño declara/consulta por bus desde el panel central (jefe) o desde el panel de configuración del vertical cuando exista; el constructor (D1) escribe cuando ensambla una solución nueva. El custodio no interpreta intención, solo CRUDa snapshots inmutables indexados por tipo_nicho. La fontanería de pago/entrega vive en E3/E4; aquí solo se guarda qué prefiere el dueño por tipo de pagador."
+  },
   "publishes": [
-    {
-      "event": "nichos.perfil.declarado",
-      "description": "Fire-and-forget (I1): el contrato de cobro/entrega fue declarado → {project_id, perfil, declarado:true}. Lo consumen motor-cobro (E3) para ejecutar el cobro y canal-distribucion (E4) para entregar la solución por el canal declarado."
-    },
-    {
-      "event": "nichos.perfil.declarar.failed",
-      "description": "Par de fallo determinista (I1): declaración rechazada (rol != CONSTRUCTOR/DUEÑO) o contrato inválido → {status, code, message, data}. Cierra el círculo de nichos.perfil.declarar.request."
-    }
+    { "event": "nichos.perfil.cobro.declarado", "description": "PULSO fire-and-forget: una declaración autorizada cambió la plantilla de cobro+entrega para un tipo_nicho. Payload: {project_id, tipo_nicho, version, por_autor, timestamp}. Lo consume el proponedor-modelo-cobro (D4), el motor-cobro (E3), el canal-distribucion (E4) y cualquier reflejo que lea la plantilla para su decisión." },
+    { "event": "nichos.perfil.cobro.declarado.failed", "description": "Par .failed del PULSO: la declaración fue rechazada (escritor no autorizado, tipo_nicho desconocido, forma inválida). Payload: {project_id, tipo_nicho, code, message, timestamp}." },
+    { "event": "nichos.perfil.cobro.plantilla.response", "description": "Response correlada por request_id al RPC nichos.perfil.cobro.plantilla.request. Payload: {status, data:{perfil_cobro_entrega:{tipo_nicho, version, perfil, por_autor}}}." },
+    { "event": "nichos.perfil.cobro.declarar.response", "description": "Response correlada por request_id al RPC nichos.perfil.cobro.declarar.request. Payload: {status, data:{nueva_version, perfil_cobro_entrega}} | {status, error}." }
+  ],
+  "subscribes": [
+    { "event": "nichos.perfil.cobro.plantilla.request", "handler": "onPlantillaRequest", "description": "Reflejo JS: devuelve la plantilla vigente para el tipo_nicho pedido (esqueleto por defecto con todo ABIERTO si no se declaró nada aún para ese tipo). Rechaza con 400 TIPO_NICHO_DESCONOCIDO si el tipo_nicho no está en el catálogo canónico {empresa, persona, organismo}." },
+    { "event": "nichos.perfil.cobro.declarar.request", "handler": "onDeclararRequest", "description": "Reflejo JS: aplica un cambio sobre el último snapshot del tipo_nicho (por_autor ∈ {'dueño','constructor'}), lo sella con instante actual y lo persiste (version++). Rechaza con 403 si el autor no es autorizado, 400 si el tipo_nicho es desconocido o si cambio trae campos fuera del esquema." },
+    { "event": "project.activated", "handler": "onProjectActivated", "description": "Reflejo JS: restaura el store persistido del proyecto activado desde /prisma/pos/nichos/perfil-cobro-entrega.json (PosPersistencia)." }
   ]
 }

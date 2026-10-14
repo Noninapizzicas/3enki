@@ -7,8 +7,8 @@
  * capturar la respuesta filtrando por request_id.
  *
  * Claves (resueltas en vivo, 2026-08-06):
- *  - El core PUBLICAR las respuestas en `core/*/events/<evento>` — el `*` es
- *    LITERAL en el topic. Suscribirse a `core/#` (o `core/*/events/#`).
+ *  - El core PUBLICAR las respuestas en `core/<cualquiera>/events/<evento>` —
+ *    el `*` es LITERAL en el topic. Suscribirse a `core/#` (o `core/<*>/events/#`).
  *  - Passwords planos NO valen; solo `enki:token:<jws>` o `enki:cert:<b64pem>`.
  *
  * Uso:
@@ -70,7 +70,7 @@ sub.on('message', (topic, msg) => {
   let d; try { d = JSON.parse(msg.toString()); } catch { return; }
   const data = d.data !== undefined ? d.data : d;
   const et = d.event_type || topic.split('/').pop();
-  if (data.request_id === request_id && et.startsWith(eventType.replace(/\.request$/, ''))) {
+  if (data.request_id === request_id && et.endsWith('.response') && et.startsWith(eventType.replace(/\.request$/, ''))) {
     clearTimeout(to);
     console.log(`✅ RESPUESTA REAL (topic ${topic}, event_type ${et}):`);
     console.log(JSON.stringify(data, null, 2));

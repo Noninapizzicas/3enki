@@ -1,0 +1,27 @@
+[Unit]
+Description=mcp-github — servidor MCP de GitHub COMPARTIDO (uno para todos los perfiles)
+Documentation=https://github.com/supercorp-ai/supergateway
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Un ÚNICO servidor MCP de GitHub para todo el sistema: los perfiles (default,
+# segundo, orus) apuntan aquí por HTTP (mcp_servers.github.url) en vez de que cada
+# uno arranque su propio `npx @modelcontextprotocol/server-github`.
+#
+# Por qué: con N perfiles, el stdio multiplicaba el MCP por N (medido: hasta 11
+# procesos, ~550 MB) y competían por el mismo clientId/recursos. Con el hub, hay UN
+# servidor y N clientes ligeros. El token se lee de ~/.hermes/.env (GITHUB_TOKEN),
+# nunca en texto plano aquí.
+#
+# Instalación: `bash deployment/systemd/instalar-mcp-github.sh` (systemd --user).
+EnvironmentFile=%h/.hermes/.env
+ExecStart=/usr/bin/env bash -lc 'GITHUB_PERSONAL_ACCESS_TOKEN="$GITHUB_TOKEN" exec npx -y supergateway --stdio "npx -y @modelcontextprotocol/server-github" --outputTransport streamableHttp --port 8140'
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

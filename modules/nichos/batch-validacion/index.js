@@ -1,140 +1,214 @@
-/**
- * nichos/batch-validacion — REFLEJO stateless (C5, hoja del plan).
- *
- * DESACOPLA el cuello de botella del sistema (el embudo de validacion C): dado
- * N candidatos de la cola (cola-candidatos L2), los REPARTE/PROCESA en un LOTE en
- * PARALELO — no en serie. Cada candidato del lote pasa por estudio-demanda (C1)
- * y veredicto-viabilidad (C3) por RPC, y el batch agrega la List<Veredicto>.
- *
- * REFLEJO puro y determinista en la ORGANIZACION del lote (_programar, _repartir),
- * aunque el juicio de cada candidato lo delega por RPC a los micro-agentes C1/C3
- * (el batch NO decide por si mismo: solo coordina). Stateless — sin estado, sin
- * custodia. Cada op es funcion pura de su entrada.
- *
- *   _programar(lote)          -> loteEnEjecucion (id, items, programado_at)
- *   _repartir(items, n)       -> N grupos paralelos del lote (distribucion justa)
- *   _ejecutarEnParalelo(lote) -> List<Veredicto> (un RPC estudio.medir + veredicto.evaluar
- *                                por item, resueltos en paralelo con Promise.all)
- *
- * Cierra su circulo: si el lote viene vacio o un item malformado, responde honesto
- * y publica nichos.batch.programar.failed. Sin store, sin custodio.
- */
-
 'use strict';
 
+/**
+ * nichos/batch-validacion — REFLEJO JS (orquestador de micro-flujo) del vertical NICHOS.
+ *
+ * Saca candidatos de la cola, y por cada uno encadena:
+ *   1. nichos.demanda.estudiar.request      → { informe }
+ *   2. nichos.veredicto.emitir.request      → { veredicto }
+ *   3. nichos.camino.decidir.request        → { camino }
+ *   4. nichos.cortar.temprano.request       (si NO_VIABLE)
+ *
+ * Emite pulsos .lote.iniciado y .lote.completado con contadores + `detalle`
+ * (la lista de viables con su informe/veredicto/camino) para que el
+ * orquestador pueda encadenar el ensamblaje con el contrato correcto.
+ *
+ * Sin estado propio — orquesta via _rpc sobre el bus.
+ * Patron: ModuloHibridoReflejo.
+ */
+
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
+
+const nowISO = () => new Date().toISOString();
+const TAMANO_DEFAULT = 5;
 
 class BatchValidacion extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'batch-validacion';
-    this.version = 'reflejo-0.1.0';
-    this.project_id = null;
-  }
-  async onUnload() { return super.onUnload(); }
-
-  onProgramarRequest(e) {
-    return this._atender(e, 'programar', 'nichos.batch.programar.response', async (d) => {
-      const res = await this._programar(d);
-      // Fire-and-forget de dominio: exito → lote ejecutado; fallo → par determinista.
-      if (res.status === 200) {
-        this.eventBus?.publish('nichos.batch.lote_ejecutado', res.data);
-      } else {
-        this.eventBus?.publish('nichos.batch.programar.failed', res);
-      }
-      return res;
-    });
+    this.version = '0.1.0';
   }
 
-  // ── REFLEJO: programa el lote EnEjecucion y lo procesa en paralelo ──
-  async _programar({ project_id, lote, criterio, paralelismo = 3 } = {}) {
-    project_id = project_id || this.project_id;
-    if (!lote || !Array.isArray(lote) || lote.length === 0) {
-      return this._errorResponse(400, 'LOTE_VACIO', 'el lote de candidatos a validar esta vacio', { project_id });
+  // -- RPC HANDLER --
+  onCorrerRequest(e) {
+    return this._atender(e, 'correr', 'nichos.validacion.lote.correr.response', d => this._correr(d));
+  }
+
+  // =============================================================
+  // PROYECCION: _correr (saca N de cola y encadena micro-flujos)
+  // =============================================================
+  async _correr(input) {
+    const tamano = (typeof input.tamano === 'number' && input.tamano > 0)
+      ? input.tamano
+      : TAMANO_DEFAULT;
+
+    const lote_id = `lote-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const projectId = input.project_id;
+    const correlationId = input.correlation_id;
+
+    // 1. Sacar candidatos de la cola.
+    // La cola recibe el tamaño como `n` (su parámetro canónico). Se envía
+    // también `tamano` por compatibilidad. La respuesta trae `lote` y su
+    // alias `candidatos` — se aceptan ambos.
+    const colResp = await this._rpc('nichos.cola.candidatos.sacar.request', {
+      project_id: projectId,
+      n: tamano,
+      tamano
+    }, { timeout_ms: 10000 });
+
+    const cd = (colResp && colResp.data) || {};
+    const candidatos = Array.isArray(cd.candidatos) ? cd.candidatos
+      : Array.isArray(cd.lote) ? cd.lote
+      : [];
+
+    if (candidatos.length === 0) {
+      return {
+        status: 200,
+        data: { lote_id, procesados: 0, razon: 'cola_vacia' }
+      };
     }
-    const n = Number(paralelismo);
-    const nParalel = (Number.isInteger(n) && n > 0) ? n : 3;
 
-    // Organizacion determinista: reparte items en grupos paralelos (distribucion justa).
-    const grupos = this._repartir(lote, nParalel);
-    const loteEnEjecucion = {
-      batch_id: `${project_id}-${Date.now()}`,
-      project_id,
-      items: lote.length,
-      paralelismo: nParalel,
-      grupos,
-      programado_at: new Date().toISOString()
-    };
+    // PULSO: lote iniciado.
+    this.eventBus?.publish('nichos.validacion.lote.iniciado', {
+      project_id: projectId,
+      lote_id,
+      candidatos_total: candidatos.length,
+      timestamp: nowISO()
+    });
 
-    // Procesa en paralelo: una cadena C1->C3 por item, resuelta con Promise.all.
-    // Cada veredicto agrega a la List<Veredicto>; fallos por item se marcan sin romper el lote.
-    const veredictos = await this._ejecutarEnParalelo(project_id, lote, criterio, nParalel);
-    const fallidos = veredictos.filter(v => v.status === 'fallido').length;
+    // 2. Procesar cada candidato en serie.
+    let viables = 0;
+    let no_viables = 0;
+    let puentes = 0;
+    const viablesIds = [];
+    const detalle = []; // { id_nicho, informe, veredicto, camino } por cada VIABLE
+    const evaluados = []; // { id_nicho, codigo, veredicto } por cada candidato evaluado
+
+    for (const candidato of candidatos) {
+      const id_nicho = candidato.id_nicho || candidato.id;
+      if (!id_nicho) continue;
+
+      try {
+        const r = await this._procesarCandidato(candidato, projectId);
+        // Registro de TODO lo evaluado (con su código y veredicto) para que el
+        // orquestador pueda citar el motivo de un PUENTE al avisar al dueño.
+        // El veredicto real trae `decision` (campo canónico) y su alias `codigo`.
+        // Leer solo `codigo` (que era undefined) mandaba TODO a PUENTE.
+        evaluados.push({ id_nicho: r.id_nicho || id_nicho, codigo: r.codigo, veredicto: r.veredicto || null, informe: r.informe || null });
+        if (r.codigo === 'VIABLE') {
+          viables++; viablesIds.push(id_nicho);
+          detalle.push({
+            id_nicho: r.id_nicho,
+            informe: r.informe,
+            veredicto: r.veredicto,
+            camino: r.camino
+          });
+        } else if (r.codigo === 'NO_VIABLE') {
+          no_viables++;
+        } else {
+          puentes++;
+        }
+      } catch (err) {
+        this.logger?.error('batch-validacion.candidato.error', {
+          id_nicho, error: err.message
+        });
+        // Honesto: un candidato que no se pudo evaluar NO es un viable.
+        puentes++;
+      }
+    }
+
+    // PULSO: lote completado.
+    // Lleva `correlation_id` (el orquestador lo exige para hallar el ciclo),
+    // los contadores y `detalle` (los nichos viables CON su informe/veredicto/
+    // camino) para que el ensamblaje se dispare con el contrato correcto.
+    this.eventBus?.publish('nichos.validacion.lote.completado', {
+      project_id: projectId,
+      lote_id,
+      correlation_id: correlationId || null,
+      viables,
+      no_viables,
+      puentes,
+      resultados: viablesIds,
+      detalle,
+      evaluados,
+      timestamp: nowISO()
+    });
+
     return {
       status: 200,
-      data: {
-        project_id,
-        batch_id: loteEnEjecucion.batch_id,
-        lote_en_ejecucion: loteEnEjecucion,
-        veredictos: veredictos.filter(v => v.status === 'exito'),
-        fallidos,
-        total: lote.length,
-        ejecutado: true
-      }
+      data: { lote_id, procesados: candidatos.length, viables, no_viables, puentes }
     };
   }
 
-  // ── REFLEJO puro: reparte items en N grupos lo mas equitativos posible ──
-  _repartir(items, n) {
-    const grupos = Array.from({ length: n }, () => []);
-    items.forEach((item, i) => {
-      grupos[i % n].push(item);
-    });
-    return grupos.filter(g => g.length > 0);
-  }
+  // =============================================================
+  // Micro-flujo por candidato — CADA SALTO CON EL CONTRATO DEL CONSUMIDOR
+  // =============================================================
+  async _procesarCandidato(candidato, projectId) {
+    const id_nicho = candidato.id_nicho || candidato.id;
+    const semilla = (candidato.payload && candidato.payload.semilla) || {};
 
-  // ── REFLEJO: un veredicto por item (RPC C1 medir + C3 evaluar), en paralelo ──
-  async _ejecutarEnParalelo(project_id, lote, criterio, nParalel) {
-    // Lotes de trabajo: cada grupo de items se procesa como una tarea paralela.
-    const tareas = this._repartir(lote, nParalel).map(grupo => this._validarGrupo(project_id, grupo, criterio));
-    const resultados = await Promise.all(tareas);
-    return resultados.flat();
-  }
+    // El estudio de demanda exige un OBJETO candidato con `.nombre`
+    // (lo usa como query de fuentes externas y como etiqueta del prompt).
+    // Antes se le pasaba solo `id_nicho` → "candidato requerido" (400) y
+    // toda la validación se saltaba en silencio.
+    const candidatoObj = {
+      id: id_nicho,
+      nombre: semilla.vertical_sugerido || semilla.titulo
+        || semilla.texto_original || id_nicho,
+      ...semilla
+    };
 
-  // ── REFLEJO: valida un grupo de items (estudio + veredicto por item) ──
-  async _validarGrupo(project_id, items, criterio) {
-    const salidas = [];
-    for (const item of items) {
-      const candidato = typeof item === 'object' ? (item.candidato || item) : { nombre: item };
-      salidas.push(await this._validarItem(project_id, candidato, criterio));
+    // 2a. Estudiar demanda → devuelve { informe }.
+    const demandaResp = await this._rpc('nichos.demanda.estudiar.request', {
+      project_id: projectId,
+      candidato: candidatoObj
+    }, { timeout_ms: 120000 });
+    const informe = (demandaResp && demandaResp.data && demandaResp.data.informe) || null;
+
+    // 2b. Emitir veredicto — exige `informe` (antes se le pasaba
+    //     `estudio_demanda`, nombre que no reconoce → 400). Si no hay
+    //     informe, NO se inventa un VIABLE: degradación honesta → PUENTE.
+    let veredicto;
+    if (!informe) {
+      veredicto = { codigo: 'PUENTE', razon: 'sin_informe_demanda' };
+    } else {
+      const veredictoResp = await this._rpc('nichos.veredicto.emitir.request', {
+        project_id: projectId,
+        id_nicho,
+        informe
+      }, { timeout_ms: 90000 });
+      veredicto = (veredictoResp && veredictoResp.data && veredictoResp.data.veredicto)
+        || { codigo: 'PUENTE', razon: 'veredicto_no_emitido' };
     }
-    return salidas;
-  }
 
-  // ── REFLEJO: un item -> estudio (C1) + veredicto (C3); fallo no rompe el lote ──
-  async _validarItem(project_id, candidato, criterio) {
-    try {
-      const estudio = await this._rpc('nichos.estudio.medir.request', {
-        project_id, candidato
-      }, { timeout_ms: 20000 }).catch(() => null);
-      if (!estudio || estudio.status !== 200) {
-        return { status: 'fallido', candidato, codigo: (estudio && estudio.error && estudio.error.code) || 'ESTUDIO_NO_DISPONIBLE' };
-      }
-      const veredicto = await this._rpc('nichos.veredicto.evaluar.request', {
-        project_id, estudio: estudio.data, criterio
-      }, { timeout_ms: 20000 }).catch(() => null);
-      if (!veredicto || veredicto.status !== 200) {
-        return { status: 'fallido', candidato, codigo: (veredicto && veredicto.error && veredicto.error.code) || 'VEREDICTO_NO_DISPONIBLE' };
-      }
-      return { status: 'exito', candidato, veredicto: veredicto.data.veredicto, confianza: veredicto.data.confianza, motivo: veredicto.data.motivo };
-    } catch (err) {
-      return { status: 'fallido', candidato, codigo: 'ERROR_BATCH' };
+    const codigo = (veredicto && (veredicto.decision || veredicto.codigo)) || 'PUENTE';
+
+    // 2d. Cortar si NO_VIABLE.
+    if (codigo === 'NO_VIABLE') {
+      await this._rpc('nichos.cortar.temprano.request', {
+        project_id: projectId,
+        id_nicho,
+        veredicto
+      }, { timeout_ms: 10000 });
+      return { id_nicho, codigo, veredicto };
     }
-  }
 
-  // ── Tools ──
-  toolProgramar(params) { return this._programar(params); }
-  toolRepartir(params) { return this._repartir(params.items, params.n); }
+    // Ni VIABLE ni NO_VIABLE → PUENTE (necesita humano). No ensambla.
+    // Se devuelve el veredicto para que el aviso al dueño pueda citar el motivo.
+    if (codigo !== 'VIABLE') return { id_nicho, codigo, veredicto };
+
+    // 2c. Decidir camino — exige `informe` + `veredicto`.
+    const caminoResp = await this._rpc('nichos.camino.decidir.request', {
+      project_id: projectId,
+      id_nicho,
+      informe,
+      veredicto
+    }, { timeout_ms: 30000 });
+    const camino = (caminoResp && caminoResp.data && caminoResp.data.camino)
+      || { tipo: 'CONSTRUIR', razon: 'camino_no_decidido' };
+
+    return { id_nicho, codigo, informe, veredicto, camino };
+  }
 }
 
 module.exports = BatchValidacion;

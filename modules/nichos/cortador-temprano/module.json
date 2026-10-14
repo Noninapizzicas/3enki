@@ -1,0 +1,19 @@
+{
+  "name": "cortador-temprano",
+  "version": "0.1.0",
+  "description": "REFLEJO del vertical NICHOS: corta un nicho antes de la fase de construccion cuando el veredicto es NO_VIABLE. Transita el pipeline a CORTADO y registra en historial. Sin estado propio.",
+  "_doc": "modules/nichos/cortador-temprano — REFLEJO sin estado del vertical NICHOS.\n\nQue hace: recibe nichos.cortar.temprano.request con {id_nicho, veredicto} y ejecuta el corte pre-construccion:\n  1. Publica nichos.pipeline.transitar.request para transitar a CORTADO.\n  2. Publica nichos.historial.registrar.request para dejar constancia.\n  3. Emite pulso nichos.cortado.pre.construccion con {id_nicho, razon}.\n\nSin estado propio — REFLEJO puro. La transicion y el registro los hacen sus dependencias.\n\nPatron: ModuloHibridoReflejo (mitad REFLEJO, JS determinista). Sin mitad blueprint.",
+  "ui_decision": {
+    "necesita": false,
+    "razon": "Fontaneria interna del pipeline de validacion. El corte temprano se dispara desde batch-validacion cuando el veredicto es NO_VIABLE. Sin cara propia al usuario."
+  },
+  "publishes": [
+    { "event": "nichos.cortado.pre.construccion", "description": "PULSO fire-and-forget: un nicho fue cortado antes de la fase de construccion. Payload: {id_nicho, razon, timestamp}." },
+    { "event": "nichos.cortar.temprano.response", "description": "Response correlada por request_id al RPC nichos.cortar.temprano.request. Payload: {status, data:{transicion}}." },
+    { "event": "nichos.pipeline.transitar.request", "description": "RPC hacia pipeline: transita el nicho al estado CORTADO. Payload: {request_id, id_nicho, estado_destino, razon}." },
+    { "event": "nichos.historial.registrar.request", "description": "RPC hacia historial: registra el corte temprano. Payload: {request_id, id_nicho, accion, detalle, timestamp}." }
+  ],
+  "subscribes": [
+    { "event": "nichos.cortar.temprano.request", "handler": "onCortarRequest", "description": "RPC: corta un nicho antes de la fase de construccion. Transita a CORTADO y registra en historial. Payload: {request_id, id_nicho, veredicto}." }
+  ]
+}

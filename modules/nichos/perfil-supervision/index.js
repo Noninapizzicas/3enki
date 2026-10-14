@@ -1,17 +1,28 @@
 /**
- * nichos/perfil-supervision — CUSTODIO CON PERSISTENCIA (H2, hoja del plan).
+ * nichos/perfil-supervision — REFLEJO JS (CUSTODIO del vertical NICHOS, bloque H dueño).
  *
- * Guarda el PERFIL DE SUPERVISIÓN por proyecto: cadencia de pulso y límites
- * declarables de la supervisión del nicho. Lo consumen el canal de supervisión
- * (G1) y el monitor/pulso para decidir cuándo y cómo avisar al dueño.
+ * Único escritor del perfil de supervisión del dueño: cadencia, qué exige
+ * respuesta sí-o-sí, umbral de nitidez para disparar solicitudes de decisión,
+ * canales elegidos y techo de pérdida por proyecto. Snapshot inmutable por
+ * versión: cada declaración muta el store aplicando el cambio sobre el último
+ * snapshot, sellándolo con autor + instante, y PULSA
+ * 'nichos.perfil.supervision.declarado'.
  *
- * CUSTODIO (patrón real, distinto del reflejo stateless): un solo escritor del
- * store — el DUEÑO declara la cadencia/límites (guard de rol). La lectura
- * (_leer) no muta. Persiste por proyecto con PosPersistencia (storage
- * /prisma/nichos/perfil-supervision.json), restaura en project.activated y
- * vuelca en onUnload. Emisor/par de fallo en errores.
+ * Store (per-proyecto, PosPersistencia): /prisma/pos/nichos/perfil-supervision.json
+ *   { _version, _updated, version, perfil:{...}, por_autor:[ {version, autor, cambio, at} ] }
  *
- * Ver hoja H2 del plan-construccion.
+ * REGLA F3: "un solo escritor (el dueño por el canal). Lectores: libres." El
+ * autor declarante debe venir como 'dueño' en el payload; otro autor → 403
+ * ESCRITOR_NO_AUTORIZADO. K3 (ajustador-umbrales) NO toca este perfil, solo
+ * el dueño: aquí se gobierna la cadencia y la cara del sistema.
+ *
+ * ABIERTO: todo campo puede nacer ABIERTO. El esqueleto por defecto entrega el
+ * perfil con todos sus campos en 'ABIERTO'; el consumidor (escalones-mensaje,
+ * puerto-canal, gate-decision-operar, alerta-sangria, paquetador-decision,
+ * normalizador-semilla) decide qué hacer con un ABIERTO.
+ *
+ * Patrón: ModuloHibridoReflejo (mitad REFLEJO, JS determinista). Sin mitad
+ * blueprint — la lógica es CRUD + aritmética de versión.
  */
 
 'use strict';
@@ -19,47 +30,45 @@
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
 const PosPersistencia = require('../../_shared/pos-persistencia');
 
-// Rol único escritor — el DUEÑO. El canal y el monitor son solo lectores.
-const ROL_DUENYO = 'DUEÑO';
+const nowISO = () => new Date().toISOString();
+const AUTOR_AUTORIZADO = 'dueño';
 
-// Cadencias de pulso de supervision declarables ([ABIERTO]).
-const CADENCIAS = new Set(['diaria', 'semanal', 'quincenal', 'tiempo_real']);
+const CAMPOS_PERFIL = [
+  'cadencia_pulso',
+  'decide_siempre',
+  'umbral_nitidez_semilla',
+  'canales_elegidos',
+  'techo_perdida_proyecto',
+  'cadencia_cuadro'
+];
 
-// Shape base del perfil de supervision declarable.
-function perfilVacio() {
+function esqueletoAbierto() {
   return {
-    esquema: 'nichos-perfil-supervision-v1',
-    cadencia_pulso: null,         // diaria|semanal|quincenal|tiempo_real
-    limites: null,                 // { max_alertas_dia, techo_perdida_eur }
-    updated_at: null,
-    declarado_por: null
+    cadencia_pulso: 'ABIERTO',
+    decide_siempre: [],
+    umbral_nitidez_semilla: 'ABIERTO',
+    canales_elegidos: 'ABIERTO',
+    techo_perdida_proyecto: 'ABIERTO',
+    cadencia_cuadro: 'ABIERTO'
   };
-}
-
-// Normalizador de un número entero positivo (o null si no trae valor).
-function numPos(v) {
-  const n = Number(v);
-  return Number.isInteger(n) && n > 0 ? n : null;
 }
 
 class PerfilSupervision extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'perfil-supervision';
-    this.version = 'reflejo-0.1.0';
-    // store en memoria: project_id -> objeto de perfil de supervision
-    this._perfiles = new Map();
+    this.version = '0.1.0';
+    this.perfilPorProyecto = new Map();   // project_id → { version, perfil, por_autor:[] }
 
     this._persist = new PosPersistencia({
       modulo: this,
       file: 'perfil-supervision.json',
-      dir: '/prisma/nichos',
-      snapshot: (pid) => {
-        const p = this._perfiles.get(pid);
-        return p ? { project_id: pid, perfil: p } : null;
-      },
+      dir: '/prisma/pos/nichos',
+      snapshot: (pid) => ({ perfil: this.perfilPorProyecto.get(pid) || null }),
       hidratar: (pid, data) => {
-        if (data && data.perfil) this._perfiles.set(pid, data.perfil);
+        if (data && data.perfil && typeof data.perfil === 'object') {
+          this.perfilPorProyecto.set(pid, data.perfil);
+        }
       }
     });
   }
@@ -70,114 +79,112 @@ class PerfilSupervision extends ModuloHibridoReflejo {
     return super.onUnload();
   }
 
-  // Restaura el perfil de supervision del proyecto activado.
   onProjectActivated(e) {
     const d = (e && (e.data || e)) || {};
     return this._persist.restaurar(d.project_id);
   }
 
-  // ── handlers RPC (una línea, delegan a _atender) ──
+  // ── RPC HANDLERS ──
   onLeerRequest(e) {
-    return this._atender(e, 'leer', 'nichos.supervision.leer.response', d => this._leer(d));
+    return this._atender(e, 'leer', 'nichos.perfil.supervision.leer.response', d => this._leer(d));
   }
 
   onDeclararRequest(e) {
-    return this._atender(e, 'declarar', 'nichos.supervision.declarar.response', async (d) => {
-      const res = await this._declarar(d);
-      // Emisor/par de fallo: exito → dominio; error → par determinista.
-      if (res.status === 200) {
-        this.eventBus?.publish('nichos.supervision.declarado', {
-          project_id: res.data.project_id,
-          perfil: res.data.perfil,
-          declarado: true,
-          correlation_id: d.correlation_id
-        });
-      } else {
-        this.eventBus?.publish('nichos.supervision.declarar.failed', res);
-      }
-      return res;
-    });
+    return this._atender(e, 'declarar', 'nichos.perfil.supervision.declarar.response', d => this._declarar(d));
   }
 
-  // ── proyección de lectura (NO muta) ──
-  _obtenerOCrear(pid) {
-    let p = this._perfiles.get(pid);
+  // =============================================================
+  // Estado — snapshot por proyecto. Esqueleto por defecto si no hay fichero.
+  // =============================================================
+  _perfil(project_id) {
+    let p = this.perfilPorProyecto.get(project_id);
     if (!p) {
-      p = perfilVacio();
-      this._perfiles.set(pid, p);
-      this._persist.marcarDirty(pid);
+      p = { version: 0, perfil: esqueletoAbierto(), por_autor: [] };
+      this.perfilPorProyecto.set(project_id, p);
     }
     return p;
   }
 
+  // =============================================================
+  // PROYECCIONES — lógica de dominio pura
+  // =============================================================
   _leer(input) {
-    const pid = input && input.project_id;
-    if (!pid) return this._invalid('project_id');
-    const p = this._obtenerOCrear(pid);
-    return { status: 200, data: { project_id: pid, perfil: p } };
+    if (!input.project_id) return this._invalid('project_id');
+    const perfil = this._perfil(input.project_id);
+    return { status: 200, data: { perfil_supervision: perfil } };
   }
 
-  // Alias semántico para G1 (canal-supervision): devuelve el perfil de supervision.
-  leerPerfil(pid) {
-    if (!pid) return null;
-    return this._perfiles.get(pid) || perfilVacio();
-  }
-
-  // ── proyección de escritura (el único escritor: DUEÑO) ──
   _declarar(input) {
-    const pid = input && input.project_id;
-    if (!pid) return this._invalid('project_id');
+    if (!input.project_id) return this._invalid('project_id');
+    if (!input.por_autor) return this._invalid('por_autor');
+    if (!input.cambio || typeof input.cambio !== 'object') return this._invalid('cambio');
 
-    // GUARD de escritor: solo el DUEÑO puede declarar el perfil de supervision.
-    if (input.rol !== ROL_DUENYO) {
-      return this._errorResponse(403, 'PERMISSION_DENIED', 'solo el DUEÑO puede declarar el perfil de supervisión', {
-        rol_esperado: ROL_DUENYO, rol_recibido: input.rol
+    // Guard F3: un solo escritor — el dueño por el canal.
+    if (input.por_autor !== AUTOR_AUTORIZADO) {
+      const err = this._errorResponse(
+        403,
+        'PERMISSION_DENIED',
+        'escritor_no_autorizado — solo el dueño declara el perfil de supervisión',
+        { por_autor: input.por_autor, autor_autorizado: AUTOR_AUTORIZADO }
+      );
+      this.eventBus?.publish('nichos.perfil.supervision.declarado.failed', {
+        project_id: input.project_id,
+        code: 'PERMISSION_DENIED',
+        message: err.error.message,
+        timestamp: nowISO()
       });
+      return err;
     }
 
-    const perfil = input.perfil;
-    if (!perfil || typeof perfil !== 'object') {
-      return this._invalid('perfil');
+    // Validación de forma: cualquier campo del cambio debe pertenecer al esquema.
+    const cambio = input.cambio;
+    const camposDesconocidos = Object.keys(cambio).filter(k => !CAMPOS_PERFIL.includes(k));
+    if (camposDesconocidos.length) {
+      const err = this._errorResponse(
+        400,
+        'INVALID_INPUT',
+        'cambio contiene campos fuera del esquema del perfil de supervisión',
+        { campos_desconocidos: camposDesconocidos, campos_validos: CAMPOS_PERFIL }
+      );
+      this.eventBus?.publish('nichos.perfil.supervision.declarado.failed', {
+        project_id: input.project_id,
+        code: 'INVALID_INPUT',
+        message: err.error.message,
+        timestamp: nowISO()
+      });
+      return err;
     }
 
-    const actual = this._obtenerOCrear(pid);
-    const previo = this._perfiles.get(pid) || perfilVacio();
-
-    // Merge conservador sobre el molde; valida y normaliza cada campo declarable.
-    if (perfil.cadencia_pulso != null && perfil.cadencia_pulso !== '') {
-      const cad = String(perfil.cadencia_pulso).toLowerCase();
-      if (!CADENCIAS.has(cad)) return this._invalid('perfil.cadencia_pulso');
-      actual.cadencia_pulso = cad;
-    } else if (previo.cadencia_pulso != null) {
-      actual.cadencia_pulso = previo.cadencia_pulso;
-    }
-
-    if (perfil.limites && typeof perfil.limites === 'object') {
-      const max_alertas_dia = numPos(perfil.limites.max_alertas_dia);
-      const techo_perdida_eur = numPos(perfil.limites.techo_perdida_eur);
-      if (max_alertas_dia == null && techo_perdida_eur == null) {
-        return this._invalid('perfil.limites');
+    // Aplica el cambio sobre el último snapshot — inmutabilidad por versión.
+    const actual = this._perfil(input.project_id);
+    const perfilNuevo = Object.assign({}, actual.perfil);
+    for (const k of CAMPOS_PERFIL) {
+      if (Object.prototype.hasOwnProperty.call(cambio, k)) {
+        perfilNuevo[k] = cambio[k];
       }
-      actual.limites = {
-        max_alertas_dia: max_alertas_dia ?? (previo.limites && previo.limites.max_alertas_dia) ?? null,
-        techo_perdida_eur: techo_perdida_eur ?? (previo.limites && previo.limites.techo_perdida_eur) ?? null
-      };
-    } else if (previo.limites) {
-      actual.limites = previo.limites;
     }
+    const nueva = {
+      version: actual.version + 1,
+      perfil: perfilNuevo,
+      por_autor: actual.por_autor.concat([{
+        version: actual.version + 1,
+        autor: input.por_autor,
+        cambio,
+        at: nowISO()
+      }])
+    };
+    this.perfilPorProyecto.set(input.project_id, nueva);
+    this._persist.marcarDirty(input.project_id);
 
-    actual.updated_at = new Date().toISOString();
-    actual.declarado_por = ROL_DUENYO;
+    this.eventBus?.publish('nichos.perfil.supervision.declarado', {
+      project_id: input.project_id,
+      version: nueva.version,
+      por_autor: input.por_autor,
+      timestamp: nowISO()
+    });
 
-    this._perfiles.set(pid, actual);
-    this._persist.marcarDirty(pid);
-
-    return { status: 200, data: { project_id: pid, perfil: actual, declarado: true } };
+    return { status: 200, data: { nueva_version: nueva.version, perfil_supervision: nueva } };
   }
-
-  // ── Tools ──
-  toolLeer(params) { return this._leer(params); }
-  toolDeclarar(params) { return this._declarar(params); }
 }
 
 module.exports = PerfilSupervision;

@@ -1,22 +1,20 @@
 /**
- * nichos/ajustador-umbrales — CUSTODIO (K3, hoja del plan).
+ * nichos/ajustador-umbrales — REFLEJO JS del vertical NICHOS.
  *
- * El JEFE retunea en caliente el criterio/umbral de validación del pipeline:
- *   - _retunear(duenyo, nuevoUmbral)  custodia el cambio en su store (un solo
- *     escritor: rol DUEÑO, guard single-writer) y lo declara aplicado.
- *   - _aplicar(cambio)                recalcula el umbral vigente (merge
- *     conservador sobre el último ajustado) y devuelve el criterio refinado.
+ * Traduce respuestas de decision en declaraciones de ajuste a los custodios
+ * pertinentes (criterio-viabilidad, perfil-limite, perfil-supervision).
+ * Escucha nichos.decision.solicitud.respondida (F7b) para auto-ajustar
+ * y atiende el RPC nichos.umbrales.ajustar.
  *
- * ORQUESTADOR LIGERO: escucha el cambio de umbral del jefe y lo PROPAGA hacia
- * criterio-viabilidad (C2) publicando nichos.umbral_ajustado (fire-and-forget,
- * ver seccion 3.2 del plan: emisor -> par de fallo). El siguiente lote de
- * validación (C3 veredicto) evalúa contra el umbral refinado del proyecto.
+ * Destinos validos:
+ *   CRITERIO            — propaga a nichos.criterio.viabilidad.declarar.request
+ *   PERFIL_LIMITE       — propaga a nichos.perfil.limite.declarar.request
+ *   PERFIL_SUPERVISION  — propaga a nichos.perfil.supervision.declarar.request
  *
- * PosPersistencia per-proyecto (patrón custodio real, ver criterio-viabilidad):
- * restaura el umbral en project.activated y vuelca en onUnload. Emisor/par de
- * fallo: exito -> nichos.umbral_ajustado; error -> nichos.umbral.retunear.failed
- * (cierra el circulo de nichos.umbral.retunear.request). Ver hoja K3 del
- * plan-construccion.
+ * Store (per-proyecto, PosPersistencia): /prisma/pos/nichos/ajustador-umbrales.json
+ *   { _version, _updated, historial: [ {destino, cambio, por_autor, at} ] }
+ *
+ * Patron: ModuloHibridoReflejo + PosPersistencia. Sin mitad blueprint.
  */
 
 'use strict';
@@ -24,52 +22,32 @@
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
 const PosPersistencia = require('../../_shared/pos-persistencia');
 
-// Rol único escritor declarable — el DUEÑO retunea el umbral (single-writer).
-const ROL_DUENYO = 'DUEÑO';
+const nowISO = () => new Date().toISOString();
 
-// Rango base declarable del umbral de ingresos semanales ([ABIERTO], 25-400).
-const UMBRAL_MIN_EUR = 25;
-const UMBRAL_MAX_EUR = 400;
+const DESTINOS = {
+  CRITERIO: 'nichos.criterio.viabilidad.declarar.request',
+  PERFIL_LIMITE: 'nichos.perfil.limite.declarar.request',
+  PERFIL_SUPERVISION: 'nichos.perfil.supervision.declarar.request'
+};
 
-// Shape base del umbral ajustado. El jefe declara todo o un subset; cada campo
-// se valida/normaliza sobre este molde.
-function umbralVacio() {
-  return {
-    esquema: 'nichos-ajustador-umbrales-v1',
-    umbral_ingresos: null,          // { number > 0 } — EUR/semana
-    minimos_demanda: null,          // { numero_busquedas, contactos_semana }
-    disposicion_a_pagar: null,      // { number > 0 } — EUR/venta
-    tipo: null,                     // marginal|estandar|premium [ABIERTO]
-    anterior: null,                 // snapshot del umbral previo (para recalcular delta)
-    ajustado_por: null,             // siempre ROL_DUENYO
-    aplicado: false,                 // true cuando se publicó nichos.umbral_ajustado
-    updated_at: null
-  };
-}
-
-function numPos(v) {
-  const n = Number(v);
-  return Number.isFinite(n) && n > 0 ? n : null;
-}
+const DESTINOS_VALIDOS = Object.keys(DESTINOS);
 
 class AjustadorUmbrales extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'ajustador-umbrales';
-    this.version = 'reflejo-0.1.0';
-    // store en memoria: project_id -> umbral ajustado (un solo estado por proyecto)
-    this._umbrales = new Map();
+    this.version = '0.1.0';
+    this.historialPorProyecto = new Map(); // project_id → { historial: [] }
 
     this._persist = new PosPersistencia({
       modulo: this,
       file: 'ajustador-umbrales.json',
-      dir: '/prisma/nichos',
-      snapshot: (pid) => {
-        const u = this._umbrales.get(pid);
-        return u ? { project_id: pid, umbral: u } : null;
-      },
+      dir: '/prisma/pos/nichos',
+      snapshot: (pid) => ({ historial: (this.historialPorProyecto.get(pid) || {}).historial || [] }),
       hidratar: (pid, data) => {
-        if (data && data.umbral) this._umbrales.set(pid, data.umbral);
+        if (data && Array.isArray(data.historial)) {
+          this.historialPorProyecto.set(pid, { historial: data.historial });
+        }
       }
     });
   }
@@ -80,136 +58,140 @@ class AjustadorUmbrales extends ModuloHibridoReflejo {
     return super.onUnload();
   }
 
-  // Restaura el umbral ajustado del proyecto activado (PosPersistencia).
   onProjectActivated(e) {
     const d = (e && (e.data || e)) || {};
     return this._persist.restaurar(d.project_id);
   }
 
-  // ── handler RPC (una línea, delega a _atender / fire-and-forget) ──
-  onRetunearRequest(e) {
-    return this._atender(e, 'retunear', 'nichos.umbral.retunear.response', (d) => {
-      const res = this._procesarRetunear(d);
-      // Emisor/par de fallo: exito → propaga nichos.umbral_ajustado; error → failed.
-      if (res.status === 200) {
-        this.eventBus?.publish('nichos.umbral_ajustado', {
-          project_id: res.data.project_id,
-          nuevo_umbral: res.data.umbral.umbral_ingresos,
-          anterior: res.data.anterior,
-          aplicado: true,
-          correlation_id: d.correlation_id
-        });
-      } else {
-        this.eventBus?.publish('nichos.umbral.retunear.failed', res);
-      }
-      return res;
-    });
+  // ── RPC HANDLER ──
+  onAjustarRequest(e) {
+    return this._atender(e, 'ajustar', 'nichos.umbrales.ajustar.response', d => this._ajustar(d));
   }
 
-  // Procesa el retune: valida el escrito, custodia y aplica (proyeccion _aplicar).
-  _procesarRetunear(input) {
-    const pid = input && input.project_id;
-    if (!pid) return this._invalid('project_id');
+  // ── FIRE-AND-FORGET: reaccion a decision respondida (F7b) ──
+  onDecisionRespondida(e) {
+    const d = (e && (e.data || e)) || {};
+    if (!d.respuesta_decision || !d.project_id) return;
 
-    // GUARD de escritor single-writer: solo el DUEÑO retunea.
-    if (input.rol !== ROL_DUENYO) {
-      return this._errorResponse(403, 'PERMISSION_DENIED', 'solo el DUEÑO puede retunear el umbral de validacion', {
-        rol_esperado: ROL_DUENYO, rol_recibido: input.rol
+    const ajustes = this._extraerAjustes(d.respuesta_decision);
+    if (!ajustes.length) return;
+
+    for (const ajuste of ajustes) {
+      this._propagar({
+        project_id: d.project_id,
+        destino: ajuste.destino,
+        cambio: ajuste.cambio,
+        por_autor: d.por_autor || 'sistema'
       });
     }
-
-    const cambio = input.nuevo_umbral || (typeof input.cambio === 'object' ? input.cambio : null);
-    if (!cambio || typeof cambio !== 'object') {
-      return this._invalid('nuevo_umbral');
-    }
-
-    const res = this._aplicar(pid, cambio, ROL_DUENYO);
-    return res;
   }
 
-  // ── proyeccion de escritura (el único escritor: DUEÑO) ──
-  // Custodia el cambio en el store y recalcula el umbral vigente (merge conservador).
-  _aplicar(pid, cambio, rol) {
-    if (!cambio || typeof cambio !== 'object') return this._invalid('cambio');
+  // =============================================================
+  // Estado — historial por proyecto
+  // =============================================================
+  _historial(project_id) {
+    let h = this.historialPorProyecto.get(project_id);
+    if (!h) {
+      h = { historial: [] };
+      this.historialPorProyecto.set(project_id, h);
+    }
+    return h;
+  }
 
-    const previo = this._umbrales.get(pid) || umbralVacio();
-    const actual = umbralVacio();
+  // =============================================================
+  // PROYECCIONES
+  // =============================================================
+  _ajustar(input) {
+    if (!input.project_id) return this._invalid('project_id');
+    if (!input.respuesta_decision) return this._invalid('respuesta_decision');
 
-    // Merge conservador: lo que el jefe declara se valida; lo que no, se conserva.
-    if (cambio.umbral_ingresos != null && cambio.umbral_ingresos !== '') {
-      const u = numPos(cambio.umbral_ingresos);
-      if (!u || u < UMBRAL_MIN_EUR || u > UMBRAL_MAX_EUR) {
-        return this._errorResponse(400, 'INVALID_INPUT', `umbral_ingresos fuera de rango ${UMBRAL_MIN_EUR}-${UMBRAL_MAX_EUR} EUR/semana`, { umbral_ingresos: cambio.umbral_ingresos });
-      }
-      actual.umbral_ingresos = u;
-    } else if (previo.umbral_ingresos != null) {
-      actual.umbral_ingresos = previo.umbral_ingresos;
+    const ajustes = this._extraerAjustes(input.respuesta_decision);
+    if (!ajustes.length) {
+      return {
+        status: 200,
+        data: { aplicados: [] }
+      };
     }
 
-    if (cambio.minimos_demanda && typeof cambio.minimos_demanda === 'object') {
-      const numero_busquedas = numPos(cambio.minimos_demanda.numero_busquedas);
-      const contactos_semana = numPos(cambio.minimos_demanda.contactos_semana);
-      if (numero_busquedas == null && contactos_semana == null) {
-        return this._invalid('cambio.minimos_demanda');
-      }
-      actual.minimos_demanda = { numero_busquedas, contactos_semana };
-    } else if (previo.minimos_demanda) {
-      actual.minimos_demanda = previo.minimos_demanda;
+    const aplicados = [];
+    for (const ajuste of ajustes) {
+      const resultado = this._propagar({
+        project_id: input.project_id,
+        destino: ajuste.destino,
+        cambio: ajuste.cambio,
+        por_autor: input.por_autor || 'sistema'
+      });
+      aplicados.push(resultado);
     }
 
-    if (cambio.disposicion_a_pagar != null && cambio.disposicion_a_pagar !== '') {
-      const p = numPos(cambio.disposicion_a_pagar);
-      if (!p) return this._invalid('cambio.disposicion_a_pagar');
-      actual.disposicion_a_pagar = p;
-    } else if (previo.disposicion_a_pagar != null) {
-      actual.disposicion_a_pagar = previo.disposicion_a_pagar;
-    }
-
-    // snapshot del previo para recalcular delta en C7 / portafolio
-    actual.anterior = {
-      umbral_ingresos: previo.umbral_ingresos ?? actual.umbral_ingresos,
-      minimos_demanda: previo.minimos_demanda ?? actual.minimos_demanda,
-      disposicion_a_pagar: previo.disposicion_a_pagar ?? actual.disposicion_a_pagar
+    return {
+      status: 200,
+      data: { aplicados }
     };
-    actual.ajustado_por = rol || ROL_DUENYO;
-    actual.aplicado = true;
-    actual.updated_at = new Date().toISOString();
-
-    this._umbrales.set(pid, actual);
-    this._persist.marcarDirty(pid);
-
-    return { status: 200, data: {
-      project_id: pid,
-      umbral: actual,
-      // delta del cambio (para trazas / recalibrado C7)
-      delta: this._deltaDe(previo, actual),
-      anterior: actual.anterior,
-      aplicado: true
-    } };
   }
 
-  // Delta del ajuste: diferencia entre el umbral previo y el nuevo (solo numéricos).
-  _deltaDe(previo, actual) {
-    const delta = {};
-    if (previo.umbral_ingresos != null && actual.umbral_ingresos != null) {
-      delta.umbral_ingresos = this._round(actual.umbral_ingresos - previo.umbral_ingresos);
+  /**
+   * Extrae ajustes de la respuesta de decision.
+   * La respuesta puede contener ajustes directos con destino y cambio.
+   */
+  _extraerAjustes(respuesta) {
+    if (!respuesta || typeof respuesta !== 'object') return [];
+
+    // Caso: ajustes explícitos en la respuesta.
+    if (Array.isArray(respuesta.ajustes)) {
+      return respuesta.ajustes.filter(a =>
+        a && a.destino && DESTINOS_VALIDOS.includes(a.destino) && a.cambio
+      );
     }
-    if (previo.disposicion_a_pagar != null && actual.disposicion_a_pagar != null) {
-      delta.disposicion_a_pagar = this._round(actual.disposicion_a_pagar - previo.disposicion_a_pagar);
+
+    // Caso: un solo ajuste con destino y cambio en la raíz.
+    if (respuesta.destino && DESTINOS_VALIDOS.includes(respuesta.destino) && respuesta.cambio) {
+      return [{ destino: respuesta.destino, cambio: respuesta.cambio }];
     }
-    return delta;
+
+    return [];
   }
 
-  // ── proyeccion de lectura (NO muta) ──
-  _leer(input) {
-    const pid = input && input.project_id;
-    if (!pid) return this._invalid('project_id');
-    return { status: 200, data: { project_id: pid, umbral: this._umbrales.get(pid) || umbralVacio() } };
-  }
+  /**
+   * Propaga un ajuste al custodio destino y registra en el historial.
+   */
+  _propagar(input) {
+    const { project_id, destino, cambio, por_autor } = input;
+    const topic = DESTINOS[destino];
 
-  // ── Tools ──
-  toolLeer(params) { return this._leer(params); }
-  toolRetunear(params) { return this._procesarRetunear(params); }
+    if (!topic) {
+      this.eventBus?.publish('nichos.umbral.ajustado.failed', {
+        project_id,
+        code: 'DESTINO_DESCONOCIDO',
+        message: `destino ${destino} no reconocido — validos: ${DESTINOS_VALIDOS.join(', ')}`,
+        timestamp: nowISO()
+      });
+      return { destino, status: 'failed', code: 'DESTINO_DESCONOCIDO' };
+    }
+
+    // Publicar la declaracion al custodio destino.
+    this.eventBus?.publish(topic, {
+      project_id,
+      por_autor,
+      cambio
+    });
+
+    // Registrar en el historial.
+    const entrada = { destino, cambio, por_autor, at: nowISO() };
+    this._historial(project_id).historial.push(entrada);
+    this._persist.marcarDirty(project_id);
+
+    // Emitir pulso de ajuste aplicado.
+    this.eventBus?.publish('nichos.umbral.ajustado', {
+      project_id,
+      destino,
+      cambio,
+      por_autor,
+      timestamp: nowISO()
+    });
+
+    return { destino, status: 'ok' };
+  }
 }
 
 module.exports = AjustadorUmbrales;

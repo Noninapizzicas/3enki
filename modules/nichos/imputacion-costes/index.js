@@ -1,90 +1,105 @@
 /**
- * nichos/imputacion-costes — REFLEJO JS PURO: cero pensar, solo calcular.
+ * nichos/imputacion-costes — REFLEJO JS del vertical NICHOS.
  *
- * Calcula LO QUE CUESTA cada proyecto: la suma de sus partidas de coste —
- * construcción (montaje de la solución) + operación (mantenimiento) + fuentes
- * (cuota de consulta/scraping/API, vía coste-fuente J4). Stateless: cada op es
- * una función pura determinista (entra objeto, sale objeto).
+ * Agrega coste de un proyecto hasta un instante dado por categoria.
+ * Sin estado propio: consulta por bus a registro-cobros e
+ * imputacion-coste-fuente, agrega y responde.
  *
- *   agregar             imputa el CosteProyecto a un proyecto y publica
- *                       nichos.coste_imputado.
- *   calcularCosteProyecto  proyección pura: desglose + coste_total.
- *
- * Al agregar con éxito publica el evento de dominio nichos.coste_imputado.
+ * Patron: ModuloHibridoReflejo. REFLEJO puro (sin persistencia).
  */
 
 'use strict';
 
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
 
+const nowISO = () => new Date().toISOString();
+
 class ImputacionCostes extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'imputacion-costes';
-    this.version = 'reflejo-0.1.0';
-    this.project_id = null;
-  }
-  async onUnload() { return super.onUnload(); }
-
-  // project.activated — reflejo sin estado: solo registra el project activo en contexto.
-  async onProjectActivated(e) {
-    const d = (e && e.data) || e || {};
-    this.project_id = d.project_id || this.project_id;
-    this.logger?.info(`${this.name}.reflejo.project_activated`, { project_id: this.project_id });
-    return { status: 200, data: { project_id: this.project_id } };
+    this.version = '0.1.0';
   }
 
-  onAgregarRequest(e) {
-    return this._atender(e, 'agregar', 'nichos.coste.agregar.response', async (d) => {
-      const res = this._agregar(d);
-      // Fire-and-forget de dominio: exito → imputado; fallo → par determinista.
-      if (res.status === 200) {
-        this.eventBus?.publish('nichos.coste_imputado', res.data);
-      } else {
-        this.eventBus?.publish('nichos.coste.agregar.failed', res);
-      }
-      return res;
-    });
+  // ── RPC HANDLER ──
+  onImputarRequest(e) {
+    return this._atender(e, 'imputar', 'nichos.costes.imputar.response', d => this._imputar(d));
   }
 
-  // ── proyección principal: imputa el CosteProyecto (determinista) ──
-  _agregar({ project_id, costes } = {}) {
-    project_id = project_id || this.project_id;
-    if (!project_id) return this._invalid('project_id');
-    if (!costes || typeof costes !== 'object') {
-      return this._invalid('costes');
-    }
+  // =============================================================
+  // PROYECCION — agrega coste por categoria
+  // =============================================================
 
-    const cp = this._calcularCosteProyecto(project_id, costes);
-    if (!cp) {
-      return this._errorResponse(400, 'COSTE_INVALIDO', 'las partidas de coste deben ser numeros >= 0', { project_id });
-    }
-    return { status: 200, data: { project_id, coste_proyecto: cp, coste_total: cp.coste_total, imputado: true } };
-  }
+  /**
+   * _imputar — agrega coste proyecto hasta instante consultando fuentes por bus.
+   *
+   * @param {Object} input
+   * @param {string} input.id_proyecto
+   * @param {string} [input.hasta] - ISO timestamp; default ahora
+   * @returns {{ status:number, data?:Object, error?:Object }}
+   */
+  async _imputar(input) {
+    if (!input.id_proyecto) return this._invalid('id_proyecto');
 
-  // ── proyección pura: desglose + total (coste real absorbe el proyecto) ──
-  _calcularCosteProyecto(project_id, costes) {
-    const construccion = Number(costes.construccion);
-    const operacion = Number(costes.operacion);
-    let fuentes = Number(costes.fuentes);
-    if (Array.isArray(costes.fuentes)) {
-      fuentes = costes.fuentes.reduce((acc, f) => acc + (Number(f.coste) || 0), 0);
-    }
-    const nums = [construccion, operacion, fuentes];
-    if (nums.some(n => !Number.isFinite(n) || n < 0)) return null;
-    const coste_total = Math.round((construccion + operacion + fuentes) * 100) / 100;
+    const hasta = input.hasta || nowISO();
+
+    // Consultar ambas fuentes en paralelo via bus
+    const [costeFuentes, costeCobros] = await Promise.all([
+      this._consultarFuentes(input.id_proyecto, hasta),
+      this._consultarCobros(input.id_proyecto, hasta)
+    ]);
+
+    const coste_total = {
+      fuentes: costeFuentes,
+      cobros: costeCobros,
+      total: (costeFuentes.total || 0) + (costeCobros.total || 0),
+      hasta,
+      timestamp: nowISO()
+    };
+
     return {
-      esquema: 'nichos-coste-proyecto-v1',
-      construccion: Math.round(construccion * 100) / 100,
-      operacion: Math.round(operacion * 100) / 100,
-      fuentes: Math.round(fuentes * 100) / 100,
-      coste_total
+      status: 200,
+      data: { coste_total }
     };
   }
 
-  // ── Tools ──
-  toolAgregar(params) { return this._agregar(params); }
-  toolCalcularCosteProyecto(params) { return this._calcularCosteProyecto(params.project_id, params.costes); }
+  // =============================================================
+  // Consultas al bus
+  // =============================================================
+
+  /**
+   * Consulta coste de fuentes via RPC a imputacion-coste-fuente.
+   */
+  async _consultarFuentes(id_proyecto, hasta) {
+    if (!this.eventBus?.publishAndWait) return { total: 0, detalle: [] };
+    try {
+      const resp = await this.eventBus.publishAndWait(
+        'nichos.fuente.coste.consultar.request',
+        { id_proyecto, hasta }
+      );
+      return (resp && resp.data) || { total: 0, detalle: [] };
+    } catch (_) {
+      // Degradacion honesta: fuente no disponible, coste = 0
+      return { total: 0, detalle: [], error: 'fuente_no_disponible' };
+    }
+  }
+
+  /**
+   * Consulta cobros via RPC a registro-cobros.
+   */
+  async _consultarCobros(id_proyecto, hasta) {
+    if (!this.eventBus?.publishAndWait) return { total: 0, detalle: [] };
+    try {
+      const resp = await this.eventBus.publishAndWait(
+        'nichos.registro.cobros.consultar.request',
+        { id_proyecto, hasta }
+      );
+      return (resp && resp.data) || { total: 0, detalle: [] };
+    } catch (_) {
+      // Degradacion honesta: cobros no disponible, coste = 0
+      return { total: 0, detalle: [], error: 'cobros_no_disponible' };
+    }
+  }
 }
 
 module.exports = ImputacionCostes;

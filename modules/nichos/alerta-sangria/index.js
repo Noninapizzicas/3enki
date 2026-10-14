@@ -1,111 +1,130 @@
-/**
- * nichos/alerta-sangria — PUENTE STATELESS (F4, hoja del plan).
- *
- * Techo de pérdida: vigila el CUADRO de salud financiera del nicho (F3) y, al
- * cruzar el techo de sangría declarado, arma una SolicitudDecision y la entrega
- * al canal de supervisión (G1) — el SISTEMA NUNCA mata el proyecto por su
- * cuenta, siempre es caso a decidir por el dueño.
- *
- * Proyecciones puras:
- *   _monitorear  evalúa el cuadro contra el techo_de_perdida → CruzaTecho:bool.
- *   _emitirDecision  al cruzar, arma la SolicitudDecision (estado PENDIENTE)
- *                    y la emite por evento → caso a decidir, no mata sola.
- *
- * Stateless (patrón real del puente, canal-supervision/gate-decision-operar):
- * sin store, sin persistencia, cada op entra objeto, sale objeto. El puente
- * comunica el techo al exterior (el dueño via canal-supervision), NO decide.
- * Publica nichos.alerta.sangria (+ nichos.alerta.monitorear.failed).
- * Ver hoja F4 del plan-construccion.
- */
-
 'use strict';
 
+/**
+ * nichos/alerta-sangria — PUENTE JS (bloque K del vertical NICHOS, #50).
+ *
+ * Cuando el cuadro de salud detecta sangría (métricas indican pérdida),
+ * evalúa el indicador contra el umbral y alza puente humano con alerta urgente.
+ *
+ * Sin estado. Puente reactivo: detecta, evalúa y escala.
+ *
+ * Patrón: ModuloHibridoReflejo (mitad REFLEJO, JS determinista).
+ */
+
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
+
+const nowISO = () => new Date().toISOString();
 
 class AlertaSangria extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'alerta-sangria';
-    this.version = 'reflejo-0.1.0';
-    this.project_id = null;
+    this.version = '0.1.0';
   }
-  async onUnload() { return super.onUnload(); }
 
-  // project.activated — puente sin estado: solo registra el project activo.
-  async onProjectActivated(e) {
+  // ── LISTENER (fire-and-forget entrante) ──
+  onSangriaDetectada(e) {
     const d = (e && (e.data || e)) || {};
-    this.project_id = d.project_id || this.project_id;
-    this.logger?.info(`${this.name}.reflejo.project_activated`, { project_id: this.project_id });
-    return { status: 200, data: { project_id: this.project_id } };
+    this._evaluar(d);
   }
 
-  onMonitorearRequest(e) {
-    return this._atender(e, 'monitorear', 'nichos.alerta.monitorear.response', async (d) => {
-      const res = await this._monitorear(d);
-      if (res.status !== 200) {
-        this.eventBus?.publish('nichos.alerta.monitorear.failed', res);
-        return res;
-      }
-      if (res.data.cruza_techo) {
-        // Al cruzar el techo → caso a decidir: se arma y emite la SolicitudDecision.
-        this.eventBus?.publish('nichos.alerta.sangria', res.data);
-      }
-      return res;
+  // ── RPC HANDLER ──
+  onEstadoRequest(e) {
+    return this._atender(e, 'estado', 'nichos.cuadro.salud.estado.response', d => this._consultarEstado(d));
+  }
+
+  // =============================================================
+  // PROYECCIÓN — evalúa indicador contra umbral
+  // =============================================================
+
+  /**
+   * _evaluar — compara indicador contra umbral y emite alerta + puente humano.
+   *
+   * @param {Object} input
+   * @param {string} input.id_nicho     - identificador del nicho
+   * @param {string} input.indicador    - nombre del indicador de sangría
+   * @param {number} input.umbral       - umbral declarado
+   * @param {number} input.valor_actual - valor actual del indicador
+   */
+  async _evaluar(input) {
+    if (!input.id_nicho || !input.indicador) return;
+
+    const umbral = input.umbral ?? 0;
+    const valor_actual = input.valor_actual ?? 0;
+
+    // La sangría ya viene detectada — emitir alerta
+    const alerta = {
+      id_nicho: input.id_nicho,
+      indicador: input.indicador,
+      umbral,
+      valor_actual,
+      timestamp: nowISO()
+    };
+
+    // PULSO de alerta emitida
+    this.eventBus?.publish('nichos.alerta.sangria.emitida', alerta);
+
+    // Alzar puente humano con alerta urgente
+    try {
+      await this._publishAlBus('nichos.puente.humano.alzar.request', {
+        tipo: 'sangria',
+        prioridad: 'urgente',
+        detalle: {
+          id_nicho: input.id_nicho,
+          indicador: input.indicador,
+          umbral,
+          valor_actual,
+          mensaje: `Sangría detectada en nicho ${input.id_nicho}: ${input.indicador} = ${valor_actual} (umbral: ${umbral})`
+        }
+      });
+    } catch (_) {
+      // Degradación honesta: la alerta se emitió, el puente humano falló
+      this.logger?.warn('alerta-sangria.puente.humano.failed', {
+        id_nicho: input.id_nicho,
+        indicador: input.indicador
+      });
+    }
+  }
+
+  /**
+   * _consultarEstado — consulta el cuadro de salud para un nicho.
+   *
+   * @param {Object} input
+   * @param {string} input.id_nicho
+   * @returns {{ status:number, data?:Object, error?:Object }}
+   */
+  async _consultarEstado(input) {
+    if (!input.id_nicho) return this._invalid('id_nicho');
+
+    // Delegar al cuadro de salud via RPC
+    const resp = await this._rpc('nichos.cuadro.salud.estado.request', {
+      id_nicho: input.id_nicho
     });
+
+    if (!resp || resp.status >= 400) {
+      return this._errorResponse(
+        502,
+        'CUADRO_SALUD_NO_DISPONIBLE',
+        'no se pudo consultar el cuadro de salud',
+        { id_nicho: input.id_nicho }
+      );
+    }
+
+    return { status: 200, data: resp.data || {} };
   }
 
-  // ── proyección pura: cruza techo? + emisor de la SolicitudDecision ──
-  async _monitorear({ project_id, cuadro, techo_perdida_eur, canal, pagador } = {}) {
-    project_id = project_id || this.project_id;
-    if (!project_id) return this._invalid('project_id');
-    if (!cuadro || typeof cuadro !== 'object') return this._invalid('cuadro');
-    if (!canal || typeof canal !== 'string' || !canal.trim()) return this._invalid('canal');
+  // =============================================================
+  // Utilidades
+  // =============================================================
 
-    const techo = techo_perdida_eur != null ? Number(techo_perdida_eur) : null;
-    // El techo es del contrato/umbría declarado (F0); sin él no hay cruce a decidir.
-    if (techo == null || !Number.isFinite(techo) || techo <= 0) return this._invalid('techo_perdida_eur');
-
-    // Perdida real del cuadro (F3) — el sistema calcula de hechos, no de promesas.
-    const perdida = Number(cuadro.perdida_eur ?? cuadro.sangria_eur ?? 0);
-    const cruza_techo = Number.isFinite(perdida) && perdida >= techo;
-
-    const base = {
-      project_id,
-      estado: 'PENDIENTE',
-      tipo: 'sangria',
-      cuadro,
-      techo_perdida_eur: techo,
-      perdida_eur: perdida,
-      cruza_techo,
-      canal,
-      pagador: (pagador && String(pagador).trim()) ? String(pagador).trim() : null,
-      decision_esperada: 'MANTENER_A_PERDIDA|MATA_PROYECTO',
-      alertado_en: new Date().toISOString()
-    };
-
-    // Al cruzar → SolicitudDecision armada y emitida por evento (caso a decidir,
-    // el sistema nunca mata sola). Si no cruza, no se emite alerta.
-    const data = cruza_techo
-      ? { ...base, decision: this._emitirDecision(base) }
-      : base;
-
-    return { status: 200, data };
+  async _publishAlBus(topic, payload) {
+    if (this.eventBus?.publishAndWait) {
+      try {
+        return await this.eventBus.publishAndWait(topic, payload);
+      } catch (_) { /* degradación: fire-and-forget */ }
+    }
+    this.eventBus?.publish(topic, payload);
   }
-
-  // ── REFLEJO (mecánico, determinista): arma la SolicitudDecision ──
-  _emitirDecision(solicitud) {
-    return {
-      solicitud_id: `${solicitud.project_id}-${solicitud.tipo}-${Date.now()}`,
-      ...solicitud,
-      estado: 'PENDIENTE',        // PENDIENTE → RESUELTA | EXPIRADA (la gestiona K2)
-      decision: null,
-      entregado_a: solicitud.canal
-    };
-  }
-
-  // ── Tools ──
-  toolMonitorear(params) { return this._monitorear(params); }
-  toolEmitir(params) { return this._emitirDecision(params); }
 }
 
 module.exports = AlertaSangria;

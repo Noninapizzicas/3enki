@@ -1,160 +1,403 @@
 ---
 name: ensamblaje
-description: "FASE 7b del proceso de proyecto: RECOMPONE la realidad escrita. Cruza el CONTRATO DISEÑADO — el bloque ```json enki-plan``` de F3b (plan-construccion.md), donde CADA hoja declara sus subscribes[] y publishes[] — contra lo ESCRITO (los module.json reales de F4 y las interfaces de F6→F7). Detecta las CONEXIONES DE DOMINIO ROTAS (un evento que se publica y nadie escucha → se pierde silenciosamente) y las HOJAS DIVERGENTES (el plan declaró que un módulo escucha/publica algo y el módulo escrito no lo hace). Determinista, sin LLM: cruzar dos listas no es un juicio."
-when-to-use: "Entra encadenada por proceso-negocio cuando el ciclo por pieza ha completado TODAS las hojas (módulo + skill + interfaz) y ANTES de la verificación final (F8). También a mano: cuando sospeches que los módulos no se hablan entre sí, cuando una cadena de eventos se corta sin error visible, o cuando quieras el mapa real de conexiones de una vertical. Sirve para CUALQUIER vertical construida con el proceso, no solo nichos."
+description: "FASE 7b del proceso de proyecto: INTEGRA el módulo recién construido en el ecosistema vivo del repo. Lee TODOS los manifests reales (modules/*/module.json), empareja lo que el módulo nuevo necesita oír con los eventos que el bus ya emite, y ESCRIBE los subscribes faltantes en el manifest del módulo nuevo más los handlers esqueleto en su index.js. Nunca toca módulos viejos. Patrón agente-perspectiva-c: reflejo determinista para leer/escribir, LLM solo para el matching semántico intención↔evento."
+when-to-use: "Entra encadenada por proceso-negocio al terminar el ciclo F4→F5→F6→F6½→F7 de UNA hoja — una sola pieza nueva por pasada. También a mano cuando añades un módulo al repo y quieres que se enchufe al bus vivo sin recorrer manifests a ojo. Sirve para cualquier vertical construida con el proceso."
 fuente: enki
 dominio: proceso
 lente_dominio: orquestacion
-lente_tarea: ensamblar
-tags: [fase7b, ensamblaje, proceso-negocio, eventos, conexiones, contrato, plan-construccion, f3b, determinista, recomposicion, islas, gate]
+lente_tarea: integrar
+tags: [fase7b, ensamblaje, integracion, proceso-negocio, eventos, event-driven, bus-vivo, canon, agente-perspectiva-c, hoja-por-hoja]
 ---
 
 # Ensamblaje — FASE 7b del proceso de proyecto
 
-> El eslabón que cierra la cadena por donde se escapaba la coherencia:
-> F0 identidad → F2 esquematizar → F3 planificar → **F3b adaptador (el plan con
-> contratos)** → F4 construir → F5 skills → F6/F6½/F7 interfaz → **F7b ENSAMBLAJE**
-> → F8 verificar.
+> El eslabón que **integra** cada hoja nueva en el bus vivo: la encuentra con
+> todo lo que el repo ya publica y le cose las orejas que le hagan falta. El
+> módulo recién construido entra al ecosistema **sabiendo oír**; los módulos
+> viejos no se enteran y no se tocan.
 >
-> Código: `modules/proceso-negocio/ensamblaje.js` (el recomponedor) + la fase
-> `negocio.ensamblado` del orquestador · habilita el paso a F8.
+> F0 identidad → F2 esquematizar → F3 planificar → F3b adaptador → F4 construir
+> → F5 skills → F6/F6½/F7 interfaz → **F7b INTEGRAR** → F8 verificar.
+>
+> Código: `modules/proceso-negocio/ensamblaje.js` (el integrador) · fase del
+> orquestador: `negocio.ensamblado` · habilita el paso a F8.
 
 ---
 
-## 1 · El problema que resuelve (medido, no supuesto)
+## 1 · El principio event-driven, intacto
 
-El proceso construye cada módulo como una **isla** (F4: «cada parcela hace SU
-trabajo y punto») y F8 verifica que cada isla **carga**. Pero **nadie comprobaba
-que las islas HABLEN entre sí**. Resultado real en la vertical nichos (leído en
-vivo, 1-oct-2026):
+> **Publique quien publique, oiga quien oiga.**
 
-```
-49 hojas en el plan · 18 divergentes · 81 conexiones de dominio rotas
-```
+El bus de Enki es desacoplamiento total: un emisor no sabe si hay oyentes; un
+consumidor no sabe quién publica. F7b **vive dentro de ese principio**:
 
-Y 8 módulos que no hacían lo que el plan declaró:
+- Un `publishes` sin oyentes HOY es **futuro abierto**, no deuda. (El módulo
+  `puertas` publicó `puertas.abierta` durante tres meses sin oyente; el día que
+  nació `control-puertas`, se suscribió — `puertas` ni se enteró.)
+- Un `subscribes` sin emisores conocidos HOY es **oreja esperando**. Legítimo.
+- El dominio **crece añadiendo manifests nuevos**, nunca modificando los viejos.
 
-| Módulo | El plan (F3b) dijo | Lo escrito |
-|---|---|---|
-| `alerta-sangria` | escucha `nichos.salud.actualizada` | no lo escucha |
-| `gate-decision-operar` | escucha `nichos.decision.resuelta` | no lo escucha |
-| `reglas-aprendidas` | escucha `nichos.cobro.ejecutado` | no lo escucha |
-| `pipeline-por-nicho` | publica `nichos.pipeline.ciclo_completado` | publica otro nombre |
+F7b **no es un juez** del ecosistema. **Es el integrador** del módulo nuevo:
+descubre qué eventos vivos del bus le aportan lo que su lógica necesita y le
+añade esas suscripciones.
 
-Cada módulo **emite su resultado y espera su propia petición con otro nombre**.
-No falta cablear: **el nombre no coincide**. El ensamblaje lo mide.
-
-## 2 · La materia prima ya existe — no se inventa nada
+## 2 · Qué toca · qué nunca toca
 
 ```
-F3   diseno-oop.md         0 eventos    ← habla de CLASES (CONTRATO X pide/emite)
-F3b  plan-construccion.md  249 eventos  ← CADA HOJA declara subscribes[] y publishes[]
-F4   modules/<slug>/module.json  ...... lo construido
+TOCA (y escribe en disco):
+  · modules/<hoja_nueva>/module.json   — añade subscribes faltantes
+  · modules/<hoja_nueva>/index.js      — añade handlers esqueleto
+
+NUNCA TOCA:
+  · ningún módulo viejo, bajo ninguna circunstancia
+  · config.json, enabled[], el loader — F7b no activa ni apaga
+  · los manifests de las otras hojas nuevas de la misma vertical salvo
+    la que está integrando AHORA (una hoja por pasada)
 ```
 
-**F3 no sirve** (tipos abstractos, cero eventos reales). **El dato vivo está en
-F3b**: el bloque `` ```json enki-plan``` `` que el adaptador escribe.
+Regla única e innegociable: **F7b sólo escribe en la hoja que acaba de nacer en
+este ciclo**. El resto es lectura.
 
-## 3 · Qué hace exactamente
+## 3 · El patrón — agente-perspectiva-c
 
-Determinista, sin LLM, **sin efectos** (solo lee y produce un informe):
+Determinismo (cargar/guardar) en el reflejo JS; chispa fuzzy (matching
+semántico) en el LLM. Es el patrón de la cabecera:
 
-1. **Divergencia POR HOJA** — para cada hoja del plan, compara `subscribes`/
-   `publishes` declarados contra los del `module.json` real:
-   - `falta_subscribes` / `falta_publishes`: el plan lo declaró y el módulo no lo hace.
-   - `extra_subscribes` / `extra_publishes`: el módulo hace algo que el plan no declaró.
-   - `NO_ESCRITA`: la hoja está en el plan y no hay módulo.
-2. **CONEXIONES DE DOMINIO ROTAS** — sobre lo escrito: un evento de dominio que
-   alguien publica y **nadie escucha**, **clasificado por el trabajo que exige**:
-   - `FALTA_CABLEAR` — el consumidor EXISTE (el plan lo declara y está escrito):
-     solo falta engancharlo. **Trabajo accionable** (`falta_en` dice dónde).
-   - `HOJA_NO_ESCRITA` — el consumidor lo declara el plan pero no está escrito.
-   - `SOBRA_EL_PUBLISH` — nadie lo declara consumir: o sobra, o falta quien lo
-     consuma (decisión de diseño, sin destino de cable).
-3. **El TRABAJO** (`trabajo[]`) — la lista accionable: las roturas con destino
-   escrito (`{evento, cablear_en}`). No es el muro: es lo que hay que hacer.
-4. **Veredicto** `ensamblado: true|false` — true solo sin rotas y sin divergentes.
+```
+REFLEJO JS (determinista):
+  1. HIDRATAR   — leer todos los manifests del repo + el manifest y el index.js
+                   del módulo nuevo + su descripción + sus handlers existentes
+  2. AGRUPAR    — presentar los eventos vivos del bus por <dominio>.<objeto>
+                   con quién los publica (para contexto, no para acoplar)
+  3. PERSISTIR  — tras la decisión del LLM, escribir subscribes al manifest
+                   y handlers esqueleto al index.js del módulo nuevo
 
-> Los eventos `.request` / `.response` del bus **NO cuentan**: los atiende el
-> propio módulo por su handler RPC.
-> Los pares de fallo **`.failed`** tampoco: son el cierre de círculo del propio
-> módulo (diagnóstico), no una conexión entre piezas. Contarlos inflaba el
-> informe (80 de 81 en nichos) y escondía el trabajo real (1).
+LLM (fuzzy — una única pregunta pura):
+  entrada:  el módulo nuevo (lo que es + lo que hace) + el mapa de eventos vivos
+  salida:   lista de eventos que necesita suscribir, con handler propuesto
+  nada más — no lee, no escribe, no decide dónde guardar: SOLO decide el match
+```
 
-## 3b · Comportamiento ante fallos (fail-SAFE, nunca fail-open)
+El LLM es una **función pura** sin herramientas; el reflejo lo rodea de
+determinismo. Si el LLM se cuelga o devuelve una lista vacía, el reflejo
+persiste lo que tenga y lo deja nombrado — jamás falsea un cosido.
 
-Doctrina del cimiento: **`success = ENTREGABLE VERIFICADO`**. El ensamblaje
-**nunca certifica lo que no ha podido comprobar**:
+## 4 · Cuándo corre y qué dispara
+
+```
+proceso-negocio.completar_fase { fase: "interfaz_construida" }
+   → siguiente hoja en el plan — y, antes de dar la hoja por cerrada,
+     se dispara F7b sobre esa misma hoja
+   → F7b la integra en el bus vivo
+   → al terminar: proceso-negocio marca negocio.ensamblado para esta hoja
+```
+
+**Granularidad: UNA hoja por pasada.** F7b se ejecuta hoja a hoja, dentro del
+mismo ciclo por pieza que ya conduce proceso-negocio. No espera a que la
+vertical entera esté construida. Esto es importante: cada hoja nueva se
+incorpora al ecosistema vivo que ya contiene las hojas construidas antes de
+ella — el ecosistema crece paso a paso, como el repo real.
+
+## 5 · El flujo exacto — CONTRATO → LEER → PENSAR → GUARDAR → EMITIR
+
+### 5.1 · CONTRATO (invariante antes de nada)
+
+```
+entrada:
+  slug_nuevo : string  — la hoja recién construida en este ciclo
+
+INVARIANTE:
+  modules/<slug_nuevo>/module.json  EXISTE (F4 lo escribió)
+  modules/<slug_nuevo>/index.js     EXISTE (F4 lo escribió)
+  si falta cualquiera → 409 FASE_INCOMPLETA (no es trabajo de F7b crearlos)
+```
+
+### 5.2 · LEER (reflejo determinista)
+
+```
+# ecosistema vivo
+manifests_vivos ← leer todos los modules/*/module.json del repo
+                   (excluye el propio slug_nuevo)
+
+# para cada manifest: extraer publishes y subscribes normalizados
+eventos_bus ← {
+  <evento> : {
+    publicado_por : [<slug>, …]   # emisores vivos
+    escuchado_por : [<slug>, …]   # oyentes vivos
+  }
+}
+
+# el módulo nuevo
+manifest_nuevo ← leer modules/<slug_nuevo>/module.json
+index_nuevo   ← leer modules/<slug_nuevo>/index.js
+descripcion   ← manifest_nuevo.description + manifest_nuevo._doc
+handlers_ya   ← nombres de handlers que ya existen en index.js
+subscribes_ya ← manifest_nuevo.subscribes[].event
+publishes_ya  ← manifest_nuevo.publishes[].event
+```
+
+### 5.3 · PENSAR (LLM — matching puro)
+
+El reflejo construye UNA pregunta cerrada y la delega al LLM:
+
+```
+pregunta_al_LLM:
+  "Este módulo recién construido:
+     slug        : <slug_nuevo>
+     descripcion : <description + _doc>
+     publica     : <publishes_ya>
+     ya escucha  : <subscribes_ya>
+
+   El ecosistema vivo del bus emite estos eventos (agrupados por dominio.objeto):
+     puertas.* :
+       - puertas.abierta       (publicado por: puertas)
+       - puertas.cerrada       (publicado por: puertas)
+     carta.* :
+       - carta.actualizada     (publicado por: carta-manager)
+       …
+
+   Devuelve SOLO los eventos vivos del bus que este módulo necesita suscribir
+   para hacer bien su trabajo según su descripción, en este JSON:
+     { subscribes_a_anadir: [
+         { event: '<nombre>', handler: 'on<CamelCase>' },
+         …
+     ] }
+   Si no necesita suscribir ninguno, devuelve lista vacía."
+
+salida_LLM:
+  { subscribes_a_anadir: [ { event, handler }, … ] }
+```
+
+Reglas que el reflejo impone sobre la salida del LLM:
+
+- **El evento debe existir en `eventos_bus`** (si no, se descarta — F7b no
+  inventa oyentes de voces que no están).
+- **No duplicar lo que ya escucha** (se descartan los que ya están en
+  `subscribes_ya`).
+- **El handler nace del evento, por canon**:
+  `handler = 'on' + CamelCase(ultimo_segmento_del_evento)`
+  Ejemplo: `puertas.abierta` → `onAbierta`; `carta.actualizada` → `onActualizada`.
+  Si el LLM propuso otro nombre más semántico y no colisiona con `handlers_ya`,
+  se respeta.
+
+### 5.4 · GUARDAR (reflejo determinista)
+
+Dos escrituras, ambas en el **módulo nuevo**:
+
+**A. Al `module.json`** — añadir cada subscribe aprobado:
+
+```json
+"subscribes": [
+  …los existentes…,
+  {
+    "event": "puertas.abierta",
+    "handler": "onAbierta",
+    "description": "Integrado por F7b el <ISO date>: evento vivo del bus (publicado por 'puertas')."
+  }
+]
+```
+
+**B. Al `index.js`** — añadir cada handler esqueleto que no exista aún:
+
+```js
+/**
+ * Handler para 'puertas.abierta' — integrado por F7b el <ISO date>.
+ *
+ * El evento llega del módulo 'puertas' (emisor vivo del bus).
+ * TODO (lógica de dominio): usar el payload { … } según necesite <slug_nuevo>.
+ * El esqueleto NO ES una decisión de dominio — es el enganche al bus.
+ * Al rellenarlo, respeta el principio event-driven: no acoplar al emisor.
+ */
+on<CamelCase>(e) {
+  const d = (e && (e.data || e)) || {};
+  // intencionalmente mínimo: F7b garantiza el ENCHUFE al bus,
+  // no la lógica interna del módulo. Esa la escribe el humano.
+  return d;
+}
+```
+
+El esqueleto se inyecta **dentro de la clase del módulo**, en el sitio
+sintácticamente seguro (al final de la clase, antes del cierre). El reflejo lee
+el AST o el índice de llaves balanceadas para no romper el fichero.
+
+**Si cualquier escritura falla**, F7b retrocede: deja `module.json` y `index.js`
+como estaban antes del intento, no cierra la fase, y responde 409 con el motivo.
+
+### 5.5 · EMITIR
+
+Al terminar correctamente, F7b emite al bus:
+
+```
+nichos.hoja.integrada    (fire-and-forget)
+  payload: {
+    slug             : <slug_nuevo>,
+    subscribes_añadidos : [ 'puertas.abierta', 'puertas.cerrada', … ],
+    handlers_creados    : [ 'onAbierta', 'onCerrada', … ],
+    integrado_el        : <ISO date>
+  }
+```
+
+Y persiste el informe de esta integración en:
+
+```
+proceso-negocio/fase7b-ensamblaje.json
+  (incremental: una entrada por hoja integrada; no se sobrescribe)
+```
+
+Formato del informe:
+
+```json
+{
+  "integraciones": [
+    {
+      "slug": "control-puertas",
+      "subscribes_añadidos": [ { "event":"puertas.abierta",  "handler":"onAbierta"  },
+                                { "event":"puertas.cerrada", "handler":"onCerrada" } ],
+      "handlers_creados":   [ "onAbierta", "onCerrada" ],
+      "integrado_el": "2026-10-03T…"
+    },
+    …
+  ]
+}
+```
+
+## 6 · El ejemplo testigo — control-puertas
+
+```
+estado previo del repo (hace meses):
+  modules/puertas/module.json
+    publishes:  ["puertas.abierta", "puertas.cerrada"]
+    subscribes: []
+  → ha publicado sin oyentes 3 meses. Legítimo.
+
+hoy — proceso-negocio integra la hoja nueva control-puertas:
+
+  F3b escribe el plan para control-puertas (no conoce todo el repo):
+    publishes:  ["control-puertas.apertura.solicitada",
+                 "control-puertas.cierre.solicitado"]
+    subscribes: []
+    description: "Decide abrir o cerrar puertas según el estado actual del edificio"
+
+  F4 construye modules/control-puertas/{module.json, index.js}.
+
+  F7b entra sobre control-puertas:
+
+    LEER:
+      ecosistema vivo incluye puertas.abierta y puertas.cerrada
+      (publicados por 'puertas')
+
+    PENSAR (LLM):
+      "control-puertas 'decide abrir/cerrar según estado actual' → necesita
+       saber qué puertas están abiertas → suscribe puertas.abierta y
+       puertas.cerrada."
+      salida: subscribes_a_añadir = [
+        { event: 'puertas.abierta', handler: 'onAbierta' },
+        { event: 'puertas.cerrada', handler: 'onCerrada' }
+      ]
+
+    GUARDAR:
+      → modules/control-puertas/module.json ahora tiene esos dos subscribes
+      → modules/control-puertas/index.js ahora tiene onAbierta() y onCerrada()
+        con esqueleto mínimo
+
+    EMITIR:
+      bus recibe nichos.hoja.integrada { slug: 'control-puertas', … }
+
+  modules/puertas NO SE TOCA. Cero diff. Al próximo arranque, cuando
+  'puertas' publique 'puertas.abierta', el bus lo entregará también a
+  control-puertas.
+```
+
+## 7 · Qué NO hace F7b (dicho en positivo — lo que respeta)
+
+> P0 autoejecutable: toda regla toma forma de Mandato. Lo que sigue son
+> ESTADOS QUE PROTEGE la skill — los límites se expresan como lo que se
+> construye.
+
+- **Respeta el ecosistema vivo**: si un oyente nuevo propone un nombre que no
+  casa con ninguna voz del bus, F7b lo descarta — nunca inventa un oyente para
+  una voz inexistente.
+- **Respeta a los módulos viejos**: F7b sólo escribe en la hoja recién nacida.
+  Un desajuste nominal entre el nuevo y un viejo (`control-puertas` escribe
+  `puertas.abiertas` plural y `puertas` emite `puertas.abierta` singular) se
+  resuelve adaptando el NUEVO a lo que ya vive — el LLM elige la grafía viva.
+- **Respeta la extensibilidad**: un `publishes` sin oyente del módulo nuevo
+  queda como futuro abierto — no se "arregla" cableándolo a nada.
+- **Respeta la honestidad del cosido**: si el LLM falla o la escritura rompe,
+  F7b retrocede y marca la hoja no integrada — nunca certifica un cosido que
+  no hizo.
+- **Respeta la soberanía del humano**: el handler esqueleto NO decide dominio;
+  es sólo el enganche al bus. El cuerpo de la lógica lo escribe el humano.
+
+## 8 · Qué publica F7b al bus (su propio contrato)
+
+```
+publishes:
+  nichos.hoja.integrada                 — fire-and-forget al integrar OK
+  nichos.hoja.integrar.failed           — par de fallo si el cosido no se pudo
+                                          persistir (RPC caído, escritura rota,
+                                          index.js imparseable)
+
+subscribes:
+  (F7b no se suscribe a nada — es un acto puntual conducido por el orquestador)
+```
+
+Un oyente natural de `nichos.hoja.integrada` será `proceso-negocio` cuando
+decida avanzar a la siguiente hoja; pero F7b no sabe nada de ello — publica y
+sigue.
+
+## 9 · Comportamiento ante fallos (fail-SAFE, nunca fail-open)
+
+Doctrina del cimiento: `success = ENTREGABLE VERIFICADO`.
 
 | Situación | Resultado |
 |---|---|
-| RPC caído (`fs.read` lanza) | **false** → 409 (no certifica) |
-| Plan inexistente / vacío | **false** → 409 |
-| Plan sin bloque `enki-plan` | **false** → 409 |
-| JSON malformado | **false** → 409 |
-| Fallo al PERSISTIR el informe | no cambia el veredicto (es un extra, best-effort) |
+| Alguno de los `modules/<slug>/{module.json,index.js}` no existe | **409 FASE_INCOMPLETA** |
+| `fs.read` del ecosistema cae | **409** (no se integra a oscuras) |
+| El LLM no responde o se cuelga | **409** (no se cose a ciegas) |
+| El LLM propone un evento que no está en el bus vivo | se descarta esa entrada; sigue con las válidas |
+| La escritura al `module.json` falla | retrocede, `module.json` queda como estaba, **409** |
+| La inyección en `index.js` rompe el parseo | retrocede, `index.js` queda como estaba, **409** |
+| Todo bien pero el informe `fase7b-ensamblaje.json` no persiste | el cosido ya está hecho; se emite `.integrada`; el informe es best-effort |
 
-El motivo del fallo queda en `_ultimoFalloEnsamblaje` para que el diagnóstico no
-sea ciego. **No se cierra una fase sobre vacío.**
+El motivo del fallo queda legible en el payload de `nichos.hoja.integrar.failed`
+y en el log. **No se cierra la fase sobre un cosido no verificado.**
 
-## 4 · Cómo se conduce (determinista)
+## 10 · Por qué F7b (y no otro sitio)
 
-El orquestador lo hace solo. La puerta de cierre es la del resto de fases:
+- **No es F3b**: F3b no conoce el ecosistema vivo (y no debe). F3b diseña el
+  módulo nuevo con su mejor intención; F7b lo enchufa al bus que exista cuando
+  nace.
+- **No es F4**: F4 construye la isla. No sabe ni tiene por qué saber a quién va
+  a oír — porque todavía no se ha decidido en qué repo va a vivir.
+- **No es F8**: F8 verifica que todo CARGA y FUNCIONA. F7b es el paso previo:
+  deja los enchufes puestos para que F8 pueda verificar que la corriente pasa.
 
-```
-proceso-negocio.completar_fase { fase: "ensamblado" }
-```
+## 11 · Anti-patrones (lo que esta skill NO es)
 
-- El gate corre `_ensambladoRecomponer` (el recomponedor). Si no está ensamblado
-  → **409 FASE_INCOMPLETA** con el motivo medido (rotas + divergentes). No pasa a F8.
-- El informe queda **en disco**: `proceso-negocio/fase7b-ensamblaje.json`.
-- A mano, para inspeccionar sin cerrar fase:
+- **No es un juez con veredicto `ensamblado:true|false` global**: integra o no
+  integra UNA hoja; el ecosistema entero no se mide, se habita.
+- **No es un detector de "publishes sin oyente"**: eso es futuro abierto, no
+  deuda. (El módulo `puertas` que publicó tres meses sin oyente no era defecto;
+  era espera.)
+- **No es un reescritor de módulos viejos**: jamás los toca.
+- **No es un cronista pasivo**: el F7b anterior leía y reportaba. Este COSE y
+  deja el módulo nuevo vivo en el bus.
 
-```js
-const { Ensamblaje } = require('modules/proceso-negocio/ensamblaje');
-const informe = new Ensamblaje(plan, real).recomponer();
-// plan = JSON.parse(bloque ```json enki-plan``` de esquemas/plan-construccion.md)
-// real = { <slug>: { existe, subscribes, publishes, tiene_interfaz } }
-```
+## 12 · Verificación
 
-## 5 · Por qué F7b (y no F3/F3b ni F8)
+Cubre, al menos:
 
-Cuando F7b corre, la realidad escrita está **completa**: plan (F3b) + módulos (F4)
-+ skills (F5) + interfaces (F6→F7). **Antes no habría nada que recomponer**;
-después (F8) ya es verificación. **F7b recompone con la realidad escrita; F8
-verifica el resultado.**
-
-## 6 · Por qué no vale el validador de eventos del repo
-
-`arquitectura/decisiones/_validators/blueprint-eventos-conscientes.validate.js`
-ya sabe detectar un evento publicado sin consumidor, **pero**:
-- su check es **OPT-IN**: solo mira módulos que declaran
-  `eventos_publicados_que_requieren_consumer[]`, y en nichos lo declaran **0 de 44**;
-- es **pasivo**: informa, no forma parte del proceso ni bloquea nada.
-
-## 7 · El freno convertido en empujón
-
-Cuando el ensamblaje encuentra rotas o divergentes, **no se detiene**: el hallazgo
-es el **trabajo que queda**. Cada conexión rota es una conexión que falta
-(existe el emisor, falta el consumidor o el nombre); cada hoja divergente es un
-módulo que no cumple su contrato. La fase se cierra cuando se corrige, y entonces
-el proceso pasa a F8.
-
-## 8 · Verificación (cómo se prueba)
-
-```bash
-node tests/unit/proceso-negocio__ensamblaje.test.js    # 8/8
-```
-
-Cubre: coincidencia plena → `ensamblado`; falta de subscribe/publica → DIVERGENTE;
-conexión rota por evento huérfano; exclusión de `.request`/`.response`; hoja no
-escrita; tolerancia a `{event, handler}`; y el **caso real** del plan de nichos.
-
-## 9 · Anti-patrones
-
-- Cablear a mano los 80 eventos: son consecuencia, no causa. La causa es que el
-  proceso no recomponía; la fase lo hace para **toda** vertical.
-- Confundir este ensamblaje con el de `ensamblador-solucion` (D1, otro dominio:
-  compone la solución de UN nicho). Aquí se ensambla el SISTEMA contra su plan.
-- Inventar consumidores para callar el informe: el informe dice la verdad; se
-  arregla el módulo o se corrige el plan (F3b), no el número.
+- **Caso puertas / control-puertas** (el testigo): la hoja nueva nace sin
+  subscribes y queda con los dos del ecosistema vivo, su index.js tiene los
+  handlers esqueleto, modules/puertas no se toca.
+- **LLM devuelve vacío**: no se añaden subscribes, no se tocan los ficheros, se
+  emite `.integrada` con listas vacías.
+- **LLM propone un evento inexistente**: se descarta esa entrada, sigue con las
+  válidas.
+- **Escritura al module.json falla**: retrocede, `.failed`, módulo queda como
+  estaba.
+- **Inyección al index.js que rompe sintaxis**: retrocede, `.failed`.
+- **Hoja nueva ya tiene algún subscribe que el LLM propone**: no se duplica.
+- **Un emisor vivo y un oyente nuevo con el mismo canon de nombrado**: cosido
+  limpio.

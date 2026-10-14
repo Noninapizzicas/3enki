@@ -1,22 +1,27 @@
 /**
- * nichos/criterio-viabilidad — CUSTODIO CON PERSISTENCIA (C2, hoja del plan).
+ * nichos/criterio-viabilidad — REFLEJO JS (CUSTODIO del vertical NICHOS, bloque C validación).
  *
- * PIEZA CENTRAL del eslabón limitante (embudo de validación): guarda el
- * CRITERIO/UMBRAL DE VIABILIDAD declarable que decide qué nicho es viable.
- * Almacena por proyecto: umbral_ingresos (base 50-300 EUR/semana según tipo,
- * [ABIERTO]), minimos_demanda (búsquedas y contactos por semana),
- * disposicion_a_pagar y el tipo/segmento de viabilidad.
+ * Único escritor del umbral de viabilidad para el motor de decisión 'VIABLE |
+ * NO_VIABLE | PUENTE'. Snapshot inmutable por versión: cada declaración muta el
+ * store aplicando el cambio sobre el último snapshot, sellándolo con autor +
+ * instante, y PULSA 'nichos.criterio.viabilidad.declarado'.
  *
- * CUSTODIO (patrón real, distinto del reflejo stateless): un solo escritor del
- * store — el DUEÑO declara el umbral (guard Rol=DUEÑO via K3); además el bucle
- * C7->C2 recalibra en caliente consumiendo nichos.umbral.recalibrado. La lectura
- * (_leer/leerVigente) no muta; la escritura valida y guarda. Persiste por
- * proyecto con PosPersistencia (storage /prisma/nichos/criterio-viabilidad.json),
- * restaura en project.activated y vuelca en onUnload. Emisor/par de fallo.
+ * Store (per-proyecto, PosPersistencia): /prisma/pos/nichos/criterio-viabilidad.json
+ *   { _version, _updated, version, umbral:{...}, por_autor:[ {version, autor, cambio, at} ] }
  *
- * REGLA: el corte DURO 'no viable no pasa' vive aquí (umbral vigente) + C6
- * (corte-temprano), NUNCA en el agente de veredicto. Ver hoja C2 del
- * plan-construccion y arquitectura/decisiones/propuestas/prisma.md.
+ * REGLA F3: escritores autorizados declarados en lista; cualquier otro autor
+ * → 403 ESCRITOR_NO_AUTORIZADO. Los autores previstos aquí son:
+ *   'dueño'              — el dueño por el canal.
+ *   'ajustador-umbrales' — K3, cuando promueve una propuesta aceptada.
+ *
+ * ABIERTO: todo campo puede nacer ABIERTO (sin declarar). El esqueleto por
+ * defecto entrega el umbral con todos sus campos en 'ABIERTO'; el consumidor
+ * (VeredictoViabilidad C3) degrada a PUENTE('umbral_sin_declarar') al toparse
+ * con un ABIERTO — jamás se asume dato ausente.
+ *
+ * Patrón: ModuloHibridoReflejo (mitad REFLEJO, JS determinista). Sin mitad
+ * blueprint — la lógica es CRUD + aritmética de versión. Lo fuzzy lo hace
+ * directamente el dueño o K3 desde su propia página LLM.
  */
 
 'use strict';
@@ -24,59 +29,43 @@
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
 const PosPersistencia = require('../../_shared/pos-persistencia');
 
-// Rol único escritor declarable — el DUEÑO. El sistema recalibra (bucle C7),
-// pero solo el dueño DECLARA el criterio base.
-const ROL_DUENYO = 'DUEÑO';
+const nowISO = () => new Date().toISOString();
+const AUTORES_AUTORIZADOS = ['dueño', 'ajustador-umbrales'];
 
-// Rango base declarable del umbral de ingresos semanales (75-300 EUR/semana,
-// [ABIERTO] por tipo). Es un CRITERIO, no una norma dura: se valida dentro del
-// rango declarable del plan pero se permite declarar cualquier número > 0.
-const UMBRAL_MIN_EUR = 50;
-const UMBRAL_MAX_EUR = 300;
-const RANGO = `${UMBRAL_MIN_EUR}-${UMBRAL_MAX_EUR} EUR/semana`;
+const CAMPOS_UMBRAL = [
+  'ingresos_semana_min',
+  'ingresos_semana_objetivo',
+  'disposicion_pagar_min',
+  'por_tipo_nicho',
+  'exige_vb_previo_construir'
+];
 
-// Tipos de viabilidad permitidos por el criterio ([ABIERTO]).
-const TIPOS_VIABILIDAD = new Set(['marginal', 'estandar', 'premium']);
-
-// Shape base del criterio declarable. El dueño declara todo o un subset; cada
-// campo se valida y normaliza sobre este molde.
-function criterioVacio() {
+function esqueletoAbierto() {
   return {
-    esquema: 'nichos-criterio-viabilidad-v1',
-    umbral_ingresos: null,          // { number > 0 } — EUR/semana (base 50-300)
-    minimos_demanda: null,          // { numero_busquedas, contactos_semana } — mínimos de demanda
-    disposicion_a_pagar: null,      // { number > 0 } — disposición a pagar EUR/venta
-    tipo: null,                     // marginal|estandar|premium — segmento de viabilidad [ABIERTO]
-    recalibrado_por: null,          // 'DUEÑO' (declarado) | 'SISTEMA_C7' (recalibrado)
-    updated_at: null,
-    declarado_por: null
+    ingresos_semana_min: 'ABIERTO',
+    ingresos_semana_objetivo: 'ABIERTO',
+    disposicion_pagar_min: 'ABIERTO',
+    por_tipo_nicho: 'ABIERTO',
+    exige_vb_previo_construir: 'ABIERTO'
   };
-}
-
-// Normalizador de un número (entero/float) estrictamente positivo, o null.
-function numPos(v) {
-  const n = Number(v);
-  return Number.isFinite(n) && n > 0 ? n : null;
 }
 
 class CriterioViabilidad extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'criterio-viabilidad';
-    this.version = 'reflejo-0.1.0';
-    // store en memoria: project_id -> objeto de criterio (un solo estado por proyecto)
-    this._criterios = new Map();
+    this.version = '0.1.0';
+    this.criterioPorProyecto = new Map();   // project_id → { version, umbral, por_autor:[] }
 
     this._persist = new PosPersistencia({
       modulo: this,
       file: 'criterio-viabilidad.json',
-      dir: '/prisma/nichos',
-      snapshot: (pid) => {
-        const c = this._criterios.get(pid);
-        return c ? { project_id: pid, criterio: c } : null;
-      },
+      dir: '/prisma/pos/nichos',
+      snapshot: (pid) => ({ criterio: this.criterioPorProyecto.get(pid) || null }),
       hidratar: (pid, data) => {
-        if (data && data.criterio) this._criterios.set(pid, data.criterio);
+        if (data && data.criterio && typeof data.criterio === 'object') {
+          this.criterioPorProyecto.set(pid, data.criterio);
+        }
       }
     });
   }
@@ -87,222 +76,112 @@ class CriterioViabilidad extends ModuloHibridoReflejo {
     return super.onUnload();
   }
 
-  // Restaura el criterio del proyecto activado.
   onProjectActivated(e) {
     const d = (e && (e.data || e)) || {};
     return this._persist.restaurar(d.project_id);
   }
 
-  // ── handlers RPC (una línea, delegan a _atender / fire-and-forget) ──
+  // ── RPC HANDLERS ──
   onLeerRequest(e) {
-    return this._atender(e, 'leer', 'nichos.criterio.leer.response', d => this._leerConHidratacion(d));
+    return this._atender(e, 'leer', 'nichos.criterio.viabilidad.leer.response', d => this._leer(d));
   }
 
   onDeclararRequest(e) {
-    return this._atender(e, 'declarar', 'nichos.criterio.declarar.response', async (d) => {
-      const res = await this._declarar(d);
-      // Emisor/par de fallo: exito → dominio; error → par determinista.
-      if (res.status === 200) {
-        this.eventBus?.publish('nichos.criterio.declarado', {
-          project_id: res.data.project_id,
-          criterio: res.data.criterio,
-          declarado: true,
-          correlation_id: d.correlation_id
-        });
-      } else {
-        this.eventBus?.publish('nichos.criterio.declarar.failed', res);
-      }
-      return res;
-    });
+    return this._atender(e, 'declarar', 'nichos.criterio.viabilidad.declarar.response', d => this._declarar(d));
   }
 
-  // Fire-and-forget del bucle C7->C2: reglas-aprendidas recalibra el umbral.
-  onUmbralRecalibrado(e) {
-    const d = (e && (e.data || e)) || {};
-    if (!d.project_id) return null;
-    const res = this._recalibrar(d);
-    if (res.status === 200) {
-      this.eventBus?.publish('nichos.criterio.recalibrado', {
-        project_id: res.data.project_id,
-        criterio: res.data.criterio,
-        recalibrado: true,
-        delta: d.delta,
-        correlation_id: d.correlation_id
-      });
-    } else {
-      this.eventBus?.publish('nichos.criterio.recalibrar.failed', res);
-    }
-    return res;
-  }
-
-  // ── proyección de lectura (NO muta); exponer el umbral vigente ──
-  // IMPORTANTE: la lectura NUNCA debe crear-y-marcar-dirty un placeholder vacío.
-  // Si el proyecto no está en memoria (p.ej. un reinicio: el criterio vive en disco
-  // y solo se hidrata en project.activated), crear un criterioVacio() y marcarlo
-  // dirty hacía que el flush DEBOUNCED SOBRESCRIBIERA el criterio real del disco
-  // con el vacío → pérdida de datos. Ahora: se hidrata del disco antes de leer.
-  _obtenerOCrear(pid) {
-    let c = this._criterios.get(pid);
+  // =============================================================
+  // Estado — snapshot por proyecto. Esqueleto por defecto si no hay fichero.
+  // =============================================================
+  _criterio(project_id) {
+    let c = this.criterioPorProyecto.get(project_id);
     if (!c) {
-      c = criterioVacio();
-      this._criterios.set(pid, c);
-      // NO se marca dirty: un placeholder vacío no debe persistirse (borraría el real).
+      c = { version: 0, umbral: esqueletoAbierto(), por_autor: [] };
+      this.criterioPorProyecto.set(project_id, c);
     }
     return c;
   }
 
-  // Lectura con hidratación: si el proyecto no está en memoria, se restaura del
-  // disco antes de leer (el criterio declarado sobrevive a los reinicios).
-  async _leerConHidratacion(input) {
-    const pid = input && input.project_id;
-    if (!pid) return this._invalid('project_id');
-    if (!this._criterios.has(pid)) {
-      await this._persist.restaurar(pid);
-    }
-    const c = this._criterios.get(pid) || criterioVacio();
-    return { status: 200, data: { project_id: pid, criterio: c } };
-  }
-
+  // =============================================================
+  // PROYECCIONES — lógica de dominio pura
+  // =============================================================
   _leer(input) {
-    const pid = input && input.project_id;
-    if (!pid) return this._invalid('project_id');
-    const c = this._obtenerOCrear(pid);
-    return { status: 200, data: { project_id: pid, criterio: c } };
+    if (!input.project_id) return this._invalid('project_id');
+    const criterio = this._criterio(input.project_id);
+    return { status: 200, data: { umbral_viabilidad: criterio } };
   }
 
-  // Alias semántico del veredicto (C3): devuelve el umbral vigente del nicho.
-  leerVigente(pid) {
-    if (!pid) return null;
-    return this._criterios.get(pid) || criterioVacio();
-  }
-
-  // ── proyección de escritura declarable (el único escritor: DUEÑO) ──
   _declarar(input) {
-    const pid = input && input.project_id;
-    if (!pid) return this._invalid('project_id');
+    if (!input.project_id) return this._invalid('project_id');
+    if (!input.por_autor) return this._invalid('por_autor');
+    if (!input.cambio || typeof input.cambio !== 'object') return this._invalid('cambio');
 
-    // GUARD de escritor: solo el DUEÑO puede declarar el criterio base.
-    if (input.rol !== ROL_DUENYO) {
-      return this._errorResponse(403, 'PERMISSION_DENIED', 'solo el DUEÑO puede declarar el criterio de viabilidad', {
-        rol_esperado: ROL_DUENYO, rol_recibido: input.rol
+    // Guard F3: escritores autorizados.
+    if (!AUTORES_AUTORIZADOS.includes(input.por_autor)) {
+      const err = this._errorResponse(
+        403,
+        'PERMISSION_DENIED',
+        'escritor_no_autorizado — solo el dueño o el ajustador-umbrales declaran el criterio de viabilidad',
+        { por_autor: input.por_autor, autores_autorizados: AUTORES_AUTORIZADOS }
+      );
+      this.eventBus?.publish('nichos.criterio.viabilidad.declarado.failed', {
+        project_id: input.project_id,
+        code: 'PERMISSION_DENIED',
+        message: err.error.message,
+        timestamp: nowISO()
       });
+      return err;
     }
 
-    const crit = input.criterio;
-    if (!crit || typeof crit !== 'object') {
-      return this._invalid('criterio');
+    // Validación de forma: cualquier campo del cambio debe pertenecer al esquema.
+    const cambio = input.cambio;
+    const camposDesconocidos = Object.keys(cambio).filter(k => !CAMPOS_UMBRAL.includes(k));
+    if (camposDesconocidos.length) {
+      const err = this._errorResponse(
+        400,
+        'INVALID_INPUT',
+        'cambio contiene campos fuera del esquema del umbral',
+        { campos_desconocidos: camposDesconocidos, campos_validos: CAMPOS_UMBRAL }
+      );
+      this.eventBus?.publish('nichos.criterio.viabilidad.declarado.failed', {
+        project_id: input.project_id,
+        code: 'INVALID_INPUT',
+        message: err.error.message,
+        timestamp: nowISO()
+      });
+      return err;
     }
 
-    const actual = criterioVacio();
-    const previo = this._criterios.get(pid) || criterioVacio();
-
-    // Merge conservador sobre el molde; valida y normaliza cada campo declarable.
-    if (crit.umbral_ingresos != null && crit.umbral_ingresos !== '') {
-      const u = numPos(crit.umbral_ingresos);
-      if (!u) return this._invalid('criterio.umbral_ingresos');
-      actual.umbral_ingresos = u;
-    } else if (previo.umbral_ingresos != null) {
-      actual.umbral_ingresos = previo.umbral_ingresos;
-    }
-
-    if (crit.minimos_demanda && typeof crit.minimos_demanda === 'object') {
-      const numero_busquedas = numPos(crit.minimos_demanda.numero_busquedas);
-      const contactos_semana = numPos(crit.minimos_demanda.contactos_semana);
-      // tolera que solo se exija UNO de los dos mínimos; ambos null = inválido
-      if (numero_busquedas == null && contactos_semana == null) {
-        return this._invalid('criterio.minimos_demanda');
+    // Aplica el cambio sobre el último snapshot — inmutabilidad por versión.
+    const actual = this._criterio(input.project_id);
+    const umbralNuevo = Object.assign({}, actual.umbral);
+    for (const k of CAMPOS_UMBRAL) {
+      if (Object.prototype.hasOwnProperty.call(cambio, k)) {
+        umbralNuevo[k] = cambio[k];
       }
-      actual.minimos_demanda = {
-        numero_busquedas,
-        contactos_semana
-      };
-    } else if (previo.minimos_demanda) {
-      actual.minimos_demanda = previo.minimos_demanda;
     }
+    const nueva = {
+      version: actual.version + 1,
+      umbral: umbralNuevo,
+      por_autor: actual.por_autor.concat([{
+        version: actual.version + 1,
+        autor: input.por_autor,
+        cambio,
+        at: nowISO()
+      }])
+    };
+    this.criterioPorProyecto.set(input.project_id, nueva);
+    this._persist.marcarDirty(input.project_id);
 
-    if (crit.disposicion_a_pagar != null && crit.disposicion_a_pagar !== '') {
-      const p = numPos(crit.disposicion_a_pagar);
-      if (!p) return this._invalid('criterio.disposicion_a_pagar');
-      actual.disposicion_a_pagar = p;
-    } else if (previo.disposicion_a_pagar != null) {
-      actual.disposicion_a_pagar = previo.disposicion_a_pagar;
-    }
+    this.eventBus?.publish('nichos.criterio.viabilidad.declarado', {
+      project_id: input.project_id,
+      version: nueva.version,
+      por_autor: input.por_autor,
+      timestamp: nowISO()
+    });
 
-    if (crit.tipo != null && crit.tipo !== '') {
-      const tipo = String(crit.tipo).toLowerCase();
-      if (!TIPOS_VIABILIDAD.has(tipo)) return this._invalid('criterio.tipo');
-      actual.tipo = tipo;
-    } else if (previo.tipo) {
-      actual.tipo = previo.tipo;
-    }
-
-    actual.updated_at = new Date().toISOString();
-    actual.recalibrado_por = 'DUEÑO';
-    actual.declarado_por = ROL_DUENYO;
-
-    this._criterios.set(pid, actual);
-    this._persist.marcarDirty(pid);
-
-    return { status: 200, data: { project_id: pid, criterio: actual, declarado: true } };
+    return { status: 200, data: { nueva_version: nueva.version, umbral_viabilidad: nueva } };
   }
-
-  // ── proyección de recalibración (bucle C7->C2, autorizado al SISTEMA) ──
-  _recalibrar(input) {
-    const pid = input && input.project_id;
-    if (!pid) return this._invalid('project_id');
-
-    const delta = input.delta;
-    // Delta debe ser un objeto con al menos un ajuste numérico finito.
-    if (!delta || typeof delta !== 'object') return this._invalid('delta');
-    const dltaIn = numPos(delta.umbral_ingresos) ?? numPos(delta.minimos_demanda);
-    if (dltaIn == null) return this._invalid('delta');
-
-    const actual = this._obtenerOCrear(pid);
-    const previo = this._criterios.get(pid) || criterioVacio();
-
-    // Refina: suma/resta el delta al umbral vigente (nunca baja de 0).
-    if (delta.umbral_ingresos != null) {
-      const ajuste = Number(delta.umbral_ingresos);
-      if (!Number.isFinite(ajuste) || ajuste === 0) return this._invalid('delta.umbral_ingresos');
-      const base = previo.umbral_ingresos != null ? previo.umbral_ingresos : 0;
-      actual.umbral_ingresos = Math.max(0, base + ajuste);
-    } else {
-      actual.umbral_ingresos = previo.umbral_ingresos;
-    }
-
-    if (delta.minimos_demanda && typeof delta.minimos_demanda === 'object') {
-      const prevMin = previo.minimos_demanda || {};
-      const nuevo = { numero_busquedas: prevMin.numero_busquedas, contactos_semana: prevMin.contactos_semana };
-      if (delta.minimos_demanda.numero_busquedas != null) {
-        const n = Math.round(Number(delta.minimos_demanda.numero_busquedas));
-        if (!Number.isFinite(n)) return this._invalid('delta.minimos_demanda.numero_busquedas');
-        nuevo.numero_busquedas = Math.max(0, (prevMin.numero_busquedas || 0) + n);
-      }
-      if (delta.minimos_demanda.contactos_semana != null) {
-        const n = Math.round(Number(delta.minimos_demanda.contactos_semana));
-        if (!Number.isFinite(n)) return this._invalid('delta.minimos_demanda.contactos_semana');
-        nuevo.contactos_semana = Math.max(0, (prevMin.contactos_semana || 0) + n);
-      }
-      actual.minimos_demanda = nuevo;
-    } else {
-      actual.minimos_demanda = previo.minimos_demanda;
-    }
-
-    actual.disposicion_a_pagar = previo.disposicion_a_pagar;
-    actual.tipo = previo.tipo;
-    actual.updated_at = new Date().toISOString();
-    actual.recalibrado_por = 'SISTEMA_C7';
-
-    this._criterios.set(pid, actual);
-    this._persist.marcarDirty(pid);
-
-    return { status: 200, data: { project_id: pid, criterio: actual, recalibrado: true, resultado_real: input.resultado_real } };
-  }
-
-  // ── Tools ──
-  toolLeer(params) { return this._leer(params); }
-  toolDeclarar(params) { return this._declarar(params); }
-  toolRecalibrar(params) { return this._recalibrar(params); }
 }
 
 module.exports = CriterioViabilidad;

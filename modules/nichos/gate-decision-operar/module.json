@@ -1,14 +1,20 @@
 {
-  "_doc": "Manifest de nichos/gate-decision-operar — PUENTE STATELESS (E2): el gate de operar — el SISTEMA NUNCA decide operar por su cuenta. Dado un nicho construido + competencia/modelo/costo/proyeccion, arma el paquete-cerrado (nicho + competencia + modelo + costo + proyeccion) y lo entrega al dueño por EVENTO como SolicitudDecision (APRUEBA/RECHAZA). No es una reunion sincrona: viaja por el bus y espera la decision del dueño via canal-supervision (G1). Sin persistencia: solo enruta/comunica con el exterior; NUNCA resuelve la decision.",
   "name": "gate-decision-operar",
   "version": "0.1.0",
-  "description": "Puente stateless de nichos (E2): entrega el paquete-cerrado de operar al dueño por EVENTO (nicho + competencia + modelo + costo + proyeccion) y espera aprueba/rechaza. El sistema NUNCA decide operar por su cuenta. Sin persistencia: solo enruta/comunica con el exterior.",
-  "language": "es",
-  "subscribes": [
-    { "event": "nichos.gate.solicitar.request", "handler": "onSolicitarRequest", "description": "RPC puro: {project_id, nicho, competencia?, modelo_cobro?, costo?, proyeccion?} → SolicitudDecision (APRUEBA|RECHAZA). Arma el paquete-cerrado autocxplicado (nicho + competencia + modelo + costo + proyeccion; reflejo: solo lo declarado, nunca fabrica numeros) y enruta la solicitud hacia el dueño. Nicho faltante/invalido → error determinista nichos.gate.solicitar.failed. Exito → publica nichos.gate.solicitado y responde por nichos.gate.solicitar.response." }
-  ],
+  "description": "PUENTE del vertical NICHOS: gate de arranque del vertical. Controla si el vertical opera o está en pausa. Si se solicita ABRIR sin confirmación del dueño, emite solicitud de decisión.",
+  "_doc": "modules/nichos/gate-decision-operar — PUENTE (gate de arranque) del vertical NICHOS.\n\nQué hace: dos operaciones.\n\n1. OPERAR (nichos.gate.operar.request): valida acción ABRIR|CERRAR y transita estado. Si ABRIR sin confirmación del dueño → solicitud de decisión. Pulsa nichos.gate.operacion.abierto o nichos.gate.operacion.cerrado.\n\n2. ESCUCHAR RESPUESTA (nichos.decision.solicitud.respondida): cuando el dueño responde a la solicitud de apertura, completa la transición.\n\nPatrón: ModuloHibridoReflejo (mitad REFLEJO, JS determinista).",
+  "ui_decision": {
+    "necesita": false,
+    "razon": "Gate de arranque del vertical NICHOS. Se invoca por RPC desde el jefe (K) o panel. No tiene cara propia."
+  },
   "publishes": [
-    { "event": "nichos.gate.solicitado", "description": "Fire-and-forget (E2): el paquete-cerrado de operar fue solicitado al dueño → {project_id, tipo:'gate_operar', estado:'PENDIENTE', nicho, competencia, modelo_cobro, costo, proyeccion, paquete_cerrado, decision_esperada:'APRUEBA|RECHAZA'}. Lo consume cola-decisiones-gate (K2) y lo entrega el canal-supervision (G1). El sistema NUNCA resuelve por su cuenta." },
-    { "event": "nichos.gate.solicitar.failed", "description": "Par de fallo determinista (E2): el paquete del gate no pudo armarse (nicho faltante/invalido) → {status, code, mensaje, data}. Cierra el circulo de nichos.gate.solicitar.request." }
+    { "event": "nichos.gate.operacion.abierto", "description": "PULSO fire-and-forget: el vertical fue abierto para operar. Payload: {project_id, timestamp}." },
+    { "event": "nichos.gate.operacion.cerrado", "description": "PULSO fire-and-forget: el vertical fue cerrado (pausado). Payload: {project_id, timestamp}." },
+    { "event": "nichos.gate.operar.response", "description": "Response correlada por request_id al RPC nichos.gate.operar.request. Payload: {status, data:{estado}} | {status, error}." },
+    { "event": "nichos.decision.solicitud.abierta", "description": "PULSO fire-and-forget: solicitud de decisión emitida al bus para confirmar apertura. Payload: {solicitud_id, tipo, contexto, opciones, timestamp}." }
+  ],
+  "subscribes": [
+    { "event": "nichos.gate.operar.request", "handler": "onOperarRequest", "description": "PUENTE: valida acción ABRIR|CERRAR y transita estado del vertical. Si ABRIR sin confirmación → solicitud de decisión. Payload: {request_id, project_id, accion: 'ABRIR'|'CERRAR'}." },
+    { "event": "nichos.decision.solicitud.respondida", "handler": "onSolicitudRespondida", "description": "Listener fire-and-forget: cuando el dueño responde a la solicitud de apertura, completa la transición. Payload: {solicitud_id, opcion_elegida, dueno, nota_libre, timestamp}." }
   ]
 }

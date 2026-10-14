@@ -1,18 +1,23 @@
 /**
- * nichos/vista-portafolio — CUSTODIO CON PERSISTENCIA (K1, hoja del plan).
+ * nichos/vista-portafolio — REFLEJO JS (CUSTODIO del vertical NICHOS).
  *
- * Cruza la SALUD de TODOS los nichos/módulos en una VISTA AGREGADA de
- * portafolio para el jefe: cuantos nichos estan en cada estado de salud del
- * pipeline, cuantos GENERA/SANGRA/NEUTRO, y el total en caja. Es el dashboard
- * que responde 'como va todo' sin mirar nicho a nicho.
+ * Snapshot agregado de salud por portafolio. Persiste la vista con los
+ * proyectos, cuantos generan, cuantos sangran y el flujo total.
+ * Se recalcula al recibir nichos.salud.recalculada.
  *
- * HIBRIDO CUSTODIO (patrón real de perfil-supervision):
- *   _agregarSalud   — REFLEJO: cruza una salud (F3) recibida contra el store y
- *                     regenera la VistaPortafolio (pura).
- *   _guardarVista   — CUSTODIO: persiste la vista agregada en el store.
- *   _leer           — lectura (no muta): DashboardJefe.
- * Escucha nichos.salud.actualizada (F3) y re-agrega/guarda cada vez.
- * PosPersistencia per-proyecto (/prisma/nichos/vista-portafolio.json).
+ * Store (per-proyecto, PosPersistencia): /prisma/pos/nichos/vista-portafolio.json
+ *   {
+ *     _version, _updated,
+ *     vista: {
+ *       version:      Int,
+ *       proyectos:    [ { id, estado, flujo } ],
+ *       generan:      Int,
+ *       sangran:      Int,
+ *       flujo_total:  Number
+ *     }
+ *   }
+ *
+ * Patron: ModuloHibridoReflejo + PosPersistencia. CUSTODIO.
  */
 
 'use strict';
@@ -20,19 +25,15 @@
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
 const PosPersistencia = require('../../_shared/pos-persistencia');
 
-// Shape base de la vista agregada de portafolio.
-function vistaVacia() {
+const nowISO = () => new Date().toISOString();
+
+function esqueletoVacio() {
   return {
-    esquema: 'nichos-vista-portafolio-v1',
-    total_nichos: 0,
-    en_caja: 0,
-    salud: {
-      GENERA: 0,
-      SANGRA: 0,
-      NEUTRO: 0
-    },
-    por_estado: {},
-    actualizada_en: null
+    version: 0,
+    proyectos: [],
+    generan: 0,
+    sangran: 0,
+    flujo_total: 0
   };
 }
 
@@ -40,22 +41,18 @@ class VistaPortafolio extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'vista-portafolio';
-    this.version = 'reflejo-0.1.0';
-    // store en memoria: project_id -> VistaPortafolio
-    this._vistas = new Map();
-    // estado auxiliar para re-agregar: project_id -> Map<nicho, salud>
-    this._salud = new Map();
+    this.version = '0.1.0';
+    this.vistaPorProyecto = new Map();   // project_id → esqueleto
 
     this._persist = new PosPersistencia({
       modulo: this,
       file: 'vista-portafolio.json',
-      dir: '/prisma/nichos',
-      snapshot: (pid) => {
-        const v = this._vistas.get(pid);
-        return v ? { project_id: pid, vista: v } : null;
-      },
+      dir: '/prisma/pos/nichos',
+      snapshot: (pid) => ({ vista: this.vistaPorProyecto.get(pid) || null }),
       hidratar: (pid, data) => {
-        if (data && data.vista) this._vistas.set(pid, data.vista);
+        if (data && data.vista && typeof data.vista === 'object') {
+          this.vistaPorProyecto.set(pid, data.vista);
+        }
       }
     });
   }
@@ -66,92 +63,107 @@ class VistaPortafolio extends ModuloHibridoReflejo {
     return super.onUnload();
   }
 
-  // Restaura la vista del portafolio del proyecto activado.
   onProjectActivated(e) {
     const d = (e && (e.data || e)) || {};
     return this._persist.restaurar(d.project_id);
   }
 
-  // ── handlers ──
-  onLeerRequest(e) {
-    return this._atender(e, 'leer', 'nichos.vista.leer.response', (d) => this._leer(d));
+  // ── RPC HANDLER ──
+  onVistaRequest(e) {
+    return this._atender(e, 'vista', 'nichos.portafolio.vista.response', d => this._vista(d));
   }
 
-  onGuardarRequest(e) {
-    return this._atender(e, 'guardar', 'nichos.vista.guardar.response', async (d) => {
-      const res = await this._guardarVista(d);
-      // Emisor/par de fallo: exito → dominio; error → par determinista.
-      if (res.status === 200) {
-        this.eventBus?.publish('nichos.vista_portafolio', this._payloadVista(res));
-      } else {
-        this.eventBus?.publish('nichos.vista.guardar.failed', res);
+  // ── PULSO HANDLER ──
+  onSaludRecalculada(e) {
+    const d = (e && (e.data || e)) || {};
+    return this._actualizarDesde(d);
+  }
+
+  // =============================================================
+  // Estado — snapshot por proyecto. Esqueleto vacio si no hay fichero.
+  // =============================================================
+  _store(project_id) {
+    let s = this.vistaPorProyecto.get(project_id);
+    if (!s) {
+      s = esqueletoVacio();
+      this.vistaPorProyecto.set(project_id, s);
+    }
+    return s;
+  }
+
+  // =============================================================
+  // PROYECCIONES — logica pura
+  // =============================================================
+
+  /**
+   * _vista — devuelve el snapshot actual del portafolio.
+   *
+   * @param {Object} input
+   * @param {string} input.project_id
+   * @param {string} [input.ahora] - ISO timestamp (informativo)
+   * @returns {{ status:number, data?:Object, error?:Object }}
+   */
+  _vista(input) {
+    if (!input.project_id) return this._invalid('project_id');
+
+    const store = this._store(input.project_id);
+
+    return {
+      status: 200,
+      data: {
+        vista_portafolio: {
+          proyectos: store.proyectos.slice(),
+          generan: store.generan,
+          sangran: store.sangran,
+          flujo_total: store.flujo_total,
+          version: store.version
+        }
       }
-      return res;
+    };
+  }
+
+  /**
+   * _actualizarDesde — recalcula la vista al recibir salud recalculada de un proyecto.
+   *
+   * @param {Object} data - payload de nichos.salud.recalculada
+   */
+  _actualizarDesde(data) {
+    if (!data.project_id) return;
+    if (!data.id || !data.estado) return;
+
+    const store = this._store(data.project_id);
+
+    // Buscar si el proyecto ya existe en la vista
+    const idx = store.proyectos.findIndex(p => p.id === data.id);
+    const entrada = {
+      id: data.id,
+      estado: data.estado,
+      flujo: typeof data.flujo === 'number' ? data.flujo : 0
+    };
+
+    if (idx >= 0) {
+      store.proyectos[idx] = entrada;
+    } else {
+      store.proyectos.push(entrada);
+    }
+
+    // Recalcular agregados
+    store.generan = store.proyectos.filter(p => p.flujo > 0).length;
+    store.sangran = store.proyectos.filter(p => p.flujo < 0).length;
+    store.flujo_total = store.proyectos.reduce((sum, p) => sum + (p.flujo || 0), 0);
+    store.version += 1;
+
+    this._persist.marcarDirty(data.project_id);
+
+    // PULSO
+    this.eventBus?.publish('nichos.portafolio.recalculado', {
+      vista: store.proyectos.slice(),
+      generan: store.generan,
+      sangran: store.sangran,
+      flujo_total: store.flujo_total,
+      timestamp: nowISO()
     });
   }
-
-  // Fire-and-forget: cuadro-salud-financiera emite salud de un nicho → re-agrega y guarda.
-  async onSaludActualizada(e) {
-    const d = (e && e.data) || e || {};
-    const res = await this._guardarVista({ project_id: d.project_id, nicho: d.nicho, salud_extra: d.salud || d.estado_salud || d.tipo_salud });
-    if (res.status === 200) {
-      this.eventBus?.publish('nichos.vista_portafolio', this._payloadVista(res));
-    }
-    return res;
-  }
-
-  _payloadVista(res) {
-    return { project_id: res.data.project_id, vista: res.data.vista, totales: res.data.vista.total_nichos };
-  }
-
-  // ── REFLEJO (pura): cruza la salud de un nicho y regenera la vista agregada ──
-  _agregarSalud(pid, v, nicho, salud) {
-    if (!nicho) return v;
-    const s = salud || 'NEUTRO';
-    const val = ['GENERA', 'SANGRA', 'NEUTRO'].includes(s) ? s : 'NEUTRO';
-    // Reemplaza/agrega la salud declarada de ese nicho (un nicho solo tiene una salud vigente).
-    v.salud[val] = (v.salud[val] || 0) + 1;
-    if (val === 'GENERA') v.en_caja += 1;
-    v.por_estado[nicho] = val;
-    return v;
-  }
-
-  _vistaDesdeSalud(pid) {
-    const v = vistaVacia();
-    v.actualizada_en = new Date().toISOString();
-    const saludMap = this._salud.get(pid) || new Map();
-    saludMap.forEach((s, nicho) => this._agregarSalud(pid, v, nicho, s));
-    v.total_nichos = saludMap.size;
-    return v;
-  }
-
-  // ── CUSTODIO: persiste la vista del portafolio ──
-  _guardarVista(input) {
-    const pid = input && input.project_id;
-    if (!pid) return this._invalid('project_id');
-    if (input.salud_extra) {
-      const saludMap = this._salud.get(pid) || new Map();
-      saludMap.set(input.nicho, input.salud_extra);
-      this._salud.set(pid, saludMap);
-    }
-    const vista = this._vistaDesdeSalud(pid);
-    this._vistas.set(pid, vista);
-    this._persist.marcarDirty(pid);
-    return { status: 200, data: { project_id: pid, vista, totales: vista.total_nichos } };
-  }
-
-  // ── lectura (no muta): DashboardJefe ──
-  _leer(input) {
-    const pid = input && input.project_id;
-    if (!pid) return this._invalid('project_id');
-    const v = this._vistas.get(pid) || this._vistaDesdeSalud(pid);
-    if (!this._vistas.has(pid)) this._vistas.set(pid, v); // cache
-    return { status: 200, data: { project_id: pid, vista: v, dashboard_jefe: true } };
-  }
-
-  // ── Tools ──
-  toolLeer(params) { return this._leer(params); }
-  toolGuardarVista(params) { return this._guardarVista(params); }
 }
 
 module.exports = VistaPortafolio;

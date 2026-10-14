@@ -1,91 +1,116 @@
 /**
- * nichos/puente-humano — PUENTE STATELESS: cero persistencia, solo enruta hacia el
- * ser humano cuando el sistema NO sabe.
+ * nichos/puente-humano — PUENTE JS del vertical NICHOS.
  *
- * D2 del plan: es la EXCEPCION del sistema — cuando el sistema no sabe, presenta
- * nicho+problema+dudas al admin por EVENTO con paquete cerrado (SolicitudDecision).
- * Es un tapón humano de Nichos, nunca el flujo normal: se activa por un BLOQUEO
- * que el sistema no puede resolver solo (construir sin alternativa, autorizar).
+ * Bridge hacia el dueño humano. Traduce solicitudes de decisión del sistema
+ * al canal del dueño. Dos operaciones:
  *
- * Proyecciones puras:
- *   _detectarBloqueo  valida que llegue un bloqueo real (nicho + problema) y arma
- *                     el paquete cerrado de dudas a resolver por el dueño.
- *   _emitirSolicitud  enruta el paquete cerrado (nicho+problema+dudas) → SolicitudDecision
- *                     al canal de supervision; publica nichos.puente_solicitado.
+ *   1. ALZAR  — formatea pregunta + opciones para el canal humano y emite
+ *               solicitud de decisión al bus.
+ *   2. ESCUCHAR — suscribe nichos.decision.solicitud.respondida y re-emite
+ *                 por el bus para que el flujo original continúe.
  *
- * Sin store, sin custodio: cada op entra objeto, sale objeto. El puente comunica
- * con el exterior (el humano), no decide por su cuenta ni lo resuelve.
+ * Sin estado propio. Traduce la solicitud de decisión del sistema al canal
+ * del dueño.
+ *
+ * Patrón: ModuloHibridoReflejo (mitad REFLEJO, JS determinista).
  */
 
 'use strict';
 
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
 
+const crypto = require('crypto');
+
+const nowISO = () => new Date().toISOString();
+
 class PuenteHumano extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'puente-humano';
-    this.version = 'reflejo-0.1.0';
+    this.version = '0.1.0';
   }
-  async onUnload() { return super.onUnload(); }
 
-  // Detectar un bloqueo (construccion sin alternativa) y armar el paquete cerrado -> SolicitudDecision.
-  onSolicitarRequest(e) {
-    return this._atender(e, 'solicitar', 'nichos.puente.solicitar.response', async (d) => {
-      const res = await this._solicitar(d);
-      // Fire-and-forget de dominio: exito → solicitado; fallo → par determinista.
-      if (res.status === 200) {
-        this.eventBus?.publish('nichos.puente_solicitado', res.data);
-      } else {
-        this.eventBus?.publish('nichos.puente.solicitar.failed', res);
-      }
-      return res;
+  // ── RPC HANDLER ──
+  onAlzarRequest(e) {
+    return this._atender(e, 'alzar', 'nichos.puente.humano.alzar.response', d => this._alzar(d));
+  }
+
+  // ── LISTENER (fire-and-forget) ──
+  onSolicitudRespondida(e) {
+    const d = (e && (e.data || e)) || {};
+    // Re-emitir por el bus para que el flujo original continúe
+    this.logger?.info('puente-humano.respuesta.reenviada', {
+      solicitud_id: d.solicitud_id,
+      opcion_elegida: d.opcion_elegida
     });
   }
 
-  // ── el puente: detecta el bloqueo y arma el paquete cerrado de dudas ──
-  async _solicitar({ project_id, nicho, problema, dudas } = {}) {
-    project_id = project_id || this.project_id;
-    const bloqueo = this._detectarBloqueo({ nicho, problema, dudas });
-    if (bloqueo.status !== 200) {
-      return this._errorResponse(bloqueo.status, bloqueo.error?.code, bloqueo.error?.message, { project_id });
-    }
-    const solicitud = this._emitirSolicitud({ project_id, ...bloqueo.data });
-    return { status: 200, data: solicitud };
-  }
+  // =============================================================
+  // PROYECCIÓN — lógica de dominio pura
+  // =============================================================
 
-  // ── REFLEJO (mecánico, determinista): valida el bloqueo real y arma el paquete cerrado ──
-  _detectarBloqueo({ nicho, problema, dudas } = {}) {
-    if (!nicho || typeof nicho !== 'object') {
-      return this._errorResponse(400, 'NICHO_INVALIDO', 'el nicho es obligatorio para presentar el bloqueo al humano', {});
-    }
-    if (!problema || typeof problema !== 'string' || problema.trim().length === 0) {
-      return this._errorResponse(400, 'PROBLEMA_INVALIDO', 'el problema a resolver es obligatorio', {});
-    }
-    const dudasLista = (Array.isArray(dudas) && dudas.length > 0) ? dudas : ['decide sobre este bloqueo'];
+  /**
+   * _alzar — formatea pregunta + opciones para el canal humano y emite
+   * solicitud de decisión al bus.
+   *
+   * @param {Object} input
+   * @param {string} input.id_nicho       - identificador del nicho
+   * @param {string} input.contexto       - contexto de la decisión
+   * @param {string} input.pregunta       - pregunta para el dueño
+   * @param {Array}  [input.opciones]     - opciones disponibles
+   * @param {string} [input.correlation_id]
+   * @returns {{ status:number, data?:Object, error?:Object }}
+   */
+  _alzar(input) {
+    if (!input.id_nicho) return this._invalid('id_nicho');
+    if (!input.pregunta) return this._invalid('pregunta');
+
+    const solicitud_id = crypto.randomUUID();
+
+    // Emitir solicitud de decisión al bus (para cola-decisiones)
+    this.eventBus?.publish('nichos.decision.solicitud.abierta', {
+      solicitud_id,
+      tipo: 'puente-humano',
+      contexto: input.contexto || '',
+      opciones: input.opciones || [],
+      pregunta: this._formatearPregunta(input),
+      id_nicho: input.id_nicho,
+      timestamp: nowISO()
+    });
+
+    // PULSO — alzado
+    this.eventBus?.publish('nichos.puente.humano.alzado', {
+      id_nicho: input.id_nicho,
+      solicitud_id,
+      pregunta: input.pregunta,
+      timestamp: nowISO()
+    });
+
     return {
       status: 200,
-      data: {
-        nicho: nicho.producto || nicho.servicio || nicho.nombre || nicho.id || null,
-        problema: problema.trim(),
-        dudas: dudasLista.map(d => String(d).trim()),
-        paquete_cerrado: true,
-        excepcion: true
-      }
+      data: { solicitud_id }
     };
   }
 
-  // ── REFLEJO: arma la SolicitudDecision autocontenida hacia el dueño ──
-  _emitirSolicitud(d) {
-    return {
-      tipo: 'puente_humano',
-      nicho: d.nicho,
-      problema: d.problema,
-      dudas: d.dudas,
-      estado: 'PENDIENTE',
-      paquete_cerrado: true,
-      solicitado_en: new Date().toISOString()
-    };
+  // =============================================================
+  // Utilidades
+  // =============================================================
+
+  /**
+   * _formatearPregunta — formatea la pregunta con opciones para el canal humano.
+   */
+  _formatearPregunta(input) {
+    let texto = input.pregunta;
+    if (input.contexto) {
+      texto = `[${input.contexto}] ${texto}`;
+    }
+    if (Array.isArray(input.opciones) && input.opciones.length > 0) {
+      const lista = input.opciones
+        .map((op, i) => `  ${i + 1}. ${typeof op === 'string' ? op : op.label || op.valor || JSON.stringify(op)}`)
+        .join('\n');
+      texto += '\nOpciones:\n' + lista;
+    }
+    return texto;
   }
 }
 

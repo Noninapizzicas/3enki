@@ -1,213 +1,227 @@
 /**
- * nichos/reglas-exclusion — MICRO-AGENTE (fuzzy): la celula que aprende a FILTRAR.
+ * nichos/reglas-exclusion — REFLEJO JS (CUSTODIO del vertical NICHOS, bloque B búsqueda).
  *
- * Recibe los candidatos que sondeo-territorio (B1) detecto (las senales de demanda)
- * y decide si se EXCLUYEN o pasan: descarta los falsos positivos que no interesan —
- * por experiencia previa (corridas reales / falsos positivos del pasado), por
- * criterio del dueño (reglas explicitas) o por patrones (senal de demanda muy baja).
+ * Guarda las reglas aprendidas de EXCLUSIÓN indexadas por firma de semilla y
+ * las sirve al sondeador-territorio. Ingiere los sondeos cerrados como feedback
+ * (append-only) para que una futura destilación (blueprint o K3) induzca
+ * patrones. Este reflejo NO destila por sí solo: solo almacena, consulta y
+ * re-emite el .actualizadas cuando el conjunto activo cambia por escritura
+ * autorizada.
  *
- * Híbrido (patrón real de nichos/normalizacion-semilla + sondeo-territorio):
- *   _aprenderDeCorridas        — FUZZY (juicio LLM): un guion-prompt self-contained +
- *                                 historial de corridas/falsos positivos -> llm.complete.request
- *                                 -> Reglas de exclusion. Si el LLM falla o no cumple el
- *                                 contrato, el reflejo por reglas asegura al menos la firma
- *                                 de cada falso positivo previo como regla.
- *   _aprenderDeCorridasReflejo — REFLEJO (mecánico, determinista): convierte cada falso
- *                                 positivo previo en una regla de firma (los campos que lo
- *                                 caracterizaron), respeta las reglas explicitas del dueño
- *                                 y marca un umbral minimo de señal.
- *   _aplicar(candidato, reglas) — REFLEJO (mecánico, determinista): cruza el candidato
- *                                 contra las reglas y emite excluido:bool + motivo + regla.
+ * Store (per-proyecto, PosPersistencia): /prisma/pos/nichos/reglas-exclusion.json
+ *   {
+ *     _version, _updated,
+ *     reglas: {
+ *       version: Int,
+ *       reglas_por_firma: { <firma>: { patrones: [String], actualizada_por, at } },
+ *       sondeos_ingeridos: [ { semilla_firma, candidatos_total, at } ],
+ *       por_autor: [ { version, autor, firma, cambio, at } ]
+ *     }
+ *   }
  *
- * NUNCA decide solo sin base: solo excluye lo que una regla justifica (aprendida,
- * declarada por el dueño o de umbral de señal); sin reglas, el candidato pasa.
- * Candidato vacio/malformed -> par de fallo honesto (nichos.reglas.excluir.failed).
- * Sin store, sin custodio: entra candidato + historial, sale veredicto de exclusion.
+ * REGLA F3: un canal de escritura por autor. Autores autorizados:
+ *   'dueño' — el dueño por el canal.
+ *   'ajustador-umbrales' — K3, cuando promueve una propuesta aceptada.
+ *
+ * Patrón: ModuloHibridoReflejo. Sin mitad blueprint — la destilación semántica
+ * de patrones vive fuera (o se añade cuando se cablee la fuzzy).
  */
 
 'use strict';
 
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
+const PosPersistencia = require('../../_shared/pos-persistencia');
 
-// ── guion-prompt del micro-agente (self-contained) ──
-const GUION_APRENDER_REGLA =
-  'Eres el APRENDIZ DE REGLAS DE EXCLUSION de un buscador de nichos de negocio. Recibes el ' +
-  'HISTORIAL de corridas reales: candidatos que en su momento parecian prometedores pero se ' +
-  'confirmaron como FALSOS POSITIVOS (no interesaban: el nicho no rinde, mala demanda real, ' +
-  'criterio del dueno) y, opcionalmente, las REGLAS EXPLICITAS que el dueno ya declaro. Tu ' +
-  'trabajo es derivar REGLAS DE EXCLUSION generalizables: condiciones claras sobre los campos ' +
-  'de un candidato (producto, audiencia, lugar, senal_de_demanda, fuente) que permitan descartar ' +
-  'los falsos positivos futuros. Reglas: usa SOLO lo que el historial/reglas apoyen, NO inventes ' +
-  'exclusiones sin base; si un falso positivo no deja un patron claro, no fuerces una regla. ' +
-  'Responde SOLO JSON con la forma: {"reglas":[{"tipo":"producto|audiencia|lugar|senal|fuente",' +
-  '"valor":"<texto o numero>","motivo":"<por que se excluye>","confianza":<0-1>}]}. Si no hay ' +
-  'patron aprendible, reglas:[].';
+const nowISO = () => new Date().toISOString();
+const AUTORES_AUTORIZADOS = ['dueño', 'ajustador-umbrales'];
 
-const UMBRAL_SENAL_DEFAULT = 0.12;
+function esqueletoVacio() {
+  return {
+    version: 0,
+    reglas_por_firma: {},
+    sondeos_ingeridos: [],
+    por_autor: []
+  };
+}
 
 class ReglasExclusion extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'reglas-exclusion';
-    this.version = 'reflejo-0.1.0';
-    this.project_id = null;
-  }
-  async onUnload() { return super.onUnload(); }
+    this.version = '0.1.0';
+    this.reglasPorProyecto = new Map();   // project_id → esqueleto
 
-  onExcluirRequest(e) {
-    return this._atender(e, 'excluir', 'nichos.reglas.excluir.response', async (d) => {
-      const res = await this._excluir(d);
-      // Fire-and-forget de dominio: exito → veredicto (excluido:bool + motivo); fallo → par determinista.
-      if (res.status === 200) {
-        this.eventBus?.publish('nichos.candidato.excluido', {
-          project_id: res.data.project_id,
-          candidato: res.data.candidato,
-          excluido: res.data.excluido,
-          motivo: res.data.motivo,
-          regla: res.data.regla
-        });
-      } else {
-        this.eventBus?.publish('nichos.reglas.excluir.failed', res);
+    this._persist = new PosPersistencia({
+      modulo: this,
+      file: 'reglas-exclusion.json',
+      dir: '/prisma/pos/nichos',
+      snapshot: (pid) => ({ reglas: this.reglasPorProyecto.get(pid) || null }),
+      hidratar: (pid, data) => {
+        if (data && data.reglas && typeof data.reglas === 'object') {
+          this.reglasPorProyecto.set(pid, data.reglas);
+        }
       }
-      return res;
     });
   }
 
-  // ── el juicio: aprende reglas (fuzzy) + aplica exclusion (reflejo) ──
-  async _excluir({ project_id, candidato, historial, reglas } = {}) {
-    project_id = project_id || this.project_id;
-    if (!candidato || typeof candidato !== 'object') {
-      return this._errorResponse(400, 'CANDIDATO_INVALIDO', 'el candidato a excluir es obligatorio (objeto con producto/audiencia/lugar/senal)', { project_id });
+  async onUnload() {
+    await this._persist.flush();
+    this._persist.detener();
+    return super.onUnload();
+  }
+
+  onProjectActivated(e) {
+    const d = (e && (e.data || e)) || {};
+    return this._persist.restaurar(d.project_id);
+  }
+
+  // ── RPC HANDLERS ──
+  onConsultarRequest(e) {
+    return this._atender(e, 'consultar', 'nichos.reglas.exclusion.consultar.response', d => this._consultar(d));
+  }
+
+  onActualizarRequest(e) {
+    return this._atender(e, 'actualizar', 'nichos.reglas.exclusion.actualizar.response', d => this._actualizar(d));
+  }
+
+  // Fire-and-forget: ingesta de sondeos cerrados.
+  onSondeoCompletado(e) {
+    const d = (e && (e.data || e)) || {};
+    if (!d.project_id || !d.semilla_firma) return;
+    const store = this._store(d.project_id);
+    store.sondeos_ingeridos.push({
+      semilla_firma: d.semilla_firma,
+      candidatos_total: d.candidatos_total || 0,
+      at: nowISO()
+    });
+    this._persist.marcarDirty(d.project_id);
+  }
+
+  // =============================================================
+  // Estado — snapshot por proyecto. Esqueleto vacío si no hay fichero.
+  // =============================================================
+  _store(project_id) {
+    let s = this.reglasPorProyecto.get(project_id);
+    if (!s) {
+      s = esqueletoVacio();
+      this.reglasPorProyecto.set(project_id, s);
     }
-    // Aprender/ajustar reglas: fuzzy con fallback reflejo determinista.
-    const reglasAprendidas = await this._aprenderDeCorridas(historial, reglas);
-    let reglasVigentes = (Array.isArray(reglasAprendidas) && reglasAprendidas.length > 0)
-      ? reglasAprendidas
-      : this._aprenderDeCorridasReflejo(historial, reglas, { umbral: UMBRAL_SENAL_DEFAULT });
-    if (!reglasVigentes || reglasVigentes.length === 0) reglasVigentes = []; // sin base → no se excluye
-    // Aplicar (reflejo puro): cruza candidato contra reglas.
-    const veredicto = this._aplicar(candidato, reglasVigentes);
+    return s;
+  }
+
+  // =============================================================
+  // PROYECCIONES — lógica pura
+  // =============================================================
+  _consultar(input) {
+    if (!input.project_id) return this._invalid('project_id');
+    if (!input.semilla_firma) return this._invalid('semilla_firma');
+    const store = this._store(input.project_id);
+    const entrada = store.reglas_por_firma[input.semilla_firma];
+    const patrones = (entrada && Array.isArray(entrada.patrones)) ? entrada.patrones.slice() : [];
     return {
       status: 200,
       data: {
-        project_id,
-        candidato,
-        excluido: veredicto.excluido,
-        motivo: veredicto.motivo,
-        regla: veredicto.regla,
-        reglas: {
-          explicitas: (Array.isArray(reglas) ? reglas : []).length,
-          aprendidas: reglasVigentes.length,
-          total: veredicto.normReglas
+        conjunto_reglas: {
+          semilla_firma: input.semilla_firma,
+          patrones_excluir: patrones,
+          version: store.version
         }
       }
     };
   }
 
-  // ── FUZZY: 1 llamada llm.complete.headless con el guion + historial/reglas ──
-  async _aprenderDeCorridas(historial, reglas) {
-    const resp = await this._rpc('llm.complete.request', {
-      system: GUION_APRENDER_REGLA,
-      messages: [{ role: 'user', content: JSON.stringify({ historial: historial || [], reglas_explicitas: reglas || [] }) }],
-      tools: [], settings: { temperature: 0.2 }
-    }, { timeout_ms: 30000 }).catch(() => null);
-    if (!resp || resp.status >= 400) return null;
-    return this._validarReglas(this._parse(resp));
-  }
+  _actualizar(input) {
+    if (!input.project_id) return this._invalid('project_id');
+    if (!input.semilla_firma) return this._invalid('semilla_firma');
+    if (!input.por_autor) return this._invalid('por_autor');
+    if (!input.cambio || typeof input.cambio !== 'object') return this._invalid('cambio');
 
-  // ── FUZZY: extrae el JSON del completado (tolera fences ```json y texto) ──
-  _parse(resp) {
-    let c = resp?.data?.content ?? resp?.content ?? resp?.data?.text ?? resp?.text ?? resp?.data?.message ?? '';
-    if (c && typeof c === 'object' && Array.isArray(c.reglas)) return c;
-    if (c && typeof c === 'object') return c;
-    if (typeof c !== 'string') return null;
-    c = c.replace(/```json/gi, '').replace(/```/g, '').trim();
-    const i = c.indexOf('{'), j = c.lastIndexOf('}');
-    if (i < 0 || j < 0 || j < i) return null;
-    try { return JSON.parse(c.slice(i, j + 1)); } catch { return null; }
-  }
-
-  // Validador de contrato: solo reglas bien formadas; NUNCA inventa patrones sin base.
-  _validarReglas(o) {
-    if (!o || !Array.isArray(o.reglas)) return null;
-    const tipos = ['producto', 'audiencia', 'lugar', 'senal', 'fuente'];
-    const out = o.reglas.map(r => {
-      const tipo = tipos.includes(r.tipo) ? r.tipo : null;
-      if (!tipo) return null;
-      const valor = r.valor !== undefined && r.valor !== null && String(r.valor).trim() !== ''
-        ? String(r.valor).trim()
-        : null;
-      if (!valor) return null;
-      return {
-        tipo,
-        valor,
-        motivo: r.motivo && String(r.motivo).trim() ? String(r.motivo).trim() : `excluido por regla de ${tipo}`,
-        confianza: (typeof r.confianza === 'number' && r.confianza > 0 && r.confianza <= 1) ? r.confianza : 0.5
-      };
-    }).filter(Boolean);
-    return out.length ? out : null;
-  }
-
-  // ── REFLEJO (fallback determinista): reglas de las corridas + explicitas del dueño + umbral ──
-  _aprenderDeCorridasReflejo(historial, reglas, { umbral = UMBRAL_SENAL_DEFAULT } = {}) {
-    const out = [];
-    // Reglas explicitas del dueño primero (siempre manda el criterio declarado).
-    if (Array.isArray(reglas)) {
-      for (const r of reglas) {
-        const v = this._validarReglas({ reglas: [r] });
-        if (v) out.push(...v);
-      }
+    // Guard F3: autores autorizados.
+    if (!AUTORES_AUTORIZADOS.includes(input.por_autor)) {
+      const err = this._errorResponse(
+        403,
+        'PERMISSION_DENIED',
+        'escritor_no_autorizado — solo el dueño o el ajustador-umbrales actualizan reglas de exclusión',
+        { por_autor: input.por_autor, autores_autorizados: AUTORES_AUTORIZADOS }
+      );
+      this.eventBus?.publish('nichos.reglas.exclusion.actualizadas.failed', {
+        project_id: input.project_id,
+        code: 'PERMISSION_DENIED',
+        message: err.error.message,
+        timestamp: nowISO()
+      });
+      return err;
     }
-    // Cada falso positivo previo deja una regla de firma: los campos que lo caracterizaron.
-    if (Array.isArray(historial) && historial.length > 0) {
-      for (const fp of historial) {
-        if (fp) {
-          if (fp.producto && String(fp.producto).trim()) out.push({ tipo: 'producto', valor: String(fp.producto).trim().toLowerCase(), motivo: (fp.motivo || 'falso positivo previo: mismo producto'), confianza: 0.6 });
-          if (fp.audiencia && String(fp.audiencia).trim()) out.push({ tipo: 'audiencia', valor: String(fp.audiencia).trim().toLowerCase(), motivo: (fp.motivo || 'falso positivo previo: misma audiencia'), confianza: 0.6 });
-          if (fp.lugar && String(fp.lugar).trim()) out.push({ tipo: 'lugar', valor: String(fp.lugar).trim().toLowerCase(), motivo: (fp.motivo || 'falso positivo previo: mismo lugar'), confianza: 0.6 });
-        }
-      }
-    }
-    // Umbral minimo de señal: patrón de demanda demasiado baja para interesar.
-    out.push({ tipo: 'senal', valor: String(umbral), motivo: `senal de demanda por debajo del umbral minimo (${umbral})`, confianza: 0.8 });
-    return out;
-  }
 
-  // ── REFLEJO (mecánico, determinista): cruza candidato contra reglas → {excluido, motivo, regla} ──
-  _aplicar(candidato, reglas) {
-    const norm = (v) => (v && String(v).trim() ? String(v).trim().toLowerCase() : '');
-    const senal = (typeof candidato.senal_de_demanda === 'number') ? candidato.senal_de_demanda
-      : (typeof candidato.senal === 'number') ? candidato.senal
-      : (candidato.senal_de_demanda && !isNaN(Number(candidato.senal_de_demanda))) ? Number(candidato.senal_de_demanda)
-      : 0;
-    const campos = {
-      producto: norm(candidato.producto),
-      audiencia: norm(candidato.audiencia),
-      lugar: norm(candidato.lugar),
-      fuente: norm(candidato.fuente)
+    // Cambio esperado: { añadir?: [String], quitar?: [String], reemplazar?: [String] }
+    const cambio = input.cambio;
+    const añadir = Array.isArray(cambio.añadir) ? cambio.añadir : [];
+    const quitar = Array.isArray(cambio.quitar) ? cambio.quitar : [];
+    const reemplazar = Array.isArray(cambio.reemplazar) ? cambio.reemplazar : null;
+
+    if (!añadir.length && !quitar.length && !reemplazar) {
+      const err = this._errorResponse(
+        400,
+        'INVALID_INPUT',
+        'cambio vacío — se espera {añadir?, quitar?, reemplazar?} con al menos uno no vacío',
+        { cambio }
+      );
+      this.eventBus?.publish('nichos.reglas.exclusion.actualizadas.failed', {
+        project_id: input.project_id,
+        code: 'INVALID_INPUT',
+        message: err.error.message,
+        timestamp: nowISO()
+      });
+      return err;
+    }
+
+    const store = this._store(input.project_id);
+    const previa = store.reglas_por_firma[input.semilla_firma] || { patrones: [], actualizada_por: null, at: null };
+    let patronesNuevos;
+    if (reemplazar) {
+      patronesNuevos = reemplazar.filter(p => typeof p === 'string');
+    } else {
+      const base = previa.patrones.slice();
+      for (const p of añadir) if (typeof p === 'string' && !base.includes(p)) base.push(p);
+      patronesNuevos = base.filter(p => !quitar.includes(p));
+    }
+
+    const nuevaVersion = store.version + 1;
+    store.version = nuevaVersion;
+    store.reglas_por_firma[input.semilla_firma] = {
+      patrones: patronesNuevos,
+      actualizada_por: input.por_autor,
+      at: nowISO()
     };
-    for (const regla of (reglas || [])) {
-      if (!regla || !regla.tipo) continue;
-      if (regla.tipo === 'senal') {
-        // Excluye si la señal real queda bajo el umbral de la regla.
-        if (senal < Number(regla.valor)) {
-          return { excluido: true, motivo: regla.motivo, regla: { tipo: 'senal', valor: regla.valor }, normReglas: (reglas || []).length };
+    store.por_autor.push({
+      version: nuevaVersion,
+      autor: input.por_autor,
+      firma: input.semilla_firma,
+      cambio,
+      at: nowISO()
+    });
+
+    this._persist.marcarDirty(input.project_id);
+
+    this.eventBus?.publish('nichos.reglas.exclusion.actualizadas', {
+      project_id: input.project_id,
+      semilla_firma: input.semilla_firma,
+      patrones_total: patronesNuevos.length,
+      actualizada_por: input.por_autor,
+      timestamp: nowISO()
+    });
+
+    return {
+      status: 200,
+      data: {
+        nueva_version: nuevaVersion,
+        conjunto_reglas: {
+          semilla_firma: input.semilla_firma,
+          patrones_excluir: patronesNuevos,
+          version: nuevaVersion
         }
-        continue;
       }
-      // Reglas de campo (producto/audiencia/lugar/fuente): coincidencia de firma normalizada.
-      if (regla.tipo === 'fuente') {
-        if (campos.fuente === norm(regla.valor)) {
-          return { excluido: true, motivo: regla.motivo, regla: { tipo: 'fuente', valor: regla.valor }, normReglas: (reglas || []).length };
-        }
-        continue;
-      }
-      if (campos[regla.tipo] === norm(regla.valor)) {
-        return { excluido: true, motivo: regla.motivo, regla: { tipo: regla.tipo, valor: regla.valor }, normReglas: (reglas || []).length };
-      }
-    }
-    // Ninguna regla aplica → el candidato pasa (no se excluye).
-    return { excluido: false, motivo: 'ninguna regla de exclusion aplica', regla: null, normReglas: (reglas || []).length };
+    };
   }
 }
 

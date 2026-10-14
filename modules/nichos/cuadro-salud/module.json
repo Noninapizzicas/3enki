@@ -1,0 +1,25 @@
+{
+  "name": "cuadro-salud",
+  "version": "0.1.0",
+  "description": "CUSTODIO del vertical NICHOS: cuadro de salud financiera por proyecto. Compone vista con ingresos, costes, flujo y estado (GENERA, SANGRA, NEUTRO). Recalcula automaticamente al registrar cobro. Persistencia per-proyecto via PosPersistencia.",
+  "_doc": "modules/nichos/cuadro-salud — CUSTODIO del vertical NICHOS.\n\nQue guarda (per-proyecto, PosPersistencia): /prisma/pos/nichos/cuadro-salud.json\n  {\n    _version, _updated,\n    salud: {\n      version:     Int,\n      ingresos:    Number,\n      costes:      Number,\n      flujo:       Number,\n      estado:      'GENERA' | 'SANGRA' | 'NEUTRO',\n      recalculado_at: ISO8601\n    }\n  }\n\nQue atiende:\n  - nichos.cuadro.salud.estado.request → lee snapshot vigente del cuadro.\n  - nichos.cuadro.salud.recalcular.request → compone vista proyecto con flujo y estado.\n  - nichos.cobro.registrado → recalcula al registrar cobro (F7b).\n  - project.activated → restaura el store del proyecto.\n\nPatron: ModuloHibridoReflejo + PosPersistencia. REFLEJO puro.",
+  "ui_decision": {
+    "necesita": false,
+    "razon": "Custodio de snapshot de salud. Sin cara propia; se consulta por RPC desde el panel del vertical NICHOS."
+  },
+  "publishes": [
+    { "event": "nichos.salud.recalculada", "description": "PULSO fire-and-forget: salud recalculada. Payload: {id_proyecto, estado, flujo, timestamp}." },
+    { "event": "nichos.salud.recalculada.failed", "description": "Par .failed del PULSO: el recalculo fallo. Payload: {project_id, code, message, timestamp}." },
+    { "event": "nichos.cuadro.salud.estado.response", "description": "Response correlada por request_id al RPC nichos.cuadro.salud.estado.request. Payload: {status, data:{vista_proyecto}}." },
+    { "event": "nichos.cuadro.salud.recalcular.response", "description": "Response correlada por request_id al RPC nichos.cuadro.salud.recalcular.request. Payload: {status, data:{vista_proyecto}}." },
+    { "event": "nichos.sangria.detectada", "description": "PULSO fire-and-forget: el proyecto sangra (flujo negativo tras recalculo). Lo consume alerta-sangria. Payload: {id_proyecto, flujo, estado, timestamp}." },
+    { "event": "nichos.costes.imputar.request", "description": "RPC saliente: solicita costes imputados al modulo de imputacion." },
+    { "event": "nichos.registro.cobros.consultar.request", "description": "RPC saliente: consulta entradas de cobro al registro-cobros." }
+  ],
+  "subscribes": [
+    { "event": "nichos.cuadro.salud.estado.request", "handler": "onEstadoRequest", "description": "RPC: lee el snapshot vigente del cuadro de salud del proyecto." },
+    { "event": "nichos.cuadro.salud.recalcular.request", "handler": "onRecalcularRequest", "description": "RPC: recalcula la vista del proyecto componiendo cobros e imputaciones." },
+    { "event": "nichos.cobro.registrado", "handler": "onCobroRegistrado", "description": "F7b: recalcula automaticamente la salud al registrar un cobro." },
+    { "event": "project.activated", "handler": "onProjectActivated", "description": "Reflejo JS: restaura el store del proyecto desde /prisma/pos/nichos/cuadro-salud.json (PosPersistencia)." }
+  ]
+}

@@ -16,7 +16,7 @@
     { "event": "nichos.catalogo.capacidad.disponibles.request", "description": "RPC hacia el catalogo de capacidades: EL NORTE. Consulta lo que el sistema sabe entregar y cobrar, para usarlo como iman de seleccion del sondeo. Payload: {request_id, project_id}." },
     { "event": "nichos.reglas.exclusion.consultar.request", "description": "RPC hacia reglas de exclusion: consulta exclusiones vigentes. Payload: {request_id, project_id}." },
     { "event": "nichos.perfil.limite.leer.request", "description": "RPC hacia perfil de limites: consulta topes de operacion. Payload: {request_id, project_id}." },
-    { "event": "nichos.fuente.consumir.request", "description": "RPC hacia fuente de datos: consume una fuente externa para obtener datos del territorio. Payload: {request_id, project_id, semilla, territorio}." }
+    { "event": "nichos.fuente.consumir.request", "description": "RPC hacia fuente de datos: consume una fuente externa para obtener datos del territorio. Payload: {request_id, project_id, semilla, territorio, query} — `query` es la CONSULTA que nombra el nicho y el territorio ('<nicho> en <territorio>'), no el territorio pelado." }
   ],
   "subscribes": [
     { "event": "nichos.territorio.sondear.request", "handler": "onSondearRequest", "description": "RPC: sondea un territorio a partir de una semilla normalizada. Consulta exclusiones y limites, consume fuentes, filtra y emite candidatos. Payload: {request_id, semilla_normalizada, project_id}." }

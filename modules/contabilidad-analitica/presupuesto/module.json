@@ -59,7 +59,7 @@
       "action": "presupuesto.fijar",
       "handler": "onFijarRequest",
       "type": "chat_tool",
-      "zone": "chat_tools"
+      "zone": "input_chat"
     }
   ]
 }

@@ -244,8 +244,25 @@ class TelegramBridgeModule extends ModuloHibridoReflejo {
     } catch (_) { /* best-effort */ }
   }
 
+  /**
+   * Normaliza el emisor a un identificador ESTABLE de texto.
+   * telegram-client.extractFrom() entrega un OBJETO {id, username, firstName, lastName};
+   * interpolarlo producía el literal "telegram:[object Object]" — así quedaron escritas
+   * 220 filas de la memoria RAG del proyecto the-pirate. Acepta también string/number
+   * (otros publicadores del evento) y cae al chatId cuando no hay emisor.
+   */
+  _etiquetaFrom(from, chatId) {
+    if (from === undefined || from === null || from === '') return String(chatId);
+    if (typeof from === 'object') {
+      const id = from.id ?? from.username ?? from.firstName ?? null;
+      return id === null ? String(chatId) : String(id);
+    }
+    return String(from);
+  }
+
   async _reenviarAlChat(d, texto) {
-    const { botName, chatId, from, correlation_id } = d;
+    const { botName, chatId, correlation_id } = d;
+    const from = this._etiquetaFrom(d.from, chatId);
     const vinculo = this.registro.vinculos?.[botName];
     if (!vinculo) {
       this.logger?.info('telegram-bridge.bot_no_vinculado', { botName, chatId });

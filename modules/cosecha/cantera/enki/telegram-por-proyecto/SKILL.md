@@ -178,6 +178,32 @@ el bridge con el mismo significado que en el frontend.
 
 **Fix**: el bridge trocea en chunks de ≤4000 chars (límite seguro) y envía en secuencia (un `telegram.send_message.request` por chunk). Verificado en prod (16-ago): 0 fallos tras el fix. Si un bot "no responde" y el journal muestra el envío emitido + fallo → revisar el `detalle` del fallo antes de tocar el circuito.
 
+## PITFALL — la memoria del proyecto guardada como "telegram:[object Object]"
+
+**Pagado en vivo (14-oct-2026, The_pirate_enki_bot / proyecto the-pirate)**: la
+tabla `rag_messages` del proyecto tenía **220 filas** con `user_id =
+'telegram:[object Object]'` — y eran TODAS las que no eran `'default'`: la
+memoria entera del proyecto quedó sin dueño real.
+
+**Causa**: `services/telegram-client.js` → `extractFrom()` devuelve un OBJETO
+`{ id, username, firstName, lastName }`, y el puente lo interpolaba tal cual:
+`user_id: from ? \`telegram:${from}\` : ...`
+(`modules/telegram-bridge/index.js:274`). Interpolar un objeto en un template
+literal da el texto `[object Object]`. El mismo objeto se usaba en el título de
+la conversación creada (`Telegram ${from}` → "Telegram [object Object]").
+
+**Síntoma a reconocer**: `SELECT DISTINCT user_id FROM rag_messages` devuelve
+`'default'` + `'telegram:[object Object]'`.
+
+**Fix (aplicado 14-oct)**: helper `_etiquetaFrom(from, chatId)` que normaliza
+objeto|string|number → `String(from.id ?? from.username ?? from.firstName ?? chatId)`,
+usado por `_reenviarAlChat` tanto para `user_id` como para el título de la
+conversación. Verificado: `{id:1934798567,…}` → `telegram:1934798567`.
+
+**Backfill de las 220 filas ya escritas** (no se re-etiquetan solas), a decidir
+por el dueño:
+`UPDATE rag_messages SET user_id='telegram:1934798567' WHERE user_id='telegram:[object Object]';`
+
 ## Permisos del registro (pitfall EACCES)
 
 `data/telegram-bridge/` debe ser **www-data:www-data con g+w** — si se crea

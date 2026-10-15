@@ -14,10 +14,13 @@
  *   'dueño'              — el dueño por el canal.
  *   'ajustador-umbrales' — K3, cuando promueve una propuesta aceptada.
  *
- * ABIERTO: todo campo puede nacer ABIERTO (sin declarar). El esqueleto por
- * defecto entrega el umbral con todos sus campos en 'ABIERTO'; el consumidor
- * (VeredictoViabilidad C3) degrada a PUENTE('umbral_sin_declarar') al toparse
- * con un ABIERTO — jamás se asume dato ausente.
+ * BASE DECLARADA (F0/F1 · F2 C2 · F3 C2): "umbral base 50-300 €/sem (F0.F1);
+ * refinable". El esqueleto por defecto ENTREGA esa base — NO nace 'ABIERTO'.
+ * Un umbral con los ingresos en 'ABIERTO' degrada TODO veredicto a
+ * PUENTE('umbral_sin_declarar') (C3) y el embudo no puede cortar ni dejar
+ * pasar: el vertical nunca emite un VIABLE y no llega a monetizar.
+ * ABIERTO se reserva a lo que F0/F2 NO declararon (disposición a pagar,
+ * overrides por tipo de nicho) — dato ausente no se asume, jamás.
  *
  * Patrón: ModuloHibridoReflejo (mitad REFLEJO, JS determinista). Sin mitad
  * blueprint — la lógica es CRUD + aritmética de versión. Lo fuzzy lo hace
@@ -40,14 +43,21 @@ const CAMPOS_UMBRAL = [
   'exige_vb_previo_construir'
 ];
 
-function esqueletoAbierto() {
-  return {
-    ingresos_semana_min: 'ABIERTO',
-    ingresos_semana_objetivo: 'ABIERTO',
-    disposicion_pagar_min: 'ABIERTO',
-    por_tipo_nicho: 'ABIERTO',
-    exige_vb_previo_construir: 'ABIERTO'
-  };
+// La BASE declarada en F0/F1 ("pasivo → 50-300 €/semana basta") y fijada en
+// F2 C2 / F3 C2 ("umbral base 50-300 €/sem"). Es el valor de ARRANQUE del
+// umbral, no una estimación: lo declara el diseño y el dueño solo lo refina.
+const BASE_DECLARADA = {
+  ingresos_semana_min: 50,
+  ingresos_semana_objetivo: 300,
+  disposicion_pagar_min: 'ABIERTO',
+  por_tipo_nicho: 'ABIERTO',
+  exige_vb_previo_construir: 'ABIERTO'
+};
+
+// Esqueleto por defecto = la base declarada. Lo que F0/F2 no declararon queda
+// ABIERTO (dato ausente no se asume); lo declarado NO nace abierto.
+function esqueletoBase() {
+  return Object.assign({}, BASE_DECLARADA);
 }
 
 class CriterioViabilidad extends ModuloHibridoReflejo {
@@ -96,7 +106,7 @@ class CriterioViabilidad extends ModuloHibridoReflejo {
   _criterio(project_id) {
     let c = this.criterioPorProyecto.get(project_id);
     if (!c) {
-      c = { version: 0, umbral: esqueletoAbierto(), por_autor: [] };
+      c = { version: 0, umbral: esqueletoBase(), por_autor: [] };
       this.criterioPorProyecto.set(project_id, c);
     }
     return c;

@@ -182,7 +182,22 @@ class VerificadorVisualModule extends ModuloHibridoReflejo {
       const consoleErrors = [], pageErrors = [];
       page.on('console', m => { try { if (m.type() === 'error') consoleErrors.push(m.text()); } catch (_) {} });
       page.on('pageerror', e => { try { pageErrors.push(e.message); } catch (_) {} });
-      await page.setContent(html, { waitUntil: 'networkidle0', timeout: this.config.timeout_ms });
+      // ── CÓMO SE CARGA EL HTML (fix 1.4.0) ──────────────────────────────────────────────
+      // `page.setContent` SE CUELGA SIEMPRE con obscura: (a) su vía rápida es la llamada CDP
+      // `Page.setDocumentContent`, que obscura NO implementa (Protocol error: Unknown Page method),
+      // y (b) la vía de reserva de puppeteer-core navega a un data: URL esperando eventos de ciclo
+      // de vida que obscura NO emite. Resultado mordido en vivo: TODA verificación moría en el
+      // timeout de 15 s → `render_error` → el freno duro de carta-digital (422) dejaba la carta SIN
+      // publicar y SIN republicar, con el bundle estático viejo en la web (the-pirate: index.html
+      // del 14-oct servido mientras la carta ya había cambiado). Es un fallo de los OJOS, no del
+      // diseño: la misma carta miente "rota".
+      // La vía que SÍ completa (probada contra obscura 0.2-0.3 s): abrir about:blank —eso sí emite
+      // domcontentloaded— y ESCRIBIR el documento con document.write. Sin límite de tamaño
+      // (verificado hasta 6 MB; el data: URL de reserva se rompe ya a ~800 KB) y sin depender del
+      // ciclo de vida. El asentamiento de 300 ms deja correr los scripts e imágenes antes de medir.
+      await page.goto('about:blank', { waitUntil: 'domcontentloaded', timeout: this.config.timeout_ms });
+      await page.evaluate(h => { document.open(); document.write(h); document.close(); }, html);
+      await new Promise(r => setTimeout(r, 300));
       const dom = await page.evaluate(() => {
         const de = document.documentElement;
         let imgRoto = 0;

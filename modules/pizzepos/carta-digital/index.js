@@ -30,6 +30,10 @@ const DISENO_PATH = '/pizzepos/carta-digital/diseno.json';   // el look que comp
 // la URL. Publicar = escribir aquí; Caddy lo sirve por el symlink (sin reload, sin
 // tocar Caddyfile). El árbol de www/ se espeja tal cual en /<ns>/<slug>/… (ver www.json).
 const BUNDLE_DIR = '/www';
+// Ventana de coalescencia de la REPUBLICACIÓN AUTOMÁTICA. Una edición de precios emite N
+// carta.editada (una por mutación) y hornear es pesado (proyecta + copia imágenes + verifica
+// render + escribe 5 ficheros) → la ráfaga se agrupa en UN solo horneado por ventana.
+const REPUB_DEBOUNCE_MS = 4000;
 
 class CartaDigitalModule extends BaseModule {
   constructor() {
@@ -47,6 +51,10 @@ class CartaDigitalModule extends BaseModule {
     this.activos = new Map();
     this.ultimoActivo = null;
     this._subs = [];
+    // REPUBLICACIÓN AUTOMÁTICA (ver _autoPublicar): un timer por proyecto que coalesce la
+    // ráfaga de señales de una misma edición. repubMs es ajustable (tests).
+    this._repubTimers = new Map();
+    this.repubMs = REPUB_DEBOUNCE_MS;
   }
 
   async onLoad(core) {
@@ -59,11 +67,13 @@ class CartaDigitalModule extends BaseModule {
 
     const sub = (ev, fn) => { try { this._subs.push(this.eventBus.subscribe(ev, fn)); } catch (_) {} };
     sub('tarifas.config.actualizada', e => this._onTarifas(e));
-    sub('carta.actualizada', e => this._reemitir(e));
-    sub('carta.editada', e => this._reemitir(e));
-    sub('carta.borrada', e => this._reemitir(e));
-    sub('contenido.actualizado', e => this._reemitir(e));
-    sub('marketing.perfil.actualizado', e => this._reemitir(e));
+    // Los MISMOS cambios que refrescan la señal son los que dejan la web VIEJA (el bundle es
+    // estático): señal para el frontend + re-horneado del bundle.
+    sub('carta.actualizada', e => { this._reemitir(e); this._autoPublicar(e); });
+    sub('carta.editada', e => { this._reemitir(e); this._autoPublicar(e); });
+    sub('carta.borrada', e => { this._reemitir(e); this._autoPublicar(e); });
+    sub('contenido.actualizado', e => { this._reemitir(e); this._autoPublicar(e); });
+    sub('marketing.perfil.actualizado', e => { this._reemitir(e); this._autoPublicar(e); });
     sub('project.activated', e => this._onProjectActivated(e));
     sub('project.deactivated', e => this._onProjectDeactivated(e));
     // RPC de bus: el cajón diseñar_carta_digital persiste el diseño por aquí (RE-VALIDA como gate).
@@ -80,6 +90,8 @@ class CartaDigitalModule extends BaseModule {
   async onUnload() {
     for (const u of this._subs) { try { u(); } catch (_) {} }
     this._subs = [];
+    for (const t of this._repubTimers.values()) { try { clearTimeout(t); } catch (_) {} }
+    this._repubTimers.clear();
     this.mappingCanalesPerProject.clear();
     this.logger?.info('module.unloaded', { module: this.name });
   }
@@ -163,6 +175,56 @@ class CartaDigitalModule extends BaseModule {
     this.eventBus.publish('cartadigital.carta_publica.actualizada', {
       project_id: d?.project_id || null, correlation_id: d?.correlation_id || crypto.randomUUID(), timestamp: new Date().toISOString()
     });
+  }
+
+  // ── REPUBLICACIÓN AUTOMÁTICA ──
+  // El bundle de la PWA es ESTÁTICO: hasta ahora cada cambio de carta exigía que el dueño
+  // volviera a pulsar `publicar`, y si no lo hacía la web se quedaba VIEJA EN SILENCIO (visto en
+  // the-pirate: index.html servido de días antes mientras la carta ya había cambiado). Ahora el
+  // propio proyector re-hornea. Tres reglas lo mantienen honesto:
+  //   1) SOLO proyectos que YA publicaron: la verdad es el DISCO (¿existe /www/index.html?), no
+  //      una bandera en memoria que muere al reiniciar. Publicar la PRIMERA vez sigue siendo acto
+  //      del dueño; a partir de ahí la web camina al paso de su carta.
+  //   2) UN horneado por edición (debounce): una edición de precios emite N carta.editada.
+  //   3) Interruptor: opciones_visualizacion.auto_publicar === false lo apaga por proyecto.
+  // Nada es silencioso: cada horneado se loguea y cada fallo emite cartadigital.republicar.fallido.
+  _autoPublicar(event) {
+    const d = event?.data || event;
+    const project_id = d?.project_id;
+    if (!project_id) return;
+    const prev = this._repubTimers.get(project_id);
+    if (prev) clearTimeout(prev);
+    const t = setTimeout(() => {
+      this._repubTimers.delete(project_id);
+      this._rehornear(project_id, d?.motivo || d?.operacion || null);
+    }, this.repubMs);
+    if (t.unref) t.unref();
+    this._repubTimers.set(project_id, t);
+  }
+
+  async _rehornear(project_id, motivo) {
+    try {
+      const ex = await this._rpc('fs.exists.request', { project_id, path: `${BUNDLE_DIR}/index.html` });
+      if (!ex || ex.error || ex.exists !== true) return;          // sin bundle → nada que mantener
+      const config = await this._leerConfig(project_id);
+      if (config?.opciones_visualizacion?.auto_publicar === false) return;   // interruptor por proyecto
+      const r = await this._publicarBundle(project_id);
+      if (r.status === 200) {
+        this.logger?.info('carta-digital.republicado', { project: r.data?.alojada_url, motivo });
+        this.metrics?.increment?.('cartadigital.republicado', { auto: 'si' });
+        return;
+      }
+      this.logger?.warn('carta-digital.republicar.omitido', { project_id, status: r.status, code: r.error?.code, motivo });
+      this.metrics?.increment?.('cartadigital.republicar.fallido', { status: String(r.status) });
+      try {
+        this.eventBus.publish('cartadigital.republicar.fallido', {
+          project_id, status: r.status, error: r.error || null, motivo,
+          correlation_id: crypto.randomUUID(), timestamp: new Date().toISOString()
+        });
+      } catch (_) {}
+    } catch (err) {
+      this.logger?.error('carta-digital.republicar.failed', { project_id, error: err.message });
+    }
   }
 
   // ── resolución de la carta del canal 'digital' (digital → general → en_servicio) ──
@@ -302,11 +364,16 @@ class CartaDigitalModule extends BaseModule {
   async _publicarBundle(project_id, slugHint) {
     if (!project_id) return this._err(400, 'INVALID_INPUT', 'project_id requerido');
 
-    // GUARD anti-escritura-cross-project: el fs escribe en el ÚLTIMO proyecto activado
-    // (filesystem._busDispatch descarta el project_id del payload). Si el objetivo no es
-    // ese, el bundle iría a otro proyecto en silencio → fallar claro (no_silent_failures).
-    // ultimoActivo se rastrea por project.activated (event-driven, sin RPC frágil).
-    if (this.ultimoActivo && project_id !== this.ultimoActivo) {
+    // GUARD anti-escritura-cross-project. filesystem v2.0.0 es multi-tenant REAL: resuelve el
+    // root por el project_id de la PETICIÓN (_projectRootFor → projectPaths) y solo cae al
+    // "proyecto activo" global cuando el id es DESCONOCIDO (nunca activado) o system. Así que
+    // el riesgo real de escribir en otro proyecto es exactamente ese: un id que el fs no conoce.
+    // Mientras el proyecto sea CONOCIDO (activado alguna vez → project.activated, el mismo
+    // evento que puebla projectPaths), el bundle cae en SU www aunque el activo global sea otro
+    // — imprescindible para la republicación automática (el dueño edita la carta de un proyecto
+    // sin tener que activarlo antes). ultimoActivo se rastrea por project.activated.
+    const conocido = this.activos.has(project_id);
+    if (!conocido && this.ultimoActivo && project_id !== this.ultimoActivo) {
       const nomActivo = this.activos.get(this.ultimoActivo)?.name || this.ultimoActivo;
       return this._err(412, 'PRECONDITION_FAILED',
         `el filesystem escribe en el proyecto activo («${nomActivo}»), no en el objetivo (${project_id}). Activa el proyecto objetivo antes de publicar para no escribir su carta en otro.`);

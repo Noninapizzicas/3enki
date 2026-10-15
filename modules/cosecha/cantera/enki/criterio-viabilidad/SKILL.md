@@ -34,15 +34,21 @@ tags: [nichos, custodio, criterio, viabilidad, umbral, validacion, bloque-c, pos
 - Store: `/prisma/pos/nichos/criterio-viabilidad.json`.
 - Autores autorizados: `dueño` (canal directo) | `ajustador-umbrales` (K3, al
   promover una propuesta aceptada).
-- Esqueleto por defecto: todo campo nace `ABIERTO` — el consumidor degrada
+- Esqueleto por defecto: **la BASE declarada** `ingresos_semana_min: 50` /
+  `ingresos_semana_objetivo: 300` (F0/F1 «pasivo → 50-300 €/semana basta»; F2 C2
+  y F3 C2 «umbral base 50-300 €/sem, refinable»). Los campos que F0/F2 NO
+  declararon (`disposicion_pagar_min`, `por_tipo_nicho`, `exige_vb_previo_construir`)
+  nacen `ABIERTO` — el consumidor degrada entonces
   (C3 → `Veredicto.PUENTE('umbral_sin_declarar')`), jamás se asume valor.
+  Un umbral con los ingresos en `ABIERTO` degrada TODO veredicto: el embudo no
+  corta ni deja pasar y el vertical nunca emite un VIABLE.
 
 ## Campos del umbral
 
 | Campo | Tipo | Semántica |
 |---|---|---|
-| `ingresos_semana_min` | `Dinero \| 'ABIERTO'` | ingresos semanales mínimos para considerar viable |
-| `ingresos_semana_objetivo` | `Dinero \| 'ABIERTO'` | ingresos semanales objetivo (meta de salud) |
+| `ingresos_semana_min` | `Dinero \| 'ABIERTO'` | ingresos semanales mínimos para considerar viable — **base declarada: 50** |
+| `ingresos_semana_objetivo` | `Dinero \| 'ABIERTO'` | ingresos semanales objetivo (meta de salud) — **base declarada: 300** |
 | `disposicion_pagar_min` | `Dinero \| 'ABIERTO'` | precio unitario mínimo aceptable |
 | `por_tipo_nicho` | `Map<TipoNicho, UmbralEspecifico> \| 'ABIERTO'` | overrides por tipo de nicho (empresa/persona/organismo) |
 | `exige_vb_previo_construir` | `Boolean \| 'ABIERTO'` | si pide VB del dueño antes de ir a CONSTRUIR |

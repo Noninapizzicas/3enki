@@ -200,6 +200,12 @@ class VerificadorVisualModule extends ModuloHibridoReflejo {
       await new Promise(r => setTimeout(r, 300));
       const dom = await page.evaluate(() => {
         const de = document.documentElement;
+        // ⚠️ obscura NO aplica CSS: getComputedStyle() devuelve '' y un <div> con width:3000px se
+        // mide a 100px (no hay CSSOM ni layout real) → cualquier medida de anchura que tomemos aquí
+        // sería inventada. Los ángulos que dependen del layout (overflow horizontal/móvil y el a11y
+        // de tamaño/contraste) quedan CIEGOS con esta engine: se miden y no disparan nunca.
+        // Lo que el ojo SÍ verifica de verdad: errores de consola/JS, página en blanco, imágenes rotas.
+        // Medir borde derecho en vez de scrollWidth NO arregla nada (probado: el div sigue a 100px).
         let imgRoto = 0;
         for (const img of Array.from(document.images)) if (img.complete && img.naturalWidth === 0) imgRoto++;
         return {

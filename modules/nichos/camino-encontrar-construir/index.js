@@ -39,6 +39,17 @@
  * (riesgo + atajo), con el norte como EVIDENCIA (nunca como puerta) y un fallback
  * determinista si el LLM no responde.
  *
+ * ── EL EJE DE MONETIZACIÓN (v0.3.0) ────────────────────────────────────────────
+ * Decidir CONSTRUIR no se queda en la etiqueta: **el acto declara el eje**. Monetizar
+ * un nicho son TRES patas — CAPTURAR al cliente, ENTREGAR, COBRAR — y C4 las declara
+ * en el norte (como encargos, autor `constructor`) en el mismo acto de decidir. Así
+ * el segundo piso del norte («podemos construir») nace de una decisión, no de un
+ * formulario que alguien rellene; y el ciclo siguiente ya siembra, sondea y juzga
+ * desde «tenemos ∪ podemos construir». El catálogo es idempotente por id: re-declarar
+ * cada ciclo no duplica. (Este es el eje que el esquema viejo `nichos-capacidades-v1`
+ * modelaba — `<nicho>:captura|entrega|cobro`, declarado por CONSTRUCTOR — y que se
+ * perdió al migrar el store: el norte quedó con un solo piso.)
+ *
  * Patrón: ModuloHibridoReflejo.
  */
 
@@ -49,6 +60,13 @@ const nowISO = () => new Date().toISOString();
 const RIESGOS = ['BAJO', 'ALTO'];
 const TIPOS_CAMINO = ['ENCONTRAR', 'CONSTRUIR'];
 const TIPO_SOLICITUD_VB = 'CAMINO_CONSTRUIR_VB';
+
+// EL EJE DE MONETIZACIÓN — monetizar un nicho son TRES patas: capturar al
+// cliente, entregar, cobrar. Cuando C4 decide CONSTRUIR las declara en el norte
+// (segundo piso: «podemos construir»), y el buscador vuelve a nacer de
+// «tenemos ∪ podemos construir». Estas tres palabras son las que el sondeador
+// conoce como EJES (no discriminan dominio: solo nombran la pata).
+const EJES = ['captura', 'entrega', 'cobro'];
 
 // Aciertos mínimos para que un cruce de palabras cuente como ENCAJE real. Con 1 solo
 // acierto entran genéricos («taller» es etiqueta legítima de impresion-3d y también
@@ -93,7 +111,7 @@ class CaminoEncontrarConstruir extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'camino-encontrar-construir';
-    this.version = '0.2.0';
+    this.version = '0.3.0';
   }
 
   // ── RPC HANDLER ──
@@ -127,7 +145,7 @@ class CaminoEncontrarConstruir extends ModuloHibridoReflejo {
       if (this._exigeVbPrevio(criterio) && juicio.riesgo === 'ALTO') {
         return this._solicitarVb(idNicho, juicio, encaje, projectId);
       }
-      return this._decidirConstruir(idNicho, juicio, encaje);
+      return this._decidirConstruir(idNicho, juicio, encaje, projectId);
     } catch (err) {
       return this._errorResponse(502, 'ERROR_CAMINO', err.message || 'error al decidir camino', {});
     }
@@ -157,18 +175,28 @@ class CaminoEncontrarConstruir extends ModuloHibridoReflejo {
   }
 
   /** Construir: hay que crear la necesidad. La rama que la v0.1.0 hacía inalcanzable. */
-  _decidirConstruir(idNicho, juicio, encaje) {
+  _decidirConstruir(idNicho, juicio, encaje, projectId) {
+    // EL ACTO DECLARA EL EJE. Decidir CONSTRUIR no es solo devolver una etiqueta:
+    // es declarar en el norte las tres patas que hay que levantar para MONETIZAR
+    // este nicho. Así el segundo piso del norte nace del ACTO de decidir (no de
+    // un formulario que alguien rellena) y el ciclo siguiente ya busca desde
+    // «tenemos ∪ podemos construir». El catálogo es idempotente por id: repetir
+    // la declaración en cada ciclo no duplica nada — es una declaración viva.
+    const por_construir = this._declararEjesConstruir(idNicho, projectId, encaje);
+
     const camino = {
       tipo: 'CONSTRUIR',
       razon: juicio.razon,
       riesgo: juicio.riesgo,
-      capacidades_encajadas: encaje
+      capacidades_encajadas: encaje,
+      capacidades_por_construir: por_construir
     };
     this.eventBus?.publish('nichos.camino.decidido', {
       id_nicho: idNicho,
       tipo: camino.tipo,
       riesgo: camino.riesgo,
       capacidades_encajadas: encaje.map(c => c.id),
+      capacidades_por_construir: por_construir,
       timestamp: nowISO()
     });
     return { status: 200, data: { camino } };
@@ -216,6 +244,52 @@ class CaminoEncontrarConstruir extends ModuloHibridoReflejo {
         solicitud_decision: solicitud
       }
     };
+  }
+
+  // =============================================================
+  // EL EJE DE MONETIZACIÓN — capturar · entregar · cobrar
+  // =============================================================
+  /**
+   * _declararEjesConstruir — el acto que llena el segundo piso del norte.
+   *
+   * Declara, como ENCARGOS, las tres patas de monetización del nicho. El autor
+   * es `constructor` (C4 ES el constructor: quien decide construir es quien
+   * declara qué hay que construir). Sin `project_id` no se declara nada — el
+   * norte es PER-PROYECTO y un encargo sin casa no existe.
+   */
+  _declararEjesConstruir(idNicho, projectId, encaje) {
+    if (!projectId) return [];
+    const base = this._slug(idNicho);
+    if (!base) return [];
+
+    const dominio = (encaje && encaje[0] && encaje[0].dominio)
+      || this._tokens(idNicho).values().next().value
+      || null;
+    const etiquetas = Array.from(this._tokens(idNicho)).slice(0, 20);
+
+    for (const eje of EJES) {
+      this.eventBus?.publish('nichos.catalogo.capacidad.encargar.request', {
+        request_id: `cam-enc-${eje}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        project_id: projectId,
+        por_autor: 'constructor',
+        capacidad: {
+          id: `${base}:${eje}`,
+          descripcion: `capacidad ${eje} para: ${idNicho}`,
+          meta: { dominio, eje, nicho: base, nicho_texto: String(idNicho), etiquetas }
+        }
+      });
+    }
+    return EJES.map((eje) => `${base}:${eje}`);
+  }
+
+  /** _slug — el id de las patas no puede llevar espacios ni tildes. */
+  _slug(texto) {
+    return String(texto || '')
+      .toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 60);
   }
 
   // =============================================================

@@ -4,8 +4,8 @@
  * nichos/sondeador-territorio — MICRO-AGENTE del vertical NICHOS.
  *
  * Sondea un territorio a partir de una semilla normalizada:
- *   0. Consulta el NORTE (catalogo de capacidades: lo que el sistema SABE
- *      entregar y cobrar) y lo usa como iman de seleccion.
+ *   0. Consulta el NORTE (los DOS pisos del catalogo: lo que el sistema SABE
+ *      entregar y cobrar + lo que sabe que PUEDE CONSTRUIR) y lo usa como iman.
  *   1. Consulta reglas de exclusion.
  *   2. Consulta limites del perfil.
  *   3. Consume fuentes externas — con la CONSULTA que nombra QUÉ buscamos y
@@ -23,6 +23,13 @@
  * prohibe: es un IMAN que selecciona. El sondeo sigue explorando igual de
  * amplio y devuelve TODOS los candidatos; lo que cambia es que cada uno viaja
  * anotado con `puede_cobrar` (true/false/null) y los que encajan van primero.
+ *
+ * EL NORTE TIENE DOS PISOS (v0.2.0): TENEMOS (cableado, se sirve y se cobra hoy)
+ * y PODEMOS CONSTRUIR (las patas captura/entrega/cobro que C4 declaro en el norte
+ * al decidir construir un nicho). Los DOS entran en el iman: un nicho donde hay
+ * que construir la capacidad sigue siendo un nicho donde Enki aporta valor — lo
+ * que cambia es la etiqueta (`capacidades_por_construir`), no el encaje. Leer
+ * solo el primero era leer medio norte: la mina se llenaba de lo que no servimos.
  *
  * Norte ABIERTO (catalogo sin capacidades declaradas): el sondeo explora
  * amplio como siempre, marca `puede_cobrar: null` y PULSA
@@ -64,7 +71,7 @@ class SondeadorTerritorio extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'sondeador-territorio';
-    this.version = '0.1.0';
+    this.version = '0.2.0';
   }
 
   // -- RPC HANDLER --
@@ -145,6 +152,9 @@ class SondeadorTerritorio extends ModuloHibridoReflejo {
           puede_cobrar: c.puede_cobrar,
           encaje_cobrable: c.encaje_cobrable,
           capacidades_cobrables: c.capacidades_cobrables,
+          // Del piso 1 (cableado) al piso 2 (por construir): el juicio distingue
+          // «lo servimos ya» de «lo podemos construir».
+          capacidades_por_construir: c.capacidades_por_construir || [],
           timestamp: ts
         });
       }
@@ -238,35 +248,53 @@ class SondeadorTerritorio extends ModuloHibridoReflejo {
    */
   async _consultarNorte(projectId) {
     let capacidades = [];
+    let construibles = [];
     try {
       const resp = await this._rpc('nichos.catalogo.capacidad.disponibles.request', {
         project_id: projectId
       }, { timeout_ms: 5000 });
-      const lista = resp && resp.data && Array.isArray(resp.data.capacidades)
-        ? resp.data.capacidades
-        : [];
-      capacidades = lista.map((c) => {
-        const id = (c && (c.id || c.nombre)) || null;
-        const texto = [
-          id,
-          c && c.descripcion,
-          c && c.meta && c.meta.dominio,
-          c && c.meta && Array.isArray(c.meta.etiquetas) ? c.meta.etiquetas.join(' ') : ''
-        ].filter(Boolean).join(' ');
-        return { id: id || texto, descripcion: (c && c.descripcion) || '', vocabulario: new Set(palabras(texto)) };
-      }).filter((c) => c.vocabulario.size > 0);
+      const datos = (resp && resp.data) || {};
+      const lista = Array.isArray(datos.capacidades) ? datos.capacidades : [];
+      const encargos = Array.isArray(datos.podemos_construir) ? datos.podemos_construir : [];
+      capacidades = lista.map((c) => this._vocabularioDe(c, false)).filter((c) => c.vocabulario.size > 0);
+      construibles = encargos.map((c) => this._vocabularioDe(c, true)).filter((c) => c.vocabulario.size > 0);
     } catch (_e) {
       capacidades = [];
+      construibles = [];
     }
 
+    const todas = capacidades.concat(construibles);
     const vocabulario = new Set();
-    for (const c of capacidades) for (const p of c.vocabulario) vocabulario.add(p);
+    for (const c of todas) for (const p of c.vocabulario) vocabulario.add(p);
 
     return {
       origen: 'catalogo-capacidades',
-      sin_norte: capacidades.length === 0,
-      capacidades,
+      sin_norte: todas.length === 0,
+      capacidades,      // piso 1 — TENEMOS (cableado: se sirve y se cobra hoy)
+      construibles,     // piso 2 — PODEMOS CONSTRUIR (encargos declarados por C4)
       vocabulario
+    };
+  }
+
+  /**
+   * _vocabularioDe — una entrada del norte (cableada o por construir) convertida
+   * en vocabulario de dominio. Las dos se leen igual: para elegir dónde aportamos
+   * valor da lo mismo que la capacidad esté cableada o sea una pata declarada
+   * por construir — en ambos casos es un dominio donde Enki SABE (o sabrá) hacer.
+   */
+  _vocabularioDe(c, construible) {
+    const id = (c && (c.id || c.nombre)) || null;
+    const texto = [
+      id,
+      c && c.descripcion,
+      c && c.meta && c.meta.dominio,
+      c && c.meta && Array.isArray(c.meta.etiquetas) ? c.meta.etiquetas.join(' ') : ''
+    ].filter(Boolean).join(' ');
+    return {
+      id: id || texto,
+      descripcion: (c && c.descripcion) || '',
+      construible: Boolean(construible),
+      vocabulario: new Set(palabras(texto))
     };
   }
 
@@ -281,7 +309,10 @@ class SondeadorTerritorio extends ModuloHibridoReflejo {
    */
   _encajeConNorte(candidato, norte) {
     if (!norte || norte.sin_norte) {
-      return { puede_cobrar: null, encaje_cobrable: null, capacidades_cobrables: [] };
+      return {
+        puede_cobrar: null, encaje_cobrable: null,
+        capacidades_cobrables: [], capacidades_por_construir: []
+      };
     }
 
     const texto = [
@@ -292,23 +323,37 @@ class SondeadorTerritorio extends ModuloHibridoReflejo {
 
     const suyas = palabras(texto);
     if (suyas.length === 0) {
-      return { puede_cobrar: false, encaje_cobrable: 0, capacidades_cobrables: [] };
+      return {
+        puede_cobrar: false, encaje_cobrable: 0,
+        capacidades_cobrables: [], capacidades_por_construir: []
+      };
     }
+
+    // Los DOS pisos del norte entran en el mismo cruce: una capacidad cableada y
+    // una pata por construir describen igual de bien un dominio donde aportamos
+    // valor. Lo que cambia es la etiqueta (`construible`), no el encaje.
+    const todas = (norte.capacidades || []).concat(norte.construibles || []);
 
     const cobrables = [];
     let coincidencias = 0;
     for (const palabra of new Set(suyas)) {
       if (!norte.vocabulario.has(palabra)) continue;
       coincidencias++;
-      for (const c of norte.capacidades) if (c.vocabulario.has(palabra) && !cobrables.includes(c.id)) cobrables.push(c.id);
+      for (const c of todas) if (c.vocabulario.has(palabra) && !cobrables.includes(c.id)) cobrables.push(c.id);
     }
+
+    // Lo que NO está cableado viaja aparte: el juicio (F2) distingue «esto lo
+    // servimos ya» de «esto lo podemos construir».
+    const porConstruir = cobrables.filter((id) =>
+      (norte.construibles || []).some((c) => c.id === id));
 
     // Encaje = porcion de la senal del candidato que habla el idioma del norte.
     const encajeCrudo = coincidencias / new Set(suyas).size;
     return {
       puede_cobrar: cobrables.length > 0,
       encaje_cobrable: this._round(Math.min(1, encajeCrudo), 4),
-      capacidades_cobrables: cobrables
+      capacidades_cobrables: cobrables,
+      capacidades_por_construir: porConstruir
     };
   }
 
@@ -334,11 +379,16 @@ class SondeadorTerritorio extends ModuloHibridoReflejo {
     const cobrables = candidatos.filter((c) => c.puede_cobrar === true).length;
     const fuera = candidatos.filter((c) => c.puede_cobrar === false).length;
     const indeterminados = candidatos.filter((c) => c.puede_cobrar == null).length;
+    const construibles = norte.construibles || [];
     return {
       origen: norte.origen,
       sin_norte: norte.sin_norte,
+      // Piso 1 — TENEMOS
       capacidades_total: norte.capacidades.length,
       dominios: norte.capacidades.map((c) => c.id),
+      // Piso 2 — PODEMOS CONSTRUIR
+      construibles_total: construibles.length,
+      dominios_por_construir: construibles.map((c) => c.id),
       mina: { cobrables, fuera_del_norte: fuera, indeterminados }
     };
   }

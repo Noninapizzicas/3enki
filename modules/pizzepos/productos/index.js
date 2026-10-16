@@ -245,6 +245,49 @@ class ProductosModule extends BaseModule {
   // Lifecycle
   // ==========================================
 
+
+  // ── IDENTIDAD DE CARRIL (misma doctrina que el filesystem) ──────────────────
+  // `projectPaths` se indexa bajo TODAS las caras del mismo proyecto (UUID · slug · nombre
+  // del directorio): da igual cómo lo llame el caller — el chat manda el slug, el frontend
+  // el UUID. El slug llega EN EL EVENTO (lo emite project-manager): antes cada módulo lo
+  // derivaba por su cuenta, y el que lo calculaba distinto (espacio, acento, rename) no
+  // encontraba nada y acababa escribiendo en el proyecto activo.
+  _carasProyecto(project_id, name, base_path, slug) {
+    const caras = [project_id];
+    if (slug) caras.push(slug);
+    if (base_path) { try { caras.push(path.basename(base_path)); } catch (_) {} }
+    return caras.filter((c, i) => c && caras.indexOf(c) === i);
+  }
+  _indexarCarril(project_id, valor, { name = null, base_path = null, slug = null } = {}) {
+    if (!project_id) return;
+    for (const cara of this._carasProyecto(project_id, name, base_path, slug)) this.projectPaths.set(cara, valor);
+  }
+  _olvidarCarril(project_id, { name = null, base_path = null, slug = null } = {}) {
+    const v = this.projectPaths.get(project_id);
+    for (const cara of this._carasProyecto(project_id, name, base_path, slug)) {
+      if (this.projectPaths.get(cara) === v) this.projectPaths.delete(cara);
+    }
+  }
+  // Se hidrata desde la fuente de verdad al onLoad: tras un hot-reload no llega ningún
+  // project.activated y el mapa nacería con SOLO los activos, sin poder resolver el resto.
+  _hidratarCarriles() {
+    if (!this.eventBus || !this.eventBus.publish) return;
+    this._hidrataCarrilesRequestId = `carriles-${this.name || 'mod'}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    try { this.eventBus.publish('project.list.request', { request_id: this._hidrataCarrilesRequestId }); } catch (_) {}
+  }
+  async onProjectListResponse(event) {
+    const data = event?.data || event?.payload || event;
+    if (!data || data.request_id !== this._hidrataCarrilesRequestId) return;   // respuestas ajenas
+    let n = 0;
+    for (const p of (Array.isArray(data.projects) ? data.projects : [])) {
+      if (!p?.id || !p?.base_path) continue;
+      if (p.metadata?.is_system === true) continue;
+      this._indexarCarril(p.id, path.join(p.base_path, 'storage', this.storageSection), { name: p.name, base_path: p.base_path, slug: p.slug });
+      n++;
+    }
+    this.logger?.info?.(`${this.name}.carriles.hidratados`, { carriles: this.projectPaths.size, proyectos: n });
+  }
+
   async onLoad(core) {
     this.logger = core.logger;
     this.metrics = core.metrics;
@@ -252,6 +295,7 @@ class ProductosModule extends BaseModule {
     this.uiHandler = core.uiHandler;
     this.config = core.config || {};
     this.logger.info('module.loaded', { module: this.name, version: this.version, mode: 'proyector-sin-estado' });
+    this._hidratarCarriles();
   }
 
   async onUnload() {
@@ -272,9 +316,9 @@ class ProductosModule extends BaseModule {
 
   async onProjectActivated(event) {
     const data = event.data || event;
-    const { project_id, base_path } = data;
+    const { project_id, base_path, name, slug } = data;
     if (!project_id) return;
-    if (base_path) this.projectPaths.set(project_id, path.join(base_path, 'storage', this.storageSection));
+    if (base_path) this._indexarCarril(project_id, path.join(base_path, 'storage', this.storageSection), { name, base_path, slug });
 
     const correlation_id = event?.metadata?.correlationId || crypto.randomUUID();
     // Hidratar el mapping canal->carta_id pidiendo snapshot a tarifas (fire-and-forget).
@@ -303,7 +347,7 @@ class ProductosModule extends BaseModule {
     this.pendingProjectRequests.delete(request_id);
     if (success && project) {
       if (project.base_path) {
-        this.projectPaths.set(project.id, path.join(project.base_path, 'storage', this.storageSection));
+        this._indexarCarril(project.id, path.join(project.base_path, 'storage', this.storageSection), { name: project.name, base_path: project.base_path, slug: project.slug });
       }
       pending.resolve(project);
     } else {

@@ -71,7 +71,7 @@ export interface OpcionesVisualizacion {
   whatsapp_telefono?: string;
   /** Mensaje que precarga WhatsApp: «¡Hola! Quiero pedir:». */
   mensaje_pedido?: string;
-  /** Soportado por config/template pero SIN pantalla hoy (hueco ABIERTO: requiere tienda-api). */
+  /** Ofrece 💶 Efectivo / 💳 Tarjeta en la PWA. Se edita en el panel jefe (checkbox). */
   pago_online?: boolean;
   pedido_endpoint?: string;
   [key: string]: unknown;

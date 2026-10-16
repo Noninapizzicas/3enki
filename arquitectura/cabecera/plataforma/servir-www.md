@@ -9,7 +9,7 @@ fuentes:
   - blueprints/project-types/www.json
   - deployment/caddy/**
   - deployment/reconcile.js
-verificado: 2026-10-15
+verificado: 2026-10-16
 ---
 
 # SERVIR WWW POR PROYECTO — árbol libre en /<ns>/<slug>/ (Caddy estático + symlink)
@@ -124,4 +124,8 @@ cartadigital.publicar.request → (fallo) cartadigital.republicar.fallido   { pr
   /<ns>/<slug>/, el escaparate prisma /<ns>/<slug>/prisma/. El mismo symlink www cubre todo el árbol.
   Render de bundle verificable en vivo. [ ] assets/PWA (sw.js, manifest, icons) = follow-up.
 VERSIONES  project-manager 4.2.0 · carta-digital 2.25.0 · bienvenida-tienda 1.1.0
+✓ VIVO  PAGO EN LA CARTA PUBLICADA (2026-10-16): el bundle de carta-digital que sirve este árbol
+  trae los botones de método de pago (💶 efectivo / 💳 tarjeta) SOLO si el proyecto tiene pasarela
+  (CONFIG.pago_online); el método viaja en el #P1 y el bot/pasarela cierran el cobro. Sin pasarela
+  el bundle es idéntico al de siempre (paga al recoger).
 ```

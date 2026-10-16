@@ -180,8 +180,43 @@ class PedidosModule extends BaseModule {
     const d = event?.data || event?.payload || event;
     const pedido_id = d?.pedido_id;
     if (!pedido_id) return;
-    const pedido = this.pedidos.get(pedido_id);
-    if (!pedido) { this.logger?.warn('pedidos.pago_confirmado.no_encontrado', { pedido_id }); return; }
+    let pedido = this.pedidos.get(pedido_id);
+    if (!pedido) {
+      // FRENO 4 (el huerfano): el pago es ASINCRONO — el cliente paga minutos despues y el webhook
+      // llega despues. Si el proceso reinicio en esa ventana (p.ej. un DEPLOY), el pedido de tienda
+      // (que vive en memoria y NO se restaura) ya no esta. El dinero SI entro en la pasarela: no se
+      // pierde en silencio. Se re-crea MINIMO desde la metadata de la sesion (pedido_id + project_id
+      // + importe, lo unico que la pasarela devuelve) y se emite pedido.pagado igual, marcado
+      // recreado. Todo por evento, sin persistir nada.
+      pedido = {
+        id: pedido_id,
+        tipo: 'tienda',
+        cuenta_id: null,
+        canal: null,
+        canal_origen: d.canal_origen || 'pasarela',
+        project_slug: d.project_slug || d.project_id || null,
+        project_id: d.project_id || null,
+        items: [],
+        estado: 'pagado',
+        total_centimos: Number.isInteger(d.monto_centimos) ? d.monto_centimos : null,
+        total: Number.isInteger(d.monto_centimos) ? d.monto_centimos / 100 : null,
+        cliente_nombre: d.cliente_nombre || null,
+        cliente_telefono: d.cliente_telefono || null,   // transitorio: solo para avisar al cliente
+        metodo_pago: 'tarjeta',
+        recreado_desde_pago: true,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+      this.pedidos.set(pedido_id, pedido);
+      if (pedido.project_slug) {
+        if (!this.pedidosPorProject.has(pedido.project_slug)) this.pedidosPorProject.set(pedido.project_slug, new Set());
+        this.pedidosPorProject.get(pedido.project_slug).add(pedido_id);
+      }
+      this.metrics?.increment?.('pedidos.tienda.recreado_desde_pago', { project: String(pedido.project_slug || 'desconocido') });
+      this.logger?.warn('pedidos.pago_confirmado.recreado', {
+        pedido_id, project_slug: pedido.project_slug, monto_centimos: pedido.total_centimos
+      });
+    }
     if (pedido.pago && pedido.pago.estado === 'pagado') return;   // idempotencia
     pedido.pago = {
       estado: 'pagado',
@@ -195,7 +230,11 @@ class PedidosModule extends BaseModule {
     this.logger?.info('pedidos.pagado', { pedido_id, pasarela: d.pasarela });
     await this._publicarEvento('pedido.pagado', {
       pedido_id, project_id: pedido.project_id || d.project_id || null,
-      session_id: d.session_id || null, total: pedido.total
+      project_slug: pedido.project_slug || d.project_slug || null,   // el consumidor necesita SABER A QUIEN avisar
+      session_id: d.session_id || null, total: pedido.total,
+      cliente_nombre: pedido.cliente_nombre || null,
+      cliente_telefono: pedido.cliente_telefono || null,   // transitorio: solo para avisar al cliente
+      recreado: !!pedido.recreado_desde_pago
     }, d);
   }
 
@@ -412,6 +451,7 @@ class PedidosModule extends BaseModule {
         cliente_nombre,
         modo_consumo,
         hora_recogida,
+        metodo_pago,
         mayor_edad_confirmado,
         expira_horas,
         notas_generales,
@@ -435,6 +475,12 @@ class PedidosModule extends BaseModule {
         && typeof hora_recogida === 'string' && hora_recogida.trim())
         ? hora_recogida.trim().slice(0, 20)
         : null;
+      // METODO DE PAGO elegido por el cliente en la PWA: efectivo (paga al recoger) | tarjeta
+      // (pago online por la pasarela). Opcional: sin el, 'efectivo' (comportamiento previo).
+      // Esto solo REGISTRA lo que el cliente pidio; quien manda sobre el cobro es la VERDAD del
+      // pago (pedido.pago.estado), no esta preferencia.
+      const METODOS_PAGO = ['efectivo', 'tarjeta'];
+      const metodo_pago_norm = METODOS_PAGO.includes(metodo_pago) ? metodo_pago : 'efectivo';
 
       if (!project_slug || typeof project_slug !== 'string') {
         this.metrics?.increment?.('pedidos.errors', { code: 'INVALID_INPUT', kind: 'create_tienda' });
@@ -514,6 +560,7 @@ class PedidosModule extends BaseModule {
         cliente_telefono: cliente_telefono || null,
         modo_consumo: modo_consumo_norm,
         hora_recogida: hora_recogida_norm,
+        metodo_pago: metodo_pago_norm,
         // Decision 6.2 = C: configurable por proyecto. Si la PWA mostro gate
         // y el cliente lo paso, este flag llega como true. Si el proyecto no
         // activa verificacion, llega null (sin info — no aplica).
@@ -564,6 +611,7 @@ class PedidosModule extends BaseModule {
           cliente_nombre: cliente_nombre_norm,
           modo_consumo: modo_consumo_norm,
           hora_recogida: hora_recogida_norm,
+          metodo_pago: metodo_pago_norm,
           expira_at,
           estado: pedido.estado,
           total_centimos,
@@ -635,11 +683,20 @@ class PedidosModule extends BaseModule {
       if (pedido.estado !== 'pendiente_recogida') {
         return this._errorResponse(409, 'CONFLICT_STATE', `estado no recogible: ${pedido.estado}`, { estado: pedido.estado });
       }
-      // cerrar: recogido + cobrado en efectivo
+      // cerrar: recogido + cobrado. El METODO sale de la VERDAD del pago (pedido.pago): si la
+      // pasarela ya lo confirmo, la caja apunta 'tarjeta' (con su session_id); si no, 'efectivo'
+      // (se cobra en barra al entregar). Antes se clavaba 'efectivo' a fuego → descuadraba la caja.
       const recogido_at = new Date().toISOString();
+      const pagoConfirmado = !!(pedido.pago && pedido.pago.estado === 'pagado');
+      const metodo_cobro = pagoConfirmado ? 'tarjeta' : 'efectivo';
       pedido.estado = 'recogido_y_cobrado';
       pedido.recogido_at = recogido_at;
-      pedido.cobro = { metodo: 'efectivo', monto_centimos: pedido.total_centimos, cobrado_at: recogido_at };
+      pedido.cobro = {
+        metodo: metodo_cobro,
+        monto_centimos: pedido.total_centimos,
+        cobrado_at: recogido_at,
+        ...(pagoConfirmado ? { session_id: pedido.pago.session_id || null, pasarela: pedido.pago.pasarela || null } : {})
+      };
       pedido.updated_at = recogido_at;
 
       this.metrics?.increment?.('pedidos.tienda.recogido', { project: pedido.project_slug });
@@ -648,7 +705,7 @@ class PedidosModule extends BaseModule {
         project_id: pedido.project_id,
         cliente_nombre: pedido.cliente_nombre || null,
         total_centimos: pedido.total_centimos,
-        metodo_pago: 'efectivo',
+        metodo_pago: metodo_cobro,
         recogido_at
       }, { correlation_id });
 
@@ -656,7 +713,7 @@ class PedidosModule extends BaseModule {
         pedido_id: pedido.id, project_slug: pedido.project_slug, total_centimos: pedido.total_centimos
       });
 
-      return { status: 200, data: { pedido_id: pedido.id, estado: pedido.estado, total_centimos: pedido.total_centimos, metodo_pago: 'efectivo' } };
+      return { status: 200, data: { pedido_id: pedido.id, estado: pedido.estado, total_centimos: pedido.total_centimos, metodo_pago: metodo_cobro, cobro: pedido.cobro } };
     } catch (err) {
       return this._handleHandlerError('pedidos.confirmar_recogida.error', err);
     }
@@ -1024,6 +1081,7 @@ class PedidosModule extends BaseModule {
     if (pedido.cliente_nombre) payload.cliente_nombre = pedido.cliente_nombre;
     if (pedido.expira_at) payload.expira_at = pedido.expira_at;
     if (pedido.project_slug) payload.project_slug = pedido.project_slug;
+    if (pedido.metodo_pago) payload.metodo_pago = pedido.metodo_pago;
     if (pedido.total_centimos !== undefined && pedido.total_centimos !== null) {
       payload.total_centimos = pedido.total_centimos;
     }

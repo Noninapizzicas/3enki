@@ -15,7 +15,7 @@ fuentes:
   - modules/pizzepos/tarifas/**
   - modules/pizzepos/persistencia-comandero/**
   - modules/pizzepos/impresion/**
-verificado: 2026-07-12
+verificado: 2026-10-16
 ---
 
 # PizzePOS Módulos — Subsistema de Punto de Venta (v3.2.0)
@@ -690,9 +690,10 @@ CLASE VariacionesProducto {
 CLASE PedidosModule HEREDA BaseModule {
   ATRIBUTOS {
     name: String = 'pedidos'
-    version: String = '3.0.0'
+    version: String = '3.5.0'
     pedidos: Map<pedido_id, Pedido>
     pedidosPorCuenta: Map<cuenta_id, Array<pedido_id>>
+    pedidosPorProject: Map<project_slug, Set<pedido_id>>
     productosCache: Map<producto_id, Producto>
   }
 
@@ -704,20 +705,51 @@ CLASE PedidosModule HEREDA BaseModule {
       PUBLICA pedido.creado
       RETORNA {status: 201, data: pedido}
 
+    async handleCreatePedidoTienda(data: {project_slug, items, cliente_nombre, modo_consumo, hora_recogida, metodo_pago}): Promise<Response>
+      NORMALIZA metodo_pago EN ['efectivo','tarjeta']  // opcional: sin el → 'efectivo' (comportamiento previo)
+      metodo_pago SOLO REGISTRA la preferencia del cliente (lo que pidio en la PWA por el #P1)
+      QUIEN MANDA SOBRE EL COBRO es la VERDAD del pago (pedido.pago.estado), NO esta preferencia
+      CREA pedido tienda (ancla = cliente_nombre) → _crearCuentaTienda → comandero.enviar_cocina
+      PUBLICA pedido.creado (lleva metodo_pago)
+
+    async onPagoConfirmado(event: {pedido_id, project_id, monto_centimos, project_slug?, cliente_nombre?, cliente_telefono?}): Void
+      SI pedido NO esta EN memoria                              // el pago es ASINCRONO y el pedido de
+        RECREA pedido MINIMO desde la metadata de la sesion     // tienda vive en memoria y NO se restaura:
+          {id: pedido_id, tipo:'tienda', estado:'pagado',       // si el proceso reinicio en la ventana de
+           total_centimos: monto_centimos, metodo_pago:'tarjeta'} // pago (p.ej. un DEPLOY) el webhook llega
+        recreado_desde_pago = true                              // huerfano. El dinero SI entro: NUNCA en
+        pedidos.set + pedidosPorProject.add                      // silencio, y sin persistir nada.
+      SI pedido.pago.estado == 'pagado' → RETORNA              // idempotencia
+      pedido.pago = {estado:'pagado', pasarela, session_id, monto_centimos, pagado_at}
+      PUBLICA pedido.pagado {pedido_id, project_slug, total, cliente_nombre, cliente_telefono, recreado}
+
+    async handleConfirmarRecogida(data: {pedido_id}): Promise<Response>
+      GUARDA pedido.estado == 'pendiente_recogida' → 409 CONFLICT_STATE
+      pagoConfirmado = pedido.pago.estado == 'pagado'
+      metodo_cobro = pagoConfirmado ? 'tarjeta' : 'efectivo'   // LA VERDAD del pago decide
+      pedido.estado = 'recogido_y_cobrado'
+      pedido.cobro = {metodo: metodo_cobro, monto_centimos, cobrado_at,
+                      IF pagoConfirmado: session_id + pasarela}
+      PUBLICA pedido.recogido {pedido_id, project_id, total_centimos, metodo_pago: metodo_cobro}
+
     async onComanderoEnviarCocina(event: Event): Promise<Void>
       CREA pedido formal SI NO existe
       PUBLICA pedido.enviado_cocina (escuchado por cocina)
 
     EVENTOS_PUBLISHES {
-      'pedido.creado': {pedido_id, cuenta_id, items, total}
+      'pedido.creado': {pedido_id, cuenta_id, items, total, metodo_pago?}
       'pedido.enviado_cocina': (delegado desde comandero bridge)
       'pedido.completado': {pedido_id, cuenta_id, tiempo_total}
       'pedido.cancelado': {pedido_id, cuenta_id, motivo}
+      'pedido.pagado': {pedido_id, project_id, project_slug, session_id, total, cliente_nombre, cliente_telefono, recreado}
+      'pedido.recogido': {pedido_id, project_id, total_centimos, cliente_nombre, metodo_pago, recogido_at}
     }
 
     EVENTOS_SUBSCRIBES {
       'comandero.enviar_cocina': onComanderoEnviarCocina (bridge)
       'catalogo.actualizado': onCatalogoActualizado (sync cache)
+      'pago.confirmado': onPagoConfirmado (la pasarela confirma por webhook)
+      'pedido.crear-tienda': handleCreatePedidoTienda (tool auto-wireada)
     }
   }
 }
@@ -726,9 +758,14 @@ CLASE Pedido {
   ATRIBUTOS {
     id: String (pedido_id)
     cuenta_id: String
+    tipo: String (pos|tienda)
     items: Array<ItemPedido>
     total: Number
-    estado: String (creado|enviado_cocina|completado|cancelado)
+    metodo_pago: String (efectivo|tarjeta — preferencia del cliente; opcional, default 'efectivo')
+    pago: Object (VERDAD del cobro: {estado, pasarela, session_id, monto_centimos, pagado_at})
+    recreado_desde_pago: Boolean (true si el webhook llego de huerfano y el pedido se reconstruyo)
+    cobro: Object ({metodo, monto_centimos, cobrado_at, session_id?, pasarela?})
+    estado: String (creado|enviado_cocina|completado|cancelado|pendiente_recogida|recogido_y_cobrado)
     created_at: String (ISO)
   }
 }

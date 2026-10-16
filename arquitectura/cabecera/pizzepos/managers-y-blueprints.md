@@ -5,7 +5,7 @@ resumen: Managers de dominio pizzepos (cuentas, productos, categorías, cobros, 
 fuentes:
   - modules/pizzepos/**
   - blueprints/**
-verificado: 2026-08-24
+verificado: 2026-10-16
 ---
 
 # Módulos Pizzepos y Blueprints
@@ -526,8 +526,42 @@ CLASE PedidosManager IMPLEMENTA PedidosContract {
     pedido.created: {pedido_id, cuenta_id}
     pedido.estado_updated: {pedido_id, estado}
     producto.added_to_pedido: {pedido_id, producto_id, cantidad}
+    pedido.pagado: {pedido_id, project_id, project_slug, session_id, total, cliente_nombre, cliente_telefono, recreado}
+    pedido.recogido: {pedido_id, project_id, total_centimos, cliente_nombre, metodo_pago, recogido_at}
   }
 }
+```
+
+### PAGO DEL PEDIDO DE TIENDA — efectivo o tarjeta (el método viaja en el #P1)
+
+```
+PREFERENCIA ≠ COBRO. El cliente elige en la PWA y la preferencia viaja autoritativa en el #P1
+(campo metodo_pago: 'efectivo' | 'tarjeta'; sin él → 'efectivo'). Eso solo REGISTRA lo que pidió.
+Quien manda sobre la caja es la VERDAD del pago: pedido.pago.estado, escrito por la pasarela.
+
+CADENA (toda por evento, ningún módulo nuevo):
+  PWA → #P1{metodo_pago} → pedido-parser → bot → pedido.crear-tienda{metodo_pago} → pedidos
+    IF metodo_pago == 'tarjeta':
+      bot → pago.iniciar.request {pedido_id, monto_centimos, return_url, metadata{project_slug, cliente_nombre, cliente_telefono, canal_origen}}
+        → pago-gateway (LÍDER, provider-agnóstico: Stripe Checkout hospedado)
+        → pago.iniciar.response {status:200, data:{checkout_url}}
+      bot → manda checkout_url al cliente por WhatsApp   // guarda: UNA sesión por pedido_id
+      ELSE degrada (NO_PASARELA / PERMISSION_DENIED) → 'puedes pagar al recoger' (el pedido ya existe)
+    Stripe → POST /pago/webhook/:project (firma verificada) → pago-gateway
+      → pago.confirmado {pedido_id, project_id, monto_centimos, + metadata de contexto}
+      → pedidos.onPagoConfirmado → pedido.pagado
+      → bot avisa al cliente 'pago recibido' ; IF recreado → avisa al STAFF por Telegram
+    Dependiente confirma recogida → pedido.recogido{metodo_pago} ; la caja ya no miente
+
+EL HUÉRFANO (por qué existe la recreación): los pedidos de tienda viven en MEMORIA y no se
+restauran. El pago es asíncrono (el webhook llega minutos después), así que un reinicio en esa
+ventana —un DEPLOY, justo— dejaría el dinero cobrado y el pedido inexistente, en silencio. Se
+reconstruye MÍNIMO desde la metadata de la sesión (pedido_id + project_id + importe) y se emite
+pedido.pagado con recreado:true. El dinero nunca se pierde sin rastro. Nada que persistir.
+
+config DEL PROYECTO: la pasarela se enciende por proyecto (pago-gateway lee
+core.config['pago-gateway'] || moduleConfig: kind stripe-checkout, provider STRIPE, moneda,
+return_url, webhook_secret). Sin bloque y sin credencial STRIPE → degrada, no rompe.
 ```
 
 ### COCINA MANAGER

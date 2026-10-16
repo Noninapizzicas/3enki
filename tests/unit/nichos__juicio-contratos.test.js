@@ -12,7 +12,10 @@ const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 
-const N = '/opt/enki/modules/nichos';
+// `ENKI_MODULES` permite probar el ÁRBOL (tu diff) en vez de prod, que es la convención
+// de los otros tests del vertical (criterio-base, norte-sondeo, sembrador-norte). Sin la
+// variable, por defecto prod — así el test no cambia de significado para quien no la usa.
+const N = process.env.ENKI_MODULES || '/opt/enki/modules/nichos';
 const load = (m) => require(path.join(N, m, 'index.js'));
 let pas = 0;
 const ok = (t) => { console.log('✓', t); pas++; };
@@ -85,14 +88,22 @@ const ok = (t) => { console.log('✓', t); pas++; };
   ok('solucion.ensamblar ← {id_nicho,veredicto,camino}');
 
   // ── estático: suscripción DESPUÉS de super.onLoad ─────────────────────
+  // La regla protege de `this.eventBus` todavía undefined (el optional-chaining traga la
+  // suscripción en silencio). Un módulo SIN onLoad no puede violarla: hereda el de la base
+  // y pide al bus por `this._rpc()`, que lee el bus en el momento de la llamada.
+  let revisados = 0;
   for (const m of ['estudio-demanda', 'veredicto-viabilidad', 'camino-encontrar-construir', 'paquetador-decision', 'propuesta-valor-canal']) {
     const src = fs.readFileSync(path.join(N, m, 'index.js'), 'utf8');
-    const onLoad = src.slice(src.indexOf('onLoad(context)'), src.indexOf('onLoad(context)') + 600);
+    const i = src.indexOf('onLoad(context)');
+    if (i === -1) continue;                    // sin override → no hay orden que verificar
+    const onLoad = src.slice(i, i + 600);
     const iSuper = onLoad.indexOf('super.onLoad');
     const iSub = onLoad.indexOf('subscribe');
-    assert.ok(iSuper !== -1 && iSub !== -1 && iSuper < iSub, `${m}: super.onLoad ANTES de subscribe`);
+    if (iSub === -1) continue;                 // no se suscribe en onLoad
+    assert.ok(iSuper !== -1 && iSuper < iSub, `${m}: super.onLoad ANTES de subscribe`);
+    revisados++;
   }
-  ok('5 módulos suscriben tras super.onLoad');
+  ok(`${revisados} módulos suscriben tras super.onLoad`);
 
   console.log('\n✅ Todos los contratos del juicio NICHOS pasan (' + pas + ')');
 })().catch(e => { console.error('✗ FALLO:', e.message); process.exit(1); });

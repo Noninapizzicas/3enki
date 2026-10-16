@@ -15,6 +15,14 @@
  *     }
  *   }
  *
+ * EL NORTE TIENE DOS PISOS (F3 «si no existe, se crea»):
+ *   TENEMOS           → catalogo.disponibles  (cableado: lo servimos y cobramos)
+ *   PODEMOS CONSTRUIR → catalogo.encargos     (declarado faltante: se fabrica)
+ * El buscador nace de los DOS: siembra, sondea y juzga con «tenemos ∪ podemos
+ * construir». Antes el segundo piso vivía en el store y no lo leía nadie —
+ * `.disponibles.request` devolvía solo el primero, así que la mina se llenaba de
+ * dominios donde no podemos servir. El norte se lee entero o no se lee.
+ *
  * REGLA F3 (adaptada al D3 del diseño): autores autorizados:
  *   'ensamblador' — D1 ensamblador-solucion (el flujo normal).
  *   'dueño'       — el dueño por el canal (registra manualmente).
@@ -54,7 +62,7 @@ class CatalogoCapacidades extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'catalogo-capacidades';
-    this.version = '0.1.0';
+    this.version = '0.2.0';
     this.catalogoPorProyecto = new Map();   // project_id → esqueleto
 
     this._persist = new PosPersistencia({
@@ -115,7 +123,14 @@ class CatalogoCapacidades extends ModuloHibridoReflejo {
     return {
       status: 200,
       data: {
-        capacidades: catalogo.disponibles.slice()
+        // PISO 1 — TENEMOS: cableado, listo para servir y cobrar.
+        capacidades: catalogo.disponibles.slice(),
+        // PISO 2 — PODEMOS CONSTRUIR: los encargos vivos (capacidades declaradas
+        // faltantes y aún no cableadas). Nacen del ACTO de decidir CONSTRUIR
+        // (C4 los declara), no de un formulario. Viajan con la misma lectura del
+        // norte porque el norte es UNO con dos pisos: quien pregunta qué sabemos
+        // hacer recibe también qué sabemos que hay que construir.
+        podemos_construir: catalogo.encargos.slice()
       }
     };
   }

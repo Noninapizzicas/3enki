@@ -2110,2628 +2110,2648 @@ libro --> revision_solicitada? no: vista_revisable (L2) --> revision_firmada (L3
 
 ```json enki-plan
 {
-  "proyecto": "contabilidad",
-  "proyecto_id": "contabilidad",
-  "origen": "fase3/diseno-oop.md (118 clases con SUBE/PUBLICA/ESCUCHA) + fase2/esquemas/esquema.md (arbol 118 hojas atomicas, formas) + inventario real modules/ (module.json real)",
-  "regla": "modulos-isla event-driven: CLASE con estado->CUSTODIO; solo calcula->REFLEJO (proyeccion _op interna); frontera de formato->CONVERSOR; habla con el exterior->PUENTE; juicio con lenguaje->MICRO-AGENTE. Dependencia->EVENTO request/response, nunca import. Todo RPC se clasifica PREGUNTA (va por el BUS) u ORDEN (superficie/panel).",
-  "inventario": "248 module.json reales en modules/ (leidos; no por nombre). Candidatos evaluados: facturas, facturacion/fuentes, facturacion/asesoria, inventario, metricas, filesystem, project-manager, credential-manager.",
-  "rpc_clase_regla": "PREGUNTA/DERIVACION (calcular·listar·buscar·saldos·estado·informe·traducir·proponer·derivar·medir) -> BUS, NUNCA panel. ORDEN HUMANA/ESCRITURA (declarar·cerrar·firmar·emitir·asentar·ajustar·encolar·archivar·ratificar·registrar·unificar·rectificar·avanzar·entregar·producir) -> superficie (panel).",
-  "hojas": [
-    {
-      "slug": "puerto-evento-vertical",
-      "accion": "CONSTRUIR",
-      "forma": "puente",
-      "eje": "entrada",
-      "depende_de": [],
-      "sube": [],
-      "publica": [
-        "puerto-evento-vertical.abrir.response",
-        "puerto-evento-vertical.abrir.failed",
-        "puerto-evento-vertical.recibir.response",
-        "puerto-evento-vertical.recibir.failed",
-        "contabilidad.hecho_recibido"
-      ],
-      "rpc_clase": {
-        "abrir": "ORDEN",
-        "recibir": "ORDEN"
-      }
-    },
-    {
-      "slug": "normalizador-hecho",
-      "accion": "CONSTRUIR",
-      "forma": "conversor",
-      "eje": "entrada",
-      "depende_de": [
-        "cola-declaraciones-criterio"
-      ],
-      "sube": [
-        "cola-declaraciones-criterio.fijar.request"
-      ],
-      "publica": [
-        "normalizador-hecho.entrar.response",
-        "normalizador-hecho.entrar.failed"
-      ],
-      "rpc_clase": {
-        "entrar": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "captura-documento",
-      "accion": "CONSTRUIR",
-      "forma": "reflejo",
-      "eje": "entrada",
-      "depende_de": [
-        "extraccion-dato",
-        "puerto-documento"
-      ],
-      "sube": [
-        "extraccion-dato.juzgar.request",
-        "puerto-documento.entrar.request"
-      ],
-      "publica": [
-        "captura-documento.admitir.response",
-        "captura-documento.admitir.failed"
-      ],
-      "rpc_clase": {
-        "admitir": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "extraccion-dato",
-      "accion": "ADAPTAR",
-      "forma": "micro-agente",
-      "eje": "entrada",
-      "depende_de": [
-        "control-cuadre-documento",
-        "encolado-excepcion"
-      ],
-      "sube": [
-        "control-cuadre-documento.cuadra.request",
-        "encolado-excepcion.encolar.request"
-      ],
-      "publica": [
-        "extraccion-dato.juzgar.response",
-        "extraccion-dato.juzgar.failed"
-      ],
-      "rpc_clase": {
-        "juzgar": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "puerto-documento",
-      "accion": "CONSTRUIR",
-      "forma": "conversor",
-      "eje": "entrada",
-      "depende_de": [
-        "extraccion-dato"
-      ],
-      "sube": [
-        "extraccion-dato.juzgar.request"
-      ],
-      "publica": [
-        "puerto-documento.entrar.response",
-        "puerto-documento.entrar.failed"
-      ],
-      "rpc_clase": {
-        "entrar": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "control-cuadre-documento",
-      "accion": "CONSTRUIR",
-      "forma": "reflejo",
-      "eje": "entrada",
-      "depende_de": [
-        "encolado-excepcion"
-      ],
-      "sube": [
-        "encolado-excepcion.encolar.request"
-      ],
-      "publica": [
-        "control-cuadre-documento.cuadra.response",
-        "control-cuadre-documento.cuadra.failed"
-      ],
-      "rpc_clase": {
-        "cuadra": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "puerto-documento-digital",
-      "accion": "REUTILIZAR",
-      "forma": "puente",
-      "eje": "entrada",
-      "depende_de": [
-        "normalizador-hecho",
-        "extraccion-dato"
-      ],
-      "sube": [
-        "normalizador-hecho.entrar.request",
-        "extraccion-dato.juzgar.request"
-      ],
-      "publica": [
-        "puerto-documento-digital.recibir.response",
-        "puerto-documento-digital.recibir.failed",
-        "contabilidad.documento_recibido"
-      ],
-      "rpc_clase": {
-        "recibir": "ORDEN"
-      }
-    },
-    {
-      "slug": "contrapartida-asistida",
-      "accion": "CONSTRUIR",
-      "forma": "micro-agente",
-      "eje": "entrada",
-      "depende_de": [
-        "regla-contrapartida"
-      ],
-      "sube": [
-        "regla-contrapartida.aplicar.request"
-      ],
-      "publica": [
-        "contrapartida-asistida.juzgar.response",
-        "contrapartida-asistida.juzgar.failed"
-      ],
-      "rpc_clase": {
-        "juzgar": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "regla-contrapartida",
-      "accion": "CONSTRUIR",
-      "forma": "custodio",
-      "eje": "entrada",
-      "depende_de": [
-        "ratificacion-regla-aprendida"
-      ],
-      "sube": [
-        "ratificacion-regla-aprendida.ratificar.request"
-      ],
-      "publica": [
-        "regla-contrapartida.aplicar.response",
-        "regla-contrapartida.aplicar.failed",
-        "regla-contrapartida.proponer.response",
-        "regla-contrapartida.proponer.failed",
-        "regla-contrapartida.declarar.response",
-        "regla-contrapartida.declarar.failed",
-        "contabilidad.contrapartida_regla_declarada"
-      ],
-      "rpc_clase": {
-        "aplicar": "PREGUNTA",
-        "proponer": "PREGUNTA",
-        "declarar": "ORDEN"
-      }
-    },
-    {
-      "slug": "deduplicacion-hecho",
-      "accion": "CONSTRUIR",
-      "forma": "reflejo",
-      "eje": "entrada",
-      "depende_de": [
-        "clave-natural"
-      ],
-      "sube": [
-        "clave-natural.calcular.request"
-      ],
-      "publica": [
-        "deduplicacion-hecho.es_nuevo.response",
-        "deduplicacion-hecho.es_nuevo.failed"
-      ],
-      "rpc_clase": {
-        "es_nuevo": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "encolado-excepcion",
-      "accion": "CONSTRUIR",
-      "forma": "custodio",
-      "eje": "entrada",
-      "depende_de": [
-        "aviso-revision"
-      ],
-      "sube": [
-        "aviso-revision.empujar.request"
-      ],
-      "publica": [
-        "encolado-excepcion.encolar.response",
-        "encolado-excepcion.encolar.failed",
-        "encolado-excepcion.tomar.response",
-        "encolado-excepcion.tomar.failed",
-        "contabilidad.excepcion_encolada"
-      ],
-      "rpc_clase": {
-        "encolar": "ORDEN",
-        "tomar": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "aviso-revision",
-      "accion": "CONSTRUIR",
-      "forma": "puente",
-      "eje": "entrada",
-      "depende_de": [
-        "motor-avisos"
-      ],
-      "sube": [
-        "motor-avisos.producir.request"
-      ],
-      "publica": [
-        "aviso-revision.empujar.response",
-        "aviso-revision.empujar.failed",
-        "contabilidad.revision_solicitada"
-      ],
-      "rpc_clase": {
-        "empujar": "ORDEN"
-      }
-    },
-    {
-      "slug": "lote-admision",
-      "accion": "CONSTRUIR",
-      "forma": "reflejo",
-      "eje": "entrada",
-      "depende_de": [
-        "normalizador-hecho",
-        "escritor-diario"
-      ],
-      "sube": [
-        "normalizador-hecho.entrar.request",
-        "escritor-diario.asentar.request"
-      ],
-      "publica": [
-        "lote-admision.admitir.response",
-        "lote-admision.admitir.failed"
-      ],
-      "rpc_clase": {
-        "admitir": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "contrato-hecho-minimo",
-      "accion": "CONSTRUIR",
-      "forma": "custodio",
-      "eje": "entrada",
-      "depende_de": [
-        "cola-declaraciones-criterio"
-      ],
-      "sube": [
-        "cola-declaraciones-criterio.fijar.request"
-      ],
-      "publica": [
-        "contrato-hecho-minimo.exigir.response",
-        "contrato-hecho-minimo.exigir.failed",
-        "contrato-hecho-minimo.declarar.response",
-        "contrato-hecho-minimo.declarar.failed",
-        "contabilidad.contrato_hecho_declarado"
-      ],
-      "rpc_clase": {
-        "exigir": "PREGUNTA",
-        "declarar": "ORDEN"
-      }
-    },
-    {
-      "slug": "completitud-cobertura",
-      "accion": "CONSTRUIR",
-      "forma": "reflejo",
-      "eje": "entrada",
-      "depende_de": [
-        "motor-avisos"
-      ],
-      "sube": [
-        "motor-avisos.producir.request"
-      ],
-      "publica": [
-        "completitud-cobertura.medir.response",
-        "completitud-cobertura.medir.failed"
-      ],
-      "rpc_clase": {
-        "medir": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "hecho-rectificativo",
-      "accion": "CONSTRUIR",
-      "forma": "puente",
-      "eje": "entrada",
-      "depende_de": [
-        "clave-natural",
-        "escritor-diario"
-      ],
-      "sube": [
-        "clave-natural.calcular.request",
-        "escritor-diario.asentar.request"
-      ],
-      "publica": [
-        "hecho-rectificativo.emparejar.response",
-        "hecho-rectificativo.emparejar.failed",
-        "contabilidad.hecho_rectificado"
-      ],
-      "rpc_clase": {
-        "emparejar": "ORDEN"
-      }
-    },
-    {
-      "slug": "anclaje-cierre-vertical",
-      "accion": "CONSTRUIR",
-      "forma": "custodio",
-      "eje": "entrada",
-      "depende_de": [
-        "clave-natural",
-        "cola-declaraciones-criterio"
-      ],
-      "sube": [
-        "clave-natural.calcular.request",
-        "cola-declaraciones-criterio.fijar.request"
-      ],
-      "publica": [
-        "anclaje-cierre-vertical.anclar.response",
-        "anclaje-cierre-vertical.anclar.failed",
-        "anclaje-cierre-vertical.declarar.response",
-        "anclaje-cierre-vertical.declarar.failed",
-        "contabilidad.anclaje_cierre_declarado"
-      ],
-      "rpc_clase": {
-        "anclar": "PREGUNTA",
-        "declarar": "ORDEN"
-      }
-    },
-    {
-      "slug": "declaracion-fuente-faltante",
-      "accion": "CONSTRUIR",
-      "forma": "puente",
-      "eje": "entrada",
-      "depende_de": [
-        "motor-avisos"
-      ],
-      "sube": [
-        "motor-avisos.producir.request"
-      ],
-      "publica": [
-        "declaracion-fuente-faltante.declarar.response",
-        "declaracion-fuente-faltante.declarar.failed",
-        "contabilidad.fuente_faltante_declarada"
-      ],
-      "rpc_clase": {
-        "declarar": "ORDEN"
-      }
-    },
-    {
-      "slug": "maestro-terceros",
-      "accion": "CONSTRUIR",
-      "forma": "custodio",
-      "eje": "entrada",
-      "depende_de": [
-        "padron-terceros",
-        "expediente-documental"
-      ],
-      "sube": [
-        "padron-terceros.unificar.request",
-        "expediente-documental.archivar.request"
-      ],
-      "publica": [
-        "maestro-terceros.ficha.response",
-        "maestro-terceros.ficha.failed",
-        "maestro-terceros.upsert.response",
-        "maestro-terceros.upsert.failed",
-        "contabilidad.tercero_actualizado"
-      ],
-      "rpc_clase": {
-        "ficha": "PREGUNTA",
-        "upsert": "ORDEN"
-      }
-    },
-    {
-      "slug": "padron-terceros",
-      "accion": "CONSTRUIR",
-      "forma": "custodio",
-      "eje": "entrada",
-      "depende_de": [],
-      "sube": [],
-      "publica": [
-        "padron-terceros.unificar.response",
-        "padron-terceros.unificar.failed",
-        "contabilidad.tercero_unificado"
-      ],
-      "rpc_clase": {
-        "unificar": "ORDEN"
-      }
-    },
-    {
-      "slug": "cuenta-proveedor",
-      "accion": "CONSTRUIR",
-      "forma": "reflejo",
-      "eje": "entrada",
-      "depende_de": [
-        "mayor-balanza"
-      ],
-      "sube": [
-        "mayor-balanza.saldos.request"
-      ],
-      "publica": [
-        "cuenta-proveedor.saldo.response",
-        "cuenta-proveedor.saldo.failed",
-        "cuenta-proveedor.facturas_vivas.response",
-        "cuenta-proveedor.facturas_vivas.failed"
-      ],
-      "rpc_clase": {
-        "saldo": "PREGUNTA",
-        "facturas_vivas": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "estado-cuenta-proveedor",
-      "accion": "CONSTRUIR",
-      "forma": "reflejo",
-      "eje": "entrada",
-      "depende_de": [
-        "cuenta-proveedor"
-      ],
-      "sube": [
-        "cuenta-proveedor.saldo.request"
-      ],
-      "publica": [
-        "estado-cuenta-proveedor.extracto.response",
-        "estado-cuenta-proveedor.extracto.failed"
-      ],
-      "rpc_clase": {
-        "extracto": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "cruce-factura-recepcion",
-      "accion": "CONSTRUIR",
-      "forma": "reflejo",
-      "eje": "entrada",
-      "depende_de": [
-        "encolado-excepcion",
-        "escritor-diario"
-      ],
-      "sube": [
-        "encolado-excepcion.encolar.request",
-        "escritor-diario.asentar.request"
-      ],
-      "publica": [
-        "cruce-factura-recepcion.cotejar.response",
-        "cruce-factura-recepcion.cotejar.failed"
-      ],
-      "rpc_clase": {
-        "cotejar": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "vencimiento-pago",
-      "accion": "CONSTRUIR",
-      "forma": "reflejo",
-      "eje": "entrada",
-      "depende_de": [
-        "maestro-terceros",
-        "motor-avisos"
-      ],
-      "sube": [
-        "maestro-terceros.ficha.request",
-        "motor-avisos.producir.request"
-      ],
-      "publica": [
-        "vencimiento-pago.calcular.response",
-        "vencimiento-pago.calcular.failed"
-      ],
-      "rpc_clase": {
-        "calcular": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "rappel-pronto-pago",
-      "accion": "CONSTRUIR",
-      "forma": "reflejo",
-      "eje": "entrada",
-      "depende_de": [
-        "cuenta-proveedor",
-        "escritor-diario"
-      ],
-      "sube": [
-        "cuenta-proveedor.saldo.request",
-        "escritor-diario.asentar.request"
-      ],
-      "publica": [
-        "rappel-pronto-pago.ajustar.response",
-        "rappel-pronto-pago.ajustar.failed"
-      ],
-      "rpc_clase": {
-        "ajustar": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "antiguedad-de-saldos",
-      "accion": "CONSTRUIR",
-      "forma": "reflejo",
-      "eje": "entrada",
-      "depende_de": [
-        "vencimiento-pago",
-        "motor-avisos"
-      ],
-      "sube": [
-        "vencimiento-pago.calcular.request",
-        "motor-avisos.producir.request"
-      ],
-      "publica": [
-        "antiguedad-de-saldos.clasificar.response",
-        "antiguedad-de-saldos.clasificar.failed"
-      ],
-      "rpc_clase": {
-        "clasificar": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "emision-factura-venta",
-      "accion": "CONSTRUIR",
-      "forma": "custodio",
-      "eje": "entrada",
-      "depende_de": [
-        "registro-verifactu",
-        "factura-electronica",
-        "escritor-diario",
-        "maestro-terceros",
-        "expediente-documental"
-      ],
-      "sube": [
-        "registro-verifactu.encadenar.request",
-        "factura-electronica.entrar.request",
-        "escritor-diario.asentar.request",
-        "maestro-terceros.ficha.request",
-        "expediente-documental.archivar.request"
-      ],
-      "publica": [
-        "emision-factura-venta.emitir.response",
-        "emision-factura-venta.emitir.failed",
-        "contabilidad.factura_emitida"
-      ],
-      "rpc_clase": {
-        "emitir": "ORDEN"
-      }
-    },
-    {
-      "slug": "factura-rectificativa",
-      "accion": "CONSTRUIR",
-      "forma": "reflejo",
-      "eje": "entrada",
-      "depende_de": [
-        "emision-factura-venta",
-        "escritor-diario"
-      ],
-      "sube": [
-        "emision-factura-venta.emitir.request",
-        "escritor-diario.asentar.request"
-      ],
-      "publica": [
-        "factura-rectificativa.calcular.response",
-        "factura-rectificativa.calcular.failed"
-      ],
-      "rpc_clase": {
-        "calcular": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "panel-proceso-contable",
-      "accion": "CONSTRUIR",
-      "forma": "reflejo",
-      "eje": "entrada",
-      "depende_de": [
-        "encolado-excepcion",
-        "historial-proceso-contable",
-        "tasa-cobertura-entrada"
-      ],
-      "sube": [
-        "encolado-excepcion.encolar.request",
-        "historial-proceso-contable.anotar.request",
-        "tasa-cobertura-entrada.calcular.request"
-      ],
-      "publica": [
-        "panel-proceso-contable.latido.response",
-        "panel-proceso-contable.latido.failed"
-      ],
-      "rpc_clase": {
-        "latido": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "historial-proceso-contable",
-      "accion": "CONSTRUIR",
-      "forma": "custodio",
-      "eje": "entrada",
-      "depende_de": [],
-      "sube": [],
-      "publica": [
-        "historial-proceso-contable.anotar.response",
-        "historial-proceso-contable.anotar.failed",
-        "contabilidad.proceso_anotado"
-      ],
-      "rpc_clase": {
-        "anotar": "ORDEN"
-      }
-    },
-    {
-      "slug": "desatasco-entrada",
-      "accion": "CONSTRUIR",
-      "forma": "micro-agente",
-      "eje": "entrada",
-      "depende_de": [
-        "escritor-diario",
-        "encolado-excepcion",
-        "regla-contrapartida",
-        "historial-proceso-contable"
-      ],
-      "sube": [
-        "escritor-diario.asentar.request",
-        "encolado-excepcion.encolar.request",
-        "regla-contrapartida.aplicar.request",
-        "historial-proceso-contable.anotar.request"
-      ],
-      "publica": [
-        "desatasco-entrada.juzgar.response",
-        "desatasco-entrada.juzgar.failed",
-        "contabilidad.excepcion_desatascada"
-      ],
-      "rpc_clase": {
-        "juzgar": "ORDEN"
-      }
-    },
-    {
-      "slug": "tasa-cobertura-entrada",
-      "accion": "CONSTRUIR",
-      "forma": "reflejo",
-      "eje": "entrada",
-      "depende_de": [
-        "completitud-cobertura"
-      ],
-      "sube": [
-        "completitud-cobertura.medir.request"
-      ],
-      "publica": [
-        "tasa-cobertura-entrada.calcular.response",
-        "tasa-cobertura-entrada.calcular.failed"
-      ],
-      "rpc_clase": {
-        "calcular": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "catalogo-cuentas",
-      "accion": "CONSTRUIR",
-      "forma": "custodio",
-      "eje": "libro",
-      "depende_de": [
-        "cola-declaraciones-criterio"
-      ],
-      "sube": [
-        "cola-declaraciones-criterio.fijar.request"
-      ],
-      "publica": [
-        "catalogo-cuentas.anadir.response",
-        "catalogo-cuentas.anadir.failed",
-        "catalogo-cuentas.buscar.response",
-        "catalogo-cuentas.buscar.failed",
-        "contabilidad.plan_cuentas_declarado"
-      ],
-      "rpc_clase": {
-        "anadir": "ORDEN",
-        "buscar": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "escritor-diario",
-      "accion": "CONSTRUIR",
-      "forma": "custodio",
-      "eje": "libro",
-      "depende_de": [
-        "traza-asiento",
-        "frontera-planos",
-        "periodificacion",
-        "deduplicacion-hecho"
-      ],
-      "sube": [
-        "traza-asiento.registrar.request",
-        "frontera-planos.verificar.request",
-        "periodificacion.imputar.request",
-        "deduplicacion-hecho.es_nuevo.request"
-      ],
-      "publica": [
-        "escritor-diario.asentar.response",
-        "escritor-diario.asentar.failed",
-        "contabilidad.asiento_asentado"
-      ],
-      "rpc_clase": {
-        "asentar": "ORDEN"
-      }
-    },
-    {
-      "slug": "mayor-balanza",
-      "accion": "CONSTRUIR",
-      "forma": "reflejo",
-      "eje": "libro",
-      "depende_de": [
-        "escritor-diario"
-      ],
-      "sube": [
-        "escritor-diario.asentar.request"
-      ],
-      "publica": [
-        "mayor-balanza.saldos.response",
-        "mayor-balanza.saldos.failed",
-        "mayor-balanza.balanza.response",
-        "mayor-balanza.balanza.failed"
-      ],
-      "rpc_clase": {
-        "saldos": "PREGUNTA",
-        "balanza": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "traza-asiento",
-      "accion": "CONSTRUIR",
-      "forma": "custodio",
-      "eje": "libro",
-      "depende_de": [],
-      "sube": [],
-      "publica": [
-        "traza-asiento.registrar.response",
-        "traza-asiento.registrar.failed",
-        "contabilidad.traza_registrada"
-      ],
-      "rpc_clase": {
-        "registrar": "ORDEN"
-      }
-    },
-    {
-      "slug": "asiento-ajuste",
-      "accion": "CONSTRUIR",
-      "forma": "puente",
-      "eje": "libro",
-      "depende_de": [
-        "escritor-diario",
-        "traza-asiento"
-      ],
-      "sube": [
-        "escritor-diario.asentar.request",
-        "traza-asiento.registrar.request"
-      ],
-      "publica": [
-        "asiento-ajuste.entrar.response",
-        "asiento-ajuste.entrar.failed",
-        "contabilidad.ajuste_entrado"
-      ],
-      "rpc_clase": {
-        "entrar": "ORDEN"
-      }
-    },
-    {
-      "slug": "puerto-plan-contable",
-      "accion": "CONSTRUIR",
-      "forma": "conversor",
-      "eje": "libro",
-      "depende_de": [
-        "catalogo-cuentas"
-      ],
-      "sube": [
-        "catalogo-cuentas.buscar.request"
-      ],
-      "publica": [
-        "puerto-plan-contable.entrar.response",
-        "puerto-plan-contable.entrar.failed",
-        "puerto-plan-contable.salir.response",
-        "puerto-plan-contable.salir.failed"
-      ],
-      "rpc_clase": {
-        "entrar": "PREGUNTA",
-        "salir": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "balance-situacion",
-      "accion": "CONSTRUIR",
-      "forma": "reflejo",
-      "eje": "libro",
-      "depende_de": [
-        "mayor-balanza"
-      ],
-      "sube": [
-        "mayor-balanza.saldos.request"
-      ],
-      "publica": [
-        "balance-situacion.calcular.response",
-        "balance-situacion.calcular.failed"
-      ],
-      "rpc_clase": {
-        "calcular": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "cuenta-resultados",
-      "accion": "CONSTRUIR",
-      "forma": "reflejo",
-      "eje": "libro",
-      "depende_de": [
-        "mayor-balanza"
-      ],
-      "sube": [
-        "mayor-balanza.saldos.request"
-      ],
-      "publica": [
-        "cuenta-resultados.calcular.response",
-        "cuenta-resultados.calcular.failed"
-      ],
-      "rpc_clase": {
-        "calcular": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "periodificacion",
-      "accion": "CONSTRUIR",
-      "forma": "reflejo",
-      "eje": "libro",
-      "depende_de": [
-        "cola-declaraciones-criterio"
-      ],
-      "sube": [
-        "cola-declaraciones-criterio.fijar.request"
-      ],
-      "publica": [
-        "periodificacion.imputar.response",
-        "periodificacion.imputar.failed"
-      ],
-      "rpc_clase": {
-        "imputar": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "cierre-ejercicio",
-      "accion": "CONSTRUIR",
-      "forma": "custodio",
-      "eje": "libro",
-      "depende_de": [
-        "plan-amortizacion",
-        "escritor-diario",
-        "aviso-cuadre"
-      ],
-      "sube": [
-        "plan-amortizacion.cuota_del_periodo.request",
-        "escritor-diario.asentar.request",
-        "aviso-cuadre.avisar.request"
-      ],
-      "publica": [
-        "cierre-ejercicio.cerrar.response",
-        "cierre-ejercicio.cerrar.failed",
-        "cierre-ejercicio.reabrir.response",
-        "cierre-ejercicio.reabrir.failed",
-        "contabilidad.ejercicio_cerrado"
-      ],
-      "rpc_clase": {
-        "cerrar": "ORDEN",
-        "reabrir": "ORDEN"
-      }
-    },
-    {
-      "slug": "apertura-ejercicio",
-      "accion": "CONSTRUIR",
-      "forma": "reflejo",
-      "eje": "libro",
-      "depende_de": [
-        "escritor-diario"
-      ],
-      "sube": [
-        "escritor-diario.asentar.request"
-      ],
-      "publica": [
-        "apertura-ejercicio.generar.response",
-        "apertura-ejercicio.generar.failed"
-      ],
-      "rpc_clase": {
-        "generar": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "aviso-cuadre",
-      "accion": "CONSTRUIR",
-      "forma": "puente",
-      "eje": "libro",
-      "depende_de": [
-        "motor-avisos"
-      ],
-      "sube": [
-        "motor-avisos.producir.request"
-      ],
-      "publica": [
-        "aviso-cuadre.avisar.response",
-        "aviso-cuadre.avisar.failed",
-        "contabilidad.cuadre_no_cuadra"
-      ],
-      "rpc_clase": {
-        "avisar": "ORDEN"
-      }
-    },
-    {
-      "slug": "conciliacion-bancaria",
-      "accion": "CONSTRUIR",
-      "forma": "reflejo",
-      "eje": "libro",
-      "depende_de": [
-        "escritor-diario",
-        "partida-no-identificada",
-        "partida-conciliatoria"
-      ],
-      "sube": [
-        "escritor-diario.asentar.request",
-        "partida-no-identificada.juzgar.request",
-        "partida-conciliatoria.desfase.request"
-      ],
-      "publica": [
-        "conciliacion-bancaria.cruzar.response",
-        "conciliacion-bancaria.cruzar.failed"
-      ],
-      "rpc_clase": {
-        "cruzar": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "puerto-extracto",
-      "accion": "CONSTRUIR",
-      "forma": "conversor",
-      "eje": "libro",
-      "depende_de": [
-        "conciliacion-bancaria"
-      ],
-      "sube": [
-        "conciliacion-bancaria.cruzar.request"
-      ],
-      "publica": [
-        "puerto-extracto.entrar.response",
-        "puerto-extracto.entrar.failed"
-      ],
-      "rpc_clase": {
-        "entrar": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "cuadre-cobro-pago",
-      "accion": "CONSTRUIR",
-      "forma": "reflejo",
-      "eje": "libro",
-      "depende_de": [
-        "escritor-diario",
-        "partida-no-identificada"
-      ],
-      "sube": [
-        "escritor-diario.asentar.request",
-        "partida-no-identificada.juzgar.request"
-      ],
-      "publica": [
-        "cuadre-cobro-pago.cuadrar.response",
-        "cuadre-cobro-pago.cuadrar.failed"
-      ],
-      "rpc_clase": {
-        "cuadrar": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "saldo-tesoreria",
-      "accion": "CONSTRUIR",
-      "forma": "reflejo",
-      "eje": "libro",
-      "depende_de": [
-        "mayor-balanza"
-      ],
-      "sube": [
-        "mayor-balanza.saldos.request"
-      ],
-      "publica": [
-        "saldo-tesoreria.calcular.response",
-        "saldo-tesoreria.calcular.failed"
-      ],
-      "rpc_clase": {
-        "calcular": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "prevision-caja",
-      "accion": "CONSTRUIR",
-      "forma": "reflejo",
-      "eje": "libro",
-      "depende_de": [
-        "saldo-tesoreria",
-        "motor-avisos"
-      ],
-      "sube": [
-        "saldo-tesoreria.calcular.request",
-        "motor-avisos.producir.request"
-      ],
-      "publica": [
-        "prevision-caja.proyectar.response",
-        "prevision-caja.proyectar.failed"
-      ],
-      "rpc_clase": {
-        "proyectar": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "partida-no-identificada",
-      "accion": "CONSTRUIR",
-      "forma": "micro-agente",
-      "eje": "libro",
-      "depende_de": [
-        "regla-movimiento-bancario",
-        "encolado-excepcion"
-      ],
-      "sube": [
-        "regla-movimiento-bancario.aplicar.request",
-        "encolado-excepcion.encolar.request"
-      ],
-      "publica": [
-        "partida-no-identificada.juzgar.response",
-        "partida-no-identificada.juzgar.failed"
-      ],
-      "rpc_clase": {
-        "juzgar": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "regla-movimiento-bancario",
-      "accion": "CONSTRUIR",
-      "forma": "custodio",
-      "eje": "libro",
-      "depende_de": [
-        "ratificacion-regla-aprendida",
-        "escritor-diario"
-      ],
-      "sube": [
-        "ratificacion-regla-aprendida.ratificar.request",
-        "escritor-diario.asentar.request"
-      ],
-      "publica": [
-        "regla-movimiento-bancario.aplicar.response",
-        "regla-movimiento-bancario.aplicar.failed",
-        "regla-movimiento-bancario.proponer.response",
-        "regla-movimiento-bancario.proponer.failed",
-        "regla-movimiento-bancario.declarar.response",
-        "regla-movimiento-bancario.declarar.failed",
-        "contabilidad.movimiento_regla_declarada"
-      ],
-      "rpc_clase": {
-        "aplicar": "PREGUNTA",
-        "proponer": "PREGUNTA",
-        "declarar": "ORDEN"
-      }
-    },
-    {
-      "slug": "partida-conciliatoria",
-      "accion": "CONSTRUIR",
-      "forma": "reflejo",
-      "eje": "libro",
-      "depende_de": [
-        "saldo-tesoreria"
-      ],
-      "sube": [
-        "saldo-tesoreria.calcular.request"
-      ],
-      "publica": [
-        "partida-conciliatoria.desfase.response",
-        "partida-conciliatoria.desfase.failed"
-      ],
-      "rpc_clase": {
-        "desfase": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "informe-conciliacion",
-      "accion": "CONSTRUIR",
-      "forma": "reflejo",
-      "eje": "libro",
-      "depende_de": [
-        "conciliacion-bancaria",
-        "partida-conciliatoria"
-      ],
-      "sube": [
-        "conciliacion-bancaria.cruzar.request",
-        "partida-conciliatoria.desfase.request"
-      ],
-      "publica": [
-        "informe-conciliacion.componer.response",
-        "informe-conciliacion.componer.failed"
-      ],
-      "rpc_clase": {
-        "componer": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "maestro-cuentas-bancarias",
-      "accion": "CONSTRUIR",
-      "forma": "custodio",
-      "eje": "libro",
-      "depende_de": [
-        "cola-declaraciones-criterio"
-      ],
-      "sube": [
-        "cola-declaraciones-criterio.fijar.request"
-      ],
-      "publica": [
-        "maestro-cuentas-bancarias.declarar.response",
-        "maestro-cuentas-bancarias.declarar.failed",
-        "maestro-cuentas-bancarias.listar.response",
-        "maestro-cuentas-bancarias.listar.failed",
-        "contabilidad.cuenta_bancaria_declarada"
-      ],
-      "rpc_clase": {
-        "declarar": "ORDEN",
-        "listar": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "puerto-exportacion",
-      "accion": "ADAPTAR",
-      "forma": "conversor",
-      "eje": "libro",
-      "depende_de": [
-        "asiento-ajuste"
-      ],
-      "sube": [
-        "asiento-ajuste.entrar.request"
-      ],
-      "publica": [
-        "puerto-exportacion.salir.response",
-        "puerto-exportacion.salir.failed",
-        "puerto-exportacion.entrar.response",
-        "puerto-exportacion.entrar.failed"
-      ],
-      "rpc_clase": {
-        "salir": "PREGUNTA",
-        "entrar": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "vista-revisable",
-      "accion": "CONSTRUIR",
-      "forma": "reflejo",
-      "eje": "libro",
-      "depende_de": [
-        "traza-asiento",
-        "mayor-balanza"
-      ],
-      "sube": [
-        "traza-asiento.registrar.request",
-        "mayor-balanza.saldos.request"
-      ],
-      "publica": [
-        "vista-revisable.explicar.response",
-        "vista-revisable.explicar.failed"
-      ],
-      "rpc_clase": {
-        "explicar": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "flujo-firma",
-      "accion": "CONSTRUIR",
-      "forma": "custodio",
-      "eje": "libro",
-      "depende_de": [
-        "traza-asiento"
-      ],
-      "sube": [
-        "traza-asiento.registrar.request"
-      ],
-      "publica": [
-        "flujo-firma.firmar.response",
-        "flujo-firma.firmar.failed",
-        "flujo-firma.estado.response",
-        "flujo-firma.estado.failed",
-        "contabilidad.revision_firmada"
-      ],
-      "rpc_clase": {
-        "firmar": "ORDEN",
-        "estado": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "expediente-documental",
-      "accion": "CONSTRUIR",
-      "forma": "custodio",
-      "eje": "libro",
-      "depende_de": [],
-      "sube": [],
-      "publica": [
-        "expediente-documental.archivar.response",
-        "expediente-documental.archivar.failed",
-        "expediente-documental.recuperar.response",
-        "expediente-documental.recuperar.failed",
-        "contabilidad.documento_archivado"
-      ],
-      "rpc_clase": {
-        "archivar": "ORDEN",
-        "recuperar": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "control-calidad-muestreo",
-      "accion": "CONSTRUIR",
-      "forma": "reflejo",
-      "eje": "libro",
-      "depende_de": [
-        "escritor-diario",
-        "regla-contrapartida"
-      ],
-      "sube": [
-        "escritor-diario.asentar.request",
-        "regla-contrapartida.aplicar.request"
-      ],
-      "publica": [
-        "control-calidad-muestreo.seleccionar.response",
-        "control-calidad-muestreo.seleccionar.failed"
-      ],
-      "rpc_clase": {
-        "seleccionar": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "cambio-desde-ultima-revision",
-      "accion": "CONSTRUIR",
-      "forma": "reflejo",
-      "eje": "libro",
-      "depende_de": [
-        "escritor-diario",
-        "asiento-ajuste",
-        "flujo-firma"
-      ],
-      "sube": [
-        "escritor-diario.asentar.request",
-        "asiento-ajuste.entrar.request",
-        "flujo-firma.estado.request"
-      ],
-      "publica": [
-        "cambio-desde-ultima-revision.delta.response",
-        "cambio-desde-ultima-revision.delta.failed"
-      ],
-      "rpc_clase": {
-        "delta": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "ratificacion-regla-aprendida",
-      "accion": "CONSTRUIR",
-      "forma": "puente",
-      "eje": "libro",
-      "depende_de": [],
-      "sube": [],
-      "publica": [
-        "ratificacion-regla-aprendida.ratificar.response",
-        "ratificacion-regla-aprendida.ratificar.failed",
-        "contabilidad.regla_ratificada"
-      ],
-      "rpc_clase": {
-        "ratificar": "ORDEN"
-      }
-    },
-    {
-      "slug": "frontera-planos",
-      "accion": "CONSTRUIR",
-      "forma": "reflejo",
-      "eje": "libro",
-      "depende_de": [],
-      "sube": [],
-      "publica": [
-        "frontera-planos.verificar.response",
-        "frontera-planos.verificar.failed"
-      ],
-      "rpc_clase": {
-        "verificar": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "single-writer",
-      "accion": "CONSTRUIR",
-      "forma": "custodio",
-      "eje": "libro",
-      "depende_de": [],
-      "sube": [],
-      "publica": [
-        "single-writer.reclamar.response",
-        "single-writer.reclamar.failed",
-        "single-writer.es_escritor.response",
-        "single-writer.es_escritor.failed",
-        "contabilidad.parcela_reclamada"
-      ],
-      "rpc_clase": {
-        "reclamar": "ORDEN",
-        "es_escritor": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "clave-natural",
-      "accion": "CONSTRUIR",
-      "forma": "reflejo",
-      "eje": "libro",
-      "depende_de": [
-        "cola-declaraciones-criterio"
-      ],
-      "sube": [
-        "cola-declaraciones-criterio.fijar.request"
-      ],
-      "publica": [
-        "clave-natural.calcular.response",
-        "clave-natural.calcular.failed",
-        "clave-natural.coincide.response",
-        "clave-natural.coincide.failed"
-      ],
-      "rpc_clase": {
-        "calcular": "PREGUNTA",
-        "coincide": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "liquidacion-iva",
-      "accion": "CONSTRUIR",
-      "forma": "reflejo",
-      "eje": "fiscal",
-      "depende_de": [
-        "mayor-balanza",
-        "perfil-administrativo"
-      ],
-      "sube": [
-        "mayor-balanza.saldos.request",
-        "perfil-administrativo.obligaciones.request"
-      ],
-      "publica": [
-        "liquidacion-iva.calcular.response",
-        "liquidacion-iva.calcular.failed"
-      ],
-      "rpc_clase": {
-        "calcular": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "modelo-303",
-      "accion": "CONSTRUIR",
-      "forma": "reflejo",
-      "eje": "fiscal",
-      "depende_de": [
-        "liquidacion-iva"
-      ],
-      "sube": [
-        "liquidacion-iva.calcular.request"
-      ],
-      "publica": [
-        "modelo-303.construir.response",
-        "modelo-303.construir.failed"
-      ],
-      "rpc_clase": {
-        "construir": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "modelo-390",
-      "accion": "CONSTRUIR",
-      "forma": "reflejo",
-      "eje": "fiscal",
-      "depende_de": [
-        "liquidacion-iva"
-      ],
-      "sube": [
-        "liquidacion-iva.calcular.request"
-      ],
-      "publica": [
-        "modelo-390.construir.response",
-        "modelo-390.construir.failed"
-      ],
-      "rpc_clase": {
-        "construir": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "retenciones",
-      "accion": "CONSTRUIR",
-      "forma": "reflejo",
-      "eje": "fiscal",
-      "depende_de": [
-        "mayor-balanza"
-      ],
-      "sube": [
-        "mayor-balanza.saldos.request"
-      ],
-      "publica": [
-        "retenciones.calcular.response",
-        "retenciones.calcular.failed"
-      ],
-      "rpc_clase": {
-        "calcular": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "estimacion-is-irpf",
-      "accion": "CONSTRUIR",
-      "forma": "reflejo",
-      "eje": "fiscal",
-      "depende_de": [
-        "cuenta-resultados",
-        "perfil-administrativo"
-      ],
-      "sube": [
-        "cuenta-resultados.calcular.request",
-        "perfil-administrativo.obligaciones.request"
-      ],
-      "publica": [
-        "estimacion-is-irpf.estimar.response",
-        "estimacion-is-irpf.estimar.failed"
-      ],
-      "rpc_clase": {
-        "estimar": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "calendario-fiscal",
-      "accion": "CONSTRUIR",
-      "forma": "custodio",
-      "eje": "fiscal",
-      "depende_de": [
-        "motor-avisos"
-      ],
-      "sube": [
-        "motor-avisos.producir.request"
-      ],
-      "publica": [
-        "calendario-fiscal.proximos.response",
-        "calendario-fiscal.proximos.failed",
-        "calendario-fiscal.declarar.response",
-        "calendario-fiscal.declarar.failed",
-        "contabilidad.plazo_declarado"
-      ],
-      "rpc_clase": {
-        "proximos": "PREGUNTA",
-        "declarar": "ORDEN"
-      }
-    },
-    {
-      "slug": "generador-modelo",
-      "accion": "CONSTRUIR",
-      "forma": "puente",
-      "eje": "fiscal",
-      "depende_de": [
-        "estado-presentacion-fiscal"
-      ],
-      "sube": [
-        "estado-presentacion-fiscal.avanzar.request"
-      ],
-      "publica": [
-        "generador-modelo.exportar.response",
-        "generador-modelo.exportar.failed",
-        "contabilidad.modelo_exportado"
-      ],
-      "rpc_clase": {
-        "exportar": "ORDEN"
-      }
-    },
-    {
-      "slug": "registro-verifactu",
-      "accion": "CONSTRUIR",
-      "forma": "custodio",
-      "eje": "fiscal",
-      "depende_de": [],
-      "sube": [],
-      "publica": [
-        "registro-verifactu.encadenar.response",
-        "registro-verifactu.encadenar.failed",
-        "contabilidad.factura_encadenada"
-      ],
-      "rpc_clase": {
-        "encadenar": "ORDEN"
-      }
-    },
-    {
-      "slug": "factura-electronica",
-      "accion": "CONSTRUIR",
-      "forma": "conversor",
-      "eje": "fiscal",
-      "depende_de": [],
-      "sube": [],
-      "publica": [
-        "factura-electronica.entrar.response",
-        "factura-electronica.entrar.failed",
-        "factura-electronica.salir.response",
-        "factura-electronica.salir.failed"
-      ],
-      "rpc_clase": {
-        "entrar": "PREGUNTA",
-        "salir": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "estado-presentacion-fiscal",
-      "accion": "CONSTRUIR",
-      "forma": "custodio",
-      "eje": "fiscal",
-      "depende_de": [
-        "motor-avisos"
-      ],
-      "sube": [
-        "motor-avisos.producir.request"
-      ],
-      "publica": [
-        "estado-presentacion-fiscal.avanzar.response",
-        "estado-presentacion-fiscal.avanzar.failed",
-        "contabilidad.obligacion_avanzada"
-      ],
-      "rpc_clase": {
-        "avanzar": "ORDEN"
-      }
-    },
-    {
-      "slug": "acuse-presentacion",
-      "accion": "CONSTRUIR",
-      "forma": "puente",
-      "eje": "fiscal",
-      "depende_de": [
-        "estado-presentacion-fiscal",
-        "escritor-diario",
-        "expediente-documental"
-      ],
-      "sube": [
-        "estado-presentacion-fiscal.avanzar.request",
-        "escritor-diario.asentar.request",
-        "expediente-documental.archivar.request"
-      ],
-      "publica": [
-        "acuse-presentacion.ligar.response",
-        "acuse-presentacion.ligar.failed",
-        "contabilidad.declaracion_justificada"
-      ],
-      "rpc_clase": {
-        "ligar": "ORDEN"
-      }
-    },
-    {
-      "slug": "rectificacion-declaracion",
-      "accion": "CONSTRUIR",
-      "forma": "custodio",
-      "eje": "fiscal",
-      "depende_de": [
-        "estado-presentacion-fiscal"
-      ],
-      "sube": [
-        "estado-presentacion-fiscal.avanzar.request"
-      ],
-      "publica": [
-        "rectificacion-declaracion.rectificar.response",
-        "rectificacion-declaracion.rectificar.failed",
-        "contabilidad.declaracion_rectificada"
-      ],
-      "rpc_clase": {
-        "rectificar": "ORDEN"
-      }
-    },
-    {
-      "slug": "perfil-administrativo",
-      "accion": "CONSTRUIR",
-      "forma": "custodio",
-      "eje": "fiscal",
-      "depende_de": [
-        "calendario-fiscal",
-        "cola-declaraciones-criterio"
-      ],
-      "sube": [
-        "calendario-fiscal.declarar.request",
-        "cola-declaraciones-criterio.fijar.request"
-      ],
-      "publica": [
-        "perfil-administrativo.obligaciones.response",
-        "perfil-administrativo.obligaciones.failed",
-        "perfil-administrativo.declarar.response",
-        "perfil-administrativo.declarar.failed",
-        "contabilidad.perfil_administrativo_declarado"
-      ],
-      "rpc_clase": {
-        "obligaciones": "PREGUNTA",
-        "declarar": "ORDEN"
-      }
-    },
-    {
-      "slug": "recibo-nomina",
-      "accion": "CONSTRUIR",
-      "forma": "reflejo",
-      "eje": "fiscal",
-      "depende_de": [],
-      "sube": [],
-      "publica": [
-        "recibo-nomina.dar_forma.response",
-        "recibo-nomina.dar_forma.failed"
-      ],
-      "rpc_clase": {
-        "dar_forma": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "obligacion-seguridad-social",
-      "accion": "CONSTRUIR",
-      "forma": "reflejo",
-      "eje": "fiscal",
-      "depende_de": [
-        "recibo-nomina",
-        "calendario-fiscal"
-      ],
-      "sube": [
-        "recibo-nomina.dar_forma.request",
-        "calendario-fiscal.declarar.request"
-      ],
-      "publica": [
-        "obligacion-seguridad-social.calcular.response",
-        "obligacion-seguridad-social.calcular.failed"
-      ],
-      "rpc_clase": {
-        "calcular": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "asiento-personal",
-      "accion": "CONSTRUIR",
-      "forma": "reflejo",
-      "eje": "fiscal",
-      "depende_de": [
-        "recibo-nomina",
-        "obligacion-seguridad-social",
-        "escritor-diario"
-      ],
-      "sube": [
-        "recibo-nomina.dar_forma.request",
-        "obligacion-seguridad-social.calcular.request",
-        "escritor-diario.asentar.request"
-      ],
-      "publica": [
-        "asiento-personal.construir.response",
-        "asiento-personal.construir.failed"
-      ],
-      "rpc_clase": {
-        "construir": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "puerto-nomina",
-      "accion": "CONSTRUIR",
-      "forma": "puente",
-      "eje": "fiscal",
-      "depende_de": [
-        "recibo-nomina"
-      ],
-      "sube": [
-        "recibo-nomina.dar_forma.request"
-      ],
-      "publica": [
-        "puerto-nomina.recibir.response",
-        "puerto-nomina.recibir.failed",
-        "contabilidad.nomina_recibida"
-      ],
-      "rpc_clase": {
-        "recibir": "ORDEN"
-      }
-    },
-    {
-      "slug": "lineas-nomina",
-      "accion": "CONSTRUIR",
-      "forma": "reflejo",
-      "eje": "fiscal",
-      "depende_de": [
-        "recibo-nomina"
-      ],
-      "sube": [
-        "recibo-nomina.dar_forma.request"
-      ],
-      "publica": [
-        "lineas-nomina.desglosar.response",
-        "lineas-nomina.desglosar.failed"
-      ],
-      "rpc_clase": {
-        "desglosar": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "acceso-nomina",
-      "accion": "CONSTRUIR",
-      "forma": "custodio",
-      "eje": "fiscal",
-      "depende_de": [
-        "cola-declaraciones-criterio"
-      ],
-      "sube": [
-        "cola-declaraciones-criterio.fijar.request"
-      ],
-      "publica": [
-        "acceso-nomina.autorizar.response",
-        "acceso-nomina.autorizar.failed",
-        "acceso-nomina.declarar.response",
-        "acceso-nomina.declarar.failed",
-        "contabilidad.acceso_nomina_declarado"
-      ],
-      "rpc_clase": {
-        "autorizar": "PREGUNTA",
-        "declarar": "ORDEN"
-      }
-    },
-    {
-      "slug": "pagos-a-cuenta-empleado",
-      "accion": "CONSTRUIR",
-      "forma": "reflejo",
-      "eje": "fiscal",
-      "depende_de": [
-        "recibo-nomina"
-      ],
-      "sube": [
-        "recibo-nomina.dar_forma.request"
-      ],
-      "publica": [
-        "pagos-a-cuenta-empleado.impacto.response",
-        "pagos-a-cuenta-empleado.impacto.failed"
-      ],
-      "rpc_clase": {
-        "impacto": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "conceptos-extra-nomina",
-      "accion": "CONSTRUIR",
-      "forma": "reflejo",
-      "eje": "fiscal",
-      "depende_de": [
-        "recibo-nomina",
-        "escritor-diario"
-      ],
-      "sube": [
-        "recibo-nomina.dar_forma.request",
-        "escritor-diario.asentar.request"
-      ],
-      "publica": [
-        "conceptos-extra-nomina.imputar.response",
-        "conceptos-extra-nomina.imputar.failed"
-      ],
-      "rpc_clase": {
-        "imputar": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "liquidacion-baja-empleado",
-      "accion": "CONSTRUIR",
-      "forma": "reflejo",
-      "eje": "fiscal",
-      "depende_de": [
-        "escritor-diario",
-        "cuenta-proveedor"
-      ],
-      "sube": [
-        "escritor-diario.asentar.request",
-        "cuenta-proveedor.saldo.request"
-      ],
-      "publica": [
-        "liquidacion-baja-empleado.liquidar.response",
-        "liquidacion-baja-empleado.liquidar.failed"
-      ],
-      "rpc_clase": {
-        "liquidar": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "alta-activo",
-      "accion": "CONSTRUIR",
-      "forma": "custodio",
-      "eje": "analitica",
-      "depende_de": [
-        "escritor-diario",
-        "plan-amortizacion",
-        "expediente-documental"
-      ],
-      "sube": [
-        "escritor-diario.asentar.request",
-        "plan-amortizacion.cuota_del_periodo.request",
-        "expediente-documental.archivar.request"
-      ],
-      "publica": [
-        "alta-activo.registrar.response",
-        "alta-activo.registrar.failed",
-        "contabilidad.activo_alta"
-      ],
-      "rpc_clase": {
-        "registrar": "ORDEN"
-      }
-    },
-    {
-      "slug": "plan-amortizacion",
-      "accion": "CONSTRUIR",
-      "forma": "custodio",
-      "eje": "analitica",
-      "depende_de": [
-        "escritor-diario",
-        "cola-declaraciones-criterio"
-      ],
-      "sube": [
-        "escritor-diario.asentar.request",
-        "cola-declaraciones-criterio.fijar.request"
-      ],
-      "publica": [
-        "plan-amortizacion.cuota_del_periodo.response",
-        "plan-amortizacion.cuota_del_periodo.failed",
-        "plan-amortizacion.generar_cuota.response",
-        "plan-amortizacion.generar_cuota.failed",
-        "contabilidad.cuota_amortizacion_generada"
-      ],
-      "rpc_clase": {
-        "cuota_del_periodo": "PREGUNTA",
-        "generar_cuota": "ORDEN"
-      }
-    },
-    {
-      "slug": "baja-activo",
-      "accion": "CONSTRUIR",
-      "forma": "reflejo",
-      "eje": "analitica",
-      "depende_de": [
-        "valor-neto-contable",
-        "escritor-diario"
-      ],
-      "sube": [
-        "valor-neto-contable.calcular.request",
-        "escritor-diario.asentar.request"
-      ],
-      "publica": [
-        "baja-activo.calcular.response",
-        "baja-activo.calcular.failed"
-      ],
-      "rpc_clase": {
-        "calcular": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "valor-neto-contable",
-      "accion": "CONSTRUIR",
-      "forma": "reflejo",
-      "eje": "analitica",
-      "depende_de": [
-        "plan-amortizacion"
-      ],
-      "sube": [
-        "plan-amortizacion.cuota_del_periodo.request"
-      ],
-      "publica": [
-        "valor-neto-contable.calcular.response",
-        "valor-neto-contable.calcular.failed"
-      ],
-      "rpc_clase": {
-        "calcular": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "valoracion-existencia",
-      "accion": "CONSTRUIR",
-      "forma": "reflejo",
-      "eje": "analitica",
-      "depende_de": [
-        "frontera-ficha-producto"
-      ],
-      "sube": [
-        "frontera-ficha-producto.entrar.request"
-      ],
-      "publica": [
-        "valoracion-existencia.valorar.response",
-        "valoracion-existencia.valorar.failed"
-      ],
-      "rpc_clase": {
-        "valorar": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "frontera-ficha-producto",
-      "accion": "CONSTRUIR",
-      "forma": "conversor",
-      "eje": "analitica",
-      "depende_de": [],
-      "sube": [],
-      "publica": [
-        "frontera-ficha-producto.entrar.response",
-        "frontera-ficha-producto.entrar.failed"
-      ],
-      "rpc_clase": {
-        "entrar": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "ajuste-inventario",
-      "accion": "CONSTRUIR",
-      "forma": "reflejo",
-      "eje": "analitica",
-      "depende_de": [
-        "escritor-diario",
-        "motor-avisos"
-      ],
-      "sube": [
-        "escritor-diario.asentar.request",
-        "motor-avisos.producir.request"
-      ],
-      "publica": [
-        "ajuste-inventario.diferencia.response",
-        "ajuste-inventario.diferencia.failed"
-      ],
-      "rpc_clase": {
-        "diferencia": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "variacion-stock-valorada",
-      "accion": "CONSTRUIR",
-      "forma": "reflejo",
-      "eje": "analitica",
-      "depende_de": [
-        "valoracion-existencia",
-        "escritor-diario"
-      ],
-      "sube": [
-        "valoracion-existencia.valorar.request",
-        "escritor-diario.asentar.request"
-      ],
-      "publica": [
-        "variacion-stock-valorada.variacion.response",
-        "variacion-stock-valorada.variacion.failed"
-      ],
-      "rpc_clase": {
-        "variacion": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "marca-sociedad",
-      "accion": "CONSTRUIR",
-      "forma": "reflejo",
-      "eje": "analitica",
-      "depende_de": [],
-      "sube": [],
-      "publica": [
-        "marca-sociedad.marcar.response",
-        "marca-sociedad.marcar.failed"
-      ],
-      "rpc_clase": {
-        "marcar": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "eliminacion-intercompany",
-      "accion": "CONSTRUIR",
-      "forma": "reflejo",
-      "eje": "analitica",
-      "depende_de": [],
-      "sube": [],
-      "publica": [
-        "eliminacion-intercompany.eliminar.response",
-        "eliminacion-intercompany.eliminar.failed"
-      ],
-      "rpc_clase": {
-        "eliminar": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "consolidacion",
-      "accion": "CONSTRUIR",
-      "forma": "reflejo",
-      "eje": "analitica",
-      "depende_de": [
-        "mayor-balanza",
-        "balance-situacion",
-        "cuenta-resultados",
-        "eliminacion-intercompany",
-        "cola-declaraciones-criterio"
-      ],
-      "sube": [
-        "mayor-balanza.saldos.request",
-        "balance-situacion.calcular.request",
-        "cuenta-resultados.calcular.request",
-        "eliminacion-intercompany.eliminar.request",
-        "cola-declaraciones-criterio.fijar.request"
-      ],
-      "publica": [
-        "consolidacion.estados.response",
-        "consolidacion.estados.failed"
-      ],
-      "rpc_clase": {
-        "estados": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "aislamiento-negocio",
-      "accion": "CONSTRUIR",
-      "forma": "custodio",
-      "eje": "analitica",
-      "depende_de": [
-        "single-writer"
-      ],
-      "sube": [
-        "single-writer.reclamar.request"
-      ],
-      "publica": [
-        "aislamiento-negocio.parcela.response",
-        "aislamiento-negocio.parcela.failed",
-        "aislamiento-negocio.escritor.response",
-        "aislamiento-negocio.escritor.failed",
-        "aislamiento-negocio.crear_parcela.response",
-        "aislamiento-negocio.crear_parcela.failed",
-        "contabilidad.negocio_parcela_creada"
-      ],
-      "rpc_clase": {
-        "parcela": "PREGUNTA",
-        "escritor": "PREGUNTA",
-        "crear_parcela": "ORDEN"
-      }
-    },
-    {
-      "slug": "etiquetado-analitico",
-      "accion": "CONSTRUIR",
-      "forma": "micro-agente",
-      "eje": "analitica",
-      "depende_de": [
-        "encolado-excepcion",
-        "cola-declaraciones-criterio"
-      ],
-      "sube": [
-        "encolado-excepcion.encolar.request",
-        "cola-declaraciones-criterio.fijar.request"
-      ],
-      "publica": [
-        "etiquetado-analitico.juzgar.response",
-        "etiquetado-analitico.juzgar.failed"
-      ],
-      "rpc_clase": {
-        "juzgar": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "margen-analitico",
-      "accion": "CONSTRUIR",
-      "forma": "reflejo",
-      "eje": "analitica",
-      "depende_de": [
-        "mayor-balanza",
-        "valoracion-existencia",
-        "coste-indirecto"
-      ],
-      "sube": [
-        "mayor-balanza.saldos.request",
-        "valoracion-existencia.valorar.request",
-        "coste-indirecto.repartir.request"
-      ],
-      "publica": [
-        "margen-analitico.calcular.response",
-        "margen-analitico.calcular.failed"
-      ],
-      "rpc_clase": {
-        "calcular": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "presupuesto",
-      "accion": "CONSTRUIR",
-      "forma": "custodio",
-      "eje": "analitica",
-      "depende_de": [
-        "cola-declaraciones-criterio"
-      ],
-      "sube": [
-        "cola-declaraciones-criterio.fijar.request"
-      ],
-      "publica": [
-        "presupuesto.fijar.response",
-        "presupuesto.fijar.failed",
-        "presupuesto.objetivo.response",
-        "presupuesto.objetivo.failed",
-        "contabilidad.presupuesto_fijado"
-      ],
-      "rpc_clase": {
-        "fijar": "ORDEN",
-        "objetivo": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "desviacion",
-      "accion": "CONSTRUIR",
-      "forma": "reflejo",
-      "eje": "analitica",
-      "depende_de": [
-        "margen-analitico",
-        "presupuesto",
-        "motor-avisos"
-      ],
-      "sube": [
-        "margen-analitico.calcular.request",
-        "presupuesto.objetivo.request",
-        "motor-avisos.producir.request"
-      ],
-      "publica": [
-        "desviacion.calcular.response",
-        "desviacion.calcular.failed"
-      ],
-      "rpc_clase": {
-        "calcular": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "coste-indirecto",
-      "accion": "CONSTRUIR",
-      "forma": "reflejo",
-      "eje": "analitica",
-      "depende_de": [
-        "mayor-balanza",
-        "cola-declaraciones-criterio"
-      ],
-      "sube": [
-        "mayor-balanza.saldos.request",
-        "cola-declaraciones-criterio.fijar.request"
-      ],
-      "publica": [
-        "coste-indirecto.repartir.response",
-        "coste-indirecto.repartir.failed"
-      ],
-      "rpc_clase": {
-        "repartir": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "cuadro-mando-contable",
-      "accion": "CONSTRUIR",
-      "forma": "reflejo",
-      "eje": "analitica",
-      "depende_de": [
-        "saldo-tesoreria",
-        "cuenta-resultados",
-        "margen-analitico",
-        "desviacion"
-      ],
-      "sube": [
-        "saldo-tesoreria.calcular.request",
-        "cuenta-resultados.calcular.request",
-        "margen-analitico.calcular.request",
-        "desviacion.calcular.request"
-      ],
-      "publica": [
-        "cuadro-mando-contable.componer.response",
-        "cuadro-mando-contable.componer.failed"
-      ],
-      "rpc_clase": {
-        "componer": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "comparador-periodos",
-      "accion": "CONSTRUIR",
-      "forma": "reflejo",
-      "eje": "analitica",
-      "depende_de": [
-        "presupuesto",
-        "desviacion"
-      ],
-      "sube": [
-        "presupuesto.objetivo.request",
-        "desviacion.calcular.request"
-      ],
-      "publica": [
-        "comparador-periodos.comparar.response",
-        "comparador-periodos.comparar.failed"
-      ],
-      "rpc_clase": {
-        "comparar": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "tablero-margen-dimension",
-      "accion": "CONSTRUIR",
-      "forma": "reflejo",
-      "eje": "analitica",
-      "depende_de": [
-        "margen-analitico"
-      ],
-      "sube": [
-        "margen-analitico.calcular.request"
-      ],
-      "publica": [
-        "tablero-margen-dimension.cruzar.response",
-        "tablero-margen-dimension.cruzar.failed"
-      ],
-      "rpc_clase": {
-        "cruzar": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "onboarding-negocio",
-      "accion": "CONSTRUIR",
-      "forma": "custodio",
-      "eje": "analitica",
-      "depende_de": [
-        "aislamiento-negocio",
-        "catalogo-cuentas"
-      ],
-      "sube": [
-        "aislamiento-negocio.parcela.request",
-        "catalogo-cuentas.buscar.request"
-      ],
-      "publica": [
-        "onboarding-negocio.recoger.response",
-        "onboarding-negocio.recoger.failed",
-        "onboarding-negocio.leer.response",
-        "onboarding-negocio.leer.failed",
-        "contabilidad.negocio_registrado"
-      ],
-      "rpc_clase": {
-        "recoger": "ORDEN",
-        "leer": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "motor-avisos",
-      "accion": "CONSTRUIR",
-      "forma": "puente",
-      "eje": "analitica",
-      "depende_de": [
-        "aviso-al-negocio"
-      ],
-      "sube": [
-        "aviso-al-negocio.entregar.request"
-      ],
-      "publica": [
-        "motor-avisos.producir.response",
-        "motor-avisos.producir.failed",
-        "contabilidad.aviso_producido"
-      ],
-      "rpc_clase": {
-        "producir": "ORDEN"
-      }
-    },
-    {
-      "slug": "informe-rico",
-      "accion": "CONSTRUIR",
-      "forma": "reflejo",
-      "eje": "analitica",
-      "depende_de": [],
-      "sube": [],
-      "publica": [
-        "informe-rico.componer.response",
-        "informe-rico.componer.failed"
-      ],
-      "rpc_clase": {
-        "componer": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "activacion-vertical",
-      "accion": "CONSTRUIR",
-      "forma": "reflejo",
-      "eje": "analitica",
-      "depende_de": [
-        "onboarding-negocio"
-      ],
-      "sube": [
-        "onboarding-negocio.recoger.request"
-      ],
-      "publica": [
-        "activacion-vertical.activar.response",
-        "activacion-vertical.activar.failed"
-      ],
-      "rpc_clase": {
-        "activar": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "cola-declaraciones-criterio",
-      "accion": "CONSTRUIR",
-      "forma": "custodio",
-      "eje": "analitica",
-      "depende_de": [],
-      "sube": [],
-      "publica": [
-        "cola-declaraciones-criterio.fijar.response",
-        "cola-declaraciones-criterio.fijar.failed",
-        "cola-declaraciones-criterio.ratificar.response",
-        "cola-declaraciones-criterio.ratificar.failed",
-        "contabilidad.criterio_fijado"
-      ],
-      "rpc_clase": {
-        "fijar": "ORDEN",
-        "ratificar": "ORDEN"
-      }
-    },
-    {
-      "slug": "consulta-cuentas-bajo-demanda",
-      "accion": "CONSTRUIR",
-      "forma": "puente",
-      "eje": "analitica",
-      "depende_de": [
-        "puente-lenguaje-dueno",
-        "mayor-balanza",
-        "saldo-tesoreria",
-        "cuenta-resultados",
-        "sello-cobertura",
-        "marca-borrador-validado"
-      ],
-      "sube": [
-        "puente-lenguaje-dueno.a_consulta.request",
-        "mayor-balanza.saldos.request",
-        "saldo-tesoreria.calcular.request",
-        "cuenta-resultados.calcular.request",
-        "sello-cobertura.sellar.request",
-        "marca-borrador-validado.estado.request"
-      ],
-      "publica": [
-        "consulta-cuentas-bajo-demanda.preguntar.response",
-        "consulta-cuentas-bajo-demanda.preguntar.failed"
-      ],
-      "rpc_clase": {
-        "preguntar": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "puente-lenguaje-dueno",
-      "accion": "CONSTRUIR",
-      "forma": "micro-agente",
-      "eje": "analitica",
-      "depende_de": [],
-      "sube": [],
-      "publica": [
-        "puente-lenguaje-dueno.a_consulta.response",
-        "puente-lenguaje-dueno.a_consulta.failed",
-        "puente-lenguaje-dueno.a_cifra.response",
-        "puente-lenguaje-dueno.a_cifra.failed"
-      ],
-      "rpc_clase": {
-        "a_consulta": "PREGUNTA",
-        "a_cifra": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "sello-cobertura",
-      "accion": "CONSTRUIR",
-      "forma": "reflejo",
-      "eje": "analitica",
-      "depende_de": [
-        "completitud-cobertura"
-      ],
-      "sube": [
-        "completitud-cobertura.medir.request"
-      ],
-      "publica": [
-        "sello-cobertura.sellar.response",
-        "sello-cobertura.sellar.failed"
-      ],
-      "rpc_clase": {
-        "sellar": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "marca-borrador-validado",
-      "accion": "CONSTRUIR",
-      "forma": "reflejo",
-      "eje": "analitica",
-      "depende_de": [
-        "traza-asiento",
-        "flujo-firma"
-      ],
-      "sube": [
-        "traza-asiento.registrar.request",
-        "flujo-firma.estado.request"
-      ],
-      "publica": [
-        "marca-borrador-validado.estado.response",
-        "marca-borrador-validado.estado.failed"
-      ],
-      "rpc_clase": {
-        "estado": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "aviso-al-negocio",
-      "accion": "CONSTRUIR",
-      "forma": "puente",
-      "eje": "analitica",
-      "depende_de": [
-        "informe-accionable",
-        "narrador-estados"
-      ],
-      "sube": [
-        "informe-accionable.juzgar.request",
-        "narrador-estados.narrar.request"
-      ],
-      "publica": [
-        "aviso-al-negocio.entregar.response",
-        "aviso-al-negocio.entregar.failed",
-        "contabilidad.aviso_entregado"
-      ],
-      "rpc_clase": {
-        "entregar": "ORDEN"
-      }
-    },
-    {
-      "slug": "informe-accionable",
-      "accion": "CONSTRUIR",
-      "forma": "micro-agente",
-      "eje": "analitica",
-      "depende_de": [
-        "informe-rico"
-      ],
-      "sube": [
-        "informe-rico.componer.request"
-      ],
-      "publica": [
-        "informe-accionable.juzgar.response",
-        "informe-accionable.juzgar.failed"
-      ],
-      "rpc_clase": {
-        "juzgar": "PREGUNTA"
-      }
-    },
-    {
-      "slug": "narrador-estados",
-      "accion": "CONSTRUIR",
-      "forma": "micro-agente",
-      "eje": "analitica",
-      "depende_de": [
-        "balance-situacion",
-        "cuenta-resultados"
-      ],
-      "sube": [
-        "balance-situacion.calcular.request",
-        "cuenta-resultados.calcular.request"
-      ],
-      "publica": [
-        "narrador-estados.narrar.response",
-        "narrador-estados.narrar.failed"
-      ],
-      "rpc_clase": {
-        "narrar": "PREGUNTA"
-      }
-    }
-  ],
-  "orden": [
-    "cola-declaraciones-criterio",
-    "eliminacion-intercompany",
-    "expediente-documental",
-    "factura-electronica",
-    "frontera-ficha-producto",
-    "frontera-planos",
-    "historial-proceso-contable",
-    "informe-rico",
-    "marca-sociedad",
-    "padron-terceros",
-    "puente-lenguaje-dueno",
-    "puerto-evento-vertical",
-    "ratificacion-regla-aprendida",
-    "recibo-nomina",
-    "registro-verifactu",
-    "single-writer",
-    "traza-asiento",
-    "acceso-nomina",
-    "catalogo-cuentas",
-    "clave-natural",
-    "contrato-hecho-minimo",
-    "maestro-cuentas-bancarias",
-    "normalizador-hecho",
-    "periodificacion",
-    "presupuesto",
-    "valoracion-existencia",
-    "informe-accionable",
-    "maestro-terceros",
-    "regla-contrapartida",
-    "lineas-nomina",
-    "pagos-a-cuenta-empleado",
-    "puerto-nomina",
-    "aislamiento-negocio",
-    "flujo-firma",
-    "puerto-plan-contable",
-    "anclaje-cierre-vertical",
-    "deduplicacion-hecho",
-    "contrapartida-asistida",
-    "onboarding-negocio",
-    "marca-borrador-validado",
-    "escritor-diario",
-    "activacion-vertical",
-    "apertura-ejercicio",
-    "asiento-ajuste",
-    "conceptos-extra-nomina",
-    "control-calidad-muestreo",
-    "emision-factura-venta",
-    "hecho-rectificativo",
-    "lote-admision",
-    "mayor-balanza",
-    "plan-amortizacion",
-    "regla-movimiento-bancario",
-    "variacion-stock-valorada",
-    "cambio-desde-ultima-revision",
-    "puerto-exportacion",
-    "factura-rectificativa",
-    "balance-situacion",
-    "coste-indirecto",
-    "cuenta-proveedor",
-    "cuenta-resultados",
-    "retenciones",
-    "saldo-tesoreria",
-    "vista-revisable",
-    "alta-activo",
-    "valor-neto-contable",
-    "margen-analitico",
-    "estado-cuenta-proveedor",
-    "liquidacion-baja-empleado",
-    "rappel-pronto-pago",
-    "consolidacion",
-    "narrador-estados",
-    "partida-conciliatoria",
-    "baja-activo",
-    "tablero-margen-dimension",
-    "aviso-al-negocio",
-    "motor-avisos",
-    "ajuste-inventario",
-    "aviso-cuadre",
-    "aviso-revision",
-    "calendario-fiscal",
-    "completitud-cobertura",
-    "declaracion-fuente-faltante",
-    "desviacion",
-    "estado-presentacion-fiscal",
-    "prevision-caja",
-    "vencimiento-pago",
-    "cierre-ejercicio",
-    "encolado-excepcion",
-    "obligacion-seguridad-social",
-    "perfil-administrativo",
-    "sello-cobertura",
-    "tasa-cobertura-entrada",
-    "comparador-periodos",
-    "cuadro-mando-contable",
-    "acuse-presentacion",
-    "generador-modelo",
-    "rectificacion-declaracion",
-    "antiguedad-de-saldos",
-    "control-cuadre-documento",
-    "cruce-factura-recepcion",
-    "desatasco-entrada",
-    "etiquetado-analitico",
-    "partida-no-identificada",
-    "asiento-personal",
-    "estimacion-is-irpf",
-    "liquidacion-iva",
-    "consulta-cuentas-bajo-demanda",
-    "panel-proceso-contable",
-    "extraccion-dato",
-    "conciliacion-bancaria",
-    "cuadre-cobro-pago",
-    "modelo-303",
-    "modelo-390",
-    "puerto-documento",
-    "puerto-documento-digital",
-    "informe-conciliacion",
-    "puerto-extracto",
-    "captura-documento"
-  ],
-  "counts": {
-    "hojas": 118,
-    "por_eje": {
-      "entrada": 32,
-      "libro": 32,
-      "fiscal": 22,
-      "analitica": 32
-    },
-    "por_forma": {
-      "puente": 14,
-      "conversor": 7,
-      "reflejo": 60,
-      "micro-agente": 8,
-      "custodio": 29
-    },
-    "por_accion": {
-      "CONSTRUIR": 115,
-      "ADAPTAR": 2,
-      "REUTILIZAR": 1
-    },
-    "rpc_pregunta": 103,
-    "rpc_orden": 46
+ "proyecto": "contabilidad",
+ "proyecto_id": "contabilidad",
+ "origen": "fase3/diseno-oop.md (118 clases con SUBE/PUBLICA/ESCUCHA) + fase2/esquemas/esquema.md (arbol 118 hojas atomicas, formas) + inventario real modules/ (module.json real)",
+ "regla": "modulos-isla event-driven: CLASE con estado->CUSTODIO; solo calcula->REFLEJO (proyeccion _op interna); frontera de formato->CONVERSOR; habla con el exterior->PUENTE; juicio con lenguaje->MICRO-AGENTE. Dependencia->EVENTO request/response, nunca import. Todo RPC se clasifica PREGUNTA (va por el BUS) u ORDEN (superficie/panel).",
+ "inventario": "248 module.json reales en modules/ (leidos; no por nombre). Candidatos evaluados: facturas, facturacion/fuentes, facturacion/asesoria, inventario, metricas, filesystem, project-manager, credential-manager.",
+ "rpc_clase_regla": "PREGUNTA/DERIVACION (calcular·listar·buscar·saldos·estado·informe·traducir·proponer·derivar·medir) -> BUS, NUNCA panel. ORDEN HUMANA/ESCRITURA (declarar·cerrar·firmar·emitir·asentar·ajustar·encolar·archivar·ratificar·registrar·unificar·rectificar·avanzar·entregar·producir) -> superficie (panel).",
+ "hojas": [
+  {
+   "slug": "puerto-evento-vertical",
+   "accion": "CONSTRUIR",
+   "forma": "puente",
+   "eje": "entrada",
+   "depende_de": [],
+   "sube": [],
+   "publica": [
+    "puerto-evento-vertical.abrir.response",
+    "puerto-evento-vertical.abrir.failed",
+    "puerto-evento-vertical.recibir.response",
+    "puerto-evento-vertical.recibir.failed",
+    "contabilidad.hecho_recibido"
+   ],
+   "rpc_clase": {
+    "abrir": "ORDEN",
+    "recibir": "ORDEN"
+   }
   },
-  "reutiliza_infra": [
-    "filesystem",
-    "project-manager",
-    "credential-manager",
-    "metricas",
-    "inventario"
-  ],
-  "nota": "118 hojas = las 118 clases del diseno (una por hoja atomica F2). Infra (filesystem, project-manager, credential-manager, metricas, inventario) se declara como base de reutilizacion dentro de cada hoja, no como hoja propia: no tiene eje ni clase."
+  {
+   "slug": "normalizador-hecho",
+   "accion": "CONSTRUIR",
+   "forma": "conversor",
+   "eje": "entrada",
+   "depende_de": [
+    "cola-declaraciones-criterio"
+   ],
+   "sube": [
+    "cola-declaraciones-criterio.fijar.request"
+   ],
+   "publica": [
+    "normalizador-hecho.entrar.response",
+    "normalizador-hecho.entrar.failed"
+   ],
+   "rpc_clase": {
+    "entrar": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "captura-documento",
+   "accion": "CONSTRUIR",
+   "forma": "reflejo",
+   "eje": "entrada",
+   "depende_de": [
+    "extraccion-dato",
+    "puerto-documento"
+   ],
+   "sube": [
+    "extraccion-dato.juzgar.request",
+    "puerto-documento.entrar.request"
+   ],
+   "publica": [
+    "captura-documento.admitir.response",
+    "captura-documento.admitir.failed"
+   ],
+   "rpc_clase": {
+    "admitir": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "extraccion-dato",
+   "accion": "ADAPTAR",
+   "forma": "micro-agente",
+   "eje": "entrada",
+   "depende_de": [
+    "control-cuadre-documento",
+    "encolado-excepcion"
+   ],
+   "sube": [
+    "control-cuadre-documento.cuadra.request",
+    "encolado-excepcion.encolar.request"
+   ],
+   "publica": [
+    "extraccion-dato.juzgar.response",
+    "extraccion-dato.juzgar.failed"
+   ],
+   "rpc_clase": {
+    "juzgar": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "puerto-documento",
+   "accion": "CONSTRUIR",
+   "forma": "conversor",
+   "eje": "entrada",
+   "depende_de": [
+    "extraccion-dato"
+   ],
+   "sube": [
+    "extraccion-dato.juzgar.request"
+   ],
+   "publica": [
+    "puerto-documento.entrar.response",
+    "puerto-documento.entrar.failed"
+   ],
+   "rpc_clase": {
+    "entrar": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "control-cuadre-documento",
+   "accion": "CONSTRUIR",
+   "forma": "reflejo",
+   "eje": "entrada",
+   "depende_de": [
+    "encolado-excepcion"
+   ],
+   "sube": [
+    "encolado-excepcion.encolar.request"
+   ],
+   "publica": [
+    "control-cuadre-documento.cuadra.response",
+    "control-cuadre-documento.cuadra.failed"
+   ],
+   "rpc_clase": {
+    "cuadra": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "puerto-documento-digital",
+   "accion": "REUTILIZAR",
+   "forma": "puente",
+   "eje": "entrada",
+   "depende_de": [
+    "normalizador-hecho",
+    "extraccion-dato"
+   ],
+   "sube": [
+    "normalizador-hecho.entrar.request",
+    "extraccion-dato.juzgar.request"
+   ],
+   "publica": [
+    "puerto-documento-digital.recibir.response",
+    "puerto-documento-digital.recibir.failed",
+    "contabilidad.documento_recibido"
+   ],
+   "rpc_clase": {
+    "recibir": "ORDEN"
+   }
+  },
+  {
+   "slug": "contrapartida-asistida",
+   "accion": "CONSTRUIR",
+   "forma": "micro-agente",
+   "eje": "entrada",
+   "depende_de": [
+    "regla-contrapartida"
+   ],
+   "sube": [
+    "regla-contrapartida.aplicar.request"
+   ],
+   "publica": [
+    "contrapartida-asistida.juzgar.response",
+    "contrapartida-asistida.juzgar.failed"
+   ],
+   "rpc_clase": {
+    "juzgar": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "regla-contrapartida",
+   "accion": "CONSTRUIR",
+   "forma": "custodio",
+   "eje": "entrada",
+   "depende_de": [
+    "ratificacion-regla-aprendida"
+   ],
+   "sube": [
+    "ratificacion-regla-aprendida.ratificar.request"
+   ],
+   "publica": [
+    "regla-contrapartida.aplicar.response",
+    "regla-contrapartida.aplicar.failed",
+    "regla-contrapartida.proponer.response",
+    "regla-contrapartida.proponer.failed",
+    "regla-contrapartida.declarar.response",
+    "regla-contrapartida.declarar.failed",
+    "contabilidad.contrapartida_regla_declarada"
+   ],
+   "rpc_clase": {
+    "aplicar": "PREGUNTA",
+    "proponer": "PREGUNTA",
+    "declarar": "ORDEN"
+   }
+  },
+  {
+   "slug": "deduplicacion-hecho",
+   "accion": "CONSTRUIR",
+   "forma": "reflejo",
+   "eje": "entrada",
+   "depende_de": [
+    "clave-natural"
+   ],
+   "sube": [
+    "clave-natural.calcular.request"
+   ],
+   "publica": [
+    "deduplicacion-hecho.es_nuevo.response",
+    "deduplicacion-hecho.es_nuevo.failed"
+   ],
+   "rpc_clase": {
+    "es_nuevo": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "encolado-excepcion",
+   "accion": "CONSTRUIR",
+   "forma": "custodio",
+   "eje": "entrada",
+   "depende_de": [
+    "aviso-revision"
+   ],
+   "sube": [
+    "aviso-revision.empujar.request"
+   ],
+   "publica": [
+    "encolado-excepcion.encolar.response",
+    "encolado-excepcion.encolar.failed",
+    "encolado-excepcion.tomar.response",
+    "encolado-excepcion.tomar.failed",
+    "contabilidad.excepcion_encolada"
+   ],
+   "rpc_clase": {
+    "encolar": "ORDEN",
+    "tomar": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "aviso-revision",
+   "accion": "CONSTRUIR",
+   "forma": "puente",
+   "eje": "entrada",
+   "depende_de": [
+    "motor-avisos"
+   ],
+   "sube": [
+    "motor-avisos.producir.request"
+   ],
+   "publica": [
+    "aviso-revision.empujar.response",
+    "aviso-revision.empujar.failed",
+    "contabilidad.revision_solicitada"
+   ],
+   "rpc_clase": {
+    "empujar": "ORDEN"
+   }
+  },
+  {
+   "slug": "lote-admision",
+   "accion": "CONSTRUIR",
+   "forma": "reflejo",
+   "eje": "entrada",
+   "depende_de": [
+    "normalizador-hecho",
+    "escritor-diario"
+   ],
+   "sube": [
+    "normalizador-hecho.entrar.request",
+    "escritor-diario.asentar.request"
+   ],
+   "publica": [
+    "lote-admision.admitir.response",
+    "lote-admision.admitir.failed"
+   ],
+   "rpc_clase": {
+    "admitir": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "contrato-hecho-minimo",
+   "accion": "CONSTRUIR",
+   "forma": "custodio",
+   "eje": "entrada",
+   "depende_de": [
+    "cola-declaraciones-criterio"
+   ],
+   "sube": [
+    "cola-declaraciones-criterio.fijar.request"
+   ],
+   "publica": [
+    "contrato-hecho-minimo.exigir.response",
+    "contrato-hecho-minimo.exigir.failed",
+    "contrato-hecho-minimo.declarar.response",
+    "contrato-hecho-minimo.declarar.failed",
+    "contabilidad.contrato_hecho_declarado"
+   ],
+   "rpc_clase": {
+    "exigir": "PREGUNTA",
+    "declarar": "ORDEN"
+   }
+  },
+  {
+   "slug": "completitud-cobertura",
+   "accion": "CONSTRUIR",
+   "forma": "reflejo",
+   "eje": "entrada",
+   "depende_de": [
+    "motor-avisos"
+   ],
+   "sube": [
+    "motor-avisos.producir.request"
+   ],
+   "publica": [
+    "completitud-cobertura.medir.response",
+    "completitud-cobertura.medir.failed"
+   ],
+   "rpc_clase": {
+    "medir": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "hecho-rectificativo",
+   "accion": "CONSTRUIR",
+   "forma": "puente",
+   "eje": "entrada",
+   "depende_de": [
+    "clave-natural",
+    "escritor-diario"
+   ],
+   "sube": [
+    "clave-natural.calcular.request",
+    "escritor-diario.asentar.request"
+   ],
+   "publica": [
+    "hecho-rectificativo.emparejar.response",
+    "hecho-rectificativo.emparejar.failed",
+    "contabilidad.hecho_rectificado"
+   ],
+   "rpc_clase": {
+    "emparejar": "ORDEN"
+   }
+  },
+  {
+   "slug": "anclaje-cierre-vertical",
+   "accion": "CONSTRUIR",
+   "forma": "custodio",
+   "eje": "entrada",
+   "depende_de": [
+    "clave-natural",
+    "cola-declaraciones-criterio"
+   ],
+   "sube": [
+    "clave-natural.calcular.request",
+    "cola-declaraciones-criterio.fijar.request"
+   ],
+   "publica": [
+    "anclaje-cierre-vertical.anclar.response",
+    "anclaje-cierre-vertical.anclar.failed",
+    "anclaje-cierre-vertical.declarar.response",
+    "anclaje-cierre-vertical.declarar.failed",
+    "contabilidad.anclaje_cierre_declarado"
+   ],
+   "rpc_clase": {
+    "anclar": "PREGUNTA",
+    "declarar": "ORDEN"
+   }
+  },
+  {
+   "slug": "declaracion-fuente-faltante",
+   "accion": "CONSTRUIR",
+   "forma": "puente",
+   "eje": "entrada",
+   "depende_de": [
+    "motor-avisos"
+   ],
+   "sube": [
+    "motor-avisos.producir.request"
+   ],
+   "publica": [
+    "declaracion-fuente-faltante.declarar.response",
+    "declaracion-fuente-faltante.declarar.failed",
+    "contabilidad.fuente_faltante_declarada"
+   ],
+   "rpc_clase": {
+    "declarar": "ORDEN"
+   }
+  },
+  {
+   "slug": "maestro-terceros",
+   "accion": "CONSTRUIR",
+   "forma": "custodio",
+   "eje": "entrada",
+   "depende_de": [
+    "padron-terceros",
+    "expediente-documental"
+   ],
+   "sube": [
+    "padron-terceros.unificar.request",
+    "expediente-documental.archivar.request"
+   ],
+   "publica": [
+    "maestro-terceros.ficha.response",
+    "maestro-terceros.ficha.failed",
+    "maestro-terceros.upsert.response",
+    "maestro-terceros.upsert.failed",
+    "contabilidad.tercero_actualizado"
+   ],
+   "rpc_clase": {
+    "ficha": "PREGUNTA",
+    "upsert": "ORDEN"
+   }
+  },
+  {
+   "slug": "padron-terceros",
+   "accion": "CONSTRUIR",
+   "forma": "custodio",
+   "eje": "entrada",
+   "depende_de": [],
+   "sube": [],
+   "publica": [
+    "padron-terceros.unificar.response",
+    "padron-terceros.unificar.failed",
+    "contabilidad.tercero_unificado"
+   ],
+   "rpc_clase": {
+    "unificar": "ORDEN"
+   }
+  },
+  {
+   "slug": "cuenta-proveedor",
+   "accion": "CONSTRUIR",
+   "forma": "reflejo",
+   "eje": "entrada",
+   "depende_de": [
+    "mayor-balanza"
+   ],
+   "sube": [
+    "mayor-balanza.saldos.request"
+   ],
+   "publica": [
+    "cuenta-proveedor.saldo.response",
+    "cuenta-proveedor.saldo.failed",
+    "cuenta-proveedor.facturas_vivas.response",
+    "cuenta-proveedor.facturas_vivas.failed"
+   ],
+   "rpc_clase": {
+    "saldo": "PREGUNTA",
+    "facturas_vivas": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "estado-cuenta-proveedor",
+   "accion": "CONSTRUIR",
+   "forma": "reflejo",
+   "eje": "entrada",
+   "depende_de": [
+    "cuenta-proveedor"
+   ],
+   "sube": [
+    "cuenta-proveedor.saldo.request"
+   ],
+   "publica": [
+    "estado-cuenta-proveedor.extracto.response",
+    "estado-cuenta-proveedor.extracto.failed"
+   ],
+   "rpc_clase": {
+    "extracto": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "cruce-factura-recepcion",
+   "accion": "CONSTRUIR",
+   "forma": "reflejo",
+   "eje": "entrada",
+   "depende_de": [
+    "encolado-excepcion",
+    "escritor-diario"
+   ],
+   "sube": [
+    "encolado-excepcion.encolar.request",
+    "escritor-diario.asentar.request"
+   ],
+   "publica": [
+    "cruce-factura-recepcion.cotejar.response",
+    "cruce-factura-recepcion.cotejar.failed"
+   ],
+   "rpc_clase": {
+    "cotejar": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "vencimiento-pago",
+   "accion": "CONSTRUIR",
+   "forma": "reflejo",
+   "eje": "entrada",
+   "depende_de": [
+    "maestro-terceros",
+    "motor-avisos"
+   ],
+   "sube": [
+    "maestro-terceros.ficha.request",
+    "motor-avisos.producir.request"
+   ],
+   "publica": [
+    "vencimiento-pago.calcular.response",
+    "vencimiento-pago.calcular.failed"
+   ],
+   "rpc_clase": {
+    "calcular": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "rappel-pronto-pago",
+   "accion": "CONSTRUIR",
+   "forma": "reflejo",
+   "eje": "entrada",
+   "depende_de": [
+    "cuenta-proveedor",
+    "escritor-diario"
+   ],
+   "sube": [
+    "cuenta-proveedor.saldo.request",
+    "escritor-diario.asentar.request"
+   ],
+   "publica": [
+    "rappel-pronto-pago.ajustar.response",
+    "rappel-pronto-pago.ajustar.failed"
+   ],
+   "rpc_clase": {
+    "ajustar": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "antiguedad-de-saldos",
+   "accion": "CONSTRUIR",
+   "forma": "reflejo",
+   "eje": "entrada",
+   "depende_de": [
+    "vencimiento-pago",
+    "motor-avisos"
+   ],
+   "sube": [
+    "vencimiento-pago.calcular.request",
+    "motor-avisos.producir.request"
+   ],
+   "publica": [
+    "antiguedad-de-saldos.clasificar.response",
+    "antiguedad-de-saldos.clasificar.failed"
+   ],
+   "rpc_clase": {
+    "clasificar": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "emision-factura-venta",
+   "accion": "CONSTRUIR",
+   "forma": "custodio",
+   "eje": "entrada",
+   "depende_de": [
+    "registro-verifactu",
+    "factura-electronica",
+    "escritor-diario",
+    "maestro-terceros",
+    "expediente-documental"
+   ],
+   "sube": [
+    "registro-verifactu.encadenar.request",
+    "factura-electronica.entrar.request",
+    "escritor-diario.asentar.request",
+    "maestro-terceros.ficha.request",
+    "expediente-documental.archivar.request"
+   ],
+   "publica": [
+    "emision-factura-venta.emitir.response",
+    "emision-factura-venta.emitir.failed",
+    "contabilidad.factura_emitida"
+   ],
+   "rpc_clase": {
+    "emitir": "ORDEN"
+   }
+  },
+  {
+   "slug": "factura-rectificativa",
+   "accion": "CONSTRUIR",
+   "forma": "reflejo",
+   "eje": "entrada",
+   "depende_de": [
+    "emision-factura-venta",
+    "escritor-diario"
+   ],
+   "sube": [
+    "emision-factura-venta.emitir.request",
+    "escritor-diario.asentar.request"
+   ],
+   "publica": [
+    "factura-rectificativa.calcular.response",
+    "factura-rectificativa.calcular.failed"
+   ],
+   "rpc_clase": {
+    "calcular": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "panel-proceso-contable",
+   "accion": "CONSTRUIR",
+   "forma": "reflejo",
+   "eje": "entrada",
+   "depende_de": [
+    "encolado-excepcion",
+    "historial-proceso-contable",
+    "tasa-cobertura-entrada"
+   ],
+   "sube": [
+    "encolado-excepcion.encolar.request",
+    "historial-proceso-contable.anotar.request",
+    "tasa-cobertura-entrada.calcular.request"
+   ],
+   "publica": [
+    "panel-proceso-contable.latido.response",
+    "panel-proceso-contable.latido.failed"
+   ],
+   "rpc_clase": {
+    "latido": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "historial-proceso-contable",
+   "accion": "CONSTRUIR",
+   "forma": "custodio",
+   "eje": "entrada",
+   "depende_de": [],
+   "sube": [],
+   "publica": [
+    "historial-proceso-contable.anotar.response",
+    "historial-proceso-contable.anotar.failed",
+    "contabilidad.proceso_anotado"
+   ],
+   "rpc_clase": {
+    "anotar": "ORDEN"
+   }
+  },
+  {
+   "slug": "desatasco-entrada",
+   "accion": "CONSTRUIR",
+   "forma": "micro-agente",
+   "eje": "entrada",
+   "depende_de": [
+    "escritor-diario",
+    "encolado-excepcion",
+    "regla-contrapartida",
+    "historial-proceso-contable"
+   ],
+   "sube": [
+    "escritor-diario.asentar.request",
+    "encolado-excepcion.encolar.request",
+    "regla-contrapartida.aplicar.request",
+    "historial-proceso-contable.anotar.request"
+   ],
+   "publica": [
+    "desatasco-entrada.juzgar.response",
+    "desatasco-entrada.juzgar.failed",
+    "contabilidad.excepcion_desatascada"
+   ],
+   "rpc_clase": {
+    "juzgar": "ORDEN"
+   }
+  },
+  {
+   "slug": "tasa-cobertura-entrada",
+   "accion": "CONSTRUIR",
+   "forma": "reflejo",
+   "eje": "entrada",
+   "depende_de": [
+    "completitud-cobertura"
+   ],
+   "sube": [
+    "completitud-cobertura.medir.request"
+   ],
+   "publica": [
+    "tasa-cobertura-entrada.calcular.response",
+    "tasa-cobertura-entrada.calcular.failed"
+   ],
+   "rpc_clase": {
+    "calcular": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "catalogo-cuentas",
+   "accion": "CONSTRUIR",
+   "forma": "custodio",
+   "eje": "libro",
+   "depende_de": [
+    "cola-declaraciones-criterio"
+   ],
+   "sube": [
+    "cola-declaraciones-criterio.fijar.request"
+   ],
+   "publica": [
+    "catalogo-cuentas.anadir.response",
+    "catalogo-cuentas.anadir.failed",
+    "catalogo-cuentas.buscar.response",
+    "catalogo-cuentas.buscar.failed",
+    "contabilidad.plan_cuentas_declarado"
+   ],
+   "rpc_clase": {
+    "anadir": "ORDEN",
+    "buscar": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "escritor-diario",
+   "accion": "CONSTRUIR",
+   "forma": "custodio",
+   "eje": "libro",
+   "depende_de": [
+    "traza-asiento",
+    "frontera-planos",
+    "periodificacion",
+    "deduplicacion-hecho"
+   ],
+   "sube": [
+    "traza-asiento.registrar.request",
+    "frontera-planos.verificar.request",
+    "periodificacion.imputar.request",
+    "deduplicacion-hecho.es_nuevo.request"
+   ],
+   "publica": [
+    "escritor-diario.asentar.response",
+    "escritor-diario.asentar.failed",
+    "contabilidad.asiento_asentado"
+   ],
+   "rpc_clase": {
+    "asentar": "ORDEN"
+   }
+  },
+  {
+   "slug": "mayor-balanza",
+   "accion": "CONSTRUIR",
+   "forma": "reflejo",
+   "eje": "libro",
+   "depende_de": [
+    "escritor-diario"
+   ],
+   "sube": [
+    "escritor-diario.asentar.request"
+   ],
+   "publica": [
+    "mayor-balanza.saldos.response",
+    "mayor-balanza.saldos.failed",
+    "mayor-balanza.balanza.response",
+    "mayor-balanza.balanza.failed"
+   ],
+   "rpc_clase": {
+    "saldos": "PREGUNTA",
+    "balanza": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "traza-asiento",
+   "accion": "CONSTRUIR",
+   "forma": "custodio",
+   "eje": "libro",
+   "depende_de": [],
+   "sube": [],
+   "publica": [
+    "traza-asiento.registrar.response",
+    "traza-asiento.registrar.failed",
+    "contabilidad.traza_registrada"
+   ],
+   "rpc_clase": {
+    "registrar": "ORDEN"
+   }
+  },
+  {
+   "slug": "asiento-ajuste",
+   "accion": "CONSTRUIR",
+   "forma": "puente",
+   "eje": "libro",
+   "depende_de": [
+    "escritor-diario",
+    "traza-asiento"
+   ],
+   "sube": [
+    "escritor-diario.asentar.request",
+    "traza-asiento.registrar.request"
+   ],
+   "publica": [
+    "asiento-ajuste.entrar.response",
+    "asiento-ajuste.entrar.failed",
+    "contabilidad.ajuste_entrado"
+   ],
+   "rpc_clase": {
+    "entrar": "ORDEN"
+   }
+  },
+  {
+   "slug": "puerto-plan-contable",
+   "accion": "CONSTRUIR",
+   "forma": "conversor",
+   "eje": "libro",
+   "depende_de": [
+    "catalogo-cuentas"
+   ],
+   "sube": [
+    "catalogo-cuentas.buscar.request"
+   ],
+   "publica": [
+    "puerto-plan-contable.entrar.response",
+    "puerto-plan-contable.entrar.failed",
+    "puerto-plan-contable.salir.response",
+    "puerto-plan-contable.salir.failed"
+   ],
+   "rpc_clase": {
+    "entrar": "PREGUNTA",
+    "salir": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "balance-situacion",
+   "accion": "CONSTRUIR",
+   "forma": "reflejo",
+   "eje": "libro",
+   "depende_de": [
+    "mayor-balanza"
+   ],
+   "sube": [
+    "mayor-balanza.saldos.request"
+   ],
+   "publica": [
+    "balance-situacion.calcular.response",
+    "balance-situacion.calcular.failed"
+   ],
+   "rpc_clase": {
+    "calcular": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "cuenta-resultados",
+   "accion": "CONSTRUIR",
+   "forma": "reflejo",
+   "eje": "libro",
+   "depende_de": [
+    "mayor-balanza"
+   ],
+   "sube": [
+    "mayor-balanza.saldos.request"
+   ],
+   "publica": [
+    "cuenta-resultados.calcular.response",
+    "cuenta-resultados.calcular.failed"
+   ],
+   "rpc_clase": {
+    "calcular": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "periodificacion",
+   "accion": "CONSTRUIR",
+   "forma": "reflejo",
+   "eje": "libro",
+   "depende_de": [
+    "cola-declaraciones-criterio"
+   ],
+   "sube": [
+    "cola-declaraciones-criterio.fijar.request"
+   ],
+   "publica": [
+    "periodificacion.imputar.response",
+    "periodificacion.imputar.failed"
+   ],
+   "rpc_clase": {
+    "imputar": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "cierre-ejercicio",
+   "accion": "CONSTRUIR",
+   "forma": "custodio",
+   "eje": "libro",
+   "depende_de": [
+    "plan-amortizacion",
+    "escritor-diario",
+    "aviso-cuadre"
+   ],
+   "sube": [
+    "plan-amortizacion.cuota_del_periodo.request",
+    "escritor-diario.asentar.request",
+    "aviso-cuadre.avisar.request"
+   ],
+   "publica": [
+    "cierre-ejercicio.cerrar.response",
+    "cierre-ejercicio.cerrar.failed",
+    "cierre-ejercicio.reabrir.response",
+    "cierre-ejercicio.reabrir.failed",
+    "contabilidad.ejercicio_cerrado"
+   ],
+   "rpc_clase": {
+    "cerrar": "ORDEN",
+    "reabrir": "ORDEN"
+   }
+  },
+  {
+   "slug": "apertura-ejercicio",
+   "accion": "CONSTRUIR",
+   "forma": "reflejo",
+   "eje": "libro",
+   "depende_de": [
+    "escritor-diario"
+   ],
+   "sube": [
+    "escritor-diario.asentar.request"
+   ],
+   "publica": [
+    "apertura-ejercicio.generar.response",
+    "apertura-ejercicio.generar.failed"
+   ],
+   "rpc_clase": {
+    "generar": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "aviso-cuadre",
+   "accion": "CONSTRUIR",
+   "forma": "puente",
+   "eje": "libro",
+   "depende_de": [
+    "motor-avisos"
+   ],
+   "sube": [
+    "motor-avisos.producir.request"
+   ],
+   "publica": [
+    "aviso-cuadre.avisar.response",
+    "aviso-cuadre.avisar.failed",
+    "contabilidad.cuadre_no_cuadra"
+   ],
+   "rpc_clase": {
+    "avisar": "ORDEN"
+   }
+  },
+  {
+   "slug": "conciliacion-bancaria",
+   "accion": "CONSTRUIR",
+   "forma": "reflejo",
+   "eje": "libro",
+   "depende_de": [
+    "escritor-diario",
+    "partida-no-identificada",
+    "partida-conciliatoria"
+   ],
+   "sube": [
+    "escritor-diario.asentar.request",
+    "partida-no-identificada.juzgar.request",
+    "partida-conciliatoria.desfase.request"
+   ],
+   "publica": [
+    "conciliacion-bancaria.cruzar.response",
+    "conciliacion-bancaria.cruzar.failed"
+   ],
+   "rpc_clase": {
+    "cruzar": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "puerto-extracto",
+   "accion": "CONSTRUIR",
+   "forma": "conversor",
+   "eje": "libro",
+   "depende_de": [
+    "conciliacion-bancaria"
+   ],
+   "sube": [
+    "conciliacion-bancaria.cruzar.request"
+   ],
+   "publica": [
+    "puerto-extracto.entrar.response",
+    "puerto-extracto.entrar.failed"
+   ],
+   "rpc_clase": {
+    "entrar": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "cuadre-cobro-pago",
+   "accion": "CONSTRUIR",
+   "forma": "reflejo",
+   "eje": "libro",
+   "depende_de": [
+    "escritor-diario",
+    "partida-no-identificada"
+   ],
+   "sube": [
+    "escritor-diario.asentar.request",
+    "partida-no-identificada.juzgar.request"
+   ],
+   "publica": [
+    "cuadre-cobro-pago.cuadrar.response",
+    "cuadre-cobro-pago.cuadrar.failed"
+   ],
+   "rpc_clase": {
+    "cuadrar": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "saldo-tesoreria",
+   "accion": "CONSTRUIR",
+   "forma": "reflejo",
+   "eje": "libro",
+   "depende_de": [
+    "mayor-balanza"
+   ],
+   "sube": [
+    "mayor-balanza.saldos.request"
+   ],
+   "publica": [
+    "saldo-tesoreria.calcular.response",
+    "saldo-tesoreria.calcular.failed"
+   ],
+   "rpc_clase": {
+    "calcular": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "prevision-caja",
+   "accion": "CONSTRUIR",
+   "forma": "reflejo",
+   "eje": "libro",
+   "depende_de": [
+    "saldo-tesoreria",
+    "motor-avisos"
+   ],
+   "sube": [
+    "saldo-tesoreria.calcular.request",
+    "motor-avisos.producir.request"
+   ],
+   "publica": [
+    "prevision-caja.proyectar.response",
+    "prevision-caja.proyectar.failed"
+   ],
+   "rpc_clase": {
+    "proyectar": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "partida-no-identificada",
+   "accion": "CONSTRUIR",
+   "forma": "micro-agente",
+   "eje": "libro",
+   "depende_de": [
+    "regla-movimiento-bancario",
+    "encolado-excepcion"
+   ],
+   "sube": [
+    "regla-movimiento-bancario.aplicar.request",
+    "encolado-excepcion.encolar.request"
+   ],
+   "publica": [
+    "partida-no-identificada.juzgar.response",
+    "partida-no-identificada.juzgar.failed"
+   ],
+   "rpc_clase": {
+    "juzgar": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "regla-movimiento-bancario",
+   "accion": "CONSTRUIR",
+   "forma": "custodio",
+   "eje": "libro",
+   "depende_de": [
+    "ratificacion-regla-aprendida",
+    "escritor-diario"
+   ],
+   "sube": [
+    "ratificacion-regla-aprendida.ratificar.request",
+    "escritor-diario.asentar.request"
+   ],
+   "publica": [
+    "regla-movimiento-bancario.aplicar.response",
+    "regla-movimiento-bancario.aplicar.failed",
+    "regla-movimiento-bancario.proponer.response",
+    "regla-movimiento-bancario.proponer.failed",
+    "regla-movimiento-bancario.declarar.response",
+    "regla-movimiento-bancario.declarar.failed",
+    "contabilidad.movimiento_regla_declarada"
+   ],
+   "rpc_clase": {
+    "aplicar": "PREGUNTA",
+    "proponer": "PREGUNTA",
+    "declarar": "ORDEN"
+   }
+  },
+  {
+   "slug": "partida-conciliatoria",
+   "accion": "CONSTRUIR",
+   "forma": "reflejo",
+   "eje": "libro",
+   "depende_de": [
+    "saldo-tesoreria"
+   ],
+   "sube": [
+    "saldo-tesoreria.calcular.request"
+   ],
+   "publica": [
+    "partida-conciliatoria.desfase.response",
+    "partida-conciliatoria.desfase.failed"
+   ],
+   "rpc_clase": {
+    "desfase": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "informe-conciliacion",
+   "accion": "CONSTRUIR",
+   "forma": "reflejo",
+   "eje": "libro",
+   "depende_de": [
+    "conciliacion-bancaria",
+    "partida-conciliatoria"
+   ],
+   "sube": [
+    "conciliacion-bancaria.cruzar.request",
+    "partida-conciliatoria.desfase.request"
+   ],
+   "publica": [
+    "informe-conciliacion.componer.response",
+    "informe-conciliacion.componer.failed"
+   ],
+   "rpc_clase": {
+    "componer": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "maestro-cuentas-bancarias",
+   "accion": "CONSTRUIR",
+   "forma": "custodio",
+   "eje": "libro",
+   "depende_de": [
+    "cola-declaraciones-criterio"
+   ],
+   "sube": [
+    "cola-declaraciones-criterio.fijar.request"
+   ],
+   "publica": [
+    "maestro-cuentas-bancarias.declarar.response",
+    "maestro-cuentas-bancarias.declarar.failed",
+    "maestro-cuentas-bancarias.listar.response",
+    "maestro-cuentas-bancarias.listar.failed",
+    "contabilidad.cuenta_bancaria_declarada"
+   ],
+   "rpc_clase": {
+    "declarar": "ORDEN",
+    "listar": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "puerto-exportacion",
+   "accion": "ADAPTAR",
+   "forma": "conversor",
+   "eje": "libro",
+   "depende_de": [
+    "asiento-ajuste"
+   ],
+   "sube": [
+    "asiento-ajuste.entrar.request"
+   ],
+   "publica": [
+    "puerto-exportacion.salir.response",
+    "puerto-exportacion.salir.failed",
+    "puerto-exportacion.entrar.response",
+    "puerto-exportacion.entrar.failed"
+   ],
+   "rpc_clase": {
+    "salir": "PREGUNTA",
+    "entrar": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "vista-revisable",
+   "accion": "CONSTRUIR",
+   "forma": "reflejo",
+   "eje": "libro",
+   "depende_de": [
+    "traza-asiento",
+    "mayor-balanza"
+   ],
+   "sube": [
+    "traza-asiento.registrar.request",
+    "mayor-balanza.saldos.request"
+   ],
+   "publica": [
+    "vista-revisable.explicar.response",
+    "vista-revisable.explicar.failed"
+   ],
+   "rpc_clase": {
+    "explicar": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "flujo-firma",
+   "accion": "CONSTRUIR",
+   "forma": "custodio",
+   "eje": "libro",
+   "depende_de": [
+    "traza-asiento"
+   ],
+   "sube": [
+    "traza-asiento.registrar.request"
+   ],
+   "publica": [
+    "flujo-firma.firmar.response",
+    "flujo-firma.firmar.failed",
+    "flujo-firma.estado.response",
+    "flujo-firma.estado.failed",
+    "contabilidad.revision_firmada"
+   ],
+   "rpc_clase": {
+    "firmar": "ORDEN",
+    "estado": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "expediente-documental",
+   "accion": "CONSTRUIR",
+   "forma": "custodio",
+   "eje": "libro",
+   "depende_de": [],
+   "sube": [],
+   "publica": [
+    "expediente-documental.archivar.response",
+    "expediente-documental.archivar.failed",
+    "expediente-documental.recuperar.response",
+    "expediente-documental.recuperar.failed",
+    "contabilidad.documento_archivado"
+   ],
+   "rpc_clase": {
+    "archivar": "ORDEN",
+    "recuperar": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "control-calidad-muestreo",
+   "accion": "CONSTRUIR",
+   "forma": "reflejo",
+   "eje": "libro",
+   "depende_de": [
+    "escritor-diario",
+    "regla-contrapartida"
+   ],
+   "sube": [
+    "escritor-diario.asentar.request",
+    "regla-contrapartida.aplicar.request"
+   ],
+   "publica": [
+    "control-calidad-muestreo.seleccionar.response",
+    "control-calidad-muestreo.seleccionar.failed"
+   ],
+   "rpc_clase": {
+    "seleccionar": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "cambio-desde-ultima-revision",
+   "accion": "CONSTRUIR",
+   "forma": "reflejo",
+   "eje": "libro",
+   "depende_de": [
+    "escritor-diario",
+    "asiento-ajuste",
+    "flujo-firma"
+   ],
+   "sube": [
+    "escritor-diario.asentar.request",
+    "asiento-ajuste.entrar.request",
+    "flujo-firma.estado.request"
+   ],
+   "publica": [
+    "cambio-desde-ultima-revision.delta.response",
+    "cambio-desde-ultima-revision.delta.failed"
+   ],
+   "rpc_clase": {
+    "delta": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "ratificacion-regla-aprendida",
+   "accion": "CONSTRUIR",
+   "forma": "puente",
+   "eje": "libro",
+   "depende_de": [],
+   "sube": [],
+   "publica": [
+    "ratificacion-regla-aprendida.ratificar.response",
+    "ratificacion-regla-aprendida.ratificar.failed",
+    "contabilidad.regla_ratificada"
+   ],
+   "rpc_clase": {
+    "ratificar": "ORDEN"
+   }
+  },
+  {
+   "slug": "frontera-planos",
+   "accion": "CONSTRUIR",
+   "forma": "reflejo",
+   "eje": "libro",
+   "depende_de": [],
+   "sube": [],
+   "publica": [
+    "frontera-planos.verificar.response",
+    "frontera-planos.verificar.failed"
+   ],
+   "rpc_clase": {
+    "verificar": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "single-writer",
+   "accion": "CONSTRUIR",
+   "forma": "custodio",
+   "eje": "libro",
+   "depende_de": [],
+   "sube": [],
+   "publica": [
+    "single-writer.reclamar.response",
+    "single-writer.reclamar.failed",
+    "single-writer.es_escritor.response",
+    "single-writer.es_escritor.failed",
+    "contabilidad.parcela_reclamada"
+   ],
+   "rpc_clase": {
+    "reclamar": "ORDEN",
+    "es_escritor": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "clave-natural",
+   "accion": "CONSTRUIR",
+   "forma": "reflejo",
+   "eje": "libro",
+   "depende_de": [
+    "cola-declaraciones-criterio"
+   ],
+   "sube": [
+    "cola-declaraciones-criterio.fijar.request"
+   ],
+   "publica": [
+    "clave-natural.calcular.response",
+    "clave-natural.calcular.failed",
+    "clave-natural.coincide.response",
+    "clave-natural.coincide.failed"
+   ],
+   "rpc_clase": {
+    "calcular": "PREGUNTA",
+    "coincide": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "liquidacion-iva",
+   "accion": "CONSTRUIR",
+   "forma": "reflejo",
+   "eje": "fiscal",
+   "depende_de": [
+    "mayor-balanza",
+    "perfil-administrativo"
+   ],
+   "sube": [
+    "mayor-balanza.saldos.request",
+    "perfil-administrativo.obligaciones.request"
+   ],
+   "publica": [
+    "liquidacion-iva.calcular.response",
+    "liquidacion-iva.calcular.failed"
+   ],
+   "rpc_clase": {
+    "calcular": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "modelo-303",
+   "accion": "CONSTRUIR",
+   "forma": "reflejo",
+   "eje": "fiscal",
+   "depende_de": [
+    "liquidacion-iva"
+   ],
+   "sube": [
+    "liquidacion-iva.calcular.request"
+   ],
+   "publica": [
+    "modelo-303.construir.response",
+    "modelo-303.construir.failed"
+   ],
+   "rpc_clase": {
+    "construir": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "modelo-390",
+   "accion": "CONSTRUIR",
+   "forma": "reflejo",
+   "eje": "fiscal",
+   "depende_de": [
+    "liquidacion-iva"
+   ],
+   "sube": [
+    "liquidacion-iva.calcular.request"
+   ],
+   "publica": [
+    "modelo-390.construir.response",
+    "modelo-390.construir.failed"
+   ],
+   "rpc_clase": {
+    "construir": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "retenciones",
+   "accion": "CONSTRUIR",
+   "forma": "reflejo",
+   "eje": "fiscal",
+   "depende_de": [
+    "mayor-balanza"
+   ],
+   "sube": [
+    "mayor-balanza.saldos.request"
+   ],
+   "publica": [
+    "retenciones.calcular.response",
+    "retenciones.calcular.failed"
+   ],
+   "rpc_clase": {
+    "calcular": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "estimacion-is-irpf",
+   "accion": "CONSTRUIR",
+   "forma": "reflejo",
+   "eje": "fiscal",
+   "depende_de": [
+    "cuenta-resultados",
+    "perfil-administrativo"
+   ],
+   "sube": [
+    "cuenta-resultados.calcular.request",
+    "perfil-administrativo.obligaciones.request"
+   ],
+   "publica": [
+    "estimacion-is-irpf.estimar.response",
+    "estimacion-is-irpf.estimar.failed"
+   ],
+   "rpc_clase": {
+    "estimar": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "calendario-fiscal",
+   "accion": "CONSTRUIR",
+   "forma": "custodio",
+   "eje": "fiscal",
+   "depende_de": [
+    "motor-avisos"
+   ],
+   "sube": [
+    "motor-avisos.producir.request"
+   ],
+   "publica": [
+    "calendario-fiscal.proximos.response",
+    "calendario-fiscal.proximos.failed",
+    "calendario-fiscal.declarar.response",
+    "calendario-fiscal.declarar.failed",
+    "contabilidad.plazo_declarado"
+   ],
+   "rpc_clase": {
+    "proximos": "PREGUNTA",
+    "declarar": "ORDEN"
+   }
+  },
+  {
+   "slug": "generador-modelo",
+   "accion": "CONSTRUIR",
+   "forma": "puente",
+   "eje": "fiscal",
+   "depende_de": [
+    "estado-presentacion-fiscal"
+   ],
+   "sube": [
+    "estado-presentacion-fiscal.avanzar.request"
+   ],
+   "publica": [
+    "generador-modelo.exportar.response",
+    "generador-modelo.exportar.failed",
+    "contabilidad.modelo_exportado"
+   ],
+   "rpc_clase": {
+    "exportar": "ORDEN"
+   }
+  },
+  {
+   "slug": "registro-verifactu",
+   "accion": "CONSTRUIR",
+   "forma": "custodio",
+   "eje": "fiscal",
+   "depende_de": [],
+   "sube": [],
+   "publica": [
+    "registro-verifactu.encadenar.response",
+    "registro-verifactu.encadenar.failed",
+    "contabilidad.factura_encadenada"
+   ],
+   "rpc_clase": {
+    "encadenar": "ORDEN"
+   }
+  },
+  {
+   "slug": "factura-electronica",
+   "accion": "CONSTRUIR",
+   "forma": "conversor",
+   "eje": "fiscal",
+   "depende_de": [],
+   "sube": [],
+   "publica": [
+    "factura-electronica.entrar.response",
+    "factura-electronica.entrar.failed",
+    "factura-electronica.salir.response",
+    "factura-electronica.salir.failed"
+   ],
+   "rpc_clase": {
+    "entrar": "PREGUNTA",
+    "salir": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "estado-presentacion-fiscal",
+   "accion": "CONSTRUIR",
+   "forma": "custodio",
+   "eje": "fiscal",
+   "depende_de": [
+    "motor-avisos"
+   ],
+   "sube": [
+    "motor-avisos.producir.request"
+   ],
+   "publica": [
+    "estado-presentacion-fiscal.avanzar.response",
+    "estado-presentacion-fiscal.avanzar.failed",
+    "contabilidad.obligacion_avanzada"
+   ],
+   "rpc_clase": {
+    "avanzar": "ORDEN"
+   }
+  },
+  {
+   "slug": "acuse-presentacion",
+   "accion": "CONSTRUIR",
+   "forma": "puente",
+   "eje": "fiscal",
+   "depende_de": [
+    "estado-presentacion-fiscal",
+    "escritor-diario",
+    "expediente-documental"
+   ],
+   "sube": [
+    "estado-presentacion-fiscal.avanzar.request",
+    "escritor-diario.asentar.request",
+    "expediente-documental.archivar.request"
+   ],
+   "publica": [
+    "acuse-presentacion.ligar.response",
+    "acuse-presentacion.ligar.failed",
+    "contabilidad.declaracion_justificada"
+   ],
+   "rpc_clase": {
+    "ligar": "ORDEN"
+   }
+  },
+  {
+   "slug": "rectificacion-declaracion",
+   "accion": "CONSTRUIR",
+   "forma": "custodio",
+   "eje": "fiscal",
+   "depende_de": [
+    "estado-presentacion-fiscal"
+   ],
+   "sube": [
+    "estado-presentacion-fiscal.avanzar.request"
+   ],
+   "publica": [
+    "rectificacion-declaracion.rectificar.response",
+    "rectificacion-declaracion.rectificar.failed",
+    "contabilidad.declaracion_rectificada"
+   ],
+   "rpc_clase": {
+    "rectificar": "ORDEN"
+   }
+  },
+  {
+   "slug": "perfil-administrativo",
+   "accion": "CONSTRUIR",
+   "forma": "custodio",
+   "eje": "fiscal",
+   "depende_de": [
+    "calendario-fiscal",
+    "cola-declaraciones-criterio"
+   ],
+   "sube": [
+    "calendario-fiscal.declarar.request",
+    "cola-declaraciones-criterio.fijar.request"
+   ],
+   "publica": [
+    "perfil-administrativo.obligaciones.response",
+    "perfil-administrativo.obligaciones.failed",
+    "perfil-administrativo.declarar.response",
+    "perfil-administrativo.declarar.failed",
+    "contabilidad.perfil_administrativo_declarado"
+   ],
+   "rpc_clase": {
+    "obligaciones": "PREGUNTA",
+    "declarar": "ORDEN"
+   }
+  },
+  {
+   "slug": "recibo-nomina",
+   "accion": "CONSTRUIR",
+   "forma": "reflejo",
+   "eje": "fiscal",
+   "depende_de": [],
+   "sube": [],
+   "publica": [
+    "recibo-nomina.dar_forma.response",
+    "recibo-nomina.dar_forma.failed"
+   ],
+   "rpc_clase": {
+    "dar_forma": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "obligacion-seguridad-social",
+   "accion": "CONSTRUIR",
+   "forma": "reflejo",
+   "eje": "fiscal",
+   "depende_de": [
+    "recibo-nomina",
+    "calendario-fiscal"
+   ],
+   "sube": [
+    "recibo-nomina.dar_forma.request",
+    "calendario-fiscal.declarar.request"
+   ],
+   "publica": [
+    "obligacion-seguridad-social.calcular.response",
+    "obligacion-seguridad-social.calcular.failed"
+   ],
+   "rpc_clase": {
+    "calcular": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "asiento-personal",
+   "accion": "CONSTRUIR",
+   "forma": "reflejo",
+   "eje": "fiscal",
+   "depende_de": [
+    "recibo-nomina",
+    "obligacion-seguridad-social",
+    "escritor-diario"
+   ],
+   "sube": [
+    "recibo-nomina.dar_forma.request",
+    "obligacion-seguridad-social.calcular.request",
+    "escritor-diario.asentar.request"
+   ],
+   "publica": [
+    "asiento-personal.construir.response",
+    "asiento-personal.construir.failed"
+   ],
+   "rpc_clase": {
+    "construir": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "puerto-nomina",
+   "accion": "CONSTRUIR",
+   "forma": "puente",
+   "eje": "fiscal",
+   "depende_de": [
+    "recibo-nomina"
+   ],
+   "sube": [
+    "recibo-nomina.dar_forma.request"
+   ],
+   "publica": [
+    "puerto-nomina.recibir.response",
+    "puerto-nomina.recibir.failed",
+    "contabilidad.nomina_recibida"
+   ],
+   "rpc_clase": {
+    "recibir": "ORDEN"
+   }
+  },
+  {
+   "slug": "lineas-nomina",
+   "accion": "CONSTRUIR",
+   "forma": "reflejo",
+   "eje": "fiscal",
+   "depende_de": [
+    "recibo-nomina"
+   ],
+   "sube": [
+    "recibo-nomina.dar_forma.request"
+   ],
+   "publica": [
+    "lineas-nomina.desglosar.response",
+    "lineas-nomina.desglosar.failed"
+   ],
+   "rpc_clase": {
+    "desglosar": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "acceso-nomina",
+   "accion": "CONSTRUIR",
+   "forma": "custodio",
+   "eje": "fiscal",
+   "depende_de": [
+    "cola-declaraciones-criterio"
+   ],
+   "sube": [
+    "cola-declaraciones-criterio.fijar.request"
+   ],
+   "publica": [
+    "acceso-nomina.autorizar.response",
+    "acceso-nomina.autorizar.failed",
+    "acceso-nomina.declarar.response",
+    "acceso-nomina.declarar.failed",
+    "contabilidad.acceso_nomina_declarado"
+   ],
+   "rpc_clase": {
+    "autorizar": "PREGUNTA",
+    "declarar": "ORDEN"
+   }
+  },
+  {
+   "slug": "pagos-a-cuenta-empleado",
+   "accion": "CONSTRUIR",
+   "forma": "reflejo",
+   "eje": "fiscal",
+   "depende_de": [
+    "recibo-nomina"
+   ],
+   "sube": [
+    "recibo-nomina.dar_forma.request"
+   ],
+   "publica": [
+    "pagos-a-cuenta-empleado.impacto.response",
+    "pagos-a-cuenta-empleado.impacto.failed"
+   ],
+   "rpc_clase": {
+    "impacto": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "conceptos-extra-nomina",
+   "accion": "CONSTRUIR",
+   "forma": "reflejo",
+   "eje": "fiscal",
+   "depende_de": [
+    "recibo-nomina",
+    "escritor-diario"
+   ],
+   "sube": [
+    "recibo-nomina.dar_forma.request",
+    "escritor-diario.asentar.request"
+   ],
+   "publica": [
+    "conceptos-extra-nomina.imputar.response",
+    "conceptos-extra-nomina.imputar.failed"
+   ],
+   "rpc_clase": {
+    "imputar": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "liquidacion-baja-empleado",
+   "accion": "CONSTRUIR",
+   "forma": "reflejo",
+   "eje": "fiscal",
+   "depende_de": [
+    "escritor-diario",
+    "cuenta-proveedor"
+   ],
+   "sube": [
+    "escritor-diario.asentar.request",
+    "cuenta-proveedor.saldo.request"
+   ],
+   "publica": [
+    "liquidacion-baja-empleado.liquidar.response",
+    "liquidacion-baja-empleado.liquidar.failed"
+   ],
+   "rpc_clase": {
+    "liquidar": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "alta-activo",
+   "accion": "CONSTRUIR",
+   "forma": "custodio",
+   "eje": "analitica",
+   "depende_de": [
+    "escritor-diario",
+    "plan-amortizacion",
+    "expediente-documental"
+   ],
+   "sube": [
+    "escritor-diario.asentar.request",
+    "plan-amortizacion.cuota_del_periodo.request",
+    "expediente-documental.archivar.request"
+   ],
+   "publica": [
+    "alta-activo.registrar.response",
+    "alta-activo.registrar.failed",
+    "contabilidad.activo_alta"
+   ],
+   "rpc_clase": {
+    "registrar": "ORDEN"
+   }
+  },
+  {
+   "slug": "plan-amortizacion",
+   "accion": "CONSTRUIR",
+   "forma": "custodio",
+   "eje": "analitica",
+   "depende_de": [
+    "escritor-diario",
+    "cola-declaraciones-criterio"
+   ],
+   "sube": [
+    "escritor-diario.asentar.request",
+    "cola-declaraciones-criterio.fijar.request"
+   ],
+   "publica": [
+    "plan-amortizacion.cuota_del_periodo.response",
+    "plan-amortizacion.cuota_del_periodo.failed",
+    "plan-amortizacion.generar_cuota.response",
+    "plan-amortizacion.generar_cuota.failed",
+    "contabilidad.cuota_amortizacion_generada"
+   ],
+   "rpc_clase": {
+    "cuota_del_periodo": "PREGUNTA",
+    "generar_cuota": "ORDEN"
+   }
+  },
+  {
+   "slug": "baja-activo",
+   "accion": "CONSTRUIR",
+   "forma": "reflejo",
+   "eje": "analitica",
+   "depende_de": [
+    "valor-neto-contable",
+    "escritor-diario"
+   ],
+   "sube": [
+    "valor-neto-contable.calcular.request",
+    "escritor-diario.asentar.request"
+   ],
+   "publica": [
+    "baja-activo.calcular.response",
+    "baja-activo.calcular.failed"
+   ],
+   "rpc_clase": {
+    "calcular": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "valor-neto-contable",
+   "accion": "CONSTRUIR",
+   "forma": "reflejo",
+   "eje": "analitica",
+   "depende_de": [
+    "plan-amortizacion"
+   ],
+   "sube": [
+    "plan-amortizacion.cuota_del_periodo.request"
+   ],
+   "publica": [
+    "valor-neto-contable.calcular.response",
+    "valor-neto-contable.calcular.failed"
+   ],
+   "rpc_clase": {
+    "calcular": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "valoracion-existencia",
+   "accion": "CONSTRUIR",
+   "forma": "reflejo",
+   "eje": "analitica",
+   "depende_de": [
+    "frontera-ficha-producto"
+   ],
+   "sube": [
+    "frontera-ficha-producto.entrar.request"
+   ],
+   "publica": [
+    "valoracion-existencia.valorar.response",
+    "valoracion-existencia.valorar.failed"
+   ],
+   "rpc_clase": {
+    "valorar": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "frontera-ficha-producto",
+   "accion": "CONSTRUIR",
+   "forma": "conversor",
+   "eje": "analitica",
+   "depende_de": [],
+   "sube": [],
+   "publica": [
+    "frontera-ficha-producto.entrar.response",
+    "frontera-ficha-producto.entrar.failed"
+   ],
+   "rpc_clase": {
+    "entrar": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "ajuste-inventario",
+   "accion": "CONSTRUIR",
+   "forma": "reflejo",
+   "eje": "analitica",
+   "depende_de": [
+    "escritor-diario",
+    "motor-avisos"
+   ],
+   "sube": [
+    "escritor-diario.asentar.request",
+    "motor-avisos.producir.request"
+   ],
+   "publica": [
+    "ajuste-inventario.diferencia.response",
+    "ajuste-inventario.diferencia.failed"
+   ],
+   "rpc_clase": {
+    "diferencia": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "variacion-stock-valorada",
+   "accion": "CONSTRUIR",
+   "forma": "reflejo",
+   "eje": "analitica",
+   "depende_de": [
+    "valoracion-existencia",
+    "escritor-diario"
+   ],
+   "sube": [
+    "valoracion-existencia.valorar.request",
+    "escritor-diario.asentar.request"
+   ],
+   "publica": [
+    "variacion-stock-valorada.variacion.response",
+    "variacion-stock-valorada.variacion.failed"
+   ],
+   "rpc_clase": {
+    "variacion": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "marca-sociedad",
+   "accion": "CONSTRUIR",
+   "forma": "reflejo",
+   "eje": "analitica",
+   "depende_de": [],
+   "sube": [],
+   "publica": [
+    "marca-sociedad.marcar.response",
+    "marca-sociedad.marcar.failed"
+   ],
+   "rpc_clase": {
+    "marcar": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "eliminacion-intercompany",
+   "accion": "CONSTRUIR",
+   "forma": "reflejo",
+   "eje": "analitica",
+   "depende_de": [],
+   "sube": [],
+   "publica": [
+    "eliminacion-intercompany.eliminar.response",
+    "eliminacion-intercompany.eliminar.failed"
+   ],
+   "rpc_clase": {
+    "eliminar": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "consolidacion",
+   "accion": "CONSTRUIR",
+   "forma": "reflejo",
+   "eje": "analitica",
+   "depende_de": [
+    "mayor-balanza",
+    "balance-situacion",
+    "cuenta-resultados",
+    "eliminacion-intercompany",
+    "cola-declaraciones-criterio"
+   ],
+   "sube": [
+    "mayor-balanza.saldos.request",
+    "balance-situacion.calcular.request",
+    "cuenta-resultados.calcular.request",
+    "eliminacion-intercompany.eliminar.request",
+    "cola-declaraciones-criterio.fijar.request"
+   ],
+   "publica": [
+    "consolidacion.estados.response",
+    "consolidacion.estados.failed"
+   ],
+   "rpc_clase": {
+    "estados": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "aislamiento-negocio",
+   "accion": "CONSTRUIR",
+   "forma": "custodio",
+   "eje": "analitica",
+   "depende_de": [
+    "single-writer"
+   ],
+   "sube": [
+    "single-writer.reclamar.request"
+   ],
+   "publica": [
+    "aislamiento-negocio.parcela.response",
+    "aislamiento-negocio.parcela.failed",
+    "aislamiento-negocio.escritor.response",
+    "aislamiento-negocio.escritor.failed",
+    "aislamiento-negocio.crear_parcela.response",
+    "aislamiento-negocio.crear_parcela.failed",
+    "contabilidad.negocio_parcela_creada"
+   ],
+   "rpc_clase": {
+    "parcela": "PREGUNTA",
+    "escritor": "PREGUNTA",
+    "crear_parcela": "ORDEN"
+   }
+  },
+  {
+   "slug": "etiquetado-analitico",
+   "accion": "CONSTRUIR",
+   "forma": "micro-agente",
+   "eje": "analitica",
+   "depende_de": [
+    "encolado-excepcion",
+    "cola-declaraciones-criterio"
+   ],
+   "sube": [
+    "encolado-excepcion.encolar.request",
+    "cola-declaraciones-criterio.fijar.request"
+   ],
+   "publica": [
+    "etiquetado-analitico.juzgar.response",
+    "etiquetado-analitico.juzgar.failed"
+   ],
+   "rpc_clase": {
+    "juzgar": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "margen-analitico",
+   "accion": "CONSTRUIR",
+   "forma": "reflejo",
+   "eje": "analitica",
+   "depende_de": [
+    "mayor-balanza",
+    "valoracion-existencia",
+    "coste-indirecto"
+   ],
+   "sube": [
+    "mayor-balanza.saldos.request",
+    "valoracion-existencia.valorar.request",
+    "coste-indirecto.repartir.request"
+   ],
+   "publica": [
+    "margen-analitico.calcular.response",
+    "margen-analitico.calcular.failed"
+   ],
+   "rpc_clase": {
+    "calcular": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "presupuesto",
+   "accion": "CONSTRUIR",
+   "forma": "custodio",
+   "eje": "analitica",
+   "depende_de": [
+    "cola-declaraciones-criterio"
+   ],
+   "sube": [
+    "cola-declaraciones-criterio.fijar.request"
+   ],
+   "publica": [
+    "presupuesto.fijar.response",
+    "presupuesto.fijar.failed",
+    "presupuesto.objetivo.response",
+    "presupuesto.objetivo.failed",
+    "contabilidad.presupuesto_fijado"
+   ],
+   "rpc_clase": {
+    "fijar": "ORDEN",
+    "objetivo": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "desviacion",
+   "accion": "CONSTRUIR",
+   "forma": "reflejo",
+   "eje": "analitica",
+   "depende_de": [
+    "margen-analitico",
+    "presupuesto",
+    "motor-avisos"
+   ],
+   "sube": [
+    "margen-analitico.calcular.request",
+    "presupuesto.objetivo.request",
+    "motor-avisos.producir.request"
+   ],
+   "publica": [
+    "desviacion.calcular.response",
+    "desviacion.calcular.failed"
+   ],
+   "rpc_clase": {
+    "calcular": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "coste-indirecto",
+   "accion": "CONSTRUIR",
+   "forma": "reflejo",
+   "eje": "analitica",
+   "depende_de": [
+    "mayor-balanza",
+    "cola-declaraciones-criterio"
+   ],
+   "sube": [
+    "mayor-balanza.saldos.request",
+    "cola-declaraciones-criterio.fijar.request"
+   ],
+   "publica": [
+    "coste-indirecto.repartir.response",
+    "coste-indirecto.repartir.failed"
+   ],
+   "rpc_clase": {
+    "repartir": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "cuadro-mando-contable",
+   "accion": "CONSTRUIR",
+   "forma": "reflejo",
+   "eje": "analitica",
+   "depende_de": [
+    "saldo-tesoreria",
+    "cuenta-resultados",
+    "margen-analitico",
+    "desviacion"
+   ],
+   "sube": [
+    "saldo-tesoreria.calcular.request",
+    "cuenta-resultados.calcular.request",
+    "margen-analitico.calcular.request",
+    "desviacion.calcular.request"
+   ],
+   "publica": [
+    "cuadro-mando-contable.componer.response",
+    "cuadro-mando-contable.componer.failed"
+   ],
+   "rpc_clase": {
+    "componer": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "comparador-periodos",
+   "accion": "CONSTRUIR",
+   "forma": "reflejo",
+   "eje": "analitica",
+   "depende_de": [
+    "presupuesto",
+    "desviacion"
+   ],
+   "sube": [
+    "presupuesto.objetivo.request",
+    "desviacion.calcular.request"
+   ],
+   "publica": [
+    "comparador-periodos.comparar.response",
+    "comparador-periodos.comparar.failed"
+   ],
+   "rpc_clase": {
+    "comparar": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "tablero-margen-dimension",
+   "accion": "CONSTRUIR",
+   "forma": "reflejo",
+   "eje": "analitica",
+   "depende_de": [
+    "margen-analitico"
+   ],
+   "sube": [
+    "margen-analitico.calcular.request"
+   ],
+   "publica": [
+    "tablero-margen-dimension.cruzar.response",
+    "tablero-margen-dimension.cruzar.failed"
+   ],
+   "rpc_clase": {
+    "cruzar": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "onboarding-negocio",
+   "accion": "CONSTRUIR",
+   "forma": "custodio",
+   "eje": "analitica",
+   "depende_de": [
+    "aislamiento-negocio",
+    "catalogo-cuentas"
+   ],
+   "sube": [
+    "aislamiento-negocio.parcela.request",
+    "catalogo-cuentas.buscar.request"
+   ],
+   "publica": [
+    "onboarding-negocio.recoger.response",
+    "onboarding-negocio.recoger.failed",
+    "onboarding-negocio.leer.response",
+    "onboarding-negocio.leer.failed",
+    "contabilidad.negocio_registrado"
+   ],
+   "rpc_clase": {
+    "recoger": "ORDEN",
+    "leer": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "motor-avisos",
+   "accion": "CONSTRUIR",
+   "forma": "puente",
+   "eje": "analitica",
+   "depende_de": [
+    "aviso-al-negocio"
+   ],
+   "sube": [
+    "aviso-al-negocio.entregar.request"
+   ],
+   "publica": [
+    "motor-avisos.producir.response",
+    "motor-avisos.producir.failed",
+    "contabilidad.aviso_producido"
+   ],
+   "rpc_clase": {
+    "producir": "ORDEN"
+   }
+  },
+  {
+   "slug": "informe-rico",
+   "accion": "CONSTRUIR",
+   "forma": "reflejo",
+   "eje": "analitica",
+   "depende_de": [],
+   "sube": [],
+   "publica": [
+    "informe-rico.componer.response",
+    "informe-rico.componer.failed"
+   ],
+   "rpc_clase": {
+    "componer": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "activacion-vertical",
+   "accion": "CONSTRUIR",
+   "forma": "reflejo",
+   "eje": "analitica",
+   "depende_de": [
+    "onboarding-negocio"
+   ],
+   "sube": [
+    "onboarding-negocio.recoger.request"
+   ],
+   "publica": [
+    "activacion-vertical.activar.response",
+    "activacion-vertical.activar.failed"
+   ],
+   "rpc_clase": {
+    "activar": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "cola-declaraciones-criterio",
+   "accion": "CONSTRUIR",
+   "forma": "custodio",
+   "eje": "analitica",
+   "depende_de": [],
+   "sube": [],
+   "publica": [
+    "cola-declaraciones-criterio.fijar.response",
+    "cola-declaraciones-criterio.fijar.failed",
+    "cola-declaraciones-criterio.ratificar.response",
+    "cola-declaraciones-criterio.ratificar.failed",
+    "contabilidad.criterio_fijado"
+   ],
+   "rpc_clase": {
+    "fijar": "ORDEN",
+    "ratificar": "ORDEN"
+   }
+  },
+  {
+   "slug": "consulta-cuentas-bajo-demanda",
+   "accion": "CONSTRUIR",
+   "forma": "puente",
+   "eje": "analitica",
+   "depende_de": [
+    "puente-lenguaje-dueno",
+    "mayor-balanza",
+    "saldo-tesoreria",
+    "cuenta-resultados",
+    "sello-cobertura",
+    "marca-borrador-validado"
+   ],
+   "sube": [
+    "puente-lenguaje-dueno.a_consulta.request",
+    "mayor-balanza.saldos.request",
+    "saldo-tesoreria.calcular.request",
+    "cuenta-resultados.calcular.request",
+    "sello-cobertura.sellar.request",
+    "marca-borrador-validado.estado.request"
+   ],
+   "publica": [
+    "consulta-cuentas-bajo-demanda.preguntar.response",
+    "consulta-cuentas-bajo-demanda.preguntar.failed"
+   ],
+   "rpc_clase": {
+    "preguntar": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "puente-lenguaje-dueno",
+   "accion": "CONSTRUIR",
+   "forma": "micro-agente",
+   "eje": "analitica",
+   "depende_de": [],
+   "sube": [],
+   "publica": [
+    "puente-lenguaje-dueno.a_consulta.response",
+    "puente-lenguaje-dueno.a_consulta.failed",
+    "puente-lenguaje-dueno.a_cifra.response",
+    "puente-lenguaje-dueno.a_cifra.failed"
+   ],
+   "rpc_clase": {
+    "a_consulta": "PREGUNTA",
+    "a_cifra": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "sello-cobertura",
+   "accion": "CONSTRUIR",
+   "forma": "reflejo",
+   "eje": "analitica",
+   "depende_de": [
+    "completitud-cobertura"
+   ],
+   "sube": [
+    "completitud-cobertura.medir.request"
+   ],
+   "publica": [
+    "sello-cobertura.sellar.response",
+    "sello-cobertura.sellar.failed"
+   ],
+   "rpc_clase": {
+    "sellar": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "marca-borrador-validado",
+   "accion": "CONSTRUIR",
+   "forma": "reflejo",
+   "eje": "analitica",
+   "depende_de": [
+    "traza-asiento",
+    "flujo-firma"
+   ],
+   "sube": [
+    "traza-asiento.registrar.request",
+    "flujo-firma.estado.request"
+   ],
+   "publica": [
+    "marca-borrador-validado.estado.response",
+    "marca-borrador-validado.estado.failed"
+   ],
+   "rpc_clase": {
+    "estado": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "aviso-al-negocio",
+   "accion": "CONSTRUIR",
+   "forma": "puente",
+   "eje": "analitica",
+   "depende_de": [
+    "informe-accionable",
+    "narrador-estados"
+   ],
+   "sube": [
+    "informe-accionable.juzgar.request",
+    "narrador-estados.narrar.request"
+   ],
+   "publica": [
+    "aviso-al-negocio.entregar.response",
+    "aviso-al-negocio.entregar.failed",
+    "contabilidad.aviso_entregado"
+   ],
+   "rpc_clase": {
+    "entregar": "ORDEN"
+   }
+  },
+  {
+   "slug": "informe-accionable",
+   "accion": "CONSTRUIR",
+   "forma": "micro-agente",
+   "eje": "analitica",
+   "depende_de": [
+    "informe-rico"
+   ],
+   "sube": [
+    "informe-rico.componer.request"
+   ],
+   "publica": [
+    "informe-accionable.juzgar.response",
+    "informe-accionable.juzgar.failed"
+   ],
+   "rpc_clase": {
+    "juzgar": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "narrador-estados",
+   "accion": "CONSTRUIR",
+   "forma": "micro-agente",
+   "eje": "analitica",
+   "depende_de": [
+    "balance-situacion",
+    "cuenta-resultados"
+   ],
+   "sube": [
+    "balance-situacion.calcular.request",
+    "cuenta-resultados.calcular.request"
+   ],
+   "publica": [
+    "narrador-estados.narrar.response",
+    "narrador-estados.narrar.failed"
+   ],
+   "rpc_clase": {
+    "narrar": "PREGUNTA"
+   }
+  },
+  {
+   "slug": "puerto-cobro-pos",
+   "accion": "CONSTRUIR",
+   "forma": "puente",
+   "eje": "entrada",
+   "depende_de": [],
+   "sube": [
+    "cobro.procesado"
+   ],
+   "publica": [
+    "contabilidad.hecho_recibido",
+    "puerto-cobro-pos.cobrar.response",
+    "puerto-cobro-pos.cobrar.failed"
+   ],
+   "rpc_clase": {
+    "cobrar": "PREGUNTA"
+   },
+   "_doc": "Hoja A15 (añadida 2026-10-15): el PUENTE que conecta el POS de pizzepos con la cadena contable. ESCUCHA cobro.procesado (evento VIVO del bus, medido: 13 publicaciones en 30 días) y PUBLICA contabilidad.hecho_recibido con el hecho derivado del cobro {tipo: venta, importe: monto_total, metodo_pago, referencia: cobro_id}. Stateless, sin persistencia — traduce y anuncia, no escribe. La idempotencia la garantiza la clave natural del diario (un cobro = un asiento)."
+  }
+ ],
+ "orden": [
+  "cola-declaraciones-criterio",
+  "eliminacion-intercompany",
+  "expediente-documental",
+  "factura-electronica",
+  "frontera-ficha-producto",
+  "frontera-planos",
+  "historial-proceso-contable",
+  "informe-rico",
+  "marca-sociedad",
+  "padron-terceros",
+  "puente-lenguaje-dueno",
+  "puerto-evento-vertical",
+  "ratificacion-regla-aprendida",
+  "recibo-nomina",
+  "registro-verifactu",
+  "single-writer",
+  "traza-asiento",
+  "acceso-nomina",
+  "catalogo-cuentas",
+  "clave-natural",
+  "contrato-hecho-minimo",
+  "maestro-cuentas-bancarias",
+  "normalizador-hecho",
+  "periodificacion",
+  "presupuesto",
+  "valoracion-existencia",
+  "informe-accionable",
+  "maestro-terceros",
+  "regla-contrapartida",
+  "lineas-nomina",
+  "pagos-a-cuenta-empleado",
+  "puerto-nomina",
+  "aislamiento-negocio",
+  "flujo-firma",
+  "puerto-plan-contable",
+  "anclaje-cierre-vertical",
+  "deduplicacion-hecho",
+  "contrapartida-asistida",
+  "onboarding-negocio",
+  "marca-borrador-validado",
+  "escritor-diario",
+  "activacion-vertical",
+  "apertura-ejercicio",
+  "asiento-ajuste",
+  "conceptos-extra-nomina",
+  "control-calidad-muestreo",
+  "emision-factura-venta",
+  "hecho-rectificativo",
+  "lote-admision",
+  "mayor-balanza",
+  "plan-amortizacion",
+  "regla-movimiento-bancario",
+  "variacion-stock-valorada",
+  "cambio-desde-ultima-revision",
+  "puerto-exportacion",
+  "factura-rectificativa",
+  "balance-situacion",
+  "coste-indirecto",
+  "cuenta-proveedor",
+  "cuenta-resultados",
+  "retenciones",
+  "saldo-tesoreria",
+  "vista-revisable",
+  "alta-activo",
+  "valor-neto-contable",
+  "margen-analitico",
+  "estado-cuenta-proveedor",
+  "liquidacion-baja-empleado",
+  "rappel-pronto-pago",
+  "consolidacion",
+  "narrador-estados",
+  "partida-conciliatoria",
+  "baja-activo",
+  "tablero-margen-dimension",
+  "aviso-al-negocio",
+  "motor-avisos",
+  "ajuste-inventario",
+  "aviso-cuadre",
+  "aviso-revision",
+  "calendario-fiscal",
+  "completitud-cobertura",
+  "declaracion-fuente-faltante",
+  "desviacion",
+  "estado-presentacion-fiscal",
+  "prevision-caja",
+  "vencimiento-pago",
+  "cierre-ejercicio",
+  "encolado-excepcion",
+  "obligacion-seguridad-social",
+  "perfil-administrativo",
+  "sello-cobertura",
+  "tasa-cobertura-entrada",
+  "comparador-periodos",
+  "cuadro-mando-contable",
+  "acuse-presentacion",
+  "generador-modelo",
+  "rectificacion-declaracion",
+  "antiguedad-de-saldos",
+  "control-cuadre-documento",
+  "cruce-factura-recepcion",
+  "desatasco-entrada",
+  "etiquetado-analitico",
+  "partida-no-identificada",
+  "asiento-personal",
+  "estimacion-is-irpf",
+  "liquidacion-iva",
+  "consulta-cuentas-bajo-demanda",
+  "panel-proceso-contable",
+  "extraccion-dato",
+  "conciliacion-bancaria",
+  "cuadre-cobro-pago",
+  "modelo-303",
+  "modelo-390",
+  "puerto-documento",
+  "puerto-documento-digital",
+  "informe-conciliacion",
+  "puerto-extracto",
+  "captura-documento",
+  "puerto-cobro-pos"
+ ],
+ "counts": {
+  "hojas": 118,
+  "por_eje": {
+   "entrada": 32,
+   "libro": 32,
+   "fiscal": 22,
+   "analitica": 32
+  },
+  "por_forma": {
+   "puente": 14,
+   "conversor": 7,
+   "reflejo": 60,
+   "micro-agente": 8,
+   "custodio": 29
+  },
+  "por_accion": {
+   "CONSTRUIR": 115,
+   "ADAPTAR": 2,
+   "REUTILIZAR": 1
+  },
+  "rpc_pregunta": 103,
+  "rpc_orden": 46
+ },
+ "reutiliza_infra": [
+  "filesystem",
+  "project-manager",
+  "credential-manager",
+  "metricas",
+  "inventario"
+ ],
+ "nota": "118 hojas = las 118 clases del diseno (una por hoja atomica F2). Infra (filesystem, project-manager, credential-manager, metricas, inventario) se declara como base de reutilizacion dentro de cada hoja, no como hoja propia: no tiene eje ni clase."
 }
 ```

@@ -1,7 +1,7 @@
 {
   "_doc": "Manifest de entrada/puerto-cobro-pos — PUENTE STATELESS (A15, hoja añadida al plan 2026-10-15). EL CABLE DEL POS: escucha `cobro.procesado` (evento VIVO de pizzepos/cobros, medido al bus) y publica el hecho `contabilidad.hecho_recibido` con la venta cobrada {tipo: venta_cobro_pos, importe: monto_total, referencia: cobro_id}. Traduce y anuncia; NO escribe. La idempotencia la garantiza la clave natural del diario (un cobro = un asiento). La contrapartida la pone la regla, no el puente.",
   "name": "puerto-cobro-pos",
-  "version": "reflejo-0.1.0",
+  "version": "0.1.0",
   "_v0_1_0_nota": "A15: la caja de hoy de la pizzería (nonina) llega al diario al vuelo. Un solo cable, cero cambios en pizzepos.",
   "description": "Puente del POS a contabilidad: cobro.procesado → contabilidad.hecho_recibido",
   "language": "es",

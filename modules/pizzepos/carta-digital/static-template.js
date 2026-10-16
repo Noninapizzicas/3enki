@@ -1338,8 +1338,16 @@ function updateCart() {
       '</div>' +
       '<input id="cliente-hora" class="cart-nombre" type="time" aria-label="Hora de recogida" style="display:' + (_modoConsumo === 'recoger' ? 'block' : 'none') + '">'
     : '';
+  // METODO DE PAGO: solo se ofrece si el proyecto tiene pasarela (pago_online). Sin ella no
+  // hay eleccion que hacer y el flujo queda igual que siempre (paga al recoger).
+  const metodoSel = CONFIG.pago_online
+    ? '<div class="cart-modo" role="group" aria-label="Metodo de pago">' +
+        '<button type="button" class="modo-btn' + (_metodoPago === 'efectivo' ? ' active' : '') + '" data-metodo="efectivo" onclick="setMetodo(\\'efectivo\\')">💶 Efectivo al recoger</button>' +
+        '<button type="button" class="modo-btn' + (_metodoPago === 'tarjeta' ? ' active' : '') + '" data-metodo="tarjeta" onclick="setMetodo(\\'tarjeta\\')">💳 Tarjeta</button>' +
+      '</div>'
+    : '';
   footer.innerHTML = '<div class="total-row"><span class="total-label">' + T.total + '</span><span class="total-amount">' + fmt(total) + '</span></div>' +
-    nombreInput + modoSel +
+    nombreInput + modoSel + metodoSel +
     '<div id="fecha-cont"></div>' +
     '<div class="cart-actions"><button class="btn-clear" onclick="clearCart()">' + T.clear + '</button>' + pagarBtn + onlineBtn + waBtn + '</div>';
   renderFechaRow();   // encargo: bloque "¿Para cuándo?" (verde/rojo según dias_sale)
@@ -1380,7 +1388,7 @@ var _modoConsumo = 'recoger';
 function setModo(m) {
   if (m !== 'mesa' && m !== 'recoger' && m !== 'llevar') return;
   _modoConsumo = m;
-  var btns = document.querySelectorAll('.modo-btn');
+  var btns = document.querySelectorAll('.modo-btn[data-modo]');
   for (var i = 0; i < btns.length; i++) {
     btns[i].classList.toggle('active', btns[i].getAttribute('data-modo') === m);
   }
@@ -1393,6 +1401,20 @@ function _pedHora() {
   var h = document.getElementById('cliente-hora');
   return (_pedModo() === 'recoger' && h && h.value) ? h.value : '';
 }
+
+// METODO DE PAGO elegido: efectivo (paga al recoger) | tarjeta (pago online por la pasarela).
+// Estado vivo que sobrevive al re-render del footer; viaja autoritativo en el #P1. Si es
+// tarjeta, el bot pide la session de pago a la pasarela y manda el enlace por WhatsApp.
+var _metodoPago = 'efectivo';
+function setMetodo(m) {
+  if (m !== 'efectivo' && m !== 'tarjeta') return;
+  _metodoPago = m;
+  var btns = document.querySelectorAll('.modo-btn[data-metodo]');
+  for (var i = 0; i < btns.length; i++) {
+    btns[i].classList.toggle('active', btns[i].getAttribute('data-metodo') === m);
+  }
+}
+function _pedMetodo() { return _metodoPago || 'efectivo'; }
 
 // ── Encargo anticipado — "¿Para cuándo?" ──────────────────────────────────
 // El cliente elige DÍA (HOY / MAÑANA / PASADO MAÑANA) con UN botón por vez, verde si
@@ -1477,6 +1499,7 @@ function buildP1Line() {
     var payload = { v: 1, items: buildOrderItems() };
     var modo = _pedModo(); if (modo) payload.modo_consumo = modo;
     var hora = _pedHora(); if (hora) payload.hora_recogida = hora;
+    var met = _pedMetodo(); if (met) payload.metodo_pago = met;
     // Encargo anticipado: fecha deseada (día futuro) → el parser lo publica con fecha_deseada.
     var fec = _fechaDeseada(); if (fec) payload.fecha_deseada = fec;
     var json = JSON.stringify(payload);
@@ -1547,6 +1570,7 @@ async function pagarAhora() {
     modo_consumo: _pedModo(),
     hora_recogida: _pedHora() || null,
     fecha_deseada: _fechaDeseada() || null,
+    metodo_pago: 'tarjeta',
     pago_online: true,
     return_url: location.origin + location.pathname
   };
@@ -1589,6 +1613,7 @@ async function pedirOnline() {
     nombre_cliente: nombre,
     modo_consumo: _pedModo(),
     hora_recogida: _pedHora() || null,
+    metodo_pago: _pedMetodo(),
     fecha_deseada: _fechaDeseada() || null
   };
   var btn = document.getElementById('btn-pedir');

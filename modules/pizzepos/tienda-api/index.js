@@ -280,6 +280,7 @@ class TiendaApiModule extends BaseModule {
         cliente_nombre: normalized.nombre_cliente,
         modo_consumo: normalized.modo_consumo,
         hora_recogida: normalized.hora_recogida,
+        metodo_pago: normalized.metodo_pago,     // efectivo | tarjeta (lo normaliza pedidos)
         mayor_edad_confirmado: normalized.mayor_edad_confirmado,
         expira_horas: normalized.expira_horas,
         notas_generales: normalized.notas_generales

@@ -3,12 +3,13 @@ id: plataforma/servir-www
 dominio: plataforma
 resumen: Árbol libre en /<ns>/<slug>/ servido por Caddy estático + symlink por proyecto; carta-digital publica el bundle; publicador escribe HTML.
 fuentes:
+  - modules/pizzepos/carta-digital/**
   - modules/publicador/**
   - lib/public-ns.js
   - blueprints/project-types/www.json
   - deployment/caddy/**
   - deployment/reconcile.js
-verificado: 2026-07-07
+verificado: 2026-10-15
 ---
 
 # SERVIR WWW POR PROYECTO — árbol libre en /<ns>/<slug>/ (Caddy estático + symlink)
@@ -32,6 +33,7 @@ verificado: 2026-07-07
   },
   "genera_el_contenido": {
     "carta-digital._publicarBundle": "VIVO — proyecta la carta pública al vuelo, escribe el bundle PWA en la RAÍZ de www/ (la carta ES la home). AUTO-ACTIVA la feature www antes de escribir.",
+    "carta-digital._autoPublicar": "VIVO — RE-HORNEA SOLO. El bundle es estático, así que un cambio de carta sin republicar dejaba la web vieja en silencio; las 5 señales de fuente (carta.actualizada/editada/borrada, contenido.actualizado, marketing.perfil.actualizado) disparan _rehornear con debounce 4s por proyecto. Solo actúa si el proyecto YA publicó (verdad en el DISCO: fs.exists /www/index.html — la primera publicación sigue siendo acto del dueño) y obedece el interruptor opciones_visualizacion.auto_publicar===false. Fallo → warn + métrica + evento cartadigital.republicar.fallido (nunca silencioso).",
     "árbol libre":  "lo que el comerciante suba a www/ (www/catalogo/…) convive al lado y se espeja en la URL"
   },
   "shop_desaparece": "el modelo viejo /<ns>/shop/<slug> (feature 'tienda', bundle rígido) queda LEGACY. Migración runtime: reactivar www + republicar.",
@@ -66,7 +68,9 @@ CLASE ProjectManager (ampliación) {
 }
 
 CLASE CartaDigital._publicarBundle(project_id, slugHint) {   // VIVO — el generador
-  guardCrossProject(project_id == ultimoActivo)             // fs escribe en el último activado
+  guardCrossProject(project_id conocido por el fs)          // fs v2.0.0 resuelve el root por el project_id de la PETICIÓN
+                                                            // (_projectRootFor → projectPaths); solo cae al activo global
+                                                            // si el id es desconocido → eso es lo que se bloquea (412)
   data ← proyectarCartaPublica(project_id)                  // al vuelo: carta-manager + marketing + contenido
   ns   ← publicNs()
   base_href ← `/${ns}/${slug}/`                             // (antes /${ns}/shop/${slug}/)
@@ -103,11 +107,13 @@ PUBLICAR (desde chat / RPC cartadigital.publicar.request):
 ```
 project.ensure-feature.request → .response   { request_id, status, data }   (auto-activar feature desde otro módulo)
 cartadigital.publicar.request → cartadigital.publicado   { project_id, slug, productos, imagenes }
+cartadigital.publicar.request → (fallo) cartadigital.republicar.fallido   { project_id, status, error, motivo }  (la republicación automática no falla en silencio)
 ```
 
 ## Estado
 
 ```
+✓ VIVO  REPUBLICACIÓN AUTOMÁTICA (carta-digital 2.25.0): el bundle se re-hornea solo al cambiar la carta — el dueño publica UNA vez y la web camina al paso de su carta
 ✓ VIVO  Caddy /a/* estático · symlink por proyecto (project-manager) · www.json · carta-digital publica a www/ raíz · auto-activación (ensure-feature) · URL por defecto /<ns>/<slug>/
 ◑ LEGACY  tienda.json (/<ns>/shop/<slug>) — proyectos vivos migran reactivando www + republicando
 ◑ RUNTIME  activar www en proyectos vivos + migrar los de tienda (no código)
@@ -117,5 +123,5 @@ cartadigital.publicar.request → cartadigital.publicado   { project_id, slug, p
   NAMESPACE prisma/ bajo www → NO colisiona con carta-digital (raíz www/index.html): carta-digital sirve
   /<ns>/<slug>/, el escaparate prisma /<ns>/<slug>/prisma/. El mismo symlink www cubre todo el árbol.
   Render de bundle verificable en vivo. [ ] assets/PWA (sw.js, manifest, icons) = follow-up.
-VERSIONES  project-manager 4.2.0 · carta-digital 2.23.0 · bienvenida-tienda 1.1.0
+VERSIONES  project-manager 4.2.0 · carta-digital 2.25.0 · bienvenida-tienda 1.1.0
 ```

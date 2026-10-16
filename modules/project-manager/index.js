@@ -223,6 +223,7 @@ class ProjectManagerModule extends BaseModule {
       if (!project) continue;
       await this._publicarEvento(EVENTS.PROJECT.ACTIVATED, {
         project_id: projectId, name: project.name,
+        slug: this._slugify(project.name),          // la carpeta física: el consumidor NO la recalcula
         base_path: project.base_path,
         metadata: project.metadata || {},
         activated_at: new Date().toISOString()
@@ -544,7 +545,9 @@ class ProjectManagerModule extends BaseModule {
     }
 
     await this._publicarEvento(EVENTS.PROJECT.ACTIVATED, {
-      project_id: realId, name: project.name, base_path: project.base_path,
+      project_id: realId, name: project.name,
+      slug: this._slugify(project.name),            // = el nombre del directorio en /data/projects/
+      base_path: project.base_path,
       metadata: project.metadata || {}, activated_at: new Date().toISOString()
     }, { correlation_id });
     this.metrics?.increment('project-manager.activated');
@@ -571,6 +574,8 @@ class ProjectManagerModule extends BaseModule {
 
     await this._publicarEvento('project.deactivated', {
       project_id: projectId, name: project?.name || null,
+      slug: project?.name ? this._slugify(project.name) : null,
+      base_path: project?.base_path || null,
       deactivated_at: new Date().toISOString()
     }, { correlation_id });
     this.metrics?.increment('project-manager.deactivated');
@@ -725,7 +730,12 @@ class ProjectManagerModule extends BaseModule {
 
   async onListProjectsRequest(event) {
     const { request_id } = event.data || event;
-    const projects = Array.from(this.projects.values());
+    // Cada proyecto sale con su slug YA CALCULADO: es lo que decide la carpeta física
+    // (/data/projects/<slug>/). El dueño del dato lo calcula UNA vez; los consumidores
+    // no deben re-derivarlo (eran 12 copias del mismo algoritmo, y la que difería fallaba).
+    const projects = Array.from(this.projects.values()).map(p => ({
+      ...p, slug: this._slugify(p.name)
+    }));
     await this.eventBus.publish(EVENTS.PROJECT.LIST_RESPONSE, {
       request_id, success: true, projects, count: projects.length,
       active_project_ids: [...this.activeProjectIds],

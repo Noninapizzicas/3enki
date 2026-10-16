@@ -31,8 +31,12 @@ class PublicadorModule extends ModuloHibridoReflejo {
     super();
     this.name = 'publicador';
     this.version = '0.1.0';
-    this.activos = new Map();          // project_id → { slug, base_path }
-    this.ultimoActivo = null;          // el fs escribe en el último activado
+    // CARA (UUID · slug · nombre del directorio) → { id, name, slug, base_path }.
+    // Indexar por TODAS las caras es la doctrina del filesystem: así da igual cómo lo
+    // llame el caller (el chat manda el slug, el frontend el UUID).
+    this.activos = new Map();
+    this.ultimoActivo = null;          // retrocompat: a quién ir si no se dice objetivo
+    this._hidrataRequestId = null;     // id de la petición de hidratación en curso
     this.freno = true;                 // verificador-visual best-effort
   }
 
@@ -40,6 +44,46 @@ class PublicadorModule extends ModuloHibridoReflejo {
     await super.onLoad(context);
     const cfg = (context && context.moduleConfig) || {};
     this.freno = cfg.freno_render !== false;
+    // Nace con TODAS las caras. Sin esto el mapa arranca VACÍO (tras un hot-reload no
+    // llega ningún project.activated) y un id objetivo caería al activo en silencio.
+    this._hidratarCarriles();
+  }
+
+  // ── IDENTIDAD DE CARRIL (doctrina del filesystem) ──────────────────────────
+  _carasDe(project_id, name, base_path) {
+    const caras = [project_id];
+    if (name) caras.push(this._slugify(name));
+    if (base_path) { try { caras.push(path.basename(base_path)); } catch (_) {} }
+    return caras.filter((c, i) => c && caras.indexOf(c) === i);
+  }
+  _indexarCarril(project_id, name, base_path) {
+    if (!project_id) return null;
+    const entrada = {
+      id: project_id,                                   // el UUID canónico (para los RPC)
+      name: name || '',
+      slug: name ? this._slugify(name) : String(project_id).slice(0, 8),
+      base_path: base_path || null
+    };
+    for (const cara of this._carasDe(project_id, name, base_path)) this.activos.set(cara, entrada);
+    return entrada;
+  }
+  _hidratarCarriles() {
+    if (!this.eventBus || !this.eventBus.publish) return;
+    const request_id = `publicador-hidrata-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    this._hidrataRequestId = request_id;
+    try { this.eventBus.publish('project.list.request', { request_id }); } catch (_) {}
+  }
+  onProjectListResponse(event) {
+    const data = (event && (event.data || event.payload)) || event || {};
+    if (!data || data.request_id !== this._hidrataRequestId) return;   // respuestas ajenas
+    const proyectos = Array.isArray(data.projects) ? data.projects : [];
+    for (const p of proyectos) {
+      if (!p || !p.id) continue;
+      // El proyecto sistema no tiene carril de proyecto: se salta.
+      if (p.metadata && p.metadata.is_system === true) continue;
+      this._indexarCarril(p.id, p.name, p.base_path);
+    }
+    this.logger?.info?.('publicador.carriles.hidratados', { caras: this.activos.size, proyectos: proyectos.length });
   }
 
   async onUnload() { this.activos.clear(); await super.onUnload(); }
@@ -52,15 +96,17 @@ class PublicadorModule extends ModuloHibridoReflejo {
   onProjectActivated(event) {
     const d = (event && event.data) || event || {};
     if (!d.project_id) return;
-    const slug = d.name ? this._slugify(d.name) : String(d.project_id).slice(0, 8);
-    this.activos.set(d.project_id, { slug, base_path: d.base_path || null });
+    this._indexarCarril(d.project_id, d.name, d.base_path);
     this.ultimoActivo = d.project_id;
   }
 
   onProjectDeactivated(event) {
     const d = (event && event.data) || event || {};
     if (!d.project_id) return;
-    this.activos.delete(d.project_id);
+    const e = this.activos.get(d.project_id);
+    for (const cara of this._carasDe(d.project_id, e && e.name, e && e.base_path)) {
+      if (this.activos.get(cara) === e) this.activos.delete(cara);   // no pisar a otro
+    }
     if (this.ultimoActivo === d.project_id) this.ultimoActivo = null;
   }
 
@@ -72,16 +118,24 @@ class PublicadorModule extends ModuloHibridoReflejo {
     }
     if (!html || typeof html !== 'string') return this._invalid('html');
 
-    // El fs y el symlink cuelgan del proyecto ACTIVO (el filesystem escribe en el último
-    // activado). No publicar a ciegas en otro proyecto (no_silent_failures).
-    const activeId = this.ultimoActivo;
-    if (!activeId) return this._errorResponse(409, 'CONFLICT_STATE', 'no hay proyecto activo; actívalo antes de publicar');
-    if (project_id && project_id !== activeId) {
-      return this._errorResponse(412, 'PRECONDITION_FAILED', `el activo es ${activeId}, no ${project_id}; activa el objetivo antes de publicar`);
+    // ¿A QUÉ PROYECTO VA? — doctrina del filesystem: el project_id de la PETICIÓN manda
+    // sobre el activo global, y vale UUID **o** slug (el nombre del directorio). Antes esto
+    // escribía SIEMPRE en el activo y rechazaba el slug con 412, aunque el proyecto fuera
+    // conocido y su carpeta existiera.
+    // Solo se frena un id DESCONOCIDO que además no sea el activo: ahí sí el destino sería
+    // otro proyecto, y fallar claro es mejor que escribir en el sitio equivocado.
+    const conocido = !!project_id && this.activos.has(project_id);
+    if (project_id && !conocido && this.ultimoActivo && project_id !== this.ultimoActivo) {
+      const nomActivo = (this.activos.get(this.ultimoActivo) || {}).name || this.ultimoActivo;
+      return this._errorResponse(412, 'PRECONDITION_FAILED',
+        `el id «${project_id}» no es un proyecto conocido (el activo es «${nomActivo}»). Usa el UUID o el slug del objetivo.`);
     }
-    const act = this.activos.get(activeId);
-    if (!act || !act.base_path) return this._errorResponse(409, 'CONFLICT_STATE', 'proyecto activo sin base_path conocido');
+    const objetivoId = conocido ? project_id : this.ultimoActivo;
+    if (!objetivoId) return this._errorResponse(409, 'CONFLICT_STATE', 'no hay proyecto activo; actívalo antes de publicar');
+    const act = this.activos.get(objetivoId);
+    if (!act || !act.base_path) return this._errorResponse(409, 'CONFLICT_STATE', 'proyecto objetivo sin base_path conocido');
     const { slug, base_path } = act;
+    const destinoId = act.id || objetivoId;      // el UUID canónico, para los RPC
 
     // Caddy sirve case-sensitive y su try_files busca 'index.html' en MINÚSCULA: el índice
     // servible SIEMPRE en minúscula. Normalizamos el nombre (SLUG_FILE lleva flag /i → dejaría
@@ -106,7 +160,7 @@ class PublicadorModule extends ModuloHibridoReflejo {
     //    → storage/www). Idempotente; el ÚNICO dueño del symlink es project-manager. Así el
     //    árbol de www/ se espeja tal cual en /<ns>/<slug>/… (ver blueprints/project-types/www.json).
     try {
-      await this._rpc('project.ensure-feature.request', { id: activeId, features: ['www'] }, { timeout_ms: 12000 });
+      await this._rpc('project.ensure-feature.request', { id: destinoId, features: ['www'] }, { timeout_ms: 12000 });
     } catch (_) { /* best-effort: si ya está activa, el symlink existe y seguimos */ }
 
     // 2. escribir en el ÁRBOL www del proyecto, bajo el subdir <dir> (para no pisar la home/
@@ -122,11 +176,11 @@ class PublicadorModule extends ModuloHibridoReflejo {
     const ns = publicNsLib.publicNs();
     const url_path = `/${ns}/${slug}/${dir}/` + (archivo === 'index.html' ? '' : archivo);
     try {
-      this.eventBus.publish('publicador.publicado', { project_id: activeId, dir, slug, archivo, url_path, timestamp: new Date().toISOString() });
+      this.eventBus.publish('publicador.publicado', { project_id: destinoId, dir, slug, archivo, url_path, timestamp: new Date().toISOString() });
       this.metrics?.increment('publicador.publicado.total');
     } catch (_) { /* best-effort */ }
 
-    return { status: 200, data: { publicado: true, project_id: activeId, slug, dir, archivo, url_path } };
+    return { status: 200, data: { publicado: true, project_id: destinoId, slug, dir, archivo, url_path } };
   }
 }
 

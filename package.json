@@ -210,7 +210,9 @@
     "test:nichos__norte-sondeo": "node tests/unit/nichos__norte-sondeo.test.js",
     "test:nichos__sembrador-norte": "node tests/unit/nichos__sembrador-norte.test.js",
     "test:nichos__clasificador-voz": "node tests/unit/nichos__clasificador-voz.test.js",
-    "test:telegram-bridge__user-id": "node tests/unit/telegram-bridge__user-id.test.js"
+    "test:nichos__criterio-base": "node tests/unit/nichos__criterio-base.test.js",
+    "test:telegram-bridge__user-id": "node tests/unit/telegram-bridge__user-id.test.js",
+    "test:nichos__camino-c4": "node tests/unit/nichos__camino-c4.test.js"
   },
   "keywords": [
     "event-driven",

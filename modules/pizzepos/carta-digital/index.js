@@ -49,6 +49,7 @@ class CartaDigitalModule extends BaseModule {
     // activado, que es DONDE escribe el filesystem (fs scopea por el último project.activated).
     // El guard de publicar compara contra esto — sin RPC frágil a project-manager.
     this.activos = new Map();
+    this._hidrataRequestId = null;
     this.ultimoActivo = null;
     this._subs = [];
     // REPUBLICACIÓN AUTOMÁTICA (ver _autoPublicar): un timer por proyecto que coalesce la
@@ -76,6 +77,8 @@ class CartaDigitalModule extends BaseModule {
     sub('marketing.perfil.actualizado', e => { this._reemitir(e); this._autoPublicar(e); });
     sub('project.activated', e => this._onProjectActivated(e));
     sub('project.deactivated', e => this._onProjectDeactivated(e));
+    // Fuente de verdad de los carriles (id, name, base_path) → todas las caras.
+    sub('project.list.response', e => this._onProjectListResponse(e));
     // RPC de bus: el cajón diseñar_carta_digital persiste el diseño por aquí (RE-VALIDA como gate).
     sub('cartadigital.guardar_diseno.request', e => this._onGuardarDisenoRequest(e));
     // RPC de bus (FRENO, skill blueprint-agentico): valida el diseño contra el contrato de slots.
@@ -84,6 +87,7 @@ class CartaDigitalModule extends BaseModule {
     sub('cartadigital.publicar.request', e => this._onPublicarRequest(e));
 
     try { await this.eventBus.publish('tarifas.config.solicitada', { correlation_id: crypto.randomUUID() }); } catch (_) {}
+    this._hidratarCarriles();   // nace con TODAS las caras, no vacío
     this.logger?.info('module.loaded', { module: this.name, version: this.version, mode: 'proyector-canal-digital' });
   }
 
@@ -153,20 +157,63 @@ class CartaDigitalModule extends BaseModule {
     if (!d?.project_id || !d?.config) return;
     this.mappingCanalesPerProject.set(d.project_id, { general: d.config.general || null, ...(d.config.canales || {}) });
   }
+  // ── IDENTIDAD DE CARRIL (misma doctrina que el filesystem) ────────────────
+  // El mapa se indexa bajo TODAS las caras del mismo proyecto (UUID · slug del
+  // nombre · nombre del directorio), así da igual cómo lo llame el caller: el
+  // chat publica con el slug, el frontend con el UUID, y los dos caen en el
+  // mismo carril. Antes el mapa solo tenía el UUID, así que un slug era un
+  // proyecto DESCONOCIDO → el guard lo rechazaba con 412 y la línea del slug
+  // caía al truncado de 8 letras ("the-pir").
+  _carasDe(project_id, name, base_path) {
+    const caras = [project_id];
+    if (name) caras.push(slugify(name));
+    if (base_path) { try { caras.push(require('path').basename(base_path)); } catch (_) {} }
+    return caras.filter((c, i) => c && caras.indexOf(c) === i);
+  }
+  _indexarCarril(project_id, name, base_path) {
+    if (!project_id) return null;
+    const entrada = {
+      name: name || '',
+      slug: name ? slugify(name) : String(project_id).slice(0, 8),
+      base_path: base_path || null
+    };
+    for (const cara of this._carasDe(project_id, name, base_path)) this.activos.set(cara, entrada);
+    return entrada;
+  }
+  // Se hidrata desde la fuente de verdad al onLoad (project.list.request): sin eso
+  // el mapa nace VACÍO tras un hot-reload y todo id cae al activo global.
+  _hidratarCarriles() {
+    if (!this.eventBus?.publish) return;
+    const request_id = `carta-hidrata-${crypto.randomUUID()}`;
+    this._hidrataRequestId = request_id;
+    try { this.eventBus.publish('project.list.request', { request_id, correlation_id: crypto.randomUUID() }); }
+    catch (_) {}
+  }
+  async _onProjectListResponse(event) {
+    const data = event?.data || event?.payload || event;
+    if (!data || data.request_id !== this._hidrataRequestId) return;   // respuestas ajenas
+    const proyectos = Array.isArray(data.projects) ? data.projects : [];
+    for (const p of proyectos) {
+      if (!p?.id) continue;
+      this._indexarCarril(p.id, p.name, p.base_path);
+    }
+    this.logger?.info('carta-digital.carriles.hidratados', { carriles: this.activos.size, proyectos: proyectos.length });
+  }
+
   _onProjectActivated(event) {
     const d = event?.data || event;
     if (!d?.project_id) return;
-    // Rastrea el activo + su slug (el evento trae name, igual que lo recibe filesystem).
-    // slug = slugify(name), como project-manager para el symlink /opt/enki/public/<ns>/<slug>.
-    const name = d.name || '';
-    this.activos.set(d.project_id, { name, slug: name ? slugify(name) : String(d.project_id).slice(0, 8) });
+    this._indexarCarril(d.project_id, d.name, d.base_path);
     this.ultimoActivo = d.project_id;
     this.eventBus.publish('tarifas.config.solicitada', { project_id: d.project_id, correlation_id: crypto.randomUUID() });
   }
   _onProjectDeactivated(event) {
     const d = event?.data || event;
     if (!d?.project_id) return;
-    this.activos.delete(d.project_id);
+    const e = this.activos.get(d.project_id);
+    for (const cara of this._carasDe(d.project_id, e?.name, e?.base_path)) {
+      if (this.activos.get(cara) === e) this.activos.delete(cara);   // no pisar a otro
+    }
     if (this.ultimoActivo === d.project_id) this.ultimoActivo = null;
   }
   // señal de refresco para la PWA/frontend cuando cambia cualquier fuente.

@@ -31,19 +31,55 @@ warn() { echo -e "${YELLOW}[!]${NC} $1"; }
 
 log "Desplegando desde ${REPO_DIR} → ${INSTALL_DIR}"
 
+# ── GUARDA: el repo tiene que estar EN main ──────────────────────────────────
+# deploy.sh copia el WORKING TREE del repo (rsync), NO git. Si el repo está en una rama
+# de trabajo o por detrás de origin/main, el deploy REVIERTE en prod todo lo que main
+# tenga de más — y en silencio. Medido 2026-10-16: el repo estaba en una rama 14 commits
+# atrás, así que ese deploy habría deshecho la doctrina de identidad de carril del
+# filesystem (#767) y 4 PRs del día. Nada avisaba.
+if [ "${ENKI_DEPLOY_FORZAR:-}" != "1" ] && git -C "${REPO_DIR}" rev-parse --git-dir &>/dev/null; then
+    _HEAD=$(git -C "${REPO_DIR}" rev-parse HEAD)
+    timeout 20 git -C "${REPO_DIR}" fetch origin --quiet 2>/dev/null \
+        || warn "no se pudo consultar origin (¿red?) — compruebo con la referencia local"
+    _MAIN=$(git -C "${REPO_DIR}" rev-parse origin/main 2>/dev/null || echo "")
+    if [ -n "${_MAIN}" ] && [ "${_HEAD}" != "${_MAIN}" ]; then
+        _RAMA=$(git -C "${REPO_DIR}" rev-parse --abbrev-ref HEAD)
+        _FALTAN=$(git -C "${REPO_DIR}" rev-list --count "${_HEAD}..${_MAIN}" 2>/dev/null || echo "?")
+        warn "ABORTO: el repo NO está en main."
+        warn "  rama actual      : ${_RAMA}"
+        warn "  commits de menos : ${_FALTAN} respecto a origin/main"
+        warn "Desplegar así REVERTIRÍA en prod esos ${_FALTAN} commits (rsync copia el working tree)."
+        warn "Arréglalo:   cd ${REPO_DIR} && git fetch origin && git checkout main && git pull origin main"
+        warn "O fuerza:    ENKI_DEPLOY_FORZAR=1 sudo ./deployment/deploy.sh"
+        exit 1
+    fi
+    if ! git -C "${REPO_DIR}" diff-index --quiet HEAD -- 2>/dev/null; then
+        warn "El repo tiene cambios SIN COMMITEAR: se desplegarán tal cual."
+    fi
+    log "Repo en origin/main ($(echo "${_HEAD}" | cut -c1-8)) — listo para desplegar."
+fi
+
 # ¿cambió package.json? ¿cambió el frontend?
 NEED_NPM=false
 diff -q "${REPO_DIR}/package.json" "${INSTALL_DIR}/package.json" &>/dev/null || NEED_NPM=true
 NEED_BUILD=false
 diff -rq "${REPO_DIR}/frontend/src" "${INSTALL_DIR}/frontend/src" &>/dev/null 2>&1 || NEED_BUILD=true
 
-# 1) Copiar código (data/public/node_modules quedan intactos)
+# 1) Copiar código. Quedan intactos: node_modules, data, public, **storage** y los
+#    package-lock (que están en .gitignore y los genera npm en la máquina).
+#    OJO con `storage`: NO es código. El proyecto SISTEMA tiene base_path=/opt/enki, así que
+#    su storage vive en la RAÍZ del install y no lo cubre el exclude de `data` (los otros
+#    proyectos sí: su base_path es data/projects/<slug>). Sin este exclude, el --delete se
+#    llevó por delante storage/esquemas/modulos/arnes-nicho.construccion.json (medido 2026-10-16).
+#    Mismo motivo para package-lock.json: el del frontend ya estaba excluido; el de la raíz no.
 log "Copiando archivos..."
 rsync -a --delete \
     --exclude='node_modules' \
     --exclude='.git' \
     --exclude='data' \
     --exclude='public' \
+    --exclude='storage' \
+    --exclude='package-lock.json' \
     --exclude='.hermes' \
     --exclude='.work*' \
     --exclude='*.bak-*' \

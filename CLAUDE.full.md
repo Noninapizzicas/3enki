@@ -2853,9 +2853,10 @@ CLASE VariacionesProducto {
 CLASE PedidosModule HEREDA BaseModule {
   ATRIBUTOS {
     name: String = 'pedidos'
-    version: String = '3.0.0'
+    version: String = '3.5.0'
     pedidos: Map<pedido_id, Pedido>
     pedidosPorCuenta: Map<cuenta_id, Array<pedido_id>>
+    pedidosPorProject: Map<project_slug, Set<pedido_id>>
     productosCache: Map<producto_id, Producto>
   }
 
@@ -2867,20 +2868,51 @@ CLASE PedidosModule HEREDA BaseModule {
       PUBLICA pedido.creado
       RETORNA {status: 201, data: pedido}
 
+    async handleCreatePedidoTienda(data: {project_slug, items, cliente_nombre, modo_consumo, hora_recogida, metodo_pago}): Promise<Response>
+      NORMALIZA metodo_pago EN ['efectivo','tarjeta']  // opcional: sin el → 'efectivo' (comportamiento previo)
+      metodo_pago SOLO REGISTRA la preferencia del cliente (lo que pidio en la PWA por el #P1)
+      QUIEN MANDA SOBRE EL COBRO es la VERDAD del pago (pedido.pago.estado), NO esta preferencia
+      CREA pedido tienda (ancla = cliente_nombre) → _crearCuentaTienda → comandero.enviar_cocina
+      PUBLICA pedido.creado (lleva metodo_pago)
+
+    async onPagoConfirmado(event: {pedido_id, project_id, monto_centimos, project_slug?, cliente_nombre?, cliente_telefono?}): Void
+      SI pedido NO esta EN memoria                              // el pago es ASINCRONO y el pedido de
+        RECREA pedido MINIMO desde la metadata de la sesion     // tienda vive en memoria y NO se restaura:
+          {id: pedido_id, tipo:'tienda', estado:'pagado',       // si el proceso reinicio en la ventana de
+           total_centimos: monto_centimos, metodo_pago:'tarjeta'} // pago (p.ej. un DEPLOY) el webhook llega
+        recreado_desde_pago = true                              // huerfano. El dinero SI entro: NUNCA en
+        pedidos.set + pedidosPorProject.add                      // silencio, y sin persistir nada.
+      SI pedido.pago.estado == 'pagado' → RETORNA              // idempotencia
+      pedido.pago = {estado:'pagado', pasarela, session_id, monto_centimos, pagado_at}
+      PUBLICA pedido.pagado {pedido_id, project_slug, total, cliente_nombre, cliente_telefono, recreado}
+
+    async handleConfirmarRecogida(data: {pedido_id}): Promise<Response>
+      GUARDA pedido.estado == 'pendiente_recogida' → 409 CONFLICT_STATE
+      pagoConfirmado = pedido.pago.estado == 'pagado'
+      metodo_cobro = pagoConfirmado ? 'tarjeta' : 'efectivo'   // LA VERDAD del pago decide
+      pedido.estado = 'recogido_y_cobrado'
+      pedido.cobro = {metodo: metodo_cobro, monto_centimos, cobrado_at,
+                      IF pagoConfirmado: session_id + pasarela}
+      PUBLICA pedido.recogido {pedido_id, project_id, total_centimos, metodo_pago: metodo_cobro}
+
     async onComanderoEnviarCocina(event: Event): Promise<Void>
       CREA pedido formal SI NO existe
       PUBLICA pedido.enviado_cocina (escuchado por cocina)
 
     EVENTOS_PUBLISHES {
-      'pedido.creado': {pedido_id, cuenta_id, items, total}
+      'pedido.creado': {pedido_id, cuenta_id, items, total, metodo_pago?}
       'pedido.enviado_cocina': (delegado desde comandero bridge)
       'pedido.completado': {pedido_id, cuenta_id, tiempo_total}
       'pedido.cancelado': {pedido_id, cuenta_id, motivo}
+      'pedido.pagado': {pedido_id, project_id, project_slug, session_id, total, cliente_nombre, cliente_telefono, recreado}
+      'pedido.recogido': {pedido_id, project_id, total_centimos, cliente_nombre, metodo_pago, recogido_at}
     }
 
     EVENTOS_SUBSCRIBES {
       'comandero.enviar_cocina': onComanderoEnviarCocina (bridge)
       'catalogo.actualizado': onCatalogoActualizado (sync cache)
+      'pago.confirmado': onPagoConfirmado (la pasarela confirma por webhook)
+      'pedido.crear-tienda': handleCreatePedidoTienda (tool auto-wireada)
     }
   }
 }
@@ -2889,9 +2921,14 @@ CLASE Pedido {
   ATRIBUTOS {
     id: String (pedido_id)
     cuenta_id: String
+    tipo: String (pos|tienda)
     items: Array<ItemPedido>
     total: Number
-    estado: String (creado|enviado_cocina|completado|cancelado)
+    metodo_pago: String (efectivo|tarjeta — preferencia del cliente; opcional, default 'efectivo')
+    pago: Object (VERDAD del cobro: {estado, pasarela, session_id, monto_centimos, pagado_at})
+    recreado_desde_pago: Boolean (true si el webhook llego de huerfano y el pedido se reconstruyo)
+    cobro: Object ({metodo, monto_centimos, cobrado_at, session_id?, pasarela?})
+    estado: String (creado|enviado_cocina|completado|cancelado|pendiente_recogida|recogido_y_cobrado)
     created_at: String (ISO)
   }
 }
@@ -5004,8 +5041,42 @@ CLASE PedidosManager IMPLEMENTA PedidosContract {
     pedido.created: {pedido_id, cuenta_id}
     pedido.estado_updated: {pedido_id, estado}
     producto.added_to_pedido: {pedido_id, producto_id, cantidad}
+    pedido.pagado: {pedido_id, project_id, project_slug, session_id, total, cliente_nombre, cliente_telefono, recreado}
+    pedido.recogido: {pedido_id, project_id, total_centimos, cliente_nombre, metodo_pago, recogido_at}
   }
 }
+```
+
+### PAGO DEL PEDIDO DE TIENDA — efectivo o tarjeta (el método viaja en el #P1)
+
+```
+PREFERENCIA ≠ COBRO. El cliente elige en la PWA y la preferencia viaja autoritativa en el #P1
+(campo metodo_pago: 'efectivo' | 'tarjeta'; sin él → 'efectivo'). Eso solo REGISTRA lo que pidió.
+Quien manda sobre la caja es la VERDAD del pago: pedido.pago.estado, escrito por la pasarela.
+
+CADENA (toda por evento, ningún módulo nuevo):
+  PWA → #P1{metodo_pago} → pedido-parser → bot → pedido.crear-tienda{metodo_pago} → pedidos
+    IF metodo_pago == 'tarjeta':
+      bot → pago.iniciar.request {pedido_id, monto_centimos, return_url, metadata{project_slug, cliente_nombre, cliente_telefono, canal_origen}}
+        → pago-gateway (LÍDER, provider-agnóstico: Stripe Checkout hospedado)
+        → pago.iniciar.response {status:200, data:{checkout_url}}
+      bot → manda checkout_url al cliente por WhatsApp   // guarda: UNA sesión por pedido_id
+      ELSE degrada (NO_PASARELA / PERMISSION_DENIED) → 'puedes pagar al recoger' (el pedido ya existe)
+    Stripe → POST /pago/webhook/:project (firma verificada) → pago-gateway
+      → pago.confirmado {pedido_id, project_id, monto_centimos, + metadata de contexto}
+      → pedidos.onPagoConfirmado → pedido.pagado
+      → bot avisa al cliente 'pago recibido' ; IF recreado → avisa al STAFF por Telegram
+    Dependiente confirma recogida → pedido.recogido{metodo_pago} ; la caja ya no miente
+
+EL HUÉRFANO (por qué existe la recreación): los pedidos de tienda viven en MEMORIA y no se
+restauran. El pago es asíncrono (el webhook llega minutos después), así que un reinicio en esa
+ventana —un DEPLOY, justo— dejaría el dinero cobrado y el pedido inexistente, en silencio. Se
+reconstruye MÍNIMO desde la metadata de la sesión (pedido_id + project_id + importe) y se emite
+pedido.pagado con recreado:true. El dinero nunca se pierde sin rastro. Nada que persistir.
+
+config DEL PROYECTO: la pasarela se enciende por proyecto (pago-gateway lee
+core.config['pago-gateway'] || moduleConfig: kind stripe-checkout, provider STRIPE, moneda,
+return_url, webhook_secret). Sin bloque y sin credencial STRIPE → degrada, no rompe.
 ```
 
 ### COCINA MANAGER
@@ -12913,6 +12984,16 @@ CLASE Category {
 }
 ```
 
+NOTA (2026-10-16) — PAGO DEL PEDIDO DE TIENDA
+```
+handlePedido (POST /tienda/pedido) REENVÍA metodo_pago ('efectivo' | 'tarjeta') dentro del payload
+de pedido.crear-tienda; el que NORMALIZA es pedidos (sin valor → 'efectivo'). tienda-api NO decide
+nada del cobro: solo transporta la preferencia que el cliente marcó en la PWA. Si el pedido llega
+con pago_online, pide igualmente la sesión a pago-gateway (pago.iniciar.request) y devuelve
+checkout_url — es el camino de la PWA alojada (el del bot es su propio _rpc). Ambas rutas acaban en
+la MISMA verdad: pago.confirmado → pedidos.onPagoConfirmado → pedido.pagado.
+```
+
 ## WHATSAPP-BOT (v2.0.0) — Integración WhatsApp
 
 ```
@@ -13174,6 +13255,14 @@ system-inspector (2.0.0)
 ---
 
 # FRONTEND — Capa de UI (SvelteKit + Svelte 5 sobre MQTT)
+
+> **Novedad (2026-10-16) — el panel jefe declara `pago_online` (se cierra el hueco [ABIERTO]).**
+> `modules/carta-digital/CartaDigitalJefePanel.svelte` gana un checkbox que escribe
+> `opciones_visualizacion.pago_online` por el mismo `update_config` (merge profundo). Antes el
+> contrato lo soportaba pero el formulario no lo pedía, así que la PWA no ofrecía método de pago.
+> El template (`static-template.js`) sigue siendo quien decide: con el flag ON pinta
+> 💶 Efectivo al recoger / 💳 Tarjeta y `metodo_pago` viaja en el `#P1` al bot (checkout WhatsApp).
+> El store `carta-digital-jefe.ts` sólo cambia el docstring del campo.
 
 > **Novedad (2026-08-07) — AgenteMarco se alimenta correctamente del puente del agente.**
 > El marco desplegable del chat ahora lee del derived store `ejecucionActiva` (reactividad
@@ -15456,7 +15545,13 @@ MITIGACION: el CSS estático (semanticos.css) es el fallback — funciona sin MQ
     "ataque_cerrado": "editar el texto de WhatsApp (p.ej. 'Total: 1€') NO sirve: el bot re-tasa por ids. Editar items = pide y paga ESO (no es fraude).",
     "ancla_recogida": "cliente_nombre (el nombre que el cliente introduce, obligatorio). codigo_recogida RETIRADO (v3.3.0) y palabra_clave RETIRADA — el dependiente pide el nombre al recoger."
   },
-  "pago": { "ahora": "a la recogida (efectivo)", "fase_2": "link Stripe (pago.iniciar ya esbozado en tienda-api)" },
+  "pago": {
+    "eleccion": "el cliente elige en la PWA (campo metodo_pago del #P1): 'efectivo' (paga al recoger — default si falta) | 'tarjeta' (pago online por la pasarela).",
+    "tarjeta": "el bot NO cobra: pide la sesión de pago al líder por bus (pago.iniciar.request → pago-gateway, provider-agnóstico) y manda la checkout_url al cliente por WhatsApp. La VERDAD del cobro no es la preferencia: es pago.confirmado → pedidos → pedido.pagado.",
+    "degradacion": "sin pasarela configurada (NO_PASARELA) o sin su credencial (PERMISSION_DENIED) el bot avisa 'puedes pagar al recoger' y NO revienta: el pedido ya está creado.",
+    "guarda_anti_duplicado": "una sola sesión por pedido_id (Meta reintenta webhooks y el cliente puede reenviar → sin guarda, dos sesiones = riesgo de pagar dos veces).",
+    "cierre_caja": "handleConfirmarRecogida lee la verdad del pago: 'tarjeta' (con session_id/pasarela) si pago.confirmado llegó antes, 'efectivo' si no. Ya NO clava 'efectivo' a fuego."
+  },
   "aviso_recogida": "cocina.pedido_listo → whatsapp-bot avisa al cliente 'ven a recoger' (ya cableado para origen-whatsapp).",
   "transporte_alojamiento": "tienda-api (POST público /tienda/pedido) APARCADO — el camino vivo es WhatsApp+bot (sin puertas).",
   "estado": "OPERATIVO end-to-end (nonina, enki-ai.online) — webhook real de Meta entrante verificado; alta de conexión por UI (whatsapp.set_config); ver sección 'WhatsApp Cloud API — OPERATIVO'."
@@ -15473,7 +15568,9 @@ El mensaje wa.me que arma la PWA es el FORMATO CANÓNICO + una línea autoritati
   ...
   Total: <X,XX> EUR                                  ← HUMANO (ignorado)
   Nombre: <nombre del cliente>
-  #P1 <base64url(JSON)>                              ← AUTORITATIVO: { v:1, items:[ItemEstructurado] }
+  #P1 <base64url(JSON)>                              ← AUTORITATIVO: { v:1, items:[ItemEstructurado],
+                                                        modo_consumo?, hora_recogida?, fecha_deseada?,
+                                                        metodo_pago? }
 
 ItemEstructurado (por IDS, nunca por precio):
   normal       → { cantidad, producto_id, tipo:'normal', quitar:[nombres], anadir:[ing_id] }
@@ -15485,6 +15582,11 @@ ItemEstructurado (por IDS, nunca por precio):
 REGLA  quitar = NOMBRES (gratis, solo nota de cocina) · anadir = IDS (el bot los re-tasa).
        base64url utf8-safe (acentos en quitar). Si #P1 falta → pedido legacy solo-texto (el bot
        no puede re-tasar; confía en el texto con warn). Si #P1 corrupto → el bot pide reenviar.
+REGLA  metodo_pago viaja en el #P1 (autoritativo, no en el texto editable), igual que
+       modo_consumo/hora_recogida: el parser lo lee con las mismas líneas. Si falta → null y el
+       consumidor decide ('efectivo', el comportamiento previo). Valores: 'efectivo' | 'tarjeta'.
+       El bus NO valida parámetros (auto-wire: saca request_id y pasa el resto tal cual), así que
+       el campo fluye hasta pedidos sin tocar contrato.
 ```
 
 ## El tasador — re-tasado server-side (función PURA, seguridad)
@@ -15673,6 +15775,50 @@ sendTemplate (Meta plantillas · salientes >24h) {
 //            El ALOJADO (publicar) NO setea ai_endpoint → chat OFF por diseño (autoservicio puro).
 ```
 
+## Pago del pedido — efectivo o tarjeta (el método viaja en el #P1, el bot lo engancha)
+
+```
+PREFERENCIA ≠ COBRO. El cliente elige en la PWA y la preferencia viaja AUTORITATIVA en el #P1
+(metodo_pago: 'efectivo' | 'tarjeta'; sin él → 'efectivo'). Eso solo REGISTRA lo que pidió.
+Quien manda sobre la caja es la VERDAD del pago (pedido.pago.estado), escrita por la pasarela.
+
+CADENA (toda por evento, ningún módulo nuevo, ninguna máquina de estados nueva):
+  PWA  cart-digital: botones '💶 Efectivo al recoger' | '💳 Tarjeta' (solo si CONFIG.pago_online)
+       → buildP1Line() añade metodo_pago al JSON del #P1 ; _metodoPago sobrevive al re-render
+  bot  pedido-parser lee metodo_pago del #P1 (mismas líneas que modo_consumo) → pending.metodo_pago
+       → publish('pedido.crear-tienda'{..., metodo_pago}) → pedidos (normaliza: sin valor → 'efectivo')
+  bot  IF metodo_pago == 'tarjeta'  (tras confirmar el pedido, sin bloquear la respuesta):
+         _rpc('pago.iniciar.request', {pedido_id, project_id, monto_centimos, return_url(pwa_url),
+              metadata{project_slug, cliente_nombre, cliente_telefono, canal_origen}})
+           → pago-gateway (LÍDER, provider-agnóstico) → pago.iniciar.response {status:200, data:{checkout_url}}
+         → _enviarMensajeSeguro(checkout_url)   // GUARDA: una sola sesión por pedido_id (LRU 500)
+         ELSE (NO_PASARELA | PERMISSION_DENIED | timeout) → 'El pago con tarjeta no está disponible
+              ahora mismo. Puedes pagar al recoger.' → DEGRADA, no revienta (el pedido ya existe)
+  Stripe → POST /pago/webhook/:project (firma verificada) → pago-gateway
+         → publish('pago.confirmado'{pedido_id, project_id, monto_centimos, + metadata de contexto})
+         → pedidos.onPagoConfirmado → pedido.pago.estado='pagado' → publish('pedido.pagado')
+         → bot.onPedidoPagado: avisa al CLIENTE ('Pago recibido… te aviso cuando esté listo')
+  caja handleConfirmarRecogida: metodo_cobro = pedido.pago.estado=='pagado' ? 'tarjeta' : 'efectivo'
+         → pedido.cobro{metodo, session_id?, pasarela?} + pedido.recogido{metodo_pago}
+
+EL MÉTODO NO SE PREGUNTA POR CHAT. No hay estado nuevo en la conversación (nueva →
+pendiente_confirmacion → pedido_creado → completada sigue igual): el método viene decidido en el
+#P1, igual que modo_consumo. Menos piezas, una sola verdad.
+
+EL HUÉRFANO — por qué la pasarela reenvía metadata. Los pedidos de tienda viven en MEMORIA y NO se
+restauran, y el pago es ASÍNCRONO (el webhook llega minutos después). Un reinicio en esa ventana
+—un DEPLOY, justo— dejaría el dinero cobrado y el pedido inexistente, en silencio. Por eso
+pago-gateway copia al metadata de la sesión el contexto del caller y lo devuelve en pago.confirmado:
+pedidos RECREA el pedido MÍNIMO (pedido_id + project_id + importe) y emite pedido.pagado con
+recreado:true. El bot avisa al cliente si hay teléfono y, si fue recreado, avisa al STAFF por
+Telegram — no hay conversación que continuar, pero el dinero nunca queda mudo. Nada que persistir.
+
+ALTA (lo único externo): bloque 'pago-gateway' en la config del proyecto (kind stripe-checkout,
+provider STRIPE, moneda eur, return_url, webhook_secret) + credencial STRIPE (sk_…) en el
+credential-manager. El publishable no hace falta (Checkout es hospedado). El webhook de Stripe
+apunta a la URL pública /pago/webhook/<slug>.
+```
+
 ## Ciclo
 
 ```
@@ -15687,14 +15833,20 @@ AUTOSERVICIO_COMPLETO {
   6. bot publish('pedido.crear-tienda', items re-tasados + estructura) → pedidos
   7. pedidos crea pedido tienda (ancla = cliente_nombre) → _crearCuentaTienda → comandero.enviar_cocina
   8. cocina pinta la comanda ESTRUCTURADA (mitades como el POS) ; estado pendiente_recogida
-  9. bot responde al cliente a nombre de <cliente> (pasa a recoger, paga al recoger)
-  10. cocina.pedido_listo → bot avisa 'ven a recoger' ; pago a la recogida (efectivo)
+  9. bot responde al cliente a nombre de <cliente> (mensaje CONDICIONAL al método elegido):
+     efectivo → 'Pasa a recoger y paga al recoger' ; tarjeta → 'Te envío ahora el enlace para pagar'
+     IF tarjeta → bot pide la sesión (pago.iniciar.request → pago-gateway) y manda la checkout_url
+  10. cocina.pedido_listo → bot avisa 'ven a recoger' ; cobro a la recogida:
+      tarjeta ya cobrado (la pasarela confirmó) → solo entregar ; efectivo → se cobra en barra
 }
 
 GARANTÍAS {
   no puertas HTTP abiertas (entrada = webhook Meta) ; precio inmanipulable (re-tasado por ids) ;
   identidad por teléfono sin login ; snapshot de precios fresco por evento (= los de la PWA) ;
   no_silent_failures (producto desconocido / cold-start → el bot pide reenviar, nunca crea mudo).
+  pago_sin_silencio: sin pasarela degrada ('paga al recoger') ; si el webhook llega huérfano el
+  pedido se re-crea desde la metadata de la sesión → pedido.pagado{recreado:true}. El dinero
+  cobrado NUNCA queda sin rastro.
 }
 ```
 
@@ -15703,9 +15855,15 @@ GARANTÍAS {
 ```
 EVENTOS {
   (entrante)                         → bot vía WEBHOOK de Meta (Cloud API; único transporte, sin navegador)
-  pedido.crear-tienda                : bot/tienda-api → pedidos (items re-tasados + estructura)
+  pedido.crear-tienda                : bot/tienda-api → pedidos (items re-tasados + estructura + metodo_pago)
   pedido.crear-tienda.response       : pedidos → bot (request_id correlado)
   pedido.creado                      : pedidos (informativo; lleva cuenta_id, sin teléfono/secretos)
+  pago.iniciar.request               : bot → pago-gateway (LÍDER — solo si metodo_pago == 'tarjeta')
+  pago.iniciar.response              : pago-gateway → bot (request_id correlado; data.checkout_url)
+  pago.confirmado                    : pago-gateway (webhook de Stripe, firma verificada) → pedidos
+                                       (lleva la metadata de contexto: permite reconstruir el huérfano)
+  pedido.pagado                      : pedidos → bot (avisa al cliente ; recreado:true → avisa al STAFF)
+  pedido.recogido                    : pedidos (metodo_pago = la VERDAD del cobro, ya no 'efectivo' fijo)
   comandero.enviar_cocina            : comandero → cocina (la estructura viaja aquí)
   cocina.pedido_listo                → bot ('ven a recoger')
   catalogo.actualizado               → bot (refresca snapshot) ; tarifas.config.actualizada → bot
@@ -15713,19 +15871,22 @@ EVENTOS {
 }
 PIEZAS {
   modules/_shared/pedido-tasador.js              (función pura: tasarPedido — re-tasado seguridad)
-  modules/whatsapp-bot (1.5.0)                   (webhook Meta REAL + alta por UI + snapshot + #P1 + re-tasado + sendTemplate)
+  modules/whatsapp-bot (1.5.0)                   (webhook Meta REAL + alta por UI + snapshot + #P1 + re-tasado + sendTemplate + _rpc/_iniciarPagoTarjeta/onPedidoPagado)
   modules/whatsapp-bot/services/meta-cloud-client.js (Meta Cloud API: sendText/sendTemplate/_postMessage/parseWebhookEvent)
-  modules/whatsapp-bot/services/pedido-parser.js (#P1: _decodificarEstructura)
-  modules/pizzepos/carta-digital (2.24.0)        (PWA emite #P1 + paridad mitad + nombre obligatorio)
-  modules/pizzepos/pedidos (3.3.0)               (estructura tienda → cocina ; ancla = cliente_nombre)
-  modules/credential-manager (2.2.0)             (META_WHATSAPP[_VERIFY_TOKEN] en catálogo + PROJECT_ONLY)
+  modules/whatsapp-bot/services/pedido-parser.js (#P1: _decodificarEstructura + metodo_pago)
+  modules/pizzepos/carta-digital (2.25.0)        (PWA emite #P1 + paridad mitad + nombre obligatorio + botones metodo_pago)
+  modules/pizzepos/pedidos (3.5.0)               (estructura tienda → cocina ; ancla = cliente_nombre ; metodo_pago ; onPagoConfirmado con recreación del huérfano)
+  modules/pizzepos/pago-gateway (1.0.0)          (LÍDER provider-agnóstico: Stripe Checkout + webhook firmado + metadata de contexto)
+  modules/credential-manager (2.2.0)             (META_WHATSAPP[_VERIFY_TOKEN] + STRIPE en catálogo + PROJECT_ONLY)
   frontend credentials (CredentialsPanel + stores) (4ª pestaña 💬 WhatsApp · fix agrupado de la lista)
   cocina (_buildCocinaItem → ItemLine)           (YA pintaba la estructura, del comandero)
 }
 TESTS {
   shared__pedido-tasador (10) · whatsapp-bot__pedido-estructura (4) · whatsapp-bot__retasado (4)
   · autoservicio__roundtrip (4, PWA→parser→tasador) · pizzepos__pedidos-tienda-estructura (3)
-  · pizzepos__carta-digital-template (mitad+poda) — suite autoservicio verde.
+  · pizzepos__carta-digital-template (mitad+poda) · pago-tarjeta-efectivo e2e (36 aserciones,
+  6 escenarios: tarjeta · efectivo · sin pasarela · sin credencial · huérfano reconstruido ·
+  webhook repetido idempotente) — suite autoservicio verde.
 }
 ```
 
@@ -15752,6 +15913,7 @@ TESTS {
   },
   "genera_el_contenido": {
     "carta-digital._publicarBundle": "VIVO — proyecta la carta pública al vuelo, escribe el bundle PWA en la RAÍZ de www/ (la carta ES la home). AUTO-ACTIVA la feature www antes de escribir.",
+    "carta-digital._autoPublicar": "VIVO — RE-HORNEA SOLO. El bundle es estático, así que un cambio de carta sin republicar dejaba la web vieja en silencio; las 5 señales de fuente (carta.actualizada/editada/borrada, contenido.actualizado, marketing.perfil.actualizado) disparan _rehornear con debounce 4s por proyecto. Solo actúa si el proyecto YA publicó (verdad en el DISCO: fs.exists /www/index.html — la primera publicación sigue siendo acto del dueño) y obedece el interruptor opciones_visualizacion.auto_publicar===false. Fallo → warn + métrica + evento cartadigital.republicar.fallido (nunca silencioso).",
     "árbol libre":  "lo que el comerciante suba a www/ (www/catalogo/…) convive al lado y se espeja en la URL"
   },
   "shop_desaparece": "el modelo viejo /<ns>/shop/<slug> (feature 'tienda', bundle rígido) queda LEGACY. Migración runtime: reactivar www + republicar.",
@@ -15786,7 +15948,9 @@ CLASE ProjectManager (ampliación) {
 }
 
 CLASE CartaDigital._publicarBundle(project_id, slugHint) {   // VIVO — el generador
-  guardCrossProject(project_id == ultimoActivo)             // fs escribe en el último activado
+  guardCrossProject(project_id conocido por el fs)          // fs v2.0.0 resuelve el root por el project_id de la PETICIÓN
+                                                            // (_projectRootFor → projectPaths); solo cae al activo global
+                                                            // si el id es desconocido → eso es lo que se bloquea (412)
   data ← proyectarCartaPublica(project_id)                  // al vuelo: carta-manager + marketing + contenido
   ns   ← publicNs()
   base_href ← `/${ns}/${slug}/`                             // (antes /${ns}/shop/${slug}/)
@@ -15823,11 +15987,13 @@ PUBLICAR (desde chat / RPC cartadigital.publicar.request):
 ```
 project.ensure-feature.request → .response   { request_id, status, data }   (auto-activar feature desde otro módulo)
 cartadigital.publicar.request → cartadigital.publicado   { project_id, slug, productos, imagenes }
+cartadigital.publicar.request → (fallo) cartadigital.republicar.fallido   { project_id, status, error, motivo }  (la republicación automática no falla en silencio)
 ```
 
 ## Estado
 
 ```
+✓ VIVO  REPUBLICACIÓN AUTOMÁTICA (carta-digital 2.25.0): el bundle se re-hornea solo al cambiar la carta — el dueño publica UNA vez y la web camina al paso de su carta
 ✓ VIVO  Caddy /a/* estático · symlink por proyecto (project-manager) · www.json · carta-digital publica a www/ raíz · auto-activación (ensure-feature) · URL por defecto /<ns>/<slug>/
 ◑ LEGACY  tienda.json (/<ns>/shop/<slug>) — proyectos vivos migran reactivando www + republicando
 ◑ RUNTIME  activar www en proyectos vivos + migrar los de tienda (no código)
@@ -15837,7 +16003,11 @@ cartadigital.publicar.request → cartadigital.publicado   { project_id, slug, p
   NAMESPACE prisma/ bajo www → NO colisiona con carta-digital (raíz www/index.html): carta-digital sirve
   /<ns>/<slug>/, el escaparate prisma /<ns>/<slug>/prisma/. El mismo symlink www cubre todo el árbol.
   Render de bundle verificable en vivo. [ ] assets/PWA (sw.js, manifest, icons) = follow-up.
-VERSIONES  project-manager 4.2.0 · carta-digital 2.23.0 · bienvenida-tienda 1.1.0
+VERSIONES  project-manager 4.2.0 · carta-digital 2.25.0 · bienvenida-tienda 1.1.0
+✓ VIVO  PAGO EN LA CARTA PUBLICADA (2026-10-16): el bundle de carta-digital que sirve este árbol
+  trae los botones de método de pago (💶 efectivo / 💳 tarjeta) SOLO si el proyecto tiene pasarela
+  (CONFIG.pago_online); el método viaja en el #P1 y el bot/pasarela cierran el cobro. Sin pasarela
+  el bundle es idéntico al de siempre (paga al recoger).
 ```
 
 ---
@@ -16159,22 +16329,26 @@ interruptores 1.2.0  subscribe interruptor.set→onSetRequest (canal del efector
 TESTS   homeostasis__bucle 10
 ```
 
-## VERIFICADOR-VISUAL — modules/verificador-visual (1.2.0) — los OJOS (freno de render)
+## VERIFICADOR-VISUAL — modules/verificador-visual (1.4.0) — los OJOS (freno de render)
 
 ```
 ÓRGANO  MOTOR+EVENTO sin memoria (tipo provider). Cierra el lazo que el freno estructural deja abierto.
 CEREBRO _evaluarSnapshot (PURO): errores_consola/js · overflow_horizontal · pagina_en_blanco · imagenes_rotas
-OJOS    _render → _abrirNavegador: PREFIERE obscura (navegador Rust, V8, SIN Chromium, stealth) por CDP
+OJOS    _render → _abrirNavegador: SÓLO obscura (navegador Rust, V8, SIN Chromium, stealth) por CDP
         (puppeteer.connect ws://127.0.0.1:9222/devtools/browser; server COMPARTIDO → disconnect, no close).
-        Sin obscura → cae honesto a Chromium local (puppeteer.launch). Despliegue: obscura por vps-setup
-        (binario prebuilt → Docker), systemd obscura.service. Config obscura_url · env VERIFICADOR_OBSCURA_URL.
-DEGRADA sin navegador (ni obscura ni Chromium) → SIN_OJOS → {ok:true, verificado:false} (fail-open + testigo).
+        El fallback a Chromium se RETIRÓ (1.3.0) — Enki no arrastra Chromium. Config obscura_url · env
+        VERIFICADOR_OBSCURA_URL · despliegue: obscura por vps-setup (prebuilt → Docker), systemd obscura.service.
+CARGA   about:blank (goto domcontentloaded) + document.write(html) + 300 ms de asentamiento — NO setContent:
+        (1.4.0) obscura no implementa Page.setDocumentContent ni emite los eventos que setContent espera, así que
+        setContent moría SIEMPRE en el timeout de 15 s → render_error → 422 de carta-digital = carta sin publicar
+        y sin republicar (fallo de los ojos, no del diseño; mismo veredicto, 0.2-0.3 s por verificación).
+DEGRADA sin navegador (obscura apagada o sin responder) → SIN_OJOS → {ok:true, verificado:false} (fail-open + testigo).
 RPC     render.verificar.request {html,etiqueta?} → {ok,verificado,motivos[],metricas}
 TESTIGO render.verificado / verificacion-visual.failed (.failed → lo siente la homeostasis)
 FRENO DURO (best-effort: 422 solo si verificado&&!ok)
-        carta-design.save (3.3.0)        tras estructural → _checkRender → 422 no guarda
-        carta-digital._publicarBundle (2.19.0) genera HTML → render → 422 no publica
-TESTS   verificador-visual__render 12 (incl. navegador real: obscura si está, Chromium si no) · carta-design__freno-render 5
+        carta-design.save                tras estructural → _checkRender → 422 no guarda
+        carta-digital._publicarBundle    genera HTML → render → 422 no publica
+TESTS   verificador-visual__render 12 (incl. navegador real: obscura) · verificador-visual__multiangulo · carta-design__freno-render 5
 ```
 
 ## RUMBO

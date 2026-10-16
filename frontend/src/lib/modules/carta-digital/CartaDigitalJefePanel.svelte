@@ -73,6 +73,7 @@
   let whatsappBorrador = '';
   let monedaBorrador = '';    // SÍMBOLO display (INV6) — sin conversión
   let mensajeBorrador = '';
+  let pagoOnlineBorrador = false;  // pago_online: ofrece 💳 Tarjeta en la PWA
   let errValidacion = '';
 
   // ---- dictámenes en la vista (desde RESPUESTAS — nunca estado optimista) ----
@@ -170,6 +171,7 @@
     whatsappBorrador = typeof ops.whatsapp_telefono === 'string' ? ops.whatsapp_telefono : '';
     monedaBorrador = typeof ops.moneda === 'string' ? ops.moneda : '';
     mensajeBorrador = typeof ops.mensaje_pedido === 'string' ? ops.mensaje_pedido : '';
+    pagoOnlineBorrador = ops.pago_online === true;
     errValidacion = '';
     dictamenGuardado = null;
     editorConfigAbierto = true;
@@ -195,6 +197,7 @@
     if (whatsapp !== '') ops.whatsapp_telefono = whatsapp;
     if (monedaBorrador.trim() !== '') ops.moneda = monedaBorrador.trim();
     if (mensajeBorrador.trim() !== '') ops.mensaje_pedido = mensajeBorrador.trim();
+    ops.pago_online = pagoOnlineBorrador;   // SIEMPRE explícito: el dueño decide encender/apagar el 💳
     if (Object.keys(ops).length > 0) campos.opciones_visualizacion = ops;
     try {
       const d: DictamenConfig = await declararConfig(campos);
@@ -458,7 +461,15 @@
           <span class="etiqueta">mensaje precargado de WhatsApp</span>
           <input id="cfg-mensaje" type="text" bind:value={mensajeBorrador} placeholder="¡Hola! Quiero pedir:" />
         </label>
-        <p class="overlay-nota">pago_online / pedido_endpoint existen en el config pero NO se piden aquí: [ABIERTO] — requiere tienda-api detrás (decisión del dueño).</p>
+        <label class="campo campo-check">
+          <input id="cfg-pago-online" type="checkbox" bind:checked={pagoOnlineBorrador} />
+          <span class="etiqueta">💳 pago con tarjeta en la PWA (pago_online)</span>
+        </label>
+        <small class="ayuda-check">
+          Encendido, la carta ofrece <b>💶 Efectivo al recoger</b> / <b>💳 Tarjeta</b>. El pedido sigue yendo por WhatsApp;
+          si el cliente elige tarjeta, el bot le manda el enlace de pago (Stripe). Necesita la credencial <b>STRIPE</b> del
+          proyecto — sin ella el bot degrada honesto («paga al recoger») y no revienta.
+        </small>
         {#if errValidacion}
           <div class="banner banner-error" role="alert">⚠ {errValidacion}</div>
         {/if}
@@ -582,12 +593,13 @@
   .editor-cuerpo { padding: 0.6rem 1.1rem; display: flex; flex-direction: column; gap: 0.35rem; }
   .campo { display: block; margin-bottom: 0.8rem; }
   .campo input { width: 100%; box-sizing: border-box; background: rgba(0, 0, 0, 0.25); border: 1px solid rgba(148, 163, 184, 0.3); color: var(--color-text, #e2e8f0); border-radius: 6px; padding: 0.5rem 0.6rem; font-size: 0.9rem; }
-  .overlay-sub, .overlay-nota, .campo small, small { font-size: 0.74rem; color: var(--color-text-muted, #94a3b8); margin: 0.2rem 0 0; }
-  .overlay-nota { font-size: 0.72rem; }
+  .campo-check { display: flex; align-items: center; gap: 0.5rem; cursor: pointer; }
+  .campo-check input { width: auto; margin: 0; accent-color: var(--color-primary, #f59e0b); }
+  .ayuda-check { display: block; margin: -0.4rem 0 0.9rem; line-height: 1.45; }
+  .overlay-sub, .campo small, small { font-size: 0.74rem; color: var(--color-text-muted, #94a3b8); margin: 0.2rem 0 0; }
   .nombrado { margin: 0.4rem 0; padding-left: 1.2rem; font-size: 0.83rem; display: flex; flex-direction: column; gap: 0.35rem; }
   .aviso-linea { color: #facc15; }
   .overlay-sub { padding: 0 1.1rem; }
-  .overlay-nota { padding: 0 0.2rem; }
   .editor-pie { display: flex; justify-content: flex-end; gap: 0.6rem; padding: 0.6rem 1.1rem 0.8rem; }
   .btn-primario { border-color: rgba(245, 158, 11, 0.6); background: rgba(245, 158, 11, 0.14); color: #fbbf24; font-weight: 600; }
   .btn-publicar { background: #16a34a; border-color: #16a34a; color: #fff; font-weight: 600; }

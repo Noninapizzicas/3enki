@@ -256,7 +256,7 @@ class FilesystemModule extends BaseModule {
 
   async onProjectActivated(event) {
     const data = event.data || event;
-    const { project_id, base_path, name, metadata } = data;
+    const { project_id, base_path, name, metadata, slug } = data;
 
     this.activeProjectId = project_id;
 
@@ -264,7 +264,7 @@ class FilesystemModule extends BaseModule {
       this.systemMode = true;
       this.activeProjectPath = process.cwd();
       this.workingDirectory = process.cwd();
-      if (project_id) this._indexProject({ id: project_id, name, base_path, system: true, root: process.cwd() });
+      if (project_id) this._indexProject({ id: project_id, name, base_path, slug, system: true, root: process.cwd() });
       this.logger.info('filesystem.project.activated.system_mode', {
         project_id, project_name: name, system_root: process.cwd()
       });
@@ -283,7 +283,7 @@ class FilesystemModule extends BaseModule {
 
     // Recuerda el root de ESTE proyecto para que sus peticiones (project_id) resuelvan
     // contra él aunque luego se active otro. La base del multi-tenant real.
-    if (project_id) this._indexProject({ id: project_id, name, base_path, system: false });
+    if (project_id) this._indexProject({ id: project_id, name, base_path, slug, system: false });
 
     this.workingDirectory = this.activeProjectPath;
     try {
@@ -520,14 +520,18 @@ class FilesystemModule extends BaseModule {
   // nombre y el nombre del directorio (basename de base_path). Resolver por cualquiera lleva
   // al MISMO carril — cerrar el "solo el UUID vale" sin inventar un registro nuevo: la
   // fuente de verdad sigue siendo project-manager; esto solo es su índice de caras.
-  _indexProject({ id, name, base_path, system = false, root = null }) {
+  // `slug` llega EN EL EVENTO: lo emite project-manager (#774), que es quien lo decide
+  // (es el nombre del directorio físico en /data/projects/<slug>/). Solo se deriva si NO
+  // viene — transitorio, hasta que no quede ningún emisor viejo. El fs no debe inventar la
+  // identidad: eso es exactamente lo que producía 12 copias del mismo algoritmo.
+  _indexProject({ id, name, base_path, system = false, root = null, slug = null }) {
     const storagePath = system
       ? (root || process.cwd())
       : (base_path ? path.join(base_path, 'storage') : null);
     if (!storagePath) return;
-    const slug = this._slugify(name);
-    const entry = { path: storagePath, system, id: id || null, base_path: base_path || null, slug };
-    const caras = [id, slug];
+    const slugFinal = slug || this._slugify(name);
+    const entry = { path: storagePath, system, id: id || null, base_path: base_path || null, slug: slugFinal };
+    const caras = [id, slugFinal];
     if (!system && base_path) caras.push(path.basename(base_path));   // nombre del directorio
     for (const cara of caras) if (cara) this.projectPaths.set(cara, entry);
   }
@@ -585,7 +589,7 @@ class FilesystemModule extends BaseModule {
     for (const p of projects) {
       if (!p?.id || !p?.base_path) continue;
       this._indexProject({
-        id: p.id, name: p.name, base_path: p.base_path,
+        id: p.id, name: p.name, base_path: p.base_path, slug: p.slug,
         system: p.metadata?.is_system === true || p.base_path === process.cwd()
       });
     }

@@ -222,10 +222,17 @@ class ProductosModule extends BaseModule {
       const lista = (Array.isArray(p.ingredientes_base) && p.ingredientes_base.length)
         ? p.ingredientes_base
         : (Array.isArray(p.ingredientes) ? p.ingredientes : []);
+      const grupo = p.categoria_id || p.categoria || null;          // la puerta donde aparece
       for (const ing of lista) {
         if (!ing || (!ing.id && !ing.nombre)) continue;
         const id = ing.id || `ing_${this.slugify(ing.nombre)}`;
-        if (byId.has(id)) continue;                                  // primero gana
+        const existente = byId.get(id);
+        if (existente) {
+          // ya visto en otra puerta: solo se ACUMULA dónde aparece (el resto, primero gana).
+          // Así el pepinillo del bocata no cae dentro de la pizza: su grupos será ['el-fardel'].
+          if (grupo && !existente.grupos.includes(grupo)) existente.grupos.push(grupo);
+          continue;
+        }
         const familia = ing.familia || ing.tipo || 'otro';
         byId.set(id, {
           id,
@@ -233,8 +240,15 @@ class ProductosModule extends BaseModule {
           emoji: ing.emoji || '',
           familia,
           tipo: ing.tipo || familia,                                 // AlGusto agrupa por familia||tipo
+          // grupos = las categorías/puertas donde vive este ingrediente. Es el filtro que ya
+          // leen carta-digital (static-template extrasForGroup) y el panel. Nace del DATO que
+          // viaja en la carta — sin estado nuevo, sin módulo nuevo.
+          grupos: grupo ? [grupo] : [],
           precio_extra: (typeof ing.precio_extra === 'number' ? ing.precio_extra : 0),
-          disponible: ing.disponible !== false
+          disponible: ing.disponible !== false,
+          // alérgenos heredados del módulo `ingredientes` (si la carta los trae en el ingrediente)
+          alergenos: Array.isArray(ing.alergenos) ? ing.alergenos : [],
+          es_alergeno: ing.es_alergeno === true || (Array.isArray(ing.alergenos) && ing.alergenos.length > 0)
         });
       }
     }
@@ -593,6 +607,167 @@ class ProductosModule extends BaseModule {
       return { status: 200, data: { project_id, carta_id: carta?.meta?.id || carta_id || null, ingredientes, total: ingredientes.length } };
     } catch (err) {
       return this._handleHandlerError('productos.ingredientes.error', err, 'ingredientes');
+    }
+  }
+
+  // ── dominio UI 'ingredientes' ────────────────────────────────────────────────
+  // El módulo `ingredientes` (pizzepos) se RETIRÓ: su store en-memoria nunca se alimentaba
+  // (el handler de carta.actualizada desestructuraba claves que el emisor ya no manda) → su
+  // catálogo era 0. Su única capacidad viva, la autoridad de precio_extra, YA VIVE en el
+  // custodio (carta.update_extras.request: cambia el precio en TODAS las apariciones, una
+  // versión). Aquí se REBINDA su contrato UI (domain 'ingredientes') sobre la MISMA proyección
+  // de la carta que sirve productos.ingredientes: una sola fuente, cero stale, cero copia.
+  async _ctxIngredientes(data) {
+    const { project_id, canal, carta_id } = data || {};
+    if (!project_id) return null;
+    const carta = await this._cartaActiva(project_id, canal, carta_id);
+    return {
+      project_id,
+      carta_id: carta?.meta?.id || carta_id || null,
+      ingredientes: carta ? this._proyectarCatalogoIngredientes(carta) : []
+    };
+  }
+
+  async handleIngredientesList(data) {
+    try {
+      const ctx = await this._ctxIngredientes(data);
+      if (!ctx) return this._errorResponse(400, 'INVALID_INPUT', 'project_id es requerido', { field: 'project_id' });
+      const { tipo, grupo, alergeno } = data || {};
+      let ings = ctx.ingredientes;
+      if (grupo) ings = ings.filter(i => (i.grupos || []).includes(grupo));
+      if (tipo) ings = ings.filter(i => i.familia === tipo || i.tipo === tipo);
+      if (alergeno === 'true' || alergeno === true) ings = ings.filter(i => i.es_alergeno === true);
+      return { status: 200, data: { project_id: ctx.project_id, ingredientes: ings, total: ings.length } };
+    } catch (err) {
+      return this._handleHandlerError('ingredientes.ui.list.failed', err, 'ui_list');
+    }
+  }
+
+  async handleIngredientesGet(data) {
+    try {
+      const { id } = data || {};
+      if (!id) return this._errorResponse(400, 'INVALID_INPUT', 'id es requerido', { field: 'id' });
+      const ctx = await this._ctxIngredientes(data);
+      if (!ctx) return this._errorResponse(400, 'INVALID_INPUT', 'project_id es requerido', { field: 'project_id' });
+      const ing = ctx.ingredientes.find(i => i.id === id);
+      if (!ing) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'Ingrediente no encontrado', { entity_type: 'ingrediente', entity_id: id });
+      return { status: 200, data: ing };
+    } catch (err) {
+      return this._handleHandlerError('ingredientes.ui.get.failed', err, 'ui_get');
+    }
+  }
+
+  async handleIngredientesGetPrecio(data) {
+    try {
+      const { ingrediente_id } = data || {};
+      if (!ingrediente_id) return this._errorResponse(400, 'INVALID_INPUT', 'ingrediente_id es requerido', { field: 'ingrediente_id' });
+      const ctx = await this._ctxIngredientes(data);
+      if (!ctx) return this._errorResponse(400, 'INVALID_INPUT', 'project_id es requerido', { field: 'project_id' });
+      const ing = ctx.ingredientes.find(i => i.id === ingrediente_id);
+      if (!ing) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'Ingrediente no encontrado', { entity_type: 'ingrediente', entity_id: ingrediente_id });
+      return { status: 200, data: { ingrediente_id, precio_extra: ing.precio_extra || 0, disponible: ing.disponible !== false } };
+    } catch (err) {
+      return this._handleHandlerError('ingredientes.ui.get_precio.failed', err, 'ui_get_precio');
+    }
+  }
+
+  async handleIngredientesSearch(data) {
+    try {
+      const { q, grupo } = data || {};
+      if (!q) return this._errorResponse(400, 'INVALID_INPUT', 'q (query) es requerido', { field: 'q' });
+      const ctx = await this._ctxIngredientes(data);
+      if (!ctx) return this._errorResponse(400, 'INVALID_INPUT', 'project_id es requerido', { field: 'project_id' });
+      const term = String(q).toLowerCase();
+      let res = ctx.ingredientes.filter(i => String(i.nombre).toLowerCase().includes(term));
+      if (grupo) res = res.filter(i => (i.grupos || []).includes(grupo));
+      return { status: 200, data: { resultados: res, total: res.length, query: q } };
+    } catch (err) {
+      return this._handleHandlerError('ingredientes.ui.search.failed', err, 'ui_search');
+    }
+  }
+
+  async handleIngredientesAlergenos(data) {
+    try {
+      const ctx = await this._ctxIngredientes(data);
+      if (!ctx) return this._errorResponse(400, 'INVALID_INPUT', 'project_id es requerido', { field: 'project_id' });
+      const alergenos = ctx.ingredientes.filter(i => i.es_alergeno === true);
+      const por_tipo = {};
+      for (const ing of alergenos) for (const a of (ing.alergenos || [])) { (por_tipo[a] = por_tipo[a] || []).push({ id: ing.id, nombre: ing.nombre, emoji: ing.emoji }); }
+      return { status: 200, data: { alergenos, total: alergenos.length, por_tipo } };
+    } catch (err) {
+      return this._handleHandlerError('ingredientes.ui.alergenos.failed', err, 'ui_alergenos');
+    }
+  }
+
+  // Editar el precio del extra = delegar en el CUSTODIO (una versión, todas las apariciones).
+  async handleIngredientesUpdate(data) {
+    try {
+      const { project_id, id, ...updates } = data || {};
+      if (!project_id) return this._errorResponse(400, 'INVALID_INPUT', 'project_id es requerido', { field: 'project_id' });
+      if (!id) return this._errorResponse(400, 'INVALID_INPUT', 'id es requerido', { field: 'id' });
+      if (updates.precio_extra == null) {
+        return this._errorResponse(400, 'INVALID_INPUT',
+          'Solo el precio del extra se edita aquí (precio_extra) — vive en la carta. Nombre/emoji/etc. se editan en la carta o el menú-generator.',
+          { fields: Object.keys(updates), hint: 'action=update_precios, o edita el ingrediente en la Carta' });
+      }
+      return this.handleIngredientesUpdatePrecios({ ...data, id, precio_extra: updates.precio_extra });
+    } catch (err) {
+      return this._handleHandlerError('ingredientes.ui.update.failed', err, 'ui_update');
+    }
+  }
+
+  async handleIngredientesUpdatePrecios(data) {
+    try {
+      const { project_id, id, tipo, grupo, precio_extra, porcentaje, canal, carta_id } = data || {};
+      if (!project_id) return this._errorResponse(400, 'INVALID_INPUT', 'project_id es requerido', { field: 'project_id' });
+      if (precio_extra == null && porcentaje == null) {
+        return this._errorResponse(400, 'INVALID_INPUT', 'precio_extra o porcentaje es requerido', { fields: ['precio_extra', 'porcentaje'] });
+      }
+      const ctx = await this._ctxIngredientes(data);
+      if (!ctx) return this._errorResponse(400, 'INVALID_INPUT', 'project_id es requerido', { field: 'project_id' });
+      let objetivo = ctx.ingredientes;
+      if (id) objetivo = objetivo.filter(i => i.id === id);
+      if (grupo) objetivo = objetivo.filter(i => (i.grupos || []).includes(grupo));
+      if (tipo) objetivo = objetivo.filter(i => i.familia === tipo || i.tipo === tipo);
+      if (objetivo.length === 0) {
+        return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'No se encontraron ingredientes con ese filtro', { filter: { id, tipo, grupo } });
+      }
+      const filas = objetivo.map(i => {
+        const anterior = Number(i.precio_extra) || 0;
+        const nuevo = porcentaje != null ? Math.round(anterior * (1 + porcentaje / 100) * 100) / 100 : Number(precio_extra);
+        return { id: i.id, anterior, nuevo };
+      });
+      const cid = await this._resolverCartaActiva(project_id, canal, carta_id);
+      if (!cid) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'No hay carta activa para el proyecto', { project_id });
+      const r = await this._rpc('carta.update_extras.request',
+        { project_id, carta_id: cid, updates: filas.map(f => ({ ingrediente_id: f.id, precio_extra_nuevo: f.nuevo })) }, { timeout_ms: 8000 });
+      if (!r) return this._errorResponse(503, 'UPSTREAM_UNREACHABLE', 'carta-manager no responde');
+      if (r.error) return { status: r.error.code === 'RESOURCE_NOT_FOUND' ? 404 : 502, error: r.error };
+      return { status: 200, data: { actualizados: filas.map(f => ({ id: f.id, anterior: f.anterior, nuevo: f.nuevo })), total: filas.length, carta_id: cid, custodia: r.aplicados || null } };
+    } catch (err) {
+      return this._handleHandlerError('ingredientes.ui.update_precios.failed', err, 'ui_update_precios');
+    }
+  }
+
+  async handleIngredientesHealth(data) {
+    try {
+      const ctx = await this._ctxIngredientes(data);
+      const ings = ctx ? ctx.ingredientes : [];
+      return { status: 200, data: { status: 'healthy', module: 'productos(ingredientes)', fuente: 'proyeccion-de-la-carta', catalogo: { total: ings.length, alergenos: ings.filter(i => i.es_alergeno).length } } };
+    } catch (err) {
+      return this._handleHandlerError('ingredientes.ui.health.failed', err, 'ui_health');
+    }
+  }
+
+  async handleIngredientesMetrics(data) {
+    try {
+      const ctx = await this._ctxIngredientes(data);
+      const ings = ctx ? ctx.ingredientes : [];
+      const por_grupo = {};
+      for (const i of ings) for (const g of (i.grupos || [])) por_grupo[g] = (por_grupo[g] || 0) + 1;
+      return { status: 200, data: { gauges: { 'ingrediente.total.count': ings.length, 'ingrediente.alergenos.count': ings.filter(i => i.es_alergeno).length }, por_grupo } };
+    } catch (err) {
+      return this._handleHandlerError('ingredientes.ui.metrics.failed', err, 'ui_metrics');
     }
   }
 

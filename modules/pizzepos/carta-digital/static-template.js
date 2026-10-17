@@ -94,6 +94,18 @@ function generateStaticHTML(carta, config, options = {}) {
       // Alérgenos canónicos (1169/2011) ya normalizados por la proyección.
       alergenos: Array.isArray(p.alergenos) ? p.alergenos : [],
       gancho: p.gancho || null,   // reclamo del marketing (etiqueta corta)
+      // ESCALERA de familia (DATO de la carta): el ancla y sus hermanas a un ingrediente.
+      // Se re-mapea aquí porque el DATA del bundle es la forma FINAL que ve la PWA.
+      escalera: (p.escalera && typeof p.escalera === 'object' && Array.isArray(p.escalera.hermanas))
+        ? {
+            ancla: p.escalera.ancla || null,
+            familia: p.escalera.familia || null,
+            hermanas: p.escalera.hermanas.map(h => ({
+              nombre: h.nombre || null,
+              anadir: Array.isArray(h.anadir) ? h.anadir.slice() : []
+            }))
+          }
+        : null,
       ingredientes: (p.ingredientes || []).map(i => ({
         nombre: i.nombre, emoji: i.emoji || null, tipo: i.tipo || null,
         precio_extra: i.precio_extra ?? null
@@ -287,6 +299,11 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .ing-add{font:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:all .12s}
 .ing-chip.added{border-color:#22c55e;background:rgba(34,197,94,.15);color:#22c55e}
 .ing-add-price{font-size:.65rem;color:#888;margin-left:2px}.ing-chip.added .ing-add-price{color:#22c55e}
+/* La escalera: mismo chip que los extras, pero "lo mismo + ingrediente -> hermana". */
+.esc-row{align-items:baseline}
+.esc-mas{color:var(--primary);font-weight:800}
+.esc-flecha{opacity:.45;margin:0 2px}
+.esc-nombre{font-weight:700}
 /* Atajos componibles (mitad / crea tu pizza): pills compactas ancladas arriba del grid */
 .special-bar{grid-column:1/-1;display:flex;gap:10px;flex-wrap:wrap;margin:0 0 6px}
 .special-btn{display:inline-flex;align-items:center;gap:8px;padding:8px 15px;border:1.5px solid var(--primary);border-radius:999px;background:rgba(245,158,11,.12);background:color-mix(in srgb,var(--primary) 14%,transparent);color:var(--primary);font:inherit;font-size:.82rem;font-weight:700;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:transform .12s,background .15s}
@@ -701,7 +718,7 @@ function renderExtrasAgrupados(extras, selSet, fn) {
     html += '<div class="ing-group" style="--fam:' + info.color + '"><div class="ing-group-head"><span>' + info.emoji + '</span><span>' + info.label + '</span><span class="ing-group-count">(' + lista.length + ')</span></div><div class="ing-list">';
     for (const e of lista) {
       const ad = (selSet && selSet.has(e.id)) ? ' added' : '';
-      html += '<button type="button" class="ing-chip ing-add' + cls + ad + '" onclick="' + handler + '(\\'' + e.id + '\\', this)">' + (e.emoji ? '<span style="font-size:.85rem">' + e.emoji + '</span>' : '') + '<span style="font-weight:500">' + esc(e.nombre) + '</span><span class="ing-add-price">+' + fmt(e.precio_extra) + '</span></button>';
+      html += '<button type="button" class="ing-chip ing-add' + cls + ad + '" data-ext-id="' + esc(e.id) + '" onclick="' + handler + '(\\'' + e.id + '\\', this)">' + (e.emoji ? '<span style="font-size:.85rem">' + e.emoji + '</span>' : '') + '<span style="font-weight:500">' + esc(e.nombre) + '</span><span class="ing-add-price">+' + fmt(e.precio_extra) + '</span></button>';
     }
     html += '</div></div>';
   }
@@ -845,10 +862,40 @@ function showDetail(id) {
     alergHtml = '<h3 class="section-title">Alérgenos</h3><div class="alerg-list">' + chips + '</div>';
   }
 
+  // La ESCALERA (DATO de la carta): el ancla y sus hermanas a UN ingrediente. Cada peldano es un
+  // ATAJO: al pulsarlo anade el ingrediente que convierte el ancla en su hermana. El precio del
+  // peldano sale del catalogo VIVO (precio_extra), nunca de un numero escrito a mano.
+  let escaleraHtml = '';
+  if (p.escalera && Array.isArray(p.escalera.hermanas) && p.escalera.hermanas.length) {
+    let filas = '';
+    for (const h of p.escalera.hermanas) {
+      const ids = Array.isArray(h.anadir) ? h.anadir : [];
+      let delta = 0; const etiquetas = [];
+      for (const iid of ids) {
+        const ex = detailExtrasById[iid] || catIngPorId(iid);
+        if (ex) {
+          delta += Number(ex.precio_extra) || 0;
+          etiquetas.push(esc(ex.nombre));
+          if (!detailExtrasById[iid]) detailExtrasById[iid] = ex;
+        }
+      }
+      if (!etiquetas.length) continue;
+      filas += '<button type="button" class="ing-chip esc-row" data-ext-id="' + esc(ids[0] || '') + '" onclick="toggleEscalera(this)">' +
+        '<span class="esc-mas">+</span><span style="font-weight:500">' + etiquetas.join(' + ') + '</span>' +
+        '<span class="esc-flecha">-></span><span class="esc-nombre">' + esc(h.nombre) + '</span>' +
+        (delta > 0 ? '<span class="ing-add-price">+' + fmt(delta) + '</span>' : '') + '</button>';
+    }
+    if (filas) {
+      escaleraHtml = '<h3 class="section-title">La escalera <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#777">lo mismo + un ingrediente</span></h3>' +
+        '<div class="ing-list esc-list">' + filas + '</div>';
+    }
+  }
+
   document.getElementById('detail-content').innerHTML =
-    '<div class="detail-header"><h2 class="detail-nombre">' + (p.emoji ? p.emoji + ' ' : '') + esc(p.nombre) + '</h2><span class="detail-precio">' + fmt(p.precio) + '</span></div>' +
+    '<div class="detail-header"><h2 class="detail-nombre">'  + (p.emoji ? p.emoji + ' ' : '') + esc(p.nombre) + '</h2><span class="detail-precio">' + fmt(p.precio) + '</span></div>' +
     (tagsHtml ? '<div class="detail-tags">' + tagsHtml + '</div>' : '') +
     (p.descripcion ? '<p class="detail-desc">' + esc(p.descripcion) + '</p>' : '') +
+    escaleraHtml +
     (ingsHtml ? '<h3 class="section-title">Ingredientes <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#777">· toca para quitar</span></h3><div class="ing-list">' + ingsHtml + '</div>' : '') +
     (extrasHtml ? '<h3 class="section-title">Añadir extras</h3>' + extrasHtml : '') +
     alergHtml;
@@ -887,8 +934,11 @@ function toggleQuitar(idx, btn) {
 function toggleAnadir(id, btn) {
   const e = detailExtrasById[id];
   if (!e) return;
-  if (anadirSel.has(id)) { anadirSel.delete(id); btn.classList.remove('added'); }
-  else { anadirSel.set(id, e); btn.classList.add('added'); }
+  const on = !anadirSel.has(id);
+  if (on) anadirSel.set(id, e); else anadirSel.delete(id);
+  // El chip de "Anadir extras" y el peldano de "La escalera" son el MISMO extra: las dos
+  // caras se encienden/apagan juntas (si no, el cliente lo veria a medias).
+  try { document.querySelectorAll('[data-ext-id="' + id + '"]').forEach(function (b) { b.classList.toggle('added', on); }); } catch (_) {}
   // El precio cambia con cada extra. Mismo toggle en dos contextos: detalle normal y
   // personalización de una mitad — cada uno repinta SU footer (no se pisan).
   if (mitadVarLado) renderMitadVarFooter(); else renderDetailFooter();
@@ -962,6 +1012,18 @@ function extrasForGroup(grpKeys, excludeSet) {
     }
     return true;
   });
+}
+// Busca un ingrediente del catalogo proyectado por id o por nombre (tolerante).
+function catIngPorId(id) {
+  const k = norm(id);
+  return (DATA.catalogo_ingredientes || []).find(function (x) { return norm(x.id) === k || norm(x.nombre) === k; });
+}
+// Peldano de "La escalera": atajo que convierte el ancla en su hermana (anade el ingrediente).
+function toggleEscalera(btn) {
+  const id = btn && btn.getAttribute('data-ext-id');
+  if (!id) return;
+  if (!detailExtrasById[id]) { const ex = catIngPorId(id); if (ex) detailExtrasById[id] = ex; }
+  toggleAnadir(id, btn);
 }
 function specialBtn(kind, title, onclickJs) {
   // Dibujos identificativos (heredan el color de marca via currentColor).
@@ -1985,8 +2047,12 @@ if ('serviceWorker' in navigator) {
  * Generate a minimal service worker for offline caching.
  * Uses relative paths (./) so it works in any subdirectory (GitHub Pages, etc.)
  */
-function generateServiceWorker(nombre_negocio) {
-  return `const CACHE = '${slugify(nombre_negocio)}-v1';
+function generateServiceWorker(nombre_negocio, version) {
+  // La VERSION va en el NOMBRE de la cache: al cambiar el bundle nace una cache nueva y
+  // `activate` borra la vieja. Con nombre fijo, el cliente que ya visito la carta se
+  // quedaba con el bundle VIEJO para siempre (el dueno no veia sus cambios).
+  const stamp = (version === undefined || version === null || version === '') ? 'v1' : String(version);
+  return `const CACHE = '${slugify(nombre_negocio)}-${stamp}';
 const ASSETS = ['./', './index.html'];
 
 self.addEventListener('install', e => {
@@ -2002,11 +2068,24 @@ self.addEventListener('activate', e => {
 });
 
 self.addEventListener('fetch', e => {
+  const req = e.request;
+  // El DOCUMENTO va a RED PRIMERO: la carta es estatica y cambia al publicar. Con
+  // cache-first el cliente veia el bundle viejo aunque el servidor tuviera el nuevo.
+  if (req.mode === 'navigate') {
+    e.respondWith(
+      fetch(req).then(res => {
+        if (res && res.ok) { const c = res.clone(); caches.open(CACHE).then(cc => cc.put(req, c)); }
+        return res;
+      }).catch(() => caches.match(req).then(r => r || caches.match('./index.html')))
+    );
+    return;
+  }
+  // Assets (img/iconos/manifest): cache primero, rapido y estable.
   e.respondWith(
-    caches.match(e.request).then(r => r || fetch(e.request).then(res => {
-      if (res.ok && e.request.method === 'GET') {
+    caches.match(req).then(r => r || fetch(req).then(res => {
+      if (res.ok && req.method === 'GET') {
         const clone = res.clone();
-        caches.open(CACHE).then(c => c.put(e.request, clone));
+        caches.open(CACHE).then(c => c.put(req, clone));
       }
       return res;
     })).catch(() => caches.match(self.registration.scope))
@@ -2014,7 +2093,6 @@ self.addEventListener('fetch', e => {
 });
 `;
 }
-
 /**
  * Generate PWA manifest.json
  * Uses relative start_url (".") so it works in any subdirectory (GitHub Pages, etc.)

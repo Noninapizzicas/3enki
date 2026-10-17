@@ -408,6 +408,7 @@ class CartaDigitalModule extends BaseModule {
   // storage/www (que project-manager symlinka a /opt/enki/public/<ns>/<slug> al activar
   // la feature `www`). Caddy lo sirve estático — sin reload, sin tocar Caddyfile.
   // NO es servido al vuelo por el gateway: /<ns>/<slug>/* es estático en Caddy.
+  // (la escalera de familia viaja como DATO del producto — ver static-template.js)
   async _publicarBundle(project_id, slugHint) {
     if (!project_id) return this._err(400, 'INVALID_INPUT', 'project_id requerido');
 
@@ -535,7 +536,7 @@ class CartaDigitalModule extends BaseModule {
     // activa el symlink no existe y /<ns>/<slug> dará 404 — lo avisa el aviso, no se finge.
     const files = [
       [`${BUNDLE_DIR}/index.html`, html],
-      [`${BUNDLE_DIR}/sw.js`, generateServiceWorker(tplConfig.nombre_negocio)],
+      [`${BUNDLE_DIR}/sw.js`, generateServiceWorker(tplConfig.nombre_negocio, crypto.createHash('sha1').update(html).digest('hex').slice(0, 10))],
       [`${BUNDLE_DIR}/manifest.json`, generateManifest(tplConfig.nombre_negocio, colorPrimario, colorFondo)],
       [`${BUNDLE_DIR}/icon-192.svg`, generateIcon(192, logoEmoji, colorPrimario, colorFondo)],
       [`${BUNDLE_DIR}/icon-512.svg`, generateIcon(512, logoEmoji, colorPrimario, colorFondo)]

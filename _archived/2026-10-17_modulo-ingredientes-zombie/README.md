@@ -55,3 +55,26 @@ La cúpula de eventos (`scripts/cupula-eventos/vigilante.js`) no lo cantaba porq
 Los tres agujeros se cerraron en el mismo PR: la cúpula ahora canta `suscriptor_huerfano`,
 soporta manifests con `subscribes`/`publishes` en forma dict (antes tumbaban el vigilante con
 `subs is not iterable`, y por eso llevaba sin ladrar), y cantó este módulo.
+
+## Tests
+
+- `tests/unit/pizzepos__ingredientes.test.js` → RETIRADO (probaba el módulo muerto).
+- `tests/unit/pizzepos__productos-ingredientes.test.js` → el relevo: la proyección emite
+  `grupos`, un extra de otra puerta no cae en la pizza, y el dominio `ingredientes` responde
+  ya desde `productos`. Enganchado al CI (`npm run test:pizzepos-ingredientes` en validate.yml).
+- `tests/unit/cupula-eventos__runtime.test.js` → sigue verde (la cúpula no rompe con dict).
+
+## Lo que la cúpula destapó al revivir (triaje pendiente, NO de este PR)
+
+El vigilante llevaba CRASHANDO en CI (manifest dict de `banco-ideas`), así que el paso
+`cupula-eventos` estaba rojo sin informar. Al revivir, canta 6 `rpc_fantasma` PREEXISTENTES
+de otros módulos (nadie los atendía, quedaban ocultos tras el crash):
+
+- `cola.longitud.request`, `filamento.listar.request` ← `modules/adaptador-avisos/index.js`
+- `notificar.request` ← `modules/cuenta-recurrente/index.js`
+- `ciclo-impresion.estado.request` ← `modules/panel-jefe` y `modules/panel-trabajador`
+- `recetas.actualizar_precio.request` ← `modules/pizzepos/escandallo/escandallo.blueprint.json`
+
+Cada uno es un `publishAndWait` que espera respuesta de un evento que nadie atiende (timeout).
+Arreglarlos es trabajo aparte: hay que decidir el nombre real del evento en cada caso.
+

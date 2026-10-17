@@ -49,6 +49,9 @@ function proyectarCartaPublica(carta, marca, contenido, config, calendario) {
       imagen: principal ? principal.url : null,
       imagenes: imgs,
       ingredientes: Array.isArray(p.ingredientes) ? p.ingredientes : (p.ingredientes_base || []),
+      // ESCALERA de familia (DATO de la carta): el ancla y sus hermanas a un ingrediente.
+      // La proyeccion es WHITELIST: lo que no se nombra aqui NO llega a la PWA.
+      escalera: (p.escalera && typeof p.escalera === 'object' && Array.isArray(p.escalera.hermanas)) ? p.escalera : null,
       alergenos,
       // Calendario (módulo calendario): cuándo sale este producto. `[]` → no es encargable
       // (sin botón de encargo en la carta). margen_antelacion_h = antelación mínima p/ encargar.

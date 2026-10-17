@@ -39,7 +39,16 @@
     { "domain": "productos", "action": "health",          "handler": "handleHealthCheck",     "type": "workspace_module", "zone": "barra_modulos" },
     { "domain": "productos", "action": "metrics",         "handler": "handleGetMetrics",      "type": "workspace_module", "zone": "barra_modulos" },
     { "domain": "productos", "action": "load_carta",      "handler": "handleLoadCarta",       "type": "workspace_module", "zone": "barra_modulos" },
-    { "domain": "productos", "action": "carta_completa",  "handler": "handleCartaCompleta",   "type": "workspace_module", "zone": "barra_modulos" }
+    { "domain": "productos", "action": "carta_completa",  "handler": "handleCartaCompleta",   "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "ingredientes", "action": "list",           "handler": "handleIngredientesList",          "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "ingredientes", "action": "get",            "handler": "handleIngredientesGet",           "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "ingredientes", "action": "get_precio",     "handler": "handleIngredientesGetPrecio",     "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "ingredientes", "action": "search",         "handler": "handleIngredientesSearch",        "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "ingredientes", "action": "alergenos",      "handler": "handleIngredientesAlergenos",     "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "ingredientes", "action": "update",         "handler": "handleIngredientesUpdate",        "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "ingredientes", "action": "update_precios", "handler": "handleIngredientesUpdatePrecios", "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "ingredientes", "action": "health",         "handler": "handleIngredientesHealth",        "type": "workspace_module", "zone": "barra_modulos" },
+    { "domain": "ingredientes", "action": "metrics",        "handler": "handleIngredientesMetrics",       "type": "workspace_module", "zone": "barra_modulos" }
   ],
   "tools": [
     {
@@ -135,7 +144,7 @@
     },
     {
       "name": "productos.ingredientes",
-      "description": "Delega al modulo ingredientes (fuente unica). Mantiene el endpoint por compatibilidad con el frontend del comandero.",
+      "description": "Catálogo de ingredientes PROYECTADO desde la carta activa (fuente única). Cada ítem lleva {id,nombre,emoji,familia,tipo,grupos,precio_extra,disponible,alergenos}: `grupos` = las puertas/categorías donde aparece (el filtro que usa la carta-digital). El AlGustoPanel y el panel de Ingredientes lo consumen. El cambio de precio_extra lo custodia carta-manager (carta.update_extras.request).",
       "parameters": {
         "type": "object",
         "properties": {

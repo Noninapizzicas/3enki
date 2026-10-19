@@ -8,7 +8,7 @@
     "razon": "Bloque J fontanería de fuentes del vertical NICHOS, sin cara propia. Orquesta llamadas al bus (crawl4rs) y publica resultados. El consumidor (B1 sondeador, C1 estudio-demanda, E1 competencia) lo invoca por RPC; el dueño no interactúa directamente con este módulo."
   },
   "publishes": [
-    { "event": "nichos.fuente.consumir.response", "description": "Response correlada por request_id al RPC nichos.fuente.consumir.request. Payload: {status, data:{resultado_crudo}} | {status, error}." },
+    { "event": "nichos.fuente.consumir.response", "description": "Response correlada por request_id al RPC nichos.fuente.consumir.request. Payload: {status, data:{resultados:[DatoHomogeneo], resultado_crudo}} | {status, error}. 'resultados' = array homogéneo (J2) con alias de consumo (nombre/fuente/tipo/evidencia); 'resultado_crudo' = crudo tal cual (compat)." },
     { "event": "nichos.fuente.limites.puede.consumir.request", "description": "RPC hacia J3 (gestion-limites-fuente): pre-check de que la fuente puede consumirse dentro de los límites vigentes. Payload: {request_id, fuente}." },
     { "event": "nichos.conversor.normalizar.request", "description": "RPC hacia J2 (conversor-fuente): solicita normalización del crudo obtenido. Payload: {request_id, crudo, origen}." },
     { "event": "nichos.fuente.coste.registrado", "description": "PULSO fire-and-forget hacia J4 (imputacion-coste-fuente): registra el coste de esta consulta. Payload: {id_proyecto, fuente, importe, timestamp}." },
@@ -17,6 +17,6 @@
     { "event": "crawl4rs.leer.request", "description": "RPC al módulo crawl4rs: lectura de URL concreta. Payload: {request_id, url, opciones}." }
   ],
   "subscribes": [
-    { "event": "nichos.fuente.consumir.request", "handler": "onConsumirRequest", "description": "PUENTE: orquesta pre-check de límites + llamada externa via bus (crawl4rs) + imputación de coste. Payload: {request_id, fuente, peticion, project_id?, correlation_id}." }
+    { "event": "nichos.fuente.consumir.request", "handler": "onConsumirRequest", "description": "PUENTE: orquesta pre-check de límites + llamada externa via bus (crawl4rs) + imputación de coste. Acepta DOS formas de payload (reconciliadas 2026-10-05): A) {request_id, fuente:{tipo:'buscar'|'leer',nombre?,coste_unitario?}, peticion:{query|url}, project_id?, correlation_id}; B) forma semántica de los consumidores del vertical {request_id, query? | candidato? | semilla+territorio? | solucion?, project_id?}." }
   ]
 }

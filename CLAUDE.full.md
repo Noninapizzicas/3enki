@@ -4796,7 +4796,10 @@ CLASE ProductosProyector IMPLEMENTA ProductosContract {
 
   METODO onLoad(ctx)
     HIDRATA mappingCanales desde tarifas (snapshot) + proyecto activo (warm)
-    // tras un hot-reload el mapa nace VACÍO y resolverCartaActiva caería al fallback
+    // v5.3.1: PUBLICA tarifas.config.solicitada {tipo:snapshot} TAMBIÉN al cargar — sin esto,
+    // tras un hot-reload/restart el mapa nacía VACÍO y el gate _esCartaGeneral no veía la general
+    // (una carta de canal habría vuelto a pisar precios de mostrador). tarifas responde un
+    // snapshot por proyecto conocido; mismo patrón que comandero.onLoad.
 }
 
 CLASE Producto {                        // el shape que viaja por la carta

@@ -357,5 +357,23 @@ async function testAsync(desc, fn) {
     assert.strictEqual(ing[2].familia, 'otro');              // familia inválida normalizada
   });
 
+  await testAsync('_save NO promociona la carta a general si ya hay general en /pizzepos/tarifas.json', async () => {
+    const store = {
+      '/pizzepos/tarifas.json': JSON.stringify({ general: 'carta_general', canales: {} })
+    };
+    const { m, bus } = makeReflejo(store);
+    await m._save({ project_id: 'proj-nonina', carta: { meta: { id: 'carta_glovo', nombre: 'Glovo' }, categorias: cartaInicial().categorias, productos: [] } });
+    const promo = bus.published.filter(([e]) => e === 'tarifas.set_general');
+    assert.strictEqual(promo.length, 0);        // la glovo NO se vuelve general
+  });
+
+  await testAsync('_save SÍ promociona cuando no hay config de tarifas (primera carta)', async () => {
+    const { m, bus } = makeReflejo({});
+    await m._save({ project_id: 'proj-nonina', carta: { meta: { id: 'carta_primera', nombre: 'Primera' }, categorias: cartaInicial().categorias, productos: [] } });
+    const promo = bus.published.filter(([e]) => e === 'tarifas.set_general');
+    assert.strictEqual(promo.length, 1);
+    assert.strictEqual(promo[0][1].carta_id, 'carta_primera');
+  });
+
   console.log('\nTodos los tests pasaron.');
 })().catch(e => { console.error(e); process.exit(1); });

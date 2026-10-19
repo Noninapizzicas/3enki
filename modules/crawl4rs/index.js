@@ -40,7 +40,7 @@ class Crawl4rsModule extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'crawl4rs';
-    this.version = '0.6.0';
+    this.version = '0.5.0';
     this.activo = false;          // interruptor OFF por defecto (egress consciente)
     this._obscura = OBSCURA_DEFAULT;
     this._searxng = SEARXNG_DEFAULT;
@@ -89,7 +89,6 @@ class Crawl4rsModule extends ModuloHibridoReflejo {
   onLeerRequest(e)     { return this._atender(e, 'leer',     'crawl4rs.leer.response',     (d) => this._leer(d)); }
   onRastrearRequest(e) { return this._atender(e, 'rastrear', 'crawl4rs.rastrear.response', (d) => this._rastrear(d)); }
   onBuscarRequest(e)   { return this._atender(e, 'buscar',   'crawl4rs.buscar.response',   (d) => this._buscar(d)); }
-  onSugerenciasRequest(e) { return this._atender(e, 'sugerencias', 'crawl4rs.sugerencias.response', (d) => this._sugerencias(d)); }
   onMapearRequest(e)   { return this._atender(e, 'mapear',   'crawl4rs.mapear.response',   (d) => this._mapear(d)); }
   onDescargarRequest(e){ return this._atender(e, 'descargar','crawl4rs.descargar.response',(d) => this._descargar(d)); }
   onEntrarRequest(e)   { return this._atender(e, 'entrar',   'crawl4rs.entrar.response',   (d) => this._entrar(d)); }
@@ -322,16 +321,8 @@ class Crawl4rsModule extends ModuloHibridoReflejo {
       }
 
       let resp;
-      // Navegación robusta: 'load' espera TODOS los recursos y en páginas pesadas
-      // expira (medido: 1 de 3 fallos con timeout de 30s). 'domcontentloaded' basta
-      // para extraer: el markdown se lee del DOM, no de la red. Si aun así expira,
-      // se reintenta UNA vez antes de declarar el fallo.
-      const nav = { waitUntil: 'domcontentloaded', timeout: this._timeoutMs };
-      try { resp = await page.goto(url, nav); }
-      catch (e1) {
-        try { resp = await page.goto(url, nav); }
-        catch (e2) { return { fallo: { tipo: /timeout/i.test(e2.message) ? 'timeout' : 'nav', motivo: e2.message } }; }
-      }
+      try { resp = await page.goto(url, { waitUntil: 'load', timeout: this._timeoutMs }); }
+      catch (e) { return { fallo: { tipo: /timeout/i.test(e.message) ? 'timeout' : 'nav', motivo: e.message } }; }
 
       // localStorage best-effort tras estar en el origen
       if (ss && Array.isArray(ss.origins)) {
@@ -352,24 +343,15 @@ class Crawl4rsModule extends ModuloHibridoReflejo {
       const html = await page.content().catch(() => '');
       const enlaces = await this._extraerEnlaces(page);
       let markdown = '';
-      if (!opts.soloEnlaces) {
-        markdown = await this._extraerMarkdown(page);
-        // La extracción puede devolver {__error} si falló dentro de obscura. Eso NO
-        // es un markdown vacío legítimo: se reporta como fallo medido (antes se
-        // tragaba y la página salía con status 200 y markdown '' — mentira).
-        if (markdown && typeof markdown === 'object' && markdown.__error) {
-          return { fallo: { tipo: 'extraccion', motivo: markdown.__error } };
-        }
-      }
-      // extracción CSS opcional (selector → texto) — textContent primero: el nodo
-      // puede estar fuera del flujo de render y innerText devolvería ''.
+      if (!opts.soloEnlaces) markdown = await this._extraerMarkdown(page);
+      // extracción CSS opcional (selector → texto)
       let extraido = null;
       if (opts.extract_css && Object.keys(opts.extract_css).length) {
         extraido = await page.evaluate((mapa) => {
           const out = {};
           for (const [clave, sel] of Object.entries(mapa)) {
             const el = document.querySelector(sel);
-            out[clave] = el ? (el.textContent || el.innerText || '').trim() : null;
+            out[clave] = el ? (el.innerText || el.textContent || '').trim() : null;
           }
           return out;
         }, opts.extract_css).catch(() => null);
@@ -459,127 +441,43 @@ class Crawl4rsModule extends ModuloHibridoReflejo {
       return await page.evaluate(() => {
         const raiz = document.querySelector('article, main, [role="main"]') || document.body;
         if (!raiz) return '';
-        // NO se clona el árbol: `cloneNode(true)` está ROTO en este motor (medido en
-        // obscura: un BODY con 11 hijos clona a 2 nodos sueltos → clon vacío →
-        // markdown ''). Se recorre el DOM ORIGINAL y se SALTAN los nodos que el clon
-        // intentaba quitar (script/style/nav/...). Mismo resultado, sin clonar.
-        const SALTAR = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'NAV', 'HEADER', 'FOOTER', 'ASIDE', 'SVG', 'FORM']);
-        const texto = (el) => (el.textContent || '').replace(/\s+/g, ' ').trim();
+        const clon = raiz.cloneNode(true);
+        for (const sel of ['script', 'style', 'noscript', 'nav', 'header', 'footer', 'aside', 'svg', 'form']) {
+          for (const el of clon.querySelectorAll(sel)) el.remove();
+        }
         const out = [];
         const md = (el) => {
           for (const n of el.childNodes) {
             if (n.nodeType === 3) { const t = n.textContent.replace(/\s+/g, ' '); if (t.trim()) out.push(t); continue; }
             if (n.nodeType !== 1) continue;
-            const tag = n.tagName;
-            if (SALTAR.has(tag)) continue;
-            const lc = tag.toLowerCase();
-            if (/^h[1-6]$/.test(lc)) { const t = texto(n); if (t) out.push('\n\n' + '#'.repeat(+lc[1]) + ' ' + t + '\n'); continue; }
-            if (lc === 'p') { const t = texto(n); if (t) out.push('\n\n' + t + '\n'); continue; }
-            if (lc === 'li') { const t = texto(n); if (t) out.push('\n- ' + t); continue; }
-            if (lc === 'br') { out.push('\n'); continue; }
-            if (lc === 'a' && n.getAttribute('href')) { const t = texto(n); if (t) out.push(`[${t}](${n.href})`); continue; }
-            if (lc === 'pre' || lc === 'code') { out.push('\n\n```\n' + (n.textContent || '').trim() + '\n```\n'); continue; }
-            if (lc === 'img' && n.getAttribute('src')) { out.push(`![${n.alt || ''}](${n.src})`); continue; }
+            const tag = n.tagName.toLowerCase();
+            if (/^h[1-6]$/.test(tag)) { out.push('\n\n' + '#'.repeat(+tag[1]) + ' ' + n.innerText.trim() + '\n'); continue; }
+            if (tag === 'p') { out.push('\n\n' + n.innerText.trim() + '\n'); continue; }
+            if (tag === 'li') { out.push('\n- ' + n.innerText.trim()); continue; }
+            if (tag === 'br') { out.push('\n'); continue; }
+            if (tag === 'a' && n.getAttribute('href')) { const t = n.innerText.trim(); if (t) out.push(`[${t}](${n.href})`); continue; }
+            if (tag === 'pre' || tag === 'code') { out.push('\n\n```\n' + n.innerText + '\n```\n'); continue; }
+            if (tag === 'img' && n.getAttribute('src')) { out.push(`![${n.alt || ''}](${n.src})`); continue; }
             md(n);
           }
         };
-        md(raiz);
+        md(clon);
         return out.join(' ').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
       });
-    } catch (e) {
-      // NO se traga el error: si la extracción falla, el fallo se propaga para que
-      // _render lo reporte. Un markdown vacío NUNCA vuelve a disfrazarse de éxito.
-      return { __error: (e && e.message) || String(e) };
-    }
+    } catch (_) { return ''; }
   }
 
   // ── buscar en SearXNG (JSON API). Overridable en test. ──
-  // Pagina de verdad: SearXNG devuelve ~20 por página y acepta &pageno=N. El
-  // limit es el TOTAL deseado; se recorre página a página hasta juntarlo (o
-  // agotar páginas). Antes se cortaba a 20 fijos → el volumen del estudio nunca
-  // pasaba de 20 y la fuerza de demanda quedaba topada (el embudo se estrangulaba).
   async _buscarSearx(query, limit) {
-    const total = Number.isInteger(limit) && limit > 0 ? limit : 10;
-    const porPagina = 20;   // SearXNG devuelve ~20 por página
-    const maxPaginas = Math.min(10, Math.ceil(total / porPagina)); // tope de seguridad
-    const out = [];
-    const vistos = new Set();
-    for (let pageno = 1; pageno <= maxPaginas && out.length < total; pageno++) {
-      const ctrl = new AbortController();
-      const to = setTimeout(() => ctrl.abort(), this._timeoutMs);
-      try {
-        const u = `${this._searxng}/search?q=${encodeURIComponent(query)}&format=json&pageno=${pageno}`;
-        const resp = await fetch(u, { signal: ctrl.signal, headers: { accept: 'application/json' } });
-        if (resp.status < 200 || resp.status >= 300) throw new Error('searxng ' + resp.status);
-        const body = await resp.json();
-        const lista = Array.isArray(body.results) ? body.results : [];
-        if (lista.length === 0) break;   // no hay más páginas
-        let nuevos = 0;
-        for (const x of lista) {
-          const url = x.url;
-          if (!url || vistos.has(url)) continue;  // dedupe entre páginas
-          vistos.add(url);
-          out.push({ title: x.title, url, snippet: x.content || '' });
-          nuevos++;
-          if (out.length >= total) break;
-        }
-        if (nuevos === 0) break;   // página sin resultados nuevos → cortar
-      } finally { clearTimeout(to); }
-    }
-    return out;
-  }
-
-  // ── EL ALTO: sugerencias (autocompletado) — el sensor del cosechador-alto. ──
-  // Escalera honesta: 1) autocompleter local de SearXNG (si su engine trae
-  // sugerencias); 2) Google directo (suggestqueries) — la misma puerta de
-  // investigación del estudio del alto de Lorca/30800. Degradación honesta:
-  // apagado → SIN_EGRESS, sin sugerencias → 200 con sugerencias:[]. Nunca
-  // inventa: lo que no trae el upstream, no existe.
-  async _sugerencias(input) {
-    const g = this._guard(); if (g) return g;
-    const q = String((input && input.query) || '').trim();
-    if (!q) return this._invalid('query');
-    const backend = String((input && input.backend) || 'google').toLowerCase();
-    if (backend === 'searxng') {
-      const lista = await this._autocompleterSearx(q);
-      return { status: 200, data: { sugerencias: lista, fuente: 'searxng' } };
-    }
-    // google (default): primero intenta el autocompleter de SearXNG; si viene
-    // vacío, sube a Google directo — una sola llamada hacia fuera.
-    let lista = await this._autocompleterSearx(q);
-    let fuente = 'searxng';
-    if (!lista.length) {
-      try { lista = await this._sugerenciasGoogle(q); fuente = 'google'; }
-      catch (_) { /* sin egress externo: honesto, lista vacía */ lista = []; fuente = 'ninguno'; }
-    }
-    return { status: 200, data: { sugerencias: lista, fuente } };
-  }
-
-  async _autocompleterSearx(q) {
     const ctrl = new AbortController();
-    const to = setTimeout(() => ctrl.abort(), 8000);
+    const to = setTimeout(() => ctrl.abort(), this._timeoutMs);
     try {
-      const u = `${this._searxng}/autocompleter?q=${encodeURIComponent(q)}`;
+      const u = `${this._searxng}/search?q=${encodeURIComponent(query)}&format=json`;
       const resp = await fetch(u, { signal: ctrl.signal, headers: { accept: 'application/json' } });
       if (resp.status < 200 || resp.status >= 300) throw new Error('searxng ' + resp.status);
       const body = await resp.json();
-      if (Array.isArray(body) && Array.isArray(body[1])) return body[1].filter((s) => typeof s === 'string');
-      return [];
-    } finally { clearTimeout(to); }
-  }
-
-  async _sugerenciasGoogle(q) {
-    const ctrl = new AbortController();
-    const to = setTimeout(() => ctrl.abort(), 8000);
-    const UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120 Safari/537.36';
-    try {
-      const u = 'https://suggestqueries.google.com/complete/search?' + new URLSearchParams({
-        client: 'firefox', hl: 'es', gl: 'es', q
-      });
-      const resp = await fetch(u, { signal: ctrl.signal, headers: { 'user-agent': UA } });
-      if (resp.status < 200 || resp.status >= 300) throw new Error('google ' + resp.status);
-      const body = await resp.json();
-      return Array.isArray(body) && Array.isArray(body[1]) ? body[1].filter((s) => typeof s === 'string') : [];
+      const lista = Array.isArray(body.results) ? body.results : [];
+      return lista.slice(0, limit).map((x) => ({ title: x.title, url: x.url, snippet: x.content || '' }));
     } finally { clearTimeout(to); }
   }
 

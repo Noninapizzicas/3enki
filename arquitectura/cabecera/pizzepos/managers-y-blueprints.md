@@ -219,7 +219,7 @@ CLASE Pedido {
 ### PRODUCTOS MANAGER
 
 ```
-// v5.2.1 — PRODUCTOS ES UN PROYECTOR SIN ESTADO sobre carta-manager.
+// v5.3.0 — PRODUCTOS ES UN PROYECTOR SIN ESTADO sobre carta-manager.
 // La CARTA es la única fuente de verdad; productos proyecta la carta activa del proyecto
 // al shape POS AL VUELO (carta.get.request). No hay store, ni searchIndex, ni persistencia
 // propia. Las mutaciones DELEGAN en el custodio (carta.*.request) y la cadena sigue por EVENTOS
@@ -263,7 +263,14 @@ CLASE ProductosProyector IMPLEMENTA ProductosContract {
 
   METODO evento carta.actualizada | carta.editada | carta.borrada  // onCartaGenerada
     PROYECTA la carta entera (viene EMBEBIDA en el payload; no re-lee)
-    PUBLICa catalogo.actualizado {project_id, productos}
+    SI _esCartaGeneral(project_id, carta)            // v5.3.0 — el gate del canal
+      PUBLICa catalogo.actualizado {project_id, productos}
+    SINO
+      // carta de CANAL (glovo/llevar/telefono): NO toca el catálogo global
+      LOG 'carta.canal.no_proyecta_catalogo' y RETORNA
+      // su precio vive en el cache POR CARTA del comandero (carta.actualizada →
+      // cartasProductosCache[carta_id]); el cobro resuelve canal→carta con fallback al base
+    // _esCartaGeneral: tarifas.general === carta.meta.id; sin general conocido → TRUE (emite)
 
   METODO onLoad(ctx)
     HIDRATA mappingCanales desde tarifas (snapshot) + proyecto activo (warm)

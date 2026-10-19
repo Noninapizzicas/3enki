@@ -109,7 +109,8 @@ function publishedOf(mocks, name) {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     assert.strictEqual(m.name, 'comandero');
-    assert.strictEqual(m.version, '3.4.0');
+    const MANIFEST = require('../../modules/pizzepos/comandero/module.json');
+    assert.strictEqual(m.version, MANIFEST.version);
     assert.strictEqual(m.pedidos.size, 0);
     assert.strictEqual(m.productosCache.size, 0);
     await m.onUnload();
@@ -570,6 +571,27 @@ function publishedOf(mocks, name) {
   });
 
   cleanupTmp();
+
+  // Group: precio por canal (v3.5.0)
+  await testAsync('carta.actualizada ENVUELTA ({carta}) hidrata cartasProductosCache', async () => {
+    const { module: m } = await instantiate(makeMocks());
+    await m.onCartaActualizada({ data: { project_id: 'p1', carta: { meta: { id: 'carta_glovo' }, productos: [{ id: 'queso', nombre: 'Queso', precio: 8.5, categoria: 'entrantes' }] } } });
+    const cache = m.cartasProductosCache.get('carta_glovo');
+    assert.ok(cache, 'la carta del canal debe quedar cacheada');
+    assert.strictEqual(cache.get('queso').precio, 8.5);
+  });
+
+  await testAsync('el precio del canal se resuelve por carta y cae al base si el producto no está', async () => {
+    const { module: m } = await instantiate(makeMocks());
+    m.tarifasConfigPorProject.set('p1', { general: 'carta_general', canales: { glovo: 'carta_glovo' } });
+    m.cartasProductosCache.set('carta_glovo', new Map([['queso', { nombre: 'Queso', precio: 8.5 }]]));
+    m.productosCache.set('queso', { nombre: 'Queso', precio: 6.5 });
+    m.productosCache.set('pan', { nombre: 'Pan', precio: 1 });
+    assert.strictEqual(m._resolverPrecioCanal('queso', 6.5, 'glovo', 'p1'), 8.5);
+    assert.strictEqual(m._resolverPrecioCanal('queso', 6.5, 'mesa', 'p1'), 6.5);
+    assert.strictEqual(m._resolverPrecioCanal('pan', 1, 'glovo', 'p1'), 1);   // no está en la carta del canal
+  });
+
   console.log('\nTodos los tests pasaron.');
   process.exit(0);
 })();

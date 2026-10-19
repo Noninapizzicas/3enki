@@ -41,7 +41,11 @@ verificado: 2026-10-19
 > precio sustituiría al de mostrador en el cache POS de todos los canales, porque comandero y
 > pedidos cachean por `producto_id` sin mirar `menu_id`. El precio del canal se resuelve al cobrar:
 > `tarifas(canal) → cartasProductosCache[carta_id] → precio` con fallback al base (producto que no
-> esté en la carta del canal = precio general). Comandero detecta el canal por el prefijo de la
+> esté en la carta del canal = precio general). **Comandero 3.5.0:** ese cache se hidrata por
+> `carta.actualizada` (la carta viaja ENVUELTA en `{project_id, carta}` — leer `data.meta.id` daba
+> `undefined` y el canal cobraba siempre precio base) y, al recibir `tarifas.config.actualizada`, con
+> un `carta.get.request` por cada carta del mapping (`onCartaGetResponse`), para que tras un restart
+> el canal no pierda su precio hasta que alguien toque la carta. Comandero detecta el canal por el prefijo de la
 > cuenta (`glovo_`, `llevar_`, `M_`, `T_`…).
 > **`carta.save` NO promociona a general si ya hay general (v2.9.0, verificado en vivo 2026-10-19).**
 > `_autoPromoTarifas` leía `/config/tarifas.json` — la ruta LEGACY — mientras tarifas escribe en

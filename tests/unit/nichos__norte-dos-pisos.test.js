@@ -199,8 +199,8 @@ const veredictoConstruir = () => ({ decision: 'VIABLE', codigo: 'VIABLE', razon:
 
     assert.deepStrictEqual(
       ideas.map((i) => i.texto),
-      ['pizzeria en Lorca', `${NICHO} en Lorca`],
-      'piso 1 (pizzeria) + piso 2 (el nicho que decidimos construir)'
+      ['pizzeria en Lorca', `${NICHO}`],
+      'piso 1 (pizzeria) + piso 2: el nicho que ya termina en Lorca NO se le duplica el territorio (#793 consulta verbatim)'
     );
     assert.strictEqual(ideas.filter((i) => /regalos/.test(i.texto)).length, 1, 'las tres patas son UNA idea');
     assert.strictEqual(ideas[1].por_construir, true, 'la idea del piso 2 viaja marcada');

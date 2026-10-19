@@ -41,7 +41,8 @@ const nowISO = () => new Date().toISOString();
  */
 const FUENTE_TOPIC = {
   buscar: 'crawl4rs.buscar.request',
-  leer:   'crawl4rs.leer.request'
+  leer:   'crawl4rs.leer.request',
+  alto:   'crawl4rs.sugerencias.request'   // EL ALTO: autocompletado (cosechador-alto)
 };
 
 class PuertoFuenteDatos extends ModuloHibridoReflejo {

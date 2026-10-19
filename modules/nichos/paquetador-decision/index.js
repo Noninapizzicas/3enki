@@ -36,9 +36,11 @@ class PaquetadorDecision extends ModuloHibridoReflejo {
     this.version = '0.1.0';
     this._pendientes = new Map(); // correlation_id → { resolve, reject }
   }
-  onLoad(context) {
+  async onLoad(context) {
+    // this.eventBus lo asigna super.onLoad → suscribir DESPUES (antes se
+    // tragaba la suscripcion en silencio y el RPC quedaba ciego).
+    await super.onLoad(context);
     this.eventBus?.subscribe('llm.complete.response', (e) => this._onLLMResponse(e));
-    return super.onLoad(context);
   }
 
   // ── RPC HANDLER ──

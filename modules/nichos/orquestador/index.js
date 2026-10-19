@@ -169,26 +169,48 @@ class Orquestador extends ModuloHibridoReflejo {
     if (!ciclo) return;
 
     ciclo.estado = ESTADO_CICLO.CONSTRUYENDO;
-    const viables = d.viables || d.resultados || [];
+    // `viables` puede venir como número (contrato nuevo) o como la lista de
+    // ids (`resultados`, contrato viejo). `detalle` es la lista de viables
+    // CON su informe/veredicto/camino — lo que el ensamblador necesita.
+    const detalle = Array.isArray(d.detalle) ? d.detalle : [];
+    const viables = (typeof d.viables === 'number')
+      ? d.viables
+      : (Array.isArray(d.resultados) ? d.resultados.length : 0);
     ciclo.viables = viables;
+    // Resumen para el aviso al dueño (la BOCA): contadores + el detalle de
+    // TODO lo evaluado (no solo los viables) para poder citar el motivo del
+    // primer PUENTE — que es la decisión que el dueño debe tomar.
+    ciclo.resumen = {
+      viables,
+      no_viables: typeof d.no_viables === 'number' ? d.no_viables : 0,
+      puentes: typeof d.puentes === 'number' ? d.puentes : 0
+    };
+    ciclo.evaluados = Array.isArray(d.evaluados) ? d.evaluados : [];
 
-    if (viables.length === 0) {
-      // Sin viables — cerrar ciclo sin ensamblaje
+    if (viables === 0 || detalle.length === 0) {
+      // Sin viables — cerrar ciclo sin ensamblaje.
       this._cerrarCiclo(correlationId, { viables: 0, razon: 'sin_viables' });
       return;
     }
 
-    // Disparar ensamblaje
-    this.eventBus?.publish('nichos.solucion.ensamblar.request', {
-      request_id: `ens-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      viables,
-      correlation_id: correlationId,
-      project_id: ciclo.project_id || null
-    });
+    // Disparar UN ensamblaje por nicho viable, con el CONTRATO que el
+    // ensamblador exige: id_nicho + veredicto + camino. Antes se le pasaba
+    // `viables: <n>` (un número) → "id_nicho requerido" (400) y el ciclo
+    // moría aquí sin producir solución.
+    for (const item of detalle) {
+      this.eventBus?.publish('nichos.solucion.ensamblar.request', {
+        request_id: `ens-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        id_nicho: item.id_nicho,
+        veredicto: item.veredicto || { codigo: 'VIABLE' },
+        camino: item.camino || { tipo: 'CONSTRUIR' },
+        correlation_id: correlationId,
+        project_id: ciclo.project_id || null
+      });
+    }
 
     this.logger?.info('orquestador.ensamblaje.disparado', {
       correlation_id: correlationId,
-      num_viables: viables.length
+      num_viables: detalle.length
     });
   }
 
@@ -243,7 +265,7 @@ class Orquestador extends ModuloHibridoReflejo {
   /**
    * Cierra un ciclo: emite pulso completado y limpia el Map.
    */
-  _cerrarCiclo(correlationId, resultado) {
+  async _cerrarCiclo(correlationId, resultado) {
     const ciclo = this._ciclos.get(correlationId);
     if (!ciclo) return;
 
@@ -266,8 +288,111 @@ class Orquestador extends ModuloHibridoReflejo {
       duracion_ms
     });
 
+    // BOCA — devolver el resultado al dueño por su canal (bot de la vertical).
+    // El destino lo resuelve puerto-canal del origen aprendido (quien escribió).
+    await this._avisarDueno(ciclo, correlationId, resultado);
+
     // Limpiar ciclo del Map
     this._ciclos.delete(correlationId);
+  }
+
+  /**
+   * _avisarDueno — la BOCA: compone el aviso del ciclo y lo publica hacia el
+   * dueño vía el puerto de canal (nichos.canal.enviar.request). El puerto
+   * resuelve el destino real (bot:chat del que escribió) — aquí NO se clava
+   * ningún chat_id.
+   */
+  async _avisarDueno(ciclo, correlationId, resultado) {
+    const projectId = ciclo && ciclo.project_id;
+    if (!projectId) return; // sin proyecto no hay a quién devolver
+
+    const s = ciclo.semilla_normalizada || {};
+    const nombre = s.vertical_sugerido || s.titulo || ciclo.semilla_texto || 'tu idea';
+    const r = ciclo.resumen || {};
+    const v = typeof r.viables === 'number' ? r.viables : (ciclo.viables || 0);
+    const p = typeof r.puentes === 'number' ? r.puentes : 0;
+    const n = typeof r.no_viables === 'number' ? r.no_viables : 0;
+
+    let cuerpo = '🧭 Nichos — resultado del ciclo\n';
+    cuerpo += `Semilla: ${nombre}\n`;
+    cuerpo += `Evaluados: viables ${v} · puentes ${p} · no viables ${n}`;
+
+    // El motivo del PRIMER PUENTE es la decisión que el dueño debe tomar.
+    const puente = (ciclo.evaluados || []).find(x => x && x.codigo === 'PUENTE' && x.veredicto);
+    if (puente && puente.veredicto && puente.veredicto.razon) {
+      // B — el PUENTE deja de ser un callejón: en vez de preguntar en abstracto,
+      // se le entrega un TEST DE VENTA concreto (dónde · precio · plazo · qué
+      // cuenta como sí). Es lo que convierte la duda en disposición a pagar.
+      cuerpo += `\n⚠️ Sin números que confirmen la demanda: ${puente.veredicto.razon}`;
+      cuerpo += '\n\n' + await this._planTestVenta(ciclo, puente);
+      cuerpo += '\n¿Lanzo el test de venta? Responde SÍ o NO.';
+    } else if (v === 0 && p === 0) {
+      cuerpo += '\nNo hay candidatos viables todavía.';
+    } else if (v > 0) {
+      cuerpo += `\n✅ Hay ${v} candidato(s) viable(s) — puedo preparar la propuesta.`;
+    }
+
+    this.eventBus?.publish('nichos.canal.enviar.request', {
+      request_id: `aviso-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      project_id: projectId,
+      proposito: 'notificacion',
+      mensaje: { cuerpo, escalon: 'resultado_ciclo' },
+      correlation_id: correlationId
+    });
+
+    // BUCLE DE DECISIÓN — si el ciclo muere pidiendo una decisión, se ENCOLA en
+    // cola-decisiones para que la respuesta del dueño tenga algo que cerrar.
+    // Antes NADIE emitía el encolar → cola vacía → la respuesta del dueño caía
+    // al vacío: "algo falla en la vertical a través del bot".
+    if (puente) {
+      const razon = (puente.veredicto && puente.veredicto.razon) || 'sin_numeros';
+      this.eventBus?.publish('nichos.cola.decisiones.encolar.request', {
+        request_id: `enc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        project_id: projectId,
+        solicitud_decision: {
+          tipo: 'VALIDACION_PUENTE',
+          contexto: razon,
+          opciones: ['SI', 'NO'],
+          dueno: 'dueño',
+          id_nicho: puente.id_nicho || null,
+          caducidad: new Date(Date.now() + 7 * 864e5).toISOString()
+        }
+      });
+    }
+
+    this.logger?.info('orquestador.aviso.dueno', {
+      correlation_id: correlationId, project_id: projectId, viables: v, puentes: p,
+      decision_encolada: !!puente
+    });
+  }
+
+  /**
+   * _planTestVenta — compone un TEST DE VENTA concreto para un PUENTE: qué se
+   * vende, dónde anunciarlo, a qué precio, en cuántos días y qué cuenta como
+   * SÍ. El precio sale de la disposición mínima DECLARADA por el dueño
+   * (criterio-viabilidad); si aún no la declaró, se usa 30 € como referencia.
+   */
+  async _planTestVenta(ciclo, puente) {
+    const s = ciclo.semilla_normalizada || {};
+    const territorio = (s.territorio && s.territorio !== 'sin_territorio') ? s.territorio : 'tu zona';
+    const nombre = s.vertical_sugerido || s.titulo || ciclo.semilla_texto || 'el nicho';
+
+    let precio = 30;
+    try {
+      const resp = await this._rpc('nichos.criterio.viabilidad.leer.request', { project_id: ciclo.project_id });
+      const umbral = resp && resp.data && resp.data.umbral_viabilidad && resp.data.umbral_viabilidad.umbral;
+      const dpm = umbral && umbral.disposicion_pagar_min;
+      if (typeof dpm === 'number' && dpm > 0) precio = dpm;
+    } catch (_) { /* degradación honesta: se usa la referencia */ }
+
+    return [
+      '📣 Test de venta (7 días) — así la duda se convierte en dato:',
+      `· Qué: ${nombre}.`,
+      `· Dónde: anuncio en Instagram + grupos locales de ${territorio}, y un puesto/feria en ${territorio}.`,
+      `· Precio: ${precio} € (tu disposición mínima declarada) — mide si PAGAN, no si les gusta.`,
+      `· Plazo: 7 días.`,
+      `· Qué cuenta como SÍ: al menos 5 personas que paguen o reserven con dinero.`
+    ].join('\n');
   }
 
   // =============================================================

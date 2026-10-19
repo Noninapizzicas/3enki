@@ -38,10 +38,11 @@ class VeredictoViabilidad extends ModuloHibridoReflejo {
     this.version = '0.1.0';
     this._pendientes = new Map();
   }
-  onLoad(context) {
+  async onLoad(context) {
+    // this.eventBus lo asigna super.onLoad → suscribir DESPUES.
+    await super.onLoad(context);
     this.eventBus?.subscribe('llm.complete.response', (e) => this._onLLMResponse(e));
     this.eventBus?.subscribe('nichos.criterio.viabilidad.leer.response', (e) => this._onCriterioResponse(e));
-    return super.onLoad(context);
   }
 
   // ── RPC HANDLER ──
@@ -63,8 +64,14 @@ class VeredictoViabilidad extends ModuloHibridoReflejo {
       // 2. Pedir al LLM que evalúe
       const resultado = await this._pedirAlLLM(input.informe, criterio, projectId);
 
+      // `decision` es el campo CANÓNICO del veredicto; `codigo` viaja como
+      // ALIAS para los consumidores que leen `codigo` (batch-validacion). Sin
+      // el alias el juicio no se propagaba: batch leía `codigo` (undefined) →
+      // TODO candidato caía a PUENTE y la vertical JAMÁS emitía un VIABLE.
+      // Era el motivo real de "viables 0 · puentes 1" en cada ciclo.
       const veredicto = {
         decision: resultado.decision,
+        codigo: resultado.decision,
         razon: resultado.razon,
         criterio_aplicado: criterio
       };
@@ -72,6 +79,7 @@ class VeredictoViabilidad extends ModuloHibridoReflejo {
       this.eventBus?.publish('nichos.veredicto.emitido', {
         id_nicho: idNicho,
         decision: veredicto.decision,
+        codigo: veredicto.decision,
         razon: veredicto.razon,
         timestamp: nowISO()
       });

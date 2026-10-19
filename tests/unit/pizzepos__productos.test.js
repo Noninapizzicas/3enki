@@ -16,6 +16,7 @@
 
 const assert = require('assert');
 const ProductosModule = require('../../modules/pizzepos/productos/index.js');
+const MANIFEST = require('../../modules/pizzepos/productos/module.json');   // la version vive en UN sitio
 
 // Carta fixture con DRIFT deliberado: un producto con `categoria`+`ingredientes` (forma
 // menu-generator vieja), otro con `categoria_id`+`ingredientes_base` (forma add_product).
@@ -118,11 +119,11 @@ const publishedOf = (mocks, name) => mocks.eventBus.published.filter(p => p[0] =
   const fxNonina = { cartas: { carta_nonina: cartaFixture() }, listByProject: { 'proj-nonina': [{ id: 'carta_nonina', estado: 'en_servicio' }] } };
 
   // Group 1: Lifecycle
-  await testAsync('onLoad: version 5.0.0, sin store, solo mapping', async () => {
+  await testAsync('onLoad: version del manifest, sin store, solo mapping', async () => {
     const mocks = makeMocks();
     const m = await instantiate(mocks);
     assert.strictEqual(m.name, 'productos');
-    assert.strictEqual(m.version, '5.1.0');
+    assert.strictEqual(m.version, MANIFEST.version);
     assert.strictEqual(m.productosPerProject, undefined);   // store ELIMINADO
     assert.strictEqual(m.mappingCanalesPerProject.size, 0);
     await m.onUnload();

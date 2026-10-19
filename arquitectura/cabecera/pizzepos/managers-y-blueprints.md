@@ -725,6 +725,18 @@ CLASE Receta {
 }
 ```
 
+PUENTE carta→catálogo (reflejo v1.4.0, 2026-10-19) — SUSCRIBE 'carta.actualizada' (handler
+onCartaActualizada): alta IDEMPOTENTE en ingredientes_catalogo de los ids de ingredientes que la
+carta usa y el catálogo no conoce. Identidad canónica = el ID de la carta (estable; la prosa del
+nombre varía), tolerancia singular/plural por variantes; dedup por id Y nombre normalizado;
+sub-recetas nunca entran como ingredientes; NUNCA inventa precio (null → el escandallo canta
+sin_precio y las fuentes de dinero —mercadona-api/manual— lo llenan). Emite
+'catalogo.ingredientes.actualizado' con las altas. Escrito fs.edit declarativo (RFC 6902), fire-
+and-forget. PRUEBA EN VIVO (2026-10-19): la 1ª iteración derivaba el id del NOMBRE y creó 5
+duplicados conceptuales en prod (champinon/salsa-de-mostaza/tomate-seco/salsa-de-ajo-asado-y-trufa/
+crema-de-champinones) — limpiados a mano; el fix (id desde carta + variantes) dio 0 altas sobre
+los mismos datos.
+
 ### INGREDIENTES MANAGER
 
 ```

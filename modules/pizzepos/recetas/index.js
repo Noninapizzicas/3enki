@@ -21,7 +21,7 @@ class RecetasReflejo extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'recetas';
-    this.version = 'reflejo-1.3.0';
+    this.version = 'reflejo-1.4.0';
     this._validarReceta = null; // validador AJV compilado (lazy, cacheado)
   }
 
@@ -31,6 +31,69 @@ class RecetasReflejo extends ModuloHibridoReflejo {
   onObtenerRequest(e) { return this._atender(e, 'obtener', 'recetas.obtener.response', d => this._obtener(d)); }
   onCrearRequest(e) { return this._atender(e, 'crear', 'recetas.crear.response', d => this._crear(d)); }
   onValidarRequest(e) { return this._atender(e, 'validar', 'recetas.validar.response', d => this._validar(d)); }
+
+  // ── PUENTE carta→catálogo (deja-solo-1: el CATÁLOGO es la fuente del dinero; la carta es consumidora) ──
+  // onCartaActualizada: alta idempotente de los ids de ingredientes que la carta usa y el catálogo no
+  // conoce. Id canónico = slug del nombre (el mismo que _crear); NUNCA inventa precio (null → el
+  // escandallo canta sin_precio y Mercadona/mercadona-api es quien lo llena). Dedup por id Y por
+  // nombre normalizado (sin acentos, - vs _). Fire-and-forget: la carta no espera al catálogo.
+  async onCartaActualizada(e) {
+    try {
+      const d = (e && e.data) || {};
+      if (!d.project_id || !d.carta || !Array.isArray(d.carta.productos)) return;
+
+      const store = await this._leerJson(d.project_id, STORE_PATH);
+      if (!store) return;
+      const cat = Array.isArray(store.ingredientes_catalogo) ? store.ingredientes_catalogo : [];
+      const porId = new Set(cat.map(c => c.id));
+      const normDe = s => String(s || '').toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/_/g, '-');
+      const subs = new Set((store.recetas || []).map(r => r.id));
+      const porNombre = new Set(cat.map(c => normDe(c.nombre)));
+
+      const ahora = new Date().toISOString();
+      const variantes = v => new Set([v, v + 's', v + 'es', v.replace(/(es|s)$/, ''), v.replace(/s$/, '') || v]);
+      const porIdVariantes = new Set(); for (const i of porId) variantes(i).forEach(x => porIdVariantes.add(x));
+      const altas = [];
+      const apuntar = (k, n) => {
+        // identidad canónica: el ID de la carta (estable; la prosa del nombre varía).
+        // slug-ish (a-z0-9 y guiones tras _→-) → es el id; UUID/raro → slug del nombre (canónico de _crear).
+        const idRaw = (typeof k === 'string' && k) ? k.toLowerCase().trim().replace(/_/g, '-') : null;
+        const id = (idRaw && /^[a-z0-9][a-z0-9-]*$/.test(idRaw)) ? idRaw : this._slug(String(n || k));
+        const nombre = String(n || k).trim();
+        const normNombre = normDe(nombre);
+        const vid = variantes(id), vnom = variantes(normNombre);
+        const chocaId = [...vid].some(x => porId.has(x)) || [...porIdVariantes].some(x => vid.has(x));
+        const chocaNombre = [...vnom].some(x => porNombre.has(x));
+        if (chocaId || chocaNombre || subs.has(id)) return;
+        porId.add(id); porNombre.add(normNombre);
+        altas.push({ id, nombre, categoria: null, compra_unidad: 'kg', precio: null,
+          fuente: 'puente carta v' + (d.carta.meta?.version || '?') + ' (' + (d.motivo || 'carta.actualizada') + ')',
+          created_at: ahora, updated_at: ahora });
+      };
+
+      for (const p of d.carta.productos) {
+        for (const i of (p.ingredientes || [])) apuntar(i.id || i.ref, i.nombre);
+        for (const op of (p.opciones || [])) for (const v of (op.valores || [])) { if (v.ref) apuntar(v.ref, v.etiqueta); }
+        for (const h of ((p.escalera && p.escalera.hermanas) || [])) for (const a of (h.anadir || [])) { if (typeof a === 'string') apuntar(a, a); }
+      }
+
+      if (altas.length === 0) return;   // idempotente: nada nuevo → no toca disco, no publica
+
+      await this._editarJson(d.project_id, STORE_PATH, [
+        ...altas.map(v => ({ op: 'add', path: '/ingredientes_catalogo/-', value: v })),
+        { op: 'replace', path: '/_updated_at', value: ahora }
+      ]);
+      this.eventBus.publish('catalogo.ingredientes.actualizado', {
+        project_id: d.project_id, altas: altas.map(a => ({ id: a.id, nombre: a.nombre })),
+        origen: 'carta.actualizada', correlation_id: d.correlation_id || null, timestamp: ahora
+      });
+      this.metrics?.increment('recetas.reflejo.served', { op: 'puente_carta_altas', total: altas.length });
+      this.logger?.info?.('recetas.reflejo.puente_carta', { project_id: d.project_id, altas: altas.length });
+    } catch (err) {
+      this.logger?.error('recetas.reflejo.puente_carta.failed', { error: err.message });
+      this.metrics?.increment('recetas.reflejo.errors', { op: 'puente_carta' });
+    }
+  }
 
   // ── proyecciones deterministas (réplica fiel del pseudocódigo) ──
 

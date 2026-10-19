@@ -275,6 +275,24 @@ const publishedOf = (mocks, name) => mocks.eventBus.published.filter(p => p[0] =
     assert.strictEqual(sig[0].productos.length, 2);   // solo activos, forma lite
   });
 
+  // Group 7b: carta de CANAL no proyecta al catálogo GLOBAL (no pisa precios de mostrador)
+  await testAsync('carta de canal NO emite catalogo.actualizado (solo la general proyecta)', async () => {
+    const mocks = makeMocks();
+    const m = await instantiate(mocks);
+    // tarifas: general = otra carta; carta_nonina es una carta de CANAL (glovo)
+    m.mappingCanalesPerProject.set('proj-nonina', { general: 'carta_pirata', glovo: 'carta_nonina' });
+    await m.onCartaGenerada({ data: { project_id: 'proj-nonina', carta: cartaFixture() } });
+    assert.strictEqual(publishedOf(mocks, 'catalogo.actualizado').length, 0);
+  });
+
+  await testAsync('la carta GENERAL sí emite catalogo.actualizado', async () => {
+    const mocks = makeMocks();
+    const m = await instantiate(mocks);
+    m.mappingCanalesPerProject.set('proj-nonina', { general: 'carta_nonina', glovo: 'carta_glovo' });
+    await m.onCartaGenerada({ data: { project_id: 'proj-nonina', carta: cartaFixture() } });
+    assert.strictEqual(publishedOf(mocks, 'catalogo.actualizado').length, 1);
+  });
+
   // Group 8: slugify
   await testAsync('slugify determinista', async () => {
     const m = await instantiate(makeMocks());

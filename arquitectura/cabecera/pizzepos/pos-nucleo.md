@@ -15,7 +15,7 @@ fuentes:
   - modules/pizzepos/tarifas/**
   - modules/pizzepos/persistencia-comandero/**
   - modules/pizzepos/impresion/**
-verificado: 2026-10-16
+verificado: 2026-10-19
 ---
 
 # PizzePOS Módulos — Subsistema de Punto de Venta (v3.2.0)
@@ -510,6 +510,13 @@ CLASE ProductosModule HEREDA BaseModule {
 
     onCartaGenerada(carta.actualizada/editada) · onCartaBorrada
       → SEÑAL: re-emite catalogo.actualizado (el comandero re-pull y proyecta fresco). NO sincroniza store.
+      → GATE _esCartaGeneral: SOLO la carta GENERAL (la que asigna tarifas) proyecta al catálogo
+        GLOBAL. Una carta de CANAL (glovo, llevar, teléfono…) NO emite catalogo.actualizado —
+        comandero y pedidos cachean por producto_id sin discriminar carta (menu_id se emite pero
+        nadie lo lee), así que su precio pisaría el de mostrador en TODOS los canales. El canal
+        se resuelve por carta: tarifas(canal) → comandero.cartasProductosCache[carta_id] → precio,
+        y si el producto no está en la carta del canal, cae al precio base. Sin config de tarifas
+        conocida todavía (arranque temprano) se emite como antes: ningún refresco se pierde.
 
     EVENTOS_PUBLISHES {
       'catalogo.actualizado': {project_id, productos (lite), source}   // SEÑAL de refresco

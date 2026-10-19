@@ -28,7 +28,7 @@ class ProductosModule extends BaseModule {
   constructor() {
     super();
     this.name = 'productos';
-    this.version = '5.2.1';
+    this.version = '5.3.0';
 
     // Dependencias (inyectadas en onLoad)
     this.uiHandler = null;
@@ -410,6 +410,18 @@ class ProductosModule extends BaseModule {
     this.metrics?.increment?.('catalogo.actualizado.total');
   }
 
+  // ¿Esta carta manda en el catálogo GLOBAL del proyecto? Solo la GENERAL (la que asigna tarifas).
+  // comandero y pedidos cachean por producto_id SIN discriminar carta (el menu_id se emite, pero
+  // nadie lo lee): una carta de CANAL (glovo, llevar, telefono…) proyectada aquí pisaría los
+  // precios de mostrador con los del canal. Sin config de tarifas conocida todavía → se emite
+  // (comportamiento previo; no se pierde ningún refresco por arranque temprano).
+  _esCartaGeneral(project_id, carta) {
+    const general = this.mappingCanalesPerProject.get(project_id)?.general || null;
+    const cartaId = carta?.meta?.id || null;
+    if (!general || !cartaId) return true;
+    return cartaId === general;
+  }
+
   // carta.actualizada / carta.editada — la carta entera viene en el payload: la proyectamos
   // y emitimos la señal. Sin tocar disco, sin acumular.
   async onCartaGenerada(event) {
@@ -422,6 +434,15 @@ class ProductosModule extends BaseModule {
     const project_id = data?.project_id || carta.project_id;
     if (!project_id) { this.logger.warn('carta.evento.no_project', { carta_id: carta.meta.id }); return; }
     try {
+      if (!this._esCartaGeneral(project_id, carta)) {
+        // Carta de CANAL: NO proyecta al catálogo global. Su precio vive en el cache por carta
+        // (comandero.onCartaActualizada → cartasProductosCache), que resuelve canal→carta.
+        const general = this.mappingCanalesPerProject.get(project_id)?.general || null;
+        this.logger.info('carta.canal.no_proyecta_catalogo', {
+          carta_id: carta.meta.id, project_id, general, productos: carta.productos.length
+        });
+        return;
+      }
       await this._emitCatalogo(project_id, carta, 'carta_change', event);
       this.logger.info('carta.evento.proyectado', { carta_id: carta.meta.id, project_id, productos: carta.productos.length });
     } catch (err) {

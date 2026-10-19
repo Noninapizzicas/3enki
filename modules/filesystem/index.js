@@ -520,10 +520,9 @@ class FilesystemModule extends BaseModule {
   // nombre y el nombre del directorio (basename de base_path). Resolver por cualquiera lleva
   // al MISMO carril — cerrar el "solo el UUID vale" sin inventar un registro nuevo: la
   // fuente de verdad sigue siendo project-manager; esto solo es su índice de caras.
-  // `slug` llega EN EL EVENTO: lo emite project-manager (#774), que es quien lo decide
-  // (es el nombre del directorio físico en /data/projects/<slug>/). Solo se deriva si NO
-  // viene — transitorio, hasta que no quede ningún emisor viejo. El fs no debe inventar la
-  // identidad: eso es exactamente lo que producía 12 copias del mismo algoritmo.
+  // `slug` viene del EVENTO: lo emite project-manager, que es quien lo decide (es el nombre
+  // del directorio físico). Solo se deriva si NO viene — transitorio, hasta que no quede
+  // ningún emisor viejo. El fs no debe inventar la identidad: eso es lo que producía 12 copias.
   _indexProject({ id, name, base_path, system = false, root = null, slug = null }) {
     const storagePath = system
       ? (root || process.cwd())

@@ -40,7 +40,7 @@ class Crawl4rsModule extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'crawl4rs';
-    this.version = '0.5.0';
+    this.version = '0.6.0';
     this.activo = false;          // interruptor OFF por defecto (egress consciente)
     this._obscura = OBSCURA_DEFAULT;
     this._searxng = SEARXNG_DEFAULT;
@@ -89,6 +89,7 @@ class Crawl4rsModule extends ModuloHibridoReflejo {
   onLeerRequest(e)     { return this._atender(e, 'leer',     'crawl4rs.leer.response',     (d) => this._leer(d)); }
   onRastrearRequest(e) { return this._atender(e, 'rastrear', 'crawl4rs.rastrear.response', (d) => this._rastrear(d)); }
   onBuscarRequest(e)   { return this._atender(e, 'buscar',   'crawl4rs.buscar.response',   (d) => this._buscar(d)); }
+  onSugerenciasRequest(e) { return this._atender(e, 'sugerencias', 'crawl4rs.sugerencias.response', (d) => this._sugerencias(d)); }
   onMapearRequest(e)   { return this._atender(e, 'mapear',   'crawl4rs.mapear.response',   (d) => this._mapear(d)); }
   onDescargarRequest(e){ return this._atender(e, 'descargar','crawl4rs.descargar.response',(d) => this._descargar(d)); }
   onEntrarRequest(e)   { return this._atender(e, 'entrar',   'crawl4rs.entrar.response',   (d) => this._entrar(d)); }
@@ -526,6 +527,60 @@ class Crawl4rsModule extends ModuloHibridoReflejo {
       } finally { clearTimeout(to); }
     }
     return out;
+  }
+
+  // ── EL ALTO: sugerencias (autocompletado) — el sensor del cosechador-alto. ──
+  // Escalera honesta: 1) autocompleter local de SearXNG (si su engine trae
+  // sugerencias); 2) Google directo (suggestqueries) — la misma puerta de
+  // investigación del estudio del alto de Lorca/30800. Degradación honesta:
+  // apagado → SIN_EGRESS, sin sugerencias → 200 con sugerencias:[]. Nunca
+  // inventa: lo que no trae el upstream, no existe.
+  async _sugerencias(input) {
+    const g = this._guard(); if (g) return g;
+    const q = String((input && input.query) || '').trim();
+    if (!q) return this._invalid('query');
+    const backend = String((input && input.backend) || 'google').toLowerCase();
+    if (backend === 'searxng') {
+      const lista = await this._autocompleterSearx(q);
+      return { status: 200, data: { sugerencias: lista, fuente: 'searxng' } };
+    }
+    // google (default): primero intenta el autocompleter de SearXNG; si viene
+    // vacío, sube a Google directo — una sola llamada hacia fuera.
+    let lista = await this._autocompleterSearx(q);
+    let fuente = 'searxng';
+    if (!lista.length) {
+      try { lista = await this._sugerenciasGoogle(q); fuente = 'google'; }
+      catch (_) { /* sin egress externo: honesto, lista vacía */ lista = []; fuente = 'ninguno'; }
+    }
+    return { status: 200, data: { sugerencias: lista, fuente } };
+  }
+
+  async _autocompleterSearx(q) {
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), 8000);
+    try {
+      const u = `${this._searxng}/autocompleter?q=${encodeURIComponent(q)}`;
+      const resp = await fetch(u, { signal: ctrl.signal, headers: { accept: 'application/json' } });
+      if (resp.status < 200 || resp.status >= 300) throw new Error('searxng ' + resp.status);
+      const body = await resp.json();
+      if (Array.isArray(body) && Array.isArray(body[1])) return body[1].filter((s) => typeof s === 'string');
+      return [];
+    } finally { clearTimeout(to); }
+  }
+
+  async _sugerenciasGoogle(q) {
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), 8000);
+    const UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120 Safari/537.36';
+    try {
+      const u = 'https://suggestqueries.google.com/complete/search?' + new URLSearchParams({
+        client: 'firefox', hl: 'es', gl: 'es', q
+      });
+      const resp = await fetch(u, { signal: ctrl.signal, headers: { 'user-agent': UA } });
+      if (resp.status < 200 || resp.status >= 300) throw new Error('google ' + resp.status);
+      const body = await resp.json();
+      return Array.isArray(body) && Array.isArray(body[1]) ? body[1].filter((s) => typeof s === 'string') : [];
+    } finally { clearTimeout(to); }
   }
 
   // ── GET binario directo (fetch global). Overridable en test. NO throw por tamaño (→ 413). ──

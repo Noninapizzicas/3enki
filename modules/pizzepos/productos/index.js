@@ -28,7 +28,7 @@ class ProductosModule extends BaseModule {
   constructor() {
     super();
     this.name = 'productos';
-    this.version = '5.2.0';
+    this.version = '5.2.1';
 
     // Dependencias (inyectadas en onLoad)
     this.uiHandler = null;
@@ -205,6 +205,11 @@ class ProductosModule extends BaseModule {
         return r;
       });
     }
+
+    // Estaciones PROPIAS del producto (la carta las guarda por producto; antes se perdían en la
+    // proyección y el item llegaba a cocina sin estación). La categoría solo hereda si el
+    // producto no trae las suyas.
+    if (Array.isArray(p.estaciones) && p.estaciones.length) prod.estaciones = p.estaciones;
 
     if (!prod.estaciones && categoria_id && catEst[categoria_id]) prod.estaciones = catEst[categoria_id];
     return prod;

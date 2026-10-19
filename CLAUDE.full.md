@@ -2673,6 +2673,13 @@ CLASE ProductosModule HEREDA BaseModule {
 
     onCartaGenerada(carta.actualizada/editada) · onCartaBorrada
       → SEÑAL: re-emite catalogo.actualizado (el comandero re-pull y proyecta fresco). NO sincroniza store.
+      → GATE _esCartaGeneral: SOLO la carta GENERAL (la que asigna tarifas) proyecta al catálogo
+        GLOBAL. Una carta de CANAL (glovo, llevar, teléfono…) NO emite catalogo.actualizado —
+        comandero y pedidos cachean por producto_id sin discriminar carta (menu_id se emite pero
+        nadie lo lee), así que su precio pisaría el de mostrador en TODOS los canales. El canal
+        se resuelve por carta: tarifas(canal) → comandero.cartasProductosCache[carta_id] → precio,
+        y si el producto no está en la carta del canal, cae al precio base. Sin config de tarifas
+        conocida todavía (arranque temprano) se emite como antes: ningún refresco se pierde.
 
     EVENTOS_PUBLISHES {
       'catalogo.actualizado': {project_id, productos (lite), source}   // SEÑAL de refresco
@@ -4546,6 +4553,18 @@ desde cualquier proceso que hable MQTT, no solo desde dentro del core Node.js.
 >
 > `producto.creado` es contrato LEGADO: nadie lo emite (v5 lo retiró); los consumidores
 > (comandero, pedidos, variaciones) se refrescan por `carta.editada` + `catalogo.actualizado`.
+>
+> **Carta de CANAL (precio por canal, verificado en vivo 2026-10-19).** `tarifas` asigna
+> `canal → carta_id` (`glovo`, `llevar`, `telefono`, `whatsapp`, `llevadoo`, `digital`, `mesa`);
+> los canales sin carta propia caen a `general`. La carta de canal es una CARTA REAL (copia de la
+> general con los precios finales escritos) que se guarda con `carta.save` y se registra con
+> `tarifas.register_variant` + `tarifas.assign`. Regla de oro: **solo la carta general proyecta
+> `catalogo.actualizado`** (`productos._esCartaGeneral`) — si una carta de canal lo emitiera, su
+> precio sustituiría al de mostrador en el cache POS de todos los canales, porque comandero y
+> pedidos cachean por `producto_id` sin mirar `menu_id`. El precio del canal se resuelve al cobrar:
+> `tarifas(canal) → cartasProductosCache[carta_id] → precio` con fallback al base (producto que no
+> esté en la carta del canal = precio general). Comandero detecta el canal por el prefijo de la
+> cuenta (`glovo_`, `llevar_`, `M_`, `T_`…).
 > Contrato de las tools `pedido.*`: `pedido_id` (v3.5.1 — send-kitchen/complete/cancel/total
 > leían `id` y devolvían 404: el pedido nunca llegaba a cocina por la vía del asistente).
 >
@@ -4722,7 +4741,7 @@ CLASE Pedido {
 ### PRODUCTOS MANAGER
 
 ```
-// v5.2.1 — PRODUCTOS ES UN PROYECTOR SIN ESTADO sobre carta-manager.
+// v5.3.0 — PRODUCTOS ES UN PROYECTOR SIN ESTADO sobre carta-manager.
 // La CARTA es la única fuente de verdad; productos proyecta la carta activa del proyecto
 // al shape POS AL VUELO (carta.get.request). No hay store, ni searchIndex, ni persistencia
 // propia. Las mutaciones DELEGAN en el custodio (carta.*.request) y la cadena sigue por EVENTOS
@@ -4766,7 +4785,14 @@ CLASE ProductosProyector IMPLEMENTA ProductosContract {
 
   METODO evento carta.actualizada | carta.editada | carta.borrada  // onCartaGenerada
     PROYECTA la carta entera (viene EMBEBIDA en el payload; no re-lee)
-    PUBLICa catalogo.actualizado {project_id, productos}
+    SI _esCartaGeneral(project_id, carta)            // v5.3.0 — el gate del canal
+      PUBLICa catalogo.actualizado {project_id, productos}
+    SINO
+      // carta de CANAL (glovo/llevar/telefono): NO toca el catálogo global
+      LOG 'carta.canal.no_proyecta_catalogo' y RETORNA
+      // su precio vive en el cache POR CARTA del comandero (carta.actualizada →
+      // cartasProductosCache[carta_id]); el cobro resuelve canal→carta con fallback al base
+    // _esCartaGeneral: tarifas.general === carta.meta.id; sin general conocido → TRUE (emite)
 
   METODO onLoad(ctx)
     HIDRATA mappingCanales desde tarifas (snapshot) + proyecto activo (warm)

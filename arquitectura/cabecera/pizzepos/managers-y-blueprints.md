@@ -43,6 +43,12 @@ verificado: 2026-10-19
 > `tarifas(canal) → cartasProductosCache[carta_id] → precio` con fallback al base (producto que no
 > esté en la carta del canal = precio general). Comandero detecta el canal por el prefijo de la
 > cuenta (`glovo_`, `llevar_`, `M_`, `T_`…).
+> **`carta.save` NO promociona a general si ya hay general (v2.9.0, verificado en vivo 2026-10-19).**
+> `_autoPromoTarifas` leía `/config/tarifas.json` — la ruta LEGACY — mientras tarifas escribe en
+> `/pizzepos/tarifas.json`: el 404 era permanente y la auto-promoción saltaba en CADA save, así que
+> la última carta guardada se volvía general. Con una carta de canal eso cambiaba los precios de
+> mostrador sin avisar (guardar la carta de glovo puso la de glovo como general). Ahora lee la ruta
+> real y solo promociona cuando no hay general ni ningún canal asignado (primera carta del proyecto).
 > Contrato de las tools `pedido.*`: `pedido_id` (v3.5.1 — send-kitchen/complete/cancel/total
 > leían `id` y devolvían 404: el pedido nunca llegaba a cocina por la vía del asistente).
 >

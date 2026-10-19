@@ -33,7 +33,7 @@ class CartaManagerReflejo extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'carta-manager';
-    this.version = 'reflejo-1.14.0';
+    this.version = 'reflejo-1.15.0';
   }
 
   // ── handlers RPC (una linea) ──
@@ -299,7 +299,13 @@ class CartaManagerReflejo extends ModuloHibridoReflejo {
   // Auto-promocion primera carta: si tarifas.config vacio, esta carta pasa a general. Fire-and-forget.
   async _autoPromoTarifas(project_id, carta_id, correlation_id) {
     try {
-      const raw = await this._read(project_id, '/config/tarifas.json');
+      // La config de tarifas vive en /pizzepos/tarifas.json desde el saneo v2 de tarifas; /config/
+      // tarifas.json es la ruta LEGACY (migración-on-write). Leer SOLO la legacy daba 404 SIEMPRE
+      // → se promocionaba en CADA save: la última carta guardada se volvía general. En un proyecto
+      // con carta de canal eso cambia los precios de mostrador sin avisar (visto en vivo 19-oct-2026:
+      // guardar la carta de glovo puso la de glovo como general). Se lee la nueva y, si no está, la legacy.
+      let raw = await this._read(project_id, '/pizzepos/tarifas.json');
+      if (!raw || raw.status !== 200) raw = await this._read(project_id, '/config/tarifas.json');
       let promocionar = false;
       if (raw && raw.status === 404) promocionar = true;
       else if (raw && raw.status === 200) {

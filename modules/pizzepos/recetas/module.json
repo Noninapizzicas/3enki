@@ -39,6 +39,11 @@
       "event": "escandallo.coste.calculado",
       "handler": "onCosteCalculado",
       "description": "Reflejo JS (persist write): aplica el coste al store. Antes era un turno LLM sintetico por cada coste."
+    },
+    {
+      "event": "carta.actualizada",
+      "handler": "onCartaActualizada",
+      "description": "PUENTE carta→catálogo (deja-solo-1): alta idempotente en ingredientes_catalogo de los ids de ingredientes que la carta usa y el catálogo no conoce. Id = slug del nombre (canónico de _crear). NO inventa precio (null; las fuentes de dinero —mercadona-api/manual— lo llenan). Dedup por id y nombre normalizado. Emite catalogo.ingredientes.actualizado."
     }
   ],
   "config": {

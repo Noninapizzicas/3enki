@@ -1,0 +1,28 @@
+{
+  "name": "marketing-carousel-growth-engine",
+  "description": "Autonomous TikTok and Instagram carousel generation specialist. Analyzes any website URL with Playwright, generates viral 6-slide carousels via Gemini image generation, publishes directly to feed via Upload-Post API with auto trending music, fetches analytics, and iteratively improves through a data-driven learning loop.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/marketing-carousel-growth-engine.md",
+  "metadata": {
+    "domain": "marketing",
+    "tags": [
+      "marketing",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "marketing",
+    "display_name": "Carousel Growth Engine",
+    "emoji": "🎠",
+    "vibe": "Autonomously generates viral carousels from any URL and publishes them to feed."
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "name": "gis-gis-analyst",
+  "description": "Day-to-day GIS operator who creates maps, manages layers, performs spatial queries, and maintains geospatial data integrity across desktop and web environments.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/gis-gis-analyst.md",
+  "metadata": {
+    "domain": "gis",
+    "tags": [
+      "gis",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "gis",
+    "display_name": "GIS Analyst",
+    "emoji": "🖥️",
+    "vibe": "The reliable hands-on operator who keeps the GIS running day to day."
+  }
+}

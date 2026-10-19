@@ -163,36 +163,11 @@ class PortalModule extends BaseModule {
 
       // confirmación: las mutaciones que la exigen requieren flag explícito
       if (def.confirmation === true && confirmado !== true) {
-        // MECANISMO DE CONFIRMACIÓN POR UI (20-ago): además del 409 que recibe el
-        // llamador (Hermes/agente), publicamos un evento de CONFIRMACIÓN PENDIENTE
-        // para que la UI (frontend web → ventana emergente "¿Ejecutar X?", y
-        // Telegram → botones Sí/No) pueda pedir el visto bueno al dueño SIN que el
-        // llamador quede bloqueado pidiendo por texto. La UI reenvía con
-        // confirmado:true → el portal ejecuta. Evento fire-and-forget: si no hay
-        // UI escuchando, nadie se entera y el 409 sigue siendo la única vía.
-        try {
-          this.eventBus.publish('portal.confirmation.pendiente', {
-            request_id: argv.request_id || null,
-            tool, project_id: argv.project_id || null,
-            description: def.description || `${tool} requiere confirmación`,
-            args: argv, timestamp: Date.now()
-          });
-        } catch (_) { /* el evento no debe romper el 409 */ }
         return this._errorResponse(409, 'NEEDS_CONFIRMATION', `la tool ${tool} requiere confirmación (confirmado:true)`, { kind: 'confirmation' });
       }
 
       const t0 = Date.now();
-      // tools event_based (sin handler directo — su handler espera un EVENTO del bus,
-      // ej. buscar_capacidad/detalle_capacidad) NO pasan por executeTool (wrapper simple
-      // que llama tool.handler → "tool.handler is not a function"). Se enrutan por bus.
-      const toolDef = this.moduleLoader?.toolsRegistry?.get?.(tool);
-      let result;
-      if (toolDef?.event_based) {
-        const { _callToolEventBased } = require('../_shared/motor/event-based-call');
-        result = await _callToolEventBased(this.eventBus, tool, argv);
-      } else {
-        result = await this.moduleLoader.executeTool(tool, argv);
-      }
+      const result = await this.moduleLoader.executeTool(tool, argv);
       this._auditar(tool, true, Date.now() - t0);
       return { status: 200, data: { tool, result } };
     } catch (err) {

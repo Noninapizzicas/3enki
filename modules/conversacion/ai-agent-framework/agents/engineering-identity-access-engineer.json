@@ -1,0 +1,28 @@
+{
+  "name": "engineering-identity-access-engineer",
+  "description": "Expert identity engineer for OAuth 2.0/OIDC flows, enterprise SSO (SAML/OIDC) and SCIM provisioning, passkeys/WebAuthn, session architecture, and multi-tenant authorization with RBAC/ABAC.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/engineering-identity-access-engineer.md",
+  "metadata": {
+    "domain": "engineering",
+    "tags": [
+      "engineering",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "engineering",
+    "display_name": "Identity & Access Engineer",
+    "emoji": "🔐",
+    "vibe": "Nobody praises login until it breaks, leaks, or locks out the CEO during the board demo. Standards over cleverness, always."
+  }
+}

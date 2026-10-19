@@ -11,45 +11,25 @@ class OllamaProvider extends BaseProvider {
   constructor(config, logger, credentialResolver) {
     super(config, logger, credentialResolver);
     this.name = 'ollama';
-    // Catálogo VIVO de la cuenta (local o cloud), capturado en configure() desde
-    // /api/tags. Es la fuente de verdad para validar modelos: si Ollama añade o
-    // retira uno, aquí se refleja solo — la lista declarada en config NO manda.
-    this.catalogoVivo = [];
   }
 
   /**
-   * Initialize.
-   * Resuelve la API key (cloud) con el circuito estándar: credentialResolver
-   * (eventos → credential-manager) → env OLLAMA_API_KEY → fallback 'local'
-   * (Ollama local no necesita key). Verifica disponibilidad contra el base
-   * con la auth correspondiente (GET /api/tags — mismo endpoint en local y cloud)
-   * y CAPTURA el catálogo vivo de modelos de la cuenta.
+   * Initialize
    */
   async configure() {
-    // 1. Resolver key cloud (si hay): resolver → env. Sin key → 'local'.
-    try {
-      await this.refreshApiKey();
-    } catch (error) {
-      this.logger.warn('ollama.credential.resolve.failed', { error: error.message });
-    }
-    if (!this.apiKey) this.apiKey = 'local';
+    // Ollama doesn't need API key (local)
+    this.apiKey = 'local';
 
-    // 2. Verificar disponibilidad + capturar el catálogo VIVO de modelos.
+    // Check if Ollama is running
     try {
-      const headers = this._authHeaders();
-      const resp = await this.makeRequest('GET', '/api/tags', null, headers);
-      const vivos = (resp && Array.isArray(resp.models) ? resp.models : [])
-        .map(m => (m && (m.name || m.model)) || null)
-        .filter(Boolean);
-      if (vivos.length) this.catalogoVivo = vivos;
+      await this.makeRequest('GET', '/api/tags');
       this.logger.info('ollama.initialized', {
         available: true,
-        mode: this.apiKey === 'local' ? 'local' : 'cloud',
-        modelos_vivos: this.catalogoVivo.length || '(config declarada)'
+        models: this.config.models
       });
     } catch (error) {
       this.logger.warn('ollama.not-running', {
-        message: 'Ollama not available',
+        message: 'Ollama not available (is it running locally?)',
         error: error.message
       });
       this.apiKey = null;
@@ -57,59 +37,13 @@ class OllamaProvider extends BaseProvider {
   }
 
   /**
-   * Catálogo de modelos elegibles: la oferta VIVA de la cuenta si se capturó;
-   * si no, la lista declarada en config. Lo consume la UI para poblar el selector.
-   */
-  catalogo() {
-    return this.catalogoVivo.length ? this.catalogoVivo.slice() : (this.config.models || []).slice();
-  }
-
-  /**
-   * Fallback de key desde entorno (legacy / sin resolver).
-   * Termina en _API_KEY → persiste en el store del credential-manager.
-   */
-  refreshApiKeyFromEnv() {
-    // Orden: key cloud explícita (OLLAMA_CLOUD) → key genérica (OLLAMA) → local
-    this.apiKey = process.env.OLLAMA_CLOUD_API_KEY || process.env.OLLAMA_CLOUD_API_KEY_GLOBAL
-      || process.env.OLLAMA_API_KEY || process.env.OLLAMA_API_KEY_GLOBAL || null;
-  }
-
-  /**
-   * Header de auth: Bearer con la key cloud. Sin key (local) → sin header
-   * (el endpoint local ignora la auth; ollama lo documenta como "required but ignored").
-   */
-  _authHeaders() {
-    if (this.apiKey && this.apiKey !== 'local') {
-      return { 'Authorization': `Bearer ${this.apiKey}` };
-    }
-    return {};
-  }
-
-  /**
-   * Coerce de modelo: valida SOLO contra el catálogo vivo de la cuenta (o la
-   * lista declarada si no se capturó). Un nombre VIVO en Ollama se respeta
-   * siempre — así el humano elige con libertad entre TODA la oferta; solo un
-   * nombre muerto/inventado cae al default_model (evita el 404/410).
-   */
-  _coerceModel(options = {}) {
-    const m = options.model;
-    if (!m) return options;
-    const validos = this.catalogoVivo.length ? this.catalogoVivo : (this.config.models || []);
-    if (!validos.includes(m)) {
-      return { ...options, model: this.config.default_model };
-    }
-    return options;
-  }
-
-  /**
    * Chat completion
    */
   async chatCompletion(messages, options = {}) {
     if (!await this.isAvailable()) {
-      throw new Error('Ollama provider not available (is Ollama running / key válida?)');
+      throw new Error('Ollama provider not available (is Ollama running locally?)');
     }
 
-    options = this._coerceModel(options);
     const model = options.model || this.config.default_model;
 
     // Estimate tokens
@@ -130,7 +64,7 @@ class OllamaProvider extends BaseProvider {
 
     // Make request with retry
     const response = await this.withRetry(
-      () => this.makeRequest('POST', '/api/chat', requestData, this._authHeaders()),
+      () => this.makeRequest('POST', '/api/chat', requestData),
       options.retryConfig || {}
     );
 
@@ -161,10 +95,9 @@ class OllamaProvider extends BaseProvider {
    */
   async chatCompletionStream(messages, options = {}) {
     if (!await this.isAvailable()) {
-      throw new Error('Ollama provider not available (is Ollama running / key válida?)');
+      throw new Error('Ollama provider not available (is Ollama running locally?)');
     }
 
-    options = this._coerceModel(options);
     const model = options.model || this.config.default_model;
 
     // Estimate tokens
@@ -191,7 +124,7 @@ class OllamaProvider extends BaseProvider {
         'POST',
         '/api/chat',
         requestData,
-        this._authHeaders(),
+        {},
         (chunk) => {
           buffer += chunk.toString();
 

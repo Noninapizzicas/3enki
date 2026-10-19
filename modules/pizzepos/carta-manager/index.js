@@ -33,7 +33,7 @@ class CartaManagerReflejo extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'carta-manager';
-    this.version = 'reflejo-1.15.0';
+    this.version = 'reflejo-1.14.0';
   }
 
   // ── handlers RPC (una linea) ──
@@ -299,13 +299,7 @@ class CartaManagerReflejo extends ModuloHibridoReflejo {
   // Auto-promocion primera carta: si tarifas.config vacio, esta carta pasa a general. Fire-and-forget.
   async _autoPromoTarifas(project_id, carta_id, correlation_id) {
     try {
-      // La config de tarifas vive en /pizzepos/tarifas.json desde el saneo v2 de tarifas; /config/
-      // tarifas.json es la ruta LEGACY (migración-on-write). Leer SOLO la legacy daba 404 SIEMPRE
-      // → se promocionaba en CADA save: la última carta guardada se volvía general. En un proyecto
-      // con carta de canal eso cambia los precios de mostrador sin avisar (visto en vivo 19-oct-2026:
-      // guardar la carta de glovo puso la de glovo como general). Se lee la nueva y, si no está, la legacy.
-      let raw = await this._read(project_id, '/pizzepos/tarifas.json');
-      if (!raw || raw.status !== 200) raw = await this._read(project_id, '/config/tarifas.json');
+      const raw = await this._read(project_id, '/config/tarifas.json');
       let promocionar = false;
       if (raw && raw.status === 404) promocionar = true;
       else if (raw && raw.status === 200) {
@@ -425,25 +419,14 @@ class CartaManagerReflejo extends ModuloHibridoReflejo {
   // necesita variaciones para cobrar extras). Misma ley que menu-generator.
   _normalizarIngredientes(lista) {
     if (!Array.isArray(lista)) return [];
-    // Acepta las DOS formas que llegan de verdad: objeto rico ({id,nombre,familia,...}) y TEXTO
-    // ('mozzarella', 'tomate'). El asistente/LLM manda texto por naturaleza; antes el filtro
-    // `ing.nombre` los tiraba en silencio y el producto nacía sin ingredientes (la lista vacía
-    // que luego nadie entiende). El texto se eleva a la forma canónica con id determinista.
-    return lista
-      .map(ing => (typeof ing === 'string' ? { nombre: ing } : ing))
-      .filter(ing => ing && (ing.nombre || ing.id))
-      .map(ing => {
-        const crudo = String(ing.nombre || ing.id);
-        // Nombre VISIBLE legible: un ingrediente dictado en minúsculas ('mozzarella') es lo
-        // natural al hablar, pero la carta y el comandero enseñan nombre de carta ('Mozzarella').
-        const nombre = /^[a-záéíóúñü]/.test(crudo) ? crudo.charAt(0).toUpperCase() + crudo.slice(1) : crudo;
-        const out = { id: ing.id || slug(nombre), nombre, familia: FAMILIAS.has(ing.familia) ? ing.familia : 'otro' };
-        if (ing.emoji) out.emoji = ing.emoji;
-        // Extra estándar si la fuente no trae precio propio; el explícito (incl. 0) se respeta.
-        // Sin esto el comandero no puede cobrar extras (ELEGIR_VARIOS quedaba a 0).
-        out.precio_extra = (typeof ing.precio_extra === 'number') ? ing.precio_extra : PRECIO_EXTRA_ESTANDAR;
-        return out;
-      });
+    return lista.filter(ing => ing && ing.nombre).map(ing => {
+      const out = { id: ing.id || slug(ing.nombre), nombre: String(ing.nombre), familia: FAMILIAS.has(ing.familia) ? ing.familia : 'otro' };
+      if (ing.emoji) out.emoji = ing.emoji;
+      // Extra estándar si la fuente no trae precio propio; el explícito (incl. 0) se respeta.
+      // Sin esto el comandero no puede cobrar extras (ELEGIR_VARIOS quedaba a 0).
+      out.precio_extra = (typeof ing.precio_extra === 'number') ? ing.precio_extra : PRECIO_EXTRA_ESTANDAR;
+      return out;
+    });
   }
 
   // Normaliza los ingredientes (base + ingredientes_base) de TODOS los productos de una carta a la
@@ -543,50 +526,23 @@ class CartaManagerReflejo extends ModuloHibridoReflejo {
     let nuevo;
     return this._mutar(input, 'add_product', (carta) => {
       if (!(carta.categorias || []).some(c => c.id === p.categoria_id)) return { error: this._errorResponse(412, 'PRECONDITION_FAILED', 'categoria_id no existe en la carta') };
-        if ((carta.productos || []).some(x => x.id === id)) return { error: this._errorResponse(409, 'ALREADY_EXISTS', 'el producto ya existe en la carta', { entity_type: 'producto', id }) };
-        // LO QUE LLEVA = ingredientes + ingredientes_base, fundidos por id. El asistente nombra
-        // las dos formas ("ingredientes", "ingredientes_base"); antes sólo se guardaba la primera
-        // y la segunda quedaba en un campo que NADIE pinta (la carta pública y el comandero leen
-        // `ingredientes`) → el producto nacía mudo, sin chips y sin variaciones. La ficha rica gana.
-        const porId = new Map();
-        for (const ing of [].concat(this._normalizarIngredientes(p.ingredientes), this._normalizarIngredientes(p.ingredientes_base))) {
-          const prev = porId.get(ing.id);
-          if (!prev) { porId.set(ing.id, ing); continue; }
-          // La ficha RICA gana: un 'otro' genérico (el que sale de un texto) no pisa una familia
-          // real, ni un nombre ya legible, ni un emoji. Sólo rellena lo que al prev le falta.
-          porId.set(ing.id, {
-            ...ing, ...prev,
-            familia: (prev.familia && prev.familia !== 'otro') ? prev.familia : ing.familia,
-            emoji: prev.emoji || ing.emoji,
-            precio_extra: (typeof prev.precio_extra === 'number') ? prev.precio_extra : ing.precio_extra
-          });
-        }
-        const ingredientes = Array.from(porId.values());
-        nuevo = {
-          id, nombre: p.nombre, precio: p.precio, categoria_id: p.categoria_id,
-          descripcion: p.descripcion || '', etiquetas: p.etiquetas || [], alergenos: p.alergenos || [], disponible: p.disponible !== undefined ? p.disponible : true,
-          ingredientes
-        };
-        // abstracción del producto (las 6 W): campos intrínsecos opcionales, solo si vienen.
-        if (p.tipo) nuevo.tipo = String(p.tipo);
-        if (p.emoji) nuevo.emoji = String(p.emoji);
-        if (Array.isArray(p.estaciones) && p.estaciones.length) nuevo.estaciones = p.estaciones;
-        const dnAdd = this._normalizarDietas(p.dietas); if (dnAdd) nuevo.dietas = dnAdd;
-        const vnAdd = this._normalizarVariaciones(p.variaciones); if (vnAdd) nuevo.variaciones = vnAdd;
-        // OPCIONES (subsistema Opciones): si el alta no las trae, se DERIVAN de lo que lleva —
-        // QUITAR por cada ingrediente (delta 0). Sin esto el producto nuevo no se puede "quitar
-        // la cebolla" ni en el comandero ni en la carta pública, aunque sus ingredientes existan.
-        if (Array.isArray(p.opciones) && p.opciones.length) {
-          nuevo.opciones = p.opciones;
-        } else if (ingredientes.length) {
-          try {
-            const ops = require('../../_shared/derivar-opciones').derivarOpciones(nuevo, []);
-            if (Array.isArray(ops) && ops.length) nuevo.opciones = ops;
-          } catch (_) { /* best-effort: el producto nace igual, sin variaciones */ }
-        }
-        carta.productos = (carta.productos || []).concat([nuevo]);
-        return { status: 201, patches: [{ op: 'replace', path: '/productos', value: carta.productos }], data: (c) => ({ producto: nuevo, carta_version: c.meta.version }) };
-      });
+      if ((carta.productos || []).some(x => x.id === id)) return { error: this._errorResponse(409, 'ALREADY_EXISTS', 'el producto ya existe en la carta', { entity_type: 'producto', id }) };
+      nuevo = {
+        id, nombre: p.nombre, precio: p.precio, categoria_id: p.categoria_id,
+        descripcion: p.descripcion || '', etiquetas: p.etiquetas || [], alergenos: p.alergenos || [],
+        disponible: p.disponible !== undefined ? p.disponible : true,
+        ingredientes: this._normalizarIngredientes(p.ingredientes)
+      };
+      // abstracción del producto (las 6 W): campos intrínsecos opcionales, solo si vienen.
+      if (p.tipo) nuevo.tipo = String(p.tipo);
+      if (p.emoji) nuevo.emoji = String(p.emoji);
+      if (Array.isArray(p.estaciones) && p.estaciones.length) nuevo.estaciones = p.estaciones;
+      if (Array.isArray(p.ingredientes_base) && p.ingredientes_base.length) nuevo.ingredientes_base = this._normalizarIngredientes(p.ingredientes_base);
+      const dnAdd = this._normalizarDietas(p.dietas); if (dnAdd) nuevo.dietas = dnAdd;
+      const vnAdd = this._normalizarVariaciones(p.variaciones); if (vnAdd) nuevo.variaciones = vnAdd;
+      carta.productos = (carta.productos || []).concat([nuevo]);
+      return { status: 201, patches: [{ op: 'replace', path: '/productos', value: carta.productos }], data: (c) => ({ producto: nuevo, carta_version: c.meta.version }) };
+    });
   }
 
   async _removeProduct(input) {

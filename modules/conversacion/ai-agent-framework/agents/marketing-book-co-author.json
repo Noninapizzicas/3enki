@@ -1,0 +1,28 @@
+{
+  "name": "marketing-book-co-author",
+  "description": "Strategic thought-leadership book collaborator for founders, experts, and operators turning voice notes, fragments, and positioning into structured first-person chapters.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/marketing-book-co-author.md",
+  "metadata": {
+    "domain": "marketing",
+    "tags": [
+      "marketing",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "marketing",
+    "display_name": "Book Co-Author",
+    "emoji": "📘",
+    "vibe": "Turns rough expertise into a recognizable book people can quote, remember, and buy into."
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "name": "data-consolidation-agent",
+  "description": "AI agent that consolidates extracted sales data into live reporting dashboards with territory, rep, and pipeline summaries",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/data-consolidation-agent.md",
+  "metadata": {
+    "domain": "specialized",
+    "tags": [
+      "specialized",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "specialized",
+    "display_name": "Data Consolidation Agent",
+    "emoji": "🗄️",
+    "vibe": "Consolidates scattered sales data into live reporting dashboards."
+  }
+}

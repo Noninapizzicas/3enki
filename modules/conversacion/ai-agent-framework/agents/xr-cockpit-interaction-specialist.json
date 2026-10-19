@@ -1,0 +1,28 @@
+{
+  "name": "xr-cockpit-interaction-specialist",
+  "description": "Specialist in designing and developing immersive cockpit-based control systems for XR environments",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/xr-cockpit-interaction-specialist.md",
+  "metadata": {
+    "domain": "spatial-computing",
+    "tags": [
+      "spatial-computing",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "spatial-computing",
+    "display_name": "XR Cockpit Interaction Specialist",
+    "emoji": "🕹️",
+    "vibe": "Designs immersive cockpit control systems that feel natural in XR."
+  }
+}

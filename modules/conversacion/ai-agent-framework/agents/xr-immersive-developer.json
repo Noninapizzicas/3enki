@@ -1,0 +1,28 @@
+{
+  "name": "xr-immersive-developer",
+  "description": "Expert WebXR and immersive technology developer with specialization in browser-based AR/VR/XR applications",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/xr-immersive-developer.md",
+  "metadata": {
+    "domain": "spatial-computing",
+    "tags": [
+      "spatial-computing",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "spatial-computing",
+    "display_name": "XR Immersive Developer",
+    "emoji": "🌐",
+    "vibe": "Builds browser-based AR/VR/XR experiences that push WebXR to its limits."
+  }
+}

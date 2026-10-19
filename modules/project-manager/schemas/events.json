@@ -94,9 +94,6 @@
               "properties": {
                 "project_id": { "type": "string" },
                 "name": { "type": "string" },
-                "slug": { "type": "string", "description": "Nombre del directorio fisico del proyecto en /data/projects/<slug>/. Lo calcula el dueño (project-manager) UNA vez; los consumidores NO deben re-derivarlo: eran 12 copias del mismo algoritmo y la que difería fallaba." },
-                "base_path": { "type": "string", "description": "Ruta absoluta del proyecto en disco." },
-                "metadata": { "type": "object", "description": "Metadatos del proyecto (namespace, features...)." },
                 "activated_at": { "type": "string", "format": "date-time" }
               },
               "additionalProperties": false
@@ -117,9 +114,7 @@
               "required": ["project_id"],
               "properties": {
                 "project_id": { "type": "string" },
-                "name": { "type": ["string", "null"] },
-                "slug": { "type": ["string", "null"], "description": "Nombre del directorio fisico del proyecto en /data/projects/<slug>/. Lo calcula el dueño (project-manager) UNA vez; los consumidores NO deben re-derivarlo: eran 12 copias del mismo algoritmo y la que difería fallaba." },
-                "base_path": { "type": ["string", "null"], "description": "Ruta absoluta del proyecto en disco." },
+                "name": { "type": "string" },
                 "deactivated_at": { "type": "string", "format": "date-time" }
               },
               "additionalProperties": false
@@ -163,22 +158,7 @@
               "properties": {
                 "request_id": { "type": "string" },
                 "success": { "type": "boolean" },
-                "projects": {
-                  "type": "array",
-                  "description": "Cada proyecto con su slug YA CALCULADO por el dueño.",
-                  "items": {
-                    "type": "object",
-                    "required": ["id"],
-                    "properties": {
-                      "id": { "type": "string" },
-                      "name": { "type": "string" },
-                      "slug": { "type": "string", "description": "Nombre del directorio fisico del proyecto en /data/projects/<slug>/. Lo calcula el dueño (project-manager) UNA vez; los consumidores NO deben re-derivarlo: eran 12 copias del mismo algoritmo y la que difería fallaba." },
-                      "base_path": { "type": "string" },
-                      "metadata": { "type": "object" },
-                      "is_active": { "type": ["boolean", "integer"] }
-                    }
-                  }
-                },
+                "projects": { "type": "array" },
                 "count": { "type": "integer" },
                 "active_project_id": { "type": "string" },
                 "error": { "type": "string" }

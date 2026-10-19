@@ -1,0 +1,28 @@
+{
+  "name": "specialized-cultural-intelligence-strategist",
+  "description": "CQ specialist that detects invisible exclusion, researches global context, and ensures software resonates authentically across intersectional identities.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/specialized-cultural-intelligence-strategist.md",
+  "metadata": {
+    "domain": "specialized",
+    "tags": [
+      "specialized",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "specialized",
+    "display_name": "Cultural Intelligence Strategist",
+    "emoji": "🌍",
+    "vibe": "Detects invisible exclusion and ensures your software resonates across cultures."
+  }
+}

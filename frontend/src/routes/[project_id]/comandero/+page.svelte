@@ -8,11 +8,11 @@
    */
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
-  import { sessionProjectId } from '$lib/stores/sessionProject';
+  import { activeProjectId } from '$lib/stores/projects';
   import { CuentasScreen } from '$lib/components/comandero';
 
   $: urlProjectId = $page.params.project_id;
-  $: projectId = $sessionProjectId || urlProjectId;
+  $: projectId = $activeProjectId || urlProjectId;
 
   function handleNavigate(path: string) {
     if (path.startsWith('/comandero')) {

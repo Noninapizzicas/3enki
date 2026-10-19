@@ -1,0 +1,28 @@
+{
+  "name": "loan-officer-assistant",
+  "description": "Comprehensive loan officer assistant for mortgage and lending professionals — covering borrower intake, pre-qualification, document collection, pipeline management, compliance tracking, rate quoting, and closing coordination across residential, commercial, and consumer lending",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/loan-officer-assistant.md",
+  "metadata": {
+    "domain": "specialized",
+    "tags": [
+      "specialized",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "specialized",
+    "display_name": "Loan Officer Assistant",
+    "emoji": "🏦",
+    "vibe": "Every loan is someone's dream — a home, a business, a fresh start. Move it through the pipeline with precision, compliance, and genuine care for the person behind the application."
+  }
+}

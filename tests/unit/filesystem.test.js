@@ -539,78 +539,6 @@ function publishedOf(mocks, name) {
     await cleanup(tmpDir);
   });
 
-  await testAsync('CARRILES: el SLUG resuelve al MISMO carril que el UUID', async () => {
-    const mocks = makeMocks();
-    const { module: m, tmpDir } = await instantiate(mocks);
-    const UUID = '5d09cb49-35a0-409f-9e09-c57da93b84a8';
-    const dirPirata = path.join(tmpDir, 'projects', 'the-pirate');
-    fsSync.mkdirSync(dirPirata, { recursive: true });
-    await m.onProjectActivated({ data: { project_id: UUID, base_path: dirPirata, name: 'the pirate' } });
-
-    // Escribe por UUID...
-    const w1 = await m.handleWrite({ path: '/pedido.json', content: '{"por":"uuid"}', project_id: UUID });
-    assert.strictEqual(w1.status, 201);
-    // ...y LEE por SLUG → mismo carril (ni 404, ni cae a otro proyecto).
-    const r = await m.handleRead({ path: '/pedido.json', project_id: 'the-pirate' });
-    assert.strictEqual(r.status, 200);
-    assert.strictEqual(r.data.content, '{"por":"uuid"}');
-    // Y escribe por slug → al MISMO directorio.
-    const w2 = await m.handleWrite({ path: '/otro.json', content: '{"por":"slug"}', project_id: 'the-pirate' });
-    assert.strictEqual(w2.status, 201);
-    assert.ok(fsSync.existsSync(path.join(dirPirata, 'storage', 'otro.json')), 'el slug escribe en el mismo carril');
-    assert.strictEqual(m.projectPaths.get(UUID).path, m.projectPaths.get('the-pirate').path, 'misma cara, mismo sitio');
-    await m.onUnload();
-    await cleanup(tmpDir);
-  });
-
-  await testAsync('CARRILES: hidratación desde project.list.response puebla UUID + slug + directorio', async () => {
-    const mocks = makeMocks();
-    const { module: m, tmpDir } = await instantiate(mocks);
-    const dir = path.join(tmpDir, 'projects', 'trama-y-punto');
-    await m.onProjectListResponse({ data: {
-      request_id: m._projectHydrateRequestId, success: true,
-      projects: [{ id: 'uuid-trama', name: 'Trama y Punto', base_path: dir, metadata: {} }]
-    }});
-    assert.strictEqual(m._projectHydrated, true);
-    const porUuid = m._lookupProject('uuid-trama');
-    const porSlug = m._lookupProject('trama-y-punto');
-    assert.ok(porUuid && porSlug, 'las dos caras resuelven');
-    assert.strictEqual(porUuid.path, porSlug.path);
-    assert.strictEqual(porSlug.path, path.join(dir, 'storage'));
-    // Una respuesta ajena (otro request_id) se ignora.
-    await m.onProjectListResponse({ data: { request_id: 'otro', projects: [{ id: 'x', base_path: '/x' }] } });
-    assert.strictEqual(m._lookupProject('x'), undefined);
-    await m.onUnload();
-    await cleanup(tmpDir);
-  });
-
-  await testAsync('CARRILES: project_id DESCONOCIDO falla CLARO (no cae al carril activo)', async () => {
-    const mocks = makeMocks();
-    const { module: m, tmpDir } = await instantiate(mocks);
-    const dirB = path.join(tmpDir, 'projects', 'b');
-    fsSync.mkdirSync(dirB, { recursive: true });
-    await m.onProjectActivated({ data: { project_id: 'b', base_path: dirB, name: 'B' } });  // B queda activo
-    const res = await m.handleRead({ path: '/algo.json', project_id: 'no-existe-xyz' });
-    assert.strictEqual(res.status, 400);
-    assert.strictEqual(res.error.code, 'INVALID_INPUT');
-    assert.strictEqual(res.error.details.kind, 'unknown_project');
-    assert.ok(!fsSync.existsSync(path.join(dirB, 'storage', 'algo.json')), 'no tocó el carril activo');
-    await m.onUnload();
-    await cleanup(tmpDir);
-  });
-
-  await testAsync('CARRILES: id desconocido PERO carril real en disco → autocuración', async () => {
-    const mocks = makeMocks();
-    const { module: m, tmpDir } = await instantiate(mocks);
-    const dirHuerfano = path.join(tmpDir, 'projects', 'huerfano-1');
-    fsSync.mkdirSync(dirHuerfano, { recursive: true });
-    const w = await m.handleWrite({ path: '/x.json', content: '{}', project_id: 'huerfano-1' });
-    assert.strictEqual(w.status, 201);
-    assert.ok(fsSync.existsSync(path.join(dirHuerfano, 'storage', 'x.json')), 'resolvió a su carril real');
-    await m.onUnload();
-    await cleanup(tmpDir);
-  });
-
   await testAsync('handleSetWorkDir cambia working directory + publica fs.workdir.changed', async () => {
     const mocks = makeMocks();
     const { module: m, tmpDir } = await instantiate(mocks);
@@ -936,20 +864,18 @@ function publishedOf(mocks, name) {
     await m.onUnload(); await cleanup(tmpDir);
   });
 
-  await testAsync('ENFORCE ON ya NO bloquea (reja abierta): canta el testigo con la palabra del dueño y el write pasa', async () => {
+  await testAsync('ENFORCE: escritura ajena → 409 CANONICAL_PATH que TIENDE la palabra (no escribe)', async () => {
     const mocks = makeMocks();
     const { module: m, tmpDir } = await instantiate(mocks);
     declararPropiedad(m);
     m.onInterruptorCambiado({ data: { id: 'fs-camino-canonico', enabled: true } });  // enforce ON
     const r = await m.handleWrite({ path: '/pizzepos/recetas.json', content: '{"recetas":[{"id":"solo1"}]}', _source_module: 'ai-gateway' });
-    assert.ok(r.status === 200 || r.status === 201, 'la reja está abierta: el write pasa');
-    const cantos = publishedOf(mocks, 'fs.escritura.ajena');
-    assert.strictEqual(cantos.length, 1, 'pero canta el testigo');
-    assert.strictEqual(cantos[0].dueno, 'recetas');
-    assert.ok(cantos[0].palabras.includes('escandallo.coste.calculado'), 'con la palabra compartida del dueño');
-    // El path se compone por el scope declarado del emisor (TP4): ai-gateway es scope=system.
-    const destino = m.validatePath('/pizzepos/recetas.json', { sourceModule: 'ai-gateway' });
-    assert.ok(fsSync.existsSync(destino), 'el dato queda escrito (no se forja el bloqueo)');
+    assert.strictEqual(r.status, 409);
+    assert.strictEqual(r.error.code, 'CANONICAL_PATH');
+    assert.ok(r.error.message.includes('escandallo.coste.calculado'), 'tiende la palabra compartida');
+    assert.ok(r.error.message.includes('No se forja'), 'lenguaje en positivo (comunicación, no reja)');
+    // y NO escribió el fichero (el truncado no ocurre):
+    assert.ok(!fsSync.existsSync(path.join(tmpDir, 'pizzepos', 'recetas.json')), 'no forjó el efecto');
     await m.onUnload(); await cleanup(tmpDir);
   });
 
@@ -974,17 +900,15 @@ function publishedOf(mocks, name) {
     await m.onUnload(); await cleanup(tmpDir);
   });
 
-  await testAsync('el interruptor observe↔enforce ya no cambia el veredicto: canta en ambos, nunca bloquea', async () => {
+  await testAsync('el interruptor conmuta enforce↔observe en caliente', async () => {
     const mocks = makeMocks();
     const { module: m, tmpDir } = await instantiate(mocks);
     declararPropiedad(m);
     m.onInterruptorCambiado({ data: { id: 'fs-camino-canonico', enabled: true } });
-    const r1 = await m.handleWrite({ path: '/pizzepos/recetas.json', content: '{}', _source_module: 'x' });
-    assert.ok(r1.status === 200 || r1.status === 201, 'con el interruptor ON tampoco bloquea');
+    assert.strictEqual((await m.handleWrite({ path: '/pizzepos/recetas.json', content: '{}', _source_module: 'x' })).status, 409, 'enforce bloquea');
     m.onInterruptorCambiado({ data: { id: 'fs-camino-canonico', enabled: false } });
-    const r2 = await m.handleWrite({ path: '/pizzepos/recetas.json', content: '{}', _source_module: 'x' });
-    assert.ok(r2.status === 200 || r2.status === 201, 'y OFF igual');
-    assert.strictEqual(publishedOf(mocks, 'fs.escritura.ajena').length, 2, 'canta en los dos modos');
+    const r = await m.handleWrite({ path: '/pizzepos/recetas.json', content: '{}', _source_module: 'x' });
+    assert.ok(r.status === 200 || r.status === 201, 'observe permite tras apagar');
     await m.onUnload(); await cleanup(tmpDir);
   });
 

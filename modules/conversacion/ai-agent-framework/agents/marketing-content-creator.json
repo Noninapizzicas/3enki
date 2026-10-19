@@ -1,0 +1,28 @@
+{
+  "name": "marketing-content-creator",
+  "description": "Expert content strategist and creator for multi-platform campaigns. Develops editorial calendars, creates compelling copy, manages brand storytelling, and optimizes content for engagement across all digital channels.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/marketing-content-creator.md",
+  "metadata": {
+    "domain": "marketing",
+    "tags": [
+      "marketing",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "marketing",
+    "display_name": "Content Creator",
+    "emoji": "✍️",
+    "vibe": "Crafts compelling stories across every platform your audience lives on."
+  }
+}

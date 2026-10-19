@@ -4,25 +4,11 @@ dominio: frontend
 resumen: SvelteKit 2 + Svelte 5 sobre MQTT: MqttClient singleton, mqtt-request, lazy-registry, stores, módulos lazy, rutas multi-tenant, nervio vista-bridge, resiliencia.
 fuentes:
   - frontend/src/**
-verificado: 2026-08-07
+verificado: 2026-07-24
 trabajo_pendiente: verificar el módulo trazo en un frontend construido (node_modules) — el wiring espeja interruptores 1:1 pero no se compiló aquí
 ---
 
 # FRONTEND — Capa de UI (SvelteKit + Svelte 5 sobre MQTT)
-
-> **Novedad (2026-10-16) — el panel jefe declara `pago_online` (se cierra el hueco [ABIERTO]).**
-> `modules/carta-digital/CartaDigitalJefePanel.svelte` gana un checkbox que escribe
-> `opciones_visualizacion.pago_online` por el mismo `update_config` (merge profundo). Antes el
-> contrato lo soportaba pero el formulario no lo pedía, así que la PWA no ofrecía método de pago.
-> El template (`static-template.js`) sigue siendo quien decide: con el flag ON pinta
-> 💶 Efectivo al recoger / 💳 Tarjeta y `metodo_pago` viaja en el `#P1` al bot (checkout WhatsApp).
-> El store `carta-digital-jefe.ts` sólo cambia el docstring del campo.
-
-> **Novedad (2026-08-07) — AgenteMarco se alimenta correctamente del puente del agente.**
-> El marco desplegable del chat ahora lee del derived store `ejecucionActiva` (reactividad
-> robusta frente a updates del Map), y el backend incluye `conversation_id` en
-> `agent.execute.progress` y normaliza `invoke_agent`/`invoke_agent.response` como alias
-> del puente.
 
 > **Novedad (2026-07-14) — identidad del navegador en el bus (inerte hasta enrolar).**
 > `ui-core/enki-identity.ts` genera un par RSA en WebCrypto (privada NO-extraíble en IndexedDB), enrola

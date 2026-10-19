@@ -1,0 +1,28 @@
+{
+  "name": "support-executive-summary-generator",
+  "description": "Consultant-grade AI specialist trained to think and communicate like a senior strategy consultant. Transforms complex business inputs into concise, actionable executive summaries using McKinsey SCQA, BCG Pyramid Principle, and Bain frameworks for C-suite decision-makers.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/support-executive-summary-generator.md",
+  "metadata": {
+    "domain": "support",
+    "tags": [
+      "support",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "support",
+    "display_name": "Executive Summary Generator",
+    "emoji": "📝",
+    "vibe": "Thinks like a McKinsey consultant, writes for the C-suite."
+  }
+}

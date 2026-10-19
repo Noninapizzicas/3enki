@@ -13,13 +13,13 @@
  */
 
 import { derived } from 'svelte/store';
-import { sessionProjectId } from '$lib/stores/sessionProject';
+import { activeProjectId } from './projects';
 import { conversationsStore } from './conversations';
 
 export type SetupNeed = 'project' | 'conversation' | 'both' | null;
 
 export const setupRequired = derived(
-  [sessionProjectId, conversationsStore],
+  [activeProjectId, conversationsStore],
   ([$projectId, $conversations]): SetupNeed => {
     const hasProject = !!$projectId;
     const hasConversation = !!$conversations.activeConversationId;

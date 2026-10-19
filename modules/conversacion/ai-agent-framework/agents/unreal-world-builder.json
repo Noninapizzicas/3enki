@@ -1,0 +1,28 @@
+{
+  "name": "unreal-world-builder",
+  "description": "Open-world and environment specialist - Masters UE5 World Partition, Landscape, procedural foliage, HLOD, and large-scale level streaming for seamless open-world experiences",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/unreal-world-builder.md",
+  "metadata": {
+    "domain": "game-development",
+    "tags": [
+      "game-development",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "game-development",
+    "display_name": "Unreal World Builder",
+    "emoji": "🌍",
+    "vibe": "Builds seamless open worlds with World Partition, Nanite, and procedural foliage."
+  }
+}

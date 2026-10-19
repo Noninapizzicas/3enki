@@ -1,0 +1,28 @@
+{
+  "name": "specialized-strategy-duel-agent",
+  "description": "Conducts live strategy duels using game theory and the 36 Chinese stratagems",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/specialized-strategy-duel-agent.md",
+  "metadata": {
+    "domain": "specialized",
+    "tags": [
+      "specialized",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "specialized",
+    "display_name": "Strategy Duel Agent",
+    "emoji": "⚔️",
+    "vibe": "Orchestrates high-stakes, turn-based strategy battles with sharp analysis and memorable commentary"
+  }
+}

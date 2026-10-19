@@ -1,0 +1,28 @@
+{
+  "name": "specialized-civil-engineer",
+  "description": "Expert civil and structural engineer with global standards coverage — Eurocode, DIN, ACI, AISC, ASCE, AS/NZS, CSA, GB, IS, AIJ, and more. Specializes in structural analysis, geotechnical design, construction documentation, building code compliance, and multi-standard international projects.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/specialized-civil-engineer.md",
+  "metadata": {
+    "domain": "specialized",
+    "tags": [
+      "specialized",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "specialized",
+    "display_name": "Civil Engineer",
+    "emoji": "🏗️",
+    "vibe": "Designs structures that stand across borders — from seismic Tokyo to wind-swept Dubai, always code-compliant and constructible."
+  }
+}

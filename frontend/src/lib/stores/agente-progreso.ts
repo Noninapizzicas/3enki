@@ -13,7 +13,7 @@
 // el agente trabaja; la ventana se actualiza sola por push MQTT.
 // ============================================================================
 
-import { writable, get, derived } from 'svelte/store';
+import { writable, get } from 'svelte/store';
 import { subscribe } from '$lib/ui-core';
 
 // ── Tipos ────────────────────────────────────────────────────────────────────
@@ -59,12 +59,6 @@ export interface AgenteEjecucion {
 export const ejecuciones = writable<Map<string, AgenteEjecucion>>(new Map());
 // request_id de la ejecución "activa" (la última que se abrió)
 export const ejecucionActivaId = writable<string | null>(null);
-
-// Derived robusto: re-evalúa automáticamente cuando cambian ejecuciones o la activa.
-export const ejecucionActiva = derived<[typeof ejecuciones, typeof ejecucionActivaId], AgenteEjecucion | undefined>(
-  [ejecuciones, ejecucionActivaId],
-  ([$ejecuciones, $id]) => $id ? $ejecuciones.get($id) : undefined
-);
 
 function nuevaEjecucion(data: any): AgenteEjecucion {
   return {
@@ -166,7 +160,6 @@ export function initAgenteProgreso(): () => void {
   unsubs.push(subscribe('conversation/+/agent_progress', (topic, payload) => {
     const data = payload as any;
     if (!data?.request_id) return;
-    const convId = data.conversation_id || convIdDeTopic(topic) || undefined;
     // FIX (lección en vivo: el marco nunca aparecía): la ejecución que está
     // progresando ES la activa — si no la fijamos, ejecucionActivaId queda null
     // y el AgenteMarco (que depende de la activa) no renderiza nada.
@@ -178,7 +171,7 @@ export function initAgenteProgreso(): () => void {
           request_id: data.request_id,
           agent_name: data.agent_name || 'agente',
           project_id: data.project_id,
-          conversation_id: convId,
+          conversation_id: convIdDeTopic(topic) || undefined,
           status: 'running',
           pasos: [],
           tools_llamadas: [],

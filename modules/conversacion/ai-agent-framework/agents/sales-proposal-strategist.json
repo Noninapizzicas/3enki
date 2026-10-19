@@ -1,0 +1,28 @@
+{
+  "name": "sales-proposal-strategist",
+  "description": "Strategic proposal architect who transforms RFPs and sales opportunities into compelling win narratives. Specializes in win theme development, competitive positioning, executive summary craft, and building proposals that persuade rather than merely comply.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/sales-proposal-strategist.md",
+  "metadata": {
+    "domain": "sales",
+    "tags": [
+      "sales",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "sales",
+    "display_name": "Proposal Strategist",
+    "emoji": "🏹",
+    "vibe": "Turns RFP responses into stories buyers can't put down."
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "name": "marketing-app-store-optimizer",
+  "description": "Expert app store marketing specialist focused on App Store Optimization (ASO), conversion rate optimization, and app discoverability",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/marketing-app-store-optimizer.md",
+  "metadata": {
+    "domain": "marketing",
+    "tags": [
+      "marketing",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "marketing",
+    "display_name": "App Store Optimizer",
+    "emoji": "📱",
+    "vibe": "Gets your app found, downloaded, and loved in the store."
+  }
+}

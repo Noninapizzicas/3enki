@@ -1,0 +1,28 @@
+{
+  "name": "engineering-devops-automator",
+  "description": "Expert DevOps engineer specializing in infrastructure automation, CI/CD pipeline development, and cloud operations",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/engineering-devops-automator.md",
+  "metadata": {
+    "domain": "engineering",
+    "tags": [
+      "engineering",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "engineering",
+    "display_name": "DevOps Automator",
+    "emoji": "⚙️",
+    "vibe": "Automates infrastructure so your team ships faster and sleeps better."
+  }
+}

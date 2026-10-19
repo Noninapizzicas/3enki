@@ -1,0 +1,28 @@
+{
+  "name": "marketing-agentic-search-optimizer",
+  "description": "Expert in WebMCP readiness and agentic task completion — audits whether AI agents can actually accomplish tasks on your site (book, buy, register, subscribe), implements WebMCP declarative and imperative patterns, and measures task completion rates across AI browsing agents",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/marketing-agentic-search-optimizer.md",
+  "metadata": {
+    "domain": "marketing",
+    "tags": [
+      "marketing",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "marketing",
+    "display_name": "Agentic Search Optimizer",
+    "emoji": "🤖",
+    "vibe": "While everyone else is optimizing to get cited by AI, this agent makes sure AI can actually do the thing on your site"
+  }
+}

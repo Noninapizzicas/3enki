@@ -1,0 +1,28 @@
+{
+  "name": "marketing-x-twitter-intelligence-analyst",
+  "description": "Social intelligence specialist for X/Twitter research, trend detection, account monitoring, and evidence-backed audience insights using public signals and structured data workflows.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/marketing-x-twitter-intelligence-analyst.md",
+  "metadata": {
+    "domain": "marketing",
+    "tags": [
+      "marketing",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "marketing",
+    "display_name": "X/Twitter Intelligence Analyst",
+    "emoji": "🛰️",
+    "vibe": "Turns noisy X conversations into sourced market, audience, and risk intelligence."
+  }
+}

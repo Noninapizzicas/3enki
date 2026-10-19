@@ -1,14 +1,26 @@
 <script lang="ts">
   /**
-   * PageNavStrip — rail derecho. SOLO el botón ⚙ Config Interfaz.
+   * PageNavStrip — rail derecho de navegacion rapida entre paginas del proyecto.
    *
-   * Los paneles del proyecto NO tienen página propia (se abren como overlay desde
-   * la workbar); listarlos aquí intentaría navegar a rutas que no existen
-   * ([proyecto]/catalogo…). La barra lateral queda desierta salvo el ⚙, consistente
-   * con «paneles sin página, workbar configurable por proyecto».
+   * Tira vertical compacta pegada al borde derecho (solo icono). El page-set EMERGE
+   * del proyecto activo (project-pages: config del proyecto → semilla por tipo), NO
+   * de una lista clavada: un proyecto prisma nace con el rail VACÍO; un pizzepos trae
+   * su set. La pagina activa se destaca; un tap en otra = goto directo, sin pasar por
+   * el chat ni por chat.cambiar_foco. Sin seccion de sistema, sin hueco central.
    */
+  import { getContext } from 'svelte';
+  import { writable, type Writable } from 'svelte/store';
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
+  import { pagesFromIds, seedFallback } from '$lib/ui-core/project-pages';
+
+  // El proyecto activo lo aporta [project_id]/+layout via setContext('project').
+  // Sin contexto (rutas planas sin proyecto) → fallback al set histórico pizzepos.
+  const projectCtx = getContext<Writable<{ pages?: string[] } > | undefined>('project') ?? writable<{ pages?: string[] }>(null as any);
+
+  // page-set del proyecto → PageDefs (icono+etiqueta del catálogo, en orden).
+  $: pageIds = $projectCtx?.pages ?? seedFallback();
+  $: PAGES = pagesFromIds(pageIds);
 
   $: segs = $page.url.pathname.split('/').filter(Boolean);
   $: project = segs[0] ?? '';
@@ -20,22 +32,22 @@
   }
 </script>
 
-<!-- RAIL LATERAL — SOLO Config Interfaz.
-     Los paneles NO tienen página propia (se abren como overlay desde la workbar);
-     listarlos aqui intentaria navegar a rutas que no existen ([proyecto]/catalogo…).
-     La barra lateral queda desierta salvo el boton ⚙, consistente con "paneles sin
-     pagina, workbar configurable por proyecto". -->
-<nav class="page-nav-strip" aria-label="Configuración de interfaz">
-  <button
-    class="pn-btn"
-    class:current={currentPage === 'configuracion'}
-    on:click={() => navigate('configuracion')}
-    disabled={currentPage === 'configuracion'}
-    title="Configuración de interfaz — elige qué paneles ves en este proyecto"
-  >
-    <span class="ic" aria-hidden="true">⚙</span>
-  </button>
+<!-- rail VACÍO (page-set vacío, p.ej. proyecto prisma nuevo) → no se pinta la tira -->
+{#if PAGES.length > 0}
+<nav class="page-nav-strip" aria-label="Navegación de páginas">
+  {#each PAGES as p (p.id)}
+    <button
+      class="pn-btn"
+      class:current={p.id === currentPage}
+      on:click={() => navigate(p.id)}
+      disabled={p.id === currentPage}
+      title={p.id === currentPage ? p.label : `Ir a ${p.label}`}
+    >
+      <span class="ic" aria-hidden="true">{p.icon}</span>
+    </button>
+  {/each}
 </nav>
+{/if}
 
 <style>
   .page-nav-strip {

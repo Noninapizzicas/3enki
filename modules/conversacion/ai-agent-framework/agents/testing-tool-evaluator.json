@@ -1,0 +1,28 @@
+{
+  "name": "testing-tool-evaluator",
+  "description": "Expert technology assessment specialist focused on evaluating, testing, and recommending tools, software, and platforms for business use and productivity optimization",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/testing-tool-evaluator.md",
+  "metadata": {
+    "domain": "testing",
+    "tags": [
+      "testing",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "testing",
+    "display_name": "Tool Evaluator",
+    "emoji": "🔧",
+    "vibe": "Tests and recommends the right tools so your team doesn't waste time on the wrong ones."
+  }
+}

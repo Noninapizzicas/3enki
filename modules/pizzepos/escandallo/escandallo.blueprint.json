@@ -2,7 +2,7 @@
   "_doc": "Blueprint del modulo escandallo v2. Hijo de subsistema-recetario.modulo-base. Calcula el coste de una receta del proyecto O de una propuesta no persistida, Y persiste el resultado en /recetas.json[r] cuando se trata de una receta existente. Invocacion on-demand — el usuario pide 'calcula costes' en el chat O el LLM principal lo invoca como parte de otro flujo (ej. crear receta). NO es reactivo (el blueprint runtime no soporta reactividad sin user request). La lectura/escritura de Mercadona la hace mercadona-api (modulo JS determinista, paradigma plugin); escandallo razona qué productos pedir y cómo mapearlos al ingrediente. Para viabilidad economica (food cost%, PVP, margen, etiquetas) el modulo viabilidad lo hace despues, leyendo los costes ya persistidos.",
   "id": "escandallo",
   "extends_blueprint_abstract": "subsistema-recetario.modulo-base",
-  "version": "blueprint-3.12.0",
+  "version": "blueprint-3.11.0",
   "_temperatura_doc": "Pagina EXACTA: razona costes/mapeos a ingrediente -> fria, minimiza alucinacion. ai-gateway la usa como default del turno (settings.temperature del humano gana; fallback global 0.7). Lo aritmetico ya vive en el REFLEJO (temperatura irrelevante alli); esto baja la chispa de la parte fuzzy (mapear producto Mercadona).",
   "temperatura": 0.2,
   "language": "es",
@@ -291,118 +291,9 @@
         "UPSTREAM_UNREACHABLE",
         "UNKNOWN_ERROR"
       ]
-    },
-    "escalar": {
-      "input": "{ project_id (req), request_id (req), correlation_id?, receta_id? (alternativa a lineas), lineas? (array de {ref,nombre,cantidad,unidad}), diametro_origen? (default 33), diametro_destino (req) }",
-      "_descripcion": "DELEGA al reflejo JS (index.js, determinista). Re-costea una receta a otro diametro: la linea de MASA escala por DIAMETRO (factor = d2/d1), el resto por AREA (factor = (d2/d1)2). Auto-detecta la masa por nombre/ref que contenga 'masa'. Conversor puro — NO persiste (el coste escalado es derivacion transitoria; quien quiera persistirlo delega en costear con persistir).",
-      "pseudocodigo": [
-        "async escalar(input):",
-        "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
-        "  if (!input.receta_id && !(Array.isArray(input.lineas) && input.lineas.length > 0)) return INVALID_INPUT { hint: 'pasar receta_id O lineas' }",
-        "  if (!(typeof input.diametro_destino === 'number' && input.diametro_destino > 0)) return INVALID_INPUT { field: 'diametro_destino' }",
-        "  // DELEGADO al reflejo JS: el escalado por superficie es aritmetica pura (masa por diametro, resto por area) — sin turno LLM.",
-        "  resp = await publishAndWait('escandallo.escalar.request', {",
-        "    project_id: input.project_id, receta_id: input.receta_id, lineas: input.lineas,",
-        "    diametro_origen: input.diametro_origen, diametro_destino: input.diametro_destino,",
-        "    correlation_id: input.correlation_id",
-        "  }, { timeout_ms: 8000 })",
-        "  RETORNA resp   // { status, data: { receta_id, diametro_origen, diametro_destino, factor_masa, factor_area, lineas_escaladas, rinde, coste_total, coste_unidad, lineas_sin_precio, fuentes_precios } }"
-      ],
-      "reglas_clave": [
-        "CONVERSOR PURO: no muta la receta ni persiste. El coste escalado es derivacion transitoria; persistirlo = invocar costear con persistir=true.",
-        "MASA escala por DIAMETRO (factor = d2/d1); el resto por AREA (factor = (d2/d1)^2). Auto-detecta masa por nombre/ref que contenga 'masa'.",
-        "El rinde NO escala con el diametro (una pizza sigue siendo 1 a 33 cm y a 28 cm) — solo escalan las cantidades de los ingredientes.",
-        "Cero invencion: lo que no tiene precio queda en lineas_sin_precio, no se inventa."
-      ],
-      "errores_posibles": [
-        "INVALID_INPUT",
-        "RESOURCE_NOT_FOUND",
-        "UPSTREAM_TIMEOUT",
-        "UPSTREAM_UNREACHABLE",
-        "UNKNOWN_ERROR"
-      ]
-    }
-  },
-  "transporte": {
-    "entrada": "reflejo RPC via ui_handlers (module.json) — las 5 operaciones se conducen por ui/request/escandallo/<accion>; transporte.rpc vacio a proposito (los topics reales escandallo.*.request tienen 3 segmentos y rompen el parser del generador).",
-    "rpc": [],
-    "salida": [
-      "escandallo.coste.calculado"
-    ],
-    "qos": "publishAndWait (request/response correlado) en cada operacion; timeout 8s"
-  },
-
-  "ui": {
-    "_doc": "Schema de panel del generador schema->UI (BlueprintForm). Las 4 operaciones del modulo con sus args reales del contrato; el evento escandallo.coste.calculado refresca la zona DATOS (declarada en F6½, consumida por F7). Acciones simples (costear, recalcular_*) porque el RPC real del bus es escandallo.<accion>.request y el wrapper mqttRequest('escandallo', '<accion>') emite ui/request/escandallo/<accion> — transporte.rpc VACIO a proposito (los topics escandallo.*.request tienen 3 segmentos y rompen el parser de deriveZones).",
-    "ops": {
-      "costear": {
-        "titulo": "Costear receta",
-        "descripcion": "Coste total + coste por porcion + desglose por ingrediente, desde catalogo / sub-recetas / Mercadona. Determinista en el reflejo; el freno valida procedencia y coherencia antes de persistir.",
-        "args": [
-          {
-            "nombre": "receta_id",
-            "tipo": "string",
-            "required": true,
-            "descripcion": "Id de la receta a costear (alternativa a lineas+rinde)."
-          },
-          {
-            "nombre": "persistir",
-            "tipo": "boolean",
-            "required": false,
-            "descripcion": "Persistir el coste en la receta (default true si receta_id)."
-          }
-        ]
-      },
-      "recalcular_siguiente": {
-        "titulo": "Costear siguiente pendiente",
-        "descripcion": "Costea UNA receta pendiente por llamada (orden topologico, reanudable) y reporta cuantas faltan. De una en una, nunca se corta el turno."
-      },
-      "recalcular_lote": {
-        "titulo": "Costear lote pendiente",
-        "descripcion": "Costea TODAS las recetas pendientes en UNA llamada (batch, orden topologico, sin navegar Mercadona)."
-      },
-      "escalar": {
-        "titulo": "Escalar receta por superficie",
-        "descripcion": "Re-costea una receta a otro diametro: la masa escala por diametro (factor d2/d1), el resto por area (factor (d2/d1)^2). Conversor puro — no persiste.",
-        "args": [
-          {
-            "nombre": "receta_id",
-            "tipo": "string",
-            "required": true,
-            "descripcion": "Id de la receta a escalar (alternativa a lineas)."
-          },
-          {
-            "nombre": "diametro_origen",
-            "tipo": "number",
-            "required": false,
-            "descripcion": "Diametro de origen en cm (default 33)."
-          },
-          {
-            "nombre": "diametro_destino",
-            "tipo": "number",
-            "required": true,
-            "descripcion": "Diametro destino en cm (p.ej. 28)."
-          }
-        ]
-      },
-      "validar": {
-        "titulo": "Validar costeo",
-        "descripcion": "Freno (reflejo): valida un costeo por PROCEDENCIA (cada precio trazable a mercadona/catalogo/sub_receta/manual) + COHERENCIA (valor=cantidad×precio, total=Σlineas, unidad=total/rinde)."
-      }
-    },
-    "datos": {
-      "op": "costear",
-      "titulo": "Ultimo costeo",
-      "refresh_on": ["escandallo.coste.calculado"],
-      "columnas": ["coste_total", "coste_unidad", "lineas_detalle", "fuentes_precios"]
     }
   },
   "trabajo_pendiente": [
-    {
-      "id": "frontend_escalado_superficie",
-      "estado": "cerrado",
-      "descripcion": "F7 COMPLETADA y verificada en prod (2026-08-20, PR #318 + deploy 15:35). El store escandallo.ts conoce 'escalar' (accion escalarReceta(recetaId, diametroDestino) via mqttRequest escandallo.escalar.request) y el panel EscandalloPanel.svelte expone la 3a vista 'Escalar por superficie'. Verificado: el texto 'Escalar por superficie' esta en el bundle frontend/build/client/_app/immutable/chunks/DfCQ5lmt.js. Vista de escalado en produccion."
-    },
     {
       "id": "reactividad_via_runtime_blueprint",
       "estado": "abierto",

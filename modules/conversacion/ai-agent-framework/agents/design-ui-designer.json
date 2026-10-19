@@ -1,0 +1,28 @@
+{
+  "name": "design-ui-designer",
+  "description": "Expert UI designer specializing in visual design systems, component libraries, and pixel-perfect interface creation. Creates beautiful, consistent, accessible user interfaces that enhance UX and reflect brand identity",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/design-ui-designer.md",
+  "metadata": {
+    "domain": "design",
+    "tags": [
+      "design",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "design",
+    "display_name": "UI Designer",
+    "emoji": "🎨",
+    "vibe": "Creates beautiful, consistent, accessible interfaces that feel just right."
+  }
+}

@@ -182,30 +182,9 @@ class VerificadorVisualModule extends ModuloHibridoReflejo {
       const consoleErrors = [], pageErrors = [];
       page.on('console', m => { try { if (m.type() === 'error') consoleErrors.push(m.text()); } catch (_) {} });
       page.on('pageerror', e => { try { pageErrors.push(e.message); } catch (_) {} });
-      // ── CÓMO SE CARGA EL HTML (fix 1.4.0) ──────────────────────────────────────────────
-      // `page.setContent` SE CUELGA SIEMPRE con obscura: (a) su vía rápida es la llamada CDP
-      // `Page.setDocumentContent`, que obscura NO implementa (Protocol error: Unknown Page method),
-      // y (b) la vía de reserva de puppeteer-core navega a un data: URL esperando eventos de ciclo
-      // de vida que obscura NO emite. Resultado mordido en vivo: TODA verificación moría en el
-      // timeout de 15 s → `render_error` → el freno duro de carta-digital (422) dejaba la carta SIN
-      // publicar y SIN republicar, con el bundle estático viejo en la web (the-pirate: index.html
-      // del 14-oct servido mientras la carta ya había cambiado). Es un fallo de los OJOS, no del
-      // diseño: la misma carta miente "rota".
-      // La vía que SÍ completa (probada contra obscura 0.2-0.3 s): abrir about:blank —eso sí emite
-      // domcontentloaded— y ESCRIBIR el documento con document.write. Sin límite de tamaño
-      // (verificado hasta 6 MB; el data: URL de reserva se rompe ya a ~800 KB) y sin depender del
-      // ciclo de vida. El asentamiento de 300 ms deja correr los scripts e imágenes antes de medir.
-      await page.goto('about:blank', { waitUntil: 'domcontentloaded', timeout: this.config.timeout_ms });
-      await page.evaluate(h => { document.open(); document.write(h); document.close(); }, html);
-      await new Promise(r => setTimeout(r, 300));
+      await page.setContent(html, { waitUntil: 'networkidle0', timeout: this.config.timeout_ms });
       const dom = await page.evaluate(() => {
         const de = document.documentElement;
-        // ⚠️ obscura NO aplica CSS: getComputedStyle() devuelve '' y un <div> con width:3000px se
-        // mide a 100px (no hay CSSOM ni layout real) → cualquier medida de anchura que tomemos aquí
-        // sería inventada. Los ángulos que dependen del layout (overflow horizontal/móvil y el a11y
-        // de tamaño/contraste) quedan CIEGOS con esta engine: se miden y no disparan nunca.
-        // Lo que el ojo SÍ verifica de verdad: errores de consola/JS, página en blanco, imágenes rotas.
-        // Medir borde derecho en vez de scrollWidth NO arregla nada (probado: el div sigue a 100px).
         let imgRoto = 0;
         for (const img of Array.from(document.images)) if (img.complete && img.naturalWidth === 0) imgRoto++;
         return {

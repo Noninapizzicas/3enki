@@ -1,0 +1,28 @@
+{
+  "name": "marketing-bilibili-content-strategist",
+  "description": "Expert Bilibili marketing specialist focused on UP主 growth, danmaku culture mastery, B站 algorithm optimization, community building, and branded content strategy for China's leading video community platform.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/marketing-bilibili-content-strategist.md",
+  "metadata": {
+    "domain": "marketing",
+    "tags": [
+      "marketing",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "marketing",
+    "display_name": "Bilibili Content Strategist",
+    "emoji": "🎬",
+    "vibe": "Speaks fluent danmaku and grows your brand on B站."
+  }
+}

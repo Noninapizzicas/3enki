@@ -1,157 +1,211 @@
 {
-  "schema": "blueprint-interfaz-v2",
+  "_doc": "Blueprint de carta-digital (HÍBRIDO: proyector JS + esta mitad LLM). Es el ESTUDIO de la carta digital cara-cliente. Sin agentes: los ESPECIALISTAS (copywriter, marketing, director de arte, curador visual) son PERSONAS que el LLM de la página ENCARNA, guiado por estos cajones. El blueprint NUNCA toca fs: lee por la puerta de los dueños (carta-manager, carta-marketing, contenido) y persiste por el reflejo de contenido. El píxel/audio lo produce el LÍDER (media.generar), nunca el LLM.",
   "id": "carta-digital",
-  "version": "blueprint-2.0.0",
-  "moduleId": "carta-digital",
-  "titulo": "Carta digital: el escaparate público (PWA). El jefe DECLARA el config del canal (dominio + opciones de checkout), REVISA el dictamen visual (preview = el HTML real que verá el cliente, iframe srcdoc) y EJECUTA la transición PUBLICAR (hornea el bundle estático que ve el público entero). Proyector, no custodio: la carta (carta-manager), la marca (carta-marketing) y el contenido se beben — lo único que posee es el config del canal.",
-  "_doc": "Blueprint de INTERFAZ (blueprint-interfaz-v2) de la cara del JEFE del módulo carta-digital (pizzepos v2.24.0, PROYECTOR sin estado, gemelo de productos). Vive junto al panel (frontend/src/lib/modules/carta-digital/) por decisión de ciclo v2. La lente de roles consolidada vive en modules/pizzepos/carta-digital/esquema-jefe/ (pasada-1, pasada-2-diseccion, anatomia-eventos-elementos, esquema.md). Verificaciones de código: modules/pizzepos/carta-digital/index.js (589 líneas leídas). Reemplaza al blueprint híbrido blueprint-1.4.0 (cajones agénticos aparcados — el módulo es reflejo determinista desde v2.x). El panel VIEJO de 3 zonas (IdentidadZone/OpcionesZone/CartaCompuestaZone) sobrevive junto al nuevo panel del jefe: consumidores externos verificados (ContenidoPanel importa cartaPublica/loadCartaPublica/initCartaDigitalSubscriptions de $lib/stores/carta-digital — sin tocar).",
-  "eventos_publicados": [
-    "cartadigital.publicado",
-    "cartadigital.config.actualizada",
-    "cartadigital.diseno.actualizada",
-    "cartadigital.carta_publica.actualizada"
-  ],
-  "eventos_que_escucho": [
-    "cartadigital.config.actualizada",
-    "cartadigital.publicado",
-    "cartadigital.diseno.actualizada",
-    "cartadigital.carta_publica.actualizada"
-  ],
-  "transporte": {
-    "entrada": "reflejo RPC vía ui_handlers (module.json, dominio 'cartadigital'): las 6 operaciones se conducen por ui/request/cartadigital/<accion>; la capa de request de la UI emite mqttRequest('cartadigital', accion, payload). El módulo TAMBIÉN expone RPC de bus para cajones (cartadigital.validar/guardar_diseno/publicar .request) — el panel usa SOLO ui_handlers.",
-    "rpc": [],
-    "salida": [
-      "cartadigital.publicado",
-      "cartadigital.config.actualizada",
-      "cartadigital.diseno.actualizada",
-      "cartadigital.carta_publica.actualizada"
-    ],
-    "qos": "publishAndWait (request/response correlado) en cada ui_handler; timeout 10-30s (publicar renderiza y verifica con Chromium: usar timeout 30s)"
+  "extends_blueprint_abstract": "subsistema-recetario.modulo-base",
+  "version": "blueprint-1.4.0",
+  "_v1_4_changelog": "v1.4.0 (2026-06-29): ACOPLE de lentes-diseno (base compartida del sistema). disenar_carta_digital consulta lentes.obtener.request (seleccion HIBRIDA: tarea->rutas o nombres) entre LEER y PENSAR -> el LLM ADOPTA la lente que toca (tokens/jerarquia/motion/marca) al componer tema_css + card_template, en vez de improvisar slop generico. Las 8 lentes (COMPLETAS) las sirve el modulo lentes-diseno por el bus.",
+  "_v1_3_changelog": "v1.3.0 (skill blueprint-agentico): EL FRENO completo en disenar_carta_digital. El proyector ya validaba el card_template al guardar, pero el contrato estaba incompleto (solo {{id}}/{{nombre}}/data-accion). Ahora _checkDiseno exige el nucleo funcional+legal: {{id}} {{nombre}} {{precio}} {{alergenos}} {{add_label}} + hooks data-accion detalle/add + sin JS inline. disenar_carta_digital pasa el diseno por cartadigital.validar.request en bucle (max 3, reprompt con el slot/hook que falta) ANTES de guardar; guardar RE-VALIDA como gate inquebrantable (422). Mata el diseno 'listo' sin precio (carta rota), sin alergenos (ilegal 1169/2011) o sin boton de pedir.",
+  "_v1_2_changelog": "v1.2.0 (2026-06-26): FIX mismo bug de desenvuelto que carta-marketing generar_copy. Los especialistas (redactar_descripcion/redactar_gancho/generar_imagen) hacian localizar(product_id, carta.productos) con carta PELADO (carta.get devuelve { status, data:{ productos } }) -> nunca encontraban el producto -> RESOURCE_NOT_FOUND. Ahora carta.data.productos y perfil.data.voz / perfil.data.visual / marca.data.visual. El invariante general vive ahora en el padre (disciplina 8b_lee_el_resultado_por_su_envoltorio).",
+  "_temperatura_doc": "Pagina CREATIVA cara-cliente: el LLM ENCARNA a copywriter/marketing/director de arte para enriquecer cada producto (descripcion, gancho, diseno) -> caliente. Un pelin menos que carta-marketing (0.85) porque enriquece productos concretos, no inventa la marca. ai-gateway la usa como default del turno.",
+  "temperatura": 0.75,
+  "_v1_0_changelog": "v1.0.0 (2026-06-15): nace el blueprint de carta-digital. Recoge el trabajo FUZZY de la página (enriquecimiento por especialistas) que antes estaba mal ubicado en contenido (huérfano: contenido no tiene página). carta-digital es la página donde vive el ContenidoPanel y los botones ✍️/🎨, así que aquí cargan los cajones. contenido queda como REFLEJO PURO (almacén). Hallazgo de auditoría nonina 2026-06-15.",
+  "language": "es",
+  "rol": "Estudio de la carta DIGITAL (PWA cara-cliente). El proyector (index.js, JS) LEE y proyecta la carta pública (get_carta_publica) + sirve la config del canal. Esta mitad LLM ENRIQUECE cada producto encarnando a los especialistas (copywriter/marketing/director de arte/curador) y delega TODA persistencia al reflejo de contenido. El POS no lo usa; es el canal de presentación online.",
+  "roster_especialistas": {
+    "_doc": "Cada cajón fuzzy lo ejecuta el LLM ENCARNANDO una persona. brief_especialista la concreta ('tono irónico de barrio', 'registro Michelin'). La persona MATIZA la voz de marca, no la sustituye.",
+    "copywriter":      { "cajon": "redactar_descripcion", "produce": "descripción del plato en la voz de marca", "motor": "ninguno (texto)" },
+    "marketing":       { "cajon": "redactar_gancho",      "produce": "reclamo/etiqueta corta (promo, 'el más pedido', etc.)", "motor": "ninguno (texto)" },
+    "director_de_arte":{ "cajon": "generar_imagen",       "produce": "prompt visual → foto del plato", "motor": "media.generar (LÍDER)" },
+    "disenador_web":   { "cajon": "disenar_carta_digital", "produce": "el LOOK inmersivo del proyecto (tema_css + card_template)", "motor": "ninguno (HTML/CSS)" },
+    "curador_visual":  { "cajon": "vincular_imagen",      "produce": "a qué producto va una imagen subida + su alt", "motor": "ninguno (matching)" },
+    "sound_designer":  { "cajon": "(reservado)",          "produce": "audio/música ambiente", "motor": "media.generar (falta motor audio)" }
   },
-  "ui": {
-    "_doc": "Panel de la CARA DEL JEFE del escaparate. Composición 3 capas (esquema-jefe): INFORMARSE (config vigente + diseño aplicable + cinta de la proyección + PREVIEW dictamen visual) → DECLARAR (editor-bloque config del canal, 1 llamada update_config) → TRANSICIÓN (publicar con confirmador-nombrado). Jefe-primero: el preview y publicar arriba porque son la decisión; las palancas, debajo. La UI no compone nada: el HTML es dictamen del módulo (mismo generateStaticHTML que ve el cliente).",
-    "ops": {
-      "update_config": {
-        "titulo": "Declarar config del canal",
-        "descripcion": "LA DECLARACIÓN (jefe): dominio_publico + opciones_visualizacion del canal (whatsapp_telefono, moneda, mensaje_pedido, pago_online...). Merge profundo: solo lo enviado cambia, el resto se PRESERVA (L572-576). Responde 200 = config COMPLETO (dictamen). Branding/productos NO se guardan aquí: se beben.",
-        "rol": "jefe",
-        "forma": "editor-bloque",
-        "senal_pareada": "cartadigital.config.actualizada (L579)",
-        "args": [
-          { "nombre": "campos", "tipo": "json", "required": true, "descripcion": "Solo lo del canal. Ej: {\"dominio_publico\":\"https://pizzeria.es\",\"opciones_visualizacion\":{\"whatsapp_telefono\":\"+34600600600\",\"moneda\":\"€\",\"mensaje_pedido\":\"¡Hola! Quiero pedir:\"}}" }
-        ]
-      },
-      "publicar": {
-        "titulo": "Publicar la carta (el público la ve)",
-        "descripcion": "LA TRANSICIÓN (jefe): hornea proyección+diseño en el bundle estático, auto-activa la feature www (best-effort) y despliega a storage/www → Caddy lo sirve en /<ns>/<slug>. Frenos propios: guard de proyecto activo (412 PRECONDITION_FAILED si el objetivo no es el último activado), freno de render (422 si el verificador mira y sale roto o overflow_movil — es una PWA de móvil). ESTÁTICO: cada cambio exige volver a publicar — el aviso lo dice.",
-        "rol": "jefe",
-        "forma": "confirmador-nombrado (modal que NOMBRA qué y a quién afecta: «publica AHORA — el público entero ve esta versión»)",
-        "senal_pareada": "cartadigital.publicado { project_id, slug, productos, imagenes } (L437)"
-      },
-      "get_config": {
-        "titulo": "Ver config del canal",
-        "descripcion": "Informe del canal vigente. SIN 404: si no hay fichero válido responde el default {_version:'1.0', dominio_publico:null, opciones_visualizacion:{}} — «sin configurar» es estado NOMBRADO, no error (INV2).",
-        "rol": "neutro",
-        "forma": "cinta-estado + informe (alimenta el editor-bloque)"
-      },
-      "get_diseno": {
-        "titulo": "Ver diseño aplicable",
-        "descripcion": "El LOOK que compuso Enki para el proyecto (card_template + tema_css, persistido vía cartadigital.guardar_diseno.request con re-validación del contrato de slots). Informe-corto, no editable en el panel del jefe.",
-        "rol": "neutro",
-        "forma": "informe-corto",
-        "senal": "cartadigital.diseno.actualizada (L237)"
-      },
-      "preview": {
-        "titulo": "Ver como el cliente",
-        "descripcion": "DICTAMEN VISUAL: genera el MISMO generateStaticHTML que ve el cliente (variante suelta → checkout WhatsApp), inlinea las imágenes como data: URI y NO escribe nada (L494-538). Respuesta 200 { html, productos, extras_sin_precio, aviso_extras? } → iframe srcdoc. El jefe REVISA antes de publicar.",
-        "rol": "neutro",
-        "forma": "PREVISU-dictamen visual (iframe srcdoc del HTML real, no maqueta)",
-        "errores": "404 RESOURCE_NOT_FOUND sin carta asignada al canal (estado nombrado: «asigna una carta al canal digital en tarifas») · 503 fuentes caídas"
-      },
-      "get_carta_publica": {
-        "titulo": "Carta pública (lo que consume la PWA)",
-        "descripcion": "UTILIZACIÓN-ANOTADA: la proyección al vuelo que bebe la PWA del cliente (mapping canal→carta por tarifas, precios, alérgenos). FUERA de la captura del panel-jefe: en el panel solo existe como DATO DE FONDO de la cinta (nº productos, extras sin precio) — su cara real es la PWA.",
-        "rol": "utilizacion-anotada",
-        "forma": "fuera del panel-jefe: la cara del cliente es la PWA desplegada (/public/<ns>/<slug>)",
-        "errores": "404 sin carta asignada al canal · 503 fuentes caídas"
-      }
+  "bebe_de": {
+    "carta-manager":   "carta.get — el producto a enriquecer (nombre, ingredientes). Para trabajar FIEL, sin inventar.",
+    "carta-marketing": "carta-marketing.get_perfil — la identidad de marca (voz + visual). El especialista escribe/pinta EN ella.",
+    "contenido":       "contenido.get/set/add_imagen — el ALMACÉN (reflejo). LEE el estado actual; PERSISTE por su puerta.",
+    "media-generator": "media.generar — el LÍDER (provider-agnóstico). El director de arte le pide la imagen; el líder la renderiza."
+  },
+  "eventos_publicados": [
+    "carta-digital.redactar_descripcion.response", "carta-digital.redactar_gancho.response",
+    "carta-digital.generar_imagen.response", "carta-digital.vincular_imagen.response",
+    "carta-digital.publicar.response"
+  ],
+  "eventos_que_escucho": [],
+  "invariantes": [
+    "El LLM NUNCA toca fs: entra por la puerta del reflejo dueño (carta.get / get_perfil / contenido.*).",
+    "NO INVENTA: solo afirma lo que LEER trajo (nombre + ingredientes reales). Nada de alérgenos/orígenes/premios no constatados.",
+    "EN LA MARCA: usa marca.voz (texto) y marca.visual (imagen). El brief matiza, no sustituye.",
+    "El asset (píxel/audio) lo produce el LÍDER (media.generar), NO el LLM. Si el líder no da asset (NO_MOTOR/PERMISSION_DENIED), PROPAGA el error — NO finjas una imagen ni afirmes éxito sin evento.",
+    "UNA unidad por llamada (un producto, una imagen). Para varios, repetir o bucle de página."
+  ],
+  "operaciones": {
+    "redactar_descripcion": {
+      "_es_fuzzy": true,
+      "_especialista": "COPYWRITER",
+      "input": "{ project_id (req), product_id (req), brief_especialista?, carta_id? }",
+      "pseudocodigo": [
+        "async redactar_descripcion(in):",
+        "  // 1. CONTRATO",
+        "  if (!in.project_id || !in.product_id) return INVALID_INPUT",
+        "  // 2. LEER (puertas — nunca fs)",
+        "  carta    = await publishAndWait('carta.get.request', { project_id: in.project_id, carta_id: in.carta_id })",
+        "  perfil   = await publishAndWait('carta-marketing.get_perfil.request', { project_id: in.project_id })   // best-effort",
+        "  actual   = await publishAndWait('contenido.get.request', { project_id: in.project_id, product_id: in.product_id })",
+        "  producto = localizar(in.product_id, carta.data.productos); if (!producto) return RESOURCE_NOT_FOUND   // .data: carta.get devuelve { status, data:{ productos } }",
+        "  // 3. PENSAR — COPYWRITER(brief) en perfil.data.voz (la marca esta en perfil.data), sin inventar, 1-2 frases",
+        "  descripcion = <el LLM la redacta>",
+        "  // 4. GUARDAR (reflejo) — EMITIR (contenido.actualizado) lo hace el reflejo",
+        "  return await publishAndWait('contenido.set.request', { project_id: in.project_id, product_id: in.product_id, parche: { descripcion } })"
+      ],
+      "reglas_clave": [
+        "EN la voz de marca (marca.voz: tono/registro/si/no). Si no hay marca, tono neutro apetecible + sugiere completar marca.",
+        "NO inventar: solo nombre + ingredientes reales del producto. Sin precio (lo pone la carta).",
+        "Breve: 1-2 frases apetecibles, coherentes con marca.publico."
+      ],
+      "errores_posibles": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"]
     },
-    "datos": {
-      "op": "get_config",
-      "titulo": "Config del canal (informe)",
-      "refresh_on": ["cartadigital.config.actualizada"],
-      "columnas": ["_version", "dominio_publico", "opciones_visualizacion"]
+    "redactar_gancho": {
+      "_es_fuzzy": true,
+      "_especialista": "MARKETING",
+      "input": "{ project_id (req), product_id (req), brief_especialista?, carta_id? }",
+      "pseudocodigo": [
+        "async redactar_gancho(in):",
+        "  if (!in.project_id || !in.product_id) return INVALID_INPUT",
+        "  carta  = await publishAndWait('carta.get.request', { project_id: in.project_id, carta_id: in.carta_id })",
+        "  perfil = await publishAndWait('carta-marketing.get_perfil.request', { project_id: in.project_id })",
+        "  producto = localizar(in.product_id, carta.data.productos); if (!producto) return RESOURCE_NOT_FOUND   // .data: carta.get devuelve { status, data:{ productos } }",
+        "  // PENSAR — MARKETING: un reclamo CORTO (etiqueta/promo), en la voz, sin prometer lo que no hay",
+        "  gancho = <el LLM lo redacta: 2-5 palabras, p.ej. 'El más pedido' / 'Receta de la casa'>",
+        "  // GUARDAR — va al campo interaccion/etiqueta del contenido (puerta extensible set)",
+        "  return await publishAndWait('contenido.set.request', { project_id: in.project_id, product_id: in.product_id, parche: { interaccion: { gancho } } })"
+      ],
+      "reglas_clave": [
+        "MUY corto (etiqueta, no párrafo). En la voz de marca.",
+        "NO prometas lo que no consta (ni 'sin gluten' ni 'el mejor' sin base). Honesto."
+      ],
+      "errores_posibles": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UPSTREAM_UNREACHABLE"]
     },
-    "roles": {
-      "update_config": "jefe",
-      "publicar": "jefe",
-      "get_config": "neutro",
-      "get_diseno": "neutro",
-      "preview": "neutro",
-      "get_carta_publica": "utilizacion"
+    "generar_imagen": {
+      "_es_fuzzy": true,
+      "_especialista": "DIRECTOR_DE_ARTE",
+      "input": "{ project_id (req), product_id (req), brief_especialista?, opciones?, carta_id? }",
+      "pseudocodigo": [
+        "async generar_imagen(in):",
+        "  if (!in.project_id || !in.product_id) return INVALID_INPUT",
+        "  carta  = await publishAndWait('carta.get.request', { project_id: in.project_id, carta_id: in.carta_id })",
+        "  perfil = await publishAndWait('carta-marketing.get_perfil.request', { project_id: in.project_id })",
+        "  producto = localizar(in.product_id, carta.data.productos); if (!producto) return RESOURCE_NOT_FOUND   // .data: carta.get devuelve { status, data:{ productos } }",
+        "  // PENSAR — DIRECTOR DE ARTE: redacta el PROMPT visual (plato real + perfil.data.visual), sin inventar",
+        "  prompt = <p.ej. 'Fotografía cenital de {producto.nombre}: {ingredientes_reales}, estilo {perfil.data.visual.estilo}, paleta {perfil.data.visual.colores}, luz natural, apetecible'>",
+        "  // GENERAR — el LÍDER (provider-agnóstico). Propaga su error TAL CUAL.",
+        "  gen = await publishAndWait('media.generar.request', { tipo: 'imagen', prompt, opciones: in.opciones || {} }, { timeout_ms: 95000 })",
+        "  if (!gen || gen.status >= 400) return gen.error   // NO_MOTOR | PERMISSION_DENIED | UPSTREAM_* — NO finjas imagen",
+        "  // GUARDAR — el reflejo nombra canónico; el LLM aporta el alt accesible",
+        "  alt = <el LLM redacta el alt del plato>",
+        "  return await publishAndWait('contenido.add_imagen.request', { project_id: in.project_id, product_id: in.product_id, content: gen.data.asset_base64, ext: gen.data.ext, alt })"
+      ],
+      "reglas_clave": [
+        "El PROMPT describe el PLATO REAL (nombre + ingredientes de carta-manager). No inventes emplatados ni ingredientes.",
+        "EN la línea visual de marca (marca.visual: paleta/estilo). brief matiza el estilo fotográfico.",
+        "El asset lo da el LÍDER, NO el LLM. Si NO_MOTOR/PERMISSION_DENIED: dilo claro (falta motor/credencial), no finjas.",
+        "El reflejo nombra el fichero canónico; el LLM aporta el ALT (accesibilidad 1.1.1), no el nombre de fichero."
+      ],
+      "errores_posibles": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "NO_MOTOR", "PERMISSION_DENIED", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"]
     },
-    "flujo": [
-      {
-        "nombre": "jefe",
-        "orden": 1,
-        "ops": ["update_config", "publicar"],
-        "descripcion": "DECLARAR el canal (editor-bloque, 1 llamada update_config {campos}) y EJECUTAR la transición PUBLICAR (confirmador-nombrado con freno: si el preview da 404/errores, bloquear; el dictamen llega en la respuesta y la señal re-confirma)."
-      },
-      {
-        "nombre": "consulta",
-        "orden": 3,
-        "ops": ["get_config", "get_diseno", "preview"],
-        "descripcion": "INFORMARSE antes de decidir: config vigente (sin 404, default = «sin configurar»), el diseño de Enki aplicable, y el PREVIEW como dictamen visual (iframe srcdoc del HTML REAL) — revisar antes de publicar."
-      }
-    ],
-    "formas_jefe": {
-      "cinta_canal": {
-        "forma": "cinta-estado",
-        "rpc": "get_config {} → default sin 404 · get_carta_publica (dato de fondo: nº productos, extras_sin_precio) · get_diseno",
-        "senal": "cartadigital.carta_publica.actualizada (señal INDIRECTA del custodio: re-emite las 8 fuentes — subscribir con debounce 60ms)"
-      },
-      "editor_config_canal": {
-        "forma": "editor-bloque",
-        "rpc": "update_config { campos: { dominio_publico?, opciones_visualizacion? } } → 200 config completo",
-        "senal": "cartadigital.config.actualizada (L579)"
-      },
-      "previu_dictamen_visual": {
-        "forma": "PREVISU-dictamen visual: botón «Ver como el cliente» → iframe srcdoc con el html de preview (variante suelta, checkout WhatsApp, imágenes inlineadas)",
-        "rpc": "preview {} → { html, productos, extras_sin_precio, aviso_extras? }",
-        "senal": "re-render a demanda del jefe; 404 = estado nombrado"
-      },
-      "publicar_transicion": {
-        "forma": "confirmador-nombrado (modal: «Publica AHORA — el público entero ve esta versión» + qué hornea + frenos 412/422; default seguro si falta carta)",
-        "rpc": "publicar {} → { alojada_url, bundle_dir, productos, imagenes_copiadas, extras_sin_precio, aviso_extras?, feature_www, aviso }",
-        "senal": "cartadigital.publicado (L437)"
-      }
+    "vincular_imagen": {
+      "_es_fuzzy": true,
+      "_especialista": "CURADOR_VISUAL",
+      "input": "{ project_id (req), content (req, base64), ext (req), pista? (nombre original o lo que dijo el usuario), carta_id? }",
+      "pseudocodigo": [
+        "async vincular_imagen(in):",
+        "  if (!in.project_id || !in.content || !in.ext) return INVALID_INPUT",
+        "  carta = await publishAndWait('carta.get.request', { project_id: in.project_id, carta_id: in.carta_id })",
+        "  // PENSAR — CURADOR: resuelve a QUÉ producto va (matching pista↔productos) + redacta el alt",
+        "  { product_id } = <el LLM lo resuelve>; if (!product_id) return PREGUNTAR_AL_USUARIO   // no_inventes",
+        "  alt = <el LLM lo redacta>",
+        "  // GUARDAR — delega al reflejo (nombra canónico, persiste referencia)",
+        "  return await publishAndWait('contenido.add_imagen.request', { project_id: in.project_id, product_id, content: in.content, ext: in.ext, alt })"
+      ],
+      "reglas_clave": [
+        "NO inventes product_id: resuélvelo contra los productos reales; si no hay match claro, PREGUNTA.",
+        "El renombrado del fichero es del reflejo (canónico), no del LLM. El LLM aporta el alt (display)."
+      ],
+      "errores_posibles": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"]
+    },
+    "disenar_carta_digital": {
+      "_es_fuzzy": true,
+      "_especialista": "DISEÑADOR WEB",
+      "_doc": "Enki COMPONE el look inmersivo de la carta digital de ESTE proyecto (como carta-design compone el impreso). El RUNTIME (carrito/pedido/chat) es fijo y compartido; aquí solo se diseña la ESTÉTICA. Se acopla al runtime por el CONTRATO de slots.",
+      "input": "{ project_id (req), brief_estilo?, carta_id? }",
+      "pseudocodigo": [
+        "async disenar_carta_digital(in):",
+        "  // 1. CONTRATO",
+        "  if (!in.project_id) return INVALID_INPUT",
+        "  // 2. LEER — para que el diseño respire con la marca + el contenido real",
+        "  carta     = await publishAndWait('carta.get.request', { project_id: in.project_id, carta_id: in.carta_id })",
+        "  marca     = await publishAndWait('carta-marketing.get_perfil.request', { project_id: in.project_id })",
+        "  contenido = await publishAndWait('contenido.get.request', { project_id: in.project_id })",
+        "  // 2b. LENTES DE DISENO (base compartida del sistema · seleccion HIBRIDA): compone con la lente que toca, no con tu default generico.",
+        "  //     Por TAREA: tema/color/tipografia -> 'tema' ; movimiento/vida -> 'motion' ; tarjetas/componentes -> 'componentes'. O por NOMBRE (lentes.listar.request da el catalogo con cuando_usar).",
+        "  lentesResp = await publishAndWait('lentes.obtener.request', { tarea: <segun la peticion del usuario>, nombres: [<si eliges a mano>], request_id: uuid() }, { timeout_ms: 8000 })",
+        "  lentes = lentesResp?.data?.lentes || []   // cada una: { nombre, cuando_usar, contenido (.md COMPLETO) }. Best-effort: si no responde, lentes=[] y sigues con tu default.",
+        "  // ADOPTA esas lentes al componer tema_css + card_template: sus reglas (tokens/jerarquia/motion/marca) MANDAN sobre tu reflejo por defecto.",
+        "  // 3. PENSAR — el DISEÑADOR WEB compone, EN la identidad de marca (marca.data.visual + marca.data.voz):",
+        "  //    tema_css   = CSS inmersivo (paleta/tipografía de marca, foto-hero, ritmo relajado). Sobreescribe la semilla.",
+        "  //    card_template = HTML de UN producto, CUMPLIENDO el contrato de slots (ver reglas_clave).",
+        "  tema_css      = <el LLM lo compone>",
+        "  card_template = <el LLM lo compone, con los placeholders + data-accion>",
+        "  // 4. VALIDAR — EL FRENO (skill blueprint-agentico): el proyector juzga el card_template contra el",
+        "  //    contrato de slots. Sin precio = carta rota; sin alergenos = ILEGAL (1169/2011); sin boton = no se pide.",
+        "  intento = 0",
+        "  repeat:",
+        "    v = await publishAndWait('cartadigital.validar.request', { project_id: in.project_id, diseno: { tema_css, card_template } }, { timeout_ms: 8000 })",
+        "    if (v.data.valid) break",
+        "    intento += 1",
+        "    card_template = <re-componer anadiendo SOLO lo que v.data.errors senala: slots faltan (p.ej. {{precio}}, {{alergenos}}), hooks data-accion>",
+        "  until (intento >= 3)",
+        "  if (!v.data.valid) return UPSTREAM_INVALID_RESPONSE { message: 'el diseno no cumple el contrato de slots tras 3 intentos', hint: v.data.errors }",
+        "  // 5. GUARDAR — el proyector RE-VALIDA (gate inquebrantable) y persiste (422 si no cumple).",
+        "  return await publishAndWait('cartadigital.guardar_diseno.request', { project_id: in.project_id, diseno: { tema_css, card_template } })",
+        "  // 6. (el proyector emite cartadigital.diseno.actualizada → el export/PWA usa el nuevo look)"
+      ],
+      "reglas_clave": [
+        "CONTRATO DE SLOTS (obligatorio en card_template): placeholders {{id}} {{nombre}} {{precio}} {{visual}} {{descripcion}} {{gancho}} {{alergenos}} {{ingredientes}} {{add_label}}. El runtime los rellena (no los inventes ni los quites).",
+        "HOOKS de interacción (obligatorios): el elemento raíz lleva data-producto-id=\"{{id}}\" data-accion=\"detalle\"; el botón de añadir lleva data-accion=\"add\" data-producto-id=\"{{id}}\". El runtime delega los clics por ahí — NO uses onclick ni nombres de función.",
+        "El runtime PRE-RENDERIZA {{visual}} (img o placeholder), {{gancho}} (badge) y {{alergenos}} (chips): mételos como vienen, dales sitio en el layout.",
+        "EN la identidad de marca: tema_css usa marca.visual (paleta/tipografía). Inmersivo: foto grande, descripción delante, aire. NO toques el runtime (carrito/pedido/chat) — solo el look.",
+        "NO JavaScript en el card_template (el runtime lo aporta). Solo HTML + clases. El CSS va en tema_css.",
+        "FRENO: el card_template pasa por cartadigital.validar.request antes de guardar (loop max 3, corrige el slot/hook que el error senala). Nucleo OBLIGATORIO funcional+legal: {{id}} {{nombre}} {{precio}} {{alergenos}} {{add_label}} + hooks data-accion detalle/add. guardar RE-VALIDA como gate. Sin precio = carta rota; sin alergenos = ilegal."
+      ],
+      "errores_posibles": ["INVALID_INPUT", "UPSTREAM_INVALID_RESPONSE", "INVALID_DESIGN", "RESOURCE_NOT_FOUND", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"]
+    },
+    "publicar": {
+      "_es_fuzzy": false,
+      "_doc": "DEPLOY REAL (delega al reflejo). DOS CAMINOS (no excluir): (1) ALOJADA — el reflejo genera el bundle estático (proyección + diseño) y lo ESCRIBE en storage/www; Caddy lo sirve en /<ns>/<slug>/ por el symlink que crea project-manager al activar la feature `www` (el reflejo la AUTO-ACTIVA vía project.ensure-feature antes de escribir, v2.23). ES ESTÁTICO, no al vuelo: cada cambio (descripción/imagen/diseño) requiere VOLVER A publicar. (2) SIN ALOJAMIENTO — export estático con carta-digital/export-cli.js para subir a cualquier hosting; pedido y asistente por WhatsApp. NO finjas el deploy: reporta lo que devuelve el reflejo (incluido el aviso sobre la feature `www`).",
+      "input": "{ project_id (req), slug? }",
+      "pseudocodigo": [
+        "async publicar(in):",
+        "  // 1. CONTRATO",
+        "  if (!in.project_id) return INVALID_INPUT",
+        "  // 2. DEPLOY — el REFLEJO proyecta + aplica diseño + generateStaticHTML + escribe el bundle.",
+        "  //    Propaga su error TAL CUAL (404 sin carta, 502/503 fs). NO finjas éxito sin respuesta.",
+        "  r = await publishAndWait('cartadigital.publicar.request', { project_id: in.project_id, slug: in.slug })",
+        "  if (!r || r.status >= 400) return r?.error || UPSTREAM_UNREACHABLE",
+        "  // 3. REPORTAR — la URL + el aviso del reflejo (estático, feature tienda). Tal cual.",
+        "  return { status: 200, data: r.data }   // { alojada_url, bundle_dir, productos, imagenes_copiadas, aviso }"
+      ],
+      "reglas_clave": [
+        "El DEPLOY lo hace el REFLEJO (escribe el bundle estático). El LLM NO escribe fs; solo delega y reporta.",
+        "NO digas 'al vuelo': es ESTÁTICO. Transmite el aviso del reflejo (cada cambio requiere republicar; si /<ns>/<slug> da 404, hay que activar la feature `www`).",
+        "Si el usuario quiere la PWA SUELTA (sin backend), indícale el export-cli (carta-digital/export-cli.js) — ahí pedido y asistente van por WhatsApp."
+      ],
+      "errores_posibles": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UPSTREAM_INVALID_RESPONSE", "UPSTREAM_UNREACHABLE"]
     }
   },
-  "_lente_roles": {
-    "agente": "ciclo-carta-digital v2",
-    "metodo": "esquematizador-jefe (modules/pizzepos/carta-digital/esquema-jefe/ — pasada-1, pasada-2-diseccion, anatomia-eventos-elementos, esquema.md)",
-    "arbitro": "¿DECLARA config del canal / EJECUTA la transición pública → jefe · ¿lo consume el CLIENTE en el canal → utilizacion · ¿SOLO lee/compone lectura sin persistir ni transicionar → neutro",
-    "veredicto": "6/6 ops juzgadas: jefe(2) update_config (LA DECLARACIÓN del canal) + publicar (LA TRANSICIÓN — lo ve el público entero) · neutro(3) get_config (informe del canal) + get_diseno (el look de Enki) + preview (PREVISU-dictamen visual) · utilizacion(1) get_carta_publica (la PWA del cliente lo consume; en el panel solo es dato de fondo de la cinta)",
-    "senales": "4 señales reales de salida, verificadas en index.js (la premisa «sin publishes» del module.json era hueco del manifest — publishes[] no lo declaraba): cartadigital.config.actualizada (L579, tras update_config) · cartadigital.publicado (L437, tras publicar {project_id, slug, productos, imagenes}) · cartadigital.carta_publica.actualizada (L161-166, _reemitir: señal INDIRECTA del custodio — re-emite carta.actualizada/carta.editada/carta.borrada/contenido.actualizado/marketing.perfil.actualizado → suscribir con debounce 60ms y re-proyectar) · cartadigital.diseno.actualizada (L237, tras guardar_diseno por bus). Doble confirmación como entrega/masa: dictamen en la respuesta RPC + señal que re-lee (nunca recarga, nunca estado optimista).",
-    "moneda": "op.moneda es SÍMBOLO display que pinta la PWA ('€' default), no cifra (INV6): la UI lo edita como texto corto, sin céntimos ni conversión. Los precios de la carta NO viven aquí (los retira el jefe en otros paneles: carta-manager/ingredientes/tarifas).",
-    "invariante_del_panel": "sin 404 de lectura de config: get_config SIEMPRE responde (default {_version:'1.0', dominio_publico:null, opciones_visualizacion:{}}) — «sin configurar» es estado nombrado. SÍ hay 404 NOMBRADO de proyección: preview/get_carta_publica/publicar responden 404 RESOURCE_NOT_FOUND sin carta asignada al canal («revisa tarifas») — estado inicial legítimo que la vista nombra y BLOQUEA publicar.",
-    "multi_tenant": "todo RPC lleva project_id (lo inyecta el caller); publicar aplica el guard del proyecto ACTIVO (412 PRECONDITION_FAILED si el objetivo no es el último project.activated — el filesystem escribe ahí): el panel muestra el nombre del proyecto en el confirmador para evitar disparar la transición sobre otro proyecto.",
-    "huecos": {
-      "pago_online": "[ABIERTO] el config soporta pago_online + pedido_endpoint y el template los honra, sin pantalla hoy: requiere backend detrás (tienda-api). Decisión del dueño. La UI NO lo pide (hueco de CONTRATO, no de captura).",
-      "programar_publicacion": "[ABIERTO] carta-scheduler vive aparte; no hay op de programación.",
-      "multi_idioma": "[ABIERTO] el config v1.0 no abre variantes por zona/idioma.",
-      "chat_ia_pwa": "[ABIERTO] el cerebro del chat es el cf-worker del escenario SUELTO (export-cli + cf-worker/deploy.js); el alojado sale con chat IA OFF a propósito — decisión de negocio."
-    },
-    "utilizacion": [
-      { "op": "get_carta_publica", "cara": "PWA del cliente final desplegada en /<ns>/<slug> (bundle estático) + cf-worker; en el panel-jefe solo alimenta la cinta (nº productos, extras sin precio)" }
-    ],
-    "panel_viejo": "El panel antiguo de 3 zonas (IdentidadZone/OpcionesZone/CartaCompuestaZone + $lib/stores/carta-digital.ts) SOBREVIVE: consumidores externos verificados (ContenidoPanel.svelte importa cartaPublica/loadCartaPublica/initCartaDigitalSubscriptions). El nuevo panel del jefe (CartaDigitalJefePanel.svelte + stores/carta-digital-jefe.ts) convive; no se toca el store $lib/stores/carta-digital.ts.",
-    "fuente_analisis": "modules/pizzepos/carta-digital/esquema-jefe/esquema.md",
-    "fecha": "2026-08-30"
-  },
-  "_verificado_en_codigo": {
-    "reflejo": "modules/pizzepos/carta-digital/index.js (2.24.0, 589 líneas): handleUpdateConfig (L568-581, ÚNICO escritor del config, merge por bloques) · handlePublicar (L472-475 → _publicarBundle L302-455: guard 412 L309-313, freno render 422 L398-408, auto-feature www L414-418, bundle a storage/www L422-435, señal publicado L437) · handleGetConfig (L564-567, default sin 404) · handleGetDiseno (L292-295) · handlePreview (L497-538, HTML real variante suelta, imágenes inlineadas, no escribe) · handleGetCartaPublica (L489-492 → _proyectarPublica L478-486, 404 sin carta L483)",
-    "senales": "index.js: config.actualizada L579 · publicado L437 · carta_publica.actualizada L161-166 (_reemitir, indirecta del custodio) · diseno.actualizada L237",
-    "errores": "400 INVALID_INPUT (falta project_id/campos) · 412 PRECONDITION_FAILED publicar (proyecto no activo) · 422 UPSTREAM_INVALID_RESPONSE publicar (render roto / overflow_movil) · 422 INVALID_DESIGN guardar_diseno (slots del contrato: CARD_TEMPLATE_AUSENTE, SLOTS_FALTAN con la lista, HOOK_DETALLE/ADD_AUSENTE, JS_EN_TEMPLATE) · 404 RESOURCE_NOT_FOUND proyección sin carta · 502/503 upstream fs"
-  }
+  "trabajo_pendiente": [
+    { "id": "deploy_frontend", "estado": "resuelto", "descripcion": "v2.2.0: publicar() es deploy real (reflejo cartadigital.publicar) → escribe el bundle; Caddy lo sirve estático por el symlink de project-manager. v2.23.0 movió el destino de storage/tienda/bundle + /shop/<slug> (feature `tienda`, legacy) al árbol libre storage/www + /<ns>/<slug> (feature `www`). Hallazgo Caddyfile 2026-06-16: la ruta estática NO pasa por el gateway, por eso la ruta on-demand era código muerto." },
+    { "id": "feature_www_auto", "estado": "resuelto", "descripcion": "v2.23.0: _publicarBundle AUTO-ACTIVA la feature `www` (project.ensure-feature.request, best-effort e idempotente) ANTES de escribir → crea el symlink /opt/enki/public/<ns>/<slug> sin paso manual, cerrando la grieta del 404-hasta-activar. Supera el antiguo feature_tienda_auto (la feature `tienda` quedó legacy con el giro a www)." },
+    { "id": "sound_designer", "estado": "espera_motor", "descripcion": "Cajón generar_audio cuando media-generator tenga motor de audio (TTS/music). La estructura de contenido ya reserva audio[]." }
+  ]
 }

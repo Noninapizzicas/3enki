@@ -1,0 +1,28 @@
+{
+  "name": "engineering-iot-fleet-engineer",
+  "description": "Expert IoT and edge fleet engineer — device provisioning and identity, MQTT/telemetry pipelines, staged over-the-air (OTA) firmware updates with rollback, edge compute, and observability across fleets of unreliable, intermittently-connected devices.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/engineering-iot-fleet-engineer.md",
+  "metadata": {
+    "domain": "engineering",
+    "tags": [
+      "engineering",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "engineering",
+    "display_name": "IoT Fleet Engineer",
+    "emoji": "📡",
+    "vibe": "A field device is a computer you can't reboot, on a network that isn't there, that you shipped a year ago. Update it carefully or brick a thousand at once."
+  }
+}

@@ -34,15 +34,13 @@ class ComanderoModule extends BaseModule {
   constructor() {
     super();
     this.name    = 'comandero';
-    this.version = '3.5.2';
+    this.version = '3.4.0';
     this.validator = null;
 
     this.pedidos              = new Map();
     this.refDisplayCache      = new Map();
     this.productosCache       = new Map();
     this.cartasProductosCache = new Map();
-    // request_id → {project_id, carta_id} de los carta.get.request en vuelo (hidratación al cargar).
-    this._cartaGetPendientes = new Map();
     // Cache local de la config de tarifas hidratado via tarifas.config.actualizada.
     // Map<project_id, { general:string|null, canales:{canal->carta_id} }>
     this.tarifasConfigPorProject = new Map();
@@ -68,13 +66,9 @@ class ComanderoModule extends BaseModule {
 
     // Pide snapshot inicial a tarifas. La respuesta llega via
     // tarifas.config.actualizada (tipo=snapshot) por cada proyecto conocido.
-    // OJO: NO es una carrera de suscripción — el loader cablea las suscripciones ANTES de onLoad
-    // (core/modules/loader.js: wireEventSubscriptions → onLoad). El hueco real es el RESPONDEDOR:
-    // en arranque en frío tarifas puede no estar cargado todavía, así que este publish se queda sin
-    // quien lo atienda. Por eso se repite en dos momentos deterministas (ver _solicitarSnapshotTarifas):
-    // core.modules.loaded.all (ya están TODOS los módulos) y project.activated (proyecto vivo).
-    // La respuesta es full-replace por proyecto: repetir la petición es idempotente.
-    this._solicitarSnapshotTarifas('onLoad');
+    // Si tarifas aun no cargo, no hay respuesta inmediata: hidrata cuando
+    // tarifas active proyectos y emita su primer cambio.
+    await this._publicarEvento('tarifas.config.solicitada', {});
 
     this.logger.info('module.loaded', {
       module:           this.name,
@@ -223,68 +217,24 @@ class ComanderoModule extends BaseModule {
 
   async onCartaActualizada(event) {
     const data    = this._unwrap(event);
-    // carta-manager publica { project_id, carta, motivo } — la carta va ENVUELTA. Antes se leía
-    // data.meta.id (undefined) → return silencioso → cartasProductosCache NUNCA se hidrataba y el
-    // precio por canal no existía (el canal caía siempre al precio base). Acepta ambas formas.
-    const carta     = data?.carta || data;
-    const cartaId   = carta?.meta?.id;
-    const productos = carta?.productos || [];
+    const cartaId = data?.meta?.id;
+    const productos = data?.productos || [];
     if (!cartaId || productos.length === 0) return;
 
-    this._cachearCarta(carta);
-  }
-
-  // Cache POR CARTA (la del canal): es lo que hace que un canal con carta propia cobre su precio.
-  _cachearCarta(carta) {
-    const cartaId = carta?.meta?.id;
-    const productos = carta?.productos || [];
-    if (!cartaId || productos.length === 0) return;
     const cartaCache = new Map();
     for (const p of productos) {
       if (p.id && p.precio !== undefined) {
         cartaCache.set(p.id, {
           nombre:     p.nombre || p.id,
           precio:     p.precio,
-          categoria:  p.categoria || p.categoria_id || null,
+          categoria:  p.categoria || null,
           estaciones: p.estaciones || null
         });
       }
     }
+
     this.cartasProductosCache.set(cartaId, cartaCache);
     this.logger.info('comandero.carta.cached', { carta_id: cartaId, productos: cartaCache.size });
-  }
-
-  // Respuesta al RPC carta.get.request que pedimos al hidratar las cartas del mapping.
-  // Si la carta es la GENERAL, además rellena productosCache: sin esto, tras un restart el POS
-  // cobraba 0 y nombraba el item con el producto_id hasta que alguien tocara la carta.
-  async onCartaGetResponse(event) {
-    const data = this._unwrap(event);
-    if (data?.status !== 200 || !data?.data) return;
-    const carta = data.data;
-    const cartaId = carta?.meta?.id || null;
-    this._cachearCarta(carta);
-
-    const pend = this._cartaGetPendientes.get(data.request_id);
-    if (pend) this._cartaGetPendientes.delete(data.request_id);
-    const project_id = pend?.project_id;
-    const general = project_id ? this.tarifasConfigPorProject.get(project_id)?.general : null;
-    if (general && cartaId === general) this._cachearCatalogoBase(carta);
-  }
-
-  // Catálogo BASE (productosCache): lo que cobra mostrador/recogida cuando el canal no tiene
-  // carta propia o el producto no está en ella.
-  _cachearCatalogoBase(carta) {
-    for (const p of (carta?.productos || [])) {
-      if (!p?.id || p.precio === undefined) continue;
-      this.productosCache.set(p.id, {
-        nombre:     p.nombre || p.id,
-        precio:     p.precio,
-        categoria:  p.categoria || p.categoria_id || null,
-        estaciones: p.estaciones || null,
-        precio_fijo: p.precio_fijo || false
-      });
-    }
-    this.logger.info('comandero.catalogo.hidratado', { productos_en_cache: this.productosCache.size });
   }
 
   async onProductoActualizado(event) {
@@ -320,55 +270,6 @@ class ComanderoModule extends BaseModule {
       tipo: data.tipo || null,
       canales_count: Object.keys(config.canales || {}).length
     });
-    this._hidratarCartasDeCanal(project_id, config);
-  }
-
-  // La petición de snapshot a tarifas se repite en tres momentos DETERMINISTAS (sin timers):
-  //   1. onLoad            — camino caliente (hot-reload): tarifas ya está cargado, responde ya.
-  //   2. core.modules.loaded.all — arranque en frío: el loader publica este evento cuando TODOS los
-  //                               módulos están cargados, así que tarifas ya existe y atiende.
-  //   3. project.activated — el proyecto acaba de activarse: tarifas ya indexó su carril.
-  // Repetir es inocuo: la respuesta es full-replace por project_id y _hidratarCartasDeCanal salta
-  // las cartas ya cacheadas.
-  _solicitarSnapshotTarifas(etapa, projectId = null) {
-    if (!this.eventBus || typeof this.eventBus.publish !== 'function') return;
-    const payload = {
-      tipo: 'snapshot',
-      correlation_id: crypto.randomUUID(),
-      timestamp: new Date().toISOString()
-    };
-    if (projectId) payload.project_id = projectId;
-    try {
-      this.eventBus.publish('tarifas.config.solicitada', payload);
-    } catch (err) {
-      this.logger?.warn?.('comandero.tarifas.solicitada.failed', { etapa, error: err?.message });
-    }
-  }
-
-  async onCoreModulesLoadedAll() {
-    this._solicitarSnapshotTarifas('modules_loaded_all');
-  }
-
-  async onProjectActivado(event) {
-    const data = event?.data || event || {};
-    if (!data.project_id) return;
-    this._solicitarSnapshotTarifas('project_activated', data.project_id);
-  }
-
-  // Las cartas de canal necesitan su cache aunque nadie las acabe de tocar (tras un restart el
-  // cache nace vacío y el canal cobraría precio base). Se piden por RPC al custodio, una vez cada una.
-  _hidratarCartasDeCanal(project_id, config) {
-    const ids = new Set([config.general, ...Object.values(config.canales || {})].filter(Boolean));
-    for (const carta_id of ids) {
-      if (this.cartasProductosCache.has(carta_id)) continue;
-      const reqId = crypto.randomUUID();
-      this._cartaGetPendientes.set(reqId, { project_id, carta_id });
-      try {
-        this.eventBus.publish('carta.get.request', { request_id: reqId, project_id, carta_id });
-      } catch (err) {
-        this.logger.warn('comandero.carta_hidratar.publish_failed', { carta_id, error: err?.message });
-      }
-    }
   }
 
   // ==========================================

@@ -1,0 +1,28 @@
+{
+  "name": "sales-outbound-strategist",
+  "description": "Signal-based outbound specialist who designs multi-channel prospecting sequences, defines ICPs, and builds pipeline through research-driven personalization — not volume.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/sales-outbound-strategist.md",
+  "metadata": {
+    "domain": "sales",
+    "tags": [
+      "sales",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "sales",
+    "display_name": "Outbound Strategist",
+    "emoji": "🎯",
+    "vibe": "Turns buying signals into booked meetings before the competition even notices."
+  }
+}

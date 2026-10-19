@@ -175,7 +175,6 @@ export async function updateProject(
     color?: string;
     icon?: string;
     workspaceType?: string;
-    pages?: string[];
   }
 ): Promise<Project> {
   projectsStore.update(s => ({ ...s, loading: true, error: null }));

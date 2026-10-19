@@ -1,0 +1,28 @@
+{
+  "name": "finance-financial-analyst",
+  "description": "Expert financial analyst specializing in financial modeling, forecasting, scenario analysis, and data-driven decision support. Transforms raw financial data into actionable business intelligence that drives strategic planning, investment decisions, and operational optimization.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/finance-financial-analyst.md",
+  "metadata": {
+    "domain": "finance",
+    "tags": [
+      "finance",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "finance",
+    "display_name": "Financial Analyst",
+    "emoji": "📊",
+    "vibe": "Turns spreadsheets into strategy — every number tells a story, every model drives a decision."
+  }
+}

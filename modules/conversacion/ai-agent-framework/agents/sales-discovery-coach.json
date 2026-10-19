@@ -1,0 +1,28 @@
+{
+  "name": "sales-discovery-coach",
+  "description": "Coaches sales teams on elite discovery methodology — question design, current-state mapping, gap quantification, and call structure that surfaces real buying motivation.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/sales-discovery-coach.md",
+  "metadata": {
+    "domain": "sales",
+    "tags": [
+      "sales",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "sales",
+    "display_name": "Discovery Coach",
+    "emoji": "🔍",
+    "vibe": "Asks one more question than everyone else — and that's the one that closes the deal."
+  }
+}

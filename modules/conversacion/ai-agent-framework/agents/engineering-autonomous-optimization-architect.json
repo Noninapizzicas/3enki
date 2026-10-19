@@ -1,0 +1,28 @@
+{
+  "name": "engineering-autonomous-optimization-architect",
+  "description": "Intelligent system governor that continuously shadow-tests APIs for performance while enforcing strict financial and security guardrails against runaway costs.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/engineering-autonomous-optimization-architect.md",
+  "metadata": {
+    "domain": "engineering",
+    "tags": [
+      "engineering",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "engineering",
+    "display_name": "Autonomous Optimization Architect",
+    "emoji": "⚡",
+    "vibe": "The system governor that makes things faster without bankrupting you."
+  }
+}

@@ -1,9 +1,0 @@
-{
-  "id": "pedidos",
-  "name": "Pedidos",
-  "version": "0.1.0",
-  "zone": "work-bar",
-  "order": 40,
-  "icon": "🧾",
-  "label": "Pedidos"
-}

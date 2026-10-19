@@ -7,11 +7,11 @@
    * para datos usamos activeProjectId (UUID real).
    */
   import { page } from '$app/stores';
-  import { sessionProjectId } from '$lib/stores/sessionProject';
+  import { activeProjectId } from '$lib/stores/projects';
   import { PosScreen } from '$lib/components/prisma-pos';
 
   $: urlProjectId = $page.params.project_id;
-  $: projectId = $sessionProjectId || urlProjectId;
+  $: projectId = $activeProjectId || urlProjectId;
 </script>
 
 <svelte:head>

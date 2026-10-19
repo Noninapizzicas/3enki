@@ -58,54 +58,7 @@ const MANIFIESTO = {
       destino: '/etc/systemd/system/enki-frontend.service',
       // ORIGIN = https://<dominio> (SvelteKit adapter-node lo exige para CSRF).
       vars: { ORIGIN: 'https://{{DOMAIN}}' }
-    },
-    // El Hermes TRABAJADOR de Enki (fusión 2026-08): api_server en :8642.
-    // Unit estática (sin vars de dominio) — el reconciliador la copia si difiere.
-    'hermes-gateway': {
-      unit: 'hermes-gateway.service',
-      plantilla: path.join(DEPLOYMENT_DIR, 'systemd', 'hermes-gateway.service'),
-      destino: '/etc/systemd/system/hermes-gateway.service',
-      vars: {}, // no depende del dominio
-      health: null // health se verifica por el API server con Bearer (ver reconcile)
     }
-  },
-
-  // Perfil del Hermes trabajador (/home/hermes/.hermes) — reconciliado desde el repo.
-  // config.yaml se RENDERIZA de plantilla preservando la key del API server;
-  // las skills de Enki se sincronizan desde .hermes/skills/enki del repo.
-  hermes_worker: {
-    home: '/home/hermes/.hermes',
-    usuario: 'hermes',
-    config_plantilla: path.join(DEPLOYMENT_DIR, 'hermes-worker', 'config.yaml.tmpl'),
-    config_destino: '/home/hermes/.hermes/config.yaml',
-    skills_origen: path.join(__dirname, '..', '.hermes', 'skills', 'enki'),
-    skills_destino: '/home/hermes/.hermes/skills/enki'
-  },
-
-  // Perfil del Hermes ADMIN (el agente conversacional, usuario admin) — clon
-  // céntrico-en-repo para VPS2 (identidad nueva). El binario se instala aparte
-  // (vps-setup.sh); aquí SOLO se reconcilian las skills/agentes desde el repo.
-  // NO se crea el usuario (admin ya existe); NO se copia config/auth/memoria
-  // de otro VPS (identidad independiente). La MEMORIA se siembra una vez como
-  // semilla desde el repo (.hermes/memory) y luego cada VPS la evoluciona solo.
-  hermes_admin: {
-    home: '/home/admin/.hermes',
-    usuario: 'admin',
-    // config de PROVIDERS compartida por el repo (provider custom → ollama/v1,
-    // deepseek-v4-flash). La key se sustituye en reconcile desde el .env vivo de
-    // Enki (NUNCA versionada; misma key que el worker). SOLO se escribe la PRIMERA
-    // vez (config destino inexistente); después cada VPS evoluciona su config.
-    config_plantilla: path.join(DEPLOYMENT_DIR, 'hermes-admin', 'config.yaml.tmpl'),
-    config_destino: '/home/admin/.hermes/config.yaml',
-    // Skills de Enki (mismas 13 que el worker) + cantera de módulos (278) + agentes.
-    skills_enki_origen: path.join(__dirname, '..', '.hermes', 'skills', 'enki'),
-    skills_enki_destino: '/home/admin/.hermes/skills/enki',
-    cantera_origen: path.join(__dirname, '..', 'modules', 'cosecha', 'cantera', 'enki'),
-    cantera_destino: '/home/admin/.hermes/skills/enki-cantera',
-    // Memoria-semilla (una vez): SIEMBRA el contexto aprendido en VPS2; luego
-    // cada VPS la evoluciona de forma independiente (no se re-siembra).
-    memoria_origen: path.join(__dirname, '..', '.hermes', 'memories'),
-    memoria_destino: '/home/admin/.hermes/memories'
   },
 
   // Caddy: plantilla con dominio hardcoded (pizzepos.es) que se sustituye por
@@ -114,41 +67,8 @@ const MANIFIESTO = {
     plantilla: path.join(DEPLOYMENT_DIR, 'caddy', 'Caddyfile.vps'),
     destino: '/etc/caddy/Caddyfile',
     dominio_placeholder: 'pizzepos.es',
-    log_placeholder: 'pizzepos.log',
-    // Override systemd: Caddy lee el .env PERSISTENTE (data/.env, excluido del
-    // rsync del deploy) para ENKI_MCP_TOKEN y demás. El .env de la raíz
-    // (/opt/enki/.env) NO sobrevive al deploy (rsync --delete lo borra).
-    override_plantilla: path.join(DEPLOYMENT_DIR, 'caddy', 'caddy.override.conf.tmpl'),
-    override_destino: '/etc/systemd/system/caddy.service.d/override.conf'
+    log_placeholder: 'pizzepos.log'
   },
-
-  // Snippets Caddy condicionales — bloques extra que el reconciliador CONCATENA
-  // al Caddyfile renderizado SOLO si el VPS declara la feature: bien por `env_flag`
-  // en su .env, bien por `dominios` (el dominio del VPS está en esta lista — vía
-  // determinista, sin tocar .env a mano). Opción A: `env_flag: 'ENABLE_OPENSCAD'`.
-  // Opción B (determinista por dominio): `dominios: ['enki-ai.online']`. Ambas
-  // coexisten: se activa si cualquiera se cumple.
-  caddy_snippets: [
-    {
-      id: 'openscad-mcp',
-      plantilla: path.join(DEPLOYMENT_DIR, 'caddy', 'Caddyfile.openscad.snippet'),
-      env_flag: 'ENABLE_OPENSCAD',
-      dominios: ['enki-ai.online']
-    }
-  ],
-
-  // Docker Compose services condicionales — contenedores que el reconciliador
-  // LEVANTA solo en VPS que declaran la feature (igual criterio que caddy_snippets:
-  // env_flag O dominio listado). En VPS sin la feature, el contenedor no se toca.
-  docker_services: [
-    {
-      id: 'openscad-mcp',
-      compose_dir: path.join(DEPLOYMENT_DIR, 'openscad-mcp'),
-      env_flag: 'ENABLE_OPENSCAD',
-      dominios: ['enki-ai.online'],
-      container: 'openscad-mcp'
-    }
-  ],
 
   // Layout LEGACY (Gen-1) que el reconciliador detecta y MIGRA a canónico.
   // En un VPS ya canónico esto no dispara nada (idempotente).
@@ -163,7 +83,7 @@ const MANIFIESTO = {
     // El Caddyfile vivo DEBE contener estos bloques (el drift clásico: falta el namespace).
     caddy_debe_contener: [`handle_path /${NS}/*`, 'handle /tienda/*'],
     dirs_escribibles: [NS_DIR],
-    servicios_activos: ['enki', 'enki-frontend', 'caddy', 'hermes-gateway'],
+    servicios_activos: ['enki', 'enki-frontend', 'caddy'],
     http_health: 'http://localhost:3000/health'
   }
 };

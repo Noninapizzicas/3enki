@@ -13,10 +13,10 @@
     initConversations,
     createConversation,
     selectConversation,
-    activeConversationId
+    activeConversationId,
+    activeProjectIdMqtt
   } from '$lib/stores';
   import { openPanel, closePanel } from '$lib/stores/ui';
-  import { sessionProjectId } from '$lib/stores/sessionProject';
 
   import HistoryTab from './HistoryTab.svelte';
   import ConfigTab from './ConfigTab.svelte';
@@ -40,7 +40,7 @@
   // ==========================================================================
 
   $: loading = $conversationsStore.loading;
-  $: projectId = $sessionProjectId;
+  $: projectId = $activeProjectIdMqtt;
   $: hasProject = !!projectId;
 
   // ==========================================================================

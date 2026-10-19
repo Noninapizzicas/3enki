@@ -109,8 +109,7 @@ function publishedOf(mocks, name) {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     assert.strictEqual(m.name, 'comandero');
-    const MANIFEST = require('../../modules/pizzepos/comandero/module.json');
-    assert.strictEqual(m.version, MANIFEST.version);
+    assert.strictEqual(m.version, '3.4.0');
     assert.strictEqual(m.pedidos.size, 0);
     assert.strictEqual(m.productosCache.size, 0);
     await m.onUnload();
@@ -254,36 +253,6 @@ function publishedOf(mocks, name) {
     assert.strictEqual(evs.length, 1, 'debe pedir snapshot al cargar');
     assert.ok(evs[0].correlation_id, 'lleva correlation_id');
     assert.ok(evs[0].timestamp, 'lleva timestamp');
-    await m.onUnload();
-  });
-
-  // El hueco real NO es una carrera de suscripcion (el loader cablea antes de onLoad): es que en
-  // arranque en frio tarifas todavia no existe y la peticion se queda sin respondedor. Por eso se
-  // repite en los dos momentos deterministas. Sin timers.
-  await testAsync('core.modules.loaded.all re-pide el snapshot (tarifas ya cargado)', async () => {
-    const mocks = makeMocks();
-    const { module: m } = await instantiate(mocks);
-    assert.strictEqual(publishedOf(mocks, 'tarifas.config.solicitada').length, 1, 'onLoad ya pidio');
-
-    await m.onCoreModulesLoadedAll();
-    const evs = publishedOf(mocks, 'tarifas.config.solicitada');
-    assert.strictEqual(evs.length, 2, 're-pide al cargar todos los modulos');
-    assert.strictEqual(evs[1].tipo, 'snapshot');
-    assert.ok(!evs[1].project_id, 'sin project_id = todos los proyectos conocidos');
-    await m.onUnload();
-  });
-
-  await testAsync('project.activated re-pide el snapshot scopeado al proyecto', async () => {
-    const mocks = makeMocks();
-    const { module: m } = await instantiate(mocks);
-
-    await m.onProjectActivado({ data: { project_id: 'proj-A' } });
-    const evs = publishedOf(mocks, 'tarifas.config.solicitada');
-    assert.strictEqual(evs.length, 2);
-    assert.strictEqual(evs[1].project_id, 'proj-A', 'scopeado al proyecto que se activa');
-
-    await m.onProjectActivado({ data: {} });          // sin project_id: no-op
-    assert.strictEqual(publishedOf(mocks, 'tarifas.config.solicitada').length, 2, 'sin project_id no pide');
     await m.onUnload();
   });
 
@@ -601,45 +570,6 @@ function publishedOf(mocks, name) {
   });
 
   cleanupTmp();
-
-  // Group: precio por canal (v3.5.0)
-  await testAsync('carta.actualizada ENVUELTA ({carta}) hidrata cartasProductosCache', async () => {
-    const { module: m } = await instantiate(makeMocks());
-    await m.onCartaActualizada({ data: { project_id: 'p1', carta: { meta: { id: 'carta_glovo' }, productos: [{ id: 'queso', nombre: 'Queso', precio: 8.5, categoria: 'entrantes' }] } } });
-    const cache = m.cartasProductosCache.get('carta_glovo');
-    assert.ok(cache, 'la carta del canal debe quedar cacheada');
-    assert.strictEqual(cache.get('queso').precio, 8.5);
-  });
-
-  await testAsync('el precio del canal se resuelve por carta y cae al base si el producto no está', async () => {
-    const { module: m } = await instantiate(makeMocks());
-    m.tarifasConfigPorProject.set('p1', { general: 'carta_general', canales: { glovo: 'carta_glovo' } });
-    m.cartasProductosCache.set('carta_glovo', new Map([['queso', { nombre: 'Queso', precio: 8.5 }]]));
-    m.productosCache.set('queso', { nombre: 'Queso', precio: 6.5 });
-    m.productosCache.set('pan', { nombre: 'Pan', precio: 1 });
-    assert.strictEqual(m._resolverPrecioCanal('queso', 6.5, 'glovo', 'p1'), 8.5);
-    assert.strictEqual(m._resolverPrecioCanal('queso', 6.5, 'mesa', 'p1'), 6.5);
-    assert.strictEqual(m._resolverPrecioCanal('pan', 1, 'glovo', 'p1'), 1);   // no está en la carta del canal
-  });
-
-  await testAsync('carta.get.response de la GENERAL rellena productosCache (tras restart)', async () => {
-    const { module: m } = await instantiate(makeMocks());
-    m.tarifasConfigPorProject.set('p1', { general: 'carta_general', canales: { glovo: 'carta_glovo' } });
-    m._cartaGetPendientes.set('req-1', { project_id: 'p1', carta_id: 'carta_general' });
-    await m.onCartaGetResponse({ data: { request_id: 'req-1', status: 200, data: { meta: { id: 'carta_general' }, productos: [{ id: 'queso', nombre: 'Queso', precio: 6.5, categoria: 'entrantes' }] } } });
-    assert.strictEqual(m.productosCache.get('queso').precio, 6.5);
-    assert.strictEqual(m.productosCache.get('queso').nombre, 'Queso');
-  });
-
-  await testAsync('carta.get.response de una carta de CANAL no toca productosCache', async () => {
-    const { module: m } = await instantiate(makeMocks());
-    m.tarifasConfigPorProject.set('p1', { general: 'carta_general', canales: { glovo: 'carta_glovo' } });
-    m._cartaGetPendientes.set('req-2', { project_id: 'p1', carta_id: 'carta_glovo' });
-    await m.onCartaGetResponse({ data: { request_id: 'req-2', status: 200, data: { meta: { id: 'carta_glovo' }, productos: [{ id: 'queso', nombre: 'Queso', precio: 8.5 }] } } });
-    assert.strictEqual(m.productosCache.get('queso'), undefined);
-    assert.strictEqual(m.cartasProductosCache.get('carta_glovo').get('queso').precio, 8.5);
-  });
-
   console.log('\nTodos los tests pasaron.');
   process.exit(0);
 })();

@@ -85,7 +85,7 @@ class FilesystemModule extends BaseModule {
   constructor() {
     super();
     this.name = 'filesystem';
-    this.version = '2.5.0';
+    this.version = '2.3.0';
     this.basePath = path.join(process.cwd(), 'data');
     this.uiHandler = null;
 
@@ -102,14 +102,6 @@ class FilesystemModule extends BaseModule {
     // del leak cross-project: dos peticiones a project_id distintos NO se pisan aunque
     // cambie el activo. (Antes: todo se resolvía contra activeProjectPath -> ruleta.)
     this.projectPaths = new Map();
-
-    // Identidad de carril (UUID + slug). El mapa se indexa bajo TODAS las caras del mismo
-    // proyecto (UUID · slug del nombre · nombre del directorio), así da igual cómo lo llame
-    // el caller. Se hidrata desde la fuente de verdad al onLoad (project.list.request):
-    // sin eso el mapa nace VACÍO tras un hot-reload y toda petición con id cae al activo.
-    this._projectHydrated = false;
-    this._projectHydrateRequestId = null;
-    this._projectHydrateTimer = null;
 
     // TP4 — cache de manifests de modulos persistentes. Indexado por module.name.
     // Cada entry: { scope: 'project'|'system', data_path: '<namespace>' }. Lo carga
@@ -142,12 +134,6 @@ class FilesystemModule extends BaseModule {
 
     await this._ensureDataDirectory();
     this._loadModuleManifests();
-
-    // Hidrata los carriles desde la fuente de verdad (project-manager) al arrancar. Best-effort:
-    // si no contesta, project.activated los irá poblando. Sin esto, tras un hot-reload el mapa
-    // nace vacío y toda petición con UUID cae al "proyecto activo" — el último activado, un
-    // accidente del orden de arranque. La hidratación lo hace determinista.
-    this._hydrateProjectPaths();
 
     // Posición 2: el enforce del camino canónico es una decisión consciente del dueño
     // (escalera off→observe→enforce, como el ejecutor). Nace en OBSERVE: detecta y canta
@@ -256,7 +242,7 @@ class FilesystemModule extends BaseModule {
 
   async onProjectActivated(event) {
     const data = event.data || event;
-    const { project_id, base_path, name, metadata, slug } = data;
+    const { project_id, base_path, name, metadata } = data;
 
     this.activeProjectId = project_id;
 
@@ -264,7 +250,7 @@ class FilesystemModule extends BaseModule {
       this.systemMode = true;
       this.activeProjectPath = process.cwd();
       this.workingDirectory = process.cwd();
-      if (project_id) this._indexProject({ id: project_id, name, base_path, slug, system: true, root: process.cwd() });
+      if (project_id) this.projectPaths.set(project_id, { path: process.cwd(), system: true });
       this.logger.info('filesystem.project.activated.system_mode', {
         project_id, project_name: name, system_root: process.cwd()
       });
@@ -283,7 +269,7 @@ class FilesystemModule extends BaseModule {
 
     // Recuerda el root de ESTE proyecto para que sus peticiones (project_id) resuelvan
     // contra él aunque luego se active otro. La base del multi-tenant real.
-    if (project_id) this._indexProject({ id: project_id, name, base_path, slug, system: false });
+    if (project_id) this.projectPaths.set(project_id, { path: this.activeProjectPath, system: false });
 
     this.workingDirectory = this.activeProjectPath;
     try {
@@ -324,8 +310,6 @@ class FilesystemModule extends BaseModule {
   }
   async onEditRequest(event)   { return this._busDispatch(event, 'edit',   'fs.edit.response',   ['path', 'patches', 'expected_hash']); }
   async onReadRequest(event)   { return this._busDispatch(event, 'read',   'fs.read.response',   ['path', 'file_path']); }
-  async onListModulesRequest(event) { return this._busDispatch(event, 'list_modules', 'fs.list_modules.response', []); }
-  async onReadModuleRequest(event)  { return this._busDispatch(event, 'read_module', 'fs.read_module.response', ['module', 'file']); }
   async onDeleteRequest(event) { return this._busDispatch(event, 'delete', 'fs.delete.response', ['path']); }
   async onListRequest(event)   { return this._busDispatch(event, 'list',   'fs.list.response',   ['path']); }
   async onMkdirRequest(event)  { return this._busDispatch(event, 'mkdir',  'fs.mkdir.response',  ['path']); }
@@ -511,138 +495,17 @@ class FilesystemModule extends BaseModule {
   // global no debe decidir contra qué proyecto se lee/escribe; lo decide el project_id.
   _projectRootFor(projectId) {
     if (!projectId) return null;
-    const entry = this._lookupProject(projectId);
+    const entry = this.projectPaths.get(projectId);
     if (!entry || entry.system) return null;   // system projects siguen el flujo systemMode
     return entry.path;
-  }
-
-  // Indexa un carril bajo TODAS sus identidades vivas: el UUID (project_id), el slug del
-  // nombre y el nombre del directorio (basename de base_path). Resolver por cualquiera lleva
-  // al MISMO carril — cerrar el "solo el UUID vale" sin inventar un registro nuevo: la
-  // fuente de verdad sigue siendo project-manager; esto solo es su índice de caras.
-  // `slug` llega EN EL EVENTO: lo emite project-manager (#774), que es quien lo decide
-  // (es el nombre del directorio físico en /data/projects/<slug>/). Solo se deriva si NO
-  // viene — transitorio, hasta que no quede ningún emisor viejo. El fs no debe inventar la
-  // identidad: eso es exactamente lo que producía 12 copias del mismo algoritmo.
-  _indexProject({ id, name, base_path, system = false, root = null, slug = null }) {
-    const storagePath = system
-      ? (root || process.cwd())
-      : (base_path ? path.join(base_path, 'storage') : null);
-    if (!storagePath) return;
-    const slugFinal = slug || this._slugify(name);
-    const entry = { path: storagePath, system, id: id || null, base_path: base_path || null, slug: slugFinal };
-    const caras = [id, slugFinal];
-    if (!system && base_path) caras.push(path.basename(base_path));   // nombre del directorio
-    for (const cara of caras) if (cara) this.projectPaths.set(cara, entry);
-  }
-
-  // Resuelve una identidad (UUID o slug, con cualquier caja) a su carril. undefined si no se
-  // conoce: el caller decide entre autocuración desde disco o fallo claro — nunca adivina.
-  _lookupProject(projectId) {
-    if (!projectId) return undefined;
-    const direct = this.projectPaths.get(projectId);
-    if (direct) return direct;
-    const norm = this._slugify(projectId);
-    return (norm && this.projectPaths.get(norm)) || undefined;
-  }
-
-  // Autocuración: si el id no está en el índice pero su carril EXISTE en disco, lo indexa y lo
-  // usa. Cubre el proyecto creado/activado antes de que el fs arrancara. Devuelve null si no hay
-  // carril real -> entonces NO se resuelve contra otro (el caller falla claro).
-  _selfHealProject(projectId) {
-    try {
-      if (typeof projectId !== 'string' || !/^[A-Za-z0-9._-]+$/.test(projectId) || projectId === 'system') return null;
-      const basePath = path.join(this.basePath, 'projects', projectId);
-      const syncFs = require('fs');
-      if (!syncFs.existsSync(basePath) || !syncFs.statSync(basePath).isDirectory()) return null;
-      this._indexProject({ id: projectId, base_path: basePath });
-      const entry = this.projectPaths.get(projectId);
-      return (entry && !entry.system) ? entry.path : null;
-    } catch (_) { return null; }
-  }
-
-  // Hidrata el índice desde la fuente de verdad (project-manager) al onLoad, para que nazca
-  // lleno y sobreviva al hot-reload (que reinstancia el módulo con el mapa VACÍO). Pide la
-  // lista por el bus; onProjectListResponse la indexa. Best-effort, no bloquea el arranque.
-  _hydrateProjectPaths() {
-    if (!this.eventBus?.publish) return;
-    const request_id = `fs-hydrate-${crypto.randomUUID()}`;
-    this._projectHydrateRequestId = request_id;
-    try {
-      this.eventBus.publish('project.list.request', { request_id, correlation_id: crypto.randomUUID() });
-    } catch (err) {
-      this.logger?.warn?.('filesystem.hydrate.publish_failed', { error: err.message });
-      return;
-    }
-    this._projectHydrateTimer = setTimeout(() => {
-      if (!this._projectHydrated) {
-        this.logger?.warn?.('filesystem.hydrate.sin_respuesta', { request_id, carriles: this.projectPaths.size });
-      }
-    }, 5000);
-    if (this._projectHydrateTimer.unref) this._projectHydrateTimer.unref();
-  }
-
-  async onProjectListResponse(event) {
-    const data = event?.data || event?.payload || event;
-    if (!data || data.request_id !== this._projectHydrateRequestId) return;   // ignora respuestas ajenas
-    const projects = Array.isArray(data.projects) ? data.projects : [];
-    for (const p of projects) {
-      if (!p?.id || !p?.base_path) continue;
-      this._indexProject({
-        id: p.id, name: p.name, base_path: p.base_path, slug: p.slug,
-        system: p.metadata?.is_system === true || p.base_path === process.cwd()
-      });
-    }
-    this._projectHydrated = true;
-    if (this._projectHydrateTimer) { clearTimeout(this._projectHydrateTimer); this._projectHydrateTimer = null; }
-    this.logger?.info?.('filesystem.hydrate.ok', { carriles: this.projectPaths.size, proyectos: projects.length });
-  }
-
-  // Slug canonico (mismo algoritmo que project-manager._slugify) — el fs no inventa su propia
-  // regla: la copia para poder reconocer el slug con que la fuente de verdad nombra el carril.
-  _slugify(name) {
-    return String(name || '').toLowerCase().trim()
-      .replace(/[áàäâã]/g, 'a').replace(/[éèëê]/g, 'e')
-      .replace(/[íìïî]/g, 'i').replace(/[óòöôõ]/g, 'o')
-      .replace(/[úùüû]/g, 'u').replace(/ñ/g, 'n')
-      .replace(/[^a-z0-9\s-]/g, '').replace(/[\s_]+/g, '-')
-      .replace(/-+/g, '-').replace(/^-|-$/g, '');
   }
 
   validatePath(userPath, options = {}) {
     const inputPath = userPath || '/';
     let resolved;
-    // El project_id de la petición MANDA sobre el proyecto activo global, y vale UUID **o** slug
-    // (el nombre del directorio). Ausente -> retrocompat (carril activo). Presente pero
-    // desconocido -> NO se adivina: se intenta autocurar desde disco y, si no hay carril real, se
-    // falla CLARO. Antes caía EN SILENCIO al carril activo — leer/escribir en el proyecto de otro
-    // sin que nadie se enterase, y con él la ruleta del "proyecto activo".
-    let projectRoot;
-    if (options.project_id) {
-      const entry = this._lookupProject(options.project_id);
-      if (entry) {
-        projectRoot = entry.system ? this.activeProjectPath : entry.path;
-      } else {
-        projectRoot = this._selfHealProject(options.project_id);
-        if (!projectRoot) {
-          this.logger?.warn?.('filesystem.path.proyecto_desconocido', {
-            requested: options.project_id, carriles_conocidos: this.projectPaths.size,
-            riesgo: 'antes caía al carril activo en silencio'
-          });
-          this.metrics?.increment?.('filesystem.path.proyecto_desconocido');
-          const error = new Error(
-            `Unknown project '${options.project_id}': no es un UUID ni un slug de proyecto conocido, ` +
-            `ni existe un carril en data/projects/. Pasa el UUID o el slug del proyecto. ` +
-            `No se resuelve contra el proyecto activo.`
-          );
-          error._code = 'INVALID_INPUT';
-          error._details = { kind: 'unknown_project', requested: options.project_id, carriles_conocidos: this.projectPaths.size };
-          throw error;
-        }
-      }
-    } else {
-      projectRoot = this.activeProjectPath;
-    }
+    // El project_id de la petición MANDA sobre el proyecto activo global. Si no viene
+    // (o no se conoce), fallback al activeProjectPath de siempre.
+    const projectRoot = (options.project_id && this._projectRootFor(options.project_id)) || this.activeProjectPath;
 
     // Defensa contra paths absolutos del sistema. Antes de esta defensa, un caller
     // que construia path = base_path + '/archivo.json' (ej: '/opt/enki/data/projects/p1/recetas.json')
@@ -759,15 +622,6 @@ class FilesystemModule extends BaseModule {
   async handleList(data) {
     try {
       const dirPath = data?.path || '/';
-      // DEFENSA MULTI-TENANT — lista contra el proyecto activo global si falta project_id
-      if (!data?.project_id) {
-        this.logger?.warn?.('filesystem.list.sin_project_id', {
-          path: dirPath,
-          activo_global: this.activeProjectId || null,
-          riesgo: 'listado contra el proyecto activo global — revisa que el caller pase project_id'
-        });
-        this.metrics?.increment?.('filesystem.list.fallback_activo_global');
-      }
       const safePath = this.validatePath(dirPath, { sourceModule: data?._source_module, project_id: data?.project_id });
 
       let stats;
@@ -866,18 +720,6 @@ class FilesystemModule extends BaseModule {
         return this._errorResponse(400, 'INVALID_INPUT', 'path is required',
           { kind: 'domain', field: 'path' });
       }
-      // DEFENSA MULTI-TENANT — si el caller no fija project_id, esta lectura resolvera
-      // contra el activeProjectPath GLOBAL (el ultimo proyecto activado), lo que puede
-      // leer el almacen de OTRO proyecto. No es fuga silenciosa: se marca en observabilidad
-      // para que quede detectable. Los callers legitimos siempre pasan project_id.
-      if (!data?.project_id) {
-        this.logger?.warn?.('filesystem.read.sin_project_id', {
-          path: filePath,
-          activo_global: this.activeProjectId || null,
-          riesgo: 'lectura contra el proyecto activo global — revisa que el caller pase project_id'
-        });
-        this.metrics?.increment?.('filesystem.read.fallback_activo_global');
-      }
       const safePath = this.validatePath(filePath, { sourceModule: data?._source_module, project_id: data?.project_id });
 
       let stats;
@@ -927,92 +769,6 @@ class FilesystemModule extends BaseModule {
       };
     } catch (err) {
       return this._handleHandlerError('filesystem.read.failed', err, 'read');
-    }
-  }
-
-  // ── SOLO LECTURA del SISTEMA (módulos) ─────────────────────────────────────
-  // El chat (LLM) NO tiene visibilidad de modules/ del sistema (su fs está
-  // scopeado al storage del proyecto) → tras invocar construir-modulos decía
-  // "no escribió nada en ninguna parte" aunque el motor SÍ había escrito.
-  // Estas tools dan SOLO lectura: listar módulos y leer un archivo de uno.
-  // NUNCA escribir/editar/borrar — el motor es el único escritor de modules/.
-
-  async handleListModules() {
-    try {
-      const modulesDir = path.join(process.cwd(), 'modules');
-      const syncFs = require('fs');
-      if (!syncFs.existsSync(modulesDir)) {
-        return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'modules dir not found', {});
-      }
-      const names = syncFs.readdirSync(modulesDir)
-        .filter(n => !n.startsWith('.') && n !== 'node_modules' && n !== '_archived' && n !== '_legacy')
-        .filter(n => {
-          try { return syncFs.statSync(path.join(modulesDir, n)).isDirectory(); } catch { return false; }
-        })
-        .sort();
-      // Marca los que tienen module.json (módulos reales) vs carpetas auxiliares
-      const modulos = names.map(n => ({
-        name: n,
-        tiene_module_json: syncFs.existsSync(path.join(modulesDir, n, 'module.json')),
-        tiene_index_js: syncFs.existsSync(path.join(modulesDir, n, 'index.js'))
-      }));
-      this.metrics?.increment('filesystem.list_modules.success');
-      return { status: 200, data: { modules_dir: modulesDir, total: modulos.length, modulos } };
-    } catch (err) {
-      return this._handleHandlerError('filesystem.list_modules.failed', err, 'list_modules');
-    }
-  }
-
-  async handleReadModule(data) {
-    try {
-      const moduleName = data?.module;
-      const file = data?.file || 'index.js';
-      if (!moduleName) {
-        return this._errorResponse(400, 'INVALID_INPUT', 'module is required',
-          { kind: 'domain', field: 'module' });
-      }
-      // Anti-path-traversal: el nombre del módulo y el archivo NO pueden
-      // escapar de modules/<modulo>/ (solo lectura del sistema — defensa dura).
-      const cleanMod = String(moduleName).replace(/^[./\\]+|[./\\]+$/g, '');
-      const cleanFile = String(file).replace(/^[./\\]+|[./\\]+$/g, '');
-      if (!cleanMod || !cleanFile || cleanMod.includes('..') || cleanFile.includes('..')) {
-        return this._errorResponse(400, 'INVALID_INPUT', 'invalid module or file path', {});
-      }
-      const safePath = path.join(process.cwd(), 'modules', cleanMod, cleanFile);
-      const modulesDir = path.join(process.cwd(), 'modules');
-      if (!safePath.startsWith(modulesDir + path.sep)) {
-        return this._errorResponse(403, 'PERMISSION_DENIED', 'path escapes modules dir', {});
-      }
-      let stats;
-      try { stats = await fs.stat(safePath); }
-      catch (e) {
-        if (e.code === 'ENOENT') {
-          return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'module file not found',
-            { module: cleanMod, file: cleanFile });
-        }
-        throw e;
-      }
-      if (stats.isDirectory()) {
-        return this._errorResponse(400, 'INVALID_INPUT', 'cannot read directory as file', {});
-      }
-      if (stats.size > MAX_READ_SIZE) {
-        return this._errorResponse(413, 'INVALID_INPUT',
-          `File too large. Max size: ${MAX_READ_SIZE / (1024 * 1024)}MB`,
-          { kind: 'limit', max_size: MAX_READ_SIZE, actual_size: stats.size });
-      }
-      const content = await fs.readFile(safePath, 'utf-8');
-      this.metrics?.increment('filesystem.read_module.success');
-      return {
-        status: 200,
-        data: {
-          module: cleanMod, file: cleanFile, path: `modules/${cleanMod}/${cleanFile}`,
-          content, encoding: 'utf-8', size: stats.size,
-          modified: stats.mtime, type: 'text',
-          hash: this._computeHash(content)
-        }
-      };
-    } catch (err) {
-      return this._handleHandlerError('filesystem.read_module.failed', err, 'read_module');
     }
   }
 

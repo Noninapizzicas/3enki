@@ -28,7 +28,7 @@ class ProductosModule extends BaseModule {
   constructor() {
     super();
     this.name = 'productos';
-    this.version = '5.3.0';
+    this.version = '5.3.1';
 
     // Dependencias (inyectadas en onLoad)
     this.uiHandler = null;
@@ -315,6 +315,20 @@ class ProductosModule extends BaseModule {
     this.config = core.config || {};
     this.logger.info('module.loaded', { module: this.name, version: this.version, mode: 'proyector-sin-estado' });
     this._hidratarCarriles();
+
+    // Hidratar el mapping canal→carta_id TAMBIÉN al cargar (no solo en project.activated): tras un
+    // hot-reload o un restart el mapa nace VACÍO, _esCartaGeneral no vería la carta general y una
+    // carta de CANAL proyectaría al catálogo global, pisando los precios de mostrador. tarifas
+    // responde con un snapshot por cada proyecto conocido (sin project_id). Mismo patrón que comandero.
+    try {
+      await this.eventBus.publish('tarifas.config.solicitada', {
+        tipo: 'snapshot',
+        correlation_id: `productos-load-${Date.now()}`,
+        timestamp: new Date().toISOString()
+      });
+    } catch (err) {
+      this.logger.warn('tarifas.config.solicitada.publish_failed', { etapa: 'onLoad', error: err?.message });
+    }
   }
 
   async onUnload() {

@@ -903,7 +903,11 @@ class PedidosModule extends BaseModule {
   async handleEnviarCocina(data) {
     try {
       const start_time = Date.now();
-      const { id } = data || {};
+      // El schema de la tool declara `pedido_id`; `id` se acepta por compat (los handlers
+      // viejos leian `id` y toda llamada que siguiera el schema daba 404 — el pedido nunca
+      // llegaba a cocina). Un solo contrato: pedido_id.
+      const { id: _id, pedido_id } = data || {};
+      const id = pedido_id || _id;
       const pedido = this.pedidos.get(id);
       if (!pedido) {
         this.metrics?.increment?.('pedidos.errors', { code: 'RESOURCE_NOT_FOUND', kind: 'send-kitchen' });
@@ -956,7 +960,8 @@ class PedidosModule extends BaseModule {
 
   async handleCompletarPedido(data) {
     try {
-      const { id } = data || {};
+      const { id: _id, pedido_id } = data || {};
+      const id = pedido_id || _id;
       const pedido = this.pedidos.get(id);
       if (!pedido) {
         this.metrics?.increment?.('pedidos.errors', { code: 'RESOURCE_NOT_FOUND', kind: 'complete' });
@@ -988,7 +993,8 @@ class PedidosModule extends BaseModule {
 
   async handleCancelarPedido(data) {
     try {
-      const { id, motivo } = data || {};
+      const { id: _id, pedido_id, motivo } = data || {};
+      const id = pedido_id || _id;
       const pedido = this.pedidos.get(id);
       if (!pedido) {
         this.metrics?.increment?.('pedidos.errors', { code: 'RESOURCE_NOT_FOUND', kind: 'cancel' });
@@ -1019,7 +1025,8 @@ class PedidosModule extends BaseModule {
 
   async handleCalcularTotal(data) {
     try {
-      const { id } = data || {};
+      const { id: _id, pedido_id } = data || {};
+      const id = pedido_id || _id;
       const pedido = this.pedidos.get(id);
       if (!pedido) {
         this.metrics?.increment?.('pedidos.errors', { code: 'RESOURCE_NOT_FOUND', kind: 'total' });

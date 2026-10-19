@@ -1,6 +1,7 @@
 {
   "name": "productos",
-  "version": "5.1.0",
+  "version": "5.2.0",
+  "_v5_2_changelog": "v5.2.0 (2026-10-19): LA PUERTA DEL ASISTENTE para productos. Nuevas tools productos.crear y productos.crear_categoria — hasta hoy el LLM/chat NO tenia ninguna forma de dar de alta un producto en la carta (solo existian list/get/update/delete y el alta vivia en la UI de carta-manager), asi que el alta acababa en ficheros paralelos (recetas.json/ingredientes.json) y NADA fluia. Ambas delegan en carta-manager (fuente unica, version++ y snapshot) y encienden la cadena entera por eventos: carta.add_product -> carta.editada -> productos.onCartaGenerada -> catalogo.actualizado -> comandero + pedidos (cache POS) | variaciones (reconfigura) | carta-digital._autoPublicar -> bundle re-horneado -> web publica. cocina recibe el producto en pedido.enviado_cocina con nombre + estaciones + variaciones. Id determinista categoria+nombre (idempotente). Tambien se corrigen las descripciones de update/delete, que prometian producto.actualizado/eliminado (eventos que v5 ya no emite).",
   "_v5_1_changelog": "v5.1.0 (2026-06-20): productos.ingredientes (y el catalogo de carta_completa) se PROYECTAN desde la carta activa — coherente con el rediseño v5 (catalogo == proyectar(carta_activa)) — en vez de delegar en el modulo ingredientes (store en-memoria que en la instalacion de nonina estaba VACIO -> el AlGustoPanel del comandero no mostraba ingredientes para anadir). _proyectarCatalogoIngredientes(carta): union de los ingredientes de todos los productos (lee ingredientes_base O ingredientes — la carta los trae bajo cualquiera; los 44 de nonina los traian bajo 'ingredientes' con familia correcta), dedup por id (mismo id que _proyectarProducto para que AlGusto reste lo que el producto ya lleva), normalizado {id,nombre,emoji,familia,tipo,precio_extra,disponible}. El AlGustoPanel agrupa por familia||tipo. NO depende de variaciones (eso es otro panel). Sin store que se vacie al reiniciar.",
   "_v5_0_changelog": "v5.0.0 (2026-06-14): REDISEÑO — productos pasa de STORE a PROYECTOR SIN ESTADO sobre carta-manager. La carta es la UNICA fuente de verdad; productos proyecta la carta activa del proyecto a formato POS al vuelo via carta.get.request (reflejo, ms). ELIMINADO: productosPerProject + categoriasPerProject (store en memoria), catalogo_activo.json (persistencia), syncCatalogo (merge incremental que derivaba -> 29 fantasmas), loadCartaFromProject (union de TODAS las cartas del dir), resolveToActiveProject + el fallback inline de carta_completa (leak cross-project). AHORA: catalogo == proyectar(carta_activa) SIEMPRE -> sin acumulacion, sin fantasmas, sin stale, sin leak (cada lectura es de LA carta de ESE proyecto). Resolucion de carta activa: carta_id explicito -> tarifas(canal) -> tarifas(general) -> carta.list en_servicio. Mutaciones (update/delete producto) DELEGAN a carta-manager (carta.update_product/remove_product.request). REQUIERE carta-manager hibrido (reflejo) desplegado. NOTA: ya NO emite producto.{creado,actualizado,eliminado} (eran artefactos del sync de store); el consumer canonico es carta.actualizada/editada (la carta) + catalogo.actualizado (señal de refresco). v4.0.0 (2026-06-01): TP3 subsistema-carta (tarifas mapping + elimina menu.generado).",
   "description": "Catalogo de productos pizzepos multi-tenant. PROYECTOR SIN ESTADO: no guarda copia; proyecta la carta activa del proyecto (carta-manager, fuente unica) a formato POS al vuelo via carta.get.request. Lee la carta por su DUEÑO (carta-manager RPC), no por fs directo. Emite catalogo.actualizado como señal de refresco para que comandero/pedidos re-pull. Mutaciones delegan a carta-manager.",
@@ -13,6 +14,8 @@
       { "event": "carta.get.request",     "description": "RPC a carta-manager (reflejo): pide la carta activa para proyectarla. Correlacionado por request_id." },
       { "event": "carta.list.request",    "description": "RPC a carta-manager (reflejo): resuelve la carta en_servicio cuando tarifas no fija general. Correlacionado por request_id." },
       { "event": "carta.update_product.request", "description": "RPC a carta-manager: delega la edicion de un producto (productos no escribe; la carta es la fuente)." },
+      { "event": "carta.add_product.request", "description": "RPC a carta-manager: delega el ALTA de un producto (productos no escribe; la carta es la fuente y quien sube version). Disparado por la tool productos.crear." },
+      { "event": "carta.add_category.request", "description": "RPC a carta-manager: delega el ALTA de una categoria/seccion. Disparado por la tool productos.crear_categoria." },
       { "event": "carta.remove_product.request", "description": "RPC a carta-manager: delega el borrado de un producto." },
       { "event": "project.get.request",   "description": "Request a project-manager para resolver base_path. Correlacionado por request_id." },
       { "event": "tarifas.config.solicitada", "description": "Solicita snapshot de tarifas en onProjectActivated para hidratar el mapping canal->carta_id. Fire-and-forget." }
@@ -100,7 +103,7 @@
     },
     {
       "name": "productos.update",
-      "description": "Actualiza campos de un producto. Persiste el catalogo en disco y emite producto.actualizado con el detalle de cambios.",
+      "description": "Actualiza campos de un producto de la carta activa (delega en carta-manager; la señal de refresco es carta.editada + catalogo.actualizado — comandero/pedidos cache, variaciones y la web publica caminan solos).",
       "parameters": {
         "type": "object",
         "properties": {
@@ -114,8 +117,59 @@
       "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UNKNOWN_ERROR"]
     },
     {
+      "name": "productos.crear",
+      "description": "ALTA de producto en la carta activa (fuente unica: carta-manager). Delega por eventos: carta.add_product -> carta.editada -> catalogo.actualizado (comandero + pedidos) + variaciones + carta-digital (re-hornea la web publica). El id nace determinista de categoria+nombre. Devuelve el producto y la version de carta.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_id": { "type": "string", "description": "Identificador del proyecto." },
+          "nombre": { "type": "string", "description": "Nombre visible del producto." },
+          "precio": { "type": "number", "description": "Precio de venta en EUROS (>= 0)." },
+          "categoria_id": { "type": "string", "description": "Categoria destino (productos.categorias la lista; productos.crear_categoria la crea)." },
+          "ingredientes": {
+            "type": "array",
+            "description": "Ingredientes del producto: [{id?, nombre, familia?, emoji?, precio_extra?}]. precio_extra ausente = extra estandar.",
+            "items": { "type": "object" }
+          },
+          "descripcion": { "type": "string" },
+          "etiquetas": { "type": "array", "items": { "type": "string" } },
+          "alergenos": { "type": "array", "items": { "type": "string" } },
+          "disponible": { "type": "boolean" },
+          "tipo": { "type": "string" },
+          "emoji": { "type": "string" },
+          "estaciones": { "type": "array", "items": { "type": "string" }, "description": "Estaciones de cocina por las que pasa (ej. ['horno'])." },
+          "ingredientes_base": { "type": "array", "items": { "type": "object" } },
+          "dietas": { "type": "object" },
+          "variaciones": { "type": "object", "description": "{permite_quitar[], permite_anadir, max_ingredientes_extra, extras_sugeridos[{ingrediente_id, precio_extra?}]}" },
+          "carta_id": { "type": "string", "description": "Opcional: carta concreta. Sin el, resuelve la activa (canal -> general -> en_servicio)." },
+          "canal": { "type": "string", "description": "Opcional: canal de venta para resolver la carta." }
+        },
+        "required": ["project_id", "nombre", "precio", "categoria_id"]
+      },
+      "handler": "handleCrearProducto",
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "PRECONDITION_FAILED", "ALREADY_EXISTS", "UPSTREAM_UNREACHABLE", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "productos.crear_categoria",
+      "description": "ALTA de categoria/seccion en la carta activa (fuente unica: carta-manager, id determinista = slug del nombre). Delega por eventos: carta.add_category -> carta.editada -> carta-digital (re-hornea la web). Necesaria para que un producto de una seccion NUEVA nazca en la carta y no en un fichero paralelo.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_id": { "type": "string", "description": "Identificador del proyecto." },
+          "nombre": { "type": "string", "description": "Nombre de la seccion (ej. Postres)." },
+          "descripcion": { "type": "string" },
+          "orden": { "type": "number" },
+          "carta_id": { "type": "string" },
+          "canal": { "type": "string" }
+        },
+        "required": ["project_id", "nombre"]
+      },
+      "handler": "handleCrearCategoria",
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "ALREADY_EXISTS", "UPSTREAM_UNREACHABLE", "UNKNOWN_ERROR"]
+    },
+    {
       "name": "productos.delete",
-      "description": "Elimina un producto del catalogo y persiste a disco. Emite producto.eliminado.",
+      "description": "Elimina un producto de la carta activa (delega en carta-manager; la señal de refresco es carta.editada + catalogo.actualizado, que repinta comandero, productos y la web).",
       "parameters": {
         "type": "object",
         "properties": {

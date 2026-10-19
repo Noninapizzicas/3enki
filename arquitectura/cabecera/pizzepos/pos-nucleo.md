@@ -71,6 +71,12 @@ CLASE ComanderoModule HEREDA BaseModule IMPLEMENTA ComanderoContract {
       VALIDA required fields
       OBTIENE o CREA pedido
       RESUELVE precio POR canal via _resolverPrecioCanal
+      // v3.5.0 — el precio del canal se resuelve POR CARTA: tarifas(canal) → cartasProductosCache
+      // [carta_id] → precio, y si el producto no está en la carta del canal, cae al precio base.
+      // cartasProductosCache se hidrata por DOS vías: carta.actualizada (la carta va ENVUELTA
+      // en {project_id, carta}) y, al recibir tarifas (snapshot o cambio), un carta.get.request
+      // por cada carta del mapping (onCartaGetResponse). Sin la segunda, tras un restart, el
+      // canal cobraba precio base hasta que alguien tocara su carta.
       CREA item con UUID
       AGREGA a pedido.items
       RECALCULA pedido.total

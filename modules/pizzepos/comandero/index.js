@@ -34,7 +34,7 @@ class ComanderoModule extends BaseModule {
   constructor() {
     super();
     this.name    = 'comandero';
-    this.version = '3.4.0';
+    this.version = '3.5.0';
     this.validator = null;
 
     this.pedidos              = new Map();
@@ -217,24 +217,42 @@ class ComanderoModule extends BaseModule {
 
   async onCartaActualizada(event) {
     const data    = this._unwrap(event);
-    const cartaId = data?.meta?.id;
-    const productos = data?.productos || [];
+    // carta-manager publica { project_id, carta, motivo } — la carta va ENVUELTA. Antes se leía
+    // data.meta.id (undefined) → return silencioso → cartasProductosCache NUNCA se hidrataba y el
+    // precio por canal no existía (el canal caía siempre al precio base). Acepta ambas formas.
+    const carta     = data?.carta || data;
+    const cartaId   = carta?.meta?.id;
+    const productos = carta?.productos || [];
     if (!cartaId || productos.length === 0) return;
 
+    this._cachearCarta(carta);
+  }
+
+  // Cache POR CARTA (la del canal): es lo que hace que un canal con carta propia cobre su precio.
+  _cachearCarta(carta) {
+    const cartaId = carta?.meta?.id;
+    const productos = carta?.productos || [];
+    if (!cartaId || productos.length === 0) return;
     const cartaCache = new Map();
     for (const p of productos) {
       if (p.id && p.precio !== undefined) {
         cartaCache.set(p.id, {
           nombre:     p.nombre || p.id,
           precio:     p.precio,
-          categoria:  p.categoria || null,
+          categoria:  p.categoria || p.categoria_id || null,
           estaciones: p.estaciones || null
         });
       }
     }
-
     this.cartasProductosCache.set(cartaId, cartaCache);
     this.logger.info('comandero.carta.cached', { carta_id: cartaId, productos: cartaCache.size });
+  }
+
+  // Respuesta al RPC carta.get.request que pedimos al hidratar las cartas de canal.
+  async onCartaGetResponse(event) {
+    const data = this._unwrap(event);
+    if (data?.status !== 200 || !data?.data) return;
+    this._cachearCarta(data.data);
   }
 
   async onProductoActualizado(event) {
@@ -270,6 +288,22 @@ class ComanderoModule extends BaseModule {
       tipo: data.tipo || null,
       canales_count: Object.keys(config.canales || {}).length
     });
+    this._hidratarCartasDeCanal(project_id, config);
+  }
+
+  // Las cartas de canal necesitan su cache aunque nadie las acabe de tocar (tras un restart el
+  // cache nace vacío y el canal cobraría precio base). Se piden por RPC al custodio, una vez cada una.
+  _hidratarCartasDeCanal(project_id, config) {
+    const ids = new Set([config.general, ...Object.values(config.canales || {})].filter(Boolean));
+    for (const carta_id of ids) {
+      if (this.cartasProductosCache.has(carta_id)) continue;
+      const reqId = crypto.randomUUID();
+      try {
+        this.eventBus.publish('carta.get.request', { request_id: reqId, project_id, carta_id });
+      } catch (err) {
+        this.logger.warn('comandero.carta_hidratar.publish_failed', { carta_id, error: err?.message });
+      }
+    }
   }
 
   // ==========================================

@@ -2240,6 +2240,8 @@ CLASE ComanderoModule HEREDA BaseModule IMPLEMENTA ComanderoContract {
       // en {project_id, carta}) y, al recibir tarifas (snapshot o cambio), un carta.get.request
       // por cada carta del mapping (onCartaGetResponse). Sin la segunda, tras un restart, el
       // canal cobraba precio base hasta que alguien tocara su carta.
+      // v3.5.1 — y si la carta que responde es la GENERAL, además rellena productosCache (catalogo
+      // base): sin eso el POS cobraba 0 y nombraba el item con el producto_id tras un restart.
       CREA item con UUID
       AGREGA a pedido.items
       RECALCULA pedido.total
@@ -4573,7 +4575,9 @@ desde cualquier proceso que hable MQTT, no solo desde dentro del core Node.js.
 > `carta.actualizada` (la carta viaja ENVUELTA en `{project_id, carta}` — leer `data.meta.id` daba
 > `undefined` y el canal cobraba siempre precio base) y, al recibir `tarifas.config.actualizada`, con
 > un `carta.get.request` por cada carta del mapping (`onCartaGetResponse`), para que tras un restart
-> el canal no pierda su precio hasta que alguien toque la carta. Comandero detecta el canal por el prefijo de la
+> el canal no pierda su precio hasta que alguien toque la carta. Si la carta que responde es la
+> **general**, además rellena `productosCache` (catálogo base): sin eso el POS cobraba 0 y nombraba
+> el ítem con el `producto_id` tras un reinicio (v3.5.1). Comandero detecta el canal por el prefijo de la
 > cuenta (`glovo_`, `llevar_`, `M_`, `T_`…).
 > **`carta.save` NO promociona a general si ya hay general (v2.9.0, verificado en vivo 2026-10-19).**
 > `_autoPromoTarifas` leía `/config/tarifas.json` — la ruta LEGACY — mientras tarifas escribe en

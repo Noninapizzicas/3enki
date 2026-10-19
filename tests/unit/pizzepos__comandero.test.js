@@ -592,6 +592,24 @@ function publishedOf(mocks, name) {
     assert.strictEqual(m._resolverPrecioCanal('pan', 1, 'glovo', 'p1'), 1);   // no está en la carta del canal
   });
 
+  await testAsync('carta.get.response de la GENERAL rellena productosCache (tras restart)', async () => {
+    const { module: m } = await instantiate(makeMocks());
+    m.tarifasConfigPorProject.set('p1', { general: 'carta_general', canales: { glovo: 'carta_glovo' } });
+    m._cartaGetPendientes.set('req-1', { project_id: 'p1', carta_id: 'carta_general' });
+    await m.onCartaGetResponse({ data: { request_id: 'req-1', status: 200, data: { meta: { id: 'carta_general' }, productos: [{ id: 'queso', nombre: 'Queso', precio: 6.5, categoria: 'entrantes' }] } } });
+    assert.strictEqual(m.productosCache.get('queso').precio, 6.5);
+    assert.strictEqual(m.productosCache.get('queso').nombre, 'Queso');
+  });
+
+  await testAsync('carta.get.response de una carta de CANAL no toca productosCache', async () => {
+    const { module: m } = await instantiate(makeMocks());
+    m.tarifasConfigPorProject.set('p1', { general: 'carta_general', canales: { glovo: 'carta_glovo' } });
+    m._cartaGetPendientes.set('req-2', { project_id: 'p1', carta_id: 'carta_glovo' });
+    await m.onCartaGetResponse({ data: { request_id: 'req-2', status: 200, data: { meta: { id: 'carta_glovo' }, productos: [{ id: 'queso', nombre: 'Queso', precio: 8.5 }] } } });
+    assert.strictEqual(m.productosCache.get('queso'), undefined);
+    assert.strictEqual(m.cartasProductosCache.get('carta_glovo').get('queso').precio, 8.5);
+  });
+
   console.log('\nTodos los tests pasaron.');
   process.exit(0);
 })();

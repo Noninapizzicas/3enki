@@ -31,6 +31,18 @@ verificado: 2026-10-19
 >
 > `producto.creado` es contrato LEGADO: nadie lo emite (v5 lo retiró); los consumidores
 > (comandero, pedidos, variaciones) se refrescan por `carta.editada` + `catalogo.actualizado`.
+>
+> **Carta de CANAL (precio por canal, verificado en vivo 2026-10-19).** `tarifas` asigna
+> `canal → carta_id` (`glovo`, `llevar`, `telefono`, `whatsapp`, `llevadoo`, `digital`, `mesa`);
+> los canales sin carta propia caen a `general`. La carta de canal es una CARTA REAL (copia de la
+> general con los precios finales escritos) que se guarda con `carta.save` y se registra con
+> `tarifas.register_variant` + `tarifas.assign`. Regla de oro: **solo la carta general proyecta
+> `catalogo.actualizado`** (`productos._esCartaGeneral`) — si una carta de canal lo emitiera, su
+> precio sustituiría al de mostrador en el cache POS de todos los canales, porque comandero y
+> pedidos cachean por `producto_id` sin mirar `menu_id`. El precio del canal se resuelve al cobrar:
+> `tarifas(canal) → cartasProductosCache[carta_id] → precio` con fallback al base (producto que no
+> esté en la carta del canal = precio general). Comandero detecta el canal por el prefijo de la
+> cuenta (`glovo_`, `llevar_`, `M_`, `T_`…).
 > Contrato de las tools `pedido.*`: `pedido_id` (v3.5.1 — send-kitchen/complete/cancel/total
 > leían `id` y devolvían 404: el pedido nunca llegaba a cocina por la vía del asistente).
 >

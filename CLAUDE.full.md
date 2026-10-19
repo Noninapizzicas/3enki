@@ -17693,7 +17693,7 @@ ESTADO ✓ VERIFICADO EN VIVO (Regalos, 3 conversaciones): crear_lista ESCRIBE �
 
 ---
 
-# CÚPULA DE AGENTES — la flota es una BIBLIOTECA buscable (ai-agent-framework-v3 ⚠COMPUTADO_ROTO(version:modules/conversacion/ai-agent-framework-v3) · vivo 2026-08-07)
+# CÚPULA DE AGENTES — la flota es una BIBLIOTECA buscable (ai-agent-framework-v3 · vivo 2026-08-07)
 
 > Tercera sustancia del patrón cúpula (lentes=conocimiento · cantera=skills · **agentes=trabajadores
 > en contexto aislado**). El framework NO cambia de motor —sigue cargando de `agents/*.json` y corriendo

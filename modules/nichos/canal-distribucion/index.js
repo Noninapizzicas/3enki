@@ -62,13 +62,30 @@ class CanalDistribucion extends ModuloHibridoReflejo {
     const mensaje_id = `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const contenidoFormateado = this._formatearContenido(input.canal_tipo, input.contenido);
 
-    // Delegar al bridge via bus
-    const topicBridge = `${input.canal_tipo}.send.request`;
-    const payloadBridge = {
-      destino: input.destinatario,
-      cuerpo: contenidoFormateado,
-      correlation_id: input.correlation_id
-    };
+    // Delegar al bridge via bus — EVENTO NATIVO del bridge de cada canal.
+    // PITFALL (verificado 2026-10-10): `${canal}.send.request` NO lo escucha
+    // nadie; telegram-service escucha `telegram.send_message.request` con
+    // {botName, chatId, text}. El destinatario de Telegram viaja como
+    // "<botName>:<chatId>" (convención de channel-manager) porque el bridge
+    // exige botName — sin él no sabe qué bot habla.
+    let topicBridge, payloadBridge;
+    if (input.canal_tipo === 'telegram') {
+      const [botName, chatId] = String(input.destinatario).split(':');
+      topicBridge = 'telegram.send_message.request';
+      payloadBridge = {
+        botName,
+        chatId,
+        text: contenidoFormateado,
+        correlation_id: input.correlation_id
+      };
+    } else {
+      topicBridge = `${input.canal_tipo}.send.request`;
+      payloadBridge = {
+        destino: input.destinatario,
+        cuerpo: contenidoFormateado,
+        correlation_id: input.correlation_id
+      };
+    }
 
     try {
       await this._publishAlBus(topicBridge, payloadBridge);

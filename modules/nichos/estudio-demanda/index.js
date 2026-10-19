@@ -38,11 +38,15 @@ class EstudioDemanda extends ModuloHibridoReflejo {
     this.version = '0.1.0';
     this._pendientes = new Map(); // correlation_id → { resolve, reject, context }
   }
-  onLoad(context) {
+  async onLoad(context) {
+    // OJO: this.eventBus lo asigna super.onLoad. Suscribir ANTES deja
+    // this.eventBus undefined y el optional-chaining traga las suscripciones
+    // EN SILENCIO → el modulo pedia al LLM/fuentes y nunca oia la respuesta
+    // (→ timeout de 60s y nichos.estudio.demanda.failed).
+    await super.onLoad(context);
     this.eventBus?.subscribe('llm.complete.response', (e) => this._onLLMResponse(e));
     this.eventBus?.subscribe('nichos.fuente.consumir.response', (e) => this._onFuenteResponse(e));
     this.eventBus?.subscribe('nichos.fuente.limites.puede.consumir.response', (e) => this._onLimitesResponse(e));
-    return super.onLoad(context);
   }
 
   // ── RPC HANDLER ──
@@ -81,8 +85,11 @@ class EstudioDemanda extends ModuloHibridoReflejo {
       }
 
       // 3. Pedir al LLM que sintetice
+      // El consumidor de fuentes devuelve el dato homogeneo en `contenido`
+      // (y a veces `resumen`/`titulo`), no en `datos`. Leer solo `datos`
+      // mandaba al LLM 10 fuentes como "sin datos" → informe ciego.
       const textoFuentes = datosFuentes.map(f =>
-        `[Fuente: ${f.fuente}]\n${f.datos || 'sin datos'}`
+        `[Fuente: ${f.fuente || f.origen || 'fuente'}] ${f.url ? `(${f.url})` : ''}\n${f.datos || f.contenido || f.resumen || f.titulo || 'sin datos'}`
       ).join('\n\n');
 
       const analisis = await this._pedirAlLLM(input.candidato, textoFuentes, projectId);

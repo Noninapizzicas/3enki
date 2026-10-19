@@ -222,9 +222,13 @@ class ColaDecisiones extends ModuloHibridoReflejo {
 
     this._persist.marcarDirty(input.project_id);
 
-    // PULSO
+    // PULSO — lleva `tipo` y `contexto` además del voto: es lo que permite a
+    // quien escuche la respuesta saber QUÉ decisión se cerró (el pulso antes
+    // solo traía el voto y ningún dato del tema, así que nadie podía continuar).
     this.eventBus?.publish('nichos.decision.solicitud.respondida', {
       solicitud_id: input.solicitud_id,
+      tipo: sol.tipo || null,
+      contexto: sol.contexto || null,
       opcion_elegida: input.respuesta,
       dueno: input.dueno || null,
       nota_libre: input.nota_libre || null,

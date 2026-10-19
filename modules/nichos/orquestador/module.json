@@ -14,6 +14,8 @@
     { "event": "nichos.validacion.lote.correr.request", "description": "Dispara batch-validacion tras sondeo completado. Payload: {request_id, candidatos, correlation_id}." },
     { "event": "nichos.solucion.ensamblar.request", "description": "Dispara ensamblaje de viables tras validacion completada. Payload: {request_id, viables, correlation_id}." },
     { "event": "nichos.cuadro.salud.recalcular.request", "description": "Recalcula cuadro de salud tras construccion completada. Payload: {request_id, resultado, correlation_id}." },
+    { "event": "nichos.canal.enviar.request", "description": "BOCA: al cerrar un ciclo, devuelve el resultado al dueño por su canal. Payload: {request_id, project_id, proposito:'notificacion', mensaje:{cuerpo, escalon}, correlation_id}. El destino lo resuelve puerto-canal del origen aprendido." },
+    { "event": "nichos.cola.decisiones.encolar.request", "description": "BUCLE DE DECISIÓN: al cerrar un ciclo con un PUENTE, encola la solicitud de decisión (tipo VALIDACION_PUENTE, opciones SI/NO) para que la respuesta del dueño tenga algo que cerrar. Payload: {request_id, project_id, solicitud_decision:{tipo, contexto, opciones, dueno, id_nicho, caducidad}}." },
     { "event": "llm.complete.request", "description": "Consulta al LLM para decisiones de orquestacion (priorizacion, filtrado). Payload: {request_id, messages, options}." }
   ],
   "subscribes": [

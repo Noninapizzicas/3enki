@@ -397,13 +397,29 @@ class SondeadorTerritorio extends ModuloHibridoReflejo {
   // Consultas al bus
   // =============================================================
   async _consultarExclusiones(projectId, firma) {
-    const resp = await this._rpc('nichos.reglas.exclusion.consultar.request', {
+    // El set GLOBAL vive bajo la firma 'sin_firma' (el dueño escribe ahí las
+    // reglas anti-ruido que aplican a TODAS las semillas — lorcana, moneda
+    // 30800, otros-Lorca). Si la firma de esta semilla tiene reglas propias,
+    // se SUMAN a las globales (fusion por id, sin duplicados).
+    const leer = (f) => this._rpc('nichos.reglas.exclusion.consultar.request', {
       project_id: projectId,
-      semilla_firma: firma || 'sin_firma'
-    }, { timeout_ms: 5000 });
-    return (resp && resp.data && resp.data.conjunto_reglas && Array.isArray(resp.data.conjunto_reglas.patrones_excluir))
-      ? resp.data.conjunto_reglas.patrones_excluir
-      : [];
+      semilla_firma: f
+    }, { timeout_ms: 5000 }).then((r) => (
+      (r && r.data && r.data.conjunto_reglas && Array.isArray(r.data.conjunto_reglas.patrones_excluir))
+        ? r.data.conjunto_reglas.patrones_excluir : []), () => []);
+    const [propias, globales] = await Promise.all([
+      firma ? leer(firma) : Promise.resolve([]),
+      leer('sin_firma')
+    ]);
+    const vistas = new Set();
+    const fusion = [];
+    for (const p of [...globales, ...propias]) {
+      const clave = String(p && (p.patron || p.nombre || p)).toLowerCase();
+      if (vistas.has(clave)) continue;
+      vistas.add(clave);
+      fusion.push(p);
+    }
+    return fusion;
   }
 
   async _consultarLimites(projectId) {
@@ -430,13 +446,19 @@ class SondeadorTerritorio extends ModuloHibridoReflejo {
   }
 
   /**
-   * _consultaDe — la consulta que sale a la fuente nombra QUÉ buscamos y DÓNDE:
-   * "<nicho> en <territorio>". El territorio solo es una localizacion, no una
-   * pregunta: sondeado en pelota, la fuente devolvia la Wikipedia de "Lorca"
-   * (ruido) en vez de mercado. Sin nicho declarado, cae al territorio — nunca
-   * se inventa uno.
+   * _consultaDe — la consulta que sale a la fuente es la INTENCIÓN ABIERTA
+   * verbatim (`texto_original`), no la categoría. Lección del alto (2026-10-16,
+   * autocompletado Google de Lorca/30800): nadie pregunta el nicho por su
+   * nombre; pregunta por estado («dónde comer barato», «abierto ahora»).
+   * La categoría (`vertical_sugerido`) era una pregunta CERRADA que llevaba la
+   * respuesta dentro: devolvía a quien YA vende (la oferta) y cero dinero.
+   * `texto_original` lo arma el sembrador («<semilla> en <territorio>») viaja
+   * dentro de la semilla_normalizada y sale tal cual. Fallback histórico:
+   * categoría + territorio (por semillas antiguas).
    */
   _consultaDe(semilla, territorio) {
+    const textoOriginal = String((semilla && (semilla.texto_original || semilla.texto)) || '').trim();
+    if (textoOriginal) return textoOriginal;
     const nicho = String(
       (semilla && (semilla.vertical_sugerido || semilla.nombre || semilla.descripcion)) || ''
     ).trim();

@@ -98,14 +98,20 @@ class SembradorNorte extends ModuloHibridoReflejo {
     }
 
     // 2. SEMBRAR — una idea por semilla, con la forma que usa el dueno:
-    //    «<a quien le vendemos> en <territorio>». Entra por la puerta del
-    //    vertical (capturador-semilla), asi que corre la cadena de siempre.
-    //    Dedupe por texto: los dos pisos pueden nombrar el mismo nicho.
+    //    la semilla ya es la INTENCIÓN ABIERTA completa («dónde comer barato
+    //    en Lorca», «trabajo camarero en Lorca») o el giro clásico
+    //    («<a quien le vendemos> en <territorio>», fallback para semillas
+    //    cortas: solo se arma cuando la semilla no lleva territorio). Entra
+    //    por la puerta del vertical (capturador-semilla), asi que corre la
+    //    cadena de siempre. Dedupe por texto: los dos pisos pueden nombrar
+    //    el mismo nicho.
     const sembradas = [];
     const vistas = new Set();
 
     const sembrarIdea = (semilla, capacidadId, construir) => {
-      const texto = `${semilla} en ${territorio}`;
+      const base = String(semilla || '').trim();
+      if (!base) return;
+      const texto = /en\s+\S+/i.test(base) ? base : `${base} en ${territorio}`;
       if (vistas.has(texto)) return;
       vistas.add(texto);
       this.eventBus?.publish('nichos.semilla.capturar.request', {
@@ -133,6 +139,20 @@ class SembradorNorte extends ModuloHibridoReflejo {
     // captura/entrega/cobro son el mismo negocio.
     for (const nicho of this._nichosAConstruir(norte.podemos_construir)) {
       sembrarIdea(nicho.texto, nicho.capacidad_id, true);
+    }
+
+    // 3. EL ALTO como semillas (v0.3.0) — intenciones ABIERTAS del territorio
+    //    (el dato real de qué teclea la gente: lorca/30800 + murcia, 2026-10-16).
+    //    El dueño las trae el evento (`semillas_alto`); nada clavado en código.
+    //    Los tres bloques que manda el alto: diversión (tiempo/cine/niños),
+    //    restauración (comer barato/abierto/domicilio) y empleo (oficio+ciudad).
+    //    Viajan con su capacidad para que el norte las ordene igual que las
+    //    otras — son el MISMO tipo de semilla, no un carril aparte.
+    const semillasAlto = Array.isArray(input.semillas_alto) ? input.semillas_alto : [];
+    for (const sa of semillasAlto) {
+      const texto = String((sa && (sa.texto || sa.semilla)) || '').trim();
+      if (!texto) continue;
+      sembrarIdea(texto, String((sa && sa.capacidad_id) || 'alto-intencion'), false);
     }
 
     this.eventBus?.publish('nichos.sembrador.norte.sembrado', {

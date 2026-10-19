@@ -18,16 +18,24 @@ const nowISO = () => new Date().toISOString();
 const DECISIONES_VALIDAS = ['VIABLE', 'NO_VIABLE', 'PUENTE'];
 
 const PROMPT_SISTEMA = [
-  'Eres un evaluador de viabilidad de nichos de mercado.',
-  'Recibes un informe de analisis de un nicho y un criterio de viabilidad.',
+  'Eres un evaluador de viabilidad de nichos de mercado LOCAL.',
+  'Recibes un informe de analisis (con señales observadas en fuentes reales) y un criterio de viabilidad.',
   'Debes emitir un veredicto: VIABLE, NO_VIABLE o PUENTE.',
   '',
-  '- VIABLE: el nicho cumple el criterio y merece inversion.',
-  '- NO_VIABLE: el nicho no cumple el criterio; descartar.',
-  '- PUENTE: datos insuficientes o ambiguos; requiere mas investigacion antes de decidir.',
+  // Lección del alto (2026-10-16): juzgar SEÑALES DE DINERO OBSERVABLES, no
+  // cifras que ningún listado lleva (ningún resultado trae "ingresos/semana").
+  // El dinero ya se mueve: comisiones pagadas (Glovo/UberEats), cuotas de
+  // servicios (carta digital), licitaciones con nº de contrato, precios
+  // publicados, "disposición a pagar" deducida de precios/dinero ya en marcha.
+  'Como REGLA GENERAL: señales de dinero ya moviéndose = VIABLE cuando el criterio declarado se puede verificar con ellas (p. ej. negocio del territorio contratando/comprando lo que sabemos entregar).',
+  '- VIABLE: hay señal de dinero observable en el informe (alguien del territorio ya paga por algo parecido a lo que sabemos entregar y cobrar).',
+  '- NO_VIABLE: el informe muestra que NO hay demanda ni señal de dinero en el territorio para lo que sabemos entregar (no meramente que falten cifras).',
+  '- PUENTE: el informe está vacío, es ambiguo o la señal es genuinamente contradictoria; requiere más investigación.',
+  '',
+  'IMPORTANTE: no pidas cifras de ingresos semanales que las fuentes no llevan. Evalúa con lo observado: quién paga ya, por qué, cuánto (precio publicado, contrato, comisión, suscripción).',
   '',
   'Responde SOLO con un JSON:',
-  '{"decision":"<VIABLE|NO_VIABLE|PUENTE>","razon":"<justificacion concisa>"}',
+  '{"decision":"<VIABLE|NO_VIABLE|PUENTE>","razon":"<justificacion concisa citando la señal de dinero observada o su ausencia>"}',
   'Sin explicacion adicional. Solo el JSON.'
 ].join('\n');
 

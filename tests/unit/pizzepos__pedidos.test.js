@@ -659,6 +659,29 @@ function publishedOf(mocks, name) {
     await m.onUnload();
   });
 
+  await testAsync('tienda · fecha_deseada válida se persiste + viaja en pedido.creado (encargo anticipado)', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    const r = await m.handleCreatePedidoTienda(validInputTienda({ fecha_deseada: '2026-09-05' }));
+    assert.ok(isCanonicalSuccess(r));
+    const pedido = m.pedidos.get(r.data.pedido_id);
+    assert.strictEqual(pedido.fecha_deseada, '2026-09-05');
+    const evs = publishedOf(mocks, 'pedido.creado');
+    assert.strictEqual(evs[0].fecha_deseada, '2026-09-05');
+    await m.onUnload();
+  });
+
+  await testAsync('tienda · fecha_deseada omitida o malformada queda null + NO viaja en pedido.creado', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    const r = await m.handleCreatePedidoTienda(validInputTienda({ fecha_deseada: '05/09/2026' }));   // no ISO → inválida
+    const pedido = m.pedidos.get(r.data.pedido_id);
+    assert.strictEqual(pedido.fecha_deseada, null);
+    const evs = publishedOf(mocks, 'pedido.creado');
+    assert.strictEqual(evs[0].fecha_deseada, undefined, 'null no debe propagarse al evento (omit-if-null)');
+    await m.onUnload();
+  });
+
   await testAsync('compatibilidad POS · handleCreatePedido sigue funcionando idéntico', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);

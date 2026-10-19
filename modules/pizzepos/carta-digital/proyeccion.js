@@ -16,14 +16,11 @@ const { normalizar: normAlergenos, etiquetar: etiquetarAlergenos } = require('..
  * @param {Object|null} marca perfil de marca (esencia/visual/voz/negocio)
  * @param {Object} contenido  mapa { [product_id]: { imagenes:[{url,principal,alt}], descripcion } }
  * @param {Object} config     config del canal { dominio_publico, opciones_visualizacion }
- * @param {Object} calendario mapa { [product_id]: { dias_salida:[1..7], margen_antelacion_h } }
- *                            (del módulo calendario — cuándo sale cada producto; ausente → [])
- * @returns {Object} { branding, dominio_publico, opciones, categorias, productos, alergenos_leyenda, generado_at }
+ * @returns {Object} { branding, dominio_publico, opciones, categorias, productos, generado_at }
  */
-function proyectarCartaPublica(carta, marca, contenido, config, calendario) {
+function proyectarCartaPublica(carta, marca, contenido, config) {
   const cont = contenido || {};
   const cfg = config || {};
-  const cal = calendario || {};
 
   const categorias = (Array.isArray(carta.categorias) ? carta.categorias : [])
     .filter(c => c.activa !== false)
@@ -32,7 +29,6 @@ function proyectarCartaPublica(carta, marca, contenido, config, calendario) {
   const presentes = new Set();
   const productos = (Array.isArray(carta.productos) ? carta.productos : []).map(p => {
     const c = cont[p.id] || {};
-    const cc = cal[p.id] || {};
     const imgs = Array.isArray(c.imagenes) ? c.imagenes : [];
     const principal = imgs.find(im => im.principal) || imgs[0] || null;
     // Alérgenos CANÓNICOS (1169/2011): normaliza el código legacy → 14 del Anexo II.
@@ -49,12 +45,7 @@ function proyectarCartaPublica(carta, marca, contenido, config, calendario) {
       imagen: principal ? principal.url : null,
       imagenes: imgs,
       ingredientes: Array.isArray(p.ingredientes) ? p.ingredientes : (p.ingredientes_base || []),
-      alergenos,
-      // Calendario (módulo calendario): cuándo sale este producto. `[]` → no es encargable
-      // (sin botón de encargo en la carta). margen_antelacion_h = antelación mínima p/ encargar.
-      dias_salida: Array.isArray(cc.dias_salida) ? cc.dias_salida.slice() : [],
-      margen_antelacion_h: (cc.margen_antelacion_h !== undefined && cc.margen_antelacion_h !== null)
-        ? Number(cc.margen_antelacion_h) : null
+      alergenos
     };
   });
   // Leyenda: solo los alérgenos que aparecen en la carta, en orden del Anexo II (id/nombre/emoji).

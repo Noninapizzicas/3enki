@@ -415,6 +415,7 @@ class PedidosModule extends BaseModule {
         mayor_edad_confirmado,
         expira_horas,
         notas_generales,
+        fecha_deseada,
         correlation_id
       } = data || {};
       // Nombre del pedido = ANCLA de recogida (el dependiente lo pide al recoger).
@@ -434,6 +435,13 @@ class PedidosModule extends BaseModule {
       const hora_recogida_norm = (modo_consumo_norm === 'recoger'
         && typeof hora_recogida === 'string' && hora_recogida.trim())
         ? hora_recogida.trim().slice(0, 20)
+        : null;
+
+      // FECHA DESEADA (encargo anticipado): día futuro en el que el cliente quiere
+      // recoger. Formato ISO YYYY-MM-DD, autoritativa por venir en el #P1 del bot o
+      // en la PWA. Si no llega o no es una fecha válida → null (pedido HOY, como siempre).
+      const fecha_deseada_norm = (typeof fecha_deseada === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(fecha_deseada.trim()))
+        ? fecha_deseada.trim()
         : null;
 
       if (!project_slug || typeof project_slug !== 'string') {
@@ -514,6 +522,7 @@ class PedidosModule extends BaseModule {
         cliente_telefono: cliente_telefono || null,
         modo_consumo: modo_consumo_norm,
         hora_recogida: hora_recogida_norm,
+        fecha_deseada: fecha_deseada_norm,
         // Decision 6.2 = C: configurable por proyecto. Si la PWA mostro gate
         // y el cliente lo paso, este flag llega como true. Si el proyecto no
         // activa verificacion, llega null (sin info — no aplica).
@@ -1027,6 +1036,11 @@ class PedidosModule extends BaseModule {
     if (pedido.total_centimos !== undefined && pedido.total_centimos !== null) {
       payload.total_centimos = pedido.total_centimos;
     }
+    if (pedido.hora_recogida) payload.hora_recogida = pedido.hora_recogida;
+    if (pedido.modo_consumo) payload.modo_consumo = pedido.modo_consumo;
+    // Encargo anticipado: fecha deseada (día futuro). La leen produccion/horno para
+    // programar la elaboración del día X. Ausente → pedido HOY.
+    if (pedido.fecha_deseada) payload.fecha_deseada = pedido.fecha_deseada;
     // mayor_edad_confirmado SI viaja en el evento (es metadata operativa, no PII).
     // El staff puede usarlo para auditoria — el dependiente sigue exigiendo DNI
     // en presencial si la regulacion lo manda.

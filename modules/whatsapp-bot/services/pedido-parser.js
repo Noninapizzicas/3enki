@@ -52,7 +52,12 @@ function _decodificarEstructura(text) {
     const hora_recogida = (modo_consumo === 'recoger' && typeof payload.hora_recogida === 'string' && payload.hora_recogida.trim())
       ? payload.hora_recogida.trim().slice(0, 20)
       : null;
-    return { items: payload.items, modo_consumo, hora_recogida };
+    // Encargo anticipado: fecha deseada (día futuro). Autoritativa por venir en el #P1
+    // (no en el texto editable). Formato ISO YYYY-MM-DD. Si la PWA no la puso → null.
+    const fecha_deseada = (typeof payload.fecha_deseada === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(payload.fecha_deseada.trim()))
+      ? payload.fecha_deseada.trim()
+      : null;
+    return { items: payload.items, modo_consumo, hora_recogida, fecha_deseada };
   } catch (_) {
     return null;   // payload corrupto → el bot cae al texto legacy o pide reenviar
   }
@@ -162,6 +167,8 @@ function parsearPedido(textoBruto) {
     // CANAL elegido en la PWA (mesa | recoger | llevar) + hora pactada, leídos del #P1.
     modo_consumo: estructura?.modo_consumo || null,
     hora_recogida: estructura?.hora_recogida || null,
+    // Encargo anticipado: fecha deseada (día futuro), leída del #P1. null = pedido hoy.
+    fecha_deseada: estructura?.fecha_deseada || null,
     estructura
   };
 }

@@ -12,5 +12,5 @@
 </script>
 
 <div data-envase-panel={panelId}>
-  <BlueprintForm {blueprint} moduleId="envase-embalaje" titulo="📦 Envase — generado del blueprint" />
+  <BlueprintForm {blueprint} moduleId="envase" titulo="📦 Envase — generado del blueprint" />
 </div>

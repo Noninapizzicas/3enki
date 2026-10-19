@@ -19,6 +19,7 @@
 'use strict';
 
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
+const PosPersistencia = require('../../_shared/pos-persistencia');
 
 const nowISO = () => new Date().toISOString();
 
@@ -37,13 +38,40 @@ class PuertoCanal extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'puerto-canal';
-    this.version = '0.1.0';
+    this.version = '0.2.0';
     // Registro en memoria: { 'canal:external_id' → { project_id, purpose } }
     this.registros = new Map();
     // Destino aprendido: project_id → { botName, chatId }. Lo llena la OREJA
     // (onTelegramText) con quien escribe al bot; lo consume la BOCA (_enviar)
     // para devolverle el resultado sin clavar un chat_id a mano.
     this._origen = new Map();
+
+    // EL DESTINO SOBREVIVE AL REINICIO (v0.2.0). Antes vivia SOLO en memoria:
+    // cualquier recarga del modulo (deploy, hot_reload) borraba el destino
+    // aprendido y la BOCA respondia 400 «destino requerido» — el aviso al
+    // dueno se perdia en silencio hasta que volviera a escribir al bot. La
+    // persistencia (PosPersistencia, por proyecto) es el fix estructural: se
+    // aprende UNA vez (el dueno escribe al bot) y queda.
+    this._persist = new PosPersistencia({
+      modulo: this,
+      file: 'puerto-canal.json',
+      dir: '/prisma/pos/nichos',
+      snapshot: (pid) => ({ origen: this._origen.get(pid) || null }),
+      hidratar: (pid, data) => {
+        if (data && data.origen && data.origen.chatId) this._origen.set(pid, data.origen);
+      }
+    });
+  }
+
+  async onUnload() {
+    await this._persist.flush();
+    this._persist.detener();
+    return super.onUnload();
+  }
+
+  onProjectActivated(e) {
+    const d = (e && (e.data || e)) || {};
+    return this._persist.restaurar(d.project_id);
   }
 
   // ── RPC HANDLERS ──
@@ -72,7 +100,10 @@ class PuertoCanal extends ModuloHibridoReflejo {
     // LA OREJA APRENDE EL DESTINO — quien escribe al bot es a quien hay que
     // responderle. Guardamos su chat por proyecto.
     const chatId = d.chatId || d.chat_id || null;
-    if (chatId) this._origen.set(projectId, { botName: d.botName, chatId });
+    if (chatId) {
+      this._origen.set(projectId, { botName: d.botName, chatId });
+      this._persist.marcarDirty(projectId);   // queda aprendido aunque el modulo recargue
+    }
 
     this.eventBus?.publish('nichos.canal.mensaje.recibido', {
       // CONTRATO: project_id + mensaje_entrante son los campos que consumen

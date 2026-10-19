@@ -1,6 +1,6 @@
 {
   "name": "puerto-canal",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "PUENTE del vertical NICHOS (bloque G · comunicación — G1): fachada de canales de comunicación (Telegram, WhatsApp, email) que desacopla al vertical del proveedor concreto. Envía mensajes por canal resuelto por propósito/destino, registra canales por proyecto y recibe mensajes entrantes.",
   "_doc": "modules/nichos/puerto-canal — PUENTE (bloque G · comunicación / G1) del vertical NICHOS.\n\nQué hace: tres operaciones.\n\n1. ENVIAR (nichos.canal.enviar.request): resuelve el canal apropiado por propósito o destino, publica al bridge correspondiente (telegram, whatsapp, email) y confirma el envío. Pulsa nichos.canal.mensaje.enviado.\n\n2. REGISTRAR (nichos.canal.registrar.request): da de alta la asociación canal↔project_id↔purpose (p.ej. 'telegram:chat_123' → proyecto X, propósito 'soporte'). Pulsa nichos.canal.registrado.\n\n3. RECIBIR (telegram.text.received y otros entrantes): recibe mensajes del bridge y los republica como nichos.canal.mensaje.recibido para que G3 (clasificador-intencion) los consuma.\n\nStore opcional /nichos/canales.json (atajos por propósito). Usa channel-manager (registry) y telegram-bridge via bus. Sin HTTP directo.\n\nPatrón: ModuloHibridoReflejo (mitad REFLEJO, JS determinista). El PUENTE no hace HTTP directo: orquesta vía bus hacia los bridges de canal y credential-manager.",
   "ui_decision": {
@@ -18,5 +18,6 @@
     { "event": "nichos.canal.enviar.request", "handler": "onEnviarRequest", "description": "PUENTE: resuelve canal y destino (explícito, o del origen aprendido por project_id: quien escribió al bot) y delega al bridge nativo del canal. Payload: {request_id, canal?, destino?, project_id?, mensaje, correlation_id}." },
     { "event": "nichos.canal.registrar.request", "handler": "onRegistrarRequest", "description": "PUENTE: registra canal↔proyecto↔propósito. Payload: {request_id, canal, external_id, project_id, purpose}." },
     { "event": "telegram.text.received", "handler": "onTelegramText", "description": "Mensaje entrante de Telegram: SOLO si viene de un bot de vertical (SERVICIO_POR_BOT[botName]) se republica como nichos.canal.mensaje.recibido, resolviendo su project_id (el evento trae botName, no project_id). Los bots de proyecto y cualquier otro bot se ignoran. Payload entrante: {botName, chatId, from, text, date}. Payload emitido: {project_id, mensaje_entrante, canal, autor, cuerpo, meta, timestamp}." }
+    ,{ "event": "project.activated", "handler": "onProjectActivated", "description": "Reflejo JS: restaura el DESTINO aprendido (quien escribió al bot) del proyecto activado desde /prisma/pos/nichos/puerto-canal.json (PosPersistencia). Sin esto, recargar el módulo borraba el destino y la BOCA respondía 400 «destino requerido»." }
   ]
 }

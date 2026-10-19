@@ -105,7 +105,14 @@ class SembradorNorte extends ModuloHibridoReflejo {
     const vistas = new Set();
 
     const sembrarIdea = (semilla, capacidadId, construir) => {
-      const texto = `${semilla} en ${territorio}`;
+      // La semilla del PISO 2 ya nombra el territorio: `meta.nicho_texto` es
+      // «tienda de regalos personalizados en Lorca». Pegarle otro
+      // « en <territorio>» daria «... en Lorca en Lorca» (y rompe el dedupe
+      // contra la misma semilla del PISO 1). Si ya lo nombra, va tal cual.
+      const base = String(semilla).trim();
+      const texto = base.toLowerCase().includes(territorio.toLowerCase())
+        ? base
+        : `${base} en ${territorio}`;
       if (vistas.has(texto)) return;
       vistas.add(texto);
       this.eventBus?.publish('nichos.semilla.capturar.request', {

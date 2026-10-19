@@ -5,7 +5,7 @@ resumen: Managers de dominio pizzepos (cuentas, productos, categorías, cobros, 
 fuentes:
   - modules/pizzepos/**
   - blueprints/**
-verificado: 2026-10-16
+verificado: 2026-10-19
 ---
 
 # Módulos Pizzepos y Blueprints
@@ -176,102 +176,104 @@ CLASE Pedido {
 ### PRODUCTOS MANAGER
 
 ```
+// v5.2.0 — PRODUCTOS ES UN PROYECTOR SIN ESTADO sobre carta-manager.
+// La CARTA es la única fuente de verdad; productos proyecta la carta activa del proyecto
+// al shape POS AL VUELO (carta.get.request). No hay store, ni searchIndex, ni persistencia
+// propia. Las mutaciones DELEGAN en el custodio (carta.*.request) y la cadena sigue por EVENTOS.
+// NO emite producto.{creado,actualizado,eliminado}: ese contrato murió con el store v4
+// (29 fantasmas). El consumer canónico es carta.actualizada/carta.editada + catalogo.actualizado.
+
 INTERFAZ ProductosContract {
-  createProducto(data: {nombre, descripcion, precio, categoria_id, iva?, imagen?}): Promise<{producto_id, ...}>
-  getProducto(producto_id: String): Promise<Producto>
-  listProductos(filters?: Object): Promise<Array<Producto>>
-  updateProducto(producto_id: String, updates: Object): Promise<Producto>
-  deleteProducto(producto_id: String): Promise<Void>
-  getProductosByCategoria(categoria_id: String): Promise<Array<Producto>>
-  searchProductos(query: String): Promise<Array<Producto>>
+  crear(data: {project_id, nombre, precio, categoria_id, ingredientes?, estaciones?, ...}): {producto, carta_version}
+  crear_categoria(data: {project_id, nombre, orden?}): {categoria, carta_version}
+  list/get/search/categorias/ingredientes/pizzas/stats/carta_completa  // LECTURAS (proyección)
+  update/delete                                                       // MUTACIONES (delegan)
 }
 
-CLASE ProductosManager IMPLEMENTA ProductosContract {
+CLASE ProductosProyector IMPLEMENTA ProductosContract {
   ATRIBUTOS {
-    coreId: String
-    eventBus: EventBus
-    logger: Logger
-    metrics: Metrics
-    uiHandler: UIRequestHandler
-    productosStore: Map<producto_id, Producto>
-    categoriasManager: CategoriasManager
-    searchIndex: Map<searchKey, Array<producto_id>>
+    eventBus          : EventBus
+    uiHandler         : UIRequestHandler
+    mappingCanales    : Map<project_id, {general, canales}>   // hidratado por tarifas.config.actualizada
+    catalogoProyectado: Map<project_id, Catalogo>             // caché de proyección (ms)
   }
 
-  CONSTRUCTOR(options: Object)
+  METODO crear(data): {producto, carta_version}          // LA PUERTA DEL ASISTENTE
+    VALIDA project_id, nombre, precio(numérico >= 0), categoria_id
+    carta_id ← resolverCartaActiva(project_id, canal?, carta_id?)
+    RPC carta.add_product.request {project_id, carta_id, producto}
+    RETORNA la respuesta del custodio (201 + producto + carta_version)
+    // cero escritura propia: si el custodio no persiste, aquí no hay nada que deshacer
 
-  METODOS {
-    async createProducto(data: {nombre, descripcion, precio, categoria_id, iva?, imagen?}): Promise<{producto_id, ...}>
-      VALIDA nombre, precio
-      VALIDA categoria_id existe
-      GENERA producto_id (UUID)
-      CREA Producto {producto_id, nombre, descripcion, precio, categoria_id, iva: iva || 0.21, imagen, created_at}
-      GUARDA EN productosStore
-      ACTUALIZA searchIndex
-      PERSISTE
-      EMITE producto.created {producto_id, nombre, precio}
-      RETORNA producto
+  METODO crear_categoria(data): {categoria, carta_version}
+    carta_id ← resolverCartaActiva(...)
+    RPC carta.add_category.request {project_id, carta_id, categoria}
 
-    async getProducto(producto_id: String): Promise<Producto>
-      BUSCA EN productosStore
-      SI no existe: LANZA ProductoNotFoundError
-      RETORNA producto
+  METODO update(id, campos): RPC carta.update_product.request    // mismas 6 W, mismo dueño
+  METODO delete(id):         RPC carta.remove_product.request
 
-    async listProductos(filters?: Object): Promise<Array<Producto>>
-      FILTRA productosStore (categoria, nombre, precio_range)
-      RETORNA Array
+  METODO resolverCartaActiva(project_id, canal, carta_id): carta_id
+    SI carta_id            RETORNA carta_id                  // el caller ya resolvió la del canal
+    SI mapping[canal]      RETORNA mapping[canal]            // override de canal (tarifas)
+    SI mapping.general     RETORNA mapping.general           // general (tarifas)
+    RETORNA carta.list.request → la en_servicio (fallback robusto)
 
-    async updateProducto(producto_id: String, updates: Object): Promise<Producto>
-      VALIDA producto existe
-      MERGES updates
-      PERSISTE
-      ACTUALIZA searchIndex
-      EMITE producto.updated {producto_id}
-      RETORNA producto
+  METODO evento carta.actualizada | carta.editada | carta.borrada  // onCartaGenerada
+    PROYECTA la carta entera (viene EMBEBIDA en el payload; no re-lee)
+    PUBLICa catalogo.actualizado {project_id, productos}
 
-    async deleteProducto(producto_id: String): Promise<Void>
-      VALIDA producto NO en pedidos activos
-      ELIMINA DE productosStore
-      ELIMINA DE searchIndex
-      PERSISTE
-      EMITE producto.deleted {producto_id}
-
-    async getProductosByCategoria(categoria_id: String): Promise<Array<Producto>>
-      FILTRA productosStore POR categoria_id
-      RETORNA Array
-
-    async searchProductos(query: String): Promise<Array<Producto>>
-      BUSCA EN searchIndex (fuzzy match)
-      RETORNA top-K resultados
-
-    async onLoad(moduleContext: Object): Promise<Void>
-      CARGA categoriasManager FROM moduleRegistry
-      REGISTRA UI handlers
-      CARGA productosStore FROM persistencia
-      CONSTRUYE searchIndex
-      LOG "productos.onLoad"
-  }
-
-  EVENTO {
-    producto.created: {producto_id, nombre, precio}
-    producto.updated: {producto_id, updates}
-    producto.deleted: {producto_id}
-  }
+  METODO onLoad(ctx)
+    HIDRATA mappingCanales desde tarifas (snapshot) + proyecto activo (warm)
+    // tras un hot-reload el mapa nace VACÍO y resolverCartaActiva caería al fallback
 }
 
-CLASE Producto {
-  ATRIBUTOS {
-    producto_id: String
-    nombre: String
-    descripcion: String
-    precio: Number
-    categoria_id: String
-    iva: Number (default 0.21)
-    imagen: String (URL|base64)
-    created_at: Number
-    updated_at: Number
-  }
+// LA CADENA DEL ALTA (un solo acto del asistente, cinco destinos por eventos)
+//
+//   productos.crear
+//     → carta.add_product.request        (carta-manager: version++ + snapshot + validar)
+//     → carta.editada                    (señal del custodio)
+//         ├─ productos.onCartaGenerada   → catalogo.actualizado
+//         │     ├─ comandero.onCatalogoActualizado   (caché POS: nombre, precio, estaciones)
+//         │     └─ pedidos                            (caché de composición)
+//         ├─ variaciones.onCartaActualizada           (reconfigura quitar/añadir)
+//         ├─ categorias.onCartaActualizada            (catálogo de categorías)
+//         ├─ recetas.onCartaActualizada               (puente: alta idempotente en el catálogo
+//         │                                            de ingredientes; precio SIEMPRE null)
+//         └─ carta-digital._autoPublicar (debounce)   → re-hornea el bundle → web pública
+//   comandero.enviar_cocina
+//     → pedido.enviado_cocina → cocina.onPedidoEnviadoCocina (item con nombre + categoría
+//                                + estaciones + variaciones; sin nombre se DESCARTA con warn)
+
+CLASE Producto {                        // el shape que viaja por la carta
+  id            : String                // determinista: slug(categoria_id) + '_' + slug(nombre)
+  nombre        : String
+  precio        : Number                // € (venta) — INDEPENDIENTE del coste (escandallo)
+  categoria_id  : String
+  ingredientes  : Array<Ingrediente>    // LO QUE LLEVA (lo único que pintan web y comandero)
+  opciones      : Array<Opcion>         // subsistema Opciones: QUITAR (lo que lleva) / ELEGIR_VARIOS
+  estaciones    : Array<String>         // herencia de la categoría si el producto no las trae
+  variaciones   : Object?               // reglas (permite_quitar / max_extras / extras_sugeridos)
+  dietas        : Array<String>?
+  alergenos     : Array<String>
+  disponible    : Boolean
 }
+
+CLASE Ingrediente {                     // forma CANÓNICA (ley única de carta-manager)
+  id           : String                 // slug del nombre — id estable, nunca prosa
+  nombre       : String                 // nombre de carta ('Mozzarella')
+  familia      : Familia                // queso|verdura|carne|salsa|pescado|fruta|extra|condimento|otro
+  emoji        : String?
+  precio_extra : Number                 // € del extra (0 explícito = gratis)
+}
+
+// LEY DE ENTRADA (el asistente habla en texto, la carta guarda fichas):
+//   _normalizarIngredientes acepta TEXTO ('mozzarella') y FICHA RICA ({id,nombre,familia,emoji}).
+//   El texto se eleva a ficha canónica con id determinista y nombre legible (capitaliza).
+//   `ingredientes_base` NO es un campo aparte: es LO MISMO que `ingredientes` — se funde por id,
+//   gana la ficha rica. (Antes se guardaba en un campo que nadie pinta → producto mudo, sin
+//   chips en la web y sin variaciones; verificado y corregido 2026-10-19.)
+//   Sin opciones en el alta → se DERIVAN de lo que lleva (QUITAR, delta 0) con
+//   _shared/derivar-opciones.derivarOpciones: el producto nace operable, no mudo.
 ```
 
 ### CATEGORIAS MANAGER

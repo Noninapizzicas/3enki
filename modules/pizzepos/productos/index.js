@@ -28,7 +28,7 @@ class ProductosModule extends BaseModule {
   constructor() {
     super();
     this.name = 'productos';
-    this.version = '5.1.0';
+    this.version = '5.2.0';
 
     // Dependencias (inyectadas en onLoad)
     this.uiHandler = null;
@@ -805,6 +805,77 @@ class ProductosModule extends BaseModule {
       return r;
     } catch (err) {
       return this._handleHandlerError('productos.update.error', err, 'update');
+    }
+  }
+
+  // ── ALTA (la puerta del asistente) ───────────────────────────────────────────
+  // productos NO escribe: delega en carta-manager, que es quien hace snapshot, sube version y emite.
+  // La cadena que enciende UNA alta, toda por eventos (nadie cablea consumidores a mano):
+  //   carta.add_product → carta-manager._mutar (version++, snapshot) → carta.editada
+  //     → productos.onCartaGenerada   → catalogo.actualizado → comandero + pedidos (cache POS)
+  //     → variaciones.onCartaActualizada → reconfigura reglas del producto
+  //     → carta-digital._autoPublicar (debounce) → bundle re-horneado → web pública
+  //   cocina: el producto llega dentro de pedido.enviado_cocina con nombre + estaciones + variaciones.
+  _normalizarAlta(data) {
+    const flat = data || {};
+    const p = { ...(flat.producto || {}) };
+    // Acepta la forma plana (nombre/precio/categoria_id/...) además de {producto:{...}}.
+    const campos = ['nombre', 'precio', 'categoria_id', 'descripcion', 'etiquetas', 'alergenos', 'disponible',
+      'tipo', 'emoji', 'estaciones', 'ingredientes', 'ingredientes_base', 'dietas', 'variaciones'];
+    for (const k of campos) if (flat[k] !== undefined) p[k] = flat[k];
+    if (typeof p.nombre === 'string') p.nombre = p.nombre.trim();
+    if (typeof p.precio === 'string' && p.precio.trim() !== '') p.precio = Number(p.precio);
+    return p;
+  }
+
+  async handleCrearProducto(data) {
+    try {
+      const { project_id, carta_id, canal } = data || {};
+      if (!project_id) return this._errorResponse(400, 'INVALID_INPUT', 'project_id es requerido', { field: 'project_id' });
+      const producto = this._normalizarAlta(data);
+      if (!producto.nombre) return this._errorResponse(400, 'INVALID_INPUT', 'nombre es requerido', { field: 'nombre' });
+      if (!Number.isFinite(producto.precio) || producto.precio < 0) {
+        return this._errorResponse(400, 'INVALID_INPUT', 'precio (€, número >= 0) es requerido', { field: 'precio' });
+      }
+      if (!producto.categoria_id) {
+        return this._errorResponse(400, 'INVALID_INPUT', 'categoria_id es requerido (productos.categorias lista; productos.crear_categoria crea)', { field: 'categoria_id' });
+      }
+      const cid = await this._resolverCartaActiva(project_id, canal, carta_id);
+      if (!cid) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'No hay carta activa para el proyecto', { project_id });
+      const r = await this._rpc('carta.add_product.request', { project_id, carta_id: cid, producto }, { timeout_ms: 8000 });
+      if (!r) return this._errorResponse(503, 'UPSTREAM_UNREACHABLE', 'carta-manager no responde');
+      if (r.status === 201 || r.status === 200) {
+        this.logger.info('productos.creado', {
+          project_id, carta_id: cid,
+          producto_id: r.data?.producto?.id, carta_version: r.data?.carta_version
+        });
+      }
+      return r;
+    } catch (err) {
+      return this._handleHandlerError('productos.crear.error', err, 'crear');
+    }
+  }
+
+  // Categoría nueva: misma puerta, mismo dueño (carta-manager). Sin esto, un producto de una
+  // sección nueva no tendría dónde nacer y acabaría en un fichero paralelo (el bug de siempre).
+  async handleCrearCategoria(data) {
+    try {
+      const { project_id, carta_id, canal } = data || {};
+      if (!project_id) return this._errorResponse(400, 'INVALID_INPUT', 'project_id es requerido', { field: 'project_id' });
+      const categoria = { ...((data || {}).categoria || {}) };
+      for (const k of ['nombre', 'descripcion', 'orden']) if (data?.[k] !== undefined) categoria[k] = data[k];
+      if (typeof categoria.nombre === 'string') categoria.nombre = categoria.nombre.trim();
+      if (!categoria.nombre) return this._errorResponse(400, 'INVALID_INPUT', 'nombre es requerido', { field: 'nombre' });
+      const cid = await this._resolverCartaActiva(project_id, canal, carta_id);
+      if (!cid) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'No hay carta activa para el proyecto', { project_id });
+      const r = await this._rpc('carta.add_category.request', { project_id, carta_id: cid, categoria }, { timeout_ms: 8000 });
+      if (!r) return this._errorResponse(503, 'UPSTREAM_UNREACHABLE', 'carta-manager no responde');
+      if (r.status === 201 || r.status === 200) {
+        this.logger.info('productos.categoria.creada', { project_id, carta_id: cid, categoria_id: r.data?.categoria?.id });
+      }
+      return r;
+    } catch (err) {
+      return this._handleHandlerError('productos.categoria.crear.error', err, 'crear_categoria');
     }
   }
 

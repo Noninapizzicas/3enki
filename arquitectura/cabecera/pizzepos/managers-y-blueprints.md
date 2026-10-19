@@ -5,12 +5,34 @@ resumen: Managers de dominio pizzepos (cuentas, productos, categorías, cobros, 
 fuentes:
   - modules/pizzepos/**
   - blueprints/**
-verificado: 2026-10-16
+verificado: 2026-10-19
 ---
 
 # Módulos Pizzepos y Blueprints
 
 ## PIZZEPOS - CORE MODULES
+
+> **Alta de producto — la cadena canónica (verificada en vivo 2026-10-19).** La puerta
+> del asistente es `productos.crear` / `productos.crear_categoria` (productos NO escribe:
+> delega en carta-manager, que hace snapshot y sube version). Un alta enciende todo por
+> eventos, sin cablear consumidores a mano:
+>
+> ```
+> productos.crear → carta.add_product → carta-manager._mutar (version++, snapshot)
+>   → carta.editada
+>       ├─ productos.onCartaGenerada      → catalogo.actualizado → comandero + pedidos
+>       │                                   (cache: nombre, precio, categoria, estaciones)
+>       ├─ variaciones.onCartaActualizada  → reconfigura reglas del producto
+>       └─ carta-digital._autoPublicar     → debounce → bundle re-horneado → web pública
+>
+> cocina: NO tiene catálogo propio — el producto llega dentro de
+>         pedido.enviado_cocina (nombre, cantidad, variaciones, ingredientes_base).
+> ```
+>
+> `producto.creado` es contrato LEGADO: nadie lo emite (v5 lo retiró); los consumidores
+> (comandero, pedidos, variaciones) se refrescan por `carta.editada` + `catalogo.actualizado`.
+> Contrato de las tools `pedido.*`: `pedido_id` (v3.5.1 — send-kitchen/complete/cancel/total
+> leían `id` y devolvían 404: el pedido nunca llegaba a cocina por la vía del asistente).
 
 > Nota (carta-marketing): su onboarding/copy siguen el patrón perspectiva-C — el reflejo
 > hidrata+persiste y el agente solo transforma; el determinismo es por COLOCACIÓN, agnóstico

@@ -77,6 +77,8 @@ CLASE ComanderoModule HEREDA BaseModule IMPLEMENTA ComanderoContract {
       // en {project_id, carta}) y, al recibir tarifas (snapshot o cambio), un carta.get.request
       // por cada carta del mapping (onCartaGetResponse). Sin la segunda, tras un restart, el
       // canal cobraba precio base hasta que alguien tocara su carta.
+      // v3.5.1 — y si la carta que responde es la GENERAL, además rellena productosCache (catalogo
+      // base): sin eso el POS cobraba 0 y nombraba el item con el producto_id tras un restart.
       CREA item con UUID
       AGREGA a pedido.items
       RECALCULA pedido.total

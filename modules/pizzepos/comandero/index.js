@@ -34,13 +34,15 @@ class ComanderoModule extends BaseModule {
   constructor() {
     super();
     this.name    = 'comandero';
-    this.version = '3.5.0';
+    this.version = '3.5.1';
     this.validator = null;
 
     this.pedidos              = new Map();
     this.refDisplayCache      = new Map();
     this.productosCache       = new Map();
     this.cartasProductosCache = new Map();
+    // request_id → {project_id, carta_id} de los carta.get.request en vuelo (hidratación al cargar).
+    this._cartaGetPendientes = new Map();
     // Cache local de la config de tarifas hidratado via tarifas.config.actualizada.
     // Map<project_id, { general:string|null, canales:{canal->carta_id} }>
     this.tarifasConfigPorProject = new Map();
@@ -248,11 +250,37 @@ class ComanderoModule extends BaseModule {
     this.logger.info('comandero.carta.cached', { carta_id: cartaId, productos: cartaCache.size });
   }
 
-  // Respuesta al RPC carta.get.request que pedimos al hidratar las cartas de canal.
+  // Respuesta al RPC carta.get.request que pedimos al hidratar las cartas del mapping.
+  // Si la carta es la GENERAL, además rellena productosCache: sin esto, tras un restart el POS
+  // cobraba 0 y nombraba el item con el producto_id hasta que alguien tocara la carta.
   async onCartaGetResponse(event) {
     const data = this._unwrap(event);
     if (data?.status !== 200 || !data?.data) return;
-    this._cachearCarta(data.data);
+    const carta = data.data;
+    const cartaId = carta?.meta?.id || null;
+    this._cachearCarta(carta);
+
+    const pend = this._cartaGetPendientes.get(data.request_id);
+    if (pend) this._cartaGetPendientes.delete(data.request_id);
+    const project_id = pend?.project_id;
+    const general = project_id ? this.tarifasConfigPorProject.get(project_id)?.general : null;
+    if (general && cartaId === general) this._cachearCatalogoBase(carta);
+  }
+
+  // Catálogo BASE (productosCache): lo que cobra mostrador/recogida cuando el canal no tiene
+  // carta propia o el producto no está en ella.
+  _cachearCatalogoBase(carta) {
+    for (const p of (carta?.productos || [])) {
+      if (!p?.id || p.precio === undefined) continue;
+      this.productosCache.set(p.id, {
+        nombre:     p.nombre || p.id,
+        precio:     p.precio,
+        categoria:  p.categoria || p.categoria_id || null,
+        estaciones: p.estaciones || null,
+        precio_fijo: p.precio_fijo || false
+      });
+    }
+    this.logger.info('comandero.catalogo.hidratado', { productos_en_cache: this.productosCache.size });
   }
 
   async onProductoActualizado(event) {
@@ -298,6 +326,7 @@ class ComanderoModule extends BaseModule {
     for (const carta_id of ids) {
       if (this.cartasProductosCache.has(carta_id)) continue;
       const reqId = crypto.randomUUID();
+      this._cartaGetPendientes.set(reqId, { project_id, carta_id });
       try {
         this.eventBus.publish('carta.get.request', { request_id: reqId, project_id, carta_id });
       } catch (err) {

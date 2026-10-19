@@ -7,16 +7,10 @@ fuentes:
   - modules/project-manager/**
   - modules/credential-manager/**
   - config.json
-verificado: 2026-08-07
+verificado: 2026-07-31
 ---
 
 # Módulos: Project-Manager, Credential-Manager y Conversación
-
-> **Novedad (2026-08-07) — chat-io puente de agente al frontend soporta `invoke_agent`.**
-> `chat-io` ya suscribía `agent.execute.request/progress/response/failed`; ahora también
-> escucha `invoke_agent` y `invoke_agent.response` (el alias que usa el chat para arrancar
-> y cerrar el motor v3) para publicar `conversation/{id}/agent_status` y
-> `conversation/{id}/agent_progress` al frontend.
 
 ## PROJECT-MANAGER
 
@@ -1155,10 +1149,7 @@ modules/conversacion/
   memory-rag                 v2.1   — memoria semántica (embeddings)
 ```
 Más nervios del chat (también en `enabled`): `estados` (rail vivo), `propiocepcion`,
-`cupula-eventos`, `conserje` (empujones), `lentes-diseno`, `prompt-manager`, `rpc-index`
-(índice RPC del sistema: el LLM consulta el nombre EXACTO de un evento con rpc.buscar/
-rpc.ver antes de publicarlo — NO lo inventa; el índice ~212 RPC se genera de los
-module.json en onLoad y se consulta bajo demanda, nunca se inyecta entero).
+`cupula-eventos`, `conserje` (empujones), `lentes-diseno`, `prompt-manager`.
 
 ### Desactivados a propósito (`modules.disabled`)
 ```

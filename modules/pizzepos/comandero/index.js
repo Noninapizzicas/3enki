@@ -34,7 +34,7 @@ class ComanderoModule extends BaseModule {
   constructor() {
     super();
     this.name    = 'comandero';
-    this.version = '3.5.1';
+    this.version = '3.5.2';
     this.validator = null;
 
     this.pedidos              = new Map();
@@ -68,9 +68,13 @@ class ComanderoModule extends BaseModule {
 
     // Pide snapshot inicial a tarifas. La respuesta llega via
     // tarifas.config.actualizada (tipo=snapshot) por cada proyecto conocido.
-    // Si tarifas aun no cargo, no hay respuesta inmediata: hidrata cuando
-    // tarifas active proyectos y emita su primer cambio.
-    await this._publicarEvento('tarifas.config.solicitada', {});
+    // OJO: NO es una carrera de suscripción — el loader cablea las suscripciones ANTES de onLoad
+    // (core/modules/loader.js: wireEventSubscriptions → onLoad). El hueco real es el RESPONDEDOR:
+    // en arranque en frío tarifas puede no estar cargado todavía, así que este publish se queda sin
+    // quien lo atienda. Por eso se repite en dos momentos deterministas (ver _solicitarSnapshotTarifas):
+    // core.modules.loaded.all (ya están TODOS los módulos) y project.activated (proyecto vivo).
+    // La respuesta es full-replace por proyecto: repetir la petición es idempotente.
+    this._solicitarSnapshotTarifas('onLoad');
 
     this.logger.info('module.loaded', {
       module:           this.name,
@@ -317,6 +321,38 @@ class ComanderoModule extends BaseModule {
       canales_count: Object.keys(config.canales || {}).length
     });
     this._hidratarCartasDeCanal(project_id, config);
+  }
+
+  // La petición de snapshot a tarifas se repite en tres momentos DETERMINISTAS (sin timers):
+  //   1. onLoad            — camino caliente (hot-reload): tarifas ya está cargado, responde ya.
+  //   2. core.modules.loaded.all — arranque en frío: el loader publica este evento cuando TODOS los
+  //                               módulos están cargados, así que tarifas ya existe y atiende.
+  //   3. project.activated — el proyecto acaba de activarse: tarifas ya indexó su carril.
+  // Repetir es inocuo: la respuesta es full-replace por project_id y _hidratarCartasDeCanal salta
+  // las cartas ya cacheadas.
+  _solicitarSnapshotTarifas(etapa, projectId = null) {
+    if (!this.eventBus || typeof this.eventBus.publish !== 'function') return;
+    const payload = {
+      tipo: 'snapshot',
+      correlation_id: crypto.randomUUID(),
+      timestamp: new Date().toISOString()
+    };
+    if (projectId) payload.project_id = projectId;
+    try {
+      this.eventBus.publish('tarifas.config.solicitada', payload);
+    } catch (err) {
+      this.logger?.warn?.('comandero.tarifas.solicitada.failed', { etapa, error: err?.message });
+    }
+  }
+
+  async onCoreModulesLoadedAll() {
+    this._solicitarSnapshotTarifas('modules_loaded_all');
+  }
+
+  async onProjectActivado(event) {
+    const data = event?.data || event || {};
+    if (!data.project_id) return;
+    this._solicitarSnapshotTarifas('project_activated', data.project_id);
   }
 
   // Las cartas de canal necesitan su cache aunque nadie las acabe de tocar (tras un restart el

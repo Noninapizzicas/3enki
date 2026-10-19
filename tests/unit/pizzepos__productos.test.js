@@ -129,6 +129,23 @@ const publishedOf = (mocks, name) => mocks.eventBus.published.filter(p => p[0] =
     await m.onUnload();
   });
 
+  // El mapping canal->carta_id se pide a tarifas al cargar, y SE REPITE en core.modules.loaded.all
+  // porque en arranque en frio tarifas aun no existia cuando onLoad publico (peticion sin respondedor).
+  // Sin timers: los dos momentos son eventos deterministas.
+  await testAsync('pide snapshot a tarifas en onLoad y lo REPITE al cargar todos los modulos', async () => {
+    const mocks = makeMocks();
+    const m = await instantiate(mocks);
+    const solicitudes = () => publishedOf(mocks, 'tarifas.config.solicitada');
+    assert.strictEqual(solicitudes().length, 1, 'onLoad pide el snapshot');
+    assert.strictEqual(solicitudes()[0].tipo, 'snapshot');
+
+    await m.onCoreModulesLoadedAll();
+    const evs = solicitudes();
+    assert.strictEqual(evs.length, 2, 'lo repite con todos los modulos cargados');
+    assert.ok(!evs[1].project_id, 'sin project_id = todos los proyectos conocidos');
+    await m.onUnload();
+  });
+
   // Group 2: Validación canónica
   await testAsync('handleListProductos sin project_id → 400 INVALID_INPUT', async () => {
     const m = await instantiate(makeMocks());

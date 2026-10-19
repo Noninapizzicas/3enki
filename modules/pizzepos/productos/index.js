@@ -28,7 +28,7 @@ class ProductosModule extends BaseModule {
   constructor() {
     super();
     this.name = 'productos';
-    this.version = '5.3.1';
+    this.version = '5.3.2';
 
     // Dependencias (inyectadas en onLoad)
     this.uiHandler = null;
@@ -320,15 +320,9 @@ class ProductosModule extends BaseModule {
     // hot-reload o un restart el mapa nace VACÍO, _esCartaGeneral no vería la carta general y una
     // carta de CANAL proyectaría al catálogo global, pisando los precios de mostrador. tarifas
     // responde con un snapshot por cada proyecto conocido (sin project_id). Mismo patrón que comandero.
-    try {
-      await this.eventBus.publish('tarifas.config.solicitada', {
-        tipo: 'snapshot',
-        correlation_id: `productos-load-${Date.now()}`,
-        timestamp: new Date().toISOString()
-      });
-    } catch (err) {
-      this.logger.warn('tarifas.config.solicitada.publish_failed', { etapa: 'onLoad', error: err?.message });
-    }
+    // NO hay carrera de suscripción (el loader cablea antes de onLoad): el hueco es que en arranque en
+    // frío tarifas puede no estar cargado. Se repite en core.modules.loaded.all (ya están todos).
+    this._solicitarSnapshotTarifas('onLoad');
   }
 
   async onUnload() {
@@ -346,6 +340,28 @@ class ProductosModule extends BaseModule {
   // ==========================================
   // Project path resolution (cache base_path; wired)
   // ==========================================
+
+  // Petición de snapshot a tarifas, repetible y sin timers. Tres momentos deterministas:
+  // onLoad (hot-reload: tarifas vivo), core.modules.loaded.all (frío: ya están todos los módulos)
+  // y project.activated (ver onProjectActivated). Repetir es inocuo: full-replace por project_id.
+  _solicitarSnapshotTarifas(etapa, projectId = null) {
+    if (!this.eventBus || typeof this.eventBus.publish !== 'function') return;
+    const payload = {
+      tipo: 'snapshot',
+      correlation_id: `productos-${etapa}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      timestamp: new Date().toISOString()
+    };
+    if (projectId) payload.project_id = projectId;
+    try {
+      this.eventBus.publish('tarifas.config.solicitada', payload);
+    } catch (err) {
+      this.logger.warn('tarifas.config.solicitada.publish_failed', { etapa, error: err?.message });
+    }
+  }
+
+  async onCoreModulesLoadedAll() {
+    this._solicitarSnapshotTarifas('modules_loaded_all');
+  }
 
   async onProjectActivated(event) {
     const data = event.data || event;

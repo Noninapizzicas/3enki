@@ -257,6 +257,36 @@ function publishedOf(mocks, name) {
     await m.onUnload();
   });
 
+  // El hueco real NO es una carrera de suscripcion (el loader cablea antes de onLoad): es que en
+  // arranque en frio tarifas todavia no existe y la peticion se queda sin respondedor. Por eso se
+  // repite en los dos momentos deterministas. Sin timers.
+  await testAsync('core.modules.loaded.all re-pide el snapshot (tarifas ya cargado)', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    assert.strictEqual(publishedOf(mocks, 'tarifas.config.solicitada').length, 1, 'onLoad ya pidio');
+
+    await m.onCoreModulesLoadedAll();
+    const evs = publishedOf(mocks, 'tarifas.config.solicitada');
+    assert.strictEqual(evs.length, 2, 're-pide al cargar todos los modulos');
+    assert.strictEqual(evs[1].tipo, 'snapshot');
+    assert.ok(!evs[1].project_id, 'sin project_id = todos los proyectos conocidos');
+    await m.onUnload();
+  });
+
+  await testAsync('project.activated re-pide el snapshot scopeado al proyecto', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+
+    await m.onProjectActivado({ data: { project_id: 'proj-A' } });
+    const evs = publishedOf(mocks, 'tarifas.config.solicitada');
+    assert.strictEqual(evs.length, 2);
+    assert.strictEqual(evs[1].project_id, 'proj-A', 'scopeado al proyecto que se activa');
+
+    await m.onProjectActivado({ data: {} });          // sin project_id: no-op
+    assert.strictEqual(publishedOf(mocks, 'tarifas.config.solicitada').length, 2, 'sin project_id no pide');
+    await m.onUnload();
+  });
+
   await testAsync('onCajaCerrada y onDiaIniciado vacian buffers', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);

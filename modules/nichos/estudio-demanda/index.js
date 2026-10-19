@@ -4,9 +4,9 @@
  * nichos/estudio-demanda — REFLEJO JS (MICRO-AGENTE del vertical NICHOS).
  *
  * Estudia la demanda de primer orden de un candidato a nicho. Consulta fuentes
- * externas por bus (nichos.fuente.consumir.request), pre-chequea limites
- * (nichos.fuente.limites.puede.consumir.request) y usa ai-gateway
- * (llm.complete.request) para sintetizar el informe.
+ * externas por bus (nichos.fuente.consumir.request) — el control de límites
+ * NO se duplica: vive en puerto-fuente-datos (429 LIMITE_EXCEDIDO) — y usa
+ * ai-gateway (llm.complete.request) para sintetizar el informe.
  *
  * Sin estado persistido — micro-agente puro (request → fuentes + LLM → response).
  * Patron: ModuloHibridoReflejo.
@@ -46,7 +46,6 @@ class EstudioDemanda extends ModuloHibridoReflejo {
     await super.onLoad(context);
     this.eventBus?.subscribe('llm.complete.response', (e) => this._onLLMResponse(e));
     this.eventBus?.subscribe('nichos.fuente.consumir.response', (e) => this._onFuenteResponse(e));
-    this.eventBus?.subscribe('nichos.fuente.limites.puede.consumir.response', (e) => this._onLimitesResponse(e));
   }
 
   // ── RPC HANDLER ──
@@ -65,17 +64,15 @@ class EstudioDemanda extends ModuloHibridoReflejo {
     let costeTotal = 0;
 
     try {
-      // 1. Pre-check limites
-      const puedeConsumir = await this._preguntarLimites(projectId);
-      if (!puedeConsumir.permitido) {
-        this.eventBus?.publish('nichos.estudio.demanda.failed', {
-          id_nicho: idNicho,
-          razon_codigo: 'LIMITE_ALCANZADO',
-          detalle: puedeConsumir.razon || 'limites de fuentes alcanzados',
-          timestamp: nowISO()
-        });
-        return this._errorResponse(429, 'LIMITE_ALCANZADO', puedeConsumir.razon || 'limites de fuentes alcanzados', {});
-      }
+      // 1. Pre-check de límites ELIMINADO (2026-10-16).
+      //    El gate real vive en puerto-fuente-datos (J3): consulta con `fuente`
+      //    y si no hay margen responde 429 LIMITE_EXCEDIDO — ese gate funciona
+      //    y NO se duplica. Este pre-check estaba ROTO por partida doble:
+      //    (a) publicaba nichos.fuente.limites.puede.consumir.request SIN el
+      //    campo `fuente` → 400 INVALID_INPUT en cada candidato → el freno
+      //    de gasto nunca se ejercía aquí; (b) al llegar la respuesta leía
+      //    `permitido` cuando el módulo responde `puede` (undefined → saltaba
+      //    el if). Ahora el círculo lo cierra el 429 de la propia fuente.
 
       // 2. Consumir fuentes
       const datosFuentes = await this._consumirFuentes(input.candidato, projectId);
@@ -133,41 +130,12 @@ class EstudioDemanda extends ModuloHibridoReflejo {
   }
 
   // =============================================================
-  // BUS — pre-check de limites
+  // BUS — pre-check de limites (ELIMINADO 2026-10-16)
   // =============================================================
-  _preguntarLimites(projectId) {
-    return new Promise((resolve) => {
-      const correlationId = `edl-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      const timeout = setTimeout(() => {
-        this._pendientes.delete(correlationId);
-        resolve({ permitido: true }); // degradacion honesta: sin respuesta → permitir
-      }, 10000);
-
-      this._pendientes.set(correlationId, {
-        tipo: 'limites',
-        resolve: (data) => {
-          clearTimeout(timeout);
-          this._pendientes.delete(correlationId);
-          resolve(data);
-        }
-      });
-
-      this.eventBus?.publish('nichos.fuente.limites.puede.consumir.request', {
-        request_id: correlationId,
-        project_id: projectId
-      });
-    });
-  }
-
-  _onLimitesResponse(e) {
-    const d = (e && (e.data || e)) || {};
-    const pendiente = this._pendientes.get(d.request_id);
-    if (!pendiente || pendiente.tipo !== 'limites') return;
-    pendiente.resolve({
-      permitido: d.data?.permitido !== false,
-      razon: d.data?.razon || null
-    });
-  }
+  // _preguntarLimites y _onLimitesResponse fueron retirados: el gate vive en
+  // puerto-fuente-datos (J3, con `fuente` correcto y 429 LIMITE_EXCEDIDO).
+  // Este duplicado llamaba SIN `fuente` (400 en cada candidato) y leía
+  // `permitido` en vez de `puede` — el freno de gasto nunca se ejercía.
 
   // =============================================================
   // BUS — consumir fuentes
@@ -192,7 +160,11 @@ class EstudioDemanda extends ModuloHibridoReflejo {
       this.eventBus?.publish('nichos.fuente.consumir.request', {
         request_id: correlationId,
         project_id: projectId,
-        query: candidato.nombre || candidato.descripcion || JSON.stringify(candidato),
+        // La consulta sale VERBATIM (la intención abierta del alto), no la
+        // categoría: buscar "pizzeria en Lorca" traía la oferta (quién ya
+        // vende), no la demanda. El texto_original viaja desde la semilla.
+        query: candidato.texto_original || candidato.nombre
+          || candidato.descripcion || JSON.stringify(candidato),
         candidato
       });
     });
@@ -231,7 +203,7 @@ class EstudioDemanda extends ModuloHibridoReflejo {
       });
 
       const userContent = [
-        `Candidato a nicho: ${candidato.nombre || JSON.stringify(candidato)}`,
+        `Candidato a nicho: ${candidato.texto_original || candidato.nombre || JSON.stringify(candidato)}`,
         '',
         'Datos de fuentes:',
         textoFuentes || '(sin datos de fuentes externas disponibles)'

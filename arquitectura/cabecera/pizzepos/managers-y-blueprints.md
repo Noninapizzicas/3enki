@@ -5,7 +5,7 @@ resumen: Managers de dominio pizzepos (cuentas, productos, categorías, cobros, 
 fuentes:
   - modules/pizzepos/**
   - blueprints/**
-verificado: 2026-10-20
+verificado: 2026-10-19
 ---
 
 # Módulos Pizzepos y Blueprints
@@ -889,19 +889,6 @@ CLASE Ingrediente {
 ```
 
 ### VARIACIONES MANAGER
-
-> **Lo REAL (verificado en vivo 2026-10-20, v4.6.0) — el contrato no es CRUD de "variaciones":**
-> es una **caché de reglas por producto** alimentada por la CARTA. `variaciones.configurar` (rol jefe)
-> delega en `carta.update_product` (el custodio escribe, variaciones solo lee). Se puebla por
-> `carta.actualizada/editada` y por `project.activated` (`productos.carta_completa`, proyector sin
-> estado). **AUTO-VIVIFICACIÓN:** `configuraciones` vive en memoria (`lost_on_restart`), así que en
-> frío —reinicio, sin `project.activated`— nacía VACÍA: `variaciones.get` devolvía 404 al panel y
-> cada `comandero.item_agregado` con variación emitía `variacion.rechazada` hasta la 1ª edición de
-> carta. Ahora `_configDeProducto`: si falta la config y la petición trae `project_id`, hidrata ESE
-> proyecto desde la carta y reintenta (una sola RPC para peticiones concurrentes). No se hidratan
-> todos los proyectos en bloque a propósito: los ids de producto se **repiten** entre proyectos
-> (nonina y the-pirate comparten 52) y la caché está indexada por `producto_id`. Sin `project_id`
-> el 404 sigue siendo el mismo: no se inventa estado.
 
 ```
 INTERFAZ VariacionesContract {

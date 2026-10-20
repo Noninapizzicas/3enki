@@ -890,82 +890,16 @@ CLASE Ingrediente {
 
 ### VARIACIONES MANAGER
 
-```
-INTERFAZ VariacionesContract {
-  createVariacion(data: {nombre, producto_id, opciones, precio_delta?}): Promise<Variacion>
-  getVariacion(variacion_id: String): Promise<Variacion>
-  listVariaciones(producto_id: String): Promise<Array<Variacion>>
-  updateVariacion(variacion_id: String, updates: Object): Promise<Variacion>
-  deleteVariacion(variacion_id: String): Promise<Void>
-}
-
-CLASE VariacionesManager IMPLEMENTA VariacionesContract {
-  ATRIBUTOS {
-    coreId: String
-    eventBus: EventBus
-    logger: Logger
-    variacionesStore: Map<variacion_id, Variacion>
-    productosManager: ProductosManager
-  }
-
-  CONSTRUCTOR(options: Object)
-
-  METODOS {
-    async createVariacion(data: {nombre, producto_id, opciones, precio_delta?}): Promise<Variacion>
-      VALIDA producto_id existe
-      GENERA variacion_id (UUID)
-      CREA Variacion {variacion_id, nombre, producto_id, opciones: [], precio_delta: precio_delta || 0, created_at}
-      AGREGA opciones
-      GUARDA EN variacionesStore
-      PERSISTE
-      EMITE variacion.created {variacion_id, producto_id}
-      RETORNA variacion
-
-    async getVariacion(variacion_id: String): Promise<Variacion>
-      BUSCA EN variacionesStore
-      RETORNA variacion
-
-    async listVariaciones(producto_id: String): Promise<Array<Variacion>>
-      FILTRA variacionesStore POR producto_id
-      RETORNA Array
-
-    async updateVariacion(variacion_id: String, updates: Object): Promise<Variacion>
-      VALIDA variacion existe
-      MERGES updates
-      PERSISTE
-      EMITE variacion.updated {variacion_id}
-      RETORNA variacion
-
-    async deleteVariacion(variacion_id: String): Promise<Void>
-      ELIMINA DE variacionesStore
-      PERSISTE
-      EMITE variacion.deleted {variacion_id}
-
-    async onLoad(moduleContext: Object): Promise<Void>
-      CARGA productosManager FROM moduleRegistry
-      REGISTRA UI handlers
-      LOG "variaciones.onLoad"
-  }
-
-  EVENTO {
-    variacion.created: {variacion_id, producto_id}
-    variacion.updated: {variacion_id}
-    variacion.deleted: {variacion_id}
-  }
-}
-
-CLASE Variacion {
-  ATRIBUTOS {
-    variacion_id: String
-    nombre: String
-    producto_id: String
-    opciones: Array<{nombre, descripcion, precio_delta?}>
-    precio_delta: Number (default 0)
-    created_at: Number
-    updated_at: Number
-  }
-}
-```
+> **No hay CRUD de "variaciones"** (ni `createVariacion`, ni `variacion.created/deleted`): el módulo
+> real es una **caché de reglas por producto leída de la CARTA**. El contrato vive en
+> `pizzepos/pos-nucleo.md` §8 VARIACIONES (v4.6.0) — esta entrada solo lo enlaza para no duplicar prosa.
+>
+> Lo esencial: `variaciones.configurar` (rol jefe) delega en `carta.update_product` (el custodio
+> escribe; aquí solo se lee). Se puebla por `carta.actualizada/editada` + `project.activated`
+> (`productos.carta_completa`). Su caché es `lost_on_restart`, así que desde v4.6.0 **auto-vivifica**:
+> si falta la config y la petición trae `project_id`, hidrata ESE proyecto desde la carta y reintenta
+> (una sola RPC para concurrentes) — sin hidratar todos los proyectos en bloque, porque los ids de
+> producto se repiten entre proyectos (nonina y the-pirate comparten 52) y la caché va por `producto_id`.
 
 ### ESCANDALLO MANAGER
 

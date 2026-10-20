@@ -651,50 +651,61 @@ CLASE Ingrediente {
 }
 ```
 
-### 8. VARIACIONES (v2.0.0) — Validación de Modificaciones
+### 8. VARIACIONES (v4.6.0) — Reglas por producto, leídas de la CARTA
+
+> **Lo REAL (verificado en vivo 2026-10-20).** El módulo NO es CRUD de "variaciones" ni guarda
+> `variacionesPerProducto`: es una **caché de reglas por producto** alimentada por la carta.
+> `variaciones.configurar` (rol jefe) delega en `carta.update_product` — el custodio escribe,
+> aquí solo se lee. Se puebla por `carta.actualizada/editada` y por `project.activated`
+> (`productos.carta_completa`, proyector sin estado).
+>
+> **AUTO-VIVIFICACIÓN (v4.6.0).** `configuraciones` vive en memoria (`lost_on_restart`), así que
+> en frío —reinicio, sin `project.activated`— nacía VACÍA: `variaciones.get` devolvía 404 al panel
+> (*"no se pudo leer el informe"*) y cada `comandero.item_agregado` con variación emitía
+> `variacion.rechazada` hasta la 1ª edición de carta. Ahora `_configDeProducto`: si falta la config
+> **y** la petición trae `project_id`, hidrata ESE proyecto desde la carta y reintenta (una sola
+> RPC para peticiones concurrentes). No se hidratan todos los proyectos en bloque a propósito:
+> los ids de producto se **repiten** entre proyectos (nonina y the-pirate comparten 52) y la caché
+> está indexada por `producto_id`. Sin `project_id` el 404 sigue siendo el mismo: no se inventa estado.
 
 ```
 CLASE VariacionesModule HEREDA BaseModule {
   ATRIBUTOS {
     name: String = 'variaciones'
-    version: String = '2.0.0'
-    variacionesPerProducto: Map<producto_id, VariacionesProducto>
-    ingredientesCache: Map<ingredient_id, Ingrediente>
+    version: String = '4.6.0'
+    configuraciones: Map<producto_id, ConfigProducto>   // en memoria, lost_on_restart
+    _hidratando: Map<project_id, Promise>               // viajes en vuelo (una RPC por proyecto)
   }
 
   METODOS {
-    async handleValidarVariacion(data: {producto_id, ingredientes_quitar?, ingredientes_anadir?}): Promise<Response>
-      OBTIENE config de variaciones DEL producto
-      VALIDA que ingredientes_quitar sean permitidos
-      VALIDA que ingredientes_anadir respeten el limite
-      PUBLICA variacion.validada|rechazada
-      RETORNA response
+    _configurar(producto_id, {categoria, precio, variaciones, ingredientes_base, opciones, paleta})
+      opciones = las de la CARTA si las trae; si no, derivarOpciones(QUITAR propios + ELEGIR_VARIOS paleta de su categoría)
 
-    async handleCalcularPrecio(data: {producto_id, ingredientes_quitar?, ingredientes_anadir?}): Promise<Response>
-      precio_base = producto.precio
-      SUMA precios_extra DE ingredientes_anadir
-      precio_final = precio_base + suma_extras
-      RETORNA {status: 200, data: {precio_final}}
+    _configDeProducto(producto_id, project_id)          // el acto crea el estado
+      SI no hay config Y hay project_id: await _asegurarProyecto(project_id) → reintenta
+      SIN project_id: devuelve null (el 404 de siempre)
+
+    _asegurarProyecto(project_id)                       // hidrata ESE proyecto desde la fuente
+      productos.carta_completa(project_id) → _configurarLista(productos)
+      concurrentes del mismo proyecto comparten el viaje
+
+    handleGetVariacionesProducto({producto_id, project_id?})   → 200 {opciones, precio_base_centimos, ...}
+    handleValidarVariacion({producto_id, project_id?, ingredientes_quitar?, ingredientes_anadir?})
+    handleCalcularPrecio({producto_id, project_id?, ingredientes_anadir?})
+    handleEvaluarOpciones({producto_id, project_id?, selecciones})   // motor-opciones, gemelo del tasador
+    handleConfigurar({producto_id, variaciones, project_id|carta_id})  // ROL JEFE → carta.update_product
 
     EVENTOS_PUBLISHES {
-      'variacion.validada': {producto_id, variaciones, precio_final}
-      'variacion.rechazada': {producto_id, razon}
+      'variacion.validada': {producto_id, project_id, correlation_id, timestamp}
+      'variacion.rechazada': {producto_id, motivo_rechazo, project_id, correlation_id, timestamp}
     }
 
     EVENTOS_SUBSCRIBES {
-      'producto.creado': onProductoCreado
-      'comandero.item_agregado': onComanderoItemAgregado (auto-valida)
+      'carta.actualizada' | 'carta.editada': onCartaActualizada   // la CARTA es la fuente
+      'project.activated': onProjectActivated                     // warm del proyecto vivo
+      'comandero.item_agregado': onComanderoItemAgregado           // auto-valida (hidrata si está frío)
+      'producto.creado': onProductoCreado                          // LEGACY, nadie lo emite
     }
-  }
-}
-
-CLASE VariacionesProducto {
-  ATRIBUTOS {
-    producto_id: String
-    ingredientes_permitidos_quitar: Array<String>
-    permite_anadir_extras: Boolean
-    ingredientes_sugeridos: Array<String>
-    max_extras: Integer
   }
 }
 ```

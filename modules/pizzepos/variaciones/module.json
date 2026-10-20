@@ -1,6 +1,7 @@
 {
   "name": "variaciones",
-  "version": "4.5.0",
+  "version": "4.6.0",
+  "_v4_6_nota": "v4.6.0 (2026-10-20): AUTO-VIVIFICACION de la cache. En frio (tras reiniciar, sin project.activated) configuraciones nacia VACIA: variaciones.get devolvia 404 al panel (no se pudo leer el informe) y cada comandero.item_agregado con variacion emitia variacion.rechazada hasta la 1a edicion de carta. Ahora _configDeProducto: si falta la config y la peticion trae project_id, hidrata ESE proyecto desde la fuente (productos.carta_completa, proyector sin estado) y reintenta. NO se hidratan todos los proyectos en bloque a proposito: los ids de producto se repiten entre proyectos (nonina y the-pirate comparten 52) y la cache esta indexada por producto_id, asi que un barrido dejaria la config del ultimo proyecto encima de la del primero. Peticiones concurrentes del mismo proyecto comparten el viaje (una sola RPC). Sin project_id no se inventa nada: el 404 sigue siendo el mismo.",
   "_v4_5_nota": "v4.5.0 (2026-08-28): ROL JEFE — nueva op `configurar` (handleConfigurar): declara las reglas de variación de un producto (permite_quitar, permite_anadir, max_ingredientes_extra, extras_sugeridos). Delega en carta.update_product (custodio), resuelve la carta activa via productos.carta_completa; la carta emite carta.editada → onCartaActualizada reconfigura este módulo solo. Cierra el hueco del esquema (esquema/: el editor de opciones era el único hueco del rol jefe).",
   "_v4_4_nota": "v4.4.0 (2026-06-22): adopta la OPERATIVA del subsistema Opciones (banco de pruebas; el nombre del modulo se queda). _configurar guarda producto.opciones — las de la carta, o DERIVADAS via _shared/derivar-opciones (QUITAR=ingredientes propios + ELEGIR_VARIOS=paleta de su categoria). handleGet devuelve `opciones` + precio_base_centimos (ADITIVO: no rompe el panel actual que aun lee permite_anadir/etc). Nueva op `evaluar` (handleEvaluarOpciones): valida+precia server-side con _shared/motor-opciones (gemelo del tasador).",
   "_v4_2_nota": "v4.2.0 (2026-06-20): WARM en project.activated (cierra el PENDIENTE de v4.1). variaciones vive en memoria (lost_on_restart); sin warm esperaba a la 1a edicion de carta para repoblarse tras un arranque en seco. Ahora onProjectActivated pide la carta activa proyectada al reflejo de productos (uiHandler.handle('productos','carta_completa') — productos resuelve cual es la activa y la proyecta con su campo `variaciones`, anadido a _proyectarProducto) y configura TODOS sus productos. La carta sigue siendo la fuente; aqui solo se lee. Best-effort: si productos no responde, la 1a edicion repobla igual.",
@@ -38,7 +39,8 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "producto_id": { "type": "string", "description": "Identificador del producto." }
+          "producto_id": { "type": "string", "description": "Identificador del producto." },
+          "project_id":  { "type": "string", "description": "Proyecto (opcional). Con la cache fria hidrata ESE proyecto desde la carta y reintenta, en vez de devolver 404 tras un reinicio." }
         },
         "required": ["producto_id"],
         "additionalProperties": false
@@ -54,7 +56,8 @@
         "properties": {
           "producto_id":          { "type": "string", "description": "Identificador del producto." },
           "ingredientes_quitar":  { "type": "array",  "items": { "type": "string" }, "description": "IDs de ingredientes a quitar." },
-          "ingredientes_anadir":  { "type": "array",  "items": { "type": "object" }, "description": "Lista de extras (cada item con ingrediente_id y cantidad)." }
+          "ingredientes_anadir":  { "type": "array",  "items": { "type": "object" }, "description": "Lista de extras (cada item con ingrediente_id y cantidad)." },
+          "project_id":           { "type": "string", "description": "Proyecto (opcional). Con la cache fria hidrata ESE proyecto desde la carta antes de validar." }
         },
         "required": ["producto_id"],
         "additionalProperties": false
@@ -69,7 +72,8 @@
         "type": "object",
         "properties": {
           "producto_id":         { "type": "string", "description": "Identificador del producto." },
-          "ingredientes_anadir": { "type": "array",  "items": { "type": "object" }, "description": "Lista de extras (ingrediente_id, cantidad)." }
+          "ingredientes_anadir": { "type": "array",  "items": { "type": "object" }, "description": "Lista de extras (ingrediente_id, cantidad)." },
+          "project_id":          { "type": "string", "description": "Proyecto (opcional). Con la cache fria hidrata ESE proyecto desde la carta antes de precificar." }
         },
         "required": ["producto_id"],
         "additionalProperties": false

@@ -158,6 +158,15 @@ class VariacionesModule extends BaseModule {
     const ops = (Array.isArray(opciones) && opciones.length)
       ? opciones
       : derivarOpciones({ ingredientes: ingredientes_base || ingredientes || [] }, paleta || [], { maxExtras: max });
+    const maxOpciones = (() => {
+      // El máximo que MANDA es el declarado en las opciones de la carta: es lo que el panel pinta
+      // y lo que el camarero/cliente ve. `variaciones.max_ingredientes_extra` es la forma vieja
+      // y solo actúa de respaldo cuando la carta no declara opciones.
+      const grupos = Array.isArray(ops) ? ops : [];
+      const g = grupos.find(o => o && o.modo === 'ELEGIR_VARIOS' && o.max != null);
+      const n = g ? Number(g.max) : NaN;
+      return Number.isFinite(n) ? n : null;
+    })();
     this.configuraciones.set(producto_id, {
       producto_id,
       grupo: categoria || 'otro',
@@ -167,7 +176,7 @@ class VariacionesModule extends BaseModule {
       // Por defecto SÍ se puede añadir (salvo que la carta lo niegue explícitamente).
       permite_anadir: v.permite_anadir !== false,
       extras_sugeridos: v.extras_sugeridos || [],
-      max_ingredientes_extra: v.max_ingredientes_extra || 5,
+      max_ingredientes_extra: maxOpciones != null ? maxOpciones : (v.max_ingredientes_extra || 5),
       ingredientes_base: (ingredientes_base || ingredientes || [])
         .map(i => (typeof i === 'string' ? i : i && i.id)).filter(Boolean),
       opciones: ops

@@ -33,7 +33,7 @@ class CartaManagerReflejo extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'carta-manager';
-    this.version = 'reflejo-1.15.0';
+    this.version = 'reflejo-1.16.0';
   }
 
   // ── handlers RPC (una linea) ──
@@ -46,6 +46,7 @@ class CartaManagerReflejo extends ModuloHibridoReflejo {
   onUpdateProductRequest(e) { return this._atender(e, 'update_product', 'carta.update_product.response', d => this._updateProduct(d)); }
   onUpdateProductsRequest(e) { return this._atender(e, 'update_products', 'carta.update_products.response', d => this._updateProducts(d)); }
   onAddCategoryRequest(e) { return this._atender(e, 'add_category', 'carta.add_category.response', d => this._addCategory(d)); }
+  onRemoveCategoryRequest(e) { return this._atender(e, 'remove_category', 'carta.remove_category.response', d => this._removeCategory(d)); }
   onUpdatePricesRequest(e) { return this._atender(e, 'update_prices', 'carta.update_prices.response', d => this._updatePrices(d)); }
   onUpdateExtrasRequest(e) { return this._atender(e, 'update_extras', 'carta.update_extras.response', d => this._updateExtras(d)); }
   onClonarRequest(e) { return this._atender(e, 'clonar', 'carta.clonar.response', d => this._clonar(d)); }
@@ -257,15 +258,20 @@ class CartaManagerReflejo extends ModuloHibridoReflejo {
       let prev = {}; try { prev = JSON.parse(prevRaw.content); } catch (_) {}
       carta.meta.version = ((prev.meta && prev.meta.version) || 1) + 1;
       carta.meta.created_at = (prev.meta && prev.meta.created_at) || nowISO();
-      // GUARDADO CONSERVADOR: una carta CONSERVA su contenido. Este save reemplaza lo
-      // que TRAE; lo que no trae, lo MANTIENE. Una escritura sin productos sobre una
-      // carta que sí los tiene conserva los suyos — la carta no pierde contenido por una
-      // escritura que no lo aporta. (Para vaciar de verdad: remove_product, que es explícito.)
-      if (!(Array.isArray(carta.productos) && carta.productos.length) && Array.isArray(prev.productos) && prev.productos.length) {
-        carta.productos = prev.productos; conservado.productos = prev.productos.length;
+      // GUARDADO POR INTENCIÓN: la clave PRESENTE manda — un array vacío es un VACIADO
+      // EXPLÍCITO; la clave AUSENTE conserva lo previo. Antes `[]` y "no viene" eran
+      // indistinguibles y el guardado conservador vaciaba la intención del que escribe:
+      // para dejar una carta en blanco había que inventarse un id nuevo. Ahora la
+      // escritura dice lo que hace; el snapshot previo sigue ahí para deshacer.
+      const declaraProductos = Object.prototype.hasOwnProperty.call(carta, 'productos');
+      const declaraCategorias = Object.prototype.hasOwnProperty.call(carta, 'categorias');
+      if (!declaraProductos && Array.isArray(prev.productos)) {
+        carta.productos = prev.productos;
+        if (prev.productos.length) conservado.productos = prev.productos.length;
       }
-      if (!(Array.isArray(carta.categorias) && carta.categorias.length) && Array.isArray(prev.categorias) && prev.categorias.length) {
-        carta.categorias = prev.categorias; conservado.categorias = prev.categorias.length;
+      if (!declaraCategorias && Array.isArray(prev.categorias)) {
+        carta.categorias = prev.categorias;
+        if (prev.categorias.length) conservado.categorias = prev.categorias.length;
       }
       if (conservado.productos || conservado.categorias) {
         this.logger?.info('carta-manager.save.conservado', { carta_id, ...conservado });
@@ -278,6 +284,11 @@ class CartaManagerReflejo extends ModuloHibridoReflejo {
     carta.meta.id = carta_id;
     carta.meta.updated_at = nowISO();
     if (!carta.meta.estado) carta.meta.estado = 'borrador';
+
+    // FORMA CANÓNICA: productos y categorias siempre existen (aunque vacíos). Una carta sin
+    // claves es una carta VACÍA, no una carta rota — el consumidor no se defiende de undefined.
+    if (!Array.isArray(carta.productos)) carta.productos = [];
+    if (!Array.isArray(carta.categorias)) carta.categorias = [];
 
     // GATE: normaliza los ingredientes de todos los productos (familia + precio_extra) ANTES de
     // persistir. Una carta del turno LLM (ruta TEXTO_LIBRE) que llegue plana sale operable; la rica
@@ -663,6 +674,46 @@ class CartaManagerReflejo extends ModuloHibridoReflejo {
       if (carta.categorias.some(c => c.id === id)) return { error: this._errorResponse(409, 'ALREADY_EXISTS', 'categoria ya existe', { entity_type: 'categoria', id }) };
       nueva = { id, nombre: String(cat.nombre).trim(), descripcion: cat.descripcion || null, orden: typeof cat.orden === 'number' ? cat.orden : carta.categorias.length };
       return { status: 201, patches: [{ op: 'add', path: '/categorias/-', value: nueva }], data: (c) => ({ categoria: nueva, carta_version: c.meta.version }) };
+    });
+  }
+
+  // remove_category — quitar una categoria del esqueleto. La unica invariante que protege
+  // algo REAL: ningun producto queda colgando de una categoria que no existe (el comandero
+  // pinta su columna y su 412 los deja sin sitio). Por eso, si la categoria tiene productos,
+  // el acto pide el destino en el MISMO acto (mover_a) en vez de prohibir el borrado.
+  // Sin productos -> borra y recompacta `orden` a 0..n-1. Con productos y sin destino -> 412
+  // que dice cuantos son y cuales, para elegir destino con el dato delante.
+  async _removeCategory(input) {
+    if (!input.project_id || !input.carta_id || !input.categoria_id) return this._invalid('categoria_id');
+    return this._mutar(input, 'remove_category', (carta) => {
+      carta.categorias = carta.categorias || [];
+      const idx = carta.categorias.findIndex(c => c.id === input.categoria_id);
+      if (idx < 0) return { error: this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'categoria no existe', { entity_type: 'categoria', id: input.categoria_id }) };
+
+      const afectados = (carta.productos || []).filter(p => p.categoria_id === input.categoria_id);
+      let movidos = 0;
+      if (afectados.length) {
+        const destino = input.mover_a;
+        if (!destino) {
+          return { error: this._errorResponse(412, 'PRECONDITION_FAILED', 'la categoria tiene productos: indica mover_a (o quitalos antes)', {
+            categoria_id: input.categoria_id, productos: afectados.length,
+            producto_ids: afectados.slice(0, 25).map(p => p.id)
+          }) };
+        }
+        if (destino === input.categoria_id) return { error: this._errorResponse(412, 'PRECONDITION_FAILED', 'mover_a no puede ser la categoria que se borra') };
+        if (!carta.categorias.some(c => c.id === destino)) {
+          return { error: this._errorResponse(412, 'PRECONDITION_FAILED', 'categoria destino no existe', { mover_a: destino }) };
+        }
+        for (const p of afectados) p.categoria_id = destino;
+        movidos = afectados.length;
+      }
+
+      carta.categorias.splice(idx, 1);
+      carta.categorias.forEach((c, i) => { c.orden = i; });   // orden contiguo: la UI no deja huecos
+
+      const patches = [{ op: 'replace', path: '/categorias', value: carta.categorias }];
+      if (movidos) patches.push({ op: 'replace', path: '/productos', value: carta.productos });
+      return { status: 200, patches, data: (c) => ({ categoria_id: input.categoria_id, productos_movidos: movidos, mover_a: movidos ? input.mover_a : null, carta_version: c.meta.version }) };
     });
   }
 

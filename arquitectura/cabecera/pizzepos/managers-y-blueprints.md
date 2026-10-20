@@ -49,6 +49,15 @@ verificado: 2026-10-19
 > **general**, además rellena `productosCache` (catálogo base): sin eso el POS cobraba 0 y nombraba
 > el ítem con el `producto_id` tras un reinicio (v3.5.1). Comandero detecta el canal por el prefijo de la
 > cuenta (`glovo_`, `llevar_`, `M_`, `T_`…).
+> **La escritura dice lo que hace (v2.10.0 · test real `tests/unit/carta-manager__frenos.test.js`).** Dos frenos del custodio
+> mentían sobre la intención y se quitaron: (1) `carta.save` era "conservador" — `productos: []` y
+> "la clave no viene" eran indistinguibles, así que una carta NO se podía dejar en blanco: había que
+> inventarse un id nuevo (pasó en vivo con the-pirate v3 → v4). Ahora manda la PRESENCIA de la clave:
+> `[]` es vaciado explícito, la clave ausente conserva lo previo (y lo reporta en `conservado`).
+> (2) no existía `remove_category`: una categoría no se borraba nunca. Ahora `carta.remove_category.request`
+> la quita; si tiene productos exige `mover_a` en el mismo acto (la única invariante real: ningún
+> producto colgando de una categoría inexistente) y recompacta `orden` a 0..n-1. El snapshot previo
+> sigue haciendo el vaciado reversible con `carta.restore`.
 > **`carta.save` NO promociona a general si ya hay general (v2.9.0, verificado en vivo 2026-10-19).**
 > `_autoPromoTarifas` leía `/config/tarifas.json` — la ruta LEGACY — mientras tarifas escribe en
 > `/pizzepos/tarifas.json`: el 404 era permanente y la auto-promoción saltaba en CADA save, así que

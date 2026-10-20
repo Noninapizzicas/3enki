@@ -651,7 +651,7 @@ CLASE Ingrediente {
 }
 ```
 
-### 8. VARIACIONES (v4.6.0) — Reglas por producto, leídas de la CARTA
+### 8. VARIACIONES (v4.6.1) — Reglas por producto, leídas de la CARTA
 
 > **Lo REAL (verificado en vivo 2026-10-20).** El módulo NO es CRUD de "variaciones" ni guarda
 > `variacionesPerProducto`: es una **caché de reglas por producto** alimentada por la carta.
@@ -668,11 +668,17 @@ CLASE Ingrediente {
 > los ids de producto se **repiten** entre proyectos (nonina y the-pirate comparten 52) y la caché
 > está indexada por `producto_id`. Sin `project_id` el 404 sigue siendo el mismo: no se inventa estado.
 
+> **EL MÁXIMO LO MANDA LA CARTA (v4.6.1).** El campo `max_ingredientes_extra` que devuelve `get` y
+> que usa la validación sale del `max` declarado en la opción `ELEGIR_VARIOS` de la carta. Antes
+> caía al 5 heredado de `variaciones.max_ingredientes_extra`, mientras el panel y el camarero veían
+> el 10 de la carta: el motor rechazaba el 6º extra que la carta sí permite. El campo viejo queda solo
+> como respaldo cuando la carta no declara opciones (derivadas).
+
 ```
 CLASE VariacionesModule HEREDA BaseModule {
   ATRIBUTOS {
     name: String = 'variaciones'
-    version: String = '4.6.0'
+    version: String = '4.6.1'
     configuraciones: Map<producto_id, ConfigProducto>   // en memoria, lost_on_restart
     _hidratando: Map<project_id, Promise>               // viajes en vuelo (una RPC por proyecto)
   }
@@ -680,6 +686,7 @@ CLASE VariacionesModule HEREDA BaseModule {
   METODOS {
     _configurar(producto_id, {categoria, precio, variaciones, ingredientes_base, opciones, paleta})
       opciones = las de la CARTA si las trae; si no, derivarOpciones(QUITAR propios + ELEGIR_VARIOS paleta de su categoría)
+      max_ingredientes_extra = opciones.ELEGIR_VARIOS.max  ??  variaciones.max_ingredientes_extra  ??  5
 
     _configDeProducto(producto_id, project_id)          // el acto crea el estado
       SI no hay config Y hay project_id: await _asegurarProyecto(project_id) → reintenta

@@ -38,7 +38,7 @@ class VariacionesModule extends BaseModule {
   constructor() {
     super();
     this.name = 'variaciones';
-    this.version = '4.6.0';
+    this.version = '4.6.1';
 
     // Dependencias (inyectadas en onLoad)
     this.uiHandler = null;

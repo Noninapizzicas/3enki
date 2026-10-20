@@ -99,7 +99,7 @@ function publishedOf(mocks, name) {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     assert.strictEqual(m.name, 'variaciones');
-    assert.strictEqual(m.version, '4.6.0');
+    assert.strictEqual(m.version, '4.6.1');
     assert.strictEqual(m.configuraciones.size, 0);
     await m.onUnload();
   });
@@ -447,7 +447,7 @@ function publishedOf(mocks, name) {
     const { module: m } = await instantiate(mocks);
     const r = await m.handleHealthCheck();
     assert.ok(isCanonicalSuccess(r));
-    assert.strictEqual(r.data.version, '4.6.0');
+    assert.strictEqual(r.data.version, '4.6.1');
     await m.onUnload();
   });
 

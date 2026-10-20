@@ -892,7 +892,7 @@ CLASE Ingrediente {
 
 > **No hay CRUD de "variaciones"** (ni `createVariacion`, ni `variacion.created/deleted`): el módulo
 > real es una **caché de reglas por producto leída de la CARTA**. El contrato vive en
-> `pizzepos/pos-nucleo.md` §8 VARIACIONES (v4.6.0) — esta entrada solo lo enlaza para no duplicar prosa.
+> `pizzepos/pos-nucleo.md` §8 VARIACIONES (v4.6.1) — esta entrada solo lo enlaza para no duplicar prosa.
 >
 > Lo esencial: `variaciones.configurar` (rol jefe) delega en `carta.update_product` (el custodio
 > escribe; aquí solo se lee). Se puebla por `carta.actualizada/editada` + `project.activated`
@@ -900,6 +900,8 @@ CLASE Ingrediente {
 > si falta la config y la petición trae `project_id`, hidrata ESE proyecto desde la carta y reintenta
 > (una sola RPC para concurrentes) — sin hidratar todos los proyectos en bloque, porque los ids de
 > producto se repiten entre proyectos (nonina y the-pirate comparten 52) y la caché va por `producto_id`.
+> Desde v4.6.1 el `max_ingredientes_extra` que valida sale del `max` de la opción `ELEGIR_VARIOS` de la
+> carta, no del 5 heredado: la carta manda y el motor deja de rechazar extras que el panel ofrece.
 
 ### ESCANDALLO MANAGER
 

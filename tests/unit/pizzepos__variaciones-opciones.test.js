@@ -88,6 +88,54 @@ test('evaluar(Batucada, +inexistente): rechazada (400)', async () => {
   assert.strictEqual(r.data.valida, false);
 });
 
+// ── el MÁXIMO lo manda la carta, no el 5 viejo ──
+// Visto en vivo 2026-10-20: the-pirate declaraba `max: 10` en las opciones y variaciones.get
+// devolvía max_ingredientes_extra: 5 (el campo viejo), así que la validación (onComanderoItemAgregado)
+// rechazaba el 6º extra que la carta sí permite. El panel y el camarero veían 10; el motor, 5.
+const cartaConMax = (max) => ({
+  meta: { id: 'carta_max' },
+  productos: [{
+    id: 'pizzas_prueba', categoria_id: 'pizzas', precio: 10,
+    ingredientes: [{ id: 'tomate', nombre: 'Tomate' }, { id: 'mozzarella', nombre: 'Mozzarella' }],
+    opciones: [
+      { id: 'sin', etiqueta: 'Sin', modo: 'QUITAR', valores: [{ id: 'tomate', etiqueta: 'Tomate' }] },
+      { id: 'anadir', etiqueta: 'Añadir', modo: 'ELEGIR_VARIOS', min: 0, max,
+        valores: [{ id: 'bacon', etiqueta: 'Bacon' }, { id: 'cebolla', etiqueta: 'Cebolla' }] },
+    ],
+  }],
+});
+
+test('get: el max declarado en las opciones de la carta es el que devuelve (10, no 5)', async () => {
+  const m = new Variaciones();
+  await m.onCartaActualizada({ data: { carta: cartaConMax(10) } });
+  const r = await m.handleGetVariacionesProducto({ producto_id: 'pizzas_prueba' });
+  assert.strictEqual(r.data.max_ingredientes_extra, 10);
+});
+
+test('get: la carta gana al campo viejo variaciones.max_ingredientes_extra', async () => {
+  const carta = cartaConMax(10);
+  carta.productos[0].variaciones = { max_ingredientes_extra: 3 };
+  const m = new Variaciones();
+  await m.onCartaActualizada({ data: { carta } });
+  const r = await m.handleGetVariacionesProducto({ producto_id: 'pizzas_prueba' });
+  assert.strictEqual(r.data.max_ingredientes_extra, 10);
+});
+
+test('validar: con max 10 de la carta, 6 extras NO se rechazan', async () => {
+  const m = new Variaciones();
+  m.metrics = { increment() {}, gauge() {}, observe() {} };
+  m.eventBus = { publish: async () => {}, subscribe: async () => () => {} };
+  const carta = cartaConMax(10);
+  const paleta = ['bacon', 'cebolla', 'atun', 'huevo', 'maiz', 'pina', 'olivas_negras'];
+  carta.productos[0].opciones[1].valores = paleta.map(id => ({ id, etiqueta: id }));
+  await m.onCartaActualizada({ data: { carta } });
+  const r = await m.handleValidarVariacion({
+    producto_id: 'pizzas_prueba',
+    variaciones: { ingredientes_anadir: ['bacon', 'cebolla', 'atun', 'huevo', 'maiz', 'pina'] }
+  });
+  assert.strictEqual(r.status, 200, `rechazó 6 extras: ${JSON.stringify(r.data)}`);
+});
+
 // ── runner ──
 (async () => {
   let passed = 0, failed = 0; const fails = [];

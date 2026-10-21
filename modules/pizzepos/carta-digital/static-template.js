@@ -314,6 +314,14 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .hermana-btns{display:flex;gap:6px;flex-shrink:0}
 .hermana-btn{padding:7px 11px;border-radius:10px;border:1px solid #2a2a2a;background:#1a1a1a;color:#ccc;font-size:.75rem;font-weight:600;cursor:pointer}
 .hermana-btn.elegir{background:var(--primary);border-color:var(--primary);color:#111}
+/* "Añadir extras" PLEGADO: se ve la cabecera, la lista aparece al tocarla. */
+.fold{border-top:1px solid #1f1f1f;margin-top:14px;padding-top:12px}
+.fold>.fold-sum{list-style:none;cursor:pointer;display:flex;align-items:center;gap:6px;margin:0;-webkit-tap-highlight-color:transparent}
+.fold>.fold-sum::-webkit-details-marker{display:none}
+.fold>.fold-sum::after{content:'▾';margin-left:auto;color:#666;font-size:.85rem;transition:transform .18s}
+.fold[open]>.fold-sum::after{transform:rotate(180deg)}
+.fold[open]>.fold-sum{margin:0 0 10px}
+.fold-hint{font-weight:400;text-transform:none;letter-spacing:0;color:#666;margin-left:2px}
 /* Atajos componibles (mitad / crea tu pizza): pills compactas ancladas arriba del grid */
 .special-bar{grid-column:1/-1;display:flex;gap:10px;flex-wrap:wrap;margin:0 0 6px}
 .special-btn{display:inline-flex;align-items:center;gap:8px;padding:8px 15px;border:1.5px solid var(--primary);border-radius:999px;background:rgba(245,158,11,.12);background:color-mix(in srgb,var(--primary) 14%,transparent);color:var(--primary);font:inherit;font-size:.82rem;font-weight:700;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:transform .12s,background .15s}
@@ -713,6 +721,14 @@ const FAM_CONFIG = {
   otro:    { emoji: '📦', label: 'Otro',             orden: 9, color: '#888888' }
 };
 function famInfo(t) { return FAM_CONFIG[t] || FAM_CONFIG.otro; }
+// "Añadir extras" NO se abre solo. Al pulsar una pizza el cliente tiene que ver LA PIZZA
+// (sus hermanas, sus ingredientes), no un muro de 20 chips que empuja todo lo demás fuera
+// de la pantalla. Va plegado y se abre al tocarlo: el que quiere cambiar la receta lo busca,
+// el que no, no lo sufre. <details> nativo → cero JS, cero estado que sincronizar.
+function extrasFold(html, n) {
+  return '<details class="fold"><summary class="section-title fold-sum">Añadir extras' +
+    '<span class="fold-hint">· ' + n + ' opcionales</span></summary>' + html + '</details>';
+}
 // Pinta los extras AGRUPADOS por familia, ordenados, con cabecera por grupo (mismo sistema
 // que el comandero). Puebla detailExtrasById. selSet marca los ya añadidos; fn = handler onclick.
 function renderExtrasAgrupados(extras, selSet, fn) {
@@ -867,14 +883,18 @@ function renderHermanas(p) {
   let filas = '';
   for (let k = 0; k < hermanas.length; k++) {
     const h = hermanas[k];
-    const lista = (h.ingredientes || []).map(function (i) { return i.nombre; }).join(' · ');
+    // Los ingredientes a la vista, con su emoji: la fila se ojea, no se lee (el emoji
+    // hace de ancla visual para el que mira de pie en la barra).
+    const lista = (h.ingredientes || []).map(function (i) {
+      return (i.emoji ? i.emoji + ' ' : '') + i.nombre;
+    }).join(' · ');
     filas += '<div class="hermana-row">' +
       '<div class="hermana-info"><div class="hermana-nombre">' + esc(h.nombre) + '</div>' +
       (lista ? '<div class="hermana-ings">' + esc(lista) + '</div>' : '') + '</div>' +
       '<span class="hermana-precio">' + fmt(h.precio) + '</span>' +
       '<div class="hermana-btns">' +
         '<button type="button" class="hermana-btn elegir" data-accion="hermana-elegir" data-producto-id="' + esc(h.id) + '">' + T.add + '</button>' +
-        '<button type="button" class="hermana-btn" data-accion="hermana-editar" data-producto-id="' + esc(h.id) + '">Editar</button>' +
+        '<button type="button" class="hermana-btn" data-accion="hermana-editar" data-producto-id="' + esc(h.id) + '">Personalizar</button>' +
       '</div></div>';
   }
   return '<h3 class="section-title">También con ' + esc(principal.nombre) +
@@ -973,7 +993,7 @@ function showDetail(id) {
     hermanasHtml +
     escaleraHtml +
     (ingsHtml ? '<h3 class="section-title">Ingredientes <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#777">· toca para quitar</span></h3><div class="ing-list">' + ingsHtml + '</div>' : '') +
-    (extrasHtml ? '<h3 class="section-title">Añadir extras</h3>' + extrasHtml : '') +
+    (extrasHtml ? extrasFold(extrasHtml, extras.length) : '') +
     alergHtml;
 
   // Delegación (una sola vez): elegir una hermana → al carrito ; editar → SU ficha.
@@ -1231,7 +1251,7 @@ function showMitadVar(lado, pizza) {
     '<div class="detail-header"><h2 class="detail-nombre">' + (pizza.emoji ? pizza.emoji + ' ' : '') + '½ ' + esc(pizza.nombre) + '</h2></div>' +
     '<p class="detail-desc">Personaliza esta mitad' + (lado === 'izq' ? ' (izquierda)' : ' (derecha)') + '</p>' +
     (ingsHtml ? '<h3 class="section-title">Ingredientes <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#777">· toca para quitar</span></h3><div class="ing-list">' + ingsHtml + '</div>' : '') +
-    (extrasHtml ? '<h3 class="section-title">Añadir extras</h3>' + extrasHtml : '');
+    (extrasHtml ? extrasFold(extrasHtml, extras.length) : '');
   renderMitadVarFooter();
 }
 function mitadVarExtras() {

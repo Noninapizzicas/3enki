@@ -1,0 +1,9 @@
+{
+  "id": "aislamiento-negocio",
+  "name": "Aislamiento de negocio",
+  "version": "0.1.0",
+  "zone": "system-bar",
+  "order": 88,
+  "icon": "🚧",
+  "label": "Aislamiento negocio"
+}

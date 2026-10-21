@@ -1,0 +1,61 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "anclaje-cierre-vertical",
+  "version": "blueprint-2.0.0",
+  "moduleId": "contabilidad",
+  "titulo": "Anclaje de cierre por vertical",
+  "_doc": "Blueprint v2 de INTERFAZ del módulo contabilidad/anclaje-cierre-vertical (F6½). Declara la sección `ui` para el BlueprintForm (patrón interfaz-dinamico). La PARCELA declarable POR VERTICAL de QUÉ es 'un cierre' y CÓMO se identifica. Un solo escritor (rol ANCLAJE_CIERRE). Un cierre no se adivina: la vertical declara su anclaje (campo/valor que marca el cierre y/o componentes de su clave natural). Las acciones van DOTTED ('<modulo>.<accion>') y el transporte.rpc va VACÍO: el RPC real es contabilidad.<accion>.request (domain 'contabilidad', action '<modulo>.<accion>' en ui_handlers) y la regex de deriveZones solo parsea acciones de 2 segmentos; el wrapper mqttRequest('contabilidad','<modulo>.<accion>') emite ui/request/contabilidad/<modulo>.<accion>, que casa con el ui_handler. Los args salen de los parámetros REALES del handler en index.js.",
+  "eventos_publicados": [
+    "contabilidad.anclaje_cierre_declarado"
+  ],
+  "eventos_que_escucho": [
+    "anclaje-cierre-vertical.declarar.response"
+  ],
+  "transporte": {
+    "rpc": [],
+    "salida": [
+      "contabilidad.anclaje_cierre_declarado"
+    ],
+    "qos": "publishAndWait (request/response correlado) vía ui/request/contabilidad/<modulo>.<accion>; timeout del panel 10s. transporte.rpc vacío a propósito (acciones DOTTED)."
+  },
+  "ui": {
+    "_doc": "Panel de la cara humana de anclaje-cierre-vertical: la op de ESCRITURA (ORDEN) del módulo, con sus args reales. El BlueprintForm la invoca por ui/request/contabilidad/<accion>.",
+    "ops": {
+      "anclaje-cierre-vertical.declarar": {
+        "titulo": "Declarar el anclaje de cierre de una vertical",
+        "descripcion": "DECLARA qué es 'un cierre' para una vertical y cómo se identifica: el campo (y valor) que marca el cierre y/o los componentes de su clave natural. Re-declarar APPENDEA al historial (nada se pisa). Anuncia contabilidad.anclaje_cierre_declarado.",
+        "rol": "jefe",
+        "forma": "editor-bloque (vertical + anclaje{campo,valor,componentes,descripcion})",
+        "senal_pareada": "contabilidad.anclaje_cierre_declarado",
+        "args": [
+          {
+            "nombre": "rol",
+            "tipo": "select",
+            "required": true,
+            "descripcion": "Rol single-writer del guard (siempre ANCLAJE_CIERRE).",
+            "enum": [
+              "ANCLAJE_CIERRE"
+            ],
+            "default": "ANCLAJE_CIERRE"
+          },
+          {
+            "nombre": "vertical",
+            "tipo": "text",
+            "required": true,
+            "descripcion": "Vertical cuyo cierre se declara (ej: pizzepos)."
+          },
+          {
+            "nombre": "anclaje",
+            "tipo": "json",
+            "required": true,
+            "descripcion": "Objeto del anclaje: {campo?, valor?, componentes?[], descripcion?}."
+          }
+        ],
+        "errores": "403 PERMISSION_DENIED (rol != ANCLAJE_CIERRE) · 400 INVALID_INPUT (falta vertical o anclaje)"
+      }
+    },
+    "roles": {
+      "anclaje-cierre-vertical.declarar": "jefe"
+    }
+  }
+}

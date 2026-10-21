@@ -1,0 +1,291 @@
+{
+  "schema": "cantera-agentes-v1",
+  "descripcion": "Contratos de agentes de Hermes para ejecutar con delegate_task. Cada archivo .json es un pipeline completo con identidad, pasos, entregable y presupuesto.",
+  "agentes": [
+    {
+      "name": "generar-skill",
+      "description": "Genera la SKILL.md de un módulo en la cantera a partir de su código (module.json + index.js).",
+      "archivo": "generar-skill.json",
+      "tags": [
+        "documentacion",
+        "cantera",
+        "skill"
+      ],
+      "creado": "2026-08-25",
+      "ejecuciones": 2,
+      "ultima_ejecucion": "2026-08-25",
+      "modulos_procesados": [
+        "composition-manager",
+        "proceso-negocio"
+      ]
+    },
+    {
+      "name": "analizar-log",
+      "description": "Analiza el log current.jsonl de Enki, extrae errores, warnings y patrones de los últimos N minutos.",
+      "archivo": "analizar-log.json",
+      "tags": [
+        "analisis",
+        "log",
+        "monitoreo"
+      ],
+      "creado": "2026-08-25",
+      "ejecuciones": 0,
+      "ultima_ejecucion": null,
+      "modulos_procesados": []
+    },
+    {
+      "name": "auditar-skills",
+      "description": "Recorre todos los módulos del sistema y detecta los que no tienen skill en cantera.",
+      "archivo": "auditar-skills.json",
+      "tags": [
+        "auditoria",
+        "cantera",
+        "cobertura"
+      ],
+      "creado": "2026-08-25",
+      "ejecuciones": 0,
+      "ultima_ejecucion": null,
+      "modulos_procesados": []
+    },
+    {
+      "name": "generar-blueprint",
+      "description": "Genera el blueprint.json de interfaz para un módulo. DETERMINISTA: sin LLM.",
+      "archivo": "generar-blueprint.json",
+      "tags": [
+        "interfaz",
+        "blueprint",
+        "ui",
+        "determinista"
+      ],
+      "creado": "2026-08-25",
+      "ejecuciones": 0,
+      "ultima_ejecucion": null,
+      "modulos_procesados": []
+    },
+    {
+      "name": "f6-f7-completo",
+      "description": "Pipeline completo F6→F6½→F7 para un módulo: genera blueprint (formato ui.ops) + trío frontend (manifest+index+Panel) + PAGE_CATALOG.",
+      "archivo": "f6-f7-completo.json",
+      "tags": [
+        "interfaz",
+        "blueprint",
+        "f7",
+        "f6"
+      ],
+      "creado": "2026-08-26",
+      "ejecuciones": 0,
+      "ultima_ejecucion": null,
+      "modulos_procesados": []
+    },
+    {
+      "name": "crear-blueprint-jefe",
+      "description": "Blueprint de interfaz con LENTE DE ROLES: cada op clasificada como Jefe (reglas/config) / Utilizacion (al elegir) / neutro. La cara del Jefe primera fase. Extiende generar-blueprint.",
+      "archivo": "crear-blueprint-jefe.json",
+      "tags": [
+        "interfaz",
+        "blueprint",
+        "ui",
+        "roles",
+        "jefe",
+        "utilizacion"
+      ],
+      "creado": "2026-08-28",
+      "ejecuciones": 0,
+      "ultima_ejecucion": null,
+      "modulos_procesados": []
+    },
+    {
+      "name": "crear-blueprint-full",
+      "description": "Blueprint de interfaz SIN filtro de actor (TODAS las ops: consulta + supervisión + operativa). No excluye ninguna operación del module.json. Extiende generar-blueprint con la capa de roles.",
+      "archivo": "crear-blueprint-full.json",
+      "tags": [
+        "interfaz",
+        "blueprint",
+        "ui",
+        "roles",
+        "full",
+        "completo"
+      ],
+      "creado": "2026-09-05",
+      "ejecuciones": 0,
+      "ultima_ejecucion": null,
+      "modulos_procesados": []
+    },
+    {
+      "name": "esquematizador-que-construir",
+      "description": "FM1 (Fase Marketing 1): deriva QUÉ crear para cubrir los objetivos de fase-0 + fm0. Produce storage/marketing/fm1.md con las piezas a construir (sin asumir web, sin catálogo, lo que no existe se marca a_crear).",
+      "archivo": "esquematizador-que-construir.json",
+      "tags": [
+        "marketing",
+        "fm1",
+        "que-construir",
+        "esquema",
+        "proceso",
+        "pipeline"
+      ],
+      "creado": "2026-09-03",
+      "ejecuciones": 0,
+      "ultima_ejecucion": null,
+      "modulos_procesados": []
+    },
+    {
+      "name": "esquematizador-interfaz-cliente",
+      "description": "FASE 2 (lente CLIENTE): esquematiza la cara de consumo del negocio (qué elige, compra, repite el cliente) para producir el esquema que un agente de UI convierte en la interfaz pública. Nace de la lógica de FASE 0 + FM0.",
+      "archivo": "esquematizador-interfaz-cliente.json",
+      "tags": [
+        "esquema",
+        "cliente",
+        "roles",
+        "ui",
+        "web",
+        "marketing",
+        "prisma",
+        "fm0",
+        "css",
+        "frontend"
+      ],
+      "creado": "2026-09-03",
+      "ejecuciones": 0,
+      "ultima_ejecucion": null,
+      "modulos_procesados": []
+    },
+    {
+      "name": "esquematizador-interfaz-jefe-trabajador",
+      "description": "Esquematiza la interfaz de un módulo de un proyecto de USO PROPIO (taller personal, sin marketing) con DOS caras trabajadas: JEFE (declara reglas, decide) y TRABAJADOR (opera el flujo físico a diario). Se alimenta de Fase 0 + Fase 2 + datos reales del módulo. Cliente al margen.",
+      "archivo": "esquematizador-interfaz-jefe-trabajador.json",
+      "tags": [
+        "esquema",
+        "interfaz",
+        "jefe",
+        "trabajador",
+        "roles",
+        "ui",
+        "uso-propio"
+      ],
+      "creado": "2026-09-08",
+      "ejecuciones": 0,
+      "ultima_ejecucion": null,
+      "modulos_procesados": []
+    },
+    {
+      "name": "f6-esquematizador-jefe",
+      "description": "FASE 6 lente JEFE: PERFIL fino de prisma-universal — esquematiza desde F0+F2+módulo con lente jefe presetando las 3 variables (ENTRADA=module.json+index.js, ARCHIVO_FINAL=esquema-jefe, CÓMO=lente JEFE). Delega el método en prisma-universal.",
+      "archivo": "f6-esquematizador-jefe.json",
+      "tags": [
+        "f6",
+        "esquema",
+        "interfaz",
+        "jefe",
+        "ui"
+      ],
+      "creado": "2026-09-08",
+      "ejecuciones": 0,
+      "ultima_ejecucion": null,
+      "modulos_procesados": []
+    },
+    {
+      "name": "f6-esquematizador-trabajador",
+      "description": "FASE 6 lente TRABAJADOR: PERFIL fino de prisma-universal — esquematiza desde F0+F2+módulo con lente trabajador presetando las 3 variables (ENTRADA=module.json+index.js, ARCHIVO_FINAL=esquema-trabajador, CÓMO=lente TRABAJADOR). Delega el método en prisma-universal.",
+      "archivo": "f6-esquematizador-trabajador.json",
+      "tags": [
+        "f6",
+        "esquema",
+        "interfaz",
+        "trabajador",
+        "ui"
+      ],
+      "creado": "2026-09-08",
+      "ejecuciones": 0,
+      "ultima_ejecucion": null,
+      "modulos_procesados": []
+    },
+    {
+      "name": "f6-esquematizador-cliente",
+      "description": "FASE 6 lente CLIENTE: PERFIL fino de prisma-universal — esquematiza desde F0+F2+módulo con lente cliente (o declara honestamente sin interfaz en uso propio) presetando las 3 variables. Delega el método en prisma-universal.",
+      "archivo": "f6-esquematizador-cliente.json",
+      "tags": [
+        "f6",
+        "esquema",
+        "interfaz",
+        "cliente",
+        "ui"
+      ],
+      "creado": "2026-09-08",
+      "ejecuciones": 0,
+      "ultima_ejecucion": null,
+      "modulos_procesados": []
+    },
+    {
+      "name": "esquematizador",
+      "description": "Esquematiza la interfaz de un módulo POR ROL como PERFIL fino de prisma-universal: preseta las 3 variables (ENTRADA=module.json+index.js, ARCHIVO_FINAL=esquema-<rol>, CÓMO=lente del rol) y delega el método en prisma-universal. Bebe de module.json+index.js, agota, produce esquema-<rol>/esquema-<rol>.md. NO materializa ui_handlers.",
+      "archivo": "esquematizador.json",
+      "tags": [
+        "f6",
+        "esquema",
+        "interfaz",
+        "prisma",
+        "rol"
+      ],
+      "creado": "2026-09-09",
+      "ejecuciones": 0,
+      "ultima_ejecucion": null,
+      "modulos_procesados": []
+    },
+    {
+      "name": "prisma-universal",
+      "description": "Esquematizador universal: prisma de 5 huecos parametrizado por 3 variables (entrada, archivo final, enfoque=CÓMO+PARA). Sirve para cualquier sujeto: negocio, interfaz, informes, módulos.",
+      "archivo": "prisma-universal.json",
+      "tags": [
+        "esquema",
+        "prisma",
+        "universal",
+        "f0",
+        "f2",
+        "f6",
+        "f6h"
+      ],
+      "creado": "2026-09-09",
+      "ejecuciones": 0,
+      "ultima_ejecucion": null,
+      "modulos_procesados": []
+    },
+    {
+      "name": "analizador-restricciones",
+      "description": "Identificador de restricciones (cuellos de botella) de cualquier sujeto. Extiende prisma-universal + TOC Goldratt: 5 pasos de focalización, Árbol de Realidad Actual, Nube de Evaporación.",
+      "archivo": "analizador-restricciones.json",
+      "tags": [
+        "restricciones",
+        "toc",
+        "goldratt",
+        "prisma",
+        "universal",
+        "analisis",
+        "cuello-de-botella"
+      ],
+      "creado": "2026-09-13",
+      "ejecuciones": 0,
+      "ultima_ejecucion": null,
+      "modulos_procesados": []
+    },
+    {
+      "name": "adaptador-pieza-3d",
+      "description": "Traduce descripción funcional de pieza en código OpenSCAD+BOSL2 compilable, exporta STL y encola para impresión. Sin frenos en tipos de diseño: estructural, mecánico, articulado, roscado, engranajes, enclosures, jigs, contenedores, tubería, herramientas. Usa prisma de 5 huecos para la anatomía y BOSL2 para la geometría.",
+      "archivo": "adaptador-pieza-3d.json",
+      "tags": [
+        "impresion-3d",
+        "openscad",
+        "bosl2",
+        "stl",
+        "parametrico",
+        "diseño",
+        "pieza",
+        "fabricacion",
+        "prisma"
+      ],
+      "creado": "2026-09-13",
+      "ejecuciones": 0,
+      "ultima_ejecucion": null,
+      "modulos_procesados": []
+    }
+  ]
+}

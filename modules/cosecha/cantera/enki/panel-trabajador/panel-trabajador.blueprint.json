@@ -1,0 +1,119 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "panel-trabajador",
+  "version": "blueprint-1.0.0",
+  "moduleId": "panel-trabajador",
+  "moduleType": "workspace_module",
+  "zone": "barra_modulos",
+  "_lente_roles": {
+    "agente": "prisma-universal (cosecha.obtener / delegate_task)",
+    "metodo": "esquematizar-interfaz (F6½)",
+    "fase6": "workspace_module · zone barra_modulos (fase6-decidir-interfaz.md #11 · REFLEJO rol HOY / operativo)",
+    "lente": "ingeniero de interfaz como TRABAJADOR/operador (ejecuta HOY: retira, cambia bobina, pausa/reanuda, confirma — NO decide el futuro)",
+    "arbitro": "future→jefe (ninguna; este panel NO aprueba propuestas ni marca urgencia futura) · now→trabajador (estado_vivo/control/eventos/pendientes) · solo-lee→neutro (proximo_encadenar)",
+    "_nota_formas": "FORMA SIN DECIDIR (null). La F6½ solo declara op/contexto/evento → elemento; la FORMA (estado-vivo/tarjeta/tabla/botones) la decide la F7. NO se escribe ui.formas."
+  },
+  "titulo": "Panel del trabajador (rol HOY) — cara OPERATIVA del taller. Expone estado en vivo de la impresión (pieza + progreso + fase del ciclo cruzando ciclo-impresion/cola/filamento/historial por RPC best-effort), próxima pieza a encadenar, últimos eventos, pendientes de confirmación del dueño, y comandos HOY (pausar/abortar/reanudar → ciclo-impresion; reintentar/saltar → manejo-fallo; cambio_bobina → filamento.cambiar; confirmar → adaptador-confirmacion). CERO juicio: cada comando DELEGA por RPC y espera la decisión del dueño. Repintado por cola.actualizada | impresion.* | material.actualizado (fire-and-forget). Reflejo puro sin store propio. NADA de decisión futura (eso es panel-jefe).",
+  "eventos_publicados": [
+    "panel-trabajador.estado_vivo.response",
+    "panel-trabajador.control.failed"
+  ],
+  "eventos_que_escucho": [],
+  "_eventos_que_escucho_nota": "GATE ANTICOLISION-001: los *.request que el módulo atiende ya son fuente de verdad en module.json.subscribes; NO se repiten en el blueprint.eventos_que_escucho. Se deja [] (XOR). El REFRESCO en vivo de la zona DATOS se declara vía ui.datos.refresh_on (cola.actualizada / impresion.* / material.actualizado), NO como subscribes de lectura.",
+  "_ui_handlers": {
+    "tipo": "workspace_module",
+    "zone": "barra_modulos",
+    "handlers": [
+      { "ui_handler": "panel-trabajador.estado_vivo", "handler_backend": "onEstadoVivoRequest", "clase": "lectura en vivo", "contexto": "ver qué imprime ahora (pieza/progreso/fase)" },
+      { "ui_handler": "panel-trabajador.proximo_encadenar", "handler_backend": "onProximoEncadenarRequest", "clase": "lectura", "contexto": "ver la siguiente cabecera lista para encadenar" },
+      { "ui_handler": "panel-trabajador.eventos", "handler_backend": "onEventosRequest", "clase": "lectura", "contexto": "ver últimos eventos del taller" },
+      { "ui_handler": "panel-trabajador.pendientes", "handler_backend": "onPendientesRequest", "clase": "lectura", "contexto": "ver confirmaciones del dueño pendientes" },
+      { "ui_handler": "panel-trabajador.control", "handler_backend": "onControlRequest", "clase": "escritura/delegación", "contexto": "operar HOY (pausar/abortar/reanudar/reintentar/saltar/cambio_bobina/confirmar)" }
+    ]
+  },
+  "transporte": {
+    "entrada": "reflejo RPC via ui_handlers (module.json.subscribes *.request). El generador schema→UI (BlueprintForm, 4 zonas) renderiza desde ui.ops/ui.datos.",
+    "rpc": [
+      "panel-trabajador.estado_vivo.request -> panel-trabajador.estado_vivo.response",
+      "panel-trabajador.proximo_encadenar.request -> panel-trabajador.proximo_encadenar.response",
+      "panel-trabajador.eventos.request -> panel-trabajador.eventos.response",
+      "panel-trabajador.pendientes.request -> panel-trabajador.pendientes.response",
+      "panel-trabajador.control.request -> panel-trabajador.control.response"
+    ],
+    "salida": [
+      "panel-trabajador.control.failed"
+    ],
+    "qos": "publishAndWait (request/response correlado) en cada operación; timeout 8s"
+  },
+  "ui": {
+    "_doc": "Schema de panel del generador schema→UI (BlueprintForm). Las 5 RPC del REFLEJO operativo con sus args reales (index.js). Las lecturas en vivo se conectan con ui.datos.refresh_on (cola.actualizada / impresion.* / material.actualizado). FORMAS sin decidir (F7).",
+    "ops": {
+      "estado_vivo": {
+        "titulo": "Estado en vivo",
+        "descripcion": "Qué imprime ahora: pieza actual + progreso + fase del ciclo, cruzando ciclo-impresion/cola/filamento/historial por RPC best-effort (huecos -> 'desconocido', nunca inventado).",
+        "clase": "lectura en vivo",
+        "contexto": "el trabajador mira el estado actual de la impresión en tiempo real",
+        "elemento_sugerido": null,
+        "args": [
+          { "nombre": "n", "tipo": "number", "required": false, "placeholder": "nº de eventos a traer (default 5)" }
+        ]
+      },
+      "proximo_encadenar": {
+        "titulo": "Próxima a encadenar",
+        "descripcion": "La siguiente cabecera lista para encadenar (cola.siguiente). La cola la ofrece; aquí solo se proyecta.",
+        "clase": "lectura",
+        "contexto": "el trabajador ve qué pieza toca encadenar a continuación",
+        "elemento_sugerido": null
+      },
+      "eventos": {
+        "titulo": "Últimos eventos",
+        "descripcion": "Últimos registros del taller (historial.recientes, append-only, dato medido).",
+        "clase": "lectura",
+        "contexto": "el trabajador consulta la cinta de eventos reciente del taller",
+        "elemento_sugerido": null,
+        "args": [
+          { "nombre": "n", "tipo": "number", "required": false, "placeholder": "nº de eventos (default 10)" }
+        ]
+      },
+      "pendientes": {
+        "titulo": "Pendientes de confirmación",
+        "descripcion": "Decisiones que esperan al dueño en el ciclo actual (estado FALLIDA o esperando confirmación).",
+        "clase": "lectura",
+        "contexto": "el trabajador ve las confirmaciones que aguardan su decisión",
+        "elemento_sugerido": null
+      },
+      "control": {
+        "titulo": "Controles HOY",
+        "descripcion": "Comandos operativos que DELEGAN: pausar/abortar/reanudar (ciclo-impresion), reintentar/saltar (manejo-fallo), cambio_bobina (filamento.cambiar), confirmar (adaptador-confirmacion). CERO juicio: cada acción espera la respuesta del dueño.",
+        "clase": "escritura/delegación",
+        "contexto": "el trabajador opera físicamente el taller hoy",
+        "elemento_sugerido": null,
+        "args": [
+          { "nombre": "accion", "tipo": "select", "required": true, "placeholder": "comando *", "enum": ["pausar", "abortar", "reanudar", "reintentar", "saltar", "cambio_bobina", "confirmar"] },
+          { "nombre": "motivo", "tipo": "string", "required": false, "placeholder": "motivo (para abortar)" },
+          { "nombre": "tarea_id", "tipo": "string", "required": false, "placeholder": "tarea (para reintentar/saltar)" },
+          { "nombre": "bobina_id", "tipo": "string", "required": false, "placeholder": "bobina (para cambio_bobina)" },
+          { "nombre": "material", "tipo": "string", "required": false, "placeholder": "material de la bobina (para cambio_bobina)" },
+          { "nombre": "gramos_restantes", "tipo": "number", "required": false, "placeholder": "gramos restantes (para cambio_bobina)" },
+          { "nombre": "tipo_confirmacion", "tipo": "string", "required": false, "placeholder": "tipo de confirmación (para confirmar)" },
+          { "nombre": "confirmacion_id", "tipo": "string", "required": false, "placeholder": "id de confirmación (para confirmar)" }
+        ]
+      }
+    },
+    "datos": {
+      "op": "estado_vivo",
+      "titulo": "Estado del taller en vivo",
+      "columnas": ["fase", "pieza", "progreso", "filamento", "eventos"],
+      "refresh_on": ["cola.actualizada", "impresion.iniciada", "impresion.finalizada", "impresion.fallida", "material.actualizado"]
+    },
+    "flujo": [
+      { "nombre": "trabajador_vigilar_ejecutar", "orden": 1, "ops": ["estado_vivo", "proximo_encadenar", "pendientes", "control", "eventos"], "descripcion": "El operador vigila la impresión en vivo y ejecuta HOY (operar, confirma pendientes, cambia bobina)" }
+    ],
+    "dependencias": {
+      "estado_vivo": [],
+      "control": []
+    },
+    "_nota_formas_sin_decidir": "FORMA = null en ui.ops (F6½ no declara forma). La F7 decide: estado_vivo → panel de estado en vivo (Z3, repintado por refresh_on), proximo_encadenar/pendientes/eventos → tarjetas/tablas (Z4), control → botones de acción/confirmación contextuales (Z2)."
+  },
+  "filosofia": "El panel del trabajador es la cara HOY del taller: vuelve cada minuto a ver qué imprime y a operar (pausa/reanuda, retira, cambia bobina, confirma una incidencia). No decide el futuro: no aprueba propuestas ni marca urgencia futura (eso es panel-jefe). Todo control DELEGA por RPC y espera la decisión humana; lo que no se sabe se muestra como 'desconocido', nunca inventado."
+}

@@ -1,0 +1,32 @@
+{
+  "_doc": "Manifest de entrada/rappel-pronto-pago — REFLEJO STATELESS (N7, hoja del plan). Descuentos/rappels/anticipos que AJUSTAN EL COSTE REAL de la compra a lo realmente pagado. Determinista. CRITICO — ESTA HOJA ERA UN ESCRITOR MUDO: su `ajustar` calculaba el rappel y NO lo anunciaba, y la cadena se cortaba. Corregido (R2/plan N7): el ajuste del coste ESCRIBE → la hoja SUBE por EVENTO escritor-diario.asentar.request (B2, single-writer del libro) tras calcular; no escribe el libro ella misma, lo ANUNCIA. SUBE tambien cuenta-proveedor.saldo.request (N3) para leer el pendiente. Honestidad (invariante 13): sin importe_base NO se estima; sin cuentas declaradas NO se inventa el apunte (se declara); un ajuste negativo se declara, no se corrige. NO escribe, NO persiste. RPC ajustar es CLASE PREGUNTA → va por el bus, sin panel. Publica rappel-pronto-pago.ajustar.response y su par .failed. Escucha contabilidad.asiento_asentado (B2 escritor-diario, emitido).",
+  "name": "rappel-pronto-pago",
+  "version": "0.1.0",
+  "description": "Reflejo (N7): rappels/descuentos/pronto-pago que ajustan el coste real de la compra. NO mudo: sube el asiento del ajuste a escritor-diario (B2).",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "rappel-pronto-pago.ajustar.request",
+      "handler": "onAjustarRequest",
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id, tercero|proveedor, importe_base, descuento?, pronto_pago_pct?, rappel_pct?, anticipos?, cuentas?, asiento?, fecha?} → {project_id, tercero, coste_base, ajustes[], ajuste_total, coste_real, saldo_proveedor, ajusta_coste, abierto}. Calcula el ajuste del coste y, si ajusta (escribe), SUBE el asiento a escritor-diario.asentar.request (NO MUDO). Responde por rappel-pronto-pago.ajustar.response. Payload invalido → rappel-pronto-pago.ajustar.failed."
+    },
+    {
+      "event": "contabilidad.asiento_asentado",
+      "handler": "onAsientoAsentado",
+      "description": "Fire-and-forget (B2 escritor-diario): un asiento quedo en el libro. Se observa (ventana acotada); no se recalcula ni se escribe."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "rappel-pronto-pago.ajustar.response",
+      "description": "Respuesta RPC correlada de la op ajustar (una sola cara: el bus)."
+    },
+    {
+      "event": "rappel-pronto-pago.ajustar.failed",
+      "description": "Par de fallo determinista: falta project_id o importe_base → {status, code, message}. Cierra el circulo de ajustar.request."
+    }
+  ],
+  "tools": [
+    { "name": "rappel-pronto-pago.ajustar", "description": "Ajusta (PREGUNTA) el coste real de la compra por rappels/descuentos/pronto-pago y anuncia el asiento del ajuste a escritor-diario." }
+  ]
+}

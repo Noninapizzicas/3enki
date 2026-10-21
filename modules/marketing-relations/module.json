@@ -1,0 +1,90 @@
+{
+  "_doc": "marketing-relations — REFLEJO PURO: suscriptores con consentimiento + interacciones append-only. 80% reflejo, 20% custodio. Persiste por proyecto en state/marketing-relations.json.",
+  "name": "marketing-relations",
+  "version": "0.1.0",
+  "description": "Relación con la audiencia: suscriptores, consentimiento, preferencias e historial de interacciones inmutable.",
+  "language": "es",
+
+  "subscribes": [
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Restaura suscriptores e interacciones del proyecto activado."
+    },
+    {
+      "event": "marketing.relations.get.request",
+      "handler": "onGetRequest",
+      "description": "Devuelve suscriptores, interacciones y resumen del proyecto."
+    },
+    {
+      "event": "marketing.relations.update.request",
+      "handler": "onUpdateRequest",
+      "description": "Actualiza suscriptores (crear, editar, cambiar estado) y registra interacciones."
+    }
+  ],
+
+  "publishes": [
+    {
+      "event": "marketing.relations.actualizado",
+      "description": "Relaciones actualizadas. Payload: { project_id, campos_actualizados[] }."
+    }
+  ],
+
+  "tools": [
+    {
+      "name": "marketing-relations.get",
+      "description": "Obtiene suscriptores e interacciones de un proyecto.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1, "description": "ID del proyecto." },
+          "filtros": {
+            "type": "object",
+            "description": "{ estado?, canal_preferido?, suscriptor_id? }"
+          }
+        },
+        "required": ["project_id"]
+      },
+      "handler": "toolGet",
+      "errores_conocidos": ["INVALID_INPUT"]
+    },
+    {
+      "name": "marketing-relations.update",
+      "description": "Actualiza suscriptores (crear, editar, cambiar estado) y registra interacciones.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1 },
+          "suscriptores": {
+            "type": "array",
+            "description": "[{ id?, nombre, contacto?, canal_preferido?, segmentos_ids?, consentimiento?, preferencias?, estado? }]"
+          },
+          "interacciones": {
+            "type": "array",
+            "description": "[{ suscriptor_id, tipo, canal_id?, pieza_id?, resultado?, datos? }]"
+          }
+        },
+        "required": ["project_id"]
+      },
+      "handler": "toolUpdate",
+      "errores_conocidos": ["INVALID_INPUT", "INVALID_STATE_TRANSITION", "MISSING_CONSENT", "SUBSCRIBER_NOT_FOUND"]
+    }
+  ],
+
+  "ui_handlers": [
+    {
+      "domain": "marketing-relations",
+      "action": "get",
+      "handler": "handleUiGet",
+      "description": "Obtener suscriptores e interacciones del proyecto activo."
+    },
+    {
+      "domain": "marketing-relations",
+      "action": "update",
+      "handler": "handleUiUpdate",
+      "description": "Actualizar suscriptores y registrar interacciones del proyecto activo."
+    }
+  ]
+}

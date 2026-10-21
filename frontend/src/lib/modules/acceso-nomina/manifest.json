@@ -1,0 +1,9 @@
+{
+  "id": "acceso-nomina",
+  "name": "Acceso a nómina",
+  "version": "0.1.0",
+  "zone": "system-bar",
+  "order": 101,
+  "icon": "🔐",
+  "label": "Acceso nómina"
+}

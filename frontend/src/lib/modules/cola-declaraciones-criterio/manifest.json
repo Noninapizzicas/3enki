@@ -1,0 +1,9 @@
+{
+  "id": "cola-declaraciones-criterio",
+  "name": "Cola de criterios",
+  "version": "0.1.0",
+  "zone": "system-bar",
+  "order": 109,
+  "icon": "📋",
+  "label": "Cola criterios"
+}

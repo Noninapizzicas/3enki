@@ -1,0 +1,76 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "traza-asiento",
+  "version": "blueprint-2.0.0",
+  "moduleId": "contabilidad",
+  "titulo": "Traza de asiento",
+  "_doc": "Blueprint v2 de INTERFAZ del módulo contabilidad/traza-asiento (F6½). Declara la sección `ui` para el BlueprintForm (patrón interfaz-dinamico). CUSTODIO (B4): registro inmutable y append-only de quién/cuándo creó cada asiento. La op registrar (ORDEN) exige asiento_id y anuncia contabilidad.traza_registrada. Un solo escritor. PUENTE/CUSTODIO de la vertical contabilidad. Las acciones van DOTTED ('<modulo>.<accion>') y el transporte.rpc va VACÍO: el RPC real es contabilidad.<accion>.request (domain 'contabilidad', action 'traza-asiento.registrar' en ui_handlers) y la regex de deriveZones solo parsea acciones de 2 segmentos; el wrapper mqttRequest('contabilidad','<modulo>.<accion>') emite ui/request/contabilidad/<modulo>.<accion>, que casa con el ui_handler. Los args salen de los parámetros REALES del handler en index.js.",
+  "eventos_publicados": [
+    "contabilidad.traza_registrada"
+  ],
+  "eventos_que_escucho": [
+    "traza-asiento.registrar.response",
+    "traza-asiento.registrar.failed"
+  ],
+  "transporte": {
+    "rpc": [],
+    "salida": [
+      "contabilidad.traza_registrada"
+    ],
+    "qos": "publishAndWait (request/response correlado) vía ui/request/contabilidad/<modulo>.<accion>; timeout del panel 10s. transporte.rpc vacío a propósito (acciones DOTTED)."
+  },
+  "ui": {
+    "_doc": "Panel de la cara humana de traza-asiento: la(s) op(s) de ESCRITURA (ORDEN) del módulo, con sus args reales. El BlueprintForm la(s) invoca por ui/request/contabilidad/<accion>.",
+    "ops": {
+      "traza-asiento.registrar": {
+        "titulo": "Registrar la traza de un asiento (quién/cuándo)",
+        "descripcion": "Apila (ORDEN, append-only) la traza de un asiento: quién y cuándo lo creó. Exige asiento_id: sin asiento no se anota. El autor ausente se declara en `abierto`, no se inventa. Publica contabilidad.traza_registrada.",
+        "rol": "jefe",
+        "forma": "editor-bloque (asiento_id/actor/rol/accion/detalle/en)",
+        "senal_pareada": "contabilidad.traza_registrada",
+        "args": [
+          {
+            "nombre": "asiento_id",
+            "tipo": "text",
+            "required": true,
+            "descripcion": "ID del asiento cuya traza se registra (obligatorio)."
+          },
+          {
+            "nombre": "actor",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Quién creó el asiento (se anota el hueco si falta)."
+          },
+          {
+            "nombre": "rol",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Rol del actor."
+          },
+          {
+            "nombre": "accion",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Acción registrada (por defecto, 'asentar')."
+          },
+          {
+            "nombre": "detalle",
+            "tipo": "json",
+            "required": false,
+            "descripcion": "Detalle adicional (objeto)."
+          },
+          {
+            "nombre": "en",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Marca temporal (por defecto, ahora)."
+          }
+        ],
+        "errores": "400 INVALID_INPUT (sin asiento_id)"
+      }
+    },
+    "roles": {
+      "traza-asiento.registrar": "jefe"
+    }
+  }
+}

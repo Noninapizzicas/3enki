@@ -1,0 +1,70 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "flujo-firma",
+  "version": "blueprint-2.0.0",
+  "moduleId": "contabilidad",
+  "titulo": "Flujo de firma",
+  "_doc": "Blueprint v2 de INTERFAZ del módulo contabilidad/flujo-firma (F6½). Declara la sección `ui` para el BlueprintForm (patrón interfaz-dinamico). CUSTODIO (L3): parcela del estado revisado/firmado. El SISTEMA NO FIRMA — registra el acto declarado del asesor (firmado_por obligatorio); la firma vence y el sistema re-pregunta. Un solo escritor. PUENTE/CUSTODIO de la vertical contabilidad. Las acciones van DOTTED ('<modulo>.<accion>') y el transporte.rpc va VACÍO: el RPC real es contabilidad.<accion>.request (domain 'contabilidad', action 'flujo-firma.firmar' en ui_handlers) y la regex de deriveZones solo parsea acciones de 2 segmentos; el wrapper mqttRequest('contabilidad','<modulo>.<accion>') emite ui/request/contabilidad/<modulo>.<accion>, que casa con el ui_handler. Los args salen de los parámetros REALES del handler en index.js.",
+  "eventos_publicados": [
+    "contabilidad.revision_firmada"
+  ],
+  "eventos_que_escucho": [
+    "flujo-firma.firmar.response",
+    "flujo-firma.firmar.failed"
+  ],
+  "transporte": {
+    "rpc": [],
+    "salida": [
+      "contabilidad.revision_firmada"
+    ],
+    "qos": "publishAndWait (request/response correlado) vía ui/request/contabilidad/<modulo>.<accion>; timeout del panel 10s. transporte.rpc vacío a propósito (acciones DOTTED)."
+  },
+  "ui": {
+    "_doc": "Panel de la cara humana de flujo-firma: la(s) op(s) de ESCRITURA (ORDEN) del módulo, con sus args reales. El BlueprintForm la(s) invoca por ui/request/contabilidad/<accion>.",
+    "ops": {
+      "flujo-firma.firmar": {
+        "titulo": "Registrar el acto de firma del asesor sobre una revisión",
+        "descripcion": "Registra (ORDEN) la constancia de que el ASESOR firmó/revisó una revisión. El sistema NO firma (sistema_firma:false): es un acto DECLARADO, y sin firmado_por no hay firma. Una firma vence; sin vencimiento declarado la firma no se inventa vigencia. Publica contabilidad.revision_firmada.",
+        "rol": "asesor",
+        "forma": "editor-bloque (referencia/firmado_por/revisado/vence_en/rol)",
+        "senal_pareada": "contabilidad.revision_firmada",
+        "args": [
+          {
+            "nombre": "referencia",
+            "tipo": "text",
+            "required": true,
+            "descripcion": "Referencia de la revisión que se firma (sin ella no se firma)."
+          },
+          {
+            "nombre": "firmado_por",
+            "tipo": "text",
+            "required": true,
+            "descripcion": "Quién firma (acto declarado del asesor; obligatorio)."
+          },
+          {
+            "nombre": "revisado",
+            "tipo": "boolean",
+            "required": false,
+            "descripcion": "Marca de revisado (por defecto true)."
+          },
+          {
+            "nombre": "vence_en",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Vencimiento de la firma (declarable; ausente = vence_en null)."
+          },
+          {
+            "nombre": "rol",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Rol declarado del firmante."
+          }
+        ],
+        "errores": "400 INVALID_INPUT (sin referencia o sin firmado_por)"
+      }
+    },
+    "roles": {
+      "flujo-firma.firmar": "asesor"
+    }
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "id": "mise-en-place",
+  "name": "Mise en Place",
+  "version": "0.1.0",
+  "zone": "work-bar",
+  "order": 12,
+  "icon": "🥘",
+  "label": "Mise en Place"
+}

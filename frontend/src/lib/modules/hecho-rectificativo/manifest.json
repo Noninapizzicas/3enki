@@ -1,0 +1,9 @@
+{
+  "id": "hecho-rectificativo",
+  "name": "Hecho rectificativo",
+  "version": "0.1.0",
+  "zone": "system-bar",
+  "order": 85,
+  "icon": "🔁",
+  "label": "Hecho rectificativo"
+}

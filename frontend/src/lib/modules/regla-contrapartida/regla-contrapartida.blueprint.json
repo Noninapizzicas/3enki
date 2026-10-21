@@ -1,0 +1,52 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "regla-contrapartida",
+  "version": "blueprint-2.0.0",
+  "moduleId": "contabilidad",
+  "titulo": "Regla de contrapartida",
+  "_doc": "Blueprint v2 de INTERFAZ del módulo contabilidad/regla-contrapartida (F6½). Declara la sección `ui` para el BlueprintForm (patrón interfaz-dinamico). CUSTODIO (A6.2): parcela de reglas de contrapartida (contexto → cuenta). La op declarar (ORDEN) registra una regla; si nace APRENDIDA no opera hasta la ratificación (gate L10). Un solo escritor. PUENTE/CUSTODIO de la vertical contabilidad. Las acciones van DOTTED ('<modulo>.<accion>') y el transporte.rpc va VACÍO: el RPC real es contabilidad.<accion>.request (domain 'contabilidad', action 'regla-contrapartida.declarar' en ui_handlers) y la regex de deriveZones solo parsea acciones de 2 segmentos; el wrapper mqttRequest('contabilidad','<modulo>.<accion>') emite ui/request/contabilidad/<modulo>.<accion>, que casa con el ui_handler. Los args salen de los parámetros REALES del handler en index.js.",
+  "eventos_publicados": [
+    "contabilidad.contrapartida_regla_declarada"
+  ],
+  "eventos_que_escucho": [
+    "regla-contrapartida.declarar.response",
+    "regla-contrapartida.declarar.failed"
+  ],
+  "transporte": {
+    "rpc": [],
+    "salida": [
+      "contabilidad.contrapartida_regla_declarada"
+    ],
+    "qos": "publishAndWait (request/response correlado) vía ui/request/contabilidad/<modulo>.<accion>; timeout del panel 10s. transporte.rpc vacío a propósito (acciones DOTTED)."
+  },
+  "ui": {
+    "_doc": "Panel de la cara humana de regla-contrapartida: la(s) op(s) de ESCRITURA (ORDEN) del módulo, con sus args reales. El BlueprintForm la(s) invoca por ui/request/contabilidad/<accion>.",
+    "ops": {
+      "regla-contrapartida.declarar": {
+        "titulo": "Declarar una regla de contrapartida (contexto → cuenta)",
+        "descripcion": "Registra (ORDEN) una regla de contrapartida con su contexto y su cuenta. Si nace APRENDIDA NO opera hasta que el asesor la ratifique (gate L10). Guard de escritor: solo REGLA_CONTRAPARTIDA. Re-declarar appendea al historial. Publica contabilidad.contrapartida_regla_declarada.",
+        "rol": "jefe",
+        "forma": "editor-bloque (rol/regla{contexto,cuenta,origen})",
+        "senal_pareada": "contabilidad.contrapartida_regla_declarada",
+        "args": [
+          {
+            "nombre": "rol",
+            "tipo": "text",
+            "required": true,
+            "descripcion": "Rol del escritor: 'REGLA_CONTRAPARTIDA' (guard de escritor)."
+          },
+          {
+            "nombre": "regla",
+            "tipo": "json",
+            "required": true,
+            "descripcion": "La regla {contexto?, cuenta?, origen? ('DECLARADA'|'APRENDIDA')}."
+          }
+        ],
+        "errores": "400 INVALID_INPUT (sin regla o sin contexto/cuenta); 403 PERMISSION_DENIED (rol != REGLA_CONTRAPARTIDA)"
+      }
+    },
+    "roles": {
+      "regla-contrapartida.declarar": "jefe"
+    }
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "_doc": "Manifest de fiscal/modelo-303 — REFLEJO STATELESS (D2, hoja del plan). Construye el modelo trimestral 303 DESDE la liquidacion. Determinista: misma liquidacion → mismo modelo. NO calcula el IVA por su cuenta (eso es liquidacion-iva D1): le SUBE por EVENTO liquidacion-iva.calcular.request y COMPONE las casillas — o usa lo declarado. Los CASILLEROS y TIPOS son DATO: no se cablea ningun tipo ni tramo de la ley (tipos_cableados:false). Honestidad (invariante 13): sin liquidacion el modelo NO se rellena con ceros — queda [ABIERTO] (0 no es 'sin IVA', es desconocido). NO escribe, NO persiste. RPC construir es CLASE PREGUNTA → va por el bus, sin panel. Publica modelo-303.construir.response y su par .failed. Escucha contabilidad.asiento_asentado (B2) y contabilidad.ejercicio_cerrado (C4), ambos emitidos.",
+  "name": "modelo-303",
+  "version": "0.1.0",
+  "description": "Reflejo (D2): modelo trimestral 303 construido desde la liquidacion de IVA. Determinista; sin liquidacion queda ABIERTO (no se rellena con ceros).",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "modelo-303.construir.request",
+      "handler": "onConstruirRequest",
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id, liquidacion?/devengado?/soportado?/resultado?, casillas?, periodo?} → {project_id, periodo, casillas, total_a_ingresar, total_a_compensar, abierto}. Compone las casillas desde la liquidacion (D1). Responde por modelo-303.construir.response; falta project_id → modelo-303.construir.failed."
+    },
+    {
+      "event": "contabilidad.asiento_asentado",
+      "handler": "onAsientoAsentado",
+      "description": "Fire-and-forget (B2 escritor-diario): un asiento quedo en el libro. Se observa (ventana acotada); no se recalcula ni se escribe."
+    },
+    {
+      "event": "contabilidad.ejercicio_cerrado",
+      "handler": "onEjercicioCerrado",
+      "description": "Fire-and-forget (cierre-ejercicio C4): un periodo quedo cerrado. Se observa como contexto del modelo; no se recalcula."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "modelo-303.construir.response",
+      "description": "Respuesta RPC correlada de la op construir (una sola cara: el bus)."
+    },
+    {
+      "event": "modelo-303.construir.failed",
+      "description": "Par de fallo determinista: falta project_id → {status, code, message}. Cierra el circulo de construir.request."
+    }
+  ],
+  "tools": [
+    { "name": "modelo-303.construir", "description": "Construye (PREGUNTA) las casillas del modelo 303 desde la liquidacion de IVA." }
+  ]
+}

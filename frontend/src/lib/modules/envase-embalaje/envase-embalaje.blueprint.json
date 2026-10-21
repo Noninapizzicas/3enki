@@ -1,0 +1,74 @@
+{
+  "_doc": "Blueprint del modulo envase-embalaje (the-pirate). Modulo REFLEJO (index.js determinista, no blueprint-driven) — este blueprint declara SOLO la interfaz del generador schema→UI (BlueprintForm). Seccion `ui` declarada por F6½ (esquematizar-interfaz, 2026-08-24): las 4 operaciones del modulo con sus args reales del contrato (module.json + FORMULAS del index.js) y el evento que refresca la zona DATOS. Las acciones son DOTTED (reglas.leer, eleccion.obtener...) porque el RPC real del bus es envase.<accion>.request y el wrapper mqttRequest('envase', '<accion>') emite ui/request/envase/<accion> — por eso transporte.rpc va VACIO: la regex de deriveZones solo parsea acciones de 2 segmentos.",
+  "id": "envase-embalaje",
+  "version": "blueprint-1.0.0",
+
+  "rol": "Custodio single-writer del envase y embalaje (reparto: eleccion de envase por tipo de producto para_llevar/cazuela/pizza; stock: envases con disponible/minimo) en envase.json del proyecto + 2 conversores puros (eleccion, stock). El resto del sistema bebe sus valores por RPC; los nulls del contrato son politica por declarar (el dueno los puebla via reglas.actualizar).",
+
+  "eventos_publicados": [
+    "envase.reglas.actualizadas"
+  ],
+
+  "eventos_que_escucho": [],
+
+  "transporte": {
+    "entrada": "reflejo RPC via ui_handlers (module.json) — las 4 operaciones se conducen por ui/request/envase/<accion> con la accion dotted; ver seccion ui.ops. transporte.rpc vacio a proposito.",
+    "rpc": [],
+    "salida": [
+      "envase.reglas.actualizadas"
+    ],
+    "qos": "publishAndWait (request/response correlado) en cada operacion; timeout 8s"
+  },
+
+  "ui": {
+    "_doc": "Schema de panel del generador schema→UI (BlueprintForm). Las 4 operaciones del reflejo con sus args; el evento envase.reglas.actualizadas refresca la zona eventos.",
+    "ops": {
+      "reglas.leer": {
+        "titulo": "Ver reglas de envase",
+        "descripcion": "Lectura de las reglas del proyecto (eleccion y stock). Devuelve el objeto `reglas` con su fuente."
+      },
+      "reglas.actualizar": {
+        "titulo": "Actualizar reglas",
+        "descripcion": "Escritura single-writer (el dueno). Los campos presentes se validan y aplican; los ausentes se preservan. Schema envase-v1.",
+        "args": [
+          {
+            "nombre": "cambios",
+            "tipo": "json",
+            "required": true,
+            "descripcion": "Cambios a aplicar. Ej: {\"eleccion\":{\"para_llevar\":\"caja-carton\",\"cazuela\":\"cazuela-barro\",\"pizza\":\"caja-pizza\"},\"stock\":{\"envases\":[{\"nombre\":\"caja-carton\",\"disponible\":50,\"minimo\":10}]}}"
+          }
+        ]
+      },
+      "eleccion.obtener": {
+        "titulo": "Eleccion de envase",
+        "descripcion": "Envase asignado a un tipo de producto (para_llevar, cazuela, pizza).",
+        "args": [
+          {
+            "nombre": "tipo",
+            "tipo": "string",
+            "required": true,
+            "placeholder": "para_llevar | cazuela | pizza"
+          }
+        ]
+      },
+      "stock.obtener": {
+        "titulo": "Stock de un envase",
+        "descripcion": "Disponible y minimo de un envase declarado.",
+        "args": [
+          {
+            "nombre": "nombre",
+            "tipo": "string",
+            "required": true,
+            "placeholder": "nombre del envase"
+          }
+        ]
+      }
+    },
+    "datos": {
+      "op": "reglas.leer",
+      "titulo": "Reglas de envase del proyecto",
+      "refresh_on": ["envase.reglas.actualizadas"],
+      "columnas": ["reglas", "fuente"]
+    }
+  }
+}

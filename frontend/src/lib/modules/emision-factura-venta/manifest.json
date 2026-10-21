@@ -1,0 +1,9 @@
+{
+  "id": "emision-factura-venta",
+  "name": "Emisión de factura de venta",
+  "version": "0.1.0",
+  "zone": "system-bar",
+  "order": 84,
+  "icon": "🧾",
+  "label": "Emitir factura"
+}

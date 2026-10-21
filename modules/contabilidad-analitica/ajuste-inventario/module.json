@@ -1,0 +1,40 @@
+{
+  "_doc": "Manifest de analitica/ajuste-inventario — REFLEJO STATELESS (H3, hoja del plan). REGULARIZA la merma/rotura con ASIENTO Y AVISO. Calcula la DIFERENCIA de inventario: diferencia = cantidad_teorica − cantidad_real (merma/rotura si >0). DETERMINISTA: mismas cifras → misma diferencia. La diferencia SUBE el asiento a escritor-diario B2 (si las cuentas son declarables) y SUBE un aviso a motor-avisos K2 (si supera el umbral declarado). NO duplica el inventario (infra reutilizada) ni el valor (valoracion-existencia H1): solo DERIVA la diferencia de lo declarado. Invariante: dato ausente = desconocido (sin cantidad teorica o real → ABIERTO). ESCUCHA contabilidad.hecho_recibido (puerto-evento-vertical A1) — ese emisor YA existe → SI se declara. RPC diferencia es CLASE PREGUNTA → sin ui_handler. STATELESS: sin PosPersistencia.",
+  "name": "ajuste-inventario",
+  "version": "0.1.0",
+  "description": "Reflejo (H3): calcula la diferencia de inventario (merma/rotura) y la regulariza con asiento (escritor-diario) y aviso (motor-avisos).",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "ajuste-inventario.diferencia.request",
+      "handler": "onDiferenciaRequest",
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id, articulo?, cantidad_teorica, cantidad_real, coste_unitario?, cuentas?, umbral?} → {project_id, ajuste, diferencia, merma, sobrante, valor, asiento_propuesto, aviso_subido, abierto}. Calcula la diferencia (determinista) y sube el asiento a escritor-diario y el aviso a motor-avisos. Responde por ajuste-inventario.diferencia.response; payload invalido → ajuste-inventario.diferencia.failed."
+    },
+    {
+      "event": "contabilidad.hecho_recibido",
+      "handler": "onHechoRecibido",
+      "description": "Señal (fire-and-forget) de puerto-evento-vertical A1: un hecho con recuento de inventario entro → se deriva la diferencia y se regulariza. Solo si el hecho declara inventario/recuento (no se inventa la merma)."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "escritor-diario.asentar.request",
+      "description": "Subida (REQUEST por EVENTO) a B2: el asiento de regularizacion (solo si las cuentas declaradas cuadran). AjusteInventario NO escribe el diario; le sube el asiento."
+    },
+    {
+      "event": "motor-avisos.producir.request",
+      "description": "Subida (REQUEST por EVENTO) a K2: el aviso de la merma/rotura relevante (si supera el umbral declarado)."
+    },
+    {
+      "event": "ajuste-inventario.diferencia.response",
+      "description": "Respuesta RPC correlada de la op diferencia (una sola cara: el bus)."
+    },
+    {
+      "event": "ajuste-inventario.diferencia.failed",
+      "description": "Par de fallo determinista: falta project_id → {status, code, message}. Cierra el circulo de diferencia.request."
+    }
+  ],
+  "tools": [
+    { "name": "ajuste-inventario.diferencia", "description": "Calcula (PREGUNTA) la diferencia de inventario y la regulariza con asiento y aviso." }
+  ]
+}

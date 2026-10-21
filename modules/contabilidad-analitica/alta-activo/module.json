@@ -1,0 +1,39 @@
+{
+  "_doc": "Manifest de analitica/alta-activo — CUSTODIO CON PERSISTENCIA (F1, hoja del plan). Parcela del INMOVILIZADO. UN escritor. Aqui se da de ALTA un activo y se apila su ficha (append-only, no se pisa en silencio). La valoracion es reflejo hidratador: se ANOTA lo declarado, no se recalcula. EL CERROJO: la identidad es el activo_id/codigo declarado; sin el NO se da de alta. R2: `registrar` ESCRIBE → anuncia contabilidad.activo_alta. Ademas, por EVENTO (best-effort), SUBE a los custodios ajenos sin escribirlos: el asiento del alta a escritor-diario.asentar.request, la cuota a plan-amortizacion.cuota_del_periodo.request y el documento fuente a expediente-documental.archivar.request. Persiste por proyecto via PosPersistencia (_shared/pos-persistencia, storage /contabilidad/alta-activo), restaura en project.activated y vuelca en onUnload. Proyeccion _registrar(activo_id,...)->Activo (ORDEN). El RPC registrar es CLASE ORDEN → SÍ lleva ui_handler.",
+  "name": "alta-activo",
+  "version": "0.1.0",
+  "description": "Custodio (F1): alta de inmovilizado. Un solo escritor, append-only; registrar anuncia el hecho y delega asiento/cuota/documento por evento.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "alta-activo.registrar.request",
+      "handler": "onRegistrarRequest",
+      "description": "RPC custodio (ORDEN, panel): {project_id, activo{activo_id|codigo, descripcion?, cuenta?, valor?, fecha_alta?, vida_util?, metodo_amortizacion?, documento?}} → {project_id, activo, registrado, total, append_only}. Da de alta/actualiza (append-only) un activo; sin identidad → INVALID_INPUT. PUBLICA contabilidad.activo_alta (R2) y responde por alta-activo.registrar.response. Payload invalido → alta-activo.registrar.failed."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Restaura el inmovilizado del proyecto activado desde el storage (PosPersistencia)."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "contabilidad.activo_alta",
+      "description": "Fire-and-forget (F1): quedo dado de alta un activo → {project_id, activo_id, activo, valor, alta}. Lo consumen amortizacion, informes y expediente."
+    },
+    {
+      "event": "alta-activo.registrar.response",
+      "description": "Respuesta RPC correlada de la op registrar."
+    },
+    {
+      "event": "alta-activo.registrar.failed",
+      "description": "Par de fallo determinista: falta project_id o la identidad del activo → {status, code, message}. Cierra el circulo de registrar.request."
+    }
+  ],
+  "tools": [
+    { "name": "alta-activo.registrar", "description": "Da de alta (ORDEN) un activo del inmovilizado y anuncia el hecho." }
+  ],
+  "ui_handlers": [
+    { "domain": "contabilidad", "action": "alta-activo.registrar", "handler": "onRegistrarRequest", "type": "system_panel", "zone": "lateral_derecha" }
+  ]
+}

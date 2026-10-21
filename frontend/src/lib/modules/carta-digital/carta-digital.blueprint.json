@@ -1,0 +1,157 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "carta-digital",
+  "version": "blueprint-2.0.0",
+  "moduleId": "carta-digital",
+  "titulo": "Carta digital: el escaparate público (PWA). El jefe DECLARA el config del canal (dominio + opciones de checkout), REVISA el dictamen visual (preview = el HTML real que verá el cliente, iframe srcdoc) y EJECUTA la transición PUBLICAR (hornea el bundle estático que ve el público entero). Proyector, no custodio: la carta (carta-manager), la marca (carta-marketing) y el contenido se beben — lo único que posee es el config del canal.",
+  "_doc": "Blueprint de INTERFAZ (blueprint-interfaz-v2) de la cara del JEFE del módulo carta-digital (pizzepos v2.24.0, PROYECTOR sin estado, gemelo de productos). Vive junto al panel (frontend/src/lib/modules/carta-digital/) por decisión de ciclo v2. La lente de roles consolidada vive en modules/pizzepos/carta-digital/esquema-jefe/ (pasada-1, pasada-2-diseccion, anatomia-eventos-elementos, esquema.md). Verificaciones de código: modules/pizzepos/carta-digital/index.js (589 líneas leídas). Reemplaza al blueprint híbrido blueprint-1.4.0 (cajones agénticos aparcados — el módulo es reflejo determinista desde v2.x). El panel VIEJO de 3 zonas (IdentidadZone/OpcionesZone/CartaCompuestaZone) sobrevive junto al nuevo panel del jefe: consumidores externos verificados (ContenidoPanel importa cartaPublica/loadCartaPublica/initCartaDigitalSubscriptions de $lib/stores/carta-digital — sin tocar).",
+  "eventos_publicados": [
+    "cartadigital.publicado",
+    "cartadigital.config.actualizada",
+    "cartadigital.diseno.actualizada",
+    "cartadigital.carta_publica.actualizada"
+  ],
+  "eventos_que_escucho": [
+    "cartadigital.config.actualizada",
+    "cartadigital.publicado",
+    "cartadigital.diseno.actualizada",
+    "cartadigital.carta_publica.actualizada"
+  ],
+  "transporte": {
+    "entrada": "reflejo RPC vía ui_handlers (module.json, dominio 'cartadigital'): las 6 operaciones se conducen por ui/request/cartadigital/<accion>; la capa de request de la UI emite mqttRequest('cartadigital', accion, payload). El módulo TAMBIÉN expone RPC de bus para cajones (cartadigital.validar/guardar_diseno/publicar .request) — el panel usa SOLO ui_handlers.",
+    "rpc": [],
+    "salida": [
+      "cartadigital.publicado",
+      "cartadigital.config.actualizada",
+      "cartadigital.diseno.actualizada",
+      "cartadigital.carta_publica.actualizada"
+    ],
+    "qos": "publishAndWait (request/response correlado) en cada ui_handler; timeout 10-30s (publicar renderiza y verifica con Chromium: usar timeout 30s)"
+  },
+  "ui": {
+    "_doc": "Panel de la CARA DEL JEFE del escaparate. Composición 3 capas (esquema-jefe): INFORMARSE (config vigente + diseño aplicable + cinta de la proyección + PREVIEW dictamen visual) → DECLARAR (editor-bloque config del canal, 1 llamada update_config) → TRANSICIÓN (publicar con confirmador-nombrado). Jefe-primero: el preview y publicar arriba porque son la decisión; las palancas, debajo. La UI no compone nada: el HTML es dictamen del módulo (mismo generateStaticHTML que ve el cliente).",
+    "ops": {
+      "update_config": {
+        "titulo": "Declarar config del canal",
+        "descripcion": "LA DECLARACIÓN (jefe): dominio_publico + opciones_visualizacion del canal (whatsapp_telefono, moneda, mensaje_pedido, pago_online...). Merge profundo: solo lo enviado cambia, el resto se PRESERVA (L572-576). Responde 200 = config COMPLETO (dictamen). Branding/productos NO se guardan aquí: se beben.",
+        "rol": "jefe",
+        "forma": "editor-bloque",
+        "senal_pareada": "cartadigital.config.actualizada (L579)",
+        "args": [
+          { "nombre": "campos", "tipo": "json", "required": true, "descripcion": "Solo lo del canal. Ej: {\"dominio_publico\":\"https://pizzeria.es\",\"opciones_visualizacion\":{\"whatsapp_telefono\":\"+34600600600\",\"moneda\":\"€\",\"mensaje_pedido\":\"¡Hola! Quiero pedir:\"}}" }
+        ]
+      },
+      "publicar": {
+        "titulo": "Publicar la carta (el público la ve)",
+        "descripcion": "LA TRANSICIÓN (jefe): hornea proyección+diseño en el bundle estático, auto-activa la feature www (best-effort) y despliega a storage/www → Caddy lo sirve en /<ns>/<slug>. Frenos propios: guard de proyecto activo (412 PRECONDITION_FAILED si el objetivo no es el último activado), freno de render (422 si el verificador mira y sale roto o overflow_movil — es una PWA de móvil). ESTÁTICO: cada cambio exige volver a publicar — el aviso lo dice.",
+        "rol": "jefe",
+        "forma": "confirmador-nombrado (modal que NOMBRA qué y a quién afecta: «publica AHORA — el público entero ve esta versión»)",
+        "senal_pareada": "cartadigital.publicado { project_id, slug, productos, imagenes } (L437)"
+      },
+      "get_config": {
+        "titulo": "Ver config del canal",
+        "descripcion": "Informe del canal vigente. SIN 404: si no hay fichero válido responde el default {_version:'1.0', dominio_publico:null, opciones_visualizacion:{}} — «sin configurar» es estado NOMBRADO, no error (INV2).",
+        "rol": "neutro",
+        "forma": "cinta-estado + informe (alimenta el editor-bloque)"
+      },
+      "get_diseno": {
+        "titulo": "Ver diseño aplicable",
+        "descripcion": "El LOOK que compuso Enki para el proyecto (card_template + tema_css, persistido vía cartadigital.guardar_diseno.request con re-validación del contrato de slots). Informe-corto, no editable en el panel del jefe.",
+        "rol": "neutro",
+        "forma": "informe-corto",
+        "senal": "cartadigital.diseno.actualizada (L237)"
+      },
+      "preview": {
+        "titulo": "Ver como el cliente",
+        "descripcion": "DICTAMEN VISUAL: genera el MISMO generateStaticHTML que ve el cliente (variante suelta → checkout WhatsApp), inlinea las imágenes como data: URI y NO escribe nada (L494-538). Respuesta 200 { html, productos, extras_sin_precio, aviso_extras? } → iframe srcdoc. El jefe REVISA antes de publicar.",
+        "rol": "neutro",
+        "forma": "PREVISU-dictamen visual (iframe srcdoc del HTML real, no maqueta)",
+        "errores": "404 RESOURCE_NOT_FOUND sin carta asignada al canal (estado nombrado: «asigna una carta al canal digital en tarifas») · 503 fuentes caídas"
+      },
+      "get_carta_publica": {
+        "titulo": "Carta pública (lo que consume la PWA)",
+        "descripcion": "UTILIZACIÓN-ANOTADA: la proyección al vuelo que bebe la PWA del cliente (mapping canal→carta por tarifas, precios, alérgenos). FUERA de la captura del panel-jefe: en el panel solo existe como DATO DE FONDO de la cinta (nº productos, extras sin precio) — su cara real es la PWA.",
+        "rol": "utilizacion-anotada",
+        "forma": "fuera del panel-jefe: la cara del cliente es la PWA desplegada (/public/<ns>/<slug>)",
+        "errores": "404 sin carta asignada al canal · 503 fuentes caídas"
+      }
+    },
+    "datos": {
+      "op": "get_config",
+      "titulo": "Config del canal (informe)",
+      "refresh_on": ["cartadigital.config.actualizada"],
+      "columnas": ["_version", "dominio_publico", "opciones_visualizacion"]
+    },
+    "roles": {
+      "update_config": "jefe",
+      "publicar": "jefe",
+      "get_config": "neutro",
+      "get_diseno": "neutro",
+      "preview": "neutro",
+      "get_carta_publica": "utilizacion"
+    },
+    "flujo": [
+      {
+        "nombre": "jefe",
+        "orden": 1,
+        "ops": ["update_config", "publicar"],
+        "descripcion": "DECLARAR el canal (editor-bloque, 1 llamada update_config {campos}) y EJECUTAR la transición PUBLICAR (confirmador-nombrado con freno: si el preview da 404/errores, bloquear; el dictamen llega en la respuesta y la señal re-confirma)."
+      },
+      {
+        "nombre": "consulta",
+        "orden": 3,
+        "ops": ["get_config", "get_diseno", "preview"],
+        "descripcion": "INFORMARSE antes de decidir: config vigente (sin 404, default = «sin configurar»), el diseño de Enki aplicable, y el PREVIEW como dictamen visual (iframe srcdoc del HTML REAL) — revisar antes de publicar."
+      }
+    ],
+    "formas_jefe": {
+      "cinta_canal": {
+        "forma": "cinta-estado",
+        "rpc": "get_config {} → default sin 404 · get_carta_publica (dato de fondo: nº productos, extras_sin_precio) · get_diseno",
+        "senal": "cartadigital.carta_publica.actualizada (señal INDIRECTA del custodio: re-emite las 8 fuentes — subscribir con debounce 60ms)"
+      },
+      "editor_config_canal": {
+        "forma": "editor-bloque",
+        "rpc": "update_config { campos: { dominio_publico?, opciones_visualizacion? } } → 200 config completo",
+        "senal": "cartadigital.config.actualizada (L579)"
+      },
+      "previu_dictamen_visual": {
+        "forma": "PREVISU-dictamen visual: botón «Ver como el cliente» → iframe srcdoc con el html de preview (variante suelta, checkout WhatsApp, imágenes inlineadas)",
+        "rpc": "preview {} → { html, productos, extras_sin_precio, aviso_extras? }",
+        "senal": "re-render a demanda del jefe; 404 = estado nombrado"
+      },
+      "publicar_transicion": {
+        "forma": "confirmador-nombrado (modal: «Publica AHORA — el público entero ve esta versión» + qué hornea + frenos 412/422; default seguro si falta carta)",
+        "rpc": "publicar {} → { alojada_url, bundle_dir, productos, imagenes_copiadas, extras_sin_precio, aviso_extras?, feature_www, aviso }",
+        "senal": "cartadigital.publicado (L437)"
+      }
+    }
+  },
+  "_lente_roles": {
+    "agente": "ciclo-carta-digital v2",
+    "metodo": "esquematizador-jefe (modules/pizzepos/carta-digital/esquema-jefe/ — pasada-1, pasada-2-diseccion, anatomia-eventos-elementos, esquema.md)",
+    "arbitro": "¿DECLARA config del canal / EJECUTA la transición pública → jefe · ¿lo consume el CLIENTE en el canal → utilizacion · ¿SOLO lee/compone lectura sin persistir ni transicionar → neutro",
+    "veredicto": "6/6 ops juzgadas: jefe(2) update_config (LA DECLARACIÓN del canal) + publicar (LA TRANSICIÓN — lo ve el público entero) · neutro(3) get_config (informe del canal) + get_diseno (el look de Enki) + preview (PREVISU-dictamen visual) · utilizacion(1) get_carta_publica (la PWA del cliente lo consume; en el panel solo es dato de fondo de la cinta)",
+    "senales": "4 señales reales de salida, verificadas en index.js (la premisa «sin publishes» del module.json era hueco del manifest — publishes[] no lo declaraba): cartadigital.config.actualizada (L579, tras update_config) · cartadigital.publicado (L437, tras publicar {project_id, slug, productos, imagenes}) · cartadigital.carta_publica.actualizada (L161-166, _reemitir: señal INDIRECTA del custodio — re-emite carta.actualizada/carta.editada/carta.borrada/contenido.actualizado/marketing.perfil.actualizado → suscribir con debounce 60ms y re-proyectar) · cartadigital.diseno.actualizada (L237, tras guardar_diseno por bus). Doble confirmación como entrega/masa: dictamen en la respuesta RPC + señal que re-lee (nunca recarga, nunca estado optimista).",
+    "moneda": "op.moneda es SÍMBOLO display que pinta la PWA ('€' default), no cifra (INV6): la UI lo edita como texto corto, sin céntimos ni conversión. Los precios de la carta NO viven aquí (los retira el jefe en otros paneles: carta-manager/ingredientes/tarifas).",
+    "invariante_del_panel": "sin 404 de lectura de config: get_config SIEMPRE responde (default {_version:'1.0', dominio_publico:null, opciones_visualizacion:{}}) — «sin configurar» es estado nombrado. SÍ hay 404 NOMBRADO de proyección: preview/get_carta_publica/publicar responden 404 RESOURCE_NOT_FOUND sin carta asignada al canal («revisa tarifas») — estado inicial legítimo que la vista nombra y BLOQUEA publicar.",
+    "multi_tenant": "todo RPC lleva project_id (lo inyecta el caller); publicar aplica el guard del proyecto ACTIVO (412 PRECONDITION_FAILED si el objetivo no es el último project.activated — el filesystem escribe ahí): el panel muestra el nombre del proyecto en el confirmador para evitar disparar la transición sobre otro proyecto.",
+    "huecos": {
+      "pago_online": "[ABIERTO] el config soporta pago_online + pedido_endpoint y el template los honra, sin pantalla hoy: requiere backend detrás (tienda-api). Decisión del dueño. La UI NO lo pide (hueco de CONTRATO, no de captura).",
+      "programar_publicacion": "[ABIERTO] carta-scheduler vive aparte; no hay op de programación.",
+      "multi_idioma": "[ABIERTO] el config v1.0 no abre variantes por zona/idioma.",
+      "chat_ia_pwa": "[ABIERTO] el cerebro del chat es el cf-worker del escenario SUELTO (export-cli + cf-worker/deploy.js); el alojado sale con chat IA OFF a propósito — decisión de negocio."
+    },
+    "utilizacion": [
+      { "op": "get_carta_publica", "cara": "PWA del cliente final desplegada en /<ns>/<slug> (bundle estático) + cf-worker; en el panel-jefe solo alimenta la cinta (nº productos, extras sin precio)" }
+    ],
+    "panel_viejo": "El panel antiguo de 3 zonas (IdentidadZone/OpcionesZone/CartaCompuestaZone + $lib/stores/carta-digital.ts) SOBREVIVE: consumidores externos verificados (ContenidoPanel.svelte importa cartaPublica/loadCartaPublica/initCartaDigitalSubscriptions). El nuevo panel del jefe (CartaDigitalJefePanel.svelte + stores/carta-digital-jefe.ts) convive; no se toca el store $lib/stores/carta-digital.ts.",
+    "fuente_analisis": "modules/pizzepos/carta-digital/esquema-jefe/esquema.md",
+    "fecha": "2026-08-30"
+  },
+  "_verificado_en_codigo": {
+    "reflejo": "modules/pizzepos/carta-digital/index.js (2.24.0, 589 líneas): handleUpdateConfig (L568-581, ÚNICO escritor del config, merge por bloques) · handlePublicar (L472-475 → _publicarBundle L302-455: guard 412 L309-313, freno render 422 L398-408, auto-feature www L414-418, bundle a storage/www L422-435, señal publicado L437) · handleGetConfig (L564-567, default sin 404) · handleGetDiseno (L292-295) · handlePreview (L497-538, HTML real variante suelta, imágenes inlineadas, no escribe) · handleGetCartaPublica (L489-492 → _proyectarPublica L478-486, 404 sin carta L483)",
+    "senales": "index.js: config.actualizada L579 · publicado L437 · carta_publica.actualizada L161-166 (_reemitir, indirecta del custodio) · diseno.actualizada L237",
+    "errores": "400 INVALID_INPUT (falta project_id/campos) · 412 PRECONDITION_FAILED publicar (proyecto no activo) · 422 UPSTREAM_INVALID_RESPONSE publicar (render roto / overflow_movil) · 422 INVALID_DESIGN guardar_diseno (slots del contrato: CARD_TEMPLATE_AUSENTE, SLOTS_FALTAN con la lista, HOOK_DETALLE/ADD_AUSENTE, JS_EN_TEMPLATE) · 404 RESOURCE_NOT_FOUND proyección sin carta · 502/503 upstream fs"
+  }
+}

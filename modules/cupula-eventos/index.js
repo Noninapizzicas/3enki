@@ -1,180 +1,343 @@
 'use strict';
 
+const fs = require('fs');
+const path = require('path');
 const BaseModule = require('../_shared/base-module');
 
 /**
- * CÚPULA DE EVENTOS — cara RUNTIME (la biblioteca buscable del contrato del bus).
+ * cupula-eventos — CÚPULA DE EVENTOS, cara RUNTIME (el contrato del bus servido al LLM).
  *
- * Gemela de buscar_agente (cúpula de agentes) y buscar_skill (cantera): da al LLM
- * acceso a TODAS las capacidades del sistema (tools + RPCs del bus que puede conducir)
- * SIN saturar contexto. El principio de la cúpula: una PUERTA diminuta y universal, y
- * el catálogo entero detrás, servido top-K bajo demanda. Los ~400 contratos nunca entran
- * al prompt — solo lo que la búsqueda devuelve.
+ * Hermana de cupula-tools (capacidades) y del bibliotecario (bóveda): mientras
+ * cupula-tools sirve las TOOLS que el LLM puede invocar, esta sirve el IDIOMA del
+ * bus — qué eventos se emiten, quién los atiende, quién los conduce, quién los
+ * publica, y dónde hay FANTASMAS (evento conducido que nadie atiende → timeout
+ * silencioso).
  *
- * Dos tools, ambas universales (viven en GLOBAL_TOOLS del ai-gateway → toda página):
- *   - buscar_capacidad {query, tipo?, limite?} → catálogo BARATO (name+tipo+descripcion), rankeado.
- *   - detalle_capacidad {name}                 → el CONTRATO completo bajo demanda
- *                                                (request_shape + cómo conducir + response_topic).
+ * Reutiliza la MISMA lógica de extracción del vigilante estático
+ * (scripts/cupula-eventos/vigilante.js) para que CI y runtime coincidan en la
+ * verdad. La diferencia: el vigilante corre en CI y canta; este módulo corre en
+ * runtime, construye el CENSO en memoria al cargar (y bajo demanda con rescanear)
+ * y lo sirve al LLM con tools de consulta.
  *
- * Fuente: moduleLoader.toolsRegistry — el índice VIVO de todas las tools registradas (el
- * mismo que alimenta getToolsForAI). Siempre fresco, sin re-escanear ficheros. El vigilante
- * estático (scripts/cupula-eventos/vigilante.js) sigue cantando fantasmas en CI; esta es la
- * OTRA CARA de la misma cúpula: misma verdad (el contrato del bus), servida al LLM en vivo.
+ * Cuatro tools universales (candidatas a GLOBAL_TOOLS):
+ *   - evento_indice    → resumen del censo (cuántos atendidos/conducidos/publicados/fantasmas)
+ *   - evento_detalle   → contrato de UN evento (quién atiende/conduce/publica)
+ *   - evento_buscar    → eventos por palabra
+ *   - evento_fantasma  → los huecos (rpc fantasma + publish huérfano)
+ *
+ * Fuente: escaneo de modules/ — manifest module.json + blueprints + pseudocódigo
+ * + código + skills de la cantera. Same regexes que el vigilante.
  */
+
+const MODULES = path.join(__dirname, '..', '..', 'modules');
+const ATENDIDOS_POR_EL_CORE = new Set(['ui.request']);
+const PREFIJOS_DINAMICOS = ['${', '<', '{', '+'];
+
 class CupulaEventosModule extends BaseModule {
   constructor() {
     super();
     this.name = 'cupula-eventos';
     this.version = '0.1.0';
-    this.moduleLoader = null;
+
+    // Censo en memoria (se reconstruye en onLoad y en rescanear)
+    this.atendidos = new Map();   // evento → [quienes lo escuchan]
+    this.conducidos = [];         // {evento, por}
+    this.publicados = [];         // {evento, por, via}
+    this.intenciones = [];        // {evento, por, id, estado}
+    this.rechazosMudos = new Map();
+    this.censadoEn = null;
   }
 
   async onLoad(context) {
     this.logger = context.logger || null;
     this.metrics = context.metrics || null;
     this.eventBus = context.eventBus;
-    this.moduleLoader = context.moduleLoader || null;
-    if (this.moduleLoader?.toolsRegistry) {
-      this._registerBuscarCapacidadTool();
-      this._registerDetalleCapacidadTool();
-    }
-    this.logger?.info?.('cupula-eventos.loaded', { capacidades: this._indice().length });
+    this._escanear();
+    this.logger?.info?.('cupula-eventos.loaded', {
+      atendidos: this.atendidos.size,
+      conducidos: this.conducidos.length,
+      publicados: this.publicados.length,
+      fantasmas: this._rpcFantasma().length
+    });
   }
 
   async onUnload() {
-    this.moduleLoader?.toolsRegistry?.delete?.('buscar_capacidad');
-    this.moduleLoader?.toolsRegistry?.delete?.('detalle_capacidad');
+    this.atendidos.clear();
+    this.conducidos = [];
+    this.publicados = [];
+    this.intenciones = [];
+    this.rechazosMudos.clear();
+    this.censadoEn = null;
   }
 
-  // ── registro de tools (patrón _registerBuscarAgenteTool) ──
-  _registerBuscarCapacidadTool() {
-    this.moduleLoader.toolsRegistry.set('buscar_capacidad', {
-      name: 'buscar_capacidad',
-      description: 'Busca en el CATÁLOGO COMPLETO de capacidades del sistema (tools y RPCs del bus que puedes conducir) las que sirven para una tarea. Devuelve nombre + descripción, top-K, sin cargar todo el catálogo. ÚSALA cuando necesites una acción y no sabes si existe una capacidad para ella (p.ej. "costear receta", "precio mercadona", "enviar whatsapp", "generar imagen"). Después, detalle_capacidad(name) te da su contrato para conducirla con bus.publishAndWait.',
-      parameters: {
-        type: 'object', additionalProperties: false,
-        properties: {
-          query: { type: 'string', minLength: 1, description: 'La acción/capacidad a buscar (p.ej. "costear receta", "crear factura", "notificar pedido").' },
-          tipo: { type: 'string', enum: ['tool', 'rpc', '*'], description: 'Opcional: "tool" (nombre pelado, p.ej. invoke_agent) o "rpc" (<modulo>.<accion>, p.ej. escandallo.costear). Default "*".' },
-          limite: { type: 'number', description: 'Opcional: cuántas devolver (default 10).' }
-        },
-        required: ['query']
-      },
-      module: 'cupula-eventos',
-      event_based: true
-    });
-  }
+  // =============================================================
+  // Escaneo — reutiliza la lógica del vigilante estático
+  // =============================================================
 
-  _registerDetalleCapacidadTool() {
-    this.moduleLoader.toolsRegistry.set('detalle_capacidad', {
-      name: 'detalle_capacidad',
-      description: 'Devuelve el CONTRATO completo de UNA capacidad hallada por buscar_capacidad: el request_shape (parámetros que acepta), cómo conducirla, el response_topic para esperar la respuesta, y si requiere confirmación. Es el "abrir cajón" del bus — el cuerpo bajo demanda, sin cargar los ~400 contratos. Con esto conduces la capacidad vía bus.publishAndWait.',
-      parameters: {
-        type: 'object', additionalProperties: false,
-        properties: { name: { type: 'string', minLength: 1, description: 'Nombre exacto de la capacidad (tal cual lo devolvió buscar_capacidad).' } },
-        required: ['name']
-      },
-      module: 'cupula-eventos',
-      event_based: true
-    });
-  }
-
-  // ── handlers de bus (publican <tool>.response {request_id, result|error}) ──
-  async onBuscarCapacidad(event) {
-    const d = event?.data || event || {};
-    try {
-      const result = this._buscar(d);
-      this.metrics?.increment?.('cupula-eventos.served', { op: 'buscar' });
-      return this.eventBus.publish('buscar_capacidad.response', { request_id: d.request_id, result });
-    } catch (err) {
-      this.metrics?.increment?.('cupula-eventos.errors', { kind: 'buscar_capacidad' });
-      return this.eventBus.publish('buscar_capacidad.response', { request_id: d.request_id, error: { code: 'UNKNOWN_ERROR', message: err.message } });
-    }
-  }
-
-  async onDetalleCapacidad(event) {
-    const d = event?.data || event || {};
-    try {
-      const r = this._detalle(d);
-      if (r && r.status) return this.eventBus.publish('detalle_capacidad.response', { request_id: d.request_id, error: r.error });
-      this.metrics?.increment?.('cupula-eventos.served', { op: 'detalle' });
-      return this.eventBus.publish('detalle_capacidad.response', { request_id: d.request_id, result: r });
-    } catch (err) {
-      this.metrics?.increment?.('cupula-eventos.errors', { kind: 'detalle_capacidad' });
-      return this.eventBus.publish('detalle_capacidad.response', { request_id: d.request_id, error: { code: 'UNKNOWN_ERROR', message: err.message } });
-    }
-  }
-
-  // ── el índice VIVO: todas las capacidades registradas (misma fuente que getToolsForAI) ──
-  _indice() {
-    const reg = this.moduleLoader?.toolsRegistry;
-    if (!reg || typeof reg.values !== 'function') return [];
+  _walk(dir) {
     const out = [];
-    for (const t of reg.values()) {
-      if (!t || !t.name) continue;
-      out.push({
-        name: t.name,
-        description: t.description || '',
-        tipo: this._tipo(t.name),
-        confirmation: !!t.confirmation,
-        module: t.module || null,
-        parameters: t.parameters || null,
-        event_based: !!t.event_based
-      });
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (e.name === 'node_modules' || e.name.startsWith('.')) continue;
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) out.push(...this._walk(p));
+      else out.push(p);
     }
     return out;
   }
 
-  // rpc = <mod>.<accion> (se conduce por bus con .request/.response) · tool = nombre pelado.
-  _tipo(name) {
-    return String(name).includes('.') ? 'rpc' : 'tool';
+  _rel(p) { return path.relative(path.resolve(__dirname, '..', '..'), p); }
+  _esDinamico(ev) { return !ev || PREFIJOS_DINAMICOS.some((d) => ev.includes(d)); }
+
+  _sinComentario(linea) {
+    const m = linea.match(/(^|[^:])\/\//);
+    return m ? linea.slice(0, m.index + m[1].length) : linea;
   }
 
-  // ── proyección PURA: rankea por tokens (gemela de _buscarAgente). No lee ni escribe estado. ──
-  _buscar({ query, tipo = '*', limite } = {}) {
-    const q = String(query || '').toLowerCase().trim();
-    if (!q) return { total: 0, capacidades: [] };
-    const lim = Math.max(1, Number(limite) || 10);
-    const toks = q.split(/\s+/).filter(Boolean);
-    const propias = new Set(['buscar_capacidad', 'detalle_capacidad']);
-    const scored = [];
-    for (const c of this._indice()) {
-      if (propias.has(c.name)) continue;                          // la puerta no se busca a sí misma
-      if (tipo !== '*' && c.tipo !== tipo) continue;
-      const nombre = c.name.toLowerCase();
-      const heno = `${nombre} ${c.description.toLowerCase()}`;
-      let s = 0;
-      for (const t of toks) {
-        if (nombre.includes(t)) s += 2;                           // match en el nombre pesa más
-        else if (heno.includes(t)) s += 1;                        // match en la descripción
+  _atiende(ev, quien) {
+    if (this._esDinamico(ev)) return;
+    if (!this.atendidos.has(ev)) this.atendidos.set(ev, []);
+    this.atendidos.get(ev).push(quien);
+  }
+
+  _escanear() {
+    this.atendidos.clear();
+    this.conducidos = [];
+    this.publicados = [];
+    this.intenciones = [];
+    this.rechazosMudos.clear();
+
+    const RE_WAIT = /publishAndWait\(\s*['"`]([^'"`]+)['"`]/g;
+    const RE_RPC = /_rpc\(\s*['"`]([^'"`]+)['"`]/g;
+    const RE_PUB = /(?<!And)[Pp]ublish\(\s*['"`]([^'"`]+)['"`]/g;
+    const RE_SUB = /\bsub(?:scribe)?\(\s*['"`]([^'"`]+)['"`]/g;
+
+    const escanearTexto = (texto, por) => {
+      let m;
+      RE_WAIT.lastIndex = 0; RE_RPC.lastIndex = 0; RE_PUB.lastIndex = 0;
+      while ((m = RE_WAIT.exec(texto))) if (!this._esDinamico(m[1])) this.conducidos.push({ evento: m[1], por });
+      while ((m = RE_RPC.exec(texto))) if (!this._esDinamico(m[1])) this.conducidos.push({ evento: m[1], por });
+      while ((m = RE_PUB.exec(texto))) if (!this._esDinamico(m[1])) this.publicados.push({ evento: m[1], por });
+    };
+
+    const escanearJS = (texto, por) => {
+      let m; RE_SUB.lastIndex = 0;
+      while ((m = RE_SUB.exec(texto))) this._atiende(m[1], por + ' (código)');
+      escanearTexto(texto, por);
+    };
+
+    for (const f of this._walk(MODULES)) {
+      const base = path.basename(f);
+      const quien = this._rel(f);
+
+      if (base === 'module.json') {
+        let mj; try { mj = JSON.parse(fs.readFileSync(f, 'utf8')); } catch (_) { continue; }
+        const subs = mj.subscribes || (mj.events && mj.events.subscribes) || [];
+        const arrSubs = Array.isArray(subs) ? subs : Object.keys(subs);  // tolera dict (banco-ideas)
+        for (const s of arrSubs) this._atiende(typeof s === 'string' ? s : s.event, quien);
+        const pubs = mj.publishes || (mj.events && mj.events.publishes) || [];
+        const arrPubs = Array.isArray(pubs) ? pubs : [];
+        for (const p of arrPubs) {
+          const ev = typeof p === 'string' ? p : p.event;
+          if (!this._esDinamico(ev)) this.publicados.push({ evento: ev, por: quien });
+        }
+        for (const t of [...(mj.tools || []), ...(mj.tools_http || [])]) if (t && t.name) this._atiende(t.name, quien + ' (tool)');
       }
-      if (s > 0) scored.push({ s, c });
+
+      if (base.endsWith('.blueprint.json')) {
+        let bp; try { bp = JSON.parse(fs.readFileSync(f, 'utf8')); } catch (_) { continue; }
+        for (const e of bp.eventos_que_escucho || []) this._atiende(typeof e === 'string' ? e : e.event, quien);
+        for (const e of bp.eventos_publicados || []) {
+          const ev = typeof e === 'string' ? e : e.event;
+          if (!this._esDinamico(ev)) this.publicados.push({ evento: ev, por: quien });
+        }
+        const lineasPseudo = [];
+        const sinComentario = (linea) => {
+          const mm = linea.match(/(^|[^:])\/\//);
+          return mm ? linea.slice(0, mm.index + mm[1].length) : linea;
+        };
+        (function recoger(nodo, bajoPseudo) {
+          if (typeof nodo === 'string') { if (bajoPseudo) lineasPseudo.push(sinComentario(nodo)); return; }
+          if (Array.isArray(nodo)) { nodo.forEach((n) => recoger(n, bajoPseudo)); return; }
+          if (nodo && typeof nodo === 'object') for (const [k, v] of Object.entries(nodo)) recoger(v, bajoPseudo || k === 'pseudocodigo');
+        })(bp, false);
+        escanearTexto(lineasPseudo.join('\n'), quien);
+        for (const t of bp.trabajo_pendiente || []) {
+          if (t && typeof t.evento_esperado === 'string') this.intenciones.push({ evento: t.evento_esperado, por: quien, id: t.id || null, estado: t.estado || null });
+        }
+      }
+
+      if (base === 'SKILL.md') escanearTexto(fs.readFileSync(f, 'utf8'), quien);
+
+      if (base.endsWith('.js') && !f.includes('__tests__') && !f.includes('/frontend/')) {
+        escanearJS(fs.readFileSync(f, 'utf8'), quien);
+      }
     }
-    scored.sort((a, b) => b.s - a.s || a.c.name.localeCompare(b.c.name));
+
+    // blueprints atienden sus operaciones como <modulo>.<op>.request
+    for (const f of this._walk(MODULES)) {
+      if (!f.endsWith('.blueprint.json')) continue;
+      let bp; try { bp = JSON.parse(fs.readFileSync(f, 'utf8')); } catch (_) { continue; }
+      if (!bp.id || !bp.operaciones) continue;
+      for (const op of Object.keys(bp.operaciones)) {
+        if (op.startsWith('_')) continue;
+        this._atiende(`${bp.id}.${op}.request`, this._rel(f) + ' (operación blueprint)');
+      }
+    }
+
+    this.censadoEn = new Date().toISOString();
+  }
+
+  // =============================================================
+  // Proyecciones deterministas
+  // =============================================================
+
+  _rpcFantasma() {
+    const esRespuesta = (ev) => /\.(response|failed|respuesta)$/.test(ev);
+    const respondeAlguien = (ev) => this.atendidos.has(ev) || ATENDIDOS_POR_EL_CORE.has(ev);
+    const visto = new Set();
+    const out = [];
+    for (const c of this.conducidos) {
+      const key = c.evento + '|' + c.por;
+      if (visto.has(key)) continue;
+      visto.add(key);
+      if (!respondeAlguien(c.evento)) out.push(c);
+    }
+    return out;
+  }
+
+  _publishHuerfano() {
+    const esRespuesta = (ev) => /\.(response|failed|respuesta)$/.test(ev);
+    const respondeAlguien = (ev) => this.atendidos.has(ev) || ATENDIDOS_POR_EL_CORE.has(ev);
+    const visto = new Set();
+    const out = [];
+    for (const p of this.publicados) {
+      if (esRespuesta(p.evento)) continue;
+      const key = p.evento + '|' + p.por;
+      if (visto.has(key)) continue;
+      visto.add(key);
+      if (!respondeAlguien(p.evento)) out.push(p);
+    }
+    return out;
+  }
+
+  // =============================================================
+  // Bus API — on<Op>Request
+  // =============================================================
+
+  async onIndiceRequest(event) { return this._responder(event, 'indice', 'cupula-eventos.indice.response', () => this._indice()); }
+  async onDetalleRequest(event) { return this._responder(event, 'detalle', 'cupula-eventos.detalle.response', (d) => this._detalle(d)); }
+  async onBuscarRequest(event) { return this._responder(event, 'buscar', 'cupula-eventos.buscar.response', (d) => this._buscar(d)); }
+  async onFantasmaRequest(event) { return this._responder(event, 'fantasma', 'cupula-eventos.fantasma.response', () => this._fantasma()); }
+  async onRescanearRequest(event) {
+    const t0 = Date.now();
+    try {
+      this._escanear();
+      this.metrics?.timing?.('cupula-eventos.rescanear.duration_ms', Date.now() - t0);
+      return this._responder(event, 'rescanear', 'cupula-eventos.rescanear.response', () => ({
+        actualizado: this.censadoEn, atendidos: this.atendidos.size, conducidos: this.conducidos.length, publicados: this.publicados.length
+      }));
+    } catch (err) {
+      return this.eventBus.publish('cupula-eventos.rescanear.response', { request_id: event?.data?.request_id, error: { code: 'UNKNOWN_ERROR', message: err.message } });
+    }
+  }
+
+  async _responder(event, op, respEvent, fn) {
+    const d = event?.data || event || {};
+    const request_id = d.request_id;
+    try {
+      const r = fn(d);
+      if (r && r.status) return this.eventBus.publish(respEvent, { request_id, error: r.error });
+      this.metrics?.increment?.(`cupula-eventos.${op}.served`);
+      return this.eventBus.publish(respEvent, { request_id, result: r });
+    } catch (err) {
+      this.metrics?.increment?.('cupula-eventos.errors', { kind: op });
+      return this.eventBus.publish(respEvent, { request_id, error: { code: 'UNKNOWN_ERROR', message: err.message } });
+    }
+  }
+
+  // =============================================================
+  // Tools del LLM
+  // =============================================================
+
+  async handleIndiceTool() {
+    try { this.metrics?.increment?.('cupula-eventos.indice.served'); return this._indice(); }
+    catch (err) { return this._handleHandlerError('cupula-eventos.indice.tool.failed', err, 'tool_indice'); }
+  }
+
+  async handleDetalleTool(args) {
+    try {
+      if (!args || typeof args !== 'object') return this._errorResponse(400, 'INVALID_INPUT', 'args debe ser un object', { kind: 'shape' });
+      if (!args.nombre || typeof args.nombre !== 'string') return this._errorResponse(400, 'INVALID_INPUT', 'indica el nombre del evento', { field: 'nombre' });
+      return this._detalle(args);
+    } catch (err) { return this._handleHandlerError('cupula-eventos.detalle.tool.failed', err, 'tool_detalle'); }
+  }
+
+  async handleBuscarTool(args) {
+    try {
+      if (!args || typeof args !== 'object') return this._errorResponse(400, 'INVALID_INPUT', 'args debe ser un object', { kind: 'shape' });
+      if (!args.q || typeof args.q !== 'string') return this._errorResponse(400, 'INVALID_INPUT', 'indica la palabra a buscar', { field: 'q' });
+      return this._buscar(args);
+    } catch (err) { return this._handleHandlerError('cupula-eventos.buscar.tool.failed', err, 'tool_buscar'); }
+  }
+
+  async handleFantasmaTool() {
+    try { this.metrics?.increment?.('cupula-eventos.fantasma.served'); return this._fantasma(); }
+    catch (err) { return this._handleHandlerError('cupula-eventos.fantasma.tool.failed', err, 'tool_fantasma'); }
+  }
+
+  // =============================================================
+  // Proyecciones
+  // =============================================================
+
+  _indice() {
+    const fantasmas = this._rpcFantasma();
     return {
-      total: scored.length,
-      capacidades: scored.slice(0, lim).map(({ c }) => ({ name: c.name, tipo: c.tipo, descripcion: c.description }))
+      status: 200,
+      data: {
+        actualizado: this.censadoEn,
+        atendidos: this.atendidos.size,
+        conducidos: this.conducidos.length,
+        publicados: this.publicados.length,
+        rpc_fantasma: fantasmas.length,
+        publish_huerfano: this._publishHuerfano().length,
+        intenciones: this.intenciones.length
+      }
     };
   }
 
-  // ── el cuerpo bajo demanda: contrato de UNA capacidad (gemela de cajon.abrir) ──
-  _detalle({ name } = {}) {
-    const n = String(name || '').trim();
-    if (!n) return this._errorResponse(400, 'INVALID_INPUT', 'name requerido');
-    const t = this.moduleLoader?.toolsRegistry?.get?.(n);
-    if (!t) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `capacidad desconocida: ${n}`, { name: n });
+  _detalle(d) {
+    const nombre = String(d?.nombre || '').trim();
+    if (!nombre) return this._errorResponse(400, 'INVALID_INPUT', 'indica el nombre del evento', { field: 'nombre' });
+    const atendido = this.atendidos.get(nombre);
+    const conducido = this.conducidos.filter(c => c.evento === nombre).map(c => c.por);
+    const publicado = this.publicados.filter(p => p.evento === nombre).map(p => p.por);
+    if (!atendido && !conducido.length && !publicado.length) {
+      return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `evento '${nombre}' no existe en el contrato del bus`, { evento: nombre });
+    }
     return {
-      name: n,
-      tipo: this._tipo(n),
-      descripcion: t.description || '',
-      module: t.module || null,
-      request_shape: t.parameters || { type: 'object' },
-      // El loader auto-suscribe el nombre de la tool: publicar '<name>' la conduce; la
-      // respuesta llega a '<name>.response' correlada por request_id.
-      como_conducir: `bus.publishAndWait('${n}', { …según request_shape, request_id }) → espera '${n}.response' { request_id, result | error }`,
-      response_topic: `${n}.response`,
-      confirmation: !!t.confirmation,
-      event_based: !!t.event_based
+      status: 200,
+      data: { nombre, atendido_por: atendido || [], conducido_por: conducido, publicado_por: publicado }
+    };
+  }
+
+  _buscar(d) {
+    const q = String(d.q).toLowerCase();
+    const topK = (typeof d.topK === 'number' && d.topK > 0) ? d.topK : 15;
+    const evs = new Map();
+    for (const ev of this.atendidos.keys()) evs.set(ev, 'atendido');
+    for (const c of this.conducidos) if (!evs.has(c.evento)) evs.set(c.evento, 'conducido');
+    for (const p of this.publicados) if (!evs.has(p.evento)) evs.set(p.evento, 'publicado');
+    const hits = [...evs.entries()]
+      .filter(([ev]) => ev.toLowerCase().includes(q))
+      .slice(0, topK)
+      .map(([nombre, tipo]) => ({ nombre, tipo }));
+    return { status: 200, data: { q, total: hits.length, eventos: hits } };
+  }
+
+  _fantasma() {
+    return {
+      status: 200,
+      data: { rpc_fantasma: this._rpcFantasma(), publish_huerfano: this._publishHuerfano().slice(0, 40) }
     };
   }
 }

@@ -1,0 +1,86 @@
+{
+  "_doc": "marketing-automation — REFLEJO PURO: flujos automatizados con trigger, pasos, reglas e historial. 78% reflejo, 22% custodio. Persiste por proyecto en state/marketing-automation.json.",
+  "name": "marketing-automation",
+  "version": "0.1.0",
+  "description": "Automatización de marketing: flujos con trigger, pasos deterministas, reglas de bifurcación e historial inmutable.",
+  "language": "es",
+
+  "subscribes": [
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Restaura los flujos de automatización del proyecto activado."
+    },
+    {
+      "event": "marketing.automation.get.request",
+      "handler": "onGetRequest",
+      "description": "Devuelve flujos de automatización y resumen del proyecto."
+    },
+    {
+      "event": "marketing.automation.update.request",
+      "handler": "onUpdateRequest",
+      "description": "Actualiza flujos (crear, editar, cambiar estado, registrar ejecución)."
+    }
+  ],
+
+  "publishes": [
+    {
+      "event": "marketing.automation.actualizado",
+      "description": "Flujos actualizados. Payload: { project_id, campos_actualizados[] }."
+    }
+  ],
+
+  "tools": [
+    {
+      "name": "marketing-automation.get",
+      "description": "Obtiene los flujos de automatización de un proyecto.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1, "description": "ID del proyecto." },
+          "filtros": {
+            "type": "object",
+            "description": "{ estado?, trigger_evento? }"
+          }
+        },
+        "required": ["project_id"]
+      },
+      "handler": "toolGet",
+      "errores_conocidos": ["INVALID_INPUT"]
+    },
+    {
+      "name": "marketing-automation.update",
+      "description": "Actualiza flujos de automatización (crear, editar, cambiar estado, registrar ejecución).",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1 },
+          "flujos": {
+            "type": "array",
+            "description": "[{ id?, nombre, trigger?, pasos?, reglas?, estado?, ejecucion? }]"
+          }
+        },
+        "required": ["project_id"]
+      },
+      "handler": "toolUpdate",
+      "errores_conocidos": ["INVALID_INPUT", "INVALID_STATE_TRANSITION", "INVALID_FLOW"]
+    }
+  ],
+
+  "ui_handlers": [
+    {
+      "domain": "marketing-automation",
+      "action": "get",
+      "handler": "handleUiGet",
+      "description": "Obtener flujos de automatización del proyecto activo."
+    },
+    {
+      "domain": "marketing-automation",
+      "action": "update",
+      "handler": "handleUiUpdate",
+      "description": "Actualizar flujos de automatización del proyecto activo."
+    }
+  ]
+}

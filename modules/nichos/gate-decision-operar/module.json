@@ -1,0 +1,20 @@
+{
+  "name": "gate-decision-operar",
+  "version": "0.1.0",
+  "description": "PUENTE del vertical NICHOS: gate de arranque del vertical. Controla si el vertical opera o está en pausa. Si se solicita ABRIR sin confirmación del dueño, emite solicitud de decisión.",
+  "_doc": "modules/nichos/gate-decision-operar — PUENTE (gate de arranque) del vertical NICHOS.\n\nQué hace: dos operaciones.\n\n1. OPERAR (nichos.gate.operar.request): valida acción ABRIR|CERRAR y transita estado. Si ABRIR sin confirmación del dueño → solicitud de decisión. Pulsa nichos.gate.operacion.abierto o nichos.gate.operacion.cerrado.\n\n2. ESCUCHAR RESPUESTA (nichos.decision.solicitud.respondida): cuando el dueño responde a la solicitud de apertura, completa la transición.\n\nPatrón: ModuloHibridoReflejo (mitad REFLEJO, JS determinista).",
+  "ui_decision": {
+    "necesita": false,
+    "razon": "Gate de arranque del vertical NICHOS. Se invoca por RPC desde el jefe (K) o panel. No tiene cara propia."
+  },
+  "publishes": [
+    { "event": "nichos.gate.operacion.abierto", "description": "PULSO fire-and-forget: el vertical fue abierto para operar. Payload: {project_id, timestamp}." },
+    { "event": "nichos.gate.operacion.cerrado", "description": "PULSO fire-and-forget: el vertical fue cerrado (pausado). Payload: {project_id, timestamp}." },
+    { "event": "nichos.gate.operar.response", "description": "Response correlada por request_id al RPC nichos.gate.operar.request. Payload: {status, data:{estado}} | {status, error}." },
+    { "event": "nichos.decision.solicitud.abierta", "description": "PULSO fire-and-forget: solicitud de decisión emitida al bus para confirmar apertura. Payload: {solicitud_id, tipo, contexto, opciones, timestamp}." }
+  ],
+  "subscribes": [
+    { "event": "nichos.gate.operar.request", "handler": "onOperarRequest", "description": "PUENTE: valida acción ABRIR|CERRAR y transita estado del vertical. Si ABRIR sin confirmación → solicitud de decisión. Payload: {request_id, project_id, accion: 'ABRIR'|'CERRAR'}." },
+    { "event": "nichos.decision.solicitud.respondida", "handler": "onSolicitudRespondida", "description": "Listener fire-and-forget: cuando el dueño responde a la solicitud de apertura, completa la transición. Payload: {solicitud_id, opcion_elegida, dueno, nota_libre, timestamp}." }
+  ]
+}

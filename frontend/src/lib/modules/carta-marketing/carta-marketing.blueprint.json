@@ -1,0 +1,95 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "carta-marketing",
+  "version": "blueprint-2.0.0",
+  "moduleId": "carta-marketing",
+  "titulo": "El PERFIL DE MARCA del proyecto: el JEFE DECLARA la identidad (voz + visual + público) que beben carta-digital, carta-design, copy y canales. Informe get_perfil (la marca vigente por secciones) + editor-bloque update_perfil (esencia/voz/visual/publico, deep-merge por sección, gate AJV).",
+  "_doc": "Blueprint v2 de INTERFAZ de la cara del JEFE del modulo carta-marketing (pizzepos v2.6.0, HIBRIDO — el PERFIL DE MARCA del proyecto). Reemplaza blueprint-1.15.0: v2.0.0 REESCRIBE en schema 'blueprint-interfaz-v2' (lente de roles esquematizador-jefe, ciclo v2 30-ago-2026) SIN cambiar el contrato: las 2 ops reales del reflejo (get_perfil/update_perfil) servidas por ui_handlers (ui/request/carta-marketing/<accion>). El reflejo (index.js reflejo-2.1.0) escribe /pizzepos/marca.json (single-writer, deep-merge por seccion) y RE-VALIDA la marca resultante contra marca.schema.json ANTES de persistir (EL FRENO: un parche que la rompe -> 422, NO persiste). Senal REAL verificada en codigo: marketing.perfil.actualizado (index.js L145, _emitirActualizado) — la publica el reflejo al persistir; carta-digital la escucha como fuente. Moneda: SIN € (es identidad de marca, no cifras). Verificaciones de codigo: modules/pizzepos/carta-marketing/index.js 199 lineas (handlers L68-69, _getPerfil L73-78, _updatePerfil L117-142, _emitirActualizado L144-149, _checkMarca L99-108), module.json (2 ui_handlers, 4 subscribes RPC). Nada inventado: ver _verificado_en_codigo.",
+  "_doc_historico": "Blueprint del modulo carta-marketing. Hijo de subsistema-recetario.modulo-base. Identidad de marca del proyecto, SIN agentes. El LLM de PAGINA conduce la entrevista de marca (completar_onboarding) y redacta el copy (generar_copy); el REFLEJO (index.js) persiste (update_perfil, guardar_copy). 4 operaciones: get_perfil, update_perfil, completar_onboarding, generar_copy. (Conservado de blueprint-1.15.0 al reescribir v2.0.0 — el historial completo de changelogs v1.x vive en el fichero anterior.)",
+  "eventos_publicados": [
+    "marketing.perfil.actualizado",
+    "marketing.onboarding.completado",
+    "marketing.copy.generado"
+  ],
+  "eventos_que_escucho": [],
+  "transporte": {
+    "entrada": "reflejo RPC via ui_handlers (module.json) — las 2 operaciones se conducen por ui/request/carta-marketing/<accion> con la accion dotted; ver seccion ui.ops. transporte.rpc vacio a proposito.",
+    "rpc": [],
+    "salida": [
+      "marketing.perfil.actualizado"
+    ],
+    "qos": "publishAndWait (request/response correlado) en cada operacion; timeout 8s"
+  },
+  "ui": {
+    "_doc": "Panel de la CARA DEL JEFE: la identidad de marca es una DECLARACION del dueño (voz + visual + publico + esencia). 2 ops con lente de roles: 1 jefe + 1 neutro (informe). Los 2 eventos request/*.request de los ui_handlers NO van en eventos_que_escucho (regla anti-colision de hibridos: ya estan en module.json.subscribes).",
+    "ops": {
+      "get_perfil": {
+        "titulo": "Ver perfil de marca",
+        "descripcion": "Lectura de la identidad vigente (/pizzepos/marca.json) por secciones (esencia/voz/publico/visual/negocio). Devuelve SIEMPRE la estructura completa (secciones vacias si falta — sin 404).",
+        "rol": "neutro",
+        "forma": "cinta-estado + informe: la identidad vigente en claro, por secciones; campo vacio = 'por declarar', nunca error"
+      },
+      "update_perfil": {
+        "titulo": "Declarar identidad de marca",
+        "descripcion": "Escritura single-writer (el dueño): LA DECLARACION de la identidad. Parche parcial por seccion (deep-merge — los campos ausentes se preservan). RE-VALIDA la marca resultante contra marca.schema.json ANTES de persistir (EL FRENO: un parche que la rompe -> 422, NO se guarda). Envia SOLO la seccion editada: { esencia } | { voz } | { visual } | { publico }.",
+        "rol": "jefe",
+        "forma": "editor-bloque por seccion (esencia primero por frecuencia; voz frecuente; visual con carta-design; publico set-once)",
+        "senal_pareada": "marketing.perfil.actualizado",
+        "args": [
+          {
+            "nombre": "campos",
+            "tipo": "json",
+            "required": true,
+            "descripcion": "Parche por seccion del esquema anidado canonico (marca.schema.json). Ej: {\"esencia\":{\"nombre\":\"La Toscana\",\"lema\":\"Pizza con alma\"},\"voz\":{\"tono\":[\"cercana\",\"gamberra\"],\"registro\":\"desenfadado\"},\"visual\":{\"colores\":{\"principal\":\"#c0392b\"}},\"publico\":{\"quien\":\"familias\",\"actitud\":\"que buscan lo autentico\"}}"
+          }
+        ]
+      }
+    },
+    "datos": {
+      "op": "get_perfil",
+      "titulo": "Identidad de marca del proyecto",
+      "refresh_on": ["marketing.perfil.actualizado"],
+      "columnas": ["esencia", "voz", "publico", "visual"]
+    },
+    "roles": {
+      "get_perfil": "neutro",
+      "update_perfil": "jefe"
+    },
+    "flujo": [
+      {
+        "nombre": "jefe",
+        "orden": 1,
+        "ops": ["update_perfil"],
+        "descripcion": "DECLARAR la identidad: editor-bloque ESENCIA (nombre req + lema/proposito/valores), editor-bloque VOZ (tono/registro/referencias/si/no), editor-bloque VISUAL (colores/tipografias/estilo/logo) y editor-bloque PUBLICO (quien/actitud), cada uno 1 llamada update_perfil { soloSuSeccion }. El dictamen llega en la respuesta (200 { marca fusionada }) y la señal marketing.perfil.actualizado re-lee el informe (nunca recarga)."
+      },
+      {
+        "nombre": "consulta",
+        "orden": 3,
+        "ops": ["get_perfil"],
+        "descripcion": "INFORMARSE antes de decidir: la identidad vigente por secciones; los campos vacios se muestran 'por declarar'."
+      }
+    ]
+  },
+  "_lente_roles": {
+    "agente": "ciclo-carta-marketing v2",
+    "metodo": "esquematizador-jefe (modules/pizzepos/carta-marketing/esquema-jefe/ — pasada-1, pasada-2-diseccion, anatomia)",
+    "arbitro": "¿escribe en la identidad de marca (via update_perfil) -> jefe · se ejecuta en la venta/atencion AHORA -> utilizacion · solo informa -> neutro",
+    "veredicto": "2/2 ops juzgadas: jefe(1) update_perfil (LA DECLARACION de la identidad — unico escritor) · neutro(1) get_perfil (informe, alimenta la vista). Utilizacion: NADA — la marca se consume en otros paneles (carta-digital, carta-design, copy), no se vende aqui.",
+    "senales": "1 señal de salida: marketing.perfil.actualizado (index.js L145 _emitirActualizado -> eventBus core -> MQTT core/*/events/...). Doble confirmacion tras declarar: dictamen en la respuesta RPC (200 { marca fusionada }) + señal que re-lee (debounce). Sin eventos granulares por seccion (hueco menor, anotado en anatomia).",
+    "moneda": "SIN € — la identidad de marca no tiene cifras (voz + visual + publico). Cero euros ni centimos en ningun shape.",
+    "invariante_del_panel": "sin 404 de lectura: get_perfil responde SIEMPRE la estructura completa (secciones vacias si falta). El estado 'sin marca' se representa como secciones vacias 'por declarar', no como error. EL FRENO: update_perfil re-valida contra marca.schema.json — un parche que rompe el contrato -> 422, NO persiste.",
+    "huecos_abiertos": [
+      "arquetipo de marca (heroe, rebelde, sabio...) — no es campo canonico del schema",
+      "manifiesto (titulo/texto/cierre) — el copy lo redacta el LLM de pagina, no se declara aqui",
+      "extraccion automatica de paleta desde el logo — hoy se pregunta/confirma",
+      "eventos granulares por seccion (marketing.voz.actualizada, etc.) — la señal es de modulo con campos_modificados"
+    ],
+    "fuente_analisis": "modules/pizzepos/carta-marketing/esquema-jefe/esquema.md",
+    "fecha": "2026-08-30"
+  },
+  "_verificado_en_codigo": {
+    "index_js": "modules/pizzepos/carta-marketing/index.js (199 lineas): handleGetPerfil L68, handleUpdatePerfil L69, _getPerfil L73-78 (sin 404, estructura completa), _updatePerfil L117-142 (deep-merge L122, FRENO _checkMarca L127-128, fs.write L129-132, _emitirActualizado L134), _emitirActualizado L144-149 (marketing.perfil.actualizado), _checkMarca L99-108 (AJV).",
+    "module_json": "2 ui_handlers (get_perfil, update_perfil) type=workspace_module zone=barra_modulos; 4 subscribes RPC (get_perfil/update_perfil/guardar_copy/validar).",
+    "schema": "arquitectura/decisiones/_schemas/marca/marca.schema.json — esencia.required=[nombre], voz/visual/publico/negocio por secciones."
+  }
+}

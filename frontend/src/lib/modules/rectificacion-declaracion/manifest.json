@@ -1,0 +1,9 @@
+{
+  "id": "rectificacion-declaracion",
+  "name": "Rectificación de declaración",
+  "version": "0.1.0",
+  "zone": "system-bar",
+  "order": 87,
+  "icon": "🧾",
+  "label": "Rectificar declar."
+}

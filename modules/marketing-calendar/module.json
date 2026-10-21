@@ -1,0 +1,94 @@
+{
+  "_doc": "marketing-calendar — REFLEJO JS puro: calendario editorial de marketing por proyecto. Entradas planificadas (pieza × canal × fecha × responsable), marcas estacionales (festividades, temporadas, lanzamientos) y cadencia por canal. 89% reflejo, 11% custodio. Persiste por proyecto en state/marketing-calendar.json.",
+  "name": "marketing-calendar",
+  "version": "0.1.0",
+  "description": "Calendario editorial del proyecto: planificación de acciones, estacionalidad y cadencia por canal. Reflejo puro con custodia de completitud.",
+  "language": "es",
+
+  "subscribes": [
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Restaura el calendario del proyecto activado."
+    },
+    {
+      "event": "marketing.calendar.get.request",
+      "handler": "onGetRequest",
+      "description": "Devuelve entradas, marcas estacionales, cadencias y resumen del proyecto."
+    },
+    {
+      "event": "marketing.calendar.update.request",
+      "handler": "onUpdateRequest",
+      "description": "Actualiza entradas, marcas estacionales o cadencias."
+    }
+  ],
+
+  "publishes": [
+    {
+      "event": "marketing.calendar.actualizado",
+      "description": "El calendario fue actualizado. Payload: { project_id, campos_actualizados[] }."
+    }
+  ],
+
+  "tools": [
+    {
+      "name": "marketing-calendar.get",
+      "description": "Obtiene el calendario editorial de un proyecto.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1, "description": "ID del proyecto." },
+          "rango": {
+            "type": "object",
+            "description": "{ inicio, fin } — filtrar entradas y marcas por rango de fechas."
+          }
+        },
+        "required": ["project_id"]
+      },
+      "handler": "toolGet",
+      "errores_conocidos": ["INVALID_INPUT"]
+    },
+    {
+      "name": "marketing-calendar.update",
+      "description": "Actualiza entradas, marcas estacionales o cadencias del calendario.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1 },
+          "entradas": {
+            "type": "array",
+            "description": "[{ id?, titulo, tipo, canal_id, fecha, responsable?, notas?, estado? }]"
+          },
+          "marcas": {
+            "type": "array",
+            "description": "[{ id?, nombre, tipo, periodo: { inicio, fin }, recurrencia?, impacto? }]"
+          },
+          "cadencias": {
+            "type": "array",
+            "description": "[{ id?, canal_id, frecuencia, unidad, activa? }]"
+          }
+        },
+        "required": ["project_id"]
+      },
+      "handler": "toolUpdate",
+      "errores_conocidos": ["INVALID_INPUT", "INVALID_STATE_TRANSITION"]
+    }
+  ],
+
+  "ui_handlers": [
+    {
+      "domain": "marketing-calendar",
+      "action": "get",
+      "handler": "handleUiGet",
+      "description": "Obtener calendario del proyecto activo."
+    },
+    {
+      "domain": "marketing-calendar",
+      "action": "update",
+      "handler": "handleUiUpdate",
+      "description": "Actualizar calendario del proyecto activo."
+    }
+  ]
+}

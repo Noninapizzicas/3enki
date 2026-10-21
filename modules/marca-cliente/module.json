@@ -1,0 +1,89 @@
+{
+  "_doc": "Módulo marca-cliente — custodio single-writer de la relación con el cliente (the-pirate): voz de marca (tono/valores), presencia digital (canales), clientes (datos de contacto) y fidelización (programa de puntos/recompensas). Construido en F4 (2026-08-20) desde el esquema maestro P11 (marca-cliente: MA1 voz-marca, MA2 presencia-digital, MA3 clientes, MA4 fidelización). El resto del sistema bebe sus valores por RPC; los nulls del contrato son política por declarar (el dueño los puebla vía marca.reglas.actualizar).",
+  "description": "Relación con el cliente: voz de marca, presencia digital, clientes y fidelización (the-pirate).",
+  "language": "es",
+  "name": "marca-cliente",
+  "publishes": [
+    {
+      "description": "Reglas de marca cambiadas (tras actualizar) — la propiocepción lo capta.",
+      "event": "marca.reglas.actualizadas"
+    }
+  ],
+  "subscribes": [
+    {
+      "description": "Voz de marca: tono, valores y tradición de referencia.",
+      "event": "marca.voz.obtener.request",
+      "handler": "onVozObtenerRequest"
+    },
+    {
+      "description": "Presencia digital: canales activos (web, instagram, whatsapp, glovo...).",
+      "event": "marca.presencia.obtener.request",
+      "handler": "onPresenciaObtenerRequest"
+    },
+    {
+      "description": "Clientes: alta/consulta de un cliente por contacto.",
+      "event": "marca.cliente.obtener.request",
+      "handler": "onClienteObtenerRequest"
+    },
+    {
+      "description": "Fidelización: puntos y recompensas de un cliente.",
+      "event": "marca.fidelizacion.obtener.request",
+      "handler": "onFidelizacionObtenerRequest"
+    },
+    {
+      "description": "Lectura de las reglas de marca del proyecto (todos pueden leer).",
+      "event": "marca.reglas.leer.request",
+      "handler": "onReglasLeerRequest"
+    },
+    {
+      "description": "Escritura single-writer de las reglas (el dueño): valida y persiste.",
+      "event": "marca.reglas.actualizar.request",
+      "handler": "onReglasActualizarRequest"
+    }
+  ],
+  "version": "0.1.0",
+  "ui_handlers": [
+    {
+      "domain": "marca",
+      "action": "reglas.leer",
+      "handler": "onReglasLeerRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "marca",
+      "action": "reglas.actualizar",
+      "handler": "onReglasActualizarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "marca",
+      "action": "voz.obtener",
+      "handler": "onVozObtenerRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "marca",
+      "action": "presencia.obtener",
+      "handler": "onPresenciaObtenerRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "marca",
+      "action": "cliente.obtener",
+      "handler": "onClienteObtenerRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "marca",
+      "action": "fidelizacion.obtener",
+      "handler": "onFidelizacionObtenerRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
+  ]
+}

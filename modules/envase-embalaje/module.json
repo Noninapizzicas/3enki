@@ -1,0 +1,65 @@
+{
+  "_doc": "Módulo envase-embalaje — custodio single-writer del envase y embalaje (the-pirate): elección de envase por tipo de producto (para llevar, cazuela, pizza) y stock de envases. Construido en F4 (2026-08-20) desde el esquema maestro P8 (envase-embalaje: E1 elección-envase, E3 stock-envases). El resto del sistema bebe sus valores por RPC; los nulls del contrato son política por declarar (el dueño los puebla vía envase.reglas.actualizar).",
+  "description": "Envase y embalaje: elección por tipo de producto y stock de envases (the-pirate).",
+  "language": "es",
+  "name": "envase-embalaje",
+  "publishes": [
+    {
+      "description": "Reglas de envase cambiadas (tras actualizar) — la propiocepción lo capta.",
+      "event": "envase.reglas.actualizadas"
+    }
+  ],
+  "subscribes": [
+    {
+      "description": "Elección de envase para un tipo de producto (para_llevar, cazuela, pizza).",
+      "event": "envase.eleccion.obtener.request",
+      "handler": "onEleccionObtenerRequest"
+    },
+    {
+      "description": "Stock de un envase (disponible, mínimo).",
+      "event": "envase.stock.obtener.request",
+      "handler": "onStockObtenerRequest"
+    },
+    {
+      "description": "Lectura de las reglas de envase del proyecto (todos pueden leer).",
+      "event": "envase.reglas.leer.request",
+      "handler": "onReglasLeerRequest"
+    },
+    {
+      "description": "Escritura single-writer de las reglas (el dueño): valida y persiste.",
+      "event": "envase.reglas.actualizar.request",
+      "handler": "onReglasActualizarRequest"
+    }
+  ],
+  "version": "0.1.0",
+  "ui_handlers": [
+    {
+      "domain": "envase",
+      "action": "reglas.leer",
+      "handler": "onReglasLeerRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "envase",
+      "action": "reglas.actualizar",
+      "handler": "onReglasActualizarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "envase",
+      "action": "eleccion.obtener",
+      "handler": "onEleccionObtenerRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "envase",
+      "action": "stock.obtener",
+      "handler": "onStockObtenerRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
+  ]
+}

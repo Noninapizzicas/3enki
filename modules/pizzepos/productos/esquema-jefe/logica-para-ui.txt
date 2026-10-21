@@ -1,0 +1,106 @@
+ANATOMÍA DE LÓGICA — productos · ROL JEFE
+==========================================
+(entrada del agente creador de UI: qué ofrece el módulo, con qué lógica,
+para que el agente derive las pantallas del jefe — sin diseñarlas aquí)
+
+
+1. NATURALEZA DEL MÓDULO (lo que el agente debe saber)
+=======================================================
+
+  productos = PROYECTOR sin estado sobre la carta.
+  - catalogo == proyectar(carta_activa) SIEMPRE, por construcción.
+  - Cero store: cada lectura proyecta la carta activa al vuelo (ms).
+  - ÚNICO estado interno: mapping canal->carta_id (de tarifas).
+  - Las mutaciones NO escriben aquí: delegan en carta-manager (custodio).
+  - Tras cada mutación ajena emite catalogo.actualizado (señal de refresco
+    para POS/carta-digital/comandero).
+
+
+2. EL FLUJO DE RESOLUCIÓN (cómo elige QUÉ carta proyectar)
+===========================================================
+
+  _resolverCartaActiva(project_id, canal, carta_id):
+
+    1. si viene carta_id explícito  → proyecta ESA carta   (selector del jefe)
+    2. si no, canal en el mapping   → la carta que tarifas asignó a ese canal
+    3. si no, mapping.general       → la carta general del proyecto
+    4. fallback                     → pregunta a carta-manager (en_servicio)
+
+  → TODAS las ops aceptan carta_id opcional: el jefe puede ver CUALQUIER
+    carta sin cambiar el servicio. Default = la activa.
+
+
+3. LÓGICA QUE OFRECE AL JEFE (elementos, orden de lectura)
+===========================================================
+
+  LECTURAS (la vista del jefe):
+  - productos.carta_completa   1 golpe: categorías + productos + ingredientes
+                               → arranque de cualquier panel del jefe
+  - productos.list             catálogo con filtros (categoría, activo, canal, carta_id)
+  - productos.categorias       categorías ordenadas + contador de productos
+  - productos.get              ficha de un producto (forma POS completa)
+  - productos.search           búsqueda full-text nombre/descripción
+  - productos.pizzas           filtro del núcleo del negocio
+  - productos.stats            cobertura: totales, por categoría, alérgenos declarados
+
+  MUTACIONES (delegan al custodio — la carta):
+  - productos.update           edita campos de un producto (precio, disponible,
+                               descripción, etiquetas, alérgenos, categoría...)
+  - productos.delete           retira un producto del catálogo
+
+  SISTEMA (no es del jefe):
+  - productos.ingredientes (compat) · health · metrics · load_carta
+
+
+4. EVENTOS QUE ENGANCHAN LA VISTA DEL JEFE
+===========================================
+
+  ESCUCHA (para refrescar la vista):
+  - carta.actualizada / carta.editada  → la carta cambió: re-proyectar + señal
+  - carta.borrada                      → re-proyectar la activa restante (o vaciar)
+  - tarifas.config.actualizada         → refrescar el mapping canal→carta
+  - project.activated                  → warm: catálogo poblado al arranque
+
+  PUBLICA (lo que el jefe dispara):
+  - catalogo.actualizado     señal de refresco con proyección lite
+  - carta.update_product.request   (delegación de edición)
+  - carta.remove_product.request   (retirada)
+
+  HUECOS DE EVENTOS (el jefe los necesita y no existen):
+  - producto.creado            el alta no tiene señal propia
+  - producto.actualizado       sin delta (antes→después) = sin rastro auditable
+  - producto.disponibilidad.cambiada  la disponibilidad viaja en el evento GRUESO
+
+
+5. NECESIDADES DEL JEFE CUBIERTAS vs HUECOS
+============================================
+
+  NECESIDAD                      OFRECE EL MÓDULO              PARA LA UI DEL AGENTE
+  ------------------------------ ----------------------------- ----------------------
+  Ver mi carta de hoy            list/categorias/completa      pantalla principal:
+  (catálogo vivo por canal)                                    grid por categorías
+  Hallar un producto             search                        caja de búsqueda
+  Ver otra carta sin cambiar     carta_id opcional en TODAS    select de cartas
+                                 las ops de lectura (YA        (faltan: listado de
+                                 existe en el contrato)        cartas + aviso de vista)
+  Cambiar precio                 update {precio}               gesto inline 1-toque
+  Disponible sí/no               update {disponible}           toggle en la tarjeta
+  Corregir ficha                 update (campos libres)        editor único (modal)
+  Retirar                        delete                        confirmación nombrada
+  DAR DE ALTA                    —— NO EXISTE en productos     la vía real: carta.add_product
+                               (el custodio sí la tiene)       (hueco de módulo o delegación)
+  Saber QUÉ cambió               ——                            no hay evento granular
+                                                               (solo carta.editada grueso)
+
+
+6. REGLAS DE LÓGICA PARA EL AGENTE DE UI (invariantes del módulo)
+==================================================================
+
+  R1. La vista SIEMPRE proyecta una carta resoluble: activa por defecto,
+      carta_id explícito para vistas previas (mostrar cuál se está viendo).
+  R2. Toda mutación pasa por el custodio: la UI nunca asume escritura local.
+  R3. El refresco de la vista lo da la SEÑAL (carta.editada/catalogo.actualizado),
+      nunca una recarga completa.
+  R4. disponible (afirmación del jefe) ≠ activo (estructura) — dos estados distintos.
+  R5. id determinista: alta sin duplicados (categoría+nombre).
+  R6. El canal resuelve la carta — el jefe NO elige ids internos salvo vista previa.

@@ -1,7 +1,20 @@
 ---
 name: montar-pack-lentes
-description: Recetario para onboardear un agente/skill externo (agency-agents, VoltAgent, un .md de oficio) como PACK del cuenco de lentes (modules/lentes-diseno), siguiendo la Teoría del Órgano. Un pack = un ÓRGANO de conocimiento: MEMORIA (.md) + opcional MOTOR (motor.js) + opcional QUÍMICO (frecuencia) + EVENTO. El cuenco lo auto-descubre; no se toca su código. La regla que manda: una lente solo entra cuando hay PÁGINA que la beba. Referencia viva: packs diseño/copy/negocio.
-when-to-use: Cuando quieras dar a una página un OFICIO nuevo (diseño, copy, negocio, estrategia…) trayendo lentes de fuera, o añadir lentes a un oficio existente. NO para "acumular" .md sin destino — si ninguna página lo consume, se COSECHA como candidato, no se monta (pack colgante ensucia el grafo). Para el vertical 2 (comercio local): los packs llegan con sus páginas.
+description: >-
+  Recetario para onboardear un agente/skill externo (agency-agents, VoltAgent,
+  un .md de oficio) como PACK del cuenco de lentes (modules/lentes-diseno),
+  siguiendo la Teoría del Órgano. Un pack = un ÓRGANO de conocimiento: MEMORIA
+  (.md) + opcional MOTOR (motor.js) + opcional QUÍMICO (frecuencia) + EVENTO.
+  El cuenco lo auto-descubre; no se toca su código. La regla que manda: una
+  lente solo entra cuando hay PÁGINA que la beba. Referencia viva: packs
+  diseño/copy/negocio.
+when-to-use: >-
+  Cuando quieras dar a una página un OFICIO nuevo (diseño, copy, negocio,
+  estrategia…) trayendo lentes de fuera, o añadir lentes a un oficio
+  existente. NO para "acumular" .md sin destino — si ninguna página lo
+  consume, se COSECHA como candidato, no se monta (pack colgante ensucia el
+  grafo). Para el vertical 2 (comercio local): los packs llegan con sus
+  páginas.
 ---
 
 # montar-pack-lentes

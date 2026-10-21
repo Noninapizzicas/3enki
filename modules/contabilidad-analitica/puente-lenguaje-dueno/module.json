@@ -1,0 +1,41 @@
+{
+  "_doc": "Manifest de analitica/puente-lenguaje-dueno — MICRO-AGENTE (Q2, hoja del plan). Traductor BIDIRECCIONAL: a_consulta (su pregunta en lenguaje natural → consulta contable estructurada) y a_cifra (un calculo/cifra contable → la cifra en SU idioma). El JUICIO linguistico es la mitad FUZZY (blueprint); esta mitad refleja es la DETERMINISTA y HONESTA: traduce con el VOCABULARIO y las PLANTILLAS DECLARADOS, sin adivinar significado ni inventar frases. Terminos no reconocidos y cifras sin plantilla se declaran (no_reconocido/abierto); jamas se estiman. Dos RPC, ambas CLASE PREGUNTA → van por el bus (sin ui_handler). NOTA R3: el plan declara escucha de contabilidad.asiento_asentado, pero NINGUN modulo del repo lo emite AUN (lo emite escritor-diario B2, grupo posterior): declararlo daria cadena colgada, asi que NO se declara. Publica a_consulta.response/.failed y a_cifra.response/.failed.",
+  "name": "puente-lenguaje-dueno",
+  "version": "0.1.0",
+  "description": "Micro-agente (Q2): traduce en ambos sentidos entre el lenguaje del dueno y la contabilidad, con vocabulario/plantillas declarados; lo no reconocido se declara.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "puente-lenguaje-dueno.a_consulta.request",
+      "handler": "onAConsultaRequest",
+      "description": "RPC (PREGUNTA, por el bus): {project_id, pregunta, vocabulario?} → {project_id, pregunta, consulta, terminos_reconocidos, no_reconocido, abierto}. Traduce solo los terminos del vocabulario declarado; el resto es juicio (mitad fuzzy) y se declara. Responde por puente-lenguaje-dueno.a_consulta.response."
+    },
+    {
+      "event": "puente-lenguaje-dueno.a_cifra.request",
+      "handler": "onACifraRequest",
+      "description": "RPC (PREGUNTA, por el bus): {project_id, cifra, clave?, plantillas?} → {project_id, clave, cifra, frase, plantilla_usada, traducido, abierto}. Viste la cifra con la plantilla declarada; sin plantilla → traducido:false (no se inventa la frase). Responde por puente-lenguaje-dueno.a_cifra.response."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "puente-lenguaje-dueno.a_consulta.response",
+      "description": "Respuesta RPC correlada de la op a_consulta (una sola cara: el bus)."
+    },
+    {
+      "event": "puente-lenguaje-dueno.a_consulta.failed",
+      "description": "Par de fallo determinista: falta project_id o pregunta → {status, code, message}. Cierra el circulo de a_consulta.request."
+    },
+    {
+      "event": "puente-lenguaje-dueno.a_cifra.response",
+      "description": "Respuesta RPC correlada de la op a_cifra."
+    },
+    {
+      "event": "puente-lenguaje-dueno.a_cifra.failed",
+      "description": "Par de fallo determinista: falta project_id o cifra → {status, code, message}. Cierra el circulo de a_cifra.request."
+    }
+  ],
+  "tools": [
+    { "name": "puente-lenguaje-dueno.a_consulta", "description": "Traduce (PREGUNTA) una pregunta del dueno a una consulta contable estructurada." },
+    { "name": "puente-lenguaje-dueno.a_cifra", "description": "Traduce (PREGUNTA) una cifra contable al idioma del dueno (plantilla declarada)." }
+  ]
+}

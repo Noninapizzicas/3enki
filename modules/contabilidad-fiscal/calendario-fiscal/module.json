@@ -1,0 +1,57 @@
+{
+  "_doc": "Manifest de fiscal/calendario-fiscal — CUSTODIO CON PERSISTENCIA (D6, hoja del plan). Parcela de PLAZOS DECLARABLES. LA LEY ENTRA COMO DATO: los plazos/obligaciones fiscales (modelo · periodo · fecha limite · periodicidad · importe · estado) se DECLARAN; NUNCA se cablean (ni una fecha, ni un modelo, ni una periodicidad vive en el codigo). Al declarar un plazo (ORDEN, panel) ESCRIBE, anuncia el HECHO contabilidad.plazo_declarado y dispara el AVISO PROACTIVO subiendo best-effort motor-avisos.producir.request (K2). `proximos` es PREGUNTA (por el bus, sin panel): los plazos declarados en la ventana pedida. UN SOLO ESCRITOR; APPEND-ONLY (re-declarar el mismo plazo apila su estado; nada se borra). Invariante: sin fecha limite declarada no se inventa el plazo. Persiste por proyecto via PosPersistencia (_shared/pos-persistencia, storage /contabilidad/calendario-fiscal), restaura en project.activated y vuelca en onUnload. Nota R3: el plan declara escucha de contabilidad.perfil_administrativo_declarado (perfil-administrativo D11), pero ese modulo AUN NO EXISTE en el repo → NO se declara (cadena colgada). RPC declarar = ORDEN (ui_handler); proximos = PREGUNTA (sin ui_handler).",
+  "name": "calendario-fiscal",
+  "version": "0.1.0",
+  "description": "Custodio (D6): parcela de plazos fiscales declarables. La ley entra como dato; declara el plazo, anuncia el hecho y dispara el aviso proactivo.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "calendario-fiscal.declarar.request",
+      "handler": "onDeclararRequest",
+      "description": "RPC custodio (ORDEN, panel): {project_id, modelo?, periodo?, periodicidad?, fecha_limite, importe?, clave?, estado?} → {project_id, plazo, declarado, total, append_only, abierto}. Declara un plazo (la ley como dato); sin fecha_limite → INVALID_INPUT. Publica contabilidad.plazo_declarado y sube motor-avisos.producir.request. Responde por calendario-fiscal.declarar.response; payload invalido → calendario-fiscal.declarar.failed."
+    },
+    {
+      "event": "calendario-fiscal.proximos.request",
+      "handler": "onProximosRequest",
+      "description": "RPC custodio (PREGUNTA, por el bus): {project_id, desde?, hasta?, modelo?} → {project_id, ventana, plazos, total, total_calendario, abierto}. Plazos declarados que caen en la ventana; no muta. Responde por calendario-fiscal.proximos.response; payload invalido → calendario-fiscal.proximos.failed."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Restaura el calendario fiscal del proyecto activado desde el storage (PosPersistencia)."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "contabilidad.plazo_declarado",
+      "description": "Fire-and-forget (D6): un plazo fiscal quedo declarado (la ley entro como dato) → {project_id, clave, modelo, periodo, fecha_limite, periodicidad, estado}. Lo ESCUCHA motor-avisos (K2) para el aviso proactivo."
+    },
+    {
+      "event": "motor-avisos.producir.request",
+      "description": "Subida (REQUEST por EVENTO, best-effort) a K2: produce el aviso proactivo del plazo declarado."
+    },
+    {
+      "event": "calendario-fiscal.declarar.response",
+      "description": "Respuesta RPC correlada de la op declarar."
+    },
+    {
+      "event": "calendario-fiscal.declarar.failed",
+      "description": "Par de fallo determinista: falta project_id o fecha_limite → {status, code, message}. Cierra el circulo de declarar.request."
+    },
+    {
+      "event": "calendario-fiscal.proximos.response",
+      "description": "Respuesta RPC correlada de la op proximos (PREGUNTA)."
+    },
+    {
+      "event": "calendario-fiscal.proximos.failed",
+      "description": "Par de fallo determinista: falta project_id → {status, code, message}. Cierra el circulo de proximos.request."
+    }
+  ],
+  "tools": [
+    { "name": "calendario-fiscal.declarar", "description": "Declara (ORDEN) un plazo fiscal como dato y dispara el aviso proactivo." },
+    { "name": "calendario-fiscal.proximos", "description": "Lee (PREGUNTA) los plazos declarados que caen en la ventana pedida." }
+  ],
+  "ui_handlers": [
+    { "domain": "contabilidad", "action": "calendario-fiscal.declarar", "handler": "onDeclararRequest", "type": "system_panel", "zone": "lateral_derecha" }
+  ]
+}

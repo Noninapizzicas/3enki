@@ -1,0 +1,32 @@
+{
+  "_doc": "Manifest de analitica/margen-analitico — REFLEJO STATELESS (J2, hoja del plan). Margen analitico = INGRESO − COSTE IMPUTADO, por DIMENSION. Determinista. NO calcula las cifras por su cuenta: RECIBE los movimientos declarados, o los agrega subiendolos por EVENTO a mayor-balanza.saldos.request (B6, ingresos), valoracion-existencia.valorar.request (H1, coste de existencias) y coste-indirecto.repartir.request (K1, indirectos). Honestidad (invariante 13): un movimiento sin dimension declarada NO se reparte a ojo — queda en `sin_dimension` y se declara; sin datos el margen es null, no 0. NO escribe, NO persiste. RPC calcular es CLASE PREGUNTA → va por el bus, sin panel. Publica margen-analitico.calcular.response y su par .failed. Escucha contabilidad.asiento_asentado (B2 escritor-diario, emitido). La escucha de contabilidad.ejercicio_cerrado del plan NO se declara: su emisor cierre-ejercicio (C4) aun no existe (R3).",
+  "name": "margen-analitico",
+  "version": "0.1.0",
+  "description": "Reflejo (J2): margen analitico por dimension = ingreso − coste imputado. Determinista; lo que no tiene dimension se declara, no se reparte.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "margen-analitico.calcular.request",
+      "handler": "onCalcularRequest",
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id, movimientos?|saldos?, existencias?, costes?, criterio?, fecha?, ejercicio?} → {project_id, ingreso, coste, margen, margen_pct, margenes[], abierto}. Agrega ingreso − coste por dimension; lo sin dimension queda declarado. Responde por margen-analitico.calcular.response. Payload invalido → margen-analitico.calcular.failed."
+    },
+    {
+      "event": "contabilidad.asiento_asentado",
+      "handler": "onAsientoAsentado",
+      "description": "Fire-and-forget (B2 escritor-diario): un asiento quedo en el libro. Se observa (ventana acotada) como fuente alternativa; no se recalcula ni se escribe."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "margen-analitico.calcular.response",
+      "description": "Respuesta RPC correlada de la op calcular (una sola cara: el bus)."
+    },
+    {
+      "event": "margen-analitico.calcular.failed",
+      "description": "Par de fallo determinista: falta project_id → {status, code, message}. Cierra el circulo de calcular.request."
+    }
+  ],
+  "tools": [
+    { "name": "margen-analitico.calcular", "description": "Calcula (PREGUNTA) el margen analitico por dimension (ingreso − coste imputado)." }
+  ]
+}

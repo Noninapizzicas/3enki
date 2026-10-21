@@ -1,0 +1,18 @@
+{
+  "name": "Despacho de Pan",
+  "short_name": "Despacho Pan",
+  "description": "Pan y repostería por encargo. Encarga hoy, recoge cuando te avisemos.",
+  "start_url": "index.html",
+  "display": "standalone",
+  "background_color": "#f5e9d7",
+  "theme_color": "#f5e9d7",
+  "lang": "es",
+  "icons": [
+    {
+      "src": "icono.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

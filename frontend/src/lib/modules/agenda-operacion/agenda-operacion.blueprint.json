@@ -1,0 +1,92 @@
+{
+  "_doc": "Blueprint del modulo agenda-operacion (the-pirate). Modulo REFLEJO (index.js determinista, no blueprint-driven) — este blueprint declara SOLO la interfaz del generador schema→UI (BlueprintForm). Seccion `ui` declarada por F6½ (esquematizar-interfaz, 2026-08-24): las 5 operaciones del modulo con sus args reales del contrato (module.json + FORMULAS del index.js) y el evento que refresca la zona DATOS. Las acciones son DOTTED (reglas.leer, horario.obtener...) porque el RPC real del bus es agenda.<accion>.request y el wrapper mqttRequest('agenda', '<accion>') emite ui/request/agenda/<accion> — por eso transporte.rpc va VACIO: la regex de deriveZones solo parsea acciones de 2 segmentos.",
+  "id": "agenda-operacion",
+  "version": "blueprint-1.0.0",
+
+  "rol": "Custodio single-writer de la operacion diaria (horario por franja, ciclo-diario de tareas, prediccion de demanda) en agenda.json del proyecto + 3 conversores puros (horario, ciclo, demanda). El resto del sistema bebe sus valores por RPC; los nulls del contrato son politica por declarar (el dueno los puebla via reglas.actualizar).",
+
+  "eventos_publicados": [
+    "agenda.reglas.actualizadas"
+  ],
+
+  "eventos_que_escucho": [],
+
+  "transporte": {
+    "entrada": "reflejo RPC via ui_handlers (module.json) — las 5 operaciones se conducen por ui/request/agenda/<accion> con la accion dotted; ver seccion ui.ops. transporte.rpc vacio a proposito.",
+    "rpc": [],
+    "salida": [
+      "agenda.reglas.actualizadas"
+    ],
+    "qos": "publishAndWait (request/response correlado) en cada operacion; timeout 8s"
+  },
+
+  "ui": {
+    "_doc": "Schema de panel del generador schema→UI (BlueprintForm). Las 5 operaciones del reflejo con sus args; el evento agenda.reglas.actualizadas refresca la zona eventos.",
+    "ops": {
+      "reglas.leer": {
+        "titulo": "Ver reglas de agenda",
+        "descripcion": "Lectura de las reglas del proyecto (horario, ciclo-diario, prediccion). Devuelve el objeto `reglas` con su fuente."
+      },
+      "reglas.actualizar": {
+        "titulo": "Actualizar reglas",
+        "descripcion": "Escritura single-writer (el dueno). Los campos presentes se validan y aplican; los ausentes se preservan. Schema agenda-v1.",
+        "args": [
+          {
+            "nombre": "cambios",
+            "tipo": "json",
+            "required": true,
+            "descripcion": "Cambios a aplicar. Ej: {\"horario\":{\"comida\":{\"abre\":\"13:00\",\"cierra\":\"16:00\"}},\"prediccion\":{\"factor_ajuste\":1.1}}"
+          }
+        ]
+      },
+      "horario.obtener": {
+        "titulo": "Horario de una franja",
+        "descripcion": "Apertura/cierre de una franja (desayuno, comida, merienda, cena).",
+        "args": [
+          {
+            "nombre": "franja",
+            "tipo": "select",
+            "required": true,
+            "enum": ["desayuno", "comida", "merienda", "cena"]
+          }
+        ]
+      },
+      "ciclo.obtener": {
+        "titulo": "Ciclo-diario",
+        "descripcion": "Tareas recurrentes del dia, opcionalmente filtradas por franja.",
+        "args": [
+          {
+            "nombre": "franja",
+            "tipo": "select",
+            "required": false,
+            "enum": ["desayuno", "comida", "merienda", "cena"]
+          }
+        ]
+      },
+      "demanda.predecir": {
+        "titulo": "Predecir demanda",
+        "descripcion": "Prediccion de demanda para una franja (senal: venta del dia anterior).",
+        "args": [
+          {
+            "nombre": "franja",
+            "tipo": "select",
+            "required": true,
+            "enum": ["desayuno", "comida", "merienda", "cena"]
+          },
+          {
+            "nombre": "venta_dia_anterior",
+            "tipo": "number",
+            "required": true,
+            "placeholder": "venta del dia anterior"
+          }
+        ]
+      }
+    },
+    "datos": {
+      "op": "reglas.leer",
+      "titulo": "Reglas de agenda del proyecto",
+      "refresh_on": ["agenda.reglas.actualizadas"],
+      "columnas": ["reglas", "fuente"]
+    }
+  }
+}

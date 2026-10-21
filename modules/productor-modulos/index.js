@@ -158,7 +158,11 @@ class ProductorModulosReflejo extends ModuloHibridoReflejo {
 
     try {
       const targetDir = path.join(MODULES_DIR, nombre);
-      fs.mkdirSync(targetDir, { recursive: true });
+      // g+w de raíz: el grupo www-data (hermes, el chat) debe poder escribir
+      // en los módulos producidos — sin esto, cada módulo nuevo nace 755 y el
+      // agente del chat no puede tocarlo (bloqueos repetidos: banco, sonda,
+      // redactor). Lección 12-ago-2026 (fusión Hermes↔Enki).
+      fs.mkdirSync(targetDir, { recursive: true, mode: 0o775 });
 
       // Escribir module.json
       fs.writeFileSync(

@@ -1,0 +1,35 @@
+{
+  "_doc": "Micro-agente del ciclo semanal (M3). Dispara la cadencia (M1: 1 idea), orquesta sonda→banco→evaluador→priorización interna→redactor→cartero, y cierra el ciclo. Semana vacía → avisa y NO envía (M5). Canal caído → ciclo ABORTADO, borrador conservado (reintento el siguiente ciclo). No guarda estado: el estado vive en los custodios.",
+  "dependencies": [],
+  "description": "Micro-agente del ciclo semanal del radar: compone la cadena sonda→banco→evaluador→redactor→cartero, elige 1 candidato (M1/M4) y cierra el ciclo con su par de fallo (ciclo_abortado).",
+  "language": "es",
+  "main": "index.js",
+  "name": "reloj",
+  "publishes": [
+    {
+      "description": "El ciclo arrancó: señales cosechadas en camino. Payload: { project_id, senales }.",
+      "event": "reloj.ciclo_iniciado"
+    },
+    {
+      "description": "Ciclo cerrado: candidato publicado. Payload: { project_id, candidatoId, envio }.",
+      "event": "reloj.ciclo_completado"
+    },
+    {
+      "description": "M5: avisa y NO envía. Payload: { project_id, motivo } — banco_sin_elegibles | todas_sin_evidencia.",
+      "event": "reloj.ciclo_semana_vacia"
+    },
+    {
+      "description": "Par de fallo del ciclo. Payload: { project_id, etapa, detalle }.",
+      "event": "reloj.ciclo_abortado"
+    }
+  ],
+  "subscribes": [
+    {
+      "description": "Dispara el ciclo semanal completo. Payload: { project_id, para?, correlation_id? }.",
+      "event": "reloj.ciclo.iniciar.request",
+      "handler": "onCicloIniciarRequest"
+    }
+  ],
+  "tools": [],
+  "version": "0.1.0"
+}

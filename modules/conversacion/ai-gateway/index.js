@@ -29,6 +29,20 @@ const KimiProvider      = require('./providers/kimi-provider');
 
 const BaseModule = require('../../_shared/base-module');
 const Sintonizador = require('../../_shared/sintonizador');
+
+// Tools GLOBALES universales al LLM en CUALQUIER pagina (blueprint y cajones
+// incluidas). Nivel de MODULO (no local a _getTools) porque _buildCatalogoCapacidades
+// tambien las necesita para EXCLUIR del catalogo lo que el LLM ya tiene como tool real.
+const GLOBAL_TOOLS = new Set(['invoke_agent', 'buscar_agente', 'activar_agente', 'desactivar_agente', 'crear_agente', 'crear_agente_desde_caso',
+  'buscar_capacidad', 'detalle_capacidad',
+  'buscar_skill', 'activar_skill',
+  'fs.read', 'fs.list', 'fs.search', 'fs.list_modules', 'fs.read_module',
+  'crear_lista', 'anadir_paso', 'completar_paso', 'ver_listas', 'borrar_lista',
+  'fijar_objetivo', 'evaluar_rail',
+  'cupulas.vista_proyecto',
+  'leer_web', 'descargar_web', 'leer_imagen', 'renderizar', 'traducir', 'transcribir', 'analizar_sonido', 'decir', 'interpretar_trazo',
+  'bibliotecario.catalogo', 'bibliotecario.consultar', 'escribano.escribir', 'escribano.pendientes']);
+
 class AiGatewayModule extends BaseModule {
   constructor() {
     super();
@@ -47,6 +61,13 @@ class AiGatewayModule extends BaseModule {
     // reacciona a cupulas.visibilidad_cambiada en caliente. Nace APAGADO por proyecto.
     this._cupulaVistaVisible = new Map();
     // Cache de prefijos por page_id, poblado lazy por _buildPagePrefixes()
+    // Cache del NERVIO GLOBAL (cantera + biblioteca): inventarios que cambian
+    // SOLO con cosecha.promover/crear/patch — leerlos por RPC en CADA turno
+    // (2s de timeout cada uno) era latencia pura. TTL corto (30s) + invalidación
+    // por evento de cosecha: nunca sirve un inventario podrido.
+    this._nervioCache = new Map();   // 'cantera' | 'biblioteca' → { data, ts }
+    this._nervioCacheTTL = 30000;    // 30s
+    this._nervioInvalidar = () => { this._nervioCache.clear(); };
     this.pagePrefixes = null;            // Map<page_id, Set<prefix>>
     // Mapa target_page_id → { manifest, parentBlueprint, childBlueprint, systemPrompt }
     // poblado por _loadBlueprints() al arrancar. Cuando el chat tiene page_id
@@ -156,6 +177,16 @@ class AiGatewayModule extends BaseModule {
           }
         }
       );
+    }
+
+    // Invalidación del cache del nervio global: la cantera/biblioteca cambian
+    // cuando el reflejo de cosecha completa promover/crear/patch. Limpiar el
+    // cache en ese momento → el próximo turno lee el inventario fresco (y los
+    // turnos intermedios no pagan el RPC).
+    if (this.eventBus?.subscribe) {
+      for (const ev of ['cosecha.promover.response', 'cosecha.crear.response', 'cosecha.patch.response', 'bibliotecario.catalogo.actualizado']) {
+        this.eventBus.subscribe(ev, () => { this._nervioInvalidar(); });
+      }
     }
 
     // Registra el botón on/off de la sintonía en el panel central de
@@ -364,7 +395,7 @@ class AiGatewayModule extends BaseModule {
   // Tools desde moduleLoader (filtradas por page_id)
   // ============================================================
 
-  _getTools(page_id) {
+  _getTools(page_id, project_id) {
     if (!this.moduleLoader) return [];
     const all = this.moduleLoader.getToolsForAI?.() || [];
     // GLOBAL_TOOLS: universales al LLM en CUALQUIER pagina (blueprint y cajones incluidas).
@@ -387,15 +418,6 @@ class AiGatewayModule extends BaseModule {
     //   fuera de este set) era invisible dentro de toda página con page_id → el LLM se
     //   rendía a "no está en la cantera" aunque existiera (visto en vivo). Mismo fix que el
     //   rail: intención "cualquier conversación" del v0.7 realizada en código.
-    const GLOBAL_TOOLS = new Set(['invoke_agent', 'buscar_agente', 'activar_agente', 'desactivar_agente', 'crear_agente', 'crear_agente_desde_caso',
-      'buscar_capacidad', 'detalle_capacidad',
-      'buscar_skill', 'activar_skill',
-      'fs.read', 'fs.list', 'fs.search',
-      'crear_lista', 'anadir_paso', 'completar_paso', 'ver_listas', 'borrar_lista',
-      'fijar_objetivo', 'evaluar_rail',
-      'cupulas.vista_proyecto',
-      'leer_web', 'descargar_web', 'leer_imagen', 'renderizar', 'traducir', 'transcribir', 'analizar_sonido', 'decir', 'interpretar_trazo',
-      'bibliotecario.catalogo', 'bibliotecario.consultar', 'escribano.escribir', 'escribano.pendientes']);
     // Slice de globales (de `all`) con la enumeracion de invoke_agent aplicada. Se combina
     // con las tools de pagina y se deduplica por nombre (el rail ya se anade aparte).
     const globalSlice = () => this._mapInvokeAgentEnum(all.filter(t => GLOBAL_TOOLS.has(t.name)), page_id);
@@ -454,6 +476,22 @@ class AiGatewayModule extends BaseModule {
       // Cajones-enabled: catalogo + nav + universales + rail + GLOBALES. Antes se iba sin
       // las globales → el LLM de la pagina no podia delegar/crear agentes (raiz del caso).
       return dedupe([...this._getCajonesTools(), ...navTools, ...universal, ...rail, ...globalSlice()]);
+    }
+    // REJA CERRADA (mundo-chat sin 460 tools — v2.37, piloto por proyecto).
+    // El LLM recibe UNA tool generica (ui.request) + las GLOBALES; el catalogo
+    // compacto de capacidades viaja como SECCION del system prompt (patron cajones:
+    // catalogo barato en el turno, schema del cajon bajo demanda con
+    // detalle_capacidad) y el ranking por significado se hace con buscar_capacidad.
+    // Decision del dueno: v1 = catalogo compacto + cajon bajo demanda; indice
+    // vectorial de tools en Turso = v2 (no construir infra beta en medio del piloto).
+    if (this._rejaCerrada(project_id)) {
+      const herramientas = dedupe([this._uiRequestTool(), ...globalSlice()]);
+      this.logger?.info('ai-gateway.reja-cerrada', {
+        project_id,
+        tools_count: herramientas.length,
+        catalogo_entries: this.moduleLoader?.toolsRegistry?.size || 0
+      });
+      return herramientas;
     }
     if (!page_id) return all;
     // Construcción lazy del mapa page_id → prefijos válidos. La primera vez que
@@ -561,6 +599,51 @@ class AiGatewayModule extends BaseModule {
       const e = registry.get(name);
       if (e) out.push({ name: e.name, description: e.description, parameters: e.parameters });
     }
+    return out;
+  }
+
+  // REJA CERRADA (v2.37): el piloto del mundo-chat sin 460 tools. Solo el proyecto
+  // listado en config.reja_abierta_proyectos con config.reja_abierta === false.
+  // Default (config ausente o true) → modo historico intacto para todo el sistema.
+  _rejaCerrada(project_id) {
+    return this.config?.reja_abierta === false
+      && Array.isArray(this.config?.reja_abierta_proyectos)
+      && this.config.reja_abierta_proyectos.includes(project_id);
+  }
+
+  // Tool generica del mundo-chat. El LLM ejecuta CUALQUIER capacidad con
+  // {dominio, accion, args}; el gateway resuelve el handler real (ruta directa v3)
+  // o el fallback por bus. El catalogo de capacidades vive en el prompt.
+  _uiRequestTool() {
+    return {
+      name: 'ui.request',
+      description: 'Ejecuta UNA capacidad del catalogo del sistema. El catalogo completo (nombres + descripcion de 1 linea) esta en la seccion # CATALOGO DE CAPACIDADES del prompt. Para el schema EXACTO de una operacion (args completos), abre el cajon con detalle_capacidad {name} ANTES de llamar. Para rankear por significado, buscar_capacidad {query}. Uso: ui.request {dominio, accion, args:{...}} donde args es el payload de la operacion (project_id se inyecta solo). Si la capacidad no existe devuelve RESOURCE_NOT_FOUND → usa buscar_capacidad para hallar la correcta.',
+      parameters: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          dominio: { type: 'string', description: 'Prefijo del modulo (ej: escandallo, recetas, productos).' },
+          accion: { type: 'string', description: 'Accion dentro del modulo (ej: costear, listar).' },
+          args: { type: 'object', description: 'Payload de la operacion (los parametros que pide el cajon de detalle_capacidad).' }
+        },
+        required: ['dominio', 'accion']
+      }
+    };
+  }
+
+  // Catalogo compacto de capacidades para el mundo-chat: name + descripcion de
+  // 1 linea (~120 chars) de TODAS las tools del toolsRegistry, salvo las globales
+  // (que el LLM ya tiene como tools reales). Se inyecta como SECCION del system
+  // prompt — el schema del cajon se abre bajo demanda con detalle_capacidad.
+  _buildCatalogoCapacidades() {
+    const registry = this.moduleLoader?.toolsRegistry;
+    if (!registry?.forEach) return [];
+    const out = [];
+    registry.forEach((entry, name) => {
+      if (!name || typeof name !== 'string' || GLOBAL_TOOLS.has(name)) return;
+      const desc = String(entry?.description || '').replace(/\s+/g, ' ').trim();
+      out.push(`${name} — ${desc.slice(0, 120)}`);
+    });
     return out;
   }
 
@@ -1289,7 +1372,7 @@ class AiGatewayModule extends BaseModule {
       await this._executeLLM({
         system: null,
         messages: [{ role: 'user', content: synthetic_message }],
-        tools: this._filtrarVisibilidadCupula(this._getTools(page_id), project_id),
+        tools: this._filtrarVisibilidadCupula(this._getTools(page_id, project_id), project_id),
         settings: {},
         attachments: null,
         project_id,
@@ -1503,9 +1586,15 @@ class AiGatewayModule extends BaseModule {
   // Array<nombre> (posiblemente vacío) o null si no hubo respuesta.
   async _leerCantera() {
     if (!this.eventBus?.subscribe || !this.eventBus?.publish) return null;
+    // Cache TTL: el inventario de la cantera solo cambia con cosecha.promover/
+    // crear/patch (invalidado por evento). Evita el RPC de 2s en CADA turno.
+    const cached = this._nervioCache?.get('cantera');
+    if (cached && Date.now() - cached.ts < (this._nervioCacheTTL || 30000)) {
+      return cached.data;
+    }
     const request_id = crypto.randomUUID();
     const timeoutMs = this.config.cantera_timeout_ms || 2000;
-    return new Promise((resolve) => {
+    const data = await new Promise((resolve) => {
       let unsub = null;
       const timeout = setTimeout(() => { if (unsub) unsub(); resolve(null); }, timeoutMs);
       try {
@@ -1525,13 +1614,23 @@ class AiGatewayModule extends BaseModule {
         resolve(null);
       }
     });
+    // Cachea también el null (2s de timeout) para no repetir el castigo: si el
+    // RPC no respondió, el próximo turno tampoco debería bloquearse esperándolo.
+    if (this._nervioCache) this._nervioCache.set('cantera', { data, ts: Date.now() });
+    return data;
   }
 
   async _leerCatalogoBiblioteca() {
     if (!this.eventBus?.subscribe || !this.eventBus?.publish) return null;
+    // Cache TTL (mismo patrón que la cantera): el catálogo solo cambia con
+    // bibliotecario.catalogo.actualizado (invalidado por evento).
+    const cached = this._nervioCache?.get('biblioteca');
+    if (cached && Date.now() - cached.ts < (this._nervioCacheTTL || 30000)) {
+      return cached.data;
+    }
     const request_id = crypto.randomUUID();
     const timeoutMs = this.config.biblioteca_timeout_ms || 2000;
-    return new Promise((resolve) => {
+    const data = await new Promise((resolve) => {
       let unsub = null;
       const timeout = setTimeout(() => { if (unsub) unsub(); resolve(null); }, timeoutMs);
       try {
@@ -1550,6 +1649,8 @@ class AiGatewayModule extends BaseModule {
         resolve(null);
       }
     });
+    if (this._nervioCache) this._nervioCache.set('biblioteca', { data, ts: Date.now() });
+    return data;
   }
 
   // Nervio del CONSERJE: pide (y consume) el empujon pendiente del proyecto. Es el
@@ -2411,6 +2512,33 @@ class AiGatewayModule extends BaseModule {
     if (toolName === 'cajon.listar' || toolName === 'cajon.abrir') {
       return this._executeCajonTool(toolName, args, ctx);
     }
+    // ui.request — la tool generica del mundo-chat (reja cerrada, v2.37). El LLM
+    // trae {dominio, accion, args}; resolvemos el nombre real de la tool y
+    // re-entramos en el path canonico (ruta directa v3 / fallback por bus).
+    // Anti-loop: ui.request no se auto-llama.
+    if (toolName === 'ui.request') {
+      const dominio = args?.dominio;
+      const accion = args?.accion;
+      const innerArgs = (args && typeof args.args === 'object' && args.args !== null) ? args.args : {};
+      if (!dominio || !accion) {
+        const e = new Error('ui.request requiere {dominio, accion, args}');
+        e.code = 'INVALID_INPUT';
+        throw e;
+      }
+      const realName = `${dominio}.${accion}`;
+      if (realName === 'ui.request') {
+        const e = new Error('ui.request no puede invocarse a si misma (anti-loop)');
+        e.code = 'INVALID_INPUT';
+        throw e;
+      }
+      const toolDef = this.moduleLoader?.toolsRegistry?.get?.(realName);
+      if (!toolDef) {
+        const e = new Error(`La capacidad '${realName}' no existe. Usa buscar_capacidad {query} para hallar la correcta (o detalle_capacidad {name} para ver su schema).`);
+        e.code = 'RESOURCE_NOT_FOUND';
+        throw e;
+      }
+      return this._executeToolCall(realName, { ...innerArgs, project_id: innerArgs.project_id ?? ctx.project_id }, ctx);
+    }
     // cajones Fase 5 bis: chat.cambiar_foco publica evento al bus; page.related
     // sirve del grafo en memoria. Interceptadas antes del path canonico.
     if (toolName === 'chat.cambiar_foco' || toolName === 'page.related') {
@@ -2450,9 +2578,40 @@ class AiGatewayModule extends BaseModule {
     const request_id = crypto.randomUUID();
     // code.orquestar puede durar hasta su timeout interno (max 60s) -> el
     // dispatch debe esperar mas que el default de 15s o lo cortaria antes.
-    const timeoutMs = toolName === 'invoke_agent' ? 150000
-      : toolName === 'code.orquestar' ? 65000
+    // invoke_agent: el timeout NO es fijo — se deriva del PRESUPUESTO real del
+    // pipeline (generacion_timeout_ms × generaciones_por_paso + margen del
+    // reflejo/JEFE). Lección en vivo: el pipeline adaptar-a-enki tardó 181s
+    // (21K tokens de salida) y el timeout fijo de 150s lo cortaba ANTES de que
+    // el agente terminara → el chat reportaba "timeout" con el agente vivo y
+    // la bitácora verificada después. Fallback generoso si el registro no
+    // responde (300s) — mejor esperar de más que matar a un agente que trabaja.
+    let timeoutMs = toolName === 'code.orquestar' ? 65000
+      : toolName === 'invoke_agent' ? 300000
       : (this.config.tool_timeout_ms || 15000);
+    if (toolName === 'invoke_agent' && args?.agent_name) {
+      try {
+        // Consulta el presupuesto REAL del pipeline (subscribe+publish manual,
+        // el mismo patrón del dispatch de abajo — el gateway no tiene _pedir).
+        const pipeRid = crypto.randomUUID();
+        const pipeTimeout = setTimeout(() => { if (unsubPipe) unsubPipe(); }, 8000);
+        let unsubPipe = this.eventBus.subscribe('pipeline.obtener.response', (ev) => {
+          const d = (ev && typeof ev === 'object' && 'data' in ev) ? ev.data : ev;
+          if (!d || d.request_id !== pipeRid) return;
+          clearTimeout(pipeTimeout);
+          if (unsubPipe) unsubPipe();
+          const presu = d?.pipeline?.presupuesto;
+          if (presu) {
+            const porPaso = Number(presu.generacion_timeout_ms) || 120000;
+            const generaciones = Number(presu.generaciones_por_paso) || 3;
+            // techo del pipeline + margen para reflejo/JEFE/commit
+            timeoutMs = porPaso * generaciones + 30000;
+          }
+        });
+        this.eventBus.publish('pipeline.obtener.request', {
+          request_id: pipeRid, nombre: args.agent_name
+        });
+      } catch (_) { /* fallback 300s */ }
+    }
     return new Promise((resolve, reject) => {
       let unsub = null;
       const timeout = setTimeout(() => {
@@ -2485,7 +2644,7 @@ class AiGatewayModule extends BaseModule {
   // Privados — Nucleo: _executeLLM (agentic loop compartido)
   // ============================================================
 
-  async _executeLLM({ system, messages, tools, settings, attachments, project_id, user_id, conversation_id, correlation_id, page_id, context, prompt, intencion, providerName }) {
+  async _executeLLM({ system, messages, tools, settings, attachments, project_id, user_id, conversation_id, correlation_id, page_id, context, prompt, intencion, providerName, max_tokens: payloadMaxTokens }) {
     const desiredProvider = providerName ?? settings?.provider ?? null;
     const { name: providerNameUsed, provider } = await this._selectProvider(desiredProvider, project_id);
 
@@ -2529,25 +2688,72 @@ class AiGatewayModule extends BaseModule {
       effectiveSystem = effectiveSystem ? `${lente}\n\n${effectiveSystem}` : lente;
     }
 
-    // Nervio de la CANTERA (global): en un turno REAL, dile al LLM las puertas de la
-    // biblioteca de skills. Estático y puro (sin RPC → no bloquea). El LLM ya empuña
-    // bus.publishAndWait; esto solo le da a CONOCER los eventos (cosecha.buscar/feeder.buscar/
-    // cosecha.promover). Verificado en vivo: sin esto el LLM decía "no tengo herramientas
-    // para skills.sh" aunque el motor respondía por el bus. No en turnos sintéticos.
-    if (!context?.async_invocation) {
-      let inventario = null;
-      try { inventario = await this._leerCantera(); } catch (_) { /* determinista best-effort; nunca bloquea */ }
-      const cantera = this._composeCanteraSection(inventario);
+    // REJA CERRADA (v2.37): inyecta el CATALOGO DE CAPACIDADES como seccion del
+    // system prompt (patron cajones: catalogo barato en el turno, schema bajo
+    // demanda). Log de desglose para medir la bajada de tokens (antes: 65K tools).
+    if (this._rejaCerrada(project_id)) {
+      const catalogo = this._buildCatalogoCapacidades();
+      if (catalogo.length > 0) {
+        const seccion = `# CATALOGO DE CAPACIDADES (${catalogo.length} operaciones del sistema)\n` +
+          'Ejecuta cualquiera con ui.request {dominio, accion, args}. Si dudas del schema de args, ' +
+          'abre el cajon con detalle_capacidad {name}. Si ninguna capacidad encaja, rankea con ' +
+          'buscar_capacidad {query}. El nombre de la capacidad = dominio.accion (ej: escandallo.costear).\n\n' +
+          catalogo.join('\n');
+        effectiveSystem = effectiveSystem ? `${effectiveSystem}\n\n${seccion}` : seccion;
+        this.logger?.info('ai-gateway.reja-cerrada.prompt', {
+          project_id,
+          catalogo_entries: catalogo.length,
+          catalogo_chars: seccion.length,
+          tools_count: Array.isArray(tools) ? tools.length : 0
+        });
+      }
+    }
+
+    // ── NERVIOS GLOBALES — lecturas RPC EN PARALELO ──────────────────────────
+    // Antes eran 8 awaits SECUENCIALES (cantera→biblioteca→propiocepción→resumen→
+    // perfil→rag→empujón→rail), cada uno con timeout propio de hasta 2-3s: un
+    // turno podía pagar la SUMA (8-20s) antes de llamar al LLM, y el provider
+    // luego cortaba por contexto gigante. Ahora se lanzan en paralelo (el turno
+    // paga el MÁXIMO, ~2-3s) y se ensamblan en el MISMO orden (coherencia del
+    // prompt intacta). Mismas condiciones de gating, mismos best-effort.
+    const esTurnoReal = !context?.async_invocation;
+    let nervios = { cantera: null, biblioteca: null, propio: null, resumen: null, perfil: null, rag: null, empujon: null, rail: null };
+    if (esTurnoReal) {
+      const ultimoMsg = Array.isArray(messages) && messages.length
+        ? messages[messages.length - 1]?.content : '';
+      const desdeTs = this.conversationPropioTs.get(conversation_id) || null;
+      [nervios.cantera, nervios.biblioteca, nervios.propio, nervios.resumen, nervios.perfil, nervios.rag, nervios.empujon, nervios.rail] = await Promise.all([
+        this._leerCantera().catch(() => null),
+        this._leerCatalogoBiblioteca().catch(() => null),
+        (blueprintCtx && project_id)
+          ? this._leerPropiocepcion(project_id, desdeTs).catch(() => ({ eventos: [], total: 0 }))
+          : Promise.resolve(null),
+        (project_id && conversation_id)
+          ? this._leerResumen(project_id, conversation_id).catch(() => null)
+          : Promise.resolve(null),
+        (project_id && user_id)
+          ? this._leerPerfil(project_id, user_id, typeof ultimoMsg === 'string' ? ultimoMsg : '').catch(() => null)
+          : Promise.resolve(null),
+        (project_id && user_id && conversation_id)
+          ? this._leerRag(project_id, user_id, conversation_id).catch(() => null)
+          : Promise.resolve(null),
+        (blueprintCtx && project_id)
+          ? this._leerEmpujon(project_id).catch(() => null)
+          : Promise.resolve(null),
+        project_id
+          ? this._leerRailActivo(project_id).catch(() => null)
+          : Promise.resolve(null)
+      ]);
+    }
+
+    // Ensamblado EN ORDEN (el orden del prompt importa — coherencia preservada)
+    if (nervios.cantera !== undefined) {
+      const cantera = this._composeCanteraSection(nervios.cantera);
       effectiveSystem = effectiveSystem ? `${effectiveSystem}\n\n${cantera}` : cantera;
     }
 
-    // Nervio de la BIBLIOTECA (global): en un turno REAL, dile al LLM los sectores de la
-    // bóveda de conocimiento y las herramientas para consultarla/escribir. Estático y
-    // best-effort (como la cantera). No en turnos sintéticos.
-    if (!context?.async_invocation) {
-      let catalogo = null;
-      try { catalogo = await this._leerCatalogoBiblioteca(); } catch (_) { /* best-effort */ }
-      const biblioteca = this._composeBibliotecaSection(catalogo);
+    if (nervios.biblioteca !== undefined) {
+      const biblioteca = this._composeBibliotecaSection(nervios.biblioteca);
       effectiveSystem = effectiveSystem ? `${effectiveSystem}\n\n${biblioteca}` : biblioteca;
     }
 
@@ -2555,7 +2761,7 @@ class AiGatewayModule extends BaseModule {
     // antes de publicarlo (bus.publishAndWait). Regla estática de 3 líneas — el índice
     // (~212 RPC) NO se inyecta: se consulta bajo demanda con rpc.buscar / rpc.ver.
     // Mata la improvisación de nombres de eventos (causa de cascadas de tools fallidas).
-    if (!context?.async_invocation) {
+    if (esTurnoReal) {
       const rpcNervio =
         '# ÍNDICE RPC — los servicios responden en el bus (contexto SILENCIOSO)\n' +
         'Antes de publicar un evento con bus.publishAndWait, consulta su nombre EXACTO y su ' +
@@ -2565,94 +2771,42 @@ class AiGatewayModule extends BaseModule {
       effectiveSystem = effectiveSystem ? `${effectiveSystem}\n\n${rpcNervio}` : rpcNervio;
     }
 
-    // Nervio propioceptivo: en un turno REAL del chat sobre una pagina de
-    // proyecto, inyectamos lo que paso en el mundo de ese proyecto desde el
-    // ultimo turno — reflejos JS y ops conscientes que el LLM no controlo pero
-    // de los que debe ser consciente. Best-effort: si propiocepcion no responde
-    // rapido, el turno sigue sin bloquearse. No se inyecta en turnos sinteticos
-    // (async-subscriber / RPC responders) ni sin proyecto.
-    if (blueprintCtx && project_id && !context?.async_invocation) {
-      try {
-        const desdeTs = this.conversationPropioTs.get(conversation_id) || null;
-        const { eventos, total } = await this._leerPropiocepcion(project_id, desdeTs);
-        if (Array.isArray(eventos) && eventos.length > 0) {
-          const seccion = this._composePropiocepcionSection(eventos, total);
-          effectiveSystem = effectiveSystem ? `${effectiveSystem}\n\n${seccion}` : seccion;
-          const ultimaTs = eventos[eventos.length - 1]?.ts;
-          if (ultimaTs) this.conversationPropioTs.set(conversation_id, ultimaTs);
-        }
-      } catch (_) { /* la consciencia es best-effort; nunca bloquea el turno */ }
+    // Nervio propioceptivo (ensamblado tras la lectura paralela)
+    if (nervios.propio && Array.isArray(nervios.propio.eventos) && nervios.propio.eventos.length > 0) {
+      const seccion = this._composePropiocepcionSection(nervios.propio.eventos, nervios.propio.total);
+      effectiveSystem = effectiveSystem ? `${effectiveSystem}\n\n${seccion}` : seccion;
+      const ultimaTs = nervios.propio.eventos[nervios.propio.eventos.length - 1]?.ts;
+      if (ultimaTs) this.conversationPropioTs.set(conversation_id, ultimaTs);
     }
 
-    // Nervio de MEMORIA (summary): en un turno REAL con proyecto y conversacion,
-    // tiramos el resumen narrativo persistido (lo que el FIFO ya recorto del
-    // historial). PULL — sustituye al push que perdia la carrera. Best-effort:
-    // si no hay resumen (conversacion corta) o tarda, el turno sigue igual.
-    if (project_id && conversation_id && !context?.async_invocation) {
-      try {
-        const resumen = await this._leerResumen(project_id, conversation_id);
-        if (resumen) {
-          const seccion = this._composeResumenSection(resumen);
-          effectiveSystem = effectiveSystem ? `${effectiveSystem}\n\n${seccion}` : seccion;
-        }
-      } catch (_) { /* memoria best-effort; nunca bloquea el turno */ }
+    // Nervio de MEMORIA (summary)
+    if (nervios.resumen) {
+      const seccion = this._composeResumenSection(nervios.resumen);
+      effectiveSystem = effectiveSystem ? `${effectiveSystem}\n\n${seccion}` : seccion;
     }
 
-    // Nervio de MEMORIA (profile): hechos del usuario, memoria entre conversaciones.
-    // PULL best-effort. No requiere conversation_id (es a nivel de usuario).
-    if (project_id && user_id && !context?.async_invocation) {
-      try {
-        // el mensaje actual (ultimo de messages) gobierna el top-K de facts pertinentes
-        const ultimoMsg = Array.isArray(messages) && messages.length
-          ? messages[messages.length - 1]?.content : '';
-        const facts = await this._leerPerfil(project_id, user_id, typeof ultimoMsg === 'string' ? ultimoMsg : '');
-        if (facts) {
-          const seccion = this._composePerfilSection(facts);
-          effectiveSystem = effectiveSystem ? `${effectiveSystem}\n\n${seccion}` : seccion;
-        }
-      } catch (_) { /* memoria best-effort; nunca bloquea el turno */ }
+    // Nervio de MEMORIA (profile)
+    if (nervios.perfil) {
+      const seccion = this._composePerfilSection(nervios.perfil);
+      effectiveSystem = effectiveSystem ? `${effectiveSystem}\n\n${seccion}` : seccion;
     }
 
-    // Nervio de MEMORIA (rag): fragmentos del historico afines al mensaje actual.
-    // PULL best-effort, reusa el embedding stashed (sin re-embeber en el turno).
-    if (project_id && user_id && conversation_id && !context?.async_invocation) {
-      try {
-        const snippet = await this._leerRag(project_id, user_id, conversation_id);
-        if (snippet) {
-          const seccion = this._composeRagSection(snippet);
-          effectiveSystem = effectiveSystem ? `${effectiveSystem}\n\n${seccion}` : seccion;
-        }
-      } catch (_) { /* memoria best-effort; nunca bloquea el turno */ }
+    // Nervio de MEMORIA (rag)
+    if (nervios.rag) {
+      const seccion = this._composeRagSection(nervios.rag);
+      effectiveSystem = effectiveSystem ? `${effectiveSystem}\n\n${seccion}` : seccion;
     }
 
-    // Nervio del conserje: en un turno REAL con proyecto, si hay un empujon
-    // pendiente (el conserje lo emitio porque detecto una brecha con intencion),
-    // lo inyectamos para que el chat lo ofrezca natural, UNA vez. Consume-on-read:
-    // el conserje lo borra al leerlo. Si el conserje esta apagado no hay nada
-    // pendiente -> no se inyecta. Best-effort: nunca bloquea el turno.
-    if (blueprintCtx && project_id && !context?.async_invocation) {
-      try {
-        const empujon = await this._leerEmpujon(project_id);
-        if (empujon && empujon.mensaje) {
-          const seccion = this._composeEmpujonSection(empujon);
-          effectiveSystem = effectiveSystem ? `${effectiveSystem}\n\n${seccion}` : seccion;
-        }
-      } catch (_) { /* el empujon es best-effort; nunca bloquea el turno */ }
+    // Nervio del conserje (empujón, consume-on-read)
+    if (nervios.empujon && nervios.empujon.mensaje) {
+      const seccion = this._composeEmpujonSection(nervios.empujon);
+      effectiveSystem = effectiveSystem ? `${effectiveSystem}\n\n${seccion}` : seccion;
     }
 
-    // Nervio del RAIL VIVO (cúpula de estados): en un turno REAL con proyecto, si hay una
-    // LISTA ACTIVA, la inyectamos como el RUMBO escrito — el timón que sostiene el hilo entre
-    // turnos (el estado ES la verdad, no la memoria fragil del historial). Universal: NO exige
-    // blueprintCtx — toda conversación con proyecto hereda el rail (patrón cuenco). Sin lista
-    // activa no se inyecta nada. Best-effort: nunca bloquea el turno.
-    if (project_id && !context?.async_invocation) {
-      try {
-        const rail = await this._leerRailActivo(project_id);
-        if (rail && Array.isArray(rail.pasos) && rail.pasos.length > 0) {
-          const seccion = this._composeRailSection(rail);
-          effectiveSystem = effectiveSystem ? `${effectiveSystem}\n\n${seccion}` : seccion;
-        }
-      } catch (_) { /* el rail es best-effort; nunca bloquea el turno */ }
+    // Nervio del RAIL VIVO (cúpula de estados)
+    if (nervios.rail && Array.isArray(nervios.rail.pasos) && nervios.rail.pasos.length > 0) {
+      const seccion = this._composeRailSection(nervios.rail);
+      effectiveSystem = effectiveSystem ? `${effectiveSystem}\n\n${seccion}` : seccion;
     }
 
     // Nervio de LENTES: si la página declara un dominio de lentes (manifest.lente_default),
@@ -2706,7 +2860,9 @@ class AiGatewayModule extends BaseModule {
       // 8192 dobla el margen (~32KB). Verificado: deepseek-v4-flash acepta hasta 64K de
       // salida. Es FLOOR (sube tambien las conversaciones viejas con 2000/4096 guardado);
       // no encarece el chat normal (el modelo para en 'stop', max_tokens es tope no objetivo).
-      max_tokens: Math.max(Number(settings?.max_tokens) || 0, 8192),
+      // El techo del PIPELINE (payloadMaxTokens, ej. 32000 del esquematizador) manda:
+      // si el caller declara su tope, se respeta (el floor solo sube, nunca baja).
+      max_tokens: Math.max(Number(settings?.max_tokens) || 0, Number(payloadMaxTokens) || 0, 8192),
       tools: translatedTools,
       projectId: project_id,
       conversationId: conversation_id,
@@ -2937,9 +3093,13 @@ class AiGatewayModule extends BaseModule {
       return;
     }
 
-    const tools = tools_disponibles && tools_disponibles.length > 0
-      ? tools_disponibles
-      : this._filtrarVisibilidadCupula(this._getTools(page_id), project_id);
+    // REJA CERRADA (v2.37): el gateway manda sobre tools_disponibles — si el
+    // piloto esta activo para este proyecto, el LLM recibe ui.request + globales
+    // aunque prompt-builder haya adjuntado el catalogo entero (65K tokens).
+    const rejaCerrada = this._rejaCerrada(project_id);
+    const tools = (rejaCerrada || !(tools_disponibles && tools_disponibles.length > 0))
+      ? this._filtrarVisibilidadCupula(this._getTools(page_id, project_id), project_id)
+      : tools_disponibles;
 
     const startedAt = Date.now();
     let providerAttempted = null;
@@ -3103,7 +3263,8 @@ class AiGatewayModule extends BaseModule {
     const data = event.data || event;
     const {
       request_id, correlation_id, system, messages, tools, settings,
-      attachments, project_id, user_id, conversation_id, page_id, provider: providerName
+      attachments, project_id, user_id, conversation_id, page_id, provider: providerName, context,
+      max_tokens: payloadMaxTokens
     } = data;
 
     if (!request_id) {
@@ -3117,7 +3278,12 @@ class AiGatewayModule extends BaseModule {
     try {
       const result = await this._executeLLM({
         system, messages, tools, settings, attachments,
-        project_id, user_id, conversation_id, correlation_id: cid, page_id, providerName
+        project_id, user_id, conversation_id, correlation_id: cid, page_id, providerName, context,
+        // El motor v3 manda max_tokens en el payload del pipeline (32000 para
+        // esquemas) — el gateway lo IGNORABA y usaba solo settings (→ floor 8192).
+        // Causa raíz del truncado de "b": finish_reason=max_tokens a los 8192.
+        // El payload manda sobre settings: el pipeline es quien declara su techo.
+        max_tokens: Number(payloadMaxTokens) || undefined
       });
 
       await this._publicarEvento('llm.complete.response', {

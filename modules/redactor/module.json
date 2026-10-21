@@ -1,0 +1,47 @@
+{
+  "_doc": "redactor — conversor híbrido (reflejo + blueprint). El REFLEJO sirve lo determinista: historial de borradores (p6), validación de entrada del cajón y persistencia por proyecto. El CAJÓN del blueprint (redactar, responde:true en redactor.redactar.request) redacta la newsletter (M9: ficha visible → veredicto claro → decisión accionable, 5 min, español, sin clickbait) leyendo la ficha del banco. Anti-colisión: redactar solo en el blueprint, nunca en subscribes del reflejo.",
+  "blueprint_driven": true,
+  "blueprint_path": "redactor.blueprint.json",
+  "cajones_enabled": true,
+  "dependencies": [
+    "banco"
+  ],
+  "description": "Conversor. El blueprint redacta la newsletter (M9); el reflejo custodia el historial de borradores (p6) y la validación determinista del cajón.",
+  "language": "es",
+  "main": "index.js",
+  "name": "redactor",
+  "publishes": [
+    {
+      "description": "Un borrador de newsletter fue generado y persistido. Payload: { borrador }.",
+      "event": "redactor.borrador_listo"
+    },
+    {
+      "description": "El cajón de redacción falló. Payload: { error, detalle? }.",
+      "event": "redactor.redactar.failed"
+    }
+  ],
+  "subscribes": [
+    {
+      "description": "Historial de borradores (p6), filtrable por candidato_id o estado.",
+      "event": "redactor.listar.request",
+      "handler": "onListarRequest"
+    },
+    {
+      "description": "GUARDA del cajón: candidato + ficha presentes (anti borrador vacío).",
+      "event": "redactor.validar.request",
+      "handler": "onValidarRequest"
+    },
+    {
+      "description": "GUARDAR del cajón redactar: persiste el borrador (dedupe por candidato_id, version++), emite redactor.borrador_listo.",
+      "event": "redactor.borrador.guardar.request",
+      "handler": "onBorradorGuardarRequest"
+    },
+    {
+      "description": "Restaura la persistencia (historial de borradores) del proyecto activado.",
+      "event": "project.activated",
+      "handler": "onProjectActivated"
+    }
+  ],
+  "tools": [],
+  "version": "0.1.0"
+}

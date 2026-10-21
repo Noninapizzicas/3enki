@@ -1,0 +1,32 @@
+{
+  "_doc": "Manifest de libro/partida-conciliatoria — REFLEJO STATELESS (E9, hoja del plan). Partidas en TRANSITO que EXPLICAN el desfase banco<->contable. El desfase se EXPLICA, no se esconde. NO calcula el saldo contable: lo SUBE por EVENTO a saldo-tesoreria.calcular.request (E3) y lo compara con el saldo bancario declarado. Honestidad (invariante 13): el desfase que NO cubre una partida declarada NO se reparte en una partida inventada — queda declarado en `no_explicado`; `explica_desfase` significa que las partidas EXPLICAN la diferencia, no que sea 0. NO escribe, NO persiste. RPC desfase es CLASE PREGUNTA → va por el bus, sin panel. Publica partida-conciliatoria.desfase.response y su par .failed. Escucha contabilidad.asiento_asentado (B2 escritor-diario, emitido).",
+  "name": "partida-conciliatoria",
+  "version": "0.1.0",
+  "description": "Reflejo (E9): partidas en transito que explican el desfase banco<->contable; lo no explicado se declara, no se esconde.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "partida-conciliatoria.desfase.request",
+      "handler": "onDesfaseRequest",
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id, saldo_banco, saldo_contable?, cuenta?, partidas[{concepto,tipo,importe,signo?,fecha?}], fecha?, ejercicio?} → {project_id, saldo_banco, saldo_contable, desfase, partidas[], desfase_explicado, no_explicado, explica_desfase, abierto}. Descompone el desfase en partidas en transito; lo no explicado se declara. Responde por partida-conciliatoria.desfase.response. Payload invalido → partida-conciliatoria.desfase.failed."
+    },
+    {
+      "event": "contabilidad.asiento_asentado",
+      "handler": "onAsientoAsentado",
+      "description": "Fire-and-forget (B2 escritor-diario): un asiento quedo en el libro. Se observa (ventana acotada); no se recalcula ni se escribe."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "partida-conciliatoria.desfase.response",
+      "description": "Respuesta RPC correlada de la op desfase (una sola cara: el bus)."
+    },
+    {
+      "event": "partida-conciliatoria.desfase.failed",
+      "description": "Par de fallo determinista: falta project_id o saldo_banco → {status, code, message}. Cierra el circulo de desfase.request."
+    }
+  ],
+  "tools": [
+    { "name": "partida-conciliatoria.desfase", "description": "Explica (PREGUNTA) el desfase banco<->contable con las partidas en transito declaradas." }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "_doc": "REFLEJO motor-propuesta del proyecto 3D (taller personal de impresion 3D). Ordena la cola de impresion (FIFO + urgencia + preferencia a preparadas + agrupacion por afinidad ABIERTO) y PROPONE al dueño la proxima tanda; NO decide solo. La propuesta vuelve por respuesta correlada; el jefe la aprueba vía cola.reordenar (decisión humana). CERO juicio automatico: propuesta != decisión. Reflejo puro: sin store propio persistente, sin project.activated, sin mutar el store de la cola. Depende de cola + cupula-gcode (la moneda lista). Par de fallo motor-propuesta.proponer.failed. Origen: plan-construccion.md seccion 6.8 (FASE 4 construir-modulos, pieza 11).",
+  "name": "motor-propuesta",
+  "version": "0.1.0",
+  "_v0_1_0_nota": "v0.1.0 (2026-09-13): REFLEJO puro. Op proponer (RPC). Proyeccion _proponerOrden (URGENTE->FIFO antiguedad->preparadas->[ABIERTO afinidad]). La orden vuelve por response; el jefe aprueba via cola.reordenar. CERO juicio: propuesta != decision. Par motor-propuesta.proponer.failed.",
+  "description": "Reflejo que ordena la cola de impresion 3D (FIFO+urgencia+preparadas) y PROPONE la proxima tanda al dueno; NO decide solo, la aprueba el jefe via cola.reordenar.",
+  "language": "es",
+  "main": "index.js",
+  "dependencies": [
+    "cola",
+    "cupula-gcode"
+  ],
+  "config": {
+    "cero_juicio": true,
+    "agrupacion_afinidad_abierto": true
+  },
+  "subscribes": [
+    { "event": "motor-propuesta.proponer.request", "handler": "onProponerRequest", "description": "PROPONE el orden de la cola (FIFO+urgencia+preparadas). Vuelve por response; el jefe decide via cola.reordenar." }
+  ],
+  "publishes": [
+    { "event": "motor-propuesta.proponer.response", "description": "Respuesta correlada: orden propuesto { orden } listo para que el jefe lo apruebe." },
+    { "event": "motor-propuesta.proponer.failed", "description": "Par de fallo: no se pudo proponer el orden." }
+  ],
+  "tools": [],
+  "observability": {
+    "metrics": ["motor-propuesta.reflejo.served", "motor-propuesta.reflejo.errors"]
+  }
+}

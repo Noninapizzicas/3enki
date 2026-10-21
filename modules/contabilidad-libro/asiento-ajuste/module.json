@@ -1,0 +1,34 @@
+{
+  "_doc": "Manifest de libro/asiento-ajuste — PUENTE (B5, hoja del plan). El CAMINO por el que la correccion del ASESOR entra al libro SIN BORRAR: un ajuste no edita el asiento equivocado, AÑADE el asiento de correccion y deja el original (traza intacta; borra_original:false). Frontera: da forma al ajuste y ANUNCIA contabilidad.ajuste_entrado; quien ESCRIBE el libro es B2 (escritor-diario) y quien apila la traza es B4 (traza-asiento) — ellos ESCUCHAN el hecho. El puente NO toca el libro (respeta el single-writer): no sube asentar.request directo porque B2 ya reacciona al hecho (subirlo duplicaria el asiento). Sin asiento no hay ajuste. NO persiste. RPC entrar es CLASE ORDEN → SÍ lleva ui_handler. Publica asiento-ajuste.entrar.response y su par .failed ademas del hecho contabilidad.ajuste_entrado.",
+  "name": "asiento-ajuste",
+  "version": "0.1.0",
+  "description": "Puente (B5): la correccion del asesor entra al libro sin borrar. Da forma al ajuste y anuncia contabilidad.ajuste_entrado; el libro lo escribe B2.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "asiento-ajuste.entrar.request",
+      "handler": "onEntrarRequest",
+      "description": "RPC puente (ORDEN, panel): {project_id, asiento{lineas,...}, referencia?, motivo?, por?} → {project_id, ajuste, asiento, referencia, por, escritores:[escritor-diario,traza-asiento], abierto}. Da forma al ajuste (no lo asienta) y publica contabilidad.ajuste_entrado; sin asiento → INVALID_INPUT. Responde por asiento-ajuste.entrar.response. Payload invalido → asiento-ajuste.entrar.failed."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "contabilidad.ajuste_entrado",
+      "description": "Fire-and-forget (B5): la correccion del asesor entro al dominio → {project_id, ajuste, asiento, por, referencia}. Lo consumen escritor-diario (B2, lo asienta) y traza-asiento (B4, apila la traza)."
+    },
+    {
+      "event": "asiento-ajuste.entrar.response",
+      "description": "Respuesta RPC correlada de la op entrar."
+    },
+    {
+      "event": "asiento-ajuste.entrar.failed",
+      "description": "Par de fallo determinista: falta project_id o asiento → {status, code, message}. Cierra el circulo de entrar.request."
+    }
+  ],
+  "tools": [
+    { "name": "asiento-ajuste.entrar", "description": "Entra (ORDEN) un ajuste del asesor al dominio y anuncia contabilidad.ajuste_entrado." }
+  ],
+  "ui_handlers": [
+    { "domain": "contabilidad", "action": "asiento-ajuste.entrar", "handler": "onEntrarRequest", "type": "system_panel", "zone": "lateral_derecha" }
+  ]
+}

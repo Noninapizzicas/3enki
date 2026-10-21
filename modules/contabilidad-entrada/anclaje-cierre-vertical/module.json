@@ -1,0 +1,58 @@
+{
+  "_doc": "Manifest de entrada/anclaje-cierre-vertical — CUSTODIO CON PERSISTENCIA (A14, hoja del plan). La PARCELA declarable POR VERTICAL de QUE ES 'un cierre' y COMO se identifica. UN escritor. Un cierre no se adivina: cada vertical declara su anclaje (campo/valor que marca el cierre y/o componentes de su clave natural). SIN anclaje declarado, `anclar` devuelve es_cierre:false y `abierto` (el sistema pregunta; NO estima) y SUBE una peticion best-effort a cola-declaraciones-criterio.fijar.request (sin suplantar al JEFE). `anclar` calcula la clave natural de la senal (clave-natural M3, por EVENTO, best-effort) y contrasta con el anclaje. UN escritor (guard rol ANCLAJE_CIERRE; segundo escritor → 403). No se borra: re-declarar appendea al historial. Persiste por proyecto via PosPersistencia (_shared/pos-persistencia, storage /contabilidad/anclaje-cierre-vertical), restaura en project.activated y vuelca en onUnload. Proyecciones _anclar (PREGUNTA, por el bus) y _declarar (ORDEN, panel). Publica contabilidad.anclaje_cierre_declarado (+ pares *.failed). ESCUCHA contabilidad.criterio_fijado (emitido por cola-declaraciones-criterio K9).",
+  "name": "anclaje-cierre-vertical",
+  "version": "0.1.0",
+  "description": "Custodio (A14): parcela declarable por vertical de que es 'un cierre' y como se identifica; sin anclaje no hay cierre (el sistema pregunta). Persistente por proyecto.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "anclaje-cierre-vertical.anclar.request",
+      "handler": "onAnclarRequest",
+      "description": "RPC custodio (PREGUNTA, por el bus): {project_id, vertical, senal} → {project_id, vertical, es_cierre, anclaje_declarado, clave_senal}. Contrasta la senal con el anclaje declarado de la vertical. Sin anclaje → es_cierre:false y abierto:true (no estima). Responde por anclaje-cierre-vertical.anclar.response; payload invalido → anclaje-cierre-vertical.anclar.failed."
+    },
+    {
+      "event": "anclaje-cierre-vertical.declarar.request",
+      "handler": "onDeclararRequest",
+      "description": "RPC custodio (ORDEN, panel): {project_id, rol:'ANCLAJE_CIERRE', vertical, anclaje{campo?, valor?, componentes?, descripcion?}} → {project_id, vertical, anclaje, declarado}. Guard de escritor (solo ANCLAJE_CIERRE; otro rol → PERMISSION_DENIED). Declara que es 'un cierre' para la vertical. Publica contabilidad.anclaje_cierre_declarado y responde por anclaje-cierre-vertical.declarar.response. Payload/rol invalido → anclaje-cierre-vertical.declarar.failed."
+    },
+    {
+      "event": "contabilidad.criterio_fijado",
+      "handler": "onCriterioFijado",
+      "description": "Fire-and-forget (lo emite cola-declaraciones-criterio K9): el JEFE fijo un criterio → si es de cierre/anclaje, se toma constancia en la parcela. No responde (no es RPC)."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Restaura los anclajes de cierre del proyecto activado desde el storage (PosPersistencia)."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "contabilidad.anclaje_cierre_declarado",
+      "description": "Fire-and-forget (A14): una vertical declaro su anclaje de cierre → {project_id, vertical, anclaje, declarado}. Lo consumen los modulos que necesitan saber que es 'un cierre' por vertical."
+    },
+    {
+      "event": "anclaje-cierre-vertical.anclar.response",
+      "description": "Respuesta RPC correlada de la op anclar (PREGUNTA)."
+    },
+    {
+      "event": "anclaje-cierre-vertical.anclar.failed",
+      "description": "Par de fallo determinista: falta project_id/vertical o senal → {status, code, message}. Cierra el circulo de anclar.request."
+    },
+    {
+      "event": "anclaje-cierre-vertical.declarar.response",
+      "description": "Respuesta RPC correlada de la op declarar (ORDEN)."
+    },
+    {
+      "event": "anclaje-cierre-vertical.declarar.failed",
+      "description": "Par de fallo determinista: rol != ANCLAJE_CIERRE, falta vertical o anclaje invalido → {status, code, message}. Cierra el circulo de declarar.request."
+    }
+  ],
+  "tools": [
+    { "name": "anclaje-cierre-vertical.anclar", "description": "Decide (PREGUNTA) si una senal es un cierre segun el anclaje declarado de la vertical." },
+    { "name": "anclaje-cierre-vertical.declarar", "description": "Declara (ORDEN) que es 'un cierre' y como se identifica para una vertical." }
+  ],
+  "ui_handlers": [
+    { "domain": "contabilidad", "action": "anclaje-cierre-vertical.declarar", "handler": "onDeclararRequest", "type": "system_panel", "zone": "lateral_derecha" }
+  ]
+}

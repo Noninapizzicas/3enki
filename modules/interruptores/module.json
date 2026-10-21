@@ -27,6 +27,11 @@
       "event": "interruptor.set",
       "handler": "onSetRequest",
       "description": "Canal del EFECTOR: un órgano (p.ej. homeostasis) pulsa un interruptor por el bus {id, enabled, motivo?}. Mismo camino que la UI: persiste + emite interruptor.cambiado (con motivo como testigo)."
+    },
+    {
+      "event": "interruptores.estado.request",
+      "handler": "onEstadoRequest",
+      "description": "RPC: consulta el estado de UN interruptor {id}. Responde {id, estado:'on'|'off'} correlado por request_id. Lo usa el cajón de la sonda (egress consciente) antes de salir a internet."
     }
   ],
 

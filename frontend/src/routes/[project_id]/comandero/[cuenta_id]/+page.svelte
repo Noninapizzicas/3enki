@@ -10,7 +10,7 @@
    */
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
-  import { activeProjectId } from '$lib/stores/projects';
+  import { sessionProjectId } from '$lib/stores/sessionProject';
   import { ComanderoScreen } from '$lib/components/comandero';
 
   // URL param — puede ser alias corto, se usa para rutas
@@ -22,7 +22,7 @@
   $: isNew = $page.url.searchParams.get('new') === '1';
 
   // Para datos, usar el UUID real del store global
-  $: projectId = $activeProjectId || urlProjectId;
+  $: projectId = $sessionProjectId || urlProjectId;
 
   function handleNavigate(path: string) {
     // Si es pedido llevadoo y quiere volver a la lista, ir a /llevadoo

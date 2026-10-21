@@ -1,0 +1,9 @@
+{
+  "id": "agenda-operacion",
+  "name": "Agenda",
+  "version": "0.1.0",
+  "zone": "work-bar",
+  "order": 16,
+  "icon": "📅",
+  "label": "Agenda"
+}

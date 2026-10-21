@@ -1,6 +1,7 @@
 {
   "name": "filesystem",
-  "version": "2.4.0",
+  "version": "2.5.0",
+  "_v2_5_nota": "v2.5.0 (2026-10-15): IDENTIDAD DE CARRIL (UUID **o** slug) + fin del adivino. projectPaths se indexa bajo TODAS las caras del proyecto (UUID, slug del nombre, basename de base_path) y se HIDRATA al onLoad con project.list.request — antes solo lo poblaba project.activated, así que tras un hot-reload nacía vacío y todo id caía al carril activo. project_id desconocido ya NO se resuelve contra el activo: autocura desde disco (data/projects/<id>) y, si no hay carril real, falla CLARO con INVALID_INPUT/unknown_project. Ausente sigue siendo retrocompat (carril activo). Sonda en vivo 15-oct: slug 'nonina' + /Paco.json false→true; id inventado true→INVALID_INPUT; UUIDs intactos.",
   "_v2_4_nota": "v2.4.0 (2026-07-16): POSICIÓN 2 — EL TRADUCTOR (camino canónico). El dato de dominio tiene DUEÑO; se cambia emitiendo la PALABRA (evento) que el dueño aliñó en su contrato, no forjando su fichero. NO es una reja: es COMUNICACIÓN. Un dueño DECLARA en su manifest: \"datos_de_dominio\": { \"posee\": [\"/pizzepos/recetas.json\"], \"palabras\": [{ \"palabra\": \"escandallo.coste.calculado\", \"para\": \"persistir el coste de una receta\" }] }. El FS lo lee al escanear manifests (no conoce a recetas — lee lo que recetas declare). Cuando un NO-dueño (source.module ≠ dueño) escribe/edita esa ruta, el FS no castiga: le TIENDE la palabra compartida (409 CANONICAL_PATH en positivo, apunta a detalle_capacidad). Escalera off→observe→enforce como el ejecutor: nace en OBSERVE (emite fs.escritura.ajena + métrica, NO bloquea — seguro en caliente); enforce = interruptor 'fs-camino-canonico' ON (decisión consciente del dueño). El dueño escribiendo lo suyo pasa; ruta sin dueño = no-op. Complementa 1 (nacimiento) + 3 (red). Test: filesystem (observe canta y permite · enforce bloquea+traduce · dueño pasa · ruta ajena · interruptor hot-switch).",
   "_v2_3_nota": "v2.3.0 (2026-07-16): POSICIÓN 3 — snapshot-antes-de-sobrescribir (la RED). Toda fs.write/fs.edit sobre un fichero que YA existe vuelca sus bytes previos a un anillo <dir>/.versions/<base>/<timestamp>.bak ANTES de escribir (últimas 10, best-effort). La destructividad se vuelve REVERSIBLE por construcción: aunque el caller trunque el fichero (incidente the-pirate: recetas.json 26→1 recetas), el previo queda recuperable. Cierra de raíz la clase 'salmorejo/recetas perdido' que fs.edit (opcional) no evitó — lo opcional es consejo, no freno. Best-effort: si el snapshot falla, se avisa (métrica filesystem.snapshot.failed) pero la escritura NO se bloquea. Parte de una defensa en 3 posiciones: (1) NACIMIENTO — fs.write fuera de GLOBAL_TOOLS del ai-gateway, no nace en páginas de dominio; (2) CAMINO CANÓNICO — freno de propiedad que apunta al evento del dueño (pendiente); (3) esta RED. Test: filesystem (snapshot del previo · nuevo sin snapshot · anillo a 10 · edit también).",
   "_v2_2_nota": "v2.2.0 (2026-06-22): + API HTTP GET /modules/filesystem/file?path=&project= (handleServeFile) que SIRVE imágenes del storage del proyecto (binario + content-type). Resuelve de raíz que las imágenes de producto (/pizzepos/contenido/imagenes/...) no tenían URL HTTP → 404 en el frontend Enki (gestor de imágenes, carta digital, preview) y obligaba a copiar/inlinear en el bundle. SEGURIDAD: solo extensiones de imagen (no expone JSON/datos sensibles); validatePath aplica el guard de traversal + raíz de proyecto. La caché del gateway está OFF por defecto y la compresión salta imágenes → seguro devolver body+headers. El frontend usa esta URL (cacheable) con fallback a data: URI vía fs.read durante el rollout.",
@@ -51,6 +52,30 @@
         "type": "object",
         "properties": { "path": { "type": "string", "description": "Ruta del archivo" } },
         "required": ["path"]
+      },
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "PERMISSION_DENIED", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "fs.list_modules",
+      "description": "SOLO LECTURA. Lista los MÓDULOS del sistema (modules/): nombres de directorio de los módulos instalados (cada uno con su module.json/index.js). Sirve para VERIFICAR que un agente construyó un módulo (ej. tras invocar construir-modulos). No expone escritura — solo lectura de la lista.",
+      "handler": "handleListModules",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      },
+      "errores_conocidos": ["RESOURCE_NOT_FOUND", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "fs.read_module",
+      "description": "SOLO LECTURA. Lee un archivo de un MÓDULO del sistema (modules/): ruta relativa al módulo, ej. {module: 'config', file: 'index.js'} o {module: 'config', file: 'module.json'}. Sirve para VERIFICAR el contenido de un módulo que un agente construyó. Solo lectura — no escribe ni edita nada del sistema.",
+      "handler": "handleReadModule",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "module": { "type": "string", "description": "Nombre del módulo (directorio en modules/)" },
+          "file": { "type": "string", "description": "Archivo relativo al módulo (ej. index.js, module.json)", "default": "index.js" }
+        },
+        "required": ["module"]
       },
       "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "PERMISSION_DENIED", "UNKNOWN_ERROR"]
     },
@@ -263,16 +288,20 @@
       "archivo.borrado",
       "archivo.listar.fallido",
       "archivo.leer.fallido",
-      "archivo.borrar.fallido"
+      "archivo.borrar.fallido",
+      "project.list.request"
     ],
     "subscribes": [
       { "event": "interruptor.cambiado",       "handler": "onInterruptorCambiado", "description": "Posición 2: 'fs-camino-canonico' ON → enforce (bloquea+traduce escritura ajena); OFF → observe (solo canta)." },
       { "event": "project.activated",          "handler": "onProjectActivated" },
       { "event": "project.deactivated",        "handler": "onProjectDeactivated" },
+      { "event": "project.list.response",      "handler": "onProjectListResponse", "description": "Hidratación de carriles al onLoad: indexa UUID + slug + basename de base_path desde la fuente de verdad (project-manager)." },
       { "event": "archivo.listar.solicitado",  "handler": "onArchivoListarSolicitado" },
       { "event": "archivo.leer.solicitado",    "handler": "onArchivoLeerSolicitado" },
       { "event": "archivo.borrar.solicitado",  "handler": "onArchivoBorrarSolicitado" },
       { "event": "fs.read.request",            "handler": "onReadRequest" },
+      { "event": "fs.list_modules.request",    "handler": "onListModulesRequest" },
+      { "event": "fs.read_module.request",     "handler": "onReadModuleRequest" },
       { "event": "fs.write.request",            "handler": "onWriteRequest" },
       { "event": "fs.write.commit.request",    "handler": "onWriteRequest" },
       { "event": "fs.edit.request",            "handler": "onEditRequest" },

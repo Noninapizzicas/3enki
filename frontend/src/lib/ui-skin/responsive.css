@@ -1,0 +1,88 @@
+/* L8 — Responsive
+   Breakpoints, fluid type, container queries, touch targets.
+   Depende de: L1 (escalas), L3 (layout), L4 (tipografía). */
+
+:root {
+  --bp-sm:  640px;
+  --bp-md:  768px;
+  --bp-lg:  1024px;
+  --bp-xl:  1280px;
+  --bp-2xl: 1536px;
+}
+
+
+/* ── Fluid type: interpola entre extremos de la escala L1 ── */
+
+.fluid-body {
+  font-size: clamp(var(--fs-sm), 2.5vw, var(--fs-base));
+}
+
+.fluid-h1 {
+  font-size: clamp(var(--fs-xl), 5vw, var(--fs-3xl));
+}
+
+.fluid-h2 {
+  font-size: clamp(var(--fs-lg), 4vw, var(--fs-2xl));
+}
+
+.fluid-h3 {
+  font-size: clamp(var(--fs-md), 3vw, var(--fs-xl));
+}
+
+
+/* ── Fluid spacing ── */
+
+.fluid-padding {
+  padding: clamp(var(--sp-3), 4vw, var(--sp-8));
+}
+
+.fluid-gap {
+  gap: clamp(var(--sp-2), 2vw, var(--sp-6));
+}
+
+
+/* ── Touch targets: mínimo 44×44 (WCAG 2.5.5 AAA) ── */
+
+.touch-target {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+
+/* ── Container query support ── */
+
+.container-inline {
+  container-type: inline-size;
+}
+
+.container-named {
+  container-type: inline-size;
+  container-name: var(--container-name, content);
+}
+
+
+/* ── Responsive visibility helpers ── */
+
+@media (max-width: 639px) {
+  .hide-below-sm { display: none !important; }
+}
+
+@media (max-width: 767px) {
+  .hide-below-md { display: none !important; }
+}
+
+@media (max-width: 1023px) {
+  .hide-below-lg { display: none !important; }
+}
+
+@media (min-width: 640px) {
+  .hide-above-sm { display: none !important; }
+}
+
+@media (min-width: 768px) {
+  .hide-above-md { display: none !important; }
+}
+
+@media (min-width: 1024px) {
+  .hide-above-lg { display: none !important; }
+}

@@ -1,0 +1,69 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "hecho-rectificativo",
+  "version": "blueprint-2.0.0",
+  "moduleId": "contabilidad",
+  "titulo": "Hecho rectificativo",
+  "_doc": "Blueprint v2 de INTERFAZ del módulo contabilidad/hecho-rectificativo (F6½). Declara la sección `ui` para el BlueprintForm (patrón interfaz-dinamico). Conecta el hecho POSTERIOR que corrige/anula uno ANTERIOR por CLAVE NATURAL. NO borra: AÑADE. El pasado no se reescribe: el rectificativo APUNTA al original por su clave natural. PUENTE stateless. Las acciones van DOTTED ('<modulo>.<accion>') y el transporte.rpc va VACÍO: el RPC real es contabilidad.<accion>.request (domain 'contabilidad', action '<modulo>.<accion>' en ui_handlers) y la regex de deriveZones solo parsea acciones de 2 segmentos; el wrapper mqttRequest('contabilidad','<modulo>.<accion>') emite ui/request/contabilidad/<modulo>.<accion>, que casa con el ui_handler. Los args salen de los parámetros REALES del handler en index.js.",
+  "eventos_publicados": [
+    "contabilidad.hecho_rectificado",
+    "clave-natural.calcular.request"
+  ],
+  "eventos_que_escucho": [
+    "hecho-rectificativo.emparejar.response"
+  ],
+  "transporte": {
+    "rpc": [],
+    "salida": [
+      "contabilidad.hecho_rectificado",
+      "clave-natural.calcular.request"
+    ],
+    "qos": "publishAndWait (request/response correlado) vía ui/request/contabilidad/<modulo>.<accion>; timeout del panel 10s. transporte.rpc vacío a propósito (acciones DOTTED)."
+  },
+  "ui": {
+    "_doc": "Panel de la cara humana de hecho-rectificativo: la op de ESCRITURA (ORDEN) del módulo, con sus args reales. El BlueprintForm la invoca por ui/request/contabilidad/<accion>.",
+    "ops": {
+      "hecho-rectificativo.emparejar": {
+        "titulo": "Emparejar un hecho rectificativo",
+        "descripcion": "Une el hecho posterior con el anterior por su clave natural y lo declara como corrección (CORRIGE|ANULA). El original NO se edita ni se borra. Sin clave natural no se empareja. Anuncia contabilidad.hecho_rectificado (lo asienta el escritor-diario).",
+        "rol": "asesor",
+        "forma": "editor-bloque (hecho json + clave + accion)",
+        "senal_pareada": "contabilidad.hecho_rectificado",
+        "args": [
+          {
+            "nombre": "hecho",
+            "tipo": "json",
+            "required": true,
+            "descripcion": "El hecho rectificativo (objeto)."
+          },
+          {
+            "nombre": "clave",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Clave natural del hecho anterior al que corrige."
+          },
+          {
+            "nombre": "accion",
+            "tipo": "select",
+            "required": false,
+            "descripcion": "Tipo de rectificación.",
+            "enum": [
+              "CORRIGE",
+              "ANULA"
+            ]
+          },
+          {
+            "nombre": "en",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Marca temporal declarada."
+          }
+        ],
+        "errores": "400 INVALID_INPUT (sin hecho)"
+      }
+    },
+    "roles": {
+      "hecho-rectificativo.emparejar": "asesor"
+    }
+  }
+}

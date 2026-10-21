@@ -1,0 +1,76 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "presupuesto",
+  "version": "blueprint-2.0.0",
+  "moduleId": "contabilidad",
+  "titulo": "Presupuesto",
+  "_doc": "Blueprint v2 de INTERFAZ del módulo contabilidad/presupuesto (F6½). Panel del custodio J3: la op de ESCRITURA (ORDEN) `fijar`, donde el jefe/asesor fija la CIFRA OBJETIVO por dimensión declarable (dimension · periodo · importe). El objetivo NO se estima: sin cifra declarada queda [ABIERTO]. Un solo escritor (rol PRESUPUESTO; otro → 403). APPEND-ONLY. Publica contabilidad.presupuesto_fijado. La op `objetivo` es PREGUNTA (sin ui_handler). Acciones DOTTED, transporte.rpc VACÍO. Args del handler REAL (index.js).",
+  "eventos_publicados": [
+    "contabilidad.presupuesto_fijado"
+  ],
+  "eventos_que_escucho": [
+    "presupuesto.fijar.response"
+  ],
+  "transporte": {
+    "entrada": "reflejo RPC via ui_handlers (module.json) — las ops se conducen por ui/request/contabilidad/<accion>. transporte.rpc vacio a proposito.",
+    "rpc": [],
+    "salida": [
+      "contabilidad.presupuesto_fijado"
+    ],
+    "qos": "publishAndWait (request/response correlado) en cada operacion; timeout 8s"
+  },
+  "ui": {
+    "_doc": "Panel de la cara humana de presupuesto: la(s) op(s) de ESCRITURA (ORDEN) del módulo, con sus args reales. El BlueprintForm la invoca por ui/request/contabilidad/<accion>.",
+    "ops": {
+      "presupuesto.fijar": {
+        "titulo": "Fijar la cifra objetivo",
+        "descripcion": "Fija la cifra objetivo por dimensión (rol PRESUPUESTO; otro rol → 403). Sin importe → el objetivo queda [ABIERTO] (el sistema pregunta, no decide). Publica contabilidad.presupuesto_fijado.",
+        "rol": "jefe",
+        "forma": "editor-bloque (project_id/rol/dimension/periodo/importe/moneda)",
+        "senal_pareada": "contabilidad.presupuesto_fijado",
+        "args": [
+          {
+            "nombre": "project_id",
+            "tipo": "text",
+            "required": true,
+            "descripcion": "Proyecto."
+          },
+          {
+            "nombre": "rol",
+            "tipo": "text",
+            "required": true,
+            "descripcion": "Rol escritor (debe ser 'PRESUPUESTO')."
+          },
+          {
+            "nombre": "dimension",
+            "tipo": "text",
+            "required": true,
+            "descripcion": "Dimensión del objetivo."
+          },
+          {
+            "nombre": "periodo",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Periodo del objetivo."
+          },
+          {
+            "nombre": "importe",
+            "tipo": "number",
+            "required": false,
+            "descripcion": "Cifra objetivo; ausente → queda [ABIERTO]."
+          },
+          {
+            "nombre": "moneda",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Moneda declarada del importe."
+          }
+        ],
+        "errores": "403 PERMISSION_DENIED (rol != PRESUPUESTO) · 400 INVALID_INPUT (sin project_id o dimension)"
+      }
+    },
+    "roles": {
+      "presupuesto.fijar": "jefe"
+    }
+  }
+}

@@ -54,7 +54,7 @@ export interface ItemCocina {
   device_id?: string;
   device_color?: string;
   device_nombre?: string;
-  // Sistema de pases: 0=general, 1=horno, 2=listo
+  // Sistema de pases: 0=general, pase++ al avanzar, listo al terminar
   pase: number;
 }
 
@@ -137,7 +137,7 @@ export interface CocinaState {
   myNombre: string | null;
   myEstacion: string | null;
   filtrosActivos: string[]; // familias/categorías activas (vacío = todo)
-  tipoEstacion: string; // tipo de estación: 'general', 'horno', 'montaje', etc.
+  tipoEstacion: string; // tipo de estación: 'general', 'montaje', etc.
   tipoEstacionInfo: TipoEstacionInfo | null; // info completa del tipo seleccionado
   tiposDisponibles: TipoEstacionInfo[]; // tipos cargados del backend
   impresora: ImpresoraConfig | null; // impresora asignada a este dispositivo

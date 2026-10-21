@@ -1,0 +1,9 @@
+{
+  "id": "asiento-ajuste",
+  "name": "Asiento de ajuste",
+  "version": "0.1.0",
+  "zone": "system-bar",
+  "order": 90,
+  "icon": "🩹",
+  "label": "Asiento ajuste"
+}

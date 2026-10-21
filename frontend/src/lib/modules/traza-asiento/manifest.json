@@ -1,0 +1,9 @@
+{
+  "id": "traza-asiento",
+  "name": "Traza de asiento",
+  "version": "0.1.0",
+  "zone": "system-bar",
+  "order": 97,
+  "icon": "🧾",
+  "label": "Traza asiento"
+}

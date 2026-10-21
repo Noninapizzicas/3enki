@@ -11,8 +11,9 @@
  *                                              └─re-entrada (mas pedidos)
  *
  * Eventos del bus:
- *   subscribes (8): comandero.{item_agregado, item_eliminado, item_actualizado, enviar_cocina},
- *                   cocina.pedido_listo, cobro.iniciado, cobro.procesado, cuenta.cerrada.
+ *   subscribes (9): comandero.{item_agregado, item_eliminado, item_actualizado, enviar_cocina},
+ *                   cocina.pedido_listo, cobro.iniciado, cobro.procesado,
+ *                   cuenta.cerrada, cuenta.cerrada_forzada.
  *   publishes  (5): cuenta.{creada, actualizada, estado_cambiado, eliminada} + comandero.enviar_cocina
  *                   (este ultimo desde _inyectarPedidoInicial para integraciones delivery).
  *
@@ -312,7 +313,7 @@ class CuentasModule extends BaseModule {
 
     if (this._pagoExterno(cuenta)) return;
 
-    if (['listo', 'entregado'].includes(cuenta.estado)) {
+    if (['listo', 'entregado', 'en_preparacion'].includes(cuenta.estado)) {
       await this._transicionarEstado(cuenta_id, 'para_cobrar', data);
     }
   }
@@ -343,6 +344,33 @@ class CuentasModule extends BaseModule {
     if (this._cerrarAlCobrar(cuenta) === false) return;
 
     await this._cerrarCuentaCobrada(cuenta_id, data);
+  }
+
+  async onCuentaCerradaForzada(event) {
+    const data = this._unwrap(event);
+    const { cuenta_id } = data;
+
+    if (!cuenta_id) return;
+    if (!this.cuentas.has(cuenta_id)) return;
+
+    const cuenta = this.cuentas.get(cuenta_id);
+    this.cuentas.delete(cuenta_id);
+    this._pedidosEnCocina.delete(cuenta_id);
+
+    const pendingTimeout = this._pendingTimeouts.get(cuenta_id);
+    if (pendingTimeout) {
+      clearTimeout(pendingTimeout);
+      this._pendingTimeouts.delete(cuenta_id);
+    }
+
+    if (this._alertaTimers.has(cuenta_id)) {
+      clearTimeout(this._alertaTimers.get(cuenta_id));
+      this._alertaTimers.delete(cuenta_id);
+    }
+
+    await this._publishCuentaEliminada(cuenta?.project_id, cuenta_id, cuenta?.tipo, 'cierre_de_caja', data);
+
+    this.logger.info('cuenta.cerrada_forzada.limpia', { cuenta_id, tipo: cuenta?.tipo, motivo: 'cierre_de_caja' });
   }
 
   async onCuentaExternaCerrada(event) {
@@ -506,6 +534,38 @@ class CuentasModule extends BaseModule {
       return { status: 200, data: { id, deleted: true } };
     } catch (err) {
       return this._handleHandlerError('cuenta.delete.failed', err, 'ui_delete');
+    }
+  }
+
+  async handleCerrarCuentaPagada(data) {
+    try {
+      const { project_id, id } = data || {};
+      if (!id) {
+        this._logError('cuenta.cerrar_pagada.validation_failed', { missing: 'id' }, 'ui_cerrar_pagada', 'INVALID_INPUT');
+        return this._errorResponse(400, 'INVALID_INPUT', 'id es requerido', { field: 'id' });
+      }
+      const cuenta = this.cuentas.get(id);
+      if (!cuenta || (project_id && cuenta.project_id !== project_id)) {
+        this._logError('cuenta.cerrar_pagada.not_found', { id, project_id }, 'ui_cerrar_pagada', 'RESOURCE_NOT_FOUND');
+        return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Cuenta ${id} no encontrada`, {
+          entity_type: 'cuenta', entity_id: id
+        });
+      }
+
+      // Solo cierra cuentas ya pagadas. Evita cerrar en falso una cuenta sin cobrar.
+      if (!cuenta.pagado) {
+        this._logError('cuenta.cerrar_pagada.no_pagada', { id, estado: cuenta.estado }, 'ui_cerrar_pagada', 'CONFLICT_STATE');
+        return this._errorResponse(409, 'CONFLICT_STATE',
+          `La cuenta no esta pagada (estado: ${cuenta.estado}). Cobra primero para cerrarla.`,
+          { current_state: cuenta.estado });
+      }
+
+      await this._cerrarCuentaCobrada(id, data);
+      this.logger.info('cuenta.cerrada_pagada', { cuenta_id: id, estado: cuenta.estado });
+
+      return { status: 200, data: { id, estado: 'cobrado' } };
+    } catch (err) {
+      return this._handleHandlerError('cuenta.cerrar_pagada.failed', err, 'ui_cerrar_pagada');
     }
   }
 

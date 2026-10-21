@@ -1,0 +1,9 @@
+{
+  "id": "ratificacion-regla-aprendida",
+  "name": "Ratificación de regla aprendida",
+  "version": "0.1.0",
+  "zone": "system-bar",
+  "order": 95,
+  "icon": "⚖️",
+  "label": "Ratificar regla"
+}

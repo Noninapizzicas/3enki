@@ -112,6 +112,20 @@ class InterruptoresModule extends BaseModule {
     return this.handleSet({ id: d.id, enabled: !!d.enabled, motivo: d.motivo });
   }
 
+  // ── RPC: consultar el estado de UN interruptor (canonico del contrato radar:
+  // el cajón de la sonda consulta 'interruptores.estado.request' {id} antes del egress).
+  // Correla la response por request_id, igual que el resto de RPC del bus.
+  async onEstadoRequest(event) {
+    const d = (event && event.data) || event || {};
+    const t = d.id ? this.toggles.get(d.id) : null;
+    const result = t
+      ? { status: 200, data: { id: t.id, estado: t.estado ? 'on' : 'off' } }
+      : this._errorResponse(404, 'RESOURCE_NOT_FOUND', `interruptor '${d.id}' no registrado`, { id: d.id });
+    this.eventBus.publish('interruptores.estado.response', { request_id: d.request_id, ...result });
+    this.metrics?.increment('interruptores.estado.servido', { id: d.id });
+    return result;
+  }
+
   // ── UI: pulsar uno -> persiste + avisa al dueño ──
   async handleSet(data) {
     try {

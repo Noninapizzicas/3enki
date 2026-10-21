@@ -1,0 +1,9 @@
+{
+  "id": "acuse-presentacion",
+  "name": "Acuse de presentación",
+  "version": "0.1.0",
+  "zone": "system-bar",
+  "order": 102,
+  "icon": "📮",
+  "label": "Acuse present."
+}

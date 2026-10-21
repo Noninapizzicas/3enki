@@ -1,0 +1,41 @@
+{
+  "_doc": "Manifest de analitica/tablero-margen-dimension — REFLEJO STATELESS (J10, hoja del plan). El CRUCE margen x DIMENSION bajo LENTE DE CONJUNTO: por centro, familia o sociedad. NO calcula el margen (eso es margen-analitico H2, al que SUBE por EVENTO): AGREGA el margen YA calculado por cada dimension declarada y compone el tablero. Invariante: dato ausente = desconocido (sin margen no se compone tablero → ABIERTO); la dimension es DATO declarable, no una lista cableada de negocio. ESCUCHA contabilidad.asiento_asentado (escritor-diario B2) y contabilidad.criterio_fijado (cola-declaraciones-criterio) — ambos emisores YA existen → SI se declaran. RPC cruzar es CLASE PREGUNTA → sin ui_handler. STATELESS: sin PosPersistencia.",
+  "name": "tablero-margen-dimension",
+  "version": "0.1.0",
+  "description": "Reflejo (J10): cruza el margen por dimension (centro/familia/sociedad) bajo lente de conjunto; agrega, no recalcula.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "tablero-margen-dimension.cruzar.request",
+      "handler": "onCruzarRequest",
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id, filas?/periodo?/ejercicio?, dimensiones?/dimension?} → {project_id, dimensiones, tablero, total_filas, fuente_margen, abierto}. Agrega el margen (declarado o de margen-analitico) por cada dimension. Responde por tablero-margen-dimension.cruzar.response; payload invalido → tablero-margen-dimension.cruzar.failed."
+    },
+    {
+      "event": "contabilidad.asiento_asentado",
+      "handler": "onAsientoAsentado",
+      "description": "Señal (fire-and-forget) de escritor-diario B2: el libro cambio → se observa (ventana acotada) para el tablero."
+    },
+    {
+      "event": "contabilidad.criterio_fijado",
+      "handler": "onCriterioFijado",
+      "description": "Señal (fire-and-forget) de cola-declaraciones-criterio: se fijo un criterio → se observa (ventana acotada)."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "margen-analitico.calcular.request",
+      "description": "Subida (REQUEST por EVENTO) a H2: el margen ya calculado por fila. TableroMargenDimension NO lo calcula; lo AGREGA."
+    },
+    {
+      "event": "tablero-margen-dimension.cruzar.response",
+      "description": "Respuesta RPC correlada de la op cruzar (una sola cara: el bus)."
+    },
+    {
+      "event": "tablero-margen-dimension.cruzar.failed",
+      "description": "Par de fallo determinista: falta project_id o dimensiones → {status, code, message}. Cierra el circulo de cruzar.request."
+    }
+  ],
+  "tools": [
+    { "name": "tablero-margen-dimension.cruzar", "description": "Cruza (PREGUNTA) el margen por dimension (centro/familia/sociedad) agregando lo ya calculado." }
+  ]
+}

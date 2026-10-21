@@ -1,0 +1,102 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "rectificacion-declaracion",
+  "version": "blueprint-2.0.0",
+  "moduleId": "contabilidad",
+  "titulo": "Rectificación de declaración",
+  "_doc": "Blueprint v2 de INTERFAZ del módulo contabilidad/rectificacion-declaracion (F6½). Declara la sección `ui` para el BlueprintForm (patrón interfaz-dinamico). EL CAMINO DE CORRECCIÓN POSTERIOR A LA PRESENTACIÓN (complementaria/sustitutiva). UN SOLO ESCRITOR (rol RECTIFICACION_DECLARACION; otro → 403). APPEND-ONLY: rectificar = AÑADIR, la declaración ORIGINAL queda INTACTA. Idempotente por clave. Persistente por proyecto. Las acciones van DOTTED ('<modulo>.<accion>') y el transporte.rpc va VACÍO: el RPC real es contabilidad.<accion>.request (domain 'contabilidad', action 'rectificacion-declaracion.rectificar' en ui_handlers) y la regex de deriveZones solo parsea acciones de 2 segmentos; el wrapper mqttRequest('contabilidad','rectificacion-declaracion.rectificar') emite ui/request/contabilidad/rectificacion-declaracion.rectificar, que casa con el ui_handler. Los args salen de los parámetros REALES del handler en index.js.",
+  "eventos_publicados": [
+    "contabilidad.declaracion_rectificada",
+    "estado-presentacion-fiscal.avanzar.request"
+  ],
+  "eventos_que_escucho": [
+    "rectificacion-declaracion.rectificar.response"
+  ],
+  "transporte": {
+    "rpc": [],
+    "salida": [
+      "contabilidad.declaracion_rectificada",
+      "estado-presentacion-fiscal.avanzar.request"
+    ],
+    "qos": "publishAndWait (request/response correlado) vía ui/request/contabilidad/rectificacion-declaracion.rectificar; timeout del panel 10s. transporte.rpc vacío a propósito (acciones DOTTED)."
+  },
+  "ui": {
+    "_doc": "Panel de la cara humana de rectificacion-declaracion: la op de ESCRITURA (ORDEN) del módulo, con sus args reales. El BlueprintForm la invoca por ui/request/contabilidad/rectificacion-declaracion.rectificar.",
+    "ops": {
+      "rectificacion-declaracion.rectificar": {
+        "titulo": "Rectificar una declaración ya presentada",
+        "descripcion": "Rectifica (ORDEN) una declaración ya presentada, APILANDO una corrección; la declaración original NUNCA se edita ni se borra (append-only). Sin declaración original o sin motivo NO se rectifica (dato ausente = desconocido). Idempotente por clave (duplicado:true). Guard de un solo escritor (otro rol → 403). Anuncia contabilidad.declaracion_rectificada y sube estado-presentacion-fiscal.avanzar.request.",
+        "rol": "asesor",
+        "forma": "editor-bloque (declaración + motivo + tipo + corrección)",
+        "senal_pareada": "contabilidad.declaracion_rectificada (+ subida estado-presentacion-fiscal.avanzar.request)",
+        "args": [
+          {
+            "nombre": "declaracion",
+            "tipo": "text",
+            "required": true,
+            "descripcion": "La declaración ORIGINAL a corregir (id/modelo). Nunca se edita: la rectificación es un registro NUEVO."
+          },
+          {
+            "nombre": "motivo",
+            "tipo": "text",
+            "required": true,
+            "descripcion": "Causa de la corrección (una corrección sin causa miente): sin motivo no se rectifica."
+          },
+          {
+            "nombre": "tipo",
+            "tipo": "select",
+            "required": false,
+            "descripcion": "Tipo de rectificación: complementaria (añade) o sustitutiva (reemplaza). Por defecto, complementaria.",
+            "enum": [
+              "complementaria",
+              "sustitutiva"
+            ]
+          },
+          {
+            "nombre": "periodo",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Periodo al que aplica la rectificación."
+          },
+          {
+            "nombre": "clave",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Clave de idempotencia (si se omite, se deriva de declaración+tipo+periodo+motivo)."
+          },
+          {
+            "nombre": "correccion",
+            "tipo": "json",
+            "required": false,
+            "descripcion": "Detalle de lo que cambia (objeto). Ausente = null (se anota el hueco, no se inventa)."
+          },
+          {
+            "nombre": "base",
+            "tipo": "number",
+            "required": false,
+            "descripcion": "Base declarada de la rectificación."
+          },
+          {
+            "nombre": "cuota",
+            "tipo": "number",
+            "required": false,
+            "descripcion": "Cuota declarada de la rectificación."
+          },
+          {
+            "nombre": "rol",
+            "tipo": "select",
+            "required": false,
+            "descripcion": "Rol single-writer del guard (RECTIFICACION_DECLARACION). Otro rol → 403.",
+            "enum": [
+              "RECTIFICACION_DECLARACION"
+            ]
+          }
+        ],
+        "errores": "403 PERMISSION_DENIED (rol != RECTIFICACION_DECLARACION) · 400 INVALID_INPUT (sin declaración o sin motivo)"
+      }
+    },
+    "roles": {
+      "rectificacion-declaracion.rectificar": "asesor"
+    }
+  }
+}

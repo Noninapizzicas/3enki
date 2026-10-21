@@ -62,6 +62,49 @@ class DatabaseManagerModule extends BaseModule {
   // Lifecycle
   // ==========================================
 
+
+  // ── IDENTIDAD DE CARRIL (misma doctrina que el filesystem) ──────────────────
+  // `projectPaths` se indexa bajo TODAS las caras del mismo proyecto (UUID · slug · nombre
+  // del directorio): da igual cómo lo llame el caller — el chat manda el slug, el frontend
+  // el UUID. El slug llega EN EL EVENTO (lo emite project-manager): antes cada módulo lo
+  // derivaba por su cuenta, y el que lo calculaba distinto (espacio, acento, rename) no
+  // encontraba nada y acababa escribiendo en el proyecto activo.
+  _carasProyecto(project_id, name, base_path, slug) {
+    const caras = [project_id];
+    if (slug) caras.push(slug);
+    if (base_path) { try { caras.push(path.basename(base_path)); } catch (_) {} }
+    return caras.filter((c, i) => c && caras.indexOf(c) === i);
+  }
+  _indexarCarril(project_id, valor, { name = null, base_path = null, slug = null } = {}) {
+    if (!project_id) return;
+    for (const cara of this._carasProyecto(project_id, name, base_path, slug)) this.projectPaths.set(cara, valor);
+  }
+  _olvidarCarril(project_id, { name = null, base_path = null, slug = null } = {}) {
+    const v = this.projectPaths.get(project_id);
+    for (const cara of this._carasProyecto(project_id, name, base_path, slug)) {
+      if (this.projectPaths.get(cara) === v) this.projectPaths.delete(cara);
+    }
+  }
+  // Se hidrata desde la fuente de verdad al onLoad: tras un hot-reload no llega ningún
+  // project.activated y el mapa nacería con SOLO los activos, sin poder resolver el resto.
+  _hidratarCarriles() {
+    if (!this.eventBus || !this.eventBus.publish) return;
+    this._hidrataCarrilesRequestId = `carriles-${this.name || 'mod'}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    try { this.eventBus.publish('project.list.request', { request_id: this._hidrataCarrilesRequestId }); } catch (_) {}
+  }
+  async onProjectListResponse(event) {
+    const data = event?.data || event?.payload || event;
+    if (!data || data.request_id !== this._hidrataCarrilesRequestId) return;   // respuestas ajenas
+    let n = 0;
+    for (const p of (Array.isArray(data.projects) ? data.projects : [])) {
+      if (!p?.id || !p?.base_path) continue;
+      if (p.metadata?.is_system === true) continue;
+      this._indexarCarril(p.id, { basePath: p.base_path, slug: p.slug || p.name }, { name: p.name, base_path: p.base_path, slug: p.slug });
+      n++;
+    }
+    this.logger?.info?.(`${this.name}.carriles.hidratados`, { carriles: this.projectPaths.size, proyectos: n });
+  }
+
   async onLoad(core) {
     this.logger    = core.logger;
     this.metrics   = core.metrics;
@@ -74,6 +117,8 @@ class DatabaseManagerModule extends BaseModule {
 
     this.projectsPath = path.resolve(this.config.projectsPath || './data/projects');
     await this._ensureProjectsDirectory();
+
+    this._hidratarCarriles();
 
     this.logger.info('database-manager.loaded', {
       projects_path: this.projectsPath
@@ -414,7 +459,7 @@ class DatabaseManagerModule extends BaseModule {
         try { db.close(); } catch (_) {}
         this.databases.delete(projectId);
       }
-      this.projectPaths.delete(projectId);
+      this._olvidarCarril(projectId);
 
       const { dbPath } = await this._resolveDatabasePath(projectId);
 
@@ -639,7 +684,7 @@ class DatabaseManagerModule extends BaseModule {
       if (result.length > 0 && result[0].base_path) {
         const { base_path: basePath, name } = result[0];
         const slug = this._slugify(name) || projectId.slice(0, 8);
-        this.projectPaths.set(projectId, { basePath, slug });
+        this._indexarCarril(projectId, { basePath, slug }, { name, base_path: basePath, slug });
         return {
           projectDir: basePath,
           dbPath: path.join(basePath, 'db', `${slug}.sqlite`),

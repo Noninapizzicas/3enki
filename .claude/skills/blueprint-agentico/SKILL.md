@@ -1,7 +1,28 @@
 ---
 name: blueprint-agentico
-description: Estándar para escribir un blueprint que el LLM ejecuta como AGENTE de fiar. El harness (ai-gateway) da gratis las 3 capas de agencia — MARCO (system prompt) + TOOLS (bus.publish/publishAndWait) + LOOP (iteraciones) — al cablear el manifest. Tú escribes la POLÍTICA: el pseudocódigo de 6 fases CONTRATO → LEER → PENSAR → VALIDAR → GUARDAR → EMITIR, donde LEER/VALIDAR/GUARDAR los hace el REFLEJO (determinista) y PENSAR el LLM (fuzzy), ATADO por un loop validate→corregir contra el contrato. Evolución de blueprint-coherente: añade la VALIDACIÓN como freno (el agente no puede mentir "lo hice") y nombra la elección de FORMA del agente. Referencia viva del fallo que motiva el freno: carta1 (nonina).
-when-to-use: Cuando una operación de blueprint ORQUESTA varios pasos con I/O (leer → pensar → validar → guardar) y el LLM la ejecuta agénticamente sobre el bus; o cuando el PENSAR puede aislarse como transform puro (entonces ver agente-perspectiva-c). Para operaciones simples sin riesgo de salida rota, basta blueprint-coherente. NO toca la capa de agentes del framework (aparcada): el agente aquí es el LLM de página enmarcado por el blueprint.
+description: >-
+  Estándar para escribir un blueprint que el LLM ejecuta como AGENTE de fiar.
+  El harness (ai-gateway) da gratis las 3 capas de agencia — MARCO (system
+  prompt) + TOOLS (bus.publish/publishAndWait) + LOOP (iteraciones) — al
+  cablear el manifest. Tú escribes la POLÍTICA: el pseudocódigo de 6 fases
+  CONTRATO → LEER → PENSAR → VALIDAR → GUARDAR → EMITIR, donde
+  LEER/VALIDAR/GUARDAR los hace el REFLEJO (determinista) y PENSAR el LLM
+  (fuzzy), ATADO por un loop validate→corregir contra el contrato. Evolución
+  de blueprint-coherente: añade la VALIDACIÓN como freno (el agente no puede
+  mentir "lo hice") y nombra la elección de FORMA del agente. Referencia viva
+  del fallo que motiva el freno: carta1 (nonina).
+when-to-use: >-
+  Cuando una operación de blueprint ORQUESTA varios pasos con I/O (leer →
+  pensar → validar → guardar) y el LLM la ejecuta agénticamente sobre el bus;
+  o cuando el PENSAR puede aislarse como transform puro (entonces ver
+  agente-perspectiva-c). Para operaciones simples sin riesgo de salida rota,
+  basta blueprint-coherente. NO toca la capa de agentes del framework
+  (aparcada): el agente aquí es el LLM de página enmarcado por el blueprint.
+fuente: enki
+dominio: metodo
+lente_dominio: prisma
+lente_tarea: escribir-blueprint
+tags: [blueprint, agente, patron, metodo, contrato, validacion, reflejo, fuzzy, bus, ai-gateway]
 ---
 
 # blueprint-agentico

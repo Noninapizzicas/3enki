@@ -6,7 +6,7 @@ fuentes:
   - modules/telegram-service/**
   - modules/text-editor/**
   - modules/pizzepos/tienda-api/**
-verificado: 2026-07-06
+verificado: 2026-10-16
 ---
 
 # GRUPO E — TELEGRAM-SERVICE, TEXT-EDITOR, TIENDA-API, WHATSAPP-BOT
@@ -565,6 +565,16 @@ CLASE Category {
     created_at: String (ISO)
   }
 }
+```
+
+NOTA (2026-10-16) — PAGO DEL PEDIDO DE TIENDA
+```
+handlePedido (POST /tienda/pedido) REENVÍA metodo_pago ('efectivo' | 'tarjeta') dentro del payload
+de pedido.crear-tienda; el que NORMALIZA es pedidos (sin valor → 'efectivo'). tienda-api NO decide
+nada del cobro: solo transporta la preferencia que el cliente marcó en la PWA. Si el pedido llega
+con pago_online, pide igualmente la sesión a pago-gateway (pago.iniciar.request) y devuelve
+checkout_url — es el camino de la PWA alojada (el del bot es su propio _rpc). Ambas rutas acaban en
+la MISMA verdad: pago.confirmado → pedidos.onPagoConfirmado → pedido.pagado.
 ```
 
 ## WHATSAPP-BOT (v2.0.0) — Integración WhatsApp

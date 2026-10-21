@@ -1,0 +1,78 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "aviso-cuadre",
+  "version": "blueprint-2.0.0",
+  "moduleId": "contabilidad",
+  "titulo": "Aviso de cuadre",
+  "_doc": "Blueprint v2 de INTERFAZ del módulo contabilidad/aviso-cuadre (F6½). Panel de la cara humana del puente C6: la op de ESCRITURA (ORDEN) `avisar`, que LEE la métrica única del cuadre (no la recalcula) y, si no cuadra o falta cobertura, anuncia contabilidad.cuadre_no_cuadra y sube motor-avisos.producir.request (K2). Si cuadra y hay cobertura → silencio legítimo. Las acciones van DOTTED y transporte.rpc va VACÍO: el wrapper mqttRequest('contabilidad','<accion>') emite ui/request/contabilidad/<accion>, que casa con el ui_handler. Args del handler REAL (index.js).",
+  "eventos_publicados": [
+    "contabilidad.cuadre_no_cuadra",
+    "motor-avisos.producir.request"
+  ],
+  "eventos_que_escucho": [
+    "aviso-cuadre.avisar.response"
+  ],
+  "transporte": {
+    "entrada": "reflejo RPC via ui_handlers (module.json) — las ops se conducen por ui/request/contabilidad/<accion>. transporte.rpc vacio a proposito.",
+    "rpc": [],
+    "salida": [
+      "contabilidad.cuadre_no_cuadra",
+      "motor-avisos.producir.request"
+    ],
+    "qos": "publishAndWait (request/response correlado) en cada operacion; timeout 8s"
+  },
+  "ui": {
+    "_doc": "Panel de la cara humana de aviso-cuadre: la(s) op(s) de ESCRITURA (ORDEN) del módulo, con sus args reales. El BlueprintForm la invoca por ui/request/contabilidad/<accion>.",
+    "ops": {
+      "aviso-cuadre.avisar": {
+        "titulo": "Avisar del cuadre",
+        "descripcion": "Lee la métrica única del cuadre (cuadra · cobertura · descuadre) y avisa si NO cuadra o FALTA cobertura. No recalcula el cuadre (el juicio vive en su dueño). Publica contabilidad.cuadre_no_cuadra y sube motor-avisos.producir.request.",
+        "rol": "asesor",
+        "forma": "editor-bloque (project_id/cuadre|metrica/cuadra/cobertura/descuadre)",
+        "senal_pareada": "contabilidad.cuadre_no_cuadra (+ motor-avisos.producir.request)",
+        "args": [
+          {
+            "nombre": "project_id",
+            "tipo": "text",
+            "required": true,
+            "descripcion": "Proyecto sobre el que se avisa."
+          },
+          {
+            "nombre": "cuadre",
+            "tipo": "json",
+            "required": false,
+            "descripcion": "El cuadre completo (objeto) si se trae entero."
+          },
+          {
+            "nombre": "metrica",
+            "tipo": "json",
+            "required": false,
+            "descripcion": "La métrica única del cuadre (cuadra · cobertura · descuadre)."
+          },
+          {
+            "nombre": "cuadra",
+            "tipo": "bool",
+            "required": false,
+            "descripcion": "Marca declarada de si el cuadre cuadra."
+          },
+          {
+            "nombre": "cobertura",
+            "tipo": "number",
+            "required": false,
+            "descripcion": "Cobertura declarada del cuadre."
+          },
+          {
+            "nombre": "descuadre",
+            "tipo": "number",
+            "required": false,
+            "descripcion": "Descuadre declarado (importe)."
+          }
+        ],
+        "errores": "400 INVALID_INPUT (sin project_id)"
+      }
+    },
+    "roles": {
+      "aviso-cuadre.avisar": "asesor"
+    }
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "_doc": "Manifest de fiscal/estimacion-is-irpf — REFLEJO STATELESS (D5, hoja del plan). Estimacion del resultado fiscal con BASE DECLARADA: nada se estima sin base. La BASE y los TRAMOS/TIPOS son DATO declarado por el negocio — NUNCA cableados aqui (la ley entra como dato). sube cuenta-resultados.calcular.request (C2, resultado contable) y perfil-administrativo.obligaciones.request (D15) — o usa lo declarado. Honestidad (invariante 13): sin base o sin tramos declarados la cuota NO se inventa — queda [ABIERTO]. NO escribe, NO persiste. RPC estimar es CLASE PREGUNTA → va por el bus, sin panel. Publica estimacion-is-irpf.estimar.response y su par .failed. Escucha contabilidad.ejercicio_cerrado (cierre-ejercicio C4, emitido).",
+  "name": "estimacion-is-irpf",
+  "version": "0.1.0",
+  "description": "Reflejo (D5): estimacion del resultado fiscal con base declarada. Tramos y tipos son dato (nunca cableados); sin base o sin tramos queda ABIERTO.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "estimacion-is-irpf.estimar.request",
+      "handler": "onEstimarRequest",
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id, base?/resultado?/ajustes?, tramos?, deducciones?, retenciones_pagadas?, regimen?} → {project_id, base_imponible, tramos_aplicados, cuota, a_ingresar, abierto}. Calcula con los tramos DECLARADOS; sin base o sin tramos queda [ABIERTO]. Responde por estimacion-is-irpf.estimar.response; falta project_id → estimacion-is-irpf.estimar.failed."
+    },
+    {
+      "event": "contabilidad.ejercicio_cerrado",
+      "handler": "onEjercicioCerrado",
+      "description": "Fire-and-forget (cierre-ejercicio C4): un periodo quedo cerrado. Se observa (ventana acotada) como contexto de la estimacion; no se recalcula ni se escribe."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "estimacion-is-irpf.estimar.response",
+      "description": "Respuesta RPC correlada de la op estimar (una sola cara: el bus)."
+    },
+    {
+      "event": "estimacion-is-irpf.estimar.failed",
+      "description": "Par de fallo determinista: falta project_id → {status, code, message}. Cierra el circulo de estimar.request."
+    }
+  ],
+  "tools": [
+    { "name": "estimacion-is-irpf.estimar", "description": "Estima (PREGUNTA) el resultado fiscal con la base y los tramos declarados." }
+  ]
+}

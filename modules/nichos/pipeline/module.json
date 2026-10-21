@@ -1,0 +1,22 @@
+{
+  "name": "pipeline",
+  "version": "0.1.0",
+  "description": "CUSTODIO del vertical NICHOS: state machine del ciclo de vida del nicho (19 estados, transiciones legales). Guarda el estado actual de cada nicho, valida la legalidad de las transiciones y emite pulsos de transicion. Registra cada transicion en el historial via nichos.historial.registrar.request.",
+  "_doc": "modules/nichos/pipeline — CUSTODIO (state machine) del vertical NICHOS.\n\nQue guarda (per-proyecto, PosPersistencia): /prisma/pos/nichos/pipeline.json\n  {\n    _version, _updated,\n    pipeline: {\n      version: Int,\n      estados: { <id_nicho>: { estado, desde, causa, autor, at } },\n      total_nichos: Int\n    }\n  }\n\nQue atiende:\n  - nichos.pipeline.transitar.request → valida la transicion contra TRANSICIONES_LEGALES, persiste el nuevo estado y emite nichos.pipeline.transicion.aplicada. Si la transicion es ilegal, emite nichos.pipeline.transicion.ilegal y devuelve error.\n  - nichos.pipeline.estado.request → devuelve el estado actual del nicho.\n  - project.activated → restaura el store del proyecto.\n\n19 estados del ciclo de vida:\n  semilla → normalizada → sondeada → encolada → validando →\n  viabilidad_emitida → camino_decidido → construyendo →\n  gate_operacion → operando → distribuyendo → activo →\n  sangria_alertada → cortado_pre_construccion → fallido →\n  pausado → archivado → caja\n\nPatron: ModuloHibridoReflejo + PosPersistencia. REFLEJO puro con state machine.",
+  "ui_decision": {
+    "necesita": false,
+    "razon": "Custodio de state machine. Sin cara propia; se gobierna por RPC desde el jefe o el panel del vertical NICHOS. El estado se consulta por RPC."
+  },
+  "publishes": [
+    { "event": "nichos.pipeline.transicion.aplicada", "description": "PULSO fire-and-forget: transicion de estado aplicada. Payload: {project_id, id, desde, hasta, causa, autor, timestamp}." },
+    { "event": "nichos.pipeline.transicion.ilegal", "description": "PULSO fire-and-forget: transicion rechazada por ilegal. Payload: {project_id, id, desde, hasta, razon_codigo:'TRANSICION_ILEGAL', timestamp}." },
+    { "event": "nichos.pipeline.transitar.response", "description": "Response correlada por request_id al RPC nichos.pipeline.transitar.request. Payload: {status, data:{estado_nuevo}} | {status, error}." },
+    { "event": "nichos.pipeline.estado.response", "description": "Response correlada por request_id al RPC nichos.pipeline.estado.request. Payload: {status, data:{estado_actual}}." },
+    { "event": "nichos.historial.registrar.request", "description": "Request al historial para registrar cada transicion aplicada como evento del log append-only del nicho." }
+  ],
+  "subscribes": [
+    { "event": "nichos.pipeline.transitar.request", "handler": "onTransitarRequest", "description": "RPC: valida la transicion y, si es legal, persiste el nuevo estado. Emite nichos.pipeline.transicion.aplicada o nichos.pipeline.transicion.ilegal." },
+    { "event": "nichos.pipeline.estado.request", "handler": "onEstadoRequest", "description": "RPC: devuelve el estado actual del nicho." },
+    { "event": "project.activated", "handler": "onProjectActivated", "description": "Reflejo JS: restaura el store del proyecto desde /prisma/pos/nichos/pipeline.json (PosPersistencia)." }
+  ]
+}

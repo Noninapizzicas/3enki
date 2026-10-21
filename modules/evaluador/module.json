@@ -1,0 +1,32 @@
+{
+  "_doc": "Reflejo puro. Aplica los 6 criterios fijos de la ficha: por criterio, evidencia no vacía → CON_EVIDENCIA, vacía → FALTA_EVIDENCIA. Si algún criterio falta → veredicto FALTA_EVIDENCIA (M10, aparca el banco). Si todos tienen evidencia → dictamen PASA propuesto (transparente, detalle por criterio). La decisión final la confirma el dueño (M11). Sin estado: lee la ficha vía RPC banco.obtener.request; sin egress → sin interruptor.",
+  "dependencies": [],
+  "description": "Dictamina fichas del radar contra los 6 criterios fijos (reglas explícitas, no inventa evidencia).",
+  "language": "es",
+  "main": "index.js",
+  "name": "evaluador",
+  "publishes": [
+    {
+      "description": "Dictamen PASA/FALTA_EVIDENCIA + detalle por criterio; el banco aplica la transición.",
+      "event": "evaluador.veredicto_emitido"
+    },
+    {
+      "description": "Par de fallo: dependencia banco no disponible o candidato no encontrado.",
+      "event": "evaluador.evaluar.failed"
+    }
+  ],
+  "subscribes": [
+    {
+      "description": "Dictamina la ficha del candidato (lee vía banco.obtener.request) y emite evaluador.veredicto_emitido.",
+      "event": "evaluador.evaluar.request",
+      "handler": "onEvaluarRequest"
+    },
+    {
+      "description": "Vista transparente del candidato + detalle por criterio (M11).",
+      "event": "evaluador.ficha.request",
+      "handler": "onFichaRequest"
+    }
+  ],
+  "tools": [],
+  "version": "0.1.0"
+}

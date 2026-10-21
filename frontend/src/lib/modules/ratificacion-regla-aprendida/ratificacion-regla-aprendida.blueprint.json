@@ -1,0 +1,62 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "ratificacion-regla-aprendida",
+  "version": "blueprint-2.0.0",
+  "moduleId": "contabilidad",
+  "titulo": "Ratificación de regla aprendida",
+  "_doc": "Blueprint v2 de INTERFAZ del módulo contabilidad/ratificacion-regla-aprendida (F6½). Declara la sección `ui` para el BlueprintForm (patrón interfaz-dinamico). PUENTE (L10): el GATE HUMANO ÚNICO. El asesor ratifica (actúa) o bloquea una regla aprendida antes de que opere; anuncia contabilidad.regla_ratificada. Sin decisión no se asume ratificación. PUENTE/CUSTODIO de la vertical contabilidad. Las acciones van DOTTED ('<modulo>.<accion>') y el transporte.rpc va VACÍO: el RPC real es contabilidad.<accion>.request (domain 'contabilidad', action 'ratificacion-regla-aprendida.ratificar' en ui_handlers) y la regex de deriveZones solo parsea acciones de 2 segmentos; el wrapper mqttRequest('contabilidad','<modulo>.<accion>') emite ui/request/contabilidad/<modulo>.<accion>, que casa con el ui_handler. Los args salen de los parámetros REALES del handler en index.js.",
+  "eventos_publicados": [
+    "contabilidad.regla_ratificada"
+  ],
+  "eventos_que_escucho": [
+    "ratificacion-regla-aprendida.ratificar.response",
+    "ratificacion-regla-aprendida.ratificar.failed"
+  ],
+  "transporte": {
+    "rpc": [],
+    "salida": [
+      "contabilidad.regla_ratificada"
+    ],
+    "qos": "publishAndWait (request/response correlado) vía ui/request/contabilidad/<modulo>.<accion>; timeout del panel 10s. transporte.rpc vacío a propósito (acciones DOTTED)."
+  },
+  "ui": {
+    "_doc": "Panel de la cara humana de ratificacion-regla-aprendida: la(s) op(s) de ESCRITURA (ORDEN) del módulo, con sus args reales. El BlueprintForm la(s) invoca por ui/request/contabilidad/<accion>.",
+    "ops": {
+      "ratificacion-regla-aprendida.ratificar": {
+        "titulo": "Ratificar o bloquear una regla aprendida",
+        "descripcion": "Registra (ORDEN) la decisión del asesor sobre una regla APRENDIDA: RATIFICADA opera sobre el volumen; BLOQUEADA no opera. Sin decisión declarada NO se asume ratificación (dato ausente = desconocido). Publica el hecho contabilidad.regla_ratificada.",
+        "rol": "asesor",
+        "forma": "editor-bloque (regla/decision/rol)",
+        "senal_pareada": "contabilidad.regla_ratificada",
+        "args": [
+          {
+            "nombre": "regla",
+            "tipo": "text",
+            "required": true,
+            "descripcion": "Regla aprendida sobre la que el asesor se pronuncia."
+          },
+          {
+            "nombre": "decision",
+            "tipo": "select",
+            "required": true,
+            "descripcion": "Decisión del asesor: RATIFICAR (actúa) o BLOQUEAR (no actúa).",
+            "enum": [
+              "RATIFICAR",
+              "BLOQUEAR"
+            ]
+          },
+          {
+            "nombre": "rol",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Rol/autor del acto (se anota el hueco si falta)."
+          }
+        ],
+        "errores": "400 INVALID_INPUT (sin regla o sin decision)"
+      }
+    },
+    "roles": {
+      "ratificacion-regla-aprendida.ratificar": "asesor"
+    }
+  }
+}

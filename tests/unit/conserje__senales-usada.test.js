@@ -26,7 +26,7 @@ async function nuevoModulo() {
     logger: { info() {}, warn() {}, error() {} },
     metrics: { increment() {}, gauge() {} },
     eventBus,
-    moduleConfig: { enabled_default: true, tick_ms: 10_000_000 } // activo, sin tick automático
+    moduleConfig: { tick_ms: 10_000_000 }
   });
   return { m, mqtt };
 }

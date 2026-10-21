@@ -1,0 +1,102 @@
+ESQUEMA — MÓDULO PRODUCTOS · ROL JEFE (EVENTOS + ELEMENTOS)
+=============================================================
+
+QUE ES: PROYECTOR SIN ESTADO sobre la carta (carta-manager = única fuente).
+Sus elementos son LECTURAS proyectadas; sus mutaciones DELEGAN al custodio.
+Aquí NO se diseña interfaz — se mapea cada evento y cada elemento del módulo
+a la necesidad real del jefe que satisface.
+
+
+ANATOMIA · EVENTOS
+==================
+
+PUBLICA (el módulo habla al bus):
+
+  catalogo.actualizado
+    "¿Mi cambio ya está en todas partes?" — señal de cambio del catálogo.
+    Sincroniza POS, carta digital, comandero. El jefe cambia un precio
+    y SABE que el resto se enteró.
+
+  carta.update_product.request
+    "Corrijo un dato" — el gesto de edición del jefe (precio, disponible,
+    descripción...) viaja al custodio por aquí.
+
+  carta.remove_product.request
+    "Retiro un producto" — retirada del catálogo vía custodio.
+
+  (carta.get/list.request · project.get.request · tarifas.config.solicitada)
+    internos de resolución — invisibles para el jefe.
+
+
+ESCUCHA:
+
+  carta.actualizada / carta.editada
+    "Mi carta cambió" — su vista se refresca sola
+  carta.borrada
+    catálogo vacío/coherente sin acción manual
+  tarifas.config.actualizada
+    el jefe decide qué carta sirve cada canal; el proyector obedece
+  project.activated
+    catálogo poblado al arranque (warm)
+
+
+LOS 3 HUECOS DE EVENTOS (el jefe lo necesita y el bus NO lo emite):
+
+  1. producto.creado — NO lo emite nadie (retirado). El alta no tiene señal
+     propia: solo se infiere de carta.editada a lo bruto (todo el catálogo
+     refresca en vez de saber QUÉ producto nació).
+
+  2. Sin señal de disponibilidad — no existe producto.disponibilidad.cambiada.
+     El apagón de productos viaja dentro de carta.editada (evento GRUESO).
+
+  3. Sin dictamen nombrado de mutación — no hay producto.actualizado con el
+     delta (precio antes→después). SIN RASTRO AUDITABLE de sus decisiones,
+     salvo versiones de carta.
+
+
+ANATOMIA · ELEMENTOS (13 handlers, mapeados a necesidades)
+==========================================================
+
+  productos.list          "¿Qué vendo hoy?" — catálogo completo con estados     [lectura]
+  productos.categorias    "¿Cómo está organizado?" + contador por categoría    [neutro]
+  productos.get           detalle de un producto (ficha completa)              [neutro]
+  productos.search        hallar sin navegar                                    [neutro]
+  productos.stats         cobertura del catálogo (totales, alérgenos)          [neutro]
+  productos.update        LA EDICIÓN: precio / disponible / ficha              [JEFE]
+  productos.delete        retirar producto del catálogo                        [JEFE]
+  productos.carta_completa visión completa en 1 golpe (arranque de panel)      [neutro]
+  productos.load_carta    recarga explícita desde disco (recuperación)         [neutro]
+  productos.pizzas        vista filtrada del núcleo del negocio                [neutro]
+  productos.ingredientes  delega a ingredientes (compat) — no es del jefe      [—]
+  productos.health        estado del sistema, no del negocio                   [—]
+  productos.metrics       métricas operativas — no del negocio                 [—]
+
+
+EL DATO CLAVE PARA EL JEFE (ya existe vs NO existe)
+====================================================
+
+  [OK]  Lectura completa del catálogo (list/get/categorias/carta_completa/stats/search)
+  [OK]  Edición puntual (update por campos → custodio)
+  [FALTA]  No existe ALTA en productos (solo vía carta.add_product — el jefe no
+           puede dar de alta desde SU cara sin ir a menu-generator o al chat)
+  [FALTA]  No hay eventos de negocio granulares (producto.creado/actualizado/
+           disponibilidad) — solo el evento grueso de carta; el jefe no recibe
+           "QUÉ cambió", solo "algo cambió"
+  [FALTA]  No hay historial para el jefe (los snapshots de carta existen pero
+           nadie le enseña "ver qué cambió ayer a las 8")
+
+
+NECESIDAD DEL JEFE, EN UNA TABLA
+=================================
+
+  Necesidad                              | Elemento que la sirve        | Estado
+  ---------------------------------------+------------------------------+---------
+  Ver mi carta de hoy                    | list + categorias + completa | [OK]
+  Hallar un producto                     | search                       | [OK]
+  Cambiar un precio                      | update                       | [OK] (falta captura ágil — UI)
+  Poner/desactivar disponibilidad        | update                       | [OK] (falta toggle — UI)
+  Corregir ficha                         | update                       | [OK] (falta editor — UI)
+  Retirar                                | delete                       | [OK] (falta confirmación — UI)
+  DAR DE ALTA                            | ——                           | [HUECO REAL] no hay tool de alta
+  SABER QUÉ CAMBIÓ Y CUÁNDO              | ——                           | [HUECO REAL] sin evento granular
+  Ver salud del catálogo                 | stats                        | [OK]

@@ -16,5 +16,15 @@
       "pattern": "single-json-per-project",
       "concurrency": "single-writer"
     }
-  }
+  },
+  "ui_handlers": [
+    {
+      "domain": "tecnicas",
+      "action": "panel",
+      "handler": "handlePanel",
+      "type": "workspace_module",
+      "zone": "barra_modulos",
+      "description": "Panel del catálogo de técnicas — generado por BlueprintForm desde la sección ui.* de tecnicas.blueprint.json (F6 adaptada al generador schema→UI, 2026-08-18)."
+    }
+  ]
 }

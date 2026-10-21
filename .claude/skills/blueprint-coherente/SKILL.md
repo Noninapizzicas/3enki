@@ -1,7 +1,22 @@
 ---
 name: blueprint-coherente
-description: Estándar para escribir o reconvertir un blueprint de módulo en pseudocódigo + OOP, SIN agentes. Cada operación sigue el mismo espinazo de 5 fases — CONTRATO → LEER → PENSAR → GUARDAR → EMITIR — donde LEER/GUARDAR los hace el REFLEJO (JS determinista) y PENSAR lo hace el LLM de PÁGINA (lo fuzzy, que ya tiene el hilo de la conversación). El blueprint cumple la función que los agentes no cumplían. Referencia: carta-marketing.
-when-to-use: Reconvertir un blueprint que invocaba agentes (agent.execute) para que el LLM de página haga lo fuzzy + el reflejo persista; o escribir un blueprint nuevo. NO toca la capa de agentes (aparcada). Da forma coherente e idéntica a todas las operaciones de los blueprints del sistema.
+description: >-
+  Estándar para escribir o reconvertir un blueprint de módulo en pseudocódigo
+  + OOP, SIN agentes. Cada operación sigue el mismo espinazo de 5 fases —
+  CONTRATO → LEER → PENSAR → GUARDAR → EMITIR — donde LEER/GUARDAR los hace el
+  REFLEJO (JS determinista) y PENSAR lo hace el LLM de PÁGINA (lo fuzzy, que
+  ya tiene el hilo de la conversación). El blueprint cumple la función que los
+  agentes no cumplían. Referencia: carta-marketing.
+when-to-use: >-
+  Reconvertir un blueprint que invocaba agentes (agent.execute) para que el
+  LLM de página haga lo fuzzy + el reflejo persista; o escribir un blueprint
+  nuevo. NO toca la capa de agentes (aparcada). Da forma coherente e idéntica
+  a todas las operaciones de los blueprints del sistema.
+fuente: enki
+dominio: metodo
+lente_dominio: prisma
+lente_tarea: escribir-blueprint
+tags: [blueprint, patron, metodo, contrato, reflejo, fuzzy, pseudocodigo, oop, sin-agentes]
 ---
 
 # blueprint-coherente

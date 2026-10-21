@@ -1,7 +1,21 @@
 ---
 name: montar-cupula-cabecera
-description: Receta para montar la CÚPULA DE LA CABECERA en cualquier repositorio — el documento rector (CLAUDE.md o equivalente) servido por REBANADAS con frontmatter, números COMPUTADOS por marcadores (doc-sync), staleness VIGILADA por fuentes (validate-cabecera) y los tres órganos en GitHub Actions (check en PR · ensamblado en merge · pulso semanal). La escalera de determinismo aplicada al documento; el olvido hace ruido, nunca silencio. Implementación canónica viva en este repo: scripts/cabecera/ + arquitectura/cabecera/ + .github/workflows/cabecera-*.yml.
-when-to-use: Cuando un repo tenga un documento rector monolítico que envejece en silencio (versiones a mano, estados congelados, secciones olvidadas tras los PRs) y quieras que se mantenga fresco POR CONSTRUCCIÓN. También para repos nuevos que quieran nacer con la cabecera rebanada. NO para documentos cortos que caben en la cabeza de un PR — la cúpula paga cuando el doc supera lo que una persona revisa de memoria.
+description: >-
+  Receta para montar la CÚPULA DE LA CABECERA en cualquier repositorio — el
+  documento rector (CLAUDE.md o equivalente) servido por REBANADAS con
+  frontmatter, números COMPUTADOS por marcadores (doc-sync), staleness
+  VIGILADA por fuentes (validate-cabecera) y los tres órganos en GitHub
+  Actions (check en PR · ensamblado en merge · pulso semanal). La escalera de
+  determinismo aplicada al documento; el olvido hace ruido, nunca silencio.
+  Implementación canónica viva en este repo: scripts/cabecera/ +
+  arquitectura/cabecera/ + .github/workflows/cabecera-*.yml.
+when-to-use: >-
+  Cuando un repo tenga un documento rector monolítico que envejece en silencio
+  (versiones a mano, estados congelados, secciones olvidadas tras los PRs) y
+  quieras que se mantenga fresco POR CONSTRUCCIÓN. También para repos nuevos
+  que quieran nacer con la cabecera rebanada. NO para documentos cortos que
+  caben en la cabeza de un PR — la cúpula paga cuando el doc supera lo que una
+  persona revisa de memoria.
 ---
 
 # montar-cupula-cabecera

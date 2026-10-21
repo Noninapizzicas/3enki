@@ -1,0 +1,91 @@
+{
+  "_doc": "marketing-analytics — HÍBRIDO: métricas + experimentación (reflejo/custodio) + atribución y veredicto (blueprint/micro-agente) + reporting (conversor). 67% reflejo, 17% custodio, 11% micro-agente, 6% conversor. Persiste por proyecto en state/marketing-analytics.json.",
+  "name": "marketing-analytics",
+  "version": "0.1.0",
+  "description": "Medición de marketing: métricas (KPIs), experimentación (A/B), atribución (crédito por acción) y reporting. El módulo más híbrido del ecosistema.",
+  "language": "es",
+  "blueprint_driven": true,
+
+  "subscribes": [
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Restaura analytics del proyecto activado."
+    },
+    {
+      "event": "marketing.analytics.get.request",
+      "handler": "onGetRequest",
+      "description": "Devuelve métricas, experimentos y resumen del proyecto."
+    },
+    {
+      "event": "marketing.analytics.update.request",
+      "handler": "onUpdateRequest",
+      "description": "Actualiza métricas o experimentos (registrar valor, crear experimento, añadir datos)."
+    }
+  ],
+
+  "publishes": [
+    {
+      "event": "marketing.analytics.actualizado",
+      "description": "Analytics actualizados. Payload: { project_id, campos_actualizados[] }."
+    }
+  ],
+
+  "tools": [
+    {
+      "name": "marketing-analytics.get",
+      "description": "Obtiene métricas y experimentos de un proyecto.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1, "description": "ID del proyecto." },
+          "filtros": {
+            "type": "object",
+            "description": "{ tipo?, canal_id?, estado_experimento? }"
+          }
+        },
+        "required": ["project_id"]
+      },
+      "handler": "toolGet",
+      "errores_conocidos": ["INVALID_INPUT"]
+    },
+    {
+      "name": "marketing-analytics.update",
+      "description": "Actualiza métricas o experimentos (crear, registrar valor, cambiar estado).",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1 },
+          "metricas": {
+            "type": "array",
+            "description": "[{ id?, nombre, tipo, fuente?, canal_id?, registro?: { fecha, valor } }]"
+          },
+          "experimentos": {
+            "type": "array",
+            "description": "[{ id?, hipotesis, variantes?, metrica_id?, dato?: { variante, valor }, veredicto?, estado? }]"
+          }
+        },
+        "required": ["project_id"]
+      },
+      "handler": "toolUpdate",
+      "errores_conocidos": ["INVALID_INPUT", "INVALID_STATE_TRANSITION", "METRICA_NOT_FOUND"]
+    }
+  ],
+
+  "ui_handlers": [
+    {
+      "domain": "marketing-analytics",
+      "action": "get",
+      "handler": "handleUiGet",
+      "description": "Obtener métricas y experimentos del proyecto activo."
+    },
+    {
+      "domain": "marketing-analytics",
+      "action": "update",
+      "handler": "handleUiUpdate",
+      "description": "Actualizar métricas o experimentos del proyecto activo."
+    }
+  ]
+}

@@ -1,0 +1,51 @@
+{
+  "_doc": "CUSTODIO cola del proyecto 3D (taller personal de impresion 3D) — EL CORAZON de la impresora unica. Lista de impresion en cola (FIFO + urgencia) que mantiene la impresora ocupada. Unico dueño del store tareas (ArrayDePrioridad FIFO+urgencia) + enImpresion. Orden segun motor-propuesta (PROPONE, no muta): _reordenar solo aplica una orden YA aprobada por el dueño; jamas reordena por su cuenta. Encola piezas CON GCODE listo en la cupula (reserva sin re-slicear); _siguienteAImprimir devuelve la cabecera YA preparada (una sola impresora a la vez). Emite cola.actualizada en cada mutacion; pares de fallo cola.encolar.failed y cola.cancelar.failed. CERO juicio: no decide SI imprimir ni el orden (propuesta aprobada); el ciclo de impresion es quien consume la siguiente. Origen: plan-construccion.md seccion 6.2 (FASE 4 construir-modulos, pieza 2).",
+  "name": "cola",
+  "version": "0.1.0",
+  "_v0_1_0_nota": "v0.1.0 (2026-09-13): CUSTODIO [CORAZON]. Ops encolar/reordenar/marcar_urgente/cancelar/siguiente/imprimiendo/terminada (RPC). Proyecciones _encolar, _reordenar (solo orden aprobada), _marcarUrgente, _cancelar, _siguienteAImprimir (cabecera YA preparada en la cupula), _marcarImprimiendo, _marcarTerminada. Store tareas FIFO+urgencia + enImpresion por proyecto. Emite cola.actualizada; pares cola.encolar.failed y cola.cancelar.failed.",
+  "description": "Custodio de la cola de impresion 3D (el corazon): lista FIFO+urgencia que mantiene la impresora unica ocupada; ordena segun propuesta aprobada del motor; siguiente solo con GCODE listo y una sola impresora a la vez.",
+  "language": "es",
+  "main": "index.js",
+  "dependencies": [
+    "_shared/pos-persistencia",
+    "cupula-gcode",
+    "motor-propuesta"
+  ],
+  "config": {
+    "persistence": {
+      "concurrency": "single-writer",
+      "data_path": "cola",
+      "pattern": "single-json-file",
+      "scope": "project",
+      "dir": "/3d/cola"
+    },
+    "estados": ["ENCOLADA", "IMPRIMIENDO", "TERMINADA", "CANCELADA"],
+    "una_sola_impresora": true
+  },
+  "subscribes": [
+    { "event": "cola.encolar.request", "handler": "onEncolarRequest", "description": "Encola una pieza (con gcode listo) al final de la lista. Emite cola.actualizada." },
+    { "event": "cola.reordenar.request", "handler": "onReordenarRequest", "description": "Aplica una orden PROPUESTA ya aprobada por el dueno (jamas reordena por su cuenta). Emite cola.actualizada." },
+    { "event": "cola.marcar_urgente.request", "handler": "onMarcarUrgenteRequest", "description": "Marca una tarea como urgente (la sube en prioridad). Emite cola.actualizada." },
+    { "event": "cola.cancelar.request", "handler": "onCancelarRequest", "description": "Cancela una tarea encolada. Emite cola.actualizada." },
+    { "event": "cola.siguiente.request", "handler": "onSiguienteRequest", "description": "Devuelve la siguiente pieza a imprimir: cabecera YA preparada en la cupula; una sola impresora a la vez." },
+    { "event": "cola.imprimiendo.request", "handler": "onImprimiendoRequest", "description": "Marca una tarea como IMPRIMIENDO (nunca dos a la vez). Emite cola.actualizada." },
+    { "event": "cola.terminada.request", "handler": "onTerminadaRequest", "description": "Marca una tarea como TERMINADA tras la impresion. Emite cola.actualizada." },
+    { "event": "project.activated", "handler": "onProjectActivated", "description": "Restaura el store del proyecto activado." }
+  ],
+  "publishes": [
+    { "event": "cola.encolar.response", "description": "Respuesta correlada: tarea encolada." },
+    { "event": "cola.reordenar.response", "description": "Respuesta correlada: orden aprobada aplicada." },
+    { "event": "cola.marcar_urgente.response", "description": "Respuesta correlada: tarea marcada urgente." },
+    { "event": "cola.cancelar.response", "description": "Respuesta correlada: tarea cancelada." },
+    { "event": "cola.siguiente.response", "description": "Respuesta correlada: siguiente pieza a imprimir (o NULO si nada listo)." },
+    { "event": "cola.imprimiendo.response", "description": "Respuesta correlada: tarea marcada IMPRIMIENDO." },
+    { "event": "cola.terminada.response", "description": "Respuesta correlada: tarea marcada TERMINADA." },
+    { "event": "cola.actualizada", "description": "Mutacion de orden/estado de la cola (repinta paneles)." },
+    { "event": "cola.encolar.failed", "description": "Par de fallo: no se pudo encolar." },
+    { "event": "cola.cancelar.failed", "description": "Par de fallo: no se pudo cancelar." }
+  ],
+  "tools": [],
+  "observability": {
+    "metrics": ["cola.reflejo.served", "cola.reflejo.errors"]
+  }
+}

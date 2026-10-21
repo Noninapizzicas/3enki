@@ -16,14 +16,22 @@
     expanded = !expanded;
   }
 
-  // El proyecto activo (via [project_id]/+layout). Un proyecto con page-set VACÍO (p.ej. prisma
-  // nuevo) → work-bar sin sus botones de DOMINIO (módulos pizzepos que no le pertenecen), PERO
-  // conserva los módulos UNIVERSALES del sistema (interruptores: el on/off del dueño, kill-switches
-  // y features). El gate esconde páginas de dominio, NO el control soberano. Sin contexto (rutas
-  // planas) o con page-set no vacío → comportamiento previo (filtra por zona+ruta).
+  // El proyecto activo (via [project_id]/+layout). La workbar es CONFIGURABLE POR
+  // PROYECTO: muestra los paneles cuyo id está en el page-set DECLARADO del
+  // proyecto (config/metadata.pages, elige el dueño en la página de config de
+  // interfaz) + SIEMPRE los módulos UNIVERSALES del sistema (interruptores: el
+  // on/off del dueño, kill-switches y features). El page-set emerge de
+  // resolvePages(project, type) en +layout.
+  //   - page-set declarado (no vacío) → workbar = universales + paneles del page-set
+  //   - page-set VACÍO (proyecto nuevo / aún sin configurar) → solo universales
+  //     (el dueño aún no eligió qué paneles ver en este proyecto).
   const projectCtx = getContext<Writable<{ pages?: string[] }> | undefined>('project') ?? writable<{ pages?: string[] }>(null as any);
-  $: emptyPageSet = Array.isArray($projectCtx?.pages) && $projectCtx.pages.length === 0;
-  $: defs = emptyPageSet ? $workBarDefinitions.filter(d => d.universal) : $workBarDefinitions;
+  $: configuredPages = Array.isArray($projectCtx?.pages) ? $projectCtx.pages : [];
+  $: configuredSet = new Set(configuredPages);
+  $: defs = $workBarDefinitions.filter(
+    d => d.universal || configuredSet.has(d.id)
+  );
+
 </script>
 
 <div class="workbar" class:collapsed={!expanded}>

@@ -20,6 +20,7 @@ verificado: 2026-07-06
 ✓ comandero-cliente-builder (v1.0.0)
 ✓ composition-manager (v2.0.0)
 ✓ credential-manager (v2.0.0)
+✓ credential-oauth (v0.1.0)
 ✓ dashboard (v3.0.0)
 ✓ database-manager (v3.0.0)
 ✓ device-health (v2.0.0)

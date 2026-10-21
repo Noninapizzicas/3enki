@@ -1,0 +1,77 @@
+{
+  "_doc": "Módulo agenda-operacion — custodio single-writer de la operación diaria del negocio (the-pirate): horario de apertura por franja, ciclo-diario (tareas recurrentes del día) y predicción de demanda (venta del día anterior como señal). Construido en F4 (2026-08-20) desde el esquema maestro P13 (agenda-operación: A1 horario, A2 ciclo-diario, A3 predicción-demanda). El resto del sistema bebe sus valores por RPC; los nulls del contrato son política por declarar (el dueño los puebla vía agenda.reglas.actualizar).",
+  "description": "Operación diaria: horario por franja, ciclo de tareas del día y predicción de demanda (the-pirate).",
+  "language": "es",
+  "name": "agenda-operacion",
+  "publishes": [
+    {
+      "description": "Reglas de agenda cambiadas (tras actualizar) — la propiocepción lo capta.",
+      "event": "agenda.reglas.actualizadas"
+    }
+  ],
+  "subscribes": [
+    {
+      "description": "Horario de apertura para una franja (desayuno/comida/merienda/cena).",
+      "event": "agenda.horario.obtener.request",
+      "handler": "onHorarioObtenerRequest"
+    },
+    {
+      "description": "Ciclo-diario: tareas recurrentes del día (amasar, hornear, montar, limpiar).",
+      "event": "agenda.ciclo.obtener.request",
+      "handler": "onCicloObtenerRequest"
+    },
+    {
+      "description": "Predicción de demanda para una franja (señal: venta del día anterior).",
+      "event": "agenda.demanda.predecir.request",
+      "handler": "onDemandaPredecirRequest"
+    },
+    {
+      "description": "Lectura de las reglas de agenda del proyecto (todos pueden leer).",
+      "event": "agenda.reglas.leer.request",
+      "handler": "onReglasLeerRequest"
+    },
+    {
+      "description": "Escritura single-writer de las reglas (el dueño): valida y persiste.",
+      "event": "agenda.reglas.actualizar.request",
+      "handler": "onReglasActualizarRequest"
+    }
+  ],
+  "version": "0.1.0",
+  "ui_handlers": [
+    {
+      "domain": "agenda",
+      "action": "reglas.leer",
+      "handler": "onReglasLeerRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "agenda",
+      "action": "reglas.actualizar",
+      "handler": "onReglasActualizarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "agenda",
+      "action": "horario.obtener",
+      "handler": "onHorarioObtenerRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "agenda",
+      "action": "ciclo.obtener",
+      "handler": "onCicloObtenerRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "agenda",
+      "action": "demanda.predecir",
+      "handler": "onDemandaPredecirRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
+  ]
+}

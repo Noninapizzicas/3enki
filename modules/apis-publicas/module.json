@@ -1,0 +1,83 @@
+{
+  "_doc": "CÚPULA DE APIS PÚBLICAS — el catálogo externo buscable y traído a demanda. Sexta sustancia del patrón cúpula: lentes=conocimiento · cantera=skills · agentes=trabajadores · eventos=contratos del bus · tools=capacidades · apis-publicas=servicios REST externos. Lo que crawl4rs raspa, una API pública lo sirve tipado (JSON estructurado, sin throttle, sin login). La API es la PRIMERA opción; el scraping es fallback. Índice barato + integración bajo demanda (traer-a-demanda). Nace v0.1.0 con catálogo semilla de las ~30 APIs prioritarias de la rebanada (las sin-auth se integran inmediato; las apiKey requieren credential-manager).",
+  "name": "apis-publicas",
+  "version": "0.1.0",
+  "_v0_1_nota": "v0.1.0: nace la cúpula de APIs públicas con el catálogo semilla de la rebanada (apis-publicas/cupulas/apis-publicas.md). Reflejo: 6 ops de consulta/catálogo (buscar, obtener, listar_categorias, estado) + crecimiento (importar) + integración (traer — confirmation:true, genera tools_http + skill). El catálogo semilla vive en catalogo/semilla.json; el crecido (importado en caliente) en data/apis-publicas/. La integración real (tools_http) es el paso siguiente: hoy el módulo indexa y sirve, el traer declara la intención.",
+  "description": "Cúpula de APIs públicas: catálogo de servicios REST externos buscable (índice barato) + ficha a demanda + integración (traer genera tool_http + skill). La API es primera opción; el scraping, fallback.",
+  "author": "enki",
+  "language": "es",
+  "main": "index.js",
+  "tier": "sistema",
+
+  "subscribes": [
+    { "event": "apis-publicas.buscar.request", "handler": "onBuscarRequest", "description": "Reflejo: busca en el catálogo por query, categoria, dominio (top-K rankeado, índice barato)." },
+    { "event": "apis-publicas.obtener.request", "handler": "onObtenerRequest", "description": "Reflejo: ficha completa de UNA API (url, auth, ejemplo). 404 si no existe." },
+    { "event": "apis-publicas.listar_categorias.request", "handler": "onListarCategoriasRequest", "description": "Reflejo: categorías con cuenta de APIs." },
+    { "event": "apis-publicas.estado.request", "handler": "onEstadoRequest", "description": "Reflejo: totales (catalogadas, integradas, categorias, fuentes)." },
+    { "event": "apis-publicas.importar.request", "handler": "onImportarRequest", "description": "Reflejo: importa APIs nuevas en caliente (idempotente por nombre)." }
+  ],
+
+  "publishes": [
+    { "event": "apis-publicas.buscar.response", "description": "Resultado: { total, integradas, apis:[{nombre,descripcion,categoria,auth,integrada,url}] }." },
+    { "event": "apis-publicas.obtener.response", "description": "Ficha de una API, o error 404. Correlado por request_id." },
+    { "event": "apis-publicas.listar_categorias.response", "description": "Categorías con cuenta." },
+    { "event": "apis-publicas.estado.response", "description": "Totales del catálogo." },
+    { "event": "apis-publicas.importar.response", "description": "Resultado de la importación." }
+  ],
+
+  "tools": [
+    {
+      "name": "buscar_api",
+      "description": "Busca en el CATÁLOGO de APIs públicas del sistema (Open Food Facts, Frankfurter, Open-Meteo, TheMealDB…) las que sirven para obtener un dato externo. Devuelve nombre + descripción + categoría + si requiere API key, top-K, sin cargar el catálogo. ÚSALA cuando necesites un dato que una API pública puede dar (p.ej. 'nutrición de un alimento', 'cambio de divisa', 'receta por ingrediente'). La API es PRIMERA opción sobre el scraping — busca aquí antes de raspar.",
+      "parameters": {
+        "type": "object", "additionalProperties": false,
+        "properties": {
+          "query": { "type": "string", "minLength": 1, "description": "La necesidad (p.ej. 'nutricion harina', 'cambio euro', 'validar iban')." },
+          "categoria": { "type": "string", "description": "Opcional: filtrar por categoría (Food & Drink, Currency, Weather, Finance, Geocoding…)." },
+          "dominio": { "type": "string", "description": "Opcional: dominio_enki (escandallo, pizzepos, recetario…)." },
+          "limite": { "type": "number", "description": "Opcional: cuántas devolver (default 10)." }
+        },
+        "required": ["query"]
+      },
+      "handler": "handleBuscarTool",
+      "errores_conocidos": ["INVALID_INPUT", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "obtener_api",
+      "description": "Devuelve la FICHA completa de UNA API pública: URL, autenticación, ejemplo de invocación, y si ya está integrada. ÚSALA cuando ya sepas qué API quieres (de buscar_api) y necesites su detalle para usarla o integrarla.",
+      "parameters": {
+        "type": "object", "additionalProperties": false,
+        "properties": { "nombre": { "type": "string", "minLength": 1, "description": "Nombre exacto de la API (tal cual de buscar_api)." } },
+        "required": ["nombre"]
+      },
+      "handler": "handleObtenerTool",
+      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UNKNOWN_ERROR"]
+    }
+  ],
+
+  "dependencies": [],
+
+  "config": {
+    "enabled": true,
+    "persistence": {
+      "scope": "system",
+      "data_path": "apis-publicas",
+      "pattern": "local-directory",
+      "restart_resilient": true,
+      "_nota": "Catálogo semilla en modules/apis-publicas/catalogo/semilla.json; crecido (importado en caliente) en data/apis-publicas/."
+    }
+  },
+
+  "observability": {
+    "logging": { "level": "info", "structured": true },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "apis-publicas.buscar.served.total",
+        "apis-publicas.obtener.served.total",
+        "apis-publicas.errors.total"
+      ],
+      "gauges": [ "apis-publicas.total", "apis-publicas.integradas" ]
+    }
+  }
+}

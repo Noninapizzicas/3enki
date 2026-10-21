@@ -1,0 +1,74 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "catalogo-cuentas",
+  "version": "blueprint-2.0.0",
+  "moduleId": "contabilidad",
+  "titulo": "Catálogo de cuentas",
+  "_doc": "Blueprint v2 de INTERFAZ del módulo contabilidad/catalogo-cuentas (F6½). Declara la sección `ui` para el BlueprintForm (patrón interfaz-dinamico). CUSTODIO (B1): plan contable declarable/importable del asesor. La op añadir (ORDEN) escribe la cuenta y ANUNCIA el hecho contabilidad.plan_cuentas_declarado; sin código no se añade. Un solo escritor. PUENTE/CUSTODIO de la vertical contabilidad. Las acciones van DOTTED ('<modulo>.<accion>') y el transporte.rpc va VACÍO: el RPC real es contabilidad.<accion>.request (domain 'contabilidad', action 'catalogo-cuentas.anadir' en ui_handlers) y la regex de deriveZones solo parsea acciones de 2 segmentos; el wrapper mqttRequest('contabilidad','<modulo>.<accion>') emite ui/request/contabilidad/<modulo>.<accion>, que casa con el ui_handler. Los args salen de los parámetros REALES del handler en index.js.",
+  "eventos_publicados": [
+    "contabilidad.plan_cuentas_declarado"
+  ],
+  "eventos_que_escucho": [
+    "catalogo-cuentas.anadir.response",
+    "catalogo-cuentas.anadir.failed"
+  ],
+  "transporte": {
+    "rpc": [],
+    "salida": [
+      "contabilidad.plan_cuentas_declarado"
+    ],
+    "qos": "publishAndWait (request/response correlado) vía ui/request/contabilidad/<modulo>.<accion>; timeout del panel 10s. transporte.rpc vacío a propósito (acciones DOTTED)."
+  },
+  "ui": {
+    "_doc": "Panel de la cara humana de catalogo-cuentas: la(s) op(s) de ESCRITURA (ORDEN) del módulo, con sus args reales. El BlueprintForm la(s) invoca por ui/request/contabilidad/<accion>.",
+    "ops": {
+      "catalogo-cuentas.anadir": {
+        "titulo": "Añadir una cuenta al plan contable",
+        "descripcion": "Añade (ORDEN) una cuenta al plan contable declarado. El código es la identidad declarada: sin código no se añade. No se pisa en silencio: re-añadir appendea al historial. PUBLICA el hecho contabilidad.plan_cuentas_declarado (R2).",
+        "rol": "jefe",
+        "forma": "editor-bloque (codigo/nombre/tipo/naturaleza/padre)",
+        "senal_pareada": "contabilidad.plan_cuentas_declarado",
+        "args": [
+          {
+            "nombre": "codigo",
+            "tipo": "text",
+            "required": true,
+            "descripcion": "Código de la cuenta (identidad declarada)."
+          },
+          {
+            "nombre": "nombre",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Nombre de la cuenta."
+          },
+          {
+            "nombre": "tipo",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Tipo de cuenta (declarable)."
+          },
+          {
+            "nombre": "naturaleza",
+            "tipo": "select",
+            "required": false,
+            "descripcion": "Naturaleza de la cuenta (declarable).",
+            "enum": [
+              "deudora",
+              "acreedora"
+            ]
+          },
+          {
+            "nombre": "padre",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Cuenta padre (si la hay)."
+          }
+        ],
+        "errores": "400 INVALID_INPUT (sin codigo)"
+      }
+    },
+    "roles": {
+      "catalogo-cuentas.anadir": "jefe"
+    }
+  }
+}

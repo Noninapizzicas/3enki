@@ -1,0 +1,28 @@
+{
+  "_doc": "Manifest de libro/puerto-extracto — CONVERSOR STATELESS (E2, hoja del plan). Frontera de CANAL/FORMATO del extracto bancario; el adaptador es por BANCO y, si falta, se CREA declarandolo. LA LEY ENTRA COMO DATO: `banco`/`formato` y `mapeo` (campo canonico → clave externa) son declarables; CERO esquemas cableados (ni OFX/N43/CSV/…). Sin canal/formato declarado no traduce; formato sin mapeo y no canonico → 422 FORMATO_NO_DECLARABLE. Traduce el extracto externo a la forma CANONICA de movimientos y, si los movimientos son interpretables, los SUBE por EVENTO a conciliacion-bancaria.cruzar.request (E1) — que es quien CRUZA. Aqui NO se concilia (conciliado:false). Dato ausente = desconocido. NO escribe, NO persiste. RPC entrar es CLASE PREGUNTA → va por el bus, SIN panel. Publica puerto-extracto.entrar.response y su par .failed.",
+  "name": "puerto-extracto",
+  "version": "0.1.0",
+  "description": "Conversor (E2): frontera de canal/formato del extracto bancario. El banco entra como dato (canal+mapeo); traduce y devuelve, no concilia ni escribe.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "puerto-extracto.entrar.request",
+      "handler": "onEntrarRequest",
+      "description": "RPC conversor (PREGUNTA, por el bus): {project_id, banco?/formato, extracto|externo, mapeo?|esquemas_declarables?} → {project_id, banco, formato, direccion:'entrar', movimientos[], abierto[]}. Traduce el extracto externo a movimientos canonicos; sin canal/formato → FORMATO_NO_DECLARADO, formato sin mapeo y no canonico → FORMATO_NO_DECLARABLE. Si los movimientos son interpretables, los sube a conciliacion-bancaria.cruzar.request. Responde por puerto-extracto.entrar.response."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "puerto-extracto.entrar.response",
+      "description": "Respuesta RPC correlada de la op entrar (una sola cara: el bus)."
+    },
+    {
+      "event": "puerto-extracto.entrar.failed",
+      "description": "Par de fallo determinista: canal/formato no declarado/no declarable o extracto invalido → {status, code, message}. Cierra el circulo de entrar.request."
+    }
+  ],
+  "tools": [
+    { "name": "puerto-extracto.entrar", "description": "Traduce (PREGUNTA) un extracto bancario externo a movimientos canonicos." }
+  ],
+  "ui_handlers": []
+}

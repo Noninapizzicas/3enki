@@ -1,0 +1,94 @@
+{
+  "_doc": "marketing-budget — REFLEJO JS puro: presupuesto de marketing por proyecto. Asignación por partida (canal/campaña/categoría) con state machine, registro de gastos inmutable (custodio), control presupuestario (semáforo) y alertas de desvío. 79% reflejo, 21% custodio. Persiste por proyecto en state/marketing-budget.json.",
+  "name": "marketing-budget",
+  "version": "0.1.0",
+  "description": "Presupuesto de marketing del proyecto: asignación por partida, registro de gastos y control presupuestario. Reflejo puro con custodia contable.",
+  "language": "es",
+
+  "subscribes": [
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Restaura el presupuesto del proyecto activado."
+    },
+    {
+      "event": "marketing.budget.get.request",
+      "handler": "onGetRequest",
+      "description": "Devuelve presupuesto, partidas, gastos y control del proyecto."
+    },
+    {
+      "event": "marketing.budget.update.request",
+      "handler": "onUpdateRequest",
+      "description": "Actualiza presupuesto, partidas o registra gastos."
+    }
+  ],
+
+  "publishes": [
+    {
+      "event": "marketing.budget.actualizado",
+      "description": "El presupuesto fue actualizado. Payload: { project_id, campos_actualizados[] }."
+    },
+    {
+      "event": "marketing.budget.alerta",
+      "description": "Gasto supera asignación de una partida. Payload: { project_id, partida_id, asignado, gastado }."
+    }
+  ],
+
+  "tools": [
+    {
+      "name": "marketing-budget.get",
+      "description": "Obtiene el presupuesto de marketing de un proyecto.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1, "description": "ID del proyecto." }
+        },
+        "required": ["project_id"]
+      },
+      "handler": "toolGet",
+      "errores_conocidos": ["INVALID_INPUT"]
+    },
+    {
+      "name": "marketing-budget.update",
+      "description": "Actualiza presupuesto, partidas o registra gastos de marketing.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1 },
+          "presupuesto": {
+            "type": "object",
+            "description": "{ cantidad, moneda?, periodo?: { inicio, fin } }"
+          },
+          "partidas": {
+            "type": "array",
+            "description": "[{ id?, nombre, tipo, referencia?, importe: { cantidad, moneda? }, periodo?: { inicio, fin }, estado? }]"
+          },
+          "gastos": {
+            "type": "array",
+            "description": "[{ partida_id, importe: { cantidad, moneda? }, concepto, fuente? }]"
+          }
+        },
+        "required": ["project_id"]
+      },
+      "handler": "toolUpdate",
+      "errores_conocidos": ["INVALID_INPUT", "INVALID_STATE_TRANSITION", "PARTIDA_NOT_FOUND", "TECHO_SUPERADO"]
+    }
+  ],
+
+  "ui_handlers": [
+    {
+      "domain": "marketing-budget",
+      "action": "get",
+      "handler": "handleUiGet",
+      "description": "Obtener presupuesto del proyecto activo."
+    },
+    {
+      "domain": "marketing-budget",
+      "action": "update",
+      "handler": "handleUiUpdate",
+      "description": "Actualizar presupuesto del proyecto activo."
+    }
+  ]
+}

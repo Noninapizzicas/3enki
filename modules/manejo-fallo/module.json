@@ -1,0 +1,28 @@
+{
+  "_doc": "REFLEJO manejo-fallo del taller 3D (pieza 15). Al fallar una impresion, SIEMPRE avisa (adaptador-avisos), consulta la politica al dueno (adaptador-confirmacion, SolicitudDecision) y NUNCA decide por su cuenta. Politica de fallo (reintentos max / saltar) configurada por el dueno [ABIERTO]. Flujos: 1) avisar SIEMPRE; 2) politica REINTENTAR con reintentos no superados -> devuelve REINTENTAR; 3) politica SALTAR o reintentos agotados -> SALTAR (no detener); 4) politica ABIERTO o decision que exige juicio -> SolicitudDecision via adaptador-confirmacion y espera la respuesta del dueno. CERO juicio: ningun fallo se calla; ninguna accion sin politica conocida del dueno. Reflejo puro sin store. Par de fallo manejo-fallo.manejar.failed. Origen: plan-construccion.md seccion 6.12 + espina (FASE 4 construir-modulos, pieza 15, TANDA 4).",
+  "name": "manejo-fallo",
+  "version": "reflejo-0.1.0",
+  "_v0_1_0_nota": "v0.1.0 (2026-09-13): REFLEJO puro. Op manejar (RPC). Proyeccion _manejar: avisa SIEMPRE y devuelve la accion segun politica del dueno (REINTENTAR/SALTAR/ESPERAR_DECISION). Si exige juicio (politica ABIERTO o reintentos agotados) dispara adaptador-confirmacion.confirmar.request (SolicitudDecision) y espera. Cero juicio: nunca decide solo. Par manejo-fallo.manejar.failed.",
+  "description": "Al fallar una impresion avisa SIEMPRE y consulta la politica al dueno (reintentar/saltar/decision abierta). CERO juicio: no decide la accion por su cuenta.",
+  "language": "es",
+  "main": "index.js",
+  "dependencies": [
+    "adaptador-avisos",
+    "adaptador-confirmacion",
+    "motor-encadenamiento"
+  ],
+  "config": {
+    "cero_juicio": true
+  },
+  "subscribes": [
+    { "event": "manejo-fallo.manejar.request", "handler": "onManejarRequest", "description": "Maneja un fallo de impresion: avisa SIEMPRE y decide la accion segun la politica del dueno (reintentar/saltar); si exige juicio, pide decision por adaptador-confirmacion." }
+  ],
+  "publishes": [
+    { "event": "manejo-fallo.manejar.response", "description": "Respuesta correlada: accion de fallo decidida (reintentar/saltar/esperando_decision)." },
+    { "event": "manejo-fallo.manejar.failed", "description": "Par de fallo: no se pudo manejar el fallo." }
+  ],
+  "tools": [],
+  "observability": {
+    "metrics": ["manejo-fallo.reflejo.served", "manejo-fallo.reflejo.errors"]
+  }
+}

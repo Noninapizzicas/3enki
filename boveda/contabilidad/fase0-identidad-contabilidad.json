@@ -1,0 +1,74 @@
+{
+  "fase": "fase0-identidad-negocio",
+  "evento": "project.created",
+  "estado": "con_identidad",
+  "completada_el": "2026-09-28",
+  "metodo": "entrevista al dueno — 10 preguntas de la skill identidad-negocio (§2), una por una esperando respuesta",
+  "vertical": "contabilidad",
+  "resumen": {
+    "que_es": "Una capacidad transversal observadora VENDIBLE: la vertical que le falta a las demas verticales para llevar la contabilidad de cada cual. No produce hechos de negocio — escucha los eventos que cada negocio ya emite y, junto con el cierre, reconstruye su contabilidad (flujo de caja, ventas, consumo, stock, compras).",
+    "que_vende": "Una vertical de contabilidad REAL y PURA, con TODO lo que da una app de contabilidad profesional. Vendible sola o empaquetada con proyectos concretos. NO una version minima.",
+    "como_lo_elabora": "No elabora un hecho nuevo: observa y reconstruye. Toma los eventos del dia que las verticales ya publican mas el cierre, y de ahi deriva caja, consumo (-> stock), compras, etc. Emite CALCULOS (contabilidad.*), nunca hechos de negocio — con tres cerrojos anti-bucle: planos separados, un solo escritor por parcela e idempotencia por clave natural ('un cierre = un asiento').",
+    "proposito": "Enlazar TODOS los proyectos economicos con una muy buena contabilidad; una vez hecho, cada proyecto la activa y es mucho mas sencillo llevarlo a cabo. Pizzepos es el 1o. No hace falta nombrar 'los economicos': los enlaza quien quiere saber sus cuentas.",
+    "tipo_derivado": "capacidad_transversal_observadora_vendible",
+    "justificacion_tipo": "Emergente del sujeto declarado, no de catalogo. El sujeto NO es una mercancia (no se vende un producto fisico) pero SI es vendible como software. Es observadora porque no produce hechos: los lee. El sufijo '_vendible' es lo que lo separa de una capacidad interna pura.",
+    "usuario": "Todos los negocios que quieran saber sobre sus cuentas (el NEGOCIO, no un dueno concreto) -> producto multi-tenant",
+    "criterio_de_exito": "Que el ASESOR lo acepte y pueda presentarlo. Mas: cuadra sin una persona digitando y sin colapsar ni entrar en bucle.",
+    "filo_por_que": "El event-driven como sustrato: sistema vivo, actualizado, dinamico y funcional (frente a la app que se alimenta de digitacion y queda desfasada).",
+    "dia_normal": "Automatizar todo el proceso: ventas por eventos, facturas digitalizadas o recibidas digitales, procesarlas, actualizar stock. Sin operador.",
+    "interlocutores": [
+      { "rol": "dueno del negocio", "canal": "consulta", "relacion": "consulta sus cuentas, decide" },
+      { "rol": "asesor / contable", "canal": "revision", "relacion": "revisa, corrige, presenta impuestos, firma — SE MANTIENE, no se sustituye" },
+      { "rol": "administracion", "canal": "presentacion", "relacion": "Hacienda (IVA/IS/IRPF) y Seguridad Social" },
+      { "rol": "clientes", "canal": "facturacion", "relacion": "facturacion de venta y cobros" },
+      { "rol": "proveedores", "canal": "facturacion", "relacion": "facturacion de compra y pagos" },
+      { "rol": "bancos", "canal": "extractos", "relacion": "conciliacion bancaria, cobros y pagos" },
+      { "rol": "empleados", "canal": "nomina", "relacion": "nominas" },
+      { "rol": "las otras verticales del sistema", "canal": "bus de eventos", "relacion": "FUENTE DE DATOS: emiten los hechos que contabilidad observa" }
+    ],
+    "preguntas_abiertas": [
+      { "campo": "cuando_reconstruye", "para": "decidir el motor de reconstruccion (tiempo real / en el cierre / ambos)", "porque": "el dueno no lo declaro", "respondida": false },
+      { "campo": "unidad_de_cierre", "para": "fijar la clave natural del asiento y el periodo contable", "porque": "la idempotencia se apoya en 'un cierre = un asiento' pero no esta declarado que es un cierre (jornada/dia/mes) ni como se identifica", "respondida": false },
+      { "campo": "fuente_coste_consumo", "para": "reconstruir consumo de ingredientes y stock", "porque": "pidiendo a escandallo/recetas de cada vertical, o cada vertical declara ficha de producto", "respondida": false },
+      { "campo": "alcance_fiscal", "para": "dimensionar la capa fiscal", "porque": "IVA/Verifactu/factura electronica hoy son CERO en Enki (verificado: 0 modulos); es un mundo, no un modulo", "respondida": false },
+      { "campo": "recepcion_digital_facturas", "para": "recibir facturas digitales y procesarlas", "porque": "el dueno dijo 'recibirlas digitales'; Facturae/Verifactu no existen hoy en Enki", "respondida": false },
+      { "campo": "cola_revision", "para": "resolver lo que la automatizacion no puede sola", "porque": "no declarado que pasa con un documento ilegible o un dato que no cuadra", "respondida": false },
+      { "campo": "catalogo_avisos", "para": "construir la capacidad de avisar", "porque": "el dueno exige 'que te avise' pero no ha declarado que avisos, a quien ni por que canal", "respondida": false },
+      { "campo": "vista_agregada", "para": "ver todos los negocios juntos", "porque": "consolidador de solo lectura vs proyecto-oficina", "respondida": false },
+      { "campo": "granularidad_de_grupo", "para": "soportar grupos de empresas / multi-sociedad", "porque": "el dueno pregunto si sirve para 'una gran empresa o grupo'; verificado que escandallo no basta", "respondida": false },
+      { "campo": "solape_marketing_budget", "para": "decidir si contabilidad absorbe o solo lee lo que marketing-budget ya custodia", "porque": "hallazgo: marketing-budget ya declara 'custodia contable'", "respondida": false },
+      { "campo": "momento_de_uso", "para": "fijar el ritmo de uso (dia / mes / cierre)", "porque": "el dueno dijo QUIEN lo usa pero no CUANDO", "respondida": false },
+      { "campo": "frontera_primera_entrega", "para": "ordenar el alcance completo en entregas", "porque": "el alcance declarado es grande; no esta decidido que entra primero", "respondida": false }
+    ]
+  },
+  "requisitos_exigidos": {
+    "soluciones_reales_al_usuario": "resuelve problemas de verdad, no los muestra",
+    "simple_y_facil": "que las cosas dificiles se hagan simples y faciles",
+    "informacion_rica": "contexto y profundidad, no un dato pelado",
+    "que_avise": "proactiva: avisos, no una pantalla muda — capacidad en si misma"
+  },
+  "no_quiere_que_sea": [
+    "una herramienta de adorno",
+    "algo justificado por la comodidad en si",
+    "una version minima o descafeinada"
+  ],
+  "decisiones_cerradas": {
+    "alcance": "COMPLETO — el de una app de contabilidad profesional. Real, pura, vendible. NO minimo.",
+    "arquitectura": "1 proyecto = N verticales; contabilidad = 1 vertical activable por config",
+    "numero_de_verticales": "UNA sola vertical 'contabilidad' con partidas dentro. Delegado por el dueno; motivo: 1 vertical = 1 proceso F0->F7. Salvaguarda: si el plan F3b desborda (>70 hojas), partir por ejes de capacidad",
+    "la_vertical_no_es_frontera": "todos los modulos son del sistema y se comunican dentro y fuera de la vertical; la vertical es unidad de ORGANIZACION y ACTIVACION",
+    "partidas": "MODULOS dentro de la vertical, no verticales separadas",
+    "aislamiento": "carpeta por proyecto (data/projects/<slug>/contabilidad/), molde inventario + PosPersistencia",
+    "asesor": "SE MANTIENE — automatiza, el asesor revisa y firma; requiere exportacion y camino de ajuste",
+    "anti_bucle": "3 cerrojos: planos separados / single-writer por parcela / idempotencia por clave natural",
+    "molde_partidas": "vertical marketing-* (12 reflejos puros con PosPersistencia)"
+  },
+  "verificados": [
+    "Enki hoy tiene 0 piezas fiscales (IVA, Verifactu, factura electronica, nominas, inmovilizado, conciliacion). facturas (pizzepos) es solo OCR de intake.",
+    "escandallo (pizzepos, 372 lineas, receta->coste) es mono-negocio: NO sirve tal cual para gran empresa o grupo (falta coste indirecto, multi-sociedad, periodos). Decision: no se toca, se pone POR ENCIMA.",
+    "Dos logicas de coste coexisten: pizzepos/escandallo (receta) y prisma/costeador (compuestos).",
+    "inventario ya es multi-proyecto (stock) y se reutiliza sin duplicar.",
+    "marketing-* = 12 modulos reflejo puro con PosPersistencia: molde de partidas, construido pero no habilitado en config.json.",
+    "marketing-budget ya declara 'custodia contable' -> solape pendiente."
+  ]
+}

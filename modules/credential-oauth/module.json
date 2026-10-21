@@ -1,0 +1,93 @@
+{
+  "_doc": "credential-oauth — Sesión 3 de la descomposición de credential-manager (2026-08-13). PUENTE OAuth2 (Google/Gmail): traduce el exterior OAuth (auth_url, callback HTTP, exchange de code) a eventos internos del bus. Reflejo puro (todo determinista — sin cajón LLM). Traducción fiel del monolito (arquitectura/migracion/_legacy/credential-manager-monolito-pre-descomposicion.js.bak): _start (~1541), _status (~1683), _configCreate/List/Delete (~1722-1812), handleOAuthCallback (~2142), _renderOAuthResultPage (~2279), _cleanupPendingOAuth (~2353), _resolve (~593 — sirve a provider-loader local.gmail: credential.oauth.resolve.request → response con { clientId, clientSecret, refreshToken } en top-level, shape EXACTO que core/providers/loader.js espera, por eso este handler NO usa _atender). El refresh_token se guarda DELEGANDO en credential-manager (credential.create.request → credential.saved) — credential-oauth NO guarda credenciales, solo CONFIGS OAuth (client_id/secret) en oauth-configs.json por proyecto (estructura del Map del monolito). Los .response de los RPC siguen el shape canónico { request_id, status, data } vía _atender. El pending del flow vive SOLO en memoria (expira 10 min, lost_on_restart). Configs OAuth = del sistema (cascada por accountId sin filtro tenant); persistencia por proyecto (spec). Endpoint HTTP: GET /modules/credential-oauth/oauth/callback (única excepción HTTP del diseño).",
+  "name": "credential-oauth",
+  "version": "0.1.0",
+  "description": "PUENTE OAuth2 (Google/Gmail): start/status/resolve + CRUD de configs OAuth + callback HTTP. Reflejo puro. Reactiva el provider local.gmail (cartero del radar, facturas).",
+  "language": "es",
+  "main": "index.js",
+
+  "subscribes": [
+    {
+      "event": "credential.oauth.start.request",
+      "handler": "onOAuthStartRequest",
+      "description": "Inicia el flujo OAuth2: genera auth_url + state único (10 min). Payload: { request_id, provider, level, identifier?, scopes?, project_id }."
+    },
+    {
+      "event": "credential.oauth.status.request",
+      "handler": "onOAuthStatusRequest",
+      "description": "Polling del flow pendiente por state_id. Payload: { request_id, state_id }."
+    },
+    {
+      "event": "credential.oauth.resolve.request",
+      "handler": "onOAuthResolveRequest",
+      "description": "Resuelve { clientId, clientSecret, refreshToken } para provider-loader (local.gmail). Payload: { request_id, provider, account? }. Response en top-level { request_id, success, credentials }."
+    },
+    {
+      "event": "credential.oauth_config.create.request",
+      "handler": "onOAuthConfigCreateRequest",
+      "description": "Guarda/actualiza una config OAuth (client_id/secret por accountId). Payload: { project_id, accountId, accountName?, clientId, clientSecret }."
+    },
+    {
+      "event": "credential.oauth_config.list.request",
+      "handler": "onOAuthConfigListRequest",
+      "description": "Lista configs OAuth (clientId enmascarado, sin secret). Payload: { project_id? }."
+    },
+    {
+      "event": "credential.oauth_config.delete.request",
+      "handler": "onOAuthConfigDeleteRequest",
+      "description": "Elimina una config OAuth. Payload: { project_id, accountId }."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Restaura oauth-configs.json del proyecto activado."
+    }
+  ],
+
+  "apis": [
+    {
+      "method": "GET",
+      "path": "/oauth/callback",
+      "handler": "handleOAuthCallback",
+      "description": "Callback de Google OAuth2 (única excepción HTTP del diseño). Ruta final: /modules/credential-oauth/oauth/callback."
+    },
+    {
+      "method": "GET",
+      "path": "/health",
+      "handler": "handleHealthCheck",
+      "description": "Health check del módulo."
+    }
+  ],
+
+  "dependencies": ["credential-manager"],
+
+  "config": {
+    "persistence": {
+      "pattern": "json-file-per-project",
+      "restart_resilient": true,
+      "concurrency": "single-writer",
+      "lost_on_restart": ["oauthPending"]
+    }
+  },
+
+  "observability": {
+    "logging": {
+      "level": "info",
+      "structured": true,
+      "correlation_id": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "credential-oauth.callback.ok",
+        "credential-oauth.callback.errors",
+        "credential-oauth.reflejo.served",
+        "credential-oauth.reflejo.errors"
+      ],
+      "gauges": [
+        "credential-oauth.pending_oauth",
+        "credential-oauth.configs"
+      ]
+    }
+  }
+}

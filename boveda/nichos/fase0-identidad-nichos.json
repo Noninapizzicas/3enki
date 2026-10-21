@@ -1,0 +1,54 @@
+{
+  "fase": "fase0-identidad-negocio",
+  "evento": "project.created",
+  "estado": "completada",
+  "completada_el": "2026-09-19T08:59:51.042Z",
+  "resumen": {
+    "correlation_id": "b56187bb-1537-4e65-81e3-63d75892de06",
+    "timestamp": "2026-09-19T08:59:51.042Z",
+    "project_id": "4fe1fb71-df73-4d67-8fb7-ba6b0beff253",
+    "que_es": "Herramienta autónoma buscadora de nichos reales donde Enki puede crear soluciones y crear modelos de negocio reales con ellos: detecta, valida, construye, monta el modelo y opera hasta cobrar, generando ingresos.",
+    "que_vende": "Negocios completos operados por el sistema, en los que el pagador final varía con el nicho elegido (empresa si es solución sectorial, suscripción si es servicio a personas, u otro según lo oportuno). El dueño percibe lo que el proceso genere en todos los casos.",
+    "como_lo_elabora": "Arranca con todas las herramientas y posibilidades de Enki (APIs, buscadores, scraping, análisis) más fuentes externas; sin filtros previos pero limitable; demanda-primero; encuentra y construye según cada ciclo; usa los recursos existentes y crea los que falten para conseguir el objetivo de generar ingresos.",
+    "tipo_derivado": "producto_digital_automatizado",
+    "preguntas_abiertas": [
+      {
+        "campo": "primer_nicho",
+        "para": "disparo inicial del motor",
+        "porque": "el primer ciclo real se valida con el primer nicho que devuelva el sistema",
+        "respondida": false
+      }
+    ]
+  },
+  "verificados": [],
+  "project_id": "4fe1fb71-df73-4d67-8fb7-ba6b0beff253",
+  "organos_del_esquematizador": {
+    "arnes_agente_hermes": {
+      "desarrollo": "El motor de repetición que materializa 'recorrer nichos por pasadas; una no vale'.\n- Mecanismo: el esquematizador corre SOLO en el bus (event-driven, patrón Enki), disparado por pasadas.\n- Ciclo de pasada: cada pasada orquesta ojo → memoria → deliberador → pasada siguiente; el gestor le garantiza el canal al ojo.\n- Parada: se detiene cuando el foco está 'seco' (no quedan huecos relevantes por trabajar en el nicho).\n- Aparcado: cuando el deliberador aparca un nicho, el arnés lo retira del ciclo activo (sigue guardado en memoria, reabrible en revisiones posteriores) y continúa con los nichos restantes o abre el siguiente foco.\nPREGUNTAS ABIERTAS (no declaradas): Q-ARN-1 criterio explícito y formal de 'foco seco' (sin él el bucle no sabe terminar); Q-ARN-2 nº de pasadas por ciclo y cadencia/timeout entre pasadas para que la señal real llegue antes de re-evaluar; Q-ARN-3 salvaguarda anti-bucle si el arnés repite sin cambiar nada.",
+      "estado": "diseñado",
+      "que_es": "Arnés para que el esquematizador corra solo en el bus, disparado por pasadas hasta secar el foco."
+    },
+    "deliberador_interno": {
+      "desarrollo": "Convierte señal en decisión con datos reales (ojo + memoria), sin intervención humana.\n- Veredictos (4 y solo 4, decididos en F0): cortar · cambiar_rumbo · seguir · aparcar. Emite UNA decisión por pasada y por nicho, justificada por evidencia.\n- 'Demanda demostrada': al acumular suficientes señales el nicho se marca así y pasa a construirse solo (mecanismo del deliberador). El valor exacto del umbral NO está declarado (Q-DEM-1).\n- Aparcar en vez de tirar: nicho agotado/coste cero sin señal → aparcar GUARDANDO historia, reabrible (decidido en F0).\n- Freno = oportunidad (invariante): si el nicho no existe, se crea; el deliberador trata el bloqueo como señal para cambiar de rumbo, no como fin.\n- Límite de autonomía declarado: el cobro legal (entidad/pasarela/fiscalidad) es decisión del dueño, no del deliberador.\nPREGUNTAS ABIERTAS (no declaradas): Q-DEC-1 umbrales/reglas exactas de cada veredicto; Q-DEC-2 qué evidencia dispara 'cambiar_rumbo' vs 'seguir' y hacia qué alternativa; Q-DEC-3 qué otros casos (además del cobro legal) NO decide solo y escala al dueño.",
+      "estado": "diseñado",
+      "que_es": "El que decide con datos reales: cortar / cambiar rumbo / seguir / aparcar un nicho, sin intervención humana."
+    },
+    "gestor_credenciales": {
+      "desarrollo": "Autoaprovisionamiento del canal del ojo: crea por sí solo las cuentas/credenciales de servicios GRATUITOS que el ojo necesita para contactar.\n- Ámbito: SOLO servicios gratuitos (coherente con coste 0 del ojo y decisión 'el gestor crea credenciales gratis si falta'). \n- Reuso primero: reusa lo que ya existe; solo crea si falta.\n- Autonomía: crea y guarda credenciales sin intervención humana; gestiona su ciclo de vida (crear, guardar, girar, validar) para no romper el canal a mitad de contacto.\n- Agnóstico de canal: sirve cualquiera de los canales gratuitos que el ojo soporta (correo/WhatsApp/IG/encuesta según el canal que el negocio tenga); no decide qué canal usar (eso es del ojo/identidad).\n- No gestiona servicios pagados (fuera de ámbito).\nPREGUNTAS ABIERTAS (no declaradas): Q-CRED-1 límite operativo de cuentas/credenciales que puede crear; Q-CRED-2 cómo consigue los datos base que algunos servicios exigen para abrir cuenta (teléfono/correo) cuando el dueño no los da; Q-CRED-3 quién vigila el riesgo de que crear cuentas haga que un servicio banee al sistema por volumen/abuso.",
+      "estado": "diseñado",
+      "que_es": "Crea por sí solo las cuentas/credenciales de servicios gratuitos que el ojo necesita para contactar."
+    },
+    "memoria_hibrida": {
+      "desarrollo": "Dos capas, decididas en F0: LOCAL (por nicho, la historia completa de cada nicho) y GLOBAL (agregado de señales a través de nichos).\n- Capa local: por nicho guarda toda la historia de señales + el estado del nicho (activo / demanda_demostrada / aparcado). Invariante decidido: un nicho aparcado NO pierde su historia — se aparca con ella y queda reabrible (nada se tira).\n- Capa global: mapa de señales que cruza nichos para aprender qué tipo de compromiso SÍ se volvió pago real vs espejismo. Es la fuente del aprendizaje del sistema.\n- La ficha de señal reutiliza el registro del ojo (canal, nicho, interlocutor, fecha, tipo ∈ {compromiso, reserva, señal, mas_info, nada, sin_respuesta}, gasto=0, evidencia). La memoria almacena fielmente lo ocurrido; nunca inventa ni interpreta en solitario.\n- Roles: no decide (deliberador), no contacta (ojo); solo guarda y agrega lo real.\nPREGUNTAS ABIERTAS (no declaradas): Q-MEM-1 campos exactos de la ficha + cómo se registra como dato que una señal 'se volvió pago real'; Q-MEM-2 definición formal de la tasa global 'compromiso → pago' por tipo de señal; Q-MEM-3 si la historia se poda/olvida o se guarda indefinida.",
+      "estado": "diseñado",
+      "que_es": "Memoria del esquematizador: local por nicho + global de señales (qué compromiso sí se volvió pago vs espejismo)."
+    },
+    "ojo_datos_reales": {
+      "desarrollo": "El sistema da soporte a CUALQUIER canal gratuito (correo, WhatsApp, IG, FB, encuesta, etc.): contacta por el canal que el negocio tenga disponible, gratis, registra su respuesta (compromiso/reserva/señal/más info/nada) y suma gasto (0). Nunca inventa: si no responde registra 'sin respuesta' — la ausencia también es dato.",
+      "estado": "diseñado",
+      "fuente": "deliberado en sesión 2026-09-22",
+      "pregunta_pendiente": "respondida en sesión 2026-09-22: cualquier canal gratuito, el sistema da soporte (correo/WhatsApp/IG/FB/encuesta)",
+      "que_es": "El contacto del sistema con el mundo: habla gratis con los interlocutores y trae de vuelta la señal de demanda."
+    }
+  }
+}

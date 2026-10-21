@@ -1,0 +1,52 @@
+{
+  "_doc": "sonda — micro-agente híbrido (reflejo + blueprint) que vigila las fuentes de mercado (RSS, APIs públicas, feeds) y cosecha SEÑALES crudas (titulo, fuente, url, sector, fechaCosecha) SIN decidir si un nicho vale. El REFLEJO custodia el registro de fuentes (canal, métrica, frecuencia, umbral — patrón radar-fuente) y la persistencia con dedupe por (fuente,url); el CAJÓN del blueprint (recolectar, responde:true) extrae las señales del markdown de crawl4rs (fuzzy). Registra interruptor 'sonda' (egress consciente).",
+  "blueprint_driven": true,
+  "blueprint_path": "sonda.blueprint.json",
+  "cajones_enabled": true,
+  "dependencies": [
+    "crawl4rs",
+    "interruptores"
+  ],
+  "description": "Micro-agente que vigila las fuentes de mercado y cosecha señales crudas (titulo, fuente, url) sin decidir si un nicho vale. Reflejo: registro de fuentes + dedupe + persistencia. Blueprint: cajón recolectar (extrae señales del markdown de crawl4rs).",
+  "language": "es",
+  "main": "index.js",
+  "name": "sonda",
+  "publishes": [
+    {
+      "description": "Señales NUEVAS cosechadas tras dedupe por (fuente,url). Payload: { senales, total_nuevas, ultimaCosecha }.",
+      "event": "sonda.senales_cosechadas"
+    },
+    {
+      "description": "Una fuente fue creada/ajustada. Payload: { id, config }.",
+      "event": "sonda.fuente.configurada"
+    },
+    {
+      "description": "El ciclo de recolección falló. Payload: { error, detalle? }.",
+      "event": "sonda.recolectar.failed"
+    }
+  ],
+  "subscribes": [
+    {
+      "description": "Devuelve el registro de fuentes con su configuración y el estado de la última cosecha.",
+      "event": "sonda.fuentes.listar.request",
+      "handler": "onFuentesListarRequest"
+    },
+    {
+      "description": "Crea/ajusta una fuente (merge parcial con garantía de canal/métrica/frecuencia — patrón radar-fuente).",
+      "event": "sonda.fuentes.configurar.request",
+      "handler": "onFuentesConfigurarRequest"
+    },
+    {
+      "description": "GUARDAR del cajón recolectar: persiste la cosecha con dedupe por (fuente,url) y emite sonda.senales_cosechadas con las nuevas.",
+      "event": "sonda.cosecha.guardar.request",
+      "handler": "onCosechaGuardarRequest"
+    },
+    {
+      "description": "Restaura la persistencia (fuentes + última cosecha) del proyecto activado.",
+      "event": "project.activated",
+      "handler": "onProjectActivated"
+    }
+  ],
+  "tools": [],
+  "version": "0.1.0"
+}

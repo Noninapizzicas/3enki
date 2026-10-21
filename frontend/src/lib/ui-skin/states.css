@@ -1,0 +1,99 @@
+/* L9 — Estados
+   Hover, focus, active, disabled, loading, skeleton, error, success.
+   Depende de: L2 (tokens semánticos), L6 (piel), L7 (motion). */
+
+
+/* ── Interactivos ── */
+
+.interactive {
+  transition-property: color, background-color, border-color, box-shadow, transform;
+  transition-duration: var(--dur-fast);
+  transition-timing-function: var(--ease-default);
+}
+
+.interactive:hover {
+  background-color: var(--surface-interactive-hover);
+}
+
+.interactive:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+}
+
+.interactive:active {
+  transform: scale(0.97);
+  transition-duration: var(--dur-instant);
+  transition-timing-function: var(--ease-in);
+}
+
+
+/* ── Disabled ── */
+
+.disabled,
+[disabled],
+[aria-disabled="true"] {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+
+/* ── Loading ── */
+
+.loading {
+  position: relative;
+  pointer-events: none;
+}
+
+.loading::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--surface-base);
+  opacity: 0.5;
+}
+
+[aria-busy="true"] {
+  cursor: wait;
+}
+
+
+/* ── Skeleton ── */
+
+.skeleton {
+  background: var(--surface-interactive);
+  border-radius: var(--radius-component);
+  animation: pulse 1.5s var(--ease-in-out) infinite;
+}
+
+.skeleton-text {
+  height: 1em;
+  margin-bottom: var(--sp-2);
+}
+
+.skeleton-circle {
+  border-radius: var(--radius-full);
+}
+
+
+/* ── Feedback: error ── */
+
+.state-error {
+  border-color: var(--border-error) !important;
+}
+
+.state-error-shake {
+  animation: shake 0.3s var(--ease-default);
+}
+
+[aria-invalid="true"] {
+  border-color: var(--border-error);
+}
+
+
+/* ── Feedback: success ── */
+
+.state-success {
+  border-color: var(--status-success);
+  transition: border-color var(--dur-slow) var(--ease-default);
+}

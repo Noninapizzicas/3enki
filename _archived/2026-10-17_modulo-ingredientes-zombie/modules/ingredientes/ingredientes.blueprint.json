@@ -1,0 +1,193 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "ingredientes",
+  "version": "blueprint-2.0.0",
+  "moduleId": "ingredientes",
+  "titulo": "Catalogo de ingredientes organizado por GRUPO (categoria de producto). Fuente unica de precios (precio_extra). Sincronizado desde carta.actualizada y producto.creado.",
+  "eventos_publicados": [
+    "ingrediente.creado",
+    "ingrediente.actualizado"
+  ],
+  "eventos_que_escucho": [
+    "project.activated",
+    "carta.actualizada",
+    "producto.creado",
+    "ingrediente.actualizado"
+  ],
+  "transporte": {
+    "rpc": [
+      "ingredientes.list.request -> .response",
+      "ingredientes.get.request -> .response",
+      "ingredientes.get_precio.request -> .response",
+      "ingredientes.search.request -> .response",
+      "ingredientes.alergenos.request -> .response",
+      "ingredientes.update.request -> .response",
+      "ingredientes.update_precios.request -> .response",
+      "ingredientes.health.request -> .response",
+      "ingredientes.metrics.request -> .response"
+    ],
+    "salida": [
+      "ingrediente.creado",
+      "ingrediente.actualizado"
+    ]
+  },
+  "ui": {
+    "ops": {
+      "list": {
+        "titulo": "List"
+      },
+      "get": {
+        "titulo": "Get"
+      },
+      "get_precio": {
+        "titulo": "Get Precio"
+      },
+      "search": {
+        "titulo": "Search"
+      },
+      "alergenos": {
+        "titulo": "Alergenos"
+      },
+      "update": {
+        "titulo": "Update"
+      },
+      "update_precios": {
+        "titulo": "Update Precios"
+      },
+      "health": {
+        "titulo": "Health"
+      },
+      "metrics": {
+        "titulo": "Metrics"
+      }
+    },
+    "datos": {
+      "op": "list",
+      "titulo": "List",
+      "refresh_on": [
+        "ingrediente.creado",
+        "ingrediente.actualizado"
+      ]
+    },
+    "estados": [
+      {
+        "nombre": "disponible",
+        "terminal": false,
+        "color": "green",
+        "icono": "DISP"
+      },
+      {
+        "nombre": "con_precio_extra",
+        "terminal": false,
+        "color": "blue",
+        "icono": "PRECIO"
+      },
+      {
+        "nombre": "alergeno",
+        "terminal": false,
+        "color": "red",
+        "icono": "ALERG"
+      }
+    ],
+    "flujo": [
+      {
+        "nombre": "jefe",
+        "orden": 1,
+        "ops": [
+          "update",
+          "update_precios"
+        ],
+        "descripcion": "Declara en el catalogo: corrige ficha (nombre, familia, alergenos, es_alergeno) y reta precios (suelto o LOTE: alcance grupo/todo, cifra fija o % compuesto)"
+      },
+      {
+        "nombre": "consulta",
+        "orden": 2,
+        "ops": [
+          "list",
+          "get",
+          "search",
+          "alergenos",
+          "get_precio"
+        ],
+        "descripcion": "Ver catalogo, ficha, precios vigentes y pulso de alergenos - alimenta cada decision del jefe"
+      },
+      {
+        "nombre": "utilidad",
+        "orden": 3,
+        "ops": [
+          "health",
+          "metrics"
+        ],
+        "descripcion": "Salud del modulo y agregados del catalogo (cinta-estado)"
+      }
+    ],
+    "detalle": {
+      "op": "get",
+      "titulo": "Ficha de ingrediente",
+      "cabecera": [
+        "id",
+        "nombre",
+        "familia",
+        "grupos",
+        "precio_extra"
+      ],
+      "campo_items": "ingredientes",
+      "campo_total": "total",
+      "acciones_contextuales": [
+        "update",
+        "update_precios",
+        "get_precio",
+        "alergenos"
+      ]
+    },
+    "roles": {
+      "list": "neutro",
+      "get": "neutro",
+      "get_precio": "neutro",
+      "search": "neutro",
+      "alergenos": "neutro",
+      "update": "jefe",
+      "update_precios": "jefe",
+      "health": "neutro",
+      "metrics": "neutro"
+    },
+    "formas_jefe": {
+      "precio_de_un_ingrediente": {
+        "forma": "inline-gesture",
+        "rpc": "ingredientes.update {id, precio_extra}",
+        "senal": "ingrediente.actualizado (1x)"
+      },
+      "ficha": {
+        "forma": "editor-bloque",
+        "rpc": "ingredientes.update {id, nombre?, familia?, es_alergeno?, alergenos?}",
+        "senal": "ingrediente.actualizado (1x)"
+      },
+      "lote_de_precios": {
+        "forma": "editor-bloque-tabla (lote)",
+        "rpc": "ingredientes.update_precios {id|tipo|grupo|todo, precio_extra|porcentaje}",
+        "senal": "ingrediente.actualizado (Nx -> debounce)"
+      },
+      "seleccion_alcance": {
+        "forma": "ref-select",
+        "rpc": "ingredientes.list {grupo?}",
+        "senal": null
+      },
+      "cinta_estado": {
+        "forma": "cinta-estado",
+        "rpc": "ingredientes.list + ingredientes.health",
+        "senal": "ingrediente.creado"
+      }
+    }
+  },
+  "_lente_roles": {
+    "agente": "crear-blueprint-jefe v2",
+    "metodo": "esquematizador-jefe",
+    "arbitro": "futuro->jefe | ahora->utilizacion | solo-lee->neutro",
+    "consolidacion": "modules/pizzepos/ingredientes/esquema-jefe/esquema.md",
+    "dualidad": "JEFE=edicion del catalogo y SUS precios (update ficha + update_precios en lote) | UTILIZACION=vacia en este modulo (el consumo de extras al vender es del motor-opciones, no aqui) | neutro=listas/agregados",
+    "senales_pareadas": "update->ingrediente.actualizado (1x, diff por campo) - update_precios->ingrediente.actualizado (Nx, UNO POR ingrediente: publica dentro del for en index.js L480) - sync externa: ingrediente.creado / carta.actualizada re-pueblan",
+    "moneda": "precio_extra se persiste en EUROS float redondeado a 2 decimales (index.js L472 Math.round(x*100)/100) - la UI edita y envia euros, sin conversion a centimos",
+    "nota": "update_precios NO acepta [{id,precio}...]: recibe alcance (id|tipo|grupo|todo) + precio_extra fijo o porcentaje COMPUESTO sobre el vigente",
+    "utilizacion": []
+  }
+}

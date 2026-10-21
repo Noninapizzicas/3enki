@@ -1,0 +1,37 @@
+{
+  "_doc": "Manifest de libro/saldo-tesoreria — REFLEJO STATELESS (E4, hoja del plan). Posicion real de DINERO por cuenta (grupo 5 PGC); derivacion determinista del mayor. La MONEDA la DECLARA maestro-cuentas-bancarias (E11) via el hecho contabilidad.cuenta_bancaria_declarada — este reflejo NO la adivina ni asume EUR. Honestidad: sin saldos no se inventa la posicion; con moneda sin declarar o varias monedas el total NO es agregable (posicion:null), no se mezcla a ciegas. NO escribe, NO persiste. RPC calcular es CLASE PREGUNTA → va por el bus, sin panel. Publica saldo-tesoreria.calcular.response y su par .failed. Escucha contabilidad.asiento_asentado (B2) y contabilidad.cuenta_bancaria_declarada (E11), ambos emitidos.",
+  "name": "saldo-tesoreria",
+  "version": "0.1.0",
+  "description": "Reflejo (E4): posicion real de dinero por cuenta, derivada del mayor. Moneda declarada (E11); sin moneda/varias monedas el total no es agregable.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "saldo-tesoreria.calcular.request",
+      "handler": "onCalcularRequest",
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id, saldos?, fecha?, ejercicio?} → {project_id, posicion, moneda, agregable, cuentas, abierto}. Agrupa el saldo por cuenta de tesoreria; el total solo es agregable con moneda unica declarada. Responde por saldo-tesoreria.calcular.response. Payload invalido → saldo-tesoreria.calcular.failed."
+    },
+    {
+      "event": "contabilidad.asiento_asentado",
+      "handler": "onAsientoAsentado",
+      "description": "Fire-and-forget (B2 escritor-diario): un asiento quedo en el libro. Se observa (ventana acotada); no se recalcula ni se escribe."
+    },
+    {
+      "event": "contabilidad.cuenta_bancaria_declarada",
+      "handler": "onCuentaBancariaDeclarada",
+      "description": "Fire-and-forget (E11 maestro-cuentas-bancarias): quedo declarada una cuenta bancaria y su moneda. Se registra para no asumir la moneda al calcular la posicion."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "saldo-tesoreria.calcular.response",
+      "description": "Respuesta RPC correlada de la op calcular (una sola cara: el bus)."
+    },
+    {
+      "event": "saldo-tesoreria.calcular.failed",
+      "description": "Par de fallo determinista: falta project_id → {status, code, message}. Cierra el circulo de calcular.request."
+    }
+  ],
+  "tools": [
+    { "name": "saldo-tesoreria.calcular", "description": "Calcula (PREGUNTA) la posicion de tesoreria (dinero) por cuenta desde los saldos del mayor." }
+  ]
+}

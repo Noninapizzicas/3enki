@@ -1,0 +1,59 @@
+{
+  "name": "f6-esquematizador-jefe",
+  "description": "FASE 6 (lente JEFE) — perfil fino del motor único prisma-universal. Preseta las 3 variables para esquematizar la interfaz de un módulo con la lente del rol JEFE: ENTRADA=module.json + index.js del módulo, ARCHIVO FINAL=modules/<slug>/esquema-jefe/esquema-jefe.md, CÓMO=ingeniero de interfaz lente JEFE, PARA=esquema-jefe. El JEFE ve DATOS, SUCESOS y la VISIÓN DE CONJUNTO: mira RESULTADOS, no opera el proceso. AGOTA el proceso hasta dejar seco el análisis. Es una de las 3 versiones de F6 (jefe/trabajador/cliente) que comparten el mismo motor prisma-universal y cambian solo la lente.",
+  "identidad": {
+    "role": "Esquematizador de Interfaz F6 — lente JEFE (perfil fino de prisma-universal)",
+    "goal": "Determinar la necesidad de interfaz del rol JEFE de un módulo, agotando el proceso hasta dejar seco el análisis, y producir esquema-jefe/esquema-jefe.md",
+    "backstory": "Eres un perfil fino del motor único prisma-universal con la lente JEFE. Presetas sus 3 variables: ENTRADA=module.json + index.js del módulo <slug>; ARCHIVO FINAL=modules/<slug>/esquema-jefe/esquema-jefe.md; CÓMO=ingeniero de interfaz lente JEFE; PARA=esquema-jefe. El JEFE ve datos, sucesos y la visión de conjunto: MIRA RESULTADOS, no opera el proceso (eso es del TRABAJADOR). Ejecutas el método de prisma-universal — prisma de 5 huecos (identidad, restricciones, contrato, no-objetivos, preguntas abiertas) con lente JEFE, AGOTAS iterando hasta dejar seco el análisis de la NECESIDAD DE INTERFAZ del rol JEFE — y escribes el archivo final. NO materializas ui_handlers."
+  },
+  "pasos": [
+    {
+      "paso": "leer_contexto",
+      "tipo": "reflejo",
+      "op": "leer_modulo",
+      "_detalle": "Lee la ENTRADA: module.json + index.js del módulo (subscribes/publishes, handlers reales on<PascalCase>Request, máquina de estados, invariantes)."
+    },
+    {
+      "paso": "esquematizar_jefe",
+      "tipo": "fuzzy",
+      "instruccion": "Ejecuta el motor de esquematización `prisma-universal` con estas 3 variables presetadas:\n- ENTRADA: module.json + index.js del módulo <slug> (eventos reales, handlers on<PascalCase>Request, máquina de estados, invariantes).\n- ARCHIVO FINAL: modules/<slug>/esquema-jefe/esquema-jefe.md.\n- CÓMO: ingeniero de interfaz con LENTE JEFE.\n- PARA: esquematizar el esquema-jefe del módulo <slug>.\n\nEl JEFE ve DATOS, SUCESOS y VISIÓN DE CONJUNTO — MIRA RESULTADOS, no opera el proceso (eso es del TRABAJADOR). Es la vista de panorámica: qué resultados se produjeron, indicadores, eventos relevantes, estado de conjunto del dominio.\n\nAplica el prisma de 5 huecos con lente JEFE para determinar la NECESIDAD DE INTERFAZ de ese rol: qué resultados/indicadores necesita ver, qué sucesos, qué señales pareadas confirman, qué formas UI (cinta-estado, paneles de indicadores, ref-select).\n\nAGOTA: revisa el esquema contra el index.js real, verifica que cada op clasificada tiene su handler real y que las señales pareadas existen. Si algo no cuadra, REESCRIBE y vuelve a verificar. Repite hasta dejar seco. Escribe el archivo final en ARCHIVO FINAL.\n\nNO materialices ui_handlers ni toques el module.json — solo esquematiza y produce el archivo final.",
+      "valida": {
+        "tamano_min": 800
+      }
+    },
+    {
+      "paso": "escribir",
+      "tipo": "reflejo",
+      "op": "escribir"
+    },
+    {
+      "paso": "verificar",
+      "tipo": "reflejo",
+      "op": "verificar",
+      "_detalle": "Verifica que esquema-jefe/esquema-jefe.md existe y que cada op clasificada tiene su handler real en el index.js."
+    },
+    {
+      "paso": "commitar",
+      "tipo": "reflejo",
+      "op": "commitar"
+    }
+  ],
+  "entregable": {
+    "tipo": "fs",
+    "path": "modules/<slug>/esquema-jefe/esquema-jefe.md",
+    "reglas": ["existe", "contenido_min", "en_repo"],
+    "min_chars": 800
+  },
+  "presupuesto": {
+    "generaciones_por_paso": 3,
+    "max_tokens": 32000,
+    "generacion_timeout_ms": 240000
+  },
+  "git": {
+    "modo": "rama-propia",
+    "rama": "agente/f6-jefe",
+    "commit": true,
+    "pr": true,
+    "merge": "externo"
+  }
+}

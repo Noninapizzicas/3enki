@@ -1,0 +1,153 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "carta-design",
+  "version": "blueprint-2.0.0",
+  "moduleId": "carta-design",
+  "titulo": "El COMPOSITOR del diseño impreso de la carta: el JEFE elige la carta (ref-select) y COMPONE el look del PDF (contexto_diseno → dictamen visual {carta, marca, alergenos_catalogo}), luego VALIDA (freno) y GUARDA (save) el HTML. La identidad del diseño sale de la MARCA (carta-marketing); la composición del HTML la hace el LLM de página.",
+  "_doc": "Blueprint v2 de INTERFAZ de la cara del JEFE del modulo carta-design (pizzepos v3.3.0, HIBRIDO — el COMPOSITOR del diseño impreso de la carta). Reemplaza blueprint-2.5.0: v2.0.0 REESCRIBE en schema 'blueprint-interfaz-v2' (lente de roles esquematizador-jefe, ciclo v2 30-ago-2026) SIN cambiar el contrato: las 5 ops reales del reflejo (contexto_diseno/load_carta/validar/save/gallery) servidas por RPC de evento design.<op>.request -> .response (SIN ui_handlers en module.json — HIBRIDO fuzzy como menu-generator/viabilidad). El reflejo (index.js reflejo-2.1.0) HIDRATA en UNA RPC {carta, marca, alergenos_catalogo} (contexto_diseno L78-99), valida el HTML contra la carta REAL (validar L161-169, _checkDiseno L117-142 — EL FRENO), guarda HTML+meta companion (save L172-210, RE-VALIDA como gate inquebrantable + 2º freno de render real) y lista la galeria (gallery L213-227). Senal REAL verificada en codigo (aunque module.json no declare publishes — leccion carta-digital): carta.html.generada (L205). Moneda: SIN € (es diseño, no cifras). Verificaciones de codigo: modules/pizzepos/carta-design/index.js 230 lineas (handlers L38-42, _contextoDiseno L78-99, _loadCarta L102-108, _checkDiseno L117-142, _validar L161-169, _save L172-210, _gallery L213-227, senal L205), module.json (5 subscribes RPC, sin ui_handlers). Nada inventado: ver _verificado_en_codigo.",
+  "_doc_historico": "Blueprint del modulo carta-design. Hijo de subsistema-recetario.modulo-base. Estudio de diseno de cartas impresas. 4 operaciones deterministas (las sirve el REFLEJO JS): contexto_diseno (HIDRATA carta+marca), load_carta (solo la carta), save (guarda el HTML), gallery (lista lo guardado). La identidad del diseno sale de la MARCA (carta-marketing): colores, tipografias, logo, voz — NO hay biblioteca de profiles. La composicion del HTML la hace el LLM de pagina (SIN agente). (Conservado de blueprint-2.5.0 al reescribir v2.0.0 — el historial completo de changelogs v1.x-v2.5.x vive en el fichero anterior.)",
+  "eventos_publicados": [
+    "carta.html.generada"
+  ],
+  "eventos_que_escucho": [
+    "design.contexto_diseno.response",
+    "design.load_carta.response",
+    "design.validar.response",
+    "design.save.response",
+    "design.gallery.response",
+    "carta.html.generada"
+  ],
+  "transporte": {
+    "entrada": "reflejo RPC por evento (SIN ui_handlers en module.json — HIBRIDO fuzzy como menu-generator/viabilidad): publish a core/*/events/design/<op>/request con ASTERISCO LITERAL + request_id + project_id en el cuerpo; respuesta pareada suscrita dot-notation 'design.<op>.response' filtrando request_id; top-level {request_id, status, data|error} — NO anidada bajo result.",
+    "rpc": [
+      "design.contexto_diseno.request -> design.contexto_diseno.response (top-level {request_id, status, data|error}) — LA DECISION (dictamen visual 200 {carta, marca, alergenos_catalogo})",
+      "design.load_carta.request -> design.load_carta.response (lectura de la carta a disenar)",
+      "design.validar.request -> design.validar.response (EL FRENO: {valid, errors, productos_total, productos_faltan})",
+      "design.save.request -> design.save.response (persiste HTML+meta, 201 meta)",
+      "design.gallery.request -> design.gallery.response (galeria de disenos guardados)",
+      "carta.list.request -> carta.list.response (ref-select: [{id, nombre, estado, version, productos_count, categorias_count}]) — neutro, alimenta la decision"
+    ],
+    "salida": [
+      "carta.html.generada (L205 — confirma que un diseno se guardo; refresca la galeria)"
+    ],
+    "qos": "publishAndWait (request/response correlado por request_id); timeout del panel 20s (contexto_diseno anida carta.get interno con timeout 8s + carta-marketing.get_perfil 6s — espera larga real); senales con debounce 60ms"
+  },
+  "ui": {
+    "_doc": "Panel de la CARA DEL JEFE del compositor del diseño impreso. Composicion (esquema-jefe): SELECCIONAR (ref-select carta desde carta.list) -> COMPONER (LA DECISION: 1 llamada design.contexto_diseno, boton muerto en vuelo, dictamen visual {carta, marca, alergenos_catalogo} en la respuesta + senal generada re-confirmando) -> VALIDAR (FRENO: design.validar {carta_id, html} -> {valid, errors}) y GUARDAR (design.save {carta_id, html} -> 201 meta + senal generada). La galeria (design.gallery) es cinta-estado. La UI no compone HTML: dispara la composicion, valida y guarda el resultado.",
+    "ops": {
+      "contexto_diseno": {
+        "titulo": "Componer el look impreso",
+        "descripcion": "LA DECISION (jefe): elige la carta (ref-select) -> el reflejo HIDRATA en UNA RPC {carta, marca, alergenos_catalogo} — la carta a disenar (carta-manager) + la identidad de marca (carta-marketing: colores, tipografias, logo, voz) + el catalogo de alergenos (Reg. UE 1169/2011). Es el DICTAMEN VISUAL del impreso: lo que el diseno va a encarnar.",
+        "rol": "jefe",
+        "forma": "ref-select carta + transicion-un-llamado + dictamen-visual",
+        "senal_pareada": "carta.html.generada (L205) — dictamen en la respuesta + senal re-confirmando (debounce 60ms)",
+        "args": [
+          { "nombre": "carta_id", "tipo": "select", "required": true, "descripcion": "La carta a disenar (ref-select desde carta.list)." }
+        ],
+        "errores": "400 INVALID_INPUT (falta carta_id) · 503 UPSTREAM_UNREACHABLE (carta-manager no responde) · 502 (status del upstream)"
+      },
+      "validar": {
+        "titulo": "Validar el diseño (freno)",
+        "descripcion": "EL FRENO (jefe): el reflejo juzga si el HTML REPRESENTA la carta, comparando contra la carta REAL (carta.get), NO contra lo que el LLM afirme — exige HTML no trivial + COMPLETITUD (cada producto aparece) + ALERGENOS declarados (1169/2011). Funcion pura (lee, no escribe): devuelve {valid, errors[{code,message,faltan}], productos_total, productos_faltan}.",
+        "rol": "jefe",
+        "forma": "transicion-un-llamado (freno) + dictamen-visual",
+        "senal_pareada": "ninguna propia (funcion pura, no escribe)",
+        "args": [
+          { "nombre": "carta_id", "tipo": "select", "required": true, "descripcion": "La carta contra la que se valida." },
+          { "nombre": "html", "tipo": "textarea", "required": true, "descripcion": "El HTML del diseño compuesto (el que el LLM de pagina genero)." }
+        ],
+        "errores": "400 INVALID_INPUT (falta carta_id o html) · 404 RESOURCE_NOT_FOUND (carta no existe) · 503 UPSTREAM_UNREACHABLE (carta-manager no responde)"
+      },
+      "save": {
+        "titulo": "Guardar el diseño",
+        "descripcion": "Persiste el HTML compuesto + meta companion en /pizzepos/carta-design/designs/<carta_id>__<timestamp>.html. RE-VALIDA como gate inquebrantable (si el diseno no representa la carta -> 422, NO persiste) + 2º freno de render real (best-effort). Emite carta.html.generada.",
+        "rol": "jefe",
+        "forma": "transicion-un-llamado + dictamen-visual",
+        "senal_pareada": "carta.html.generada (L205) — refresca la galeria",
+        "args": [
+          { "nombre": "carta_id", "tipo": "select", "required": true, "descripcion": "La carta del diseño." },
+          { "nombre": "html", "tipo": "textarea", "required": true, "descripcion": "El HTML del diseño a guardar." },
+          { "nombre": "nombre", "tipo": "text", "required": false, "descripcion": "Nombre del diseño (opcional)." },
+          { "nombre": "formato", "tipo": "text", "required": false, "descripcion": "Formato de la maqueta (p.ej. 'A4 apaisado · doble cara · 3 col')." }
+        ],
+        "errores": "400 INVALID_INPUT · 404 RESOURCE_NOT_FOUND (carta no existe) · 422 UPSTREAM_INVALID_RESPONSE (el diseno no representa la carta — faltan productos/alergenos, o renderiza roto) · 503 UPSTREAM_UNREACHABLE"
+      }
+    },
+    "datos": {
+      "op": "design.gallery",
+      "titulo": "Galeria de disenos guardados (cinta-estado)",
+      "refresh_on": ["carta.html.generada"],
+      "columnas": ["carta_id", "nombre", "formato", "generado_at", "generado_por"]
+    },
+    "roles": {
+      "contexto_diseno": "jefe",
+      "validar": "jefe",
+      "save": "jefe"
+    },
+    "flujo": [
+      {
+        "nombre": "jefe",
+        "orden": 1,
+        "ops": ["contexto_diseno", "validar", "save"],
+        "descripcion": "COMPONER el look impreso: COMPONER (ref-select carta -> 1 llamada design.contexto_diseno -> dictamen visual {carta, marca, alergenos_catalogo} en la respuesta + senal generada re-confirmando), VALIDAR (FRENO: design.validar {carta_id, html} -> {valid, errors}) y GUARDAR (design.save {carta_id, html} -> 201 meta + senal generada). El jefe es el compositor: dispara la composicion, valida y persiste el resultado."
+      },
+      {
+        "nombre": "consulta",
+        "orden": 2,
+        "ops": [],
+        "descripcion": "INFORMARSE antes de decidir: el dictamen visual llega en la respuesta de contexto_diseno (dictamen-visual) y la galeria de disenos guardados se lee con design.gallery (cinta-estado). El ref-select de cartas (carta.list) alimenta la eleccion."
+      }
+    ],
+    "formas_jefe": {
+      "ref_select_carta": {
+        "forma": "ref-select (elegir la carta desde el listado — nunca teclear el id)",
+        "rpc": "carta.list.request { project_id } -> [{id, nombre, estado, version, productos_count, categorias_count}]",
+        "senal": "ninguna propia (lectura neutra)"
+      },
+      "componer_dictamen": {
+        "forma": "transicion-un-llamado + dictamen-visual: boton COMPONER (muerto en vuelo, espera 20s por carta.get interno) -> dictamen {carta, marca, alergenos_catalogo} en claro",
+        "rpc": "design.contexto_diseno.request { project_id, carta_id } -> 200 {carta, marca, alergenos_catalogo}",
+        "senal": "carta.html.generada (L205) — debounce 60ms"
+      },
+      "validar_freno": {
+        "forma": "transicion-un-llamado (freno): boton VALIDAR -> {valid, errors[{code,message,faltan}], productos_total, productos_faltan}",
+        "rpc": "design.validar.request { project_id, carta_id, html } -> 200 {valid, errors, productos_total, productos_faltan}",
+        "senal": "ninguna propia (funcion pura)"
+      },
+      "guardar_diseno": {
+        "forma": "transicion-un-llamado: boton GUARDAR -> 201 meta {carta_id, nombre, formato, generado_at, generado_por, filename, size_bytes}",
+        "rpc": "design.save.request { project_id, carta_id, html, nombre?, formato? } -> 201 meta",
+        "senal": "carta.html.generada (L205) — debounce 60ms"
+      },
+      "galeria_disenos": {
+        "forma": "cinta-estado (el pulso de lo compuesto sin navegar)",
+        "rpc": "design.gallery.request { project_id, carta_id? } -> metas (orden fecha desc)",
+        "senal": "carta.html.generada"
+      }
+    }
+  },
+  "_lente_roles": {
+    "agente": "ciclo-carta-design v2",
+    "metodo": "esquematizador-jefe (modules/pizzepos/carta-design/esquema-jefe/ — pasada-1, pasada-2-diseccion, esquema.md)",
+    "arbitro": "¿DECIDE el look impreso de la carta (compone/valida/guarda el diseño)? -> jefe · ¿se vende/consume en el momento de la venta? -> utilizacion (POS/PWA) · ¿solo lee? -> neutro",
+    "veredicto": "3/5 ops juzgadas: jefe(3) contexto_diseno (LA DECISION — dispara la composicion del look impreso; HIDRATA {carta, marca, alergenos_catalogo} en 1 RPC) + validar (EL FRENO — juzga si el HTML representa la carta) + save (persiste el diseño, RE-VALIDA como gate inquebrantable). Neutros(2): carta.list (ref-select, lectura de carta-manager que alimenta la eleccion) + gallery (cinta-estado de disenos guardados). Utilizacion: nada (el diseño impreso se imprime/publica, no se vende).",
+    "senales": "1 señal de salida: carta.html.generada (index.js L205, tras guardar) — el module.json NO declara publishes (hueco del manifiesto, leccion carta-digital: el codigo manda). Doble confirmacion tras componer/guardar: dictamen en la respuesta RPC + señal que re-confirma (debounce 60ms) — nunca recarga, nunca estado optimista.",
+    "moneda": "SIN € — el diseño de la carta no tiene cifras (es look impreso: carta + marca + alergenos). Cero euros ni centimos en ningun shape.",
+    "dualidad": "JEFE=contexto_diseno (LA DECISION) + validar (FRENO) + save (persiste) | UTILIZACION=nada (el diseño impreso se imprime/publica, no se vende) | neutro=carta.list (ref-select, lectura de carta-manager) + gallery (cinta-estado)",
+    "huecos_abiertos": [
+      "[ABIERTO] composicion del HTML en el panel: hoy la hace el LLM de PAGINA en el chat (fuzzy, sin agente). El panel del jefe dispara (contexto_diseno), valida y guarda — no compone. Decision del dueno.",
+      "[ABIERTO] edicion de la marca desde el panel: la identidad vive en carta-marketing (custodio). El diseño la BEBE, no la edita. Decision del dueno.",
+      "[ABIERTO] re-composicion automatica cuando cambia la carta: un diseño es snapshot del momento. Decision del dueno."
+    ],
+    "moderacion": "contexto_diseno es jefe (dispara la composicion del look impreso); validar es jefe (freno); save es jefe (persiste). El ref-select de cartas es neutro (alimenta la eleccion). La galeria es neutra (cinta-estado). No hay utilizacion: el diseño impreso es previo a la venta.",
+    "utilizacion": [],
+    "fuente_analisis": "modules/pizzepos/carta-design/esquema-jefe/esquema.md",
+    "fecha": "2026-08-30"
+  },
+  "_verificado_en_codigo": {
+    "reflejo": "modules/pizzepos/carta-design/index.js (reflejo-2.1.0, 230 lineas): onContextoDisenoRequest (L38, _atender -> design.contexto_diseno.response) · onLoadCartaRequest (L39) · onSaveRequest (L40) · onGalleryRequest (L41) · onValidarRequest (L42) · _contextoDiseno (L78-99): valida (400 L79), carta.get (L80-81, timeout 8s), carta-marketing.get_perfil (L85-87, timeout 6s, best-effort marca:null), normaliza alergenos (L91-93), dictamen 200 {carta, marca, alergenos_catalogo} (L94-98) · _loadCarta (L102-108) · _checkDiseno (L117-142): HTML no trivial + COMPLETITUD (cada producto aparece) + ALERGENOS declarados (1169/2011) · _validar (L161-169): 200 {valid, errors, productos_total, productos_faltan} · _save (L172-210): RE-VALIDA (L178-181, 422 si no representa), 2º freno render (L184-188, best-effort), escribe HTML+meta (L194-203), publica carta.html.generada (L205), 201 meta (L209) · _gallery (L213-227): metas orden fecha desc",
+    "senales": "carta.html.generada (L205, tras guardar) — el module.json NO declara publishes (hueco del manifiesto, leccion carta-digital: el codigo manda)",
+    "module_json": "5 subscribes RPC (contexto_diseno/load_carta/save/gallery/validar) — SIN ui_handlers (HIBRIDO fuzzy como menu-generator/viabilidad)",
+    "errores": "400 INVALID_INPUT (falta carta_id/html) · 404 RESOURCE_NOT_FOUND (carta no existe) · 422 UPSTREAM_INVALID_RESPONSE (el diseno no representa la carta — faltan productos/alergenos, o renderiza roto) · 503 UPSTREAM_UNREACHABLE (carta-manager/carta-marketing no responden) · 502 (status del upstream)"
+  }
+}

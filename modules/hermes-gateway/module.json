@@ -1,0 +1,15 @@
+{
+  "name": "hermes-gateway",
+  "version": "1.0.0",
+  "description": "Expone todo el toolsRegistry de Enki por MQTT. Cualquier proceso externo (motor-hermes Rust, enki-movil, motores enki-sense) puede invocar tools sin HTTP. Delega el dispatch a hermes-bridge (3 rutas: bus universal, directa, fallback).",
+  "subscribes": [],
+  "publishes": [],
+  "provides": {
+    "apis": [],
+    "hooks": []
+  },
+  "config": {
+    "topic_prefix": "hermes",
+    "tool_timeout_ms": 15000
+  }
+}

@@ -1,0 +1,47 @@
+{
+  "_doc": "Manifest de libro/mayor-balanza — REFLEJO STATELESS (B3, hoja del plan). Saldos por CUENTA y BALANZA de comprobacion DERIVADOS del diario. Calculo DETERMINISTA (mismo diario → mismos saldos). ESCUCHA contabilidad.asiento_asentado (B2 escritor-diario) y acumula su DERIVADO en memoria (el mayor): NO escribe el libro, lo LEE. Debe/Haber se conservan separados y se deriva el saldo por cuenta; sin cuenta declarada, los movimientos se agrupan aparte (`sin_cuenta`), no se imputan a una cuenta inventada. NO escribe, NO persiste. RPC saldos y balanza son CLASE PREGUNTA → van por el bus, sin panel. Publica los pares saldos/balanza .response/.failed.",
+  "name": "mayor-balanza",
+  "version": "0.1.0",
+  "description": "Reflejo (B3): mayor y balanza de comprobacion derivados del diario. Determinista; ni escribe ni persiste el libro.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "mayor-balanza.saldos.request",
+      "handler": "onSaldosRequest",
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id, prefijo?, cuenta?} → {project_id, saldos, num_cuentas, total_debe, total_haber, cuadra}. Deriva los saldos por cuenta del mayor. Sin project_id → INVALID_INPUT. Responde por mayor-balanza.saldos.response."
+    },
+    {
+      "event": "mayor-balanza.balanza.request",
+      "handler": "onBalanzaRequest",
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id} → {project_id, balanza:[{cuenta, suma_debe, suma_haber, saldo_deudor, saldo_acreedor}], total_debe, total_haber, cuadra}. Balanza de comprobacion por cuenta. Responde por mayor-balanza.balanza.response."
+    },
+    {
+      "event": "contabilidad.asiento_asentado",
+      "handler": "onAsientoAsentado",
+      "description": "Fire-and-forget (lo emite escritor-diario B2): un asiento quedo en el libro → se acumula en el mayor derivado. No responde (no es RPC) ni publica nada."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "mayor-balanza.saldos.response",
+      "description": "Respuesta RPC correlada de la op saldos."
+    },
+    {
+      "event": "mayor-balanza.saldos.failed",
+      "description": "Par de fallo determinista: falta project_id → {status, code, message}. Cierra el circulo de saldos.request."
+    },
+    {
+      "event": "mayor-balanza.balanza.response",
+      "description": "Respuesta RPC correlada de la op balanza."
+    },
+    {
+      "event": "mayor-balanza.balanza.failed",
+      "description": "Par de fallo determinista: falta project_id → {status, code, message}. Cierra el circulo de balanza.request."
+    }
+  ],
+  "tools": [
+    { "name": "mayor-balanza.saldos", "description": "Deriva (PREGUNTA) los saldos por cuenta del diario." },
+    { "name": "mayor-balanza.balanza", "description": "Deriva (PREGUNTA) la balanza de comprobacion por cuenta." }
+  ],
+  "ui_handlers": []
+}

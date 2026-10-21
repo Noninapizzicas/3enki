@@ -1,0 +1,53 @@
+{
+  "_doc": "Manifest de libro/flujo-firma — CUSTODIO CON PERSISTENCIA (L3, hoja del plan). La PARCELA del estado revisado/firmado del asesor. UN solo escritor. 🔴 EL SISTEMA NO FIRMA: esta hoja NO firma nada, REGISTRA que el asesor firmo (acto declarado, firmado_por obligatorio) y deja constancia. Una firma VENCE: al pasar su vencimiento EXPIRA (estado VENCIDA) y el sistema RE-PREGUNTA; nunca renueva en silencio ni da por buena una firma caducada. Sin vencimiento declarado la firma no se inventa vigencia (vence_en=null, se declara en `abierto`). Dato ausente = desconocido: sin referencia de revision no se firma. No se borra: re-firmar appendea al historial. Persiste por proyecto via PosPersistencia (_shared/pos-persistencia, storage /contabilidad/flujo-firma), restaura en project.activated y vuelca en onUnload. Proyecciones _firmar (ORDEN, panel) y _estado (PREGUNTA, por el bus). Publica contabilidad.revision_firmada (+ pares *.failed). SUBE traza-asiento.registrar.request (B4) por evento. ESCUCHA: ninguna (el plan no declara escucha de dominio).",
+  "name": "flujo-firma",
+  "version": "0.1.0",
+  "description": "Custodio (L3): parcela del estado revisado/firmado. El sistema NO firma — registra el acto del asesor; la firma vence y el sistema re-pregunta. Persistente por proyecto.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "flujo-firma.firmar.request",
+      "handler": "onFirmarRequest",
+      "description": "RPC custodio (ORDEN, panel): {project_id, referencia, firmado_por, revisado?, vence_en?, rol?} → {project_id, clave, revision, firmada, estado, sistema_firma:false}. Registra el acto del asesor (el sistema NO firma); sin firmado_por → INVALID_INPUT. Publica contabilidad.revision_firmada y responde por flujo-firma.firmar.response. Payload invalido → flujo-firma.firmar.failed."
+    },
+    {
+      "event": "flujo-firma.estado.request",
+      "handler": "onEstadoRequest",
+      "description": "RPC custodio (PREGUNTA, por el bus): {project_id, referencia} → {project_id, clave, estado, vigente, re_pregunta}. Estado de firma (SIN_FIRMAR|VIGENTE|VENCIDA); una firma vencida o inexistente → re_pregunta:true (no se da por buena). Responde por flujo-firma.estado.response; payload invalido → flujo-firma.estado.failed."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Restaura la parcela de firma del proyecto activado desde el storage (PosPersistencia)."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "contabilidad.revision_firmada",
+      "description": "Fire-and-forget (L3): el asesor dejo constancia de que firmo/reviso una revision → {project_id, clave, revision, firmada, estado}. Lo consume marca-borrador-validado (Q4) para sellar el punto en que esta lo que se ve."
+    },
+    {
+      "event": "flujo-firma.firmar.response",
+      "description": "Respuesta RPC correlada de la op firmar (ORDEN)."
+    },
+    {
+      "event": "flujo-firma.firmar.failed",
+      "description": "Par de fallo determinista: falta project_id/referencia o firmado_por → {status, code, message}. Cierra el circulo de firmar.request."
+    },
+    {
+      "event": "flujo-firma.estado.response",
+      "description": "Respuesta RPC correlada de la op estado (PREGUNTA)."
+    },
+    {
+      "event": "flujo-firma.estado.failed",
+      "description": "Par de fallo determinista: falta project_id o referencia → {status, code, message}. Cierra el circulo de estado.request."
+    }
+  ],
+  "tools": [
+    { "name": "flujo-firma.firmar", "description": "Registra (ORDEN) el acto de firma del asesor sobre una revision (el sistema no firma)." },
+    { "name": "flujo-firma.estado", "description": "Lee (PREGUNTA) el estado de firma de una revision (vigente/vencida/sin firmar)." }
+  ],
+  "ui_handlers": [
+    { "domain": "contabilidad", "action": "flujo-firma.firmar", "handler": "onFirmarRequest", "type": "system_panel", "zone": "lateral_derecha" }
+  ]
+}

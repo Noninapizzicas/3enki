@@ -1,0 +1,65 @@
+{
+  "_doc": "Módulo entrega — custodio single-writer de la entrega (the-pirate): estimación de tiempo de preparación/entrega (EN3) y configuración de reparto (EN1: radio, coste, tiempo por km). Construido en F4 (2026-08-20) desde el esquema maestro P9 (entrega: EN1 reparto, EN3 estimación-tiempo). El reparto como canal ya lo cubren glovo/llevadoo; este módulo aporta la ESTIMACIÓN de tiempo y la política de reparto propio. Los nulls del contrato son política por declarar (el dueño los puebla vía entrega.reglas.actualizar).",
+  "description": "Entrega: estimación de tiempo de preparación/entrega y política de reparto (the-pirate).",
+  "language": "es",
+  "name": "entrega",
+  "publishes": [
+    {
+      "description": "Reglas de entrega cambiadas (tras actualizar) — la propiocepción lo capta.",
+      "event": "entrega.reglas.actualizadas"
+    }
+  ],
+  "subscribes": [
+    {
+      "description": "Estimación de tiempo total (preparación + reparto) para un pedido.",
+      "event": "entrega.tiempo.estimar.request",
+      "handler": "onTiempoEstimarRequest"
+    },
+    {
+      "description": "Política de reparto: radio, coste, tiempo por km.",
+      "event": "entrega.reparto.obtener.request",
+      "handler": "onRepartoObtenerRequest"
+    },
+    {
+      "description": "Lectura de las reglas de entrega del proyecto (todos pueden leer).",
+      "event": "entrega.reglas.leer.request",
+      "handler": "onReglasLeerRequest"
+    },
+    {
+      "description": "Escritura single-writer de las reglas (el dueño): valida y persiste.",
+      "event": "entrega.reglas.actualizar.request",
+      "handler": "onReglasActualizarRequest"
+    }
+  ],
+  "version": "0.1.0",
+  "ui_handlers": [
+    {
+      "domain": "entrega",
+      "action": "reglas.leer",
+      "handler": "onReglasLeerRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "entrega",
+      "action": "reglas.actualizar",
+      "handler": "onReglasActualizarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "entrega",
+      "action": "tiempo.estimar",
+      "handler": "onTiempoEstimarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "entrega",
+      "action": "reparto.obtener",
+      "handler": "onRepartoObtenerRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
+  ]
+}

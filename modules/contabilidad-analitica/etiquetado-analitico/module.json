@@ -1,0 +1,42 @@
+{
+  "_doc": "Manifest de analitica/etiquetado-analitico — MICRO-AGENTE (J1, hoja del plan). ASIGNA centro/linea/producto a cada hecho con REGLA DECLARABLE; cuando la regla no cubre, lo dudoso va a COLA. PROPONE, no escribe: la mitad REFLEJA (determinista) aplica las reglas DECLARADAS y expone la ETIQUETA PROPUESTA; NO fija nada por su cuenta. Sin regla que cubra la etiqueta queda ABIERTA (no se adivina el centro de coste) y SUBE encolado-excepcion.encolar.request (A8.1, lo dudoso a cola). Dato ausente = desconocido: sin hecho no hay nada que etiquetar. ESCUCHA contabilidad.hecho_recibido (puerto-evento-vertical A1) y contabilidad.criterio_fijado (cola-declaraciones-criterio) — ambos con emisor vivo; los handlers son fire-and-forget (toman constancia, no anuncian hecho). STATELESS (sin PosPersistencia). RPC juzgar es CLASE PREGUNTA → SIN ui_handler, su cara es el bus. Publica etiquetado-analitico.juzgar.response y su par .failed.",
+  "name": "etiquetado-analitico",
+  "version": "0.1.0",
+  "description": "Micro-agente (J1): propone centro/linea/producto por regla declarada; lo no cubierto va a cola. Propone, no fija.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "etiquetado-analitico.juzgar.request",
+      "handler": "onJuzgarRequest",
+      "description": "RPC micro-agente (PREGUNTA, por el bus): {project_id, hecho, dimensiones?, reglas?} → {project_id, hecho_id, dimensiones, propuesta{etiquetas, dimensiones, completa, faltan}, propone:true, fija:false, abierto}. Aplica las reglas declaradas; lo NO cubierto queda abierto y SUBE encolado-excepcion.encolar.request. Sin hecho → INVALID_INPUT. Responde por etiquetado-analitico.juzgar.response."
+    },
+    {
+      "event": "contabilidad.hecho_recibido",
+      "handler": "onHechoRecibido",
+      "description": "Fire-and-forget (puerto-evento-vertical A1): se recibio un hecho → se toma constancia del contexto (no propone ni escribe; el hecho llega por RPC). No responde."
+    },
+    {
+      "event": "contabilidad.criterio_fijado",
+      "handler": "onCriterioFijado",
+      "description": "Fire-and-forget (cola-declaraciones-criterio): se fijo un criterio declarable de etiquetado → se observa (memoria acotada) para aplicar sin que se declaren las reglas en cada RPC."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "etiquetado-analitico.juzgar.response",
+      "description": "Respuesta RPC correlada de la op juzgar (una sola cara: el bus)."
+    },
+    {
+      "event": "etiquetado-analitico.juzgar.failed",
+      "description": "Par de fallo determinista: falta project_id o hecho → {status, code, message}. Cierra el circulo de juzgar.request."
+    },
+    {
+      "event": "encolado-excepcion.encolar.request",
+      "description": "Subida (REQUEST por EVENTO, SOLO si la regla no cubre el hecho): encola lo dudoso en A8.1 para que el humano lo etiquete. EtiquetadoAnalitico propone; encolado-excepcion encola."
+    }
+  ],
+  "tools": [
+    { "name": "etiquetado-analitico.juzgar", "description": "Propone (PREGUNTA) la etiqueta analitica (centro/linea/producto) de un hecho segun la regla declarada." }
+  ],
+  "ui_handlers": []
+}

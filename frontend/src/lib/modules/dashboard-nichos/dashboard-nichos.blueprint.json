@@ -1,0 +1,81 @@
+{
+  "schema": "blueprint-interfaz-v1",
+  "id": "dashboard-nichos",
+  "version": "blueprint-0.1.0",
+  "moduleId": "vista-portafolio",
+  "titulo": "Dashboard del vertical NICHOS: observabilidad para el dueño. Cuántos nichos, cuántos generan, cuántos sangran, estado del pipeline, decisiones pendientes, alertas activas. SOLO LECTURA — la operación es por Telegram.",
+  "_doc": "Blueprint de INTERFAZ del dashboard del vertical nichos (system_panel, zone lateral_derecha). Ancla: módulo vista-portafolio. Consume por RPC de lectura a 5 módulos backend: vista-portafolio (snapshot agregado), cuadro-salud (finanzas), pipeline (estado por nicho), cola-decisiones (pendientes), historial (cronología). Se refresca con pulsos del bus. Sin escritura — el dueño opera por Telegram (puente-humano).",
+
+  "transporte": {
+    "rpc": [
+      "nichos.portafolio.vista.request → .response        (snapshot agregado: generan/sangran/flujo)",
+      "nichos.cuadro.salud.estado.request → respuesta       (finanzas: ingresos, costes, flujo, estado)",
+      "nichos.pipeline.estado.request → .response           (estado actual por nicho en la state machine)",
+      "nichos.cola.decisiones.siguientes.request → .response (solicitudes de decisión pendientes)",
+      "nichos.historial.cronologia.request → .response       (timeline de eventos por nicho)"
+    ],
+    "salida": [],
+    "qos": "publishAndWait (request/response correlado); timeout 8s por RPC"
+  },
+
+  "ui": {
+    "_doc": "5 zonas de solo lectura. Sin ops de escritura — el dueño opera por Telegram. Cada zona se refresca con el pulso del módulo que la alimenta.",
+    "ops": {
+      "portafolio": {
+        "titulo": "Resumen del portafolio",
+        "descripcion": "Snapshot agregado: total nichos, en caja, generan/sangran/neutro, flujo total.",
+        "rpc": "nichos.portafolio.vista.request",
+        "args": []
+      },
+      "salud": {
+        "titulo": "Salud financiera",
+        "descripcion": "Ingresos, costes, flujo neto y estado por proyecto.",
+        "rpc": "nichos.cuadro.salud.estado.request",
+        "args": []
+      },
+      "pipeline": {
+        "titulo": "Estado del pipeline",
+        "descripcion": "Cada nicho con su estado actual en la state machine de 19 estados (semilla→caja).",
+        "rpc": "nichos.pipeline.estado.request",
+        "args": []
+      },
+      "decisiones": {
+        "titulo": "Decisiones pendientes",
+        "descripcion": "Cuántas solicitudes hay en cola y cuáles son (solo contador + lista, sin resolver desde aquí).",
+        "rpc": "nichos.cola.decisiones.siguientes.request",
+        "args": []
+      },
+      "cronologia": {
+        "titulo": "Cronología",
+        "descripcion": "Timeline de los últimos eventos del vertical (registrados por historial).",
+        "rpc": "nichos.historial.cronologia.request",
+        "args": [
+          { "nombre": "limite", "tipo": "number", "default": 20, "descripcion": "Últimos N eventos" }
+        ]
+      }
+    },
+    "datos": {
+      "op": "portafolio",
+      "titulo": "Estado del vertical nichos",
+      "refresh_on": [
+        "nichos.portafolio.recalculado",
+        "nichos.salud.recalculada",
+        "nichos.pipeline.transicion.aplicada",
+        "nichos.decision.solicitud.abierta",
+        "nichos.decision.solicitud.respondida",
+        "nichos.alerta.sangria.emitida"
+      ]
+    }
+  },
+
+  "eventos_publicados": [],
+  "eventos_que_escucho": [
+    "nichos.portafolio.recalculado",
+    "nichos.salud.recalculada",
+    "nichos.pipeline.transicion.aplicada",
+    "nichos.decision.solicitud.abierta",
+    "nichos.decision.solicitud.respondida",
+    "nichos.decision.solicitud.caducada",
+    "nichos.alerta.sangria.emitida"
+  ]
+}

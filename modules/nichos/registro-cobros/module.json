@@ -1,0 +1,21 @@
+{
+  "name": "registro-cobros",
+  "version": "0.1.0",
+  "description": "CUSTODIO del vertical NICHOS: registro append-only de cobros por proyecto. Registra entradas de cobro (EFECTIVO, COMPROMETIDO, DEVUELTO) con referencia unica y sirve consultas filtradas por rango/tipo. Persistencia per-proyecto via PosPersistencia.",
+  "_doc": "modules/nichos/registro-cobros — CUSTODIO del vertical NICHOS.\n\nQue guarda (per-proyecto, PosPersistencia): /prisma/pos/nichos/registro-cobros.json\n  {\n    _version, _updated,\n    registro: {\n      version:         Int,\n      entradas:        [ { ref, tipo, importe, moneda, timestamp, por_autor, meta } ],\n      total_entradas:  Int\n    }\n  }\n\nQue atiende:\n  - nichos.registro.cobros.registrar.request → append de entrada de cobro. Emite nichos.cobro.registrado.\n  - nichos.registro.cobros.consultar.request → filtra entradas por rango/tipo.\n  - project.activated → restaura el store del proyecto.\n\nInvariante: append-only — las entradas registradas NUNCA se mutan ni se borran.\n\nPatron: ModuloHibridoReflejo + PosPersistencia. REFLEJO puro.",
+  "ui_decision": {
+    "necesita": false,
+    "razon": "Custodio de registro append-only. Sin cara propia; se consulta por RPC desde el cuadro de salud o el panel del vertical NICHOS."
+  },
+  "publishes": [
+    { "event": "nichos.cobro.registrado", "description": "PULSO fire-and-forget: cobro registrado. Payload: {id_proyecto, tipo, importe, cobro_ref, timestamp}." },
+    { "event": "nichos.cobro.registrado.failed", "description": "Par .failed del PULSO: el registro fallo (input invalido). Payload: {project_id, code, message, timestamp}." },
+    { "event": "nichos.registro.cobros.registrar.response", "description": "Response correlada por request_id al RPC nichos.registro.cobros.registrar.request. Payload: {status, data:{ref_cobro}}." },
+    { "event": "nichos.registro.cobros.consultar.response", "description": "Response correlada por request_id al RPC nichos.registro.cobros.consultar.request. Payload: {status, data:{entradas[]}}." }
+  ],
+  "subscribes": [
+    { "event": "nichos.registro.cobros.registrar.request", "handler": "onRegistrarRequest", "description": "RPC: append de una entrada de cobro al registro." },
+    { "event": "nichos.registro.cobros.consultar.request", "handler": "onConsultarRequest", "description": "RPC: consulta entradas filtradas por rango/tipo." },
+    { "event": "project.activated", "handler": "onProjectActivated", "description": "Reflejo JS: restaura el store del proyecto desde /prisma/pos/nichos/registro-cobros.json (PosPersistencia)." }
+  ]
+}

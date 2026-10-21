@@ -1,0 +1,27 @@
+{
+  "_doc": "Manifest de analitica/informe-rico — REFLEJO STATELESS (K3, hoja del plan). COMPONE la cifra YA CALCULADA con el contexto DECLARADO (periodo, unidad, criterio, comparativa, dimension, sociedad, nota). NO calcula la cifra (eso es de mayor-balanza/balance-situacion/cuenta-resultados): la RECIBE y la rodea de contexto. NO narra (la narracion fuzzy es R3) y NO propone accion (el 'que hacer' es R2). Invariante: dato ausente = desconocido → sin cifra no compone nada, y el contexto que falta NO se rellena: se declara en `abierto`. Una sola cara: el bus (PREGUNTA). NOTA R3: el plan declara escucha de contabilidad.asiento_asentado y contabilidad.ejercicio_cerrado, pero NINGUN modulo del repo los emite AUN (los emite escritor-diario B2 y cierre-ejercicio C4, de grupos posteriores): declararlos daria cadena colgada, asi que NO se declaran hasta que su emisor exista. Publica informe-rico.componer.response y su par .failed.",
+  "name": "informe-rico",
+  "version": "0.1.0",
+  "description": "Reflejo (K3): compone la cifra ya calculada con el contexto declarado. No calcula, no narra, no acciona; lo que falta se declara abierto.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "informe-rico.componer.request",
+      "handler": "onComponerRequest",
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id, cifra, contexto?, titulo?, calculo_de?} → {project_id, titulo, cifra, contexto, compuesto, recalculo:false, narracion_incluida:false, accion_incluida:false, abierto}. La cifra llega ya calculada; el contexto solo se compone, no se estima. Responde por informe-rico.componer.response."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "informe-rico.componer.response",
+      "description": "Respuesta RPC correlada de la op componer (una sola cara: el bus)."
+    },
+    {
+      "event": "informe-rico.componer.failed",
+      "description": "Par de fallo determinista: falta project_id o cifra → {status, code, message}. Cierra el circulo de componer.request."
+    }
+  ],
+  "tools": [
+    { "name": "informe-rico.componer", "description": "Compone (PREGUNTA) la cifra ya calculada con su contexto declarado." }
+  ]
+}

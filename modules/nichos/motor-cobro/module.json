@@ -1,0 +1,20 @@
+{
+  "name": "motor-cobro",
+  "version": "0.1.0",
+  "description": "REFLEJO sin estado del vertical NICHOS: ejecuta cobros según modelo, consulta plantilla de cobro por bus y registra en registro-cobros por bus. Formatea recibo.",
+  "_doc": "modules/nichos/motor-cobro — REFLEJO sin estado del vertical NICHOS.\n\nQué hace: una operación.\n\n1. EJECUTAR (nichos.cobro.ejecutar.request): consulta la plantilla de cobro al bus (nichos.perfil.cobro.plantilla.request), aplica el modelo de cobro al cliente, registra en registro-cobros por bus (nichos.registro.cobros.registrar.request) y devuelve recibo. Pulsa nichos.cobro.ejecutado o nichos.cobro.fallido.\n\nSin estado propio — REFLEJO puro, determinista.\n\nPatrón: ModuloHibridoReflejo (mitad REFLEJO, JS determinista).",
+  "ui_decision": {
+    "necesita": false,
+    "razon": "Motor de cobro sin cara propia. Se invoca por RPC desde el pipeline o flujos de monetización."
+  },
+  "publishes": [
+    { "event": "nichos.cobro.ejecutado", "description": "PULSO fire-and-forget: cobro ejecutado con éxito. Payload: {id_nicho, recibo, timestamp}." },
+    { "event": "nichos.cobro.fallido", "description": "PULSO fire-and-forget: cobro falló. Payload: {id_nicho, razon_codigo, detalle, timestamp}." },
+    { "event": "nichos.cobro.ejecutar.response", "description": "Response correlada por request_id al RPC nichos.cobro.ejecutar.request. Payload: {status, data:{recibo}} | {status, error}." },
+    { "event": "nichos.registro.cobros.registrar.request", "description": "RPC delegado: registra el cobro en registro-cobros. Payload: {request_id, id_nicho, recibo, timestamp}." },
+    { "event": "nichos.perfil.cobro.plantilla.request", "description": "RPC delegado: consulta la plantilla de cobro vigente. Payload: {request_id, id_nicho, modelo_cobro}." }
+  ],
+  "subscribes": [
+    { "event": "nichos.cobro.ejecutar.request", "handler": "onEjecutarRequest", "description": "REFLEJO: ejecuta cobro según modelo, consulta plantilla, registra en registro-cobros. Payload: {request_id, id_nicho, modelo_cobro, cliente}." }
+  ]
+}

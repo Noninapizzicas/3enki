@@ -1,0 +1,9 @@
+{
+  "id": "historial-proceso-contable",
+  "name": "Historial del proceso contable",
+  "version": "0.1.0",
+  "zone": "system-bar",
+  "order": 86,
+  "icon": "🗂️",
+  "label": "Historial proceso"
+}

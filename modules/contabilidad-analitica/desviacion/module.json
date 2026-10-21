@@ -1,0 +1,38 @@
+{
+  "_doc": "Manifest de analitica/desviacion — REFLEJO STATELESS (J4, hoja del plan). Real vs PRESUPUESTO → dispara aviso SI se sale del umbral DECLARADO. Determinista: desviacion = real - presupuesto; se sale si |desviacion| > |umbral|. No calcula el real (eso es margen-analitico) ni fija el objetivo (eso es presupuesto): los recibe (o los sube por EVENTO best-effort). Escucha contabilidad.presupuesto_fijado (presupuesto J3) y contabilidad.asiento_asentado (escritor-diario B2). Honestidad (invariante 13): sin AMBAS cifras la desviacion NO se inventa (desviacion:null y `abierto`); sin umbral declarado se calcula la desviacion pero NO se decide si es inaceptable (fuera_umbral:null). Sin store propio (STATELESS). La op calcular es CLASE PREGUNTA → SIN ui_handler.",
+  "name": "desviacion",
+  "version": "0.1.0",
+  "description": "Reflejo (J4): real vs presupuesto; avisa si se sale del umbral declarado. Sin datos no inventa. PREGUNTA.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "desviacion.calcular.request",
+      "handler": "onCalcularRequest",
+      "description": "RPC reflejo (PREGUNTA): {project_id, real?, presupuesto?/objetivo?, umbral?/tolerancia?, concepto?, periodo?} → {project_id, real, presupuesto, desviacion, desviacion_relativa, umbral, fuera_umbral}. Determinista. Si |desviacion| supera el umbral declarado publica motor-avisos.producir.request. Sin ambas cifras → desviacion:null y `abierto` (no se inventa). Responde por desviacion.calcular.response; entrada invalida → desviacion.calcular.failed."
+    },
+    {
+      "event": "contabilidad.presupuesto_fijado",
+      "handler": "onPresupuestoFijado",
+      "description": "Fire-and-forget (presupuesto J3): se fijo el presupuesto del proyecto. Se observa el objetivo y el umbral (memoria acotada) para comparar cuando no se declaren en el input."
+    },
+    {
+      "event": "contabilidad.asiento_asentado",
+      "handler": "onAsientoAsentado",
+      "description": "Fire-and-forget (escritor-diario B2): el libro cambio → se observa el asiento (ventana acotada). El reflejo no reescribe el libro; solo mira."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "desviacion.calcular.response",
+      "description": "Respuesta RPC correlada de la op calcular (una sola cara: el bus)."
+    },
+    {
+      "event": "desviacion.calcular.failed",
+      "description": "Par de fallo determinista: falta project_id o entrada invalida → {status, code, message}. Cierra el circulo de calcular.request."
+    }
+  ],
+  "tools": [
+    { "name": "desviacion.calcular", "description": "Calcula (PREGUNTA) la desviacion real vs presupuesto y avisa si sale del umbral." }
+  ],
+  "ui_handlers": []
+}

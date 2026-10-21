@@ -1,0 +1,18 @@
+{
+  "name": "canal-distribucion",
+  "version": "0.1.0",
+  "description": "PUENTE del vertical NICHOS (bloque K): bridge hacia canales externos (telegram, whatsapp, email) via bus del core. Formatea contenido por canal_tipo y publica al canal correspondiente. Sin estado.",
+  "_doc": "modules/nichos/canal-distribucion — PUENTE (bloque K) del vertical NICHOS.\n\nQué hace: recibe nichos.canal.mensaje.enviar.request con {destinatario, canal_tipo, contenido}, formatea el contenido según el canal_tipo y delega el envío al canal correspondiente via bus.\n\nSin estado. Bridge puro: transforma y reenvía.\n\nPatrón: ModuloHibridoReflejo (mitad REFLEJO, JS determinista).",
+  "ui_decision": {
+    "necesita": false,
+    "razon": "Fontanería de distribución del vertical NICHOS, sin cara propia. Los consumidores lo invocan por RPC para enviar mensajes por canal."
+  },
+  "publishes": [
+    { "event": "nichos.canal.mensaje.enviado", "description": "PULSO fire-and-forget: mensaje enviado con éxito por un canal. Payload: {mensaje_id, canal_tipo, destinatario, timestamp}." },
+    { "event": "nichos.canal.mensaje.enviar.failed", "description": "PULSO fire-and-forget: fallo al enviar mensaje. Payload: {mensaje_id, razon_codigo, detalle, timestamp}." },
+    { "event": "nichos.canal.mensaje.enviar.response", "description": "Response correlada por request_id al RPC nichos.canal.mensaje.enviar.request. Payload: {status, data:{mensaje_id, estado}} | {status, error}." }
+  ],
+  "subscribes": [
+    { "event": "nichos.canal.mensaje.enviar.request", "handler": "onEnviarRequest", "description": "PUENTE: formatea contenido por canal_tipo y publica al canal correspondiente. Payload: {request_id, destinatario, canal_tipo, contenido, correlation_id?}." }
+  ]
+}

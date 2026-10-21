@@ -28,7 +28,7 @@ import {
   MqttTimeoutError,
   MqttRequestError
 } from '$lib/ui-core/mqtt-request';
-import { activeProjectId } from './projects';
+import { sessionProjectId } from '$lib/stores/sessionProject';
 
 // =============================================================================
 // TYPES — modelo_canonico (recetas blueprint v2.x): Receta · Linea · Ingrediente
@@ -228,7 +228,7 @@ export async function loadRecetas(estado?: EstadoOperativo, limit: number = DEFA
   recetasStore.update(s => ({ ...s, loading: true, error: null }));
 
   try {
-    const pid = get(activeProjectId);
+    const pid = get(sessionProjectId);
     if (!pid) throw new Error('No hay proyecto activo');
 
     const store = await readRecetasStore();

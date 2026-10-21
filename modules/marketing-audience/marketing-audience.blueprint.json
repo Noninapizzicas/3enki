@@ -1,0 +1,68 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "marketing-audience",
+  "version": "blueprint-1.0.0",
+  "moduleId": "marketing-audience",
+  "actor": "jefe",
+  "titulo": "Audiencia de marketing: genera personas-arquetipo desde segmentos declarados.",
+  "eventos_que_escucho": [
+    "marketing.audience.generar-persona.request"
+  ],
+  "transporte": {
+    "rpc": [
+      "marketing.audience.generar-persona.request -> .response"
+    ]
+  },
+  "spine": {
+    "descripcion": "Blueprint coherente: CONTRATO → LEER → PENSAR → GUARDAR → EMITIR",
+    "pasos": [
+      {
+        "paso": "CONTRATO",
+        "descripcion": "Recibe { project_id, segmento_id }. Promete devolver una persona-arquetipo accionable."
+      },
+      {
+        "paso": "LEER",
+        "descripcion": "Lee el segmento del store (via reflejo) y el project-profile del proyecto para contexto de negocio.",
+        "lee": [
+          "marketing.audience.get.request → segmentos del proyecto",
+          "project-profile.get.request → identidad del negocio"
+        ]
+      },
+      {
+        "paso": "PENSAR",
+        "descripcion": "Sintetiza datos del segmento + identidad del negocio en un perfil-persona: nombre ficticio, perfil narrativo, necesidad concreta, barrera, motivación, canal preferido, mensaje clave.",
+        "restricciones": [
+          "La persona DEBE ser accionable: nombre + necesidad + barrera + canal como mínimo",
+          "El tono del mensaje_clave respeta la voz de marca del proyecto",
+          "La necesidad de la persona es más específica que la del segmento"
+        ]
+      },
+      {
+        "paso": "GUARDAR",
+        "descripcion": "Guarda la persona generada en el store via marketing.audience.update.request con origen: 'generada'."
+      },
+      {
+        "paso": "EMITIR",
+        "descripcion": "Emite marketing.audience.generar-persona.response con la persona creada."
+      }
+    ]
+  },
+  "ui": {
+    "ops": {
+      "generar-persona": {
+        "titulo": "Generar persona desde segmento"
+      }
+    },
+    "roles": {
+      "generar-persona": "jefe"
+    },
+    "flujo": [
+      {
+        "nombre": "jefe",
+        "orden": 1,
+        "ops": ["generar-persona"],
+        "descripcion": "El dueño elige un segmento y pide generar una persona-arquetipo desde sus datos"
+      }
+    ]
+  }
+}

@@ -304,6 +304,16 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .esc-mas{color:var(--primary);font-weight:800}
 .esc-flecha{opacity:.45;margin:0 2px}
 .esc-nombre{font-weight:700}
+.hermanas{margin-bottom:16px}
+.hermana-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid #1f1f1f}
+.hermana-row:first-child{border-top:0}
+.hermana-info{flex:1;min-width:0}
+.hermana-nombre{font-weight:700;font-size:.86rem;color:#eee}
+.hermana-ings{font-size:.72rem;color:#888;margin-top:2px;line-height:1.35}
+.hermana-precio{font-weight:700;font-size:.86rem;color:var(--primary);white-space:nowrap}
+.hermana-btns{display:flex;gap:6px;flex-shrink:0}
+.hermana-btn{padding:7px 11px;border-radius:10px;border:1px solid #2a2a2a;background:#1a1a1a;color:#ccc;font-size:.75rem;font-weight:600;cursor:pointer}
+.hermana-btn.elegir{background:var(--primary);border-color:var(--primary);color:#111}
 /* Atajos componibles (mitad / crea tu pizza): pills compactas ancladas arriba del grid */
 .special-bar{grid-column:1/-1;display:flex;gap:10px;flex-wrap:wrap;margin:0 0 6px}
 .special-btn{display:inline-flex;align-items:center;gap:8px;padding:8px 15px;border:1.5px solid var(--primary);border-radius:999px;background:rgba(245,158,11,.12);background:color-mix(in srgb,var(--primary) 14%,transparent);color:var(--primary);font:inherit;font-size:.82rem;font-weight:700;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:transform .12s,background .15s}
@@ -813,6 +823,65 @@ function renderGrid() {
   }
 }
 
+// ─── Hermanas por INGREDIENTE PRINCIPAL (derivado de la carta, no almacenado) ───
+// Abres "Pizza de jamón York (Milonga)" y justo debajo aparecen las demás que llevan
+// jamón de york: nombre, sus ingredientes a la vista, precio y dos botones — elegir (al
+// carrito) o editar (abre SU ficha, con su quitar/añadir). No se guarda nada: se calcula
+// al abrir desde los ingredientes que cada producto YA declara. Si la carta cambia, cambia solo.
+function familiaDe(p) {
+  const cat = String(p.categoria || '').toLowerCase();
+  return DATA.productos.filter(function (q) {
+    return String(q.categoria || '').toLowerCase() === cat
+      && Array.isArray(q.ingredientes) && q.ingredientes.length;
+  });
+}
+
+// El PRINCIPAL es el ingrediente que comparten VARIAS pero no CASI TODAS: lo que sale en
+// >=60% del grupo es la base (masa, tomate, mozzarella) y no distingue una pizza de otra.
+function ingPrincipalDe(p, grupo) {
+  if (!grupo || grupo.length < 2) return null;
+  const techo = grupo.length * 0.6;
+  const mios = (p.ingredientes || []).map(function (i) { return i.nombre; });
+  let mejor = null, mejorN = 0;
+  for (let k = 0; k < mios.length; k++) {
+    const nombre = mios[k];
+    let n = 0;
+    for (let j = 0; j < grupo.length; j++) {
+      const ings = grupo[j].ingredientes || [];
+      for (let m = 0; m < ings.length; m++) { if (ings[m].nombre === nombre) { n++; break; } }
+    }
+    if (n >= techo) continue;   // base del grupo: no sirve de eje
+    if (n > mejorN) { mejor = nombre; mejorN = n; }
+  }
+  return mejorN >= 2 ? { nombre: mejor, n: mejorN } : null;
+}
+
+function renderHermanas(p) {
+  const grupo = familiaDe(p);
+  const principal = ingPrincipalDe(p, grupo);
+  if (!principal) return '';
+  const hermanas = grupo.filter(function (q) {
+    return q.id !== p.id && (q.ingredientes || []).some(function (i) { return i.nombre === principal.nombre; });
+  });
+  if (!hermanas.length) return '';
+  let filas = '';
+  for (let k = 0; k < hermanas.length; k++) {
+    const h = hermanas[k];
+    const lista = (h.ingredientes || []).map(function (i) { return i.nombre; }).join(' · ');
+    filas += '<div class="hermana-row">' +
+      '<div class="hermana-info"><div class="hermana-nombre">' + esc(h.nombre) + '</div>' +
+      (lista ? '<div class="hermana-ings">' + esc(lista) + '</div>' : '') + '</div>' +
+      '<span class="hermana-precio">' + fmt(h.precio) + '</span>' +
+      '<div class="hermana-btns">' +
+        '<button type="button" class="hermana-btn elegir" data-accion="hermana-elegir" data-producto-id="' + esc(h.id) + '">' + T.add + '</button>' +
+        '<button type="button" class="hermana-btn" data-accion="hermana-editar" data-producto-id="' + esc(h.id) + '">Editar</button>' +
+      '</div></div>';
+  }
+  return '<h3 class="section-title">También con ' + esc(principal.nombre) +
+    ' <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#777">· ' + principal.n + '</span></h3>' +
+    '<div class="hermanas">' + filas + '</div>';
+}
+
 // Detail
 function showDetail(id) {
   detailProd = DATA.productos.find(p => p.id === id);
@@ -891,6 +960,9 @@ function showDetail(id) {
     }
   }
 
+  // Hermanas por ingrediente principal: las otras que llevan lo mismo, con elegir/editar.
+  const hermanasHtml = renderHermanas(p);
+
   document.getElementById('detail-content').innerHTML =
     '<div class="detail-header"><h2 class="detail-nombre">'  + (p.emoji ? p.emoji + ' ' : '') + esc(p.nombre) + '</h2><span class="detail-precio">' + fmt(p.precio) + '</span></div>' +
     (tagsHtml ? '<div class="detail-tags">' + tagsHtml + '</div>' : '') +
@@ -898,7 +970,23 @@ function showDetail(id) {
     escaleraHtml +
     (ingsHtml ? '<h3 class="section-title">Ingredientes <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#777">· toca para quitar</span></h3><div class="ing-list">' + ingsHtml + '</div>' : '') +
     (extrasHtml ? '<h3 class="section-title">Añadir extras</h3>' + extrasHtml : '') +
+    hermanasHtml +
     alergHtml;
+
+  // Delegación (una sola vez): elegir una hermana → al carrito ; editar → SU ficha.
+  const dcEl = document.getElementById('detail-content');
+  if (dcEl && !dcEl._delegadoHermanas) {
+    dcEl.addEventListener('click', function (e) {
+      const btn = e.target.closest('[data-accion="hermana-elegir"], [data-accion="hermana-editar"]');
+      if (!btn) return;
+      e.stopPropagation();
+      const pid = btn.getAttribute('data-producto-id');
+      if (!pid) return;
+      if (btn.getAttribute('data-accion') === 'hermana-editar') showDetail(pid);
+      else addToCart(pid);
+    });
+    dcEl._delegadoHermanas = true;
+  }
 
   renderDetailFooter();
 

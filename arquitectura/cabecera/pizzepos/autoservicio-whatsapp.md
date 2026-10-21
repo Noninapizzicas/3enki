@@ -401,8 +401,9 @@ TESTS {
     "editar": "showDetail(id) — la ficha de la hermana, con su bloque recalculado"
   },
   "piezas": {
-    "modules/pizzepos/carta-digital/static-template.js": "familiaDe · ingPrincipalDe · renderHermanas + delegación en #detail-content",
-    "tests/unit/carta-digital__hermanas-ingrediente.test.js": "6 casos sobre el runtime REAL emitido (stub DOM, corte del bootstrap)"
+    "modules/pizzepos/carta-digital/static-template.js": "familiaDe · ingPrincipalDe · renderHermanas + delegación en #detail-content; el bloque se pinta PEGADO A LA CABECERA (antes de ingredientes y extras — enterrado debajo de 'Añadir extras' era invisible en el móvil)",
+    "frontend/src/lib/utils/indice-ingredientes.ts": "hermanasDe(producto, todos) — la misma regla en el comandero (VariacionesPanel), para que el camarero vea las hermanas al abrir la pizza",
+    "tests/unit/carta-digital__hermanas-ingrediente.test.js": "7 casos sobre el runtime REAL emitido (stub DOM, corte del bootstrap), incluido el ORDEN del bloque"
   },
   "medido": "the-pirate-v4 (v49): 8 pizzas con Jamón de york -> el ancla lista 7 hermanas; la Margarita no pinta bloque (no inventa eje)"
 }

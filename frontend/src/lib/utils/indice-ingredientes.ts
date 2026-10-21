@@ -110,3 +110,68 @@ export function construirSeccionesIngredientes(
     .sort((a, b) => b.s.productos.length - a.s.productos.length || a.i - b.i)
     .map(x => x.s);
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HERMANAS de una pizza: las otras que llevan su MISMO ingrediente principal.
+//
+// El camarero abre "Pizza de jamón York" y debajo ve Indie, Jazz, K-Pop, Merengue,
+// Punk, Swing, Vallenato — con lo que lleva cada una, su precio y su botón. Mismo
+// criterio que la carta digital: principal = el que comparten VARIAS pero no CASI
+// TODAS (la base, tomate/mozzarella, no distingue una pizza de otra).
+//
+// Derivado, no almacenado: se calcula al abrir desde los `ingredientes` que cada
+// producto YA declara. Si entra una pizza nueva con jamón, aparece sola.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface Hermanas {
+  principal: { id: string; nombre: string };
+  hermanas: Producto[];
+}
+
+/** El ingrediente que ejes el grupo: repetido en varias pero en menos del 60%. */
+export function ingredientePrincipal(
+  producto: Producto,
+  grupo: Producto[]
+): { id: string; nombre: string; n: number } | null {
+  if (!Array.isArray(grupo) || grupo.length < 2) return null;
+  const techo = grupo.length * 0.6;
+  const mios = ((producto as any)?.ingredientes || (producto as any)?.ingredientes_base || []) as any[];
+
+  let mejor: { id: string; nombre: string; n: number } | null = null;
+  for (const ing of mios) {
+    const id = idDeIngrediente(ing);
+    if (!id) continue;
+    let n = 0;
+    for (const q of grupo) if (llevaIngrediente(q, id)) n++;
+    if (n >= techo) continue;          // base del grupo: no sirve de eje
+    if (!mejor || n > mejor.n) {
+      mejor = { id, nombre: (typeof ing === 'object' && ing.nombre) || id.replace(/_/g, ' '), n };
+    }
+  }
+  return mejor && mejor.n >= 2 ? mejor : null;
+}
+
+/**
+ * Las hermanas del producto (sin él mismo). Devuelve null si no hay eje:
+ * una pizza sin principal compartido no inventa sección.
+ */
+export function hermanasDe(
+  producto: Producto,
+  todos: Producto[],
+  opciones: { categorias?: string[] } = {}
+): Hermanas | null {
+  if (!producto || !Array.isArray(todos)) return null;
+  const categorias = opciones.categorias || CATEGORIAS_CON_SECCIONES;
+  const cat = (producto as any).categoria_id || (producto as any).categoria || '';
+  if (categorias.length && !categorias.includes(cat)) return null;
+
+  const grupo = todos.filter(
+    p => ((p as any).categoria_id || (p as any).categoria) === cat
+  );
+  const principal = ingredientePrincipal(producto, grupo);
+  if (!principal) return null;
+
+  const hermanas = grupo.filter(p => p.id !== producto.id && llevaIngrediente(p, principal.id));
+  if (hermanas.length === 0) return null;
+  return { principal: { id: principal.id, nombre: principal.nombre }, hermanas };
+}

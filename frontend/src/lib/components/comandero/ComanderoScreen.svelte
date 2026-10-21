@@ -48,7 +48,7 @@
   } from '$lib/stores/comandero';
   import { renameMesa, renameCuenta } from '$lib/stores/cuentas';
   import { imprimirComanda, type ComandaItem, type Canal } from '$lib/stores/impresion';
-  import { construirSeccionesIngredientes, llevaIngrediente, type SeccionIngrediente } from '$lib/utils/indice-ingredientes';
+  import { hermanasDe, llevaIngrediente, type Hermanas } from '$lib/utils/indice-ingredientes';
 
   import BotonEspecial from './BotonEspecial.svelte';
   import CategoriaBtn from './CategoriaBtn.svelte';
@@ -89,11 +89,14 @@
   // Colores fijos por familia: amarillo, verde, azul, rojo, lila
   const FAMILIA_COLORS = ['#eab308', '#22c55e', '#3b82f6', '#ef4444', '#a855f7'];
 
-  // Sección por INGREDIENTE PRINCIPAL (derivada, no almacenada): se calcula desde
-  // los ingredientes que cada pizza ya declara. Si la carta cambia, cambia sola.
+  // Hermanas por INGREDIENTE PRINCIPAL (derivado, no almacenado): al abrir una pizza,
+  // el panel muestra las demás que llevan lo mismo con nombre, ingredientes, precio y
+  // botón. Se calcula desde los ingredientes que cada producto ya declara.
   let ingredienteActivo: string | null = null;
 
-  $: seccionesIngrediente = construirSeccionesIngredientes($todosProductos);
+  $: hermanasPanel = productoVariaciones
+    ? (hermanasDe(productoVariaciones as any, $todosProductos) as Hermanas | null)
+    : null;
 
   // Filtro por ingrediente: el camarero entra por lo que oye ("dos de jamón"),
   // no por el nombre de la pizza. Una pizza con jamón y bacon sale en las dos.
@@ -347,6 +350,25 @@
   function handleVariacionesClose() {
     showVariaciones = false;
     productoVariaciones = null;
+  }
+
+  // Hermana ELEGIDA desde el panel: entra al pedido con su precio, sin salir del panel
+  // (el camarero sigue donde estaba y puede sumar otra). EDITAR abre su ficha.
+  function handleElegirHermana(detalle: { producto: Producto; editar?: boolean }) {
+    if (!detalle?.producto) return;
+    if (detalle.editar) {
+      productoVariaciones = detalle.producto;
+      return;
+    }
+    const prod = detalle.producto;
+    const ingsBase = (prod.ingredientes || [])
+      .map((i: any) => (typeof i === 'string' ? i : i.nombre))
+      .filter(Boolean);
+    if (ingsBase.length > 0) {
+      addItem(prod.id, 1, [], { ingredientes_base: ingsBase });
+    } else {
+      addItem(prod.id);
+    }
   }
 
   function handleCobroClose() {
@@ -709,28 +731,6 @@
     {/each}
   </div>
 
-  <!-- Secciones por ingrediente principal (derivadas de la carta, no almacenadas) -->
-  {#if seccionesIngrediente.length > 0}
-    <div class="ingredientes-bar">
-      {#each seccionesIngrediente as seccion (seccion.ingrediente_id)}
-        <button
-          class="ing-chip"
-          class:active={ingredienteActivo === seccion.ingrediente_id}
-          on:click={() => alternarIngrediente(seccion.ingrediente_id)}
-        >
-          {#if seccion.emoji}<span class="ing-emoji">{seccion.emoji}</span>{/if}
-          <span class="ing-nombre">{seccion.nombre}</span>
-          <span class="ing-count">{seccion.productos.length}</span>
-        </button>
-      {/each}
-      {#if ingredienteActivo}
-        <button class="ing-chip limpiar" on:click={() => (ingredienteActivo = null)}>
-          ✕ Todas
-        </button>
-      {/if}
-    </div>
-  {/if}
-
   <div class="main-body">
     <!-- Sidebar: solo acciones -->
     <aside class="sidebar">
@@ -809,8 +809,10 @@
       visible={showVariaciones}
       {projectId}
       catalogoIngredientes={$ingredientesStore}
+      hermanas={hermanasPanel}
       on:close={handleVariacionesClose}
       on:confirm={handleVariacionesConfirm}
+      on:elegir-hermana={(e) => handleElegirHermana(e.detail)}
     />
   {/if}
 

@@ -278,12 +278,13 @@ if (!CARTA_VIVA) {
     assert.strictEqual(jamon.ancla, 'pizzas_pizza_de_jamon_york');
     assert.deepStrictEqual(jamon.miembros, [
       'pizzas_indie', 'pizzas_jazz', 'pizzas_k_pop', 'pizzas_merengue', 'pizzas_punk',
-      'pizzas_swing', 'pizzas_vallenato'
+      'pizzas_swing', 'pizzas_vallenato', 'la_flota_mahon'
     ]);
 
     const bacon = fam('pizzas_pizza_de_bacon');
     assert.strictEqual(bacon.ingrediente_id, 'bacon', 'bacon fijado');
-    assert.strictEqual(bacon.miembros.length, 11, 'las 11 hermanas de bacon (las 10 de Nónina + Merengue)');
+    assert.strictEqual(bacon.miembros.length, 12, 'las 12 hermanas de bacon (las 10 de Nónina + Merengue + Nassau)');
+    assert.ok(bacon.miembros.includes('la_flota_nassau'), 'Nassau entra en bacon: la familia es del ingrediente');
 
     const atun = fam('pizzas_pizza_de_atun');
     assert.strictEqual(atun.ingrediente_id, 'atun', 'atún fijado');
@@ -305,7 +306,7 @@ if (!CARTA_VIVA) {
     assert.strictEqual(ternera.ingrediente_id, 'ternera', 'ternera fijada');
     assert.strictEqual(ternera.ancla, 'pizzas_pizza_de_carne_de_ternera');
     assert.deepStrictEqual(ternera.miembros, [
-      'pizzas_hip_hop', 'pizzas_r_b_rhythm_and_blues', 'pizzas_cumbia'
+      'pizzas_hip_hop', 'pizzas_r_b_rhythm_and_blues', 'pizzas_cumbia', 'la_flota_ile_sainte_marie'
     ]);
 
     // La regla del dueño, como invariante: miembros = TODOS los portadores reales, sin el ancla.
@@ -333,6 +334,28 @@ if (!CARTA_VIVA) {
       for (const ing of (porId.get(id) || {}).ingredientes || []) {
         assert.ok(ing.emoji, `${id}: ${ing.nombre} sin emoji`);
       }
+    }
+  });
+
+  // La Flota: las pizzas de AUTOR que ya venían con su nombre puesto en las cartas anteriores
+  // (Port Royal, Nassau, ...). Traídas verbatim por el dueño y con su propia categoría, no
+  // dentro de Pizzas (2026-10-21).
+  caso('dato vivo: La Flota (pizzas de autor) traída de la carta anterior', () => {
+    const carta = JSON.parse(fs.readFileSync(CARTA_VIVA, 'utf8'));
+    const flota = (carta.productos || []).filter(p => p.categoria_id === 'la_flota');
+    assert.deepStrictEqual(flota.map(p => p.nombre), [
+      'Port Royal', 'Nassau', 'Cartagena de Indias', 'Île Sainte-Marie', 'Mahón'
+    ], 'las 5 pizzas de autor, en su orden');
+    assert.deepStrictEqual(
+      Object.fromEntries(flota.map(p => [p.nombre, p.precio])),
+      { 'Port Royal': 9.95, 'Nassau': 13, 'Cartagena de Indias': 12.5, 'Île Sainte-Marie': 12, 'Mahón': 10.5 },
+      'precios verbatim de la carta anterior'
+    );
+    assert.ok((carta.categorias || []).some(c => c.id === 'la_flota' && c.nombre === 'La Flota'),
+      'categoría La Flota declarada');
+    for (const p of flota) {
+      assert.ok((p.ingredientes || []).length > 0, `${p.nombre} sin ingredientes`);
+      for (const i of p.ingredientes) assert.ok(i.emoji, `${p.nombre}: ${i.nombre} sin emoji`);
     }
   });
 }

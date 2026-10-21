@@ -120,7 +120,7 @@ function publishedOf(mocks, name) {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     m.pedidos.set('c1', { items: [], notas: '', total: 0 });
-    m.productosCache.set('p1', { precio: 10 });
+    m._productosDe('default').set('p1', { precio: 10 });
     m.tarifasConfigPorProject.set('proj-x', { general: 'g', canales: { glovo: 'cg' } });
     m._saveTimer = setTimeout(() => {}, 60000);
     await m.onUnload();
@@ -182,8 +182,77 @@ function publishedOf(mocks, name) {
       { id: 'p1', nombre: 'Pizza', precio: 10 },
       { id: 'p2', nombre: 'Cola',  precio: 3 }
     ]}});
-    assert.strictEqual(m.productosCache.size, 2);
-    assert.strictEqual(m.productosCache.get('p1').precio, 10);
+    assert.strictEqual(m._productosDe('default').size, 2);
+    assert.strictEqual(m._productosDe('default').get('p1').precio, 10);
+    await m.onUnload();
+  });
+
+  // ── CACHE QUE NO SE PUDRE (v3.6.1) ─────────────────────────────────────────
+  // El cache base era un Map plano SIN purga: catalogo.actualizado solo hacía .set(), así que
+  // un producto retirado seguía cobrándose y los productos de otra carta se acumulaban
+  // (el POS declaró 63 productos con una carta de 22).
+  await testAsync('catalogo.actualizado REEMPLAZA el cache (no acumula productos retirados)', async () => {
+    const { module: m } = await instantiate(makeMocks());
+    await m.onCatalogoActualizado({ data: { project_id: 'pr', productos: [
+      { id: 'p1', nombre: 'Pizza', precio: 10 },
+      { id: 'p2', nombre: 'Vieja', precio: 5 }
+    ]}});
+    assert.strictEqual(m._productosDe('pr').size, 2);
+    await m.onCatalogoActualizado({ data: { project_id: 'pr', productos: [
+      { id: 'p1', nombre: 'Pizza', precio: 12 }
+    ]}});
+    assert.strictEqual(m._productosDe('pr').size, 1, 'el producto retirado no debe sobrevivir');
+    assert.strictEqual(m._productosDe('pr').get('p2'), undefined);
+    assert.strictEqual(m._productosDe('pr').get('p1').precio, 12);
+    await m.onUnload();
+  });
+
+  await testAsync('catalogo.actualizado con productos:[] VACÍA el cache del proyecto (carta borrada)', async () => {
+    const { module: m } = await instantiate(makeMocks());
+    await m.onCatalogoActualizado({ data: { project_id: 'pr', productos: [
+      { id: 'p1', nombre: 'Pizza', precio: 10 }
+    ]}});
+    assert.strictEqual(m._productosDe('pr').size, 1);
+    await m.onCatalogoActualizado({ data: { project_id: 'pr', productos: [] } });
+    assert.strictEqual(m.productosCache.get('pr').size, 0);
+    await m.onUnload();
+  });
+
+  await testAsync('catalogo.actualizado sin array productos NO toca el cache (forma `catalogo` de producto-manager)', async () => {
+    const { module: m } = await instantiate(makeMocks());
+    await m.onCatalogoActualizado({ data: { project_id: 'pr', productos: [
+      { id: 'p1', nombre: 'Pizza', precio: 10 }
+    ]}});
+    // producto-manager publica { project_id, catalogo:{...} } — 0 productos: si esto vaciara,
+    // el POS cobraría 0 hasta la siguiente proyección.
+    await m.onCatalogoActualizado({ data: { project_id: 'pr', catalogo: { productos: [] }, motivo: 'clonar' } });
+    assert.strictEqual(m._productosDe('pr').size, 1, 'la señal cruda no debe vaciar el cache base');
+    await m.onUnload();
+  });
+
+  await testAsync('el cache base esta AISLADO por proyecto (un proyecto no cobra con el catalogo de otro)', async () => {
+    const { module: m } = await instantiate(makeMocks());
+    await m.onCatalogoActualizado({ data: { project_id: 'A', productos: [
+      { id: 'pizza_a', nombre: 'De A', precio: 10 }
+    ]}});
+    await m.onCatalogoActualizado({ data: { project_id: 'B', productos: [
+      { id: 'pizza_b', nombre: 'De B', precio: 20 }
+    ]}});
+    assert.strictEqual(m._productosDe('A').size, 1);
+    assert.strictEqual(m._productosDe('B').size, 1);
+    assert.strictEqual(m._productosDe('A').get('pizza_b'), undefined);
+    assert.strictEqual(m._totalProductosCache(), 2);
+    await m.onUnload();
+  });
+
+  await testAsync('handleAddItem sin project_id usa el catalogo del proyecto por defecto', async () => {
+    const { module: m } = await instantiate(makeMocks());
+    await m.onCatalogoActualizado({ data: { project_id: 'default', productos: [
+      { id: 'p1', nombre: 'Pizza', precio: 9.5 }
+    ]}});
+    const r = await m.handleAddItem({ cuenta_id: 'mesa_1', producto_id: 'p1', cantidad: 1 });
+    assert.strictEqual(r.data.item.precio, 9.5);
+    assert.strictEqual(r.data.item.nombre, 'Pizza');
     await m.onUnload();
   });
 
@@ -330,7 +399,7 @@ function publishedOf(mocks, name) {
   await testAsync('handleAddItem aplica precio canonico desde cache', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
-    m.productosCache.set('p1', { nombre: 'Pizza', precio: 10 });
+    m._productosDe('default').set('p1', { nombre: 'Pizza', precio: 10 });
 
     const r = await m.handleAddItem({ cuenta_id: 'mesa_x', producto_id: 'p1', cantidad: 1 });
     assert.strictEqual(r.data.item.precio, 10);
@@ -615,8 +684,8 @@ function publishedOf(mocks, name) {
     const { module: m } = await instantiate(makeMocks());
     m.tarifasConfigPorProject.set('p1', { general: 'carta_general', canales: { glovo: 'carta_glovo' } });
     m.cartasProductosCache.set('carta_glovo', new Map([['queso', { nombre: 'Queso', precio: 8.5 }]]));
-    m.productosCache.set('queso', { nombre: 'Queso', precio: 6.5 });
-    m.productosCache.set('pan', { nombre: 'Pan', precio: 1 });
+    m._productosDe('p1').set('queso', { nombre: 'Queso', precio: 6.5 });
+    m._productosDe('p1').set('pan', { nombre: 'Pan', precio: 1 });
     assert.strictEqual(m._resolverPrecioCanal('queso', 6.5, 'glovo', 'p1'), 8.5);
     assert.strictEqual(m._resolverPrecioCanal('queso', 6.5, 'mesa', 'p1'), 6.5);
     assert.strictEqual(m._resolverPrecioCanal('pan', 1, 'glovo', 'p1'), 1);   // no está en la carta del canal
@@ -627,8 +696,8 @@ function publishedOf(mocks, name) {
     m.tarifasConfigPorProject.set('p1', { general: 'carta_general', canales: { glovo: 'carta_glovo' } });
     m._cartaGetPendientes.set('req-1', { project_id: 'p1', carta_id: 'carta_general' });
     await m.onCartaGetResponse({ data: { request_id: 'req-1', status: 200, data: { meta: { id: 'carta_general' }, productos: [{ id: 'queso', nombre: 'Queso', precio: 6.5, categoria: 'entrantes' }] } } });
-    assert.strictEqual(m.productosCache.get('queso').precio, 6.5);
-    assert.strictEqual(m.productosCache.get('queso').nombre, 'Queso');
+    assert.strictEqual(m._productosDe('p1').get('queso').precio, 6.5);
+    assert.strictEqual(m._productosDe('p1').get('queso').nombre, 'Queso');
   });
 
   await testAsync('carta.get.response de una carta de CANAL no toca productosCache', async () => {
@@ -636,7 +705,7 @@ function publishedOf(mocks, name) {
     m.tarifasConfigPorProject.set('p1', { general: 'carta_general', canales: { glovo: 'carta_glovo' } });
     m._cartaGetPendientes.set('req-2', { project_id: 'p1', carta_id: 'carta_glovo' });
     await m.onCartaGetResponse({ data: { request_id: 'req-2', status: 200, data: { meta: { id: 'carta_glovo' }, productos: [{ id: 'queso', nombre: 'Queso', precio: 8.5 }] } } });
-    assert.strictEqual(m.productosCache.get('queso'), undefined);
+    assert.strictEqual(m._productosDe('p1').get('queso'), undefined);
     assert.strictEqual(m.cartasProductosCache.get('carta_glovo').get('queso').precio, 8.5);
   });
 

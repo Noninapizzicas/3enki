@@ -16000,6 +16000,40 @@ TESTS {
 
 ---
 
+## Hermanas por ingrediente principal en la ficha del cliente (derivadas)
+
+> **Novedad (2026-10-21).** El cliente abre una pizza ("Pizza de jamón York") y, justo
+> debajo de sus ingredientes y de los extras, ve **las demás que llevan ese mismo
+> ingrediente principal**, cada una con su nombre, sus ingredientes a la vista, su
+> precio y dos acciones: **elegir** (al carrito con SU precio) o **editar** (abre SU
+> ficha, con su quitar/añadir).
+
+```json
+{
+  "esquema": "hermanas-ingrediente-principal-v1",
+  "fuente": "DATA.productos[].ingredientes[].nombre (ya viaja en el bundle)",
+  "derivado": true,
+  "regla_del_principal": "el ingrediente que comparten VARIAS pero no CASI TODAS: lo que sale en >=60% del grupo es la base (tomate, mozzarella) y NO distingue una pizza de otra; empate -> el más repetido",
+  "acciones": {
+    "elegir": "addToCart(id) — precio del producto, sin extras",
+    "editar": "showDetail(id) — la ficha de la hermana, con su bloque recalculado"
+  },
+  "piezas": {
+    "modules/pizzepos/carta-digital/static-template.js": "familiaDe · ingPrincipalDe · renderHermanas + delegación en #detail-content",
+    "tests/unit/carta-digital__hermanas-ingrediente.test.js": "6 casos sobre el runtime REAL emitido (stub DOM, corte del bootstrap)"
+  },
+  "medido": "the-pirate-v4 (v49): 8 pizzas con Jamón de york -> el ancla lista 7 hermanas; la Margarita no pinta bloque (no inventa eje)"
+}
+```
+
+> **Por qué derivado y no dato.** No hay campo nuevo en la carta ni nada que mantener en
+> cada alta: se calcula al abrir la ficha. Si mañana entra una pizza con jamón, aparece
+> sola en el bloque de las otras siete. El patrón `escalera` que ya viajaba en la carta
+> sigue siendo el atajo "lo mismo + un ingrediente"; esto es su hermano estructural —
+> mismas hermanas, sin exigir que la carta las declare.
+
+---
+
 # SERVIR WWW POR PROYECTO — árbol libre en /<ns>/<slug>/ (Caddy estático + symlink)
 
 > El www por proyecto NO lo sirve el gateway Node: lo sirve **Caddy** estático desde un

@@ -99,10 +99,10 @@ test('carta the-pirate-v4: secciones que salen hoy', () => {
   const resumen = secciones.map(s => `${s.ingrediente_id}=${s.productos.length}`);
 
   console.log(`    → ${resumen.join(' · ')}`);
-  // Carta v51: se trajeron las 8 pizzas de bacon de la carta de Nónina (Country, Hip-Hop, Pop,
-  // R&B, Ranchera, Rap, Rockabilly, Soul) → bacon pasa de 4 a 12, y con ellas entran ternera y pollo.
+  // Carta v56: a las 8 de bacon de Nónina se suman las 4 de atún (Blues, Bossa Nova, Chillout,
+  // Tango) → atún pasa de 2 a 6. Bacon sigue en 12 y jamón de york en 8.
   assert.deepStrictEqual(resumen, [
-    'bacon=12', 'jamon_de_york=8', 'ternera=3', 'atun=2', 'pollo=1', 'anchoas=1'
+    'bacon=12', 'jamon_de_york=8', 'atun=6', 'ternera=3', 'pollo=1', 'anchoas=1'
   ]);
 
   // El nombre y el emoji salen del dato de la carta, no de una tabla paralela.
@@ -139,7 +139,7 @@ test('carta the-pirate-v4 proyectada (ingredientes_base) da las mismas secciones
   }));
   const resumen = mod.construirSeccionesIngredientes(proyectada)
     .map(s => `${s.ingrediente_id}=${s.productos.length}`);
-  assert.deepStrictEqual(resumen, ['bacon=12', 'jamon_de_york=8', 'ternera=3', 'atun=2', 'pollo=1', 'anchoas=1']);
+  assert.deepStrictEqual(resumen, ['bacon=12', 'jamon_de_york=8', 'atun=6', 'ternera=3', 'pollo=1', 'anchoas=1']);
 });
 
 // ---------- 5. Hermanas del COMANDERO (el bloque que se abre al pulsar la pizza) ----------

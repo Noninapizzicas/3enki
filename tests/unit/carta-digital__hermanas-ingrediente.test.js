@@ -247,6 +247,57 @@ caso('familia FIJADA: el bloque es el mismo al abrir cualquiera de sus miembros'
   assert.ok(/También con Bacon/.test(desdeAncla), 'y el ancla de bacon muestra la suya');
 });
 
+// ─── Canario del DATO VIVO: las familias fijadas de the-pirate ──────────────────
+// Este bloque corre donde vive la carta (el VPS); en un árbol sin data/ se salta y lo dice.
+// Fija lo que el dueño aprobó: jamón de york (ancla Milonga + 7), bacon (ancla + 10),
+// atún (ancla Pizza de atún + las 4 de Nónina, SIN Punk: una pizza, una familia).
+const CARTA_VIVA = [
+  process.env.CARTA_VIVA,   // permite probar que el canario MUERDE contra una copia retocada
+  path.join(RAIZ, 'data/projects/the-pirate/storage/pizzepos/cartas/the-pirate-v4.json'),
+  '/opt/enki/data/projects/the-pirate/storage/pizzepos/cartas/the-pirate-v4.json'
+].filter(Boolean).find(p => { try { return fs.existsSync(p); } catch (_) { return false; } });
+
+if (!CARTA_VIVA) {
+  console.log('SKIP canario del dato vivo: sin carta en disco (data/ es gitignored)');
+} else {
+  caso('dato vivo: las tres familias fijadas y sus miembros', () => {
+    const carta = JSON.parse(fs.readFileSync(CARTA_VIVA, 'utf8'));
+    const porId = new Map(carta.productos.map(p => [p.id, p]));
+    const fam = (id) => (porId.get(id) || {}).familia || {};
+
+    const jamon = fam('pizzas_pizza_de_jamon_york');
+    assert.strictEqual(jamon.ingrediente_id, 'jamon_de_york', 'jamón de york fijado');
+    assert.strictEqual(jamon.ancla, 'pizzas_pizza_de_jamon_york');
+    assert.deepStrictEqual(jamon.miembros, [
+      'pizzas_indie', 'pizzas_jazz', 'pizzas_k_pop', 'pizzas_merengue', 'pizzas_punk',
+      'pizzas_swing', 'pizzas_vallenato'
+    ]);
+
+    const bacon = fam('pizzas_pizza_de_bacon');
+    assert.strictEqual(bacon.ingrediente_id, 'bacon', 'bacon fijado');
+    assert.strictEqual(bacon.miembros.length, 10, 'las 10 hermanas de bacon');
+
+    const atun = fam('pizzas_pizza_de_atun');
+    assert.strictEqual(atun.ingrediente_id, 'atun', 'atún fijado');
+    assert.strictEqual(atun.ancla, 'pizzas_pizza_de_atun');
+    assert.deepStrictEqual(atun.miembros, [
+      'pizzas_blues', 'pizzas_bossa_nova', 'pizzas_chillout', 'pizzas_tango'
+    ]);
+    assert.ok(!atun.miembros.includes('pizzas_punk'), 'Punk no entra en atún: ya es de jamón de york');
+
+    // El dato viaja en el ancla Y en cada miembro: el bloque sale igual desde cualquiera.
+    for (const id of atun.miembros) {
+      assert.deepStrictEqual(fam(id).miembros, atun.miembros, `${id} comparte la familia de atún`);
+    }
+    // Y los ingredientes de las 4 de atún llevan emoji (la fila se pinta, no se lee).
+    for (const id of atun.miembros) {
+      for (const ing of (porId.get(id) || {}).ingredientes || []) {
+        assert.ok(ing.emoji, `${id}: ${ing.nombre} sin emoji`);
+      }
+    }
+  });
+}
+
 let fallos = 0;
 for (const c of casos) {
   try { c.fn(); console.log('PASS ' + c.nombre); }

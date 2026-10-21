@@ -35,11 +35,16 @@ class ComanderoModule extends BaseModule {
   constructor() {
     super();
     this.name    = 'comandero';
-    this.version = '3.6.0';
+    this.version = '3.6.1';
     this.validator = null;
 
     this.pedidos              = new Map();
     this.refDisplayCache      = new Map();
+    // Cache del catálogo BASE: Map<project_id, Map<producto_id, producto>>.
+    // Era un Map PLANO, sin proyecto y sin purga: cada catalogo.actualizado solo hacía .set(),
+    // así que los productos de otra carta u otro proyecto se acumulaban (el POS llegó a declarar
+    // 63 productos con una carta de 22) y un producto borrado seguía cobrándose para siempre.
+    // Ahora es por proyecto y se REEMPLAZA entero con cada señal.
     this.productosCache       = new Map();
     this.cartasProductosCache = new Map();
     // Carta COMPLETA por carta_id: { productos, ingredientes_catalogo }. Es la que come el
@@ -208,23 +213,50 @@ class ComanderoModule extends BaseModule {
     });
   }
 
+  // catalogo.actualizado — señal de refresco del catálogo BASE. Llega en DOS formas y solo una
+  // alimenta este cache:
+  //   · { project_id, menu_id, productos: [...] }  → proyección de la carta GENERAL (productos/)
+  //   · { project_id, catalogo: {...} }            → catálogo crudo (prisma/producto-manager), otra verdad
+  // La guarda de array no es cosmética: sin ella un evento de la segunda forma (trae 0 productos)
+  // vaciaría el cache y el POS cobraría 0 hasta la siguiente proyección.
   async onCatalogoActualizado(event) {
     const data = this._unwrap(event);
-    const productos = data?.productos || [];
-
-    for (const producto of productos) {
-      if (producto.id && producto.precio !== undefined) {
-        this.productosCache.set(producto.id, {
-          nombre:      producto.nombre || producto.id,
-          precio:      producto.precio,
-          categoria:   producto.categoria || null,
-          estaciones:  producto.estaciones || null,
-          precio_fijo: producto.precio_fijo || false
-        });
-      }
+    const productos = data?.productos;
+    if (!Array.isArray(productos)) {
+      this.logger.debug('comandero.catalogo.ignored', {
+        reason: 'evento sin array productos', keys: Object.keys(data || {})
+      });
+      return;
     }
 
-    this.logger.info('comandero.catalogo.synced', { productos_en_cache: this.productosCache.size });
+    const projectId = data.project_id || DEFAULT_PROJECT_ID;
+    const previos   = this.productosCache.get(projectId) || new Map();
+
+    // FULL-REPLACE, no acumulación: lo que la carta ya no tiene deja de existir y deja de cobrarse.
+    // Un producto renombrado o eliminado desaparece aquí; con el .set() de antes se quedaba.
+    const fresco = new Map();
+    for (const producto of productos) {
+      if (!producto?.id || producto.precio === undefined) continue;
+      fresco.set(producto.id, {
+        nombre:      producto.nombre || producto.id,
+        precio:      producto.precio,
+        categoria:   producto.categoria || null,
+        estaciones:  producto.estaciones || null,
+        precio_fijo: producto.precio_fijo || false
+      });
+    }
+    let purgados = 0;
+    for (const id of previos.keys()) if (!fresco.has(id)) purgados++;
+    this.productosCache.set(projectId, fresco);
+
+    this.logger.info('comandero.catalogo.synced', {
+      project_id:   projectId,
+      menu_id:      data.menu_id || null,
+      source:       data.source || null,
+      productos_en_cache: fresco.size,
+      previos:      previos.size,
+      purgados
+    });
   }
 
   async onCartaActualizada(event) {
@@ -280,15 +312,34 @@ class ComanderoModule extends BaseModule {
     if (pend) this._cartaGetPendientes.delete(data.request_id);
     const project_id = pend?.project_id;
     const general = project_id ? this.tarifasConfigPorProject.get(project_id)?.general : null;
-    if (general && cartaId === general) this._cachearCatalogoBase(carta);
+    if (general && cartaId === general) this._cachearCatalogoBase(carta, project_id);
+  }
+
+  // Map<project_id → Map<producto_id → producto>> del catálogo BASE. Un proyecto nuevo nace vacío:
+  // el catálogo de un proyecto jamás puede servir precio a otro.
+  _productosDe(projectId) {
+    const pid = projectId || DEFAULT_PROJECT_ID;
+    let map = this.productosCache.get(pid);
+    if (!map) { map = new Map(); this.productosCache.set(pid, map); }
+    return map;
+  }
+
+  _totalProductosCache() {
+    let total = 0;
+    for (const map of this.productosCache.values()) total += map.size;
+    return total;
   }
 
   // Catálogo BASE (productosCache): lo que cobra mostrador/recogida cuando el canal no tiene
-  // carta propia o el producto no está en ella.
-  _cachearCatalogoBase(carta) {
+  // carta propia o el producto no está en ella. FULL-REPLACE del proyecto: hidratar la general
+  // no puede dejar vivos los productos de una versión anterior de la carta.
+  _cachearCatalogoBase(carta, projectId) {
+    const pid = projectId || DEFAULT_PROJECT_ID;
+    const previos = this.productosCache.get(pid) || new Map();
+    const fresco  = new Map();
     for (const p of (carta?.productos || [])) {
       if (!p?.id || p.precio === undefined) continue;
-      this.productosCache.set(p.id, {
+      fresco.set(p.id, {
         nombre:     p.nombre || p.id,
         precio:     p.precio,
         categoria:  p.categoria || p.categoria_id || null,
@@ -296,15 +347,21 @@ class ComanderoModule extends BaseModule {
         precio_fijo: p.precio_fijo || false
       });
     }
-    this.logger.info('comandero.catalogo.hidratado', { productos_en_cache: this.productosCache.size });
+    let purgados = 0;
+    for (const id of previos.keys()) if (!fresco.has(id)) purgados++;
+    this.productosCache.set(pid, fresco);
+    this.logger.info('comandero.catalogo.hidratado', {
+      project_id: pid, productos_en_cache: fresco.size, previos: previos.size, purgados
+    });
   }
 
   async onProductoActualizado(event) {
     const data = this._unwrap(event);
-    const { id, nombre, precio, categoria } = data;
+    const { id, nombre, precio, categoria, project_id } = data;
     if (id && precio !== undefined) {
-      const existing = this.productosCache.get(id);
-      this.productosCache.set(id, {
+      const cache = this._productosDe(project_id);
+      const existing = cache.get(id);
+      cache.set(id, {
         nombre:     nombre || id,
         precio,
         categoria:  categoria || existing?.categoria || null,
@@ -424,7 +481,7 @@ class ComanderoModule extends BaseModule {
         this.pedidos.set(cuenta_id, pedido);
       }
 
-      const cached       = this.productosCache.get(producto_id);
+      const cached       = this._productosDe(project_id).get(producto_id);
       const itemNombre   = nombre || cached?.nombre || producto_id;
       const precioBase   = precio ?? cached?.precio ?? 0;
       const itemCantidad = cantidad || 1;
@@ -777,7 +834,8 @@ class ComanderoModule extends BaseModule {
           module:             this.name,
           version:            this.version,
           pedidos_activos:    this.pedidos.size,
-          productos_en_cache: this.productosCache.size,
+          productos_en_cache: this._totalProductosCache(),
+          proyectos_en_cache: this.productosCache.size,
           timestamp:          new Date().toISOString()
         }
       };

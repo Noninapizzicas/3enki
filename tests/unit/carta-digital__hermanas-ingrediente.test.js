@@ -26,7 +26,14 @@ const RAIZ   = path.resolve(__dirname, '../..');
 const TPL    = path.join(RAIZ, 'modules/pizzepos/carta-digital/static-template.js');
 
 // ─── Carta mínima, determinista (no depende de datos de proyecto) ───────────────
-const ing = (nombre, emoji) => ({ nombre, emoji: emoji || null, tipo: null, precio_extra: null });
+// Los ingredientes llevan emoji, como en la carta real (los 26 del proyecto lo traen):
+// la fila de una hermana se ojea de pie en la barra, no se lee.
+const EMOJI = {
+  'Tomate': '🍅', 'Jamón de york': '🥩', 'Mozzarella': '🧀', 'Pepperoni': '🥩',
+  'Bacon': '🥓', 'Champiñones': '🍄', 'Albahaca': '🌿', 'Nata': '🥛',
+  'Queso azul': '🧀', 'Anchoas': '🐟', 'Alcaparras': '🌿'
+};
+const ing = (nombre, emoji) => ({ nombre, emoji: emoji || EMOJI[nombre] || null, tipo: null, precio_extra: null });
 const pizza = (id, nombre, precio, ings) => ({
   id, nombre, categoria: 'pizzas', categoria_id: 'pizzas', precio,
   descripcion: null, emoji: null, tags: [], imagen: null, alergenos: [],
@@ -128,10 +135,24 @@ caso('abre la ficha del ancla y pinta el bloque de hermanas', () => {
 
 caso('cada hermana trae ingredientes a la vista, precio y dos botones', () => {
   const out = api.detalle();
-  assert.ok(/hermana-ings">Tomate · Mozzarella · Jamón de york · Bacon/.test(out), 'ingredientes visibles');
+  assert.ok(/hermana-ings">🍅 Tomate · 🧀 Mozzarella · 🥩 Jamón de york · 🥓 Bacon/.test(out), 'ingredientes visibles CON emoji');
   assert.ok(/hermana-precio/.test(out) && /10,50|10\.50/.test(out), 'precio de la hermana');
   assert.ok(/data-accion="hermana-elegir" data-producto-id="pizzas_indie"/.test(out), 'botón elegir');
-  assert.ok(/data-accion="hermana-editar" data-producto-id="pizzas_indie"/.test(out), 'botón editar');
+  assert.ok(/data-accion="hermana-editar" data-producto-id="pizzas_indie"/.test(out), 'botón personalizar (acción hermana-editar)');
+});
+
+caso('el segundo botón dice PERSONALIZAR, no "Editar"', () => {
+  const out = api.detalle();
+  assert.ok(/hermana-btn"[^>]*>Personalizar</.test(out), 'la etiqueta es Personalizar');
+  assert.ok(!/>Editar</.test(out), 'ya no queda ningún "Editar" suelto');
+});
+
+caso('"Añadir extras" viene PLEGADO: se ve la cabecera, no el muro de chips', () => {
+  const out = api.detalle();
+  assert.ok(/<details class="fold">/.test(out), 'la sección es un desplegable');
+  assert.ok(!/<details class="fold" open/.test(out), 'y arranca CERRADO (nada se despliega solo)');
+  assert.ok(/fold-sum">Añadir extras<span class="fold-hint">· \d+ opcionales/.test(out), 'cabecera con el número de opcionales');
+  assert.ok(/data-ext-id=/.test(out), 'los extras siguen ahí dentro, listos para abrir');
 });
 
 caso('editar abre LA FICHA de esa hermana (y su propio bloque)', () => {

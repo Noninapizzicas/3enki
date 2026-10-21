@@ -2202,10 +2202,14 @@ INTERFAZ ComanderoContract {
 CLASE ComanderoModule HEREDA BaseModule IMPLEMENTA ComanderoContract {
   ATRIBUTOS {
     name: String = 'comandero'
-    version: String = '3.2.0'
+    version: String = '3.6.1'
     pedidos: Map<cuenta_id, Pedido>
     refDisplayCache: Map<cuenta_id, String>
-    productosCache: Map<producto_id, Producto>
+    // v3.6.1 — POR PROYECTO y con purga. Antes era un Map plano SIN project_id y sin purga:
+    // catalogo.actualizado solo hacía .set(), así que un producto retirado se cobraba para
+    // siempre y los catálogos de dos proyectos se sumaban (medido en vivo: 63 en cache con
+    // una carta de 22). Ahora se REEMPLAZA entero el mapa del proyecto.
+    productosCache: Map<project_id, Map<producto_id, Producto>>
     cartasProductosCache: Map<carta_id, Map<producto_id, ProductoEnCarta>>
     tarifasConfigPorProject: Map<project_id, {general, canales}>
     _bufferFile: String
@@ -2255,6 +2259,8 @@ CLASE ComanderoModule HEREDA BaseModule IMPLEMENTA ComanderoContract {
       // canal cobraba precio base hasta que alguien tocara su carta.
       // v3.5.1 — y si la carta que responde es la GENERAL, además rellena productosCache (catalogo
       // base): sin eso el POS cobraba 0 y nombraba el item con el producto_id tras un restart.
+      // v3.6.1 — ese relleno es FULL-REPLACE del proyecto: hidratar la general no puede dejar
+      // vivos los productos de una versión anterior de la carta.
       CREA item con UUID
       AGREGA a pedido.items
       RECALCULA pedido.total
@@ -2696,8 +2702,9 @@ CLASE ProductosModule HEREDA BaseModule {
       → SEÑAL: re-emite catalogo.actualizado (el comandero re-pull y proyecta fresco). NO sincroniza store.
       → GATE _esCartaGeneral: SOLO la carta GENERAL (la que asigna tarifas) proyecta al catálogo
         GLOBAL. Una carta de CANAL (glovo, llevar, teléfono…) NO emite catalogo.actualizado —
-        comandero y pedidos cachean por producto_id sin discriminar carta (menu_id se emite pero
-        nadie lo lee), así que su precio pisaría el de mostrador en TODOS los canales. El canal
+        las caches base se indexan por proyecto (comandero desde v3.6.1; pedidos aún por
+        producto_id pelado), así que sin el gate una carta de canal pisaría el precio de
+        mostrador en TODOS los canales. El canal
         se resuelve por carta: tarifas(canal) → comandero.cartasProductosCache[carta_id] → precio,
         y si el producto no está en la carta del canal, cae al precio base. Sin config de tarifas
         conocida todavía (arranque temprano) se emite como antes: ningún refresco se pierde.

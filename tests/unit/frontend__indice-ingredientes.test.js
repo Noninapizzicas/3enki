@@ -16,7 +16,12 @@ const { execFileSync } = require('child_process');
 const RAIZ      = path.resolve(__dirname, '../..');
 const FUENTE    = path.join(RAIZ, 'frontend/src/lib/utils/indice-ingredientes.ts');
 const SALIDA    = '/tmp/indice-ingredientes.test.cjs';
-const ESBUILD   = path.join(RAIZ, 'frontend/node_modules/.bin/esbuild');
+const ESBUILD   = [
+  path.join(RAIZ, 'frontend/node_modules/.bin/esbuild'),
+  '/opt/enki/frontend/node_modules/.bin/esbuild',   // deps desplegadas: el repo puede no tenerlas
+  '/usr/local/bin/esbuild'
+].find(p => { try { return fs.existsSync(p) && fs.statSync(p).isFile(); } catch (_) { return false; } });
+assert.ok(ESBUILD, 'no hay esbuild: instala frontend/node_modules (npm ci) o deja el árbol desplegado en /opt/enki');
 
 // La carta vive en data/ (gitignored): el test la busca en el worktree y, si no
 // está, en el árbol desplegado. Sin carta, los tests de dato real se omiten en vez
@@ -167,6 +172,41 @@ test('hermanasDe: una pizza sin principal compartido no inventa bloque', () => {
 test('hermanasDe: fuera del sector pizzas no hay hermanas', () => {
   const p = { id: 'x', nombre: 'x', categoria_id: 'bebidas', precio: 2, ingredientes_base: [{ id: 'cola', nombre: 'Cola' }] };
   assert.strictEqual(mod.hermanasDe(p, [p, { ...p, id: 'y' }]), null);
+});
+
+// ---------- 6. FAMILIA FIJADA (el grupo declarado, no derivado) ----------
+// Fijar = congelar la sección en el DATO. Lo que importa: (a) manda el dato aunque el ingrediente
+// ya no esté, (b) una pizza que SÍ lleva el ingrediente pero no está en la lista NO se cuela,
+// (c) un miembro dado de baja desaparece del bloque sin romperlo.
+test('hermanasDe: la familia fijada manda sobre la derivación', () => {
+  const p = (id, ings, extra = {}) => ({ id, nombre: id, categoria_id: 'pizzas', precio: 10,
+    ingredientes_base: ings.map(n => ({ id: n, nombre: n })), ...extra });
+
+  const ancla = p('bacon_base', ['tomate', 'bacon'], {
+    familia: { ingrediente_id: 'bacon', ingrediente: 'Bacon', ancla: 'bacon_base',
+               miembros: ['bacon_rb', 'bacon_fantasma'], fijado_at: '2026-10-21T00:00:00Z' }
+  });
+  const rnb   = p('bacon_rb', ['tomate', 'bacon']);      // miembro declarado
+  const soul  = p('bacon_soul', ['tomate', 'bacon']);    // lleva bacon pero NO está en la familia
+  const todos = [ancla, rnb, soul];
+
+  const h = mod.hermanasDe(ancla, todos);
+  assert.ok(h, 'debe haber bloque');
+  assert.strictEqual(h.principal.nombre, 'Bacon');
+  assert.deepStrictEqual(h.hermanas.map(q => q.id), ['bacon_rb'],
+    'solo el declarado: Soul lleva bacon pero no entra; el fantasma se salta');
+});
+
+test('hermanasDe: un miembro fijado sin el ingrediente sigue en el bloque', () => {
+  const ancla = { id: 'a', nombre: 'a', categoria_id: 'pizzas', precio: 10,
+    ingredientes_base: [{ id: 'bacon', nombre: 'Bacon' }],
+    familia: { ingrediente_id: 'bacon', ingrediente: 'Bacon', miembros: ['b'] } };
+  const b = { id: 'b', nombre: 'b', categoria_id: 'pizzas', precio: 11,
+    ingredientes_base: [{ id: 'nata', nombre: 'Nata' }] };   // ya no lleva bacon
+  const h = mod.hermanasDe(ancla, [ancla, b]);
+  assert.ok(h);
+  assert.deepStrictEqual(h.hermanas.map(q => q.id), ['b'],
+    'la sección está fijada: se pinta lo declarado, aunque el ingrediente se haya ido');
 });
 
 console.log(`\n${pasados} tests OK`);

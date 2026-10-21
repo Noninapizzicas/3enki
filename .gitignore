@@ -1,5 +1,8 @@
 # Dependencies
 node_modules/
+# El symlink `frontend/node_modules` (un worktree apuntando al repo) NO es un directorio,
+# así que `node_modules/` no lo cubría y se commiteó por error. Este patrón cubre ambos.
+node_modules
 package-lock.json
 
 # Environment files

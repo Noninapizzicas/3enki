@@ -52,6 +52,9 @@ function proyectarCartaPublica(carta, marca, contenido, config, calendario) {
       // ESCALERA de familia (DATO de la carta): el ancla y sus hermanas a un ingrediente.
       // La proyeccion es WHITELIST: lo que no se nombra aqui NO llega a la PWA.
       escalera: (p.escalera && typeof p.escalera === 'object' && Array.isArray(p.escalera.hermanas)) ? p.escalera : null,
+      // FAMILIA FIJADA (DATO de la carta): el grupo declarado, con sus miembros por id. Si viene,
+      // la PWA pinta ESE grupo tal cual; si no, deriva por ingrediente principal.
+      familia: (p.familia && typeof p.familia === 'object' && Array.isArray(p.familia.miembros)) ? p.familia : null,
       alergenos,
       // Calendario (módulo calendario): cuándo sale este producto. `[]` → no es encargable
       // (sin botón de encargo en la carta). margen_antelacion_h = antelación mínima p/ encargar.

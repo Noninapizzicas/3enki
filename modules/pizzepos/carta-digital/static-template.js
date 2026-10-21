@@ -106,6 +106,18 @@ function generateStaticHTML(carta, config, options = {}) {
             }))
           }
         : null,
+      // FAMILIA FIJADA de ingrediente (DATO de la carta): el grupo declarado a mano, con sus
+      // miembros por id. Si viene, MANDA sobre la derivación — la sección ya no se mueve cuando
+      // alguien toca los ingredientes de una pizza. Si no viene, se deriva como siempre.
+      familia: (p.familia && typeof p.familia === 'object' && Array.isArray(p.familia.miembros))
+        ? {
+            ingrediente_id: p.familia.ingrediente_id || null,
+            ingrediente: p.familia.ingrediente || null,
+            ancla: p.familia.ancla || null,
+            miembros: p.familia.miembros.filter(x => typeof x === 'string').slice(),
+            fijado_at: p.familia.fijado_at || null
+          }
+        : null,
       ingredientes: (p.ingredientes || []).map(i => ({
         nombre: i.nombre, emoji: i.emoji || null, tipo: i.tipo || null,
         precio_extra: i.precio_extra ?? null
@@ -874,12 +886,33 @@ function ingPrincipalDe(p, grupo) {
 
 function renderHermanas(p) {
   const grupo = familiaDe(p);
-  const principal = ingPrincipalDe(p, grupo);
-  if (!principal) return '';
-  const hermanas = grupo.filter(function (q) {
-    return q.id !== p.id && (q.ingredientes || []).some(function (i) { return i.nombre === principal.nombre; });
-  });
-  if (!hermanas.length) return '';
+  let principal = null, hermanas = [];
+
+  // GRUPO FIJADO (DATO de la carta): manda el dato, no la derivación. Los ids se resuelven
+  // contra la carta VIVA, así que una pizza dada de baja simplemente desaparece del bloque en
+  // vez de romperlo — y una pizza nueva NO se cuela en una sección que el dueño fijó.
+  const fijada = p && p.familia;
+  if (fijada && Array.isArray(fijada.miembros) && fijada.miembros.length) {
+    const todos = (DATA && DATA.productos) || [];
+    for (let k = 0; k < fijada.miembros.length; k++) {
+      const id = fijada.miembros[k];
+      if (!id || id === p.id) continue;
+      const q = todos.find(function (x) { return x.id === id; });
+      if (q && !hermanas.some(function (y) { return y.id === q.id; })) hermanas.push(q);
+    }
+    if (!hermanas.length) return '';
+    principal = {
+      nombre: fijada.ingrediente || String(fijada.ingrediente_id || '').replace(/_/g, ' '),
+      n: hermanas.length + 1      // el ancla cuenta en el total de la sección
+    };
+  } else {
+    principal = ingPrincipalDe(p, grupo);
+    if (!principal) return '';
+    hermanas = grupo.filter(function (q) {
+      return q.id !== p.id && (q.ingredientes || []).some(function (i) { return i.nombre === principal.nombre; });
+    });
+    if (!hermanas.length) return '';
+  }
   let filas = '';
   for (let k = 0; k < hermanas.length; k++) {
     const h = hermanas[k];

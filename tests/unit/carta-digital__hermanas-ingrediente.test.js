@@ -34,11 +34,11 @@ const EMOJI = {
   'Queso azul': '🧀', 'Anchoas': '🐟', 'Alcaparras': '🌿'
 };
 const ing = (nombre, emoji) => ({ nombre, emoji: emoji || EMOJI[nombre] || null, tipo: null, precio_extra: null });
-const pizza = (id, nombre, precio, ings) => ({
+const pizza = (id, nombre, precio, ings, extra = {}) => ({
   id, nombre, categoria: 'pizzas', categoria_id: 'pizzas', precio,
   descripcion: null, emoji: null, tags: [], imagen: null, alergenos: [],
   ingredientes: ings.map(n => ing(n)),
-  dias_sale: [], margen_antelacion_h: null, escalera: null
+  dias_sale: [], margen_antelacion_h: null, escalera: null, ...extra
 });
 
 const CARTA = {
@@ -52,7 +52,17 @@ const CARTA = {
     // Tres sin jamón: sin ellas la "base" sería el propio jamón (4/4) y el eje se perdería.
     pizza('pizzas_carbonara','Pizza Carbonara', 10.5, ['Tomate', 'Mozzarella', 'Bacon', 'Nata']),
     pizza('pizzas_cuatro_quesos','Pizza Cuatro Quesos', 11.5, ['Tomate', 'Mozzarella', 'Queso azul', 'Nata']),
-    pizza('pizzas_clasica','La Clásica', 10.5, ['Tomate', 'Mozzarella', 'Anchoas', 'Alcaparras'])
+    pizza('pizzas_clasica','La Clásica', 10.5, ['Tomate', 'Mozzarella', 'Anchoas', 'Alcaparras']),
+    // FAMILIA FIJADA: el dueño declaró el grupo. Merengue está dentro; la Barbacoa (que SÍ lleva
+    // bacon) se queda fuera porque no la declaró; el fantasma ya no existe.
+    pizza('pizzas_bacon_ancla','Pizza de bacon', 10, ['Tomate', 'Mozzarella', 'Bacon'], {
+      familia: {
+        ingrediente_id: 'bacon', ingrediente: 'Bacon', ancla: 'pizzas_bacon_ancla',
+        miembros: ['pizzas_merengue', 'pizzas_fantasma'],
+        fijado_at: '2026-10-21T00:00:00Z'
+      }
+    }),
+    pizza('pizzas_bbq_fuera','Barbacoa', 10.5, ['Tomate', 'Mozzarella', 'Bacon', 'Nata'])
   ],
   alergenos_leyenda: [],
   catalogo_ingredientes: [{ id: 'bacon', nombre: 'Bacon', tipo: 'carne', precio_extra: 1.5, emoji: null }]
@@ -214,6 +224,27 @@ caso('el bloque de hermanas va ARRIBA, antes de ingredientes y de añadir extras
   assert.ok(posHermanas > -1, 'el bloque existe');
   assert.ok(posHermanas < posExtras, 'las hermanas van antes de "Añadir extras" (si no, quedan enterradas)');
   assert.ok(posHermanas < posIngs, 'y antes de la lista de ingredientes');
+});
+
+// ── FAMILIA FIJADA ────────────────────────────────────────────────────────────
+caso('familia FIJADA: pinta los declarados y NO deja colarse a los que llevan el ingrediente', () => {
+  api.showDetail('pizzas_bacon_ancla');
+  const out = api.detalle();
+  assert.ok(/También con Bacon/.test(out), 'cabecera con el ingrediente declarado');
+  assert.strictEqual((out.match(/hermana-row/g) || []).length, 1, 'una sola hermana: la declarada');
+  assert.ok(/hermana-nombre">Merengue/.test(out), 'Merengue sí (está en la familia)');
+  assert.ok(!/hermana-nombre">Barbacoa/.test(out), 'Barbacoa NO: lleva bacon pero no está en la familia');
+  assert.ok(!/pizzas_fantasma/.test(out), 'el miembro que ya no existe se salta, no rompe');
+});
+
+caso('familia FIJADA: el bloque es el mismo al abrir cualquiera de sus miembros', () => {
+  api.showDetail('pizzas_bacon_ancla');
+  const desdeAncla = api.detalle();
+  api.showDetail('pizzas_merengue');
+  const desdeMiembro = api.detalle();
+  assert.ok(/También con Jamón de york/.test(desdeMiembro), 'Merengue sigue mostrando su familia de jamón');
+  assert.ok(/hermana-nombre">Indie/.test(desdeMiembro), 'con las hermanas de siempre');
+  assert.ok(/También con Bacon/.test(desdeAncla), 'y el ancla de bacon muestra la suya');
 });
 
 let fallos = 0;

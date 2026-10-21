@@ -128,6 +128,20 @@ export interface Hermanas {
   hermanas: Producto[];
 }
 
+/**
+ * FAMILIA FIJADA (DATO de la carta): el grupo declarado a mano en el producto. Si viene, MANDA
+ * sobre la derivación — la sección deja de moverse cuando alguien toca los ingredientes de una
+ * pizza. Los ids se resuelven contra la carta viva: una pizza dada de baja desaparece del bloque
+ * y una pizza nueva NO se cuela en una familia que el dueño fijó.
+ */
+export interface FamiliaFijada {
+  ingrediente_id?: string;
+  ingrediente?:  string;
+  ancla?:        string;
+  miembros:      string[];
+  fijado_at?:    string;
+}
+
 /** El ingrediente que ejes el grupo: repetido en varias pero en menos del 60%. */
 export function ingredientePrincipal(
   producto: Producto,
@@ -165,6 +179,26 @@ export function hermanasDe(
   const cat = (producto as any).categoria_id || (producto as any).categoria || '';
   if (categorias.length && !categorias.includes(cat)) return null;
 
+  // 1) FAMILIA FIJADA: la sección declarada manda. Resuelve por id contra la carta viva.
+  const fijada = (producto as any).familia as FamiliaFijada | undefined;
+  if (fijada && Array.isArray(fijada.miembros) && fijada.miembros.length) {
+    const hermanas: Producto[] = [];
+    for (const id of fijada.miembros) {
+      if (!id || id === producto.id) continue;
+      const q = todos.find(p => p.id === id);
+      if (q && !hermanas.some(y => y.id === q.id)) hermanas.push(q);
+    }
+    if (hermanas.length === 0) return null;
+    return {
+      principal: {
+        id: fijada.ingrediente_id || '',
+        nombre: fijada.ingrediente || (fijada.ingrediente_id || '').replace(/_/g, ' ')
+      },
+      hermanas
+    };
+  }
+
+  // 2) Sin familia fijada: se deriva (como siempre).
   const grupo = todos.filter(
     p => ((p as any).categoria_id || (p as any).categoria) === cat
   );

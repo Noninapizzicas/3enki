@@ -134,6 +134,39 @@ test('carta the-pirate-v4 proyectada (ingredientes_base) da las mismas secciones
     .map(s => `${s.ingrediente_id}=${s.productos.length}`);
   assert.deepStrictEqual(resumen, ['jamon_de_york=8', 'bacon=4', 'atun=2', 'ternera=1', 'anchoas=1']);
 });
+
+// ---------- 5. Hermanas del COMANDERO (el bloque que se abre al pulsar la pizza) ----------
+// Misma regla que la carta digital, pero aquí sobre los productos proyectados.
+test('hermanasDe: la Milonga lista las otras 7 con jamón, sin ella misma', () => {
+  const carta = JSON.parse(fs.readFileSync(CARTA, 'utf8'));
+  const proyectada = carta.productos.map(p => ({
+    id: p.id, nombre: p.nombre, categoria_id: p.categoria_id, precio: p.precio,
+    ingredientes_base: (p.ingredientes || []).map(i => ({ id: i.id, nombre: i.nombre, emoji: i.emoji }))
+  }));
+  const milonga = proyectada.find(p => p.id === 'pizzas_pizza_de_jamon_york');
+  const h = mod.hermanasDe(milonga, proyectada);
+  assert.ok(h, 'debe haber eje');
+  assert.strictEqual(h.principal.id, 'jamon_de_york');
+  assert.strictEqual(h.principal.nombre, 'Jamón de york');
+  assert.strictEqual(h.hermanas.length, 7);
+  assert.ok(!h.hermanas.some(q => q.id === milonga.id), 'no se lista a sí misma');
+});
 }
+
+test('hermanasDe: una pizza sin principal compartido no inventa bloque', () => {
+  const p = (id, ings) => ({ id, nombre: id, categoria_id: 'pizzas', precio: 10,
+    ingredientes_base: ings.map(n => ({ id: n, nombre: n })) });
+  const todos = [
+    p('a', ['tomate', 'mozzarella', 'albahaca']),
+    p('b', ['tomate', 'mozzarella', 'bacon']),
+    p('c', ['tomate', 'mozzarella', 'nata'])
+  ];
+  assert.strictEqual(mod.hermanasDe(todos[0], todos), null);
+});
+
+test('hermanasDe: fuera del sector pizzas no hay hermanas', () => {
+  const p = { id: 'x', nombre: 'x', categoria_id: 'bebidas', precio: 2, ingredientes_base: [{ id: 'cola', nombre: 'Cola' }] };
+  assert.strictEqual(mod.hermanasDe(p, [p, { ...p, id: 'y' }]), null);
+});
 
 console.log(`\n${pasados} tests OK`);

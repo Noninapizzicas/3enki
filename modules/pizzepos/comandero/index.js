@@ -27,6 +27,7 @@ const fs     = require('fs').promises;
 const path   = require('path');
 
 const BaseModule = require('../../_shared/base-module');
+const { tasarPedido } = require('../../_shared/pedido-tasador');
 const DEFAULT_PROJECT_ID = 'default';
 const SAVE_DEBOUNCE_MS   = 1000;
 
@@ -34,13 +35,17 @@ class ComanderoModule extends BaseModule {
   constructor() {
     super();
     this.name    = 'comandero';
-    this.version = '3.5.2';
+    this.version = '3.6.0';
     this.validator = null;
 
     this.pedidos              = new Map();
     this.refDisplayCache      = new Map();
     this.productosCache       = new Map();
     this.cartasProductosCache = new Map();
+    // Carta COMPLETA por carta_id: { productos, ingredientes_catalogo }. Es la que come el
+    // tasador de pedidos (_shared/pedido-tasador.js) — la misma función pura que re-tasa el
+    // autoservicio de WhatsApp, de modo que POS y web cobran con el mismo criterio.
+    this.cartasCompletas      = new Map();
     // request_id → {project_id, carta_id} de los carta.get.request en vuelo (hidratación al cargar).
     this._cartaGetPendientes = new Map();
     // Cache local de la config de tarifas hidratado via tarifas.config.actualizada.
@@ -92,6 +97,7 @@ class ComanderoModule extends BaseModule {
     this.pedidos.clear();
     this.productosCache.clear();
     this.cartasProductosCache.clear();
+    this.cartasCompletas.clear();
     this.refDisplayCache.clear();
     this.tarifasConfigPorProject.clear();
     this.logger.info('module.unloaded', { module: this.name });
@@ -251,6 +257,12 @@ class ComanderoModule extends BaseModule {
       }
     }
     this.cartasProductosCache.set(cartaId, cartaCache);
+    // Carta completa (productos + catálogo de extras) para el tasador: el índice de productos
+    // de arriba es solo para la resolución rápida de precio por canal.
+    this.cartasCompletas.set(cartaId, {
+      productos,
+      ingredientes_catalogo: this._extrasDeCarta(productos)
+    });
     this.logger.info('comandero.carta.cached', { carta_id: cartaId, productos: cartaCache.size });
   }
 
@@ -431,14 +443,35 @@ class ComanderoModule extends BaseModule {
       }
 
       const canal      = this._detectarCanalCuenta(cuenta_id);
-      // D3 (subsistema-catalogo): si el composer ya tasó el item contra la carta del canal,
-      // llega precio_canal_resuelto=true → comandero CONFÍA en el precio recibido (un solo punto tasa,
-      // mata el bug de delivery de items compuestos). Si NO llega el flag (composers actuales que mandan
-      // precio_override del catálogo general), se mantiene la re-resolución por canal. Puente
-      // backward-compat: ambos conviven sin ruptura; los composers se migran después (Fase 7 frontend).
-      const itemPrecio = (data.precio_canal_resuelto === true)
-        ? precioBase
-        : this._resolverPrecioCanal(producto_id, precioBase, canal, project_id);
+
+      // ── UN SOLO TASADOR (v3.6.0) ──────────────────────────────────────────────
+      // El precio del item lo pone el SERVIDOR contra la carta del canal, con la misma función
+      // pura que re-tasa el autoservicio (`_shared/pedido-tasador.js`): producto + Σ extras.
+      // Antes había dos verdades — el panel mandaba un total y este backend lo pisaba con el
+      // precio pelado de la carta en todo canal que no fuera mesa —, así que los extras se
+      // caían en llevar/teléfono/glovo. Ahora el precio del cliente no manda: se re-tasa.
+      const tasado = this._tasarItem({
+        producto_id, cantidad: itemCantidad, tipo, pizza_izquierda, pizza_derecha,
+        variaciones, canal, project_id
+      });
+
+      let itemPrecio;
+      if (tasado) {
+        itemPrecio = tasado.precio;
+        for (const av of (tasado.avisos || [])) {
+          this.logger.warn('comandero.tasado.aviso', { producto_id, ...av });
+        }
+      } else {
+        // Degradación honesta (no_silent_failures): el producto no está en la carta del canal
+        // (p.ej. 'pizza_algusto', 'porcion', un pack de tienda) o la carta aún no está cacheada.
+        // Se mantiene el camino anterior —incluido el flag precio_canal_resuelto del delivery—
+        // y se AVISA, para que un fallback no pase por precio bueno.
+        this.logger.warn('comandero.tasado.fallback', { producto_id, canal, project_id, tipo: tipo || 'normal' });
+        this.metrics?.increment('comandero.tasado.fallback');
+        itemPrecio = (data.precio_canal_resuelto === true)
+          ? precioBase
+          : this._resolverPrecioCanal(producto_id, precioBase, canal, project_id);
+      }
 
       const item_id = crypto.randomUUID();
       const item = {
@@ -887,6 +920,109 @@ class ComanderoModule extends BaseModule {
   }
 
   _unwrap(event) { return event?.data || event?.payload || event || {}; }
+
+  // ==========================================
+  // Internals — UN SOLO TASADOR (v3.6.0)
+  // ==========================================
+
+  /**
+   * Deriva el catálogo de extras DE LA CARTA (dueño único del delta). Recorre las opciones
+   * ELEGIR_VARIOS de cada producto y se queda con {id, nombre, precio_extra}: exactamente lo que
+   * el panel de variaciones le enseña al camarero, así el precio tasado es el que vio en pantalla.
+   * Los valores del grupo QUITAR no entran: quitar es gratis.
+   */
+  _extrasDeCarta(productos) {
+    const porId = new Map();
+    for (const p of (productos || [])) {
+      for (const o of (p?.opciones || [])) {
+        if (o?.modo !== 'ELEGIR_VARIOS') continue;
+        for (const v of (o?.valores || [])) {
+          if (!v?.id) continue;
+          const id = String(v.id);
+          if (porId.has(id)) continue;
+          porId.set(id, {
+            id,
+            nombre: v.etiqueta || id,
+            precio_extra: (Number(v.delta_precio_centimos) || 0) / 100
+          });
+        }
+      }
+    }
+    return Array.from(porId.values());
+  }
+
+  _clave(texto) {
+    return String(texto ?? '')
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase().replace(/\s+/g, ' ').trim();
+  }
+
+  /**
+   * Puente legacy: VariacionesPanel y MitadMitadPanel mandan los extras por NOMBRE ("Calabacín",
+   * "Jamón de york"), no por id. Se resuelven aquí contra la carta del canal; un id explícito
+   * gana siempre. Sin esta resolución el extra se cae del precio — que es justo el agujero que
+   * esto cierra.
+   */
+  _idsDeExtras(anadir, catalogo) {
+    if (!Array.isArray(anadir)) return [];
+    const porNombre = new Map();
+    for (const e of catalogo) porNombre.set(this._clave(e.nombre), e.id);
+    const ids = [];
+    for (const raw of anadir) {
+      if (raw == null) continue;
+      const id  = (typeof raw === 'object') ? raw.id : null;
+      const nom = (typeof raw === 'object') ? (raw.nombre || raw.etiqueta) : raw;
+      if (id != null) { ids.push(String(id)); continue; }
+      const resuelto = porNombre.get(this._clave(nom));
+      if (resuelto) ids.push(resuelto);   // si no resuelve, el tasador lo reporta como aviso
+    }
+    return ids;
+  }
+
+  /**
+   * UN SOLO TASADOR. Tasado server-side del item contra la carta del CANAL con la función pura
+   * `tasarPedido` (la misma del autoservicio): producto + Σ extras; mitad y mitad = max(base) +
+   * extras de cada mitad. El dinero va en céntimos dentro del tasador y sale en EUROS porque el
+   * buffer, la cuenta y el cobro están en euros.
+   *
+   * Devuelve { precio, avisos } o null. null = no se puede tasar (sin carta cacheada, producto
+   * fuera de la carta): el llamante cae al camino anterior y AVISA — nunca se inventa un precio.
+   */
+  _tasarItem({ producto_id, cantidad, tipo, pizza_izquierda, pizza_derecha, variaciones, canal, project_id }) {
+    const cartaId = this._resolverCartaIdParaCanal(canal, project_id);
+    if (!cartaId) return null;
+    const carta = this.cartasCompletas.get(cartaId);
+    if (!carta) return null;
+
+    const catalogo  = carta.ingredientes_catalogo;
+    const descriptor = {
+      producto_id,
+      cantidad: Number.isInteger(cantidad) && cantidad > 0 ? cantidad : 1,
+      tipo: (tipo === 'mitad_mitad' || tipo === 'al_gusto') ? tipo : 'normal'
+    };
+
+    if (descriptor.tipo === 'mitad_mitad') {
+      if (!pizza_izquierda?.id || !pizza_derecha?.id) return null;
+      descriptor.pizza_izquierda = {
+        id: String(pizza_izquierda.id),
+        anadir: this._idsDeExtras(pizza_izquierda.anadir, catalogo)
+      };
+      descriptor.pizza_derecha = {
+        id: String(pizza_derecha.id),
+        anadir: this._idsDeExtras(pizza_derecha.anadir, catalogo)
+      };
+    } else {
+      const v = (variaciones && !Array.isArray(variaciones)) ? variaciones : {};
+      descriptor.anadir = this._idsDeExtras(v.ingredientes_anadir, catalogo);
+      descriptor.quitar = v.ingredientes_quitar;
+    }
+
+    const r = tasarPedido([descriptor], carta);
+    if (!r.ok || r.items.length !== 1) return null;
+    const centimos = r.items[0].precio_unitario_centimos;
+    if (!Number.isInteger(centimos)) return null;
+    return { precio: centimos / 100, avisos: r.avisos };
+  }
 
   // ==========================================
   // Internals — calculo + canal + precio

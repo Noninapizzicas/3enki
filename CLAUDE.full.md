@@ -16002,11 +16002,12 @@ TESTS {
 
 ## Hermanas por ingrediente principal en la ficha del cliente (derivadas)
 
-> **Novedad (2026-10-21).** El cliente abre una pizza ("Pizza de jamón York") y, justo
-> debajo de sus ingredientes y de los extras, ve **las demás que llevan ese mismo
-> ingrediente principal**, cada una con su nombre, sus ingredientes a la vista, su
-> precio y dos acciones: **elegir** (al carrito con SU precio) o **editar** (abre SU
-> ficha, con su quitar/añadir).
+> **Novedad (2026-10-21).** El cliente abre una pizza ("Pizza de jamón York") y ve, **pegadas a
+> la cabecera** (antes de sus ingredientes y de los extras), **las demás que llevan ese mismo
+> ingrediente principal**, cada una con su nombre, sus ingredientes a la vista **con emoji**, su
+> precio y dos acciones: **elegir** (al carrito con SU precio) o **Personalizar** (abre SU ficha,
+> con su quitar/añadir). "Añadir extras" va **plegado** — veinte chips abiertos empujaban las
+> hermanas fuera de pantalla, que es como se perdió el bloque la primera vez.
 
 ```json
 {
@@ -16014,14 +16015,21 @@ TESTS {
   "fuente": "DATA.productos[].ingredientes[].nombre (ya viaja en el bundle)",
   "derivado": true,
   "regla_del_principal": "el ingrediente que comparten VARIAS pero no CASI TODAS: lo que sale en >=60% del grupo es la base (tomate, mozzarella) y NO distingue una pizza de otra; empate -> el más repetido",
+  "orden_en_la_ficha": ["cabecera+precio", "hermanas", "escalera", "ingredientes tocables", "extras PLEGADOS"],
   "acciones": {
     "elegir": "addToCart(id) — precio del producto, sin extras",
-    "editar": "showDetail(id) — la ficha de la hermana, con su bloque recalculado"
+    "personalizar": "showDetail(id) — la ficha de la hermana, con SUS ingredientes y su bloque recalculado (showDetail resetea quitarSel/anadirSel: nada se hereda del ancla)"
   },
   "piezas": {
     "modules/pizzepos/carta-digital/static-template.js": "familiaDe · ingPrincipalDe · renderHermanas + delegación en #detail-content; el bloque se pinta PEGADO A LA CABECERA (antes de ingredientes y extras — enterrado debajo de 'Añadir extras' era invisible en el móvil)",
     "frontend/src/lib/utils/indice-ingredientes.ts": "hermanasDe(producto, todos) — la misma regla en el comandero (VariacionesPanel), para que el camarero vea las hermanas al abrir la pizza",
-    "tests/unit/carta-digital__hermanas-ingrediente.test.js": "7 casos sobre el runtime REAL emitido (stub DOM, corte del bootstrap), incluido el ORDEN del bloque"
+    "tests/unit/carta-digital__hermanas-ingrediente.test.js": "10 casos sobre el runtime REAL emitido (stub DOM, corte del bootstrap): orden del bloque, extras plegados, etiqueta Personalizar (y CERO 'Editar'), emoji en la fila, abrir LA ficha de la hermana y que sus chips NO arrastren los del ancla"
+  },
+  "fijado": {
+    "npm": "test:carta-digital__hermanas · test:carta-digital__republicacion, y ambos DENTRO de `npm run test` (la suite canónica: quien corre los tests, corre la guarda)",
+    "ci_hoy": "NO — dos bloqueos reales, medidos: (1) el PAT del repo tiene scope `repo` y GitHub rechaza cualquier cambio en .github/workflows sin scope `workflow`; (2) validate.yml muere antes de cualquier paso de carta (test:motor sale 1 con 14 fallos, validate:ci sale 1 por schema). Un guard ahí sería verde de mentira",
+    "ci_manana": "cuando el CI vuelva a estar verde, el paso va JUSTO ANTES de validate:ci (los de después no se ejecutan) — `npm run test:carta-digital__hermanas`",
+    "prueba_de_que_muerde": "inyectar el fallo real (detailProd sin reasignar) tumba 3 casos, incluido el del arrastre"
   },
   "medido": "the-pirate-v4 (v49): 8 pizzas con Jamón de york -> el ancla lista 7 hermanas; la Margarita no pinta bloque (no inventa eje)"
 }

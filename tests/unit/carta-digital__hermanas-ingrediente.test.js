@@ -163,6 +163,27 @@ caso('editar abre LA FICHA de esa hermana (y su propio bloque)', () => {
   assert.ok(!/hermana-nombre">Indie/.test(out), 'sin listarse a sí misma');
 });
 
+caso('personalizar una hermana NO arrastra los ingredientes del ancla', () => {
+  // El fallo que se vio en pantalla: tocabas Indie, la cabecera decía Indie, pero los
+  // chips borrables seguían siendo los de Milonga (el ancla abierta antes).
+  const chipsDe = html => {
+    const re = /class="ing-chip ing-removable[^"]*"[^>]*>[\s\S]*?font-weight:500">([^<]+)</g;
+    const out = [];
+    let m;
+    while ((m = re.exec(html))) out.push(m[1]);
+    return out;
+  };
+  api.showDetail('pizzas_milonga');
+  assert.deepStrictEqual(chipsDe(api.detalle()), ['Tomate', 'Jamón de york', 'Mozzarella'],
+    'el ancla declara sus 3');
+
+  api.showDetail('pizzas_indie');
+  const deIndie = chipsDe(api.detalle());
+  assert.deepStrictEqual(deIndie, ['Tomate', 'Mozzarella', 'Jamón de york', 'Pepperoni'],
+    'los chips son los de Indie, en su orden — ninguno heredado del ancla');
+  assert.ok(!deIndie.includes('Bacon'), 'Bacon es de Merengue, aquí no pinta nada');
+});
+
 caso('elegir mete la hermana en el carrito con SU precio', () => {
   api.showDetail('pizzas_milonga');
   const antes = api.carrito().length;

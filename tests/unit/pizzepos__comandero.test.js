@@ -640,6 +640,140 @@ function publishedOf(mocks, name) {
     assert.strictEqual(m.cartasProductosCache.get('carta_glovo').get('queso').precio, 8.5);
   });
 
+  // ==========================================================
+  // Group: UN SOLO TASADOR (v3.6.0) — el precio lo pone el servidor
+  // ==========================================================
+
+  // Carta mínima con la MISMA forma que la real: el delta del extra vive en opciones ELEGIR_VARIOS
+  // (delta_precio_centimos), y los valores del grupo QUITAR no llevan precio (quitar es gratis).
+  const CARTA_GEN = {
+    meta: { id: 'carta_gen' },
+    productos: [
+      {
+        id: 'margarita', nombre: 'Margarita', precio: 8,
+        opciones: [
+          { modo: 'QUITAR', valores: [{ id: 'tomate', etiqueta: 'Tomate' }, { id: 'mozzarella', etiqueta: 'Mozzarella' }] },
+          { modo: 'ELEGIR_VARIOS', max: 5, valores: [
+            { id: 'bacon', etiqueta: 'Bacon', delta_precio_centimos: 150 },
+            { id: 'jamon_de_york', etiqueta: 'Jamón de york', delta_precio_centimos: 150 },
+            { id: 'calabacin', etiqueta: 'Calabacín', delta_precio_centimos: 50 }
+          ] }
+        ]
+      },
+      { id: 'pepperoni', nombre: 'Pepperoni', precio: 10, opciones: [
+        { modo: 'ELEGIR_VARIOS', max: 5, valores: [{ id: 'bacon', etiqueta: 'Bacon', delta_precio_centimos: 150 }] }
+      ] }
+    ]
+  };
+
+  async function conCarta(opts = {}) {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    m.tarifasConfigPorProject.set('p1', { general: 'carta_gen', canales: opts.canales || {} });
+    await m.onCartaActualizada({ data: { project_id: 'p1', carta: CARTA_GEN } });
+    if (opts.cartaCanal) await m.onCartaActualizada({ data: { project_id: 'p1', carta: opts.cartaCanal } });
+    return { mocks, m };
+  }
+
+  await testAsync('_extrasDeCarta saca el delta de ELEGIR_VARIOS y no del grupo QUITAR', async () => {
+    const { m } = await conCarta();
+    const cat = m.cartasCompletas.get('carta_gen').ingredientes_catalogo;
+    const bacon = cat.find(e => e.id === 'bacon');
+    assert.ok(bacon, 'bacon debe estar en el catálogo derivado');
+    assert.strictEqual(bacon.precio_extra, 1.5, 'céntimos → euros');
+    assert.strictEqual(bacon.nombre, 'Bacon');
+    assert.ok(!cat.find(e => e.id === 'tomate'), 'quitar es gratis: los valores QUITAR no son extras');
+    await m.onUnload();
+  });
+
+  await testAsync('EL BUG DE HOY: en canal llevar el extra YA NO se cae del precio', async () => {
+    const { m } = await conCarta();
+    const r = await m.handleAddItem({
+      project_id: 'p1', cuenta_id: 'llevar_1', producto_id: 'margarita', nombre: 'Margarita',
+      precio: 8, cantidad: 1,
+      variaciones: { ingredientes_quitar: [], ingredientes_anadir: [{ nombre: 'Bacon', cantidad: 1 }] }
+    });
+    assert.ok(isCanonicalSuccess(r));
+    assert.strictEqual(r.data.item.precio, 9.5, '8 de base + 1,50 de bacon (antes devolvía 8,00)');
+    assert.strictEqual(r.data.item.subtotal, 9.5);
+    await m.onUnload();
+  });
+
+  await testAsync('el precio que manda el cliente se IGNORA: se re-tasa contra la carta', async () => {
+    const { m } = await conCarta();
+    const r = await m.handleAddItem({
+      project_id: 'p1', cuenta_id: 'mesa_3', producto_id: 'margarita', nombre: 'Margarita',
+      precio: 0.01, precio_canal_resuelto: true, cantidad: 1
+    });
+    assert.strictEqual(r.data.item.precio, 8, 'manda la carta, no el 0,01 del cliente');
+    await m.onUnload();
+  });
+
+  await testAsync('la cantidad multiplica el unitario tasado, no el precio', async () => {
+    const { m } = await conCarta();
+    const r = await m.handleAddItem({
+      project_id: 'p1', cuenta_id: 'llevar_2', producto_id: 'margarita', nombre: 'Margarita',
+      precio: 8, cantidad: 3,
+      variaciones: { ingredientes_quitar: [], ingredientes_anadir: [{ nombre: 'calabacín', cantidad: 1 }] }
+    });
+    assert.strictEqual(r.data.item.precio, 8.5);
+    assert.strictEqual(r.data.item.subtotal, 25.5);
+    assert.strictEqual(r.data.pedido.total, 25.5);
+    await m.onUnload();
+  });
+
+  await testAsync('mitad y mitad: max(base) + extras de las dos mitades (nombres → ids)', async () => {
+    const { m } = await conCarta();
+    const r = await m.handleAddItem({
+      project_id: 'p1', cuenta_id: 'mesa_4', producto_id: 'margarita', nombre: '½ Margarita + ½ Pepperoni',
+      precio: 10, cantidad: 1, tipo: 'mitad_mitad',
+      pizza_izquierda: { id: 'margarita', nombre: 'Margarita', anadir: [{ nombre: 'Bacon' }] },
+      pizza_derecha:   { id: 'pepperoni', nombre: 'Pepperoni', anadir: [] }
+    });
+    assert.strictEqual(r.data.item.precio, 11.5, 'max(8,10)=10 + 1,50 de bacon en la mitad izquierda');
+    await m.onUnload();
+  });
+
+  await testAsync('carta de CANAL: se tasa con el precio del canal, no con la general', async () => {
+    const cartaGlovo = { meta: { id: 'carta_glovo' }, productos: [
+      { id: 'margarita', nombre: 'Margarita', precio: 9.5, opciones: CARTA_GEN.productos[0].opciones }
+    ] };
+    const { m } = await conCarta({ canales: { glovo: 'carta_glovo' }, cartaCanal: cartaGlovo });
+    const r = await m.handleAddItem({
+      project_id: 'p1', cuenta_id: 'glovo_9', producto_id: 'margarita', nombre: 'Margarita',
+      precio: 8, cantidad: 1,
+      variaciones: { ingredientes_quitar: [], ingredientes_anadir: [{ nombre: 'Bacon' }] }
+    });
+    assert.strictEqual(r.data.item.precio, 11, '9,50 del canal + 1,50 (antes: 8,00 o 9,50 sin extras)');
+    await m.onUnload();
+  });
+
+  await testAsync('fallback HONESTO: producto fuera de la carta se cobra como antes y se avisa', async () => {
+    const { mocks, m } = await conCarta();
+    const r = await m.handleAddItem({
+      project_id: 'p1', cuenta_id: 'mesa_5', producto_id: 'porcion', nombre: 'Porción',
+      precio: 3.5, cantidad: 1
+    });
+    assert.strictEqual(r.data.item.precio, 3.5, 'sin carta no se inventa precio: se usa el recibido');
+    const avisos = mocks.logs.filter(l => l[1] === 'comandero.tasado.fallback');
+    assert.strictEqual(avisos.length, 1, 'el fallback NO es silencioso');
+    await m.onUnload();
+  });
+
+  await testAsync('cold start (sin carta cacheada) → fallback, no excepción', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    m.tarifasConfigPorProject.set('p1', { general: 'carta_gen', canales: {} });
+    const r = await m.handleAddItem({
+      project_id: 'p1', cuenta_id: 'llevar_3', producto_id: 'margarita', nombre: 'Margarita',
+      precio: 8, cantidad: 1
+    });
+    assert.ok(isCanonicalSuccess(r));
+    assert.strictEqual(r.data.item.precio, 8);
+    assert.strictEqual(mocks.logs.filter(l => l[1] === 'comandero.tasado.fallback').length, 1);
+    await m.onUnload();
+  });
+
   console.log('\nTodos los tests pasaron.');
   process.exit(0);
 })();

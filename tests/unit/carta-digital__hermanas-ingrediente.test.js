@@ -268,7 +268,7 @@ const CARTA_VIVA = [
 if (!CARTA_VIVA) {
   console.log('SKIP canario del dato vivo: sin carta en disco (data/ es gitignored)');
 } else {
-  caso('dato vivo: las tres familias fijadas y sus miembros', () => {
+  caso('dato vivo: las cinco familias fijadas y sus miembros', () => {
     const carta = JSON.parse(fs.readFileSync(CARTA_VIVA, 'utf8'));
     const porId = new Map(carta.productos.map(p => [p.id, p]));
     const fam = (id) => (porId.get(id) || {}).familia || {};
@@ -283,8 +283,7 @@ if (!CARTA_VIVA) {
 
     const bacon = fam('pizzas_pizza_de_bacon');
     assert.strictEqual(bacon.ingrediente_id, 'bacon', 'bacon fijado');
-    assert.strictEqual(bacon.miembros.length, 11, 'las 11 hermanas de bacon (entra Merengue: lleva bacon)');
-    assert.ok(bacon.miembros.includes('pizzas_merengue'), 'Merengue sale en bacon aunque su familia declarada sea jamón');
+    assert.strictEqual(bacon.miembros.length, 11, 'las 11 hermanas de bacon (las 10 de Nónina + Merengue)');
 
     const atun = fam('pizzas_pizza_de_atun');
     assert.strictEqual(atun.ingrediente_id, 'atun', 'atún fijado');
@@ -292,19 +291,45 @@ if (!CARTA_VIVA) {
     assert.deepStrictEqual(atun.miembros, [
       'pizzas_blues', 'pizzas_bossa_nova', 'pizzas_chillout', 'pizzas_tango', 'pizzas_punk'
     ]);
-    assert.ok(atun.miembros.includes('pizzas_punk'), 'Punk SÍ entra en atún: lleva atún. Y sigue en jamón (repetirse no cuesta nada)');
-    assert.ok(jamon.miembros.includes('pizzas_punk'), 'Punk también en jamón de york');
+    assert.ok(atun.miembros.includes('pizzas_punk'), 'Punk SÍ entra en atún: la familia es del ingrediente');
 
-    // El dato viaja en el ancla Y en cada miembro QUE DECLARA esa familia. Punk no la declara
-    // (su familia declarada es jamón) y aun así sale en atún porque lleva atún: la pertenencia
-    // la resuelve el ingrediente, no el objeto `familia` del producto.
-    for (const id of atun.miembros) {
-      if (fam(id).ingrediente_id !== 'atun') continue;
-      assert.deepStrictEqual(fam(id).miembros, atun.miembros, `${id} comparte la familia de atún`);
+    // Pepperoni y ternera: el dueño las pidió con el mismo proceder (2026-10-21).
+    const pepperoni = fam('pizzas_pizza_de_pepperoni');
+    assert.strictEqual(pepperoni.ingrediente_id, 'pepperoni', 'pepperoni fijado');
+    assert.strictEqual(pepperoni.ancla, 'pizzas_pizza_de_pepperoni');
+    assert.deepStrictEqual(pepperoni.miembros, [
+      'pizzas_indie', 'pizzas_hip_hop', 'pizzas_soul', 'pizzas_trap', 'pizzas_flamenco', 'pizzas_funk'
+    ]);
+
+    const ternera = fam('pizzas_pizza_de_carne_de_ternera');
+    assert.strictEqual(ternera.ingrediente_id, 'ternera', 'ternera fijada');
+    assert.strictEqual(ternera.ancla, 'pizzas_pizza_de_carne_de_ternera');
+    assert.deepStrictEqual(ternera.miembros, [
+      'pizzas_hip_hop', 'pizzas_r_b_rhythm_and_blues', 'pizzas_cumbia'
+    ]);
+
+    // La regla del dueño, como invariante: miembros = TODOS los portadores reales, sin el ancla.
+    // Repetirse no cuesta: Hip-Hop (bacon+pepperoni+ternera) sale en las tres.
+    for (const [idAncla, ing] of [
+      ['pizzas_pizza_de_jamon_york', 'jamon_de_york'],
+      ['pizzas_pizza_de_bacon', 'bacon'],
+      ['pizzas_pizza_de_atun', 'atun'],
+      ['pizzas_pizza_de_pepperoni', 'pepperoni'],
+      ['pizzas_pizza_de_carne_de_ternera', 'ternera']
+    ]) {
+      const f = fam(idAncla);
+      const portadores = carta.productos
+        .filter(p => p.id !== f.ancla && (p.ingredientes || []).some(i => i.id === ing))
+        .map(p => p.id);
+      assert.deepStrictEqual(
+        f.miembros.slice().sort(), portadores.slice().sort(),
+        `${ing}: la familia lista todos los portadores reales (sin el ancla)`
+      );
     }
-    assert.strictEqual(fam('pizzas_punk').ingrediente_id, 'jamon_de_york', 'Punk declara jamón y aun así sale en atún');
-    // Y los ingredientes de las 4 de atún llevan emoji (la fila se pinta, no se lee).
-    for (const id of atun.miembros) {
+
+    // Las pizzas traídas de Nónina llevan sus ingredientes con emoji (la fila se pinta, no se lee).
+    for (const id of ['pizzas_blues', 'pizzas_bossa_nova', 'pizzas_chillout', 'pizzas_tango',
+                      'pizzas_trap', 'pizzas_flamenco', 'pizzas_funk', 'pizzas_cumbia']) {
       for (const ing of (porId.get(id) || {}).ingredientes || []) {
         assert.ok(ing.emoji, `${id}: ${ing.nombre} sin emoji`);
       }

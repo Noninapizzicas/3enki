@@ -1,0 +1,64 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "maestro-cuentas-bancarias",
+  "version": "blueprint-2.0.0",
+  "moduleId": "contabilidad",
+  "titulo": "Maestro de cuentas bancarias",
+  "_doc": "Blueprint v2 de INTERFAZ del módulo contabilidad/maestro-cuentas-bancarias (F6½). Declara la sección `ui` para el BlueprintForm (patrón interfaz-dinamico). CUSTODIO (E11): parcela declarable de cuentas bancarias y su MONEDA. La op declarar (ORDEN) escribe y anuncia contabilidad.cuenta_bancaria_declarada; la moneda ausente = desconocida (no se asume EUR). Un solo escritor. PUENTE/CUSTODIO de la vertical contabilidad. Las acciones van DOTTED ('<modulo>.<accion>') y el transporte.rpc va VACÍO: el RPC real es contabilidad.<accion>.request (domain 'contabilidad', action 'maestro-cuentas-bancarias.declarar' en ui_handlers) y la regex de deriveZones solo parsea acciones de 2 segmentos; el wrapper mqttRequest('contabilidad','<modulo>.<accion>') emite ui/request/contabilidad/<modulo>.<accion>, que casa con el ui_handler. Los args salen de los parámetros REALES del handler en index.js.",
+  "eventos_publicados": [
+    "contabilidad.cuenta_bancaria_declarada"
+  ],
+  "eventos_que_escucho": [
+    "maestro-cuentas-bancarias.declarar.response",
+    "maestro-cuentas-bancarias.declarar.failed"
+  ],
+  "transporte": {
+    "rpc": [],
+    "salida": [
+      "contabilidad.cuenta_bancaria_declarada"
+    ],
+    "qos": "publishAndWait (request/response correlado) vía ui/request/contabilidad/<modulo>.<accion>; timeout del panel 10s. transporte.rpc vacío a propósito (acciones DOTTED)."
+  },
+  "ui": {
+    "_doc": "Panel de la cara humana de maestro-cuentas-bancarias: la(s) op(s) de ESCRITURA (ORDEN) del módulo, con sus args reales. El BlueprintForm la(s) invoca por ui/request/contabilidad/<accion>.",
+    "ops": {
+      "maestro-cuentas-bancarias.declarar": {
+        "titulo": "Declarar una cuenta bancaria y su moneda",
+        "descripcion": "Declara (ORDEN) una cuenta bancaria y su moneda. La identidad es su cuenta_id/iban declarado: sin él no se declara. La moneda es declarable; ausente = desconocida (NO se asume EUR). Re-declarar appendea al historial. PUBLICA contabilidad.cuenta_bancaria_declarada (R2).",
+        "rol": "jefe",
+        "forma": "editor-bloque (cuenta_id/alias/banco/moneda)",
+        "senal_pareada": "contabilidad.cuenta_bancaria_declarada",
+        "args": [
+          {
+            "nombre": "cuenta_id",
+            "tipo": "text",
+            "required": true,
+            "descripcion": "Identificador de la cuenta (cuenta_id o IBAN declarado)."
+          },
+          {
+            "nombre": "alias",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Alias de la cuenta."
+          },
+          {
+            "nombre": "banco",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Banco de la cuenta."
+          },
+          {
+            "nombre": "moneda",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Moneda de la cuenta (declarable; ausente = desconocida)."
+          }
+        ],
+        "errores": "400 INVALID_INPUT (sin cuenta_id)"
+      }
+    },
+    "roles": {
+      "maestro-cuentas-bancarias.declarar": "jefe"
+    }
+  }
+}

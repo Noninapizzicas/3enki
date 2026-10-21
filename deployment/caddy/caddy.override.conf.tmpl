@@ -1,0 +1,5 @@
+# Override de Caddy — lee el .env PERSISTENTE de Enki (data/.env, excluido del
+# rsync del deploy) para ENKI_MCP_TOKEN y demás secretos. El .env de la raíz
+# (/opt/enki/.env) NO sobrevive al deploy (rsync --delete lo borra).
+[Service]
+EnvironmentFile=/opt/enki/data/.env

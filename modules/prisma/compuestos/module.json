@@ -10,5 +10,6 @@
     { "event": "compuestos.list.request", "handler": "onListRequest", "description": "Reflejo: {project_id} → catálogo barato (id·nombre·nº componentes)." },
     { "event": "compuestos.actualizar.request", "handler": "onActualizarRequest", "description": "Reflejo: {project_id, compuesto_id, campos} → parcha (componentes/clasificación…), snapshot previo. Emite compuesto.actualizado." },
     { "event": "compuestos.pendientes.request", "handler": "onPendientesRequest", "description": "Reflejo: {project_id} → los ids a costear (la COLA). El loop cuesta de a una, nunca en bloque." }
-  ]
+  ],
+  "description": "Custodio de la biblioteca de COMPUESTOS (formulaciones): crear/get/list/actualizar/pendientes sobre /prisma/compuestos/<id>.json, atómico, create-only (409 si el slug existe). Un compuesto guarda SOLO refs+cantidades a insumos o a otros compuestos (sub-mezclas, recursivo), nunca los datos del insumo. Biblioteca independiente del producto. Emite compuesto.creado/actualizado."
 }

@@ -1,0 +1,37 @@
+{
+  "_doc": "Manifest de analitica/coste-indirecto — REFLEJO STATELESS (J5, hoja del plan). Aplica el REPARTO DECLARADO de los gastos NO directos (los que no se imputan a un solo destino). EL CERROJO: NO se reparte con un criterio inventado — el reparto (base + pesos por destino) se DECLARA; si no viene, se SUBE el hueco a cola-declaraciones-criterio.fijar.request (best-effort) y el resultado queda `repartido:false` con `abierto` (NO hay 50/50 por defecto; dato ausente = desconocido). Determinista: reparto proporcional a la base declarada, con el resto del redondeo al destino de mayor importe. NO escribe, NO persiste. RPC repartir es CLASE PREGUNTA → va por el bus, sin panel. Publica coste-indirecto.repartir.response y su par .failed. Escucha contabilidad.asiento_asentado (B2) y contabilidad.criterio_fijado (K9), ambos emitidos.",
+  "name": "coste-indirecto",
+  "version": "0.1.0",
+  "description": "Reflejo (J5): reparte gastos indirectos segun el reparto DECLARADO. Sin reparto no se inventa criterio; se sube el hueco y queda abierto.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "coste-indirecto.repartir.request",
+      "handler": "onRepartirRequest",
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id, importe, reparto?{destinos:[{destino,base}]}} → {project_id, importe, imputaciones, imputado, repartido, determinista, abierto}. Reparte proporcional a la base declarada; sin reparto declarado NO se inventa (repartido:false). Responde por coste-indirecto.repartir.response. Payload invalido → coste-indirecto.repartir.failed."
+    },
+    {
+      "event": "contabilidad.asiento_asentado",
+      "handler": "onAsientoAsentado",
+      "description": "Fire-and-forget (B2 escritor-diario): un asiento quedo en el libro. Se observa (ventana acotada); no se escribe."
+    },
+    {
+      "event": "contabilidad.criterio_fijado",
+      "handler": "onCriterioFijado",
+      "description": "Fire-and-forget (K9 cola-declaraciones-criterio): el jefe fijo un criterio (p.ej. el reparto). Se registra para aplicar el reparto declarado sin inventarlo."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "coste-indirecto.repartir.response",
+      "description": "Respuesta RPC correlada de la op repartir (una sola cara: el bus)."
+    },
+    {
+      "event": "coste-indirecto.repartir.failed",
+      "description": "Par de fallo determinista: falta project_id o importe → {status, code, message}. Cierra el circulo de repartir.request."
+    }
+  ],
+  "tools": [
+    { "name": "coste-indirecto.repartir", "description": "Reparte (PREGUNTA) un gasto indirecto segun el reparto declarado por destino." }
+  ]
+}

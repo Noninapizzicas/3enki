@@ -1,0 +1,28 @@
+{
+  "_doc": "Manifest de libro/periodificacion — REFLEJO STATELESS (C3, hoja del plan). Imputa cada hecho a su PERIODO con el criterio DECLARADO; CONSERVA fecha operacion y fecha valor. No estima el periodo: lo deriva del hecho y del criterio declarado. El criterio es DECLARABLE (`por`: fecha_operacion por defecto o fecha_valor; `mes_corte`: 1..12, por defecto 12 = año natural; `granularidad`: mensual/anual). Sin la fecha que gobierna el periodo → periodo:null (dato ausente = desconocido), no un periodo inventado. Se conservan SIEMPRE ambas fechas. Sin estado. RPC PREGUNTA → sin ui_handler (su cara es el bus). Cuando falta el criterio declarado, sube una peticion best-effort a cola-declaraciones-criterio.fijar.request (sin suplantar al JEFE). Publica periodificacion.imputar.response y su par .failed.",
+  "name": "periodificacion",
+  "version": "0.1.0",
+  "description": "Reflejo (C3): imputa cada hecho a su periodo con el criterio declarado, conservando fecha operación y fecha valor. Sin estado.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "periodificacion.imputar.request",
+      "handler": "onImputarRequest",
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id?, hecho, criterio?, por?, mes_corte?, granularidad?} → {project_id, fecha_operacion, fecha_valor, periodo, por, granularidad, mes_corte, criterio_declarado, abierto}. Deriva el periodo con el criterio declarado; sin la fecha que gobierna → periodo:null. Sin hecho → INVALID_INPUT. Responde por periodificacion.imputar.response. Payload invalido → periodificacion.imputar.failed."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "periodificacion.imputar.response",
+      "description": "Respuesta RPC correlada de la op imputar (una sola cara: el bus)."
+    },
+    {
+      "event": "periodificacion.imputar.failed",
+      "description": "Par de fallo determinista: falta el hecho → {status, code, message}. Cierra el circulo de imputar.request."
+    }
+  ],
+  "tools": [
+    { "name": "periodificacion.imputar", "description": "Imputa (PREGUNTA) un hecho a su periodo con el criterio declarado, conservando fecha operación y fecha valor." }
+  ],
+  "ui_handlers": []
+}

@@ -1,0 +1,27 @@
+{
+  "_doc": "Manifest de libro/apertura-ejercicio — REFLEJO STATELESS (C5, hoja del plan). Asientos de APERTURA DERIVADOS del CIERRE anterior. LA CLAVE: quien ESCRIBE y ANUNCIA es B2 (escritor-diario), NO este modulo — aqui solo se deriva el asiento propuesto y se SUBE escritor-diario.asentar.request para que el custodio lo asiente (respeta el single-writer; NUNCA toca el libro). Sin cierre anterior declarado NO se inventan saldos (0 lineas, no un default). NO escribe, NO persiste. RPC generar es CLASE PREGUNTA → va por el bus, sin panel. Publica apertura-ejercicio.generar.response y su par .failed. (La escucha de contabilidad.ejercicio_cerrado del plan NO se declara aun: su emisor cierre-ejercicio no existe todavia — R3.)",
+  "name": "apertura-ejercicio",
+  "version": "0.1.0",
+  "description": "Reflejo (C5): deriva los asientos de apertura del cierre anterior y los delega a escritor-diario (quien escribe y anuncia es B2).",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "apertura-ejercicio.generar.request",
+      "handler": "onGenerarRequest",
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id, cierre|saldos, fecha?, ejercicio?} → {project_id, asiento, lineas, escritor:'escritor-diario', delegado, abierto}. Deriva el asiento de apertura y sube escritor-diario.asentar.request; sin cierre → 0 lineas (no estima). Responde por apertura-ejercicio.generar.response. Payload invalido → apertura-ejercicio.generar.failed."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "apertura-ejercicio.generar.response",
+      "description": "Respuesta RPC correlada de la op generar (una sola cara: el bus)."
+    },
+    {
+      "event": "apertura-ejercicio.generar.failed",
+      "description": "Par de fallo determinista: falta project_id → {status, code, message}. Cierra el circulo de generar.request."
+    }
+  ],
+  "tools": [
+    { "name": "apertura-ejercicio.generar", "description": "Genera (PREGUNTA) el asiento de apertura derivado del cierre anterior y lo delega a escritor-diario." }
+  ]
+}

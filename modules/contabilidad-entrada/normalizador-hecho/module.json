@@ -1,0 +1,33 @@
+{
+  "_doc": "Manifest de entrada/normalizador-hecho — CONVERSOR (A2, hoja del plan). UNICA PUERTA DE FORMATO: homogeneiza el hecho de cada vertical a FORMA ASENTABLE (fechas a ISO, moneda a mayusculas, texto recortado, mapeo declarado), SIN decidir contenido (no calcula importes ni elige contrapartida). La forma es DECLARABLE (`mapeo` entra como dato); sin mapeo y sin claves canonicas en el crudo, la forma NO se fabrica: se declara ABIERTO. Dato ausente = desconocido: campo canonico que no viene → null y declarado en `abierto`. Conversor puro: no escribe → no anuncia hecho (R2); su cara es el bus (entrar.response). ESCUCHA contabilidad.hecho_recibido (emitido por puerto-evento-vertical). NOTA R3: el plan declara tambien escucha de contabilidad.documento_recibido, pero su emisor (puerto-documento-digital A4) AUN NO EXISTE en el repo: declararlo daria cadena colgada, asi que NO se declara hasta que su emisor exista. Cuando falta la forma declarada, sube una peticion best-effort a cola-declaraciones-criterio.fijar.request (sin suplantar al JEFE). Publica normalizador-hecho.entrar.response y su par .failed. RPC PREGUNTA → sin ui_handler.",
+  "name": "normalizador-hecho",
+  "version": "0.1.0",
+  "description": "Conversor (A2): única puerta de formato — homogeneiza el hecho de cada vertical a forma asentable, sin decidir contenido. Sin estado.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "normalizador-hecho.entrar.request",
+      "handler": "onEntrarRequest",
+      "description": "RPC conversor (PREGUNTA, por el bus): {project_id?, hecho, vertical?, mapeo?} → {project_id, vertical, forma_asentable, faltantes, forma_declarada, abierto}. Homogeneiza el hecho a forma asentable; no decide contenido. Sin hecho → INVALID_INPUT. Responde por normalizador-hecho.entrar.response. Payload invalido → normalizador-hecho.entrar.failed."
+    },
+    {
+      "event": "contabilidad.hecho_recibido",
+      "handler": "onHechoRecibido",
+      "description": "Fire-and-forget (A2): la puerta (puerto-evento-vertical) admitio un hecho crudo → se normaliza (misma logica de _entrar). No publica hecho de dominio (el conversor no escribe) ni decide contenido; si falta la forma declarada, deja la peticion a cola-declaraciones-criterio."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "normalizador-hecho.entrar.response",
+      "description": "Respuesta RPC correlada de la op entrar (una sola cara: el bus)."
+    },
+    {
+      "event": "normalizador-hecho.entrar.failed",
+      "description": "Par de fallo determinista: falta el hecho → {status, code, message}. Cierra el circulo de entrar.request."
+    }
+  ],
+  "tools": [
+    { "name": "normalizador-hecho.entrar", "description": "Homogeneiza (PREGUNTA) un hecho crudo a forma asentable, sin decidir contenido." }
+  ],
+  "ui_handlers": []
+}

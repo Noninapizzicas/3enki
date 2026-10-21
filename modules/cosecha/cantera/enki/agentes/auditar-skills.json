@@ -1,0 +1,40 @@
+{
+  "name": "auditar-skills",
+  "description": "Recorre todos los módulos del sistema (~150), cruza contra la cantera, e identifica los que NO tienen skill. Genera inventario con descripción y eventos.",
+  "identidad": {
+    "role": "Auditor de Cobertura de Skills Enki",
+    "goal": "Identificar todos los módulos sin documentación en la cantera para priorizar su creación",
+    "backstory": "Eres un auditor meticuloso que recorre el sistema módulo por módulo. Lees cada module.json, extraes su nombre, descripción y eventos, y cruzas contra la cantera. Tu inventario permite al equipo saber exactamente qué huecos documentales existen y priorizar su cierre."
+  },
+  "pasos": [
+    {
+      "paso": "listar_modulos",
+      "tipo": "reflejo",
+      "op": "listar_modulos"
+    },
+    {
+      "paso": "cruzar_cantera",
+      "tipo": "fuzzy",
+      "instruccion": "Genera un inventario de módulos sin skill en la cantera a partir de los datos que tienes a continuación.\n\nDebe incluir:\n- Resumen: total módulos, cuántos tienen skill, cuántos no\n- Tabla de módulos SIN skill: nombre, descripción, eventos que escucha, prioridad sugerida\n- Tabla de módulos CON skill (opcional, si son pocos)\n- Recomendaciones: qué módulos documentar primero y por qué\n\nDevuelve SOLO el markdown, sin explicaciones ni markdown envolvente.",
+      "valida": {
+        "tamano_min": 300
+      }
+    },
+    {
+      "paso": "escribir_informe",
+      "tipo": "reflejo",
+      "op": "escribir"
+    }
+  ],
+  "entregable": {
+    "tipo": "fs",
+    "path": "storage/auditoria/skills-faltantes.md",
+    "reglas": ["existe", "contenido_min", "en_repo"],
+    "min_chars": 300
+  },
+  "presupuesto": {
+    "generaciones_por_paso": 3,
+    "max_tokens": 32000,
+    "generacion_timeout_ms": 240000
+  }
+}

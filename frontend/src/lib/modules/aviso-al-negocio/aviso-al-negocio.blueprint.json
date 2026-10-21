@@ -1,0 +1,68 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "aviso-al-negocio",
+  "version": "blueprint-2.0.0",
+  "moduleId": "contabilidad",
+  "titulo": "Aviso al negocio",
+  "_doc": "Blueprint v2 de INTERFAZ del módulo contabilidad/aviso-al-negocio (F6½). Cara de ENTREGA (puente R1): la op de ESCRITURA (ORDEN) `entregar`, que ENTREGA al negocio el aviso producido por motor-avisos (K2) y confirma la entrega (append-only). Escucha contabilidad.aviso_producido. Un aviso se da por ENTREGADO solo si declara destinatario; sin él queda ABIERTO. Publica contabilidad.aviso_entregado y, si el aviso pide enriquecimiento, sube informe-accionable.juzgar.request y narrador-estados.narrar.request. Acciones DOTTED, transporte.rpc VACÍO. Args del handler REAL (index.js).",
+  "eventos_publicados": [
+    "contabilidad.aviso_entregado",
+    "informe-accionable.juzgar.request",
+    "narrador-estados.narrar.request"
+  ],
+  "eventos_que_escucho": [
+    "contabilidad.aviso_producido"
+  ],
+  "transporte": {
+    "entrada": "reflejo RPC via ui_handlers (module.json) — las ops se conducen por ui/request/contabilidad/<accion>. transporte.rpc vacio a proposito.",
+    "rpc": [],
+    "salida": [
+      "contabilidad.aviso_entregado",
+      "informe-accionable.juzgar.request",
+      "narrador-estados.narrar.request"
+    ],
+    "qos": "publishAndWait (request/response correlado) en cada operacion; timeout 8s"
+  },
+  "ui": {
+    "_doc": "Panel de la cara humana de aviso-al-negocio: la(s) op(s) de ESCRITURA (ORDEN) del módulo, con sus args reales. El BlueprintForm la invoca por ui/request/contabilidad/<accion>.",
+    "ops": {
+      "aviso-al-negocio.entregar": {
+        "titulo": "Entregar un aviso al negocio",
+        "descripcion": "Entrega (apila, append-only) el aviso producido por motor-avisos y confirma la entrega. Sin destinatario queda ABIERTO (no se finge la entrega). Publica contabilidad.aviso_entregado.",
+        "rol": "asesor",
+        "forma": "editor-bloque (project_id/aviso/destinatario/enriquecer)",
+        "senal_pareada": "contabilidad.aviso_entregado",
+        "args": [
+          {
+            "nombre": "project_id",
+            "tipo": "text",
+            "required": true,
+            "descripcion": "Proyecto."
+          },
+          {
+            "nombre": "aviso",
+            "tipo": "json",
+            "required": true,
+            "descripcion": "El aviso producido que se entrega al negocio."
+          },
+          {
+            "nombre": "destinatario",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Destinatario declarado; sin él la entrega queda ABIERTA."
+          },
+          {
+            "nombre": "enriquecer",
+            "tipo": "bool",
+            "required": false,
+            "descripcion": "Si el aviso pide enriquecimiento (que-hacer + narración)."
+          }
+        ],
+        "errores": "400 INVALID_INPUT (sin project_id o aviso)"
+      }
+    },
+    "roles": {
+      "aviso-al-negocio.entregar": "asesor"
+    }
+  }
+}

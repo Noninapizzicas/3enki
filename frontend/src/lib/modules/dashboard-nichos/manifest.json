@@ -1,0 +1,9 @@
+{
+  "id": "dashboard-nichos",
+  "name": "Dashboard nichos",
+  "version": "0.1.0",
+  "zone": "system-bar",
+  "order": 97,
+  "icon": "📊",
+  "label": "Dashboard nichos"
+}

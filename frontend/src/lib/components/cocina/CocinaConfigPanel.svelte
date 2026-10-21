@@ -338,7 +338,7 @@
 
           {#if $tiposDisponibles.length === 0}
             <!-- Fallback si no se cargaron los tipos del backend -->
-            {#each ['general', 'horno', 'montaje', 'freidora', 'emplatado', 'plancha'] as tipoId}
+            {#each ['general', 'montaje', 'freidora', 'emplatado', 'plancha'] as tipoId}
               <button
                 class="familia-chip tipo-chip"
                 class:active={selectedTipoEstacion === tipoId}

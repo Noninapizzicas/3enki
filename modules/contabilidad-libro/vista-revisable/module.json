@@ -1,0 +1,32 @@
+{
+  "_doc": "Manifest de libro/vista-revisable — REFLEJO STATELESS (L2, hoja del plan). Muestra cada asiento/calculo CON su ORIGEN: composicion determinista de la traza. NO es caja negra (caja_negra:false): cada linea se muestra junto a los componentes que la explican (traza B4, documento L7, regla, fuente, criterio, hecho, tercero); lo que NO tiene origen NO se oculta → se declara `sin_origen` en `abierto` (explicable:false). Sube por EVENTO (best-effort) a traza-asiento.registrar.request y mayor-balanza.saldos.request para traer el origen cuando no viene declarado; NUNCA escribe ni muta el libro. NO persiste. RPC explicar es CLASE PREGUNTA → va por el bus, sin panel. Publica vista-revisable.explicar.response y su par .failed. Escucha contabilidad.asiento_asentado (B2 escritor-diario, emitido).",
+  "name": "vista-revisable",
+  "version": "0.1.0",
+  "description": "Reflejo (L2): vista explicable de cada asiento/calculo con su origen (traza/documento/regla). No es caja negra; lo sin origen se declara.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "vista-revisable.explicar.request",
+      "handler": "onExplicarRequest",
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id, asiento|calculo, traza?, origen?, titulo?} → {project_id, lineas, origen, explicable, caja_negra, abierto}. Compone cada linea con sus componentes de origen; lo sin origen se declara, no se oculta. Responde por vista-revisable.explicar.response. Payload invalido → vista-revisable.explicar.failed."
+    },
+    {
+      "event": "contabilidad.asiento_asentado",
+      "handler": "onAsientoAsentado",
+      "description": "Fire-and-forget (B2 escritor-diario): un asiento quedo en el libro. Se recuerda (ventana acotada) por si hay que explicarlo; no se escribe."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "vista-revisable.explicar.response",
+      "description": "Respuesta RPC correlada de la op explicar (una sola cara: el bus)."
+    },
+    {
+      "event": "vista-revisable.explicar.failed",
+      "description": "Par de fallo determinista: falta project_id o asiento → {status, code, message}. Cierra el circulo de explicar.request."
+    }
+  ],
+  "tools": [
+    { "name": "vista-revisable.explicar", "description": "Compone (PREGUNTA) la vista explicable de un asiento/calculo con su origen." }
+  ]
+}

@@ -1,0 +1,87 @@
+{
+  "_doc": "marketing-campaigns — HÍBRIDO: gestión de campañas (reflejo) + cierre/veredicto (blueprint/micro-agente). 86% reflejo, 7% custodio, 7% micro-agente. Persiste por proyecto en state/marketing-campaigns.json.",
+  "name": "marketing-campaigns",
+  "version": "0.1.0",
+  "description": "Campañas de marketing: briefing, assets, lanzamiento, cierre con veredicto. Híbrido reflejo + blueprint.",
+  "language": "es",
+  "blueprint_driven": true,
+
+  "subscribes": [
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Restaura las campañas del proyecto activado."
+    },
+    {
+      "event": "marketing.campaigns.get.request",
+      "handler": "onGetRequest",
+      "description": "Devuelve campañas y resumen del proyecto."
+    },
+    {
+      "event": "marketing.campaigns.update.request",
+      "handler": "onUpdateRequest",
+      "description": "Actualiza campañas (crear, editar briefing, cambiar estado)."
+    }
+  ],
+
+  "publishes": [
+    {
+      "event": "marketing.campaigns.actualizado",
+      "description": "Campañas actualizadas. Payload: { project_id, campos_actualizados[] }."
+    }
+  ],
+
+  "tools": [
+    {
+      "name": "marketing-campaigns.get",
+      "description": "Obtiene las campañas de un proyecto.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1, "description": "ID del proyecto." },
+          "filtros": {
+            "type": "object",
+            "description": "{ estado? }"
+          }
+        },
+        "required": ["project_id"]
+      },
+      "handler": "toolGet",
+      "errores_conocidos": ["INVALID_INPUT"]
+    },
+    {
+      "name": "marketing-campaigns.update",
+      "description": "Actualiza campañas (crear, editar, cambiar estado).",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1 },
+          "campañas": {
+            "type": "array",
+            "description": "[{ id?, nombre, objetivo?, audiencia_id?, canales_ids?, presupuesto?, periodo?, kpis?, assets_ids?, estado?, cierre? }]"
+          }
+        },
+        "required": ["project_id"]
+      },
+      "handler": "toolUpdate",
+      "errores_conocidos": ["INVALID_INPUT", "INVALID_STATE_TRANSITION"]
+    }
+  ],
+
+  "ui_handlers": [
+    {
+      "domain": "marketing-campaigns",
+      "action": "get",
+      "handler": "handleUiGet",
+      "description": "Obtener campañas del proyecto activo."
+    },
+    {
+      "domain": "marketing-campaigns",
+      "action": "update",
+      "handler": "handleUiUpdate",
+      "description": "Actualizar campañas del proyecto activo."
+    }
+  ]
+}

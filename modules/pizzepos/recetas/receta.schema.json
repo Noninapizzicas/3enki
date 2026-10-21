@@ -14,8 +14,9 @@
     },
     "tipo": {
       "type": "string",
-      "enum": ["pizza", "masa", "salsa", "base"],
-      "description": "Clase de la Receta. TODO lo que se elabora es una Receta: la pizza final, pero también la masa, la salsa casera o una base — cada una tipo propio y referenciable por 'ref' desde otras (sub-receta)."
+      "minLength": 1,
+      "pattern": "^[a-z0-9-]+$",
+      "description": "Clase de la Receta, en slug. ABIERTO por diseño: el contrato valida la FORMA (identificador limpio), no la semántica — cualquier familia del negocio es legítima (pizza, masa, salsa, base, bocata, cazuela, postre, bebida, lo que se abra) y entra sin tocar código. TODO lo que se elabora es una Receta: la pizza final, pero también la masa, la salsa casera o una base — cada una tipo propio y referenciable por 'ref' desde otras (sub-receta)."
     },
     "rinde": {
       "type": ["object", "null"],

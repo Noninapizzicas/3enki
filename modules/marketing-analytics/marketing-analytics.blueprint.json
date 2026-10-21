@@ -1,0 +1,113 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "marketing-analytics",
+  "version": "blueprint-1.0.0",
+  "moduleId": "marketing-analytics",
+  "actor": "jefe",
+  "titulo": "Analytics de marketing: atribución de crédito y veredicto de experimentos.",
+  "eventos_que_escucho": [
+    "marketing.analytics.atribuir.request",
+    "marketing.analytics.veredicto.request"
+  ],
+  "transporte": {
+    "rpc": [
+      "marketing.analytics.atribuir.request -> .response",
+      "marketing.analytics.veredicto.request -> .response"
+    ]
+  },
+  "spine": {
+    "descripcion": "Blueprint coherente: CONTRATO → LEER → PENSAR → GUARDAR → EMITIR. Dos operaciones independientes.",
+    "operaciones": [
+      {
+        "nombre": "atribuir",
+        "pasos": [
+          {
+            "paso": "CONTRATO",
+            "descripcion": "Recibe { project_id, resultado, modelo? }. Promete devolver distribución de crédito entre acciones."
+          },
+          {
+            "paso": "LEER",
+            "descripcion": "Lee las métricas del proyecto, las campañas activas y los canales para contexto de touchpoints.",
+            "lee": [
+              "marketing.analytics.get.request → métricas y registros",
+              "marketing.campaigns.get.request → campañas activas",
+              "marketing.channels.get.request → canales activos"
+            ]
+          },
+          {
+            "paso": "PENSAR",
+            "descripcion": "Aplica el modelo de atribución elegido (last_touch, first_touch, lineal, decay) al resultado concreto. Identifica los touchpoints candidatos y distribuye el crédito según el modelo.",
+            "restricciones": [
+              "El modelo por defecto es last_touch si no se especifica",
+              "La suma de créditos distribuidos DEBE ser 100%",
+              "Solo se atribuye a acciones reales (con touchpoints registrados)"
+            ]
+          },
+          {
+            "paso": "GUARDAR",
+            "descripcion": "No persiste directamente — la atribución es un cálculo bajo demanda."
+          },
+          {
+            "paso": "EMITIR",
+            "descripcion": "Emite marketing.analytics.atribuir.response con la distribución de crédito."
+          }
+        ]
+      },
+      {
+        "nombre": "veredicto",
+        "pasos": [
+          {
+            "paso": "CONTRATO",
+            "descripcion": "Recibe { project_id, experimento_id }. Promete devolver veredicto del experimento."
+          },
+          {
+            "paso": "LEER",
+            "descripcion": "Lee el experimento del store con sus variantes y datos acumulados.",
+            "lee": [
+              "marketing.analytics.get.request → experimento y sus datos"
+            ]
+          },
+          {
+            "paso": "PENSAR",
+            "descripcion": "Evalúa si los datos son suficientes y significativos. Determina variante ganadora o inconcluso.",
+            "restricciones": [
+              "Si no hay datos suficientes, el veredicto es 'inconcluso'",
+              "Evalúa la diferencia entre variantes considerando el volumen de datos",
+              "El veredicto es: { resultado: ganadora/inconcluso/negativo, variante_ganadora?, confianza, razon }"
+            ]
+          },
+          {
+            "paso": "GUARDAR",
+            "descripcion": "Guarda el veredicto en el experimento via marketing.analytics.update.request y cierra el experimento."
+          },
+          {
+            "paso": "EMITIR",
+            "descripcion": "Emite marketing.analytics.veredicto.response con el veredicto."
+          }
+        ]
+      }
+    ]
+  },
+  "ui": {
+    "ops": {
+      "atribuir": {
+        "titulo": "Atribuir resultado a acciones"
+      },
+      "veredicto": {
+        "titulo": "Emitir veredicto de experimento"
+      }
+    },
+    "roles": {
+      "atribuir": "jefe",
+      "veredicto": "jefe"
+    },
+    "flujo": [
+      {
+        "nombre": "jefe",
+        "orden": 1,
+        "ops": ["atribuir", "veredicto"],
+        "descripcion": "El dueño pide atribuir un resultado o cerrar un experimento con veredicto"
+      }
+    ]
+  }
+}

@@ -10,5 +10,6 @@
     { "event": "insumos.get.request", "handler": "onGetRequest", "description": "Reflejo: {project_id, insumo_id} → el insumo completo, o 404." },
     { "event": "insumos.list.request", "handler": "onListRequest", "description": "Reflejo: {project_id} → catálogo barato de insumos (id·nombre·familia·precio)." },
     { "event": "insumos.actualizar.request", "handler": "onActualizarRequest", "description": "Reflejo: {project_id, insumo_id, campos} → parcha el insumo (precio de referencia, clasificación…), snapshot previo. Un cambio de precio dispara re-costeo en cascada (lo hace el costeador). Emite insumo.actualizado." }
-  ]
+  ],
+  "description": "Custodio de la biblioteca de INSUMOS (materia prima): buscar (reconciliación por similitud)/crear/get/list/actualizar sobre /prisma/insumos/<id>.json, atómico, create-only (409). Normaliza el precio a céntimos POR UNIDAD BASE (o referencia prudente p75) y preserva densidad_g_ml. Precio de referencia; sin factura (fase 1). Emite insumo.creado/actualizado."
 }

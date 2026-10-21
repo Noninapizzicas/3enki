@@ -1,0 +1,9 @@
+{
+  "id": "desatasco-entrada",
+  "name": "Desatasco de entrada",
+  "version": "0.1.0",
+  "zone": "system-bar",
+  "order": 83,
+  "icon": "🧯",
+  "label": "Desatasco"
+}

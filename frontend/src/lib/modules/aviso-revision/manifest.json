@@ -1,0 +1,9 @@
+{
+  "id": "aviso-revision",
+  "name": "Aviso de revisión",
+  "version": "0.1.0",
+  "zone": "system-bar",
+  "order": 81,
+  "icon": "🚩",
+  "label": "Aviso revisión"
+}

@@ -1,0 +1,9 @@
+{
+  "id": "single-writer",
+  "name": "Un solo escritor",
+  "version": "0.1.0",
+  "zone": "system-bar",
+  "order": 96,
+  "icon": "🛡️",
+  "label": "Single writer"
+}

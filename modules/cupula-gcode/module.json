@@ -1,0 +1,45 @@
+{
+  "_doc": "CUSTODIO cupula-gcode del proyecto 3D (taller personal de impresion 3D). Almacén de la MONEDA real del taller preparada para imprimir: ArchivoPreparado (ruta/perfil/gramos_est/tiempo_est/listo) en la moneda STL/3MF (origen) + GCODE (preparado). Los 3 formatos conviven. Single-writer del store por proyecto (PosPersistencia). Reserva para la cola: _reserva alimenta la proxima tanda listos sin re-slicear lo ya preparado (cache). Registra un archivo y emite archivo.preparado; permite marcar consumido, listar listos para imprimir y obtener un archivo. CERO juicio: no decide que pieza imprimir (eso es del dueno/cola); solo guarda y sirve la preparacion. reservaMin ABIERTO. Par de fallo cupula-gcode.registrar.failed y cupula-gcode.marcar_consumido.failed. Origen: plan-construccion.md seccion 6.4 (FASE 4 construir-modulos, pieza 4).",
+  "name": "cupula-gcode",
+  "version": "0.1.0",
+  "_v0_1_0_nota": "v0.1.0 (2026-09-13): CUSTODIO. Ops registrar/marcar_consumido/listos/reserva/obtener (RPC). Proyecciones _registrar (emite archivo.preparado), _marcarConsumido, _listosParaImprimir, _reserva (alimenta la cola; no re-slicea lo listo), _obtener. Emite archivo.preparado; pares de fallo cupula-gcode.registrar.failed y cupula-gcode.marcar_consumido.failed. Moneda real STL/3MF/GCODE conviven.",
+  "description": "Custodio de la cupula de gcode del taller 3D: almacen de la moneda preparada para imprimir (STL/3MF origen + GCODE listo), reserva para la cola, sin re-slicing de lo ya preparado.",
+  "language": "es",
+  "main": "index.js",
+  "dependencies": [
+    "_shared/pos-persistencia"
+  ],
+  "config": {
+    "persistence": {
+      "concurrency": "single-writer",
+      "data_path": "cupula-gcode",
+      "pattern": "single-json-file",
+      "scope": "project",
+      "dir": "/3d/cupula-gcode"
+    },
+    "formatos": ["STL", "3MF", "GCODE"],
+    "reserva_min_abierto": true
+  },
+  "subscribes": [
+    { "event": "cupula-gcode.registrar.request", "handler": "onRegistrarRequest", "description": "Registra un archivo preparado (STL/3MF origen y/o GCODE listo). Emite archivo.preparado." },
+    { "event": "cupula-gcode.marcar_consumido.request", "handler": "onMarcarConsumidoRequest", "description": "Marca un archivo como consumido tras la impresion (lo retira de la reserva)." },
+    { "event": "cupula-gcode.listos.request", "handler": "onListosRequest", "description": "Lista los archivos listos para imprimir (con gcode listo)." },
+    { "event": "cupula-gcode.reserva.request", "handler": "onReservaRequest", "description": "Proxima tanda lista que alimenta la cola; no re-slicea lo ya preparado (cache)." },
+    { "event": "cupula-gcode.obtener.request", "handler": "onObtenerRequest", "description": "Obtiene un archivo preparado por id." },
+    { "event": "project.activated", "handler": "onProjectActivated", "description": "Restaura el store del proyecto activado." }
+  ],
+  "publishes": [
+    { "event": "cupula-gcode.registrar.response", "description": "Respuesta correlada: archivo registrado (reconciliado si ya existia)." },
+    { "event": "cupula-gcode.marcar_consumido.response", "description": "Respuesta correlada: archivo marcado consumido." },
+    { "event": "cupula-gcode.listos.response", "description": "Respuesta correlada: lista de archivos listos." },
+    { "event": "cupula-gcode.reserva.response", "description": "Respuesta correlada: reserva de proximos listos para la cola." },
+    { "event": "cupula-gcode.obtener.response", "description": "Respuesta correlada: archivo preparado o 404." },
+    { "event": "archivo.preparado", "description": "GCODE listo en la cupula (alimenta la cola/reserva)." },
+    { "event": "cupula-gcode.registrar.failed", "description": "Par de fallo: no se pudo registrar el archivo." },
+    { "event": "cupula-gcode.marcar_consumido.failed", "description": "Par de fallo: no se pudo marcar consumido." }
+  ],
+  "tools": [],
+  "observability": {
+    "metrics": ["cupula-gcode.reflejo.served", "cupula-gcode.reflejo.errors"]
+  }
+}

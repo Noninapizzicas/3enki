@@ -1,0 +1,64 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "registro-verifactu",
+  "version": "blueprint-2.0.0",
+  "moduleId": "contabilidad",
+  "titulo": "Registro Verifactu",
+  "_doc": "Blueprint v2 de INTERFAZ del módulo contabilidad/registro-verifactu (F6½). Panel del custodio D8: la op de ESCRITURA (ORDEN) `encadenar`, que encadena la huella de una factura al último eslabón del registro inalterable (huella_anterior). APPEND-ONLY: una factura encadenada no se borra, no se reordena y no se muta. Romper la cadena → 409 CADENA_ROTA. Un solo escritor. Acciones DOTTED, transporte.rpc VACÍO. Args del handler REAL (index.js).",
+  "eventos_publicados": [
+    "contabilidad.factura_encadenada"
+  ],
+  "eventos_que_escucho": [
+    "registro-verifactu.encadenar.response"
+  ],
+  "transporte": {
+    "entrada": "reflejo RPC via ui_handlers (module.json) — las ops se conducen por ui/request/contabilidad/<accion>. transporte.rpc vacio a proposito.",
+    "rpc": [],
+    "salida": [
+      "contabilidad.factura_encadenada"
+    ],
+    "qos": "publishAndWait (request/response correlado) en cada operacion; timeout 8s"
+  },
+  "ui": {
+    "_doc": "Panel de la cara humana de registro-verifactu: la(s) op(s) de ESCRITURA (ORDEN) del módulo, con sus args reales. El BlueprintForm la invoca por ui/request/contabilidad/<accion>.",
+    "ops": {
+      "registro-verifactu.encadenar": {
+        "titulo": "Encadenar una factura",
+        "descripcion": "Encadena la huella de una factura al último eslabón del registro inalterable. Huella_anterior que no liga → 409 CADENA_ROTA; misma huella → no re-encadena. Publica contabilidad.factura_encadenada.",
+        "rol": "asesor",
+        "forma": "editor-bloque (project_id/factura/huella/huella_anterior)",
+        "senal_pareada": "contabilidad.factura_encadenada",
+        "args": [
+          {
+            "nombre": "project_id",
+            "tipo": "text",
+            "required": true,
+            "descripcion": "Proyecto."
+          },
+          {
+            "nombre": "factura",
+            "tipo": "json",
+            "required": true,
+            "descripcion": "Factura cuya huella se encadena."
+          },
+          {
+            "nombre": "huella",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Huella de la factura; si no llega, se deriva."
+          },
+          {
+            "nombre": "huella_anterior",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Huella del eslabón anterior; distinta a la última → 409 CADENA_ROTA."
+          }
+        ],
+        "errores": "400 INVALID_INPUT (sin project_id/factura) · 409 CADENA_ROTA"
+      }
+    },
+    "roles": {
+      "registro-verifactu.encadenar": "asesor"
+    }
+  }
+}

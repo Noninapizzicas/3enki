@@ -1,0 +1,33 @@
+{
+  "_doc": "Manifest de entrada/completitud-cobertura — REFLEJO STATELESS (A12, hoja del plan). PRODUCE LA METRICA UNICA DE COBERTURA que Q3/C6/P4 LEEN (no la recalculan): cobertura = min(recibidos, esperados) / esperados, acotada a [0,1], determinista, sin ponderaciones ocultas. Escucha contabilidad.hecho_recibido (fire-and-forget) y guarda una ventana acotada en memoria para medir cuando no se declaran los totales. Honestidad (invariante 13): si no llega lo esperado ni lo recibido, la metrica NO se inventa — cobertura:null y `abierto` declarado (dato ausente = desconocido). Sin store propio (STATELESS). La op medir es CLASE PREGUNTA → SIN ui_handler.",
+  "name": "completitud-cobertura",
+  "version": "0.1.0",
+  "description": "Reflejo (A12): la metrica unica de cobertura. Determinista; sin dato no inventa el porcentaje. PREGUNTA.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "completitud-cobertura.medir.request",
+      "handler": "onMedirRequest",
+      "description": "RPC reflejo (PREGUNTA): {project_id, esperados?|claves_esperadas?, recibidos?|claves_recibidas?, umbral?} → {project_id, cobertura, recibidos, esperados, faltantes, completa, bajo_umbral}. Determinista: min(recibidos,esperados)/esperados. Sin dato declarado ni observado → cobertura:null y `abierto` (no se inventa). Responde por completitud-cobertura.medir.response; entrada invalida → completitud-cobertura.medir.failed."
+    },
+    {
+      "event": "contabilidad.hecho_recibido",
+      "handler": "onHechoRecibido",
+      "description": "Fire-and-forget (puerto-evento-vertical A1): llego un hecho de la operacion. Se observa su clave en una ventana acotada para poder medir la cobertura sin que se declaren los totales. No publica hecho (solo observa)."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "completitud-cobertura.medir.response",
+      "description": "Respuesta RPC correlada de la op medir (una sola cara: el bus)."
+    },
+    {
+      "event": "completitud-cobertura.medir.failed",
+      "description": "Par de fallo determinista: falta project_id → {status, code, message}. Cierra el circulo de medir.request."
+    }
+  ],
+  "tools": [
+    { "name": "completitud-cobertura.medir", "description": "Mide (PREGUNTA) la cobertura de la entrada: recibidos/esperados, determinista." }
+  ],
+  "ui_handlers": []
+}

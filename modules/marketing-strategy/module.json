@@ -1,0 +1,94 @@
+{
+  "_doc": "marketing-strategy — REFLEJO JS puro: estrategia de marketing del proyecto. Posicionamiento (declaración, propuesta de valor, atributos, territorio, credibilidad, consistencia) + Objetivos (meta, target, horizonte, prioridad, alineación, estado con state-machine, criterio de revisión). Cero fuzzy — almacena las decisiones del dueño y valida completitud. Persiste por proyecto en state/marketing-strategy.json.",
+  "name": "marketing-strategy",
+  "version": "0.1.0",
+  "description": "Estrategia de marketing del proyecto: posicionamiento y objetivos medibles. Reflejo puro — almacena, valida, no interpreta.",
+  "language": "es",
+
+  "subscribes": [
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Restaura la estrategia del proyecto activado."
+    },
+    {
+      "event": "marketing.strategy.get.request",
+      "handler": "onGetRequest",
+      "description": "Devuelve la estrategia completa de un proyecto."
+    },
+    {
+      "event": "marketing.strategy.update.request",
+      "handler": "onUpdateRequest",
+      "description": "Actualiza campos de la estrategia (parcial)."
+    }
+  ],
+
+  "publishes": [
+    {
+      "event": "marketing.strategy.actualizada",
+      "description": "La estrategia fue actualizada. Payload: { project_id, campos_actualizados[] }."
+    }
+  ],
+
+  "tools": [
+    {
+      "name": "marketing-strategy.get",
+      "description": "Obtiene la estrategia de marketing de un proyecto.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1, "description": "ID del proyecto." }
+        },
+        "required": ["project_id"]
+      },
+      "handler": "toolGet",
+      "errores_conocidos": ["INVALID_INPUT"]
+    },
+    {
+      "name": "marketing-strategy.update",
+      "description": "Actualiza la estrategia de marketing de un proyecto (merge parcial).",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1 },
+          "posicionamiento": {
+            "type": "object",
+            "description": "Bloque de posicionamiento: { declaracion, propuesta_valor, atributos_deseados[], territorio: { categoria, vecinos[] }, credibilidad: { evidencias[] }, consistencia: { vigente_desde } }"
+          },
+          "objetivos": {
+            "type": "array",
+            "description": "[{ id?, meta, target: { valor, unidad, direccion }, horizonte: { fecha, tipo }, prioridad, alineacion, estado?, criterio_revision?: { umbral_alerta, fecha_revision, accion_si_falla } }]"
+          },
+          "alineacion_negocio": {
+            "type": "array",
+            "description": "[{ objetivo_id, proposito_negocio }]"
+          },
+          "conocimiento_disponible": {
+            "type": "object",
+            "description": "{ sabemos: string[], no_sabemos: string[] }"
+          }
+        },
+        "required": ["project_id"]
+      },
+      "handler": "toolUpdate",
+      "errores_conocidos": ["INVALID_INPUT", "INVALID_STATE_TRANSITION"]
+    }
+  ],
+
+  "ui_handlers": [
+    {
+      "domain": "marketing-strategy",
+      "action": "get",
+      "handler": "handleUiGet",
+      "description": "Obtener estrategia del proyecto activo."
+    },
+    {
+      "domain": "marketing-strategy",
+      "action": "update",
+      "handler": "handleUiUpdate",
+      "description": "Actualizar estrategia del proyecto activo."
+    }
+  ]
+}

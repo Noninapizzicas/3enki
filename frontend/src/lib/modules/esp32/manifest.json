@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "zone": "work-bar",
   "order": 2,
-  "routes": ["/dispositivos"],
   "icon": "⚡",
-  "label": "ESP32"
+  "label": "ESP32",
+  "universal": true
 }

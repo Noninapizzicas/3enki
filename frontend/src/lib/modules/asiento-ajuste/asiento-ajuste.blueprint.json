@@ -1,0 +1,64 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "asiento-ajuste",
+  "version": "blueprint-2.0.0",
+  "moduleId": "contabilidad",
+  "titulo": "Asiento de ajuste",
+  "_doc": "Blueprint v2 de INTERFAZ del módulo contabilidad/asiento-ajuste (F6½). Declara la sección `ui` para el BlueprintForm (patrón interfaz-dinamico). PUENTE (B5): la corrección del asesor entra al libro SIN BORRAR. Da forma al ajuste y anuncia contabilidad.ajuste_entrado; el libro lo escribe B2 (escritor-diario) y la traza B4 (traza-asiento). PUENTE/CUSTODIO de la vertical contabilidad. Las acciones van DOTTED ('<modulo>.<accion>') y el transporte.rpc va VACÍO: el RPC real es contabilidad.<accion>.request (domain 'contabilidad', action 'asiento-ajuste.entrar' en ui_handlers) y la regex de deriveZones solo parsea acciones de 2 segmentos; el wrapper mqttRequest('contabilidad','<modulo>.<accion>') emite ui/request/contabilidad/<modulo>.<accion>, que casa con el ui_handler. Los args salen de los parámetros REALES del handler en index.js.",
+  "eventos_publicados": [
+    "contabilidad.ajuste_entrado"
+  ],
+  "eventos_que_escucho": [
+    "asiento-ajuste.entrar.response",
+    "asiento-ajuste.entrar.failed"
+  ],
+  "transporte": {
+    "rpc": [],
+    "salida": [
+      "contabilidad.ajuste_entrado"
+    ],
+    "qos": "publishAndWait (request/response correlado) vía ui/request/contabilidad/<modulo>.<accion>; timeout del panel 10s. transporte.rpc vacío a propósito (acciones DOTTED)."
+  },
+  "ui": {
+    "_doc": "Panel de la cara humana de asiento-ajuste: la(s) op(s) de ESCRITURA (ORDEN) del módulo, con sus args reales. El BlueprintForm la(s) invoca por ui/request/contabilidad/<accion>.",
+    "ops": {
+      "asiento-ajuste.entrar": {
+        "titulo": "Entrar un ajuste del asesor al libro",
+        "descripcion": "Da forma (ORDEN) al asiento de corrección y lo anuncia al dominio. NO edita el asiento equivocado: AÑADE el asiento de corrección y deja el original intacto (borra_original:false). Lo escuchan escritor-diario (B2) y traza-asiento (B4). Sin asiento no hay ajuste.",
+        "rol": "asesor",
+        "forma": "editor-bloque (asiento/referencia/motivo/por)",
+        "senal_pareada": "contabilidad.ajuste_entrado",
+        "args": [
+          {
+            "nombre": "asiento",
+            "tipo": "json",
+            "required": true,
+            "descripcion": "El asiento de corrección {lineas:[{cuenta,debe,haber}], fecha?, concepto?}."
+          },
+          {
+            "nombre": "referencia",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "A qué asiento corrige (el original NO se toca)."
+          },
+          {
+            "nombre": "motivo",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Por qué se hace el ajuste."
+          },
+          {
+            "nombre": "por",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Quién hace el ajuste."
+          }
+        ],
+        "errores": "400 INVALID_INPUT (sin asiento)"
+      }
+    },
+    "roles": {
+      "asiento-ajuste.entrar": "asesor"
+    }
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "name": "estudio-demanda",
+  "version": "0.1.0",
+  "description": "MICRO-AGENTE del vertical NICHOS: estudia la demanda de primer orden de un candidato a nicho. Consulta fuentes externas por bus (nichos.fuente.consumir.request), pre-chequea limites (nichos.fuente.limites.puede.consumir.request) y usa ai-gateway (llm.complete.request) para sintetizar el informe de demanda. RPC nichos.demanda.estudiar; pulsos .completado y .failed.",
+  "_doc": "modules/nichos/estudio-demanda — MICRO-AGENTE del vertical NICHOS.\n\nQue hace: recibe un candidato a nicho, consulta fuentes externas para recabar datos de demanda, pide al LLM que sintetice un informe con demanda de primer orden, disposicion a pagar, fuentes usadas y coste imputable. Sin estado persistido.\n\nPatron: ModuloHibridoReflejo (micro-agente — usa LLM via ai-gateway + fuentes por bus, sin estado persistido).",
+  "ui_decision": {
+    "necesita": false,
+    "razon": "Micro-agente sin cara propia. Estudia demanda internamente y emite el informe al bus. Los consumidores (pipeline, veredicto) reaccionan al pulso. Sin interaccion directa con el humano."
+  },
+  "publishes": [
+    { "event": "nichos.estudio.demanda.completado", "description": "PULSO fire-and-forget: estudio de demanda completado. Payload: {id_nicho, demanda_1er_orden, disposicion_a_pagar, fuentes_usadas[], coste}." },
+    { "event": "nichos.estudio.demanda.failed", "description": "Par .failed del PULSO: el estudio de demanda fallo. Payload: {id_nicho, razon_codigo, detalle}." },
+    { "event": "nichos.demanda.estudiar.response", "description": "Response correlada por request_id al RPC nichos.demanda.estudiar.request. Payload: {status, data:{informe:{demanda_1er_orden, disposicion_a_pagar, fuentes_usadas[], coste}}}." },
+    { "event": "nichos.fuente.consumir.request", "description": "RPC saliente: pide datos de una fuente externa. Payload: {request_id, fuente, query, project_id}." },
+    { "event": "nichos.fuente.limites.puede.consumir.request", "description": "RPC saliente: pre-check de limites antes de consumir una fuente. Payload: {request_id, fuente, project_id}." }
+  ],
+  "subscribes": [
+    { "event": "nichos.demanda.estudiar.request", "handler": "onEstudiarRequest", "description": "RPC: estudia la demanda de un candidato a nicho y devuelve el informe via response correlada." }
+  ]
+}

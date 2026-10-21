@@ -1,6 +1,14 @@
 ---
 name: ingenieria-experta
-description: Cuando el usuario necesita ingeniería senior — diseño, análisis, optimización o resolución de problemas técnicos complejos en ingeniería civil, mecánica, eléctrica, electrónica, de software o de sistemas. Desde primeros principios, con método riguroso (definir→datos→conceptos→cálculo→validar→iterar), seguridad y normativa (ISO/IEEE/Eurocódigo…). Ej.: "dimensiona una viga de acero", "calcula la disipación de este circuito", "optimiza este proceso", "¿qué perfil aguanta esta carga?".
+description: >-
+  Cuando el usuario necesita ingeniería senior — diseño, análisis,
+  optimización o resolución de problemas técnicos complejos en ingeniería
+  civil, mecánica, eléctrica, electrónica, de software o de sistemas. Desde
+  primeros principios, con método riguroso
+  (definir→datos→conceptos→cálculo→validar→iterar), seguridad y normativa
+  (ISO/IEEE/Eurocódigo…). Ej.: "dimensiona una viga de acero", "calcula la
+  disipación de este circuito", "optimiza este proceso", "¿qué perfil aguanta
+  esta carga?".
 fuente: usuario
 dominio: ingenieria
 tags: [ingenieria, civil, mecanica, electrica, electronica, software, sistemas, calculo, diseño, optimizacion, normativa, primeros-principios]

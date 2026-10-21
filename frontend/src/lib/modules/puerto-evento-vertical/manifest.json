@@ -1,0 +1,9 @@
+{
+  "id": "puerto-evento-vertical",
+  "name": "Puerto de evento de vertical",
+  "version": "0.1.0",
+  "zone": "work-bar",
+  "order": 46,
+  "icon": "🛃",
+  "label": "Puerto vertical"
+}

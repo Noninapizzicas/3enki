@@ -223,6 +223,7 @@ class ProjectManagerModule extends BaseModule {
       if (!project) continue;
       await this._publicarEvento(EVENTS.PROJECT.ACTIVATED, {
         project_id: projectId, name: project.name,
+        slug: this._slugify(project.name),          // la carpeta física: el consumidor NO la recalcula
         base_path: project.base_path,
         metadata: project.metadata || {},
         activated_at: new Date().toISOString()
@@ -544,7 +545,9 @@ class ProjectManagerModule extends BaseModule {
     }
 
     await this._publicarEvento(EVENTS.PROJECT.ACTIVATED, {
-      project_id: realId, name: project.name, base_path: project.base_path,
+      project_id: realId, name: project.name,
+      slug: this._slugify(project.name),            // = el nombre del directorio en /data/projects/
+      base_path: project.base_path,
       metadata: project.metadata || {}, activated_at: new Date().toISOString()
     }, { correlation_id });
     this.metrics?.increment('project-manager.activated');
@@ -571,6 +574,8 @@ class ProjectManagerModule extends BaseModule {
 
     await this._publicarEvento('project.deactivated', {
       project_id: projectId, name: project?.name || null,
+      slug: project?.name ? this._slugify(project.name) : null,
+      base_path: project?.base_path || null,
       deactivated_at: new Date().toISOString()
     }, { correlation_id });
     this.metrics?.increment('project-manager.deactivated');
@@ -725,7 +730,12 @@ class ProjectManagerModule extends BaseModule {
 
   async onListProjectsRequest(event) {
     const { request_id } = event.data || event;
-    const projects = Array.from(this.projects.values());
+    // Cada proyecto sale con su slug YA CALCULADO: es lo que decide la carpeta física
+    // (/data/projects/<slug>/). El dueño del dato lo calcula UNA vez; los consumidores
+    // no deben re-derivarlo (eran 12 copias del mismo algoritmo, y la que difería fallaba).
+    const projects = Array.from(this.projects.values()).map(p => ({
+      ...p, slug: this._slugify(p.name)
+    }));
     await this.eventBus.publish(EVENTS.PROJECT.LIST_RESPONSE, {
       request_id, success: true, projects, count: projects.length,
       active_project_ids: [...this.activeProjectIds],
@@ -1039,7 +1049,7 @@ class ProjectManagerModule extends BaseModule {
 
   async handleUIUpdate(data) {
     try {
-      const { id, name, description, color, icon, workspaceType } = data || {};
+      const { id, name, description, color, icon, workspaceType, pages } = data || {};
       if (!id) return this._errorResponse(400, 'INVALID_INPUT', 'Project ID is required',
         { kind: 'domain', field: 'id' });
 
@@ -1054,6 +1064,13 @@ class ProjectManagerModule extends BaseModule {
       if (color !== undefined) metadata.color = color;
       if (icon !== undefined) metadata.icon = icon;
       if (workspaceType !== undefined) metadata.workspaceType = workspaceType;
+      // Workbar configurable por proyecto: el page-set declarado del proyecto
+      // (qué paneles se ven en SU workbar). resolvePages lo lee via metadata.pages.
+      if (pages !== undefined) {
+        if (!Array.isArray(pages)) return this._errorResponse(400, 'INVALID_INPUT',
+          'pages must be an array of strings', { kind: 'domain', field: 'pages' });
+        metadata.pages = pages.filter(p => typeof p === 'string');
+      }
       updates.metadata = metadata;
 
       const project = await this._updateProject(id, updates, crypto.randomUUID());
@@ -1452,6 +1469,31 @@ class ProjectManagerModule extends BaseModule {
     await fs.promises.mkdir(path.join(persistenciaBase, 'current'), { recursive: true });
     await fs.promises.mkdir(path.join(persistenciaBase, 'backups'), { recursive: true });
     await fs.promises.mkdir(path.join(basePath, 'contabilidad', 'cierres'), { recursive: true });
+
+    // AUTOPISTA SIN EVENTOS (multi-tenant): el storage del proyecto nace
+    // ESCRIBIBLE POR EL GRUPO (g+w). El proceso de Hermes corre como hermes, que
+    // está en el grupo www-data; tras el deploy el árbol queda www-data:www-data.
+    // Con g+w en el storage (y sus subdirs), Hermes (chat X del proyecto) escribe
+    // por la RUTA DIRECTA del fs (fs.write/fs.edit con handler directo, SIN evento
+    // en el bus) sobre SU storage, scopeado por fs.validatePath con el project_id.
+    // El aislamiento multi-tenant lo da validatePath (X nunca escribe en Y); esto
+    // solo abre el carril de escritura. Antes: nacía 644 → hermes chocaba con EACCES
+    // y el chat pedía activar/code.orquestar por un falso bloqueo (frenazo real).
+    try {
+      const dirs = [
+        basePath, path.join(basePath, 'db'), path.join(basePath, 'storage'),
+        persistenciaBase, path.join(persistenciaBase, 'eventos'),
+        path.join(persistenciaBase, 'ventas'), path.join(persistenciaBase, 'current'),
+        path.join(persistenciaBase, 'backups'), path.join(basePath, 'contabilidad', 'cierres')
+      ];
+      for (const dir of dirs) {
+        await fs.promises.chmod(dir, 0o775); // rwxr-xrwx → grupo puede escribir
+      }
+    } catch (err) {
+      // No debe romper el alta: log + métrica, el chmod es best-effort.
+      this.logger?.warn('project-manager.directories.chmod.failed', { basePath, error: err.message });
+      this.metrics?.increment('project-manager.errors', { kind: 'directories_chmod' });
+    }
     return basePath;
   }
 

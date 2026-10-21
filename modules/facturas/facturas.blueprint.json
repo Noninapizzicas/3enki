@@ -1,0 +1,209 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "facturas",
+  "version": "blueprint-1.0.0",
+  "moduleId": "facturas",
+  "titulo": "Facturas entrantes del negocio: pipeline v2 (Intake → Convert → Prepare → OCR → Structure (IA) → Validate → Store). El jefe sube, corrige datos extraídos, reprocesa fallos y exporta el CSV fiscal a contabilidad.",
+  "eventos_publicados": [
+    "factura.recibida",
+    "factura.procesada",
+    "factura.error",
+    "factura.exportada"
+  ],
+  "eventos_que_escucho": [
+    "project.activated",
+    "factura.recibida",
+    "factura.procesada",
+    "factura.error",
+    "factura.exportada"
+  ],
+  "transporte": {
+    "rpc": [
+      "facturas.subir.request -> .response",
+      "facturas.actualizar.request -> .response",
+      "facturas.reprocesar.request -> .response",
+      "facturas.listar.request -> .response",
+      "facturas.obtener.request -> .response",
+      "facturas.estadisticas.request -> .response",
+      "facturas.exportar.request -> .response",
+      "facturas.pipeline-metrics.request -> .response"
+    ],
+    "salida": [
+      "factura.recibida",
+      "factura.procesada",
+      "factura.error",
+      "factura.exportada"
+    ]
+  },
+  "ui": {
+    "type": "workspace_module",
+    "zone": "modulos",
+    "ops": {
+      "subir": {
+        "titulo": "Subir factura",
+        "descripcion": "Registra un archivo de factura y dispara el pipeline. El canal natural es el chat/telegram (llega sola); desde el panel el shape exige archivo {nombre, contenido base64}.",
+        "args": [
+          { "nombre": "archivo.nombre", "tipo": "text", "required": true, "placeholder": "factura_2026-08.pdf" },
+          { "nombre": "archivo.contenido", "tipo": "json", "required": true, "placeholder": "contenido del archivo en base64 (el que llega por chat/telegram no necesita este gesto)" },
+          { "nombre": "source", "tipo": "select", "enum": ["manual", "telegram", "gmail"], "required": false, "placeholder": "manual" }
+        ],
+        "confirm": false
+      },
+      "actualizar": {
+        "titulo": "Corregir datos",
+        "descripcion": "Corrige los datos extraídos antes del export: proveedor, números, montos (€), estado de pago. UPDATE libre sobre columnas reales de la tabla facturas.",
+        "args": [
+          { "nombre": "id", "tipo": "ref", "ref": "facturas.listar", "ref_label": "nombre_archivo", "ref_value": "id", "required": true },
+          { "nombre": "datos", "tipo": "json", "required": true, "placeholder": "{ \"proveedor_nombre\": \"...\", \"total_factura\": 123.45, \"estado_pago\": \"pagada\" }" }
+        ],
+        "confirm": false
+      },
+      "reprocesar": {
+        "titulo": "Reprocesar",
+        "descripcion": "Relanza el pipeline sobre el archivo original (path_original). 404 si el archivo ya no está en disco. Cara manual de procesar — el gesto grueso cuando factura.error nombra la fila.",
+        "args": [
+          { "nombre": "id", "tipo": "ref", "ref": "facturas.listar", "ref_label": "nombre_archivo", "ref_value": "id", "required": true }
+        ],
+        "confirm": true
+      },
+      "exportar": {
+        "titulo": "Exportar a contabilidad",
+        "descripcion": "Genera el CSV fiscal de las facturas PROCESADAS y las marca exportadas (semana ISO opcional). Gruesa: cambia el circuito de la factura.",
+        "args": [
+          { "nombre": "semana", "tipo": "text", "required": false, "placeholder": "2026-W35 (vacío = todas las procesadas)" }
+        ],
+        "confirm": true
+      },
+      "listar": {
+        "titulo": "Listar facturas",
+        "args": [
+          { "nombre": "estado", "tipo": "select", "enum": ["pendiente", "procesando", "procesada", "error", "exportada"], "required": false },
+          { "nombre": "limit", "tipo": "number", "required": false, "placeholder": "100" }
+        ]
+      },
+      "obtener": {
+        "titulo": "Ficha de factura",
+        "args": [
+          { "nombre": "id", "tipo": "ref", "ref": "facturas.listar", "ref_label": "nombre_archivo", "ref_value": "id", "required": true }
+        ]
+      },
+      "estadisticas": {
+        "titulo": "Estadisticas",
+        "args": []
+      },
+      "pipeline-metrics": {
+        "titulo": "Pipeline metrics",
+        "args": []
+      },
+      "procesar": {
+        "titulo": "Procesar archivo en disco",
+        "descripcion": "FÁBRICA (utilización-sistema): dispara el pipeline sobre un filePath ya en disco. El pipeline la dispara solo al llegar factura.entrada; su cara manual del jefe es reprocesar. Queda como utilidad, fuera del flujo.",
+        "args": [
+          { "nombre": "filePath", "tipo": "text", "required": true, "placeholder": "/ruta/absoluta/al/archivo.pdf" },
+          { "nombre": "source", "tipo": "select", "enum": ["manual", "telegram", "gmail"], "required": false, "placeholder": "manual" }
+        ]
+      }
+    },
+    "datos": {
+      "op": "listar",
+      "titulo": "Pila de facturas (estado visible por fila)",
+      "refresh_on": [
+        "factura.recibida",
+        "factura.procesada",
+        "factura.error",
+        "factura.exportada"
+      ],
+      "columnas": ["id", "nombre_archivo", "proveedor_nombre", "total_factura", "estado", "estado_pago"]
+    },
+    "estados": [
+      { "nombre": "pendiente", "terminal": false, "color": "gray", "icono": "📥" },
+      { "nombre": "procesando", "terminal": false, "color": "amber", "icono": "⚙️" },
+      { "nombre": "procesada", "terminal": false, "color": "blue", "icono": "✅" },
+      { "nombre": "error", "terminal": false, "color": "red", "icono": "⚠️" },
+      { "nombre": "exportada", "terminal": true, "color": "green", "icono": "📤" }
+    ],
+    "flujo": [
+      {
+        "nombre": "jefe",
+        "orden": 1,
+        "ops": ["subir", "actualizar", "reprocesar", "exportar"],
+        "descripcion": "Declara sobre las facturas entrantes: las mete al circuito (subir), corrige lo que la IA extrajo mal (actualizar), relanza el pipeline cuando falló (reprocesar) y cierra el ciclo fiscal (exportar csv a contabilidad)"
+      },
+      {
+        "nombre": "consulta",
+        "orden": 2,
+        "ops": ["listar", "obtener", "estadisticas", "pipeline-metrics"],
+        "descripcion": "El pulso del circuito: cinta por estados, pila con estado visible, ficha completa y salud del pipeline v2"
+      }
+    ],
+    "detalle": {
+      "op": "obtener",
+      "titulo": "Ficha de factura",
+      "cabecera": ["id", "nombre_archivo", "proveedor_nombre", "proveedor_nif", "factura_numero", "factura_fecha", "total_factura", "estado", "estado_pago"],
+      "campo_items": "lineas",
+      "campo_total": "total_factura",
+      "acciones_contextuales": ["actualizar", "reprocesar", "exportar"]
+    },
+    "roles": {
+      "subir": "jefe",
+      "actualizar": "jefe",
+      "reprocesar": "jefe",
+      "exportar": "jefe",
+      "listar": "neutro",
+      "obtener": "neutro",
+      "estadisticas": "neutro",
+      "pipeline-metrics": "neutro",
+      "procesar": "neutro"
+    },
+    "formas_jefe": {
+      "subir_factura": {
+        "forma": "editor-bloque",
+        "rpc": "facturas.subir {archivo{nombre, contenido(base64)}, source?}",
+        "senal": "factura.recibida → factura.procesada | factura.error"
+      },
+      "corregir_datos_extraidos": {
+        "forma": "editor-bloque",
+        "rpc": "facturas.actualizar {id, datos} — datos = whitelist de columnas reales (UPDATE sql libre en facturas-db L370)",
+        "senal": null
+      },
+      "reprocesar_fallida": {
+        "forma": "confirmador-nombrado",
+        "rpc": "facturas.reprocesar {id} — 404 si path_original ya no existe en disco",
+        "senal": "factura.procesada | factura.error"
+      },
+      "exportar_ciclo_fiscal": {
+        "forma": "confirmador-nombrado (gruesa)",
+        "rpc": "facturas.exportar {semana?} — selecciona solo estado=procesada y marca exportadas",
+        "senal": "factura.exportada"
+      },
+      "cinta_estados": {
+        "forma": "cinta-estado",
+        "rpc": "facturas.estadisticas {proyecto} → {total, pendientes, procesadas, errores, exportadas, porSource}",
+        "senal": "factura.procesada + factura.error"
+      },
+      "cinta_pipeline": {
+        "forma": "cinta-estado (secundaria)",
+        "rpc": "facturas.pipeline-metrics {} → {available, summary{successRate,failed,duplicates}, cost, timing}",
+        "senal": null
+      },
+      "pila_con_estado": {
+        "forma": "lista-ref (la fila es el ref)",
+        "rpc": "facturas.listar {estado?, limit}",
+        "senal": "factura.recibida/procesada/error/publicadas → debounce + refetch"
+      }
+    }
+  },
+  "_lente_roles": {
+    "agente": "crear-blueprint-jefe v2",
+    "metodo": "esquematizador-jefe",
+    "arbitro": "futuro->jefe | ahora->utilizacion | solo-lee->neutro",
+    "consolidacion": "modules/facturas/esquema-jefe/esquema.md",
+    "dualidad": "JEFE=gestion de las FACTURAS ENTRANTES (subir al circuito, corregir datos extraidos, reprocesar fallos, exportar a contabilidad) | UTILIZACION=factura.entrada llega SOLA desde chat/telegram/comedor (utilizacion-sistema, no gesto del jefe) + procesar es la FABRICA del pipeline (dispara IA/OCR; Cara manual = reprocesar) | neutro=listas, ficha, agregados, salud del pipeline",
+    "senales_pareadas": "subir->factura.recibida -> factura.procesada|factura.error (tandem 1-3 eventos, el bridge absorbe con debounce) · actualizar->SIN senal (rpc directo a local.facturas-db.actualizar; refetch por dictamen de respuesta) · reprocesar->factura.procesada|factura.error (publica invoice-pipeline L808/L160) · exportar->factura.exportada {project_id, total, archivo} (index.js L460) · fallos->factura.error nombrado en su fila (code canonico + message)",
+    "moneda": "los importes son EUROS float en columnas REAL de sqlite (base_imponible, cuota_iva, total_factura...) — la UI edita y envia euros, sin conversion a centimos",
+    "nota": "subir NO acepta filePath: exige archivo{nombre, contenido(base64)} (handleSubir index.js L267) — filePath es el shape de procesar (fabrica). reprocesar reparte 404 si path_original no existe en disco. exportar selecciona SOLO estado=procesada y las marca exportadas: corregir despues de exportar = cifra erronea en asesoria. actualizar es UPDATE SQL sin whitelist: la UI restringe a columnas reales del schema (proveedor_*, factura_*, base_imponible, tipo_iva, cuota_iva, total_factura, estado, estado_pago, notas).",
+    "moderacion": "procesar anotado en ui.ops con nota de fabrica (utilizacion-sistema cuando lo dispara el pipeline) y fuera del flujo: el gesto manual del jefe es reprocesar",
+    "utilizacion": ["factura.entrada (recepción automática chat/telegram/comedor)", "procesar (fábrica del pipeline)"],
+    "validado_contra": "modules/facturas/index.js v3.0.0 (657 lineas) + pipeline/invoice-pipeline.js + services/providers/local/facturas-db/index.js (schema tabla facturas)"
+  }
+}

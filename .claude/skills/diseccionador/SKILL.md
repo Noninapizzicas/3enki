@@ -1,7 +1,25 @@
 ---
 name: diseccionador
-description: El BISTURÍ — el patrón para disecionar una tarea amorfa en procesos con FORMA asignada. Parte la tarea en verbos atómicos (el espinazo) y pasa cada paso por las 6 PREGUNTAS; cada respuesta asigna la forma de la pieza (reflejo puro · micro-agente fuzzy · custodio · conversor · puente) — y la forma dicta dónde vive, quién escribe, cómo se testea y qué hace ante un dato ausente. Agnóstico al dominio; caso testigo completo: prisma-compuestos.
-when-to-use: Cuando llega una tarea/faceta nueva sin forma todavía ("gestionar X", "llevar Y", "coordinar Z") y hay que decidir QUÉ piezas construir antes de construirlas — disecciona ANTES de codificar. También para auditar una parcela existente (¿cada pieza tiene la forma que le toca?). NO para ejecutar una parcela ya disecionada (eso lo hace su propia skill, p.ej. prisma-compuestos).
+description: >-
+  El BISTURÍ — el patrón para disecionar una tarea amorfa en procesos con
+  FORMA asignada. Parte la tarea en verbos atómicos (el espinazo) y pasa cada
+  paso por las 6 PREGUNTAS; cada respuesta asigna la forma de la pieza
+  (reflejo puro · micro-agente fuzzy · custodio · conversor · puente) — y la
+  forma dicta dónde vive, quién escribe, cómo se testea y qué hace ante un
+  dato ausente. Agnóstico al dominio; caso testigo completo:
+  prisma-compuestos.
+when-to-use: >-
+  Cuando llega una tarea/faceta nueva sin forma todavía ("gestionar X",
+  "llevar Y", "coordinar Z") y hay que decidir QUÉ piezas construir antes de
+  construirlas — disecciona ANTES de codificar. También para auditar una
+  parcela existente (¿cada pieza tiene la forma que le toca?). NO para
+  ejecutar una parcela ya disecionada (eso lo hace su propia skill, p.ej.
+  prisma-compuestos).
+fuente: enki
+dominio: metodo
+lente_dominio: prisma
+lente_tarea: disecionar-tarea
+tags: [patron, metodo, diseccion, reflejo, fuzzy, custodio, conversor, puente, parcela, replicable]
 ---
 
 # Diseccionador — de tarea amorfa a piezas con forma
@@ -73,7 +91,24 @@ PUENTE            sin store propio · solo escucha y delega · no pisa decisione
 · referencia, no embebido    — los entes se apuntan por ref/id canónico; cambiar en UN sitio propaga
 ```
 
-## El ciclo de obra (cómo se ejecuta la disección)
+## Los dos modos de uso (lee cuál te toca antes de seguir)
+
+```
+SUELTA        llega una tarea amorfa fuera de un proceso → partes, asignas forma
+              y SIGUES TÚ con el ciclo de obra de abajo (asentar → construir →
+              verificar → coser → podar). Tú mandas el ritmo.
+
+DENTRO DEL RAIL  la disección es un TRAMO de la FASE 2 del proceso de proyecto
+              (skill esquematizar-negocio): las hojas atómicas ya vienen dadas
+              por el prisma y aquí solo se les fija la FORMA, una a una, sin
+              saltarse ninguna. El entregable es <proyecto>/esquemas/pasada-N-diseccion.md
+              + la forma anotada en esquema.md — y un gate en disco lo verifica.
+              CONSTRUIR NO ES TUYO: las fases 3 a 8 del rail se ocupan (PLASMA →
+              adaptador → construir → skills → interfaz → verificación), cada una
+              con su propio gate. El ciclo de obra de abajo NO se ejecuta aquí.
+```
+
+## El ciclo de obra (cómo se ejecuta la disección SUELTA)
 
 ```
 1. ASENTAR     el guión en arquitectura/decisiones/propuestas/<parcela>.md — el modelo se acuerda ANTES de codificar
@@ -83,6 +118,25 @@ PUENTE            sin store propio · solo escucha y delega · no pisa decisione
 5. PODAR       retirar lo viejo SOLO tras verificar quién depende de verdad (grep de emisores/imports, no de prosa)
 
 Freno humano SOLO en lo irreversible (borrar, fusionar identidades, pisar precios). Todo lo demás fluye.
+```
+
+## Dónde sigue cada forma (asignarla es el principio, no el final)
+
+La forma dicta el resto — y ese resto ya está escrito. Al terminar la disección,
+carga la skill de la forma que asignaste:
+
+```
+MICRO-AGENTE fuzzy  → agente-perspectiva-c   el reflejo HIDRATA y PERSISTE; el agente
+                                             solo TRANSFORMA (función pura, sin tools).
+                                             El determinismo fuera, la chispa dentro.
+                    → blueprint-agentico     cuando la pieza ORQUESTA pasos con I/O:
+                                             CONTRATO→LEER→PENSAR→VALIDAR→GUARDAR→EMITIR,
+                                             con el validador como freno (el agente no
+                                             puede mentir "lo hice").
+REFLEJO puro        → blueprint-coherente    las 5 fases sin agentes: lo fuzzy lo pone el
+                                             LLM de página, el reflejo persiste.
+CUSTODIO · CONVERSOR · PUENTE
+                    → blueprint-coherente    mismo espinazo; el reflejo es dueño de su store.
 ```
 
 ## Anti-patrones

@@ -1,0 +1,27 @@
+{
+  "_doc": "Manifest de analitica/eliminacion-intercompany — REFLEJO STATELESS (I2, hoja del plan). Detecta el CRUCE interno entre sociedades del grupo declarado y devuelve el conjunto de PARTIDAS A ELIMINAR en la consolidacion, con su importe neto y su anulacion. DETERMINISTA: emparejamiento por reglas declaradas (criterio.grupo, criterio.umbral, criterio.cuentas_internas), cero constantes de negocio cableadas. Dato ausente = desconocido: sin asientos o sin grupo declarado → eliminaciones vacias con abierto:true. NO escribe, NO persiste. RPC eliminar es CLASE PREGUNTA → va por el bus, sin panel. Publica eliminacion-intercompany.eliminar.response y su par .failed.",
+  "name": "eliminacion-intercompany",
+  "version": "0.1.0",
+  "description": "Reflejo (I2): detecta el cruce interno entre sociedades del grupo y devuelve las partidas a eliminar en la consolidacion. Determinista y declarable con cero constantes; no escribe.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "eliminacion-intercompany.eliminar.request",
+      "handler": "onEliminarRequest",
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id, asientos|partidas?, criterio{grupo,umbral,cuentas_internas}} → {project_id, eliminaciones[], n_eliminaciones, neto, abierto, faltan}. Empareja deterministamente el cruce interno del grupo declarado. Sin asientos/grupo → eliminatorias vacias con lo que falta (nada se estima). Responde por eliminacion-intercompany.eliminar.response; payload invalido → eliminacion-intercompany.eliminar.failed."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "eliminacion-intercompany.eliminar.response",
+      "description": "Respuesta RPC correlada de la op eliminar (una sola cara: el bus)."
+    },
+    {
+      "event": "eliminacion-intercompany.eliminar.failed",
+      "description": "Par de fallo determinista: falta project_id o payload invalido → {status, code, message}. Cierra el circulo de eliminar.request."
+    }
+  ],
+  "tools": [
+    { "name": "eliminacion-intercompany.eliminar", "description": "Deriva (PREGUNTA) las partidas del cruce interno a eliminar en la consolidacion para el grupo declarado." }
+  ]
+}

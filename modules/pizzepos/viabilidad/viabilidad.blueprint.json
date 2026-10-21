@@ -1,128 +1,171 @@
 {
-  "_doc": "Blueprint del modulo viabilidad (HIBRIDO). Hijo de subsistema-recetario.modulo-base. Evaluador economico previo: dado una receta o propuesta + PVP objetivo, emite veredicto economico canonico (viable | viable_con_advertencias | no_viable_economicamente | sin_pvp_objetivo) por reglas de food cost, y persiste un expediente por evaluacion (audit trail). Las 4 ops las SIRVE el REFLEJO JS (index.js); los cajones de aqui son DELEGADORES finos (publishAndWait viabilidad.<op>.request). El reflejo delega el coste a escandallo.costear (cadena reflejo->reflejo). Las decisiones cualitativas (diferenciacion, encaje en carta) NO son del modulo — las desarrolla el LLM principal en el chat tras leer el veredicto y tocar un camino.",
-
+  "schema": "blueprint-interfaz-v2",
   "id": "viabilidad",
-  "extends_blueprint_abstract": "subsistema-recetario.modulo-base",
-  "version": "blueprint-2.1.0",
-  "_temperatura_doc": "Pagina EXACTA: veredicto economico por reglas de food cost -> fria. ai-gateway la usa como default del turno (settings.temperature del humano gana; fallback global 0.7). El veredicto y la aritmetica viven en el REFLEJO; esto solo enfria lo poco fuzzy que quede.",
-  "temperatura": 0.2,
-  "_v2_0_changelog": "v2.0.0 (2026-06-15): HIBRIDADO. Las 4 ops (evaluar/obtener/listar/descartar) pasan al REFLEJO JS; los cajones quedan como delegadores finos. El reflejo delega el coste a escandallo.costear (REFLEJO determinista) y normaliza su modelo canonico; NO usa escandallo.calcular (cajon fuzzy). Los caminos se generan por regla (stubs ligeros). La aritmetica de veredicto, las reglas de food cost y la persistencia dual-branch viven ahora en JS. El contrato de bus no cambia.",
-  "language": "es",
-
-  "rol": "Evaluador economico previo del subsistema-recetario (HIBRIDO). El REFLEJO (index.js) hace todo lo determinista: delega el coste a escandallo.costear, aplica las reglas de food cost, emite el veredicto, genera los caminos por regla y persiste el expediente en viabilidad.json. Los cajones de la pagina delegan al reflejo. Lo cualitativo (desarrollar un camino, decidir encaje comercial) lo razona el LLM principal en el chat.",
-
-  "bebe_de": {
-    "escandallo": "escandallo.costear.request — el coste determinista (modelo canonico coste_unidad/lineas/rinde, que el reflejo normaliza a coste_porcion/ingredientes/porciones). NO escandallo.calcular (cajon fuzzy Mercadona).",
-    "recetas": "recetas.obtener.request — el nombre de la receta cuando se evalua por receta_id sin nombre (no inventarlo)."
-  },
-
-  "garantiza": [
-    "Cada evaluacion produce un expediente persistido en /pizzepos/viabilidad.json con id, fecha, input (receta_id o propuesta), calculo, PVP, food_cost_pct, veredicto, advertencias, caminos.",
-    "Veredicto canonico del enum: viable | viable_con_advertencias | no_viable_economicamente | sin_pvp_objetivo.",
-    "Reglas de food cost (sobre PVP sin IVA): <25% viable; 25-35% viable_con_advertencias; 35-45% viable_con_advertencias + alerta_margen_critico; >=45% no_viable_economicamente.",
-    "Si no se pasa PVP objetivo, se calcula pvp_sugerido para food cost objetivo (default 30%) y el veredicto es 'sin_pvp_objetivo' (orientativo).",
-    "Cada evaluacion produce 0-3 caminos { titulo, prompt } (la brujula del comerciante), generados por REGLA desde el veredicto/advertencias; [] si el producto sale redondo. Viven SOLO en el expediente, NO en el evento de dominio.",
-    "evaluar publica viabilidad.evaluacion.completada y descartar publica viabilidad.evaluacion.descartada (shape canonico del schema oficial, additionalProperties:false).",
-    "Descartar es soft-delete (estado='descartado') — NO se borra del archivo (audit trail). Doble descarte -> CONFLICT_STATE.",
-    "Persistencia via fs (reflejo): dual-branch fs.write inicial si 404, fs.edit append/update si existe."
-  ],
-
-  "no_garantiza": [
-    "Coste real preciso — sale de escandallo.costear (catalogo cacheado, orientativo).",
-    "Veredicto cualitativo (diferenciacion, encaje en carta) — lo razona el LLM principal en el chat.",
-    "Re-evaluacion automatica cuando los precios suben — un expediente es snapshot del momento."
-  ],
-
-  "estado_persistente": {
-    "_descripcion": "Archivo unico por proyecto con la lista de expedientes. Lo escribe el REFLEJO.",
-    "path_relativo": "/pizzepos/viabilidad.json",
-    "shape": "{ _version, _updated_at, expedientes: [ { id, fecha_evaluacion, estado: activo|descartado, motivo_descarte, fecha_descarte, input: {receta_id, nombre, porciones, ingredientes, pvp_objetivo}, calculo: {coste_total, coste_porcion, ingredientes_detalle, ingredientes_sin_precio, postcode_usado}, pvp_efectivo, pvp_sugerido, food_cost_pct, margen_porcion, veredicto, advertencias, caminos: [{titulo, prompt}] } ] }"
-  },
-
+  "version": "blueprint-2.0.0",
+  "moduleId": "viabilidad",
+  "titulo": "El EVALUADOR ECONÓMICO previo del recetario: el JEFE dictamina si una receta/producto es viable en coste/margen ANTES de darla de alta. Ref-select receta + PVP objetivo → EVALUAR → dictamen económico en claro (viable/coste/margen/food_cost). El coste lo delega a escandallo.costear (reflejo determinista); el veredicto sale de las reglas de food cost del proyecto.",
+  "_doc": "Blueprint v2 de INTERFAZ de la cara del JEFE del modulo viabilidad (pizzepos v2.0.0, HIBRIDO — el EVALUADOR ECONOMICO previo del subsistema-recetario). Reemplaza blueprint-2.1.0: v2.0.0 REESCRIBE en schema 'blueprint-interfaz-v2' (lente de roles esquematizador-jefe, ciclo v2 30-ago-2026) SIN cambiar el contrato: las 4 ops reales del reflejo (evaluar/obtener/listar/descartar) servidas por RPC de evento viabilidad.<op>.request -> .response (SIN ui_handlers en module.json — HIBRIDO fuzzy como menu-generator). El reflejo delega el coste a escandallo.costear (L109) y el nombre de la receta a recetas.obtener (L125). El dictamen economico {viable, coste_porcion, margen_porcion, food_cost_pct, veredicto, advertencias, caminos} es la respuesta 201 de evaluar. Senales REALES verificadas en codigo (aunque module.json no declare publishes — leccion carta-digital): viabilidad.evaluacion.completada (L208) + viabilidad.evaluacion.descartada (L295). Verificaciones de codigo: modules/pizzepos/viabilidad/index.js 309 lineas (handlers L47-50, _evaluar L94-225, _obtener L244, _listar L256, _descartar L271, senales L208/L295), module.json (4 subscribes RPC, sin ui_handlers). Nada inventado: ver _verificado_en_codigo.",
   "eventos_publicados": [
-    "viabilidad.evaluar.response",
-    "viabilidad.evaluar.failed",
-    "viabilidad.obtener.response",
-    "viabilidad.obtener.failed",
-    "viabilidad.listar.response",
-    "viabilidad.listar.failed",
-    "viabilidad.descartar.response",
-    "viabilidad.descartar.failed",
     "viabilidad.evaluacion.completada",
     "viabilidad.evaluacion.descartada"
   ],
-
-  "eventos_que_escucho": [],
-
-  "operaciones": {
-    "evaluar": {
-      "input": "{ project_id (req), request_id (req), correlation_id?, user_id?, receta_id? (alternativa a ingredientes+porciones), nombre? (req si propuesta), ingredientes? (array {nombre,cantidad,unidad}), porciones? (req si propuesta), pvp_objetivo? (>0, opcional), food_cost_objetivo_pct? (default 30) }",
-      "pseudocodigo": [
-        "async evaluar(input):",
-        "  // HIBRIDO: lo ejecuta el REFLEJO JS (index.js). El reflejo delega el coste a",
-        "  // escandallo.costear, aplica reglas de food cost, genera caminos por regla, persiste",
-        "  // el expediente y emite viabilidad.evaluacion.completada. Este cajon DELEGA.",
-        "  resp = await publishAndWait('viabilidad.evaluar.request', { ...input, request_id: uuid() }, { timeout_ms: 30000 })",
-        "  return resp"
-      ],
-      "reglas_clave": [
-        "Pasar receta_id O { nombre, ingredientes, porciones }.",
-        "El veredicto y los umbrales (25/35/45) son del reflejo — NO inventar etiquetas.",
-        "Los caminos llegan en el expediente; el frontend los renderiza como tarjetas->chat."
-      ],
-      "errores_posibles": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"],
-      "_delega_en": "viabilidad.evaluar.request (REFLEJO JS — index.js)"
+  "eventos_que_escucho": [
+    "viabilidad.evaluar.response",
+    "viabilidad.obtener.response",
+    "viabilidad.listar.response",
+    "viabilidad.descartar.response",
+    "viabilidad.evaluacion.completada",
+    "viabilidad.evaluacion.descartada"
+  ],
+  "transporte": {
+    "rpc": [
+      "viabilidad.evaluar.request -> viabilidad.evaluar.response (top-level {request_id, status, data|error}) — LA DECISION (dictamen 201)",
+      "viabilidad.obtener.request -> viabilidad.obtener.response (lectura de un expediente)",
+      "viabilidad.listar.request -> viabilidad.listar.response (historial de expedientes)",
+      "viabilidad.descartar.request -> viabilidad.descartar.response (soft-delete)",
+      "recetas.listar.request -> recetas.listar.response (ref-select: {total, recetas:[{receta_id, nombre, tipo, rinde}]}) — neutro, alimenta la decision"
+    ],
+    "salida": [
+      "viabilidad.evaluacion.completada (L208 — confirma la evaluacion)",
+      "viabilidad.evaluacion.descartada (L295 — confirma el descarte)"
+    ],
+    "qos": "publishAndWait (request/response correlado por request_id); timeout del panel 20s (evaluar anida escandallo.costear interno con timeout 20s — espera larga real); senales con debounce 60ms"
+  },
+  "ui": {
+    "_doc": "Panel de la CARA DEL JEFE del evaluador economico. Composicion (esquema-jefe): SELECCIONAR (ref-select receta desde recetas.listar + PVP objetivo opcional) -> INFORMARSE (dictamen economico en claro + historial de expedientes) -> DECLARAR (EVALUAR: 1 llamada viabilidad.evaluar, boton muerto en vuelo, dictamen en la respuesta + senal re-confirmando; DESCARTAR: confirmador-nombrado). La UI no compone nada: el dictamen del reflejo se muestra tal cual.",
+    "ops": {
+      "evaluar": {
+        "titulo": "Evaluar viabilidad economica",
+        "descripcion": "LA DECISION (jefe): elige la receta (ref-select) + PVP objetivo opcional -> el reflejo delega el coste a escandallo.costear, aplica las reglas de food cost y emite el dictamen {viable, coste_porcion, margen_porcion, food_cost_pct, veredicto, advertencias, caminos}. Aprueba o frena un producto.",
+        "rol": "jefe",
+        "forma": "ref-select receta + inline-gesture PVP + transicion-un-llamado + dictamen-visual",
+        "senal_pareada": "viabilidad.evaluacion.completada (L208) — dictamen en la respuesta + senal re-confirmando (debounce 60ms)",
+        "args": [
+          { "nombre": "receta_id", "tipo": "select", "required": false, "descripcion": "La receta a evaluar (ref-select desde recetas.listar). Alternativa a {nombre, ingredientes, porciones}." },
+          { "nombre": "pvp_objetivo", "tipo": "number", "required": false, "descripcion": "PVP objetivo (>0). Si vacio, el reflejo calcula pvp_sugerido al food cost objetivo (default 30%) y el veredicto es 'sin_pvp_objetivo' (orientativo)." },
+          { "nombre": "food_cost_objetivo_pct", "tipo": "number", "required": false, "descripcion": "Food cost objetivo en % (default 30)." }
+        ],
+        "errores": "400 INVALID_INPUT (falta receta_id o {nombre, ingredientes, porciones}) · 503 UPSTREAM_UNREACHABLE (escandallo/recetas no responden) · 502 (status del upstream)"
+      },
+      "descartar": {
+        "titulo": "Descartar un expediente",
+        "descripcion": "Soft-delete de una evaluacion (estado='descartado', audit trail). Nombra que expediente y a quien afecta. Doble descarte -> CONFLICT_STATE (409).",
+        "rol": "jefe",
+        "forma": "confirmador-nombrado",
+        "senal_pareada": "viabilidad.evaluacion.descartada (L295)",
+        "args": [
+          { "nombre": "expediente_id", "tipo": "text", "required": true, "descripcion": "Id del expediente a descartar." },
+          { "nombre": "motivo", "tipo": "text", "required": false, "descripcion": "Motivo del descarte (recomendado)." }
+        ],
+        "errores": "400 INVALID_INPUT · 404 RESOURCE_NOT_FOUND (expediente no existe) · 409 CONFLICT_STATE (ya descartado) · 502/503 fs"
+      }
     },
-    "obtener": {
-      "input": "{ project_id (req), request_id (req), correlation_id?, expediente_id (req) }",
-      "pseudocodigo": [
-        "async obtener(input):",
-        "  resp = await publishAndWait('viabilidad.obtener.request', { ...input, request_id: uuid() }, { timeout_ms: 15000 })",
-        "  return resp"
-      ],
-      "reglas_clave": ["Lectura pura. Devuelve expediente activo o descartado."],
-      "errores_posibles": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"],
-      "_delega_en": "viabilidad.obtener.request (REFLEJO JS — index.js)"
+    "datos": {
+      "op": "viabilidad.listar",
+      "titulo": "Historial de expedientes (cinta-estado)",
+      "refresh_on": ["viabilidad.evaluacion.completada", "viabilidad.evaluacion.descartada"],
+      "columnas": ["nombre", "veredicto", "food_cost_pct", "fecha_evaluacion"]
     },
-    "listar": {
-      "input": "{ project_id (req), request_id (req), correlation_id?, estado? (activo|descartado|todos, default activo), veredicto?, receta_id? }",
-      "pseudocodigo": [
-        "async listar(input):",
-        "  resp = await publishAndWait('viabilidad.listar.request', { ...input, request_id: uuid() }, { timeout_ms: 15000 })",
-        "  return resp"
-      ],
-      "reglas_clave": ["Lectura pura. Default estado='activo'. Orden por fecha desc."],
-      "errores_posibles": ["INVALID_INPUT", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"],
-      "_delega_en": "viabilidad.listar.request (REFLEJO JS — index.js)"
+    "roles": {
+      "evaluar": "jefe",
+      "descartar": "jefe"
     },
-    "descartar": {
-      "input": "{ project_id (req), request_id (req), correlation_id?, user_id?, expediente_id (req), motivo? }",
-      "pseudocodigo": [
-        "async descartar(input):",
-        "  resp = await publishAndWait('viabilidad.descartar.request', { ...input, request_id: uuid() }, { timeout_ms: 15000 })",
-        "  return resp"
-      ],
-      "reglas_clave": ["Soft delete (estado='descartado'). Doble descarte -> CONFLICT_STATE. Motivo recomendado."],
-      "errores_posibles": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "CONFLICT_STATE", "UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE"],
-      "_delega_en": "viabilidad.descartar.request (REFLEJO JS — index.js)"
+    "flujo": [
+      {
+        "nombre": "jefe",
+        "orden": 1,
+        "ops": ["evaluar", "descartar"],
+        "descripcion": "DECIDIR la viabilidad economica: EVALUAR (ref-select receta + PVP objetivo opcional -> dictamen {viable, coste_porcion, margen_porcion, food_cost_pct, veredicto, advertencias, caminos} en la respuesta + senal completada re-confirmando) y DESCARTAR un expediente (confirmador-nombrado -> senal descartada). El jefe es el FRENO: aprueba o frena un producto antes de darlo de alta."
+      },
+      {
+        "nombre": "consulta",
+        "orden": 2,
+        "ops": [],
+        "descripcion": "INFORMARSE antes de decidir: el dictamen economico llega en la respuesta de evaluar (dictamen-visual) y el historial de expedientes se lee con viabilidad.listar (cinta-estado). El ref-select de recetas (recetas.listar) alimenta la eleccion."
+      }
+    ],
+    "formas_jefe": {
+      "ref_select_receta": {
+        "forma": "ref-select (elegir la receta desde el listado — nunca teclear el id)",
+        "rpc": "recetas.listar.request { project_id, estado:'en_servicio' } -> { total, recetas:[{receta_id, nombre, tipo, rinde}] }",
+        "senal": "ninguna propia (lectura neutra)"
+      },
+      "pvp_objetivo": {
+        "forma": "inline-gesture (cifra opcional >0; si vacio -> pvp_sugerido, veredicto 'sin_pvp_objetivo')",
+        "rpc": "dato del request de evaluar",
+        "senal": "ninguna propia (dato, no escritura)"
+      },
+      "evaluar_dictamen": {
+        "forma": "transicion-un-llamado + dictamen-visual: boton EVALUAR (muerto en vuelo, espera 20s por escandallo interno) -> dictamen {viable, coste_porcion, margen_porcion, food_cost_pct, veredicto, advertencias, caminos} en claro",
+        "rpc": "viabilidad.evaluar.request { project_id, receta_id?, pvp_objetivo? } -> 201 {viable, coste_porcion, margen_porcion, food_cost_pct, veredicto, advertencias, caminos}",
+        "senal": "viabilidad.evaluacion.completada (L208) — debounce 60ms"
+      },
+      "descartar_expediente": {
+        "forma": "confirmador-nombrado: 'Descarta el expediente X (evaluacion de Y)' -> soft-delete",
+        "rpc": "viabilidad.descartar.request { project_id, expediente_id, motivo? } -> 200 expediente con estado='descartado'",
+        "senal": "viabilidad.evaluacion.descartada (L295) — debounce 60ms"
+      },
+      "historial_expedientes": {
+        "forma": "cinta-estado (el pulso de lo evaluado sin navegar)",
+        "rpc": "viabilidad.listar.request { project_id, estado?, veredicto? } -> expedientes (orden fecha desc)",
+        "senal": "viabilidad.evaluacion.completada + viabilidad.evaluacion.descartada"
+      }
     }
   },
-
-  "trabajo_pendiente": [
-    {
-      "id": "frontend_path_drift",
-      "estado": "abierto",
-      "descripcion": "El panel del frontend (ViabilidadPanel.svelte) lee '/viabilidad.json' pero el canonico es '/pizzepos/viabilidad.json'. Alinear el path del frontend al canonico para que el panel muestre lo que el reflejo escribe."
+  "_lente_roles": {
+    "agente": "ciclo-viabilidad v2",
+    "metodo": "esquematizador-jefe (modules/pizzepos/viabilidad/esquema-jefe/ — pasada-1, pasada-2-diseccion, esquema.md)",
+    "arbitro": "¿DECIDE la viabilidad economica de una receta/producto (el freno de negocio)? -> jefe · ¿se vende/consume en el momento de la venta? -> utilizacion (POS/PWA) · ¿solo lee/calcula? -> neutro",
+    "veredicto": "2/2 ops juzgadas: jefe(2) evaluar (LA DECISION — dictamina si una receta/producto es viable en coste/margen ANTES de darla de alta; delega el coste a escandallo.costear y emite el dictamen) + descartar (soft-delete de un expediente, audit trail). Neutros: sin op propia (el ref-select de recetas es lectura de recetas, no del modulo). Utilizacion: nada (es un evaluador previo, no se vende).",
+    "senales": "evaluar -> viabilidad.evaluacion.completada (index.js L208, 1x) · descartar -> viabilidad.evaluacion.descartada (L295, 1x) · dictamen inmediato en la respuesta de evaluar (201 {viable, coste_porcion, margen_porcion, food_cost_pct, veredicto, advertencias, caminos}) · senales correeladas por project_id con debounce 60ms (doble confirmacion como entrega/masa: dictamen en la respuesta + senal que re-confirma — nunca recarga, nunca estado optimista).",
+    "moneda": "coste_porcion/margen_porcion/pvp_efectivo/pvp_sugerido en euros (2 decimales, _round L141); food_cost_pct en % (1 decimal). El dictamen se muestra tal cual, sin conversion.",
+    "dualidad": "JEFE=evaluar (LA DECISION economica) + descartar (soft-delete) | UTILIZACION=nada (evaluador previo, no se vende) | neutro=recetas.listar (ref-select, lectura de recetas que alimenta la eleccion)",
+    "huecos_abiertos": [
+      "[ABIERTO] coste fresco via escandallo.calcular: el reflejo usa escandallo.costear (catalogo cacheado, orientativo). Si se quiere coste con precios Mercadona frescos, via bajo demanda explicita (turno LLM).",
+      "[ABIERTO] re-evaluacion automatica cuando suben los precios: un expediente es snapshot del momento.",
+      "[ABIERTO] umbrales de food cost editables desde el panel: hoy viven en /pizzepos/viabilidad/config.json (config del proyecto, patron carta-digital). Decision del dueno."
+    ],
+    "moderacion": "evaluar es jefe (dictamen economico que decide el futuro del catalogo); descartar es jefe (soft-delete). El ref-select de recetas es neutro (alimenta la eleccion). No hay utilizacion: el evaluador es previo a la venta.",
+    "utilizacion": [],
+    "fuente_analisis": "modules/pizzepos/viabilidad/esquema-jefe/esquema.md",
+    "fecha": "2026-08-30"
+  },
+  "_doc_historico": {
+    "aviso": "Contenido del blueprint-2.1.0 (HIBRIDO) — se conserva por valor documental. El _doc, la aritmetica de veredicto, las reglas de food cost y la persistencia dual-branch viven en el REFLEJO (index.js); los cajones de la pagina eran DELEGADORES finos (publishAndWait viabilidad.<op>.request). El v2.0.0 de INTERFAZ reescribe en schema 'blueprint-interfaz-v2' con lente de roles (ui.ops/ui.roles/ui.flujo/_lente_roles) sin cambiar el contrato de bus.",
+    "_doc_original": "Blueprint del modulo viabilidad (HIBRIDO). Hijo de subsistema-recetario.modulo-base. Evaluador economico previo: dado una receta o propuesta + PVP objetivo, emite veredicto economico canonico (viable | viable_con_advertencias | no_viable_economicamente | sin_pvp_objetivo) por reglas de food cost, y persiste un expediente por evaluacion (audit trail). Las 4 ops las SIRVE el REFLEJO JS (index.js); los cajones de aqui son DELEGADORES finos (publishAndWait viabilidad.<op>.request). El reflejo delega el coste a escandallo.costear (cadena reflejo->reflejo). Las decisiones cualitativas (diferenciacion, encaje en carta) NO son del modulo — las desarrolla el LLM principal en el chat tras leer el veredicto y tocar un camino.",
+    "operaciones_originales": {
+      "evaluar": "input { project_id (req), request_id (req), correlation_id?, user_id?, receta_id? (alternativa a ingredientes+porciones), nombre? (req si propuesta), ingredientes? (array {nombre,cantidad,unidad}), porciones? (req si propuesta), pvp_objetivo? (>0, opcional), food_cost_objetivo_pct? (default 30) } — el reflejo delega el coste a escandallo.costear, aplica reglas de food cost, genera caminos por regla, persiste el expediente y emite viabilidad.evaluacion.completada.",
+      "obtener": "input { project_id (req), request_id (req), correlation_id?, expediente_id (req) } — lectura pura. Devuelve expediente activo o descartado.",
+      "listar": "input { project_id (req), request_id (req), correlation_id?, estado? (activo|descartado|todos, default activo), veredicto?, receta_id? } — lectura pura. Default estado='activo'. Orden por fecha desc.",
+      "descartar": "input { project_id (req), request_id (req), correlation_id?, user_id?, expediente_id (req), motivo? } — soft delete (estado='descartado'). Doble descarte -> CONFLICT_STATE. Motivo recomendado."
     },
-    {
-      "id": "umbrales_food_cost_por_proyecto",
-      "estado": "abierto",
-      "descripcion": "Umbrales (25/35/45) hardcoded en el reflejo. Algunos proyectos (alta cocina) pueden querer otros. Mover a config por proyecto cuando aparezca el caso."
-    },
-    {
-      "id": "coste_fresco_vs_cacheado",
-      "estado": "abierto",
-      "descripcion": "El reflejo usa escandallo.costear (catalogo cacheado, ms). Si se quiere coste con precios Mercadona frescos, habria que ofrecer una via que dispare escandallo.calcular (turno LLM) bajo demanda explicita."
-    }
-  ]
+    "garantiza_originales": [
+      "Cada evaluacion produce un expediente persistido en /pizzepos/viabilidad.json con id, fecha, input (receta_id o propuesta), calculo, PVP, food_cost_pct, veredicto, advertencias, caminos.",
+      "Veredicto canonico del enum: viable | viable_con_advertencias | no_viable_economicamente | sin_pvp_objetivo.",
+      "Reglas de food cost (sobre PVP sin IVA): <25% viable; 25-35% viable_con_advertencias; 35-45% viable_con_advertencias + alerta_margen_critico; >=45% no_viable_economicamente. Umbrales overridables por proyecto via /pizzepos/viabilidad/config.json (default 25/35/45).",
+      "Si no se pasa PVP objetivo, se calcula pvp_sugerido para food cost objetivo (default 30%) y el veredicto es 'sin_pvp_objetivo' (orientativo).",
+      "Cada evaluacion produce 0-3 caminos { titulo, prompt } (la brujula del comerciante), generados por REGLA desde el veredicto/advertencias; [] si el producto sale redondo. Viven SOLO en el expediente, NO en el evento de dominio.",
+      "evaluar publica viabilidad.evaluacion.completada y descartar publica viabilidad.evaluacion.descartada (shape canonico del schema oficial, additionalProperties:false).",
+      "Descartar es soft-delete (estado='descartado') — NO se borra del archivo (audit trail). Doble descarte -> CONFLICT_STATE.",
+      "Persistencia via fs (reflejo): dual-branch fs.write inicial si 404, fs.edit append/update si existe."
+    ],
+    "no_garantiza_originales": [
+      "Coste real preciso — sale de escandallo.costear (catalogo cacheado, orientativo).",
+      "Veredicto cualitativo (diferenciacion, encaje en carta) — lo razona el LLM principal en el chat.",
+      "Re-evaluacion automatica cuando los precios suben — un expediente es snapshot del momento."
+    ],
+    "estado_persistente_original": "Archivo unico por proyecto con la lista de expedientes. Lo escribe el REFLEJO. path_relativo: /pizzepos/viabilidad.json. shape: { _version, _updated_at, expedientes: [ { id, fecha_evaluacion, estado: activo|descartado, motivo_descarte, fecha_descarte, input: {receta_id, nombre, porciones, ingredientes, pvp_objetivo}, calculo: {coste_total, coste_porcion, ingredientes_detalle, ingredientes_sin_precio, postcode_usado}, pvp_efectivo, pvp_sugerido, food_cost_pct, margen_porcion, veredicto, advertencias, caminos: [{titulo, prompt}] } ] }",
+    "trabajo_pendiente_original": [
+      { "id": "frontend_path_drift", "estado": "cerrado", "descripcion": "El panel del frontend (ViabilidadPanel.svelte) lee '/pizzepos/viabilidad.json' (linea 20/47) — el canonico. El reflejo (index.js STORE_PATH = '/pizzepos/viabilidad.json') escribe en la misma ruta. Sin drift. Cierre 2026-08-20." },
+      { "id": "umbrales_food_cost_por_proyecto", "estado": "cerrado", "descripcion": "Umbrales (25/35/45) ahora configurables por proyecto via /pizzepos/viabilidad/config.json (patron carta-digital): { umbrales: { viable, advertencia, critico } }. El reflejo los lee con fallback a los DEFAULT (25/35/45) si no existe o esta malformado. Cierre 2026-08-20." },
+      { "id": "coste_fresco_vs_cacheado", "estado": "abierto", "descripcion": "El reflejo usa escandallo.costear (catalogo cacheado, ms). Si se quiere coste con precios Mercadona frescos, habria que ofrecer una via que dispare escandallo.calcular (turno LLM) bajo demanda explicita." }
+    ]
+  },
+  "_verificado_en_codigo": {
+    "reflejo": "modules/pizzepos/viabilidad/index.js (reflejo-1.0.0, 309 lineas): onEvaluarRequest (L47, _atender -> viabilidad.evaluar.response) · onObtenerRequest (L48) · onListarRequest (L49) · onDescartarRequest (L50) · _evaluar (L94-225): valida (400 L96-102), delega coste a escandallo.costear (L109, timeout 20s), resuelve nombre via recetas.obtener (L125), calcula pvp_efectivo/food_cost_pct/margen_porcion (L131-141), veredicto por umbrales (L149-162), caminos por regla (L164-165), persiste expediente (L191-205) y publica viabilidad.evaluacion.completada (L208) · _obtener (L244) · _listar (L256-268) · _descartar (L271-305, publica viabilidad.evaluacion.descartada L295)",
+    "senales": "viabilidad.evaluacion.completada (L208, tras persistir el expediente) · viabilidad.evaluacion.descartada (L295, tras el soft-delete) — el module.json NO declara publishes (hueco del manifiesto, leccion carta-digital: el codigo manda)",
+    "evaluar": "input receta_id O {nombre, ingredientes, porciones} (L97-99) · pvp_objetivo >0 opcional (L100-102) · food_cost_objetivo_pct default 30 (L103) · dictamen 201 = expediente {id, fecha_evaluacion, estado, input, calculo, pvp_efectivo, pvp_sugerido, food_cost_pct, margen_porcion, veredicto, advertencias, caminos} (L168-189)",
+    "descartar": "soft-delete (estado='descartado', L284-290) · doble descarte -> 409 CONFLICT_STATE (L280) · publica viabilidad.evaluacion.descartada (L295)",
+    "errores": "400 INVALID_INPUT (falta receta_id o propuesta) · 404 RESOURCE_NOT_FOUND (expediente no existe) · 409 CONFLICT_STATE (ya descartado) · 503 UPSTREAM_UNREACHABLE (escandallo/recetas no responden) · 502 (status del upstream) · 502/503 fs"
+  }
 }

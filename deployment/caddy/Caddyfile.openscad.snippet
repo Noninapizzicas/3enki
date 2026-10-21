@@ -1,0 +1,27 @@
+# OpenSCAD MCP — servidor remoto para diseño 3D (scad.<domain>)
+# Auth por token Bearer compartido con instancias Enki.
+#
+# Este snippet se INYECTA en el Caddyfile solo en los VPS que declaran
+# ENABLE_OPENSCAD=true en su .env. El reconciliador sustituye pizzepos.es
+# por el dominio local (mismo mecanismo que la plantilla principal).
+#
+# Requiere: docker compose up -d en deployment/openscad-mcp/
+# Token:    ENKI_MCP_TOKEN en el EnvironmentFile de Caddy.
+
+scad.pizzepos.es {
+	@no_token {
+		not header Authorization "Bearer {env.ENKI_MCP_TOKEN}"
+	}
+	respond @no_token 401
+
+	reverse_proxy localhost:3100
+
+	header {
+		X-Content-Type-Options nosniff
+	}
+
+	log {
+		output file /var/log/caddy/pizzepos.log
+		format json
+	}
+}

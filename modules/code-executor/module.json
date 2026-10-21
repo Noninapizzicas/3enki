@@ -182,7 +182,7 @@
       "name": "code.orquestar",
       "description": "Ejecuta un script JS cuya UNICA capacidad es el bus de eventos (bus.publish, bus.publishAndWait). Cura la regla \"una operacion por turno\": en vez de N tool-calls fragiles, escribe UN script que itera/ramifica sobre el bus y se ejecuta determinista. Sandbox capability-based: sin require/process/fs/red. Devuelve { resultado, logs }. Doble timeout corta runaway.",
       "handler": "handleToolOrquestar",
-      "confirmation": true,
+      "confirmation": false,
       "errores_conocidos": [
         "INVALID_INPUT",
         "UPSTREAM_TIMEOUT",

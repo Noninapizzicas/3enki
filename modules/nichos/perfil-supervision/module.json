@@ -1,0 +1,22 @@
+{
+  "name": "perfil-supervision",
+  "version": "0.1.0",
+  "description": "CUSTODIO del vertical NICHOS (bloque H · interlocutor dueño): ranura única autorizada que fija la cadencia, los tipos de decisión que siempre exigen al dueño, el umbral de nitidez de semilla, los canales elegidos y el techo de pérdida por proyecto. Snapshot inmutable por versión; escritor único: el dueño por el canal. Lectores libres por RPC.",
+  "_doc": "modules/nichos/perfil-supervision — CUSTODIO (bloque H · interlocutor dueño) del vertical NICHOS.\n\nQué guarda: un snapshot inmutable por versión del perfil de supervisión {cadencia_pulso, decide_siempre, umbral_nitidez_semilla, canales_elegidos, techo_perdida_proyecto, cadencia_cuadro}. Cualquier campo puede nacer 'ABIERTO' (sin declarar): el consumidor (escalones-mensaje, puerto-canal, gate-decision-operar, alerta-sangria, paquetador-decision, normalizador-semilla) decide qué hacer con un ABIERTO — jamás se asume valor por defecto.\n\nQué publica: cada declaración muta el store con autor+timestamp y PULSA 'nichos.perfil.supervision.declarado' (o su .failed) para que todo consumidor que lea cadencias/umbrales/canales se recableé sin acoplarse al custodio.\n\nQuién escribe: el dueño por el canal (regla F3 — 'un solo escritor'). Rechazo 403 ESCRITOR_NO_AUTORIZADO si viene otro autor (el ajustador-umbrales K3 NO toca este perfil; aquí solo manda el dueño porque gobierna la cadencia y la cara del sistema). Lectores: libres por RPC nichos.perfil.supervision.leer.request → .response.\n\nPersistencia: PosPersistencia por proyecto, snapshot JSON /prisma/pos/nichos/perfil-supervision.json (debounced 800 ms, flush en onUnload, restauración en project.activated). Si no existe fichero → esqueleto por defecto {version:0, perfil:esqueletoABIERTO, por_autor:[]}. Degradación honesta: sin project_id lee/escribe en memoria.\n\nPatrón: ModuloHibridoReflejo (mitad REFLEJO, JS determinista). Sin mitad blueprint — la lógica es CRUD + aritmética de versión. Lo fuzzy (qué cadencia quiere el dueño, qué le molesta) lo decide el dueño directamente por su canal."
+  ,
+  "ui_decision": {
+    "necesita": false,
+    "razon": "Bloque H interlocutor dueño del vertical NICHOS, sin cara propia. El dueño declara/consulta por bus desde el panel central (jefe) o desde el panel de configuración del vertical cuando exista; el custodio no interpreta intención, solo CRUDa snapshots inmutables. El perfil es su mando a distancia sobre cadencia, escalones y techos — no una UI de edición por sí mismo."
+  },
+  "publishes": [
+    { "event": "nichos.perfil.supervision.declarado", "description": "PULSO fire-and-forget: una declaración del dueño cambió el perfil de supervisión. Payload: {project_id, version, por_autor, timestamp}. Lo consumen escalones-mensaje, puerto-canal, gate-decision-operar, alerta-sangria, paquetador-decision y normalizador-semilla." },
+    { "event": "nichos.perfil.supervision.declarado.failed", "description": "Par .failed del PULSO: la declaración fue rechazada (escritor no autorizado, forma inválida). Payload: {project_id, code, message, timestamp}." },
+    { "event": "nichos.perfil.supervision.leer.response", "description": "Response correlada por request_id al RPC nichos.perfil.supervision.leer.request. Payload: {status, data:{perfil_supervision:{version, perfil, por_autor}}}." },
+    { "event": "nichos.perfil.supervision.declarar.response", "description": "Response correlada por request_id al RPC nichos.perfil.supervision.declarar.request. Payload: {status, data:{nueva_version, perfil_supervision}} | {status, error}." }
+  ],
+  "subscribes": [
+    { "event": "nichos.perfil.supervision.leer.request", "handler": "onLeerRequest", "description": "Reflejo JS: devuelve el perfil vigente (esqueleto por defecto con todo ABIERTO si no se declaró nada aún)." },
+    { "event": "nichos.perfil.supervision.declarar.request", "handler": "onDeclararRequest", "description": "Reflejo JS: aplica un cambio sobre el último snapshot (por_autor=dueño), lo sella con instante actual y lo persiste (version++). Rechaza con 403 ESCRITOR_NO_AUTORIZADO si el autor no es el dueño." },
+    { "event": "project.activated", "handler": "onProjectActivated", "description": "Reflejo JS: restaura el perfil persistido del proyecto activado desde /prisma/pos/nichos/perfil-supervision.json (PosPersistencia)." }
+  ]
+}

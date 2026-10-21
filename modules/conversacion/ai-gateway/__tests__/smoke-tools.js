@@ -29,8 +29,8 @@ const fakeModules = new Map([
   ['carta-digital',   { manifest: { name: 'carta-digital',  tools: [
     { name: 'cartadigital.get_config' }, { name: 'cartadigital.update_config' }
   ]}}],
-  ['ai-agent-framework', { manifest: { name: 'ai-agent-framework', tools: [
-    { name: 'invoke_agent' }
+  ['ai-agent-framework-v3', { manifest: { name: 'ai-agent-framework-v3', tools: [
+    { name: 'invoke_agent' }, { name: 'buscar_agente' }
   ]}}],
   ['filesystem',      { manifest: { name: 'filesystem',     tools: [
     { name: 'fs.read' }, { name: 'fs.write' }, { name: 'fs.list' }

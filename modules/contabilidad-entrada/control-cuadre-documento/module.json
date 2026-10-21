@@ -1,0 +1,32 @@
+{
+  "_doc": "Manifest de entrada/control-cuadre-documento — REFLEJO STATELESS (A4.3, hoja del plan). SI IMPORTE+IMPUESTOS NO CUADRAN -> COLA; NO SE ASIENTA MAL. Es el CONTROL entre la EXTRACCION (A4.1) y el ASIENTO: comprueba que las cifras del documento cuadran (base + cuota == total) con tolerancia de centimos. Cálculo determinista — NO inventa el total, NO ajusta la cuota para cuadrar; declara la DIFERENCIA con las dos sumas. Si NO cuadra, SUBE por EVENTO encolado-excepcion.encolar.request (la cola de lo dudoso A8.1); si cuadra, devuelve cuadra:true y el hecho puede seguir. Honestidad (invariante 13): sin cifras NO se afirma cuadra ni descuadre — queda NO verificable (cuadra:null) y NO se encola una excepcion por un hueco (dato ausente = desconocido). NO escribe estado → no hay hecho que anunciar (R2). Sin store propio (STATELESS). La op cuadra es CLASE PREGUNTA → SIN ui_handler.",
+  "name": "control-cuadre-documento",
+  "version": "0.1.0",
+  "description": "Reflejo (A4.3): control determinista de cuadre del documento (base+cuota==total); si no cuadra lo lleva a la cola, no se asienta mal.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "control-cuadre-documento.cuadra.request",
+      "handler": "onCuadraRequest",
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id, documento{base?, cuota?, total?, documento_id?, clave?}} → {project_id, base, cuota, total, diferencia, cuadra, verificable, encolada, abierto}. Comprueba base + cuota == total. Si NO cuadra, SUBE encolado-excepcion.encolar.request (no se asienta mal). Sin cifras → cuadra:null (no verificable, no se encola). Responde por control-cuadre-documento.cuadra.response; falta project_id → control-cuadre-documento.cuadra.failed."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "control-cuadre-documento.cuadra.response",
+      "description": "Respuesta RPC correlada de la op cuadra (una sola cara: el bus)."
+    },
+    {
+      "event": "control-cuadre-documento.cuadra.failed",
+      "description": "Par de fallo determinista: falta project_id → {status, code, message}. Cierra el circulo de cuadra.request."
+    },
+    {
+      "event": "encolado-excepcion.encolar.request",
+      "description": "Subida (REQUEST por EVENTO, SOLO si hay descuadre real): encola el documento que no cuadra en la cola de lo dudoso (A8.1). ControlCuadreDocumento controla; encolado-excepcion encola."
+    }
+  ],
+  "tools": [
+    { "name": "control-cuadre-documento.cuadra", "description": "Comprueba (PREGUNTA) el cuadre de un documento (base+cuota==total); si no cuadra lo lleva a la cola." }
+  ],
+  "ui_handlers": []
+}

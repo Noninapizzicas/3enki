@@ -1,0 +1,29 @@
+{
+  "_doc": "REFLEJO motor-encadenamiento del proyecto 3D (taller personal de impresion 3D). Al terminar una impresion (pieza.imprimida dispara al_terminar), marca la tarea terminada en la cola, ELIGE la SIGUIENTE de la cola (cola.siguienteAImprimir: cabecera YA preparada en la cupula) y la encadena disparando ciclo-impresion.iniciar.request (RPC declarado; el ciclo se construye en la tanda 4). Si no hay nada listo emite cola_vacia (impresora ociosa). Reflejo puro: sin store propio, sin mutar el store de la cola directamente (delega por evento/RPC). CERO juicio: no decide SI imprimir (eso es el ciclo); solo encadena la cabecera lista. Par de fallo motor-encadenamiento.al_terminar.failed. Origen: plan-construccion.md seccion 6.7 (FASE 4 construir-modulos, pieza 10).",
+  "name": "motor-encadenamiento",
+  "version": "0.1.0",
+  "_v0_1_0_nota": "v0.1.0 (2026-09-13): REFLEJO puro. Op al_terminar (RPC). Proyeccion _alTerminar: cola.terminada -> siguiente=cola.siguienteAImprimir -> si <> NULO dispara ciclo-impresion.iniciar.request; si NULO emite cola_vacia. Encadena solo la cabecera lista; nunca decide SI imprimir. Par motor-encadenamiento.al_terminar.failed.",
+  "description": "Reflejo que al terminar una impresion 3D elige la siguiente de la cola (cabecera YA preparada) y la encadena; si nada listo emite cola_vacia. El ciclo de impresion se construye en la tanda 4 (invocacion RPC declarada).",
+  "language": "es",
+  "main": "index.js",
+  "dependencies": [
+    "cola",
+    "ciclo-impresion",
+    "cupula-gcode"
+  ],
+  "config": {
+    "cero_juicio": true
+  },
+  "subscribes": [
+    { "event": "motor-encadenamiento.al_terminar.request", "handler": "onAlTerminarRequest", "description": "Al terminar una impresion, elige la siguiente de la cola y dispara el ciclo; si nada listo emite cola_vacia." }
+  ],
+  "publishes": [
+    { "event": "motor-encadenamiento.al_terminar.response", "description": "Respuesta correlada: siguiente encadenada (o cola_vacia)." },
+    { "event": "cola_vacia", "description": "Impresora ociosa: nada listo para encadenar." },
+    { "event": "motor-encadenamiento.al_terminar.failed", "description": "Par de fallo: no se pudo encadenar la siguiente." }
+  ],
+  "tools": [],
+  "observability": {
+    "metrics": ["motor-encadenamiento.reflejo.served", "motor-encadenamiento.reflejo.errors"]
+  }
+}

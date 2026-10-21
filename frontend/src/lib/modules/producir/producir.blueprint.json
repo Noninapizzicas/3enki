@@ -1,0 +1,82 @@
+{
+  "_doc": "Blueprint del modulo producir (the-pirate, prisma). Modulo REFLEJO (index.js determinista, no blueprint-driven) — este blueprint declara SOLO la interfaz del generador schema→UI (BlueprintForm). Seccion `ui` declarada por F6½ (esquematizar-interfaz, 2026-08-18): las 3 operaciones del modulo con sus args reales del contrato. Las acciones son SIMPLES (proyectar, rendimiento, validar) porque el RPC real del bus es producir.<accion>.request y el wrapper mqttRequest('producir', '<accion>') emite ui/request/producir/<accion>; transporte.rpc va VACIO por consistencia con el patron masa (las ops se declaran explicitas en ui.ops). SIN zona DATOS: producir es un motor de calculo puro — sus 3 ops llevan args y devuelven el resultado en la misma llamada; no hay lectura persistente que listar (la zona se omite, no se inventa).",
+  "id": "producir",
+  "version": "blueprint-1.0.0",
+
+  "rol": "MOTOR de proyeccion de compuestos a objetivos fisicos (patron costeador, sin store): proyectar (compuesto + objetivo {formato?, cantidad, unidad} → componentes escalados en SU unidad + totales por insumo en SU unidad base, el desmembramiento: lo que hay que COMPRAR), rendimiento (stock[] → unidades de produccion floor + sobrante por componente, la inversa) y validar (freno puro). Reglas de escala: lineal · area (diam²) · fija · densidad. Un compuesto sin regla declarada responde pendiente_declaracion — nunca inventa el factor. masa es una INSTANCIA de este organo (compuesto 'masa-pan' + formatos + politicas).",
+
+  "eventos_publicados": [
+    "producir.proyeccion.calculada"
+  ],
+
+  "eventos_que_escucho": [],
+
+  "transporte": {
+    "entrada": "reflejo RPC via ui_handlers (module.json) — las 3 operaciones se conducen por ui/request/producir/<accion>; ver seccion ui.ops. transporte.rpc vacio a proposito (patron masa: las ops se declaran explicitas en ui.ops y el wrapper mqttRequest usa la accion).",
+    "rpc": [],
+    "salida": [
+      "producir.proyeccion.calculada"
+    ],
+    "qos": "publishAndWait (request/response correlado) en cada operacion; timeout 8s"
+  },
+
+  "ui": {
+    "_doc": "Schema de panel del generador schema→UI (BlueprintForm). Las 3 operaciones del reflejo con sus args reales. Sin zona DATOS: las 3 ops son de calculo con args (el resultado vuelve en la llamada), no hay listado persistente — el motor omite la zona.",
+    "ops": {
+      "proyectar": {
+        "titulo": "Proyectar produccion",
+        "descripcion": "Compuesto + objetivo fisico → componentes escalados en SU unidad + totales por insumo en SU unidad base (lo que hay que comprar). Formato declarado gana; sin regla → pendiente_declaracion.",
+        "args": [
+          {
+            "nombre": "compuesto_id",
+            "tipo": "string",
+            "required": true,
+            "descripcion": "ID del compuesto (ej. masa_pan)."
+          },
+          {
+            "nombre": "objetivo",
+            "tipo": "json",
+            "required": true,
+            "descripcion": "Objetivo fisico. Ej: {\"formato\":\"disco_33_cm\",\"cantidad\":20} o {\"cantidad\":10,\"unidad\":\"bolas\"}"
+          }
+        ]
+      },
+      "rendimiento": {
+        "titulo": "Calcular rendimiento",
+        "descripcion": "La INVERSA: con lo que tengo en stock → cuantas unidades de produccion salen (floor) + sobrante por componente.",
+        "args": [
+          {
+            "nombre": "compuesto_id",
+            "tipo": "string",
+            "required": true,
+            "descripcion": "ID del compuesto (ej. masa_pan)."
+          },
+          {
+            "nombre": "stock",
+            "tipo": "json",
+            "required": true,
+            "descripcion": "Stock disponible por componente. Ej: [{\"ref\":\"harina_de_fuerza\",\"cantidad\":5,\"unidad\":\"kg\"},{\"ref\":\"hielo\",\"cantidad\":2,\"unidad\":\"kg\"}]"
+          }
+        ]
+      },
+      "validar": {
+        "titulo": "Validar objetivo",
+        "descripcion": "Freno puro: unidad coherente, formato conocido, cantidad > 0. Devuelve {valid, errors}.",
+        "args": [
+          {
+            "nombre": "compuesto_id",
+            "tipo": "string",
+            "required": true,
+            "descripcion": "ID del compuesto (ej. masa_pan)."
+          },
+          {
+            "nombre": "objetivo",
+            "tipo": "json",
+            "required": true,
+            "descripcion": "Objetivo a validar. Ej: {\"cantidad\":0}"
+          }
+        ]
+      }
+    }
+  }
+}

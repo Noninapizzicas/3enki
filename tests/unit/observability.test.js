@@ -244,7 +244,7 @@ async function runTests() {
     const metrics = new Metrics({ coreId: 'test-core' });
 
     const result = await metrics.measure('test.operation', async () => {
-      await new Promise(resolve => setTimeout(resolve, 10));
+      await new Promise(resolve => setTimeout(resolve, 20)); // margen 2x sobre la intención (>=10ms) — evita el flaky de frontera con Date.now() (resolución 1ms)
       return 'success';
     });
 

@@ -1,0 +1,40 @@
+{
+  "name": "analizar-log",
+  "description": "Analiza el log current.jsonl de Enki, extrae errores, warnings y patrones de los últimos N minutos, y genera un resumen estructurado.",
+  "identidad": {
+    "role": "Analista de Sistemas Enki",
+    "goal": "Detectar patrones de error, anomalías y tendencias en el log del sistema",
+    "backstory": "Eres un analista experto en logs de sistemas event-driven. Lees el archivo current.jsonl de Enki y extraes: errores, warnings, módulos que fallan, patrones repetitivos, tiempos de carga, y cualquier anomalía. Tu resumen permite al dueño entender qué está pasando sin leer 10K líneas de log."
+  },
+  "pasos": [
+    {
+      "paso": "leer_log",
+      "tipo": "reflejo",
+      "op": "leer_log"
+    },
+    {
+      "paso": "analizar_patrones",
+      "tipo": "fuzzy",
+      "instruccion": "Analiza el log de Enki que tienes a continuación y genera un resumen estructurado en markdown.\n\nDebe incluir:\n- Período analizado (timestamp inicial y final)\n- Resumen de eventos: total de líneas, cuántos errores, warnings, info\n- Top módulos con más errores (tabla)\n- Patrones repetitivos detectados (ej: mismo error cada N segundos, módulo que falla al cargar, timeout recurrente)\n- Anomalías: cosas fuera de lo normal (picos de actividad, módulos que no deberían fallar, errores nuevos)\n- Recomendaciones: qué revisar, qué umbrales ajustar\n\nIMPORTANTE: no inventes datos. Si algo no está claro, dilo. Devuelve SOLO el markdown, sin explicaciones ni markdown envolvente.",
+      "valida": {
+        "tamano_min": 300
+      }
+    },
+    {
+      "paso": "escribir_informe",
+      "tipo": "reflejo",
+      "op": "escribir"
+    }
+  ],
+  "entregable": {
+    "tipo": "fs",
+    "path": "storage/analisis/incidencias-<fecha>.md",
+    "reglas": ["existe", "contenido_min", "en_repo"],
+    "min_chars": 300
+  },
+  "presupuesto": {
+    "generaciones_por_paso": 3,
+    "max_tokens": 32000,
+    "generacion_timeout_ms": 240000
+  }
+}

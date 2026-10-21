@@ -180,6 +180,8 @@ class CosechaModule extends ModuloHibridoReflejo {
   // "¿cómo hago X?" de find-skills sobre nuestro catálogo interno. Devuelven {status,data}. ──
   async handleBuscarTool(args)   { return this.hibrida ? this._buscarFusion(args || {}) : this._buscar(args || {}); }
   async handlePromoverTool(args) { return this._promover(args || {}); }
+  async handleCrearSkillTool(args)   { return this._crear(args || {}); }
+  async handleMejorarSkillTool(args) { return this._patch(args || {}); }
 
   // ── el NERVIO del destilador: cuando SELLA una skill en una cúpula (memoria por
   // proyecto), la cantera la ABSORBE a la biblioteca global. Fire-and-forget: el cuerpo

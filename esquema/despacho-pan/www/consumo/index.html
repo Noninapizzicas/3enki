@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#f5e9d7">
+<title>Despacho de Pan — encarga tu pan</title>
+<link rel="manifest" href="manifest.json">
+<style>
+  :root{
+    --crema:#f5e9d7; --crema-2:#fbf3e6; --beige:#e8d5b5; --tostado:#8a5a2b;
+    --marrón:#5c3a1e; --marrón-osc:#3d2713; --verde:#5a7d4a; --verde-osc:#3f5a33;
+    --rojo:#b3402a; --verde-ok:#3f7d4a; --texto:#3d2713; --texto-suave:#6b4a2a;
+    --blanco:#fffdf8; --sombra:0 4px 14px rgba(61,39,19,.12);
+    --radio:18px; --radio-btn:14px;
+  }
+  *{box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent;}
+  html{font-size:18px;}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    background:var(--crema); color:var(--texto); line-height:1.5;
+    min-height:100vh; display:flex; flex-direction:column;
+  }
+  /* ===== PANTALLAS: una por paso ===== */
+  .pantalla{display:none; flex-direction:column; min-height:100vh; padding:20px 20px 28px; max-width:520px; margin:0 auto; width:100%;}
+  .pantalla.activa{display:flex;}
+  .contenido{flex:1; display:flex; flex-direction:column;}
+  /* ===== CABECERA ===== */
+  .cabecera{display:flex; align-items:center; justify-content:space-between; margin-bottom:18px;}
+  .marca{font-size:1.15rem; font-weight:700; color:var(--marrón); letter-spacing:.3px;}
+  .marca .pan{color:var(--tostado);}
+  .btn-volver{background:none; border:none; font-size:1.4rem; color:var(--marrón); cursor:pointer; padding:6px 10px; border-radius:10px;}
+  .btn-volver:hover{background:var(--beige);}
+  .btn-volver.oculto{visibility:hidden;}
+  /* ===== HERO ===== */
+  .hero{text-align:center; padding:26px 0 8px;}
+  .hero .emoji{font-size:3.4rem; display:block; margin-bottom:10px;}
+  .hero h1{font-size:2.1rem; font-weight:800; color:var(--marrón-osc); line-height:1.15; margin-bottom:10px;}
+  .hero p{font-size:1.1rem; color:var(--texto-suave); max-width:420px; margin:0 auto 6px;}
+  .hero .diferenciador{margin-top:14px; background:var(--blanco); border:2px solid var(--verde); color:var(--verde-osc); border-radius:var(--radio); padding:12px 16px; font-weight:600; font-size:1rem;}
+  .hero .diferenciador .icono{font-size:1.3rem; margin-right:6px;}
+  /* ===== BOTONES ===== */
+  .btn{
+    display:flex; align-items:center; justify-content:center; gap:10px;
+    width:100%; padding:18px 20px; border:none; border-radius:var(--radio-btn);
+    font-size:1.2rem; font-weight:700; cursor:pointer; transition:transform .08s, box-shadow .15s;
+    text-align:center;
+  }
+  .btn:active{transform:scale(.98);}
+  .btn-primario{background:var(--verde); color:var(--blanco); box-shadow:var(--sombra);}
+  .btn-primario:hover{background:var(--verde-osc);}
+  .btn-tostado{background:var(--tostado); color:var(--blanco); box-shadow:var(--sombra);}
+  .btn-tostado:hover{background:var(--marrón);}
+  .btn-secundario{background:var(--blanco); color:var(--marrón); border:2px solid var(--beige);}
+  .btn-secundario:hover{background:var(--crema-2);}
+  .btn-grande{padding:22px 20px; font-size:1.35rem;}
+  .btn .icono{font-size:1.4rem;}
+  .btn:disabled{opacity:.5; cursor:not-allowed;}
+  .pie-accion{margin-top:auto; padding-top:22px;}
+  /* ===== CATÁLOGO ===== */
+  .titulo-seccion{font-size:1.4rem; font-weight:800; color:var(--marrón-osc); margin-bottom:4px;}
+  .subtitulo{color:var(--texto-suave); font-size:.95rem; margin-bottom:16px;}
+  .catalogo{display:flex; flex-direction:column; gap:14px;}
+  .tarjeta{
+    background:var(--blanco); border-radius:var(--radio); box-shadow:var(--sombra);
+    padding:16px; display:flex; align-items:center; gap:14px; cursor:pointer;
+    border:2px solid transparent; transition:border-color .12s;
+  }
+  .tarjeta:hover{border-color:var(--beige);}
+  .tarjeta.seleccionada{border-color:var(--verde); background:var(--crema-2);}
+  .tarjeta .icono{font-size:2.2rem; flex-shrink:0;}
+  .tarjeta .info{flex:1;}
+  .tarjeta .nombre{font-weight:700; font-size:1.05rem; color:var(--marrón-osc);}
+  .tarjeta .detalle{font-size:.85rem; color:var(--texto-suave);}
+  .tarjeta .precio{font-weight:800; color:var(--tostado); font-size:1.1rem; white-space:nowrap;}
+  /* ===== SELECTOR ===== */
+  .selector-titulo{font-size:1.3rem; font-weight:800; color:var(--marrón-osc); margin-bottom:4px;}
+  .selector-item{font-size:1rem; color:var(--texto-suave); margin-bottom:18px;}
+  .grupo-opciones{display:flex; flex-direction:column; gap:12px; margin-bottom:22px;}
+  .opcion{
+    background:var(--blanco); border:2px solid var(--beige); border-radius:var(--radio-btn);
+    padding:16px 18px; font-size:1.1rem; font-weight:600; color:var(--marrón);
+    cursor:pointer; text-align:left; display:flex; align-items:center; gap:12px; transition:all .12s;
+  }
+  .opcion .icono{font-size:1.4rem;}
+  .opcion .desc{font-size:.85rem; color:var(--texto-suave); font-weight:400; display:block;}
+  .opcion.seleccionada{border-color:var(--verde); background:var(--crema-2); color:var(--verde-osc);}
+  .opcion.seleccionada .desc{color:var(--verde-osc);}
+  .opcion .check{margin-left:auto; font-size:1.3rem; color:var(--verde); opacity:0;}
+  .opcion.seleccionada .check{opacity:1;}
+  /* ===== CANTIDAD ===== */
+  .cantidad{display:flex; align-items:center; justify-content:center; gap:20px; margin:8px 0 24px;}
+  .cantidad .btn-cant{
+    width:64px; height:64px; border-radius:50%; border:none; font-size:2rem; font-weight:800;
+    background:var(--beige); color:var(--marrón-osc); cursor:pointer; box-shadow:var(--sombra);
+  }
+  .cantidad .btn-cant:hover{background:var(--tostado); color:var(--blanco);}
+  .cantidad .valor{font-size:2.2rem; font-weight:800; color:var(--marrón-osc); min-width:48px; text-align:center;}
+  /* ===== RESUMEN ===== */
+  .resumen{background:var(--blanco); border-radius:var(--radio); box-shadow:var(--sombra); padding:18px; margin-bottom:18px;}
+  .resumen .fila{display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--crema);}
+  .resumen .fila:last-child{border-bottom:none;}
+  .resumen .fila .label{color:var(--texto-suave); font-size:.95rem;}
+  .resumen .fila .valor{font-weight:700; color:var(--marrón-osc);}
+  .resumen .fila .valor.destacado{font-size:1.2rem; color:var(--tostado); font-weight:800;}
+  .resumen .total{display:flex; justify-content:space-between; align-items:center; padding-top:14px; margin-top:6px; border-top:2px solid var(--beige);}
+  .resumen .total .label{font-size:1.1rem; font-weight:700; color:var(--marrón-osc);}
+  .resumen .total .valor{font-size:1.6rem; font-weight:800; color:var(--tostado);}
+  /* ===== CONFIRMACIÓN ===== */
+  .confirmacion{text-align:center; padding:30px 0;}
+  .confirmacion .emoji-grande{font-size:4.5rem; display:block; margin-bottom:14px;}
+  .confirmacion h2{font-size:1.7rem; font-weight:800; color:var(--verde-ok); margin-bottom:10px;}
+  .confirmacion p{font-size:1.05rem; color:var(--texto-suave); margin-bottom:6px;}
+  .confirmacion .ancla{font-size:1.3rem; font-weight:800; color:var(--marrón-osc); background:var(--blanco); border-radius:var(--radio); padding:14px; margin:16px 0; box-shadow:var(--sombra);}
+  .confirmacion .ancla .icono{font-size:1.5rem; margin-right:8px;}
+  /* ===== REENGANCHE ===== */
+  .reenganche{text-align:center; padding:20px 0;}
+  .reenganche .emoji-grande{font-size:3.6rem; display:block; margin-bottom:12px;}
+  .reenganche h2{font-size:1.5rem; font-weight:800; color:var(--marrón-osc); margin-bottom:8px;}
+  .reenganche p{font-size:1rem; color:var(--texto-suave); margin-bottom:18px;}
+  .oferta{background:var(--blanco); border:2px dashed var(--tostado); border-radius:var(--radio); padding:14px; margin:14px 0; font-weight:700; color:var(--tostado); font-size:1.05rem;}
+  /* ===== BARRA PEDIDO ===== */
+  .barra-pedido{
+    position:sticky; bottom:0; background:var(--blanco); border-top:2px solid var(--beige);
+    padding:12px 20px; display:flex; align-items:center; justify-content:space-between; gap:12px;
+    box-shadow:0 -4px 14px rgba(61,39,19,.08);
+  }
+  .barra-pedido .resumen-mini{font-size:.9rem; color:var(--texto-suave);}
+  .barra-pedido .resumen-mini .total{font-weight:800; color:var(--tostado); font-size:1.1rem;}
+  .barra-pedido .btn{width:auto; padding:14px 22px; font-size:1.05rem;}
+  .barra-pedido.oculto{display:none;}
+  /* ===== TOAST ===== */
+  .toast{
+    position:fixed; bottom:90px; left:50%; transform:translateX(-50%) translateY(20px);
+    background:var(--marrón-osc); color:var(--blanco); padding:14px 22px; border-radius:12px;
+    font-size:1rem; font-weight:600; box-shadow:var(--sombra); opacity:0; pointer-events:none;
+    transition:all .25s; z-index:100; max-width:90%; text-align:center;
+  }
+  .toast.visible{opacity:1; transform:translateX(-50%) translateY(0);}
+  .toast.ok{background:var(--verde-ok);}
+  .toast.error{background:var(--rojo);}
+  /* ===== RESPONSIVE ===== */
+  @media (min-width:600px){
+    .catalogo{flex-direction:row; flex-wrap:wrap;}
+    .tarjeta{flex:1 1 45%;}
+  }
+</style>
+</head>
+<body>
+
+<!-- ============ PANTALLA 1: HERO (descubrir) ============ -->
+<section class="pantalla activa" id="pantalla-hero">
+  <div class="contenido">
+    <div class="hero">
+      <span class="emoji">🍞</span>
+      <h1>Despacho de Pan</h1>
+      <p>Pan y repostería dulce y salada, horneados por encargo.</p>
+      <p>Encarga hoy, recoge cuando te avisemos.</p>
+      <div class="diferenciador"><span class="icono">📱</span>Tu pan de cada semana, encargado en 2 toques</div>
+    </div>
+    <div class="pie-accion">
+      <button class="btn btn-primario btn-grande" id="btn-ver-catalogo"><span class="icono">🥖</span>Encarga tu pan</button>
+    </div>
+  </div>
+</section>
+
+<!-- ============ PANTALLA 2: CATÁLOGO (elegir) ============ -->
+<section class="pantalla" id="pantalla-catalogo">
+  <div class="cabecera">
+    <button class="btn-volver" data-volver="pantalla-hero" aria-label="Volver">←</button>
+    <div class="marca">Despacho <span class="pan">de Pan</span></div>
+    <span style="width:40px"></span>
+  </div>
+  <div class="contenido">
+    <h2 class="titulo-seccion">Elige tu pan</h2>
+    <p class="subtitulo">Toca un producto para ver sus opciones.</p>
+    <div class="catalogo" id="catalogo">
+      <!-- tarjetas generadas por JS -->
+    </div>
+  </div>
+  <div class="barra-pedido oculto" id="barra-pedido">
+    <div class="resumen-mini"><span id="mini-items">0</span> · <span class="total" id="mini-total">0,00 €</span></div>
+    <button class="btn btn-primario" id="btn-ver-pedido">🛒 Ver pedido</button>
+  </div>
+</section>
+
+<!-- ============ PANTALLA 3: SELECTOR DE OPCIONES ============ -->
+<section class="pantalla" id="pantalla-selector">
+  <div class="cabecera">
+    <button class="btn-volver" data-volver="pantalla-catalogo" aria-label="Volver">←</button>
+    <div class="marca">Despacho <span class="pan">de Pan</span></div>
+    <span style="width:40px"></span>
+  </div>
+  <div class="contenido">
+    <h2 class="selector-titulo" id="sel-nombre">Producto</h2>
+    <p class="selector-item" id="sel-detalle"></p>
+
+    <div class="grupo-opciones">
+      <div class="opcion" data-cantidad="1">
+        <span class="icono">🥖</span>
+        <span>1 unidad<span class="desc">Para probar</span></span>
+        <span class="check">✓</span>
+      </div>
+      <div class="opcion" data-cantidad="2">
+        <span class="icono">🥖🥖</span>
+        <span>2 unidades<span class="desc">Para la familia</span></span>
+        <span class="check">✓</span>
+      </div>
+      <div class="opcion" data-cantidad="4">
+        <span class="icono">🥖🥖🥖🥖</span>
+        <span>4 unidades<span class="desc">Para toda la semana</span></span>
+        <span class="check">✓</span>
+      </div>
+    </div>
+
+    <div class="grupo-opciones">
+      <div class="opcion" data-franja="hoy">
+        <span class="icono">☀️</span>
+        <span>HOY<span class="desc">Recoge hoy</span></span>
+        <span class="check">✓</span>
+      </div>
+      <div class="opcion" data-franja="manana">
+        <span class="icono">🌅</span>
+        <span>MAÑANA<span class="desc">Recoge mañana</span></span>
+        <span class="check">✓</span>
+      </div>
+      <div class="opcion" data-franja="pasado">
+        <span class="icono">📅</span>
+        <span>PASADO MAÑANA<span class="desc">Recoge pasado mañana</span></span>
+        <span class="check">✓</span>
+      </div>
+    </div>
+
+    <div class="pie-accion">
+      <button class="btn btn-tostado btn-grande" id="btn-anadir">Añadir al pedido</button>
+    </div>
+  </div>
+</section>
+
+<!-- ============ PANTALLA 4: RESUMEN (convertir) ============ -->
+<section class="pantalla" id="pantalla-resumen">
+  <div class="cabecera">
+    <button class="btn-volver" data-volver="pantalla-catalogo" aria-label="Volver">←</button>
+    <div class="marca">Despacho <span class="pan">de Pan</span></div>
+    <span style="width:40px"></span>
+  </div>
+  <div class="contenido">
+    <h2 class="titulo-seccion">Tu pedido</h2>
+    <p class="subtitulo">Revisa antes de pagar.</p>
+    <div class="resumen" id="resumen-items">
+      <!-- items generados por JS -->
+    </div>
+    <div class="resumen">
+      <div class="fila"><span class="label">Recogida</span><span class="valor" id="res-franja">—</span></div>
+      <div class="fila"><span class="label">Nombre</span><span class="valor" id="res-nombre">—</span></div>
+      <div class="total"><span class="label">Total</span><span class="valor" id="res-total">0,00 €</span></div>
+    </div>
+    <div class="pie-accion">
+      <button class="btn btn-primario btn-grande" id="btn-pagar"><span class="icono">💳</span>Pagar ahora</button>
+    </div>
+  </div>
+</section>
+
+<!-- ============ PANTALLA 5: CONFIRMACIÓN (señal) ============ -->
+<section class="pantalla" id="pantalla-confirmacion">
+  <div class="contenido">
+    <div class="confirmacion">
+      <span class="emoji-grande">✅</span>
+      <h2>¡Pedido confirmado!</h2>
+      <p>Hemos recibido tu encargo.</p>
+      <p>Te avisaremos cuando esté listo para recoger.</p>
+      <div class="ancla"><span class="icono">📦</span>Recoge a nombre de: <strong id="conf-nombre">—</strong></div>
+      <p id="conf-franja" style="font-size:.95rem">Recogida: <strong id="conf-franja-valor">—</strong></p>
+    </div>
+    <div class="pie-accion">
+      <button class="btn btn-secundario" id="btn-nuevo-pedido">Hacer otro pedido</button>
+    </div>
+  </div>
+</section>
+
+<!-- ============ PANTALLA 6: REENGANCHE (repetir) ============ -->
+<section class="pantalla" id="pantalla-reenganche">
+  <div class="contenido">
+    <div class="reenganche">
+      <span class="emoji-grande">🔁</span>
+      <h2>¿Repites tu pan esta semana?</h2>
+      <p>Tu pedido de la semana pasada está guardado.</p>
+      <div class="oferta">🎁 Esta semana: <strong>10% de descuento</strong> en tu pedido recurrente</div>
+    </div>
+    <div class="pie-accion">
+      <button class="btn btn-primario btn-grande" id="btn-repetir"><span class="icono">🔁</span>Repetir mi pedido</button>
+      <button class="btn btn-secundario" id="btn-cambiar" style="margin-top:12px">Cambiar mi pedido</button>
+    </div>
+  </div>
+</section>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============================================================
+   DESPACHO DE PAN — Web de consumo (P1)
+   Esquema: esquema-cliente (9 hojas atómicas)
+   Lógica: señal > precio · un flujo responde siempre · cero merma
+   ============================================================ */
+
+// ---- Estado de la app ----
+const estado = {
+  catalogo: [],          // productos cargados
+  seleccion: null,       // producto en el selector
+  cantidad: 1,
+  franja: 'hoy',
+  pedido: [],            // items del pedido
+  nombre: 'Cliente',     // ancla de recogida
+  repetible: false,      // hay pedido guardado para reenganche
+};
+
+// ---- Catálogo por defecto (Q1 ABIERTO: el dueño lo define) ----
+// Mientras el dueño no decida el catálogo real, mostramos una base artesanal.
+const CATALOGO_BASE = [
+  { id:'pan-barra',   nombre:'Barra de pan',   detalle:'Pan de barra · 250 g',  precio:1.20, icono:'🥖' },
+  { id:'pan-redondo', nombre:'Pan redondo',    detalle:'Pan de pueblo · 500 g', precio:2.40, icono:'🍞' },
+  { id:'bolleria',    nombre:'Bollería',       detalle:'Croissant, napolitana…', precio:1.80, icono:'🥐' },
+  { id:'dulce',       nombre:'Dulce',          detalle:'Tarta, bizcocho…',      precio:3.50, icono:'🍰' },
+  { id:'salado',      nombre:'Salado',         detalle:'Empanada, focaccia…',   precio:2.90, icono:'🥨' },
+];
+
+// ---- Utilidades ----
+const $ = (sel) => document.querySelector(sel);
+const $$ = (sel) => document.querySelectorAll(sel);
+const fmt = (n) => n.toFixed(2).replace('.', ',') + ' €';
+
+function mostrar(pantallaId){
+  $$('.pantalla').forEach(p => p.classList.remove('activa'));
+  $('#' + pantallaId).classList.add('activa');
+  window.scrollTo(0,0);
+}
+
+function toast(msg, tipo=''){
+  const t = $('#toast');
+  t.textContent = msg;
+  t.className = 'toast visible ' + tipo;
+  clearTimeout(t._t);
+  t._t = setTimeout(() => t.classList.remove('visible'), 2600);
+}
+
+// ---- Cargar catálogo (señal: catálogo cargado) ----
+function cargarCatalogo(){
+  // En producción: catalogo.listar → estado.catalogo
+  // Mientras Q1 esté abierto, usamos la base.
+  estado.catalogo = CATALOGO_BASE;
+  renderCatalogo();
+}
+
+function renderCatalogo(){
+  const cont = $('#catalogo');
+  cont.innerHTML = '';
+  estado.catalogo.forEach(p => {
+    const card = document.createElement('div');
+    card.className = 'tarjeta';
+    card.dataset.id = p.id;
+    card.innerHTML = `
+      <span class="icono">${p.icono}</span>
+      <div class="info">
+        <div class="nombre">${p.nombre}</div>
+        <div class="detalle">${p.detalle}</div>
+      </div>
+      <div class="precio">${fmt(p.precio)}</div>
+    `;
+    card.addEventListener('click', () => abrirSelector(p.id));
+    cont.appendChild(card);
+  });
+}
+
+// ---- Selector de opciones ----
+function abrirSelector(id){
+  const p = estado.catalogo.find(x => x.id === id);
+  if(!p) return;
+  estado.seleccion = p;
+  estado.cantidad = 1;
+  estado.franja = 'hoy';
+  $('#sel-nombre').textContent = p.nombre;
+  $('#sel-detalle').textContent = p.detalle + ' · ' + fmt(p.precio) + ' / unidad';
+  // reset selecciones
+  $$('#pantalla-selector .opcion').forEach(o => o.classList.remove('seleccionada'));
+  $$('#pantalla-selector .opcion[data-cantidad="1"]')[0].classList.add('seleccionada');
+  $$('#pantalla-selector .opcion[data-franja="hoy"]')[0].classList.add('seleccionada');
+  mostrar('pantalla-selector');
+}
+
+// selección de opciones
+$$('#pantalla-selector .opcion').forEach(op => {
+  op.addEventListener('click', () => {
+    const grupo = op.dataset.cantidad ? '[data-cantidad]' : '[data-franja]';
+    $$('#pantalla-selector ' + grupo).forEach(o => o.classList.remove('seleccionada'));
+    op.classList.add('seleccionada');
+    if(op.dataset.cantidad) estado.cantidad = parseInt(op.dataset.cantidad, 10);
+    if(op.dataset.franja) estado.franja = op.dataset.franja;
+  });
+});
+
+// ---- Añadir al pedido ----
+$('#btn-anadir').addEventListener('click', () => {
+  const p = estado.seleccion;
+  if(!p) return;
+  const existente = estado.pedido.find(i => i.id === p.id && i.franja === estado.franja);
+  if(existente){
+    existente.cantidad += estado.cantidad;
+  } else {
+    estado.pedido.push({ id:p.id, nombre:p.nombre, icono:p.icono, precio:p.precio, cantidad:estado.cantidad, franja:estado.franja });
+  }
+  actualizarBarra();
+  toast('Añadido: ' + p.nombre, 'ok');
+  mostrar('pantalla-catalogo');
+});
+
+function totalPedido(){
+  return estado.pedido.reduce((s,i) => s + i.precio * i.cantidad, 0);
+}
+
+function actualizarBarra(){
+  const n = estado.pedido.reduce((s,i) => s + i.cantidad, 0);
+  $('#mini-items').textContent = n + (n === 1 ? ' artículo' : ' artículos');
+  $('#mini-total').textContent = fmt(totalPedido());
+  $('#barra-pedido').classList.toggle('oculto', n === 0);
+}
+
+// ---- Ver pedido (resumen) ----
+$('#btn-ver-pedido').addEventListener('click', () => {
+  renderResumen();
+  mostrar('pantalla-resumen');
+});
+
+function renderResumen(){
+  const cont = $('#resumen-items');
+  cont.innerHTML = '';
+  estado.pedido.forEach(i => {
+    const fila = document.createElement('div');
+    fila.className = 'fila';
+    fila.innerHTML = `
+      <span class="label">${i.icono} ${i.nombre} × ${i.cantidad}</span>
+      <span class="valor">${fmt(i.precio * i.cantidad)}</span>
+    `;
+    cont.appendChild(fila);
+  });
+  const franjaTxt = { hoy:'HOY', manana:'MAÑANA', pasado:'PASADO MAÑANA' }[estado.franja] || 'HOY';
+  $('#res-franja').textContent = franjaTxt;
+  $('#res-nombre').textContent = estado.nombre;
+  $('#res-total').textContent = fmt(totalPedido());
+}
+
+// ---- Pagar (convertir) ----
+$('#btn-pagar').addEventListener('click', () => {
+  if(estado.pedido.length === 0){ toast('Tu pedido está vacío', 'error'); return; }
+  // En producción: pedido.crear → pago.iniciar (link de pago)
+  // Q4 ABIERTO: método de pago lo decide el dueño.
+  toast('Procesando pago…');
+  setTimeout(() => {
+    // señal: pedido confirmado
+    estado.repetible = true;
+    const franjaTxt = { hoy:'HOY', manana:'MAÑANA', pasado:'PASADO MAÑANA' }[estado.franja] || 'HOY';
+    $('#conf-nombre').textContent = estado.nombre;
+    $('#conf-franja-valor').textContent = franjaTxt;
+    mostrar('pantalla-confirmacion');
+  }, 900);
+});
+
+// ---- Nuevo pedido ----
+$('#btn-nuevo-pedido').addEventListener('click', () => {
+  estado.pedido = [];
+  actualizarBarra();
+  mostrar('pantalla-hero');
+});
+
+// ---- Reenganche (repetir) ----
+$('#btn-repetir').addEventListener('click', () => {
+  // En producción: cuenta-recurrente.generar_semana → aplica 10%
+  toast('Pedido de la semana generado con 10% de descuento', 'ok');
+  setTimeout(() => {
+    estado.repetible = true;
+    $('#conf-nombre').textContent = estado.nombre;
+    $('#conf-franja-valor').textContent = 'HOY';
+    mostrar('pantalla-confirmacion');
+  }, 800);
+});
+
+$('#btn-cambiar').addEventListener('click', () => mostrar('pantalla-catalogo'));
+
+// ---- Navegación volver ----
+$$('.btn-volver').forEach(btn => {
+  btn.addEventListener('click', () => mostrar(btn.dataset.volver));
+});
+
+// ---- Inicio ----
+$('#btn-ver-catalogo').addEventListener('click', () => mostrar('pantalla-catalogo'));
+
+// Si hay pedido guardado (reenganche), ofrecer repetir al entrar
+function ofrecerReenganche(){
+  if(estado.repetible){
+    // se muestra la pantalla de reenganche la próxima visita
+  }
+}
+
+cargarCatalogo();
+</script>
+</body>
+</html>

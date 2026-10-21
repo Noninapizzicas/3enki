@@ -1,0 +1,61 @@
+{
+  "_doc": "Manifest de fiscal/perfil-administrativo — CUSTODIO CON PERSISTENCIA (D15, hoja del plan). La PARCELA DECLARABLE de que administraciones y obligaciones aplican (territorio y regimen). UN SOLO ESCRITOR: solo el rol ADMINISTRATIVO declara (segundo escritor → 403 PERMISSION_DENIED). NO calcula obligaciones: las DECLARA el jefe; dato ausente = desconocido, jamas se estima. Sin regimen/territorio/obligaciones declarados → [ABIERTO] (el sistema pregunta, no decide). No se borra: re-declarar APPENDEA al historial con fecha y autor. Persiste por proyecto via PosPersistencia (storage /contabilidad/perfil-administrativo), restaura en project.activated y vuelca en onUnload. R2: al declarar publica contabilidad.perfil_administrativo_declarado (lo escucha calendario-fiscal D6) y SUBE best-effort cola-declaraciones-criterio.fijar.request (D3) y calendario-fiscal.declarar.request (D6). DOS RPC: declarar es CLASE ORDEN → SI lleva ui_handler (mesa del asesor); obligaciones es CLASE PREGUNTA (lectura) → SIN ui_handler (su cara es el bus).",
+  "name": "perfil-administrativo",
+  "version": "0.1.0",
+  "description": "Custodio (D15): perfil declarable de administraciones y obligaciones (territorio y regimen). Un solo escritor; lo no declarado queda abierto, no se estima.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "perfil-administrativo.obligaciones.request",
+      "handler": "onObligacionesRequest",
+      "description": "RPC custodio (PREGUNTA, por el bus): {project_id} → {project_id, regimen, territorio, obligaciones, estado, abierto}. LEE el perfil declarado; si no existe, el sistema pregunta y NO estima. Responde por perfil-administrativo.obligaciones.response. Payload invalido → perfil-administrativo.obligaciones.failed."
+    },
+    {
+      "event": "perfil-administrativo.declarar.request",
+      "handler": "onDeclararRequest",
+      "description": "RPC custodio (ORDEN, panel del asesor): {project_id, rol:'ADMINISTRATIVO', regimen?, territorio?, obligaciones?} → {project_id, perfil, declarado, abierto}. UN escritor (rol != ADMINISTRATIVO → 403). Sin datos declarados → estado [ABIERTO]. Publica contabilidad.perfil_administrativo_declarado (R2) y SUBE cola-declaraciones-criterio.fijar.request + calendario-fiscal.declarar.request. Responde por perfil-administrativo.declarar.response; fallo → perfil-administrativo.declarar.failed."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Restaura el perfil administrativo del proyecto activado desde el storage (PosPersistencia). Emitido por el core."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "contabilidad.perfil_administrativo_declarado",
+      "description": "Fire-and-forget (D15): el perfil administrativo quedo declarado → {project_id, regimen, territorio, obligaciones, estado, abierto}. Lo escucha calendario-fiscal (D6)."
+    },
+    {
+      "event": "cola-declaraciones-criterio.fijar.request",
+      "description": "Subida (REQUEST por EVENTO) a D3: fija el criterio declarado del perfil para que se deriven los modelos aplicables."
+    },
+    {
+      "event": "calendario-fiscal.declarar.request",
+      "description": "Subida (REQUEST por EVENTO) a D6: declara el perfil/obligaciones en el calendario fiscal."
+    },
+    {
+      "event": "perfil-administrativo.obligaciones.response",
+      "description": "Respuesta RPC correlada de la op obligaciones (lectura)."
+    },
+    {
+      "event": "perfil-administrativo.declarar.response",
+      "description": "Respuesta RPC correlada de la op declarar (escritura)."
+    },
+    {
+      "event": "perfil-administrativo.obligaciones.failed",
+      "description": "Par de fallo determinista de la op obligaciones: falta project_id → {status, code, message}."
+    },
+    {
+      "event": "perfil-administrativo.declarar.failed",
+      "description": "Par de fallo determinista de la op declarar: falta project_id o rol no autorizado (403) → {status, code, message}."
+    }
+  ],
+  "tools": [
+    { "name": "perfil-administrativo.declarar", "description": "Declara (ORDEN) el perfil administrativo (regimen, territorio, obligaciones) y anuncia el hecho." },
+    { "name": "perfil-administrativo.obligaciones", "description": "Lee (PREGUNTA) las obligaciones del perfil administrativo declarado." }
+  ],
+  "ui_handlers": [
+    { "domain": "contabilidad", "action": "perfil-administrativo.declarar", "handler": "onDeclararRequest", "type": "system_panel", "zone": "lateral_derecha" }
+  ]
+}

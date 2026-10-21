@@ -1,0 +1,23 @@
+{
+  "name": "ensamblador-solucion",
+  "version": "0.1.0",
+  "description": "MICRO-AGENTE del vertical NICHOS (el mas complejo del bloque D): ensambla una solucion a partir de un veredicto y un camino. Consulta el catalogo de capacidades (disponibles/encargar), alza puente humano si hay bloqueo, y usa ai-gateway para fuzzy matching. Atiende el RPC nichos.solucion.ensamblar y emite pulsos de construccion (iniciada/completada/failed).",
+  "_doc": "modules/nichos/ensamblador-solucion — MICRO-AGENTE del vertical NICHOS.\n\nQue hace: recibe un id_nicho, veredicto y camino; consulta capacidades disponibles; encarga las faltantes; si hay bloqueo alza puente humano; usa LLM para fuzzy matching de requisitos vs capacidades. Emite pulsos de progreso de construccion.\n\nSin estado persistido. Patron: ModuloHibridoReflejo (micro-agente — usa LLM via ai-gateway).",
+  "ui_decision": {
+    "necesita": false,
+    "razon": "Micro-agente sin cara propia. Ensambla soluciones internamente, emite pulsos de progreso al bus y alza puente humano por bus cuando se bloquea. Sin interaccion directa con el humano."
+  },
+  "publishes": [
+    { "event": "nichos.construccion.iniciada", "description": "PULSO: comienza el ensamblaje de una solucion. Payload: {id_proyecto, timestamp}." },
+    { "event": "nichos.construccion.completada", "description": "PULSO: ensamblaje completado. Payload: {id_proyecto, capacidades_creadas[], capacidades_pendientes[], timestamp}." },
+    { "event": "nichos.construccion.failed", "description": "PULSO: ensamblaje fallido. Payload: {id_proyecto, razon_codigo, detalle, timestamp}." },
+    { "event": "nichos.solucion.ensamblar.response", "description": "Response correlada por request_id al RPC nichos.solucion.ensamblar.request. Payload: {status, data:{solucion|puente_humano_aviso|solicitud_decision}}." },
+    { "event": "nichos.catalogo.capacidad.disponibles.request", "description": "RPC al catalogo de capacidades: consulta las disponibles." },
+    { "event": "nichos.catalogo.capacidad.encargar.request", "description": "RPC al catalogo de capacidades: encarga capacidades faltantes." },
+    { "event": "nichos.puente.humano.alzar.request", "description": "RPC al puente humano: alza una solicitud de intervencion humana ante bloqueo." },
+    { "event": "llm.complete.request", "description": "Solicitud al ai-gateway para fuzzy matching de requisitos vs capacidades." }
+  ],
+  "subscribes": [
+    { "event": "nichos.solucion.ensamblar.request", "handler": "onEnsamblarRequest", "description": "RPC: ensambla una solucion a partir de veredicto y camino, devuelve resultado via response correlada." }
+  ]
+}

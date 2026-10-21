@@ -1,0 +1,148 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "escandallo",
+  "version": "blueprint-2.0.0",
+  "moduleId": "escandallo",
+  "titulo": "Food-cost por receta: la sala de lectura del coste (dictamen del motor). El jefe MIRA la tabla-calculo (ingrediente x cantidad = coste), JUZGA margen/validez y DISPARA costeos (lote/siguiente/uno) y derivaciones (escalar). Sin escritura de reglas: los precios viven en ingredientes, las recetas en recetas.",
+  "_doc": "Blueprint de INTERFAZ (blueprint-interfaz-v2) de la cara del JEFE del modulo escandallo (pizzepos v2.3.0, hibrido). Vive junto al panel (frontend/src/lib/modules/escandallo/) por decision de ciclo v2 — el blueprint HIBRIDO del modulo (modules/pizzepos/escandallo/escandallo.blueprint.json, blueprint-3.12.0 cajones+LLM Mercadona) NO se toca. La lente de roles consolidada vive en modules/pizzepos/escandallo/esquema-jefe/esquema.md. Verificaciones de codigo: modules/pizzepos/escandallo/index.js v1.4.0 (5 handlers, euros, publicacion unica escandallo.coste.calculado) y modules/pizzepos/recetas/index.js (listar/obtener shapes). Shapes verificados, nada inventado: el margen objetivo y el precio de venta NO existen hoy en ningun shape ([ABIERTO], ver _lente_roles.huecos).",
+  "eventos_publicados": [
+    "escandallo.coste.calculado"
+  ],
+  "eventos_que_escucho": [
+    "escandallo.coste.calculado"
+  ],
+  "transporte": {
+    "rpc": [
+      "escandallo.costear.request -> .response",
+      "escandallo.escalar.request -> .response",
+      "escandallo.recalcular_siguiente.request -> .response",
+      "escandallo.recalcular_lote.request -> .response",
+      "escandallo.validar.request -> .response",
+      "recetas.listar.request -> .response (fuente del ref-select y de la cinta)",
+      "recetas.obtener.request -> .response (fuente de la tabla-calculo)"
+    ],
+    "salida": [
+      "escandallo.coste.calculado"
+    ]
+  },
+  "ui": {
+    "_doc": "Schema de panel para la cara del JEFE. Jefe-primero: primero la cinta + la tabla del dictamen (lo diario), despues los gestos de costeo (por epocas), y al final derivaciones/validacion (raros). La UI no calcula nada de negocio: el coste es un dictamen del motor; el unico calculo local es el % de presentacion por fila (valor/coste_total).",
+    "ops": {
+      "recalcular_lote": { "titulo": "Recalcular Lote" },
+      "recalcular_siguiente": { "titulo": "Recalcular Siguiente" },
+      "costear": { "titulo": "Costear" },
+      "escalar": { "titulo": "Escalar" },
+      "validar": { "titulo": "Validar" }
+    },
+    "datos": {
+      "op": "recetas.listar",
+      "titulo": "Recetas con coste (cinta + ref-select)",
+      "refresh_on": ["escandallo.coste.calculado"]
+    },
+    "datos_detalle": {
+      "op": "recetas.obtener",
+      "titulo": "Tabla-calculo de una receta (lineas + lineas_detalle)",
+      "refresh_on": ["escandallo.coste.calculado"]
+    },
+    "estados": [
+      { "nombre": "escandalizada", "terminal": false, "color": "green", "icono": "OK" },
+      { "nombre": "pendiente_de_costear", "terminal": false, "color": "yellow", "icono": "PEND" },
+      { "nombre": "con_huecos_de_precio", "terminal": false, "color": "red", "icono": "SIN PRECIO" }
+    ],
+    "flujo": [
+      {
+        "nombre": "jefe",
+        "orden": 1,
+        "ops": ["costear", "recalcular_siguiente", "recalcular_lote"],
+        "descripcion": "Dispara el costeo que regenera el dictamen: una receta (la que mira), la siguiente pendiente, o el lote completo. El coste no se edita: se recalcula."
+      },
+      {
+        "nombre": "consulta",
+        "orden": 2,
+        "ops": ["validar", "escalar"],
+        "descripcion": "Fiar el numero (dictamen de procedencia+coherencia) y derivar el coste a otro diametro (masa x diametro, resto x area, no persiste)."
+      },
+      {
+        "nombre": "fuente_de_datos",
+        "orden": 3,
+        "ops": ["recetas.listar", "recetas.obtener"],
+        "descripcion": "Lecturas por el reflejo de recetas: la cinta y el ref-select vienen de listar (incluir_lineas: true trae coste_unidad por receta); la tabla-calculo viene de obtener (receta completa: lineas + lineas_detalle + costes)."
+      }
+    ],
+    "roles": {
+      "recalcular_lote": "jefe",
+      "recalcular_siguiente": "jefe",
+      "costear": "jefe",
+      "escalar": "neutro",
+      "validar": "neutro",
+      "recetas_listar": "neutro",
+      "recetas_obtener": "neutro"
+    },
+    "formas_jefe": {
+      "cinta_estado_lote": {
+        "forma": "cinta-estado",
+        "rpc": "recetas.listar {estado:'en_servicio', incluir_lineas:true, limit:1000}",
+        "senal": "escandallo.coste.calculado (N x en lote -> debounce 60ms, una re-lectura)"
+      },
+      "seleccion_de_receta": {
+        "forma": "ref-select",
+        "rpc": "recetas.listar {estado:'en_servicio', incluir_lineas:true} -> recetas.obtener {receta_id}",
+        "senal": null
+      },
+      "tabla_calculo": {
+        "forma": "tabla-calculo legible (ingrediente x cantidad = coste de linea)",
+        "rpc": "recetas.obtener {receta_id} -> lineas + lineas_detalle + costes del dictamen",
+        "senal": "escandallo.coste.calculado (misma receta re-render)"
+      },
+      "costeo_lote": {
+        "forma": "inline-gesture (boton de cinta)",
+        "rpc": "escandallo.recalcular_lote {} -> {costeadas[], sin_precio[], terminado}",
+        "senal": "N x escandallo.coste.calculado (1 por receta)"
+      },
+      "costeo_siguiente": {
+        "forma": "inline-gesture (boton de cinta)",
+        "rpc": "escandallo.recalcular_siguiente {} -> {costeada, faltan, terminado}",
+        "senal": "1 x escandallo.coste.calculado"
+      },
+      "regenerar_una": {
+        "forma": "inline-gesture sobre la tabla",
+        "rpc": "escandallo.costear {receta_id, persistir:true}",
+        "senal": "1 x escandallo.coste.calculado"
+      },
+      "validar_dictamen": {
+        "forma": "confirmador-nombrado",
+        "rpc": "escandallo.validar {costeo} -> {valid, errors[], precios_estimados[]}",
+        "senal": null
+      },
+      "escalar_superficie": {
+        "forma": "editor-bloque",
+        "rpc": "escandallo.escalar {receta_id, diametro_origen, diametro_destino} -> factores + coste derivado (NO persiste)",
+        "senal": null
+      }
+    }
+  },
+  "_lente_roles": {
+    "agente": "crear-blueprint-jefe v2 (ciclo v2 escandallo)",
+    "metodo": "esquematizador-jefe",
+    "arbitro": "futuro->jefe | ahora->utilizacion | solo-lee->neutro",
+    "consolidacion": "modules/pizzepos/escandallo/esquema-jefe/esquema.md",
+    "dualidad": "JEFE=dispara costeos que regeneran el dictamen (costear/recalcular_siguiente/recalcular_lote: el constructor del futuro estado de costes) | UTILIZACION=vacia (el coste no se vende: nada de este modulo corre en la atencion; la venta lee precios de carta/tarifas) | neutro=escalar/validar (derivacion y dictamen: juzgan, no fijan reglas) + lecturas recetas.*",
+    "senales_pareadas": "costear (con receta_id) -> escandallo.coste.calculado (1x) · recalcular_siguiente -> 1x · recalcular_lote -> N x (1 por receta: publica DENTRO del for, index.js _recalcularLote -> _persistir) · escalar -> SIN senal (no persiste: derivacion transitoria, la respuesta RPC es la confirmacion — nombrado) · validar -> SIN senal (funcion pura) · costeo externo (otra ventana/agente) -> escandallo.coste.calculado re-puebla igual",
+    "moneda": "EUROS verificados en index.js: coste_total redondeado a 2 decimales (_round(coste,2) L305); coste_unidad a 6 decimales para no tragarse sub-recetas baratas (L309, la masa a 0,001 €/g). La UI muestra y envia € SIN conversion a centimos. precios_unitarios de linea vienen ya convertidos por _convertir (kg->g, l->ml).",
+    "nota_externa": "Los PRECIOS del catalogo los reta el jefe en SU panel (ingredientes, señal pareada ingrediente.actualizado). Aqui el coste solo se recalcula: si un precio subio, el efecto se ve tras re-costear. Los precios de venta y el margen objetivo NO existen en ningun shape (recetas.listar/obtener no traen precio_venta; escandallo no calcula margen sin precio de venta) — huecos ABIERTO, la UI no los inventa.",
+    "huecos": {
+      "margen_objetivo": "[ABIERTO] el jefe quiere ver margen vs objetivo (cinta '% sobre objetivo'); no hay campo en recetas ni op que lo declare. Decision del dueño pendiente (donde vive, como se declara). El panel muestra el coste y su desglose; cualquier % sobre objetivo seria inventado.",
+      "precio_venta_referencia": "[ABIERTO] precio de venta por receta para margen €/% reales — vive fuera (carta/tarifas); puente sin definir.",
+      "umbral_food_cost_sano": "[ABIERTO] heuristicas del panel viejo (25-33%) no son regla del dominio sin cierre del dueño.",
+      "caducidad_del_coste": "[ABIERTO] politica de re-costeo (precios del catalogo subidos desde coste_actualizado_at)."
+    },
+    "utilizacion": []
+  },
+  "_verificado_en_codigo": {
+    "reflejo": "modules/pizzepos/escandallo/index.js (v1.4.0): onCostearRequest/onEscalarRequest/onRecalcularSiguienteRequest/onRecalcularLoteRequest/onValidarRequest",
+    "publicacion": "index.js _persistir -> eventBus.publish('escandallo.coste.calculado', {...}) — unico evento del modulo",
+    "fuentes_recetas": "modules/pizzepos/recetas/index.js listar{incluir_lineas}(coste_unidad por receta) y obtener(receta completa)",
+    "sin_precio": "lineas_sin_precio[] es honestidad del costeo (ingredientes sin precio en catalogo), no error",
+    "errores": "400 INVALID_INPUT (falta project_id/receta_id/diametro_destino) · 404 RESOURCE_NOT_FOUND (receta no existe) · 500 UNKNOWN_ERROR"
+  }
+}

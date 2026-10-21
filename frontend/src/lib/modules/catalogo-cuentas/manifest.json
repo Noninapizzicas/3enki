@@ -1,0 +1,9 @@
+{
+  "id": "catalogo-cuentas",
+  "name": "Catálogo de cuentas",
+  "version": "0.1.0",
+  "zone": "system-bar",
+  "order": 91,
+  "icon": "📒",
+  "label": "Catálogo cuentas"
+}

@@ -1,0 +1,69 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "puerto-nomina",
+  "version": "blueprint-2.0.0",
+  "moduleId": "contabilidad",
+  "titulo": "Puerto de nómina",
+  "_doc": "Blueprint v2 de INTERFAZ del módulo contabilidad/puerto-nomina (F6½). Declara la sección `ui` para el BlueprintForm (patrón interfaz-dinamico). ORIGEN DECLARABLE del dato de nómina: la FRONTERA por la que entra la nómina de un sistema de personal externo. La op recibir ADMITE una nómina ya emitida TAL CUAL (no la interpreta) y ANUNCIA contabilidad.nomina_recibida. PUENTE stateless. Las acciones van DOTTED ('<modulo>.<accion>') y el transporte.rpc va VACÍO: el RPC real es contabilidad.<accion>.request (domain 'contabilidad', action 'puerto-nomina.recibir' en ui_handlers) y la regex de deriveZones solo parsea acciones de 2 segmentos; el wrapper mqttRequest('contabilidad','puerto-nomina.recibir') emite ui/request/contabilidad/puerto-nomina.recibir, que casa con el ui_handler. Los args salen de los parámetros REALES del handler en index.js.",
+  "eventos_publicados": [
+    "contabilidad.nomina_recibida"
+  ],
+  "eventos_que_escucho": [
+    "puerto-nomina.recibir.response"
+  ],
+  "transporte": {
+    "rpc": [],
+    "salida": [
+      "contabilidad.nomina_recibida"
+    ],
+    "qos": "publishAndWait (request/response correlado) vía ui/request/contabilidad/puerto-nomina.recibir; timeout del panel 10s. transporte.rpc vacío a propósito (acciones DOTTED)."
+  },
+  "ui": {
+    "_doc": "Panel de la cara humana de puerto-nomina: la op de ESCRITURA (ORDEN) del módulo, con sus args reales. El BlueprintForm la invoca por ui/request/contabilidad/puerto-nomina.recibir.",
+    "ops": {
+      "puerto-nomina.recibir": {
+        "titulo": "Recibir una nómina de un origen externo",
+        "descripcion": "Admite (ORDEN) una nómina ya emitida por el sistema de personal externo, TAL CUAL (el puerto no la interpreta; eso es recibo-nomina G1). Anuncia el hecho de dominio contabilidad.nomina_recibida para que arranque la cadena de nómina. Sin nómina no se fabrica nada (dato ausente = desconocido).",
+        "rol": "asesor",
+        "forma": "editor-bloque (nómina json + origen + empleado + periodo)",
+        "senal_pareada": "contabilidad.nomina_recibida",
+        "args": [
+          {
+            "nombre": "nomina",
+            "tipo": "json",
+            "required": true,
+            "descripcion": "La nómina ya emitida por el origen externo (objeto/array). El puerto la admite tal cual, sin interpretarla."
+          },
+          {
+            "nombre": "origen",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Sistema de personal / vertical de origen (declarado; el puerto no lo adivina)."
+          },
+          {
+            "nombre": "empleado",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Empleado de la nómina (si no lo declara la propia nómina)."
+          },
+          {
+            "nombre": "periodo",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Periodo de la nómina (si no lo declara la propia nómina)."
+          },
+          {
+            "nombre": "recibida_en",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Marca temporal de recepción (por defecto, ahora)."
+          }
+        ],
+        "errores": "400 INVALID_INPUT (sin project_id o sin nomina)"
+      }
+    },
+    "roles": {
+      "puerto-nomina.recibir": "asesor"
+    }
+  }
+}

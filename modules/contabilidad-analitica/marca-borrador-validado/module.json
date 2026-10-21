@@ -1,0 +1,37 @@
+{
+  "_doc": "Manifest de analitica/marca-borrador-validado — REFLEJO STATELESS (Q4, hoja del plan). El SELLO del punto en que esta lo que se ve: 'en curso' (EN_CURSO) / 'revisado' (REVISADO) / 'firmado' (FIRMADO). Existe para que NO se decida sobre un borrador vivo. El sello se DERIVA de los hechos ya ocurridos, sin recalcul de dominio: contabilidad.traza_registrada (traza-asiento B4) → al menos REVISADO; contabilidad.revision_firmada (flujo-firma L3) → FIRMADO. El reflejo NO impone la marca: la acumula de los hechos que ESCUCHA y la DECLARA. El sello SOLO sube (EN_CURSO < REVISADO < FIRMADO): re-trazar no degrada lo firmado. Dato ausente = desconocido: sin hechos vistos el sello es EN_CURSO y se declara borrador vivo (no se inventa validacion). NO escribe dominio, NO persiste (registro derivado en memoria). RPC PREGUNTA → sin ui_handler, su cara es el bus. ESCUCHA contabilidad.traza_registrada y contabilidad.revision_firmada (ambos con emisor vivo). Publica marca-borrador-validado.estado.response y su par .failed.",
+  "name": "marca-borrador-validado",
+  "version": "0.1.0",
+  "description": "Reflejo (Q4): sello del punto en que esta lo que se ve (en curso/revisado/firmado) para no decidir sobre un borrador vivo. Sin estado.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "marca-borrador-validado.estado.request",
+      "handler": "onEstadoRequest",
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id, clave|referencia} → {project_id, clave, sello, validado, borrador_vivo, firmado}. Devuelve el sello del punto en que esta lo que se ve; sin hechos vistos → EN_CURSO y borrador_vivo:true (no se inventa validacion). Responde por marca-borrador-validado.estado.response; payload invalido → marca-borrador-validado.estado.failed."
+    },
+    {
+      "event": "contabilidad.traza_registrada",
+      "handler": "onTrazaRegistrada",
+      "description": "Fire-and-forget (lo emite traza-asiento B4): un asiento quedo trazado → sube el sello a REVISADO (nunca lo baja). No responde."
+    },
+    {
+      "event": "contabilidad.revision_firmada",
+      "handler": "onRevisionFirmada",
+      "description": "Fire-and-forget (lo emite flujo-firma L3): el asesor firmo → sube el sello a FIRMADO (nunca lo baja). No responde."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "marca-borrador-validado.estado.response",
+      "description": "Respuesta RPC correlada de la op estado (una sola cara: el bus)."
+    },
+    {
+      "event": "marca-borrador-validado.estado.failed",
+      "description": "Par de fallo determinista: falta project_id o clave → {status, code, message}. Cierra el circulo de estado.request."
+    }
+  ],
+  "tools": [
+    { "name": "marca-borrador-validado.estado", "description": "Lee (PREGUNTA) el sello del punto en que esta lo que se ve (en curso/revisado/firmado)." }
+  ]
+}

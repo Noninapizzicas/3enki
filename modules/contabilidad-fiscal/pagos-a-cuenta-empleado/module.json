@@ -1,0 +1,27 @@
+{
+  "_doc": "Manifest de fiscal/pagos-a-cuenta-empleado — REFLEJO STATELESS (G8, hoja del plan). ANTICIPOS/ADELANTOS y su IMPACTO en el neto y el IRPF. No todo es sueldo fijo: un pago a cuenta adelantado REDUCE el neto a percibir hoy (neto_a_percibir = base − retencion − anticipos) pero NO borra la base del IRPF — la retencion se calcula sobre el DEVENGO, no sobre lo percibido (anticipo_afecta_irpf:false, impacto_irpf:0). Mecanico y DETERMINISTA: los importes (base/bruto, retencion, anticipos) llegan DECLARADOS del recibo (G1); aqui solo se recomponen. Dato ausente = desconocido: sin base/retencion declaradas el impacto es PARCIAL (impacto_completo:false); un anticipo sin importe no se estima con 0. NO escribe, NO persiste. RPC impacto es CLASE PREGUNTA → va por el bus, sin panel. NOTA R3: el plan declara escucha de contabilidad.nomina_recibida, pero NINGUN modulo del repo lo emite AUN (lo emite puerto-nomina G4, grupo posterior): declararlo daria cadena colgada, asi que NO se declara. Publica pagos-a-cuenta-empleado.impacto.response y su par .failed.",
+  "name": "pagos-a-cuenta-empleado",
+  "version": "0.1.0",
+  "description": "Reflejo (G8): impacto de los anticipos/pagos a cuenta en el neto y el IRPF. El anticipo reduce el neto pero no el IRPF (retencion sobre devengo). Determinista.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "pagos-a-cuenta-empleado.impacto.request",
+      "handler": "onImpactoRequest",
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id, anticipos|pagos_a_cuenta, base|bruto?, retencion?} → {project_id, anticipos[], total_anticipos, base_devengo, neto_sin_anticipos, neto_a_percibir, impacto_neto, irpf, impacto_irpf, anticipo_afecta_irpf, impacto_completo, abierto}. Calcula el impacto del anticipo sobre el neto (reduce) y el IRPF (no afecta). Responde por pagos-a-cuenta-empleado.impacto.response; sin anticipos → pagos-a-cuenta-empleado.impacto.failed."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "pagos-a-cuenta-empleado.impacto.response",
+      "description": "Respuesta RPC correlada de la op impacto (una sola cara: el bus)."
+    },
+    {
+      "event": "pagos-a-cuenta-empleado.impacto.failed",
+      "description": "Par de fallo determinista: falta project_id o anticipos → {status, code, message}. Cierra el circulo de impacto.request."
+    }
+  ],
+  "tools": [
+    { "name": "pagos-a-cuenta-empleado.impacto", "description": "Calcula (PREGUNTA) el impacto de los pagos a cuenta en el neto y el IRPF." }
+  ]
+}

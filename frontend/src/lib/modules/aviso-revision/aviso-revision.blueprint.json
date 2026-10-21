@@ -1,0 +1,65 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "aviso-revision",
+  "version": "blueprint-2.0.0",
+  "moduleId": "contabilidad",
+  "titulo": "Aviso de revisión",
+  "_doc": "Blueprint v2 de INTERFAZ del módulo contabilidad/aviso-revision (F6½). Declara la sección `ui` para el BlueprintForm (patrón interfaz-dinamico). EMPÚJON al canal de avisos: 'esto necesita revisión'. Una EXCEPCIÓN SIEMPRE genera aviso: una pieza dudosa no se queda muda — se pide revisión del asesor. PUENTE stateless. Las acciones van DOTTED ('<modulo>.<accion>') y el transporte.rpc va VACÍO: el RPC real es contabilidad.<accion>.request (domain 'contabilidad', action '<modulo>.<accion>' en ui_handlers) y la regex de deriveZones solo parsea acciones de 2 segmentos; el wrapper mqttRequest('contabilidad','<modulo>.<accion>') emite ui/request/contabilidad/<modulo>.<accion>, que casa con el ui_handler. Los args salen de los parámetros REALES del handler en index.js.",
+  "eventos_publicados": [
+    "contabilidad.revision_solicitada",
+    "motor-avisos.producir.request"
+  ],
+  "eventos_que_escucho": [
+    "aviso-revision.empujar.response"
+  ],
+  "transporte": {
+    "rpc": [],
+    "salida": [
+      "contabilidad.revision_solicitada",
+      "motor-avisos.producir.request"
+    ],
+    "qos": "publishAndWait (request/response correlado) vía ui/request/contabilidad/<modulo>.<accion>; timeout del panel 10s. transporte.rpc vacío a propósito (acciones DOTTED)."
+  },
+  "ui": {
+    "_doc": "Panel de la cara humana de aviso-revision: la op de ESCRITURA (ORDEN) del módulo, con sus args reales. El BlueprintForm la invoca por ui/request/contabilidad/<accion>.",
+    "ops": {
+      "aviso-revision.empujar": {
+        "titulo": "Empujar un aviso de revisión",
+        "descripcion": "Da forma al empujón de revisión de una excepción dudosa y lo sube al canal de avisos. Sin excepción declarada NO se inventa una revisión (dato ausente = desconocido). Publica contabilidad.revision_solicitada y sube motor-avisos.producir.request.",
+        "rol": "asesor",
+        "forma": "editor-bloque (excepcion_id/motivo/dudoso)",
+        "senal_pareada": "contabilidad.revision_solicitada (+ motor-avisos.producir.request)",
+        "args": [
+          {
+            "nombre": "excepcion",
+            "tipo": "json",
+            "required": false,
+            "descripcion": "La excepción completa (objeto) si se trae entera."
+          },
+          {
+            "nombre": "excepcion_id",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "ID de la excepción que pide revisión."
+          },
+          {
+            "nombre": "motivo",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Por qué necesita revisión."
+          },
+          {
+            "nombre": "dudoso",
+            "tipo": "boolean",
+            "required": false,
+            "descripcion": "Marca declarada de duda (una excepción por duda SIEMPRE avisa)."
+          }
+        ],
+        "errores": "400 INVALID_INPUT (sin excepcion_id, excepcion ni motivo)"
+      }
+    },
+    "roles": {
+      "aviso-revision.empujar": "asesor"
+    }
+  }
+}

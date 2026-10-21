@@ -38,6 +38,9 @@ class EscandalloReflejo extends ModuloHibridoReflejo {
   onCostearRequest(e) {
     return this._atender(e, 'costear', 'escandallo.costear.response', d => this._costearReceta(d));
   }
+  onEscalarRequest(e) {
+    return this._atender(e, 'escalar', 'escandallo.escalar.response', d => this._escalar(d));
+  }
   onValidarRequest(e) {
     return this._atender(e, 'validar', 'escandallo.validar.response', d => this._validar(d));
   }
@@ -150,6 +153,65 @@ class EscandalloReflejo extends ModuloHibridoReflejo {
         lineas_detalle: r.desglose, lineas_sin_precio: r.sin_precio, fuentes_precios: r.fuentes
       }
     };
+  }
+
+  // ── _escalar — ESCALADO POR SUPERFICIE (conversor puro, la pieza P12/escandallo-escala).
+  //    Dada una receta a un diámetro, la re-costea a otro diámetro: la línea de MASA escala
+  //    por DIÁMETRO (factor = d2/d1), el resto por ÁREA (factor = (d2/d1)²). Auto-detecta la
+  //    masa por nombre/ref (contiene 'masa'). NO persiste (el coste escalado es derivación
+  //    transitoria; quien quiera persistirlo delega en escandallo.costear con persistir). ──
+  async _escalar(input) {
+    if (!input.project_id) return this._invalid('project_id');
+    if (!input.receta_id && !(Array.isArray(input.lineas) && input.lineas.length > 0)) {
+      return this._invalid('receta_id | lineas');
+    }
+    const dOri = (typeof input.diametro_origen === 'number' && input.diametro_origen > 0) ? input.diametro_origen : 33;
+    const dDes = (typeof input.diametro_destino === 'number' && input.diametro_destino > 0) ? input.diametro_destino : null;
+    if (!dDes) return this._invalid('diametro_destino');
+
+    const catalogo = await this._cargarCatalogo(input);
+    const receta = input.receta_id
+      ? await this._cargarReceta(input, input.receta_id)
+      : { id: null, lineas: input.lineas };
+    if (!receta) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'receta no encontrada', { entity_type: 'recipe', id: input.receta_id });
+
+    const factorMasa = dDes / dOri;
+    const factorArea = factorMasa * factorMasa;
+
+    // ESCALA las líneas (no muta la receta original — construye lineasEscaladas nuevas).
+    const lineasEscaladas = (receta.lineas || []).map(l => {
+      const esMasa = this._esMasaNombre(l);
+      const f = esMasa ? factorMasa : factorArea;
+      const cantidad = (typeof l.cantidad === 'number') ? this._round(l.cantidad * f, 6) : l.cantidad;
+      return { ...l, cantidad, _es_masa: esMasa };
+    });
+
+    // El rinde (nº de porciones) NO escala con el diámetro: una pizza sigue siendo 1 pizza
+    // a 33 cm y a 28 cm. Solo escalan las cantidades de los ingredientes. Por tanto el rinde
+    // nuevo conserva el original — así coste_unidad = coste_total / rinde_original.
+    const rindeNuevo = { cantidad: (receta.rinde?.cantidad || 1), unidad: (receta.rinde?.unidad || 'ud') };
+
+    const r = await this._costear(input, { id: receta.id, nombre: receta.nombre, lineas: lineasEscaladas, rinde: rindeNuevo }, catalogo, []);
+    const fuentes = new Set(r.fuentes);
+
+    this.metrics?.increment('escandallo.reflejo.served', { op: 'escalar' });
+    return {
+      status: 200,
+      data: {
+        receta_id: receta.id, diametro_origen: dOri, diametro_destino: dDes,
+        factor_masa: this._round(factorMasa, 6), factor_area: this._round(factorArea, 6),
+        lineas_escaladas: lineasEscaladas.map(l => ({ ref: l.ref, nombre: l.nombre, cantidad: l.cantidad, unidad: l.unidad, es_masa: l._es_masa })),
+        rinde: rindeNuevo,
+        coste_total: r.coste_total, coste_unidad: r.coste_unidad,
+        lineas_sin_precio: r.sin_precio, fuentes_precios: r.fuentes
+      }
+    };
+  }
+
+  // ── auto-detección de la línea de masa ──
+  _esMasaNombre(linea) {
+    const n = ((linea.nombre || '') + ' ' + (linea.ref || '')).toLowerCase();
+    return n.includes('masa');
   }
 
   // ── EL FRENO (skill blueprint-agentico). Un escandallo no se valida con un schema de

@@ -1,0 +1,39 @@
+{
+  "_doc": "Manifest de fiscal/registro-verifactu — CUSTODIO CON PERSISTENCIA (D8, hoja del plan). La CADENA INALTERABLE de la facturacion: registro ENCADENADO donde cada factura emitida deja su huella ligada a la huella del eslabon ANTERIOR (huella_anterior). APPEND-ONLY: una vez encadenada, una factura no se borra, no se reordena y no se muta; romper la cadena (huella_anterior distinta de la ultima) → 409 CADENA_ROTA. UN SOLO ESCRITOR (este custodio): ningun otro muta la cadena. Solo se ENCADENA la huella, no el cuerpo de la factura (eso es de emision-factura-venta O1). Persiste por proyecto via PosPersistencia (_shared/pos-persistencia, storage /contabilidad/registro-verifactu), restaura en project.activated y vuelca en onUnload. La op encadenar es ORDEN (panel). Publica contabilidad.factura_encadenada (+ pares *.failed). NOTA R3: el plan declara escucha de contabilidad.factura_emitida, pero NINGUN modulo del repo lo emite AUN (lo emite emision-factura-venta O1, grupo posterior): declararlo daria cadena colgada, asi que NO se declara.",
+  "name": "registro-verifactu",
+  "version": "0.1.0",
+  "description": "Custodio (D8): cadena inalterable de facturacion, registro encadenado por huellas. Append-only, un solo escritor, persistente por proyecto.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "registro-verifactu.encadenar.request",
+      "handler": "onEncadenarRequest",
+      "description": "RPC custodio (ORDEN, panel): {project_id, factura, huella?, huella_anterior?} → {project_id, factura, registro, encadenada, total, append_only}. Encadena la huella de una factura al ultimo eslabon; huella_anterior que no liga → 409 CADENA_ROTA; misma huella → no re-encadena. Publica contabilidad.factura_encadenada. Responde por registro-verifactu.encadenar.response."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Restaura la cadena de facturacion del proyecto activado desde el storage (PosPersistencia)."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "contabilidad.factura_encadenada",
+      "description": "Fire-and-forget (D8): una factura quedo encadenada en el registro inalterable → {project_id, factura, huella, huella_anterior, posicion, encadenada_en}. Lo exige la administracion (integridad de la facturacion)."
+    },
+    {
+      "event": "registro-verifactu.encadenar.response",
+      "description": "Respuesta RPC correlada de la op encadenar (una sola cara: el bus)."
+    },
+    {
+      "event": "registro-verifactu.encadenar.failed",
+      "description": "Par de fallo determinista: falta project_id/factura o la cadena esta rota (409 CADENA_ROTA) → {status, code, message}. Cierra el circulo de encadenar.request."
+    }
+  ],
+  "tools": [
+    { "name": "registro-verifactu.encadenar", "description": "Encadena (ORDEN) la huella de una factura al registro inalterable de facturacion." }
+  ],
+  "ui_handlers": [
+    { "domain": "contabilidad", "action": "registro-verifactu.encadenar", "handler": "onEncadenarRequest", "type": "system_panel", "zone": "lateral_derecha" }
+  ]
+}

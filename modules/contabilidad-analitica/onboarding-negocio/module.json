@@ -1,0 +1,53 @@
+{
+  "_doc": "Manifest de analitica/onboarding-negocio — CUSTODIO CON PERSISTENCIA (K1, hoja del plan). RECOGE los datos DECLARABLES del negocio nuevo (nombre, NIF, plan, fuentes, parametros). UN escritor. Es la puerta de alta: lo que el negocio declara al nacer queda guardado y se anuncia el hecho. La parcela aislada NO se reimplementa: SUBE a aislamiento-negocio.parcela.request (I4) por EVENTO; el plan declarado lo confirma contra catalogo-cuentas.buscar.request (B1) por EVENTO (ambos best-effort). Dato ausente = desconocido: un dato no declarado queda null y se declara en `abierto` (un negocio sin plan NO se le inventa un plan). UN escritor (guard rol ONBOARDING_NEGOCIO; segundo escritor → 403). No se borra: re-recoger appendea al historial. Persiste por proyecto via PosPersistencia (_shared/pos-persistencia, storage /contabilidad/onboarding-negocio), restaura en project.activated y vuelca en onUnload. Proyecciones _recoger (ORDEN, panel) y _leer (PREGUNTA, por el bus). Publica contabilidad.negocio_registrado (+ pares *.failed). ESCUCHA: ninguna (el plan no declara escucha de dominio).",
+  "name": "onboarding-negocio",
+  "version": "0.1.0",
+  "description": "Custodio (K1): recoge los datos declarables del negocio nuevo (plan, fuentes, parametros); un solo escritor y persistente por proyecto.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "onboarding-negocio.recoger.request",
+      "handler": "onRecogerRequest",
+      "description": "RPC custodio (ORDEN, panel): {project_id, rol:'ONBOARDING_NEGOCIO', negocio_id, datos{nombre?,nif?,plan?,fuentes?,parametros?}} → {project_id, negocio_id, negocio, registrado, parcela}. Guard de escritor (solo ONBOARDING_NEGOCIO; otro rol → PERMISSION_DENIED). Recoge/actualiza los datos declarables y sube la parcela a aislamiento-negocio. Publica contabilidad.negocio_registrado y responde por onboarding-negocio.recoger.response. Payload/rol invalido → onboarding-negocio.recoger.failed."
+    },
+    {
+      "event": "onboarding-negocio.leer.request",
+      "handler": "onLeerRequest",
+      "description": "RPC custodio (PREGUNTA, por el bus): {project_id, negocio_id} → {project_id, negocio_id, negocio, existe, faltan, completo}. Devuelve lo declarado; lo que falte se declara en `abierto` (no se estima). Sin negocio → existe:false. Responde por onboarding-negocio.leer.response; payload invalido → onboarding-negocio.leer.failed."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Restaura los negocios declarados del proyecto activado desde el storage (PosPersistencia)."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "contabilidad.negocio_registrado",
+      "description": "Fire-and-forget (K1): un negocio quedo registrado con sus datos declarables → {project_id, negocio_id, negocio, registrado}. Lo consume aislamiento-negocio (I4) para su parcela y el resto de la capa analitica."
+    },
+    {
+      "event": "onboarding-negocio.recoger.response",
+      "description": "Respuesta RPC correlada de la op recoger (ORDEN)."
+    },
+    {
+      "event": "onboarding-negocio.recoger.failed",
+      "description": "Par de fallo determinista: rol != ONBOARDING_NEGOCIO, falta project_id o negocio_id → {status, code, message}. Cierra el circulo de recoger.request."
+    },
+    {
+      "event": "onboarding-negocio.leer.response",
+      "description": "Respuesta RPC correlada de la op leer (PREGUNTA)."
+    },
+    {
+      "event": "onboarding-negocio.leer.failed",
+      "description": "Par de fallo determinista: falta project_id o negocio_id → {status, code, message}. Cierra el circulo de leer.request."
+    }
+  ],
+  "tools": [
+    { "name": "onboarding-negocio.recoger", "description": "Recoge (ORDEN) los datos declarables del negocio nuevo y anuncia el hecho." },
+    { "name": "onboarding-negocio.leer", "description": "Lee (PREGUNTA) lo declarado del negocio; lo que falte queda abierto." }
+  ],
+  "ui_handlers": [
+    { "domain": "contabilidad", "action": "onboarding-negocio.recoger", "handler": "onRecogerRequest", "type": "workspace_module", "zone": "barra_modulos" }
+  ]
+}

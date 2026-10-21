@@ -1,0 +1,9 @@
+{
+  "id": "encolado-excepcion",
+  "name": "Encolado de excepción",
+  "version": "0.1.0",
+  "zone": "work-bar",
+  "order": 42,
+  "icon": "📥",
+  "label": "Encolar excepción"
+}

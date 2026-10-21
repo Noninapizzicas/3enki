@@ -707,8 +707,12 @@ class ChatIoModule extends BaseModule {
       ? (typeof metadata === 'string' ? metadata : JSON.stringify(metadata))
       : null;
     try {
+      // Idempotente: si el message_id ya existe (chat.assistant.saved re-publicado
+      // por retry/duplicado del emisor), NO reintentar el INSERT — la respuesta del
+      // agente ya está persistida. Sin esto, la segunda INSERT choca con el UNIQUE
+      // messages.id → SQLITE_CONSTRAINT (pagado en vivo edias/f, 20-ago).
       await this._db(project_id,
-        `INSERT INTO messages (id, conversation_id, role, content, metadata, created_at)
+        `INSERT OR IGNORE INTO messages (id, conversation_id, role, content, metadata, created_at)
          VALUES (?, ?, 'assistant', ?, ?, ?)`,
         [message_id, conversation_id, assistant_message, metadataStr, now]
       );
@@ -842,6 +846,20 @@ class ChatIoModule extends BaseModule {
     this.metrics?.increment?.('chat-io.agent_bridge.request', {});
   }
 
+  // invoke_agent es el alias legacy/usado por el chat para arrancar el motor v3.
+  // Normalizamos al mismo shape de agent.execute.request para que el puente al
+  // frontend (agent_status + agent_progress) se dispare igual.
+  onInvokeAgentBridge(event) {
+    const d = event?.data || event || {};
+    return this.onAgentExecuteRequest({
+      data: {
+        ...d,
+        conversation_id: d.conversation_id || d.context?.conversation_id || null,
+        agent_name: d.agent_name || d.agentName || 'agente'
+      }
+    });
+  }
+
   onAgentExecuteProgress(event) {
     const d = event?.data || event || {};
     if (!d.conversation_id || !d.request_id) return;
@@ -892,21 +910,20 @@ class ChatIoModule extends BaseModule {
     this.metrics?.increment?.('chat-io.agent_bridge.failed', {});
   }
 
-  // ── MARCO (CIMIENTO v3): el legacy cierra la ventana del agente ────────────
-  // invoke_agent.response (las invocaciones del chat) → agent_status idle con
-  // veredicto + respuesta del modelo. El marco abre con agent.execute.progress
-  // (lo publica el framework en legacy) y se cierra aquí con el veredicto.
-  onInvokeAgentResponse(event) {
+  // invoke_agent.response es el alias legacy/usado por el chat para cerrar el motor v3.
+  // Normalizamos al mismo shape de agent.execute.response/failed para cerrar el marco.
+  onInvokeAgentDoneBridge(event) {
     const d = event?.data || event || {};
-    if (!d.conversation_id) return;
-    this._publishAgentTopic(d.conversation_id, 'agent_status', {
-      status: 'idle',
-      error: d.error || null,
-      veredicto: d.veredicto || null,
-      llm: d.result ? { content: d.result.content || '' } : null,
-      timestamp: new Date().toISOString()
+    const conversation_id = d.conversation_id || d.context?.conversation_id || null;
+    if (!conversation_id) return;
+    if (d.error) {
+      return this.onAgentExecuteFailed({
+        data: { ...d, conversation_id, error: d.error, veredicto: d.veredicto, llm: d.llm }
+      });
+    }
+    return this.onAgentExecuteDone({
+      data: { ...d, conversation_id, veredicto: d.veredicto, llm: d.llm }
     });
-    this.metrics?.increment?.('chat-io.agent_bridge.legacy_done', {});
   }
 
   // ── REHIDRATACIÓN DEL MARCO (CIMIENTO v3) ──────────────────────────────────

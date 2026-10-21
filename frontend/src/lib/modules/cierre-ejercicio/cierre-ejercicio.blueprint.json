@@ -1,0 +1,127 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "cierre-ejercicio",
+  "version": "blueprint-2.0.0",
+  "moduleId": "contabilidad",
+  "titulo": "Cierre de ejercicio",
+  "_doc": "Blueprint v2 de INTERFAZ del módulo contabilidad/cierre-ejercicio (F6½). Declara la sección `ui` para el BlueprintForm (patrón interfaz-dinamico). CUSTODIO (C4): el cierre en DOS NIVELES. El DÍA cierra la CAJA; el MES cierra la CONTABILIDAD. Cierra con ajustes y anuncia contabilidad.ejercicio_cerrado. PUENTE/CUSTODIO de la vertical contabilidad. Las acciones van DOTTED ('<modulo>.<accion>') y el transporte.rpc va VACÍO: el RPC real es contabilidad.<accion>.request (domain 'contabilidad', action 'cierre-ejercicio.cerrar' en ui_handlers) y la regex de deriveZones solo parsea acciones de 2 segmentos; el wrapper mqttRequest('contabilidad','<modulo>.<accion>') emite ui/request/contabilidad/<modulo>.<accion>, que casa con el ui_handler. Los args salen de los parámetros REALES del handler en index.js.",
+  "eventos_publicados": [
+    "contabilidad.ejercicio_cerrado"
+  ],
+  "eventos_que_escucho": [
+    "cierre-ejercicio.cerrar.response",
+    "cierre-ejercicio.cerrar.failed",
+    "cierre-ejercicio.reabrir.response",
+    "cierre-ejercicio.reabrir.failed"
+  ],
+  "transporte": {
+    "rpc": [],
+    "salida": [
+      "contabilidad.ejercicio_cerrado"
+    ],
+    "qos": "publishAndWait (request/response correlado) vía ui/request/contabilidad/<modulo>.<accion>; timeout del panel 10s. transporte.rpc vacío a propósito (acciones DOTTED)."
+  },
+  "ui": {
+    "_doc": "Panel de la cara humana de cierre-ejercicio: la(s) op(s) de ESCRITURA (ORDEN) del módulo, con sus args reales. El BlueprintForm la(s) invoca por ui/request/contabilidad/<accion>.",
+    "ops": {
+      "cierre-ejercicio.cerrar": {
+        "titulo": "Cerrar un periodo (día o mes)",
+        "descripcion": "Cierra (ORDEN) un periodo. El nivel 'dia' cierra la CAJA del día; el nivel 'mes' cierra la CONTABILIDAD del mes (pidiendo la cuota de amortización y el asiento de cierre). Idempotente por nivel+clave. Publica contabilidad.ejercicio_cerrado. Sin cifras declaradas cierra VACÍO (0), no se inventa el resultado.",
+        "rol": "jefe",
+        "forma": "editor-bloque (nivel/ejercicio/mes/dia/rol)",
+        "senal_pareada": "contabilidad.ejercicio_cerrado",
+        "args": [
+          {
+            "nombre": "nivel",
+            "tipo": "select",
+            "required": true,
+            "descripcion": "Nivel de cierre: 'dia' cierra la caja; 'mes' cierra la contabilidad.",
+            "enum": [
+              "dia",
+              "mes"
+            ]
+          },
+          {
+            "nombre": "ejercicio",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Ejercicio (año). Por defecto, el del input o el actual."
+          },
+          {
+            "nombre": "mes",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Mes (obligatorio si nivel='mes')."
+          },
+          {
+            "nombre": "dia",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Día (obligatorio si nivel='dia')."
+          },
+          {
+            "nombre": "rol",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Rol del escritor: 'CIERRE_EJERCICIO' (guard: otro rol se rechaza)."
+          }
+        ],
+        "errores": "400 INVALID_INPUT (nivel != dia|mes, o falta mes/dia); 403 PERMISSION_DENIED (rol != CIERRE_EJERCICIO)"
+      },
+      "cierre-ejercicio.reabrir": {
+        "titulo": "Reabrir un periodo cerrado (explícito)",
+        "descripcion": "Reabre (ORDEN) un periodo que estaba cerrado. La reapertura es explícita y queda en la historia append-only: el cierre previo NO se borra. Publica contabilidad.ejercicio_cerrado con estado 'reabierto'.",
+        "rol": "jefe",
+        "forma": "editor-bloque (nivel/ejercicio/mes/dia/motivo/rol)",
+        "senal_pareada": "contabilidad.ejercicio_cerrado",
+        "args": [
+          {
+            "nombre": "nivel",
+            "tipo": "select",
+            "required": true,
+            "descripcion": "Nivel de reapertura: 'dia' o 'mes'.",
+            "enum": [
+              "dia",
+              "mes"
+            ]
+          },
+          {
+            "nombre": "ejercicio",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Ejercicio (año)."
+          },
+          {
+            "nombre": "mes",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Mes (si nivel='mes')."
+          },
+          {
+            "nombre": "dia",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Día (si nivel='dia')."
+          },
+          {
+            "nombre": "motivo",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Motivo de la reapertura (se anota el hueco si falta)."
+          },
+          {
+            "nombre": "rol",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Rol del escritor: 'CIERRE_EJERCICIO'."
+          }
+        ],
+        "errores": "400 INVALID_INPUT (nivel != dia|mes); 403 PERMISSION_DENIED (rol != CIERRE_EJERCICIO)"
+      }
+    },
+    "roles": {
+      "cierre-ejercicio.cerrar": "jefe",
+      "cierre-ejercicio.reabrir": "jefe"
+    }
+  }
+}

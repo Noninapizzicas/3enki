@@ -1,0 +1,84 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "generador-modelo",
+  "version": "blueprint-2.0.0",
+  "moduleId": "contabilidad",
+  "titulo": "Generador de modelo",
+  "_doc": "Blueprint v2 de INTERFAZ del módulo contabilidad/generador-modelo (F6½). Panel del puente D7: la op de ESCRITURA (ORDEN) `exportar`, que PREPARA el modelo fiscal exportable en formato abierto (json/csv/xml/txt) con sus casillas/partidas DECLARADAS. No presenta: prepara; sube estado-presentacion-fiscal.avanzar.request. Sin casillas declaradas no se inventa una cifra. Acciones DOTTED, transporte.rpc VACÍO. Args del handler REAL (index.js).",
+  "eventos_publicados": [
+    "contabilidad.modelo_exportado",
+    "estado-presentacion-fiscal.avanzar.request"
+  ],
+  "eventos_que_escucho": [
+    "generador-modelo.exportar.response"
+  ],
+  "transporte": {
+    "entrada": "reflejo RPC via ui_handlers (module.json) — las ops se conducen por ui/request/contabilidad/<accion>. transporte.rpc vacio a proposito.",
+    "rpc": [],
+    "salida": [
+      "contabilidad.modelo_exportado",
+      "estado-presentacion-fiscal.avanzar.request"
+    ],
+    "qos": "publishAndWait (request/response correlado) en cada operacion; timeout 8s"
+  },
+  "ui": {
+    "_doc": "Panel de la cara humana de generador-modelo: la(s) op(s) de ESCRITURA (ORDEN) del módulo, con sus args reales. El BlueprintForm la invoca por ui/request/contabilidad/<accion>.",
+    "ops": {
+      "generador-modelo.exportar": {
+        "titulo": "Exportar un modelo fiscal",
+        "descripcion": "Prepara el modelo fiscal (modelo 303/390/…) exportable en formato abierto con sus casillas/partidas declaradas. Publica contabilidad.modelo_exportado y sube estado-presentacion-fiscal.avanzar.request. Sin casillas no se inventan cifras.",
+        "rol": "asesor",
+        "forma": "editor-bloque (project_id/modelo/ejercicio/periodo/formato/casillas|partidas)",
+        "senal_pareada": "contabilidad.modelo_exportado (+ estado-presentacion-fiscal.avanzar.request)",
+        "args": [
+          {
+            "nombre": "project_id",
+            "tipo": "text",
+            "required": true,
+            "descripcion": "Proyecto."
+          },
+          {
+            "nombre": "modelo",
+            "tipo": "text",
+            "required": true,
+            "descripcion": "Modelo fiscal a exportar (ej. 303, 390)."
+          },
+          {
+            "nombre": "ejercicio",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Ejercicio del modelo."
+          },
+          {
+            "nombre": "periodo",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Periodo del modelo."
+          },
+          {
+            "nombre": "formato",
+            "tipo": "select",
+            "required": false,
+            "descripcion": "Formato abierto de salida (json/csv/xml/txt)."
+          },
+          {
+            "nombre": "casillas",
+            "tipo": "json",
+            "required": false,
+            "descripcion": "Casillas declaradas del modelo."
+          },
+          {
+            "nombre": "partidas",
+            "tipo": "json",
+            "required": false,
+            "descripcion": "Partidas declaradas del modelo."
+          }
+        ],
+        "errores": "400 INVALID_INPUT (sin project_id o modelo)"
+      }
+    },
+    "roles": {
+      "generador-modelo.exportar": "asesor"
+    }
+  }
+}

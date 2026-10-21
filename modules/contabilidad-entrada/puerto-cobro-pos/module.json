@@ -1,0 +1,17 @@
+{
+  "_doc": "Manifest de entrada/puerto-cobro-pos — PUENTE STATELESS (A15, hoja añadida al plan 2026-10-15). EL CABLE DEL POS: escucha `cobro.procesado` (evento VIVO de pizzepos/cobros, medido al bus) y publica el hecho `contabilidad.hecho_recibido` con la venta cobrada {tipo: venta_cobro_pos, importe: monto_total, referencia: cobro_id}. Traduce y anuncia; NO escribe. La idempotencia la garantiza la clave natural del diario (un cobro = un asiento). La contrapartida la pone la regla, no el puente.",
+  "name": "puerto-cobro-pos",
+  "version": "0.1.0",
+  "_v0_1_0_nota": "A15: la caja de hoy de la pizzería (nonina) llega al diario al vuelo. Un solo cable, cero cambios en pizzepos.",
+  "description": "Puente del POS a contabilidad: cobro.procesado → contabilidad.hecho_recibido",
+  "language": "es",
+  "subscribes": [
+    { "event": "puerto-cobro-pos.cobrar.request", "handler": "onCobrarRequest", "description": "PREGUNTA (bus): traduce un cobro a hecho contable y lo anuncia." },
+    { "event": "cobro.procesado", "handler": "onCobroProcesado", "description": "El cobro del POS llega por el bus → se traduce y se anuncia contabilidad.hecho_recibido (emisor VIVO: pizzepos/cobros)." }
+  ],
+  "publishes": [
+    { "event": "contabilidad.hecho_recibido", "description": "El hecho de dominio: una venta cobrada en el POS entra a la cadena contable." },
+    { "event": "puerto-cobro-pos.cobrar.response", "description": "Respuesta del RPC cobrar." },
+    { "event": "puerto-cobro-pos.cobrar.failed", "description": "Par de fallo: cobro sin lo esencial (no se anuncia nada)." }
+  ]
+}

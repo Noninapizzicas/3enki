@@ -1,0 +1,59 @@
+{
+  "name": "f6-esquematizador-trabajador",
+  "description": "FASE 6 (lente TRABAJADOR) — perfil fino del motor único prisma-universal. Preseta las 3 variables para esquematizar la interfaz de un módulo con la lente del rol TRABAJADOR: ENTRADA=module.json + index.js del módulo, ARCHIVO FINAL=modules/<slug>/esquema-trabajador/esquema-trabajador.md, CÓMO=ingeniero de interfaz lente TRABAJADOR, PARA=esquema-trabajador. El TRABAJADOR controla TODO el proceso productivo/creativo HOY/CÓMO: arranca, produce, retira, cambia material, reanuda. AGOTA el proceso hasta dejar seco el análisis. Es una de las 3 versiones de F6 (jefe/trabajador/cliente) que comparten el mismo motor prisma-universal y cambian solo la lente.",
+  "identidad": {
+    "role": "Esquematizador de Interfaz F6 — lente TRABAJADOR (perfil fino de prisma-universal)",
+    "goal": "Determinar la necesidad de interfaz del rol TRABAJADOR de un módulo, agotando el proceso hasta dejar seco el análisis, y producir esquema-trabajador/esquema-trabajador.md",
+    "backstory": "Eres un perfil fino del motor único prisma-universal con la lente TRABAJADOR. Presetas sus 3 variables: ENTRADA=module.json + index.js del módulo <slug>; ARCHIVO FINAL=modules/<slug>/esquema-trabajador/esquema-trabajador.md; CÓMO=ingeniero de interfaz lente TRABAJADOR; PARA=esquema-trabajador. El TRABAJADOR controla TODO el proceso productivo y creativo del módulo HOY/CÓMO: arranca la producción, la ejecuta, retira piezas, cambia material, reanuda tras error, y supervisa el proceso en marcha (no solo 'opera' — LO DIRIGE). Ejecutas el método de prisma-universal — prisma de 5 huecos (identidad, restricciones, contrato, no-objetivos, preguntas abiertas) con lente TRABAJADOR, AGOTAS iterando hasta dejar seco el análisis de la NECESIDAD DE INTERFAZ del rol TRABAJADOR — y escribes el archivo final. NO materializas ui_handlers."
+  },
+  "pasos": [
+    {
+      "paso": "leer_contexto",
+      "tipo": "reflejo",
+      "op": "leer_modulo",
+      "_detalle": "Lee la ENTRADA: module.json + index.js del módulo (subscribes/publishes, handlers reales on<PascalCase>Request, máquina de estados, invariantes)."
+    },
+    {
+      "paso": "esquematizar_trabajador",
+      "tipo": "fuzzy",
+      "instruccion": "Ejecuta el motor de esquematización `prisma-universal` con estas 3 variables presetadas:\n- ENTRADA: module.json + index.js del módulo <slug> (eventos reales, handlers on<PascalCase>Request, máquina de estados, invariantes).\n- ARCHIVO FINAL: modules/<slug>/esquema-trabajador/esquema-trabajador.md.\n- CÓMO: ingeniero de interfaz con LENTE TRABAJADOR.\n- PARA: esquematizar el esquema-trabajador del módulo <slug>.\n\nEl TRABAJADOR controla TODO el proceso productivo y creativo — no es un mero lector/operador pasivo. Lo que produce, lo crea, lo dirige HOY. El JEFE, en cambio, ve resultados/visión de conjunto (al margen aquí).\n\nAplica el prisma de 5 huecos con lente TRABAJADOR para determinar la NECESIDAD DE INTERFAZ de ese rol: qué necesita VER del proceso para DIRIGIRLO, qué acciones de producción dispara, qué señales pareadas confirman cada paso, qué formas UI (cinta-estado, gestos, confirmadores, ref-select). La cara del trabajador es, normalmente, la PRINCIPAL del panel.\n\nAGOTA: revisa el esquema contra el index.js real, verifica que cada op clasificada tiene su handler real y que las señales pareadas existen. Si algo no cuadra, REESCRIBE y vuelve a verificar. Repite hasta dejar seco. Escribe el archivo final en ARCHIVO FINAL.\n\nNO materialices ui_handlers ni toques el module.json — solo esquematiza y produce el archivo final.",
+      "valida": {
+        "tamano_min": 800
+      }
+    },
+    {
+      "paso": "escribir",
+      "tipo": "reflejo",
+      "op": "escribir"
+    },
+    {
+      "paso": "verificar",
+      "tipo": "reflejo",
+      "op": "verificar",
+      "_detalle": "Verifica que esquema-trabajador/esquema-trabajador.md existe y que cada op clasificada tiene su handler real en el index.js."
+    },
+    {
+      "paso": "commitar",
+      "tipo": "reflejo",
+      "op": "commitar"
+    }
+  ],
+  "entregable": {
+    "tipo": "fs",
+    "path": "modules/<slug>/esquema-trabajador/esquema-trabajador.md",
+    "reglas": ["existe", "contenido_min", "en_repo"],
+    "min_chars": 800
+  },
+  "presupuesto": {
+    "generaciones_por_paso": 3,
+    "max_tokens": 32000,
+    "generacion_timeout_ms": 240000
+  },
+  "git": {
+    "modo": "rama-propia",
+    "rama": "agente/f6-trabajador",
+    "commit": true,
+    "pr": true,
+    "merge": "externo"
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "_doc": "Módulo confluencia — el corazón del negocio de despacho-de-pan. Reflejo determinista (sin LLM) que casa cada línea de un pedido contra el calendario (H1) POR EL BUS: consume calendario.validar.request para cada línea y la clasifica CONFIRMADO / AJUSTADO / AJUSTADO_MARGEN / NO_DISPONIBLE, con propuesta de día válido cuando aplica. Devuelve el pedido resuelto + un mensaje honesto al cliente. NO duplica la lógica de validación: bebe del RPC de calendario (fuente única). Construido en F4 (2026-08-22) desde diseno-oop.md sección Motor de confluencia. Depende de H1 (calendario) ya desplegado.",
+  "description": "Motor de confluencia: casa líneas de pedido contra el calendario de producción y clasifica confirmado/ajustado/no_disponible (panadería).",
+  "language": "es",
+  "name": "confluencia",
+  "publishes": [
+    {
+      "description": "Un pedido resuelto (líneas clasificadas + resumen + mensaje al cliente).",
+      "event": "confluencia.pedido_resuelto"
+    }
+  ],
+  "subscribes": [
+    {
+      "description": "Resolver un pedido completo: cada línea contra su calendario.",
+      "event": "confluencia.resolver_pedido.request",
+      "handler": "onResolverPedidoRequest"
+    },
+    {
+      "description": "Resolver una sola línea de pedido.",
+      "event": "confluencia.validar_linea.request",
+      "handler": "onValidarLineaRequest"
+    }
+  ],
+  "ui_handlers": [
+    {
+      "action": "resolver.pedido",
+      "domain": "confluencia",
+      "handler": "onResolverPedidoRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "action": "validar.linea",
+      "domain": "confluencia",
+      "handler": "onValidarLineaRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
+  ],
+  "version": "0.1.0"
+}

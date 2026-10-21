@@ -1,0 +1,33 @@
+{
+  "_doc": "Manifest de libro/informe-conciliacion — REFLEJO STATELESS (E10, hoja del plan). Documento de CUADRE saldo banco ↔ saldo contable AJUSTADO (por las partidas conciliatorias). Es LA PRUEBA de que cuadra: no inventa el cuadre, lo demuestra con la ecuacion. Depende de conciliacion-bancaria (E1) y partida-conciliatoria (E8) por EVENTO: les SUBE conciliacion-bancaria.cruzar.request y partida-conciliatoria.desfase.request (no las implementa). Invariante (honestidad): sin ambos lados declarados NO se afirma el cuadre — cuadra:null y `abierto` explicito (dato ausente = desconocido). NO escribe, NO persiste. RPC componer es CLASE PREGUNTA → va por el bus, SIN panel. Publica informe-conciliacion.componer.response y su par .failed. R3: escucha contabilidad.asiento_asentado — su emisor escritor-diario (B2) YA existe en el repo → SI se declara.",
+  "name": "informe-conciliacion",
+  "version": "0.1.0",
+  "description": "Reflejo (E10): el informe de conciliacion bancaria — la prueba de que el saldo banco cuadra con el contable ajustado. Sin datos no se afirma; se declara abierto.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "informe-conciliacion.componer.request",
+      "handler": "onComponerRequest",
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id, cuenta?, fecha?, saldo_banco?, saldo_contable?, partidas?[]} → {project_id, saldo_banco, partidas, saldo_contable_ajustado, saldo_contable, cuadra, verificable, invariante, abierto}. Compone el cuadre banco ↔ contable ajustado; sin ambos lados declarados, cuadra:null y `abierto`. Responde por informe-conciliacion.componer.response. Payload invalido → informe-conciliacion.componer.failed."
+    },
+    {
+      "event": "contabilidad.asiento_asentado",
+      "handler": "onAsientoAsentado",
+      "description": "Fire-and-forget (B2 escritor-diario): un asiento quedo en el libro. Se observa (ventana acotada) como fuente del lado contable; no se recalcula ni se escribe."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "informe-conciliacion.componer.response",
+      "description": "Respuesta RPC correlada de la op componer (una sola cara: el bus)."
+    },
+    {
+      "event": "informe-conciliacion.componer.failed",
+      "description": "Par de fallo determinista: falta project_id → {status, code, message}. Cierra el circulo de componer.request."
+    }
+  ],
+  "tools": [
+    { "name": "informe-conciliacion.componer", "description": "Compone (PREGUNTA) el informe de conciliacion bancaria: banco vs contable ajustado por partidas." }
+  ],
+  "ui_handlers": []
+}

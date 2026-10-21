@@ -1,0 +1,52 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "single-writer",
+  "version": "blueprint-2.0.0",
+  "moduleId": "contabilidad",
+  "titulo": "Un solo escritor",
+  "_doc": "Blueprint v2 de INTERFAZ del módulo contabilidad/single-writer (F6½). Declara la sección `ui` para el BlueprintForm (patrón interfaz-dinamico). CUSTODIO (M2): LA LEY de un solo escritor por parcela. La op reclamar (ORDEN) concede la parcela libre y anuncia contabilidad.parcela_reclamada; el segundo escritor se RECHAZA (409 SEGUNDO_ESCRITOR). PUENTE/CUSTODIO de la vertical contabilidad. Las acciones van DOTTED ('<modulo>.<accion>') y el transporte.rpc va VACÍO: el RPC real es contabilidad.<accion>.request (domain 'contabilidad', action 'single-writer.reclamar' en ui_handlers) y la regex de deriveZones solo parsea acciones de 2 segmentos; el wrapper mqttRequest('contabilidad','<modulo>.<accion>') emite ui/request/contabilidad/<modulo>.<accion>, que casa con el ui_handler. Los args salen de los parámetros REALES del handler en index.js.",
+  "eventos_publicados": [
+    "contabilidad.parcela_reclamada"
+  ],
+  "eventos_que_escucho": [
+    "single-writer.reclamar.response",
+    "single-writer.reclamar.failed"
+  ],
+  "transporte": {
+    "rpc": [],
+    "salida": [
+      "contabilidad.parcela_reclamada"
+    ],
+    "qos": "publishAndWait (request/response correlado) vía ui/request/contabilidad/<modulo>.<accion>; timeout del panel 10s. transporte.rpc vacío a propósito (acciones DOTTED)."
+  },
+  "ui": {
+    "_doc": "Panel de la cara humana de single-writer: la(s) op(s) de ESCRITURA (ORDEN) del módulo, con sus args reales. El BlueprintForm la(s) invoca por ui/request/contabilidad/<accion>.",
+    "ops": {
+      "single-writer.reclamar": {
+        "titulo": "Reclamar una parcela para un escritor",
+        "descripcion": "Concede (ORDEN) una parcela LIBRE a un escritor. El mismo escritor re-reclamando es idempotente; OTRO escritor se RECHAZA con 409 SEGUNDO_ESCRITOR (dos escritores sobre la misma parcela = corrupción). Publica contabilidad.parcela_reclamada.",
+        "rol": "jefe",
+        "forma": "editor-bloque (parcela/escritor)",
+        "senal_pareada": "contabilidad.parcela_reclamada",
+        "args": [
+          {
+            "nombre": "parcela",
+            "tipo": "text",
+            "required": true,
+            "descripcion": "La parcela que se reclama."
+          },
+          {
+            "nombre": "escritor",
+            "tipo": "text",
+            "required": true,
+            "descripcion": "El escritor que reclama la parcela."
+          }
+        ],
+        "errores": "400 INVALID_INPUT (sin parcela o escritor); 409 SEGUNDO_ESCRITOR (parcela ya con otro titular)"
+      }
+    },
+    "roles": {
+      "single-writer.reclamar": "jefe"
+    }
+  }
+}

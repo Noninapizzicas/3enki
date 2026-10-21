@@ -1,0 +1,25 @@
+{
+  "name": "hermes-relay",
+  "version": "1.0.0",
+  "description": "Pipe puro: chat.message.saved → Hermes /v1/chat/completions → ai.chat.response. Reemplaza prompt-builder + ai-gateway en la cadena conversacional.",
+  "dependencies": ["database-manager"],
+  "subscribes": [
+    { "event": "chat.message.saved", "handler": "onMessageSaved" },
+    { "event": "db.query.response", "handler": "onDbQueryResponse" }
+  ],
+  "publishes": ["ai.chat.response", "ai.chat.failed"],
+  "provides": { "apis": [], "hooks": [] },
+  "config": {
+    "hermes_url": "http://localhost:8642/v1/chat/completions",
+    "hermes_model": "hermes",
+    "hermes_api_key": "",
+    "context_window": 40,
+    "request_timeout_ms": 300000,
+    "claude_md_path": ""
+  },
+  "credentials": {
+    "hermes_owns": ["LLM provider keys (OpenAI, Anthropic, DeepSeek, local models)"],
+    "credential_manager_owns": ["WhatsApp Cloud API", "Telegram Bot", "Glovo", "Mercadona", "domain-specific API keys"],
+    "separation": "Hermes gestiona sus propios providers y API keys internamente. credential-manager sigue vivo para credenciales de dominio que los módulos operativos (whatsapp-bot, telegram-service, tienda-api, etc.) necesitan."
+  }
+}

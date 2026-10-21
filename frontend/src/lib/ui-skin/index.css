@@ -1,0 +1,13 @@
+/* UI Skin — Sistema de 10 capas
+   Importa en orden de dependencia: L0 → L1 → L2 → L4 → L7 → L8 → L9.
+   L3 (layout) son componentes Svelte, no CSS.
+   L5 (esqueleto) vive en cada componente.
+   L6 (piel) la aplica skin-engine.ts en runtime. */
+
+@import './reset.css';                    /* L0 */
+@import './tokens/atomicos.css';          /* L1 */
+@import './tokens/semanticos.css';        /* L2 */
+@import './typography.css';               /* L4 */
+@import './motion.css';                   /* L7 */
+@import './responsive.css';               /* L8 */
+@import './states.css';                   /* L9 */

@@ -1,0 +1,177 @@
+/* L1 — Tokens atómicos
+   Valores brutos sin semántica. Solo la escala.
+   Depende de: L0 (reset). */
+
+:root {
+
+  /* ── Color: paleta en oklch (perceptualmente uniforme, gamut p3) ── */
+
+  /* Neutral */
+  --c-neutral-0:   oklch(1.000 0 0);       /* blanco */
+  --c-neutral-50:  oklch(0.970 0.001 286);
+  --c-neutral-100: oklch(0.930 0.002 286);
+  --c-neutral-200: oklch(0.870 0.003 286);
+  --c-neutral-300: oklch(0.780 0.004 286);
+  --c-neutral-400: oklch(0.660 0.005 286);
+  --c-neutral-500: oklch(0.550 0.005 286);
+  --c-neutral-600: oklch(0.440 0.005 286);
+  --c-neutral-700: oklch(0.370 0.004 286);
+  --c-neutral-800: oklch(0.280 0.003 286);
+  --c-neutral-850: oklch(0.230 0.003 286);
+  --c-neutral-900: oklch(0.180 0.002 286);
+  --c-neutral-950: oklch(0.130 0.002 286);
+  --c-neutral-980: oklch(0.100 0.001 286);
+
+  /* Primary */
+  --c-primary-50:  oklch(0.970 0.015 250);
+  --c-primary-100: oklch(0.930 0.040 250);
+  --c-primary-200: oklch(0.870 0.070 250);
+  --c-primary-300: oklch(0.780 0.110 250);
+  --c-primary-400: oklch(0.700 0.140 250);
+  --c-primary-500: oklch(0.600 0.160 250);
+  --c-primary-600: oklch(0.500 0.150 250);
+  --c-primary-700: oklch(0.420 0.130 250);
+  --c-primary-800: oklch(0.340 0.100 250);
+  --c-primary-900: oklch(0.270 0.070 250);
+  --c-primary-950: oklch(0.200 0.040 250);
+
+  /* Accent */
+  --c-accent-50:  oklch(0.970 0.020 170);
+  --c-accent-100: oklch(0.930 0.050 170);
+  --c-accent-200: oklch(0.870 0.090 170);
+  --c-accent-300: oklch(0.780 0.120 170);
+  --c-accent-400: oklch(0.700 0.140 170);
+  --c-accent-500: oklch(0.600 0.150 170);
+  --c-accent-600: oklch(0.500 0.130 170);
+  --c-accent-700: oklch(0.420 0.110 170);
+  --c-accent-800: oklch(0.340 0.080 170);
+  --c-accent-900: oklch(0.270 0.060 170);
+  --c-accent-950: oklch(0.200 0.030 170);
+
+  /* Success */
+  --c-success-50:  oklch(0.970 0.020 150);
+  --c-success-100: oklch(0.930 0.050 150);
+  --c-success-200: oklch(0.870 0.090 150);
+  --c-success-300: oklch(0.780 0.120 150);
+  --c-success-400: oklch(0.700 0.140 150);
+  --c-success-500: oklch(0.600 0.150 150);
+  --c-success-600: oklch(0.500 0.130 150);
+  --c-success-700: oklch(0.420 0.110 150);
+  --c-success-800: oklch(0.340 0.080 150);
+  --c-success-900: oklch(0.270 0.050 150);
+  --c-success-950: oklch(0.200 0.030 150);
+
+  /* Warning */
+  --c-warning-50:  oklch(0.970 0.025 85);
+  --c-warning-100: oklch(0.930 0.060 85);
+  --c-warning-200: oklch(0.870 0.100 85);
+  --c-warning-300: oklch(0.800 0.140 85);
+  --c-warning-400: oklch(0.740 0.160 85);
+  --c-warning-500: oklch(0.660 0.170 85);
+  --c-warning-600: oklch(0.560 0.150 85);
+  --c-warning-700: oklch(0.460 0.120 85);
+  --c-warning-800: oklch(0.370 0.090 85);
+  --c-warning-900: oklch(0.290 0.060 85);
+  --c-warning-950: oklch(0.220 0.035 85);
+
+  /* Error */
+  --c-error-50:  oklch(0.970 0.015 25);
+  --c-error-100: oklch(0.930 0.040 25);
+  --c-error-200: oklch(0.870 0.080 25);
+  --c-error-300: oklch(0.780 0.130 25);
+  --c-error-400: oklch(0.700 0.160 25);
+  --c-error-500: oklch(0.600 0.180 25);
+  --c-error-600: oklch(0.500 0.170 25);
+  --c-error-700: oklch(0.420 0.140 25);
+  --c-error-800: oklch(0.340 0.100 25);
+  --c-error-900: oklch(0.270 0.070 25);
+  --c-error-950: oklch(0.200 0.040 25);
+
+
+  /* ── Spacing: escala geométrica base 4px ── */
+
+  --sp-0:    0;
+  --sp-px:   1px;
+  --sp-0\.5: 0.125rem;   /* 2px */
+  --sp-1:    0.25rem;     /* 4px */
+  --sp-1\.5: 0.375rem;    /* 6px */
+  --sp-2:    0.5rem;      /* 8px */
+  --sp-3:    0.75rem;     /* 12px */
+  --sp-4:    1rem;        /* 16px */
+  --sp-5:    1.25rem;     /* 20px */
+  --sp-6:    1.5rem;      /* 24px */
+  --sp-8:    2rem;        /* 32px */
+  --sp-10:   2.5rem;      /* 40px */
+  --sp-12:   3rem;        /* 48px */
+  --sp-16:   4rem;        /* 64px */
+  --sp-20:   5rem;        /* 80px */
+  --sp-24:   6rem;        /* 96px */
+
+
+  /* ── Tipografía: escala modular ratio 1.25 (Major Third) ── */
+
+  --fs-xs:   0.64rem;     /* ~10px */
+  --fs-sm:   0.8rem;      /* ~13px */
+  --fs-base: 1rem;        /* 16px */
+  --fs-md:   1.25rem;     /* 20px */
+  --fs-lg:   1.563rem;    /* 25px */
+  --fs-xl:   1.953rem;    /* 31px */
+  --fs-2xl:  2.441rem;    /* 39px */
+  --fs-3xl:  3.052rem;    /* 49px */
+
+  --lh-tight:   1.2;
+  --lh-normal:  1.5;
+  --lh-relaxed: 1.75;
+
+  --fw-normal:   400;
+  --fw-medium:   500;
+  --fw-semibold: 600;
+  --fw-bold:     700;
+
+
+  /* ── Border radius ── */
+
+  --radius-none: 0;
+  --radius-sm:   0.25rem;    /* 4px */
+  --radius-md:   0.375rem;   /* 6px */
+  --radius-lg:   0.5rem;     /* 8px */
+  --radius-xl:   0.75rem;    /* 12px */
+  --radius-2xl:  1rem;       /* 16px */
+  --radius-full: 9999px;
+
+
+  /* ── Sombras ── */
+
+  --shadow-xs:  0 1px 2px oklch(0 0 0 / 0.05);
+  --shadow-sm:  0 1px 3px oklch(0 0 0 / 0.1), 0 1px 2px oklch(0 0 0 / 0.06);
+  --shadow-md:  0 4px 6px oklch(0 0 0 / 0.1), 0 2px 4px oklch(0 0 0 / 0.06);
+  --shadow-lg:  0 10px 15px oklch(0 0 0 / 0.1), 0 4px 6px oklch(0 0 0 / 0.05);
+  --shadow-xl:  0 20px 25px oklch(0 0 0 / 0.1), 0 8px 10px oklch(0 0 0 / 0.04);
+
+
+  /* ── Motion: duraciones + easings ── */
+
+  --dur-instant: 50ms;
+  --dur-fast:    100ms;
+  --dur-normal:  200ms;
+  --dur-slow:    300ms;
+  --dur-slower:  500ms;
+
+  --ease-default: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-in:      cubic-bezier(0.4, 0, 1, 1);
+  --ease-out:     cubic-bezier(0, 0, 0.2, 1);
+  --ease-in-out:  cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-spring:  cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-bounce:  cubic-bezier(0.34, 1.3, 0.64, 1);
+
+
+  /* ── Z-index ── */
+
+  --z-base:     0;
+  --z-dropdown: 10;
+  --z-sticky:   20;
+  --z-overlay:  30;
+  --z-modal:    40;
+  --z-popover:  50;
+  --z-toast:    60;
+}

@@ -1,0 +1,27 @@
+{
+  "_doc": "Manifest de libro/frontera-planos — REFLEJO STATELESS (M1, hoja del plan). EL CERROJO ESTRUCTURAL anti-bucle del dominio: separa el PLANO DE OPERACION (los hechos del negocio, que contabilidad RECIBE y jamas produce) del PLANO DE CALCULO (los derivados, que contabilidad PRODUCE y jamas deben realimentar la operacion). A la salida SOLO viajan calculos. Evidencia dura (la salida se declara hecho/realimenta) → 422 FRONTERA_PLANOS_ROTA. Sin patron declarado (`permitido`) NO da por bueno lo que no puede verificar (conforme:null: el silencio no es conformidad). DETERMINISTA; dato ausente = desconocido. NO escribe, NO persiste. RPC verificar es CLASE PREGUNTA → va por el bus, sin panel. Publica frontera-planos.verificar.response y su par .failed.",
+  "name": "frontera-planos",
+  "version": "0.1.0",
+  "description": "Reflejo (M1): cerrojo estructural anti-bucle. Verifica que a la salida solo viajan calculos y nunca hechos de negocio; fail-safe (el silencio no es conformidad).",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "frontera-planos.verificar.request",
+      "handler": "onVerificarRequest",
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id, salida, permitido?} → {project_id, conforme, verificable, no_realimenta, planos_clasificados, patron_aplicado, abierto}. Evidencia dura (salida declarada hecho/realimenta) → 422; sin patron → conforme:null (no verificable). Responde por frontera-planos.verificar.response."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "frontera-planos.verificar.response",
+      "description": "Respuesta RPC correlada de la op verificar (una sola cara: el bus)."
+    },
+    {
+      "event": "frontera-planos.verificar.failed",
+      "description": "Par de fallo determinista: falta project_id/salida o la salida cruza la frontera (422 FRONTERA_PLANOS_ROTA) → {status, code, message}. Cierra el circulo de verificar.request."
+    }
+  ],
+  "tools": [
+    { "name": "frontera-planos.verificar", "description": "Verifica (PREGUNTA) que una salida solo contiene calculos y no realimenta la operacion." }
+  ]
+}

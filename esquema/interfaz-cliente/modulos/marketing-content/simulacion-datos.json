@@ -1,0 +1,128 @@
+{
+  "_doc": "Simulación: marketing-content relleno para Nonina Pizzicas. Piezas de contenido en distintos formatos, canales, estados y etapas del funnel. Incluye relación madre→hijas (fragmentación).",
+  "esquema": "marketing-content-v1",
+
+  "piezas": [
+    {
+      "id": "pc-001",
+      "titulo": "La historia de Nonina: de un horno en Nápoles a tu barrio",
+      "formato": "articulo",
+      "canal_id": "web",
+      "etapa_funnel": "awareness",
+      "descripcion": "Artículo de marca que cuenta el origen del proyecto: la abuela (Nonina), la receta de masa madre y el viaje del horno napolitano a Madrid. Pieza fundamental para la página About y blog.",
+      "madre_id": null,
+      "estado": "publicado",
+      "contenido": "Todo empezó con un horno de leña en el barrio de Forcella, Nápoles. Mi abuela — la Nonina — amasaba cada mañana antes de que saliera el sol. No medía la harina: la sentía. No cronometraba la masa: la escuchaba. Cuando nos mudamos a Madrid, lo único que trajimos fue su receta y la certeza de que la pizza no se hace con prisa.\n\nHoy, cada masa fermenta 72 horas. Los tomates San Marzano llegan de la misma cooperativa que los vendía en el mercado de Pignasecca. La mozzarella di bufala la trae Di Stefano cada martes, en frío, desde Battipaglia.\n\nNo somos una cadena. No tenemos inversor. Somos un horno con una receta de abuela y la terquedad de hacerla bien."
+    },
+    {
+      "id": "pc-002",
+      "titulo": "Nuestra carta de temporada — Otoño 2026",
+      "formato": "landing",
+      "canal_id": "web",
+      "etapa_funnel": "consideration",
+      "descripcion": "Landing page de la carta estacional con las pizzas de otoño: calabaza, funghi porcini, trufa. Incluye fotos, ingredientes y alérgenos.",
+      "madre_id": null,
+      "estado": "publicado",
+      "contenido": null
+    },
+    {
+      "id": "pc-003",
+      "titulo": "¿Por qué 72 horas de fermentación?",
+      "formato": "articulo",
+      "canal_id": "web",
+      "etapa_funnel": "consideration",
+      "descripcion": "Artículo educativo sobre la fermentación lenta: digestibilidad, sabor, textura. Posiciona la masa madre como diferenciador real, no marketing. Con datos de un estudio de la Universidad Federico II de Nápoles.",
+      "madre_id": null,
+      "estado": "publicado",
+      "contenido": "La diferencia entre una pizza industrial y una artesanal no está en el topping. Está en la masa. Y la masa se define por el tiempo.\n\nCuando dejas fermentar una masa 72 horas a temperatura controlada, las levaduras descomponen los azúcares complejos del trigo. El resultado: una masa más ligera, con alvéolos irregulares, crujiente por fuera y elástica por dentro. Pero sobre todo: una masa que tu estómago digiere sin esfuerzo.\n\nUn estudio de la Universidad Federico II de Nápoles demostró que la fermentación larga reduce el índice glucémico de la masa en un 30% respecto a una masa de 4 horas. No es marketing — es bioquímica."
+    },
+    {
+      "id": "pc-004",
+      "titulo": "Pide directo: sin comisiones, mismo sabor",
+      "formato": "landing",
+      "canal_id": "web",
+      "etapa_funnel": "conversion",
+      "descripcion": "Landing para captar pedidos directos en lugar de Glovo/UberEats. Argumento: mismo precio, pizza más caliente (sin espera de rider), y apoyas al pequeño comercio.",
+      "madre_id": null,
+      "estado": "publicado",
+      "contenido": null
+    },
+    {
+      "id": "pc-005",
+      "titulo": "Newsletter: El horno de Nonina — Septiembre 2026",
+      "formato": "email",
+      "canal_id": "email",
+      "etapa_funnel": "retention",
+      "descripcion": "Newsletter mensual para suscriptores: nueva carta de otoño, evento de cata de vinos naturales, descuento 10% para pedidos directos en septiembre.",
+      "madre_id": null,
+      "estado": "publicado",
+      "contenido": "Hola pizzalovers,\n\nSeptiembre huele a bosque: llegan los funghi porcini y la trufa negra de Norcia. La nueva carta de otoño está lista — y este mes estrenamos dos pizzas que llevábamos un año probando.\n\n🍕 NUEVA: Tartufata — crema de trufa negra, mozzarella fior di latte, funghi porcini, parmigiano 36 meses\n🍕 NUEVA: Zucca e Salsiccia — crema de calabaza, salsiccia artesanal, provola affumicata, nueces\n\n🍷 EVENTO: Cata de vinos naturales con Marco de Cantina Ferrara — viernes 20 de septiembre, 20:30h. 6 vinos + 6 pizzas mini. Plazas limitadas.\n\n💰 SOLO SEPTIEMBRE: 10% de descuento en tu primer pedido directo desde nuestra web. Código: DIRECTO10\n\nNos vemos en el horno,\nEl equipo de Nonina"
+    },
+    {
+      "id": "pc-006",
+      "titulo": "Post Instagram: La masa a las 5am",
+      "formato": "post_social",
+      "canal_id": "instagram",
+      "etapa_funnel": "awareness",
+      "descripcion": "Foto del proceso de amasado a las 5 de la mañana con luz natural. Caption sobre el ritual diario. Hashtags: #masaMadre #pizzaNapolitana #hechoAmano",
+      "madre_id": null,
+      "estado": "publicado",
+      "contenido": "5:17 de la mañana. El horno aún no está encendido pero la masa ya lleva 68 horas despertándose.\n\nCada día empezamos así: las manos en la harina, el olor del fermento, el silencio del barrio dormido. No hay atajos — hay constancia.\n\nHoy estas masas se convertirán en 120 pizzas. Cada una con la misma receta que la Nonina amasaba en Forcella.\n\n#masaMadre #pizzaNapolitana #fermentacionNatural #hechoAmano #72horas #sinAtajos #pizzaMadrid"
+    },
+    {
+      "id": "pc-007",
+      "titulo": "3 razones para probar pizza de masa madre (extracto del artículo 72h)",
+      "formato": "post_social",
+      "canal_id": "instagram",
+      "etapa_funnel": "consideration",
+      "descripcion": "Carrusel de 3 slides extraído del artículo sobre fermentación. Fragmento hija del artículo pc-003.",
+      "madre_id": "pc-003",
+      "estado": "publicado",
+      "contenido": "Slide 1: Más digestible — fermentación larga = menos azúcares complejos\nSlide 2: Más sabor — los alvéolos atrapan la salsa y el aceite\nSlide 3: Más crujiente — la corteza se carameliza distinto a 450°C"
+    },
+    {
+      "id": "pc-008",
+      "titulo": "Cómo llegamos a la receta perfecta de Margherita",
+      "formato": "video",
+      "canal_id": "web",
+      "etapa_funnel": "awareness",
+      "descripcion": "Vídeo corto (2min) mostrando el proceso: amasado → fermentación → boleado → horneado → servicio. Sin voz, solo sonido ambiente y subtítulos.",
+      "madre_id": null,
+      "estado": "borrador",
+      "contenido": null
+    },
+    {
+      "id": "pc-009",
+      "titulo": "Guía: Cómo pedir pizza para grupos sin volverse loco",
+      "formato": "guia",
+      "canal_id": "web",
+      "etapa_funnel": "conversion",
+      "descripcion": "Guía práctica para pedidos de grupo (6+ personas): cuántas pizzas pedir, combinaciones recomendadas, cómo gestionar alérgenos. CTA: pide directo con menú grupal.",
+      "madre_id": null,
+      "estado": "publicado",
+      "contenido": "Regla de oro: 1 pizza por persona si son estándar, 1.5 si hay hambrientos.\n\nPara 8 personas recomendamos:\n- 3 clásicas (Margherita, Marinara, Diavola)\n- 3 especiales (de la carta de temporada)\n- 2 comodín (las que más gusten al grupo)\n\n¿Alérgenos? Todas nuestras pizzas indican alérgenos. Si alguien es celíaco, tenemos base sin gluten (avísanos con 24h). Veganos: la Marinara y la Ortolana son vuestras.\n\nPide directo desde la web — descuento del 5% en pedidos de 6+ pizzas."
+    },
+    {
+      "id": "pc-010",
+      "titulo": "Opinión de cliente: familia López, viernes de pizza",
+      "formato": "caso_exito",
+      "canal_id": "web",
+      "etapa_funnel": "advocacy",
+      "descripcion": "Testimonio real: familia que pide cada viernes. Foto en su mesa con las cajas de Nonina. Cita directa sobre la calidad y el servicio.",
+      "madre_id": null,
+      "estado": "publicado",
+      "contenido": "\"Llevamos un año pidiendo cada viernes. Los niños ya dicen 'hoy toca Nonina' como si fuera un evento. La Margherita es la referencia — si alguien dice que no le gusta la pizza, es que no ha probado esta. Y desde que pedimos directo en vez de por Glovo, llega más caliente y nos ahorramos 3€.\" — Laura López, clienta desde octubre 2025"
+    },
+    {
+      "id": "pc-011",
+      "titulo": "FAQ: ¿Hacéis delivery? ¿Tenéis sin gluten? ¿Se puede reservar?",
+      "formato": "faq",
+      "canal_id": "web",
+      "etapa_funnel": "conversion",
+      "descripcion": "Página de preguntas frecuentes con las 10 dudas más comunes. Reduce la carga de WhatsApp y teléfono.",
+      "madre_id": null,
+      "estado": "publicado",
+      "contenido": "¿Hacéis delivery? → Sí, pedidos directos desde nuestra web. Radio: 4km.\n¿Tenéis sin gluten? → Sí, base sin gluten disponible (+2€). Avisa con 24h.\n¿Se puede reservar? → Sí, desde la web o por WhatsApp.\n¿Cuánto tarda el delivery? → 35-45 min de media.\n¿Tenéis opciones veganas? → Marinara, Ortolana y cualquier pizza sin queso.\n¿Aceptáis grupos grandes? → Sí, hasta 20 personas con reserva previa.\n¿Puedo personalizar mi pizza? → Sí, puedes añadir o quitar ingredientes.\n¿Tenéis carta de vinos? → Sí, vinos naturales italianos seleccionados.\n¿Dónde estáis? → [Dirección], barrio de [X], Madrid.\n¿Cuál es vuestro horario? → Mar-Dom 13:00-16:00 y 20:00-23:30. Lunes cerrado."
+    }
+  ]
+}

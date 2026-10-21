@@ -15,7 +15,7 @@
 
   import { createEventDispatcher } from 'svelte';
   import { mqttRequest } from '$lib/ui-core/mqtt-request';
-  import { activeProjectId } from '$lib/stores/projects';
+  import { sessionProjectId } from '$lib/stores/sessionProject';
 
   export let extensions: string[] = [];
   export let placeholder: string = 'Seleccionar archivo...';
@@ -66,7 +66,7 @@
     error = '';
     try {
       const res = await mqttRequest<any>('fs', 'list', {
-        project_id: $activeProjectId,
+        project_id: $sessionProjectId,
         path
       }, { timeout: 10000 });
       items = (res.data?.files || []).filter(matchesFilter);

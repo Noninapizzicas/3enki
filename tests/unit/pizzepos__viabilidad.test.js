@@ -114,6 +114,27 @@ async function testAsync(desc, fn) {
     assert.strictEqual(r3.data.veredicto, 'no_viable_economicamente');
   });
 
+  await testAsync('evaluar: umbrales custom por proyecto (config.json 20/30/40) sin romper default', async () => {
+    const cfg = { '/pizzepos/viabilidad/config.json': JSON.stringify({ umbrales: { viable: 20, advertencia: 30, critico: 40 } }) };
+    // 15% → viable (15 < 20)
+    const r1 = await makeReflejo(cfg, cost(1.5)).m._evaluar({ ...base, nombre: 'A', ingredientes: [{ nombre: 'x' }], porciones: 1, pvp_objetivo: 10 });
+    assert.strictEqual(r1.data.veredicto, 'viable');
+    // 25% → viable_con_advertencias (20 <= 25 < 30), sin alerta crítica
+    const r2 = await makeReflejo(cfg, cost(2.5)).m._evaluar({ ...base, nombre: 'B', ingredientes: [{ nombre: 'x' }], porciones: 1, pvp_objetivo: 10 });
+    assert.strictEqual(r2.data.veredicto, 'viable_con_advertencias');
+    assert.ok(!r2.data.advertencias.some(a => a.startsWith('alerta_margen_critico')), '25% no es crítico con umbral 30');
+    // 35% → viable_con_advertencias + alerta crítica (30 <= 35 < 40)
+    const r3 = await makeReflejo(cfg, cost(3.5)).m._evaluar({ ...base, nombre: 'C', ingredientes: [{ nombre: 'x' }], porciones: 1, pvp_objetivo: 10 });
+    assert.strictEqual(r3.data.veredicto, 'viable_con_advertencias');
+    assert.ok(r3.data.advertencias.some(a => a.startsWith('alerta_margen_critico')), '35% es crítico con umbral 30');
+    // 45% → no_viable (45 >= 40)
+    const r4 = await makeReflejo(cfg, cost(4.5)).m._evaluar({ ...base, nombre: 'D', ingredientes: [{ nombre: 'x' }], porciones: 1, pvp_objetivo: 10 });
+    assert.strictEqual(r4.data.veredicto, 'no_viable_economicamente');
+    // Default intacto: sin config.json, 30% sigue siendo viable_con_advertencias (25 <= 30 < 35)
+    const r5 = await makeReflejo({}, cost(3)).m._evaluar({ ...base, nombre: 'E', ingredientes: [{ nombre: 'x' }], porciones: 1, pvp_objetivo: 10 });
+    assert.strictEqual(r5.data.veredicto, 'viable_con_advertencias');
+  });
+
   await testAsync('evaluar sin PVP → sin_pvp_objetivo + pvp_sugerido (30%)', async () => {
     const { m } = makeReflejo({}, cost(3));
     const r = await m._evaluar({ ...base, nombre: 'D', ingredientes: [{ nombre: 'x' }], porciones: 1 });

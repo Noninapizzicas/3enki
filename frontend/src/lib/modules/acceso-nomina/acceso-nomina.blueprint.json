@@ -1,0 +1,58 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "acceso-nomina",
+  "version": "blueprint-2.0.0",
+  "moduleId": "contabilidad",
+  "titulo": "Acceso a nómina",
+  "_doc": "Blueprint v2 de INTERFAZ del módulo contabilidad/acceso-nomina (F6½). Panel del custodio G7: la op de ESCRITURA (ORDEN) `declarar`, que declara qué identidades pueden ver la nómina de un empleado (el propio siempre). El default es `propio`; ver la de otro exige declararlo (dato ausente = desconocido, no se concede por silencio). Persistente. La op `autorizar` es PREGUNTA (sin ui_handler). Acciones DOTTED, transporte.rpc VACÍO. Args del handler REAL (index.js).",
+  "eventos_publicados": [
+    "contabilidad.acceso_nomina_declarado"
+  ],
+  "eventos_que_escucho": [
+    "acceso-nomina.declarar.response"
+  ],
+  "transporte": {
+    "entrada": "reflejo RPC via ui_handlers (module.json) — las ops se conducen por ui/request/contabilidad/<accion>. transporte.rpc vacio a proposito.",
+    "rpc": [],
+    "salida": [
+      "contabilidad.acceso_nomina_declarado"
+    ],
+    "qos": "publishAndWait (request/response correlado) en cada operacion; timeout 8s"
+  },
+  "ui": {
+    "_doc": "Panel de la cara humana de acceso-nomina: la(s) op(s) de ESCRITURA (ORDEN) del módulo, con sus args reales. El BlueprintForm la invoca por ui/request/contabilidad/<accion>.",
+    "ops": {
+      "acceso-nomina.declarar": {
+        "titulo": "Declarar el acceso a una nómina",
+        "descripcion": "Declara qué identidades pueden ver la nómina de un empleado (el propio siempre). Sin regla declarada, ver la de otro queda en desconocido (no se concede por silencio). Publica contabilidad.acceso_nomina_declarado.",
+        "rol": "jefe",
+        "forma": "editor-bloque (project_id/empleado_id/quien_puede_ver)",
+        "senal_pareada": "contabilidad.acceso_nomina_declarado",
+        "args": [
+          {
+            "nombre": "project_id",
+            "tipo": "text",
+            "required": true,
+            "descripcion": "Proyecto."
+          },
+          {
+            "nombre": "empleado_id",
+            "tipo": "text",
+            "required": true,
+            "descripcion": "Empleado cuya nómina se gobierna."
+          },
+          {
+            "nombre": "quien_puede_ver",
+            "tipo": "json",
+            "required": false,
+            "descripcion": "Identidades autorizadas a ver esa nómina (el propio siempre)."
+          }
+        ],
+        "errores": "400 INVALID_INPUT (sin project_id o empleado_id)"
+      }
+    },
+    "roles": {
+      "acceso-nomina.declarar": "jefe"
+    }
+  }
+}

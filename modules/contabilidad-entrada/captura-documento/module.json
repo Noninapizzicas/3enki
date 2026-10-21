@@ -1,0 +1,33 @@
+{
+  "_doc": "Manifest de entrada/captura-documento — REFLEJO STATELESS (A3, hoja del plan). Admite y VALIDA el documento recibido: MECANICO, cero juicio (no interpreta el contenido — eso es extraccion-dato A4.1). Comprueba que el documento existe y trae al menos un anclaje (tipo/file_path/contenido/mime); si no, RECHAZA con motivo declarado, no lo inventa. Al admitir, ENCADENA la entrada por EVENTO: si declara `formato`, lo sube a puerto-documento.entrar.request (A4.2, que traduce la forma y sigue a extraccion-dato); si ya viene canonico, lo sube a extraccion-dato.juzgar.request (A4.1). NO escribe, NO persiste. RPC admitir es CLASE PREGUNTA → va por el bus, SIN panel. Publica captura-documento.admitir.response y su par .failed. R3: escucha contabilidad.documento_recibido — su emisor puerto-documento-digital (A5) se construye en ESTE MISMO grupo → SI se declara (RPC admitir es el camino directo; la escucha es reaccion al puente digital).",
+  "name": "captura-documento",
+  "version": "0.1.0",
+  "description": "Reflejo (A3): admite y valida el documento recibido (mecanico, cero juicio). Encadena la entrada por evento a puerto-documento/extraccion-dato; no escribe.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "captura-documento.admitir.request",
+      "handler": "onAdmitirRequest",
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id, documento{...}, formato?, origen?} → {project_id, admitido, documento, encadenado_a, abierto}. Valida mecanicamente el documento (anclaje tipo/file_path/contenido/mime); si no lo trae, RECHAZA con motivo (no se inventa). Al admitir, sube puerto-documento.entrar.request o extraccion-dato.juzgar.request segun formato. Responde por captura-documento.admitir.response. Payload invalido → captura-documento.admitir.failed."
+    },
+    {
+      "event": "contabilidad.documento_recibido",
+      "handler": "onDocumentoRecibido",
+      "description": "Fire-and-forget (A5 puerto-documento-digital): llego un documento por el canal digital. Se admite mecanicamente y se encadena; no se interpreta ni se escribe."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "captura-documento.admitir.response",
+      "description": "Respuesta RPC correlada de la op admitir (una sola cara: el bus)."
+    },
+    {
+      "event": "captura-documento.admitir.failed",
+      "description": "Par de fallo determinista: falta project_id o el documento no es admisible → {status, code, message}. Cierra el circulo de admitir.request."
+    }
+  ],
+  "tools": [
+    { "name": "captura-documento.admitir", "description": "Admite (PREGUNTA) y valida mecanicamente un documento recibido antes de encadenarlo." }
+  ],
+  "ui_handlers": []
+}

@@ -1,0 +1,49 @@
+{
+  "name": "agentes-registro",
+  "version": "1.0.0",
+  "description": "P2 · Registro de pipelines — CUSTODIO único de la definición de cada agente (pasos, validaciones, entregable, presupuesto). Un solo escritor del store; nadie define un pipeline fuera del registro.",
+  "author": "Event Core Team",
+  "language": "es",
+  "main": "index.js",
+  "publishes": [
+    {
+      "event": "pipeline.declarado",
+      "description": "Un pipeline quedó declarado y persistido en el registro (payload: { request_id, pipeline, creado })."
+    },
+    {
+      "event": "pipeline.obtener.response",
+      "description": "Respuesta con el pipeline pedido (payload: { request_id, pipeline })."
+    },
+    {
+      "event": "pipeline.listar.response",
+      "description": "Respuesta con la lista de pipelines declarados (payload: { request_id, pipelines })."
+    },
+    {
+      "event": "pipeline.declarar.failed",
+      "description": "Fallo al declarar (contrato inválido, shape roto)."
+    },
+    {
+      "event": "pipeline.obtener.failed",
+      "description": "Pipeline no encontrado."
+    },
+    {
+      "event": "pipeline.listar.failed",
+      "description": "Fallo al listar."
+    }
+  ],
+  "subscribes": [
+    {
+      "event": "pipeline.declarar.request",
+      "handler": "onPipelineDeclararRequest"
+    },
+    {
+      "event": "pipeline.obtener.request",
+      "handler": "onPipelineObtenerRequest"
+    },
+    {
+      "event": "pipeline.listar.request",
+      "handler": "onPipelineListarRequest"
+    }
+  ],
+  "dependencies": []
+}

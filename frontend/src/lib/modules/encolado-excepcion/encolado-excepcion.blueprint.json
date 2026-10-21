@@ -1,0 +1,96 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "encolado-excepcion",
+  "version": "blueprint-2.0.0",
+  "moduleId": "contabilidad",
+  "titulo": "Encolado de excepción",
+  "_doc": "Blueprint v2 de INTERFAZ del módulo contabilidad/encolado-excepcion (F6½). Declara la sección `ui` para el BlueprintForm (patrón interfaz-dinamico). LA PARCELA DE LO DUDOSO. Un solo escritor (rol ENCOLADO_EXCEPCION). El flujo CONTINÚA; lo dudoso espera. IDEMPOTENTE por clave (la misma excepción no se encola dos veces). APPEND-ONLY. Persistente por proyecto. Las acciones van DOTTED ('<modulo>.<accion>') y el transporte.rpc va VACÍO: el RPC real es contabilidad.<accion>.request (domain 'contabilidad', action '<modulo>.<accion>' en ui_handlers) y la regex de deriveZones solo parsea acciones de 2 segmentos; el wrapper mqttRequest('contabilidad','<modulo>.<accion>') emite ui/request/contabilidad/<modulo>.<accion>, que casa con el ui_handler. Los args salen de los parámetros REALES del handler en index.js.",
+  "eventos_publicados": [
+    "contabilidad.excepcion_encolada"
+  ],
+  "eventos_que_escucho": [
+    "encolado-excepcion.encolar.response"
+  ],
+  "transporte": {
+    "rpc": [],
+    "salida": [
+      "contabilidad.excepcion_encolada"
+    ],
+    "qos": "publishAndWait (request/response correlado) vía ui/request/contabilidad/<modulo>.<accion>; timeout del panel 10s. transporte.rpc vacío a propósito (acciones DOTTED)."
+  },
+  "ui": {
+    "_doc": "Panel de la cara humana de encolado-excepcion: la op de ESCRITURA (ORDEN) del módulo, con sus args reales. El BlueprintForm la invoca por ui/request/contabilidad/<accion>.",
+    "ops": {
+      "encolado-excepcion.encolar": {
+        "titulo": "Encolar una excepción dudosa",
+        "descripcion": "Apunta una excepción dudosa para que un humano la revise. NO la resuelve ni para el flujo. Idempotente por clave (misma clave → duplicada:true). APPEND-ONLY. Anuncia contabilidad.excepcion_encolada.",
+        "rol": "asesor",
+        "forma": "editor-bloque (clave + motivo + origen)",
+        "senal_pareada": "contabilidad.excepcion_encolada",
+        "args": [
+          {
+            "nombre": "clave",
+            "tipo": "text",
+            "required": true,
+            "descripcion": "Clave de idempotencia de la excepción."
+          },
+          {
+            "nombre": "ref",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Referencia alternativa para la clave."
+          },
+          {
+            "nombre": "entidad",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Entidad de la que nace (alternativa a la clave)."
+          },
+          {
+            "nombre": "entidad_id",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "ID de la entidad (se combina con entidad)."
+          },
+          {
+            "nombre": "motivo",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Por qué es dudosa (se apila el hueco si falta)."
+          },
+          {
+            "nombre": "origen",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Módulo/vertical de origen."
+          },
+          {
+            "nombre": "vertical",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Alternativa a origen."
+          },
+          {
+            "nombre": "payload",
+            "tipo": "json",
+            "required": false,
+            "descripcion": "Datos crudos de la excepción."
+          },
+          {
+            "nombre": "rol",
+            "tipo": "select",
+            "required": false,
+            "descripcion": "Rol single-writer del guard (ENCOLADO_EXCEPCION).",
+            "enum": [
+              "ENCOLADO_EXCEPCION"
+            ]
+          }
+        ],
+        "errores": "403 PERMISSION_DENIED (rol != ENCOLADO_EXCEPCION) · 400 INVALID_INPUT (sin clave ni ref ni entidad)"
+      }
+    },
+    "roles": {
+      "encolado-excepcion.encolar": "asesor"
+    }
+  }
+}

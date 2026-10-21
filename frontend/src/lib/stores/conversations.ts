@@ -15,7 +15,7 @@ import {
   MqttTimeoutError,
   MqttRequestError
 } from '$lib/ui-core/mqtt-request';
-import { activeProjectId } from './projects';
+import { sessionProjectId } from '$lib/stores/sessionProject';
 import { saveConversation, getState } from './persistence';
 
 // =============================================================================
@@ -131,7 +131,7 @@ export const conversationsStore = writable<ConversationsState>(initialState);
  * Carga la lista de conversaciones del proyecto activo
  */
 export async function loadConversations(projectId?: string): Promise<void> {
-  const projId = projectId || get(activeProjectId);
+  const projId = projectId || get(sessionProjectId);
 
   if (!projId) {
     console.log('[Conversations] No active project, skipping load');
@@ -175,7 +175,7 @@ export async function loadConversations(projectId?: string): Promise<void> {
  * Carga una conversacion con sus mensajes
  */
 export async function loadConversation(conversationId: string): Promise<void> {
-  const projId = get(activeProjectId);
+  const projId = get(sessionProjectId);
   if (!projId) throw new Error('No active project');
   conversationsStore.update(s => ({ ...s, loading: true, error: null }));
 
@@ -208,7 +208,7 @@ export async function loadConversation(conversationId: string): Promise<void> {
 export async function createConversation(
   config?: Partial<Pick<Conversation, 'title' | 'system_prompt' | 'model' | 'provider' | 'temperature' | 'max_tokens' | 'context_window'>> | string
 ): Promise<Conversation> {
-  const projId = get(activeProjectId);
+  const projId = get(sessionProjectId);
 
   if (!projId) {
     throw new Error('No active project');
@@ -281,7 +281,7 @@ export async function updateConversation(
   conversationId: string,
   updates: Partial<Pick<Conversation, 'title' | 'system_prompt' | 'model' | 'provider' | 'temperature' | 'max_tokens' | 'context_window'>>
 ): Promise<Conversation> {
-  const projId = get(activeProjectId);
+  const projId = get(sessionProjectId);
   if (!projId) throw new Error('No active project');
   try {
     // Mapeamos a los campos que conoce el backend (chat-io.handleUpdateSettings)
@@ -329,7 +329,7 @@ export async function updateConversation(
  * Elimina una conversacion
  */
 export async function deleteConversation(conversationId: string): Promise<void> {
-  const projId = get(activeProjectId);
+  const projId = get(sessionProjectId);
   if (!projId) throw new Error('No active project');
   try {
     await mqttRequest('conversation', 'delete', { project_id: projId, conversation_id: conversationId });
@@ -401,7 +401,7 @@ export async function sendMessage(
       duration: number;
     }>('conversation', 'send', {
       conversationId: state.activeConversationId,
-      projectId: state.activeConversation?.project_id || get(activeProjectId),
+      projectId: state.activeConversation?.project_id || get(sessionProjectId),
       content,
       attachments
     });
@@ -418,7 +418,7 @@ export async function sendMessage(
           conversation: Conversation;
           messages: Message[];
         }>('conversation', 'load', {
-          project_id: state.activeConversation?.project_id || get(activeProjectId),
+          project_id: state.activeConversation?.project_id || get(sessionProjectId),
           conversation_id: conversationId
         });
 
@@ -546,7 +546,7 @@ export async function toggleMessageContext(
   inContext: boolean
 ): Promise<void> {
   const state = get(conversationsStore);
-  const projId = get(activeProjectId);
+  const projId = get(sessionProjectId);
 
   if (!projId) {
     throw new Error('No active project');
@@ -591,7 +591,7 @@ export async function toggleMessageContext(
  */
 export async function loadContextStats(): Promise<ContextStats | null> {
   const state = get(conversationsStore);
-  const projId = get(activeProjectId);
+  const projId = get(sessionProjectId);
 
   if (!projId || !state.activeConversationId) {
     return null;
@@ -695,8 +695,8 @@ export function initConversations(): () => void {
   const savedState = getState();
   const savedConversationId = savedState.chat?.conversationId;
 
-  // Suscribirse a cambios de proyecto activo
-  const unsubscribe = activeProjectId.subscribe(async (projectId) => {
+  // Suscribirse a cambios de proyecto activo (de la sesión/página actual)
+  const unsubscribe = sessionProjectId.subscribe(async (projectId) => {
     if (projectId) {
       await loadConversations(projectId);
 

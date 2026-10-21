@@ -1,0 +1,142 @@
+{
+  "_doc": "Blueprint del modulo lotes (the-pirate). Modulo REFLEJO (index.js determinista, no blueprint-driven) — este blueprint declara SOLO la interfaz del generador schema→UI (BlueprintForm). Seccion `ui` declarada por F6½ (esquematizar-interfaz, 2026-08-18): las 7 operaciones del modulo con sus args reales del contrato y los eventos que refrescan la zona DATOS. Las acciones son DOTTED (crear, estado.consultar, ocupacion.consultar...) porque el RPC real del bus es lotes.<accion>.request y el wrapper mqttRequest('lotes', '<accion>') emite ui/request/lotes/<accion> — por eso transporte.rpc va VACIO: la regex de deriveZones solo parsea acciones de 2 segmentos y los topics de 3 segmentos generarian ops fantasma con topic roto.",
+  "id": "lotes",
+  "version": "blueprint-1.0.0",
+
+  "rol": "Custodio del ciclo de vida de lotes de produccion anticipada (masa, huevos prehechos, cazuelas precocidas, salsas...): state machine NACIDO→EN_VENTANA→CONSUMIDO/DESCARTADO con ventana de uso calculada desde la config, ocupacion contra capacidad declarada y politica de reamasado parcial (lote_parcial). Generico: no sabe que contiene el lote. La politica (ventanas por tipo, capacidad, avisos) la declara el negocio via config.actualizar (ConfigCustodio).",
+
+  "eventos_publicados": [
+    "lote.creado",
+    "lote.estado.avanzado",
+    "lote.config.actualizado"
+  ],
+
+  "eventos_que_escucho": [],
+
+  "transporte": {
+    "entrada": "reflejo RPC via ui_handlers (module.json) — las 7 operaciones se conducen por ui/request/lotes/<accion> con la accion dotted; ver seccion ui.ops. transporte.rpc vacio a proposito (los topics reales lotes.*.request tienen 3 segmentos y rompen el parser del generador).",
+    "rpc": [],
+    "salida": [
+      "lote.creado",
+      "lote.estado.avanzado",
+      "lote.config.actualizado"
+    ],
+    "qos": "publishAndWait (request/response correlado) en cada operacion; timeout 8s"
+  },
+
+  "ui": {
+    "_doc": "Schema de panel del generador schema→UI (BlueprintForm). Las 7 operaciones del reflejo con sus args; lote.creado y lote.estado.avanzado refrescan la zona DATOS (declarada en F6½, consumida por F7).",
+    "ops": {
+      "crear": {
+        "titulo": "Crear lote",
+        "descripcion": "Da de alta un lote de produccion anticipada con su ventana calculada desde lotes-config. Comprueba capacidad antes de admitirlo.",
+        "args": [
+          {
+            "nombre": "tipo",
+            "tipo": "text",
+            "required": true,
+            "placeholder": "tipo de lote (masa, huevos_prehechos, cazuela...) — debe tener ventana declarada"
+          },
+          {
+            "nombre": "cantidad",
+            "tipo": "number",
+            "required": true,
+            "placeholder": "cantidad (ej. 5)"
+          },
+          {
+            "nombre": "unidad",
+            "tipo": "text",
+            "required": true,
+            "placeholder": "unidad (kg, bolas, uds)"
+          },
+          {
+            "nombre": "ocupacion",
+            "tipo": "number",
+            "required": false,
+            "placeholder": "ocupacion del frigo (kg) — opcional, suma contra capacidad"
+          },
+          {
+            "nombre": "nota",
+            "tipo": "text",
+            "required": false,
+            "placeholder": "nota libre (opcional)"
+          }
+        ]
+      },
+      "estado.consultar": {
+        "titulo": "Ver estado de un lote",
+        "descripcion": "Estado efectivo (NACIDO/EN_VENTANA/CONSUMIDO/DESCARTADO), fechas y tiempo restante de ventana.",
+        "args": [
+          {
+            "nombre": "lote_id",
+            "tipo": "text",
+            "required": true,
+            "placeholder": "id del lote (ej. lote_m3k2...) — ver la zona DATOS"
+          }
+        ]
+      },
+      "avanzar": {
+        "titulo": "Avanzar lote",
+        "descripcion": "Materializa la vida del lote: madurar (pasa a EN_VENTANA cuando su fecha llego), consumir, descartar, o reamasar_parcial (recalcula ventana desde ahora, politica lote_parcial).",
+        "args": [
+          {
+            "nombre": "lote_id",
+            "tipo": "text",
+            "required": true,
+            "placeholder": "id del lote"
+          },
+          {
+            "nombre": "accion",
+            "tipo": "select",
+            "required": true,
+            "enum": ["madurar", "consumir", "descartar", "reamasar_parcial"]
+          },
+          {
+            "nombre": "motivo",
+            "tipo": "text",
+            "required": false,
+            "placeholder": "motivo (opcional, queda en el historial)"
+          }
+        ]
+      },
+      "ocupacion.consultar": {
+        "titulo": "Ocupacion del frigo",
+        "descripcion": "Ocupacion viva (lotes no consumidos/descartados) contra la capacidad declarada, con disponible y porcentaje."
+      },
+      "ventana.consultar": {
+        "titulo": "Ventanas por tipo",
+        "descripcion": "Ventana de uso (min/max horas) de un tipo de lote, o el mapa completo si no se indica tipo.",
+        "args": [
+          {
+            "nombre": "tipo",
+            "tipo": "text",
+            "required": false,
+            "placeholder": "tipo (opcional — sin el, devuelve todas las ventanas)"
+          }
+        ]
+      },
+      "config.leer": {
+        "titulo": "Ver configuracion de lotes",
+        "descripcion": "Lectura de lotes-config del proyecto (capacidad, ventanas por tipo, avisos, lote parcial, condiciones)."
+      },
+      "config.actualizar": {
+        "titulo": "Actualizar configuracion",
+        "descripcion": "Escritura single-writer (el dueno). Los campos presentes se validan y aplican; los ausentes se preservan. Schema lotes-config-v1.",
+        "args": [
+          {
+            "nombre": "cambios",
+            "tipo": "json",
+            "required": true,
+            "descripcion": "Cambios a aplicar. Ej: {\"capacidad\":{\"total\":300},\"ventanas_por_tipo\":{\"masa\":{\"ventana_min_horas\":24,\"ventana_max_horas\":72}}}"
+          }
+        ]
+      }
+    },
+    "datos": {
+      "op": "ocupacion.consultar",
+      "titulo": "Ocupacion de lotes vs capacidad",
+      "refresh_on": ["lote.creado", "lote.estado.avanzado"],
+      "columnas": ["ocupacion_total", "capacidad_total", "disponible", "pct_ocupacion", "lotes_vivos"]
+    }
+  }
+}

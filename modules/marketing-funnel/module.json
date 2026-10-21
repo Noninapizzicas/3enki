@@ -1,0 +1,86 @@
+{
+  "_doc": "marketing-funnel — REFLEJO JS puro: embudo de marketing por proyecto. Etapas personalizables, flujos entre etapas con tasa de conversión y serie temporal, conversor de cuello de botella. 77% reflejo, 15% custodio, 8% conversor. Persiste por proyecto en state/marketing-funnel.json.",
+  "name": "marketing-funnel",
+  "version": "0.1.0",
+  "description": "Embudo de marketing: etapas, flujos de conversión y detección de cuellos de botella. Reflejo puro con custodia y conversor JS.",
+  "language": "es",
+
+  "subscribes": [
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Restaura el funnel del proyecto activado."
+    },
+    {
+      "event": "marketing.funnel.get.request",
+      "handler": "onGetRequest",
+      "description": "Devuelve etapas, flujos, cuello de botella y resumen del proyecto."
+    },
+    {
+      "event": "marketing.funnel.update.request",
+      "handler": "onUpdateRequest",
+      "description": "Actualiza etapas o registra flujos de conversión."
+    }
+  ],
+
+  "publishes": [
+    {
+      "event": "marketing.funnel.actualizado",
+      "description": "El funnel fue actualizado. Payload: { project_id, campos_actualizados[] }."
+    }
+  ],
+
+  "tools": [
+    {
+      "name": "marketing-funnel.get",
+      "description": "Obtiene el embudo de marketing de un proyecto.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1, "description": "ID del proyecto." }
+        },
+        "required": ["project_id"]
+      },
+      "handler": "toolGet",
+      "errores_conocidos": ["INVALID_INPUT"]
+    },
+    {
+      "name": "marketing-funnel.update",
+      "description": "Actualiza etapas del funnel o registra flujos de conversión.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1 },
+          "etapas": {
+            "type": "array",
+            "description": "[{ id?, nombre, orden?, descripcion?, metrica_principal?, acciones?, volumen? }]"
+          },
+          "flujos": {
+            "type": "array",
+            "description": "[{ id?, etapa_origen_id, etapa_destino_id, registro?: { tasa, volumen_origen?, volumen_destino? } }]"
+          }
+        },
+        "required": ["project_id"]
+      },
+      "handler": "toolUpdate",
+      "errores_conocidos": ["INVALID_INPUT", "ETAPA_NOT_FOUND"]
+    }
+  ],
+
+  "ui_handlers": [
+    {
+      "domain": "marketing-funnel",
+      "action": "get",
+      "handler": "handleUiGet",
+      "description": "Obtener funnel del proyecto activo."
+    },
+    {
+      "domain": "marketing-funnel",
+      "action": "update",
+      "handler": "handleUiUpdate",
+      "description": "Actualizar funnel del proyecto activo."
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "id": "regla-movimiento-bancario",
+  "name": "Regla de movimiento bancario",
+  "version": "0.1.0",
+  "zone": "work-bar",
+  "order": 53,
+  "icon": "🔀",
+  "label": "Regla movimiento"
+}

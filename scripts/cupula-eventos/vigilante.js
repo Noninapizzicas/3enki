@@ -15,6 +15,10 @@
  *   2. publish_huerfano  (WARN)  — un publish('X') de dominio sin subscriber
  *                                  (se excluyen *.response / *.failed: van
  *                                  correlados al caller, no a un subscriber).
+ *   3. suscriptor_huerfano (WARN) — un SUSCRIPTOR cuyo evento nadie EMITE (oyente
+ *                                  muerto: no loguea, no lanza, no expira). Caso
+ *                                  testigo: producto.creado. Se excluyen los .request
+ *                                  (endpoint RPC sin llamador = superficie de API).
  *
  * Nacimiento en fase TESTIGO (como la cúpula de la cabecera): --testigo
  * reporta y sale 0. Sin el flag, los ERROR salen 1 (para cuando gradúe).
@@ -39,7 +43,7 @@ const RED = '\x1b[31m', GREEN = '\x1b[32m', YEL = '\x1b[33m', CYAN = '\x1b[36m',
 const ATENDIDOS_POR_EL_CORE = new Set([
   'ui.request',            // UIRequestHandler (core/ui) — ui/request/# no pasa por manifests
 ]);
-const PREFIJOS_DINAMICOS = ['${', '<', '{', '+']; // nombres con placeholder → no resolubles estáticamente
+const PREFIJOS_DINAMICOS = ['${', '<', '{', '+', '*']; // placeholder o comodín → no resolubles estáticamente
 
 // ── barrido de ficheros ──────────────────────────────────────────────────────
 function* walk(dir) {
@@ -54,6 +58,14 @@ function* walk(dir) {
 const rel = (p) => path.relative(ROOT, p);
 const esDinamico = (ev) => !ev || PREFIJOS_DINAMICOS.some((d) => ev.includes(d));
 
+// El canon declara subscribes/publishes como LISTA. Un manifest que los trae como
+// DICT ({evento: handler}) dice lo mismo con otra forma → se NORMALIZA (y se canta el
+// desvío). Antes un solo manifest así tumbaba el vigilante entero: 'subs is not iterable'.
+const esDict = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
+const comoLista = (v) => Array.isArray(v)
+  ? v
+  : (esDict(v) ? Object.entries(v).map(([event, handler]) => ({ event, handler: typeof handler === 'string' ? handler : undefined })) : []);
+
 // ── censo ────────────────────────────────────────────────────────────────────
 // atendidos: evento → [quien lo escucha]        (subscribes / eventos_que_escucho / tools por nombre)
 // conducidos: {evento, por, via}                (publishAndWait — espera respuesta)
@@ -63,6 +75,7 @@ const conducidos = [];
 const publicados = [];
 const intenciones = [];   // trabajo_pendiente[].evento_esperado — futuro DECLARADO (forma, no prosa)
 const rechazosMudos = new Map();   // blueprint → nº de INVALID_INPUT sin hint (muro sin puerta)
+const manifiestosFueraDeCanon = []; // manifests que declaran subscribes/publishes como dict (forma fuera de canon)
 
 // Corta el comentario de línea (// …) respetando URLs (http://, https://). La línea
 // comentada del pseudocódigo es intención/prosa, NO conducción — caso testigo:
@@ -72,10 +85,10 @@ function sinComentario(linea) {
   return m ? linea.slice(0, m.index + m[1].length) : linea;
 }
 
-function atiende(ev, quien) {
+function atiende(ev, quien, via = 'manifest') {
   if (esDinamico(ev)) return;
   if (!atendidos.has(ev)) atendidos.set(ev, []);
-  atendidos.get(ev).push(quien);
+  atendidos.get(ev).push({ quien, via });
 }
 
 const RE_WAIT = /publishAndWait\(\s*['"`]([^'"`]+)['"`]/g;
@@ -96,7 +109,7 @@ function escanearTexto(texto, por, via) {
 // contrato vivo es la unión de manifest + código.
 function escanearJS(texto, por) {
   let m; RE_SUB.lastIndex = 0;
-  while ((m = RE_SUB.exec(texto))) atiende(m[1], por + ' (código)');
+  while ((m = RE_SUB.exec(texto))) atiende(m[1], por + ' (código)', 'codigo');
   escanearTexto(texto, por, 'codigo');
 }
 
@@ -106,22 +119,27 @@ for (const f of walk(MODULES)) {
   if (base === 'module.json') {
     let mj; try { mj = JSON.parse(fs.readFileSync(f, 'utf8')); } catch (_) { continue; }
     const quien = rel(f);
-    const subs = mj.subscribes || (mj.events && mj.events.subscribes) || [];
-    for (const s of subs) atiende(typeof s === 'string' ? s : s.event, quien);
-    const pubs = mj.publishes || (mj.events && mj.events.publishes) || [];
-    for (const p of pubs) {
+    const crudoSubs = mj.subscribes || (mj.events && mj.events.subscribes);
+    const crudoPubs = mj.publishes || (mj.events && mj.events.publishes);
+    const camposFueraDeCanon = [];
+    if (esDict(crudoSubs)) camposFueraDeCanon.push('subscribes');
+    if (esDict(crudoPubs)) camposFueraDeCanon.push('publishes');
+    if (esDict(mj.tools)) camposFueraDeCanon.push('tools');
+    if (camposFueraDeCanon.length) manifiestosFueraDeCanon.push({ donde: quien, campos: camposFueraDeCanon });
+    for (const s of comoLista(crudoSubs)) atiende(typeof s === 'string' ? s : s.event, quien, 'manifest');
+    for (const p of comoLista(crudoPubs)) {
       const ev = typeof p === 'string' ? p : p.event;
       if (!esDinamico(ev)) publicados.push({ evento: ev, por: quien, via: 'manifest' });
     }
     // tools y tools_http se alcanzan por bus con su nombre (el loader las cablea)
-    for (const t of [...(mj.tools || []), ...(mj.tools_http || [])]) if (t && t.name) atiende(t.name, quien + ' (tool)');
+    for (const t of [...comoLista(mj.tools), ...comoLista(mj.tools_http)]) if (t && t.name) atiende(t.name, quien + ' (tool)', 'tool');
   }
 
   if (base.endsWith('.blueprint.json')) {
     let bp; try { bp = JSON.parse(fs.readFileSync(f, 'utf8')); } catch (_) { continue; }
     const quien = rel(f);
-    for (const e of bp.eventos_que_escucho || []) atiende(typeof e === 'string' ? e : e.event, quien);
-    for (const e of bp.eventos_publicados || []) {
+    for (const e of comoLista(bp.eventos_que_escucho)) atiende(typeof e === 'string' ? e : e.event, quien, 'blueprint');
+    for (const e of comoLista(bp.eventos_publicados)) {
       const ev = typeof e === 'string' ? e : e.event;
       if (!esDinamico(ev)) publicados.push({ evento: ev, por: quien, via: 'blueprint' });
     }
@@ -164,7 +182,7 @@ for (const f of walk(MODULES)) {
   if (!bp.id || !bp.operaciones) continue;
   for (const op of Object.keys(bp.operaciones)) {
     if (op.startsWith('_')) continue;
-    atiende(`${bp.id}.${op}.request`, rel(f) + ' (operación blueprint)');
+    atiende(`${bp.id}.${op}.request`, rel(f) + ' (operación blueprint)', 'blueprint');
   }
 }
 
@@ -231,6 +249,27 @@ for (const p of publicados) {
   if (!respondeAlguien(p.evento)) publishHuerfano.push(p);
 }
 
+// 3. suscriptor_huerfano (WARN) — un SUSCRIPTOR cuyo evento NADIE emite. El punto ciego
+//    del contrato: un oyente muerto no loguea, no lanza, no expira — nadie lo espera.
+//    Caso testigo: producto.creado (4 orejas, ningún altavoz). Se excluyen los .request/
+//    .response/.failed: un endpoint RPC sin llamador es superficie de API, no fantasma.
+const esRpc = (ev) => /\.(request|response|failed|respuesta)$/.test(ev);
+const publicadosSet = new Set(publicados.map((p) => p.evento));
+const conducidosSet = new Set(conducidos.map((c) => c.evento));
+const suscriptorHuerfano = [];
+for (const [ev, quienas] of atendidos) {
+  if (esRpc(ev) || esDinamico(ev) || ATENDIDOS_POR_EL_CORE.has(ev)) continue;
+  if (ev.startsWith('core.')) continue;   // el core los emite fuera de manifests (no estáticos)
+  // Solo se canta el CONTRATO duro: oyentes declarados en module.json (manifest) o
+  // cableados en código (sub()). Los de blueprint/LLM/UI escuchan eventos que el repo
+  // no emite estáticamente (llegan por MQTT o de un turno LLM) — ruido, no fantasma.
+  const declarados = quienas.filter((q) => q.via === 'manifest' || q.via === 'codigo');
+  if (declarados.length === 0) continue;
+  if (publicadosSet.has(ev) || conducidosSet.has(ev)) continue;
+  suscriptorHuerfano.push({ evento: ev, por: [...new Set(declarados.map((q) => q.quien))].join(', '), via: declarados[0].via });
+}
+suscriptorHuerfano.sort((a, b) => a.evento.localeCompare(b.evento));
+
 // dedup para el reporte
 const dedup = (arr) => { const s = new Set(); return arr.filter((x) => { const k = x.evento + '|' + x.por; if (s.has(k)) return false; s.add(k); return true; }); };
 const errores = dedup(rpcFantasma);
@@ -238,7 +277,7 @@ const avisos = dedup(publishHuerfano);
 
 // ── reporte ──────────────────────────────────────────────────────────────────
 if (AS_JSON) {
-  console.log(JSON.stringify({ atendidos: atendidos.size, conducidos: conducidos.length, publicados: publicados.length, rpc_fantasma: errores, publish_huerfano: avisos, test_fantasma: testFantasma, veto_por_nombre: vetoPorNombre, intenciones, rechazos_mudos: Object.fromEntries(rechazosMudos) }, null, 1));
+  console.log(JSON.stringify({ atendidos: atendidos.size, conducidos: conducidos.length, publicados: publicados.length, rpc_fantasma: errores, publish_huerfano: avisos, suscriptor_huerfano: suscriptorHuerfano, manifiestos_fuera_de_canon: manifiestosFueraDeCanon, test_fantasma: testFantasma, veto_por_nombre: vetoPorNombre, intenciones, rechazos_mudos: Object.fromEntries(rechazosMudos) }, null, 1));
 } else {
   console.log(`cúpula-eventos: ${atendidos.size} eventos atendidos · ${conducidos.length} RPCs conducidos · ${publicados.length} publicaciones`);
   for (const e of errores) console.log(`${RED}✗ RPC FANTASMA${RST} ${e.evento}  ← conducido por ${e.por} y NADIE lo atiende`);
@@ -247,6 +286,8 @@ if (AS_JSON) {
   // dinámico — viven completos en --json, no ahogan la señal aquí.
   const avisosFuertes = avisos.filter((a) => a.via === 'pseudocodigo' || a.via === 'skill');
   for (const a of avisosFuertes) console.log(`${YEL}⚠ publish huérfano${RST} ${a.evento}  ← ${a.por} (${a.via}) — sin subscriber`);
+  for (const s of suscriptorHuerfano) console.log(`${YEL}⚠ suscriptor huérfano${RST} ${s.evento}  ← ${s.por} — nadie EMITE este evento (oyente muerto)`);
+  for (const m of manifiestosFueraDeCanon) console.log(`${CYAN}◆ manifest fuera de canon${RST} ${m.donde} — ${m.campos.join('/')} declarado como dict (el canon es lista; se normalizó)`);
   for (const t of testFantasma) console.log(`${YEL}⚠ test con fantasma${RST} ${t.evento}  ← ${t.por} — el stub perpetúa un evento que nadie atiende`);
   for (const v of vetoPorNombre) console.log(`${YEL}⚠ veto por nombre${RST} ${v.donde} — la procedencia se califica por EVIDENCIA (ley del prisma), no por lista: ${v.linea}`);
   // El canto POSITIVO: una intención declarada cuyo evento YA vive — ofrécela, ciérrala.

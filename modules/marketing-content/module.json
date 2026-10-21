@@ -1,0 +1,87 @@
+{
+  "_doc": "marketing-content — HÍBRIDO: catálogo de piezas de contenido con ciclo de vida (reflejo) + plan de fragmentación/reutilización (blueprint). 86% reflejo, 7% custodio, 7% micro-agente. Persiste por proyecto en state/marketing-content.json.",
+  "name": "marketing-content",
+  "version": "0.1.0",
+  "description": "Catálogo de piezas de contenido del proyecto: formato, canal, funnel, ciclo de vida y reutilización (fragmentación madre→hijas). Híbrido reflejo + blueprint.",
+  "language": "es",
+  "blueprint_driven": true,
+
+  "subscribes": [
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Restaura el contenido del proyecto activado."
+    },
+    {
+      "event": "marketing.content.get.request",
+      "handler": "onGetRequest",
+      "description": "Devuelve piezas de contenido y resumen del proyecto."
+    },
+    {
+      "event": "marketing.content.update.request",
+      "handler": "onUpdateRequest",
+      "description": "Actualiza piezas de contenido (crear, editar, transicionar estado)."
+    }
+  ],
+
+  "publishes": [
+    {
+      "event": "marketing.content.actualizado",
+      "description": "El contenido fue actualizado. Payload: { project_id, campos_actualizados[] }."
+    }
+  ],
+
+  "tools": [
+    {
+      "name": "marketing-content.get",
+      "description": "Obtiene las piezas de contenido de un proyecto.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1, "description": "ID del proyecto." },
+          "filtros": {
+            "type": "object",
+            "description": "{ formato?, canal_id?, etapa_funnel?, estado?, madre_id? }"
+          }
+        },
+        "required": ["project_id"]
+      },
+      "handler": "toolGet",
+      "errores_conocidos": ["INVALID_INPUT"]
+    },
+    {
+      "name": "marketing-content.update",
+      "description": "Actualiza piezas de contenido (crear, editar, cambiar estado).",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1 },
+          "piezas": {
+            "type": "array",
+            "description": "[{ id?, titulo, formato, canal_id?, etapa_funnel?, descripcion?, madre_id?, estado? }]"
+          }
+        },
+        "required": ["project_id"]
+      },
+      "handler": "toolUpdate",
+      "errores_conocidos": ["INVALID_INPUT", "INVALID_STATE_TRANSITION", "MADRE_NOT_FOUND"]
+    }
+  ],
+
+  "ui_handlers": [
+    {
+      "domain": "marketing-content",
+      "action": "get",
+      "handler": "handleUiGet",
+      "description": "Obtener piezas de contenido del proyecto activo."
+    },
+    {
+      "domain": "marketing-content",
+      "action": "update",
+      "handler": "handleUiUpdate",
+      "description": "Actualizar piezas de contenido del proyecto activo."
+    }
+  ]
+}

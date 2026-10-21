@@ -1,0 +1,34 @@
+{
+  "_doc": "Manifest de fiscal/puerto-nomina — PUENTE (G4, hoja del plan). ORIGEN DECLARABLE del dato de nomina: la FRONTERA por la que entra la nomina de un sistema de personal externo (o de la operacion). La op recibir (ORDEN, panel) admite UNA nomina ya emitida TAL CUAL (no la interpreta, no le da forma — eso es recibo-nomina G1) y ANUNCIA el hecho de dominio contabilidad.nomina_recibida para que arranque la cadena de nomina (recibo-nomina G1, lineas-nomina G6, pagos-a-cuenta-empleado G8, obligacion-seguridad-social, asiento-personal, conceptos-extra-nomina, liquidacion-baja-empleado). Frontera: la nomina viene de FUERA del repo, por eso NO se declara escucha de contabilidad.nomina_recibida (este puerto la EMITE). Dato ausente = desconocido: sin nomina no se fabrica; el origen/contrato que no venga se declara en `abierto` (si no existe el origen, se declara el puerto y se crea). STATELESS: sin PosPersistencia. Publica recibir.response/.failed y contabilidad.nomina_recibida.",
+  "name": "puerto-nomina",
+  "version": "0.1.0",
+  "description": "Puente (G4): origen declarable del dato de nomina. Admite la nomina de un sistema externo y anuncia contabilidad.nomina_recibida.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "puerto-nomina.recibir.request",
+      "handler": "onRecibirRequest",
+      "description": "RPC puente (ORDEN, panel): {project_id, nomina, origen?, empleado?, periodo?, recibida_en?} → {project_id, nomina, origen, empleado, periodo, recibida, interpretada:false, abierto}. Admite la nomina ya emitida por el origen externo (sin interpretarla) y publica contabilidad.nomina_recibida. Responde por puerto-nomina.recibir.response; sin nomina → puerto-nomina.recibir.failed."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "contabilidad.nomina_recibida",
+      "description": "Fire-and-forget (G4): la puerta admitio una nomina ya emitida por un origen externo → {project_id, nomina, origen, empleado, periodo, recibida_en}. Arranca la cadena de nomina: lo consumen recibo-nomina (G1), obligacion-seguridad-social, asiento-personal, lineas-nomina (G6), pagos-a-cuenta-empleado (G8), conceptos-extra-nomina y liquidacion-baja-empleado."
+    },
+    {
+      "event": "puerto-nomina.recibir.response",
+      "description": "Respuesta RPC correlada de la op recibir (una sola cara: el bus)."
+    },
+    {
+      "event": "puerto-nomina.recibir.failed",
+      "description": "Par de fallo determinista: falta project_id o nomina → {status, code, message}. Cierra el circulo de recibir.request."
+    }
+  ],
+  "tools": [
+    { "name": "puerto-nomina.recibir", "description": "Recibe (ORDEN) una nomina ya emitida por el sistema de personal y anuncia contabilidad.nomina_recibida." }
+  ],
+  "ui_handlers": [
+    { "domain": "contabilidad", "action": "puerto-nomina.recibir", "handler": "onRecibirRequest", "type": "workspace_module", "zone": "barra_modulos" }
+  ]
+}

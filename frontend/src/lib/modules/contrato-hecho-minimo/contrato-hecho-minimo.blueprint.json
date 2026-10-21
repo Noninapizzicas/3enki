@@ -1,0 +1,57 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "contrato-hecho-minimo",
+  "version": "blueprint-2.0.0",
+  "moduleId": "contabilidad",
+  "titulo": "Contrato de hecho mínimo",
+  "_doc": "Blueprint v2 de INTERFAZ del módulo contabilidad/contrato-hecho-minimo (F6½). Declara la sección `ui` para el BlueprintForm (patrón interfaz-dinamico). Parcela DECLARABLE del MÍNIMO exigible vista desde la FUENTE: la respuesta a '¿qué campos mínimos debe traer un hecho de esta vertical?' la DECLARA el jefe; el módulo NO inventa un mínimo cableado. Un escritor. Las acciones van DOTTED ('<modulo>.<accion>') y el transporte.rpc va VACÍO: el RPC real es contabilidad.<accion>.request (domain 'contabilidad', action '<modulo>.<accion>' en ui_handlers) y la regex de deriveZones solo parsea acciones de 2 segmentos; el wrapper mqttRequest('contabilidad','<modulo>.<accion>') emite ui/request/contabilidad/<modulo>.<accion>, que casa con el ui_handler. Los args salen de los parámetros REALES del handler en index.js.",
+  "eventos_publicados": [
+    "contabilidad.contrato_hecho_declarado"
+  ],
+  "eventos_que_escucho": [
+    "contrato-hecho-minimo.declarar.response"
+  ],
+  "transporte": {
+    "rpc": [],
+    "salida": [
+      "contabilidad.contrato_hecho_declarado"
+    ],
+    "qos": "publishAndWait (request/response correlado) vía ui/request/contabilidad/<modulo>.<accion>; timeout del panel 10s. transporte.rpc vacío a propósito (acciones DOTTED)."
+  },
+  "ui": {
+    "_doc": "Panel de la cara humana de contrato-hecho-minimo: la op de ESCRITURA (ORDEN) del módulo, con sus args reales. El BlueprintForm la invoca por ui/request/contabilidad/<accion>.",
+    "ops": {
+      "contrato-hecho-minimo.declarar": {
+        "titulo": "Declarar el contrato de hecho mínimo de una vertical",
+        "descripcion": "Fija el contrato de hecho mínimo de una vertical (los campos exigidos). Re-declarar APPENDEA al historial (no se pisa en silencio). Anuncia contabilidad.contrato_hecho_declarado.",
+        "rol": "jefe",
+        "forma": "editor-bloque (vertical + campos_exigidos + descripcion)",
+        "senal_pareada": "contabilidad.contrato_hecho_declarado",
+        "args": [
+          {
+            "nombre": "vertical",
+            "tipo": "text",
+            "required": true,
+            "descripcion": "Vertical a la que se le exige el mínimo (ej: pizzepos)."
+          },
+          {
+            "nombre": "campos_exigidos",
+            "tipo": "json",
+            "required": true,
+            "descripcion": "Lista de campos mínimos exigidos. Ej: [\"fecha\",\"importe\",\"tercero\"]"
+          },
+          {
+            "nombre": "descripcion",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Descripción humana del contrato."
+          }
+        ],
+        "errores": "400 INVALID_INPUT (falta vertical o campos_exigidos vacío)"
+      }
+    },
+    "roles": {
+      "contrato-hecho-minimo.declarar": "jefe"
+    }
+  }
+}

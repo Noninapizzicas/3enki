@@ -1,0 +1,57 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "aislamiento-negocio",
+  "version": "blueprint-2.0.0",
+  "moduleId": "contabilidad",
+  "titulo": "Aislamiento de negocio",
+  "_doc": "Blueprint v2 de INTERFAZ del módulo contabilidad/aislamiento-negocio (F6½). Declara la sección `ui` para el BlueprintForm (patrón interfaz-dinamico). Multi-negocio SIN FUGA: cada negocio tiene su PARCELA (frontera de aislamiento) con UN dueño; un negocio NUNCA se fuga a la parcela de otro. Crea la parcela y la RECLAMA en single-writer (M2) por evento. AISLAMIENTO: una parcela es de UN negocio; un segundo negocio sobre la misma parcela → 409 PARCELA_OCUPADA. Persistente por proyecto. Las acciones van DOTTED ('<modulo>.<accion>') y el transporte.rpc va VACÍO: el RPC real es contabilidad.<accion>.request (domain 'contabilidad', action 'aislamiento-negocio.crear_parcela' en ui_handlers) y la regex de deriveZones solo parsea acciones de 2 segmentos; el wrapper mqttRequest('contabilidad','aislamiento-negocio.crear_parcela') emite ui/request/contabilidad/aislamiento-negocio.crear_parcela, que casa con el ui_handler. Los args salen de los parámetros REALES del handler en index.js.",
+  "eventos_publicados": [
+    "contabilidad.negocio_parcela_creada"
+  ],
+  "eventos_que_escucho": [
+    "aislamiento-negocio.crear_parcela.response"
+  ],
+  "transporte": {
+    "rpc": [],
+    "salida": [
+      "contabilidad.negocio_parcela_creada"
+    ],
+    "qos": "publishAndWait (request/response correlado) vía ui/request/contabilidad/aislamiento-negocio.crear_parcela; timeout del panel 10s. transporte.rpc vacío a propósito (acciones DOTTED)."
+  },
+  "ui": {
+    "_doc": "Panel de la cara de ESCRITURA de aislamiento-negocio: la op crear_parcela (ORDEN) del módulo, con sus args reales. El BlueprintForm la invoca por ui/request/contabilidad/aislamiento-negocio.crear_parcela.",
+    "ops": {
+      "aislamiento-negocio.crear_parcela": {
+        "titulo": "Crear la parcela aislada de un negocio",
+        "descripcion": "Crea (ORDEN) la parcela del negocio (por defecto 'negocio:<id>') y la RECLAMA en single-writer por EVENTO (el único que concede titularidad). Sin negocio_id no hay parcela (no se inventa). Re-crear la parcela del MISMO negocio es idempotente; una parcela ya ocupada por OTRO negocio se RECHAZA (409 PARCELA_OCUPADA). Anuncia contabilidad.negocio_parcela_creada.",
+        "rol": "asesor",
+        "forma": "editor-bloque (negocio_id + escritor + parcela)",
+        "senal_pareada": "contabilidad.negocio_parcela_creada (+ subida single-writer.reclamar.request)",
+        "args": [
+          {
+            "nombre": "negocio_id",
+            "tipo": "text",
+            "required": true,
+            "descripcion": "ID del negocio dueño de la parcela (sin él no hay parcela: no se inventa)."
+          },
+          {
+            "nombre": "escritor",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Único escritor de la parcela (por defecto, el propio negocio)."
+          },
+          {
+            "nombre": "parcela",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Nombre declarado de la parcela (por defecto 'negocio:<negocio_id>')."
+          }
+        ],
+        "errores": "409 PARCELA_OCUPADA (la parcela ya es de otro negocio) · 400 INVALID_INPUT (sin project_id o sin negocio_id)"
+      }
+    },
+    "roles": {
+      "aislamiento-negocio.crear_parcela": "asesor"
+    }
+  }
+}

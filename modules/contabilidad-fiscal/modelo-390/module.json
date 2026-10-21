@@ -1,0 +1,33 @@
+{
+  "_doc": "Manifest de fiscal/modelo-390 — REFLEJO STATELESS (D3, hoja del plan). Declaracion ANUAL del IVA: construccion DETERMINISTA agregando las liquidaciones periodicas (los 4 trimestres). Depende de liquidacion-iva por EVENTO (le SUBE liquidacion-iva.calcular.request; no importa, no la implementa). LA LEY COMO DATO: los TIPOS/casillas del 390 son DECLARABLES (`tipos`), jamas se cablea ninguna casilla ni ningun tipo concreto: el modulo agrupa por la clave `tipo` que cada liquidacion declare. Invariante (honestidad): sin liquidaciones declaradas ni recuperables NO se inventa el 390 — se declara `abierto` (dato ausente = desconocido). NO escribe, NO persiste, NO presenta. RPC construir es CLASE PREGUNTA → va por el bus, SIN panel. Publica modelo-390.construir.response y su par .failed. R3: escucha contabilidad.ejercicio_cerrado — su emisor cierre-ejercicio (C4) YA existe en el repo → SI se declara.",
+  "name": "modelo-390",
+  "version": "0.1.0",
+  "description": "Reflejo (D3): modelo 390 (IVA anual) construido deterministicamente desde las liquidaciones. La ley entra como dato (tipos declarables); sin datos no se inventa.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "modelo-390.construir.request",
+      "handler": "onConstruirRequest",
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id, ejercicio?, periodos?[], liquidaciones?[], tipos?[]} → {project_id, ejercicio, resumen{iva_devengado,iva_deducible,resultado}, por_tipo, periodos[], verificable, abierto}. Agrega las liquidaciones periodicas; los tipos del 390 son dato declarable. Responde por modelo-390.construir.response. Payload invalido → modelo-390.construir.failed."
+    },
+    {
+      "event": "contabilidad.ejercicio_cerrado",
+      "handler": "onEjercicioCerrado",
+      "description": "Fire-and-forget (C4 cierre-ejercicio): un ejercicio quedo cerrado. Se observa (ventana acotada) como disparador del 390 anual; no se recalcula ni se escribe."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "modelo-390.construir.response",
+      "description": "Respuesta RPC correlada de la op construir (una sola cara: el bus)."
+    },
+    {
+      "event": "modelo-390.construir.failed",
+      "description": "Par de fallo determinista: falta project_id → {status, code, message}. Cierra el circulo de construir.request."
+    }
+  ],
+  "tools": [
+    { "name": "modelo-390.construir", "description": "Construye (PREGUNTA) el modelo 390 anual agregando las liquidaciones de IVA." }
+  ],
+  "ui_handlers": []
+}

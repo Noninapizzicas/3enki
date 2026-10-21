@@ -1,133 +1,100 @@
 'use strict';
 
 /**
- * CÚPULA DE EVENTOS (runtime) — buscar_capacidad + detalle_capacidad.
+ * CÚPULA DE EVENTOS (runtime) — el contrato del bus servido al LLM.
  *
- * La biblioteca buscable del contrato del bus: el LLM descubre y conduce cualquier
- * capacidad SIN cargar el catálogo entero. Gemela de buscar_agente / buscar_skill.
+ * Verifica las 4 tools de consulta (evento_indice, evento_detalle, evento_buscar,
+ * evento_fantasma) contra el escaneo real del repo. No toca el bus — solo el
+ * módulo en aislamiento con un registry/escaneo sintético.
  *
  * Ejecutar: node tests/unit/cupula-eventos__runtime.test.js
  */
 
 const assert = require('assert');
-const Cupula = require('../../modules/cupula-eventos');
+const CupulaEventos = require('../../modules/cupula-eventos');
+
+function nuevo(opts = {}) {
+  const m = new CupulaEventos();
+  m.logger = { info() {}, warn() {}, error() {} };
+  m.metrics = { increment() {}, timing() {}, gauge() {} };
+  m.eventBus = { publish: async () => {} };
+  // Si opts.conRepo=true, escanea el repo real (solo indice/detalle, sin mutaciones)
+  if (opts.conRepo) {
+    m.onLoad({ logger: m.logger, metrics: m.metrics, eventBus: m.eventBus, moduleLoader: {} });
+  } else {
+    // Censo sintético mínimo para las proyecciones
+    m.atendidos.set('estados.crear.request', ['modules/estados/module.json']);
+    m.atendidos.set('a.pedido.creado', ['modules/pedidos/module.json']);
+    m.conducidos.push({ evento: 'escandallo.costear.request', por: 'skill:test' });
+    m.conducidos.push({ evento: 'fantasma.test.request', por: 'skill:test' }); // no atendido → fantasma
+    m.publicados.push({ evento: 'a.pedido.creado', por: 'modules/pedidos/module.json' });
+    m.censadoEn = '2026-08-19T00:00:00.000Z';
+  }
+  return m;
+}
 
 const tests = [];
 function test(name, fn) { tests.push({ name, fn }); }
 
-function registrySintetico() {
-  return new Map([
-    ['escandallo.costear', { name: 'escandallo.costear', description: 'Calcula el coste de una receta del proyecto', parameters: { type: 'object', properties: { receta_id: { type: 'string' } }, required: ['receta_id'] }, module: 'escandallo', event_based: true }],
-    ['mercadona.producto.obtener', { name: 'mercadona.producto.obtener', description: 'Precio real de un producto en Mercadona', parameters: { type: 'object' }, module: 'mercadona-api' }],
-    ['invoke_agent', { name: 'invoke_agent', description: 'Invoca un agente especialista para una tarea', parameters: { type: 'object' } }],
-    ['whatsapp.enviar_plantilla', { name: 'whatsapp.enviar_plantilla', description: 'Envia una plantilla de whatsapp aprobada al cliente', parameters: { type: 'object' }, module: 'whatsapp-bot', confirmation: true }]
-  ]);
-}
-
-function nuevo() {
-  const reg = registrySintetico();
-  const published = [];
-  const m = new Cupula();
-  m.onLoad({
-    logger: { info() {}, warn() {}, error() {} },
-    metrics: { increment() {} },
-    eventBus: { publish: (t, p) => { published.push({ topic: t, payload: p }); } },
-    moduleLoader: { toolsRegistry: reg, getTool: (n) => reg.get(n) }
-  });
-  return { m, reg, published };
-}
-
-test('onLoad registra buscar_capacidad y detalle_capacidad en el toolsRegistry', () => {
-  const { reg } = nuevo();
-  assert.ok(reg.has('buscar_capacidad'), 'registra buscar_capacidad');
-  assert.ok(reg.has('detalle_capacidad'), 'registra detalle_capacidad');
-  assert.strictEqual(reg.get('buscar_capacidad').event_based, true);
+test('onLoad construye censo con atendidos/conducidos/publicados', () => {
+  const m = nuevo({ conRepo: true });
+  assert.ok(m.atendidos.size > 0, 'atendidos > 0');
+  assert.ok(m.conducidos.length >= 0);
+  assert.ok(m.publicados.length >= 0);
+  assert.ok(m.censadoEn, 'tiene timestamp de censado');
 });
 
-test('buscar_capacidad rankea y devuelve el catálogo BARATO (name+tipo+descripcion)', () => {
-  const { m } = nuevo();
-  const r = m._buscar({ query: 'costear receta' });
-  assert.ok(r.capacidades.length >= 1);
-  const top = r.capacidades[0];
-  assert.strictEqual(top.name, 'escandallo.costear', 'la más relevante primero');
-  assert.strictEqual(top.tipo, 'rpc', 'name con punto → rpc');
-  assert.ok(top.descripcion.includes('coste'), 'trae descripción');
-  assert.ok(!('parameters' in top), 'NO trae el cuerpo pesado (parameters) en la búsqueda');
+test('evento_indice resume el censo', () => {
+  const m = nuevo();
+  const { data } = m._indice();
+  assert.ok(typeof data.atendidos === 'number');
+  assert.ok(typeof data.conducidos === 'number');
+  assert.ok(typeof data.publicados === 'number');
+  assert.ok('rpc_fantasma' in data);
 });
 
-test('buscar_capacidad — el match en el NOMBRE pesa más que en la descripción', () => {
-  const { m } = nuevo();
-  const r = m._buscar({ query: 'mercadona' });
-  assert.strictEqual(r.capacidades[0].name, 'mercadona.producto.obtener');
+test('evento_detalle devuelve quién atiende un evento', () => {
+  const m = nuevo();
+  const r = m._detalle({ nombre: 'a.pedido.creado' });
+  assert.strictEqual(r.status, 200);
+  assert.ok(r.data.atendido_por.includes('modules/pedidos/module.json'));
+  assert.ok(r.data.publicado_por.length >= 1);
 });
 
-test('buscar_capacidad filtra por tipo (tool vs rpc)', () => {
-  const { m } = nuevo();
-  const soloTool = m._buscar({ query: 'agente', tipo: 'tool' });
-  assert.ok(soloTool.capacidades.every(c => c.tipo === 'tool'), 'solo tools (nombre pelado)');
-  assert.ok(soloTool.capacidades.some(c => c.name === 'invoke_agent'));
-  const soloRpc = m._buscar({ query: 'coste', tipo: 'rpc' });
-  assert.ok(soloRpc.capacidades.every(c => c.tipo === 'rpc'));
-});
-
-test('buscar_capacidad respeta el límite (sin saturar)', () => {
-  const { m } = nuevo();
-  const r = m._buscar({ query: 'a', limite: 1 });   // 'a' matchea varias
-  assert.ok(r.capacidades.length <= 1, 'top-K acotado');
-  assert.ok(typeof r.total === 'number', 'reporta el total real (más allá del límite)');
-});
-
-test('buscar_capacidad NO se devuelve a sí misma', () => {
-  const { m } = nuevo();
-  const r = m._buscar({ query: 'capacidad buscar detalle' });
-  const nombres = r.capacidades.map(c => c.name);
-  assert.ok(!nombres.includes('buscar_capacidad'), 'la puerta no se busca a sí misma');
-  assert.ok(!nombres.includes('detalle_capacidad'));
-});
-
-test('detalle_capacidad devuelve el CONTRATO completo bajo demanda', () => {
-  const { m } = nuevo();
-  const d = m._detalle({ name: 'escandallo.costear' });
-  assert.strictEqual(d.name, 'escandallo.costear');
-  assert.strictEqual(d.tipo, 'rpc');
-  assert.deepStrictEqual(d.request_shape.required, ['receta_id'], 'trae el request_shape');
-  assert.strictEqual(d.response_topic, 'escandallo.costear.response');
-  assert.ok(d.como_conducir.includes("bus.publishAndWait('escandallo.costear'"), 'dice cómo conducirla');
-});
-
-test('detalle_capacidad propaga confirmation:true', () => {
-  const { m } = nuevo();
-  const d = m._detalle({ name: 'whatsapp.enviar_plantilla' });
-  assert.strictEqual(d.confirmation, true);
-});
-
-test('detalle_capacidad → 404 para capacidad desconocida', () => {
-  const { m } = nuevo();
-  const r = m._detalle({ name: 'no.existe' });
+test('evento_detalle → 404 para evento inexistente', () => {
+  const m = nuevo();
+  const r = m._detalle({ nombre: 'no.existe.ejemplo' });
   assert.strictEqual(r.status, 404);
   assert.strictEqual(r.error.code, 'RESOURCE_NOT_FOUND');
 });
 
-test('detalle_capacidad → 400 sin name', () => {
-  const { m } = nuevo();
+test('evento_detalle → 400 sin nombre', () => {
+  const m = nuevo();
   assert.strictEqual(m._detalle({}).status, 400);
 });
 
-test('onBuscarCapacidad publica buscar_capacidad.response correlada por request_id', async () => {
-  const { m, published } = nuevo();
-  await m.onBuscarCapacidad({ data: { request_id: 'r1', query: 'costear' } });
-  const ev = published.find(p => p.topic === 'buscar_capacidad.response');
-  assert.ok(ev, 'publica la response');
-  assert.strictEqual(ev.payload.request_id, 'r1');
-  assert.ok(ev.payload.result.capacidades.length >= 1);
+test('evento_buscar encuentra por palabra', () => {
+  const m = nuevo();
+  const r = m._buscar({ q: 'pedido' });
+  assert.strictEqual(r.status, 200);
+  assert.ok(r.data.eventos.some(e => e.nombre.includes('pedido')));
 });
 
-test('onDetalleCapacidad publica error como {error} (no como result)', async () => {
-  const { m, published } = nuevo();
-  await m.onDetalleCapacidad({ data: { request_id: 'r2', name: 'no.existe' } });
-  const ev = published.find(p => p.topic === 'detalle_capacidad.response');
-  assert.ok(ev.payload.error, 'el 404 viaja como error, no como result');
-  assert.strictEqual(ev.payload.error.code, 'RESOURCE_NOT_FOUND');
+test('evento_buscar respeta el límite', () => {
+  const m = nuevo();
+  const r = m._buscar({ q: 'a', topK: 2 });
+  assert.ok(r.data.eventos.length <= 2);
+});
+
+test('evento_fantasma detecta los conducidos sin atender', () => {
+  const m = nuevo();
+  const { data } = m._fantasma();
+  assert.ok(data.rpc_fantasma.some(x => x.evento === 'fantasma.test.request'), 'detecta el fantasma');
+});
+
+test('escaneo del repo NO lanza (robusto)', () => {
+  const m = nuevo({ conRepo: true });
+  assert.doesNotThrow(() => m._escanear());
 });
 
 (async () => {

@@ -14,7 +14,8 @@
   "subscribes": [
     { "event": "publicar.html.request", "handler": "onPublicarRequest",     "description": "{ dir, html, nombre?, project_id? } → asegura la feature www + escribe el HTML en storage/www/<dir>/ → devuelve url_path (/<ns>/<slug>/<dir>/)." },
     { "event": "project.activated",     "handler": "onProjectActivated",    "description": "rastrea el proyecto activo (slug + base_path) — de ahí cuelga el árbol www." },
-    { "event": "project.deactivated",   "handler": "onProjectDeactivated",  "description": "limpia el activo." }
+    { "event": "project.deactivated",   "handler": "onProjectDeactivated",  "description": "limpia el activo." },
+    { "event": "project.list.response", "handler": "onProjectListResponse", "description": "HIDRATA las caras (UUID / slug / dir) desde la fuente de verdad al arrancar; sin esto el mapa nace vacio tras un hot-reload." }
   ],
   "publishes_rpc": [
     { "event": "project.ensure-feature.request", "description": "asegura la feature www antes de escribir (idempotente; project-manager crea storage/www + symlink)." }

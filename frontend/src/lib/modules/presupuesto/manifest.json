@@ -1,0 +1,9 @@
+{
+  "id": "presupuesto",
+  "name": "Presupuesto",
+  "version": "0.1.0",
+  "zone": "chat-tools",
+  "order": 14,
+  "icon": "🎯",
+  "label": "Presupuesto"
+}

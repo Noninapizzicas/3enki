@@ -1,0 +1,32 @@
+{
+  "_doc": "Manifest de analitica/sello-cobertura — REFLEJO STATELESS (Q3, hoja del plan). La MARCA DE COMPLETITUD de lo consultado, FUERA de ciclo: si falta cobertura lo dice ANTES de que se decida. ES UN REFLEJO QUE SELLA — y sellar aqui es MARCAR EL OBJETO DEVUELTO, no escribir estado: este modulo NO persiste, NO muta nada y NO guarda store; la marca vive SOLO en la respuesta. (Cura del error anterior: era un ESCRITOR MUDO — su `sellar` escribia y no lo anunciaba. La correccion es NO escribir: sin escritura no hay hecho que anunciar y R2 no aplica.) LEE la metrica UNICA (completitud-cobertura A12): NO la recalcula. Sube best-effort completitud-cobertura.medir.request (PREGUNTA→PREGUNTA) o usa lo DECLARADO en el input. Honestidad: sin metrica NO se inventa un sello de 'completo' — la marca queda INDETERMINADA. ≠ aviso-cuadre C6 (que solo avisa al cierre). RPC sellar es CLASE PREGUNTA → va por el bus, SIN ui_handler. Escucha contabilidad.hecho_recibido (su emisor puerto-evento-vertical A1 SI existe → R3 OK); observa, no escribe. Publica sello-cobertura.sellar.response y su par .failed.",
+  "name": "sello-cobertura",
+  "version": "0.1.0",
+  "description": "Reflejo (Q3): marca de completitud de lo consultado, fuera de ciclo. Sella el objeto devuelto (no escribe estado); sin metrica la marca queda indeterminada.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "sello-cobertura.sellar.request",
+      "handler": "onSellarRequest",
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id, metrica?/cobertura?, ejercicio?, desde?, hasta?} → {project_id, fuente, sello:{completo, estado, esperados, llegados, faltan, cobertura, faltantes, fuera_de_ciclo, persistido:false}, recalcula_metrica:false, abierto}. Marca la completitud de lo consultado ANTES de decidir; sin metrica queda INDETERMINADO. Responde por sello-cobertura.sellar.response. Payload invalido → sello-cobertura.sellar.failed."
+    },
+    {
+      "event": "contabilidad.hecho_recibido",
+      "handler": "onHechoRecibido",
+      "description": "Fire-and-forget (A1 puerto-evento-vertical): llego un hecho de la operacion. Se OBSERVA (ventana acotada) para el sello de la proxima consulta; no se escribe ni se recalcula la metrica."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "sello-cobertura.sellar.response",
+      "description": "Respuesta RPC correlada de la op sellar (una sola cara: el bus)."
+    },
+    {
+      "event": "sello-cobertura.sellar.failed",
+      "description": "Par de fallo determinista: falta project_id → {status, code, message}. Cierra el circulo de sellar.request."
+    }
+  ],
+  "tools": [
+    { "name": "sello-cobertura.sellar", "description": "Sella (PREGUNTA) la completitud de lo consultado leyendo la metrica unica, fuera de ciclo." }
+  ]
+}

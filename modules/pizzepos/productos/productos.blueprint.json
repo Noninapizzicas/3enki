@@ -1,0 +1,320 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "productos",
+  "version": "blueprint-1.1.0",
+  "moduleId": "productos",
+  "titulo": "Catalogo de productos pizzepos multi-tenant. PROYECTOR SIN ESTADO: no guarda copia; proyecta la carta activa del proyecto (carta-manager, fuente unica) a formato POS al vuelo via carta.get.request. Lee la carta por su DUEÑO (carta-manager RPC), no por fs directo. Emite catalogo.actualizado como señal de refresco para que comandero/pedidos re-pull. Mutaciones delegan a carta-manager.",
+  "eventos_publicados": [
+    "catalogo.actualizado",
+    "tarifas.config.solicitada"
+  ],
+  "eventos_que_escucho": [
+    "carta.actualizada",
+    "carta.editada",
+    "carta.borrada",
+    "tarifas.config.actualizada",
+    "project.activated",
+    "project.get.response"
+  ],
+  "transporte": {
+    "rpc": [
+      "productos.list.request -> .response",
+      "productos.get.request -> .response",
+      "productos.search.request -> .response",
+      "productos.update.request -> .response",
+      "productos.delete.request -> .response",
+      "productos.categorias.request -> .response",
+      "productos.ingredientes.request -> .response",
+      "productos.pizzas.request -> .response",
+      "productos.stats.request -> .response",
+      "productos.health.request -> .response",
+      "productos.metrics.request -> .response",
+      "productos.load_carta.request -> .response",
+      "productos.carta_completa.request -> .response"
+    ],
+    "salida": [
+      "catalogo.actualizado",
+      "tarifas.config.solicitada"
+    ]
+  },
+  "ui": {
+    "ops": {
+      "list": {
+        "titulo": "List",
+        "descripcion": "Lista productos del catalogo del proyecto con filtros opcionales por categoria, categoria_id o activo. Ordenados por categoria + nombre.",
+        "args": [
+          {
+            "nombre": "categoria",
+            "tipo": "string",
+            "required": false,
+            "descripcion": "Filtro opcional por nombre de categoria."
+          },
+          {
+            "nombre": "categoria_id",
+            "tipo": "ref",
+            "required": false,
+            "descripcion": "Filtro opcional por id de categoria.",
+            "ref": "productos.carta_completa",
+            "ref_label": "nombre",
+            "ref_value": "id",
+            "placeholder": "selecciona un categoria"
+          },
+          {
+            "nombre": "activo",
+            "tipo": "select",
+            "required": false,
+            "descripcion": "Filtro opcional por estado activo (boolean o 'true'/'false').",
+            "enum": [
+              "true",
+              "false"
+            ],
+            "enumLabels": [
+              "Sí",
+              "No"
+            ]
+          }
+        ]
+      },
+      "get": {
+        "titulo": "Get",
+        "descripcion": "Obtiene un producto por id dentro del catalogo del proyecto.",
+        "args": [
+          {
+            "nombre": "id",
+            "tipo": "ref",
+            "required": true,
+            "descripcion": "Identificador del producto.",
+            "ref": "productos.carta_completa",
+            "ref_label": "nombre",
+            "ref_value": "id",
+            "placeholder": "selecciona un producto"
+          }
+        ]
+      },
+      "search": {
+        "titulo": "Search",
+        "descripcion": "Busqueda full-text en nombre y descripcion de productos activos del proyecto.",
+        "args": [
+          {
+            "nombre": "q",
+            "tipo": "string",
+            "required": true,
+            "descripcion": "Termino de busqueda (case-insensitive)."
+          }
+        ]
+      },
+      "update": {
+        "titulo": "Update",
+        "descripcion": "Actualiza campos de un producto. Persiste el catalogo en disco y emite producto.actualizado con el detalle de cambios.",
+        "args": [
+          {
+            "nombre": "id",
+            "tipo": "ref",
+            "required": true,
+            "descripcion": "Identificador del producto.",
+            "ref": "productos.carta_completa",
+            "ref_label": "nombre",
+            "ref_value": "id",
+            "placeholder": "selecciona un producto"
+          }
+        ],
+        "nota_forma": "LA EDICIÓN del jefe (delega en carta.update_product). Campos frecuentes: precio (inline-gesture: toque→cifra→Enter en la tarjeta) y disponible (toggle de un toque). Los campos de ficha (descripción/etiquetas/alérgenos/categoría) van en un editor-bloque único (1 modal, sin fases). Señal pareada: carta.editada + catalogo.actualizado."
+      },
+      "delete": {
+        "titulo": "Delete",
+        "descripcion": "Elimina un producto del catalogo y persiste a disco. Emite producto.eliminado.",
+        "args": [
+          {
+            "nombre": "id",
+            "tipo": "ref",
+            "required": true,
+            "descripcion": "Identificador del producto.",
+            "ref": "productos.carta_completa",
+            "ref_label": "nombre",
+            "ref_value": "id",
+            "placeholder": "selecciona un producto"
+          }
+        ],
+        "nota_forma": "Retirada con confirmador-nombrado: el modal nombra qué producto, su precio y desde cuándo deja de venderse. Default recomendado: DESACTIVAR (update disponible=false) sobre borrar — el 90% de retiradas son estacionales. Señal pareada: carta.editada + catalogo.actualizado."
+      },
+      "categorias": {
+        "titulo": "Categorias",
+        "descripcion": "Lista categorias del proyecto con contador de productos activos en cada una, ordenadas por orden declarado."
+      },
+      "ingredientes": {
+        "titulo": "Ingredientes",
+        "descripcion": "Delega al modulo ingredientes (fuente unica). Mantiene el endpoint por compatibilidad con el frontend del comandero.",
+        "args": [
+          {
+            "nombre": "tipo",
+            "tipo": "string",
+            "required": false,
+            "descripcion": "Filtro opcional por tipo de ingrediente."
+          },
+          {
+            "nombre": "grupo",
+            "tipo": "string",
+            "required": false,
+            "descripcion": "Filtro opcional por grupo de ingrediente."
+          }
+        ]
+      },
+      "pizzas": {
+        "titulo": "Pizzas",
+        "descripcion": "Lista productos del catalogo cuya categoria empieza por 'pizz' o tipo es 'pizza'. Ordenadas alfabeticamente."
+      },
+      "stats": {
+        "titulo": "Stats",
+        "descripcion": "Estadisticas del catalogo. Si no se pasa project_id devuelve totales agregados across proyectos cargados; con project_id devuelve detalle por proyecto.",
+        "nota_forma": "cinta-estado: pulso del catalogo ('42 productos · 6 categorías · 2 sin alérgenos') sin navegar."
+      },
+      "health": {
+        "titulo": "Health",
+        "descripcion": "Health check: estado del modulo, totales agregados de productos/categorias/menus pendientes."
+      },
+      "metrics": {
+        "titulo": "Metrics",
+        "descripcion": "Metricas operativas del catalogo (counters y gauges)."
+      },
+      "load_carta": {
+        "titulo": "Load Carta",
+        "descripcion": "Recarga la carta del proyecto desde disco (storage/pizzepos/cartas/). Devuelve cuantos productos y categorias se cargaron."
+      },
+      "carta_completa": {
+        "titulo": "Carta Completa",
+        "descripcion": "Devuelve la carta completa (categorias + productos + ingredientes) en un solo round-trip. Si no se pasa project_id, usa el primer proyecto con datos."
+      }
+    },
+    "datos": {
+      "op": "list",
+      "titulo": "List",
+      "refresh_on": [
+        "carta.editada",
+        "catalogo.actualizado",
+        "tarifas.config.solicitada"
+      ]
+    },
+    "estados": [
+      {
+        "nombre": "borrador",
+        "terminal": false,
+        "color": "gray",
+        "icono": "📝"
+      },
+      {
+        "nombre": "config_solicitada",
+        "terminal": false,
+        "color": "gray",
+        "icono": "⚪"
+      }
+    ],
+    "flujo": [
+      {
+        "nombre": "jefe",
+        "orden": 1,
+        "ops": [
+          "update",
+          "delete"
+        ],
+        "descripcion": "Declaraciones del jefe sobre el catalogo: update (precio = inline-gesture, el gesto frecuente nº1; disponible = toggle, nº2; ficha = editor-bloque) y delete (confirmador-nombrado; default recomendado: desactivar, no borrar). Ambas delegan al custodio carta-manager; la señal pareada carta.editada + catalogo.actualizado refresca la vista (nunca recarga)."
+      },
+      {
+        "nombre": "consulta",
+        "orden": 3,
+        "ops": [
+          "list",
+          "categorias",
+          "get",
+          "search",
+          "stats",
+          "carta_completa",
+          "pizzas"
+        ],
+        "descripcion": "Lecturas que alimentan la decisión: catalogo vivo por categorias, ficha, busqueda en vivo, cinta-estado (stats) y la carta completa en un golpe (es el ref de los selects de producto: label nombre, value id)."
+      },
+      {
+        "nombre": "utilidad",
+        "orden": 5,
+        "ops": [
+          "load_carta"
+        ],
+        "descripcion": "Recuperacion manual: recarga la carta desde disco."
+      }
+    ],
+    "dependencias": {
+      "list": [
+        {
+          "campo": "categoria_id",
+          "de": "carta_completa"
+        }
+      ],
+      "get": [
+        {
+          "campo": "id",
+          "de": "list"
+        }
+      ],
+      "update": [
+        {
+          "campo": "id",
+          "de": "list"
+        }
+      ],
+      "delete": [
+        {
+          "campo": "id",
+          "de": "list"
+        }
+      ]
+    },
+    "detalle": {
+      "op": "get",
+      "titulo": "Detalle de producto",
+      "cabecera": [
+        "id",
+        "estado",
+        "created_at"
+      ],
+      "campo_items": "items",
+      "campo_total": "total",
+      "estados": [
+        "borrador",
+        "config_solicitada"
+      ],
+      "acciones_contextuales": [
+        "search",
+        "update",
+        "delete",
+        "categorias",
+        "ingredientes",
+        "pizzas",
+        "stats",
+        "metrics",
+        "load_carta",
+        "carta_completa"
+      ]
+    },
+    "roles": {
+      "update": "jefe",
+      "delete": "jefe",
+      "list": "neutro",
+      "get": "neutro",
+      "search": "neutro",
+      "categorias": "neutro",
+      "stats": "neutro",
+      "carta_completa": "neutro",
+      "pizzas": "neutro",
+      "load_carta": "neutro",
+      "ingredientes": "neutro",
+      "health": "neutro",
+      "metrics": "neutro"
+    },
+    "nota_roles": "ingredientes/health/metrics = sistema/compat: fuera del flujo. Ninguna op de utilizacion en este modulo."
+  },
+  "_lente_roles": {
+    "agente": "crear-blueprint-jefe v2",
+    "metodo": "esquematizador-jefe (modules/pizzepos/productos/esquema-jefe/)",
+    "arbitro": "¿decide el FUTURO del catalogo (escribe via custodio) -> jefe · sirve venta AHORA -> utilizacion · solo informa -> neutro",
+    "nota": "Productos no vende: UTILIZACION = nada (el POS consume las lecturas). El modulo entero es la cara de edicion del custodio carta-manager."
+  }
+}

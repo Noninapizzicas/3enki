@@ -1,0 +1,12 @@
+{
+  "name": "banco-ideas",
+  "version": "0.1.0",
+  "description": "Gestiona un banco de ideas: guardar, listar y recuperar ideas.",
+  "_doc": "Módulo que ofrece un banco de ideas compartido. Otros módulos pueden guardar ideas (texto y autor opcional), listarlas y recuperarlas por id. Las ideas se mantienen en memoria durante la vida del proceso.",
+  "subscribes": {
+    "banco-ideas.crear.request": "_crearIdea",
+    "banco-ideas.listar.request": "_listarIdeas",
+    "banco-ideas.obtener.request": "_obtenerIdea"
+  },
+  "publishes": {}
+}

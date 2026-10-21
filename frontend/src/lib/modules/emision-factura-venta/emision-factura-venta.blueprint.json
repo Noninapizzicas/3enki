@@ -1,0 +1,112 @@
+{
+  "schema": "blueprint-interfaz-v2",
+  "id": "emision-factura-venta",
+  "version": "blueprint-2.0.0",
+  "moduleId": "contabilidad",
+  "titulo": "Emisión de factura de venta",
+  "_doc": "Blueprint v2 de INTERFAZ del módulo contabilidad/emision-factura-venta (F6½). Declara la sección `ui` para el BlueprintForm (patrón interfaz-dinamico). La cara EMITIDA con SERIE/NUMERACIÓN. CONTABILIDAD SÍ emite la factura de venta. NUMERACIÓN ÚNICA por (serie, numero): repetirla → 409 NUMERO_DUPLICADO. APPEND-ONLY: nada se borra; una rectificación es OTRA factura. Las acciones van DOTTED ('<modulo>.<accion>') y el transporte.rpc va VACÍO: el RPC real es contabilidad.<accion>.request (domain 'contabilidad', action '<modulo>.<accion>' en ui_handlers) y la regex de deriveZones solo parsea acciones de 2 segmentos; el wrapper mqttRequest('contabilidad','<modulo>.<accion>') emite ui/request/contabilidad/<modulo>.<accion>, que casa con el ui_handler. Los args salen de los parámetros REALES del handler en index.js.",
+  "eventos_publicados": [
+    "contabilidad.factura_emitida",
+    "registro-verifactu.encadenar.request",
+    "factura-electronica.entrar.request",
+    "escritor-diario.asentar.request"
+  ],
+  "eventos_que_escucho": [
+    "emision-factura-venta.emitir.response"
+  ],
+  "transporte": {
+    "rpc": [],
+    "salida": [
+      "contabilidad.factura_emitida",
+      "registro-verifactu.encadenar.request",
+      "factura-electronica.entrar.request",
+      "escritor-diario.asentar.request"
+    ],
+    "qos": "publishAndWait (request/response correlado) vía ui/request/contabilidad/<modulo>.<accion>; timeout del panel 10s. transporte.rpc vacío a propósito (acciones DOTTED)."
+  },
+  "ui": {
+    "_doc": "Panel de la cara humana de emision-factura-venta: la op de ESCRITURA (ORDEN) del módulo, con sus args reales. El BlueprintForm la invoca por ui/request/contabilidad/<accion>.",
+    "ops": {
+      "emision-factura-venta.emitir": {
+        "titulo": "Emitir una factura de venta",
+        "descripcion": "Emite una factura con serie/numeración. Si no se declara número, toma el SIGUIENTE de la serie. Un (serie, numero) repetido se RECHAZA (409). Sin base/líneas/total no se emite (dato ausente = desconocido). Anuncia contabilidad.factura_emitida y encadena verifactu/e-factura/asiento.",
+        "rol": "asesor",
+        "forma": "editor-bloque (serie/numero/base/iva/total)",
+        "senal_pareada": "contabilidad.factura_emitida (+ cadena verifactu/e-factura/asiento)",
+        "args": [
+          {
+            "nombre": "serie",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Serie de la factura (por defecto 'A').",
+            "default": "A"
+          },
+          {
+            "nombre": "numero",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Número declarado; vacío = siguiente de la serie."
+          },
+          {
+            "nombre": "base",
+            "tipo": "number",
+            "required": false,
+            "descripcion": "Base imponible."
+          },
+          {
+            "nombre": "iva",
+            "tipo": "number",
+            "required": false,
+            "descripcion": "Cuota de IVA."
+          },
+          {
+            "nombre": "total",
+            "tipo": "number",
+            "required": false,
+            "descripcion": "Total (si falta, base + iva)."
+          },
+          {
+            "nombre": "fecha",
+            "tipo": "date",
+            "required": false,
+            "descripcion": "Fecha de la factura (por defecto hoy)."
+          },
+          {
+            "nombre": "tercero",
+            "tipo": "json",
+            "required": false,
+            "descripcion": "Tercero (objeto)."
+          },
+          {
+            "nombre": "lineas",
+            "tipo": "json",
+            "required": false,
+            "descripcion": "Líneas de la factura (array)."
+          },
+          {
+            "nombre": "documento_id",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "ID del documento digital asociado."
+          },
+          {
+            "nombre": "asiento",
+            "tipo": "json",
+            "required": false,
+            "descripcion": "Asiento contable ya calculado (objeto)."
+          },
+          {
+            "nombre": "por",
+            "tipo": "text",
+            "required": false,
+            "descripcion": "Quién emite."
+          }
+        ],
+        "errores": "409 NUMERO_DUPLICADO · 400 INVALID_INPUT (sin base ni líneas ni total) · 503 fs"
+      }
+    },
+    "roles": {
+      "emision-factura-venta.emitir": "asesor"
+    }
+  }
+}

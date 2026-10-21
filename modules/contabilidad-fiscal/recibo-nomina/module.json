@@ -1,0 +1,27 @@
+{
+  "_doc": "Manifest de fiscal/recibo-nomina — REFLEJO STATELESS (G1, hoja del plan). Admite y da FORMA ASENTABLE al hecho de nomina: una CABEZA identificada (empleado, periodo, fecha, devengo) + unos CONCEPTOS declarados, cada uno con su importe. Mecanico, CERO juicio: NO calcula la nomina (bruto/neto, bases, tipos), NO la interpreta: el hecho llega YA emitido por puerto-nomina (G7) y aqui solo se le da la forma que necesitan asiento-personal (G3) y la cadena de nomina. Se normaliza la ESTRUCTURA, no el VALOR: los importes se copian tal cual (ausente → null, no se asume 0). Invariante: dato ausente = desconocido. Una sola cara: el bus (PREGUNTA). NOTA R3: el plan declara escucha de contabilidad.nomina_recibida, pero NINGUN modulo del repo lo emite AUN (lo emite puerto-nomina G7, grupo posterior): declararlo daria cadena colgada, asi que NO se declara. Publica recibo-nomina.dar_forma.response y su par .failed.",
+  "name": "recibo-nomina",
+  "version": "0.1.0",
+  "description": "Reflejo (G1): admite y da forma asentable al hecho de nomina (cabeza + conceptos declarados). Mecanico, cero juicio; no calcula importes.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "recibo-nomina.dar_forma.request",
+      "handler": "onDarFormaRequest",
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id, nomina} → {project_id, forma, cabeza, conceptos, num_conceptos, calculado:false, interpretado:false, abierto}. Da forma asentable al hecho de nomina; los importes se copian declarados (no se calculan). Responde por recibo-nomina.dar_forma.response."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "recibo-nomina.dar_forma.response",
+      "description": "Respuesta RPC correlada de la op dar_forma (una sola cara: el bus)."
+    },
+    {
+      "event": "recibo-nomina.dar_forma.failed",
+      "description": "Par de fallo determinista: falta project_id o nomina → {status, code, message}. Cierra el circulo de dar_forma.request."
+    }
+  ],
+  "tools": [
+    { "name": "recibo-nomina.dar_forma", "description": "Da forma asentable (PREGUNTA) al hecho de nomina (cabeza + conceptos)." }
+  ]
+}

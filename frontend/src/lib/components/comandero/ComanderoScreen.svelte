@@ -48,6 +48,7 @@
   } from '$lib/stores/comandero';
   import { renameMesa, renameCuenta } from '$lib/stores/cuentas';
   import { imprimirComanda, type ComandaItem, type Canal } from '$lib/stores/impresion';
+  import { construirSeccionesIngredientes, llevaIngrediente, type SeccionIngrediente } from '$lib/utils/indice-ingredientes';
 
   import BotonEspecial from './BotonEspecial.svelte';
   import CategoriaBtn from './CategoriaBtn.svelte';
@@ -88,12 +89,28 @@
   // Colores fijos por familia: amarillo, verde, azul, rojo, lila
   const FAMILIA_COLORS = ['#eab308', '#22c55e', '#3b82f6', '#ef4444', '#a855f7'];
 
+  // Sección por INGREDIENTE PRINCIPAL (derivada, no almacenada): se calcula desde
+  // los ingredientes que cada pizza ya declara. Si la carta cambia, cambia sola.
+  let ingredienteActivo: string | null = null;
+
+  $: seccionesIngrediente = construirSeccionesIngredientes($todosProductos);
+
+  // Filtro por ingrediente: el camarero entra por lo que oye ("dos de jamón"),
+  // no por el nombre de la pizza. Una pizza con jamón y bacon sale en las dos.
+  $: productosVisibles = ingredienteActivo
+    ? $todosProductos.filter(p => llevaIngrediente(p, ingredienteActivo as string))
+    : $todosProductos;
+
   // Agrupar productos por categoría con color garantizado
   $: productosPorFamilia = $categorias.map((cat, idx) => ({
     categoria: cat,
     color: cat.color || FAMILIA_COLORS[idx % FAMILIA_COLORS.length],
-    productos: $todosProductos.filter(p => p.categoria_id === cat.id || p.categoria === cat.id)
+    productos: productosVisibles.filter(p => p.categoria_id === cat.id || p.categoria === cat.id)
   })).filter(g => g.productos.length > 0);
+
+  function alternarIngrediente(ingredienteId: string) {
+    ingredienteActivo = ingredienteActivo === ingredienteId ? null : ingredienteId;
+  }
 
   function scrollToFamilia(catId: string) {
     familiaActiva = catId;
@@ -692,6 +709,28 @@
     {/each}
   </div>
 
+  <!-- Secciones por ingrediente principal (derivadas de la carta, no almacenadas) -->
+  {#if seccionesIngrediente.length > 0}
+    <div class="ingredientes-bar">
+      {#each seccionesIngrediente as seccion (seccion.ingrediente_id)}
+        <button
+          class="ing-chip"
+          class:active={ingredienteActivo === seccion.ingrediente_id}
+          on:click={() => alternarIngrediente(seccion.ingrediente_id)}
+        >
+          {#if seccion.emoji}<span class="ing-emoji">{seccion.emoji}</span>{/if}
+          <span class="ing-nombre">{seccion.nombre}</span>
+          <span class="ing-count">{seccion.productos.length}</span>
+        </button>
+      {/each}
+      {#if ingredienteActivo}
+        <button class="ing-chip limpiar" on:click={() => (ingredienteActivo = null)}>
+          ✕ Todas
+        </button>
+      {/if}
+    </div>
+  {/if}
+
   <div class="main-body">
     <!-- Sidebar: solo acciones -->
     <aside class="sidebar">
@@ -1057,6 +1096,67 @@
 
   .familias-bar::-webkit-scrollbar {
     display: none;
+  }
+
+  /* Secciones por ingrediente principal — fila de accesos bajo las familias */
+  .ingredientes-bar {
+    display: flex;
+    gap: 6px;
+    padding: 4px 10px;
+    background: #0a0a0a;
+    border-bottom: 1px solid #1a1a1a;
+    overflow-x: auto;
+    overflow-y: hidden;
+    flex-shrink: 0;
+    scrollbar-width: none;
+  }
+
+  .ingredientes-bar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .ing-chip {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 9px;
+    border: 1px solid #2a2a2a;
+    border-radius: 12px;
+    background: #151515;
+    color: #cbd5e1;
+    font-size: 0.68rem;
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background 0.12s, border-color 0.12s, color 0.12s;
+  }
+
+  .ing-chip:hover {
+    background: #1f1f1f;
+    border-color: #3a3a3a;
+  }
+
+  .ing-chip.active {
+    background: #eab308;
+    border-color: #eab308;
+    color: #111;
+  }
+
+  .ing-emoji { font-size: 0.75rem; }
+
+  .ing-count {
+    font-size: 0.6rem;
+    opacity: 0.7;
+    padding: 0 3px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  .ing-chip.active .ing-count { background: rgba(0, 0, 0, 0.18); }
+
+  .ing-chip.limpiar {
+    border-style: dashed;
+    color: #94a3b8;
   }
 
   /* Main body */

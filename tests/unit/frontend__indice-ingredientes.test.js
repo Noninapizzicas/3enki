@@ -177,10 +177,11 @@ test('hermanasDe: fuera del sector pizzas no hay hermanas', () => {
 });
 
 // ---------- 6. FAMILIA FIJADA (el grupo declarado, no derivado) ----------
-// Fijar = congelar la sección en el DATO. Lo que importa: (a) manda el dato aunque el ingrediente
-// ya no esté, (b) una pizza que SÍ lleva el ingrediente pero no está en la lista NO se cuela,
-// (c) un miembro dado de baja desaparece del bloque sin romperlo.
-test('hermanasDe: la familia fijada manda sobre la derivación', () => {
+// Fijar = declarar QUÉ ingrediente abre la sección. Lo que importa: (a) un miembro declarado
+// sigue en el bloque aunque haya dejado de llevar el ingrediente, (b) todo el que lo lleva ENTRA
+// (la pertenencia es del ingrediente, no del producto — repetirse no cuesta nada), (c) un miembro
+// dado de baja desaparece del bloque sin romperlo.
+test('hermanasDe: la familia fijada abre con el ingrediente y entra todo el que lo lleva', () => {
   const p = (id, ings, extra = {}) => ({ id, nombre: id, categoria_id: 'pizzas', precio: 10,
     ingredientes_base: ings.map(n => ({ id: n, nombre: n })), ...extra });
 
@@ -189,14 +190,14 @@ test('hermanasDe: la familia fijada manda sobre la derivación', () => {
                miembros: ['bacon_rb', 'bacon_fantasma'], fijado_at: '2026-10-21T00:00:00Z' }
   });
   const rnb   = p('bacon_rb', ['tomate', 'bacon']);      // miembro declarado
-  const soul  = p('bacon_soul', ['tomate', 'bacon']);    // lleva bacon pero NO está en la familia
+  const soul  = p('bacon_soul', ['tomate', 'bacon']);    // lleva bacon y NO estaba declarada
   const todos = [ancla, rnb, soul];
 
   const h = mod.hermanasDe(ancla, todos);
   assert.ok(h, 'debe haber bloque');
   assert.strictEqual(h.principal.nombre, 'Bacon');
-  assert.deepStrictEqual(h.hermanas.map(q => q.id), ['bacon_rb'],
-    'solo el declarado: Soul lleva bacon pero no entra; el fantasma se salta');
+  assert.deepStrictEqual(h.hermanas.map(q => q.id), ['bacon_rb', 'bacon_soul'],
+    'todo el que lleva bacon entra (la pertenencia es del ingrediente); el fantasma se salta');
 });
 
 test('hermanasDe: un miembro fijado sin el ingrediente sigue en el bloque', () => {

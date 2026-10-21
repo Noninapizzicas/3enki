@@ -961,16 +961,19 @@ function showDetail(id) {
   }
 
   // Hermanas por ingrediente principal: las otras que llevan lo mismo, con elegir/editar.
+  // VAN ARRIBA, pegadas a la cabecera: el cliente abre la pizza y lo primero que ve son sus
+  // hermanas con nombre, lo que llevan, precio y boton. Enterrarlas debajo de "Anadir extras"
+  // (que es larguisimo) las volvia invisibles en el movil — se veian solo tras bajar media ficha.
   const hermanasHtml = renderHermanas(p);
 
   document.getElementById('detail-content').innerHTML =
     '<div class="detail-header"><h2 class="detail-nombre">'  + (p.emoji ? p.emoji + ' ' : '') + esc(p.nombre) + '</h2><span class="detail-precio">' + fmt(p.precio) + '</span></div>' +
     (tagsHtml ? '<div class="detail-tags">' + tagsHtml + '</div>' : '') +
     (p.descripcion ? '<p class="detail-desc">' + esc(p.descripcion) + '</p>' : '') +
+    hermanasHtml +
     escaleraHtml +
     (ingsHtml ? '<h3 class="section-title">Ingredientes <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#777">· toca para quitar</span></h3><div class="ing-list">' + ingsHtml + '</div>' : '') +
     (extrasHtml ? '<h3 class="section-title">Añadir extras</h3>' + extrasHtml : '') +
-    hermanasHtml +
     alergHtml;
 
   // Delegación (una sola vez): elegir una hermana → al carrito ; editar → SU ficha.

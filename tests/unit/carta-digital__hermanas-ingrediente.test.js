@@ -163,6 +163,17 @@ caso('una pizza sin familia de ingrediente no pinta el bloque (no inventa)', () 
   assert.ok(!/También con/.test(out), 'sin principal compartido → sin bloque');
 });
 
+caso('el bloque de hermanas va ARRIBA, antes de ingredientes y de añadir extras', () => {
+  api.showDetail('pizzas_milonga');
+  const out = api.detalle();
+  const posHermanas = out.indexOf('También con Jamón de york');
+  const posExtras   = out.indexOf('Añadir extras');
+  const posIngs     = out.indexOf('toca para quitar');
+  assert.ok(posHermanas > -1, 'el bloque existe');
+  assert.ok(posHermanas < posExtras, 'las hermanas van antes de "Añadir extras" (si no, quedan enterradas)');
+  assert.ok(posHermanas < posIngs, 'y antes de la lista de ingredientes');
+});
+
 let fallos = 0;
 for (const c of casos) {
   try { c.fn(); console.log('PASS ' + c.nombre); }

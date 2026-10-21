@@ -21,7 +21,7 @@ class TarifasModule extends BaseModule {
   constructor() {
     super();
     this.name = 'tarifas';
-    this.version = '3.1.0';
+    this.version = '3.2.0';
     this.configPerProject = new Map();
     this.projectPaths = new Map();
     this._lastActiveProjectId = null;
@@ -61,13 +61,24 @@ class TarifasModule extends BaseModule {
     const data = event?.data || event?.payload || event;
     if (!data || data.request_id !== this._hidrataCarrilesRequestId) return;   // respuestas ajenas
     let n = 0;
+    const hidratados = [];
     for (const p of (Array.isArray(data.projects) ? data.projects : [])) {
       if (!p?.id || !p?.base_path) continue;
       if (p.metadata?.is_system === true) continue;
       this._indexarCarril(p.id, (p.metadata?.is_system === true ? process.cwd() : p.base_path), { name: p.name, base_path: p.base_path, slug: p.slug });
       n++;
+      hidratados.push(p.id);
     }
     this.logger?.info?.(`${this.name}.carriles.hidratados`, { carriles: this.projectPaths.size, proyectos: n });
+
+    // FRÍO (v3.2.0): hidratar TAMBIÉN la config, no solo las rutas. Sin esto, tras un
+    // reinicio (o un hot-reload) configPerProject nace VACÍO y cualquier canal cae a la
+    // carta en_servicio: el override nunca muerde hasta que alguien active el proyecto a
+    // mano. El mapa canal->carta es DATO en disco; se lee al arrancar como las rutas.
+    for (const pid of hidratados) {
+      if (!this.configPerProject.has(pid)) await this.loadConfig(pid);
+      await this._publicarSnapshot(pid, null);
+    }
   }
 
   async onLoad(context) {

@@ -84,7 +84,7 @@ function publishedOf(mocks, name) {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     assert.strictEqual(m.name, 'tarifas');
-    assert.strictEqual(m.version, '3.1.0');
+    assert.strictEqual(m.version, '3.2.0');
     assert.strictEqual(m.configPerProject.size, 0);
     await m.onUnload();
   });
@@ -413,6 +413,59 @@ function publishedOf(mocks, name) {
     const { module: m } = await instantiate(mocks);
     mocks.published.length = 0;
     await m.onConfigSolicitada({ data: {} });
+    assert.strictEqual(publishedOf(mocks, 'tarifas.config.actualizada').length, 0);
+    await m.onUnload();
+  });
+
+  // Group FRÍO: el mapa canal->carta es DATO en disco y se hidrata al arrancar
+  await testAsync('onProjectListResponse hidrata la CONFIG del disco y publica snapshot (frío)', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    const base = path.join(TMP_ROOT, 'cold-proj');
+    await fsp.mkdir(path.join(base, 'storage', 'pizzepos'), { recursive: true });
+    await fsp.writeFile(
+      path.join(base, 'storage', 'pizzepos', 'tarifas.json'),
+      JSON.stringify({ general: 'v4', canales: { glovo: 'v4-glovo' }, variantes: [] })
+    );
+
+    // onLoad ya publicó project.list.request: rescatamos su request_id
+    const reqs = publishedOf(mocks, 'project.list.request');
+    assert.strictEqual(reqs.length, 1);
+    const request_id = reqs[0].request_id;
+    assert.ok(request_id, 'la hidratación pide project.list con request_id');
+
+    mocks.published.length = 0;
+    await m.onProjectListResponse({
+      data: {
+        request_id,
+        projects: [{ id: 'cold-1', name: 'the-pirate', slug: 'the-pirate', base_path: base }]
+      }
+    });
+
+    const cfg = m.configPerProject.get('cold-1');
+    assert.ok(cfg, 'configPerProject debe tener el proyecto sin haber sido activado');
+    assert.strictEqual(cfg.general, 'v4');
+    assert.strictEqual(cfg.canales.glovo, 'v4-glovo');
+
+    const snaps = publishedOf(mocks, 'tarifas.config.actualizada')
+      .filter(e => e.project_id === 'cold-1' && e.tipo === 'snapshot');
+    assert.strictEqual(snaps.length, 1);
+    assert.strictEqual(snaps[0].config.general, 'v4');
+    await m.onUnload();
+  });
+
+  await testAsync('onProjectListResponse ignora respuestas con request_id ajeno', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    const base = path.join(TMP_ROOT, 'ajeno-proj');
+    await fsp.mkdir(path.join(base, 'storage', 'pizzepos'), { recursive: true });
+    await fsp.writeFile(path.join(base, 'storage', 'pizzepos', 'tarifas.json'), JSON.stringify({ general: 'X' }));
+
+    mocks.published.length = 0;
+    await m.onProjectListResponse({
+      data: { request_id: 'otro-modulo-123', projects: [{ id: 'ajeno', base_path: base }] }
+    });
+    assert.strictEqual(m.configPerProject.has('ajeno'), false);
     assert.strictEqual(publishedOf(mocks, 'tarifas.config.actualizada').length, 0);
     await m.onUnload();
   });

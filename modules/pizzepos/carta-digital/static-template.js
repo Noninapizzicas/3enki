@@ -884,21 +884,44 @@ function ingPrincipalDe(p, grupo) {
   return mejorN >= 2 ? { nombre: mejor, n: mejorN } : null;
 }
 
+// Nombre de ingrediente comparable: sin mayúsculas ni espacios de sobra (el id es la vía
+// buena; esto es la red por si una carta vieja llega sin ids).
+function normIng(txt) {
+  return String(txt == null ? '' : txt).toLowerCase().trim();
+}
+
 function renderHermanas(p) {
   const grupo = familiaDe(p);
   let principal = null, hermanas = [];
 
-  // GRUPO FIJADO (DATO de la carta): manda el dato, no la derivación. Los ids se resuelven
-  // contra la carta VIVA, así que una pizza dada de baja simplemente desaparece del bloque en
-  // vez de romperlo — y una pizza nueva NO se cuela en una sección que el dueño fijó.
+  // GRUPO FIJADO (DATO de la carta): el ingrediente declarado abre sección, y dentro entra
+  // TODO el que lo lleva. La pertenencia es del INGREDIENTE, no del producto: una pizza con
+  // jamón york y atún sale en las dos secciones — repetirse no cuesta nada, y una pizza nueva
+  // entra sola sin volver a fijar nada. Los declarados van primero (orden del dueño) y los ids
+  // se resuelven contra la carta VIVA: un miembro dado de baja desaparece del bloque sin romperlo.
   const fijada = p && p.familia;
   if (fijada && Array.isArray(fijada.miembros) && fijada.miembros.length) {
     const todos = (DATA && DATA.productos) || [];
-    for (let k = 0; k < fijada.miembros.length; k++) {
-      const id = fijada.miembros[k];
-      if (!id || id === p.id) continue;
+    const visto = {};
+    const meter = function (id) {
+      if (!id || id === p.id || id === fijada.ancla || visto[id]) return;
       const q = todos.find(function (x) { return x.id === id; });
-      if (q && !hermanas.some(function (y) { return y.id === q.id; })) hermanas.push(q);
+      if (!q) return;                       // miembro que ya no existe: se salta
+      visto[id] = 1;
+      hermanas.push(q);
+    };
+    for (let k = 0; k < fijada.miembros.length; k++) meter(fijada.miembros[k]);
+    const ingId = fijada.ingrediente_id;
+    const ingNombre = normIng(fijada.ingrediente);
+    for (let k = 0; k < todos.length; k++) {
+      const q = todos[k];
+      if (!q || q.id === fijada.ancla) continue;
+      const ings = q.ingredientes || [];
+      for (let m = 0; m < ings.length; m++) {
+        const i = ings[m] || {};
+        const mismo = (ingId && i.id === ingId) || (ingNombre && normIng(i.nombre) === ingNombre);
+        if (mismo) { meter(q.id); break; }
+      }
     }
     if (!hermanas.length) return '';
     principal = {

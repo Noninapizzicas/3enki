@@ -179,14 +179,23 @@ export function hermanasDe(
   const cat = (producto as any).categoria_id || (producto as any).categoria || '';
   if (categorias.length && !categorias.includes(cat)) return null;
 
-  // 1) FAMILIA FIJADA: la sección declarada manda. Resuelve por id contra la carta viva.
+  // 1) FAMILIA FIJADA: el ingrediente declarado abre sección, y dentro entra TODO el que lo
+  // lleva — la pertenencia es del INGREDIENTE, no del producto (la misma regla que la
+  // derivación de arriba y que la carta digital). Una pizza con jamón york y atún sale en las
+  // dos secciones; repetirse no cuesta nada y una pizza nueva entra sola. Los declarados van
+  // primero y un miembro dado de baja se salta sin romper el bloque.
   const fijada = (producto as any).familia as FamiliaFijada | undefined;
   if (fijada && Array.isArray(fijada.miembros) && fijada.miembros.length) {
     const hermanas: Producto[] = [];
-    for (const id of fijada.miembros) {
-      if (!id || id === producto.id) continue;
+    const meter = (id?: string) => {
+      if (!id || id === producto.id || id === fijada.ancla) return;
+      if (hermanas.some(y => y.id === id)) return;
       const q = todos.find(p => p.id === id);
-      if (q && !hermanas.some(y => y.id === q.id)) hermanas.push(q);
+      if (q) hermanas.push(q);
+    };
+    for (const id of fijada.miembros) meter(id);
+    if (fijada.ingrediente_id) {
+      for (const q of todos) if (llevaIngrediente(q, fijada.ingrediente_id)) meter(q.id);
     }
     if (hermanas.length === 0) return null;
     return {

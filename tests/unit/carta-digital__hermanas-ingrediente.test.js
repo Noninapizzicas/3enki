@@ -227,14 +227,22 @@ caso('el bloque de hermanas va ARRIBA, antes de ingredientes y de añadir extras
 });
 
 // ── FAMILIA FIJADA ────────────────────────────────────────────────────────────
-caso('familia FIJADA: pinta los declarados y NO deja colarse a los que llevan el ingrediente', () => {
+caso('familia FIJADA: entra TODO el que lleva el ingrediente (la pertenencia es del ingrediente)', () => {
   api.showDetail('pizzas_bacon_ancla');
   const out = api.detalle();
   assert.ok(/También con Bacon/.test(out), 'cabecera con el ingrediente declarado');
-  assert.strictEqual((out.match(/hermana-row/g) || []).length, 1, 'una sola hermana: la declarada');
-  assert.ok(/hermana-nombre">Merengue/.test(out), 'Merengue sí (está en la familia)');
-  assert.ok(!/hermana-nombre">Barbacoa/.test(out), 'Barbacoa NO: lleva bacon pero no está en la familia');
+  assert.strictEqual((out.match(/hermana-row/g) || []).length, 3, 'las tres que llevan bacon: la declarada y las dos que no estaban');
+  assert.ok(/hermana-nombre">Merengue/.test(out), 'Merengue sí (declarada)');
+  assert.ok(/hermana-nombre">Barbacoa/.test(out), 'Barbacoa SÍ: lleva bacon, y la lista no es una puerta cerrada');
+  assert.ok(/hermana-nombre">Pizza Carbonara/.test(out), 'Carbonara también: lleva bacon');
   assert.ok(!/pizzas_fantasma/.test(out), 'el miembro que ya no existe se salta, no rompe');
+});
+
+caso('una pizza con DOS ingredientes de familia sale en las DOS secciones', () => {
+  api.showDetail('pizzas_bacon_ancla');
+  assert.ok(/hermana-nombre">Merengue/.test(api.detalle()), 'Merengue en la de bacon: lleva bacon');
+  api.showDetail('pizzas_milonga');
+  assert.ok(/hermana-nombre">Merengue/.test(api.detalle()), 'y en la de jamón de york: lleva jamón. Repetirse no cuesta nada');
 });
 
 caso('familia FIJADA: el bloque es el mismo al abrir cualquiera de sus miembros', () => {
@@ -275,20 +283,26 @@ if (!CARTA_VIVA) {
 
     const bacon = fam('pizzas_pizza_de_bacon');
     assert.strictEqual(bacon.ingrediente_id, 'bacon', 'bacon fijado');
-    assert.strictEqual(bacon.miembros.length, 10, 'las 10 hermanas de bacon');
+    assert.strictEqual(bacon.miembros.length, 11, 'las 11 hermanas de bacon (entra Merengue: lleva bacon)');
+    assert.ok(bacon.miembros.includes('pizzas_merengue'), 'Merengue sale en bacon aunque su familia declarada sea jamón');
 
     const atun = fam('pizzas_pizza_de_atun');
     assert.strictEqual(atun.ingrediente_id, 'atun', 'atún fijado');
     assert.strictEqual(atun.ancla, 'pizzas_pizza_de_atun');
     assert.deepStrictEqual(atun.miembros, [
-      'pizzas_blues', 'pizzas_bossa_nova', 'pizzas_chillout', 'pizzas_tango'
+      'pizzas_blues', 'pizzas_bossa_nova', 'pizzas_chillout', 'pizzas_tango', 'pizzas_punk'
     ]);
-    assert.ok(!atun.miembros.includes('pizzas_punk'), 'Punk no entra en atún: ya es de jamón de york');
+    assert.ok(atun.miembros.includes('pizzas_punk'), 'Punk SÍ entra en atún: lleva atún. Y sigue en jamón (repetirse no cuesta nada)');
+    assert.ok(jamon.miembros.includes('pizzas_punk'), 'Punk también en jamón de york');
 
-    // El dato viaja en el ancla Y en cada miembro: el bloque sale igual desde cualquiera.
+    // El dato viaja en el ancla Y en cada miembro QUE DECLARA esa familia. Punk no la declara
+    // (su familia declarada es jamón) y aun así sale en atún porque lleva atún: la pertenencia
+    // la resuelve el ingrediente, no el objeto `familia` del producto.
     for (const id of atun.miembros) {
+      if (fam(id).ingrediente_id !== 'atun') continue;
       assert.deepStrictEqual(fam(id).miembros, atun.miembros, `${id} comparte la familia de atún`);
     }
+    assert.strictEqual(fam('pizzas_punk').ingrediente_id, 'jamon_de_york', 'Punk declara jamón y aun así sale en atún');
     // Y los ingredientes de las 4 de atún llevan emoji (la fila se pinta, no se lee).
     for (const id of atun.miembros) {
       for (const ing of (porId.get(id) || {}).ingredientes || []) {

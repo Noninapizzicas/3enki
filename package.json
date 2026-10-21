@@ -7,7 +7,7 @@
     "event-core": "./cli/index.js"
   },
   "scripts": {
-    "test": "node tests/unit/hooks.test.js && node tests/unit/observability.test.js && node tests/unit/http-gateway.test.js && node tests/unit/conversacion__chat-io.test.js && node tests/unit/conversacion__ai-gateway.test.js",
+    "test": "node tests/unit/hooks.test.js && node tests/unit/observability.test.js && node tests/unit/http-gateway.test.js && node tests/unit/conversacion__chat-io.test.js && node tests/unit/conversacion__ai-gateway.test.js && node tests/unit/carta-digital__hermanas-ingrediente.test.js && node tests/unit/carta-digital__republicacion-auto.test.js",
     "test:conversation": "node tests/unit/conversacion__chat-io.test.js && node tests/unit/conversacion__ai-gateway.test.js",
     "test:all": "npm run test:hooks && npm run test:observability && npm run test:gateway && npm run test:cli && npm run test:integration",
     "test:hooks": "node tests/unit/hooks.test.js",
@@ -182,6 +182,8 @@
     "create-module:interactive": "node scripts/create-module.js --interactive",
     "generate:constants": "node scripts/generate-constants.js",
     "test:pizzepos__carta-manager": "node tests/unit/pizzepos__carta-manager.test.js",
+    "test:carta-digital__hermanas": "node tests/unit/carta-digital__hermanas-ingrediente.test.js",
+    "test:carta-digital__republicacion": "node tests/unit/carta-digital__republicacion-auto.test.js",
     "test:pizzepos__carta-design": "node tests/unit/pizzepos__carta-design.test.js",
     "test:prisma__producto-manager": "node tests/unit/prisma__producto-manager.test.js",
     "test:prisma__recetario": "node tests/unit/prisma__recetario.test.js",

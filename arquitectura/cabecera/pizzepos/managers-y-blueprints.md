@@ -5,12 +5,87 @@ resumen: Managers de dominio pizzepos (cuentas, productos, categorías, cobros, 
 fuentes:
   - modules/pizzepos/**
   - blueprints/**
-verificado: 2026-07-19
+verificado: 2026-10-21
 ---
 
 # Módulos Pizzepos y Blueprints
 
 ## PIZZEPOS - CORE MODULES
+
+> **Alta de producto — la cadena canónica (verificada en vivo 2026-10-19).** La puerta
+> del asistente es `productos.crear` / `productos.crear_categoria` (productos NO escribe:
+> delega en carta-manager, que hace snapshot y sube version). Un alta enciende todo por
+> eventos, sin cablear consumidores a mano:
+>
+> ```
+> productos.crear → carta.add_product → carta-manager._mutar (version++, snapshot)
+>   → carta.editada
+>       ├─ productos.onCartaGenerada      → catalogo.actualizado → comandero + pedidos
+>       │                                   (cache: nombre, precio, categoria, estaciones)
+>       ├─ variaciones.onCartaActualizada  → reconfigura reglas del producto
+>       └─ carta-digital._autoPublicar     → debounce → bundle re-horneado → web pública
+>
+> cocina: NO tiene catálogo propio — el producto llega dentro de
+>         pedido.enviado_cocina (nombre, cantidad, variaciones, ingredientes_base).
+> ```
+>
+> `producto.creado` es contrato LEGADO: nadie lo emite (v5 lo retiró); los consumidores
+> (comandero, pedidos, variaciones) se refrescan por `carta.editada` + `catalogo.actualizado`.
+>
+> **Carta de CANAL (precio por canal, verificado en vivo 2026-10-19).** `tarifas` asigna
+> `canal → carta_id` (`glovo`, `llevar`, `telefono`, `whatsapp`, `llevadoo`, `digital`, `mesa`);
+> los canales sin carta propia caen a `general`. La carta de canal es una CARTA REAL (copia de la
+> general con los precios finales escritos) que se guarda con `carta.save` y se registra con
+> `tarifas.register_variant` + `tarifas.assign`. Regla de oro: **solo la carta general proyecta
+> `catalogo.actualizado`** (`productos._esCartaGeneral`) — si una carta de canal lo emitiera, su
+> precio sustituiría al de mostrador en el cache POS de todos los canales, porque comandero y
+> pedidos cachean por `producto_id` sin mirar `menu_id`. El precio del canal se resuelve al cobrar:
+> `tarifas(canal) → cartasProductosCache[carta_id] → precio` con fallback al base (producto que no
+> esté en la carta del canal = precio general). **Comandero 3.5.0:** ese cache se hidrata por
+> `carta.actualizada` (la carta viaja ENVUELTA en `{project_id, carta}` — leer `data.meta.id` daba
+> `undefined` y el canal cobraba siempre precio base) y, al recibir `tarifas.config.actualizada`, con
+> un `carta.get.request` por cada carta del mapping (`onCartaGetResponse`), para que tras un restart
+> el canal no pierda su precio hasta que alguien toque la carta. Si la carta que responde es la
+> **general**, además rellena `productosCache` (catálogo base): sin eso el POS cobraba 0 y nombraba
+> el ítem con el `producto_id` tras un reinicio (v3.5.1). Comandero detecta el canal por el prefijo de la
+> cuenta (`glovo_`, `llevar_`, `M_`, `T_`…).
+> **UN SOLO TASADOR (comandero 3.6.0, 2026-10-21).** El precio del ítem lo pone el SERVIDOR con
+> `_shared/pedido-tasador.js` — la MISMA función pura que re-tasa el autoservicio de WhatsApp —
+> contra la carta del CANAL: producto + Σ extras; mitad y mitad = `max(base) + Σ extras de cada
+> mitad`. El `precio` que llega del cliente se ignora si el producto está en la carta. Antes había
+> dos verdades y el backend pisaba el total del panel con el precio pelado de la carta en todo canal
+> ≠ mesa, así que **los extras se caían del precio en llevar/teléfono/glovo** y se cobraba de menos.
+> El catálogo de extras se DERIVA de la propia carta (`opciones[].valores[].delta_precio_centimos`;
+> el grupo `QUITAR` no entra: quitar es gratis) y los nombres que mandan los paneles se resuelven a
+> ids (`id` explícito > nombre normalizado sin tildes). Degradación honesta: producto fuera de la
+> carta (`pizza_algusto`, `porcion`, packs de tienda) o carta no cacheada → camino anterior + `warn
+> comandero.tasado.fallback` + métrica.
+> **La escritura dice lo que hace (v2.10.0 · test real `tests/unit/carta-manager__frenos.test.js`).** Dos frenos del custodio
+> mentían sobre la intención y se quitaron: (1) `carta.save` era "conservador" — `productos: []` y
+> "la clave no viene" eran indistinguibles, así que una carta NO se podía dejar en blanco: había que
+> inventarse un id nuevo (pasó en vivo con the-pirate v3 → v4). Ahora manda la PRESENCIA de la clave:
+> `[]` es vaciado explícito, la clave ausente conserva lo previo (y lo reporta en `conservado`).
+> (2) no existía `remove_category`: una categoría no se borraba nunca. Ahora `carta.remove_category.request`
+> la quita; si tiene productos exige `mover_a` en el mismo acto (la única invariante real: ningún
+> producto colgando de una categoría inexistente) y recompacta `orden` a 0..n-1. El snapshot previo
+> sigue haciendo el vaciado reversible con `carta.restore`.
+> **`carta.save` NO promociona a general si ya hay general (v2.9.0, verificado en vivo 2026-10-19).**
+> `_autoPromoTarifas` leía `/config/tarifas.json` — la ruta LEGACY — mientras tarifas escribe en
+> `/pizzepos/tarifas.json`: el 404 era permanente y la auto-promoción saltaba en CADA save, así que
+> la última carta guardada se volvía general. Con una carta de canal eso cambiaba los precios de
+> mostrador sin avisar (guardar la carta de glovo puso la de glovo como general). Ahora lee la ruta
+> real y solo promociona cuando no hay general ni ningún canal asignado (primera carta del proyecto).
+> Contrato de las tools `pedido.*`: `pedido_id` (v3.5.1 — send-kitchen/complete/cancel/total
+> leían `id` y devolvían 404: el pedido nunca llegaba a cocina por la vía del asistente).
+>
+> **Ley de entrada del alta (verificada en vivo 2026-10-19).** El asistente habla en texto y la
+> carta guarda fichas: `_normalizarIngredientes` acepta `['mozzarella','tomate']` y también la
+> ficha rica, y eleva el texto a `{id, nombre, familia, precio_extra}`. `ingredientes_base` es
+> LO MISMO que `ingredientes` (se funde por id; gana la ficha rica) — antes caía en un campo que
+> nadie pinta y el producto nacía mudo (sin chips en la web, sin nada que quitar). Si el alta no
+> trae `opciones`, se **derivan** de lo que lleva (QUITAR, delta 0). Verificado end-to-end en
+> the-pirate: carta v64 → comandero tasa 9,99 € y `estaciones:['horno']` → cocina recibe el item
+> → web pública re-horneada con sus ingredientes.
 
 > Nota (carta-marketing): su onboarding/copy siguen el patrón perspectiva-C — el reflejo
 > hidrata+persiste y el agente solo transforma; el determinismo es por COLOCACIÓN, agnóstico
@@ -176,102 +251,97 @@ CLASE Pedido {
 ### PRODUCTOS MANAGER
 
 ```
+// v5.3.0 — PRODUCTOS ES UN PROYECTOR SIN ESTADO sobre carta-manager.
+// La CARTA es la única fuente de verdad; productos proyecta la carta activa del proyecto
+// al shape POS AL VUELO (carta.get.request). No hay store, ni searchIndex, ni persistencia
+// propia. Las mutaciones DELEGAN en el custodio (carta.*.request) y la cadena sigue por EVENTOS
+// (la cadena completa del alta está arriba, en «PIZZEPOS - CORE MODULES»).
+// NO emite producto.{creado,actualizado,eliminado}: ese contrato murió con el store v4.
+
 INTERFAZ ProductosContract {
-  createProducto(data: {nombre, descripcion, precio, categoria_id, iva?, imagen?}): Promise<{producto_id, ...}>
-  getProducto(producto_id: String): Promise<Producto>
-  listProductos(filters?: Object): Promise<Array<Producto>>
-  updateProducto(producto_id: String, updates: Object): Promise<Producto>
-  deleteProducto(producto_id: String): Promise<Void>
-  getProductosByCategoria(categoria_id: String): Promise<Array<Producto>>
-  searchProductos(query: String): Promise<Array<Producto>>
+  crear(data: {project_id, nombre, precio, categoria_id, ingredientes?, estaciones?, ...}): {producto, carta_version}
+  crear_categoria(data: {project_id, nombre, orden?}): {categoria, carta_version}
+  list/get/search/categorias/ingredientes/pizzas/stats/carta_completa  // LECTURAS (proyección)
+  update/delete                                                       // MUTACIONES (delegan)
 }
 
-CLASE ProductosManager IMPLEMENTA ProductosContract {
+CLASE ProductosProyector IMPLEMENTA ProductosContract {
   ATRIBUTOS {
-    coreId: String
-    eventBus: EventBus
-    logger: Logger
-    metrics: Metrics
-    uiHandler: UIRequestHandler
-    productosStore: Map<producto_id, Producto>
-    categoriasManager: CategoriasManager
-    searchIndex: Map<searchKey, Array<producto_id>>
+    eventBus          : EventBus
+    uiHandler         : UIRequestHandler
+    mappingCanales    : Map<project_id, {general, canales}>   // hidratado por tarifas
+    catalogoProyectado: Map<project_id, Catalogo>             // caché de proyección (ms)
   }
 
-  CONSTRUCTOR(options: Object)
+  METODO crear(data): {producto, carta_version}          // LA PUERTA DEL ASISTENTE
+    VALIDA project_id, nombre, precio(numérico >= 0), categoria_id
+    carta_id ← resolverCartaActiva(project_id, canal?, carta_id?)
+    RPC carta.add_product.request {project_id, carta_id, producto}
+    RETORNA la respuesta del custodio (201 + producto + carta_version)
+    // cero escritura propia: si el custodio no persiste, aquí no hay nada que deshacer
 
-  METODOS {
-    async createProducto(data: {nombre, descripcion, precio, categoria_id, iva?, imagen?}): Promise<{producto_id, ...}>
-      VALIDA nombre, precio
-      VALIDA categoria_id existe
-      GENERA producto_id (UUID)
-      CREA Producto {producto_id, nombre, descripcion, precio, categoria_id, iva: iva || 0.21, imagen, created_at}
-      GUARDA EN productosStore
-      ACTUALIZA searchIndex
-      PERSISTE
-      EMITE producto.created {producto_id, nombre, precio}
-      RETORNA producto
+  METODO crear_categoria(data): {categoria, carta_version}
+    carta_id ← resolverCartaActiva(...)
+    RPC carta.add_category.request {project_id, carta_id, categoria}
 
-    async getProducto(producto_id: String): Promise<Producto>
-      BUSCA EN productosStore
-      SI no existe: LANZA ProductoNotFoundError
-      RETORNA producto
+  METODO update(id, campos): RPC carta.update_product.request    // mismas 6 W, mismo dueño
+  METODO delete(id):         RPC carta.remove_product.request
 
-    async listProductos(filters?: Object): Promise<Array<Producto>>
-      FILTRA productosStore (categoria, nombre, precio_range)
-      RETORNA Array
+  METODO resolverCartaActiva(project_id, canal, carta_id): carta_id
+    SI carta_id        RETORNA carta_id                  // el caller ya resolvió la del canal
+    SI mapping[canal]  RETORNA mapping[canal]            // override de canal (tarifas)
+    SI mapping.general RETORNA mapping.general           // general (tarifas)
+    RETORNA carta.list.request → la en_servicio (fallback robusto)
 
-    async updateProducto(producto_id: String, updates: Object): Promise<Producto>
-      VALIDA producto existe
-      MERGES updates
-      PERSISTE
-      ACTUALIZA searchIndex
-      EMITE producto.updated {producto_id}
-      RETORNA producto
+  METODO evento carta.actualizada | carta.editada | carta.borrada  // onCartaGenerada
+    PROYECTA la carta entera (viene EMBEBIDA en el payload; no re-lee)
+    SI _esCartaGeneral(project_id, carta)            // v5.3.0 — el gate del canal
+      PUBLICa catalogo.actualizado {project_id, productos}
+    SINO
+      // carta de CANAL (glovo/llevar/telefono): NO toca el catálogo global
+      LOG 'carta.canal.no_proyecta_catalogo' y RETORNA
+      // su precio vive en el cache POR CARTA del comandero (carta.actualizada →
+      // cartasProductosCache[carta_id]); el cobro resuelve canal→carta con fallback al base
+    // _esCartaGeneral: tarifas.general === carta.meta.id; sin general conocido → TRUE (emite)
 
-    async deleteProducto(producto_id: String): Promise<Void>
-      VALIDA producto NO en pedidos activos
-      ELIMINA DE productosStore
-      ELIMINA DE searchIndex
-      PERSISTE
-      EMITE producto.deleted {producto_id}
-
-    async getProductosByCategoria(categoria_id: String): Promise<Array<Producto>>
-      FILTRA productosStore POR categoria_id
-      RETORNA Array
-
-    async searchProductos(query: String): Promise<Array<Producto>>
-      BUSCA EN searchIndex (fuzzy match)
-      RETORNA top-K resultados
-
-    async onLoad(moduleContext: Object): Promise<Void>
-      CARGA categoriasManager FROM moduleRegistry
-      REGISTRA UI handlers
-      CARGA productosStore FROM persistencia
-      CONSTRUYE searchIndex
-      LOG "productos.onLoad"
-  }
-
-  EVENTO {
-    producto.created: {producto_id, nombre, precio}
-    producto.updated: {producto_id, updates}
-    producto.deleted: {producto_id}
-  }
+  METODO onLoad(ctx)
+    HIDRATA mappingCanales desde tarifas (snapshot) + proyecto activo (warm)
+    // v5.3.1: PUBLICA tarifas.config.solicitada {tipo:snapshot} TAMBIÉN al cargar — sin esto,
+    // tras un hot-reload/restart el mapa nacía VACÍO y el gate _esCartaGeneral no veía la general
+    // (una carta de canal habría vuelto a pisar precios de mostrador). tarifas responde un
+    // snapshot por proyecto conocido; mismo patrón que comandero.onLoad.
 }
 
-CLASE Producto {
-  ATRIBUTOS {
-    producto_id: String
-    nombre: String
-    descripcion: String
-    precio: Number
-    categoria_id: String
-    iva: Number (default 0.21)
-    imagen: String (URL|base64)
-    created_at: Number
-    updated_at: Number
-  }
+CLASE Producto {                        // el shape que viaja por la carta
+  id            : String                // determinista: slug(categoria_id) + '_' + slug(nombre)
+  nombre        : String
+  precio        : Number                // € (venta) — INDEPENDIENTE del coste (escandallo)
+  categoria_id  : String
+  ingredientes  : Array<Ingrediente>    // LO QUE LLEVA (lo único que pintan web y comandero)
+  opciones      : Array<Opcion>         // subsistema Opciones: QUITAR (lo que lleva) / ELEGIR_VARIOS
+  estaciones    : Array<String>         // propias del producto o heredadas de la categoría
+  variaciones   : Object?               // reglas (permite_quitar / max_extras / extras_sugeridos)
+  dietas        : Array<String>?
+  alergenos     : Array<String>
+  disponible    : Boolean
 }
+
+CLASE Ingrediente {                     // forma CANÓNICA (ley única de carta-manager)
+  id           : String                 // slug del nombre — id estable, nunca prosa
+  nombre       : String                 // nombre de carta ('Mozzarella')
+  familia      : Familia                // queso|verdura|carne|salsa|pescado|fruta|extra|condimento|otro
+  emoji        : String?
+  precio_extra : Number                 // € del extra (0 explícito = gratis)
+}
+
+// LEY DE ENTRADA (el asistente habla en texto, la carta guarda fichas):
+//   _normalizarIngredientes acepta TEXTO ('mozzarella') y FICHA RICA ({id,nombre,familia,emoji}).
+//   El texto se eleva a forma canónica (id determinista, nombre legible, familia, precio_extra).
+//   `ingredientes_base` NO es un campo aparte: es LO MISMO que `ingredientes` — se funde por id,
+//   gana la ficha rica. (Antes se guardaba en un campo que nadie pinta → producto mudo: sin chips
+//   en la web y sin nada que quitar. Verificado y corregido 2026-10-19.)
+//   Sin `opciones` en el alta → se DERIVAN de lo que lleva (QUITAR, delta 0) con
+//   _shared/derivar-opciones.derivarOpciones: el producto nace operable, no mudo.
 ```
 
 ### CATEGORIAS MANAGER
@@ -526,8 +596,42 @@ CLASE PedidosManager IMPLEMENTA PedidosContract {
     pedido.created: {pedido_id, cuenta_id}
     pedido.estado_updated: {pedido_id, estado}
     producto.added_to_pedido: {pedido_id, producto_id, cantidad}
+    pedido.pagado: {pedido_id, project_id, project_slug, session_id, total, cliente_nombre, cliente_telefono, recreado}
+    pedido.recogido: {pedido_id, project_id, total_centimos, cliente_nombre, metodo_pago, recogido_at}
   }
 }
+```
+
+### PAGO DEL PEDIDO DE TIENDA — efectivo o tarjeta (el método viaja en el #P1)
+
+```
+PREFERENCIA ≠ COBRO. El cliente elige en la PWA y la preferencia viaja autoritativa en el #P1
+(campo metodo_pago: 'efectivo' | 'tarjeta'; sin él → 'efectivo'). Eso solo REGISTRA lo que pidió.
+Quien manda sobre la caja es la VERDAD del pago: pedido.pago.estado, escrito por la pasarela.
+
+CADENA (toda por evento, ningún módulo nuevo):
+  PWA → #P1{metodo_pago} → pedido-parser → bot → pedido.crear-tienda{metodo_pago} → pedidos
+    IF metodo_pago == 'tarjeta':
+      bot → pago.iniciar.request {pedido_id, monto_centimos, return_url, metadata{project_slug, cliente_nombre, cliente_telefono, canal_origen}}
+        → pago-gateway (LÍDER, provider-agnóstico: Stripe Checkout hospedado)
+        → pago.iniciar.response {status:200, data:{checkout_url}}
+      bot → manda checkout_url al cliente por WhatsApp   // guarda: UNA sesión por pedido_id
+      ELSE degrada (NO_PASARELA / PERMISSION_DENIED) → 'puedes pagar al recoger' (el pedido ya existe)
+    Stripe → POST /pago/webhook/:project (firma verificada) → pago-gateway
+      → pago.confirmado {pedido_id, project_id, monto_centimos, + metadata de contexto}
+      → pedidos.onPagoConfirmado → pedido.pagado
+      → bot avisa al cliente 'pago recibido' ; IF recreado → avisa al STAFF por Telegram
+    Dependiente confirma recogida → pedido.recogido{metodo_pago} ; la caja ya no miente
+
+EL HUÉRFANO (por qué existe la recreación): los pedidos de tienda viven en MEMORIA y no se
+restauran. El pago es asíncrono (el webhook llega minutos después), así que un reinicio en esa
+ventana —un DEPLOY, justo— dejaría el dinero cobrado y el pedido inexistente, en silencio. Se
+reconstruye MÍNIMO desde la metadata de la sesión (pedido_id + project_id + importe) y se emite
+pedido.pagado con recreado:true. El dinero nunca se pierde sin rastro. Nada que persistir.
+
+config DEL PROYECTO: la pasarela se enciende por proyecto (pago-gateway lee
+core.config['pago-gateway'] || moduleConfig: kind stripe-checkout, provider STRIPE, moneda,
+return_url, webhook_secret). Sin bloque y sin credencial STRIPE → degrada, no rompe.
 ```
 
 ### COCINA MANAGER
@@ -691,6 +795,18 @@ CLASE Receta {
 }
 ```
 
+PUENTE carta→catálogo (reflejo v1.4.0, 2026-10-19) — SUSCRIBE 'carta.actualizada' (handler
+onCartaActualizada): alta IDEMPOTENTE en ingredientes_catalogo de los ids de ingredientes que la
+carta usa y el catálogo no conoce. Identidad canónica = el ID de la carta (estable; la prosa del
+nombre varía), tolerancia singular/plural por variantes; dedup por id Y nombre normalizado;
+sub-recetas nunca entran como ingredientes; NUNCA inventa precio (null → el escandallo canta
+sin_precio y las fuentes de dinero —mercadona-api/manual— lo llenan). Emite
+'catalogo.ingredientes.actualizado' con las altas. Escrito fs.edit declarativo (RFC 6902), fire-
+and-forget. PRUEBA EN VIVO (2026-10-19): la 1ª iteración derivaba el id del NOMBRE y creó 5
+duplicados conceptuales en prod (champinon/salsa-de-mostaza/tomate-seco/salsa-de-ajo-asado-y-trufa/
+crema-de-champinones) — limpiados a mano; el fix (id desde carta + variantes) dio 0 altas sobre
+los mismos datos.
+
 ### INGREDIENTES MANAGER
 
 ```
@@ -785,82 +901,18 @@ CLASE Ingrediente {
 
 ### VARIACIONES MANAGER
 
-```
-INTERFAZ VariacionesContract {
-  createVariacion(data: {nombre, producto_id, opciones, precio_delta?}): Promise<Variacion>
-  getVariacion(variacion_id: String): Promise<Variacion>
-  listVariaciones(producto_id: String): Promise<Array<Variacion>>
-  updateVariacion(variacion_id: String, updates: Object): Promise<Variacion>
-  deleteVariacion(variacion_id: String): Promise<Void>
-}
-
-CLASE VariacionesManager IMPLEMENTA VariacionesContract {
-  ATRIBUTOS {
-    coreId: String
-    eventBus: EventBus
-    logger: Logger
-    variacionesStore: Map<variacion_id, Variacion>
-    productosManager: ProductosManager
-  }
-
-  CONSTRUCTOR(options: Object)
-
-  METODOS {
-    async createVariacion(data: {nombre, producto_id, opciones, precio_delta?}): Promise<Variacion>
-      VALIDA producto_id existe
-      GENERA variacion_id (UUID)
-      CREA Variacion {variacion_id, nombre, producto_id, opciones: [], precio_delta: precio_delta || 0, created_at}
-      AGREGA opciones
-      GUARDA EN variacionesStore
-      PERSISTE
-      EMITE variacion.created {variacion_id, producto_id}
-      RETORNA variacion
-
-    async getVariacion(variacion_id: String): Promise<Variacion>
-      BUSCA EN variacionesStore
-      RETORNA variacion
-
-    async listVariaciones(producto_id: String): Promise<Array<Variacion>>
-      FILTRA variacionesStore POR producto_id
-      RETORNA Array
-
-    async updateVariacion(variacion_id: String, updates: Object): Promise<Variacion>
-      VALIDA variacion existe
-      MERGES updates
-      PERSISTE
-      EMITE variacion.updated {variacion_id}
-      RETORNA variacion
-
-    async deleteVariacion(variacion_id: String): Promise<Void>
-      ELIMINA DE variacionesStore
-      PERSISTE
-      EMITE variacion.deleted {variacion_id}
-
-    async onLoad(moduleContext: Object): Promise<Void>
-      CARGA productosManager FROM moduleRegistry
-      REGISTRA UI handlers
-      LOG "variaciones.onLoad"
-  }
-
-  EVENTO {
-    variacion.created: {variacion_id, producto_id}
-    variacion.updated: {variacion_id}
-    variacion.deleted: {variacion_id}
-  }
-}
-
-CLASE Variacion {
-  ATRIBUTOS {
-    variacion_id: String
-    nombre: String
-    producto_id: String
-    opciones: Array<{nombre, descripcion, precio_delta?}>
-    precio_delta: Number (default 0)
-    created_at: Number
-    updated_at: Number
-  }
-}
-```
+> **No hay CRUD de "variaciones"** (ni `createVariacion`, ni `variacion.created/deleted`): el módulo
+> real es una **caché de reglas por producto leída de la CARTA**. El contrato vive en
+> `pizzepos/pos-nucleo.md` §8 VARIACIONES (v4.6.1) — esta entrada solo lo enlaza para no duplicar prosa.
+>
+> Lo esencial: `variaciones.configurar` (rol jefe) delega en `carta.update_product` (el custodio
+> escribe; aquí solo se lee). Se puebla por `carta.actualizada/editada` + `project.activated`
+> (`productos.carta_completa`). Su caché es `lost_on_restart`, así que desde v4.6.0 **auto-vivifica**:
+> si falta la config y la petición trae `project_id`, hidrata ESE proyecto desde la carta y reintenta
+> (una sola RPC para concurrentes) — sin hidratar todos los proyectos en bloque, porque los ids de
+> producto se repiten entre proyectos (nonina y the-pirate comparten 52) y la caché va por `producto_id`.
+> Desde v4.6.1 el `max_ingredientes_extra` que valida sale del `max` de la opción `ELEGIR_VARIOS` de la
+> carta, no del 5 heredado: la carta manda y el motor deja de rechazar extras que el panel ofrece.
 
 ### ESCANDALLO MANAGER
 
@@ -1051,15 +1103,17 @@ CLASE CartaDigitalModule EXTIENDE BaseModule {  // PROYECTOR, no manager-con-sto
   //   carta-marketing → el branding (get_perfil)           [nombre/lema/colores/logo/voz]
   //   contenido       → imágenes/descripción por producto  (contenido.get)
   //   productos       → catálogo de ingredientes 'extra'   (handleListIngredientes, canal digital)
+  //   calendario      → dias_salida[] + margen_antelacion_h por producto (calendario.productos.leer)
 
   METODOS {
     // PROYECCIÓN pura (proyeccion.js): entra dato, sale dato. La misma FORMA para los
-    // dos consumidores — el reflejo (bus) y el export-cli (disco).
+    // dos consumidores: el reflejo (bus) y el export-cli (disco).
     _proyectarPublica(project_id):
-      [carta, marca, contenido, config] ← Promise.all(bebe_de…)
+      [carta, marca, contenido, config, calendario] ← Promise.all(bebe_de_*)
       SI !carta: RETORNA 404 (canal sin carta — revisa tarifas)
-      RETORNA proyectarCartaPublica(carta, marca, contenido, config)
-        // → { branding, categorias, productos, alergenos_leyenda (1169/2011), opciones }
+      RETORNA proyectarCartaPublica(carta, marca, contenido, config, calendario)
+        // → { branding, categorias, productos, alergenos_leyenda (1169/2011), opciones,
+        //     dias_salida[] por producto (para el boton Encargar de la PWA) }
 
     // DISEÑO con FRENO (skill blueprint-agentico): _checkDiseno exige el CONTRATO de slots
     //   {{id}} {{nombre}} {{precio}} {{alergenos}} {{add_label}} + hooks data-accion detalle/add.

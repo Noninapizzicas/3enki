@@ -38,13 +38,14 @@ class VariacionesModule extends BaseModule {
   constructor() {
     super();
     this.name = 'variaciones';
-    this.version = '4.4.0';
+    this.version = '4.6.1';
 
     // Dependencias (inyectadas en onLoad)
     this.uiHandler = null;
 
     // Estado en memoria — solo reglas por producto, NO precios de ingredientes
     this.configuraciones = new Map(); // producto_id -> variacion_config
+    this._hidratando = new Map();     // project_id -> Promise (hidrataciones en vuelo)
   }
 
   // ==========================================
@@ -121,6 +122,7 @@ class VariacionesModule extends BaseModule {
     // El loader desregistra automaticamente bus subs y uiHandler entries de tools[]
     // via unregisterToolsForAI. Aqui solo limpiamos estado del modulo.
     this.configuraciones.clear();
+    this._hidratando.clear();
 
     this.logger.info('module.unloaded', { module: this.name });
   }
@@ -156,6 +158,15 @@ class VariacionesModule extends BaseModule {
     const ops = (Array.isArray(opciones) && opciones.length)
       ? opciones
       : derivarOpciones({ ingredientes: ingredientes_base || ingredientes || [] }, paleta || [], { maxExtras: max });
+    const maxOpciones = (() => {
+      // El máximo que MANDA es el declarado en las opciones de la carta: es lo que el panel pinta
+      // y lo que el camarero/cliente ve. `variaciones.max_ingredientes_extra` es la forma vieja
+      // y solo actúa de respaldo cuando la carta no declara opciones.
+      const grupos = Array.isArray(ops) ? ops : [];
+      const g = grupos.find(o => o && o.modo === 'ELEGIR_VARIOS' && o.max != null);
+      const n = g ? Number(g.max) : NaN;
+      return Number.isFinite(n) ? n : null;
+    })();
     this.configuraciones.set(producto_id, {
       producto_id,
       grupo: categoria || 'otro',
@@ -165,23 +176,18 @@ class VariacionesModule extends BaseModule {
       // Por defecto SÍ se puede añadir (salvo que la carta lo niegue explícitamente).
       permite_anadir: v.permite_anadir !== false,
       extras_sugeridos: v.extras_sugeridos || [],
-      max_ingredientes_extra: v.max_ingredientes_extra || 5,
+      max_ingredientes_extra: maxOpciones != null ? maxOpciones : (v.max_ingredientes_extra || 5),
       ingredientes_base: (ingredientes_base || ingredientes || [])
         .map(i => (typeof i === 'string' ? i : i && i.id)).filter(Boolean),
       opciones: ops
     });
   }
 
-  // Flujo NUEVO: configura las variaciones de TODOS los productos de la carta. La CARTA
-  // es la fuente (carta.actualizada/editada de carta-manager). Reemplaza al muerto
-  // 'producto.creado', que en la arquitectura carta-based no lo emite nadie — variaciones
-  // se quedó huérfana y por eso no se podía quitar/añadir en ninguna pizza.
-  async onCartaActualizada(event) {
-    const d = event?.data || event?.payload || event;
-    const carta = d?.carta;
-    if (!carta || !Array.isArray(carta.productos)) return;
-    const paletas = _paletasPorCategoria(carta);
-    for (const p of carta.productos) {
+  // Configura una lista de productos proyectados (misma forma de carta). Devuelve cuántos.
+  _configurarLista(productos) {
+    if (!Array.isArray(productos)) return 0;
+    const paletas = _paletasPorCategoria({ productos });
+    for (const p of productos) {
       if (!p || !p.id) continue;
       this._configurar(p.id, {
         categoria: p.categoria_id || p.categoria,
@@ -194,6 +200,64 @@ class VariacionesModule extends BaseModule {
       });
     }
     this.metrics?.gauge?.('variacion.productos_configurados.count', this.configuraciones.size);
+    return productos.length;
+  }
+
+  // Caché con AUTO-VIVIFICACIÓN: el estado vive en memoria y solo se poblaba con
+  // project.activated (lo emite el frontend al entrar al proyecto) o con una edición de carta.
+  // En frío —tras un reinicio, nadie ha activado nada— la caché nace VACÍA: variaciones.get
+  // responde 404 al panel ("no se pudo leer el informe") y cada comandero.item_agregado con
+  // variación emite variacion.rechazada hasta la primera edición de carta.
+  // Aquí el ACTO crea el estado: quien pregunta por un producto de un proyecto conocido hidrata
+  // ESE proyecto desde la fuente (productos.carta_completa, proyector sin estado) y se reintenta.
+  // No se hidratan todos los proyectos de golpe a propósito: los ids de producto se REPITEN entre
+  // proyectos (nonina y the-pirate comparten 52) y esta caché está indexada por producto_id —
+  // un barrido en bloque dejaría la config del último proyecto encima de la del primero.
+  // Las peticiones concurrentes del mismo proyecto comparten el viaje (una sola RPC).
+  _asegurarProyecto(project_id) {
+    if (!project_id || !this.uiHandler?.handle) return Promise.resolve(0);
+    const enVuelo = this._hidratando.get(project_id);
+    if (enVuelo) return enVuelo;
+    const viaje = (async () => {
+      try {
+        const res = await this.uiHandler.handle('productos', 'carta_completa', { project_id });
+        const productos = res?.data?.productos;
+        if (!Array.isArray(productos)) return 0;
+        const n = this._configurarLista(productos);
+        this.logger?.info?.('variaciones.hidratada.bajo_demanda', { project_id, productos: n });
+        return n;
+      } catch (err) {
+        // Best-effort: si productos no responde, el 404 sigue siendo el mismo de antes.
+        this.logger?.warn?.('variaciones.hidratada.fallida', { project_id, error: err?.message });
+        return 0;
+      } finally {
+        this._hidratando.delete(project_id);
+      }
+    })();
+    this._hidratando.set(project_id, viaje);
+    return viaje;
+  }
+
+  // Lee la config del producto; si la caché está fría y sabemos el proyecto, hidrata y reintenta.
+  // Sin project_id no se inventa nada: se devuelve el mismo hueco de antes (404).
+  async _configDeProducto(producto_id, project_id) {
+    let config = this.configuraciones.get(producto_id);
+    if (!config && project_id && producto_id) {
+      await this._asegurarProyecto(project_id);
+      config = this.configuraciones.get(producto_id);
+    }
+    return config || null;
+  }
+
+  // Flujo NUEVO: configura las variaciones de TODOS los productos de la carta. La CARTA
+  // es la fuente (carta.actualizada/editada de carta-manager). Reemplaza al muerto
+  // 'producto.creado', que en la arquitectura carta-based no lo emite nadie — variaciones
+  // se quedó huérfana y por eso no se podía quitar/añadir en ninguna pizza.
+  async onCartaActualizada(event) {
+    const d = event?.data || event?.payload || event;
+    const carta = d?.carta;
+    if (!carta || !Array.isArray(carta.productos)) return;
+    this._configurarLista(carta.productos);
     this.logger?.info?.('variaciones.carta.configurada', {
       carta_id: carta.meta?.id,
       productos: carta.productos.length,
@@ -214,20 +278,7 @@ class VariacionesModule extends BaseModule {
       const res = await this.uiHandler.handle('productos', 'carta_completa', { project_id });
       const productos = res?.data?.productos;
       if (!Array.isArray(productos)) return;
-      const paletas = _paletasPorCategoria({ productos });
-      for (const p of productos) {
-        if (!p || !p.id) continue;
-        this._configurar(p.id, {
-          categoria: p.categoria_id || p.categoria,
-          precio: p.precio,
-          variaciones: p.variaciones,
-          ingredientes_base: p.ingredientes_base,
-          ingredientes: p.ingredientes,
-          opciones: p.opciones,
-          paleta: paletas.get(p.categoria_id || p.categoria) || []
-        });
-      }
-      this.metrics?.gauge?.('variacion.productos_configurados.count', this.configuraciones.size);
+      this._configurarLista(productos);
       this.logger?.info?.('variaciones.warm.project_activated', {
         project_id, productos: productos.length, correlation_id: d?.correlation_id
       });
@@ -250,7 +301,7 @@ class VariacionesModule extends BaseModule {
   async onComanderoItemAgregado(event) {
     const eventData = event?.data || event?.payload || event;
     const correlationId = event?.metadata?.correlationId;
-    const { producto_id, variaciones } = eventData;
+    const { producto_id, variaciones, project_id } = eventData;
 
     if (!variaciones || (!variaciones.ingredientes_quitar && !variaciones.ingredientes_anadir)) {
       return;
@@ -264,6 +315,7 @@ class VariacionesModule extends BaseModule {
 
     const resultado = await this.validarVariacion({
       producto_id,
+      project_id,
       ingredientes_quitar: variaciones.ingredientes_quitar || [],
       ingredientes_anadir: variaciones.ingredientes_anadir || []
     });
@@ -280,8 +332,8 @@ class VariacionesModule extends BaseModule {
   // ==========================================
 
   async handleGetVariacionesProducto(data) {
-    const { producto_id } = data;
-    const config = this.configuraciones.get(producto_id);
+    const { producto_id, project_id } = data || {};
+    const config = await this._configDeProducto(producto_id, project_id);
 
     if (!config) {
       this.metrics?.increment?.('variaciones.errors', { code: 'RESOURCE_NOT_FOUND', kind: 'get' });
@@ -307,7 +359,7 @@ class VariacionesModule extends BaseModule {
   }
 
   async handleValidarVariacion(data) {
-    const { producto_id, ingredientes_quitar, ingredientes_anadir } = data;
+    const { producto_id, ingredientes_quitar, ingredientes_anadir, project_id } = data || {};
 
     if (!producto_id) {
       this.metrics?.increment?.('variaciones.errors', { code: 'INVALID_INPUT', kind: 'validar' });
@@ -317,6 +369,7 @@ class VariacionesModule extends BaseModule {
 
     const resultado = await this.validarVariacion({
       producto_id,
+      project_id,
       ingredientes_quitar: ingredientes_quitar || [],
       ingredientes_anadir: ingredientes_anadir || []
     });
@@ -335,9 +388,9 @@ class VariacionesModule extends BaseModule {
   }
 
   async handleCalcularPrecio(data) {
-    const { producto_id, ingredientes_anadir } = data;
+    const { producto_id, ingredientes_anadir, project_id } = data || {};
 
-    const config = this.configuraciones.get(producto_id);
+    const config = await this._configDeProducto(producto_id, project_id);
     if (!config) {
       this.metrics?.increment?.('variaciones.errors', { code: 'RESOURCE_NOT_FOUND', kind: 'calcular_precio' });
       this.logger.warn('variaciones.calcular_precio.not_found', { producto_id });
@@ -365,9 +418,9 @@ class VariacionesModule extends BaseModule {
   // Subsistema Opciones: valida + precia una selección server-side con el motor genérico
   // (gemelo del pedido-tasador: el cliente manda valor_ids por opción, el precio lo pone el motor).
   async handleEvaluarOpciones(data) {
-    const { producto_id, selecciones } = data || {};
+    const { producto_id, selecciones, project_id } = data || {};
     if (!producto_id) return this._errorResponse(400, 'INVALID_INPUT', 'producto_id requerido', { field: 'producto_id' });
-    const config = this.configuraciones.get(producto_id);
+    const config = await this._configDeProducto(producto_id, project_id);
     if (!config) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'Producto no configurado', { producto_id });
     const r = evaluarProducto(
       { precio_base_centimos: config.precio_base_centimos || 0, opciones: config.opciones || [] },
@@ -472,9 +525,9 @@ class VariacionesModule extends BaseModule {
   }
 
   async validarVariacion(request) {
-    const { producto_id, ingredientes_quitar, ingredientes_anadir } = request;
+    const { producto_id, ingredientes_quitar, ingredientes_anadir, project_id } = request || {};
 
-    const config = this.configuraciones.get(producto_id);
+    const config = await this._configDeProducto(producto_id, project_id);
     if (!config) {
       return {
         valida: false,

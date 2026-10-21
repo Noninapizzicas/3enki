@@ -109,7 +109,8 @@ function publishedOf(mocks, name) {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     assert.strictEqual(m.name, 'comandero');
-    assert.strictEqual(m.version, '3.4.0');
+    const MANIFEST = require('../../modules/pizzepos/comandero/module.json');
+    assert.strictEqual(m.version, MANIFEST.version);
     assert.strictEqual(m.pedidos.size, 0);
     assert.strictEqual(m.productosCache.size, 0);
     await m.onUnload();
@@ -119,7 +120,7 @@ function publishedOf(mocks, name) {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     m.pedidos.set('c1', { items: [], notas: '', total: 0 });
-    m.productosCache.set('p1', { precio: 10 });
+    m._productosDe('default').set('p1', { precio: 10 });
     m.tarifasConfigPorProject.set('proj-x', { general: 'g', canales: { glovo: 'cg' } });
     m._saveTimer = setTimeout(() => {}, 60000);
     await m.onUnload();
@@ -181,8 +182,77 @@ function publishedOf(mocks, name) {
       { id: 'p1', nombre: 'Pizza', precio: 10 },
       { id: 'p2', nombre: 'Cola',  precio: 3 }
     ]}});
-    assert.strictEqual(m.productosCache.size, 2);
-    assert.strictEqual(m.productosCache.get('p1').precio, 10);
+    assert.strictEqual(m._productosDe('default').size, 2);
+    assert.strictEqual(m._productosDe('default').get('p1').precio, 10);
+    await m.onUnload();
+  });
+
+  // ── CACHE QUE NO SE PUDRE (v3.6.1) ─────────────────────────────────────────
+  // El cache base era un Map plano SIN purga: catalogo.actualizado solo hacía .set(), así que
+  // un producto retirado seguía cobrándose y los productos de otra carta se acumulaban
+  // (el POS declaró 63 productos con una carta de 22).
+  await testAsync('catalogo.actualizado REEMPLAZA el cache (no acumula productos retirados)', async () => {
+    const { module: m } = await instantiate(makeMocks());
+    await m.onCatalogoActualizado({ data: { project_id: 'pr', productos: [
+      { id: 'p1', nombre: 'Pizza', precio: 10 },
+      { id: 'p2', nombre: 'Vieja', precio: 5 }
+    ]}});
+    assert.strictEqual(m._productosDe('pr').size, 2);
+    await m.onCatalogoActualizado({ data: { project_id: 'pr', productos: [
+      { id: 'p1', nombre: 'Pizza', precio: 12 }
+    ]}});
+    assert.strictEqual(m._productosDe('pr').size, 1, 'el producto retirado no debe sobrevivir');
+    assert.strictEqual(m._productosDe('pr').get('p2'), undefined);
+    assert.strictEqual(m._productosDe('pr').get('p1').precio, 12);
+    await m.onUnload();
+  });
+
+  await testAsync('catalogo.actualizado con productos:[] VACÍA el cache del proyecto (carta borrada)', async () => {
+    const { module: m } = await instantiate(makeMocks());
+    await m.onCatalogoActualizado({ data: { project_id: 'pr', productos: [
+      { id: 'p1', nombre: 'Pizza', precio: 10 }
+    ]}});
+    assert.strictEqual(m._productosDe('pr').size, 1);
+    await m.onCatalogoActualizado({ data: { project_id: 'pr', productos: [] } });
+    assert.strictEqual(m.productosCache.get('pr').size, 0);
+    await m.onUnload();
+  });
+
+  await testAsync('catalogo.actualizado sin array productos NO toca el cache (forma `catalogo` de producto-manager)', async () => {
+    const { module: m } = await instantiate(makeMocks());
+    await m.onCatalogoActualizado({ data: { project_id: 'pr', productos: [
+      { id: 'p1', nombre: 'Pizza', precio: 10 }
+    ]}});
+    // producto-manager publica { project_id, catalogo:{...} } — 0 productos: si esto vaciara,
+    // el POS cobraría 0 hasta la siguiente proyección.
+    await m.onCatalogoActualizado({ data: { project_id: 'pr', catalogo: { productos: [] }, motivo: 'clonar' } });
+    assert.strictEqual(m._productosDe('pr').size, 1, 'la señal cruda no debe vaciar el cache base');
+    await m.onUnload();
+  });
+
+  await testAsync('el cache base esta AISLADO por proyecto (un proyecto no cobra con el catalogo de otro)', async () => {
+    const { module: m } = await instantiate(makeMocks());
+    await m.onCatalogoActualizado({ data: { project_id: 'A', productos: [
+      { id: 'pizza_a', nombre: 'De A', precio: 10 }
+    ]}});
+    await m.onCatalogoActualizado({ data: { project_id: 'B', productos: [
+      { id: 'pizza_b', nombre: 'De B', precio: 20 }
+    ]}});
+    assert.strictEqual(m._productosDe('A').size, 1);
+    assert.strictEqual(m._productosDe('B').size, 1);
+    assert.strictEqual(m._productosDe('A').get('pizza_b'), undefined);
+    assert.strictEqual(m._totalProductosCache(), 2);
+    await m.onUnload();
+  });
+
+  await testAsync('handleAddItem sin project_id usa el catalogo del proyecto por defecto', async () => {
+    const { module: m } = await instantiate(makeMocks());
+    await m.onCatalogoActualizado({ data: { project_id: 'default', productos: [
+      { id: 'p1', nombre: 'Pizza', precio: 9.5 }
+    ]}});
+    const r = await m.handleAddItem({ cuenta_id: 'mesa_1', producto_id: 'p1', cantidad: 1 });
+    assert.strictEqual(r.data.item.precio, 9.5);
+    assert.strictEqual(r.data.item.nombre, 'Pizza');
     await m.onUnload();
   });
 
@@ -256,6 +326,36 @@ function publishedOf(mocks, name) {
     await m.onUnload();
   });
 
+  // El hueco real NO es una carrera de suscripcion (el loader cablea antes de onLoad): es que en
+  // arranque en frio tarifas todavia no existe y la peticion se queda sin respondedor. Por eso se
+  // repite en los dos momentos deterministas. Sin timers.
+  await testAsync('core.modules.loaded.all re-pide el snapshot (tarifas ya cargado)', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    assert.strictEqual(publishedOf(mocks, 'tarifas.config.solicitada').length, 1, 'onLoad ya pidio');
+
+    await m.onCoreModulesLoadedAll();
+    const evs = publishedOf(mocks, 'tarifas.config.solicitada');
+    assert.strictEqual(evs.length, 2, 're-pide al cargar todos los modulos');
+    assert.strictEqual(evs[1].tipo, 'snapshot');
+    assert.ok(!evs[1].project_id, 'sin project_id = todos los proyectos conocidos');
+    await m.onUnload();
+  });
+
+  await testAsync('project.activated re-pide el snapshot scopeado al proyecto', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+
+    await m.onProjectActivado({ data: { project_id: 'proj-A' } });
+    const evs = publishedOf(mocks, 'tarifas.config.solicitada');
+    assert.strictEqual(evs.length, 2);
+    assert.strictEqual(evs[1].project_id, 'proj-A', 'scopeado al proyecto que se activa');
+
+    await m.onProjectActivado({ data: {} });          // sin project_id: no-op
+    assert.strictEqual(publishedOf(mocks, 'tarifas.config.solicitada').length, 2, 'sin project_id no pide');
+    await m.onUnload();
+  });
+
   await testAsync('onCajaCerrada y onDiaIniciado vacian buffers', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
@@ -299,7 +399,7 @@ function publishedOf(mocks, name) {
   await testAsync('handleAddItem aplica precio canonico desde cache', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
-    m.productosCache.set('p1', { nombre: 'Pizza', precio: 10 });
+    m._productosDe('default').set('p1', { nombre: 'Pizza', precio: 10 });
 
     const r = await m.handleAddItem({ cuenta_id: 'mesa_x', producto_id: 'p1', cantidad: 1 });
     assert.strictEqual(r.data.item.precio, 10);
@@ -570,6 +670,179 @@ function publishedOf(mocks, name) {
   });
 
   cleanupTmp();
+
+  // Group: precio por canal (v3.5.0)
+  await testAsync('carta.actualizada ENVUELTA ({carta}) hidrata cartasProductosCache', async () => {
+    const { module: m } = await instantiate(makeMocks());
+    await m.onCartaActualizada({ data: { project_id: 'p1', carta: { meta: { id: 'carta_glovo' }, productos: [{ id: 'queso', nombre: 'Queso', precio: 8.5, categoria: 'entrantes' }] } } });
+    const cache = m.cartasProductosCache.get('carta_glovo');
+    assert.ok(cache, 'la carta del canal debe quedar cacheada');
+    assert.strictEqual(cache.get('queso').precio, 8.5);
+  });
+
+  await testAsync('el precio del canal se resuelve por carta y cae al base si el producto no está', async () => {
+    const { module: m } = await instantiate(makeMocks());
+    m.tarifasConfigPorProject.set('p1', { general: 'carta_general', canales: { glovo: 'carta_glovo' } });
+    m.cartasProductosCache.set('carta_glovo', new Map([['queso', { nombre: 'Queso', precio: 8.5 }]]));
+    m._productosDe('p1').set('queso', { nombre: 'Queso', precio: 6.5 });
+    m._productosDe('p1').set('pan', { nombre: 'Pan', precio: 1 });
+    assert.strictEqual(m._resolverPrecioCanal('queso', 6.5, 'glovo', 'p1'), 8.5);
+    assert.strictEqual(m._resolverPrecioCanal('queso', 6.5, 'mesa', 'p1'), 6.5);
+    assert.strictEqual(m._resolverPrecioCanal('pan', 1, 'glovo', 'p1'), 1);   // no está en la carta del canal
+  });
+
+  await testAsync('carta.get.response de la GENERAL rellena productosCache (tras restart)', async () => {
+    const { module: m } = await instantiate(makeMocks());
+    m.tarifasConfigPorProject.set('p1', { general: 'carta_general', canales: { glovo: 'carta_glovo' } });
+    m._cartaGetPendientes.set('req-1', { project_id: 'p1', carta_id: 'carta_general' });
+    await m.onCartaGetResponse({ data: { request_id: 'req-1', status: 200, data: { meta: { id: 'carta_general' }, productos: [{ id: 'queso', nombre: 'Queso', precio: 6.5, categoria: 'entrantes' }] } } });
+    assert.strictEqual(m._productosDe('p1').get('queso').precio, 6.5);
+    assert.strictEqual(m._productosDe('p1').get('queso').nombre, 'Queso');
+  });
+
+  await testAsync('carta.get.response de una carta de CANAL no toca productosCache', async () => {
+    const { module: m } = await instantiate(makeMocks());
+    m.tarifasConfigPorProject.set('p1', { general: 'carta_general', canales: { glovo: 'carta_glovo' } });
+    m._cartaGetPendientes.set('req-2', { project_id: 'p1', carta_id: 'carta_glovo' });
+    await m.onCartaGetResponse({ data: { request_id: 'req-2', status: 200, data: { meta: { id: 'carta_glovo' }, productos: [{ id: 'queso', nombre: 'Queso', precio: 8.5 }] } } });
+    assert.strictEqual(m._productosDe('p1').get('queso'), undefined);
+    assert.strictEqual(m.cartasProductosCache.get('carta_glovo').get('queso').precio, 8.5);
+  });
+
+  // ==========================================================
+  // Group: UN SOLO TASADOR (v3.6.0) — el precio lo pone el servidor
+  // ==========================================================
+
+  // Carta mínima con la MISMA forma que la real: el delta del extra vive en opciones ELEGIR_VARIOS
+  // (delta_precio_centimos), y los valores del grupo QUITAR no llevan precio (quitar es gratis).
+  const CARTA_GEN = {
+    meta: { id: 'carta_gen' },
+    productos: [
+      {
+        id: 'margarita', nombre: 'Margarita', precio: 8,
+        opciones: [
+          { modo: 'QUITAR', valores: [{ id: 'tomate', etiqueta: 'Tomate' }, { id: 'mozzarella', etiqueta: 'Mozzarella' }] },
+          { modo: 'ELEGIR_VARIOS', max: 5, valores: [
+            { id: 'bacon', etiqueta: 'Bacon', delta_precio_centimos: 150 },
+            { id: 'jamon_de_york', etiqueta: 'Jamón de york', delta_precio_centimos: 150 },
+            { id: 'calabacin', etiqueta: 'Calabacín', delta_precio_centimos: 50 }
+          ] }
+        ]
+      },
+      { id: 'pepperoni', nombre: 'Pepperoni', precio: 10, opciones: [
+        { modo: 'ELEGIR_VARIOS', max: 5, valores: [{ id: 'bacon', etiqueta: 'Bacon', delta_precio_centimos: 150 }] }
+      ] }
+    ]
+  };
+
+  async function conCarta(opts = {}) {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    m.tarifasConfigPorProject.set('p1', { general: 'carta_gen', canales: opts.canales || {} });
+    await m.onCartaActualizada({ data: { project_id: 'p1', carta: CARTA_GEN } });
+    if (opts.cartaCanal) await m.onCartaActualizada({ data: { project_id: 'p1', carta: opts.cartaCanal } });
+    return { mocks, m };
+  }
+
+  await testAsync('_extrasDeCarta saca el delta de ELEGIR_VARIOS y no del grupo QUITAR', async () => {
+    const { m } = await conCarta();
+    const cat = m.cartasCompletas.get('carta_gen').ingredientes_catalogo;
+    const bacon = cat.find(e => e.id === 'bacon');
+    assert.ok(bacon, 'bacon debe estar en el catálogo derivado');
+    assert.strictEqual(bacon.precio_extra, 1.5, 'céntimos → euros');
+    assert.strictEqual(bacon.nombre, 'Bacon');
+    assert.ok(!cat.find(e => e.id === 'tomate'), 'quitar es gratis: los valores QUITAR no son extras');
+    await m.onUnload();
+  });
+
+  await testAsync('EL BUG DE HOY: en canal llevar el extra YA NO se cae del precio', async () => {
+    const { m } = await conCarta();
+    const r = await m.handleAddItem({
+      project_id: 'p1', cuenta_id: 'llevar_1', producto_id: 'margarita', nombre: 'Margarita',
+      precio: 8, cantidad: 1,
+      variaciones: { ingredientes_quitar: [], ingredientes_anadir: [{ nombre: 'Bacon', cantidad: 1 }] }
+    });
+    assert.ok(isCanonicalSuccess(r));
+    assert.strictEqual(r.data.item.precio, 9.5, '8 de base + 1,50 de bacon (antes devolvía 8,00)');
+    assert.strictEqual(r.data.item.subtotal, 9.5);
+    await m.onUnload();
+  });
+
+  await testAsync('el precio que manda el cliente se IGNORA: se re-tasa contra la carta', async () => {
+    const { m } = await conCarta();
+    const r = await m.handleAddItem({
+      project_id: 'p1', cuenta_id: 'mesa_3', producto_id: 'margarita', nombre: 'Margarita',
+      precio: 0.01, precio_canal_resuelto: true, cantidad: 1
+    });
+    assert.strictEqual(r.data.item.precio, 8, 'manda la carta, no el 0,01 del cliente');
+    await m.onUnload();
+  });
+
+  await testAsync('la cantidad multiplica el unitario tasado, no el precio', async () => {
+    const { m } = await conCarta();
+    const r = await m.handleAddItem({
+      project_id: 'p1', cuenta_id: 'llevar_2', producto_id: 'margarita', nombre: 'Margarita',
+      precio: 8, cantidad: 3,
+      variaciones: { ingredientes_quitar: [], ingredientes_anadir: [{ nombre: 'calabacín', cantidad: 1 }] }
+    });
+    assert.strictEqual(r.data.item.precio, 8.5);
+    assert.strictEqual(r.data.item.subtotal, 25.5);
+    assert.strictEqual(r.data.pedido.total, 25.5);
+    await m.onUnload();
+  });
+
+  await testAsync('mitad y mitad: max(base) + extras de las dos mitades (nombres → ids)', async () => {
+    const { m } = await conCarta();
+    const r = await m.handleAddItem({
+      project_id: 'p1', cuenta_id: 'mesa_4', producto_id: 'margarita', nombre: '½ Margarita + ½ Pepperoni',
+      precio: 10, cantidad: 1, tipo: 'mitad_mitad',
+      pizza_izquierda: { id: 'margarita', nombre: 'Margarita', anadir: [{ nombre: 'Bacon' }] },
+      pizza_derecha:   { id: 'pepperoni', nombre: 'Pepperoni', anadir: [] }
+    });
+    assert.strictEqual(r.data.item.precio, 11.5, 'max(8,10)=10 + 1,50 de bacon en la mitad izquierda');
+    await m.onUnload();
+  });
+
+  await testAsync('carta de CANAL: se tasa con el precio del canal, no con la general', async () => {
+    const cartaGlovo = { meta: { id: 'carta_glovo' }, productos: [
+      { id: 'margarita', nombre: 'Margarita', precio: 9.5, opciones: CARTA_GEN.productos[0].opciones }
+    ] };
+    const { m } = await conCarta({ canales: { glovo: 'carta_glovo' }, cartaCanal: cartaGlovo });
+    const r = await m.handleAddItem({
+      project_id: 'p1', cuenta_id: 'glovo_9', producto_id: 'margarita', nombre: 'Margarita',
+      precio: 8, cantidad: 1,
+      variaciones: { ingredientes_quitar: [], ingredientes_anadir: [{ nombre: 'Bacon' }] }
+    });
+    assert.strictEqual(r.data.item.precio, 11, '9,50 del canal + 1,50 (antes: 8,00 o 9,50 sin extras)');
+    await m.onUnload();
+  });
+
+  await testAsync('fallback HONESTO: producto fuera de la carta se cobra como antes y se avisa', async () => {
+    const { mocks, m } = await conCarta();
+    const r = await m.handleAddItem({
+      project_id: 'p1', cuenta_id: 'mesa_5', producto_id: 'porcion', nombre: 'Porción',
+      precio: 3.5, cantidad: 1
+    });
+    assert.strictEqual(r.data.item.precio, 3.5, 'sin carta no se inventa precio: se usa el recibido');
+    const avisos = mocks.logs.filter(l => l[1] === 'comandero.tasado.fallback');
+    assert.strictEqual(avisos.length, 1, 'el fallback NO es silencioso');
+    await m.onUnload();
+  });
+
+  await testAsync('cold start (sin carta cacheada) → fallback, no excepción', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    m.tarifasConfigPorProject.set('p1', { general: 'carta_gen', canales: {} });
+    const r = await m.handleAddItem({
+      project_id: 'p1', cuenta_id: 'llevar_3', producto_id: 'margarita', nombre: 'Margarita',
+      precio: 8, cantidad: 1
+    });
+    assert.ok(isCanonicalSuccess(r));
+    assert.strictEqual(r.data.item.precio, 8);
+    assert.strictEqual(mocks.logs.filter(l => l[1] === 'comandero.tasado.fallback').length, 1);
+    await m.onUnload();
+  });
+
   console.log('\nTodos los tests pasaron.');
   process.exit(0);
 })();

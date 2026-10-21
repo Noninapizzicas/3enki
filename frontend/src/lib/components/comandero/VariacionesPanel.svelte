@@ -27,6 +27,22 @@
   export let projectId: string = '';
   export let catalogoIngredientes: any[] = [];
 
+  /**
+   * Hermanas por ingrediente principal (derivado en ComanderoScreen desde la carta):
+   * las demás pizzas que llevan lo mismo que la que se está abriendo.
+   * { principal: {id,nombre}, hermanas: Producto[] } | null
+   */
+  export let hermanas: any = null;
+
+  const dispatch2 = createEventDispatcher<{
+    'elegir-hermana': { producto: any; editar?: boolean };
+  }>();
+
+  function ingsDe(p: any): string {
+    const ings = (p?.ingredientes || p?.ingredientes_base || []) as any[];
+    return ings.map((i: any) => (typeof i === 'string' ? i : i?.nombre)).filter(Boolean).join(' · ');
+  }
+
   const dispatch = createEventDispatcher<{
     close: void;
     confirm: {
@@ -317,6 +333,38 @@
                     {/if}
                     <span class="chip-name">{ing.nombre}</span>
                   </button>
+                {/each}
+              </div>
+            </section>
+          {/if}
+
+          <!-- HERMANAS: las demás que llevan el mismo ingrediente principal.
+               Nombre, lo que llevan, precio y dos botones — elegir (al pedido) o editar (su ficha). -->
+          {#if hermanas && hermanas.hermanas?.length}
+            <section class="section section-hermanas">
+              <h3 class="section-title">
+                🔗 También con {hermanas.principal?.nombre || 'lo mismo'}
+                <span class="hermanas-count">· {hermanas.hermanas.length}</span>
+              </h3>
+              <div class="hermanas-list">
+                {#each hermanas.hermanas as h (h.id)}
+                  <div class="hermana-row">
+                    <div class="hermana-info">
+                      <div class="hermana-nombre">{h.nombre}</div>
+                      <div class="hermana-ings">{ingsDe(h)}</div>
+                    </div>
+                    <span class="hermana-precio">{formatPrecio(h.precio)}</span>
+                    <div class="hermana-btns">
+                      <button
+                        class="hermana-btn elegir"
+                        on:click={() => dispatch2('elegir-hermana', { producto: h })}
+                      >Elegir</button>
+                      <button
+                        class="hermana-btn"
+                        on:click={() => dispatch2('elegir-hermana', { producto: h, editar: true })}
+                      >Editar</button>
+                    </div>
+                  </div>
                 {/each}
               </div>
             </section>
@@ -701,6 +749,98 @@
   .confirm-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+
+  /* Hermanas por ingrediente principal — nombre, lo que llevan, precio y botones */
+  .section-hermanas {
+    border: 1px solid #2a2a2a;
+    border-radius: 12px;
+    padding: 10px 12px;
+    background: #161616;
+  }
+
+  .hermanas-count {
+    font-weight: 400;
+    color: #777;
+  }
+
+  .hermanas-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .hermana-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 0;
+    border-top: 1px solid #232323;
+    min-width: 0;
+  }
+
+  .hermana-row:first-child {
+    border-top: 0;
+  }
+
+  .hermana-info {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .hermana-nombre {
+    font-weight: 700;
+    font-size: 0.86rem;
+    color: #eee;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .hermana-ings {
+    font-size: 0.72rem;
+    color: #888;
+    margin-top: 2px;
+    line-height: 1.35;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+
+  .hermana-precio {
+    font-weight: 700;
+    font-size: 0.86rem;
+    color: var(--primary, #f59e0b);
+    white-space: nowrap;
+  }
+
+  .hermana-btns {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  .hermana-btn {
+    padding: 7px 11px;
+    border-radius: 10px;
+    border: 1px solid #2a2a2a;
+    background: #1a1a1a;
+    color: #ccc;
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .hermana-btn.elegir {
+    background: var(--primary, #f59e0b);
+    border-color: var(--primary, #f59e0b);
+    color: #111;
+  }
+
+  .hermana-btn:hover {
+    filter: brightness(1.15);
   }
 
   /* Mobile adjustments */

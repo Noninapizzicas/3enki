@@ -4,11 +4,25 @@ dominio: frontend
 resumen: SvelteKit 2 + Svelte 5 sobre MQTT: MqttClient singleton, mqtt-request, lazy-registry, stores, módulos lazy, rutas multi-tenant, nervio vista-bridge, resiliencia.
 fuentes:
   - frontend/src/**
-verificado: 2026-07-24
+verificado: 2026-10-21
 trabajo_pendiente: verificar el módulo trazo en un frontend construido (node_modules) — el wiring espeja interruptores 1:1 pero no se compiló aquí
 ---
 
 # FRONTEND — Capa de UI (SvelteKit + Svelte 5 sobre MQTT)
+
+> **Novedad (2026-10-16) — el panel jefe declara `pago_online` (se cierra el hueco [ABIERTO]).**
+> `modules/carta-digital/CartaDigitalJefePanel.svelte` gana un checkbox que escribe
+> `opciones_visualizacion.pago_online` por el mismo `update_config` (merge profundo). Antes el
+> contrato lo soportaba pero el formulario no lo pedía, así que la PWA no ofrecía método de pago.
+> El template (`static-template.js`) sigue siendo quien decide: con el flag ON pinta
+> 💶 Efectivo al recoger / 💳 Tarjeta y `metodo_pago` viaja en el `#P1` al bot (checkout WhatsApp).
+> El store `carta-digital-jefe.ts` sólo cambia el docstring del campo.
+
+> **Novedad (2026-08-07) — AgenteMarco se alimenta correctamente del puente del agente.**
+> El marco desplegable del chat ahora lee del derived store `ejecucionActiva` (reactividad
+> robusta frente a updates del Map), y el backend incluye `conversation_id` en
+> `agent.execute.progress` y normaliza `invoke_agent`/`invoke_agent.response` como alias
+> del puente.
 
 > **Novedad (2026-07-14) — identidad del navegador en el bus (inerte hasta enrolar).**
 > `ui-core/enki-identity.ts` genera un par RSA en WebCrypto (privada NO-extraíble en IndexedDB), enrola
@@ -871,3 +885,40 @@ RESILIENCIA {
   batch-logging debounced; on fail HTTP → desactiva collector
 }
 ```
+
+---
+
+## Secciones por ingrediente principal (derivadas, no almacenadas)
+
+> **Novedad (2026-10-21).** El comandero gana una fila de accesos por INGREDIENTE
+> PRINCIPAL encima del grid de productos. El camarero entra por lo que oye
+> ("dos de jamón"), no por el nombre de la pizza.
+
+La pieza es un índice **derivado al leer**, no un campo de la carta: se calcula desde
+los `ingredientes` / `ingredientes_base` que cada producto YA declara. No hay nada que
+mantener en cada alta y, si la carta cambia, las secciones cambian solas.
+
+```json
+{
+  "esquema": "secciones-ingrediente-v1",
+  "fuente": "productos.carta_completa → productos[].ingredientes_base[]",
+  "unidad": "ingrediente PRINCIPAL (5-6 del sector), jamás los 30 de la carta",
+  "principales_pizzas": ["jamon_de_york", "bacon", "ternera", "pollo", "anchoas", "atun"],
+  "reglas": [
+    "solo cuenta la categoría declarada (hoy: pizzas)",
+    "una pizza con dos principales aparece en las dos secciones (no es duplicado, es el uso)",
+    "sección con 0 productos no se pinta",
+    "orden: por número de pizzas; empate → orden declarado de principales",
+    "nombre y emoji salen del dato de la carta, no de una tabla paralela"
+  ],
+  "piezas": {
+    "frontend/src/lib/utils/indice-ingredientes.ts": "puro: idDeIngrediente · llevaIngrediente · construirSeccionesIngredientes",
+    "frontend/src/lib/components/comandero/ComanderoScreen.svelte": "fila .ingredientes-bar + filtro productosVisibles",
+    "tests/unit/frontend__indice-ingredientes.test.js": "lógica pura + contra la carta real de the-pirate-v4"
+  }
+}
+```
+
+> **Trampa pagada.** `productos.carta_completa` NO entrega `ingredientes`: los proyecta
+> como `ingredientes_base` (`modules/pizzepos/productos/index.js:203`). Un índice que
+> mirase solo `ingredientes` saldría vacío con la carta intacta; el test 4 lo fija.

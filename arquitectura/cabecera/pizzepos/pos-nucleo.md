@@ -15,7 +15,7 @@ fuentes:
   - modules/pizzepos/tarifas/**
   - modules/pizzepos/persistencia-comandero/**
   - modules/pizzepos/impresion/**
-verificado: 2026-07-12
+verificado: 2026-10-21
 ---
 
 # PizzePOS Módulos — Subsistema de Punto de Venta (v3.2.0)
@@ -39,10 +39,14 @@ INTERFAZ ComanderoContract {
 CLASE ComanderoModule HEREDA BaseModule IMPLEMENTA ComanderoContract {
   ATRIBUTOS {
     name: String = 'comandero'
-    version: String = '3.2.0'
+    version: String = '3.6.1'
     pedidos: Map<cuenta_id, Pedido>
     refDisplayCache: Map<cuenta_id, String>
-    productosCache: Map<producto_id, Producto>
+    // v3.6.1 — POR PROYECTO y con purga. Antes era un Map plano SIN project_id y sin purga:
+    // catalogo.actualizado solo hacía .set(), así que un producto retirado se cobraba para
+    // siempre y los catálogos de dos proyectos se sumaban (medido en vivo: 63 en cache con
+    // una carta de 22). Ahora se REEMPLAZA entero el mapa del proyecto.
+    productosCache: Map<project_id, Map<producto_id, Producto>>
     cartasProductosCache: Map<carta_id, Map<producto_id, ProductoEnCarta>>
     tarifasConfigPorProject: Map<project_id, {general, canales}>
     _bufferFile: String
@@ -64,13 +68,36 @@ CLASE ComanderoModule HEREDA BaseModule IMPLEMENTA ComanderoContract {
       pedidos.clear()
       productosCache.clear()
       cartasProductosCache.clear()
+      cartasCompletas.clear()
       refDisplayCache.clear()
       tarifasConfigPorProject.clear()
 
     async handleAddItem(data: {cuenta_id, producto_id, nombre?, precio?, cantidad?, notas?, variaciones?}): Promise<Response>
       VALIDA required fields
       OBTIENE o CREA pedido
-      RESUELVE precio POR canal via _resolverPrecioCanal
+      TASA el precio server-side via _tasarItem (UN SOLO TASADOR, v3.6.0) y, si no puede, cae a _resolverPrecioCanal
+      // v3.6.0 — UN SOLO TASADOR. El precio lo pone el SERVIDOR con _shared/pedido-tasador.js (la
+      // MISMA función pura que re-tasa el autoservicio de WhatsApp) contra la carta del CANAL:
+      // producto + Σ extras; mitad y mitad = max(base) + extras de cada mitad. El cliente deja de
+      // poner dinero: el `precio` que llega se ignora cuando el producto está en la carta.
+      // Antes había dos verdades — el panel mandaba un total con extras y el backend lo pisaba con
+      // el precio pelado de la carta en todo canal ≠ mesa —, así que los extras SE CAÍAN en
+      // llevar/teléfono/glovo y se cobraba de menos. El catálogo de extras se deriva de las
+      // propias opciones ELEGIR_VARIOS de la carta (delta_precio_centimos), y los nombres que
+      // mandan los paneles se resuelven a ids (_idsDeExtras: id explícito > nombre normalizado).
+      // DEGRADACIÓN HONESTA: producto fuera de la carta del canal (pizza_algusto, porcion, packs
+      // de tienda) o carta aún no cacheada → camino anterior + warn `comandero.tasado.fallback`
+      // (y métrica). El fallback no es silencioso.
+      // v3.5.0 — el precio del canal se resuelve POR CARTA: tarifas(canal) → cartasProductosCache
+      // [carta_id] → precio, y si el producto no está en la carta del canal, cae al precio base.
+      // cartasProductosCache se hidrata por DOS vías: carta.actualizada (la carta va ENVUELTA
+      // en {project_id, carta}) y, al recibir tarifas (snapshot o cambio), un carta.get.request
+      // por cada carta del mapping (onCartaGetResponse). Sin la segunda, tras un restart, el
+      // canal cobraba precio base hasta que alguien tocara su carta.
+      // v3.5.1 — y si la carta que responde es la GENERAL, además rellena productosCache (catalogo
+      // base): sin eso el POS cobraba 0 y nombraba el item con el producto_id tras un restart.
+      // v3.6.1 — ese relleno es FULL-REPLACE del proyecto: hidratar la general no puede dejar
+      // vivos los productos de una versión anterior de la carta.
       CREA item con UUID
       AGREGA a pedido.items
       RECALCULA pedido.total
@@ -510,6 +537,14 @@ CLASE ProductosModule HEREDA BaseModule {
 
     onCartaGenerada(carta.actualizada/editada) · onCartaBorrada
       → SEÑAL: re-emite catalogo.actualizado (el comandero re-pull y proyecta fresco). NO sincroniza store.
+      → GATE _esCartaGeneral: SOLO la carta GENERAL (la que asigna tarifas) proyecta al catálogo
+        GLOBAL. Una carta de CANAL (glovo, llevar, teléfono…) NO emite catalogo.actualizado —
+        las caches base se indexan por proyecto (comandero desde v3.6.1; pedidos aún por
+        producto_id pelado), así que sin el gate una carta de canal pisaría el precio de
+        mostrador en TODOS los canales. El canal
+        se resuelve por carta: tarifas(canal) → comandero.cartasProductosCache[carta_id] → precio,
+        y si el producto no está en la carta del canal, cae al precio base. Sin config de tarifas
+        conocida todavía (arranque temprano) se emite como antes: ningún refresco se pierde.
 
     EVENTOS_PUBLISHES {
       'catalogo.actualizado': {project_id, productos (lite), source}   // SEÑAL de refresco
@@ -636,50 +671,68 @@ CLASE Ingrediente {
 }
 ```
 
-### 8. VARIACIONES (v2.0.0) — Validación de Modificaciones
+### 8. VARIACIONES (v4.6.1) — Reglas por producto, leídas de la CARTA
+
+> **Lo REAL (verificado en vivo 2026-10-20).** El módulo NO es CRUD de "variaciones" ni guarda
+> `variacionesPerProducto`: es una **caché de reglas por producto** alimentada por la carta.
+> `variaciones.configurar` (rol jefe) delega en `carta.update_product` — el custodio escribe,
+> aquí solo se lee. Se puebla por `carta.actualizada/editada` y por `project.activated`
+> (`productos.carta_completa`, proyector sin estado).
+>
+> **AUTO-VIVIFICACIÓN (v4.6.0).** `configuraciones` vive en memoria (`lost_on_restart`), así que
+> en frío —reinicio, sin `project.activated`— nacía VACÍA: `variaciones.get` devolvía 404 al panel
+> (*"no se pudo leer el informe"*) y cada `comandero.item_agregado` con variación emitía
+> `variacion.rechazada` hasta la 1ª edición de carta. Ahora `_configDeProducto`: si falta la config
+> **y** la petición trae `project_id`, hidrata ESE proyecto desde la carta y reintenta (una sola
+> RPC para peticiones concurrentes). No se hidratan todos los proyectos en bloque a propósito:
+> los ids de producto se **repiten** entre proyectos (nonina y the-pirate comparten 52) y la caché
+> está indexada por `producto_id`. Sin `project_id` el 404 sigue siendo el mismo: no se inventa estado.
+
+> **EL MÁXIMO LO MANDA LA CARTA (v4.6.1).** El campo `max_ingredientes_extra` que devuelve `get` y
+> que usa la validación sale del `max` declarado en la opción `ELEGIR_VARIOS` de la carta. Antes
+> caía al 5 heredado de `variaciones.max_ingredientes_extra`, mientras el panel y el camarero veían
+> el 10 de la carta: el motor rechazaba el 6º extra que la carta sí permite. El campo viejo queda solo
+> como respaldo cuando la carta no declara opciones (derivadas).
 
 ```
 CLASE VariacionesModule HEREDA BaseModule {
   ATRIBUTOS {
     name: String = 'variaciones'
-    version: String = '2.0.0'
-    variacionesPerProducto: Map<producto_id, VariacionesProducto>
-    ingredientesCache: Map<ingredient_id, Ingrediente>
+    version: String = '4.6.1'
+    configuraciones: Map<producto_id, ConfigProducto>   // en memoria, lost_on_restart
+    _hidratando: Map<project_id, Promise>               // viajes en vuelo (una RPC por proyecto)
   }
 
   METODOS {
-    async handleValidarVariacion(data: {producto_id, ingredientes_quitar?, ingredientes_anadir?}): Promise<Response>
-      OBTIENE config de variaciones DEL producto
-      VALIDA que ingredientes_quitar sean permitidos
-      VALIDA que ingredientes_anadir respeten el limite
-      PUBLICA variacion.validada|rechazada
-      RETORNA response
+    _configurar(producto_id, {categoria, precio, variaciones, ingredientes_base, opciones, paleta})
+      opciones = las de la CARTA si las trae; si no, derivarOpciones(QUITAR propios + ELEGIR_VARIOS paleta de su categoría)
+      max_ingredientes_extra = opciones.ELEGIR_VARIOS.max  ??  variaciones.max_ingredientes_extra  ??  5
 
-    async handleCalcularPrecio(data: {producto_id, ingredientes_quitar?, ingredientes_anadir?}): Promise<Response>
-      precio_base = producto.precio
-      SUMA precios_extra DE ingredientes_anadir
-      precio_final = precio_base + suma_extras
-      RETORNA {status: 200, data: {precio_final}}
+    _configDeProducto(producto_id, project_id)          // el acto crea el estado
+      SI no hay config Y hay project_id: await _asegurarProyecto(project_id) → reintenta
+      SIN project_id: devuelve null (el 404 de siempre)
+
+    _asegurarProyecto(project_id)                       // hidrata ESE proyecto desde la fuente
+      productos.carta_completa(project_id) → _configurarLista(productos)
+      concurrentes del mismo proyecto comparten el viaje
+
+    handleGetVariacionesProducto({producto_id, project_id?})   → 200 {opciones, precio_base_centimos, ...}
+    handleValidarVariacion({producto_id, project_id?, ingredientes_quitar?, ingredientes_anadir?})
+    handleCalcularPrecio({producto_id, project_id?, ingredientes_anadir?})
+    handleEvaluarOpciones({producto_id, project_id?, selecciones})   // motor-opciones, gemelo del tasador
+    handleConfigurar({producto_id, variaciones, project_id|carta_id})  // ROL JEFE → carta.update_product
 
     EVENTOS_PUBLISHES {
-      'variacion.validada': {producto_id, variaciones, precio_final}
-      'variacion.rechazada': {producto_id, razon}
+      'variacion.validada': {producto_id, project_id, correlation_id, timestamp}
+      'variacion.rechazada': {producto_id, motivo_rechazo, project_id, correlation_id, timestamp}
     }
 
     EVENTOS_SUBSCRIBES {
-      'producto.creado': onProductoCreado
-      'comandero.item_agregado': onComanderoItemAgregado (auto-valida)
+      'carta.actualizada' | 'carta.editada': onCartaActualizada   // la CARTA es la fuente
+      'project.activated': onProjectActivated                     // warm del proyecto vivo
+      'comandero.item_agregado': onComanderoItemAgregado           // auto-valida (hidrata si está frío)
+      'producto.creado': onProductoCreado                          // LEGACY, nadie lo emite
     }
-  }
-}
-
-CLASE VariacionesProducto {
-  ATRIBUTOS {
-    producto_id: String
-    ingredientes_permitidos_quitar: Array<String>
-    permite_anadir_extras: Boolean
-    ingredientes_sugeridos: Array<String>
-    max_extras: Integer
   }
 }
 ```
@@ -690,9 +743,10 @@ CLASE VariacionesProducto {
 CLASE PedidosModule HEREDA BaseModule {
   ATRIBUTOS {
     name: String = 'pedidos'
-    version: String = '3.0.0'
+    version: String = '3.5.0'
     pedidos: Map<pedido_id, Pedido>
     pedidosPorCuenta: Map<cuenta_id, Array<pedido_id>>
+    pedidosPorProject: Map<project_slug, Set<pedido_id>>
     productosCache: Map<producto_id, Producto>
   }
 
@@ -704,20 +758,51 @@ CLASE PedidosModule HEREDA BaseModule {
       PUBLICA pedido.creado
       RETORNA {status: 201, data: pedido}
 
+    async handleCreatePedidoTienda(data: {project_slug, items, cliente_nombre, modo_consumo, hora_recogida, metodo_pago}): Promise<Response>
+      NORMALIZA metodo_pago EN ['efectivo','tarjeta']  // opcional: sin el → 'efectivo' (comportamiento previo)
+      metodo_pago SOLO REGISTRA la preferencia del cliente (lo que pidio en la PWA por el #P1)
+      QUIEN MANDA SOBRE EL COBRO es la VERDAD del pago (pedido.pago.estado), NO esta preferencia
+      CREA pedido tienda (ancla = cliente_nombre) → _crearCuentaTienda → comandero.enviar_cocina
+      PUBLICA pedido.creado (lleva metodo_pago)
+
+    async onPagoConfirmado(event: {pedido_id, project_id, monto_centimos, project_slug?, cliente_nombre?, cliente_telefono?}): Void
+      SI pedido NO esta EN memoria                              // el pago es ASINCRONO y el pedido de
+        RECREA pedido MINIMO desde la metadata de la sesion     // tienda vive en memoria y NO se restaura:
+          {id: pedido_id, tipo:'tienda', estado:'pagado',       // si el proceso reinicio en la ventana de
+           total_centimos: monto_centimos, metodo_pago:'tarjeta'} // pago (p.ej. un DEPLOY) el webhook llega
+        recreado_desde_pago = true                              // huerfano. El dinero SI entro: NUNCA en
+        pedidos.set + pedidosPorProject.add                      // silencio, y sin persistir nada.
+      SI pedido.pago.estado == 'pagado' → RETORNA              // idempotencia
+      pedido.pago = {estado:'pagado', pasarela, session_id, monto_centimos, pagado_at}
+      PUBLICA pedido.pagado {pedido_id, project_slug, total, cliente_nombre, cliente_telefono, recreado}
+
+    async handleConfirmarRecogida(data: {pedido_id}): Promise<Response>
+      GUARDA pedido.estado == 'pendiente_recogida' → 409 CONFLICT_STATE
+      pagoConfirmado = pedido.pago.estado == 'pagado'
+      metodo_cobro = pagoConfirmado ? 'tarjeta' : 'efectivo'   // LA VERDAD del pago decide
+      pedido.estado = 'recogido_y_cobrado'
+      pedido.cobro = {metodo: metodo_cobro, monto_centimos, cobrado_at,
+                      IF pagoConfirmado: session_id + pasarela}
+      PUBLICA pedido.recogido {pedido_id, project_id, total_centimos, metodo_pago: metodo_cobro}
+
     async onComanderoEnviarCocina(event: Event): Promise<Void>
       CREA pedido formal SI NO existe
       PUBLICA pedido.enviado_cocina (escuchado por cocina)
 
     EVENTOS_PUBLISHES {
-      'pedido.creado': {pedido_id, cuenta_id, items, total}
+      'pedido.creado': {pedido_id, cuenta_id, items, total, metodo_pago?}
       'pedido.enviado_cocina': (delegado desde comandero bridge)
       'pedido.completado': {pedido_id, cuenta_id, tiempo_total}
       'pedido.cancelado': {pedido_id, cuenta_id, motivo}
+      'pedido.pagado': {pedido_id, project_id, project_slug, session_id, total, cliente_nombre, cliente_telefono, recreado}
+      'pedido.recogido': {pedido_id, project_id, total_centimos, cliente_nombre, metodo_pago, recogido_at}
     }
 
     EVENTOS_SUBSCRIBES {
       'comandero.enviar_cocina': onComanderoEnviarCocina (bridge)
       'catalogo.actualizado': onCatalogoActualizado (sync cache)
+      'pago.confirmado': onPagoConfirmado (la pasarela confirma por webhook)
+      'pedido.crear-tienda': handleCreatePedidoTienda (tool auto-wireada)
     }
   }
 }
@@ -726,9 +811,14 @@ CLASE Pedido {
   ATRIBUTOS {
     id: String (pedido_id)
     cuenta_id: String
+    tipo: String (pos|tienda)
     items: Array<ItemPedido>
     total: Number
-    estado: String (creado|enviado_cocina|completado|cancelado)
+    metodo_pago: String (efectivo|tarjeta — preferencia del cliente; opcional, default 'efectivo')
+    pago: Object (VERDAD del cobro: {estado, pasarela, session_id, monto_centimos, pagado_at})
+    recreado_desde_pago: Boolean (true si el webhook llego de huerfano y el pedido se reconstruyo)
+    cobro: Object ({metodo, monto_centimos, cobrado_at, session_id?, pasarela?})
+    estado: String (creado|enviado_cocina|completado|cancelado|pendiente_recogida|recogido_y_cobrado)
     created_at: String (ISO)
   }
 }

@@ -99,7 +99,7 @@ function publishedOf(mocks, name) {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     assert.strictEqual(m.name, 'variaciones');
-    assert.strictEqual(m.version, '4.4.0');
+    assert.strictEqual(m.version, '4.6.1');
     assert.strictEqual(m.configuraciones.size, 0);
     await m.onUnload();
   });
@@ -317,6 +317,87 @@ function publishedOf(mocks, name) {
     await m.onUnload();
   });
 
+  // ── AUTO-VIVIFICACIÓN: en frío (nadie activó el proyecto) el ACTO hidrata ──
+  const productoConOpciones = () => ([
+    { id: 'pizzas_base', categoria_id: 'pizzas', precio: 10,
+      variaciones: { permite_quitar: ['tomate'], permite_anadir: true, max_ingredientes_extra: 4 },
+      ingredientes_base: [{ id: 'tomate' }, { id: 'bacon' }],
+      opciones: [
+        { id: 'QUITAR', modo: 'QUITAR', valores: [{ id: 'tomate' }] },
+        { id: 'ANADIR', modo: 'ELEGIR_VARIOS', max: 4, valores: [{ id: 'bacon' }, { id: 'huevo' }] }
+      ] }
+  ]);
+
+  await testAsync('variaciones.get en frío hidrata el proyecto desde la carta y responde 200', async () => {
+    const mocks = makeMocks({ cartaCompletaProductos: productoConOpciones() });
+    const { module: m } = await instantiate(mocks);
+    assert.strictEqual(m.configuraciones.size, 0);                       // caché VACÍA tras reinicio
+
+    const r = await m.handleGetVariacionesProducto({ producto_id: 'pizzas_base', project_id: 'proj-pirate' });
+
+    assert.strictEqual(r.status, 200);                                    // antes: 404
+    assert.strictEqual(r.data.precio_base_centimos, 1000);
+    assert.strictEqual(r.data.opciones.length, 2);                        // las de la CARTA, no derivadas
+    assert.ok(mocks.uiHandled.some(([d, a, x]) => d === 'productos' && a === 'carta_completa' && x?.project_id === 'proj-pirate'));
+    assert.strictEqual(m.configuraciones.size, 1);
+    await m.onUnload();
+  });
+
+  await testAsync('variaciones.get SIN project_id mantiene el 404 (no inventa)', async () => {
+    const mocks = makeMocks({ cartaCompletaProductos: productoConOpciones() });
+    const { module: m } = await instantiate(mocks);
+    const r = await m.handleGetVariacionesProducto({ producto_id: 'pizzas_base' });
+    assert.strictEqual(r.status, 404);
+    assert.strictEqual(r.error.code, 'RESOURCE_NOT_FOUND');
+    assert.strictEqual(mocks.uiHandled.length, 0);                        // no hay proyecto → no hay fuente
+    assert.strictEqual(m.configuraciones.size, 0);
+    await m.onUnload();
+  });
+
+  await testAsync('hidratación compartida: dos peticiones concurrentes = UNA sola RPC', async () => {
+    const base = makeMocks({ cartaCompletaProductos: productoConOpciones() });
+    let llamadas = 0;
+    const mocks = { ...base, uiHandler: { ...base.uiHandler, handle: async (d, a, x) => { llamadas++; return base.uiHandler.handle(d, a, x); } } };
+    const { module: m } = await instantiate(mocks);
+
+    const [r1, r2] = await Promise.all([
+      m.handleGetVariacionesProducto({ producto_id: 'pizzas_base', project_id: 'proj-pirate' }),
+      m.handleGetVariacionesProducto({ producto_id: 'pizzas_base', project_id: 'proj-pirate' })
+    ]);
+
+    assert.strictEqual(r1.status, 200);
+    assert.strictEqual(r2.status, 200);
+    assert.strictEqual(llamadas, 1);                                      // el viaje se comparte
+    await m.onUnload();
+  });
+
+  await testAsync('onComanderoItemAgregado en frío hidrata y emite variacion.validada (no rechazada)', async () => {
+    const mocks = makeMocks({ cartaCompletaProductos: productoConOpciones() });
+    const { module: m } = await instantiate(mocks);
+    assert.strictEqual(m.configuraciones.size, 0);
+
+    await m.onComanderoItemAgregado({
+      metadata: { correlationId: 'cid-frio' },
+      data: {
+        project_id: 'proj-pirate', producto_id: 'pizzas_base',
+        variaciones: { ingredientes_quitar: ['tomate'], ingredientes_anadir: [] }
+      }
+    });
+
+    assert.strictEqual(publishedOf(mocks, 'variacion.rechazada').length, 0);   // antes: rechazada
+    assert.strictEqual(publishedOf(mocks, 'variacion.validada').length, 1);
+    await m.onUnload();
+  });
+
+  await testAsync('variaciones.get en frío con productos caído sigue devolviendo 404 (best-effort)', async () => {
+    const mocks = makeMocks({ cartaCompletaError: true });
+    const { module: m } = await instantiate(mocks);
+    const r = await m.handleGetVariacionesProducto({ producto_id: 'pizzas_base', project_id: 'proj-pirate' });
+    assert.strictEqual(r.status, 404);
+    assert.strictEqual(m.configuraciones.size, 0);
+    await m.onUnload();
+  });
+
   await testAsync('onComanderoItemAgregado con variacion valida emite variacion.validada', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
@@ -366,7 +447,7 @@ function publishedOf(mocks, name) {
     const { module: m } = await instantiate(mocks);
     const r = await m.handleHealthCheck();
     assert.ok(isCanonicalSuccess(r));
-    assert.strictEqual(r.data.version, '4.4.0');
+    assert.strictEqual(r.data.version, '4.6.1');
     await m.onUnload();
   });
 

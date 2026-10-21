@@ -21,10 +21,64 @@ class TarifasModule extends BaseModule {
   constructor() {
     super();
     this.name = 'tarifas';
-    this.version = '3.1.0';
+    this.version = '3.2.0';
     this.configPerProject = new Map();
     this.projectPaths = new Map();
     this._lastActiveProjectId = null;
+  }
+
+
+  // ── IDENTIDAD DE CARRIL (misma doctrina que el filesystem) ──────────────────
+  // `projectPaths` se indexa bajo TODAS las caras del mismo proyecto (UUID · slug · nombre
+  // del directorio): da igual cómo lo llame el caller — el chat manda el slug, el frontend
+  // el UUID. El slug llega EN EL EVENTO (lo emite project-manager): antes cada módulo lo
+  // derivaba por su cuenta, y el que lo calculaba distinto (espacio, acento, rename) no
+  // encontraba nada y acababa escribiendo en el proyecto activo.
+  _carasProyecto(project_id, name, base_path, slug) {
+    const caras = [project_id];
+    if (slug) caras.push(slug);
+    if (base_path) { try { caras.push(path.basename(base_path)); } catch (_) {} }
+    return caras.filter((c, i) => c && caras.indexOf(c) === i);
+  }
+  _indexarCarril(project_id, valor, { name = null, base_path = null, slug = null } = {}) {
+    if (!project_id) return;
+    for (const cara of this._carasProyecto(project_id, name, base_path, slug)) this.projectPaths.set(cara, valor);
+  }
+  _olvidarCarril(project_id, { name = null, base_path = null, slug = null } = {}) {
+    const v = this.projectPaths.get(project_id);
+    for (const cara of this._carasProyecto(project_id, name, base_path, slug)) {
+      if (this.projectPaths.get(cara) === v) this.projectPaths.delete(cara);
+    }
+  }
+  // Se hidrata desde la fuente de verdad al onLoad: tras un hot-reload no llega ningún
+  // project.activated y el mapa nacería con SOLO los activos, sin poder resolver el resto.
+  _hidratarCarriles() {
+    if (!this.eventBus || !this.eventBus.publish) return;
+    this._hidrataCarrilesRequestId = `carriles-${this.name || 'mod'}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    try { this.eventBus.publish('project.list.request', { request_id: this._hidrataCarrilesRequestId }); } catch (_) {}
+  }
+  async onProjectListResponse(event) {
+    const data = event?.data || event?.payload || event;
+    if (!data || data.request_id !== this._hidrataCarrilesRequestId) return;   // respuestas ajenas
+    let n = 0;
+    const hidratados = [];
+    for (const p of (Array.isArray(data.projects) ? data.projects : [])) {
+      if (!p?.id || !p?.base_path) continue;
+      if (p.metadata?.is_system === true) continue;
+      this._indexarCarril(p.id, (p.metadata?.is_system === true ? process.cwd() : p.base_path), { name: p.name, base_path: p.base_path, slug: p.slug });
+      n++;
+      hidratados.push(p.id);
+    }
+    this.logger?.info?.(`${this.name}.carriles.hidratados`, { carriles: this.projectPaths.size, proyectos: n });
+
+    // FRÍO (v3.2.0): hidratar TAMBIÉN la config, no solo las rutas. Sin esto, tras un
+    // reinicio (o un hot-reload) configPerProject nace VACÍO y cualquier canal cae a la
+    // carta en_servicio: el override nunca muerde hasta que alguien active el proyecto a
+    // mano. El mapa canal->carta es DATO en disco; se lee al arrancar como las rutas.
+    for (const pid of hidratados) {
+      if (!this.configPerProject.has(pid)) await this.loadConfig(pid);
+      await this._publicarSnapshot(pid, null);
+    }
   }
 
   async onLoad(context) {
@@ -32,6 +86,7 @@ class TarifasModule extends BaseModule {
     this.logger = context.logger;
     this.metrics = context.metrics;
     this.logger.info('module.loaded', { module: this.name, version: this.version });
+    this._hidratarCarriles();
   }
 
   async onUnload() {
@@ -110,11 +165,11 @@ class TarifasModule extends BaseModule {
 
   async onProjectActivated(event) {
     const data = event?.data || event;
-    const { project_id, base_path, metadata } = data || {};
+    const { project_id, base_path, metadata, name, slug } = data || {};
 
     const resolvedBase = (metadata?.is_system === true) ? process.cwd() : base_path;
     if (resolvedBase) {
-      this.projectPaths.set(project_id, resolvedBase);
+      this._indexarCarril(project_id, resolvedBase, { name, base_path, slug });
     }
     this._lastActiveProjectId = project_id;
 

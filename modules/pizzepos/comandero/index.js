@@ -27,6 +27,7 @@ const fs     = require('fs').promises;
 const path   = require('path');
 
 const BaseModule = require('../../_shared/base-module');
+const { tasarPedido } = require('../../_shared/pedido-tasador');
 const DEFAULT_PROJECT_ID = 'default';
 const SAVE_DEBOUNCE_MS   = 1000;
 
@@ -34,13 +35,24 @@ class ComanderoModule extends BaseModule {
   constructor() {
     super();
     this.name    = 'comandero';
-    this.version = '3.4.0';
+    this.version = '3.6.1';
     this.validator = null;
 
     this.pedidos              = new Map();
     this.refDisplayCache      = new Map();
+    // Cache del catálogo BASE: Map<project_id, Map<producto_id, producto>>.
+    // Era un Map PLANO, sin proyecto y sin purga: cada catalogo.actualizado solo hacía .set(),
+    // así que los productos de otra carta u otro proyecto se acumulaban (el POS llegó a declarar
+    // 63 productos con una carta de 22) y un producto borrado seguía cobrándose para siempre.
+    // Ahora es por proyecto y se REEMPLAZA entero con cada señal.
     this.productosCache       = new Map();
     this.cartasProductosCache = new Map();
+    // Carta COMPLETA por carta_id: { productos, ingredientes_catalogo }. Es la que come el
+    // tasador de pedidos (_shared/pedido-tasador.js) — la misma función pura que re-tasa el
+    // autoservicio de WhatsApp, de modo que POS y web cobran con el mismo criterio.
+    this.cartasCompletas      = new Map();
+    // request_id → {project_id, carta_id} de los carta.get.request en vuelo (hidratación al cargar).
+    this._cartaGetPendientes = new Map();
     // Cache local de la config de tarifas hidratado via tarifas.config.actualizada.
     // Map<project_id, { general:string|null, canales:{canal->carta_id} }>
     this.tarifasConfigPorProject = new Map();
@@ -66,9 +78,13 @@ class ComanderoModule extends BaseModule {
 
     // Pide snapshot inicial a tarifas. La respuesta llega via
     // tarifas.config.actualizada (tipo=snapshot) por cada proyecto conocido.
-    // Si tarifas aun no cargo, no hay respuesta inmediata: hidrata cuando
-    // tarifas active proyectos y emita su primer cambio.
-    await this._publicarEvento('tarifas.config.solicitada', {});
+    // OJO: NO es una carrera de suscripción — el loader cablea las suscripciones ANTES de onLoad
+    // (core/modules/loader.js: wireEventSubscriptions → onLoad). El hueco real es el RESPONDEDOR:
+    // en arranque en frío tarifas puede no estar cargado todavía, así que este publish se queda sin
+    // quien lo atienda. Por eso se repite en dos momentos deterministas (ver _solicitarSnapshotTarifas):
+    // core.modules.loaded.all (ya están TODOS los módulos) y project.activated (proyecto vivo).
+    // La respuesta es full-replace por proyecto: repetir la petición es idempotente.
+    this._solicitarSnapshotTarifas('onLoad');
 
     this.logger.info('module.loaded', {
       module:           this.name,
@@ -86,6 +102,7 @@ class ComanderoModule extends BaseModule {
     this.pedidos.clear();
     this.productosCache.clear();
     this.cartasProductosCache.clear();
+    this.cartasCompletas.clear();
     this.refDisplayCache.clear();
     this.tarifasConfigPorProject.clear();
     this.logger.info('module.unloaded', { module: this.name });
@@ -196,53 +213,155 @@ class ComanderoModule extends BaseModule {
     });
   }
 
+  // catalogo.actualizado — señal de refresco del catálogo BASE. Llega en DOS formas y solo una
+  // alimenta este cache:
+  //   · { project_id, menu_id, productos: [...] }  → proyección de la carta GENERAL (productos/)
+  //   · { project_id, catalogo: {...} }            → catálogo crudo (prisma/producto-manager), otra verdad
+  // La guarda de array no es cosmética: sin ella un evento de la segunda forma (trae 0 productos)
+  // vaciaría el cache y el POS cobraría 0 hasta la siguiente proyección.
   async onCatalogoActualizado(event) {
     const data = this._unwrap(event);
-    const productos = data?.productos || [];
-
-    for (const producto of productos) {
-      if (producto.id && producto.precio !== undefined) {
-        this.productosCache.set(producto.id, {
-          nombre:      producto.nombre || producto.id,
-          precio:      producto.precio,
-          categoria:   producto.categoria || null,
-          estaciones:  producto.estaciones || null,
-          precio_fijo: producto.precio_fijo || false
-        });
-      }
+    const productos = data?.productos;
+    if (!Array.isArray(productos)) {
+      this.logger.debug('comandero.catalogo.ignored', {
+        reason: 'evento sin array productos', keys: Object.keys(data || {})
+      });
+      return;
     }
 
-    this.logger.info('comandero.catalogo.synced', { productos_en_cache: this.productosCache.size });
+    const projectId = data.project_id || DEFAULT_PROJECT_ID;
+    const previos   = this.productosCache.get(projectId) || new Map();
+
+    // FULL-REPLACE, no acumulación: lo que la carta ya no tiene deja de existir y deja de cobrarse.
+    // Un producto renombrado o eliminado desaparece aquí; con el .set() de antes se quedaba.
+    const fresco = new Map();
+    for (const producto of productos) {
+      if (!producto?.id || producto.precio === undefined) continue;
+      fresco.set(producto.id, {
+        nombre:      producto.nombre || producto.id,
+        precio:      producto.precio,
+        categoria:   producto.categoria || null,
+        estaciones:  producto.estaciones || null,
+        precio_fijo: producto.precio_fijo || false
+      });
+    }
+    let purgados = 0;
+    for (const id of previos.keys()) if (!fresco.has(id)) purgados++;
+    this.productosCache.set(projectId, fresco);
+
+    this.logger.info('comandero.catalogo.synced', {
+      project_id:   projectId,
+      menu_id:      data.menu_id || null,
+      source:       data.source || null,
+      productos_en_cache: fresco.size,
+      previos:      previos.size,
+      purgados
+    });
   }
 
   async onCartaActualizada(event) {
     const data    = this._unwrap(event);
-    const cartaId = data?.meta?.id;
-    const productos = data?.productos || [];
+    // carta-manager publica { project_id, carta, motivo } — la carta va ENVUELTA. Antes se leía
+    // data.meta.id (undefined) → return silencioso → cartasProductosCache NUNCA se hidrataba y el
+    // precio por canal no existía (el canal caía siempre al precio base). Acepta ambas formas.
+    const carta     = data?.carta || data;
+    const cartaId   = carta?.meta?.id;
+    const productos = carta?.productos || [];
     if (!cartaId || productos.length === 0) return;
 
+    this._cachearCarta(carta);
+  }
+
+  // Cache POR CARTA (la del canal): es lo que hace que un canal con carta propia cobre su precio.
+  _cachearCarta(carta) {
+    const cartaId = carta?.meta?.id;
+    const productos = carta?.productos || [];
+    if (!cartaId || productos.length === 0) return;
     const cartaCache = new Map();
     for (const p of productos) {
       if (p.id && p.precio !== undefined) {
         cartaCache.set(p.id, {
           nombre:     p.nombre || p.id,
           precio:     p.precio,
-          categoria:  p.categoria || null,
+          categoria:  p.categoria || p.categoria_id || null,
           estaciones: p.estaciones || null
         });
       }
     }
-
     this.cartasProductosCache.set(cartaId, cartaCache);
+    // Carta completa (productos + catálogo de extras) para el tasador: el índice de productos
+    // de arriba es solo para la resolución rápida de precio por canal.
+    this.cartasCompletas.set(cartaId, {
+      productos,
+      ingredientes_catalogo: this._extrasDeCarta(productos)
+    });
     this.logger.info('comandero.carta.cached', { carta_id: cartaId, productos: cartaCache.size });
+  }
+
+  // Respuesta al RPC carta.get.request que pedimos al hidratar las cartas del mapping.
+  // Si la carta es la GENERAL, además rellena productosCache: sin esto, tras un restart el POS
+  // cobraba 0 y nombraba el item con el producto_id hasta que alguien tocara la carta.
+  async onCartaGetResponse(event) {
+    const data = this._unwrap(event);
+    if (data?.status !== 200 || !data?.data) return;
+    const carta = data.data;
+    const cartaId = carta?.meta?.id || null;
+    this._cachearCarta(carta);
+
+    const pend = this._cartaGetPendientes.get(data.request_id);
+    if (pend) this._cartaGetPendientes.delete(data.request_id);
+    const project_id = pend?.project_id;
+    const general = project_id ? this.tarifasConfigPorProject.get(project_id)?.general : null;
+    if (general && cartaId === general) this._cachearCatalogoBase(carta, project_id);
+  }
+
+  // Map<project_id → Map<producto_id → producto>> del catálogo BASE. Un proyecto nuevo nace vacío:
+  // el catálogo de un proyecto jamás puede servir precio a otro.
+  _productosDe(projectId) {
+    const pid = projectId || DEFAULT_PROJECT_ID;
+    let map = this.productosCache.get(pid);
+    if (!map) { map = new Map(); this.productosCache.set(pid, map); }
+    return map;
+  }
+
+  _totalProductosCache() {
+    let total = 0;
+    for (const map of this.productosCache.values()) total += map.size;
+    return total;
+  }
+
+  // Catálogo BASE (productosCache): lo que cobra mostrador/recogida cuando el canal no tiene
+  // carta propia o el producto no está en ella. FULL-REPLACE del proyecto: hidratar la general
+  // no puede dejar vivos los productos de una versión anterior de la carta.
+  _cachearCatalogoBase(carta, projectId) {
+    const pid = projectId || DEFAULT_PROJECT_ID;
+    const previos = this.productosCache.get(pid) || new Map();
+    const fresco  = new Map();
+    for (const p of (carta?.productos || [])) {
+      if (!p?.id || p.precio === undefined) continue;
+      fresco.set(p.id, {
+        nombre:     p.nombre || p.id,
+        precio:     p.precio,
+        categoria:  p.categoria || p.categoria_id || null,
+        estaciones: p.estaciones || null,
+        precio_fijo: p.precio_fijo || false
+      });
+    }
+    let purgados = 0;
+    for (const id of previos.keys()) if (!fresco.has(id)) purgados++;
+    this.productosCache.set(pid, fresco);
+    this.logger.info('comandero.catalogo.hidratado', {
+      project_id: pid, productos_en_cache: fresco.size, previos: previos.size, purgados
+    });
   }
 
   async onProductoActualizado(event) {
     const data = this._unwrap(event);
-    const { id, nombre, precio, categoria } = data;
+    const { id, nombre, precio, categoria, project_id } = data;
     if (id && precio !== undefined) {
-      const existing = this.productosCache.get(id);
-      this.productosCache.set(id, {
+      const cache = this._productosDe(project_id);
+      const existing = cache.get(id);
+      cache.set(id, {
         nombre:     nombre || id,
         precio,
         categoria:  categoria || existing?.categoria || null,
@@ -270,6 +389,55 @@ class ComanderoModule extends BaseModule {
       tipo: data.tipo || null,
       canales_count: Object.keys(config.canales || {}).length
     });
+    this._hidratarCartasDeCanal(project_id, config);
+  }
+
+  // La petición de snapshot a tarifas se repite en tres momentos DETERMINISTAS (sin timers):
+  //   1. onLoad            — camino caliente (hot-reload): tarifas ya está cargado, responde ya.
+  //   2. core.modules.loaded.all — arranque en frío: el loader publica este evento cuando TODOS los
+  //                               módulos están cargados, así que tarifas ya existe y atiende.
+  //   3. project.activated — el proyecto acaba de activarse: tarifas ya indexó su carril.
+  // Repetir es inocuo: la respuesta es full-replace por project_id y _hidratarCartasDeCanal salta
+  // las cartas ya cacheadas.
+  _solicitarSnapshotTarifas(etapa, projectId = null) {
+    if (!this.eventBus || typeof this.eventBus.publish !== 'function') return;
+    const payload = {
+      tipo: 'snapshot',
+      correlation_id: crypto.randomUUID(),
+      timestamp: new Date().toISOString()
+    };
+    if (projectId) payload.project_id = projectId;
+    try {
+      this.eventBus.publish('tarifas.config.solicitada', payload);
+    } catch (err) {
+      this.logger?.warn?.('comandero.tarifas.solicitada.failed', { etapa, error: err?.message });
+    }
+  }
+
+  async onCoreModulesLoadedAll() {
+    this._solicitarSnapshotTarifas('modules_loaded_all');
+  }
+
+  async onProjectActivado(event) {
+    const data = event?.data || event || {};
+    if (!data.project_id) return;
+    this._solicitarSnapshotTarifas('project_activated', data.project_id);
+  }
+
+  // Las cartas de canal necesitan su cache aunque nadie las acabe de tocar (tras un restart el
+  // cache nace vacío y el canal cobraría precio base). Se piden por RPC al custodio, una vez cada una.
+  _hidratarCartasDeCanal(project_id, config) {
+    const ids = new Set([config.general, ...Object.values(config.canales || {})].filter(Boolean));
+    for (const carta_id of ids) {
+      if (this.cartasProductosCache.has(carta_id)) continue;
+      const reqId = crypto.randomUUID();
+      this._cartaGetPendientes.set(reqId, { project_id, carta_id });
+      try {
+        this.eventBus.publish('carta.get.request', { request_id: reqId, project_id, carta_id });
+      } catch (err) {
+        this.logger.warn('comandero.carta_hidratar.publish_failed', { carta_id, error: err?.message });
+      }
+    }
   }
 
   // ==========================================
@@ -313,7 +481,7 @@ class ComanderoModule extends BaseModule {
         this.pedidos.set(cuenta_id, pedido);
       }
 
-      const cached       = this.productosCache.get(producto_id);
+      const cached       = this._productosDe(project_id).get(producto_id);
       const itemNombre   = nombre || cached?.nombre || producto_id;
       const precioBase   = precio ?? cached?.precio ?? 0;
       const itemCantidad = cantidad || 1;
@@ -332,14 +500,35 @@ class ComanderoModule extends BaseModule {
       }
 
       const canal      = this._detectarCanalCuenta(cuenta_id);
-      // D3 (subsistema-catalogo): si el composer ya tasó el item contra la carta del canal,
-      // llega precio_canal_resuelto=true → comandero CONFÍA en el precio recibido (un solo punto tasa,
-      // mata el bug de delivery de items compuestos). Si NO llega el flag (composers actuales que mandan
-      // precio_override del catálogo general), se mantiene la re-resolución por canal. Puente
-      // backward-compat: ambos conviven sin ruptura; los composers se migran después (Fase 7 frontend).
-      const itemPrecio = (data.precio_canal_resuelto === true)
-        ? precioBase
-        : this._resolverPrecioCanal(producto_id, precioBase, canal, project_id);
+
+      // ── UN SOLO TASADOR (v3.6.0) ──────────────────────────────────────────────
+      // El precio del item lo pone el SERVIDOR contra la carta del canal, con la misma función
+      // pura que re-tasa el autoservicio (`_shared/pedido-tasador.js`): producto + Σ extras.
+      // Antes había dos verdades — el panel mandaba un total y este backend lo pisaba con el
+      // precio pelado de la carta en todo canal que no fuera mesa —, así que los extras se
+      // caían en llevar/teléfono/glovo. Ahora el precio del cliente no manda: se re-tasa.
+      const tasado = this._tasarItem({
+        producto_id, cantidad: itemCantidad, tipo, pizza_izquierda, pizza_derecha,
+        variaciones, canal, project_id
+      });
+
+      let itemPrecio;
+      if (tasado) {
+        itemPrecio = tasado.precio;
+        for (const av of (tasado.avisos || [])) {
+          this.logger.warn('comandero.tasado.aviso', { producto_id, ...av });
+        }
+      } else {
+        // Degradación honesta (no_silent_failures): el producto no está en la carta del canal
+        // (p.ej. 'pizza_algusto', 'porcion', un pack de tienda) o la carta aún no está cacheada.
+        // Se mantiene el camino anterior —incluido el flag precio_canal_resuelto del delivery—
+        // y se AVISA, para que un fallback no pase por precio bueno.
+        this.logger.warn('comandero.tasado.fallback', { producto_id, canal, project_id, tipo: tipo || 'normal' });
+        this.metrics?.increment('comandero.tasado.fallback');
+        itemPrecio = (data.precio_canal_resuelto === true)
+          ? precioBase
+          : this._resolverPrecioCanal(producto_id, precioBase, canal, project_id);
+      }
 
       const item_id = crypto.randomUUID();
       const item = {
@@ -645,7 +834,8 @@ class ComanderoModule extends BaseModule {
           module:             this.name,
           version:            this.version,
           pedidos_activos:    this.pedidos.size,
-          productos_en_cache: this.productosCache.size,
+          productos_en_cache: this._totalProductosCache(),
+          proyectos_en_cache: this.productosCache.size,
           timestamp:          new Date().toISOString()
         }
       };
@@ -788,6 +978,109 @@ class ComanderoModule extends BaseModule {
   }
 
   _unwrap(event) { return event?.data || event?.payload || event || {}; }
+
+  // ==========================================
+  // Internals — UN SOLO TASADOR (v3.6.0)
+  // ==========================================
+
+  /**
+   * Deriva el catálogo de extras DE LA CARTA (dueño único del delta). Recorre las opciones
+   * ELEGIR_VARIOS de cada producto y se queda con {id, nombre, precio_extra}: exactamente lo que
+   * el panel de variaciones le enseña al camarero, así el precio tasado es el que vio en pantalla.
+   * Los valores del grupo QUITAR no entran: quitar es gratis.
+   */
+  _extrasDeCarta(productos) {
+    const porId = new Map();
+    for (const p of (productos || [])) {
+      for (const o of (p?.opciones || [])) {
+        if (o?.modo !== 'ELEGIR_VARIOS') continue;
+        for (const v of (o?.valores || [])) {
+          if (!v?.id) continue;
+          const id = String(v.id);
+          if (porId.has(id)) continue;
+          porId.set(id, {
+            id,
+            nombre: v.etiqueta || id,
+            precio_extra: (Number(v.delta_precio_centimos) || 0) / 100
+          });
+        }
+      }
+    }
+    return Array.from(porId.values());
+  }
+
+  _clave(texto) {
+    return String(texto ?? '')
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase().replace(/\s+/g, ' ').trim();
+  }
+
+  /**
+   * Puente legacy: VariacionesPanel y MitadMitadPanel mandan los extras por NOMBRE ("Calabacín",
+   * "Jamón de york"), no por id. Se resuelven aquí contra la carta del canal; un id explícito
+   * gana siempre. Sin esta resolución el extra se cae del precio — que es justo el agujero que
+   * esto cierra.
+   */
+  _idsDeExtras(anadir, catalogo) {
+    if (!Array.isArray(anadir)) return [];
+    const porNombre = new Map();
+    for (const e of catalogo) porNombre.set(this._clave(e.nombre), e.id);
+    const ids = [];
+    for (const raw of anadir) {
+      if (raw == null) continue;
+      const id  = (typeof raw === 'object') ? raw.id : null;
+      const nom = (typeof raw === 'object') ? (raw.nombre || raw.etiqueta) : raw;
+      if (id != null) { ids.push(String(id)); continue; }
+      const resuelto = porNombre.get(this._clave(nom));
+      if (resuelto) ids.push(resuelto);   // si no resuelve, el tasador lo reporta como aviso
+    }
+    return ids;
+  }
+
+  /**
+   * UN SOLO TASADOR. Tasado server-side del item contra la carta del CANAL con la función pura
+   * `tasarPedido` (la misma del autoservicio): producto + Σ extras; mitad y mitad = max(base) +
+   * extras de cada mitad. El dinero va en céntimos dentro del tasador y sale en EUROS porque el
+   * buffer, la cuenta y el cobro están en euros.
+   *
+   * Devuelve { precio, avisos } o null. null = no se puede tasar (sin carta cacheada, producto
+   * fuera de la carta): el llamante cae al camino anterior y AVISA — nunca se inventa un precio.
+   */
+  _tasarItem({ producto_id, cantidad, tipo, pizza_izquierda, pizza_derecha, variaciones, canal, project_id }) {
+    const cartaId = this._resolverCartaIdParaCanal(canal, project_id);
+    if (!cartaId) return null;
+    const carta = this.cartasCompletas.get(cartaId);
+    if (!carta) return null;
+
+    const catalogo  = carta.ingredientes_catalogo;
+    const descriptor = {
+      producto_id,
+      cantidad: Number.isInteger(cantidad) && cantidad > 0 ? cantidad : 1,
+      tipo: (tipo === 'mitad_mitad' || tipo === 'al_gusto') ? tipo : 'normal'
+    };
+
+    if (descriptor.tipo === 'mitad_mitad') {
+      if (!pizza_izquierda?.id || !pizza_derecha?.id) return null;
+      descriptor.pizza_izquierda = {
+        id: String(pizza_izquierda.id),
+        anadir: this._idsDeExtras(pizza_izquierda.anadir, catalogo)
+      };
+      descriptor.pizza_derecha = {
+        id: String(pizza_derecha.id),
+        anadir: this._idsDeExtras(pizza_derecha.anadir, catalogo)
+      };
+    } else {
+      const v = (variaciones && !Array.isArray(variaciones)) ? variaciones : {};
+      descriptor.anadir = this._idsDeExtras(v.ingredientes_anadir, catalogo);
+      descriptor.quitar = v.ingredientes_quitar;
+    }
+
+    const r = tasarPedido([descriptor], carta);
+    if (!r.ok || r.items.length !== 1) return null;
+    const centimos = r.items[0].precio_unitario_centimos;
+    if (!Number.isInteger(centimos)) return null;
+    return { precio: centimos / 100, avisos: r.avisos };
+  }
 
   // ==========================================
   // Internals — calculo + canal + precio

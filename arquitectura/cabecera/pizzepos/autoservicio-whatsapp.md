@@ -1,13 +1,13 @@
 ---
 id: pizzepos/autoservicio-whatsapp
 dominio: pizzepos
-resumen: Pedido del cliente por WhatsApp: PWA arma #P1 por ids, el bot re-tasa server-side (pedido-tasador), webhook real de Meta, ancla por nombre.
+resumen: Pedido del cliente por WhatsApp: PWA arma #P1 por ids, el bot re-tasa server-side (pedido-tasador), webhook real de Meta, ancla por nombre, pago efectivo o tarjeta (el método viaja en el #P1).
 fuentes:
   - modules/whatsapp-bot/**
   - modules/pizzepos/carta-digital/**
   - modules/pizzepos/pedidos/**
   - modules/_shared/pedido-tasador.js
-verificado: 2026-07-21
+verificado: 2026-10-21
 ---
 
 # SUBSISTEMA AUTOSERVICIO — Pedido del cliente por WhatsApp (PWA → bot → cocina)
@@ -35,7 +35,13 @@ verificado: 2026-07-21
     "ataque_cerrado": "editar el texto de WhatsApp (p.ej. 'Total: 1€') NO sirve: el bot re-tasa por ids. Editar items = pide y paga ESO (no es fraude).",
     "ancla_recogida": "cliente_nombre (el nombre que el cliente introduce, obligatorio). codigo_recogida RETIRADO (v3.3.0) y palabra_clave RETIRADA — el dependiente pide el nombre al recoger."
   },
-  "pago": { "ahora": "a la recogida (efectivo)", "fase_2": "link Stripe (pago.iniciar ya esbozado en tienda-api)" },
+  "pago": {
+    "eleccion": "el cliente elige en la PWA (campo metodo_pago del #P1): 'efectivo' (paga al recoger — default si falta) | 'tarjeta' (pago online por la pasarela).",
+    "tarjeta": "el bot NO cobra: pide la sesión de pago al líder por bus (pago.iniciar.request → pago-gateway, provider-agnóstico) y manda la checkout_url al cliente por WhatsApp. La VERDAD del cobro no es la preferencia: es pago.confirmado → pedidos → pedido.pagado.",
+    "degradacion": "sin pasarela configurada (NO_PASARELA) o sin su credencial (PERMISSION_DENIED) el bot avisa 'puedes pagar al recoger' y NO revienta: el pedido ya está creado.",
+    "guarda_anti_duplicado": "una sola sesión por pedido_id (Meta reintenta webhooks y el cliente puede reenviar → sin guarda, dos sesiones = riesgo de pagar dos veces).",
+    "cierre_caja": "handleConfirmarRecogida lee la verdad del pago: 'tarjeta' (con session_id/pasarela) si pago.confirmado llegó antes, 'efectivo' si no. Ya NO clava 'efectivo' a fuego."
+  },
   "aviso_recogida": "cocina.pedido_listo → whatsapp-bot avisa al cliente 'ven a recoger' (ya cableado para origen-whatsapp).",
   "transporte_alojamiento": "tienda-api (POST público /tienda/pedido) APARCADO — el camino vivo es WhatsApp+bot (sin puertas).",
   "estado": "OPERATIVO end-to-end (nonina, enki-ai.online) — webhook real de Meta entrante verificado; alta de conexión por UI (whatsapp.set_config); ver sección 'WhatsApp Cloud API — OPERATIVO'."
@@ -52,7 +58,9 @@ El mensaje wa.me que arma la PWA es el FORMATO CANÓNICO + una línea autoritati
   ...
   Total: <X,XX> EUR                                  ← HUMANO (ignorado)
   Nombre: <nombre del cliente>
-  #P1 <base64url(JSON)>                              ← AUTORITATIVO: { v:1, items:[ItemEstructurado] }
+  #P1 <base64url(JSON)>                              ← AUTORITATIVO: { v:1, items:[ItemEstructurado],
+                                                        modo_consumo?, hora_recogida?, fecha_deseada?,
+                                                        metodo_pago? }
 
 ItemEstructurado (por IDS, nunca por precio):
   normal       → { cantidad, producto_id, tipo:'normal', quitar:[nombres], anadir:[ing_id] }
@@ -64,6 +72,11 @@ ItemEstructurado (por IDS, nunca por precio):
 REGLA  quitar = NOMBRES (gratis, solo nota de cocina) · anadir = IDS (el bot los re-tasa).
        base64url utf8-safe (acentos en quitar). Si #P1 falta → pedido legacy solo-texto (el bot
        no puede re-tasar; confía en el texto con warn). Si #P1 corrupto → el bot pide reenviar.
+REGLA  metodo_pago viaja en el #P1 (autoritativo, no en el texto editable), igual que
+       modo_consumo/hora_recogida: el parser lo lee con las mismas líneas. Si falta → null y el
+       consumidor decide ('efectivo', el comportamiento previo). Valores: 'efectivo' | 'tarjeta'.
+       El bus NO valida parámetros (auto-wire: saca request_id y pasa el resto tal cual), así que
+       el campo fluye hasta pedidos sin tocar contrato.
 ```
 
 ## El tasador — re-tasado server-side (función PURA, seguridad)
@@ -230,20 +243,70 @@ sendTemplate (Meta plantillas · salientes >24h) {
 //   nombre al recoger; cocina/staff lo ven como ref_display.
 ```
 
-## CLASE carta-digital (PWA) — emite el pedido por ids (#P1) + paridad comandero
+## CLASE carta-digital (PWA) — emite el pedido por ids (#P1) + paridad comandero + ENCARGO con fecha
 
-```
+```javascript
 // modules/pizzepos/carta-digital/static-template.js (generador de la PWA, v2.6.0):
 //   - cada item del carrito lleva su `estructura` por ids (normal/al_gusto/mitad_mitad).
 //   - buildP1Line(): serializa { v:1, items: buildOrderItems() } a base64url utf8-safe y lo
 //     cuelga del mensaje wa.me tras 'Nombre:'. Las líneas humanas siguen (el cliente ve su pedido).
 //   - MITAD con variaciones en AMBAS mitades (paridad comandero): botón partido (cuerpo=mitad
 //     tal cual · ✏️=personalizar), política max(izq,der)+extras (v2.3.0).
+// ENCARGO con fecha (hoja 2 — boton "Encargar" del detalle de producto):
+//   - los productos que traen dias_salida[] (del módulo calendario, 5ª fuente del proyector)
+//     muestran el botón Encargar → calendario del mes (🟢 sale / 🔴 no sale).
+//   - confirmar para día FUTURO → buildP1Line() añade `fecha_deseada:'YYYY-MM-DD'` al JSON del
+//     #P1 y el mensaje wa.me incluye la cabecera 'Para: <fecha>' (avisos de entrega/cocina).
+//   - confirmar HOY → pedido normal sin fecha_deseada (retrocompat total).
 // PODA previa de carta-digital:
 //   v2.4.0 — fuera ofertas/reseñas/track (la proyección no los daba: UI viva alimentada por vacío).
 //   v2.5.0 — fuera el cerebro FANTASMA del chat (default ai_chat_path '/modules/ai-gateway/chat',
 //            endpoint que nadie sirve) → '/chat' (el cf-worker, único cerebro real, escenario suelto).
 //            El ALOJADO (publicar) NO setea ai_endpoint → chat OFF por diseño (autoservicio puro).
+```
+
+## Pago del pedido — efectivo o tarjeta (el método viaja en el #P1, el bot lo engancha)
+
+```
+PREFERENCIA ≠ COBRO. El cliente elige en la PWA y la preferencia viaja AUTORITATIVA en el #P1
+(metodo_pago: 'efectivo' | 'tarjeta'; sin él → 'efectivo'). Eso solo REGISTRA lo que pidió.
+Quien manda sobre la caja es la VERDAD del pago (pedido.pago.estado), escrita por la pasarela.
+
+CADENA (toda por evento, ningún módulo nuevo, ninguna máquina de estados nueva):
+  PWA  cart-digital: botones '💶 Efectivo al recoger' | '💳 Tarjeta' (solo si CONFIG.pago_online)
+       → buildP1Line() añade metodo_pago al JSON del #P1 ; _metodoPago sobrevive al re-render
+  bot  pedido-parser lee metodo_pago del #P1 (mismas líneas que modo_consumo) → pending.metodo_pago
+       → publish('pedido.crear-tienda'{..., metodo_pago}) → pedidos (normaliza: sin valor → 'efectivo')
+  bot  IF metodo_pago == 'tarjeta'  (tras confirmar el pedido, sin bloquear la respuesta):
+         _rpc('pago.iniciar.request', {pedido_id, project_id, monto_centimos, return_url(pwa_url),
+              metadata{project_slug, cliente_nombre, cliente_telefono, canal_origen}})
+           → pago-gateway (LÍDER, provider-agnóstico) → pago.iniciar.response {status:200, data:{checkout_url}}
+         → _enviarMensajeSeguro(checkout_url)   // GUARDA: una sola sesión por pedido_id (LRU 500)
+         ELSE (NO_PASARELA | PERMISSION_DENIED | timeout) → 'El pago con tarjeta no está disponible
+              ahora mismo. Puedes pagar al recoger.' → DEGRADA, no revienta (el pedido ya existe)
+  Stripe → POST /pago/webhook/:project (firma verificada) → pago-gateway
+         → publish('pago.confirmado'{pedido_id, project_id, monto_centimos, + metadata de contexto})
+         → pedidos.onPagoConfirmado → pedido.pago.estado='pagado' → publish('pedido.pagado')
+         → bot.onPedidoPagado: avisa al CLIENTE ('Pago recibido… te aviso cuando esté listo')
+  caja handleConfirmarRecogida: metodo_cobro = pedido.pago.estado=='pagado' ? 'tarjeta' : 'efectivo'
+         → pedido.cobro{metodo, session_id?, pasarela?} + pedido.recogido{metodo_pago}
+
+EL MÉTODO NO SE PREGUNTA POR CHAT. No hay estado nuevo en la conversación (nueva →
+pendiente_confirmacion → pedido_creado → completada sigue igual): el método viene decidido en el
+#P1, igual que modo_consumo. Menos piezas, una sola verdad.
+
+EL HUÉRFANO — por qué la pasarela reenvía metadata. Los pedidos de tienda viven en MEMORIA y NO se
+restauran, y el pago es ASÍNCRONO (el webhook llega minutos después). Un reinicio en esa ventana
+—un DEPLOY, justo— dejaría el dinero cobrado y el pedido inexistente, en silencio. Por eso
+pago-gateway copia al metadata de la sesión el contexto del caller y lo devuelve en pago.confirmado:
+pedidos RECREA el pedido MÍNIMO (pedido_id + project_id + importe) y emite pedido.pagado con
+recreado:true. El bot avisa al cliente si hay teléfono y, si fue recreado, avisa al STAFF por
+Telegram — no hay conversación que continuar, pero el dinero nunca queda mudo. Nada que persistir.
+
+ALTA (lo único externo): bloque 'pago-gateway' en la config del proyecto (kind stripe-checkout,
+provider STRIPE, moneda eur, return_url, webhook_secret) + credencial STRIPE (sk_…) en el
+credential-manager. El publishable no hace falta (Checkout es hospedado). El webhook de Stripe
+apunta a la URL pública /pago/webhook/<slug>.
 ```
 
 ## Ciclo
@@ -260,14 +323,20 @@ AUTOSERVICIO_COMPLETO {
   6. bot publish('pedido.crear-tienda', items re-tasados + estructura) → pedidos
   7. pedidos crea pedido tienda (ancla = cliente_nombre) → _crearCuentaTienda → comandero.enviar_cocina
   8. cocina pinta la comanda ESTRUCTURADA (mitades como el POS) ; estado pendiente_recogida
-  9. bot responde al cliente a nombre de <cliente> (pasa a recoger, paga al recoger)
-  10. cocina.pedido_listo → bot avisa 'ven a recoger' ; pago a la recogida (efectivo)
+  9. bot responde al cliente a nombre de <cliente> (mensaje CONDICIONAL al método elegido):
+     efectivo → 'Pasa a recoger y paga al recoger' ; tarjeta → 'Te envío ahora el enlace para pagar'
+     IF tarjeta → bot pide la sesión (pago.iniciar.request → pago-gateway) y manda la checkout_url
+  10. cocina.pedido_listo → bot avisa 'ven a recoger' ; cobro a la recogida:
+      tarjeta ya cobrado (la pasarela confirmó) → solo entregar ; efectivo → se cobra en barra
 }
 
 GARANTÍAS {
   no puertas HTTP abiertas (entrada = webhook Meta) ; precio inmanipulable (re-tasado por ids) ;
   identidad por teléfono sin login ; snapshot de precios fresco por evento (= los de la PWA) ;
   no_silent_failures (producto desconocido / cold-start → el bot pide reenviar, nunca crea mudo).
+  pago_sin_silencio: sin pasarela degrada ('paga al recoger') ; si el webhook llega huérfano el
+  pedido se re-crea desde la metadata de la sesión → pedido.pagado{recreado:true}. El dinero
+  cobrado NUNCA queda sin rastro.
 }
 ```
 
@@ -276,9 +345,15 @@ GARANTÍAS {
 ```
 EVENTOS {
   (entrante)                         → bot vía WEBHOOK de Meta (Cloud API; único transporte, sin navegador)
-  pedido.crear-tienda                : bot/tienda-api → pedidos (items re-tasados + estructura)
+  pedido.crear-tienda                : bot/tienda-api → pedidos (items re-tasados + estructura + metodo_pago)
   pedido.crear-tienda.response       : pedidos → bot (request_id correlado)
   pedido.creado                      : pedidos (informativo; lleva cuenta_id, sin teléfono/secretos)
+  pago.iniciar.request               : bot → pago-gateway (LÍDER — solo si metodo_pago == 'tarjeta')
+  pago.iniciar.response              : pago-gateway → bot (request_id correlado; data.checkout_url)
+  pago.confirmado                    : pago-gateway (webhook de Stripe, firma verificada) → pedidos
+                                       (lleva la metadata de contexto: permite reconstruir el huérfano)
+  pedido.pagado                      : pedidos → bot (avisa al cliente ; recreado:true → avisa al STAFF)
+  pedido.recogido                    : pedidos (metodo_pago = la VERDAD del cobro, ya no 'efectivo' fijo)
   comandero.enviar_cocina            : comandero → cocina (la estructura viaja aquí)
   cocina.pedido_listo                → bot ('ven a recoger')
   catalogo.actualizado               → bot (refresca snapshot) ; tarifas.config.actualizada → bot
@@ -286,18 +361,64 @@ EVENTOS {
 }
 PIEZAS {
   modules/_shared/pedido-tasador.js              (función pura: tasarPedido — re-tasado seguridad)
-  modules/whatsapp-bot ({{version:modules/whatsapp-bot}})                   (webhook Meta REAL + alta por UI + snapshot + #P1 + re-tasado + sendTemplate)
+  modules/whatsapp-bot ({{version:modules/whatsapp-bot}})                   (webhook Meta REAL + alta por UI + snapshot + #P1 + re-tasado + sendTemplate + _rpc/_iniciarPagoTarjeta/onPedidoPagado)
   modules/whatsapp-bot/services/meta-cloud-client.js (Meta Cloud API: sendText/sendTemplate/_postMessage/parseWebhookEvent)
-  modules/whatsapp-bot/services/pedido-parser.js (#P1: _decodificarEstructura)
-  modules/pizzepos/carta-digital ({{version:modules/pizzepos/carta-digital}})        (PWA emite #P1 + paridad mitad + nombre obligatorio)
-  modules/pizzepos/pedidos (3.3.0)               (estructura tienda → cocina ; ancla = cliente_nombre)
-  modules/credential-manager ({{version:modules/credential-manager}})             (META_WHATSAPP[_VERIFY_TOKEN] en catálogo + PROJECT_ONLY)
+  modules/whatsapp-bot/services/pedido-parser.js (#P1: _decodificarEstructura + metodo_pago)
+  modules/pizzepos/carta-digital ({{version:modules/pizzepos/carta-digital}})        (PWA emite #P1 + paridad mitad + nombre obligatorio + botones metodo_pago)
+  modules/pizzepos/pedidos (3.5.0)               (estructura tienda → cocina ; ancla = cliente_nombre ; metodo_pago ; onPagoConfirmado con recreación del huérfano)
+  modules/pizzepos/pago-gateway ({{version:modules/pizzepos/pago-gateway}})          (LÍDER provider-agnóstico: Stripe Checkout + webhook firmado + metadata de contexto)
+  modules/credential-manager ({{version:modules/credential-manager}})             (META_WHATSAPP[_VERIFY_TOKEN] + STRIPE en catálogo + PROJECT_ONLY)
   frontend credentials (CredentialsPanel + stores) (4ª pestaña 💬 WhatsApp · fix agrupado de la lista)
   cocina (_buildCocinaItem → ItemLine)           (YA pintaba la estructura, del comandero)
 }
 TESTS {
   shared__pedido-tasador (10) · whatsapp-bot__pedido-estructura (4) · whatsapp-bot__retasado (4)
   · autoservicio__roundtrip (4, PWA→parser→tasador) · pizzepos__pedidos-tienda-estructura (3)
-  · pizzepos__carta-digital-template (mitad+poda) — suite autoservicio verde.
+  · pizzepos__carta-digital-template (mitad+poda) · pago-tarjeta-efectivo e2e (36 aserciones,
+  6 escenarios: tarjeta · efectivo · sin pasarela · sin credencial · huérfano reconstruido ·
+  webhook repetido idempotente) — suite autoservicio verde.
 }
 ```
+
+---
+
+## Hermanas por ingrediente principal en la ficha del cliente (derivadas)
+
+> **Novedad (2026-10-21).** El cliente abre una pizza ("Pizza de jamón York") y ve, **pegadas a
+> la cabecera** (antes de sus ingredientes y de los extras), **las demás que llevan ese mismo
+> ingrediente principal**, cada una con su nombre, sus ingredientes a la vista **con emoji**, su
+> precio y dos acciones: **elegir** (al carrito con SU precio) o **Personalizar** (abre SU ficha,
+> con su quitar/añadir). "Añadir extras" va **plegado** — veinte chips abiertos empujaban las
+> hermanas fuera de pantalla, que es como se perdió el bloque la primera vez.
+
+```json
+{
+  "esquema": "hermanas-ingrediente-principal-v1",
+  "fuente": "DATA.productos[].ingredientes[].nombre (ya viaja en el bundle)",
+  "derivado": true,
+  "regla_del_principal": "el ingrediente que comparten VARIAS pero no CASI TODAS: lo que sale en >=60% del grupo es la base (tomate, mozzarella) y NO distingue una pizza de otra; empate -> el más repetido",
+  "orden_en_la_ficha": ["cabecera+precio", "hermanas", "escalera", "ingredientes tocables", "extras PLEGADOS"],
+  "acciones": {
+    "elegir": "addToCart(id) — precio del producto, sin extras",
+    "personalizar": "showDetail(id) — la ficha de la hermana, con SUS ingredientes y su bloque recalculado (showDetail resetea quitarSel/anadirSel: nada se hereda del ancla)"
+  },
+  "piezas": {
+    "modules/pizzepos/carta-digital/static-template.js": "familiaDe · ingPrincipalDe · renderHermanas + delegación en #detail-content; el bloque se pinta PEGADO A LA CABECERA (antes de ingredientes y extras — enterrado debajo de 'Añadir extras' era invisible en el móvil)",
+    "frontend/src/lib/utils/indice-ingredientes.ts": "hermanasDe(producto, todos) — la misma regla en el comandero (VariacionesPanel), para que el camarero vea las hermanas al abrir la pizza",
+    "tests/unit/carta-digital__hermanas-ingrediente.test.js": "10 casos sobre el runtime REAL emitido (stub DOM, corte del bootstrap): orden del bloque, extras plegados, etiqueta Personalizar (y CERO 'Editar'), emoji en la fila, abrir LA ficha de la hermana y que sus chips NO arrastren los del ancla"
+  },
+  "fijado": {
+    "npm": "test:carta-digital__hermanas · test:carta-digital__republicacion, y ambos DENTRO de `npm run test` (la suite canónica: quien corre los tests, corre la guarda)",
+    "ci_hoy": "NO — dos bloqueos reales, medidos: (1) el PAT del repo tiene scope `repo` y GitHub rechaza cualquier cambio en .github/workflows sin scope `workflow`; (2) validate.yml muere antes de cualquier paso de carta (test:motor sale 1 con 14 fallos, validate:ci sale 1 por schema). Un guard ahí sería verde de mentira",
+    "ci_manana": "cuando el CI vuelva a estar verde, el paso va JUSTO ANTES de validate:ci (los de después no se ejecutan) — `npm run test:carta-digital__hermanas`",
+    "prueba_de_que_muerde": "inyectar el fallo real (detailProd sin reasignar) tumba 3 casos, incluido el del arrastre"
+  },
+  "medido": "the-pirate-v4 (v49): 8 pizzas con Jamón de york -> el ancla lista 7 hermanas; la Margarita no pinta bloque (no inventa eje)"
+}
+```
+
+> **Por qué derivado y no dato.** No hay campo nuevo en la carta ni nada que mantener en
+> cada alta: se calcula al abrir la ficha. Si mañana entra una pizza con jamón, aparece
+> sola en el bloque de las otras siete. El patrón `escalera` que ya viajaba en la carta
+> sigue siendo el atajo "lo mismo + un ingrediente"; esto es su hermano estructural —
+> mismas hermanas, sin exigir que la carta las declare.

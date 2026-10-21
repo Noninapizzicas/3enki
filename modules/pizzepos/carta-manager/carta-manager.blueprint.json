@@ -1,479 +1,233 @@
 {
-  "_doc": "Blueprint del modulo carta-manager. Hijo de subsistema-recetario.modulo-base (reutilizado por simplicidad — su modelo de ejecucion, primitivas del bus y manejo de errores aplican identico). Aggregate root del subsistema-carta: CRUD de cartas + manipulacion de productos/categorias dentro de carta + versionado con history archivado + busqueda + stats + restore. Persistencia multi-archivo: data/projects/{slug}/storage/pizzepos/cartas/<id>.json + storage/pizzepos/cartas/.versions/<id>/<timestamp>.json para snapshots.",
+  "_doc": "Blueprint v2 del modulo carta-manager (aggregate root del subsistema-carta): CRUD de cartas + manipulacion de productos/categorias + versionado + transiciones de ciclo de vida. Hijo de subsistema-recetario.modulo-base. v2.0.0 REESCRIBE el blueprint en schema 'blueprint-interfaz-v2' (lente de roles esquematizador-jefe) SIN cambiar el contrato de bus: 18 ops reales en el reflejo (12 JEFE + 6 CONSULTA) via _atender en modules/_shared/modulo-hibrido-reflejo.js; validar cuenta dos veces en roles (consulta + NEUTRO-FRENO previo a activar) => 19 claves de rol. Canal frontend verificado en vivo: publicar a 'core/*/events/carta/<op>/request' (asterisco LITERAL — el EventBus del core solo re-emite a modulos locales topics con '*'), respuesta top-level {request_id, status, data|error} SIN anidar bajo result. Precedente v1.14.0: 16 ops blueprint-driven por turno LLM (sin update_products ni validar); el reflejo v2.8.0 manda.",
+  "schema": "blueprint-interfaz-v2",
   "id": "carta-manager",
-  "extends_blueprint_abstract": "subsistema-recetario.modulo-base",
-  "version": "1.14.0",
-  "_temperatura_doc": "Pagina FRIA: los cajones son delegadores finos — el LLM traduce intencion en lenguaje natural ('subele 1euro a las pizzas') a la op estructurada y delega al REFLEJO; cero invencion. Baja temperatura = mapeo fiel intencion->op, sin alucinar productos ni precios. El trabajo de verdad es CRUD/versionado determinista en JS.",
-  "temperatura": 0.3,
-  "_v1_5_changelog": "v1.5.0 (2026-06-13): anyade _modelo_oop (CLASE CartaManager) — aggregate root, store actual+versiones, las 15 ops agrupadas (entrada event-driven / lectura / raiz / mutacion estructurada) + helper comun _mutar que captura el patron repetido en las 5 mutaciones (read->snapshot->fs.edit->version++->evento). Prep para HIBRIDAR: todo es CRUD/versionado determinista -> pasa a REFLEJO JS (index.js), mismo contrato de bus carta.<op>.request (los carta-* no se enteran). Regla de dominio reafirmada: anyadir/editar productos de una carta = carta-manager (add_product/update_product); menu-generator solo NACE la base. Coger producto de recetas -> carta = leer recetas.obtener + escribir carta-manager.add_product (recetas es fuente, carta-manager es el writer).",
-  "_v1_4_changelog": "v1.4.0 (aterrizaje subsistema-catalogo, D2): añadida operacion 'clonar' (carta_base_id + nuevo_nombre -> carta INDEPENDIENTE nueva). Es el paso 1 de 'carta por canal': el LLM clona la base, la manipula (update_prices/add_product/remove_product) segun instrucciones NL, y tarifas la asigna a un canal. carta-manager solo PRODUCE; la asignacion canal<->carta es de tarifas. Cambio ADITIVO (op nueva, no toca las 14 existentes). El shape que persiste es ahora carta-pizzepos v2 (ingredientes con id+familia) pero save persiste cualquier shape literal -> sin break. Pendiente (futuro): extender update_prices con target por categoria/familia + factor (hoy es per-producto absoluto).",
-  "language": "es",
-  "_v1_1_changelog": "v1.1.0 (2026-05-25): anyade subscriber asincrono al evento 'carta.creada' via mecanismo blueprint-subscribers-asincronos (mismo wiring que recetas usa para escandallo.coste.calculado — frente 2.4). Operacion interna nueva _on_carta_creada (prefijo _ = no expuesta como cajon al LLM, solo invocada cuando llega el evento). Delega a save sin duplicar logica. Origen: audit runtime Fase 7b de la migracion menu-generator (decision 5.3 refactorizada de RPC a fire-and-forget). Operaciones pre-existentes (save, get, list, delete, etc.) sin cambios.",
-  "_v1_2_changelog": "v1.2.0 (2026-05-28): migra todas las escrituras de la carta principal de fs.write.request a fs.edit.request (RFC 6902 JSON Patch). Elimina la composicion mental del LLM al escribir las cartas — filesystem aplica los patches deterministicamente. Las escrituras de snapshots a /cartas/versions/ (archivos nuevos con timestamp) permanecen como fs.write.request porque fs.edit no puede crear archivos nuevos. Patrones aplicados: UPDATE 1-campo en delete (estado+version+updated_at puntuales), UPDATE compuesto en add_product/remove_product/update_product/update_prices/add_category (replace array + meta puntuales), APPEND PURO en add_category (op:add /categorias/-), root-replace dual-branch en save y restore (fs.write si archivo nuevo, fs.edit op:replace '' si existente). Anti-patron ...spread eliminado en add_product (reemplazado por construccion campo a campo).",
-  "_v1_3_changelog": "v1.3.0 (2026-06-01): aplica contrato subsistema-carta v1.0.0. Path canonico /storage/pizzepos/cartas/ en TODOS los publishAndWait fs.* (snapshots a /storage/pizzepos/cartas/.versions/). Shape de carta.actualizada/editada/borrada lleva la carta entera en campo 'carta' del payload. correlation_id obligatorio en payloads de los 3 eventos canonicos publicados (save/restore -> carta.actualizada; add_product/remove_product/update_product/add_category/update_prices -> carta.editada; delete -> carta.borrada): si el input no lo trae, se genera con uuid() (correlation_id_efectivo). Auto-promocion en save: si tarifas.config esta vacio (general=null Y todos canales=null), publish('tarifas.set_general', {...}) fire-and-forget tras persistir. eventos_publicados_que_requieren_consumer en raiz: ['carta.actualizada', 'carta.editada', 'carta.borrada'].",
-  "rol": "Aggregate root del subsistema-carta. Custodio del dato canonico de cada carta del proyecto. CRUD + versionado + manipulacion estructurada de productos y categorias dentro de cada carta. Otros modulos del subsistema (carta-design, carta-digital, carta-marketing, carta-scheduler) leen cartas via carta-manager pero NUNCA escriben al store directamente.",
-  "_modelo_oop": "CLASE CartaManager {  // AGGREGATE ROOT de /pizzepos/cartas/. TODO determinista (CRUD+versionado) -> candidato REFLEJO JS, no turno LLM.\n  STORE_ACTUAL  = /pizzepos/cartas/<id>.json\n  STORE_VERSION = /pizzepos/cartas/.versions/<id>/<ts>.json\n  // ENTRADA event-driven:\n  _on_carta_creada(evento) -> delega a save        // menu-generator publica carta.creada\n  // LECTURA (no muta):\n  get(carta_id) · list(filtros) · search(query,tipo) · stats() · versions(carta_id)\n  // RAIZ (snapshot + version):\n  save(carta)            -> si existe: snapshot+version++ ; persiste ; EMITE carta.actualizada ; auto-promo tarifas si config vacio\n  restore(carta_id,ver)  -> snapshot actual -> restaura version -> version++ ; EMITE carta.actualizada\n  clonar(base_id,nombre) -> copia INDEPENDIENTE id nuevo ; EMITE carta.actualizada\n  delete(carta_id)       -> soft-delete (estado=archivada) + version++ ; EMITE carta.borrada\n  // MUTACION ESTRUCTURADA (todas via el helper _mutar):\n  add_product · remove_product · update_product · add_category · update_prices  -> EMITE carta.editada\n  // HELPER comun (DRY del patron repetido en las 5 mutaciones):\n  _mutar(carta_id, aplicar(carta)->patches) : read -> snapshot(.versions) -> aplicar -> fs.edit(patches) -> version++ + updated_at -> return carta\n  INVARIANTES {\n    cada mutacion: snapshot ANTES de sobrescribir (audit trail) + meta.version++ + evento canonico.\n    otros carta-* LEEN via carta.<op>.request ; NUNCA escriben al store (carta-manager es el unico writer).\n    write nuevo = fs.write atomico ; write sobre existente = fs.edit (RFC6902, sin componer el fichero entero).\n  }\n}",
-  "garantiza": [
-    "Cada carta tiene meta.id (uuid), meta.nombre, meta.version (entero >=1), meta.created_at, meta.updated_at.",
-    "Estructura de la carta: { meta, categorias:[{id, nombre, orden}], productos:[{id, nombre, descripcion, precio, categoria_id, etiquetas?, alergenos?}] }.",
-    "Persistencia multi-archivo: una carta = un archivo /storage/pizzepos/cartas/<carta_id>.json. Versiones anteriores en /storage/pizzepos/cartas/.versions/<carta_id>/<timestamp>.json (snapshot completo).",
-    "Cada mutacion (save, add_product, remove_product, update_product, add_category, update_prices) bumps meta.version + crea snapshot en versions/ ANTES de sobrescribir.",
-    "Cada mutacion publica el evento canonico correspondiente: carta.actualizada (save), carta.editada (productos/categorias), carta.borrada (delete).",
-    "Restore puede recuperar cualquier version del history."
-  ],
-  "no_garantiza": [
-    "Composicion visual / branding — eso lo hace carta-design (blueprint hermano).",
-    "Publicacion en PWA — eso lo hace carta-digital.",
-    "Renderizado/maquetacion imprimible — eso lo hace carta-design (absorbio carta-impresion).",
-    "Copy/descripciones generadas con LLM — eso lo hace carta-marketing.",
-    "Activacion por franja horaria — eso lo hace carta-scheduler.",
-    "Validacion semantica de precios coherentes con coste — eso lo hace viabilidad."
-  ],
-  "estado_persistente": {
-    "_descripcion": "Multi-archivo. Una carta por archivo. Versiones en subdirectorio paralelo.",
-    "paths_relativos": {
-      "carta_actual": "/pizzepos/cartas/<carta_id>.json",
-      "version_archivada": "/pizzepos/cartas/.versions/<carta_id>/<timestamp>.json"
-    },
-    "shape_carta": {
-      "meta": {
-        "id": "uuid",
-        "nombre": "string trim",
-        "descripcion": "string|null",
-        "version": "integer >=1",
-        "estado": "borrador|activa|archivada",
-        "tags": "array de strings",
-        "created_at": "ISO 8601",
-        "updated_at": "ISO 8601"
-      },
-      "categorias": [
-        {
-          "id": "uuid",
-          "nombre": "string",
-          "orden": "integer",
-          "descripcion": "string|null"
-        }
-      ],
-      "productos": [
-        {
-          "id": "uuid",
-          "nombre": "string",
-          "descripcion": "string|null",
-          "precio": "number >= 0",
-          "categoria_id": "uuid",
-          "etiquetas": "array string",
-          "alergenos": "array string",
-          "disponible": "boolean"
-        }
-      ]
-    }
-  },
+  "version": "blueprint-2.0.0",
+  "moduleId": "carta-manager",
+  "titulo": "Aggregate root del subsistema-carta: custodio del catalogo de cartas (borrador / en_servicio / archivada), su contenido (categorias, productos, precios en EUROS) y su historial versionado. La transicion activar cambia el catalogo vivo entero (degrada las demas en_servicio, motivo 'activar').",
   "eventos_publicados": [
-    "carta.save.response",
-    "carta.save.failed",
-    "carta.get.response",
-    "carta.get.failed",
-    "carta.list.response",
-    "carta.list.failed",
-    "carta.delete.response",
-    "carta.delete.failed",
-    "carta.add_product.response",
-    "carta.add_product.failed",
-    "carta.remove_product.response",
-    "carta.remove_product.failed",
-    "carta.update_product.response",
-    "carta.update_product.failed",
-    "carta.add_category.response",
-    "carta.add_category.failed",
-    "carta.update_prices.response",
-    "carta.update_prices.failed",
-    "carta.search.response",
-    "carta.search.failed",
-    "carta.stats.response",
-    "carta.stats.failed",
-    "carta.versions.response",
-    "carta.versions.failed",
-    "carta.restore.response",
-    "carta.restore.failed",
     "carta.actualizada",
     "carta.editada",
-    "carta.borrada",
-    "carta.clonar.response",
-    "carta.clonar.failed",
-    "tarifas.set_general"
+    "carta.borrada"
   ],
-  "eventos_publicados_que_requieren_consumer": [
-    "carta.actualizada",
-    "carta.editada",
-    "carta.borrada",
-    "tarifas.set_general"
+  "eventos_que_escucho": [
+    "carta.creada"
   ],
-  "eventos_que_escucho": [],
-  "operaciones": {
-    "save": {
-      "input": "{ project_id (req), request_id (req), correlation_id?, user_id?, carta (req — objeto completo con meta + categorias + productos), motivo? }",
-      "pseudocodigo": [
-        "async save(input):",
-        "  // HIBRIDO v2.0.0: la ejecucion determinista (CRUD/versionado/persistencia/snapshots) la hace el",
-        "  // REFLEJO JS (index.js). Este cajon SOLO traduce la intencion del usuario a los args estructurados",
-        "  // y DELEGA. NUNCA toca fs ni compone la carta entera — entra por la puerta del reflejo.",
-        "  resp = await publishAndWait('carta.save.request', { ...input, request_id: uuid() }, { timeout_ms: 15000 })",
-        "  return resp   // { status, data } tal cual lo devuelve el reflejo"
-      ],
-      "reglas_clave": [
-        "Snapshot a versions/ ANTES de sobrescribir (fs.write.request — archivo nuevo).",
-        "Carta nueva: fs.write.request atomico. Carta existente: fs.edit.request root-replace (sin composicion mental).",
-        "version bumpea +1 por cada save sobre carta existente.",
-        "estado default = 'borrador' si no se pasa."
-      ],
-      "errores_posibles": [
-        "INVALID_INPUT",
-        "UPSTREAM_TIMEOUT",
-        "UPSTREAM_UNREACHABLE",
-        "UPSTREAM_INVALID_RESPONSE"
-      ],
-      "_delega_en": "carta.save.request (REFLEJO JS — index.js)"
+  "transporte": {
+    "rpc": [
+      "core/*/events/carta/save/request -> core/*/events/carta/save/response",
+      "core/*/events/carta/get/request -> core/*/events/carta/get/response",
+      "core/*/events/carta/list/request -> core/*/events/carta/list/response",
+      "core/*/events/carta/search/request -> core/*/events/carta/search/response",
+      "core/*/events/carta/stats/request -> core/*/events/carta/stats/response",
+      "core/*/events/carta/versions/request -> core/*/events/carta/versions/response",
+      "core/*/events/carta/validar/request -> core/*/events/carta/validar/response",
+      "core/*/events/carta/add_product/request -> core/*/events/carta/add_product/response",
+      "core/*/events/carta/remove_product/request -> core/*/events/carta/remove_product/response",
+      "core/*/events/carta/update_product/request -> core/*/events/carta/update_product/response",
+      "core/*/events/carta/update_products/request -> core/*/events/carta/update_products/response",
+      "core/*/events/carta/add_category/request -> core/*/events/carta/add_category/response",
+      "core/*/events/carta/remove_category/request -> core/*/events/carta/remove_category/response",
+      "core/*/events/carta/update_prices/request -> core/*/events/carta/update_prices/response",
+      "core/*/events/carta/update_extras/request -> core/*/events/carta/update_extras/response",
+      "core/*/events/carta/clonar/request -> core/*/events/carta/clonar/response",
+      "core/*/events/carta/restore/request -> core/*/events/carta/restore/response",
+      "core/*/events/carta/activar/request -> core/*/events/carta/activar/response",
+      "core/*/events/carta/delete/request -> core/*/events/carta/delete/response"
+    ],
+    "salida": [
+      "carta.actualizada",
+      "carta.editada",
+      "carta.borrada"
+    ]
+  },
+  "ui": {
+    "ops": {
+      "save": { "titulo": "Guardar carta" },
+      "get": { "titulo": "Ver carta" },
+      "list": { "titulo": "Listar cartas" },
+      "search": { "titulo": "Buscar" },
+      "stats": { "titulo": "Estadisticas" },
+      "versions": { "titulo": "Versiones" },
+      "validar": { "titulo": "Validar (freno)" },
+      "add_product": { "titulo": "Añadir producto" },
+      "remove_product": { "titulo": "Quitar producto" },
+      "update_product": { "titulo": "Editar producto" },
+      "update_products": { "titulo": "Editar productos (lote)" },
+      "add_category": { "titulo": "Añadir categoria" },
+      "remove_category": { "titulo": "Quitar categoria" },
+      "update_prices": { "titulo": "Actualizar precios" },
+      "update_extras": { "titulo": "Actualizar extras" },
+      "clonar": { "titulo": "Clonar carta" },
+      "restore": { "titulo": "Restaurar version" },
+      "activar": { "titulo": "Activar carta" },
+      "delete": { "titulo": "Archivar carta" }
     },
-    "get": {
-      "input": "{ project_id (req), request_id (req), correlation_id?, carta_id (req) }",
-      "pseudocodigo": [
-        "async get(input):",
-        "  // HIBRIDO v2.0.0: la ejecucion determinista (CRUD/versionado/persistencia/snapshots) la hace el",
-        "  // REFLEJO JS (index.js). Este cajon SOLO traduce la intencion del usuario a los args estructurados",
-        "  // y DELEGA. NUNCA toca fs ni compone la carta entera — entra por la puerta del reflejo.",
-        "  resp = await publishAndWait('carta.get.request', { ...input, request_id: uuid() }, { timeout_ms: 15000 })",
-        "  return resp   // { status, data } tal cual lo devuelve el reflejo"
-      ],
-      "errores_posibles": [
-        "INVALID_INPUT",
-        "RESOURCE_NOT_FOUND",
-        "UPSTREAM_TIMEOUT",
-        "UPSTREAM_UNREACHABLE"
-      ],
-      "_delega_en": "carta.get.request (REFLEJO JS — index.js)"
-    },
-    "list": {
-      "input": "{ project_id (req), request_id (req), correlation_id?, estado? (borrador|activa|archivada|todos, default 'todos'), tag? }",
-      "pseudocodigo": [
-        "async list(input):",
-        "  // HIBRIDO v2.0.0: la ejecucion determinista (CRUD/versionado/persistencia/snapshots) la hace el",
-        "  // REFLEJO JS (index.js). Este cajon SOLO traduce la intencion del usuario a los args estructurados",
-        "  // y DELEGA. NUNCA toca fs ni compone la carta entera — entra por la puerta del reflejo.",
-        "  resp = await publishAndWait('carta.list.request', { ...input, request_id: uuid() }, { timeout_ms: 15000 })",
-        "  return resp   // { status, data } tal cual lo devuelve el reflejo"
-      ],
-      "reglas_clave": [
-        "Salida ligera: meta + counts, sin productos/categorias completos.",
-        "Ignora directorio versions/.",
-        "Orden por updated_at desc."
-      ],
-      "errores_posibles": [
-        "INVALID_INPUT",
-        "UPSTREAM_TIMEOUT",
-        "UPSTREAM_UNREACHABLE"
-      ],
-      "_delega_en": "carta.list.request (REFLEJO JS — index.js)"
-    },
-    "delete": {
-      "input": "{ project_id (req), request_id (req), correlation_id?, user_id?, carta_id (req), motivo? }",
-      "pseudocodigo": [
-        "async delete(input):",
-        "  // HIBRIDO v2.0.0: la ejecucion determinista (CRUD/versionado/persistencia/snapshots) la hace el",
-        "  // REFLEJO JS (index.js). Este cajon SOLO traduce la intencion del usuario a los args estructurados",
-        "  // y DELEGA. NUNCA toca fs ni compone la carta entera — entra por la puerta del reflejo.",
-        "  resp = await publishAndWait('carta.delete.request', { ...input, request_id: uuid() }, { timeout_ms: 15000 })",
-        "  return resp   // { status, data } tal cual lo devuelve el reflejo"
-      ],
-      "reglas_clave": [
-        "Soft delete — estado='archivada'. No se borra del filesystem (audit trail)."
-      ],
-      "errores_posibles": [
-        "INVALID_INPUT",
-        "RESOURCE_NOT_FOUND",
-        "UPSTREAM_TIMEOUT",
-        "UPSTREAM_UNREACHABLE"
-      ],
-      "_delega_en": "carta.delete.request (REFLEJO JS — index.js)"
-    },
-    "add_product": {
-      "input": "{ project_id (req), request_id (req), correlation_id?, user_id?, carta_id (req), producto (req — {nombre, precio, categoria_id, descripcion?, etiquetas?, alergenos?, disponible?, ingredientes?:[{id?, nombre, emoji?, familia?}]}) }",
-      "pseudocodigo": [
-        "async add_product(input):",
-        "  // HIBRIDO v2.0.0: la ejecucion determinista (CRUD/versionado/persistencia/snapshots) la hace el",
-        "  // REFLEJO JS (index.js). Este cajon SOLO traduce la intencion del usuario a los args estructurados",
-        "  // y DELEGA. NUNCA toca fs ni compone la carta entera — entra por la puerta del reflejo.",
-        "  resp = await publishAndWait('carta.add_product.request', { ...input, request_id: uuid() }, { timeout_ms: 15000 })",
-        "  return resp   // { status, data } tal cual lo devuelve el reflejo"
-      ],
-      "reglas_clave": [
-        "categoria_id debe existir en la carta.",
-        "producto.id DETERMINISTA = slug(categoria_id)+'_'+slug(nombre). Mismo producto -> mismo id SIEMPRE (idempotencia, sin duplicados).",
-        "si ya existe un producto con ese id -> 409 ALREADY_EXISTS (no duplica).",
-        "ingredientes se normalizan a forma canonica {id, nombre, emoji?, familia}; familia validada (default 'otro'); id de ingrediente = slug(nombre) si no viene.",
-        "snapshot+bump version (audit trail)."
-      ],
-      "errores_posibles": [
-        "INVALID_INPUT",
-        "RESOURCE_NOT_FOUND",
-        "PRECONDITION_FAILED",
-        "UPSTREAM_TIMEOUT",
-        "UPSTREAM_UNREACHABLE"
-      ],
-      "_delega_en": "carta.add_product.request (REFLEJO JS — index.js)"
-    },
-    "remove_product": {
-      "input": "{ project_id (req), request_id (req), correlation_id?, user_id?, carta_id (req), producto_id (req) }",
-      "pseudocodigo": [
-        "async remove_product(input):",
-        "  // HIBRIDO v2.0.0: la ejecucion determinista (CRUD/versionado/persistencia/snapshots) la hace el",
-        "  // REFLEJO JS (index.js). Este cajon SOLO traduce la intencion del usuario a los args estructurados",
-        "  // y DELEGA. NUNCA toca fs ni compone la carta entera — entra por la puerta del reflejo.",
-        "  resp = await publishAndWait('carta.remove_product.request', { ...input, request_id: uuid() }, { timeout_ms: 15000 })",
-        "  return resp   // { status, data } tal cual lo devuelve el reflejo"
-      ],
-      "errores_posibles": [
-        "INVALID_INPUT",
-        "RESOURCE_NOT_FOUND",
-        "UPSTREAM_TIMEOUT",
-        "UPSTREAM_UNREACHABLE"
-      ],
-      "_delega_en": "carta.remove_product.request (REFLEJO JS — index.js)"
-    },
-    "update_product": {
-      "input": "{ project_id (req), request_id (req), correlation_id?, user_id?, carta_id (req), producto_id (req), campos (req — {nombre?, precio?, categoria_id?, descripcion?, etiquetas?, alergenos?, disponible?, ingredientes?:[{id?, nombre, emoji?, familia?}]}) }",
-      "pseudocodigo": [
-        "async update_product(input):",
-        "  // HIBRIDO v2.0.0: la ejecucion determinista (CRUD/versionado/persistencia/snapshots) la hace el",
-        "  // REFLEJO JS (index.js). Este cajon SOLO traduce la intencion del usuario a los args estructurados",
-        "  // y DELEGA. NUNCA toca fs ni compone la carta entera — entra por la puerta del reflejo.",
-        "  resp = await publishAndWait('carta.update_product.request', { ...input, request_id: uuid() }, { timeout_ms: 15000 })",
-        "  return resp   // { status, data } tal cual lo devuelve el reflejo"
-      ],
-      "errores_posibles": [
-        "INVALID_INPUT",
-        "RESOURCE_NOT_FOUND",
-        "PRECONDITION_FAILED",
-        "UPSTREAM_TIMEOUT",
-        "UPSTREAM_UNREACHABLE"
-      ],
-      "_delega_en": "carta.update_product.request (REFLEJO JS — index.js)",
-      "reglas_clave": [
-        "el id del producto NO cambia aunque se renombre (identidad estable, integridad referencial).",
-        "categoria_id destino debe existir si se cambia.",
-        "ingredientes (si vienen) se normalizan a forma canonica {id, nombre, emoji?, familia}.",
-        "snapshot+bump version."
+    "datos": {
+      "op": "list",
+      "titulo": "Listar cartas",
+      "refresh_on": [
+        "carta.actualizada",
+        "carta.editada",
+        "carta.borrada"
       ]
     },
-    "add_category": {
-      "input": "{ project_id (req), request_id (req), correlation_id?, user_id?, carta_id (req), categoria (req — {nombre, descripcion?, orden?}) }",
-      "pseudocodigo": [
-        "async add_category(input):",
-        "  // HIBRIDO v2.0.0: la ejecucion determinista (CRUD/versionado/persistencia/snapshots) la hace el",
-        "  // REFLEJO JS (index.js). Este cajon SOLO traduce la intencion del usuario a los args estructurados",
-        "  // y DELEGA. NUNCA toca fs ni compone la carta entera — entra por la puerta del reflejo.",
-        "  resp = await publishAndWait('carta.add_category.request', { ...input, request_id: uuid() }, { timeout_ms: 15000 })",
-        "  return resp   // { status, data } tal cual lo devuelve el reflejo"
+    "estados": [
+      { "nombre": "borrador", "terminal": false, "color": "blue", "icono": "BORR" },
+      { "nombre": "en_servicio", "terminal": false, "color": "green", "icono": "VIVA" },
+      { "nombre": "archivada", "terminal": true, "color": "red", "icono": "ARCH" }
+    ],
+    "flujo": [
+      {
+        "nombre": "jefe",
+        "orden": 1,
+        "ops": [
+          "save",
+          "add_product",
+          "update_product",
+          "update_products",
+          "add_category",
+          "remove_category",
+          "update_prices",
+          "update_extras",
+          "remove_product",
+          "clonar",
+          "restore",
+          "activar",
+          "delete"
+        ],
+        "descripcion": "Declara el catalogo: guarda y puebla cartas (productos, precios €, categorias, extras), y manda el ciclo de vida con transiciones nombradas (clonar base nueva, restaurar version, ACTIVAR — degrada las demas en_servicio —, archivar)"
+      },
+      {
+        "nombre": "consulta",
+        "orden": 2,
+        "ops": [
+          "get",
+          "list",
+          "search",
+          "stats",
+          "versions",
+          "validar"
+        ],
+        "descripcion": "Alimenta cada decision del jefe: catálogo por estado, ficha de carta, buscador, agregados de la cinta, historial desc de versiones y el dictamen {valid, errors[]} que FRENA activar"
+      }
+    ],
+    "detalle": {
+      "op": "get",
+      "titulo": "Ficha de carta",
+      "cabecera": [
+        "id",
+        "nombre",
+        "estado",
+        "version",
+        "productos_count"
       ],
-      "errores_posibles": [
-        "INVALID_INPUT",
-        "RESOURCE_NOT_FOUND",
-        "ALREADY_EXISTS",
-        "UPSTREAM_TIMEOUT",
-        "UPSTREAM_UNREACHABLE"
-      ],
-      "_delega_en": "carta.add_category.request (REFLEJO JS — index.js)",
-      "reglas_clave": [
-        "categoria.id DETERMINISTA = slug(nombre). 'Hamburguesas' -> 'hamburguesas' SIEMPRE.",
-        "dedup por id: si ya existe esa categoria -> 409 ALREADY_EXISTS.",
-        "snapshot+bump version."
+      "campo_items": "productos",
+      "acciones_contextuales": [
+        "add_product",
+        "update_product",
+        "update_prices",
+        "validar",
+        "activar",
+        "restore"
       ]
     },
-    "update_prices": {
-      "input": "{ project_id (req), request_id (req), correlation_id?, user_id?, carta_id (req), updates (req — array de {producto_id, precio_nuevo}) }",
-      "pseudocodigo": [
-        "async update_prices(input):",
-        "  // HIBRIDO v2.0.0: la ejecucion determinista (CRUD/versionado/persistencia/snapshots) la hace el",
-        "  // REFLEJO JS (index.js). Este cajon SOLO traduce la intencion del usuario a los args estructurados",
-        "  // y DELEGA. NUNCA toca fs ni compone la carta entera — entra por la puerta del reflejo.",
-        "  resp = await publishAndWait('carta.update_prices.request', { ...input, request_id: uuid() }, { timeout_ms: 15000 })",
-        "  return resp   // { status, data } tal cual lo devuelve el reflejo"
-      ],
-      "reglas_clave": [
-        "Update masivo: aplica los validos, reporta errores por producto. Si NINGUNO valido, PRECONDITION_FAILED."
-      ],
-      "errores_posibles": [
-        "INVALID_INPUT",
-        "RESOURCE_NOT_FOUND",
-        "PRECONDITION_FAILED",
-        "UPSTREAM_TIMEOUT",
-        "UPSTREAM_UNREACHABLE"
-      ],
-      "_delega_en": "carta.update_prices.request (REFLEJO JS — index.js)"
+    "roles": {
+      "save": "jefe",
+      "add_product": "jefe",
+      "remove_product": "jefe",
+      "update_product": "jefe",
+      "update_products": "jefe",
+      "add_category": "jefe",
+      "update_prices": "jefe",
+      "update_extras": "jefe",
+      "clonar": "jefe",
+      "restore": "jefe",
+      "activar": "jefe",
+      "delete": "jefe",
+      "get": "neutro",
+      "list": "neutro",
+      "search": "neutro",
+      "stats": "neutro",
+      "versions": "neutro",
+      "validar": "neutro-freno",
+      "validar_como_freno": "neutro-freno"
     },
-    "update_extras": {
-      "input": "{ project_id (req), request_id (req), correlation_id?, user_id?, carta_id (req), updates (req — array de {ingrediente_id, precio_extra_nuevo}) }",
-      "pseudocodigo": [
-        "async update_extras(input):",
-        "  // HIBRIDO: el REFLEJO JS (index.js) hace el cambio determinista (fija precio_extra del",
-        "  // ingrediente en TODAS sus apariciones, versionado). Este cajon SOLO traduce la intencion del",
-        "  // usuario ('sube el queso a 0,80', 'extras gratis') a los args y DELEGA. NUNCA toca fs.",
-        "  // El precio del extra vive en la CARTA (no en un fichero suelto): el custodio lo cambia.",
-        "  resp = await publishAndWait('carta.update_extras.request', { ...input, request_id: uuid() }, { timeout_ms: 15000 })",
-        "  return resp   // { status, data: { aplicados:[{ingrediente_id, precio_extra, ocurrencias}], errores } }"
-      ],
-      "reglas_clave": [
-        "precio_extra_nuevo en EUROS (>= 0). 0 = extra gratis. Cambia TODAS las apariciones del ingrediente_id.",
-        "Update masivo: aplica los validos, reporta errores por ingrediente. Si NINGUNO valido, PRECONDITION_FAILED."
-      ],
-      "errores_posibles": [
-        "INVALID_INPUT",
-        "RESOURCE_NOT_FOUND",
-        "PRECONDITION_FAILED",
-        "UPSTREAM_TIMEOUT",
-        "UPSTREAM_UNREACHABLE"
-      ],
-      "_delega_en": "carta.update_extras.request (REFLEJO JS — index.js)"
-    },
-    "clonar": {
-      "input": "{ project_id (req), request_id (req), correlation_id?, user_id?, carta_base_id (req), nuevo_nombre (req) }",
-      "pseudocodigo": [
-        "async clonar(input):",
-        "  // HIBRIDO v2.0.0: la ejecucion determinista (CRUD/versionado/persistencia/snapshots) la hace el",
-        "  // REFLEJO JS (index.js). Este cajon SOLO traduce la intencion del usuario a los args estructurados",
-        "  // y DELEGA. NUNCA toca fs ni compone la carta entera — entra por la puerta del reflejo.",
-        "  resp = await publishAndWait('carta.clonar.request', { ...input, request_id: uuid() }, { timeout_ms: 15000 })",
-        "  return resp   // { status, data } tal cual lo devuelve el reflejo"
-      ],
-      "reglas_clave": [
-        "Produce una carta INDEPENDIENTE (no overlay declarativo). El LLM la manipula despues; tarifas la asigna a un canal. carta-manager solo produce.",
-        "Falla con CONFLICT_STATE si el id derivado ya existe — NO sobrescribe."
-      ],
-      "errores_posibles": [
-        "INVALID_INPUT",
-        "RESOURCE_NOT_FOUND",
-        "CONFLICT_STATE",
-        "UPSTREAM_TIMEOUT",
-        "UPSTREAM_UNREACHABLE"
-      ],
-      "_delega_en": "carta.clonar.request (REFLEJO JS — index.js)"
-    },
-    "search": {
-      "input": "{ project_id (req), request_id (req), correlation_id?, query (req — string), tipo? ('producto'|'carta'|'todos', default 'todos') }",
-      "pseudocodigo": [
-        "async search(input):",
-        "  // HIBRIDO v2.0.0: la ejecucion determinista (CRUD/versionado/persistencia/snapshots) la hace el",
-        "  // REFLEJO JS (index.js). Este cajon SOLO traduce la intencion del usuario a los args estructurados",
-        "  // y DELEGA. NUNCA toca fs ni compone la carta entera — entra por la puerta del reflejo.",
-        "  resp = await publishAndWait('carta.search.request', { ...input, request_id: uuid() }, { timeout_ms: 15000 })",
-        "  return resp   // { status, data } tal cual lo devuelve el reflejo"
-      ],
-      "errores_posibles": [
-        "INVALID_INPUT",
-        "UPSTREAM_TIMEOUT",
-        "UPSTREAM_UNREACHABLE"
-      ],
-      "_delega_en": "carta.search.request (REFLEJO JS — index.js)"
-    },
-    "stats": {
-      "input": "{ project_id (req), request_id (req), correlation_id? }",
-      "pseudocodigo": [
-        "async stats(input):",
-        "  // HIBRIDO v2.0.0: la ejecucion determinista (CRUD/versionado/persistencia/snapshots) la hace el",
-        "  // REFLEJO JS (index.js). Este cajon SOLO traduce la intencion del usuario a los args estructurados",
-        "  // y DELEGA. NUNCA toca fs ni compone la carta entera — entra por la puerta del reflejo.",
-        "  resp = await publishAndWait('carta.stats.request', { ...input, request_id: uuid() }, { timeout_ms: 15000 })",
-        "  return resp   // { status, data } tal cual lo devuelve el reflejo"
-      ],
-      "errores_posibles": [
-        "INVALID_INPUT",
-        "UPSTREAM_TIMEOUT",
-        "UPSTREAM_UNREACHABLE"
-      ],
-      "_delega_en": "carta.stats.request (REFLEJO JS — index.js)"
-    },
-    "versions": {
-      "input": "{ project_id (req), request_id (req), correlation_id?, carta_id (req) }",
-      "pseudocodigo": [
-        "async versions(input):",
-        "  // HIBRIDO v2.0.0: la ejecucion determinista (CRUD/versionado/persistencia/snapshots) la hace el",
-        "  // REFLEJO JS (index.js). Este cajon SOLO traduce la intencion del usuario a los args estructurados",
-        "  // y DELEGA. NUNCA toca fs ni compone la carta entera — entra por la puerta del reflejo.",
-        "  resp = await publishAndWait('carta.versions.request', { ...input, request_id: uuid() }, { timeout_ms: 15000 })",
-        "  return resp   // { status, data } tal cual lo devuelve el reflejo"
-      ],
-      "reglas_clave": [
-        "Solo metadata (timestamp + filename) — payload ligero. Para contenido, restore o get tras restore."
-      ],
-      "errores_posibles": [
-        "INVALID_INPUT",
-        "UPSTREAM_TIMEOUT",
-        "UPSTREAM_UNREACHABLE"
-      ],
-      "_delega_en": "carta.versions.request (REFLEJO JS — index.js)"
-    },
-    "restore": {
-      "input": "{ project_id (req), request_id (req), correlation_id?, user_id?, carta_id (req), version_filename (req — del listado de versions) }",
-      "pseudocodigo": [
-        "async restore(input):",
-        "  // HIBRIDO v2.0.0: la ejecucion determinista (CRUD/versionado/persistencia/snapshots) la hace el",
-        "  // REFLEJO JS (index.js). Este cajon SOLO traduce la intencion del usuario a los args estructurados",
-        "  // y DELEGA. NUNCA toca fs ni compone la carta entera — entra por la puerta del reflejo.",
-        "  resp = await publishAndWait('carta.restore.request', { ...input, request_id: uuid() }, { timeout_ms: 15000 })",
-        "  return resp   // { status, data } tal cual lo devuelve el reflejo"
-      ],
-      "reglas_clave": [
-        "Snapshot del estado actual ANTES de restaurar (fs.write.request — archivo nuevo).",
-        "Carta existente: fs.edit.request root-replace. Carta inexistente (raro): fs.write.request atomico.",
-        "Bumps version (no recupera el version original — el restore es UNA actualizacion mas)."
-      ],
-      "errores_posibles": [
-        "INVALID_INPUT",
-        "RESOURCE_NOT_FOUND",
-        "UPSTREAM_TIMEOUT",
-        "UPSTREAM_UNREACHABLE"
-      ],
-      "_delega_en": "carta.restore.request (REFLEJO JS — index.js)"
-    },
-    "activar": {
-      "input": "{ project_id (req), request_id (req), correlation_id?, carta_id (req) }",
-      "pseudocodigo": [
-        "async activar(input):",
-        "  // HIBRIDO: traduce 'activa / pon en servicio la carta X' a los args y DELEGA en el reflejo.",
-        "  // El reflejo pone estado=en_servicio con un patch de UN campo (NO reescribe la carta entera),",
-        "  // baja a borrador cualquier OTRA activa, y emite carta.actualizada. NUNCA toques fs ni el estado tu.",
-        "  resp = await publishAndWait('carta.activar.request', { project_id: input.project_id, carta_id: input.carta_id, correlation_id: input.correlation_id, request_id: uuid() }, { timeout_ms: 15000 })",
-        "  return resp   // { status, data: { carta_id, estado: 'en_servicio' } }"
-      ],
-      "reglas_clave": [
-        "Activar = poner UNA carta en_servicio. El reflejo garantiza una sola activa (baja las otras a borrador) y emite carta.actualizada -> comandero/POS la recogen.",
-        "Un BORRADOR se activa directamente; NO hace falta 'guardar la carta entera' (eso arriesga perder productos)."
-      ],
-      "errores_posibles": [
-        "INVALID_INPUT",
-        "RESOURCE_NOT_FOUND",
-        "UPSTREAM_TIMEOUT",
-        "UPSTREAM_UNREACHABLE"
-      ],
-      "_delega_en": "carta.activar.request (REFLEJO JS — index.js)"
+    "formas_jefe": {
+      "cinta_estado": {
+        "forma": "cinta-estado",
+        "rpc": "carta.list + carta.stats",
+        "senal": "carta.borrada / carta.actualizada (re-list con debounce 60ms)"
+      },
+      "seleccion_de_carta": {
+        "forma": "ref-select",
+        "rpc": "carta.list {estado?} + carta.get {carta_id}",
+        "senal": null
+      },
+      "alta_de_producto": {
+        "forma": "editor-bloque",
+        "rpc": "carta.add_product {carta_id, producto:{nombre, precio:number>=0 EUROS, categoria_id, ingredientes_base?}} — id determinista slug(cat)_slug(nombre) que calcula el custodio",
+        "senal": "carta.editada + version++ (409 ALREADY_EXISTS -> 'ya existe (id determinista)' · 412 PRECONDITION_FAILED -> 'crea antes la categoria')"
+      },
+      "edicion_de_producto": {
+        "forma": "editor-bloque",
+        "rpc": "carta.update_product {carta_id, producto_id, nombre?|precio?|categoria_id?|descripcion?|etiquetas?|alergenos?|disponible?|tipo?|emoji?|estaciones?|ingredientes_base?|dietas?|variaciones?}",
+        "senal": "carta.editada + version++"
+      },
+      "lote_de_productos": {
+        "forma": "lista-acciones editorial",
+        "rpc": "carta.update_products {carta_id, productos:[...] }",
+        "senal": "carta.editada + version++ (1x por lote)"
+      },
+      "precios": {
+        "forma": "editor-bloque-tabla",
+        "rpc": "carta.update_prices {carta_id, precios:[...]} — EUROS, sin conversion a centimos",
+        "senal": "carta.editada + version++"
+      },
+      "extras": {
+        "forma": "editor-bloque",
+        "rpc": "carta.update_extras {carta_id, ...}",
+        "senal": "carta.editada + version++"
+      },
+      "categoria": {
+        "forma": "editor-bloque corto",
+        "rpc": "carta.add_category {carta_id, nombre}",
+        "senal": "carta.editada + version++"
+      },
+      "ciclo_de_vida": {
+        "forma": "confirmador-nombrado",
+        "rpc": "carta.activar {carta_id} — 'activa AHORA $nombre: degrada la activa y cambia el catalogo vivo' · carta.delete {carta_id} — soft: estado->archivada",
+        "senal": "activar -> carta.actualizada · delete -> carta.borrada"
+      },
+      "historia": {
+        "forma": "lista-desc + confirmador-nombrado",
+        "rpc": "carta.versions {carta_id} -> {timestamp, filename}[] desc · carta.restore {carta_id, path|version} (guarda basename)",
+        "senal": "carta.actualizada"
+      },
+      "copia": {
+        "forma": "confirmador-nombrado + input (default '<nombre> (copia)')",
+        "rpc": "carta.clonar {carta_id, nombre} -> 201 id carta_<slug>",
+        "senal": "carta.actualizada"
+      },
+      "freno_de_activacion": {
+        "forma": "dictamen-bloque",
+        "rpc": "carta.validar -> {valid, errors[], productos}",
+        "senal": null
+      }
     }
   },
-  "trabajo_pendiente": [
-    {
-      "id": "schemas_oficiales_carta",
-      "estado": "abierto",
-      "descripcion": "Los eventos canonicos carta.actualizada / carta.editada / carta.borrada NO tienen schemas oficiales en arquitectura/decisiones/_schemas/. Crear cuando se aborde la coherencia formal del subsistema-carta (no urgente para v1)."
-    },
-    {
-      "id": "padre_propio_subsistema_carta",
-      "estado": "abierto",
-      "descripcion": "Hoy carta-manager extiende subsistema-recetario.modulo-base por reuso pragmatico (su modelo de ejecucion aplica identico). Cuando el subsistema-carta tenga particularidades propias (estado_operativo distinto, transiciones distintas), crear subsistema-carta.modulo-base.blueprint.json y migrar los 6 hijos."
+  "_lente_roles": {
+    "agente": "crear-blueprint-jefe v2",
+    "metodo": "esquematizador-jefe",
+    "arbitro": "futuro->jefe | ahora->utilizacion | solo-lee->neutro",
+    "consolidacion": "modules/pizzepos/carta-manager/esquema-jefe/esquema.md",
+    "dualidad": "JEFE=declara el catalogo que SERA (12 mutaciones, todas con señal pareada) | UTILIZACION=vacia en este modulo (servir lo hacen tarifas/pedidos leyendo lo que aqui se custodia) | neutro=6 lecturas + validar como dictamen",
+    "senales_pareadas": "save/clonar/restore/activar -> carta.actualizada (1x) · add_product/remove_product/update_product/update_products/add_category/update_prices/update_extras (_mutar) -> carta.editada + version++ (1x por llamada) · delete -> carta.borrada (soft) · entrada externa: carta.creada (menu-generator) la aplica onCartaCreada via _save",
+    "moneda": "precio de producto se persiste en EUROS number>=0 redondeados a 2 decimales — la UI edita y envia euros, SIN conversion a centimos",
+    "nota": "18 ops reales en el reflejo (index.js: 12 _mutar/raiz + 6 consulta). Las 19 claves de ui.roles separan el DOBLE PAPEL de validar: lectura-neutra en consulta y FRENO que bloquea activar si !valid ('validar_como_freno'). Errores nombrados de mutacion: 409 ALREADY_EXISTS (id determinista duplicado), 412 PRECONDITION_FAILED (categoria no existe), HANDLER_NOT_FOUND si se va por ui/request (no hay handlers UI: usar core/*/events siempre).",
+    "huecos": {
+      "validar-como-freno-en-UI": "[ABIERTO] el dictamen existe ({valid, errors[]}); la UI jefe (F7 CartaManagerJefePanel) lo ejecuta ANTES de activar y bloquea el boton si !valid — la formalizacion del freño en el blueprint abstracto queda pendiente",
+      "ruta-mutacion-frontend-custodio": "[RESUELTA, verificada en vivo] core/*/events/carta/<op>/request con EventEnvelope (publish de $lib/ui-core/mqtt) — ui/request/* (mqttRequest) NO tiene handlers: timeout garantizado"
     }
-  ],
-  "_v1_6_changelog": "v1.6.0 (2026-06-13): HIBRIDADO. Las 15 ops (todas deterministas) pasan al REFLEJO JS (index.js, CartaManagerReflejo extends ModuloHibridoReflejo) — CRUD+versionado+manipulacion de productos/categorias servidos en el bus (carta.<op>.request) sin turno LLM. Cada cajon queda como DELEGADOR FINO: el LLM de la pagina interpreta lenguaje natural -> publishAndWait('carta.<op>.request') -> el reflejo ejecuta y persiste. La op interna _on_carta_creada se elimina del blueprint (la sirve el reflejo onCartaCreada via module.json.subscribes); por eso 'carta.creada' SALE de eventos_que_escucho (regla anti-colision: un evento no puede estar en module.json.subscribes y en blueprint.eventos_que_escucho a la vez). El pseudocodigo previo (la danza fs completa) queda capturado fielmente en el reflejo JS.",
-  "_v1_7_changelog": "v1.7.0 (2026-06-14): FASE 2 identidad determinista (rediseño subsistema-carta). add_product genera id DETERMINISTA slug(categoria_id)+'_'+slug(nombre) (no UUID) -> el mismo producto es el mismo id SIEMPRE, se acabaron las 3 copias de TEXAS; 409 ALREADY_EXISTS si ya existe. add_category genera id = slug(nombre) y dedup por id. add_product/update_product ACEPTAN y persisten 'ingredientes' en forma canonica {id, nombre, emoji?, familia} (antes add_product los descartaba -> productos sin ingredientes). Implementado en el REFLEJO (index.js reflejo-1.1.0); los cajones siguen delegando.",
-  "_v1_8_changelog": "v1.8.0 (2026-06-14): op add_from_receta — NACE un producto de carta desde una receta. Cierra recetas->carta: el reflejo LEE recetas.obtener, mapea lineas->ingredientes (toppings=variaciones; masa/salsa=subproducto base, EXCLUIDOS) y delega a add_product. Asi el producto entra con sus variaciones reales y se respeta la regla subproducto vs topping.",
-  "_v1_9_changelog": "v1.9.0 (2026-06-14): add_from_receta excluye SOLO la masa (base). La salsa/tomate son toppings (correccion de dominio). Antes excluia masa+salsa.",
-  "_v1_10_changelog": "v1.10.0 (2026-06-14): add_from_receta deja de ser delegador al reflejo: la clasificacion base-vs-topping es CRITERIO (fuzzy), la hace el LLM razonando plato a plato (auto-preguntas: base o topping). El reflejo solo LEE (recetas.obtener) y PERSISTE (add_product). No se generaliza por familia ni flag: el LLM juzga caso a caso. Revierte el hardcode masa/salsa de v1.8/1.9.",
-  "_v1_11_changelog": "v1.11.0 (2026-06-14): quita el cajon add_from_receta — se MUDA a menu-generator.preparar. El que prepara (menu-generator) es quien orquesta (lee carta.get + recetas.obtener, prepara, escribe carta.add_product) en UNA vuelta LLM contra REFLEJOS. carta-manager se queda en lo suyo: SIRVE get y add_product (reflejo), no orquesta ni clasifica. Cierra el lio base/topping (v1.8-1.10) por la raiz: la clasificacion no existe; el toque vive en menu-generator siguiendo el patron de la carta.",
-  "_v1_12_changelog": "v1.12.0 (2026-06-22): + cajon update_extras (delegador fino). El LLM de pagina traduce 'sube el precio de los extras'/'queso a 0,80'/'extras gratis' -> publishAndWait('carta.update_extras.request'). El CAMBIO de precio del extra vive en el custodio (carta-manager), no en un fichero suelto. Cierra el caso real: pedir a la pagina cambiar precios de ingredientes ya no choca con 'no existe el fichero'."
+  }
 }

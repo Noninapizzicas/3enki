@@ -94,10 +94,38 @@ function generateStaticHTML(carta, config, options = {}) {
       // Alérgenos canónicos (1169/2011) ya normalizados por la proyección.
       alergenos: Array.isArray(p.alergenos) ? p.alergenos : [],
       gancho: p.gancho || null,   // reclamo del marketing (etiqueta corta)
+      // ESCALERA de familia (DATO de la carta): el ancla y sus hermanas a un ingrediente.
+      // Se re-mapea aquí porque el DATA del bundle es la forma FINAL que ve la PWA.
+      escalera: (p.escalera && typeof p.escalera === 'object' && Array.isArray(p.escalera.hermanas))
+        ? {
+            ancla: p.escalera.ancla || null,
+            familia: p.escalera.familia || null,
+            hermanas: p.escalera.hermanas.map(h => ({
+              nombre: h.nombre || null,
+              anadir: Array.isArray(h.anadir) ? h.anadir.slice() : []
+            }))
+          }
+        : null,
+      // FAMILIA FIJADA de ingrediente (DATO de la carta): el grupo declarado a mano, con sus
+      // miembros por id. Si viene, MANDA sobre la derivación — la sección ya no se mueve cuando
+      // alguien toca los ingredientes de una pizza. Si no viene, se deriva como siempre.
+      familia: (p.familia && typeof p.familia === 'object' && Array.isArray(p.familia.miembros))
+        ? {
+            ingrediente_id: p.familia.ingrediente_id || null,
+            ingrediente: p.familia.ingrediente || null,
+            ancla: p.familia.ancla || null,
+            miembros: p.familia.miembros.filter(x => typeof x === 'string').slice(),
+            fijado_at: p.familia.fijado_at || null
+          }
+        : null,
       ingredientes: (p.ingredientes || []).map(i => ({
         nombre: i.nombre, emoji: i.emoji || null, tipo: i.tipo || null,
         precio_extra: i.precio_extra ?? null
-      }))
+      })),
+      // Encargo (módulo calendario): días de la semana en que sale (1=Lun..7=Dom) y
+      // antelación mínima para encargar. `[]` → no es encargable (sin selector de fecha).
+      dias_sale: Array.isArray(p.dias_salida) ? p.dias_salida.slice() : [],
+      margen_antelacion_h: (p.margen_antelacion_h ?? null)
     };
   });
   // Leyenda de alérgenos presentes (id/nombre/emoji), de la proyección.
@@ -283,6 +311,29 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .ing-add{font:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:all .12s}
 .ing-chip.added{border-color:#22c55e;background:rgba(34,197,94,.15);color:#22c55e}
 .ing-add-price{font-size:.65rem;color:#888;margin-left:2px}.ing-chip.added .ing-add-price{color:#22c55e}
+/* La escalera: mismo chip que los extras, pero "lo mismo + ingrediente -> hermana". */
+.esc-row{align-items:baseline}
+.esc-mas{color:var(--primary);font-weight:800}
+.esc-flecha{opacity:.45;margin:0 2px}
+.esc-nombre{font-weight:700}
+.hermanas{margin-bottom:16px}
+.hermana-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid #1f1f1f}
+.hermana-row:first-child{border-top:0}
+.hermana-info{flex:1;min-width:0}
+.hermana-nombre{font-weight:700;font-size:.86rem;color:#eee}
+.hermana-ings{font-size:.72rem;color:#888;margin-top:2px;line-height:1.35}
+.hermana-precio{font-weight:700;font-size:.86rem;color:var(--primary);white-space:nowrap}
+.hermana-btns{display:flex;gap:6px;flex-shrink:0}
+.hermana-btn{padding:7px 11px;border-radius:10px;border:1px solid #2a2a2a;background:#1a1a1a;color:#ccc;font-size:.75rem;font-weight:600;cursor:pointer}
+.hermana-btn.elegir{background:var(--primary);border-color:var(--primary);color:#111}
+/* "Añadir extras" PLEGADO: se ve la cabecera, la lista aparece al tocarla. */
+.fold{border-top:1px solid #1f1f1f;margin-top:14px;padding-top:12px}
+.fold>.fold-sum{list-style:none;cursor:pointer;display:flex;align-items:center;gap:6px;margin:0;-webkit-tap-highlight-color:transparent}
+.fold>.fold-sum::-webkit-details-marker{display:none}
+.fold>.fold-sum::after{content:'▾';margin-left:auto;color:#666;font-size:.85rem;transition:transform .18s}
+.fold[open]>.fold-sum::after{transform:rotate(180deg)}
+.fold[open]>.fold-sum{margin:0 0 10px}
+.fold-hint{font-weight:400;text-transform:none;letter-spacing:0;color:#666;margin-left:2px}
 /* Atajos componibles (mitad / crea tu pizza): pills compactas ancladas arriba del grid */
 .special-bar{grid-column:1/-1;display:flex;gap:10px;flex-wrap:wrap;margin:0 0 6px}
 .special-btn{display:inline-flex;align-items:center;gap:8px;padding:8px 15px;border:1.5px solid var(--primary);border-radius:999px;background:rgba(245,158,11,.12);background:color-mix(in srgb,var(--primary) 14%,transparent);color:var(--primary);font:inherit;font-size:.82rem;font-weight:700;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:transform .12s,background .15s}
@@ -360,6 +411,24 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .btn-wa:disabled{opacity:.6;cursor:not-allowed}
 .cart-nombre{width:100%;box-sizing:border-box;margin:8px 0;padding:10px 12px;border:1px solid #333;border-radius:10px;background:#111;color:var(--text);font-size:.85rem}
 .cart-nombre:focus{outline:none;border-color:var(--primary)}
+/* Selector "¿Para cuándo?" — encargo anticipado. Un botón por día (HOY/MAÑANA/PM):
+   verde si ese día el producto SALE (dias_sale), ámbar/rojo si no. Cero inputs de fecha. */
+.fecha-row{margin:10px 0}
+.fecha-label{font-size:.68rem;font-weight:600;text-transform:uppercase;letter-spacing:.4px;color:var(--text-dim);margin-bottom:6px}
+.fecha-btns{display:flex;gap:6px;flex-wrap:wrap}
+.fecha-btn{flex:1;min-width:86px;padding:10px 6px;border:1px solid #333;border-radius:12px;background:#111;color:var(--text);font:inherit;font-size:.78rem;font-weight:700;cursor:pointer;text-align:center;-webkit-tap-highlight-color:transparent;display:flex;flex-direction:column;gap:2px;transition:all .15s}
+.fecha-btn small{font-size:.6rem;font-weight:500;color:var(--text-dim)}
+.fecha-btn.off{opacity:.38;border-color:#2a2a2a}
+.fecha-btn.sale{border-color:rgba(34,197,94,.4)}
+.fecha-btn.sale .dot{color:var(--success)}
+.fecha-btn.nosale{border-color:rgba(239,68,68,.35)}
+.fecha-btn.nosale .dot{color:var(--danger)}
+.fecha-btn.active{border-color:var(--primary);background:var(--primary);color:#000;box-shadow:0 0 0 2px rgba(245,158,11,.25)}
+.fecha-btn.active small,.fecha-btn.active .dot{color:#000}
+.fecha-btn .dot{font-size:.85rem;line-height:1}
+.fecha-hint{font-size:.66rem;color:var(--text-dim);margin-top:5px;line-height:1.35}
+.fecha-hint .off{opacity:.5}
+.fecha-hint .pclaro{color:var(--success)}.fecha-hint .projo{color:var(--danger)}
 .cart-modo{display:flex;gap:6px;margin:8px 0}
 .modo-btn{flex:1;padding:9px 4px;border:1px solid #333;border-radius:10px;background:#111;color:var(--text);font-size:.8rem;font-weight:600;cursor:pointer}
 .modo-btn.active{border-color:var(--primary);background:var(--primary);color:#000}
@@ -664,6 +733,14 @@ const FAM_CONFIG = {
   otro:    { emoji: '📦', label: 'Otro',             orden: 9, color: '#888888' }
 };
 function famInfo(t) { return FAM_CONFIG[t] || FAM_CONFIG.otro; }
+// "Añadir extras" NO se abre solo. Al pulsar una pizza el cliente tiene que ver LA PIZZA
+// (sus hermanas, sus ingredientes), no un muro de 20 chips que empuja todo lo demás fuera
+// de la pantalla. Va plegado y se abre al tocarlo: el que quiere cambiar la receta lo busca,
+// el que no, no lo sufre. <details> nativo → cero JS, cero estado que sincronizar.
+function extrasFold(html, n) {
+  return '<details class="fold"><summary class="section-title fold-sum">Añadir extras' +
+    '<span class="fold-hint">· ' + n + ' opcionales</span></summary>' + html + '</details>';
+}
 // Pinta los extras AGRUPADOS por familia, ordenados, con cabecera por grupo (mismo sistema
 // que el comandero). Puebla detailExtrasById. selSet marca los ya añadidos; fn = handler onclick.
 function renderExtrasAgrupados(extras, selSet, fn) {
@@ -679,7 +756,7 @@ function renderExtrasAgrupados(extras, selSet, fn) {
     html += '<div class="ing-group" style="--fam:' + info.color + '"><div class="ing-group-head"><span>' + info.emoji + '</span><span>' + info.label + '</span><span class="ing-group-count">(' + lista.length + ')</span></div><div class="ing-list">';
     for (const e of lista) {
       const ad = (selSet && selSet.has(e.id)) ? ' added' : '';
-      html += '<button type="button" class="ing-chip ing-add' + cls + ad + '" onclick="' + handler + '(\\'' + e.id + '\\', this)">' + (e.emoji ? '<span style="font-size:.85rem">' + e.emoji + '</span>' : '') + '<span style="font-weight:500">' + esc(e.nombre) + '</span><span class="ing-add-price">+' + fmt(e.precio_extra) + '</span></button>';
+      html += '<button type="button" class="ing-chip ing-add' + cls + ad + '" data-ext-id="' + esc(e.id) + '" onclick="' + handler + '(\\'' + e.id + '\\', this)">' + (e.emoji ? '<span style="font-size:.85rem">' + e.emoji + '</span>' : '') + '<span style="font-weight:500">' + esc(e.nombre) + '</span><span class="ing-add-price">+' + fmt(e.precio_extra) + '</span></button>';
     }
     html += '</div></div>';
   }
@@ -774,6 +851,90 @@ function renderGrid() {
   }
 }
 
+// ─── Hermanas por INGREDIENTE PRINCIPAL (derivado de la carta, no almacenado) ───
+// Abres "Pizza de jamón York (Milonga)" y justo debajo aparecen las demás que llevan
+// jamón de york: nombre, sus ingredientes a la vista, precio y dos botones — elegir (al
+// carrito) o editar (abre SU ficha, con su quitar/añadir). No se guarda nada: se calcula
+// al abrir desde los ingredientes que cada producto YA declara. Si la carta cambia, cambia solo.
+function familiaDe(p) {
+  const cat = String(p.categoria || '').toLowerCase();
+  return DATA.productos.filter(function (q) {
+    return String(q.categoria || '').toLowerCase() === cat
+      && Array.isArray(q.ingredientes) && q.ingredientes.length;
+  });
+}
+
+// El PRINCIPAL es el ingrediente que comparten VARIAS pero no CASI TODAS: lo que sale en
+// >=60% del grupo es la base (masa, tomate, mozzarella) y no distingue una pizza de otra.
+function ingPrincipalDe(p, grupo) {
+  if (!grupo || grupo.length < 2) return null;
+  const techo = grupo.length * 0.6;
+  const mios = (p.ingredientes || []).map(function (i) { return i.nombre; });
+  let mejor = null, mejorN = 0;
+  for (let k = 0; k < mios.length; k++) {
+    const nombre = mios[k];
+    let n = 0;
+    for (let j = 0; j < grupo.length; j++) {
+      const ings = grupo[j].ingredientes || [];
+      for (let m = 0; m < ings.length; m++) { if (ings[m].nombre === nombre) { n++; break; } }
+    }
+    if (n >= techo) continue;   // base del grupo: no sirve de eje
+    if (n > mejorN) { mejor = nombre; mejorN = n; }
+  }
+  return mejorN >= 2 ? { nombre: mejor, n: mejorN } : null;
+}
+
+function renderHermanas(p) {
+  const grupo = familiaDe(p);
+  let principal = null, hermanas = [];
+
+  // GRUPO FIJADO (DATO de la carta): manda el dato, no la derivación. Los ids se resuelven
+  // contra la carta VIVA, así que una pizza dada de baja simplemente desaparece del bloque en
+  // vez de romperlo — y una pizza nueva NO se cuela en una sección que el dueño fijó.
+  const fijada = p && p.familia;
+  if (fijada && Array.isArray(fijada.miembros) && fijada.miembros.length) {
+    const todos = (DATA && DATA.productos) || [];
+    for (let k = 0; k < fijada.miembros.length; k++) {
+      const id = fijada.miembros[k];
+      if (!id || id === p.id) continue;
+      const q = todos.find(function (x) { return x.id === id; });
+      if (q && !hermanas.some(function (y) { return y.id === q.id; })) hermanas.push(q);
+    }
+    if (!hermanas.length) return '';
+    principal = {
+      nombre: fijada.ingrediente || String(fijada.ingrediente_id || '').replace(/_/g, ' '),
+      n: hermanas.length + 1      // el ancla cuenta en el total de la sección
+    };
+  } else {
+    principal = ingPrincipalDe(p, grupo);
+    if (!principal) return '';
+    hermanas = grupo.filter(function (q) {
+      return q.id !== p.id && (q.ingredientes || []).some(function (i) { return i.nombre === principal.nombre; });
+    });
+    if (!hermanas.length) return '';
+  }
+  let filas = '';
+  for (let k = 0; k < hermanas.length; k++) {
+    const h = hermanas[k];
+    // Los ingredientes a la vista, con su emoji: la fila se ojea, no se lee (el emoji
+    // hace de ancla visual para el que mira de pie en la barra).
+    const lista = (h.ingredientes || []).map(function (i) {
+      return (i.emoji ? i.emoji + ' ' : '') + i.nombre;
+    }).join(' · ');
+    filas += '<div class="hermana-row">' +
+      '<div class="hermana-info"><div class="hermana-nombre">' + esc(h.nombre) + '</div>' +
+      (lista ? '<div class="hermana-ings">' + esc(lista) + '</div>' : '') + '</div>' +
+      '<span class="hermana-precio">' + fmt(h.precio) + '</span>' +
+      '<div class="hermana-btns">' +
+        '<button type="button" class="hermana-btn elegir" data-accion="hermana-elegir" data-producto-id="' + esc(h.id) + '">' + T.add + '</button>' +
+        '<button type="button" class="hermana-btn" data-accion="hermana-editar" data-producto-id="' + esc(h.id) + '">Personalizar</button>' +
+      '</div></div>';
+  }
+  return '<h3 class="section-title">También con ' + esc(principal.nombre) +
+    ' <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#777">· ' + principal.n + '</span></h3>' +
+    '<div class="hermanas">' + filas + '</div>';
+}
+
 // Detail
 function showDetail(id) {
   detailProd = DATA.productos.find(p => p.id === id);
@@ -823,13 +984,65 @@ function showDetail(id) {
     alergHtml = '<h3 class="section-title">Alérgenos</h3><div class="alerg-list">' + chips + '</div>';
   }
 
+  // La ESCALERA (DATO de la carta): el ancla y sus hermanas a UN ingrediente. Cada peldano es un
+  // ATAJO: al pulsarlo anade el ingrediente que convierte el ancla en su hermana. El precio del
+  // peldano sale del catalogo VIVO (precio_extra), nunca de un numero escrito a mano.
+  let escaleraHtml = '';
+  if (p.escalera && Array.isArray(p.escalera.hermanas) && p.escalera.hermanas.length) {
+    let filas = '';
+    for (const h of p.escalera.hermanas) {
+      const ids = Array.isArray(h.anadir) ? h.anadir : [];
+      let delta = 0; const etiquetas = [];
+      for (const iid of ids) {
+        const ex = detailExtrasById[iid] || catIngPorId(iid);
+        if (ex) {
+          delta += Number(ex.precio_extra) || 0;
+          etiquetas.push(esc(ex.nombre));
+          if (!detailExtrasById[iid]) detailExtrasById[iid] = ex;
+        }
+      }
+      if (!etiquetas.length) continue;
+      filas += '<button type="button" class="ing-chip esc-row" data-ext-id="' + esc(ids[0] || '') + '" onclick="toggleEscalera(this)">' +
+        '<span class="esc-mas">+</span><span style="font-weight:500">' + etiquetas.join(' + ') + '</span>' +
+        '<span class="esc-flecha">-></span><span class="esc-nombre">' + esc(h.nombre) + '</span>' +
+        (delta > 0 ? '<span class="ing-add-price">+' + fmt(delta) + '</span>' : '') + '</button>';
+    }
+    if (filas) {
+      escaleraHtml = '<h3 class="section-title">La escalera <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#777">lo mismo + un ingrediente</span></h3>' +
+        '<div class="ing-list esc-list">' + filas + '</div>';
+    }
+  }
+
+  // Hermanas por ingrediente principal: las otras que llevan lo mismo, con elegir/editar.
+  // VAN ARRIBA, pegadas a la cabecera: el cliente abre la pizza y lo primero que ve son sus
+  // hermanas con nombre, lo que llevan, precio y boton. Enterrarlas debajo de "Anadir extras"
+  // (que es larguisimo) las volvia invisibles en el movil — se veian solo tras bajar media ficha.
+  const hermanasHtml = renderHermanas(p);
+
   document.getElementById('detail-content').innerHTML =
-    '<div class="detail-header"><h2 class="detail-nombre">' + (p.emoji ? p.emoji + ' ' : '') + esc(p.nombre) + '</h2><span class="detail-precio">' + fmt(p.precio) + '</span></div>' +
+    '<div class="detail-header"><h2 class="detail-nombre">'  + (p.emoji ? p.emoji + ' ' : '') + esc(p.nombre) + '</h2><span class="detail-precio">' + fmt(p.precio) + '</span></div>' +
     (tagsHtml ? '<div class="detail-tags">' + tagsHtml + '</div>' : '') +
     (p.descripcion ? '<p class="detail-desc">' + esc(p.descripcion) + '</p>' : '') +
+    hermanasHtml +
+    escaleraHtml +
     (ingsHtml ? '<h3 class="section-title">Ingredientes <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#777">· toca para quitar</span></h3><div class="ing-list">' + ingsHtml + '</div>' : '') +
-    (extrasHtml ? '<h3 class="section-title">Añadir extras</h3>' + extrasHtml : '') +
+    (extrasHtml ? extrasFold(extrasHtml, extras.length) : '') +
     alergHtml;
+
+  // Delegación (una sola vez): elegir una hermana → al carrito ; editar → SU ficha.
+  const dcEl = document.getElementById('detail-content');
+  if (dcEl && !dcEl._delegadoHermanas) {
+    dcEl.addEventListener('click', function (e) {
+      const btn = e.target.closest('[data-accion="hermana-elegir"], [data-accion="hermana-editar"]');
+      if (!btn) return;
+      e.stopPropagation();
+      const pid = btn.getAttribute('data-producto-id');
+      if (!pid) return;
+      if (btn.getAttribute('data-accion') === 'hermana-editar') showDetail(pid);
+      else addToCart(pid);
+    });
+    dcEl._delegadoHermanas = true;
+  }
 
   renderDetailFooter();
 
@@ -865,8 +1078,11 @@ function toggleQuitar(idx, btn) {
 function toggleAnadir(id, btn) {
   const e = detailExtrasById[id];
   if (!e) return;
-  if (anadirSel.has(id)) { anadirSel.delete(id); btn.classList.remove('added'); }
-  else { anadirSel.set(id, e); btn.classList.add('added'); }
+  const on = !anadirSel.has(id);
+  if (on) anadirSel.set(id, e); else anadirSel.delete(id);
+  // El chip de "Anadir extras" y el peldano de "La escalera" son el MISMO extra: las dos
+  // caras se encienden/apagan juntas (si no, el cliente lo veria a medias).
+  try { document.querySelectorAll('[data-ext-id="' + id + '"]').forEach(function (b) { b.classList.toggle('added', on); }); } catch (_) {}
   // El precio cambia con cada extra. Mismo toggle en dos contextos: detalle normal y
   // personalización de una mitad — cada uno repinta SU footer (no se pisan).
   if (mitadVarLado) renderMitadVarFooter(); else renderDetailFooter();
@@ -940,6 +1156,18 @@ function extrasForGroup(grpKeys, excludeSet) {
     }
     return true;
   });
+}
+// Busca un ingrediente del catalogo proyectado por id o por nombre (tolerante).
+function catIngPorId(id) {
+  const k = norm(id);
+  return (DATA.catalogo_ingredientes || []).find(function (x) { return norm(x.id) === k || norm(x.nombre) === k; });
+}
+// Peldano de "La escalera": atajo que convierte el ancla en su hermana (anade el ingrediente).
+function toggleEscalera(btn) {
+  const id = btn && btn.getAttribute('data-ext-id');
+  if (!id) return;
+  if (!detailExtrasById[id]) { const ex = catIngPorId(id); if (ex) detailExtrasById[id] = ex; }
+  toggleAnadir(id, btn);
 }
 function specialBtn(kind, title, onclickJs) {
   // Dibujos identificativos (heredan el color de marca via currentColor).
@@ -1056,7 +1284,7 @@ function showMitadVar(lado, pizza) {
     '<div class="detail-header"><h2 class="detail-nombre">' + (pizza.emoji ? pizza.emoji + ' ' : '') + '½ ' + esc(pizza.nombre) + '</h2></div>' +
     '<p class="detail-desc">Personaliza esta mitad' + (lado === 'izq' ? ' (izquierda)' : ' (derecha)') + '</p>' +
     (ingsHtml ? '<h3 class="section-title">Ingredientes <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#777">· toca para quitar</span></h3><div class="ing-list">' + ingsHtml + '</div>' : '') +
-    (extrasHtml ? '<h3 class="section-title">Añadir extras</h3>' + extrasHtml : '');
+    (extrasHtml ? extrasFold(extrasHtml, extras.length) : '');
   renderMitadVarFooter();
 }
 function mitadVarExtras() {
@@ -1316,9 +1544,19 @@ function updateCart() {
       '</div>' +
       '<input id="cliente-hora" class="cart-nombre" type="time" aria-label="Hora de recogida" style="display:' + (_modoConsumo === 'recoger' ? 'block' : 'none') + '">'
     : '';
+  // METODO DE PAGO: solo se ofrece si el proyecto tiene pasarela (pago_online). Sin ella no
+  // hay eleccion que hacer y el flujo queda igual que siempre (paga al recoger).
+  const metodoSel = CONFIG.pago_online
+    ? '<div class="cart-modo" role="group" aria-label="Metodo de pago">' +
+        '<button type="button" class="modo-btn' + (_metodoPago === 'efectivo' ? ' active' : '') + '" data-metodo="efectivo" onclick="setMetodo(\\'efectivo\\')">💶 Efectivo al recoger</button>' +
+        '<button type="button" class="modo-btn' + (_metodoPago === 'tarjeta' ? ' active' : '') + '" data-metodo="tarjeta" onclick="setMetodo(\\'tarjeta\\')">💳 Tarjeta</button>' +
+      '</div>'
+    : '';
   footer.innerHTML = '<div class="total-row"><span class="total-label">' + T.total + '</span><span class="total-amount">' + fmt(total) + '</span></div>' +
-    nombreInput + modoSel +
+    nombreInput + modoSel + metodoSel +
+    '<div id="fecha-cont"></div>' +
     '<div class="cart-actions"><button class="btn-clear" onclick="clearCart()">' + T.clear + '</button>' + pagarBtn + onlineBtn + waBtn + '</div>';
+  renderFechaRow();   // encargo: bloque "¿Para cuándo?" (verde/rojo según dias_sale)
 }
 
 function changeQty(cid, delta) {
@@ -1356,7 +1594,7 @@ var _modoConsumo = 'recoger';
 function setModo(m) {
   if (m !== 'mesa' && m !== 'recoger' && m !== 'llevar') return;
   _modoConsumo = m;
-  var btns = document.querySelectorAll('.modo-btn');
+  var btns = document.querySelectorAll('.modo-btn[data-modo]');
   for (var i = 0; i < btns.length; i++) {
     btns[i].classList.toggle('active', btns[i].getAttribute('data-modo') === m);
   }
@@ -1368,6 +1606,86 @@ function _pedModo() { return _modoConsumo || 'recoger'; }
 function _pedHora() {
   var h = document.getElementById('cliente-hora');
   return (_pedModo() === 'recoger' && h && h.value) ? h.value : '';
+}
+
+// METODO DE PAGO elegido: efectivo (paga al recoger) | tarjeta (pago online por la pasarela).
+// Estado vivo que sobrevive al re-render del footer; viaja autoritativo en el #P1. Si es
+// tarjeta, el bot pide la session de pago a la pasarela y manda el enlace por WhatsApp.
+var _metodoPago = 'efectivo';
+function setMetodo(m) {
+  if (m !== 'efectivo' && m !== 'tarjeta') return;
+  _metodoPago = m;
+  var btns = document.querySelectorAll('.modo-btn[data-metodo]');
+  for (var i = 0; i < btns.length; i++) {
+    btns[i].classList.toggle('active', btns[i].getAttribute('data-metodo') === m);
+  }
+}
+function _pedMetodo() { return _metodoPago || 'efectivo'; }
+
+// ── Encargo anticipado — "¿Para cuándo?" ──────────────────────────────────
+// El cliente elige DÍA (HOY / MAÑANA / PASADO MAÑANA) con UN botón por vez, verde si
+// ese día SALE el producto (dias_sale), rojo si no. El estado vive en _fechaKey.
+// Regla (dueño): HOY = pedido normal (sin fecha); día futuro = fecha explícita (encargo).
+var _fechaKey = 'hoy';                 // 'hoy' | 'manana' | 'pasado' | 'elegir'
+// Fecha deseada SOLO si es un encargo (día futuro). HOY → null (pedido normal, sin fecha).
+function _fechaDeseada() {
+  if (_fechaKey === 'hoy' || _fechaKey === 'elegir') return null;
+  return _fechaISO(_fechaKey);
+}
+function _fechaOptions() {
+  // Unión de dias_sale de los productos del carrito (vacío → sin selector).
+  var set = new Set();
+  for (var i = 0; i < cart.length; i++) {
+    var p = DATA.productos.find(function(x){ return x.id === cart[i].id; });
+    if (p && Array.isArray(p.dias_sale)) p.dias_sale.forEach(function(d){ set.add(d); });
+  }
+  return Array.from(set).sort(function(a,b){ return a-b; });   // [1..7], 1=Lun
+}
+function _esEncargable() {
+  return _fechaOptions().length > 0 && cart.length > 0;
+}
+function _fechaISO(key) {
+  // Suma días a HOY (local). 'hoy'→+0, 'manana'→+1, 'pasado'→+2. Devuelve 'YYYY-MM-DD'.
+  var dias = { hoy:0, manana:1, pasado:2 }[key];
+  if (dias === undefined) return null;
+  var d = new Date(); d.setDate(d.getDate() + dias);
+  var mm = String(d.getMonth()+1).padStart(2,'0'), dd = String(d.getDate()).padStart(2,'0');
+  return d.getFullYear() + '-' + mm + '-' + dd;
+}
+function _btnFecha(key, label, sub) {
+  var on = _fechaKey === key, ok = _diaSale(key);
+  var cls = 'fecha-btn ' + (on ? 'active' : (ok ? 'sale' : 'nosale'));
+  return '<button type="button" class="' + cls + '" onclick="setFecha(\\'' + key + '\\')" aria-pressed="' + on + '">' +
+    '<span class="dot">' + (ok ? '●' : '○') + '</span>' + label + '<small>' + sub + '</small></button>';
+}
+function _diaSale(key) {
+  if (key === 'hoy') return true;                 // HOY siempre sale (válido encargar hoy)
+  var d = new Date(); d.setDate(d.getDate() + ({hoy:0,manana:1,pasado:2}[key]||0));
+  var iso = (d.getDay()+6) % 7 + 1;              // 1=Lun..7=Dom
+  return _fechaOptions().indexOf(iso) !== -1;
+}
+function setFecha(key) {
+  if (key !== 'hoy' && key !== 'manana' && key !== 'pasado') return;
+  _fechaKey = key;
+  renderFechaRow();   // repinta solo el selector
+  updateCart();       // recalcula hint/estado del footer
+}
+// Render del bloque "¿Para cuándo?" (solo si el carrito tiene al menos un producto encargable).
+function renderFechaRow() {
+  var cont = document.getElementById('fecha-cont');
+  if (!cont) return;
+  if (!_esEncargable()) { cont.innerHTML = ''; return; }
+  var sel = _fechaKey, on = _fechaKey, sale = _diaSale(sel);
+  cont.innerHTML =
+    '<div class="fecha-label">¿Para cuándo?</div>' +
+    '<div class="fecha-btns">' +
+      _btnFecha('hoy','HOY','hoy') + _btnFecha('manana','MAÑANA','manana') + _btnFecha('pasado','PM','pasado') +
+    '</div>' +
+    '<div class="fecha-hint">' +
+      (sel==='hoy' ? '<span class="pclaro">Hoy</span> lo preparamos y va directo a cocina.' :
+       sale     ? '<span class="pclaro">Encargo</span> — se anota para el ' + _fechaISO(sel) + '.' :
+                  '<span class="projo">Ese día no sale</span> — elige otro.' ) +
+    '</div>';
 }
 
 // Pedido CODIFICADO POR IDS (lo autoritativo). El bot lo re-tasa contra la carta; los
@@ -1387,6 +1705,9 @@ function buildP1Line() {
     var payload = { v: 1, items: buildOrderItems() };
     var modo = _pedModo(); if (modo) payload.modo_consumo = modo;
     var hora = _pedHora(); if (hora) payload.hora_recogida = hora;
+    var met = _pedMetodo(); if (met) payload.metodo_pago = met;
+    // Encargo anticipado: fecha deseada (día futuro) → el parser lo publica con fecha_deseada.
+    var fec = _fechaDeseada(); if (fec) payload.fecha_deseada = fec;
     var json = JSON.stringify(payload);
     var b64 = btoa(unescape(encodeURIComponent(json)));
     var b64url = b64.replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=+$/, '');
@@ -1414,6 +1735,9 @@ function buildOrderMsg() {
   var total = cart.reduce(function(s, i) { return s + i.precio * i.qty; }, 0);
   msg += 'Total: ' + _pedEur(total) + '\\n';
   msg += 'Nombre: ' + nombre;
+  // Encargo: fecha deseada en claro (el parser la lee; la #P1 la lleva autoritativa).
+  var fec = _fechaDeseada();
+  if (fec) msg += '\\nPara: ' + fec;
   var p1 = buildP1Line();
   if (p1) msg += '\\n' + p1;
   return msg;
@@ -1451,6 +1775,8 @@ async function pagarAhora() {
     nombre_cliente: nombre,
     modo_consumo: _pedModo(),
     hora_recogida: _pedHora() || null,
+    fecha_deseada: _fechaDeseada() || null,
+    metodo_pago: 'tarjeta',
     pago_online: true,
     return_url: location.origin + location.pathname
   };
@@ -1492,7 +1818,9 @@ async function pedirOnline() {
     total_centimos: Math.round(total * 100),
     nombre_cliente: nombre,
     modo_consumo: _pedModo(),
-    hora_recogida: _pedHora() || null
+    hora_recogida: _pedHora() || null,
+    metodo_pago: _pedMetodo(),
+    fecha_deseada: _fechaDeseada() || null
   };
   var btn = document.getElementById('btn-pedir');
   if (btn) { btn.disabled = true; btn.textContent = 'Enviando…'; }
@@ -1863,8 +2191,12 @@ if ('serviceWorker' in navigator) {
  * Generate a minimal service worker for offline caching.
  * Uses relative paths (./) so it works in any subdirectory (GitHub Pages, etc.)
  */
-function generateServiceWorker(nombre_negocio) {
-  return `const CACHE = '${slugify(nombre_negocio)}-v1';
+function generateServiceWorker(nombre_negocio, version) {
+  // La VERSION va en el NOMBRE de la cache: al cambiar el bundle nace una cache nueva y
+  // `activate` borra la vieja. Con nombre fijo, el cliente que ya visito la carta se
+  // quedaba con el bundle VIEJO para siempre (el dueno no veia sus cambios).
+  const stamp = (version === undefined || version === null || version === '') ? 'v1' : String(version);
+  return `const CACHE = '${slugify(nombre_negocio)}-${stamp}';
 const ASSETS = ['./', './index.html'];
 
 self.addEventListener('install', e => {
@@ -1880,11 +2212,24 @@ self.addEventListener('activate', e => {
 });
 
 self.addEventListener('fetch', e => {
+  const req = e.request;
+  // El DOCUMENTO va a RED PRIMERO: la carta es estatica y cambia al publicar. Con
+  // cache-first el cliente veia el bundle viejo aunque el servidor tuviera el nuevo.
+  if (req.mode === 'navigate') {
+    e.respondWith(
+      fetch(req).then(res => {
+        if (res && res.ok) { const c = res.clone(); caches.open(CACHE).then(cc => cc.put(req, c)); }
+        return res;
+      }).catch(() => caches.match(req).then(r => r || caches.match('./index.html')))
+    );
+    return;
+  }
+  // Assets (img/iconos/manifest): cache primero, rapido y estable.
   e.respondWith(
-    caches.match(e.request).then(r => r || fetch(e.request).then(res => {
-      if (res.ok && e.request.method === 'GET') {
+    caches.match(req).then(r => r || fetch(req).then(res => {
+      if (res.ok && req.method === 'GET') {
         const clone = res.clone();
-        caches.open(CACHE).then(c => c.put(e.request, clone));
+        caches.open(CACHE).then(c => c.put(req, clone));
       }
       return res;
     })).catch(() => caches.match(self.registration.scope))
@@ -1892,7 +2237,6 @@ self.addEventListener('fetch', e => {
 });
 `;
 }
-
 /**
  * Generate PWA manifest.json
  * Uses relative start_url (".") so it works in any subdirectory (GitHub Pages, etc.)

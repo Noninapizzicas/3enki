@@ -193,6 +193,13 @@ class ProductosModule extends BaseModule {
     if (Array.isArray(p.etiquetas)) prod.etiquetas = p.etiquetas;
     if (p.disponible !== undefined) prod.disponible = p.disponible;
     if (p.variaciones && typeof p.variaciones === 'object') prod.variaciones = p.variaciones;
+    // Opciones de la carta (QUITAR / ELEGIR_VARIOS / ELEGIR_UNO) tal cual las declaró el dueño:
+    // viajan en la proyección para que variaciones NO las re-derive de la paleta de la categoría
+    // (la paleta es un subconjunto: se caían los ingredientes que solo viven en otras categorías).
+    if (Array.isArray(p.opciones) && p.opciones.length) prod.opciones = p.opciones;
+    // FAMILIA FIJADA de ingrediente (DATO de la carta): viaja al comandero para que el bloque de
+    // hermanas use el grupo declarado en vez de derivarlo.
+    if (p.familia && typeof p.familia === 'object' && Array.isArray(p.familia.miembros)) prod.familia = p.familia;
 
     if (Array.isArray(p.ingredientes_base) && p.ingredientes_base.length) {
       prod.ingredientes_base = p.ingredientes_base;

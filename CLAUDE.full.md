@@ -523,18 +523,6 @@ PATRONES
 
 # Capa de Aterrizaje — Análisis del Core (Event-Driven Framework)
 
-> **Novedad (2026-10-05) — el hot-reload de módulos está VIVO.** `config.json` prometía
-> `modules.hot_reload: true` pero nadie leía esa clave: `watchAll()` existía y no lo llamaba
-> nadie → editar un módulo exigía `systemctl restart enki` + sudo. Ahora `index.js` arranca
-> `moduleLoader.watchAll()` al terminar `loadAll()` si `hot_reload === true`: editar el
-> `index.js` de un módulo (o un helper de `modules/_shared/` del que dependa) lo recarga en
-> caliente. Tres arreglos en `loader.js`: (1) `clearModuleCache()` suelta la caché de require
-> del módulo ENTERO — index.js Y sus dependencias locales bajo `_shared/` — sin tocar
-> `node_modules` (soltar esas provoca fugas); (2) el debounce es por módulo (`reloadTimeouts`)
-> en vez de un temporizador global que perdía recargas simultáneas; (3) `reload()` re-arma el
-> watcher que `unload()` cerraba (sin esto, el módulo se quedaba ciego tras la 1ª recarga).
-> Verificado por `tests/unit/core__hot-reload.test.js` (7/7).
-
 > **Novedad (2026-07-14) — el broker embebido admite un guard opcional.** `EmbeddedBroker` acepta
 > `opts.guard`; si está, cablea `aedes.authenticate/authorizePublish/authorizeSubscribe` (sin guard →
 > abierto, retrocompatible). `MQTTClient` construye un `BusGuard` (`core/broker/bus-guard.js`) y lo
@@ -869,7 +857,6 @@ CLASE ModuleLoader IMPLEMENTA ModuleLoaderContract {
     metrics: Metrics
     loadedModules: Map<moduleName, {manifest, instance, path, loadedAt, _eventUnsubs?, _uiRegistrations?}>
     watchers: Map<moduleName, FSWatcher>
-    reloadTimeouts: Map<moduleName, Timeout>
     toolsRegistry: Map<toolName, {name, description, parameters, handler, module, confirmation}>
     intentRegistry: IntentRegistry
   }
@@ -909,13 +896,7 @@ CLASE ModuleLoader IMPLEMENTA ModuleLoaderContract {
       ELIMINA DE loadedModules
 
     async reload(moduleName: String): Promise<Void>
-      RECUERDA si estaba observado
-      UNLOAD + LOAD (load() limpia la caché del módulo entero vía clearModuleCache)
-      RE-ARMA el watcher si lo tenía
-
-    clearModuleCache(modulePath: String): Void
-      SUELTA la caché de require del módulo (index.js) Y de sus dependencias
-        locales bajo modules/_shared/ — RESPETA node_modules
+      UNLOAD + LOAD
 
     async loadAll(): Promise<Array<{name, success, error?}>>
       DESCUBRE todos módulos
@@ -928,11 +909,11 @@ CLASE ModuleLoader IMPLEMENTA ModuleLoaderContract {
       UNLOAD todos los módulos
 
     watch(moduleName: String): Void
-      fs.watch(modulePath) CON debounce 500ms POR MÓDULO
-      on change (index.js|module.json): RELOAD
+      fs.watch(modulePath) CON debounce 500ms
+      on change: RELOAD
 
     watchAll(): Void
-      watch() PARA cada módulo — arrancado por index.js si config.modules.hot_reload === true
+      watch() PARA cada módulo
 
     normalizeSubscriptions(manifest: Object): Array<{event, handler}>
     wireEventSubscriptions(manifest: Object, instance: Object): Array<Function>
@@ -3238,12 +3219,6 @@ PATRON Multi-Tenant {
 
 # Módulos: Project-Manager, Credential-Manager y Conversación
 
-> **Novedad (2026-08-07) — chat-io puente de agente al frontend soporta `invoke_agent`.**
-> `chat-io` ya suscribía `agent.execute.request/progress/response/failed`; ahora también
-> escucha `invoke_agent` y `invoke_agent.response` (el alias que usa el chat para arrancar
-> y cerrar el motor v3) para publicar `conversation/{id}/agent_status` y
-> `conversation/{id}/agent_progress` al frontend.
-
 ## PROJECT-MANAGER
 
 ```
@@ -4430,149 +4405,6 @@ conversacion-ref/agent-bridge       → (absorbido por agent-observer)
 
 Los monolitos pre-rewrite (v0) preservados en `arquitectura/migracion/_legacy/*.bak`
 son el historial de la reescritura — su sitio canónico (los genera scaffold-rewrite.js).
-
----
-
-# Integración Hermes ↔ Enki
-
-Hermes (NousResearch/hermes-agent) es la capa conversacional. Enki aporta
-434+ tools de dominio. La fusión es ADITIVA: Hermes conserva todo (CLI,
-dashboard :9119, providers, terminal_tool, file tools, web browsing) y
-gana las tools de Enki.
-
-## Arquitectura (3 piezas)
-
-```
-Frontend (MQTT)
-    │
-    ▼
-chat-io ──persist──▶ SQLite
-    │
-    │ chat.message.saved
-    ▼
-hermes-relay ──history──▶ SQLite
-    │                      │
-    │ POST /v1/chat/completions
-    │ (system: CLAUDE.md + ctx activo + vista_frontend)
-    ▼
-  Hermes (OpenAI-compat API)
-    │
-    │ tool calls via enki_tools
-    │ POST /modules/hermes-bridge/execute
-    ▼
-hermes-bridge ──dispatch──▶ Enki tools (434+)
-    │
-    │ (3 rutas: bus universal, ruta directa, bus fallback)
-    ▼
-  resultado → Hermes → respuesta
-    │
-    ▼
-hermes-relay
-    │ ai.chat.response
-    ▼
-chat-io ──persist──▶ SQLite
-    │
-    │ MQTT push conversation/{id}/message
-    ▼
-Frontend
-```
-
-## hermes-bridge (módulo Node.js)
-
-Dispatcher de tools extraído de ai-gateway._executeToolCall. Expone 3
-endpoints HTTP en el gateway de Enki (:3000):
-
-| Método | Ruta | Auth | Función |
-|--------|------|------|---------|
-| POST | /modules/hermes-bridge/execute | Bearer | Ejecuta tool por nombre |
-| GET | /modules/hermes-bridge/catalog | Bearer | Catálogo OpenAI format |
-| GET | /modules/hermes-bridge/health | - | Health check |
-
-Auth: token compartido 32 bytes hex, generado al primer arranque,
-persistido en `data/.hermes-bridge-token` (mode 0600), validado con
-`crypto.timingSafeEqual`.
-
-3 rutas de dispatch (misma lógica que ai-gateway):
-1. `bus.publish` / `bus.publishAndWait` — tools universales del bus
-2. Ruta directa — handler en módulo vía toolsRegistry + loadedModules
-3. Bus fallback — publish + wait correlado por request_id
-
-## enki_tools (paquete Python)
-
-Cliente HTTP que Hermes usa para llamar a hermes-bridge.
-
-- `EnkiBridge(base_url, token, token_path, timeout)` — cliente HTTP
-- `EnkiBridge.call(tool_name, context, **args)` — ejecuta tool
-- `EnkiBridge.catalog()` — catálogo OpenAI format
-- `load_tools(bridge)` — genera `dict[str, callable]` (434+ funciones Python)
-- Token auto-discovery: `ENKI_BRIDGE_TOKEN` env o `data/.hermes-bridge-token`
-
-## hermes-relay (módulo Node.js)
-
-Pipe puro que reemplaza prompt-builder + ai-gateway en la cadena de eventos.
-
-- Suscribe `chat.message.saved` (lo que antes atendía prompt-builder)
-- Carga historial de SQLite vía `db.query.request` (mismo patrón que chat-io)
-- Construye system message: CLAUDE.md (cache 60s) + CONTEXTO ACTIVO + vista_frontend
-- POST a Hermes `/v1/chat/completions` (OpenAI-compat, sin stream)
-- Emite `ai.chat.response` (lo que antes emitía ai-gateway)
-- chat-io persiste y empuja al frontend sin cambios
-
-Config: `hermes_url`, `hermes_model`, `hermes_api_key`, `context_window`,
-`request_timeout_ms`, `claude_md_path`.
-
-## Separación de credenciales
-
-| Dueño | Qué gestiona |
-|-------|-------------|
-| Hermes | API keys de LLM providers (OpenAI, Anthropic, DeepSeek, modelos locales). Configuradas en Hermes internamente. |
-| credential-manager | Credenciales de dominio: WhatsApp Cloud API, Telegram Bot, Glovo, Mercadona, y toda API key que un módulo operativo necesite. Sigue vivo, intacto. |
-
-ai-gateway resolvía credenciales LLM vía `credential.resolve.request` →
-credential-manager. Con Hermes, esa resolución desaparece: Hermes trae sus
-propios providers. credential-manager pierde solo ese consumidor (ai-gateway),
-pero conserva todos los demás (whatsapp-bot, telegram-service, tienda-api,
-facturas, mercadona-api, etc.).
-
-## Módulos deshabilitados
-
-7 módulos conversacionales deshabilitados en `config.json`:
-
-| Módulo | Reemplazado por |
-|--------|----------------|
-| ai-gateway | hermes-relay + Hermes |
-| prompt-builder | hermes-relay (_buildSystemMessage) |
-| ai-agent-framework-v3 | Hermes agentic loop |
-| agent-observer | sin ai-gateway no hay pipeline que observar |
-| memory-conversation-summary | sin emisores activos |
-| memory-rag | sin emisores activos |
-| memory-user-profile | sin emisores activos |
-
-**chat-io se mantiene** — persistencia SQLite, CRUD de conversaciones,
-push MQTT al frontend. Es la bisagra entre el relay y el frontend.
-
-## hermes-gateway (módulo Node.js)
-
-Expone TODO el toolsRegistry de Enki por MQTT. Cualquier proceso externo
-(motor-hermes Rust, enki-movil, motores enki-sense) puede invocar tools
-sin HTTP. Delega el dispatch a hermes-bridge (3 rutas intactas).
-
-**Protocolo MQTT:**
-
-| Dirección | Topic | Payload |
-|-----------|-------|---------|
-| Request | `hermes/tool/{toolName}` | `{ request_id, args, context }` |
-| Response | `hermes/response/{request_id}` | `{ request_id, status, result, error }` |
-
-- Suscribe `hermes/tool/+` en el broker (topic propio, sin conflicto con EventBus)
-- Delega a `hermes-bridge._dispatch(toolName, args, context)` — misma lógica de dispatch (bus universal, ruta directa, bus fallback), zero duplicación
-- Publica respuesta en `hermes/response/{request_id}` con QoS 1
-- Sin auth propia — la identidad la rige el broker (bus-guard)
-- Config: `topic_prefix` (default `hermes`)
-
-**Beneficio sistémico:** con hermes-gateway, las tools de ruta directa
-(fs.read, credential.*, code.orquestar, tools de dominio) quedan accesibles
-desde cualquier proceso que hable MQTT, no solo desde dentro del core Node.js.
 
 ---
 
@@ -8436,7 +8268,6 @@ CLASE ProjectMetadata {
 ✓ comandero-cliente-builder (v1.0.0)
 ✓ composition-manager (v2.0.0)
 ✓ credential-manager (v2.0.0)
-✓ credential-oauth (v0.1.0)
 ✓ dashboard (v3.0.0)
 ✓ database-manager (v3.0.0)
 ✓ device-health (v2.0.0)
@@ -13055,16 +12886,6 @@ CLASE Category {
 }
 ```
 
-NOTA (2026-10-16) — PAGO DEL PEDIDO DE TIENDA
-```
-handlePedido (POST /tienda/pedido) REENVÍA metodo_pago ('efectivo' | 'tarjeta') dentro del payload
-de pedido.crear-tienda; el que NORMALIZA es pedidos (sin valor → 'efectivo'). tienda-api NO decide
-nada del cobro: solo transporta la preferencia que el cliente marcó en la PWA. Si el pedido llega
-con pago_online, pide igualmente la sesión a pago-gateway (pago.iniciar.request) y devuelve
-checkout_url — es el camino de la PWA alojada (el del bot es su propio _rpc). Ambas rutas acaban en
-la MISMA verdad: pago.confirmado → pedidos.onPagoConfirmado → pedido.pagado.
-```
-
 ## WHATSAPP-BOT (v2.0.0) — Integración WhatsApp
 
 ```
@@ -14644,990 +14465,6 @@ EVENTO_BACKEND_A_FRONT {
 
 ---
 
-# PIEL MODULAR — Sistema de UI en 10 capas
-
-> **Fase: DISEÑO.** Este documento es la arquitectura. No hay código aún.
-> El objetivo es un esqueleto que soporte pieles, fuentes, transiciones,
-> tamaños para cualquier dispositivo — todo fraccionado en capas independientes.
-
-## Diagnóstico del estado actual
-
-```json
-{
-  "tiene": {
-    "colores": "~21 CSS custom properties (--color-*) en theme.ts",
-    "pieles": "1 piel alternativa (prisma-skin.ts) que sobreescribe las mismas vars",
-    "aplicacion": "JS inline en :root (root.style.setProperty)",
-    "componentes": "estilos scoped Svelte con var(--color-*) + fallbacks hardcoded"
-  },
-  "no_tiene": [
-    "tokens de spacing (padding/margin/gap clavados en cada componente)",
-    "escala tipográfica (font-size clavado: 0.75em, 0.875rem, 1rem...)",
-    "tokens de border-radius (clavado: 0.375rem, 0.5rem...)",
-    "tokens de sombra",
-    "sistema de motion/transiciones (clavado: 0.15s, 0.1s...)",
-    "breakpoints / container queries (no hay responsive formal)",
-    "layout primitives (cada componente monta su propio grid/flex)",
-    "sistema de estados unificado (hover/focus/active ad-hoc por componente)"
-  ]
-}
-```
-
-## Las 10 capas — contrato
-
-```
-ENUM CapaUI {
-  L0_RESET           // normalizar navegadores
-  L1_TOKENS_ATOMICOS // valores brutos: paleta, escala spacing, escala tipo, duraciones, easings, radii
-  L2_TOKENS_SEMANTICOS // mapeo átomos → significado: --surface, --text-body, --space-section
-  L3_LAYOUT          // primitivas de composición: Stack, Cluster, Grid, Sidebar, Center, Cover
-  L4_TIPOGRAFIA      // familias, pesos, line-height, letter-spacing por rol
-  L5_ESQUELETO       // componentes estructura: forma sin piel (padding+radius+flex, sin color)
-  L6_PIEL            // color, sombras, bordes, gradientes — aplicados vía tokens semánticos
-  L7_MOVIMIENTO      // transiciones, animaciones, prefers-reduced-motion
-  L8_RESPONSIVE      // fluid type, container queries, breakpoints
-  L9_ESTADOS         // hover, focus-visible, active, disabled, loading, error, skeleton
-}
-```
-
-### Contrato de dependencia entre capas
-
-```
-L0_RESET ← (sin dependencias — base pura)
-L1_TOKENS_ATOMICOS ← L0
-L2_TOKENS_SEMANTICOS ← L1 (mapea átomos a roles)
-L3_LAYOUT ← L1 (usa spacing atómico)
-L4_TIPOGRAFIA ← L1 (usa escala tipográfica atómica)
-L5_ESQUELETO ← L1, L3 (usa spacing + layout primitives)
-L6_PIEL ← L2 (aplica tokens semánticos de color/sombra/borde)
-L7_MOVIMIENTO ← L1 (usa duraciones y easings atómicos)
-L8_RESPONSIVE ← L1, L3, L4 (modifica spacing, layout y tipo por viewport/container)
-L9_ESTADOS ← L2, L6, L7 (combina color semántico + piel + transición)
-```
-
-```
-REGLA: cada capa depende SOLO de las capas listadas arriba.
-        Cambiar L6 (piel) NO toca L3 (layout) ni L5 (esqueleto).
-        Cambiar L4 (tipografía) NO toca L6 (piel).
-        → independencia real, no teórica.
-```
-
----
-
-## L0 — Reset
-
-```
-ARCHIVO: ui-skin/reset.css
-
-PROPOSITO: eliminar diferencias entre navegadores.
-CONTENIDO:
-  - box-sizing: border-box en todo (*, *::before, *::after)
-  - margin: 0 en body, h1-h6, p, figure, blockquote, dl, dd
-  - line-height: 1.5 en body (accesibilidad)
-  - -webkit-font-smoothing: antialiased
-  - img, picture, video, canvas, svg: display block, max-width 100%
-  - input, button, textarea, select: heredan font
-  - overflow-wrap: break-word en body
-  - #root, #__next: isolation isolate (stacking context)
-
-FUENTE_RECOMENDADA: modern-css-reset de Andy Bell (adaptado)
-```
-
-## L1 — Tokens atómicos
-
-```json
-{
-  "esquema": "tokens-atomicos-v1",
-  "archivo": "ui-skin/tokens/atomicos.css",
-  "descripcion": "los VALORES BRUTOS — sin semántica, solo la escala",
-
-  "color": {
-    "nota": "paleta completa en hue steps, no colores con nombre",
-    "estructura": {
-      "neutral":  ["--c-neutral-0 (blanco)", "...", "--c-neutral-950 (casi negro)"],
-      "primary":  ["--c-primary-50", "--c-primary-100", "...", "--c-primary-900"],
-      "accent":   ["--c-accent-50", "...", "--c-accent-900"],
-      "success":  ["--c-success-50", "...", "--c-success-900"],
-      "warning":  ["--c-warning-50", "...", "--c-warning-900"],
-      "error":    ["--c-error-50", "...", "--c-error-900"]
-    },
-    "formato": "oklch(L C H) — perceptualmente uniforme, gamut p3"
-  },
-
-  "spacing": {
-    "nota": "escala geométrica base 4px",
-    "valores": {
-      "--sp-0": "0",
-      "--sp-px": "1px",
-      "--sp-0.5": "0.125rem",
-      "--sp-1": "0.25rem",
-      "--sp-2": "0.5rem",
-      "--sp-3": "0.75rem",
-      "--sp-4": "1rem",
-      "--sp-5": "1.25rem",
-      "--sp-6": "1.5rem",
-      "--sp-8": "2rem",
-      "--sp-10": "2.5rem",
-      "--sp-12": "3rem",
-      "--sp-16": "4rem",
-      "--sp-20": "5rem",
-      "--sp-24": "6rem"
-    }
-  },
-
-  "tipografia": {
-    "nota": "escala modular ratio 1.25 (Major Third)",
-    "valores": {
-      "--fs-xs": "0.64rem",
-      "--fs-sm": "0.8rem",
-      "--fs-base": "1rem",
-      "--fs-md": "1.25rem",
-      "--fs-lg": "1.563rem",
-      "--fs-xl": "1.953rem",
-      "--fs-2xl": "2.441rem",
-      "--fs-3xl": "3.052rem"
-    },
-    "line_heights": {
-      "--lh-tight": "1.2",
-      "--lh-normal": "1.5",
-      "--lh-relaxed": "1.75"
-    },
-    "font_weights": {
-      "--fw-normal": "400",
-      "--fw-medium": "500",
-      "--fw-semibold": "600",
-      "--fw-bold": "700"
-    }
-  },
-
-  "radii": {
-    "--radius-none": "0",
-    "--radius-sm": "0.25rem",
-    "--radius-md": "0.375rem",
-    "--radius-lg": "0.5rem",
-    "--radius-xl": "0.75rem",
-    "--radius-2xl": "1rem",
-    "--radius-full": "9999px"
-  },
-
-  "sombras": {
-    "--shadow-xs": "0 1px 2px oklch(0 0 0 / 0.05)",
-    "--shadow-sm": "0 1px 3px oklch(0 0 0 / 0.1), 0 1px 2px oklch(0 0 0 / 0.06)",
-    "--shadow-md": "0 4px 6px oklch(0 0 0 / 0.1), 0 2px 4px oklch(0 0 0 / 0.06)",
-    "--shadow-lg": "0 10px 15px oklch(0 0 0 / 0.1), 0 4px 6px oklch(0 0 0 / 0.05)",
-    "--shadow-xl": "0 20px 25px oklch(0 0 0 / 0.1), 0 8px 10px oklch(0 0 0 / 0.04)"
-  },
-
-  "motion": {
-    "duraciones": {
-      "--dur-instant": "50ms",
-      "--dur-fast": "100ms",
-      "--dur-normal": "200ms",
-      "--dur-slow": "300ms",
-      "--dur-slower": "500ms"
-    },
-    "easings": {
-      "--ease-default": "cubic-bezier(0.4, 0, 0.2, 1)",
-      "--ease-in": "cubic-bezier(0.4, 0, 1, 1)",
-      "--ease-out": "cubic-bezier(0, 0, 0.2, 1)",
-      "--ease-in-out": "cubic-bezier(0.4, 0, 0.2, 1)",
-      "--ease-spring": "cubic-bezier(0.34, 1.56, 0.64, 1)",
-      "--ease-bounce": "cubic-bezier(0.34, 1.3, 0.64, 1)"
-    }
-  },
-
-  "z_index": {
-    "--z-base": "0",
-    "--z-dropdown": "10",
-    "--z-sticky": "20",
-    "--z-overlay": "30",
-    "--z-modal": "40",
-    "--z-popover": "50",
-    "--z-toast": "60"
-  }
-}
-```
-
-## L2 — Tokens semánticos
-
-```json
-{
-  "esquema": "tokens-semanticos-v1",
-  "archivo": "ui-skin/tokens/semanticos.css",
-  "descripcion": "mapean átomos a SIGNIFICADO — lo que consumen los componentes",
-  "nota": "ESTE es el archivo que cambia la PIEL. Un componente NUNCA usa un token atómico directamente para color.",
-
-  "superficie": {
-    "--surface-base": "var(--c-neutral-950)",
-    "--surface-raised": "var(--c-neutral-900)",
-    "--surface-overlay": "var(--c-neutral-800)",
-    "--surface-sunken": "var(--c-neutral-980)",
-    "--surface-interactive": "var(--c-neutral-850)",
-    "--surface-interactive-hover": "var(--c-neutral-800)"
-  },
-
-  "texto": {
-    "--text-primary": "var(--c-neutral-50)",
-    "--text-secondary": "var(--c-neutral-400)",
-    "--text-tertiary": "var(--c-neutral-500)",
-    "--text-inverse": "var(--c-neutral-950)",
-    "--text-on-primary": "var(--c-neutral-0)",
-    "--text-link": "var(--c-primary-400)",
-    "--text-link-hover": "var(--c-primary-300)"
-  },
-
-  "borde": {
-    "--border-default": "var(--c-neutral-800)",
-    "--border-subtle": "var(--c-neutral-850)",
-    "--border-strong": "var(--c-neutral-600)",
-    "--border-focus": "var(--c-primary-500)",
-    "--border-error": "var(--c-error-500)"
-  },
-
-  "accion": {
-    "--action-primary": "var(--c-primary-500)",
-    "--action-primary-hover": "var(--c-primary-400)",
-    "--action-primary-active": "var(--c-primary-600)",
-    "--action-secondary": "var(--c-neutral-800)",
-    "--action-secondary-hover": "var(--c-neutral-700)",
-    "--action-destructive": "var(--c-error-500)",
-    "--action-destructive-hover": "var(--c-error-400)"
-  },
-
-  "estado": {
-    "--status-success": "var(--c-success-500)",
-    "--status-success-bg": "var(--c-success-950)",
-    "--status-warning": "var(--c-warning-500)",
-    "--status-warning-bg": "var(--c-warning-950)",
-    "--status-error": "var(--c-error-500)",
-    "--status-error-bg": "var(--c-error-950)",
-    "--status-info": "var(--c-primary-500)",
-    "--status-info-bg": "var(--c-primary-950)"
-  },
-
-  "espaciado_semantico": {
-    "--space-component-gap": "var(--sp-2)",
-    "--space-section-gap": "var(--sp-8)",
-    "--space-page-padding": "var(--sp-4)",
-    "--space-card-padding": "var(--sp-4)",
-    "--space-input-x": "var(--sp-3)",
-    "--space-input-y": "var(--sp-2)"
-  },
-
-  "radio_semantico": {
-    "--radius-component": "var(--radius-md)",
-    "--radius-card": "var(--radius-lg)",
-    "--radius-input": "var(--radius-md)",
-    "--radius-button": "var(--radius-md)",
-    "--radius-modal": "var(--radius-xl)"
-  },
-
-  "sombra_semantica": {
-    "--shadow-card": "var(--shadow-sm)",
-    "--shadow-dropdown": "var(--shadow-md)",
-    "--shadow-modal": "var(--shadow-xl)",
-    "--shadow-toast": "var(--shadow-lg)"
-  }
-}
-```
-
-## L3 — Layout primitives
-
-```
-PROPOSITO: componentes de COMPOSICION pura — solo distribución, sin piel.
-ARCHIVO: ui-skin/layout/
-
-PRIMITIVA Stack {
-  proposito: "apilar hijos verticalmente con gap uniforme"
-  props: { gap: SpacingToken = '--sp-4', recursive: Boolean = false }
-  css: "display: flex; flex-direction: column; gap: var(gap)"
-}
-
-PRIMITIVA Cluster {
-  proposito: "hijos en fila que hacen wrap natural"
-  props: { gap: SpacingToken = '--sp-4', justify: String = 'flex-start', align: String = 'center' }
-  css: "display: flex; flex-wrap: wrap; gap: var(gap); justify-content: justify; align-items: align"
-}
-
-PRIMITIVA Grid {
-  proposito: "grid auto-fill con mínimo configurable"
-  props: { min: String = '250px', gap: SpacingToken = '--sp-4' }
-  css: "display: grid; grid-template-columns: repeat(auto-fill, minmax(min(min, 100%), 1fr)); gap: var(gap)"
-}
-
-PRIMITIVA Sidebar {
-  proposito: "sidebar fija + contenido fluido, colapsa en estrecho"
-  props: { side: 'left'|'right' = 'left', sideWidth: String, contentMin: String = '60%', gap: SpacingToken = '--sp-4' }
-  css: "display: flex; flex-wrap: wrap; gap: var(gap); > :first-child { flex-basis: sideWidth } > :last-child { flex: 1; min-inline-size: contentMin }"
-}
-
-PRIMITIVA Center {
-  proposito: "centrar contenido con ancho máximo"
-  props: { max: String = '65ch', padding: SpacingToken = '--sp-4' }
-  css: "max-inline-size: max; margin-inline: auto; padding-inline: var(padding)"
-}
-
-PRIMITIVA Cover {
-  proposito: "cubrir viewport con hijo centrado verticalmente"
-  props: { min: String = '100vh', padding: SpacingToken = '--sp-4' }
-  css: "display: flex; flex-direction: column; min-block-size: min; padding: var(padding); > * { margin-block: auto }"
-}
-
-PRIMITIVA Frame {
-  proposito: "ratio de aspecto fijo (imagen, video, embed)"
-  props: { ratio: String = '16/9' }
-  css: "aspect-ratio: ratio; overflow: hidden; > * { inline-size: 100%; block-size: 100%; object-fit: cover }"
-}
-```
-
-## L4 — Tipografía
-
-```json
-{
-  "esquema": "tipografia-v1",
-  "archivo": "ui-skin/typography.css",
-
-  "familias": {
-    "--font-sans": "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
-    "--font-mono": "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
-    "--font-display": "var(--font-sans)"
-  },
-
-  "roles": {
-    "heading-1": { "family": "var(--font-display)", "size": "var(--fs-3xl)", "weight": "var(--fw-bold)", "line-height": "var(--lh-tight)", "letter-spacing": "-0.02em" },
-    "heading-2": { "family": "var(--font-display)", "size": "var(--fs-2xl)", "weight": "var(--fw-bold)", "line-height": "var(--lh-tight)", "letter-spacing": "-0.01em" },
-    "heading-3": { "family": "var(--font-display)", "size": "var(--fs-xl)", "weight": "var(--fw-semibold)", "line-height": "var(--lh-tight)" },
-    "heading-4": { "family": "var(--font-display)", "size": "var(--fs-lg)", "weight": "var(--fw-semibold)", "line-height": "var(--lh-normal)" },
-    "body": { "family": "var(--font-sans)", "size": "var(--fs-base)", "weight": "var(--fw-normal)", "line-height": "var(--lh-normal)" },
-    "body-sm": { "family": "var(--font-sans)", "size": "var(--fs-sm)", "weight": "var(--fw-normal)", "line-height": "var(--lh-normal)" },
-    "caption": { "family": "var(--font-sans)", "size": "var(--fs-xs)", "weight": "var(--fw-normal)", "line-height": "var(--lh-normal)" },
-    "code": { "family": "var(--font-mono)", "size": "var(--fs-sm)", "weight": "var(--fw-normal)", "line-height": "var(--lh-relaxed)" },
-    "label": { "family": "var(--font-sans)", "size": "var(--fs-sm)", "weight": "var(--fw-medium)", "line-height": "var(--lh-tight)" },
-    "button": { "family": "var(--font-sans)", "size": "var(--fs-sm)", "weight": "var(--fw-semibold)", "line-height": "1" }
-  },
-
-  "implementacion": "clases CSS (.text-h1, .text-body, .text-caption...) que agrupan las 4 propiedades"
-}
-```
-
-## L5 — Componentes esqueleto
-
-```
-PROPOSITO: la FORMA del componente sin piel — padding, radius, flex, tamaños.
-           Un componente esqueleto se ve "transparente" — solo ocupa espacio y responde a interacción.
-NOTA: usa tokens atómicos de spacing y radii, NUNCA tokens semánticos de color.
-ARCHIVO: cada componente en su .svelte, la parte <style> solo toca forma.
-
-ESQUELETO Button {
-  display: inline-flex
-  align-items: center
-  justify-content: center
-  gap: var(--sp-2)
-  border: 1px solid transparent
-  cursor: pointer
-  tamaños:
-    sm: { padding: var(--sp-1) var(--sp-2), font: role(button), radius: var(--radius-component) }
-    md: { padding: var(--sp-2) var(--sp-3), font: role(button), radius: var(--radius-component) }
-    lg: { padding: var(--sp-3) var(--sp-4), font: role(button), radius: var(--radius-component) }
-}
-
-ESQUELETO Card {
-  padding: var(--space-card-padding)
-  border-radius: var(--radius-card)
-  overflow: hidden
-}
-
-ESQUELETO Input {
-  padding: var(--space-input-y) var(--space-input-x)
-  border-radius: var(--radius-input)
-  border: 1px solid transparent
-  font: role(body)
-  min-height: 2.5rem
-}
-
-ESQUELETO Modal {
-  border-radius: var(--radius-modal)
-  padding: var(--sp-6)
-  max-width: min(90vw, 32rem)
-  max-height: 85vh
-  overflow-y: auto
-}
-
-ESQUELETO Badge {
-  display: inline-flex
-  align-items: center
-  padding: var(--sp-0.5) var(--sp-2)
-  border-radius: var(--radius-full)
-  font: role(caption)
-}
-
-ESQUELETO Panel {
-  border-radius: var(--radius-card)
-  overflow: hidden
-  display: flex
-  flex-direction: column
-}
-```
-
-## L6 — Piel (dato del proyecto, no código)
-
-> **Decisión clave:** la piel NO se hardcodea en el frontend. Se define en cada proyecto
-> y viaja con él. El código solo tiene el MOTOR que aplica cualquier piel; los VALORES
-> viven en la config del proyecto. Así cada proyecto (pizzepos, prisma, un cliente nuevo)
-> tiene su identidad visual sin tocar el repo del frontend.
-
-### Dos caras visuales por proyecto — el origen de las pieles
-
-> **Idea semilla.** Cada proyecto tiene dos necesidades visuales distintas que conviven:
->
-> 1. **Marketing (visión cliente)** — lo que ve el cliente final: carta digital, landing,
->    escaparate, redes, materiales de marca. Aquí la piel es la MARCA del negocio:
->    colores corporativos, tipografía de identidad, tono visual que transmite personalidad.
->    Módulos de marketing por proyecto (por crear) consumirán esta cara.
->
-> 2. **Trabajo (operativa interna)** — lo que ve el operador: comandero, cocina, admin,
->    dashboard, inventario. Aquí la piel prioriza LEGIBILIDAD, contraste, velocidad de
->    lectura, ergonomía en condiciones reales (luz de cocina, pantalla táctil grasienta,
->    estrés de servicio). La marca pasa a segundo plano; la función manda.
->
-> De estas dos caras nacen los principios de diseño de las pieles — no son la misma piel
-> con distinto logo, son dos conjuntos de prioridades que el mismo proyecto necesita cubrir.
-
-```json
-{
-  "esquema": "dos-caras-v1",
-  "idea": "cada proyecto tiene dos contextos visuales con prioridades distintas",
-
-  "caras": {
-    "marketing": {
-      "quien_ve": "cliente final",
-      "donde": ["carta-digital", "landing", "escaparate", "redes", "materiales de marca"],
-      "prioridades": [
-        "identidad de marca — colores corporativos, tipografía propia, personalidad visual",
-        "impacto emocional — el diseño VENDE, transmite confianza y deseo",
-        "coherencia cross-canal — la misma cara en web, móvil, print, redes",
-        "estética sobre densidad — más espacio, más respiración, menos información por pantalla"
-      ],
-      "modulos_pendientes": "módulos de marketing por proyecto (por crear) que consuman esta piel",
-      "tokens_que_importan": ["paleta de marca", "tipografía display", "radii generosos", "sombras suaves", "motion expresivo"]
-    },
-
-    "trabajo": {
-      "quien_ve": "operador, equipo, staff",
-      "donde": ["comandero", "cocina", "admin-panel", "dashboard", "inventario", "caja"],
-      "prioridades": [
-        "legibilidad — contraste alto, tamaño mínimo generoso, fuentes sin adornos",
-        "densidad informativa — mucha información útil visible sin scroll",
-        "velocidad de interacción — touch targets grandes, feedback inmediato, sin animaciones que retrasen",
-        "resiliencia ambiental — funciona con luz directa, pantalla sucia, manos ocupadas",
-        "diferenciación por proyecto — saber en qué proyecto estás de un vistazo (el hue de fondo que ya hace prisma-skin)"
-      ],
-      "tokens_que_importan": ["contraste alto", "fuente sans limpia", "radii mínimos", "motion rápido o nulo", "colores de estado claros"]
-    }
-  },
-
-  "principios_que_emergen": [
-    {
-      "id": "P-PIEL-1",
-      "principio": "un proyecto define DOS pieles, no una — marketing y trabajo",
-      "implicacion": "PielJSON lleva un campo 'contexto': 'marketing' | 'trabajo'. El skin-engine aplica según el contexto activo."
-    },
-    {
-      "id": "P-PIEL-2",
-      "principio": "marketing hereda de la marca; trabajo hereda del sistema con tinte de proyecto",
-      "implicacion": "la piel de trabajo comparte el HUE de marca (para identificar proyecto) pero no su tipografía display ni su ritmo visual — usa los defaults de sistema optimizados para operativa."
-    },
-    {
-      "id": "P-PIEL-3",
-      "principio": "el contexto visual lo decide la RUTA, no el usuario",
-      "implicacion": "rutas /carta, /landing, /escaparate → marketing. Rutas /comandero, /cocina, /admin → trabajo. Sin toggle manual."
-    },
-    {
-      "id": "P-PIEL-4",
-      "principio": "la piel de trabajo puede ser AUSTERA — la de marketing nunca",
-      "implicacion": "trabajo: el proyecto puede definir solo '--action-primary' y un '--surface-base' con tinte → el resto son defaults de sistema. Marketing: la piel debe ser completa porque ES la marca."
-    },
-    {
-      "id": "P-PIEL-5",
-      "principio": "los módulos de marketing del proyecto son los consumidores naturales de la piel marketing",
-      "implicacion": "estos módulos (por crear) generan la carta digital, la landing, los materiales. Consumen la piel como dato, no como template CSS."
-    }
-  ],
-
-  "impacto_en_PielJSON": {
-    "cambio": "PielJSON pasa de ser un objeto plano a tener DOS secciones",
-    "estructura_nueva": {
-      "id": "String",
-      "nombre": "String",
-      "trabajo": {
-        "variante": "'dark' | 'light'",
-        "tokens": "Map<String, String> — overrides mínimos (hue de proyecto + contraste)",
-        "fuentes?": "normalmente hereda del sistema",
-        "motion?": "normalmente rápido o nulo"
-      },
-      "marketing": {
-        "variante": "'dark' | 'light'",
-        "tokens": "Map<String, String> — paleta completa de marca",
-        "fuentes?": "tipografía corporativa (display + body)",
-        "motion?": "expresivo, con personalidad",
-        "radii?": "los de la marca"
-      }
-    }
-  }
-}
-```
-
-```json
-{
-  "esquema": "piel-dinamica-v1",
-  "principio": "la piel es DATO del proyecto, no código del frontend",
-
-  "donde_vive": {
-    "definicion": "en la config del proyecto (project-manager / marca.json / DB)",
-    "transporte": "llega al frontend por MQTT al entrar al proyecto",
-    "topic": "core/<project_id>/config/skin",
-    "persistencia": "el proyecto persiste su piel; el frontend solo la CONSUME"
-  },
-
-  "contrato_piel": {
-    "descripcion": "JSON con DOS secciones — trabajo y marketing — cada una redefine tokens semánticos",
-    "estructura": {
-      "id": "String — identificador único de la piel del proyecto",
-      "nombre": "String — nombre visible (ej: 'Pizzepos')",
-      "trabajo": {
-        "nota": "piel de OPERATIVA — lo que ve el staff. Overrides mínimos: hue de proyecto + lo que difiera del default sistema.",
-        "variante": "'dark' | 'light'",
-        "tokens": "Map<TokenSemantico, valor>",
-        "fuentes?": "normalmente omitido (hereda sistema)",
-        "motion?": "normalmente omitido (rápido por default)",
-        "radii?": "normalmente omitido"
-      },
-      "marketing": {
-        "nota": "piel de MARCA — lo que ve el cliente. Paleta completa de identidad corporativa.",
-        "variante": "'dark' | 'light'",
-        "tokens": "Map<TokenSemantico, valor>",
-        "fuentes?": "tipografía corporativa (display + body)",
-        "motion?": "expresivo, con personalidad",
-        "radii?": "los de la marca"
-      }
-    }
-  },
-
-  "motor_de_aplicacion": {
-    "archivo": "ui-skin/skin-engine.ts",
-    "responsabilidad": [
-      "recibir el JSON de piel del proyecto por MQTT",
-      "resolver la variante base (dark/light) como capa de defaults",
-      "aplicar los overrides del proyecto como setProperty en :root",
-      "restaurar al default del sistema al salir del proyecto",
-      "emitir 'skin.applied' al bus para que los componentes que necesiten reaccionar lo hagan"
-    ]
-  },
-
-  "flujo": [
-    "1. Usuario entra al proyecto",
-    "2. project-manager publica core/<id>/config/skin con el JSON de piel (ambas caras)",
-    "3. skin-engine recibe y guarda ambas caras en memoria",
-    "4. La RUTA determina el contexto: /carta, /landing → marketing; /comandero, /cocina → trabajo",
-    "5. skin-engine aplica la cara correspondiente al contexto de la ruta activa",
-    "6. Si el usuario navega entre rutas de distinto contexto → skin-engine cambia la cara en caliente",
-    "7. Usuario sale del proyecto → skin-engine restaura defaults del sistema"
-  ],
-
-  "piel_default_del_sistema": {
-    "nota": "el frontend SÍ trae una piel default (dark + light) como fallback",
-    "vive_en": "ui-skin/tokens/semanticos.css — los valores por defecto",
-    "cuando": "sin proyecto activo, o proyecto sin piel definida"
-  },
-
-  "donde_se_edita_la_piel": {
-    "nota": "la piel se crea/edita desde el proyecto — admin-panel, blueprint, o herramienta de marca",
-    "no_en": "archivos CSS del frontend — esos NUNCA contienen pieles específicas de proyecto"
-  }
-}
-```
-
-### Pseudocódigo del motor
-
-```
-ENUM ContextoVisual { TRABAJO, MARKETING }
-
-CLASE SkinEngine {
-  defaults        : Map<Variante, Map<Token, Valor>>   // dark y light, del CSS estático
-  pielProyecto    : PielJSON | null                     // ambas caras cargadas
-  contextoActivo  : ContextoVisual
-  tokensAplicados : Array<String>                       // para limpiar al cambiar
-  bus             : EventBus
-
-  cargar(piel: PielJSON): Void {
-    pielProyecto = piel
-    // aplica la cara del contexto actual
-    aplicarCara(contextoActivo)
-  }
-
-  cambiarContexto(ctx: ContextoVisual): Void {
-    SI ctx == contextoActivo: RETORNAR
-    contextoActivo = ctx
-    SI pielProyecto: aplicarCara(ctx)
-  }
-
-  aplicarCara(ctx: ContextoVisual): Void {
-    PRECONDICION: pielProyecto existe
-    cara ← SI ctx == MARKETING: pielProyecto.marketing
-           SINO: pielProyecto.trabajo
-
-    SI cara == null: RETORNAR   // el proyecto no define esta cara → defaults
-
-    limpiarTokensAnteriores()
-
-    root ← document.documentElement
-    root.setAttribute('data-skin', pielProyecto.id)
-    root.setAttribute('data-context', ctx.lowercase())
-    root.setAttribute('data-variant', cara.variante ?? 'dark')
-
-    tokensAplicados = []
-
-    PARA [token, valor] EN cara.tokens:
-      root.style.setProperty(token, valor)
-      tokensAplicados.push(token)
-
-    PARA seccion EN [cara.fuentes, cara.motion, cara.radii]:
-      SI seccion:
-        PARA [token, valor] EN seccion:
-          root.style.setProperty(token, valor)
-          tokensAplicados.push(token)
-
-    bus.emit('skin.applied', { id: pielProyecto.id, contexto: ctx })
-  }
-
-  limpiarTokensAnteriores(): Void {
-    root ← document.documentElement
-    PARA token EN tokensAplicados:
-      root.style.removeProperty(token)
-    tokensAplicados = []
-  }
-
-  restaurar(): Void {
-    limpiarTokensAnteriores()
-    root ← document.documentElement
-    root.removeAttribute('data-skin')
-    root.removeAttribute('data-context')
-    pielProyecto = null
-    bus.emit('skin.cleared')
-  }
-
-  // suscripción MQTT — se engancha al conectar al proyecto
-  onSkinMessage(payload: PielJSON): Void {
-    cargar(payload)
-  }
-
-  // el router llama a esto al cambiar de ruta
-  onRouteChange(ruta: String): Void {
-    ctx ← clasificarRuta(ruta)
-    cambiarContexto(ctx)
-  }
-
-  clasificarRuta(ruta: String): ContextoVisual {
-    SI ruta.contiene('/carta') O ruta.contiene('/landing') O ruta.contiene('/escaparate'):
-      RETORNAR MARKETING
-    RETORNAR TRABAJO   // default — la operativa es el caso común
-  }
-}
-```
-
-### Ejemplo de piel de proyecto (JSON que viaja por MQTT)
-
-```json
-{
-  "id": "pizzepos",
-  "nombre": "Pizzepos",
-
-  "trabajo": {
-    "variante": "dark",
-    "tokens": {
-      "--surface-base": "#1a1210",
-      "--surface-raised": "#231c18",
-      "--action-primary": "#e67e22",
-      "--border-focus": "#e67e22"
-    }
-  },
-
-  "marketing": {
-    "variante": "light",
-    "tokens": {
-      "--surface-base": "#fdf8f3",
-      "--surface-raised": "#fff9f0",
-      "--action-primary": "#d35400",
-      "--action-primary-hover": "#c0392b",
-      "--text-primary": "#2c1810",
-      "--text-secondary": "#6b4423",
-      "--text-link": "#d35400",
-      "--status-success": "#27ae60",
-      "--border-default": "#e8d5c0",
-      "--border-focus": "#d35400"
-    },
-    "fuentes": {
-      "--font-display": "'Playfair Display', serif",
-      "--font-sans": "'Lato', system-ui, sans-serif"
-    },
-    "motion": {
-      "--dur-normal": "300ms",
-      "--ease-default": "cubic-bezier(0.22, 1, 0.36, 1)"
-    },
-    "radii": {
-      "--radius-component": "0.5rem",
-      "--radius-card": "1rem"
-    }
-  }
-}
-```
-
-```
-NOTA: la piel de TRABAJO es espartana — 4 tokens bastan para dar el tinte de proyecto.
-      La piel de MARKETING es completa — ES la marca, tiene que serlo.
-      Un proyecto puede definir solo 'trabajo' (sin módulos marketing aún) y funcionar.
-```
-
-## L7 — Movimiento
-
-```json
-{
-  "esquema": "movimiento-v1",
-  "archivo": "ui-skin/motion.css",
-
-  "utilidades": {
-    ".transition-colors": "transition: color var(--dur-fast) var(--ease-default), background-color var(--dur-fast) var(--ease-default), border-color var(--dur-fast) var(--ease-default)",
-    ".transition-transform": "transition: transform var(--dur-normal) var(--ease-spring)",
-    ".transition-opacity": "transition: opacity var(--dur-normal) var(--ease-default)",
-    ".transition-all": "transition: all var(--dur-normal) var(--ease-default)",
-    ".transition-none": "transition: none"
-  },
-
-  "keyframes": {
-    "fade-in": "from { opacity: 0 } to { opacity: 1 }",
-    "fade-out": "from { opacity: 1 } to { opacity: 0 }",
-    "slide-up": "from { transform: translateY(var(--sp-4)); opacity: 0 } to { transform: translateY(0); opacity: 1 }",
-    "slide-down": "from { transform: translateY(calc(-1 * var(--sp-4))); opacity: 0 } to { transform: translateY(0); opacity: 1 }",
-    "scale-in": "from { transform: scale(0.95); opacity: 0 } to { transform: scale(1); opacity: 1 }",
-    "spin": "from { transform: rotate(0deg) } to { transform: rotate(360deg) }",
-    "pulse": "0%,100% { opacity: 1 } 50% { opacity: 0.5 }",
-    "shake": "0%,100% { transform: translateX(0) } 25% { transform: translateX(-4px) } 75% { transform: translateX(4px) }"
-  },
-
-  "reduced_motion": {
-    "regla": "@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important } }",
-    "nota": "obligatorio — accesibilidad no negociable"
-  }
-}
-```
-
-## L8 — Responsive
-
-```json
-{
-  "esquema": "responsive-v1",
-  "archivo": "ui-skin/responsive.css",
-
-  "breakpoints": {
-    "--bp-sm": "640px",
-    "--bp-md": "768px",
-    "--bp-lg": "1024px",
-    "--bp-xl": "1280px",
-    "--bp-2xl": "1536px"
-  },
-
-  "fluid_type": {
-    "metodo": "clamp(min, preferred, max)",
-    "ejemplo_body": "font-size: clamp(var(--fs-sm), 2.5vw, var(--fs-base))",
-    "ejemplo_h1": "font-size: clamp(var(--fs-xl), 5vw, var(--fs-3xl))",
-    "nota": "la escala de L1 define los extremos; el fluid interpola"
-  },
-
-  "container_queries": {
-    "proposito": "componentes que responden a SU contenedor, no al viewport",
-    "habilitacion": "el layout primitive que aloja el componente define container-type: inline-size",
-    "ejemplo": "@container (min-width: 400px) { .card { flex-direction: row } }",
-    "prioridad": "container queries > media queries para componentes; media queries para layout de página"
-  },
-
-  "spacing_fluid": {
-    "proposito": "spacing que escala con viewport sin media queries",
-    "ejemplo": "--space-page-padding: clamp(var(--sp-3), 4vw, var(--sp-8))"
-  },
-
-  "touch_targets": {
-    "minimo": "44px × 44px (WCAG 2.5.5 AAA)",
-    "metodo": "min-height: 44px; min-width: 44px en todos los interactivos",
-    "nota": "el esqueleto (L5) ya lo garantiza en los tamaños md y lg"
-  }
-}
-```
-
-## L9 — Estados
-
-```json
-{
-  "esquema": "estados-v1",
-  "archivo": "ui-skin/states.css",
-
-  "estados_interactivos": {
-    "hover": {
-      "visual": "superficie sube un step (--surface-interactive → --surface-interactive-hover)",
-      "transition": "var(--dur-fast) var(--ease-default)"
-    },
-    "focus-visible": {
-      "visual": "outline 2px solid var(--border-focus), offset 2px",
-      "nota": "SOLO focus-visible, nunca focus genérico — teclado sí, click no"
-    },
-    "active": {
-      "visual": "scale(0.97) + superficie baja un step",
-      "transition": "var(--dur-instant) var(--ease-in)"
-    },
-    "disabled": {
-      "visual": "opacity: 0.4, cursor: not-allowed, pointer-events: none",
-      "nota": "pointer-events none impide tooltips — considerar aria-disabled si se necesita tooltip"
-    }
-  },
-
-  "estados_de_carga": {
-    "loading": {
-      "visual": "spinner o pulse animation + opacity 0.7 en contenido",
-      "aria": "aria-busy=true"
-    },
-    "skeleton": {
-      "visual": "rectángulos con pulse animation en los huecos del contenido",
-      "transition": "fade-in al cargar el contenido real"
-    }
-  },
-
-  "estados_de_feedback": {
-    "error": {
-      "visual": "border-color: var(--border-error) + mensaje debajo",
-      "animation": "shake para errores de validación inline",
-      "aria": "aria-invalid=true + aria-describedby al mensaje"
-    },
-    "success": {
-      "visual": "border-color: var(--status-success) temporal (2s), luego vuelve a default"
-    }
-  }
-}
-```
-
----
-
-## Modelo OOP — cómo se compone
-
-```
-INTERFAZ Capa {
-  id: CapaUI
-  dependeDe: Array<CapaUI>
-  archivos: Array<String>
-  aplicar(target: HTMLElement): Void
-}
-
-CLASE SistemaUI {
-  capas: Map<CapaUI, Capa>
-  skinEngine: SkinEngine
-
-  aplicarEstructura(root: HTMLElement): Void {
-    // L0→L1→L2→L3→L4→L5→L7→L8→L9 vienen del CSS estático (importados en index.css)
-    // L6 (piel) la aplica skinEngine cuando llega el dato del proyecto
-  }
-}
-
-ENUM ContextoVisual { TRABAJO, MARKETING }
-
-VALUE_OBJECT CaraPiel {
-  variante : 'dark' | 'light'
-  tokens   : Map<String, String>         // overrides semánticos
-  fuentes? : Map<String, String>         // override de familias
-  motion?  : Map<String, String>         // override de duraciones/easings
-  radii?   : Map<String, String>         // override de radii
-}
-
-VALUE_OBJECT PielJSON {
-  id        : String
-  nombre    : String
-  trabajo   : CaraPiel                    // operativa — staff ve esto
-  marketing : CaraPiel | null             // marca — cliente ve esto (puede no existir aún)
-
-  ORIGEN: config del proyecto (project-manager / marca.json / DB)
-  TRANSPORTE: MQTT → core/<project_id>/config/skin
-  CICLO: llega al entrar al proyecto, se limpia al salir
-}
-
-CLASE SkinEngine {
-  defaults        : Map<Variante, Map<Token, Valor>>  // del CSS estático
-  pielProyecto    : PielJSON | null
-  contextoActivo  : ContextoVisual
-  tokensAplicados : Array<String>                      // para limpiar al cambiar
-  bus             : EventBus
-
-  cargar(piel: PielJSON): Void            // guarda ambas caras, aplica la del contexto actual
-  cambiarContexto(ctx: ContextoVisual)    // cambia cara en caliente (al navegar entre rutas)
-  aplicarCara(ctx: ContextoVisual): Void  // overrides en :root de la cara elegida
-  restaurar(): Void                        // limpia inline, CSS estático retoma
-  onSkinMessage(payload: PielJSON)         // suscripción MQTT
-  onRouteChange(ruta: String)              // el router decide el contexto
-}
-```
-
-## Estructura de archivos propuesta
-
-```
-frontend/src/lib/ui-skin/
-├── reset.css                     # L0
-├── tokens/
-│   ├── atomicos.css              # L1 — valores brutos (escalas, paleta neutral)
-│   ├── semanticos.css            # L2 — mapeo a significado (defaults dark)
-│   └── semanticos-light.css      # L2 — defaults light (se activa por data-variant="light")
-├── layout/
-│   ├── Stack.svelte              # L3
-│   ├── Cluster.svelte
-│   ├── Grid.svelte
-│   ├── Sidebar.svelte
-│   ├── Center.svelte
-│   ├── Cover.svelte
-│   └── Frame.svelte
-├── typography.css                # L4
-├── skin-engine.ts                # L6 — MOTOR: recibe PielJSON por MQTT, aplica/restaura
-├── motion.css                    # L7
-├── responsive.css                # L8
-├── states.css                    # L9
-└── index.css                     # importa L0→L1→L2→L4→L7→L8→L9 en orden
-```
-
-```
-NOTA: NO hay carpeta skins/ con archivos CSS por proyecto.
-      Cada proyecto define su piel en su propia config (marca.json o DB).
-      El frontend solo tiene el MOTOR (skin-engine.ts) y los DEFAULTS (semanticos.css).
-```
-
-## Migración desde el estado actual
-
-```
-PLAN:
-  1. Crear ui-skin/ con L0, L1, L2 (extraer los ~21 colores actuales a la escala atómica + defaults semánticos)
-  2. Crear skin-engine.ts (L6 motor) — recibe PielJSON, aplica overrides, restaura
-  3. Refactorizar theme.ts: de setProperty×21 a delegar en skin-engine
-  4. Migrar prisma-skin.ts: de objeto JS hardcoded → PielJSON en la config del proyecto prisma
-  5. Crear layout primitives (L3) como componentes Svelte
-  6. Migrar componentes base (Button, Badge, Card...) a esqueleto+tokens semánticos
-  7. Añadir L7 (motion) y L8 (responsive) como utilidades CSS
-  8. Migrar componentes de dominio gradualmente (comandero, cocina, carta...)
-  9. Cada proyecto existente define su PielJSON en su marca.json o config
-
-RIESGO: los fallbacks hardcoded en ~80 componentes (var(--color-text, #e5e5e5)).
-MITIGACION: se eliminan al migrar cada componente — no se rompe nada mientras tanto
-            porque los nuevos tokens semánticos mapean a los mismos valores.
-
-RIESGO: proyectos sin piel definida.
-MITIGACION: el CSS estático (semanticos.css) es el fallback — funciona sin MQTT,
-            sin proyecto, sin config. El skin-engine solo AÑADE; sin dato, hay default.
-```
-
----
-
 # SUBSISTEMA AUTOSERVICIO — Pedido del cliente por WhatsApp (PWA → bot → cocina)
 
 > **Ingeniería atípica: cada herramienta hace lo que sabe.** WhatsApp da IDENTIDAD veraz (el
@@ -15982,7 +14819,7 @@ PIEZAS {
   modules/whatsapp-bot (1.5.0)                   (webhook Meta REAL + alta por UI + snapshot + #P1 + re-tasado + sendTemplate + _rpc/_iniciarPagoTarjeta/onPedidoPagado)
   modules/whatsapp-bot/services/meta-cloud-client.js (Meta Cloud API: sendText/sendTemplate/_postMessage/parseWebhookEvent)
   modules/whatsapp-bot/services/pedido-parser.js (#P1: _decodificarEstructura + metodo_pago)
-  modules/pizzepos/carta-digital (2.25.0)        (PWA emite #P1 + paridad mitad + nombre obligatorio + botones metodo_pago)
+  modules/pizzepos/carta-digital (2.24.0)        (PWA emite #P1 + paridad mitad + nombre obligatorio + botones metodo_pago)
   modules/pizzepos/pedidos (3.5.0)               (estructura tienda → cocina ; ancla = cliente_nombre ; metodo_pago ; onPagoConfirmado con recreación del huérfano)
   modules/pizzepos/pago-gateway (1.0.0)          (LÍDER provider-agnóstico: Stripe Checkout + webhook firmado + metadata de contexto)
   modules/credential-manager (2.2.0)             (META_WHATSAPP[_VERIFY_TOKEN] + STRIPE en catálogo + PROJECT_ONLY)
@@ -16064,7 +14901,6 @@ TESTS {
   },
   "genera_el_contenido": {
     "carta-digital._publicarBundle": "VIVO — proyecta la carta pública al vuelo, escribe el bundle PWA en la RAÍZ de www/ (la carta ES la home). AUTO-ACTIVA la feature www antes de escribir.",
-    "carta-digital._autoPublicar": "VIVO — RE-HORNEA SOLO. El bundle es estático, así que un cambio de carta sin republicar dejaba la web vieja en silencio; las 5 señales de fuente (carta.actualizada/editada/borrada, contenido.actualizado, marketing.perfil.actualizado) disparan _rehornear con debounce 4s por proyecto. Solo actúa si el proyecto YA publicó (verdad en el DISCO: fs.exists /www/index.html — la primera publicación sigue siendo acto del dueño) y obedece el interruptor opciones_visualizacion.auto_publicar===false. Fallo → warn + métrica + evento cartadigital.republicar.fallido (nunca silencioso).",
     "árbol libre":  "lo que el comerciante suba a www/ (www/catalogo/…) convive al lado y se espeja en la URL"
   },
   "shop_desaparece": "el modelo viejo /<ns>/shop/<slug> (feature 'tienda', bundle rígido) queda LEGACY. Migración runtime: reactivar www + republicar.",
@@ -16099,9 +14935,7 @@ CLASE ProjectManager (ampliación) {
 }
 
 CLASE CartaDigital._publicarBundle(project_id, slugHint) {   // VIVO — el generador
-  guardCrossProject(project_id conocido por el fs)          // fs v2.0.0 resuelve el root por el project_id de la PETICIÓN
-                                                            // (_projectRootFor → projectPaths); solo cae al activo global
-                                                            // si el id es desconocido → eso es lo que se bloquea (412)
+  guardCrossProject(project_id == ultimoActivo)             // fs escribe en el último activado
   data ← proyectarCartaPublica(project_id)                  // al vuelo: carta-manager + marketing + contenido
   ns   ← publicNs()
   base_href ← `/${ns}/${slug}/`                             // (antes /${ns}/shop/${slug}/)
@@ -16138,13 +14972,11 @@ PUBLICAR (desde chat / RPC cartadigital.publicar.request):
 ```
 project.ensure-feature.request → .response   { request_id, status, data }   (auto-activar feature desde otro módulo)
 cartadigital.publicar.request → cartadigital.publicado   { project_id, slug, productos, imagenes }
-cartadigital.publicar.request → (fallo) cartadigital.republicar.fallido   { project_id, status, error, motivo }  (la republicación automática no falla en silencio)
 ```
 
 ## Estado
 
 ```
-✓ VIVO  REPUBLICACIÓN AUTOMÁTICA (carta-digital 2.25.0): el bundle se re-hornea solo al cambiar la carta — el dueño publica UNA vez y la web camina al paso de su carta
 ✓ VIVO  Caddy /a/* estático · symlink por proyecto (project-manager) · www.json · carta-digital publica a www/ raíz · auto-activación (ensure-feature) · URL por defecto /<ns>/<slug>/
 ◑ LEGACY  tienda.json (/<ns>/shop/<slug>) — proyectos vivos migran reactivando www + republicando
 ◑ RUNTIME  activar www en proyectos vivos + migrar los de tienda (no código)
@@ -16154,11 +14986,7 @@ cartadigital.publicar.request → (fallo) cartadigital.republicar.fallido   { pr
   NAMESPACE prisma/ bajo www → NO colisiona con carta-digital (raíz www/index.html): carta-digital sirve
   /<ns>/<slug>/, el escaparate prisma /<ns>/<slug>/prisma/. El mismo symlink www cubre todo el árbol.
   Render de bundle verificable en vivo. [ ] assets/PWA (sw.js, manifest, icons) = follow-up.
-VERSIONES  project-manager 4.2.0 · carta-digital 2.25.0 · bienvenida-tienda 1.1.0
-✓ VIVO  PAGO EN LA CARTA PUBLICADA (2026-10-16): el bundle de carta-digital que sirve este árbol
-  trae los botones de método de pago (💶 efectivo / 💳 tarjeta) SOLO si el proyecto tiene pasarela
-  (CONFIG.pago_online); el método viaja en el #P1 y el bot/pasarela cierran el cobro. Sin pasarela
-  el bundle es idéntico al de siempre (paga al recoger).
+VERSIONES  project-manager 4.2.0 · carta-digital 2.23.0 · bienvenida-tienda 1.1.0
 ```
 
 ---
@@ -16480,26 +15308,22 @@ interruptores 1.2.0  subscribe interruptor.set→onSetRequest (canal del efector
 TESTS   homeostasis__bucle 10
 ```
 
-## VERIFICADOR-VISUAL — modules/verificador-visual (1.4.0) — los OJOS (freno de render)
+## VERIFICADOR-VISUAL — modules/verificador-visual (1.2.0) — los OJOS (freno de render)
 
 ```
 ÓRGANO  MOTOR+EVENTO sin memoria (tipo provider). Cierra el lazo que el freno estructural deja abierto.
 CEREBRO _evaluarSnapshot (PURO): errores_consola/js · overflow_horizontal · pagina_en_blanco · imagenes_rotas
-OJOS    _render → _abrirNavegador: SÓLO obscura (navegador Rust, V8, SIN Chromium, stealth) por CDP
+OJOS    _render → _abrirNavegador: PREFIERE obscura (navegador Rust, V8, SIN Chromium, stealth) por CDP
         (puppeteer.connect ws://127.0.0.1:9222/devtools/browser; server COMPARTIDO → disconnect, no close).
-        El fallback a Chromium se RETIRÓ (1.3.0) — Enki no arrastra Chromium. Config obscura_url · env
-        VERIFICADOR_OBSCURA_URL · despliegue: obscura por vps-setup (prebuilt → Docker), systemd obscura.service.
-CARGA   about:blank (goto domcontentloaded) + document.write(html) + 300 ms de asentamiento — NO setContent:
-        (1.4.0) obscura no implementa Page.setDocumentContent ni emite los eventos que setContent espera, así que
-        setContent moría SIEMPRE en el timeout de 15 s → render_error → 422 de carta-digital = carta sin publicar
-        y sin republicar (fallo de los ojos, no del diseño; mismo veredicto, 0.2-0.3 s por verificación).
-DEGRADA sin navegador (obscura apagada o sin responder) → SIN_OJOS → {ok:true, verificado:false} (fail-open + testigo).
+        Sin obscura → cae honesto a Chromium local (puppeteer.launch). Despliegue: obscura por vps-setup
+        (binario prebuilt → Docker), systemd obscura.service. Config obscura_url · env VERIFICADOR_OBSCURA_URL.
+DEGRADA sin navegador (ni obscura ni Chromium) → SIN_OJOS → {ok:true, verificado:false} (fail-open + testigo).
 RPC     render.verificar.request {html,etiqueta?} → {ok,verificado,motivos[],metricas}
 TESTIGO render.verificado / verificacion-visual.failed (.failed → lo siente la homeostasis)
 FRENO DURO (best-effort: 422 solo si verificado&&!ok)
-        carta-design.save                tras estructural → _checkRender → 422 no guarda
-        carta-digital._publicarBundle    genera HTML → render → 422 no publica
-TESTS   verificador-visual__render 12 (incl. navegador real: obscura) · verificador-visual__multiangulo · carta-design__freno-render 5
+        carta-design.save (3.3.0)        tras estructural → _checkRender → 422 no guarda
+        carta-digital._publicarBundle (2.19.0) genera HTML → render → 422 no publica
+TESTS   verificador-visual__render 12 (incl. navegador real: obscura si está, Chromium si no) · carta-design__freno-render 5
 ```
 
 ## RUMBO
@@ -17816,7 +16640,7 @@ ESTADO ✓ VERIFICADO EN VIVO (Regalos, 3 conversaciones): crear_lista ESCRIBE �
 
 ---
 
-# CÚPULA DE AGENTES — la flota es una BIBLIOTECA buscable (ai-agent-framework-v3 · vivo 2026-08-07)
+# CÚPULA DE AGENTES — la flota es una BIBLIOTECA buscable (ai-agent-framework 2.2.0 · vivo 2026-07-31)
 
 > Tercera sustancia del patrón cúpula (lentes=conocimiento · cantera=skills · **agentes=trabajadores
 > en contexto aislado**). El framework NO cambia de motor —sigue cargando de `agents/*.json` y corriendo
@@ -18987,113 +17811,6 @@ ESTADO ✓ bancos puros del dominio + tests. ◑ follow-up: obra-manager (custod
 DECISIÓN meta-frame (pipeline genérico parametrizado por tema) = se extrae cuando la duplicación comercio↔construcción
          DUELA, no antes. Hoy: reusar los bancos _shared, crecer al lado (no refactorizar el comercio que funciona).
 ```
-
----
-
-# IMPRESIÓN-3D — cola de trabajo del taller (SPARKX i7 · PETG)
-
-> Taller personal de impresión 3D (uso propio, no venta). Objetivo: **mantener la máquina ocupada**.
-> El sistema es una cola de modelos con prioridad que propone el siguiente trabajo al liberarse la
-> máquina, con puentes a OpenSCAD (diseño paramétrico) y a la web (descubrimiento de modelos).
-> Aterrizaje del diseño OOP puro (`esquemas/diseno-oop.md`) sobre el runtime de Enki, según el plan
-> `esquemas/plan-construccion.md` (7 pasos, todos completados).
-
-## El ciclo (event-driven, desacoplado)
-
-```
-libre → propuesta → aprobación → imprimiendo → impreso → libre
-   ↑                                                      │
-   └────────────────── maquina.liberada ──────────────────┘
-```
-
-- **`cola_modelos`** — CRIPTA (CustodioModelos, aggregate root). Único escritor de
-  `/impresion-3d/cola/modelos.json`. RPCs: `agregar`, `obtener_por_prioridad`,
-  `actualizar_estado`, `listar`. Invariantes: id único, singleton `imprimiendo`,
-  transiciones legales con freno, estado inicial `pendiente`. Persistencia fs tmp+rename.
-- **`motor_propuesta`** — REFLEJO PURO (sin store, sin E/S). `proponer_siguiente(cola)`
-  filtra `pendiente`, ordena por prioridad desc → fecha_alta asc (ReglaPrioridadPorDefecto,
-  Strategy por config). Cero juicio: no aprueba ni desaprueba.
-- **`orquestador_cola`** — HÍBRIDO. `al_liberarse` + `al_terminar_impresion`. Reflejo compone
-  cola_modelos + motor_propuesta (transiciones legales, reversión de fallo, `ociosa()` explícita);
-  blueprint presenta candidato y decide aprobar/rechazar (LLM de página, SIN agente).
-- **`disenador_parametrico`** — REFLEJO + PUENTE a skill openscad-mcp. `generar_stl`,
-  `estimar_tiempo` (alimenta `Modelo.tiempo_estimado`).
-- **`buscador_www`** — REFLEJO + PUENTE a fuentes web. `buscar_por_necesidad` → `Lista<Candidato>`
-  (DTO de entrada; solo pasa a Modelo vía `cola_modelos.agregar`). Candidatos vacíos no rompen el ciclo.
-- **`cupula_stl`** — CRIPTA (PASO 6). Custodia el STL/3MF UNIVERSAL (el MODELO 3D, una vez por pieza,
-  sirve para CUALQUIER máquina). Single-writer de `/impresion-3d/stl/`. RPCs: `registrar`, `obtener`, `listar`.
-- **`cupula_gcode`** — CRIPTA (PASO 7). Custodia el gcode POR MÁQUINA (la RECETA de UNA máquina, firmada
-  y cacheada). A diferencia del STL, lleva `maquina` + hash/firma. Single-writer de `/impresion-3d/gcode/`.
-  RPCs: `registrar`, `obtener_por_maquina`, `listar`.
-- **`puente_creality`** — HÍBRIDO (PASO 8). Frontera con el PC del dueño (CrealityPrint V7.2.1).
-  Orquesta slice STL→gcode, sube el gcode, arranca y monitorea la impresión. La detección de `complete`
-  es por EVENTO (no polling): al terminar emite `maquina.liberada` para que el orquestador encadene.
-- **`estimador_tiempo`** — REFLEJO PURO (PASO 9). Estima minutos por volumen/altura/material/velocidad,
-  determinista, sin E/S. Alimenta `Modelo.tiempo_estimado`. Su PROPÓSITO es la PRESENCIA: el motor de
-  propuesta usa `tiempo_estimado` + horarios en casa para decidir si la impresión termina con alguien.
-- **`horarios_casa`** — CRIPTA (PASO 10). Ventanas de impresión POR PERSONA (4 perfiles en casa, cada uno
-  con su ritmo). El orquestador consulta `ventana_activa` antes de proponer/arrancar: solo imprime dentro
-  de la ventana de quien pidió la pieza (PRESENCIA). RPCs: `configurar_horario`, `obtener_horario`,
-  `listar_horarios`, `ventana_activa`. `motor_propuesta` v0.2.0 integra `ReglaPrioridadConPresencia`.
-
-## Contrato de bus (request/response)
-
-```
-core/<core_id>/api/request/<dominio>/<accion> → core/<core_id>/api/response/<correlation_id>
-```
-
-| RPC | Respuesta |
-|---|---|
-| `cola_modelos.agregar` | 201 `{id}` · 409 `ID_YA_EXISTE` · 422 `INVARIANTE_ROTA` |
-| `cola_modelos.obtener_por_prioridad` | 200 `{pendientes:[Modelo...]}` (mayor→menor prioridad) |
-| `cola_modelos.actualizar_estado` | 200 `{modelo}` · 409 `TRANSICION_INVALIDA` · 404 `NO_EXISTE` |
-| `cola_modelos.listar` | 200 `{modelos:[Modelo...]}` |
-| `motor_propuesta.proponer_siguiente` | 200 `{propuesta:Modelo}` · 200 `{propuesta:null, causa:'cola_vacia'}` |
-| `orquestador_cola.al_liberarse` | 200 `{ocupacion:'imprimiendo', modelo}` · 200 `{ocupacion:'ociosa', causa}` |
-| `orquestador_cola.al_terminar_impresion` | 200 `{ocupacion:'imprimiendo'\|'ociosa', modelo?}` |
-| `disenador_parametrico.generar_stl` | 200 `{archivo}` · 422 `PARAMETROS_INVALIDOS` |
-| `disenador_parametrico.estimar_tiempo` | 200 `{minutos}` |
-| `buscador_www.buscar_por_necesidad` | 200 `{candidatos:[Candidato...]}` |
-
-Eventos de dominio (fire-and-forget, CREATE-ONLY):
-`cola.modelo.entra` · `cola.modelo.estado.cambia` · `cola.propuesta.siguiente` ·
-`maquina.liberada` (dispara `al_liberarse`) · `cola.ociosa` (señal explícita, nunca silencio).
-
-## Invariantes clave (gate de la cúpula de eventos)
-
-1. **Cola vacía** → `proponer_siguiente([])` = Ausente; `alLiberarse()` = `ociosa()` con causa. Nunca silencio.
-2. **Empate** → desempata por `fecha_alta` asc. Determinista.
-3. **`imprimiendo` nunca se propone** — filtrado por `estado.puedeSerPropuesto()`.
-4. **Transición inválida sin mutar** — `pendiente→impreso` directo = 409, store intacto. `impreso` es foco absorbente.
-5. **Aprobación rechazada** → marca hueco + reintenta `al_liberarse()` con el siguiente.
-6. **Fallo al arrancar** → revierte a `pendiente` y reintenta, sin perder trabajo.
-7. **`tiempo_estimado`/prioridad sugerida son sugerencias** — solo se convierten en Modelo vía `agregar` (fuerza `pendiente`, prioridad `>=0`).
-8. **Singleton `imprimiendo`** — un solo trabajo a la vez (segundo = 409).
-9. **El motor es cálculo puro, cero juicio** — no muta nada.
-10. **El custodio es dueño único del store** — nadie más escribe `modelos.json`.
-11. **Ciclo cerrado con respuesta** — todo camino termina en response u evento.
-
-## Frontend
-
-`cola-impresion` (work-bar + panel): store `cola-impresion.ts` + módulo lazy
-(manifest + index + `ColaImpresionPanel.svelte`) que consume los 5 módulos por MQTT.
-`orquestador-impresion` (work-bar + panel): `OrquestadorPanel.svelte` consume el
-orquestador — encadena el ciclo, propone siguiente, y muestra la **ociosidad explícita
-con causa** (`cola.ociosa` → `ociosa · <causa>`, nunca silencio). El store suscribe
-`cola.ociosa`, `cola.propuesta.siguiente` y `cola.propuesta.rechazada` además de los
-eventos de `cola_modelos`.
-Compilado en el bundle de producción (chunk `DPsf4Io_.js`).
-
-## Estado
-
-✓ 5 módulos backend construidos, cargados y verificados en runtime (FASE 4).
-✓ Frontend `cola-impresion` construido, typecheck limpio, build de producción generado (FASE 7).
-✓ Cola sembrada con el set ShelfFUXX 16mm (conector-90, conector-T, conector-recto, tapon) en PETG.
-✓ Ciclo completo probado: agregar → proponer → imprimiendo → impreso → encadena.
-✓ Sin rpc_fantasma de los 5 módulos (el único fantasma del bus es `recetas.actualizar_precio.request`, ajeno).
-✓ Reglas de negocio afinadas con el dueño (PASO 7): aprobación auto-aprueba lo ya impreso y consulta lo nuevo (orquestador `ya_impreso`); prioridad por número (mayor primero, piezas estructurales altas); fuentes por defecto printables+thingiverse primero (buscador_www).
-✓ PASOS 6-10 completados: `cupula_stl` (modelo universal), `cupula_gcode` (receta por máquina), `puente_creality` (frontera CrealityPrint, complete por evento), `estimador_tiempo` (minutos deterministas), `horarios_casa` (ventanas por persona, PRESENCIA). `motor_propuesta` v0.2.0 con `ReglaPrioridadConPresencia`.
-✓ `horarios_casa` desplegado y en vivo (135 módulos, presente con module.json + index.js).
 
 ---
 

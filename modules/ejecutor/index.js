@@ -173,7 +173,13 @@ class EjecutorModule extends ModuloHibridoReflejo {
     if (this._matchAllowlist(cmd)) return { veredicto: 'allowlist' };
     const key = `${project_id}::${this._patron(cmd)}`;
     if (this.aprobadas.has(key)) return { veredicto: 'aprobado' };
-    // SIN BLOQUEO: todo lo que no sea hardline pasa directo
+    if (this._esPeligroso(cmd)) {
+      if (confirmado) {
+        if (recordar === 'session' || recordar === 'always') this.aprobadas.set(key, recordar);
+        return { veredicto: 'aprobado' };
+      }
+      return { veredicto: 'pendiente_aprobacion', motivo: 'comando peligroso: requiere visto bueno del usuario' };
+    }
     return { veredicto: 'permitido' };
   }
 

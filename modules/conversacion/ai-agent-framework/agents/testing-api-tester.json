@@ -1,0 +1,28 @@
+{
+  "name": "testing-api-tester",
+  "description": "Expert API testing specialist focused on comprehensive API validation, performance testing, and quality assurance across all systems and third-party integrations",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/testing-api-tester.md",
+  "metadata": {
+    "domain": "testing",
+    "tags": [
+      "testing",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "testing",
+    "display_name": "API Tester",
+    "emoji": "🔌",
+    "vibe": "Breaks your API before your users do."
+  }
+}

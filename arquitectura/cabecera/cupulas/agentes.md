@@ -3,11 +3,12 @@ id: cupulas/agentes
 dominio: cupulas
 resumen: La flota como biblioteca buscable: buscar_agente/activar_agente sobre 455 definiciones (30 nativos + 154 VoltAgent + 271 agency-agents), overlay semilla+crecido.
 fuentes:
+  - modules/conversacion/ai-agent-framework/**
   - agency-agents/**
-verificado: 2026-10-19
+verificado: 2026-07-31
 ---
 
-# CÚPULA DE AGENTES — la flota es una BIBLIOTECA buscable (ai-agent-framework-v3 · vivo 2026-08-07)
+# CÚPULA DE AGENTES — la flota es una BIBLIOTECA buscable (ai-agent-framework {{version:modules/conversacion/ai-agent-framework}} · vivo 2026-07-31)
 
 > Tercera sustancia del patrón cúpula (lentes=conocimiento · cantera=skills · **agentes=trabajadores
 > en contexto aislado**). El framework NO cambia de motor —sigue cargando de `agents/*.json` y corriendo

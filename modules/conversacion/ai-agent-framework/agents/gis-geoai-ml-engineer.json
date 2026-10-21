@@ -1,0 +1,28 @@
+{
+  "name": "gis-geoai-ml-engineer",
+  "description": "Geospatial machine learning specialist who builds models for feature extraction, object detection, image segmentation, and land cover classification from satellite and aerial imagery.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/gis-geoai-ml-engineer.md",
+  "metadata": {
+    "domain": "gis",
+    "tags": [
+      "gis",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "gis",
+    "display_name": "GeoAI/ML Engineer",
+    "emoji": "🤖",
+    "vibe": "Teaching machines to see the Earth — one pixel at a time."
+  }
+}

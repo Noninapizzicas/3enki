@@ -1,0 +1,28 @@
+{
+  "name": "testing-performance-benchmarker",
+  "description": "Expert performance testing and optimization specialist focused on measuring, analyzing, and improving system performance across all applications and infrastructure",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/testing-performance-benchmarker.md",
+  "metadata": {
+    "domain": "testing",
+    "tags": [
+      "testing",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "testing",
+    "display_name": "Performance Benchmarker",
+    "emoji": "⏱️",
+    "vibe": "Measures everything, optimizes what matters, and proves the improvement."
+  }
+}

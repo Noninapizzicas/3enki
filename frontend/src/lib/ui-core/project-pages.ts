@@ -15,10 +15,6 @@ export interface PageDef {
   id: string;
   icon: string;
   label: string;
-  // false = página NO navegable (panel de work-bar, sin ruta propia): el rail
-  // lateral (PageNavStrip) la omite. El page-set la declara para gatear la
-  // work-bar, pero no hay /<proyecto>/<id> que visitar.
-  nav?: boolean;
 }
 
 /** Catálogo de páginas conocidas: id → icono + etiqueta. El page-set del proyecto indexa aquí. */
@@ -39,31 +35,9 @@ export const PAGE_CATALOG: Record<string, PageDef> = {
   catalogo:         { id: 'catalogo',         icon: '🔷',  label: 'Catálogo' },
   pos:              { id: 'pos',              icon: '🧾',  label: 'POS' },
   escaparate:       { id: 'escaparate',       icon: '🪟',  label: 'Escaparate' },
-  agenda:           { id: 'agenda',           icon: '📅',  label: 'Agenda' },
-  // — buscador de nichos (radar): visible SOLO si el proyecto declara 'interfaz' en su page-set —
-  // nav:false → el rail lateral NO la pinta (no hay ruta /<proyecto>/interfaz); el botón
-  // vive en la work-bar (manifest zone work-bar + loader en panels.ts), que abre el panel.
-  interfaz:         { id: 'interfaz',         icon: '📡',  label: 'Radar de nichos', nav: false },
-  // — F6½/F7 (The Pirate — prisma): paneles generados del blueprint. nav:false → el rail
-  // lateral no los pinta (sin ruta /<proyecto>/<id>); el page-set los gatea en la work-bar
-  // (masa/lotes/mise-en-place) y el chat-tools (producir, que además exige loader en panels.ts).
-  masa:             { id: 'masa',             icon: '🍞',  label: 'Masa', nav: false },
-  lotes:            { id: 'lotes',            icon: '🧊',  label: 'Lotes', nav: false },
-  'mise-en-place':  { id: 'mise-en-place',    icon: '🥘',  label: 'Mise en Place', nav: false },
-  producir:         { id: 'producir',         icon: '🏭',  label: 'Producir', nav: false },
-  pedidos:          { id: 'pedidos',          icon: '📋',  label: 'Pedidos', nav: false },
-  variaciones:      { id: 'variaciones',      icon: '🔧',  label: 'Variaciones', nav: false },
-  productos:        { id: 'productos',        icon: '🍕',  label: 'Productos', nav: false },
-  // — Proyecto 3D (vertical impresión) — F7: paneles de interfaz (construir-interfaz).
-  // nav:false → el rail lateral no los pinta (sin ruta /<proyecto>/<id>); el page-set
-  // los gatea en la work-bar (catalogo/panel-trabajador/panel-jefe) y el chat-tools
-  // (importacion/buscador-repositorios, que además exigen loader en panels.ts).
-  // NOTA: 'catalogo' ya existe más arriba (id 'catalogo'); se comparte entre prisma y 3d.
-  'panel-trabajador':{ id: 'panel-trabajador', icon: '🔧',  label: 'Panel del trabajador', nav: false },
-  'panel-jefe':     { id: 'panel-jefe',       icon: '🗂',  label: 'Panel del jefe', nav: false },
-  importacion:      { id: 'importacion',      icon: '📥',  label: 'Importación', nav: false },
-  'buscador-repositorios': { id: 'buscador-repositorios', icon: '🔎',  label: 'Buscar modelos', nav: false }
+  agenda:           { id: 'agenda',           icon: '📅',  label: 'Agenda' }
 };
+
 /** Semilla por tipo: lo que un proyecto trae al nacer, antes de que crezca en runtime. */
 const SEED_BY_TYPE: Record<string, string[]> = {
   pizzepos: [

@@ -1,7 +1,7 @@
 {
   "_doc": "crawl4rs — el ÓRGANO WEB de Enki, NATIVO sobre OBSCURA (navegador headless en Rust, V8, sin Chromium, stealth; corre en :9222). CENTRALIZADO en Enki: se retiró el contenedor D-os (Chromium) y el wrapper Playwright; este módulo conduce obscura por CDP con puppeteer-core (mismo patrón que verificador-visual). Reparto de las 7 puertas: leer/rastrear/mapear → obscura (render+extracción); entrar/abrir (login) → obscura (cookies/localStorage = storageState); buscar → SearXNG directo (HTTP); descargar → fetch binario plano. NACE OFF (interruptor 'crawl4rs', grupo sistema): el botón aquí protege el EGRESS a la web (excepción sin-botón). DEGRADA HONESTO: OFF → 503 apagado; obscura no responde → 503 sin_navegador; SearXNG caído → 503 sin_busqueda; nunca finge. Seams del navegador (_render/_ejecutarLogin/_buscarSearx/_fetchBinario) aislados y overridables → la lógica es pura y testeable. Config: obscura_url (default ws://127.0.0.1:9222/devtools/browser), searxng_url (default http://localhost:8080), timeout_ms.",
   "name": "crawl4rs",
-  "version": "0.6.0",
+  "version": "0.5.0",
   "_v0_5_0_nota": "v0.5.0: CENTRALIZADO EN ENKI SOBRE OBSCURA. El motor dejó de vivir en el repo D-os (Docker + Chromium + wrapper Playwright): ahora todo lo conduce obscura (navegador Rust nativo, ya en Enki) por CDP con puppeteer-core. Muere el contenedor enki-crawl4rs y su Chromium. leer/rastrear/mapear rendean en obscura (markdown readability-lite EN la página, extracción de enlaces, extract_css); rastrear hace BFS con dedup + tope; entrar/abrir capturan y reinyectan storageState (cookies+localStorage) y interceptan el JSON de la API interna (page.on('response')); buscar va directo a SearXNG (JSON API). descargar sigue siendo fetch plano. Contrato bus IDÉNTICO (drop-in): mismos eventos, mismas formas de salida, mismas tools. Motivos de degradación nuevos: sin_navegador (obscura), sin_busqueda (SearXNG) — se van 'sin_servicio'/'auth_rechazada'/'sin_marcha_larga' (no hay D-os ni JWT ni wrapper). Verificación en vivo pendiente (obscura no corre en el entorno de tests, como verificador-visual); la lógica va 23/23. Tests: crawl4rs__index (15), crawl4rs__marcha-larga (8).",
   "_v0_4_0_nota": "v0.4.0: nace la MARCHA LARGA en el bus — login→sesión, la puerta que faltaba para páginas con contraseña. Reflejos crawl4rs.entrar (POST wrapper /login {url,pasos} → captura storageState → devuelve un sesion_id handle) y crawl4rs.abrir (POST wrapper /abrir {url,sesion,interactuar?,interceptar?} reusando la sesión). El wrapper Playwright es OTRO servicio (CRAWL4RS_PLAYWRIGHT_URL, default :8100), NO el axum :8081 (cuyo /crawl no conserva sesión): por eso un puente aparte y motivo de degradación 'sin_marcha_larga'. El storageState (cookies+localStorage = SECRETO) se guarda server-side en el módulo (TTL 30 min); el LLM solo maneja el sesion_id, nunca la sesión cruda. Tools de chat entrar_web + abrir_web. interceptar captura el JSON de la API interna (la jugada de precios en portales B2B). Honestidad heredada del motor: el wrapper nunca inventa (responde {fallo}); el stealth NO promete pasar DataDome/Turnstile. Motor: D-os bridge/playwright-wrapper (mergeado en main). Test: crawl4rs__marcha-larga.",
   "_v0_3_0_nota": "v0.3.0: nace crawl4rs.descargar (tool de chat descargar_web) — el eslabón url→bytes que faltaba. GET binario directo de un asset público (imagen/pdf) → {base64, content_type, ext, bytes}, acotado por max_descarga_bytes (10 MB). Cierra el hueco visto en vivo: el LLM tenía la url de la imagen pero su único url→bytes era el ejecutor+curl (gated), y se atascaba. Ahora encadena leer_web (halla la url) → descargar_web (trae los bytes) → contenido.add_imagen (persiste). Se expone descargar_web como tool global del ai-gateway (transversal, como leer_web).",
@@ -16,94 +16,25 @@
   "horizonte": "TODO el acceso web del bus — leer/buscar/mapear/rastrear. Modo auto: fetch HTTP ligero primero, navegador real + stealth cuando la página lo exige (Cloudflare, JS pesado)",
   "dependencies": [],
   "subscribes": [
-    {
-      "event": "crawl4rs.leer.request",
-      "handler": "onLeerRequest",
-      "description": "Reflejo: lee una URL → obscura (render) → markdown limpio + enlaces + extracción. Degrada 503 si OFF/obscura caída."
-    },
-    {
-      "event": "crawl4rs.rastrear.request",
-      "handler": "onRastrearRequest",
-      "description": "Reflejo: crawl profundo BFS {url, max_depth?, max_pages?, cross_domain?} → obscura por página (dedup + tope) → páginas con markdown + extracción."
-    },
-    {
-      "event": "crawl4rs.buscar.request",
-      "handler": "onBuscarRequest",
-      "description": "Reflejo: búsqueda web {query, limit?} → SearXNG directo (JSON API) → {resultados:[{titulo,url,resumen}], total}. 503 sin_busqueda si SearXNG no responde."
-    },
-    {
-      "event": "crawl4rs.sugerencias.request",
-      "handler": "onSugerenciasRequest",
-      "description": "EL ALTO: sugerencias de autocompletado para una query (la intención real que la gente teclea). Payload: {request_id, query, backend?:'google'|'searxng'}. Escalera: autocompleter SearXNG → Google directo (una llamada exterior). Response: {status, data:{sugerencias:[], fuente}} | degradación honesta si apagado. Lo consume el cosechador-alto del vertical NICHOS."
-    },
-    {
-      "event": "crawl4rs.mapear.request",
-      "handler": "onMapearRequest",
-      "description": "Reflejo: enlaces de una página {url} → obscura (solo enlaces) → {url, enlaces, total}. Ligero, sin contenido."
-    },
-    {
-      "event": "crawl4rs.descargar.request",
-      "handler": "onDescargarRequest",
-      "description": "Reflejo: descarga un recurso {url} (imagen/pdf/asset) → {base64, content_type, ext, bytes}. GET binario directo (fetch plano), acotado por tamaño. El eslabón url→bytes entre leer_web y contenido.add_imagen."
-    },
-    {
-      "event": "crawl4rs.entrar.request",
-      "handler": "onEntrarRequest",
-      "description": "MARCHA LARGA: login → sesión. {url, pasos:[{tipo:fill|click|wait|scroll|press, selector?, valor?, ms?}], stealth?, emular?} → obscura ejecuta el guion → captura el storageState (cookies+localStorage) → { sesion_id, final_url, expira_en_ms }. El sesion_id es un handle; el storageState (secreto) se queda server-side. 503 sin_navegador si obscura no está."
-    },
-    {
-      "event": "crawl4rs.abrir.request",
-      "handler": "onAbrirRequest",
-      "description": "MARCHA LARGA: abre una URL YA autenticado reusando la sesión. {url, sesion_id, interactuar?, interceptar?, stealth?, emular?} → obscura reinyecta el storageState → { html, final_url, status_http, intercepted }. interceptar captura el JSON de la API interna (precios) por page.on('response'). 409 SESION_DESCONOCIDA si el sesion_id caducó (vuelve a entrar)."
-    },
-    {
-      "event": "interruptor.cambiado",
-      "handler": "onInterruptorCambiado",
-      "description": "Enciende/apaga el puente en caliente (id 'crawl4rs'). OFF → todo degrada 503."
-    },
-    {
-      "event": "interruptor.solicitar_registro",
-      "handler": "onSolicitarRegistro",
-      "description": "Re-registra su botón (cura la carrera de arranque del panel)."
-    }
+    { "event": "crawl4rs.leer.request", "handler": "onLeerRequest", "description": "Reflejo: lee una URL → obscura (render) → markdown limpio + enlaces + extracción. Degrada 503 si OFF/obscura caída." },
+    { "event": "crawl4rs.rastrear.request", "handler": "onRastrearRequest", "description": "Reflejo: crawl profundo BFS {url, max_depth?, max_pages?, cross_domain?} → obscura por página (dedup + tope) → páginas con markdown + extracción." },
+    { "event": "crawl4rs.buscar.request", "handler": "onBuscarRequest", "description": "Reflejo: búsqueda web {query, limit?} → SearXNG directo (JSON API) → {resultados:[{titulo,url,resumen}], total}. 503 sin_busqueda si SearXNG no responde." },
+    { "event": "crawl4rs.mapear.request", "handler": "onMapearRequest", "description": "Reflejo: enlaces de una página {url} → obscura (solo enlaces) → {url, enlaces, total}. Ligero, sin contenido." },
+    { "event": "crawl4rs.descargar.request", "handler": "onDescargarRequest", "description": "Reflejo: descarga un recurso {url} (imagen/pdf/asset) → {base64, content_type, ext, bytes}. GET binario directo (fetch plano), acotado por tamaño. El eslabón url→bytes entre leer_web y contenido.add_imagen." },
+    { "event": "crawl4rs.entrar.request", "handler": "onEntrarRequest", "description": "MARCHA LARGA: login → sesión. {url, pasos:[{tipo:fill|click|wait|scroll|press, selector?, valor?, ms?}], stealth?, emular?} → obscura ejecuta el guion → captura el storageState (cookies+localStorage) → { sesion_id, final_url, expira_en_ms }. El sesion_id es un handle; el storageState (secreto) se queda server-side. 503 sin_navegador si obscura no está." },
+    { "event": "crawl4rs.abrir.request", "handler": "onAbrirRequest", "description": "MARCHA LARGA: abre una URL YA autenticado reusando la sesión. {url, sesion_id, interactuar?, interceptar?, stealth?, emular?} → obscura reinyecta el storageState → { html, final_url, status_http, intercepted }. interceptar captura el JSON de la API interna (precios) por page.on('response'). 409 SESION_DESCONOCIDA si el sesion_id caducó (vuelve a entrar)." },
+    { "event": "interruptor.cambiado", "handler": "onInterruptorCambiado", "description": "Enciende/apaga el puente en caliente (id 'crawl4rs'). OFF → todo degrada 503." },
+    { "event": "interruptor.solicitar_registro", "handler": "onSolicitarRegistro", "description": "Re-registra su botón (cura la carrera de arranque del panel)." }
   ],
   "publishes": [
-    {
-      "event": "crawl4rs.leer.response",
-      "description": "{ markdown, extraido, paginas:[{url, markdown, extraido}], total } o 503 degradado."
-    },
-    {
-      "event": "crawl4rs.rastrear.response",
-      "description": "Igual que leer pero con N páginas del crawl profundo."
-    },
-    {
-      "event": "crawl4rs.buscar.response",
-      "description": "{ resultados:[{titulo,url,resumen}], total } o error con la prescripción del servidor en message."
-    },
-    {
-      "event": "crawl4rs.mapear.response",
-      "description": "{ url, enlaces:[...], total } o 503 degradado."
-    },
-    {
-      "event": "crawl4rs.descargar.response",
-      "description": "{ url, content_type, ext, bytes, base64 } o error (413 demasiado grande, 5xx upstream, 503 degradado)."
-    },
-    {
-      "event": "crawl4rs.entrar.response",
-      "description": "{ sesion_id, final_url, expira_en_ms } o error (LOGIN_FALLIDO 502/504, 503 sin_navegador). NUNCA devuelve el storageState (secreto)."
-    },
-    {
-      "event": "crawl4rs.abrir.response",
-      "description": "{ html, final_url, status_http, intercepted:[{url,status,json}] } o error (409 SESION_DESCONOCIDA, 503 sin_navegador)."
-    },
-    {
-      "event": "interruptor.registrar",
-      "description": "Registra el botón 'crawl4rs' (grupo sistema, OFF por defecto)."
-    },
-    {
-      "event": "crawl4rs.sugerencias.response",
-      "description": "Response correlada por request_id. Payload: {status, data:{sugerencias:[string], fuente:'searxng'|'google'|'ninguno'}} | {status, error}."
-    }
+    { "event": "crawl4rs.leer.response", "description": "{ markdown, extraido, paginas:[{url, markdown, extraido}], total } o 503 degradado." },
+    { "event": "crawl4rs.rastrear.response", "description": "Igual que leer pero con N páginas del crawl profundo." },
+    { "event": "crawl4rs.buscar.response", "description": "{ resultados:[{titulo,url,resumen}], total } o error con la prescripción del servidor en message." },
+    { "event": "crawl4rs.mapear.response", "description": "{ url, enlaces:[...], total } o 503 degradado." },
+    { "event": "crawl4rs.descargar.response", "description": "{ url, content_type, ext, bytes, base64 } o error (413 demasiado grande, 5xx upstream, 503 degradado)." },
+    { "event": "crawl4rs.entrar.response", "description": "{ sesion_id, final_url, expira_en_ms } o error (LOGIN_FALLIDO 502/504, 503 sin_navegador). NUNCA devuelve el storageState (secreto)." },
+    { "event": "crawl4rs.abrir.response", "description": "{ html, final_url, status_http, intercepted:[{url,status,json}] } o error (409 SESION_DESCONOCIDA, 503 sin_navegador)." },
+    { "event": "interruptor.registrar", "description": "Registra el botón 'crawl4rs' (grupo sistema, OFF por defecto)." }
   ],
   "tools": [
     {
@@ -113,27 +44,13 @@
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "query": {
-            "type": "string",
-            "minLength": 1,
-            "description": "La consulta de búsqueda."
-          },
-          "limit": {
-            "type": "number",
-            "description": "Cuántos resultados devolver (default 10)."
-          }
+          "query": { "type": "string", "minLength": 1, "description": "La consulta de búsqueda." },
+          "limit": { "type": "number", "description": "Cuántos resultados devolver (default 10)." }
         },
-        "required": [
-          "query"
-        ]
+        "required": ["query"]
       },
       "handler": "handleBuscarTool",
-      "errores_conocidos": [
-        "INVALID_INPUT",
-        "UPSTREAM_UNREACHABLE",
-        "UPSTREAM_TIMEOUT",
-        "UPSTREAM_INVALID_RESPONSE"
-      ]
+      "errores_conocidos": ["INVALID_INPUT", "UPSTREAM_UNREACHABLE", "UPSTREAM_TIMEOUT", "UPSTREAM_INVALID_RESPONSE"]
     },
     {
       "name": "leer_web",
@@ -142,31 +59,14 @@
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "url": {
-            "type": "string",
-            "minLength": 1,
-            "description": "URL absoluta de la página a leer."
-          },
-          "query": {
-            "type": "string",
-            "description": "Opcional: consulta para filtrar el contenido por relevancia (BM25)."
-          },
-          "extract_semantic": {
-            "type": "boolean",
-            "description": "Opcional: extraer el contenido principal por densidad semántica."
-          }
+          "url": { "type": "string", "minLength": 1, "description": "URL absoluta de la página a leer." },
+          "query": { "type": "string", "description": "Opcional: consulta para filtrar el contenido por relevancia (BM25)." },
+          "extract_semantic": { "type": "boolean", "description": "Opcional: extraer el contenido principal por densidad semántica." }
         },
-        "required": [
-          "url"
-        ]
+        "required": ["url"]
       },
       "handler": "handleLeerTool",
-      "errores_conocidos": [
-        "INVALID_INPUT",
-        "UPSTREAM_UNREACHABLE",
-        "UPSTREAM_TIMEOUT",
-        "UPSTREAM_INVALID_RESPONSE"
-      ]
+      "errores_conocidos": ["INVALID_INPUT", "UPSTREAM_UNREACHABLE", "UPSTREAM_TIMEOUT", "UPSTREAM_INVALID_RESPONSE"]
     },
     {
       "name": "descargar_web",
@@ -175,23 +75,12 @@
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "url": {
-            "type": "string",
-            "minLength": 1,
-            "description": "URL absoluta del recurso a descargar (p.ej. la url de una imagen de producto)."
-          }
+          "url": { "type": "string", "minLength": 1, "description": "URL absoluta del recurso a descargar (p.ej. la url de una imagen de producto)." }
         },
-        "required": [
-          "url"
-        ]
+        "required": ["url"]
       },
       "handler": "handleDescargarTool",
-      "errores_conocidos": [
-        "INVALID_INPUT",
-        "DEMASIADO_GRANDE",
-        "UPSTREAM_UNREACHABLE",
-        "UPSTREAM_INVALID_RESPONSE"
-      ]
+      "errores_conocidos": ["INVALID_INPUT", "DEMASIADO_GRANDE", "UPSTREAM_UNREACHABLE", "UPSTREAM_INVALID_RESPONSE"]
     },
     {
       "name": "entrar_web",
@@ -200,11 +89,7 @@
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "url": {
-            "type": "string",
-            "minLength": 1,
-            "description": "URL de la página de login."
-          },
+          "url": { "type": "string", "minLength": 1, "description": "URL de la página de login." },
           "pasos": {
             "type": "array",
             "minItems": 1,
@@ -212,55 +97,21 @@
             "items": {
               "type": "object",
               "properties": {
-                "tipo": {
-                  "type": "string",
-                  "enum": [
-                    "fill",
-                    "click",
-                    "wait",
-                    "scroll"
-                  ]
-                },
-                "selector": {
-                  "type": "string",
-                  "description": "Selector CSS del campo/botón (fill/click/wait)."
-                },
-                "valor": {
-                  "type": "string",
-                  "description": "Texto a escribir (fill) — p.ej. email o contraseña."
-                },
-                "ms": {
-                  "type": "number",
-                  "description": "Espera en milisegundos (wait sin selector)."
-                },
-                "veces": {
-                  "type": "number",
-                  "description": "Cuántas veces baja (scroll)."
-                }
+                "tipo": { "type": "string", "enum": ["fill", "click", "wait", "scroll"] },
+                "selector": { "type": "string", "description": "Selector CSS del campo/botón (fill/click/wait)." },
+                "valor": { "type": "string", "description": "Texto a escribir (fill) — p.ej. email o contraseña." },
+                "ms": { "type": "number", "description": "Espera en milisegundos (wait sin selector)." },
+                "veces": { "type": "number", "description": "Cuántas veces baja (scroll)." }
               },
-              "required": [
-                "tipo"
-              ]
+              "required": ["tipo"]
             }
           },
-          "stealth": {
-            "type": "boolean",
-            "description": "Oculta señales de automatización (navigator.webdriver, etc.). No promete pasar DataDome/Turnstile."
-          }
+          "stealth": { "type": "boolean", "description": "Oculta señales de automatización (navigator.webdriver, etc.). No promete pasar DataDome/Turnstile." }
         },
-        "required": [
-          "url",
-          "pasos"
-        ]
+        "required": ["url", "pasos"]
       },
       "handler": "handleEntrarTool",
-      "errores_conocidos": [
-        "INVALID_INPUT",
-        "LOGIN_FALLIDO",
-        "UPSTREAM_UNREACHABLE",
-        "UPSTREAM_TIMEOUT",
-        "UPSTREAM_INVALID_RESPONSE"
-      ]
+      "errores_conocidos": ["INVALID_INPUT", "LOGIN_FALLIDO", "UPSTREAM_UNREACHABLE", "UPSTREAM_TIMEOUT", "UPSTREAM_INVALID_RESPONSE"]
     },
     {
       "name": "abrir_web",
@@ -269,82 +120,25 @@
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "url": {
-            "type": "string",
-            "minLength": 1,
-            "description": "URL a abrir dentro de la sesión (catálogo, ficha, panel)."
-          },
-          "sesion_id": {
-            "type": "string",
-            "minLength": 1,
-            "description": "El handle devuelto por entrar_web."
-          },
+          "url": { "type": "string", "minLength": 1, "description": "URL a abrir dentro de la sesión (catálogo, ficha, panel)." },
+          "sesion_id": { "type": "string", "minLength": 1, "description": "El handle devuelto por entrar_web." },
           "interceptar": {
             "description": "Captura el JSON de la API interna. true = todo JSON; { contiene:['/api/'] } = filtra por subcadena de URL.",
             "oneOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "contiene": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
+              { "type": "boolean" },
+              { "type": "object", "properties": { "contiene": { "type": "array", "items": { "type": "string" } } } }
             ]
           },
           "interactuar": {
             "type": "array",
             "description": "Guion (mismo vocabulario que entrar_web) antes de leer: scroll infinito, 'cargar más', pestañas.",
-            "items": {
-              "type": "object",
-              "properties": {
-                "tipo": {
-                  "type": "string",
-                  "enum": [
-                    "fill",
-                    "click",
-                    "wait",
-                    "scroll"
-                  ]
-                },
-                "selector": {
-                  "type": "string"
-                },
-                "valor": {
-                  "type": "string"
-                },
-                "ms": {
-                  "type": "number"
-                },
-                "veces": {
-                  "type": "number"
-                }
-              },
-              "required": [
-                "tipo"
-              ]
-            }
+            "items": { "type": "object", "properties": { "tipo": { "type": "string", "enum": ["fill", "click", "wait", "scroll"] }, "selector": { "type": "string" }, "valor": { "type": "string" }, "ms": { "type": "number" }, "veces": { "type": "number" } }, "required": ["tipo"] }
           }
         },
-        "required": [
-          "url",
-          "sesion_id"
-        ]
+        "required": ["url", "sesion_id"]
       },
       "handler": "handleAbrirTool",
-      "errores_conocidos": [
-        "INVALID_INPUT",
-        "SESION_DESCONOCIDA",
-        "UPSTREAM_UNREACHABLE",
-        "UPSTREAM_TIMEOUT",
-        "UPSTREAM_INVALID_RESPONSE"
-      ]
+      "errores_conocidos": ["INVALID_INPUT", "SESION_DESCONOCIDA", "UPSTREAM_UNREACHABLE", "UPSTREAM_TIMEOUT", "UPSTREAM_INVALID_RESPONSE"]
     }
   ],
   "config": {

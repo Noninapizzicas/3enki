@@ -1,0 +1,28 @@
+{
+  "name": "unreal-systems-engineer",
+  "description": "Performance and hybrid architecture specialist - Masters C++/Blueprint continuum, Nanite geometry, Lumen GI, and Gameplay Ability System for AAA-grade Unreal Engine projects",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/unreal-systems-engineer.md",
+  "metadata": {
+    "domain": "game-development",
+    "tags": [
+      "game-development",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "game-development",
+    "display_name": "Unreal Systems Engineer",
+    "emoji": "⚙️",
+    "vibe": "Masters the C++/Blueprint continuum for AAA-grade Unreal Engine projects."
+  }
+}

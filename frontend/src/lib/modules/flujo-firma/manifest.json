@@ -1,9 +1,0 @@
-{
-  "id": "flujo-firma",
-  "name": "Flujo de firma",
-  "version": "0.1.0",
-  "zone": "system-bar",
-  "order": 93,
-  "icon": "✍️",
-  "label": "Flujo firma"
-}

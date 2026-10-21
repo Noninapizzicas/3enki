@@ -14,12 +14,10 @@
   import { mqttRequest, MqttNotConnectedError, MqttRequestError } from '$lib/ui-core/mqtt-request';
   import { connected } from '$lib/ui-core/mqtt';
   import { activeProjectId, activateProject } from '$lib/stores/projects';
-  import { setSessionProject } from '$lib/stores/sessionProject';
   import { selectProject } from '$lib/stores/workspace';
   import { saveWorkspace } from '$lib/stores/persistence';
   import { resolveType, resolvePages, isNavPage } from '$lib/ui-core/project-pages';
   import { applyPrismaSkin, clearPrismaSkin } from '$lib/stores/prisma-skin';
-  import ConfirmacionModal from '$lib/components/ConfirmacionModal.svelte';
 
   // Store del proyecto actual. `type` + `pages` alimentan la navegación que EMERGE del
   // proyecto (rail/work-bar) en vez de una lista clavada a pizzepos. `resolved` = datos
@@ -77,8 +75,6 @@
   $: if (urlParam && urlParam !== lastSyncedParam) {
     lastSyncedParam = urlParam;
     saveWorkspace({ projectId: urlParam });
-    // MULTI-TENANT: alimentar el project_id de ESTA sesión/página (no el global).
-    setSessionProject(urlParam);
 
     // Si MQTT conectado y el proyecto activo difiere, activar el de la URL
     if ($connected && urlParam !== $activeProjectId) {
@@ -159,10 +155,6 @@
       const realId = project?.id || project_id;
       const slug = project?.slug;
 
-      // MULTI-TENANT: el project_id de ESTA sesión es el UUID real (el que
-      // exigen los RPC), no el slug de la URL ni el global persistido.
-      setSessionProject(realId);
-
       projectStore.set({
         id: realId,
         name: project?.name || project_id,
@@ -232,7 +224,6 @@
   </div>
 {:else}
   <slot />
-  <ConfirmacionModal />
 {/if}
 
 <style>

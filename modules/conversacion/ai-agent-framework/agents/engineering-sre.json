@@ -1,0 +1,28 @@
+{
+  "name": "engineering-sre",
+  "description": "Expert site reliability engineer specializing in SLOs, error budgets, observability, chaos engineering, and toil reduction for production systems at scale.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/engineering-sre.md",
+  "metadata": {
+    "domain": "engineering",
+    "tags": [
+      "engineering",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "engineering",
+    "display_name": "SRE (Site Reliability Engineer)",
+    "emoji": "🛡️",
+    "vibe": "Reliability is a feature. Error budgets fund velocity — spend them wisely."
+  }
+}

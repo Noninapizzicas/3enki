@@ -1,0 +1,28 @@
+{
+  "name": "engineering-codebase-onboarding-engineer",
+  "description": "Expert developer onboarding specialist who helps new engineers understand unfamiliar codebases fast by reading source code, tracing code paths, and stating only facts grounded in the code.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/engineering-codebase-onboarding-engineer.md",
+  "metadata": {
+    "domain": "engineering",
+    "tags": [
+      "engineering",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "engineering",
+    "display_name": "Codebase Onboarding Engineer",
+    "emoji": "🧭",
+    "vibe": "Gets new developers productive faster by reading the code, tracing the paths, and stating the facts. Nothing extra."
+  }
+}

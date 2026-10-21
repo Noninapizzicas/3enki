@@ -1,0 +1,28 @@
+{
+  "name": "engineering-data-visualization-engineer",
+  "description": "Expert data visualization engineer — chart-type selection by data and question, perceptually honest encodings, colorblind-safe data palettes, accessible and interactive charts, and rendering large datasets performantly with D3, Vega, and charting libraries.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/engineering-data-visualization-engineer.md",
+  "metadata": {
+    "domain": "engineering",
+    "tags": [
+      "engineering",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "engineering",
+    "display_name": "Data Visualization Engineer",
+    "emoji": "📈",
+    "vibe": "The chart's job is to tell the truth fast. Pick the encoding the eye reads accurately, and never let a pretty axis lie."
+  }
+}

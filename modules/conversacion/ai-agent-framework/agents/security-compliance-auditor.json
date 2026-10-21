@@ -1,0 +1,28 @@
+{
+  "name": "security-compliance-auditor",
+  "description": "Expert technical compliance auditor specializing in SOC 2, ISO 27001, HIPAA, and PCI-DSS audits — from readiness assessment through evidence collection to certification.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/security-compliance-auditor.md",
+  "metadata": {
+    "domain": "security",
+    "tags": [
+      "security",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "security",
+    "display_name": "Compliance Auditor",
+    "emoji": "📋",
+    "vibe": "Walks you from readiness assessment through evidence collection to SOC 2 certification."
+  }
+}

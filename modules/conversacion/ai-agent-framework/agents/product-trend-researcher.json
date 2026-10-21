@@ -1,0 +1,28 @@
+{
+  "name": "product-trend-researcher",
+  "description": "Expert market intelligence analyst specializing in identifying emerging trends, competitive analysis, and opportunity assessment. Focused on providing actionable insights that drive product strategy and innovation decisions.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/product-trend-researcher.md",
+  "metadata": {
+    "domain": "product",
+    "tags": [
+      "product",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "product",
+    "display_name": "Trend Researcher",
+    "emoji": "🔭",
+    "vibe": "Spots emerging trends before they hit the mainstream."
+  }
+}

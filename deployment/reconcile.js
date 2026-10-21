@@ -32,7 +32,6 @@
 const fs   = require('fs');
 const path = require('path');
 const cp   = require('child_process');
-const crypto = require('crypto');
 
 const { MANIFIESTO } = require('./vps.manifest.js');
 
@@ -255,86 +254,24 @@ async function main() {
 
   // 4) Unidades systemd (render + escribir si difieren)
   let systemdCambio = false;
-  // Key del API server de Hermes: preservar la del unit/config vivo si existe
-  // (nunca versionada; fallback a env; en VPS nuevo la GENERA — y alimenta tanto
-  // el unit de enki como el config del worker, para que todo quede listo de una).
-  const keyHermesViva = (() => {
-    const unitVivo = leer(M.servicios.enki.destino) || '';
-    const cfgVivo = leer(M.hermes_worker?.config_destino) || '';
-    const m1 = unitVivo.match(/Environment=HERMES_API_KEY=(\S+)/);
-    const m2 = cfgVivo.match(/^(\s*)key:\s*([^\s]+)\s*$/m);
-    // OJO: la key es el grupo 2 ([^\s]+); el grupo 1 es la indentación (\s*).
-    // Usar m2[1] devolvía la indentación (truthy) → no regeneraba la key.
-    const key = (m1 && m1[1]) || (m2 && m2[2]) || process.env.API_SERVER_KEY || '';
-    if (!key || key === '__API_SERVER_KEY__') {
-      const gen = crypto.randomBytes(24).toString('hex');
-      act(`generando key del API server de Hermes (${gen.slice(0, 8)}…)`);
-      return gen;
-    }
-    return key;
-  })();
   for (const [nombre, svc] of Object.entries(M.servicios)) {
     const tmpl = leer(svc.plantilla);
     if (tmpl == null) { warn(`plantilla ausente: ${svc.plantilla} (salto ${nombre})`); continue; }
     const vars = {};
     for (const [k, val] of Object.entries(svc.vars || {})) vars[k] = renderPlantilla(val, { DOMAIN: dominio });
-    let rendered = renderPlantilla(tmpl, { DOMAIN: dominio, ...vars });
-    if (nombre === 'enki') rendered = rendered.replace(/Environment=HERMES_API_KEY=.*$/m, `Environment=HERMES_API_KEY=${keyHermesViva}`);
+    const rendered = renderPlantilla(tmpl, { DOMAIN: dominio, ...vars });
     if (escribirSiDifiere(svc.destino, rendered, nombre)) systemdCambio = true;
   }
   if (systemdCambio) { act('systemctl daemon-reload'); shOk('systemctl daemon-reload'); }
 
-  // 5) Caddyfile (render con dominio local + snippets condicionales + escribir si difiere)
+  // 5) Caddyfile (render con dominio local + escribir si difiere)
   const caddyTmpl = leer(M.caddy.plantilla);
   let caddyCambio = false;
-  // Una feature se activa si: (a) el .env del VPS declara env_flag=true, O (b) el
-  // dominio del VPS está en la lista `dominios` del spec (vía determinista, sin
-  // tocar .env a mano). Ambas coexisten: cualquiera de las dos la enciende.
-  const featureActiva = (spec, envVivo, dominio) => {
-    const flagValue = (envVivo || '').match(new RegExp(`^\\s*${spec.env_flag}\\s*=\\s*(.+?)\\s*$`, 'm'));
-    if (flagValue && flagValue[1].trim().toLowerCase() === 'true') return true;
-    if (Array.isArray(spec.dominios) && spec.dominios.includes(dominio)) return true;
-    return false;
-  };
   if (caddyTmpl == null) {
     warn(`plantilla Caddy ausente: ${M.caddy.plantilla}`);
   } else {
-    let caddyRendered = renderCaddyfile(caddyTmpl, dominio, M.caddy, M.public_ns, M.public_dir);
-
-    // Snippets condicionales: se concatenan al Caddyfile SOLO si el .env del VPS
-    // declara la flag correspondiente (ej. ENABLE_OPENSCAD=true). Cada snippet
-    // pasa por el mismo replace de dominio que la plantilla principal.
-    for (const snip of (M.caddy_snippets || [])) {
-      if (featureActiva(snip, envVivo, dominio)) {
-        const snippetTmpl = leer(snip.plantilla);
-        if (snippetTmpl) {
-          const snippetRendered = renderCaddyfile(snippetTmpl, dominio, M.caddy);
-          caddyRendered += '\n' + snippetRendered;
-          log(`snippet Caddy '${snip.id}' activado (flag ${snip.env_flag} o dominio ${dominio} en lista)`);
-        } else {
-          warn(`snippet Caddy '${snip.id}': plantilla ausente ${snip.plantilla}`);
-        }
-      } else {
-        log(`snippet Caddy '${snip.id}' omitido (${snip.env_flag} no activado ni dominio listado)`);
-      }
-    }
-
+    const caddyRendered = renderCaddyfile(caddyTmpl, dominio, M.caddy, M.public_ns, M.public_dir);
     caddyCambio = escribirSiDifiere(M.caddy.destino, caddyRendered, 'Caddyfile');
-  }
-
-  // 5b) Override systemd de Caddy — asegura que Caddy lea el .env PERSISTENTE
-  // (data/.env, excluido del rsync del deploy) para ENKI_MCP_TOKEN y demás.
-  // El .env de la raíz (/opt/enki/.env) NO sobrevive al deploy (rsync --delete).
-  if (M.caddy.override_plantilla && M.caddy.override_destino) {
-    const overrideTmpl = leer(M.caddy.override_plantilla);
-    if (overrideTmpl != null) {
-      const overrideDir = path.dirname(M.caddy.override_destino);
-      if (!existe(overrideDir)) { act(`mkdir -p ${overrideDir}`); if (!DRY_RUN) fs.mkdirSync(overrideDir, { recursive: true }); }
-      const overrideCambio = escribirSiDifiere(M.caddy.override_destino, overrideTmpl, 'caddy override.conf');
-      if (overrideCambio && !DRY_RUN) { act('daemon-reload (override caddy)'); shOk('systemctl daemon-reload'); }
-    } else {
-      warn(`plantilla override caddy ausente: ${M.caddy.override_plantilla}`);
-    }
   }
 
   // 6) Habilitar + arrancar/recargar SOLO lo que cambió
@@ -348,209 +285,6 @@ async function main() {
   }
   if (FRESH || caddyCambio) { act('systemctl reload/restart caddy'); shOk('systemctl reload caddy') || shOk('systemctl restart caddy'); }
   else { log('Caddy sin cambios (no recargo)'); }
-
-  // 6b) Hermes TRABAJADOR (/home/hermes/.hermes) — config renderizada preservando
-  // la key + skills de Enki sincronizadas + usuario asegurado. Idempotente.
-  const HW = M.hermes_worker;
-  if (HW) {
-    // usuario hermes (grupo + home) si no existe
-    if (!shOk('id hermes')) {
-      act(`useradd -m -s /bin/bash ${HW.usuario}`);
-      if (!DRY_RUN) shOk(`useradd -m -s /bin/bash ${HW.usuario}`);
-      cambios++;
-    }
-    if (!existe(HW.home)) { act(`mkdir -p ${HW.home}`); if (!DRY_RUN) fs.mkdirSync(HW.home, { recursive: true }); cambios++; }
-
-    // INSTALAR Hermes si falta el binario (el trabajador no viaja en el repo:
-    // el paquete hermes-agent se instala con el instalador oficial de Nous).
-    // Idempotente: si el binario existe, no hace nada. En un VPS nuevo lo deja
-    // listo de una — y genera la key del API server si no hay (abajo).
-    const binHermes = `/home/${HW.usuario}/.local/bin/hermes`;
-    if (!existe(binHermes)) {
-      const installer = 'https://hermes-agent.nousresearch.com/install.sh';
-      act(`instalando hermes-agent (${installer}) → ${binHermes}`);
-      if (!DRY_RUN) {
-        shOk(`curl -fsSL ${installer} | HOME=/home/${HW.usuario} bash`);
-        if (!existe(binHermes)) {
-          warn(`instalador de Hermes no dejó el binario en ${binHermes} — revisa journalctl/network. El VPS queda degradado (chat sin mente).`);
-        } else {
-          shOk(`chown -R ${HW.usuario}:${HW.usuario} /home/${HW.usuario}/.local /home/${HW.usuario}/.hermes`);
-          cambios++;
-        }
-      }
-    }
-
-    // config.yaml: renderizar plantilla con la key viva (nunca versionada; la
-    // resuelve/genera el paso 4 — VPS nuevo listo de una).
-    const tmplCfg = leer(HW.config_plantilla);
-    let workerConfigCambio = false;
-    if (tmplCfg == null) {
-      warn(`plantilla hermes-worker ausente: ${HW.config_plantilla} (salto config)`);
-    } else {
-      // Key de Ollama: se lee del .env vivo de Enki (data/.env, donde el
-      // credential-manager lo persiste). Nunca se versiona. Soporta el nombre
-      // de VPS1 (OLLAMA_API_KEY) y el de VPS2 (OLLAMA_CLOUD_API_KEY_GLOBAL).
-      const envOllama = leer(path.join(M.install_dir, 'data', '.env')) || leer(path.join(M.install_dir, '.env')) || '';
-      const ollamaViva = (envOllama.match(/^OLLAMA_API_KEY=(\S+)/m) || [])[1] || (envOllama.match(/^OLLAMA_CLOUD_API_KEY_GLOBAL=(\S+)/m) || [])[1] || '';
-      let renderedCfg = tmplCfg.replace(/__API_SERVER_KEY__/g, keyHermesViva);
-      renderedCfg = renderedCfg.replace(/__OLLAMA_API_KEY__/g, ollamaViva);
-      // Token del MCP de OpenSCAD: se lee del .env vivo (nunca versionado).
-      const mcpToken = (envOllama.match(/^ENKI_MCP_TOKEN=(\S+)/m) || [])[1] || '';
-      renderedCfg = renderedCfg.replace(/__ENKI_MCP_TOKEN__/g, mcpToken);
-      workerConfigCambio = escribirSiDifiere(HW.config_destino, renderedCfg, 'hermes-worker config.yaml');
-      if (workerConfigCambio) { act('chown config → hermes'); if (!DRY_RUN) shOk(`chown -R ${HW.usuario}:${HW.usuario} ${HW.home}`); }
-    }
-
-    // skills de Enki: sincronizar desde el repo (rsync sin borrar lo extra)
-    if (existe(HW.skills_origen)) {
-      act(`rsync skills enki → ${HW.skills_destino}`);
-      if (!DRY_RUN) {
-        shOk(`mkdir -p ${HW.skills_destino}`);
-        shOk(`rsync -a --delete ${HW.skills_origen}/ ${HW.skills_destino}/`);
-        shOk(`chown -R ${HW.usuario}:${HW.usuario} ${HW.skills_destino}`);
-      }
-      cambios++;
-    }
-
-    // reiniciar hermes-gateway si su config cambió (la unit ya se reinicia arriba si cambió)
-    if (workerConfigCambio && !DRY_RUN) { act('systemctl restart hermes-gateway'); shOk('systemctl restart hermes-gateway'); }
-  }
-
-  // 6b2) Hermes ADMIN (/home/admin/.hermes) — skills/agentes clon céntrico-en-repo.
-  // El binario se instala aparte (vps-setup.sh); aquí SOLO se sincronizan desde
-  // el repo: skills de Enki (13), cantera de módulos (278 + agentes) y — si el
-  // repo trae memoria semilla — se SIEMBRA una vez. NO crea el usuario (admin
-  // ya existe), NO toca config/auth. Cada VPS es identidad independiente.
-  const HA = M.hermes_admin;
-  if (HA) {
-    if (!existe(HA.home)) { act(`mkdir -p ${HA.home}`); if (!DRY_RUN) fs.mkdirSync(HA.home, { recursive: true }); cambios++; }
-
-    // INSTALAR Hermes ADMIN si falta el binario (no viaja en el repo: el paquete
-    // hermes-agent se instala con el instalador oficial de Nous). Idempotente:
-    // si el binario existe, no hace nada. En VPS nuevo lo deja listo de una.
-    const binAdmin = `/home/${HA.usuario}/.local/bin/hermes`;
-    if (!existe(binAdmin)) {
-      const installer = 'https://hermes-agent.nousresearch.com/install.sh';
-      act(`instalando hermes-agent (admin) ${installer} → ${binAdmin}`);
-      if (!DRY_RUN) {
-        shOk(`curl -fsSL ${installer} | HOME=/home/${HA.usuario} bash`);
-        if (!existe(binAdmin)) {
-          warn(`instalador de Hermes admin no dejó el binario en ${binAdmin} — revisa journalctl/network. El VPS queda sin el Hermes conversacional.`);
-        } else {
-          shOk(`chown -R ${HA.usuario}:${HA.usuario} /home/${HA.usuario}/.local /home/${HA.usuario}/.hermes`);
-          cambios++;
-        }
-      }
-    }
-
-    // config de PROVIDERS, clon céntrico-en-repo. SOLO se crea la PRIMERA vez
-    // (config destino inexistente); después cada VPS evoluciona la suya
-    // (identidad independiente). Multi-provider: detecta en el .env vivo de Enki
-    // qué key existe — OLLAMA_API_KEY → Ollama Cloud (VPS1), DEEPSEEK_API_KEY_GLOBAL
-    // → DeepSeek (VPS2) — y escribe el bloqua model correcto. La key NUNCA se
-    // versiona; se rellena desde el .env.
-    const HA_cfg = leer(HA.config_plantilla);
-    if (HA_cfg != null && !existe(HA.config_destino)) {
-      const HA_env = leer(path.join(M.install_dir, 'data', '.env')) || leer(path.join(M.install_dir, '.env')) || '';
-      // detectar provider y su key
-      const ollamaKey = (HA_env.match(/^OLLAMA_API_KEY=(\S+)/m) || [])[1] || '';
-      const deepseekKey = (HA_env.match(/^DEEPSEEK_API_KEY_GLOBAL=(\S+)/m) || [])[1] || '';
-      let baseUrl, defaultModel, apiKey;
-      if (ollamaKey) {
-        baseUrl = 'https://ollama.com/v1';
-        defaultModel = 'deepseek-v4.1-flash';
-        apiKey = ollamaKey;
-      } else if (deepseekKey) {
-        baseUrl = 'https://api.deepseek.com/v1';
-        defaultModel = 'deepseek-flash';
-        apiKey = deepseekKey;
-      }
-      let HA_rendered = HA_cfg;
-      // si no hay key detectable, dejar el provider sin tocar (no escribir basura)
-      if (apiKey) {
-        const modelYaml = `model:\n  default: ${defaultModel}\n  provider: custom\n  base_url: ${baseUrl}\n  api_key: ${apiKey}\n\n`;
-        // si la plantilla ya tiene un bloque model: lo reemplaza; si no, lo antepone
-        if (/^model:/m.test(HA_cfg)) {
-          HA_rendered = HA_cfg.replace(/^model:[\s\S]*?(?=^\S|\Z)/m, modelYaml);
-        } else {
-          HA_rendered = modelYaml + HA_cfg;
-        }
-      }
-      act(`creando config de admin (provider: ${apiKey ? (ollamaKey ? 'ollama-cloud' : 'deepseek') : 'indetectado'}) → ${HA.config_destino}`);
-      if (!DRY_RUN) {
-        fs.writeFileSync(HA.config_destino, HA_rendered);
-        shOk(`chown ${HA.usuario}:${HA.usuario} ${HA.config_destino}`);
-      }
-      cambios++;
-    } else if (existe(HA.config_destino)) {
-      log(`config de admin ya existe en ${HA.config_destino} — no se toca (identidad independiente)`);
-    }
-
-    // skills de Enki (SIN --delete — cada VPS es identidad independiente y
-    // puede tener skills locales propias que no vienen del repo; el admin no
-    // es un clon exacto del repo, a diferencia del worker que sí es repo-puro)
-    if (existe(HA.skills_enki_origen)) {
-      act(`rsync skills enki → ${HA.skills_enki_destino}`);
-      if (!DRY_RUN) {
-        shOk(`mkdir -p ${HA.skills_enki_destino}`);
-        shOk(`rsync -a ${HA.skills_enki_origen}/ ${HA.skills_enki_destino}/`);
-      }
-      cambios++;
-    }
-
-    // cantera de módulos + agentes (SIN --delete — misma razón que skills)
-    if (existe(HA.cantera_origen)) {
-      act(`rsync cantera enki (módulos+agentes) → ${HA.cantera_destino}`);
-      if (!DRY_RUN) {
-        shOk(`mkdir -p ${HA.cantera_destino}`);
-        shOk(`rsync -a ${HA.cantera_origen}/ ${HA.cantera_destino}/`);
-      }
-      cambios++;
-    }
-
-    // memoria-semilla: SOLO si el repo la trae y el destino NO existe aún
-    // (una vez). Luego cada VPS evoluciona la suya de forma independiente.
-    if (existe(HA.memoria_origen) && !existe(HA.memoria_destino)) {
-      act(`sembrando memoria-semilla → ${HA.memoria_destino} (una vez)`);
-      if (!DRY_RUN) {
-        shOk(`mkdir -p ${HA.memoria_destino}`);
-        shOk(`rsync -a ${HA.memoria_origen}/ ${HA.memoria_destino}/`);
-      }
-      cambios++;
-    } else if (existe(HA.memoria_destino)) {
-      log(`memoria de admin ya existe en ${HA.memoria_destino} — no se re-siembra (independiente)`);
-    }
-
-    // el dueño es admin (el reconcile corre como root; dejar el home a admin)
-    if (!DRY_RUN) shOk(`chown -R ${HA.usuario}:${HA.usuario} ${HA.home}`);
-  }
-
-  // 6c) Docker services condicionales — levanta solo en VPS con la flag activa.
-  // Idempotente: `docker compose up -d` no recrea si ya está corriendo y la
-  // imagen no cambió; `--build` asegura que el Dockerfile del repo prevalece.
-  for (const ds of (M.docker_services || [])) {
-    const activo = featureActiva(ds, envVivo, dominio);
-    const composeFile = path.join(ds.compose_dir, 'docker-compose.yml');
-
-    if (!existe(composeFile)) {
-      warn(`docker service '${ds.id}': compose file ausente ${composeFile}`);
-      continue;
-    }
-
-    if (activo) {
-      act(`docker compose up -d --build (${ds.id})`);
-      if (!DRY_RUN) {
-        if (shOk(`docker compose -f ${composeFile} up -d --build`)) {
-          log(`docker service '${ds.id}' levantado (flag ${ds.env_flag} o dominio ${dominio} en lista)`);
-        } else {
-          warn(`docker service '${ds.id}': fallo al levantar — revisa docker logs ${ds.container}`);
-        }
-      }
-      cambios++;
-    } else {
-      log(`docker service '${ds.id}' omitido (${ds.env_flag} no activado ni dominio listado)`);
-    }
-  }
 
   // 7) Self-check ruidoso
   if (DRY_RUN) {

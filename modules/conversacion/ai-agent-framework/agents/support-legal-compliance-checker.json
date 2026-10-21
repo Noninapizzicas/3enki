@@ -1,0 +1,28 @@
+{
+  "name": "support-legal-compliance-checker",
+  "description": "Expert legal and compliance specialist ensuring business operations, data handling, and content creation comply with relevant laws, regulations, and industry standards across multiple jurisdictions.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/support-legal-compliance-checker.md",
+  "metadata": {
+    "domain": "support",
+    "tags": [
+      "support",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "support",
+    "display_name": "Legal Compliance Checker",
+    "emoji": "⚖️",
+    "vibe": "Ensures your operations comply with the law across every jurisdiction that matters."
+  }
+}

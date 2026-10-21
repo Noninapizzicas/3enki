@@ -21,12 +21,10 @@ Ambos comparten laboratorio, agar, grano, tecnica esteril, habitat y tecnologia 
 - [[comercio/00 - Comercio (MOC)|Comercio]] — digital, local e internacional (margenes, canales, unit economics)
 - [[inmobiliario/00 - Inmobiliario (MOC)|Inmobiliario]] — intermediacion en Espana (captacion, MLS, comisiones, legal)
 - [[trading/00 - Trading (MOC)|Trading]] — futuros, crypto, acciones, forex, opciones (gestion de riesgo, sistema, psicologia)
-- [[teoria-restricciones/00 - Teoría de las Restricciones (MOC)|Teoría de las Restricciones (TOC)]] — Goldratt, 5 pasos de focalizacion, Drum-Buffer-Rope, Contabilidad del Throughput, Procesos de Pensamiento, Cadena Critica (CCPM), distribucion, ventas, DevOps
 
 ### Ingenieria
 - [[refrigeracion-por-calor/00 - Frio accionado por calor (MOC)|Frio accionado por calor]] — absorcion, adsorcion, eyector; fuentes termicas
 - [[estufas-rocket/00 - Estufas Rocket (MOC)|Estufas Rocket]] — combustion en flujo, readsorcion, masa termica, fabricacion DIY
-- [[eolica-hogar/00 - Eólica a escala hogar (MOC)|Eólica a escala hogar]] — micro y mini eólica (<10 kW): turbinas HAWT/VAWT, perfiles aerodinámicos, BEM, generador PMG, normativa España → ver también [[aerodinamica/00 - Aerodinámica aplicada (MOC)|Aerodinámica aplicada]]
 
 ### Maker y fabricacion
 - [[carpinteria-cnc/00 - Carpintería CNC (MOC)|Carpintería CNC]] — fresado, controladores (Grbl/LinuxCNC/FluidNC), máquinas open-source, nesting, ensambles
@@ -40,28 +38,3 @@ Ambos comparten laboratorio, agar, grano, tecnica esteril, habitat y tecnologia 
 - [[cocina-mediterranea/00 - Cocina mediterránea (MOC)|Cocina mediterránea]] — España, Italia, Francia, Grecia, Turquía, Magreb, Levante, despensa común
 - [[cocina-asiatica/00 - Cocina asiática (MOC)|Cocina asiática]] — Japón, China, Tailandia, Corea, India, Vietnam, arroz, wok
 - [[cocina-mexicana/00 - Cocina mexicana (MOC)|Cocina mexicana]] — regiones, maíz, tacos, antojitos, bebidas, recetas fundamentales
-
-### Fermentos
-- [[fermentos/00 - Fermentos (MOC)|Fermentos]] — lactofermentación (chucrut, kimchi, encurtidos), kéfir (leche y agua), kombucha (SCOBY), fermentos alcohólicos (vino, sidra, cerveza), fermentos asiáticos (miso, tempeh, natto, koji), vinagres caseros, técnicas base y seguridad
-
-### Terapias holísticas
-- [[terapias-holisticas/00 - Terapias holísticas (MOC)|Terapias holísticas]] — plantas medicinales y adaptógenos (fitoterapia, tincturas); flores de Bach (38 remedios, selección, Rescue Remedy); aceites esenciales y aromaterapia (diluciones, mezclas, uso terapéutico); EFT tapping (puntos meridianos, protocolo, matrix reimprinting); respiraciones (box breathing, Wim Hof, coherencia cardíaca, pranayama); frecuencias y sonido (binaural beats, solfeggio, cuencos tibetanos, mantra); kinesiología y péndulo (test muscular, auto-test, radiestesia); afirmaciones y reprogramación (Louise Hay, scripting, ho'oponopono, visualización); tarot y ángeles (arcanos, tiradas, angelología, números angélicos); diseño humano (tipos, estrategia, autoridad, centros, perfiles)
-
-### Biohacking y longevidad
-- [[biohacking-longevidad/00 - Biohacking y longevidad (MOC)|Biohacking y longevidad]] — ayuno intermitente (16:8, 5:2, autofagia, electrolitos); sueño y recuperación (ciclos, HRV, higiene, cronobiología); frío terapéutico (hormesis, duchas, baños de hielo); sauna y termoterapia (HSP, cardiovascular, infrarrojo); luz roja/infrarroja (fotobiomodulación, mitocondrias, piel); suplementación basada en evidencia (NMN, magnesio, creatina, omega-3, D3+K2); zona 2 y VO₂max (entrenamiento aeróbico, HIIT 4×4, modelo polarizado 80/20); caminata y movimiento diario (NEAT, rucking, glucosa postprandial); tai chi y qigong (formas, principios, evidencia clínica); microbioma y longevidad (gut-brain axis, AGCC, Akkermansia, fermentados); gestión del estrés (cortisol, adaptógenos, nervio vago, HRV); glándula pineal (melatonina, calcificación, flúor, ritmo circadiano, DMT) — Attia · Sinclair · Rhonda Patrick
-
-### Maker y fabricacion — Carpintería DIY
-- [[carpinteria-diy/00 - Carpintería DIY (MOC)|Carpintería DIY]] — maderas (pino · roble · haya · nogal · tableros · escala Janka · secado · humedad); herramientas (cepillos · formones · serruchos japoneses · sierra circular · fresadora · sierra de mesa); juntas y uniones (cola de milano · mortaja y espiga · espigas redondas · Domino); acabados (aceite tung · aceite danés · cera · goma laca · barniz · secuencia completa); técnicas base (medición · corte · cepillado · escuadrado · encolado · prensado · lijado); planos y proyectos con medidas reales (banco de trabajo 2000×600mm · estanterías flotantes · mesa de comedor · exterior con pino tratado); estilos y diseño (escandinavo · japonés · industrial · mid-century · live edge · proporciones ergonómicas); fuentes (paoson.com · woodworkersarchive.com +4.600 planos · Paul Sellers · Rex Krueger · foromadera.com) — Paoson · Paul Sellers · Rob Cosman
-
-### Aerodinámica
-- [[aerodinamica/00 - Aerodinámica aplicada (MOC)|Aerodinámica aplicada]] — sustentación, empuje, arrastre; perfiles NACA y modernos; velas y propulsión eólica; alerones y control activo (AFC, X-65 CRANE); capa límite (NLF/HLFC); biomimética (riblets, tubercles, serrations); alas morfing; estudios y patentes 2020-2025; CFD (OpenFOAM, XFOIL, QBlade) → ver también [[eolica-hogar/00 - Eólica a escala hogar (MOC)|Eólica a escala hogar]]
-
-### Electromecánica y Ondas
-- [[electromecanica-ondas/00 - Electromecánica y Ondas (MOC)|Electromecánica y Ondas]] — Maxwell, Faraday, Lenz, Lorentz; imanes NdFeB; bobinado y AWG; motores DC/BLDC/stepper/FOC; generadores PMG axial; resonancia LC/RLC; Tesla (motor AC, bobina Tesla, WPT); antenas (dipolo, Yagi, SDR); simulación (FEMM, LTspice, OpenEMS); proyectos DIY → ver también [[eolica-hogar/00 - Eólica a escala hogar (MOC)|Eólica a escala hogar]]
-
-### Química práctica
-- [[quimica-practica/00 - Química práctica (MOC)|Química práctica]] — electroquímica (electrólisis, galvanotecnia, anodizado, pilas); cristales (alumbre, CuSO₄, bismuto, acetato sódico); saponificación y tensioactivos (jabones cold process, champú sólido); destilación y extracción (AE, hidrolatos, tinturas); pH e indicadores (col lombarda, buffers, dureza del agua); tintes y pigmentos (índigo, cochinilla, ecoprint); polímeros (epoxi, bioplásticos, silicona); análisis casero (cromatografía, TLC, titulación, refractometría); seguridad (SDS, EPI, residuos)
-
-### Agricultura y cultivo natural
-- [[agricultura-natural/00 - Agricultura natural (MOC)|Agricultura natural]] — suelo vivo (microbioma, micorrizas, lombrices); compost y vermicompost (pila termófila, lombricompostador, té de compost aireado); fertilizantes naturales (purín de ortiga, biol, bokashi, ceniza, algas); control biológico (Bt, Beauveria, depredadores, feromonas); pesticidas naturales caseros (jabón potásico, neem, caldo bordelés); enmiendas de suelo (biochar, silicio, micorrizas inoculadas, corrección de pH) → ver también [[hidroponia/00 - Hidroponía (MOC)|Hidroponía]]
-- [[hidroponia/00 - Hidroponía (MOC)|Hidroponía]] — sistemas (NFT, DWC, Kratky pasivo, ebb&flow, aeropónico); nutrientes (EC, pH, macros/micros, recetas caseras A+B); iluminación (LED grow lights, PPFD/DLI, espectro, fotoperíodo); sustratos (rockwool, coco, perlita, arcilla expandida); terraza y espacio reducido (Kratky en jarra, rack vertical, ZipGrow, IKEA hacks); automatización DIY (ESP32 + sensores EC/pH + MQTT + Home Assistant); cultivos recomendados (lechugas, fresas, tomates cherry, aromáticas) → ver también [[agricultura-natural/00 - Agricultura natural (MOC)|Agricultura natural]]

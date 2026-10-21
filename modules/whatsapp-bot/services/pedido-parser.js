@@ -52,11 +52,7 @@ function _decodificarEstructura(text) {
     const hora_recogida = (modo_consumo === 'recoger' && typeof payload.hora_recogida === 'string' && payload.hora_recogida.trim())
       ? payload.hora_recogida.trim().slice(0, 20)
       : null;
-    // MÉTODO DE PAGO elegido en la PWA: 'efectivo' (paga al recoger) | 'tarjeta' (pago online
-    // por la pasarela). Autoritativo por venir en el #P1 (no en el texto editable). Opcional:
-    // sin él queda null → el consumidor decide (por defecto 'efectivo', el comportamiento previo).
-    const metodo_pago = ['efectivo', 'tarjeta'].includes(payload.metodo_pago) ? payload.metodo_pago : null;
-    return { items: payload.items, modo_consumo, hora_recogida, metodo_pago };
+    return { items: payload.items, modo_consumo, hora_recogida };
   } catch (_) {
     return null;   // payload corrupto → el bot cae al texto legacy o pide reenviar
   }
@@ -166,8 +162,6 @@ function parsearPedido(textoBruto) {
     // CANAL elegido en la PWA (mesa | recoger | llevar) + hora pactada, leídos del #P1.
     modo_consumo: estructura?.modo_consumo || null,
     hora_recogida: estructura?.hora_recogida || null,
-    // MÉTODO DE PAGO elegido en la PWA (efectivo | tarjeta), leído del #P1. null si la PWA no lo puso.
-    metodo_pago: estructura?.metodo_pago || null,
     estructura
   };
 }

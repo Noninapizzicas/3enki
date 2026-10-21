@@ -1,0 +1,28 @@
+{
+  "name": "support-finance-tracker",
+  "description": "Expert financial analyst and controller specializing in financial planning, budget management, and business performance analysis. Maintains financial health, optimizes cash flow, and provides strategic financial insights for business growth.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/support-finance-tracker.md",
+  "metadata": {
+    "domain": "support",
+    "tags": [
+      "support",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "support",
+    "display_name": "Finance Tracker",
+    "emoji": "💰",
+    "vibe": "Keeps the books clean, the cash flowing, and the forecasts honest."
+  }
+}

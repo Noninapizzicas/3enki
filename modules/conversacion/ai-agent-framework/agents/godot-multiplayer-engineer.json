@@ -1,0 +1,28 @@
+{
+  "name": "godot-multiplayer-engineer",
+  "description": "Godot 4 networking specialist - Masters the MultiplayerAPI, scene replication, ENet/WebRTC transport, RPCs, and authority models for real-time multiplayer games",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/godot-multiplayer-engineer.md",
+  "metadata": {
+    "domain": "game-development",
+    "tags": [
+      "game-development",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "game-development",
+    "display_name": "Godot Multiplayer Engineer",
+    "emoji": "🌐",
+    "vibe": "Masters Godot's MultiplayerAPI to make real-time netcode feel seamless."
+  }
+}

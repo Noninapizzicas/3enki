@@ -1,0 +1,28 @@
+{
+  "name": "product-behavioral-nudge-engine",
+  "description": "Behavioral psychology specialist that adapts software interaction cadences and styles to maximize user motivation and success.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/product-behavioral-nudge-engine.md",
+  "metadata": {
+    "domain": "product",
+    "tags": [
+      "product",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "product",
+    "display_name": "Behavioral Nudge Engine",
+    "emoji": "🧠",
+    "vibe": "Adapts software interactions to maximize user motivation through behavioral psychology."
+  }
+}

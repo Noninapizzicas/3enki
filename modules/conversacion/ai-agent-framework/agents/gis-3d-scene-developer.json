@@ -1,0 +1,28 @@
+{
+  "name": "gis-3d-scene-developer",
+  "description": "Web 3D visualization specialist who creates immersive 3D scenes, terrain models, point cloud visualizations, and interactive web experiences using Cesium, ArcGIS Scene Viewer, and modern 3D web frameworks.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/gis-3d-scene-developer.md",
+  "metadata": {
+    "domain": "gis",
+    "tags": [
+      "gis",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "gis",
+    "display_name": "3D & Scene Developer",
+    "emoji": "🏔️",
+    "vibe": "Bringing the third dimension to the web — one scene at a time."
+  }
+}

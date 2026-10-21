@@ -1,0 +1,28 @@
+{
+  "name": "marketing-video-optimization-specialist",
+  "description": "Video marketing strategist specializing in YouTube algorithm optimization, audience retention, chaptering, thumbnail concepts, and cross-platform video syndication.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/marketing-video-optimization-specialist.md",
+  "metadata": {
+    "domain": "marketing",
+    "tags": [
+      "marketing",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "marketing",
+    "display_name": "Video Optimization Specialist",
+    "emoji": "🎬",
+    "vibe": "Energetic, data-driven, strategic, and hyper-focused on audience retention"
+  }
+}

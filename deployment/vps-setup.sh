@@ -230,17 +230,14 @@ if docker compose version &>/dev/null; then
     # (no toca el grupo docker). El core solo lo usa si el interruptor 'headroom' se
     # enciende (OFF por defecto) → tenerlo arriba es inofensivo. Baja el modelo Kompress
     # al 1er arranque (tarda; el healthcheck lo cubre).
-    # [2026-09-06] DESACTIVADO por decisión del dueño: no se levanta el contenedor (no
-    # arranca), pero NO se apaga definitivamente. Para reactivar, descomentar el bloque.
     HR_COMPOSE="${REPO_DIR}/deployment/python-tools/docker-compose.headroom.yml"
     if [ -f "$HR_COMPOSE" ]; then
-        log "Headroom DESACTIVADO (decisión del dueño) — no se levanta el contenedor."
-        # log "Levantando Headroom (proxy de compresión, :8787)..."
-        # if docker compose -f "$HR_COMPOSE" up -d --build > /dev/null 2>&1; then
-        #     log "Headroom arriba (verifica: curl http://127.0.0.1:8787/livez)"
-        # else
-        #     warn "Headroom no arrancó — el provider va directo al LLM (fallback seguro). Revisa: docker compose -f $HR_COMPOSE logs"
-        # fi
+        log "Levantando Headroom (proxy de compresión, :8787)..."
+        if docker compose -f "$HR_COMPOSE" up -d --build > /dev/null 2>&1; then
+            log "Headroom arriba (verifica: curl http://127.0.0.1:8787/livez)"
+        else
+            warn "Headroom no arrancó — el provider va directo al LLM (fallback seguro). Revisa: docker compose -f $HR_COMPOSE logs"
+        fi
     fi
 else
     warn "Sin docker compose: Crawl4RS/SearXNG/Headroom no se levantaron. Todo degrada honesto hasta reejecutar el setup."
@@ -399,16 +396,6 @@ if [ -x /usr/local/bin/motor-ojo ]; then
     else
         warn "motor-ojo instalado pero el servicio no arrancó (revisa: journalctl -u motor-ojo -f)"
     fi
-fi
-
-# ---- 3a-ter-quater. MCP GitHub COMPARTIDO (un servidor para todos los perfiles) ----
-# Evita que cada perfil de Hermes arranque su propio npx del MCP de GitHub (con N
-# perfiles: N copias, ~550 MB medidos). Un hub HTTP en :8140 al que apuntan todos.
-if [ -f "${REPO_DIR}/deployment/systemd/instalar-mcp-github.sh" ]; then
-    log "Instalando MCP GitHub compartido (:8140)..."
-    bash "${REPO_DIR}/deployment/systemd/instalar-mcp-github.sh" >/dev/null 2>&1 \
-        && log "MCP GitHub compartido listo (apunta cada perfil a http://127.0.0.1:8140/mcp)" \
-        || warn "MCP GitHub compartido no instalado (revisa: journalctl --user -u mcp-github)"
 fi
 
 # ---- 3a-ter-ter. motor-traduce — órgano de TRADUCCIÓN de enki-sense (Rust nativo, :8121) ----
@@ -633,12 +620,7 @@ if [ -f "${INSTALL_DIR}/frontend/package.json" ]; then
     log "Construyendo frontend..."
     cd "${INSTALL_DIR}/frontend"
     npm install --silent 2>/dev/null
-    # Heap del build ADAPTADO a la memoria real de la máquina: total − 1 GB de reserva
-    # (mínimo, la mitad). El build AJUSTA su heap a la máquina; nunca lo impone por
-    # encima de ella (un valor fijo > RAM tumba la VPS por OOM a mitad de build).
-    _TOTAL_MB=$(awk '/MemTotal/{print int($2/1024)}' /proc/meminfo)
-    _HEAP_MB=$(( _TOTAL_MB > 2048 ? _TOTAL_MB - 1024 : _TOTAL_MB / 2 ))
-    NODE_OPTIONS="--max-old-space-size=${_HEAP_MB}" npm run build 2>&1 || warn "Frontend build falló"
+    npm run build 2>&1 || warn "Frontend build falló"
     log "Frontend construido en frontend/build/"
     cd "${INSTALL_DIR}"
 fi

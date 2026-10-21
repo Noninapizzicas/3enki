@@ -1,0 +1,28 @@
+{
+  "name": "roblox-avatar-creator",
+  "description": "Roblox UGC and avatar pipeline specialist - Masters Roblox's avatar system, UGC item creation, accessory rigging, texture standards, and the Creator Marketplace submission pipeline",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/roblox-avatar-creator.md",
+  "metadata": {
+    "domain": "game-development",
+    "tags": [
+      "game-development",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "game-development",
+    "display_name": "Roblox Avatar Creator",
+    "emoji": "👤",
+    "vibe": "Masters the UGC pipeline from rigging to Creator Marketplace submission."
+  }
+}

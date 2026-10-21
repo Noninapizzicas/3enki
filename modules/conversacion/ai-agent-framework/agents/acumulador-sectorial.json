@@ -1,0 +1,34 @@
+{
+  "id": "acumulador-sectorial",
+  "name": "acumulador-sectorial",
+  "description": "Acumulador sectorial de la bóveda de conocimiento (boveda/ en el repo). Dado un tema/sector, ejecuta el ciclo de cosecha de 6 fases (contrato, descomponer, cosechar web, reconciliar, escribir notas Obsidian, resumen) y deja notas markdown enlazadas, fechadas y con fuentes en la bóveda. Lee lo que ya existe (bibliotecario), investiga en la web (buscar/leer/descargar), procesa PDFs e imágenes (OCR local), traduce fuentes en otros idiomas, y escribe las notas (escribano). Reconcilia fuentes sin pisarlas, marca lo dudoso con a-verificar, encuadre honesto en temas sensibles, cero invención.",
+  "version": "1.0.0",
+  "enabled": false,
+  "scope": ["aprendizaje"],
+  "prompt_file": "prompts/acumulador-sectorial-system.md",
+  "tools": [
+    "bibliotecario.catalogo",
+    "bibliotecario.consultar",
+    "buscar_skill",
+    "buscar_web",
+    "leer_web",
+    "descargar_web",
+    "leer_imagen",
+    "traducir",
+    "transcribir",
+    "escribano.escribir",
+    "escribano.pendientes"
+  ],
+  "provider": "deepseek",
+  "temperature": 0.4,
+  "max_tokens": 8000,
+  "timeout_ms": 180000,
+  "max_retries": 2,
+  "context_enabled": false,
+  "metadata": {
+    "type": "domain-agent",
+    "domain": "aprendizaje",
+    "tags": ["conocimiento", "cosecha", "investigacion", "boveda", "sectorial"],
+    "_infra": "LEER lo existente: bibliotecario.catalogo + bibliotecario.consultar (bóveda local boveda/). GUÍAS: buscar_skill (busca skills de descomposición en la cantera — prisma, esquematizador, diseccionador — para estructurar la investigación). COSECHAR web: buscar_web (SearXNG) + leer_web (navegador headless) + descargar_web (binarios: PDF, imágenes). PROCESAR: leer_imagen (OCR local, Rust) + traducir (MarianMT local) + transcribir (Whisper local). GUARDAR: escribano.escribir (notas en boveda/) + escribano.pendientes (qué falta por commit). crawl4rs interruptor OFF por defecto → encender para cosechar."
+  }
+}

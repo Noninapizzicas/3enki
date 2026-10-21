@@ -7,7 +7,7 @@ fuentes:
   - modules/homeostasis/**
   - modules/verificador-visual/**
   - deployment/obscura/**
-verificado: 2026-10-15
+verificado: 2026-07-21
 ---
 
 # Teoría del Órgano — cuenco · grafo · homeostasis · ojos (vivo en main, 2026-06-29)
@@ -59,26 +59,22 @@ interruptores 1.2.0  subscribe interruptor.set→onSetRequest (canal del efector
 TESTS   homeostasis__bucle 10
 ```
 
-## VERIFICADOR-VISUAL — modules/verificador-visual ({{version:modules/verificador-visual}}) — los OJOS (freno de render)
+## VERIFICADOR-VISUAL — modules/verificador-visual (1.2.0) — los OJOS (freno de render)
 
 ```
 ÓRGANO  MOTOR+EVENTO sin memoria (tipo provider). Cierra el lazo que el freno estructural deja abierto.
 CEREBRO _evaluarSnapshot (PURO): errores_consola/js · overflow_horizontal · pagina_en_blanco · imagenes_rotas
-OJOS    _render → _abrirNavegador: SÓLO obscura (navegador Rust, V8, SIN Chromium, stealth) por CDP
+OJOS    _render → _abrirNavegador: PREFIERE obscura (navegador Rust, V8, SIN Chromium, stealth) por CDP
         (puppeteer.connect ws://127.0.0.1:9222/devtools/browser; server COMPARTIDO → disconnect, no close).
-        El fallback a Chromium se RETIRÓ (1.3.0) — Enki no arrastra Chromium. Config obscura_url · env
-        VERIFICADOR_OBSCURA_URL · despliegue: obscura por vps-setup (prebuilt → Docker), systemd obscura.service.
-CARGA   about:blank (goto domcontentloaded) + document.write(html) + 300 ms de asentamiento — NO setContent:
-        (1.4.0) obscura no implementa Page.setDocumentContent ni emite los eventos que setContent espera, así que
-        setContent moría SIEMPRE en el timeout de 15 s → render_error → 422 de carta-digital = carta sin publicar
-        y sin republicar (fallo de los ojos, no del diseño; mismo veredicto, 0.2-0.3 s por verificación).
-DEGRADA sin navegador (obscura apagada o sin responder) → SIN_OJOS → {ok:true, verificado:false} (fail-open + testigo).
+        Sin obscura → cae honesto a Chromium local (puppeteer.launch). Despliegue: obscura por vps-setup
+        (binario prebuilt → Docker), systemd obscura.service. Config obscura_url · env VERIFICADOR_OBSCURA_URL.
+DEGRADA sin navegador (ni obscura ni Chromium) → SIN_OJOS → {ok:true, verificado:false} (fail-open + testigo).
 RPC     render.verificar.request {html,etiqueta?} → {ok,verificado,motivos[],metricas}
 TESTIGO render.verificado / verificacion-visual.failed (.failed → lo siente la homeostasis)
 FRENO DURO (best-effort: 422 solo si verificado&&!ok)
-        carta-design.save                tras estructural → _checkRender → 422 no guarda
-        carta-digital._publicarBundle    genera HTML → render → 422 no publica
-TESTS   verificador-visual__render 12 (incl. navegador real: obscura) · verificador-visual__multiangulo · carta-design__freno-render 5
+        carta-design.save (3.3.0)        tras estructural → _checkRender → 422 no guarda
+        carta-digital._publicarBundle (2.19.0) genera HTML → render → 422 no publica
+TESTS   verificador-visual__render 12 (incl. navegador real: obscura si está, Chromium si no) · carta-design__freno-render 5
 ```
 
 ## RUMBO

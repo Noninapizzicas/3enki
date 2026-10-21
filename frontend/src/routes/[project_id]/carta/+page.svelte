@@ -6,11 +6,11 @@
    * El cliente ve la carta, personaliza productos y pide por WhatsApp.
    */
   import { page } from '$app/stores';
-  import { sessionProjectId } from '$lib/stores/sessionProject';
+  import { activeProjectId } from '$lib/stores/projects';
   import CartaScreen from '$lib/components/carta/CartaScreen.svelte';
 
   $: urlProjectId = $page.params.project_id;
-  $: projectId = $sessionProjectId || urlProjectId;
+  $: projectId = $activeProjectId || urlProjectId;
 </script>
 
 <svelte:head>

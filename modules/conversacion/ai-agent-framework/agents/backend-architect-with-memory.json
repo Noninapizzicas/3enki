@@ -1,0 +1,28 @@
+{
+  "name": "backend-architect-with-memory",
+  "description": "Senior backend architect specializing in scalable system design, database architecture, API development, and cloud infrastructure. Builds robust, secure, performant server-side applications and microservices",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/backend-architect-with-memory.md",
+  "metadata": {
+    "domain": "integrations",
+    "tags": [
+      "integrations",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "integrations",
+    "display_name": "Backend Architect",
+    "emoji": null,
+    "vibe": null
+  }
+}

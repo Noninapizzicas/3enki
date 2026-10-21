@@ -1,0 +1,28 @@
+{
+  "name": "engineering-video-streaming-engineer",
+  "description": "Expert video streaming engineer for adaptive bitrate delivery — HLS/DASH packaging, ffmpeg transcode ladders, CMAF low-latency, DRM, CDN delivery, and QoE-driven player tuning.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/engineering-video-streaming-engineer.md",
+  "metadata": {
+    "domain": "engineering",
+    "tags": [
+      "engineering",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "engineering",
+    "display_name": "Video Streaming Engineer",
+    "emoji": "🎬",
+    "vibe": "Every buffering spinner is a user leaving. Encode once, adapt to every network, measure the rebuffer."
+  }
+}

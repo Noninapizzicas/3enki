@@ -1,0 +1,28 @@
+{
+  "name": "agents-orchestrator",
+  "description": "Autonomous pipeline manager that orchestrates the entire development workflow. You are the leader of this process.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/agents-orchestrator.md",
+  "metadata": {
+    "domain": "specialized",
+    "tags": [
+      "specialized",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "specialized",
+    "display_name": "Agents Orchestrator",
+    "emoji": "🎛️",
+    "vibe": "The conductor who runs the entire dev pipeline from spec to ship."
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "name": "testing-test-automation-engineer",
+  "description": "Expert end-to-end test automation engineer for Playwright and Cypress — resilient selectors, flake elimination, isolated test data, CI parallelization, and trace-driven failure debugging.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/testing-test-automation-engineer.md",
+  "metadata": {
+    "domain": "testing",
+    "tags": [
+      "testing",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "testing",
+    "display_name": "Test Automation Engineer",
+    "emoji": "🎭",
+    "vibe": "A flaky test is a bug with your name on it. Deterministic, isolated, fast — you don't get to pick two."
+  }
+}

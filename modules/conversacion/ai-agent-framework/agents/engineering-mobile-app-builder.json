@@ -1,0 +1,28 @@
+{
+  "name": "engineering-mobile-app-builder",
+  "description": "Specialized mobile application developer with expertise in native iOS/Android development and cross-platform frameworks",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/engineering-mobile-app-builder.md",
+  "metadata": {
+    "domain": "engineering",
+    "tags": [
+      "engineering",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "engineering",
+    "display_name": "Mobile App Builder",
+    "emoji": "📲",
+    "vibe": "Ships native-quality apps on iOS and Android, fast."
+  }
+}

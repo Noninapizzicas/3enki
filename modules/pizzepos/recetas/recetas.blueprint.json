@@ -1,179 +1,1124 @@
 {
-  "schema": "blueprint-interfaz-v2",
+  "_doc": "Blueprint CONCRETO del modulo recetas v1.0.0. Reemplaza completamente al modulo recetas legacy v4.0.0 (cuyo index.js queda como referencia historica). Declara las 13 operaciones del dominio en formato declarativo: contrato + pseudocodigo + reglas. El LLM ES el runtime: lee este blueprint (junto con el padre) como su contrato, sigue el pseudocodigo de cada operacion publicando eventos al bus directamente via bus.publish / bus.publishAndWait. NO existe runtime intermedio. NO existen helpers JS del dominio.",
   "id": "recetas",
-  "version": "blueprint-2.0.0",
-  "moduleId": "recetas",
-  "titulo": "El RECETARIO (origen del coste): el JEFE define CÓMO se hace cada cosa que se elabora (pizza, masa, salsa, base) con sus cantidades exactas. Crear receta (editor-bloque de líneas ingrediente×cantidad) + validar la forma (el FRENO AJV). El coste lo deriva escandallo y se muestra, no se edita aquí.",
-  "_doc": "Blueprint v2 de INTERFAZ de la cara del JEFE del modulo recetas (pizzepos v2.2.0, HIBRIDO: reflejo JS + blueprint agéntico). Reemplaza blueprint-2.9.0 (agéntico): v2.0.0 REESCRIBE en schema 'blueprint-interfaz-v2' (lente de roles esquematizador-jefe, ciclo v2 30-ago-2026) SIN cambiar el contrato: los 5 ui_handlers reales de module.json (listar, obtener, ingredientes, crear, validar). El blueprint HIBRIDO anterior (cajones LLM: crear desde intencion, investigar, editar por cajones) sigue VIVO en la pagina (lo FUZZY del chat); su _doc agéntico se conserva en _doc_historico. La cara del jefe de este panel opera el REFLEJO directamente (instantaneo y verificado): crear (persist verificado, 201 solo si aterrizo) + validar (freno AJV puro). RPC real: ui/request/recetas/<accion> (ui_handlers declarados) y RPC de bus correlado recetas.<op>.request -> .response. Verificaciones de codigo: modules/pizzepos/recetas/index.js 319 lineas (handlers L29-33, crear L186-282, validar L112-129, senales L271/L306), receta.schema.json (el FRENO AJV), module.json (5 ui_handlers). Nada inventado: ver _verificado_en_codigo.",
-  "_doc_historico": "Blueprint CONCRETO del modulo recetas v1.0.0. Reemplaza completamente al modulo recetas legacy v4.0.0 (cuyo index.js queda como referencia historica). Declara las 13 operaciones del dominio en formato declarativo: contrato + pseudocodigo + reglas. El LLM ES el runtime: lee este blueprint (junto con el padre) como su contrato, sigue el pseudocodigo de cada operacion publicando eventos al bus directamente via bus.publish / bus.publishAndWait. NO existe runtime intermedio. NO existen helpers JS del dominio. [CONSERVADO en v2.0.0: la cara FUZZY (crear desde intencion, investigar, editar por cajones LLM) sigue viva en el chat; el panel del jefe opera el reflejo directamente.]",
-  "eventos_publicados": [
-    "receta.creada",
-    "receta.actualizada"
+  "version": "blueprint-2.9.0",
+  "extends_blueprint_abstract": "subsistema-recetario.modulo-base",
+  "_temperatura_doc": "Pagina MIXTA (templada): el grueso es custodio fiel (crear/actualizar una receta NO inventa ingredientes — los toma del catalogo), pero investigar_receta es busqueda con chispa. 0.5 = un punto por encima del default custodio del subsistema (0.4) por la parte de investigacion, sin soltar la disciplina de no inventar datos.",
+  "temperatura": 0.5,
+  "language": "es",
+  "_v2_1_changelog": "v2.1.0 (2026-06-09): migra el pseudocodigo de TODAS las operaciones al modelo_canonico (paso 2). crear/actualizar construyen {tipo, rinde, lineas} (lineas con 'ref' unico; fuera porciones/tiempo/dificultad — ya no se piden). actualizar_precio + catalogo usan precio + compra_unidad (antes precio_mercado + unidad) y fuente {mercadona,manual,estimado}. _aplicar_coste_calculado aplica coste_unidad + lineas_detalle/lineas_sin_precio. listar/buscar/historial/estadisticas/analizar proyectan tipo/rinde/lineas_count y filtran por tipo (fuera filtros dificultad/tiempo/porciones). Normalizador 'ingredientes' → 'lineas' (resuelve ref por nombre); +normalizador 'rinde'. id de receta = slug del nombre. PENDIENTE: escandallo (recorrer lineas/ref) y frontend.",
+  "_v2_changelog": "v2.0.0 (2026-06-09): MODELO CANONICO. Descompone el dominio en 3 clases (Ingrediente, Receta, Linea) como seccion gobernante 'modelo_canonico' — UNA estructura, un solo patron, para que el LLM no improvise formas distintas cada dia (raiz del churn/perdida/alucinacion segun audit del proyecto nonina). Cambios de shape: Receta gana 'tipo' (pizza|masa|salsa|base) y 'rinde' {cantidad,unidad}; 'ingredientes[]' → 'lineas[]' donde cada Linea tiene UN campo de enlace 'ref' (unifica id_ingrediente+ref_receta_id: apunta a Ingrediente del catalogo O a otra Receta). Se eliminan de la friccion porciones/dificultad/tiempo_min (el LLM ya NO los pide). coste_porcion → coste_unidad (coste_total/rinde.cantidad). disciplina_ingredientes → disciplina_lineas. campos_que_marcan_completa = {nombre,tipo,lineas}. ESTADO: modelo + shapes + disciplina LOCKED este commit; pendiente de migrar a continuacion el pseudocodigo de las operaciones, escandallo (recorre lineas/ref) y los stores frontend. modelo_canonico es la fuente de verdad de la estructura mientras tanto.",
+  "_v1_9_changelog": "v1.9.0 (2026-06-09): consolida las DOS vias en recetas.json — recetas[] + ingredientes_catalogo[] como fuente UNICA de precio (la otra via). (1) shape_ingrediente_catalogado gana 'id' (slug estable, clave de enlace) y 'mercadona_producto_id' (cache del producto para refrescar precio sin re-navegar); 'unidad' acotada a kg|l|ud y precio_mercado documentado como precio por esa unidad. (2) shape_ingrediente (linea de receta) gana 'id_ingrediente' (enlace al catalogo) — mutuamente excluyente con ref_receta_id. (3) actualizar_precio: upsert keyed por id (slug derivado del nombre si no se pasa), soporta id + mercadona_producto_id; es la operacion por la que escandallo cachea precios Mercadona (una conexion por ingrediente). (4) disciplina_ingredientes: regla CATALOGO UNICA FUENTE DE PRECIO (commodity → id_ingrediente → catalogo; nada de precios sueltos en la receta). Retrocompatible: campos nuevos opcionales.",
+  "_v1_8_changelog": "v1.8.0 (2026-06-09): educa al LLM en la disciplina receta↔ingrediente para que las recetas nazcan costeables y no haya que reparar el dato a posteriori. (1) shape_ingrediente gana campo opcional ref_receta_id (uuid|null): cuando un ingrediente es a su vez una preparacion mantenida como receta (masa, salsa base, semi-elaborado) se referencia por id (cantidad = nº porciones, unidad='ud') en vez de duplicar su formula como commodity — escandallo usara su coste_porcion real en vez de estimar. (2) normalizadores_que_aplica_el_llm gana bloque disciplina_ingredientes con 4 reglas: UNIDAD CANONICA (g|kg|ml|l|ud, prohibido peso embebido en unidad tipo 'bola (315g)'), NOMBRE RESOLUBLE Y UNICO (comercial/Mercadona, sin genericos como 'Queso', mismo nombre en todas las recetas), SUB-RECETA (ref_receta_id), NO DUPLICAR PREPARACIONES (listar antes de crear, reusar la masa existente). (3) garantiza añade la invariante correspondiente. Sin cambios en operaciones ni en el shape persistido fuera del campo nuevo (opcional, retrocompatible: recetas sin ref_receta_id siguen valiendo).",
+  "_v1_1_changelog": "v1.1.0 (2026-05-24): anyade subscriber asincrono al evento 'escandallo.coste.calculado' via mecanismo blueprint-subscribers-asincronos (ai-gateway commit 6cb2082c). Operacion interna nueva _aplicar_coste_calculado (prefijo _ = no expuesta como cajon al LLM, solo invocada cuando llega el evento). Recetas mantiene la propiedad absoluta de pizzepos/recetas.json — escandallo NO escribe directo (paradigma event-core puro), publica el evento y recetas lo aplica. Operaciones pre-existentes (crear, listar, obtener, etc.) sin cambios.",
+  "rol": "Aggregate root del subsistema-recetario. Custodio del dato canonico de cada receta y del catalogo de ingredientes del proyecto.",
+  "garantiza": [
+    "Cada receta tiene id (uuid), nombre, version (entero >=1), estado_operativo in {borrador|en_servicio|archivada}.",
+    "No hay duplicados activos: dos recetas no pueden tener el mismo nombre normalizado (lowercase + trim) en estado_operativo=en_servicio simultaneamente.",
+    "Persistencia atomica en pizzepos/recetas.json (path relativo al base_path del proyecto, resuelto por filesystem internamente cuando se incluye project_id en el payload).",
+    "Cada operacion de mutacion publica el evento canonico correspondiente (receta.creada, receta.actualizada, receta.estado.actualizada, receta.eliminada, ingrediente.precio.actualizado).",
+    "Cada actualizacion pushea snapshot al history[] de la receta y bumps version (+1). Las versiones anteriores se pueden restaurar via revertir.",
+    "Las transiciones de estado_operativo respetan TRANSICIONES_VALIDAS (declaradas en el padre). Transicion invalida → PRECONDITION_FAILED.",
+    "incompleta + campos_pendientes se recalculan en cada mutacion (crear, actualizar, revertir) — campos_pendientes son los de {nombre, ingredientes, instrucciones, porciones} vacios.",
+    "Cada receta es { tipo, rinde, lineas } (modelo_canonico). Cada Linea referencia por 'ref' un Ingrediente del catalogo o otra Receta (sub-receta) — un solo patron; unidad canonica g|ml|ud; nombre comercial unico; nunca se duplica ni se re-lista una preparacion."
   ],
-  "eventos_que_escucho": [
-    "receta.creada",
-    "receta.actualizada"
+  "no_garantiza": [
+    "Coste real — escandallo escucha receta.creada/actualizada y calcula via su propio pseudocodigo.",
+    "Viabilidad economica — viabilidad calcula tras escandallo.",
+    "Sugerencias culinarias creativas — recetario-creativo (modulo aparte) propone prototipos.",
+    "Catalogo de ingredientes detallado (alergenos, origen) — solo precio + categoria + compra_unidad."
   ],
-  "transporte": {
-    "rpc": [
-      "ui/request/recetas/listar (ui_handler) -> respuesta directa",
-      "ui/request/recetas/obtener (ui_handler) -> respuesta directa",
-      "ui/request/recetas/ingredientes (ui_handler) -> respuesta directa",
-      "ui/request/recetas/crear (ui_handler) -> respuesta directa",
-      "ui/request/recetas/validar (ui_handler) -> respuesta directa"
-    ],
-    "salida": [
-      "receta.creada",
-      "receta.actualizada (coste aplicado por escandallo)"
-    ]
+  "convencion_de_paths_filesystem": {
+    "_descripcion": "filesystem espera paths LEADING-SLASH relativos al base_path del proyecto. NO construir paths absolutos del sistema concatenando base_path — duplica el prefijo. El project_id viaja en el payload y filesystem resuelve internamente.",
+    "correcto": "publishAndWait('fs.read.request', { project_id: input.project_id, path: '/pizzepos/recetas.json' })",
+    "incorrecto": "publishAndWait('fs.read.request', { path: base_path + '/pizzepos/recetas.json' })  // duplica prefijo"
   },
-  "ui": {
-    "_doc": "Panel de la CARA DEL JEFE del recetario: INFORMARSE (cinta + selector + TABLA de lineas ingrediente×cantidad con coste si escandallo ya lo escribio), DECLARAR (CREAR receta: editor-bloque con lineas dinamicas + el FRENO validar en vivo), CONFIRMAR (dictamen 201/409/503 + receta.creada). Jefe-primero: primero la cinta y la tabla (lo diario), despues el editor-bloque de crear (la forma GRANDE, baja frecuencia). El coste NO se edita aqui: lo escribe escandallo, se muestra.",
-    "ops": {
-      "listar": {
-        "titulo": "Listar recetas",
-        "descripcion": "Proyeccion del recetario (reflejo JS, sin turno LLM). EXIGE project_id.",
-        "args": [
-          { "nombre": "estado", "tipo": "select", "required": false, "enum": ["borrador", "en_servicio", "archivada"], "descripcion": "Estado operativo (default en_servicio)." },
-          { "nombre": "solo_incompletas", "tipo": "boolean", "required": false, "descripcion": "Solo recetas con campos pendientes." },
-          { "nombre": "solo_sin_coste", "tipo": "boolean", "required": false, "descripcion": "Solo recetas sin coste_unidad calculado." },
-          { "nombre": "incluir_lineas", "tipo": "boolean", "required": false, "descripcion": "Incluir lineas[] y coste_unidad en cada item." },
-          { "nombre": "limit", "tipo": "number", "required": false, "placeholder": "max resultados (default 50)" }
-        ]
-      },
-      "obtener": {
-        "titulo": "Ver una receta",
-        "descripcion": "Receta completa por id (slug) o nombre normalizado. Incluye lineas, rinde y coste si lo calculo escandallo.",
-        "args": [
-          { "nombre": "receta_id", "tipo": "text", "required": false, "placeholder": "id de la receta (slug)" },
-          { "nombre": "nombre", "tipo": "text", "required": false, "placeholder": "o nombre exacto" }
-        ]
-      },
-      "ingredientes": {
-        "titulo": "Catalogo de ingredientes",
-        "descripcion": "Catalogo de ingredientes del proyecto (id, nombre, compra_unidad, precio, fuente). Fuente unica de precio para escandallo. Servido por el reflejo JS."
-      },
-      "crear": {
-        "titulo": "Crear receta",
-        "descripcion": "Alta de una receta del modelo canonico { nombre, tipo, rinde, lineas[] }. El reflejo valida contra el contrato y persiste verificado (201 solo si aterrizo).",
-        "args": [
-          { "nombre": "nombre", "tipo": "text", "required": true, "placeholder": "nombre de la receta" },
-          { "nombre": "tipo", "tipo": "select", "required": false, "enum": ["pizza", "masa", "salsa", "base"], "descripcion": "Tipo (default pizza)." },
-          { "nombre": "lineas", "tipo": "json", "required": false, "descripcion": "Lineas [{ref, nombre, cantidad, unidad: g|ml|ud}]. ref = id de ingrediente del catalogo o de otra receta." },
-          { "nombre": "rinde", "tipo": "json", "required": false, "descripcion": "Rinde {cantidad, unidad: ud|g|ml}. Si falta, se infiere por tipo." },
-          { "nombre": "notas", "tipo": "text", "required": false }
-        ]
-      },
-      "validar": {
-        "titulo": "Validar receta",
-        "descripcion": "Freno del contrato: valida una receta contra receta.schema.json (AJV). Devuelve {valid, errors}. Funcion pura del reflejo.",
-        "args": [
-          { "nombre": "receta", "tipo": "json", "required": true, "descripcion": "Receta a validar (modelo canonico)." }
-        ]
-      }
+  "modelo_canonico": {
+    "_descripcion": "LA estructura. Govierna TODO el blueprint. Tres clases, un solo patron — el LLM construye SIEMPRE asi, no improvisa formas distintas cada vez. El coste es DERIVADO (lo escribe escandallo); el LLM solo estructura, no calcula coste en el chat.",
+    "clases": {
+      "Ingrediente": "atomo con precio (vive en ingredientes_catalogo[]). { id: slug, nombre: comercial unico, compra_unidad: 'kg'|'l'|'ud', precio: number por compra_unidad, fuente: string libre juzgada por la ley de la evidencia (prisma-del-caso), url: string|null (evidencia; obligatoria para toda afirmacion externa) }.",
+      "Receta": "TODO lo que se elabora: pizza | masa | salsa | base (vive en recetas[]). { id: slug, nombre, tipo, rinde: {cantidad, unidad}, lineas: Linea[] }. coste_total/coste_unidad son DERIVADOS — los escribe escandallo, el LLM NO los toca.",
+      "Linea": "une una Receta con una de sus partes. { ref: id, nombre, cantidad: number, unidad: 'g'|'ml'|'ud', notas?: string }. 'ref' apunta a un Ingrediente (catalogo) O a otra Receta (sub-receta: masa, salsa). UN solo campo de enlace para todo."
     },
-    "datos": {
-      "op": "listar",
-      "titulo": "Recetas del proyecto",
-      "refresh_on": [
-        "receta.creada",
-        "receta.actualizada"
+    "resolucion_ref": "escandallo resuelve 'ref': si esta en ingredientes_catalogo → Ingrediente (usa su precio); si esta en recetas → Receta (usa su coste_unidad x cantidad). Por eso masa, salsas caseras y toppings caben TODOS en la misma forma de Linea — un solo mecanismo.",
+    "camino_directo_del_llm": [
+      "Para crear/editar una receta SOLO necesitas: nombre, tipo (pizza|masa|salsa|base) y las lineas {ref, cantidad, unidad}.",
+      "Por cada linea: si el 'que' ya existe (ingrediente o receta) usa su id en ref; si es un ingrediente nuevo, dalo de alta en el catalogo (nombre comercial unico) y usa su id.",
+      "NO preguntes porciones, dificultad ni tiempo — no son del coste. 'rinde' lo infieres: pizza={1,'ud'}; masa={nº bolas,'ud'}; salsa={peso total,'g'}.",
+      "Una salsa casera (Victorino, alioli, mostaza, trufa) es una Receta tipo='salsa', NO una nota: creala una vez y referenciala con ref desde las pizzas.",
+      "El coste no lo calculas tu en el chat: lo hace escandallo y se persiste. Tu solo estructuras."
+    ],
+    "ejemplo": {
+      "ingredientes_catalogo": [
+        {
+          "id": "mozzarella",
+          "nombre": "Mozzarella fresca",
+          "compra_unidad": "kg",
+          "precio": 7.2,
+          "fuente": "mercadona"
+        }
       ],
-      "columnas": [
-        "nombre",
-        "tipo",
-        "estado_operativo",
-        "version",
-        "incompleta",
-        "coste_unidad"
+      "recetas": [
+        {
+          "id": "masa-nonina",
+          "nombre": "Masa Nonina",
+          "tipo": "masa",
+          "rinde": {
+            "cantidad": 8,
+            "unidad": "ud"
+          },
+          "lineas": [
+            {
+              "ref": "harina",
+              "nombre": "Harina de fuerza",
+              "cantidad": 1000,
+              "unidad": "g"
+            }
+          ]
+        },
+        {
+          "id": "cumbia",
+          "nombre": "Cumbia",
+          "tipo": "pizza",
+          "rinde": {
+            "cantidad": 1,
+            "unidad": "ud"
+          },
+          "lineas": [
+            {
+              "ref": "masa-nonina",
+              "nombre": "Masa Nonina",
+              "cantidad": 1,
+              "unidad": "ud"
+            },
+            {
+              "ref": "mozzarella",
+              "nombre": "Mozzarella",
+              "cantidad": 80,
+              "unidad": "g"
+            },
+            {
+              "ref": "salsa-victorino",
+              "nombre": "Salsa Victorino",
+              "cantidad": 30,
+              "unidad": "g"
+            }
+          ]
+        }
       ]
     },
-    "estados": [
-      { "nombre": "en_servicio", "terminal": false, "color": "green", "icono": "ACTIVA" },
-      { "nombre": "borrador", "terminal": false, "color": "yellow", "icono": "BORRADOR" },
-      { "nombre": "incompleta", "terminal": false, "color": "red", "icono": "INCOMPLETA" },
-      { "nombre": "con_coste", "terminal": false, "color": "blue", "icono": "COSTE" }
-    ],
-    "flujo": [
-      {
-        "nombre": "jefe",
-        "orden": 1,
-        "ops": ["crear", "validar"],
-        "descripcion": "DECLARAR el recetario: CREAR receta (editor-bloque: nombre + tipo + rinde + lineas dinamicas ingrediente×cantidad con ref del catalogo) y VALIDAR la forma (el FRENO AJV en vivo, dictamen errors[].path). El reflejo persiste verificado: 201 solo si aterrizo, 409 si ya existe, 503 si no se confirmo en disco."
-      },
-      {
-        "nombre": "consulta",
-        "orden": 3,
-        "ops": ["listar", "obtener", "ingredientes"],
-        "descripcion": "INFORMARSE antes de decidir: la cinta del recetario (n recetas · n con coste · n incompletas), la TABLA de lineas de la receta seleccionada (ingrediente×cantidad + coste si escandallo ya lo escribio), y el catalogo de ingredientes para resolver el ref de las lineas."
-      }
-    ],
-    "roles": {
-      "listar": "neutro",
-      "obtener": "neutro",
-      "ingredientes": "neutro",
-      "crear": "jefe",
-      "validar": "jefe"
+    "_estado_migracion": "v2.3.0: modelo canonico LOCKED + TODAS las operaciones migradas (tipo/rinde/lineas/ref/precio/compra_unidad/coste_unidad). 'listar' acepta incluir_lineas=true (devuelve lineas + coste_unidad) — lo consume escandallo.recalcular_siguiente (CLASE EscandalloRecetas) para costear de una en una, reanudable. Stores frontend (recetas.ts/escandallo.ts) ya migrados. COMPLETO: recetas ↔ escandallo cierran el lazo sobre el modelo canonico."
+  },
+  "estado_persistente": {
+    "_descripcion": "El unico estado del modulo vive en disco como JSON en pizzepos/recetas.json del proyecto. Estructura del store.",
+    "ubicacion_logica": "/pizzepos/recetas.json (relativo al base_path del proyecto)",
+    "shape": {
+      "_version": "string ('1.0')",
+      "_updated_at": "ISO 8601 — se refresca en cada mutacion",
+      "recetas": "array de Receta",
+      "ingredientes_catalogo": "array de IngredienteCatalogado"
     },
-    "formas_jefe": {
-      "cinta_recetario": {
-        "forma": "cinta-estado",
-        "rpc": "recetas.listar {project_id, incluir_lineas:true} -> n recetas · n con coste · n incompletas",
-        "senal": "receta.creada + receta.actualizada (debounce 60ms, una re-lectura)"
-      },
-      "selector_receta": {
-        "forma": "ref-select",
-        "rpc": "recetas.listar {project_id, incluir_lineas:true} -> recetas[]{receta_id, nombre, tipo, rinde, lineas[], coste_unidad}",
-        "senal": null
-      },
-      "tabla_recetario": {
-        "forma": "tabla de lineas ingrediente×cantidad",
-        "rpc": "recetas.obtener {project_id, receta_id} -> ficha completa (spread directo) + recetas.listar {incluir_lineas:true}",
-        "senal": "receta.actualizada (coste aplicado por escandallo)"
-      },
-      "crear_receta": {
-        "forma": "editor-bloque (la forma GRANDE): nombre + tipo + rinde + lineas dinamicas (ref del catalogo recetas.ingredientes, cantidad, unidad g|ml|ud, notas) con el FRENO validar en vivo",
-        "rpc": "recetas.crear {project_id, nombre, tipo?, rinde?, lineas[]} -> 201 {receta_id, nombre, tipo, estado_operativo, incompleta, campos_pendientes, lineas_count} | 409 ALREADY_EXISTS | 503 NO guardada",
-        "senal": "receta.creada (1x, tras verificar aterrizaje)"
-      },
-      "freno_validar": {
-        "forma": "informe/dictamen bajo el editor: errors[].path clicables en su fila",
-        "rpc": "recetas.validar {receta} -> SIEMPRE 200 {valid, errors[]{path, keyword, message}} (funcion pura, sin señal)",
-        "senal": null
+    "shape_receta": {
+      "id": "slug estable (lowercase, guiones; derivado del nombre). Clave de enlace desde Linea.ref.",
+      "nombre": "string trim",
+      "tipo": "string in {pizza, masa, salsa, base} — que clase de elaborado es",
+      "descripcion": "string | ''",
+      "rinde": "{ cantidad: number > 0, unidad: 'ud'|'g'|'ml' } — cuanto produce. pizza={1,ud}; masa={nº bolas,ud}; salsa={peso total,g}. escandallo: coste_unidad = coste_total / rinde.cantidad.",
+      "lineas": "array de Linea { ref, nombre, cantidad: number, unidad: 'g'|'ml'|'ud', notas?: string }. ref → id de un Ingrediente (catalogo) o de otra Receta (sub-receta).",
+      "instrucciones": "array de string (pasos) | '' — opcional, info de cocina (no bloquea coste)",
+      "categorias": "array de string",
+      "etiquetas": "array de string",
+      "fuente": "string in {manual, importada, sugerida, agente} — default 'manual'",
+      "notas": "string | ''",
+      "estado_operativo": "borrador | en_servicio | archivada",
+      "version": "number (1 al crear, +1 por update)",
+      "history": "array de snapshots de versiones anteriores ({ ...receta sin history, _archived_at: ISO })",
+      "incompleta": "boolean (true si campos_pendientes.length > 0)",
+      "campos_pendientes": "array — de {nombre, tipo, lineas} que esten vacios",
+      "created_at": "ISO 8601",
+      "updated_at": "ISO 8601",
+      "_campos_escritos_por_escandallo": {
+        "_descripcion": "DERIVADOS. Los escribe escandallo al calcular coste; el LLM NO los toca y recetas los preserva en mutaciones. Ausentes si nunca se calculo.",
+        "coste_total": "number — suma del valor de las lineas (eur).",
+        "coste_unidad": "number — coste_total / rinde.cantidad, 2 decimales.",
+        "coste_actualizado_at": "ISO 8601.",
+        "fuentes_precios": "array ⊆ {catalogo, mercadona, estimado_llm, sub_receta, no_disponible}.",
+        "lineas_detalle": "array — desglose por linea con ref, precio_unitario, valor_calculado, fuente.",
+        "lineas_sin_precio": "array de nombres que no se pudieron valorar."
       }
+    },
+    "shape_ingrediente_catalogado": {
+      "id": "string slug — clave de enlace (Linea.ref apunta aqui). Si no se pasa al upsert, se deriva del nombre (lowercase, espacios y acentos → guiones). Estable.",
+      "nombre": "string trim — comercial, unico. Lookup case-insensitive si no hay id",
+      "categoria": "string | null",
+      "compra_unidad": "string ('kg' | 'l' | 'ud') — unidad en la que se expresa 'precio'",
+      "precio": "number >= 0 — precio por compra_unidad (por kg, por l o por ud). Fuente UNICA de precio del ingrediente para escandallo.",
+      "mercadona_producto_id": "string | null — producto Mercadona del que salio el precio (cacheado para refrescar sin re-navegar)",
+      "fuente": "string in {mercadona, manual, estimado} — default 'manual'",
+      "created_at": "ISO 8601",
+      "updated_at": "ISO 8601"
     }
   },
-  "_lente_roles": {
-    "agente": "ciclo-recetas v2",
-    "metodo": "esquematizador-jefe (modules/pizzepos/recetas/esquema-jefe/ — pasada-1, pasada-2, pasada-3, esquema.md)",
-    "arbitro": "¿define el FUTURO del recetario (que existe, como se hace cada pizza)? -> jefe · ¿solo lee/informa? -> neutro · ¿ejecuta en la venta/cocina? -> utilizacion (fuera)",
-    "veredicto": "5/5 ops juzgadas: jefe(2) crear (LA DEFINICION del negocio: da de alta COMO se hace cada pizza con sus lineas ingrediente×cantidad; existe reflejo con ui_handler onCrearRequest L186-282 -> el panel-jefe SI lo captura) + validar (EL FRENO del propio crear: juzga la forma contra receta.schema.json AJV, funcion pura L112-129) · neutro(3) listar (proyeccion que alimenta decisiones propias y a escandallo) + obtener (ficha completa) + ingredientes (catalogo para resolver el ref de las lineas).",
-    "senales": "crear -> receta.creada (index.js L271, 1x, SOLO tras verificar que la persistencia aterrizo: doble confirmacion dictamen+senal, nunca optimismo) · coste de escandallo -> receta.actualizada (L306, onCosteCalculado, campos_actualizados + origen:'escandallo.coste.calculado', 1 por coste aplicado) · listar/obtener/ingredientes -> lecturas sin señal · validar -> dictamen en la RESPUESTA (funcion pura, no se fabrica pareo).",
-    "nota_crear": "crear es persist VERIFICADO: id slug estable + dedup (409 ALREADY_EXISTS con existing_id) + persist atomico + VERIFICA que la receta este en el archivo antes de emitir receta.creada (L262-269) — si no aterrizo, 503 UPSTREAM_UNREACHABLE 'NO guardada'. RESPUESTA = dictamen: 201 {receta_id, nombre, tipo, estado_operativo, incompleta, campos_pendientes, lineas_count}.",
-    "nota_coste": "El coste VIVE en las lineas: escandallo lee recetas.listar {incluir_lineas:true} (receta_id, lineas[], coste_unidad) y ESCRIBE de vuelta via escandallo.coste.calculado (persist write L286-316). El recetario no calcula nada: su job es dejar las lineas COSTEABLES (ref resoluble + cantidad > 0 + unidad canonica). La UI muestra coste_unidad/lineas_detalle/lineas_sin_precio, NO los edita.",
-    "nota_project_id": "recetas.listar EXIGE project_id (L38: if (!input.project_id) return this._invalid('project_id')) — el bug del escandallo lo demostro (cinta fallaba con 'project_id requerido'). TODOS los RPC del store deben inyectar project_id.",
-    "dualidad": "JEFE=crear receta (la definicion de como se hace cada pizza) + validar la forma (el freno AJV) | UTILIZACION=vacia en este panel (consumir recetas al vender = POS, ejecutarlas = cocina — fuera) | neutro=listar/obtener/ingredientes (lecturas que alimentan decisiones propias y a escandallo)",
-    "huecos_abiertos": [
-      "[ABIERTO] cara EDITAR una receta existente: actualizar tiene pseudocodigo agéntico (snapshot history + bump + freno) PERO sin reflejo ni ui_handler — la UI no la inventa; hoy via chat. Si llega su reflejo: nueva pasada.",
-      "[ABIERTO] eliminar / archivar / cambiar_estado en UI (sin reflejo).",
-      "[ABIERTO] alta de ingrediente desde el editor (un ref sin entrada del catalogo hoy exige chat / modulo ingredientes).",
-      "[ABIERTO] instrucciones/descripcion/notas del editor (el reflejo las persiste — forma de edicion aun sin decidir).",
-      "[ABIERTO] flujo de sub-recetas en el editor (referenciar masa/salsa ya creadas vs crearlas aqui mismo)."
+  "fuentes_aceptadas": {
+    "receta": [
+      "manual",
+      "importada",
+      "sugerida",
+      "agente"
     ],
-    "moderacion": "crear es jefe AQUI en el reflejo (existe ui_handler onCrearRequest): el blueprint fuzzy normaliza lenguaje natural y DELEGA el guardar aqui (v2.7). El panel-jefe opera el reflejo directamente — sin turno LLM, instantaneo y verificado. La cara FUZZY (crear desde intencion, investigar, editar por cajones) sigue viva en el chat, NO se toca.",
-    "utilizacion": [],
-    "fuente_analisis": "modules/pizzepos/recetas/esquema-jefe/esquema.md",
-    "fecha": "2026-08-30"
+    "precio": [
+      "manual",
+      "scrap",
+      "api",
+      "agente"
+    ]
   },
-  "_verificado_en_codigo": {
-    "reflejo": "modules/pizzepos/recetas/index.js (reflejo-1.3.0, 319 lineas)",
-    "ui_handlers": "module.json L52-88: listar (L29), obtener (L31), ingredientes (L30), crear (L32), validar (L33)",
-    "senales": "receta.creada (L271, tras verificar aterrizaje) · receta.actualizada (L306, onCosteCalculado, origen:'escandallo.coste.calculado')",
-    "crear": "L186-282: id slug estable + dedup 409 + persist atomico (fs.write rama A / fs.edit rama B) + VERIFICA aterrizaje (L262-269) + receta.creada (L271) + 201 dictamen (L278-281)",
-    "validar": "L112-129: AJV contra receta.schema.json, SIEMPRE 200 {valid, errors[]{path, keyword, message}}, funcion pura sin señal",
-    "listar": "L37-65: EXIGE project_id (L38), filtros estado/solo_incompletas/solo_sin_coste, incluir_lineas -> lineas[] + coste_unidad",
-    "obtener": "L76-95: por receta_id|nombre, spread directo (sin history), + versiones_anteriores",
-    "ingredientes": "L67-74: catalogo {id, nombre, compra_unidad, precio, fuente}, filtro categoria",
-    "errores": "400 INVALID_INPUT (falta project_id/campos) · 404 RESOURCE_NOT_FOUND (receta no encontrada) · 409 ALREADY_EXISTS (nombre activo duplicado, existing_id) · 503 UPSTREAM_UNREACHABLE (fs fallo / no aterrizo)"
-  }
+  "normalizadores_que_aplica_el_llm": {
+    "_descripcion": "El LLM razona estos normalizadores mentalmente — son lenguaje natural + reglas. No son tools.",
+    "nombre": "trim. Comparacion para duplicados: toLowerCase + trim.",
+    "lineas": [
+      "Cada linea normaliza a Linea del modelo_canonico: { ref, nombre, cantidad, unidad: 'g'|'ml'|'ud', notas? }.",
+      "Si input es array de strings → cada string es el nombre; resuelve ref por nombre (busca en ingredientes_catalogo y recetas). cantidad/unidad null hasta que el usuario los de.",
+      "Si input es array de objetos → mapear sinonimos (name→nombre, quantity→cantidad, unit→unidad, notes→notas, id/ingredient_id/recipe_id→ref). Si no hay ref, resuelve por nombre.",
+      "Si la linea es un ingrediente nuevo (sin entrada en catalogo) → dalo de alta con actualizar_precio y usa su id como ref. Si es una preparacion (masa/salsa) que ya es Receta → ref = id de esa Receta.",
+      "Filtrar al final lineas con nombre vacio. Aplica disciplina_lineas."
+    ],
+    "disciplina_lineas": [
+      "UN SOLO PATRON (modelo_canonico): cada linea de receta es { ref, nombre, cantidad, unidad }. 'ref' es el id de un Ingrediente del catalogo O de otra Receta (sub-receta). No hay otra forma — no improvises shapes distintos.",
+      "UNIDAD CANONICA: 'g' | 'ml' | 'ud'. NUNCA metas peso/cantidad dentro de 'unidad' como texto (mal: unidad='bola (315g)'; bien: cantidad=315, unidad='g'). Medida no convertible (hojas, pizca) → 'ud' con cantidad aproximada.",
+      "NOMBRE RESOLUBLE Y UNICO: nombre comercial especifico, localizable en Mercadona. Evita genericos (mal 'Queso' → 'Mozzarella'). El MISMO producto lleva SIEMPRE el mismo id+nombre en todas las recetas.",
+      "SUB-RECETA: masa, salsa casera, sofrito... son Receta tipo masa|salsa|base, NO notas ni listas embebidas. Creala una vez y referenciala con ref desde las pizzas (cantidad en su unidad de rinde). Asi escandallo usa su coste real.",
+      "NO DUPLICAR: antes de crear/referenciar, comprueba si ya existe (id/nombre normalizado) y reusala. Prohibido 'Masa Nonina' y 'Masa napolitana' para la misma masa.",
+      "CATALOGO UNICA FUENTE DE PRECIO: un ingrediente commodity es una entrada de ingredientes_catalogo; la linea lo referencia por ref. El catalogo (mismo archivo) es la UNICA fuente de precio, se llena una vez desde Mercadona. No metas precios sueltos en la receta."
+    ],
+    "instrucciones": [
+      "Si input es array → trim cada string, filtrar vacios.",
+      "Si input es string → split por '\\n' o '. ' (punto+espacio), trim, filtrar vacios."
+    ],
+    "rinde": "{ cantidad: number > 0, unidad: 'ud'|'g'|'ml' }. Si falta, inferir por tipo: pizza={1,'ud'}; masa={nº bolas,'ud'}; salsa={peso total,'g'}.",
+    "fuente_receta": "Si input en {manual,importada,sugerida,agente} → preservar. Otro → 'manual'.",
+    "fuente_precio": "String LIBRE (ley de la evidencia, prisma-del-caso): derivadas/manual/mercadona pasan; estimacion NO persiste como real; cualquier otra fuente exige evidencia (url|referencia_id) y entra. La fuente jamas se veta por nombre."
+  },
+  "campos_que_marcan_completa": [
+    "nombre",
+    "tipo",
+    "lineas"
+  ],
+  "operaciones": {
+    "crear": {
+      "input": "{ project_id (uuid, req), user_id?, nombre (req, string trim), tipo? (in {pizza,masa,salsa,base}, default 'pizza'), lineas?, rinde?, instrucciones?, categorias?, etiquetas?, fuente?, descripcion?, notas?, correlation_id? }",
+      "pseudocodigo": [
+        "async crear(input):  // AGENTE: das FORMA; el reflejo LEE/VALIDA/GUARDA (skill blueprint-agentico).",
+        "",
+        "  // 1. CONTRATO — input minimo (guarda = cara de enforcement)",
+        "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
+        "  if (!input.nombre || input.nombre.trim() === '') return INVALID_INPUT { field: 'nombre' }",
+        "",
+        "  // 2. LEER — hidrata el catalogo del reflejo (ms, sin turno LLM) para resolver 'ref'",
+        "  //    contra ingredientes/recetas REALES. FIDELIDAD: reusa el id existente, no inventes",
+        "  //    uno nuevo si el componente ya esta en el catalogo.",
+        "  cat = await publishAndWait('recetas.ingredientes.request', { project_id: input.project_id }, { timeout_ms: 8000 })",
+        "",
+        "  // 3. PENSAR (lo fuzzy, TU trabajo): lenguaje natural -> Receta del modelo_canonico.",
+        "  //    Cada Linea = { ref, nombre, cantidad>0, unidad('g'|'ml'|'ud'), notas? }. Resuelve 'ref'",
+        "  //    por nombre contra 'cat' y las recetas; infiere tipo (pizza|masa|salsa|base) y rinde si",
+        "  //    faltan. FIDELIDAD: cada dato sale del usuario o del catalogo. Si no sabes la cantidad de",
+        "  //    una linea, NO la inventes: dejala fuera (nace borrador) o preguntala. Aplica disciplina_lineas.",
+        "  receta = {",
+        "    nombre: input.nombre.trim(),",
+        "    tipo:   <pizza|masa|salsa|base, inferido si falta>,",
+        "    rinde:  <{cantidad>0, unidad} del input o inferido por tipo>,",
+        "    lineas: <Linea[] resueltas contra 'cat'; cada una cantidad>0, unidad g|ml|ud, nombre resoluble>,",
+        "    instrucciones: input.instrucciones, categorias: input.categorias, etiquetas: input.etiquetas,",
+        "    fuente: input.fuente, descripcion: input.descripcion, notas: input.notas",
+        "  }",
+        "",
+        "  // 4. VALIDAR — EL FRENO: el reflejo juzga la FORMA contra el contrato (receta.schema.json, AJV).",
+        "  //    La salida se guarda cuando el contrato la da por valida, no por tu confianza.",
+        "  intento = 0",
+        "  repeat:",
+        "    v = await publishAndWait('recetas.validar.request', { receta }, { timeout_ms: 8000 })",
+        "    if (v.data.valid) break",
+        "    intento += 1",
+        "    receta = <re-PENSAR corrigiendo SOLO los v.data.errors[].path (p.ej. /lineas/2/cantidad debe ser >0,",
+        "              unidad in {g,ml,ud}, nombre no vacio)>",
+        "  until (intento >= 3)",
+        "  if (!v.data.valid) return UPSTREAM_INVALID_RESPONSE { message: 'la receta no cumple el contrato tras 3 intentos', hint: v.data.errors }",
+        "",
+        "  // 5. GUARDAR — SIEMPRE por el reflejo (determinista, verificado): dedup activo + id slug estable +",
+        "  //    persist atomico + VERIFICA que la receta esta en el archivo ANTES de emitir receta.creada.",
+        "  resp = await publishAndWait('recetas.crear.request', {",
+        "    project_id: input.project_id, nombre: receta.nombre, tipo: receta.tipo,",
+        "    lineas: receta.lineas, rinde: receta.rinde, instrucciones: receta.instrucciones,",
+        "    descripcion: receta.descripcion, categorias: receta.categorias, etiquetas: receta.etiquetas,",
+        "    fuente: receta.fuente, notas: receta.notas, correlation_id: input.correlation_id",
+        "  }, { timeout_ms: 15000 })",
+        "",
+        "  // 6. EMITIR — el reflejo ya emitio receta.creada al confirmar el aterrizaje. Devuelve su respuesta",
+        "  //    TAL CUAL: 201 guardada Y verificada · 409 ya existe · 400 falta nombre · 503 el fs NO confirmo",
+        "  //    => di que NO se guardo y ofrece reintentar. PROHIBIDO afirmar 'guardada' que el reflejo no confirmo.",
+        "  return resp"
+      ],
+      "reglas_clave": [
+        "FORMA: das forma a una Receta del modelo_canonico { nombre, tipo, rinde, lineas[] }. Cada Linea { ref, nombre, cantidad>0, unidad g|ml|ud }.",
+        "FIDELIDAD: cada dato procede del usuario o del catalogo (recetas.ingredientes). Si falta una cantidad, dejas la linea fuera (nace borrador) — la forma sale de lo que hay, no de lo inventado.",
+        "FRENO: la receta pasa por recetas.validar.request y se guarda solo cuando el contrato la da por valida (max 3 intentos, corrigiendo el path del error). Si no cuaja, devuelves el fallo honesto (UPSTREAM_INVALID_RESPONSE).",
+        "GUARDAR VERIFICADO: el alta la hace el reflejo (recetas.crear.request): dedup + id slug + persist atomico + verifica el aterrizaje antes de emitir receta.creada. Repites su respuesta EXACTA (201 verificada | 503 NO guardada).",
+        "DELEGADO: el reflejo posee el store; tu das forma y validas, no compones el archivo ni afirmas exito que el reflejo no confirmo."
+      ],
+      "errores_posibles": [
+        "INVALID_INPUT",
+        "UPSTREAM_INVALID_RESPONSE",
+        "ALREADY_EXISTS",
+        "UPSTREAM_TIMEOUT",
+        "UPSTREAM_UNREACHABLE",
+        "UNKNOWN_ERROR"
+      ]
+    },
+    "listar": {
+      "input": "{ project_id (req), estado?='en_servicio', solo_incompletas?=false, solo_sin_coste?=false, limit?=50, incluir_lineas?=false }",
+      "pseudocodigo": [
+        "async listar(input):",
+        "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
+        "  estado = input.estado || 'en_servicio'",
+        "  if (!['borrador','en_servicio','archivada'].includes(estado)) return INVALID_INPUT { field: 'estado' }",
+        "  limit = (typeof input.limit === 'number' && input.limit > 0) ? input.limit : 50",
+        "",
+        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/pizzepos/recetas.json' })",
+        "  if (raw.status === 404) return { status: 200, data: { total: 0, recetas: [] } }",
+        "  store = JSON.parse(raw.content)",
+        "",
+        "  items = store.recetas.filter(r => r.estado_operativo === estado)",
+        "  if (input.solo_incompletas === true) items = items.filter(r => r.incompleta === true)",
+        "  if (input.solo_sin_coste === true) items = items.filter(r => !(typeof r.coste_unidad === \"number\" && r.coste_unidad > 0))",
+        "",
+        "  return { status: 200, data: {",
+        "    total: items.length,",
+        "    recetas: items.slice(0, limit).map(r => ({",
+        "      receta_id: r.id, nombre: r.nombre, tipo: r.tipo, rinde: r.rinde, lineas_count: Array.isArray(r.lineas) ? r.lineas.length : 0,",
+        "      incompleta: r.incompleta, campos_pendientes: r.campos_pendientes,",
+        "      estado_operativo: r.estado_operativo, version: r.version, updated_at: r.updated_at,",
+        "      ...(input.incluir_lineas === true ? { lineas: Array.isArray(r.lineas) ? r.lineas : [], coste_unidad: r.coste_unidad } : {})",
+        "    }))",
+        "  } }"
+      ],
+      "reglas_clave": [
+        "Solo lee, no muta. No publica eventos.",
+        "incluir_lineas=true devuelve 'lineas' (con ref/cantidad/unidad) + 'coste_unidad' por receta. Lo usa escandallo.recalcular_siguiente para elegir la siguiente pendiente y costearla sin pedir cada receta por separado."
+      ],
+      "errores_posibles": [
+        "INVALID_INPUT",
+        "UPSTREAM_TIMEOUT",
+        "UPSTREAM_UNREACHABLE",
+        "UNKNOWN_ERROR"
+      ]
+    },
+    "obtener": {
+      "input": "{ project_id (req), receta_id? | nombre? (al menos uno req) }",
+      "pseudocodigo": [
+        "async obtener(input):",
+        "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
+        "  if (!input.receta_id && !input.nombre) return INVALID_INPUT { field: 'receta_id|nombre' }",
+        "",
+        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/pizzepos/recetas.json' })",
+        "  if (raw.status === 404) return RESOURCE_NOT_FOUND { entity_type: 'recipe' }",
+        "  store = JSON.parse(raw.content)",
+        "",
+        "  // Lookup por id (UUID) → comparar id. Sino por nombre normalizado.",
+        "  ref = input.receta_id || input.nombre",
+        "  esUuid = <ref matches UUIDv4 regex>",
+        "  r = esUuid",
+        "    ? store.recetas.find(x => x.id === ref)",
+        "    : store.recetas.find(x => x.nombre.toLowerCase().trim() === ref.toLowerCase().trim())",
+        "  if (!r) return RESOURCE_NOT_FOUND { entity_type: 'recipe', entity_ref: ref }",
+        "",
+        "  // Devolver receta sin history pero anyadiendo versiones_anteriores (count).",
+        "  // Construir rest copiando campo a campo EXCLUYENDO 'history'",
+        "  //   (anti-patron pseudocodigo-estilo.contract: rest_spread con omision).",
+        "  rest = {}",
+        "  for (campo in r) {",
+        "    if (campo !== 'history') rest[campo] = r[campo]",
+        "  }",
+        "  return { status: 200, data: { ...rest, versiones_anteriores: (r.history || []).length } }"
+      ],
+      "reglas_clave": [
+        "Solo lee. Recetas archivadas TAMBIEN se devuelven (filtrar es responsabilidad del caller)."
+      ],
+      "errores_posibles": [
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND",
+        "UPSTREAM_TIMEOUT",
+        "UPSTREAM_UNREACHABLE",
+        "UNKNOWN_ERROR"
+      ]
+    },
+    "buscar": {
+      "input": "{ project_id (req), texto?, ingrediente?, tipo? (in {pizza,masa,salsa,base}), categoria?, etiqueta?, limit?=20 }",
+      "pseudocodigo": [
+        "async buscar(input):",
+        "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
+        "  limit = (typeof input.limit === 'number' && input.limit > 0) ? input.limit : 20",
+        "",
+        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/pizzepos/recetas.json' })",
+        "  if (raw.status === 404) return { status: 200, data: { total: 0, resultados: [] } }",
+        "  store = JSON.parse(raw.content)",
+        "",
+        "  // Solo busca entre en_servicio.",
+        "  items = store.recetas.filter(r => r.estado_operativo === 'en_servicio')",
+        "  if (input.texto) {",
+        "    t = input.texto.toLowerCase()",
+        "    items = items.filter(r => r.nombre.toLowerCase().includes(t) || (r.descripcion||'').toLowerCase().includes(t) || (r.lineas||[]).some(l => (l.nombre||'').toLowerCase().includes(t)))",
+        "  }",
+        "  if (input.ingrediente) {",
+        "    ing = input.ingrediente.toLowerCase()",
+        "    items = items.filter(r => (r.lineas||[]).some(l => (l.nombre||'').toLowerCase().includes(ing) || l.ref === ing))",
+        "  }",
+        "  if (input.tipo)             items = items.filter(r => r.tipo === input.tipo)",
+        "  if (input.categoria)        items = items.filter(r => r.categorias.includes(input.categoria))",
+        "  if (input.etiqueta)         items = items.filter(r => r.etiquetas.includes(input.etiqueta))",
+        "",
+        "  return { status: 200, data: {",
+        "    total: items.length,",
+        "    resultados: items.slice(0, limit).map(r => ({",
+        "      receta_id: r.id, nombre: r.nombre, tipo: r.tipo, rinde: r.rinde,",
+        "      lineas_count: Array.isArray(r.lineas) ? r.lineas.length : 0, categorias: r.categorias, etiquetas: r.etiquetas",
+        "    }))",
+        "  } }"
+      ],
+      "reglas_clave": [
+        "Filtros AND. Solo busca entre en_servicio. Devuelve ids+resumen, no recetas completas."
+      ],
+      "errores_posibles": [
+        "INVALID_INPUT",
+        "UPSTREAM_TIMEOUT",
+        "UPSTREAM_UNREACHABLE",
+        "UNKNOWN_ERROR"
+      ]
+    },
+    "actualizar": {
+      "input": "{ project_id (req), receta_id (req), cambios (req, objeto con campos a modificar), correlation_id? }",
+      "pseudocodigo": [
+        "async actualizar(input):",
+        "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
+        "  if (!input.receta_id)  return INVALID_INPUT { field: 'receta_id' }",
+        "  if (!input.cambios || typeof input.cambios !== 'object' || Array.isArray(input.cambios)) return INVALID_INPUT { field: 'cambios' }",
+        "",
+        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/pizzepos/recetas.json' })",
+        "  if (raw.status === 404) return RESOURCE_NOT_FOUND { entity_type: 'recipe' }",
+        "  store = JSON.parse(raw.content)",
+        "  r = store.recetas.find(x => x.id === input.receta_id)",
+        "  if (!r) return RESOURCE_NOT_FOUND { entity_type: 'recipe', entity_ref: input.receta_id }",
+        "",
+        "  // Snapshot a history ANTES de aplicar cambios.",
+        "  // IMPORTANTE: construir snapshot copiando campo a campo EXCLUYENDO 'history'",
+        "  //   para no anidar history dentro de history (anti-patron pseudocodigo-estilo.contract).",
+        "  snapshot = {}",
+        "  for (campo in r) {",
+        "    if (campo !== 'history') snapshot[campo] = r[campo]",
+        "  }",
+        "  snapshot._archived_at = nowISO()",
+        "  r.history.push(snapshot)",
+        "",
+        "  aplicados = []",
+        "  // Whitelist de campos modificables + sus normalizadores.",
+        "  for (campo in input.cambios) {",
+        "    switch (campo) {",
+        "      case 'nombre':        r.nombre = String(input.cambios.nombre).trim(); aplicados.push('nombre')",
+        "      case 'tipo':          if (['pizza','masa','salsa','base'].includes(input.cambios.tipo)) { r.tipo = input.cambios.tipo; aplicados.push('tipo') }",
+        "      case 'descripcion':   r.descripcion = typeof input.cambios.descripcion === 'string' ? input.cambios.descripcion : ''; aplicados.push('descripcion')",
+        "      case 'rinde':         if (input.cambios.rinde && input.cambios.rinde.cantidad > 0) { r.rinde = input.cambios.rinde; aplicados.push('rinde') }",
+        "      case 'lineas':        r.lineas = <normalizar input.cambios.lineas a Linea[] resolviendo ref por nombre>; aplicados.push('lineas')",
+        "      case 'instrucciones': r.instrucciones = <normalizar input.cambios.instrucciones>; aplicados.push('instrucciones')",
+        "      case 'notas':         r.notas = typeof input.cambios.notas === 'string' ? input.cambios.notas : ''; aplicados.push('notas')",
+        "      case 'fuente':        if (typeof input.cambios.fuente === 'string' && input.cambios.fuente.trim()) { r.fuente = input.cambios.fuente.trim().toLowerCase(); aplicados.push('fuente') }   // string libre — la procedencia jamas se veta por nombre (ley del prisma)",
+        "      case 'categorias':    r.categorias = Array.isArray(input.cambios.categorias) ? input.cambios.categorias.map(String) : []; aplicados.push('categorias')",
+        "      case 'etiquetas':     r.etiquetas  = Array.isArray(input.cambios.etiquetas) ? input.cambios.etiquetas.map(String) : []; aplicados.push('etiquetas')",
+        "      default: <ignorar>",
+        "    }",
+        "  }",
+        "",
+        "  if (aplicados.length === 0) {",
+        "    r.history.pop()  // revertir snapshot inutil",
+        "    return INVALID_INPUT { field: 'cambios', message: 'ningun campo conocido' }",
+        "  }",
+        "",
+        "  r.version += 1",
+        "  r.updated_at = nowISO()",
+        "  // Recalcular completitud.",
+        "  r.campos_pendientes = [ campos en {nombre, tipo, lineas} vacios ]",
+        "  r.incompleta = r.campos_pendientes.length > 0",
+        "",
+        "",
+        "  // VALIDAR (FRENO, skill blueprint-agentico): la receta resultante pasa por el contrato",
+        "  //   (receta.schema.json, AJV) ANTES de persistir. Si los cambios dejaron forma rota (p.ej. una",
+        "  //   linea con cantidad 0 o unidad no canonica), NO se guarda: revierte el snapshot y falla honesto.",
+        "  v = await publishAndWait('recetas.validar.request', { receta: r }, { timeout_ms: 8000 })",
+        "  if (!v.data.valid) {",
+        "    r.history.pop()  // revertir el snapshot: no persistimos forma rota ni bumpeamos version",
+        "    return UPSTREAM_INVALID_RESPONSE { message: 'los cambios dejan la receta fuera del contrato', hint: v.data.errors }",
+        "  }",
+        "  idx = store.recetas.findIndex(x => x.id === input.receta_id)  // ya garantizado >= 0",
+        "  now = nowISO()",
+        "",
+        "  // Persistir via fs.edit declarativo (RFC 6902). Patron UPDATE compuesto:",
+        "  // - op:test guarda race contra reordenamiento del array.",
+        "  // - op:replace de la receta entera (history bump + version + campos whitelist + incompleta).",
+        "  // - op:replace de _updated_at del store. No componer archivo entero.",
+        "  await publishAndWait('fs.edit.request', {",
+        "    project_id: input.project_id,",
+        "    path: '/pizzepos/recetas.json',",
+        "    patches: [",
+        "      { op: 'test',    path: `/recetas/${idx}/id`, value: input.receta_id },",
+        "      { op: 'replace', path: `/recetas/${idx}`,    value: r },",
+        "      { op: 'replace', path: '/_updated_at',       value: now }",
+        "    ]",
+        "  })",
+        "",
+        "  publish('receta.actualizada', {",
+        "    receta_id: r.id, nombre: r.nombre, version: r.version,",
+        "    campos_actualizados: aplicados,",
+        "    ...(r.incompleta ? { incompleta: true, campos_pendientes: r.campos_pendientes } : {})",
+        "  })",
+        "",
+        "  return { status: 200, data: {",
+        "    receta_id: r.id, nombre: r.nombre, version: r.version,",
+        "    campos_actualizados: aplicados,",
+        "    incompleta: r.incompleta, campos_pendientes: r.campos_pendientes",
+        "  } }"
+      ],
+      "reglas_clave": [
+        "Solo campos whitelist se aplican (los listados en el switch). Otros se ignoran silenciosamente.",
+        "Si ningun campo conocido en cambios → INVALID_INPUT (no persistir, no bumpear version).",
+        "Snapshot a history ANTES de aplicar cambios. Si no hay cambios validos, revertir el snapshot (pop).",
+        "version += 1. updated_at refrescado. Recalcular incompleta + campos_pendientes.",
+        "Persistir via fs.edit con patron UPDATE compuesto: op:test + op:replace /recetas/<idx> + op:replace /_updated_at.",
+        "FRENO: la receta resultante pasa por recetas.validar.request antes de persistir; si los cambios la dejan fuera del contrato, revierte el snapshot (history.pop) y devuelve UPSTREAM_INVALID_RESPONSE (no persiste, no bumpea version)."
+      ],
+      "errores_posibles": [
+        "UPSTREAM_INVALID_RESPONSE",
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND",
+        "UPSTREAM_TIMEOUT",
+        "UPSTREAM_UNREACHABLE",
+        "UNKNOWN_ERROR"
+      ]
+    },
+    "historial": {
+      "input": "{ project_id (req), receta_id (req) }",
+      "pseudocodigo": [
+        "async historial(input):",
+        "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
+        "  if (!input.receta_id)  return INVALID_INPUT { field: 'receta_id' }",
+        "",
+        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/pizzepos/recetas.json' })",
+        "  if (raw.status === 404) return RESOURCE_NOT_FOUND { entity_type: 'recipe' }",
+        "  store = JSON.parse(raw.content)",
+        "  r = store.recetas.find(x => x.id === input.receta_id)",
+        "  if (!r) return RESOURCE_NOT_FOUND { entity_type: 'recipe', entity_ref: input.receta_id }",
+        "",
+        "  versiones = (r.history || []).map(h => ({",
+        "    version: h.version,",
+        "    archived_at: h._archived_at,",
+        "    nombre: h.nombre, tipo: h.tipo, rinde: h.rinde,",
+        "    lineas_count: Array.isArray(h.lineas) ? h.lineas.length : 0",
+        "  }))",
+        "",
+        "  return { status: 200, data: {",
+        "    receta_id: r.id, nombre: r.nombre,",
+        "    version_actual: r.version,",
+        "    versiones_anteriores: versiones.length,",
+        "    historial: versiones",
+        "  } }"
+      ],
+      "reglas_clave": [
+        "Solo lee. Devuelve resumen de cada snapshot del history."
+      ],
+      "errores_posibles": [
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND",
+        "UPSTREAM_TIMEOUT",
+        "UPSTREAM_UNREACHABLE",
+        "UNKNOWN_ERROR"
+      ]
+    },
+    "revertir": {
+      "input": "{ project_id (req), receta_id (req), target_version (req, entero >=1) }",
+      "pseudocodigo": [
+        "async revertir(input):",
+        "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
+        "  if (!input.receta_id)  return INVALID_INPUT { field: 'receta_id' }",
+        "  if (!Number.isInteger(input.target_version) || input.target_version < 1) return INVALID_INPUT { field: 'target_version' }",
+        "",
+        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/pizzepos/recetas.json' })",
+        "  if (raw.status === 404) return RESOURCE_NOT_FOUND { entity_type: 'recipe' }",
+        "  store = JSON.parse(raw.content)",
+        "  r = store.recetas.find(x => x.id === input.receta_id)",
+        "  if (!r) return RESOURCE_NOT_FOUND { entity_type: 'recipe', entity_ref: input.receta_id }",
+        "",
+        "  target = (r.history || []).find(h => h.version === input.target_version)",
+        "  if (!target) return RESOURCE_NOT_FOUND { entity_type: 'recipe-version', entity_ref: input.target_version, versiones_disponibles: r.history.map(h => h.version) }",
+        "",
+        "  // Snapshot del estado actual ANTES de revertir.",
+        "  // IMPORTANTE: construir currentSnap copiando campo a campo EXCLUYENDO 'history'",
+        "  //   para no anidar history dentro de history (anti-patron pseudocodigo-estilo.contract).",
+        "  currentSnap = {}",
+        "  for (campo in r) {",
+        "    if (campo !== 'history') currentSnap[campo] = r[campo]",
+        "  }",
+        "  currentSnap._archived_at = nowISO()",
+        "  r.history.push(currentSnap)",
+        "",
+        "  // Aplicar target campo a campo (sin tocar version + history del actual).",
+        "  // EXCLUYE '_archived_at' (marca interna del snapshot) y 'version' (se bumpea aparte).",
+        "  for (campo in target) {",
+        "    if (campo !== '_archived_at' && campo !== 'version' && campo !== 'history') {",
+        "      r[campo] = target[campo]",
+        "    }",
+        "  }",
+        "  r.version += 1  // bumps respecto al actual, no al target",
+        "  r.updated_at = nowISO()",
+        "  // Recalcular completitud (puede haber cambiado).",
+        "  r.campos_pendientes = [...]",
+        "  r.incompleta = r.campos_pendientes.length > 0",
+        "",
+        "  idx = store.recetas.findIndex(x => x.id === input.receta_id)  // ya garantizado >= 0",
+        "  now = nowISO()",
+        "",
+        "  // Persistir via fs.edit declarativo (RFC 6902). Patron UPDATE compuesto:",
+        "  // - op:test guarda race contra reordenamiento del array.",
+        "  // - op:replace de la receta entera (history + version + campos restaurados).",
+        "  // - op:replace de _updated_at del store. No componer archivo entero.",
+        "  await publishAndWait('fs.edit.request', {",
+        "    project_id: input.project_id,",
+        "    path: '/pizzepos/recetas.json',",
+        "    patches: [",
+        "      { op: 'test',    path: `/recetas/${idx}/id`, value: input.receta_id },",
+        "      { op: 'replace', path: `/recetas/${idx}`,    value: r },",
+        "      { op: 'replace', path: '/_updated_at',       value: now }",
+        "    ]",
+        "  })",
+        "",
+        "  publish('receta.actualizada', {",
+        "    receta_id: r.id, nombre: r.nombre, version: r.version, motivo: 'revertir',",
+        "    ...(r.incompleta ? { incompleta: true, campos_pendientes: r.campos_pendientes } : {})",
+        "  })",
+        "",
+        "  return { status: 200, data: {",
+        "    receta_id: r.id, nombre: r.nombre,",
+        "    revertida_a_version: input.target_version,",
+        "    version_actual: r.version",
+        "  } }"
+      ],
+      "reglas_clave": [
+        "El revertido crea una NUEVA version (no decrementa). El estado anterior se guarda en history primero.",
+        "Si target_version no existe → RESOURCE_NOT_FOUND con lista de versiones disponibles.",
+        "Persistir via fs.edit con patron UPDATE compuesto: op:test + op:replace /recetas/<idx> + op:replace /_updated_at."
+      ],
+      "errores_posibles": [
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND",
+        "UPSTREAM_TIMEOUT",
+        "UPSTREAM_UNREACHABLE",
+        "UNKNOWN_ERROR"
+      ]
+    },
+    "eliminar": {
+      "input": "{ project_id (req), receta_id (req), motivo?: string }",
+      "_descripcion_semantica": "Eliminacion LOGICA (estado → archivada). No borra del store. Equivalente a cambiar_estado(target='archivada') pero con evento extra receta.eliminada.",
+      "pseudocodigo": [
+        "async eliminar(input):",
+        "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
+        "  if (!input.receta_id)  return INVALID_INPUT { field: 'receta_id' }",
+        "",
+        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/pizzepos/recetas.json' })",
+        "  if (raw.status === 404) return RESOURCE_NOT_FOUND { entity_type: 'recipe' }",
+        "  store = JSON.parse(raw.content)",
+        "  r = store.recetas.find(x => x.id === input.receta_id)",
+        "  if (!r) return RESOURCE_NOT_FOUND { entity_type: 'recipe', entity_ref: input.receta_id }",
+        "",
+        "  if (r.estado_operativo === 'archivada') {",
+        "    return { status: 200, data: { receta_id: r.id, nombre: r.nombre, estado_operativo: 'archivada', status: 'ya_estaba_archivada' } }",
+        "  }",
+        "",
+        "  estado_anterior = r.estado_operativo",
+        "  idx = store.recetas.findIndex(x => x.id === input.receta_id)  // ya garantizado >= 0 por la guarda anterior",
+        "  now = nowISO()",
+        "",
+        "  // Persistir via fs.edit declarativo (RFC 6902). Patron UPDATE 1-campo:",
+        "  // - op:test guarda race: si el indice cambio, aborta todo.",
+        "  // - op:replace de 3 campos puntuales. El LLM NO compone el archivo entero.",
+        "  // Solo esta receta puede afectarse; las vecinas son intocables.",
+        "  await publishAndWait('fs.edit.request', {",
+        "    project_id: input.project_id,",
+        "    path: '/pizzepos/recetas.json',",
+        "    patches: [",
+        "      { op: 'test',    path: `/recetas/${idx}/id`,               value: input.receta_id },",
+        "      { op: 'replace', path: `/recetas/${idx}/estado_operativo`, value: 'archivada' },",
+        "      { op: 'replace', path: `/recetas/${idx}/updated_at`,       value: now },",
+        "      { op: 'replace', path: '/_updated_at',                     value: now }",
+        "    ]",
+        "  })",
+        "",
+        "  publish('receta.estado.actualizada', {",
+        "    receta_id: r.id, nombre: r.nombre,",
+        "    estado_anterior, estado_nuevo: 'archivada', version: r.version,",
+        "    ...(input.motivo ? { motivo: input.motivo } : {})",
+        "  })",
+        "  publish('receta.eliminada', {",
+        "    receta_id: r.id, nombre: r.nombre,",
+        "    ...(input.motivo ? { motivo: input.motivo } : {})",
+        "  })",
+        "",
+        "  return { status: 200, data: { receta_id: r.id, nombre: r.nombre, estado_operativo: 'archivada', status: 'archivada' } }"
+      ],
+      "reglas_clave": [
+        "Si ya esta archivada → idempotente (return 'ya_estaba_archivada', sin publicar eventos).",
+        "Publica DOS eventos: receta.estado.actualizada (cambio de estado) + receta.eliminada (eliminacion logica)."
+      ],
+      "errores_posibles": [
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND",
+        "UPSTREAM_TIMEOUT",
+        "UPSTREAM_UNREACHABLE",
+        "UNKNOWN_ERROR"
+      ]
+    },
+    "cambiar_estado": {
+      "input": "{ project_id (req), receta_id (req), target_estado (req in {borrador|en_servicio|archivada}), motivo?: string }",
+      "pseudocodigo": [
+        "async cambiar_estado(input):",
+        "  if (!input.project_id || !input.receta_id || !input.target_estado) return INVALID_INPUT",
+        "  if (!['borrador','en_servicio','archivada'].includes(input.target_estado)) return INVALID_INPUT { field: 'target_estado' }",
+        "",
+        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/pizzepos/recetas.json' })",
+        "  if (raw.status === 404) return RESOURCE_NOT_FOUND { entity_type: 'recipe' }",
+        "  store = JSON.parse(raw.content)",
+        "  r = store.recetas.find(x => x.id === input.receta_id)",
+        "  if (!r) return RESOURCE_NOT_FOUND { entity_type: 'recipe' }",
+        "",
+        "  estado_anterior = r.estado_operativo",
+        "  if (estado_anterior === input.target_estado) {",
+        "    return { status: 200, data: { receta_id: r.id, estado_operativo: estado_anterior, status: 'sin_cambios' } }",
+        "  }",
+        "",
+        "  // Transiciones validas (declaradas en el blueprint padre estado_operativo.transiciones_validas).",
+        "  permitidas = {",
+        "    'borrador':    ['en_servicio'],",
+        "    'en_servicio': ['borrador', 'archivada'],",
+        "    'archivada':   ['en_servicio']",
+        "  }[estado_anterior]",
+        "  if (!permitidas.includes(input.target_estado)) {",
+        "    return PRECONDITION_FAILED {",
+        "      kind: 'invalid_state_transition',",
+        "      estado_anterior, target_estado: input.target_estado,",
+        "      transiciones_permitidas: permitidas",
+        "    }",
+        "  }",
+        "",
+        "  idx = store.recetas.findIndex(x => x.id === input.receta_id)  // ya garantizado >= 0 por la guarda anterior",
+        "  now = nowISO()",
+        "",
+        "  // Persistir via fs.edit declarativo (RFC 6902). Patron UPDATE 1-campo:",
+        "  // - op:test guarda race contra reordenamiento del array.",
+        "  // - op:replace de los 3 campos puntuales. No componer archivo entero.",
+        "  await publishAndWait('fs.edit.request', {",
+        "    project_id: input.project_id,",
+        "    path: '/pizzepos/recetas.json',",
+        "    patches: [",
+        "      { op: 'test',    path: `/recetas/${idx}/id`,               value: input.receta_id },",
+        "      { op: 'replace', path: `/recetas/${idx}/estado_operativo`, value: input.target_estado },",
+        "      { op: 'replace', path: `/recetas/${idx}/updated_at`,       value: now },",
+        "      { op: 'replace', path: '/_updated_at',                     value: now }",
+        "    ]",
+        "  })",
+        "",
+        "  publish('receta.estado.actualizada', {",
+        "    receta_id: r.id, nombre: r.nombre,",
+        "    estado_anterior, estado_nuevo: input.target_estado, version: r.version,",
+        "    ...(input.motivo ? { motivo: input.motivo } : {})",
+        "  })",
+        "  if (input.target_estado === 'archivada') {",
+        "    publish('receta.eliminada', { receta_id: r.id, nombre: r.nombre, ...(input.motivo ? { motivo: input.motivo } : {}) })",
+        "  }",
+        "",
+        "  return { status: 200, data: { receta_id: r.id, estado_anterior, estado_operativo: r.estado_operativo } }"
+      ],
+      "reglas_clave": [
+        "Transiciones validas declaradas en blueprint padre. PRECONDITION_FAILED si no permitida.",
+        "Si target_estado === estado_actual → idempotente (status: 'sin_cambios', sin eventos).",
+        "Si target_estado === 'archivada' → publish ADICIONAL receta.eliminada (compat semantica con eliminar)."
+      ],
+      "errores_posibles": [
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND",
+        "PRECONDITION_FAILED",
+        "UPSTREAM_TIMEOUT",
+        "UPSTREAM_UNREACHABLE",
+        "UNKNOWN_ERROR"
+      ]
+    },
+    "estadisticas": {
+      "input": "{ project_id (req) }",
+      "pseudocodigo": [
+        "async estadisticas(input):",
+        "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
+        "",
+        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/pizzepos/recetas.json' })",
+        "  if (raw.status === 404) return { status: 200, data: { total_recetas: 0, por_estado: {borrador:0, en_servicio:0, archivada:0}, incompletas: 0, ingredientes_catalogo: 0, ingredientes_con_precio: 0, ingredientes_usados_unicos: 0 } }",
+        "  store = JSON.parse(raw.content)",
+        "",
+        "  por_estado = { borrador: 0, en_servicio: 0, archivada: 0 }",
+        "  incompletas = 0",
+        "  ingredientes_usados = new Set()",
+        "  for (r in store.recetas) {",
+        "    por_estado[r.estado_operativo]++",
+        "    if (r.incompleta) incompletas++",
+        "    for (l in (r.lineas||[])) ingredientes_usados.add((l.ref || l.nombre || '').toLowerCase())",
+        "  }",
+        "  con_precio = store.ingredientes_catalogo.filter(i => typeof i.precio === 'number' && i.precio > 0).length",
+        "",
+        "  return { status: 200, data: {",
+        "    total_recetas: store.recetas.length,",
+        "    por_estado, incompletas,",
+        "    ingredientes_catalogo: store.ingredientes_catalogo.length,",
+        "    ingredientes_con_precio: con_precio,",
+        "    ingredientes_usados_unicos: ingredientes_usados.size",
+        "  } }"
+      ],
+      "reglas_clave": [
+        "Solo lee. No publica."
+      ],
+      "errores_posibles": [
+        "INVALID_INPUT",
+        "UPSTREAM_TIMEOUT",
+        "UPSTREAM_UNREACHABLE",
+        "UNKNOWN_ERROR"
+      ]
+    },
+    "ingredientes": {
+      "input": "{ project_id (req), categoria? }",
+      "pseudocodigo": [
+        "async ingredientes(input):",
+        "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
+        "",
+        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/pizzepos/recetas.json' })",
+        "  if (raw.status === 404) return { status: 200, data: { total: 0, ingredientes: [] } }",
+        "  store = JSON.parse(raw.content)",
+        "",
+        "  arr = store.ingredientes_catalogo",
+        "  if (input.categoria) arr = arr.filter(i => i.categoria === input.categoria)",
+        "  return { status: 200, data: { total: arr.length, ingredientes: arr } }"
+      ],
+      "reglas_clave": [
+        "Solo lee el catalogo. Filtro opcional por categoria."
+      ],
+      "errores_posibles": [
+        "INVALID_INPUT",
+        "UPSTREAM_TIMEOUT",
+        "UPSTREAM_UNREACHABLE",
+        "UNKNOWN_ERROR"
+      ]
+    },
+    "actualizar_precio": {
+      "cajon": false,
+      "_frontera": "pricing = trabajo de escandallo. recetas es dueño del catalogo (por eso el upsert vive aqui), pero el LLM de recetas NO debe fijar precios. Solo escandallo la invoca por el bus (recetas.actualizar_precio.request) para cachear lo que navega de Mercadona.",
+      "input": "{ project_id (req), nombre (req), precio (req, number >= 0), compra_unidad? in {kg,l,ud}, categoria?, id?, mercadona_producto_id?, fuente? (string LIBRE — la fuente jamas se veta por nombre), url?|referencia_id? (evidencia — OBLIGATORIA para toda fuente que no sea derivada interna, manual o mercadona) }",
+      "_descripcion_semantica": "Upsert sobre ingredientes_catalogo (clase Ingrediente del modelo_canonico). Clave: input.id si viene, sino slug derivado del nombre. Si no existe lo crea (id estable); si existe actualiza precio + campos opcionales preservando los no enviados. Es la operacion por la que escandallo cachea precios de Mercadona: una conexion por ingrediente, luego todos leen el catalogo.",
+      "pseudocodigo": [
+        "async actualizar_precio(input):",
+        "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
+        "  if (!input.nombre || input.nombre.trim() === '') return INVALID_INPUT { field: 'nombre' }",
+        "  if (typeof input.precio !== 'number' || input.precio < 0 || isNaN(input.precio)) return INVALID_INPUT { field: 'precio' }",
+        "  // LEY DE LA EVIDENCIA (prisma-del-caso.leyDeLaEvidencia): la fuente JAMAS se veta por nombre —",
+        "  //   derivadas internas (catalogo, sub_receta) y testimonio ('manual') pasan; 'mercadona' pasa (su",
+        "  //   producto_id es la vuelta); la estimacion es IRRECTIFICABLE (jamas persiste como real); CUALQUIER",
+        "  //   otra fuente (soysuper, makro, la-que-venga) es afirmacion externa: nombra tu evidencia y entras.",
+        "  fuente = String(input.fuente || 'manual').toLowerCase().trim()",
+        "  ley = leyDeLaEvidencia({ fuente, url: input.url, referencia_id: input.referencia_id, mercadona_producto_id: input.mercadona_producto_id })",
+        "  if (!ley.ok) return INVALID_INPUT { field: ley.naturaleza === 'IRRECTIFICABLE' ? 'fuente' : 'url', hint: ley.falta }",
+        "",
+        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/pizzepos/recetas.json' })",
+        "  now = nowISO()",
+        "",
+        "  nombreTrim = input.nombre.trim()",
+        "  lower = nombreTrim.toLowerCase()",
+        "  slug = input.id || lower.normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'')  // id estable derivado del nombre si no se pasa",
+        "  item_canonico = {",
+        "    id: slug,",
+        "    nombre: nombreTrim,",
+        "    categoria: typeof input.categoria === 'string' ? input.categoria : null,",
+        "    compra_unidad: ['kg','l','ud'].includes(input.compra_unidad) ? input.compra_unidad : null,",
+        "    precio: input.precio,",
+        "    mercadona_producto_id: typeof input.mercadona_producto_id === 'string' ? input.mercadona_producto_id : null,",
+        "    fuente: fuente,   // string libre — ya juzgada por la ley (lo que se exigio fue la evidencia)",
+        "    url: typeof input.url === 'string' ? input.url : null,   // evidencia (soysuper) — el freno de escandallo la exige",
+        "    created_at: now, updated_at: now",
+        "  }",
+        "",
+        "  // Rama A — archivo NO existe (proyecto sin recetas): fs.write atomico del store inicial con el item.",
+        "  if (raw.status === 404) {",
+        "    store_inicial = { _version: '1.0', _updated_at: now, recetas: [], ingredientes_catalogo: [item_canonico] }",
+        "    write_resp = await publishAndWait('fs.write.request', {",
+        "      project_id: input.project_id, path: '/pizzepos/recetas.json',",
+        "      content: JSON.stringify(store_inicial, null, 2), encoding: 'utf-8', atomic: true",
+        "    })",
+        "    if (write_resp.status >= 400) return write_resp",
+        "    publish('ingrediente.precio.actualizado', {",
+        "      id: item_canonico.id, nombre: item_canonico.nombre, precio: item_canonico.precio,",
+        "      compra_unidad: item_canonico.compra_unidad, categoria: item_canonico.categoria, fuente: item_canonico.fuente",
+        "    })",
+        "    return { status: 200, data: { id: item_canonico.id, nombre: item_canonico.nombre, precio: item_canonico.precio, compra_unidad: item_canonico.compra_unidad, status: 'actualizado' } }",
+        "  }",
+        "",
+        "  if (raw.status >= 400) return raw",
+        "",
+        "  store = JSON.parse(raw.content)",
+        "  item = store.ingredientes_catalogo.find(i => (i.id && i.id === slug) || (i.nombre && i.nombre.toLowerCase() === lower))",
+        "",
+        "  // Persistir via fs.edit declarativo (RFC 6902). Dos ramas segun si el item existe en el catalogo.",
+        "  if (!item) {",
+        "    // Caso B1 — archivo existe pero item NO existe: append nuevo ingrediente al catalogo.",
+        "    item = item_canonico",
+        "    await publishAndWait('fs.edit.request', {",
+        "      project_id: input.project_id,",
+        "      path: '/pizzepos/recetas.json',",
+        "      patches: [",
+        "        { op: 'add',     path: '/ingredientes_catalogo/-', value: item },",
+        "        { op: 'replace', path: '/_updated_at',             value: now }",
+        "      ]",
+        "    })",
+        "  } else {",
+        "    // Caso B2 — UPDATE item existente. Componer item nuevo, sustituir en posicion.",
+        "    idx = store.ingredientes_catalogo.findIndex(i => (i.id && i.id === slug) || (i.nombre && i.nombre.toLowerCase() === lower))",
+        "    item = {",
+        "      ...item,",
+        "      id: item.id || slug,",
+        "      precio: input.precio,",
+        "      updated_at: now,",
+        "      ...(typeof input.categoria === 'string' ? { categoria: input.categoria } : {}),",
+        "      ...(['kg','l','ud'].includes(input.compra_unidad) ? { compra_unidad: input.compra_unidad } : {}),",
+        "      ...(typeof input.mercadona_producto_id === 'string' ? { mercadona_producto_id: input.mercadona_producto_id } : {}),",
+        "      ...(input.fuente ? { fuente } : {}),",
+        "      ...(typeof input.url === 'string' ? { url: input.url } : {})",
+        "    }",
+        "    await publishAndWait('fs.edit.request', {",
+        "      project_id: input.project_id,",
+        "      path: '/pizzepos/recetas.json',",
+        "      patches: [",
+        "        { op: 'test',    path: `/ingredientes_catalogo/${idx}/nombre`, value: item.nombre },",
+        "        { op: 'replace', path: `/ingredientes_catalogo/${idx}`,        value: item },",
+        "        { op: 'replace', path: '/_updated_at',                         value: now }",
+        "      ]",
+        "    })",
+        "  }",
+        "",
+        "  publish('ingrediente.precio.actualizado', {",
+        "    id: item.id, nombre: item.nombre, precio: item.precio,",
+        "    ...(item.compra_unidad ? { compra_unidad: item.compra_unidad } : {}),",
+        "    ...(item.categoria ? { categoria: item.categoria } : {}),",
+        "    ...(item.fuente ? { fuente: item.fuente } : {})",
+        "  })",
+        "",
+        "  return { status: 200, data: { id: item.id, nombre: item.nombre, precio: item.precio, compra_unidad: item.compra_unidad, status: 'actualizado' } }"
+      ],
+      "reglas_clave": [
+        "Upsert: crear si no existe, actualizar si existe.",
+        "Lookup case-insensitive por nombre normalizado (toLowerCase).",
+        "Campos opcionales no enviados PRESERVAN el valor anterior (no se sobreescriben con null)."
+      ],
+      "errores_posibles": [
+        "INVALID_INPUT",
+        "UPSTREAM_TIMEOUT",
+        "UPSTREAM_UNREACHABLE",
+        "UNKNOWN_ERROR"
+      ]
+    },
+    "analizar": {
+      "cajon": false,
+      "_frontera": "costing = trabajo de escandallo. Llamable por bus si hace falta, pero NO cajon del LLM de recetas. Para coste, recetas delega en escandallo (evento).",
+      "input": "{ project_id (req), receta_id (req) }",
+      "_descripcion_semantica": "Calcula el coste de una receta cruzando sus ingredientes con el catalogo de precios. NO modifica nada. Si la receta esta incompleta o si faltan precios/unidades en el catalogo, lo refleja en la response (coste_es_real=false).",
+      "pseudocodigo": [
+        "async analizar(input):",
+        "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
+        "  if (!input.receta_id)  return INVALID_INPUT { field: 'receta_id' }",
+        "",
+        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/pizzepos/recetas.json' })",
+        "  if (raw.status === 404) return RESOURCE_NOT_FOUND { entity_type: 'recipe' }",
+        "  store = JSON.parse(raw.content)",
+        "  r = store.recetas.find(x => x.id === input.receta_id)",
+        "  if (!r) return RESOURCE_NOT_FOUND { entity_type: 'recipe', entity_ref: input.receta_id }",
+        "  if (r.incompleta) return PRECONDITION_FAILED { kind: 'incomplete_recipe', campos_pendientes: r.campos_pendientes }",
+        "",
+        "  coste_total = 0",
+        "  coste_es_real = true",
+        "  desglose = []",
+        "  for (l in (r.lineas||[])) {",
+        "    cat = store.ingredientes_catalogo.find(i => (l.ref && i.id === l.ref) || (i.nombre||'').toLowerCase() === (l.nombre||'').toLowerCase())",
+        "    coste = null",
+        "    if (cat && typeof cat.precio === 'number' && typeof l.cantidad === 'number') {",
+        "      factor = (l.unidad === 'g' || l.unidad === 'ml') ? l.cantidad / 1000 : l.cantidad  // g/ml→kg/l si compra_unidad kg/l; ud→ tal cual",
+        "      coste = factor * cat.precio",
+        "      coste_total += coste",
+        "    } else {",
+        "      coste_es_real = false  // sin precio en catalogo, o es sub-receta (ref a otra Receta): escandallo lo resuelve de verdad",
+        "    }",
+        "    desglose.push({ ref: l.ref, nombre: l.nombre, cantidad: l.cantidad, unidad: l.unidad, precio: cat ? cat.precio : null, coste, en_catalogo: !!cat })",
+        "  }",
+        "  base_rinde = (r.rinde && r.rinde.cantidad > 0) ? r.rinde.cantidad : 1",
+        "  cpu = coste_es_real ? (coste_total / base_rinde) : null",
+        "",
+        "  return { status: 200, data: {",
+        "    receta_id: r.id, nombre: r.nombre, tipo: r.tipo, rinde: r.rinde,",
+        "    lineas: desglose,",
+        "    coste_total: coste_es_real ? coste_total : null,",
+        "    coste_unidad: cpu,",
+        "    coste_es_real,",
+        "    nota: coste_es_real ? null : 'Faltan precios en el catalogo, o hay sub-recetas (ref a otra Receta): usa escandallo para el coste real.'",
+        "  } }"
+      ],
+      "reglas_clave": [
+        "Solo lee, no muta. No publica eventos.",
+        "Si receta.incompleta → PRECONDITION_FAILED (rechaza analizar incompletas).",
+        "coste_es_real=true SOLO si todos los ingredientes tienen precio + unidad compatible. Sino, coste_total=null y nota explicativa."
+      ],
+      "errores_posibles": [
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND",
+        "PRECONDITION_FAILED",
+        "UPSTREAM_TIMEOUT",
+        "UPSTREAM_UNREACHABLE",
+        "UNKNOWN_ERROR"
+      ]
+    },
+    "investigar_receta": {
+      "input": "{ project_id (req), nombre_receta (req) }",
+      "_descripcion_semantica": "Comprueba si una receta existe por nombre. Si existe la devuelve. Si no, devuelve una instruccion al LLM caller para que proponga + confirme con el usuario antes de crear. NO crea automaticamente.",
+      "pseudocodigo": [
+        "async investigar_receta(input):",
+        "  if (!input.project_id)    return INVALID_INPUT { field: 'project_id' }",
+        "  if (!input.nombre_receta) return INVALID_INPUT { field: 'nombre_receta' }",
+        "",
+        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/pizzepos/recetas.json' })",
+        "  if (raw.status === 404) return { status: 200, data: { existe: false, instruccion: 'Store vacio. Propon una receta y guardala con crear tras confirmacion del usuario.' } }",
+        "  store = JSON.parse(raw.content)",
+        "",
+        "  lower = input.nombre_receta.toLowerCase().trim()",
+        "  r = store.recetas.find(x => x.nombre.toLowerCase().trim() === lower)",
+        "  if (r) {",
+        "    // Construir rest copiando campo a campo EXCLUYENDO 'history'",
+        "    //   (anti-patron pseudocodigo-estilo.contract: rest_spread con omision).",
+        "    rest = {}",
+        "    for (campo in r) {",
+        "      if (campo !== 'history') rest[campo] = r[campo]",
+        "    }",
+        "    return { status: 200, data: { existe: true, receta: rest } }",
+        "  }",
+        "  return { status: 200, data: { existe: false, instruccion: 'No existe en el proyecto. Propon una receta y guardala con crear tras confirmacion del usuario.' } }"
+      ],
+      "reglas_clave": [
+        "Solo lee. No publica. No crea recetas automaticamente.",
+        "Si no existe → devuelve instruccion textual para que el LLM caller la siga (proponer + confirmar antes de crear)."
+      ],
+      "errores_posibles": [
+        "INVALID_INPUT",
+        "UPSTREAM_TIMEOUT",
+        "UPSTREAM_UNREACHABLE",
+        "UNKNOWN_ERROR"
+      ]
+    },
+    "_aplicar_coste_calculado": {
+      "_descripcion": "Operacion INTERNA — handler asincrono del evento 'escandallo.coste.calculado'. NO se expone como cajon al LLM en el chat normal (el prefijo _ es la convencion canonica para esto). Se invoca SOLO via blueprint-subscribers-asincronos cuando llega el evento. El LLM (en conversacion sintetica creada por ai-gateway) ejecuta este pseudocodigo igual que cualquier operacion.",
+      "input": "{ receta_id (req), project_id (uuid, req), coste_total?, coste_unidad?, coste_actualizado_at?, fuentes_precios?, lineas_detalle?, lineas_sin_precio?, correlation_id?, timestamp? } — payload del evento 'escandallo.coste.calculado'.",
+      "pseudocodigo": [
+        "async _aplicar_coste_calculado(input):",
+        "  if (!input.project_id) return INVALID_INPUT { field: 'project_id' }",
+        "  if (!input.receta_id) return INVALID_INPUT { field: 'receta_id' }",
+        "",
+        "  // 1. Leer store. Recetas es dueno absoluto de pizzepos/recetas.json — esto es fs.read",
+        "  //    a un path PROPIO, NO viola no_explorar_estado_ajeno.",
+        "  raw = await publishAndWait('fs.read.request', { project_id: input.project_id, path: '/pizzepos/recetas.json' })",
+        "  if (raw.status === 404) return RESOURCE_NOT_FOUND { entity_type: 'recipe_store', hint: 'no hay recetas que actualizar' }",
+        "  if (raw.status >= 400) return raw",
+        "  store = JSON.parse(raw.content)",
+        "",
+        "  // 2. Encontrar la receta por id",
+        "  receta_idx = (store.recetas || []).findIndex(r => r.id === input.receta_id)",
+        "  if (receta_idx < 0) return RESOURCE_NOT_FOUND { entity_type: 'recipe', entity_ref: input.receta_id }",
+        "  r = store.recetas[receta_idx]",
+        "",
+        "  // 3. Aplicar los campos del evento (solo los que vienen explicitos — tolera ausencias).",
+        "  //    Los 7 campos canonicos de coste vienen de escandallo. El LLM NO inventa valores",
+        "  //    aqui — solo copia lo que viene en input. Marcador de fuente: 'modulo' (escandallo).",
+        "  aplicados = []",
+        "  for (campo of ['coste_total','coste_unidad','coste_actualizado_at','fuentes_precios','lineas_detalle','lineas_sin_precio']) {",
+        "    if (input[campo] !== undefined && input[campo] !== null) {",
+        "      r[campo] = input[campo]",
+        "      aplicados.push(campo)",
+        "    }",
+        "  }",
+        "  if (aplicados.length === 0) return INVALID_INPUT { field: 'cambios', message: 'evento sin campos aplicables' }",
+        "",
+        "  // 4. Persistir via fs.edit declarativo (RFC 6902). Patron UPDATE compuesto:",
+        "  //    - op:test guarda race contra reordenamiento del array.",
+        "  //    - op:replace de la receta entera (con los 7 campos de coste aplicados).",
+        "  //    - op:replace de _updated_at del store. No componer archivo entero.",
+        "  now = nowISO()",
+        "  await publishAndWait('fs.edit.request', {",
+        "    project_id: input.project_id,",
+        "    path: '/pizzepos/recetas.json',",
+        "    patches: [",
+        "      { op: 'test',    path: `/recetas/${receta_idx}/id`, value: input.receta_id },",
+        "      { op: 'replace', path: `/recetas/${receta_idx}`,    value: r },",
+        "      { op: 'replace', path: '/_updated_at',              value: now }",
+        "    ]",
+        "  })",
+        "",
+        "  // 5. Publicar receta.actualizada para que otros consumers se enteren.",
+        "  //    'origen' indica que vino del subscriber asincrono, no de edicion del usuario.",
+        "  publish('receta.actualizada', {",
+        "    receta_id: r.id, nombre: r.nombre, version: r.version,",
+        "    campos_actualizados: aplicados,",
+        "    origen: 'escandallo.coste.calculado',",
+        "    correlation_id: input.correlation_id || null,",
+        "    timestamp: nowISO()",
+        "  })",
+        "",
+        "  return { status: 200, data: { applied: true, receta_id: r.id, campos_actualizados: aplicados } }"
+      ],
+      "reglas_clave": [
+        "Es handler de evento (fire-and-forget desde escandallo). NO devuelves response al publisher; tu output efectivo es el publish de receta.actualizada que haces tu mismo al final.",
+        "NO inventes valores: solo aplica los campos que vienen explicitos en input. Si falta uno, se mantiene el valor previo de la receta.",
+        "NO uses esta operacion como cajon en el chat normal — es solo handler. Su prefijo _ la marca como interna.",
+        "Si la receta del evento no existe (id desconocido), devuelves RESOURCE_NOT_FOUND. El publisher no se entera (fire-and-forget); el log de ai-gateway registra el fallo del handler para auditoria.",
+        "version de la receta NO se bumpea aqui — los campos de coste son derivacion calculada, no edicion editorial. El bump version queda para actualizar (cuando es el usuario quien edita).",
+        "Persistir via fs.edit con patron UPDATE compuesto: op:test + op:replace /recetas/<idx> + op:replace /_updated_at."
+      ],
+      "errores_posibles": [
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND",
+        "UPSTREAM_TIMEOUT",
+        "UNKNOWN_ERROR"
+      ]
+    }
+  },
+  "eventos_publicados": [
+    "receta.creada",
+    "receta.actualizada",
+    "receta.estado.actualizada",
+    "receta.eliminada",
+    "ingrediente.precio.actualizado"
+  ],
+  "eventos_que_escucho": [],
+  "trabajo_pendiente": [
+    "Primitiva universal del bus 'bus.newId' o 'uuid.generate.request/response' que devuelva UUIDv4 real generado por crypto.randomUUID() — para reemplazar el helper LLM-side uuid() que aluciña ids con shape regular.",
+    "Schemas JSON Schema 2020-12 estrictos para los 5 eventos publicados, integrados en subsistema-recetario.contract.json + validator.",
+    "Validacion estricta de catalogo en ai-gateway._executeToolCall — actualmente el LLM puede emitir cualquier nombre de tool (recetas.crear, etc.) y se publica al bus sin validar. Permite saltarse el blueprint cuando el modulo legacy sigue cargado.",
+    "DELEGADO 'actualizar': el LLM aun lee/compone/escribe el archivo (fs.read+fs.edit en el turno). Reconvertir a un responder recetas.actualizar.request del reflejo (como crear) para que el agente solo de forma + valide."
+  ],
+  "_v2_2_changelog": "v2.2.0 (2026-06-09): frontera de modulo. actualizar_precio (pricing) y analizar (costing) marcadas 'cajon': false → siguen siendo llamables por bus (RPC <mod>.<op>.request intacto, lo usa escandallo para cachear) pero DEJAN de exponerse como cajon al LLM de la pagina de recetas. Asi la pagina de recetas solo construye/gestiona recetas; pricing y costing quedan walled en escandallo. Acompaña a ai-gateway._extractCajones (ahora salta ops con cajon:false y con prefijo _). Diagnostico: el coste salia 0 porque el compañero trabajaba en la pagina de recetas y nunca invocaba escandallo (page-scoping), y ademas recetas podia hacer pricing por tener actualizar_precio como cajon — ambos cerrados.",
+  "_v2_5_changelog": "v2.5.0 (2026-06-11): recetas pasa a HIBRIDO. Las lecturas por RPC (listar/ingredientes/obtener.request) ya NO se sirven con turno LLM sintetico (se quitan de eventos_que_escucho con responde:true) — las sirve el reflejo JS index.js, determinista e instantaneo. Mata el coste de 250-370K tokens por escandallo. Los cajones listar/obtener/ingredientes siguen para el LLM en la pagina de recetas.",
+  "_v2_6_changelog": "v2.6.0 (2026-06-11): el persist (_aplicar_coste_calculado, write de coste al store) pasa al REFLEJO JS (index.js onCosteCalculado). Ya no es un turno LLM sintetico por cada escandallo.coste.calculado. eventos_que_escucho queda vacio. Completa la mitad determinista de recetas: lecturas + persist en codigo.",
+  "_v2_7_changelog": "crear MIGRADO a REFLEJO (recetas.crear.request, index.js): el alta era 100% del LLM y el mismo turno decidia escribir Y afirmar exito -> 3 fantasmas medidos (chillout/flamenco/hip-hop) + K-Pop (ejecuto pero la escritura no aterrizo, fs inestable). Ahora el blueprint solo NORMALIZA lenguaje natural -> lineas[] y delega el GUARDAR al reflejo, que persiste atomico y VERIFICA que aterrizo antes de emitir receta.creada. Determinismo: el guardado falso es imposible por construccion (o esta en el archivo, o el reflejo devuelve 503).",
+  "_v2_9_changelog": "v2.9.0 (skill blueprint-agentico): el FRENO. Nuevo contrato receta.schema.json (modelo_canonico como JSON Schema draft-07: description INSTRUYE al PENSAR, type/enum/exclusiveMinimum es la LEY que ejecuta VALIDAR). Nuevo responder del reflejo recetas.validar.request (AJV, funcion pura: {valid, errors[{path,message}]}). 'crear' reescrita al espinazo de 6 fases CONTRATO->LEER->PENSAR->VALIDAR->GUARDAR->EMITIR: el LLM da forma, el reflejo valida contra el contrato (loop max 3, reprompt con el path del error) y solo entonces el reflejo persiste verificado. Mata la linea hueca (cantidad:0/nombre vacio) que antes se coaccionaba en silencio, SIN prohibir el borrador (lineas vacias siguen siendo borrador legitimo). 'actualizar' recibe el mismo freno antes de su fs.edit (revierte el snapshot si la receta resultante no cumple). PENDIENTE: reconvertir 'actualizar' a DELEGADO puro (mover su fs.read/fs.edit a un responder recetas.actualizar.request del reflejo; hoy el LLM aun compone el archivo)."
 }

@@ -1,0 +1,28 @@
+{
+  "name": "project-management-studio-operations",
+  "description": "Expert operations manager specializing in day-to-day studio efficiency, process optimization, and resource coordination. Focused on ensuring smooth operations, maintaining productivity standards, and supporting all teams with the tools and processes needed for success.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/project-management-studio-operations.md",
+  "metadata": {
+    "domain": "project-management",
+    "tags": [
+      "project-management",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "project-management",
+    "display_name": "Studio Operations",
+    "emoji": "🏭",
+    "vibe": "Keeps the studio running smoothly — processes, tools, and people in sync."
+  }
+}

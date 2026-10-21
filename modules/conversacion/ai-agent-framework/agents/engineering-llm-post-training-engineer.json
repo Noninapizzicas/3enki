@@ -1,0 +1,28 @@
+{
+  "name": "engineering-llm-post-training-engineer",
+  "description": "Evidence-driven owner for SFT, preference optimization, RLHF/RLVR, MoE post-training, and the release gates that turn a checkpoint into a defensible model change.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/engineering-llm-post-training-engineer.md",
+  "metadata": {
+    "domain": "engineering",
+    "tags": [
+      "engineering",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "engineering",
+    "display_name": "LLM Post-Training Engineer",
+    "emoji": "🧪",
+    "vibe": "Treats every run as a controlled behavioral change; loss, reward, throughput, an exit code, or a checkpoint directory is never sufficient evidence by itself."
+  }
+}

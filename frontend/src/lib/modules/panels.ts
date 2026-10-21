@@ -121,6 +121,18 @@ export const panels: Record<string, PanelDef> = {
     loader: () => import('$lib/modules/menu-generate/GeneratePanel.svelte')
   },
 
+  // === WORK BAR — Recetas ===
+  'recetas-panel': {
+    id: 'recetas-panel',
+    title: 'Recetas',
+    icon: '📖',
+    size: 'lg',
+    position: 'top',
+    zone: 'work-bar',
+    order: 8,
+    loader: () => import('$lib/modules/recetas/RecetasPanel.svelte')
+  },
+
   // === WORK BAR — Escandallo ===
   'escandallo-panel': {
     id: 'escandallo-panel',
@@ -169,59 +181,6 @@ export const panels: Record<string, PanelDef> = {
     loader: () => import('$lib/modules/impresion/ImpresionPanel.svelte')
   },
 
-  // === WORK BAR — Catalogo de modelos 3D (F7, prisma-universal) ===
-  // El botón lo pinta el manifest (zone work-bar, order 8, icon 🧊); esta entrada
-  // es el loader de respaldo del panel (el autodescubrimiento del lazy-registry
-  // lo resuelve primero vía module.manifest.panels).
-
-  // === WORK BAR — Radar de nichos (interfaz) ===
-  // El botón de la barra lo renderiza el manifest.json del módulo (zone work-bar,
-  // order 8, icon 📡); esta entrada es el loader que carga el panel al pulsar.
-  interfaz: {
-    id: 'interfaz',
-    title: 'Radar de nichos',
-    icon: '📡',
-    size: 'lg',
-    position: 'top',
-    zone: 'work-bar',
-    order: 8,
-    loader: () => import('$lib/modules/interfaz/InterfazPanel.svelte')
-  },
-
-  // === WORK BAR — Proyecto 3D — FASE 7 (construir-interfaz) ===
-  // El botón de la barra lo renderiza el manifest.json de cada módulo (zone work-bar).
-  // Estas entradas son los loaders que cargan el panel al pulsar.
-  catalogo: {
-    id: 'catalogo',
-    title: 'Catálogo de piezas',
-    icon: '🧊',
-    size: 'lg',
-    position: 'top',
-    zone: 'work-bar',
-    order: 8,
-    loader: () => import('$lib/modules/catalogo/CatalogoPanel.svelte')
-  },
-  'panel-trabajador': {
-    id: 'panel-trabajador',
-    title: 'Panel del trabajador',
-    icon: '🔧',
-    size: 'lg',
-    position: 'top',
-    zone: 'work-bar',
-    order: 9,
-    loader: () => import('$lib/modules/panel-trabajador/PanelTrabajadorPanel.svelte')
-  },
-  'panel-jefe': {
-    id: 'panel-jefe',
-    title: 'Panel del jefe',
-    icon: '🗂',
-    size: 'lg',
-    position: 'top',
-    zone: 'work-bar',
-    order: 10,
-    loader: () => import('$lib/modules/panel-jefe/PanelJefePanel.svelte')
-  },
-
   // === CHAT TOOLS (barra inferior junto al chat) ===
   files: {
     id: 'files',
@@ -232,42 +191,6 @@ export const panels: Record<string, PanelDef> = {
     zone: 'chat-tools',
     order: 1,
     loader: () => import('$lib/modules/files/FilesPanel.svelte')
-  },
-  // === CHAT TOOLS — Producir (F7, prisma). ChatTools NO autodescubre: exige entrada aquí.
-  // El botón lo pinta el manifest (zone chat-tools, order 13, icon 🏭); esta entrada es el loader.
-  producir: {
-    id: 'producir',
-    title: 'Producir',
-    icon: '🏭',
-    size: 'lg',
-    position: 'left',
-    zone: 'chat-tools',
-    order: 2,
-    loader: () => import('$lib/modules/producir/ProducirPanel.svelte')
-  },
-
-  // === CHAT TOOLS — Proyecto 3D — FASE 7 (construir-interfaz) ===
-  // Los chat_tool del proyecto 3d (conversor y puente de búsqueda). El botón lo
-  // pinta el manifest (zone chat-tools); estas entradas son los loaders.
-  importacion: {
-    id: 'importacion',
-    title: 'Importación de modelos',
-    icon: '📥',
-    size: 'lg',
-    position: 'left',
-    zone: 'chat-tools',
-    order: 3,
-    loader: () => import('$lib/modules/importacion/ImportacionPanel.svelte')
-  },
-  'buscador-repositorios': {
-    id: 'buscador-repositorios',
-    title: 'Buscar modelos',
-    icon: '🔎',
-    size: 'lg',
-    position: 'left',
-    zone: 'chat-tools',
-    order: 4,
-    loader: () => import('$lib/modules/buscador-repositorios/BuscadorRepositoriosPanel.svelte')
   },
 
   // === PANELES PROGRAMÁTICOS (showInBar: false — solo vía openPanel()) ===
@@ -299,20 +222,6 @@ export const panels: Record<string, PanelDef> = {
     order: 99,
     loader: () => import('$lib/modules/related-pages/RelatedPagesPanel.svelte')
   },
-  // === SYSTEM BAR — Vertical nichos — dashboard solo lectura (F6½+F7) ===
-  // Un solo panel: dashboard-nichos (system_panel, observabilidad). Consume 5 RPCs
-  // de lectura del vertical nichos vía BlueprintForm. El dueño opera por Telegram.
-  'dashboard-nichos': {
-    id: 'dashboard-nichos',
-    title: 'Dashboard nichos',
-    icon: '📊',
-    size: 'lg',
-    position: 'right',
-    zone: 'system-bar',
-    order: 97,
-    loader: () => import('$lib/modules/dashboard-nichos/DashboardNichosPanel.svelte')
-  },
-
   // === VENTANA DEL AGENTE (panel embebible dentro del chat) ===
   // El mismo componente que la ruta /[project_id]/agentes/[request_id] — aquí
   // "esparcido dentro" mientras el agente trabaja. Se abre con openPanel('agente').

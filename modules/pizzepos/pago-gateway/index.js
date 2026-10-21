@@ -114,16 +114,6 @@ class PagoGatewayModule extends BaseModule {
     params.set('cancel_url', ret ? (ret + sep + 'pago=cancel') : 'https://example.com/?pago=cancel');
     params.set('metadata[pedido_id]', String(d.pedido_id));
     if (d.project_id) params.set('metadata[project_id]', String(d.project_id));
-    // METADATA ADICIONAL del caller: la pasarela la devuelve en el webhook, asi que es lo que
-    // permite RECONSTRUIR el pedido si el webhook llega cuando ya no esta en memoria (un reinicio
-    // en la ventana de pago). Se filtra a escalares y claves simples (form-encoded de Stripe).
-    if (d.metadata && typeof d.metadata === 'object') {
-      for (const [k, v] of Object.entries(d.metadata)) {
-        if (v === null || v === undefined || v === '') continue;
-        if (!/^[a-z0-9_]{1,40}$/i.test(k)) continue;
-        params.set('metadata[' + k + ']', String(v).slice(0, 500));
-      }
-    }
 
     let resp, text;
     try {
@@ -186,17 +176,9 @@ class PagoGatewayModule extends BaseModule {
         const pedido_id = s.metadata?.pedido_id || null;
         const pagado = s.payment_status === 'paid' || s.status === 'complete';
         if (pedido_id && pagado) {
-          // Se reenvia la metadata de contexto que puso el caller: es lo que permite al consumidor
-          // reconstruir el pedido si el webhook llega tarde (deploy/reinicio en la ventana de pago).
-          const meta = s.metadata || {};
-          const contexto = {};
-          for (const k of ['project_slug', 'cliente_nombre', 'cliente_telefono', 'canal_origen']) {
-            if (meta[k] !== undefined && meta[k] !== '') contexto[k] = meta[k];
-          }
           await this.eventBus.publish('pago.confirmado', {
-            pedido_id, project_id: meta.project_id || null,
+            pedido_id, project_id: s.metadata?.project_id || null,
             session_id: s.id, pasarela: 'stripe-checkout', monto_centimos: s.amount_total || null,
-            ...contexto,
             correlation_id: crypto.randomUUID(), timestamp: new Date().toISOString()
           });
           this.metrics?.increment?.('pago.confirmado.total');

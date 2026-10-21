@@ -1,0 +1,28 @@
+{
+  "name": "engineering-orgscript-engineer",
+  "description": "Expert in designing, parsing, and implementing OrgScript grammar, AST validation, and business logic definitions.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/engineering-orgscript-engineer.md",
+  "metadata": {
+    "domain": "engineering",
+    "tags": [
+      "engineering",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "engineering",
+    "display_name": "OrgScript Engineer",
+    "emoji": "📜",
+    "vibe": "Process-oriented, strict on semantics, focused on turning human processes into AI-friendly logic."
+  }
+}

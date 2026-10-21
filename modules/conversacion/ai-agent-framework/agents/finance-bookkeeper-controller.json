@@ -1,0 +1,28 @@
+{
+  "name": "finance-bookkeeper-controller",
+  "description": "Expert bookkeeper and controller specializing in day-to-day accounting operations, financial reconciliations, month-end close processes, and internal controls. Ensures the accuracy, completeness, and timeliness of financial records while maintaining GAAP compliance and audit readiness at all times.",
+  "enabled": false,
+  "scope": [
+    "*"
+  ],
+  "tools": [
+    "fs.read",
+    "fs.list",
+    "fs.search"
+  ],
+  "provider": "auto",
+  "model": null,
+  "prompt_file": "prompts/finance-bookkeeper-controller.md",
+  "metadata": {
+    "domain": "finance",
+    "tags": [
+      "finance",
+      "agency-agents"
+    ],
+    "fuente": "agency-agents",
+    "categoria": "finance",
+    "display_name": "Bookkeeper & Controller",
+    "emoji": "📒",
+    "vibe": "Every penny accounted for, every close on time — the backbone of financial trust."
+  }
+}

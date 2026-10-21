@@ -31,11 +31,6 @@ class WhatsappBotModule extends BaseModule {
     // Bounded (LRU simple) para no fugar memoria.
     this.pedidosListos = new Map();
     this.maxPedidosListos = 500;
-    // pedido_id -> cuándo se pidió la sesión de pago a la pasarela. Guarda ANTI-DUPLICADO: Meta
-    // reintenta webhooks y el cliente puede reenviar; sin esto, dos peticiones = dos sesiones en
-    // Stripe = riesgo de pagar dos veces. Bounded (LRU simple) para no fugar memoria.
-    this.pagosIniciados = new Map();
-    this.maxPagosIniciados = 500;
 
     // ── Re-tasado server-side (seguridad). El bot mantiene un SNAPSHOT de precios por
     // proyecto, hidratado VÍA EVENTO (catalogo.actualizado / project.activated): cuando
@@ -257,12 +252,6 @@ class WhatsappBotModule extends BaseModule {
     // Recordar quién es el cliente para avisarle cuando cocina lo marque listo.
     // Clave por pedido_id (tienda) y por cuenta_id (la cuenta operativa de comandero).
     this._trackPedidoListo([data.pedido_id, data.cuenta_id], pending.project_slug, pending.from, pending.cliente_nombre);
-    // Pago con TARJETA: el cliente lo eligió en la PWA. Se pide la sesión a la pasarela y se le
-    // manda el enlace por WhatsApp. NO se espera aquí (no bloquea la confirmación ni el timeout);
-    // si la pasarela no está, _iniciarPagoTarjeta degrada y le dice que pague al recoger.
-    if (pending.metodo_pago === 'tarjeta') {
-      this._iniciarPagoTarjeta(pending, data).catch(() => {});
-    }
   }
 
   // Cocina marcó el pedido listo → avisa al CLIENTE por WhatsApp ("ven a recoger").
@@ -380,15 +369,7 @@ class WhatsappBotModule extends BaseModule {
     }
     await this._publicarEvento('whatsapp.mensaje.recibido', {
       project_slug, phone_number_id: msg.phone_number_id, from: msg.from,
-      message_type: msg.message_type, message_id: msg.message_id, has_text: !!msg.text,
-      // Entrada interactiva estructurada (botón/list) o encuesta. El módulo de negocio
-      // sabe EXACTAMENTE qué tocó el cliente. {type: button|list|flow|poll, ...}. Ver README.
-      interaction: msg.interaction || null,
-      // Media entrante (image/video/audio/document). Contiene el `id` de Meta para
-      // rescatar el media via Graph API — NO se descarga aquí (decisión del consumidor).
-      media: msg.media || null,
-      // Ubicación entrante (el cliente comparte un punto del mapa). {longitude, latitude, name?, address?}.
-      location: msg.location || null
+      message_type: msg.message_type, message_id: msg.message_id, has_text: !!msg.text
     });
     await this._despacharEntrante(project_slug, msg);
   }
@@ -628,265 +609,6 @@ class WhatsappBotModule extends BaseModule {
     }
   }
 
-  // Enviar MEDIA al cliente por link (URL pública). Tipos: image | video | audio | document.
-  // Meta descarga la URL en su red al entregar. Es la vía para mandar imágenes de producto,
-  // PDFs (cartas), notas de voz pre-grabadas, etc. Abre WhatsApp a contenido no-texto.
-  async handleToolEnviarMedia(data) {
-    const project_slug = data?.project_slug;
-    const to = data?.to;
-    const type = data?.type;
-    const link = data?.link;
-    try {
-      if (!project_slug) return this._errorResponse(400, 'INVALID_INPUT', 'project_slug requerido', { field: 'project_slug' });
-      if (!to || typeof to !== 'string') return this._errorResponse(400, 'INVALID_INPUT', 'to requerido (E.164 sin +)', { field: 'to' });
-      const tipos = ['image', 'video', 'audio', 'document'];
-      if (!tipos.includes(type)) return this._errorResponse(400, 'INVALID_INPUT', `type debe ser uno de: ${tipos.join(', ')}`, { field: 'type' });
-      if (!link || typeof link !== 'string') return this._errorResponse(400, 'INVALID_INPUT', 'link (URL pública del media) requerido', { field: 'link' });
-
-      const meta = this.projectsByMeta.get(project_slug);
-      if (!meta || !meta.phone_number_id || String(meta.phone_number_id).startsWith('<PENDIENTE')) {
-        return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Proyecto '${project_slug}' no configurado o con datos pendientes`, { project_slug });
-      }
-      const token = process.env[this._envTokenKey(project_slug)];
-      if (!token) {
-        return this._errorResponse(401, 'AUTHENTICATION_REQUIRED', `Credencial META_WHATSAPP no disponible para '${project_slug}'`, { project_slug });
-      }
-
-      const { messageId } = await this.metaClient.sendMedia({
-        phoneNumberId: meta.phone_number_id,
-        accessToken: token,
-        to,
-        type,
-        link,
-        filename: data?.filename,
-        caption: data?.caption,
-        mime_type: data?.mime_type
-      });
-
-      this.metrics?.increment('whatsapp-bot.message.sent', { project: project_slug, kind: `media_${type}` });
-      await this._publicarEvento('whatsapp.mensaje.enviado', {
-        project_slug, to: this._maskPhoneNumber(to), message_id: messageId, kind: `media_${type}`
-      });
-
-      return { status: 200, data: { message_id: messageId, project_slug, kind: `media_${type}` } };
-    } catch (err) {
-      this.metrics?.increment('whatsapp-bot.message.failed', { project: project_slug, kind: `media_${type || 'unknown'}` });
-      await this._publicarEvento('whatsapp.envio.fallido', {
-        project_slug, to: this._maskPhoneNumber(to),
-        error_code: err._code || 'UNKNOWN_ERROR', error_message: err.message
-      });
-      return this._handleHandlerError('whatsapp-bot.tool.enviar_media.error', err, 'tool');
-    }
-  }
-
-  // Enviar UBICACIÓN al cliente (un punto del mapa). longitude/latitude obligatorios;
-  // name/address opcionales (se muestran sobre el pin). Sirve para mandar la dirección
-  // del negocio, puntos de recogida, etc. Abre WhatsApp al canal de ubicación.
-  async handleToolEnviarUbicacion(data) {
-    const project_slug = data?.project_slug;
-    const to = data?.to;
-    const longitude = data?.longitude;
-    const latitude = data?.latitude;
-    try {
-      if (!project_slug) return this._errorResponse(400, 'INVALID_INPUT', 'project_slug requerido', { field: 'project_slug' });
-      if (!to || typeof to !== 'string') return this._errorResponse(400, 'INVALID_INPUT', 'to requerido (E.164 sin +)', { field: 'to' });
-      if (typeof longitude !== 'number' || typeof latitude !== 'number') {
-        return this._errorResponse(400, 'INVALID_INPUT', 'longitude y latitude deben ser números', { field: 'longitude/latitude' });
-      }
-
-      const meta = this.projectsByMeta.get(project_slug);
-      if (!meta || !meta.phone_number_id || String(meta.phone_number_id).startsWith('<PENDIENTE')) {
-        return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Proyecto '${project_slug}' no configurado o con datos pendientes`, { project_slug });
-      }
-      const token = process.env[this._envTokenKey(project_slug)];
-      if (!token) {
-        return this._errorResponse(401, 'AUTHENTICATION_REQUIRED', `Credencial META_WHATSAPP no disponible para '${project_slug}'`, { project_slug });
-      }
-
-      const { messageId } = await this.metaClient.sendLocation({
-        phoneNumberId: meta.phone_number_id,
-        accessToken: token,
-        to,
-        longitude,
-        latitude,
-        name: data?.name,
-        address: data?.address
-      });
-
-      this.metrics?.increment('whatsapp-bot.message.sent', { project: project_slug, kind: 'location' });
-      await this._publicarEvento('whatsapp.mensaje.enviado', {
-        project_slug, to: this._maskPhoneNumber(to), message_id: messageId, kind: 'location'
-      });
-
-      return { status: 200, data: { message_id: messageId, project_slug, kind: 'location' } };
-    } catch (err) {
-      this.metrics?.increment('whatsapp-bot.message.failed', { project: project_slug, kind: 'location' });
-      await this._publicarEvento('whatsapp.envio.fallido', {
-        project_slug, to: this._maskPhoneNumber(to),
-        error_code: err._code || 'UNKNOWN_ERROR', error_message: err.message
-      });
-      return this._handleHandlerError('whatsapp-bot.tool.enviar_ubicacion.error', err, 'tool');
-    }
-  }
-
-  // Enviar INTERACTIVO: botones (quick-reply, máx 3) o lista (menú con secciones/opciones).
-  // kind: 'buttons' | 'list'. Da opciones al cliente para responder con un toque,
-  // sin que tenga que escribir. Ideal para menús, confirmar, elegir opción, etc.
-  async handleToolEnviarInteractivo(data) {
-    const project_slug = data?.project_slug;
-    const to = data?.to;
-    const kind = data?.kind;
-    try {
-      if (!project_slug) return this._errorResponse(400, 'INVALID_INPUT', 'project_slug requerido', { field: 'project_slug' });
-      if (!to || typeof to !== 'string') return this._errorResponse(400, 'INVALID_INPUT', 'to requerido (E.164 sin +)', { field: 'to' });
-      if (!['buttons', 'list'].includes(kind)) return this._errorResponse(400, 'INVALID_INPUT', 'kind debe ser buttons|list', { field: 'kind' });
-      const body = data?.body;
-      if (!body || typeof body !== 'string') return this._errorResponse(400, 'INVALID_INPUT', 'body (texto) requerido', { field: 'body' });
-      if (kind === 'buttons' && (!Array.isArray(data?.buttons) || data.buttons.length === 0)) {
-        return this._errorResponse(400, 'INVALID_INPUT', 'buttons: array requerido (1..3)', { field: 'buttons' });
-      }
-      if (kind === 'list' && (!data?.list || !Array.isArray(data.list.sections) || data.list.sections.length === 0)) {
-        return this._errorResponse(400, 'INVALID_INPUT', 'list.sections requerido', { field: 'list' });
-      }
-
-      const meta = this.projectsByMeta.get(project_slug);
-      if (!meta || !meta.phone_number_id || String(meta.phone_number_id).startsWith('<PENDIENTE')) {
-        return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Proyecto '${project_slug}' no configurado o con datos pendientes`, { project_slug });
-      }
-      const token = process.env[this._envTokenKey(project_slug)];
-      if (!token) {
-        return this._errorResponse(401, 'AUTHENTICATION_REQUIRED', `Credencial META_WHATSAPP no disponible para '${project_slug}'`, { project_slug });
-      }
-
-      const { messageId } = await this.metaClient.sendInteractive({
-        phoneNumberId: meta.phone_number_id,
-        accessToken: token,
-        to,
-        kind,
-        header: data?.header,
-        body,
-        footer: data?.footer,
-        buttons: data?.buttons,
-        list: data?.list
-      });
-
-      this.metrics?.increment('whatsapp-bot.message.sent', { project: project_slug, kind: `interactive_${kind}` });
-      await this._publicarEvento('whatsapp.mensaje.enviado', {
-        project_slug, to: this._maskPhoneNumber(to), message_id: messageId, kind: `interactive_${kind}`
-      });
-
-      return { status: 200, data: { message_id: messageId, project_slug, kind: `interactive_${kind}` } };
-    } catch (err) {
-      this.metrics?.increment('whatsapp-bot.message.failed', { project: project_slug, kind: `interactive_${kind || 'unknown'}` });
-      await this._publicarEvento('whatsapp.envio.fallido', {
-        project_slug, to: this._maskPhoneNumber(to),
-        error_code: err._code || 'UNKNOWN_ERROR', error_message: err.message
-      });
-      return this._handleHandlerError('whatsapp-bot.tool.enviar_interactivo.error', err, 'tool');
-    }
-  }
-
-  // Enviar ENCUESTA (poll). question obligatorio, options 2..10. WhatsApp nativo.
-  async handleToolEnviarEncuesta(data) {
-    const project_slug = data?.project_slug;
-    const to = data?.to;
-    const question = data?.question;
-    const options = data?.options;
-    try {
-      if (!project_slug) return this._errorResponse(400, 'INVALID_INPUT', 'project_slug requerido', { field: 'project_slug' });
-      if (!to || typeof to !== 'string') return this._errorResponse(400, 'INVALID_INPUT', 'to requerido (E.164 sin +)', { field: 'to' });
-      if (!question || typeof question !== 'string') return this._errorResponse(400, 'INVALID_INPUT', 'question requerida', { field: 'question' });
-      if (!Array.isArray(options) || options.length < 2 || options.length > 10) {
-        return this._errorResponse(400, 'INVALID_INPUT', 'options: array de 2..10', { field: 'options' });
-      }
-
-      const meta = this.projectsByMeta.get(project_slug);
-      if (!meta || !meta.phone_number_id || String(meta.phone_number_id).startsWith('<PENDIENTE')) {
-        return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Proyecto '${project_slug}' no configurado o con datos pendientes`, { project_slug });
-      }
-      const token = process.env[this._envTokenKey(project_slug)];
-      if (!token) {
-        return this._errorResponse(401, 'AUTHENTICATION_REQUIRED', `Credencial META_WHATSAPP no disponible para '${project_slug}'`, { project_slug });
-      }
-
-      const { messageId } = await this.metaClient.sendPoll({
-        phoneNumberId: meta.phone_number_id,
-        accessToken: token,
-        to,
-        question,
-        options: options.map((o, i) => ({ id: String(data?.poll_id || `opt_${i}`), title: String(o) }))
-      });
-
-      this.metrics?.increment('whatsapp-bot.message.sent', { project: project_slug, kind: 'poll' });
-      await this._publicarEvento('whatsapp.mensaje.enviado', {
-        project_slug, to: this._maskPhoneNumber(to), message_id: messageId, kind: 'poll'
-      });
-
-      return { status: 200, data: { message_id: messageId, project_slug, kind: 'poll' } };
-    } catch (err) {
-      this.metrics?.increment('whatsapp-bot.message.failed', { project: project_slug, kind: 'poll' });
-      await this._publicarEvento('whatsapp.envio.fallido', {
-        project_slug, to: this._maskPhoneNumber(to),
-        error_code: err._code || 'UNKNOWN_ERROR', error_message: err.message
-      });
-      return this._handleHandlerError('whatsapp-bot.tool.enviar_encuesta.error', err, 'tool');
-    }
-  }
-
-  // Enviar el CATÁLOGO NATIVO de WhatsApp (Commerce Manager de Meta). El catálogo y sus
-  // productos viven en el Commerce Manager del WABA de Meta; Enki solo envía el mensaje.
-  // `catalog_id` (obligatorio) es el id de Meta del catálogo conectado al número. El texto
-  // `text` presenta el catálogo. Si el proyecto tiene un catalog_id en su config (bloque
-  // whatsapp), se puede omitir y se toma de ahí. NO se mezcla con los catálogos de Enki.
-  async handleToolEnviarCatalogo(data) {
-    const project_slug = data?.project_slug;
-    const to = data?.to;
-    try {
-      if (!project_slug) return this._errorResponse(400, 'INVALID_INPUT', 'project_slug requerido', { field: 'project_slug' });
-      if (!to || typeof to !== 'string') return this._errorResponse(400, 'INVALID_INPUT', 'to requerido (E.164 sin +)', { field: 'to' });
-      const text = data?.text || 'Este es nuestro catálogo';
-      const meta = this.projectsByMeta.get(project_slug);
-      if (!meta || !meta.phone_number_id || String(meta.phone_number_id).startsWith('<PENDIENTE')) {
-        return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Proyecto '${project_slug}' no configurado o con datos pendientes`, { project_slug });
-      }
-      const token = process.env[this._envTokenKey(project_slug)];
-      if (!token) {
-        return this._errorResponse(401, 'AUTHENTICATION_REQUIRED', `Credencial META_WHATSAPP no disponible para '${project_slug}'`, { project_slug });
-      }
-      // catalog_id: o se pasa en la llamada, o se lee del config del proyecto (bloque whatsapp).
-      let catalogId = data?.catalog_id;
-      if (!catalogId) {
-        const cfg = await this._readProjectConfig(project_slug);
-        catalogId = cfg?.whatsapp?.catalog_id || null;
-      }
-      if (!catalogId) {
-        return this._errorResponse(400, 'INVALID_INPUT', 'catalog_id requerido (id de Meta del catálogo del número). Pásalo o ponlo en el config del proyecto (whatsapp.catalog_id)', { field: 'catalog_id' });
-      }
-
-      const { messageId } = await this.metaClient.sendCatalog({
-        phoneNumberId: meta.phone_number_id,
-        accessToken: token,
-        to,
-        catalogId,
-        body: text
-      });
-
-      this.metrics?.increment('whatsapp-bot.message.sent', { project: project_slug, kind: 'catalog' });
-      await this._publicarEvento('whatsapp.mensaje.enviado', {
-        project_slug, to: this._maskPhoneNumber(to), message_id: messageId, kind: 'catalog'
-      });
-
-      return { status: 200, data: { message_id: messageId, project_slug, kind: 'catalog' } };
-    } catch (err) {
-      this.metrics?.increment('whatsapp-bot.message.failed', { project: project_slug, kind: 'catalog' });
-      await this._publicarEvento('whatsapp.envio.fallido', {
-        project_slug, to: this._maskPhoneNumber(to),
-        error_code: err._code || 'UNKNOWN_ERROR', error_message: err.message
-      });
-      return this._handleHandlerError('whatsapp-bot.tool.enviar_catalogo.error', err, 'tool');
-    }
-  }
-
   // ==========================================
   // Dominio protegido (mapping, despacho, helpers)
   // ==========================================
@@ -976,25 +698,8 @@ class WhatsappBotModule extends BaseModule {
   }
 
   async _despacharEntrante(project_slug, msg) {
-    // Media entrante (foto/audio/vídeo/documento) SIN texto: no es un pedido por formato
-    // texto. Lo capturamos y avisamos al cliente; el media viaja en whatsapp.mensaje.recibido
-    // para que el módulo de negocio del proyecto decida qué hacer (guardar/analizar/derivar).
     if (!msg.text) {
-      this.logger.info('whatsapp-bot.entrante.sin_texto', { project_slug, message_type: msg.message_type, media: msg.media || null, location: msg.location || null });
-      const pwa = this.projectsByMeta.get(project_slug)?.pwa_url || 'nuestro catálogo';
-      if (msg.location) {
-        // El cliente compartió su ubicación. La capturamos (ya viaja en
-        // whatsapp.mensaje.recibido) y avisamos. Un módulo de negocio puede usar las
-        // coordenadas para reparto/recogida/geolocalización.
-        this.metrics?.increment?.('whatsapp-bot.location.recibido', { project: project_slug });
-        await this._enviarMensajeSeguro(project_slug, msg.from,
-          `Hemos recibido tu ubicación. Si quieres hacer un pedido, abre la carta aquí: ${pwa}.`);
-      } else if (msg.media) {
-        this.metrics?.increment?.('whatsapp-bot.media.recibido', { project: project_slug, type: msg.media.type });
-        const label = msg.media.type === 'audio' ? 'nota de voz' : msg.media.type;
-        await this._enviarMensajeSeguro(project_slug, msg.from,
-          `Hemos recibido tu ${label}. Si quieres hacer un pedido, abre la carta aquí: ${pwa}.`);
-      }
+      this.logger.info('whatsapp-bot.entrante.sin_texto', { project_slug, message_type: msg.message_type });
       return;
     }
     const parsed = parsearPedido(msg.text);
@@ -1061,7 +766,6 @@ class WhatsappBotModule extends BaseModule {
       items,
       total_centimos: parsed.total_centimos,
       cliente_nombre: parsed.cliente_nombre,
-      metodo_pago: parsed.metodo_pago || 'efectivo',
       mayor_edad_confirmado: parsed.mayor_edad_confirmado,
       timeoutHandle,
       created_at: Date.now()
@@ -1081,7 +785,6 @@ class WhatsappBotModule extends BaseModule {
       cliente_nombre: parsed.cliente_nombre,
       modo_consumo: parsed.modo_consumo || null,
       hora_recogida: parsed.hora_recogida || null,
-      metodo_pago: parsed.metodo_pago || 'efectivo',
       mayor_edad_confirmado: parsed.mayor_edad_confirmado
     });
     this.metrics?.increment('whatsapp-bot.pedido.solicitado', { project: project_slug });
@@ -1147,7 +850,6 @@ class WhatsappBotModule extends BaseModule {
     this.pendingPedidos.set(request_id, {
       project_slug, from: msg.from, message_id: msg.message_id,
       items, total_centimos, cliente_nombre: parsed.cliente_nombre,
-      metodo_pago: parsed.metodo_pago || 'efectivo',
       mayor_edad_confirmado: parsed.mayor_edad_confirmado, timeoutHandle, created_at: Date.now()
     });
 
@@ -1157,33 +859,12 @@ class WhatsappBotModule extends BaseModule {
       cliente_telefono: msg.from, cliente_nombre: parsed.cliente_nombre,
       modo_consumo: parsed.modo_consumo || null,
       hora_recogida: parsed.hora_recogida || null,
-      metodo_pago: parsed.metodo_pago || 'efectivo',
       mayor_edad_confirmado: parsed.mayor_edad_confirmado
     });
     this.metrics?.increment('whatsapp-bot.pedido.solicitado', { project: project_slug, retasado: 'si' });
     this.logger.info('whatsapp-bot.pedido.retasado', {
       project_slug, items: items.length, total_centimos,
       total_cliente: parsed.total_centimos, coincide: parsed.total_centimos === total_centimos
-    });
-  }
-
-  // RPC de bus: publica <evento>.request con request_id y espera la <evento>.response correlacionada.
-  // Mismo patrón que tienda-api y pago-gateway (el líder de pago no es tool del LLM: es bus directo).
-  async _rpc(evento, payload = {}, { timeout_ms = 15000 } = {}) {
-    if (!this.eventBus?.subscribe || !this.eventBus?.publish) return null;
-    const request_id = crypto.randomUUID();
-    const responseEvent = evento.endsWith('.request') ? evento.slice(0, -8) + '.response' : `${evento}.response`;
-    return new Promise((resolve) => {
-      let unsub = null;
-      const t = setTimeout(() => { if (unsub) unsub(); resolve(null); }, timeout_ms);
-      try {
-        unsub = this.eventBus.subscribe(responseEvent, (ev) => {
-          const dd = ev?.data || ev;
-          if (!dd || dd.request_id !== request_id) return;
-          clearTimeout(t); if (unsub) unsub(); resolve(dd);
-        });
-        this.eventBus.publish(evento, { request_id, ...payload });
-      } catch (_) { clearTimeout(t); if (unsub) unsub(); resolve(null); }
     });
   }
 
@@ -1195,105 +876,11 @@ class WhatsappBotModule extends BaseModule {
     return pending;
   }
 
-  // Pago con TARJETA (elegido en la PWA). Pide la sesión a la pasarela (líder pago-gateway,
-  // provider-agnóstico) y manda el enlace al cliente por WhatsApp. Guarda anti-duplicado por
-  // pedido_id. Sin pasarela (NO_PASARELA) o sin su credencial (PERMISSION_DENIED) DEGRADA: avisa
-  // que pague al recoger y NO revienta (el pedido ya está creado, no se pierde).
-  async _iniciarPagoTarjeta(pending, pedido) {
-    const pedido_id = pedido?.pedido_id;
-    if (!pedido_id) return;
-    if (this.pagosIniciados.has(pedido_id)) return;          // una sola sesión por pedido
-    this.pagosIniciados.set(pedido_id, Date.now());
-    while (this.pagosIniciados.size > this.maxPagosIniciados) {
-      this.pagosIniciados.delete(this.pagosIniciados.keys().next().value);
-    }
-    const meta = this.projectsByMeta.get(pending.project_slug);
-    const r = await this._rpc('pago.iniciar.request', {
-      pedido_id,
-      project_id: this._resolverProjectId(pending.project_slug) || pending.project_slug,
-      monto_centimos: Number.isInteger(pending.total_centimos) ? pending.total_centimos : null,
-      concepto: 'Pedido ' + (pending.cliente_nombre || ''),
-      // Vuelta tras pagar: la propia carta del negocio (donde el cliente ya estaba).
-      return_url: meta?.pwa_url || '',
-      // Metadata de CONTEXTO: la pasarela la devuelve en el webhook → permite RECONSTRUIR el
-      // pedido si el webhook llega cuando ya no está en memoria (reinicio en la ventana de pago).
-      metadata: {
-        project_slug: pending.project_slug,
-        cliente_nombre: pending.cliente_nombre || '',
-        cliente_telefono: pending.from || '',
-        canal_origen: 'whatsapp'
-      }
-    }, { timeout_ms: 20000 });
-
-    if (r && r.status === 200 && r.data?.checkout_url) {
-      const display = meta?.display_number ? `\nNumero del negocio: ${meta.display_number}` : '';
-      await this._enviarMensajeSeguro(pending.project_slug, pending.from,
-        `Paga con tarjeta aquí (enlace seguro): ${r.data.checkout_url}\nEn cuanto se confirme, tu pedido queda reservado.${display}`);
-      this.metrics?.increment('whatsapp-bot.pago.enlace_enviado', { project: pending.project_slug });
-      this.logger.info('whatsapp-bot.pago.enlace_enviado', {
-        project_slug: pending.project_slug, pedido_id, from: this._maskPhoneNumber(pending.from)
-      });
-      return;
-    }
-    const code = (r && r.error) ? r.error.code : 'PAGO_NO_DISPONIBLE';
-    this.metrics?.increment('whatsapp-bot.pago.no_disponible', { project: pending.project_slug, code });
-    this.logger.warn('whatsapp-bot.pago.no_disponible', { project_slug: pending.project_slug, pedido_id, code });
-    await this._enviarMensajeSeguro(pending.project_slug, pending.from,
-      'El pago con tarjeta no está disponible ahora mismo. Puedes pagar al recoger.');
-  }
-
-  // La pasarela confirmó el pago (pago.confirmado → pedidos → pedido.pagado). Se lo decimos al
-  // cliente. Si el pedido hubo que RECREARLO (el webhook llegó cuando ya no estaba en memoria),
-  // no hay conversación que continuar → se avisa al STAFF por Telegram: el dinero NUNCA en silencio.
-  async onPedidoPagado(event) {
-    const d = event?.data || event;
-    if (!d?.pedido_id) return;
-    const recreado = d.recreado === true;
-    this.metrics?.increment('whatsapp-bot.pago.confirmado', { recreado });
-    this.logger.info('whatsapp-bot.pago.confirmado', { pedido_id: d.pedido_id, recreado, total: d.total });
-    // El slug puede venir en el evento, o deducirse: en los pedidos de tienda `project_id` es el
-    // PROPIO slug, y el puente slugPorPid solo lo tiende project.activated. Se cubren los dos.
-    const slug = d.project_slug
-      || (d.project_id && this.projectsByMeta.has(d.project_id) ? d.project_id : null)
-      || this.slugPorPid.get(d.project_id) || null;
-    if (d.cliente_telefono && slug) {
-      await this._enviarMensajeSeguro(slug, d.cliente_telefono,
-        `Pago recibido${d.cliente_nombre ? ' a nombre de ' + d.cliente_nombre : ''}. Tu pedido queda reservado — te aviso cuando esté listo. 🎉`);
-    }
-    if (recreado) await this._avisarStaffPagoRecreado(d, slug);
-  }
-
-  async _avisarStaffPagoRecreado(d, slug) {
-    const meta = slug ? this.projectsByMeta.get(slug) : null;
-    if (!meta?.telegram_chat_id || !meta?.telegram_bot_name) {
-      this.logger.warn('whatsapp-bot.pago.recreado.sin_telegram', { pedido_id: d.pedido_id, slug });
-      return;
-    }
-    const totalEur = Number.isFinite(d.total) ? d.total.toFixed(2) : '?';
-    const lines = [
-      `PAGO CON TARJETA CONFIRMADO (pedido reconstruido) - ${String(slug || '?').toUpperCase()}`,
-      `Pedido: ${d.pedido_id}`,
-      d.cliente_nombre ? `A nombre de: ${d.cliente_nombre}` : null,
-      `Total: ${totalEur} EUR`,
-      '',
-      'El pedido no estaba en memoria cuando llegó el webhook (reinicio en la ventana de pago).',
-      'El dinero SÍ está cobrado: revisa la pasarela y rehaz el pedido si hace falta.'
-    ].filter(Boolean);
-    await this.eventBus.publish('telegram.send_message.request', {
-      request_id: crypto.randomUUID(),
-      botName: meta.telegram_bot_name,
-      chatId: Number(meta.telegram_chat_id),
-      text: lines.join('\n')
-    });
-  }
-
   async _confirmarPedidoCliente(pending, pedido) {
     const meta = this.projectsByMeta.get(pending.project_slug);
     const display = meta?.display_number ? `\nNumero del negocio: ${meta.display_number}` : '';
     const aNombre = pending.cliente_nombre ? ` a nombre de ${pending.cliente_nombre}` : '';
-    const msg = (pending.metodo_pago === 'tarjeta')
-      ? `Pedido recibido${aNombre}. Te envío ahora el enlace para pagar con tarjeta.${display}`
-      : `Pedido recibido${aNombre}. Pasa a recoger y paga al recoger.${display}`;
+    const msg = `Pedido recibido${aNombre}. Pasa a recoger y paga al recoger.${display}`;
     await this._enviarMensajeSeguro(pending.project_slug, pending.from, msg);
   }
 

@@ -4610,6 +4610,17 @@ desde cualquier proceso que hable MQTT, no solo desde dentro del core Node.js.
 > **general**, además rellena `productosCache` (catálogo base): sin eso el POS cobraba 0 y nombraba
 > el ítem con el `producto_id` tras un reinicio (v3.5.1). Comandero detecta el canal por el prefijo de la
 > cuenta (`glovo_`, `llevar_`, `M_`, `T_`…).
+> **UN SOLO TASADOR (comandero 3.6.0, 2026-10-21).** El precio del ítem lo pone el SERVIDOR con
+> `_shared/pedido-tasador.js` — la MISMA función pura que re-tasa el autoservicio de WhatsApp —
+> contra la carta del CANAL: producto + Σ extras; mitad y mitad = `max(base) + Σ extras de cada
+> mitad`. El `precio` que llega del cliente se ignora si el producto está en la carta. Antes había
+> dos verdades y el backend pisaba el total del panel con el precio pelado de la carta en todo canal
+> ≠ mesa, así que **los extras se caían del precio en llevar/teléfono/glovo** y se cobraba de menos.
+> El catálogo de extras se DERIVA de la propia carta (`opciones[].valores[].delta_precio_centimos`;
+> el grupo `QUITAR` no entra: quitar es gratis) y los nombres que mandan los paneles se resuelven a
+> ids (`id` explícito > nombre normalizado sin tildes). Degradación honesta: producto fuera de la
+> carta (`pizza_algusto`, `porcion`, packs de tienda) o carta no cacheada → camino anterior + `warn
+> comandero.tasado.fallback` + métrica.
 > **La escritura dice lo que hace (v2.10.0 · test real `tests/unit/carta-manager__frenos.test.js`).** Dos frenos del custodio
 > mentían sobre la intención y se quitaron: (1) `carta.save` era "conservador" — `productos: []` y
 > "la clave no viene" eran indistinguibles, así que una carta NO se podía dejar en blanco: había que

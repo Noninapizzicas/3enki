@@ -15,7 +15,7 @@ fuentes:
   - modules/pizzepos/tarifas/**
   - modules/pizzepos/persistencia-comandero/**
   - modules/pizzepos/impresion/**
-verificado: 2026-10-19
+verificado: 2026-10-21
 ---
 
 # PizzePOS Módulos — Subsistema de Punto de Venta (v3.2.0)

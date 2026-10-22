@@ -63,6 +63,17 @@ function proyectarCartaPublica(carta, marca, contenido, config, calendario) {
         ? Number(cc.margen_antelacion_h) : null
     };
   });
+  // ORDEN DEL SCROLL: `productos[]` es lo que pinta el grid "Todas" de la PWA, así que su
+  // orden ES el orden de lectura de la carta. Se agrupa en tramos contiguos siguiendo
+  // `categorias[].orden` (el mismo que las pestañas de arriba) y se conserva, dentro de cada
+  // tramo, el orden en que la carta guardó los productos (el orden culinario del dueño).
+  // Un producto cuya sección no está publicada conserva su sitio y va al final.
+  const posCat = new Map(categorias.map((c, i) => [c.id, i]));
+  const productos_ordenados = productos
+    .map((p, i) => ({ p, i, k: posCat.has(p.categoria) ? posCat.get(p.categoria) : Number.MAX_SAFE_INTEGER }))
+    .sort((a, b) => (a.k - b.k) || (a.i - b.i))
+    .map(x => x.p);
+
   // Leyenda: solo los alérgenos que aparecen en la carta, en orden del Anexo II (id/nombre/emoji).
   const alergenos_leyenda = etiquetarAlergenos([...presentes]);
 
@@ -81,7 +92,7 @@ function proyectarCartaPublica(carta, marca, contenido, config, calendario) {
     dominio_publico: cfg.dominio_publico || null,
     opciones: cfg.opciones_visualizacion || {},
     categorias,
-    productos,
+    productos: productos_ordenados,
     alergenos_leyenda,
     generado_at: new Date().toISOString()
   };

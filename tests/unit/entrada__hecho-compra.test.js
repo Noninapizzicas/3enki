@@ -297,6 +297,40 @@ test('sin project_id → 400 INVALID_INPUT, .failed y ningún evento de dominio'
   assert.strictEqual(eventos(bus, 'encolado-excepcion.encolar.request').length, 0);
 });
 
+
+// ── MODO REVISIÓN: asienta en la propuesta pero NO escribe el libro hasta que el dueño confirme ──
+test('asentar_automatico=false → compone el asiento, NO publica hecho_recibido y lo deja en la cola', async () => {
+  const { m, bus } = nuevo();
+  m.config.cuenta_gasto_default = '629';
+  m.config.asentar_automatico = false;   // política del vertical hoy
+
+  const { res } = await componer(m, { project_id: 'p1', clase: 'factura', extraido: FACTURA });
+
+  assert.strictEqual(res.data.asienta, true, 'el asiento se compone igual');
+  assert.strictEqual(res.data.requiere_confirmacion, true, 'declara que necesita confirmación');
+  assert.strictEqual(eventos(bus, 'contabilidad.hecho_recibido').length, 0,
+    'NO debe anunciarse el hecho: el libro no se toca');
+  const cola = eventos(bus, 'encolado-excepcion.encolar.request');
+  assert.strictEqual(cola.length, 1, 'el asiento propuesto se deja en la cola');
+  assert.strictEqual(cola[0].p.rol, 'ENCOLADO_EXCEPCION');
+  assert.strictEqual(cola[0].p.clave, res.data.clave, 'clave natural de la compra');
+  assert.ok(/confirmacion/i.test(cola[0].p.motivo), `motivo: ${cola[0].p.motivo}`);
+  assert.strictEqual(cola[0].p.payload.asiento.lineas.length, 3, 'la cola lleva el asiento listo para confirmar');
+});
+
+// ── y con la política en true (declarada), asienta solo ──
+test('asentar_automatico=true → publica hecho_recibido (lo asienta escritor-diario)', async () => {
+  const { m, bus } = nuevo();
+  m.config.cuenta_gasto_default = '629';
+  m.config.asentar_automatico = true;
+
+  const { res } = await componer(m, { project_id: 'p1', clase: 'factura', extraido: FACTURA });
+
+  assert.strictEqual(res.data.asienta, true);
+  assert.strictEqual(eventos(bus, 'contabilidad.hecho_recibido').length, 1);
+  assert.strictEqual(eventos(bus, 'encolado-excepcion.encolar.request').length, 0);
+});
+
 (async () => {
   let fallos = 0;
   for (const t of tests) {

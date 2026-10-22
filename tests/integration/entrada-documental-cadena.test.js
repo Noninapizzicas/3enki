@@ -38,7 +38,10 @@ const PROYECTO = 'proyecto-prueba-entrada';
 // Config del SITIO (equivale a config.json → modules_config). Sin cuenta de gasto declarada,
 // `hecho-compra` NO asienta (no se inventa una cuenta): es lo correcto, pero aquí el sitio la
 // declara para poder verificar la partida doble de punta a punta.
-const CONFIG_SITIO = { 'hecho-compra': { cuenta_gasto_default: '629' } };
+// En producción el manifest declara `asentar_automatico:false` (propone y espera confirmación).
+// Aquí lo ponemos a true A PROPÓSITO: esta prueba verifica la cadena ENTERA hasta el asiento.
+// El modo revisión (no escribe el libro) está cubierto en el unitario de hecho-compra.
+const CONFIG_SITIO = { 'hecho-compra': { cuenta_gasto_default: '629', asentar_automatico: true } };
 
 function logger() {
   const noop = () => {};

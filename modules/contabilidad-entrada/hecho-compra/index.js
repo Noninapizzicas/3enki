@@ -55,6 +55,9 @@ class HechoCompra extends ModuloHibridoReflejo {
       cuenta_gasto_default: null,
       cuenta_iva_soportado: '472',
       cuenta_proveedores: '400',
+      // Default de la CLASE: asienta (comportamiento histórico). La POLÍTICA real la declara el
+      // manifest (`asentar_automatico:false` en producción = propone y espera confirmación).
+      asentar_automatico: true,
       timeout_regla_ms: 6000
     };
   }
@@ -73,6 +76,9 @@ class HechoCompra extends ModuloHibridoReflejo {
       this.config.cuenta_proveedores = String(cfg.cuenta_proveedores).trim();
     }
     if (Number(cfg.timeout_regla_ms) > 0) this.config.timeout_regla_ms = Number(cfg.timeout_regla_ms);
+    // POLITICA DEL VERTICAL: mientras el dueno no lo autorice, un asiento se PROPONE y espera
+    // confirmacion humana; NO se escribe el libro. Solo `true` (declarado) asienta solo.
+    if (cfg.asentar_automatico !== undefined) this.config.asentar_automatico = cfg.asentar_automatico === true;
     this.logger?.info(`${this.name}.reflejo.loaded`, {
       cuenta_gasto_default: this.config.cuenta_gasto_default,
       cuenta_iva_soportado: this.config.cuenta_iva_soportado,
@@ -124,6 +130,31 @@ class HechoCompra extends ModuloHibridoReflejo {
     }
 
     if (x.asienta === true && x.hecho && x.hecho.asiento) {
+      // MODO REVISIÓN (asentar_automatico=false, el que manda hoy): el asiento está COMPUESTO
+      // y se deja en la cola tal cual, esperando al dueño. No se escribe el libro.
+      // `desatasco-entrada` con accion 'resolver' lo asienta cuando se confirme.
+      if (this.config.asentar_automatico !== true) {
+        x.requiere_confirmacion = true;
+        x.encolada = true;
+        this.eventBus?.publish('encolado-excepcion.encolar.request', {
+          project_id: x.project_id,
+          rol: 'ENCOLADO_EXCEPCION',
+          clave: x.clave,
+          motivo: 'pendiente_de_confirmacion (asentar_automatico=false): asiento propuesto, el libro no se toca hasta que el dueno lo confirme',
+          origen: 'hecho-compra',
+          payload: {
+            clase: x.clase,
+            extraido: x.extraido,
+            documento: x.documento,
+            asiento: x.hecho.asiento,
+            hecho: x.hecho,
+            cuenta_gasto: x.cuenta_gasto,
+            cuenta_gasto_origen: x.cuenta_gasto_origen
+          },
+          correlation_id: d.correlation_id
+        });
+        return;
+      }
       // R2 · si hay HECHO, se anuncia: escritor-diario (B2) es el único que escribe el libro.
       this.eventBus?.publish('contabilidad.hecho_recibido', {
         project_id: x.project_id,

@@ -342,7 +342,7 @@ if (!CARTA_VIVA) {
   caso('dato vivo: La Flota lleva las pizzas dictadas por el dueño, con los ingredientes en SU orden', () => {
     const carta = JSON.parse(fs.readFileSync(CARTA_VIVA, 'utf8'));
     const flota = (carta.productos || []).filter(p => p.categoria_id === 'la_flota');
-    assert.deepStrictEqual(flota.map(p => p.nombre), ['Mahón', 'Île Sainte-Marie'],
+    assert.deepStrictEqual(flota.map(p => p.nombre), ['Mahón', 'Île Sainte-Marie', 'Cartagena de Indias'],
       'La Flota lleva las pizzas de autor que dictó el dueño, y sólo esas');
     assert.ok((carta.categorias || []).some(c => c.id === 'la_flota' && c.nombre === 'La Flota'),
       'categoría La Flota se queda declarada');
@@ -363,8 +363,16 @@ if (!CARTA_VIVA) {
       'los ingredientes en el orden DICTADO: tomate, cebolla, ternera, mozzarella, mezcla, piña, y salsa Vitorino al salir del horno');
     for (const i of sainte.ingredientes) assert.ok(i.emoji, `Sainte-Marie: ${i.nombre} sin emoji`);
 
-    // Las otras tres que se sacaron siguen fuera: ni producto vivo ni miembro de familia.
-    const fuera = ['la_flota_port_royal', 'la_flota_nassau', 'la_flota_cartagena_de_indias'];
+    const cartagena = flota[2];
+    assert.strictEqual(cartagena.id, 'la_flota_cartagena_de_indias');
+    assert.strictEqual(cartagena.precio, 12.5, 'precio de su carta anterior (the-pirate v1/v2 y Glovo)');
+    assert.deepStrictEqual((cartagena.ingredientes || []).map(i => i.id),
+      ['tomate', 'tomatitos_asados_con_mantequilla_de_ajo', 'salami', 'mozzarella', 'sesamo', 'albahaca'],
+      'los ingredientes en el orden DICTADO: tomate, tomatitos asados con mantequilla de ajo, salami, mozzarella, sésamo y albahaca fresca');
+    for (const i of cartagena.ingredientes) assert.ok(i.emoji, `Cartagena: ${i.nombre} sin emoji`);
+
+    // Las otras dos que se sacaron siguen fuera: ni producto vivo ni miembro de familia.
+    const fuera = ['la_flota_port_royal', 'la_flota_nassau'];
     for (const id of fuera) {
       assert.ok(!(carta.productos || []).some(p => p.id === id), `${id} fuera de la carta`);
       for (const p of carta.productos || []) {

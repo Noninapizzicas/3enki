@@ -404,6 +404,9 @@ if (!CARTA_VIVA) {
   // "todos los bocadillos" con el nombre y la familia que ya tenían: primero entraron tres,
   // y al avisar de que faltaban entraron los dos últimos (Diego García de Paredes y Sir
   // Francis Drake). El censo de cinco es la puerta: ni falta ninguno ni vuelve uno que no toque.
+  // Y el PAN no es ingrediente: es intrínseco al bocadillo y sólo hay un tipo de pan, así que
+  // no se lista ni se ofrece (corrección del dueño, misma fecha). La puerta: si alguien vuelve
+  // a meter pancito/masa en un bocadillo, canta.
   caso('dato vivo: El Fardel lleva los cinco bocadillos de la carta anterior, con nombre, precio y familia', () => {
     const carta = JSON.parse(fs.readFileSync(CARTA_VIVA, 'utf8'));
     const fardel = (carta.productos || []).filter(p => p.categoria_id === 'el_fardel');
@@ -419,40 +422,52 @@ if (!CARTA_VIVA) {
     assert.strictEqual(barbanegra.id, 'el_fardel_barbanegra');
     assert.strictEqual(barbanegra.precio, 8, 'precio de su carta anterior, no inventado');
     assert.deepStrictEqual((barbanegra.ingredientes || []).map(i => i.id),
-      ['pancito_artesano_masa_madre', 'atun', 'cebolla', 'mostaza_dijon'],
-      'ingredientes VERBATIM: pancito, atún, cebolla, mostaza Dijon');
+      ['atun', 'cebolla', 'mostaza_dijon'],
+      'atún, cebolla, mostaza Dijon (el pan NO es ingrediente: es intrínseco al bocadillo)');
 
     const barbarroja = fardel[1];
     assert.strictEqual(barbarroja.id, 'el_fardel_barbarroja');
     assert.strictEqual(barbarroja.precio, 7.5);
     assert.deepStrictEqual((barbarroja.ingredientes || []).map(i => i.id),
-      ['pancito_artesano_masa_madre', 'alioli_de_leche', 'atun', 'pimiento_verde', 'olivas_negras']);
+      ['alioli_de_leche', 'atun', 'pimiento_verde', 'olivas_negras']);
 
     const anne = fardel[2];
     assert.strictEqual(anne.id, 'el_fardel_anne_bonny');
     assert.strictEqual(anne.precio, 7);
     assert.deepStrictEqual((anne.ingredientes || []).map(i => i.id),
-      ['pancito_artesano_masa_madre', 'pollo', 'mayonesa', 'pepinillo_agridulce']);
+      ['pollo', 'mayonesa', 'pepinillo_agridulce']);
 
     const diego = fardel[3];
     assert.strictEqual(diego.id, 'el_fardel_diego_garcia_de_paredes_el_sanson_extremeno');
     assert.strictEqual(diego.precio, 8.5, 'precio de su carta anterior, no inventado');
     assert.deepStrictEqual((diego.ingredientes || []).map(i => i.id),
-      ['pancito_artesano_masa_madre', 'ternera', 'salsa_de_queso_manchego', 'pimientos_padron_encurtidos'],
-      'ingredientes VERBATIM: pancito, ternera, salsa de queso manchego, pimientos Padrón');
+      ['ternera', 'salsa_de_queso_manchego', 'pimientos_padron_encurtidos'],
+      'ternera, salsa de queso manchego, pimientos Padrón');
 
     const drake = fardel[4];
     assert.strictEqual(drake.id, 'el_fardel_sir_francis_drake');
     assert.strictEqual(drake.precio, 8);
     assert.deepStrictEqual((drake.ingredientes || []).map(i => i.id),
-      ['masa_the_pirate', 'jamon_serrano', 'tomate_triturado', 'aove', 'sal'],
-      'ingredientes VERBATIM: masa The Pirate, jamón serrano, tomate triturado, AOVE, sal');
+      ['jamon_serrano', 'tomate_triturado', 'aove', 'sal'],
+      'jamón serrano, tomate triturado, AOVE, sal');
 
     for (const p of fardel) {
       for (const i of p.ingredientes || []) assert.ok(i.emoji, `${p.nombre}: ${i.nombre} sin emoji`);
       // El alta deriva la paleta QUITAR: sin ella el cliente no puede quitarse la cebolla.
       assert.ok((p.opciones || []).some(o => o.id === 'sin'), `${p.nombre}: sin paleta QUITAR`);
     }
+
+    // El pan es intrínseco al bocadillo, no un ingrediente que se liste o se ofrezca.
+    const PAN = ['pancito_artesano_masa_madre', 'masa_the_pirate'];
+    for (const p of fardel) {
+      const ids = (p.ingredientes || []).map(i => i.id);
+      assert.deepStrictEqual(ids.filter(id => PAN.includes(id)), [],
+        `${p.nombre}: el pan no es ingrediente (es intrínseco al bocadillo)`);
+    }
+    const portadoresPan = (carta.productos || [])
+      .filter(p => (p.ingredientes || []).some(i => PAN.includes(i.id)));
+    assert.deepStrictEqual(portadoresPan.map(p => p.nombre), [],
+      'ningún producto de la carta lleva pan como ingrediente: hay un solo pan y va implícito');
 
     // La familia es del ingrediente: Diego García lleva ternera, así que sale en esa sección
     // además de en El Fardel. Sir Francis Drake lleva jamón SERRANO (no de york): no entra.

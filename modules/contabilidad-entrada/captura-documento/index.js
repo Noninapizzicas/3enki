@@ -6,10 +6,17 @@
  * al menos un ANCLAJE (tipo / file_path / contenido / mime). Si no lo trae → RECHAZA
  * con motivo declarado; jamas se inventa un documento.
  *
- * Al admitir, ENCADENA la entrada por EVENTO:
- *   · declara `formato`  → sube `puerto-documento.entrar.request` (A4.2 traduce la forma
- *                          y sigue hacia extraccion-dato)
- *   · ya viene canonico → sube `extraccion-dato.juzgar.request` (A4.1 lo vuelve dato)
+ * Al admitir (RPC directo), ENCADENA la entrada por EVENTO segun la FORMA del documento:
+ *   · declara `formato`  → `puerto-documento.entrar.request` (A4.2 traduce la forma)
+ *   · es FISICO (trae path/file_path y NO texto) → `lector-documento.leer.request`
+ *     (hay que convertir los bytes en texto ANTES de pedir juicio: encadenar un binario a
+ *     extraccion-dato produce una excepcion «documento incompleto» por cada documento)
+ *   · ya viene canonico (trae texto/contenido) → `extraccion-dato.juzgar.request` (A4.1)
+ *
+ * Y NO encadena cuando el documento llega por el HECHO `contabilidad.documento_recibido`:
+ * el emisor de ese hecho (puerto-documento-digital / ingesta-documental) YA encadeno al
+ * camino correcto. Re-encadenar aqui es un SEGUNDO camino sobre el mismo documento: medido
+ * en vivo, metia una excepcion espuria en la cola por cada documento que entraba bien.
  *
  * Forma: REFLEJO → STATELESS. Sin PosPersistencia. PREGUNTA (admitir) → sin ui_handler.
  * Ver hoja A3 del plan-construccion y diseno-oop.md (CLASE CapturaDocumento).
@@ -20,7 +27,10 @@
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
 
 // Anclajes que hacen ADMISIBLE un documento. Sin NINGUNO, no hay documento que admitir.
-const ANCLAJES = ['tipo', 'file_path', 'contenido', 'mime', 'url'];
+// `path` y `texto` son las formas REALES que usan los modulos de esta vertical (fs.read trabaja
+// con `path`; el lector devuelve `texto`). El contrato original solo nombraba `file_path` y
+// `contenido`, y con eso un documento que traia `path` se rechazaba en silencio.
+const ANCLAJES = ['tipo', 'file_path', 'path', 'contenido', 'texto', 'mime', 'url'];
 
 class CapturaDocumento extends ModuloHibridoReflejo {
   constructor() {
@@ -59,8 +69,17 @@ class CapturaDocumento extends ModuloHibridoReflejo {
       this.logger?.error(`${this.name}.documento_recibido.error`, { error: err.message });
       return;
     }
-    // Solo se encadena si el documento es admisible (sin documento NO se fabrica nada).
-    if (res.status === 200 && res.data && res.data.admitido) this._encadenar(res, d);
+    // AQUI NO SE ENCADENA. Este handler escucha un HECHO: el documento ya entro por el puerto
+    // digital, que es quien encadena al camino correcto (lector si es fisico, extraccion si ya
+    // es texto). Encadenar otra vez creaba un segundo camino y una excepcion espuria por
+    // documento (medido en produccion). Se admite (deja constancia) y se para.
+    if (res.status === 200 && res.data && res.data.admitido) {
+      this.logger?.info(`${this.name}.documento_recibido.admitido`, {
+        project_id: res.data.project_id,
+        camino: res.data.encadenado_a,
+        nota: 'el emisor del hecho ya encadeno; aqui no se re-encadena'
+      });
+    }
   }
 
   // ══════════════════════════════════════════════════════════════════════
@@ -89,9 +108,7 @@ class CapturaDocumento extends ModuloHibridoReflejo {
         anclajes,
         // CERO JUICIO: se declara que no se interpreto el contenido (eso es extraccion-dato).
         contenido_interpretado: false,
-        encadenado_a: admitido
-          ? (input.formato != null ? 'puerto-documento' : 'extraccion-dato')
-          : null,
+        encadenado_a: admitido ? this._camino(documento, input.formato) : null,
         abierto: {
           documento: admitido
             ? null
@@ -101,8 +118,18 @@ class CapturaDocumento extends ModuloHibridoReflejo {
     };
   }
 
-  // Encadena la entrada por EVENTO. Si declara formato → puerto-documento (traduce la forma);
-  // si ya es canonico → extraccion-dato (lo vuelve dato). No se decide nada de negocio aqui.
+  // El CAMINO que le toca a un documento, por su FORMA (no por su contenido):
+  //   formato declarado → puerto-documento (hay que traducir la forma)
+  //   fisico (bytes)    → lector-documento (hay que leerlo antes de juzgarlo)
+  //   canonico (texto)  → extraccion-dato (ya se puede volver dato)
+  _camino(documento = {}, formato = null) {
+    if (formato != null) return 'puerto-documento';
+    const fisico = Boolean(documento.path || documento.file_path)
+      && documento.texto == null && documento.contenido == null;
+    return fisico ? 'lector-documento' : 'extraccion-dato';
+  }
+
+  // Encadena la entrada por EVENTO al camino que toca. No se decide nada de negocio aqui.
   _encadenar(res, d) {
     if (!res.data || !res.data.admitido) return;
     const payload = {
@@ -113,7 +140,9 @@ class CapturaDocumento extends ModuloHibridoReflejo {
       correlation_id: d.correlation_id
     };
     try {
-      if (res.data.formato != null) this.eventBus?.publish('puerto-documento.entrar.request', payload);
+      const camino = this._camino(res.data.documento, res.data.formato);
+      if (camino === 'puerto-documento') this.eventBus?.publish('puerto-documento.entrar.request', payload);
+      else if (camino === 'lector-documento') this.eventBus?.publish('lector-documento.leer.request', payload);
       else this.eventBus?.publish('extraccion-dato.juzgar.request', payload);
     } catch (_) { /* best-effort */ }
   }

@@ -34,8 +34,13 @@ function busFalso(respuestas) {
       const resp = respuestas[ev.split('.request')[0]];
       const respuestaEv = ev.endsWith('.request') ? ev.replace(/\.request$/, '.response') : null;
       if (!respuestaEv || resp === undefined) return;   // sin respuesta: simula servicio ausente
-      const datos = typeof resp === 'function' ? await resp(payload) : resp;
+      let datos = typeof resp === 'function' ? await resp(payload) : resp;
       if (datos === undefined) return;
+      // Los PROVIDERS (local.gmail) contestan ENVUELTOS en `data` — así responde de verdad
+      // provider-loader. El bus del test lo replica para no volver a probar una forma que no existe.
+      if (ev.startsWith('local.gmail') && datos && !datos.error && datos.data === undefined) {
+        datos = { data: datos };
+      }
       setImmediate(() => {
         for (const fn of (subs.get(respuestaEv) || [])) {
           fn({ event_type: respuestaEv, data: { request_id: payload.request_id, ...datos } });

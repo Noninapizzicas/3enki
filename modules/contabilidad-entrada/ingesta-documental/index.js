@@ -200,6 +200,13 @@ class IngestaDocumental extends ModuloHibridoReflejo {
     return { project_id: null, origen: null, ambiguo: activos.length };
   }
 
+  // Los providers contestan ENVUELTOS ({data:{...}}); los módulos de la vertical, planos.
+  // Este helper acepta las dos formas sin adivinar: si hay `data`, es la carga útil.
+  _datos(x) {
+    if (!x || typeof x !== 'object') return {};
+    return x.data !== undefined && x.data !== null ? x.data : x;
+  }
+
   _timeoutProyecto() {
     const n = Number(this.config.timeout_proyecto_ms);
     return Number.isFinite(n) && n > 0 ? n : 8000;
@@ -397,7 +404,10 @@ class IngestaDocumental extends ModuloHibridoReflejo {
         });
     }
 
-    const mensajes = Array.isArray(busqueda.messages) ? busqueda.messages : [];
+    // La respuesta del provider viene ENVUELTA: {data:{messages:[...]}} (medido en producción).
+    // Leer `busqueda.messages` a pelo devolvía 0 correos y el barrido "funcionaba" en vacío.
+    const datosBusqueda = this._datos(busqueda);
+    const mensajes = Array.isArray(datosBusqueda.messages) ? datosBusqueda.messages : [];
     const entregados = [];
     const ignorados = [];
 
@@ -405,13 +415,14 @@ class IngestaDocumental extends ModuloHibridoReflejo {
       const messageId = m && m.id;
       if (!messageId) { ignorados.push({ path: null, motivo: 'mensaje_sin_id' }); continue; }
 
-      const correo = await this._rpc('local.gmail.read.request',
+      const crudo = await this._rpc('local.gmail.read.request',
         { account: cuenta, messageId, format: 'full' },
         { timeout_ms: Number(this.config.timeout_gmail_ms) || 60000 });
-      if (!correo || correo.error) {
+      if (!crudo || crudo.error) {
         ignorados.push({ path: messageId, motivo: 'correo_ilegible' });
         continue;
       }
+      const correo = this._datos(crudo);
 
       const adjuntos = Array.isArray(correo.attachments) ? correo.attachments : [];
       for (const att of adjuntos) {
@@ -425,10 +436,11 @@ class IngestaDocumental extends ModuloHibridoReflejo {
         }
         if (!att.id) { ignorados.push({ path: nombre || null, motivo: 'adjunto_sin_id' }); continue; }
 
-        const descarga = await this._rpc('local.gmail.attachments.download.request',
+        const crudoDescarga = await this._rpc('local.gmail.attachments.download.request',
           { account: cuenta, messageId, attachmentId: att.id },
           { timeout_ms: Number(this.config.timeout_gmail_ms) || 60000 });
-        const content = descarga && !descarga.error ? descarga.content : null;
+        const descarga = crudoDescarga ? this._datos(crudoDescarga) : null;
+        const content = descarga && !crudoDescarga.error ? descarga.content : null;
         if (!content) { ignorados.push({ path: nombre || null, motivo: 'adjunto_sin_contenido' }); continue; }
 
         let bytes;

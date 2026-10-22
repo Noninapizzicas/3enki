@@ -1,0 +1,59 @@
+{
+  "_doc": "PLANTILLA POR PROVEEDOR (dato, no codigo). Factura de IONOS: el NIF del emisor aparece con GUION ('B-85049435') y TODOS los importes llevan sufijo 'EUR' al final de lineas largas, asi que los patrones se anclan a la etiqueta y al 'EUR', no al hueco de columnas.",
+  "id": "ionos",
+  "nombre": "IONOS Cloud (factura de servicios, importes con sufijo EUR y NIF con guion)",
+  "clase": "factura",
+  "detectar": {
+    "dominio": [
+      "ionos.es",
+      "ionos.com",
+      "ionos"
+    ],
+    "texto": [
+      "IONOS\\s+Cloud",
+      "N\\.?\\s*[º°]\\s*de factura"
+    ]
+  },
+  "obligatorios": [
+    "nif",
+    "fecha",
+    "numero",
+    "base",
+    "iva_importe",
+    "total"
+  ],
+  "campos": {
+    "nif": {
+      "regex": "NIF\\s*:?\\s*([A-Z]-?\\s?\\d{7}\\s?-?[0-9A-J])",
+      "flags": "i"
+    },
+    "proveedor": {
+      "regex": "(IONOS\\s+Cloud\\s+S\\.L\\.U\\.)",
+      "flags": "i"
+    },
+    "fecha": {
+      "regex": "Fecha de facturaci[óo]n\\s*:?\\s*(\\d{1,2}/\\d{1,2}/\\d{2,4})",
+      "flags": "i"
+    },
+    "numero": {
+      "regex": "N\\.?\\s*[º°]\\s*de factura\\s*:?\\s*(\\d[\\w\\-/]{2,})",
+      "flags": "i"
+    },
+    "base": {
+      "regex": "Total\\s*\\(?\\s*base imponible\\s*\\)?[^\\n]*?([\\d.,]+)\\s*EUR",
+      "flags": "i"
+    },
+    "iva_pct": {
+      "regex": "IVA\\s*\\(\\s*(\\d{1,2})",
+      "flags": "i"
+    },
+    "iva_importe": {
+      "regex": "IVA\\s*\\([^)\\n]*\\)[^\\n]*?([\\d.,]+)\\s*EUR",
+      "flags": "i"
+    },
+    "total": {
+      "regex": "Total a pagar[^\\n]*?([\\d.,]+)\\s*EUR",
+      "flags": "i"
+    }
+  }
+}

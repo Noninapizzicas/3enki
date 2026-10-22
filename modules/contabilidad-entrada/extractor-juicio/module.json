@@ -1,0 +1,48 @@
+{
+  "_doc": "Manifest de entrada/extractor-juicio — MICRO-AGENTE HIBRIDO, STATELESS. EL RESPALDO DEL HUECO de A4.1: cuando extraccion-dato (determinista, esquema de regex) no completa el documento (no hay esquema o faltan obligatorios), este modulo pide JUICIO a un LLM (DeepSeek, API OpenAI-compatible) sobre el TEXTO y PROPONE los campos. No tiene la ultima palabra: su respuesta se VALIDA (JSON parseable, campos conocidos, importes parseables, fecha plausible, NIF con control) y lo que no pasa se DESCARTA a null y se declara en `abierto`. PROPONE, no asienta: no escribe en el libro ni persiste nada. Si el LLM falla, tarda o no hay clave -> 502 JUICIO_NO_DISPONIBLE con abierto.juicio (degradacion honesta: el hueco sigue siendo un hueco, pero declarado). La clave DEEPSEEK_API_KEY_GLOBAL se lee del .env vivo (/opt/enki/data/.env) en onLoad y NUNCA viaja en este manifest ni en los logs. ENCADENADO con el mismo contrato que A4.1: propuesta:true -> control-cuadre-documento.cuadra.request (A5); propuesta:false -> encolado-excepcion.encolar.request (A8.1) con rol ENCOLADO_EXCEPCION y origen 'extractor-juicio'. RPC extraer es CLASE PREGUNTA -> por el bus, sin ui_handler.",
+  "name": "extractor-juicio",
+  "version": "0.1.0",
+  "description": "Respaldo hibrido del hueco de la extraccion determinista: un LLM lee el texto de una factura/ticket y PROPONE los campos, validados y con descarte declarado. No asienta; sin juicio disponible responde 502 JUICIO_NO_DISPONIBLE.",
+  "language": "es",
+  "main": "index.js",
+  "dependencies": [],
+  "config": {
+    "_doc": "Config por defecto del juicio. NO contiene la clave: la clave se lee del .env vivo en onLoad.",
+    "url": "https://api.deepseek.com/chat/completions",
+    "modelo": "deepseek-chat",
+    "timeout_ms": 30000,
+    "max_texto": 20000,
+    "env_path": "/opt/enki/data/.env"
+  },
+  "subscribes": [
+    {
+      "event": "extractor-juicio.extraer.request",
+      "handler": "onExtraerRequest",
+      "description": "RPC micro-agente (PREGUNTA, por el bus): {project_id, texto, documento?, clase?, obligatorios?} -> {project_id, extraido, motor:'deepseek', modelo, faltantes, propuesta, abierto, ms}. Juzga el TEXTO con el LLM y VALIDA la respuesta; lo que no pasa la validacion se descarta a null y se declara en abierto. Si propuesta:true sube a control-cuadre-documento.cuadra.request; si false, encola la excepcion (ENCOLADO_EXCEPCION). Falta project_id o texto (<8 caracteres) -> 400. Sin clave / fallo / timeout / respuesta no JSON -> 502 JUICIO_NO_DISPONIBLE con abierto.juicio."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "extractor-juicio.extraer.response",
+      "description": "Respuesta RPC correlada de la op extraer: la PROPUESTA del juicio (extraido + faltantes + propuesta + abierto + ms). Una sola cara: el bus."
+    },
+    {
+      "event": "extractor-juicio.extraer.failed",
+      "description": "Par de fallo: 400 INVALID_INPUT o 502 JUICIO_NO_DISPONIBLE -> {status, error}. Cierra el circulo de extraer.request cuando no hay propuesta."
+    },
+    {
+      "event": "control-cuadre-documento.cuadra.request",
+      "description": "Encadenado (mismo contrato que extraccion-dato A4.1): el documento propuesto se SUBE a cuadre (A5) con {project_id, documento, extraido, clase, correlation_id} cuando propuesta:true."
+    },
+    {
+      "event": "encolado-excepcion.encolar.request",
+      "description": "Encadenado best-effort (A8.1): cuando propuesta:false lo dudoso ESPERA a un humano. Lleva rol ENCOLADO_EXCEPCION (unico escritor de la parcela), origen 'extractor-juicio', la clave del DOCUMENTO (deduplica contra lo que ya encolo A4.1) y el extraido parcial como payload."
+    }
+  ],
+  "tools": [
+    { "name": "extractor-juicio.extraer", "description": "Pide JUICIO (PREGUNTA) a un LLM sobre el texto de un documento y devuelve la propuesta validada. No asienta ni persiste." }
+  ],
+  "observability": {
+    "metrics": ["extractor-juicio.reflejo.served", "extractor-juicio.reflejo.errors"]
+  }
+}

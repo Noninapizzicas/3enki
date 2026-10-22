@@ -1,0 +1,40 @@
+                                                                                       N.° de factura:                           311101212664
+IONOS Cloud S.L.U. · Madre de Dios nº 21 · 26004-                                      Fecha de facturación:                          13/10/26
+Logroño (La Rioja) Spain
+                                                                                       ID de cliente:                               900112233
+Cliente Ejemplo S.L.                                                                  N.° de contrato:                             300099887
+Ana Perez                                                                      Número de IVA:                             ESB12345674
+Calle Ficticia 99
+30001 cartagena                                                                 Teléfono:                                     91 000 0000
+España                                                                                 Horario de Atención al Cliente:                      24/7
+
+
+
+
+Factura
+       Servicios facturados                                    Tarifa                              Cantidad         IVA (%)      Importe (EUR)
+Contrato: 300099887
+
+1      IONOS VPS Linux M - cuota básica                        4,50 EUR / mes                                1         21,0                    4,50
+       12/10/26 - 11/11/26
+2      IONOS VPS Linux M - descuento                           -1,50 EUR / mes                               1         21,0                   -1,50
+       12/10/26 - 11/11/26
+
+Total (base imponible)                                                                                                                   3,00 EUR
++ IVA (21,0 %)                                                                                                                           0,63 EUR
+
+Total a pagar                                                                                                                        3,63 EUR
+
+El método de pago configurado para el cargo de esta factura es tu cuenta Google Pay. Muchas gracias por confiar
+en IONOS.
+
+¿Tienes dudas o preguntas sobre esta factura?
+Encontrarás más información en my.ionos.es o en nuestro Centro de Ayuda.
+
+
+
+
+IONOS Cloud S.L.U., NIF B-85049435, Madre de Dios nº 21, 26004-Logroño (La Rioja) Spain, Inscrita en el Registro Mercantil de La Rioja,
+Tomo y Folio electrónico, Hoja LO-21627,
+Commerzbank Frankfurt, IBAN: DE00000000000000000000                                                                                     Página 1 de 1
+

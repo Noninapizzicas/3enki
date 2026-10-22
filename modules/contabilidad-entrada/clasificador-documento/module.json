@@ -1,20 +1,20 @@
 {
-  "_doc": "Manifest de entrada/clasificador-documento — REFLEJO STATELESS (B del contrato de entrada documental). Recibe el TEXTO que ya saco lector-documento y decide QUE documento es: factura | albaran | ticket | otro. DETERMINISTA, CERO LLM: solo suma SEÑALES DECLARADAS con pesos fijos del contrato (factura 3 + base+iva 2 + nº factura 2; albaran 3; ticket 3; NIF como señal booleana de refuerzo) y desempata con reglas documentadas. No inventa: sin señal, la clase es `otro` con esquema vacio y se declara en `abierto.tipo`. Su salida es la LEY de lectura de extraccion-dato (A4.1): `esquema` {campo:{regex,flags}} con el valor en el GRUPO 1 + `obligatorios` por tipo, mas `confianza` = min(1, peso/6). Publica el HECHO contabilidad.documento_clasificado y ENCADENA SIEMPRE extraccion-dato.juzgar.request (tambien con `otro`, para que la cola de excepciones lo recoja: nada se pierde en silencio). RPC clasificar es CLASE PREGUNTA → va por el bus, SIN panel. Sin estado en disco.",
+  "_doc": "Manifest de entrada/clasificador-documento — REFLEJO STATELESS (B del contrato de entrada documental). Recibe el TEXTO que ya saco lector-documento y decide QUE documento es: factura | albaran | ticket | otro. DETERMINISTA, CERO LLM: solo suma SEÑALES DECLARADAS con pesos fijos del contrato (factura 3 + base+iva 2 + nº factura 2; albaran 3; ticket 3; NIF como señal booleana de refuerzo) y desempata con reglas documentadas. No inventa: sin señal, la clase es `otro` con esquema vacio y se declara en `abierto.tipo`. Su salida es la LEY de lectura de extraccion-dato (A4.1): `esquema` {campo:{regex,flags}} con el valor en el GRUPO 1 + `obligatorios` por tipo, mas `confianza` = min(1, peso/6). Publica el HECHO contabilidad.documento_clasificado y ENCADENA SIEMPRE extraccion-dato.juzgar.request (tambien con `otro`, para que la cola de excepciones lo recoja: nada se pierde en silencio). RPC clasificar es CLASE PREGUNTA → va por el bus, SIN panel. Sin estado en disco. PLANTILLAS POR PROVEEDOR: la ley de lectura puede venir de un DATO en `plantillas/<id>.json` ({id, nombre, detectar:{dominio[], texto[]}, clase, obligatorios[], campos:{campo:{regex,flags}}}) que se detecta por `documento.remitente` (email/dominio que deja el canal Gmail) o por señales del TEXTO. Con plantilla manda su `clase` y su esquema, y la respuesta lo declara en `origen_esquema:'plantilla:<id>'` (si no casa ninguna, `origen_esquema:'generico'` y esquema genérico: nada cambia para lo que ya funcionaba). Añadir un proveedor = soltar un JSON, sin tocar código; un JSON roto se ignora y ese proveedor cae al genérico.",
   "name": "clasificador-documento",
   "version": "0.1.0",
-  "description": "Reflejo (B): texto → tipo de documento + esquema de extracción declarado. Determinista (cero LLM); sin señal → 'otro' declarado; encadena siempre a extraccion-dato.",
+  "description": "Reflejo (B): texto → tipo de documento + esquema de extracción declarado (genérico o por plantilla de proveedor). Determinista (cero LLM); sin señal → 'otro' declarado; encadena siempre a extraccion-dato.",
   "language": "es",
   "subscribes": [
     {
       "event": "clasificador-documento.clasificar.request",
       "handler": "onClasificarRequest",
-      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id, texto, documento?, source_kind?} → {project_id, clase:factura|albaran|ticket|otro, confianza, motivos, senales:{factura,albaran,ticket,nif}, esquema:{campo:{regex,flags}}, obligatorios, encadenado_a:'extraccion-dato', abierto:{tipo}}. Suma las señales declaradas y desempata (NIF + base/IVA → factura; con entrega/pedido → albaran; si no, ticket); ningún peso > 0 → 'otro' con esquema vacío, sin inventar el tipo. Publica el HECHO contabilidad.documento_clasificado y encadena SIEMPRE extraccion-dato.juzgar.request. Responde por clasificador-documento.clasificar.response; sin project_id o texto (< 8 chars) → clasificador-documento.clasificar.failed."
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id, texto, documento?, source_kind?} → {project_id, clase:factura|albaran|ticket|otro, confianza, motivos, senales:{factura,albaran,ticket,nif}, esquema:{campo:{regex,flags}}, obligatorios, origen_esquema:'plantilla:<id>'|'generico', encadenado_a:'extraccion-dato', abierto:{tipo}}. Suma las señales declaradas y desempata (NIF + base/IVA → factura; con entrega/pedido → albaran; si no, ticket); ningún peso > 0 → 'otro' con esquema vacío, sin inventar el tipo. Publica el HECHO contabilidad.documento_clasificado y encadena SIEMPRE extraccion-dato.juzgar.request. Responde por clasificador-documento.clasificar.response; sin project_id o texto (< 8 chars) → clasificador-documento.clasificar.failed."
     }
   ],
   "publishes": [
     {
       "event": "contabilidad.documento_clasificado",
-      "description": "Fire-and-forget (R2): se decidió QUÉ documento es → {project_id, documento, clase, confianza, motivos, source_kind, correlation_id}. Es el hecho del clasificador; no interpreta importes (eso es extraccion-dato)."
+      "description": "Fire-and-forget (R2): se decidió QUÉ documento es → {project_id, documento, clase, confianza, motivos, origen_esquema, source_kind, correlation_id}. Es el hecho del clasificador; no interpreta importes (eso es extraccion-dato)."
     },
     {
       "event": "extraccion-dato.juzgar.request",
@@ -30,7 +30,10 @@
     }
   ],
   "tools": [
-    { "name": "clasificador-documento.clasificar", "description": "Clasifica (PREGUNTA) un texto de documento y devuelve el tipo, la confianza y el esquema de extracción declarado." }
+    {
+      "name": "clasificador-documento.clasificar",
+      "description": "Clasifica (PREGUNTA) un texto de documento y devuelve el tipo, la confianza y el esquema de extracción declarado."
+    }
   ],
   "ui_handlers": []
 }

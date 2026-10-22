@@ -1,5 +1,5 @@
 {
-  "_doc": "Manifest de entrada/extraccion-dato — MICRO-AGENTE (A4.1, hoja del plan). Abre un documento NO estructurado y lo vuelve DATO. Interpreta y PROPONE; no asienta. La mitad REFLEJA (determinista y honesta) extrae los campos con el ESQUEMA y los PATRONES DECLARADOS; un campo que no casa con ningun patron declarado NO se inventa: se declara en `abierto` (es juicio, mitad fuzzy). SUBE best-effort control-cuadre-documento.cuadra.request (A5) para cuadrar el documento y, si queda incompleto/ambiguo, encolado-excepcion.encolar.request (A8.1). ADAPTA `facturas` (su pipeline real de OCR/IA): toma su salida como documento declarado sin romper su proyecto. NO escribe, NO persiste (su extraccion es una PROPUESTA en la respuesta). RPC juzgar es CLASE PREGUNTA → va por el bus, sin panel. Publica extraccion-dato.juzgar.response y su par .failed. Escucha de dominio: — (ninguna; su entrada es la peticion).",
+  "_doc": "Manifest de entrada/extraccion-dato — MICRO-AGENTE (A4.1, hoja del plan). Abre un documento NO estructurado y lo vuelve DATO. Interpreta y PROPONE; no asienta. La mitad REFLEJA (determinista y honesta) extrae los campos con el ESQUEMA y los PATRONES DECLARADOS; un campo que no casa con ningun patron declarado NO se inventa: se declara en `abierto` (es juicio, mitad fuzzy). SUBE best-effort control-cuadre-documento.cuadra.request (A5) para cuadrar el documento y, si queda incompleto/ambiguo, ANTES de encolar pide JUICIO al respaldo hibrido extractor-juicio.extraer.request (best-effort, no espera respuesta: el juicio PROPONE y sigue la cadena por su cuenta) y encolado-excepcion.encolar.request (A8.1). ADAPTA `facturas` (su pipeline real de OCR/IA): toma su salida como documento declarado sin romper su proyecto. NO escribe, NO persiste (su extraccion es una PROPUESTA en la respuesta). RPC juzgar es CLASE PREGUNTA → va por el bus, sin panel. Publica extraccion-dato.juzgar.response y su par .failed. Escucha de dominio: — (ninguna; su entrada es la peticion).",
   "name": "extraccion-dato",
   "version": "0.1.0",
   "description": "Micro-agente (A4.1): extrae dato de un documento no estructurado con el esquema declarado y lo PROPONE. No asienta; lo no extraible se declara abierto.",
@@ -8,7 +8,7 @@
     {
       "event": "extraccion-dato.juzgar.request",
       "handler": "onJuzgarRequest",
-      "description": "RPC micro-agente (PREGUNTA, por el bus): {project_id, documento{...}/texto?, esquema{campo:regla}, obligatorios?} → {project_id, extraido, faltantes, propuesta, encolar, abierto}. Extrae con el esquema DECLARADO y PROPONE. Sube a cuadre (A5) y a cola (A8.1) si procede. Responde por extraccion-dato.juzgar.response; falta project_id/documento → extraccion-dato.juzgar.failed."
+      "description": "RPC micro-agente (PREGUNTA, por el bus): {project_id, documento{...}/texto?, esquema{campo:regla}, obligatorios?} → {project_id, extraido, faltantes, propuesta, encolar, abierto}. Extrae con el esquema DECLARADO y PROPONE. Sube a cuadre (A5) y, si queda incompleto y hay texto, pide juicio al respaldo hibrido (extractor-juicio.extraer.request) antes de encolar en la cola (A8.1). Responde por extraccion-dato.juzgar.response; falta project_id/documento → extraccion-dato.juzgar.failed."
     }
   ],
   "publishes": [
@@ -19,6 +19,18 @@
     {
       "event": "extraccion-dato.juzgar.failed",
       "description": "Par de fallo determinista: falta project_id o documento → {status, code, message}. Cierra el circulo de juzgar.request."
+    },
+    {
+      "event": "control-cuadre-documento.cuadra.request",
+      "description": "Encadenado (A5): cuando propuesta:true el documento extraido se SUBE a cuadre con {project_id, documento, extraido, clase, correlation_id}."
+    },
+    {
+      "event": "extractor-juicio.extraer.request",
+      "description": "Respaldo hibrido (best-effort, no se espera respuesta): cuando propuesta:false y el documento trae TEXTO, se pide JUICIO a extractor-juicio con {project_id, texto, documento, clase, obligatorios?, correlation_id} ANTES de encolar. Sin clave o sin LLM el juicio responde 502 y el flujo no cambia."
+    },
+    {
+      "event": "encolado-excepcion.encolar.request",
+      "description": "Encadenado (A8.1): cuando encolar:true lo dudoso ESPERA a un humano con rol ENCOLADO_EXCEPCION y origen 'extraccion-dato'."
     }
   ],
   "tools": [

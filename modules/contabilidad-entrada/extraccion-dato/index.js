@@ -54,7 +54,31 @@ class ExtraccionDato extends ModuloHibridoReflejo {
           correlation_id: d.correlation_id
         });
       }
-      if (res.data.encolar === true) {
+      // RESPALDO HIBRIDO (best-effort): si el esquema determinista NO completa el documento y el
+      // documento TRAE TEXTO que se pueda leer, se pide JUICIO a `extractor-juicio` ANTES de
+      // encolar. Es un `.request` que NO se espera aqui: el juicio sigue la cadena por su cuenta
+      // (cuadre si completa, cola si tampoco puede). A4.1 no depende de que haya LLM ni clave.
+      let delegadoAJuicio = false;
+      if (res.data.propuesta === false) {
+        const texto = this._textoParaJuicio(d);
+        if (typeof texto === 'string' && texto.trim().length >= 8) {
+          const peticionJuicio = {
+            project_id: pid,
+            texto,
+            documento: res.data.documento,
+            clase: res.data.clase,
+            correlation_id: d.correlation_id
+          };
+          // Los obligatorios viajan tal cual los declaro el llamante (si los declaro): el juicio
+          // no los inventa ni los reinterpreta.
+          if (Array.isArray(d.obligatorios)) peticionJuicio.obligatorios = d.obligatorios;
+          this.eventBus?.publish('extractor-juicio.extraer.request', peticionJuicio);
+          delegadoAJuicio = true;
+        }
+      }
+      // Si se delego al JUICIO, la excepcion la decide el juicio (si tampoco completa): una sola
+      // entrada por documento. Encolar aqui tambien dejaba DOS (incompleto + asiento propuesto).
+      if (res.data.encolar === true && !delegadoAJuicio) {
         this.eventBus?.publish('encolado-excepcion.encolar.request', {
           project_id: pid, rol: 'ENCOLADO_EXCEPCION',
           clave: res.data.clave_excepcion, motivo: 'documento incompleto/ambiguo',
@@ -131,6 +155,19 @@ class ExtraccionDato extends ModuloHibridoReflejo {
   _documento(input) {
     if (input.documento && typeof input.documento === 'object') return input.documento;
     if (input.texto != null || input.contenido != null) return { texto: input.texto != null ? input.texto : input.contenido };
+    return null;
+  }
+
+  // El TEXTO legible del documento (para pedir juicio al respaldo hibrido). Sin texto no hay
+  // nada que un LLM pueda leer: se devuelve null y NO se pide juicio (no se juzga el vacio).
+  _textoParaJuicio(input = {}) {
+    const directo = input.texto != null ? input.texto : (input.contenido != null ? input.contenido : null);
+    if (typeof directo === 'string') return directo;
+    const doc = input.documento && typeof input.documento === 'object' ? input.documento : null;
+    if (doc) {
+      const t = doc.texto != null ? doc.texto : (doc.contenido != null ? doc.contenido : null);
+      if (typeof t === 'string') return t;
+    }
     return null;
   }
 

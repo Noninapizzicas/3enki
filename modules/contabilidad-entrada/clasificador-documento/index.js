@@ -17,6 +17,20 @@
  * esquema vacío: `extraccion-dato` declarará el abierto y la cola de excepciones lo
  * recogerá. Nada se pierde en silencio — invariante de toda la vertical.
  *
+ * PLANTILLAS POR PROVEEDOR (dato, no código): el esquema genérico de arriba está pensado
+ * para tickets LINEALES. Una factura maquetada en columnas (lo que sale de
+ * `pdftotext -layout`) rompe esos patrones por dos motivos medidos en producción: los
+ * valores caen en OTRA línea a 40+ espacios, y la cabecera del emisor convive con un
+ * bloque `CLIENTE` cuyo NIF se cuela antes que el del emisor. Por eso cada proveedor
+ * puede declarar su propia LEY DE LECTURA en `plantillas/<id>.json` (mismo formato
+ * `{campo:{regex,flags}}`), SIN tocar este fichero y SIN dependencias nuevas.
+ *   · Detección: por `documento.remitente` (el canal Gmail lo deja ahí: email o dominio)
+ *     y, si no casa, por las señales de TEXTO que declare la plantilla.
+ *   · La `clase` de la plantilla MANDA sobre la detectada por pesos (el proveedor ya
+ *     dijo qué papel emite), y `origen_esquema` dice de dónde salió la ley de lectura:
+ *     `plantilla:<id>` o `generico`. Sin plantilla que case, el esquema genérico sigue
+ *     siendo el de siempre: añadir proveedores no cambia nada de lo que ya funcionaba.
+ *
  * Forma: REFLEJO → STATELESS (sin PosPersistencia, sin estado en disco). RPC `clasificar`
  * es CLASE PREGUNTA → va por el bus, SIN ui_handler. Publica el HECHO
  * `contabilidad.documento_clasificado` (R2: anuncia la decisión de dominio) y su par
@@ -24,6 +38,9 @@
  */
 
 'use strict';
+
+const fs = require('fs');
+const path = require('path');
 
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
 
@@ -91,6 +108,33 @@ const OBLIGATORIOS = {
   otro: []
 };
 
+// ── PLANTILLAS POR PROVEEDOR: se LEEN del disco, no se cablean ───────────────────────
+// Una plantilla es DATO: añadir un proveedor = soltar un JSON en `plantillas/`. Se cargan
+// UNA vez al requerir el módulo (determinista: orden alfabético de fichero, que fija la
+// precedencia entre plantillas que casen por texto). Un JSON roto NO tumba el
+// clasificador: se ignora y ese proveedor vuelve al esquema genérico.
+const DIR_PLANTILLAS = path.join(__dirname, 'plantillas');
+
+function cargarPlantillas() {
+  let ficheros;
+  try {
+    ficheros = fs.readdirSync(DIR_PLANTILLAS).filter((f) => f.endsWith('.json')).sort();
+  } catch (_) {
+    return []; // sin carpeta de plantillas → solo esquema genérico (nada se rompe)
+  }
+  const plantillas = [];
+  for (const fichero of ficheros) {
+    try {
+      const p = JSON.parse(fs.readFileSync(path.join(DIR_PLANTILLAS, fichero), 'utf8'));
+      if (!p || !p.id || !p.campos || typeof p.campos !== 'object') continue;
+      plantillas.push(p);
+    } catch (_) { /* plantilla ilegible: se ignora (el genérico sigue disponible) */ }
+  }
+  return plantillas;
+}
+
+const PLANTILLAS = cargarPlantillas();
+
 // Denominador del contrato: confianza = min(1, peso_ganador / 6).
 const PESO_MAXIMO = 6;
 
@@ -134,7 +178,21 @@ class ClasificadorDocumento extends ModuloHibridoReflejo {
     if (texto.trim().length < 8) return this._invalid('texto');
 
     const juicio = this._juicio(texto);
-    const clase = juicio.clase;
+
+    // PLANTILLA DEL PROVEEDOR: si casa (por remitente o por señales del texto) manda su
+    // clase y su ley de lectura. Sin plantilla, el comportamiento es el de siempre.
+    const hallada = this._plantilla(input, texto);
+    const clase = hallada ? String(hallada.plantilla.clase || juicio.clase) : juicio.clase;
+    const esquema = hallada
+      ? this._esquemaPlantilla(hallada.plantilla)
+      : (clase === 'otro' ? {} : this._esquema(clase));
+    const obligatorios = hallada
+      ? this._obligatoriosPlantilla(hallada.plantilla, esquema, clase)
+      : OBLIGATORIOS[clase].slice();
+
+    // `motivos` se deja reproducible: los del contrato y, al final, de dónde salió el atajo.
+    const motivos = juicio.motivos.slice();
+    if (hallada) motivos.push(`plantilla:${hallada.plantilla.id} (${hallada.motivo})`);
 
     return {
       status: 200,
@@ -142,11 +200,15 @@ class ClasificadorDocumento extends ModuloHibridoReflejo {
         project_id: pid,
         tipo: 'clasificador-documento',
         clase,
-        confianza: clase === 'otro' ? 0 : this._round(Math.min(1, juicio.peso_ganador / PESO_MAXIMO), 2),
-        motivos: juicio.motivos,
+        // Con plantilla la identificación es determinista (el proveedor está declarado),
+        // así que la confianza es 1 aunque el OCR no puntúe ninguna señal de texto.
+        confianza: clase === 'otro' ? 0 : (hallada ? 1 : this._round(Math.min(1, juicio.peso_ganador / PESO_MAXIMO), 2)),
+        motivos,
         senales: juicio.senales,
-        esquema: clase === 'otro' ? {} : this._esquema(clase),
-        obligatorios: OBLIGATORIOS[clase].slice(),
+        esquema,
+        obligatorios,
+        // De dónde salió la LEY DE LECTURA: auditable en la propia respuesta.
+        origen_esquema: hallada ? `plantilla:${hallada.plantilla.id}` : 'generico',
         encadenado_a: 'extraccion-dato',
         abierto: {
           tipo: clase === 'otro'
@@ -217,6 +279,78 @@ class ClasificadorDocumento extends ModuloHibridoReflejo {
     return esquema;
   }
 
+  // ── PLANTILLAS: detección y esquema ────────────────────────────────────────────────
+
+  /**
+   * Plantilla que casa con el documento, o null. Precedencia declarada y determinista:
+   *   1. REMITENTE (`documento.remitente` o `remitente`): email o dominio del canal; basta
+   *      que CONTENGA el dominio declarado (`Facturas <facturas@ionos.es>` vale).
+   *   2. Señales del TEXTO, en orden alfabético de fichero de plantilla.
+   * Se prueba el remitente primero porque el canal sabe quién manda el papel y el texto
+   * puede venir de un OCR que se coma la cabecera.
+   */
+  _plantilla(input, texto) {
+    const remitente = this._remitente(input).toLowerCase();
+    if (remitente) {
+      for (const p of PLANTILLAS) {
+        for (const dominio of this._lista(p.detectar && p.detectar.dominio)) {
+          const d = String(dominio).toLowerCase();
+          if (d && remitente.includes(d)) return { plantilla: p, motivo: `dominio:${dominio}` };
+        }
+      }
+    }
+    for (const p of PLANTILLAS) {
+      for (const patron of this._lista(p.detectar && p.detectar.texto)) {
+        let rx;
+        try { rx = new RegExp(String(patron), 'i'); } catch (_) { continue; } // patrón roto: se ignora
+        if (rx.test(texto)) return { plantilla: p, motivo: `texto:${patron}` };
+      }
+    }
+    return null;
+  }
+
+  // La ley de lectura de la plantilla, ya en la forma {campo:{regex,flags}} de _extraer.
+  // Solo `regex`/`flags`: nada inventado, la plantilla es DATO y se copia tal cual.
+  _esquemaPlantilla(plantilla) {
+    const esquema = {};
+    const campos = plantilla.campos || {};
+    for (const campo of Object.keys(campos)) {
+      const regla = campos[campo];
+      if (!regla) continue;
+      if (typeof regla === 'string') { esquema[campo] = { regex: regla, flags: 'i' }; continue; }
+      if (regla.regex == null && regla.path == null) continue;
+      esquema[campo] = {
+        regex: regla.regex != null ? String(regla.regex) : null,
+        flags: regla.flags != null ? String(regla.flags) : 'i'
+      };
+      if (regla.path != null) esquema[campo].path = String(regla.path);
+    }
+    return esquema;
+  }
+
+  // Obligatorios de la plantilla, SIEMPRE subconjunto de los campos declarados: un
+  // obligatorio sin patrón solo serviría para encolar documentos que sí se leen.
+  _obligatoriosPlantilla(plantilla, esquema, clase) {
+    const declarados = Object.keys(esquema);
+    const pedidos = Array.isArray(plantilla.obligatorios) ? plantilla.obligatorios.map(String) : OBLIGATORIOS[clase] || [];
+    return pedidos.filter((c) => declarados.includes(c));
+  }
+
+  // De quién viene el papel: el canal (Gmail/Telegram) lo deja en `documento.remitente`.
+  _remitente(input = {}) {
+    const doc = this._documento(input);
+    if (doc.remitente != null) return String(doc.remitente);
+    if (input.remitente != null) return String(input.remitente);
+    if (doc.from != null) return String(doc.from);
+    return '';
+  }
+
+  _lista(valor) {
+    if (Array.isArray(valor)) return valor.filter((v) => v != null && String(v).length > 0);
+    if (valor != null && String(valor).length > 0) return [valor];
+    return [];
+  }
+
   // Texto a clasificar: `texto` del payload o, si el puente lo dejó dentro, `documento.texto`.
   _texto(input = {}) {
     if (input.texto != null) return String(input.texto);
@@ -237,6 +371,7 @@ class ClasificadorDocumento extends ModuloHibridoReflejo {
         clase: data.clase,
         confianza: data.confianza,
         motivos: data.motivos,
+        origen_esquema: data.origen_esquema,
         source_kind: d.source_kind != null ? String(d.source_kind) : null,
         correlation_id: d.correlation_id
       });

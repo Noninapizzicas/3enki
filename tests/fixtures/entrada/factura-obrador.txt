@@ -1,0 +1,52 @@
+                                                                                                                           www.panificadora-demo.example  
+                                                                                                                           info@panificadora-demo.example  
+
+
+
+
+                                                                                                                                                   &e@@02F|QRQXTp
+N.I.F:B73069916
+C/ EJEMPLO, NAVE B-2 P.I. EL PRADO                                                                                                                        5500041273390
+C.P.:30001,CARTAGENA       
+                                                                                                   CLIENTE              4127
+MURCIA
+TEL:968000111                                                                                      COMERCIAL EJEMPLO, S. COOP    
+FAX:
+                                                                                                   BAR LA ESQUINA 
+                                                                                                   CALLE MAYOR 12, CARTAGENA    
+              *** FACTURA ***                                                                      30200           CARTAGENA
+                                                                                                   MURCIA
+                                                                                                   NIF:  B12345674
+     FECHA              FACTURA                HOJA                                                Tfno: 600111222
+  16/10/2026           2612184                       1
+                                                                                               COMERCIAL: ANA TORRES     
+
+
+
+FORMA DE PAGO:                 18 GIRO
+
+
+  REFERENCIA                       DESCRIPCIÓN                                            BULTOS                   CANT.               PRECIO              DTO       IMPORTE
+
+                  ****** N/ALBARAN   2630616              14/10/2026                               0,00                                                                    0,00
+                  NR:WEB SR:iGES ******
+TA005             HARINA LIBRA 25KG X SACO                                                         3,00                  3,00                     23,40                   70,20
+                 lote:100327 // Caducidad: 10/03/2027
+
+
+
+
+         BASE IMPONIBLE                                          IVA:        4,00%                                                                  TOTAL IMPORTE
+                  70,20                                                       2,81
+                                                                                                                                                    73,01 Euros
+
+
+
+
+16/10/2026                73,01
+
+
+
+
+                                Inscrita en el Reg. Merc. de Xxxxxx Tomo xxxx General xxx sec. x    Libro soc. folio xxxx Hoja xxxx Inscrip. 1ª
+

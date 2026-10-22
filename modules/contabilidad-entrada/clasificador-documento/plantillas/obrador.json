@@ -1,0 +1,54 @@
+{
+  "_doc": "PLANTILLA POR PROVEEDOR (dato, no codigo). Factura del obrador de pan con maquetacion a columnas (pdftotext -layout): el emisor va en la cabecera izquierda con 'N.I.F:' pegado, y los importes caen en la linea SIGUIENTE a su etiqueta, a 40+ espacios. Anonimizada en los tests: los patrones dependen de ETIQUETAS y de la POSICION EN LINEA, no de nombres ni NIF concretos.",
+  "id": "obrador",
+  "nombre": "Obrador de pan (factura a columnas, emisor en cabecera izquierda)",
+  "clase": "factura",
+  "detectar": {
+    "dominio": [
+      "especialidadesdelobrador.es",
+      "especialidadesdelobrador"
+    ],
+    "texto": [
+      "FECHA\\s+FACTURA\\s+HOJA",
+      "especialidadesdelobrador"
+    ]
+  },
+  "obligatorios": [
+    "nif",
+    "fecha",
+    "numero",
+    "base",
+    "iva_importe",
+    "total"
+  ],
+  "campos": {
+    "nif": {
+      "regex": "^N\\.?\\s?I\\.?\\s?F\\.?\\s*:?\\s*([A-Z]\\s?-?\\s?\\d{7}\\s?-?\\s?[0-9A-J])",
+      "flags": "mi"
+    },
+    "fecha": {
+      "regex": "FECHA\\s+FACTURA\\s+HOJA[^\\n]*\\n[ \\t]*(\\d{1,2}/\\d{1,2}/\\d{2,4})",
+      "flags": "i"
+    },
+    "numero": {
+      "regex": "FECHA\\s+FACTURA\\s+HOJA[^\\n]*\\n[ \\t]*\\d{1,2}/\\d{1,2}/\\d{2,4}[^\\d\\n]{1,60}(\\d[\\w\\-/]{2,})",
+      "flags": "i"
+    },
+    "base": {
+      "regex": "BASE\\s+IMPONIBLE[^\\n]*\\n[ \\t]*([\\d.,]+)",
+      "flags": "i"
+    },
+    "iva_pct": {
+      "regex": "IVA[^\\d%\\n]{0,10}(\\d{1,2})\\s*[,.]?\\d{0,2}\\s*%",
+      "flags": "i"
+    },
+    "iva_importe": {
+      "regex": "BASE\\s+IMPONIBLE[^\\n]*\\n[ \\t]*[\\d.,]+[^\\n\\d]+([\\d.,]+)",
+      "flags": "i"
+    },
+    "total": {
+      "regex": "TOTAL\\s+IMPORTE[\\s\\S]{0,600}?([\\d.,]+)\\s*Euros",
+      "flags": "i"
+    }
+  }
+}

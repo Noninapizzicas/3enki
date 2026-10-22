@@ -143,6 +143,29 @@ Salida 200:
   `{project_id, documento:{...documento, texto}, texto, esquema, obligatorios, correlation_id}`
   (aun con `otro`, para que la cola de excepciones lo recoja: nada se pierde en silencio).
 
+### B.1 · Plantillas por proveedor (la ley de lectura como DATO)
+
+El esquema genérico de arriba es de TICKET LINEAL. Una factura maquetada a columnas
+(`pdftotext -layout`) lo rompe: el valor cae en la línea siguiente a su etiqueta y el bloque
+`CLIENTE` mete su NIF antes que el del emisor. Por eso cada proveedor puede declarar su propio
+esquema en `modules/contabilidad-entrada/clasificador-documento/plantillas/<id>.json`:
+
+```json
+{ "id":"ionos", "nombre":"...", "clase":"factura",
+  "detectar": { "dominio":["ionos.es"], "texto":["IONOS\\s+Cloud"] },
+  "obligatorios": ["nif","fecha","numero","base","iva_importe","total"],
+  "campos": { "nif": {"regex":"NIF\\s*:?\\s*([A-Z]-?\\s?\\d{7}\\s?-?[0-9A-J])","flags":"i"} } }
+```
+
+- Detección: primero `documento.remitente` (email/dominio que deja el canal Gmail; basta que
+  contenga un dominio declarado), después las señales `detectar.texto`; a igualdad, orden
+  alfabético de fichero. Sin plantilla que case → esquema genérico (`origen_esquema:'generico'`).
+- Con plantilla: su `clase` manda sobre la detectada por pesos, su `campos` es el `esquema`,
+  sus `obligatorios` se filtran a los campos declarados, `confianza` es 1 (proveedor
+  identificado) y la salida declara `origen_esquema:'plantilla:<id>'`.
+- Añadir un proveedor = soltar un JSON (dato, no código). Un JSON ilegible se ignora y ese
+  proveedor vuelve al esquema genérico: nunca tumba el clasificador.
+
 ## C · `ingesta-documental` — CANALES → puerto digital
 
 **El módulo NO se monta por proyecto.** El proyecto se resuelve solo, en este orden:

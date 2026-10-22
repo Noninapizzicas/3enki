@@ -308,7 +308,8 @@ if (!CARTA_VIVA) {
     assert.strictEqual(ternera.ingrediente_id, 'ternera', 'ternera fijada');
     assert.strictEqual(ternera.ancla, 'pizzas_pizza_de_carne_de_ternera');
     assert.deepStrictEqual(ternera.miembros, [
-      'pizzas_hip_hop', 'pizzas_r_b_rhythm_and_blues', 'pizzas_cumbia', 'la_flota_ile_sainte_marie'
+      'pizzas_hip_hop', 'pizzas_r_b_rhythm_and_blues', 'pizzas_cumbia', 'la_flota_ile_sainte_marie',
+      'el_fardel_diego_garcia_de_paredes_el_sanson_extremeno'
     ]);
 
     // La regla del dueño, como invariante: miembros = TODOS los portadores reales, sin el ancla.
@@ -399,17 +400,20 @@ if (!CARTA_VIVA) {
     assert.strictEqual(new Set(ids).size, ids.length, 'ninguna pizza de La Flota está duplicada');
   });
 
-  // El Fardel: los BOCADILLOS traídos de la carta anterior (2026-10-22). El dueño mandó traer
-  // tres de los cinco y que conservaran el nombre y la familia que ya tenían. Los dos que no
-  // entraron (Diego García de Paredes «El Sansón Extremeño» y Sir Francis Drake) NO vuelven solos.
-  caso('dato vivo: El Fardel lleva los tres bocadillos traídos, con nombre, precio y familia de la carta anterior', () => {
+  // El Fardel: los CINCO bocadillos de la carta anterior (2026-10-22). El dueño mandó traer
+  // "todos los bocadillos" con el nombre y la familia que ya tenían: primero entraron tres,
+  // y al avisar de que faltaban entraron los dos últimos (Diego García de Paredes y Sir
+  // Francis Drake). El censo de cinco es la puerta: ni falta ninguno ni vuelve uno que no toque.
+  caso('dato vivo: El Fardel lleva los cinco bocadillos de la carta anterior, con nombre, precio y familia', () => {
     const carta = JSON.parse(fs.readFileSync(CARTA_VIVA, 'utf8'));
     const fardel = (carta.productos || []).filter(p => p.categoria_id === 'el_fardel');
     assert.ok((carta.categorias || []).some(c => c.id === 'el_fardel' && c.nombre === 'El Fardel' && c.orden === 4),
       'categoría El Fardel declarada, en su sitio (después de La Flota)');
 
-    assert.deepStrictEqual(fardel.map(p => p.nombre), ['Barbanegra', 'Barbarroja', 'Anne Bonny'],
-      'los tres bocadillos, en el orden de la carta anterior');
+    assert.deepStrictEqual(fardel.map(p => p.nombre),
+      ['Barbanegra', 'Barbarroja', 'Anne Bonny',
+       'Diego García de Paredes «El Sansón Extremeño»', 'Sir Francis Drake'],
+      'los cinco bocadillos, en el orden de la carta anterior');
 
     const barbanegra = fardel[0];
     assert.strictEqual(barbanegra.id, 'el_fardel_barbanegra');
@@ -430,17 +434,41 @@ if (!CARTA_VIVA) {
     assert.deepStrictEqual((anne.ingredientes || []).map(i => i.id),
       ['pancito_artesano_masa_madre', 'pollo', 'mayonesa', 'pepinillo_agridulce']);
 
+    const diego = fardel[3];
+    assert.strictEqual(diego.id, 'el_fardel_diego_garcia_de_paredes_el_sanson_extremeno');
+    assert.strictEqual(diego.precio, 8.5, 'precio de su carta anterior, no inventado');
+    assert.deepStrictEqual((diego.ingredientes || []).map(i => i.id),
+      ['pancito_artesano_masa_madre', 'ternera', 'salsa_de_queso_manchego', 'pimientos_padron_encurtidos'],
+      'ingredientes VERBATIM: pancito, ternera, salsa de queso manchego, pimientos Padrón');
+
+    const drake = fardel[4];
+    assert.strictEqual(drake.id, 'el_fardel_sir_francis_drake');
+    assert.strictEqual(drake.precio, 8);
+    assert.deepStrictEqual((drake.ingredientes || []).map(i => i.id),
+      ['masa_the_pirate', 'jamon_serrano', 'tomate_triturado', 'aove', 'sal'],
+      'ingredientes VERBATIM: masa The Pirate, jamón serrano, tomate triturado, AOVE, sal');
+
     for (const p of fardel) {
       for (const i of p.ingredientes || []) assert.ok(i.emoji, `${p.nombre}: ${i.nombre} sin emoji`);
       // El alta deriva la paleta QUITAR: sin ella el cliente no puede quitarse la cebolla.
       assert.ok((p.opciones || []).some(o => o.id === 'sin'), `${p.nombre}: sin paleta QUITAR`);
     }
 
-    // Los dos que se quedaron fuera no están en ninguna categoría (ni colgando en otra).
-    const todos = (carta.productos || []).map(p => p.nombre);
-    for (const fuera of ['Diego García de Paredes «El Sansón Extremeño»', 'Sir Francis Drake']) {
-      assert.ok(!todos.includes(fuera), `${fuera} no se trajo: sólo se dictaron tres`);
-    }
+    // La familia es del ingrediente: Diego García lleva ternera, así que sale en esa sección
+    // además de en El Fardel. Sir Francis Drake lleva jamón SERRANO (no de york): no entra.
+    const terneraFam = (carta.productos || []).find(p => p.familia && p.familia.ingrediente_id === 'ternera');
+    assert.ok(terneraFam.familia.miembros.includes(diego.id),
+      'Diego García entra en la familia de ternera: la pertenencia es del ingrediente');
+    assert.ok(!terneraFam.familia.miembros.includes(drake.id),
+      'Sir Francis Drake no entra en ternera');
+    const yorkFam = (carta.productos || []).find(p => p.familia && p.familia.ingrediente_id === 'jamon_de_york');
+    assert.ok(!yorkFam.familia.miembros.includes(drake.id),
+      'jamón serrano no es jamón de york: Drake no entra en esa familia');
+
+    // Ningún bocadillo de la carta anterior queda fuera ni duplicado.
+    const ids = fardel.map(p => p.id);
+    assert.strictEqual(new Set(ids).size, ids.length, 'ningún bocadillo de El Fardel duplicado');
+    assert.strictEqual(fardel.length, 5, 'los cinco de la carta anterior, ni uno menos');
   });
 }
 

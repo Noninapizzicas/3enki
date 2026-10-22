@@ -278,13 +278,12 @@ if (!CARTA_VIVA) {
     assert.strictEqual(jamon.ancla, 'pizzas_pizza_de_jamon_york');
     assert.deepStrictEqual(jamon.miembros, [
       'pizzas_indie', 'pizzas_jazz', 'pizzas_k_pop', 'pizzas_merengue', 'pizzas_punk',
-      'pizzas_swing', 'pizzas_vallenato', 'la_flota_mahon'
+      'pizzas_swing', 'pizzas_vallenato'
     ]);
 
     const bacon = fam('pizzas_pizza_de_bacon');
     assert.strictEqual(bacon.ingrediente_id, 'bacon', 'bacon fijado');
-    assert.strictEqual(bacon.miembros.length, 12, 'las 12 hermanas de bacon (las 10 de Nónina + Merengue + Nassau)');
-    assert.ok(bacon.miembros.includes('la_flota_nassau'), 'Nassau entra en bacon: la familia es del ingrediente');
+    assert.strictEqual(bacon.miembros.length, 11, 'las 11 hermanas de bacon (las 10 de Nónina + Merengue)');
 
     const atun = fam('pizzas_pizza_de_atun');
     assert.strictEqual(atun.ingrediente_id, 'atun', 'atún fijado');
@@ -306,7 +305,7 @@ if (!CARTA_VIVA) {
     assert.strictEqual(ternera.ingrediente_id, 'ternera', 'ternera fijada');
     assert.strictEqual(ternera.ancla, 'pizzas_pizza_de_carne_de_ternera');
     assert.deepStrictEqual(ternera.miembros, [
-      'pizzas_hip_hop', 'pizzas_r_b_rhythm_and_blues', 'pizzas_cumbia', 'la_flota_ile_sainte_marie'
+      'pizzas_hip_hop', 'pizzas_r_b_rhythm_and_blues', 'pizzas_cumbia'
     ]);
 
     // La regla del dueño, como invariante: miembros = TODOS los portadores reales, sin el ancla.
@@ -337,25 +336,28 @@ if (!CARTA_VIVA) {
     }
   });
 
-  // La Flota: las pizzas de AUTOR que ya venían con su nombre puesto en las cartas anteriores
-  // (Port Royal, Nassau, ...). Traídas verbatim por el dueño y con su propia categoría, no
-  // dentro de Pizzas (2026-10-21).
-  caso('dato vivo: La Flota (pizzas de autor) traída de la carta anterior', () => {
+  // La Flota: las pizzas de AUTOR. El dueño MANDÓ vaciarla (2026-10-22): se sacan las 5 que
+  // se habían traído de la carta anterior —Port Royal, Nassau, Cartagena de Indias,
+  // Île Sainte-Marie, Mahón— porque las dicta él. La CATEGORÍA se queda declarada, esperando.
+  caso('dato vivo: La Flota declarada y VACÍA (el dueño dicta las pizzas de autor)', () => {
     const carta = JSON.parse(fs.readFileSync(CARTA_VIVA, 'utf8'));
     const flota = (carta.productos || []).filter(p => p.categoria_id === 'la_flota');
-    assert.deepStrictEqual(flota.map(p => p.nombre), [
-      'Port Royal', 'Nassau', 'Cartagena de Indias', 'Île Sainte-Marie', 'Mahón'
-    ], 'las 5 pizzas de autor, en su orden');
-    assert.deepStrictEqual(
-      Object.fromEntries(flota.map(p => [p.nombre, p.precio])),
-      { 'Port Royal': 9.95, 'Nassau': 13, 'Cartagena de Indias': 12.5, 'Île Sainte-Marie': 12, 'Mahón': 10.5 },
-      'precios verbatim de la carta anterior'
-    );
+    assert.deepStrictEqual(flota.map(p => p.nombre), [],
+      'ninguna pizza de autor dentro: se quitaron las 5 traídas, las dicta el dueño');
     assert.ok((carta.categorias || []).some(c => c.id === 'la_flota' && c.nombre === 'La Flota'),
-      'categoría La Flota declarada');
-    for (const p of flota) {
-      assert.ok((p.ingredientes || []).length > 0, `${p.nombre} sin ingredientes`);
-      for (const i of p.ingredientes) assert.ok(i.emoji, `${p.nombre}: ${i.nombre} sin emoji`);
+      'categoría La Flota se queda declarada');
+
+    // Y no queda rastro de las 5 en ningún sitio: ni producto vivo ni miembro de familia.
+    const ids = ['la_flota_port_royal', 'la_flota_nassau', 'la_flota_cartagena_de_indias',
+                 'la_flota_ile_sainte_marie', 'la_flota_mahon'];
+    for (const id of ids) {
+      assert.ok(!(carta.productos || []).some(p => p.id === id), `${id} fuera de la carta`);
+      for (const p of carta.productos || []) {
+        const f = p.familia;
+        if (f && Array.isArray(f.miembros)) {
+          assert.ok(!f.miembros.includes(id), `${id} no puede seguir en los miembros de ${f.ingrediente_id}`);
+        }
+      }
     }
   });
 }

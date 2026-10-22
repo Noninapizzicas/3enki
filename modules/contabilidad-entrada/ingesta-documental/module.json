@@ -2,7 +2,7 @@
   "_doc": "Manifest de entrada/ingesta-documental — REFLEJO STATELESS (bloque C del contrato de entrada documental). ES EL CABLEADO DE LOS CANALES: convierte 'hay un fichero aquí' en 'hay un documento recibido' y nada más. NO lee, NO clasifica, NO interpreta, NO escribe dominio: entrega al puerto digital (puerto-documento-digital.recibir.request) y ahí acaba su trabajo. Dos canales, una sola forma de entrega: (1) CARPETA — op `barrer` lista por bus fs.list.request una carpeta del storage del proyecto (default inbox/), calcula sha256 de cada fichero soportado y entrega los nuevos; (2) TELEGRAM — escucha telegram.photo.received / telegram.document.received (fire-and-forget), resuelve el proyecto por el vínculo declarado en config `vinculos:{'<botName>':'<project_id>'}` (SIN vínculo se IGNORA y se loguea en abierto.proyecto: el proyecto NUNCA se adivina), descarga por bus telegram.get_file.request con destPath en os.tmpdir() del host, sube los bytes al storage con fs.write.request a inbox/<messageId>-<fileId>.<ext>, borra el tmp y entrega. IDEMPOTENCIA EN MEMORIA: este módulo guarda el set de sha256 ya entregados (SIN persistencia) — la verdad la decide deduplicacion-hecho, por eso el sha256 viaja en el documento. Las dos ops son ORDEN (mueven/entregan documentos) → SÍ llevan ui_handlers. Publica ingesta-documental.barrer(.response|.failed), ingesta-documental.entregar(.response|.failed) y puerto-documento-digital.recibir.request.",
   "name": "ingesta-documental",
   "version": "0.1.0",
-  "description": "Reflejo (C): canales carpeta + Telegram → puerto-documento-digital. Barre/entrega documentos del storage y los empuja al puerto; sin vínculo bot→proyecto no se adivina el proyecto. Idempotente por sha256 en memoria.",
+  "description": "Puente (C): canales → puerto digital. Barre la carpeta inbox/ del proyecto, recibe fotos/PDF de Telegram y barre los adjuntos del correo (Gmail), y entrega cada documento con su fuente y sha256. Idempotente; sin vínculo/cuenta no adivina el destino.",
   "language": "es",
   "subscribes": [
     {
@@ -14,6 +14,11 @@
       "event": "ingesta-documental.entregar.request",
       "handler": "onEntregarRequest",
       "description": "RPC reflejo (ORDEN, panel): {project_id, path, mime?, nombre?, fuente?} → {project_id, entregados, ignorados}. Entrega UN documento concreto que ya está en el storage del proyecto: lee por fs.read, calcula sha256 y publica puerto-documento-digital.recibir.request (misma forma que barrer). Idempotente por sha256; extensión no soportada → 415; ilegible → 404. Responde por ingesta-documental.entregar.response; fallo → ingesta-documental.entregar.failed."
+    },
+    {
+      "event": "ingesta-documental.barrer_email.request",
+      "handler": "onBarrerEmailRequest",
+      "description": "RPC puente (ORDEN, panel): {project_id, cuenta?, query?, maxResults?} → {project_id, fuente:'gmail', cuenta, query, entregados[], ignorados[]}. Busca correos con adjuntos (local.gmail.search), lee cada correo (local.gmail.read), descarga los adjuntos soportados (local.gmail.attachments.download), los guarda en el storage del proyecto (inbox/email-<messageId>-<nombre>) y entrega cada uno a puerto-documento-digital.recibir.request con fuente 'gmail'. Idempotente por sha256 (memoria). Sin credenciales validas → 401 GMAIL_NO_AUTORIZADO (hay que rehacer el OAuth); servicio ausente → 502 GMAIL_NO_DISPONIBLE."
     },
     {
       "event": "telegram.photo.received",
@@ -46,19 +51,60 @@
     {
       "event": "ingesta-documental.entregar.failed",
       "description": "Par de fallo determinista de entregar: falta project_id/path, extensión no soportada (415), documento ilegible (404), publicación fallida (502) → {status, error}. Cierra el círculo de entregar.request."
+    },
+    {
+      "event": "ingesta-documental.barrer_email.response",
+      "description": "Respuesta RPC correlada de la op barrer_email."
+    },
+    {
+      "event": "ingesta-documental.barrer_email.failed",
+      "description": "Par de fallo determinista: falta project_id, Gmail no autorizado (401) o servicio no disponible (502)."
     }
   ],
   "tools": [
-    { "name": "ingesta-documental.barrer", "description": "Barre (ORDEN) la carpeta del storage del proyecto y entrega al puerto los documentos nuevos." },
-    { "name": "ingesta-documental.entregar", "description": "Entrega (ORDEN) un documento concreto del storage del proyecto al puerto digital." }
+    {
+      "name": "ingesta-documental.barrer",
+      "description": "Barre (ORDEN) la carpeta del storage del proyecto y entrega al puerto los documentos nuevos."
+    },
+    {
+      "name": "ingesta-documental.entregar",
+      "description": "Entrega (ORDEN) un documento concreto del storage del proyecto al puerto digital."
+    },
+    {
+      "name": "ingesta-documental.barrer_email",
+      "description": "Barre (ORDEN) el correo del proyecto: adjuntos de Gmail → storage → puerto digital."
+    }
   ],
   "ui_handlers": [
-    { "domain": "contabilidad", "action": "ingesta-documental.barrer", "handler": "onBarrerRequest", "type": "system_panel", "zone": "lateral_derecha" },
-    { "domain": "contabilidad", "action": "ingesta-documental.entregar", "handler": "onEntregarRequest", "type": "system_panel", "zone": "lateral_derecha" }
+    {
+      "domain": "contabilidad",
+      "action": "ingesta-documental.barrer",
+      "handler": "onBarrerRequest",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "ingesta-documental.entregar",
+      "handler": "onEntregarRequest",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "ingesta-documental.barrer_email",
+      "handler": "onBarrerEmailRequest",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    }
   ],
   "config": {
     "carpeta_default": "inbox/",
     "vinculos": {},
-    "timeout_get_file_ms": 30000
+    "timeout_get_file_ms": 30000,
+    "cuenta_email": null,
+    "query_email": "has:attachment -in:trash",
+    "max_email": 20,
+    "timeout_gmail_ms": 60000
   }
 }

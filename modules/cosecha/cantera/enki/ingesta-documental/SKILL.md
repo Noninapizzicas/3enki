@@ -26,6 +26,7 @@ y el puerto sigue la cadena (lector → clasificador → extracción → cuadre 
 |---|---|---|
 | `barrer` | `{project_id, carpeta?}` (default `inbox/`) | lista por `fs.list.request`, entrega los ficheros soportados que no haya entregado ya |
 | `entregar` | `{project_id, path, mime?, nombre?, fuente?}` | entrega un fichero concreto del storage |
+| `barrer_email` | `{project_id, cuenta?, query?, maxResults?}` | busca adjuntos en Gmail (`has:attachment -in:trash` por defecto), los guarda en `inbox/email-<messageId>-<nombre>` y los entrega con `fuente:'gmail'` |
 
 **Idempotencia:** set de `sha256` ya entregados **en memoria**. No persiste: el que decide de verdad
 si un hecho está duplicado es `deduplicacion-hecho` (A7). Un restart puede re-entregar; no duplica
@@ -41,6 +42,17 @@ messageId, fileId, fileSize, mimeType, fileName?, caption}`).
 2. Descarga con `telegram.get_file.request {botName, fileId, download:true, destPath:<os.tmpdir()>}`.
 3. Sube al storage con `fs.write.request {project_id, path:'inbox/<messageId>-<fileId>.<ext>',
    content:<base64>, encoding:'base64'}`, borra el tmp y entrega.
+
+## Canal EMAIL (Gmail)
+
+`local.gmail.search` → `local.gmail.read` → `local.gmail.attachments.download` (base64) →
+`fs.write` al storage → entrega con `fuente:'gmail'` (`mensaje_id`, `remitente`, `asunto` en el
+documento). Solo adjuntos soportados; el cuerpo del correo NO es el documento.
+
+- **`invalid_grant` → 401 `GMAIL_NO_AUTORIZADO`**: el refresh token caducó o se revocó. No es un
+  bug del módulo; se rehace el OAuth con `node scripts/gmail-oauth-setup.js` (escucha en
+  `http://localhost:3456/callback`, hay que abrir la URL y autorizar) y se reinicia el core.
+- Servicio `local.gmail` ausente/colgado → 502 `GMAIL_NO_DISPONIBLE` (distinto de "no autorizado").
 
 ## Pitfalls
 

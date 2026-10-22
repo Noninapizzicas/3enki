@@ -416,14 +416,15 @@ test('module.json: ops ORDEN con ui_handlers y publica SOLO lo declarado', async
   const eventos = man.subscribes.map((s) => s.event);
   assert.ok(eventos.includes('ingesta-documental.barrer.request'));
   assert.ok(eventos.includes('ingesta-documental.entregar.request'));
+  assert.ok(eventos.includes('ingesta-documental.barrer_email.request'));
   assert.ok(eventos.includes('telegram.photo.received'));
   assert.ok(eventos.includes('telegram.document.received'));
 
   const publica = man.publishes.map((p) => p.event);
   assert.ok(publica.includes(EVENTO_PUERTO));
-  assert.strictEqual(man.ui_handlers.length, 2, 'las dos ops son ORDEN → ui_handler');
+  assert.strictEqual(man.ui_handlers.length, 3, 'las tres ops son ORDEN → ui_handler');
   assert.deepStrictEqual(man.ui_handlers.map((u) => u.action).sort(),
-    ['ingesta-documental.barrer', 'ingesta-documental.entregar']);
+    ['ingesta-documental.barrer', 'ingesta-documental.barrer_email', 'ingesta-documental.entregar']);
 });
 
 // ══════════════════════════════════════════════════════════════════════

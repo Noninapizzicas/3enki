@@ -173,6 +173,19 @@ Entrada `entregar`: `{project_id, path, mime?, nombre?, fuente?}` → una sola e
   Forma real de `fs.list.response`: `{files:[{name,type,size,modified,path,extension}], count}`.
 - Ignora `caption`/texto: para eso ya está el chat, no este módulo.
 
+### Canal EMAIL (Gmail) — op `barrer_email` (ORDEN)
+
+Entrada `{project_id, cuenta?, query?, maxResults?}`. `query` por defecto
+`has:attachment -in:trash`. Secuencia, toda por el bus:
+`local.gmail.search` → `local.gmail.read {format:'full'}` → `local.gmail.attachments.download`
+(devuelve `content` en base64) → `fs.write` en `inbox/email-<messageId>-<nombre>` → entrega con
+`fuente:'gmail'` y en el documento `mensaje_id`, `remitente`, `asunto`.
+
+- Solo se ingieren adjuntos con extensión soportada; el resto → `ignorados[{motivo:'adjunto_no_soportado'}]`.
+- El CUERPO del correo no es el documento: es el transporte.
+- `invalid_grant`/token caducado → **401 `GMAIL_NO_AUTORIZADO`** (hay que rehacer el OAuth con
+  `scripts/gmail-oauth-setup.js`); servicio ausente → 502 `GMAIL_NO_DISPONIBLE`.
+
 Salida de las ops: `{project_id, entregados:[{path,sha256}], ignorados:[{path,motivo}]}`.
 
 ## Tests (obligatorio, uno por módulo)

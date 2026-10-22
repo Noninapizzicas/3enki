@@ -147,6 +147,15 @@ class IngestaDocumental extends ModuloHibridoReflejo {
     });
   }
 
+  onBarrerEmailRequest(e) {
+    return this._atender(e, 'barrer_email', 'ingesta-documental.barrer_email.response', (d) => {
+      return this._barrerEmail(d).then((res) => {
+        if (res.status !== 200) this.eventBus?.publish('ingesta-documental.barrer_email.failed', res);
+        return res;
+      });
+    });
+  }
+
   // ── handlers de dominio (fire-and-forget): el canal Telegram EMPUJA un fichero ──
   onTelegramPhotoReceived(e) {
     return this._desdeTelegram(e, 'photo');
@@ -291,6 +300,124 @@ class IngestaDocumental extends ModuloHibridoReflejo {
       entregados: [{ path: ruta, sha256 }],
       ignorados: []
     });
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // op `barrer_email` — canal GMAIL: busca correos con adjuntos y entrega cada
+  // adjunto soportado. NO procesa el correo (ni cuerpo ni remitente como hecho):
+  // el documento es el ADJUNTO; el email solo es el transporte.
+  // ══════════════════════════════════════════════════════════════════════
+  async _barrerEmail(input = {}) {
+    const pid = input.project_id || this.project_id;
+    if (!pid) return this._invalid('project_id');
+
+    const cuenta = input.cuenta != null ? String(input.cuenta)
+      : (this.config.cuenta_email != null ? String(this.config.cuenta_email) : null);
+    const query = input.query != null ? String(input.query)
+      : (this.config.query_email || 'has:attachment -in:trash');
+    const maxResults = Number(input.maxResults || this.config.max_email || 20);
+
+    const busqueda = await this._rpc('local.gmail.search.request',
+      { account: cuenta, query, maxResults },
+      { timeout_ms: Number(this.config.timeout_gmail_ms) || 60000 });
+
+    if (!busqueda) {
+      return this._errorResponse(502, 'GMAIL_NO_DISPONIBLE',
+        'el bus no respondio a la busqueda en Gmail (servicio local.gmail ausente o colgado)', {
+          cuenta, query,
+          abierto: { gmail: 'sin respuesta del servicio local.gmail (no se puede saber si hay correos)' }
+        });
+    }
+    if (busqueda.error) {
+      const msg = busqueda.error.message || busqueda.error;
+      const esAuth = /invalid_grant|invalid_request|unauthorized|401|token/i.test(String(msg));
+      return this._errorResponse(esAuth ? 401 : 502,
+        esAuth ? 'GMAIL_NO_AUTORIZADO' : 'GMAIL_ERROR',
+        esAuth
+          ? `Gmail no autorizado para la cuenta '${cuenta || 'default'}': ${msg}. Hay que rehacer el OAuth (refresh token caducado o revocado).`
+          : `Gmail fallo al buscar: ${msg}`, {
+          cuenta, query,
+          abierto: { gmail: esAuth ? 'credenciales caducadas: reautorizar (scripts/gmail-oauth-setup.js)' : msg }
+        });
+    }
+
+    const mensajes = Array.isArray(busqueda.messages) ? busqueda.messages : [];
+    const entregados = [];
+    const ignorados = [];
+
+    for (const m of mensajes) {
+      const messageId = m && m.id;
+      if (!messageId) { ignorados.push({ path: null, motivo: 'mensaje_sin_id' }); continue; }
+
+      const correo = await this._rpc('local.gmail.read.request',
+        { account: cuenta, messageId, format: 'full' },
+        { timeout_ms: Number(this.config.timeout_gmail_ms) || 60000 });
+      if (!correo || correo.error) {
+        ignorados.push({ path: messageId, motivo: 'correo_ilegible' });
+        continue;
+      }
+
+      const adjuntos = Array.isArray(correo.attachments) ? correo.attachments : [];
+      for (const att of adjuntos) {
+        const nombre = att && att.filename ? String(att.filename) : '';
+        const mime = att && att.mimeType ? String(att.mimeType) : '';
+        const ext = extensionDe(nombre) || extensionDe(mime);
+        // Solo se ingiere lo que la cadena sabe leer; el resto se declara.
+        if (!ext || !EXTS_SOPORTADAS.includes(ext)) {
+          ignorados.push({ path: nombre || null, motivo: 'adjunto_no_soportado' });
+          continue;
+        }
+        if (!att.id) { ignorados.push({ path: nombre || null, motivo: 'adjunto_sin_id' }); continue; }
+
+        const descarga = await this._rpc('local.gmail.attachments.download.request',
+          { account: cuenta, messageId, attachmentId: att.id },
+          { timeout_ms: Number(this.config.timeout_gmail_ms) || 60000 });
+        const content = descarga && !descarga.error ? descarga.content : null;
+        if (!content) { ignorados.push({ path: nombre || null, motivo: 'adjunto_sin_contenido' }); continue; }
+
+        let bytes;
+        try { bytes = Buffer.from(String(content), 'base64'); } catch (_) { bytes = null; }
+        if (!bytes || bytes.length === 0) {
+          ignorados.push({ path: nombre || null, motivo: 'adjunto_vacio' });
+          continue;
+        }
+
+        const sha256 = this._sha256(bytes);
+        if (this._entregados.has(sha256)) {
+          ignorados.push({ path: nombre || null, motivo: 'duplicado_sha256' });
+          continue;
+        }
+
+        // El ADJUNTO se guarda en el buzón del proyecto (multi-tenant): el canal no
+        // entrega rutas del host ni depende de que Gmail siga accesible.
+        const ruta = `inbox/email-${messageId}-${nombreSeguro(nombre, `adjunto${ext}`)}`;
+        const escrito = await this._rpc('fs.write.request',
+          { project_id: pid, path: ruta, content: bytes.toString('base64'), encoding: 'base64' },
+          { timeout_ms: 30000 });
+        if (!escrito || escrito.error) {
+          ignorados.push({ path: nombre || null, motivo: 'no_se_pudo_guardar' });
+          continue;
+        }
+
+        const ok = this._entregarAlPuerto({
+          project_id: pid,
+          fuente: 'gmail',
+          documento: {
+            path: ruta,
+            nombre: nombreSeguro(nombre, path.basename(ruta)),
+            mime: mime || MIME_POR_EXT[ext],
+            sha256,
+            mensaje_id: messageId,
+            remitente: correo.from || null,
+            asunto: correo.subject || null
+          }
+        });
+        if (ok) entregados.push({ path: ruta, sha256 });
+        else ignorados.push({ path: ruta, motivo: 'publicacion_fallida' });
+      }
+    }
+
+    return this._salida(pid, { fuente: 'gmail', cuenta, query, entregados, ignorados });
   }
 
   // ══════════════════════════════════════════════════════════════════════

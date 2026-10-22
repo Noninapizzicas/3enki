@@ -56,6 +56,12 @@ cuenta_gasto_origen, cuadra, motivo, abierto}`.
 
 - **Sin `cuenta_gasto_default` ni regla, NADA se asienta**: es el comportamiento correcto, no un bug.
   Declarar la cuenta por defecto del negocio es decisión del dueño.
+- **La `clase` tiene que llegar propagada**: la pone el clasificador y la reenvía `extraccion-dato`
+  (campo `clase`) hasta el cuadre. Si llega `null`, este módulo solo la acepta si viene declarada
+  (`input.clase` → `documento.clase` → `documento.tipo` → `extraido.clase`); nunca la deduce del texto.
+- **Hallazgo ajeno (no corregido aquí): `escritor-diario._lineas` persiste solo `cuenta/debe/haber`**,
+  así que el `concepto` por línea que compone este módulo se pierde en el libro (el concepto global
+  del asiento sí se guarda). Si el libro necesita el detalle por línea, se arregla en B2, no aquí.
 - El importe llega como string del OCR (`'69,96'`): se parsea a número con coma decimal; no se
   re-formatea antes de comparar.
 - `asienta:false` por descuadre duplica la excepción si `control-cuadre-documento` ya la encoló:

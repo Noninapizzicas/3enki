@@ -288,8 +288,11 @@ if (!CARTA_VIVA) {
     const atun = fam('pizzas_pizza_de_atun');
     assert.strictEqual(atun.ingrediente_id, 'atun', 'atún fijado');
     assert.strictEqual(atun.ancla, 'pizzas_pizza_de_atun');
+    // Los dos bocadillos de El Fardel que llevan atún (Barbanegra y Barbarroja) entran aquí:
+    // la pertenencia es del INGREDIENTE, no de la categoría (regla del dueño 2026-10-21).
     assert.deepStrictEqual(atun.miembros, [
-      'pizzas_blues', 'pizzas_bossa_nova', 'pizzas_chillout', 'pizzas_tango', 'pizzas_punk'
+      'pizzas_blues', 'pizzas_bossa_nova', 'pizzas_chillout', 'pizzas_tango', 'pizzas_punk',
+      'el_fardel_barbanegra', 'el_fardel_barbarroja'
     ]);
     assert.ok(atun.miembros.includes('pizzas_punk'), 'Punk SÍ entra en atún: la familia es del ingrediente');
 
@@ -394,6 +397,50 @@ if (!CARTA_VIVA) {
     // (el nombre y el orden de arriba son la puerta: ni duplicados ni sobrantes).
     const ids = flota.map(p => p.id);
     assert.strictEqual(new Set(ids).size, ids.length, 'ninguna pizza de La Flota está duplicada');
+  });
+
+  // El Fardel: los BOCADILLOS traídos de la carta anterior (2026-10-22). El dueño mandó traer
+  // tres de los cinco y que conservaran el nombre y la familia que ya tenían. Los dos que no
+  // entraron (Diego García de Paredes «El Sansón Extremeño» y Sir Francis Drake) NO vuelven solos.
+  caso('dato vivo: El Fardel lleva los tres bocadillos traídos, con nombre, precio y familia de la carta anterior', () => {
+    const carta = JSON.parse(fs.readFileSync(CARTA_VIVA, 'utf8'));
+    const fardel = (carta.productos || []).filter(p => p.categoria_id === 'el_fardel');
+    assert.ok((carta.categorias || []).some(c => c.id === 'el_fardel' && c.nombre === 'El Fardel' && c.orden === 4),
+      'categoría El Fardel declarada, en su sitio (después de La Flota)');
+
+    assert.deepStrictEqual(fardel.map(p => p.nombre), ['Barbanegra', 'Barbarroja', 'Anne Bonny'],
+      'los tres bocadillos, en el orden de la carta anterior');
+
+    const barbanegra = fardel[0];
+    assert.strictEqual(barbanegra.id, 'el_fardel_barbanegra');
+    assert.strictEqual(barbanegra.precio, 8, 'precio de su carta anterior, no inventado');
+    assert.deepStrictEqual((barbanegra.ingredientes || []).map(i => i.id),
+      ['pancito_artesano_masa_madre', 'atun', 'cebolla', 'mostaza_dijon'],
+      'ingredientes VERBATIM: pancito, atún, cebolla, mostaza Dijon');
+
+    const barbarroja = fardel[1];
+    assert.strictEqual(barbarroja.id, 'el_fardel_barbarroja');
+    assert.strictEqual(barbarroja.precio, 7.5);
+    assert.deepStrictEqual((barbarroja.ingredientes || []).map(i => i.id),
+      ['pancito_artesano_masa_madre', 'alioli_de_leche', 'atun', 'pimiento_verde', 'olivas_negras']);
+
+    const anne = fardel[2];
+    assert.strictEqual(anne.id, 'el_fardel_anne_bonny');
+    assert.strictEqual(anne.precio, 7);
+    assert.deepStrictEqual((anne.ingredientes || []).map(i => i.id),
+      ['pancito_artesano_masa_madre', 'pollo', 'mayonesa', 'pepinillo_agridulce']);
+
+    for (const p of fardel) {
+      for (const i of p.ingredientes || []) assert.ok(i.emoji, `${p.nombre}: ${i.nombre} sin emoji`);
+      // El alta deriva la paleta QUITAR: sin ella el cliente no puede quitarse la cebolla.
+      assert.ok((p.opciones || []).some(o => o.id === 'sin'), `${p.nombre}: sin paleta QUITAR`);
+    }
+
+    // Los dos que se quedaron fuera no están en ninguna categoría (ni colgando en otra).
+    const todos = (carta.productos || []).map(p => p.nombre);
+    for (const fuera of ['Diego García de Paredes «El Sansón Extremeño»', 'Sir Francis Drake']) {
+      assert.ok(!todos.includes(fuera), `${fuera} no se trajo: sólo se dictaron tres`);
+    }
   });
 }
 

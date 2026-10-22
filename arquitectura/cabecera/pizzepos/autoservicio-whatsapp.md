@@ -7,7 +7,7 @@ fuentes:
   - modules/pizzepos/carta-digital/**
   - modules/pizzepos/pedidos/**
   - modules/_shared/pedido-tasador.js
-verificado: 2026-10-21
+verificado: 2026-10-22
 ---
 
 # SUBSISTEMA AUTOSERVICIO — Pedido del cliente por WhatsApp (PWA → bot → cocina)
@@ -258,6 +258,9 @@ sendTemplate (Meta plantillas · salientes >24h) {
 //   - confirmar para día FUTURO → buildP1Line() añade `fecha_deseada:'YYYY-MM-DD'` al JSON del
 //     #P1 y el mensaje wa.me incluye la cabecera 'Para: <fecha>' (avisos de entrega/cocina).
 //   - confirmar HOY → pedido normal sin fecha_deseada (retrocompat total).
+// ORDEN DEL GRID (2026-10-22): el grid "Todas" pinta `DATA.productos` tal cual llega, así que la
+//   proyección los entrega en tramos contiguos por `categorias[].orden` (mismo orden que las
+//   pestañas). El scroll ya no depende del orden de guardado de la carta.
 // PODA previa de carta-digital:
 //   v2.4.0 — fuera ofertas/reseñas/track (la proyección no los daba: UI viva alimentada por vacío).
 //   v2.5.0 — fuera el cerebro FANTASMA del chat (default ai_chat_path '/modules/ai-gateway/chat',

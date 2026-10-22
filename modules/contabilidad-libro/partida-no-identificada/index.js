@@ -65,7 +65,7 @@ class PartidaNoIdentificada extends ModuloHibridoReflejo {
           // Lo dudoso va a la cola (A8.1): no se adivina.
           this.eventBus?.publish('encolado-excepcion.encolar.request', {
             project_id: res.data.project_id,
-            rol: 'PARTIDA_NO_IDENTIFICADA',
+            rol: 'ENCOLADO_EXCEPCION',
             clave: res.data.clave || `partida:${res.data.movimiento_id || 's/ref'}`,
             motivo: 'movimiento sin contrapartida y sin regla declarada: la clasificacion queda abierta (no se adivina)',
             origen: 'partida-no-identificada',

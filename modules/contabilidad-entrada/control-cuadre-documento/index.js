@@ -49,8 +49,10 @@ class ControlCuadreDocumento extends ModuloHibridoReflejo {
           // DESCUADRE REAL: se sube a la cola de excepciones (A8.1). No se asienta mal.
           this.eventBus?.publish('encolado-excepcion.encolar.request', {
             project_id: res.data.project_id,
-            rol: 'CONTROL_CUADRE_DOCUMENTO',
-            clave: res.data.clave || `cuadre:${res.data.documento_id || 's/ref'}`,
+            rol: 'ENCOLADO_EXCEPCION',
+            // La CLAVE lleva el documento: con `s/ref` todos los descuadres sin id colisionaban
+            // entre si (el custodio deduce duplicado por clave) y se perdia el segundo.
+            clave: `cuadre:${res.data.clave || res.data.documento_id || 's/ref'}`,
             motivo: 'el documento NO cuadra (importe+impuestos): no se asienta mal',
             origen: 'control-cuadre-documento',
             payload: { suma_debe: res.data.base, suma_haber: res.data.total, diferencia: res.data.diferencia },
@@ -124,7 +126,7 @@ class ControlCuadreDocumento extends ModuloHibridoReflejo {
         project_id: pid,
         tipo: 'control-cuadre-documento',
         documento_id: doc.documento_id != null ? String(doc.documento_id) : null,
-        clave: doc.clave != null ? String(doc.clave) : null,
+        clave: this._claveDoc(doc),
         base: cifras.base,
         cuota: cifras.cuota,
         total: cifras.total,
@@ -143,6 +145,13 @@ class ControlCuadreDocumento extends ModuloHibridoReflejo {
         }
       }
     };
+  }
+
+  // Referencia del documento para la clave de la excepcion: la ruta sirve; `null` NO (sin ref
+  // todos los documentos caerian en la misma clave y el custodio los tomaria por duplicados).
+  _claveDoc(doc = {}) {
+    const v = doc.clave ?? doc.ruta ?? doc.path ?? doc.documento_id ?? doc.id;
+    return v != null && v !== '' ? String(v) : null;
   }
 
   // Normaliza las cifras declaradas del documento. Ausente → null (no 0): un hueco no es un cero.

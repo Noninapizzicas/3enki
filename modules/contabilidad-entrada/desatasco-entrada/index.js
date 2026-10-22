@@ -84,7 +84,7 @@ class DesatascoEntrada extends ModuloHibridoReflejo {
       }
     } else if (data.accion === 'reencolar') {
       this.eventBus?.publish('encolado-excepcion.encolar.request', {
-        ...base, rol: 'DESATASCO_ENTRADA', clave: data.clave || `desatasco:${data.excepcion_id}`, motivo: data.motivo, origen: 'desatasco-entrada'
+        ...base, rol: 'ENCOLADO_EXCEPCION', clave: data.clave || `desatasco:${data.excepcion_id}`, motivo: data.motivo, origen: 'desatasco-entrada'
       });
     } else if (data.accion === 'descartar') {
       // Al descartar con una contrapartida declarada, se puede aplicar la regla (aprendizaje).

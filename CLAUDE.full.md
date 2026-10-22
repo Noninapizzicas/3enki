@@ -5676,6 +5676,13 @@ CLASE CartaDigitalModule EXTIENDE BaseModule {  // PROYECTOR, no manager-con-sto
   METODOS {
     // PROYECCIÓN pura (proyeccion.js): entra dato, sale dato. La misma FORMA para los
     // dos consumidores: el reflejo (bus) y el export-cli (disco).
+    //
+    // ORDEN DEL SCROLL (contrato): `productos[]` es lo que pinta el grid "Todas" de la PWA,
+    // así que su orden ES el orden de lectura de la carta. La proyección los agrupa en TRAMOS
+    // CONTIGUOS siguiendo `categorias[].orden` — el mismo orden que las pestañas de arriba —
+    // conservando dentro de cada tramo el orden culinario de la carta. Un producto de sección
+    // no publicada va al final sin romper los tramos. Consecuencia: el orden del scroll deja de
+    // depender de cómo esté guardada la lista (dar de alta un producto ya no lo manda al final).
     _proyectarPublica(project_id):
       [carta, marca, contenido, config, calendario] ← Promise.all(bebe_de_*)
       SI !carta: RETORNA 404 (canal sin carta — revisa tarifas)
@@ -15876,6 +15883,9 @@ sendTemplate (Meta plantillas · salientes >24h) {
 //   - confirmar para día FUTURO → buildP1Line() añade `fecha_deseada:'YYYY-MM-DD'` al JSON del
 //     #P1 y el mensaje wa.me incluye la cabecera 'Para: <fecha>' (avisos de entrega/cocina).
 //   - confirmar HOY → pedido normal sin fecha_deseada (retrocompat total).
+// ORDEN DEL GRID (2026-10-22): el grid "Todas" pinta `DATA.productos` tal cual llega, así que la
+//   proyección los entrega en tramos contiguos por `categorias[].orden` (mismo orden que las
+//   pestañas). El scroll ya no depende del orden de guardado de la carta.
 // PODA previa de carta-digital:
 //   v2.4.0 — fuera ofertas/reseñas/track (la proyección no los daba: UI viva alimentada por vacío).
 //   v2.5.0 — fuera el cerebro FANTASMA del chat (default ai_chat_path '/modules/ai-gateway/chat',

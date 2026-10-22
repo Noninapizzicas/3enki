@@ -49,7 +49,7 @@ class EtiquetadoAnalitico extends ModuloHibridoReflejo {
         // La regla NO cubre el hecho → lo dudoso va a la cola (A8.1). No se adivina la etiqueta.
         this.eventBus?.publish('encolado-excepcion.encolar.request', {
           project_id: res.data.project_id,
-          rol: 'ETIQUETADO_ANALITICO',
+          rol: 'ENCOLADO_EXCEPCION',
           clave: res.data.clave || `etiquetado:${res.data.hecho_id || 's/ref'}`,
           motivo: 'ninguna regla declarada cubre este hecho: la etiqueta analitica queda abierta (no se adivina)',
           origen: 'etiquetado-analitico',

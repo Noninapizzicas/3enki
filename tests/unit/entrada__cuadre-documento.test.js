@@ -94,11 +94,16 @@ function crear() {
   const { m, bus } = crear();
   m.onCuadraRequest({
     request_id: 'r2', project_id: 'p1',
+    documento: { ruta: 'inbox/ticket.png' },
     extraido: { base: '63,60', iva_importe: '6,36', total: '99,99' },
   });
   const enc = bus.eventos.find((e) => e.ev === 'encolado-excepcion.encolar.request');
   assert.ok(enc, 'un descuadre real debe encolar la excepción');
-  assert.strictEqual(enc.payload.rol, 'CONTROL_CUADRE_DOCUMENTO');
+  // El campo `rol` es del ESCRITOR de la parcela (single-writer), no del emisor: el custodio
+  // rechaza con 403 cualquier otro rol y la excepcion se pierde en silencio (medido en prod).
+  assert.strictEqual(enc.payload.rol, 'ENCOLADO_EXCEPCION');
+  assert.strictEqual(enc.payload.origen, 'control-cuadre-documento', 'el emisor va en origen');
+  assert.strictEqual(enc.payload.clave, 'cuadre:inbox/ticket.png', 'la clave lleva el documento, no `s/ref`');
   assert.ok(Math.abs(enc.payload.payload.diferencia + 30.03) < 0.005, 'la diferencia se declara, no se corrige');
   const aHecho = bus.eventos.find((e) => e.ev === 'hecho-compra.componer.request');
   assert.ok(!aHecho, 'un documento que no cuadra NO debe encadenar al asiento');

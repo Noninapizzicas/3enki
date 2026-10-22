@@ -61,7 +61,7 @@ class CruceFacturaRecepcion extends ModuloHibridoReflejo {
           // NO cuadra: se sube a la cola (A8.1). No se asienta mal.
           this.eventBus?.publish('encolado-excepcion.encolar.request', {
             project_id: res.data.project_id,
-            rol: 'CRUCE_FACTURA_RECEPCION',
+            rol: 'ENCOLADO_EXCEPCION',
             clave: res.data.clave || `cruce:${res.data.hecho_id || 's/ref'}`,
             motivo: 'pedido/recepcion/factura NO cotejan: no se asienta',
             origen: 'cruce-factura-recepcion',

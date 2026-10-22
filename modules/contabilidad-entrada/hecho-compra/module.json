@@ -1,0 +1,46 @@
+{
+  "_doc": "Manifest de entrada/hecho-compra — REFLEJO STATELESS (D · el eslabón que hoy NO existe: extracción → HECHO contable con asiento de partida doble, determinista, sin LLM). Convierte los campos de un documento de compra (proveedor/nif/numero/fecha/base/iva_pct/iva_importe/total) en el HECHO que escritor-diario sabe asentar. Reglas PGC congeladas: (1) ALBARÁN NO ASIENTA — un albarán no devenga gasto: asienta:false, motivo 'albaran_pendiente_de_factura', hecho:null y encadena cruce-factura-recepcion.cotejar.request (N5) para esperar la factura; NO es un error y NO va a la cola. (2) TICKET y FACTURA asientan solo si hay fecha+base+IVA+total cuadrando (|base+cuota−total| ≤ 0,02); la cuota es iva_importe si viene, si no base*iva_pct/100 redondeado; sin ninguno de los dos NO se inventa el IVA → abierto.iva y a la cola. (3) La cuenta de gasto se resuelve en orden declarado (cuenta_gasto del input → config.cuenta_gasto_default → regla-contrapartida.aplicar.request) y se declara cuál se usó (cuenta_gasto_origen); sin ninguna → abierto.cuenta_gasto, NUNCA se inventa una cuenta. (4) Asiento PGC: DEBE cuenta_gasto por base, DEBE 472 (HP IVA soportado) por la cuota si > 0, HABER 400 (Proveedores) por el total; fecha normalizada a YYYY-MM-DD (dd/mm/yyyy, dd-mm-yyyy, ISO; una fecha inexistente como 31/02 no se arregla) y la suma DEBE debe igualar la del HABER. (5) clase 'otro' o no declarada → asienta:false con abierto.clase. (6) moneda por defecto EUR (se declara en el hecho). Si asienta:true publica el HECHO contabilidad.hecho_recibido {project_id, asiento, hecho, origen:'hecho-compra'} (lo apila escritor-diario B2, el único escritor del libro); si asienta:false NO publica el hecho y encola en encolado-excepcion.encolar.request (A8.1) con clave natural compra:<nif>:<numero>. NO escribe, NO persiste. RPC componer es CLASE PREGUNTA → va por el bus, SIN panel.",
+  "name": "hecho-compra",
+  "version": "0.1.0",
+  "description": "Reflejo (D): campos de un documento de compra → hecho contable con asiento de partida doble PGC. Albarán no asienta (encadena al cotejo); sin IVA o sin cuenta no asienta y encola; nunca inventa cuenta, IVA ni fecha.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "hecho-compra.componer.request",
+      "handler": "onComponerRequest",
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id, clase:'factura'|'ticket'|'albaran'|'otro', extraido{proveedor,nif,numero,fecha,base,iva_pct,iva_importe,total,moneda?}, documento?, cuenta_gasto?} → {project_id, clase, hecho, asienta, cuenta_gasto, cuadra, motivo, abierto}. Compone el asiento de partida doble (DEBE gasto + DEBE 472 / HABER 400) solo si las cifras cuadran y hay cuenta declarada. Responde por hecho-compra.componer.response. asienta:true → publica contabilidad.hecho_recibido (lo asienta escritor-diario); asienta:false → encola en encolado-excepcion; albarán → encadena cruce-factura-recepcion.cotejar.request. Falta project_id → hecho-compra.componer.failed."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "hecho-compra.componer.response",
+      "description": "Respuesta RPC correlada de la op componer (una sola cara: el bus). Lleva el hecho compuesto o el motivo por el que NO se asienta, con abierto declarado."
+    },
+    {
+      "event": "hecho-compra.componer.failed",
+      "description": "Par de fallo determinista: falta project_id → {status, code, message}. Cierra el círculo de componer.request y NO publica el hecho."
+    },
+    {
+      "event": "contabilidad.hecho_recibido",
+      "description": "HECHO (SOLO si asienta:true): {project_id, asiento, hecho, origen:'hecho-compra', correlation_id}. Lo escucha escritor-diario (B2), que es el ÚNICO que escribe el diario; este módulo compone, no asienta."
+    },
+    {
+      "event": "encolado-excepcion.encolar.request",
+      "description": "Subida (REQUEST por EVENTO, SOLO si asienta:false y no es albarán): {project_id, rol:'ENCOLADO_EXCEPCION', clave:'compra:<nif>:<numero>', motivo, origen:'hecho-compra', payload:{clase, extraido, documento, abierto}}. La compra dudosa espera revisión; no se asienta lo que no está declarado."
+    },
+    {
+      "event": "cruce-factura-recepcion.cotejar.request",
+      "description": "Encadenado por EVENTO (SOLO albarán): {project_id, recepcion{proveedor,nif,numero,fecha,importe,extraido}, clave, origen:'hecho-compra'}. Un albarán no devenga gasto: se coteja con la factura cuando llegue (N5)."
+    }
+  ],
+  "config": {
+    "cuenta_gasto_default": null,
+    "cuenta_iva_soportado": "472",
+    "cuenta_proveedores": "400",
+    "timeout_regla_ms": 6000
+  },
+  "tools": [
+    { "name": "hecho-compra.componer", "description": "Compone (PREGUNTA) el hecho contable con asiento de partida doble a partir de los campos extraídos de un documento de compra." }
+  ],
+  "ui_handlers": []
+}

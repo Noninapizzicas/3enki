@@ -80,6 +80,11 @@ class PuertoDocumentoDigital extends ModuloHibridoReflejo {
         });
     }
 
+    // A donde se encadena de verdad: un documento fisico primero se LEE (lector-documento);
+    // uno que ya trae texto va directo a extraccion-dato. Se declara, no se supone.
+    const fisico = Boolean(documento.path || documento.file_path || documento.ruta)
+      && documento.texto == null && documento.contenido == null;
+
     return {
       status: 200,
       data: {
@@ -95,7 +100,7 @@ class PuertoDocumentoDigital extends ModuloHibridoReflejo {
         adapta: 'facturacion/fuentes',
         contrato_traducido: { de: 'factura.entrada', a: 'contabilidad.documento_recibido' },
         recibido_en: new Date().toISOString(),
-        encadenado_a: 'normalizador-hecho',
+        encadenado_a: fisico ? 'lector-documento' : 'extraccion-dato',
         abierto: {
           fuente: null,
           documento: null
@@ -105,19 +110,26 @@ class PuertoDocumentoDigital extends ModuloHibridoReflejo {
   }
 
   // Encadena la recepcion al pipeline de entrada por EVENTO (best-effort).
-  //   A2 normaliza el hecho; A4.1 lo vuelve dato. Aqui NO se interpreta ni se escribe.
+  //   · documento FISICO (trae bytes: path/mime y NO trae texto) → A-LECTOR: hay que LEERLO
+  //     antes de poder extraer nada. Encadenar directo a extraccion-dato seria pedir juicio
+  //     sobre bytes que nadie ha convertido en texto (excepcion espuria por cada documento).
+  //   · documento YA TEXTUAL (trae `texto`/`contenido` interpretable) → A4.1 lo vuelve dato.
+  // A2 (normalizador) recibe la recepcion en los dos casos: deja el hecho en forma asentable.
   _encadenar(res, d) {
+    const doc = res.data.documento || {};
     const base = {
       project_id: res.data.project_id,
-      documento: res.data.documento,
+      documento: doc,
       fuente: res.data.fuente,
       formato: res.data.formato,
       origen: 'puerto-documento-digital',
       correlation_id: d.correlation_id
     };
+    const fisico = Boolean(doc.path || doc.file_path || doc.ruta) && doc.texto == null && doc.contenido == null;
     try {
       this.eventBus?.publish('normalizador-hecho.entrar.request', base);
-      this.eventBus?.publish('extraccion-dato.juzgar.request', base);
+      if (fisico) this.eventBus?.publish('lector-documento.leer.request', base);
+      else this.eventBus?.publish('extraccion-dato.juzgar.request', base);
     } catch (_) { /* best-effort */ }
   }
 

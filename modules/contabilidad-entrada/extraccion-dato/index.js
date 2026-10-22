@@ -48,6 +48,9 @@ class ExtraccionDato extends ModuloHibridoReflejo {
       if (res.data.propuesta) {
         this.eventBus?.publish('control-cuadre-documento.cuadra.request', {
           project_id: pid, documento: res.data.documento, extraido: res.data.extraido,
+          // La CLASE viaja con el dato: sin ella el cuadre no puede encadenar al hecho contable
+          // (factura/ticket asientan; albaran no). Se propaga tal cual, sin reinterpretarla.
+          clase: res.data.clase,
           correlation_id: d.correlation_id
         });
       }
@@ -99,6 +102,9 @@ class ExtraccionDato extends ModuloHibridoReflejo {
       data: {
         project_id: pid,
         tipo: 'extraccion-dato',
+        // Clase declarada del documento (factura/albaran/ticket/otro) si el sitio la declaro.
+        // El extractor NO la deduce: la recibe y la devuelve para que el cuadre sepa a donde ir.
+        clase: input.clase != null ? String(input.clase) : null,
         documento: this._refDocumento(documento),
         campos: campos,
         extraido,

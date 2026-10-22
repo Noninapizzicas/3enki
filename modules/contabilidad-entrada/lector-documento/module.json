@@ -1,0 +1,45 @@
+{
+  "_doc": "Manifest de entrada/lector-documento — REFLEJO STATELESS (A · bytes → TEXTO, determinista, sin LLM). Convierte el documento recibido en TEXTO legible y declara CON QUÉ MOTOR lo hizo. Estrategia en dos pasos, del más barato al más caro: (1) PDF → `pdftotext -layout -enc UTF-8` sobre un tmp; si el texto limpio llega a min_chars_digital → source_kind 'digital', motor 'pdftotext', y NO se toca el OCR; (2) imagen o PDF escaneado (texto insuficiente) → tesseract LOCAL (`--psm 4 -l spa+eng`; PDF rasterizado con pdftoppm a 300dpi, máx. 8 páginas) que CONSERVA EL ORDEN DE LÍNEA (imprescindible para que 'TOTAL 69,96' no se despegue) → source_kind 'ocr', motor 'tesseract'; si no saca texto → POST {base_url}/ocr con los bytes crudos (application/octet-stream) → motor 'ocr4rs'. Motor caído/timeout → 502 MOTOR_OCR_NO_DISPONIBLE con abierto.texto declarado (jamás texto inventado); texto final < 8 chars → 422 TEXTO_VACIO; extensión fuera de pdf/jpg/jpeg/png/webp/tif/tiff → 415 FORMATO_NO_SOPORTADO. Los bytes se leen por el bus (fs.read.request base64) o desde ruta_absoluta SOLO en pruebas locales. NO clasifica (clasificador-documento), NO extrae campos (extraccion-dato), NO escribe ni persiste: sin estado en disco salvo un tmp que se borra siempre. RPC leer es CLASE PREGUNTA → va por el bus, SIN panel. Publica lector-documento.leer.response y su par .failed; al leer bien publica el HECHO contabilidad.documento_leido {project_id, documento, texto, source_kind, motor, evidencia, correlation_id} y ENCADENA clasificador-documento.clasificar.request. Config: base_url (motor OCR4RS, :8090), timeout_ocr_ms, min_chars_digital, tmp_dir (null = os.tmpdir(), que JSON no puede expresar).",
+  "name": "lector-documento",
+  "version": "0.1.0",
+  "description": "Reflejo (A): bytes → texto. PDF digital con pdftotext; imagen/PDF escaneado con tesseract (--psm 4, conserva el orden de línea) y OCR4RS como respaldo; degrada honesto (502/422) sin inventar texto y encadena al clasificador por evento.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "lector-documento.leer.request",
+      "handler": "onLeerRequest",
+      "description": "RPC reflejo (PREGUNTA, por el bus): {project_id, documento{path|file_path, mime?, nombre?}, path?, ruta_absoluta?} → {project_id, documento, texto, paginas, source_kind, motor, evidencia{sha256,bytes}, ms, abierto}. Resuelve la ruta (ruta_absoluta solo pruebas; si no, fs.read.request base64 por el bus), comprueba formato, y lee: pdftotext si el PDF trae capa de texto; si no, tesseract local (orden de línea) y OCR4RS de respaldo. Responde por lector-documento.leer.response; error → lector-documento.leer.failed. Al leer bien publica contabilidad.documento_leido y encadena clasificador-documento.clasificar.request."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "lector-documento.leer.response",
+      "description": "Respuesta RPC correlada de la op leer (una sola cara: el bus)."
+    },
+    {
+      "event": "lector-documento.leer.failed",
+      "description": "Par de fallo determinista: {request_id, status, error} cuando no se pudo leer (400/404/415/422/502). Cierra el círculo de leer.request y NO publica el hecho documento_leido."
+    },
+    {
+      "event": "contabilidad.documento_leido",
+      "description": "HECHO: el documento ya es texto. {project_id, documento, texto, source_kind, motor, evidencia, correlation_id} — sin paginas completas (no abultar el bus). Es la evidencia que el asiento podrá citar."
+    },
+    {
+      "event": "clasificador-documento.clasificar.request",
+      "description": "Encadenado por EVENTO: {project_id, documento, texto, source_kind, evidencia, correlation_id} → el clasificador decide QUÉ documento es. El lector no clasifica ni adivina el tipo."
+    }
+  ],
+  "config": {
+    "base_url": "http://localhost:8090",
+    "timeout_ocr_ms": 60000,
+    "min_chars_digital": 40,
+    "tmp_dir": null
+  },
+  "tools": [
+    {
+      "name": "lector-documento.leer",
+      "description": "Lee (PREGUNTA) un documento (bytes) y devuelve su TEXTO con la evidencia de qué motor lo leyó."
+    }
+  ],
+  "ui_handlers": []
+}

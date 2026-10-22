@@ -1,0 +1,110 @@
+{
+  "_doc": "Manifest de entrada/ingesta-documental — REFLEJO STATELESS (bloque C del contrato de entrada documental). ES EL CABLEADO DE LOS CANALES: convierte 'hay un fichero aquí' en 'hay un documento recibido' y nada más. NO lee, NO clasifica, NO interpreta, NO escribe dominio: entrega al puerto digital (puerto-documento-digital.recibir.request) y ahí acaba su trabajo. Dos canales, una sola forma de entrega: (1) CARPETA — op `barrer` lista por bus fs.list.request una carpeta del storage del proyecto (default inbox/), calcula sha256 de cada fichero soportado y entrega los nuevos; (2) TELEGRAM — escucha telegram.photo.received / telegram.document.received (fire-and-forget), resuelve el proyecto por el vínculo declarado en config `vinculos:{'<botName>':'<project_id>'}` (SIN vínculo se IGNORA y se loguea en abierto.proyecto: el proyecto NUNCA se adivina), descarga por bus telegram.get_file.request con destPath en os.tmpdir() del host, sube los bytes al storage con fs.write.request a inbox/<messageId>-<fileId>.<ext>, borra el tmp y entrega. IDEMPOTENCIA EN MEMORIA: este módulo guarda el set de sha256 ya entregados (SIN persistencia) — la verdad la decide deduplicacion-hecho, por eso el sha256 viaja en el documento. Las dos ops son ORDEN (mueven/entregan documentos) → SÍ llevan ui_handlers. Publica ingesta-documental.barrer(.response|.failed), ingesta-documental.entregar(.response|.failed) y puerto-documento-digital.recibir.request.",
+  "name": "ingesta-documental",
+  "version": "0.1.0",
+  "description": "Puente (C): canales → puerto digital. Barre la carpeta inbox/ del proyecto, recibe fotos/PDF de Telegram y barre los adjuntos del correo (Gmail), y entrega cada documento con su fuente y sha256. Idempotente; sin vínculo/cuenta no adivina el destino.",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "ingesta-documental.barrer.request",
+      "handler": "onBarrerRequest",
+      "description": "RPC reflejo (ORDEN, panel): {project_id, carpeta?} → {project_id, entregados[{path,sha256}], ignorados[{path,motivo}]}. Lista la carpeta por fs.list.request (default inbox/, relativa al storage del proyecto); si no existe → 404. Por cada fichero de extensión soportada (.pdf .jpg .jpeg .png .webp .tif .tiff) lee por fs.read, calcula sha256 y publica puerto-documento-digital.recibir.request con fuente='carpeta' si no lo entregó ya en este proceso. Responde por ingesta-documental.barrer.response; payload inválido o fallo → ingesta-documental.barrer.failed."
+    },
+    {
+      "event": "ingesta-documental.entregar.request",
+      "handler": "onEntregarRequest",
+      "description": "RPC reflejo (ORDEN, panel): {project_id, path, mime?, nombre?, fuente?} → {project_id, entregados, ignorados}. Entrega UN documento concreto que ya está en el storage del proyecto: lee por fs.read, calcula sha256 y publica puerto-documento-digital.recibir.request (misma forma que barrer). Idempotente por sha256; extensión no soportada → 415; ilegible → 404. Responde por ingesta-documental.entregar.response; fallo → ingesta-documental.entregar.failed."
+    },
+    {
+      "event": "ingesta-documental.barrer_email.request",
+      "handler": "onBarrerEmailRequest",
+      "description": "RPC puente (ORDEN, panel): {project_id, cuenta?, query?, maxResults?} → {project_id, fuente:'gmail', cuenta, query, entregados[], ignorados[]}. Busca correos con adjuntos (local.gmail.search), lee cada correo (local.gmail.read), descarga los adjuntos soportados (local.gmail.attachments.download), los guarda en el storage del proyecto (inbox/email-<messageId>-<nombre>) y entrega cada uno a puerto-documento-digital.recibir.request con fuente 'gmail'. Idempotente por sha256 (memoria). Sin credenciales validas → 401 GMAIL_NO_AUTORIZADO (hay que rehacer el OAuth); servicio ausente → 502 GMAIL_NO_DISPONIBLE."
+    },
+    {
+      "event": "telegram.photo.received",
+      "handler": "onTelegramPhotoReceived",
+      "description": "Fire-and-forget (canal Telegram): {botName, chatId, messageId, from, fileId, fileSize, width, height, mimeType, caption, sizes}. Resuelve el proyecto por config `vinculos`; sin vínculo se IGNORA y se loguea (abierto.proyecto) — nunca se adivina. Descarga por telegram.get_file.request a os.tmpdir(), sube a inbox/<messageId>-<fileId>.jpg por fs.write, borra el tmp y entrega al puerto con fuente='telegram'. Ignora caption/texto (para eso está el chat)."
+    },
+    {
+      "event": "telegram.document.received",
+      "handler": "onTelegramDocumentReceived",
+      "description": "Fire-and-forget (canal Telegram): igual que la foto + {fileName, mimeType}. La extensión se toma de fileName; si no es de la lista soportada se ignora y se loguea. Mismo camino: get_file → tmp → fs.write → borrar tmp → puerto con fuente='telegram'."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "puerto-documento-digital.recibir.request",
+      "description": "ORDEN encadenada (A5): {request_id, project_id, fuente:'carpeta'|'telegram', documento:{path, nombre, mime, sha256}}. Es la entrega al puerto digital: a partir de aquí la vertical sigue sola (documento_recibido → lector → clasificador → extracción)."
+    },
+    {
+      "event": "ingesta-documental.barrer.response",
+      "description": "Respuesta RPC correlada de la op barrer (una sola cara: el bus)."
+    },
+    {
+      "event": "ingesta-documental.barrer.failed",
+      "description": "Par de fallo determinista de barrer: falta project_id, la carpeta no existe (404), el bus no responde (502) → {status, error}. Cierra el círculo de barrer.request."
+    },
+    {
+      "event": "ingesta-documental.entregar.response",
+      "description": "Respuesta RPC correlada de la op entregar (una sola cara: el bus)."
+    },
+    {
+      "event": "ingesta-documental.entregar.failed",
+      "description": "Par de fallo determinista de entregar: falta project_id/path, extensión no soportada (415), documento ilegible (404), publicación fallida (502) → {status, error}. Cierra el círculo de entregar.request."
+    },
+    {
+      "event": "ingesta-documental.barrer_email.response",
+      "description": "Respuesta RPC correlada de la op barrer_email."
+    },
+    {
+      "event": "ingesta-documental.barrer_email.failed",
+      "description": "Par de fallo determinista: falta project_id, Gmail no autorizado (401) o servicio no disponible (502)."
+    }
+  ],
+  "tools": [
+    {
+      "name": "ingesta-documental.barrer",
+      "description": "Barre (ORDEN) la carpeta del storage del proyecto y entrega al puerto los documentos nuevos."
+    },
+    {
+      "name": "ingesta-documental.entregar",
+      "description": "Entrega (ORDEN) un documento concreto del storage del proyecto al puerto digital."
+    },
+    {
+      "name": "ingesta-documental.barrer_email",
+      "description": "Barre (ORDEN) el correo del proyecto: adjuntos de Gmail → storage → puerto digital."
+    }
+  ],
+  "ui_handlers": [
+    {
+      "domain": "contabilidad",
+      "action": "ingesta-documental.barrer",
+      "handler": "onBarrerRequest",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "ingesta-documental.entregar",
+      "handler": "onEntregarRequest",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    },
+    {
+      "domain": "contabilidad",
+      "action": "ingesta-documental.barrer_email",
+      "handler": "onBarrerEmailRequest",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    }
+  ],
+  "config": {
+    "carpeta_default": "inbox/",
+    "vinculos": {},
+    "timeout_get_file_ms": 30000,
+    "cuenta_email": null,
+    "query_email": "has:attachment -in:trash",
+    "max_email": 20,
+    "timeout_gmail_ms": 60000
+  }
+}

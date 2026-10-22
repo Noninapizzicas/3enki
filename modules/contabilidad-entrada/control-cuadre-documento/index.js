@@ -58,6 +58,18 @@ class ControlCuadreDocumento extends ModuloHibridoReflejo {
           });
         }
         // Cuadra o dato ausente → no se encola nada (no se inventa la excepcion por un hueco).
+        // CUADRA DE VERDAD (cifras declaradas y base+cuota==total) → el documento ya es un HECHO
+        // contable: se encadena a hecho-compra (compone la partida doble) y de ahi a escritor-diario.
+        // Con dato ausente (cuadra:null) NO se encadena: no se asienta lo que no se ha verificado.
+        else if (res.data.cuadra === true) {
+          this.eventBus?.publish('hecho-compra.componer.request', {
+            project_id: res.data.project_id,
+            clase: d.clase != null ? String(d.clase) : null,
+            extraido: d.extraido || {},
+            documento: d.documento || {},
+            correlation_id: d.correlation_id
+          });
+        }
       } else {
         this.eventBus?.publish('control-cuadre-documento.cuadra.failed', res);
       }
@@ -73,7 +85,10 @@ class ControlCuadreDocumento extends ModuloHibridoReflejo {
     if (!pid) return this._invalid('project_id');
 
     const doc = input.documento && typeof input.documento === 'object' ? input.documento : input;
-    const cifras = this._cifras(doc);
+    // Las cifras pueden venir DECLARADAS en el documento O EXTRAIDAS por A4.1 (`extraido`).
+    // Antes solo se miraba `documento` (referencia sin cifras) → el cuadre nunca era verificable.
+    const extraido = input.extraido && typeof input.extraido === 'object' ? input.extraido : {};
+    const cifras = this._cifras(doc, extraido);
 
     // Sin cifras NO se afirma nada: no verificable (dato ausente = desconocido).
     if (cifras.base === null && cifras.cuota === null && cifras.total === null) {
@@ -131,16 +146,37 @@ class ControlCuadreDocumento extends ModuloHibridoReflejo {
   }
 
   // Normaliza las cifras declaradas del documento. Ausente → null (no 0): un hueco no es un cero.
-  _cifras(doc) {
-    const base = this._num(doc.base ?? doc.importe_base ?? doc.subtotal);
-    const cuota = this._num(doc.cuota ?? doc.impuestos ?? doc.iva ?? doc.cuota_iva);
-    const total = this._num(doc.total ?? doc.importe_total ?? doc.importe);
+  _cifras(doc = {}, extra = {}) {
+    const base = this._num(doc.base ?? doc.importe_base ?? doc.subtotal
+      ?? extra.base ?? extra.importe_base ?? extra.subtotal);
+    // La cuota puede venir dada (iva_importe) o derivarse de base × iva_pct. Nunca se inventa:
+    // sin cuota y sin tipo NO hay cuota (null), y el cuadre queda ABIERTO.
+    const cuotaDirecta = this._num(doc.cuota ?? doc.impuestos ?? doc.iva ?? doc.cuota_iva
+      ?? extra.cuota ?? extra.iva_importe ?? extra.cuota_iva);
+    const pct = this._num(doc.iva_pct ?? extra.iva_pct);
+    const cuota = cuotaDirecta !== null
+      ? cuotaDirecta
+      : (base !== null && pct !== null ? this._round(base * pct / 100, 2) : null);
+    const total = this._num(doc.total ?? doc.importe_total ?? doc.importe
+      ?? extra.total ?? extra.importe_total);
     return { base, cuota, total };
   }
 
+  // Numero tolerante al formato del documento (OCR espanol): '69,96' → 69.96, '1.234,56' → 1234.56,
+  // '1.234' → 1234, '€ 12,30' → 12.3. Lo que no es numero sigue siendo null (un hueco no es un cero).
   _num(v) {
     if (v === undefined || v === null || v === '') return null;
-    const n = Number(v);
+    if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+    let s = String(v).trim().replace(/[\s€]/g, '').replace(/[^\d.,-]/g, '');
+    if (!s) return null;
+    if (s.includes(',')) {
+      s = s.replace(/\./g, '').replace(',', '.');
+    } else {
+      const partes = s.split('.');
+      if (partes.length > 2) s = partes.join('');
+      else if (partes.length === 2 && partes[1].length === 3) s = partes.join('');
+    }
+    const n = Number(s);
     return Number.isFinite(n) ? n : null;
   }
 

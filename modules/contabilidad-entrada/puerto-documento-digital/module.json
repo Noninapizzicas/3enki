@@ -1,5 +1,5 @@
 {
-  "_doc": "Manifest de entrada/puerto-documento-digital — PUENTE STATELESS (A5, hoja del plan). Recepcion DIGITAL declarable: el puente de la frontera hacia los canales que ya entregan un documento digital a un pipeline (Telegram push / Gmail pull). ADAPTA el strategy-pattern REAL de `facturacion/fuentes` (adapta su contrato: `factura.entrada` → el contrato contable `contabilidad.*`), NO lo reescribe. En su lugar, el `_fuentes_declaradas` de la recibida declara las fuentes del sitio (su adaptador lo pone el sitio: aqui CERO canales cableados). Recibe por RPC ORDEN (panel): declara la fuente y ENCADENA la recepcion por EVENTO a normalizador-hecho.entrar.request (A2, normaliza el hecho) y extraccion-dato.juzgar.request (A4.1, lo vuelve dato). Al RECIBIR publica el HECHO contabilidad.documento_recibido (R2: ESCRIBE estado de dominio → su hecho), que escucha captura-documento (A3, este mismo grupo). PUENTE STATELESS: sin PosPersistencia. R3: NO declara escuchas de dominio (el plan tampoco las declara: -). Publica puerto-documento-digital.recibir.response/.failed y contabilidad.documento_recibido.",
+  "_doc": "Manifest de entrada/puerto-documento-digital — PUENTE STATELESS (A5, hoja del plan). Recepcion DIGITAL declarable: el puente de la frontera hacia los canales que ya entregan un documento digital (Telegram push / Gmail pull / carpeta). ADAPTA el strategy-pattern REAL de `facturacion/fuentes` (`factura.entrada` → `contabilidad.*`), NO lo reescribe: CERO canales cableados aqui. Recibe por RPC ORDEN (panel): declara la fuente y ENCADENA la recepcion por EVENTO a normalizador-hecho.entrar.request (A2) y, segun la forma del documento, a lector-documento.leer.request (documento FISICO: hay que leerlo primero) o a extraccion-dato.juzgar.request (documento YA TEXTUAL). Al RECIBIR publica el HECHO contabilidad.documento_recibido (R2: ESCRIBE estado de dominio → su hecho), que escucha captura-documento (A3). PUENTE STATELESS: sin PosPersistencia. Publica puerto-documento-digital.recibir.response/.failed, contabilidad.documento_recibido y lector-documento.leer.request.",
   "name": "puerto-documento-digital",
   "version": "0.1.0",
   "description": "Puente (A5): recepcion digital declarable. Adapta el strategy-pattern de facturacion/fuentes; encadena el documento y publica contabilidad.documento_recibido.",
@@ -8,7 +8,7 @@
     {
       "event": "puerto-documento-digital.recibir.request",
       "handler": "onRecibirRequest",
-      "description": "RPC puente (ORDEN, panel): {project_id, fuente, documento{...}, formato?, metadatos?} → {project_id, fuente, recibido, documento, encadenado_a, abierto}. Recepcion digital declarable; encadena a normalizador-hecho.entrar.request y extraccion-dato.juzgar.request. Publica el HECHO contabilidad.documento_recibido. Responde por puerto-documento-digital.recibir.response; falta project_id/documento → puerto-documento-digital.recibir.failed."
+      "description": "RPC puente (ORDEN, panel): {project_id, fuente, documento{...}, formato?, metadatos?} → {project_id, fuente, recibido, documento, encadenado_a, abierto}. Recepcion digital declarable; encadena a normalizador-hecho.entrar.request y, si el documento es fisico, a lector-documento.leer.request (si ya trae texto, a extraccion-dato.juzgar.request). Publica el HECHO contabilidad.documento_recibido. Responde por puerto-documento-digital.recibir.response; falta project_id/documento o fuente no declarada → puerto-documento-digital.recibir.failed."
     }
   ],
   "publishes": [
@@ -23,12 +23,25 @@
     {
       "event": "puerto-documento-digital.recibir.failed",
       "description": "Par de fallo determinista: falta project_id, documento, o la fuente no esta declarada → {status, code, message}. Cierra el circulo de recibir.request."
+    },
+    {
+      "event": "lector-documento.leer.request",
+      "description": "Se encadena SOLO si el documento recibido es FISICO (trae path/file_path y no trae texto): hay que convertirlo en texto antes de extraer nada. Consumido por lector-documento (A-lector)."
     }
   ],
   "tools": [
-    { "name": "puerto-documento-digital.recibir", "description": "Recibe (ORDEN) un documento digital de una fuente declarada y lo encadena a la entrada." }
+    {
+      "name": "puerto-documento-digital.recibir",
+      "description": "Recibe (ORDEN) un documento digital de una fuente declarada y lo encadena a la entrada."
+    }
   ],
   "ui_handlers": [
-    { "domain": "contabilidad", "action": "puerto-documento-digital.recibir", "handler": "onRecibirRequest", "type": "system_panel", "zone": "lateral_derecha" }
+    {
+      "domain": "contabilidad",
+      "action": "puerto-documento-digital.recibir",
+      "handler": "onRecibirRequest",
+      "type": "system_panel",
+      "zone": "lateral_derecha"
+    }
   ]
 }

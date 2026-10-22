@@ -23,10 +23,17 @@
     {
       "event": "encolado-excepcion.encolar.request",
       "description": "Subida (REQUEST por EVENTO, SOLO si hay descuadre real): encola el documento que no cuadra en la cola de lo dudoso (A8.1). ControlCuadreDocumento controla; encolado-excepcion encola."
+    },
+    {
+      "event": "hecho-compra.componer.request",
+      "description": "Se encadena SOLO cuando el cuadre es TRUE (cifras declaradas y base+cuota==total): el documento ya es un hecho contable y hay que componer la partida doble. Con descuadre va a la cola; con dato ausente no se encadena (no se asienta lo no verificado). Consumido por hecho-compra."
     }
   ],
   "tools": [
-    { "name": "control-cuadre-documento.cuadra", "description": "Comprueba (PREGUNTA) el cuadre de un documento (base+cuota==total); si no cuadra lo lleva a la cola." }
+    {
+      "name": "control-cuadre-documento.cuadra",
+      "description": "Comprueba (PREGUNTA) el cuadre de un documento (base+cuota==total); si no cuadra lo lleva a la cola."
+    }
   ],
   "ui_handlers": []
 }

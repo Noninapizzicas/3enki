@@ -145,6 +145,16 @@ Salida 200:
 
 ## C · `ingesta-documental` — CANALES → puerto digital
 
+**El módulo NO se monta por proyecto.** El proyecto se resuelve solo, en este orden:
+1. el `project_id` de quien invoca (el panel del proyecto pasa el suyo);
+2. el CANAL ya trae su dueño: `telegram.bridge.listar.request` → vínculo `botName → project_id`
+   (el registro real del bridge, no una copia en config que se queda vieja);
+3. vínculo `cuenta de correo → project_id` (`config.vinculos_email`, una cuenta es de un negocio);
+4. si el core tiene UN solo proyecto activo (`project.list.request`), ese.
+Con **varios** proyectos activos y sin vínculo → `400 PROYECTO_NO_RESUELTO` con `abierto.proyecto`:
+ambiguo declarado, nunca repartido al azar. Dar de alta un canal = dar su credencial (bot token /
+cuenta de correo), no configurar el flujo.
+
 **Ops** (ORDEN → sí lleva `ui_handlers`):
 - `barrer` — barre una carpeta declarada y entrega lo nuevo.
 - `entregar` — entrega un documento concreto que ya está en el storage.
@@ -256,8 +266,10 @@ Salida 200:
   (A8.1) con `{project_id, rol:'ENCOLADO_EXCEPCION', clave:'compra:<nif>:<numero>', motivo, payload}`.
 - Errores → `.failed`.
 
-Config: `cuenta_gasto_default` (por defecto `null`: NO se inventa), `cuenta_iva_soportado:'472'`,
-`cuenta_proveedores:'400'`, `timeout_regla_ms:6000`.
+Config (POLÍTICA DEL VERTICAL, no configuración del dueño): `cuenta_gasto_default:'629'`
+(compras de otros servicios) para que la entrada funcione SIN configurar nada; `cuenta_iva_soportado:'472'`,
+`cuenta_proveedores:'400'`, `timeout_regla_ms:6000`. Las reglas por proveedor (`regla-contrapartida`)
+afinan esa cuenta cuando existen; cambiar la política es UN valor del manifest, no un montaje por proyecto.
 
 ## Cableado (lo hace el padre, NO la tarea)
 

@@ -159,12 +159,15 @@ const test = (name, fn) => tests.push({ name, fn });
 // ══════════════════════════════════════════════════════════════════════
 // barrer
 // ══════════════════════════════════════════════════════════════════════
-test('barrer sin project_id → 400 INVALID_INPUT y .failed publicado', async () => {
+test('barrer sin project_id resoluble → 400 PROYECTO_NO_RESUELTO y .failed', async () => {
   const { modulo, bus } = nuevo();
   const res = await modulo.onBarrerRequest({ data: { request_id: 'r-400' } });
   assert.strictEqual(res.status, 400);
-  assert.strictEqual(res.error.code, 'INVALID_INPUT');
-  assert.ok(res.error.details.field === 'project_id', 'declara el campo que falta');
+  // Ya no es "falta un campo": es que el proyecto NO SE PUDO RESOLVER (ni panel, ni canal,
+  // ni proyecto unico activo). Se declara con su propio codigo, no se adivina.
+  assert.strictEqual(res.error.code, 'PROYECTO_NO_RESUELTO');
+  assert.ok(res.error.details && res.error.details.abierto && res.error.details.abierto.proyecto,
+    'declara por que no se resolvio');
   assert.strictEqual(bus.eventos('ingesta-documental.barrer.failed').length, 1, 'publica el par de fallo');
   assert.strictEqual(bus.eventos(EVENTO_PUERTO).length, 0, 'no entrega nada');
 });

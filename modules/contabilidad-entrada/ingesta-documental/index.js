@@ -165,12 +165,65 @@ class IngestaDocumental extends ModuloHibridoReflejo {
     return this._desdeTelegram(e, 'document');
   }
 
+
+  // ══════════════════════════════════════════════════════════════════════
+  // RESOLUCIÓN DEL PROYECTO — el módulo NO se "monta" por proyecto.
+  // Ley del sistema, en este orden (dato declarado = desconocido, no se adivina):
+  //   1. el proyecto que INVOCA (el panel del proyecto pasa el suyo);
+  //   2. el CANAL ya trae su dueño: vínculo bot→proyecto del telegram-bridge
+  //      (su registro real, no una copia de config que se queda vieja);
+  //   3. vínculo cuenta-de-correo→proyecto (una cuenta es de un negocio);
+  //   4. si el core tiene UN SOLO proyecto activo, ese; si hay varios → AMBIGUO
+  //      y se declara (jamás se reparte el papel a un proyecto al azar).
+  // ══════════════════════════════════════════════════════════════════════
+  async _resolverProyecto(input = {}) {
+    const directo = input.project_id || this.project_id;
+    if (directo) return { project_id: String(directo), origen: 'invocacion', ambiguo: 0 };
+
+    if (input.botName) {
+      const declarado = (this.config.vinculos || {})[input.botName];
+      if (declarado) return { project_id: String(declarado), origen: 'config_bot', ambiguo: 0 };
+      const lista = await this._rpc('telegram.bridge.listar.request', {}, { timeout_ms: this._timeoutProyecto() });
+      const vinculos = (lista && ((lista.data && lista.data.vinculos) || lista.vinculos)) || [];
+      const v = vinculos.find((x) => x && x.botName === input.botName && x.project_id);
+      if (v) return { project_id: String(v.project_id), origen: 'telegram_bridge', ambiguo: 0 };
+    }
+
+    if (input.cuentaEmail) {
+      const declarado = (this.config.vinculos_email || {})[input.cuentaEmail];
+      if (declarado) return { project_id: String(declarado), origen: 'config_email', ambiguo: 0 };
+    }
+
+    const pl = await this._rpc('project.list.request', {}, { timeout_ms: this._timeoutProyecto() });
+    const activos = (pl && ((pl.data && pl.data.active_project_ids) || pl.active_project_ids)) || [];
+    if (activos.length === 1) return { project_id: String(activos[0]), origen: 'unico_activo', ambiguo: 0 };
+    return { project_id: null, origen: null, ambiguo: activos.length };
+  }
+
+  _timeoutProyecto() {
+    const n = Number(this.config.timeout_proyecto_ms);
+    return Number.isFinite(n) && n > 0 ? n : 8000;
+  }
+
+  // Error homogéneo: no se pudo resolver el proyecto y NO se inventa.
+  _proyectoNoResuelto(res, canal) {
+    return this._errorResponse(400, 'PROYECTO_NO_RESUELTO',
+      res.ambiguo > 1
+        ? `hay ${res.ambiguo} proyectos activos: el canal '${canal}' necesita saber a cual pertenece (pasalo en project_id o declara el vinculo)`
+        : `no se pudo resolver el proyecto del canal '${canal}' (sin project_id, sin vinculo de canal y sin proyecto unico activo)`,
+      {
+        canal,
+        abierto: { proyecto: res.ambiguo > 1 ? 'varios proyectos activos: ambiguo' : 'sin vinculo de canal' }
+      });
+  }
+
   // ══════════════════════════════════════════════════════════════════════
   // op `barrer` — barre una carpeta del storage y entrega lo NUEVO
   // ══════════════════════════════════════════════════════════════════════
   async _barrer(input = {}) {
-    const pid = input.project_id || this.project_id;
-    if (!pid) return this._invalid('project_id');
+    const resProy = await this._resolverProyecto(input);
+    if (!resProy.project_id) return this._proyectoNoResuelto(resProy, 'carpeta');
+    const pid = resProy.project_id;
 
     const carpeta = normalizarCarpeta(input.carpeta || this.config.carpeta_default);
     const listado = await this._rpc('fs.list.request', { project_id: pid, path: carpeta });
@@ -246,8 +299,9 @@ class IngestaDocumental extends ModuloHibridoReflejo {
   // op `entregar` — entrega UN documento concreto que ya está en el storage
   // ══════════════════════════════════════════════════════════════════════
   async _entregar(input = {}) {
-    const pid = input.project_id || this.project_id;
-    if (!pid) return this._invalid('project_id');
+    const resProy = await this._resolverProyecto(input);
+    if (!resProy.project_id) return this._proyectoNoResuelto(resProy, 'entregar');
+    const pid = resProy.project_id;
 
     const ruta = typeof input.path === 'string' ? input.path.trim() : '';
     if (!ruta) return this._invalid('path');
@@ -308,11 +362,13 @@ class IngestaDocumental extends ModuloHibridoReflejo {
   // el documento es el ADJUNTO; el email solo es el transporte.
   // ══════════════════════════════════════════════════════════════════════
   async _barrerEmail(input = {}) {
-    const pid = input.project_id || this.project_id;
-    if (!pid) return this._invalid('project_id');
-
     const cuenta = input.cuenta != null ? String(input.cuenta)
       : (this.config.cuenta_email != null ? String(this.config.cuenta_email) : null);
+
+    // El proyecto se resuelve por el canal (cuenta de correo → proyecto) o por el panel.
+    const resProy = await this._resolverProyecto({ ...input, cuentaEmail: cuenta });
+    if (!resProy.project_id) return this._proyectoNoResuelto(resProy, 'gmail');
+    const pid = resProy.project_id;
     const query = input.query != null ? String(input.query)
       : (this.config.query_email || 'has:attachment -in:trash');
     const maxResults = Number(input.maxResults || this.config.max_email || 20);
@@ -434,17 +490,21 @@ class IngestaDocumental extends ModuloHibridoReflejo {
         return null;
       }
 
-      // El proyecto se RESUELVE por vínculo declarado. Sin vínculo no hay proyecto:
-      // se ignora y se declara (jamás se adivina a quién pertenece el papel).
-      const vinculos = this.config.vinculos || {};
-      const pid = vinculos[botName] || vinculos[d.botName];
+      // El proyecto lo trae el CANAL: el telegram-bridge ya tiene el vínculo bot→proyecto
+      // (registro real). No hay que declararlo dos veces ni "montar" nada aquí.
+      const resProy = await this._resolverProyecto({ botName });
+      const pid = resProy.project_id;
       if (!pid) {
-        this.logger?.warn(`${this.name}.telegram.sin_vinculo`, {
+        this.logger?.warn(`${this.name}.telegram.sin_proyecto`, {
           module: this.name,
           clase,
           botName,
           messageId: d.messageId,
-          abierto: { proyecto: 'bot sin vinculo declarado: no se adivina el proyecto' }
+          origen: resProy.origen,
+          ambiguo: resProy.ambiguo,
+          abierto: { proyecto: resProy.ambiguo > 1
+            ? 'varios proyectos activos y el bot no esta vinculado'
+            : 'bot sin vinculo en telegram-bridge: no se adivina el proyecto' }
         });
         return null;
       }

@@ -14,6 +14,16 @@ tags: [enki, modulo, puente, stateless, contabilidad, entrada, canales, telegram
 
 # ingesta-documental — canales → puerto digital
 
+## Resolución del proyecto (el módulo NO se monta por proyecto)
+
+1. `project_id` de quien invoca (el panel del proyecto pasa el suyo).
+2. **El canal ya trae su dueño**: `telegram.bridge.listar.request` → `botName → project_id`
+   (registro real del bridge). No hay que declarar el vínculo dos veces.
+3. `config.vinculos_email {cuenta: project_id}` (una cuenta de correo es de un negocio).
+4. Si el core tiene UN solo proyecto activo, ese.
+Con varios activos y sin vínculo → **400 `PROYECTO_NO_RESUELTO`** (`abierto.proyecto`): ambiguo
+declarado, nunca al azar. Dar de alta un canal = dar su credencial, no configurar el flujo.
+
 ## Qué hace
 
 Es la puerta de los CANALES. Entrega documentos, no los interpreta. Cada entrega es un
@@ -37,8 +47,8 @@ asiento porque la clave natural del hecho lo impide.
 Escucha `telegram.photo.received` y `telegram.document.received` (payload real: `{botName, chatId,
 messageId, fileId, fileSize, mimeType, fileName?, caption}`).
 
-1. Resuelve el proyecto por `config.vinculos { "<botName>": "<project_id UUID>" }`.
-   **Sin vínculo NO se entrega y NO se adivina el proyecto** (se loguea y se ignora).
+- Resuelve el proyecto por el **bridge** (`telegram.bridge.listar`), con `config.vinculos` solo como
+   atajo opcional. **Sin vínculo NO se entrega y NO se adivina el proyecto** (se loguea y se ignora).
 2. Descarga con `telegram.get_file.request {botName, fileId, download:true, destPath:<os.tmpdir()>}`.
 3. Sube al storage con `fs.write.request {project_id, path:'inbox/<messageId>-<fileId>.<ext>',
    content:<base64>, encoding:'base64'}`, borra el tmp y entrega.

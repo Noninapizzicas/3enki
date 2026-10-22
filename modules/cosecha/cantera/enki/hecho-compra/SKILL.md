@@ -48,14 +48,15 @@ cuenta_gasto_origen, cuadra, motivo, abierto}`.
 
 | Clave | Default | Qué hace |
 |---|---|---|
-| `cuenta_gasto_default` | `null` | cuenta de gasto si no hay regla; `null` = todo va a revisión (no se inventa) |
+| `cuenta_gasto_default` | `'629'` | cuenta de gasto si no hay regla. Es **política del vertical** (no configuración del dueño): así la entrada asienta sin montar nada. Las reglas por proveedor la afinan. |
 | `cuenta_iva_soportado` | `'472'` | cuenta de IVA soportado |
 | `cuenta_proveedores` | `'400'` | cuenta de proveedores |
 
 ## Pitfalls
 
-- **Sin `cuenta_gasto_default` ni regla, NADA se asienta**: es el comportamiento correcto, no un bug.
-  Declarar la cuenta por defecto del negocio es decisión del dueño.
+- **La cuenta por defecto del vertical es `629`**: no se le pide al dueño configurarla. Si un negocio
+  compra mercancía para revender, se cambia ese valor en el manifest (600) o se declara regla por
+  proveedor; el flujo no se "monta" por proyecto.
 - **La `clase` tiene que llegar propagada**: la pone el clasificador y la reenvía `extraccion-dato`
   (campo `clase`) hasta el cuadre. Si llega `null`, este módulo solo la acepta si viene declarada
   (`input.clase` → `documento.clase` → `documento.tipo` → `extraido.clase`); nunca la deduce del texto.

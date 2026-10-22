@@ -410,8 +410,8 @@ if (!CARTA_VIVA) {
   caso('dato vivo: El Fardel lleva los cinco bocadillos de la carta anterior, con nombre, precio y familia', () => {
     const carta = JSON.parse(fs.readFileSync(CARTA_VIVA, 'utf8'));
     const fardel = (carta.productos || []).filter(p => p.categoria_id === 'el_fardel');
-    assert.ok((carta.categorias || []).some(c => c.id === 'el_fardel' && c.nombre === 'El Fardel' && c.orden === 4),
-      'categoría El Fardel declarada, en su sitio (después de La Flota)');
+    assert.ok((carta.categorias || []).some(c => c.id === 'el_fardel' && c.nombre === 'El Fardel' && c.orden === 3),
+      'categoría El Fardel declarada, en su sitio (después de las clásicas)');
 
     assert.deepStrictEqual(fardel.map(p => p.nombre),
       ['Barbanegra', 'Barbarroja', 'Anne Bonny',
@@ -484,6 +484,22 @@ if (!CARTA_VIVA) {
     const ids = fardel.map(p => p.id);
     assert.strictEqual(new Set(ids).size, ids.length, 'ningún bocadillo de El Fardel duplicado');
     assert.strictEqual(fardel.length, 5, 'los cinco de la carta anterior, ni uno menos');
+  });
+
+  // Orden de las SECCIONES de la carta (2026-10-22). No es alfabético ni histórico: es el
+  // orden comercial que él aprobó — el héroe y su ancla de precio arriba (La Flota: 9,95–13 €),
+  // los entrantes de upselling justo detrás del ancla (Las Calas), el volumen de la casa en
+  // medio (Pizzas Puerto Seguro), la alternativa de ticket bajo después (El Fardel) y la bebida
+  // de margen al cierre, que es la última posición que se recuerda. La puerta: reordenar una
+  // sección o dejar un hueco en la numeración canta.
+  caso('dato vivo: el orden de las secciones es el dictado por comercial', () => {
+    const carta = JSON.parse(fs.readFileSync(CARTA_VIVA, 'utf8'));
+    const secciones = (carta.categorias || [])
+      .slice().sort((a, b) => a.orden - b.orden)
+      .map(c => `${c.orden}:${c.nombre}`);
+    assert.deepStrictEqual(secciones,
+      ['0:La Flota', '1:Las Calas', '2:Pizzas Puerto Seguro', '3:El Fardel', '4:Bebidas'],
+      'orden aprobado: héroe → entrantes → clásicas → bocadillos → bebidas, sin huecos');
   });
 }
 

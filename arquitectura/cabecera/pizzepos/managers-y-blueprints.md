@@ -5,7 +5,7 @@ resumen: Managers de dominio pizzepos (cuentas, productos, categorías, cobros, 
 fuentes:
   - modules/pizzepos/**
   - blueprints/**
-verificado: 2026-10-21
+verificado: 2026-10-22
 ---
 
 # Módulos Pizzepos y Blueprints
@@ -1108,6 +1108,13 @@ CLASE CartaDigitalModule EXTIENDE BaseModule {  // PROYECTOR, no manager-con-sto
   METODOS {
     // PROYECCIÓN pura (proyeccion.js): entra dato, sale dato. La misma FORMA para los
     // dos consumidores: el reflejo (bus) y el export-cli (disco).
+    //
+    // ORDEN DEL SCROLL (contrato): `productos[]` es lo que pinta el grid "Todas" de la PWA,
+    // así que su orden ES el orden de lectura de la carta. La proyección los agrupa en TRAMOS
+    // CONTIGUOS siguiendo `categorias[].orden` — el mismo orden que las pestañas de arriba —
+    // conservando dentro de cada tramo el orden culinario de la carta. Un producto de sección
+    // no publicada va al final sin romper los tramos. Consecuencia: el orden del scroll deja de
+    // depender de cómo esté guardada la lista (dar de alta un producto ya no lo manda al final).
     _proyectarPublica(project_id):
       [carta, marca, contenido, config, calendario] ← Promise.all(bebe_de_*)
       SI !carta: RETORNA 404 (canal sin carta — revisa tarifas)

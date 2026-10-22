@@ -9,7 +9,7 @@ fuentes:
   - blueprints/project-types/www.json
   - deployment/caddy/**
   - deployment/reconcile.js
-verificado: 2026-10-16
+verificado: 2026-10-22
 ---
 
 # SERVIR WWW POR PROYECTO — árbol libre en /<ns>/<slug>/ (Caddy estático + symlink)

@@ -278,7 +278,7 @@ if (!CARTA_VIVA) {
     assert.strictEqual(jamon.ancla, 'pizzas_pizza_de_jamon_york');
     assert.deepStrictEqual(jamon.miembros, [
       'pizzas_indie', 'pizzas_jazz', 'pizzas_k_pop', 'pizzas_merengue', 'pizzas_punk',
-      'pizzas_swing', 'pizzas_vallenato'
+      'pizzas_swing', 'pizzas_vallenato', 'la_flota_mahon'
     ]);
 
     const bacon = fam('pizzas_pizza_de_bacon');
@@ -336,21 +336,29 @@ if (!CARTA_VIVA) {
     }
   });
 
-  // La Flota: las pizzas de AUTOR. El dueño MANDÓ vaciarla (2026-10-22): se sacan las 5 que
-  // se habían traído de la carta anterior —Port Royal, Nassau, Cartagena de Indias,
-  // Île Sainte-Marie, Mahón— porque las dicta él. La CATEGORÍA se queda declarada, esperando.
-  caso('dato vivo: La Flota declarada y VACÍA (el dueño dicta las pizzas de autor)', () => {
+  // La Flota: las pizzas de AUTOR. El dueño MANDÓ vaciarla (2026-10-22) porque las dicta él,
+  // y al día siguiente dictó la primera: MAHÓN. Este caso fija lo que vino a decir —el ORDEN
+  // de los ingredientes— y que las otras cuatro que se sacaron no vuelven por su cuenta.
+  caso('dato vivo: La Flota lleva la Mahón dictada por el dueño, con los ingredientes en SU orden', () => {
     const carta = JSON.parse(fs.readFileSync(CARTA_VIVA, 'utf8'));
     const flota = (carta.productos || []).filter(p => p.categoria_id === 'la_flota');
-    assert.deepStrictEqual(flota.map(p => p.nombre), [],
-      'ninguna pizza de autor dentro: se quitaron las 5 traídas, las dicta el dueño');
+    assert.deepStrictEqual(flota.map(p => p.nombre), ['Mahón'],
+      'La Flota lleva la pizza de autor que dictó el dueño, y sólo esa');
     assert.ok((carta.categorias || []).some(c => c.id === 'la_flota' && c.nombre === 'La Flota'),
       'categoría La Flota se queda declarada');
 
-    // Y no queda rastro de las 5 en ningún sitio: ni producto vivo ni miembro de familia.
-    const ids = ['la_flota_port_royal', 'la_flota_nassau', 'la_flota_cartagena_de_indias',
-                 'la_flota_ile_sainte_marie', 'la_flota_mahon'];
-    for (const id of ids) {
+    const mahon = flota[0];
+    assert.strictEqual(mahon.id, 'la_flota_mahon');
+    assert.strictEqual(mahon.precio, 10.5, 'precio de su carta anterior (the-pirate v1/v2 y Glovo)');
+    assert.deepStrictEqual((mahon.ingredientes || []).map(i => i.id),
+      ['salsa_the_pirate', 'mozzarella', 'mezcla_de_quesos', 'jamon_de_york'],
+      'los ingredientes en el orden DICTADO: salsa de la casa, mozzarella, mezcla, jamón');
+    for (const i of mahon.ingredientes) assert.ok(i.emoji, `Mahón: ${i.nombre} sin emoji`);
+
+    // Las otras cuatro que se sacaron siguen fuera: ni producto vivo ni miembro de familia.
+    const fuera = ['la_flota_port_royal', 'la_flota_nassau', 'la_flota_cartagena_de_indias',
+                   'la_flota_ile_sainte_marie'];
+    for (const id of fuera) {
       assert.ok(!(carta.productos || []).some(p => p.id === id), `${id} fuera de la carta`);
       for (const p of carta.productos || []) {
         const f = p.familia;

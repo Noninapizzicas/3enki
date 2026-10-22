@@ -343,7 +343,7 @@ if (!CARTA_VIVA) {
     const carta = JSON.parse(fs.readFileSync(CARTA_VIVA, 'utf8'));
     const flota = (carta.productos || []).filter(p => p.categoria_id === 'la_flota');
     assert.deepStrictEqual(flota.map(p => p.nombre),
-      ['Mahón', 'Île Sainte-Marie', 'Cartagena de Indias', 'Nassau'],
+      ['Mahón', 'Île Sainte-Marie', 'Cartagena de Indias', 'Nassau', 'Port Royal'],
       'La Flota lleva las pizzas de autor que dictó el dueño, y sólo esas');
     assert.ok((carta.categorias || []).some(c => c.id === 'la_flota' && c.nombre === 'La Flota'),
       'categoría La Flota se queda declarada');
@@ -380,17 +380,20 @@ if (!CARTA_VIVA) {
       'los ingredientes en el orden DICTADO: gorgonzola, mozzarella, nata, uva, bacon y sésamo');
     for (const i of nassau.ingredientes) assert.ok(i.emoji, `Nassau: ${i.nombre} sin emoji`);
 
-    // Las que se sacaron y aún no ha dictado siguen fuera: ni producto vivo ni miembro de familia.
-    const fuera = ['la_flota_port_royal'];
-    for (const id of fuera) {
-      assert.ok(!(carta.productos || []).some(p => p.id === id), `${id} fuera de la carta`);
-      for (const p of carta.productos || []) {
-        const f = p.familia;
-        if (f && Array.isArray(f.miembros)) {
-          assert.ok(!f.miembros.includes(id), `${id} no puede seguir en los miembros de ${f.ingrediente_id}`);
-        }
-      }
-    }
+    // Quinta y última de la flota (dictada 2026-10-22). Precio REAL de su carta anterior:
+    // 9,95 € — rectificada de 17,50 € por escandallo, no los 13,50 € que dije de memoria.
+    const portRoyal = flota[4];
+    assert.strictEqual(portRoyal.id, 'la_flota_port_royal');
+    assert.strictEqual(portRoyal.precio, 9.95, 'precio de su carta anterior (the-pirate v1/v2 y Glovo)');
+    assert.deepStrictEqual((portRoyal.ingredientes || []).map(i => i.id),
+      ['cebolla', 'champinon', 'mozzarella', 'tomates_secos', 'salsa_de_ajo_trufa', 'anchoas'],
+      'los ingredientes en el orden DICTADO: cebolla, champiñones, mozzarella, tomate seco, salsa de ajo trufa y anchoas en frío');
+    for (const i of portRoyal.ingredientes) assert.ok(i.emoji, `Port Royal: ${i.nombre} sin emoji`);
+
+    // Ninguna de las cinco que se sacaron al vaciar La Flota queda viva fuera de su sitio
+    // (el nombre y el orden de arriba son la puerta: ni duplicados ni sobrantes).
+    const ids = flota.map(p => p.id);
+    assert.strictEqual(new Set(ids).size, ids.length, 'ninguna pizza de La Flota está duplicada');
   });
 }
 

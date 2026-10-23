@@ -71,9 +71,20 @@ class ReglaContrapartida extends ModuloHibridoReflejo {
     return this._persist.restaurar(d.project_id);
   }
 
+  // ── Parcela del proyecto: hidratada del DISCO si aun no esta en memoria ──
+  // `_obtenerOCrear` crea una parcela VACIA: tras un reinicio, `aplicar` decia "no hay regla
+  // operativa" aunque el fichero la tuviera, y `declarar` escribia encima perdiendo las demas.
+  // Solo se restaura si NO existe en memoria (si existe puede tener cambios sin flush).
+  async _asegurarParcela(pid) {
+    const id = pid || this.project_id;
+    if (id && !this._parcelas.has(id)) await this._persist.restaurar(id);
+    return id;
+  }
+
   // ── handler RPC PREGUNTA (sin ui_handler: su cara es el bus) ──
   onAplicarRequest(e) {
     return this._atender(e, 'aplicar', 'regla-contrapartida.aplicar.response', async (d) => {
+      await this._asegurarParcela(d && d.project_id);
       const res = this._aplicar(d);
       if (res.status !== 200) this.eventBus?.publish('regla-contrapartida.aplicar.failed', res);
       return res;
@@ -82,6 +93,7 @@ class ReglaContrapartida extends ModuloHibridoReflejo {
 
   onProponerRequest(e) {
     return this._atender(e, 'proponer', 'regla-contrapartida.proponer.response', async (d) => {
+      await this._asegurarParcela(d && d.project_id);
       const res = this._proponer(d);
       if (res.status !== 200) this.eventBus?.publish('regla-contrapartida.proponer.failed', res);
       return res;
@@ -91,6 +103,7 @@ class ReglaContrapartida extends ModuloHibridoReflejo {
   // ── handler RPC ORDEN (ui_handler: el humano declara la regla) ──
   onDeclararRequest(e) {
     return this._atender(e, 'declarar', 'regla-contrapartida.declarar.response', async (d) => {
+      await this._asegurarParcela(d && d.project_id);
       const res = this._declarar(d);
       if (res.status === 200) {
         // R2 · si ESCRIBE, anuncia el HECHO: una regla de contrapartida quedo declarada.

@@ -383,7 +383,11 @@ class HechoCompra extends ModuloHibridoReflejo {
     // Sin respuesta / sin regla → null. `contrapartida` es el campo real de regla-contrapartida;
     // se acepta `cuenta` por si el contrato se cita con ese nombre.
     if (resp && (resp.status === 200 || resp.status === undefined)) {
-      const deRegla = this._texto(resp.contrapartida) || this._texto(resp.cuenta);
+      // La response del custodio viaja como { request_id, status, data:{ contrapartida, ... } }:
+      // el cuerpo UTIL esta en `.data`. Leerlo solo en plano hacia que la regla nunca se viera
+      // aunque el custodio respondiera 200 con su cuenta.
+      const cuerpo = (resp.data && typeof resp.data === 'object') ? resp.data : resp;
+      const deRegla = this._texto(cuerpo.contrapartida) || this._texto(cuerpo.cuenta);
       if (deRegla) return { cuenta: deRegla, origen: 'regla' };
     }
 

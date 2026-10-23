@@ -193,7 +193,8 @@ test('la regla de contrapartida resuelve la cuenta (segunda vía; contexto strin
   let pedido = null;
   m._rpc = async (evento, payload) => {
     pedido = { evento, payload };
-    return { status: 200, contrapartida: '600', regla: { clave: 'panaderia' } };
+    // Forma REAL de la response del custodio: { status, data:{ contrapartida, regla } }
+    return { status: 200, data: { contrapartida: '600', regla: { clave: 'panaderia' } } };
   };
   const { res } = await componer(m, { project_id: 'p5', clase: 'factura', extraido: FACTURA });
 
@@ -210,7 +211,7 @@ test('la regla de contrapartida resuelve la cuenta (segunda vía; contexto strin
 test('la regla del proveedor GANA a la config por defecto (629 no tapa el 600 del pan)', async () => {
   const { m } = nuevo();
   m.config.cuenta_gasto_default = '629';   // politica del vertical
-  m._rpc = async () => ({ status: 200, contrapartida: '600', regla: { clave: 'obrador' } });
+  m._rpc = async () => ({ status: 200, data: { contrapartida: '600', regla: { clave: 'obrador' } } });
   const { res } = await componer(m, { project_id: 'p6', clase: 'factura', extraido: FACTURA });
 
   assert.strictEqual(res.data.cuenta_gasto, '600');

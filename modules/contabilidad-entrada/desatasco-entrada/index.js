@@ -92,6 +92,20 @@ class DesatascoEntrada extends ModuloHibridoReflejo {
         this.eventBus?.publish('regla-contrapartida.aplicar.request', { ...base, contexto: data.contrapartida });
       }
     }
+
+    // CERRAR la excepcion: descartar/resolver SIN cerrar la dejaba pendiente para siempre y el
+    // panel mostraba trabajo ya hecho. Append-only: se MARCA cerrada con su causa, no se borra.
+    if (data.accion === 'resolver' || data.accion === 'descartar') {
+      this.eventBus?.publish('encolado-excepcion.cerrar.request', {
+        ...base,
+        rol: 'ENCOLADO_EXCEPCION',
+        excepcion_id: data.excepcion_id || null,
+        clave: data.clave || null,
+        resultado: data.accion === 'resolver' ? 'RESUELTA' : 'DESCARTADA',
+        motivo: data.motivo,
+        origen: 'desatasco-entrada'
+      });
+    }
     // TODO desatasco se anota en el historial del proceso (append-only).
     this.eventBus?.publish('historial-proceso-contable.anotar.request', {
       ...base,

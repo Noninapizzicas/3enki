@@ -188,7 +188,7 @@ test('sin cuenta (config null y regla que no responde) → NO asienta y declara 
   assert.strictEqual(eventos(bus, 'encolado-excepcion.encolar.request').length, 1);
 });
 
-test('la regla de contrapartida resuelve la cuenta (tercera vía, declarada como origen regla)', async () => {
+test('la regla de contrapartida resuelve la cuenta (segunda vía; contexto string nif:<NIF>)', async () => {
   const { m, bus } = nuevo();
   let pedido = null;
   m._rpc = async (evento, payload) => {
@@ -201,9 +201,22 @@ test('la regla de contrapartida resuelve la cuenta (tercera vía, declarada como
   assert.strictEqual(res.data.cuenta_gasto, '600');
   assert.strictEqual(res.data.cuenta_gasto_origen, 'regla');
   assert.strictEqual(pedido.evento, 'regla-contrapartida.aplicar.request');
-  assert.strictEqual(pedido.payload.contexto.nif, 'B12345678');
+  assert.strictEqual(pedido.payload.contexto, 'nif:B12345678',
+    'el contexto viaja como STRING canonico: el custodio compara strings exactos');
   assert.strictEqual(res.data.hecho.asiento.lineas[0].cuenta, '600');
   assert.strictEqual(eventos(bus, 'contabilidad.hecho_recibido').length, 1);
+});
+
+test('la regla del proveedor GANA a la config por defecto (629 no tapa el 600 del pan)', async () => {
+  const { m } = nuevo();
+  m.config.cuenta_gasto_default = '629';   // politica del vertical
+  m._rpc = async () => ({ status: 200, contrapartida: '600', regla: { clave: 'obrador' } });
+  const { res } = await componer(m, { project_id: 'p6', clase: 'factura', extraido: FACTURA });
+
+  assert.strictEqual(res.data.cuenta_gasto, '600');
+  assert.strictEqual(res.data.cuenta_gasto_origen, 'regla',
+    'lo especifico del proveedor manda sobre el default del vertical');
+  assert.strictEqual(res.data.hecho.asiento.lineas[0].cuenta, '600');
 });
 
 test('documento que NO cuadra (base+IVA != total) → NO asienta y se encola', async () => {

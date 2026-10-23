@@ -371,22 +371,37 @@ class HechoCompra extends ModuloHibridoReflejo {
     const delInput = this._texto(input.cuenta_gasto);
     if (delInput) return { cuenta: delInput, origen: 'input' };
 
-    // b) la cuenta declarada en la config del módulo (null por defecto: NO se inventa)
-    const deConfig = this._texto(this.config.cuenta_gasto_default);
-    if (deConfig) return { cuenta: deConfig, origen: 'config' };
-
-    // c) la regla de contrapartida vigente (A6.2) por EVENTO, con timeout acotado
-    const resp = await this._rpc('regla-contrapartida.aplicar.request', {
+    // b) la REGLA declarada del proveedor (A6.2) — lo ESPECIFICO gana a la politica general.
+    //    Antes iba DESPUES de la config, así que el default (629) tapaba cualquier regla por
+    //    proveedor y la regla no se usaba NUNCA. Y el contexto viajaba como OBJETO: el custodio
+    //    compara strings exactos (`String(r.contexto) === contexto`) → jamas casaba.
+    const claveRegla = this._claveRegla(contexto);
+    const resp = claveRegla ? await this._rpc('regla-contrapartida.aplicar.request', {
       project_id: input.project_id || this.project_id,
-      contexto
-    }, { timeout_ms: this.config.timeout_regla_ms });
+      contexto: claveRegla
+    }, { timeout_ms: this.config.timeout_regla_ms }) : null;
     // Sin respuesta / sin regla → null. `contrapartida` es el campo real de regla-contrapartida;
     // se acepta `cuenta` por si el contrato se cita con ese nombre.
     if (resp && (resp.status === 200 || resp.status === undefined)) {
       const deRegla = this._texto(resp.contrapartida) || this._texto(resp.cuenta);
       if (deRegla) return { cuenta: deRegla, origen: 'regla' };
     }
+
+    // c) la cuenta declarada en la config del modulo (politica del vertical; null = no se inventa)
+    const deConfig = this._texto(this.config.cuenta_gasto_default);
+    if (deConfig) return { cuenta: deConfig, origen: 'config' };
+
     return { cuenta: null, origen: null };
+  }
+
+  // Clave canonica del contexto para la regla: `nif:<NIF>` (sin puntos ni guiones) o
+  // `proveedor:<nombre>`. Es un STRING: el custodio compara contextos exactos.
+  _claveRegla(contexto = {}) {
+    const nif = this._texto(contexto.nif);
+    if (nif) return `nif:${nif.toUpperCase().replace(/[^A-Z0-9]/g, '')}`;
+    const prov = this._texto(contexto.proveedor);
+    if (prov) return `proveedor:${prov}`;
+    return null;
   }
 
   // ── Clase del documento: SOLO se acepta una clase declarada y RECONOCIDA ──

@@ -52,12 +52,15 @@ const IMPORTES = new Set(['base', 'iva_pct', 'iva_importe', 'total']);
 const OBLIGATORIOS_MINIMOS = ['proveedor', 'nif', 'fecha', 'total'];
 
 // Variable del .env vivo. La clave NUNCA se declara en module.json ni se loguea.
-const NOMBRE_CLAVE = 'DEEPSEEK_API_KEY_GLOBAL';
+// El juicio va por Ollama Cloud (misma puerta que la mente de Hermes) con deepseek-v4.1-flash:
+// una sola cuenta de modelo para todo el sistema y la API directa de DeepSeek no se usa aqui.
+const NOMBRE_CLAVE = 'OLLAMA_CLOUD_API_KEY_GLOBAL';
 const ENV_POR_DEFECTO = '/opt/enki/data/.env';
 
 const CONFIG_POR_DEFECTO = {
-  url: 'https://api.deepseek.com/chat/completions',
-  modelo: 'deepseek-chat',
+  url: 'https://ollama.com/v1/chat/completions',
+  modelo: 'deepseek-v4.1-flash',
+  motor: 'ollama-cloud',
   timeout_ms: 30000,
   // Recorte de seguridad del texto enviado: un documento gigante no debe convertirse en una
   // factura de tokens. Si se recorta, se declara (`abierto.texto_truncado`).
@@ -101,13 +104,15 @@ class ExtractorJuicio extends ModuloHibridoReflejo {
     this._cfg = {
       url: typeof cfg.url === 'string' && cfg.url ? cfg.url : CONFIG_POR_DEFECTO.url,
       modelo: typeof cfg.modelo === 'string' && cfg.modelo ? cfg.modelo : CONFIG_POR_DEFECTO.modelo,
+      motor: typeof cfg.motor === 'string' && cfg.motor ? cfg.motor : CONFIG_POR_DEFECTO.motor,
+      env_var: typeof cfg.env_var === 'string' && cfg.env_var ? cfg.env_var : NOMBRE_CLAVE,
       timeout_ms: Number.isFinite(Number(cfg.timeout_ms)) && Number(cfg.timeout_ms) > 0
         ? Number(cfg.timeout_ms) : CONFIG_POR_DEFECTO.timeout_ms,
       max_texto: Number.isFinite(Number(cfg.max_texto)) && Number(cfg.max_texto) > 0
         ? Number(cfg.max_texto) : CONFIG_POR_DEFECTO.max_texto,
       env_path: typeof cfg.env_path === 'string' && cfg.env_path ? cfg.env_path : ENV_POR_DEFECTO
     };
-    this._apiKey = this._leerClave(this._cfg.env_path);
+    this._apiKey = this._leerClave(this._cfg.env_path, this._cfg.env_var);
     // Se declara SI HAY clave, jamás cuál es.
     this.logger?.info('extractor-juicio.juicio.configurado', {
       module: this.name, version: this.version, modelo: this._cfg.modelo,
@@ -117,7 +122,7 @@ class ExtractorJuicio extends ModuloHibridoReflejo {
     if (!this._apiKey) {
       // Sin clave el juicio NO se puede prestar: se avisa al arrancar, no cuando llega el documento.
       this.logger?.warn('extractor-juicio.clave.ausente', {
-        module: this.name, variable: NOMBRE_CLAVE, env_path: this._cfg.env_path,
+        module: this.name, variable: this._cfg.env_var, env_path: this._cfg.env_path,
         efecto: 'toda peticion de juicio respondera 502 JUICIO_NO_DISPONIBLE'
       });
     }
@@ -176,7 +181,7 @@ class ExtractorJuicio extends ModuloHibridoReflejo {
     // Sin clave NO se llama al proveedor: se degrada y se dice por qué.
     if (!this._apiKey) {
       return this._noDisponible(
-        `no hay ${NOMBRE_CLAVE} en ${this._cfg.env_path}: el juicio no esta disponible ` +
+        `no hay ${this._cfg.env_var} en ${this._cfg.env_path}: el juicio no esta disponible ` +
         '(no se inventa la extraccion)'
       );
     }
@@ -226,7 +231,7 @@ class ExtractorJuicio extends ModuloHibridoReflejo {
         tipo: 'extractor-juicio',
         extraido,
         // Quién juzgó: el motor y el modelo viajan en la respuesta (trazabilidad del dato).
-        motor: 'deepseek',
+        motor: this._cfg.motor,
         modelo: this._cfg.modelo,
         faltantes,
         propuesta,
@@ -575,12 +580,14 @@ class ExtractorJuicio extends ModuloHibridoReflejo {
       { abierto: { juicio: motivo }, ...extra });
   }
 
-  _leerClave(ruta) {
+  _leerClave(ruta, variable = NOMBRE_CLAVE) {
     // La clave vive en el .env VIVO (nunca en el manifest, nunca en un log).
+    // La variable es configurable (`env_var`) para poder cambiar de proveedor sin tocar codigo.
+    const nombre = String(variable || NOMBRE_CLAVE).replace(/[^A-Z0-9_]/gi, '');
     try {
       const crudo = fs.readFileSync(path.resolve(String(ruta)), 'utf-8');
       for (const linea of crudo.split(/\r?\n/)) {
-        const m = linea.match(/^\s*(?:export\s+)?DEEPSEEK_API_KEY_GLOBAL\s*=\s*(.+?)\s*$/);
+        const m = linea.match(new RegExp('^\\s*(?:export\\s+)?' + nombre + '\\s*=\\s*(.+?)\\s*$'));
         if (m && m[1]) {
           const v = m[1].replace(/^["']|["']$/g, '').trim();
           if (v) return v;

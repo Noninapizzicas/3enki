@@ -46,7 +46,7 @@ function loggerFalso() {
 function envFalso({ conClave = true } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'juicio-'));
   const ruta = path.join(dir, '.env');
-  fs.writeFileSync(ruta, conClave ? `OTRA=COSA\nDEEPSEEK_API_KEY_GLOBAL=${CLAVE_FALSA}\n` : 'OTRA=COSA\n');
+  fs.writeFileSync(ruta, conClave ? `OTRA=COSA\nOLLAMA_CLOUD_API_KEY_GLOBAL=${CLAVE_FALSA}\n` : 'OTRA=COSA\n');
   return { ruta, dir, limpiar: () => fs.rmSync(dir, { recursive: true, force: true }) };
 }
 
@@ -108,8 +108,8 @@ async function crear({ conClave = true, fetch: fetchMock } = {}) {
     assert.strictEqual(d.extraido.base, '63,60', 'el importe va tal cual (coma decimal)');
     assert.strictEqual(d.extraido.total, '69,96');
     assert.strictEqual(d.extraido.moneda, 'EUR');
-    assert.strictEqual(d.motor, 'deepseek');
-    assert.strictEqual(d.modelo, 'deepseek-chat');
+    assert.strictEqual(d.motor, 'ollama-cloud');
+    assert.strictEqual(d.modelo, 'deepseek-v4.1-flash');
     assert.strictEqual(d.propuesta, true);
     assert.deepStrictEqual(d.faltantes, []);
     assert.strictEqual(d.asienta, false, 'propone, NO asienta');
@@ -128,9 +128,9 @@ async function crear({ conClave = true, fetch: fetchMock } = {}) {
     const llamada = fm.llamadas[0];
     const cuerpo = JSON.parse(llamada.opciones.body);
     assert.strictEqual(cuerpo.temperature, 0);
-    assert.strictEqual(cuerpo.model, 'deepseek-chat');
+    assert.strictEqual(cuerpo.model, 'deepseek-v4.1-flash');
     assert.deepStrictEqual(cuerpo.response_format, { type: 'json_object' });
-    assert.strictEqual(llamada.url, 'https://api.deepseek.com/chat/completions');
+    assert.strictEqual(llamada.url, 'https://ollama.com/v1/chat/completions');
     assert.ok(llamada.opciones.headers.Authorization.includes(CLAVE_FALSA));
     // El prompt lleva las reglas duras: NIF del EMISOR, no inventar, importes con coma decimal.
     const sistema = cuerpo.messages[0].content;

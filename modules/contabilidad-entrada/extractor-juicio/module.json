@@ -7,9 +7,11 @@
   "main": "index.js",
   "dependencies": [],
   "config": {
-    "_doc": "Config por defecto del juicio. NO contiene la clave: la clave se lee del .env vivo en onLoad.",
-    "url": "https://api.deepseek.com/chat/completions",
-    "modelo": "deepseek-chat",
+    "_doc": "Config por defecto del juicio. NO contiene la clave: se lee del .env vivo en onLoad, de la variable `env_var`.",
+    "url": "https://ollama.com/v1/chat/completions",
+    "modelo": "deepseek-v4.1-flash",
+    "motor": "ollama-cloud",
+    "env_var": "OLLAMA_CLOUD_API_KEY_GLOBAL",
     "timeout_ms": 30000,
     "max_texto": 20000,
     "env_path": "/opt/enki/data/.env"
@@ -40,9 +42,15 @@
     }
   ],
   "tools": [
-    { "name": "extractor-juicio.extraer", "description": "Pide JUICIO (PREGUNTA) a un LLM sobre el texto de un documento y devuelve la propuesta validada. No asienta ni persiste." }
+    {
+      "name": "extractor-juicio.extraer",
+      "description": "Pide JUICIO (PREGUNTA) a un LLM sobre el texto de un documento y devuelve la propuesta validada. No asienta ni persiste."
+    }
   ],
   "observability": {
-    "metrics": ["extractor-juicio.reflejo.served", "extractor-juicio.reflejo.errors"]
+    "metrics": [
+      "extractor-juicio.reflejo.served",
+      "extractor-juicio.reflejo.errors"
+    ]
   }
 }

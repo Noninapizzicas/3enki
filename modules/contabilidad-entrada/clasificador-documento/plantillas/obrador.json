@@ -22,6 +22,10 @@
     "total"
   ],
   "campos": {
+    "proveedor": {
+      "regex": "TEL:\\s*\\d+\\s{2,}([A-ZÁÉÍÓÚÑÜ][^\\n]{3,90})",
+      "flags": "m"
+    },
     "nif": {
       "regex": "^N\\.?\\s?I\\.?\\s?F\\.?\\s*:?\\s*([A-Z]\\s?-?\\s?\\d{7}\\s?-?\\s?[0-9A-J])",
       "flags": "mi"

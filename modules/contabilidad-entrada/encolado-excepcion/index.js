@@ -136,8 +136,12 @@ class EncoladoExcepcion extends ModuloHibridoReflejo {
 
     const cola = this._obtenerOCrear(pid);
 
-    // IDEMPOTENTE por clave: la misma excepcion no se encola dos veces (append-only).
-    if (cola.claves.has(clave)) {
+    // IDEMPOTENTE por clave MIENTRAS SIGA ABIERTA (append-only: lo vivo no se duplica).
+    // Una excepcion CERRADA libera su clave: si el documento vuelve (reproceso, otra factura con
+    // la misma clave), debe poder entrar de nuevo. Antes `claves.has` bloqueaba PARA SIEMPRE y un
+    // documento descartado por error no podia volver a la cola.
+    const abierta = cola.cola.some((x) => x.clave === clave && x.estado !== 'cerrada');
+    if (abierta) {
       return {
         status: 200,
         data: {
@@ -146,7 +150,7 @@ class EncoladoExcepcion extends ModuloHibridoReflejo {
           encolada: false,
           duplicada: true,
           pendientes: this._pendientes(cola),
-          motivo: 'la excepcion ya estaba en la cola (misma clave): no se duplica (append-only)'
+          motivo: 'la excepcion ya estaba ABIERTA en la cola (misma clave): no se duplica (append-only)'
         }
       };
     }

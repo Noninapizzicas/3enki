@@ -105,5 +105,23 @@ const pedido = (extra = {}) => ({ request_id: 't', project_id: PID, rol: 'ENCOLA
     assert.strictEqual((r.data || r).cerrada, true, 'cierra la excepcion que estaba solo en disco');
   }
 
-  console.log('OK · encolado-excepcion.cerrar: 7/7 (cierra con causa, idempotente, rol y hidratacion)');
+  // 8. una excepcion CERRADA libera su clave: el documento puede volver a la cola
+  {
+    const { m } = crear();
+    await m.onCerrarRequest(pedido());
+    const r = m._encolar({ project_id: PID, rol: 'ENCOLADO_EXCEPCION', clave: EXC.clave, motivo: 'reproceso', origen: 'test' });
+    assert.strictEqual(r.data.encolada, true, 'tras cerrar, la misma clave puede encolarse de nuevo');
+    assert.strictEqual(r.data.duplicada, false);
+    assert.strictEqual(m._colas.get(PID).cola.length, 2, 'queda la cerrada y la nueva');
+    assert.strictEqual(m._colas.get(PID).cola[1].estado, 'pendiente');
+  }
+
+  // 9. una excepcion ABIERTA sigue bloqueando duplicados
+  {
+    const { m } = crear();
+    const r = m._encolar({ project_id: PID, rol: 'ENCOLADO_EXCEPCION', clave: EXC.clave, motivo: 'otra', origen: 'test' });
+    assert.strictEqual(r.data.duplicada, true, 'lo vivo no se duplica');
+  }
+
+  console.log('OK · encolado-excepcion.cerrar: 9/9 (cierra con causa, idempotente, rol, hidratacion y clave liberada)');
 })().catch((e) => { console.error('FALLO ·', e.message); process.exit(1); });

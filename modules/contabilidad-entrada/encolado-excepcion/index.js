@@ -72,9 +72,19 @@ class EncoladoExcepcion extends ModuloHibridoReflejo {
     return this._persist.restaurar(d.project_id);
   }
 
+  // ── La cola del proyecto se hidrata del DISCO si aun no esta en memoria ──
+  // `_colas` nace vacio tras un reinicio: sin esto, `tomar`/`cerrar` decian "vacia" con la cola
+  // llena en disco y `encolar` escribia encima perdiendo las excepciones anteriores.
+  async _asegurarCola(pid) {
+    const id = pid || this.project_id;
+    if (id && !this._colas.has(id)) await this._persist.restaurar(id);
+    return id;
+  }
+
   // ── handler RPC de escritura (ORDEN → ui_handler) ──
   onEncolarRequest(e) {
-    return this._atender(e, 'encolar', 'encolado-excepcion.encolar.response', (d) => {
+    return this._atender(e, 'encolar', 'encolado-excepcion.encolar.response', async (d) => {
+      await this._asegurarCola(d && d.project_id);
       const res = this._encolar(d);
       if (res.status === 200 && res.data && res.data.encolada) {
         // R2 · si ESCRIBE, anuncia el HECHO: hay una excepcion en espera de revision.
@@ -96,7 +106,8 @@ class EncoladoExcepcion extends ModuloHibridoReflejo {
 
   // ── handler RPC de lectura (PREGUNTA → sin ui_handler) ──
   onTomarRequest(e) {
-    return this._atender(e, 'tomar', 'encolado-excepcion.tomar.response', (d) => {
+    return this._atender(e, 'tomar', 'encolado-excepcion.tomar.response', async (d) => {
+      await this._asegurarCola(d && d.project_id);
       const res = this._tomar(d);
       if (res.status !== 200) this.eventBus?.publish('encolado-excepcion.tomar.failed', res);
       return res;
@@ -217,6 +228,112 @@ class EncoladoExcepcion extends ModuloHibridoReflejo {
         pendientes: this._pendientes(cola),
         append_only: true,
         abierto: { revisor: excepcion.tomada_por ? null : 'no se declaro quien la toma (se anota el hueco, no se inventa)' }
+      }
+    };
+  }
+
+  // ── handler RPC de escritura (ORDEN → ui_handler): CIERRA una excepcion ──
+  // Descartar o resolver SIN cerrar dejaba la excepcion pendiente para siempre: el panel
+  // mostraba trabajo ya hecho y nadie podia saber que estaba atendido.
+  onCerrarRequest(e) {
+    return this._atender(e, 'cerrar', 'encolado-excepcion.cerrar.response', async (d) => {
+      await this._asegurarCola(d && d.project_id);
+      const res = this._cerrar(d);
+      if (res.status === 200 && res.data && res.data.cerrada) {
+        // R2 · si ESCRIBE, anuncia el HECHO.
+        this.eventBus?.publish('contabilidad.excepcion_cerrada', {
+          project_id: res.data.project_id,
+          excepcion_id: res.data.excepcion_id,
+          clave: res.data.clave,
+          resultado: res.data.resultado,
+          motivo: res.data.motivo,
+          pendientes: res.data.pendientes,
+          correlation_id: d && d.correlation_id
+        });
+      } else if (res.status !== 200) {
+        this.eventBus?.publish('encolado-excepcion.cerrar.failed', res);
+      }
+      return res;
+    });
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // _cerrar(input) → { status, data }  ·  cierra (marca) una excepcion atendida
+  // ══════════════════════════════════════════════════════════════════════
+  _cerrar(input = {}) {
+    const pid = input.project_id || this.project_id;
+    if (!pid) return this._invalid('project_id');
+
+    if (input.rol != null && input.rol !== ROL_ESCRITOR) {
+      return {
+        status: 403,
+        error: {
+          code: 'ROL_NO_AUTORIZADO',
+          message: `solo ${ROL_ESCRITOR} cierra excepciones`,
+          details: { rol_esperado: ROL_ESCRITOR, rol_recibido: input.rol }
+        }
+      };
+    }
+
+    // Cerrar SIN causa es tapar la excepcion: el motivo es obligatorio.
+    const motivo = input.motivo != null ? String(input.motivo).trim() : '';
+    if (!motivo) return this._invalid('motivo');
+    const resultado = input.resultado != null ? String(input.resultado).toUpperCase().trim() : '';
+    if (resultado !== 'RESUELTA' && resultado !== 'DESCARTADA') return this._invalid('resultado');
+
+    const cola = this._colas.get(pid) || null;
+    if (!cola || cola.cola.length === 0) {
+      return { status: 200, data: { project_id: pid, cerrada: false, existe: false, pendientes: 0, abierto: { excepcion: 'no hay excepciones en la cola del proyecto' } } };
+    }
+
+    const idx = input.excepcion_id != null
+      ? cola.cola.findIndex((x) => x.excepcion_id === String(input.excepcion_id))
+      : (input.clave != null ? cola.cola.findIndex((x) => x.clave === String(input.clave)) : -1);
+    if (idx === -1) {
+      return { status: 404, error: { code: 'EXCEPCION_NO_ENCONTRADA', message: 'no existe esa excepcion en la cola', details: { project_id: pid } } };
+    }
+
+    const excepcion = cola.cola[idx];
+    if (excepcion.estado === 'cerrada') {
+      // Idempotente: cerrar dos veces no es un error, pero se declara.
+      return {
+        status: 200,
+        data: {
+          project_id: pid, cerrada: false, ya_cerrada: true, existe: true,
+          excepcion_id: excepcion.excepcion_id, clave: excepcion.clave,
+          resultado: (excepcion.cierre || {}).resultado || null,
+          pendientes: this._pendientes(cola), append_only: true
+        }
+      };
+    }
+
+    const ahora = new Date().toISOString();
+    // APPEND-ONLY de la HISTORIA: la excepcion NO se borra; se marca cerrada con su causa.
+    excepcion.estado = 'cerrada';
+    excepcion.cierre = {
+      resultado,
+      motivo,
+      cerrada_en: ahora,
+      cerrada_por: input.origen != null ? String(input.origen) : 'desatasco-entrada'
+    };
+    cola.updated_at = ahora;
+    this._persist.marcarDirty(pid);
+
+    return {
+      status: 200,
+      data: {
+        project_id: pid,
+        cerrada: true,
+        ya_cerrada: false,
+        existe: true,
+        excepcion_id: excepcion.excepcion_id,
+        clave: excepcion.clave,
+        resultado,
+        motivo,
+        estado: 'cerrada',
+        pendientes: this._pendientes(cola),
+        append_only: true,
+        abierto: null
       }
     };
   }

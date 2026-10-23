@@ -19,6 +19,10 @@
       "event": "project.activated",
       "handler": "onProjectActivated",
       "description": "Restaura la cola de excepciones del proyecto activado desde el storage (PosPersistencia). Emitido por el core."
+    },
+    {
+      "event": "encolado-excepcion.cerrar.request",
+      "handler": "onCerrarRequest"
     }
   ],
   "publishes": [
@@ -44,10 +48,67 @@
     }
   ],
   "tools": [
-    { "name": "encolado-excepcion.encolar", "description": "Encuela (ORDEN) una excepcion para revision, sin parar el flujo." },
-    { "name": "encolado-excepcion.tomar", "description": "Toma (PREGUNTA) una excepcion pendiente y la marca como tomada sin borrarla." }
+    {
+      "name": "encolado-excepcion.encolar",
+      "description": "Encuela (ORDEN) una excepcion para revision, sin parar el flujo."
+    },
+    {
+      "name": "encolado-excepcion.tomar",
+      "description": "Toma (PREGUNTA) una excepcion pendiente y la marca como tomada sin borrarla."
+    },
+    {
+      "name": "encolado-excepcion.cerrar",
+      "description": "Cierra (ORDEN) una excepcion ya atendida: la marca RESUELTA o DESCARTADA con su motivo. Append-only: no borra, marca.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "description": "Proyecto duenno de la cola"
+          },
+          "excepcion_id": {
+            "type": "string",
+            "description": "Id de la excepcion (preferente)"
+          },
+          "clave": {
+            "type": "string",
+            "description": "Clave natural si no se tiene el id"
+          },
+          "resultado": {
+            "type": "string",
+            "enum": [
+              "RESUELTA",
+              "DESCARTADA"
+            ],
+            "description": "Como se atendio"
+          },
+          "motivo": {
+            "type": "string",
+            "description": "Por que se cierra (obligatorio)"
+          },
+          "rol": {
+            "type": "string",
+            "description": "Rol escritor: ENCOLADO_EXCEPCION"
+          },
+          "origen": {
+            "type": "string",
+            "description": "Quien cierra (p.ej. desatasco-entrada)"
+          }
+        },
+        "required": [
+          "resultado",
+          "motivo"
+        ]
+      }
+    }
   ],
   "ui_handlers": [
-    { "domain": "contabilidad", "action": "encolado-excepcion.encolar", "handler": "onEncolarRequest", "type": "workspace_module", "zone": "barra_modulos" }
+    {
+      "domain": "contabilidad",
+      "action": "encolado-excepcion.encolar",
+      "handler": "onEncolarRequest",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ]
 }

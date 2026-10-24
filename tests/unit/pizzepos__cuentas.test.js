@@ -500,6 +500,123 @@ function publishedOf(mocks, name) {
     await m.onUnload();
   });
 
+  // ==========================================
+  // Group 9: Identidad de proyecto — un solo camino (slug)
+  // ==========================================
+
+  // Bus con RPC: project.list.request → project.list.response (el dueño del dato
+  // entrega el slug ya calculado, como hace project-manager).
+  function makeMocksConProyectos(proyectos) {
+    const base = makeMocks();
+    const subs = new Map();
+    base.eventBus = {
+      publish: async (event, payload) => {
+        base.published.push([event, payload]);
+        if (event === 'project.list.request') {
+          const d = {
+            request_id: payload.request_id, success: true,
+            projects: proyectos, count: proyectos.length
+          };
+          for (const h of [...(subs.get('project.list.response') || [])]) {
+            try { h({ data: d }); } catch { /* suscriptor de test */ }
+          }
+        }
+      },
+      subscribe: (event, handler) => {
+        if (!subs.has(event)) subs.set(event, new Set());
+        subs.get(event).add(handler);
+        return () => subs.get(event)?.delete(handler);
+      }
+    };
+    return base;
+  }
+
+  const PROYECTOS = [{
+    id: '5d09cb49-35a0-409f-9e09-c57da93b84a8',
+    name: 'the pirate',
+    slug: 'the-pirate',
+    base_path: '/opt/enki/data/projects/the-pirate'
+  }];
+
+  await testAsync('cuenta NACE con slug aunque el project_id venga en UUID', async () => {
+    const mocks = makeMocksConProyectos(PROYECTOS);
+    const { module: m } = await instantiate(mocks);
+    const r = await m.handleCreateCuenta({
+      project_id: '5d09cb49-35a0-409f-9e09-c57da93b84a8', tipo: 'mesa'
+    });
+    assert.strictEqual(r.status, 201);
+    assert.strictEqual(r.data.project_id, 'the-pirate');
+    const ev = publishedOf(mocks, 'cuenta.creada')[0];
+    assert.strictEqual(ev.project_id, 'the-pirate', 'el evento lleva el slug, no el uuid');
+    await m.onUnload();
+  });
+
+  await testAsync('cuenta.list con UUID ve las cuentas guardadas en slug y viceversa', async () => {
+    const mocks = makeMocksConProyectos(PROYECTOS);
+    const { module: m } = await instantiate(mocks);
+    const UID = '5d09cb49-35a0-409f-9e09-c57da93b84a8';
+
+    // una cuenta nueva (nace en slug) y una legacy restaurada con uuid
+    await m.handleCreateCuenta({ project_id: UID, tipo: 'llevar', nombre: 'nueva' });
+    m.cuentas.set('mesa_legacy', {
+      id: 'mesa_legacy', project_id: UID, turno: 266, tipo: 'mesa', nombre: 'Mesa 45',
+      estado: 'en_preparacion', pagado: false, items: 0, total: 0,
+      created_at: new Date().toISOString(), updated_at: new Date().toISOString()
+    });
+    // otra de un proyecto ajeno: NO debe aparecer
+    m.cuentas.set('mesa_ajena', {
+      id: 'mesa_ajena', project_id: '5d6d28eb-24e1-4205-ba18-5f45ebc2657b', turno: 250,
+      tipo: 'mesa', nombre: 'otra', estado: 'listo', pagado: false, items: 0, total: 0,
+      created_at: new Date().toISOString(), updated_at: new Date().toISOString()
+    });
+
+    const porUuid = await m.handleListCuentas({ project_id: UID });
+    assert.strictEqual(porUuid.data.total, 2, 'uuid ve la nueva y la legacy');
+    const ids = porUuid.data.cuentas.map(c => c.id);
+    assert.ok(ids.includes('mesa_legacy'), 'la legacy (uuid) aparece al preguntar con uuid');
+    assert.ok(!ids.includes('mesa_ajena'), 'la de otro proyecto no se cuela');
+
+    const porSlug = await m.handleListCuentas({ project_id: 'the-pirate' });
+    assert.strictEqual(porSlug.data.total, 2, 'slug ve exactamente las mismas dos');
+
+    const soloMesa = await m.handleListCuentas({ project_id: 'the-pirate', tipo: 'mesa' });
+    assert.strictEqual(soloMesa.data.total, 1);
+    assert.strictEqual(soloMesa.data.cuentas[0].id, 'mesa_legacy');
+    await m.onUnload();
+  });
+
+  await testAsync('operar por UUID una cuenta guardada con UUID (legacy) y por slug una nueva', async () => {
+    const mocks = makeMocksConProyectos(PROYECTOS);
+    const { module: m } = await instantiate(mocks);
+    const UID = '5d09cb49-35a0-409f-9e09-c57da93b84a8';
+
+    const nueva = await m.handleCreateCuenta({ project_id: UID, tipo: 'llevar' });
+    // el comandero la pide con el uuid: debe encontrarla
+    const get = await m.handleGetCuenta({ project_id: UID, id: nueva.data.id });
+    assert.strictEqual(get.status, 200);
+    assert.strictEqual(get.data.project_id, 'the-pirate');
+
+    m.cuentas.set('mesa_legacy', {
+      id: 'mesa_legacy', project_id: UID, turno: 266, tipo: 'mesa', nombre: 'Mesa 45',
+      estado: 'en_preparacion', pagado: false, items: 0, total: 0,
+      created_at: new Date().toISOString(), updated_at: new Date().toISOString()
+    });
+    const del = await m.handleDeleteCuenta({ project_id: 'the-pirate', id: 'mesa_legacy' });
+    assert.strictEqual(del.status, 200, 'pedida por slug, la legacy (uuid) se borra igual');
+    assert.strictEqual(del.data.deleted, true);
+    await m.onUnload();
+  });
+
+  await testAsync('sin respuesta del bus se degrada honesto: conserva el project_id tal cual', async () => {
+    const mocks = makeMocks();               // eventBus SIN subscribe → sin RPC
+    const { module: m } = await instantiate(mocks);
+    const UID = '5d09cb49-35a0-409f-9e09-c57da93b84a8';
+    const r = await m.handleCreateCuenta({ project_id: UID, tipo: 'mesa' });
+    assert.strictEqual(r.status, 201);
+    assert.strictEqual(r.data.project_id, UID, 'sin poder resolver, no se inventa identidad');
+    await m.onUnload();
+  });
+
   cleanupTmp();
   console.log('\nTodos los tests pasaron.');
   process.exit(0);

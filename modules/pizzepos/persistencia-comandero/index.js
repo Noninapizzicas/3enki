@@ -31,6 +31,7 @@ const path   = require('path');
 const crypto = require('crypto');
 
 const BaseModule = require('../../_shared/base-module');
+const ResolutorProyecto = require('../../_shared/resolutor-proyecto');
 const DEFAULT_PROJECT_ID = 'default';
 
 class PersistenciaComanderoModule extends BaseModule {
@@ -61,6 +62,9 @@ class PersistenciaComanderoModule extends BaseModule {
     };
 
     this._writeQueue = Promise.resolve();
+
+    // Resolutor sin bus hasta onLoad: degrada a la llave tal cual (comportamiento previo).
+    this._proyectos = new ResolutorProyecto();
   }
 
   // ==========================================
@@ -81,6 +85,14 @@ class PersistenciaComanderoModule extends BaseModule {
     this.ventasDir  = this.config.ventas_dir  || './data/ventas';
     this.currentDir = this.config.current_dir || './data/current';
     this.backupDir  = this.config.backup_dir  || './data/backups';
+
+    // Identidad de proyecto en un solo camino: id (uuid) | slug → slug. Es la
+    // llave con la que se nombra la carpeta (/data/projects/<slug>/), asi que dos
+    // llaves del mismo negocio dejan de escribir en dos carpetas distintas.
+    this._proyectos = new ResolutorProyecto({
+      eventBus: this.eventBus, logger: this.logger, metrics: this.metrics
+    });
+    this._proyectos.calentar();
 
     await this._crearDirectorios();
     await this._cargarJornada();
@@ -390,7 +402,16 @@ class PersistenciaComanderoModule extends BaseModule {
     try {
       const { project_id, tipo } = data || {};
       let cuentas = Array.from(this.cuentasActivasCache.values());
-      if (project_id) cuentas = cuentas.filter(c => c.project_id === project_id);
+      if (project_id) {
+        // Cualquier llave pregunta por el proyecto entero: el cache puede tener
+        // cuentas con UUID (historicas) y con slug (nuevas) del MISMO negocio.
+        const pid = await this._proyectos.slugDe(project_id);
+        const slugDeCuenta = new Map();
+        for (const c of cuentas) {
+          if (!slugDeCuenta.has(c.project_id)) slugDeCuenta.set(c.project_id, await this._proyectos.slugDe(c.project_id));
+        }
+        cuentas = cuentas.filter(c => c.project_id === pid || slugDeCuenta.get(c.project_id) === pid);
+      }
       if (tipo)       cuentas = cuentas.filter(c => c.tipo === tipo);
       return {
         status: 200,
@@ -893,16 +914,24 @@ class PersistenciaComanderoModule extends BaseModule {
   async _guardarCuentasActivasPorProyecto() {
     const porProyecto = new Map();
     for (const [cuenta_id, cuenta] of this.cuentasActivasCache.entries()) {
-      const pid = cuenta.project_id;
-      if (!pid) continue;
-      if (!porProyecto.has(pid)) porProyecto.set(pid, new Map());
-      porProyecto.get(pid).set(cuenta_id, cuenta);
+      if (!cuenta.project_id) continue;
+      // Agrupado por SLUG, no por la llave cruda: dos llaves del mismo negocio
+      // escribian dos ficheros y el que perdia la carrera borraba las suyas.
+      const llave = await this._proyectos.slugDe(cuenta.project_id);
+      if (!porProyecto.has(llave)) porProyecto.set(llave, new Map());
+      porProyecto.get(llave).set(cuenta_id, cuenta);
     }
 
     // Un proyecto que se queda SIN cuentas desaparece de porProyecto: sin recorrer
     // también los proyectos ACTIVOS, su fichero no se reescribía nunca y la última
     // cuenta borrada resucitaba en el siguiente arranque. El fichero refleja la verdad.
-    const proyectos = new Set([...porProyecto.keys(), ...this._getActiveProjectIds()]);
+    // Los activos llegan en UUID: se pasan por el mismo resolutor para no abrir una
+    // segunda entrada que pise (con 0 cuentas) la carpeta del proyecto.
+    const llaves = new Set(porProyecto.keys());
+    for (const activo of this._getActiveProjectIds()) {
+      llaves.add(await this._proyectos.slugDe(activo));
+    }
+    const proyectos = llaves;
 
     for (const projectId of proyectos) {
       const cuentasMap = porProyecto.get(projectId) || new Map();
@@ -1066,14 +1095,16 @@ class PersistenciaComanderoModule extends BaseModule {
 
   async _getProjectDirs(projectId) {
     if (!projectId) return null;
-    const base = path.join(this.projectsBasePath, projectId, 'persistencia');
+    // La carpeta fisica del proyecto es SIEMPRE su slug, llegue la llave como llegue.
+    const llave = await this._proyectos.slugDe(projectId);
+    const base = path.join(this.projectsBasePath, llave, 'persistencia');
     const dirs = {
       base,
       current:        path.join(base, 'current'),
       eventos:        path.join(base, 'eventos'),
       ventas:         path.join(base, 'ventas'),
       backups:        path.join(base, 'backups'),
-      contabilidad:   path.join(this.projectsBasePath, projectId, 'contabilidad', 'cierres')
+      contabilidad:   path.join(this.projectsBasePath, llave, 'contabilidad', 'cierres')
     };
     for (const dir of Object.values(dirs)) {
       try { await fs.mkdir(dir, { recursive: true }); }

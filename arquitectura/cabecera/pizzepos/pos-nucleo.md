@@ -263,6 +263,20 @@ CLASE CuentasModule HEREDA BaseModule {
     // ACTIVOS: sin eso, el proyecto que se quedaba sin cuentas no reescribía su fichero y la
     // última cuenta borrada resucitaba en el siguiente arranque.
 
+    // IDENTIDAD DE PROYECTO — UN SOLO CAMINO: EL SLUG (verificado en vivo 2026-10-24).
+    // El bus admite dos llaves del mismo negocio (UUID de sesión y slug de la carpeta) y
+    // cada consumidor usaba la suya: las cuentas de mesa quedaron en /data/projects/<uuid>/
+    // y las de llevar en /data/projects/the-pirate/, invisibles entre sí (el comandero veía
+    // unas, cocina —que no filtra— veía todas). El borde resuelve cualquier llave a slug con
+    // ResolutorProyecto (_shared; el mapa id→slug lo calcula project-manager en
+    // project.list.response, no se re-deriva):
+    //   · la cuenta NACE con project_id = slug → un solo fichero, una sola carpeta
+    //   · toda consulta compara por equivalencia (mismo slug = mismo proyecto) → las
+    //     cuentas históricas con UUID se ven igual, sin migrar datos en caliente
+    //   · persistencia-comandero nombra la carpeta y agrupa por slug, y su filtro de
+    //     cuentas_activas también resuelve ambas llaves
+    // Sin respuesta del bus se devuelve la llave tal cual: nunca se inventa identidad.
+
     EVENTOS_SUBSCRIBES {
       'comandero.item_agregado': onComanderoItemAgregado
       'comandero.item_eliminado': onComanderoItemEliminado

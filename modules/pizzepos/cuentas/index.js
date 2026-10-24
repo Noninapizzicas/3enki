@@ -27,6 +27,7 @@ const fs     = require('fs').promises;
 const crypto = require('crypto');
 
 const BaseModule = require('../../_shared/base-module');
+const ResolutorProyecto = require('../../_shared/resolutor-proyecto');
 const DEFAULT_PROJECT_ID  = 'default';
 const ALERTA_PENDIENTE_MS = 30 * 60 * 1000;
 const POST_COBRADO_MS     = 5 * 60 * 1000;
@@ -62,6 +63,9 @@ class CuentasModule extends BaseModule {
     this._turnoSaveTimer = null;
 
     this._metricsInterval = null;
+
+    // Identidad de proyecto en un solo camino: id (uuid) | slug → slug.
+    this._proyectos = new ResolutorProyecto();
   }
 
   static SIMBOLOS = {
@@ -88,6 +92,13 @@ class CuentasModule extends BaseModule {
     this._turnoFile = path.join('.', 'data', 'current', 'contador_global.json');
     await this._loadTurno();
     await this._restaurarDesdeArchivo();
+
+    // Calienta en segundo plano el mapa id→slug: la primera cuenta que entre
+    // (o la primera consulta) no paga el RPC al bus.
+    this._proyectos = new ResolutorProyecto({
+      eventBus: this.eventBus, logger: this.logger, metrics: this.metrics
+    });
+    this._proyectos.calentar();
 
     this._metricsInterval = setInterval(() => this._reportMetrics(), METRICS_INTERVAL_MS);
 
@@ -419,6 +430,9 @@ class CuentasModule extends BaseModule {
       }
 
       const tipoFinal = tipo || 'local';
+      // Una sola llave por proyecto: la cuenta NACE con slug (la carpeta fisica),
+      // venga el project_id como uuid o como slug. Persistencia y consultas leen igual.
+      const projectIdFinal = await this._slugProyecto(project_id);
       const cuenta_id = cuentaIdPropuesto || this._buildCuentaId(tipoFinal);
       const { turno, ref_display } = this._generateRefDisplay(tipoFinal, nombre);
 
@@ -427,7 +441,7 @@ class CuentasModule extends BaseModule {
 
       const cuenta = {
         id: cuenta_id,
-        project_id,
+        project_id: projectIdFinal,
         turno,
         tipo: tipoFinal,
         nombre: nombre || null,
@@ -454,7 +468,7 @@ class CuentasModule extends BaseModule {
       await this._publishCuentaCreada(cuenta, data);
 
       this.logger.info('cuenta.creada', {
-        project_id, cuenta_id, tipo: tipoFinal, ref_display, duration: Date.now() - start_time
+        project_id: projectIdFinal, cuenta_id, tipo: tipoFinal, ref_display, duration: Date.now() - start_time
       });
 
       if (pedido_inicial && Array.isArray(pedido_inicial.items) && pedido_inicial.items.length > 0) {
@@ -471,7 +485,16 @@ class CuentasModule extends BaseModule {
     try {
       const { project_id, tipo, estado } = data || {};
       let cuentas = Array.from(this.cuentas.values());
-      if (project_id) cuentas = cuentas.filter(c => c.project_id === project_id);
+      if (project_id) {
+        // Se pregunta con CUALQUIER llave (uuid o slug) y responde la cuenta del
+        // proyecto, tenga la llave que tenga: mismo proyecto = mismo slug.
+        const pid = await this._slugProyecto(project_id);
+        const slugDeCuenta = new Map();
+        for (const c of cuentas) {
+          if (!slugDeCuenta.has(c.project_id)) slugDeCuenta.set(c.project_id, await this._slugProyecto(c.project_id));
+        }
+        cuentas = cuentas.filter(c => c.project_id === pid || slugDeCuenta.get(c.project_id) === pid);
+      }
       if (tipo)       cuentas = cuentas.filter(c => c.tipo === tipo);
       if (estado)     cuentas = cuentas.filter(c => c.estado === estado);
       cuentas.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
@@ -489,7 +512,7 @@ class CuentasModule extends BaseModule {
         return this._errorResponse(400, 'INVALID_INPUT', 'id es requerido', { field: 'id' });
       }
       const cuenta = this.cuentas.get(id);
-      if (!cuenta || (project_id && cuenta.project_id !== project_id)) {
+      if (!cuenta || (project_id && !(await this._mismoProyecto(cuenta.project_id, project_id)))) {
         this._logError('cuenta.get.not_found', { id, project_id }, 'ui_get', 'RESOURCE_NOT_FOUND');
         return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Cuenta ${id} no encontrada`, {
           entity_type: 'cuenta', entity_id: id
@@ -509,7 +532,7 @@ class CuentasModule extends BaseModule {
         return this._errorResponse(400, 'INVALID_INPUT', 'id es requerido', { field: 'id' });
       }
       const cuenta = this.cuentas.get(id);
-      if (!cuenta || (project_id && cuenta.project_id !== project_id)) {
+      if (!cuenta || (project_id && !(await this._mismoProyecto(cuenta.project_id, project_id)))) {
         this._logError('cuenta.delete.not_found', { id, project_id }, 'ui_delete', 'RESOURCE_NOT_FOUND');
         return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Cuenta ${id} no encontrada`, {
           entity_type: 'cuenta', entity_id: id
@@ -545,7 +568,7 @@ class CuentasModule extends BaseModule {
         return this._errorResponse(400, 'INVALID_INPUT', 'id es requerido', { field: 'id' });
       }
       const cuenta = this.cuentas.get(id);
-      if (!cuenta || (project_id && cuenta.project_id !== project_id)) {
+      if (!cuenta || (project_id && !(await this._mismoProyecto(cuenta.project_id, project_id)))) {
         this._logError('cuenta.cerrar_pagada.not_found', { id, project_id }, 'ui_cerrar_pagada', 'RESOURCE_NOT_FOUND');
         return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Cuenta ${id} no encontrada`, {
           entity_type: 'cuenta', entity_id: id
@@ -577,7 +600,7 @@ class CuentasModule extends BaseModule {
         return this._errorResponse(400, 'INVALID_INPUT', 'id es requerido', { field: 'id' });
       }
       const cuenta = this.cuentas.get(id);
-      if (!cuenta || (project_id && cuenta.project_id !== project_id)) {
+      if (!cuenta || (project_id && !(await this._mismoProyecto(cuenta.project_id, project_id)))) {
         this._logError('cuenta.marcar_entregado.not_found', { id, project_id }, 'ui_marcar_entregado', 'RESOURCE_NOT_FOUND');
         return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Cuenta ${id} no encontrada`, {
           entity_type: 'cuenta', entity_id: id
@@ -619,7 +642,7 @@ class CuentasModule extends BaseModule {
         return this._errorResponse(400, 'INVALID_INPUT', 'nombre es requerido', { field: 'nombre' });
       }
       const cuenta = this.cuentas.get(id);
-      if (!cuenta || (project_id && cuenta.project_id !== project_id)) {
+      if (!cuenta || (project_id && !(await this._mismoProyecto(cuenta.project_id, project_id)))) {
         this._logError('cuenta.rename.not_found', { id, project_id }, 'ui_rename', 'RESOURCE_NOT_FOUND');
         return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `Cuenta ${id} no encontrada`, {
           entity_type: 'cuenta', entity_id: id
@@ -904,6 +927,21 @@ class CuentasModule extends BaseModule {
   }
 
   _unwrap(event) { return event?.data || event?.payload || event || {}; }
+
+  // ==========================================
+  // Identidad de proyecto — UN SOLO CAMINO: el slug
+  // ==========================================
+
+  // El resolutor vive en _shared porque persistencia-comandero padece la misma
+  // grieta (escribe carpetas por proyecto). Un dueño de la resolución, no dos copias.
+  async _slugProyecto(projectId) {
+    return this._proyectos.slugDe(projectId);
+  }
+
+  // Dos llaves distintas son el mismo proyecto cuando resuelven al mismo slug.
+  async _mismoProyecto(a, b) {
+    return this._proyectos.mismoProyecto(a, b);
+  }
 
   // ==========================================
   // Persistencia (turno + restauracion)

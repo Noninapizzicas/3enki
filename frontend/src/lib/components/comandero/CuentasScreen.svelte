@@ -47,9 +47,10 @@
   //      ('the-pirate' → 'the pirate'), que es el rótulo humano inmediato.
   // Nunca el prop projectId: al recargar vale el slug y después el UUID de
   // sesión, así que pintarlo hacía parpadear 'the-pirate' → UUID.
-  const projectCtx = getContext<{ subscribe: (fn: (v: { name?: string; resolved?: boolean }) => void) => () => void } | undefined>('project');
+  const projectCtx = getContext<{ subscribe: (fn: (v: { id?: string; slug?: string; name?: string; resolved?: boolean }) => void) => () => void } | undefined>('project');
   let projectName = '';
   let projectResolved = false;
+  let projectSlug = '';
   let unsubProject: (() => void) | null = null;
   $: urlSlug = ($page.params?.project_id as string) || '';
   $: titulo = (projectResolved && projectName) || humanizarSlug(urlSlug) || 'Cuentas';
@@ -129,12 +130,13 @@
       unsubProject = projectCtx.subscribe((p) => {
         projectName = p?.name || '';
         projectResolved = !!p?.resolved;
+        projectSlug = p?.slug || '';
       });
     }
 
     // Connect MQTT + init subscriptions + load categories
     connect().then(() => {
-      cleanupSubs = initCuentasSubscriptions(projectId);
+      cleanupSubs = initCuentasSubscriptions(projectId, () => projectSlug);
       loadCategorias();
     }).catch((err) => {
       console.error('[CuentasScreen] MQTT connection failed', err);

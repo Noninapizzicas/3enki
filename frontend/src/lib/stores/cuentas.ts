@@ -595,8 +595,20 @@ function checkAlerta(cuenta: any): boolean {
 // REALTIME SUBSCRIPTIONS
 // =============================================================================
 
-export function initCuentasSubscriptions(projectId: string): () => void {
+export function initCuentasSubscriptions(projectId: string, getProjectSlug?: () => string): () => void {
   const cleanups: (() => void)[] = [];
+
+  // Un mismo negocio llega con DOS llaves: el UUID (sesión) y el slug (el canal,
+  // la tienda, la carpeta). Filtrar por una sola dejaba la pantalla ciega a la
+  // mitad de sus cuentas — las de mesa se veían en cocina y no en el comandero.
+  // El slug se lee en cada evento (getter): al montar las suscripciones todavía
+  // puede estar en vuelo la resolución del proyecto.
+  const esDelProyecto = (data: any) => {
+    if (!data?.project_id) return true;
+    if (data.project_id === projectId) return true;
+    const slug = getProjectSlug?.() || '';
+    return !!slug && data.project_id === slug;
+  };
 
   // cuenta.creada → recargar desde persistencia
   cleanups.push(
@@ -604,7 +616,7 @@ export function initCuentasSubscriptions(projectId: string): () => void {
       const data = event?.data || event?.payload || event;
       if (!data?.cuenta_id) return;
       // Solo recargar si es del mismo proyecto
-      if (data.project_id && data.project_id !== projectId) return;
+      if (!esDelProyecto(data)) return;
 
       // Recargar desde persistencia (fuente de verdad)
       loadCuentasFromPersistencia(projectId);
@@ -616,7 +628,7 @@ export function initCuentasSubscriptions(projectId: string): () => void {
     mqttSubscribe('cuenta.actualizada', (event: any) => {
       const data = event?.data || event?.payload || event;
       if (!data?.cuenta_id) return;
-      if (data.project_id && data.project_id !== projectId) return;
+      if (!esDelProyecto(data)) return;
 
       cuentasStore.update(s => ({
         ...s,
@@ -640,7 +652,7 @@ export function initCuentasSubscriptions(projectId: string): () => void {
     mqttSubscribe('cuenta.eliminada', (event: any) => {
       const data = event?.data || event?.payload || event;
       if (!data?.cuenta_id) return;
-      if (data.project_id && data.project_id !== projectId) return;
+      if (!esDelProyecto(data)) return;
 
       cuentasStore.update(s => ({
         ...s,
@@ -654,7 +666,7 @@ export function initCuentasSubscriptions(projectId: string): () => void {
     mqttSubscribe('cuenta.estado_cambiado', (event: any) => {
       const data = event?.data || event?.payload || event;
       if (!data?.cuenta_id) return;
-      if (data.project_id && data.project_id !== projectId) return;
+      if (!esDelProyecto(data)) return;
 
       const nuevoEstado = data.estado_nuevo || data.estado;
       if (!nuevoEstado) return;
@@ -680,7 +692,7 @@ export function initCuentasSubscriptions(projectId: string): () => void {
   cleanups.push(
     mqttSubscribe('mesa.abierta', (event: any) => {
       const data = event?.data || event?.payload || event;
-      if (data?.project_id && data.project_id !== projectId) return;
+      if (!esDelProyecto(data)) return;
       loadCuentasFromPersistencia(projectId);
     })
   );
@@ -706,7 +718,7 @@ export function initCuentasSubscriptions(projectId: string): () => void {
   cleanups.push(
     mqttSubscribe('pedido.creado', (event: any) => {
       const data = event?.data || event?.payload || event;
-      if (data?.project_id && data.project_id !== projectId) return;
+      if (!esDelProyecto(data)) return;
       loadCuentasFromPersistencia(projectId);
     })
   );
@@ -715,7 +727,7 @@ export function initCuentasSubscriptions(projectId: string): () => void {
   cleanups.push(
     mqttSubscribe('cuenta.cerrada', (event: any) => {
       const data = event?.data || event?.payload || event;
-      if (data?.project_id && data.project_id !== projectId) return;
+      if (!esDelProyecto(data)) return;
       loadCuentasFromPersistencia(projectId);
     })
   );

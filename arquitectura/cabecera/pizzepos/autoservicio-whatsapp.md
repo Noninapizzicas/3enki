@@ -261,6 +261,13 @@ sendTemplate (Meta plantillas · salientes >24h) {
 // ORDEN DEL GRID (2026-10-22): el grid "Todas" pinta `DATA.productos` tal cual llega, así que la
 //   proyección los entrega en tramos contiguos por `categorias[].orden` (mismo orden que las
 //   pestañas). El scroll ya no depende del orden de guardado de la carta.
+// CIERRE DEL PEDIDO (módulo v2.25.1): al SALIR el pedido el carrito se vacía. Un solo
+//   _cerrarPedido(nombre) sirve a los tres caminos (WhatsApp, online tienda-api, pasarela sin
+//   redirección): vacía, PERSISTE el vacío (localStorage 'carta_cart_*' — recargar no lo
+//   resucita) y deja la confirmación por nombre a la vista. La copia va a 'repetir último
+//   pedido', guardada ANTES de vaciar (saveLastOrder) → vaciar no pierde nada.
+//   Antes: sendWhatsApp dejaba el carrito lleno (y volvía al recargar) y el camino online
+//   repintaba 'carrito vacío' encima de la confirmación (nunca se veía).
 // PODA previa de carta-digital:
 //   v2.4.0 — fuera ofertas/reseñas/track (la proyección no los daba: UI viva alimentada por vacío).
 //   v2.5.0 — fuera el cerebro FANTASMA del chat (default ai_chat_path '/modules/ai-gateway/chat',

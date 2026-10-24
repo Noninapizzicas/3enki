@@ -1086,6 +1086,10 @@ CLASE EstudioViabilidad {
 > la carta pública AL VUELO bebiendo de las fuentes reales → nunca se queda viejo. Lo
 > ÚNICO que posee: el config del CANAL (dominio + opciones PWA) y el diseño (look de Enki).
 > Híbrido: index.js es el REFLEJO (JS); carta-digital.blueprint.json es la mitad LLM (cajones).
+> v2.25.1 — el CIERRE del pedido vive en la plantilla (static-template.js): al salir el pedido el
+> carrito se vacía (WhatsApp / online / pasarela sin redirección) y la copia queda en «repetir
+> último pedido». Es plantilla HORNEADA: el deploy no toca el bundle ya publicado — tras desplegar
+> hay que REPUBLICAR para que la PWA servida lleve la plantilla nueva.
 
 ```
 INTERFAZ CartaDigitalContract {                 // ui_handlers (RPC del bus / frontend)

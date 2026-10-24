@@ -6,6 +6,7 @@ const crypto = require('crypto');
 
 const BaseModule = require('../_shared/base-module');
 const { parsearPedido } = require('./services/pedido-parser');
+const LectorServicio = require('../_shared/lector-servicio');
 const { MetaCloudClient, parseWebhookEvent } = require('./services/meta-cloud-client');
 const { tasarPedido } = require('../_shared/pedido-tasador');
 
@@ -248,6 +249,16 @@ class WhatsappBotModule extends BaseModule {
     const moduleJson = JSON.parse(await fs.readFile(path.join(__dirname, 'module.json'), 'utf8'));
     this.config = moduleJson.config || {};
 
+    // Lectura de la config de servicio del proyecto: la dirección de recogida viaja en la
+    // confirmación al cliente. Misma puerta que pedidos y tienda-api (una sola fuente).
+    this.servicio = new LectorServicio({
+      eventBus: core.eventBus,
+      logger: core.logger,
+      metrics: core.metrics,
+      ttlMs: 60000,
+      timeoutMs: 4000
+    });
+
     // Transporte ÚNICO: Meta Cloud API (HTTP, sin navegador). Enki no arrastra Chromium.
     this.logger.info('module.loading', { module: this.name, version: this.version, transport: 'meta' });
 
@@ -383,6 +394,14 @@ class WhatsappBotModule extends BaseModule {
       error: data.error
     });
     this.metrics?.increment('whatsapp-bot.pedido.fallido', { project: pending.project_slug });
+    // El negocio está cerrado (horario o interruptor): al cliente se le dice la VERDAD
+    // que devolvio la puerta del pedido, no un "intentalo de nuevo" que no va a funcionar.
+    const code = data.error?.code;
+    if (code === 'TIENDA_CERRADA' || code === 'FUERA_DE_HORARIO') {
+      const motivo = data.error?.message || 'Ahora mismo no estamos aceptando pedidos.';
+      await this._enviarMensajeSeguro(pending.project_slug, pending.from, `${motivo} No se ha cobrado nada.`);
+      return;
+    }
     await this._enviarMensajeSeguro(pending.project_slug, pending.from,
       'Lo sentimos, no hemos podido procesar tu pedido. Vuelve a la PWA e intentalo de nuevo.');
   }
@@ -1375,10 +1394,25 @@ class WhatsappBotModule extends BaseModule {
     const meta = this.projectsByMeta.get(pending.project_slug);
     const display = meta?.display_number ? `\nNumero del negocio: ${meta.display_number}` : '';
     const aNombre = pending.cliente_nombre ? ` a nombre de ${pending.cliente_nombre}` : '';
+    // DÓNDE recoger: la dirección y el mapa viven en el config del proyecto (bloque servicio),
+    // no en el código del bot. Si no hay dirección configurada, el mensaje no la inventa.
+    const recogida = await this._lineaRecogida(pending.project_slug);
     const msg = (pending.metodo_pago === 'tarjeta')
-      ? `Pedido recibido${aNombre}. Te envío ahora el enlace para pagar con tarjeta.${display}`
-      : `Pedido recibido${aNombre}. Pasa a recoger y paga al recoger.${display}`;
+      ? `Pedido recibido${aNombre}. Te envío ahora el enlace para pagar con tarjeta.${recogida}${display}`
+      : `Pedido recibido${aNombre}. Pasa a recoger y paga al recoger.${recogida}${display}`;
     await this._enviarMensajeSeguro(pending.project_slug, pending.from, msg);
+  }
+
+  // Línea de recogida para el cliente: dirección + link del mapa si están configurados.
+  async _lineaRecogida(project_slug) {
+    try {
+      if (!this.servicio) return '';
+      const cfg = await this.servicio.leer(project_slug);
+      const rec = (cfg && cfg.recogida) || null;
+      if (!rec || !rec.direccion) return '';
+      const dir = `${rec.direccion}${rec.ciudad ? ', ' + rec.ciudad : ''}`;
+      return `\nRecogida en ${dir}` + (rec.maps_url ? `\n${rec.maps_url}` : '');
+    } catch (_) { return ''; }
   }
 
   async _notificarStaff(pending, pedido) {

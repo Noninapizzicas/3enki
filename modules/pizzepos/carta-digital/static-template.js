@@ -1775,9 +1775,10 @@ function sendWhatsApp() {
   }
   const msg = buildOrderMsg();
   if (!msg) return;
-  var total = cart.reduce(function(s, i) { return s + i.precio * i.qty; }, 0);
-  saveLastOrder();
+  var nombre = _pedNombre();
+  saveLastOrder();          // copia para «repetir último pedido»: vaciar no pierde el pedido
   window.open('https://wa.me/' + CONFIG.whatsapp_telefono + '?text=' + encodeURIComponent(msg), '_blank');
+  _cerrarPedido(nombre);    // el pedido ya salió hacia WhatsApp: el carrito se vacía
 }
 
 // Pagar AHORA (pasarela): POST con pago_online → tienda-api crea el pedido + inicia el pago
@@ -1815,7 +1816,7 @@ async function pagarAhora() {
       return;
     }
     // Sin pasarela: el pedido SÍ se creó (recogida). Confirmamos por nombre.
-    if (r.ok && data && data.data && data.data.pedido_id) { mostrarConfirmacion(nombre); cart = []; updateCart(); return; }
+    if (r.ok && data && data.data && data.data.pedido_id) { saveLastOrder(); _cerrarPedido(nombre); return; }
     throw new Error((data && data.error && data.error.message) || ('HTTP ' + r.status));
   } catch (e) {
     alert('No se pudo iniciar el pago.' + (CONFIG.whatsapp_telefono ? ' Prueba por WhatsApp.' : ' Inténtalo de nuevo.'));
@@ -1852,8 +1853,7 @@ async function pedirOnline() {
     var data = await r.json().catch(function(){ return null; });
     if (r.ok && data && data.data && data.data.pedido_id) {
       saveLastOrder();
-      mostrarConfirmacion(nombre);
-      cart = []; updateCart();
+      _cerrarPedido(nombre);
     } else {
       throw new Error((data && data.error && data.error.message) || ('HTTP ' + r.status));
     }
@@ -1862,6 +1862,15 @@ async function pedirOnline() {
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = 'Pedir para recoger'; }
   }
+}
+
+// El pedido YA salió (WhatsApp, online, o pasarela sin redirección): un solo camino lo cierra.
+// Vacía el carrito y deja la confirmación a la vista. Se llama DESPUÉS de saveLastOrder(): así
+// el respaldo «repetir último pedido» guarda las líneas y vaciar no pierde nada.
+function _cerrarPedido(nombre) {
+  cart = [];
+  updateCart();                  // vacía + persiste en localStorage + oculta el footer
+  mostrarConfirmacion(nombre);   // y el panel pasa a decir «pedido confirmado»
 }
 
 // Confirmación accesible: el ancla de recogida es el NOMBRE (el dependiente lo pide al recoger).
@@ -1875,6 +1884,7 @@ function mostrarConfirmacion(nombre) {
       '<h3>¡Pedido confirmado!</h3>' +
       '<p>Cuando lo recojas, di tu nombre:</p>' +
       '<div class="pedido-codigo">' + esc(nombre) + '</div>' +
+      (getLastOrder() ? '<button class="btn-share" onclick="repeatLastOrder();toggleCart()">🔄 ' + T.repeat_order + '</button>' : '') +
       '<button class="btn-wa" onclick="toggleCart()">Cerrar</button></div>';
   }
 }

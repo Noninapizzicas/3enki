@@ -172,3 +172,24 @@ test('carta-digital/template — PODA v2.4: sin ofertas/reseñas/track (la proye
     assert.ok(!html.includes(huerfano), 'no debe quedar rastro de: ' + huerfano);
   }
 });
+
+test('carta-digital/template — mandar el pedido VACÍA el carrito (whatsapp y online)', () => {
+  const html = htmlDe();
+  // Un solo camino cierra el pedido: vacía + persiste + confirma.
+  assert.ok(html.includes('function _cerrarPedido(nombre)'), 'existe _cerrarPedido');
+  assert.ok(html.includes('cart = [];\n  updateCart();'), 'el cierre vacía y repinta (persiste en localStorage)');
+
+  // WhatsApp: primero se abre wa.me, DESPUÉS se vacía (el pedido ya salió).
+  const wa = html.slice(html.indexOf('function sendWhatsApp('), html.indexOf('async function pagarAhora('));
+  assert.ok(wa.includes('saveLastOrder()'), 'whatsapp: guarda el respaldo antes de vaciar');
+  assert.ok(wa.indexOf('window.open') < wa.indexOf('_cerrarPedido('), 'whatsapp: abre y luego vacía');
+  assert.ok(!wa.includes('cart = [];'), 'whatsapp: ya no se queda el carrito lleno');
+
+  // Online (tienda-api): mismo camino, sin repintar vacío antes de confirmar.
+  const online = html.slice(html.indexOf('async function pedirOnline('), html.indexOf('function _cerrarPedido('));
+  assert.ok(online.includes('_cerrarPedido(nombre)'), 'online: cierra por el helper');
+  assert.ok(!online.includes('cart = []; updateCart();'), 'online: sin vaciado a mano');
+
+  // El respaldo del último pedido se guarda ANTES de vaciar (si no, «repetir» saldría vacío).
+  assert.ok(html.indexOf('function saveLastOrder()') < html.indexOf('function _cerrarPedido('), 'orden: respaldo antes del cierre');
+});

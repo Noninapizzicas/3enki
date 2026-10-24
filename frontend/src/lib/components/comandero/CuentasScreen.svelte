@@ -34,6 +34,7 @@
 
   import TipoButton from './TipoButton.svelte';
   import CuentaCardMesa from './CuentaCardMesa.svelte';
+  import ServicioToggle from './ServicioToggle.svelte';
 
   // Props
   export let onNavigate: ((path: string) => void) | null = null;
@@ -162,6 +163,8 @@
       <span class="count">{$cuentasCount}</span>
     </div>
     <div class="header-right">
+      <!-- La tecla del dueño: pedidos de tienda abiertos/cerrados (las mesas no se tocan) -->
+      <ServicioToggle {projectId} {projectSlug} />
       <ConnectionStatus showLabel={true} size="md" />
       <span class="clock">{clock}</span>
     </div>

@@ -286,6 +286,51 @@ async function testToolEstadoYSet() {
 }
 
 // --------------------------------------------------
+// 4. El contrato del comandero — el pill del header habla la MISMA puerta
+// --------------------------------------------------
+
+function testContratoDelComandero() {
+  const fs = require('fs');
+  const path = require('path');
+  const manifest = require('../../modules/pizzepos/pedidos/module.json');
+
+  // Misma derivación que core/modules/loader.js: domain = antes del primer punto.
+  const claveUi = (nombre) => {
+    const i = nombre.indexOf('.');
+    return { domain: nombre.slice(0, i), action: nombre.slice(i + 1) };
+  };
+
+  const nombres = manifest.tools.map(t => t.name);
+  assert.ok(nombres.includes('pedido.servicio.estado'), 'la tool de lectura existe');
+  assert.ok(nombres.includes('pedido.servicio.set'), 'la tool de la tecla existe');
+  assert.deepStrictEqual(claveUi('pedido.servicio.estado'), { domain: 'pedido', action: 'servicio.estado' });
+  assert.deepStrictEqual(claveUi('pedido.servicio.set'), { domain: 'pedido', action: 'servicio.set' });
+
+  const raiz = path.join(__dirname, '../..');
+  const toggle = fs.readFileSync(
+    path.join(raiz, 'frontend/src/lib/components/comandero/ServicioToggle.svelte'), 'utf8'
+  );
+  assert.ok(
+    /mqttRequest<[^>]*>\('pedido', 'servicio\.estado'/.test(toggle),
+    'el pill LEE por la puerta pedido/servicio.estado (no inventa otra)'
+  );
+  assert.ok(
+    /mqttRequest<[^>]*>\('pedido', 'servicio\.set'/.test(toggle),
+    'el pill ESCRIBE por la puerta pedido/servicio.set (no inventa otra)'
+  );
+
+  const cuentas = fs.readFileSync(
+    path.join(raiz, 'frontend/src/lib/components/comandero/CuentasScreen.svelte'), 'utf8'
+  );
+  assert.ok(
+    cuentas.includes('<ServicioToggle'),
+    'el header del comandero monta el interruptor'
+  );
+
+  console.log('  ✓ comandero: el pill lee/escribe servicio.estado|set por la puerta pedido (misma tool, sin puerta nueva)');
+}
+
+// --------------------------------------------------
 // 3. tienda-api — el espejo que lee la PWA
 // --------------------------------------------------
 
@@ -351,6 +396,7 @@ async function testEstadoHttpSinConfig() {
   await testSinLecturaDeConfigNoFrena();
   await testFicheroSinEnvoltorio();
   await testToolEstadoYSet();
+  testContratoDelComandero();
   await testEstadoHttp();
   await testEstadoHttpSinConfig();
   console.log('pizzepos__servicio: OK');

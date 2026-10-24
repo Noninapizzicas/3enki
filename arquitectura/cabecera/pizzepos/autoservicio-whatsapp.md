@@ -10,6 +10,7 @@ fuentes:
   - modules/_shared/pedido-tasador.js
   - modules/_shared/horario-servicio.js
   - modules/_shared/lector-servicio.js
+  - frontend/src/lib/components/comandero/ServicioToggle.svelte
   - tests/unit/pizzepos__servicio.test.js
 verificado: 2026-10-24
 ---
@@ -480,7 +481,14 @@ tool): **el bar sigue trabajando con la tienda cerrada**.
 | `modules/_shared/horario-servicio.js` | la DECISIÓN, pura: recibe el instante, devuelve el estado. Sin I/O |
 | `modules/_shared/lector-servicio.js` | la LECTURA: `fs.read`/`fs.write` del config por el bus, caché 15 s, invalidada por `servicio.cambiado` |
 | `pedido.servicio.set` / `pedido.servicio.estado` | la TECLA del dueño (`abierto`, `motivo`, `hasta`, `aviso`) y la pregunta "¿se puede pedir ahora?" |
+| `frontend/.../comandero/ServicioToggle.svelte` | la MANO del dueño: el pill ABIERTO/CERRADO en el header del comandero. Cierra 30 min / 1 h / 2 h (se reabre solo), hasta una hora, o sin hora (candado). No abre otra puerta: llama a las mismas dos tools |
 | `GET /tienda/estado/:project` | el ESPEJO para la PWA: banner, botones frenados y datos de recogida |
+
+**El dueño cierra desde el comandero, no desde el chat.** El pill del header
+(`CuentasScreen.svelte` monta `ServicioToggle`) lee `servicio.estado` al montar y cada 30 s,
+y escribe `servicio.set`. Si la tool no existe en el backend desplegado, el pill NO se pinta:
+el comandero se comporta como antes. Cerrar por saturación desde el móvil en la barra no exige
+consola, ni chat, ni republicar.
 
 **Cerrar no exige republicar.** La PWA pregunta el estado al abrir y pinta el aviso; si el
 dueño cierra, muerde en segundos. El bundle es estático: un freno solo en el cliente se salta

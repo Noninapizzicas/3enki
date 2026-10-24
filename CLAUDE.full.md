@@ -16131,7 +16131,7 @@ TESTS {
 ```json
 {
   "esquema": "estado-servicio-v1",
-  "fuente_unica": "config.json del proyecto → bloque `servicio`",
+  "fuente_unica": "<storage del proyecto>/pizzepos/servicio/config.json (bloque suelto o envuelto en `servicio`)",
   "forma": {
     "zona_horaria": "Europe/Madrid — el servidor corre en UTC; comparar su hora con el horario de Lorca da 2h de error",
     "horario": { "<dia>": ["19:30-23:30", "13:00-16:00"] },

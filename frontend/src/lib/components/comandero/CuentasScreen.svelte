@@ -20,6 +20,7 @@
    * Mobile: sidebar se mueve arriba como barra horizontal
    */
   import { onMount, onDestroy, getContext } from 'svelte';
+  import { page } from '$app/stores';
   import { connect, disconnect, setupVisibilityHandler, removeVisibilityHandler } from '$lib/ui-core';
   import { mqttRequest } from '$lib/ui-core/mqtt-request';
   import { ConnectionStatus } from '$lib/components/base';
@@ -39,20 +40,26 @@
   export let projectId: string = '';
 
   // NOMBRE VISIBLE — el header enseña el NOMBRE del proyecto, nunca su id.
-  // El layout `[project_id]/+layout.svelte` ya resuelve project.name del bus y lo
-  // publica en el contexto 'project'; aquí solo se lee. Mientras el nombre no ha
-  // llegado se pinta el rótulo neutro de la pantalla ('Cuentas'), NUNCA el id:
-  // al recargar, el prop projectId es el slug de la URL y después el UUID real
-  // (sessionProject), así que pintarlo hacía parpadear slug → UUID → nombre.
-  // Sin contexto (uso suelto del componente), sí cae al id recibido.
+  // Dos fuentes, en este orden:
+  //   1. el nombre REAL que el layout `[project_id]/+layout.svelte` resuelve del
+  //      bus y publica en el contexto 'project' (solo cuando `resolved`).
+  //   2. mientras no ha llegado: el slug de la URL con los guiones por espacios
+  //      ('the-pirate' → 'the pirate'), que es el rótulo humano inmediato.
+  // Nunca el prop projectId: al recargar vale el slug y después el UUID de
+  // sesión, así que pintarlo hacía parpadear 'the-pirate' → UUID.
   const projectCtx = getContext<{ subscribe: (fn: (v: { name?: string; resolved?: boolean }) => void) => () => void } | undefined>('project');
   let projectName = '';
   let projectResolved = false;
   let unsubProject: (() => void) | null = null;
-  // Solo se fía el NOMBRE cuando el layout ya lo ha RESUELTO del bus: antes de eso
-  // el layout siembra name con el slug de la URL (name: project_id), y pintarlo
-  // daría el mismo parpadeo. Mientras no haya nombre resuelto: rótulo neutro.
-  $: titulo = (projectResolved && projectName) || (projectCtx ? 'Cuentas' : (projectId || 'Cuentas'));
+  $: urlSlug = ($page.params?.project_id as string) || '';
+  $: titulo = (projectResolved && projectName) || humanizarSlug(urlSlug) || 'Cuentas';
+
+  function humanizarSlug(slug: string): string {
+    if (!slug) return '';
+    // Un UUID no es un nombre: si el segmento ya es un id, no se pinta.
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(slug)) return '';
+    return decodeURIComponent(slug).replace(/[-_]+/g, ' ').trim();
+  }
 
   let cleanupSubs: (() => void) | null = null;
   let clock = '';

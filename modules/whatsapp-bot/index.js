@@ -89,12 +89,35 @@ class WhatsappBotModule extends BaseModule {
   // Re-pull de la carta del canal 'digital' a `productos` EN PROCESO (mismo patrón que
   // carta-digital→ingredientes). Cachea { productos(precio), ingredientes_catalogo(precio_extra) }:
   // justo lo que tasarPedido necesita. Soft-fail: si productos no está, deja el snapshot como esté.
+  // Instancia VIVA de productos (pizzepos/productos se registra por el nombre del
+  // DIRECTORIO, no por el manifest: 'productos'). Se prueban las dos formas para que un
+  // rename del grupo no vuelva a dejar el snapshot muerto en silencio.
+  _instanciaProductos() {
+    const reg = this.moduleRegistry;
+    if (!reg || typeof reg.get !== 'function') return null;
+    for (const clave of ['productos', 'pizzepos/productos']) {
+      const inst = reg.get(clave)?.instance;
+      if (inst?.handleCartaCompleta) return inst;
+    }
+    return null;
+  }
+
   async _refrescarCarta(project_id) {
     try {
-      const inst = this.moduleRegistry?.get('productos')?.instance;
-      if (!inst?.handleCartaCompleta) return;
+      const inst = this._instanciaProductos();
+      if (!inst) {
+        this.logger?.warn?.('whatsapp-bot.carta.snapshot.sin_modulo', { project_id });
+        this.metrics?.increment?.('whatsapp-bot.carta.snapshot.sin_modulo');
+        return null;
+      }
       const r = await inst.handleCartaCompleta({ project_id, canal: 'digital' });
-      if (r?.status !== 200 || !r.data) return;
+      if (r?.status !== 200 || !r.data) {
+        this.logger?.warn?.('whatsapp-bot.carta.snapshot.sin_carta', {
+          project_id, status: r?.status ?? null, error: r?.error?.code || r?.error?.message || null
+        });
+        this.metrics?.increment?.('whatsapp-bot.carta.snapshot.sin_carta', { status: r?.status ?? 0 });
+        return null;
+      }
       this.cartaSnap.set(project_id, {
         productos: Array.isArray(r.data.productos) ? r.data.productos : [],
         ingredientes_catalogo: Array.isArray(r.data.ingredientes) ? r.data.ingredientes : [],
@@ -103,30 +126,74 @@ class WhatsappBotModule extends BaseModule {
       this.logger?.info?.('whatsapp-bot.carta.snapshot', {
         project_id, productos: r.data.productos?.length || 0, ingredientes: r.data.ingredientes?.length || 0
       });
+      this.metrics?.increment?.('whatsapp-bot.carta.snapshot.ok');
+      return this.cartaSnap.get(project_id) || null;
     } catch (err) {
       this.logger?.warn?.('whatsapp-bot.carta.snapshot.failed', { project_id, error: err.message });
+      this.metrics?.increment?.('whatsapp-bot.carta.snapshot.failed');
+      return null;
     }
   }
 
   // slug → project_id (UUID). Lo tiende project.activated; si falta, intenta resolver en
   // proceso por project-manager (cold-start). null si no se puede (→ el bot pedirá reintentar).
+  _slugify(s) {
+    return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  }
+
   _resolverProjectId(slug) {
+    if (!slug) return null;
     if (this.pidPorSlug.has(slug)) return this.pidPorSlug.get(slug);
     try {
       const pm = this.moduleRegistry?.get('project-manager')?.instance;
-      const store = pm?.projectsStore;
-      if (store && typeof store.values === 'function') {
-        for (const p of store.values()) {
-          const s = p?.slug || (p?.name ? pm._slugify?.(p.name) : null);
-          if (s === slug && p?.project_id) {
-            this.pidPorSlug.set(slug, p.project_id);
-            this.slugPorPid.set(p.project_id, slug);
-            return p.project_id;
-          }
+      // FUENTE REAL: project-manager expone `this.projects` (Map id -> project). La forma
+      // `projectsStore` NO existe (grep: 0 ocurrencias) y dejaba el resolver muerto en frío.
+      const store = pm?.projects;
+      const iter = (store && typeof store.values === 'function') ? Array.from(store.values())
+                 : (Array.isArray(store) ? store : []);
+      for (const p of iter) {
+        const pid = p?.id || p?.project_id;
+        if (!pid) continue;
+        const candidatos = [
+          p?.slug,
+          p?.name ? (pm?._slugify?.(p.name) || this._slugify(p.name)) : null,
+          p?.base_path ? path.basename(String(p.base_path)) : null
+        ].filter(Boolean);
+        if (candidatos.includes(slug)) {
+          this.pidPorSlug.set(slug, pid);
+          this.slugPorPid.set(pid, slug);
+          this.logger?.info?.('whatsapp-bot.project_id.resuelto', { slug, project_id: pid });
+          return pid;
         }
       }
-    } catch (_) {}
+    } catch (err) {
+      this.logger?.warn?.('whatsapp-bot.project_id.resolve_failed', { slug, error: err?.message });
+    }
+    this.logger?.warn?.('whatsapp-bot.project_id.no_resuelto', {
+      slug, proyectos_en_pm: this.moduleRegistry?.get('project-manager')?.instance?.projects?.size ?? null
+    });
     return null;
+  }
+
+  // Cold start: calienta el snapshot de TODOS los proyectos mapeados. No depende de
+  // project.activated (el core NO lo emite al arrancar: 0 receives medidos). Reintenta
+  // porque project-manager puede no estar cargado en el primer tick.
+  async _calentarSnapshots(intentos = 5) {
+    for (const slug of this.projectsByMeta.keys()) {
+      const pid = this._resolverProjectId(slug);
+      if (pid && !this.cartaSnap.has(pid)) await this._refrescarCarta(pid);
+    }
+    const pendientes = [];
+    for (const slug of this.projectsByMeta.keys()) {
+      if (!this._resolverProjectId(slug)) pendientes.push(slug);
+    }
+    this.logger?.info?.('whatsapp-bot.carta.snapshots.calientes', {
+      calientes: this.cartaSnap.size, pendientes, intentos
+    });
+    if (pendientes.length && intentos > 1) {
+      setTimeout(() => { this._calentarSnapshots(intentos - 1).catch(() => {}); }, 2500);
+    }
   }
 
   // ==========================================
@@ -191,6 +258,9 @@ class WhatsappBotModule extends BaseModule {
     });
 
     await this._hidratarMappingProyectos();
+
+    // Cold start: calienta snapshots en background (no bloquea el onLoad ni el arranque del core).
+    setTimeout(() => { this._calentarSnapshots().catch(() => {}); }, 1500);
 
     this.logger.info('module.loaded', {
       module: this.name,
@@ -404,12 +474,26 @@ class WhatsappBotModule extends BaseModule {
         });
       }
     }
+    // Observabilidad del re-tasado: sin esto, un snapshot vacío solo se ve en un warn
+    // que puede no llegar al jsonl (0 warns medidos en días enteros).
+    const snapshots = [];
+    for (const [pid, snap] of this.cartaSnap) {
+      snapshots.push({
+        project_id: pid,
+        project_slug: this.slugPorPid.get(pid) || null,
+        productos: snap.productos?.length || 0,
+        ingredientes: snap.ingredientes_catalogo?.length || 0,
+        edad_ms: Date.now() - (snap.at || 0)
+      });
+    }
     const body = {
       module: this.name,
       version: this.version,
       projects_mapped: this.projectsByMeta.size,
       projects_operativos: operativos,
-      pending_pedidos: this.pendingPedidos.size
+      pending_pedidos: this.pendingPedidos.size,
+      pid_por_slug: Object.fromEntries(this.pidPorSlug),
+      carta_snapshot: snapshots
     };
     if (res && typeof res.status === 'function') {
       return res.status(200).json({ status: 'ok', ...body });

@@ -899,7 +899,13 @@ class PersistenciaComanderoModule extends BaseModule {
       porProyecto.get(pid).set(cuenta_id, cuenta);
     }
 
-    for (const [projectId, cuentasMap] of porProyecto) {
+    // Un proyecto que se queda SIN cuentas desaparece de porProyecto: sin recorrer
+    // también los proyectos ACTIVOS, su fichero no se reescribía nunca y la última
+    // cuenta borrada resucitaba en el siguiente arranque. El fichero refleja la verdad.
+    const proyectos = new Set([...porProyecto.keys(), ...this._getActiveProjectIds()]);
+
+    for (const projectId of proyectos) {
+      const cuentasMap = porProyecto.get(projectId) || new Map();
       const dirs = await this._getProjectDirs(projectId);
       if (!dirs) continue;
       try {

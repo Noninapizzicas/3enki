@@ -161,7 +161,10 @@ class ComanderoModule extends BaseModule {
       required: ['cuenta_id'],
       properties: {
         cuenta_id:  { type: 'string', minLength: 1 },
-        project_id: { type: 'string' }
+        project_id: { type: 'string' },
+        // Identidad del envío: si el origen ya tiene pedido (tienda, WhatsApp,
+        // cualquier canal), su id viaja aquí y el comandero NO acuña otro.
+        pedido_id:  { type: 'string', minLength: 1 }
       }
     });
 
@@ -738,7 +741,7 @@ class ComanderoModule extends BaseModule {
         return invalid;
       }
 
-      const { cuenta_id, project_id } = data;
+      const { cuenta_id, project_id, pedido_id: pedido_id_origen } = data;
       const pedido = this.pedidos.get(cuenta_id);
       if (!pedido || pedido.items.length === 0) {
         this._logError('comandero.ui.send_kitchen.empty', { cuenta_id }, 'ui_send_kitchen', 'CONFLICT_STATE');
@@ -755,7 +758,10 @@ class ComanderoModule extends BaseModule {
         });
       }
 
-      const pedido_id = `ped_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`;
+      // Un pedido, un id: si el origen manda el suyo, ESE es el pedido. Solo el
+      // comandero manual (sin origen) acuña un id nuevo. Evita el gemelo fantasma
+      // que nacía cuando tienda ya había creado su pedido antes de la cuenta.
+      const pedido_id = pedido_id_origen || `ped_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`;
       const ahora     = new Date().toISOString();
 
       for (const item of itemsParaEnviar) {

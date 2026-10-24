@@ -433,9 +433,13 @@ export async function loadCuentasFromPersistencia(projectId: string, tipo?: stri
                 itemsDetalle.push({
                   item_id: itemId,
                   producto_id: item.producto_id || '',
-                  nombre: item.nombre || '',
+                  // Shape POS: `nombre`. Shape tienda: `descripcion`. Sin el fallback,
+                  // la línea sale muda ("x1" y nada más).
+                  nombre: item.nombre || item.descripcion || '',
                   cantidad: item.cantidad || 1,
-                  precio: item.precio || item.precio_unitario || item.subtotal || 0,
+                  // El precio tambien cambia de shape: euros en POS, centimos en tienda.
+                  precio: item.precio ?? item.precio_unitario
+                    ?? (Number.isInteger(item.precio_unitario_centimos) ? item.precio_unitario_centimos / 100 : (item.subtotal ?? 0)),
                   estado_cocina: existing?.estado_cocina || 'en_cocina',
                   ...(existing?.listo_at && { listo_at: existing.listo_at })
                 });

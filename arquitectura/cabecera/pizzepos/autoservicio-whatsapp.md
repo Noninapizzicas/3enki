@@ -7,7 +7,7 @@ fuentes:
   - modules/pizzepos/carta-digital/**
   - modules/pizzepos/pedidos/**
   - modules/_shared/pedido-tasador.js
-verificado: 2026-10-22
+verificado: 2026-10-24
 ---
 
 # SUBSISTEMA AUTOSERVICIO — Pedido del cliente por WhatsApp (PWA → bot → cocina)
@@ -351,6 +351,9 @@ EVENTOS {
   pedido.crear-tienda                : bot/tienda-api → pedidos (items re-tasados + estructura + metodo_pago)
   pedido.crear-tienda.response       : pedidos → bot (request_id correlado)
   pedido.creado                      : pedidos (informativo; lleva cuenta_id, sin teléfono/secretos)
+                                       UNO por pedido: el bot confirma con el primero y `_consumePending`
+                                       es de un solo uso — el gemelo que nacía al enviar a cocina
+                                       (pedido_id propio del comandero) ya no existe (2026-10-24)
   pago.iniciar.request               : bot → pago-gateway (LÍDER — solo si metodo_pago == 'tarjeta')
   pago.iniciar.response              : pago-gateway → bot (request_id correlado; data.checkout_url)
   pago.confirmado                    : pago-gateway (webhook de Stripe, firma verificada) → pedidos

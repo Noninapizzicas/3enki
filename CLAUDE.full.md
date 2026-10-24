@@ -5666,6 +5666,10 @@ CLASE EstudioViabilidad {
 > la carta pública AL VUELO bebiendo de las fuentes reales → nunca se queda viejo. Lo
 > ÚNICO que posee: el config del CANAL (dominio + opciones PWA) y el diseño (look de Enki).
 > Híbrido: index.js es el REFLEJO (JS); carta-digital.blueprint.json es la mitad LLM (cajones).
+> v2.25.1 — el CIERRE del pedido vive en la plantilla (static-template.js): al salir el pedido el
+> carrito se vacía (WhatsApp / online / pasarela sin redirección) y la copia queda en «repetir
+> último pedido». Es plantilla HORNEADA: el deploy no toca el bundle ya publicado — tras desplegar
+> hay que REPUBLICAR para que la PWA servida lleve la plantilla nueva.
 
 ```
 INTERFAZ CartaDigitalContract {                 // ui_handlers (RPC del bus / frontend)
@@ -15906,6 +15910,13 @@ sendTemplate (Meta plantillas · salientes >24h) {
 // ORDEN DEL GRID (2026-10-22): el grid "Todas" pinta `DATA.productos` tal cual llega, así que la
 //   proyección los entrega en tramos contiguos por `categorias[].orden` (mismo orden que las
 //   pestañas). El scroll ya no depende del orden de guardado de la carta.
+// CIERRE DEL PEDIDO (módulo v2.25.1): al SALIR el pedido el carrito se vacía. Un solo
+//   _cerrarPedido(nombre) sirve a los tres caminos (WhatsApp, online tienda-api, pasarela sin
+//   redirección): vacía, PERSISTE el vacío (localStorage 'carta_cart_*' — recargar no lo
+//   resucita) y deja la confirmación por nombre a la vista. La copia va a 'repetir último
+//   pedido', guardada ANTES de vaciar (saveLastOrder) → vaciar no pierde nada.
+//   Antes: sendWhatsApp dejaba el carrito lleno (y volvía al recargar) y el camino online
+//   repintaba 'carrito vacío' encima de la confirmación (nunca se veía).
 // PODA previa de carta-digital:
 //   v2.4.0 — fuera ofertas/reseñas/track (la proyección no los daba: UI viva alimentada por vacío).
 //   v2.5.0 — fuera el cerebro FANTASMA del chat (default ai_chat_path '/modules/ai-gateway/chat',
@@ -15966,6 +15977,9 @@ AUTOSERVICIO_COMPLETO {
   1. cliente escribe al WhatsApp → bot responde con el link de la PWA (greeter)
   2. cliente arma el carrito en la PWA (fotos, mitad, al_gusto, variaciones)
   3. PWA pre-rellena el wa.me con el pedido CANÓNICO + #P1 (por ids) ; cliente pulsa enviar
+     — al SALIR el pedido el carrito se VACÍA (y el vacío se persiste: recargar no lo resucita);
+       el panel confirma por nombre y la copia queda en «repetir último pedido» (vaciar no pierde
+       nada). Mismo cierre para el camino online (tienda-api/pasarela): un solo _cerrarPedido.
   4. bot recibe (su nº = identidad veraz) → parsea → estructura (#P1)
   5. bot RE-TASA contra cartaSnap[pid] (fresco por evento) → precios del SERVIDOR
   6. bot publish('pedido.crear-tienda', items re-tasados + estructura) → pedidos
@@ -16015,7 +16029,7 @@ PIEZAS {
   modules/whatsapp-bot (1.5.0)                   (webhook Meta REAL + alta por UI + snapshot + #P1 + re-tasado + sendTemplate + _rpc/_iniciarPagoTarjeta/onPedidoPagado)
   modules/whatsapp-bot/services/meta-cloud-client.js (Meta Cloud API: sendText/sendTemplate/_postMessage/parseWebhookEvent)
   modules/whatsapp-bot/services/pedido-parser.js (#P1: _decodificarEstructura + metodo_pago)
-  modules/pizzepos/carta-digital (2.25.0)        (PWA emite #P1 + paridad mitad + nombre obligatorio + botones metodo_pago)
+  modules/pizzepos/carta-digital (2.25.1)        (PWA emite #P1 + paridad mitad + nombre obligatorio + botones metodo_pago)
   modules/pizzepos/pedidos (3.5.0)               (estructura tienda → cocina ; ancla = cliente_nombre ; metodo_pago ; onPagoConfirmado con recreación del huérfano)
   modules/pizzepos/pago-gateway (1.0.0)          (LÍDER provider-agnóstico: Stripe Checkout + webhook firmado + metadata de contexto)
   modules/credential-manager (2.2.0)             (META_WHATSAPP[_VERIFY_TOKEN] + STRIPE en catálogo + PROJECT_ONLY)

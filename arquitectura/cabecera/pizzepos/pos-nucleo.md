@@ -910,6 +910,9 @@ CLASE PersistenciaComanderoModule HEREDA BaseModule {
 
   METODOS {
     async handleGetCuentasActivas(): Promise<Response>
+      // project_id se resuelve a SLUG (ResolutorProyecto): pregunta con UUID o con
+      // slug y responde el negocio entero — las cuentas historicas con UUID y las
+      // nuevas con slug son el MISMO proyecto (verificado en vivo 2026-10-24).
       RETORNA {status: 200, data: {cuentas: cuentasActivasCache.values()}}
 
     async handleGetEventos(data?: {date?}): Promise<Response>
@@ -1079,6 +1082,13 @@ PATRON Multi-Tenant {
 ---
 
 ## PROJECT-TYPE: pizzepos
+
+> **Identidad de proyecto en el POS (verificado en vivo 2026-10-24).** La carpeta
+> física y la llave de las cuentas es el **SLUG** (`/data/projects/the-pirate/`), no
+> el UUID de sesión. `ResolutorProyecto` (`modules/_shared`) traduce cualquier llave
+> a slug — el mapa id→slug lo calcula `project-manager` en `project.list.response`;
+> sin respuesta del bus se devuelve la llave tal cual. Sin esta normalización el
+> mismo negocio partía sus cuentas en dos carpetas y el comandero solo veía la mitad.
 
 ```json
 {

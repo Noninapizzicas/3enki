@@ -120,6 +120,8 @@ CLASE CuentasManager IMPLEMENTA CuentasContract {
     pedidosStore: Map<cuenta_id, Array<Pedido>>
     productosCache: Map<producto_id, Producto>
     productosManager: ProductosManager
+    // project_id NO se guarda crudo: el borde lo resuelve a SLUG (ResolutorProyecto),
+    // porque es el nombre de la carpeta en /data/projects/. Un negocio, una llave.
   }
 
   CONSTRUCTOR(options: Object)

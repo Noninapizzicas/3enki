@@ -5,7 +5,7 @@ resumen: Managers de dominio pizzepos (cuentas, productos, categorías, cobros, 
 fuentes:
   - modules/pizzepos/**
   - blueprints/**
-verificado: 2026-10-22
+verificado: 2026-10-24
 ---
 
 # Módulos Pizzepos y Blueprints
@@ -601,6 +601,14 @@ CLASE PedidosManager IMPLEMENTA PedidosContract {
   }
 }
 ```
+
+> **Un pedido, un id (verificado en vivo 2026-10-24).** `handleCreatePedidoTienda` crea el pedido
+> (UUID) y `_crearCuentaTienda` lo inyecta en el comandero; el envío a cocina viaja con
+> `pedido_id = pedido.id` y su `project_id`. `onComanderoEnviarCocina` COMPLETA ese pedido si ya
+> existe (items vivos, estado `en_cocina`, un solo `pedido.enviado_cocina`) en vez de acuñar un
+> gemelo `ped_<ts>_<rand>` y republicar `pedido.creado`. El gemelo apilaba dos apuntes en la
+> cuenta (4 líneas donde había 2 items) y dejaba un pedido fantasma con `project_id: 'default'`.
+> El comandero manual sigue acuñando su propio id: no pasa `pedido_id`.
 
 ### PAGO DEL PEDIDO DE TIENDA — efectivo o tarjeta (el método viaja en el #P1)
 

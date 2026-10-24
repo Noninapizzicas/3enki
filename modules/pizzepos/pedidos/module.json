@@ -1,6 +1,6 @@
 {
   "name": "pedidos",
-  "version": "3.5.1",
+  "version": "3.6.0",
   "_v3_5_1_nota": "v3.5.1 (2026-10-19): CONTRATO pedido_id. Cuatro handlers (send-kitchen, complete, cancel, total) declaraban pedido_id en el schema de su tool pero leian data.id -> toda llamada que siguiera el schema devolvia 404 'Pedido no encontrado' y el pedido NUNCA llegaba a cocina por la via del asistente. Ahora aceptan pedido_id (canonico) y id (compat). Verificado en vivo: pedido.create -> add-item -> send-kitchen -> cocina.list-active con el item y su estacion.",
   "_v3_4_nota": "v3.4.0 (2026-06-30): los INGREDIENTES BASE del producto viajan a cocina por el camino de autoservicio. Antes la carta-digital/bot mandaba solo producto_id + variaciones -> cocina pintaba el plato PELADO (Batucada sin sus ingredientes; solo se veia el '+ Ajo' del extra). Ahora el tasador adjunta ingredientes_base (nombres) por linea (normal/al_gusto) y por mitad (pizza_izquierda/derecha.ingredientes_base), y pedidos los REENVIA: items_tienda y el bridge _crearCuentaTienda->comandero.handleAddItem dejan pasar ingredientes_base (el comandero ya lo guarda y reenvia en enviar_cocina; cocina ItemLine ya lo pinta). Ademas: this.version se DERIVA del manifest (antes 3.2.0 clavado divergia).",
   "_v3_3_nota": "v3.3.0 (2026-06-23): se RETIRA codigo_recogida del flujo de tienda. El ANCLA de recogida pasa a ser cliente_nombre (el nombre que el cliente introduce en la PWA/WhatsApp, ahora OBLIGATORIO en pedido.crear-tienda). handleConfirmarRecogida localiza por cliente_nombre (con desambiguacion por pedido_id si varios pendientes comparten nombre). Eliminados: la generacion de codigo (_generarCodigoRecogida[Unico]) y la tool pedido.generar_codigo_recogida. Los eventos pedido.creado/recogido/expirado y la cuenta operativa llevan cliente_nombre en lugar de codigo_recogida.",
@@ -19,7 +19,8 @@
       { "event": "pedido.completado",        "description": "Pedido completado (todos los items servidos). project_id top-level + correlation_id + timestamp." },
       { "event": "pedido.cancelado",         "description": "Pedido cancelado. project_id top-level + correlation_id + timestamp." },
       { "event": "pedido.pagado",            "description": "Pago online CONFIRMADO por la pasarela (llega como pago.confirmado). El pedido queda pagado de verdad. Si el pedido ya no estaba en memoria cuando llego el webhook (reinicio/deploy en la ventana de pago), se emite igual con recreado:true — reconstruido MINIMO desde la metadata de la sesion: el dinero nunca se pierde en silencio. Consumido por whatsapp-bot (avisa al cliente; si es recreado, avisa al staff)." },
-      { "event": "pedido.recogido",          "description": "El dependiente confirmo la recogida (pedido de tienda) -> recogido_y_cobrado. metodo_pago es la VERDAD del cobro: 'tarjeta' si la pasarela lo confirmo antes, 'efectivo' si se cobra en barra. project_id top-level + correlation_id + timestamp." }
+      { "event": "pedido.recogido",          "description": "El dependiente confirmo la recogida (pedido de tienda) -> recogido_y_cobrado. metodo_pago es la VERDAD del cobro: 'tarjeta' si la pasarela lo confirmo antes, 'efectivo' si se cobra en barra. project_id top-level + correlation_id + timestamp." },
+      { "event": "servicio.cambiado",         "description": "El interruptor de SERVICIO del proyecto cambio (abrir/cerrar aceptacion de pedidos de tienda). Lo publica pedido.servicio.set. Consumidores: el propio pedidos (suelta la cache de config) y tienda-api (refresca el estado que sirve a la PWA). Payload: { project_slug, abierto, motivo, hasta, correlation_id }." }
     ],
     "subscribes": [
       { "event": "comandero.enviar_cocina",  "handler": "onComanderoEnviarCocina", "description": "Bridge: comandero solicita enviar a cocina → crear pedido formal y publicar pedido.enviado_cocina." },
@@ -31,7 +32,8 @@
       { "event": "producto.actualizado",     "handler": "onProductoActualizado",   "description": "Producto actualizado — actualizar cache." },
       { "event": "caja.cerrada",             "handler": "onCajaCerrada",           "description": "Cierre de caja — limpiar pedidos del dia." },
       { "event": "dia.iniciado",             "handler": "onDiaIniciado",           "description": "Nuevo dia — limpiar pedidos stale." },
-      { "event": "pago.confirmado",          "handler": "onPagoConfirmado",        "description": "Pago online confirmado (pasarela) — marcar el pedido pagado y liberarlo." }
+      { "event": "pago.confirmado",          "handler": "onPagoConfirmado",        "description": "Pago online confirmado (pasarela) — marcar el pedido pagado y liberarlo." },
+      { "event": "servicio.cambiado",        "handler": "onServicioCambiado",      "description": "Interruptor de servicio cambiado — soltar la cache de config de servicio del proyecto." }
     ]
   },
   "ui_handlers": [
@@ -241,7 +243,39 @@
         "required": ["project_slug", "items", "total_centimos", "canal_origen", "cliente_nombre"]
       },
       "handler": "handleCreatePedidoTienda",
-      "errores_conocidos": ["INVALID_INPUT", "CONFLICT_STATE", "UNKNOWN_ERROR"]
+      "errores_conocidos": ["INVALID_INPUT", "CONFLICT_STATE", "TIENDA_CERRADA", "FUERA_DE_HORARIO", "UNKNOWN_ERROR"]
+    },
+    {
+      "name": "pedido.servicio.estado",
+      "description": "Estado de SERVICIO del proyecto para AHORA: ¿se aceptan pedidos? Resuelve en una sola respuesta el horario semanal (franjas por dia, zona del negocio) y el interruptor del dueno (saturacion / cierre arbitrario con reapertura automatica si declara `hasta`). Devuelve abierto, motivo (manual|saturacion|horario|excepcion), hasta, aviso, franja_actual, franjas_hoy, proxima_apertura, mensaje para el cliente y la direccion/link de recogida. Lo consumen la PWA (banner + freno visual) y el bot. La fuente es el bloque `servicio` del config.json del proyecto.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_slug": { "type": "string", "description": "Slug del proyecto (ej: the-pirate)." },
+          "recargar":     { "type": "boolean", "description": "true = ignora la cache corta (15s) y relee la config." }
+        },
+        "required": ["project_slug"]
+      },
+      "handler": "handleEstadoServicio",
+      "errores_conocidos": ["INVALID_INPUT", "UPSTREAM_UNREACHABLE"]
+    },
+    {
+      "name": "pedido.servicio.set",
+      "description": "La TECLA del dueno: abre o cierra la aceptacion de pedidos de tienda de forma arbitraria (saturacion, imprevisto, cierre manual). Escribe el interruptor en el config.json del proyecto y publica `servicio.cambiado`, asi que muerde en segundos sin republicar la PWA. `hasta` ISO = se reabre solo cuando amaine; sin `hasta` queda cerrado hasta que lo abra. NO afecta a los pedidos de mesa (tipo pos): el bar sigue trabajando.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_slug":  { "type": "string",  "description": "Slug del proyecto." },
+          "abierto":       { "type": "boolean", "description": "true = aceptar pedidos; false = cerrar." },
+          "motivo":        { "type": "string",  "description": "saturacion | manual (default manual)." },
+          "motivo_texto":  { "type": "string",  "description": "Texto libre para el cliente (sustituye al texto por defecto del motivo)." },
+          "hasta":         { "type": "string",  "description": "Fecha ISO de reapertura automatica. Sin ella el cierre es indefinido." },
+          "aviso":         { "type": "string",  "description": "Mensaje para el cliente mientras esta cerrado." }
+        },
+        "required": ["project_slug", "abierto"]
+      },
+      "handler": "handleFijarServicio",
+      "errores_conocidos": ["INVALID_INPUT", "CONFLICT_STATE", "UPSTREAM_UNREACHABLE"]
     }
   ],
   "dependencies": [],

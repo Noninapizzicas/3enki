@@ -16122,6 +16122,58 @@ TESTS {
 > sigue siendo el atajo "lo mismo + un ingrediente"; esto es su hermano estructural —
 > mismas hermanas, sin exigir que la carta las declare.
 
+## Cuándo se aceptan pedidos y dónde se recoge (estado de servicio)
+
+> **Aceptar un pedido no es un derecho del cliente: es una decisión del negocio.** Hasta v3.6.0
+> no había sitio: el horario vivía como texto muerto en `marca.json` y nadie lo leía, así que la
+> PWA dejaba pedir a las cuatro de la mañana. Ahora hay UNA fuente y UN freno.
+
+```json
+{
+  "esquema": "estado-servicio-v1",
+  "fuente_unica": "config.json del proyecto → bloque `servicio`",
+  "forma": {
+    "zona_horaria": "Europe/Madrid — el servidor corre en UTC; comparar su hora con el horario de Lorca da 2h de error",
+    "horario": { "<dia>": ["19:30-23:30", "13:00-16:00"] },
+    "excepciones": [{ "fecha": "YYYY-MM-DD", "cerrado": true, "motivo": "Boda privada", "franjas": ["21:00-23:30"] }],
+    "interruptor": { "abierto": false, "motivo": "saturacion", "hasta": "ISO|null", "aviso": "texto para el cliente" },
+    "recogida": { "direccion": "Juan Carlo I, 49", "ciudad": "Lorca", "maps_url": "…" }
+  },
+  "prelacion": ["interruptor del dueño", "excepción de la fecha", "horario semanal"],
+  "sin_config": "abierto — un fallo de lectura no puede cerrar el negocio",
+  "dia_con_lista_vacia": "cerrado — es una decisión escrita, no un olvido",
+  "franja_que_cruza_medianoche": "19:30-01:00 cubre la madrugada siguiente"
+}
+```
+
+**Dónde muerde.** La puerta es `pedido.crear-tienda` (`modules/pizzepos/pedidos`): ahí desembocan
+las dos vías, la PWA (tienda-api) y WhatsApp (whatsapp-bot). Cierre por saturación → `409
+TIENDA_CERRADA`; fuera de horario o excepción → `412 FUERA_DE_HORARIO`; los dos con `motivo`,
+`hasta` y `proxima_apertura` en `details`. Los pedidos de MESA no pasan por esa puerta (otra
+tool): **el bar sigue trabajando con la tienda cerrada**.
+
+**Las tres piezas (un dato, tres caras).**
+
+| pieza | rol |
+|---|---|
+| `modules/_shared/horario-servicio.js` | la DECISIÓN, pura: recibe el instante, devuelve el estado. Sin I/O |
+| `modules/_shared/lector-servicio.js` | la LECTURA: `fs.read`/`fs.write` del config por el bus, caché 15 s, invalidada por `servicio.cambiado` |
+| `pedido.servicio.set` / `pedido.servicio.estado` | la TECLA del dueño (`abierto`, `motivo`, `hasta`, `aviso`) y la pregunta "¿se puede pedir ahora?" |
+| `GET /tienda/estado/:project` | el ESPEJO para la PWA: banner, botones frenados y datos de recogida |
+
+**Cerrar no exige republicar.** La PWA pregunta el estado al abrir y pinta el aviso; si el
+dueño cierra, muerde en segundos. El bundle es estático: un freno solo en el cliente se salta
+con un POST, por eso el freno de verdad vive en pedidos y el de la PWA es solo el aviso visual.
+
+**El dónde.** La confirmación (PWA y WhatsApp) lleva `recogida.direccion` + `maps_url` del mismo
+bloque. La dirección ya estaba en `marca.json` (`negocio.local`) y nadie la usaba; ahora viaja al
+cliente en el mensaje que cierra el pedido.
+
+**Fijado en tests.** `tests/unit/pizzepos__servicio.test.js` (dentro de `npm run test`): 15 casos
+sobre el runtime real — zona horaria, franja que cruza medianoche, día vacío, excepción, prelación
+del interruptor, reapertura por `hasta`, 409/412 sin crear pedido, degradación honesta sin config,
+y la respuesta HTTP del espejo.
+
 ---
 
 # SERVIR WWW POR PROYECTO — árbol libre en /<ns>/<slug>/ (Caddy estático + symlink)

@@ -29,6 +29,8 @@ const fs = require('fs').promises;
 const path = require('path');
 
 const BaseModule = require('../../_shared/base-module');
+const LectorServicio = require('../../_shared/lector-servicio');
+const { estadoServicio, mensajeCierre } = require('../../_shared/horario-servicio');
 
 class PedidosModule extends BaseModule {
   constructor() {
@@ -55,6 +57,17 @@ class PedidosModule extends BaseModule {
     this.uiHandler = core.uiHandler;
     this.moduleRegistry = core.moduleRegistry;   // para crear cuentas vía cuentas.handleCreateCuenta
     this.config = core.config || null;
+
+    // Puerta única de la config de servicio (horario + interruptor). Un cierre puesto
+    // por el dueño tiene que morder en segundos: caché corta, invalidada por
+    // `servicio.cambiado`. Sin lectura no se frena nada (degradación honesta).
+    this.servicio = new LectorServicio({
+      eventBus: core.eventBus,
+      logger: core.logger,
+      metrics: core.metrics,
+      ttlMs: 15000,
+      timeoutMs: 4000
+    });
 
     this.logger.info('module.loading', { module: this.name, version: this.version });
 
@@ -162,6 +175,16 @@ class PedidosModule extends BaseModule {
       producto_id: data?.producto_id,
       motivo: data?.motivo,
       correlation_id: event?.metadata?.correlationId
+    });
+  }
+
+  // El interruptor de servicio cambió (lo tocó el dueño o un panel): se suelta la caché
+  // para que el siguiente pedido vea el estado nuevo sin esperar al TTL.
+  async onServicioCambiado(event) {
+    const data = event?.data || event?.payload || event;
+    this.servicio?.invalidar(data?.project_slug || data?.project_id || null);
+    this.logger?.debug?.('pedidos.servicio.cache_invalidada', {
+      project: data?.project_slug || data?.project_id || null
     });
   }
 
@@ -484,6 +507,97 @@ class PedidosModule extends BaseModule {
   // Handlers Tienda PWA (tipo='tienda')
   // ==========================================
 
+  // Estado de servicio del proyecto (horario + interruptor) ya resuelto para AHORA.
+  // Devuelve null cuando no se pudo leer: sin lectura no se frena nada.
+  async _estadoServicio(project_slug, { recargar = false } = {}) {
+    if (!this.servicio) return null;
+    let cfg;
+    try {
+      cfg = await this.servicio.leer(project_slug, { recargar });
+    } catch (err) {
+      this.logger?.warn?.('pedidos.servicio.lectura_error', { project_slug, error: err?.message });
+      return null;
+    }
+    if (cfg === null) return null;
+    return estadoServicio(cfg);
+  }
+
+  // Tool pedido.servicio.estado — ¿se puede pedir ahora? (la PWA y el bot preguntan aquí)
+  async handleEstadoServicio(data) {
+    try {
+      const project_slug = data?.project_slug || data?.project_id;
+      if (!project_slug || typeof project_slug !== 'string') {
+        return this._errorResponse(400, 'INVALID_INPUT', 'project_slug es requerido', { field: 'project_slug' });
+      }
+      const estado = await this._estadoServicio(project_slug, { recargar: data?.recargar === true });
+      if (!estado) {
+        return this._errorResponse(503, 'UPSTREAM_UNREACHABLE', 'no se pudo leer la config de servicio del proyecto', { project_slug });
+      }
+      const abiertos = this.pedidosPorProject.get(project_slug);
+      const pendientes = abiertos ? [...abiertos].map(id => this.pedidos.get(id)).filter(p => p && p.estado === 'pendiente_recogida').length : 0;
+      return {
+        status: 200,
+        data: {
+          ...estado,
+          project_slug,
+          mensaje: mensajeCierre(estado),
+          pedidos_pendientes: pendientes
+        }
+      };
+    } catch (err) {
+      return this._handleHandlerError('pedidos.servicio.estado.error', err);
+    }
+  }
+
+  // Tool pedido.servicio.set — la tecla del dueño: cerrar (saturación) y abrir cuando amaine.
+  // `hasta` con fecha ISO = se reabre solo. Sin `hasta` = cerrado hasta que lo abra él.
+  async handleFijarServicio(data) {
+    try {
+      const project_slug = data?.project_slug || data?.project_id;
+      if (!project_slug || typeof project_slug !== 'string') {
+        return this._errorResponse(400, 'INVALID_INPUT', 'project_slug es requerido', { field: 'project_slug' });
+      }
+      if (typeof data?.abierto !== 'boolean') {
+        return this._errorResponse(400, 'INVALID_INPUT', 'abierto es requerido (true = aceptar pedidos, false = cerrar)', { field: 'abierto' });
+      }
+      let hasta = data?.hasta ?? null;
+      if (hasta !== null) {
+        const ms = Date.parse(String(hasta));
+        if (!Number.isFinite(ms)) {
+          return this._errorResponse(400, 'INVALID_INPUT', 'hasta debe ser una fecha ISO valida (o null)', { field: 'hasta' });
+        }
+        hasta = new Date(ms).toISOString();
+      }
+      const r = await this.servicio.fijarInterruptor(project_slug, {
+        abierto: data.abierto,
+        motivo: data?.motivo || 'manual',
+        motivo_texto: data?.motivo_texto || null,
+        hasta,
+        aviso: data?.aviso || null
+      });
+      if (!r.ok) {
+        const code = r.error?.code || 'UNKNOWN_ERROR';
+        const status = code === 'INVALID_INPUT' ? 400 : (code === 'CONFLICT_STATE' ? 409 : 502);
+        return { status, error: r.error || { code, message: 'no se pudo fijar el interruptor de servicio' } };
+      }
+      const estado = estadoServicio(r.servicio);
+      await this.eventBus?.publish?.('servicio.cambiado', {
+        request_id: data?.request_id || crypto.randomUUID(),
+        project_slug,
+        abierto: data.abierto,
+        motivo: estado.motivo,
+        hasta: estado.hasta,
+        correlation_id: data?.correlation_id
+      });
+      this.logger?.info?.('pedidos.servicio.cambiado', {
+        project_slug, abierto: data.abierto, motivo: estado.motivo, hasta: estado.hasta
+      });
+      return { status: 200, data: { ...estado, project_slug, mensaje: mensajeCierre(estado) } };
+    } catch (err) {
+      return this._handleHandlerError('pedidos.servicio.set.error', err);
+    }
+  }
+
   async handleCreatePedidoTienda(data) {
     try {
       const start_time = Date.now();
@@ -550,6 +664,36 @@ class PedidosModule extends BaseModule {
       if (!cliente_nombre_norm || cliente_nombre_norm.length < 2) {
         this.metrics?.increment?.('pedidos.errors', { code: 'INVALID_INPUT', kind: 'create_tienda' });
         return this._errorResponse(400, 'INVALID_INPUT', 'cliente_nombre es requerido (ancla de recogida)', { field: 'cliente_nombre' });
+      }
+
+      // ── GUARD DE SERVICIO — la puerta donde el pedido NACE ─────────────────────
+      // Aceptar pedidos no es un derecho del cliente: es una decisión del negocio.
+      // Dos razones para no aceptarlo ahora, las dos escritas en el config del proyecto:
+      //   · interruptor del dueño (saturación / imprevisto) → 409 TIENDA_CERRADA
+      //   · horario o excepción del día                    → 412 FUERA_DE_HORARIO
+      // Vive aquí y no en la PWA porque la PWA es estática y se puede saltar: este es
+      // el único sitio donde nacen los pedidos de tienda (web y WhatsApp desembocan aquí).
+      // Las mesas NO pasan por esta puerta (otra tool): el bar sigue trabajando.
+      const servicioEstado = await this._estadoServicio(project_slug);
+      if (servicioEstado && servicioEstado.abierto === false) {
+        const porHorario = servicioEstado.motivo === 'horario' || servicioEstado.motivo === 'excepcion';
+        const status = porHorario ? 412 : 409;
+        const code = porHorario ? 'FUERA_DE_HORARIO' : 'TIENDA_CERRADA';
+        const mensaje = mensajeCierre(servicioEstado)
+          || (porHorario ? 'Fuera de horario de pedidos' : 'La tienda no acepta pedidos ahora mismo');
+        this.metrics?.increment?.('pedidos.rechazado.total', 1, { project: project_slug, code });
+        this.logger?.info?.('pedidos.rechazado.servicio_cerrado', {
+          project_slug, code, motivo: servicioEstado.motivo,
+          hasta: servicioEstado.hasta, correlation_id
+        });
+        return this._errorResponse(status, code, mensaje, {
+          motivo: servicioEstado.motivo,
+          motivo_texto: servicioEstado.motivo_texto,
+          hasta: servicioEstado.hasta,
+          aviso: servicioEstado.aviso,
+          proxima_apertura: servicioEstado.proxima_apertura,
+          franjas_hoy: servicioEstado.franjas_hoy
+        });
       }
       // Construir items canonicos del shape tienda. Items vienen del parser
       // (modules/whatsapp-bot/services/pedido-parser.js) o de la PWA directamente.

@@ -5,6 +5,8 @@ const fs = require('fs').promises;
 const crypto = require('crypto');
 
 const BaseModule = require('../../_shared/base-module');
+const LectorServicio = require('../../_shared/lector-servicio');
+const { estadoServicio, mensajeCierre } = require('../../_shared/horario-servicio');
 
 class TiendaApiModule extends BaseModule {
   constructor() {
@@ -82,6 +84,16 @@ class TiendaApiModule extends BaseModule {
 
     const moduleJson = JSON.parse(await fs.readFile(path.join(__dirname, 'module.json'), 'utf8'));
     this.config = moduleJson.config || {};
+
+    // Estado de servicio (horario + interruptor): la PWA lo consulta al abrir la carta.
+    // Caché corta: un cierre del dueño se ve en la PWA en segundos, sin republicar.
+    this.servicio = new LectorServicio({
+      eventBus: core.eventBus,
+      logger: core.logger,
+      metrics: core.metrics,
+      ttlMs: 15000,
+      timeoutMs: 4000
+    });
 
     this.logger.info('module.loading', { module: this.name, version: this.version });
     this.logger.info('module.loaded', {
@@ -309,6 +321,51 @@ class TiendaApiModule extends BaseModule {
     if (res && typeof res.status === 'function') {
       res.status(204).end();
     }
+  }
+
+  // GET /tienda/estado/:project — ¿se aceptan pedidos AHORA en este proyecto?
+  // Lo consume la PWA al abrir la carta (banner + freno visual) y lo puede consultar
+  // cualquier canal. El dato sale de una sola fuente: el bloque `servicio` del config
+  // del proyecto. Aquí se INFORMA; quien FRENA es pedidos (la PWA es estática y se
+  // puede saltar). Sin lectura de config se responde abierto: un fallo de lectura no
+  // puede cerrar el negocio.
+  async handleEstadoGet(req, res) {
+    const project_slug = req?.params?.project;
+    const cabeceras = () => {
+      if (res && typeof res.setHeader === 'function') {
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Cache-Control', 'no-store');
+      }
+    };
+    if (!project_slug || typeof project_slug !== 'string') {
+      cabeceras();
+      return this._respondNow(res, 400, {
+        status: 400,
+        error: { code: 'INVALID_INPUT', message: 'project param required in path', details: { kind: 'missing', field: 'project' } }
+      });
+    }
+    try {
+      const cfg = await this.servicio.leer(project_slug);
+      const estado = cfg === null
+        ? { abierto: true, motivo: null, motivo_texto: null, hasta: null, aviso: null, franja_actual: null, franjas_hoy: [], proxima_apertura: null, recogida: { direccion: null, ciudad: null, maps_url: null, notas: null }, mensaje: null, desactualizado: true }
+        : { ...estadoServicio(cfg) };
+      if (!estado.mensaje) estado.mensaje = mensajeCierre(estado);
+      cabeceras();
+      return this._respondNow(res, 200, {
+        status: 200,
+        data: { project_slug, ...estado }
+      });
+    } catch (err) {
+      const errResp = this._handleHandlerError('tienda-api.estado.error', err, 'http');
+      cabeceras();
+      return this._respondNow(res, errResp.status, errResp);
+    }
+  }
+
+  // El interruptor cambió: se suelta la caché para que la siguiente consulta lo vea.
+  async onServicioCambiado(event) {
+    const data = event?.data || event?.payload || event || {};
+    this.servicio?.invalidar(data.project_slug || data.project_id || null);
   }
 
   async handleHealthCheck(req, res) {

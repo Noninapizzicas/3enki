@@ -56,6 +56,12 @@ function generateStaticHTML(carta, config, options = {}) {
     // Endpoint de pedido online (tienda-api). Si está → la PWA hace POST (escenario
     // ALOJADO: VPS+dominio). Si NO → checkout por WhatsApp (escenario PWA suelta).
     pedido_endpoint = config.pedido_endpoint || '',
+    // Estado de servicio (horario + interruptor del dueño). El endpoint se deriva del de
+    // pedido si no viene explícito: /tienda/pedido/<slug> → /tienda/estado/<slug>. La PWA
+    // lo consulta al abrir: si el local está cerrado, se ve y no se puede pedir, SIN
+    // republicar la carta (el cierre muerde en segundos).
+    estado_endpoint = config.estado_endpoint
+      || (pedido_endpoint ? pedido_endpoint.replace('/tienda/pedido/', '/tienda/estado/') : ''),
     // Pago online: si el proyecto tiene pasarela, ofrece "Pagar ahora" (además de recoger).
     pago_online = config.pago_online === true
   } = options;
@@ -136,7 +142,7 @@ function generateStaticHTML(carta, config, options = {}) {
   const dataJSON = JSON.stringify({ categorias, productos, alergenos_leyenda: alergenosLeyenda, catalogo_ingredientes: catalogoIngredientes });
   const configJSON = JSON.stringify({
     nombre_negocio, moneda, whatsapp_telefono, mensaje_header, project_slug,
-    ai_endpoint, ai_provider, ai_chat_path, chat_enabled, pedido_endpoint, pago_online
+    ai_endpoint, ai_provider, ai_chat_path, chat_enabled, pedido_endpoint, estado_endpoint, pago_online
   });
 
   // Build system prompt for AI assistant with full menu context + upselling
@@ -437,6 +443,9 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .pedido-ok h3{margin:12px 0 4px;font-size:1.1rem}
 .pedido-ok p{color:var(--text-mid,#888);font-size:.85rem;margin:0 0 12px}
 .pedido-codigo{font-size:1.8rem;font-weight:800;letter-spacing:4px;color:var(--primary);background:#111;border:2px dashed var(--primary);border-radius:12px;padding:14px;margin:0 auto 16px;display:inline-block}
+.servicio-aviso{background:#3a1f1f;border:1px solid #b3261e;color:#ffd9d6;border-radius:10px;padding:10px 12px;margin:0 0 12px;font-size:.92rem;line-height:1.35}
+.pedido-recogida{margin:6px 0 4px;font-size:.95rem;opacity:.9}
+.pedido-mapa{display:inline-block;margin:0 0 12px;color:var(--primary);text-decoration:underline;font-size:.95rem}
 .btn-wa:active{background:#1da851}
 .empty{text-align:center;padding:40px 20px;color:#555}
 .empty-ico{font-size:2.5rem;display:block;margin-bottom:8px}
@@ -1580,7 +1589,65 @@ function updateCart() {
     '<div id="fecha-cont"></div>' +
     '<div class="cart-actions"><button class="btn-clear" onclick="clearCart()">' + T.clear + '</button>' + pagarBtn + onlineBtn + waBtn + '</div>';
   renderFechaRow();   // encargo: bloque "¿Para cuándo?" (verde/rojo según dias_sale)
+  aplicarEstadoServicio();
 }
+
+// ─── ESTADO DE SERVICIO (horario + interruptor del dueño) ───
+// La carta es estática: el horario y el cierre no pueden vivir aquí, o habría que
+// republicar para cerrar. Se preguntan al abrir (/tienda/estado/<slug>) y se pintan.
+// Esto es el FRENO VISUAL; el freno de verdad está en pedidos, en la puerta del pedido.
+var _servicio = null;
+
+function cargarEstadoServicio() {
+  if (!CONFIG.estado_endpoint) return;
+  fetch(CONFIG.estado_endpoint, { cache: 'no-store' })
+    .then(function(r) { return r.json(); })
+    .then(function(d) { if (d && d.data) { _servicio = d.data; aplicarEstadoServicio(); } })
+    .catch(function() { /* sin estado se comporta como siempre: abierto */ });
+}
+
+function servicioCerrado() { return !!(_servicio && _servicio.abierto === false); }
+
+function mensajeServicio() {
+  if (!servicioCerrado()) return '';
+  return _servicio.mensaje || 'Ahora mismo no aceptamos pedidos.';
+}
+
+function aplicarEstadoServicio() {
+  var footer = document.getElementById('cart-footer');
+  if (!footer) return;
+  var btnPedir = document.getElementById('btn-pedir');
+  var btnPagar = document.getElementById('btn-pagar');
+  var aviso = document.getElementById('servicio-aviso');
+  if (servicioCerrado()) {
+    if (!aviso) {
+      aviso = document.createElement('div');
+      aviso.id = 'servicio-aviso';
+      aviso.className = 'servicio-aviso';
+      aviso.setAttribute('role', 'status');
+      footer.insertBefore(aviso, footer.firstChild);
+    }
+    aviso.innerHTML = '🔒 ' + esc(mensajeServicio());
+    if (btnPedir) { btnPedir.disabled = true; btnPedir.textContent = '🔒 Cerrado ahora'; }
+    if (btnPagar) { btnPagar.disabled = true; btnPagar.textContent = '🔒 Cerrado ahora'; }
+  } else {
+    if (aviso && aviso.parentNode) aviso.parentNode.removeChild(aviso);
+    if (btnPedir) { btnPedir.disabled = false; btnPedir.textContent = 'Pedir y pagar al recoger'; }
+    if (btnPagar) { btnPagar.disabled = false; btnPagar.textContent = '💳 Pagar ahora'; }
+  }
+}
+
+// Dirección y mapa de recogida en la confirmación (el cliente sabe DÓNDE recoger).
+function recogidaHTML() {
+  var rec = (_servicio && _servicio.recogida) || null;
+  if (!rec || !rec.direccion) return '';
+  var dir = esc(rec.direccion) + (rec.ciudad ? ', ' + esc(rec.ciudad) : '');
+  var link = rec.maps_url
+    ? '<a class="pedido-mapa" href="' + esc(rec.maps_url) + '" target="_blank" rel="noopener">📍 Cómo llegar</a>'
+    : '';
+  return '<p class="pedido-recogida">Recogida en ' + dir + '</p>' + link;
+}
+
 
 function changeQty(cid, delta) {
   const idx = cart.findIndex(i => i._id === cid);
@@ -1785,6 +1852,7 @@ function sendWhatsApp() {
 // → checkout_url; la PWA redirige a la pasarela. Si no hay pasarela, el pedido ya quedó (recogida).
 async function pagarAhora() {
   if (cart.length === 0 || !CONFIG.pedido_endpoint) return;
+  if (servicioCerrado()) { alert(mensajeServicio()); return; }
   var nombre = _pedNombre();
   if (!nombre) {
     var nmp = document.getElementById('cliente-nombre');
@@ -1829,6 +1897,7 @@ async function pagarAhora() {
 // recogida es el NOMBRE del cliente (obligatorio); el dependiente lo pide al recoger.
 async function pedirOnline() {
   if (cart.length === 0 || !CONFIG.pedido_endpoint) return;
+  if (servicioCerrado()) { alert(mensajeServicio()); return; }
   var nombre = _pedNombre();
   if (!nombre) {
     var nmo = document.getElementById('cliente-nombre');
@@ -1884,6 +1953,7 @@ function mostrarConfirmacion(nombre) {
       '<h3>¡Pedido confirmado!</h3>' +
       '<p>Cuando lo recojas, di tu nombre:</p>' +
       '<div class="pedido-codigo">' + esc(nombre) + '</div>' +
+      recogidaHTML() +
       (getLastOrder() ? '<button class="btn-share" onclick="repeatLastOrder();toggleCart()">🔄 ' + T.repeat_order + '</button>' : '') +
       '<button class="btn-wa" onclick="toggleCart()">Cerrar</button></div>';
   }
@@ -2207,6 +2277,7 @@ function speakText(text) {
 applyTranslations();
 initChat();
 initVoice();
+cargarEstadoServicio();
 renderCats();
 renderGrid();
 updateCart();

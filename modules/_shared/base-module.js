@@ -97,7 +97,9 @@ class BaseModule {
       case 'PERMISSION_DENIED':          return 403;
       case 'RESOURCE_NOT_FOUND':         return 404;
       case 'CONFLICT_STATE':
-      case 'ALREADY_EXISTS':             return 409;
+      case 'ALREADY_EXISTS':
+      case 'TIENDA_CERRADA':             return 409;
+      case 'FUERA_DE_HORARIO':           return 412;
       case 'PRECONDITION_FAILED':        return 422;
       case 'RATE_LIMITED':               return 429;
       case 'UPSTREAM_INVALID_RESPONSE':  return 502;

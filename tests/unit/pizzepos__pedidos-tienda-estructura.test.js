@@ -18,14 +18,14 @@ async function instanciarConBridge() {
     uiHandler: null, config: null
   });
   const addItemCalls = [];
-  let enviarCocinaCalls = 0;
+  const enviarCocinaCalls = [];
   const cuentas = { instance: { handleCreateCuenta: async () => ({ status: 201, data: { id: 'cuenta-1', ref_display: 'T1' } }) } };
   const comandero = { instance: {
     handleAddItem: async (args) => { addItemCalls.push(args); return { status: 201, data: {} }; },
-    handleEnviarCocina: async () => { enviarCocinaCalls++; return { status: 200, data: {} }; }
+    handleEnviarCocina: async (args) => { enviarCocinaCalls.push(args); return { status: 200, data: {} }; }
   } };
   m.moduleRegistry = { get: (n) => (n === 'cuentas' ? cuentas : n === 'comandero' ? comandero : null) };
-  return { m, addItemCalls, getEnviarCocina: () => enviarCocinaCalls };
+  return { m, addItemCalls, getEnviarCocina: () => enviarCocinaCalls.length, getEnviarCocinaArgs: () => enviarCocinaCalls };
 }
 
 test('D — mitad con variaciones llega ESTRUCTURADA al handleAddItem del comandero', async () => {
@@ -111,4 +111,53 @@ test('ingredientes_base — mitad: cada mitad llega con los suyos dentro de pizz
   });
   assert.deepEqual(addItemCalls[0].pizza_izquierda.ingredientes_base, ['Mozzarella']);
   assert.deepEqual(addItemCalls[0].pizza_derecha.ingredientes_base, ['Piña', 'Jamón']);
+});
+
+// ── un pedido, un id (24-oct-2026) ──────────────────────────────────────────
+// El gemelo nacía aquí: tienda creaba su pedido, comandero acuñaba otro para cocina
+// y el puente lo registraba como pedido nuevo. Resultado en la cuenta: 4 apuntes
+// donde había 2 items. Estos dos tests congelan la invariante.
+
+test('un pedido, un id — el envío a cocina lleva el id del pedido de tienda y su project_id', async () => {
+  const { m, getEnviarCocinaArgs } = await instanciarConBridge();
+  const res = await m.handleCreatePedidoTienda({
+    project_slug: 'nonina', canal_origen: 'whatsapp', total_centimos: 950,
+    cliente_nombre: 'Ana', cliente_telefono: '34600000000',
+    items: [{ cantidad: 1, descripcion: 'Bachata', producto_id: 'bachata',
+      precio_unitario_centimos: 950, precio_total_centimos: 950 }]
+  });
+  const envio = getEnviarCocinaArgs()[0];
+  assert.equal(envio.pedido_id, res.data.pedido_id, 'el comandero NO acuña un id propio');
+  assert.equal(envio.project_id, 'nonina', 'sin project_id el evento cae a DEFAULT_PROJECT_ID');
+});
+
+test('un pedido, un id — el puente completa el envío y NO crea gemelo si el pedido ya existe', async () => {
+  const { m } = await instanciarConBridge();
+  const publicados = [];
+  m.eventBus.publish = async (name, payload) => { publicados.push({ name, payload }); };
+
+  const pedido = {
+    id: 'p-tienda', tipo: 'tienda', cuenta_id: null, canal: null, project_id: 'nonina',
+    items: [{ item_id: 'i1', producto_id: 'bachata', descripcion: 'Bachata',
+      precio_unitario_centimos: 950, cantidad: 1 }],
+    estado: 'pendiente_recogida', total: 9.5, created_at: '2026-10-24T02:00:00.000Z'
+  };
+  m.pedidos.set('p-tienda', pedido);
+
+  await m.onComanderoEnviarCocina({ data: {
+    cuenta_id: 'cuenta-1', pedido_id: 'p-tienda', project_id: 'nonina',
+    ref_display: 'Ana M 1', total: 9.5,
+    items: [{ id: 'cm1', producto_id: 'bachata', nombre: 'Bachata', precio: 9.5, cantidad: 1 }]
+  } });
+
+  assert.equal(m.pedidos.size, 1, 'un solo pedido, sin gemelo');
+  assert.equal(publicados.filter(p => p.name === 'pedido.creado').length, 0, 'no se republica pedido.creado');
+  assert.equal(publicados.filter(p => p.name === 'pedido.enviado_cocina').length, 1);
+
+  const enviado = publicados.find(p => p.name === 'pedido.enviado_cocina').payload;
+  assert.equal(enviado.pedido_id, 'p-tienda');
+  assert.equal(enviado.items[0].nombre, 'Bachata', 'cocina recibe nombre, no una línea muda');
+  assert.equal(pedido.estado, 'en_cocina');
+  assert.equal(pedido.cuenta_id, 'cuenta-1');
+  assert.equal(pedido.items[0].descripcion, 'Bachata', 'el shape de origen se conserva');
 });

@@ -1877,14 +1877,15 @@ async function pagarAhora() {
   try {
     var r = await fetch(CONFIG.pedido_endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     var data = await r.json().catch(function(){ return null; });
-    var url = data && data.data && data.data.checkout_url;
+    var cuerpo = (data && data.data) || data;   // el gateway sirve el cuerpo PLANO; toleramos {data:{...}}
+    var url = cuerpo && cuerpo.checkout_url;
     if (r.ok && url) {
       saveLastOrder();
       window.location.href = url;   // → pasarela (Stripe)
       return;
     }
     // Sin pasarela: el pedido SÍ se creó (recogida). Confirmamos por nombre.
-    if (r.ok && data && data.data && data.data.pedido_id) { saveLastOrder(); _cerrarPedido(nombre); return; }
+    if (r.ok && cuerpo && cuerpo.pedido_id) { saveLastOrder(); _cerrarPedido(nombre); return; }
     throw new Error((data && data.error && data.error.message) || ('HTTP ' + r.status));
   } catch (e) {
     alert('No se pudo iniciar el pago.' + (CONFIG.whatsapp_telefono ? ' Prueba por WhatsApp.' : ' Inténtalo de nuevo.'));
@@ -1920,7 +1921,8 @@ async function pedirOnline() {
   try {
     var r = await fetch(CONFIG.pedido_endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     var data = await r.json().catch(function(){ return null; });
-    if (r.ok && data && data.data && data.data.pedido_id) {
+    var cuerpo = (data && data.data) || data;   // el gateway sirve el cuerpo PLANO; toleramos {data:{...}}
+    if (r.ok && cuerpo && cuerpo.pedido_id) {
       saveLastOrder();
       _cerrarPedido(nombre);
     } else {

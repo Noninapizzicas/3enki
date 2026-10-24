@@ -226,6 +226,19 @@ class TiendaApiModule extends BaseModule {
   async handlePedidoPost(req, res) {
     const project_slug = req?.params?.project;
     const correlation_id = crypto.randomUUID();
+    // ── EL GATEWAY NO DA UN `res` DE EXPRESS ─────────────────────────────────────
+    // core/gateway/http.js:510 llama al handler con (req, ctx) y ESPERA DE VUELTA un
+    // { status, data } — es él quien escribe la respuesta HTTP. El segundo argumento es
+    // un contexto { correlationId, request_id, timestamp }, no un ServerResponse: no
+    // tiene .status() ni .json(). Por eso este handler no puede responder "luego" con
+    // res.status(...): esa llamada no existe (y en silencio devolvía 200 con cuerpo vacío
+    // — el cliente veía error y el pedido SÍ se creaba en cocina).
+    // La respuesta es ASÍNCRONA (llega por el bus), así que se devuelve una promesa que
+    // el gateway espera. Con un `res` de verdad (tests, otros llamantes) se mantiene el
+    // camino clásico de escribirlo directamente.
+    const resEsReal = !!(res && typeof res.status === 'function');
+    let resolver = null;
+    const espera = resEsReal ? null : new Promise((r) => { resolver = r; });
 
     try {
       if (!project_slug || typeof project_slug !== 'string') {
@@ -272,6 +285,7 @@ class TiendaApiModule extends BaseModule {
         timeoutHandle,
         started_at: Date.now(),
         correlation_id,
+        resolver,          // ← despierta la promesa que el gateway está esperando
         // Pago online opcional: si pago_online, tras crear el pedido se inicia el pago
         // en la pasarela y se devuelve checkout_url (en vez de solo la confirmación por nombre).
         pago_online: normalized.pago_online === true,
@@ -298,6 +312,8 @@ class TiendaApiModule extends BaseModule {
         notas_generales: normalized.notas_generales
       }, { correlation_id });
       // No respondemos aqui — la response llega por onPedidoCrearTiendaResponse o por timeout.
+      // El gateway SÍ espera: le devolvemos la promesa (con un `res` real no hay nada que esperar).
+      return espera;
     } catch (err) {
       const errResp = this._handleHandlerError('tienda-api.pedido.error', err, 'http');
       try {
@@ -392,15 +408,31 @@ class TiendaApiModule extends BaseModule {
     return pending;
   }
 
+  // Forma de respuesta que el HTTPGateway SABE enviar: { status, data } (http.js:559 →
+  // responseContext.data). Devolver { status, error } (la forma "de Express") hacía que el
+  // gateway enviara status pero cuerpo VACÍO: el cliente se quedaba sin el mensaje de cierre.
+  _resultadoGateway(status, body) {
+    if (body && typeof body === 'object' && body.data !== undefined) return { status, data: body.data };
+    return { status, data: body === undefined ? null : body };
+  }
+
   _respondToClient(pending, status, body) {
+    const resultado = this._resultadoGateway(status, body);
+    // Despierta al gateway (camino real: handler HTTP) …
+    if (pending && typeof pending.resolver === 'function') {
+      const resolver = pending.resolver;
+      pending.resolver = null;
+      try { resolver(resultado); } catch (_) { /* ignore */ }
+    }
+    // … y escribe en el res si el llamante dio uno de verdad (tests, llamadas internas).
     try {
       const res = pending?.res;
-      if (!res || typeof res.status !== 'function') return;
+      if (!res || typeof res.status !== 'function') return resultado;
       if (res.headersSent) {
         this.logger?.warn?.('tienda-api.response_after_headers_sent', {
           project_slug: pending.project_slug
         });
-        return;
+        return resultado;
       }
       if (typeof res.setHeader === 'function') {
         res.setHeader('Access-Control-Allow-Origin', '*');
@@ -409,6 +441,7 @@ class TiendaApiModule extends BaseModule {
     } catch (err) {
       this.logger?.error?.('tienda-api.respond_error', { error: err?.message });
     }
+    return resultado;
   }
 
   _respondNow(res, status, body) {
@@ -420,7 +453,7 @@ class TiendaApiModule extends BaseModule {
         res.status(status).json(body);
       }
     } catch (_err) { /* ignore */ }
-    return body;
+    return this._resultadoGateway(status, body);
   }
 
   _handleTimeout(request_id) {

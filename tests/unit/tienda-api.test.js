@@ -440,5 +440,69 @@ function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
     assert.strictEqual(typeof m._publicarEvento, 'function');
   });
 
+  // ===========================================================
+  // Group 6: el CONTRATO REAL del gateway (2026-10-25)
+  // core/gateway/http.js:510 llama al handler con (req, ctx) — NO con un res de Express —
+  // y envía `result.data`. Estos tests reproducen ese llamante: antes, el handler devolvía
+  // undefined (→ 200 con cuerpo vacío) mientras el pedido SÍ nacía en cocina.
+  // ===========================================================
+
+  // Lo que el gateway pasa como segundo argumento: un contexto, sin .status() ni .json().
+  function gatewayCtx() {
+    return { correlationId: 'req-gw-1', request_id: 'req-gw-1', timestamp: new Date().toISOString() };
+  }
+
+  await testAsync('gateway (ctx sin res): el handler devuelve una PROMESA y resuelve {status,data}', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    const devuelto = m.handlePedidoPost({ params: { project: 'vapers' }, body: validBody() }, gatewayCtx());
+    assert.ok(devuelto && typeof devuelto.then === 'function', 'devuelve promesa (el gateway la espera)');
+    await new Promise((r) => setImmediate(r));   // deja correr el publish del bus
+    const request_id = publishedOf(mocks, 'pedido.crear-tienda')[0].request_id;
+    await m.onPedidoCrearTiendaResponse({ data: { request_id, result: { pedido_id: 'ped-gw-1', cliente_nombre: 'Ana' } } });
+    const r = await devuelto;
+    assert.deepStrictEqual(r.status, 201);
+    assert.strictEqual(r.data.pedido_id, 'ped-gw-1', 'cuerpo plano: el gateway envía r.data');
+    assert.strictEqual(r.error, undefined);
+    await m.onUnload();
+  });
+
+  await testAsync('gateway (ctx sin res): rechazo por servicio cerrado llega con cuerpo, no 200 vacío', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    const devuelto = m.handlePedidoPost({ params: { project: 'the-pirate' }, body: validBody() }, gatewayCtx());
+    await new Promise((r) => setImmediate(r));   // deja correr el publish del bus
+    const request_id = publishedOf(mocks, 'pedido.crear-tienda')[0].request_id;
+    await m.onPedidoCrearTiendaResponse({ data: { request_id, error: { code: 'FUERA_DE_HORARIO', message: 'Fuera de horario. Abrimos a las 18:00.' } } });
+    const r = await devuelto;
+    assert.strictEqual(r.status, 412);
+    assert.strictEqual(r.data.error.code, 'FUERA_DE_HORARIO');
+    assert.ok(r.data.error.message.includes('18:00'), 'el mensaje de cierre viaja al cliente');
+    await m.onUnload();
+  });
+
+  await testAsync('gateway (ctx sin res): validación inválida devuelve {status:400,data:{error}} (nunca undefined)', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    const r = await m.handlePedidoPost({ params: { project: 'vapers' }, body: { items: [] } }, gatewayCtx());
+    assert.ok(r && typeof r === 'object', 'no devuelve undefined');
+    assert.strictEqual(r.status, 400);
+    assert.strictEqual(r.data.error.code, 'INVALID_INPUT');
+    await m.onUnload();
+  });
+
+  await testAsync('gateway (ctx sin res): timeout del bus resuelve 504 con cuerpo (no cuelga la petición)', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks, { timeoutMs: 60000 });
+    const devuelto = m.handlePedidoPost({ params: { project: 'vapers' }, body: validBody() }, gatewayCtx());
+    await new Promise((r) => setImmediate(r));
+    const request_id = publishedOf(mocks, 'pedido.crear-tienda')[0].request_id;
+    m._handleTimeout(request_id);          // el reloj no mantiene vivo el proceso: se dispara a mano
+    const r = await devuelto;
+    assert.strictEqual(r.status, 504);
+    assert.strictEqual(r.data.error.code, 'UPSTREAM_TIMEOUT');
+    await m.onUnload();
+  });
+
   console.log('\n✓ tienda-api: todos los tests pasaron.');
 })();

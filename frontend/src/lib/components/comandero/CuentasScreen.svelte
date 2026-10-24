@@ -19,7 +19,7 @@
    *
    * Mobile: sidebar se mueve arriba como barra horizontal
    */
-  import { onMount, onDestroy } from 'svelte';
+  import { onMount, onDestroy, getContext } from 'svelte';
   import { connect, disconnect, setupVisibilityHandler, removeVisibilityHandler } from '$lib/ui-core';
   import { mqttRequest } from '$lib/ui-core/mqtt-request';
   import { ConnectionStatus } from '$lib/components/base';
@@ -37,6 +37,22 @@
   // Props
   export let onNavigate: ((path: string) => void) | null = null;
   export let projectId: string = '';
+
+  // NOMBRE VISIBLE — el header enseña el NOMBRE del proyecto, nunca su id.
+  // El layout `[project_id]/+layout.svelte` ya resuelve project.name del bus y lo
+  // publica en el contexto 'project'; aquí solo se lee. Mientras el nombre no ha
+  // llegado se pinta el rótulo neutro de la pantalla ('Cuentas'), NUNCA el id:
+  // al recargar, el prop projectId es el slug de la URL y después el UUID real
+  // (sessionProject), así que pintarlo hacía parpadear slug → UUID → nombre.
+  // Sin contexto (uso suelto del componente), sí cae al id recibido.
+  const projectCtx = getContext<{ subscribe: (fn: (v: { name?: string; resolved?: boolean }) => void) => () => void } | undefined>('project');
+  let projectName = '';
+  let projectResolved = false;
+  let unsubProject: (() => void) | null = null;
+  // Solo se fía el NOMBRE cuando el layout ya lo ha RESUELTO del bus: antes de eso
+  // el layout siembra name con el slug de la URL (name: project_id), y pintarlo
+  // daría el mismo parpadeo. Mientras no haya nombre resuelto: rótulo neutro.
+  $: titulo = (projectResolved && projectName) || (projectCtx ? 'Cuentas' : (projectId || 'Cuentas'));
 
   let cleanupSubs: (() => void) | null = null;
   let clock = '';
@@ -100,6 +116,15 @@
     updateClock();
     clockInterval = setInterval(updateClock, 10000);
 
+    // Nombre del proyecto desde el contexto del layout (se actualiza solo cuando
+    // loadProject() trae el nombre real del bus).
+    if (projectCtx && typeof projectCtx.subscribe === 'function') {
+      unsubProject = projectCtx.subscribe((p) => {
+        projectName = p?.name || '';
+        projectResolved = !!p?.resolved;
+      });
+    }
+
     // Connect MQTT + init subscriptions + load categories
     connect().then(() => {
       cleanupSubs = initCuentasSubscriptions(projectId);
@@ -113,6 +138,7 @@
 
   onDestroy(() => {
     clearInterval(clockInterval);
+    unsubProject?.();
     cleanupSubs?.();
     disconnect();
     removeVisibilityHandler();
@@ -123,7 +149,7 @@
   <!-- Header -->
   <header class="screen-header">
     <div class="header-left">
-      <h1 class="title">{projectId || 'Cuentas'}</h1>
+      <h1 class="title">{titulo}</h1>
       <span class="count">{$cuentasCount}</span>
     </div>
     <div class="header-right">

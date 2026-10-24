@@ -3,6 +3,7 @@ export { default as CuentasScreen } from './CuentasScreen.svelte';
 export { default as CuentaCard } from './CuentaCard.svelte';
 export { default as CuentaCardMesa } from './CuentaCardMesa.svelte';
 export { default as TipoButton } from './TipoButton.svelte';
+export { default as ServicioToggle } from './ServicioToggle.svelte';
 
 // Pantalla Comandero
 export { default as ComanderoScreen } from './ComanderoScreen.svelte';

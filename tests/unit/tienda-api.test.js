@@ -9,6 +9,9 @@
 const assert = require('assert');
 
 const TiendaApiModule = require('../../modules/pizzepos/tienda-api/index.js');
+// La versión esperada se lee del manifest: si el módulo sube de versión, el test
+// acompaña sin quedarse clavado en un número viejo.
+const TIENDA_API_MANIFEST = require('../../modules/pizzepos/tienda-api/module.json');
 
 function makeMocks() {
   const logs = [], published = [], metricsCalls = [];
@@ -82,7 +85,7 @@ function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     assert.strictEqual(m.name, 'tienda-api');
-    assert.strictEqual(m.version, '1.1.0');
+    assert.strictEqual(m.version, TIENDA_API_MANIFEST.version);
     assert.strictEqual(typeof m.config.pedido_wait_timeout_ms, 'number');
     assert.strictEqual(m.pendingRequests.size, 0);
     await m.onUnload();

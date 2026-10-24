@@ -2426,6 +2426,20 @@ CLASE CuentasModule HEREDA BaseModule {
     // ACTIVOS: sin eso, el proyecto que se quedaba sin cuentas no reescribía su fichero y la
     // última cuenta borrada resucitaba en el siguiente arranque.
 
+    // IDENTIDAD DE PROYECTO — UN SOLO CAMINO: EL SLUG (verificado en vivo 2026-10-24).
+    // El bus admite dos llaves del mismo negocio (UUID de sesión y slug de la carpeta) y
+    // cada consumidor usaba la suya: las cuentas de mesa quedaron en /data/projects/<uuid>/
+    // y las de llevar en /data/projects/the-pirate/, invisibles entre sí (el comandero veía
+    // unas, cocina —que no filtra— veía todas). El borde resuelve cualquier llave a slug con
+    // ResolutorProyecto (_shared; el mapa id→slug lo calcula project-manager en
+    // project.list.response, no se re-deriva):
+    //   · la cuenta NACE con project_id = slug → un solo fichero, una sola carpeta
+    //   · toda consulta compara por equivalencia (mismo slug = mismo proyecto) → las
+    //     cuentas históricas con UUID se ven igual, sin migrar datos en caliente
+    //   · persistencia-comandero nombra la carpeta y agrupa por slug, y su filtro de
+    //     cuentas_activas también resuelve ambas llaves
+    // Sin respuesta del bus se devuelve la llave tal cual: nunca se inventa identidad.
+
     EVENTOS_SUBSCRIBES {
       'comandero.item_agregado': onComanderoItemAgregado
       'comandero.item_eliminado': onComanderoItemEliminado
@@ -3059,6 +3073,9 @@ CLASE PersistenciaComanderoModule HEREDA BaseModule {
 
   METODOS {
     async handleGetCuentasActivas(): Promise<Response>
+      // project_id se resuelve a SLUG (ResolutorProyecto): pregunta con UUID o con
+      // slug y responde el negocio entero — las cuentas historicas con UUID y las
+      // nuevas con slug son el MISMO proyecto (verificado en vivo 2026-10-24).
       RETORNA {status: 200, data: {cuentas: cuentasActivasCache.values()}}
 
     async handleGetEventos(data?: {date?}): Promise<Response>
@@ -3228,6 +3245,13 @@ PATRON Multi-Tenant {
 ---
 
 ## PROJECT-TYPE: pizzepos
+
+> **Identidad de proyecto en el POS (verificado en vivo 2026-10-24).** La carpeta
+> física y la llave de las cuentas es el **SLUG** (`/data/projects/the-pirate/`), no
+> el UUID de sesión. `ResolutorProyecto` (`modules/_shared`) traduce cualquier llave
+> a slug — el mapa id→slug lo calcula `project-manager` en `project.list.response`;
+> sin respuesta del bus se devuelve la llave tal cual. Sin esta normalización el
+> mismo negocio partía sus cuentas en dos carpetas y el comandero solo veía la mitad.
 
 ```json
 {
@@ -4592,6 +4616,14 @@ desde cualquier proceso que hable MQTT, no solo desde dentro del core Node.js.
 
 ## PIZZEPOS - CORE MODULES
 
+> **La llave del proyecto en el POS es el SLUG (verificado en vivo 2026-10-24).** Las
+> cuentas nacen, se filtran y se persisten por `project_id = slug`
+> (`/data/projects/<slug>/`), no por el UUID de sesión. `ResolutorProyecto`
+> (`modules/_shared/resolutor-proyecto.js`) traduce cualquier llave a slug con el mapa
+> que publica `project-manager` en `project.list.response`; sin bus devuelve la llave
+> tal cual. Antes, mesa (UUID) y llevar (slug) del mismo negocio vivían en dos carpetas
+> y el comandero solo veía una mitad.
+
 > **Alta de producto — la cadena canónica (verificada en vivo 2026-10-19).** La puerta
 > del asistente es `productos.crear` / `productos.crear_categoria` (productos NO escribe:
 > delega en carta-manager, que hace snapshot y sube version). Un alta enciende todo por
@@ -4700,6 +4732,8 @@ CLASE CuentasManager IMPLEMENTA CuentasContract {
     pedidosStore: Map<cuenta_id, Array<Pedido>>
     productosCache: Map<producto_id, Producto>
     productosManager: ProductosManager
+    // project_id NO se guarda crudo: el borde lo resuelve a SLUG (ResolutorProyecto),
+    // porque es el nombre de la carpeta en /data/projects/. Un negocio, una llave.
   }
 
   CONSTRUCTOR(options: Object)

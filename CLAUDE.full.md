@@ -2285,11 +2285,14 @@ CLASE ComanderoModule HEREDA BaseModule IMPLEMENTA ComanderoContract {
       PERSISTE
       RETORNA {status: 200, data: {item, pedido}}
 
-    async handleEnviarCocina(data: {cuenta_id}): Promise<Response>
+    async handleEnviarCocina(data: {cuenta_id, project_id?, pedido_id?}): Promise<Response>
       OBTIENE pedido SI items == 0: 409 CONFLICT_STATE
       MARCA items.enviado = true + item.enviado_at = now()
-      GENERA pedido_id
-      PUBLICA comandero.enviar_cocina {pedido_id, items, total, notas}
+      // UN PEDIDO, UN ID: si el origen (tienda/WhatsApp) ya creó su pedido, su id viaja
+      // aquí y ES el pedido. Solo el comandero manual acuña `ped_<ts>_<rand>` (verificado 2026-10-24).
+      GENERA pedido_id = data.pedido_id || ped_<ts>_<rand>
+      PUBLICA comandero.enviar_cocina {pedido_id, project_id, items, total, notas}
+      // project_id viaja explícito: sin él el evento cae a DEFAULT_PROJECT_ID ('default')
       PERSISTE
       RETORNA {status: 200, data: {pedido_id, items_enviados}}
 
@@ -2413,6 +2416,15 @@ CLASE CuentasModule HEREDA BaseModule {
       'cuenta.estado_cambiado': {project_id, cuenta_id, estado_anterior, estado_nuevo}
       'cuenta.eliminada': {project_id, cuenta_id, tipo, motivo}
     }
+
+    // IDENTIDAD = id de origen (verificado en vivo 2026-10-24). `pedidos.onComanderoEnviarCocina`
+    // recibe `pedido_id`; si ese pedido YA existe (tienda lo creó antes de la cuenta) COMPLETA
+    // su envío —items vivos, estado en_cocina, un solo pedido.enviado_cocina— en vez de crear un
+    // gemelo y republicar pedido.creado. El gemelo dejaba 4 apuntes donde había 2 items en la
+    // cuenta y un pedido fantasma con project_id 'default'. Un pedido, un pedido.creado.
+    // `persistencia-comandero._guardarCuentasActivasPorProyecto` recorre además los proyectos
+    // ACTIVOS: sin eso, el proyecto que se quedaba sin cuentas no reescribía su fichero y la
+    // última cuenta borrada resucitaba en el siguiente arranque.
 
     EVENTOS_SUBSCRIBES {
       'comandero.item_agregado': onComanderoItemAgregado
@@ -5169,6 +5181,14 @@ CLASE PedidosManager IMPLEMENTA PedidosContract {
   }
 }
 ```
+
+> **Un pedido, un id (verificado en vivo 2026-10-24).** `handleCreatePedidoTienda` crea el pedido
+> (UUID) y `_crearCuentaTienda` lo inyecta en el comandero; el envío a cocina viaja con
+> `pedido_id = pedido.id` y su `project_id`. `onComanderoEnviarCocina` COMPLETA ese pedido si ya
+> existe (items vivos, estado `en_cocina`, un solo `pedido.enviado_cocina`) en vez de acuñar un
+> gemelo `ped_<ts>_<rand>` y republicar `pedido.creado`. El gemelo apilaba dos apuntes en la
+> cuenta (4 líneas donde había 2 items) y dejaba un pedido fantasma con `project_id: 'default'`.
+> El comandero manual sigue acuñando su propio id: no pasa `pedido_id`.
 
 ### PAGO DEL PEDIDO DE TIENDA — efectivo o tarjeta (el método viaja en el #P1)
 
@@ -15976,6 +15996,9 @@ EVENTOS {
   pedido.crear-tienda                : bot/tienda-api → pedidos (items re-tasados + estructura + metodo_pago)
   pedido.crear-tienda.response       : pedidos → bot (request_id correlado)
   pedido.creado                      : pedidos (informativo; lleva cuenta_id, sin teléfono/secretos)
+                                       UNO por pedido: el bot confirma con el primero y `_consumePending`
+                                       es de un solo uso — el gemelo que nacía al enviar a cocina
+                                       (pedido_id propio del comandero) ya no existe (2026-10-24)
   pago.iniciar.request               : bot → pago-gateway (LÍDER — solo si metodo_pago == 'tarjeta')
   pago.iniciar.response              : pago-gateway → bot (request_id correlado; data.checkout_url)
   pago.confirmado                    : pago-gateway (webhook de Stripe, firma verificada) → pedidos

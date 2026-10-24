@@ -19,7 +19,8 @@
    *
    * Mobile: sidebar se mueve arriba como barra horizontal
    */
-  import { onMount, onDestroy } from 'svelte';
+  import { onMount, onDestroy, getContext } from 'svelte';
+  import { page } from '$app/stores';
   import { connect, disconnect, setupVisibilityHandler, removeVisibilityHandler } from '$lib/ui-core';
   import { mqttRequest } from '$lib/ui-core/mqtt-request';
   import { ConnectionStatus } from '$lib/components/base';
@@ -37,6 +38,28 @@
   // Props
   export let onNavigate: ((path: string) => void) | null = null;
   export let projectId: string = '';
+
+  // NOMBRE VISIBLE — el header enseña el NOMBRE del proyecto, nunca su id.
+  // Dos fuentes, en este orden:
+  //   1. el nombre REAL que el layout `[project_id]/+layout.svelte` resuelve del
+  //      bus y publica en el contexto 'project' (solo cuando `resolved`).
+  //   2. mientras no ha llegado: el slug de la URL con los guiones por espacios
+  //      ('the-pirate' → 'the pirate'), que es el rótulo humano inmediato.
+  // Nunca el prop projectId: al recargar vale el slug y después el UUID de
+  // sesión, así que pintarlo hacía parpadear 'the-pirate' → UUID.
+  const projectCtx = getContext<{ subscribe: (fn: (v: { name?: string; resolved?: boolean }) => void) => () => void } | undefined>('project');
+  let projectName = '';
+  let projectResolved = false;
+  let unsubProject: (() => void) | null = null;
+  $: urlSlug = ($page.params?.project_id as string) || '';
+  $: titulo = (projectResolved && projectName) || humanizarSlug(urlSlug) || 'Cuentas';
+
+  function humanizarSlug(slug: string): string {
+    if (!slug) return '';
+    // Un UUID no es un nombre: si el segmento ya es un id, no se pinta.
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(slug)) return '';
+    return decodeURIComponent(slug).replace(/[-_]+/g, ' ').trim();
+  }
 
   let cleanupSubs: (() => void) | null = null;
   let clock = '';
@@ -100,6 +123,15 @@
     updateClock();
     clockInterval = setInterval(updateClock, 10000);
 
+    // Nombre del proyecto desde el contexto del layout (se actualiza solo cuando
+    // loadProject() trae el nombre real del bus).
+    if (projectCtx && typeof projectCtx.subscribe === 'function') {
+      unsubProject = projectCtx.subscribe((p) => {
+        projectName = p?.name || '';
+        projectResolved = !!p?.resolved;
+      });
+    }
+
     // Connect MQTT + init subscriptions + load categories
     connect().then(() => {
       cleanupSubs = initCuentasSubscriptions(projectId);
@@ -113,6 +145,7 @@
 
   onDestroy(() => {
     clearInterval(clockInterval);
+    unsubProject?.();
     cleanupSubs?.();
     disconnect();
     removeVisibilityHandler();
@@ -123,7 +156,7 @@
   <!-- Header -->
   <header class="screen-header">
     <div class="header-left">
-      <h1 class="title">{projectId || 'Cuentas'}</h1>
+      <h1 class="title">{titulo}</h1>
       <span class="count">{$cuentasCount}</span>
     </div>
     <div class="header-right">

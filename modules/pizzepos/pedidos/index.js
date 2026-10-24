@@ -288,6 +288,51 @@ class PedidosModule extends BaseModule {
       const pedido_id = comandero_pedido_id || crypto.randomUUID();
       const canal = this._detectarCanal(cuenta_id);
 
+      // IDENTIDAD = id de origen. Si el pedido YA existe (tienda lo crea antes de la
+      // cuenta), este evento COMPLETA su envío a cocina: no se crea un gemelo. Antes
+      // nacía un pedido_2 por cada envío, y persistencia apilaba los dos en la cuenta
+      // (4 apuntes donde había 2 items, y el gemelo con project_id 'default').
+      const existente = this.pedidos.get(pedido_id);
+      if (existente) {
+        const originales = existente.items || [];
+        existente.cuenta_id  = cuenta_id;
+        existente.canal      = existente.canal || canal;
+        existente.estado     = 'en_cocina';
+        existente.project_id = existente.project_id || project_id || null;
+        existente.ref_display = ref_display || existente.ref_display || null;
+        // Los items de cocina son la verdad viva (nombre, precio, estructura); el shape
+        // de origen (descripcion + centimos) se conserva para no dejar líneas mudas.
+        existente.items = (items || []).map((item, idx) => {
+          const built = this._buildPedidoItem(item, 'en_cocina');
+          const orig  = originales[idx] || {};
+          if (orig.descripcion) built.descripcion = orig.descripcion;
+          if (Number.isInteger(orig.precio_unitario_centimos)) built.precio_unitario_centimos = orig.precio_unitario_centimos;
+          return built;
+        });
+        existente.subtotal = total || existente.total || 0;
+        existente.total    = total || existente.total || 0;
+        existente.notas_generales   = existente.notas_generales || notas_generales || null;
+        existente.enviado_cocina_at = new Date().toISOString();
+        existente.updated_at        = existente.enviado_cocina_at;
+
+        if (!this.pedidosPorCuenta.has(cuenta_id)) {
+          this.pedidosPorCuenta.set(cuenta_id, new Set());
+        }
+        this.pedidosPorCuenta.get(cuenta_id).add(pedido_id);
+
+        this.metrics?.increment?.('pedidos.enviado_cocina.total');
+        this.metrics?.increment?.('pedidos.bridge.envio_completado.total');
+        // Un pedido = un pedido.creado: el de tienda sale después, con cuenta_id.
+        // Aquí solo se cierra el círculo de cocina.
+        await this._publishEnviadoCocina(existente, { correlation_id: correlationId });
+
+        this.logger.info('pedidos.bridge.envio_completado', {
+          pedido_id, cuenta_id, items_count: existente.items.length,
+          total: existente.total, correlation_id: correlationId
+        });
+        return;
+      }
+
       const pedido = {
         id: pedido_id,
         cuenta_id,
@@ -1256,7 +1301,9 @@ class PedidosModule extends BaseModule {
       }
 
       // 3) Enviar a cocina por el flujo normal del comandero.
-      await comandero.handleEnviarCocina({ cuenta_id });
+      //    pedido_id = el id de ESTE pedido de tienda: comandero y pedidos hablan del mismo.
+      //    project_id viaja explícito: sin él, comandero cae a DEFAULT_PROJECT_ID ('default').
+      await comandero.handleEnviarCocina({ cuenta_id, project_id, pedido_id: pedido.id });
 
       this.metrics?.increment?.('pedidos.tienda.cuenta_creada', { project: pedido.project_slug });
       this.logger.info('pedidos.tienda.cuenta_creada', {

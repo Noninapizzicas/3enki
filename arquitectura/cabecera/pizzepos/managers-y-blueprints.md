@@ -12,6 +12,14 @@ verificado: 2026-10-24
 
 ## PIZZEPOS - CORE MODULES
 
+> **La llave del proyecto en el POS es el SLUG (verificado en vivo 2026-10-24).** Las
+> cuentas nacen, se filtran y se persisten por `project_id = slug`
+> (`/data/projects/<slug>/`), no por el UUID de sesión. `ResolutorProyecto`
+> (`modules/_shared/resolutor-proyecto.js`) traduce cualquier llave a slug con el mapa
+> que publica `project-manager` en `project.list.response`; sin bus devuelve la llave
+> tal cual. Antes, mesa (UUID) y llevar (slug) del mismo negocio vivían en dos carpetas
+> y el comandero solo veía una mitad.
+
 > **Alta de producto — la cadena canónica (verificada en vivo 2026-10-19).** La puerta
 > del asistente es `productos.crear` / `productos.crear_categoria` (productos NO escribe:
 > delega en carta-manager, que hace snapshot y sube version). Un alta enciende todo por

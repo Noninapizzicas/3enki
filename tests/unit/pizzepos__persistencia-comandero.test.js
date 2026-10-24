@@ -556,6 +556,65 @@ function publishedOf(mocks, name) {
     await m.onUnload();
   });
 
+  // ==========================================
+  // Identidad de proyecto — un solo camino (slug)
+  // ==========================================
+
+  const UID_TP = '5d09cb49-35a0-409f-9e09-c57da93b84a8';
+
+  function conBusDeProyectos(mocks) {
+    const subs = new Map();
+    mocks.eventBus = {
+      publish: async (event, payload) => {
+        if (event === 'project.list.request') {
+          const d = {
+            request_id: payload.request_id, success: true, count: 1,
+            projects: [{ id: UID_TP, name: 'the pirate', slug: 'the-pirate',
+                         base_path: '/opt/enki/data/projects/the-pirate' }]
+          };
+          for (const h of [...(subs.get('project.list.response') || [])]) {
+            try { h({ data: d }); } catch { /* suscriptor de test */ }
+          }
+        }
+      },
+      subscribe: (event, handler) => {
+        if (!subs.has(event)) subs.set(event, new Set());
+        subs.get(event).add(handler);
+        return () => subs.get(event)?.delete(handler);
+      }
+    };
+    return mocks;
+  }
+
+  await testAsync('cuentas_activas: preguntar con UUID devuelve las del mismo negocio guardadas con slug', async () => {
+    const mocks = conBusDeProyectos(makeMocks());
+    const { module: m } = await instantiate(mocks);
+
+    m.cuentasActivasCache.set('mesa_266', { cuenta_id: 'mesa_266', project_id: UID_TP, tipo: 'mesa' });
+    m.cuentasActivasCache.set('llevar_267', { cuenta_id: 'llevar_267', project_id: 'the-pirate', tipo: 'llevar' });
+    m.cuentasActivasCache.set('mesa_250', { cuenta_id: 'mesa_250', project_id: 'nonina', tipo: 'mesa' });
+
+    const porUuid = await m.handleGetCuentasActivas({ project_id: UID_TP });
+    assert.strictEqual(porUuid.status, 200);
+    assert.strictEqual(porUuid.data.total, 2, 'las dos llaves del MISMO negocio');
+    const ids = porUuid.data.cuentas.map(c => c.cuenta_id).sort();
+    assert.deepStrictEqual(ids, ['llevar_267', 'mesa_266']);
+
+    const porSlug = await m.handleGetCuentasActivas({ project_id: 'the-pirate' });
+    assert.strictEqual(porSlug.data.total, 2, 'preguntando por slug, las mismas dos');
+    await m.onUnload();
+  });
+
+  await testAsync('_getProjectDirs nombra la carpeta con el SLUG aunque llegue el UUID', async () => {
+    const mocks = conBusDeProyectos(makeMocks());
+    const { module: m } = await instantiate(mocks);
+    const dirs = await m._getProjectDirs(UID_TP);
+    assert.ok(dirs.current.endsWith(path.join('projects', 'the-pirate', 'persistencia', 'current')),
+      `carpeta fisica = slug (fue ${dirs.current})`);
+    assert.ok(!dirs.current.includes(UID_TP), 'la carpeta NO se nombra con el uuid');
+    await m.onUnload();
+  });
+
   cleanupTmp();
   console.log('\nTodos los tests pasaron.');
   process.exit(0);

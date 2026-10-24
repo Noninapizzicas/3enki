@@ -26,6 +26,7 @@
   // reales cargados (el guard de ruta no dispara con los defaults en vuelo).
   const projectStore = writable<{
     id: string;
+    slug: string;
     name: string;
     type: string;
     pages: string[];
@@ -35,6 +36,7 @@
     error: string | null;
   }>({
     id: '',
+    slug: '',
     name: '',
     type: 'general',
     pages: [],
@@ -165,6 +167,9 @@
 
       projectStore.set({
         id: realId,
+        // El slug es la llave con la que el negocio tiene sus datos en disco: los
+        // hijos lo necesitan para reconocer eventos que llegan con esa llave.
+        slug: slug || '',
         name: project?.name || project_id,
         type,
         pages,

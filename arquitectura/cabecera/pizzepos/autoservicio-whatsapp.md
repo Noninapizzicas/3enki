@@ -321,6 +321,9 @@ AUTOSERVICIO_COMPLETO {
   1. cliente escribe al WhatsApp → bot responde con el link de la PWA (greeter)
   2. cliente arma el carrito en la PWA (fotos, mitad, al_gusto, variaciones)
   3. PWA pre-rellena el wa.me con el pedido CANÓNICO + #P1 (por ids) ; cliente pulsa enviar
+     — al SALIR el pedido el carrito se VACÍA (y el vacío se persiste: recargar no lo resucita);
+       el panel confirma por nombre y la copia queda en «repetir último pedido» (vaciar no pierde
+       nada). Mismo cierre para el camino online (tienda-api/pasarela): un solo _cerrarPedido.
   4. bot recibe (su nº = identidad veraz) → parsea → estructura (#P1)
   5. bot RE-TASA contra cartaSnap[pid] (fresco por evento) → precios del SERVIDOR
   6. bot publish('pedido.crear-tienda', items re-tasados + estructura) → pedidos

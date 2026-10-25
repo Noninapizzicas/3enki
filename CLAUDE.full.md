@@ -5235,7 +5235,7 @@ CADENA (toda por evento, ningún módulo nuevo):
   PWA → #P1{metodo_pago} → pedido-parser → bot → pedido.crear-tienda{metodo_pago} → pedidos
     IF metodo_pago == 'tarjeta':
       bot → pago.iniciar.request {pedido_id, monto_centimos, return_url, metadata{project_slug, cliente_nombre, cliente_telefono, canal_origen}}
-        → pago-gateway (LÍDER, provider-agnóstico: Stripe Checkout hospedado)
+        → pago-gateway (ÓRGANO, provider-agnóstico: Stripe / SumUp hosted checkout)
         → pago.iniciar.response {status:200, data:{checkout_url}}
       bot → manda checkout_url al cliente por WhatsApp   // guarda: UNA sesión por pedido_id
       ELSE degrada (NO_PASARELA / PERMISSION_DENIED) → 'puedes pagar al recoger' (el pedido ya existe)
@@ -5260,7 +5260,11 @@ kind alternativo; cambiar de pasarela es cambiar pasarela.kind, no tocar el call
                   perdido) · PENDING vencido → DELETE (link muerto no se paga)
   pago.cancelar    → DELETE; 409 CHECKOUT_PROCESSED + PAID → confirma, no cancela
   pago.reembolsar  → POST /v1.0/merchants/{mc}/payments/{tx}/refunds (total o parcial), tope por
-                     libro y SIN reintento en timeout (ESTADO_INCIERTO: se verifica, no se repite)
+                     libro y SIN reintento en timeout. Si SumUp no contesta (red o 5xx), el
+                     adapter PREGUNTA a la transacción: GET /v2.1/merchants/{mc}/transactions?id=
+                     → eventos REFUND con status REFUNDED/SUCCESSFUL. Con rastro → se registra
+                     pago.reembolsado (resuelto_por_reconsulta:true); sin rastro → 504
+                     ESTADO_INCIERTO diciendo cuál de las dos cosas pasa. Nunca se repite el POST.
   FAILED        → pago.rechazado (el cliente sabe que la tarjeta falló)
   pago.confirmado lleva el transaction BUENO (no transactions[0]): transaction_code, entry_mode,
   auth_code, propina_centimos, iva_centimos. project_id se resuelve por el :project del path.
@@ -5281,17 +5285,45 @@ kind alternativo; cambiar de pasarela es cambiar pasarela.kind, no tocar el call
       → cobro.liquidado {bruto, comision REAL (sum fee), deducciones, neto}   ← el cuadre de caja
   Tick cada 15 min (pasarela.conciliacion{activo, intervalo_ms}); a mano: pago.conciliar.
 
+  COMPLETO (v1.4) → lo que hace que la integración sea de producción y no un MVP:
+  pago.estado   → PREFLIGHT REAL antes de encender el botón: GET /v1/merchants/{mc} (país, moneda
+                  por defecto, business_type) + payment-methods + webhook configurado + libro del
+                  proyecto (pendientes, vencidos, cobrado_hoy). Devuelve puedo_cobrar y los
+                  avisos que lo impiden: el fallo clásico del alta —scope de pagos online sin
+                  activar, que se manifiesta como cuenta sin método 'card'— se ve AQUÍ.
+  pago.recibo   → GET /v1.1/receipts/{tx}?mid={mc} → ticket estructurado (total, IVA, propina,
+                  método, autorización, comercio) normalizado a céntimos + pago.recibo.obtenido.
+                  SumUp ya emite el recibo: aquí se lee, no se inventa. Base de la factura
+                  simplificada que se manda por WhatsApp.
+  webhook       → acepta TODA la familia de eventos de checkout (la doc documenta
+                  CHECKOUT_STATUS_CHANGED; la spec ya publica checkouts.created/paid/updated/
+                  failed/expired) y busca el id en la raíz o dentro del evento. Los eventos que
+                  no son de checkout (readers.*, members.*, roles.*) se ignoran con 200 y sin
+                  gastar una llamada. Se reconsulta SIEMPRE: el payload no firmado no es prueba.
+  libro         → guarda checkout_type, merchant_country, purpose, customer_id y
+                  payment_instrument_token: el rastro de la tarjeta guardada. La tokenización
+                  completa (purpose SETUP_RECURRING_PAYMENT + cobro con token) exige Payment
+                  Widget en página propia, no Hosted Checkout: es un salto de arquitectura, no
+                  una línea. El dato ya se persiste para cuando se dé.
+  Sin Bizum: SumUp no lo ofrece en España (catálogo APM verificado 2026-10: Apple Pay, Google
+  Pay, PayPal, SumUp Pay). Si algún día se quiere Bizum, es otra pasarela, no otra config.
+
 EL HUÉRFANO (por qué existe la recreación): los pedidos de tienda viven en MEMORIA y no se
 restauran. El pago es asíncrono (el webhook llega minutos después), así que un reinicio en esa
 ventana —un DEPLOY, justo— dejaría el dinero cobrado y el pedido inexistente, en silencio. Se
 reconstruye MÍNIMO desde la metadata de la sesión (pedido_id + project_id + importe) y se emite
 pedido.pagado con recreado:true. El dinero nunca se pierde sin rastro. Nada que persistir.
 
-config DEL PROYECTO: la pasarela se enciende por proyecto (pago-gateway lee
-core.config['pago-gateway'] || moduleConfig). SumUp: kind sumup-checkout, provider SUMUP, moneda,
-merchant_code, webhook_url (NUESTRO endpoint, y sin él el adapter falla en voz alta), webhook_token,
-return_url (vuelta del cliente), ttl_minutos, min_centimos, barrido{activo, intervalo_ms},
-conciliacion{activo, intervalo_ms}.
+config DEL PROYECTO: la pasarela se enciende por proyecto SIN tocar código. El órgano guarda
+su cuenta en /pago/config.json del storage del proyecto (pago.config.leer / pago.config.escribir,
+esquema pago-pasarela-v1) y la resuelve por proyecto al iniciar; el bloque `pasarela` del core solo
+es el DEFAULT. SumUp: kind sumup-checkout, provider SUMUP, moneda, merchant_code, webhook_url
+(NUESTRO endpoint, y sin él el adapter falla en voz alta), webhook_token, return_url, ttl_minutos,
+min_centimos, barrido{activo, intervalo_ms}, conciliacion{activo, intervalo_ms}.
+La CLAVE nunca está ahí: credential-manager la resuelve POR PROYECTO
+(SUMUP_API_KEY_PROJECT_<project_id>) antes de caer a la global; el merchant y la clave de un
+negocio no pueden usarse para cobrar en otro. `exigir_config_proyecto: true` corta la herencia: sin config propia el proyecto no cobra (NO_PASARELA), que es lo que se enciende al haber un segundo negocio. Libro y cursor también por proyecto (/pago/*.json;
+se lee una vez /pizzepos/pago/* para migrar sin perder cobros).
 Stripe: kind stripe-checkout, provider STRIPE, webhook_secret. Sin bloque y sin credencial de la
 pasarela configurada → degrada (NO_PASARELA / PERMISSION_DENIED), no rompe: el pedido ya existe y
 se paga al recoger.
@@ -16107,8 +16139,8 @@ PIEZAS {
   modules/whatsapp-bot/services/pedido-parser.js (#P1: _decodificarEstructura + metodo_pago)
   modules/pizzepos/carta-digital (2.25.1)        (PWA emite #P1 + paridad mitad + nombre obligatorio + botones metodo_pago)
   modules/pizzepos/pedidos (3.5.0)               (estructura tienda → cocina ; ancla = cliente_nombre ; metodo_pago ; onPagoConfirmado con recreación del huérfano)
-  modules/pizzepos/pago-gateway (1.3.0)          (LÍDER provider-agnóstico: Stripe Checkout + webhook firmado + metadata de contexto)
-  modules/credential-manager (2.2.0)             (META_WHATSAPP[_VERIFY_TOKEN] + STRIPE en catálogo + PROJECT_ONLY)
+  modules/pago-gateway (2.0.0)                  (ÓRGANO de cobro provider-agnóstico: Stripe + SumUp; cuenta y clave POR PROYECTO)
+  modules/credential-manager (2.2.0)             (META_WHATSAPP[_VERIFY_TOKEN] + GLOVO PROJECT_ONLY + la clave de pago por proyecto)
   frontend credentials (CredentialsPanel + stores) (4ª pestaña 💬 WhatsApp · fix agrupado de la lista)
   cocina (_buildCocinaItem → ItemLine)           (YA pintaba la estructura, del comandero)
 }

@@ -9,6 +9,7 @@ fuentes:
   - modules/pizzepos/tienda-api/**
   - modules/_shared/pedido-tasador.js
   - modules/_shared/horario-servicio.js
+  - modules/pago-gateway/**
   - modules/_shared/lector-servicio.js
   - frontend/src/lib/components/comandero/ServicioToggle.svelte
   - tests/unit/pizzepos__servicio.test.js
@@ -388,8 +389,8 @@ PIEZAS {
   modules/whatsapp-bot/services/pedido-parser.js (#P1: _decodificarEstructura + metodo_pago)
   modules/pizzepos/carta-digital ({{version:modules/pizzepos/carta-digital}})        (PWA emite #P1 + paridad mitad + nombre obligatorio + botones metodo_pago)
   modules/pizzepos/pedidos (3.5.0)               (estructura tienda → cocina ; ancla = cliente_nombre ; metodo_pago ; onPagoConfirmado con recreación del huérfano)
-  modules/pizzepos/pago-gateway ({{version:modules/pizzepos/pago-gateway}})          (LÍDER provider-agnóstico: Stripe Checkout + webhook firmado + metadata de contexto)
-  modules/credential-manager ({{version:modules/credential-manager}})             (META_WHATSAPP[_VERIFY_TOKEN] + STRIPE en catálogo + PROJECT_ONLY)
+  modules/pago-gateway ({{version:modules/pago-gateway}})                  (ÓRGANO de cobro provider-agnóstico: Stripe + SumUp; cuenta y clave POR PROYECTO)
+  modules/credential-manager ({{version:modules/credential-manager}})             (META_WHATSAPP[_VERIFY_TOKEN] + GLOVO PROJECT_ONLY + la clave de pago por proyecto)
   frontend credentials (CredentialsPanel + stores) (4ª pestaña 💬 WhatsApp · fix agrupado de la lista)
   cocina (_buildCocinaItem → ItemLine)           (YA pintaba la estructura, del comandero)
 }

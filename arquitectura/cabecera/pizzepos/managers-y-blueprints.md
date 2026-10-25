@@ -4,8 +4,9 @@ dominio: pizzepos
 resumen: Managers de dominio pizzepos (cuentas, productos, categorías, cobros, pedidos, cocina, recetas, ingredientes, variaciones, escandallo, viabilidad, carta-digital, menu-generator) + blueprint drivers.
 fuentes:
   - modules/pizzepos/**
+  - modules/pago-gateway/**
   - blueprints/**
-verificado: 2026-10-25 (pasarela SumUp v1.4: preflight, recibo y reembolso por reconsulta)
+verificado: 2026-10-25 (pago-gateway v2.0: órgano de plataforma — config y clave por proyecto)
 ---
 
 # Módulos Pizzepos y Blueprints
@@ -631,7 +632,7 @@ CADENA (toda por evento, ningún módulo nuevo):
   PWA → #P1{metodo_pago} → pedido-parser → bot → pedido.crear-tienda{metodo_pago} → pedidos
     IF metodo_pago == 'tarjeta':
       bot → pago.iniciar.request {pedido_id, monto_centimos, return_url, metadata{project_slug, cliente_nombre, cliente_telefono, canal_origen}}
-        → pago-gateway (LÍDER, provider-agnóstico: Stripe Checkout hospedado)
+        → pago-gateway (ÓRGANO, provider-agnóstico: Stripe / SumUp hosted checkout)
         → pago.iniciar.response {status:200, data:{checkout_url}}
       bot → manda checkout_url al cliente por WhatsApp   // guarda: UNA sesión por pedido_id
       ELSE degrada (NO_PASARELA / PERMISSION_DENIED) → 'puedes pagar al recoger' (el pedido ya existe)
@@ -710,11 +711,16 @@ ventana —un DEPLOY, justo— dejaría el dinero cobrado y el pedido inexistent
 reconstruye MÍNIMO desde la metadata de la sesión (pedido_id + project_id + importe) y se emite
 pedido.pagado con recreado:true. El dinero nunca se pierde sin rastro. Nada que persistir.
 
-config DEL PROYECTO: la pasarela se enciende por proyecto (pago-gateway lee
-core.config['pago-gateway'] || moduleConfig). SumUp: kind sumup-checkout, provider SUMUP, moneda,
-merchant_code, webhook_url (NUESTRO endpoint, y sin él el adapter falla en voz alta), webhook_token,
-return_url (vuelta del cliente), ttl_minutos, min_centimos, barrido{activo, intervalo_ms},
-conciliacion{activo, intervalo_ms}.
+config DEL PROYECTO: la pasarela se enciende por proyecto SIN tocar código. El órgano guarda
+su cuenta en /pago/config.json del storage del proyecto (pago.config.leer / pago.config.escribir,
+esquema pago-pasarela-v1) y la resuelve por proyecto al iniciar; el bloque `pasarela` del core solo
+es el DEFAULT. SumUp: kind sumup-checkout, provider SUMUP, moneda, merchant_code, webhook_url
+(NUESTRO endpoint, y sin él el adapter falla en voz alta), webhook_token, return_url, ttl_minutos,
+min_centimos, barrido{activo, intervalo_ms}, conciliacion{activo, intervalo_ms}.
+La CLAVE nunca está ahí: credential-manager la resuelve POR PROYECTO
+(SUMUP_API_KEY_PROJECT_<project_id>) antes de caer a la global; el merchant y la clave de un
+negocio no pueden usarse para cobrar en otro. `exigir_config_proyecto: true` corta la herencia: sin config propia el proyecto no cobra (NO_PASARELA), que es lo que se enciende al haber un segundo negocio. Libro y cursor también por proyecto (/pago/*.json;
+se lee una vez /pizzepos/pago/* para migrar sin perder cobros).
 Stripe: kind stripe-checkout, provider STRIPE, webhook_secret. Sin bloque y sin credencial de la
 pasarela configurada → degrada (NO_PASARELA / PERMISSION_DENIED), no rompe: el pedido ya existe y
 se paga al recoger.

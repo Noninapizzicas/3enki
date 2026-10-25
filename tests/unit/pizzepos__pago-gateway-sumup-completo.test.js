@@ -20,7 +20,7 @@
 'use strict';
 
 const assert = require('assert');
-const PagoGateway = require('../../modules/pizzepos/pago-gateway/index.js');
+const PagoGateway = require('../../modules/pago-gateway/index.js');
 
 let ok = 0;
 const check = (nombre, fn) => Promise.resolve().then(fn)
@@ -69,7 +69,7 @@ function makeBus({ disco = new Map() } = {}) {
       })());
       responder('fs.write.request', (() => { disco.set(payload.path, payload.content); return { success: true }; })());
     },
-    libro() { const c = disco.get('/pizzepos/pago/checkouts.json'); return c ? JSON.parse(c) : null; },
+    libro() { const c = disco.get('/pago/checkouts.json'); return c ? JSON.parse(c) : null; },
     eventos(ev) { return bus.published.filter(([e]) => e === ev).map(([, p]) => p); }
   };
   return bus;

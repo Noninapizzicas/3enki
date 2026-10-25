@@ -1,0 +1,86 @@
+{
+  "name": "pago-gateway",
+  "version": "2.0.0",
+  "description": "EL ÓRGANO DE COBRO — puerto provider-agnóstico pago.iniciar / pago.cancelar / pago.reembolsar / pago.estado / pago.recibo / pago.conciliar / pago.config que enruta a la PASARELA configurada. Sirve a CUALQUIER proyecto sin tocar código: la cuenta (merchant, moneda, TTL, webhook) es POR PROYECTO (/pago/config.json) y la credencial se resuelve POR PROYECTO en credential-manager; el libro de cobros vive en el storage de cada proyecto. Pasarelas: stripe-checkout (Checkout Session firmada) y sumup-checkout (Hosted Checkout = link de pago alojado, 1,95% sin cuota) con el protocolo completo: creación idempotente que REUTILIZA el checkout vivo ante un 409 (dos links = dos cobros), valid_until propio, libro durable, barrido de reconciliación (si el webhook se pierde, el pago no se pierde), integridad del importe (un PAID que no cuadra no se confirma), cancelación por DELETE, reembolsos con tope y RESUELTOS POR RECONSULTA, webhook verificado por reconsulta + token y tolerante a toda la familia checkouts.*, preflight de cuenta (puedo_cobrar), RECIBO estructurado, pago.rechazado, y CONCILIACIÓN con la cuenta (historial incremental + payouts). El dinero vive en la pasarela; aquí se inicia, se verifica, se concilia y se cuadra. Degradable: sin pasarela → NO_PASARELA (el pedido sigue en pie y se paga al recoger).",
+  "author": "plataforma",
+  "language": "javascript",
+  "main": "index.js",
+  "horizonte": "órgano de plataforma: cobro online para cualquier proyecto (pizzepos, despacho de pan, taller, reservas); un solo motor, una config por negocio",
+  "eventos_publicados": [
+    "pago.iniciar.response",
+    "pago.cancelar.response",
+    "pago.reembolsar.response",
+    "pago.estado.response",
+    "pago.recibo.response",
+    "pago.config.response",
+    "pago.config.actualizar.response",
+    "pago.config.actualizada",
+    "pago.confirmado",
+    "pago.rechazado",
+    "pago.cancelado",
+    "pago.reembolsado",
+    "pago.recibo.obtenido",
+    "pago.importe_discrepante",
+    "pago.contracargo",
+    "cobro.huerfano",
+    "cobro.liquidado"
+  ],
+  "eventos_que_escucho": [
+    "pago.iniciar.request",
+    "pago.cancelar.request",
+    "pago.reembolsar.request",
+    "pago.estado.request",
+    "pago.recibo.request",
+    "pago.config.request",
+    "pago.config.actualizar.request",
+    "pago.config.actualizada"
+  ],
+  "ui_handlers": [
+    { "domain": "pago", "action": "iniciar", "handler": "handlePagoIniciar", "description": "Inicia el pago de un pedido en la pasarela DEL PROYECTO → devuelve checkout_url, session_id y expira_at." },
+    { "domain": "pago", "action": "cancelar", "handler": "handlePagoCancelar", "description": "Mata el link de pago (SumUp DELETE). Si ya estaba pagado devuelve CHECKOUT_YA_PAGADO y confirma el cobro en vez de cancelarlo." },
+    { "domain": "pago", "action": "reembolsar", "handler": "handlePagoReembolsar", "description": "Reembolso total o parcial con tope por libro de cobros. Sin reintento automático: un timeout es ESTADO_INCIERTO." },
+    { "domain": "pago", "action": "metodos", "handler": "handlePagoMetodos", "description": "Qué métodos acepta la cuenta del proyecto (card, apple_pay, google_pay, paypal). Preflight antes de publicar el botón." },
+    { "domain": "pago", "action": "estado", "handler": "handlePagoEstado", "description": "PREFLIGHT REAL del proyecto: merchant válido, métodos activos, webhook configurado y estado del libro. Devuelve puedo_cobrar y qué lo impide." },
+    { "domain": "pago", "action": "recibo", "handler": "handlePagoRecibo", "description": "Recibo estructurado (v1.1) de un cobro: total, IVA, propina, método, autorización y comercio." },
+    { "domain": "pago", "action": "conciliar", "handler": "handlePagoConciliar", "description": "Fuerza un tick de conciliación con la cuenta de la pasarela (historial incremental + liquidaciones). Con project_id, solo ese; sin él, todos los que tengan config." },
+    { "domain": "pago", "action": "config_leer", "handler": "handlePagoConfigLeer", "description": "Lee la config de cobro del proyecto (sin secretos) + de dónde sale (proyecto o core) + si puede cobrar." },
+    { "domain": "pago", "action": "config_escribir", "handler": "handlePagoConfigEscribir", "description": "Escribe la config de cobro del proyecto (kind, provider, merchant_code, moneda, webhook_url, ttl_minutos…) y publica pago.config.actualizada. Es lo que enciende el cobro de un negocio nuevo sin tocar código." }
+  ],
+  "apis": [
+    {
+      "method": "POST",
+      "path": "/pago/webhook/:project",
+      "handler": "handleWebhook",
+      "description": "Webhook de la pasarela → emite pago.confirmado / pago.rechazado. El :project del path decide CON QUÉ CUENTA se verifica (config + credencial de ese proyecto). Stripe: firma HMAC del cuerpo. SumUp: su evento es {event_type, id} SIN firma; se reconsulta GET /v0.1/checkouts/{id} y solo se confirma si status === 'PAID'. Token opcional (?t=). Responde 5xx a propósito cuando no puede verificar, para que la pasarela reintente. URL pública: https://<dominio>/modules/pago-gateway/pago/webhook/<project> (bloque /modules/* de Caddy, sin rewrite)."
+    }
+  ],
+  "config": {
+    "storage": {
+      "config_proyecto": "/pago/config.json",
+      "libro": "/pago/checkouts.json",
+      "conciliacion": "/pago/conciliacion.json",
+      "legacy": "/pizzepos/pago/*.json (se lee una vez; la primera escritura migra)"
+    },
+    "pasarela": {
+      "kind": "stripe-checkout",
+      "provider": "STRIPE",
+      "moneda": "eur",
+      "merchant_code": null,
+      "webhook_url": null,
+      "webhook_token": null,
+      "webhook_secret": null,
+      "return_url": null,
+      "ttl_minutos": 15,
+      "min_centimos": 100,
+      "exigir_config_proyecto": false,
+      "barrido": { "activo": true, "intervalo_ms": 120000 },
+      "conciliacion": { "activo": true, "intervalo_ms": 900000 }
+    },
+    "_doc": "El bloque `pasarela` de aquí son los DEFAULTS del core. Cada proyecto pisa lo suyo con /pago/config.json (esquema pago-pasarela-v1) vía pago.config.escribir — sin reinicio y sin código. El secreto NUNCA está aquí: vive en credential-manager como <PROVIDER>_API_KEY_PROJECT_<project_id> (nivel PROJECT, aislado por negocio), con la global solo como respaldo single-tenant. Con `exigir_config_proyecto: true` el órgano deja de heredar la cuenta del core: un proyecto que no declaró la suya NO cobra (NO_PASARELA) — el interruptor que se enciende al haber un segundo negocio."
+  },
+  "dependencies": {
+    "credential-manager": "resuelve la credencial POR PROYECTO (credential.resolve.request con provider + project_id → nivel PROJECT antes que GLOBAL)",
+    "filesystem": "config por proyecto (/pago/config.json), libro de cobros (/pago/checkouts.json) y cursor de conciliación (/pago/conciliacion.json) en el storage del proyecto",
+    "project-manager": "resuelve el project_id por slug en el webhook (:project) y lista los proyectos para barrer/conciliar"
+  }
+}

@@ -93,7 +93,7 @@
   "eventos_publicados_que_requieren_consumer": [
     {
       "event": "pago.iniciar.request",
-      "consumer_esperado": "modules/pizzepos/pago-gateway",
+      "consumer_esperado": "modules/pago-gateway",
       "razon": "Pago con TARJETA elegido por el cliente en la PWA. El bot pide la sesion de pago al lider (pago-gateway, provider-agnostico) y recibe la checkout_url por la response correlacionada (pago.iniciar.response) para mandarsela al cliente por WhatsApp. Sin pasarela configurada degrada: avisa que pague al recoger (el pedido ya esta creado)."
     },
     {

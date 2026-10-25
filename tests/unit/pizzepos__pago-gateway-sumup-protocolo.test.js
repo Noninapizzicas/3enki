@@ -2,7 +2,7 @@
  * Tests unitarios — PAGO-GATEWAY / protocolo SUMUP completo (v1.2).
  *
  * Lo que estos tests clavan (cada punto costó leer la doc oficial, 596 KB):
- *   1. LIBRO de cobros durable en /pizzepos/pago/checkouts.json (sin él no hay barrido).
+ *   1. LIBRO de cobros durable en /pago/checkouts.json (sin él no hay barrido).
  *   2. pago.confirmado sale con los datos RICOS del transaction (código, entry_mode, propina, IVA, auth).
  *   3. El transaction bueno no es transactions[0]: se busca el SUCCESSFUL.
  *   4. FAILED → pago.rechazado (el cliente se entera, no se queda mirando la pantalla).
@@ -18,7 +18,7 @@
 'use strict';
 
 const assert = require('assert');
-const PagoGateway = require('../../modules/pizzepos/pago-gateway/index.js');
+const PagoGateway = require('../../modules/pago-gateway/index.js');
 
 let ok = 0;
 const check = (nombre, fn) => Promise.resolve().then(fn)
@@ -68,8 +68,8 @@ function makeBus({ disco = new Map() } = {}) {
       })());
       responder('fs.write.request', (() => { disco.set(payload.path, payload.content); return { success: true }; })());
     },
-    disco() { return disco.get('/pizzepos/pago/checkouts.json'); },
-    libro() { const c = disco.get('/pizzepos/pago/checkouts.json'); return c ? JSON.parse(c) : null; },
+    disco() { return disco.get('/pago/checkouts.json'); },
+    libro() { const c = disco.get('/pago/checkouts.json'); return c ? JSON.parse(c) : null; },
     eventos(ev) { return bus.published.filter(([e]) => e === ev).map(([, p]) => p); }
   };
   return bus;
@@ -115,7 +115,7 @@ const webhook = (mod, { id = 'co-1', query = {}, project = 'the-pirate', evento 
 
 // ─────────────────────────────────────────────────────────────
 async function test_libro() {
-  await check('libro: el checkout queda escrito en storage/pizzepos/pago/checkouts.json', async () => {
+  await check('libro: el checkout queda escrito en storage/pago/checkouts.json', async () => {
     mockFetch(() => ({ status: 201, body: CO_PENDIENTE }));
     const { mod, bus } = await montar(CFG);
     const r = await mod.handlePagoIniciar({ pedido_id: 'PED-1', monto_centimos: 2340, project_id: PROYECTO.id, project_slug: PROYECTO.slug });
@@ -208,7 +208,7 @@ async function test_confirmar() {
 
 async function test_barrido() {
   await check('barrido: webhook perdido → el checkout PAID se confirma igual (origen barrido)', async () => {
-    const disco = new Map([['/pizzepos/pago/checkouts.json', JSON.stringify({
+    const disco = new Map([['/pago/checkouts.json', JSON.stringify({
       version: 1, checkouts: { 'co-1': { checkout_id: 'co-1', ...CO_PENDIENTE, estado: 'pendiente', pedido_id: 'PED-1', monto_centimos: 2340, project_slug: 'the-pirate', creado: new Date().toISOString(), valid_until: CO_PENDIENTE.valid_until } }
     })]]);
     mockFetch(() => ({ status: 200, body: CO_PAGADO }));
@@ -224,7 +224,7 @@ async function test_barrido() {
 
   await check('barrido: PENDING vencido → DELETE del link y estado expirado', async () => {
     const vencido = { ...CO_PENDIENTE, valid_until: new Date(Date.now() - 60000).toISOString() };
-    const disco = new Map([['/pizzepos/pago/checkouts.json', JSON.stringify({
+    const disco = new Map([['/pago/checkouts.json', JSON.stringify({
       version: 1, checkouts: { 'co-1': { checkout_id: 'co-1', ...vencido, estado: 'pendiente', pedido_id: 'PED-1', monto_centimos: 2340, creado: new Date().toISOString() } }
     })]]);
     const calls = mockFetch((url, opts) => (opts.method === 'DELETE' ? { status: 200, body: vencido } : { status: 200, body: vencido }));
@@ -258,7 +258,7 @@ async function test_cancelar() {
 }
 
 async function test_reembolsar() {
-  const conCobro = () => new Map([['/pizzepos/pago/checkouts.json', JSON.stringify({
+  const conCobro = () => new Map([['/pago/checkouts.json', JSON.stringify({
     version: 1, checkouts: { 'co-1': { ...CO_PAGADO, estado: 'confirmado', pedido_id: 'PED-1', monto_centimos: 2340, transaction_id: 'tx-buena', reembolsos: [] } }
   })]]);
 

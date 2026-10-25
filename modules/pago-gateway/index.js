@@ -46,12 +46,19 @@
  */
 
 const crypto = require('crypto');
-const BaseModule = require('../../_shared/base-module');
+const BaseModule = require('../_shared/base-module');
 const ConciliacionSumUp = require('./conciliacion');
 
 const SUMUP_API = 'https://api.sumup.com';
-const LEDGER_PATH = '/pizzepos/pago/checkouts.json';   // relativo al storage del proyecto
-const CONCILIACION_PATH = '/pizzepos/pago/conciliacion.json';
+// Storage del proyecto. El prefijo es del ÓRGANO, no de la vertical: /pago vale para
+// cualquier proyecto (pizzería, panadería, taller). Las rutas viejas se siguen leyendo
+// una vez para no perder el libro de cobros al desplegar (migración sin hueco).
+const PAGO_DIR = '/pago';
+const LEDGER_PATH = PAGO_DIR + '/checkouts.json';
+const LEDGER_LEGACY = '/pizzepos/pago/checkouts.json';
+const CONCILIACION_PATH = PAGO_DIR + '/conciliacion.json';
+const CONCILIACION_LEGACY = '/pizzepos/pago/conciliacion.json';
+const CONFIG_PATH = PAGO_DIR + '/config.json';        // config de pasarela POR PROYECTO
 const LEDGER_MAX = 800;
 const REF_MAX = 60;                                    // deja sitio al sufijo #n (máx SumUp: 64)
 const SUMUP_TIMEOUT_MS = 8000;                        // el cliente está esperando el link
@@ -75,6 +82,9 @@ class PagoGatewayModule extends BaseModule {
     this._conciTimer = null;
     this._barrido = null;
     this._barriendo = false;
+    this._pasarelaProyecto = new Map();   // project_id → bloque `pasarela` del proyecto
+    this._configCargada = new Set();      // project_id ya leído de disco
+    this._configNoDisponible = new Map(); // project_id → ts hasta el que no se reintenta leer
   }
 
   async onLoad(core) {
@@ -90,6 +100,12 @@ class PagoGatewayModule extends BaseModule {
     sub('pago.reembolsar.request', e => this._onReembolsarRequest(e));
     sub('pago.estado.request', e => this._onRespuestaSimple(e, 'pago.estado.request', 'pago.estado.response', d => this._sumupEstado(d)));
     sub('pago.recibo.request', e => this._onRespuestaSimple(e, 'pago.recibo.request', 'pago.recibo.response', d => this._sumupRecibo(d)));
+    // Config de pasarela POR PROYECTO (el órgano es el mismo para todos los negocios):
+    // leer / escribir por bus, y el mismo camino que usa el panel.
+    sub('pago.config.request', e => this._onRespuestaSimple(e, 'pago.config.request', 'pago.config.response', d => this._configLeer(d)));
+    sub('pago.config.actualizar.request', e => this._onRespuestaSimple(e, 'pago.config.actualizar.request', 'pago.config.actualizar.response', d => this._configEscribir(d)));
+    // Un cambio de config invalida la caché: el siguiente pago ya usa la nueva.
+    sub('pago.config.actualizada', e => { const d = e?.data || e; if (d?.project_id) this._invalidarConfig(d.project_id); });
 
     this._montarConciliacion();
     this._arrancarBarrido();
@@ -108,6 +124,130 @@ class PagoGatewayModule extends BaseModule {
     for (const u of this._subs) { try { u(); } catch (_) {} }
     this._subs = [];
     this.logger?.info('module.unloaded', { module: this.name });
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  //  CONFIG POR PROYECTO — el órgano es uno; cada negocio tiene su cuenta
+  //  Sin esto, dos proyectos compartirían merchant code y clave (un cobro
+  //  acabaría en la cuenta del otro). Con esto, cero código por proyecto:
+  //  se escribe la config del proyecto y el mismo órgano cobra con SU cuenta.
+  // ══════════════════════════════════════════════════════════════════════════
+
+  _pasarelaPara(project_id) {
+    const proy = project_id ? this._pasarelaProyecto.get(project_id) : null;
+    // Modo ESTRICTO (multi-negocio): sin config propia no se cobra. Un proyecto que no
+    // ha declarado su cuenta NUNCA usa la del core — así nadie cobra en la cuenta de otro.
+    if (!proy && project_id && this.pasarela?.exigir_config_proyecto === true) return {};
+    if (!proy) return this.pasarela;
+    const base = this.pasarela || {};
+    const out = { ...base, ...proy };
+    // Los bloques anidados se mergean: el proyecto puede cambiar solo `barrido`.
+    for (const b of ['barrido', 'conciliacion']) {
+      if (proy[b] && typeof proy[b] === 'object' && !Array.isArray(proy[b])) out[b] = { ...(base[b] || {}), ...proy[b] };
+    }
+    return out;
+  }
+
+  // La ruta del libro es del ÓRGANO (/pago/...), configurable por si un despliegue
+  // quiere aislarlo en otro sitio. El prefijo pizzepos era de la vertical, no del pago.
+  _ledgerPath() { return this.config?.libro_path || LEDGER_PATH; }
+  _conciPath() { return this.config?.conciliacion_path || CONCILIACION_PATH; }
+
+  _invalidarConfig(project_id) {
+    if (!project_id) return;
+    this._pasarelaProyecto.delete(project_id);
+    this._configCargada.delete(project_id);
+  }
+
+  // Carga (una vez por proyecto) el bloque `pasarela` de /pago/config.json.
+  // Degrada en silencio si no hay fs o no hay config: se usan los defaults del core.
+  async _asegurarConfig(project_id) {
+    if (!project_id || this._configCargada.has(project_id)) return this._pasarelaPara(project_id);
+    if (Date.now() < (this._configNoDisponible.get(project_id) || 0)) return this._pasarelaPara(project_id);
+    const r = await this._rpc('fs.read.request', { project_id, path: CONFIG_PATH }, { timeout_ms: FS_TIMEOUT_MS });
+    if (!r) {
+      this._configNoDisponible.set(project_id, Date.now() + 10 * 60 * 1000);
+      return this._pasarelaPara(project_id);
+    }
+    if (r.success !== false && typeof r.content === 'string') {
+      try {
+        const j = JSON.parse(r.content);
+        const p = j?.pasarela;
+        if (p && typeof p === 'object' && !Array.isArray(p)) this._pasarelaProyecto.set(project_id, p);
+      } catch (_) { this.logger?.warn('pago-gateway.config.json_invalido', { project_id }); }
+    }
+    this._configCargada.add(project_id);
+    return this._pasarelaPara(project_id);
+  }
+
+  async _configLeer(d = {}) {
+    if (!d.project_id) return { status: 400, error: { code: 'INVALID_INPUT', message: 'project_id requerido' } };
+    const p = await this._asegurarConfig(d.project_id);
+    return {
+      status: 200,
+      data: {
+        project_id: d.project_id,
+        pasarela: this._configPublica(p),
+        fuente: this._pasarelaProyecto.has(d.project_id) ? 'proyecto' : 'core'
+      }
+    };
+  }
+
+  async _configEscribir(d = {}) {
+    if (!d.project_id) return { status: 400, error: { code: 'INVALID_INPUT', message: 'project_id requerido' } };
+    const cambios = d.pasarela && typeof d.pasarela === 'object' && !Array.isArray(d.pasarela) ? d.pasarela : null;
+    if (!cambios) return { status: 400, error: { code: 'INVALID_INPUT', message: 'pasarela (objeto) requerido' } };
+
+    // Validación: lo que se escribe es lo que se usará. Nada de kind inventado.
+    const KINDS = new Set(['stripe-checkout', 'sumup-checkout', 'sumup']);
+    if (cambios.kind !== undefined && !KINDS.has(String(cambios.kind))) {
+      return { status: 400, error: { code: 'INVALID_INPUT', message: `kind '${cambios.kind}' no implementado (stripe-checkout, sumup-checkout)`, field: 'kind' } };
+    }
+    if (cambios.merchant_code !== undefined && cambios.merchant_code !== null && typeof cambios.merchant_code !== 'string') {
+      return { status: 400, error: { code: 'INVALID_INPUT', message: 'merchant_code debe ser string', field: 'merchant_code' } };
+    }
+    if (cambios.ttl_minutos !== undefined && cambios.ttl_minutos !== null) {
+      const t = Number(cambios.ttl_minutos);
+      if (!Number.isFinite(t) || t <= 0) return { status: 400, error: { code: 'INVALID_INPUT', message: 'ttl_minutos debe ser > 0', field: 'ttl_minutos' } };
+    }
+    if (cambios.provider !== undefined && typeof cambios.provider !== 'string') {
+      return { status: 400, error: { code: 'INVALID_INPUT', message: 'provider debe ser string (nombre del credential-manager)', field: 'provider' } };
+    }
+
+    const actual = this._pasarelaProyecto.get(d.project_id) || {};
+    const nuevas = { ...actual, ...cambios };
+    for (const b of ['barrido', 'conciliacion']) {
+      if (cambios[b] && typeof cambios[b] === 'object' && !Array.isArray(cambios[b])) nuevas[b] = { ...(actual[b] || {}), ...cambios[b] };
+    }
+    // Lo que viaja al disco es SOLO la config del proyecto (nada de defaults del core
+    // mezclados: así se ve de un vistazo qué es de este negocio).
+    const r = await this._rpc('fs.write.request', {
+      project_id: d.project_id, path: CONFIG_PATH,
+      content: JSON.stringify({ esquema: 'pago-pasarela-v1', pasarela: nuevas }, null, 2),
+      encoding: 'utf-8', atomic: true
+    }, { timeout_ms: FS_TIMEOUT_MS });
+    if (!r || r.success === false) {
+      return { status: 503, error: { code: 'STORAGE_UNAVAILABLE', message: 'no se pudo escribir /pago/config.json del proyecto' } };
+    }
+    this._pasarelaProyecto.set(d.project_id, nuevas);
+    this._configCargada.add(d.project_id);
+    this.eventBus?.publish?.('pago.config.actualizada', {
+      project_id: d.project_id, pasarela: this._configPublica({ ...this.pasarela, ...nuevas }),
+      correlation_id: crypto.randomUUID(), timestamp: new Date().toISOString()
+    });
+    return { status: 200, data: { project_id: d.project_id, pasarela: this._configPublica({ ...this.pasarela, ...nuevas }), guardado: true } };
+  }
+
+  // Vista sin secretos: la api_key NUNCA vive aquí (está en credential-manager).
+  _configPublica(p = {}) {
+    return {
+      kind: p.kind || null, provider: p.provider || null, moneda: p.moneda || null,
+      merchant_code: p.merchant_code || null, webhook_url: p.webhook_url || null,
+      return_url: p.return_url || null, ttl_minutos: p.ttl_minutos ?? null,
+      min_centimos: p.min_centimos ?? null, proyecto: p.project_slug || null,
+      tiene_webhook_token: !!p.webhook_token, tiene_webhook_secret: !!p.webhook_secret,
+      puede_cobrar: !!(p.kind && p.provider && (p.kind === 'stripe-checkout' ? true : !!p.merchant_code))
+    };
   }
 
   // RPC de bus (resuelve credencial via credential-manager, como el loader/tools_http).
@@ -129,11 +269,16 @@ class PagoGatewayModule extends BaseModule {
     });
   }
 
-  async _resolveCred(provider) {
-    const r = await this._rpc('credential.resolve.request', { provider }, { timeout_ms: 6000 });
+  // La credencial es POR PROYECTO cuando se pasa project_id: credential-manager resuelve
+  // SUMUP_API_KEY_PROJECT_<id> antes de caer a la global. Sin project_id resolvía siempre
+  // la global → dos negocios pagaban con la cuenta del primero.
+  async _resolveCred(provider, project_id = null) {
+    const payload = { provider };
+    if (project_id) payload.project_id = project_id;
+    const r = await this._rpc('credential.resolve.request', payload, { timeout_ms: 6000 });
     if (!r) return { error: 'credential.resolve timeout' };
     if (r.success === false || !r.api_key) return { error: r.error || `sin credencial para provider '${provider}'` };
-    return { api_key: r.api_key };
+    return { api_key: r.api_key, nivel: r.resolved_from || null, identificador: r.identifier || null };
   }
 
   // ── núcleo: iniciar el pago. RETORNA {status, data|error} ──
@@ -141,9 +286,10 @@ class PagoGatewayModule extends BaseModule {
     if (!d?.pedido_id || !Number.isInteger(d.monto_centimos) || d.monto_centimos <= 0) {
       return { status: 400, error: { code: 'INVALID_INPUT', message: 'pedido_id y monto_centimos (entero > 0) requeridos' } };
     }
-    const kind = this.pasarela.kind;
+    const p = await this._asegurarConfig(d.project_id);   // config del negocio, no la del core
+    const kind = p.kind;
     if (!kind) {
-      return { status: 503, error: { code: 'NO_PASARELA', message: 'sin pasarela configurada. Configúrala en pago-gateway.pasarela (kind + provider) + su credencial.' } };
+      return { status: 503, error: { code: 'NO_PASARELA', message: 'sin pasarela configurada para este proyecto. Escribe pago.config (kind + provider + merchant_code) + su credencial.' } };
     }
     if (kind === 'stripe-checkout') return this._stripeCheckout(d);
     if (kind === 'sumup-checkout' || kind === 'sumup') return this._sumupCheckout(d);
@@ -152,13 +298,14 @@ class PagoGatewayModule extends BaseModule {
 
   // ── adapter STRIPE (Checkout Session) ──
   async _stripeCheckout(d) {
-    const provider = this.pasarela.provider || 'STRIPE';
-    const cred = await this._resolveCred(provider);
+    const p = this._pasarelaPara(d.project_id);
+    const provider = p.provider || 'STRIPE';
+    const cred = await this._resolveCred(provider, d.project_id);
     if (cred.error) return { status: 500, error: { code: 'PERMISSION_DENIED', message: `credencial '${provider}': ${cred.error}` } };
 
-    const moneda = (d.moneda || this.pasarela.moneda || 'eur').toLowerCase();
+    const moneda = (d.moneda || p.moneda || 'eur').toLowerCase();
     const concepto = (d.concepto || 'Pedido').slice(0, 120);
-    const ret = d.return_url || this.pasarela.return_url || '';
+    const ret = d.return_url || p.return_url || '';
     const sep = ret.includes('?') ? '&' : '?';
     // Stripe Checkout Sessions: body x-www-form-urlencoded (NO json).
     const params = new URLSearchParams();
@@ -216,8 +363,9 @@ class PagoGatewayModule extends BaseModule {
   // ══════════════════════════════════════════════════════════════════════════
 
   _sumupCfg(d = {}) {
-    const p = this.pasarela;
+    const p = this._pasarelaPara(d.project_id);
     return {
+      project_id: d.project_id || p.project_id || null,
       merchant: d.merchant_code || p.merchant_code || null,
       provider: p.provider || 'SUMUP',
       moneda: String(d.moneda || p.moneda || 'eur').toUpperCase(),
@@ -225,12 +373,12 @@ class PagoGatewayModule extends BaseModule {
       clienteUrl: d.return_url || p.return_url || null,
       webhookToken: p.webhook_token || null,
       minCentimos: Number.isInteger(p.min_centimos) ? p.min_centimos : 100,   // SumUp: mínimo 1,00
-      ttlMin: this._ttlMinutos()
+      ttlMin: this._ttlMinutos(d.project_id)
     };
   }
 
-  _ttlMinutos() {
-    const t = Number(this.pasarela?.ttl_minutos);
+  _ttlMinutos(project_id = null) {
+    const t = Number(this._pasarelaPara(project_id)?.ttl_minutos);
     return Number.isFinite(t) && t > 0 ? Math.min(t, 30) : 15;   // Hosted Checkout vive 30 min como máximo
   }
 
@@ -355,7 +503,7 @@ class PagoGatewayModule extends BaseModule {
     if (d.monto_centimos < cfg.minCentimos) {
       return { status: 400, error: { code: 'INVALID_INPUT', message: `importe por debajo del mínimo de SumUp (${(cfg.minCentimos / 100).toFixed(2)} ${cfg.moneda})` } };
     }
-    const cred = await this._resolveCred(cfg.provider);
+    const cred = await this._resolveCred(cfg.provider, cfg.project_id);
     if (cred.error) return { status: 500, error: { code: 'PERMISSION_DENIED', message: `credencial '${cfg.provider}': ${cred.error}` } };
 
     const concepto = (d.concepto || `Pedido ${d.pedido_id}`).slice(0, 120);
@@ -421,7 +569,13 @@ class PagoGatewayModule extends BaseModule {
     const bloqueadoHasta = this._ledgerNoDisponible.get(project_id) || 0;
     if (Date.now() < bloqueadoHasta) return null;
 
-    const r = await this._rpc('fs.read.request', { project_id, path: LEDGER_PATH }, { timeout_ms: FS_TIMEOUT_MS });
+    const ruta = this._ledgerPath();
+    let r = await this._rpc('fs.read.request', { project_id, path: ruta }, { timeout_ms: FS_TIMEOUT_MS });
+    // Migración sin hueco: si aún no existe la ruta del órgano, se lee la vieja de pizzepos.
+    if ((!r || r.success === false || !r.content) && ruta !== LEDGER_LEGACY) {
+      const rl = await this._rpc('fs.read.request', { project_id, path: LEDGER_LEGACY }, { timeout_ms: FS_TIMEOUT_MS });
+      if (rl && rl.success !== false && typeof rl.content === 'string' && rl.content) r = rl;
+    }
     let libro = { version: 1, checkouts: {} };
     if (r && r.success !== false && typeof r.content === 'string') {
       try {
@@ -442,7 +596,7 @@ class PagoGatewayModule extends BaseModule {
     const libro = this._ledger.get(project_id);
     if (!project_id || !libro) return false;
     const r = await this._rpc('fs.write.request', {
-      project_id, path: LEDGER_PATH, content: JSON.stringify(libro, null, 2), encoding: 'utf-8', atomic: true
+      project_id, path: this._ledgerPath(), content: JSON.stringify(libro, null, 2), encoding: 'utf-8', atomic: true
     }, { timeout_ms: FS_TIMEOUT_MS });
     return !!(r && r.success !== false);
   }
@@ -629,7 +783,8 @@ class PagoGatewayModule extends BaseModule {
 
   // ── cancelar: matar el link (DELETE). Si ya se pagó, se confirma, no se cancela. ──
   async _cancelar(d) {
-    const kind = this.pasarela.kind;
+    await this._asegurarConfig(d.project_id);
+    const kind = this._pasarelaPara(d.project_id).kind;
     if (kind !== 'sumup-checkout' && kind !== 'sumup') {
       return { status: 501, error: { code: 'NOT_IMPLEMENTED', message: `cancelar no implementado para '${kind}'` } };
     }
@@ -645,7 +800,7 @@ class PagoGatewayModule extends BaseModule {
     if (!checkout_id) {
       return { status: 404, error: { code: 'NOT_FOUND', message: 'sin session_id ni checkout en el libro para ese pedido' } };
     }
-    const cred = await this._resolveCred(cfg.provider);
+    const cred = await this._resolveCred(cfg.provider, cfg.project_id);
     if (cred.error) return { status: 500, error: { code: 'PERMISSION_DENIED', message: `credencial '${cfg.provider}': ${cred.error}` } };
 
     const r = await this._sumupCall('DELETE', `/v0.1/checkouts/${encodeURIComponent(checkout_id)}`, { api_key: cred.api_key });
@@ -675,7 +830,8 @@ class PagoGatewayModule extends BaseModule {
 
   // ── reembolsar (v1.0, merchant-scoped). SIN reintento automático: estado incierto no se repite. ──
   async _sumupReembolsar(d) {
-    const kind = this.pasarela.kind;
+    await this._asegurarConfig(d.project_id);
+    const kind = this._pasarelaPara(d.project_id).kind;
     if (kind !== 'sumup-checkout' && kind !== 'sumup') {
       return { status: 501, error: { code: 'NOT_IMPLEMENTED', message: `reembolsar no implementado para '${kind}'` } };
     }
@@ -696,7 +852,7 @@ class PagoGatewayModule extends BaseModule {
       return { status: 400, error: { code: 'INVALID_INPUT', message: `el reembolso excede lo cobrado (cobrado ${cobrado}, ya devuelto ${yaDevuelto}, pedido ${total})` } };
     }
 
-    const cred = await this._resolveCred(cfg.provider);
+    const cred = await this._resolveCred(cfg.provider, cfg.project_id);
     if (cred.error) return { status: 500, error: { code: 'PERMISSION_DENIED', message: `credencial '${cfg.provider}': ${cred.error}` } };
 
     const body = total ? { amount: Number((total / 100).toFixed(2)) } : null;
@@ -776,7 +932,7 @@ class PagoGatewayModule extends BaseModule {
   async _sumupMetodos(d = {}) {
     const cfg = this._sumupCfg(d);
     if (!cfg.merchant) return { status: 500, error: { code: 'CONFIG_MISSING', message: 'falta merchant_code' } };
-    const cred = await this._resolveCred(cfg.provider);
+    const cred = await this._resolveCred(cfg.provider, cfg.project_id);
     if (cred.error) return { status: 500, error: { code: 'PERMISSION_DENIED', message: `credencial '${cfg.provider}': ${cred.error}` } };
     const r = await this._sumupCall('GET', `/v0.1/merchants/${encodeURIComponent(cfg.merchant)}/payment-methods`, { api_key: cred.api_key });
     if (!r.ok) return this._errorDeSumup(r);
@@ -802,7 +958,7 @@ class PagoGatewayModule extends BaseModule {
   async _sumupEstado(d = {}) {
     const cfg = this._sumupCfg(d);
     if (!cfg.merchant) return { status: 500, error: { code: 'CONFIG_MISSING', message: 'falta pasarela.merchant_code (el código M… de la cuenta SumUp)' } };
-    const cred = await this._resolveCred(cfg.provider);
+    const cred = await this._resolveCred(cfg.provider, cfg.project_id);
     if (cred.error) return { status: 500, error: { code: 'PERMISSION_DENIED', message: `credencial '${cfg.provider}': ${cred.error}` } };
 
     const [m, met] = await Promise.all([
@@ -887,7 +1043,7 @@ class PagoGatewayModule extends BaseModule {
     if (!transaction_id) {
       return { status: 400, error: { code: 'INVALID_INPUT', message: 'sin transaction_id: ni en la petición ni en el libro de cobros' } };
     }
-    const cred = await this._resolveCred(cfg.provider);
+    const cred = await this._resolveCred(cfg.provider, cfg.project_id);
     if (cred.error) return { status: 500, error: { code: 'PERMISSION_DENIED', message: `credencial '${cfg.provider}': ${cred.error}` } };
 
     const q = new URLSearchParams({ mid: cfg.merchant });
@@ -955,8 +1111,8 @@ class PagoGatewayModule extends BaseModule {
   _montarConciliacion() {
     if (!this._conciliacionActiva()) return;
     this._conci = new ConciliacionSumUp({
-      cfg: () => this._sumupCfg({}),
-      resolveCred: p => this._resolveCred(p),
+      cfg: (pid) => this._sumupCfg({ project_id: pid || null }),
+      resolveCred: (p, pid) => this._resolveCred(p, pid),
       call: (m, path, opts) => this._sumupCall(m, path, opts),
       cargarLibro: pid => this._ledgerLoad(pid),
       buscarTx: async (pid, ids) => {
@@ -984,7 +1140,7 @@ class PagoGatewayModule extends BaseModule {
   async _conciEstadoLoad(project_id) {
     if (!project_id) return null;
     if (this._conciEstado.has(project_id)) return this._conciEstado.get(project_id);
-    const r = await this._rpc('fs.read.request', { project_id, path: CONCILIACION_PATH }, { timeout_ms: FS_TIMEOUT_MS });
+    const r = await this._rpc('fs.read.request', { project_id, path: this._conciPath() }, { timeout_ms: FS_TIMEOUT_MS });
     let est = { history_cursor: null, payouts_hasta: null, vistos: [] };
     if (r && r.success !== false && typeof r.content === 'string') {
       try { const j = JSON.parse(r.content); if (j && typeof j === 'object') est = { ...est, ...j }; } catch (_) {}
@@ -997,7 +1153,7 @@ class PagoGatewayModule extends BaseModule {
     if (!project_id || !estado) return false;
     this._conciEstado.set(project_id, estado);
     const r = await this._rpc('fs.write.request', {
-      project_id, path: CONCILIACION_PATH, content: JSON.stringify(estado, null, 2), encoding: 'utf-8', atomic: true
+      project_id, path: this._conciPath(), content: JSON.stringify(estado, null, 2), encoding: 'utf-8', atomic: true
     }, { timeout_ms: FS_TIMEOUT_MS });
     return !!(r && r.success !== false);
   }
@@ -1059,13 +1215,14 @@ class PagoGatewayModule extends BaseModule {
   async _barrerProyecto({ id, slug }) {
     const libro = await this._ledgerLoad(id);
     if (!libro) return;
+    await this._asegurarConfig(id);
     const pendientes = Object.values(libro.checkouts || {})
       .filter(e => e && e.checkout_id && e.estado === 'pendiente' && !this._confirmados.has(e.checkout_id))
       .slice(0, 50);
     if (!pendientes.length) return;
 
-    const cfg = this._sumupCfg({});
-    const cred = await this._resolveCred(cfg.provider);
+    const cfg = this._sumupCfg({ project_id: id });
+    const cred = await this._resolveCred(cfg.provider, cfg.project_id);
     if (cred.error) return;
     const ahora = Date.now();
 
@@ -1148,6 +1305,9 @@ class PagoGatewayModule extends BaseModule {
   async handlePagoEstado(data) { return this._sumupEstado(data || {}); }
   async handlePagoRecibo(data) { return this._sumupRecibo(data || {}); }
   async handlePagoConciliar(data) { return this._conciliar(data || {}); }
+  // Config de la pasarela DEL PROYECTO (lo que enciende el botón sin tocar código).
+  async handlePagoConfigLeer(data) { return this._configLeer(data || {}); }
+  async handlePagoConfigEscribir(data) { return this._configEscribir(data || {}); }
 
   // ── WEBHOOK HTTP de la pasarela → pago.confirmado ──
   //   Stripe → firma HMAC (stripe-signature) del cuerpo.
@@ -1159,7 +1319,8 @@ class PagoGatewayModule extends BaseModule {
     try { evt = JSON.parse(raw); } catch (_) { return this._respond(res, 400, { error: 'payload no es JSON' }); }
     if (evt && typeof evt.event_type === 'string') return this._webhookSumup(req, res, evt);
     const sig = req?.headers?.['stripe-signature'] || req?.headers?.['Stripe-Signature'];
-    const secret = this.pasarela.webhook_secret || null;
+    const proyectoStripe = req?.params?.project ? await this._proyectoPorSlug(req.params.project) : null;
+    const secret = this._pasarelaPara(proyectoStripe?.id)?.webhook_secret || null;
     try {
       if (secret) {
         const ok = this._verifyStripeSig(raw, sig, secret);
@@ -1194,9 +1355,13 @@ class PagoGatewayModule extends BaseModule {
 
   // ── webhook SUMUP: el evento no prueba nada, se reconsulta el checkout ──
   async _webhookSumup(req, res, evt) {
+    // El proyecto sale del path del webhook: su config y su credencial son SUYAS.
+    const proyecto = req?.params?.project ? await this._proyectoPorSlug(req.params.project) : null;
+    const project_id = proyecto?.id || this.pasarela.project_id || null;
+    await this._asegurarConfig(project_id);
     // Token opcional en la URL: cualquiera puede POSTear el endpoint (SumUp no firma); el token
     // evita que un tercero nos queme la cuota de API con eventos inventados.
-    const esperado = this.pasarela.webhook_token || null;
+    const esperado = this._pasarelaPara(project_id).webhook_token || null;
     if (esperado) {
       const recibido = req?.query?.t || req?.query?.token || null;
       if (recibido !== esperado) {
@@ -1218,8 +1383,8 @@ class PagoGatewayModule extends BaseModule {
       || evt.checkout?.id || evt.object?.id || null;
     if (!checkout_id) return this._respond(res, 400, { error: 'evento sin id' });
 
-    const cfg = this._sumupCfg({});
-    const cred = await this._resolveCred(cfg.provider);
+    const cfg = this._sumupCfg({ project_id });
+    const cred = await this._resolveCred(cfg.provider, cfg.project_id);
     // 5xx a propósito: SumUp reintenta (1min, 5min, 20min, 2h). Un 2xx aquí perdería el aviso.
     if (cred.error) return this._respond(res, 503, { error: `credencial '${cfg.provider}': ${cred.error}` });
 
@@ -1243,9 +1408,6 @@ class PagoGatewayModule extends BaseModule {
 
     const co = r.data;
     const project_slug = req?.params?.project || this.pasarela.project_slug || null;
-    // El proyecto sale del path del webhook (o del libro) — es lo que permite avisar a quien toca.
-    const proyecto = req?.params?.project ? await this._proyectoPorSlug(req.params.project) : null;
-    const project_id = proyecto?.id || this.pasarela.project_id || null;
 
     if (co?.status === 'PAID') {
       const out = await this._confirmarSumup(co, { project_id, project_slug, origen: 'webhook' });

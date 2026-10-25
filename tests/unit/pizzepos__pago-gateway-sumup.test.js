@@ -207,6 +207,17 @@ async function test_sumup_iniciar() {
     assert.deepStrictEqual(refs, ['PED-1', 'PED-1#1']);
   });
 
+  await check('sumup: 409 y NO se puede leer el existente → 503 sin crear un segundo link', async () => {
+    const calls = mockFetch((url, opts) => (opts.method === 'POST'
+      ? { status: 409, body: { message: 'checkout_reference already used' } }
+      : { status: 500, body: { message: 'boom' } }));
+    const { mod } = await montar(SUMUP_CFG);
+    const r = await mod.handlePagoIniciar({ pedido_id: 'PED-1', monto_centimos: 1000, project_id: 'p1' });
+    assert.strictEqual(r.status, 503);
+    assert.strictEqual(r.error.code, 'ESTADO_INCIERTO');
+    assert.strictEqual(calls.filter(c => c.method === 'POST').length, 1, 'jamás un segundo checkout a ciegas');
+  });
+
   await check('sumup: el link nace con valid_until (caduca con el pedido, no a los 30 min de SumUp)', async () => {
     const calls = mockFetch(() => ({ status: 201, body: CHECKOUT_OK }));
     const { mod } = await montar({ ...SUMUP_CFG, ttl_minutos: 15 });

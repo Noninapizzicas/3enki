@@ -282,6 +282,14 @@ class PagoGatewayModule extends BaseModule {
       if (r.status === 409) {
         // DUPLICATED_CHECKOUT: la referencia ya existe. Nunca crear otra a ciegas.
         const lista = await this._sumupCall('GET', `/v0.1/checkouts?checkout_reference=${encodeURIComponent(ref)}`, { api_key });
+        if (!lista.ok) {
+          // Sin poder leer el existente no se sabe si hay un link vivo: NO se crea otro.
+          // Se devuelve 503 (reintentable) para que el caller reintente el mismo pedido.
+          return {
+            ok: false, status: 503,
+            error: { code: 'ESTADO_INCIERTO', message: `la referencia '${ref}' ya existe y no se pudo leer el checkout (${lista.status || lista.code}): no se crea un segundo link a ciegas` }
+          };
+        }
         const existentes = Array.isArray(lista?.data) ? lista.data : (lista?.data?.items || []);
         const vivo = existentes.find(c => c?.status === 'PENDING' && c?.hosted_checkout_url);
         if (vivo) {

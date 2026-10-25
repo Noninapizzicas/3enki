@@ -1,34 +1,63 @@
 {
   "name": "pago-gateway",
-  "version": "1.0.0",
-  "description": "El LÍDER DE PAGO: puerto provider-agnóstico pago.iniciar (request→response) que enruta a la PASARELA configurada (semilla: Stripe Checkout) y, al confirmarse el pago por webhook firmado, emite pago.confirmado. El dinero vive en la pasarela; aquí solo se inicia la sesión y se verifica la confirmación. Degradable: sin pasarela → NO_PASARELA. Swappable a Redsys/PayPal cambiando pasarela.kind + adapter. Capa OPCIONAL: si el proyecto no tiene pasarela, el pedido sigue el flujo de recogida (pickup) sin pago online (no excluir).",
+  "version": "1.3.0",
+  "description": "El LÍDER DE PAGO: puerto provider-agnóstico pago.iniciar / pago.cancelar / pago.reembolsar / pago.conciliar que enruta a la PASARELA configurada. Pasarelas: stripe-checkout (Checkout Session firmada) y sumup-checkout (Hosted Checkout = link de pago alojado, 1,95% sin cuota) con el protocolo completo: creación idempotente que REUTILIZA el checkout vivo ante un 409 (dos links = dos cobros), valid_until propio (el link caduca con el pedido), libro de cobros durable por proyecto, barrido de reconciliación (si el webhook se pierde, el pago no se pierde), integridad del importe (un PAID que no cuadra con el pedido NO se confirma), cancelación por DELETE, reembolsos v1.0 con tope, webhook verificado por reconsulta + token respondido por debajo del umbral de timeout de SumUp, pago.rechazado cuando la tarjeta falla, y CONCILIACIÓN con la cuenta (historial incremental v2.1: reembolsos y contracargos hechos desde el panel, cobros que no casan con ningún pedido; payouts v1.0: la comisión REAL y el neto liquidado del día). El dinero vive en la pasarela; aquí se inicia, se verifica, se concilia y se cuadra. Degradable: sin pasarela → NO_PASARELA.",
   "author": "pizzepos",
   "language": "javascript",
   "main": "index.js",
   "horizonte": "infra de pago online para el carrito de la carta digital",
   "eventos_publicados": [
     "pago.iniciar.response",
-    "pago.confirmado"
+    "pago.cancelar.response",
+    "pago.reembolsar.response",
+    "pago.confirmado",
+    "pago.rechazado",
+    "pago.cancelado",
+    "pago.reembolsado",
+    "pago.importe_discrepante",
+    "pago.contracargo",
+    "cobro.huerfano",
+    "cobro.liquidado"
   ],
   "eventos_que_escucho": [
-    "pago.iniciar.request"
+    "pago.iniciar.request",
+    "pago.cancelar.request",
+    "pago.reembolsar.request"
   ],
   "ui_handlers": [
-    { "domain": "pago", "action": "iniciar", "handler": "handlePagoIniciar", "description": "Inicia el pago de un pedido en la pasarela configurada → devuelve checkout_url." }
+    { "domain": "pago", "action": "iniciar", "handler": "handlePagoIniciar", "description": "Inicia el pago de un pedido en la pasarela configurada → devuelve checkout_url, session_id y expira_at." },
+    { "domain": "pago", "action": "cancelar", "handler": "handlePagoCancelar", "description": "Mata el link de pago (SumUp DELETE). Si ya estaba pagado devuelve CHECKOUT_YA_PAGADO y confirma el cobro en vez de cancelarlo." },
+    { "domain": "pago", "action": "reembolsar", "handler": "handlePagoReembolsar", "description": "Reembolso total o parcial (SumUp v1.0 merchant-scoped) con tope por libro de cobros. Sin reintento automático: un timeout es ESTADO_INCIERTO." },
+    { "domain": "pago", "action": "metodos", "handler": "handlePagoMetodos", "description": "Qué métodos acepta la cuenta (card, apple_pay, google_pay, paypal). Sirve de preflight antes de publicar el botón de pago." },
+    { "domain": "pago", "action": "conciliar", "handler": "handlePagoConciliar", "description": "Fuerza un tick de conciliación con la cuenta de SumUp (historial incremental + liquidaciones) y devuelve el resumen. Sin project_id, todos los proyectos." }
   ],
-  "http": [
-    { "method": "POST", "path": "/pago/webhook/:project", "handler": "handleWebhook", "raw_body": true, "description": "Webhook firmado de la pasarela (Stripe). Verifica la firma → emite pago.confirmado." }
+  "apis": [
+    {
+      "method": "POST",
+      "path": "/pago/webhook/:project",
+      "handler": "handleWebhook",
+      "description": "Webhook de la pasarela → emite pago.confirmado / pago.rechazado. Stripe: firma HMAC stripe-signature del cuerpo. SumUp: su evento es {event_type, id} SIN firma; se reconsulta GET /v0.1/checkouts/{id} con nuestra clave y solo se confirma si status === 'PAID'. Token opcional en la URL (?t=) para que un tercero no queme la cuota de API. Responde 5xx a propósito cuando no puede verificar, para que la pasarela reintente. URL pública: https://<dominio>/modules/pago-gateway/pago/webhook/<project> (la sirve el bloque /modules/* de Caddy, sin rewrite)."
+    }
   ],
   "config": {
     "pasarela": {
       "kind": "stripe-checkout",
       "provider": "STRIPE",
       "moneda": "eur",
+      "merchant_code": null,
+      "webhook_url": null,
+      "webhook_token": null,
       "webhook_secret": null,
-      "return_url": null
+      "return_url": null,
+      "ttl_minutos": 15,
+      "min_centimos": 100,
+      "barrido": { "activo": true, "intervalo_ms": 120000 },
+      "conciliacion": { "activo": true, "intervalo_ms": 900000 }
     }
   },
   "dependencies": {
-    "credential-manager": "para resolver la credencial de la pasarela (STRIPE secret key)"
+    "credential-manager": "para resolver la credencial de la pasarela (STRIPE_SECRET_KEY_* / SUMUP_API_KEY_*, via credential.resolve.request con provider)",
+    "filesystem": "para el libro de cobros durable en el storage del proyecto (/pizzepos/pago/checkouts.json) y el cursor de conciliación (/pizzepos/pago/conciliacion.json)",
+    "project-manager": "para resolver el project_id por slug (webhook :project) y para barrer/conciliar los libros de todos los proyectos"
   }
 }

@@ -924,7 +924,7 @@ class HTTPGateway {
    */
   async parseBody(req) {
     return new Promise((resolve, reject) => {
-      let body = '';
+      const chunks = [];
       let bodySize = 0;
 
       req.on('data', chunk => {
@@ -934,16 +934,21 @@ class HTTPGateway {
           reject(new Error(`Request body too large. Max size: ${this.maxBodySize} bytes`));
           return;
         }
-        body += chunk.toString();
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
       });
 
       req.on('end', () => {
         try {
-          if (body.length === 0) {
+          // Bytes EXACTOS del cuerpo en req._rawBody: las firmas de webhook (Stripe
+          // stripe-signature) se calculan sobre el payload tal cual llegó, y
+          // JSON.stringify(JSON.parse(x)) no lo reproduce. Además concatena en Buffer
+          // para no romper caracteres UTF-8 partidos entre chunks.
+          const raw = Buffer.concat(chunks).toString('utf8');
+          req._rawBody = raw;
+          if (raw.length === 0) {
             resolve(null);
           } else {
-            const parsed = JSON.parse(body);
-            resolve(parsed);
+            resolve(JSON.parse(raw));
           }
         } catch (error) {
           reject(new Error('Invalid JSON body'));

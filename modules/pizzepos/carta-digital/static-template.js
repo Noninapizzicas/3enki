@@ -1576,6 +1576,15 @@ function updateCart() {
       '</div>' +
       '<input id="cliente-hora" class="cart-nombre" type="time" aria-label="Hora de recogida" style="display:' + (_modoConsumo === 'recoger' ? 'block' : 'none') + '">'
     : '';
+  // ¿VIENE DE FUERA? No es curiosidad: es la pregunta que evita el pedido perdido
+  // (el cliente cree que se lo llevamos y no se presenta). Sin elegir no molesta a nadie.
+  const lejosSel = (CONFIG.whatsapp_telefono || CONFIG.pedido_endpoint)
+    ? '<div class="cart-modo" role="group" aria-label="¿Vienes de fuera de Lorca?">' +
+        '<button type="button" class="modo-btn' + (_lejos === 'no' ? ' active' : '') + '" data-lejos="no" onclick="setLejos(\\'no\\')">📍 Soy de Lorca</button>' +
+        '<button type="button" class="modo-btn' + (_lejos === 'si' ? ' active' : '') + '" data-lejos="si" onclick="setLejos(\\'si\\')">🚗 Vengo de fuera</button>' +
+      '</div>' +
+      '<div id="lejos-aviso"></div>'
+    : '';
   // METODO DE PAGO: solo se ofrece si el proyecto tiene pasarela (pago_online). Sin ella no
   // hay eleccion que hacer y el flujo queda igual que siempre (paga al recoger).
   const metodoSel = CONFIG.pago_online
@@ -1585,11 +1594,13 @@ function updateCart() {
       '</div>'
     : '';
   footer.innerHTML = '<div class="total-row"><span class="total-label">' + T.total + '</span><span class="total-amount">' + fmt(total) + '</span></div>' +
-    nombreInput + modoSel + metodoSel +
+    nombreInput + modoSel + metodoSel + lejosSel +
     '<div id="fecha-cont"></div>' +
+    '<div id="cart-recogida">' + recogidaHTML() + '</div>' +
     '<div class="cart-actions"><button class="btn-clear" onclick="clearCart()">' + T.clear + '</button>' + pagarBtn + onlineBtn + waBtn + '</div>';
   renderFechaRow();   // encargo: bloque "¿Para cuándo?" (verde/rojo según dias_sale)
   aplicarEstadoServicio();
+  aplicarLejos();     // el aviso de fuera-de-Lorca sobrevive al re-render del footer
 }
 
 // ─── ESTADO DE SERVICIO (horario + interruptor del dueño) ───
@@ -1697,6 +1708,31 @@ function _pedHora() {
   var h = document.getElementById('cliente-hora');
   return (_pedModo() === 'recoger' && h && h.value) ? h.value : '';
 }
+
+// ¿Viene de fuera de Lorca? — la pregunta que evita el pedido perdido. Estado vivo
+// (sobrevive al re-render del footer) y viaja al pedido como nota para el dependiente.
+var _lejos = '';
+function setLejos(v) {
+  _lejos = (v === 'si' || v === 'no') ? v : '';
+  var btns = document.querySelectorAll('.modo-btn[data-lejos]');
+  for (var i = 0; i < btns.length; i++) {
+    btns[i].classList.toggle('active', btns[i].getAttribute('data-lejos') === _lejos);
+  }
+  aplicarLejos();
+}
+function aplicarLejos() {
+  var aviso = document.getElementById('lejos-aviso');
+  if (!aviso) return;
+  if (_lejos !== 'si') { aviso.innerHTML = ''; return; }
+  var rec = (_servicio && _servicio.recogida) || null;
+  var donde = (rec && rec.direccion) ? esc(rec.direccion) + (rec.ciudad ? ', ' + esc(rec.ciudad) : '') : 'nuestro local';
+  var mapa = (rec && rec.maps_url) ? ' <a href="' + esc(rec.maps_url) + '" target="_blank" rel="noopener">Ver en el mapa</a>' : '';
+  aviso.innerHTML = '<div class="servicio-aviso" role="status">' +
+    '🚗 <b>No repartimos a domicilio.</b> Tu pedido se recoge en ' + donde + '.' + mapa +
+    ' Si vienes de fuera, cuenta el viaje antes de confirmar.</div>';
+}
+// La nota que ve el dependiente: no es censo, es saber que este pedido viene de lejos.
+function _notaLejos() { return _lejos === 'si' ? 'Cliente de fuera de Lorca' : ''; }
 
 // METODO DE PAGO elegido: efectivo (paga al recoger) | tarjeta (pago online por la pasarela).
 // Estado vivo que sobrevive al re-render del footer; viaja autoritativo en el #P1. Si es
@@ -1825,6 +1861,7 @@ function buildOrderMsg() {
   var total = cart.reduce(function(s, i) { return s + i.precio * i.qty; }, 0);
   msg += 'Total: ' + _pedEur(total) + '\\n';
   msg += 'Nombre: ' + nombre;
+  if (_notaLejos()) msg += '\\n' + _notaLejos();
   // Encargo: fecha deseada en claro (el parser la lee; la #P1 la lleva autoritativa).
   var fec = _fechaDeseada();
   if (fec) msg += '\\nPara: ' + fec;
@@ -1870,7 +1907,8 @@ async function pagarAhora() {
     fecha_deseada: _fechaDeseada() || null,
     metodo_pago: 'tarjeta',
     pago_online: true,
-    return_url: location.origin + location.pathname
+    return_url: location.origin + location.pathname,
+    notas_generales: _notaLejos() || null
   };
   var btn = document.getElementById('btn-pagar');
   if (btn) { btn.disabled = true; btn.textContent = 'Conectando…'; }
@@ -1914,7 +1952,8 @@ async function pedirOnline() {
     modo_consumo: _pedModo(),
     hora_recogida: _pedHora() || null,
     metodo_pago: _pedMetodo(),
-    fecha_deseada: _fechaDeseada() || null
+    fecha_deseada: _fechaDeseada() || null,
+    notas_generales: _notaLejos() || null
   };
   var btn = document.getElementById('btn-pedir');
   if (btn) { btn.disabled = true; btn.textContent = 'Enviando…'; }
@@ -1940,6 +1979,7 @@ async function pedirOnline() {
 // el respaldo «repetir último pedido» guarda las líneas y vaciar no pierde nada.
 function _cerrarPedido(nombre) {
   cart = [];
+  _lejos = '';
   updateCart();                  // vacía + persiste en localStorage + oculta el footer
   mostrarConfirmacion(nombre);   // y el panel pasa a decir «pedido confirmado»
 }

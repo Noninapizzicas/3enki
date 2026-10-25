@@ -15726,6 +15726,7 @@ MITIGACION: el CSS estático (semanticos.css) es el fallback — funciona sin MQ
     "cierre_caja": "handleConfirmarRecogida lee la verdad del pago: 'tarjeta' (con session_id/pasarela) si pago.confirmado llegó antes, 'efectivo' si no. Ya NO clava 'efectivo' a fuego."
   },
   "aviso_recogida": "cocina.pedido_listo → whatsapp-bot avisa al cliente 'ven a recoger' (ya cableado para origen-whatsapp).",
+  "aviso_fuera_de_lorca": "la PWA NO adivina la ubicación (la geo del navegador no verifica nada y en iPhone exige gesto): PREGUNTA con dos botones, 'Soy de Lorca' / 'Vengo de fuera'. Al marcar 'fuera' el carrito pinta la dirección de recogida + el mapa ANTES de confirmar ('no repartimos a domicilio, cuenta el viaje') y la nota viaja al pedido como notas_generales (campo ya validado por tienda-api) y al mensaje wa.me. El pedido que se pierde es el del cliente que cree que se lo llevan y no se presenta.",
   "transporte_alojamiento": "tienda-api (POST público /tienda/pedido) APARCADO — el camino vivo es WhatsApp+bot (sin puertas).",
   "estado": "OPERATIVO end-to-end (nonina, enki-ai.online) — webhook real de Meta entrante verificado; alta de conexión por UI (whatsapp.set_config); ver sección 'WhatsApp Cloud API — OPERATIVO'."
 }

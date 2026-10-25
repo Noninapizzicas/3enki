@@ -5,7 +5,7 @@ resumen: Managers de dominio pizzepos (cuentas, productos, categorías, cobros, 
 fuentes:
   - modules/pizzepos/**
   - blueprints/**
-verificado: 2026-10-24
+verificado: 2026-10-25
 ---
 
 # Módulos Pizzepos y Blueprints
@@ -639,7 +639,27 @@ CADENA (toda por evento, ningún módulo nuevo):
       → pago.confirmado {pedido_id, project_id, monto_centimos, + metadata de contexto}
       → pedidos.onPagoConfirmado → pedido.pagado
       → bot avisa al cliente 'pago recibido' ; IF recreado → avisa al STAFF por Telegram
+
     Dependiente confirma recogida → pedido.recogido{metodo_pago} ; la caja ya no miente
+
+PASARELA VIVA (2026-10-25): sumup-checkout (Hosted Checkout, 1,95 % sin cuota). Stripe queda como
+kind alternativo; cambiar de pasarela es cambiar pasarela.kind, no tocar el caller.
+  pago.iniciar  → POST /v0.1/checkouts {amount DECIMAL, checkout_reference = pedido_id,
+                  hosted_checkout.enabled, return_url = NUESTRO webhook, redirect_url = vuelta,
+                  valid_until = ahora + ttl_minutos(15)} → link checkout.sumup.com/pay/<uuid>
+                  409 DUPLICATED_CHECKOUT → GET ?checkout_reference= y REUTILIZA el PENDING
+                  (dos links vivos = dos cobros); #1/#2 solo si el anterior murió
+  webhook       → SumUp NO firma: {event_type, id} → GET checkout → solo PAID confirma
+                  (5xx a propósito si no se puede verificar: reintenta 1m/5m/20m/2h)
+  libro         → storage/pizzepos/pago/checkouts.json (pendiente|confirmado|rechazado|expirado)
+  barrido       → cada 2 min: GET de los pendientes → PAID confirma (webhook perdido ≠ pago
+                  perdido) · PENDING vencido → DELETE (link muerto no se paga)
+  pago.cancelar    → DELETE; 409 CHECKOUT_PROCESSED + PAID → confirma, no cancela
+  pago.reembolsar  → POST /v1.0/merchants/{mc}/payments/{tx}/refunds (total o parcial), tope por
+                     libro y SIN reintento en timeout (ESTADO_INCIERTO: se verifica, no se repite)
+  FAILED        → pago.rechazado (el cliente sabe que la tarjeta falló)
+  pago.confirmado lleva el transaction BUENO (no transactions[0]): transaction_code, entry_mode,
+  auth_code, propina_centimos, iva_centimos. project_id se resuelve por el :project del path.
 
 EL HUÉRFANO (por qué existe la recreación): los pedidos de tienda viven en MEMORIA y no se
 restauran. El pago es asíncrono (el webhook llega minutos después), así que un reinicio en esa
@@ -648,8 +668,12 @@ reconstruye MÍNIMO desde la metadata de la sesión (pedido_id + project_id + im
 pedido.pagado con recreado:true. El dinero nunca se pierde sin rastro. Nada que persistir.
 
 config DEL PROYECTO: la pasarela se enciende por proyecto (pago-gateway lee
-core.config['pago-gateway'] || moduleConfig: kind stripe-checkout, provider STRIPE, moneda,
-return_url, webhook_secret). Sin bloque y sin credencial STRIPE → degrada, no rompe.
+core.config['pago-gateway'] || moduleConfig). SumUp: kind sumup-checkout, provider SUMUP, moneda,
+merchant_code, webhook_url (NUESTRO endpoint, y sin él el adapter falla en voz alta), webhook_token,
+return_url (vuelta del cliente), ttl_minutos, min_centimos, barrido{activo, intervalo_ms}.
+Stripe: kind stripe-checkout, provider STRIPE, webhook_secret. Sin bloque y sin credencial de la
+pasarela configurada → degrada (NO_PASARELA / PERMISSION_DENIED), no rompe: el pedido ya existe y
+se paga al recoger.
 ```
 
 ### COCINA MANAGER

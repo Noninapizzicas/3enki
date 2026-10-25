@@ -853,7 +853,7 @@ class PagoGatewayModule extends BaseModule {
       data: {
         pasarela: this.pasarela.kind || null,
         merchant_code: cfg.merchant,
-        merchant_nombre: merchant.merchant_name || merchant.company?.name || null,
+        merchant_nombre: merchant.merchant_name || merchant.business_profile?.name || merchant.company?.name || null,
         merchant_pais: pais,
         merchant_moneda: monedaCuenta,
         moneda_configurada: cfg.moneda,

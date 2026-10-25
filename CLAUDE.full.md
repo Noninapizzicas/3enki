@@ -16448,6 +16448,8 @@ penalización) que emite **PNG** (WhatsApp/impresión) y **SVG**; se verificó d
 lector independiente (OpenCV) las URLs reales de checkout. Con `importe` crea o reusa el checkout
 del hecho (dinámico); con `url` pinta lo que le den sin gastar ni una llamada (carta, propinas). Un
 QR **estático** impreso obliga al cliente a teclear el importe: sirve para la carta, no para cobrar.
+El otro mundo —el **QR EMVCo** de Bizum/banco, que se paga desde la app sin pasar por una web— no lo
+genera el comercio: lo emite el adquirente, y SumUp no lo expone en su spec (verificado).
 
 **3 · Datáfono (Reader/Terminal API).** `GET/POST /v0.1/merchants/{mc}/readers`,
 `…/{id}/status`, `…/{id}/checkout`, `…/{id}/checkout/{coid}`, `…/{id}/terminate` (202, asíncrono y
@@ -16494,7 +16496,7 @@ devuelve `requiere_accion` y **no se reintenta**: reintentar ahí sería el segu
 ## Puertos (bus)
 
 ```
-pago.iniciar · pago.actualizar · pago.cancelar · pago.reembolsar · pago.estado · pago.recibo · pago.conciliar · pago.config
+pago.iniciar · pago.actualizar · pago.cancelar · pago.reembolsar · pago.estado · pago.recibo · pago.metodos · pago.conciliar · pago.config
 pago.qr
 pago.reader.listar · .parear · .leer · .renombrar · .borrar · .estado · .cobrar · .consultar · .terminar · .cobrar_go
 pago.cliente.alta · .leer · .actualizar · .tarjetas · .tarjeta.baja
@@ -16518,7 +16520,9 @@ Publica: `pago.actualizado` · `pago.confirmado` · `pago.rechazado` · `pago.ca
   procesos (la conciliación lo detectaría como `cobro.huerfano`, no se pierde dinero); el reintento
   es único y no respeta `Retry-After`; no hay multi-merchant por OAuth (una cuenta por proyecto ni
   soporte de plataforma multi-comercio); la caché caliente del webhook no se poda; Apple Pay nativo
-  (`/v0.2/checkouts/{id}/apple-pay-session`) no se usa (los wallets van por el checkout alojado).
+  (`/v0.2/checkouts/{id}/apple-pay-session`) no se usa (los wallets van por el checkout alojado);
+  fuera de alcance por diseño: `members`, `roles`, `persons` y `memberships` (gestión del equipo en
+  el panel de SumUp, no cobro) y OAuth de plataforma multi-comercio.
 
 ---
 

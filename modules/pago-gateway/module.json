@@ -45,7 +45,8 @@
     "pago.tokenizado",
     "pago.contracargo",
     "cobro.huerfano",
-    "cobro.liquidado"
+    "cobro.liquidado",
+    "pago.metodos.response"
   ],
   "eventos_que_escucho": [
     "pago.iniciar.request",
@@ -74,7 +75,8 @@
     "pago.cliente.tarjetas.request",
     "pago.cliente.tarjeta.baja.request",
     "pago.tokenizar.request",
-    "pago.cobrar_guardada.request"
+    "pago.cobrar_guardada.request",
+    "pago.metodos.request"
   ],
   "ui_handlers": [
     {

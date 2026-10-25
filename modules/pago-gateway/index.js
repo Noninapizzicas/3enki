@@ -119,6 +119,7 @@ class PagoGatewayModule extends BaseModule {
     const puertos = {
       'pago.qr.request': d => this._qr(d),
       'pago.actualizar.request': d => this._actualizar(d),
+      'pago.metodos.request': d => this._sumupMetodos(d),
       'pago.reader.listar.request': d => this._readerListar(d),
       'pago.reader.parear.request': d => this._readerParear(d),
       'pago.reader.leer.request': d => this._readerLeer(d),

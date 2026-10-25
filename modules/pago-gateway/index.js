@@ -118,6 +118,7 @@ class PagoGatewayModule extends BaseModule {
     // .request/.response. Un negocio nuevo los usa escribiendo su config, sin tocar código.
     const puertos = {
       'pago.qr.request': d => this._qr(d),
+      'pago.actualizar.request': d => this._actualizar(d),
       'pago.reader.listar.request': d => this._readerListar(d),
       'pago.reader.parear.request': d => this._readerParear(d),
       'pago.reader.leer.request': d => this._readerLeer(d),
@@ -1988,6 +1989,89 @@ class PagoGatewayModule extends BaseModule {
     return out;
   }
 
+  // ── ACTUALIZAR el link vivo (PATCH) ──
+  // Para qué: el cliente añade algo, cambia la hora o el importe. La alternativa sería cancelar y
+  // crear otro link — y ahí es donde se cuela un segundo cobro. Se actualiza el MISMO.
+  // La spec lo dice literal: "This request changes the checkout details; it does not charge a
+  // payment instrument."
+  async _actualizar(d = {}) {
+    await this._asegurarConfig(d.project_id);
+    const kind = this._pasarelaPara(d.project_id).kind;
+    if (kind !== 'sumup-checkout' && kind !== 'sumup') {
+      return { status: 501, error: { code: 'NOT_IMPLEMENTED', message: `actualizar no implementado para '${kind}'` } };
+    }
+    const cfg = this._sumupCfg(d);
+    const referencia = this._ref(d);
+    let checkout_id = d.session_id || d.checkout_id || null;
+    let entry = null;
+    if (!checkout_id && referencia) {
+      entry = await this._ledgerBuscar(d.project_id, { referencia });
+      checkout_id = entry?.checkout_id || null;
+    } else if (checkout_id) {
+      entry = await this._ledgerBuscar(d.project_id, { checkout_id });
+    }
+    if (!checkout_id) {
+      return { status: 404, error: { code: 'NOT_FOUND', message: 'sin session_id ni checkout en el libro para esa referencia' } };
+    }
+
+    const body = {};
+    if (d.monto_centimos !== undefined) {
+      if (!Number.isInteger(d.monto_centimos) || d.monto_centimos <= 0) {
+        return { status: 400, error: { code: 'INVALID_INPUT', message: 'monto_centimos debe ser entero > 0', field: 'monto_centimos' } };
+      }
+      if (d.monto_centimos < cfg.minCentimos) {
+        return { status: 400, error: { code: 'INVALID_INPUT', message: `importe por debajo del mínimo de SumUp (${(cfg.minCentimos / 100).toFixed(2)} ${cfg.moneda})` } };
+      }
+      body.amount = Number((d.monto_centimos / 100).toFixed(2));
+    }
+    if (d.concepto || d.descripcion) body.description = String(d.concepto || d.descripcion).slice(0, 120);
+    if (d.checkout_reference) body.checkout_reference = String(d.checkout_reference).replace(/#/g, '-').slice(0, REF_MAX);
+    if (d.valid_until || d.caduca_at) body.valid_until = d.valid_until || d.caduca_at;
+    if (d.customer_id) body.customer_id = String(d.customer_id);
+    if (!Object.keys(body).length) {
+      return { status: 400, error: { code: 'INVALID_INPUT', message: 'nada que actualizar (monto_centimos, concepto, checkout_reference, valid_until o customer_id)' } };
+    }
+
+    const cred = await this._resolveCred(cfg.provider, cfg.project_id);
+    if (cred.error) return { status: 500, error: { code: 'PERMISSION_DENIED', message: `credencial '${cfg.provider}': ${cred.error}` } };
+
+    const r = await this._sumupCall('PATCH', `/v0.1/checkouts/${encodeURIComponent(checkout_id)}`, { api_key: cred.api_key, body });
+    if (r.status === 409) {
+      return { status: 409, error: { code: 'CHECKOUT_PROCESADO', message: 'el checkout ya se procesó: su importe no se puede cambiar (no se crea otro link a ciegas)' } };
+    }
+    if (!r.ok) return this._errorDeSumup(r, 'SumUp actualizar checkout');
+
+    // El libro tiene que reflejar el importe NUEVO: si no, la guarda de integridad rechazaría
+    // un cobro correcto (o aceptaría uno incorrecto).
+    const patch = { actualizado_at: new Date().toISOString() };
+    if (Number.isInteger(d.monto_centimos)) patch.monto_centimos = d.monto_centimos;
+    if (body.valid_until) patch.valid_until = body.valid_until;
+    if (body.description) patch.concepto = body.description;
+    if (body.customer_id) patch.customer_id = body.customer_id;
+    await this._ledgerMark(d.project_id, checkout_id, patch);
+
+    await this.eventBus.publish('pago.actualizado', {
+      referencia: entry?.referencia || referencia || null,
+      pedido_id: entry?.referencia || referencia || null,
+      session_id: checkout_id, project_id: d.project_id || null,
+      monto_centimos: Number.isInteger(d.monto_centimos) ? d.monto_centimos : (entry?.monto_centimos ?? null),
+      cambios: Object.keys(body),
+      pasarela: 'sumup-checkout',
+      correlation_id: crypto.randomUUID(), timestamp: new Date().toISOString()
+    });
+
+    return {
+      status: 200,
+      data: {
+        session_id: checkout_id,
+        estado: r.data?.status || null,
+        checkout_url: r.data?.hosted_checkout_url || entry?.checkout_url || null,
+        monto_centimos: Number.isInteger(d.monto_centimos) ? d.monto_centimos : (entry?.monto_centimos ?? null),
+        cambios: Object.keys(body)
+      }
+    };
+  }
+
   // ui_handlers
   async handlePagoIniciar(data) { return this._iniciar(data || {}); }
   async handlePagoCancelar(data) { return this._cancelar(data || {}); }
@@ -2001,6 +2085,7 @@ class PagoGatewayModule extends BaseModule {
   async handlePagoConfigEscribir(data) { return this._configEscribir(data || {}); }
   // QR, datáfono, clientes, tarjeta guardada y recurrencia (mismos puertos para todo proyecto).
   async handlePagoQr(data) { return this._qr(data || {}); }
+  async handlePagoActualizar(data) { return this._actualizar(data || {}); }
   async handlePagoReaderListar(data) { return this._readerListar(data || {}); }
   async handlePagoReaderParear(data) { return this._readerParear(data || {}); }
   async handlePagoReaderEstado(data) { return this._readerEstado(data || {}); }

@@ -23,7 +23,7 @@ verificado: 2026-10-25
   "tesis": "cinco puertas, un órgano: el hecho cobrado se identifica por `referencia`, no por 'pedido'",
   "pasarelas": { "kind": ["sumup-checkout", "sumup", "stripe-checkout"], "provider": "nombre en credential-manager (SUMUP/STRIPE)" },
   "puertas": {
-    "link":      "pago.iniciar.request → checkout_url alojado (SumUp Hosted / Stripe Session)",
+    "link":      "pago.iniciar.request → checkout_url alojado (SumUp Hosted / Stripe Session); pago.actualizar.request cambia importe/concepto/caducidad del MISMO link (PATCH), sin recrearlo"
     "qr":        "pago.qr.request → PNG/SVG de la MISMA url (dinámico: lleva importe y caduca con el hecho)",
     "terminal":  "pago.reader.* → Reader/Terminal API: parear, estado, cobrar, consultar, terminar, go-checkout",
     "cliente":   "pago.cliente.* → Customers API: alta idempotente, tarjetas guardadas, baja",
@@ -60,6 +60,12 @@ verificado: 2026-10-25
 `return_url` (webhook) y `valid_until` propio. Un `409 DUPLICATED_CHECKOUT` **no** crea un segundo
 link: se busca el vivo y se **reutiliza** — dos links vivos son dos cobros posibles. Sin
 `return_url` el adapter falla en voz alta: se cobraría y nadie liberaría el hecho.
+
+**1b · Cambiar el link vivo (PATCH).** Si el cliente añade algo, el importe se cambia sobre el
+MISMO checkout (`PATCH /v0.1/checkouts/{id}`) — la alternativa (cancelar y crear otro) es
+exactamente donde se cuela un segundo cobro. El libro adopta el importe nuevo, porque si no la
+guarda de integridad rechazaría un cobro correcto. La spec lo dice: ese PATCH "does not charge a
+payment instrument".
 
 **2 · QR.** No es un método de pago, es la URL dentro de un dibujo: misma comisión, misma
 integración. `qr.js` es un codificador **nativo** (modo byte, ECC L/M/Q/H, v1–20, máscara por
@@ -113,21 +119,21 @@ devuelve `requiere_accion` y **no se reintenta**: reintentar ahí sería el segu
 ## Puertos (bus)
 
 ```
-pago.iniciar · pago.cancelar · pago.reembolsar · pago.estado · pago.recibo · pago.conciliar · pago.config
+pago.iniciar · pago.actualizar · pago.cancelar · pago.reembolsar · pago.estado · pago.recibo · pago.conciliar · pago.config
 pago.qr
 pago.reader.listar · .parear · .leer · .renombrar · .borrar · .estado · .cobrar · .consultar · .terminar · .cobrar_go
 pago.cliente.alta · .leer · .actualizar · .tarjetas · .tarjeta.baja
 pago.tokenizar · pago.cobrar_guardada
 ```
 
-Publica: `pago.confirmado` · `pago.rechazado` · `pago.cancelado` · `pago.reembolsado` ·
+Publica: `pago.actualizado` · `pago.confirmado` · `pago.rechazado` · `pago.cancelado` · `pago.reembolsado` ·
 `pago.importe_discrepante` · `pago.en_terminal` · `pago.tokenizado` · `pago.recibo.obtenido` ·
 `pago.contracargo` · `cobro.huerfano` · `cobro.liquidado`. Todos los de dinero llevan `canal`
 (`online` · `terminal` · `guardada`) y `referencia` + `pedido_id`.
 
 ## Estado y frenos (honesto)
 
-- **Verificado**: 100 checks en `npm test` con `fetch` falso — protocolo, idempotencia, integridad,
+- **Verificado**: 102 checks en `npm test` con `fetch` falso — protocolo, idempotencia, integridad,
   aislamiento multiproyecto, terminal, clientes, recurrencia y QR. El QR se decodificó con lector
   independiente (OpenCV).
 - **Sin verificar**: no se ha tocado la API real de SumUp (faltan merchant code y credencial del

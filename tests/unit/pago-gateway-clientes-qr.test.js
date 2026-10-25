@@ -376,6 +376,40 @@ async function test_alias_pedido_id_sigue_vivo() {
   });
 }
 
+async function test_actualizar_link() {
+  await check('actualizar: PATCH al link VIVO (importe) sin crear otro, y el libro adopta el importe nuevo', async () => {
+    const calls = mockFetch((url, opts) => {
+      const method = opts.method || 'GET';
+      if (url.includes('/v0.1/checkouts') && method === 'POST') return { status: 201, body: { ...CO_PENDIENTE, id: 'co-up', checkout_reference: 'PED-UP' } };
+      if (url.includes('/v0.1/checkouts/co-up') && method === 'PATCH') return { status: 200, body: { ...CO_PENDIENTE, id: 'co-up', amount: 30.9, status: 'PENDING' } };
+      return { status: 404, body: {} };
+    });
+    const { mod, bus } = await montar(CFG);
+    await mod.handlePagoIniciar({ project_id: PROYECTO.id, referencia: 'PED-UP', monto_centimos: 2340 });
+    const r = await mod.handlePagoActualizar({ project_id: PROYECTO.id, referencia: 'PED-UP', monto_centimos: 3090, concepto: 'Pizza + postre' });
+    assert.strictEqual(r.status, 200, JSON.stringify(r));
+    const patch = llamadas(calls, '/v0.1/checkouts/co-up', 'PATCH')[0];
+    assert.ok(patch, 'debe ser PATCH sobre el MISMO checkout');
+    assert.deepStrictEqual(cuerpo(patch), { amount: 30.9, description: 'Pizza + postre' });
+    assert.strictEqual(llamadas(calls, '/v0.1/checkouts', 'POST').length, 1, 'no se crea un segundo link');
+    const e = bus.libro().checkouts['co-up'];
+    assert.strictEqual(e.monto_centimos, 3090, 'el libro adopta el importe nuevo (la integridad depende de esto)');
+    assert.strictEqual(bus.eventos('pago.actualizado')[0].cambios.includes('amount'), true);
+  });
+}
+
+async function test_actualizar_rechaza_importe_invalido() {
+  await check('actualizar: importe por debajo del mínimo o vacío → 400 sin llamar a SumUp', async () => {
+    const calls = mockFetch(() => ({ status: 200, body: {} }));
+    const { mod } = await montar(CFG);
+    const bajo = await mod.handlePagoActualizar({ project_id: PROYECTO.id, session_id: 'co-x', monto_centimos: 50 });
+    assert.strictEqual(bajo.status, 400);
+    const vacio = await mod.handlePagoActualizar({ project_id: PROYECTO.id, session_id: 'co-x' });
+    assert.strictEqual(vacio.status, 400);
+    assert.strictEqual(calls.length, 0);
+  });
+}
+
 // ─────────────────────────────────────────────────────────────
 (async () => {
   await test_cliente_alta_idempotente();
@@ -391,6 +425,8 @@ async function test_alias_pedido_id_sigue_vivo() {
   await test_qr_roundtrip();
   await test_referencia_generica();
   await test_alias_pedido_id_sigue_vivo();
+  await test_actualizar_link();
+  await test_actualizar_rechaza_importe_invalido();
   console.log(`\n${ok} checks ok`);
   setTimeout(() => process.exit(process.exitCode || 0), 50).unref();
 })();

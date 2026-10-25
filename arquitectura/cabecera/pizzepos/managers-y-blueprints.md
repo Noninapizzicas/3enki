@@ -5,7 +5,7 @@ resumen: Managers de dominio pizzepos (cuentas, productos, categorías, cobros, 
 fuentes:
   - modules/pizzepos/**
   - blueprints/**
-verificado: 2026-10-25
+verificado: 2026-10-25 (pasarela SumUp v1.4: preflight, recibo y reembolso por reconsulta)
 ---
 
 # Módulos Pizzepos y Blueprints

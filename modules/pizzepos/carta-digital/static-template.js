@@ -1613,7 +1613,13 @@ function cargarEstadoServicio() {
   if (!CONFIG.estado_endpoint) return;
   fetch(CONFIG.estado_endpoint, { cache: 'no-store' })
     .then(function(r) { return r.json(); })
-    .then(function(d) { if (d && d.data) { _servicio = d.data; aplicarEstadoServicio(); } })
+    .then(function(d) {
+      // El gateway HTTP sirve el cuerpo PLANO ({abierto:…}); otros canales lo envuelven
+      // en {data:{…}}. Se aceptan las dos formas: exigir la clave data dejaba el estado
+      // sin pintar (ni banner de cerrado ni dirección de recogida) aunque el endpoint diera 200.
+      var st = (d && d.data && typeof d.data === 'object') ? d.data : d;
+      if (st && typeof st.abierto === 'boolean') { _servicio = st; aplicarEstadoServicio(); }
+    })
     .catch(function() { /* sin estado se comporta como siempre: abierto */ });
 }
 

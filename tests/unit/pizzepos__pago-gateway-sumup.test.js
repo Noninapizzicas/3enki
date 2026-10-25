@@ -175,17 +175,47 @@ async function test_sumup_iniciar() {
     assert.strictEqual(body.redirect_url, SUMUP_CFG.return_url, 'redirect_url = vuelta del cliente');
   });
 
-  await check('sumup: referencia duplicada (409) → reintenta con sufijo @ts y devuelve link', async () => {
-    const calls = mockFetch((url, opts, n) => (n === 1
+  await check('sumup: 409 DUPLICATED_CHECKOUT → REUTILIZA el checkout vivo (dos links = dos cobros)', async () => {
+    const VIVO = { ...CHECKOUT_OK, checkout_reference: 'PED-1' };
+    const calls = mockFetch((url, opts) => (opts.method === 'POST'
       ? { status: 409, body: { message: 'checkout_reference already used' } }
-      : { status: 201, body: { ...CHECKOUT_OK, checkout_reference: 'PED-1@1700000000000' } }));
+      : { status: 200, body: [VIVO] }));
     const { mod } = await montar(SUMUP_CFG);
-    const r = await mod.handlePagoIniciar({ pedido_id: 'PED-1', monto_centimos: 1000 });
+    const r = await mod.handlePagoIniciar({ pedido_id: 'PED-1', monto_centimos: 1000, project_id: 'p1' });
 
     assert.strictEqual(r.status, 200, JSON.stringify(r));
-    assert.strictEqual(calls.length, 2);
-    const ref = JSON.parse(calls[1].body).checkout_reference;
-    assert.ok(/^PED-1@\d+$/.test(ref), ref);
+    assert.strictEqual(r.data.checkout_url, VIVO.hosted_checkout_url, 'devuelve el link que YA existía');
+    assert.strictEqual(r.data.reutilizado, true);
+    assert.strictEqual(calls.filter(c => c.method === 'POST').length, 1, 'no se crea un segundo checkout');
+    assert.ok(calls[1].url.includes('checkout_reference=PED-1'), calls[1].url);
+  });
+
+  await check('sumup: 409 con el anterior EXPIRADO → sí crea uno nuevo con sufijo #1', async () => {
+    const calls = mockFetch((url, opts, n) => {
+      if (opts.method === 'POST') {
+        return n === 1
+          ? { status: 409, body: { message: 'checkout_reference already used' } }
+          : { status: 201, body: { ...CHECKOUT_OK, checkout_reference: 'PED-1#1' } };
+      }
+      return { status: 200, body: [{ ...CHECKOUT_OK, status: 'EXPIRED' }] };
+    });
+    const { mod } = await montar(SUMUP_CFG);
+    const r = await mod.handlePagoIniciar({ pedido_id: 'PED-1', monto_centimos: 1000, project_id: 'p1' });
+
+    assert.strictEqual(r.status, 200, JSON.stringify(r));
+    const refs = calls.filter(c => c.method === 'POST').map(c => JSON.parse(c.body).checkout_reference);
+    assert.deepStrictEqual(refs, ['PED-1', 'PED-1#1']);
+  });
+
+  await check('sumup: el link nace con valid_until (caduca con el pedido, no a los 30 min de SumUp)', async () => {
+    const calls = mockFetch(() => ({ status: 201, body: CHECKOUT_OK }));
+    const { mod } = await montar({ ...SUMUP_CFG, ttl_minutos: 15 });
+    const antes = Date.now();
+    await mod.handlePagoIniciar({ pedido_id: 'PED-1', monto_centimos: 1000 });
+    const body = JSON.parse(calls[0].body);
+    assert.ok(body.valid_until, 'falta valid_until');
+    const t = Date.parse(body.valid_until);
+    assert.ok(t > antes + 14 * 60000 && t < antes + 16 * 60000, body.valid_until);
   });
 
   await check('sumup: 401 de SumUp → PERMISSION_DENIED con el mensaje de arriba', async () => {

@@ -48,6 +48,9 @@
 const crypto = require('crypto');
 const BaseModule = require('../_shared/base-module');
 const ConciliacionSumUp = require('./conciliacion');
+const { TerminalSumUp } = require('./terminal');
+const { ClientesSumUp } = require('./clientes');
+const QR = require('./qr');
 
 const SUMUP_API = 'https://api.sumup.com';
 // Storage del proyecto. El prefijo es del ÓRGANO, no de la vertical: /pago vale para
@@ -59,6 +62,7 @@ const LEDGER_LEGACY = '/pizzepos/pago/checkouts.json';
 const CONCILIACION_PATH = PAGO_DIR + '/conciliacion.json';
 const CONCILIACION_LEGACY = '/pizzepos/pago/conciliacion.json';
 const CONFIG_PATH = PAGO_DIR + '/config.json';        // config de pasarela POR PROYECTO
+const CLIENTES_PATH = PAGO_DIR + '/clientes.json';    // registro de clientes y tarjetas POR PROYECTO
 const LEDGER_MAX = 800;
 const REF_MAX = 60;                                    // deja sitio al sufijo #n (máx SumUp: 64)
 const SUMUP_TIMEOUT_MS = 8000;                        // el cliente está esperando el link
@@ -70,7 +74,7 @@ class PagoGatewayModule extends BaseModule {
   constructor() {
     super();
     this.name = 'pago-gateway';
-    this.version = '1.4.0';
+    this.version = '3.0.0';
     this._subs = [];
     this._confirmados = new Set();      // idempotencia caliente del webhook (SumUp reintenta 4 veces)
     this._rechazados = new Set();       // ídem para FAILED (SumUp manda el evento varias veces)
@@ -85,6 +89,8 @@ class PagoGatewayModule extends BaseModule {
     this._pasarelaProyecto = new Map();   // project_id → bloque `pasarela` del proyecto
     this._configCargada = new Set();      // project_id ya leído de disco
     this._configNoDisponible = new Map(); // project_id → ts hasta el que no se reintenta leer
+    this._registro = new Map();           // project_id → { clientes: { [customer_id]: {...} } }
+    this._registroCargado = new Set();
   }
 
   async onLoad(core) {
@@ -106,6 +112,33 @@ class PagoGatewayModule extends BaseModule {
     sub('pago.config.actualizar.request', e => this._onRespuestaSimple(e, 'pago.config.actualizar.request', 'pago.config.actualizar.response', d => this._configEscribir(d)));
     // Un cambio de config invalida la caché: el siguiente pago ya usa la nueva.
     sub('pago.config.actualizada', e => { const d = e?.data || e; if (d?.project_id) this._invalidarConfig(d.project_id); });
+
+    // ── PUERTOS DEL ÓRGANO (los mismos para TODOS los proyectos) ──
+    // QR, datáfono, clientes, tarjeta guardada y recurrencia: cada puerto responde con su par
+    // .request/.response. Un negocio nuevo los usa escribiendo su config, sin tocar código.
+    const puertos = {
+      'pago.qr.request': d => this._qr(d),
+      'pago.reader.listar.request': d => this._readerListar(d),
+      'pago.reader.parear.request': d => this._readerParear(d),
+      'pago.reader.leer.request': d => this._readerLeer(d),
+      'pago.reader.renombrar.request': d => this._readerRenombrar(d),
+      'pago.reader.borrar.request': d => this._readerBorrar(d),
+      'pago.reader.estado.request': d => this._readerEstado(d),
+      'pago.reader.cobrar.request': d => this._readerCobrar(d),
+      'pago.reader.consultar.request': d => this._readerConsultar(d),
+      'pago.reader.terminar.request': d => this._readerTerminar(d),
+      'pago.reader.cobrar_go.request': d => this._readerCobrarGo(d),
+      'pago.cliente.alta.request': d => this._clienteAlta(d),
+      'pago.cliente.leer.request': d => this._clienteLeer(d),
+      'pago.cliente.actualizar.request': d => this._clienteActualizar(d),
+      'pago.cliente.tarjetas.request': d => this._clienteTarjetas(d),
+      'pago.cliente.tarjeta.baja.request': d => this._clienteBajaTarjeta(d),
+      'pago.tokenizar.request': d => this._tokenizar(d),
+      'pago.cobrar_guardada.request': d => this._cobrarGuardada(d)
+    };
+    for (const [ev, fn] of Object.entries(puertos)) {
+      sub(ev, e => this._onRespuestaSimple(e, ev, ev.replace(/\.request$/, '.response'), fn));
+    }
 
     this._montarConciliacion();
     this._arrancarBarrido();
@@ -281,11 +314,97 @@ class PagoGatewayModule extends BaseModule {
     return { api_key: r.api_key, nivel: r.resolved_from || null, identificador: r.identifier || null };
   }
 
+  // ── REFERENCIA UNIVERSAL ──
+  // El pago no cobra "un pedido": cobra un HECHO con identidad propia. Un pedido es vocabulario
+  // de pizzería; un taller dice presupuesto y una reserva dice reserva. El contrato dice
+  // `referencia`; `pedido_id` se sigue admitiendo como ALIAS para no romper a los consumidores
+  // que ya lo mandan (tienda-api, whatsapp-bot) y se sigue emitiendo en los eventos.
+  _ref(d = {}) {
+    const r = d?.referencia ?? d?.referencia_externa ?? d?.pedido_id ?? d?.order_id ?? null;
+    if (r === null || r === undefined || r === '') return null;
+    return String(r);
+  }
+
+  // Un bloque de pasarela con cuenta válida para operar (merchant + webhook donde haga falta).
+  async _cuentaParaCobro(project_id) {
+    const cfg = this._sumupCfg({ project_id });
+    if (!cfg.merchant) {
+      return { error: { status: 500, error: { code: 'CONFIG_MISSING', message: 'falta pasarela.merchant_code del proyecto (el código M… se copia del panel de SumUp)' } } };
+    }
+    const cred = await this._resolveCred(cfg.provider, cfg.project_id);
+    if (cred.error) return { error: { status: 500, error: { code: 'PERMISSION_DENIED', message: `credencial '${cfg.provider}': ${cred.error}` } } };
+    return { cfg, api_key: cred.api_key };
+  }
+
+  async _terminal(d = {}) {
+    const c = await this._cuentaParaCobro(d.project_id);
+    if (c.error) return c;
+    return { term: new TerminalSumUp({ call: this._sumupCall.bind(this), merchant: c.cfg.merchant, moneda: c.cfg.moneda, logger: this.logger }), cfg: c.cfg, api_key: c.api_key };
+  }
+
+  async _clientesDe(d = {}) {
+    const c = await this._cuentaParaCobro(d.project_id);
+    if (c.error) return c;
+    return { cli: new ClientesSumUp({ call: this._sumupCall.bind(this), merchant: c.cfg.merchant, moneda: c.cfg.moneda, logger: this.logger }), cfg: c.cfg, api_key: c.api_key };
+  }
+
+  // ── registro de clientes y tarjetas (POR PROYECTO; el libro es del negocio) ──
+  async _registroLoad(project_id) {
+    if (!project_id) return null;
+    if (this._registro.has(project_id)) return this._registro.get(project_id);
+    if (this._registroCargado.has(project_id)) return this._registro.get(project_id) || null;
+    const r = await this._rpc('fs.read.request', { project_id, path: CLIENTES_PATH }, { timeout_ms: FS_TIMEOUT_MS });
+    let reg = { version: 1, clientes: {} };
+    if (r && r.success !== false && typeof r.content === 'string' && r.content) {
+      try {
+        const j = JSON.parse(r.content);
+        if (j && typeof j === 'object' && j.clientes) reg = j;
+      } catch (_) { this.logger?.warn('pago-gateway.clientes.json_invalido', { project_id }); }
+    }
+    this._registro.set(project_id, reg);
+    this._registroCargado.add(project_id);
+    return reg;
+  }
+
+  async _registroSave(project_id) {
+    const reg = this._registro.get(project_id);
+    if (!project_id || !reg) return false;
+    const r = await this._rpc('fs.write.request', {
+      project_id, path: CLIENTES_PATH, content: JSON.stringify(reg, null, 2), encoding: 'utf-8', atomic: true
+    }, { timeout_ms: FS_TIMEOUT_MS });
+    return !!(r && r.success !== false);
+  }
+
+  // Guarda SOLO lo mínimo para reconocer al cliente y su tarjeta: nunca el número de tarjeta
+  // (no lo tenemos) ni datos que no hagan falta para cobrar.
+  async _registroTarjeta(project_id, { customer_id, tarjeta = null, alias = null, alta = false }) {
+    if (!project_id || !customer_id) return;
+    const reg = await this._registroLoad(project_id);
+    if (!reg) return;
+    const c = reg.clientes[customer_id] || { customer_id, creado: new Date().toISOString(), tarjetas: {} };
+    if (alias) c.alias = String(alias).slice(0, 120);
+    if (alta) c.actualizado = new Date().toISOString();
+    if (tarjeta?.token) {
+      c.tarjetas = c.tarjetas || {};
+      c.tarjetas[tarjeta.token] = {
+        ultimos4: tarjeta.ultimos4 || null, marca: tarjeta.marca || null,
+        mandato: tarjeta.mandato || null, activa: tarjeta.activa !== false,
+        cobrable_sin_cliente: !!tarjeta.cobrable_sin_cliente,
+        visto: new Date().toISOString()
+      };
+    }
+    reg.clientes[customer_id] = c;
+    reg.actualizado = new Date().toISOString();
+    await this._registroSave(project_id);
+  }
+
   // ── núcleo: iniciar el pago. RETORNA {status, data|error} ──
   async _iniciar(d) {
-    if (!d?.pedido_id || !Number.isInteger(d.monto_centimos) || d.monto_centimos <= 0) {
-      return { status: 400, error: { code: 'INVALID_INPUT', message: 'pedido_id y monto_centimos (entero > 0) requeridos' } };
+    const referencia = this._ref(d);
+    if (!referencia || !Number.isInteger(d.monto_centimos) || d.monto_centimos <= 0) {
+      return { status: 400, error: { code: 'INVALID_INPUT', message: 'referencia (o su alias pedido_id) y monto_centimos (entero > 0) requeridos' } };
     }
+    d = { ...d, referencia, pedido_id: d.pedido_id ?? referencia };
     const p = await this._asegurarConfig(d.project_id);   // config del negocio, no la del core
     const kind = p.kind;
     if (!kind) {
@@ -316,7 +435,8 @@ class PagoGatewayModule extends BaseModule {
     params.set('line_items[0][quantity]', '1');
     params.set('success_url', ret ? (ret + sep + 'pago=ok&session={CHECKOUT_SESSION_ID}') : 'https://example.com/?pago=ok');
     params.set('cancel_url', ret ? (ret + sep + 'pago=cancel') : 'https://example.com/?pago=cancel');
-    params.set('metadata[pedido_id]', String(d.pedido_id));
+    params.set('metadata[pedido_id]', String(d.pedido_id ?? d.referencia));
+    params.set('metadata[referencia]', String(d.referencia ?? d.pedido_id));
     if (d.project_id) params.set('metadata[project_id]', String(d.project_id));
     // METADATA ADICIONAL del caller: la pasarela la devuelve en el webhook, asi que es lo que
     // permite RECONSTRUIR el pedido si el webhook llega cuando ya no esta en memoria.
@@ -506,8 +626,8 @@ class PagoGatewayModule extends BaseModule {
     const cred = await this._resolveCred(cfg.provider, cfg.project_id);
     if (cred.error) return { status: 500, error: { code: 'PERMISSION_DENIED', message: `credencial '${cfg.provider}': ${cred.error}` } };
 
-    const concepto = (d.concepto || `Pedido ${d.pedido_id}`).slice(0, 120);
-    const base = String(d.checkout_reference || d.pedido_id).replace(/#/g, '-').slice(0, REF_MAX);
+    const concepto = (d.concepto || `Cobro ${d.referencia || d.pedido_id}`).slice(0, 120);
+    const base = String(d.checkout_reference || d.referencia || d.pedido_id).replace(/#/g, '-').slice(0, REF_MAX);
     const validUntil = new Date(Date.now() + cfg.ttlMin * 60000).toISOString();
     const purpose = SUMUP_PURPOSES.has(String(d.purpose || '').toUpperCase()) ? String(d.purpose).toUpperCase() : 'CHECKOUT';
     const customerId = d.customer_id || null;
@@ -530,7 +650,9 @@ class PagoGatewayModule extends BaseModule {
     await this._ledgerPut(d.project_id, {
       checkout_id: co.id,
       checkout_reference: co.checkout_reference || out.ref,
-      pedido_id: String(d.pedido_id),
+      referencia: String(d.referencia || d.pedido_id),
+      pedido_id: String(d.pedido_id || d.referencia),   // alias: el libro viejo y los consumidores lo leen
+      canal: 'online',
       project_slug: d.project_slug || this.pasarela.project_slug || null,
       monto_centimos: d.monto_centimos,
       moneda: cfg.moneda,
@@ -638,14 +760,15 @@ class PagoGatewayModule extends BaseModule {
     await this._ledgerSave(project_id);
   }
 
-  async _ledgerBuscar(project_id, { checkout_id, pedido_id, transaction_id } = {}) {
+  async _ledgerBuscar(project_id, { checkout_id, referencia, pedido_id, transaction_id } = {}) {
     const libro = await this._ledgerLoad(project_id);
     const checkouts = libro?.checkouts || this._ledger.get(project_id || '_sin_proyecto')?.checkouts || {};
     const todos = Object.values(checkouts);
     if (checkout_id) return checkouts[checkout_id] || null;
     if (transaction_id) return todos.find(e => e.transaction_id === transaction_id) || null;
-    if (pedido_id) {
-      return todos.filter(e => String(e.pedido_id) === String(pedido_id))
+    const ref = referencia ?? pedido_id;   // alias: el mismo hecho con dos nombres
+    if (ref !== undefined && ref !== null) {
+      return todos.filter(e => String(e.referencia) === String(ref) || String(e.pedido_id) === String(ref))
         .sort((a, b) => String(b.creado).localeCompare(String(a.creado)))[0] || null;
     }
     return null;
@@ -658,12 +781,46 @@ class PagoGatewayModule extends BaseModule {
     // El primer transaction no siempre es el bueno (puede haber un intento fallido antes).
     const tx = txs.find(t => t.status === 'SUCCESSFUL' || t.status === 'REFUNDED') || txs[txs.length - 1] || null;
 
-    const pedido_id = String(co.checkout_reference || '').split(/[#@]/)[0] || null;
-    if (!pedido_id) return { confirmado: false, motivo: 'sin_checkout_reference' };
-
+    // La referencia manda desde el LIBRO (el hecho que nosotros registramos); si no hay fila,
+    // se cae al checkout_reference que devolvió SumUp.
     const entry = await this._ledgerBuscar(project_id, { checkout_id: co.id });
+    const referencia = entry?.referencia || entry?.pedido_id
+      || String(co.checkout_reference || '').split(/[#@]/)[0] || null;
+    if (!referencia) return { confirmado: false, motivo: 'sin_referencia' };
+
     const yaConfirmado = this._confirmados.has(co.id) || !!entry?.transaction_id;
-    if (yaConfirmado) return { confirmado: false, motivo: 'duplicado', pedido_id };
+    if (yaConfirmado) return { confirmado: false, motivo: 'duplicado', referencia, pedido_id: referencia };
+
+    // ── TOKENIZACIÓN ≠ COBRO ──
+    // El checkout de consentimiento (SETUP_RECURRING_PAYMENT) hace un cargo de autorización que
+    // SumUp devuelve al instante: aquí NO hay dinero que confirmar. Lo que nace es la tarjeta
+    // guardada y su mandato, así que el desenlace es `pago.tokenizado`.
+    if (entry?.canal === 'tokenizacion' || String(co.purpose || entry?.purpose || '').toUpperCase() === 'SETUP_RECURRING_PAYMENT') {
+      const token = co.payment_instrument?.token || entry?.payment_instrument_token || null;
+      const customer_id = co.customer_id || entry?.customer_id || referencia;
+      if (token) {
+        await this._registroTarjeta(project_id, {
+          customer_id,
+          tarjeta: { token, activa: true, cobrable_sin_cliente: true, mandato: { tipo: 'recurrent', estado: 'active' } }
+        });
+      }
+      await this.eventBus.publish('pago.tokenizado', {
+        referencia, pedido_id: referencia, project_id, project_slug,
+        customer_id, payment_instrument_token: token,
+        session_id: co.id, autorizacion_devuelta: true,
+        pasarela: 'sumup-checkout', origen,
+        correlation_id: crypto.randomUUID(), timestamp: new Date().toISOString()
+      });
+      this._marcarConfirmado(co.id);
+      await this._ledgerMark(project_id, co.id, {
+        estado: token ? 'tokenizado' : 'sin_tarjeta',
+        customer_id, ...(token ? { payment_instrument_token: token } : {}),
+        tokenizado_at: new Date().toISOString()
+      });
+      this.metrics?.increment?.('pago.tokenizado.total');
+      this.logger?.info('pago-gateway.tokenizado', { customer_id, session_id: co.id, tiene_token: !!token });
+      return { confirmado: false, tokenizado: !!token, referencia };
+    }
 
     const montoCentimos = tx && Number.isFinite(Number(tx.amount))
       ? Math.round(Number(tx.amount) * 100)
@@ -676,7 +833,8 @@ class PagoGatewayModule extends BaseModule {
     const discrepancia = this._cuadraCobro({ entry, co, montoCentimos, propinaCentimos });
     if (discrepancia) {
       await this.eventBus.publish('pago.importe_discrepante', {
-        pedido_id,
+        referencia,
+        pedido_id: referencia,                            // alias heredado
         project_id: project_id || this.pasarela.project_id || null,
         project_slug,
         session_id: co.id,
@@ -692,15 +850,17 @@ class PagoGatewayModule extends BaseModule {
       });
       if (entry?.checkout_id) await this._ledgerMark(project_id, co.id, { estado: 'discrepante', discrepancia: discrepancia.motivo });
       this.metrics?.increment?.('pago.importe_discrepante.total', { motivo: discrepancia.motivo });
-      this.logger?.warn('pago-gateway.importe_discrepante', { pedido_id, session_id: co.id, ...discrepancia });
-      return { confirmado: false, motivo: 'importe_discrepante', pedido_id, discrepancia };
+      this.logger?.warn('pago-gateway.importe_discrepante', { referencia, session_id: co.id, ...discrepancia });
+      return { confirmado: false, motivo: 'importe_discrepante', referencia, pedido_id: referencia, discrepancia };
     }
 
     const payload = {
-      pedido_id,
+      referencia,                                        // nombre del CONTRATO (hecho cobrado)
+      pedido_id: referencia,                             // alias: los consumidores de siempre siguen leyendo esto
       project_id: project_id || this.pasarela.project_id || null,
       project_slug,                                    // el consumidor necesita SABER A QUIEN avisar
       session_id: co.id,
+      canal: entry?.canal || 'online',                   // online (link/QR) · terminal (datáfono) · guardada
       transaction_id: tx?.id || null,
       transaction_code: tx?.transaction_code || null,
       entry_mode: tx?.entry_mode || null,              // CUSTOMER_ENTRY · APPLE_PAY · GOOGLE_PAY · PAYPAL…
@@ -723,9 +883,9 @@ class PagoGatewayModule extends BaseModule {
       // puerta al "pide otra vez en dos toques" sin volver a teclear la tarjeta.
       ...(co.payment_instrument?.token ? { payment_instrument_token: co.payment_instrument.token } : {})
     });
-    this.metrics?.increment?.('pago.confirmado.total', { pasarela: 'sumup-checkout' });
-    this.logger?.info('pago-gateway.confirmado', { pedido_id, session_id: co.id, origen });
-    return { confirmado: true, pedido_id };
+    this.metrics?.increment?.('pago.confirmado.total', { pasarela: 'sumup-checkout', canal: payload.canal });
+    this.logger?.info('pago-gateway.confirmado', { referencia, session_id: co.id, origen, canal: payload.canal });
+    return { confirmado: true, referencia, pedido_id: referencia };
   }
 
   /**
@@ -764,10 +924,11 @@ class PagoGatewayModule extends BaseModule {
     if (this._rechazados.has(co.id) || this._confirmados.has(co.id)) return { rechazado: false, motivo: 'ya_registrado' };
     const previo = await this._ledgerBuscar(project_id, { checkout_id: co.id });
     if (previo?.estado === 'rechazado' || previo?.estado === 'confirmado') return { rechazado: false, motivo: 'ya_registrado' };
-    const pedido_id = String(co.checkout_reference || '').split(/[#@]/)[0] || null;
+    const referencia = previo?.referencia || previo?.pedido_id
+      || String(co.checkout_reference || '').split(/[#@]/)[0] || null;
     const tx = (co.transactions || [])[0] || null;
     await this.eventBus.publish('pago.rechazado', {
-      pedido_id, session_id: co.id, project_slug,
+      referencia, pedido_id: referencia, session_id: co.id, project_slug,
       motivo: tx?.status || co.status || 'FAILED',
       transaction_id: tx?.id || null,
       monto_centimos: Number.isFinite(Number(co.amount)) ? Math.round(Number(co.amount) * 100) : null,
@@ -778,7 +939,7 @@ class PagoGatewayModule extends BaseModule {
     this._rechazados.add(co.id);
     if (this._rechazados.size > 500) this._rechazados.delete(this._rechazados.values().next().value);
     this.metrics?.increment?.('pago.rechazado.total', { pasarela: 'sumup-checkout' });
-    return { rechazado: true, pedido_id };
+    return { rechazado: true, referencia, pedido_id: referencia };
   }
 
   // ── cancelar: matar el link (DELETE). Si ya se pagó, se confirma, no se cancela. ──
@@ -789,16 +950,17 @@ class PagoGatewayModule extends BaseModule {
       return { status: 501, error: { code: 'NOT_IMPLEMENTED', message: `cancelar no implementado para '${kind}'` } };
     }
     const cfg = this._sumupCfg(d);
+    const referencia = this._ref(d);
     let checkout_id = d.session_id || null;
     let entry = null;
-    if (!checkout_id && d.pedido_id) {
-      entry = await this._ledgerBuscar(d.project_id, { pedido_id: d.pedido_id });
+    if (!checkout_id && referencia) {
+      entry = await this._ledgerBuscar(d.project_id, { referencia });
       checkout_id = entry?.checkout_id || null;
     } else if (checkout_id) {
       entry = await this._ledgerBuscar(d.project_id, { checkout_id });
     }
     if (!checkout_id) {
-      return { status: 404, error: { code: 'NOT_FOUND', message: 'sin session_id ni checkout en el libro para ese pedido' } };
+      return { status: 404, error: { code: 'NOT_FOUND', message: 'sin session_id ni checkout en el libro para esa referencia' } };
     }
     const cred = await this._resolveCred(cfg.provider, cfg.project_id);
     if (cred.error) return { status: 500, error: { code: 'PERMISSION_DENIED', message: `credencial '${cfg.provider}': ${cred.error}` } };
@@ -807,7 +969,9 @@ class PagoGatewayModule extends BaseModule {
     if (r.ok) {
       await this._ledgerMark(d.project_id, checkout_id, { estado: 'cancelado', cancelado_at: new Date().toISOString() });
       await this.eventBus.publish('pago.cancelado', {
-        pedido_id: entry?.pedido_id || d.pedido_id || null, session_id: checkout_id,
+        referencia: entry?.referencia || entry?.pedido_id || referencia || null,
+        pedido_id: entry?.referencia || entry?.pedido_id || referencia || null,
+        session_id: checkout_id,
         pasarela: 'sumup-checkout', correlation_id: crypto.randomUUID(), timestamp: new Date().toISOString()
       });
       return { status: 200, data: { cancelado: true, session_id: checkout_id } };
@@ -839,7 +1003,8 @@ class PagoGatewayModule extends BaseModule {
     if (!cfg.merchant) return { status: 500, error: { code: 'CONFIG_MISSING', message: 'sumup-checkout exige pasarela.merchant_code' } };
 
     const entry = await this._ledgerBuscar(d.project_id, {
-      transaction_id: d.transaction_id, checkout_id: d.session_id, pedido_id: d.pedido_id
+      transaction_id: d.transaction_id, checkout_id: d.session_id,
+      referencia: this._ref(d), pedido_id: this._ref(d)
     });
     const transaction_id = d.transaction_id || entry?.transaction_id || null;
     if (!transaction_id) {
@@ -913,7 +1078,8 @@ class PagoGatewayModule extends BaseModule {
       });
     }
     await this.eventBus.publish('pago.reembolsado', {
-      pedido_id: entry?.pedido_id || d.pedido_id || null,
+      referencia: entry?.referencia || entry?.pedido_id || this._ref(d),
+      pedido_id: entry?.referencia || entry?.pedido_id || this._ref(d),
       session_id: entry?.checkout_id || d.session_id || null,
       transaction_id, monto_centimos: devuelto,
       total_reembolsado_centimos: yaDevuelto + (devuelto || 0),
@@ -1037,7 +1203,8 @@ class PagoGatewayModule extends BaseModule {
     const cfg = this._sumupCfg(d);
     if (!cfg.merchant) return { status: 500, error: { code: 'CONFIG_MISSING', message: 'falta pasarela.merchant_code' } };
     const entry = await this._ledgerBuscar(d.project_id, {
-      transaction_id: d.transaction_id, checkout_id: d.session_id, pedido_id: d.pedido_id
+      transaction_id: d.transaction_id, checkout_id: d.session_id,
+      referencia: this._ref(d), pedido_id: this._ref(d)
     });
     const transaction_id = d.transaction_id || entry?.transaction_id || null;
     if (!transaction_id) {
@@ -1055,7 +1222,8 @@ class PagoGatewayModule extends BaseModule {
     const num = v => (v === null || v === undefined || v === '' ? null : Number(v));
     const cent = v => (Number.isFinite(num(v)) ? Math.round(num(v) * 100) : null);
     const recibo = {
-      pedido_id: entry?.pedido_id || d.pedido_id || null,
+      referencia: entry?.referencia || entry?.pedido_id || this._ref(d),
+      pedido_id: entry?.referencia || entry?.pedido_id || this._ref(d),
       transaction_id,
       transaction_code: td.transaction_code || entry?.transaction_code || null,
       fecha: td.timestamp || td.date || null,
@@ -1069,7 +1237,8 @@ class PagoGatewayModule extends BaseModule {
       crudo: r.data || null
     };
     await this.eventBus.publish('pago.recibo.obtenido', {
-      pedido_id: recibo.pedido_id, session_id: entry?.checkout_id || d.session_id || null,
+      referencia: recibo.referencia, pedido_id: recibo.pedido_id,
+      session_id: entry?.checkout_id || d.session_id || null,
       transaction_id, total_centimos: recibo.total_centimos, iva_centimos: recibo.iva_centimos,
       pasarela: 'sumup-checkout',
       correlation_id: crypto.randomUUID(), timestamp: new Date().toISOString()
@@ -1227,6 +1396,16 @@ class PagoGatewayModule extends BaseModule {
     const ahora = Date.now();
 
     for (const e of pendientes) {
+      // Cobro PRESENCIAL: su verdad vive en el lector, no en /v0.1/checkouts (daría 404).
+      if (e.canal === 'terminal' && e.reader_id) {
+        const visto = await this._readerConsultar({ project_id: id, project_slug: e.project_slug || slug, reader_id: e.reader_id, checkout_id: e.checkout_id });
+        if (visto.status !== 200) continue;
+        // Un cobro presencial abandonado se cierra: si el cliente se fue, no queda pendiente eterno.
+        if (visto.data.estado_organo === 'pendiente' && e.creado && (ahora - Date.parse(e.creado)) > 30 * 60 * 1000) {
+          await this._ledgerMark(id, e.checkout_id, { estado: 'abandonado' });
+        }
+        continue;
+      }
       const r = await this._sumupCall('GET', `/v0.1/checkouts/${encodeURIComponent(e.checkout_id)}`, { api_key: cred.api_key });
       if (r.status === 404) { await this._ledgerMark(id, e.checkout_id, { estado: 'perdido' }); continue; }
       if (!r.ok) continue;
@@ -1297,6 +1476,518 @@ class PagoGatewayModule extends BaseModule {
     } catch (_) {}
   }
 
+  // ══════════════════════════════════════════════════════════════════════════
+  //  QR — la MISMA puerta del link, pintada
+  //  Un QR no es un método de pago: es la URL del checkout dentro de un dibujo. Por eso no
+  //  hay integración nueva ni comisión nueva. Dos modos:
+  //    · con importe → crea (o REUSA) el checkout del hecho y pinta su URL  → QR de COBRO
+  //    · con url     → pinta la URL que le den (carta, propinas, un link ya emitido)
+  //  Dinámico siempre que se cobra: un QR estático impreso obliga al cliente a teclear el
+  //  importe, y ahí es donde se paga de menos.
+  // ══════════════════════════════════════════════════════════════════════════
+
+  async _qr(d = {}) {
+    const formato = String(d.formato || 'png').toLowerCase();     // png (WhatsApp/impresión) | svg | ambos
+    const escala = Number.isInteger(d.escala) ? Math.min(Math.max(d.escala, 3), 24) : 8;
+    const borde = Number.isInteger(d.borde) ? Math.min(Math.max(d.borde, 0), 10) : 4;
+
+    let url = d.url || null;
+    let checkout = null;
+
+    if (!url) {
+      const referencia = this._ref(d);
+      if (!referencia) {
+        return { status: 400, error: { code: 'INVALID_INPUT', message: 'pasa url (para pintar un enlace ya emitido) o referencia + importe_centimos (para cobrar con QR)' } };
+      }
+      if (!Number.isInteger(d.monto_centimos) || d.monto_centimos <= 0) {
+        return { status: 400, error: { code: 'INVALID_INPUT', message: 'monto_centimos (entero > 0) requerido para un QR de cobro' } };
+      }
+      const r = await this._iniciar({ ...d, referencia, pedido_id: d.pedido_id ?? referencia, canal: 'qr' });
+      if (r.status !== 200) {
+        // 409 CHECKOUT_YA_PAGADO es información, no fallo del QR: se devuelve tal cual.
+        return r;
+      }
+      url = r.data.checkout_url;
+      checkout = { checkout_id: r.data.session_id, expira_at: r.data.expira_at, reutilizado: !!r.data.reutilizado };
+    } else {
+      try { new URL(String(url)); }
+      catch (_) { return { status: 400, error: { code: 'INVALID_INPUT', message: 'url no es una URL válida', field: 'url' } } };
+    }
+
+    let q;
+    try { q = QR.encode(String(url), { ecl: d.ecl || 'M' }); }
+    catch (err) { return { status: 400, error: { code: 'QR_INVALID_INPUT', message: err.message } }; }
+
+    const out = {
+      status: 200,
+      data: {
+        url: String(url),
+        ...(checkout || {}),
+        qr: {
+          version: q.version, modulos: q.size, correccion: q.ecl, texto: String(url)
+        }
+      }
+    };
+    if (formato === 'svg' || formato === 'ambos') {
+      const svg = QR.toSvg(q, { scale: escala, border: borde });
+      out.data.qr.svg = svg;
+      out.data.qr.svg_data_uri = QR.dataUriSvg(svg);
+    }
+    if (formato === 'png' || formato === 'ambos') {
+      const png = QR.toPng(q, { scale: escala, border: borde });
+      out.data.qr.png_base64 = png.toString('base64');
+      out.data.qr.png_data_uri = QR.dataUriPng(png);
+    }
+    return out;
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  //  DATÁFONO (Reader/Terminal API) — el cobro en persona
+  //  El mismo órgano, otra puerta: el cliente que viene a recoger paga en el mostrador.
+  //  La verdad está en el checkout del lector: se reconsulta, nunca se supone.
+  // ══════════════════════════════════════════════════════════════════════════
+
+  async _readerListar(d = {}) {
+    const t = await this._terminal(d);
+    if (t.error) return t.error;
+    return t.term.listar();
+  }
+
+  async _readerParear(d = {}) {
+    const t = await this._terminal(d);
+    if (t.error) return t.error;
+    return t.term.parear({ pairing_code: d.pairing_code, name: d.name, metadata: d.metadata });
+  }
+
+  async _readerLeer(d = {}) {
+    const t = await this._terminal(d);
+    if (t.error) return t.error;
+    return t.term.leer(d.reader_id);
+  }
+
+  async _readerRenombrar(d = {}) {
+    const t = await this._terminal(d);
+    if (t.error) return t.error;
+    return t.term.renombrar(d.reader_id, { name: d.name, metadata: d.metadata });
+  }
+
+  async _readerBorrar(d = {}) {
+    const t = await this._terminal(d);
+    if (t.error) return t.error;
+    return t.term.borrar(d.reader_id);
+  }
+
+  async _readerEstado(d = {}) {
+    const t = await this._terminal(d);
+    if (t.error) return t.error;
+    return t.term.estado(d.reader_id);
+  }
+
+  /**
+   * Manda el importe al datáfono. IDEMPOTENTE POR REFERENCIA: si ese hecho ya tiene un cobro
+   * vivo en ese lector, se DEVUELVE EL MISMO (reconsultado), no se manda otro. Dos checkouts
+   * vivos en el mismo datáfono = dos cobros posibles.
+   */
+  async _readerCobrar(d = {}) {
+    const referencia = this._ref(d);
+    if (!referencia) return { status: 400, error: { code: 'INVALID_INPUT', message: 'referencia (o su alias pedido_id) requerida' } };
+    if (!d.reader_id) return { status: 400, error: { code: 'INVALID_INPUT', message: 'reader_id requerido (¿qué datáfono?)', field: 'reader_id' } };
+    if (!Number.isInteger(d.monto_centimos) || d.monto_centimos <= 0) {
+      return { status: 400, error: { code: 'INVALID_INPUT', message: 'monto_centimos (entero > 0) requerido' } };
+    }
+    const t = await this._terminal(d);
+    if (t.error) return t.error;
+
+    // ¿Ya hay algo para esta referencia?
+    let entry = await this._ledgerBuscar(d.project_id, { referencia });
+    if (entry?.canal === 'terminal') {
+      if (entry.estado === 'confirmado') {
+        return { status: 409, error: { code: 'YA_PAGADO', message: 'esa referencia ya está cobrada', referencia, transaction_id: entry.transaction_id || null } };
+      }
+      if (entry.estado === 'pendiente' && entry.checkout_id && entry.reader_id) {
+        const visto = await t.term.consultar(entry.reader_id, entry.checkout_id);
+        if (visto.status === 200) {
+          const est = visto.data.estado_organo;
+          if (est === 'pendiente') {
+            return { status: 200, data: { ...visto.data, reutilizado: true, aviso: 'ya había un cobro vivo en ese datáfono: se devuelve el mismo' } };
+          }
+          if (est === 'confirmado') {
+            await this._confirmarTerminal({ ...visto.data, project_id: d.project_id, project_slug: d.project_slug, entry });
+            return { status: 409, error: { code: 'YA_PAGADO', message: 'el cobro de esa referencia ya se completó en el datáfono', referencia } };
+          }
+          // rechazado / cancelado → se permite un intento nuevo con sufijo
+        }
+      }
+    }
+
+    // Un intento nuevo: sufijo en la referencia para no chocar con el anterior.
+    const intento = Number.isInteger(entry?.intento) ? entry.intento + 1 : 0;
+    const refIntento = intento ? `${referencia.slice(0, REF_MAX - 2)}#${intento}` : referencia;
+
+    const out = await t.term.cobrar(d.reader_id, {
+      referencia: refIntento,
+      importe_centimos: d.monto_centimos,
+      descripcion: d.concepto || d.descripcion || null,
+      moneda: d.moneda || t.cfg.moneda,
+      return_url: d.return_url || t.cfg.webhookUrl || null,
+      propina_centimos: Number.isInteger(d.propina_centimos) ? d.propina_centimos : null,
+      tip_rates: Array.isArray(d.tip_rates) ? d.tip_rates : null,
+      tip_timeout: d.tip_timeout,
+      card_type: d.card_type,
+      installments: d.installments
+    });
+    if (out.status !== 200) return out;
+
+    await this._ledgerPut(d.project_id, {
+      checkout_id: out.data.checkout_id || out.data.client_transaction_id,
+      referencia,
+      pedido_id: referencia,
+      canal: 'terminal',
+      reader_id: d.reader_id,
+      project_slug: d.project_slug || null,
+      monto_centimos: d.monto_centimos,
+      propina_centimos: Number.isInteger(d.propina_centimos) ? d.propina_centimos : null,
+      moneda: out.data.moneda || t.cfg.moneda,
+      estado: 'pendiente',
+      intento,
+      creado: new Date().toISOString(),
+      reembolsos: []
+    });
+    await this.eventBus.publish('pago.en_terminal', {
+      referencia, pedido_id: referencia, project_id: d.project_id || null, project_slug: d.project_slug || null,
+      reader_id: d.reader_id, session_id: out.data.checkout_id, monto_centimos: d.monto_centimos,
+      pasarela: 'sumup-terminal', correlation_id: crypto.randomUUID(), timestamp: new Date().toISOString()
+    });
+    this.metrics?.increment?.('pago.terminal.iniciado');
+    return { status: 200, data: { ...out.data, referencia, intento, aviso: 'cobro enviado al datáfono: el cliente completa en el dispositivo' } };
+  }
+
+  /**
+   * LA verdad del cobro presencial: se pregunta al lector y se traduce a los eventos del órgano.
+   * Es lo que usan el caller (polling), el barrido y el webhook.
+   */
+  async _readerConsultar(d = {}) {
+    const reader_id = d.reader_id || null;
+    const checkout_id = d.checkout_id || d.session_id || null;
+    if (!reader_id || !checkout_id) {
+      return { status: 400, error: { code: 'INVALID_INPUT', message: 'reader_id y checkout_id requeridos' } };
+    }
+    const t = await this._terminal(d);
+    if (t.error) return t.error;
+    const r = await t.term.consultar(reader_id, checkout_id);
+    if (r.status !== 200) return r;
+
+    const entry = await this._ledgerBuscar(d.project_id, { checkout_id });
+    const datos = { ...r.data, referencia: entry?.referencia || null, pedido_id: entry?.referencia || null };
+
+    if (r.data.estado_organo === 'confirmado') {
+      await this._confirmarTerminal({ ...datos, project_id: d.project_id, project_slug: d.project_slug, entry });
+    } else if (r.data.estado_organo === 'rechazado') {
+      await this._rechazarTerminal({ ...datos, project_id: d.project_id, project_slug: d.project_slug, entry });
+    } else if (r.data.estado_organo === 'cancelado') {
+      await this._cancelarTerminal({ ...datos, project_id: d.project_id, project_slug: d.project_slug, entry });
+    }
+    return { status: 200, data: datos };
+  }
+
+  async _readerTerminar(d = {}) {
+    const reader_id = d.reader_id || null;
+    let reader = reader_id;
+    if (!reader && (d.checkout_id || d.session_id)) {
+      const entry = await this._ledgerBuscar(d.project_id, { checkout_id: d.checkout_id || d.session_id });
+      reader = entry?.reader_id || null;
+    }
+    if (!reader) return { status: 400, error: { code: 'INVALID_INPUT', message: 'reader_id requerido (o el checkout_id de un cobro en datáfono)' } };
+    const t = await this._terminal(d);
+    if (t.error) return t.error;
+    return t.term.terminar(reader);
+  }
+
+  async _readerCobrarGo(d = {}) {
+    const referencia = this._ref(d);
+    if (!referencia) return { status: 400, error: { code: 'INVALID_INPUT', message: 'referencia requerida' } };
+    const t = await this._terminal(d);
+    if (t.error) return t.error;
+    const out = await t.term.cobrarGo(d.reader_id, {
+      referencia, importe_centimos: d.monto_centimos,
+      propina_centimos: Number.isInteger(d.propina_centimos) ? d.propina_centimos : null,
+      moneda: d.moneda || t.cfg.moneda
+    });
+    if (out.status !== 200) return out;
+    if (out.data.estado_organo === 'confirmado') {
+      await this._confirmarTerminal({
+        project_id: d.project_id, project_slug: d.project_slug, reader_id: d.reader_id,
+        checkout_id: out.data.client_transaction_id, referencia,
+        importe_centimos: d.monto_centimos, moneda: out.data.moneda,
+        transaction_id: out.data.transaction_id, entry: null
+      });
+    }
+    return out;
+  }
+
+  // ── transiciones del cobro PRESENCIAL (un solo camino, como el online) ──
+  async _confirmarTerminal({ project_id = null, project_slug = null, entry = null, reader_id = null,
+    checkout_id = null, referencia = null, importe_centimos = null, moneda = null,
+    transaction_id = null, origen = 'consulta' } = {}) {
+    const ref = referencia || entry?.referencia || entry?.pedido_id || null;
+    const id = checkout_id || entry?.checkout_id || null;
+    if (!ref || !id) return { confirmado: false, motivo: 'sin_referencia' };
+    if (this._confirmados.has(id)) return { confirmado: false, motivo: 'duplicado', referencia: ref };
+
+    const fila = entry || await this._ledgerBuscar(project_id, { checkout_id: id });
+    const cobrado = Number.isInteger(importe_centimos) ? importe_centimos : (fila?.monto_centimos ?? null);
+    // Misma guarda de integridad que el pago online: lo cobrado tiene que ser lo pedido.
+    const discrepancia = this._cuadraCobro({ entry: fila, co: { currency: moneda }, montoCentimos: cobrado, propinaCentimos: fila?.propina_centimos ?? null });
+    if (discrepancia) {
+      await this.eventBus.publish('pago.importe_discrepante', {
+        referencia: ref, pedido_id: ref, project_id, project_slug,
+        session_id: id, canal: 'terminal', reader_id,
+        esperado_centimos: discrepancia.esperado, cobrado_centimos: discrepancia.cobrado,
+        motivo: discrepancia.motivo, pasarela: 'sumup-terminal', origen,
+        correlation_id: crypto.randomUUID(), timestamp: new Date().toISOString()
+      });
+      await this._ledgerMark(project_id, id, { estado: 'discrepante', discrepancia: discrepancia.motivo });
+      return { confirmado: false, motivo: 'importe_discrepante', referencia: ref };
+    }
+
+    await this.eventBus.publish('pago.confirmado', {
+      referencia: ref, pedido_id: ref, project_id, project_slug,
+      session_id: id, canal: 'terminal', reader_id,
+      transaction_id: transaction_id || null,
+      entry_mode: 'TERMINAL',
+      monto_centimos: cobrado,
+      moneda: moneda || fila?.moneda || null,
+      pasarela: 'sumup-terminal', origen,
+      correlation_id: crypto.randomUUID(), timestamp: new Date().toISOString()
+    });
+    this._marcarConfirmado(id);
+    await this._ledgerMark(project_id, id, {
+      estado: 'confirmado', transaction_id: transaction_id || null,
+      confirmado_at: new Date().toISOString(), origen
+    });
+    this.metrics?.increment?.('pago.confirmado.total', { pasarela: 'sumup-terminal', canal: 'terminal' });
+    this.logger?.info('pago-gateway.confirmado_terminal', { referencia: ref, session_id: id, origen });
+    return { confirmado: true, referencia: ref };
+  }
+
+  async _rechazarTerminal({ project_id = null, project_slug = null, entry = null, checkout_id = null,
+    referencia = null, motivo = null, origen = 'consulta' } = {}) {
+    const ref = referencia || entry?.referencia || entry?.pedido_id || null;
+    const id = checkout_id || entry?.checkout_id || null;
+    if (!id || this._rechazados.has(id) || this._confirmados.has(id)) return { rechazado: false };
+    await this.eventBus.publish('pago.rechazado', {
+      referencia: ref, pedido_id: ref, project_id, project_slug,
+      session_id: id, canal: 'terminal', motivo: motivo || 'FAILED',
+      pasarela: 'sumup-terminal', origen,
+      correlation_id: crypto.randomUUID(), timestamp: new Date().toISOString()
+    });
+    await this._ledgerMark(project_id, id, { estado: 'rechazado', rechazado_at: new Date().toISOString() });
+    this._rechazados.add(id);
+    if (this._rechazados.size > 500) this._rechazados.delete(this._rechazados.values().next().value);
+    return { rechazado: true, referencia: ref };
+  }
+
+  async _cancelarTerminal({ project_id = null, project_slug = null, entry = null, checkout_id = null, referencia = null } = {}) {
+    const ref = referencia || entry?.referencia || entry?.pedido_id || null;
+    const id = checkout_id || entry?.checkout_id || null;
+    if (!id) return { cancelado: false };
+    if (this._confirmados.has(id)) return { cancelado: false, motivo: 'ya_confirmado' };
+    await this._ledgerMark(project_id, id, { estado: 'cancelado', cancelado_at: new Date().toISOString() });
+    await this.eventBus.publish('pago.cancelado', {
+      referencia: ref, pedido_id: ref, project_id, project_slug, session_id: id, canal: 'terminal',
+      pasarela: 'sumup-terminal', correlation_id: crypto.randomUUID(), timestamp: new Date().toISOString()
+    });
+    return { cancelado: true, referencia: ref };
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  //  CLIENTE DE SIEMPRE + TARJETA GUARDADA (Customers API)
+  //  Genérico: el cliente es del NEGOCIO, no de la pizzería. Un taller cobra plazos con la
+  //  misma tarjeta guardada; una panadería, la semana. El registro vive en /pago/clientes.json.
+  // ══════════════════════════════════════════════════════════════════════════
+
+  async _clienteAlta(d = {}) {
+    const c = await this._clientesDe(d);
+    if (c.error) return c.error;
+    const id = d.customer_id || this._ref(d);
+    const r = await c.cli.alta({ customer_id: id, personal_details: d.personal_details || null });
+    if (r.status === 200) await this._registroTarjeta(d.project_id, { customer_id: r.data.customer_id, alias: d.alias || null, alta: true });
+    return r;
+  }
+
+  async _clienteLeer(d = {}) {
+    const c = await this._clientesDe(d);
+    if (c.error) return c.error;
+    return c.cli.leer(d.customer_id || this._ref(d));
+  }
+
+  async _clienteActualizar(d = {}) {
+    const c = await this._clientesDe(d);
+    if (c.error) return c.error;
+    return c.cli.actualizar(d.customer_id || this._ref(d), { personal_details: d.personal_details });
+  }
+
+  async _clienteTarjetas(d = {}) {
+    const c = await this._clientesDe(d);
+    if (c.error) return c.error;
+    const r = await c.cli.tarjetas(d.customer_id || this._ref(d));
+    if (r.status === 200) {
+      for (const t of r.data.tarjetas) {
+        await this._registroTarjeta(d.project_id, { customer_id: r.data.customer_id, tarjeta: t });
+      }
+    }
+    return r;
+  }
+
+  async _clienteBajaTarjeta(d = {}) {
+    const c = await this._clientesDe(d);
+    if (c.error) return c.error;
+    const r = await c.cli.bajaTarjeta(d.customer_id || this._ref(d), d.token);
+    if (r.status === 200) {
+      await this._registroTarjeta(d.project_id, {
+        customer_id: d.customer_id || this._ref(d),
+        tarjeta: { token: d.token, activa: false, cobrable_sin_cliente: false }
+      });
+    }
+    return r;
+  }
+
+  /**
+   * CONSENTIMIENTO para guardar la tarjeta (no es un cobro: la autorización se devuelve al
+   * instante). Crea el checkout `SETUP_RECURRING_PAYMENT` del cliente y devuelve la URL de la
+   * página que el PROPIO órgano sirve con el Payment Widget — así ningún proyecto escribe frontend.
+   */
+  async _tokenizar(d = {}) {
+    const customer_id = d.customer_id || this._ref(d);
+    if (!customer_id) return { status: 400, error: { code: 'INVALID_INPUT', message: 'customer_id requerido (el pagador al que se le guarda la tarjeta)', field: 'customer_id' } };
+    const cfg = this._sumupCfg(d);
+    if (!cfg.merchant) return { status: 500, error: { code: 'CONFIG_MISSING', message: 'falta pasarela.merchant_code' } };
+    if (!cfg.webhookUrl) return { status: 500, error: { code: 'CONFIG_MISSING', message: 'falta pasarela.webhook_url: sin aviso de SumUp no se sabe si el cliente consintió' } };
+
+    const c = await this._clientesDe(d);
+    if (c.error) return c.error;
+
+    // Alta idempotente: el cliente tiene que existir para poder ligarle la tarjeta.
+    const alta = await c.cli.alta({ customer_id, personal_details: d.personal_details || null });
+    if (alta.status !== 200) return alta;
+
+    const importe = Number.isInteger(d.monto_centimos) && d.monto_centimos > 0 ? d.monto_centimos : cfg.minCentimos;
+    const r = await this._sumupCheckout({
+      ...d, referencia: `tok-${customer_id}`.slice(0, REF_MAX), monto_centimos: importe,
+      concepto: d.concepto || 'Alta de tarjeta para pagos futuros',
+      purpose: 'SETUP_RECURRING_PAYMENT', customer_id
+    });
+    if (r.status !== 200) return r;
+
+    const coid = r.data.session_id;
+    // La página del widget la sirve ESTE módulo: el proyecto no escribe ni una línea.
+    const base = (() => { try { return new URL(cfg.webhookUrl).origin; } catch (_) { return ''; } })();
+    const slug = d.project_slug || this._pasarelaPara(d.project_id).project_slug || null;
+    const t = cfg.webhookToken ? `?t=${encodeURIComponent(cfg.webhookToken)}` : '';
+    const widget_url = slug ? `${base}/modules/pago-gateway/pago/widget/${encodeURIComponent(slug)}/${encodeURIComponent(coid)}${t}` : null;
+
+    await this._ledgerPut(d.project_id, {
+      checkout_id: coid,
+      checkout_reference: `tok-${customer_id}`.slice(0, REF_MAX),
+      referencia: String(customer_id),
+      pedido_id: String(customer_id),
+      canal: 'tokenizacion',
+      project_slug: slug,
+      customer_id,
+      monto_centimos: importe,
+      moneda: cfg.moneda,
+      estado: 'pendiente',
+      purpose: 'SETUP_RECURRING_PAYMENT',
+      creado: new Date().toISOString(),
+      reembolsos: []
+    });
+
+    return {
+      status: 200,
+      data: {
+        customer_id,
+        checkout_id: coid,
+        widget_url,
+        hosted_checkout_url: r.data.checkout_url,
+        expira_at: r.data.expira_at,
+        importe_autorizacion_centimos: importe,
+        aviso: 'la autorización se devuelve al instante; lo que queda es la tarjeta guardada con el consentimiento del cliente'
+      }
+    };
+  }
+
+  /**
+   * COBRO con la tarjeta guardada (recurrente / merchant-initiated), servidor-a-servidor.
+   * La referencia es la llave: si ese hecho ya está cobrado, NO se cobra otra vez.
+   */
+  async _cobrarGuardada(d = {}) {
+    const referencia = this._ref(d);
+    if (!referencia) return { status: 400, error: { code: 'INVALID_INPUT', message: 'referencia requerida' } };
+    const customer_id = d.customer_id || null;
+    const token = d.token || d.payment_instrument_token || null;
+    if (!customer_id || !token) {
+      return { status: 400, error: { code: 'INVALID_INPUT', message: 'customer_id y token requeridos (tarjeta guardada del cliente)' } };
+    }
+    if (!Number.isInteger(d.monto_centimos) || d.monto_centimos <= 0) {
+      return { status: 400, error: { code: 'INVALID_INPUT', message: 'monto_centimos (entero > 0) requerido' } };
+    }
+
+    // Idempotencia ANTES de tocar la API: un cobro confirmado no se repite nunca.
+    const previo = await this._ledgerBuscar(d.project_id, { referencia });
+    if (previo?.canal === 'guardada') {
+      if (previo.estado === 'confirmado') {
+        return { status: 409, error: { code: 'YA_PAGADO', message: 'esa referencia ya está cobrada con tarjeta guardada', transaction_id: previo.transaction_id || null } };
+      }
+      if (previo.estado === 'requiere_accion') {
+        return { status: 409, error: { code: 'REQUIERE_ACCION', message: 'hay un cobro pendiente de autenticación del banco: no se reintenta (sería un segundo cargo)', url: previo.requiere_accion?.url || null } };
+      }
+    }
+
+    const c = await this._clientesDe(d);
+    if (c.error) return c.error;
+    const out = await c.cli.cobrarConToken({
+      customer_id, token, referencia, importe_centimos: d.monto_centimos,
+      descripcion: d.concepto || d.descripcion || null, moneda: d.moneda || c.cfg.moneda,
+      checkout_id: previo?.canal === 'guardada' && previo.estado === 'pendiente' ? previo.checkout_id : null
+    });
+
+    if (out.status === 409 && out.error?.code === 'YA_PAGADO') {
+      return out;
+    }
+    if (out.status !== 200) return out;
+
+    const datos = out.data;
+    const entry = {
+      checkout_id: datos.checkout_id,
+      referencia,
+      pedido_id: referencia,
+      canal: 'guardada',
+      customer_id,
+      payment_instrument_token: token,
+      project_slug: d.project_slug || null,
+      monto_centimos: d.monto_centimos,
+      moneda: datos.moneda || c.cfg.moneda,
+      estado: datos.estado === 'confirmado' ? 'pendiente' : (datos.estado === 'requiere_accion' ? 'requiere_accion' : datos.estado),
+      creado: new Date().toISOString(),
+      reembolsos: []
+    };
+    if (datos.requiere_accion) entry.requiere_accion = datos.requiere_accion;
+    await this._ledgerPut(d.project_id, entry);
+
+    if (datos.estado === 'confirmado') {
+      // Se relee el checkout: la confirmación pasa SIEMPRE por el mismo camino (integridad incluida).
+      const t = await this._cuentaParaCobro(d.project_id);
+      if (!t.error) {
+        const co = await this._sumupCall('GET', `/v0.1/checkouts/${encodeURIComponent(datos.checkout_id)}`, { api_key: t.api_key });
+        if (co.ok) await this._confirmarSumup(co.data, { project_id: d.project_id, project_slug: d.project_slug, origen: 'guardada' });
+      }
+    } else if (datos.estado === 'rechazado') {
+      await this._rechazarSumup({ id: datos.checkout_id, checkout_reference: referencia, status: 'FAILED', amount: Number((d.monto_centimos / 100).toFixed(2)), currency: datos.moneda, transactions: [] },
+        { project_id: d.project_id, project_slug: d.project_slug, origen: 'guardada' });
+    }
+    return out;
+  }
+
   // ui_handlers
   async handlePagoIniciar(data) { return this._iniciar(data || {}); }
   async handlePagoCancelar(data) { return this._cancelar(data || {}); }
@@ -1308,6 +1999,20 @@ class PagoGatewayModule extends BaseModule {
   // Config de la pasarela DEL PROYECTO (lo que enciende el botón sin tocar código).
   async handlePagoConfigLeer(data) { return this._configLeer(data || {}); }
   async handlePagoConfigEscribir(data) { return this._configEscribir(data || {}); }
+  // QR, datáfono, clientes, tarjeta guardada y recurrencia (mismos puertos para todo proyecto).
+  async handlePagoQr(data) { return this._qr(data || {}); }
+  async handlePagoReaderListar(data) { return this._readerListar(data || {}); }
+  async handlePagoReaderParear(data) { return this._readerParear(data || {}); }
+  async handlePagoReaderEstado(data) { return this._readerEstado(data || {}); }
+  async handlePagoReaderCobrar(data) { return this._readerCobrar(data || {}); }
+  async handlePagoReaderConsultar(data) { return this._readerConsultar(data || {}); }
+  async handlePagoReaderTerminar(data) { return this._readerTerminar(data || {}); }
+  async handlePagoReaderCobrarGo(data) { return this._readerCobrarGo(data || {}); }
+  async handlePagoClienteAlta(data) { return this._clienteAlta(data || {}); }
+  async handlePagoClienteTarjetas(data) { return this._clienteTarjetas(data || {}); }
+  async handlePagoClienteBajaTarjeta(data) { return this._clienteBajaTarjeta(data || {}); }
+  async handlePagoTokenizar(data) { return this._tokenizar(data || {}); }
+  async handlePagoCobrarGuardada(data) { return this._cobrarGuardada(data || {}); }
 
   // ── WEBHOOK HTTP de la pasarela → pago.confirmado ──
   //   Stripe → firma HMAC (stripe-signature) del cuerpo.
@@ -1328,22 +2033,22 @@ class PagoGatewayModule extends BaseModule {
       }
       if (evt.type === 'checkout.session.completed' || evt.type === 'checkout.session.async_payment_succeeded') {
         const s = evt.data?.object || {};
-        const pedido_id = s.metadata?.pedido_id || null;
+        const referencia = s.metadata?.referencia || s.metadata?.pedido_id || null;
         const pagado = s.payment_status === 'paid' || s.status === 'complete';
-        if (pedido_id && pagado) {
+        if (referencia && pagado) {
           const meta = s.metadata || {};
           const contexto = {};
           for (const k of ['project_slug', 'cliente_nombre', 'cliente_telefono', 'canal_origen']) {
             if (meta[k] !== undefined && meta[k] !== '') contexto[k] = meta[k];
           }
           await this.eventBus.publish('pago.confirmado', {
-            pedido_id, project_id: meta.project_id || null,
+            referencia, pedido_id: referencia, project_id: meta.project_id || null,
             session_id: s.id, pasarela: 'stripe-checkout', monto_centimos: s.amount_total || null,
             ...contexto,
             correlation_id: crypto.randomUUID(), timestamp: new Date().toISOString()
           });
           this.metrics?.increment?.('pago.confirmado.total');
-          this.logger?.info('pago-gateway.confirmado', { pedido_id, session_id: s.id });
+          this.logger?.info('pago-gateway.confirmado', { referencia, session_id: s.id });
         }
       }
       return this._respond(res, 200, { received: true });
@@ -1373,7 +2078,8 @@ class PagoGatewayModule extends BaseModule {
     // OpenAPI ya publica checkouts.created/paid/updated/failed/expired. Se acepta toda la
     // familia (SumUp avisa de que añadirá eventos sin previo aviso) y el resto se ignora.
     const tipo = String(evt.event_type || '');
-    if (!/^checkouts?[._]/i.test(tipo) && tipo !== 'CHECKOUT_STATUS_CHANGED') {
+    const familiaReader = /^readers?[._]/i.test(tipo) || /reader/i.test(tipo);
+    if (!/^checkouts?[._]/i.test(tipo) && tipo !== 'CHECKOUT_STATUS_CHANGED' && !familiaReader) {
       // Doc: "New events may be introduced at any time... silently ignore unknown events."
       this.logger?.info('pago-gateway.sumup.evento_ignorado', { event_type: evt.event_type });
       return this._respond(res, 200, { received: true, ignorado: evt.event_type });
@@ -1382,6 +2088,16 @@ class PagoGatewayModule extends BaseModule {
     const checkout_id = evt.id || evt.checkout_id || evt.data?.id || evt.data?.checkout_id
       || evt.checkout?.id || evt.object?.id || null;
     if (!checkout_id) return this._respond(res, 400, { error: 'evento sin id' });
+
+    // EVENTO DE DATÁFONO: solo interesa si ese checkout lo abrimos NOSOTROS. Si no está en el
+    // libro, se ignora con 200 y sin gastar una llamada — la doc pide ignorar en silencio lo
+    // que no se reconoce, y un reader que no es nuestro no se puede verificar con nuestra clave.
+    if (familiaReader) {
+      const terminal = await this._webhookTerminal(project_id, req?.params?.project, checkout_id);
+      if (terminal) return this._respond(res, 200, { received: true, ...terminal });
+      this.logger?.info('pago-gateway.sumup.evento_reader_ajeno', { event_type: evt.event_type, checkout_id });
+      return this._respond(res, 200, { received: true, ignorado: evt.event_type });
+    }
 
     const cfg = this._sumupCfg({ project_id });
     const cred = await this._resolveCred(cfg.provider, cfg.project_id);
@@ -1398,7 +2114,12 @@ class PagoGatewayModule extends BaseModule {
       return this._respond(res, 503, { error: 'no se pudo verificar el checkout' });
     }
     if (r.status === 404) {
-      // La sesión ya no existe. No hay nada que confirmar y reintentar no lo arregla.
+      // La sesión ya no existe como checkout ONLINE. Pero puede ser un cobro PRESENCIAL: el
+      // checkout del lector vive en otra familia de endpoints. Si está en el libro como
+      // terminal, se reconsulta en el datáfono antes de dar el aviso por perdido.
+      const terminal = await this._webhookTerminal(project_id, req?.params?.project, checkout_id);
+      if (terminal) return this._respond(res, 200, { received: true, ...terminal });
+      // No hay nada que confirmar y reintentar no lo arregla.
       return this._respond(res, 200, { received: true, ignorado: 'checkout_not_found' });
     }
     if (!r.ok) {
@@ -1423,6 +2144,63 @@ class PagoGatewayModule extends BaseModule {
     }
     this.logger?.info('pago-gateway.sumup.webhook.no_pagado', { checkout_id, status: co?.status || null });
     return this._respond(res, 200, { received: true, estado: co?.status || null });
+  }
+
+  // ── PÁGINA DEL WIDGET (tokenización) ──
+  //   El consentimiento para guardar la tarjeta se recoge con el Payment Widget de SumUp, que
+  //   exige una página con su SDK. Esa página la sirve ESTE módulo, genérica para cualquier
+  //   proyecto: el negocio no escribe frontend ni toca su web. Los datos de la tarjeta van del
+  //   navegador a SumUp directamente — nunca pasan por aquí.
+  async handleWidget(req, res) {
+    const proyecto = req?.params?.project ? await this._proyectoPorSlug(req.params.project) : null;
+    const project_id = proyecto?.id || this.pasarela.project_id || null;
+    await this._asegurarConfig(project_id);
+    const p = this._pasarelaPara(project_id);
+    const esperado = p.webhook_token || null;
+    const recibido = req?.query?.t || req?.query?.token || null;
+    if (esperado && recibido !== esperado) return this._respond(res, 401, { error: 'token inválido' });
+
+    const checkout_id = req?.params?.checkout_id || null;
+    if (!checkout_id) return this._respond(res, 400, { error: 'checkout_id requerido' });
+
+    const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const html = '<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">'
+      + '<meta name="viewport" content="width=device-width,initial-scale=1">'
+      + '<title>Guardar tarjeta</title>'
+      + '<style>body{font-family:system-ui,sans-serif;margin:0;padding:24px;background:#f6f6f6;color:#111}'
+      + '.caja{max-width:420px;margin:0 auto;background:#fff;border-radius:14px;padding:20px;box-shadow:0 2px 10px rgba(0,0,0,.08)}'
+      + 'h1{font-size:18px;margin:0 0 6px}p{font-size:14px;line-height:1.4;color:#444;margin:0 0 14px}'
+      + '#estado{font-size:14px;margin-top:14px}</style></head><body><div class="caja">'
+      + '<h1>Guardar tarjeta para pagos futuros</h1>'
+      + '<p>No se te cobra nada ahora: SumUp hace una autorización y la devuelve al instante. '
+      + 'Solo se guarda la tarjeta con tu permiso.</p>'
+      + '<div id="sumup-card"></div><div id="estado"></div></div>'
+      + '<script src="https://gateway.sumup.com/gateway/ecom/card/v2/sdk.js"></script>'
+      + '<script>'
+      + 'var estado=document.getElementById("estado");'
+      + 'SumUpCard.mount({id:"sumup-card",checkoutId:' + JSON.stringify(String(checkout_id)) + ',onResponse:function(tipo,cuerpo){'
+      + 'if(tipo==="success"){estado.textContent="Tarjeta guardada. Ya puedes cerrar esta página.";}'
+      + 'else if(tipo==="error"){estado.textContent="No se pudo guardar la tarjeta: "+((cuerpo&&(cuerpo.message||cuerpo.error_message))||tipo);}'
+      + '}});'
+      + '</script></body></html>';
+    try {
+      if (res && typeof res.writeHead === 'function') {
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+        res.end(html);
+      }
+    } catch (_) {}
+    return { status: 200, html: true, checkout_id };
+  }
+
+  // Un evento que no es de un checkout online: ¿es un cobro en datáfono? Solo si el libro lo
+  // conoce como terminal; entonces la verdad se pide al lector.
+  async _webhookTerminal(project_id, project_slug, checkout_id) {
+    if (!project_id || !checkout_id) return null;
+    const entry = await this._ledgerBuscar(project_id, { checkout_id });
+    if (!entry || entry.canal !== 'terminal' || !entry.reader_id) return null;
+    const r = await this._readerConsultar({ project_id, project_slug, reader_id: entry.reader_id, checkout_id });
+    if (r.status !== 200) return { terminal: true, estado: 'sin_verificar' };
+    return { terminal: true, estado: r.data.estado_organo };
   }
 
   async _proyectoPorSlug(slug) {

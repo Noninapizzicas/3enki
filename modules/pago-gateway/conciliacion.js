@@ -183,7 +183,8 @@ class ConciliacionSumUp {
 
       if (item.type === 'CHARGE_BACK') {
         await this.d.publicar('pago.contracargo', {
-          pedido_id: entry?.pedido_id || null,
+          referencia: entry?.referencia || entry?.pedido_id || null,
+          pedido_id: entry?.referencia || entry?.pedido_id || null,
           project_slug: entry?.project_slug || slug || null,
           transaction_id: item.transaction_id,
           transaction_code: item.transaction_code || null,
@@ -197,7 +198,8 @@ class ConciliacionSumUp {
         emitidos++;
       } else if (item.type === 'REFUND') {
         await this.d.publicar('pago.reembolsado', {
-          pedido_id: entry?.pedido_id || null,
+          referencia: entry?.referencia || entry?.pedido_id || null,
+          pedido_id: entry?.referencia || entry?.pedido_id || null,
           session_id: entry?.checkout_id || null,
           transaction_id: item.transaction_id,
           monto_centimos: this._cent(item.amount),
@@ -227,7 +229,8 @@ class ConciliacionSumUp {
           if (devueltoSumup > devueltoNuestro) {
             const diferencia = devueltoSumup - devueltoNuestro;
             await this.d.publicar('pago.reembolsado', {
-              pedido_id: entry.pedido_id || null, session_id: entry.checkout_id || null,
+              referencia: entry.referencia || entry.pedido_id || null,
+              pedido_id: entry.referencia || entry.pedido_id || null, session_id: entry.checkout_id || null,
               transaction_id: entry.transaction_id || item.transaction_id,
               monto_centimos: diferencia,
               total_reembolsado_centimos: devueltoSumup,

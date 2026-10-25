@@ -295,14 +295,21 @@ async function test_reembolsar() {
   });
 
   await check('reembolsar: timeout = ESTADO_INCIERTO y NO se reintenta (no se devuelve dos veces)', async () => {
-    let llamadas = 0;
-    global.fetch = async () => { llamadas++; const e = new Error('timeout'); e.name = 'AbortError'; throw e; };
+    const llamadas = [];
+    global.fetch = async (url, opts = {}) => {
+      llamadas.push({ url: String(url), method: opts.method || 'GET' });
+      const e = new Error('timeout'); e.name = 'AbortError'; throw e;
+    };
     const { mod, bus } = await montar(CFG, { disco: conCobro() });
     const r = await mod.handlePagoReembolsar({ pedido_id: 'PED-1', project_id: PROYECTO.id });
     assert.strictEqual(r.status, 504);
     assert.strictEqual(r.error.code, 'ESTADO_INCIERTO');
-    assert.strictEqual(llamadas, 1, 'un reembolso no se repite a ciegas');
-    assert.strictEqual(bus.eventos('pago.reembolsado').length, 0);
+    // Lo que NO puede pasar: repetir el POST del reembolso a ciegas.
+    assert.strictEqual(llamadas.filter(c => /\/refunds$/.test(c.url)).length, 1, 'un reembolso no se repite a ciegas');
+    // Lo que SÍ hace ahora (v1.4): preguntarle a la transacción si el dinero salió.
+    assert.ok(llamadas.some(c => /transactions\?id=/.test(c.url)), 'tras el timeout debe reconsultar la transacción');
+    assert.ok(/desconocido/.test(r.error.message), r.error.message);
+    assert.strictEqual(bus.eventos('pago.reembolsado').length, 0, 'sin verificación no se canta un reembolso');
   });
 }
 

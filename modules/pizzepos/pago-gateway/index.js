@@ -31,6 +31,18 @@
  *      puede: reembolsos y contracargos hechos desde el panel de SumUp, cobros que no casan
  *      con ningún pedido (cobro.huerfano), y la liquidación diaria con la comisión REAL
  *      (cobro.liquidado). Sin él el sistema solo sabe lo que él mismo hizo.
+ *   8. REEMBOLSO QUE NO SE QUEDA EN EL LIMBO — un timeout o un 5xx de SumUp no se reintenta a
+ *      ciegas (podría devolver dos veces), pero tampoco se abandona: se RECONSULTA la
+ *      transacción (v2.1 transactions?id=) y sus eventos REFUND, y si el dinero ya salió se
+ *      registra como devuelto. Antes, ese caso quedaba "incierto" hasta el siguiente tick.
+ *   9. PREFLIGHT HONESTO — `pago.estado` dice si la cuenta PUEDE cobrar hoy (merchant válido,
+ *      moneda, país, métodos con tarjeta, webhook configurado) antes de encender el botón.
+ *      El fallo típico del alta (scope de pagos online sin activar) se ve aquí, no al cobrar.
+ *  10. TICKET DIGITAL — `pago.recibo` lee el recibo estructurado de SumUp (v1.1) de cualquier
+ *      cobro: importe, IVA, propina, autorización. Base de la factura simplificada.
+ *  11. A PRUEBA DE EVENTOS NUEVOS — SumUp puede añadir tipos de evento sin avisar (su doc lo
+ *      dice literal). Se acepta cualquier evento de la familia `checkout*` y se reconsulta
+ *      siempre: el payload no firmado nunca es prueba, pero tampoco se tira a la basura.
  */
 
 const crypto = require('crypto');
@@ -51,7 +63,7 @@ class PagoGatewayModule extends BaseModule {
   constructor() {
     super();
     this.name = 'pago-gateway';
-    this.version = '1.3.0';
+    this.version = '1.4.0';
     this._subs = [];
     this._confirmados = new Set();      // idempotencia caliente del webhook (SumUp reintenta 4 veces)
     this._rechazados = new Set();       // ídem para FAILED (SumUp manda el evento varias veces)
@@ -76,6 +88,8 @@ class PagoGatewayModule extends BaseModule {
     sub('pago.iniciar.request', e => this._onIniciarRequest(e));
     sub('pago.cancelar.request', e => this._onCancelarRequest(e));
     sub('pago.reembolsar.request', e => this._onReembolsarRequest(e));
+    sub('pago.estado.request', e => this._onRespuestaSimple(e, 'pago.estado.request', 'pago.estado.response', d => this._sumupEstado(d)));
+    sub('pago.recibo.request', e => this._onRespuestaSimple(e, 'pago.recibo.request', 'pago.recibo.response', d => this._sumupRecibo(d)));
 
     this._montarConciliacion();
     this._arrancarBarrido();
@@ -376,7 +390,14 @@ class PagoGatewayModule extends BaseModule {
       creado: new Date().toISOString(),
       valid_until: co.valid_until || validUntil,
       intento: out.intento,
-      reembolsos: []
+      reembolsos: [],
+      // Contexto que SumUp devuelve y que hace falta DESPUÉS: país de la cuenta (para cuadrar
+      // comisiones), tipo de checkout y el rastro de tokenización (tarjeta guardada del cliente).
+      checkout_type: co.checkout_type || null,
+      merchant_country: co.merchant_country || null,
+      purpose: co.purpose || purpose,
+      customer_id: co.customer_id || customerId || null,
+      ...(co.payment_instrument?.token ? { payment_instrument_token: co.payment_instrument.token } : {})
     });
 
     return {
@@ -543,7 +564,10 @@ class PagoGatewayModule extends BaseModule {
     await this._ledgerMark(project_id, co.id, {
       estado: 'confirmado', transaction_id: tx?.id || null,
       transaction_code: tx?.transaction_code || null,
-      confirmado_at: payload.timestamp, origen
+      confirmado_at: payload.timestamp, origen,
+      // Si el cobro trae la tarjeta tokenizada (checkout con customer_id), se guarda: es la
+      // puerta al "pide otra vez en dos toques" sin volver a teclear la tarjeta.
+      ...(co.payment_instrument?.token ? { payment_instrument_token: co.payment_instrument.token } : {})
     });
     this.metrics?.increment?.('pago.confirmado.total', { pasarela: 'sumup-checkout' });
     this.logger?.info('pago-gateway.confirmado', { pedido_id, session_id: co.id, origen });
@@ -681,18 +705,51 @@ class PagoGatewayModule extends BaseModule {
       `/v1.0/merchants/${encodeURIComponent(cfg.merchant)}/payments/${encodeURIComponent(transaction_id)}/refunds`,
       { api_key: cred.api_key, body, retry: false, timeout_ms: 20000 }
     );
-    if (r.network) {
-      // Puede haberse ejecutado igual. No se reintenta: se dice la verdad.
-      this.logger?.warn('pago-gateway.sumup.reembolso_estado_incierto', { transaction_id, code: r.code });
-      return { status: 504, error: { code: 'ESTADO_INCIERTO', message: 'SumUp no respondió al reembolso: puede haberse ejecutado. Verifica el estado antes de repetir.' } };
+    if (r.network || (r.status >= 500 && r.status < 600)) {
+      // Puede haberse ejecutado igual. NO se reintenta a ciegas (riesgo de devolver dos veces):
+      // se le pregunta a la transacción si el dinero salió.
+      this.logger?.warn('pago-gateway.sumup.reembolso_estado_incierto', { transaction_id, code: r.code, status: r.status });
+      const v = await this._reembolsoAplicado({
+        cfg, api_key: cred.api_key, transaction_id,
+        esperadoCentimos: total || null
+      });
+      if (v.aplicado) {
+        const out = await this._registrarReembolso({
+          d, entry, transaction_id, yaDevuelto,
+          devuelto: total || v.devuelto_centimos || entry?.monto_centimos || null,
+          resueltoPorReconsulta: true
+        });
+        this.logger?.info('pago-gateway.sumup.reembolso_resuelto_por_reconsulta', { transaction_id, devuelto: v.devuelto_centimos });
+        return out;
+      }
+      return {
+        status: 504,
+        error: {
+          code: 'ESTADO_INCIERTO',
+          message: v.conocido
+            ? 'SumUp no confirmó el reembolso al pedirlo y la transacción no muestra el REFUND: no se ha aplicado (o aún no figura). Reintenta pasado un minuto.'
+            : 'SumUp no respondió al reembolso y tampoco se pudo consultar la transacción: estado desconocido. Verifica antes de repetir.'
+        }
+      };
     }
     if (!r.ok) {
       this.logger?.warn('pago-gateway.sumup.reembolso_failed', { transaction_id, status: r.status });
       return this._errorDeSumup(r, 'SumUp reembolso');
     }
 
-    const devuelto = total || entry?.monto_centimos || null;
-    const reembolsos = [...(entry?.reembolsos || []), { monto_centimos: devuelto, at: new Date().toISOString() }];
+    return this._registrarReembolso({
+      d, entry, transaction_id, yaDevuelto,
+      devuelto: total || entry?.monto_centimos || null
+    });
+  }
+
+  // Registro único del reembolso (lo usen el camino directo o el resuelto por reconsulta).
+  async _registrarReembolso({ d, entry, transaction_id, yaDevuelto, devuelto, resueltoPorReconsulta = false }) {
+    const cobrado = entry?.monto_centimos || null;
+    const reembolsos = [...(entry?.reembolsos || []), {
+      monto_centimos: devuelto, at: new Date().toISOString(),
+      ...(resueltoPorReconsulta ? { resuelto_por_reconsulta: true } : {})
+    }];
     const completo = !!(cobrado && yaDevuelto + (devuelto || 0) >= cobrado);
     if (entry?.checkout_id) {
       await this._ledgerMark(d.project_id, entry.checkout_id, {
@@ -704,11 +761,15 @@ class PagoGatewayModule extends BaseModule {
       session_id: entry?.checkout_id || d.session_id || null,
       transaction_id, monto_centimos: devuelto,
       total_reembolsado_centimos: yaDevuelto + (devuelto || 0),
-      completo, pasarela: 'sumup-checkout',
+      completo, resuelto_por_reconsulta: resueltoPorReconsulta,
+      pasarela: 'sumup-checkout',
       correlation_id: crypto.randomUUID(), timestamp: new Date().toISOString()
     });
     this.metrics?.increment?.('pago.reembolsado.total', { pasarela: 'sumup-checkout' });
-    return { status: 200, data: { reembolsado: true, transaction_id, monto_centimos: devuelto, completo } };
+    return {
+      status: 200,
+      data: { reembolsado: true, transaction_id, monto_centimos: devuelto, completo, resuelto_por_reconsulta: resueltoPorReconsulta }
+    };
   }
 
   // ── qué métodos acepta ESTA cuenta (tarjeta, Apple/Google Pay, PayPal…) ──
@@ -733,6 +794,153 @@ class PagoGatewayModule extends BaseModule {
         bizum: false   // SumUp no ofrece Bizum en su catálogo de APMs (verificado 2026-10)
       }
     };
+  }
+
+  // ── PREFLIGHT: ¿puede esta cuenta cobrar HOY? ──
+  //   El alta de SumUp falla en sitios que no se ven hasta el primer cobro: scope de pagos
+  //   online sin activar, moneda de la cuenta distinta, país distinto. Esto lo dice antes.
+  async _sumupEstado(d = {}) {
+    const cfg = this._sumupCfg(d);
+    if (!cfg.merchant) return { status: 500, error: { code: 'CONFIG_MISSING', message: 'falta pasarela.merchant_code (el código M… de la cuenta SumUp)' } };
+    const cred = await this._resolveCred(cfg.provider);
+    if (cred.error) return { status: 500, error: { code: 'PERMISSION_DENIED', message: `credencial '${cfg.provider}': ${cred.error}` } };
+
+    const [m, met] = await Promise.all([
+      this._sumupCall('GET', `/v1/merchants/${encodeURIComponent(cfg.merchant)}`, { api_key: cred.api_key }),
+      this._sumupCall('GET', `/v0.1/merchants/${encodeURIComponent(cfg.merchant)}/payment-methods`, { api_key: cred.api_key })
+    ]);
+    if (!m.ok) return this._errorDeSumup(m, 'SumUp merchant');
+
+    const merchant = m.data || {};
+    const metodos = met.ok
+      ? (Array.isArray(met.data) ? met.data : (met.data?.items || met.data?.payment_methods || []))
+        .map(x => (typeof x === 'string' ? x : x?.id)).filter(Boolean)
+      : [];
+    const tieneTarjeta = metodos.includes('card');
+
+    const avisos = [];
+    const pais = String(merchant.country || merchant.merchant_country || '').toUpperCase() || null;
+    const monedaCuenta = String(merchant.default_currency || merchant.currency || '').toUpperCase() || null;
+    if (pais && pais !== 'ES') avisos.push(`la cuenta es de ${pais}, no de España: revisa país y métodos`);
+    if (monedaCuenta && monedaCuenta !== cfg.moneda) avisos.push(`la cuenta liquida en ${monedaCuenta} y la pasarela cobra en ${cfg.moneda}`);
+    if (!met.ok) avisos.push(`no se pudieron leer los métodos de pago (${met.status || met.code}): ¿API key sin scope?`);
+    else if (!tieneTarjeta) avisos.push('la cuenta NO tiene tarjeta activada para pagos online: pide el alta del scope online a SumUp');
+    if (!cfg.webhookUrl) avisos.push('sin pasarela.webhook_url: SumUp no avisará del cobro y el pedido no se liberaría solo');
+
+    // Lo que dice el libro de cobros del proyecto (si nos dan proyecto).
+    let libro = null;
+    if (d.project_id) {
+      const l = await this._ledgerLoad(d.project_id);
+      const todos = Object.values(l?.checkouts || {});
+      const ahora = Date.now();
+      const pendientes = todos.filter(e => e.estado === 'pendiente');
+      const hoy = new Date().toISOString().slice(0, 10);
+      libro = {
+        total: todos.length,
+        pendientes: pendientes.length,
+        pendientes_vencidos: pendientes.filter(e => e.valid_until && Date.parse(e.valid_until) < ahora).length,
+        confirmados_hoy: todos.filter(e => e.estado === 'confirmado' && String(e.confirmado_at || '').slice(0, 10) === hoy).length,
+        cobrado_hoy_centimos: todos
+          .filter(e => e.estado === 'confirmado' && String(e.confirmado_at || '').slice(0, 10) === hoy)
+          .reduce((s, e) => s + (Number(e.monto_centimos) || 0), 0),
+        ultimo_confirmado_at: todos.filter(e => e.confirmado_at).map(e => e.confirmado_at).sort().pop() || null
+      };
+    }
+
+    const puedoCobrar = m.ok && tieneTarjeta && !!cfg.webhookUrl;
+    return {
+      status: 200,
+      data: {
+        pasarela: this.pasarela.kind || null,
+        merchant_code: cfg.merchant,
+        merchant_nombre: merchant.merchant_name || merchant.company?.name || null,
+        merchant_pais: pais,
+        merchant_moneda: monedaCuenta,
+        moneda_configurada: cfg.moneda,
+        business_type: merchant.business_type || null,
+        metodos,
+        tarjeta: tieneTarjeta,
+        apple_pay: metodos.includes('apple_pay'),
+        google_pay: metodos.includes('google_pay'),
+        paypal: metodos.includes('paypal'),
+        bizum: false,
+        webhook_configurado: !!cfg.webhookUrl,
+        min_centimos: cfg.minCentimos,
+        ttl_minutos: cfg.ttlMin,
+        puedo_cobrar: puedoCobrar,
+        avisos,
+        libro
+      }
+    };
+  }
+
+  // ── RECIBO: el ticket estructurado de SumUp de un cobro (v1.1) ──
+  //   No se genera aquí: SumUp ya emite el recibo de cada transacción. Se lee y se normaliza
+  //   para poder mandarlo por WhatsApp o imprimirlo (base de la factura simplificada).
+  async _sumupRecibo(d = {}) {
+    const cfg = this._sumupCfg(d);
+    if (!cfg.merchant) return { status: 500, error: { code: 'CONFIG_MISSING', message: 'falta pasarela.merchant_code' } };
+    const entry = await this._ledgerBuscar(d.project_id, {
+      transaction_id: d.transaction_id, checkout_id: d.session_id, pedido_id: d.pedido_id
+    });
+    const transaction_id = d.transaction_id || entry?.transaction_id || null;
+    if (!transaction_id) {
+      return { status: 400, error: { code: 'INVALID_INPUT', message: 'sin transaction_id: ni en la petición ni en el libro de cobros' } };
+    }
+    const cred = await this._resolveCred(cfg.provider);
+    if (cred.error) return { status: 500, error: { code: 'PERMISSION_DENIED', message: `credencial '${cfg.provider}': ${cred.error}` } };
+
+    const q = new URLSearchParams({ mid: cfg.merchant });
+    if (d.tx_event_id) q.set('tx_event_id', String(d.tx_event_id));
+    const r = await this._sumupCall('GET', `/v1.1/receipts/${encodeURIComponent(transaction_id)}?${q.toString()}`, { api_key: cred.api_key });
+    if (!r.ok) return this._errorDeSumup(r, 'SumUp recibo');
+
+    const td = r.data?.transaction_data || {};
+    const num = v => (v === null || v === undefined || v === '' ? null : Number(v));
+    const cent = v => (Number.isFinite(num(v)) ? Math.round(num(v) * 100) : null);
+    const recibo = {
+      pedido_id: entry?.pedido_id || d.pedido_id || null,
+      transaction_id,
+      transaction_code: td.transaction_code || entry?.transaction_code || null,
+      fecha: td.timestamp || td.date || null,
+      total_centimos: cent(td.amount),
+      iva_centimos: cent(td.vat_amount),
+      propina_centimos: cent(td.tip_amount),
+      moneda: td.currency || entry?.moneda || cfg.moneda,
+      metodo: td.payment_type || td.simple_payment_type || null,
+      comercio: r.data?.merchant_data?.merchant_name || r.data?.merchant_data?.business_name || null,
+      autorizacion: r.data?.acquirer_data?.authorization_code || null,
+      crudo: r.data || null
+    };
+    await this.eventBus.publish('pago.recibo.obtenido', {
+      pedido_id: recibo.pedido_id, session_id: entry?.checkout_id || d.session_id || null,
+      transaction_id, total_centimos: recibo.total_centimos, iva_centimos: recibo.iva_centimos,
+      pasarela: 'sumup-checkout',
+      correlation_id: crypto.randomUUID(), timestamp: new Date().toISOString()
+    });
+    return { status: 200, data: recibo };
+  }
+
+  // ── ¿el reembolso que dio timeout llegó a ejecutarse? ──
+  //   SumUp no tiene idempotency-key para refunds: reintentar a ciegas puede devolver dos veces.
+  //   La verdad está en la transacción (v2.1 ?id=): sus eventos REFUND dicen si el dinero salió.
+  //   Devuelve { aplicado, conocido, devuelto_centimos }.
+  async _reembolsoAplicado({ cfg, api_key, transaction_id, esperadoCentimos = null }) {
+    const q = new URLSearchParams({ id: String(transaction_id) });
+    const r = await this._sumupCall('GET', `/v2.1/merchants/${encodeURIComponent(cfg.merchant)}/transactions?${q.toString()}`,
+      { api_key, timeout_ms: 12000 });
+    if (!r.ok || !r.data) return { aplicado: false, conocido: false, estado: r.status || r.code || null };
+    const t = Array.isArray(r.data) ? (r.data[0] || null) : r.data;
+    if (!t) return { aplicado: false, conocido: false, estado: 'sin_transaccion' };
+
+    const eventos = Array.isArray(t.events) ? t.events : [];
+    const refs = eventos.filter(e => String(e.event_type || '').toUpperCase() === 'REFUND');
+    const vivos = refs.filter(e => ['REFUNDED', 'SUCCESSFUL'].includes(String(e.status || '').toUpperCase()));
+    const devuelto = vivos.reduce((s, e) => s + (Number.isFinite(Number(e.amount)) ? Math.round(Number(e.amount) * 100) : 0), 0);
+    const aplicado = esperadoCentimos
+      ? devuelto >= esperadoCentimos
+      : vivos.length > 0;
+    return { aplicado, conocido: true, devuelto_centimos: devuelto, eventos_refund: refs.length, estado_transaccion: t.status || null };
   }
 
   // ── CONCILIACIÓN con la cuenta de SumUp (historial incremental + liquidación) ──
@@ -915,11 +1123,30 @@ class PagoGatewayModule extends BaseModule {
     } catch (_) {}
   }
 
+  // Envoltorio común para los puertos de solo-consulta (estado, recibo): correlan y responden.
+  async _onRespuestaSimple(event, eventoReq, eventoResp, fn) {
+    const d = event?.data || event || {};
+    let r;
+    try { r = await fn(d); }
+    catch (err) {
+      this.logger?.error('pago-gateway.rpc.fallo', { evento: eventoReq, error: err.message });
+      r = { status: 502, error: { code: 'UPSTREAM_UNREACHABLE', message: err.message } };
+    }
+    try {
+      this.eventBus.publish(eventoResp, {
+        request_id: d.request_id, correlation_id: d.correlation_id || crypto.randomUUID(),
+        timestamp: new Date().toISOString(), ...r
+      });
+    } catch (_) {}
+  }
+
   // ui_handlers
   async handlePagoIniciar(data) { return this._iniciar(data || {}); }
   async handlePagoCancelar(data) { return this._cancelar(data || {}); }
   async handlePagoReembolsar(data) { return this._sumupReembolsar(data || {}); }
   async handlePagoMetodos(data) { return this._sumupMetodos(data || {}); }
+  async handlePagoEstado(data) { return this._sumupEstado(data || {}); }
+  async handlePagoRecibo(data) { return this._sumupRecibo(data || {}); }
   async handlePagoConciliar(data) { return this._conciliar(data || {}); }
 
   // ── WEBHOOK HTTP de la pasarela → pago.confirmado ──
@@ -977,12 +1204,18 @@ class PagoGatewayModule extends BaseModule {
         return this._respond(res, 401, { error: 'token inválido' });
       }
     }
-    if (evt.event_type !== 'CHECKOUT_STATUS_CHANGED') {
+    // Familia de eventos de checkout. La doc pública documenta CHECKOUT_STATUS_CHANGED; la spec
+    // OpenAPI ya publica checkouts.created/paid/updated/failed/expired. Se acepta toda la
+    // familia (SumUp avisa de que añadirá eventos sin previo aviso) y el resto se ignora.
+    const tipo = String(evt.event_type || '');
+    if (!/^checkouts?[._]/i.test(tipo) && tipo !== 'CHECKOUT_STATUS_CHANGED') {
       // Doc: "New events may be introduced at any time... silently ignore unknown events."
       this.logger?.info('pago-gateway.sumup.evento_ignorado', { event_type: evt.event_type });
       return this._respond(res, 200, { received: true, ignorado: evt.event_type });
     }
-    const checkout_id = evt.id;
+    // El id puede venir en la raíz (formato documentado) o dentro del objeto del evento.
+    const checkout_id = evt.id || evt.checkout_id || evt.data?.id || evt.data?.checkout_id
+      || evt.checkout?.id || evt.object?.id || null;
     if (!checkout_id) return this._respond(res, 400, { error: 'evento sin id' });
 
     const cfg = this._sumupCfg({});

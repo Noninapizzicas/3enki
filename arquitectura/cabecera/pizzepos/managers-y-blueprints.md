@@ -656,7 +656,11 @@ kind alternativo; cambiar de pasarela es cambiar pasarela.kind, no tocar el call
                   perdido) · PENDING vencido → DELETE (link muerto no se paga)
   pago.cancelar    → DELETE; 409 CHECKOUT_PROCESSED + PAID → confirma, no cancela
   pago.reembolsar  → POST /v1.0/merchants/{mc}/payments/{tx}/refunds (total o parcial), tope por
-                     libro y SIN reintento en timeout (ESTADO_INCIERTO: se verifica, no se repite)
+                     libro y SIN reintento en timeout. Si SumUp no contesta (red o 5xx), el
+                     adapter PREGUNTA a la transacción: GET /v2.1/merchants/{mc}/transactions?id=
+                     → eventos REFUND con status REFUNDED/SUCCESSFUL. Con rastro → se registra
+                     pago.reembolsado (resuelto_por_reconsulta:true); sin rastro → 504
+                     ESTADO_INCIERTO diciendo cuál de las dos cosas pasa. Nunca se repite el POST.
   FAILED        → pago.rechazado (el cliente sabe que la tarjeta falló)
   pago.confirmado lleva el transaction BUENO (no transactions[0]): transaction_code, entry_mode,
   auth_code, propina_centimos, iva_centimos. project_id se resuelve por el :project del path.
@@ -676,6 +680,29 @@ kind alternativo; cambiar de pasarela es cambiar pasarela.kind, no tocar el call
     GET /v1.0/merchants/{mc}/payouts?start_date&end_date  (una vez por día cerrado)
       → cobro.liquidado {bruto, comision REAL (sum fee), deducciones, neto}   ← el cuadre de caja
   Tick cada 15 min (pasarela.conciliacion{activo, intervalo_ms}); a mano: pago.conciliar.
+
+  COMPLETO (v1.4) → lo que hace que la integración sea de producción y no un MVP:
+  pago.estado   → PREFLIGHT REAL antes de encender el botón: GET /v1/merchants/{mc} (país, moneda
+                  por defecto, business_type) + payment-methods + webhook configurado + libro del
+                  proyecto (pendientes, vencidos, cobrado_hoy). Devuelve puedo_cobrar y los
+                  avisos que lo impiden: el fallo clásico del alta —scope de pagos online sin
+                  activar, que se manifiesta como cuenta sin método 'card'— se ve AQUÍ.
+  pago.recibo   → GET /v1.1/receipts/{tx}?mid={mc} → ticket estructurado (total, IVA, propina,
+                  método, autorización, comercio) normalizado a céntimos + pago.recibo.obtenido.
+                  SumUp ya emite el recibo: aquí se lee, no se inventa. Base de la factura
+                  simplificada que se manda por WhatsApp.
+  webhook       → acepta TODA la familia de eventos de checkout (la doc documenta
+                  CHECKOUT_STATUS_CHANGED; la spec ya publica checkouts.created/paid/updated/
+                  failed/expired) y busca el id en la raíz o dentro del evento. Los eventos que
+                  no son de checkout (readers.*, members.*, roles.*) se ignoran con 200 y sin
+                  gastar una llamada. Se reconsulta SIEMPRE: el payload no firmado no es prueba.
+  libro         → guarda checkout_type, merchant_country, purpose, customer_id y
+                  payment_instrument_token: el rastro de la tarjeta guardada. La tokenización
+                  completa (purpose SETUP_RECURRING_PAYMENT + cobro con token) exige Payment
+                  Widget en página propia, no Hosted Checkout: es un salto de arquitectura, no
+                  una línea. El dato ya se persiste para cuando se dé.
+  Sin Bizum: SumUp no lo ofrece en España (catálogo APM verificado 2026-10: Apple Pay, Google
+  Pay, PayPal, SumUp Pay). Si algún día se quiere Bizum, es otra pasarela, no otra config.
 
 EL HUÉRFANO (por qué existe la recreación): los pedidos de tienda viven en MEMORIA y no se
 restauran. El pago es asíncrono (el webhook llega minutos después), así que un reinicio en esa

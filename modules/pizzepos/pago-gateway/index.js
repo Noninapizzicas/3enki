@@ -24,29 +24,43 @@
  *   4. WEBHOOK VERIFICADO — SumUp no firma: se reconsulta el checkout y solo PAID confirma.
  *   5. REEMBOLSOS — v1.0 merchant-scoped, con tope por libro; sin reintento automático (un
  *      timeout en un reembolso es estado incierto, no se repite a ciegas).
+ *   6. INTEGRIDAD DEL IMPORTE — un checkout PAID que no cuadra con lo pedido (menos el importe
+ *      de la propina, que el cliente puede añadir en la pantalla de SumUp) NO se confirma:
+ *      se emite pago.importe_discrepante. Confirmar sin cuadrar es regalar el pedido.
+ *   7. CONCILIACIÓN CON LA CUENTA — el órgano `conciliacion.js` cierra lo que el barrido no
+ *      puede: reembolsos y contracargos hechos desde el panel de SumUp, cobros que no casan
+ *      con ningún pedido (cobro.huerfano), y la liquidación diaria con la comisión REAL
+ *      (cobro.liquidado). Sin él el sistema solo sabe lo que él mismo hizo.
  */
 
 const crypto = require('crypto');
 const BaseModule = require('../../_shared/base-module');
+const ConciliacionSumUp = require('./conciliacion');
 
 const SUMUP_API = 'https://api.sumup.com';
 const LEDGER_PATH = '/pizzepos/pago/checkouts.json';   // relativo al storage del proyecto
+const CONCILIACION_PATH = '/pizzepos/pago/conciliacion.json';
 const LEDGER_MAX = 800;
 const REF_MAX = 60;                                    // deja sitio al sufijo #n (máx SumUp: 64)
 const SUMUP_TIMEOUT_MS = 8000;                        // el cliente está esperando el link
+const SUMUP_WEBHOOK_TIMEOUT_MS = 4000;                // el webhook se responde RÁPIDO (si tarda, SumUp lo da por fallido)
 const FS_TIMEOUT_MS = 3000;
+const SUMUP_PURPOSES = new Set(['CHECKOUT', 'SETUP_RECURRING_PAYMENT']);
 
 class PagoGatewayModule extends BaseModule {
   constructor() {
     super();
     this.name = 'pago-gateway';
-    this.version = '1.2.0';
+    this.version = '1.3.0';
     this._subs = [];
     this._confirmados = new Set();      // idempotencia caliente del webhook (SumUp reintenta 4 veces)
     this._rechazados = new Set();       // ídem para FAILED (SumUp manda el evento varias veces)
     this._ledger = new Map();           // project_id → { checkouts: { [checkout_id]: entry } }
     this._ledgerCargado = new Set();    // project_id ya leído de disco
     this._ledgerNoDisponible = new Map(); // project_id → ts hasta el que no se reintenta leer
+    this._conciEstado = new Map();      // project_id → { history_cursor, payouts_hasta, vistos[] }
+    this._conci = null;
+    this._conciTimer = null;
     this._barrido = null;
     this._barriendo = false;
   }
@@ -63,17 +77,20 @@ class PagoGatewayModule extends BaseModule {
     sub('pago.cancelar.request', e => this._onCancelarRequest(e));
     sub('pago.reembolsar.request', e => this._onReembolsarRequest(e));
 
+    this._montarConciliacion();
     this._arrancarBarrido();
 
     this.logger?.info('module.loaded', {
       module: this.name, version: this.version,
       pasarela: this.pasarela.kind || '(sin configurar)', provider: this.pasarela.provider || null,
-      ttl_min: this._ttlMinutos(), barrido: this._barridoActivo()
+      ttl_min: this._ttlMinutos(), barrido: this._barridoActivo(),
+      conciliacion: this._conciliacionActiva()
     });
   }
 
   async onUnload() {
     if (this._barrido) { clearInterval(this._barrido); this._barrido = null; }
+    if (this._conciTimer) { clearInterval(this._conciTimer); this._conciTimer = null; }
     for (const u of this._subs) { try { u(); } catch (_) {} }
     this._subs = [];
     this.logger?.info('module.unloaded', { module: this.name });
@@ -251,7 +268,7 @@ class PagoGatewayModule extends BaseModule {
 
   // Crear checkout REUTILIZANDO el existente si la referencia ya está tomada.
   // Dos links vivos para el mismo pedido = dos cobros posibles. Eso no se hace.
-  async _sumupCrearOReusar({ api_key, cfg, base, monto_centimos, concepto, validUntil }) {
+  async _sumupCrearOReusar({ api_key, cfg, base, monto_centimos, concepto, validUntil, purpose = null, customerId = null }) {
     let ultimo = null;
     for (let intento = 0; intento < 3; intento++) {
       const ref = intento === 0 ? base : `${base}#${intento}`;
@@ -266,6 +283,10 @@ class PagoGatewayModule extends BaseModule {
         valid_until: validUntil
       };
       if (cfg.clienteUrl) body.redirect_url = cfg.clienteUrl;
+      // FUTURO YA CABLEADO: el día que haya cliente de siempre (tarjeta guardada), el adapter
+      // no cambia — solo llega `customer_id` y `purpose: SETUP_RECURRING_PAYMENT` desde el caller.
+      if (purpose && purpose !== 'CHECKOUT') body.purpose = purpose;
+      if (customerId) body.customer_id = customerId;
       if (cfg.webhookToken) {
         const u = new URL(cfg.webhookUrl);
         u.searchParams.set('t', cfg.webhookToken);
@@ -326,9 +347,11 @@ class PagoGatewayModule extends BaseModule {
     const concepto = (d.concepto || `Pedido ${d.pedido_id}`).slice(0, 120);
     const base = String(d.checkout_reference || d.pedido_id).replace(/#/g, '-').slice(0, REF_MAX);
     const validUntil = new Date(Date.now() + cfg.ttlMin * 60000).toISOString();
+    const purpose = SUMUP_PURPOSES.has(String(d.purpose || '').toUpperCase()) ? String(d.purpose).toUpperCase() : 'CHECKOUT';
+    const customerId = d.customer_id || null;
 
     const out = await this._sumupCrearOReusar({
-      api_key: cred.api_key, cfg, base, monto_centimos: d.monto_centimos, concepto, validUntil
+      api_key: cred.api_key, cfg, base, monto_centimos: d.monto_centimos, concepto, validUntil, purpose, customerId
     });
 
     if (!out.ok) {
@@ -463,12 +486,40 @@ class PagoGatewayModule extends BaseModule {
     const pedido_id = String(co.checkout_reference || '').split(/[#@]/)[0] || null;
     if (!pedido_id) return { confirmado: false, motivo: 'sin_checkout_reference' };
 
-    const yaConfirmado = this._confirmados.has(co.id) || !!(await this._ledgerBuscar(project_id, { checkout_id: co.id }))?.transaction_id;
+    const entry = await this._ledgerBuscar(project_id, { checkout_id: co.id });
+    const yaConfirmado = this._confirmados.has(co.id) || !!entry?.transaction_id;
     if (yaConfirmado) return { confirmado: false, motivo: 'duplicado', pedido_id };
 
     const montoCentimos = tx && Number.isFinite(Number(tx.amount))
       ? Math.round(Number(tx.amount) * 100)
       : (Number.isFinite(Number(co.amount)) ? Math.round(Number(co.amount) * 100) : null);
+    const propinaCentimos = Number.isFinite(Number(tx?.tip_amount)) ? Math.round(Number(tx.tip_amount) * 100) : null;
+
+    // ── INTEGRIDAD DEL COBRO: lo que entra tiene que ser lo que se pidió ──
+    //   Subcobro = se cobró menos de lo pedido → el pedido no se entrega por ese precio.
+    //   Sobrecobro = solo admisible si la propina que el cliente añadió en SumUp lo explica.
+    const discrepancia = this._cuadraCobro({ entry, co, montoCentimos, propinaCentimos });
+    if (discrepancia) {
+      await this.eventBus.publish('pago.importe_discrepante', {
+        pedido_id,
+        project_id: project_id || this.pasarela.project_id || null,
+        project_slug,
+        session_id: co.id,
+        transaction_id: tx?.id || null,
+        esperado_centimos: discrepancia.esperado,
+        cobrado_centimos: discrepancia.cobrado,
+        propina_centimos: propinaCentimos,
+        motivo: discrepancia.motivo,
+        moneda_esperada: discrepancia.monedaEsperada || null,
+        moneda_cobrada: discrepancia.monedaCobrada || null,
+        pasarela: 'sumup-checkout', origen,
+        correlation_id: crypto.randomUUID(), timestamp: new Date().toISOString()
+      });
+      if (entry?.checkout_id) await this._ledgerMark(project_id, co.id, { estado: 'discrepante', discrepancia: discrepancia.motivo });
+      this.metrics?.increment?.('pago.importe_discrepante.total', { motivo: discrepancia.motivo });
+      this.logger?.warn('pago-gateway.importe_discrepante', { pedido_id, session_id: co.id, ...discrepancia });
+      return { confirmado: false, motivo: 'importe_discrepante', pedido_id, discrepancia };
+    }
 
     const payload = {
       pedido_id,
@@ -480,7 +531,7 @@ class PagoGatewayModule extends BaseModule {
       entry_mode: tx?.entry_mode || null,              // CUSTOMER_ENTRY · APPLE_PAY · GOOGLE_PAY · PAYPAL…
       auth_code: tx?.auth_code || null,
       monto_centimos: montoCentimos,
-      propina_centimos: Number.isFinite(Number(tx?.tip_amount)) ? Math.round(Number(tx.tip_amount) * 100) : null,
+      propina_centimos: propinaCentimos,
       iva_centimos: Number.isFinite(Number(tx?.vat_amount)) ? Math.round(Number(tx.vat_amount) * 100) : null,
       moneda: co.currency || null,
       pasarela: 'sumup-checkout',
@@ -491,11 +542,43 @@ class PagoGatewayModule extends BaseModule {
     this._marcarConfirmado(co.id);
     await this._ledgerMark(project_id, co.id, {
       estado: 'confirmado', transaction_id: tx?.id || null,
+      transaction_code: tx?.transaction_code || null,
       confirmado_at: payload.timestamp, origen
     });
     this.metrics?.increment?.('pago.confirmado.total', { pasarela: 'sumup-checkout' });
     this.logger?.info('pago-gateway.confirmado', { pedido_id, session_id: co.id, origen });
     return { confirmado: true, pedido_id };
+  }
+
+  /**
+   * ¿El cobro cuadra con el pedido? Devuelve null si cuadra (o si no hay con qué comparar) y
+   * { motivo, esperado, cobrado } si no.
+   *
+   *   PRECONDICIÓN: `entry` es la fila del libro creada al abrir el link; ahí está el importe
+   *   que el negocio pidió. Sin fila no se juzga (webhook de un checkout ajeno a nosotros: lo
+   *   caza la conciliación como cobro.huerfano, no este guarda).
+   */
+  _cuadraCobro({ entry, co, montoCentimos, propinaCentimos }) {
+    const esperado = Number.isInteger(entry?.monto_centimos) ? entry.monto_centimos : null;
+    const monedaEsperada = entry?.moneda ? String(entry.moneda).toUpperCase() : null;
+    const monedaCobrada = co?.currency ? String(co.currency).toUpperCase() : null;
+
+    if (monedaEsperada && monedaCobrada && monedaEsperada !== monedaCobrada) {
+      return { motivo: 'moneda', esperado, cobrado: montoCentimos, monedaEsperada, monedaCobrada };
+    }
+    if (esperado === null || montoCentimos === null) return null;
+
+    if (montoCentimos < esperado) {
+      return { motivo: 'importe_insuficiente', esperado, cobrado: montoCentimos, monedaEsperada, monedaCobrada };
+    }
+    // Sobrecobro: solo lo explica la propina que el cliente añade en la pantalla de SumUp
+    // (el importe cobrado la incluye). Un céntimo de holgura por redondeo.
+    const exceso = montoCentimos - esperado;
+    const explicado = (Number.isFinite(propinaCentimos) ? propinaCentimos : 0) + 1;
+    if (exceso > explicado) {
+      return { motivo: 'importe_excesivo', esperado, cobrado: montoCentimos, monedaEsperada, monedaCobrada };
+    }
+    return null;
   }
 
   async _rechazarSumup(co, { project_id = null, project_slug = null, origen = 'webhook' } = {}) {
@@ -652,6 +735,85 @@ class PagoGatewayModule extends BaseModule {
     };
   }
 
+  // ── CONCILIACIÓN con la cuenta de SumUp (historial incremental + liquidación) ──
+  //   El barrido pregunta "¿mi checkout se pagó?"; esto pregunta "¿qué ha pasado en la cuenta
+  //   que yo no sé?": reembolsos/contracargos desde el panel, cobros sin pedido, y el neto real.
+  _conciliacionActiva() {
+    const c = this.pasarela?.conciliacion;
+    if (c && c.activo === false) return false;
+    return this.pasarela.kind === 'sumup-checkout' || this.pasarela.kind === 'sumup';
+  }
+
+  _montarConciliacion() {
+    if (!this._conciliacionActiva()) return;
+    this._conci = new ConciliacionSumUp({
+      cfg: () => this._sumupCfg({}),
+      resolveCred: p => this._resolveCred(p),
+      call: (m, path, opts) => this._sumupCall(m, path, opts),
+      cargarLibro: pid => this._ledgerLoad(pid),
+      buscarTx: async (pid, ids) => {
+        const libro = await this._ledgerLoad(pid);
+        const todos = Object.values(libro?.checkouts || this._ledger.get(pid || '_sin_proyecto')?.checkouts || {});
+        return todos.find(e => (ids.transaction_id && e.transaction_id === ids.transaction_id)
+          || (ids.transaction_code && e.transaction_code === ids.transaction_code)) || null;
+      },
+      marcar: (pid, cid, patch) => this._ledgerMark(pid, cid, patch),
+      leerEstado: pid => this._conciEstadoLoad(pid),
+      guardarEstado: (pid, e) => this._conciGuardar(pid, e),
+      publicar: (ev, payload) => this.eventBus.publish(ev, payload),
+      logger: this.logger, metrics: this.metrics
+    });
+
+    const cfgMs = Number(this.pasarela?.conciliacion?.intervalo_ms);
+    const ms = Number.isFinite(cfgMs) && cfgMs >= 60000 ? cfgMs : 15 * 60000;
+    const tick = () => { this._conciliar({}).catch(err => this.logger?.warn('pago-gateway.conciliacion.fallo', { error: err.message })); };
+    this._conciTimer = setInterval(tick, ms);
+    if (typeof this._conciTimer.unref === 'function') this._conciTimer.unref();
+    const primer = setTimeout(tick, 90000);           // no competir con el arranque del core
+    if (typeof primer.unref === 'function') primer.unref();
+  }
+
+  async _conciEstadoLoad(project_id) {
+    if (!project_id) return null;
+    if (this._conciEstado.has(project_id)) return this._conciEstado.get(project_id);
+    const r = await this._rpc('fs.read.request', { project_id, path: CONCILIACION_PATH }, { timeout_ms: FS_TIMEOUT_MS });
+    let est = { history_cursor: null, payouts_hasta: null, vistos: [] };
+    if (r && r.success !== false && typeof r.content === 'string') {
+      try { const j = JSON.parse(r.content); if (j && typeof j === 'object') est = { ...est, ...j }; } catch (_) {}
+    }
+    this._conciEstado.set(project_id, est);
+    return est;
+  }
+
+  async _conciGuardar(project_id, estado) {
+    if (!project_id || !estado) return false;
+    this._conciEstado.set(project_id, estado);
+    const r = await this._rpc('fs.write.request', {
+      project_id, path: CONCILIACION_PATH, content: JSON.stringify(estado, null, 2), encoding: 'utf-8', atomic: true
+    }, { timeout_ms: FS_TIMEOUT_MS });
+    return !!(r && r.success !== false);
+  }
+
+  // Conciliar a mano un proyecto (o todos). Devuelve lo que ha visto, no una promesa vacía.
+  async _conciliar(d = {}) {
+    if (!this._conci) this._montarConciliacion();
+    if (!this._conci) {
+      return { status: 501, error: { code: 'NOT_IMPLEMENTED', message: 'conciliación solo para pasarelas SumUp' } };
+    }
+    const proyectos = [];
+    if (d.project_id) {
+      proyectos.push({ id: d.project_id, slug: d.project_slug || null });
+    } else {
+      const r = await this._rpc('project.list.request', {}, { timeout_ms: 4000 });
+      for (const p of (r?.projects || [])) if (p?.id) proyectos.push({ id: p.id, slug: p.slug || null });
+      if (this.pasarela.project_id && !proyectos.some(p => p.id === this.pasarela.project_id)) {
+        proyectos.push({ id: this.pasarela.project_id, slug: this.pasarela.project_slug || null });
+      }
+    }
+    const resumen = await this._conci.tick(proyectos);
+    return { status: 200, data: resumen };
+  }
+
   // ── barrido de reconciliación: si el webhook se pierde, el pago no se pierde ──
   _barridoActivo() {
     const b = this.pasarela?.barrido;
@@ -758,6 +920,7 @@ class PagoGatewayModule extends BaseModule {
   async handlePagoCancelar(data) { return this._cancelar(data || {}); }
   async handlePagoReembolsar(data) { return this._sumupReembolsar(data || {}); }
   async handlePagoMetodos(data) { return this._sumupMetodos(data || {}); }
+  async handlePagoConciliar(data) { return this._conciliar(data || {}); }
 
   // ── WEBHOOK HTTP de la pasarela → pago.confirmado ──
   //   Stripe → firma HMAC (stripe-signature) del cuerpo.
@@ -827,7 +990,11 @@ class PagoGatewayModule extends BaseModule {
     // 5xx a propósito: SumUp reintenta (1min, 5min, 20min, 2h). Un 2xx aquí perdería el aviso.
     if (cred.error) return this._respond(res, 503, { error: `credencial '${cfg.provider}': ${cred.error}` });
 
-    const r = await this._sumupCall('GET', `/v0.1/checkouts/${encodeURIComponent(checkout_id)}`, { api_key: cred.api_key });
+    // Un solo intento y timeout corto: la doc es literal — «reply as soon as possible. If the
+    // response takes longer, our system accepts this as a failed notification and retries it».
+    // Mejor un 503 en 4 s (reintenta en 1 min) que un 200 tardío que SumUp da por perdido.
+    const r = await this._sumupCall('GET', `/v0.1/checkouts/${encodeURIComponent(checkout_id)}`,
+      { api_key: cred.api_key, retry: false, timeout_ms: SUMUP_WEBHOOK_TIMEOUT_MS });
     if (r.network || (!r.ok && r.status >= 500)) {
       this.logger?.warn('pago-gateway.sumup.webhook.sin_verificar', { checkout_id, status: r.status, code: r.code });
       return this._respond(res, 503, { error: 'no se pudo verificar el checkout' });

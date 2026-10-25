@@ -15922,6 +15922,12 @@ CLASE WhatsappBotModule HEREDA BaseModule {  // ── el INSIDER que re-tasa
 //   _decodificarEstructura: localiza la línea '#P1 <base64url>', decodifica → { v:1, items }. Corrupto → null.
 ```
 
+> **Declaración del manifest (v3 de pago-gateway).** `modules/whatsapp-bot/module.json` declara
+> `pago-gateway` como dependencia con la ruta de PLATAFORMA (`modules/pago-gateway`, ya no bajo
+> `modules/pizzepos/`): el bot es consumidor del órgano de cobro, no dueño de la vertical. El
+> nombre del módulo no cambia (el loader monta por `manifest.name`, no por carpeta), así que la
+> ruta HTTP del webhook de este bot sigue siendo la de siempre.
+
 ## WhatsApp Cloud API — OPERATIVO end-to-end (v1.5.0) · webhook real de Meta + alta por UI
 
 > Estado: VIVO en producción (enki-ai.online, proyecto nonina). El transporte ÚNICO es el

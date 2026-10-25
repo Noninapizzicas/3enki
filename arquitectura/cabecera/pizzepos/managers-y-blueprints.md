@@ -661,6 +661,22 @@ kind alternativo; cambiar de pasarela es cambiar pasarela.kind, no tocar el call
   pago.confirmado lleva el transaction BUENO (no transactions[0]): transaction_code, entry_mode,
   auth_code, propina_centimos, iva_centimos. project_id se resuelve por el :project del path.
 
+  INTEGRIDAD (v1.3) → un PAID que no cuadra con el libro NO se confirma: pago.importe_discrepante
+  {esperado, cobrado, motivo}. Subcobro siempre discrepa; el sobrecobro solo se admite si la
+  propina que el cliente añadió en SumUp lo explica (el importe cobrado la incluye). Y el webhook
+  verifica con UN intento y 4 s: SumUp da por fallida la notificación que tarda.
+
+  CONCILIACIÓN (v1.3, conciliacion.js) → lo que el barrido no puede saber: qué pasa en la CUENTA.
+  Cursor incremental en storage/pizzepos/pago/conciliacion.json (no se avanza si el tick falla):
+    GET /v2.1/merchants/{mc}/transactions/history?changes_since&payment_types[]=ECOM&order=ascending
+      → reembolso hecho en el panel  → pago.reembolsado (SOLO la diferencia de refunded_amount)
+      → contracargo                   → pago.contracargo
+      → SUCCESSFUL que no casa        → cobro.huerfano (dinero cobrado sin pedido: se avisa)
+      dedupe durable por TIPO:transaction_id (vistos, tope 1000)
+    GET /v1.0/merchants/{mc}/payouts?start_date&end_date  (una vez por día cerrado)
+      → cobro.liquidado {bruto, comision REAL (sum fee), deducciones, neto}   ← el cuadre de caja
+  Tick cada 15 min (pasarela.conciliacion{activo, intervalo_ms}); a mano: pago.conciliar.
+
 EL HUÉRFANO (por qué existe la recreación): los pedidos de tienda viven en MEMORIA y no se
 restauran. El pago es asíncrono (el webhook llega minutos después), así que un reinicio en esa
 ventana —un DEPLOY, justo— dejaría el dinero cobrado y el pedido inexistente, en silencio. Se
@@ -670,7 +686,8 @@ pedido.pagado con recreado:true. El dinero nunca se pierde sin rastro. Nada que 
 config DEL PROYECTO: la pasarela se enciende por proyecto (pago-gateway lee
 core.config['pago-gateway'] || moduleConfig). SumUp: kind sumup-checkout, provider SUMUP, moneda,
 merchant_code, webhook_url (NUESTRO endpoint, y sin él el adapter falla en voz alta), webhook_token,
-return_url (vuelta del cliente), ttl_minutos, min_centimos, barrido{activo, intervalo_ms}.
+return_url (vuelta del cliente), ttl_minutos, min_centimos, barrido{activo, intervalo_ms},
+conciliacion{activo, intervalo_ms}.
 Stripe: kind stripe-checkout, provider STRIPE, webhook_secret. Sin bloque y sin credencial de la
 pasarela configurada → degrada (NO_PASARELA / PERMISSION_DENIED), no rompe: el pedido ya existe y
 se paga al recoger.

@@ -2275,7 +2275,11 @@ class PagoGatewayModule extends BaseModule {
         res.end(html);
       }
     } catch (_) {}
-    return { status: 200, html: true, checkout_id };
+    // El gateway sirve HTML por la convención `_html` + `_contentType`
+    // (core/gateway/http.js:577-586). Si devolviéramos `status`, ganaría la rama JSON
+    // y el navegador recibiría 0 bytes (verificado en prod 26-10: GET
+    // …/pago/widget/the-pirate/abc123 → 200, application/json, content-length 0).
+    return { _html: html, _contentType: 'text/html; charset=utf-8' };
   }
 
   // Un evento que no es de un checkout online: ¿es un cobro en datáfono? Solo si el libro lo
@@ -2317,7 +2321,11 @@ class PagoGatewayModule extends BaseModule {
     try {
       if (res && typeof res.writeHead === 'function') { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(body)); }
     } catch (_) {}
-    return { status, ...body };
+    // Contrato del HTTPGateway (core/gateway/http.js:510 y :577): el gateway llama
+    // handler({method,path,query,body,headers,request_id,params}) — NO pasa `res`.
+    // Serializa ÉL leyendo {status, data|body, headers}. Devolver `{status, ...body}`
+    // dejaba `data` undefined y el cliente recibía el status correcto con cuerpo vacío.
+    return { status, data: body };
   }
 }
 

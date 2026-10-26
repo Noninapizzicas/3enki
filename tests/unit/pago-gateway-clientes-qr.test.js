@@ -410,6 +410,36 @@ async function test_actualizar_rechaza_importe_invalido() {
   });
 }
 
+// ── 7. Contrato del HTTPGateway (el que rompió el widget en prod) ────────────
+async function test_contrato_http_gateway() {
+  await check('contrato gateway: _respond devuelve {status, data} — no {status, ...body}', async () => {
+    const { mod } = await montar(CFG);
+    const r = mod._respond(null, 503, { error: 'credencial ausente' });
+    assert.strictEqual(r.status, 503);
+    assert.deepStrictEqual(r.data, { error: 'credencial ausente' }, 'el gateway serializa result.data; sin data → cuerpo vacío');
+    assert.strictEqual(Object.keys(r).length, 2, 'sin claves sueltas que el gateway no lea');
+  });
+
+  await check('contrato gateway: handleWidget devuelve HTML por _html (sin status)', async () => {
+    const { mod } = await montar(CFG);
+    // Llamada EXACTA del gateway (core/gateway/http.js:510): objeto req + contexto, SIN res.
+    const r = await mod.handleWidget({
+      method: 'GET',
+      path: '/modules/pago-gateway/pago/widget/the-pirate/co-1',
+      query: { t: 'tk-secreto' },
+      body: null,
+      headers: {},
+      request_id: 'req-test',
+      params: { project: 'the-pirate', checkout_id: 'co-1' }
+    }, { correlationId: 'req-test' });
+    assert.strictEqual(r.status, undefined, 'si trae status gana la rama JSON y el navegador recibe 0 bytes');
+    assert.ok(typeof r._html === 'string' && r._html.length > 500, 'el HTML tiene que viajar en _html');
+    assert.ok(r._html.includes('SumUpCard.mount'), 'el montaje del widget de SumUp');
+    assert.ok(r._html.includes('checkoutId:"co-1"'), 'el checkout_id llega al SDK');
+    assert.strictEqual(r._contentType, 'text/html; charset=utf-8');
+  });
+}
+
 // ─────────────────────────────────────────────────────────────
 (async () => {
   await test_cliente_alta_idempotente();
@@ -427,6 +457,7 @@ async function test_actualizar_rechaza_importe_invalido() {
   await test_alias_pedido_id_sigue_vivo();
   await test_actualizar_link();
   await test_actualizar_rechaza_importe_invalido();
+  await test_contrato_http_gateway();
   console.log(`\n${ok} checks ok`);
   setTimeout(() => process.exit(process.exitCode || 0), 50).unref();
 })();

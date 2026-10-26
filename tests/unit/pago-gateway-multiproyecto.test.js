@@ -28,10 +28,15 @@ const check = (nombre, fn) => Promise.resolve().then(fn)
 const logger = { info() {}, warn() {}, error() {}, debug() {} };
 const metrics = { increment() {} };
 
-const A = { id: 'p-uno', slug: 'the-pirate' };
-const B = { id: 'p-dos', slug: 'despacho-pan' };
-const C = { id: 'p-tres', slug: 'sin-config' };
-const CLAVES = { 'p-uno': 'sup_key_uno', 'p-dos': 'sup_key_dos' };
+// Identidades REALES: UUID del registro + slug del directorio (el mismo proyecto con dos caras).
+// La credencial vive SOLO bajo el slug (SUMUP_API_KEY_PROJECT_<slug>); el storage se indexa por
+// la llave que llega, pero reconoce las dos caras (como el módulo filesystem real).
+const A = { id: '11111111-1111-4111-8111-111111111111', slug: 'the-pirate' };
+const B = { id: '22222222-2222-4222-8222-222222222222', slug: 'despacho-pan' };
+const C = { id: '33333333-3333-4333-8333-333333333333', slug: 'sin-config' };
+const CLAVES = { 'the-pirate': 'sup_key_uno', 'despacho-pan': 'sup_key_dos' };
+const SLUG_DE = Object.fromEntries([A, B, C].map(p => [p.id, p.slug]));
+const cara = (pid) => SLUG_DE[pid] || pid;      // uuid|slug → la misma carpeta/storage
 
 function mockFetch(handler) {
   const calls = [];
@@ -48,7 +53,7 @@ function mockFetch(handler) {
 function makeBus() {
   const subs = new Map();
   const discos = new Map();   // project_id → Map(path → contenido)
-  const discoDe = (pid) => { if (!discos.has(pid)) discos.set(pid, new Map()); return discos.get(pid); };
+  const discoDe = (pid) => { const k = cara(pid) || '_'; if (!discos.has(k)) discos.set(k, new Map()); return discos.get(k); };
 
   const responder = (nombre, cuerpoFn) => {
     for (const fn of [...(subs.get(nombre) || [])]) fn({ data: cuerpoFn() });
@@ -210,7 +215,7 @@ async function main() {
     assert.strictEqual(r.status, 200, JSON.stringify(r));
     assert.strictEqual(calls[0].headers.Authorization, 'Bearer sup_key_dos');
     const conf = bus.eventos('pago.confirmado');
-    assert.ok(conf.some(p => p.project_id === B.id), 'pago.confirmado lleva el project_id de B');
+    assert.ok(conf.some(p => p.project_id === B.slug), 'pago.confirmado lleva la identidad de B');
   });
 
   await check('config en caliente: cambiar el merchant de A se usa en el siguiente cobro', async () => {

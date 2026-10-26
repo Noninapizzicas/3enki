@@ -161,8 +161,10 @@ async function test_sumup_iniciar() {
     assert.strictEqual(r.data.session_id, CHECKOUT_OK.id);
     assert.strictEqual(r.data.pasarela, 'sumup-checkout');
 
-    const c = calls[0];
-    assert.strictEqual(c.method, 'POST');
+    // El POST del checkout (antes de crearlo se pregunta /v0.1/me para saber si la cuenta es
+    // sandbox, así que el POST no es necesariamente la primera llamada).
+    const c = calls.find(x => x.method === 'POST' && x.url.endsWith('/v0.1/checkouts'));
+    assert.ok(c, 'no hubo POST a /v0.1/checkouts: ' + calls.map(x => x.method + ' ' + x.url).join(', '));
     assert.ok(c.url.endsWith('/v0.1/checkouts'), c.url);
     assert.ok(/^Bearer sup_sk_test$/.test(c.headers.Authorization));
     const body = JSON.parse(c.body);
@@ -187,13 +189,17 @@ async function test_sumup_iniciar() {
     assert.strictEqual(r.data.checkout_url, VIVO.hosted_checkout_url, 'devuelve el link que YA existía');
     assert.strictEqual(r.data.reutilizado, true);
     assert.strictEqual(calls.filter(c => c.method === 'POST').length, 1, 'no se crea un segundo checkout');
-    assert.ok(calls[1].url.includes('checkout_reference=PED-1'), calls[1].url);
+    // Se busca el GET del checkout existente (antes hay un GET /v0.1/me para saber el entorno).
+    const consulta = calls.find(c => c.method === 'GET' && c.url.includes('checkout_reference=PED-1'));
+    assert.ok(consulta, calls.map(c => c.method + ' ' + c.url).join(', '));
   });
 
   await check('sumup: 409 con el anterior EXPIRADO → sí crea uno nuevo con sufijo #1', async () => {
-    const calls = mockFetch((url, opts, n) => {
+    let posts = 0;   // se cuenta por POST, no por llamada total (antes va el GET /v0.1/me)
+    const calls = mockFetch((url, opts) => {
       if (opts.method === 'POST') {
-        return n === 1
+        posts++;
+        return posts === 1
           ? { status: 409, body: { message: 'checkout_reference already used' } }
           : { status: 201, body: { ...CHECKOUT_OK, checkout_reference: 'PED-1#1' } };
       }
@@ -223,7 +229,7 @@ async function test_sumup_iniciar() {
     const { mod } = await montar({ ...SUMUP_CFG, ttl_minutos: 15 });
     const antes = Date.now();
     await mod.handlePagoIniciar({ pedido_id: 'PED-1', monto_centimos: 1000 });
-    const body = JSON.parse(calls[0].body);
+    const body = JSON.parse(calls.find(x => x.method === 'POST').body);
     assert.ok(body.valid_until, 'falta valid_until');
     const t = Date.parse(body.valid_until);
     assert.ok(t > antes + 14 * 60000 && t < antes + 16 * 60000, body.valid_until);

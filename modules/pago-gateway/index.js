@@ -50,6 +50,7 @@ const BaseModule = require('../_shared/base-module');
 const ConciliacionSumUp = require('./conciliacion');
 const { TerminalSumUp } = require('./terminal');
 const { ClientesSumUp } = require('./clientes');
+const ResolutorProyecto = require('../_shared/resolutor-proyecto');
 const QR = require('./qr');
 
 const SUMUP_API = 'https://api.sumup.com';
@@ -91,6 +92,9 @@ class PagoGatewayModule extends BaseModule {
     this._configNoDisponible = new Map(); // project_id → ts hasta el que no se reintenta leer
     this._registro = new Map();           // project_id → { clientes: { [customer_id]: {...} } }
     this._registroCargado = new Set();
+    this.resolutor = null;                // uuid|slug → slug (la identidad, en un solo camino)
+    this._entorno = new Map();            // hash(api_key) → { sandbox, merchant_code, at }
+    this._entornoProyecto = new Map();    // project_id → { sandbox, … } ya averiguado
   }
 
   async onLoad(core) {
@@ -99,6 +103,13 @@ class PagoGatewayModule extends BaseModule {
     this.metrics = core.metrics;
     this.config = (core.config && core.config['pago-gateway']) || core.moduleConfig || {};
     this.pasarela = this.config.pasarela || {};
+
+    // La identidad del proyecto, resuelta en el BORDE (ver `_slugProyecto`). Se calienta en
+    // segundo plano: el primer pago no debe pagar el RPC a project-manager.
+    this.resolutor = new ResolutorProyecto({
+      eventBus: this.eventBus, logger: this.logger, metrics: this.metrics, timeoutMs: 3000
+    });
+    try { this.resolutor.calentar(); } catch (_) {}
 
     const sub = (ev, fn) => { try { this._subs.push(this.eventBus.subscribe(ev, fn)); } catch (_) {} };
     sub('pago.iniciar.request', e => this._onIniciarRequest(e));
@@ -162,6 +173,95 @@ class PagoGatewayModule extends BaseModule {
   }
 
   // ══════════════════════════════════════════════════════════════════════════
+  //  IDENTIDAD DEL PROYECTO — un solo camino: el SLUG
+  //
+  //  El bus admite DOS llaves para el mismo negocio (el UUID del registro y el
+  //  slug del directorio) y cada llamante llegaba con la suya: tienda-api manda
+  //  el slug en `project_id`, el webhook resolvía el UUID de project-manager y el
+  //  barrido itera con UUIDs. Con la llave equivocada pasan dos cosas, las dos
+  //  silenciosas:
+  //
+  //    · la credencial se guarda como SUMUP_API_KEY_PROJECT_<slug>, así que con
+  //      el UUID "no existe" → 503 en el webhook con el dinero YA cobrado;
+  //    · el storage se indexa por la llave, así que el libro de cobros se parte
+  //      en dos carpetas (/data/projects/<uuid>/ y /data/projects/<slug>/): un
+  //      cobro invisible desde la mitad de las puertas.
+  //
+  //  Se resuelve en el BORDE con el resolutor COMPARTIDO (modules/_shared):
+  //  uuid|slug → slug. Sin mapa propio, sin segunda copia del slugify, y con
+  //  degradación honesta: si el bus no contesta, la llave se respeta tal cual.
+  // ══════════════════════════════════════════════════════════════════════════
+
+  async _slugProyecto(project_id) {
+    if (project_id === null || project_id === undefined || project_id === '') return null;
+    const pid = String(project_id);
+    if (!this.resolutor) return pid;
+    try { return await this.resolutor.slugDe(pid); } catch (_) { return pid; }
+  }
+
+  // Copia del payload con `project_id` ya canónico. Todo lo que entra (evento,
+  // RPC, webhook) pasa por aquí UNA vez y lo de dentro ya no vuelve a dudar.
+  async _conSlug(d = {}) {
+    const pid = await this._slugProyecto(d?.project_id);
+    if (pid === null || pid === (d?.project_id ?? null)) return d;
+    return { ...d, project_id: pid };
+  }
+
+  // ¿La clave es de una cuenta SANDBOX? SumUp no lo pone en la clave (sup_sk_ es
+  // la misma en las dos) pero GET /v0.1/me lo publica en `extdev`. Importa porque
+  // un cobro de sandbox entra en el libro EXACTAMENTE igual que uno real: sin este
+  // dato, "cobrado" y "probado" son la misma fila. Una consulta por credencial
+  // (caché 10 min), best-effort: si SumUp no contesta, el entorno queda
+  // desconocido y NUNCA bloquea un cobro.
+  async _entornoDeCuenta(api_key) {
+    if (!api_key) return null;
+    const huella = crypto.createHash('sha256').update(String(api_key)).digest('hex').slice(0, 16);
+    const cache = this._entorno.get(huella);
+    if (cache && (Date.now() - cache.at) < 10 * 60 * 1000) return cache;
+    const r = await this._sumupCall('GET', '/v0.1/me', { api_key, retry: false, timeout_ms: 3000 });
+    if (!r.ok) return cache || null;
+    const me = r.data || {};
+    const perfil = me.merchant_profile || {};
+    // La forma REAL (verificada 26-oct-2026 contra api.sumup.com con la clave del sandbox):
+    //   { account:{type}, details_submitted:false, merchant_profile:{ extdev:true,
+    //     complete:false, merchant_code:'MH87V91E', company_name:'The Pirate', … } }
+    // `extdev` vive DENTRO de merchant_profile, no en la raíz: leerlo arriba daba "real" en una
+    // cuenta de pruebas, que es peor que no tener el dato.
+    const dato = {
+      at: Date.now(),
+      sandbox: perfil.extdev === true || me.extdev === true || me.sandbox === true,
+      merchant_code: perfil.merchant_code || me.merchant_code || null,
+      comercio: perfil.company_name || perfil.doing_business_as?.business_name || null,
+      perfil_completo: perfil.complete ?? me.complete_profile ?? null,
+      detalles_enviados: me.details_submitted ?? null,
+      usuario: me.account?.username || me.username || null
+    };
+    this._entorno.set(huella, dato);
+    return dato;
+  }
+
+  // Deja el entorno averiguado a mano del proyecto (lo lee `_ledgerPut` al abrir fila).
+  _recordarEntorno(project_id, dato) {
+    if (!project_id || !dato) return;
+    this._entornoProyecto.set(String(project_id), dato);
+  }
+
+  // Los métodos de pago que SumUp devuelve para el merchant vienen como
+  // { available_payment_methods: [{ id: 'card' }] } — NO como un array suelto ni
+  // bajo `items`. Leer la clave equivocada daba lista vacía y con ella el aviso
+  // FALSO "pide el alta del scope online a SumUp", que mandó a soporte dos veces
+  // con la cuenta perfectamente operativa. Se aceptan todas las formas conocidas.
+  _metodosDeSumup(data) {
+    const bruto = Array.isArray(data) ? data
+      : (data?.available_payment_methods ?? data?.payment_methods ?? data?.items ?? []);
+    const ids = (Array.isArray(bruto) ? bruto : [])
+      .map(m => (typeof m === 'string' ? m : (m?.id ?? m?.payment_method ?? m?.type)))
+      .filter(Boolean)
+      .map(x => String(x).toLowerCase());
+    return [...new Set(ids)];
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
   //  CONFIG POR PROYECTO — el órgano es uno; cada negocio tiene su cuenta
   //  Sin esto, dos proyectos compartirían merchant code y clave (un cobro
   //  acabaría en la cuenta del otro). Con esto, cero código por proyecto:
@@ -197,6 +297,7 @@ class PagoGatewayModule extends BaseModule {
   // Carga (una vez por proyecto) el bloque `pasarela` de /pago/config.json.
   // Degrada en silencio si no hay fs o no hay config: se usan los defaults del core.
   async _asegurarConfig(project_id) {
+    project_id = await this._slugProyecto(project_id);
     if (!project_id || this._configCargada.has(project_id)) return this._pasarelaPara(project_id);
     if (Date.now() < (this._configNoDisponible.get(project_id) || 0)) return this._pasarelaPara(project_id);
     const r = await this._rpc('fs.read.request', { project_id, path: CONFIG_PATH }, { timeout_ms: FS_TIMEOUT_MS });
@@ -216,6 +317,7 @@ class PagoGatewayModule extends BaseModule {
   }
 
   async _configLeer(d = {}) {
+    d = await this._conSlug(d);
     if (!d.project_id) return { status: 400, error: { code: 'INVALID_INPUT', message: 'project_id requerido' } };
     const p = await this._asegurarConfig(d.project_id);
     return {
@@ -229,6 +331,9 @@ class PagoGatewayModule extends BaseModule {
   }
 
   async _configEscribir(d = {}) {
+    // La config se escribe bajo el SLUG: si no, el que configuró con el UUID deja un
+    // config.json en otra carpeta y el cobro sigue viendo "NO_PASARELA".
+    d = await this._conSlug(d);
     if (!d.project_id) return { status: 400, error: { code: 'INVALID_INPUT', message: 'project_id requerido' } };
     const cambios = d.pasarela && typeof d.pasarela === 'object' && !Array.isArray(d.pasarela) ? d.pasarela : null;
     if (!cambios) return { status: 400, error: { code: 'INVALID_INPUT', message: 'pasarela (objeto) requerido' } };
@@ -308,8 +413,11 @@ class PagoGatewayModule extends BaseModule {
   // SUMUP_API_KEY_PROJECT_<id> antes de caer a la global. Sin project_id resolvía siempre
   // la global → dos negocios pagaban con la cuenta del primero.
   async _resolveCred(provider, project_id = null) {
+    // La clave por proyecto vive en <PROVIDER>_API_KEY_PROJECT_<slug>: se pregunta por el
+    // slug, nunca por el UUID (con el UUID la respuesta era "sin credencial" teniéndola).
+    const pid = await this._slugProyecto(project_id);
     const payload = { provider };
-    if (project_id) payload.project_id = project_id;
+    if (pid) payload.project_id = pid;
     const r = await this._rpc('credential.resolve.request', payload, { timeout_ms: 6000 });
     if (!r) return { error: 'credential.resolve timeout' };
     if (r.success === false || !r.api_key) return { error: r.error || `sin credencial para provider '${provider}'` };
@@ -329,6 +437,8 @@ class PagoGatewayModule extends BaseModule {
 
   // Un bloque de pasarela con cuenta válida para operar (merchant + webhook donde haga falta).
   async _cuentaParaCobro(project_id) {
+    project_id = await this._slugProyecto(project_id);
+    await this._asegurarConfig(project_id);          // arranque en frío: la config vive en disco
     const cfg = this._sumupCfg({ project_id });
     if (!cfg.merchant) {
       return { error: { status: 500, error: { code: 'CONFIG_MISSING', message: 'falta pasarela.merchant_code del proyecto (el código M… se copia del panel de SumUp)' } } };
@@ -352,6 +462,7 @@ class PagoGatewayModule extends BaseModule {
 
   // ── registro de clientes y tarjetas (POR PROYECTO; el libro es del negocio) ──
   async _registroLoad(project_id) {
+    project_id = await this._slugProyecto(project_id);
     if (!project_id) return null;
     if (this._registro.has(project_id)) return this._registro.get(project_id);
     if (this._registroCargado.has(project_id)) return this._registro.get(project_id) || null;
@@ -369,6 +480,7 @@ class PagoGatewayModule extends BaseModule {
   }
 
   async _registroSave(project_id) {
+    project_id = await this._slugProyecto(project_id);
     const reg = this._registro.get(project_id);
     if (!project_id || !reg) return false;
     const r = await this._rpc('fs.write.request', {
@@ -402,6 +514,7 @@ class PagoGatewayModule extends BaseModule {
 
   // ── núcleo: iniciar el pago. RETORNA {status, data|error} ──
   async _iniciar(d) {
+    d = await this._conSlug(d);
     const referencia = this._ref(d);
     if (!referencia || !Number.isInteger(d.monto_centimos) || d.monto_centimos <= 0) {
       return { status: 400, error: { code: 'INVALID_INPUT', message: 'referencia (o su alias pedido_id) y monto_centimos (entero > 0) requeridos' } };
@@ -628,6 +741,13 @@ class PagoGatewayModule extends BaseModule {
     const cred = await this._resolveCred(cfg.provider, cfg.project_id);
     if (cred.error) return { status: 500, error: { code: 'PERMISSION_DENIED', message: `credencial '${cfg.provider}': ${cred.error}` } };
 
+    // El entorno viaja con el cobro: un checkout de sandbox y uno real son la MISMA fila en el
+    // libro si no se marca. Best-effort (caché 10 min): si SumUp no contesta, queda null.
+    const entornoDato = await this._entornoDeCuenta(cred.api_key);
+    const entorno = entornoDato ? (entornoDato.sandbox ? 'sandbox' : 'real') : null;
+    this._recordarEntorno(cfg.project_id, entornoDato);
+    if (entorno === 'sandbox') this.logger?.warn('pago-gateway.sumup.cobro_en_prueba', { referencia: this._ref(d) });
+
     const concepto = (d.concepto || `Cobro ${d.referencia || d.pedido_id}`).slice(0, 120);
     const base = String(d.checkout_reference || d.referencia || d.pedido_id).replace(/#/g, '-').slice(0, REF_MAX);
     const validUntil = new Date(Date.now() + cfg.ttlMin * 60000).toISOString();
@@ -659,6 +779,7 @@ class PagoGatewayModule extends BaseModule {
       monto_centimos: d.monto_centimos,
       moneda: cfg.moneda,
       estado: co.status === 'PAID' ? 'confirmado' : 'pendiente',
+      entorno,                       // real | sandbox | null — sin esto un ensayo y un cobro son la misma fila
       creado: new Date().toISOString(),
       valid_until: co.valid_until || validUntil,
       intento: out.intento,
@@ -679,6 +800,7 @@ class PagoGatewayModule extends BaseModule {
         session_id: co.id,
         pasarela: 'sumup-checkout',
         estado: 'pendiente',
+        entorno,
         expira_at: co.valid_until || validUntil,
         reutilizado: !!out.reutilizado
       }
@@ -687,6 +809,7 @@ class PagoGatewayModule extends BaseModule {
 
   // ── libro de cobros (durable, por proyecto; degrada a memoria si no hay fs) ──
   async _ledgerLoad(project_id) {
+    project_id = await this._slugProyecto(project_id);
     if (!project_id) return null;
     if (this._ledger.has(project_id)) return this._ledger.get(project_id);
     if (this._ledgerCargado.has(project_id)) return this._ledger.get(project_id) || null;
@@ -717,6 +840,7 @@ class PagoGatewayModule extends BaseModule {
   }
 
   async _ledgerSave(project_id) {
+    project_id = await this._slugProyecto(project_id);
     const libro = this._ledger.get(project_id);
     if (!project_id || !libro) return false;
     const r = await this._rpc('fs.write.request', {
@@ -727,6 +851,12 @@ class PagoGatewayModule extends BaseModule {
 
   async _ledgerPut(project_id, entry) {
     if (!entry?.checkout_id) return;
+    // El entorno se hereda de lo ya averiguado para el proyecto: así TODA fila del libro dice
+    // si fue un cobro real o un ensayo, aunque el camino no lo haya preguntado él mismo.
+    if (entry.entorno === undefined) {
+      const e = this._entornoProyecto.get(project_id) || null;
+      entry = { ...entry, entorno: e ? (e.sandbox ? 'sandbox' : 'real') : null };
+    }
     const libro = await this._ledgerLoad(project_id);
     if (!libro) { this._ledgerEnMemoria(project_id, entry); return; }   // degradado: solo memoria
     libro.checkouts[entry.checkout_id] = { ...(libro.checkouts[entry.checkout_id] || {}), ...entry };
@@ -748,6 +878,13 @@ class PagoGatewayModule extends BaseModule {
   }
 
   async _ledgerMark(project_id, checkout_id, patch) {
+    project_id = await this._slugProyecto(project_id);
+    // Un cobro confirmado hereda el entorno ya averiguado (caché, sin red): las filas que
+    // nacieron antes de saberlo no se quedan sin decir si fue ensayo o dinero real.
+    if (patch?.estado === 'confirmado') {
+      const ent = this._entornoProyecto.get(project_id);
+      patch = { ...patch, entorno: ent ? (ent.sandbox ? 'sandbox' : 'real') : (patch.entorno ?? null) };
+    }
     const libro = await this._ledgerLoad(project_id);
     if (!libro) {
       const mem = this._ledger.get(project_id || '_sin_proyecto');
@@ -1098,15 +1235,18 @@ class PagoGatewayModule extends BaseModule {
 
   // ── qué métodos acepta ESTA cuenta (tarjeta, Apple/Google Pay, PayPal…) ──
   async _sumupMetodos(d = {}) {
+    d = await this._conSlug(d);
+    await this._asegurarConfig(d.project_id);        // sin esto, en frío dice CONFIG_MISSING mintiendo
     const cfg = this._sumupCfg(d);
     if (!cfg.merchant) return { status: 500, error: { code: 'CONFIG_MISSING', message: 'falta merchant_code' } };
     const cred = await this._resolveCred(cfg.provider, cfg.project_id);
     if (cred.error) return { status: 500, error: { code: 'PERMISSION_DENIED', message: `credencial '${cfg.provider}': ${cred.error}` } };
     const r = await this._sumupCall('GET', `/v0.1/merchants/${encodeURIComponent(cfg.merchant)}/payment-methods`, { api_key: cred.api_key });
     if (!r.ok) return this._errorDeSumup(r);
-    const lista = Array.isArray(r.data) ? r.data : (r.data?.items || r.data?.payment_methods || []);
-    const ids = lista.map(m => (typeof m === 'string' ? m : m?.id)).filter(Boolean);
+    const ids = this._metodosDeSumup(r.data);
     const tiene = k => ids.includes(k);
+    const entorno = await this._entornoDeCuenta(cred.api_key);
+    this._recordarEntorno(cfg.project_id, entorno);
     return {
       status: 200,
       data: {
@@ -1115,7 +1255,8 @@ class PagoGatewayModule extends BaseModule {
         apple_pay: tiene('apple_pay'),
         google_pay: tiene('google_pay'),
         paypal: tiene('paypal'),
-        bizum: false   // SumUp no ofrece Bizum en su catálogo de APMs (verificado 2026-10)
+        bizum: false,   // SumUp no ofrece Bizum en su catálogo de APMs (verificado 2026-10)
+        entorno: entorno ? (entorno.sandbox ? 'sandbox' : 'real') : null
       }
     };
   }
@@ -1124,6 +1265,8 @@ class PagoGatewayModule extends BaseModule {
   //   El alta de SumUp falla en sitios que no se ven hasta el primer cobro: scope de pagos
   //   online sin activar, moneda de la cuenta distinta, país distinto. Esto lo dice antes.
   async _sumupEstado(d = {}) {
+    d = await this._conSlug(d);
+    await this._asegurarConfig(d.project_id);        // el preflight tiene que ver la cuenta del negocio
     const cfg = this._sumupCfg(d);
     if (!cfg.merchant) return { status: 500, error: { code: 'CONFIG_MISSING', message: 'falta pasarela.merchant_code (el código M… de la cuenta SumUp)' } };
     const cred = await this._resolveCred(cfg.provider, cfg.project_id);
@@ -1136,19 +1279,25 @@ class PagoGatewayModule extends BaseModule {
     if (!m.ok) return this._errorDeSumup(m, 'SumUp merchant');
 
     const merchant = m.data || {};
-    const metodos = met.ok
-      ? (Array.isArray(met.data) ? met.data : (met.data?.items || met.data?.payment_methods || []))
-        .map(x => (typeof x === 'string' ? x : x?.id)).filter(Boolean)
-      : [];
+    const metodos = met.ok ? this._metodosDeSumup(met.data) : [];
     const tieneTarjeta = metodos.includes('card');
+    // SumUp publica en /v0.1/me si la cuenta es de pruebas (`extdev`). Es el dato que separa
+    // un cobro de un ensayo, y no se ve en la clave: sup_sk_ es idéntica en las dos cuentas.
+    const entorno = await this._entornoDeCuenta(cred.api_key);
+    this._recordarEntorno(cfg.project_id, entorno);
 
     const avisos = [];
     const pais = String(merchant.country || merchant.merchant_country || '').toUpperCase() || null;
     const monedaCuenta = String(merchant.default_currency || merchant.currency || '').toUpperCase() || null;
     if (pais && pais !== 'ES') avisos.push(`la cuenta es de ${pais}, no de España: revisa país y métodos`);
     if (monedaCuenta && monedaCuenta !== cfg.moneda) avisos.push(`la cuenta liquida en ${monedaCuenta} y la pasarela cobra en ${cfg.moneda}`);
-    if (!met.ok) avisos.push(`no se pudieron leer los métodos de pago (${met.status || met.code}): ¿API key sin scope?`);
-    else if (!tieneTarjeta) avisos.push('la cuenta NO tiene tarjeta activada para pagos online: pide el alta del scope online a SumUp');
+    if (!met.ok) avisos.push(`no se pudieron leer los métodos de pago (${met.status || met.code}): la clave no responde, NO es un problema de alta`);
+    else if (!tieneTarjeta) avisos.push('la cuenta no lista tarjeta entre sus métodos de pago online: comprueba el alta eCom en el panel de SumUp');
+    if (entorno?.sandbox) avisos.push('esta clave es de una cuenta SANDBOX: los cobros son de PRUEBA y no entra dinero real');
+    if (entorno?.perfil_completo === false) avisos.push('la cuenta SumUp tiene el alta sin completar (complete:false): hasta que se cierre, los cobros online pueden rechazarse');
+    if (entorno && entorno.merchant_code && cfg.merchant && entorno.merchant_code !== cfg.merchant) {
+      avisos.push(`la clave pertenece al merchant ${entorno.merchant_code} y la pasarela cobra con ${cfg.merchant}: no cuadran`);
+    }
     if (!cfg.webhookUrl) avisos.push('sin pasarela.webhook_url: SumUp no avisará del cobro y el pedido no se liberaría solo');
 
     // Lo que dice el libro de cobros del proyecto (si nos dan proyecto).
@@ -1192,6 +1341,10 @@ class PagoGatewayModule extends BaseModule {
         min_centimos: cfg.minCentimos,
         ttl_minutos: cfg.ttlMin,
         puedo_cobrar: puedoCobrar,
+        // `real` | `sandbox` | null (SumUp no contestó). El panel y la carta deben verlo ANTES
+        // de encender el botón: con una clave sandbox el cobro entra en el libro igual que uno real.
+        entorno: entorno ? (entorno.sandbox ? 'sandbox' : 'real') : null,
+        entorno_merchant: entorno?.merchant_code || null,
         avisos,
         libro
       }
@@ -1202,6 +1355,8 @@ class PagoGatewayModule extends BaseModule {
   //   No se genera aquí: SumUp ya emite el recibo de cada transacción. Se lee y se normaliza
   //   para poder mandarlo por WhatsApp o imprimirlo (base de la factura simplificada).
   async _sumupRecibo(d = {}) {
+    d = await this._conSlug(d);
+    await this._asegurarConfig(d.project_id);
     const cfg = this._sumupCfg(d);
     if (!cfg.merchant) return { status: 500, error: { code: 'CONFIG_MISSING', message: 'falta pasarela.merchant_code' } };
     const entry = await this._ledgerBuscar(d.project_id, {
@@ -1309,6 +1464,7 @@ class PagoGatewayModule extends BaseModule {
   }
 
   async _conciEstadoLoad(project_id) {
+    project_id = await this._slugProyecto(project_id);
     if (!project_id) return null;
     if (this._conciEstado.has(project_id)) return this._conciEstado.get(project_id);
     const r = await this._rpc('fs.read.request', { project_id, path: this._conciPath() }, { timeout_ms: FS_TIMEOUT_MS });
@@ -1321,6 +1477,7 @@ class PagoGatewayModule extends BaseModule {
   }
 
   async _conciGuardar(project_id, estado) {
+    project_id = await this._slugProyecto(project_id);
     if (!project_id || !estado) return false;
     this._conciEstado.set(project_id, estado);
     const r = await this._rpc('fs.write.request', {
@@ -1337,10 +1494,14 @@ class PagoGatewayModule extends BaseModule {
     }
     const proyectos = [];
     if (d.project_id) {
-      proyectos.push({ id: d.project_id, slug: d.project_slug || null });
+      const pid = await this._slugProyecto(d.project_id);
+      proyectos.push({ id: pid, slug: d.project_slug || pid });
     } else {
       const r = await this._rpc('project.list.request', {}, { timeout_ms: 4000 });
-      for (const p of (r?.projects || [])) if (p?.id) proyectos.push({ id: p.id, slug: p.slug || null });
+      for (const p of (r?.projects || [])) {
+        const pid = await this._slugProyecto(p?.id || p?.slug);
+        if (pid) proyectos.push({ id: pid, slug: p?.slug || pid });
+      }
       if (this.pasarela.project_id && !proyectos.some(p => p.id === this.pasarela.project_id)) {
         proyectos.push({ id: this.pasarela.project_id, slug: this.pasarela.project_slug || null });
       }
@@ -1372,8 +1533,16 @@ class PagoGatewayModule extends BaseModule {
     try {
       const proyectos = [];
       const r = await this._rpc('project.list.request', {}, { timeout_ms: 4000 });
-      for (const p of (r?.projects || [])) if (p?.id) proyectos.push({ id: p.id, slug: p.slug || null });
-      if (this.pasarela.project_id) proyectos.push({ id: this.pasarela.project_id, slug: this.pasarela.project_slug || null });
+      // project-manager publica UUID + slug; el barrido trabaja con el SLUG (el UUID solo lo
+      // usaría para pedir la config y el libro en otra carpeta).
+      for (const p of (r?.projects || [])) {
+        const pid = await this._slugProyecto(p?.id || p?.slug);
+        if (pid) proyectos.push({ id: pid, slug: p?.slug || pid });
+      }
+      if (this.pasarela.project_id) {
+        const pid = await this._slugProyecto(this.pasarela.project_id);
+        proyectos.push({ id: pid, slug: this.pasarela.project_slug || pid });
+      }
       const vistos = new Set();
       for (const p of proyectos) {
         if (vistos.has(p.id)) continue;
@@ -1384,6 +1553,8 @@ class PagoGatewayModule extends BaseModule {
   }
 
   async _barrerProyecto({ id, slug }) {
+    // El libro se busca por la llave que llegue (se normaliza dentro); la CONFIG y la CREDENCIAL
+    // se piden por el slug, que es donde viven.
     const libro = await this._ledgerLoad(id);
     if (!libro) return;
     await this._asegurarConfig(id);
@@ -1392,7 +1563,7 @@ class PagoGatewayModule extends BaseModule {
       .slice(0, 50);
     if (!pendientes.length) return;
 
-    const cfg = this._sumupCfg({ project_id: id });
+    const cfg = this._sumupCfg({ project_id: slug || id });
     const cred = await this._resolveCred(cfg.provider, cfg.project_id);
     if (cred.error) return;
     const ahora = Date.now();
@@ -1428,7 +1599,7 @@ class PagoGatewayModule extends BaseModule {
 
   // ── suscriptores de bus ──
   async _onIniciarRequest(event) {
-    const d = event?.data || event;
+    const d = await this._conSlug(event?.data || event);
     const r = await this._iniciar(d);
     this.metrics?.increment?.('pago.iniciar.' + (r.status === 200 ? 'ok' : 'fail'), { pasarela: this.pasarela.kind || 'none' });
     try {
@@ -1440,7 +1611,7 @@ class PagoGatewayModule extends BaseModule {
   }
 
   async _onCancelarRequest(event) {
-    const d = event?.data || event;
+    const d = await this._conSlug(event?.data || event);
     const r = await this._cancelar(d);
     try {
       this.eventBus.publish('pago.cancelar.response', {
@@ -1451,7 +1622,7 @@ class PagoGatewayModule extends BaseModule {
   }
 
   async _onReembolsarRequest(event) {
-    const d = event?.data || event;
+    const d = await this._conSlug(event?.data || event);
     const r = await this._sumupReembolsar(d);
     try {
       this.eventBus.publish('pago.reembolsar.response', {
@@ -1463,7 +1634,7 @@ class PagoGatewayModule extends BaseModule {
 
   // Envoltorio común para los puertos de solo-consulta (estado, recibo): correlan y responden.
   async _onRespuestaSimple(event, eventoReq, eventoResp, fn) {
-    const d = event?.data || event || {};
+    const d = await this._conSlug(event?.data || event || {});
     let r;
     try { r = await fn(d); }
     catch (err) {
@@ -1996,6 +2167,7 @@ class PagoGatewayModule extends BaseModule {
   // La spec lo dice literal: "This request changes the checkout details; it does not charge a
   // payment instrument."
   async _actualizar(d = {}) {
+    d = await this._conSlug(d);
     await this._asegurarConfig(d.project_id);
     const kind = this._pasarelaPara(d.project_id).kind;
     if (kind !== 'sumup-checkout' && kind !== 'sumup') {
@@ -2111,7 +2283,8 @@ class PagoGatewayModule extends BaseModule {
     if (evt && typeof evt.event_type === 'string') return this._webhookSumup(req, res, evt);
     const sig = req?.headers?.['stripe-signature'] || req?.headers?.['Stripe-Signature'];
     const proyectoStripe = req?.params?.project ? await this._proyectoPorSlug(req.params.project) : null;
-    const secret = this._pasarelaPara(proyectoStripe?.id)?.webhook_secret || null;
+    const pidStripe = await this._slugProyecto(proyectoStripe?.id || proyectoStripe?.slug || null);
+    const secret = this._pasarelaPara(pidStripe)?.webhook_secret || null;
     try {
       if (secret) {
         const ok = this._verifyStripeSig(raw, sig, secret);
@@ -2148,7 +2321,8 @@ class PagoGatewayModule extends BaseModule {
   async _webhookSumup(req, res, evt) {
     // El proyecto sale del path del webhook: su config y su credencial son SUYAS.
     const proyecto = req?.params?.project ? await this._proyectoPorSlug(req.params.project) : null;
-    const project_id = proyecto?.id || this.pasarela.project_id || null;
+    // `proyecto.id` es el UUID del registro; la credencial y el libro viven bajo el SLUG.
+    const project_id = await this._slugProyecto(proyecto?.id || proyecto?.slug || this.pasarela.project_id || null);
     await this._asegurarConfig(project_id);
     // Token opcional en la URL: cualquiera puede POSTear el endpoint (SumUp no firma); el token
     // evita que un tercero nos queme la cuota de API con eventos inventados.
@@ -2239,7 +2413,8 @@ class PagoGatewayModule extends BaseModule {
   //   navegador a SumUp directamente — nunca pasan por aquí.
   async handleWidget(req, res) {
     const proyecto = req?.params?.project ? await this._proyectoPorSlug(req.params.project) : null;
-    const project_id = proyecto?.id || this.pasarela.project_id || null;
+    // El token y la config del proyecto viven bajo el SLUG (el id del registro es el UUID).
+    const project_id = await this._slugProyecto(proyecto?.id || proyecto?.slug || this.pasarela.project_id || null);
     await this._asegurarConfig(project_id);
     const p = this._pasarelaPara(project_id);
     const esperado = p.webhook_token || null;

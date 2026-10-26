@@ -16409,10 +16409,22 @@ VERSIONES  project-manager 4.2.0 · carta-digital 2.25.0 · bienvenida-tienda 1.
     "alias_admitidos": ["pedido_id", "referencia_externa", "order_id"],
     "emision": "los eventos publican `referencia` Y `pedido_id` con el mismo valor (compatibilidad de consumidores)"
   },
+  "identidad": {
+    "tesis": "un proyecto tiene DOS llaves en el bus (UUID del registro y slug del directorio) y el órgano habla SIEMPRE slug",
+    "resolucion": "modules/_shared/resolutor-proyecto.js en el borde: uuid|slug → slug; lo desconocido se respeta tal cual",
+    "por_que": "la credencial se guarda como <PROVIDER>_API_KEY_PROJECT_<slug> y el storage se indexa por llave: con el UUID la clave 'no existe' (webhook 503 con el dinero cobrado) y el libro se parte en dos carpetas",
+    "entradas_normalizadas": ["pago.iniciar/cancelar/reembolsar", "todo puerto .request", "config.leer/escribir", "webhook (path → proyecto)", "barrido y conciliación (iteran UUIDs)"]
+  },
+  "entorno": {
+    "de_que": "GET /v0.1/me → extdev true = cuenta SANDBOX (la clave no lo dice: sup_sk_ es igual en las dos)",
+    "donde": "pago.estado.entorno (real|sandbox|null) + aviso explícito; y en la fila del libro, heredado por _ledgerPut",
+    "regla": "un ensayo y un cobro real jamás son la misma fila; si SumUp no contesta el entorno queda null y NUNCA bloquea el cobro",
+    "cache": "10 min por credencial (hash), best-effort"
+  },
   "config": {
     "por_proyecto": "/pago/config.json (esquema pago-pasarela-v1)",
     "core": "bloque pasarela de module.json = DEFAULTS; el proyecto pisa (merge de barrido/conciliacion)",
-    "credencial": "credential.resolve.request CON project_id → SUMUP_API_KEY_PROJECT_<project_id> antes que GLOBAL",
+    "credencial": "credential.resolve.request CON el SLUG → <PROVIDER>_API_KEY_PROJECT_<slug> antes que GLOBAL",
     "estricto": "pasarela.exigir_config_proyecto=true → sin config propia NO_PASARELA (nadie cobra en la cuenta de otro)"
   },
   "storage_por_proyecto": {
@@ -16427,6 +16439,31 @@ VERSIONES  project-manager 4.2.0 · carta-digital 2.25.0 · bienvenida-tienda 1.
   }
 }
 ```
+
+## Las dos grietas que costaron dinero (26-oct-2026, con la cuenta real)
+
+**Identidad: un solo camino, el slug.** El bus admite dos llaves para el mismo negocio —el UUID del
+registro y el slug del directorio— y cada llamante llegaba con la suya: `tienda-api` manda el slug
+en `project_id`, el webhook resolvía el UUID de `project-manager` y el barrido itera UUIDs. Como la
+credencial se guarda `SUMUP_API_KEY_PROJECT_<slug>` y el storage se indexa por la llave que llega,
+el UUID producía dos fallos silenciosos: el webhook contestaba **503 con el dinero ya cobrado**
+(«no hay credencial» sobre una clave que existía) y el libro podía partirse en dos carpetas. Se
+cierra en el **borde** con el resolutor compartido (`modules/_shared/resolutor-proyecto.js`):
+`uuid|slug → slug`, sin mapa propio ni segunda copia del slugify, y con degradación honesta (si el
+bus no contesta, la llave se respeta tal cual). Los dos juegos de llaves que se escribieron a mano
+en `.env` para taparlo dejan de hacer falta.
+
+**Métodos de pago: la forma real de la respuesta.** SumUp responde
+`{ available_payment_methods: [{ id: 'card' }] }`; leer solo `items`/`payment_methods` daba lista
+vacía y con ella un aviso **falso**: «pide el alta del scope online a SumUp». Mandó a soporte dos
+veces con la cuenta perfectamente operativa. Ahora hay un único extractor (`_metodosDeSumup`) y el
+aviso distingue «la clave no responde» de «la cuenta no lista tarjeta».
+
+**Entorno: ensayo ≠ cobro.** Una clave de sandbox (`sup_sk_` idéntica a la real) hace que un ensayo
+entre en el libro exactamente igual que un cobro. `GET /v0.1/me` lo publica en `extdev`: el órgano
+lo expone en `pago.estado.entorno` con aviso explícito y lo graba en la fila del libro (`entorno`),
+heredado en `_ledgerPut` para las cuatro puertas. Es best-effort: si SumUp no contesta queda `null`
+y nunca bloquea un cobro.
 
 ## Las cinco puertas, con lo que exige cada una
 

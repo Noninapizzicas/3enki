@@ -120,7 +120,7 @@ async function test_estado_sano() {
 }
 
 async function test_estado_sin_scope_online() {
-  await check('estado: sin método card (scope online sin activar) → puedo_cobrar false y lo dice', async () => {
+  await check('estado: sin método card → puedo_cobrar false y lo dice (sin culpar a la clave)', async () => {
     mockFetch((url) => {
       if (/\/v1\/merchants\//.test(url)) return { status: 200, body: MERCHANT_ES };
       if (/payment-methods/.test(url)) return { status: 200, body: [] };
@@ -130,7 +130,7 @@ async function test_estado_sin_scope_online() {
     const r = await mod.handlePagoEstado({});
     assert.strictEqual(r.status, 200);
     assert.strictEqual(r.data.puedo_cobrar, false);
-    assert.ok(r.data.avisos.some(a => /scope online/.test(a)), JSON.stringify(r.data.avisos));
+    assert.ok(r.data.avisos.some(a => /eCom/.test(a)), JSON.stringify(r.data.avisos));
   });
 }
 

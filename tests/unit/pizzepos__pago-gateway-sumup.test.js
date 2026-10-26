@@ -19,8 +19,8 @@ const assert = require('assert');
 const crypto = require('crypto');
 const path = require('path');
 
-const PagoGateway = require('../../modules/pizzepos/pago-gateway/index.js');
-const MANIFEST = require('../../modules/pizzepos/pago-gateway/module.json');
+const PagoGateway = require('../../modules/pago-gateway/index.js');
+const MANIFEST = require('../../modules/pago-gateway/module.json');
 
 let ok = 0;
 function check(nombre, fn) {

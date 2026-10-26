@@ -23,7 +23,7 @@
 'use strict';
 
 const assert = require('assert');
-const PagoGateway = require('../../modules/pizzepos/pago-gateway/index.js');
+const PagoGateway = require('../../modules/pago-gateway/index.js');
 
 let ok = 0;
 const check = (nombre, fn) => Promise.resolve().then(fn)
@@ -33,8 +33,8 @@ const check = (nombre, fn) => Promise.resolve().then(fn)
 const logger = { info() {}, warn() {}, error() {}, debug() {} };
 const metrics = { increment() {} };
 const PROYECTO = { id: 'p-1', slug: 'the-pirate' };
-const LIBRO = '/pizzepos/pago/checkouts.json';
-const CONCILIACION = '/pizzepos/pago/conciliacion.json';
+const LIBRO = '/pago/checkouts.json';
+const CONCILIACION = '/pago/conciliacion.json';
 
 function makeRes() {
   return { status: null, body: null, writeHead(s) { this.status = s; }, end(b) { this.body = b; } };

@@ -9,6 +9,7 @@ fuentes:
   - modules/pizzepos/tienda-api/**
   - modules/_shared/pedido-tasador.js
   - modules/_shared/horario-servicio.js
+  - modules/pago-gateway/**
   - modules/_shared/lector-servicio.js
   - frontend/src/lib/components/comandero/ServicioToggle.svelte
   - tests/unit/pizzepos__servicio.test.js
@@ -43,6 +44,7 @@ verificado: 2026-10-25
   "pago": {
     "eleccion": "el cliente elige en la PWA (campo metodo_pago del #P1): 'efectivo' (paga al recoger — default si falta) | 'tarjeta' (pago online por la pasarela).",
     "tarjeta": "el bot NO cobra: pide la sesión de pago al líder por bus (pago.iniciar.request → pago-gateway, provider-agnóstico) y manda la checkout_url al cliente por WhatsApp. La VERDAD del cobro no es la preferencia: es pago.confirmado → pedidos → pedido.pagado.",
+    "puertas_del_organo": "el mismo puerto tiene tres puertas más desde pago-gateway v3: pago.qr.request pinta ESA url en PNG (manda la imagen en vez del enlace, útil cuando el cliente no quiere teclear), pago.reader.cobrar.request manda el importe al datáfono del mostrador (cobro al recoger) y pago.cobrar_guardada.request cobra con la tarjeta guardada del cliente de siempre. El bot no cambia: sigue pidiendo pago.iniciar y escuchando pago.confirmado, que ahora trae `canal` (online | terminal | guardada) — el cierre de caja distingue con qué puerta se cobró.",
     "degradacion": "sin pasarela configurada (NO_PASARELA) o sin su credencial (PERMISSION_DENIED) el bot avisa 'puedes pagar al recoger' y NO revienta: el pedido ya está creado.",
     "guarda_anti_duplicado": "una sola sesión por pedido_id (Meta reintenta webhooks y el cliente puede reenviar → sin guarda, dos sesiones = riesgo de pagar dos veces).",
     "cierre_caja": "handleConfirmarRecogida lee la verdad del pago: 'tarjeta' (con session_id/pasarela) si pago.confirmado llegó antes, 'efectivo' si no. Ya NO clava 'efectivo' a fuego."
@@ -169,6 +171,12 @@ CLASE WhatsappBotModule HEREDA BaseModule {  // ── el INSIDER que re-tasa
 // parser (services/pedido-parser.js): parsearPedido(text) ahora devuelve `estructura` ({items}|null)
 //   _decodificarEstructura: localiza la línea '#P1 <base64url>', decodifica → { v:1, items }. Corrupto → null.
 ```
+
+> **Declaración del manifest (v3 de pago-gateway).** `modules/whatsapp-bot/module.json` declara
+> `pago-gateway` como dependencia con la ruta de PLATAFORMA (`modules/pago-gateway`, ya no bajo
+> `modules/pizzepos/`): el bot es consumidor del órgano de cobro, no dueño de la vertical. El
+> nombre del módulo no cambia (el loader monta por `manifest.name`, no por carpeta), así que la
+> ruta HTTP del webhook de este bot sigue siendo la de siempre.
 
 ## WhatsApp Cloud API — OPERATIVO end-to-end (v{{version:modules/whatsapp-bot}}) · webhook real de Meta + alta por UI
 
@@ -388,8 +396,8 @@ PIEZAS {
   modules/whatsapp-bot/services/pedido-parser.js (#P1: _decodificarEstructura + metodo_pago)
   modules/pizzepos/carta-digital ({{version:modules/pizzepos/carta-digital}})        (PWA emite #P1 + paridad mitad + nombre obligatorio + botones metodo_pago)
   modules/pizzepos/pedidos (3.5.0)               (estructura tienda → cocina ; ancla = cliente_nombre ; metodo_pago ; onPagoConfirmado con recreación del huérfano)
-  modules/pizzepos/pago-gateway ({{version:modules/pizzepos/pago-gateway}})          (LÍDER provider-agnóstico: Stripe Checkout + webhook firmado + metadata de contexto)
-  modules/credential-manager ({{version:modules/credential-manager}})             (META_WHATSAPP[_VERIFY_TOKEN] + STRIPE en catálogo + PROJECT_ONLY)
+  modules/pago-gateway ({{version:modules/pago-gateway}})                  (ÓRGANO de cobro provider-agnóstico: Stripe + SumUp; cuenta y clave POR PROYECTO)
+  modules/credential-manager ({{version:modules/credential-manager}})             (META_WHATSAPP[_VERIFY_TOKEN] + GLOVO PROJECT_ONLY + la clave de pago por proyecto)
   frontend credentials (CredentialsPanel + stores) (4ª pestaña 💬 WhatsApp · fix agrupado de la lista)
   cocina (_buildCocinaItem → ItemLine)           (YA pintaba la estructura, del comandero)
 }

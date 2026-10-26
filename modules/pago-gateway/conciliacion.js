@@ -124,10 +124,12 @@ class ConciliacionSumUp {
     return resumen;
   }
 
-  async _credencial() {
-    const cfg = this.d.cfg() || {};
+  // La cuenta es la del PROYECTO que se está conciliando: dos negocios, dos merchants,
+  // dos claves. Sin project_id se conciliaba todo con la cuenta del core.
+  async _credencial(project_id = null) {
+    const cfg = this.d.cfg(project_id) || {};
     if (!cfg.merchant) return { error: 'sin merchant_code' };
-    const cred = await this.d.resolveCred(cfg.provider || 'SUMUP');
+    const cred = await this.d.resolveCred(cfg.provider || 'SUMUP', project_id);
     if (cred?.error) return { error: cred.error };
     return { api_key: cred.api_key, merchant: cfg.merchant, cfg };
   }
@@ -135,7 +137,7 @@ class ConciliacionSumUp {
   // ── 1. HISTORIAL INCREMENTAL: reembolsos, contracargos y cobros sin casar ──
   async historial({ id: project_id, slug } = {}) {
     if (!project_id) return { error: 'sin proyecto' };
-    const cred = await this._credencial();
+    const cred = await this._credencial(project_id);
     if (cred.error) return { error: cred.error };
 
     const estado = await this._estado(project_id);
@@ -181,7 +183,8 @@ class ConciliacionSumUp {
 
       if (item.type === 'CHARGE_BACK') {
         await this.d.publicar('pago.contracargo', {
-          pedido_id: entry?.pedido_id || null,
+          referencia: entry?.referencia || entry?.pedido_id || null,
+          pedido_id: entry?.referencia || entry?.pedido_id || null,
           project_slug: entry?.project_slug || slug || null,
           transaction_id: item.transaction_id,
           transaction_code: item.transaction_code || null,
@@ -195,7 +198,8 @@ class ConciliacionSumUp {
         emitidos++;
       } else if (item.type === 'REFUND') {
         await this.d.publicar('pago.reembolsado', {
-          pedido_id: entry?.pedido_id || null,
+          referencia: entry?.referencia || entry?.pedido_id || null,
+          pedido_id: entry?.referencia || entry?.pedido_id || null,
           session_id: entry?.checkout_id || null,
           transaction_id: item.transaction_id,
           monto_centimos: this._cent(item.amount),
@@ -225,7 +229,8 @@ class ConciliacionSumUp {
           if (devueltoSumup > devueltoNuestro) {
             const diferencia = devueltoSumup - devueltoNuestro;
             await this.d.publicar('pago.reembolsado', {
-              pedido_id: entry.pedido_id || null, session_id: entry.checkout_id || null,
+              referencia: entry.referencia || entry.pedido_id || null,
+              pedido_id: entry.referencia || entry.pedido_id || null, session_id: entry.checkout_id || null,
               transaction_id: entry.transaction_id || item.transaction_id,
               monto_centimos: diferencia,
               total_reembolsado_centimos: devueltoSumup,
@@ -263,7 +268,7 @@ class ConciliacionSumUp {
   // ── 2. LIQUIDACIÓN: la comisión REAL y lo que entra en el banco ──
   async payouts({ id: project_id, slug } = {}) {
     if (!project_id) return { error: 'sin proyecto' };
-    const cred = await this._credencial();
+    const cred = await this._credencial(project_id);
     if (cred.error) return { error: cred.error };
 
     const estado = await this._estado(project_id);

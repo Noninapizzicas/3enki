@@ -1,0 +1,265 @@
+{
+  "name": "pago-gateway",
+  "version": "3.0.0",
+  "description": "EL ÓRGANO DE COBRO DE LA PLATAFORMA — un solo motor para cobrar en CUALQUIER proyecto sin tocar código: la cuenta (merchant, moneda, TTL, webhook) y la credencial son DEL PROYECTO, el libro de cobros vive en su storage. Pasarelas por `pasarela.kind`: sumup-checkout (SumUp, Hosted Checkout) y stripe-checkout (Checkout Session firmada). CINCO PUERTAS DEL MISMO ÓRGANO: (1) LINK de pago alojado; (2) QR dinámico pintado por el propio órgano (codificador QR nativo, sin dependencias, PNG+SVG, verificado contra lector independiente); (3) DATÁFONO presencial (Reader/Terminal API: parear, estado ONLINE, mandar importe en unidades menores, consultar el resultado, terminar, variante SumUp Go idempotente); (4) CLIENTE de siempre (Customers API: alta idempotente, tarjetas guardadas, baja de tarjeta); (5) COBRO RECURRENTE servidor-a-servidor con la tarjeta guardada (ProcessCheckout con token+customer_id) y consentimiento recogido en la página del Payment Widget que sirve el propio módulo. Protocolo completo: creación idempotente que REUTILIZA el checkout vivo ante un 409 (dos links = dos cobros), valid_until propio, libro durable, barrido de reconciliación (webhook perdido ≠ pago perdido, también para datáfono), integridad del importe (un PAID que no cuadra no se confirma; la tokenización NO es un cobro), reembolsos con tope y RESUELTOS POR RECONSULTA, webhook verificado por token + reconsulta y tolerante a familias nuevas (checkouts.* y readers.*), preflight de cuenta (puedo_cobrar), RECIBO estructurado, pago.rechazado, pago.en_terminal y pago.tokenizado, y CONCILIACIÓN con la cuenta (historial incremental + payouts). El contrato dice `referencia` (el HECHO cobrado, sea pedido, presupuesto o reserva); `pedido_id` se admite y se emite como alias. Degradable: sin pasarela → NO_PASARELA (el cobro sigue en pie y se paga al recoger).",
+  "author": "plataforma",
+  "language": "javascript",
+  "main": "index.js",
+  "horizonte": "órgano de plataforma: cobro en cualquier proyecto (pizzería, panadería, taller, reservas) por link, QR, datáfono, cliente recurrente o tarjeta guardada; un solo motor, una config por negocio",
+  "eventos_publicados": [
+    "pago.iniciar.response",
+    "pago.cancelar.response",
+    "pago.reembolsar.response",
+    "pago.estado.response",
+    "pago.recibo.response",
+    "pago.config.response",
+    "pago.config.actualizar.response",
+    "pago.config.actualizada",
+    "pago.actualizar.response",
+    "pago.qr.response",
+    "pago.reader.listar.response",
+    "pago.reader.parear.response",
+    "pago.reader.leer.response",
+    "pago.reader.renombrar.response",
+    "pago.reader.borrar.response",
+    "pago.reader.estado.response",
+    "pago.reader.cobrar.response",
+    "pago.reader.consultar.response",
+    "pago.reader.terminar.response",
+    "pago.reader.cobrar_go.response",
+    "pago.cliente.alta.response",
+    "pago.cliente.leer.response",
+    "pago.cliente.actualizar.response",
+    "pago.cliente.tarjetas.response",
+    "pago.cliente.tarjeta.baja.response",
+    "pago.tokenizar.response",
+    "pago.cobrar_guardada.response",
+    "pago.actualizado",
+    "pago.confirmado",
+    "pago.rechazado",
+    "pago.cancelado",
+    "pago.reembolsado",
+    "pago.recibo.obtenido",
+    "pago.importe_discrepante",
+    "pago.en_terminal",
+    "pago.tokenizado",
+    "pago.contracargo",
+    "cobro.huerfano",
+    "cobro.liquidado",
+    "pago.metodos.response"
+  ],
+  "eventos_que_escucho": [
+    "pago.iniciar.request",
+    "pago.cancelar.request",
+    "pago.reembolsar.request",
+    "pago.estado.request",
+    "pago.recibo.request",
+    "pago.config.request",
+    "pago.config.actualizar.request",
+    "pago.config.actualizada",
+    "pago.actualizar.request",
+    "pago.qr.request",
+    "pago.reader.listar.request",
+    "pago.reader.parear.request",
+    "pago.reader.leer.request",
+    "pago.reader.renombrar.request",
+    "pago.reader.borrar.request",
+    "pago.reader.estado.request",
+    "pago.reader.cobrar.request",
+    "pago.reader.consultar.request",
+    "pago.reader.terminar.request",
+    "pago.reader.cobrar_go.request",
+    "pago.cliente.alta.request",
+    "pago.cliente.leer.request",
+    "pago.cliente.actualizar.request",
+    "pago.cliente.tarjetas.request",
+    "pago.cliente.tarjeta.baja.request",
+    "pago.tokenizar.request",
+    "pago.cobrar_guardada.request",
+    "pago.metodos.request"
+  ],
+  "ui_handlers": [
+    {
+      "domain": "pago",
+      "action": "iniciar",
+      "handler": "handlePagoIniciar",
+      "description": "Inicia el cobro de un hecho (referencia) en la pasarela DEL PROYECTO → devuelve checkout_url, session_id y expira_at."
+    },
+    {
+      "domain": "pago",
+      "action": "cancelar",
+      "handler": "handlePagoCancelar",
+      "description": "Mata el link de pago (SumUp DELETE). Si ya estaba pagado devuelve CHECKOUT_YA_PAGADO y confirma el cobro en vez de cancelarlo."
+    },
+    {
+      "domain": "pago",
+      "action": "reembolsar",
+      "handler": "handlePagoReembolsar",
+      "description": "Reembolso total o parcial con tope por libro de cobros. Sin reintento automático: un timeout es ESTADO_INCIERTO."
+    },
+    {
+      "domain": "pago",
+      "action": "metodos",
+      "handler": "handlePagoMetodos",
+      "description": "Qué métodos acepta la cuenta del proyecto (card, apple_pay, google_pay, paypal). Preflight antes de publicar el botón."
+    },
+    {
+      "domain": "pago",
+      "action": "estado",
+      "handler": "handlePagoEstado",
+      "description": "PREFLIGHT REAL del proyecto: merchant válido, métodos activos, webhook configurado y estado del libro. Devuelve puedo_cobrar y qué lo impide."
+    },
+    {
+      "domain": "pago",
+      "action": "recibo",
+      "handler": "handlePagoRecibo",
+      "description": "Recibo estructurado (v1.1) de un cobro: total, IVA, propina, método, autorización y comercio."
+    },
+    {
+      "domain": "pago",
+      "action": "conciliar",
+      "handler": "handlePagoConciliar",
+      "description": "Fuerza un tick de conciliación con la cuenta de la pasarela (historial incremental + liquidaciones). Con project_id, solo ese; sin él, todos los que tengan config."
+    },
+    {
+      "domain": "pago",
+      "action": "config_leer",
+      "handler": "handlePagoConfigLeer",
+      "description": "Lee la config de cobro del proyecto (sin secretos) + de dónde sale (proyecto o core) + si puede cobrar."
+    },
+    {
+      "domain": "pago",
+      "action": "config_escribir",
+      "handler": "handlePagoConfigEscribir",
+      "description": "Escribe la config de cobro del proyecto (kind, provider, merchant_code, moneda, webhook_url, ttl_minutos…) y publica pago.config.actualizada. Es lo que enciende el cobro de un negocio nuevo sin tocar código."
+    },
+    {
+      "domain": "pago",
+      "action": "qr",
+      "handler": "handlePagoQr",
+      "description": "QR de cobro: crea o REUSA el checkout del hecho y devuelve la URL pintada en PNG (WhatsApp/impresión) y/o SVG. Con `url` pinta un enlace ya emitido (carta, propinas). Dinámico = lleva importe y caduca con el hecho."
+    },
+    {
+      "domain": "pago",
+      "action": "actualizar",
+      "handler": "handlePagoActualizar",
+      "description": "Cambia importe, concepto, referencia o caducidad del link VIVO (PATCH), sin cancelar y recrear: dos links = dos cobros. El libro adopta el importe nuevo para que la integridad siga cuadrando."
+    },
+    {
+      "domain": "pago",
+      "action": "reader_listar",
+      "handler": "handlePagoReaderListar",
+      "description": "Datáfonos de la cuenta del proyecto: id, nombre, estado de emparejamiento, modelo y serie."
+    },
+    {
+      "domain": "pago",
+      "action": "reader_parear",
+      "handler": "handlePagoReaderParear",
+      "description": "Empareja un datáfono con el código de 8-9 caracteres que muestra la pantalla del dispositivo."
+    },
+    {
+      "domain": "pago",
+      "action": "reader_estado",
+      "handler": "handlePagoReaderEstado",
+      "description": "¿Puede cobrar AHORA ese datáfono? ONLINE/OFFLINE, pantalla, batería, firmware y última actividad."
+    },
+    {
+      "domain": "pago",
+      "action": "reader_cobrar",
+      "handler": "handlePagoReaderCobrar",
+      "description": "Manda el importe al datáfono (idempotente por referencia: si ya hay un cobro vivo, devuelve el mismo). El cobro es asíncrono: el cliente completa en el dispositivo."
+    },
+    {
+      "domain": "pago",
+      "action": "reader_consultar",
+      "handler": "handlePagoReaderConsultar",
+      "description": "LA verdad del cobro presencial: reconsulta el lector y traduce a pago.confirmado / pago.rechazado / pago.cancelado (canal terminal)."
+    },
+    {
+      "domain": "pago",
+      "action": "reader_terminar",
+      "handler": "handlePagoReaderTerminar",
+      "description": "Cancela lo que el cliente esté haciendo en el datáfono (202: asíncrono y sin confirmación)."
+    },
+    {
+      "domain": "pago",
+      "action": "cliente_alta",
+      "handler": "handlePagoClienteAlta",
+      "description": "Alta idempotente del cliente de siempre (customer_id propio del negocio) para guardar tarjetas y cobrar sin que vuelva a teclear."
+    },
+    {
+      "domain": "pago",
+      "action": "cliente_tarjetas",
+      "handler": "handlePagoClienteTarjetas",
+      "description": "Tarjetas guardadas del cliente: token, últimos 4, marca, estado del mandato y si se puede cobrar sin el cliente delante."
+    },
+    {
+      "domain": "pago",
+      "action": "cliente_tarjeta_baja",
+      "handler": "handlePagoClienteBajaTarjeta",
+      "description": "Desactiva una tarjeta guardada (DELETE en SumUp + registro del proyecto)."
+    },
+    {
+      "domain": "pago",
+      "action": "tokenizar",
+      "handler": "handlePagoTokenizar",
+      "description": "Consentimiento para guardar la tarjeta: checkout SETUP_RECURRING_PAYMENT (autorización que se devuelve al instante) + URL de la página del Payment Widget que sirve este módulo. No es un cobro."
+    },
+    {
+      "domain": "pago",
+      "action": "cobrar_guardada",
+      "handler": "handlePagoCobrarGuardada",
+      "description": "Cobro recurrente servidor-a-servidor con la tarjeta guardada (token + customer_id). Idempotente por referencia; si el banco pide SCA devuelve requiere_accion y NO se reintenta."
+    }
+  ],
+  "apis": [
+    {
+      "method": "POST",
+      "path": "/pago/webhook/:project",
+      "handler": "handleWebhook",
+      "description": "Webhook de la pasarela → emite pago.confirmado / pago.rechazado / pago.tokenizado. El :project del path decide CON QUÉ CUENTA se verifica (config + credencial de ese proyecto). Stripe: firma HMAC del cuerpo. SumUp: su evento es {event_type, id} SIN firma; se reconsulta GET /v0.1/checkouts/{id} y solo se confirma si status === 'PAID'. Acepta la familia checkouts.* Y la de readers.*; si el checkout no existe como online, se busca en el libro como cobro de datáfono y se reconsulta el lector. Token opcional (?t=). Responde 5xx a propósito cuando no puede verificar, para que la pasarela reintente. URL pública: https://<dominio>/modules/pago-gateway/pago/webhook/<project>"
+    },
+    {
+      "method": "GET",
+      "path": "/pago/widget/:project/:checkout_id",
+      "handler": "handleWidget",
+      "description": "Página del Payment Widget de SumUp para el CONSENTIMIENTO de guardar tarjeta (la exige su SDK). Genérica: la sirve el módulo, así que ningún proyecto escribe frontend. Los datos de la tarjeta van del navegador a SumUp y nunca pasan por Enki. Token opcional (?t=). URL pública: https://<dominio>/modules/pago-gateway/pago/widget/<project>/<checkout_id>"
+    }
+  ],
+  "config": {
+    "storage": {
+      "config_proyecto": "/pago/config.json",
+      "libro": "/pago/checkouts.json",
+      "clientes": "/pago/clientes.json",
+      "conciliacion": "/pago/conciliacion.json",
+      "legacy": "/pizzepos/pago/*.json (se lee una vez; la primera escritura migra)"
+    },
+    "pasarela": {
+      "kind": "stripe-checkout",
+      "provider": "STRIPE",
+      "moneda": "eur",
+      "merchant_code": null,
+      "webhook_url": null,
+      "webhook_token": null,
+      "webhook_secret": null,
+      "return_url": null,
+      "ttl_minutos": 15,
+      "min_centimos": 100,
+      "exigir_config_proyecto": false,
+      "barrido": {
+        "activo": true,
+        "intervalo_ms": 120000
+      },
+      "conciliacion": {
+        "activo": true,
+        "intervalo_ms": 900000
+      }
+    },
+    "_doc": "El bloque `pasarela` de aquí son los DEFAULTS del core. Cada proyecto pisa lo suyo con /pago/config.json (esquema pago-pasarela-v1) vía pago.config.actualizar.request — sin reinicio y sin código. El secreto NUNCA está aquí: vive en credential-manager como <PROVIDER>_API_KEY_PROJECT_<project_id> (nivel PROJECT, aislado por negocio), con la global solo como respaldo single-tenant. Con `exigir_config_proyecto: true` el órgano deja de heredar la cuenta del core: un proyecto que no declaró la suya NO cobra (NO_PASARELA) — el interruptor que se enciende al haber un segundo negocio."
+  },
+  "dependencies": {
+    "credential-manager": "resuelve la credencial POR PROYECTO (credential.resolve.request con provider + project_id → nivel PROJECT antes que GLOBAL)",
+    "filesystem": "config por proyecto (/pago/config.json), libro de cobros (/pago/checkouts.json), registro de clientes y tarjetas (/pago/clientes.json) y cursor de conciliación (/pago/conciliacion.json) en el storage del proyecto",
+    "project-manager": "resuelve el project_id por slug en el webhook y en la página del widget (:project), y lista los proyectos para barrer/conciliar"
+  }
+}

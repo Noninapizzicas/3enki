@@ -227,6 +227,48 @@ export const cocinaStore = writable<CocinaState>({
 // Glovo: Set de cuenta_ids ya confirmados (aceptados en Glovo API)
 const glovoConfirmados = new Set<string>();
 
+// =============================================================================
+// PROYECTO DE ESTA PANTALLA
+// =============================================================================
+// El modulo cocina es un singleton del core: guarda los pedidos de TODOS los
+// proyectos. Esta pantalla tiene que decir cual es el suyo o enseñaria (y
+// marcaria) la cola de otro negocio. La llave llega de la ruta /{project_id}/cocina
+// y puede ser uuid o slug: se guarda tal cual y se comparan las dos formas.
+let proyectoCocina: string | null = null;
+const aliasesProyecto = new Set<string>(['']);
+
+/** Ata esta pantalla a su proyecto. Se llama al montar la cocina, antes de
+ *  cualquier petición o suscripción. Acepta uuid o slug. */
+export function vincularProyectoCocina(projectId?: string | null): void {
+  proyectoCocina = projectId || null;
+  aliasesProyecto.clear();
+  aliasesProyecto.add('');
+  if (proyectoCocina) aliasesProyecto.add(proyectoCocina);
+}
+
+/** Suma un alias (id o slug) del MISMO proyecto — lo trae la respuesta del
+ *  backend, que ya resolvió la identidad. */
+export function aliasProyectoCocina(alias?: string | null): void {
+  if (alias) aliasesProyecto.add(alias);
+}
+
+export function getProyectoCocina(): string | null {
+  return proyectoCocina;
+}
+
+/** ¿Este dato es de mi proyecto? Sin proyecto vinculado no se filtra (compat). */
+function esDeMiProyecto(projectId?: string | null): boolean {
+  if (!proyectoCocina) return true;
+  if (!projectId) return false;
+  return aliasesProyecto.has(projectId);
+}
+
+/** Petición al dominio cocina con el proyecto de esta pantalla puesto. */
+function pedirCocina<T = any>(action: string, args: Record<string, any> = {}) {
+  const payload = proyectoCocina ? { project_id: proyectoCocina, ...args } : args;
+  return mqttRequest<T>('cocina', action, payload);
+}
+
 // Derivados
 export const pedidosCocina = derived(cocinaStore, $s => $s.pedidos);
 export const cocinaLoading = derived(cocinaStore, $s => $s.loading);
@@ -264,10 +306,16 @@ export async function loadPedidosActivos(): Promise<void> {
   cocinaStore.update(s => ({ ...s, loading: true, error: null }));
 
   try {
-    const res = await mqttRequest<any>('cocina', 'list-active', {});
+    const res = await pedirCocina('list-active');
     const data = res?.data?.pedidos ? res.data : res?.data?.data;
     const pedidos = data?.pedidos || [];
     const devices = data?.devices || [];
+
+    // Las dos llaves del proyecto tal como las resolvió el backend + las que
+    // traen los pedidos: con eso se reconocen los eventos en vivo sin adivinar.
+    aliasProyectoCocina(data?.proyecto?.id);
+    aliasProyectoCocina(data?.proyecto?.slug);
+    for (const p of pedidos) aliasProyectoCocina(p?.project_id);
 
     cocinaStore.update(s => ({
       ...s,
@@ -286,7 +334,7 @@ export async function loadPedidosActivos(): Promise<void> {
 
 export async function loadMetrics(): Promise<void> {
   try {
-    const res = await mqttRequest<any>('cocina', 'metrics', {});
+    const res = await pedirCocina('metrics');
     const metrics = res?.data?.pedidos_activos !== undefined ? res.data : res?.data?.data;
 
     if (metrics) {
@@ -341,7 +389,7 @@ export async function prepararItem(itemId: string): Promise<boolean> {
     const state2 = get(cocinaStore);
     const payload: any = { item_id: itemId };
     if (state2.myDeviceId) payload.device_id = state2.myDeviceId;
-    await mqttRequest<any>('cocina', 'prepare-item', payload);
+    await pedirCocina('prepare-item', payload);
     return true;
   } catch {
     // Revert optimistic update
@@ -396,7 +444,7 @@ export async function terminarItem(itemId: string): Promise<boolean> {
     const state2 = get(cocinaStore);
     const payload: any = { item_id: itemId, done: true };
     if (state2.myDeviceId) payload.device_id = state2.myDeviceId;
-    await mqttRequest<any>('cocina', 'prepare-item', payload);
+    await pedirCocina('prepare-item', payload);
     return true;
   } catch {
     cocinaStore.update(s => {
@@ -427,7 +475,7 @@ export async function marcarListo(pedidoId: string): Promise<boolean> {
   }));
 
   try {
-    await mqttRequest<any>('cocina', 'mark-ready', { pedido_id: pedidoId });
+    await pedirCocina('mark-ready', { pedido_id: pedidoId });
     return true;
   } catch {
     // Recargar estado real
@@ -450,7 +498,7 @@ export async function registerDevice(nombre?: string): Promise<boolean> {
   try {
     const state = get(cocinaStore);
     // Enviar config completa: valores del store (que ya incluyen los persistidos de localStorage)
-    const res = await mqttRequest<any>('cocina', 'register-device', {
+    const res = await pedirCocina('register-device', {
       device_id: deviceId,
       nombre: nombre || state.myNombre || undefined,
       estacion: state.myEstacion || undefined,
@@ -505,7 +553,7 @@ export function toggleFiltro(familia: string): void {
   const state = get(cocinaStore);
   saveDeviceConfig({ filtrosActivos: state.filtrosActivos });
   if (state.myDeviceId) {
-    mqttRequest('cocina', 'register-device', {
+    pedirCocina('register-device', {
       device_id: state.myDeviceId,
       filtros: { familias: state.filtrosActivos }
     }).catch(() => {});
@@ -519,7 +567,7 @@ export function clearFiltros(): void {
 
   const state = get(cocinaStore);
   if (state.myDeviceId) {
-    mqttRequest('cocina', 'register-device', {
+    pedirCocina('register-device', {
       device_id: state.myDeviceId,
       filtros: { familias: [] }
     }).catch(() => {});
@@ -536,7 +584,7 @@ export function setFiltros(familias: string[]): void {
 
   const state = get(cocinaStore);
   if (state.myDeviceId) {
-    mqttRequest('cocina', 'register-device', {
+    pedirCocina('register-device', {
       device_id: state.myDeviceId,
       filtros: { familias }
     }).catch(() => {});
@@ -554,7 +602,7 @@ export async function updateDeviceName(nombre: string): Promise<boolean> {
   saveDeviceConfig({ nombre });
 
   try {
-    await mqttRequest('cocina', 'register-device', {
+    await pedirCocina('register-device', {
       device_id: state.myDeviceId,
       nombre,
       estacion: state.myEstacion || undefined,
@@ -578,7 +626,7 @@ export async function updateEstacion(estacion: string): Promise<boolean> {
   saveDeviceConfig({ estacion });
 
   try {
-    await mqttRequest('cocina', 'register-device', {
+    await pedirCocina('register-device', {
       device_id: state.myDeviceId,
       estacion,
       filtros: { familias: state.filtrosActivos },
@@ -603,7 +651,7 @@ export async function setTipoEstacion(tipo: string): Promise<boolean> {
 
   if (state.myDeviceId) {
     try {
-      await mqttRequest('cocina', 'register-device', {
+      await pedirCocina('register-device', {
         device_id: state.myDeviceId,
         tipo_estacion: tipo,
         filtros: { familias: state.filtrosActivos }
@@ -637,7 +685,7 @@ export async function setImpresora(impresora: ImpresoraConfig | null): Promise<b
   const state = get(cocinaStore);
   if (state.myDeviceId) {
     try {
-      await mqttRequest('cocina', 'register-device', {
+      await pedirCocina('register-device', {
         device_id: state.myDeviceId,
         impresora
       });
@@ -680,7 +728,7 @@ export async function loadImpresorasDisponibles(): Promise<ImpresoraDisponible[]
  */
 export async function loadTiposEstacion(): Promise<void> {
   try {
-    const res = await mqttRequest<any>('cocina', 'list-station-types', {});
+    const res = await pedirCocina('list-station-types');
     const tipos = res?.data?.tipos || res?.data?.data?.tipos || [];
     if (tipos.length > 0) {
       cocinaStore.update(s => ({ ...s, tiposDisponibles: tipos }));
@@ -958,6 +1006,8 @@ export function initCocinaSubscriptions(): () => void {
     mqttSubscribe('pedido.enviado_cocina', (event: any) => {
       const data = event?.data || event?.payload || event;
       if (!data?.pedido_id) return;
+      // La cocina de un negocio no canta el pedido de otro: el bus es global.
+      if (!esDeMiProyecto(data.project_id)) return;
 
       const isGlovo = data.canal === 'glovo';
 

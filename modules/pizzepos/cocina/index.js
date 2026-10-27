@@ -19,6 +19,7 @@ const fs = require('fs').promises;
 const path = require('path');
 
 const BaseModule = require('../../_shared/base-module');
+const ResolutorProyecto = require('../../_shared/resolutor-proyecto');
 const TIPOS_ESTACION = {
   general: {
     id: 'general',
@@ -48,7 +49,7 @@ class CocinaModule extends BaseModule {
   constructor() {
     super();
     this.name = 'cocina';
-    this.version = '3.4.0';
+    this.version = '3.5.0';
     this.uiHandler = null;
     this.validator = null;
     this.config = null;
@@ -59,6 +60,12 @@ class CocinaModule extends BaseModule {
     this.tiemposPreparacion = [];
     this.tiposEstacion = { ...TIPOS_ESTACION };
     this.devices = new Map();
+
+    // Identidad de proyecto en un solo camino: id (uuid) | slug -> slug.
+    // El modulo es un singleton del core, asi que aqui conviven los pedidos de
+    // todos los proyectos; esto es lo que permite recortarlos al que pregunta.
+    this._proyectos = new ResolutorProyecto();
+    this._avisadosSinProyecto = new Set();
 
     this._snapshotFile = null;
     this._snapshotSaveTimer = null;
@@ -77,6 +84,12 @@ class CocinaModule extends BaseModule {
     this.config = core.config || null;
 
     this.logger.info('module.loading', { module: this.name, version: this.version });
+
+    // El resolutor necesita el bus vivo; se recrea con el para no quedar mudo.
+    this._proyectos = new ResolutorProyecto({
+      eventBus: this.eventBus, logger: this.logger, metrics: this.metrics
+    });
+    this._proyectos.calentar();
 
     this._registerSchemas();
     // tools.contract v1.2: el loader auto-wirea tools[] del module.json a uiHandler.
@@ -139,6 +152,61 @@ class CocinaModule extends BaseModule {
     });
     this.metrics?.increment?.('cocina.errors', { code, kind });
     return this._errorResponse(status, code, err?.message || 'Error interno');
+  }
+
+  // ==========================================
+  // Identidad de proyecto (aislamiento entre cocinas)
+  // ==========================================
+  //
+  // El modulo es un singleton: en `pedidosActivos` conviven los pedidos de TODOS
+  // los proyectos del core. Cada pedido lleva su project_id desde
+  // onPedidoEnviadoCocina, pero listar sin mirarlo hacia que la cocina de un
+  // proyecto ensenara (y pudiera marcar listo) los pedidos de otro. Estas
+  // funciones son el UNICO camino para recortar esa lista, y hablan la lengua
+  // del resolutor compartido: se pregunta con uuid o con slug, responde el slug.
+
+  async _slugProyecto(projectId) {
+    return this._proyectos.slugDe(projectId);
+  }
+
+  // Un pedido es de este proyecto cuando su llave resuelve al mismo slug.
+  // Un pedido sin project_id no es de nadie: se avisa (no_silent_drops) y queda fuera.
+  async _esDelProyecto(cosa, slug) {
+    if (!slug) return true;
+    if (!cosa?.project_id) {
+      const clave = cosa?.pedido_id || cosa?.device_id || 'desconocido';
+      if (!this._avisadosSinProyecto.has(clave)) {
+        this._avisadosSinProyecto.add(clave);
+        this.logger?.warn?.('cocina.sin_proyecto', { entidad: clave });
+        this.metrics?.increment?.('cocina.errors', { code: 'MISSING_PROJECT', kind: 'aislamiento' });
+      }
+      return false;
+    }
+    return (await this._slugProyecto(cosa.project_id)) === slug;
+  }
+
+  // Pedidos activos que puede ver quien pregunta. Sin project_id → todos
+  // (el camino de los agentes y del bus, que ya hablan de un proyecto concreto).
+  async _pedidosVisibles(projectId) {
+    const todos = Array.from(this.pedidosActivos.values());
+    if (!projectId) return todos;
+    const slug = await this._slugProyecto(projectId);
+    const visibles = [];
+    for (const p of todos) {
+      if (await this._esDelProyecto(p, slug)) visibles.push(p);
+    }
+    return visibles;
+  }
+
+  async _devicesVisibles(projectId) {
+    const lista = this._getDeviceList();
+    if (!projectId) return lista;
+    const slug = await this._slugProyecto(projectId);
+    const visibles = [];
+    for (const d of lista) {
+      if (await this._esDelProyecto(d, slug)) visibles.push(d);
+    }
+    return visibles;
   }
 
   async _publicarEvento(name, payload, sourcePayload) {
@@ -338,32 +406,49 @@ class CocinaModule extends BaseModule {
     }
   }
 
-  async onCajaCerrada(event) {
-    const size = this.pedidosActivos.size;
-    this.pedidosActivos.clear();
-    this.cuentaNombres.clear();
-    this.historial = [];
-    this._saveSnapshotDebounced();
+  // Reset de caja / dia iniciado. Antes vaciaba la cocina ENTERA del core: cerrar
+  // la caja de un negocio borraba los pedidos activos de los demas. Ahora toca
+  // solo los del proyecto del evento; sin project_id (evento legacy) limpia todo.
+  async _resetCocina(event, motivo) {
+    const data = event?.data || event?.payload || event;
+    const projectId = data?.project_id || null;
+    let limpiados = 0;
 
-    this.metrics?.gauge?.('cocina.pedidos_activos.count', 0);
-    this.logger.info('cocina.reset.caja_cerrada', {
-      pedidos_limpiados: size,
+    if (!projectId) {
+      limpiados = this.pedidosActivos.size;
+      this.pedidosActivos.clear();
+      this.cuentaNombres.clear();
+      this.historial = [];
+    } else {
+      const slug = await this._slugProyecto(projectId);
+      for (const [pedido_id, pedido] of Array.from(this.pedidosActivos)) {
+        if (await this._esDelProyecto(pedido, slug)) {
+          this.pedidosActivos.delete(pedido_id);
+          limpiados++;
+        }
+      }
+      const historialAjeno = [];
+      for (const p of this.historial) {
+        if (!(await this._esDelProyecto(p, slug))) historialAjeno.push(p);
+      }
+      this.historial = historialAjeno;
+    }
+
+    this._saveSnapshotDebounced();
+    this.metrics?.gauge?.('cocina.pedidos_activos.count', this.pedidosActivos.size);
+    this.logger.info(motivo, {
+      pedidos_limpiados: limpiados,
+      project_id: projectId,
       correlation_id: event?.metadata?.correlationId || null
     });
   }
 
-  async onDiaIniciado(event) {
-    const size = this.pedidosActivos.size;
-    this.pedidosActivos.clear();
-    this.cuentaNombres.clear();
-    this.historial = [];
-    this._saveSnapshotDebounced();
+  async onCajaCerrada(event) {
+    await this._resetCocina(event, 'cocina.reset.caja_cerrada');
+  }
 
-    this.metrics?.gauge?.('cocina.pedidos_activos.count', 0);
-    this.logger.info('cocina.reset.dia_iniciado', {
-      pedidos_limpiados: size,
-      correlation_id: event?.metadata?.correlationId || null
-    });
+  async onDiaIniciado(event) {
+    await this._resetCocina(event, 'cocina.reset.dia_iniciado');
   }
 
   async onPedidoEnviadoCocina(event) {
@@ -475,9 +560,18 @@ class CocinaModule extends BaseModule {
   // UI Handlers
   // ==========================================
 
-  async handleGetActivos() {
+  async handleGetActivos(data) {
     try {
-      const activos = Array.from(this.pedidosActivos.values());
+      const { project_id } = data || {};
+      // Solo los pedidos del proyecto que pregunta: la cocina de un negocio no
+      // ensena la cola de otro (antes se veian todas las del core).
+      const activos = await this._pedidosVisibles(project_id);
+      // La identidad resuelta vuelve con la respuesta: así la pantalla conoce las
+      // DOS llaves del proyecto (uuid y slug) y puede reconocer sus eventos en vivo.
+      const slugProyecto = project_id ? await this._slugProyecto(project_id) : null;
+      const proyecto = slugProyecto
+        ? { id: await this._proyectos.idDe(slugProyecto), slug: slugProyecto }
+        : null;
       activos.sort((a, b) => new Date(a.recibido_at) - new Date(b.recibido_at));
 
       let itemsPendientes = 0;
@@ -496,7 +590,8 @@ class CocinaModule extends BaseModule {
           total: activos.length,
           items_pendientes: itemsPendientes,
           items_preparando: itemsPreparando,
-          devices: this._getDeviceList()
+          proyecto,
+          devices: await this._devicesVisibles(project_id)
         }
       };
     } catch (err) {
@@ -506,8 +601,16 @@ class CocinaModule extends BaseModule {
 
   async handleGetHistorial(data) {
     try {
-      const { limit } = data || {};
-      const historial = this.historial.slice(0, parseInt(limit) || 20);
+      const { limit, project_id } = data || {};
+      let historial = this.historial;
+      if (project_id) {
+        const slug = await this._slugProyecto(project_id);
+        historial = [];
+        for (const p of this.historial) {
+          if (await this._esDelProyecto(p, slug)) historial.push(p);
+        }
+      }
+      historial = historial.slice(0, parseInt(limit) || 20);
       return { status: 200, data: { pedidos: historial, total: historial.length } };
     } catch (err) {
       return this._handleHandlerError('cocina.history.error', err);
@@ -519,12 +622,12 @@ class CocinaModule extends BaseModule {
       const invalid = this._validateInput('cocina.get', data);
       if (invalid) return invalid;
 
-      const { pedido_id } = data;
+      const { pedido_id, project_id } = data;
       const pedido = this.pedidosActivos.get(pedido_id);
 
-      if (!pedido) {
+      if (!pedido || (project_id && !(await this._esDelProyecto(pedido, await this._slugProyecto(project_id))))) {
         this.metrics?.increment?.('cocina.errors', { code: 'RESOURCE_NOT_FOUND', kind: 'get' });
-        this.logger.warn('cocina.get.not_found', { pedido_id });
+        this.logger.warn('cocina.get.not_found', { pedido_id, project_id: project_id || null });
         return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'Pedido no encontrado en cocina', { pedido_id });
       }
 
@@ -539,13 +642,15 @@ class CocinaModule extends BaseModule {
       const invalid = this._validateInput('cocina.prepare-item', data);
       if (invalid) return invalid;
 
-      const { item_id, device_id } = data;
+      const { item_id, device_id, project_id } = data;
       const device = device_id ? this.devices.get(device_id) : null;
       if (device) device.last_seen = new Date().toISOString();
 
       let pedidoEncontrado = null;
       let itemEncontrado = null;
-      for (const pedido of this.pedidosActivos.values()) {
+      // Se busca SOLO entre los pedidos del proyecto que actua: un item de otra
+      // cocina no se encuentra (404), que es lo que impide marcarlo listo por error.
+      for (const pedido of await this._pedidosVisibles(project_id)) {
         const item = pedido.items.find(i => i.item_id === item_id);
         if (item) {
           pedidoEncontrado = pedido;
@@ -556,7 +661,7 @@ class CocinaModule extends BaseModule {
 
       if (!itemEncontrado) {
         this.metrics?.increment?.('cocina.errors', { code: 'RESOURCE_NOT_FOUND', kind: 'prepare-item' });
-        this.logger.warn('cocina.prepare_item.not_found', { item_id });
+        this.logger.warn('cocina.prepare_item.not_found', { item_id, project_id: project_id || null });
         return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'Item no encontrado en cocina', { item_id });
       }
 
@@ -710,11 +815,11 @@ class CocinaModule extends BaseModule {
       const invalid = this._validateInput('cocina.mark-ready', data);
       if (invalid) return invalid;
 
-      const { pedido_id } = data;
+      const { pedido_id, project_id } = data;
       const pedido = this.pedidosActivos.get(pedido_id);
-      if (!pedido) {
+      if (!pedido || (project_id && !(await this._esDelProyecto(pedido, await this._slugProyecto(project_id))))) {
         this.metrics?.increment?.('cocina.errors', { code: 'RESOURCE_NOT_FOUND', kind: 'mark-ready' });
-        this.logger.warn('cocina.mark_ready.not_found', { pedido_id });
+        this.logger.warn('cocina.mark_ready.not_found', { pedido_id, project_id: project_id || null });
         return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'Pedido no encontrado en cocina', { pedido_id });
       }
 
@@ -755,6 +860,10 @@ class CocinaModule extends BaseModule {
           { valid_types: Object.keys(this.tiposEstacion) });
       }
 
+      // El device pertenece al proyecto de la pantalla que lo registra: sin esto,
+      // la 'Estacion 1' de un negocio salia tambien en la cocina de los demas.
+      const slugProyecto = data.project_id ? await this._slugProyecto(data.project_id) : null;
+
       const existing = this.devices.get(device_id);
 
       if (existing) {
@@ -763,6 +872,7 @@ class CocinaModule extends BaseModule {
         existing.filtros = filtros || existing.filtros;
         if (tipo_estacion !== undefined) existing.tipo_estacion = tipo_estacion;
         if (impresora !== undefined) existing.impresora = impresora;
+        if (slugProyecto) existing.project_id = slugProyecto;
         existing.last_seen = new Date().toISOString();
 
         await this._publicarEvento('cocina.device_updated', {
@@ -786,7 +896,7 @@ class CocinaModule extends BaseModule {
             tipo_estacion: existing.tipo_estacion,
             tipo_estacion_info: this.tiposEstacion[existing.tipo_estacion] || null,
             impresora: existing.impresora || null,
-            devices: this._getDeviceList()
+            devices: await this._devicesVisibles(data.project_id)
           }
         };
       }
@@ -796,6 +906,7 @@ class CocinaModule extends BaseModule {
 
       const device = {
         device_id,
+        project_id: slugProyecto,
         nombre: nombre || `Estacion ${this.devices.size + 1}`,
         estacion: estacion || null,
         color,
@@ -834,7 +945,7 @@ class CocinaModule extends BaseModule {
           tipo_estacion: device.tipo_estacion,
           tipo_estacion_info: this.tiposEstacion[device.tipo_estacion] || null,
           impresora: device.impresora,
-          devices: this._getDeviceList()
+          devices: await this._devicesVisibles(data.project_id)
         }
       };
     } catch (err) {
@@ -860,19 +971,20 @@ class CocinaModule extends BaseModule {
         });
       }
 
-      return { status: 200, data: { removed: existed, devices: this._getDeviceList() } };
+      return { status: 200, data: { removed: existed, devices: await this._devicesVisibles(data.project_id) } };
     } catch (err) {
       return this._handleHandlerError('cocina.unregister_device.error', err);
     }
   }
 
-  async handleListDevices() {
-    return { status: 200, data: { devices: this._getDeviceList() } };
+  async handleListDevices(data) {
+    return { status: 200, data: { devices: await this._devicesVisibles(data?.project_id) } };
   }
 
   _getDeviceList() {
     return Array.from(this.devices.values()).map(d => ({
       device_id: d.device_id,
+      project_id: d.project_id || null,
       nombre: d.nombre,
       estacion: d.estacion || null,
       color: d.color,

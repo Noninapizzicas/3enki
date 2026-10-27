@@ -15,7 +15,7 @@ fuentes:
   - modules/pizzepos/tarifas/**
   - modules/pizzepos/persistencia-comandero/**
   - modules/pizzepos/impresion/**
-verificado: 2026-10-24
+verificado: 2026-10-27
 ---
 
 # PizzePOS Módulos — Subsistema de Punto de Venta (v3.2.0)
@@ -423,54 +423,66 @@ CLASE Cobro {
 }
 ```
 
-### 4. COCINA (v3.2.0) — Display de Cocina en Tiempo Real
+### 4. COCINA (v3.5.0) — Display de Cocina en Tiempo Real
 
 ```
 CLASE CocinaModule HEREDA BaseModule {
   ATRIBUTOS {
     name: String = 'cocina'
-    version: String = '3.2.0'
-    pedidosActivos: Map<pedido_id, PedidoEnCocina>
+    version: String = '3.5.0'
+    pedidosActivos: Map<pedido_id, PedidoEnCocina>   // GLOBAL: conviven TODOS los proyectos
     historial: Array<PedidoEnCocina> (max 50)
-    devices: Map<device_id, Device>
+    devices: Map<device_id, Device>                  // CADA device lleva su project_id
     tiemposPreparacion: Array<Number> (max 100)
     cuentaNombres: Map<cuenta_id, String>
     tiposEstacion: Map<tipo, TipoEstacion>
+    _proyectos: ResolutorProyecto                    // uuid|slug → slug (el camino único)
     _snapshotFile: String
     _snapshotSaveTimer: NodeJS.Timeout
   }
 
   METODOS {
-    async onLoad(core: EventCore): Promise<Void>
-      await _restaurarSnapshot()
-      SI NO: await _restaurarDesdeArchivo()
+    // AISLAMIENTO (v3.5.0): el singleton guarda las colas de todos los proyectos,
+    // así que LEER y ACTUAR se recortan al project_id que pregunta. Sin project_id
+    // (agentes, bus) el comportamiento es el de siempre: todo.
+    async _pedidosVisibles(project_id?): Array<PedidoEnCocina>
+      SI NO project_id: RETORNA TODOS
+      slug ← _proyectos.slugDe(project_id)
+      RETORNA pedidos cuyo project_id resuelve AL MISMO slug
+      // pedido sin project_id: fuera + logger.warn 'cocina.sin_proyecto' + metric (no_silent_drops)
 
-    async handleGetActivos(): Promise<Response>
-      FILTRA pedidosActivos donde estado != 'completado'
-      ENRIQUECE CON device colors
-      RETORNA {status: 200, data: {pedidos}}
+    async handleGetActivos(data: {project_id?}): Promise<Response>
+      pedidos ← await _pedidosVisibles(project_id)
+      ORDENA por recibido_at ASC
+      RETORNA {status: 200, data: {pedidos, total, items_pendientes, items_preparando,
+                                   proyecto: {id, slug}, devices: await _devicesVisibles(project_id)}}
+      // `proyecto` lleva las DOS llaves: la pantalla reconoce así sus eventos en vivo
 
-    async handlePrepararItem(data: {item_id, device_id?}): Promise<Response>
-      BUSCA item EN todos los pedidos activos
-      SI NO existe: 404
+    async handlePrepararItem(data: {item_id, device_id?, project_id?}): Promise<Response>
+      BUSCA item SOLO entre _pedidosVisibles(project_id)
+      SI NO existe: 404   // un item de otra cocina NO se encuentra: no se puede marcar por error
       VALIDA transicion: pendiente → preparando → avanzado/preparado
       PUBLICA cocina.item_preparando|item_avanzado|item_preparado
-      RETORNA response
 
-    async handleMarcarListo(data: {pedido_id}): Promise<Response>
-      OBTIENE pedido
-      MARCA TODOS items como completados
-      ELIMINA DE pedidosActivos
-      AGREGA AL historial
-      PUBLICA cocina.pedido_listo
-      RETORNA {status: 200}
+    async handleMarcarListo(data: {pedido_id, project_id?}): Promise<Response>
+      pedido ← pedidosActivos.get(pedido_id)
+      SI NO existe O project_id no resuelve a su slug: 404
+      MARCA TODOS items como completados, AGREGA AL historial, PUBLICA cocina.pedido_listo
 
-    async handleRegisterDevice(data: {device_id, nombre?, estacion?, tipo_estacion?, filtros?, impresora?}): Promise<Response>
+    async handleGetPedido / handleGetHistorial(data: {..., project_id?})
+      MISMA guarda: pedido/historial de otro proyecto = 404 / fuera de la lista
+
+    async _resetCocina(event, motivo)
+      // caja.cerrada y dia.iniciado ya NO vacían la cocina del core entero:
+      SI evento.project_id: limpia SOLO los pedidos (y el historial) de ese proyecto
+      SI NO: limpia todo (comportamiento legacy)
+
+    async handleRegisterDevice(data: {device_id, project_id?, nombre?, estacion?, tipo_estacion?, filtros?, impresora?}): Promise<Response>
+      project_id ← _proyectos.slugDe(project_id)
       ASIGNA color unico del pool DEVICE_COLORS
-      CREA Device object
-      devices.set(device_id, device)
+      devices.set(device_id, Device con project_id)
       PUBLICA cocina.device_registered
-      RETORNA {status: 201, data: device}
+      RETORNA {status: 201, data: device, devices: await _devicesVisibles(project_id)}
 
     EVENTOS_PUBLISHES {
       'cocina.item_preparando': {item_id, pedido_id, cuenta_id, desde_estacion}

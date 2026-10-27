@@ -1,6 +1,7 @@
 {
   "name": "cocina",
-  "version": "3.4.0",
+  "version": "3.5.0",
+  "_v3_5_nota": "v3.5.0 (2026-10-27): AISLAMIENTO POR PROYECTO. El modulo es un singleton del core y list-active devolvia los pedidos de TODOS los proyectos: la cocina de the-pirate ensenaba y podia marcar listo el pedido de nonina. Ahora list-active/history/get/prepare-item/mark-ready/list-devices/prepare se recortan al project_id que pregunta con el resolutor compartido (_shared/resolutor-proyecto: uuid o slug -> slug); cada device guarda su proyecto; caja.cerrada y dia.iniciado vacian solo su proyecto. list-active devuelve proyecto:{id,slug} para que la pantalla reconozca sus eventos. Sin project_id, comportamiento de siempre (agentes y bus).",
   "_v3_4_nota": "v3.4.0 (2026-06-30): TERMINADO directo (botón rojo de la pantalla). prepare-item acepta done:true → marca el item LISTO desde cualquier estado (pendiente o preparando) en un solo paso, cierra la fase abierta, publica cocina.item_preparado y cierra el pedido si todos listos. Soporta el rediseño de interacción del frontend: tocar el producto solo despliega/pliega el detalle (ya NO avanza estado → no más terminados accidentales); terminar es un acto explícito por el botón rojo. Schema prepare-item +done:boolean.",
   "_v3_3_nota": "v3.3.0 (2026-06-29): RED DE SALIDA contra lineas fantasma. onPedidoEnviadoCocina descarta los items sin nombre (no accionables = la 'fila vacia' que aparecia por el camino de autoservicio) PERO con logger.warn cocina.item.sin_nombre_descartado — nunca en silencio (no_silent_failures), para cazar al emisor. Defensa en profundidad junto al gate fuerte del comandero v3.4.0 (que rechaza la linea muda en la puerta). El camino feliz no cambia: los items con nombre pasan igual.",
   "description": "Display de cocina en tiempo real - Sistema de preparacion de pedidos. Estacion unica (general) + multi-device con colores. Imprime ticket de pieza al completar. Snapshot persistente atomico. Publica periferico.display para pantallas externas.",
@@ -74,7 +75,9 @@
     {
       "name": "cocina.list-active",
       "description": "Lista pedidos activos en cocina (no terminados) con sus items y devices asignados.",
-      "parameters": { "type": "object", "properties": {}, "additionalProperties": false },
+      "parameters": { "type": "object", "properties": {
+        "project_id": { "type": "string", "description": "Proyecto que pregunta (uuid o slug). Sin el, se devuelven todos los proyectos del core." }
+      }, "additionalProperties": false },
       "handler": "handleGetActivos",
       "errores_conocidos": ["UNKNOWN_ERROR"]
     },
@@ -84,8 +87,9 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "pedido_id": { "type": "string", "description": "Identificador del pedido." }
-        },
+          "pedido_id": { "type": "string", "description": "Identificador del pedido." },
+        "project_id": { "type": "string", "description": "Proyecto que pregunta (uuid o slug). Sin el, se devuelven todos los proyectos del core." }
+      },
         "required": ["pedido_id"],
         "additionalProperties": false
       },
@@ -98,8 +102,9 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "limit": { "type": "integer", "description": "Cantidad maxima a devolver (default 20)." }
-        },
+          "limit": { "type": "integer", "description": "Cantidad maxima a devolver (default 20)." },
+        "project_id": { "type": "string", "description": "Proyecto que pregunta (uuid o slug). Sin el, se devuelven todos los proyectos del core." }
+      },
         "additionalProperties": false
       },
       "handler": "handleGetHistorial",
@@ -112,8 +117,9 @@
         "type": "object",
         "properties": {
           "item_id":   { "type": "string", "description": "Identificador del item." },
-          "device_id": { "type": "string", "description": "Device de cocina que toma el item (opcional)." }
-        },
+          "device_id": { "type": "string", "description": "Device de cocina que toma el item (opcional)." },
+        "project_id": { "type": "string", "description": "Proyecto que pregunta (uuid o slug). Sin el, se devuelven todos los proyectos del core." }
+      },
         "required": ["item_id"],
         "additionalProperties": false
       },
@@ -126,8 +132,9 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "pedido_id": { "type": "string", "description": "Identificador del pedido." }
-        },
+          "pedido_id": { "type": "string", "description": "Identificador del pedido." },
+        "project_id": { "type": "string", "description": "Proyecto que pregunta (uuid o slug). Sin el, se devuelven todos los proyectos del core." }
+      },
         "required": ["pedido_id"],
         "additionalProperties": false
       },
@@ -145,8 +152,9 @@
           "estacion":      { "type": "string", "description": "Estacion asignada." },
           "filtros":       { "type": "object", "description": "Filtros de familias del device." },
           "tipo_estacion": { "type": "string", "description": "Tipo de estacion (general, horno, ...)." },
-          "impresora":     { "type": "string", "description": "Impresora asociada al device (opcional)." }
-        },
+          "impresora":     { "type": "string", "description": "Impresora asociada al device (opcional)." },
+        "project_id": { "type": "string", "description": "Proyecto que pregunta (uuid o slug). Sin el, se devuelven todos los proyectos del core." }
+      },
         "required": ["device_id"],
         "additionalProperties": false
       },
@@ -159,8 +167,9 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "device_id": { "type": "string", "description": "Identificador del device." }
-        },
+          "device_id": { "type": "string", "description": "Identificador del device." },
+        "project_id": { "type": "string", "description": "Proyecto que pregunta (uuid o slug). Sin el, se devuelven todos los proyectos del core." }
+      },
         "required": ["device_id"],
         "additionalProperties": false
       },
@@ -170,7 +179,9 @@
     {
       "name": "cocina.list-devices",
       "description": "Lista los devices fisicos de cocina registrados con sus colores y estaciones.",
-      "parameters": { "type": "object", "properties": {}, "additionalProperties": false },
+      "parameters": { "type": "object", "properties": {
+        "project_id": { "type": "string", "description": "Proyecto que pregunta (uuid o slug). Sin el, se devuelven todos los proyectos del core." }
+      }, "additionalProperties": false },
       "handler": "handleListDevices",
       "errores_conocidos": ["UNKNOWN_ERROR"]
     },

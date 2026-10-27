@@ -6,7 +6,7 @@ fuentes:
   - modules/pizzepos/**
   - modules/pago-gateway/**
   - blueprints/**
-verificado: 2026-10-25 (pago-gateway v2.0: órgano de plataforma — config y clave por proyecto)
+verificado: 2026-10-27 (cocina v3.5.0: aislamiento por proyecto — el singleton ya no mezcla colas)
 ---
 
 # Módulos Pizzepos y Blueprints
@@ -36,6 +36,14 @@ verificado: 2026-10-25 (pago-gateway v2.0: órgano de plataforma — config y cl
 >
 > cocina: NO tiene catálogo propio — el producto llega dentro de
 >         pedido.enviado_cocina (nombre, cantidad, variaciones, ingredientes_base).
+>         **v3.5.0 — la cocina también es por proyecto (verificado en vivo 2026-10-27):**
+>         `pedidosActivos`/`devices` son singletons del core y guardan las colas de TODOS
+>         los proyectos, así que LEER y ACTUAR se recortan con `ResolutorProyecto`
+>         (`cocina._pedidosVisibles(project_id)`): list-active, history, get, prepare-item,
+>         mark-ready y las listas de devices responden solo al proyecto que pregunta
+>         (uuid o slug), `prepare-item`/`mark-ready` de otra cocina → 404, cada device
+>         guarda su `project_id` y `caja.cerrada`/`dia.iniciado` vacían solo su proyecto.
+>         Sin `project_id` el comportamiento es el de siempre (agentes y bus).
 > ```
 >
 > `producto.creado` es contrato LEGADO: nadie lo emite (v5 lo retiró); los consumidores

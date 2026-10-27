@@ -19,6 +19,15 @@ const REGISTRO_DEFAULT = './data/telegram-bridge/registro.json';
  *             ÚLTIMA ACTIVA (el backend ordena por updated_at DESC); si no
  *             hay ninguna, crea una (conversation/create). El id resuelto
  *             se recuerda en el registro → hilo unificado con la web.
+ * FOTO      : telegram.photo.received → la foto se materializa en
+ *             data/bots/<bot>/received/ (telegram.get_file, download:true) y
+ *             el chat recibe UNA línea con el PIE DE FOTO y la ruta local.
+ *             Sin esto, la foto entraba al disco y el chat no se enteraba:
+ *             el pie («esta foto es la Carbonara») se perdía en silencio.
+ *             NO se cuelga de bot.file.stored: ese evento no se emite en
+ *             producción (bot-manager exige `result.success` y la respuesta
+ *             de telegram-service trae `status`/`data`), así que depender de
+ *             él sería colgarse de un evento muerto.
  * SALIENTE  : ai.chat.response / ai.chat.failed con channel='telegram' →
  *             telegram.send_message.request { botName, chatId, text } con el
  *             hilo del mensaje original (channel_context propagado por el
@@ -32,10 +41,13 @@ class TelegramBridgeModule extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'telegram-bridge';
-    this.version = '1.0.1';
+    this.version = '1.0.2';
 
     this.registro = { _updated_at: null, vinculos: {} };
     this.registroPath = REGISTRO_DEFAULT;
+    // Almacén de ficheros de los bots (bot-manager usa el mismo): destino de la
+    // foto que el puente materializa para poder citarla en el chat.
+    this.botsPath = './data/bots';
     this.mqttRequest = null;
     // Confirmaciones pendientes (paso 3 Telegram): ui_token → datos de la petición
     // para resolver el callback Sí/No y reenviar portal.call con confirmado:true.
@@ -47,6 +59,7 @@ class TelegramBridgeModule extends ModuloHibridoReflejo {
     this.mqttRequest = context?.mqttRequest || null;
     const cfg = context?.moduleConfig || {};
     if (cfg.registro_path) this.registroPath = cfg.registro_path;
+    if (cfg.bots_path) this.botsPath = cfg.bots_path;
     this._cargarRegistro();
     this.logger?.info('telegram-bridge.loaded', {
       module: this.name, version: this.version,
@@ -150,6 +163,77 @@ class TelegramBridgeModule extends ModuloHibridoReflejo {
     if (!d.command) return;
     const texto = `/${d.command}${(d.args || []).length ? ' ' + d.args.join(' ') : ''}`;
     await this._reenviarAlChat(d, texto);
+  }
+
+  /**
+   * ENTRANTE — FOTO de Telegram → el chat, con su PIE DE FOTO y su ruta.
+   *
+   * Antes de esto la foto entraba en `data/bots/<botName>/received/` y el chat
+   * NO se enteraba: el PIE DE FOTO («esta foto es la Carbonara») se perdía en
+   * silencio y había que emparejar a mano por fecha de fichero.
+   *
+   * Ahora el chat recibe UNA sola línea con el pie y la ruta local del archivo:
+   *
+   *   [foto] esta foto es la Carbonara
+   *   archivo: ./data/bots/<bot>/received/foto_20261027T134814_10889465.jpg
+   *
+   * Se descarga AQUÍ (telegram.get_file con download:true y destPath propio) y
+   * no se espera a `bot.file.stored` porque ese evento NO se emite en producción
+   * (0 ocurrencias en 8 días de logs, con fotos entrando a diario): bot-manager
+   * lo publica solo si `result.success`, y la respuesta de telegram-service
+   * trae `status`/`data`, no `success` → se sale antes de publicar. Colgarse de
+   * un evento muerto sería un arreglo que no arregla nada. La foto que trae el
+   * fileId es la MISMA que guarda bot-manager: se paga una descarga doble
+   * (~100 KB) a cambio de no depender de otro módulo.
+   */
+  async onTelegramPhotoReceived(event) {
+    const d = (event && event.data) || event || {};
+    const { botName, chatId, fileId, caption } = d;
+    if (!botName || chatId === undefined || chatId === null) return;
+
+    // Bot sin vincular: se ignora igual que un texto (no se descarga nada).
+    if (!this.registro.vinculos?.[botName]) {
+      this.logger?.info('telegram-bridge.bot_no_vinculado', { botName, chatId, motivo: 'foto' });
+      return;
+    }
+
+    const pie = typeof caption === 'string' && caption.trim() ? caption.trim() : null;
+    const ruta = await this._descargarFoto(botName, fileId);
+
+    const cabeza = pie ? `[foto] ${pie}` : '[foto recibida sin pie de foto]';
+    const texto = ruta
+      ? `${cabeza}\narchivo: ${ruta}`
+      : `${cabeza}\n(no se pudo descargar la foto · fileId ${fileId || 'desconocido'})`;
+
+    await this._reenviarAlChat({ botName, chatId, from: d.from }, texto);
+    this.metrics?.increment('telegram-bridge.entrante.foto_reenviada');
+  }
+
+  /**
+   * Materializa la foto en el almacén del bot y devuelve la ruta local.
+   * La descarga la hace telegram-service (telegram.get_file, download:true);
+   * el puente solo elige el destino. Devuelve null si falla (el chat se entera
+   * igual, con el aviso: mejor una foto sin ruta que un silencio).
+   */
+  async _descargarFoto(botName, fileId) {
+    if (!fileId) return null;
+    // Nombre propio y fechado: el chat puede citar la ruta tal cual.
+    const sello = new Date().toISOString().replace(/[-:]/g, '').replace(/\..*$/, ''); // 20261027T134814
+    const cola = String(fileId).replace(/[^\w-]/g, '').slice(-8);
+    const destPath = path.join(this.botsPath, botName, 'received', `foto_${sello}_${cola}.jpg`);
+
+    const res = await this._rpc(
+      'telegram.get_file.request',
+      { botName, fileId, download: true, destPath },
+      { timeout_ms: 30000 }
+    );
+    if (!res || res.status !== 200) {
+      this.logger?.error('telegram-bridge.foto.descarga_fallo', {
+        botName, fileId, error: res && (res.error?.message || res.error)
+      });
+      return null;
+    }
+    return (res.data && res.data.localPath) || null;
   }
 
   async onTelegramCallbackReceived(event) {

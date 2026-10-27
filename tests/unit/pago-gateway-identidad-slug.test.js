@@ -276,6 +276,41 @@ async function main() {
     assert.strictEqual(fila.entorno, 'sandbox');
   });
 
+  await check('webhook: el path con UUID resuelve la MISMA config del proyecto (no cae al core)', async () => {
+    // Un cobro nuevo, pendiente, para que la confirmación no sea "duplicado".
+    sumup();
+    const ini = await mod.handlePagoIniciar({ project_id: UUID, pedido_id: 'PED-UUID-WH', monto_centimos: 700 });
+    assert.strictEqual(ini.status, 200, JSON.stringify(ini));
+    bus.credencialesPedidas.length = 0;
+    const calls = mockFetch((url) => ({ status: 200, body: { ...CO('PED-UUID-WH'), status: 'PAID', amount: 7 } }));
+    const res = { status: null, body: null, writeHead(s) { this.status = s; }, end(b) { this.body = b; } };
+    const req = {
+      params: { project: UUID }, query: {},
+      _rawBody: JSON.stringify({ event_type: 'CHECKOUT_STATUS_CHANGED', id: 'co-PED-UUID-WH' })
+    };
+    const r = await mod.handleWebhook(req, res);
+    assert.strictEqual(r.status, 200, JSON.stringify(r));
+    assert.deepStrictEqual(bus.credencialesPedidas, [SLUG], 'la credencial se pide por el slug');
+    const get = calls.find(c => c.url.includes('/v0.1/checkouts/'));
+    assert.ok(get, 'se reconsultó el checkout');
+    assert.strictEqual(get.headers.Authorization, 'Bearer ' + CLAVE);
+  });
+
+  await check('estado: `pasarela` es la del PROYECTO, no el default del core', async () => {
+    const mod3 = new PagoGateway();
+    const bus3 = makeBus();
+    await mod3.onLoad({
+      logger, eventBus: bus3, metrics,
+      moduleConfig: { pasarela: { kind: 'stripe-checkout', moneda: 'eur', ttl_minutos: 15, min_centimos: 100 } }
+    });
+    await new Promise(r => setTimeout(r, 20));
+    await escribirConfig(mod3, SLUG);
+    sumup();
+    const r = await mod3.handlePagoEstado({ project_id: SLUG });
+    assert.strictEqual(r.status, 200, JSON.stringify(r));
+    assert.strictEqual(r.data.pasarela, 'sumup-checkout');
+  });
+
   console.log('\n' + ok + ' checks ok\n');
 }
 

@@ -1324,7 +1324,10 @@ class PagoGatewayModule extends BaseModule {
     return {
       status: 200,
       data: {
-        pasarela: this.pasarela.kind || null,
+        // La pasarela DEL PROYECTO, no la del core: `this.pasarela` es el default global y
+        // con un proyecto configurado a SumUp el preflight decía "stripe-checkout" (dato
+        // falso en la primera línea del diagnóstico). Es un campo de lectura, sin efectos.
+        pasarela: this._pasarelaPara(d.project_id).kind || null,
         merchant_code: cfg.merchant,
         merchant_nombre: merchant.merchant_name || merchant.business_profile?.name || merchant.company?.name || null,
         merchant_pais: pais,
@@ -2468,10 +2471,17 @@ class PagoGatewayModule extends BaseModule {
     return { terminal: true, estado: r.data.estado_organo };
   }
 
+  // La llave del path del webhook llega como SLUG (la URL configurada) o como UUID (un
+  // operador que copia el id del panel). Antes solo se comparaba con `slug` y el UUID no
+  // encontraba proyecto: se caía al default del core y el 503 hablaba de otra pasarela
+  // ("credencial 'STRIPE'") en vez de decir que la llave no era de ningún proyecto.
   async _proyectoPorSlug(slug) {
     if (!slug) return null;
+    const llave = String(slug);
     const r = await this._rpc('project.list.request', {}, { timeout_ms: 3000 });
-    const p = (r?.projects || []).find(x => x?.slug === slug);
+    const proyectos = r?.projects || [];
+    const p = proyectos.find(x => String(x?.slug) === llave)
+      || proyectos.find(x => String(x?.id).toLowerCase() === llave.toLowerCase());
     return p ? { id: p.id, slug: p.slug } : null;
   }
 

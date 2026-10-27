@@ -41,7 +41,7 @@ class TelegramBridgeModule extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'telegram-bridge';
-    this.version = '1.0.2';
+    this.version = '1.0.3';
 
     this.registro = { _updated_at: null, vinculos: {} };
     this.registroPath = REGISTRO_DEFAULT;
@@ -188,7 +188,7 @@ class TelegramBridgeModule extends ModuloHibridoReflejo {
    */
   async onTelegramPhotoReceived(event) {
     const d = (event && event.data) || event || {};
-    const { botName, chatId, fileId, caption } = d;
+    const { botName, chatId, caption } = d;
     if (!botName || chatId === undefined || chatId === null) return;
 
     // Bot sin vincular: se ignora igual que un texto (no se descarga nada).
@@ -197,16 +197,52 @@ class TelegramBridgeModule extends ModuloHibridoReflejo {
       return;
     }
 
+    // El fileId NO siempre viaja como `fileId`: si el evento viene de una capa
+    // que reenvía el update CRUDO de Telegram, el id vive en `photo[].file_id`
+    // o `sizes[].file_id`. Buscarlo en todas sus formas antes de rendirse.
+    const fileId = this._extraerFileId(d);
     const pie = typeof caption === 'string' && caption.trim() ? caption.trim() : null;
     const ruta = await this._descargarFoto(botName, fileId);
 
     const cabeza = pie ? `[foto] ${pie}` : '[foto recibida sin pie de foto]';
     const texto = ruta
       ? `${cabeza}\narchivo: ${ruta}`
-      : `${cabeza}\n(no se pudo descargar la foto · fileId ${fileId || 'desconocido'})`;
+      : `${cabeza}\n(no se pudo descargar la foto · ${this._motivoSinFoto(d, fileId)})`;
 
     await this._reenviarAlChat({ botName, chatId, from: d.from }, texto);
     this.metrics?.increment('telegram-bridge.entrante.foto_reenviada');
+  }
+
+  /**
+   * El id del fichero en Telegram, mire donde mire. Contempla el payload
+   * normalizado (`fileId`) y el update CRUDO (`photo[]` / `sizes[]` con
+   * `file_id`), porque el mismo evento llega por dos caminos distintos.
+   */
+  _extraerFileId(d) {
+    if (!d) return null;
+    const directo = d.fileId || d.file_id;
+    if (directo) return directo;
+    const ultimoDe = (lista) => {
+      if (!Array.isArray(lista) || lista.length === 0) return null;
+      const ultimo = lista[lista.length - 1];
+      return (ultimo && (ultimo.fileId || ultimo.file_id)) || null;
+    };
+    const doc = d.document || null;
+    return ultimoDe(d.sizes)
+        || ultimoDe(d.photo)
+        || (doc && (doc.fileId || doc.file_id))
+        || null;
+  }
+
+  /**
+   * Por qué no hay foto, dicho con el dato en la mano: el id que se buscó o,
+   * si no había ninguno, las claves que SÍ traía el evento (para no volver a
+   * diagnosticar a ciegas).
+   */
+  _motivoSinFoto(d, fileId) {
+    if (fileId) return `fileId ${fileId}`;
+    const claves = Object.keys(d || {}).join(', ');
+    return `sin fileId (claves del evento: ${claves || 'ninguna'})`;
   }
 
   /**

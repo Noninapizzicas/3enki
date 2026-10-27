@@ -82,5 +82,41 @@ const foto = (m, extra) =>
   assert.strictEqual(c.chat.length, 0, 'bot no vinculado no inyecta');
   assert.strictEqual(c.files.length, 0, 'bot no vinculado no descarga');
 
-  console.log('✅ telegram-bridge__foto OK — pie + ruta llegan al chat; si la descarga falla, avisa; bot no vinculado se ignora');
+  // 5. update CRUDO de Telegram (sin normalizar): el id vive en photo[].file_id.
+  //    Es el caso que rompió en vivo el 27-oct: llegaba el pie y «fileId desconocido».
+  m = nuevo(); c = capturar(m);
+  await m.onTelegramPhotoReceived({ data: {
+    botName: 'TestBot', chatId: '123', fileId: undefined,
+    from: { id: 1934798567 }, caption: 'esta foto es la Carbonara',
+    photo: [
+      { file_id: 'AgACAgQAAxkBAAIB-chica', width: 90, height: 67 },
+      { file_id: 'AgACAgQAAxkBAAIB-grande', width: 1280, height: 960 }
+    ]
+  }});
+  assert.strictEqual(c.files.length, 1, 'con el update crudo también se descarga');
+  assert.strictEqual(c.files[0].fileId, 'AgACAgQAAxkBAAIB-grande',
+    'se usa la resolución mayor (el último de la lista)');
+  assert.ok(c.chat[0].message.includes(c.files[0].destPath), 'la ruta llega al chat');
+
+  // 6. id en sizes[].file_id (misma forma snake_case)
+  m = nuevo(); c = capturar(m);
+  await m.onTelegramPhotoReceived({ data: {
+    botName: 'TestBot', chatId: '123', from: { id: 1 }, caption: 'x',
+    sizes: [{ fileId: 'viejo', width: 90 }, { file_id: 'nuevo', width: 800 }]
+  }});
+  assert.strictEqual(c.files.length, 1);
+  assert.strictEqual(c.files[0].fileId, 'nuevo');
+
+  // 7. foto SIN ningún id → el aviso DICE qué claves traía el evento (no adivina)
+  m = nuevo(); c = capturar(m);
+  await m.onTelegramPhotoReceived({ data: {
+    botName: 'TestBot', chatId: '123', from: { id: 1 }, caption: 'la Carbonara'
+  }});
+  assert.strictEqual(c.files.length, 0, 'sin id no se pide una descarga imposible');
+  assert.strictEqual(c.chat.length, 1, 'pero el chat se entera');
+  assert.ok(c.chat[0].message.includes('sin fileId'), 'dice que falta el id');
+  assert.ok(c.chat[0].message.includes('botName'), 'lista las claves del evento');
+  assert.ok(c.chat[0].message.includes('la Carbonara'), 'el pie no se pierde');
+
+  console.log('✅ telegram-bridge__foto OK — pie + ruta llegan al chat (payload normalizado o update crudo); si la descarga falla o falta el id, avisa con el dato; bot no vinculado se ignora');
 })().catch(e => { console.error('❌ FALLO:', e.message); process.exit(1); });

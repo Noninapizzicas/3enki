@@ -107,6 +107,20 @@ class ResolutorProyecto {
     return sa === sb;
   }
 
+  // La vuelta del mismo mapa: slug → uuid. Sirve para hablar la llave que viaja
+  // en los eventos del bus (project_id) cuando lo unico que se tiene es el slug.
+  // Best-effort: si el mapa no esta, devuelve null (nunca inventa identidad).
+  async idDe(projectId) {
+    if (projectId === null || projectId === undefined || projectId === '') return null;
+    const pid = String(projectId);
+    if (ResolutorProyecto.UUID_RE.test(pid)) return pid;
+    const mapa = await this.cargarSlugs();
+    for (const [llave, slug] of mapa) {
+      if (slug === pid && ResolutorProyecto.UUID_RE.test(llave)) return llave;
+    }
+    return null;
+  }
+
   // Calienta el mapa en segundo plano (el primer uso no paga el RPC).
   calentar() {
     this.cargarSlugs().catch(() => { /* best-effort */ });

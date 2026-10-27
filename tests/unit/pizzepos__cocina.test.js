@@ -142,7 +142,7 @@ function makePedidoEvent(overrides = {}) {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
     assert.strictEqual(m.name, 'cocina');
-    assert.strictEqual(m.version, '3.4.0');
+    assert.strictEqual(m.version, '3.5.0');
     assert.strictEqual(m.pedidosActivos.size, 0);
     assert.strictEqual(m.devices.size, 0);
     assert.strictEqual(m.historial.length, 0);

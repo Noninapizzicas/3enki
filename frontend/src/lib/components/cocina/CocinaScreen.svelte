@@ -18,12 +18,14 @@
    * └─────────────────────────────────────┘
    */
   import { onMount, onDestroy } from 'svelte';
+  import { page } from '$app/stores';
   import { connect, disconnect, setupVisibilityHandler, removeVisibilityHandler } from '$lib/ui-core';
   import {
     pedidosCocina,
     cocinaLoading,
     pedidosCount,
     initCocinaSubscriptions,
+    vincularProyectoCocina,
     resumeAudioContext,
     requestNotificationPermission,
     isGlovoConfirmado,
@@ -74,6 +76,13 @@
   });
   $: pedidosOrdenados = sortPedidos(pedidosFiltrados);
 
+  // Si se navega a otro proyecto sin desmontar la pantalla, se re-vincula.
+  let proyectoActual: string | undefined;
+  $: if ($page.params.project_id !== proyectoActual) {
+    proyectoActual = $page.params.project_id;
+    vincularProyectoCocina(proyectoActual);
+  }
+
   function unlockAudio() {
     if (!audioUnlocked) {
       resumeAudioContext();
@@ -83,6 +92,10 @@
   }
 
   onMount(() => {
+    // ANTES de cualquier petición o suscripción: esta cocina sirve a UN proyecto.
+    // Sin esto el store pedía la cocina del core entero (todas las colas juntas).
+    vincularProyectoCocina($page.params.project_id);
+
     connect().then(async () => {
       cleanupSubs = initCocinaSubscriptions();
     }).catch((err) => {

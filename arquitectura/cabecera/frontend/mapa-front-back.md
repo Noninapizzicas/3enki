@@ -5,7 +5,7 @@ resumen: El puente MQTT: mapa dominio→módulo backend por cada consumidor del 
 fuentes:
   - frontend/src/lib/ui-core/**
   - frontend/src/lib/stores/**
-verificado: 2026-07-14
+verificado: 2026-10-27 (cocina: el enlace viaja con project_id)
 ---
 
 # FRONTEND ↔ BACKEND — Mapa de Referencias (puente MQTT)
@@ -174,6 +174,9 @@ ENLACE cocina {
   domain: 'cocina'
   acciones: [list-active, list-station-types, register-device, prepare-item, mark-ready, metrics]
   modulo_backend: 'pizzepos/cocina'  (domain=cocina)
+  // TODAS las acciones viajan con project_id (v3.5.0): el módulo es un singleton
+  // del core y sin esa llave devolvía la cola de todos los negocios juntos.
+  // La pantalla lo vincula desde la ruta /{project_id}/cocina (uuid o slug).
 }
 
 ENLACE impresion {

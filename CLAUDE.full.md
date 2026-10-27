@@ -4651,6 +4651,14 @@ desde cualquier proceso que hable MQTT, no solo desde dentro del core Node.js.
 >
 > cocina: NO tiene catálogo propio — el producto llega dentro de
 >         pedido.enviado_cocina (nombre, cantidad, variaciones, ingredientes_base).
+>         **v3.5.0 — la cocina también es por proyecto (verificado en vivo 2026-10-27):**
+>         `pedidosActivos`/`devices` son singletons del core y guardan las colas de TODOS
+>         los proyectos, así que LEER y ACTUAR se recortan con `ResolutorProyecto`
+>         (`cocina._pedidosVisibles(project_id)`): list-active, history, get, prepare-item,
+>         mark-ready y las listas de devices responden solo al proyecto que pregunta
+>         (uuid o slug), `prepare-item`/`mark-ready` de otra cocina → 404, cada device
+>         guarda su `project_id` y `caja.cerrada`/`dia.iniciado` vacían solo su proyecto.
+>         Sin `project_id` el comportamiento es el de siempre (agentes y bus).
 > ```
 >
 > `producto.creado` es contrato LEGADO: nadie lo emite (v5 lo retiró); los consumidores
@@ -14558,6 +14566,9 @@ ENLACE cocina {
   domain: 'cocina'
   acciones: [list-active, list-station-types, register-device, prepare-item, mark-ready, metrics]
   modulo_backend: 'pizzepos/cocina'  (domain=cocina)
+  // TODAS las acciones viajan con project_id (v3.5.0): el módulo es un singleton
+  // del core y sin esa llave devolvía la cola de todos los negocios juntos.
+  // La pantalla lo vincula desde la ruta /{project_id}/cocina (uuid o slug).
 }
 
 ENLACE impresion {

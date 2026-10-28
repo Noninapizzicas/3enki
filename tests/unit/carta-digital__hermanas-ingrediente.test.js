@@ -157,10 +157,9 @@ caso('el segundo botón dice PERSONALIZAR, no "Editar"', () => {
   assert.ok(!/>Editar</.test(out), 'ya no queda ningún "Editar" suelto');
 });
 
-caso('"Añadir extras" viene PLEGADO: se ve la cabecera, no el muro de chips', () => {
+caso('"Añadir extras" viene DESPLEGADO: el cliente ve los ingredientes sin buscarlos', () => {
   const out = api.detalle();
-  assert.ok(/<details class="fold">/.test(out), 'la sección es un desplegable');
-  assert.ok(!/<details class="fold" open/.test(out), 'y arranca CERRADO (nada se despliega solo)');
+  assert.ok(/<details class="fold" open>/.test(out), 'la sección arranca ABIERTA (orden del dueño 2026-10-28)');
   assert.ok(/fold-sum">Añadir extras<span class="fold-hint">· \d+ opcionales/.test(out), 'cabecera con el número de opcionales');
   assert.ok(/data-ext-id=/.test(out), 'los extras siguen ahí dentro, listos para abrir');
 });

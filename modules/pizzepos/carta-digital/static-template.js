@@ -742,12 +742,12 @@ const FAM_CONFIG = {
   otro:    { emoji: '📦', label: 'Otro',             orden: 9, color: '#888888' }
 };
 function famInfo(t) { return FAM_CONFIG[t] || FAM_CONFIG.otro; }
-// "Añadir extras" NO se abre solo. Al pulsar una pizza el cliente tiene que ver LA PIZZA
-// (sus hermanas, sus ingredientes), no un muro de 20 chips que empuja todo lo demás fuera
-// de la pantalla. Va plegado y se abre al tocarlo: el que quiere cambiar la receta lo busca,
-// el que no, no lo sufre. <details> nativo → cero JS, cero estado que sincronizar.
+// "Añadir extras" se abre SOLO, desplegado por defecto (orden del dueño 2026-10-28): el
+// cliente tiene que VER los ingredientes que puede sumar sin tener que buscar un desplegable
+// que no sabe que existe. <details open> nativo → cero JS, cero estado que sincronizar; el
+// cliente lo pliega si no quiere verlo.
 function extrasFold(html, n) {
-  return '<details class="fold"><summary class="section-title fold-sum">Añadir extras' +
+  return '<details class="fold" open><summary class="section-title fold-sum">Añadir extras' +
     '<span class="fold-hint">· ' + n + ' opcionales</span></summary>' + html + '</details>';
 }
 // Pinta los extras AGRUPADOS por familia, ordenados, con cabecera por grupo (mismo sistema
@@ -1175,17 +1175,14 @@ function catGrpKeys(catId) {
 }
 // excludeSet: Set de tokens normalizados (id y/o nombre) a excluir (los base del producto).
 // Acepta {} (sin .has) como "sin exclusión" para los call sites que no excluyen (al-gusto/gate).
+// TODOS los ingredientes del catálogo, sin filtrar por grupo (orden del dueño 2026-10-28): el
+// cliente puede sumar cualquier ingrediente que el negocio tenga en catálogo, no solo los que
+// ya usa su sección. grpKeys se conserva en la firma por compatibilidad de los call sites.
 function extrasForGroup(grpKeys, excludeSet) {
   const hasExcl = excludeSet && typeof excludeSet.has === 'function' && excludeSet.size;
   return (DATA.catalogo_ingredientes || []).filter(function (ing) {
     if (!ing) return false;
     if (hasExcl && (excludeSet.has(norm(ing.id)) || excludeSet.has(norm(ing.nombre)))) return false;
-    const g = ing.grupos || [];
-    if (g.length && grpKeys.length) {
-      let ok = false;
-      for (let k = 0; k < g.length; k++) { if (grpKeys.indexOf(String(g[k]).toLowerCase()) >= 0) { ok = true; break; } }
-      if (!ok) return false;
-    }
     return true;
   });
 }

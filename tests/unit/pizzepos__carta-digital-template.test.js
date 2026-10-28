@@ -138,6 +138,28 @@ test('carta-digital/template — extras AGRUPADOS por familia (mismo sistema que
   // Ya NO hay lista plana de extras sin cabecera (el doble wrapper .ing-list se quitó).
   assert.ok(!html.includes('Añadir extras</h3><div class="ing-list">'), 'sin lista plana sin agrupar');
 });
+test('carta-digital/template — extras: TODOS los ingredientes del catalogo + desplegados por defecto', () => {
+  const html = htmlDe();
+  // 1) el fold nace ABIERTO (orden del dueno 2026-10-28)
+  assert.ok(html.includes('<details class="fold" open>'), 'Añadir extras desplegado por defecto');
+
+  // 2) extrasForGroup ya NO filtra por grupo: se ejecuta la funcion REAL del runtime emitido
+  const js = html.match(/<script>([\s\S]*?)<\/script>/)[1];
+  const iData = js.indexOf('const DATA = ');
+  const dataLiteral = js.slice(iData + 'const DATA = '.length, js.indexOf(';\n', iData));
+  const src = 'const DATA = ' + dataLiteral + ';\n' + js.slice(js.indexOf('function norm('), js.indexOf('function catIngPorId('));
+  const rt = new Function(src + '\nreturn { extrasForGroup: extrasForGroup, DATA: DATA };')();
+
+  const catalogo = rt.DATA.catalogo_ingredientes;
+  assert.ok(catalogo.length >= 2, 'fixture con catalogo');
+  // pidiendo la paleta de OTRA seccion (la_flota) siguen saliendo TODOS los del catalogo
+  const desdeOtraSeccion = rt.extrasForGroup(['la_flota'], {});
+  assert.equal(desdeOtraSeccion.length, catalogo.length, 'la seccion del producto no recorta el catalogo');
+  // y la base propia sigue excluida (no tiene sentido ofrecer lo que ya lleva)
+  const sinBacon = rt.extrasForGroup(['la_flota'], new Set(['i_bacon']));
+  assert.equal(sinBacon.length, catalogo.length - 1, 'la base del producto sigue fuera de los extras');
+  assert.ok(!sinBacon.some((i) => i.id === 'i_bacon'), 'bacon (base) no se ofrece como extra');
+});
 
 test('carta-digital/template — ALOJADO emite <base> para resolver assets sin barra final (404 img)', () => {
   const carta = { categorias: [], productos: [], catalogo_ingredientes: [], alergenos_leyenda: [] };

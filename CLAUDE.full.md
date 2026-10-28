@@ -5349,6 +5349,15 @@ se lee una vez /pizzepos/pago/* para migrar sin perder cobros).
 Stripe: kind stripe-checkout, provider STRIPE, webhook_secret. Sin bloque y sin credencial de la
 pasarela configurada → degrada (NO_PASARELA / PERMISSION_DENIED), no rompe: el pedido ya existe y
 se paga al recoger.
+CONCILIACIÓN Stripe (conciliacion-stripe.js) — misma disciplina que la de SumUp, pero la API impone
+sus límites y el órgano los respeta: el listado de sesiones se pide con `status=complete` y se exige
+`payment_status='paid'` en cliente, porque `payment_status` NO es un filtro válido de
+GET /v1/checkout/sessions (400 parameter_unknown, verificado 2026-10-28 — con ese filtro la
+conciliación moría entera y no veía ni huérfanos ni reembolsos hechos en el panel).
+De ahí salen cobro.huerfano (sesión pagada sin pedido nuestro) y la comisión REAL por día desde
+/v1/balance_transactions (bruto − fee), que es lo único que cuadra la caja: la sesión de checkout no
+trae la comisión. El webhook de Stripe, además, solo apunta: se verifica la firma sobre los BYTES
+CRUDOS del cuerpo (req._rawBody del gateway) y se reconsulta la sesión con NUESTRA clave.
 ```
 
 ### COCINA MANAGER
@@ -16083,7 +16092,8 @@ CADENA (toda por evento, ningún módulo nuevo, ninguna máquina de estados nuev
          → _enviarMensajeSeguro(checkout_url)   // GUARDA: una sola sesión por pedido_id (LRU 500)
          ELSE (NO_PASARELA | PERMISSION_DENIED | timeout) → 'El pago con tarjeta no está disponible
               ahora mismo. Puedes pagar al recoger.' → DEGRADA, no revienta (el pedido ya existe)
-  Stripe → POST /pago/webhook/:project (firma si hay secreto + RECONSULTA de la sesión) → pago-gateway
+  Stripe → POST /pago/webhook/:project (firma sobre los BYTES CRUDOS del cuerpo — req._rawBody —
+         y RECONSULTA de la sesión con nuestra clave) → pago-gateway
          → publish('pago.confirmado'{pedido_id, project_id, monto_centimos, + metadata de contexto})
          → pedidos.onPagoConfirmado → pedido.pago.estado='pagado' → publish('pedido.pagado')
          → bot.onPedidoPagado: avisa al CLIENTE ('Pago recibido… te aviso cuando esté listo')

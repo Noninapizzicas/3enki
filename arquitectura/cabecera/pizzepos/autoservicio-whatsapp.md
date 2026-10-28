@@ -13,7 +13,7 @@ fuentes:
   - modules/_shared/lector-servicio.js
   - frontend/src/lib/components/comandero/ServicioToggle.svelte
   - tests/unit/pizzepos__servicio.test.js
-verificado: 2026-10-25
+verificado: 2026-10-28 (pago-gateway v3.1.0: el webhook de Stripe reconsulta la sesión; clave RAK)
 ---
 
 # SUBSISTEMA AUTOSERVICIO — Pedido del cliente por WhatsApp (PWA → bot → cocina)
@@ -308,7 +308,7 @@ CADENA (toda por evento, ningún módulo nuevo, ninguna máquina de estados nuev
          → _enviarMensajeSeguro(checkout_url)   // GUARDA: una sola sesión por pedido_id (LRU 500)
          ELSE (NO_PASARELA | PERMISSION_DENIED | timeout) → 'El pago con tarjeta no está disponible
               ahora mismo. Puedes pagar al recoger.' → DEGRADA, no revienta (el pedido ya existe)
-  Stripe → POST /pago/webhook/:project (firma verificada) → pago-gateway
+  Stripe → POST /pago/webhook/:project (firma si hay secreto + RECONSULTA de la sesión) → pago-gateway
          → publish('pago.confirmado'{pedido_id, project_id, monto_centimos, + metadata de contexto})
          → pedidos.onPagoConfirmado → pedido.pago.estado='pagado' → publish('pedido.pagado')
          → bot.onPedidoPagado: avisa al CLIENTE ('Pago recibido… te aviso cuando esté listo')
@@ -328,9 +328,12 @@ recreado:true. El bot avisa al cliente si hay teléfono y, si fue recreado, avis
 Telegram — no hay conversación que continuar, pero el dinero nunca queda mudo. Nada que persistir.
 
 ALTA (lo único externo): bloque 'pago-gateway' en la config del proyecto (kind stripe-checkout,
-provider STRIPE, moneda eur, return_url, webhook_secret) + credencial STRIPE (sk_…) en el
-credential-manager. El publishable no hace falta (Checkout es hospedado). El webhook de Stripe
-apunta a la URL pública /pago/webhook/<slug>.
+provider STRIPE, moneda eur, return_url, webhook_secret) + credencial STRIPE en el
+credential-manager — clave RESTRINGIDA (`rk_test_`/`rk_live_`), no la secreta; y `return_url` es
+OBLIGATORIA (sin ella el cliente aterriza en example.com y `pago.iniciar` responde CONFIG_MISSING).
+El publishable no hace falta (Checkout es hospedado). El webhook de Stripe apunta a la URL pública
+/pago/webhook/<slug> y su cuerpo es un PUNTERO: el órgano reconsulta la sesión con su clave y solo
+`payment_status:'paid'` confirma, así que un POST inventado no puede fabricar un pago.confirmado.
 ```
 
 ## Ciclo
@@ -380,7 +383,7 @@ EVENTOS {
                                        (pedido_id propio del comandero) ya no existe (2026-10-24)
   pago.iniciar.request               : bot → pago-gateway (LÍDER — solo si metodo_pago == 'tarjeta')
   pago.iniciar.response              : pago-gateway → bot (request_id correlado; data.checkout_url)
-  pago.confirmado                    : pago-gateway (webhook de Stripe, firma verificada) → pedidos
+  pago.confirmado                    : pago-gateway (webhook de Stripe + reconsulta) → pedidos
                                        (lleva la metadata de contexto: permite reconstruir el huérfano)
   pedido.pagado                      : pedidos → bot (avisa al cliente ; recreado:true → avisa al STAFF)
   pedido.recogido                    : pedidos (metodo_pago = la VERDAD del cobro, ya no 'efectivo' fijo)

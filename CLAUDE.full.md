@@ -5259,15 +5259,17 @@ CADENA (toda por evento, ningún módulo nuevo):
         → pago.iniciar.response {status:200, data:{checkout_url}}
       bot → manda checkout_url al cliente por WhatsApp   // guarda: UNA sesión por pedido_id
       ELSE degrada (NO_PASARELA / PERMISSION_DENIED) → 'puedes pagar al recoger' (el pedido ya existe)
-    Stripe → POST /pago/webhook/:project (firma verificada) → pago-gateway
+    Stripe → POST /pago/webhook/:project (firma si hay secreto + RECONSULTA de la sesión) → pago-gateway
       → pago.confirmado {pedido_id, project_id, monto_centimos, + metadata de contexto}
       → pedidos.onPagoConfirmado → pedido.pagado
       → bot avisa al cliente 'pago recibido' ; IF recreado → avisa al STAFF por Telegram
 
     Dependiente confirma recogida → pedido.recogido{metodo_pago} ; la caja ya no miente
 
-PASARELA VIVA (2026-10-25): sumup-checkout (Hosted Checkout, 1,95 % sin cuota). Stripe queda como
-kind alternativo; cambiar de pasarela es cambiar pasarela.kind, no tocar el caller.
+PASARELA VIVA (2026-10-28): sumup-checkout (Hosted Checkout, 1,95 % sin cuota). Stripe (v3.1) ya NO
+es un kind a medias: tiene libro propio, idempotencia por referencia (dos clics = un link), reembolso
+que se resuelve por reconsulta y conciliación propia. Cambiar de pasarela sigue siendo cambiar
+pasarela.kind; lo que cambia es que las dos sostienen las nueve garantías.
   pago.iniciar  → POST /v0.1/checkouts {amount DECIMAL, checkout_reference = pedido_id,
                   hosted_checkout.enabled, return_url = NUESTRO webhook, redirect_url = vuelta,
                   valid_until = ahora + ttl_minutos(15)} → link checkout.sumup.com/pay/<uuid>
@@ -16081,7 +16083,7 @@ CADENA (toda por evento, ningún módulo nuevo, ninguna máquina de estados nuev
          → _enviarMensajeSeguro(checkout_url)   // GUARDA: una sola sesión por pedido_id (LRU 500)
          ELSE (NO_PASARELA | PERMISSION_DENIED | timeout) → 'El pago con tarjeta no está disponible
               ahora mismo. Puedes pagar al recoger.' → DEGRADA, no revienta (el pedido ya existe)
-  Stripe → POST /pago/webhook/:project (firma verificada) → pago-gateway
+  Stripe → POST /pago/webhook/:project (firma si hay secreto + RECONSULTA de la sesión) → pago-gateway
          → publish('pago.confirmado'{pedido_id, project_id, monto_centimos, + metadata de contexto})
          → pedidos.onPagoConfirmado → pedido.pago.estado='pagado' → publish('pedido.pagado')
          → bot.onPedidoPagado: avisa al CLIENTE ('Pago recibido… te aviso cuando esté listo')
@@ -16101,9 +16103,12 @@ recreado:true. El bot avisa al cliente si hay teléfono y, si fue recreado, avis
 Telegram — no hay conversación que continuar, pero el dinero nunca queda mudo. Nada que persistir.
 
 ALTA (lo único externo): bloque 'pago-gateway' en la config del proyecto (kind stripe-checkout,
-provider STRIPE, moneda eur, return_url, webhook_secret) + credencial STRIPE (sk_…) en el
-credential-manager. El publishable no hace falta (Checkout es hospedado). El webhook de Stripe
-apunta a la URL pública /pago/webhook/<slug>.
+provider STRIPE, moneda eur, return_url, webhook_secret) + credencial STRIPE en el
+credential-manager — clave RESTRINGIDA (`rk_test_`/`rk_live_`), no la secreta; y `return_url` es
+OBLIGATORIA (sin ella el cliente aterriza en example.com y `pago.iniciar` responde CONFIG_MISSING).
+El publishable no hace falta (Checkout es hospedado). El webhook de Stripe apunta a la URL pública
+/pago/webhook/<slug> y su cuerpo es un PUNTERO: el órgano reconsulta la sesión con su clave y solo
+`payment_status:'paid'` confirma, así que un POST inventado no puede fabricar un pago.confirmado.
 ```
 
 ## Ciclo
@@ -16153,7 +16158,7 @@ EVENTOS {
                                        (pedido_id propio del comandero) ya no existe (2026-10-24)
   pago.iniciar.request               : bot → pago-gateway (LÍDER — solo si metodo_pago == 'tarjeta')
   pago.iniciar.response              : pago-gateway → bot (request_id correlado; data.checkout_url)
-  pago.confirmado                    : pago-gateway (webhook de Stripe, firma verificada) → pedidos
+  pago.confirmado                    : pago-gateway (webhook de Stripe + reconsulta) → pedidos
                                        (lleva la metadata de contexto: permite reconstruir el huérfano)
   pedido.pagado                      : pedidos → bot (avisa al cliente ; recreado:true → avisa al STAFF)
   pedido.recogido                    : pedidos (metodo_pago = la VERDAD del cobro, ya no 'efectivo' fijo)
@@ -16169,7 +16174,7 @@ PIEZAS {
   modules/whatsapp-bot/services/pedido-parser.js (#P1: _decodificarEstructura + metodo_pago)
   modules/pizzepos/carta-digital (2.25.1)        (PWA emite #P1 + paridad mitad + nombre obligatorio + botones metodo_pago)
   modules/pizzepos/pedidos (3.5.0)               (estructura tienda → cocina ; ancla = cliente_nombre ; metodo_pago ; onPagoConfirmado con recreación del huérfano)
-  modules/pago-gateway (3.0.0)                  (ÓRGANO de cobro provider-agnóstico: Stripe + SumUp; cuenta y clave POR PROYECTO)
+  modules/pago-gateway (3.1.0)                  (ÓRGANO de cobro provider-agnóstico: Stripe + SumUp; cuenta y clave POR PROYECTO)
   modules/credential-manager (2.2.0)             (META_WHATSAPP[_VERIFY_TOKEN] + GLOVO PROJECT_ONLY + la clave de pago por proyecto)
   frontend credentials (CredentialsPanel + stores) (4ª pestaña 💬 WhatsApp · fix agrupado de la lista)
   cocina (_buildCocinaItem → ItemLine)           (YA pintaba la estructura, del comandero)
@@ -16545,13 +16550,50 @@ devuelve `requiere_accion` y **no se reintenta**: reintentar ahí sería el segu
   "2_caducidad": "valid_until propio atado a la vida del hecho (la página de SumUp vive 30 min)",
   "3_libro_durable": "/pago/checkouts.json del proyecto, no solo memoria",
   "4_barrido": "cada 2 min: webhook perdido ≠ pago perdido (y también reconcilia los cobros de datáfono con el lector)",
-  "5_webhook_no_es_prueba": "SumUp no firma: token secreto en la URL + RECONSULTA del recurso; 5xx si no se pudo verificar (reintenta 1m/5m/20m/2h)",
+  "5_webhook_no_es_prueba": "SumUp no firma: token secreto en la URL + RECONSULTA del recurso; 5xx si no se pudo verificar (reintenta 1m/5m/20m/2h). Stripe: el payload es un PUNTERO, la firma HMAC es opcional y la reconsulta es la que confirma",
   "6_integridad": "un PAID que no cuadra no se confirma (pago.importe_discrepante); el exceso solo lo explica la propina",
-  "7_reembolso": "sin reintento a ciegas (no hay idempotency-key) pero sin abandonar: se reconsulta la transacción y sus eventos REFUND",
+  "7_reembolso": "sin reintento a ciegas pero sin abandonar: SumUp reconsulta la transacción y sus eventos REFUND; Stripe reconsulta /v1/refunds?payment_intent y compara con lo ya apuntado",
   "8_preflight": "pago.estado dice si la cuenta puede cobrar HOY (método card activo, moneda, país, webhook)",
   "9_aislamiento": "merchant, clave, token de webhook, libro, registro y conciliación son DEL PROYECTO"
 }
 ```
+
+## Stripe con la misma disciplina (v3.1 · 27-oct-2026)
+
+Hasta la v3.0 el adapter de Stripe sabía **dos cosas**: crear una Checkout Session y leer el webhook
+con su firma HMAC. Eso dejaba fuera cinco de las nueve garantías, y el síntoma no aparece en una
+prueba sino en producción: dos clics = dos sesiones = dos cobros, y un reembolso hecho en el panel de
+Stripe que nadie ve. La v3.1 (3.1.0) mete Stripe en el libro, en el
+barrido y en la conciliación.
+
+| garantía | cómo queda en Stripe |
+|---|---|
+| 1 idempotencia | `_stripeLinkVivo` lee el **libro** (no la memoria): referencia con link vivo → se devuelve el MISMO `session_id` sin llamar a Stripe; pedido ya pagado → 409 `CHECKOUT_YA_PAGADO`. Además `Idempotency-Key` en el POST: un reintento de red no abre otra sesión. |
+| 2 caducidad | `expires_at` con el TTL del proyecto, acotado a lo que Stripe acepta (**entre 30 min y 24 h**): no se pide un imposible. |
+| 3 libro | misma fila en `/pago/checkouts.json` con `pasarela: 'stripe-checkout'`, importe, `checkout_url` y `entorno` — aquí el prefijo `rk_test_`/`rk_live_` SÍ distingue ensayo de real (al revés que `sup_sk_`). |
+| 4 barrido | `_barrerProyecto` pregunta el `kind` **del proyecto** y usa `GET /v1/checkout/sessions/{id}`: `paid` confirma, `expired` expira, `open` vencida se expira. **El barrido pasa a montarse siempre**: antes exigía `kind` en la config del CORE —el sitio equivocado— y un negocio bien configurado podía quedarse sin barrido. |
+| 5 webhook | el payload es un **PUNTERO**, no una prueba: se pide la sesión con NUESTRA clave y solo `payment_status:'paid'` confirma. La firma HMAC se verifica si hay `webhook_secret`, pero la defensa real es la reconsulta: sin secreto, un POST inventado no puede fabricar un `pago.confirmado`. |
+| 6 integridad | `amount_total` contra la fila del libro con `_cuadraCobro` (la MISMA guarda que SumUp) → `pago.importe_discrepante` y el pedido no se libera. |
+| 7 reembolso | `POST /v1/refunds` por `payment_intent`, con tope por libro; ante timeout o 5xx se **reconsulta** `GET /v1/refunds?payment_intent=…` y se compara con lo ya apuntado: nunca se reintenta a ciegas (devolvería dos veces). |
+| 8 preflight | `pago.estado` lee `/v1/account` (`charges_enabled`, `payouts_enabled`, `details_submitted`) y `/v1/balance`; un 403 no rompe el informe, se degrada con aviso («la clave no tiene Account · Lectura»). En modo test se puede cobrar aunque el alta no esté cerrada, y el aviso dice que ese dinero es de ensayo. |
+| 9 aislamiento | clave `STRIPE_API_KEY_PROJECT_<slug>`, `webhook_secret` y libro del proyecto; el `:project` del webhook decide con qué cuenta se verifica. |
+
+**Lo que NO hace, y se dice al encenderlo:** `pago.recibo` responde 501 (Stripe no emite recibo
+estructurado de un pago de Checkout; el ticket es del ERP) y `pago.actualizar` responde 501 (una
+sesión de Stripe no cambia de importe: se expira y se abre otra, con una sola viva). Los métodos que
+se informan son los que la sesión PIDE (`pasarela.metodos`, por defecto `card`): no se inventa PayPal.
+
+**Conciliación propia** (`conciliacion-stripe.js`, hermano del de SumUp, mismo contrato de deps): un
+tick cada 15 min que (a) lista las sesiones pagadas y emite `cobro.huerfano` para las que no casan
+con ninguna fila, (b) lee los refunds creados en la ventana y emite `pago.reembolsado` con la
+DIFERENCIA —dedupe por `refund_id`, que queda apuntado en el libro al reembolsar—, y (c) cierra la
+comisión REAL por día desde `/v1/balance_transactions` (bruto · comisión · neto). Cada conciliador se
+salta los proyectos que no son de su pasarela: la pasarela es del PROYECTO, no del core.
+
+**Permisos de la clave (RAK), recurso por recurso:** Checkout Sessions **Write** (cobrar) y **Read**
+(barrido y conciliación) · Refunds **Write** (devolver) y **Read** (reembolsos del panel) · Account
+**Read** y Balance **Read** (preflight y comisión real; sin ellos el informe se degrada con aviso, no
+falla) · Payment Intents **Read** solo si se quiere ampliar el detalle.
 
 ## Puertos (bus)
 
@@ -16570,12 +16612,15 @@ Publica: `pago.actualizado` · `pago.confirmado` · `pago.rechazado` · `pago.ca
 
 ## Estado y frenos (honesto)
 
-- **Verificado**: 102 checks en `npm test` con `fetch` falso — protocolo, idempotencia, integridad,
-  aislamiento multiproyecto, terminal, clientes, recurrencia y QR. El QR se decodificó con lector
-  independiente (OpenCV).
-- **Sin verificar**: no se ha tocado la API real de SumUp (faltan merchant code y credencial del
-  proyecto). Los primeros actos al tenerlas: pago de 1 € en sandbox, camino de fallo con importe
-  `…11`, y lectura de `pago.estado`.
+- **Verificado**: 137 checks en `npm test` con `fetch` falso — protocolo SumUp, idempotencia,
+  integridad, aislamiento multiproyecto, terminal, clientes, recurrencia, QR **y la paridad de
+  Stripe** (21 checks propios: libro, idempotencia por referencia, webhook-puntero, firma, importe,
+  barrido, reembolso resuelto por reconsulta, preflight, cancelación y conciliación). El QR se
+  decodificó con lector independiente (OpenCV).
+- **Sin verificar**: no se ha tocado la API real de ninguna de las dos pasarelas (falta merchant
+  code/clave del proyecto). Los primeros actos al tenerlas: pago de 1 € en sandbox, camino de fallo
+  (importe `…11` en SumUp · tarjeta `4000 0000 0000 0002` en Stripe) y lectura de `pago.estado`.
+  En Stripe, además, la clave RAK necesita los permisos de la tabla de arriba o el adapter degrada.
 - **Costuras conocidas**: el libro es un JSON por proyecto con read-modify-write sin candado entre
   procesos (la conciliación lo detectaría como `cobro.huerfano`, no se pierde dinero); el reintento
   es único y no respeta `Retry-After`; no hay multi-merchant por OAuth (una cuenta por proyecto ni

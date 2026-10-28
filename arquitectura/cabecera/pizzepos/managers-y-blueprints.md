@@ -6,7 +6,7 @@ fuentes:
   - modules/pizzepos/**
   - modules/pago-gateway/**
   - blueprints/**
-verificado: 2026-10-27 (cocina v3.5.0: aislamiento por proyecto — el singleton ya no mezcla colas)
+verificado: 2026-10-28 (pago-gateway v3.1.0: Stripe con paridad — libro, idempotencia, webhook-puntero y conciliación)
 ---
 
 # Módulos Pizzepos y Blueprints
@@ -644,15 +644,17 @@ CADENA (toda por evento, ningún módulo nuevo):
         → pago.iniciar.response {status:200, data:{checkout_url}}
       bot → manda checkout_url al cliente por WhatsApp   // guarda: UNA sesión por pedido_id
       ELSE degrada (NO_PASARELA / PERMISSION_DENIED) → 'puedes pagar al recoger' (el pedido ya existe)
-    Stripe → POST /pago/webhook/:project (firma verificada) → pago-gateway
+    Stripe → POST /pago/webhook/:project (firma si hay secreto + RECONSULTA de la sesión) → pago-gateway
       → pago.confirmado {pedido_id, project_id, monto_centimos, + metadata de contexto}
       → pedidos.onPagoConfirmado → pedido.pagado
       → bot avisa al cliente 'pago recibido' ; IF recreado → avisa al STAFF por Telegram
 
     Dependiente confirma recogida → pedido.recogido{metodo_pago} ; la caja ya no miente
 
-PASARELA VIVA (2026-10-25): sumup-checkout (Hosted Checkout, 1,95 % sin cuota). Stripe queda como
-kind alternativo; cambiar de pasarela es cambiar pasarela.kind, no tocar el caller.
+PASARELA VIVA (2026-10-28): sumup-checkout (Hosted Checkout, 1,95 % sin cuota). Stripe (v3.1) ya NO
+es un kind a medias: tiene libro propio, idempotencia por referencia (dos clics = un link), reembolso
+que se resuelve por reconsulta y conciliación propia. Cambiar de pasarela sigue siendo cambiar
+pasarela.kind; lo que cambia es que las dos sostienen las nueve garantías.
   pago.iniciar  → POST /v0.1/checkouts {amount DECIMAL, checkout_reference = pedido_id,
                   hosted_checkout.enabled, return_url = NUESTRO webhook, redirect_url = vuelta,
                   valid_until = ahora + ttl_minutos(15)} → link checkout.sumup.com/pay/<uuid>

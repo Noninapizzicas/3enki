@@ -349,9 +349,16 @@ async function test_sumup_webhook() {
 // --------------------------------------------------
 
 async function test_stripe_sigue_vivo() {
-  await check('stripe: firma HMAC válida → pago.confirmado (no se rompió el camino viejo)', async () => {
+  await check('stripe: firma HMAC válida → pago.confirmado (el payload es un PUNTERO y la sesión se reconsulta)', async () => {
     const secret = 'whsec_test';
     const { mod, bus } = await montar({ ...SUMUP_CFG, kind: 'stripe-checkout', provider: 'STRIPE', webhook_secret: secret });
+    // v3.1: el evento solo dice QUÉ sesión mirar. El pago lo dice la respuesta de Stripe.
+    const sesion = {
+      id: 'cs_test_1', status: 'complete', payment_status: 'paid',
+      amount_total: 2340, currency: 'eur', payment_intent: 'pi_1',
+      metadata: { pedido_id: 'PED-9', referencia: 'PED-9', project_slug: 'the-pirate' }
+    };
+    const calls = mockFetch(() => ({ status: 200, body: sesion }));
     const payload = JSON.stringify({
       type: 'checkout.session.completed',
       data: { object: { id: 'cs_test_1', payment_status: 'paid', amount_total: 2340, metadata: { pedido_id: 'PED-9', project_slug: 'the-pirate' } } }
@@ -362,10 +369,12 @@ async function test_stripe_sigue_vivo() {
     await mod.handleWebhook({ _rawBody: payload, headers: { 'stripe-signature': `t=${t},v1=${v1}` } }, res);
 
     assert.strictEqual(res.status, 200);
+    assert.ok(calls.some(c => c.url.includes('/v1/checkout/sessions/cs_test_1')), 'debía reconsultar la sesión');
     const d = bus.published.find(([e]) => e === 'pago.confirmado')[1];
     assert.strictEqual(d.pedido_id, 'PED-9');
     assert.strictEqual(d.pasarela, 'stripe-checkout');
     assert.strictEqual(d.monto_centimos, 2340);
+    assert.strictEqual(d.transaction_id, 'pi_1');
   });
 
   await check('stripe: firma inválida → 400 y no confirma', async () => {

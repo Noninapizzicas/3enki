@@ -349,6 +349,59 @@ async function runTests() {
     await gateway.stop();
   });
 
+  await test('HTTPGateway: el handler recibe los BYTES CRUDOS en _rawBody (firma de webhook)', async () => {
+    const registry = new ModuleRegistry();
+    const crypto = require('crypto');
+
+    registry.register('test', {
+      manifest: { name: 'test', version: '1.0.0', description: 'Test' },
+      instance: {},
+      apis: [
+        {
+          name: 'firma',
+          method: 'POST',
+          path: '/firma',
+          handler: async (req) => {
+            // Lo que hace un webhook firmado: HMAC sobre el cuerpo TAL CUAL llegó.
+            const firma = crypto.createHmac('sha256', 'secreto').update(req._rawBody || '').digest('hex');
+            return {
+              raw: req._rawBody === undefined ? null : req._rawBody,
+              firma,
+              reSerializado: JSON.stringify(req.body)
+            };
+          }
+        }
+      ]
+    });
+
+    const gateway = new HTTPGateway({ port: 3031, registry });
+    await gateway.start();
+
+    // Cuerpo con espacios: JSON.stringify(JSON.parse(x)) NO lo reproduce.
+    const raw = '{\n  "id": "evt_1",  "type": "checkout.session.completed"\n}';
+    const esperada = crypto.createHmac('sha256', 'secreto').update(raw).digest('hex');
+
+    const resultado = await new Promise((resolve, reject) => {
+      const req = http.request({
+        host: 'localhost', port: 3031, path: '/modules/test/firma', method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      }, (res) => {
+        let data = '';
+        res.on('data', c => data += c);
+        res.on('end', () => { try { resolve(JSON.parse(data)); } catch (e) { reject(e); } });
+      });
+      req.on('error', reject);
+      req.write(raw);
+      req.end();
+    });
+
+    assert(resultado.raw === raw, 'req._rawBody llega idéntico al cuerpo enviado');
+    assert(resultado.firma === esperada, 'la firma calculada sobre _rawBody coincide');
+    assert(resultado.reSerializado !== raw, 'el cuerpo re-serializado NO reproduce el original (por eso hace falta _rawBody)');
+
+    await gateway.stop();
+  });
+
   await test('HTTPGateway: debe manejar errores del handler', async () => {
     const registry = new ModuleRegistry();
 

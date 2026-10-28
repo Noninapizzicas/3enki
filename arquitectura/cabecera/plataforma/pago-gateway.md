@@ -6,7 +6,7 @@ fuentes:
   - modules/pago-gateway/**
   - tests/unit/pago-gateway-*.test.js
   - tests/unit/pizzepos__pago-gateway-*.test.js
-verificado: 2026-10-27
+verificado: 2026-10-28
 ---
 
 # PAGO-GATEWAY — el órgano de cobro de la plataforma

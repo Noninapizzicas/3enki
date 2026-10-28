@@ -308,7 +308,8 @@ CADENA (toda por evento, ningún módulo nuevo, ninguna máquina de estados nuev
          → _enviarMensajeSeguro(checkout_url)   // GUARDA: una sola sesión por pedido_id (LRU 500)
          ELSE (NO_PASARELA | PERMISSION_DENIED | timeout) → 'El pago con tarjeta no está disponible
               ahora mismo. Puedes pagar al recoger.' → DEGRADA, no revienta (el pedido ya existe)
-  Stripe → POST /pago/webhook/:project (firma si hay secreto + RECONSULTA de la sesión) → pago-gateway
+  Stripe → POST /pago/webhook/:project (firma sobre los BYTES CRUDOS del cuerpo — req._rawBody —
+         y RECONSULTA de la sesión con nuestra clave) → pago-gateway
          → publish('pago.confirmado'{pedido_id, project_id, monto_centimos, + metadata de contexto})
          → pedidos.onPagoConfirmado → pedido.pago.estado='pagado' → publish('pedido.pagado')
          → bot.onPedidoPagado: avisa al CLIENTE ('Pago recibido… te aviso cuando esté listo')

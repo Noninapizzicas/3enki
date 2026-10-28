@@ -5,7 +5,7 @@ resumen: El core event-driven: EventBus, MQTTClient, EmbeddedBroker, ModuleLoade
 fuentes:
   - core/**
   - index.js
-verificado: 2026-10-05
+verificado: 2026-10-28
 ---
 
 # Capa de Aterrizaje — Análisis del Core (Event-Driven Framework)

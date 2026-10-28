@@ -410,6 +410,24 @@ async function test_conciliacion() {
     assert.strictEqual(bus.eventos('cobro.huerfano').length, 1);
   });
 
+  await check('conciliación: el filtro de sesiones usa status=complete (payment_status NO es parámetro válido)', async () => {
+    // Stripe responde 400 parameter_unknown a `payment_status` en GET /v1/checkout/sessions.
+    // Si el filtro vuelve, la conciliación entera muere con "sessions 400" y nadie ve huérfanos.
+    const calls = mockFetch((u) => {
+      if (u.includes('/v1/checkout/sessions?')) return { status: 200, body: { data: [], has_more: false } };
+      if (u.includes('/v1/refunds?')) return { status: 200, body: { data: [], has_more: false } };
+      return { status: 200, body: { data: [] } };
+    });
+    const { mod } = await montar(CFG);
+    await mod._conciliar({ project_id: PROYECTO.id, project_slug: PROYECTO.slug });
+    const listados = calls.filter(c => c.url.includes('/v1/checkout/sessions?'));
+    assert.ok(listados.length >= 1, 'la conciliación lista sesiones');
+    for (const c of listados) {
+      assert.ok(c.url.includes('status=complete'), `usa status=complete: ${c.url}`);
+      assert.ok(!c.url.includes('payment_status='), `NO usa payment_status como filtro: ${c.url}`);
+    }
+  });
+
   await check('conciliación: reembolso hecho en el PANEL se detecta y se apunta', async () => {
     mockFetch((u, o) => {
       if (o.method === 'POST' && u.endsWith('/v1/checkout/sessions')) return { status: 200, body: SESION_NUEVA };

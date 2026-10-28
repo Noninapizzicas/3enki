@@ -125,8 +125,11 @@ class CartaDigitalModule extends BaseModule {
   // (carta_activa)): el comandero ya dejó de leer el módulo `ingredientes` (store en-memoria que
   // en nonina estaba VACÍO); la carta-digital termina aquí esa migración → los dos canales beben
   // de la carta, ninguno depende de ingredientes.json (que aparece/desaparece). canal='digital'
-  // para proyectar la carta del canal público. GATE de negocio: SOLO extras con precio_extra>0
-  // (no se regalan toppings); con todo a 0 el catálogo viaja vacío → "añadir" degrada a solo-quitar.
+  // para proyectar la carta del canal público. GATE de negocio (orden del dueño 2026-10-28):
+  // precio 0 = GRATIS y SÍ se ofrece — el extra a cero es el gancho que incentiva el pedido
+  // (cebolla, pimiento, calabacín). Lo que NO se ofrece es el ingrediente SIN precio declarado
+  // (undefined/null): eso se CUENTA en sin_precio para avisarle. Con todo a undefined el catálogo
+  // viaja vacío → "añadir" degrada a solo-quitar.
   // Soft-fail total → [] (nunca rompe la publicación).
   async _catalogoIngredientes(project_id, canal) {
     try {
@@ -135,10 +138,11 @@ class CartaDigitalModule extends BaseModule {
       const r = await inst.handleListIngredientes({ project_id, canal: canal || 'digital' });
       const arr = (r && r.data && r.data.ingredientes) || [];
       const disponibles = arr.filter(i => i && i.disponible !== false);
-      // GATE de negocio: la carta pública NO ofrece extras a 0€ (no precio cero). Los que no tienen
-      // precio NO se muestran al cliente, pero se CUENTAN (sin_precio) para avisar al dueño.
+      // GATE: precio declarado (número, incluido 0 = GRATIS). Sin precio (undefined/null) NO se
+      // muestra al cliente, pero se CUENTA (sin_precio) para avisar al dueño.
+      const conPrecio = (i) => i && i.precio_extra !== null && i.precio_extra !== undefined && Number.isFinite(Number(i.precio_extra));
       const catalogo = disponibles
-        .filter(i => Number(i.precio_extra) > 0)
+        .filter(conPrecio)
         .map(i => ({
           id: i.id,
           nombre: i.nombre,

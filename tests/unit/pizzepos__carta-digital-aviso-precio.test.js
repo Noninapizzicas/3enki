@@ -1,8 +1,9 @@
 'use strict';
 
 /**
- * Paso 4b: "aviso sin precio cero". La carta-digital (PWA pública) NO ofrece extras a 0€ (gate
- * precio_extra>0), pero cuenta los que se quedan fuera para AVISAR al dueño (extras_sin_precio).
+ * Paso 4b: "aviso sin precio". La carta-digital (PWA pública) ofrece TODO extra con precio
+ * declarado — precio 0 = Gratis (orden del dueño 2026-10-28: el extra a cero es el gancho) — y
+ * cuenta los que NO tienen precio declarado para AVISAR al dueño (extras_sin_precio).
  *
  * Prueba _catalogoIngredientes con un productos stub. Ejecutar:
  *   node tests/unit/pizzepos__carta-digital-aviso-precio.test.js
@@ -24,17 +25,18 @@ function conProductos(ingredientes) {
   return m;
 }
 
-test('gate: solo extras con precio_extra>0 viajan al cliente; los de 0 se cuentan (aviso)', async () => {
+test('gate: precio declarado (incluido 0 = Gratis) viaja al cliente; sin precio declarado se cuenta (aviso)', async () => {
   const m = conProductos([
     { id: 'bacon', nombre: 'Bacon', precio_extra: 0.5, disponible: true },
-    { id: 'pollo', nombre: 'Pollo', precio_extra: 0, disponible: true },
-    { id: 'queso', nombre: 'Queso', disponible: true },              // sin precio_extra → 0
+    { id: 'pollo', nombre: 'Pollo', precio_extra: 0, disponible: true },   // 0 = GRATIS → se ofrece
+    { id: 'queso', nombre: 'Queso', disponible: true },              // sin precio_extra → aviso
     { id: 'x', nombre: 'X', precio_extra: 1, disponible: false },     // no disponible → ni se cuenta
   ]);
   const r = await m._catalogoIngredientes('proj', 'digital');
-  assert.strictEqual(r.catalogo.length, 1, 'solo bacon se ofrece');
-  assert.strictEqual(r.catalogo[0].id, 'bacon');
-  assert.strictEqual(r.sin_precio, 2, 'pollo y queso → aviso (no disponible no cuenta)');
+  assert.strictEqual(r.catalogo.length, 2, 'bacon y pollo(gratis) se ofrecen');
+  assert.deepStrictEqual(r.catalogo.map(c => c.id).sort(), ['bacon', 'pollo']);
+  assert.strictEqual(r.catalogo.find(c => c.id === 'pollo').precio_extra, 0, 'el gratis viaja con precio 0');
+  assert.strictEqual(r.sin_precio, 1, 'queso → aviso (no disponible no cuenta)');
 });
 
 test('todos con precio → sin_precio 0 (no hay aviso)', async () => {

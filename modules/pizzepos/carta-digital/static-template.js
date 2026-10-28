@@ -155,7 +155,7 @@ function generateStaticHTML(carta, config, options = {}) {
     if (!menuPorCategoria[catNombre]) menuPorCategoria[catNombre] = [];
     const ings = (p.ingredientes || []).map(i => i.nombre).join(', ');
     const tags = (p.tags || []).join(', ');
-    const extras = (p.ingredientes || []).filter(i => i.precio_extra).map(i => `+${i.nombre} ${i.precio_extra.toFixed(2)}${moneda}`).join(', ');
+    const extras = (p.ingredientes || []).filter(i => i.precio_extra !== null && i.precio_extra !== undefined).map(i => `+${i.nombre} ${Number(i.precio_extra) > 0 ? i.precio_extra.toFixed(2) + moneda : 'Gratis'}`).join(', ');
     menuPorCategoria[catNombre].push(
       `- ${p.nombre}: ${p.precio.toFixed(2)}${moneda}${ings ? ' (' + ings + ')' : ''}${tags ? ' [' + tags + ']' : ''}${extras ? ' | Extras: ' + extras : ''}`
     );
@@ -317,6 +317,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .ing-add{font:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:all .12s}
 .ing-chip.added{border-color:#22c55e;background:rgba(34,197,94,.15);color:#22c55e}
 .ing-add-price{font-size:.65rem;color:#888;margin-left:2px}.ing-chip.added .ing-add-price{color:#22c55e}
+.ing-add-price.gratis{color:#22c55e;font-weight:700;letter-spacing:.02em}
 /* La escalera: mismo chip que los extras, pero "lo mismo + ingrediente -> hermana". */
 .esc-row{align-items:baseline}
 .esc-mas{color:var(--primary);font-weight:800}
@@ -765,7 +766,8 @@ function renderExtrasAgrupados(extras, selSet, fn) {
     html += '<div class="ing-group" style="--fam:' + info.color + '"><div class="ing-group-head"><span>' + info.emoji + '</span><span>' + info.label + '</span><span class="ing-group-count">(' + lista.length + ')</span></div><div class="ing-list">';
     for (const e of lista) {
       const ad = (selSet && selSet.has(e.id)) ? ' added' : '';
-      html += '<button type="button" class="ing-chip ing-add' + cls + ad + '" data-ext-id="' + esc(e.id) + '" onclick="' + handler + '(\\'' + e.id + '\\', this)">' + (e.emoji ? '<span style="font-size:.85rem">' + e.emoji + '</span>' : '') + '<span style="font-weight:500">' + esc(e.nombre) + '</span><span class="ing-add-price">+' + fmt(e.precio_extra) + '</span></button>';
+      const esGratis = !(Number(e.precio_extra) > 0);
+      html += '<button type="button" class="ing-chip ing-add' + cls + ad + '" data-ext-id="' + esc(e.id) + '" onclick="' + handler + '(\\'' + e.id + '\\', this)">' + (e.emoji ? '<span style="font-size:.85rem">' + e.emoji + '</span>' : '') + '<span style="font-weight:500">' + esc(e.nombre) + '</span><span class="ing-add-price' + (esGratis ? ' gratis' : '') + '">' + (esGratis ? 'Gratis' : '+' + fmt(e.precio_extra)) + '</span></button>';
     }
     html += '</div></div>';
   }

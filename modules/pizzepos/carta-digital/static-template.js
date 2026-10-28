@@ -1001,10 +1001,9 @@ function showDetail(id) {
     ingsHtml += '<button type="button" class="ing-chip ing-removable' + cls + '" data-ing-idx="' + idx + '" onclick="toggleQuitar(' + idx + ', this)">' + (i.emoji ? '<span style="font-size:.85rem">' + i.emoji + '</span>' : '') + '<span style="font-weight:500">' + esc(i.nombre) + '</span></button>';
   }
 
-  // Extras AÑADIBLES (1b): del catálogo (ya gateado a precio>0), mismo grupo que el producto,
-  // que NO sean ya base (exclusión por id O nombre, robusta). Espeja "añadir" del VariacionesPanel.
-  const grpKeys = [p.categoria_id, (p.categoria || '').toLowerCase()].filter(Boolean);
-  const extras = extrasForGroup(grpKeys, baseExcludeSet(p));
+  // Extras AÑADIBLES (1b): del catálogo (ya gateado a precio>0), que NO sean ya base
+  // (exclusión por id O nombre, robusta). Una sola puerta para todos los flujos: extrasForProduct.
+  const extras = extrasForProduct(p);
   const extrasHtml = extras.length ? renderExtrasAgrupados(extras, anadirSel, 'toggleAnadir') : '';
 
   // Declaración de alérgenos por NOMBRE (1169/2011 — el texto es lo legalmente exigible).
@@ -1188,6 +1187,17 @@ function extrasForGroup(grpKeys, excludeSet) {
     return true;
   });
 }
+// LA PUERTA ÚNICA del "Añadir extras" de un producto (detalle, mitad y cualquier flujo futuro).
+// GATE DE CATEGORÍA: los ingredientes solo se ofrecen donde el negocio los vende — la MISMA
+// condición que enciende el constructor "Crea tu pizza" (isPizzaCat). Sin este gate, al abrir el
+// catálogo entero (PR #881) una Coca-Cola ofrecía los 45 ingredientes del negocio y una ración de
+// patatas también: medido, 0 opcionales antes del #881 → 45 después. Un solo sitio decide, así el
+// chequeo de coherencia puede llamar a ESTA función y no re-implementar la regla.
+function extrasForProduct(p) {
+  if (!p || !isPizzaCat(p.categoria)) return [];
+  const grpKeys = [p.categoria_id, (p.categoria || '').toLowerCase()].filter(Boolean);
+  return extrasForGroup(grpKeys, baseExcludeSet(p));
+}
 // Busca un ingrediente del catalogo proyectado por id o por nombre (tolerante).
 function catIngPorId(id) {
   const k = norm(id);
@@ -1303,8 +1313,7 @@ function showMitadVar(lado, pizza) {
     const rm = quitarSel.has(idx) ? ' removed' : '';
     ingsHtml += '<button type="button" class="ing-chip ing-removable' + cls + rm + '" onclick="toggleQuitar(' + idx + ', this)">' + (i.emoji ? '<span style="font-size:.85rem">' + i.emoji + '</span>' : '') + '<span style="font-weight:500">' + esc(i.nombre) + '</span></button>';
   }
-  const grpKeys = [pizza.categoria_id, (pizza.categoria || '').toLowerCase()].filter(Boolean);
-  const extras = extrasForGroup(grpKeys, baseExcludeSet(pizza));
+  const extras = extrasForProduct(pizza);
   let extrasHtml = '';
   if (extras.length) {
     for (const e of extras) detailExtrasById[e.id] = e;

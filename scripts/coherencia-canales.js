@@ -61,7 +61,7 @@ function extractRuntime(html) {
     break;
   }
   // expone funciones y datos al exterior (mismo ámbito léxico: los `const` viven en este script)
-  const exp = '\n;globalThis.__carta = { DATA, extrasForGroup, baseExcludeSet, catGrpKeys, isPizzaCat, norm, famInfo };';
+  const exp = '\n;globalThis.__carta = { DATA, extrasForGroup, extrasForProduct, baseExcludeSet, catGrpKeys, isPizzaCat, norm, famInfo };';
   return lines.slice(0, cut).join('\n') + exp;
 }
 
@@ -106,7 +106,7 @@ function makeSandbox() {
 
 // ---- 4. Comparación ---------------------------------------------------------------------
 function analyse(api) {
-  const { DATA, extrasForGroup, baseExcludeSet, catGrpKeys, isPizzaCat, famInfo, norm } = api;
+  const { DATA, extrasForGroup, extrasForProduct, baseExcludeSet, catGrpKeys, isPizzaCat, famInfo, norm } = api;
   const money = (n) => (Number(n) || 0).toFixed(2).replace('.', ',') + ' €';
   const catName = {}, catPizza = {};
   (DATA.categorias || []).forEach((c) => { catName[c.id] = c.nombre || c.id; catPizza[c.id] = !!isPizzaCat(c.id); });
@@ -117,7 +117,13 @@ function analyse(api) {
 
   const filas = [];
   for (const p of (DATA.productos || [])) {
-    const anadir = extrasForGroup([], baseExcludeSet(p));
+    // Canal A = LO QUE PINTA EL DETALLE: se llama a la puerta real del runtime, extrasForProduct,
+    // no se re-implementa la regla. Si el bundle publicado no la trae (anterior al arreglo), se
+    // avisa en vez de inventar una medición.
+    if (typeof extrasForProduct !== 'function') {
+      throw new Error('el bundle publicado no trae extrasForProduct: no se puede medir el canal A sin re-implementar la regla');
+    }
+    const anadir = extrasForProduct(p);
     const anadirKeys = new Set(anadir.flatMap(keyOf));
     // Los ingredientes BASE pueden venir sin id (solo nombre): se emparejan por id o por nombre,
     // igual que hace baseExcludeSet en la página.

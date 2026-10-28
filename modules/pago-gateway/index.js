@@ -48,12 +48,17 @@
 const crypto = require('crypto');
 const BaseModule = require('../_shared/base-module');
 const ConciliacionSumUp = require('./conciliacion');
+const ConciliacionStripe = require('./conciliacion-stripe');
 const { TerminalSumUp } = require('./terminal');
 const { ClientesSumUp } = require('./clientes');
 const ResolutorProyecto = require('../_shared/resolutor-proyecto');
 const QR = require('./qr');
 
 const SUMUP_API = 'https://api.sumup.com';
+const STRIPE_API = 'https://api.stripe.com';
+const STRIPE_TIMEOUT_MS = 15000;
+const STRIPE_WEBHOOK_TIMEOUT_MS = 4000;               // el webhook responde rápido: Stripe reintenta
+const STRIPE_EXPIRA_MIN_MIN = 30;                      // Stripe no acepta expires_at a menos de 30 min
 // Storage del proyecto. El prefijo es del ÓRGANO, no de la vertical: /pago vale para
 // cualquier proyecto (pizzería, panadería, taller). Las rutas viejas se siguen leyendo
 // una vez para no perder el libro de cobros al desplegar (migración sin hueco).
@@ -75,7 +80,7 @@ class PagoGatewayModule extends BaseModule {
   constructor() {
     super();
     this.name = 'pago-gateway';
-    this.version = '3.0.0';
+    this.version = '3.1.0';
     this._subs = [];
     this._confirmados = new Set();      // idempotencia caliente del webhook (SumUp reintenta 4 veces)
     this._rechazados = new Set();       // ídem para FAILED (SumUp manda el evento varias veces)
@@ -84,6 +89,7 @@ class PagoGatewayModule extends BaseModule {
     this._ledgerNoDisponible = new Map(); // project_id → ts hasta el que no se reintenta leer
     this._conciEstado = new Map();      // project_id → { history_cursor, payouts_hasta, vistos[] }
     this._conci = null;
+    this._conciStripe = null;
     this._conciTimer = null;
     this._barrido = null;
     this._barriendo = false;
@@ -115,8 +121,8 @@ class PagoGatewayModule extends BaseModule {
     sub('pago.iniciar.request', e => this._onIniciarRequest(e));
     sub('pago.cancelar.request', e => this._onCancelarRequest(e));
     sub('pago.reembolsar.request', e => this._onReembolsarRequest(e));
-    sub('pago.estado.request', e => this._onRespuestaSimple(e, 'pago.estado.request', 'pago.estado.response', d => this._sumupEstado(d)));
-    sub('pago.recibo.request', e => this._onRespuestaSimple(e, 'pago.recibo.request', 'pago.recibo.response', d => this._sumupRecibo(d)));
+    sub('pago.estado.request', e => this._onRespuestaSimple(e, 'pago.estado.request', 'pago.estado.response', d => this.handlePagoEstado(d)));
+    sub('pago.recibo.request', e => this._onRespuestaSimple(e, 'pago.recibo.request', 'pago.recibo.response', d => this.handlePagoRecibo(d)));
     // Config de pasarela POR PROYECTO (el órgano es el mismo para todos los negocios):
     // leer / escribir por bus, y el mismo camino que usa el panel.
     sub('pago.config.request', e => this._onRespuestaSimple(e, 'pago.config.request', 'pago.config.response', d => this._configLeer(d)));
@@ -130,7 +136,7 @@ class PagoGatewayModule extends BaseModule {
     const puertos = {
       'pago.qr.request': d => this._qr(d),
       'pago.actualizar.request': d => this._actualizar(d),
-      'pago.metodos.request': d => this._sumupMetodos(d),
+      'pago.metodos.request': d => this.handlePagoMetodos(d),
       'pago.reader.listar.request': d => this._readerListar(d),
       'pago.reader.parear.request': d => this._readerParear(d),
       'pago.reader.leer.request': d => this._readerLeer(d),
@@ -530,65 +536,548 @@ class PagoGatewayModule extends BaseModule {
     return { status: 501, error: { code: 'NOT_IMPLEMENTED', message: `pasarela '${kind}' no implementada (semilla: stripe-checkout, sumup-checkout)` } };
   }
 
-  // ── adapter STRIPE (Checkout Session) ──
-  async _stripeCheckout(d) {
-    const p = this._pasarelaPara(d.project_id);
-    const provider = p.provider || 'STRIPE';
-    const cred = await this._resolveCred(provider, d.project_id);
-    if (cred.error) return { status: 500, error: { code: 'PERMISSION_DENIED', message: `credencial '${provider}': ${cred.error}` } };
+  // ══════════════════════════════════════════════════════════════════════════
+  //  STRIPE — Checkout Sessions con la MISMA disciplina que SumUp
+  //  Doc: docs.stripe.com/api/checkout/sessions · /api/refunds · /api/accounts
+  //
+  //  El adapter mínimo (v3.0) sabía crear una sesión y leer su webhook. Eso deja
+  //  fuera cinco de las nueve garantías del órgano. Aquí entran todas:
+  //   1. IDEMPOTENCIA POR REFERENCIA — la referencia es el pedido; un segundo clic
+  //      REUTILIZA el link vivo, y si el pedido ya se pagó no se crea otro.
+  //   2. CADUCIDAD PROPIA — expires_at, atada a la vida del pedido (Stripe exige ≥30 min).
+  //   3. LIBRO DURABLE — /pago/checkouts.json, igual que SumUp: sin fila no hay barrido.
+  //   4. WEBHOOK = RECONSULTAR — el payload es un PUNTERO; se pide la sesión con
+  //      NUESTRA clave y solo `payment_status:paid` confirma. Un POST falsificado
+  //      no puede inventar un cobro aunque no haya webhook_secret.
+  //   5. INTEGRIDAD DEL IMPORTE — amount_total contra lo pedido; si no cuadra,
+  //      `pago.importe_discrepante` y el pedido NO se libera.
+  //   6. REEMBOLSO sin reintento a ciegas — un timeout se RECONSULTA (lista de
+  //      refunds del payment_intent), nunca se repite (devolvería dos veces).
+  //   7. PREFLIGHT — `pago.estado` dice si la cuenta puede cobrar hoy.
+  //   8. AISLAMIENTO — clave, secreto, libro y conciliación son del PROYECTO.
+  // ══════════════════════════════════════════════════════════════════════════
 
-    const moneda = (d.moneda || p.moneda || 'eur').toLowerCase();
-    const concepto = (d.concepto || 'Pedido').slice(0, 120);
-    const ret = d.return_url || p.return_url || '';
-    const sep = ret.includes('?') ? '&' : '?';
-    // Stripe Checkout Sessions: body x-www-form-urlencoded (NO json).
-    const params = new URLSearchParams();
-    params.set('mode', 'payment');
-    params.set('line_items[0][price_data][currency]', moneda);
-    params.set('line_items[0][price_data][product_data][name]', concepto);
-    params.set('line_items[0][price_data][unit_amount]', String(d.monto_centimos));
-    params.set('line_items[0][quantity]', '1');
-    params.set('success_url', ret ? (ret + sep + 'pago=ok&session={CHECKOUT_SESSION_ID}') : 'https://example.com/?pago=ok');
-    params.set('cancel_url', ret ? (ret + sep + 'pago=cancel') : 'https://example.com/?pago=cancel');
-    params.set('metadata[pedido_id]', String(d.pedido_id ?? d.referencia));
-    params.set('metadata[referencia]', String(d.referencia ?? d.pedido_id));
-    if (d.project_id) params.set('metadata[project_id]', String(d.project_id));
-    // METADATA ADICIONAL del caller: la pasarela la devuelve en el webhook, asi que es lo que
-    // permite RECONSTRUIR el pedido si el webhook llega cuando ya no esta en memoria.
+  _stripeCfg(d = {}) {
+    const p = this._pasarelaPara(d.project_id);
+    const ttl = Number(p.ttl_minutos) > 0 ? Number(p.ttl_minutos) : 60;
+    return {
+      project_id: d.project_id || p.project_id || null,
+      provider: p.provider || 'STRIPE',
+      moneda: String(d.moneda || p.moneda || 'eur').toLowerCase(),
+      returnUrl: d.return_url || p.return_url || null,
+      webhookSecret: p.webhook_secret || null,
+      // Lo que la sesión ACEPTA es lo que se informa: no se inventan métodos.
+      metodos: Array.isArray(p.metodos) && p.metodos.length ? p.metodos.map(x => String(x).toLowerCase()) : ['card'],
+      minCentimos: Number.isInteger(p.min_centimos) ? p.min_centimos : 50,   // mínimo de Stripe en EUR: 0,50
+      ttlMin: Math.min(Math.max(ttl, STRIPE_EXPIRA_MIN_MIN), 24 * 60)        // Stripe: expires_at entre 30 min y 24 h
+    };
+  }
+
+  // El MODO no viaja en una llamada aparte: el prefijo de la clave lo dice y no se
+  // puede disfrazar (al contrario que la sup_sk_ de SumUp, idéntica en los dos entornos).
+  _entornoDeStripe(api_key) {
+    const k = String(api_key || '');
+    if (k.startsWith('rk_live_') || k.startsWith('sk_live_')) return 'real';
+    if (k.startsWith('rk_test_') || k.startsWith('sk_test_')) return 'sandbox';
+    return null;
+  }
+
+  // Stripe habla x-www-form-urlencoded (NO json) y devuelve {error:{message}}.
+  async _stripeCall(method, path, { api_key, params = null, idempotency_key = null, timeout_ms = STRIPE_TIMEOUT_MS } = {}) {
+    const headers = { 'Authorization': 'Bearer ' + api_key };
+    let body;
+    if (params) {
+      const sp = new URLSearchParams();
+      for (const [k, v] of Object.entries(params)) {
+        if (v === null || v === undefined || v === '') continue;
+        sp.set(k, String(v));
+      }
+      body = sp.toString();
+      headers['Content-Type'] = 'application/x-www-form-urlencoded';
+    }
+    if (idempotency_key) headers['Idempotency-Key'] = String(idempotency_key).slice(0, 250);
+    let resp, text;
+    try {
+      const controller = new AbortController();
+      const tid = setTimeout(() => controller.abort(), timeout_ms);
+      resp = await fetch(STRIPE_API + path, { method, headers, body, signal: controller.signal });
+      clearTimeout(tid);
+      text = await resp.text();
+    } catch (err) {
+      if (err.name === 'AbortError') return { ok: false, status: 504, network: true, code: 'UPSTREAM_TIMEOUT', message: 'Stripe no respondió a tiempo' };
+      return { ok: false, status: 502, network: true, code: 'UPSTREAM_UNREACHABLE', message: `red Stripe: ${err.message}` };
+    }
+    let data = null; try { data = JSON.parse(text); } catch (_) {}
+    if (!resp.ok) {
+      return { ok: false, status: resp.status, data, text, message: data?.error?.message || (text || '').slice(0, 300) };
+    }
+    return { ok: true, status: resp.status, data, text };
+  }
+
+  _errorDeStripe(r, prefijo = 'Stripe') {
+    const code = r.network ? (r.code || 'UPSTREAM_UNREACHABLE')
+      : (r.status === 401 || r.status === 403) ? 'PERMISSION_DENIED'
+        : (r.status === 400 || r.status === 404) ? 'INVALID_INPUT'
+          : 'UPSTREAM_INVALID_RESPONSE';
+    return { status: r.status || 502, error: { code, message: `${prefijo} ${r.status}: ${r.message || r.code || 'sin detalle'}` } };
+  }
+
+  // El link VIVO de una referencia, leído del libro. Esto es la idempotencia: no hay
+  // estado en memoria que valga (un deploy lo borra), la fila del libro es la verdad.
+  async _stripeLinkVivo(project_id, referencia) {
+    if (!referencia) return null;
+    const libro = await this._ledgerLoad(project_id);
+    if (!libro) return null;
+    const ahora = Date.now();
+    const filas = Object.values(libro.checkouts || {})
+      .filter(e => e && e.pasarela === 'stripe-checkout' && e.checkout_id
+        && (String(e.referencia) === String(referencia) || String(e.pedido_id) === String(referencia)))
+      .sort((a, b) => String(b.creado || '').localeCompare(String(a.creado || '')));
+    const pagada = filas.find(e => e.estado === 'confirmado' || e.transaction_id);
+    if (pagada) return { entry: pagada, estado: 'pagado' };
+    const viva = filas.find(e => e.estado === 'pendiente' && e.checkout_url
+      && (!e.valid_until || Date.parse(e.valid_until) > ahora));
+    if (viva) return { entry: viva, estado: 'pendiente' };
+    return null;
+  }
+
+  async _stripeCheckout(d) {
+    const cfg = this._stripeCfg(d);
+    // Sin return_url el cliente aterriza en example.com: el pago entra y el pedido no se libera.
+    if (!cfg.returnUrl) {
+      return { status: 500, error: { code: 'CONFIG_MISSING', message: 'stripe-checkout exige pasarela.return_url (a dónde vuelve el cliente tras pagar)' } };
+    }
+    if (d.monto_centimos < cfg.minCentimos) {
+      return { status: 400, error: { code: 'INVALID_INPUT', message: `importe por debajo del mínimo de Stripe (${(cfg.minCentimos / 100).toFixed(2)} ${cfg.moneda.toUpperCase()})` } };
+    }
+    const cred = await this._resolveCred(cfg.provider, cfg.project_id);
+    if (cred.error) return { status: 500, error: { code: 'PERMISSION_DENIED', message: `credencial '${cfg.provider}': ${cred.error}` } };
+
+    // ── 1. IDEMPOTENCIA: dos clics NO son dos cobros ──
+    const vivo = await this._stripeLinkVivo(d.project_id, d.referencia);
+    if (vivo?.estado === 'pagado') {
+      return { status: 409, error: { code: 'CHECKOUT_YA_PAGADO', message: 'el pedido ya está pagado; no se crea un link nuevo' } };
+    }
+    if (vivo?.estado === 'pendiente') {
+      return {
+        status: 200,
+        data: {
+          checkout_url: vivo.entry.checkout_url, session_id: vivo.entry.checkout_id,
+          pasarela: 'stripe-checkout', estado: 'pendiente',
+          expira_at: vivo.entry.valid_until || null, entorno: vivo.entry.entorno ?? null,
+          reutilizado: true
+        }
+      };
+    }
+
+    const ahora = Date.now();
+    const expira = new Date(ahora + cfg.ttlMin * 60000).toISOString();
+    const sep = cfg.returnUrl.includes('?') ? '&' : '?';
+    const params = {
+      mode: 'payment',
+      'line_items[0][price_data][currency]': cfg.moneda,
+      'line_items[0][price_data][product_data][name]': (d.concepto || `Cobro ${d.referencia}`).slice(0, 120),
+      'line_items[0][price_data][unit_amount]': String(d.monto_centimos),
+      'line_items[0][quantity]': '1',
+      success_url: cfg.returnUrl + sep + 'pago=ok&session={CHECKOUT_SESSION_ID}',
+      cancel_url: cfg.returnUrl + sep + 'pago=cancel',
+      expires_at: String(Math.floor((ahora + cfg.ttlMin * 60000) / 1000)),
+      client_reference_id: String(d.referencia).slice(0, 200),
+      'metadata[pedido_id]': String(d.pedido_id ?? d.referencia),
+      'metadata[referencia]': String(d.referencia),
+      'metadata[pasarela]': 'stripe-checkout',
+      // El reembolso se hace contra el payment_intent: se hereda la referencia para poder
+      // reembolsar SIN expandir la sesión (expand exige permiso extra sobre PaymentIntents).
+      'payment_intent_data[metadata][referencia]': String(d.referencia),
+      ...(d.project_id ? { 'metadata[project_id]': String(d.project_id) } : {}),
+      ...(d.project_slug ? { 'metadata[project_slug]': String(d.project_slug) } : {})
+    };
+    cfg.metodos.forEach((m, i) => { params[`payment_method_types[${i}]`] = m; });
+    // METADATA ADICIONAL del caller: viaja al webhook y permite reconstruir el pedido.
     if (d.metadata && typeof d.metadata === 'object') {
       for (const [k, v] of Object.entries(d.metadata)) {
         if (v === null || v === undefined || v === '') continue;
         if (!/^[a-z0-9_]{1,40}$/i.test(k)) continue;
-        params.set('metadata[' + k + ']', String(v).slice(0, 500));
+        params['metadata[' + k + ']'] = String(v).slice(0, 500);
       }
     }
 
-    let resp, text;
-    try {
-      const controller = new AbortController();
-      const tid = setTimeout(() => controller.abort(), 20000);
-      resp = await fetch('https://api.stripe.com/v1/checkout/sessions', {
-        method: 'POST',
-        headers: { 'Authorization': 'Bearer ' + cred.api_key, 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: params.toString(), signal: controller.signal
-      });
-      clearTimeout(tid);
-      text = await resp.text();
-    } catch (err) {
-      if (err.name === 'AbortError') return { status: 504, error: { code: 'UPSTREAM_TIMEOUT', message: 'Stripe no respondió a tiempo' } };
-      return { status: 502, error: { code: 'UPSTREAM_UNREACHABLE', message: `red Stripe: ${err.message}` } };
+    // Idempotency-Key: un reintento de red del MISMO acto no abre una segunda sesión.
+    const idem = `cs:${cfg.project_id || '-'}:${d.referencia}`;
+    const r = await this._stripeCall('POST', '/v1/checkout/sessions', { api_key: cred.api_key, params, idempotency_key: idem });
+    if (!r.ok) {
+      this.logger?.warn('pago-gateway.stripe.create_failed', { status: r.status, message: r.message });
+      return this._errorDeStripe(r);
     }
-    let parsed = null; try { parsed = JSON.parse(text); } catch (_) {}
-    if (!resp.ok) {
-      const sMsg = parsed?.error?.message || (text || '').slice(0, 300) || `HTTP ${resp.status}`;
-      this.logger?.warn('pago-gateway.stripe.http_error', { status: resp.status, message: sMsg });
-      const code = resp.status === 401 || resp.status === 403 ? 'PERMISSION_DENIED' : resp.status === 400 ? 'INVALID_INPUT' : 'UPSTREAM_INVALID_RESPONSE';
-      return { status: resp.status, error: { code, message: `Stripe ${resp.status}: ${sMsg}` } };
-    }
-    if (!parsed?.url || !parsed?.id) {
+    const s = r.data || {};
+    if (!s.url || !s.id) {
       return { status: 502, error: { code: 'UPSTREAM_INVALID_RESPONSE', message: 'Stripe no devolvió checkout url/id' } };
     }
-    return { status: 200, data: { checkout_url: parsed.url, session_id: parsed.id, pasarela: 'stripe-checkout', estado: 'pendiente' } };
+
+    // ── 3. LIBRO: sin fila no hay barrido ni idempotencia tras un reinicio ──
+    const entorno = this._entornoDeStripe(cred.api_key);
+    if (entorno === 'sandbox') this.logger?.warn('pago-gateway.stripe.cobro_en_prueba', { referencia: d.referencia });
+    await this._ledgerPut(d.project_id, {
+      checkout_id: s.id,
+      checkout_reference: s.client_reference_id || String(d.referencia),
+      referencia: String(d.referencia),
+      pedido_id: String(d.pedido_id || d.referencia),
+      canal: 'online',
+      pasarela: 'stripe-checkout',
+      project_slug: d.project_slug || null,
+      monto_centimos: Number.isInteger(s.amount_total) ? s.amount_total : d.monto_centimos,
+      moneda: String(s.currency || cfg.moneda).toUpperCase(),
+      estado: 'pendiente',
+      checkout_url: s.url,
+      entorno,
+      creado: new Date().toISOString(),
+      valid_until: expira,
+      reembolsos: []
+    });
+
+    return {
+      status: 200,
+      data: {
+        checkout_url: s.url, session_id: s.id, pasarela: 'stripe-checkout',
+        estado: 'pendiente', expira_at: expira, entorno, reutilizado: false
+      }
+    };
+  }
+
+  // La sesión, pedida a Stripe con NUESTRA clave. Es la única fuente que confirma.
+  async _stripeSesion(session_id, api_key, timeout_ms = STRIPE_TIMEOUT_MS) {
+    return this._stripeCall('GET', `/v1/checkout/sessions/${encodeURIComponent(session_id)}`, { api_key, timeout_ms });
+  }
+
+  // LA verdad del pago en Stripe: un solo camino, lo usen webhook, barrido o conciliación.
+  // El webhook solo dice QUÉ sesión mirar; lo que se publica sale de esta respuesta.
+  async _confirmarStripe(s, { project_id = null, project_slug = null, origen = 'webhook' } = {}) {
+    if (!s?.id) return { confirmado: false, motivo: 'sin_sesion' };
+    if (s.payment_status !== 'paid') return { confirmado: false, motivo: 'no_pagado', estado: s.payment_status || s.status || null };
+
+    const entry = await this._ledgerBuscar(project_id, { checkout_id: s.id });
+    const referencia = entry?.referencia
+      || s.metadata?.referencia || s.metadata?.pedido_id || s.client_reference_id || null;
+    if (!referencia) return { confirmado: false, motivo: 'sin_referencia' };
+
+    // Idempotencia duradera: la fila del libro sobrevive al reinicio, el Set no.
+    if (this._confirmados.has(s.id) || entry?.transaction_id) {
+      return { confirmado: false, motivo: 'duplicado', referencia, pedido_id: referencia };
+    }
+
+    const montoCentimos = Number.isFinite(Number(s.amount_total)) ? Number(s.amount_total) : null;
+    // ── 5. INTEGRIDAD: misma guarda que SumUp, con la propina fuera (Stripe Checkout no la añade) ──
+    const discrepancia = this._cuadraCobro({ entry, co: { currency: s.currency }, montoCentimos, propinaCentimos: 0 });
+    if (discrepancia) {
+      await this.eventBus.publish('pago.importe_discrepante', {
+        referencia, pedido_id: referencia,
+        project_id: project_id || s.metadata?.project_id || null,
+        project_slug,
+        session_id: s.id,
+        transaction_id: s.payment_intent || null,
+        esperado_centimos: discrepancia.esperado,
+        cobrado_centimos: discrepancia.cobrado,
+        propina_centimos: null,
+        motivo: discrepancia.motivo,
+        moneda_esperada: discrepancia.monedaEsperada || null,
+        moneda_cobrada: discrepancia.monedaCobrada || null,
+        pasarela: 'stripe-checkout', origen,
+        correlation_id: crypto.randomUUID(), timestamp: new Date().toISOString()
+      });
+      if (entry?.checkout_id) await this._ledgerMark(project_id, s.id, { estado: 'discrepante', discrepancia: discrepancia.motivo });
+      this.metrics?.increment?.('pago.importe_discrepante.total', { motivo: discrepancia.motivo, pasarela: 'stripe-checkout' });
+      this.logger?.warn('pago-gateway.stripe.importe_discrepante', { referencia, session_id: s.id, ...discrepancia });
+      return { confirmado: false, motivo: 'importe_discrepante', referencia, pedido_id: referencia, discrepancia };
+    }
+
+    const payload = {
+      referencia, pedido_id: referencia,
+      project_id: project_id || s.metadata?.project_id || null,
+      project_slug: project_slug || s.metadata?.project_slug || null,
+      session_id: s.id,
+      canal: 'online',
+      transaction_id: s.payment_intent || null,
+      monto_centimos: montoCentimos,
+      moneda: s.currency ? String(s.currency).toUpperCase() : null,
+      pasarela: 'stripe-checkout', origen,
+      correlation_id: crypto.randomUUID(), timestamp: new Date().toISOString()
+    };
+    await this.eventBus.publish('pago.confirmado', payload);
+    this._marcarConfirmado(s.id);
+
+    const marca = {
+      estado: 'confirmado', transaction_id: s.payment_intent || null,
+      confirmado_at: payload.timestamp, origen
+    };
+    if (entry?.checkout_id) {
+      await this._ledgerMark(project_id, s.id, marca);
+    } else if (project_id) {
+      // Cobro de una sesión que no abrimos nosotros (link compartido/duplicado): se deja
+      // fila para que el duplicado se detecte también después de un reinicio.
+      await this._ledgerPut(project_id, {
+        checkout_id: s.id, referencia, pedido_id: referencia, canal: 'online',
+        pasarela: 'stripe-checkout', project_slug: payload.project_slug,
+        monto_centimos: montoCentimos, moneda: payload.moneda, entorno: this._entornoDeStripe('') ?? null,
+        creado: new Date().toISOString(), reembolsos: [], sin_pedido_propio: true, ...marca
+      });
+    }
+    this.metrics?.increment?.('pago.confirmado.total', { pasarela: 'stripe-checkout', canal: 'online' });
+    this.logger?.info('pago-gateway.confirmado', { referencia, session_id: s.id, origen, pasarela: 'stripe-checkout' });
+    return { confirmado: true, referencia, pedido_id: referencia };
+  }
+
+  async _rechazarStripe(s, { project_id = null, project_slug = null, origen = 'webhook' } = {}) {
+    if (!s?.id) return { rechazado: false };
+    const entry = await this._ledgerBuscar(project_id, { checkout_id: s.id });
+    if (this._rechazados.has(s.id) || entry?.estado === 'rechazado' || entry?.estado === 'confirmado') {
+      return { rechazado: false, motivo: 'ya_registrado' };
+    }
+    const referencia = entry?.referencia || s.metadata?.referencia || s.client_reference_id || null;
+    await this.eventBus.publish('pago.rechazado', {
+      referencia, pedido_id: referencia, session_id: s.id, project_slug,
+      motivo: s.last_payment_error?.code || s.payment_status || s.status || 'FAILED',
+      transaction_id: s.payment_intent || null,
+      monto_centimos: Number.isFinite(Number(s.amount_total)) ? Number(s.amount_total) : null,
+      pasarela: 'stripe-checkout', origen,
+      correlation_id: crypto.randomUUID(), timestamp: new Date().toISOString()
+    });
+    if (entry?.checkout_id) await this._ledgerMark(project_id, s.id, { estado: 'rechazado', rechazado_at: new Date().toISOString() });
+    this._rechazados.add(s.id);
+    if (this._rechazados.size > 500) this._rechazados.delete(this._rechazados.values().next().value);
+    this.metrics?.increment?.('pago.rechazado.total', { pasarela: 'stripe-checkout' });
+    return { rechazado: true, referencia, pedido_id: referencia };
+  }
+
+  // ── cancelar: expirar la sesión (Stripe no tiene DELETE; `expire` es el equivalente) ──
+  async _stripeCancelar(d) {
+    const cfg = this._stripeCfg(d);
+    const referencia = this._ref(d);
+    let checkout_id = d.session_id || d.checkout_id || null;
+    let entry = null;
+    if (!checkout_id && referencia) {
+      entry = await this._ledgerBuscar(d.project_id, { referencia });
+      checkout_id = entry?.checkout_id || null;
+    } else if (checkout_id) {
+      entry = await this._ledgerBuscar(d.project_id, { checkout_id });
+    }
+    if (!checkout_id) {
+      return { status: 404, error: { code: 'NOT_FOUND', message: 'sin session_id ni checkout en el libro para esa referencia' } };
+    }
+    const cred = await this._resolveCred(cfg.provider, cfg.project_id);
+    if (cred.error) return { status: 500, error: { code: 'PERMISSION_DENIED', message: `credencial '${cfg.provider}': ${cred.error}` } };
+
+    const r = await this._stripeCall('POST', `/v1/checkout/sessions/${encodeURIComponent(checkout_id)}/expire`,
+      { api_key: cred.api_key, idempotency_key: `expire:${checkout_id}` });
+    if (r.ok || r.data?.status === 'expired') {
+      await this._ledgerMark(d.project_id, checkout_id, { estado: 'cancelado', cancelado_at: new Date().toISOString() });
+      await this.eventBus.publish('pago.cancelado', {
+        referencia: entry?.referencia || entry?.pedido_id || referencia || null,
+        pedido_id: entry?.referencia || entry?.pedido_id || referencia || null,
+        session_id: checkout_id, pasarela: 'stripe-checkout',
+        correlation_id: crypto.randomUUID(), timestamp: new Date().toISOString()
+      });
+      return { status: 200, data: { cancelado: true, session_id: checkout_id } };
+    }
+    // Stripe solo expira sesiones `open`. Si ya se cobró, se confirma en vez de cancelar.
+    if (r.status === 400 || r.status === 404) {
+      const ses = await this._stripeSesion(checkout_id, cred.api_key);
+      if (ses.ok && ses.data?.payment_status === 'paid') {
+        await this._confirmarStripe(ses.data, { project_id: d.project_id, project_slug: d.project_slug, origen: 'cancelar' });
+        return { status: 409, error: { code: 'CHECKOUT_YA_PAGADO', message: 'la sesión ya estaba pagada: se ha confirmado el pago, no se ha cancelado' } };
+      }
+      return { status: 409, error: { code: 'CHECKOUT_PROCESADO', message: 'la sesión ya no está abierta y no se puede expirar' } };
+    }
+    return this._errorDeStripe(r);
+  }
+
+  // ── reembolsar (v1, payment_intent-scoped). SIN reintento automático. ──
+  async _stripeReembolsar(d) {
+    const cfg = this._stripeCfg(d);
+    const entry = await this._ledgerBuscar(d.project_id, {
+      transaction_id: d.transaction_id, checkout_id: d.session_id,
+      referencia: this._ref(d), pedido_id: this._ref(d)
+    });
+    const payment_intent = d.transaction_id || d.payment_intent || entry?.transaction_id || null;
+    if (!payment_intent) {
+      return { status: 400, error: { code: 'INVALID_INPUT', message: 'sin payment_intent: ni en la petición ni en el libro de cobros' } };
+    }
+    const total = Number.isInteger(d.monto_centimos) && d.monto_centimos > 0 ? d.monto_centimos : null;
+    const yaDevuelto = (entry?.reembolsos || []).reduce((s, x) => s + (Number(x.monto_centimos) || 0), 0);
+    const cobrado = entry?.monto_centimos || null;
+    if (total && cobrado && yaDevuelto + total > cobrado) {
+      return { status: 400, error: { code: 'INVALID_INPUT', message: `el reembolso excede lo cobrado (cobrado ${cobrado}, ya devuelto ${yaDevuelto}, pedido ${total})` } };
+    }
+    const cred = await this._resolveCred(cfg.provider, cfg.project_id);
+    if (cred.error) return { status: 500, error: { code: 'PERMISSION_DENIED', message: `credencial '${cfg.provider}': ${cred.error}` } };
+
+    const params = { payment_intent, ...(total ? { amount: String(total) } : {}) };
+    const r = await this._stripeCall('POST', '/v1/refunds', {
+      api_key: cred.api_key, params, timeout_ms: 20000,
+      idempotency_key: `re:${payment_intent}:${total || 'total'}:${yaDevuelto}`
+    });
+    if (r.network || (r.status >= 500 && r.status < 600)) {
+      // Puede haberse ejecutado igual. NO se reintenta a ciegas: se pregunta por los refunds.
+      this.logger?.warn('pago-gateway.stripe.reembolso_estado_incierto', { payment_intent, status: r.status, code: r.code });
+      const v = await this._reembolsoAplicadoStripe({ api_key: cred.api_key, payment_intent, yaDevuelto, esperadoCentimos: total });
+      if (v.aplicado) {
+        const out = await this._registrarReembolso({
+          d, entry, transaction_id: payment_intent, yaDevuelto,
+          devuelto: total || v.diferencia || entry?.monto_centimos || null,
+          resueltoPorReconsulta: true, pasarela: 'stripe-checkout'
+        });
+        this.logger?.info('pago-gateway.stripe.reembolso_resuelto_por_reconsulta', { payment_intent, devuelto: v.diferencia });
+        return out;
+      }
+      return {
+        status: 504,
+        error: {
+          code: 'ESTADO_INCIERTO',
+          message: v.conocido
+            ? 'Stripe no confirmó el reembolso al pedirlo y el payment_intent no muestra el refund: no se ha aplicado (o aún no figura). Reintenta pasado un minuto.'
+            : 'Stripe no respondió al reembolso y tampoco se pudo consultar: estado desconocido. Verifica antes de repetir.'
+        }
+      };
+    }
+    if (!r.ok) {
+      this.logger?.warn('pago-gateway.stripe.reembolso_failed', { payment_intent, status: r.status, message: r.message });
+      return this._errorDeStripe(r, 'Stripe reembolso');
+    }
+    const devuelto = Number.isFinite(Number(r.data?.amount)) ? Number(r.data.amount) : (total || entry?.monto_centimos || null);
+    const out = await this._registrarReembolso({
+      d, entry, transaction_id: payment_intent, yaDevuelto, devuelto,
+      pasarela: 'stripe-checkout', refund_id: r.data?.id || null
+    });
+    if (out?.data && r.data?.status) out.data.refund_estado = r.data.status;   // pending = asíncrono, saldrá
+    return out;
+  }
+
+  // ¿el reembolso que dio timeout llegó a ejecutarse? Se mira la lista de refunds del
+  // payment_intent y se compara con lo que YA teníamos apuntado (nunca con el total bruto:
+  // un segundo reembolso parcial no debe confundirse con el primero).
+  async _reembolsoAplicadoStripe({ api_key, payment_intent, yaDevuelto = 0, esperadoCentimos = null }) {
+    const r = await this._stripeCall('GET', `/v1/refunds?payment_intent=${encodeURIComponent(payment_intent)}&limit=50`, { api_key });
+    if (!r.ok) return { conocido: false, aplicado: false };
+    const items = Array.isArray(r.data?.data) ? r.data.data : [];
+    const vivos = items.filter(x => x.status === 'succeeded' || x.status === 'pending');
+    const total = vivos.reduce((s, x) => s + (Number(x.amount) || 0), 0);
+    const diferencia = total - (Number(yaDevuelto) || 0);
+    if (diferencia <= 0) return { conocido: true, aplicado: false, total };
+    if (esperadoCentimos && diferencia < esperadoCentimos) return { conocido: true, aplicado: false, total, diferencia };
+    return { conocido: true, aplicado: true, total, diferencia };
+  }
+
+  // ── qué métodos acepta la cuenta: los que la sesión PIDE (no se inventan) ──
+  async _stripeMetodos(d = {}) {
+    d = await this._conSlug(d);
+    await this._asegurarConfig(d.project_id);
+    const cfg = this._stripeCfg(d);
+    const cred = await this._resolveCred(cfg.provider, cfg.project_id);
+    if (cred.error) return { status: 500, error: { code: 'PERMISSION_DENIED', message: `credencial '${cfg.provider}': ${cred.error}` } };
+    const ids = cfg.metodos;
+    const tiene = k => ids.includes(k);
+    return {
+      status: 200,
+      data: {
+        metodos: ids,
+        tarjeta: tiene('card'),
+        apple_pay: tiene('card'),    // Apple/Google Pay viajan DENTRO de card en Checkout
+        google_pay: tiene('card'),
+        paypal: tiene('paypal'),
+        bizum: tiene('bizum'),
+        entorno: this._entornoDeStripe(cred.api_key)
+      }
+    };
+  }
+
+  // ── PREFLIGHT: ¿puede esta cuenta cobrar HOY? ──
+  //   En Stripe el alta no bloquea el cobro (se cobra desde el primer día), pero sí puede
+  //   dejar la cuenta con charges_enabled:false y los payouts retenidos. Eso se dice ANTES.
+  async _stripeEstado(d = {}) {
+    d = await this._conSlug(d);
+    await this._asegurarConfig(d.project_id);
+    const cfg = this._stripeCfg(d);
+    const cred = await this._resolveCred(cfg.provider, cfg.project_id);
+    if (cred.error) return { status: 500, error: { code: 'PERMISSION_DENIED', message: `credencial '${cfg.provider}': ${cred.error}` } };
+
+    const [cuenta, saldo] = await Promise.all([
+      this._stripeCall('GET', '/v1/account', { api_key: cred.api_key }),
+      this._stripeCall('GET', '/v1/balance', { api_key: cred.api_key })
+    ]);
+    const avisos = [];
+    let charges = null, details = null, pais = null, monedaCuenta = null, payouts = null;
+    if (cuenta.ok) {
+      const c = cuenta.data || {};
+      charges = c.charges_enabled ?? null;
+      payouts = c.payouts_enabled ?? null;
+      details = c.details_submitted ?? null;
+      pais = c.country || null;
+      monedaCuenta = c.default_currency ? String(c.default_currency).toUpperCase() : null;
+    } else if (cuenta.status === 403) {
+      avisos.push('la clave no tiene LECTURA sobre Account: no se puede verificar el estado de la cuenta (no impide cobrar)');
+    } else {
+      return this._errorDeStripe(cuenta, 'Stripe account');
+    }
+    if (charges === false) avisos.push('la cuenta tiene charges_enabled:false — Stripe no acepta cobros todavía');
+    if (payouts === false) avisos.push('la cuenta tiene payouts_enabled:false — el dinero cobrado no llegará al banco hasta cerrar el alta');
+    if (details === false) avisos.push('el alta de la cuenta no está completa (details_submitted:false)');
+    if (saldo.status === 403) avisos.push('la clave no tiene LECTURA sobre Balance: no se puede verificar la liquidación');
+    if (cfg.returnUrl === null) avisos.push('sin pasarela.return_url: el cliente aterrizaría en example.com tras pagar');
+    if (!cfg.webhookSecret) avisos.push('sin pasarela.webhook_secret: la firma del webhook NO se verifica (la reconsulta a Stripe sigue impidiendo confirmar un cobro falso, pero cualquiera puede forzar reconsultas)');
+    if (monedaCuenta && monedaCuenta.toLowerCase() !== cfg.moneda) avisos.push(`la cuenta liquida en ${monedaCuenta} y la pasarela cobra en ${cfg.moneda.toUpperCase()}`);
+
+    const entorno = this._entornoDeStripe(cred.api_key);
+    if (entorno === 'sandbox') avisos.push('esta clave es de PRUEBA (rk_test_/sk_test_): los cobros son de ensayo y NO entra dinero real');
+    if (entorno === null) avisos.push('el prefijo de la clave no es de Stripe (se esperaba rk_test_/rk_live_/sk_…): ¿es la clave correcta?');
+
+    let libro = null;
+    if (d.project_id) {
+      const l = await this._ledgerLoad(d.project_id);
+      const todos = Object.values(l?.checkouts || {}).filter(e => e.pasarela === 'stripe-checkout');
+      const ahora = Date.now();
+      const pendientes = todos.filter(e => e.estado === 'pendiente');
+      const hoy = new Date().toISOString().slice(0, 10);
+      libro = {
+        total: todos.length,
+        pendientes: pendientes.length,
+        pendientes_vencidos: pendientes.filter(e => e.valid_until && Date.parse(e.valid_until) < ahora).length,
+        confirmados_hoy: todos.filter(e => e.estado === 'confirmado' && String(e.confirmado_at || '').slice(0, 10) === hoy).length,
+        cobrado_hoy_centimos: todos
+          .filter(e => e.estado === 'confirmado' && String(e.confirmado_at || '').slice(0, 10) === hoy)
+          .reduce((s, e) => s + (Number(e.monto_centimos) || 0), 0),
+        ultimo_confirmado_at: todos.filter(e => e.confirmado_at).map(e => e.confirmado_at).sort().pop() || null
+      };
+    }
+
+    // En modo test se cobra SIEMPRE (es el sentido del modo test); en real manda la cuenta.
+    const puedoCobrar = !!cred.api_key && !!cfg.returnUrl && (entorno === 'sandbox' || charges !== false);
+    return {
+      status: 200,
+      data: {
+        pasarela: this._pasarelaPara(d.project_id).kind || null,
+        provider: cfg.provider,
+        moneda_configurada: cfg.moneda.toUpperCase(),
+        metodos: cfg.metodos,
+        tarjeta: cfg.metodos.includes('card'),
+        apple_pay: cfg.metodos.includes('card'),
+        google_pay: cfg.metodos.includes('card'),
+        paypal: cfg.metodos.includes('paypal'),
+        bizum: cfg.metodos.includes('bizum'),
+        cuenta_pais: pais,
+        cuenta_moneda: monedaCuenta,
+        charges_enabled: charges,
+        payouts_enabled: payouts,
+        details_submitted: details,
+        webhook_configurado: !!cfg.returnUrl,
+        webhook_firmado: !!cfg.webhookSecret,
+        return_url: cfg.returnUrl,
+        min_centimos: cfg.minCentimos,
+        ttl_minutos: cfg.ttlMin,
+        puedo_cobrar: puedoCobrar,
+        entorno,
+        avisos,
+        libro
+      }
+    };
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -1085,6 +1574,7 @@ class PagoGatewayModule extends BaseModule {
   async _cancelar(d) {
     await this._asegurarConfig(d.project_id);
     const kind = this._pasarelaPara(d.project_id).kind;
+    if (kind === 'stripe-checkout') return this._stripeCancelar(d);
     if (kind !== 'sumup-checkout' && kind !== 'sumup') {
       return { status: 501, error: { code: 'NOT_IMPLEMENTED', message: `cancelar no implementado para '${kind}'` } };
     }
@@ -1204,10 +1694,12 @@ class PagoGatewayModule extends BaseModule {
   }
 
   // Registro único del reembolso (lo usen el camino directo o el resuelto por reconsulta).
-  async _registrarReembolso({ d, entry, transaction_id, yaDevuelto, devuelto, resueltoPorReconsulta = false }) {
+  // `pasarela` viaja en el evento y en la métrica: el mismo registro sirve a SumUp y a Stripe.
+  async _registrarReembolso({ d, entry, transaction_id, yaDevuelto, devuelto, resueltoPorReconsulta = false, pasarela = 'sumup-checkout', refund_id = null }) {
     const cobrado = entry?.monto_centimos || null;
     const reembolsos = [...(entry?.reembolsos || []), {
       monto_centimos: devuelto, at: new Date().toISOString(),
+      ...(refund_id ? { refund_id } : {}),
       ...(resueltoPorReconsulta ? { resuelto_por_reconsulta: true } : {})
     }];
     const completo = !!(cobrado && yaDevuelto + (devuelto || 0) >= cobrado);
@@ -1223,10 +1715,11 @@ class PagoGatewayModule extends BaseModule {
       transaction_id, monto_centimos: devuelto,
       total_reembolsado_centimos: yaDevuelto + (devuelto || 0),
       completo, resuelto_por_reconsulta: resueltoPorReconsulta,
-      pasarela: 'sumup-checkout',
+      ...(refund_id ? { refund_id } : {}),
+      pasarela,
       correlation_id: crypto.randomUUID(), timestamp: new Date().toISOString()
     });
-    this.metrics?.increment?.('pago.reembolsado.total', { pasarela: 'sumup-checkout' });
+    this.metrics?.increment?.('pago.reembolsado.total', { pasarela });
     return {
       status: 200,
       data: { reembolsado: true, transaction_id, monto_centimos: devuelto, completo, resuelto_por_reconsulta: resueltoPorReconsulta }
@@ -1428,18 +1921,25 @@ class PagoGatewayModule extends BaseModule {
     return { aplicado, conocido: true, devuelto_centimos: devuelto, eventos_refund: refs.length, estado_transaccion: t.status || null };
   }
 
-  // ── CONCILIACIÓN con la cuenta de SumUp (historial incremental + liquidación) ──
+  // ── CONCILIACIÓN con la cuenta (historial incremental + liquidación) ──
   //   El barrido pregunta "¿mi checkout se pagó?"; esto pregunta "¿qué ha pasado en la cuenta
   //   que yo no sé?": reembolsos/contracargos desde el panel, cobros sin pedido, y el neto real.
+  //   Hay un conciliador POR PASARELA y cada uno se salta los proyectos que no son suyos:
+  //   la pasarela es del PROYECTO, no del core, así que no se puede montar "la del core".
   _conciliacionActiva() {
     const c = this.pasarela?.conciliacion;
     if (c && c.activo === false) return false;
-    return this.pasarela.kind === 'sumup-checkout' || this.pasarela.kind === 'sumup';
+    return true;
+  }
+
+  // El proyecto manda: devuelve el `kind` de SU config (o el del core si no tiene).
+  _kindDeProyecto(project_id) {
+    return this._pasarelaPara(project_id)?.kind || null;
   }
 
   _montarConciliacion() {
     if (!this._conciliacionActiva()) return;
-    this._conci = new ConciliacionSumUp({
+    const deps = {
       cfg: (pid) => this._sumupCfg({ project_id: pid || null }),
       resolveCred: (p, pid) => this._resolveCred(p, pid),
       call: (m, path, opts) => this._sumupCall(m, path, opts),
@@ -1454,7 +1954,23 @@ class PagoGatewayModule extends BaseModule {
       leerEstado: pid => this._conciEstadoLoad(pid),
       guardarEstado: (pid, e) => this._conciGuardar(pid, e),
       publicar: (ev, payload) => this.eventBus.publish(ev, payload),
+      kind: (pid) => this._kindDeProyecto(pid),
       logger: this.logger, metrics: this.metrics
+    };
+    this._conci = new ConciliacionSumUp(deps);
+    this._conciStripe = new ConciliacionStripe({
+      ...deps,
+      cfg: (pid) => this._stripeCfg({ project_id: pid || null }),
+      call: (m, path, opts) => this._stripeCall(m, path, opts),
+      // La fila del libro por id de sesión o por referencia (no por transaction_id).
+      buscarSesion: async (pid, ids = {}) => {
+        const libro = await this._ledgerLoad(pid);
+        const cs = libro?.checkouts || this._ledger.get(pid || '_sin_proyecto')?.checkouts || {};
+        if (ids.checkout_id && cs[ids.checkout_id]) return cs[ids.checkout_id];
+        if (!ids.referencia) return null;
+        return Object.values(cs).find(e => e.pasarela === 'stripe-checkout'
+          && (String(e.referencia) === String(ids.referencia) || String(e.pedido_id) === String(ids.referencia))) || null;
+      }
     });
 
     const cfgMs = Number(this.pasarela?.conciliacion?.intervalo_ms);
@@ -1493,7 +2009,7 @@ class PagoGatewayModule extends BaseModule {
   async _conciliar(d = {}) {
     if (!this._conci) this._montarConciliacion();
     if (!this._conci) {
-      return { status: 501, error: { code: 'NOT_IMPLEMENTED', message: 'conciliación solo para pasarelas SumUp' } };
+      return { status: 501, error: { code: 'NOT_IMPLEMENTED', message: 'conciliación desactivada (pasarela.conciliacion.activo:false)' } };
     }
     const proyectos = [];
     if (d.project_id) {
@@ -1510,14 +2026,25 @@ class PagoGatewayModule extends BaseModule {
       }
     }
     const resumen = await this._conci.tick(proyectos);
+    // Cada conciliador se salta los proyectos que no son de su pasarela, así que se pasan
+    // los MISMOS proyectos a los dos: el que no aplica devuelve 0 y no gasta cuota.
+    if (this._conciStripe) {
+      const s = await this._conciStripe.tick(proyectos);
+      resumen.stripe = s;
+      resumen.errores = (resumen.errores || 0) + (s.errores || 0);
+      resumen.historial = (resumen.historial || 0) + (s.historial || 0);
+      resumen.liquidaciones = (resumen.liquidaciones || 0) + (s.comisiones || 0);
+    }
     return { status: 200, data: resumen };
   }
 
   // ── barrido de reconciliación: si el webhook se pierde, el pago no se pierde ──
+  //   Se monta SIEMPRE salvo que se apague a mano: la pasarela vive en la config del PROYECTO,
+  //   así que preguntar por `this.pasarela.kind` (el default del core) dejaba sin barrido a un
+  //   negocio bien configurado solo porque el core no tenía kind. Cada proyecto se salta solo.
   _barridoActivo() {
     const b = this.pasarela?.barrido;
-    if (b && b.activo === false) return false;
-    return this.pasarela.kind === 'sumup-checkout' || this.pasarela.kind === 'sumup';
+    return !(b && b.activo === false);
   }
 
   _arrancarBarrido() {
@@ -1566,7 +2093,11 @@ class PagoGatewayModule extends BaseModule {
       .slice(0, 50);
     if (!pendientes.length) return;
 
-    const cfg = this._sumupCfg({ project_id: slug || id });
+    // La pasarela es la DEL PROYECTO: el mismo barrido sirve a los dos adapters.
+    const kind = this._kindDeProyecto(slug || id);
+    const stripe = kind === 'stripe-checkout';
+    if (!stripe && kind !== 'sumup-checkout' && kind !== 'sumup') return;
+    const cfg = stripe ? this._stripeCfg({ project_id: slug || id }) : this._sumupCfg({ project_id: slug || id });
     const cred = await this._resolveCred(cfg.provider, cfg.project_id);
     if (cred.error) return;
     const ahora = Date.now();
@@ -1579,6 +2110,25 @@ class PagoGatewayModule extends BaseModule {
         // Un cobro presencial abandonado se cierra: si el cliente se fue, no queda pendiente eterno.
         if (visto.data.estado_organo === 'pendiente' && e.creado && (ahora - Date.parse(e.creado)) > 30 * 60 * 1000) {
           await this._ledgerMark(id, e.checkout_id, { estado: 'abandonado' });
+        }
+        continue;
+      }
+      if (stripe) {
+        // Solo las filas de este adapter: el libro puede tener filas de la pasarela anterior.
+        if (e.pasarela && e.pasarela !== 'stripe-checkout') continue;
+        const rs = await this._stripeCall('GET', `/v1/checkout/sessions/${encodeURIComponent(e.checkout_id)}`, { api_key: cred.api_key });
+        if (rs.status === 404) { await this._ledgerMark(id, e.checkout_id, { estado: 'perdido' }); continue; }
+        if (!rs.ok) continue;
+        const s = rs.data || {};
+        if (s.payment_status === 'paid') {
+          await this._confirmarStripe(s, { project_id: id, project_slug: e.project_slug || slug, origen: 'barrido' });
+        } else if (s.status === 'expired') {
+          await this._ledgerMark(id, e.checkout_id, { estado: 'expirado' });
+        } else if (s.status === 'open' && e.valid_until && Date.parse(e.valid_until) < ahora) {
+          // Venció sin pagarse: se expira para que nadie pague un pedido ya descartado.
+          await this._stripeCall('POST', `/v1/checkout/sessions/${encodeURIComponent(e.checkout_id)}/expire`,
+            { api_key: cred.api_key, idempotency_key: `expire:${e.checkout_id}` });
+          await this._ledgerMark(id, e.checkout_id, { estado: 'expirado' });
         }
         continue;
       }
@@ -1626,7 +2176,8 @@ class PagoGatewayModule extends BaseModule {
 
   async _onReembolsarRequest(event) {
     const d = await this._conSlug(event?.data || event);
-    const r = await this._sumupReembolsar(d);
+    // El adapter lo elige la pasarela DEL PROYECTO (antes iba siempre a SumUp).
+    const r = await this.handlePagoReembolsar(d);
     try {
       this.eventBus.publish('pago.reembolsar.response', {
         request_id: d?.request_id, correlation_id: d?.correlation_id || crypto.randomUUID(),
@@ -2173,6 +2724,17 @@ class PagoGatewayModule extends BaseModule {
     d = await this._conSlug(d);
     await this._asegurarConfig(d.project_id);
     const kind = this._pasarelaPara(d.project_id).kind;
+    if (kind === 'stripe-checkout') {
+      // Stripe no deja cambiar el importe de una Checkout Session ya creada. La alternativa
+      // segura es expirar ESE link y abrir otro (nunca dejar dos vivos: serían dos cobros).
+      return {
+        status: 501,
+        error: {
+          code: 'NOT_IMPLEMENTED',
+          message: 'stripe-checkout no permite cambiar el importe de una sesión viva: usa pago.cancelar (la expira) y pago.iniciar de nuevo'
+        }
+      };
+    }
     if (kind !== 'sumup-checkout' && kind !== 'sumup') {
       return { status: 501, error: { code: 'NOT_IMPLEMENTED', message: `actualizar no implementado para '${kind}'` } };
     }
@@ -2249,12 +2811,65 @@ class PagoGatewayModule extends BaseModule {
   }
 
   // ui_handlers
+  //   El CONTRATO es agnóstico; los adapters no. Este es el ÚNICO punto donde se elige:
+  //   antes, reembolsar/métodos/estado llamaban a `_sumup*` sin mirar `pasarela.kind`, así
+  //   que un negocio en Stripe pedía reembolsar y el módulo hablaba con SumUp.
+  async _porKindDePasarela(data, fns = {}) {
+    const d = await this._conSlug(data || {});
+    await this._asegurarConfig(d.project_id);
+    const kind = this._pasarelaPara(d.project_id).kind;
+    if (kind === 'stripe-checkout') {
+      if (fns.stripe) return fns.stripe(d);
+      return {
+        status: 501,
+        error: { code: 'NOT_IMPLEMENTED', message: `'${fns.puerto || 'esta operación'}' no está implementado para stripe-checkout` }
+      };
+    }
+    if (fns.sumup) return fns.sumup(d);
+    return {
+      status: 501,
+      error: { code: 'NO_PASARELA', message: `sin pasarela con esa capacidad para el proyecto (kind: ${kind || 'ninguno'})` }
+    };
+  }
+
   async handlePagoIniciar(data) { return this._iniciar(data || {}); }
   async handlePagoCancelar(data) { return this._cancelar(data || {}); }
-  async handlePagoReembolsar(data) { return this._sumupReembolsar(data || {}); }
-  async handlePagoMetodos(data) { return this._sumupMetodos(data || {}); }
-  async handlePagoEstado(data) { return this._sumupEstado(data || {}); }
-  async handlePagoRecibo(data) { return this._sumupRecibo(data || {}); }
+  async handlePagoReembolsar(data) {
+    return this._porKindDePasarela(data, {
+      puerto: 'pago.reembolsar',
+      stripe: d => this._stripeReembolsar(d),
+      sumup: d => this._sumupReembolsar(d)
+    });
+  }
+  async handlePagoMetodos(data) {
+    return this._porKindDePasarela(data, {
+      puerto: 'pago.metodos',
+      stripe: d => this._stripeMetodos(d),
+      sumup: d => this._sumupMetodos(d)
+    });
+  }
+  async handlePagoEstado(data) {
+    return this._porKindDePasarela(data, {
+      puerto: 'pago.estado',
+      stripe: d => this._stripeEstado(d),
+      sumup: d => this._sumupEstado(d)
+    });
+  }
+  // Recibo estructurado: SumUp emite uno por transacción (v1.1). Stripe no tiene endpoint de
+  // recibo para un Checkout payment (su factura es otra cosa), así que se dice en vez de inventarlo.
+  async handlePagoRecibo(data) {
+    return this._porKindDePasarela(data, {
+      puerto: 'pago.recibo',
+      stripe: () => ({
+        status: 501,
+        error: {
+          code: 'NOT_IMPLEMENTED',
+          message: 'Stripe no emite recibo estructurado por API para un pago de Checkout; el ticket se emite en el ERP (módulo facturas) con la fila del libro de cobros'
+        }
+      }),
+      sumup: d => this._sumupRecibo(d)
+    });
+  }
   async handlePagoConciliar(data) { return this._conciliar(data || {}); }
   // Config de la pasarela DEL PROYECTO (lo que enciende el botón sin tocar código).
   async handlePagoConfigLeer(data) { return this._configLeer(data || {}); }
@@ -2287,33 +2902,51 @@ class PagoGatewayModule extends BaseModule {
     const sig = req?.headers?.['stripe-signature'] || req?.headers?.['Stripe-Signature'];
     const proyectoStripe = req?.params?.project ? await this._proyectoPorSlug(req.params.project) : null;
     const pidStripe = await this._slugProyecto(proyectoStripe?.id || proyectoStripe?.slug || null);
-    const secret = this._pasarelaPara(pidStripe)?.webhook_secret || null;
+    await this._asegurarConfig(pidStripe);
+    const pHook = this._pasarelaPara(pidStripe);
+    const secret = pHook?.webhook_secret || null;
     try {
+      // 1. La firma, si hay secreto. Sin secreto NO se cae el aviso, pero se dice en el log:
+      //    la defensa real es el paso 2 (reconsultar), no creerse el cuerpo.
       if (secret) {
         const ok = this._verifyStripeSig(raw, sig, secret);
         if (!ok) { this.logger?.warn('pago-gateway.webhook.firma_invalida', {}); return this._respond(res, 400, { error: 'firma inválida' }); }
+      } else {
+        this.logger?.warn('pago-gateway.stripe.webhook_sin_secreto', { project: req?.params?.project || null });
       }
-      if (evt.type === 'checkout.session.completed' || evt.type === 'checkout.session.async_payment_succeeded') {
-        const s = evt.data?.object || {};
-        const referencia = s.metadata?.referencia || s.metadata?.pedido_id || null;
-        const pagado = s.payment_status === 'paid' || s.status === 'complete';
-        if (referencia && pagado) {
-          const meta = s.metadata || {};
-          const contexto = {};
-          for (const k of ['project_slug', 'cliente_nombre', 'cliente_telefono', 'canal_origen']) {
-            if (meta[k] !== undefined && meta[k] !== '') contexto[k] = meta[k];
-          }
-          await this.eventBus.publish('pago.confirmado', {
-            referencia, pedido_id: referencia, project_id: meta.project_id || null,
-            session_id: s.id, pasarela: 'stripe-checkout', monto_centimos: s.amount_total || null,
-            ...contexto,
-            correlation_id: crypto.randomUUID(), timestamp: new Date().toISOString()
-          });
-          this.metrics?.increment?.('pago.confirmado.total');
-          this.logger?.info('pago-gateway.confirmado', { referencia, session_id: s.id });
-        }
+
+      // 2. WEBHOOK = PUNTERO. El payload solo dice QUÉ sesión mirar; se pide a Stripe con
+      //    NUESTRA clave y solo `payment_status:paid` confirma. Un POST inventado no puede
+      //    fabricar un pago.confirmado: la reconsulta no encontraría el cobro.
+      const session_id = evt?.data?.object?.id || null;
+      if (!session_id) return this._respond(res, 200, { received: true, ignorado: 'sin_sesion' });
+      const cred = await this._resolveCred(pHook.provider || 'STRIPE', pidStripe);
+      if (cred.error) return this._respond(res, 503, { error: `credencial '${pHook.provider || 'STRIPE'}': ${cred.error}` });
+      const ses = await this._stripeSesion(session_id, cred.api_key, STRIPE_WEBHOOK_TIMEOUT_MS);
+      if (ses.network || (!ses.ok && ses.status >= 500)) {
+        // 5xx a propósito: Stripe reintenta. Un 2xx aquí perdería el aviso.
+        this.logger?.warn('pago-gateway.stripe.webhook.sin_verificar', { session_id, status: ses.status, code: ses.code });
+        return this._respond(res, 503, { error: 'no se pudo verificar la sesión' });
       }
-      return this._respond(res, 200, { received: true });
+      if (!ses.ok) return this._respond(res, 200, { received: true, ignorado: `sesion_${ses.status}` });
+
+      const s = ses.data || {};
+      const project_slug = req?.params?.project || pHook.project_slug || null;
+      const tipo = String(evt?.type || '');
+      if (tipo === 'checkout.session.async_payment_failed') {
+        await this._rechazarStripe(s, { project_id: pidStripe, project_slug, origen: 'webhook' });
+        return this._respond(res, 200, { received: true, estado: 'fallido' });
+      }
+      if (tipo === 'checkout.session.expired' || s.status === 'expired') {
+        if (pidStripe) await this._ledgerMark(pidStripe, s.id, { estado: 'expirado' });
+        return this._respond(res, 200, { received: true, estado: 'expirado' });
+      }
+      if (s.payment_status === 'paid') {
+        const out = await this._confirmarStripe(s, { project_id: pidStripe, project_slug, origen: 'webhook' });
+        return this._respond(res, 200, { received: true, ...out });
+      }
+      this.logger?.info('pago-gateway.stripe.webhook.no_pagado', { session_id, estado: s.payment_status || s.status || null });
+      return this._respond(res, 200, { received: true, estado: s.payment_status || s.status || null });
     } catch (err) {
       this.logger?.error('pago-gateway.webhook.failed', { error: err.message });
       return this._respond(res, 400, { error: err.message });

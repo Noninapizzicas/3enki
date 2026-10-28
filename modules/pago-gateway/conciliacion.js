@@ -103,6 +103,10 @@ class ConciliacionSumUp {
     try {
       for (const p of proyectos) {
         if (!p?.id) continue;
+        // La pasarela es del PROYECTO: este conciliador solo trabaja los suyos. Antes se
+        // conciliaba todo con la cuenta del core, fuera cual fuera la pasarela del negocio.
+        const kind = this.d.kind ? this.d.kind(p.id) : 'sumup-checkout';
+        if (kind !== 'sumup-checkout' && kind !== 'sumup') { resumen.saltados = (resumen.saltados || 0) + 1; continue; }
         resumen.proyectos++;
         try {
           const a = await this.historial(p);

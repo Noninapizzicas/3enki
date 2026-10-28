@@ -512,6 +512,11 @@ class HTTPGateway {
           path: pathname,
           query,
           body: context.body,
+          // Bytes EXACTOS del cuerpo: sin esto, un handler de webhook solo tiene el
+          // objeto ya parseado y JSON.stringify(JSON.parse(x)) NO reproduce el payload
+          // original (espacios, escapes unicode, números) → la firma HMAC falla.
+          // El cuerpo crudo lo captura parseBody en req._rawBody.
+          _rawBody: req._rawBody,
           headers: req.headers,
           request_id: requestId,
           params: apiData.params || {} // Include route params (e.g., :id extracted from path)

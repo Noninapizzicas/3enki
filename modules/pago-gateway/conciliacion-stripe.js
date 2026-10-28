@@ -132,16 +132,19 @@ class ConciliacionStripe {
     //   Solo se emite el huérfano. Confirmar un pago NO es trabajo de la conciliación:
     //   si la sesión está en el libro pero sin confirmar, la cierra el barrido.
     const sesiones = [];
-    let url = `/v1/checkout/sessions?payment_status=paid&created%5Bgte%5D=${desdeSeg}&limit=100`;
+    // El filtro `payment_status` NO existe en GET /v1/checkout/sessions (400 parameter_unknown,
+    // verificado 28-oct-2026). El filtro válido es `status`, así que se pide complete y se
+    // exige paid en cliente: lo que no esté pagado no entra en la lista.
+    let url = `/v1/checkout/sessions?status=complete&created%5Bgte%5D=${desdeSeg}&limit=100`;
     let paginas = 0;
     while (url && paginas < PAGINAS_MAX) {
       const r = await this.d.call('GET', url, { api_key: cred.api_key });
       if (!r.ok) { fallo = `sessions ${r.status || r.code}${r.status === 403 ? ' (falta permiso Checkout Sessions · Lectura)' : ''}`; break; }
-      const lote = Array.isArray(r.data?.data) ? r.data.data : [];
+      const lote = Array.isArray(r.data?.data) ? r.data.data.filter(s => s?.payment_status === 'paid') : [];
       sesiones.push(...lote);
       const ultima = lote[lote.length - 1]?.id;
       url = (r.data?.has_more && ultima)
-        ? `/v1/checkout/sessions?payment_status=paid&created%5Bgte%5D=${desdeSeg}&limit=100&starting_after=${encodeURIComponent(ultima)}`
+        ? `/v1/checkout/sessions?status=complete&created%5Bgte%5D=${desdeSeg}&limit=100&starting_after=${encodeURIComponent(ultima)}`
         : null;
       paginas++;
     }

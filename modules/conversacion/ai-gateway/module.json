@@ -249,11 +249,10 @@
           "gpt-oss:120b",
           "gpt-oss:20b",
           "gemma4:31b",
-          "minimax-m2.7",
+          "minimax-m3.1-flash",
           "minimax-m3",
-          "mistral-large-3:675b",
-          "nemotron-3-nano:30b",
-          "nemotron-3-super",
+          "mistral-large-4",
+                    "nemotron-3-super",
           "nemotron-3-ultra"
         ],
         "_nota": "Ollama Cloud — API NATIVA https://ollama.com/api. La lista de models es FALLBACK: el provider captura el catálogo VIVO de /api/tags en configure() y esa es la fuente de verdad (catalogoVivo). Así el selector y el coerce usan siempre la oferta viva."

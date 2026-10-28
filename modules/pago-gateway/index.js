@@ -692,7 +692,12 @@ class PagoGatewayModule extends BaseModule {
       ...(d.project_id ? { 'metadata[project_id]': String(d.project_id) } : {}),
       ...(d.project_slug ? { 'metadata[project_slug]': String(d.project_slug) } : {})
     };
-    cfg.metodos.forEach((m, i) => { params[`payment_method_types[${i}]`] = m; });
+    // METODOS: `payment_method_types` fue RETIRADO por Stripe al crear Checkout Sessions
+    // (400 literal, 28-oct-2026: "The `payment_method_types` parameter is no longer
+    // supported... Payment methods are now managed from your Dashboard settings"). Enviarlo
+    // ya no restringe nada y tumba la creación entera. Quién acepta qué lo manda el PANEL de
+    // Stripe; `pasarela.metodos` queda como DECLARACIÓN para el panel y el preflight, no como
+    // candado. Si el negocio quiere solo tarjeta, se apaga en Dashboard → payment methods.
     // METADATA ADICIONAL del caller: viaja al webhook y permite reconstruir el pedido.
     if (d.metadata && typeof d.metadata === 'object') {
       for (const [k, v] of Object.entries(d.metadata)) {
@@ -1022,6 +1027,9 @@ class PagoGatewayModule extends BaseModule {
     if (details === false) avisos.push('el alta de la cuenta no está completa (details_submitted:false)');
     if (saldo.status === 403) avisos.push('la clave no tiene LECTURA sobre Balance: no se puede verificar la liquidación');
     if (cfg.returnUrl === null) avisos.push('sin pasarela.return_url: el cliente aterrizaría en example.com tras pagar');
+    // `metodos` es DECLARACIÓN, no candado: Stripe retiró payment_method_types y el set real
+    // lo sirve el panel. Decirlo aquí evita que alguien crea que Enki está filtrando métodos.
+    avisos.push(`los métodos que se ofrecerán los manda el PANEL de Stripe (${cfg.metodos.join(', ')} es solo declaración: payment_method_types ya no se envía)`);
     if (!cfg.webhookSecret) avisos.push('sin pasarela.webhook_secret: la firma del webhook NO se verifica (la reconsulta a Stripe sigue impidiendo confirmar un cobro falso, pero cualquiera puede forzar reconsultas)');
     if (monedaCuenta && monedaCuenta.toLowerCase() !== cfg.moneda) avisos.push(`la cuenta liquida en ${monedaCuenta} y la pasarela cobra en ${cfg.moneda.toUpperCase()}`);
 

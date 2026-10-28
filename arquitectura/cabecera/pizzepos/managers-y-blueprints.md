@@ -6,7 +6,7 @@ fuentes:
   - modules/pizzepos/**
   - modules/pago-gateway/**
   - blueprints/**
-verificado: 2026-10-28 (pago-gateway v3.1.0: Stripe con paridad — libro, idempotencia, webhook-puntero y conciliación)
+verificado: 2026-10-28 (pago-gateway v3.1.0: Stripe con paridad — libro, idempotencia, webhook-puntero y conciliación; los métodos los manda el panel de Stripe, payment_method_types ya no se envía)
 ---
 
 # Módulos Pizzepos y Blueprints

@@ -13,7 +13,7 @@ fuentes:
   - modules/_shared/lector-servicio.js
   - frontend/src/lib/components/comandero/ServicioToggle.svelte
   - tests/unit/pizzepos__servicio.test.js
-verificado: 2026-10-28 (pago-gateway v3.1.0: el webhook de Stripe reconsulta la sesión; clave RAK)
+verificado: 2026-10-28 (pago-gateway v3.1.0: el webhook de Stripe reconsulta la sesión; clave RAK; los métodos del checkout los sirve el panel de Stripe)
 ---
 
 # SUBSISTEMA AUTOSERVICIO — Pedido del cliente por WhatsApp (PWA → bot → cocina)

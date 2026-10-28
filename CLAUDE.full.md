@@ -16580,8 +16580,9 @@ barrido y en la conciliación.
 
 **Lo que NO hace, y se dice al encenderlo:** `pago.recibo` responde 501 (Stripe no emite recibo
 estructurado de un pago de Checkout; el ticket es del ERP) y `pago.actualizar` responde 501 (una
-sesión de Stripe no cambia de importe: se expira y se abre otra, con una sola viva). Los métodos que
-se informan son los que la sesión PIDE (`pasarela.metodos`, por defecto `card`): no se inventa PayPal.
+sesión de Stripe no cambia de importe: se expira y se abre otra, con una sola viva). `pasarela.metodos`
+es hoy **declaración, no candado**: Stripe retiró `payment_method_types` al crear Checkout Sessions
+(400 literal, 28-oct-2026) y el set real lo sirve el panel de Stripe; el preflight lo dice en `avisos`.
 
 **Conciliación propia** (`conciliacion-stripe.js`, hermano del de SumUp, mismo contrato de deps): un
 tick cada 15 min que (a) lista las sesiones pagadas y emite `cobro.huerfano` para las que no casan

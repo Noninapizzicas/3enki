@@ -1186,11 +1186,19 @@ function esSeccionPizza(c) {
   if (String(c.tipo || '').toLowerCase() === 'pizzas') return true;
   return ((c.nombre || '') + ' ' + (c.id || '')).toLowerCase().indexOf('pizz') >= 0;
 }
+// TODAS las pizzas de la carta, sin importar en qué sección de pizza esté el cliente: la MISMA
+// lista para todas (mitades y "Crea tu pizza"). Es la base de que la sección no cambie lo que
+// se ofrece ni lo que se cobra.
+function pizzasCatalogo() {
+  const ids = DATA.categorias.filter(esSeccionPizza).map(function (c) { return c.id; });
+  if (!ids.length) return [];
+  return DATA.productos.filter(function (p) { return ids.indexOf(p.categoria) >= 0; });
+}
 function pizzasMitad() {
   const ids = DATA.categorias.filter(esSeccionPizza).map(function (c) { return c.id; });
   // Sección que NO es de pizza (bocadillos, raciones…): se queda con su lista de siempre.
   if (ids.indexOf(mitadCat) < 0) return pizzasOf(mitadCat);
-  const lista = DATA.productos.filter(function (p) { return ids.indexOf(p.categoria) >= 0; });
+  const lista = pizzasCatalogo();
   // La sección en la que está el cliente primero (contexto), luego el resto en orden de carta:
   // las dos secciones ofrecen LAS MISMAS pizzas, solo cambia el orden de lectura.
   return lista.filter(function (p) { return p.categoria === mitadCat; })
@@ -1418,14 +1426,25 @@ function addMitadToCart() {
   closeDetail();
 }
 
-// Al gusto: base (la pizza más barata de la familia) + extras del catálogo (gateado a precio>0).
+// Al gusto: base (el TECHO de la casa) + extras del catálogo (gateado a precio>0).
+// Criterio del dueño (29-oct-2026: «nuestro trabajo y el servicio tiene un precio»): componer una
+// pizza a medida es más trabajo que vender la más barata del catálogo, y no puede depender de por
+// qué sección entre el cliente. Antes era la más barata de la sección activa → la misma pizza
+// inventada costaba 12 entrando por La Flota y 9,50 entrando por Puerto Seguro: el mismo defecto
+// que el de las mitades, pero con dinero de por medio. Ahora la base es UNA para toda la carta.
+function alGustoBaseProducto(catId) {
+  const pool = pizzasCatalogo();
+  const lista = pool.length ? pool : pizzasOf(catId);
+  let base = null;
+  for (const p of lista) { if (!base || Number(p.precio) > Number(base.precio)) base = p; }
+  return base;
+}
 function showAlGusto(catId) {
   alGustoCat = catId;
   detailProd = null; quitarSel = new Set(); anadirSel = new Map(); detailExtrasById = {};
-  const pz = pizzasOf(catId);
-  // base = la pizza más barata de la familia; guardamos su ID para que el bot re-tase al_gusto.
-  let base = null;
-  for (const p of pz) { if (!base || p.precio < base.precio) base = p; }
+  // base = la pizza más cara de la carta; guardamos su ID para que el bot re-tase al_gusto
+  // con el mismo precio que ve el cliente (si no, la web y la caja no cuadran).
+  const base = alGustoBaseProducto(catId);
   alGustoBase = base ? base.precio : 0;
   alGustoBaseId = base ? base.id : null;
   document.getElementById('detail-visual').innerHTML = '<span class="detail-ph">🍕</span><button class="close-btn" onclick="closeDetail()" aria-label="Cerrar">✕</button>';

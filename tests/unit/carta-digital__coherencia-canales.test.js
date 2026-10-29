@@ -63,7 +63,17 @@ test('coherencia-canales — precio idéntico entre canales y base cobrada dos v
 });
 
 test('coherencia-canales — canta el producto no-pizza que ofrece ingredientes (sale 1)', () => {
-  const r = run(bundle({ conBebida: true }));
+  // El chequeo tiene que seguir cazando ESTA clase de fallo aunque hoy la puerta la impida.
+  // Se le da el runtime ROTO a propósito (la puerta de categoría anulada, como estaba en el
+  // PR #881): si alguien la quita otra vez, el chequeo lo canta en vez de callarse.
+  const original = bundle({ conBebida: true });
+  const roto = path.join(path.dirname(original), 'carta-sin-puerta.html');
+  const html = fs.readFileSync(original, 'utf8');
+  const conPuerta = 'if (!p || !isPizzaCat(p.categoria)) return [];';
+  assert.ok(html.includes(conPuerta), 'el bundle de hoy trae la puerta');
+  fs.writeFileSync(roto, html.replace(conPuerta, ''));
+
+  const r = run(roto);
   assert.strictEqual(r.code, 1, 'es una incoherencia real: bebida ofreciendo ingredientes');
   const fuera = r.json.ofrecenIngredientesSinPizza;
   assert.strictEqual(fuera.length, 1);

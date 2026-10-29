@@ -109,8 +109,8 @@ test('carta-digital/template — un ingrediente BASE no se ofrece como extra (ex
   // (ya en la pizza) se ofrecían como extra. Ahora exclusión por id O nombre normalizado.
   assert.ok(html.includes('function baseExcludeSet('), 'helper de exclusión de base presente');
   assert.ok(html.includes('function norm('), 'normalizador presente');
-  assert.ok(html.includes('extrasForGroup(grpKeys, baseExcludeSet(p))'), 'detalle normal excluye su base');
-  assert.ok(html.includes('extrasForGroup(grpKeys, baseExcludeSet(pizza))'), 'mitad excluye la base de esa media');
+  assert.ok(html.includes('const extras = extrasForProduct(p);'), 'detalle normal excluye su base');
+  assert.ok(html.includes('const extras = extrasForProduct(pizza);'), 'mitad excluye la base de esa media');
   assert.ok(html.includes('excludeSet.has(norm(ing.id)) || excludeSet.has(norm(ing.nombre))'), 'casa por id O nombre');
   assert.ok(!html.includes('baseIds[ing.id]'), 'no queda la exclusión frágil solo-por-id');
 });
@@ -214,4 +214,79 @@ test('carta-digital/template — mandar el pedido VACÍA el carrito (whatsapp y 
 
   // El respaldo del último pedido se guarda ANTES de vaciar (si no, «repetir» saldría vacío).
   assert.ok(html.indexOf('function saveLastOrder()') < html.indexOf('function _cerrarPedido('), 'orden: respaldo antes del cierre');
+});
+
+test('carta-digital/template — una bebida o una tapa NO ofrecen ingredientes (gate = misma puerta que "Crea tu pizza")', () => {
+  // Regresión del PR #881: al abrir el catálogo entero se quitó el filtro por grupo, y con él
+  // la única cosa que impedía que una Coca-Cola ofreciera los 45 ingredientes del negocio.
+  // Medido sobre las cartas: antes del #881 bebidas/tapas = 0 opcionales, después = 45.
+  // El gate no inventa una regla nueva: usa isPizzaCat, la MISMA condición que enciende el
+  // constructor. Si una categoría no se construye con ingredientes, no los ofrece en el detalle.
+  const vm = require('node:vm');
+  const carta = {
+    categorias: [
+      { id: 'pizzas', nombre: 'Pizzas', orden: 1 },
+      { id: 'bebidas', nombre: 'Bebidas', orden: 2 }
+    ],
+    productos: [
+      { id: 'p_pizza', nombre: 'Bachata', categoria: 'pizzas', categoria_id: 'pizzas', precio: 9.5, ingredientes: [{ nombre: 'Mozzarella', tipo: 'queso' }], alergenos: [] },
+      { id: 'p_cola', nombre: 'Coca-Cola', categoria: 'bebidas', categoria_id: 'bebidas', precio: 1.5, ingredientes: [], alergenos: [] }
+    ],
+    catalogo_ingredientes: [
+      { id: 'i_bacon', nombre: 'Bacon', emoji: '🥓', tipo: 'carne', grupos: ['pizzas'], precio_extra: 1.5 },
+      { id: 'i_ajo', nombre: 'Ajo', emoji: '🧄', tipo: 'verdura', grupos: ['pizzas'], precio_extra: 0.8 },
+      { id: 'i_mozza', nombre: 'Mozzarella', emoji: '🧀', tipo: 'queso', grupos: ['pizzas'], precio_extra: 1 }
+    ],
+    alergenos_leyenda: []
+  };
+  const html = generateStaticHTML(carta, { nombre_negocio: 'Nonina', moneda: '€' }, {});
+  assert.ok(html.includes('const extras = extrasForProduct(p);'), 'el detalle abre extras por la puerta única');
+
+  // Se EJECUTA el runtime emitido: showDetail es el camino real del cliente.
+  const js = html.match(/<script>([\s\S]*?)<\/script>/)[1];
+  const lines = js.split('\n');
+  const boot = /^(sendChat|stopVoice|applyTranslations|initChat|initVoice|cargarEstadoServicio|renderCats|renderGrid|renderCart|updateCart)\(\);?$/;
+  let cut = lines.length;
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const t = lines[i].trim();
+    if (t === '' || boot.test(t)) { cut = i; continue; }
+    break;
+  }
+  const el = (id) => ({
+    id, _h: '', style: {}, dataset: {}, children: [],
+    classList: { add() {}, remove() {}, toggle() {}, contains: () => false },
+    appendChild(c) { this.children.push(c); return c; }, setAttribute() {}, removeAttribute() {},
+    addEventListener() {}, removeEventListener() {}, remove() {}, insertBefore() {},
+    querySelector: () => el('q'), querySelectorAll: () => [], closest: () => null,
+    get innerHTML() { return this._h; }, set innerHTML(v) { this._h = v; },
+    get textContent() { return this._h; }, set textContent(v) { this._h = v; }
+  });
+  const cache = {};
+  const ctx = {
+    console,
+    document: {
+      getElementById: (id) => (cache[id] = cache[id] || el(id)),
+      querySelector: () => el('q'), querySelectorAll: () => [], createElement: () => el('new'),
+      addEventListener() {}, body: el('body'), head: el('head'), documentElement: el('html')
+    },
+    window: { addEventListener() {}, location: { href: '' }, matchMedia: () => ({ matches: false, addEventListener() {} }) },
+    localStorage: { getItem: () => null, setItem() {}, removeItem() {} },
+    navigator: {}, fetch: () => new Promise(() => {}),
+    setTimeout: () => 0, setInterval: () => 0, clearTimeout() {}, clearInterval() {},
+    Audio: function () { return { play() {} }; }
+  };
+  ctx.globalThis = ctx;
+  vm.createContext(ctx);
+  vm.runInContext(lines.slice(0, cut).join('\n') + '\n;globalThis.__d = { showDetail };', ctx, { timeout: 20000 });
+
+  const pintar = (id) => { cache['detail-content'] = el('detail-content'); ctx.__d.showDetail(id); return cache['detail-content'].innerHTML || ''; };
+
+  const pizza = pintar('p_pizza');
+  assert.ok(/Añadir extras/.test(pizza), 'la pizza SÍ ofrece extras');
+  assert.ok(/Bacon/.test(pizza), 'y ofrece el catálogo (Bacon)');
+  assert.ok(!/Mozzarella<\/span>/.test(pizza.slice(pizza.indexOf('Añadir extras'))), 'su base (Mozzarella) no se ofrece como extra');
+
+  const bebida = pintar('p_cola');
+  assert.ok(!/Añadir extras/.test(bebida), 'la Coca-Cola NO ofrece ingredientes');
+  assert.ok(!/opcionales/.test(bebida), 'ni cuenta de opcionales');
 });

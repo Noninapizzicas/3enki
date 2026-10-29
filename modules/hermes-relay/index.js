@@ -135,7 +135,8 @@ class HermesRelayModule extends BaseModule {
 
       const result = await this._callHermes(messages);
 
-      const assistantMessage = result.content || '';
+      const { texto: assistantMessage, adjuntos } =
+        await this._extraerAdjuntos(result.content || '', project_id, conversation_id);
       const messageIdAssistant = crypto.randomUUID();
 
       await this._publicarEvento('ai.chat.response', {
@@ -148,6 +149,7 @@ class HermesRelayModule extends BaseModule {
         message_id,
         message_id_assistant: messageIdAssistant,
         assistant_message: assistantMessage,
+        adjuntos: adjuntos || [],
         model: result.model || this.config.hermes_model,
         provider: 'hermes',
         tokens: result.usage || { input: 0, output: 0, total: 0 },
@@ -321,6 +323,66 @@ class HermesRelayModule extends BaseModule {
 
     return sections.length > 0 ? sections.join('\n\n---\n\n') : null;
   }
+
+    // ── Adjuntos: un data-URI de imagen NO es texto ────────────────
+    // Una imagen embebida (data:image/…;base64,…) en el mensaje acaba publicada como
+    // texto: el canal la trocea en cientos de trozos de base64. Se extrae a fichero
+    // del proyecto (fs.write, encoding base64) y en el texto queda una referencia.
+
+    async _rpc(evento, payload = {}, { timeout_ms = 8000 } = {}) {
+      if (!this.eventBus?.subscribe || !this.eventBus?.publish) return null;
+      const request_id = crypto.randomUUID();
+      const responseEvent = evento.endsWith('.request')
+        ? evento.slice(0, -('.request'.length)) + '.response'
+        : `${evento}.response`;
+      return new Promise((resolve) => {
+        let unsub = null;
+        const timeout = setTimeout(() => { if (unsub) unsub(); resolve(null); }, timeout_ms);
+        try {
+          unsub = this.eventBus.subscribe(responseEvent, (event) => {
+            const d = event?.data || event;
+            if (!d || d.request_id !== request_id) return;
+            clearTimeout(timeout);
+            if (unsub) unsub();
+            resolve(d);
+          });
+          this.eventBus.publish(evento, { request_id, ...payload });
+        } catch (_) {
+          clearTimeout(timeout);
+          if (unsub) unsub();
+          resolve(null);
+        }
+      });
+    }
+
+    async _extraerAdjuntos(content, project_id, conversation_id) {
+      const adjuntos = [];
+      if (!content || typeof content !== 'string' || !content.includes('data:image/')) {
+        return { texto: content, adjuntos };
+      }
+      const RE = /!\[([^\]]*)\]\(data:(image\/[a-zA-Z0-9.+-]+);base64,([A-Za-z0-9+/=\s]+)\)/g;
+      const trozos = [...content.matchAll(RE)];
+      let texto = content;
+      let n = 0;
+      for (const m of trozos) {
+        const [entero, alt, mime, b64] = m;
+        const ext = mime.split('/')[1].replace('jpeg', 'jpg').replace('svg+xml', 'svg');
+        const nombre = `${Date.now()}-${++n}.${ext}`;
+        const ruta = `/adjuntos/${conversation_id}/${nombre}`;
+        const res = await this._rpc('fs.write.request', {
+          project_id, path: ruta,
+          content: String(b64).replace(/\s/g, ''),
+          encoding: 'base64', atomic: true
+        }, { timeout_ms: 8000 });
+        if (res && res.success !== false && !res.error) {
+          adjuntos.push({ path: ruta, mime, alt });
+          texto = texto.replace(entero, `![${alt}](${ruta})`);
+        } else {
+          this.logger?.warn('hermes-relay.adjunto.fallido', { conversation_id, mime, error: res?.error });
+        }
+      }
+      return { texto, adjuntos };
+    }
 
   // ── HTTP a Hermes ─────────────────────────────────────────────
 

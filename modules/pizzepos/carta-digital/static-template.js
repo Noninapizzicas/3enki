@@ -78,8 +78,11 @@ function generateStaticHTML(carta, config, options = {}) {
   const logoEmoji = tema.logo_emoji || '🍕';
 
   // Prepare data
+  // `tipo` viaja para que la plantilla sepa qué secciones son de pizza (La Flota lo declara en
+  // la carta con tipo 'pizzas'): la carta de mitades es la MISMA en todas ellas.
   const categorias = (carta.categorias || []).map(c => ({
-    id: c.id, nombre: c.nombre, orden: c.orden, icon: c.icon || null
+    id: c.id, nombre: c.nombre, orden: c.orden, icon: c.icon || null,
+    tipo: c.tipo || null
   }));
 
   const imgs = Array.isArray(carta.productos) ? carta.productos : [];
@@ -1170,6 +1173,37 @@ function isPizzaCat(catId) {
   });
 }
 function pizzasOf(catId) { return DATA.productos.filter(p => p.categoria === catId); }
+// Carta de MITADES: UNA sola lista de pizzas para todas las secciones de pizza. Antes era
+// pizzasOf(mitadCat) → el cliente veía dos cartas distintas de mitad y mitad según dónde
+// estuviera: en La Flota salían solo sus 5 pizzas de autor, en Puerto Seguro sus 29
+// (corrección del dueño, 29-oct-2026: «estando en La Flota o en Puerto Seguro, las opciones
+// de mitad y mitad ya no son las mismas»). La mitad se elige del catálogo de pizza entero.
+// Sección de pizza = raíz "pizz" en nombre/id (Pizzas · Pizzicas · Pizze) o sección que la
+// propia carta declara con tipo 'pizzas' en categorias[] (La Flota: pizzas de autor cuyo id
+// no dice "pizza"). Lo que no es pizza (bebidas, raciones, bocadillos) no entra aquí.
+function esSeccionPizza(c) {
+  if (!c) return false;
+  if (String(c.tipo || '').toLowerCase() === 'pizzas') return true;
+  return ((c.nombre || '') + ' ' + (c.id || '')).toLowerCase().indexOf('pizz') >= 0;
+}
+// TODAS las pizzas de la carta, sin importar en qué sección de pizza esté el cliente: la MISMA
+// lista para todas (mitades y "Crea tu pizza"). Es la base de que la sección no cambie lo que
+// se ofrece ni lo que se cobra.
+function pizzasCatalogo() {
+  const ids = DATA.categorias.filter(esSeccionPizza).map(function (c) { return c.id; });
+  if (!ids.length) return [];
+  return DATA.productos.filter(function (p) { return ids.indexOf(p.categoria) >= 0; });
+}
+function pizzasMitad() {
+  const ids = DATA.categorias.filter(esSeccionPizza).map(function (c) { return c.id; });
+  // Sección que NO es de pizza (bocadillos, raciones…): se queda con su lista de siempre.
+  if (ids.indexOf(mitadCat) < 0) return pizzasOf(mitadCat);
+  const lista = pizzasCatalogo();
+  // La sección en la que está el cliente primero (contexto), luego el resto en orden de carta:
+  // las dos secciones ofrecen LAS MISMAS pizzas, solo cambia el orden de lectura.
+  return lista.filter(function (p) { return p.categoria === mitadCat; })
+    .concat(lista.filter(function (p) { return p.categoria !== mitadCat; }));
+}
 function catGrpKeys(catId) {
   const c = DATA.categorias.find(x => x.id === catId);
   return [catId, (c && c.nombre) || ''].filter(Boolean).map(s => String(s).toLowerCase());
@@ -1256,7 +1290,7 @@ function mitadSlot(lado, pizza) {
     '<span class="mitad-box-ph">' + ph + '</span><span class="mitad-box-label">' + lbl + '</span></button>';
 }
 function renderMitad() {
-  const pizzas = pizzasOf(mitadCat);
+  const pizzas = pizzasMitad();   // la MISMA lista en todas las secciones de pizza (ver pizzasMitad)
   // Grid 2-col de botones partidos (como el .pizzas-grid del comandero): cuerpo = mitad tal cual,
   // zona "✏️" = mitad + variaciones de ESA mitad, en un gesto.
   let grid = '<div class="mitad-grid">';
@@ -1392,14 +1426,25 @@ function addMitadToCart() {
   closeDetail();
 }
 
-// Al gusto: base (la pizza más barata de la familia) + extras del catálogo (gateado a precio>0).
+// Al gusto: base (el TECHO de la casa) + extras del catálogo (gateado a precio>0).
+// Criterio del dueño (29-oct-2026: «nuestro trabajo y el servicio tiene un precio»): componer una
+// pizza a medida es más trabajo que vender la más barata del catálogo, y no puede depender de por
+// qué sección entre el cliente. Antes era la más barata de la sección activa → la misma pizza
+// inventada costaba 12 entrando por La Flota y 9,50 entrando por Puerto Seguro: el mismo defecto
+// que el de las mitades, pero con dinero de por medio. Ahora la base es UNA para toda la carta.
+function alGustoBaseProducto(catId) {
+  const pool = pizzasCatalogo();
+  const lista = pool.length ? pool : pizzasOf(catId);
+  let base = null;
+  for (const p of lista) { if (!base || Number(p.precio) > Number(base.precio)) base = p; }
+  return base;
+}
 function showAlGusto(catId) {
   alGustoCat = catId;
   detailProd = null; quitarSel = new Set(); anadirSel = new Map(); detailExtrasById = {};
-  const pz = pizzasOf(catId);
-  // base = la pizza más barata de la familia; guardamos su ID para que el bot re-tase al_gusto.
-  let base = null;
-  for (const p of pz) { if (!base || p.precio < base.precio) base = p; }
+  // base = la pizza más cara de la carta; guardamos su ID para que el bot re-tase al_gusto
+  // con el mismo precio que ve el cliente (si no, la web y la caja no cuadran).
+  const base = alGustoBaseProducto(catId);
   alGustoBase = base ? base.precio : 0;
   alGustoBaseId = base ? base.id : null;
   document.getElementById('detail-visual').innerHTML = '<span class="detail-ph">🍕</span><button class="close-btn" onclick="closeDetail()" aria-label="Cerrar">✕</button>';

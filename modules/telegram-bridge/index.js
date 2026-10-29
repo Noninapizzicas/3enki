@@ -358,6 +358,45 @@ class TelegramBridgeModule extends ModuloHibridoReflejo {
     } catch (_) { /* no debe romper el flujo */ }
   }
 
+  /**
+   * ADJUNTOS: una imagen no viaja como texto.
+   * El relay extrae los data-URI a fichero del proyecto y deja en el evento
+   * `adjuntos: [{ path, mime, alt }]` (path relativo al storage del proyecto).
+   * Aquí se resuelve la ruta absoluta y se manda por su puerta: send_photo.
+   */
+  async _enviarAdjuntos(botName, chatId, adjuntos, project_id) {
+    if (!Array.isArray(adjuntos) || adjuntos.length === 0) return;
+    const base = await this._baseDelProyecto(project_id);
+    for (const adj of adjuntos) {
+      if (!adj || !adj.path) continue;
+      const foto = base ? `${base}/storage${adj.path}` : adj.path;
+      const res = await this._rpc('telegram.send_photo.request', {
+        botName, chatId, photo: foto, caption: adj.alt || undefined
+      }, { timeout_ms: 30000 });
+      if (!res || res.status !== 200) {
+        const msg = (res && (res.error?.message || res.error)) || 'sin respuesta de telegram.send_photo';
+        this._emitirFallo(botName, chatId, 'telegram_send_photo', msg, null, foto);
+      }
+      this.metrics?.increment('telegram-bridge.adjunto.enviado');
+    }
+  }
+
+  /** base_path del proyecto, cacheado. Devuelve null si no se puede resolver. */
+  async _baseDelProyecto(project_id) {
+    if (!project_id) return null;
+    if (!this._basesProyecto) this._basesProyecto = new Map();
+    if (this._basesProyecto.has(project_id)) return this._basesProyecto.get(project_id);
+    const res = await this._rpc('project.list.request', { request_id: `bridge-base-${Date.now()}` }, { timeout_ms: 8000 });
+    const projs = (res && (res.projects || res.data?.projects)) || [];
+    for (const p of projs) {
+      if (p && (p.id === project_id || p.slug === project_id)) {
+        this._basesProyecto.set(project_id, p.base_path || null);
+        return p.base_path || null;
+      }
+    }
+    return null;
+  }
+
   async _enviarTelegram(botName, chatId, text, extra = {}) {
     try {
       await this._rpc('telegram.send_message.request', { botName, chatId, text, ...extra }, { timeout_ms: 30000 });
@@ -488,6 +527,9 @@ class TelegramBridgeModule extends ModuloHibridoReflejo {
 
     const texto = d.assistant_message || '';
     const chunks = this._trocearTexto(texto, 4000); // Telegram limita a 4096 chars
+
+    // Imágenes que el relay extrajo a fichero: van por su puerta, no como texto.
+    await this._enviarAdjuntos(cc.botName, cc.chatId, d.adjuntos, d.project_id);
 
     // Envío SECUENCIAL: un telegram.send_message.request por chunk, esperando
     // el ack de cada uno antes del siguiente. Si un chunk falla, emite

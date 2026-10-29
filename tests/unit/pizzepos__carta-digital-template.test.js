@@ -103,6 +103,21 @@ test('carta-digital/template — mitad/al-gusto: criterio robusto (raíz "pizz" 
   assert.ok(html.includes('showMitad(') && html.includes('showAlGusto('), 'entradas mitad/al-gusto presentes');
 });
 
+test('carta-digital/template — mitad y mitad: la MISMA lista de pizzas en todas las secciones', () => {
+  const html = htmlDe();
+  // El bug (29-oct-2026): renderMitad usaba pizzasOf(mitadCat) → cada sección ofrecía solo sus
+  // pizzas (La Flota 5 de autor, Puerto Seguro 29) y el cliente veía DOS cartas de mitad y mitad
+  // según dónde estuviera. Ahora la lista se compone del catálogo de pizza entero.
+  assert.ok(html.includes('function pizzasMitad('), 'helper de la carta única de mitades');
+  assert.ok(html.includes('const pizzas = pizzasMitad()'), 'renderMitad usa la lista compartida');
+  assert.ok(!html.includes('const pizzas = pizzasOf(mitadCat)'), 'no queda la lista por sección');
+  // Sección de pizza = raíz "pizz" o sección declarada en la carta con tipo 'pizzas' (La Flota).
+  assert.ok(html.includes('function esSeccionPizza('), 'predicado de sección de pizza');
+  assert.ok(html.includes("String(c.tipo || '').toLowerCase() === 'pizzas'"), 'la carta puede declarar una sección como pizza');
+  // La sección activa va primero, luego el resto: mismas pizzas, distinto orden de lectura.
+  assert.ok(html.includes('p.categoria === mitadCat') && html.includes('p.categoria !== mitadCat'), 'sección activa primero');
+});
+
 test('carta-digital/template — un ingrediente BASE no se ofrece como extra (exclusión robusta id/nombre)', () => {
   const html = htmlDe();
   // El bug: la base se excluía solo por id; al no casar el id del catálogo, Mozzarella/Champiñón

@@ -1,0 +1,20 @@
+## Dependencias gestionadas por el component manager de ESP-IDF.
+## `idf.py build` las descarga solo (necesita red la primera vez).
+
+dependencies:
+  idf: ">=5.5,<6.0"
+
+  # BSP OFICIAL de la placa: inicializa MIPI-DSI (JD9365), tactil GT911,
+  # PSRAM, LVGL (esp_lvgl_adapter) y el brillo por LEDC.
+  # https://components.espressif.com/components/waveshare/esp32_p4_wifi6_touch_lcd_x
+  waveshare/esp32_p4_wifi6_touch_lcd_x: "^2.0.3"
+
+  # LVGL 9 (el BSP admite >=8,<10; fijamos 9.x porque la UI usa API v9)
+  lvgl/lvgl: "^9.2.0"
+
+  # WiFi 6 / BLE del ESP32-C6 por SDIO (esp_hosted).
+  # Versiones alineadas con el firmware del C6 que trae la placa: la rama
+  # IDF 5.x usa esp_hosted 1.4.x + esp_wifi_remote 0.14.x
+  # (ver examples/esp-idf/04_wifistation/main/idf_component.yml del repo Waveshare).
+  espressif/esp_hosted: "1.4.7"
+  espressif/esp_wifi_remote: "0.14.5"

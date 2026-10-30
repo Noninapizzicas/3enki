@@ -1,0 +1,87 @@
+menu "Cocina P4"
+
+    menu "Red"
+
+        config COCINA_WIFI_SSID
+            string "WiFi SSID"
+            default ""
+            help
+                SSID de la red de la cocina. Si se deja vacío se usa el fallback
+                de main/config.h y la pantalla muestra "Configura WiFi".
+
+        config COCINA_WIFI_PASSWORD
+            string "WiFi password"
+            default ""
+
+        config COCINA_MQTT_URI
+            string "MQTT broker URI"
+            default "wss://enki-ai.online/mqtt"
+            help
+                wss://enki-ai.online/mqtt  (TLS, puerto 443) en produccion.
+                mqtt://192.168.1.10:1883   en LAN sin TLS.
+
+        config COCINA_MQTT_USERNAME
+            string "MQTT username"
+            default ""
+
+        config COCINA_MQTT_PASSWORD
+            string "MQTT password"
+            default ""
+
+        config COCINA_MQTT_SKIP_CN
+            bool "No verificar el Common Name del certificado (solo pruebas)"
+            default n
+            help
+                Relaja la verificacion TLS. NO usar en produccion.
+
+        config COCINA_NTP_SERVER
+            string "Servidor NTP"
+            default "pool.ntp.org"
+
+        config COCINA_TZ
+            string "Zona horaria POSIX"
+            default "CET-1CEST,M3.5.0,M10.5.0/3"
+
+    endmenu
+
+    menu "Identidad del dispositivo"
+
+        config COCINA_DEVICE_ID
+            string "device_id"
+            default ""
+            help
+                Identificador que viaja en register-device y con el que se
+                filtran los eventos periferico.display. Vacio => se deriva
+                de la MAC: "cocina-p4-aabbccddeeff".
+
+        config COCINA_NOMBRE
+            string "nombre"
+            default "Cocina"
+
+        config COCINA_ESTACION
+            string "estacion"
+            default "cocina"
+
+        config COCINA_TIPO_ESTACION
+            string "tipo_estacion"
+            default "cocina"
+
+    endmenu
+
+    menu "Topics MQTT"
+
+        config COCINA_TOPIC_SUB
+            string "Topic de suscripcion (eventos de display)"
+            default "core/+/events/periferico/display"
+
+        config COCINA_TOPIC_REGISTER
+            string "Topic de register-device-request"
+            default "core/core-a/events/cocina/register-device-request"
+
+        config COCINA_TOPIC_PREPARE
+            string "Topic de prepare-item-request"
+            default "core/core-a/events/cocina/prepare-item-request"
+
+    endmenu
+
+endmenu

@@ -516,7 +516,10 @@ function publishedOf(mocks, name) {
     assert.strictEqual(added[1].nombre, 'Bachata');
     assert.strictEqual(added[1].cantidad, 2);
     assert.ok(!added.some((d) => d.producto_id === 'tienda:pedido'), 'no debe existir la linea colapsada');
-    assert.ok(!('precio' in added[0]), 'sin precio en el pedido, el comandero re-tasa (no se inventa 0)');
+    // El importe NO se pierde: el total del pedido se reparte entre las lineas y cuadra al céntimo.
+    const suma = added.reduce((s, d) => s + Math.round(d.precio * 100) * d.cantidad, 0);
+    assert.strictEqual(suma, 3400, 'las lineas suman el total que vio el cliente');
+    assert.ok(added.every((d) => d.precio > 0), 'ninguna linea se queda a 0');
     // El descuadre no se calla: queda el aviso para revisar el importe en la cuenta.
     assert.ok(mocks.logs.some(([lvl, ev]) => lvl === 'warn' && ev === 'pedidos.tienda.items_sin_precio'));
     await m.onUnload();

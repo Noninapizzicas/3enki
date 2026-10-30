@@ -55,6 +55,9 @@ async function cargar(config) {
   const logger = makeLogger();
   const mod = new ReporteCierreModule();
   await mod.onLoad({ logger, metrics: { increment: () => {} }, eventBus: bus, moduleConfig: config || {} });
+  // Por defecto el bridge no responde (no hay bus real): resolver el bot es instantaneo y se usa
+  // el bot de config. La prueba (j) inyecta su propio _rpc para probar el reparto por proyecto.
+  mod._rpc = async () => null;
   return { mod, bus, logger };
 }
 
@@ -123,6 +126,36 @@ function eventoCierre(overrides) {
 
 const pruebas = [];
 function test(nombre, fn) { pruebas.push({ nombre, fn }); }
+
+// ------------------------------------------
+// (j) el bot se resuelve POR PROYECTO (una sola app, varios negocios)
+// ------------------------------------------
+test('(j) cada proyecto manda por SU bot; sin vinculo cae al bot de config', async () => {
+  // Nonina: vinculo en el bridge; The Pirate: otro bot.
+  const { mod, bus } = await cargar({ bot_name: 'Pro_nonina_bot', chat_id: '-1001234567890', telegram_activo: true });
+  mod._rpc = async (evento, payload) => {
+    assert.strictEqual(evento, 'telegram.bridge.listar.request');
+    return { data: { vinculos: [
+      { botName: 'Pro_nonina_bot', project_id: 'p-nonina' },
+      { botName: 'The_pirate_enki_bot', project_id: 'p-pirata' }
+    ] } };
+  };
+
+  await mod.onCajaCerrada(eventoCierre({ project_id: 'p-nonina' }));
+  await mod.onCajaCerrada(eventoCierre({ project_id: 'p-pirata', fecha: '2026-10-31' }));
+
+  const enviados = bus.de('telegram.send_message.request').map((x) => x.payload.botName);
+  assert.deepStrictEqual(enviados, ['Pro_nonina_bot', 'The_pirate_enki_bot'],
+    'cada cierre sale por el bot de su proyecto');
+
+  // Proyecto sin vinculo → bot de config (no se queda sin reporte).
+  mod._rpc = async () => ({ data: { vinculos: [] } });
+  const antes = bus.de('telegram.send_message.request').length;
+  await mod.onCajaCerrada(eventoCierre({ project_id: 'p-sin-vinculo', fecha: '2026-11-01' }));
+  const ultimo = bus.de('telegram.send_message.request').slice(-1)[0];
+  assert.strictEqual(bus.de('telegram.send_message.request').length, antes + 1);
+  assert.strictEqual(ultimo.payload.botName, 'Pro_nonina_bot', 'sin vinculo usa el bot de config');
+});
 
 // ------------------------------------------
 // (a) cierre completo → un solo mensaje de Telegram bien formado

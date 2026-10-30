@@ -54,6 +54,10 @@ class PersistenciaComanderoModule extends BaseModule {
     this.cuentasActivasCache  = new Map();
     this.fechaJornada         = null;
     this.horaInicioJornada    = null;
+    // Fondo inicial (calderilla) declarado al abrir la jornada. Se resta del
+    // contado en el cierre: ese dinero no es venta del día, solo cambio.
+    this.fondoInicialJornada  = 0;
+    this.monedaJornada        = null;
 
     this.internalMetrics = {
       eventos_guardados:   0,
@@ -606,10 +610,47 @@ class PersistenciaComanderoModule extends BaseModule {
         await this._guardarCuentasActivas();
       }
 
-      const resumen                = this._calcularResumenDia(ventasParaCierre);
-      const totalEsperadoEfectivo  = resumen.por_metodo_pago.efectivo || 0;
-      const totalArqueado          = arqueo.total_contado || ((arqueo.efectivo || 0) + (arqueo.monedas || 0));
-      const diferencia             = totalArqueado - totalEsperadoEfectivo;
+      const resumen = this._calcularResumenDia(ventasParaCierre);
+
+      // ---- Arqueo por método ----------------------------------------
+      // La caja es del negocio: el fondo inicial (calderilla) NO es venta, se
+      // suma al esperado en efectivo y por tanto se descuenta del contado.
+      // Las retiradas (sangrias al cajón/banca) salen del efectivo esperado.
+      const fondoInicial = this._redondearImporte(this.fondoInicialJornada || 0);
+      const retiradas = (Array.isArray(arqueo.retiradas) ? arqueo.retiradas : [])
+        .filter(r => r && r.importe !== undefined && r.importe !== null && r.importe !== ''
+          && Number.isFinite(Number(r.importe)))
+        .map(r => ({
+          importe: this._redondearImporte(r.importe),
+          motivo:  r.motivo ? String(r.motivo) : ''
+        }));
+      const totalRetiradas = this._redondearImporte(retiradas.reduce((s, r) => s + r.importe, 0));
+
+      const esperado = {
+        efectivo: this._redondearImporte(
+          fondoInicial + (resumen.por_metodo_pago.efectivo || 0) - totalRetiradas
+        ),
+        tarjeta:  this._redondearImporte(resumen.por_metodo_pago.tarjeta || 0),
+        bizum:    this._redondearImporte(resumen.por_metodo_pago.bizum || 0)
+      };
+
+      // `efectivo` manda; los arqueos antiguos (`total_contado` / `monedas`) se
+      // siguen leyendo cuando `efectivo` falta o viene a 0.
+      const contado = {
+        efectivo: this._contarEfectivo(arqueo),
+        tarjeta:  arqueo.tarjeta === undefined || arqueo.tarjeta === null
+          ? null : this._redondearImporte(arqueo.tarjeta),
+        bizum:    arqueo.bizum === undefined || arqueo.bizum === null
+          ? null : this._redondearImporte(arqueo.bizum)
+      };
+
+      // Solo hay diferencia de un método si alguien contó ese método.
+      const diferencias = { efectivo: this._redondearImporte(contado.efectivo - esperado.efectivo) };
+      if (contado.tarjeta !== null) diferencias.tarjeta = this._redondearImporte(contado.tarjeta - esperado.tarjeta);
+      if (contado.bizum   !== null) diferencias.bizum   = this._redondearImporte(contado.bizum   - esperado.bizum);
+
+      // La diferencia global es la del efectivo: es la única que lleva fondo.
+      const diferencia = diferencias.efectivo;
 
       const horaCierre = new Date().toISOString();
       const cierre = {
@@ -620,6 +661,11 @@ class PersistenciaComanderoModule extends BaseModule {
         hora_cierre:    horaCierre,
         arqueo,
         totales:        resumen,
+        fondo_inicial:  fondoInicial,
+        retiradas,
+        esperado,
+        contado,
+        diferencias,
         diferencia,
         estado:         diferencia === 0 ? 'cuadrado' : (diferencia > 0 ? 'sobrante' : 'faltante'),
         cuentas_cerradas_forzadas: informeCuentasAbiertas
@@ -683,11 +729,33 @@ class PersistenciaComanderoModule extends BaseModule {
     }
   }
 
-  async handleIniciarDia() {
+  async handleIniciarDia(data) {
     try {
+      // El bus entrega el payload en `data.data`; `_unwrap` acepta ambas formas.
+      const entrada = this._unwrap(data) || {};
+
+      // Fondo inicial del día (calderilla con la que arranca la caja).
+      // Sin él, la caja arranca a cero y se declara explícitamente.
+      let fondoInicial = 0;
+      const fondoBruto = entrada.fondo_inicial;
+      if (fondoBruto !== undefined && fondoBruto !== null && fondoBruto !== '') {
+        const n = Number(fondoBruto);
+        if (!Number.isFinite(n) || n < 0) {
+          this._logError('persistencia.iniciar_dia.fondo_invalido',
+            { fondo_inicial: fondoBruto }, 'ui_iniciar_dia', 'INVALID_INPUT');
+          return this._errorResponse(400, 'INVALID_INPUT',
+            'fondo_inicial debe ser un número >= 0',
+            { field: 'fondo_inicial' });
+        }
+        fondoInicial = this._redondearImporte(n);
+      }
+      const moneda = entrada.moneda ? String(entrada.moneda) : null;
+
       const horaInicio       = new Date().toISOString();
       this.fechaJornada      = this._getFechaCalendario();
       this.horaInicioJornada = horaInicio;
+      this.fondoInicialJornada = fondoInicial;
+      this.monedaJornada       = moneda;
 
       this.eventosCache = [];
       this.ventasCache  = [];
@@ -699,12 +767,15 @@ class PersistenciaComanderoModule extends BaseModule {
       await this._guardarCuentasActivas();
 
       await this._publicarEvento('dia.iniciado', {
-        fecha:       this.fechaJornada,
-        hora_inicio: horaInicio
-      });
+        fecha:         this.fechaJornada,
+        hora_inicio:   horaInicio,
+        fondo_inicial: fondoInicial,
+        moneda
+      }, entrada);
 
       this.logger.info('persistencia.jornada_iniciada', {
-        fecha_jornada: this.fechaJornada, hora_inicio: horaInicio
+        fecha_jornada: this.fechaJornada, hora_inicio: horaInicio,
+        fondo_inicial: fondoInicial, moneda
       });
 
       return {
@@ -712,6 +783,8 @@ class PersistenciaComanderoModule extends BaseModule {
         data: {
           fecha_jornada: this.fechaJornada,
           hora_inicio:   horaInicio,
+          fondo_inicial: fondoInicial,
+          moneda,
           user_hint:     'Jornada iniciada'
         }
       };
@@ -962,12 +1035,18 @@ class PersistenciaComanderoModule extends BaseModule {
     if (datos) {
       this.fechaJornada      = datos.fecha_jornada;
       this.horaInicioJornada = datos.hora_inicio || null;
+      // El fondo inicial sobrevive al reinicio del proceso: si no está, 0.
+      this.fondoInicialJornada = this._normalizarImporte(datos.fondo_inicial);
+      this.monedaJornada       = datos.moneda || null;
       this.logger.info('persistencia.jornada_cargada', {
-        fecha_jornada: this.fechaJornada, hora_inicio: this.horaInicioJornada
+        fecha_jornada: this.fechaJornada, hora_inicio: this.horaInicioJornada,
+        fondo_inicial: this.fondoInicialJornada
       });
     } else {
       this.fechaJornada      = this._getFechaCalendario();
       this.horaInicioJornada = new Date().toISOString();
+      this.fondoInicialJornada = 0;
+      this.monedaJornada       = null;
       await this._guardarJornada();
       this.logger.info('persistencia.jornada_nueva', { fecha_jornada: this.fechaJornada });
     }
@@ -979,6 +1058,8 @@ class PersistenciaComanderoModule extends BaseModule {
       const data = {
         fecha_jornada:  this.fechaJornada,
         hora_inicio:    this.horaInicioJornada,
+        fondo_inicial:  this.fondoInicialJornada || 0,
+        moneda:         this.monedaJornada || null,
         guardado_at:    new Date().toISOString()
       };
       await this._atomicWriteFile(archivo, JSON.stringify(data, null, 2));
@@ -1212,6 +1293,37 @@ class PersistenciaComanderoModule extends BaseModule {
     });
   }
 
+  // Redondeo monetario a 2 decimales: evita el ruido de coma flotante en las
+  // diferencias (205.00000000000003 - 205 no debe dar 'sobrante').
+  _redondearImporte(valor) {
+    const n = Number(valor);
+    if (!Number.isFinite(n)) return 0;
+    return Math.round((n + Number.EPSILON) * 100) / 100;
+  }
+
+  // Lectura tolerante de un importe ya persistido (jornada.json): nunca lanza,
+  // un valor corrupto degrada a 0 en lugar de romper la carga.
+  _normalizarImporte(valor) {
+    if (valor === undefined || valor === null || valor === '') return 0;
+    const n = Number(valor);
+    if (!Number.isFinite(n) || n < 0) return 0;
+    return this._redondearImporte(n);
+  }
+
+  // Efectivo contado de un arqueo. `efectivo` manda cuando trae importe; si
+  // falta o viene a 0 se leen los campos de los arqueos antiguos
+  // (`total_contado`, `monedas`), que antes eran la única fuente de verdad.
+  _contarEfectivo(arqueo = {}) {
+    for (const bruto of [arqueo.efectivo, arqueo.total_contado, arqueo.monedas]) {
+      if (bruto === undefined || bruto === null || bruto === '') continue;
+      const n = Number(bruto);
+      if (Number.isFinite(n) && n !== 0) return this._redondearImporte(n);
+    }
+    // Nada declarado, o todo a cero: el cajón se declara vacío.
+    const cero = Number(arqueo.efectivo ?? arqueo.total_contado ?? arqueo.monedas ?? 0);
+    return Number.isFinite(cero) ? this._redondearImporte(cero) : 0;
+  }
+
   _calcularResumenDia(ventas = null) {
     const ventasToProcess = this._deduplicarVentas(ventas || this.ventasCache);
     const resumen = {
@@ -1334,11 +1446,33 @@ class PersistenciaComanderoModule extends BaseModule {
 
     lineas.push(`🔢 ARQUEO DE CAJA`);
     lineas.push(`─────────────────────`);
-    const totalContado = arqueo.total_contado || ((arqueo.efectivo || 0) + (arqueo.monedas || 0));
-    lineas.push(`Efectivo contado: ${totalContado.toFixed(2)} €`);
-    lineas.push(`Efectivo esperado: ${(totales.por_metodo_pago?.efectivo || 0).toFixed(2)} €`);
+    // Con el arqueo por método se imprime lo que de verdad se comparó; con
+    // cierres antiguos (sin esperado/contado) se cae al cálculo de siempre.
+    const esperadoEfectivo = cierre.esperado
+      ? Number(cierre.esperado.efectivo || 0)
+      : Number(totales.por_metodo_pago?.efectivo || 0);
+    const contadoEfectivo = cierre.contado
+      ? Number(cierre.contado.efectivo || 0)
+      : (arqueo.total_contado || ((arqueo.efectivo || 0) + (arqueo.monedas || 0)));
+    if (cierre.fondo_inicial) {
+      lineas.push(`Fondo inicial: ${Number(cierre.fondo_inicial).toFixed(2)} €`);
+    }
+    if (Array.isArray(cierre.retiradas) && cierre.retiradas.length > 0) {
+      const totalRetiradas = cierre.retiradas.reduce((s, r) => s + Number(r.importe || 0), 0);
+      lineas.push(`Retiradas: ${totalRetiradas.toFixed(2)} € (${cierre.retiradas.length})`);
+    }
+    lineas.push(`Efectivo contado: ${contadoEfectivo.toFixed(2)} €`);
+    lineas.push(`Efectivo esperado: ${esperadoEfectivo.toFixed(2)} €`);
     lineas.push(`Diferencia: ${diferencia >= 0 ? '+' : ''}${diferencia.toFixed(2)} €`);
     lineas.push(`Estado: ${estado === 'cuadrado' ? '✅ Cuadrado' : estado === 'sobrante' ? '⬆️ Sobrante' : '⬇️ Faltante'}`);
+    // Diferencias de los métodos que se contaron (tarjeta/bizum son opcionales).
+    if (cierre.diferencias && typeof cierre.diferencias === 'object') {
+      for (const [metodo, dif] of Object.entries(cierre.diferencias)) {
+        if (metodo === 'efectivo') continue;
+        const n = Number(dif || 0);
+        lineas.push(`  ${metodo}: ${n >= 0 ? '+' : ''}${n.toFixed(2)} €`);
+      }
+    }
     lineas.push(``);
 
     if (ventas.length > 0) {

@@ -1,0 +1,94 @@
+{
+  "_doc": "PUENTE del vertical pizzepos: al cerrar caja (caja.cerrada que publica persistencia-comandero) compone el reporte del dia y lo MANDA al dueño por Telegram (telegram.send_message.request con parseMode HTML) y, si email_destino esta configurado, tambien por email (local.gmail.send.request con html). No calcula el cierre ni persiste nada: solo formatea y delega el envio. Si un dato no viene en el evento, se omite del mensaje — nunca se inventa una cifra. Idempotencia best-effort en memoria (clave fecha+project_id, Set acotado a 100): el mismo cierre no se reenvia dos veces dentro del mismo proceso; se pierde al reiniciar (es un puente). Deja constancia de los canales usados en la salida del handler y en el evento cierre.reporte_enviado.",
+
+  "name": "reporte-cierre",
+  "version": "1.0.0",
+  "description": "Envia al dueño el reporte del cierre de caja de pizzepos por Telegram (HTML) y, opcionalmente, por email: total del dia, desglose por metodo de pago (esperado/contado/diferencia), propinas, top 5 productos por importe y aviso de cuentas cerradas a la fuerza.",
+  "author": "Pizzepos Team",
+  "language": "es",
+  "main": "index.js",
+
+  "provides": {
+    "events": [
+      "cierre.reporte_enviado"
+    ]
+  },
+
+  "subscribes": [
+    {
+      "event": "caja.cerrada",
+      "handler": "onCajaCerrada",
+      "description": "Disparador principal: cuando persistencia-comandero cierra la caja publica el hecho con fecha/project_id/totales/arqueo/diferencia/cierre y este puente compone y manda el reporte al dueño."
+    }
+  ],
+
+  "events": {
+    "publishes": [
+      {
+        "event": "telegram.send_message.request",
+        "description": "Reporte del cierre en HTML para Telegram: { botName, chatId, text, parseMode: 'HTML' }. Solo se publica si hay chat_id configurado y telegram_activo."
+      },
+      {
+        "event": "local.gmail.send.request",
+        "description": "Reporte del cierre por email: { account: 'default', to: email_destino, subject, body (HTML), html: true }. Solo se publica si email_destino esta configurado."
+      },
+      {
+        "event": "cierre.reporte_enviado",
+        "description": "Constancia de que canales se usaron: { fecha, project_id, canales, ok }."
+      }
+    ]
+  },
+
+  "publishes": [
+    "telegram.send_message.request",
+    "local.gmail.send.request",
+    "cierre.reporte_enviado"
+  ],
+
+  "eventos_publicados_que_requieren_consumer": [
+    {
+      "event": "telegram.send_message.request",
+      "consumer_esperado": "modules/telegram-service | modules/telegram-bridge",
+      "razon": "Envio efectivo del mensaje al chat del dueño vía Bot API de Telegram."
+    },
+    {
+      "event": "local.gmail.send.request",
+      "consumer_esperado": "services/providers/local/gmail",
+      "razon": "Envio efectivo del email con el reporte en HTML."
+    }
+  ],
+
+  "config": {
+    "_doc": "Config del puente. bot_name y chat_id identifican el destino de Telegram; telegram_activo permite apagar el canal sin borrar la config; email_destino es opcional (vacio = no se envia email y se declara en abierto).",
+    "bot_name": "Pro_nonina_bot",
+    "chat_id": "",
+    "telegram_activo": true,
+    "email_destino": ""
+  },
+
+  "persistence": {
+    "pattern": "ninguno",
+    "_doc": "Modulo PUENTE: no guarda estado. Unico estado vivo: el Set de idempotencia en memoria (max. 100 claves fecha+project_id), que se pierde al reiniciar."
+  },
+
+  "observability": {
+    "logging": {
+      "level": "info",
+      "structured": true,
+      "correlation_id": true
+    },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "reporte-cierre.reporte.enviado",
+        "reporte-cierre.reporte.descartado"
+      ]
+    }
+  },
+
+  "tracing": {
+    "propaga_correlation_id": true
+  },
+
+  "dependencies": []
+}

@@ -1,5 +1,6 @@
-# Cocina P4 — tabla de particiones (32 MB de flash, como el BSP/ejemplo oficial).
+# Cocina P4 — tabla de particiones (flash de 16 MB, según device.yaml).
 # Una sola app (sin OTA) + storage: 8M deja sitio de sobra para LVGL + MQTT.
+# Fin del ultimo offset: 0x820000 + 0x700000 = 0xF20000 (~15,1 MB) < 16 MB.
 # Name,     Type, SubType,  Offset,  Size, Flags
 nvs,        data, nvs,      0x9000,  0x6000,
 phy_init,   data, phy,      0xf000,  0x1000,

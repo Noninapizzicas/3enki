@@ -2,21 +2,20 @@
  * @file config.h
  * @brief Cocina P4 — configuración de compilación (hardware real + red).
  *
- * PLACA: Waveshare ESP32-P4-WIFI6-Touch-LCD-10.1
- *        (familia ESP32-P4-WIFI6-Touch-LCD-X), 800x1280, 32 MB PSRAM,
- *        tactil capacitivo GT911 por I2C, WiFi 6/BLE por ESP32-C6 (esp_hosted).
+ * PLACA: GUITION JC8012P4A1C (a.k.a. JC8012P4A1) — SKU 10153001,
+ *        "P4-10.1 inch Capacitive touch", 800x1280.
+ *        ESP32-P4 + ESP32-C6 por SDIO, 10.1" JD9365 por MIPI-DSI (2 lanes),
+ *        tactil capacitivo por I2C (GT911 en esta app), PSRAM, backlight LEDC.
  *
  * IMPORTANTE — el panel de 10.1" NO es RGB: es un JD9365 por MIPI-DSI
  * (2 lanes, 1500 Mbps/lane). Por eso aquí no hay defines de pines RGB
- * (PCLK/DE/HSYNC/VSYNC/DATA0..15): el panel se inicializa por DSI desde el
- * BSP oficial, no por GPIO. Ver README.md ("Correcciones respecto al brief").
+ * (PCLK/DE/HSYNC/VSYNC/DATA0..15): el panel se inicializa por DSI, no por
+ * GPIO. Ver README.md ("Diferencias con la Waveshare").
  *
- * PINES: no se inventa ninguno. Los valores de abajo salen del BSP oficial
- * `waveshare/esp32_p4_wifi6_touch_lcd_x` v2.0.3, fichero
- *   include/bsp/esp32_p4_wifi6_touch_lcd_x.h
- * (https://components.espressif.com/components/waveshare/esp32_p4_wifi6_touch_lcd_x)
- * main.c comprueba por _Static_assert que estos valores siguen coincidiendo
- * con los del BSP: si el BSP cambia, salta en compilación, no en la cocina.
+ * PINES: no se inventa ninguno. Los valores de abajo salen de la config
+ * ESPHome pública de esta misma placa (jtenniswood/esphome-lvgl,
+ * guition-esp32-p4-jc8012p4a1/device/device.yaml); cada define cita la
+ * línea de la que viene. Ver el bloque 1.
  *
  * Los valores de red (WiFi/MQTT/estación) se pueden fijar de dos formas:
  *   1. menuconfig -> "Cocina P4"  (recomendado, no recompila código)
@@ -32,41 +31,96 @@
 #include "sdkconfig.h"
 
 /* =====================================================================
- * 1. Pantalla / tactil (pines reales del BSP Waveshare v2.0.3)
+ * 1. Pantalla / tactil — GUITION JC8012P4A1C (10.1", 800x1280)
+ * ---------------------------------------------------------------------
+ * Panel:  JD9365 (JD9365DA-H3) por MIPI-DSI, 2 lanes.
+ * Tactil:  GT911 por I2C.
+ * Backlight: LEDC.
+ *
+ * FUENTE DE LOS PINES (unica, no inventada): config ESPHome publica de la
+ * propia placa, fichero device/device.yaml:
+ *   https://raw.githubusercontent.com/jtenniswood/esphome-lvgl/main/
+ *     guition-esp32-p4-jc8012p4a1/device/device.yaml
+ * De ahi salen literalmente:
+ *   display:    model JC8012P4A1, reset_pin GPIO27
+ *   touchscreen: reset_pin GPIO22, interrupt_pin GPIO21,
+ *                transform: swap_xy false, mirror_x false, mirror_y true
+ *   i2c:        sda GPIO7, scl GPIO8, 400 kHz,
+ *               sda_pullup_enabled False / scl_pullup_enabled False
+ *   light/output ledc: pin GPIO23   (retroiluminacion)
+ *   esp_ldo:    channel 3, 2.5 V    (alimenta el PHY MIPI-DSI)
+ *
+ * AVISO sobre el driver tactil: esa config usa el componente externo
+ * `gsl3680` (github://kvj/esphome@jd9365_gsl3680) sobre el mismo bus I2C
+ * 7/8. Es decir, el pinout esta confirmado pero el CONTROLADOR tactil de
+ * esa revision es GSL3680, no GT911. En esta placa montamos GT911 (lo que
+ * dice la etiqueta del SKU 10153001 y lo que hay en el Component Registry
+ * de Espressif); si el tactil no responde, el primer sospechoso es esto y
+ * se comprueba con un scan I2C (GT911 = 0x5D/0x14, GSL3680 = 0x40).
+ * Ver README.md, "Tactil: GT911 o GSL3680".
+ *
+ * NO hay defines de pines RGB (PCLK/DE/HSYNC/VSYNC/DATA0..15): el panel no
+ * es RGB, es DSI. El video sale por el PHY MIPI, no por GPIO.
  * ===================================================================== */
 
-/* Geometría y formato (include/bsp/display.h:
- *   BSP_LCD_H_RES / BSP_LCD_V_RES / BSP_LCD_MIPI_DSI_LANE_NUM) */
+/* Geometria y formato. El timing (porches, reloj DPI) lo pone el macro
+ * JD9365_800_1280_PANEL_60HZ_DPI_CONFIG() del componente esp_lcd_jd9365,
+ * que es exactamente 800x1280. */
 #define COCINA_LCD_H_RES            800
 #define COCINA_LCD_V_RES            1280
-#define COCINA_LCD_MIPI_LANES       2
-#define COCINA_LCD_MIPI_MBPS        1500
+#define COCINA_LCD_MIPI_LANES       2      /* device.yaml: panel de 2 lanes */
+#define COCINA_LCD_MIPI_MBPS        1500   /* JD9365_PANEL_BUS_DSI_2CH_CONFIG() */
+#define COCINA_LCD_BPP              16     /* RGB565 */
+#define COCINA_LCD_DSI_BUS_ID       0
 
-/* I2C del tactil: BSP_I2C_SDA / BSP_I2C_SCL (GPIO 7 y 8 en el header del BSP).
- * El bus lo inicializa el BSP (bsp_i2c_init() desde bsp_display_start_*). */
-#define COCINA_I2C_SDA_GPIO         7
-#define COCINA_I2C_SCL_GPIO         8
-#define COCINA_TOUCH_I2C_ADDR       0x5D   /* GT911; el BSP además prueba 0x14 */
-#define COCINA_TOUCH_SWAP_XY        false  /* vertical, como el ejemplo 08_lvgl_demo_v9 */
-#define COCINA_TOUCH_MIRROR_X       false
-#define COCINA_TOUCH_MIRROR_Y       false
+/* PHY MIPI-DSI: LDO interno del P4 (device.yaml: esp_ldo channel 3, 2.5 V).
+ * Sin esto el panel no enciende aunque el resto este bien. */
+#define COCINA_LDO_CHAN            3
+#define COCINA_LDO_MV              2500
 
-/* Retroiluminación y reset del panel (BSP_LCD_BACKLIGHT / BSP_LCD_RST).
- * El PWM de brillo lo gobierna el BSP: bsp_display_brightness_set(%). */
-#define COCINA_LCD_BL_GPIO          26
-#define COCINA_LCD_RST_GPIO         27
-#define COCINA_TOUCH_RST_GPIO       (-1)   /* BSP_LCD_TOUCH_RST = GPIO_NUM_NC */
-#define COCINA_TOUCH_INT_GPIO       (-1)   /* BSP_LCD_TOUCH_INT = GPIO_NUM_NC */
+/* Reset del panel (device.yaml: display reset_pin GPIO27). */
+#define COCINA_LCD_RST_GPIO        27
 
-#define COCINA_BL_DUTY_PCT          100    /* brillo inicial 0-100 */
+/* Retroiluminacion (device.yaml: output ledc pin GPIO23). */
+#define COCINA_LCD_BL_GPIO         23
+#define COCINA_BL_DUTY_PCT         100    /* brillo inicial 0-100 */
+#define COCINA_BL_LEDC_FREQ_HZ     5000
+#define COCINA_BL_LEDC_RES_BITS    10     /* 0..1023 */
+#define COCINA_BL_LEDC_TIMER       1
+#define COCINA_BL_LEDC_CHANNEL     1
+
+/* I2C del tactil (device.yaml: sda GPIO7, scl GPIO8, 400 kHz, sin pullups
+ * internos -> la placa los trae externos). */
+#define COCINA_I2C_PORT            0
+#define COCINA_I2C_SDA_GPIO        7
+#define COCINA_I2C_SCL_GPIO        8
+#define COCINA_I2C_FREQ_HZ         400000
+
+/* Tactil GT911 (device.yaml: reset GPIO22, interrupt GPIO21). */
+#define COCINA_TOUCH_RST_GPIO      22
+#define COCINA_TOUCH_INT_GPIO      21
+#define COCINA_TOUCH_I2C_ADDR      0x5D   /* GT911 con INT a nivel bajo al arrancar */
+#define COCINA_TOUCH_SWAP_XY       false  /* device.yaml: swap_xy false */
+#define COCINA_TOUCH_MIRROR_X      false  /* device.yaml: mirror_x false */
+#define COCINA_TOUCH_MIRROR_Y      true   /* device.yaml: mirror_y true */
+
+/* Buffer de dibujo LVGL: 100 lineas x 2 buffers en PSRAM (800*100*2 B =
+ * 160 KB cada uno). Refresco parcial: la UI son tarjetas pequenas. */
+#define COCINA_LVGL_BUF_LINES      100
 
 /* =====================================================================
  * 2. WiFi 6 / BLE por coprocesador ESP32-C6 (esp_hosted)
  * ---------------------------------------------------------------------
  * El transporte es SDIO y lo configura el componente esp_hosted en su
- * propio Kconfig. En esta placa los pines SDIO del C6 son los del slot 1
- * del ESP32-P4 y vienen fijados por el propio esp_hosted (no hay define
- * de usuario en la app). Si tu revisión de placa los cambia, se ajustan en
+ * propio Kconfig, así que la app no toca esos GPIO. Los pines del enlace
+ * P4 <-> C6 en esta placa (mismos que declara device.yaml en el bloque
+ * `esp32_hosted`) son, solo como referencia/documentación:
+ *
+ *   reset GPIO54 · cmd GPIO19 · clk GPIO18 · d0 GPIO14 · d1 GPIO15
+ *   d2 GPIO16 · d3 GPIO17
+ *
+ * Coinciden con el slot SDIO por defecto del ESP32-P4, por eso no hace
+ * falta reconfigurarlos. Si tu revisión de placa los cambia, se ajustan en
  * menuconfig -> "Component config -> ESP-Hosted".
  * ===================================================================== */
 

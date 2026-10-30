@@ -1,9 +1,8 @@
 # =====================================================================
-# Cocina P4 — defaults de compilacion
-# Base: examples/esp-idf/08_lvgl_demo_v9/sdkconfig.defaults del repo oficial
-#       waveshareteam/ESP32-P4-WIFI6-Touch-LCD-X (ESP-IDF 5.5)
-#       + config/sdkconfig/lcd-10-1.defaults
-#       + config/sdkconfig/rev3_x.defaults
+# Cocina P4 — defaults de compilacion (GUITION JC8012P4A1C)
+# Base: examples/esp-idf/08_lvgl_demo_v9 del repo Waveshare (estructura de
+#       LVGL/PSRAM/MQTT, que es agnostica de placa) pero SIN nada del BSP
+#       Waveshare: aqui el panel JD9365 y el GT911 se montan a mano.
 # =====================================================================
 
 # --- Target / revision de silicio -----------------------------------------
@@ -14,8 +13,10 @@ CONFIG_BOOTLOADER_LOG_LEVEL_ERROR=y
 CONFIG_BOOTLOADER_LOG_LEVEL=1
 
 # --- Flash / particiones --------------------------------------------------
-CONFIG_ESPTOOLPY_FLASHSIZE_32MB=y
-CONFIG_ESPTOOLPY_FLASHSIZE="32MB"
+# device.yaml de la JC8012P4A1 declara flash_size: 16MB. Si tu unidad trae
+# 32 MB, sube esto a 32MB (sobra sitio; la tabla de particiones no cambia).
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+CONFIG_ESPTOOLPY_FLASHSIZE="16MB"
 CONFIG_ESPTOOLPY_FLASHMODE_QIO=y
 CONFIG_ESPTOOLPY_FLASHFREQ_80M=y
 CONFIG_PARTITION_TABLE_CUSTOM=y
@@ -38,16 +39,12 @@ CONFIG_LOG_DEFAULT_LEVEL_INFO=y
 CONFIG_ESP_TASK_WDT_TIMEOUT_S=15
 CONFIG_IDF_EXPERIMENTAL_FEATURES=y
 
-# --- BSP Waveshare (esp32_p4_wifi6_touch_lcd_x v2.x) ----------------------
-CONFIG_BSP_LCD_TYPE_800_1280_10_1_INCH=y
-CONFIG_BSP_LCD_COLOR_FORMAT_RGB565=y
-CONFIG_BSP_LCD_DPI_BUFFER_NUMS=3
-CONFIG_BSP_I2C_NUM=1
-CONFIG_BSP_I2C_FAST_MODE=y
-CONFIG_BSP_DISPLAY_BRIGHTNESS_LEDC_CH=1
-CONFIG_BSP_ERROR_CHECK=y
+# --- Panel / tactil / puente LVGL (sin BSP: componentes sueltos) ---------
+# esp_lcd_touch: 1 punto de contacto (en cocina se toca una tarjeta cada vez)
+CONFIG_ESP_LCD_TOUCH_MAX_POINTS=1
+CONFIG_ESP_LCD_TOUCH_MAX_BUTTONS=0
 
-# --- LVGL 9 (el BSP arranca esp_lv_adapter con esta configuracion) --------
+# --- LVGL 9 (lo arranca main.c con lvgl_port_init) ------------------------
 CONFIG_LV_OS_FREERTOS=y
 CONFIG_LV_USE_CLIB_MALLOC=y
 CONFIG_LV_USE_CLIB_STRING=y

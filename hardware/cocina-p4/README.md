@@ -1,83 +1,134 @@
-# Cocina P4 — pantalla de cocina de Enki (ESP32-P4, 10.1")
+# Cocina P4 — pantalla de cocina de Enki (GUITION JC8012P4A1C, 10.1")
 
 Firmware ESP-IDF para una pantalla de cocina que se registra como dispositivo del
 módulo **cocina** de Enki por MQTT y muestra los pedidos activos en tiempo real.
 
-- **Placa**: Waveshare **ESP32-P4-WIFI6-Touch-LCD-10.1**
-  (familia `ESP32-P4-WIFI6-Touch-LCD-X`: 7", 8" y 10.1").
-- **Pantalla**: 10.1" **800x1280**, 32 MB PSRAM, táctil capacitivo I2C.
+- **Placa**: **GUITION JC8012P4A1C** (a.k.a. `JC8012P4A1`) — etiqueta *SKU 10153001*,
+  "P4-10.1 inch Capacitive touch".
+- **Pantalla**: 10.1" **800x1280**, panel **JD9365** por **MIPI-DSI** (2 lanes).
+- **Táctil**: capacitivo por **I2C** (GT911 en este firmware; ver aviso abajo).
 - **Radio**: WiFi 6 / BLE por coprocesador **ESP32-C6** con `esp_hosted` (SDIO).
-- **Stack**: ESP-IDF **v5.5**, LVGL 9, `esp-mqtt` (TLS), cJSON, BSP oficial de Waveshare.
+- **Flash**: 16 MB (según `device.yaml` de la placa) · **PSRAM** a 200 MHz.
+- **Stack**: ESP-IDF **v5.4–5.5**, LVGL 9, `esp-mqtt` (TLS), cJSON.
+- **Sin BSP**: no existe BSP publicado para esta placa. El panel, el táctil, el
+  brillo y el puente a LVGL se inicializan en `main.c` con componentes oficiales
+  del Component Registry.
 
-## Correcciones respecto al brief original
+## Diferencias con la Waveshare
 
-Tres cosas del encargo inicial no coincidían con el hardware real y se han corregido
-contra las fuentes oficiales (no se ha inventado ningún pin):
+Este firmware nació apuntando a la **Waveshare ESP32-P4-WIFI6-Touch-LCD-10.1** y se
+ha reapuntado a la GUITION. Lo que cambia y lo que no:
 
-| Brief decía | Realidad (verificado) | Qué se hizo |
+| | Waveshare 10.1" | GUITION JC8012P4A1C |
 |---|---|---|
-| Panel **RGB** 800x1280 con pines PCLK/DE/HSYNC/VSYNC/DATA0..15 | El panel de 10" es un **JD9365 por MIPI-DSI** (2 lanes, 1500 Mbps/lane) | Se eliminaron todos los `#define` de pines RGB: no existen. El panel lo inicializa el BSP por DSI. |
-| Init de display/táctil a mano | El repo de Waveshare trae **BSP reutilizable** (`waveshare/esp32_p4_wifi6_touch_lcd_x` v2.0.3, publicado en el Component Registry) | `main/idf_component.yml` depende del BSP; `main.c` usa `bsp_display_start_with_config()`. No se escribe ningún init de panel/táctil a mano. |
-| "No se conocen los GPIO" | Pinout documentado en el header del BSP | `main/config.h` lleva los valores **reales**, citando fichero de origen, y `main.c` los blinda con `_Static_assert` contra el BSP. |
+| Controlador de panel | **JD9365**, MIPI-DSI | **JD9365**, MIPI-DSI (**el mismo**) |
+| Resolución | 800x1280 | 800x1280 (el mismo) |
+| **Pines** | GPIO 7/8 I2C, BL **26**, RST 27, táctil sin RST/INT | GPIO 7/8 I2C, BL **23**, RST 27, táctil RST **22**, INT **21** |
+| Inicialización | BSP `waveshare/esp32_p4_wifi6_touch_lcd_x` v2.0.3 (`bsp_display_start_with_config`) | **init propio**: `esp_lcd_jd9365` + `esp_lcd_touch_gt911` + `esp_lvgl_port` |
+| Puente LVGL | `esp_lv_adapter` del BSP | `esp_lvgl_port` (oficial) |
+| Brillo | `bsp_display_brightness_set()` | LEDC propio en GPIO23 |
+| Flash | 32 MB | 16 MB |
+| Táctil (según la config pública de la placa) | GT911 | **GT911 o GSL3680** según revisión (ver abajo) |
 
-Fuentes usadas:
+O sea: **el panel es el mismo, la placa y los pines no**. Por eso el cambio no es
+"otro driver de panel" sino "quitar el BSP y cablear a mano lo que el BSP hacía".
 
-- Docs: <https://docs.waveshare.com/ESP32-P4-WIFI6-Touch-LCD-X>
-- Guía ESP-IDF: <https://docs.waveshare.com/ESP32-P4-WIFI6-Touch-LCD-X/ESP-IDF>
-- Recursos: <https://docs.waveshare.com/ESP32-P4-WIFI6-Touch-LCD-X/Resources-And-Documents>
-- Ejemplos: <https://github.com/waveshareteam/ESP32-P4-WIFI6-Touch-LCD-X>
-  (`examples/esp-idf/08_lvgl_demo_v9`, `04_wifistation`, `config/display-variants.json`)
-- BSP: <https://components.espressif.com/components/waveshare/esp32_p4_wifi6_touch_lcd_x>
+## Hardware y pinout
 
-## Pinout (real, del BSP v2.0.3)
+**Fuente única** (no se ha inventado ningún pin): la config ESPHome pública de la
+propia placa, `jtenniswood/esphome-lvgl`, carpeta `guition-esp32-p4-jc8012p4a1`,
+fichero `device/device.yaml`:
 
-Fuente: `include/bsp/esp32_p4_wifi6_touch_lcd_x.h` del componente
-`waveshare/esp32_p4_wifi6_touch_lcd_x` v2.0.3. Están replicados en `main/config.h`
-y comprobados en compilación (`_Static_assert` en `main.c`).
+<https://raw.githubusercontent.com/jtenniswood/esphome-lvgl/main/guition-esp32-p4-jc8012p4a1/device/device.yaml>
 
-| Función | GPIO | Macro del BSP | Macro en `config.h` |
+| Función | GPIO | Origen en `device.yaml` | Macro en `config.h` |
 |---|---|---|---|
-| I2C SDA (táctil GT911 + codec) | 7 | `BSP_I2C_SDA` | `COCINA_I2C_SDA_GPIO` |
-| I2C SCL | 8 | `BSP_I2C_SCL` | `COCINA_I2C_SCL_GPIO` |
-| Retroiluminación (PWM LEDC) | 26 | `BSP_LCD_BACKLIGHT` | `COCINA_LCD_BL_GPIO` |
-| Reset del panel | 27 | `BSP_LCD_RST` | `COCINA_LCD_RST_GPIO` |
-| Reset del táctil | NC (-1) | `BSP_LCD_TOUCH_RST` | `COCINA_TOUCH_RST_GPIO` |
-| Interrupción del táctil | NC (-1) | `BSP_LCD_TOUCH_INT` | `COCINA_TOUCH_INT_GPIO` |
-| Datos de vídeo | **no hay** (MIPI-DSI) | — | — |
+| I2C SDA (táctil) | **7** | `i2c: sda: GPIO7` | `COCINA_I2C_SDA_GPIO` |
+| I2C SCL | **8** | `i2c: scl: GPIO8` (sin pullups internos) | `COCINA_I2C_SCL_GPIO` |
+| Frecuencia I2C | 400 kHz | `frequency: 400kHz` | `COCINA_I2C_FREQ_HZ` |
+| Reset del panel | **27** | `display: reset_pin: GPIO27` | `COCINA_LCD_RST_GPIO` |
+| Retroiluminación (LEDC) | **23** | `output: platform: ledc, pin: GPIO23` | `COCINA_LCD_BL_GPIO` |
+| Reset del táctil | **22** | `touchscreen: reset_pin: GPIO22` | `COCINA_TOUCH_RST_GPIO` |
+| Interrupción del táctil | **21** | `touchscreen: interrupt_pin: GPIO21` | `COCINA_TOUCH_INT_GPIO` |
+| Orientación del táctil | — | `transform: swap_xy false, mirror_x false, mirror_y true` | `COCINA_TOUCH_SWAP_XY/MIRROR_*` |
+| LDO del PHY MIPI-DSI | canal 3, 2.5 V | `esp_ldo: channel: 3, voltage: 2.5V` | `COCINA_LDO_CHAN` / `COCINA_LDO_MV` |
+| Datos de vídeo | **no hay** (MIPI-DSI) | `display: model: JC8012P4A1` | — |
+| Enlace P4 ↔ C6 (SDIO) | 54/19/18/14/15/16/17 | bloque `esp32_hosted` | documentado en `config.h`, lo configura `esp_hosted` |
 
-Táctil: **GT911** en I2C (0x5D; el BSP además prueba el alias 0x14). El bus y el
-dispositivo los crea el BSP (`bsp_i2c_init()` dentro de `bsp_display_start_*`).
+Notas:
 
-**No queda ningún pin "AJUSTAR A TU PLACA"**: todo sale del BSP. Si tu revisión de
-placa cambia algo, el `_Static_assert` de `main.c` lo detecta en compilación.
-Los únicos valores ajustables a mano son los flags del táctil
-(`COCINA_TOUCH_SWAP_XY` / `MIRROR_X` / `MIRROR_Y`, por defecto `false` como en el
-ejemplo oficial) por si el panel va montado girado.
+- `device.yaml` trae además un bloque SPI con GPIO 54/19/18/14-17. **No es del
+  panel**: son los pines del bus SDIO que une el P4 con el ESP32-C6. Coinciden con
+  el slot por defecto de `esp_hosted`, por eso la app no los toca y se dejan
+  documentados en `config.h`.
+- El brillo va por **LEDC** (timer 1, canal 1, 5 kHz, 10 bits) sobre GPIO23, igual
+  que en la config de referencia (`output: platform: ledc`).
+
+### Táctil: GT911 o GSL3680 (léelo si el táctil no responde)
+
+La config de referencia monta, sobre ese mismo bus I2C 7/8, el componente externo
+**`gsl3680`** (`github://kvj/esphome@jd9365_gsl3680`), no GT911. Es decir: el
+**pinout está confirmado**, pero el controlador táctil de esa unidad concreta es un
+**GSL3680**. Este firmware usa **GT911**, que es lo que declara la etiqueta del SKU
+10153001 y lo que hay en el Component Registry de Espressif.
+
+Consecuencia práctica: si el táctil no responde, el firmware **no se cae** — la
+pantalla arranca igual y muestra el banner *"Táctil no detectado - revisa
+GT911/GSL3680"*. Para salir de dudas, un scan I2C distingue los dos:
+
+| Controlador | Dirección I2C |
+|---|---|
+| GT911 | `0x5D` (INT bajo al arrancar) o `0x14` (INT alto) |
+| GSL3680 | `0x40` |
+
+Si sale `0x40`, hay que añadir el driver GSL3680 (no existe en el registry de
+Espressif; habría que portar el de la config ESPHome). No se ha inventado: está
+documentado aquí y en el comentario de `config.h`.
 
 ## Estructura
 
 ```
 hardware/cocina-p4/
 ├── CMakeLists.txt          proyecto ESP-IDF
-├── sdkconfig.defaults      PSRAM octal, BSP 10.1", LVGL 9, MQTT+TLS, 32 MB flash
-├── partitions.csv          factory 8M + storage 7M (sin OTA)
+├── sdkconfig.defaults      PSRAM octal, LVGL 9, MQTT+TLS, 16 MB flash (sin nada del BSP)
+├── partitions.csv          factory 8M + storage 7M (sin OTA, cabe en 16 MB)
 └── main/
     ├── CMakeLists.txt
-    ├── idf_component.yml   BSP Waveshare + LVGL 9 + esp_hosted/esp_wifi_remote
+    ├── idf_component.yml   esp_lcd_jd9365 + esp_lcd_touch_gt911 + esp_lvgl_port + LVGL 9 + esp_hosted
     ├── Kconfig.projbuild   menuconfig -> "Cocina P4" (WiFi, broker, topics, identidad)
-    ├── config.h            pines reales + valores por defecto
-    ├── main.c              arranque: NVS, TWDT, BSP display, WiFi, SNTP, MQTT, task UI
+    ├── config.h            pines de la Guition (con fuente) + valores por defecto
+    ├── main.c              arranque: NVS, TWDT, LDO+DSI+JD9365, GT911, LVGL, LEDC, WiFi, SNTP, MQTT, task UI
     ├── ui.c / ui.h         UI LVGL 9 (barra de estado + tarjetas + parpadeo + táctil)
     └── mqtt_enki.c / .h    cliente MQTT: envelope, suscripción, registro, prepare-item
 ```
 
+## Dependencias (verificadas en el Component Registry)
+
+Consultadas en `components.espressif.com` el 2026-10-30; las APIs se han comprobado
+**descargando los componentes y leyendo sus cabeceras reales**, no la documentación.
+
+| Componente | Versión usada | Para qué |
+|---|---|---|
+| `espressif/esp_lcd_jd9365` | `^2.0.2` (última 2.0.2) | panel JD9365 por MIPI-DSI: `esp_lcd_new_panel_jd9365()`, `JD9365_PANEL_BUS_DSI_2CH_CONFIG()`, `JD9365_PANEL_IO_DBI_CONFIG()`, `JD9365_800_1280_PANEL_60HZ_DPI_CONFIG()` |
+| `espressif/esp_lcd_touch` | `^1.2.1` | capa común de táctil (`esp_lcd_touch_config_t`, `esp_lcd_new_panel_io_i2c`) |
+| `espressif/esp_lcd_touch_gt911` | `^1.2.1` | `esp_lcd_touch_new_i2c_gt911()` |
+| `espressif/esp_lvgl_port` | `^2.9.0` | puente LVGL 9 ↔ esp_lcd: `lvgl_port_init()`, `lvgl_port_add_disp_dsi()`, `lvgl_port_add_touch()`, `lvgl_port_lock()` |
+| `lvgl/lvgl` | `^9.2.0` | LVGL 9 (la UI usa API v9) |
+| `espressif/esp_hosted` | `1.4.7` | WiFi 6/BLE del C6 por SDIO |
+| `espressif/esp_wifi_remote` | `0.14.5` | API `esp_wifi` remota sobre esp_hosted |
+
+`idf: ">=5.4,<6.0"`: el driver del JD9365 exige ≥5.4 y su macro de timing solo
+existe por debajo de IDF 6.
+
+**Fuera**: `waveshare/esp32_p4_wifi6_touch_lcd_x` y su `esp_lvgl_adapter` (eran el
+BSP de la otra placa). Ya no se usa ninguna API `bsp_*` ni `ESP_LV_ADAPTER_*`.
+
 ## Requisitos
 
-- **ESP-IDF v5.5.x** (`idf.py`): <https://docs.espressif.com/projects/esp-idf/en/v5.5/>
-- Cable USB-C conectado al puerto **USB** de la placa (el ESP32-P4 se flashea por el
-  periférico USB nativo, suele aparecer como `/dev/ttyACM0`).
-- Red para que el *component manager* descargue el BSP y LVGL la primera vez.
-- **No hace falta** tener a mano el repo de Waveshare: el BSP viene del registry.
+- **ESP-IDF v5.4 o v5.5** (`idf.py`): <https://docs.espressif.com/projects/esp-idf/en/v5.5/>
+- Cable USB-C al puerto **USB** de la placa (el P4 se flashea por su USB nativo,
+  suele aparecer como `/dev/ttyACM0`).
+- Red la primera vez, para que el *component manager* descargue los componentes.
 
 ## Compilar y flashear
 
@@ -95,7 +146,7 @@ idf.py menuconfig
 #   -> "Cocina P4" -> WiFi SSID / password
 #   -> "Cocina P4" -> MQTT broker URI  (wss://enki-ai.online/mqtt  o  mqtt://IP:1883)
 #   -> "Cocina P4" -> device_id (vacío = cocina-p4-<mac>)
-#   -> "Board Support Package(ESP32-P4)" -> LCD type = "Waveshare ESP32-P4-WIFI6-Touch-LCD-10.1"
+#   (ya no hay "Board Support Package" que elegir: no hay BSP)
 
 # 4. Build
 idf.py build
@@ -106,12 +157,16 @@ idf.py -p /dev/ttyACM0 flash monitor
 
 Notas de build:
 
-- `sdkconfig.defaults` ya fija `CONFIG_BSP_LCD_TYPE_800_1280_10_1_INCH=y`,
-  RGB565, 3 framebuffers, 32 MB de flash, PSRAM a 200 MHz y XIP desde PSRAM.
-- Si el panel sale **girado o espejado**, cambia `rotation` en `main.c`
-  (`ESP_LV_ADAPTER_ROTATE_90`) o los flags del táctil en `config.h`.
-- Si el `idf.py build` avisa de símbolos `CONFIG_...` desconocidos, es que tu
-  versión del BSP/LVGL renombró alguna opción: se ignora sin romper el build.
+- `sdkconfig.defaults` fija 16 MB de flash, PSRAM a 200 MHz, XIP desde PSRAM,
+  RGB565, 1 punto de contacto y las fuentes Montserrat que usa la UI.
+- **Colores invertidos o rosa/azul**: cambiar `.swap_bytes` a `true` en
+  `lvgl_port_display_cfg_t` (`main.c`). Es el ajuste típico de RGB565 por DSI.
+- **Imagen espejada o girada**: el panel va en vertical 800x1280 sin rotación; si
+  la unidad sale girada, se toca `.rotation` en `main.c`. La orientación del
+  **táctil** es independiente y va en `config.h` (`COCINA_TOUCH_MIRROR_Y` = `true`,
+  como en `device.yaml`).
+- **Pantalla en negro pero el log avanza**: casi siempre es el LDO del PHY
+  (`COCINA_LDO_CHAN`/`COCINA_LDO_MV`) o el reset del panel (GPIO27).
 
 ## Contrato MQTT
 
@@ -174,6 +229,10 @@ Pantalla vertical 800x1280, fondo oscuro:
 - **Sin pedidos**: la lista muestra "Sin pedidos" y la hora sigue refrescándose.
 - Todo el texto está en español.
 
+La UI es agnóstica de placa: todo lo suyo es LVGL puro, y el lock lo toma de
+`lvgl_port_lock()/unlock()` (`esp_lvgl_port`). Es el único cambio que se hizo en
+`ui.c` al quitar el BSP (3 líneas: include + las dos funciones del lock).
+
 ## Robustez
 
 - **WiFi**: reintento indefinido con backoff exponencial 1→32 s (`esp_timer`, no
@@ -189,48 +248,75 @@ Pantalla vertical 800x1280, fondo oscuro:
 - **Orden de arranque**: primero pantalla y UI, después red. Sin WiFi la pantalla
   sigue viva con un banner ("Sin WiFi - reintentando..." / "Configura WiFi en
   menuconfig > Cocina P4").
+- **El táctil no es bloqueante**: si el GT911 no aparece, se registra el error, la
+  UI arranca igual y el banner lo dice.
 - Si el MQTT no está accesible, la lista conserva los últimos pedidos y el banner
   avisa; no se bloquea nada.
 - Log por `ESP_LOGI`/`ESP_LOGW`/`ESP_LOGE` con tags `cocina-p4`, `cocina-ui`,
   `cocina-mqtt`.
 
+## Blindaje del pinout (los 6 `_Static_assert`)
+
+Antes había 6 `_Static_assert` que comparaban `config.h` con las macros del BSP
+(`BSP_I2C_SDA`, `BSP_LCD_RST`...). **Al quitar el BSP desaparece ese contraste**:
+no hay nada externo contra lo que blindar los pines.
+
+Decisión: se mantienen **6 asserts**, mismo número y mismo propósito, pero ahora
+comprueban la **coherencia entre los defines y lo que exigen los drivers**, que es
+de donde vienen los fallos silenciosos:
+
+1. `COCINA_LCD_MIPI_LANES == 2` — el macro del driver fija 2 lanes.
+2. `COCINA_LCD_BPP == 16` — la UI y el buffer son RGB565.
+3. La dirección del táctil es una de las dos válidas del GT911 (`0x5D`/`0x14`).
+4. `COCINA_I2C_FREQ_HZ` dentro del máximo del GT911 (400 kHz).
+5. Resolución LEDC y duty del brillo coherentes (10 bits, 0-100 %).
+6. Ningún GPIO repetido entre panel, táctil y retroiluminación + buffer LVGL que
+   cabe en la pantalla.
+
+Lo que **no** se puede comprobar en compilación es el timing del panel: los macros
+`JD9365_..._CONFIG()` son inicializadores con llaves y no son inspeccionables desde
+un `_Static_assert`. Por eso hay un **chequeo en runtime** al principio de
+`panel_init()`: si el `h_size`/`v_size`/`num_data_lanes` del driver no coinciden con
+`config.h`, se aborta con `ESP_ERR_INVALID_SIZE` y un log claro, antes de tocar el
+panel.
+
 ## Verificación (leer antes de dar por bueno el firmware)
 
-**NO se ha probado en hardware**: en el entorno donde se escribió este código no hay
-placa, ni ESP-IDF instalado, ni toolchain RISC-V, así que no se ha podido compilar
-con `idf.py` ni flashear. Lo que **sí** se verificó:
+**NO se ha probado en hardware**: en el entorno donde se escribió esto no hay placa,
+ni ESP-IDF instalado, ni toolchain RISC-V. **No se ha podido ejecutar `idf.py build`
+ni flashear.** Lo que **sí** se verificó:
 
-1. **Compilación estática** de `main.c`, `ui.c` y `mqtt_enki.c` con
-   `gcc -fsyntax-only -std=gnu17 -Wall -Wextra` contra cabeceras stub de las APIs
-   de ESP-IDF/LVGL/BSP usadas: 0 errores y 0 warnings.
-2. **Simulación funcional** del módulo MQTT (`mqtt_enki.c` real) en nativo con un
-   cJSON mínimo y stubs de UI/MQTT: 40+ aserciones cubriendo registro, envelope,
-   filtro por `destino`, filtro por `modulo`, contador, `prioridad 2`,
-   `pedido_listo`, snapshot en array, borrado, `limpiar`, payload troceado,
-   `prepare-item`, JSON inválido, evento sin contenido y re-registro al reconectar.
-   Todas en verde.
-3. **Pinout**: valores copiados del BSP oficial v2.0.3 y blindados con
-   `_Static_assert`.
+1. **APIs reales, no de memoria**: se descargaron del Component Registry los `.zip`
+   de `esp_lcd_jd9365` 2.0.2, `esp_lcd_touch` 1.2.1, `esp_lcd_touch_gt911` 1.2.1 y
+   `esp_lvgl_port` 2.9.0, y el código se escribió **contra esas cabeceras**. De ahí
+   salió, por ejemplo, que en 2.0.2 `lane_num` va **dentro de** `mipi_config` y que
+   ya **no** existe `flags.use_mipi_interface` (el README del componente está
+   desactualizado en ese punto).
+2. **Compilación estática** de `main.c`, `ui.c` y `mqtt_enki.c` con
+   `gcc -fsyntax-only -std=gnu17 -Wall -Wextra`: **0 errores, 0 warnings**, usando
+   las cabeceras **reales** de los cuatro componentes + stubs de las cabeceras del
+   core de IDF (i2c_master, ledc, gpio, ldo, mipi_dsi, esp_lcd_*).
+3. **Simulación funcional** del módulo MQTT (`mqtt_enki.c` real) en nativo con un
+   cJSON mínimo y stubs de UI/MQTT (verifícala con `sim/` si la tienes a mano):
+   registro, envelope, filtro por `destino`, filtro por `modulo`, contador,
+   `prioridad 2`, `pedido_listo`, snapshot en array, borrado, `limpiar`, payload
+   troceado, `prepare-item`, JSON inválido y re-registro al reconectar. Todo verde.
 
-Por tanto, lo primero al enchufar la placa es:
+Sin verificar (requiere placa):
+
+- Que el `esp_lcd_jd9365` v2.0.2 inicialice **esta** variante del JD9365 (el driver
+  trae una secuencia de init por defecto; si el panel sale en blanco o con imagen
+  corrupta, el siguiente paso es pasar `init_cmds` propio en `vendor_config`).
+- El `swap_bytes`/orden de color RGB565 por DSI (puede necesitar invertirse).
+- El canal del LDO del PHY (3 a 2.5 V) y el reset en GPIO27.
+- Si el táctil es **GT911** (este firmware) o **GSL3680** (lo que usa la config
+  ESPHome de referencia). Ver la sección del táctil.
+- Los pines SDIO del C6 con la versión de `esp_hosted` fijada.
 
 ```bash
-idf.py build          # aquí saldrán los errores reales si la versión del BSP difiere
+idf.py build          # aquí saldrán los errores reales si algo no casa
 idf.py -p /dev/ttyACM0 flash monitor
 ```
-
-Riesgos conocidos a vigilar en el primer arranque real:
-
-- La API del BSP (`bsp_display_start_with_config`, `ESP_LV_ADAPTER_*`) es la de
-  **v2.x**; con v1.x no compila (por eso el `^2.0.3` está fijado).
-- `esp_hosted` 1.4.x + `esp_wifi_remote` 0.14.x deben casar con el firmware del
-  ESP32-C6 que trae la placa. Si el WiFi no levanta (`ESP_ERR_TIMEOUT` del hosted),
-  es lo primero a revisar (versiones en `main/idf_component.yml`, alineadas con
-  `examples/esp-idf/04_wifistation` del repo Waveshare).
-- Los timings del panel y la secuencia de init del JD9365 son los del BSP; no se
-  han tocado. Si la imagen sale con tearing, subir
-  `CONFIG_BSP_LCD_DPI_BUFFER_NUMS` (ya está en 3) o ajustar `tear_avoid_mode`.
-- El brillo inicial es 100 % (`COCINA_BL_DUTY_PCT`).
 
 ## Prueba rápida del contrato (sin la placa)
 

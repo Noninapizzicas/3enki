@@ -5,7 +5,7 @@
  * Modelo: la UI es la dueña de la lista de tarjetas. El modulo MQTT solo
  * traduce eventos a llamadas ui_upsert_item()/ui_remove_item()/
  * ui_replace_items(). Todas las funciones publicas son thread-safe: toman
- * el lock de LVGL del BSP (bsp_display_lock) internamente,
+ * el lock de LVGL de esp_lvgl_port (lvgl_port_lock) internamente,
  * asi que NO hay que llamarlas ya con el lock tomado.
  */
 

@@ -147,6 +147,7 @@
       "recetas",
       "redactor",
       "reloj",
+      "reporte-cierre",
       "rpc-index",
       "scheduler",
       "scope-provider",
@@ -324,6 +325,12 @@
     "portal": {
       "scope": "system",
       "mode": "write"
+    },
+    "reporte-cierre": {
+      "bot_name": "Pro_nonina_bot",
+      "chat_id": 1934798567,
+      "telegram_activo": true,
+      "email_destino": ""
     }
   }
 }

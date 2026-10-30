@@ -1410,37 +1410,37 @@ class PedidosModule extends BaseModule {
       const cuenta_id = cuentaRes.data.id;
       pedido.cuenta_id = cuenta_id;
 
-      // 2) Cargar items en el buffer del comandero (precio por unidad del pedido).
-      //    Si algún item no trae precio, una línea agregada con el total → el cobro
-      //    nunca queda en 0. precio_canal_resuelto:true → comandero confía el precio.
+      // 2) Cargar items en el buffer del comandero: UNA línea por item del pedido.
+      //    El precio por unidad viaja cuando el emisor lo manda (PWA web, parser WhatsApp);
+      //    si no, se omite y el comandero re-tasa por producto_id contra la carta del canal.
+      //    NUNCA se colapsa el pedido en una sola línea "Pedido tienda · Nombre" con el total:
+      //    la cocina necesita los platos, no la suma (bug 30-oct-2026: pedido web de 34 EUR
+      //    llegó a cocina como una única línea sin categoría → "sin items de tu estación").
       const conPrecio = pedido.items.length > 0 &&
         pedido.items.every(it => Number.isInteger(it.precio_unitario_centimos));
-      if (conPrecio) {
-        for (const it of pedido.items) {
-          await comandero.handleAddItem({
-            cuenta_id, project_id,
-            producto_id: it.producto_id || `tienda:${this._slugItem(it.descripcion)}`,
-            nombre: it.descripcion,
-            precio: it.precio_unitario_centimos / 100,
-            cantidad: it.cantidad,
-            precio_canal_resuelto: true,
-            // Estructura → el comandero la guarda y la reenvía en enviar_cocina → cocina la pinta.
-            // `tipo` solo mitad/al_gusto (enum del comandero); normal va solo con `variaciones`.
-            ...((it.tipo === 'mitad_mitad' || it.tipo === 'al_gusto') ? { tipo: it.tipo } : {}),
-            ...(it.variaciones ? { variaciones: it.variaciones } : {}),
-            ...(Array.isArray(it.ingredientes_base) ? { ingredientes_base: it.ingredientes_base } : {}),
-            ...(it.pizza_izquierda ? { pizza_izquierda: it.pizza_izquierda } : {}),
-            ...(it.pizza_derecha ? { pizza_derecha: it.pizza_derecha } : {})
-          });
-        }
-      } else {
+      if (!conPrecio) {
+        // Sin precio por línea el cobro depende del tasador: se AVISA (no silencio) y el
+        // importe se comprueba en la cuenta. El total del pedido no se pierde: sigue en pedido.total.
+        this.logger.warn('pedidos.tienda.items_sin_precio', {
+          pedido_id: pedido.id, items: pedido.items.length, total: pedido.total
+        });
+      }
+      for (const it of pedido.items) {
+        const tienePrecio = Number.isInteger(it.precio_unitario_centimos);
         await comandero.handleAddItem({
           cuenta_id, project_id,
-          producto_id: 'tienda:pedido',
-          nombre: `Pedido tienda${pedido.cliente_nombre ? ' · ' + pedido.cliente_nombre : ''}`,
-          precio: pedido.total,
-          cantidad: 1,
-          precio_canal_resuelto: true
+          producto_id: it.producto_id || `tienda:${this._slugItem(it.descripcion)}`,
+          nombre: it.descripcion,
+          ...(tienePrecio ? { precio: it.precio_unitario_centimos / 100 } : {}),
+          cantidad: it.cantidad,
+          precio_canal_resuelto: true,
+          // Estructura → el comandero la guarda y la reenvía en enviar_cocina → cocina la pinta.
+          // `tipo` solo mitad/al_gusto (enum del comandero); normal va solo con `variaciones`.
+          ...((it.tipo === 'mitad_mitad' || it.tipo === 'al_gusto') ? { tipo: it.tipo } : {}),
+          ...(it.variaciones ? { variaciones: it.variaciones } : {}),
+          ...(Array.isArray(it.ingredientes_base) ? { ingredientes_base: it.ingredientes_base } : {}),
+          ...(it.pizza_izquierda ? { pizza_izquierda: it.pizza_izquierda } : {}),
+          ...(it.pizza_derecha ? { pizza_derecha: it.pizza_derecha } : {})
         });
       }
 

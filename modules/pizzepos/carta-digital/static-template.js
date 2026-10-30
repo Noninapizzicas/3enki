@@ -1908,6 +1908,35 @@ function sendWhatsApp() {
   _cerrarPedido(nombre);    // el pedido ya salió hacia WhatsApp: el carrito se vacía
 }
 
+// Items del pedido ONLINE (tienda-api → pedido.crear-tienda). Además del texto que lee el
+// cliente, cada línea dice QUE es (producto_id + estructura) y CUANTO cuesta. Sin eso el POS
+// no puede construir las líneas: pedidos colapsa el pedido en una sola "Pedido tienda · Nombre"
+// con el total y la cocina recibe un fantasma sin platos (bug 30-oct-2026: pedido web de 34 EUR
+// con una única línea genérica). Con producto_id + precio, el comandero re-tasa contra la carta
+// del canal y cocina recibe cada plato con su categoría/estación.
+function pedidoItemsTienda() {
+  return cart.map(function (i) {
+    var it = {
+      cantidad: i.qty,
+      descripcion: i.nombre + (i.detalle ? ' [' + i.detalle + ']' : ''),
+      precio_unitario_centimos: Math.round(Number(i.precio) * 100),
+      precio_total_centimos: Math.round(Number(i.precio) * Number(i.qty) * 100)
+    };
+    if (i.estructura) {
+      for (var k in i.estructura) {
+        if (Object.prototype.hasOwnProperty.call(i.estructura, k)) it[k] = i.estructura[k];
+      }
+      // Extras del "al gusto": viajan como variaciones (es lo que el comandero re-tasa).
+      if (Array.isArray(i.estructura.anadir) && !it.variaciones) {
+        it.variaciones = { ingredientes_anadir: i.estructura.anadir, ingredientes_quitar: [] };
+      }
+    } else {
+      it.producto_id = i.id;
+    }
+    return it;
+  });
+}
+
 // Pagar AHORA (pasarela): POST con pago_online → tienda-api crea el pedido + inicia el pago
 // → checkout_url; la PWA redirige a la pasarela. Si no hay pasarela, el pedido ya quedó (recogida).
 async function pagarAhora() {
@@ -1922,7 +1951,7 @@ async function pagarAhora() {
   }
   var total = cart.reduce(function(s, i){ return s + i.precio * i.qty; }, 0);
   var body = {
-    items: cart.map(function(i){ return { cantidad: i.qty, descripcion: i.nombre + (i.detalle ? ' [' + i.detalle + ']' : '') }; }),
+    items: pedidoItemsTienda(),
     total_centimos: Math.round(total * 100),
     nombre_cliente: nombre,
     modo_consumo: _pedModo(),
@@ -1969,7 +1998,7 @@ async function pedirOnline() {
   }
   var total = cart.reduce(function(s, i){ return s + i.precio * i.qty; }, 0);
   var body = {
-    items: cart.map(function(i){ return { cantidad: i.qty, descripcion: i.nombre + (i.detalle ? ' [' + i.detalle + ']' : '') }; }),
+    items: pedidoItemsTienda(),
     total_centimos: Math.round(total * 100),
     nombre_cliente: nombre,
     modo_consumo: _pedModo(),

@@ -205,16 +205,73 @@ class ReporteCierreModule extends BaseModule {
     return resultado;
   }
 
+  // RPC minimo (BaseModule no lo trae): publica y espera la response correlada por request_id.
+  _rpc(evento, payload = {}, { timeout_ms = 5000 } = {}) {
+    if (!this.eventBus || !this.eventBus.subscribe || !this.eventBus.publish) return Promise.resolve(null);
+    const request_id = crypto.randomUUID();
+    const responseEvent = evento.endsWith('.request')
+      ? evento.slice(0, -'.request'.length) + '.response'
+      : evento + '.response';
+    return new Promise((resolve) => {
+      let unsub = null;
+      let cerrado = false;
+      const timeout = setTimeout(() => {
+        cerrado = true;
+        if (unsub) unsub();
+        resolve(null);
+      }, timeout_ms);
+      try {
+        unsub = this.eventBus.subscribe(responseEvent, (event) => {
+          const d = (event && event.data) || event;
+          if (cerrado || !d || d.request_id !== request_id) return;
+          clearTimeout(timeout);
+          cerrado = true;
+          if (unsub) unsub();
+          resolve(d);
+        });
+        this.eventBus.publish(evento, { request_id, ...payload });
+      } catch (_) {
+        clearTimeout(timeout);
+        cerrado = true;
+        if (unsub) unsub();
+        resolve(null);
+      }
+    });
+  }
+
+  // Bot del proyecto duenno del cierre (telegram-bridge: un bot por proyecto). Cacheado.
+  async _botDelProyecto(project_id) {
+    const deConfig = this.config.bot_name || 'Pro_nonina_bot';
+    if (!project_id || this.config.bot_por_proyecto === false) return deConfig;
+    if (this._botsPorProyecto && this._botsPorProyecto.has(project_id)) return this._botsPorProyecto.get(project_id);
+    try {
+      const lista = await this._rpc('telegram.bridge.listar.request', {}, {
+        timeout_ms: this.config.timeout_bridge_ms || 5000
+      });
+      const vinculos = (lista && ((lista.data && lista.data.vinculos) || lista.vinculos)) || [];
+      const v = vinculos.find((x) => x && x.project_id === project_id && x.botName);
+      if (v) {
+        this._botsPorProyecto = this._botsPorProyecto || new Map();
+        this._botsPorProyecto.set(project_id, v.botName);
+        return v.botName;
+      }
+    } catch (_) { /* sin bridge: se usa el bot de config */ }
+    return deConfig;
+  }
+
   // ==========================================
   // Canales
   // ==========================================
 
   async _enviarTelegram(modelo, sourceData) {
     const texto = this._recortar(this._componerTexto(modelo), MAX_LARGO_TELEGRAM);
+    // El bot se resuelve POR PROYECTO: la app es una sola y el cierre de The Pirate no debe
+    // salir por el bot de Nonina. Si no hay vinculo, se cae al bot de config.
+    const botName = await this._botDelProyecto(sourceData && sourceData.project_id);
     try {
       await this.eventBus.publish('telegram.send_message.request', {
         request_id: crypto.randomUUID(),
-        botName: this.config.bot_name || 'Pro_nonina_bot',
+        botName,
         chatId: this._chatId(),
         text: texto,
         parseMode: 'HTML',

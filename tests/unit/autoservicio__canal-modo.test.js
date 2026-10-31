@@ -3,8 +3,10 @@
  * pactada viajan PWA → #P1 → parser → pedido.crear-tienda → cuenta (tipo + metadata).
  *
  * Fija el hilo abierto en esta pasada: el dato NO existía (canal:null, tipo hardcodeado
- * 'llevar'); ahora el modo elegido por el cliente fija el tipo de la cuenta y la hora
- * viaja en metadata (la agenda futura la leerá; hoy solo se muestra).
+ * 'llevar'); ahora el modo elegido por el cliente viaja hasta la cuenta y la hora
+ * viaja en metadata (la agenda futura la leerá; hoy solo se muestra). OJO: pedidos pasa
+ * el MODO tal cual; quien lo traduce a CANAL (recoger → llevar) es cuentas.handleCreateCuenta
+ * — ver tests/unit/pizzepos__cuentas.test.js (grupo 2b).
  */
 'use strict';
 
@@ -88,7 +90,7 @@ test('pedidos — modo_consumo recoger fija tipo de cuenta y guarda hora en meta
   assert.equal(res.data.modo_consumo, 'recoger');
   assert.equal(res.data.hora_recogida, '20:30');
   assert.equal(cuentaArgs.length, 1);
-  assert.equal(cuentaArgs[0].tipo, 'recoger', 'la cuenta nace con el modo como tipo');
+  assert.equal(cuentaArgs[0].tipo, 'recoger', 'pedidos pasa el MODO tal cual; cuentas lo normaliza a canal (ver pizzepos__cuentas)');
   assert.equal(cuentaArgs[0].metadata.hora_recogida, '20:30');
   assert.equal(cuentaArgs[0].metadata.modo_consumo, 'recoger');
 });

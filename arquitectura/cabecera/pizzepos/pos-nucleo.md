@@ -15,7 +15,7 @@ fuentes:
   - modules/pizzepos/tarifas/**
   - modules/pizzepos/persistencia-comandero/**
   - modules/pizzepos/impresion/**
-verificado: 2026-10-27
+verificado: 2026-10-31
 ---
 
 # PizzePOS Módulos — Subsistema de Punto de Venta (v3.2.0)
@@ -210,9 +210,16 @@ CLASE CuentasModule HEREDA BaseModule {
 
     async handleCreateCuenta(data: {project_id, tipo?, nombre?, metadata?, pedido_inicial?}): Promise<Response>
       VALIDA project_id obligatorio
-      OBTIENE o genera cuenta_id
+      // EL TIPO ES EL CANAL, NO EL MODO. El cliente elige modo (mesa|recoger|llevar);
+      // el canal lo fijan las strategies de cuentas-canales (mesa|telefono|llevar|glovo|
+      // whatsapp|llevadoo) y es lo que da prefijo al cuenta_id y quien cierra. Mapa
+      // CANAL_POR_MODO: recoger → llevar (mismo canal operativo; el frontend ya lo hace
+      // en TIPO_MAP). El modo se conserva en metadata.modo_consumo.
+      tipoCanal = CANAL_POR_MODO[tipo] || tipo || 'local'
+      SI tipoCanal ≠ tipo: metadata.modo_consumo = metadata.modo_consumo ?? tipo
+      OBTIENE o genera cuenta_id (prefijo del tipoCanal)
       GENERA turno via _getNextTurno()
-      GENERA ref_display via _generateRefDisplay(tipo, nombre)
+      GENERA ref_display via _generateRefDisplay(tipoCanal, nombre)
       CREA Cuenta object
       cuentas.set(cuenta_id, cuenta)
       _gestionarAlerta(cuenta_id, 'pendiente')

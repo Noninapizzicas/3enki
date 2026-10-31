@@ -34,6 +34,17 @@ const POST_COBRADO_MS     = 5 * 60 * 1000;
 const TURNO_DEBOUNCE_MS   = 1000;
 const METRICS_INTERVAL_MS = 10000;
 
+// El CANAL de una cuenta es a quien alguna strategy de cuentas-canales sabe atender
+// (mesa | telefono | llevar | glovo | whatsapp | llevadoo): fija el prefijo del cuenta_id
+// y, con el, QUIEN la cierra. El MODO DE CONSUMO que elige el cliente (mesa | recoger |
+// llevar) es otro eje: 'recoger' y 'llevar' son el mismo canal operativo (se paga y se
+// recoge en mostrador), igual que ya resuelve el frontend (stores/cuentas.ts TIPO_MAP).
+// Sin este mapa, una cuenta nace con un tipo que no tiene canal duenno: al cobrar nadie
+// emite cuenta.cerrada y la venta no llega al libro de caja.
+const CANAL_POR_MODO = {
+  recoger: 'llevar'
+};
+
 // Re-entradas legitimas: con_pedido → con_pedido (mas items),
 // con_pedido → pendiente (items=0), en_preparacion → en_preparacion (mas pedidos),
 // listo → en_preparacion (cliente pide mas).
@@ -429,7 +440,14 @@ class CuentasModule extends BaseModule {
         return this._errorResponse(400, 'INVALID_INPUT', 'project_id es requerido', { field: 'project_id' });
       }
 
-      const tipoFinal = tipo || 'local';
+      const tipoRecibido = tipo || 'local';
+      // El tipo de la cuenta es su CANAL, no el modo de consumo del cliente.
+      // 'recoger' (default de la carta web) nace 'llevar' para que la strategy llevar
+      // la reconozca; el modo elegido se conserva en metadata.modo_consumo.
+      const tipoFinal    = CANAL_POR_MODO[tipoRecibido] || tipoRecibido;
+      const metadataFinal = (tipoFinal === tipoRecibido)
+        ? (metadata || {})
+        : { ...(metadata || {}), modo_consumo: metadata?.modo_consumo ?? tipoRecibido };
       // Una sola llave por proyecto: la cuenta NACE con slug (la carpeta fisica),
       // venga el project_id como uuid o como slug. Persistencia y consultas leen igual.
       const projectIdFinal = await this._slugProyecto(project_id);
@@ -452,7 +470,7 @@ class CuentasModule extends BaseModule {
         items: 0,
         total: Number.isFinite(totalInicial) ? totalInicial : 0,
         alerta: false,
-        metadata: metadata || {},
+        metadata: metadataFinal,
         created_at: now.toISOString(),
         updated_at: now.toISOString()
       };

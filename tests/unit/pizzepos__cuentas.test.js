@@ -180,6 +180,54 @@ function publishedOf(mocks, name) {
   });
 
   // ==========================================
+  // Group 2b: CANAL de la cuenta ≠ MODO de consumo del cliente
+  // ==========================================
+
+  await testAsync("handleCreateCuenta tipo 'recoger' nace con canal 'llevar' y conserva el modo", async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    const c = await m.handleCreateCuenta({
+      project_id: 'p1', tipo: 'recoger', nombre: 'Juan',
+      metadata: { origen: 'tienda', hora_recogida: '20:30' }
+    });
+    // El tipo es el CANAL: 'recoger' es el modo del cliente, el canal es 'llevar'.
+    assert.strictEqual(c.data.tipo, 'llevar');
+    assert.ok(c.data.id.startsWith('llevar_'), `el id debe llevar el prefijo del canal, vino ${c.data.id}`);
+    // El dato del cliente no se pierde: sigue en metadata, y lo demás se respeta.
+    assert.strictEqual(c.data.metadata.modo_consumo, 'recoger');
+    assert.strictEqual(c.data.metadata.hora_recogida, '20:30');
+    assert.strictEqual(c.data.metadata.origen, 'tienda');
+    // Lo que viaja al bus (y lee persistencia) tambien es el canal.
+    const creada = publishedOf(mocks, 'cuenta.creada');
+    assert.strictEqual(creada.length, 1);
+    assert.strictEqual(creada[0].tipo, 'llevar');
+    assert.strictEqual(creada[0].metadata.modo_consumo, 'recoger');
+    await m.onUnload();
+  });
+
+  await testAsync("handleCreateCuenta 'recoger' respeta el modo_consumo que ya venia en metadata", async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    const c = await m.handleCreateCuenta({
+      project_id: 'p1', tipo: 'recoger', metadata: { modo_consumo: 'llevar' }
+    });
+    assert.strictEqual(c.data.tipo, 'llevar');
+    assert.strictEqual(c.data.metadata.modo_consumo, 'llevar', 'no se pisa el modo del emisor');
+    await m.onUnload();
+  });
+
+  await testAsync('los canales con strategy no se tocan (mesa / llevar / telefono / glovo)', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    for (const tipo of ['mesa', 'llevar', 'telefono', 'glovo', 'whatsapp', 'llevadoo']) {
+      const c = await m.handleCreateCuenta({ project_id: 'p1', tipo });
+      assert.strictEqual(c.data.tipo, tipo, `${tipo} debe conservar su canal`);
+      assert.strictEqual(c.data.metadata.modo_consumo, undefined, `${tipo} no inventa modo`);
+    }
+    await m.onUnload();
+  });
+
+  // ==========================================
   // Group 3: State machine — transiciones
   // ==========================================
 

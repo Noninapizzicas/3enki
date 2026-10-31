@@ -12,7 +12,7 @@ fuentes:
   - modules/_shared/error-fertil.js
   - modules/cosecha/cantera/enki/leer-web/**
   - modules/cosecha/cantera/enki/precio-ingredientes-web/**
-verificado: 2026-07-27
+verificado: 2026-10-31
 ---
 
 # HERRAMIENTAS EXTERNAS — Crawl4RS sobre obscura (el órgano web, nativo) · Python en Docker (Headroom · el contenedor universal)

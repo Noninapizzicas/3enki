@@ -1389,7 +1389,8 @@ class PedidosModule extends BaseModule {
       // 1) Cuenta operativa SIN pedido_inicial (ese atajo salta el buffer del comandero).
       const cuentaRes = await cuentas.handleCreateCuenta({
         project_id,
-        tipo: pedido.modo_consumo || 'llevar',     // CANAL: mesa | recoger | llevar (lo eligió el cliente)
+        tipo: pedido.modo_consumo || 'llevar',     // MODO del cliente: mesa | recoger | llevar.
+                                                  // cuentas lo canoniza a CANAL (recoger→llevar).
         nombre: pedido.cliente_nombre || null,
         metadata: {
           origen: 'tienda',
@@ -1398,7 +1399,11 @@ class PedidosModule extends BaseModule {
           hora_recogida: pedido.hora_recogida || null,
           cliente_nombre: pedido.cliente_nombre || null,
           cliente_telefono: pedido.cliente_telefono || null,
-          pedido_tienda_id: pedido.id
+          pedido_tienda_id: pedido.id,
+          // Un pedido de tienda no tiene mesa ni ticket: nadie del canal lo va a
+          // cerrar, así que el cierre es del COBRO (y con él, la venta al libro).
+          // Las cuentas de mesa las cierra su canal; las de recogida en barra, no.
+          cerrar_al_cobrar: (pedido.modo_consumo || 'llevar') !== 'mesa'
         },
         correlation_id
       });

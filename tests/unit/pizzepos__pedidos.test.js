@@ -492,6 +492,39 @@ function publishedOf(mocks, name) {
     await m.onUnload();
   });
 
+  await testAsync('tienda · sin precio por item NO colapsa el pedido en una linea unica', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    const added = [];
+    const cuentas = { handleCreateCuenta: async () => ({ status: 201, data: { id: 'mesa_test1', ref_display: 'Test M 1' } }) };
+    const comandero = {
+      handleAddItem: async (d) => { added.push(d); return { status: 201, data: { item: { precio: d.precio ?? 0, cantidad: d.cantidad } } }; },
+      handleEnviarCocina: async () => ({ status: 200, data: {} })
+    };
+    m.moduleRegistry = { get: (n) => (n === 'cuentas' ? { instance: cuentas } : n === 'comandero' ? { instance: comandero } : null) };
+    const r = await m.handleCreatePedidoTienda(validInputTienda({
+      items: [
+        { cantidad: 1, descripcion: 'Anne Bonny' },
+        { cantidad: 2, descripcion: 'Bachata' }
+      ],
+      total_centimos: 3400
+    }));
+    assert.strictEqual(r.status, 201);
+    // Una linea por item (nunca la linea unica "Pedido tienda · Nombre" con el total).
+    assert.strictEqual(added.length, 2, 'una linea por item');
+    assert.strictEqual(added[0].nombre, 'Anne Bonny');
+    assert.strictEqual(added[1].nombre, 'Bachata');
+    assert.strictEqual(added[1].cantidad, 2);
+    assert.ok(!added.some((d) => d.producto_id === 'tienda:pedido'), 'no debe existir la linea colapsada');
+    // El importe NO se pierde: el total del pedido se reparte entre las lineas y cuadra al céntimo.
+    const suma = added.reduce((s, d) => s + Math.round(d.precio * 100) * d.cantidad, 0);
+    assert.strictEqual(suma, 3400, 'las lineas suman el total que vio el cliente');
+    assert.ok(added.every((d) => d.precio > 0), 'ninguna linea se queda a 0');
+    // El descuadre no se calla: queda el aviso para revisar el importe en la cuenta.
+    assert.ok(mocks.logs.some(([lvl, ev]) => lvl === 'warn' && ev === 'pedidos.tienda.items_sin_precio'));
+    await m.onUnload();
+  });
+
   await testAsync('tienda · sin items devuelve 400 INVALID_INPUT', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);

@@ -319,6 +319,15 @@ async function main() {
       }
     }
 
+    // La puerta de contraseña (deployment/puerta.sh) vive en un snippet aparte
+    // para sobrevivir a este render. El Caddyfile lleva `import /etc/caddy/puerta.caddy`,
+    // así que el fichero TIENE que existir o Caddy no arranca: se crea vacío.
+    const snippetPuerta = '/etc/caddy/puerta.caddy';
+    if (!fs.existsSync(snippetPuerta)) {
+      fs.writeFileSync(snippetPuerta, '# sin puerta: lo escribe deployment/puerta.sh\n');
+      log('puerta.caddy creado vacío (aún sin contraseña)');
+    }
+
     caddyCambio = escribirSiDifiere(M.caddy.destino, caddyRendered, 'Caddyfile');
   }
 

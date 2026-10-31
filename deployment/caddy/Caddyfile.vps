@@ -16,6 +16,11 @@
 #   - enki-frontend.service corriendo en localhost:3001 (node frontend/build/index.js)
 
 pizzepos.es {
+	# Puerta de contraseña. El snippet lo escribe deployment/puerta.sh y NO lo
+	# pisa el deploy (se reescribe este fichero, no el snippet). Sin contraseña
+	# puesta, el snippet existe vacío y el import no hace nada.
+	import /etc/caddy/puerta.caddy
+
 	# API REST → event-core HTTP gateway
 	handle /modules/* {
 		reverse_proxy localhost:3000

@@ -690,17 +690,20 @@ fi
 log "Instalando Event Core en ${INSTALL_DIR}..."
 mkdir -p "${INSTALL_DIR}"
 
-# Los excludes NO son cosmética: sin 'storage' y 'package-lock.json' el --delete se
-# los come (medido 2026-10-16: se llevó por delante storage/esquemas/…). Sin
-# 'frontend/build', un build que falle deja el frontend sin nada que servir; con él,
-# se queda el anterior y el VPS sigue en pie. Mismo juego que deploy.sh.
+# Los excludes NO son cosmética, y cada uno tiene su forma:
+#  · storage va como PROTECCIÓN (P) y no como exclude: se COPIA lo que el repo trae
+#    (storage/pizzepos/cartas/… son semillas versionadas) y NO se BORRA lo que nació en
+#    la máquina (storage/esquemas/… se genera al vuelo; el --delete se lo comió el
+#    2026-10-16). Con --exclude, una instalación NUEVA se quedaría sin semillas.
+#  · sin 'frontend/build', un build que falle deja la web en cero; con él se queda el
+#    anterior y el VPS sigue en pie. Mismo juego que deploy.sh.
 rsync -a --delete \
     --exclude='node_modules' \
     --exclude='.git' \
     --exclude='deployment' \
     --exclude='data' \
     --exclude='public' \
-    --exclude='storage' \
+    --filter='P storage/***' \
     --exclude='package-lock.json' \
     --exclude='.hermes' \
     --exclude='.work*' \

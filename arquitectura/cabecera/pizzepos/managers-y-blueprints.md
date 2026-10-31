@@ -6,7 +6,7 @@ fuentes:
   - modules/pizzepos/**
   - modules/pago-gateway/**
   - blueprints/**
-verificado: 2026-10-28 (pago-gateway v3.1.0: Stripe con paridad — libro, idempotencia, webhook-puntero y conciliación; los métodos los manda el panel de Stripe, payment_method_types ya no se envía)
+verificado: 2026-10-31 (cuentas: el tipo es CANAL — recoger nace llevar via CANAL_POR_MODO, el modo se guarda en metadata.modo_consumo; pago-gateway v3.1.0 Stripe con paridad)
 ---
 
 # Módulos Pizzepos y Blueprints
@@ -127,6 +127,13 @@ INTERFAZ CuentasContract {
 }
 
 CLASE CuentasManager IMPLEMENTA CuentasContract {
+  // CANAL ≠ MODO DE CONSUMO. El `tipo` de una cuenta es su CANAL (mesa|telefono|llevar|
+  // glovo|whatsapp|llevadoo): da prefijo al cuenta_id y decide qué strategy de
+  // cuentas-canales la atiende y la cierra. El MODO que elige el cliente
+  // (mesa|recoger|llevar) NO es canal: `cuentas.handleCreateCuenta` lo traduce con
+  // CANAL_POR_MODO (recoger → llevar, igual que el TIPO_MAP del frontend) y guarda el
+  // modo en metadata.modo_consumo. Una cuenta con tipo inventado nace sin dueño: al
+  // cobrar nadie emite cuenta.cerrada y la venta no llega al libro de caja.
   ATRIBUTOS {
     coreId: String
     eventBus: EventBus

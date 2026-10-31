@@ -210,6 +210,11 @@ CLASE CuentasModule HEREDA BaseModule {
 
     async handleCreateCuenta(data: {project_id, tipo?, nombre?, metadata?, pedido_inicial?}): Promise<Response>
       VALIDA project_id obligatorio
+      CANONIZA el tipo a CANAL con dueño: ALIAS_CANAL = { recoger: 'llevar' }
+        // El MODO del cliente no es el CANAL: 'recoger' es un pedido para llevar.
+        // Un tipo sin strategy (prefijo sin dueño) nace HUÉRFANO — ni mesa ni ticket,
+        // nadie lo cierra, y su venta no llega al libro. El modo se queda en
+        // metadata.modo_consumo (es lo que pinta el comandero). Única puerta: aquí.
       OBTIENE o genera cuenta_id
       GENERA turno via _getNextTurno()
       GENERA ref_display via _generateRefDisplay(tipo, nombre)
@@ -246,11 +251,17 @@ CLASE CuentasModule HEREDA BaseModule {
       SI ya pagado (idempotencia): RETORNA
       cuenta.pagado = true
       SI _cerrarAlCobrar(cuenta): await _cerrarCuentaCobrada(cuenta_id)
+        // _cerrarCuentaCobrada: SI metadata.cerrar_al_cobrar == true (los pedidos de tienda,
+        // que no tienen mesa ni ticket) PUBLICA cuenta.cerrada → persistencia-comandero apunta
+        // LA venta. Sin ese evento la cuenta se cerraba, el cobro quedaba en el registro y el
+        // libro no veía el dinero (caja 92,50 vs cajón 95,50 en the-pirate 2026-10-30).
+        // Las de mesa y las de llevar del comandero las cierra su canal, que ya lo publica.
 
     EVENTOS_PUBLISHES {
       'cuenta.creada': {project_id, cuenta_id, turno, tipo, nombre, ref_display, total, estado}
       'cuenta.actualizada': {project_id, cuenta_id, cambios}
       'cuenta.estado_cambiado': {project_id, cuenta_id, estado_anterior, estado_nuevo}
+      'cuenta.cerrada': {project_id, cuenta_id, tipo, total, metadata}   // solo si cerrar_al_cobrar
       'cuenta.eliminada': {project_id, cuenta_id, tipo, motivo}
     }
 

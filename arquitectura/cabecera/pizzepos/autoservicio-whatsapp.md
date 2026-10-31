@@ -85,6 +85,11 @@ REGLA  metodo_pago viaja en el #P1 (autoritativo, no en el texto editable), igua
        consumidor decide ('efectivo', el comportamiento previo). Valores: 'efectivo' | 'tarjeta'.
        El bus NO valida parámetros (auto-wire: saca request_id y pasa el resto tal cual), así que
        el campo fluye hasta pedidos sin tocar contrato.
+REGLA  modo_consumo es el MODO DEL CLIENTE, no el CANAL de la cuenta. 'recoger' (el default de la
+       carta) nace como canal 'llevar' en cuentas.handleCreateCuenta: un tipo sin strategy no
+       tiene dueño y nadie lo cierra nunca (ni mesa ni ticket → la venta no llega al libro de
+       ventas). El modo original se conserva en metadata.modo_consumo y es lo que pinta el
+       comandero. Un pedido de tienda se cierra AL COBRAR (metadata.cerrar_al_cobrar:true).
 ```
 
 ## El tasador — re-tasado server-side (función PURA, seguridad)

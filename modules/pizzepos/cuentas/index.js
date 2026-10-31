@@ -839,6 +839,7 @@ class CuentasModule extends BaseModule {
     const tipo       = cuenta.tipo;
     const timeout    = setTimeout(() => {
       this._pendingTimeouts.delete(cuenta_id);
+      if (!this.cuentas.has(cuenta_id)) return;   // ya la retiró su `cuenta.cerrada`
       this.cuentas.delete(cuenta_id);
       this._publishCuentaEliminada(project_id, cuenta_id, tipo, 'cobro_completado');
     }, POST_COBRADO_MS);

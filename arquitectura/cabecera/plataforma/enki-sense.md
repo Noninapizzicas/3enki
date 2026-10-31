@@ -13,7 +13,7 @@ fuentes:
   - enki-sense/**
   - deployment/vps-setup.sh
   - arquitectura/decisiones/propuestas/enki-sense.md
-verificado: 2026-07-21
+verificado: 2026-10-31
 ---
 
 # ENKI-SENSE — los sentidos locales (órganos Rust, cero nube)

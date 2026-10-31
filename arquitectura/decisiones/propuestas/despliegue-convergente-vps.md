@@ -162,6 +162,35 @@ Decisión tomada: **namespace GLOBAL configurable** (`/a/`, `/es/`, …), un blo
 soltar carpeta. Se descartó el registro con bloque-por-superficie (add = deploy) y
 el catch-all con fallback al frontend (cambia el enrutado, riesgo de colisión).
 
+## La guardia de main — el portero de las dos puertas (2026-10-31)
+
+**El agujero.** Los dos caminos (`deploy.sh` y `vps-setup.sh`) copian el **working
+tree** con `rsync`, no un commit de git. Si el árbol no está en `origin/main`, el
+deploy REVIERTE en producción lo que main tenga de más — y en silencio. `deploy.sh`
+llevaba guarda desde el 16-oct; `vps-setup.sh` no tenía ninguna.
+
+**Medido 2026-10-31.** Un deploy salió de un árbol en `hermes/cierre-canal-recoger`,
+10 commits por detrás. El comandero volvió al fichero viejo y 11 de 14 cuentas
+abiertas perdieron su carrito. Nadie lo notó en tres horas porque **producción no
+sabía qué versión corría** (`/health` devuelve `sha: "unknown"`).
+
+**La regla, ahora en las dos puertas.** Aborta si:
+
+| condición | por qué | salida |
+|---|---|---|
+| `${REPO_DIR}` no es repo git | sin `.git` no hay forma de saber qué se despliega | desplegar desde un worktree de main |
+| `HEAD != origin/main` | rsync borraría lo que main tiene de más | `--forzar=<sha>` |
+| árbol sucio (`git status --porcelain`) | ese código no existe en git | `git stash` · `--permitir-sucio` |
+
+Los escapes son **flags, no env var**: `sudo` limpia el entorno (misma lección que
+`--docker`), así que `ENKI_DEPLOY_FORZAR=… sudo …` no llega al script. Y `--forzar`
+exige **el SHA que esperas**, no un `1`: forzar deja de ser un músculo y pasa a ser
+un acto consciente.
+
+**El sello.** `vps-setup.sh` escribe `${INSTALL_DIR}/.deployed-commit` con el SHA que
+acaba de copiar y lo imprime en el resumen. «¿Qué corre en producción?» pasa a ser
+`cat /opt/enki/.deployed-commit` en vez de una conjetura.
+
 ## Follow-ups
 
 - Colapsar la generación inline de `vps-setup.sh` en el reconciliador (una sola fuente en fresh install).

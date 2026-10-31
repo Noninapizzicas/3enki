@@ -16,13 +16,18 @@
 
 set -euo pipefail
 
-# Args: el dominio (posicional) y --docker (flag). Se aceptan en cualquier orden.
-# --docker se prefiere a la env var ENKI_ENABLE_DOCKER porque `sudo` limpia el entorno
+# Args: el dominio (posicional) y los flags. Se aceptan en cualquier orden.
+# Los flags van como FLAG y no como env var porque `sudo` limpia el entorno
 # (ENKI_ENABLE_DOCKER=1 sudo … NO llega al script; sudo … --docker sí).
+#   --docker           habilita el ejecutor en contenedor
+#   --permitir-sucio   despliega aunque haya cambios sin commitear
+#   --forzar=<sha>     despliega aunque el árbol no esté en main (exige el SHA que esperas)
 DOMAIN=""
 for _arg in "$@"; do
     case "$_arg" in
-        --docker)     ENKI_ENABLE_DOCKER=1 ;;
+        --docker)         ENKI_ENABLE_DOCKER=1 ;;
+        --permitir-sucio) ENKI_DEPLOY_PERMITIR_SUCIO=1 ;;
+        --forzar=*)       ENKI_DEPLOY_FORZAR="${_arg#--forzar=}" ;;
         --*)      echo "[!] flag desconocido ignorado: $_arg" ;;
         *)        DOMAIN="$_arg" ;;
     esac
@@ -43,6 +48,76 @@ err()  { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
 
 # Verificar root
 [[ $EUID -ne 0 ]] && err "Ejecutar con sudo: sudo ./vps-setup.sh [dominio]"
+
+# ── GUARDA DE PRODUCCIÓN: solo se despliega main ──────────────────────────────
+# Este script copia el WORKING TREE del repo (rsync --delete, §4), NO un commit de
+# git. Si el árbol no es EXACTAMENTE origin/main, el deploy REVIERTE en producción
+# lo que main tenga de más — en silencio y sin avisar a nadie.
+# Medido 2026-10-31: un deploy salió de un árbol en hermes/cierre-canal-recoger, 10
+# commits por detrás. El comandero volvió al fichero viejo y 11 de 14 cuentas abiertas
+# perdieron su carrito. Nadie lo notó en tres horas porque producción no sabía qué
+# versión corría (/health devuelve sha "unknown").
+# Esta guarda es el portero común de las DOS puertas (vps-setup.sh y deploy.sh).
+#
+# Forzar exige teclear el SHA que esperas (--forzar=<sha>): acto consciente, no músculo.
+if ! git -C "${REPO_DIR}" rev-parse --git-dir &>/dev/null; then
+    err "ABORTO: ${REPO_DIR} NO es un repositorio git.
+  Sin .git no hay forma de saber QUÉ versión se despliega, y rsync copia el árbol tal cual.
+  Despliega desde un checkout en main:
+    git -C ${REPO_DIR} fetch origin main
+    git worktree add ~/deploy-main origin/main
+    cd ~/deploy-main && sudo ./deployment/vps-setup.sh <dominio>"
+fi
+
+_HEAD=$(git -C "${REPO_DIR}" rev-parse HEAD)
+_RAMA=$(git -C "${REPO_DIR}" rev-parse --abbrev-ref HEAD)
+timeout 20 git -C "${REPO_DIR}" fetch origin --quiet 2>/dev/null \
+    || warn "no se pudo consultar origin (¿red?) — compruebo con la referencia local"
+_MAIN=$(git -C "${REPO_DIR}" rev-parse origin/main 2>/dev/null || echo "")
+if [ -z "${_MAIN}" ]; then
+    err "ABORTO: no hay referencia origin/main en ${REPO_DIR}.
+  Arréglalo: git -C ${REPO_DIR} fetch origin main"
+fi
+
+if [ "${_HEAD}" != "${_MAIN}" ]; then
+    _FALTAN=$(git -C "${REPO_DIR}" rev-list --count "${_HEAD}..${_MAIN}" 2>/dev/null || echo "?")
+    _SOBRAN=$(git -C "${REPO_DIR}" rev-list --count "${_MAIN}..${_HEAD}" 2>/dev/null || echo "?")
+    if [ "${ENKI_DEPLOY_FORZAR:-}" = "${_HEAD}" ]; then
+        warn "FORZADO a propósito sobre ${_HEAD:0:8} (rama ${_RAMA}): ${_FALTAN} commit(s) de menos, ${_SOBRAN} de más respecto a main."
+        warn "Producción quedará en ${_HEAD:0:8}, NO en main. Queda anotado en ${INSTALL_DIR}/.deployed-commit"
+    else
+        err "ABORTO: el árbol NO está en origin/main.
+    ruta             : ${REPO_DIR}
+    rama actual      : ${_RAMA}
+    HEAD             : ${_HEAD:0:8}
+    origin/main      : ${_MAIN:0:8}
+    commits de menos : ${_FALTAN}   (desplegar así los BORRA de producción)
+    commits de más   : ${_SOBRAN}   (desplegar así los METE en producción sin PR)
+  Arréglalo:
+    git -C ${REPO_DIR} fetch origin main
+    git worktree add ~/deploy-main origin/main
+    cd ~/deploy-main && sudo ./deployment/vps-setup.sh <dominio>
+  O fuerza a propósito (tecleando el SHA que esperas):
+    sudo ./deployment/vps-setup.sh <dominio> --forzar=${_HEAD}"
+    fi
+fi
+
+# Árbol sucio: rsync copia TAMBIÉN lo no commiteado. Ese código no existe en git y
+# producción pasaría a correr algo que nadie puede reconstruir. Aborta.
+_SUCIOS=$(git -C "${REPO_DIR}" status --porcelain 2>/dev/null || true)
+if [ -n "${_SUCIOS}" ]; then
+    if [ "${ENKI_DEPLOY_PERMITIR_SUCIO:-}" = "1" ]; then
+        warn "Cambios SIN COMMITEAR: se despliegan tal cual (--permitir-sucio):"
+        printf '%s\n' "${_SUCIOS}" | head -20
+    else
+        err "ABORTO: cambios SIN COMMITEAR en ${REPO_DIR} (rsync los copiaría a producción):
+$(printf '%s\n' "${_SUCIOS}" | head -20)
+  Arréglalo: git -C ${REPO_DIR} stash        (o commit + PR)
+  O permítelo a propósito: sudo ./deployment/vps-setup.sh <dominio> --permitir-sucio"
+    fi
+fi
+
+log "Guardia OK: ${REPO_DIR} en origin/main (${_HEAD:0:8})"
 
 # Determinar modo
 if [ -n "$DOMAIN" ]; then
@@ -615,13 +690,35 @@ fi
 log "Instalando Event Core en ${INSTALL_DIR}..."
 mkdir -p "${INSTALL_DIR}"
 
+# Los excludes NO son cosmética, y cada uno tiene su forma:
+#  · storage va como PROTECCIÓN (P) y no como exclude: se COPIA lo que el repo trae
+#    (storage/pizzepos/cartas/… son semillas versionadas) y NO se BORRA lo que nació en
+#    la máquina (storage/esquemas/… se genera al vuelo; el --delete se lo comió el
+#    2026-10-16). Con --exclude, una instalación NUEVA se quedaría sin semillas.
+#  · sin 'frontend/build', un build que falle deja la web en cero; con él se queda el
+#    anterior y el VPS sigue en pie. Mismo juego que deploy.sh.
 rsync -a --delete \
     --exclude='node_modules' \
     --exclude='.git' \
     --exclude='deployment' \
     --exclude='data' \
     --exclude='public' \
+    --filter='P storage/***' \
+    --exclude='package-lock.json' \
+    --exclude='.hermes' \
+    --exclude='.work*' \
+    --exclude='*.bak-*' \
+    --exclude='frontend/build' \
+    --exclude='frontend/.svelte-kit' \
+    --exclude='frontend/package-lock.json' \
     "${REPO_DIR}/" "${INSTALL_DIR}/"
+
+# ── SELLO DE VERSIÓN: producción dice qué commit corre ────────────────────────
+# /health devuelve sha "unknown": hasta hoy, saber qué había en producción era una
+# conjetura — y por eso un deploy equivocado pasó tres horas invisible. Este fichero
+# lo responde en un segundo:  cat /opt/enki/.deployed-commit
+printf '%s\n' "${_HEAD}" > "${INSTALL_DIR}/.deployed-commit"
+log "Sello de versión: ${_HEAD:0:8} → ${INSTALL_DIR}/.deployed-commit"
 
 # Instalar dependencias backend
 cd "${INSTALL_DIR}"
@@ -852,6 +949,8 @@ echo ""
 echo "============================================"
 echo "  Setup completado"
 echo "============================================"
+echo ""
+echo "  Versión:  $(cat "${INSTALL_DIR}/.deployed-commit" 2>/dev/null || echo 'desconocida')  (origin/main: ${_MAIN:0:8})"
 echo ""
 echo "  Servicios:"
 echo "    enki           → node index.js (localhost:3000)"

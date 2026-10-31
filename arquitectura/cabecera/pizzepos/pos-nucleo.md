@@ -1112,6 +1112,15 @@ PATRON Multi-Tenant {
 > a slug — el mapa id→slug lo calcula `project-manager` en `project.list.response`;
 > sin respuesta del bus se devuelve la llave tal cual. Sin esta normalización el
 > mismo negocio partía sus cuentas en dos carpetas y el comandero solo veía la mitad.
+>
+> **Y el CANAL de la cuenta es un prefijo con dueño (verificado en vivo 2026-10-30).**
+> `cuentas-canales` reparte cobros y cierres por prefijo (`mesa_`, `llevar_`,
+> `telefono_`, `whatsapp_`, `glovo_`, `llevadoo_`). El MODO que elige el cliente en la
+> PWA no es el canal: `recoger` nace como `llevar` en `handleCreateCuenta`, y el modo se
+> queda en `metadata.modo_consumo`. Un tipo sin strategy nace huérfano — nadie lo cierra
+> y su venta no llega al libro, que solo apunta en `cuenta.cerrada`. Por eso una cuenta
+> sin mesa ni ticket declara `cerrar_al_cobrar:true` y emite su `cuenta.cerrada` al
+> cobrarse (the-pirate 2026-10-30: 5 cobros 95,50 frente a un libro de 92,50).
 
 ```json
 {

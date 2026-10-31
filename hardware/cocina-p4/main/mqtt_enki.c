@@ -423,7 +423,7 @@ static void mqtt_event_handler(void *args, esp_event_base_t base, int32_t event_
         if (event->data == NULL || event->data_len <= 0) break;
 
         /* Reensamblado: esp-mqtt trocea payloads mayores que el buffer. */
-        if (event->data_offset == 0) {
+        if (event->current_data_offset == 0) {
             s_rx_len = 0;
         }
         if (s_rx_len + (size_t)event->data_len >= sizeof(s_rx_buf)) {

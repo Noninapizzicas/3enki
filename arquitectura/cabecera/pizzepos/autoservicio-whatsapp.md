@@ -85,6 +85,11 @@ REGLA  metodo_pago viaja en el #P1 (autoritativo, no en el texto editable), igua
        consumidor decide ('efectivo', el comportamiento previo). Valores: 'efectivo' | 'tarjeta'.
        El bus NO valida parámetros (auto-wire: saca request_id y pasa el resto tal cual), así que
        el campo fluye hasta pedidos sin tocar contrato.
+REGLA  modo_consumo es el MODO DEL CLIENTE, no el CANAL de la cuenta. 'recoger' (el default de la
+       carta) nace como canal 'llevar' en cuentas.handleCreateCuenta: un tipo sin strategy no
+       tiene dueño y nadie lo cierra nunca (ni mesa ni ticket → la venta no llega al libro de
+       ventas). El modo original se conserva en metadata.modo_consumo y es lo que pinta el
+       comandero. Un pedido de tienda se cierra AL COBRAR (metadata.cerrar_al_cobrar:true).
 ```
 
 ## El tasador — re-tasado server-side (función PURA, seguridad)
@@ -255,6 +260,15 @@ sendTemplate (Meta plantillas · salientes >24h) {
 //   pedido.crear-tienda). handleConfirmarRecogida localiza por cliente_nombre (case-insensitive)
 //   y desambigua con pedido_id si varios pendientes comparten nombre. El dependiente pide el
 //   nombre al recoger; cocina/staff lo ven como ref_display.
+//
+// EL CANAL Y EL CIERRE (v3.3.1 — el dinero cobrado llegaba tarde al libro):
+//   _crearCuentaTienda pasa `tipo = modo_consumo` y cuentas lo CANONIZA (recoger→llevar):
+//   un tipo sin strategy nace huérfano y nadie lo cierra nunca. Además la cuenta nace con
+//   metadata.cerrar_al_cobrar:true (salvo modo mesa, que la cierra su canal): el pedido de
+//   tienda no tiene mesa ni ticket, así que el cierre lo dispara el COBRO, y ese cierre
+//   publica cuenta.cerrada — el único evento por el que persistencia apunta LA venta.
+//   Sin esto el cobro quedaba en el registro y el libro del día no veía el dinero
+//   (the-pirate 2026-10-30: 5 cobros 95,50 en efectivo, libro 92,50).
 ```
 
 ## CLASE carta-digital (PWA) — emite el pedido por ids (#P1) + paridad comandero + ENCARGO con fecha

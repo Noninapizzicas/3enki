@@ -21,6 +21,15 @@ verificado: 2026-10-28 (pago-gateway v3.1.0: Stripe con paridad — libro, idemp
 > tal cual. Antes, mesa (UUID) y llevar (slug) del mismo negocio vivían en dos carpetas
 > y el comandero solo veía una mitad.
 
+> **La LEY DEL CANAL (verificada en vivo 2026-10-30).** El MODO del cliente no es el
+> CANAL de la cuenta. `cuentas-canales` reparte cobros y cierres por PREFIJO
+> (`mesa_`, `llevar_`, `telefono_`, `whatsapp_`, `glovo_`, `llevadoo_`): un tipo sin
+> strategy nace HUÉRFANO — nadie lo cierra y su venta no llega al libro de ventas, que
+> solo apunta en `cuenta.cerrada`. Por eso `cuentas.handleCreateCuenta` canoniza el tipo
+> (`recoger` → `llevar`) y por eso una cuenta que no tiene mesa ni ticket declara
+> `metadata.cerrar_al_cobrar:true` y emite su `cuenta.cerrada` al cobrarse. El modo
+> original viaja intacto en `metadata.modo_consumo`.
+
 > **Alta de producto — la cadena canónica (verificada en vivo 2026-10-19).** La puerta
 > del asistente es `productos.crear` / `productos.crear_categoria` (productos NO escribe:
 > delega en carta-manager, que hace snapshot y sube version). Un alta enciende todo por

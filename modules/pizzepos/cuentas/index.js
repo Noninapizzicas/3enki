@@ -78,6 +78,27 @@ class CuentasModule extends BaseModule {
     llevadoo: 'V'
   };
 
+  // Un CANAL es un prefijo con dueño: cuentas-canales detecta la strategy por
+  // `mesa_`, `llevar_`, `telefono_`... Una cuenta con un tipo que no es canal
+  // nace HUÉRFANA — nadie la cierra (cerrarMesa/cerrarTicket) y su venta no
+  // llega al libro de ventas (persistencia solo apunta en `cuenta.cerrada`).
+  // El MODO DEL CLIENTE no es el canal: 'recoger' es cómo el cliente pide un
+  // pedido para llevar y su canal operativo es `llevar`. El modo original se
+  // conserva en `metadata.modo_consumo` (lo escribe quien crea la cuenta).
+  static ALIAS_CANAL = {
+    recoger: 'llevar'
+  };
+
+  /**
+   * Tipo de cuenta canónico (canal con dueño) a partir del modo pedido por el
+   * cliente. Toda cuenta nace de aquí: es la única puerta.
+   */
+  _canalCanonico(tipo) {
+    const t = typeof tipo === 'string' && tipo.trim() ? tipo.trim() : null;
+    if (!t) return 'local';
+    return CuentasModule.ALIAS_CANAL[t] || t;
+  }
+
   // ==========================================
   // Lifecycle
   // ==========================================
@@ -429,7 +450,9 @@ class CuentasModule extends BaseModule {
         return this._errorResponse(400, 'INVALID_INPUT', 'project_id es requerido', { field: 'project_id' });
       }
 
-      const tipoFinal = tipo || 'local';
+      // CANAL canónico: 'recoger' (modo del cliente) nace como 'llevar' (canal con
+      // dueño). El modo viaja intacto en metadata.modo_consumo.
+      const tipoFinal = this._canalCanonico(tipo);
       // Una sola llave por proyecto: la cuenta NACE con slug (la carpeta fisica),
       // venga el project_id como uuid o como slug. Persistencia y consultas leen igual.
       const projectIdFinal = await this._slugProyecto(project_id);
@@ -778,12 +801,33 @@ class CuentasModule extends BaseModule {
     if (!cuenta) return;
     if (cuenta.estado === 'cobrado') return;
 
+    // ¿El cierre es NUESTRO? Solo si la cuenta lo declara (cerrar_al_cobrar:true),
+    // como hacen las cuentas nacidas de un pedido de tienda: no tienen mesa ni
+    // ticket, así que nadie más las cerrará. Las de mesa y las de llevar del
+    // comandero las cierra su canal, que es quien publica `cuenta.cerrada`.
+    const cierrePropio = cuenta.metadata?.cerrar_al_cobrar === true;
+
     const ok = await this._transicionarEstado(cuenta_id, 'cobrado', sourcePayload);
     if (!ok) {
       this.logger.warn('cuenta.cerrar_cobrada.transicion_fallida', {
         cuenta_id, estado_actual: cuenta.estado
       });
       return;
+    }
+
+    // El libro de ventas apunta UNA venta por `cuenta.cerrada` (persistencia-
+    // comandero). Sin este evento la cuenta se cerraba, el cobro quedaba en el
+    // registro y la venta NO entraba en caja: el dinero aparecía en el cajón y
+    // no en el libro (visto en vivo con las cuentas de recoger de la web).
+    if (cierrePropio) {
+      await this._publicarEvento('cuenta.cerrada', {
+        project_id: cuenta.project_id,
+        cuenta_id,
+        tipo:       cuenta.tipo,
+        total:      cuenta.total,
+        metadata:   cuenta.metadata || {}
+      }, sourcePayload);
+      this.logger.info('cuenta.cerrada_cobrada', { cuenta_id, tipo: cuenta.tipo, total: cuenta.total });
     }
 
     this._pedidosEnCocina.delete(cuenta_id);
@@ -795,6 +839,7 @@ class CuentasModule extends BaseModule {
     const tipo       = cuenta.tipo;
     const timeout    = setTimeout(() => {
       this._pendingTimeouts.delete(cuenta_id);
+      if (!this.cuentas.has(cuenta_id)) return;   // ya la retiró su `cuenta.cerrada`
       this.cuentas.delete(cuenta_id);
       this._publishCuentaEliminada(project_id, cuenta_id, tipo, 'cobro_completado');
     }, POST_COBRADO_MS);

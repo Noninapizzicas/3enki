@@ -210,6 +210,11 @@ CLASE CuentasModule HEREDA BaseModule {
 
     async handleCreateCuenta(data: {project_id, tipo?, nombre?, metadata?, pedido_inicial?}): Promise<Response>
       VALIDA project_id obligatorio
+      CANONIZA el tipo a CANAL con dueño: ALIAS_CANAL = { recoger: 'llevar' }
+        // El MODO del cliente no es el CANAL: 'recoger' es un pedido para llevar.
+        // Un tipo sin strategy (prefijo sin dueño) nace HUÉRFANO — ni mesa ni ticket,
+        // nadie lo cierra, y su venta no llega al libro. El modo se queda en
+        // metadata.modo_consumo (es lo que pinta el comandero). Única puerta: aquí.
       OBTIENE o genera cuenta_id
       GENERA turno via _getNextTurno()
       GENERA ref_display via _generateRefDisplay(tipo, nombre)
@@ -246,11 +251,17 @@ CLASE CuentasModule HEREDA BaseModule {
       SI ya pagado (idempotencia): RETORNA
       cuenta.pagado = true
       SI _cerrarAlCobrar(cuenta): await _cerrarCuentaCobrada(cuenta_id)
+        // _cerrarCuentaCobrada: SI metadata.cerrar_al_cobrar == true (los pedidos de tienda,
+        // que no tienen mesa ni ticket) PUBLICA cuenta.cerrada → persistencia-comandero apunta
+        // LA venta. Sin ese evento la cuenta se cerraba, el cobro quedaba en el registro y el
+        // libro no veía el dinero (caja 92,50 vs cajón 95,50 en the-pirate 2026-10-30).
+        // Las de mesa y las de llevar del comandero las cierra su canal, que ya lo publica.
 
     EVENTOS_PUBLISHES {
       'cuenta.creada': {project_id, cuenta_id, turno, tipo, nombre, ref_display, total, estado}
       'cuenta.actualizada': {project_id, cuenta_id, cambios}
       'cuenta.estado_cambiado': {project_id, cuenta_id, estado_anterior, estado_nuevo}
+      'cuenta.cerrada': {project_id, cuenta_id, tipo, total, metadata}   // solo si cerrar_al_cobrar
       'cuenta.eliminada': {project_id, cuenta_id, tipo, motivo}
     }
 
@@ -1101,6 +1112,15 @@ PATRON Multi-Tenant {
 > a slug — el mapa id→slug lo calcula `project-manager` en `project.list.response`;
 > sin respuesta del bus se devuelve la llave tal cual. Sin esta normalización el
 > mismo negocio partía sus cuentas en dos carpetas y el comandero solo veía la mitad.
+>
+> **Y el CANAL de la cuenta es un prefijo con dueño (verificado en vivo 2026-10-30).**
+> `cuentas-canales` reparte cobros y cierres por prefijo (`mesa_`, `llevar_`,
+> `telefono_`, `whatsapp_`, `glovo_`, `llevadoo_`). El MODO que elige el cliente en la
+> PWA no es el canal: `recoger` nace como `llevar` en `handleCreateCuenta`, y el modo se
+> queda en `metadata.modo_consumo`. Un tipo sin strategy nace huérfano — nadie lo cierra
+> y su venta no llega al libro, que solo apunta en `cuenta.cerrada`. Por eso una cuenta
+> sin mesa ni ticket declara `cerrar_al_cobrar:true` y emite su `cuenta.cerrada` al
+> cobrarse (the-pirate 2026-10-30: 5 cobros 95,50 frente a un libro de 92,50).
 
 ```json
 {

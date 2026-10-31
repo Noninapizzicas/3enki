@@ -1,24 +1,29 @@
 /**
  * @file main.c
- * @brief Cocina P4 — arranque de la pantalla de cocina (Waveshare ESP32-P4-WIFI6-Touch-LCD-10.1).
+ * @brief Cocina P4 — arranque de la pantalla de cocina (GUITION JC8012P4A1C, 10.1").
  *
  * HARDWARE: ESP32-P4 + 10.1" 800x1280 JD9365 por MIPI-DSI (2 lanes) + tactil
- * GT911 por I2C + 32 MB PSRAM + ESP32-C6 (WiFi 6/BLE) por SDIO con esp_hosted.
+ * GT911 por I2C + PSRAM + ESP32-C6 (WiFi 6/BLE) por SDIO con esp_hosted.
  *
- * Display, tactil, LVGL y brillo los pone el BSP OFICIAL:
- *   waveshare/esp32_p4_wifi6_touch_lcd_x v2.0.3
- *   (include/bsp/esp32_p4_wifi6_touch_lcd_x.h, bsp_display_start_with_config())
- * Aqui no se inicializa ningun panel a mano ni se cablea ningun GPIO de video.
+ * NO HAY BSP para esta placa: el display, el tactil, el brillo y el puente a
+ * LVGL se inicializan AQUI con componentes oficiales de Espressif:
+ *   espressif/esp_lcd_jd9365      2.0.2  (esp_lcd_new_panel_jd9365)
+ *   espressif/esp_lcd_touch_gt911 1.2.1  (esp_lcd_touch_new_i2c_gt911)
+ *   espressif/esp_lvgl_port       2.9.0  (lvgl_port_add_disp_dsi + add_touch)
+ *   driver/i2c_master + driver/ledc del propio IDF
  *
  * Orden de arranque:
  *   1. NVS + zona horaria + task watchdog
- *   2. BSP display (DSI + GT911 + LVGL) y UI  -> la pantalla NUNCA se queda negra
+ *   2. LDO del PHY DSI -> bus MIPI -> panel JD9365 -> GT911 -> LVGL -> brillo
+ *      y UI  -> la pantalla NUNCA se queda negra
  *   3. WiFi (backoff infinito) + SNTP
  *   4. MQTT Enki (register-device automatico al conectar)
  *   5. Task de UI: reloj, iconos de enlace, banner de estado
  *
  * La UI se construye ANTES de conectar la red: sin WiFi la pantalla sigue
  * mostrando "Sin pedidos", la hora y un banner explicando el problema.
+ *
+ * PINES: ver config.h, bloque 1 (fuente: device.yaml de la propia placa).
  */
 
 #include <stdio.h>
@@ -33,6 +38,7 @@
 #include "esp_check.h"
 #include "esp_err.h"
 #include "esp_event.h"
+#include "esp_ldo_regulator.h"
 #include "esp_log.h"
 #include "esp_netif.h"
 #include "esp_netif_sntp.h"
@@ -42,9 +48,17 @@
 #include "esp_wifi.h"
 #include "nvs_flash.h"
 
+#include "driver/gpio.h"
+#include "driver/i2c_master.h"
+#include "driver/ledc.h"
+
+#include "esp_lcd_jd9365.h"
+#include "esp_lcd_mipi_dsi.h"
+#include "esp_lcd_panel_io.h"
+#include "esp_lcd_panel_ops.h"
+#include "esp_lcd_touch_gt911.h"
+#include "esp_lvgl_port.h"
 #include "lvgl.h"
-#include "bsp/esp-bsp.h"
-#include "bsp/display.h"
 
 #include "config.h"
 #include "mqtt_enki.h"
@@ -56,16 +70,51 @@ static const char *TAG = "cocina-p4";
 #define WIFI_MAX_BACKOFF_S  32
 
 /* ------------------------------------------------------------------ */
-/* Blindaje del pinout: si el BSP cambia los pines, salta AQUI           */
+/* Blindaje del pinout                                                */
 /* ------------------------------------------------------------------ */
-_Static_assert(BSP_I2C_SDA == COCINA_I2C_SDA_GPIO, "BSP_I2C_SDA ya no coincide con config.h");
-_Static_assert(BSP_I2C_SCL == COCINA_I2C_SCL_GPIO, "BSP_I2C_SCL ya no coincide con config.h");
-_Static_assert(BSP_LCD_BACKLIGHT == COCINA_LCD_BL_GPIO, "BSP_LCD_BACKLIGHT ya no coincide con config.h");
-_Static_assert(BSP_LCD_RST == COCINA_LCD_RST_GPIO, "BSP_LCD_RST ya no coincide con config.h");
-_Static_assert(BSP_LCD_H_RES == COCINA_LCD_H_RES, "resolucion horizontal distinta de la esperada");
-_Static_assert(BSP_LCD_V_RES == COCINA_LCD_V_RES, "resolucion vertical distinta de la esperada");
+/* Antes esto eran 6 _Static_assert contra las macros del BSP Waveshare
+ * (BSP_I2C_SDA, BSP_LCD_RST...). Ya no hay BSP: los pines son defines
+ * nuestros, asi que no hay nada externo contra lo que blindar. Lo que SI
+ * se puede blindar en compilacion es la COHERENCIA entre esos defines y los
+ * requisitos de los drivers, que es de donde vienen los fallos silenciosos
+ * (pantalla en negro, tactil muerto, colores mal). Se mantienen 6 asserts,
+ * mismo numero, mismo proposito: que un cambio de pin o de formato salte en
+ * compilacion y no en la cocina. */
+_Static_assert(COCINA_LCD_MIPI_LANES == 2,
+               "JD9365_PANEL_BUS_DSI_2CH_CONFIG() fija 2 lanes; config.h dice otra cosa");
+_Static_assert(COCINA_LCD_BPP == 16,
+               "la UI y el buffer LVGL son RGB565 (16 bpp): panel_config.bits_per_pixel");
+_Static_assert(COCINA_TOUCH_I2C_ADDR == ESP_LCD_TOUCH_IO_I2C_GT911_ADDRESS ||
+               COCINA_TOUCH_I2C_ADDR == ESP_LCD_TOUCH_IO_I2C_GT911_ADDRESS_BACKUP,
+               "el GT911 solo responde en 0x5D (INT bajo al arrancar) o 0x14 (INT alto)");
+_Static_assert(COCINA_I2C_FREQ_HZ > 0 && COCINA_I2C_FREQ_HZ <= 400000,
+               "el GT911 va a 400 kHz como maximo (device.yaml: frequency 400kHz)");
+_Static_assert(COCINA_BL_LEDC_RES_BITS == LEDC_TIMER_10_BIT &&
+               COCINA_BL_DUTY_PCT >= 0 && COCINA_BL_DUTY_PCT <= 100,
+               "brillo: duty 0-100% sobre 10 bits de resolucion LEDC");
+_Static_assert(COCINA_LVGL_BUF_LINES > 0 && COCINA_LVGL_BUF_LINES <= COCINA_LCD_V_RES,
+               "el buffer LVGL no puede ser mayor que la pantalla");
+/* Un GPIO repetido entre panel/tactil/brillo es un fallo que no se ve hasta
+ * el taller: se comprueba aqui. */
+_Static_assert(COCINA_LCD_RST_GPIO != COCINA_LCD_BL_GPIO &&
+               COCINA_LCD_RST_GPIO != COCINA_I2C_SDA_GPIO &&
+               COCINA_LCD_RST_GPIO != COCINA_I2C_SCL_GPIO &&
+               COCINA_LCD_BL_GPIO  != COCINA_I2C_SDA_GPIO &&
+               COCINA_LCD_BL_GPIO  != COCINA_I2C_SCL_GPIO &&
+               COCINA_TOUCH_RST_GPIO != COCINA_TOUCH_INT_GPIO &&
+               COCINA_TOUCH_RST_GPIO != COCINA_LCD_RST_GPIO &&
+               COCINA_TOUCH_INT_GPIO != COCINA_LCD_RST_GPIO,
+               "pin repetido entre panel, tactil y retroiluminacion");
 
 static lv_display_t *s_disp;
+
+/* Handles del subsistema de pantalla (viven toda la vida del firmware) */
+static esp_lcd_panel_handle_t    s_panel;
+static esp_lcd_panel_io_handle_t s_panel_io;
+static i2c_master_bus_handle_t   s_i2c_bus;
+static esp_lcd_panel_io_handle_t s_touch_io;
+static esp_lcd_touch_handle_t    s_touch;
+static bool                      s_touch_ok;
 
 static EventGroupHandle_t s_wifi_eg;
 #define WIFI_EV_CONNECTED    BIT0
@@ -97,40 +146,244 @@ static void twdt_setup(void)
 }
 
 /* ------------------------------------------------------------------ */
-/* Pantalla + LVGL + UI (todo via BSP oficial)                        */
+/* Panel JD9365 por MIPI-DSI (2 lanes)                                */
 /* ------------------------------------------------------------------ */
-static esp_err_t display_and_ui_init(void)
+static esp_err_t panel_init(void)
 {
-    bsp_display_cfg_t cfg = {
-        .lv_adapter_cfg = ESP_LV_ADAPTER_DEFAULT_CONFIG(),
-        .rotation       = ESP_LV_ADAPTER_ROTATE_0,          /* 800x1280 vertical */
-        .tear_avoid_mode = ESP_LV_ADAPTER_TEAR_AVOID_MODE_TRIPLE_PARTIAL,
-        .touch_flags = {
-            .swap_xy  = COCINA_TOUCH_SWAP_XY,
-            .mirror_x = COCINA_TOUCH_MIRROR_X,
-            .mirror_y = COCINA_TOUCH_MIRROR_Y,
+    /* 1. PHY MIPI-DSI: LDO interno del P4 a 2.5 V. Sin esto el panel no
+     *    enciende aunque el resto del init devuelva ESP_OK.
+     *    (device.yaml: esp_ldo channel 3, 2.5V, adjustable) */
+    esp_ldo_channel_handle_t ldo = NULL;
+    const esp_ldo_channel_config_t ldo_cfg = {
+        .chan_id    = COCINA_LDO_CHAN,
+        .voltage_mv = COCINA_LDO_MV,
+    };
+    ESP_RETURN_ON_ERROR(esp_ldo_acquire_channel(&ldo_cfg, &ldo), TAG,
+                        "no se pudo encender el PHY MIPI-DSI (LDO %d)", COCINA_LDO_CHAN);
+
+    /* 2. Bus MIPI-DSI: 2 lanes a 1500 Mbps (macro del driver, .bus_id 0) */
+    esp_lcd_dsi_bus_handle_t dsi_bus = NULL;
+    const esp_lcd_dsi_bus_config_t bus_cfg = JD9365_PANEL_BUS_DSI_2CH_CONFIG();
+    ESP_RETURN_ON_ERROR(esp_lcd_new_dsi_bus(&bus_cfg, &dsi_bus), TAG, "esp_lcd_new_dsi_bus");
+
+    /* 3. Panel IO: los comandos DCS del JD9365 viajan por el mismo DSI */
+    const esp_lcd_dbi_io_config_t dbi_cfg = JD9365_PANEL_IO_DBI_CONFIG();
+    ESP_RETURN_ON_ERROR(esp_lcd_new_panel_io_dbi(dsi_bus, &dbi_cfg, &s_panel_io), TAG,
+                        "esp_lcd_new_panel_io_dbi");
+
+    /* 4. Timing de video (800x1280@60) ya resuelto por el driver */
+    const esp_lcd_dpi_panel_config_t dpi_cfg =
+        JD9365_800_1280_PANEL_60HZ_DPI_CONFIG(LCD_COLOR_PIXEL_FORMAT_RGB565);
+
+    /* El macro de arriba es un inicializador con llaves: no se puede mirar
+     * desde un _Static_assert. Se comprueba aqui, antes de tocar el panel. */
+    if (dpi_cfg.video_timing.h_size != COCINA_LCD_H_RES ||
+        dpi_cfg.video_timing.v_size != COCINA_LCD_V_RES ||
+        bus_cfg.num_data_lanes != COCINA_LCD_MIPI_LANES) {
+        ESP_LOGE(TAG, "timing del driver (%ux%u, %u lanes) != config.h (%dx%d, %d lanes)",
+                 (unsigned)dpi_cfg.video_timing.h_size, (unsigned)dpi_cfg.video_timing.v_size,
+                 (unsigned)bus_cfg.num_data_lanes,
+                 COCINA_LCD_H_RES, COCINA_LCD_V_RES, COCINA_LCD_MIPI_LANES);
+        return ESP_ERR_INVALID_SIZE;
+    }
+
+    jd9365_vendor_config_t vendor_cfg = {
+        .mipi_config = {
+            .dsi_bus    = dsi_bus,
+            .dpi_config = &dpi_cfg,
+            .lane_num   = COCINA_LCD_MIPI_LANES,
+        },
+    };
+    const esp_lcd_panel_dev_config_t panel_cfg = {
+        .reset_gpio_num = COCINA_LCD_RST_GPIO,          /* GPIO27 */
+        .rgb_ele_order  = LCD_RGB_ELEMENT_ORDER_RGB,    /* device.yaml: color_order RGB */
+        .bits_per_pixel = COCINA_LCD_BPP,
+        .vendor_config  = &vendor_cfg,
+    };
+
+    ESP_RETURN_ON_ERROR(esp_lcd_new_panel_jd9365(s_panel_io, &panel_cfg, &s_panel), TAG,
+                        "esp_lcd_new_panel_jd9365");
+    ESP_RETURN_ON_ERROR(esp_lcd_panel_reset(s_panel), TAG, "panel_reset");
+    ESP_RETURN_ON_ERROR(esp_lcd_panel_init(s_panel), TAG, "panel_init");
+    ESP_RETURN_ON_ERROR(esp_lcd_panel_disp_on_off(s_panel, true), TAG, "panel_disp_on");
+
+    ESP_LOGI(TAG, "JD9365 %dx%d listo (MIPI-DSI %d lanes, %d Mbps)",
+             COCINA_LCD_H_RES, COCINA_LCD_V_RES, COCINA_LCD_MIPI_LANES, COCINA_LCD_MIPI_MBPS);
+    return ESP_OK;
+}
+
+/* ------------------------------------------------------------------ */
+/* Tactil GT911 por I2C (SDA 7, SCL 8, RST 22, INT 21)                */
+/* ------------------------------------------------------------------ */
+static esp_err_t touch_init(void)
+{
+    const i2c_master_bus_config_t i2c_cfg = {
+        .i2c_port          = COCINA_I2C_PORT,
+        .sda_io_num        = COCINA_I2C_SDA_GPIO,
+        .scl_io_num        = COCINA_I2C_SCL_GPIO,
+        .clk_source        = I2C_CLK_SRC_DEFAULT,
+        .glitch_ignore_cnt = 7,
+        .flags = {
+            /* device.yaml: sda_pullup_enabled: False / scl_pullup_enabled: False
+             * -> los pullups son externos, en placa. */
+            .enable_internal_pullup = false,
+        },
+    };
+    ESP_RETURN_ON_ERROR(i2c_new_master_bus(&i2c_cfg, &s_i2c_bus), TAG,
+                        "i2c_new_master_bus (SDA %d / SCL %d)",
+                        COCINA_I2C_SDA_GPIO, COCINA_I2C_SCL_GPIO);
+
+    esp_lcd_panel_io_i2c_config_t io_cfg = ESP_LCD_TOUCH_IO_I2C_GT911_CONFIG();
+    io_cfg.dev_addr     = COCINA_TOUCH_I2C_ADDR;
+    io_cfg.scl_speed_hz = COCINA_I2C_FREQ_HZ;
+    ESP_RETURN_ON_ERROR(esp_lcd_new_panel_io_i2c(s_i2c_bus, &io_cfg, &s_touch_io), TAG,
+                        "esp_lcd_new_panel_io_i2c (GT911)");
+
+    const esp_lcd_touch_config_t tp_cfg = {
+        .x_max        = COCINA_LCD_H_RES,
+        .y_max        = COCINA_LCD_V_RES,
+        .rst_gpio_num = COCINA_TOUCH_RST_GPIO,    /* GPIO22 */
+        .int_gpio_num = COCINA_TOUCH_INT_GPIO,    /* GPIO21 */
+        .levels = {
+            .reset     = 0,   /* RST activo a nivel bajo */
+            .interrupt = 0,
+        },
+        .flags = {
+            .swap_xy  = COCINA_TOUCH_SWAP_XY,     /* device.yaml: false */
+            .mirror_x = COCINA_TOUCH_MIRROR_X,    /* device.yaml: false */
+            .mirror_y = COCINA_TOUCH_MIRROR_Y,    /* device.yaml: true  */
+        },
+    };
+    ESP_RETURN_ON_ERROR(esp_lcd_touch_new_i2c_gt911(s_touch_io, &tp_cfg, &s_touch), TAG,
+                        "GT911 no responde en 0x%02X (¿GSL3680? ver README)",
+                        COCINA_TOUCH_I2C_ADDR);
+    return ESP_OK;
+}
+
+/* ------------------------------------------------------------------ */
+/* Retroiluminacion por LEDC (GPIO23)                                 */
+/* ------------------------------------------------------------------ */
+static esp_err_t backlight_init(void)
+{
+    const ledc_timer_config_t tcfg = {
+        .speed_mode      = LEDC_LOW_SPEED_MODE,
+        .duty_resolution = LEDC_TIMER_10_BIT,
+        .timer_num       = COCINA_BL_LEDC_TIMER,
+        .freq_hz         = COCINA_BL_LEDC_FREQ_HZ,
+        .clk_cfg         = LEDC_AUTO_CLK,
+    };
+    ESP_RETURN_ON_ERROR(ledc_timer_config(&tcfg), TAG, "ledc_timer_config");
+
+    const ledc_channel_config_t ccfg = {
+        .gpio_num   = COCINA_LCD_BL_GPIO,      /* GPIO23 */
+        .speed_mode = LEDC_LOW_SPEED_MODE,
+        .channel    = COCINA_BL_LEDC_CHANNEL,
+        .intr_type  = LEDC_INTR_DISABLE,
+        .timer_sel  = COCINA_BL_LEDC_TIMER,
+        .duty       = 0,                       /* negro hasta que la UI exista */
+        .hpoint     = 0,
+    };
+    return ledc_channel_config(&ccfg);
+}
+
+static void backlight_set_pct(int pct)
+{
+    if (pct < 0)   pct = 0;
+    if (pct > 100) pct = 100;
+    const uint32_t max = (1u << COCINA_BL_LEDC_RES_BITS) - 1u;
+    const uint32_t duty = (max * (uint32_t)pct) / 100u;
+    (void)ledc_set_duty(LEDC_LOW_SPEED_MODE, COCINA_BL_LEDC_CHANNEL, duty);
+    (void)ledc_update_duty(LEDC_LOW_SPEED_MODE, COCINA_BL_LEDC_CHANNEL);
+}
+
+/* ------------------------------------------------------------------ */
+/* Puente LVGL 9 (esp_lvgl_port)                                      */
+/* ------------------------------------------------------------------ */
+static esp_err_t lvgl_attach(lv_display_t **out_disp)
+{
+    const lvgl_port_cfg_t port_cfg = ESP_LVGL_PORT_INIT_CONFIG();
+    ESP_RETURN_ON_ERROR(lvgl_port_init(&port_cfg), TAG, "lvgl_port_init");
+
+    const lvgl_port_display_cfg_t disp_cfg = {
+        .io_handle    = s_panel_io,
+        .panel_handle = s_panel,
+        .buffer_size  = COCINA_LCD_H_RES * COCINA_LVGL_BUF_LINES,
+        .double_buffer = true,
+        .hres = COCINA_LCD_H_RES,
+        .vres = COCINA_LCD_V_RES,
+        .monochrome = false,
+        /* La rotacion del PANEL va aparte de la del tactil: device.yaml solo
+         * pone mirror_y en el bloque touchscreen, el display va tal cual. */
+        .rotation = {
+            .swap_xy  = false,
+            .mirror_x = false,
+            .mirror_y = false,
+        },
+#if LVGL_VERSION_MAJOR >= 9
+        .color_format = LV_COLOR_FORMAT_RGB565,
+#endif
+        .flags = {
+            .buff_dma    = false,
+            .buff_spiram = true,   /* 800x100 RGB565 x2 = 320 KB: a PSRAM */
+            .swap_bytes  = false,  /* si los colores salen raros, probar true */
+            .full_refresh = false, /* tarjetas pequenas: refresco parcial */
+            .direct_mode  = false,
+        },
+    };
+    const lvgl_port_display_dsi_cfg_t dsi_cfg = {
+        .flags = {
+            .avoid_tearing = false,   /* num_fbs=1 en el DPI config */
         },
     };
 
-    s_disp = bsp_display_start_with_config(&cfg);
-    if (s_disp == NULL) {
-        ESP_LOGE(TAG, "bsp_display_start_with_config fallo");
+    *out_disp = lvgl_port_add_disp_dsi(&disp_cfg, &dsi_cfg);
+    if (*out_disp == NULL) {
+        ESP_LOGE(TAG, "lvgl_port_add_disp_dsi devolvio NULL");
         return ESP_FAIL;
     }
 
-    /* El BSP ya ha hecho reset + init del JD9365 por DSI y ha registrado el
-     * tactil GT911; solo falta subir la retroiluminacion. */
-    const esp_err_t bl = bsp_display_brightness_set(COCINA_BL_DUTY_PCT);
-    if (bl != ESP_OK) {
-        ESP_LOGW(TAG, "brightness_set: %s", esp_err_to_name(bl));
+    if (s_touch_ok) {
+        const lvgl_port_touch_cfg_t touch_cfg = {
+            .disp   = *out_disp,
+            .handle = s_touch,
+            .scale  = { .x = 1.0f, .y = 1.0f },
+        };
+        if (lvgl_port_add_touch(&touch_cfg) == NULL) {
+            /* No es fatal: la pantalla sigue mostrando pedidos, solo que no se
+             * pueden marcar como hechos. El banner lo avisa. */
+            ESP_LOGE(TAG, "lvgl_port_add_touch devolvio NULL: pantalla sin tactil");
+            s_touch_ok = false;
+        }
     }
-    bsp_display_backlight_on();
+    return ESP_OK;
+}
 
-    ESP_LOGI(TAG, "display %dx%d listo (MIPI-DSI %d lanes, %d Mbps)",
-             COCINA_LCD_H_RES, COCINA_LCD_V_RES, COCINA_LCD_MIPI_LANES, COCINA_LCD_MIPI_MBPS);
+/* ------------------------------------------------------------------ */
+/* Pantalla + LVGL + UI (todo a mano, sin BSP)                        */
+/* ------------------------------------------------------------------ */
+static esp_err_t display_and_ui_init(void)
+{
+    ESP_RETURN_ON_ERROR(panel_init(), TAG, "init del panel JD9365");
+
+    /* El tactil NO es bloqueante: sin tactil la pantalla sigue informando
+     * (y el banner lo dice). Con tactil, se marcan los pedidos. */
+    const esp_err_t terr = touch_init();
+    if (terr == ESP_OK) {
+        s_touch_ok = true;
+    } else {
+        ESP_LOGE(TAG, "tactil GT911 no inicializado (%s): la UI arranca sin tactil",
+                 esp_err_to_name(terr));
+    }
+
+    ESP_RETURN_ON_ERROR(lvgl_attach(&s_disp), TAG, "puente LVGL");
+
+    /* El LEDC arranca con duty 0 (ver backlight_init): asi no se ve el
+     * framebuffer sin pintar. Se sube el brillo cuando la UI ya existe. */
+    ESP_RETURN_ON_ERROR(backlight_init(), TAG, "backlight LEDC");
 
     ui_init();
     ui_set_station(cocina_cfg_nombre());
+    backlight_set_pct(COCINA_BL_DUTY_PCT);   /* por fin se ve algo */
     return ESP_OK;
 }
 
@@ -288,6 +541,8 @@ static void ui_task(void *arg)
         const char *banner = NULL;
         if (cocina_cfg_wifi_ssid()[0] == '\0') {
             banner = "Configura WiFi en menuconfig > Cocina P4";
+        } else if (!s_touch_ok) {
+            banner = "Tactil no detectado - revisa GT911/GSL3680";
         } else if (!s_wifi_up) {
             banner = "Sin WiFi - reintentando...";
         } else if (!mqtt_enki_is_connected()) {

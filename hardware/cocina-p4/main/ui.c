@@ -20,9 +20,10 @@
 #include "esp_err.h"
 #include "esp_log.h"
 
-/* El lock de LVGL lo expone el BSP (esp_lv_adapter por debajo): no se usa
- * esp_lvgl_port porque el BSP oficial ya monta su propio adapter + task. */
-#include "bsp/esp-bsp.h"
+/* El lock de LVGL lo expone esp_lvgl_port (es el puente que monta main.c).
+ * Antes venia del BSP Waveshare (esp_lv_adapter); ahora es la misma idea
+ * pero con la API del componente oficial. */
+#include "esp_lvgl_port.h"
 
 #include "config.h"
 #include "ui.h"
@@ -136,10 +137,10 @@ static void  build_bar(void);
 /* ------------------------------------------------------------------ */
 static bool ui_lock(void)
 {
-    /* -1 = esperar indefinidamente (misma convencion que el ejemplo del BSP) */
-    const esp_err_t err = bsp_display_lock(-1);
-    if (err != ESP_OK) {
-        ESP_LOGW(TAG, "no se pudo tomar el lock de LVGL: %s", esp_err_to_name(err));
+    /* 0 = esperar indefinidamente (la firma de esp_lvgl_port es distinta de
+     * la del BSP Waveshare: alli bsp_display_lock(-1) devolvia esp_err_t). */
+    if (!lvgl_port_lock(0)) {
+        ESP_LOGW(TAG, "no se pudo tomar el lock de LVGL");
         return false;
     }
     return true;
@@ -147,7 +148,7 @@ static bool ui_lock(void)
 
 static void ui_unlock(void)
 {
-    bsp_display_unlock();
+    lvgl_port_unlock();
 }
 
 /* ------------------------------------------------------------------ */

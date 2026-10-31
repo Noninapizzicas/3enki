@@ -954,6 +954,16 @@ echo "  Setup completado"
 echo "============================================"
 echo ""
 echo "  Versión:  $(cat "${INSTALL_DIR}/.deployed-commit" 2>/dev/null || echo 'desconocida')  (origin/main: ${_MAIN:0:8})"
+_ENTREGADO=$(cat "${INSTALL_DIR}/.deployed-commit" 2>/dev/null || echo "")
+if [ -n "${_ENTREGADO}" ] && [ "${_ENTREGADO}" != "${_MAIN}" ]; then
+    echo ""
+    echo -e "${YELLOW}  [!] PRODUCCIÓN NO ESTÁ EN MAIN${NC}"
+    echo "        desplegado  : ${_ENTREGADO:0:8}"
+    echo "        origin/main : ${_MAIN:0:8}"
+    echo "        Esto es el fallo del 31-oct (las cuentas perdieron el carrito)."
+    echo "        Vuelve a main DESDE ~/3enki y redespliega:"
+    echo "          cd ~/3enki && git checkout main && git pull --ff-only origin main"
+fi
 echo ""
 echo "  Servicios:"
 echo "    enki           → node index.js (localhost:3000)"

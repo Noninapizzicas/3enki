@@ -760,6 +760,14 @@ if [ "$MODE" = "domain" ]; then
     # Sustituir dominio hardcoded del template por el real
     sed -e "s/pizzepos\.es/${DOMAIN}/g" -e "s/pizzepos\.log/${DOMAIN}.log/g" \
         "${REPO_DIR}/deployment/caddy/Caddyfile.vps" > /etc/caddy/Caddyfile
+    # La puerta de contraseña (deployment/puerta.sh) vive en un snippet aparte
+    # para sobrevivir a este render. El Caddyfile lleva `import /etc/caddy/puerta.caddy`:
+    # si el fichero no existe al arrancar, Caddy se cae. Se crea vacío.
+    if [ ! -f /etc/caddy/puerta.caddy ]; then
+        printf '# sin puerta: lo escribe deployment/puerta.sh\n' > /etc/caddy/puerta.caddy
+        log "puerta.caddy creado vacío (aún sin contraseña)"
+    fi
+    chown caddy:caddy /etc/caddy/puerta.caddy 2>/dev/null || true
     log "Caddyfile configurado para ${DOMAIN}"
 else
     log "Configurando Caddy para ${SERVER_IP} (HTTP)..."

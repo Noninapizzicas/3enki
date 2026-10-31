@@ -58,6 +58,9 @@ class ComanderoModule extends BaseModule {
     this.tarifasConfigPorProject = new Map();
 
     this._bufferFile = path.join('./data/current', 'comandero_buffers.json');
+    // Cuentas abiertas (las escribe persistencia-comandero). Fuente para rellenar el
+    // buffer de una cuenta cuyo pedido ya esta hecho pero cuyo buffer no sobrevivio.
+    this._cuentasActivasFile = path.join('./data/current', 'cuentas_activas.json');
     this._saveTimer  = null;
   }
 
@@ -99,6 +102,9 @@ class ComanderoModule extends BaseModule {
       clearTimeout(this._saveTimer);
       this._saveTimer = null;
     }
+    // Volcar el ultimo cambio: si se apaga sin esto, el buffer del disco se queda
+    // en la foto anterior y la cuenta pierde lo ultimo que se le anadio.
+    if (this.pedidos.size > 0) await this._guardarBuffersAhora();
     this.pedidos.clear();
     this.productosCache.clear();
     this.cartasProductosCache.clear();
@@ -856,10 +862,9 @@ class ComanderoModule extends BaseModule {
 
   async _restaurarBuffers() {
     const datos = await this._readJsonSafe(this._bufferFile, 'restaurar_buffers');
-    if (!datos?.buffers) return;
 
     let restaurados = 0;
-    for (const [cuenta_id, buffer] of Object.entries(datos.buffers)) {
+    for (const [cuenta_id, buffer] of Object.entries(datos?.buffers || {})) {
       if (!buffer.items || buffer.items.length === 0) continue;
       this.pedidos.set(cuenta_id, {
         items: buffer.items,
@@ -869,40 +874,119 @@ class ComanderoModule extends BaseModule {
       restaurados++;
     }
 
-    if (restaurados > 0) {
+    // El buffer es la COPIA DE TRABAJO de la cuenta: lo que el camarero ve y cobra.
+    // Antes el fichero guardaba solo los items SIN enviar, asi que cada reinicio
+    // borraba de golpe toda cuenta con la comida ya en cocina -> el comandero pedia
+    // 0 € al cobrar (y el ticket salia vacio). Las cuentas que ya quedaron a medias
+    // se rellenan desde cuentas_activas.json, que guarda el pedido de cada cuenta.
+    const sembrados = await this._sembrarDesdeCuentasActivas();
+
+    if (restaurados > 0 || sembrados > 0) {
       this.logger.info('comandero.buffers_restaurados', {
         buffers_restaurados: restaurados,
+        buffers_sembrados:   sembrados,
         items_total: Array.from(this.pedidos.values()).reduce((s, p) => s + p.items.length, 0)
       });
     }
   }
 
+  // Rellena el buffer de las cuentas que ya tienen pedido hecho pero cuyo buffer
+  // no sobrevivio (el fichero antiguo solo guardaba lo NO enviado). Toma el pedido
+  // de cuentas_activas.json y lo marca enviado, para que enviar_cocina NO lo repita.
+  // Devuelve cuantas cuentas se han rellenado.
+  async _sembrarDesdeCuentasActivas() {
+    const datos = await this._readJsonSafe(
+      this._cuentasActivasFile,
+      'sembrar_buffers'
+    );
+    const cuentas = datos?.cuentas || {};
+
+    let sembrados = 0;
+    for (const [cuenta_id, cuenta] of Object.entries(cuentas)) {
+      const enviados = [];
+      for (const pedido of (Array.isArray(cuenta?.pedidos) ? cuenta.pedidos : [])) {
+        for (const it of (Array.isArray(pedido?.items) ? pedido.items : [])) {
+          enviados.push(this._itemDesdePedido(it, pedido.pedido_id));
+        }
+      }
+      if (enviados.length === 0) continue;
+
+      const buffer    = this.pedidos.get(cuenta_id) || { items: [], notas: '', total: 0 };
+      const conocidos = new Set(buffer.items.map(i => i.id));
+
+      let añadidos = 0;
+      for (const it of enviados) {
+        if (conocidos.has(it.id)) continue;   // ya esta en el buffer: no se duplica
+        buffer.items.push(it);
+        conocidos.add(it.id);
+        añadidos++;
+      }
+      if (añadidos === 0) continue;
+
+      buffer.total = this._calcularTotal(buffer.items);
+      this.pedidos.set(cuenta_id, buffer);
+      sembrados++;
+    }
+    return sembrados;
+  }
+
+  // Traduce una linea del pedido (forma de pedidos/cuentas) a la forma del buffer
+  // del comandero. Misma id = mismo item, para poder deduplicar por id.
+  _itemDesdePedido(it, pedido_id) {
+    const cantidad = it?.cantidad || 1;
+    const precio   = it?.precio_unitario ?? it?.precio ?? 0;
+    return {
+      id:          it?.item_id || it?.id || crypto.randomUUID(),
+      producto_id: it?.producto_id || null,
+      nombre:      it?.nombre || it?.producto_id || 'Item',
+      precio,
+      cantidad,
+      categoria:   it?.categoria || null,
+      estaciones:  it?.estaciones || null,
+      variaciones: it?.variaciones || [],
+      notas:       it?.notas || '',
+      subtotal:    it?.precio_total ?? (precio * cantidad),
+      created_at:  it?.created_at || new Date().toISOString(),
+      enviado:     true,
+      enviado_at:  it?.updated_at || it?.created_at || new Date().toISOString(),
+      pedido_id
+    };
+  }
+
   _guardarBuffers() {
     if (this._saveTimer) clearTimeout(this._saveTimer);
-    this._saveTimer = setTimeout(async () => {
-      try {
-        const buffers = {};
-        for (const [cuenta_id, pedido] of this.pedidos.entries()) {
-          const itemsNoEnviados = pedido.items.filter(i => !i.enviado);
-          if (itemsNoEnviados.length > 0) {
-            buffers[cuenta_id] = {
-              items: itemsNoEnviados,
-              notas: pedido.notas,
-              total: this._calcularTotal(itemsNoEnviados)
-            };
-          }
-        }
-
-        await fs.mkdir(path.dirname(this._bufferFile), { recursive: true });
-        await this._atomicWriteFile(
-          this._bufferFile,
-          JSON.stringify({ buffers, updated_at: new Date().toISOString() }, null, 2)
-        );
-      } catch (err) {
-        this.logger.warn('comandero.guardar_buffers.error', { error: err.message });
-        this.metrics?.increment('comandero.errors', { kind: 'guardar_buffers', code: 'UNKNOWN_ERROR' });
-      }
+    this._saveTimer = setTimeout(() => {
+      this._saveTimer = null;
+      this._guardarBuffersAhora();
     }, SAVE_DEBOUNCE_MS);
+  }
+
+  // Escritura inmediata (sin debounce). La usa el debounce y la usa onUnload para
+  // no perder el ultimo cambio al apagar; tambien la usan los tests.
+  async _guardarBuffersAhora() {
+    try {
+      const buffers = {};
+      for (const [cuenta_id, pedido] of this.pedidos.entries()) {
+        // Se guarda la cuenta ENTERA, enviados incluidos: el fichero debe ser la
+        // misma copia de trabajo que hay en memoria. Si se guardan solo los no
+        // enviados, un reinicio vacia la cuenta y el cobro sale a 0 €.
+        if (pedido.items.length === 0) continue;
+        buffers[cuenta_id] = {
+          items: pedido.items,
+          notas: pedido.notas,
+          total: this._calcularTotal(pedido.items)
+        };
+      }
+
+      await fs.mkdir(path.dirname(this._bufferFile), { recursive: true });
+      await this._atomicWriteFile(
+        this._bufferFile,
+        JSON.stringify({ buffers, updated_at: new Date().toISOString() }, null, 2)
+      );
+    } catch (err) {
+      this.logger.warn('comandero.guardar_buffers.error', { error: err.message });
+      this.metrics?.increment('comandero.errors', { kind: 'guardar_buffers', code: 'UNKNOWN_ERROR' });
+    }
   }
 
   // ==========================================

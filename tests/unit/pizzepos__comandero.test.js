@@ -61,6 +61,10 @@ async function instantiate(mocks, opts = {}) {
   if (opts.bufferFile) m._bufferFile = opts.bufferFile;
   else m._bufferFile = path.join(makeTmpDir(), 'buffers.json');
 
+  // El sembrado lee cuentas_activas.json: por defecto, un fichero que no existe
+  // (tmpdir) para que el test no dependa de los datos reales del runtime.
+  m._cuentasActivasFile = opts.cuentasFile || path.join(makeTmpDir(), 'cuentas_activas.json');
+
   await m.onLoad({
     logger:   mocks.logger,
     metrics:  mocks.metrics,
@@ -518,6 +522,90 @@ function publishedOf(mocks, name) {
     assert.strictEqual(m.pedidos.size, 0);
     const warns = mocks.logs.filter(l => l[0] === 'warn' && /restaurar|read_error/.test(l[1]));
     assert.strictEqual(warns.length, 0, 'ENOENT NO debe loguear warn');
+    await m.onUnload();
+  });
+
+  // ── El buffer es la copia de trabajo de la CUENTA, no solo el carrito pendiente ──
+
+  await testAsync('guardarBuffers persiste tambien los items YA enviados a cocina', async () => {
+    const dir = makeTmpDir();
+    const bufferFile = path.join(dir, 'buffers.json');
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks, { bufferFile });
+
+    m.pedidos.set('mesa_1', {
+      notas: '',
+      total: 13,
+      items: [
+        { id: 'i-enviado', producto_id: 'p1', nombre: 'Funk', precio: 10, cantidad: 1, subtotal: 10, enviado: true },
+        { id: 'i-pendiente', producto_id: 'p2', nombre: 'Champiñones', precio: 3, cantidad: 1, subtotal: 3 }
+      ]
+    });
+
+    await m._guardarBuffersAhora();
+    const guardado = JSON.parse(await fsp.readFile(bufferFile, 'utf-8'));
+    const ids = (guardado.buffers['mesa_1'].items || []).map(i => i.id);
+
+    assert.deepStrictEqual(ids.sort(), ['i-enviado', 'i-pendiente'], 'el fichero lleva la cuenta entera');
+    assert.strictEqual(guardado.buffers['mesa_1'].total, 13, 'el total guardado es el de la cuenta');
+    await m.onUnload();
+  });
+
+  await testAsync('tras reiniciar, la cuenta con todo enviado sigue valiendo lo suyo (no 0)', async () => {
+    const dir = makeTmpDir();
+    const bufferFile = path.join(dir, 'buffers.json');
+    await fsp.writeFile(bufferFile, JSON.stringify({
+      buffers: {
+        'mesa_1': {
+          items: [{ id: 'i-enviado', producto_id: 'p1', nombre: 'Funk', precio: 10, cantidad: 1, subtotal: 10, enviado: true }],
+          notas: '',
+          total: 10
+        }
+      }
+    }));
+
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks, { bufferFile });
+    const r = await m.handleGetPedido({ cuenta_id: 'mesa_1' });
+
+    assert.strictEqual(r.data.total, 10, 'el comandero sigue sabiendo lo que vale la cuenta');
+    assert.strictEqual(r.data.items.length, 1);
+    await m.onUnload();
+  });
+
+  await testAsync('siembra desde cuentas_activas: rellena el buffer perdido sin duplicar y marcado enviado', async () => {
+    const dir = makeTmpDir();
+    const cuentasFile = path.join(dir, 'cuentas_activas.json');
+    await fsp.writeFile(cuentasFile, JSON.stringify({
+      cuentas: {
+        'mesa_9': {
+          project_id: 'nonina',
+          tipo: 'mesa',
+          pedidos: [{
+            pedido_id: 'ped_1',
+            items: [
+              { item_id: 'it-1', producto_id: 'pizzicas_funk', nombre: 'Funk', cantidad: 1, precio_unitario: 10, precio_total: 10 },
+              { item_id: 'it-2', producto_id: 'pizzicas_swing', nombre: 'Swing', cantidad: 2, precio_unitario: 11, precio_total: 22 }
+            ]
+          }]
+        },
+        'mesa_10': { project_id: 'nonina', tipo: 'mesa', pedidos: [] }
+      }
+    }));
+
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks, { cuentasFile });
+
+    const p = m.pedidos.get('mesa_9');
+    assert.ok(p, 'la cuenta con pedido entra en el buffer');
+    assert.strictEqual(p.items.length, 2);
+    assert.strictEqual(p.total, 32, 'el total sale del pedido, no 0');
+    assert.ok(p.items.every(i => i.enviado === true), 'entra marcado enviado: no se re-manda a cocina');
+    assert.strictEqual(m.pedidos.has('mesa_10'), false, 'la cuenta sin pedido no se inventa');
+
+    // Idempotente: un segundo arranque no duplica
+    await m._sembrarDesdeCuentasActivas();
+    assert.strictEqual(m.pedidos.get('mesa_9').items.length, 2, 'sembrar dos veces no duplica');
     await m.onUnload();
   });
 

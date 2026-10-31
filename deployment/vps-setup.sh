@@ -20,13 +20,12 @@ set -euo pipefail
 # Los flags van como FLAG y no como env var porque `sudo` limpia el entorno
 # (ENKI_ENABLE_DOCKER=1 sudo … NO llega al script; sudo … --docker sí).
 #   --docker           habilita el ejecutor en contenedor
-#   --permitir-sucio   despliega aunque haya cambios sin commitear
 #   --forzar=<sha>     despliega aunque el árbol no esté en main (exige el SHA que esperas)
 DOMAIN=""
 for _arg in "$@"; do
     case "$_arg" in
         --docker)         ENKI_ENABLE_DOCKER=1 ;;
-        --permitir-sucio) ENKI_DEPLOY_PERMITIR_SUCIO=1 ;;
+        --permitir-sucio) : ;;   # ya es el comportamiento normal (se despliega con aviso)
         --forzar=*)       ENKI_DEPLOY_FORZAR="${_arg#--forzar=}" ;;
         --*)      echo "[!] flag desconocido ignorado: $_arg" ;;
         *)        DOMAIN="$_arg" ;;
@@ -59,14 +58,16 @@ err()  { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
 # versión corría (/health devuelve sha "unknown").
 # Esta guarda es el portero común de las DOS puertas (vps-setup.sh y deploy.sh).
 #
+# El sitio de despliegue es el worktree principal ~/3enki, que es el espejo de
+# origin/main (AGENTS.md §R1): se despliega desde ahí, siempre, sin carpetas nuevas.
+#
 # Forzar exige teclear el SHA que esperas (--forzar=<sha>): acto consciente, no músculo.
 if ! git -C "${REPO_DIR}" rev-parse --git-dir &>/dev/null; then
     err "ABORTO: ${REPO_DIR} NO es un repositorio git.
   Sin .git no hay forma de saber QUÉ versión se despliega, y rsync copia el árbol tal cual.
-  Despliega desde un checkout en main:
-    git -C ${REPO_DIR} fetch origin main
-    git worktree add ~/deploy-main origin/main
-    cd ~/deploy-main && sudo ./deployment/vps-setup.sh <dominio>"
+  Despliega desde el espejo de main:
+    cd ~/3enki && git pull --ff-only origin main
+    sudo ./deployment/vps-setup.sh <dominio>"
 fi
 
 _HEAD=$(git -C "${REPO_DIR}" rev-parse HEAD)
@@ -93,31 +94,33 @@ if [ "${_HEAD}" != "${_MAIN}" ]; then
     origin/main      : ${_MAIN:0:8}
     commits de menos : ${_FALTAN}   (desplegar así los BORRA de producción)
     commits de más   : ${_SOBRAN}   (desplegar así los METE en producción sin PR)
-  Arréglalo:
-    git -C ${REPO_DIR} fetch origin main
-    git worktree add ~/deploy-main origin/main
-    cd ~/deploy-main && sudo ./deployment/vps-setup.sh <dominio>
+  Arréglalo (volver a main DESDE ~/3enki, sin moverte de carpeta):
+    cd ~/3enki && git checkout main && git pull --ff-only origin main
+    sudo ./deployment/vps-setup.sh <dominio>
   O fuerza a propósito (tecleando el SHA que esperas):
     sudo ./deployment/vps-setup.sh <dominio> --forzar=${_HEAD}"
     fi
 fi
 
-# Árbol sucio: rsync copia TAMBIÉN lo no commiteado. Ese código no existe en git y
-# producción pasaría a correr algo que nadie puede reconstruir. Aborta.
+# Árbol sucio: rsync copia TAMBIÉN lo no commiteado, y eso es el flujo de siempre
+# (editas y despliegas). Se avisa con la lista para que se vea lo que viaja; el
+# portero duro es la guarda de arriba (la rama), porque desplegar otra rama es lo
+# que revierte producción en silencio.
 _SUCIOS=$(git -C "${REPO_DIR}" status --porcelain 2>/dev/null || true)
 if [ -n "${_SUCIOS}" ]; then
-    if [ "${ENKI_DEPLOY_PERMITIR_SUCIO:-}" = "1" ]; then
-        warn "Cambios SIN COMMITEAR: se despliegan tal cual (--permitir-sucio):"
-        printf '%s\n' "${_SUCIOS}" | head -20
-    else
-        err "ABORTO: cambios SIN COMMITEAR en ${REPO_DIR} (rsync los copiaría a producción):
-$(printf '%s\n' "${_SUCIOS}" | head -20)
-  Arréglalo: git -C ${REPO_DIR} stash        (o commit + PR)
-  O permítelo a propósito: sudo ./deployment/vps-setup.sh <dominio> --permitir-sucio"
+    _N_SUCIOS=$(printf '%s\n' "${_SUCIOS}" | wc -l)
+    warn "Cambios SIN COMMITEAR (${_N_SUCIOS}): rsync los copia tal cual a producción:"
+    printf '%s\n' "${_SUCIOS}" | head -20
+    if [ "${_N_SUCIOS}" -gt 20 ]; then
+        warn "  … y $(( _N_SUCIOS - 20 )) más"
     fi
 fi
 
-log "Guardia OK: ${REPO_DIR} en origin/main (${_HEAD:0:8})"
+if [ "${_HEAD}" = "${_MAIN}" ]; then
+    log "Guardia OK: ${REPO_DIR} en origin/main (${_HEAD:0:8})"
+else
+    warn "Guardia FORZADA: ${REPO_DIR} en ${_HEAD:0:8} (NO es main)"
+fi
 
 # Determinar modo
 if [ -n "$DOMAIN" ]; then

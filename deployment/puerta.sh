@@ -110,7 +110,9 @@ VAL_DIR="$(mktemp -d)"
 cp "$TMP_CADDY" "$VAL_DIR/Caddyfile"
 cp "$TMP_SNIPPET" "$VAL_DIR/puerta.caddy"
 sed -i "s#^\([[:space:]]*\)import /etc/caddy/puerta.caddy#\1import $VAL_DIR/puerta.caddy#" "$VAL_DIR/Caddyfile"
-sed -i 's#/var/log/caddy/#/tmp/caddy-dry-#g' "$VAL_DIR/Caddyfile"
+# Los logs van a la carpeta temporal de validación: /tmp/caddy-dry-* puede
+# existir de una prueba anterior (de root) y Caddy no podría escribirlo.
+sed -i "s#/var/log/caddy/#$VAL_DIR/#g" "$VAL_DIR/Caddyfile"
 VLOG="$(mktemp)"
 if ! caddy validate --config "$VAL_DIR/Caddyfile" --adapter caddyfile >"$VLOG" 2>&1; then
   echo "ERROR: Caddy rechaza la configuración nueva. NO he tocado nada." >&2

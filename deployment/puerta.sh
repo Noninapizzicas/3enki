@@ -26,7 +26,11 @@ SITE="enki-ai.online"
 # WhatsApp y el healthcheck. (/scad/* fuera: OpenSCAD ya no existe.)
 PUBLICO="/a/* /tienda/* /glovo/* /whatsapp/* /health"
 DRY=0
-[ "${1:-}" = "--dry-run" ] && DRY=1
+PWS=0
+for arg in "$@"; do
+  [ "$arg" = "--dry-run" ] && DRY=1
+  [ "$arg" = "--password-stdin" ] && PWS=1
+done
 
 if [ "$DRY" = "0" ] && [ "$(id -u)" != "0" ]; then
   echo "ERROR: ejecútalo con sudo." >&2; exit 1
@@ -49,11 +53,13 @@ if [ -t 0 ]; then
     break
   done
 else
-  if [ "$DRY" = "1" ]; then
+  if [ "$PWS" = "1" ] || [ "$DRY" = "1" ]; then
+    # Sin terminal: la contraseña entra por stdin (primera línea), para poder
+    # lanzarlo desde un script o un agente. No se imprime ni se guarda.
     read -r PW1; PW2="$PW1"
     [ -z "$PW1" ] && { echo "ERROR: contraseña vacía en stdin" >&2; exit 1; }
   else
-    echo "ERROR: hace falta una terminal interactiva para escribir la contraseña." >&2
+    echo "ERROR: hace falta una terminal interactiva, o pasa --password-stdin." >&2
     exit 1
   fi
 fi

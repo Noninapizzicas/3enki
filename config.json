@@ -330,7 +330,13 @@
       "bot_name": "Pro_nonina_bot",
       "chat_id": 1934798567,
       "telegram_activo": true,
-      "email_destino": ""
+      "email_destino": "",
+      "bots_por_proyecto": {
+        "nonina": "Pro_nonina_bot",
+        "5d6d28eb-24e1-4205-ba18-5f45ebc2657b": "Pro_nonina_bot",
+        "the-pirate": "Cierres_thepirate_bot",
+        "5d09cb49-35a0-409f-9e09-c57da93b84a8": "Cierres_thepirate_bot"
+      }
     }
   }
 }

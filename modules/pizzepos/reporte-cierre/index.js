@@ -240,23 +240,59 @@ class ReporteCierreModule extends BaseModule {
   }
 
   // Bot del proyecto duenno del cierre (telegram-bridge: un bot por proyecto). Cacheado.
-  async _botDelProyecto(project_id) {
+  //
+  // Orden de resolucion:
+  //   1. cache de lo ya resuelto
+  //   2. vinculo del telegram-bridge para `project_id`
+  //   3. `bots_por_proyecto` de la config (mapa declarado a mano por el dueño)
+  //   4. `bot_name` de config (ultimo recurso: nunca se queda sin reporte)
+  //
+  // `alt` es una segunda llave del MISMO negocio (p.ej. `cierre.project_id_origen`,
+  // el slug del fichero de ventas rescatado): el bus usa UUID y slug de forma
+  // indistinta y el mapa puede estar escrito con cualquiera de los dos.
+  async _botDelProyecto(project_id, alt = null) {
     const deConfig = this.config.bot_name || 'Pro_nonina_bot';
-    if (!project_id || this.config.bot_por_proyecto === false) return deConfig;
-    if (this._botsPorProyecto && this._botsPorProyecto.has(project_id)) return this._botsPorProyecto.get(project_id);
+    // La llave puede llegar solo por `alt` (cierre sin project_id, rescatado del disco).
+    const llave = project_id || alt || null;
+    if (!llave || this.config.bot_por_proyecto === false) return deConfig;
+    if (this._botsPorProyecto && this._botsPorProyecto.has(llave)) return this._botsPorProyecto.get(llave);
     try {
       const lista = await this._rpc('telegram.bridge.listar.request', {}, {
         timeout_ms: this.config.timeout_bridge_ms || 5000
       });
       const vinculos = (lista && ((lista.data && lista.data.vinculos) || lista.vinculos)) || [];
-      const v = vinculos.find((x) => x && x.project_id === project_id && x.botName);
+      const v = vinculos.find((x) => x && x.project_id === llave && x.botName);
       if (v) {
         this._botsPorProyecto = this._botsPorProyecto || new Map();
-        this._botsPorProyecto.set(project_id, v.botName);
+        this._botsPorProyecto.set(llave, v.botName);
         return v.botName;
       }
     } catch (_) { /* sin bridge: se usa el bot de config */ }
+    // Mapa declarado en config: gana sobre el bot generico y tolera slug o UUID.
+    const delMapa = this._botDelMapa(llave) || this._botDelMapa(alt);
+    if (delMapa) return delMapa;
     return deConfig;
+  }
+
+  /**
+   * Bot declarado a mano para un proyecto: `bots_por_proyecto: { "<slug|uuid>": "<bot>" }`.
+   * Devuelve null si no hay entrada (no inventa destino). La comparacion es tolerante
+   * (sin espacios y en minusculas) para que 'Nonina' y 'nonina' sean el mismo negocio.
+   */
+  _botDelMapa(projectId) {
+    const mapa = this.config.bots_por_proyecto;
+    if (!projectId || !mapa || typeof mapa !== 'object' || Array.isArray(mapa)) return null;
+    const norm = (v) => String(v === undefined || v === null ? '' : v).trim().toLowerCase();
+    const buscada = norm(projectId);
+    if (!buscada) return null;
+    for (const [clave, valor] of Object.entries(mapa)) {
+      if (norm(clave) !== buscada) continue;
+      const nombre = typeof valor === 'string'
+        ? valor.trim()
+        : (valor && typeof valor === 'object' ? String(valor.botName || valor.bot_name || '').trim() : '');
+      return nombre || null;
+    }
+    return null;
   }
 
   // ==========================================
@@ -267,7 +303,10 @@ class ReporteCierreModule extends BaseModule {
     const texto = this._recortar(this._componerTexto(modelo), MAX_LARGO_TELEGRAM);
     // El bot se resuelve POR PROYECTO: la app es una sola y el cierre de The Pirate no debe
     // salir por el bot de Nonina. Si no hay vinculo, se cae al bot de config.
-    const botName = await this._botDelProyecto(sourceData && sourceData.project_id);
+    // `project_id_origen` es la llave del fichero del que se rescataron las ventas: el
+    // mismo negocio puede llegar como UUID o como slug y el mapa de config admite ambos.
+    const cierre = (sourceData && sourceData.cierre) || {};
+    const botName = await this._botDelProyecto(sourceData && sourceData.project_id, cierre.project_id_origen || null);
     try {
       await this.eventBus.publish('telegram.send_message.request', {
         request_id: crypto.randomUUID(),
@@ -329,6 +368,18 @@ class ReporteCierreModule extends BaseModule {
     const { productos, unidades } = this._topProductos(cierre.desglose_productos);
     const forzadas = this._cuentasForzadas(cierre.cuentas_cerradas_forzadas);
 
+    // Aviso de cierre sin ventas: el custodio lo declara en `cierre.sin_ventas`
+    // (y en `abierto.sin_ventas`, por compat). Un cuadre que solo compara caja
+    // no es un cuadre: el dueño tiene que verlo en el mensaje.
+    const abierto = (data.abierto && typeof data.abierto === 'object') ? data.abierto : {};
+    const sinVentas = cierre.sin_ventas || abierto.sin_ventas || null;
+
+    // Ventas rescatadas del disco tras un reinicio ('disco' | 'disco-proyecto').
+    const ventasOrigen = typeof cierre.ventas_origen === 'string' ? cierre.ventas_origen : null;
+    const ventasRecuperadas = (ventasOrigen === 'disco' || ventasOrigen === 'disco-proyecto')
+      ? (this._numero(cierre.ventas_recuperadas) || 0)
+      : 0;
+
     return {
       fecha,
       fechaTexto: this._fechaTexto(fecha),
@@ -342,7 +393,10 @@ class ReporteCierreModule extends BaseModule {
       metodos,
       productos,
       unidades,
-      forzadas
+      forzadas,
+      sinVentas,
+      ventasOrigen,
+      ventasRecuperadas
     };
   }
 
@@ -467,6 +521,13 @@ class ReporteCierreModule extends BaseModule {
     lineas.push(`Estado: <b>${this._escapar(modelo.estadoTexto)}</b>`);
     lineas.push('');
 
+    // Aviso destacado: hay arqueo y ninguna venta del dia. Sin esta linea el
+    // "cuadrado/sobrante" del cierre se lee como bueno cuando no lo es.
+    if (modelo.sinVentas) {
+      lineas.push('⚠️ Sin ventas registradas para ese día: el cuadre solo compara caja');
+      lineas.push('');
+    }
+
     if (modelo.totalIngresos !== null) {
       const ventas = modelo.ventas !== null
         ? ` · ${modelo.ventas} ${modelo.ventas === 1 ? 'venta' : 'ventas'}`
@@ -508,6 +569,14 @@ class ReporteCierreModule extends BaseModule {
       lineas.push(`⚠️ ${modelo.forzadas.total} ${modelo.forzadas.total === 1 ? 'cuenta cerrada' : 'cuentas cerradas'} a la fuerza${nombres}`);
     }
 
+    // Pie de trazabilidad: las ventas no venian de la memoria del proceso, se
+    // rescataron del disco. Que el dueño sepa que hubo un reinicio, no que se
+    // invento el total.
+    if (modelo.ventasRecuperadas > 0) {
+      lineas.push('');
+      lineas.push(`Ventas recuperadas del disco (${modelo.ventasRecuperadas}) — el sistema se había reiniciado`);
+    }
+
     return lineas.join('\n');
   }
 
@@ -547,12 +616,21 @@ class ReporteCierreModule extends BaseModule {
       + '</p>'
       : '';
 
+    // Mismos avisos que el mensaje de Telegram: cierre sin ventas y rescate del disco.
+    const bloqueSinVentas = modelo.sinVentas
+      ? '<p style="color:#c62828"><b>⚠️ Sin ventas registradas para ese día: el cuadre solo compara caja</b></p>'
+      : '';
+    const bloqueRecuperadas = modelo.ventasRecuperadas > 0
+      ? `<p style="color:#888;font-size:12px">Ventas recuperadas del disco (${modelo.ventasRecuperadas}) — el sistema se había reiniciado</p>`
+      : '';
+
     return [
       '<!DOCTYPE html><html><head><meta charset="utf-8"></head>',
       '<body style="font-family:Arial,Helvetica,sans-serif;color:#222;padding:16px;">',
       `<h2 style="margin:0 0 4px">Cierre de caja · ${esc(modelo.fechaTexto)}`
       + `${modelo.horaTexto ? ' · ' + esc(modelo.horaTexto) : ''}</h2>`,
       `<p style="margin:0 0 16px;color:${colorEstado}"><b>${esc(modelo.estadoTexto)}</b></p>`,
+      bloqueSinVentas,
       '<table cellspacing="0" cellpadding="6" style="border-collapse:collapse;min-width:320px">',
       '<tbody>', filas.join(''), '</tbody></table>',
       modelo.productos.length > 0
@@ -564,6 +642,7 @@ class ReporteCierreModule extends BaseModule {
         : '',
       bloqueForzadas,
       '<p style="margin-top:24px;color:#888;font-size:12px">Reporte automático del cierre de caja.</p>',
+      bloqueRecuperadas,
       '</body></html>'
     ].join('');
   }

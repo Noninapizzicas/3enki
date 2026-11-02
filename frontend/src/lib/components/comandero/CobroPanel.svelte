@@ -506,6 +506,7 @@
 
   {#if showCierreCaja}
     <CierreCajaPanel
+      {project_id}
       on:close={() => showCierreCaja = false}
     />
   {/if}

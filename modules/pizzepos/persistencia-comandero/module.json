@@ -107,6 +107,7 @@
       "counters": [
         "persistencia.eventos.total",
         "persistencia.ventas.total",
+        "persistencia.ventas.rescatadas_disco",
         "persistencia.errores.total",
         "persistencia-comandero.errors"
       ]

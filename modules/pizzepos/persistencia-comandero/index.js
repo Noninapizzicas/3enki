@@ -579,6 +579,48 @@ class PersistenciaComanderoModule extends BaseModule {
         ventasParaCierre = ventasParaCierre.filter(v => v.project_id === project_id);
       }
 
+      // ---- Rescate de ventas desde DISCO --------------------------------
+      // Si la memoria esta vacia (proceso reiniciado, cierre lanzado sin
+      // project_id), el cierre saldria con 0 ventas y un "sobrante" falso: paso
+      // en vivo el 01/11/2026 con nonina (136,50 € de ventas y un faltante de
+      // 126,50 € que se reporto como sobrante de 10). El disco SI tiene la
+      // verdad, asi que se lee antes de calcular nada.
+      const abierto = {};
+      let ventasOrigen    = 'memoria';
+      let projectIdCierre = project_id || null;
+      let projectIdOrigen = null;
+
+      if (ventasParaCierre.length === 0) {
+        const rescatado = await this._rescatarVentasDelDisco(project_id, this.fechaJornada);
+        if (rescatado) {
+          ventasParaCierre = rescatado.ventas;
+          ventasOrigen     = rescatado.origen;
+          projectIdOrigen  = rescatado.project_id || null;
+          // Sin project_id en la llamada, el proyecto del FICHERO manda: es el
+          // que sabe de que negocio son estas ventas (y el que elige el bot).
+          if (!projectIdCierre) projectIdCierre = rescatado.project_id || null;
+          if (Array.isArray(rescatado.candidatos)) abierto.origen_ventas = rescatado.candidatos;
+          this.logger.warn('persistencia.cierre.ventas_rescatadas', {
+            project_id:      projectIdCierre || 'global',
+            origen:          ventasOrigen,
+            ventas:          ventasParaCierre.length,
+            project_id_origen: projectIdOrigen,
+            candidatos:      Array.isArray(rescatado.candidatos) ? rescatado.candidatos.length : 0
+          });
+          this.metrics?.increment?.('persistencia.ventas.rescatadas_disco', { origen: ventasOrigen });
+        }
+      }
+
+      // La caja se cierra igual, pero el reporte debe poder decirlo: hay arqueo
+      // y ninguna venta del dia. No se bloquea el cierre (la caja tiene que poder
+      // cerrarse), se declara.
+      if (ventasParaCierre.length === 0) {
+        abierto.sin_ventas = 'hay arqueo pero ninguna venta del dia: revisar antes de dar el cuadre por bueno';
+        this.logger.warn('persistencia.cierre.sin_ventas', {
+          fecha: this.fechaJornada, project_id: projectIdCierre || 'global'
+        });
+      }
+
       const informeCuentasAbiertas = cuentasAbiertas.map(c => ({
         cuenta_id:      c.cuenta_id || c.id,
         tipo:           c.tipo,
@@ -655,7 +697,7 @@ class PersistenciaComanderoModule extends BaseModule {
       const horaCierre = new Date().toISOString();
       const cierre = {
         cierre_id:      `cierre_${Date.now()}`,
-        project_id:     project_id || null,
+        project_id:     projectIdCierre,
         fecha_jornada:  this.fechaJornada,
         hora_inicio:    this.horaInicioJornada,
         hora_cierre:    horaCierre,
@@ -668,8 +710,19 @@ class PersistenciaComanderoModule extends BaseModule {
         diferencias,
         diferencia,
         estado:         diferencia === 0 ? 'cuadrado' : (diferencia > 0 ? 'sobrante' : 'faltante'),
+        // Trazabilidad del origen de las ventas: 'memoria' (cache del proceso),
+        // 'disco-proyecto' (rescate de la carpeta de un proyecto) o 'disco'
+        // (rescate del fichero global). `ventas_recuperadas` deja por escrito
+        // cuantas se rescataron: sin esto, un cierre tras reinicio parece limpio.
+        ventas_origen:      ventasOrigen,
+        ventas_recuperadas: ventasOrigen === 'memoria' ? 0 : ventasParaCierre.length,
         cuentas_cerradas_forzadas: informeCuentasAbiertas
       };
+
+      // Proyecto del que salieron las ventas rescatadas (puede diferir de la
+      // llave con la que se pidio el cierre): el reporte lo usa para el bot.
+      if (projectIdOrigen) cierre.project_id_origen = projectIdOrigen;
+      if (abierto.sin_ventas) cierre.sin_ventas = abierto.sin_ventas;
 
       const desglose_productos = this._calcularDesgloseProductos(ventasParaCierre);
       cierre.desglose_productos = desglose_productos;
@@ -680,8 +733,8 @@ class PersistenciaComanderoModule extends BaseModule {
       await this._atomicWriteFile(archivoCierre, JSON.stringify(cierre, null, 2));
 
       // Guardar cierre por proyecto
-      if (project_id) {
-        const dirs = await this._getProjectDirs(project_id);
+      if (projectIdCierre) {
+        const dirs = await this._getProjectDirs(projectIdCierre);
         if (dirs) {
           await this._atomicWriteFile(
             path.join(dirs.ventas, `cierre_${this.fechaJornada}.json`),
@@ -692,28 +745,32 @@ class PersistenciaComanderoModule extends BaseModule {
             JSON.stringify({ ...cierre, informe, ventas: ventasParaCierre }, null, 2)
           );
           this.logger.info('persistencia.cierre_proyecto.guardado', {
-            project_id, contabilidad: path.join(dirs.contabilidad, `cierre_${this.fechaJornada}.json`)
+            project_id: projectIdCierre, contabilidad: path.join(dirs.contabilidad, `cierre_${this.fechaJornada}.json`)
           });
         }
       }
 
-      await this._archivarDia(project_id);
+      await this._archivarDia(projectIdCierre);
 
       await this._publicarEvento('caja.cerrada', {
         fecha:       this.fechaJornada,
-        project_id:  project_id || null,
+        project_id:  projectIdCierre,
         arqueo,
         totales:     resumen,
         diferencia,
         cierre,
-        informe
-      }, data);
+        informe,
+        // Lo que el cierre no pudo cuadrar solo (rescate de ventas / sin ventas).
+        abierto
+      }, { ...(data || {}), project_id: projectIdCierre });
 
       this.logger.info('persistencia.cierre_caja', {
         fecha:            this.fechaJornada,
-        project_id:       project_id || 'global',
+        project_id:       projectIdCierre || 'global',
         diferencia,
         estado:           cierre.estado,
+        ventas_origen:    cierre.ventas_origen,
+        ventas_recuperadas: cierre.ventas_recuperadas,
         cuentas_forzadas: informeCuentasAbiertas.length
       });
 
@@ -721,6 +778,7 @@ class PersistenciaComanderoModule extends BaseModule {
         status: 200,
         data: {
           cierre,
+          abierto,
           user_hint: 'Cierre de caja completado'
         }
       };
@@ -1209,6 +1267,174 @@ class PersistenciaComanderoModule extends BaseModule {
   }
 
   // ==========================================
+  // Rescate de ventas del dia desde DISCO
+  // ==========================================
+  //
+  // Para que sirve: el cierre de caja calculaba SOLO con `ventasCache`. Tras un
+  // reinicio del proceso esa cache nace vacia, asi que un cierre lanzado sin
+  // `project_id` daba 0 ventas y comparaba el arqueo contra el fondo inicial:
+  // en vivo (01/11/2026, nonina) 136,50 € de ventas se convirtieron en un
+  // "sobrante 10 €" cuando la caja faltaba 126,50 €.
+  //
+  // El disco guarda la verdad (`_guardarVentas`/`_guardarVentasPorProyecto`), asi
+  // que se lee de ahi — sin recalcular ni inventar: si en disco no hay ventas del
+  // dia, se declara y el cierre se completa igual.
+
+  /**
+   * Busca ventas del dia en disco. Devuelve `{ ventas, project_id, origen, candidatos }`
+   * o null si no hay nada que rescatar.
+   *   - Con project_id: SOLO su carpeta (current y luego el archivo del dia).
+   *   - Sin project_id: todas las carpetas de proyecto con `fecha === jornada` y
+   *     ventas > 0. Con varias, la de mas ventas (no se suman negocios distintos:
+   *     cada caja es de su negocio) y la lista completa en `candidatos`.
+   *   - Ultimo recurso en ambos casos: el fichero global.
+   */
+  async _rescatarVentasDelDisco(projectId, fecha) {
+    if (!fecha) return null;
+
+    if (projectId) {
+      const propio = await this._ventasDelProyectoEnDisco(projectId, fecha);
+      if (propio) return { ...propio, origen: 'disco-proyecto', candidatos: null };
+    } else {
+      const candidatos = await this._proyectosConVentasEnDisco(fecha);
+      if (candidatos.length > 0) {
+        // Orden estable: mas ventas primero, y a igualdad el slug (determinista).
+        const ordenados = candidatos.slice().sort((a, b) =>
+          (b.ventas.length - a.ventas.length) ||
+          String(a.project_id).localeCompare(String(b.project_id)));
+        const elegido = ordenados[0];
+        return {
+          ventas:     elegido.ventas,
+          project_id: elegido.project_id,
+          origen:     'disco-proyecto',
+          // Se declara la lista entera (no se elige en silencio entre negocios).
+          candidatos: ordenados.map(c => ({
+            project_id: c.project_id,
+            ventas:     c.ventas.length,
+            elegido:    c === elegido
+          }))
+        };
+      }
+    }
+
+    const global = await this._ventasGlobalesEnDisco(fecha);
+    if (global) {
+      // El fichero global mezcla todos los negocios: si el cierre es de UN
+      // proyecto, solo valen sus ventas. Si no queda ninguna, no hay rescate
+      // (mejor un cierre sin ventas declarado que uno con las ventas de otro).
+      if (!projectId) return { ...global, origen: 'disco', candidatos: null };
+      const suyas = global.ventas.filter(v => v?.project_id === projectId);
+      if (suyas.length > 0) {
+        return {
+          ventas: suyas,
+          project_id: this._proyectoUnicoDeVentas(suyas) || projectId,
+          origen: 'disco',
+          candidatos: null
+        };
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Ventas del dia de la carpeta de UN proyecto. `current/ventas.json` manda (es
+   * lo que escribe `_guardarVentasPorProyecto`); si no hay, el archivo del dia que
+   * deja `_archivarDia`.
+   */
+  async _ventasDelProyectoEnDisco(projectId, fecha) {
+    const dirs = await this._getProjectDirs(projectId);
+    if (!dirs) return null;
+    for (const archivo of [
+      path.join(dirs.current, 'ventas.json'),
+      path.join(dirs.ventas, `${fecha}.json`)
+    ]) {
+      const datos = await this._readJsonSafe(archivo, 'rescate_ventas_proyecto');
+      if (!this._esFicheroDelDia(datos, fecha)) continue;
+      const ventas = this._deduplicarVentas(datos.ventas || []);
+      if (ventas.length === 0) continue;
+      // El project_id del FICHERO es el bueno (la carpeta se nombra por slug).
+      return { ventas, project_id: datos.project_id || this._proyectoUnicoDeVentas(ventas) || projectId, archivo };
+    }
+    return null;
+  }
+
+  /** Recorre `projects/<slug>/persistencia/current/ventas.json` buscando el dia. */
+  async _proyectosConVentasEnDisco(fecha) {
+    let entradas = [];
+    try {
+      entradas = await fs.readdir(this.projectsBasePath, { withFileTypes: true });
+    } catch (err) {
+      if (err.code !== 'ENOENT') {
+        this.logger.warn('persistencia.rescate.readdir.error', { error: err.message });
+        this.metrics?.increment?.('persistencia-comandero.errors', { kind: 'rescate_readdir', code: 'UNKNOWN_ERROR' });
+      }
+      return [];
+    }
+
+    const candidatos = [];
+    for (const entrada of entradas) {
+      if (!entrada || !entrada.isDirectory()) continue;
+      // Igual que con proyecto explicito: `current` manda, el archivo del dia respalda.
+      for (const archivo of [
+        path.join(this.projectsBasePath, entrada.name, 'persistencia', 'current', 'ventas.json'),
+        path.join(this.projectsBasePath, entrada.name, 'persistencia', 'ventas', `${fecha}.json`)
+      ]) {
+        const datos = await this._readJsonSafe(archivo, 'rescate_ventas_scan');
+        if (!this._esFicheroDelDia(datos, fecha)) continue;
+        const ventas = this._deduplicarVentas(datos.ventas || []);
+        if (ventas.length === 0) continue;
+        candidatos.push({
+          ventas,
+          project_id: datos.project_id || this._proyectoUnicoDeVentas(ventas) || entrada.name,
+          archivo
+        });
+        break;
+      }
+    }
+    return candidatos;
+  }
+
+  /** Ultimo recurso: el fichero de ventas global (sin proyecto). */
+  async _ventasGlobalesEnDisco(fecha) {
+    for (const archivo of [
+      path.join(this.currentDir, 'ventas.json'),
+      path.join(this.ventasDir, `${fecha}.json`)
+    ]) {
+      const datos = await this._readJsonSafe(archivo, 'rescate_ventas_global');
+      if (!this._esFicheroDelDia(datos, fecha)) continue;
+      const ventas = this._deduplicarVentas(datos.ventas || []);
+      if (ventas.length === 0) continue;
+      return { ventas, project_id: datos.project_id || this._proyectoUnicoDeVentas(ventas) || null, archivo };
+    }
+    return null;
+  }
+
+  /**
+   * ¿El fichero es de la jornada? La `fecha` del JSON manda. Si no la trae (ficheros
+   * antiguos), se exige que al menos una venta sea de ese dia — nunca se rescata un
+   * dia distinto por un fichero olvidado.
+   */
+  _esFicheroDelDia(datos, fecha) {
+    if (!datos || !Array.isArray(datos.ventas) || datos.ventas.length === 0) return false;
+    if (datos.fecha) return String(datos.fecha) === String(fecha);
+    return datos.ventas.some(v => this._fechaDeVenta(v) === String(fecha));
+  }
+
+  /** Fecha (YYYY-MM-DD) de una venta segun su timestamp de cierre. */
+  _fechaDeVenta(venta) {
+    const iso = venta?.timestamp || venta?.cuenta?.hora_cierre || null;
+    if (!iso) return null;
+    const m = /^(\d{4}-\d{2}-\d{2})/.exec(String(iso));
+    return m ? m[1] : null;
+  }
+
+  /** Project_id unico de un conjunto de ventas (null si hay varias o ninguna). */
+  _proyectoUnicoDeVentas(ventas = []) {
+    const ids = new Set(ventas.map(v => v?.project_id).filter(Boolean));
+    return ids.size === 1 ? [...ids][0] : null;
+  }
+
+  // ==========================================
   // Business logic — venta builders + agregaciones
   // ==========================================
 
@@ -1465,6 +1691,13 @@ class PersistenciaComanderoModule extends BaseModule {
     lineas.push(`Efectivo esperado: ${esperadoEfectivo.toFixed(2)} €`);
     lineas.push(`Diferencia: ${diferencia >= 0 ? '+' : ''}${diferencia.toFixed(2)} €`);
     lineas.push(`Estado: ${estado === 'cuadrado' ? '✅ Cuadrado' : estado === 'sobrante' ? '⬆️ Sobrante' : '⬇️ Faltante'}`);
+    // Origen de las ventas: si se rescataron del disco (proceso reiniciado) o si
+    // no habia ninguna, el informe lo dice — nunca se disimula un cierre a cero.
+    if (cierre.sin_ventas) {
+      lineas.push(`⚠️ Sin ventas registradas para ese dia: ${cierre.sin_ventas}`);
+    } else if (Number(cierre.ventas_recuperadas) > 0) {
+      lineas.push(`Ventas recuperadas del disco (${cierre.ventas_recuperadas})`);
+    }
     // Diferencias de los métodos que se contaron (tarjeta/bizum son opcionales).
     if (cierre.diferencias && typeof cierre.diferencias === 'object') {
       for (const [metodo, dif] of Object.entries(cierre.diferencias)) {

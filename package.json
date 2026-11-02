@@ -79,6 +79,7 @@
     "test:staff-manager": "node tests/unit/staff-manager.test.js",
     "test:pizzepos__cuentas": "node tests/unit/pizzepos__cuentas.test.js",
     "test:pizzepos__persistencia-comandero": "node tests/unit/pizzepos__persistencia-comandero.test.js",
+    "test:pizzepos__cierre-recupera-ventas": "node tests/unit/pizzepos__cierre-recupera-ventas.test.js",
     "test:pizzepos__impresion": "node tests/unit/pizzepos__impresion.test.js",
     "test:pizzepos__categorias": "node tests/unit/pizzepos__categorias.test.js",
     "test:pizzepos__comandero": "node tests/unit/pizzepos__comandero.test.js",

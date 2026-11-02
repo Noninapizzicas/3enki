@@ -7,10 +7,44 @@
    * sistema: el cruce se hace en el backend y viaja al propietario. Es ciego por
    * diseño, para que nadie pueda "cuadrar la caja a mano".
    */
-  import { createEventDispatcher } from 'svelte';
+  import { createEventDispatcher, getContext, onDestroy } from 'svelte';
   import { mqttRequest } from '$lib/ui-core/mqtt-request';
+  import { sessionProjectId } from '$lib/stores/sessionProject';
+  import type { Readable } from 'svelte/store';
 
   export let visible: boolean = true;
+
+  /**
+   * project_id del NEGOCIO al que pertenece esta caja.
+   *
+   * Se resuelve, por orden: store `sessionProjectId` (el UUID real de ESTA pestaña, que
+   * alimenta el layout `[project_id]`) → prop del padre (CobroPanel → ComanderoScreen) →
+   * contexto `project` de ese mismo layout.
+   *
+   * POR QUÉ NO ES OPCIONAL: sin `project_id`, `persistencia-comandero` no sabe de qué
+   * negocio son las ventas del día → el cierre sale a 0 y el reporte se manda por el
+   * bot de OTRO proyecto (incidente de la noche del 01/11).
+   */
+  export let project_id: string = '';
+
+  // Contexto del layout `[project_id]`: id/slug/nombre REALES del proyecto de la URL.
+  type ProjectCtx = { id?: string; slug?: string; name?: string; resolved?: boolean };
+  const projectCtx = getContext<Readable<ProjectCtx> | undefined>('project');
+  let ctxProject: ProjectCtx = {};
+  if (projectCtx && typeof projectCtx.subscribe === 'function') {
+    const unsubCtx = projectCtx.subscribe((p) => { ctxProject = p || {}; });
+    onDestroy(unsubCtx);
+  }
+
+  // Proyecto activo resoluble. Cadena de respaldo, nunca inventada: el store de sesión
+  // es la fuente canónica (UUID real de ESTA pestaña, lo escribe el layout), después la
+  // prop del padre y por último el contexto del layout.
+  $: proyectoId = ($sessionProjectId || project_id || ctxProject.id || '').trim();
+  // Nombre del negocio: solo cuando el layout ya resolvió el proyecto (si no, `name`
+  // contiene el slug de la URL y no sirve como nombre comercial).
+  $: proyectoNombre = (ctxProject.resolved && ctxProject.name) ? String(ctxProject.name) : '';
+  // Etiqueta para el recibo: nombre si lo hay, si no el id; null = no hay proyecto.
+  $: proyectoEtiqueta = proyectoId ? (proyectoNombre || proyectoId) : null;
 
   const dispatch = createEventDispatcher<{
     close: void;
@@ -46,6 +80,7 @@
 
   // Recibo congelado al enviar: SOLO cifras tecleadas por el camarero, nunca del sistema.
   let recibo: {
+    proyecto: string | null;
     efectivo: number;
     tarjeta: number | null;
     bizum: number | null;
@@ -160,9 +195,12 @@
     }
     loading = true;
     try {
-      const res = await mqttRequest<any>('persistencia', 'iniciar_dia', {
-        fondo_inicial: redondear(fondo)
-      });
+      // La jornada se abre SIEMPRE con el proyecto de la sesión (ver `proyectoId`):
+      // sin él, el día queda abierto en el proyecto equivocado y el cierre posterior
+      // no encuentra ventas de este negocio.
+      const payloadDia: Record<string, unknown> = { fondo_inicial: redondear(fondo) };
+      if (proyectoId) payloadDia.project_id = proyectoId;
+      const res = await mqttRequest<any>('persistencia', 'iniciar_dia', payloadDia);
       if (res?.status === 200) {
         fondoAbierto = redondear(fondo);
         if (cerrarAlTerminar) dispatch('close');
@@ -196,6 +234,7 @@
 
       // Congelamos el recibo ANTES de enviar: es lo único que verá el camarero.
       recibo = {
+        proyecto: proyectoEtiqueta,
         efectivo,
         tarjeta: tarjetaVal === null ? null : redondear(tarjetaVal),
         bizum: bizumVal === null ? null : redondear(bizumVal),
@@ -204,7 +243,10 @@
         total: totalDeclarado
       };
 
-      const res = await mqttRequest<any>('persistencia', 'cierre', {
+      // El cierre SIEMPRE viaja con `project_id`. Sin él, `persistencia-comandero` no
+      // sabe de qué negocio son las ventas del día: el cierre sale a 0 y el reporte
+      // termina en el bot de otro proyecto (incidente del 01/11).
+      const payloadCierre: Record<string, unknown> = {
         arqueo: {
           billetes: { ...billetes },
           monedas: { ...monedas },
@@ -215,7 +257,13 @@
           propinas: propinasVal === null ? null : redondear(propinasVal),
           retiradas: retiradasPayload
         }
-      });
+      };
+      // Si no hay proyecto resoluble NO bloqueamos la caja (el camarero está cerrando a
+      // las tantas): se omite la clave a propósito → el backend lo trata como cierre
+      // GLOBAL y el recibo avisa de ello.
+      if (proyectoId) payloadCierre.project_id = proyectoId;
+
+      const res = await mqttRequest<any>('persistencia', 'cierre', payloadCierre);
       if (res?.status === 200 && res?.data) {
         // Cierre ciego: del cierre NO se guarda nada con cifras del sistema. Solo la fecha y
         // cuantas cuentas se cerraron a la fuerza (el dato no revela importes).
@@ -292,6 +340,14 @@
               {#if fondoAbierto !== null}
                 <p class="apertura-ok">Día abierto · fondo {formatPrecio(fondoAbierto)}</p>
               {/if}
+              <!-- A qué negocio pertenece esta caja: solo informativo, para no cerrar en el equivocado -->
+              <p class="apertura-proyecto" class:sin-proyecto={!proyectoEtiqueta}>
+                {#if proyectoEtiqueta}
+                  🏪 {proyectoEtiqueta}
+                {:else}
+                  ⚠️ Sin proyecto activo · cierre global
+                {/if}
+              </p>
             </div>
           </section>
 
@@ -414,8 +470,17 @@
               </p>
             {/if}
 
+            {#if recibo && !recibo.proyecto}
+              <!-- Cierre enviado sin project_id: no se bloqueó la caja, pero el camarero debe saberlo -->
+              <p class="resultado-global">⚠️ Sin proyecto asociado · cierre global</p>
+            {/if}
+
             {#if recibo}
               <div class="recibo">
+                <div class="recibo-row proyecto">
+                  <span>Proyecto</span>
+                  <strong>{recibo.proyecto ?? '—'}</strong>
+                </div>
                 <div class="recibo-row">
                   <span>Efectivo contado</span>
                   <strong>{formatPrecio(recibo.efectivo)}</strong>
@@ -716,6 +781,21 @@
     color: #22c55e;
   }
 
+  /* Negocio de la caja: informativo, discreto */
+  .apertura-proyecto {
+    margin: 6px 0 0 0;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: #888;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .apertura-proyecto.sin-proyecto {
+    color: #f59e0b;
+  }
+
   .apertura-btn {
     padding: 8px 12px;
     border: 1px solid #22c55e55;
@@ -891,6 +971,26 @@
   .recibo-motivo {
     color: #666;
     font-size: 0.72rem;
+  }
+
+  /* Proyecto en el recibo: informativo, sin cifras */
+  .recibo-row.proyecto {
+    padding-bottom: 6px;
+    border-bottom: 1px dashed #2a2a2a;
+    margin-bottom: 2px;
+  }
+
+  .recibo-row.proyecto span,
+  .recibo-row.proyecto strong {
+    font-size: 0.72rem;
+    color: #888;
+  }
+
+  .resultado-global {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #f59e0b;
+    margin: 6px 0 0 0;
   }
 
   .resultado-forzadas {

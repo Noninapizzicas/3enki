@@ -38,7 +38,12 @@ module.exports = {
   name: 'notificar-cierre-caja',
   description: 'Envía informe de cierre de caja por Telegram/WhatsApp/Email',
   trigger: 'caja.cerrada',
-  enabled: true,
+  // DESACTIVADO: lo sustituye el módulo `pizzepos/reporte-cierre`, que escucha el mismo
+  // `caja.cerrada` y manda UN mensaje en formato español con desglose por método
+  // (esperado/contado/diferencia), propinas, top de productos y el bot del proyecto.
+  // Con este handler activo llegaban DOS mensajes por cierre: el informe crudo del custodio
+  // (con `0.00 €`) y el reporte bueno. Se deja el código como referencia/respaldo.
+  enabled: false,
 
   async handle(event, { logger, emit, config: globalConfig }) {
     const data = event.data || event;

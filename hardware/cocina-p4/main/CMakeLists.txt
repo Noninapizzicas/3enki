@@ -16,6 +16,7 @@ idf_component_register(
         esp_event
         esp_timer
         esp_hw_support      # esp_ldo_regulator.h (LDO del PHY MIPI-DSI)
+        esp_mm              # esp_cache.h (volcado de cache del framebuffer DSI)
         esp_driver_gpio
         esp_driver_i2c
         esp_driver_ledc

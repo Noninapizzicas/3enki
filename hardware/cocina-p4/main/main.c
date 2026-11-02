@@ -37,6 +37,7 @@
 
 #include "esp_check.h"
 #include "esp_err.h"
+#include "esp_cache.h"
 #include "esp_event.h"
 #include "esp_ldo_regulator.h"
 #include "esp_log.h"
@@ -297,6 +298,83 @@ static void backlight_set_pct(int pct)
 }
 
 /* ------------------------------------------------------------------ */
+/* Autopsia de la pantalla (se apaga cuando la imagen se vea)        */
+/* ------------------------------------------------------------------ */
+/* Una pantalla que no ensena nada puede romperse en cuatro sitios muy distintos
+ * y por fuera los cuatro se ven igual: negro. Esto los separa en UN arranque,
+ * de abajo arriba, y cada etapa deja su linea en el log:
+ *
+ *   1. barras de color del host DSI -> PHY, panel y retroiluminacion
+ *   2. framebuffer entero en blanco -> el mismo camino que usa LVGL (FB -> DSI)
+ *   3. framebuffer a negro          -> que el blanco no era un espejismo
+ *   4. refrescos de LVGL            -> si LVGL llega a pintar y cuantas veces
+ *
+ * Poner COCINA_AUTOPSIA_PANTALLA a 0 cuando la pantalla se vea. */
+#define COCINA_AUTOPSIA_PANTALLA 1
+
+static volatile uint32_t s_ciclos_lvgl;    /* LV_EVENT_REFR_READY */
+static volatile uint32_t s_pintados_lvgl;  /* LV_EVENT_RENDER_START: dibujo real */
+
+static void autopsia_refresh_cb(lv_event_t *e)
+{
+    const lv_event_code_t code = lv_event_get_code(e);
+
+    if (code == LV_EVENT_REFR_READY) {
+        if (s_ciclos_lvgl == 0 && s_pintados_lvgl == 0) {
+            ESP_LOGW(TAG, "AUTOPSIA 4/4 LVGL da ciclos de refresco pero no ha dibujado nada");
+        }
+        s_ciclos_lvgl++;
+    } else if (code == LV_EVENT_RENDER_START) {
+        if (s_pintados_lvgl == 0) {
+            ESP_LOGI(TAG, "AUTOPSIA 4/4 LVGL ha empezado a dibujar (primer render)");
+        }
+        s_pintados_lvgl++;
+    }
+}
+
+static void autopsia_pantalla(void)
+{
+#if COCINA_AUTOPSIA_PANTALLA
+    const size_t fb_bytes =
+        (size_t)COCINA_LCD_H_RES * COCINA_LCD_V_RES * (COCINA_LCD_BPP / 8);
+
+    /* La retroiluminacion, antes de nada: sin ella todo se ve negro aunque el
+     * panel este perfecto, y las etapas de abajo no dirian nada. */
+    backlight_set_pct(COCINA_BL_DUTY_PCT);
+
+    /* 1. Patron del propio host DSI: no pasa por el framebuffer ni por LVGL. */
+    const esp_err_t e1 =
+        esp_lcd_dpi_panel_set_pattern(s_panel, MIPI_DSI_PATTERN_BAR_HORIZONTAL);
+    ESP_LOGI(TAG, "AUTOPSIA 1/4 barras de color del host DSI (%s): 2 s",
+             esp_err_to_name(e1));
+    vTaskDelay(pdMS_TO_TICKS(2000));
+    (void)esp_lcd_dpi_panel_set_pattern(s_panel, MIPI_DSI_PATTERN_NONE);
+
+    /* 2 y 3. El camino exacto que usa LVGL: escribir el framebuffer que el DSI
+     * esta barriendo. El blanco tiene que salir blanco; si sale negro, el fallo
+     * esta por debajo de LVGL (o el brillo). */
+    void *fb = NULL;
+    const esp_err_t e2 = esp_lcd_dpi_panel_get_frame_buffer(s_panel, 1, &fb);
+    ESP_LOGI(TAG, "AUTOPSIA 2/4 framebuffer %p (%s), %u bytes: BLANCO 2 s",
+             fb, esp_err_to_name(e2), (unsigned)fb_bytes);
+    if (e2 == ESP_OK && fb != NULL) {
+        /* El DSI lee el framebuffer por DMA: sin el volcado de cache el blanco
+         * se queda en la cache y en pantalla no aparece nada. */
+        memset(fb, 0xFF, fb_bytes);
+        esp_cache_msync(fb, fb_bytes,
+                        ESP_CACHE_MSYNC_FLAG_DIR_C2M | ESP_CACHE_MSYNC_FLAG_UNALIGNED);
+        vTaskDelay(pdMS_TO_TICKS(2000));
+
+        memset(fb, 0x00, fb_bytes);
+        esp_cache_msync(fb, fb_bytes,
+                        ESP_CACHE_MSYNC_FLAG_DIR_C2M | ESP_CACHE_MSYNC_FLAG_UNALIGNED);
+        vTaskDelay(pdMS_TO_TICKS(500));
+    }
+    ESP_LOGI(TAG, "AUTOPSIA 3/4 framebuffer a negro: la pantalla deberia apagarse");
+#endif
+}
+
+/* ------------------------------------------------------------------ */
 /* Puente LVGL 9 (esp_lvgl_port)                                      */
 /* ------------------------------------------------------------------ */
 static esp_err_t lvgl_attach(lv_display_t **out_disp)
@@ -365,6 +443,13 @@ static esp_err_t display_and_ui_init(void)
 {
     ESP_RETURN_ON_ERROR(panel_init(), TAG, "init del panel JD9365");
 
+    /* La retroiluminacion se enciende aqui, antes de tocar LVGL: es lo unico
+     * que convierte "hay imagen" en "se ve imagen", y asi las pruebas de abajo
+     * no pueden mentir por culpa del brillo. */
+    ESP_RETURN_ON_ERROR(backlight_init(), TAG, "backlight LEDC");
+
+    autopsia_pantalla();
+
     /* El tactil NO es bloqueante: sin tactil la pantalla sigue informando
      * (y el banner lo dice). Con tactil, se marcan los pedidos. */
     const esp_err_t terr = touch_init();
@@ -377,13 +462,24 @@ static esp_err_t display_and_ui_init(void)
 
     ESP_RETURN_ON_ERROR(lvgl_attach(&s_disp), TAG, "puente LVGL");
 
-    /* El LEDC arranca con duty 0 (ver backlight_init): asi no se ve el
-     * framebuffer sin pintar. Se sube el brillo cuando la UI ya existe. */
-    ESP_RETURN_ON_ERROR(backlight_init(), TAG, "backlight LEDC");
+#if COCINA_AUTOPSIA_PANTALLA
+    if (lvgl_port_lock(0)) {
+        lv_display_add_event_cb(s_disp, autopsia_refresh_cb, LV_EVENT_REFR_READY, NULL);
+        lv_display_add_event_cb(s_disp, autopsia_refresh_cb, LV_EVENT_RENDER_START, NULL);
+        lvgl_port_unlock();
+    }
+#endif
 
     ui_init();
     ui_set_station(cocina_cfg_nombre());
     backlight_set_pct(COCINA_BL_DUTY_PCT);   /* por fin se ve algo */
+
+#if COCINA_AUTOPSIA_PANTALLA
+    vTaskDelay(pdMS_TO_TICKS(3000));
+    ESP_LOGI(TAG, "AUTOPSIA resumen: ciclos LVGL=%u, dibujos LVGL=%u "
+                  "(dibujos=0 -> LVGL no pinta; ciclos=0 -> la tarea LVGL no corre)",
+             (unsigned)s_ciclos_lvgl, (unsigned)s_pintados_lvgl);
+#endif
     return ESP_OK;
 }
 

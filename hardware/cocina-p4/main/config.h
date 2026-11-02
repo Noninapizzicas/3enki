@@ -69,9 +69,49 @@
 #define COCINA_LCD_H_RES            800
 #define COCINA_LCD_V_RES            1280
 #define COCINA_LCD_MIPI_LANES       2      /* device.yaml: panel de 2 lanes */
-#define COCINA_LCD_MIPI_MBPS        1500   /* JD9365_PANEL_BUS_DSI_2CH_CONFIG() */
 #define COCINA_LCD_BPP              16     /* RGB565 */
 #define COCINA_LCD_DSI_BUS_ID       0
+
+/* ---------------------------------------------------------------------
+ * VARIANTE DE PANEL: la GUITION JC8012P4A1 se vende en dos versiones con el
+ * MISMO controlador JD9365 y la MISMA resolucion, pero con vidrio distinto:
+ *
+ *   variante 1 (JC8012P4A1)     : pclk  60 MHz, 2 lanes a 1000 Mbps,
+ *                                 vsync back porch 8, front porch 20
+ *   variante 2 (JC8012P4A1-V2)  : pclk  70 MHz, 2 lanes a 1500 Mbps,
+ *                                 vsync back porch 10, front porch 20
+ *
+ * Fuente: modelo oficial de ESPHome para esta placa
+ * (esphome/components/mipi_dsi/models/guition.py, entradas "JC8012P4A1" y
+ * "JC8012P4A1-V2"). El componente espressif/esp_lcd_jd9365 NO sirve para
+ * ninguna de las dos: manda la secuencia de registros de otro fabricante y
+ * fija 80 MHz / 1500 Mbps, que no es el timing de esta placa.
+ *
+ * Se elige al compilar:  -DCOCINA_PANEL_VARIANT=2  (por defecto 1).
+ * --------------------------------------------------------------------- */
+#ifndef COCINA_PANEL_VARIANT
+#define COCINA_PANEL_VARIANT        1
+#endif
+
+#if COCINA_PANEL_VARIANT == 2
+#define COCINA_LCD_PCLK_MHZ         70
+#define COCINA_LCD_MIPI_MBPS        1500
+#define COCINA_HSYNC_BP             20
+#define COCINA_HSYNC_PW             20
+#define COCINA_HSYNC_FP             40
+#define COCINA_VSYNC_BP             10
+#define COCINA_VSYNC_PW             4
+#define COCINA_VSYNC_FP             20
+#else
+#define COCINA_LCD_PCLK_MHZ         60
+#define COCINA_LCD_MIPI_MBPS        1000
+#define COCINA_HSYNC_BP             20
+#define COCINA_HSYNC_PW             20
+#define COCINA_HSYNC_FP             40
+#define COCINA_VSYNC_BP             8
+#define COCINA_VSYNC_PW             4
+#define COCINA_VSYNC_FP             20
+#endif
 
 /* PHY MIPI-DSI: LDO interno del P4 (device.yaml: esp_ldo channel 3, 2.5 V).
  * Sin esto el panel no enciende aunque el resto este bien. */

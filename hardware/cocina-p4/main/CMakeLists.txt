@@ -28,3 +28,12 @@ idf_component_register(
         mqtt
         json
 )
+
+# Variante de panel de la placa GUITION (ver main/config.h):
+#   1 = JC8012P4A1      (pclk 60 MHz, 2 lanes a 1000 Mbps)
+#   2 = JC8012P4A1-V2   (pclk 70 MHz, 2 lanes a 1500 Mbps)
+# Se elige sin tocar el codigo:  COCINA_PANEL_VARIANT=2 idf.py -B build-v2 build
+if(DEFINED ENV{COCINA_PANEL_VARIANT})
+    target_compile_definitions(${COMPONENT_LIB} PRIVATE
+        COCINA_PANEL_VARIANT=$ENV{COCINA_PANEL_VARIANT})
+endif()

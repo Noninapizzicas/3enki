@@ -62,6 +62,7 @@
 #include "lvgl.h"
 
 #include "config.h"
+#include "jd9365_guition_init.h"
 #include "mqtt_enki.h"
 #include "ui.h"
 
@@ -149,6 +150,31 @@ static void twdt_setup(void)
 /* ------------------------------------------------------------------ */
 /* Panel JD9365 por MIPI-DSI (2 lanes)                                */
 /* ------------------------------------------------------------------ */
+/* Secuencia de registros de la PLACA (no la del componente). El driver
+ * espressif manda la de otro fabricante: aqui se sobreescribe con la de
+ * guition.py y se vuelve a sacar el panel del sleep. */
+static esp_err_t jd9365_aplicar_init_placa(esp_lcd_panel_io_handle_t io)
+{
+#if COCINA_PANEL_VARIANT == 2
+    const jd9365_reg_t *seq = JD9365_JC8012_V2;
+    const size_t n = sizeof(JD9365_JC8012_V2) / sizeof(JD9365_JC8012_V2[0]);
+#else
+    const jd9365_reg_t *seq = JD9365_JC8012_V1;
+    const size_t n = sizeof(JD9365_JC8012_V1) / sizeof(JD9365_JC8012_V1[0]);
+#endif
+    for (size_t i = 0; i < n; i++) {
+        ESP_RETURN_ON_ERROR(esp_lcd_panel_io_tx_param(io, seq[i].cmd, &seq[i].val, 1),
+                            TAG, "registro 0x%02X", seq[i].cmd);
+        /* sleep-out (0x11) y display-on (0x29) necesitan su tiempo */
+        if (seq[i].cmd == 0x11 || seq[i].cmd == 0x29) {
+            vTaskDelay(pdMS_TO_TICKS(120));
+        }
+    }
+    ESP_LOGI(TAG, "secuencia GUITION variante %d aplicada (%u registros)",
+             COCINA_PANEL_VARIANT, (unsigned)n);
+    return ESP_OK;
+}
+
 static esp_err_t panel_init(void)
 {
     /* 1. PHY MIPI-DSI: LDO interno del P4 a 2.5 V. Sin esto el panel no
@@ -162,9 +188,15 @@ static esp_err_t panel_init(void)
     ESP_RETURN_ON_ERROR(esp_ldo_acquire_channel(&ldo_cfg, &ldo), TAG,
                         "no se pudo encender el PHY MIPI-DSI (LDO %d)", COCINA_LDO_CHAN);
 
-    /* 2. Bus MIPI-DSI: 2 lanes a 1500 Mbps (macro del driver, .bus_id 0) */
+    /* 2. Bus MIPI-DSI: velocidad POR VARIANTE de placa (ver config.h).
+     *    El macro del componente fija 1500 Mbps, que es el de la V2. */
     esp_lcd_dsi_bus_handle_t dsi_bus = NULL;
-    const esp_lcd_dsi_bus_config_t bus_cfg = JD9365_PANEL_BUS_DSI_2CH_CONFIG();
+    const esp_lcd_dsi_bus_config_t bus_cfg = {
+        .bus_id             = COCINA_LCD_DSI_BUS_ID,
+        .num_data_lanes     = COCINA_LCD_MIPI_LANES,
+        .phy_clk_src        = 0,
+        .lane_bit_rate_mbps = COCINA_LCD_MIPI_MBPS,
+    };
     ESP_RETURN_ON_ERROR(esp_lcd_new_dsi_bus(&bus_cfg, &dsi_bus), TAG, "esp_lcd_new_dsi_bus");
 
     /* 3. Panel IO: los comandos DCS del JD9365 viajan por el mismo DSI */
@@ -172,9 +204,29 @@ static esp_err_t panel_init(void)
     ESP_RETURN_ON_ERROR(esp_lcd_new_panel_io_dbi(dsi_bus, &dbi_cfg, &s_panel_io), TAG,
                         "esp_lcd_new_panel_io_dbi");
 
-    /* 4. Timing de video (800x1280@60) ya resuelto por el driver */
-    const esp_lcd_dpi_panel_config_t dpi_cfg =
-        JD9365_800_1280_PANEL_60HZ_DPI_CONFIG(LCD_COLOR_PIXEL_FORMAT_RGB565);
+    /* 4. Timing de video POR VARIANTE de placa: 800x1280, pclk y porches de
+     *    guition.py. El macro JD9365_800_1280_PANEL_60HZ_DPI_CONFIG() del
+     *    componente pide 80 MHz y otros porches: no es esta placa. */
+    const esp_lcd_dpi_panel_config_t dpi_cfg = {
+        .dpi_clk_src         = MIPI_DSI_DPI_CLK_SRC_DEFAULT,
+        .dpi_clock_freq_mhz  = COCINA_LCD_PCLK_MHZ,
+        .virtual_channel     = 0,
+        .pixel_format        = LCD_COLOR_PIXEL_FORMAT_RGB565,
+        .num_fbs             = 1,
+        .video_timing = {
+            .h_size             = COCINA_LCD_H_RES,
+            .v_size             = COCINA_LCD_V_RES,
+            .hsync_back_porch   = COCINA_HSYNC_BP,
+            .hsync_pulse_width  = COCINA_HSYNC_PW,
+            .hsync_front_porch  = COCINA_HSYNC_FP,
+            .vsync_back_porch   = COCINA_VSYNC_BP,
+            .vsync_pulse_width  = COCINA_VSYNC_PW,
+            .vsync_front_porch  = COCINA_VSYNC_FP,
+        },
+        .flags = {
+            .use_dma2d = true,
+        },
+    };
 
     /* El macro de arriba es un inicializador con llaves: no se puede mirar
      * desde un _Static_assert. Se comprueba aqui, antes de tocar el panel. */
@@ -208,8 +260,13 @@ static esp_err_t panel_init(void)
     ESP_RETURN_ON_ERROR(esp_lcd_panel_init(s_panel), TAG, "panel_init");
     ESP_RETURN_ON_ERROR(esp_lcd_panel_disp_on_off(s_panel, true), TAG, "panel_disp_on");
 
-    ESP_LOGI(TAG, "JD9365 %dx%d listo (MIPI-DSI %d lanes, %d Mbps)",
-             COCINA_LCD_H_RES, COCINA_LCD_V_RES, COCINA_LCD_MIPI_LANES, COCINA_LCD_MIPI_MBPS);
+    /* 5. Los registros de la PLACA, encima de los del componente. */
+    ESP_RETURN_ON_ERROR(jd9365_aplicar_init_placa(s_panel_io), TAG,
+                        "secuencia de registros de la placa GUITION");
+
+    ESP_LOGI(TAG, "JD9365 %dx%d listo (MIPI-DSI %d lanes, %d Mbps, pclk %d MHz, variante %d)",
+             COCINA_LCD_H_RES, COCINA_LCD_V_RES, COCINA_LCD_MIPI_LANES,
+             COCINA_LCD_MIPI_MBPS, COCINA_LCD_PCLK_MHZ, COCINA_PANEL_VARIANT);
     return ESP_OK;
 }
 

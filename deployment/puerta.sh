@@ -23,8 +23,14 @@ SNIPPET=/etc/caddy/puerta.caddy
 IMPORT_LINE="import /etc/caddy/puerta.caddy"
 SITE="enki-ai.online"
 # Lo que sigue abierto sin contraseña: carta pública, pedidos web, Glovo,
-# WhatsApp y el healthcheck. (/scad/* fuera: OpenSCAD ya no existe.)
-PUBLICO="/a/* /tienda/* /glovo/* /whatsapp/* /health"
+# WhatsApp, el healthcheck y el WebSocket del bus (/mqtt).
+#
+# /mqtt fuera de la puerta (2026-11-02): el panel de cocina (ESP32-P4) no tiene
+# navegador ni nadie que teclee una contraseña, y esp-mqtt no sabe mandar
+# cabeceras HTTP. Su red (WiFi de hostelería) solo deja salir por 80/443, así
+# que 1883 no es camino: entra por wss://enki-ai.online/mqtt, y esa ruta tiene
+# que quedar fuera del basic_auth o el aparato recibe 401 para siempre.
+PUBLICO="/a/* /tienda/* /glovo/* /whatsapp/* /health /mqtt"
 DRY=0
 PWS=0
 for arg in "$@"; do

@@ -323,7 +323,7 @@ static void refresh_contador(void)
 {
     if (!s_lbl_contador) return;
     int n = s_pedidos_activos > 0 ? s_pedidos_activos : s_n_items;
-    char buf[8];
+    char buf[12];   /* %d sobre int: hasta 11 bytes (signo + 10 digitos) */
     snprintf(buf, sizeof(buf), "%d", n);
     lv_label_set_text(s_lbl_contador, buf);
     lv_obj_set_style_text_color(s_lbl_contador, lv_color_hex(n > 0 ? COL_OK : COL_MUTED), 0);

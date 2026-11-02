@@ -20,6 +20,11 @@ set -uo pipefail
 
 CADDYFILE=/etc/caddy/Caddyfile
 SNIPPET=/etc/caddy/puerta.caddy
+# La llave del panel de cocina. NO es una contraseña de persona: es un secreto
+# de aparato que viaja en la dirección del websocket (/mqtt?k=…). Nace aquí, en
+# el servidor, y se reutiliza en cada pasada (si se borra, se emite otra y el
+# panel deja de entrar hasta que se le regrabe).
+TOKEN_FILE=/etc/caddy/panel.token
 IMPORT_LINE="import /etc/caddy/puerta.caddy"
 SITE="enki-ai.online"
 # Lo que sigue abierto sin contraseña: carta pública, pedidos web, Glovo,
@@ -73,14 +78,50 @@ fi
 HASH="$(caddy hash-password --algorithm bcrypt --plaintext "$PW1")" || { echo "ERROR: no pude cifrar la contraseña" >&2; exit 1; }
 [ -z "$HASH" ] && { echo "ERROR: huella vacía" >&2; exit 1; }
 
+# ── 1b. La llave del panel de cocina ─────────────────────────────────────────
+# El panel es un ESP32: su cliente MQTT no sabe mandar cabecera de autenticación,
+# pero SÍ puede llevar la llave en la dirección del websocket. La llave nace en
+# este servidor (no la teclea nadie) y se conserva entre pasadas: si ya existe,
+# se reutiliza, para que cambiar la contraseña de la web no deje la cocina a
+# oscuras.
+nueva_llave() {
+  if command -v openssl >/dev/null 2>&1; then
+    openssl rand -hex 16
+  else
+    head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n'
+  fi
+}
+PANEL_TOKEN=""
+[ -f "$TOKEN_FILE" ] && PANEL_TOKEN="$(tr -d '[:space:]' < "$TOKEN_FILE" 2>/dev/null)"
+TOKEN_NUEVA=0
+if [ "${#PANEL_TOKEN}" -lt 32 ]; then
+  PANEL_TOKEN="$(nueva_llave | tr -d '[:space:]')"
+  [ "${#PANEL_TOKEN}" -lt 32 ] && { echo "ERROR: no pude generar la llave del panel." >&2; exit 1; }
+  TOKEN_NUEVA=1
+fi
+
 # ── 2. Snippet de la puerta ──────────────────────────────────────────────────
 TMP_SNIPPET="$(mktemp)"
 cat > "$TMP_SNIPPET" << SNIP
 # ── PUERTA (generado por deployment/puerta.sh) ──────────────────────────────
 # Todo pide contraseña salvo lo público: carta, pedidos web, Glovo, WhatsApp
 # y /health. Este fichero NO lo pisa el deploy: vive fuera de la plantilla.
-@privada not path $PUBLICO
+@privada {
+	not path $PUBLICO
+	not path /mqtt
+}
 basic_auth @privada {
+	$USUARIO $HASH
+}
+# El PANEL DE COCINA no teclea contraseñas: el cliente MQTT del chip no sabe
+# mandar cabecera de autenticación, pero SÍ puede llevar su llave en la propia
+# dirección del websocket →  wss://$SITE/mqtt?k=<llave>
+# Sin la llave, /mqtt sigue cerrado como todo lo demás.
+@mqtt_sin_llave {
+	path /mqtt
+	not query k=$PANEL_TOKEN
+}
+basic_auth @mqtt_sin_llave {
 	$USUARIO $HASH
 }
 # ── fin de la puerta ────────────────────────────────────────────────────────
@@ -136,6 +177,7 @@ if [ "$DRY" = "1" ]; then
   echo "--- SECO: nada aplicado."
   echo "    Caddyfile: /tmp/caddy-preview.Caddyfile"
   echo "    snippet  : /tmp/caddy-preview-puerta.caddy"
+  echo "    llave del panel: $PANEL_TOKEN  (de vista previa: no se ha guardado)"
   exit 0
 fi
 
@@ -145,6 +187,15 @@ cp "$CADDYFILE" "$BACKUP" || { echo "ERROR: no pude hacer copia de seguridad" >&
 BACKUP_SNIP=""
 [ -f "$SNIPPET" ] && { BACKUP_SNIP="$BACKUP.puerta"; cp "$SNIPPET" "$BACKUP_SNIP"; }
 echo "Copia de seguridad: $BACKUP"
+
+# La llave va al disco ANTES de tocar Caddy: si no se puede guardar, no se
+# aplica una puerta que dejaría al panel fuera para siempre.
+if [ "$TOKEN_NUEVA" = "1" ]; then
+  printf '%s\n' "$PANEL_TOKEN" > "$TOKEN_FILE" && chmod 600 "$TOKEN_FILE" || {
+    echo "ERROR: no pude guardar la llave del panel en $TOKEN_FILE" >&2
+    rm -f "$TMP_SNIPPET" "$TMP_CADDY"; exit 1
+  }
+fi
 
 cp "$TMP_SNIPPET" "$SNIPPET"
 cp "$TMP_CADDY" "$CADDYFILE"
@@ -167,21 +218,33 @@ C_SIN=$(curl -s -o /dev/null -w '%{http_code}' -m 10 "$BASE/")
 C_MAL=$(curl -s -o /dev/null -w '%{http_code}' -m 10 -u "$USUARIO":"no-es-la-clave" "$BASE/")
 C_BIEN=$(curl -s -o /dev/null -w '%{http_code}' -m 10 -u "$USUARIO":"$PW1" "$BASE/")
 C_PUB=$(curl -s -o /dev/null -w '%{http_code}' -m 10 "$BASE/a/nonina/carta.html")
+# El bus: sin llave debe seguir cerrado; con la llave del panel debe PASAR de la
+# puerta (lo que responda el broker después da igual: 400/426 es "llegó dentro").
+C_MQTT_SIN=$(curl -s -o /dev/null -w '%{http_code}' -m 10 "$BASE/mqtt")
+C_MQTT_PANEL=$(curl -s -o /dev/null -w '%{http_code}' -m 10 "$BASE/mqtt?k=$PANEL_TOKEN")
 unset PW1 PW2
 
 echo "  sistema sin contraseña : $C_SIN   (debe ser 401)"
 echo "  sistema con clave mala : $C_MAL   (debe ser 401)"
 echo "  sistema con tu clave   : $C_BIEN   (debe ser 200/302)"
 echo "  carta pública          : $C_PUB   (debe ser 200)"
+echo "  bus sin llave          : $C_MQTT_SIN   (debe ser 401)"
+echo "  bus con llave del panel: $C_MQTT_PANEL   (NO debe ser 401)"
 
-if [ "$C_SIN" != "401" ] || [ "$C_PUB" != "200" ]; then
+if [ "$C_SIN" != "401" ] || [ "$C_PUB" != "200" ] || [ "$C_MQTT_SIN" != "401" ] || [ "$C_MQTT_PANEL" = "401" ]; then
   echo "ERROR: la puerta no quedó como debía." >&2
   rollback; exit 1
 fi
-echo "OK. La web ya pide contraseña y la carta sigue abierta."
+echo "OK. La web ya pide contraseña, la carta sigue abierta y el panel tiene su llave."
 echo
 echo "Persistencia: la puerta vive en $SNIPPET y el Caddyfile solo guarda el import."
 echo "El próximo deploy reescribe el Caddyfile desde la plantilla del repo, que ya"
 echo "trae el import — y el snippet no lo toca nadie."
 echo
 echo "Entra en $BASE  (usuario: $USUARIO). Una vez por aparato."
+echo
+echo "LLAVE DEL PANEL DE COCINA (esta pantalla la lleva dentro; no se teclea):"
+echo "  $PANEL_TOKEN"
+echo "  dirección que usa el panel: wss://$SITE/mqtt?k=$PANEL_TOKEN"
+echo "  guardada en $TOKEN_FILE (solo root). Cambiarla = borrar ese fichero,"
+echo "  volver a lanzar esto y regrabar el firmware del panel."

@@ -127,6 +127,12 @@
 /* =====================================================================
  * 3. Red: valores por defecto (menuconfig manda si está relleno)
  * ===================================================================== */
+/* OJO con la dirección del bus: la puerta de la web (deployment/puerta.sh)
+ * cierra /mqtt con contraseña, y este chip no sabe mandar cabecera de
+ * autenticación. Por eso el panel entra con SU llave en la propia dirección:
+ *     wss://<dominio>/mqtt?k=<llave del panel>
+ * La llave la emite puerta.sh en el servidor y se graba dentro del firmware
+ * (menuconfig -> "Cocina P4" -> URI del broker). Sin ?k=<llave>, /mqtt da 401. */
 #define COCINA_FALLBACK_WIFI_SSID      ""
 #define COCINA_FALLBACK_WIFI_PASS      ""
 #define COCINA_FALLBACK_MQTT_URI       "wss://enki-ai.online/mqtt"

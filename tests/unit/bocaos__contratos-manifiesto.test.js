@@ -56,6 +56,13 @@ test('las ocho islas del peldaño 4 están', () => {
   }
 });
 
+test('las ocho islas del grupo 2 están (entrada, chat, las dos del local, la incidencia y el fallo)', () => {
+  for (const esperado of ['entrada-listo', 'chat-enmascarado', 'medida-cocina', 'panel-tienda',
+                          'incidencia-reparto', 'lectura-incidencia', 'regla-fallo', 'cargo-fallo']) {
+    assert.ok(MODULOS.includes(esperado), `falta modules/bocaos/${esperado}`);
+  }
+});
+
 test('hay al menos las tres islas del peldaño 2', () => {
   for (const esperado of ['canal-rider', 'redaccion-propuesta', 'escalada-enlace']) {
     assert.ok(MODULOS.includes(esperado), `falta modules/bocaos/${esperado}`);
@@ -146,9 +153,14 @@ test('la base común requiere _shared y resuelve', () => {
 test('quien escribe estado tiene store propio por proyecto; quien no, no lo finge', () => {
   const conEstado = ['pedido-mercado', 'hecho-listo', 'propuesta', 'contrato-puntual', 'hechos-reparto',
     'escalada-enlace', 'acta-decisiones', 'censo-parte', 'terminos-parte',
-    'contrato-tramos', 'instrucciones-acceso', 'tarifa-pedido'];
+    'contrato-tramos', 'instrucciones-acceso', 'tarifa-pedido',
+    // grupo 2 · el único custodio con store de las ocho: el cargo por fallo (G04).
+    'cargo-fallo'];
   const sinEstado = ['foto-mercado', 'enlace', 'canal-rider', 'redaccion-propuesta',
-    'frontera-plaza', 'indice-plaza', 'aviso-cliente', 'aviso-tienda'];
+    'frontera-plaza', 'indice-plaza', 'aviso-cliente', 'aviso-tienda',
+    // grupo 2 · puentes y reflejos sin store: el hecho lo guarda su dueño.
+    'entrada-listo', 'chat-enmascarado', 'medida-cocina', 'panel-tienda',
+    'incidencia-reparto', 'lectura-incidencia', 'regla-fallo'];
   for (const dir of conEstado) {
     const m = new (require(path.join(RAIZ, dir, 'index.js')))();
     assert.ok(/^\/bocaos\/[a-z-]+\.json$/.test(m._path || ''), `${dir}: store propio en /bocaos/`);

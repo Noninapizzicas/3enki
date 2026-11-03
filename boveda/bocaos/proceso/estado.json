@@ -1,6 +1,6 @@
 {
   "vertical": "bocaos",
-  "actualizado": "2026-11-03T15:30:00Z",
+  "actualizado": "2026-11-03T18:00:00Z",
   "fuente": "proceso/fase3b/plan-construccion.md §11 (espina enki-plan, F3b v3 con inventario real)",
   "nota": "Bocaos es SÓLO el mercado. La tienda ya existe: pizzepos (tienda-api · pedidos · cocina · carta-digital · carta-marketing · tarifas · whatsapp-bot · pago-gateway · impresion). Lo de la tienda NO se construye: se engancha por evento (pedido.creado · pedido.cancelado · cocina.pedido_listo · pedido.pagado). Las 3 ADAPTAR son las únicas que tocan un módulo existente, y son aditivas.",
   "tracking": {
@@ -75,22 +75,30 @@
       "aviso-cliente",
       "aviso-tienda",
       "canal-rider",
+      "cargo-fallo",
       "censo-parte",
+      "chat-enmascarado",
       "config-mercado",
       "contrato-puntual",
       "contrato-tramos",
       "enlace",
+      "entrada-listo",
       "escalada-enlace",
       "estado-parte",
       "foto-mercado",
       "frontera-plaza",
       "hecho-listo",
       "hechos-reparto",
+      "incidencia-reparto",
       "indice-plaza",
       "instrucciones-acceso",
+      "lectura-incidencia",
+      "medida-cocina",
+      "panel-tienda",
       "pedido-mercado",
       "propuesta",
       "redaccion-propuesta",
+      "regla-fallo",
       "ruta-viva",
       "tarifa-pedido",
       "terminos-parte"
@@ -108,14 +116,6 @@
       "cobro-gestion"
     ],
     "pendientes": [
-      "entrada-listo",
-      "chat-enmascarado",
-      "medida-cocina",
-      "panel-tienda",
-      "incidencia-reparto",
-      "lectura-incidencia",
-      "regla-fallo",
-      "cargo-fallo",
       "disputa-fallo",
       "liquidacion",
       "factura-gestion",
@@ -142,14 +142,25 @@
       "fed-versiones",
       "fed-aviso"
     ],
-    "proximo": "entrada-listo",
+    "proximo": "disputa-fallo",
     "total": 64,
-    "hechos": 23,
-    "faltan": 33,
+    "hechos": 31,
+    "faltan": 25,
     "retirados": [
       "tienda-captura (C01: duplicaba tienda-api + pedidos)",
       "tienda-hora-listo (C04: duplicaba cocina.mark-ready)",
       "pedido (renombrado a pedido-mercado: publicaba en el namespace pedido.* de pizzepos)"
     ]
-  }
+  },
+  "costuras_cerradas": {
+    "bocaos.acta_anotada": "el hecho del acta es UNO y se llama como en la espina (§11) y como lo escucha contrato-tramos: bocaos.acta_anotada. acta-decisiones emitía bocaos.acta_asentada (dos nombres para el mismo hecho); renombrado en código, manifest y test. «Asentar» es lo que hace por dentro; «anotar» es lo que hace en el bus.",
+    "bocaos.tarifa": "el tope que autoriza el cliente (Q43) lo anuncia su custodio, tarifa-pedido, al congelar la oferta/tope y cuando el tope llega por RPC. Antes no lo emitía nadie (lo emitía el pedido retirado) y escalada-enlace lo escuchaba: un consumidor hablando un idioma que nadie hablaba. Sin tope NO se emite (un 0 sería un tope inventado)."
+  },
+  "desvios_del_plano": [
+    "entrada-listo publica además bocaos.hueco_nombrado: su §9-D lo pide (A34) y §5.3 se lo asignaba sólo a enlace. Sin él, un pedido al que le falta el destino no entra al enlace y la tienda no se entera.",
+    "lectura-incidencia declara bocaos.incidencia_clasificada y bocaos.lectura_ambigua en publishes: el §9-F los llama «hechos que publica» y la lista B de la espina los omitía.",
+    "cargo-fallo publica bocaos.cargo_sin_evidencia: el §9 lo exige («sin evidencia → cargo_sin_evidencia») y su lista B no lo declaraba. Sin ese hecho, el rechazo es silencioso.",
+    "cargo-fallo transmite el estado del cargo (anotado · anulado) dentro de bocaos.cargo_anotado: la espina le da un solo nombre al hecho de ese agregado y el §6.4 lo modela como transiciones del mismo (medido → anotado → cobrado · anulado).",
+    "entrada-listo no usa el par hecho-listo.anotar.request que lista §5.2: §5.3 asigna bocaos.listo_declarado a entrada-listo y hecho-listo ya lo escucha. Llamar a los dos escribiría el mismo hecho dos veces (la segunda, un 409 disfrazado de éxito)."
+  ]
 }

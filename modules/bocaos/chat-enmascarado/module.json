@@ -1,0 +1,38 @@
+{
+  "_doc": "chat-enmascarado — PUENTE rider↔cliente con ALIAS POR CONTRATO y sin números de teléfono (F04). Escucha `bocaos.contrato_creado` para saber que hay canal, y la puerta `chat-enmascarado.entregar.request` del transporte. El alias se deriva del contrato_id (no de la persona) y por eso no hay tabla que guardar; antes de entregar se pregunta a `contrato-puntual.de` si el contrato sigue VIVO, porque al cerrarse el alias muere. El número no cruza: se sustituye por el alias en el texto y no entra en el hecho. CERO agregados sobre la conversación (art. 15): ni texto, ni longitud, ni histórico; el hecho dice que cruzó y por dónde, nada más. Isla: cero require a otra isla.",
+  "name": "chat-enmascarado",
+  "version": "0.1.0",
+  "description": "El canal rider↔cliente con alias por contrato y sin teléfonos: el mensaje cruza, el número no, y la plaza no guarda ni el texto ni el histórico (F04).",
+  "unidad": "plaza",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "bocaos.contrato_creado",
+      "handler": "onContratoCreado",
+      "description": "Hay contrato: hay canal. Se apunta a qué pedido y a qué rider pertenece (sin guardar nada del texto)."
+    },
+    {
+      "event": "chat-enmascarado.entregar.request",
+      "handler": "onEntregarRequest",
+      "description": "Puerta del transporte: entrega un mensaje de una parte a la otra con el alias del contrato y el número tapado."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "chat-enmascarado.entregar.response",
+      "description": "El mensaje cruzó: contrato, de, a, los dos alias y el id del transporte. Sin el texto."
+    },
+    {
+      "event": "chat-enmascarado.entregar.failed",
+      "description": "No cruzó: sin contrato, con el contrato cerrado (el alias murió), sin destino o con el transporte caído."
+    },
+    {
+      "event": "bocaos.mensaje_entregado",
+      "description": "HECHO: un mensaje cruzó entre las dos partes de un contrato. Lleva contrato, pedido, de/a, los alias y el canal — y ni el texto ni su tamaño (F04)."
+    },
+    {
+      "event": "bocaos.mensaje_rechazado",
+      "description": "HECHO: el mensaje no cruzó, con el motivo y el hueco: alias muerto, sin destino, o sólo un número de teléfono."
+    }
+  ]
+}

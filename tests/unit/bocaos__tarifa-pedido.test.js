@@ -193,6 +193,40 @@ test('idempotencia: el mismo pedido.creado no reabre la oferta', async () => {
   assert.strictEqual((await de(m)).data.precio.desglose.oferta_centimos, 450, 'la primera oferta es la que vale');
 });
 
+test('E07/Q43: el tope autorizado se anuncia como bocaos.tarifa — y sin tope no se habla', async () => {
+  const { m, eventos } = nuevo();
+  await nacer(m);
+  // Sin tope no hay autorización: no se emite nada (un 0 sería un tope inventado).
+  assert.strictEqual(eventos('bocaos.tarifa').length, 0);
+
+  // Otro pedido, y este sí con la autorización del cliente en su bloque `entrega`.
+  await m.onPedidoCreado({ data: {
+    pedido_id: 'ped-2002', project_id: TIENDA, project_slug: TIENDA, plaza_id: PLAZA,
+    entrega: {
+      direccion: { calle: 'Larios' }, zona: 'centro', oferta_centimos: 450,
+      tope_centimos: 600, escalon_centimos: 100, escalones_max: 2
+    }
+  } });
+  const tarifas = eventos('bocaos.tarifa');
+  assert.strictEqual(tarifas.length, 1, 'el tope es un hecho del bus');
+  assert.strictEqual(tarifas[0].p.tope_cents, 600);
+  assert.strictEqual(tarifas[0].p.escalon_cents, 100, 'el escalón viaja con la misma autorización');
+  assert.strictEqual(tarifas[0].p.escalones_max, 2);
+  assert.strictEqual(tarifas[0].p.autor, 'cliente');
+  assert.strictEqual(tarifas[0].p.cobrado, false, 'quiénes pagan el escalón es Q17: se anota, no se cobra');
+
+  // El mismo tope otra vez no se anuncia dos veces (escalada-enlace abriría dos veces el peldaño).
+  const est = await m.estado(PLAZA);
+  m._anunciarTarifa(est.tarifas['ped-2002'], { autor: 'cliente' });
+  assert.strictEqual(eventos('bocaos.tarifa').length, 1);
+
+  // Y un tope nuevo (el cliente sube la autorización) SÍ se anuncia: es otro acto.
+  est.tarifas['ped-2002'].tope_centimos = 800;
+  m._anunciarTarifa(est.tarifas['ped-2002'], { autor: 'cliente' });
+  assert.strictEqual(eventos('bocaos.tarifa').length, 2);
+  assert.strictEqual(eventos('bocaos.tarifa')[1].p.tope_cents, 800);
+});
+
 (async () => {
   let fallos = 0;
   for (const t of tests) {

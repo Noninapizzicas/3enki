@@ -1,0 +1,34 @@
+{
+  "_doc": "incidencia-reparto — PUENTE que ABRE el caso cuando algo no salió (F06). Relato LIBRE + autor + hora + traza: no hay campos obligatorios que fuercen una versión de los hechos, y lo único que no se puede es abrir sin autor. NO juzga (ni tipo ni gravedad: `clasificar es leer`, F07) y NO crea deuda (la crea G04 con evidencia). La traza se compone pidiendo el acta a `hechos-reparto.acta` y con los hechos del reparto que ha oído; si la entrega llega después de abrir el caso, la traza crece sin abrir otro. Sin store: el caso es un hecho del bus y su dueño es la cola de la sala.",
+  "name": "incidencia-reparto",
+  "version": "0.1.0",
+  "description": "Abre el caso de reparto con relato, autor, hora y traza, sin clasificar y sin crear deuda: pone la queja delante, no la juzga (F06).",
+  "unidad": "plaza",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "bocaos.hecho_reparto_anotado",
+      "handler": "onHechoRepartoAnotado",
+      "description": "Un hecho del reparto entra en la traza del caso abierto de ese pedido (y en la de los que se abran después). No abre casos por su cuenta."
+    },
+    {
+      "event": "incidencia-reparto.abrir.request",
+      "handler": "onAbrirRequest",
+      "description": "Abre el caso: relato libre, autor, hora y traza. Sin autor no hay caso; sin clasificar y sin deuda."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "incidencia-reparto.abrir.response",
+      "description": "El caso abierto (o el mismo, con la traza de ahora si ya estaba): incidencia, pedido, relato, autor, hora y traza."
+    },
+    {
+      "event": "incidencia-reparto.abrir.failed",
+      "description": "No se abre: falta el pedido, falta el relato o falta el autor."
+    },
+    {
+      "event": "bocaos.incidencia_abierta",
+      "description": "HECHO: hay un caso de reparto abierto, con su relato, su autor, su hora y su traza. Sin tipo, sin gravedad y sin deuda (F06)."
+    }
+  ]
+}

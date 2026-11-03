@@ -1,0 +1,25 @@
+{
+  "_doc": "panel-tienda — REFLEJO stateless de lo que la TIENDA ve de su mercado (L01): espera medida, puntualidad, propuestas recibidas, pedidos sin repartidor y QUÉ UMBRALES está aplicando ella misma. Misma fuente y mismo número que ve el rider antes de aceptar: la puntualidad se devuelve TAL CUAL la da `medida-cocina` (L03), los umbrales los da `config-mercado` (J04) con su capa y su autor, y la cobertura `frontera-plaza` (S01). Si hubiera una versión para el que paga y otra para el que sufre, el mercado dejaría de corregir y empezaría a negociar: el panel dice `version_amable: false`. No lee el almacén de la plaza: propuestas y pedidos sin rider son el snapshot que la plaza le entrega, y si no viene se dice «sin snapshot», no un 0. Sin store.",
+  "name": "panel-tienda",
+  "version": "0.1.0",
+  "description": "El panel de la tienda con la espera medida, la puntualidad, las propuestas, los pedidos sin repartidor y los umbrales que ella misma está aplicando — el mismo número que ve el rider (L01).",
+  "unidad": "tienda",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "panel-tienda.ver.request",
+      "handler": "onVerRequest",
+      "description": "Compone el panel de una tienda con las tres lecturas del bus y el snapshot de la plaza que viaja en la pregunta."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "panel-tienda.ver.response",
+      "description": "El panel: espera medida, puntualidad (la de L03, sin recomponer), umbrales con su capa y su autor, cobertura, propuestas y pedidos sin repartidor — con los huecos nombrados."
+    },
+    {
+      "event": "panel-tienda.ver.failed",
+      "description": "No hay panel que componer: falta el proyecto, o la tienda que pregunta no es la dueña de ese panel."
+    }
+  ]
+}

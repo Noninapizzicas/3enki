@@ -68,7 +68,7 @@ test('asienta el acta con qué, por qué, quién, desde y ámbito: y el hecho sa
   assert.deepStrictEqual(r.data.acta.cambio, CAMBIO);
   assert.deepStrictEqual(r.data.acta.faltantes, [], 'trae lo que un acta tiene que traer');
 
-  const h = eventos('bocaos.acta_asentada');
+  const h = eventos('bocaos.acta_anotada');
   assert.strictEqual(h.length, 1);
   assert.strictEqual(h[0].p.acta_id, r.data.acta.acta_id);
   assert.strictEqual(h[0].p.ambito, 'plaza');
@@ -111,7 +111,7 @@ test('el acta NO se corrige: otro texto con el mismo id es 409 y lo asentado sig
   const dos = await asentar(m, base);
   assert.strictEqual(dos.status, 200);
   assert.strictEqual(dos.data.idempotente, true);
-  assert.strictEqual(eventos('bocaos.acta_asentada').length, 1, 'un acta, un hecho');
+  assert.strictEqual(eventos('bocaos.acta_anotada').length, 1, 'un acta, un hecho');
 
   // Otro motivo con el mismo id: eso es corregir.
   const corregir = await asentar(m, { ...base, motivo: 'me equivoqué de motivo' });
@@ -340,7 +340,7 @@ test('un dictamen firmado se asienta con el MISMO id que config-mercado usará c
   });
   await bus.drenar();
 
-  const asentada = bus.eventos('bocaos.acta_asentada');
+  const asentada = bus.eventos('bocaos.acta_anotada');
   assert.strictEqual(asentada.length, 1, 'el dictamen deja acta');
   assert.strictEqual(asentada[0].p.acta_id, 'dic-77', 'el id es el que config-mercado sella');
   assert.strictEqual(asentada[0].p.ambito, 'plaza');

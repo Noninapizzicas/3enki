@@ -58,7 +58,7 @@
       "description": "No se puede listar: falta el proyecto o el acta pedida no consta."
     },
     {
-      "event": "bocaos.acta_asentada",
+      "event": "bocaos.acta_anotada",
       "description": "HECHO: se firmó un acta. Lleva ámbito, autor, desde, qué cambió, por qué, qué se esperaba y a quién sustituye."
     }
   ]

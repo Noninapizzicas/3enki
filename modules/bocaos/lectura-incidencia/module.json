@@ -1,0 +1,33 @@
+{
+  "_doc": "lectura-incidencia — MICRO-AGENTE del borde (F07): lee el relato libre de una incidencia y lo pone en una ETIQUETA DE LA LISTA CERRADA (no encontraba el portal · el cliente no bajaba · el local no estaba listo · dirección incorrecta · otro). Un campo nuevo se rechaza, no se inventa: el validador es lo que hace honesta la mitad fuzzy. No dictamina: no dice si el fallo existió (eso es G02 con hechos) ni a quién culpar (`es_juez: false`). Si el modelo falta, se cae o tarda, la incidencia entra SIN clasificar (`bocaos.lectura_ambigua`, `sigue_su_curso: true`) y el caso sigue en la cola. El cajón `cajon_clasificar` es una proyección interna y NO va en subscribes (gate anti-colisión de validate-hibridos). Sin estado.",
+  "name": "lectura-incidencia",
+  "version": "0.1.0",
+  "description": "Clasifica el relato de una incidencia en una etiqueta de la lista cerrada, sin dictaminar: si el modelo falla o inventa una etiqueta, el caso sigue sin clasificar (F07).",
+  "unidad": "plaza",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "lectura-incidencia.clasificar.request",
+      "handler": "onClasificarRequest",
+      "description": "Lee un relato y devuelve una etiqueta de la lista cerrada, o dice por qué no hay lectura. El caso nunca se para por esto."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "lectura-incidencia.clasificar.response",
+      "description": "La etiqueta (o null) con su fuente y con lo que NO dice: ni fallo ni culpa."
+    },
+    {
+      "event": "lectura-incidencia.clasificar.failed",
+      "description": "No hay nada que leer: falta el proyecto o el relato."
+    },
+    {
+      "event": "bocaos.incidencia_clasificada",
+      "description": "HECHO: una incidencia quedó con etiqueta de la lista cerrada, con su fuente y su hora (F07)."
+    },
+    {
+      "event": "bocaos.lectura_ambigua",
+      "description": "HECHO: no hay lectura — el modelo falta, se cae, tarda o inventa una etiqueta. La incidencia sigue su curso sin clasificar."
+    }
+  ]
+}

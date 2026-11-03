@@ -1,0 +1,39 @@
+{
+  "_doc": "regla-fallo — REFLEJO stateless de la tabla que mide un fallo (G02 HechoVerificado · G03 ReglaPagoFallo · G06 TrazabilidadFallo). Un fallo existe SI Y SÓLO SI los hechos con hora lo verifican: sin acta completa no hay fallo y se dice qué falta. Mide las tres esperas por separado (N1 en tienda, N2 en el portal, N3 en la llegada) porque las sufre gente distinta; la que no tiene hecho que la mida sale NO_CONSTA, no 0. La tabla devuelve QUIÉN responde, no CUÁNTO: los importes están [ABIERTO] (Q28) y salen NO_CONSTA. Cada fila excedida lleva su prueba enumerable con hora, anterior al cargo; si falta, la traza FALLA y no nace deuda (G06). No juzga: no distingue por qué se pasó. Sin store: mide y publica.",
+  "name": "regla-fallo",
+  "version": "0.1.0",
+  "description": "La tabla que mide un fallo con hechos con hora: las tres esperas por separado, quién responde (no cuánto) y la evidencia enumerable que lo sostiene (G02, G03, G06).",
+  "unidad": "plaza",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "regla-fallo.evaluar.request",
+      "handler": "onEvaluarRequest",
+      "description": "Evalúa un pedido: mide las tres esperas, aplica la tabla y devuelve la traza. Sin acta completa, NO_CONSTA."
+    },
+    {
+      "event": "bocaos.acta_incompleta",
+      "handler": "onActaIncompleta",
+      "description": "Un acta incompleta no es un fallo: se apunta qué hecho falta para no volver a descubrirlo."
+    },
+    {
+      "event": "bocaos.incidencia_abierta",
+      "handler": "onIncidenciaAbierta",
+      "description": "Al abrirse una incidencia se intenta medir; si los hechos no lo verifican, no se publica ningún fallo y el caso sigue en la cola."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "regla-fallo.evaluar.response",
+      "description": "El fallo medido: las tres esperas con su límite, las filas con quién responde, la traza y lo que no se puede decir (el importe)."
+    },
+    {
+      "event": "regla-fallo.evaluar.failed",
+      "description": "No se puede evaluar: falta el proyecto o el pedido."
+    },
+    {
+      "event": "bocaos.fallo_medido",
+      "description": "HECHO: hay un fallo verificado por hechos con hora, con quién responde, la evidencia enumerable y los importes en NO_CONSTA. Es lo que hace nacer (o no) el cargo de G04."
+    }
+  ]
+}

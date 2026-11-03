@@ -208,7 +208,9 @@ class ActaDecisiones extends ModuloBocaos {
     est.actas.push(acta);
     await this.guardar(d.project_id);
 
-    this.hecho('bocaos.acta_asentada', {
+    // El nombre del hecho es el de la espina (§11) y el que ya escucha `contrato-tramos`:
+    // `bocaos.acta_anotada`. Un hecho, un nombre; el acta se ASIENTA por dentro, se ANOTA en el bus.
+    this.hecho('bocaos.acta_anotada', {
       acta_id,
       plaza_id: acta.plaza_id,
       ambito,

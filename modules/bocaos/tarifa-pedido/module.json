@@ -75,6 +75,10 @@
       "description": "HECHO: el número está cerrado (oferta + incentivo, sólo suma). Es la entrada de `cobra`: sin él no hay propuesta."
     },
     {
+      "event": "bocaos.tarifa",
+      "description": "HECHO: el cliente autorizó un tope (y su escalón, si lo declaró) para ese pedido. Es lo que escucha `escalada-enlace`: sin este hecho no se sube la oferta, porque no hay permiso que cumplir (Q43)."
+    },
+    {
       "event": "bocaos.oferta_subida",
       "description": "HECHO: se subió la oferta con autor y tope. Lleva el escalón, el autor y la deuda visible (cobrado:false, Q17)."
     }

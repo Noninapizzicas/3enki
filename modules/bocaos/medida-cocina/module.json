@@ -1,0 +1,38 @@
+{
+  "_doc": "medida-cocina — REFLEJO stateless de la puntualidad DECLARADA de una cocina (L03). Mide la distribución de la hora de listo frente a la hora prometida, por franja y con n, y la publica ANTES de que el rider acepte: es el número que A08 usa para medir la espera probable y la única lectura plaza→tienda que el diseño permite (la plaza lee lo que la tienda PUBLICA, nunca su carta ni sus clientes). Da una DISTRIBUCIÓN, no una nota: `nota: null` y `estrellas: null` por construcción. Sin datos suficientes → NO_CONSTA y el rider ve «sin histórico» (Q51): un mercado nuevo no inventa una reputación. Las muestras viajan en la pregunta (no hay store y no se barre el histórico de nadie); la hora de listo que falta se pide a hecho-listo, y la promesa que falta NO se imputa.",
+  "name": "medida-cocina",
+  "version": "0.1.0",
+  "description": "La puntualidad declarada de una cocina como distribución (hora de listo frente a lo prometido, por franja y con n), sin nota y con NO_CONSTA cuando no hay histórico (L03).",
+  "unidad": "tienda",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "medida-cocina.medir.request",
+      "handler": "onMedirRequest",
+      "description": "La distribución de una franja: cubos, mínimo, máximo, p50, p90 y n. Con menos del mínimo declarado, NO_CONSTA."
+    },
+    {
+      "event": "medida-cocina.historial.request",
+      "handler": "onHistorialRequest",
+      "description": "La serie franja a franja (por hora del hecho de listo) con su n y su estado, y lo que el historial NO dice."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "medida-cocina.medir.response",
+      "description": "La distribución de la puntualidad de esa franja, con n, mínimo declarado y los huecos dichos."
+    },
+    {
+      "event": "medida-cocina.medir.failed",
+      "description": "No se puede medir: falta el proyecto, la serie viaja mal, o la tienda pregunta por otra tienda (403)."
+    },
+    {
+      "event": "medida-cocina.historial.response",
+      "description": "La serie franja a franja, con su n por franja y los límites de la medida."
+    },
+    {
+      "event": "medida-cocina.historial.failed",
+      "description": "No se puede dar el historial: falta el proyecto, la serie o el permiso sobre esa tienda."
+    }
+  ]
+}

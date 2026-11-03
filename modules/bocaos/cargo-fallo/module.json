@@ -1,0 +1,56 @@
+{
+  "_doc": "cargo-fallo — CUSTODIO single-writer del cargo por fallo (G04). SIN EVIDENCIA NO NACE: si la adjudicación no trae hechos con hora, la deuda no se crea y se publica el intento (`bocaos.cargo_sin_evidencia`), porque un rechazo silencioso es indistinguible de un fallo del sistema. Nace como DEUDA entre dos partes con nombre, no como descuento: la plaza no retiene (H06) y una deuda no se compensa con un devengo. SIN IMPORTE TAMBIÉN ES UNA DEUDA: `importe_centimos: null` e `importe_estado: NO_CONSTA` (Q28) en vez de un cero que la daría por saldada. El estado del cargo vive en el mismo hecho `bocaos.cargo_anotado` (estado anotado/anulado) porque el plano da un solo nombre al hecho de este agregado. Store `/bocaos/cargo-fallo.json` por proyecto.",
+  "name": "cargo-fallo",
+  "version": "0.1.0",
+  "description": "El cargo por fallo como deuda con nombre y evidencia, sin importe inventado y sin descuento: sin evidencia no nace, y el intento se publica (G04).",
+  "unidad": "plaza",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "bocaos.fallo_medido",
+      "handler": "onFalloMedido",
+      "description": "Hay una adjudicación con evidencia: se anota la deuda entre las dos partes (una por fila), o se publica por qué no nace."
+    },
+    {
+      "event": "cargo-fallo.anular.request",
+      "handler": "onAnularRequest",
+      "description": "Anula un cargo con autor y motivo. No sirve para descontar: la plaza no retiene (H06)."
+    },
+    {
+      "event": "cargo-fallo.de.request",
+      "handler": "onDeRequest",
+      "description": "Devuelve un cargo o los de un pedido/parte, con el saldo y con lo que NO consta (el importe)."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Hidrata el registro de cargos de la plaza y fija su sello."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "cargo-fallo.anular.response",
+      "description": "El cargo anulado, con su autor, su motivo y su hora."
+    },
+    {
+      "event": "cargo-fallo.anular.failed",
+      "description": "No se anula: sin autor o sin motivo, cargo inexistente, ya cobrado, o intento de descontar de un devengo."
+    },
+    {
+      "event": "cargo-fallo.de.response",
+      "description": "Los cargos con sus partes, su evidencia y el saldo — con el importe en NO_CONSTA cuando no consta."
+    },
+    {
+      "event": "cargo-fallo.de.failed",
+      "description": "No hay cargo que dar: falta el proyecto, el cargo o el pedido."
+    },
+    {
+      "event": "bocaos.cargo_anotado",
+      "description": "HECHO: la deuda existe (estado anotado) o se anuló (estado anulado), con deudor, acreedor, evidencia y el importe tal y como se sabe."
+    },
+    {
+      "event": "bocaos.cargo_sin_evidencia",
+      "description": "HECHO: se intentó anotar un cargo y no nació, con el motivo (sin hechos con hora o con la traza en FALLA). El intento se ve."
+    }
+  ]
+}

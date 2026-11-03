@@ -71,6 +71,11 @@ class TarifaPedido extends ModuloBocaos {
       tienda_id: d.tienda_id || d.project_slug || null,
       oferta_centimos: oferta,
       tope_centimos: CENTIMOS(entrega.tope_centimos) ? entrega.tope_centimos : null,
+      // Q43: el escalón y su número máximo son parte de la MISMA autorización del cliente. Si no
+      // los dice, no se rellenan: `escalada-enlace` tiene su default declarado y se sabe cuál es.
+      escalon_centimos: CENTIMOS(entrega.escalon_centimos) ? entrega.escalon_centimos
+        : (CENTIMOS(entrega.escalon_cents) ? entrega.escalon_cents : null),
+      escalones_max: Number.isInteger(entrega.escalones_max) && entrega.escalones_max >= 0 ? entrega.escalones_max : null,
       hora: this._iso(d.hora) || this.ahora()
     });
   }
@@ -92,7 +97,7 @@ class TarifaPedido extends ModuloBocaos {
         { field: 'oferta_centimos', congelada_en: t.congelada_en, oferta_centimos: t.oferta_centimos });
     }
 
-    await this._congelarAlNacer({
+    const congelada = await this._congelarAlNacer({
       project_id: d.project_id,
       plaza_id: d.plaza_id || this.plaza_id || d.project_id,
       pedido_id: d.pedido_id,
@@ -102,6 +107,13 @@ class TarifaPedido extends ModuloBocaos {
       hora: this._iso(d.hora) || this.ahora(),
       autor: d.autor || 'cliente'
     });
+    // Si la tarifa ya estaba congelada y el tope llega AHORA, se anota y se anuncia: es el mismo
+    // acto del cliente, sólo que por la puerta del RPC en vez de con el pedido.
+    if (CENTIMOS(d.tope_centimos) && congelada && congelada.tope_centimos !== d.tope_centimos) {
+      congelada.tope_centimos = d.tope_centimos;
+      this._anunciarTarifa(congelada, { autor: d.autor || 'cliente', hora: this._iso(d.hora) || this.ahora() });
+      await this.guardar(d.project_id);
+    }
     const vista = await this._vista(d.project_id, d.pedido_id);
     return { status: 201, data: { pedido_id: d.pedido_id, precio: vista } };
   }
@@ -242,6 +254,8 @@ class TarifaPedido extends ModuloBocaos {
       incentivo_autor: null,
       incentivo_hora: null,
       tope_centimos: d.tope_centimos ?? (existente ? existente.tope_centimos : null) ?? null,
+      escalon_centimos: d.escalon_centimos ?? (existente ? existente.escalon_centimos : null) ?? null,
+      escalones_max: d.escalones_max ?? (existente ? existente.escalones_max : null) ?? null,
       congelada_en: d.hora,
       horario: []
     };
@@ -250,7 +264,42 @@ class TarifaPedido extends ModuloBocaos {
 
     const vista = await this._vista(d.project_id, d.pedido_id);
     this._cerrarPrecio(d, vista);
+    // E07/Q43 · si el cliente autorizó un tope, se DICE en el bus: `escalada-enlace` lo escucha y
+    // sin él no puede subir la oferta (no hay permiso que cumplir). Un tope que no existe no se
+    // anuncia: un 0 sería un tope inventado.
+    this._anunciarTarifa(t, { autor: d.autor || 'cliente', hora: d.hora });
     return t;
+  }
+
+  // ================= E07/Q43 · el tope autorizado, como hecho =================
+  // `bocaos.tarifa` es el ÚNICO idioma que `escalada-enlace` entiende para saber hasta dónde puede
+  // subir. Lo habla el custodio del tope (aquí), no el pedido: si lo hablara el pedido, habría dos
+  // escritores del mismo número. Sin tope NO se emite.
+  _anunciarTarifa(t, { autor, hora, escalon_centimos, escalones_max } = {}) {
+    if (!CENTIMOS(t.tope_centimos)) return null;
+    if (t.tope_anunciado === t.tope_centimos) return null;   // el mismo tope no se anuncia dos veces
+    t.tope_anunciado = t.tope_centimos;
+
+    const escalon = CENTIMOS(escalon_centimos) ? escalon_centimos : (CENTIMOS(t.escalon_centimos) ? t.escalon_centimos : null);
+    if (escalon !== null) t.escalon_centimos = escalon;
+    if (Number.isInteger(escalones_max) && escalones_max >= 0) t.escalones_max = escalones_max;
+
+    const carga = {
+      pedido_id: t.pedido_id,
+      plaza_id: t.plaza_id,
+      tienda_id: t.tienda_id,
+      tope_cents: t.tope_centimos,
+      oferta_cents: t.oferta_centimos,
+      autor: autor || 'cliente',
+      hora: hora || this.ahora(),
+      // Q43: el tope lo autoriza el cliente, no el sistema. Quién paga el escalón es Q17 (abierto):
+      // se anota el acto y la deuda queda visible, no cobrada.
+      cobrado: false,
+      deuda_visible: true
+    };
+    if (escalon !== null) carga.escalon_cents = escalon;
+    if (Number.isInteger(t.escalones_max)) carga.escalones_max = t.escalones_max;
+    return this.hecho('bocaos.tarifa', carga);
   }
 
   // E03: SÓLO SUMA. Ni redondeo, ni estimación, ni comisión escondida.

@@ -1,0 +1,46 @@
+{
+  "_doc": "entrada-listo — PUENTE de la puerta del mercado (el paso ① del §7.1). Escucha `cocina.pedido_listo` de pizzepos (con la hora que declaró la cocina, C04) y compone el AvisoPedidoListo {pedido · tienda · destino · hora · precio · plaza_id}: pide `pedido.get` a la tienda por el bus y el precio a `tarifa-pedido.de`, y DECLARA el hecho `bocaos.listo_declarado`, que es el que anota `hecho-listo` (A01). Sin destino o sin precio NO inventa: emite `bocaos.hueco_nombrado` con el dato que falta (A34) y el pedido no entra al enlace. No guarda nada, no escribe en la tienda, no corrige la hora: declarar tiene consecuencia. Isla: cero require a otra isla.",
+  "name": "entrada-listo",
+  "version": "0.1.0",
+  "description": "La puerta del mercado: traduce el «listo» de la cocina de la tienda en el hecho de listo de la plaza, pidiendo destino y precio al bus y nombrando el hueco cuando falta (C04 → A01, A34).",
+  "unidad": "plaza",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "cocina.pedido_listo",
+      "handler": "onCocinaPedidoListo",
+      "description": "El disparador del mercado: la cocina de la tienda declara listo un pedido. Se compone el aviso y se declara el hecho de la plaza."
+    },
+    {
+      "event": "entrada-listo.reintentar.request",
+      "handler": "onReintentarRequest",
+      "description": "Vuelve a componer el aviso de un pedido desde el pedido de la tienda (no desde la memoria): si sigue faltando el destino o el precio, se dice con motivo."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "entrada-listo.componer.response",
+      "description": "El aviso compuesto, con destino, hora, precio de reparto y sello de la plaza (el par del disparador, para que el bus lo muestre)."
+    },
+    {
+      "event": "entrada-listo.componer.failed",
+      "description": "No se compuso el aviso: sin plaza, sin hora de listo, sin pedido, sin destino, sin precio o sin total. Con el motivo y el hueco nombrado."
+    },
+    {
+      "event": "entrada-listo.reintentar.response",
+      "description": "El aviso recompuesto en el reintento, con lo que el pedido tiene ahora."
+    },
+    {
+      "event": "entrada-listo.reintentar.failed",
+      "description": "El reintento no pudo componer el aviso: el motivo y el hueco, nunca silencio."
+    },
+    {
+      "event": "bocaos.listo_declarado",
+      "description": "HECHO: la plaza declara listo un pedido, con pedido · tienda · destino · hora · precio y plaza_id. Lo anota `hecho-listo` (A01) y arranca el enlace."
+    },
+    {
+      "event": "bocaos.hueco_nombrado",
+      "description": "HECHO: falta un dato y se nombra en vez de inventarlo (A34): sin destino, sin precio, sin total o sin hora. El pedido no entra al enlace."
+    }
+  ]
+}

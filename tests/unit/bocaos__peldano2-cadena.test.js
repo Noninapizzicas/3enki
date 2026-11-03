@@ -27,6 +27,7 @@ const path = require('path');
 const PedidoMercado = require('../../modules/bocaos/pedido-mercado/index.js');
 const TarifaPedido = require('../../modules/bocaos/tarifa-pedido/index.js');
 const ContratoTramos = require('../../modules/bocaos/contrato-tramos/index.js');
+const EntradaListo = require('../../modules/bocaos/entrada-listo/index.js');
 const HechoListo = require('../../modules/bocaos/hecho-listo/index.js');
 const FotoMercado = require('../../modules/bocaos/foto-mercado/index.js');
 const Enlace = require('../../modules/bocaos/enlace/index.js');
@@ -159,31 +160,9 @@ function pizzepos(bus) {
   };
 }
 
-// ─── entrada-listo (hoja 23 del peldaño, todavía NO construida) ───
-function entradaListo(bus, rpc) {
-  bus.subscribe('cocina.pedido_listo', async (e) => {
-    const d = e.data;
-    const pedido = (await rpc('pedido.get.request', { project_id: d.project_id, pedido_id: d.pedido_id }))?.data?.pedido || null;
-    const precio = (await rpc('tarifa-pedido.de.request', { project_id: PLAZA, pedido_id: d.pedido_id }))?.data?.precio || null;
-    if (!pedido || !precio) {
-      bus.publish('bocaos.hueco_nombrado', {
-        pedido_id: d.pedido_id, plaza_id: PLAZA,
-        motivo: !pedido ? 'pizzepos no da el pedido' : 'sin precio de reparto cerrado (E03)',
-        hueco: !pedido ? 'sin pedido' : 'sin precio'
-      });
-      return;
-    }
-    const entrega = pedido.entrega || {};
-    bus.publish('bocaos.listo_declarado', {
-      plaza_id: PLAZA, tienda_id: pedido.project_slug || TIENDA, pedido_id: d.pedido_id,
-      hora_listo: d.hora, hora: d.hora,
-      precio_congelado: { total_cents: pedido.total_centimos, moneda: 'EUR', reparto_cents: precio.precio_centimos },
-      punto: entrega.punto || null, destino: entrega.destino || null, zona: entrega.zona || null,
-      autor: { rol: 'tienda', tienda_id: pedido.project_slug || TIENDA }
-    });
-  });
-}
-
+// `entrada-listo` es la hoja de verdad: el arnés ya no la sustituye. El disparador es el evento
+// REAL de pizzepos (cocina.pedido_listo) y el puente pide el total a la tienda y el precio de
+// reparto a `tarifa-pedido`: no inventa ninguno de los dos.
 const RAIZ = path.join(__dirname, '../../modules/bocaos');
 
 function montar(opciones = {}) {
@@ -195,6 +174,7 @@ function montar(opciones = {}) {
     'pedido-mercado': new PedidoMercado(),
     'tarifa-pedido': new TarifaPedido(),
     'contrato-tramos': new ContratoTramos(),
+    'entrada-listo': new EntradaListo(),
     'hecho-listo': new HechoListo(),
     'foto-mercado': new FotoMercado(),
     enlace: new Enlace(),
@@ -238,7 +218,6 @@ function montar(opciones = {}) {
 
   puertos(bus, opciones);
   const pz = pizzepos(bus);
-  entradaListo(bus, rpc);
   modulos.__pizzepos = pz;   // el doble de pizzepos, para que el arnés pueda dar de alta
   modulos.__pizzepos_pub = (ev, p) => bus.publish(ev, p);
   bus.publish('project.activated', { project_id: PLAZA });
@@ -270,9 +249,9 @@ async function abrirPlaza(rpc, { chat = CHAT, umbrales = {} } = {}) {
 }
 
 // El alta la hace PIZZEPOS (pedido.creado real, con su bloque entrega). El tope que el cliente
-// autoriza al pedir viaja con la entrega Y como hecho `bocaos.tarifa`, que es lo que escucha la
-// escalada: ese hecho lo emitía el `pedido` retirado y hoy no tiene emisor en el plano — se dice
-// aquí en vez de esconderlo detrás del arnés.
+// autoriza al pedir viaja con la entrega y lo ANUNCIA su custodio — `tarifa-pedido`, que congela la
+// oferta y el tope — como hecho `bocaos.tarifa`, que es lo que escucha la escalada. Antes lo emitía
+// el `pedido` retirado; hoy lo emite la isla que custodia el número (cero emisores de mentira).
 async function altaDePedido(rpc, modulos, cliente = 'cli-1', extra = {}) {
   const pz = modulos.__pizzepos;
   const { tope_reparto_cents, escalon_cents, ...resto } = extra;
@@ -284,20 +263,11 @@ async function altaDePedido(rpc, modulos, cliente = 'cli-1', extra = {}) {
       direccion: { calle: 'Larios', numero: 3, cp: '29005' }, zona: 'centro',
       oferta_centimos: 450, punto: PUNTO, destino: DESTINO,
       ...(tope_reparto_cents ? { tope_centimos: tope_reparto_cents } : {}),
+      ...(Number.isInteger(escalon_cents) ? { escalon_centimos: escalon_cents } : {}),
       ...resto
     }
   });
   const pedido_id = pedido.pedido_id;
-  if (tope_reparto_cents) {
-    // El tope autorizado por el cliente es un HECHO con consumidor (escalada-enlace), y viaja
-    // junto al pedido: lo emite el lado del pedido, no el mercado.
-    modulos.__pizzepos_pub('bocaos.tarifa', {
-      pedido_id, plaza_id: PLAZA, tienda_id: TIENDA,
-      tope_cents: tope_reparto_cents,
-      escalon_cents: Number.isInteger(escalon_cents) ? escalon_cents : null,
-      autor: 'cliente'
-    });
-  }
   const acogido = await rpc('pedido-mercado.aceptar.request', { project_id: PLAZA, pedido_id, rol: 'tienda', tienda_id: TIENDA });
   assert.strictEqual(acogido.status, 200, JSON.stringify(acogido));
   // Cocina marca listo (evento REAL) y entrada-listo compone el hecho de la plaza.

@@ -852,6 +852,18 @@ que compara cada fila con quien la escribió.
 
 ---
 
+
+> **Corrección 2026-11-03 · cuatro hojas ya existen en pizzepos.**
+> El plan se escribió sin mirar el inventario real y mandaba construir una tienda
+> paralela. No se construyen:
+>   · `escaparate`        → `modules/pizzepos/escaparate`
+>   · `tienda-captura`    → `pedidos` (emite `pedido.creado`) + `tienda-api` (recibe el POST)
+>   · `pedido`            → `pedidos` (guarda el ciclo entero, con tabla cerrada de estados)
+>   · `tienda-hora-listo` → `cocina` (emite `cocina.pedido_listo`)
+> Bocaos se engancha a sus eventos con un puente fino (`puente-pizzepos`) que traduce
+> el idioma de pizzepos al del mercado. Si un campo no viene en el evento, NO se inventa:
+> queda hueco y el consumidor lo nombra.
+
 ## 8 · Orden de construcción
 
 El diseño no se puede construir empezando por el corazón: `enlace` depende de datos que escribe medio
@@ -876,7 +888,7 @@ REGLA DEL ORDEN · cada peldaño se puede probar solo.
 | 7 | `ruta-viva` | custodio | CONSTRUIR | PLAZA | B01, B02, B03, B04, B05, B06 | 3 · la ruta viva |
 | 8 | `contrato-tramos` | custodio | CONSTRUIR | PLAZA | E06, N02 | 4 · el pedido y su precio * |
 | 9 | `frontera-plaza` | reflejo | CONSTRUIR | PLAZA | S01, S02 | 4 · el pedido y su precio * |
-| 10 | `escaparate` | reflejo | CONSTRUIR | PLAZA | D07, D08, K02 | 4 · el pedido y su precio * |
+| 10 | `escaparate` | reflejo | REUTILIZAR | PLAZA | D07, D08, K02 | 4 · el pedido y su precio * |
 | 11 | `tienda-marca` | custodio | CONSTRUIR | TIENDA | D01 | 4 · el pedido y su precio |
 | 12 | `tienda-carta` | conversor | CONSTRUIR | TIENDA | D02 | 4 · el pedido y su precio |
 | 13 | `tienda-cliente` | custodio | CONSTRUIR | TIENDA | D05, L02 | 4 · el pedido y su precio |
@@ -885,10 +897,10 @@ REGLA DEL ORDEN · cada peldaño se puede probar solo.
 | 16 | `tienda-incentivo` | custodio | CONSTRUIR | TIENDA | E02 | 4 · el pedido y su precio |
 | 17 | `tarifa-pedido` | custodio | CONSTRUIR | PLAZA | E01, E03, E07 | 4 · el pedido y su precio |
 | 18 | `tienda-precio` | reflejo | CONSTRUIR | TIENDA | D03 | 4 · el pedido y su precio |
-| 19 | `tienda-captura` | reflejo | CONSTRUIR | TIENDA | C01 | 4 · el pedido y su precio |
-| 20 | `pedido` | custodio | CONSTRUIR | PLAZA | C02, C07 | 4 · el pedido y su precio |
+| 19 | `tienda-captura` | reflejo | REUTILIZAR | TIENDA | C01 | 4 · el pedido y su precio |
+| 20 | `pedido` | custodio | REUTILIZAR | PLAZA | C02, C07 | 4 · el pedido y su precio |
 | 21 | `hecho-listo` | custodio | CONSTRUIR | PLAZA | A01 | 4 · el pedido y su precio |
-| 22 | `tienda-hora-listo` | custodio | CONSTRUIR | TIENDA | C04 | 4 · el pedido y su precio |
+| 22 | `tienda-hora-listo` | custodio | REUTILIZAR | TIENDA | C04 | 4 · el pedido y su precio |
 | 23 | `tienda-cocina-visible` | reflejo | CONSTRUIR | TIENDA | C05 | 4 · el pedido y su precio |
 | 24 | `aviso-tienda` | puente | CONSTRUIR | PLAZA | C03 | 4 · el pedido y su precio |
 | 25 | `instrucciones-acceso` | custodio | CONSTRUIR | PLAZA | F05 | 4 · el pedido y su precio |

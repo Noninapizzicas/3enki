@@ -1,0 +1,93 @@
+{
+  "_doc": "estado-parte — custodio del censo operativo y del estado vivo de cada parte en la plaza (I03 EstadoTienda · I04 EstadoRider). La pausa SÓLO la declara el rider; «ocupado» lo pone el contrato vivo y lo quita su cierre; «saturada» la declara la tienda; la suspensión entra por bocaos.parte_sancionada con motivo y acta. Sin alta no hay estado. El coste por vehículo se resuelve preguntando a config-mercado por el bus y la capacidad vigente llega como hecho desde ruta-viva. Isla: no lee el almacén de nadie.",
+  "name": "estado-parte",
+  "version": "0.1.0",
+  "description": "El censo operativo de la plaza y el estado vivo de tiendas y riders: quién existe para el mercado, en qué estado, y quién puede decirlo (I03, I04).",
+  "unidad": "plaza",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "estado-parte.alta.request",
+      "handler": "onAltaRequest",
+      "description": "I01/I02: da de alta una tienda o un rider en el censo de esta plaza, con lo que declara de sí mismo."
+    },
+    {
+      "event": "estado-parte.declarar.request",
+      "handler": "onDeclararRequest",
+      "description": "I03/I04: la parte declara su estado con hora. La pausa sólo la declara él."
+    },
+    {
+      "event": "estado-parte.de.request",
+      "handler": "onDeRequest",
+      "description": "Estado vigente de una parte — o de todas, con la lista `riders` que pide la foto del mercado (A02)."
+    },
+    {
+      "event": "estado-parte.vigentes.request",
+      "handler": "onVigentesRequest",
+      "description": "A02: quién está disponible AHORA (fuera pausa, suspensión y reparto), con los ocultos nombrados."
+    },
+    {
+      "event": "bocaos.contrato_creado",
+      "handler": "onContratoCreado",
+      "description": "I04: el contrato vivo pone «ocupado». No es una declaración, es un hecho."
+    },
+    {
+      "event": "bocaos.contrato_cerrado",
+      "handler": "onContratoCerrado",
+      "description": "I04: cerrado el último contrato vivo, el rider vuelve a «disponible»."
+    },
+    {
+      "event": "bocaos.parte_sancionada",
+      "handler": "onParteSancionada",
+      "description": "P03: la única escritura de otro sobre el estado es la suspensión, con motivo y acta."
+    },
+    {
+      "event": "bocaos.capacidad_declarada",
+      "handler": "onCapacidadDeclarada",
+      "description": "B05: la capacidad que el rider declaró llega como hecho desde ruta-viva (su único escritor) y se guarda tal cual."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Hidrata el censo de la plaza y fija su sello."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "estado-parte.alta.response",
+      "description": "La parte entra en el censo con su estado inicial."
+    },
+    {
+      "event": "estado-parte.alta.failed",
+      "description": "No hay alta: ya estaba en el censo, o los datos declarados no son válidos."
+    },
+    {
+      "event": "estado-parte.declarar.response",
+      "description": "El estado declarado, con hora y autor."
+    },
+    {
+      "event": "estado-parte.declarar.failed",
+      "description": "Estado no declarado: pausa por otro, «ocupado» a mano, suspensión sin acta, parte fuera del censo."
+    },
+    {
+      "event": "estado-parte.de.response",
+      "description": "Estado vigente de una parte o del censo entero."
+    },
+    {
+      "event": "estado-parte.de.failed",
+      "description": "La parte no consta en esta plaza."
+    },
+    {
+      "event": "estado-parte.vigentes.response",
+      "description": "Riders disponibles ahora y tiendas abiertas, con los ocultos y su razón."
+    },
+    {
+      "event": "estado-parte.vigentes.failed",
+      "description": "No se puede responder sin proyecto."
+    },
+    {
+      "event": "bocaos.estado_parte_declarado",
+      "description": "HECHO: una parte cambió de estado, con hora, autor y motivo."
+    }
+  ]
+}

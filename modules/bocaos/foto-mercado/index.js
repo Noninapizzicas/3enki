@@ -48,7 +48,16 @@ class FotoMercado extends ModuloBocaos {
 
     const [parte, ruta, config] = await Promise.all([
       this._rpc('estado-parte.de.request', { project_id: d.project_id, plaza_id }),
-      this._rpc('ruta-viva.de.request', { project_id: d.project_id, plaza_id }),
+      // La tienda del pedido viaja con la pregunta: sin saber CUÁL es la tienda, «ETA a la
+      // tienda» no es un dato, es una impresión. Y el instante viaja también, para que la
+      // frescura de un punto se juzgue contra la hora de la foto y no contra la de ahora.
+      this._rpc('ruta-viva.de.request', {
+        project_id: d.project_id,
+        plaza_id,
+        tienda: pedido.punto || null,
+        destino: pedido.destino || null,
+        instante
+      }),
       this._rpc('config-mercado.politica.request', { project_id: d.project_id, plaza_id, instante })
     ]);
 

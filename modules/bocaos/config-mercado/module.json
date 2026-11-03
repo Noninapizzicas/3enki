@@ -1,0 +1,65 @@
+{
+  "_doc": "config-mercado — custodio de la política de la plaza CON VIGENCIA (J01 umbrales · J02 ventana · J03 zona · J04 versión efectiva · J05 simulador · G01 tres esperas). Dos capas y una precedencia que es una tabla: la tienda si declaró, si no la plaza, si no el default de la F0 (y se dice). La forma es cerrada: cuatro umbrales en AND, sin quinto criterio. Cambiar un umbral no reabre casos pasados: `politica(instante)` devuelve la que estaba viva. Isla: no lee el almacén de nadie, pregunta al bus.",
+  "name": "config-mercado",
+  "version": "0.1.0",
+  "description": "La política del mercado con vigencia, dos capas y la forma cerrada de los cuatro umbrales, la ventana de propuesta, las tres esperas y el coste del rider (J01-J05, G01).",
+  "unidad": "plaza",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "config-mercado.declarar.request",
+      "handler": "onDeclararRequest",
+      "description": "Declara una versión (J01/J02/J03/G01) con autor, desde, ámbito y acta. Sin acta no se escribe."
+    },
+    {
+      "event": "config-mercado.politica.request",
+      "handler": "onPoliticaRequest",
+      "description": "J04: la política viva en (instante, tienda, zona), con su capa y su autor, o el default de la plaza."
+    },
+    {
+      "event": "config-mercado.simular.request",
+      "handler": "onSimularRequest",
+      "description": "J05: qué habría pasado con otros números sobre hechos ya escritos. Simula y declara sus límites; no aplica."
+    },
+    {
+      "event": "bocaos.dictamen_firmado",
+      "handler": "onDictamenFirmado",
+      "description": "O02: un dictamen firmado con política entra por la misma puerta que declarar (con su acta)."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Hidrata el registro de la plaza y fija su sello (una plaza = un despliegue)."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "config-mercado.declarar.response",
+      "description": "La versión declarada, con número de versión y sello."
+    },
+    {
+      "event": "config-mercado.declarar.failed",
+      "description": "No se declara: sin acta, sin autor, con quinta llave, o con vigencia hacia atrás."
+    },
+    {
+      "event": "config-mercado.politica.response",
+      "description": "La política resuelta con sus sellos por valor y la precedencia que se aplicó."
+    },
+    {
+      "event": "config-mercado.politica.failed",
+      "description": "No hay política que resolver: falta proyecto."
+    },
+    {
+      "event": "config-mercado.simular.response",
+      "description": "La comparación sobre hechos escritos, con su resumen y sus límites."
+    },
+    {
+      "event": "config-mercado.simular.failed",
+      "description": "No se simula sin hechos o con una alternativa que rompe la forma."
+    },
+    {
+      "event": "bocaos.politica_declarada",
+      "description": "HECHO: cambió el criterio. Lleva capa, autor, acta, desde y los cuatro números."
+    }
+  ]
+}

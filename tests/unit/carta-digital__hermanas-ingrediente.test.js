@@ -52,7 +52,8 @@ const CARTA = {
     // Tres sin jamón: sin ellas la "base" sería el propio jamón (4/4) y el eje se perdería.
     pizza('pizzas_carbonara','Pizza Carbonara', 10.5, ['Tomate', 'Mozzarella', 'Bacon', 'Nata']),
     pizza('pizzas_cuatro_quesos','Pizza Cuatro Quesos', 11.5, ['Tomate', 'Mozzarella', 'Queso azul', 'Nata']),
-    pizza('pizzas_clasica','La Clásica', 10.5, ['Tomate', 'Mozzarella', 'Anchoas', 'Alcaparras']),
+    pizza('pizzas_clasica','La Clásica', 10.5, ['Tomate', 'Mozzarella', 'Anchoas', 'Alcaparras'],
+      { descripcion: 'La de siempre: anchoas y alcaparras' }),
     // FAMILIA FIJADA: el dueño declaró el grupo. Merengue está dentro; la Barbacoa (que SÍ lleva
     // bacon) se queda fuera porque no la declaró; el fantasma ya no existe.
     pizza('pizzas_bacon_ancla','Pizza de bacon', 10, ['Tomate', 'Mozzarella', 'Bacon'], {
@@ -164,6 +165,29 @@ caso('"Añadir extras" viene DESPLEGADO: el cliente ve los ingredientes sin busc
   assert.ok(/data-ext-id=/.test(out), 'los extras siguen ahí dentro, listos para abrir');
 });
 
+caso('los ingredientes van JUSTO debajo del nombre: encima de hermanas y de "Añadir extras"', () => {
+  // Orden pedido por el dueño (3-nov-2026): abres una pizza y lo primero que lees, debajo del
+  // nombre, es lo que lleva. Antes caían a media ficha, detrás de la descripción y del bloque
+  // de hermanas, y justo encima de los extras.
+  const orden = (out, marcas) => marcas.map(m => {
+    const i = out.indexOf(m);
+    assert.ok(i > -1, 'falta el bloque ' + m);
+    return i;
+  });
+  api.showDetail('pizzas_milonga');
+  let pos = orden(api.detalle(), ['detail-nombre', 'Ingredientes', 'También con Jamón de york', 'Añadir extras']);
+  for (let k = 1; k < pos.length; k++) {
+    assert.ok(pos[k - 1] < pos[k], 'el orden se rompe entre ' + k + ' y ' + (k + 1));
+  }
+  assert.ok(api.detalle().indexOf('ing-chip ing-removable') < api.detalle().indexOf('hermana-row'),
+    'la receta se lee antes que las otras pizzas');
+
+  // Y sigue por encima de la DESCRIPCIÓN del plato, no debajo.
+  api.showDetail('pizzas_clasica');
+  pos = orden(api.detalle(), ['detail-nombre', 'Ingredientes', 'La de siempre: anchoas y alcaparras']);
+  assert.ok(pos[1] < pos[2], 'los ingredientes van antes de la descripción');
+});
+
 caso('editar abre LA FICHA de esa hermana (y su propio bloque)', () => {
   api.showDetail('pizzas_indie');
   const out = api.detalle();
@@ -214,15 +238,21 @@ caso('una pizza sin familia de ingrediente no pinta el bloque (no inventa)', () 
   assert.ok(!/También con/.test(out), 'sin principal compartido → sin bloque');
 });
 
-caso('el bloque de hermanas va ARRIBA, antes de ingredientes y de añadir extras', () => {
+caso('ORDEN VIGENTE (3-nov-2026): receta debajo del nombre; las hermanas, DETRÁS de la receta', () => {
+  // Cambio pedido por el dueño, y sustituye al orden anterior (hermanas pegadas a la cabecera):
+  // "sus ingredientes ... deben estar justos debajo de su nombre, encima de las otras". La receta
+  // del plato manda; las demás pizzas de la familia siguen viéndose sin desplegar nada, pero
+  // después. Las dos siguen por encima de "Añadir extras", que es lo que las enterraba.
   api.showDetail('pizzas_milonga');
   const out = api.detalle();
+  const posNombre  = out.indexOf('detail-nombre');
+  const posIngs    = out.indexOf('toca para quitar');
   const posHermanas = out.indexOf('También con Jamón de york');
-  const posExtras   = out.indexOf('Añadir extras');
-  const posIngs     = out.indexOf('toca para quitar');
-  assert.ok(posHermanas > -1, 'el bloque existe');
-  assert.ok(posHermanas < posExtras, 'las hermanas van antes de "Añadir extras" (si no, quedan enterradas)');
-  assert.ok(posHermanas < posIngs, 'y antes de la lista de ingredientes');
+  const posExtras  = out.indexOf('Añadir extras');
+  assert.ok(posIngs > -1 && posHermanas > -1, 'los dos bloques existen');
+  assert.ok(posNombre < posIngs, 'la receta va justo debajo del nombre');
+  assert.ok(posIngs < posHermanas, 'y por encima del bloque de hermanas');
+  assert.ok(posHermanas < posExtras, 'las hermanas siguen antes de "Añadir extras" (si no, quedan enterradas)');
 });
 
 // ── FAMILIA FIJADA ────────────────────────────────────────────────────────────

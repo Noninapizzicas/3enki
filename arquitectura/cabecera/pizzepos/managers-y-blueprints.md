@@ -6,7 +6,7 @@ fuentes:
   - modules/pizzepos/**
   - modules/pago-gateway/**
   - blueprints/**
-verificado: 2026-10-28 (pago-gateway v3.1.0: Stripe con paridad — libro, idempotencia, webhook-puntero y conciliación; los métodos los manda el panel de Stripe, payment_method_types ya no se envía)
+verificado: 2026-11-03 (carta-digital v2.25.1: la FICHA del producto ordena sus bloques nombre → receta → descripción → hermanas → Añadir extras — la receta va PEGADA al nombre, encima de descripción y hermanas; sigue vigente pago-gateway v3.1.0: Stripe con paridad — libro, idempotencia, webhook-puntero y conciliación; los métodos los manda el panel de Stripe, payment_method_types ya no se envía)
 ---
 
 # Módulos Pizzepos y Blueprints
@@ -1202,6 +1202,13 @@ CLASE EstudioViabilidad {
 > carrito se vacía (WhatsApp / online / pasarela sin redirección) y la copia queda en «repetir
 > último pedido». Es plantilla HORNEADA: el deploy no toca el bundle ya publicado — tras desplegar
 > hay que REPUBLICAR para que la PWA servida lleve la plantilla nueva.
+> v2.25.1 (3-nov-2026) — ORDEN DE LA FICHA (static-template.js): al abrir un producto los bloques
+> van NOMBRE → RECETA (los ingredientes que lleva) → DESCRIPCIÓN → HERMANAS («también te puede
+> gustar») → Añadir extras. La receta queda PEGADA al nombre, por delante de descripción y
+> hermanas: el cliente lee qué lleva antes que ninguna otra cosa. Y las hermanas se calculan
+> desde los ingredientes que cada producto YA declara — si la carta cambia, cambian solas.
+> Misma regla de plantilla HORNEADA: tras desplegar hay que REPUBLICAR o la ficha servida
+> conserva el orden viejo.
 
 ```
 INTERFAZ CartaDigitalContract {                 // ui_handlers (RPC del bus / frontend)

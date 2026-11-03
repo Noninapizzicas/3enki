@@ -49,6 +49,24 @@ comandero, tarifas (canales de venta food). El motor de VENTA sí hereda:
 
 ## 2 · Arquitectura de la vertical
 
+**CORRECCIÓN DE DISEÑO (auditada por el chat de la instancia, nov-2026)**:
+
+1. **Las skills viven en DOBLES sitios**: repo (`~/3enki/`) para git, y **DEPLOY**
+   (`/opt/enki/modules/cosecha/cantera/enki/`) para que el chat las vea — el chat
+   NO ve la cantera del repo, solo la del deploy (490 skills). Copiar a AMBOS y
+   chmod g+w + chown www-data (el pitfall del permiso 644 del onboarding).
+2. **El canal Telegram NO es un bloque "canales" nuevo en el CONFIG**: el CONFIG
+   real de carta-digital lleva `opciones_visualizacion` con `whatsapp_telefono`,
+   `pedido_endpoint`, `pago_online` (y "canales" en tarifas significa otra cosa:
+   qué carta sirve cada canal). El cambio real: **campo nuevo
+   `opciones_visualizacion.telegram_bot`** — la PWA pinta el botón
+   "Pedir por Telegram" si existe. El bot ya trabaja por el vínculo
+   (telegram-bridge): el canal es el bot vinculado, no un campo redondo.
+3. **El proyecto nace vacío** (storage solo `_propiocepcion.json` + destilador +
+   pago/conciliación): la carta, productos y tarifas los monta el chat del
+   proyecto CON los datos reales del dueño (nombre+precio+grupos por producto).
+   Sin lista → nada montado (el chat se niega a inventar — correcto).
+
 ```
 CLIENTE (TG) → bot del negocio (telegram-service, polling)
   → comando inline: /menu · /carta · /pedir → INLINE KEYBOARDS del nicho

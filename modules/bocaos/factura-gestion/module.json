@@ -1,0 +1,42 @@
+{
+  "_doc": "factura-gestion — CONVERSOR del cierre en documento de cobro de UNA parte (H03). No calcula el importe: lo formatea. Sólo lo DEVENGADO en ese cierre, ni un concepto más; lo que está en duda (Q18) no se factura y se declara en `no_facturado`. Los campos que el diseño no tiene se marcan vacíos: IVA, forma jurídica, serie/numero fiscal y quién factura a quién son Q4 [ABIERTO] — sin tipo declarado no hay cuota y el total es la base. Una factura por cierre y parte POR CONSTRUCCIÓN: el documento se deriva del cierre con su huella, así que la misma llave da siempre el mismo documento_id; la segunda sólo es RECTIFICATIVA si trae motivo y a qué documento corrige. Sin store: el documento lo guarda quien lo pidió.",
+  "name": "factura-gestion",
+  "version": "0.1.0",
+  "description": "El cierre convertido en documento de cobro de una parte: sólo lo devengado, con IVA y serie NO_CONSTA, y rectificativa con motivo (H03).",
+  "unidad": "plaza",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "factura-gestion.emitir.request",
+      "handler": "onEmitirRequest",
+      "description": "Convierte el cierre en el documento de cobro de una parte, o en su rectificativa con motivo."
+    },
+    {
+      "event": "factura-gestion.de.request",
+      "handler": "onDeRequest",
+      "description": "Reconstruye el documento desde el cierre (misma llave, mismo documento): el conversor no guarda nada."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "factura-gestion.emitir.response",
+      "description": "El documento de cobro: líneas, base, IVA declarado o NO_CONSTA, y lo que no se factura."
+    },
+    {
+      "event": "factura-gestion.emitir.failed",
+      "description": "No se emite: sin cierre, sin devengo de esa parte, o rectificativa sin motivo."
+    },
+    {
+      "event": "factura-gestion.de.response",
+      "description": "El mismo documento reconstruido desde el cierre, con su huella."
+    },
+    {
+      "event": "factura-gestion.de.failed",
+      "description": "No hay documento que reconstruir: falta el cierre o la parte no tiene devengo."
+    },
+    {
+      "event": "bocaos.documento_emitido",
+      "description": "HECHO: el documento de cobro de esa parte existe, con su base, su estado de IVA y su huella."
+    }
+  ]
+}

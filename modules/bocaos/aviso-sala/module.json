@@ -1,0 +1,41 @@
+{
+  "_doc": "aviso-sala — PUENTE de I07. Pone el caso delante de una persona CON SU TRAZA (sin traza la sala sólo puede improvisar) y lo deja en la cola SIEMPRE: si no hay destinatario o el transporte falla, el caso sigue vivo y visible, que es lo único que no se puede perder (Q40 [ABIERTO]: a las 23:40 de un sábado puede no haber nadie). El aviso NO cierra el caso: que el mensaje salga no es que alguien lo haya mirado. Si el plazo venció, el caso sube de prioridad y sigue vivo — no se cierra solo. Sin store; el transporte se inyecta (en producción `telegram.send_message.request`).",
+  "name": "aviso-sala",
+  "version": "0.1.0",
+  "description": "Avisa a la sala del caso con su traza y su plazo, y si no hay nadie el caso queda en la cola, vivo y visible (I07).",
+  "unidad": "plaza",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "aviso-sala.caso.request",
+      "handler": "onCasoRequest",
+      "description": "Hay un caso que un humano tiene que mirar: se manda a la sala con su traza y su plazo, y se deja en la cola."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "telegram.send_message.request",
+      "description": "El aviso, por el servicio de Telegram del despliegue (puerto del transporte, no hoja)."
+    },
+    {
+      "event": "aviso-sala.caso.response",
+      "description": "El aviso salió (con su mensaje_id) o no había destinatario; en los dos casos el caso está en la cola."
+    },
+    {
+      "event": "aviso-sala.caso.failed",
+      "description": "No hay aviso que mandar: falta el caso o la traza (un aviso sin traza no es un aviso)."
+    },
+    {
+      "event": "aviso-sala.enviado",
+      "description": "HECHO: el aviso salió, con su destinatario y su traza, y con `cierra_caso: false`."
+    },
+    {
+      "event": "aviso-sala.fallido",
+      "description": "HECHO: el aviso no salió (sin destinatario o transporte que falla); el caso sigue en la cola."
+    },
+    {
+      "event": "cola-sala.encolar.request",
+      "description": "El caso entra en la cola de la sala (P01) siempre, con su traza, su plazo y si está vencido."
+    }
+  ]
+}

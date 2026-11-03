@@ -1,0 +1,38 @@
+{
+  "_doc": "cuenta-parte — REFLEJO stateless de la cuenta de cada parte (Q01 · M01). Proyección sobre devengos, documentos, cobros y cargos: NO guarda nada (si guardara, habría dos verdades del dinero). Lo que no consta se dice `NO_CONSTA`, nunca cero: un cero es una cuenta saldada sin que nadie pagara (Q28). Pide al bus el devengo (liquidacion.de), el documento (factura-gestion.de), las deudas con evidencia (cargo-fallo.de), el cobro de verdad (pago.recibo, la pasarela) y el acta del reparto (hechos-reparto.acta) para separar GANADO de RECLAMADO (Q30). Una cartera por plaza: la de al lado no se ve desde aquí (§7.9/Q45). El cliente final no tiene cuenta (Q01).",
+  "name": "cuenta-parte",
+  "version": "0.1.0",
+  "description": "La cuenta de una parte y la cartera del rider en esta plaza: devengado, facturado, cobrado, deuda y el neto que sólo existe si constan sus términos (Q01, M01).",
+  "unidad": "plaza",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "cuenta-parte.ver.request",
+      "handler": "onVerRequest",
+      "description": "Devengado · facturado · cobrado · deuda · pendiente · saldo de una parte, con la versión de tramos que estaba viva."
+    },
+    {
+      "event": "cuenta-parte.cartera.request",
+      "handler": "onCarteraRequest",
+      "description": "La cartera del rider en ESTA plaza: ganado, reclamado, pendiente, cuota, deudas y neto — sin estimar nada."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "cuenta-parte.ver.response",
+      "description": "La cuenta de la parte con cada importe apuntando a su hecho y lo que no consta dicho."
+    },
+    {
+      "event": "cuenta-parte.ver.failed",
+      "description": "No hay cuenta: falta parte o plaza, es el cliente final, o esa parte no tiene devengo en esta plaza."
+    },
+    {
+      "event": "cuenta-parte.cartera.response",
+      "description": "La cartera del rider con sus pedidos clasificados (ganado, reclamado, pendiente) y su neto o su NO_CONSTA."
+    },
+    {
+      "event": "cuenta-parte.cartera.failed",
+      "description": "No hay cartera: ese rider no tiene devengo en esta plaza para ese periodo."
+    }
+  ]
+}

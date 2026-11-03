@@ -1,0 +1,97 @@
+{
+  "_doc": "cola-sala — CUSTODIO single-writer de la ÚNICA cola de la sala (P01 · O03 · P02). Una incidencia, una disputa, un alta incompleta y un pedido sin rider son la misma cosa: algo atascado que necesita a alguien. PRIORIDAD POR HECHOS (tiempo esperando y pedidos afectados, con el vencimiento empujando), y los componentes van en cada caso para que nadie tenga que creerse la fórmula. VENCER NO RESUELVE: el caso sube de prioridad y sigue vivo. UN CASO SALE CON UN HECHO QUE LO CIERRA (dictamen · cargo · alta completada · resuelto), no porque alguien lo borre: sin hecho de cierre, 409. La revisión es de ESTA plaza (O03) y la vista de una parte no muestra a la otra (P02). El aviso (I07) y la incidencia (F06) entran por la misma fila: encolar es idempotente por caso_id. Store `/bocaos/cola-sala.json`.",
+  "name": "cola-sala",
+  "version": "0.1.0",
+  "description": "La única cola de la sala: casos con traza y plazo, prioridad por hechos, vencimiento que empuja y cierre con hecho (P01, O03, P02).",
+  "unidad": "plaza",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "cola-sala.encolar.request",
+      "handler": "onEncolarRequest",
+      "description": "Entra un caso con su tipo, su traza y su plazo; idempotente por caso_id, y el tipo es forma cerrada."
+    },
+    {
+      "event": "cola-sala.tomar.request",
+      "handler": "onTomarRequest",
+      "description": "Una persona toma el caso: uno solo lo tiene, y se dice quién."
+    },
+    {
+      "event": "cola-sala.cerrar.request",
+      "handler": "onCerrarRequest",
+      "description": "Cierra el caso con un hecho que lo cierra y un porqué. Sin hecho de cierre no se cierra: no se borra."
+    },
+    {
+      "event": "cola-sala.listar.request",
+      "handler": "onListarRequest",
+      "description": "La cola por prioridad (con sus componentes), o la vista de una parte de sus propios casos (P02)."
+    },
+    {
+      "event": "aviso-sala.caso.request",
+      "handler": "onAvisoSalaCaso",
+      "description": "El aviso de la sala anuncia un caso: entra en la misma fila (idempotente por caso_id), salga o no el mensaje."
+    },
+    {
+      "event": "bocaos.hueco_nombrado",
+      "handler": "onHuecoNombrado",
+      "description": "Un hueco nombrado (A34) se guarda y se pega a la traza del caso de ese pedido: es el diagnóstico que la sala puede leer. No crea un caso por sí solo."
+    },
+    {
+      "event": "bocaos.incidencia_abierta",
+      "handler": "onIncidenciaAbierta",
+      "description": "Una incidencia abierta ES un caso de esta cola (una sola cola), con su relato como traza."
+    },
+    {
+      "event": "bocaos.dictamen_firmado",
+      "handler": "onDictamenFirmado",
+      "description": "El dictamen firmado es el hecho que cierra el caso que nombra (P01/O04)."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Hidrata la cola de la plaza: no se vacía al reiniciar."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "cola-sala.encolar.response",
+      "description": "El caso en la cola, con su prioridad y sus componentes (o el que ya estaba)."
+    },
+    {
+      "event": "cola-sala.encolar.failed",
+      "description": "No entra: falta proyecto, tipo declarado, traza, o cruza de plaza / pide reabrir un caso cerrado."
+    },
+    {
+      "event": "cola-sala.tomar.response",
+      "description": "El caso tomado por esa persona."
+    },
+    {
+      "event": "cola-sala.tomar.failed",
+      "description": "No se toma: falta caso o persona, ya lo tiene otro, o ya está cerrado."
+    },
+    {
+      "event": "cola-sala.cerrar.response",
+      "description": "El caso cerrado, con su hecho de cierre y su porqué."
+    },
+    {
+      "event": "cola-sala.cerrar.failed",
+      "description": "No se cierra: falta el hecho de cierre o el porqué."
+    },
+    {
+      "event": "cola-sala.listar.response",
+      "description": "La cola ordenada por hechos (con su fórmula dicha) o la vista de la parte sin datos de la otra."
+    },
+    {
+      "event": "cola-sala.listar.failed",
+      "description": "No hay cola que listar: falta el proyecto."
+    },
+    {
+      "event": "bocaos.caso_encolado",
+      "description": "HECHO: el caso está en la cola, con su tipo, su traza, su plazo, su prioridad y si está vencido."
+    },
+    {
+      "event": "bocaos.caso_cerrado",
+      "description": "HECHO: el caso se cerró con un hecho que lo cierra, su porqué y quién."
+    }
+  ]
+}

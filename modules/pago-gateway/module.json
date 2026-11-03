@@ -10,6 +10,8 @@
     "pago.iniciar.response",
     "pago.cancelar.response",
     "pago.reembolsar.response",
+    "pago.revertir.response",
+    "pago.revertido",
     "pago.estado.response",
     "pago.recibo.response",
     "pago.config.response",
@@ -52,6 +54,7 @@
     "pago.iniciar.request",
     "pago.cancelar.request",
     "pago.reembolsar.request",
+    "pago.revertir.request",
     "pago.estado.request",
     "pago.recibo.request",
     "pago.config.request",
@@ -96,6 +99,12 @@
       "action": "reembolsar",
       "handler": "handlePagoReembolsar",
       "description": "Reembolso total o parcial con tope por libro de cobros. Sin reintento automático: un timeout es ESTADO_INCIERTO."
+    },
+    {
+      "domain": "pago",
+      "action": "revertir",
+      "handler": "handlePagoRevertir",
+      "description": "ADITIVO (Bocaos H04): devuelve un cobro con autor, motivo y constancia en el libro. La vuelta real es el reembolso del cobro; revertir una transferencia sobre la cuenta conectada es Q29 [ABIERTO] y se dice, no se finge."
     },
     {
       "domain": "pago",

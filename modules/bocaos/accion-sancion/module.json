@@ -1,0 +1,65 @@
+{
+  "_doc": "accion-sancion — CUSTODIO single-writer de la sanción (P03). Un acto con AUTOR, MOTIVO, PLAZO y ACTA: sin firmante no hay sanción (403), sin acta tampoco (409). «Por tasa de rechazo» no es una falta — rechazar es un derecho (A21). Y la sanción NO toca lo que está en marcha: corta la ENTRADA de pedidos nuevos, no corta pedidos en vuelo ni retira propuestas vivas (H05) y no toca el dinero (H06); si alguien pide eso, no hay sanción (409). La revocación es una TRANSICIÓN del mismo hecho (activa → revocada), con motivo y autor, no un borrado. Un dictamen firmado (O04) sólo revoca si nombra la sanción. Store `/bocaos/accion-sancion.json`.",
+  "name": "accion-sancion",
+  "version": "0.1.0",
+  "description": "La sanción como acto con autor, motivo, plazo y acta, con sus límites escritos y su revocación que deja rastro (P03).",
+  "unidad": "plaza",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "accion-sancion.aplicar.request",
+      "handler": "onAplicarRequest",
+      "description": "Se aplica una sanción con firmante, acta, motivo y plazo; o se dice por qué no puede aplicarse."
+    },
+    {
+      "event": "accion-sancion.revocar.request",
+      "handler": "onRevocarRequest",
+      "description": "Se revoca una sanción con autor y motivo: transición del mismo hecho, con su rastro."
+    },
+    {
+      "event": "accion-sancion.de.request",
+      "handler": "onDeRequest",
+      "description": "Las sanciones de una parte (o una), con su estado efectivo y los límites que nunca cruzaron."
+    },
+    {
+      "event": "bocaos.dictamen_firmado",
+      "handler": "onDictamenFirmado",
+      "description": "Un dictamen firmado que NOMBRA la sanción la revoca; uno que no la nombra no es un indulto."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Hidrata el registro de sanciones de la plaza."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "accion-sancion.aplicar.response",
+      "description": "La sanción aplicada, con su alcance escrito y su plazo."
+    },
+    {
+      "event": "accion-sancion.aplicar.failed",
+      "description": "No se aplica: sin firmante, sin acta, sin motivo o plazo, por tasa de rechazo, o pidiendo cortar lo que está en vuelo."
+    },
+    {
+      "event": "accion-sancion.revocar.response",
+      "description": "La sanción revocada, con autor, motivo y hora."
+    },
+    {
+      "event": "accion-sancion.revocar.failed",
+      "description": "No se revoca: falta la sanción, el autor o el motivo."
+    },
+    {
+      "event": "accion-sancion.de.response",
+      "description": "Las sanciones de la parte con su estado efectivo (activa, vencida, revocada) y sus límites."
+    },
+    {
+      "event": "accion-sancion.de.failed",
+      "description": "No hay nada que dar: falta el proyecto, la sanción o la parte."
+    },
+    {
+      "event": "bocaos.parte_sancionada",
+      "description": "HECHO: una parte queda sancionada (aplicada) o se revoca, con su motivo, su acta y su alcance."
+    }
+  ]
+}

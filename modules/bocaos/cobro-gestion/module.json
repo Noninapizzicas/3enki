@@ -1,0 +1,63 @@
+{
+  "_doc": "cobro-gestion — PUENTE de H04 sobre `pago-gateway` v3.1.0, que YA cobra por proyecto, por canal y concilia: no se reconstruye el cobro. Escucha el documento de la cuota (`bocaos.documento_emitido`), resuelve el CANAL QUE LA PARTE DECLARÓ (estado-parte) y pide `pago.iniciar.request`; la constancia vuelve como `bocaos.cobro_confirmado`. Un importe que no cuadra NO se da por cobrado (`pago.importe_discrepante` → `bocaos.cobro_fallido`). Un cobro fallido no cambia lo devengado (H04/H05). La VUELTA es un acto con autor y motivo y sólo ANTES DE LIQUIDAR (H02): se valida, se pide al órgano con la op NUEVA y aditiva `pago.revertir` y se devuelve la constancia. El cobro de un documento es UN agregado: el reembolso viaja como transición dentro de `bocaos.cobro_confirmado` (estado REEMBOLSADO), no como hecho nuevo. Sin store: el libro es del órgano y el cierre de `liquidacion`.",
+  "name": "cobro-gestion",
+  "version": "0.1.0",
+  "description": "Cobra a la parte su documento por el canal que ella declaró, con constancia, discrepancia controlada y vuelta con autor (H04).",
+  "unidad": "plaza",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "bocaos.documento_emitido",
+      "handler": "onDocumentoEmitido",
+      "description": "Hay documento de cuota: se resuelve el canal declarado por la parte y se pide el cobro; si no hay canal o el documento está incompleto, se publica el fallo con su hueco."
+    },
+    {
+      "event": "pago.confirmado",
+      "handler": "onPagoConfirmado",
+      "description": "El dinero entró: se confirma SÓLO si el importe cuadra con el documento; si no, se apunta la discrepancia."
+    },
+    {
+      "event": "pago.rechazado",
+      "handler": "onPagoRechazado",
+      "description": "La pasarela rechazó el cobro: constancia del fallo, sin tocar el devengo."
+    },
+    {
+      "event": "pago.reembolsado",
+      "handler": "onPagoReembolsado",
+      "description": "El dinero volvió: transición del mismo cobro a REEMBOLSADO (el devengo no se mueve)."
+    },
+    {
+      "event": "pago.importe_discrepante",
+      "handler": "onPagoImporteDiscrepante",
+      "description": "El importe no cuadra: el caso NO se da por cobrado y se dice cuánto se esperaba y cuánto llegó."
+    },
+    {
+      "event": "pago.revertir.request",
+      "handler": "onRevertirRequest",
+      "description": "Orden de devolver la cuota de un documento: se valida (autor, motivo, cobrado y antes de liquidar), se pide al órgano y se contesta en pago.revertir.response."
+    },
+    {
+      "event": "pago.revertir.response",
+      "handler": "onPagoRevertirResponse",
+      "description": "La respuesta de una reversión que no pedimos nosotros: se anota la constancia. Las propias no se muerden la cola."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "pago.iniciar.request",
+      "description": "Se pide al órgano el cobro del documento por el canal de la parte (referencia = documento_id)."
+    },
+    {
+      "event": "pago.revertir.response",
+      "description": "La respuesta de la reversión para quien la pidió, con su request_id original."
+    },
+    {
+      "event": "bocaos.cobro_confirmado",
+      "description": "HECHO: el cobro de ese documento está confirmado — o, como transición del mismo agregado, reembolsado."
+    },
+    {
+      "event": "bocaos.cobro_fallido",
+      "description": "HECHO: el cobro no se hizo o no cuadra, con su código, su motivo y su hueco."
+    }
+  ]
+}

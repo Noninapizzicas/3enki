@@ -1,6 +1,6 @@
 {
   "vertical": "bocaos",
-  "actualizado": "2026-11-03T18:00:00Z",
+  "actualizado": "2026-11-03T14:41:05Z",
   "fuente": "proceso/fase3b/plan-construccion.md §11 (espina enki-plan, F3b v3 con inventario real)",
   "nota": "Bocaos es SÓLO el mercado. La tienda ya existe: pizzepos (tienda-api · pedidos · cocina · carta-digital · carta-marketing · tarifas · whatsapp-bot · pago-gateway · impresion). Lo de la tienda NO se construye: se engancha por evento (pedido.creado · pedido.cancelado · cocina.pedido_listo · pedido.pagado). Las 3 ADAPTAR son las únicas que tocan un módulo existente, y son aditivas.",
   "tracking": {
@@ -71,20 +71,28 @@
       "fed-aviso"
     ],
     "realizados": [
+      "accion-sancion",
       "acta-decisiones",
       "aviso-cliente",
+      "aviso-sala",
       "aviso-tienda",
       "canal-rider",
       "cargo-fallo",
       "censo-parte",
       "chat-enmascarado",
+      "cobro-gestion",
+      "cola-sala",
       "config-mercado",
       "contrato-puntual",
       "contrato-tramos",
+      "cuenta-parte",
+      "dictamen-revision",
+      "disputa-fallo",
       "enlace",
       "entrada-listo",
       "escalada-enlace",
       "estado-parte",
+      "factura-gestion",
       "foto-mercado",
       "frontera-plaza",
       "hecho-listo",
@@ -93,6 +101,7 @@
       "indice-plaza",
       "instrucciones-acceso",
       "lectura-incidencia",
+      "liquidacion",
       "medida-cocina",
       "panel-tienda",
       "pedido-mercado",
@@ -112,18 +121,9 @@
     ],
     "a_adaptar": [
       "pedidos",
-      "tienda-api",
-      "cobro-gestion"
+      "tienda-api"
     ],
     "pendientes": [
-      "disputa-fallo",
-      "liquidacion",
-      "factura-gestion",
-      "cuenta-parte",
-      "aviso-sala",
-      "dictamen-revision",
-      "accion-sancion",
-      "cola-sala",
       "salud-mercado",
       "publicacion",
       "resumen-tienda",
@@ -142,10 +142,10 @@
       "fed-versiones",
       "fed-aviso"
     ],
-    "proximo": "disputa-fallo",
+    "proximo": "salud-mercado",
     "total": 64,
-    "hechos": 31,
-    "faltan": 25,
+    "hechos": 40,
+    "faltan": 17,
     "retirados": [
       "tienda-captura (C01: duplicaba tienda-api + pedidos)",
       "tienda-hora-listo (C04: duplicaba cocina.mark-ready)",
@@ -154,13 +154,21 @@
   },
   "costuras_cerradas": {
     "bocaos.acta_anotada": "el hecho del acta es UNO y se llama como en la espina (§11) y como lo escucha contrato-tramos: bocaos.acta_anotada. acta-decisiones emitía bocaos.acta_asentada (dos nombres para el mismo hecho); renombrado en código, manifest y test. «Asentar» es lo que hace por dentro; «anotar» es lo que hace en el bus.",
-    "bocaos.tarifa": "el tope que autoriza el cliente (Q43) lo anuncia su custodio, tarifa-pedido, al congelar la oferta/tope y cuando el tope llega por RPC. Antes no lo emitía nadie (lo emitía el pedido retirado) y escalada-enlace lo escuchaba: un consumidor hablando un idioma que nadie hablaba. Sin tope NO se emite (un 0 sería un tope inventado)."
+    "bocaos.tarifa": "el tope que autoriza el cliente (Q43) lo anuncia su custodio, tarifa-pedido, al congelar la oferta/tope y cuando el tope llega por RPC. Antes no lo emitía nadie (lo emitía el pedido retirado) y escalada-enlace lo escuchaba: un consumidor hablando un idioma que nadie hablaba. Sin tope NO se emite (un 0 sería un tope inventado).",
+    "bocaos.disputa_abierta": "disputa-fallo publica bocaos.disputa_abierta: su §9-F lo llama «hechos que publica» y el §11-B no lo declaraba en publishes. Es el hecho que hace visible que el cargo está en el aire (cobrable:false), y sin él un dictamen no tendría nada que firmar en el bus.",
+    "pago.revertir": "cobro-gestion responde en `pago.revertir.response` (el §11-B) y no en `cobro-gestion.revertir.*` (el §9-E): la respuesta de un op viaja en el nombre que el plano declara, o el que pregunta no la encuentra. La reversión la ejecuta el órgano con la op NUEVA y aditiva `pago.revertir`, que contesta en el mismo tópico con el request_id de quien la pidió.",
+    "pago.reembolsar.request": "cobro-gestion NO publica pago.reembolsar.request (el §11-B lo listaba): la vuelta se pide con `pago.revertir` y el órgano ejecuta el reembolso por dentro. Dos caminos para devolver el mismo dinero es exactamente el doble-reembolso que el órgano evita."
   },
   "desvios_del_plano": [
     "entrada-listo publica además bocaos.hueco_nombrado: su §9-D lo pide (A34) y §5.3 se lo asignaba sólo a enlace. Sin él, un pedido al que le falta el destino no entra al enlace y la tienda no se entera.",
     "lectura-incidencia declara bocaos.incidencia_clasificada y bocaos.lectura_ambigua en publishes: el §9-F los llama «hechos que publica» y la lista B de la espina los omitía.",
     "cargo-fallo publica bocaos.cargo_sin_evidencia: el §9 lo exige («sin evidencia → cargo_sin_evidencia») y su lista B no lo declaraba. Sin ese hecho, el rechazo es silencioso.",
     "cargo-fallo transmite el estado del cargo (anotado · anulado) dentro de bocaos.cargo_anotado: la espina le da un solo nombre al hecho de ese agregado y el §6.4 lo modela como transiciones del mismo (medido → anotado → cobrado · anulado).",
-    "entrada-listo no usa el par hecho-listo.anotar.request que lista §5.2: §5.3 asigna bocaos.listo_declarado a entrada-listo y hecho-listo ya lo escucha. Llamar a los dos escribiría el mismo hecho dos veces (la segunda, un 409 disfrazado de éxito)."
+    "entrada-listo no usa el par hecho-listo.anotar.request que lista §5.2: §5.3 asigna bocaos.listo_declarado a entrada-listo y hecho-listo ya lo escucha. Llamar a los dos escribiría el mismo hecho dos veces (la segunda, un 409 disfrazado de éxito).",
+    "liquidacion publica además scheduler.job.created: el job del ciclo semanal hay que pedírselo al scheduler, y sólo se pide si la plaza DECLARA su horario (`ciclo.horario`). El día y la hora del ciclo son Q26 [ABIERTO] y no se inventan.",
+    "cola-sala escucha bocaos.dictamen_firmado: P01 dice que un caso sale con un hecho que lo cierra (dictamen · cargo · alta completada), y el §11 no le daba ese evento. Sin él, un dictamen firmado no cerraba nada.",
+    "liquidacion no prorratea el fijo por su cuenta: el fijo es MENSUAL y el ciclo SEMANAL, y la parte que toca no está en el diseño (Q26). Se devenga el variable y el fijo sale NO_CONSTA, salvo que quien cierra declare `prorrateo.dias_periodo`/`dias_mes`; entonces se calcula con SUS números.",
+    "liquidacion no fija los valores de la mora (H05): sin `escala_mora` declarada (días de recordatorio, de recargo y de suspensión) no hay recargo ni suspensión, sólo la deuda visible. La suspensión nunca corta pedidos en vuelo ni propuestas vivas.",
+    "factura-gestion no numera ni pone tipo de IVA: serie, número, forma jurídica y quién factura a quién son Q4 [ABIERTO]. El documento se identifica por una llave derivada del cierre y de la parte (misma llave, mismo documento) y el IVA sale NO_CONSTA sin cuota."
   ]
 }

@@ -96,6 +96,24 @@ function emiteEnCodigo(dir) {
 }
 
 function evDe(x) { return (x && typeof x === 'object') ? (x.event || '') : String(x || ''); }
+
+// ── Lo que un manifest declara PUBLICAR, en las tres formas que hay vivas en el repo:
+//    publishes: [{event}]   (pizzepos, bocaos, el formato nuevo)
+//    eventos_publicados: []  (varias verticales)
+//    events: { publishes: [{event}] }  (el core y el scheduler)
+// Sin esto, un módulo que escucha al scheduler sale como «nadie lo emite»: el emisor existe y
+// declara; lo que no lo veía era esta herramienta. (Medido: scheduler declara job.triggered en
+// events.publishes y su código lo publica con `_publicarEvento`, que el RE_PUBLISH tampoco pilla.)
+function pubsDe(j) {
+  if (!j || typeof j !== 'object') return [];
+  const out = [];
+  if (Array.isArray(j.publishes)) out.push(...j.publishes);
+  if (Array.isArray(j.eventos_publicados)) out.push(...j.eventos_publicados);
+  if (j.events && Array.isArray(j.events.publishes)) out.push(...j.events.publishes);
+  if (j.events && Array.isArray(j.events.eventos_publicados)) out.push(...j.events.eventos_publicados);
+  return out.map(evDe);
+}
+
 function esRpc(e) { return e.endsWith('.request'); }
 function esRespuesta(e) { return e.endsWith('.response') || e.endsWith('.failed'); }
 
@@ -132,7 +150,7 @@ function leer(m) {
 function medir(m, emisores) {
   const { j, b } = leer(m);
   const subs = arrayDe(j.subscribes).map(evDe);
-  const pubs = arrayDe(j.publishes).map(evDe);
+  const pubs = pubsDe(j);
   const ops = (b && b.ui && b.ui.ops && typeof b.ui.ops === 'object') ? Object.keys(b.ui.ops) : [];
 
   // La escucha RELEVANTE para el ADN: eventos de DOMINIO. Se excluyen:
@@ -227,7 +245,7 @@ function main() {
   const emisores = new Set();
   for (const m of descubrir()) {
     const { j } = leer(m);
-    for (const e of arrayDe(j.publishes).map(evDe)) if (!esRespuesta(e)) emisores.add(e);
+    for (const e of pubsDe(j)) if (!esRespuesta(e)) emisores.add(e);
     for (const e of emiteEnCodigo(m.dir)) emisores.add(e);
   }
 
@@ -291,7 +309,7 @@ function main() {
 //   · CLI   → node scripts/verificar-adn-modulo.js
 //   · require → el gate de proceso-negocio mide el ADN al construir
 // Así la regla no se duplica: el gate y el script dicen lo mismo.
-module.exports = { descubrir, descubrirEn, leer, medir, juzgar, emiteEnCodigo, arrayDe, evDe, RE_PUBLISH, VERBO_CONSULTA, VERBO_ESCRITURA };
+module.exports = { descubrir, descubrirEn, leer, medir, juzgar, emiteEnCodigo, arrayDe, evDe, pubsDe, RE_PUBLISH, VERBO_CONSULTA, VERBO_ESCRITURA };
 
 /** Mide UN módulo por su slug y devuelve {ok, hallazgos, medida}. Uso: el gate.
  *  `raiz` es opcional (por defecto la del repo): permite medir una raíz fabricada. */
@@ -302,7 +320,7 @@ function medirSlug(slug, raiz) {
   const emisores = new Set();
   for (const ot of lista) {
     const { j } = leer(ot);
-    for (const e of arrayDe(j.publishes).map(evDe)) if (!esRespuesta(e)) emisores.add(e);
+    for (const e of pubsDe(j)) if (!esRespuesta(e)) emisores.add(e);
     for (const e of emiteEnCodigo(ot.dir)) emisores.add(e);
   }
   const x = medir(m, emisores);

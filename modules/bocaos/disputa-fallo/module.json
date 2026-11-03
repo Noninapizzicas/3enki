@@ -1,0 +1,38 @@
+{
+  "_doc": "disputa-fallo — PUENTE de la disidencia (G05). Una parte que no está de acuerdo pone el caso delante de un humano, con la evidencia del cargo y los hechos que cita; Bocaos no decide la disputa. La deuda NO se borra: se declara `cobrable: false` hasta el dictamen firmado (O04), porque cómo se hace efectivo un cargo es Q29 [ABIERTO]. El caso entra por `aviso-sala.caso.request` — I07 lo deja en la cola si no hay nadie, vivo y visible. El cargo se LEE (de `cargo-fallo.de` o del hecho que acaba de pasar): si no consta, no se abre una disputa sobre una deuda inventada. Sin store: la cola es de `cola-sala`.",
+  "name": "disputa-fallo",
+  "version": "0.1.0",
+  "description": "La disputa de un cargo: el caso delante de un humano con su traza y su plazo, sin que la deuda desaparezca (G05).",
+  "unidad": "plaza",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "bocaos.cargo_anotado",
+      "handler": "onCargoAnotado",
+      "description": "El cargo existe o se anuló: se recuerda en caliente para poder disputarlo sin preguntar, y para no disputar una deuda que ya no está. No abre nada solo."
+    },
+    {
+      "event": "disputa-fallo.abrir.request",
+      "handler": "onAbrirRequest",
+      "description": "Una parte del cargo pide revision: se valida contra el cargo, se abre el caso y se manda al aviso de la sala."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "disputa-fallo.abrir.response",
+      "description": "El caso abierto, con su traza, su plazo y la deuda intacta."
+    },
+    {
+      "event": "disputa-fallo.abrir.failed",
+      "description": "No se abre: sin motivo, cargo inexistente o anulado, o quien la pide no es parte del cargo."
+    },
+    {
+      "event": "bocaos.disputa_abierta",
+      "description": "HECHO: hay una disputa abierta sobre ese cargo, con la evidencia que la sostiene y `cobrable: false` hasta el dictamen."
+    },
+    {
+      "event": "aviso-sala.caso.request",
+      "description": "El caso se pone delante de la sala (I07), que lo deja en la cola si no hay nadie."
+    }
+  ]
+}

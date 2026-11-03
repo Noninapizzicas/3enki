@@ -1,0 +1,52 @@
+{
+  "_doc": "dictamen-revision — CUSTODIO single-writer de la firma humana sobre una decisión automática (O04). TRES efectos cerrados: compensar · corregir histórico · cambiar la regla HACIA ADELANTE. El PROHIBIDO es rehacer la propuesta que ya se emitió: si pudiera, el humano sería un planificador y no hay planificador (A28) — 422 EFECTO_PROHIBIDO. Sin firmante no hay dictamen (403), y la firma DICE EL ÁMBITO: una revisión de tienda no la firma el dueño de la plaza y el nacional no dictamina sobre un caso ajeno (O03). Un caso ya dictaminado no se vuelve a firmar con otro efecto (el pasado no se reescribe). Quién firma es Q26 [ABIERTO]: el diseño garantiza el nombre, no elige cuál. Store `/bocaos/dictamen-revision.json`.",
+  "name": "dictamen-revision",
+  "version": "0.1.0",
+  "description": "La firma humana del mercado: caso + firmante + uno de tres efectos permitidos + motivo, sin rehacer nunca la propuesta emitida (O04).",
+  "unidad": "plaza",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "dictamen-revision.firmar.request",
+      "handler": "onFirmarRequest",
+      "description": "Se firma el dictamen de un caso: efecto permitido, motivo, firmante y ámbito que cuadre con el caso."
+    },
+    {
+      "event": "dictamen-revision.de.request",
+      "handler": "onDeRequest",
+      "description": "Devuelve un dictamen o el estado de revisión de un caso (dictaminado o pendiente)."
+    },
+    {
+      "event": "bocaos.caso_encolado",
+      "handler": "onCasoEncolado",
+      "description": "Hay un caso en la cola: se apunta con su ámbito para que la firma pueda comprobarse."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Hidrata los dictámenes y los casos de la plaza."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "dictamen-revision.firmar.response",
+      "description": "El dictamen firmado, con su hora, su firmante, su efecto y lo que NO alcanza."
+    },
+    {
+      "event": "dictamen-revision.firmar.failed",
+      "description": "No se firma: sin firmante, sin motivo, efecto prohibido o no declarado, firma fuera de ámbito, caso inexistente o ya dictaminado."
+    },
+    {
+      "event": "dictamen-revision.de.response",
+      "description": "El dictamen pedido, o el estado de revisión del caso con lo que falta."
+    },
+    {
+      "event": "dictamen-revision.de.failed",
+      "description": "No hay nada que dar: falta el proyecto, el dictamen o el caso."
+    },
+    {
+      "event": "bocaos.dictamen_firmado",
+      "description": "HECHO: hay una firma humana con hora, firmante, efecto permitido y motivo, y con `rehace_propuesta: false`."
+    }
+  ]
+}

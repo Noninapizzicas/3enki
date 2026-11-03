@@ -1,0 +1,101 @@
+{
+  "_doc": "liquidacion — CUSTODIO single-writer del ÚNICO dinero de la plaza (H01·H02·H05·E04·E05·A32·H06). Devenga POR PEDIDO ACEPTADO con la tarifa del contrato VIGENTE EN LA HORA DEL HECHO (se la pregunta a contrato-tramos, no la copia) y devuelve DOS cifras: lo seguro y lo que depende de Q18 (pedido cancelado tras aceptar) — no elige. El cierre del ciclo es INMUTABLE y NO incluye el canon: el segundo cierre del mismo periodo devuelve el mismo cierre. H06/A32: la plaza no retiene; un cierre que descuente una deuda o un kilómetro ahorrado NO se escribe (409 NO_RETENCION / NO_CAPTURA_DEL_AHORRO). Y lo que el diseño no tiene se declara, no se rellena: la PARTE DE FIJO QUE TOCA a un periodo (mensual vs semanal, Q26) sale NO_CONSTA salvo que quien cierra declare `prorrateo`; la MORA (H05) sólo se aplica con `escala_mora` declarada; el canon es del nacional (R26). El job del ciclo se crea SÓLO si la plaza declara `ciclo.horario` — la hora es Q26 [ABIERTO]. Store `/bocaos/liquidacion.json`.",
+  "name": "liquidacion",
+  "version": "0.1.0",
+  "description": "El dinero de la plaza: devengo por pedido aceptado con la tarifa de la hora del hecho, ciclo semanal inmutable y sin retención (H01·H02·H05·E04·E05·A32·H06).",
+  "unidad": "plaza",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "liquidacion.abrir.request",
+      "handler": "onAbrirRequest",
+      "description": "Abre el periodo del ciclo. Un periodo cerrado no se reabre: 409 (H02)."
+    },
+    {
+      "event": "liquidacion.cerrar.request",
+      "handler": "onCerrarRequest",
+      "description": "Cierra el ciclo del periodo: devengo congelado por parte, huella e inmutabilidad. El segundo cierre no cambia el primero."
+    },
+    {
+      "event": "liquidacion.de.request",
+      "handler": "onDeRequest",
+      "description": "Devuelve el cierre o el devengo de una parte, con lo que no consta dicho."
+    },
+    {
+      "event": "liquidacion.cuenta.request",
+      "handler": "onCuentaRequest",
+      "description": "La cuenta de la plaza de un periodo: cuotas seguras y en duda, cargos que NO se descuentan, mora declarada y los caminos del dinero (E05)."
+    },
+    {
+      "event": "scheduler.job.triggered",
+      "handler": "onSchedulerJobTriggered",
+      "description": "Disparo del job del ciclo (se filtra por nombre): se cierra el periodo abierto. Job que falla no cierra nada."
+    },
+    {
+      "event": "bocaos.contrato_creado",
+      "handler": "onContratoCreado",
+      "description": "Hubo aceptación: el pedido entra en el devengo, con su hora y su plaza. Un pedido aceptado una vez devenga una vez."
+    },
+    {
+      "event": "bocaos.hecho_reparto_anotado",
+      "handler": "onHechoRepartoAnotado",
+      "description": "Los hechos del reparto no mueven la cuota: se guardan para distinguir ganado de reclamado en la cuenta de la parte (M01)."
+    },
+    {
+      "event": "bocaos.cargo_anotado",
+      "handler": "onCargoAnotado",
+      "description": "Una deuda se VE en el cierre y no se descuenta de ningún devengo (H06)."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Hidrata el ciclo de la plaza y crea el job del cierre SÓLO si la plaza declara su horario (Q26 [ABIERTO])."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "liquidacion.abrir.response",
+      "description": "El periodo abierto, con su hora de apertura."
+    },
+    {
+      "event": "liquidacion.abrir.failed",
+      "description": "No se abre: falta el proyecto o el periodo ya está cerrado."
+    },
+    {
+      "event": "liquidacion.cerrar.response",
+      "description": "El cierre congelado con huella, por parte, con los avisos de lo que no se pudo verificar."
+    },
+    {
+      "event": "liquidacion.cerrar.failed",
+      "description": "No se cierra: sin proyecto, o con una regla de retención o de captura del ahorro (H06/A32)."
+    },
+    {
+      "event": "liquidacion.de.response",
+      "description": "El cierre o el devengo de una parte, con el estado del periodo y lo que no consta."
+    },
+    {
+      "event": "liquidacion.de.failed",
+      "description": "No hay nada que dar: falta el proyecto, el periodo o esa parte en el cierre."
+    },
+    {
+      "event": "liquidacion.cuenta.response",
+      "description": "La cuenta de la plaza: cuotas, cargos que no se descuentan, mora declarada y los cinco caminos del dinero."
+    },
+    {
+      "event": "liquidacion.cuenta.failed",
+      "description": "No hay cuenta: falta el proyecto."
+    },
+    {
+      "event": "bocaos.devengo_anotado",
+      "description": "HECHO: el devengo de una parte queda congelado en un cierre, con sus dos cifras y con `descontado: false`."
+    },
+    {
+      "event": "bocaos.ciclo_cerrado",
+      "description": "HECHO: el ciclo de la plaza está cerrado, con su huella, sus avisos y sin canon."
+    },
+    {
+      "event": "scheduler.job.created",
+      "description": "Se pide al scheduler el job del ciclo semanal, SÓLO si la plaza declaró su horario (Q26 [ABIERTO]: no se inventa el día ni la hora)."
+    }
+  ]
+}

@@ -121,6 +121,10 @@ class PagoGatewayModule extends BaseModule {
     sub('pago.iniciar.request', e => this._onIniciarRequest(e));
     sub('pago.cancelar.request', e => this._onCancelarRequest(e));
     sub('pago.reembolsar.request', e => this._onReembolsarRequest(e));
+    // ADITIVO (Bocaos · H04): devolver un cobro con autor, motivo y constancia. No toca ninguna op
+    // existente; la vuelta de dinero que el órgano sabe hacer hoy es el reembolso del cobro, y la
+    // transferencia sobre la cuenta conectada es Q29 [ABIERTO] — se dice, no se finge.
+    sub('pago.revertir.request', e => this._onRevertirRequest(e));
     sub('pago.estado.request', e => this._onRespuestaSimple(e, 'pago.estado.request', 'pago.estado.response', d => this.handlePagoEstado(d)));
     sub('pago.recibo.request', e => this._onRespuestaSimple(e, 'pago.recibo.request', 'pago.recibo.response', d => this.handlePagoRecibo(d)));
     // Config de pasarela POR PROYECTO (el órgano es el mismo para todos los negocios):
@@ -2192,6 +2196,104 @@ class PagoGatewayModule extends BaseModule {
         timestamp: new Date().toISOString(), ...r
       });
     } catch (_) {}
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  //  REVERTIR (aditivo · Bocaos H04) — la vuelta de un cobro, con autor y constancia
+  //
+  //  H04 necesita devolver la cuota de una parte cuando un dictamen lo dice. Lo que el órgano sabe
+  //  hacer HOY con dinero ya cobrado es el reembolso del cobro (con tope y resuelto por reconsulta,
+  //  igual que antes). Revertir una TRANSFERENCIA sobre la cuenta conectada es Q29 [ABIERTO]: no se
+  //  inventa una llamada que el repo no tiene — se contesta lo que hay, con su nombre, y se apunta
+  //  en el libro que ese cobro se revirtió y por qué.
+  //  Nada de lo anterior cambia: mismo libro, mismos estados, mismas ops.
+  // ══════════════════════════════════════════════════════════════════════════
+  async _onRevertirRequest(event) {
+    const d = await this._conSlug(event?.data || event);
+    let r;
+    try { r = await this.handlePagoRevertir(d); }
+    catch (err) {
+      this.logger?.error('pago-gateway.revertir.fallo', { error: err.message });
+      r = { status: 502, error: { code: 'UPSTREAM_UNREACHABLE', message: err.message } };
+    }
+    try {
+      this.eventBus.publish('pago.revertir.response', {
+        request_id: d?.request_id, correlation_id: d?.correlation_id || crypto.randomUUID(),
+        timestamp: new Date().toISOString(), ...r
+      });
+    } catch (_) {}
+  }
+
+  async handlePagoRevertir(data) {
+    return this._revertir(data || {});
+  }
+
+  async _revertir(d) {
+    d = await this._conSlug(d);
+    const motivo = typeof d.motivo === 'string' ? d.motivo.trim() : '';
+    const autor = typeof d.autor === 'string' ? d.autor.trim()
+      : (d.autor && (d.autor.id || d.autor.parte_id) ? String(d.autor.id || d.autor.parte_id) : '');
+    // Devolver dinero es un acto con autor y motivo: sin ellos no es una reversión, es un descuadre.
+    if (!autor) return { status: 400, error: { code: 'INVALID_INPUT', message: 'revertir exige autor' } };
+    if (!motivo) return { status: 400, error: { code: 'INVALID_INPUT', message: 'revertir exige motivo' } };
+
+    const entry = await this._ledgerBuscar(d.project_id, {
+      transaction_id: d.transaction_id, checkout_id: d.session_id,
+      referencia: this._ref(d), pedido_id: this._ref(d)
+    });
+    if (!entry) {
+      return { status: 404, error: { code: 'NO_CONSTA', message: 'no hay cobro con esa referencia en el libro de este proyecto' } };
+    }
+    const devuelto = (entry.reembolsos || []).reduce((s, x) => s + (Number(x.monto_centimos) || 0), 0);
+    if (entry.estado === 'reembolsado' || (entry.monto_centimos && devuelto >= entry.monto_centimos)) {
+      return { status: 409, error: { code: 'YA_DEVUELTO', message: 'ese cobro ya está devuelto por completo: no se devuelve dos veces' } };
+    }
+    if (!entry.transaction_id && !entry.checkout_id) {
+      return {
+        status: 409,
+        error: {
+          code: 'SIN_VIA_DE_VUELTA',
+          message: 'ese cobro no tiene transacción con la que volver: cómo se hace efectivo un cargo es Q29 [ABIERTO]',
+          details: { q: 'Q29', hueco: 'sin transaction_id' }
+        }
+      };
+    }
+
+    // La vuelta real: la puerta de reembolso que YA existía. Se dice que es eso y no una reversión
+    // de transferencia, porque son cosas distintas y el libro tiene que poder contarlas.
+    const r = await this.handlePagoReembolsar({
+      ...d,
+      transaction_id: entry.transaction_id || d.transaction_id,
+      session_id: entry.checkout_id || d.session_id,
+      monto_centimos: Number.isInteger(d.monto_centimos) ? d.monto_centimos : entry.monto_centimos
+    });
+    if (r.status >= 400) return r;
+
+    // Constancia en el libro (campos nuevos; los existentes no se tocan) + hecho propio.
+    await this._ledgerMark(d.project_id, entry.checkout_id, {
+      revertido: true,
+      revertido_motivo: motivo,
+      revertido_por: autor,
+      revertido_en: new Date().toISOString()
+    });
+    const vuelta = {
+      referencia: entry.referencia || entry.pedido_id || d.referencia || null,
+      pedido_id: entry.referencia || entry.pedido_id || null,
+      session_id: entry.checkout_id || null,
+      transaction_id: entry.transaction_id || null,
+      monto_centimos: r.data?.monto_centimos ?? null,
+      motivo, autor,
+      via: 'reembolso',
+      // Lo que NO se ha hecho, con su nombre: si alguien esperaba una reversión de transferencia,
+      // aquí está la respuesta (y Q29 sigue abierto).
+      no_es: 'no es una reversión de transferencia sobre la cuenta conectada: eso es Q29 [ABIERTO]',
+      pasarela: this._pasarelaPara(d.project_id).kind || null
+    };
+    try {
+      this.eventBus.publish('pago.revertido', { ...vuelta, timestamp: new Date().toISOString() });
+    } catch (_) {}
+    this.metrics?.increment?.('pago.revertido.total', { pasarela: vuelta.pasarela || 'none' });
+    return { status: 200, data: vuelta };
   }
 
   // Envoltorio común para los puertos de solo-consulta (estado, recibo): correlan y responden.

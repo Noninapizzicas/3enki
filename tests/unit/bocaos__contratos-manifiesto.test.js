@@ -69,6 +69,13 @@ test('hay al menos las tres islas del peldaño 2', () => {
   }
 });
 
+test('las nueve islas del grupo 3 están (el dinero, la sala y la sanción)', () => {
+  for (const esperado of ['disputa-fallo', 'liquidacion', 'factura-gestion', 'cobro-gestion',
+                          'cuenta-parte', 'aviso-sala', 'dictamen-revision', 'accion-sancion', 'cola-sala']) {
+    assert.ok(MODULOS.includes(esperado), `falta modules/bocaos/${esperado}`);
+  }
+});
+
 test('las tres islas del acta, el censo y los términos están, con su manifest y su store', () => {
   for (const esperado of ['acta-decisiones', 'censo-parte', 'terminos-parte']) {
     assert.ok(MODULOS.includes(esperado), `falta modules/bocaos/${esperado}`);
@@ -155,12 +162,17 @@ test('quien escribe estado tiene store propio por proyecto; quien no, no lo fing
     'escalada-enlace', 'acta-decisiones', 'censo-parte', 'terminos-parte',
     'contrato-tramos', 'instrucciones-acceso', 'tarifa-pedido',
     // grupo 2 · el único custodio con store de las ocho: el cargo por fallo (G04).
-    'cargo-fallo'];
+    'cargo-fallo',
+    // grupo 3 · los cuatro custodios del dinero y la sala: el cierre, la firma, la sanción, la cola.
+    'liquidacion', 'dictamen-revision', 'accion-sancion', 'cola-sala'];
   const sinEstado = ['foto-mercado', 'enlace', 'canal-rider', 'redaccion-propuesta',
     'frontera-plaza', 'indice-plaza', 'aviso-cliente', 'aviso-tienda',
     // grupo 2 · puentes y reflejos sin store: el hecho lo guarda su dueño.
     'entrada-listo', 'chat-enmascarado', 'medida-cocina', 'panel-tienda',
-    'incidencia-reparto', 'lectura-incidencia', 'regla-fallo'];
+    'incidencia-reparto', 'lectura-incidencia', 'regla-fallo',
+    // grupo 3 · el puente de la disputa y del cobro, el conversor del documento, el reflejo de la
+    // cuenta y el aviso: ninguno guarda. Dos verdades del dinero serían una vieja.
+    'disputa-fallo', 'factura-gestion', 'cobro-gestion', 'cuenta-parte', 'aviso-sala'];
   for (const dir of conEstado) {
     const m = new (require(path.join(RAIZ, dir, 'index.js')))();
     assert.ok(/^\/bocaos\/[a-z-]+\.json$/.test(m._path || ''), `${dir}: store propio en /bocaos/`);

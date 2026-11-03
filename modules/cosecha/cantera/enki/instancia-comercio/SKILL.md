@@ -110,3 +110,18 @@ skills en cantera — NO yo desde el canal externo. Rol de Hermes:
 ## Historia
 - 2026-11: creada como companion de comercio-tg (la infra) para ejecutar
   el ALTA de cada instancia — completando el ritual original.
+- **Auditoría del chat (nov-2026)**: mi traspaso tenía 2 fallos corregidos:
+  (a) skills SOLO en repo no valen — el chat las ve en el DEPLOY
+  (`/opt/enki/...cantera/enki/`) → copiar a AMBOS con g+w+www-data;
+  (b) el canal TG no es bloque 'canales' del CONFIG — es campo opcional
+  `telegram_bot` en `opciones_visualizacion` de carta-digital.
+  Y el proyecto nace VACÍO: sin la lista real de productos del dueño,
+  el chat no monta carta (correcto — nada inventado).
+- **EL SENDERO CANÓNICO de skills (sin atajos)**: la skill se ESCRIBE
+  en rama feature/ → commit → push → → PR → el dueño MERGEA en GitHub
+  → `sudo git pull` en los clones (VPS y PC). JAMÁS copiar SKILL.md a
+  mano al repo sin git: el pull del dueño aborta con "untracked would
+  be overwritten" (pagado en vivo con comercio-tg + instancia-comercio:
+  backup a /tmp, rm con sudo, pull, diff contra backup = IDÉNTICOS).
+  La copia a mano al DEPLOY (/opt/enki) para el chat en caliente sí es
+  válida (es su cantera en vivo, no el repo git).

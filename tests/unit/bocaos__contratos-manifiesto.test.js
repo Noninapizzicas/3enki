@@ -37,9 +37,21 @@ function leer(dir) {
   return { man, src };
 }
 
-test('hay al menos los nueve módulos del peldaño 0', () => {
-  for (const esperado of ['tienda-captura', 'pedido', 'tienda-hora-listo', 'hecho-listo', 'foto-mercado',
+test('hay al menos las islas del corazón (v3: el pedido del mercado, no el de la tienda)', () => {
+  // tienda-captura y tienda-hora-listo se RETIRARON: duplicaban tienda-api + pedidos y
+  // cocina.mark-ready. El pedido se llama pedido-mercado y se cuelga del pedido.creado de pizzepos.
+  for (const esperado of ['pedido-mercado', 'hecho-listo', 'foto-mercado',
                           'enlace', 'propuesta', 'contrato-puntual', 'hechos-reparto']) {
+    assert.ok(MODULOS.includes(esperado), `falta modules/bocaos/${esperado}`);
+  }
+  for (const retirado of ['tienda-captura', 'tienda-hora-listo', 'pedido']) {
+    assert.ok(!MODULOS.includes(retirado), `modules/bocaos/${retirado} debería estar retirado (duplicaba pizzepos)`);
+  }
+});
+
+test('las ocho islas del peldaño 4 están', () => {
+  for (const esperado of ['contrato-tramos', 'frontera-plaza', 'indice-plaza', 'pedido-mercado',
+                          'aviso-cliente', 'aviso-tienda', 'instrucciones-acceso', 'tarifa-pedido']) {
     assert.ok(MODULOS.includes(esperado), `falta modules/bocaos/${esperado}`);
   }
 });
@@ -85,6 +97,9 @@ test('publishes ⇄ lo que index.js emite de verdad (en los dos sentidos)', () =
 
     const emitidos = new Set();
     for (const m of src.matchAll(/this\.hecho\('([^']+)'/g)) emitidos.add(m[1]);
+    // Un puente no "hace" un hecho del dominio: PIDE al transporte y lo publica. Se cuenta igual,
+    // porque si no `publishes` diría que el módulo no llama a nadie y sería decoración.
+    for (const m of src.matchAll(/this\.eventBus\.publish\('([^']+)'/g)) emitidos.add(m[1]);
     for (const m of src.matchAll(/servir\(e,\s*'[^']+',\s*'([^']+)'/g)) {
       emitidos.add(m[1] + '.response');
       emitidos.add(m[1] + '.failed');
@@ -129,9 +144,11 @@ test('la base común requiere _shared y resuelve', () => {
 });
 
 test('quien escribe estado tiene store propio por proyecto; quien no, no lo finge', () => {
-  const conEstado = ['pedido', 'tienda-hora-listo', 'hecho-listo', 'propuesta', 'contrato-puntual', 'hechos-reparto',
-    'escalada-enlace', 'acta-decisiones', 'censo-parte', 'terminos-parte'];
-  const sinEstado = ['tienda-captura', 'foto-mercado', 'enlace', 'canal-rider', 'redaccion-propuesta'];
+  const conEstado = ['pedido-mercado', 'hecho-listo', 'propuesta', 'contrato-puntual', 'hechos-reparto',
+    'escalada-enlace', 'acta-decisiones', 'censo-parte', 'terminos-parte',
+    'contrato-tramos', 'instrucciones-acceso', 'tarifa-pedido'];
+  const sinEstado = ['foto-mercado', 'enlace', 'canal-rider', 'redaccion-propuesta',
+    'frontera-plaza', 'indice-plaza', 'aviso-cliente', 'aviso-tienda'];
   for (const dir of conEstado) {
     const m = new (require(path.join(RAIZ, dir, 'index.js')))();
     assert.ok(/^\/bocaos\/[a-z-]+\.json$/.test(m._path || ''), `${dir}: store propio en /bocaos/`);

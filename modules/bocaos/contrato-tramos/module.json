@@ -1,0 +1,70 @@
+{
+  "_doc": "contrato-tramos — custodio single-writer del contrato de tramos de la plaza CON VIGENCIA (E06 ContratoTramos · N02 SimuladorTramos). Tres tramos (1·2·3) con fijo mensual y céntimos por pedido, y a quién; el contratante de la tienda es la plaza, no el nacional (Q42). Sin antigüedad, sin exclusividad, sin cuota mínima (Q34/Q35): lo que no está en la tabla no se guarda. `vigente(parte, instante)` devuelve el tramo que estaba VIVO en aquel instante, no el de hoy, así que cambiar tramos no reescribe un cierre ya emitido. Sin aceptación de la parte (I08, bocaos.terminos_aceptados) no hay devengo: se dice con devenga:false. El simulador recalcula con los hechos de ESA tienda y no aplica. Isla: no lee el almacén de nadie, pregunta al bus.",
+  "name": "contrato-tramos",
+  "version": "0.1.0",
+  "description": "El contrato de tramos de la plaza con vigencia: fijo mensual + céntimos por pedido, a quién, con autor y acta, y un simulador que recalcula con los hechos de esa parte sin aplicar nada (E06, N02).",
+  "unidad": "plaza",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "contrato-tramos.declarar.request",
+      "handler": "onDeclararRequest",
+      "description": "E06: declara un tramo (1·2·3) para una parte, con fijo, céntimos por pedido, desde, autor y acta. Sin acta no se escribe; con antigüedad, exclusividad o cuota mínima, tampoco."
+    },
+    {
+      "event": "contrato-tramos.vigente.request",
+      "handler": "onVigenteRequest",
+      "description": "E06: el contrato que estaba VIVO en ese instante para esa parte (no el de hoy), con su devengo y su motivo."
+    },
+    {
+      "event": "contrato-tramos.simular.request",
+      "handler": "onSimularRequest",
+      "description": "N02: qué habría pagado esa parte con otro tramo, sobre sus hechos ya escritos. Simula y declara sus límites; no aplica."
+    },
+    {
+      "event": "bocaos.acta_anotada",
+      "handler": "onActaAnotada",
+      "description": "O02: un acta firmada que trae tramos entra por la MISMA puerta que declarar, con su acta como autoridad."
+    },
+    {
+      "event": "bocaos.terminos_aceptados",
+      "handler": "onTerminosAceptados",
+      "description": "I08: la parte acepta el tramo que le rige. Es la única puerta a que el contrato devengue."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Hidrata el registro de la plaza y fija su sello (una plaza = un despliegue)."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "contrato-tramos.declarar.response",
+      "description": "El tramo declarado, con su número de versión y su sello."
+    },
+    {
+      "event": "contrato-tramos.declarar.failed",
+      "description": "No se declara: sin acta, sin autor, con un quinto término, con vigencia hacia atrás o sin tramo válido."
+    },
+    {
+      "event": "contrato-tramos.vigente.response",
+      "description": "El contrato vigente en ese instante (o no_consta con su motivo) y si devenga."
+    },
+    {
+      "event": "contrato-tramos.vigente.failed",
+      "description": "No se puede resolver: falta el proyecto o la parte."
+    },
+    {
+      "event": "contrato-tramos.simular.response",
+      "description": "La comparación de tramos sobre los hechos de esa parte, con su resumen y sus límites."
+    },
+    {
+      "event": "contrato-tramos.simular.failed",
+      "description": "No se simula sin hechos, sin parte o con un tramo que no es 1·2·3."
+    },
+    {
+      "event": "bocaos.tramos_actualizados",
+      "description": "HECHO: cambió el tramo de una parte. Lleva el tramo, el fijo, los céntimos por pedido, desde, autor, acta y si devenga."
+    }
+  ]
+}

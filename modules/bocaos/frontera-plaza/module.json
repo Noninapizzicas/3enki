@@ -1,0 +1,46 @@
+{
+  "_doc": "frontera-plaza — reflejo de la frontera (S01 FronteraDePlaza · S02 FiltroPorCobertura). Responde a la única pregunta que no se puede adivinar: ¿de qué plaza es esta dirección, y qué tiendas LLEGAN aquí? Cobertura de la plaza por el bus (config-mercado J03) y cobertura de cada tienda por el censo (censo-parte D06). Sin zona declarada, o sin cobertura, la respuesta es NO_CONSTA con el hueco nombrado: no se estima. Dos coberturas solapadas sin desempate declarado devuelven AMBIGUA y no hay pedido (Q52). Filtrar no es ordenar: nadie paga por estar en la lista. Sin store: no escribe nada, todo vuelve en la response.",
+  "name": "frontera-plaza",
+  "version": "0.1.0",
+  "description": "La frontera de la plaza: de qué plaza es una dirección y qué tiendas llegan de verdad, sin adivinar y sin ordenar (S01, S02).",
+  "unidad": "plaza",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "frontera-plaza.cubre.request",
+      "handler": "onCubreRequest",
+      "description": "S01: dirección → plaza_id | NO_CONSTA | AMBIGUA(plazas). Sin zona declarada no se estima; dos coberturas solapadas sin desempate no dan pedido (Q52)."
+    },
+    {
+      "event": "frontera-plaza.zonas.request",
+      "handler": "onZonasRequest",
+      "description": "S02: qué tiendas reparten en la dirección consultada (intersección J03 ∩ D06), con las que no llegan y su motivo, y a la inversa qué zonas declara cada tienda."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "frontera-plaza.cubre.response",
+      "description": "La plaza que cubre la dirección, o NO_CONSTA / AMBIGUA con su motivo y su hueco."
+    },
+    {
+      "event": "frontera-plaza.cubre.failed",
+      "description": "No se puede resolver la frontera: falta el proyecto."
+    },
+    {
+      "event": "frontera-plaza.zonas.response",
+      "description": "Las tiendas que llegan, las que no con su motivo, la cobertura de la plaza y los huecos de la pregunta."
+    },
+    {
+      "event": "frontera-plaza.zonas.failed",
+      "description": "No se puede filtrar el índice: falta el proyecto."
+    },
+    {
+      "event": "bocaos.frontera_ambigua",
+      "description": "HECHO: dos coberturas de plaza se solapan sobre una dirección y no hay desempate declarado. No hay pedido (Q52)."
+    },
+    {
+      "event": "bocaos.direccion_sin_plaza",
+      "description": "HECHO: la dirección no cae en ninguna plaza que declare cobertura, o no declara zona. No hay pedido."
+    }
+  ]
+}

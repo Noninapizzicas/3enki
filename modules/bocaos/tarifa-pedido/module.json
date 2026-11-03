@@ -1,0 +1,82 @@
+{
+  "_doc": "tarifa-pedido — custodio single-writer de los cuatro números del pedido (E01 OfertaCliente · E02 IncentivoTienda · E03 PrecioReparto · E07 SubidaDeOferta). E01: la oferta del cliente llega CON el pedido.creado de pizzepos (entrega.oferta_centimos) y se congela con su hora; después NADIE la toca (ni la tienda, ni la sala, ni Bocaos): si se pudiera reformar, Bocaos estaría subastando reparto. E02: el incentivo lo sube la tienda con autor y hora, y nunca baja. E03: precio = oferta + incentivo, SÓLO SUMA; es la entrada de `cobra` (A11) y sin él no hay propuesta. El tramo del contrato (E06) se pide al bus y va en el DESGLOSE con sumado_en_el_precio:false — lo liquida la plaza, no se le cobra dos veces al rider. E07: la subida exige AUTOR humano y tope autorizado por el cliente (Q43); por encima del tope, 409; quién paga el escalón es Q17, así que se anota el acto y la deuda queda visible, no cobrada. Sin oferta no hay precio y se nombra el hueco.",
+  "name": "tarifa-pedido",
+  "version": "0.1.0",
+  "description": "Los cuatro números del reparto con un solo escritor: oferta del cliente congelada al nacer, incentivo de la tienda que sólo sube, precio que sólo suma y subida con autor y tope (E01, E02, E03, E07).",
+  "unidad": "plaza",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "pedido.creado",
+      "handler": "onPedidoCreado",
+      "description": "E01: congela la oferta del cliente (entrega.oferta_centimos) con la hora del pedido. Sin oferta no hay precio y se dice el hueco."
+    },
+    {
+      "event": "tarifa-pedido.oferta.request",
+      "handler": "onOfertaRequest",
+      "description": "E01: estipula la oferta de un pedido que aún no la tenía (el pedido llegó sin ella). Si ya está congelada, 409: no la toca nadie más."
+    },
+    {
+      "event": "tarifa-pedido.incentivo.request",
+      "handler": "onIncentivoRequest",
+      "description": "E02: la tienda sube su incentivo con autor y hora. No puede bajar el precio ya ofrecido (409 NO_BAJA)."
+    },
+    {
+      "event": "tarifa-pedido.subir.request",
+      "handler": "onSubirRequest",
+      "description": "E07/Q43: sube la oferta con AUTOR humano y dentro del tope autorizado por el cliente. Por encima del tope, 409. Quién paga el escalón (Q17) se anota como deuda visible, no se cobra."
+    },
+    {
+      "event": "tarifa-pedido.de.request",
+      "handler": "onDeRequest",
+      "description": "E03: el precio cerrado del pedido con su desglose (oferta + incentivo + tramo del contrato, sin sumar el tramo)."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Hidrata el registro de la plaza y fija su sello (una plaza = un despliegue)."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "tarifa-pedido.oferta.response",
+      "description": "La oferta congelada y el precio compuesto, con su desglose."
+    },
+    {
+      "event": "tarifa-pedido.oferta.failed",
+      "description": "No se estipula: falta el pedido, el importe no es céntimos enteros, o la oferta ya estaba congelada (E01)."
+    },
+    {
+      "event": "tarifa-pedido.incentivo.response",
+      "description": "El incentivo aplicado y el precio nuevo."
+    },
+    {
+      "event": "tarifa-pedido.incentivo.failed",
+      "description": "No se aplica: sin autor, sin tarifa, importe inválido, o intento de bajar lo ya ofrecido."
+    },
+    {
+      "event": "tarifa-pedido.subir.response",
+      "description": "La subida aplicada, con el autor y la deuda visible sin cobrar."
+    },
+    {
+      "event": "tarifa-pedido.subir.failed",
+      "description": "No se sube: sin autor humano, sin tope autorizado, por encima del tope o por debajo de lo ya ofrecido."
+    },
+    {
+      "event": "tarifa-pedido.de.response",
+      "description": "El precio cerrado del pedido con su desglose completo."
+    },
+    {
+      "event": "tarifa-pedido.de.failed",
+      "description": "No hay precio que dar: falta el pedido o no tiene oferta del cliente."
+    },
+    {
+      "event": "bocaos.precio_cerrado",
+      "description": "HECHO: el número está cerrado (oferta + incentivo, sólo suma). Es la entrada de `cobra`: sin él no hay propuesta."
+    },
+    {
+      "event": "bocaos.oferta_subida",
+      "description": "HECHO: se subió la oferta con autor y tope. Lleva el escalón, el autor y la deuda visible (cobrado:false, Q17)."
+    }
+  ]
+}

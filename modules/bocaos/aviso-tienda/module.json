@@ -1,0 +1,56 @@
+{
+  "_doc": "aviso-tienda — puente al canal DE LA TIENDA (C03 AvisoTienda · K01 ReclamaciónPorLaTienda). Avisa por telegram.send_message.request (el mismo transporte que reporte-caja, inyectable en tests): pedido recibido, rider asignado, hueco nombrado (sin rider todavía). AVISA, NO DECIDE: no acepta por ella, no arranca su cocina, no compromete hora; si el aviso trae una orden, 409 AVISO_NO_ORDENA. Si el aviso no llega (sin chat en el censo, transporte que falla), emite aviso-tienda.fallido y el pedido existe igual: el aviso es transporte, no verdad. K01: una reclamación del cliente final que llegue a Bocaos se DEVUELVE a la tienda con su hora y no se atiende ni se guarda como relación. El chat no se guarda aquí: se pide al censo (censo-parte.de). Sin store.",
+  "name": "aviso-tienda",
+  "version": "0.1.0",
+  "description": "Avisa a la tienda por su propio canal de lo que pasa con su pedido, sin decidir nada por ella, y le devuelve las reclamaciones del cliente final (C03, K01).",
+  "unidad": "plaza",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "bocaos.pedido_creado",
+      "handler": "onPedidoCreado",
+      "description": "C03: pedido recibido en la tienda. Se avisa a SU canal; el mensaje no lleva ninguna orden."
+    },
+    {
+      "event": "bocaos.contrato_creado",
+      "handler": "onContratoCreado",
+      "description": "C03: hay rider asignado. Se avisa; la tienda no tiene que hacer nada con este aviso."
+    },
+    {
+      "event": "bocaos.hueco_nombrado",
+      "handler": "onHuecoNombrado",
+      "description": "C03: no hay rider todavía para ese pedido. Se nombra el hueco; la plaza no compromete una hora."
+    },
+    {
+      "event": "aviso-tienda.devolver.request",
+      "handler": "onDevolverRequest",
+      "description": "K01: una reclamación del cliente final se devuelve a la tienda con su hora. Si trae una orden (aceptar, arrancar cocina, hora), 409."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "aviso-tienda.devolver.response",
+      "description": "La reclamación devuelta a la tienda, con su hora y si el transporte la entregó."
+    },
+    {
+      "event": "aviso-tienda.devolver.failed",
+      "description": "No se puede devolver: falta la tienda, o el aviso intenta ordenar en vez de avisar."
+    },
+    {
+      "event": "telegram.send_message.request",
+      "description": "La petición al transporte: el mismo telegram.send_message que usa reporte-caja, con el chat de la tienda."
+    },
+    {
+      "event": "aviso-tienda.enviado",
+      "description": "HECHO: el aviso llegó al canal de la tienda, con el chat, el mensaje y el texto exacto. Dice explícitamente ordena:false."
+    },
+    {
+      "event": "aviso-tienda.fallido",
+      "description": "HECHO: el aviso no llegó (sin tienda, sin chat en el censo o transporte que falla). El pedido existe igual."
+    },
+    {
+      "event": "bocaos.reclamacion_devuelta",
+      "description": "HECHO: la reclamación del cliente final vuelve a su tienda con su hora, entregada o no (K01)."
+    }
+  ]
+}

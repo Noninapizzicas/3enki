@@ -103,11 +103,13 @@ function montar({ oferta = 450, zona = 'centro' } = {}) {
   });
 
   const rpc = crearRpc(bus, {
-    'pedido.de.request': () => ({
+    // El pedido del mercado es `pedido-mercado` (el `pedido` de la v2 está retirado), y la oferta
+    // del cliente vive en su precio (E01/E03).
+    'pedido-mercado.de.request': () => ({
       status: 200,
-      data: { pedido: { pedido_id: PEDIDO, plaza_id: PLAZA, tienda_id: 'tienda-paco', zona, oferta_reparto_cents: oferta } }
+      data: { pedido: { pedido_id: PEDIDO, plaza_id: PLAZA, tienda_id: 'tienda-paco', zona, precio: { oferta_centimos: oferta } } }
     }),
-    'pedido.cancelar.request': () => ({ status: 200, data: { pedido_id: PEDIDO, estado: 'CANCELADO' } })
+    'pedido-mercado.cancelar.request': () => ({ status: 200, data: { pedido_id: PEDIDO, estado: 'CANCELADO' } })
   });
 
   const m = new EscaladaEnlace();
@@ -190,7 +192,7 @@ test('los siguientes peldaños suben la oferta por escalones, sin pasar del tope
   assert.strictEqual(sinReparto[0].p.peldano, 5);
 
   // Y se PIDE la cancelación al custodio del pedido (la escalada no escribe su registro).
-  const cancel = bus.publicados.filter((x) => x.ev === '→ pedido.cancelar.request');
+  const cancel = bus.publicados.filter((x) => x.ev === '→ pedido-mercado.cancelar.request');
   assert.strictEqual(cancel.length, 1);
   assert.strictEqual(cancel[0].p.rol, 'plaza');
   assert.ok(cancel[0].p.motivo.includes('sin reparto'));

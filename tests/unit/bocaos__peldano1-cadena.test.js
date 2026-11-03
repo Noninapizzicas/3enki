@@ -25,9 +25,9 @@ const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 
-const TiendaCaptura = require('../../modules/bocaos/tienda-captura/index.js');
-const Pedido = require('../../modules/bocaos/pedido/index.js');
-const TiendaHoraListo = require('../../modules/bocaos/tienda-hora-listo/index.js');
+const PedidoMercado = require('../../modules/bocaos/pedido-mercado/index.js');
+const TarifaPedido = require('../../modules/bocaos/tarifa-pedido/index.js');
+const ContratoTramos = require('../../modules/bocaos/contrato-tramos/index.js');
 const HechoListo = require('../../modules/bocaos/hecho-listo/index.js');
 const FotoMercado = require('../../modules/bocaos/foto-mercado/index.js');
 const Enlace = require('../../modules/bocaos/enlace/index.js');
@@ -133,15 +133,69 @@ function puertos(bus, { desvio = 312 } = {}) {
   return disco;
 }
 
+// ─── PIZZEPOS DE MENTIRA: los eventos REALES de la frontera (pedido.creado · cocina.pedido_listo) ───
+function pizzepos(bus) {
+  const pedidos = new Map();
+  bus.subscribe('pedido.get.request', (e) => {
+    const p = pedidos.get(e.data.pedido_id);
+    if (!p) return bus.publish('pedido.get.response', { request_id: e.data.request_id, status: 404, error: { code: 'RESOURCE_NOT_FOUND', message: 'sin pedido' } });
+    bus.publish('pedido.get.response', { request_id: e.data.request_id, status: 200, data: { pedido: p } });
+  });
+  return {
+    creado(payload) {
+      const pedido = { cuenta_id: 'cta-1', modo_consumo: 'domicilio', ...payload };
+      pedidos.set(pedido.pedido_id, pedido);
+      bus.publish('pedido.creado', pedido);
+      return pedido;
+    },
+    listo({ pedido_id, hora, dispositivo = 'horno-1' }) {
+      const p = pedidos.get(pedido_id) || {};
+      bus.publish('cocina.pedido_listo', {
+        pedido_id, cuenta_id: p.cuenta_id || null,
+        project_id: p.project_id || TIENDA, project_slug: p.project_slug || TIENDA,
+        hora, dispositivo
+      });
+    },
+    pedidos
+  };
+}
+
+// ─── entrada-listo (hoja 23 del peldaño, todavía NO construida) ───
+// Traduce el disparador REAL de cocina al hecho de la plaza, pidiendo el total a pizzepos y el
+// precio de reparto a tarifa-pedido: no inventa ninguno de los dos. Cuando la hoja exista, sobra.
+function entradaListo(bus, rpc) {
+  bus.subscribe('cocina.pedido_listo', async (e) => {
+    const d = e.data;
+    const pedido = (await rpc('pedido.get.request', { project_id: d.project_id, pedido_id: d.pedido_id }))?.data?.pedido || null;
+    const precio = (await rpc('tarifa-pedido.de.request', { project_id: PLAZA, pedido_id: d.pedido_id }))?.data?.precio || null;
+    if (!pedido || !precio) {
+      bus.publish('bocaos.hueco_nombrado', {
+        pedido_id: d.pedido_id, plaza_id: PLAZA,
+        motivo: !pedido ? 'pizzepos no da el pedido' : 'sin precio de reparto cerrado (E03)',
+        hueco: !pedido ? 'sin pedido' : 'sin precio'
+      });
+      return;
+    }
+    const entrega = pedido.entrega || {};
+    bus.publish('bocaos.listo_declarado', {
+      plaza_id: PLAZA, tienda_id: pedido.project_slug || TIENDA, pedido_id: d.pedido_id,
+      hora_listo: d.hora, hora: d.hora,
+      precio_congelado: { total_cents: pedido.total_centimos, moneda: 'EUR', reparto_cents: precio.precio_centimos },
+      punto: entrega.punto || null, destino: entrega.destino || null, zona: entrega.zona || null,
+      autor: { rol: 'tienda', tienda_id: pedido.project_slug || TIENDA }
+    });
+  });
+}
+
 const RAIZ = path.join(__dirname, '../../modules/bocaos');
 
 function montar(opciones = {}) {
   const bus = crearBus();
   const rpc = crearRpc(bus);
   const modulos = {
-    'tienda-captura': new TiendaCaptura(),
-    pedido: new Pedido(),
-    'tienda-hora-listo': new TiendaHoraListo(),
+    'pedido-mercado': new PedidoMercado(),
+    'tarifa-pedido': new TarifaPedido(),
+    'contrato-tramos': new ContratoTramos(),
     'hecho-listo': new HechoListo(),
     'foto-mercado': new FotoMercado(),
     enlace: new Enlace(),
@@ -170,9 +224,12 @@ function montar(opciones = {}) {
     }
   }
   puertos(bus, opciones);
+  const pz = pizzepos(bus);
+  entradaListo(bus, rpc);
+  modulos.__pizzepos = pz;   // el doble de pizzepos, para que el arnés pueda dar de alta
   bus.publish('project.activated', { project_id: PLAZA });
   bus.publish('project.activated', { project_id: TIENDA });
-  return { bus, modulos, rpc };
+  return { bus, modulos, rpc, pizzepos: pz };
 }
 
 // La plaza y el censo, tal como los deja un día normal antes de que entre el primer pedido.
@@ -198,21 +255,20 @@ async function abrirPlaza(rpc) {
   assert.strictEqual(pos.status, 200, JSON.stringify(pos));
 }
 
-async function altaDePedido(rpc, modulos, cliente = 'cli-1') {
-  const tc = modulos['tienda-captura'];
-  const alta = await tc.onAltaRequest({ request_id: `alt-${cliente}`, data: {
-    project_id: TIENDA, plaza_id: PLAZA, tienda_id: TIENDA, cliente_id: cliente,
-    lineas: [{ sku: 'campero', cantidad: 1 }], precio_congelado: PRECIO, oferta_reparto_cents: 450,
-    punto: PUNTO, destino: DESTINO, zona: 'centro'
-  } });
-  assert.strictEqual(alta.status, 201, JSON.stringify(alta));
-  const pedido_id = alta.data.pedido_id;
-  await rpc('pedido.aceptar.request', { project_id: PLAZA, pedido_id, rol: 'tienda', tienda_id: TIENDA });
-  const decl = await modulos['tienda-hora-listo'].onDeclararRequest({ request_id: `lst-${cliente}`, data: {
-    project_id: TIENDA, pedido_id, hora_listo: LISTO,
-    autor: { rol: 'tienda', tienda_id: TIENDA }, precio_congelado: PRECIO
-  } });
-  assert.strictEqual(decl.status, 201, JSON.stringify(decl));
+// El alta la hace PIZZEPOS (pedido.creado real, con su bloque entrega); la acogida y la
+// aceptación, la plaza; el «listo» lo marca COCINA (cocina.pedido_listo) y entrada-listo lo traduce.
+async function altaDePedido(rpc, modulos, cliente = 'cli-1', extra = {}) {
+  const pz = modulos.__pizzepos;
+  const pedido = pz.creado({
+    pedido_id: `ped-${cliente}`,
+    project_id: TIENDA, project_slug: TIENDA,
+    total_centimos: PRECIO.total_cents, items_count: 1, cliente_nombre: 'Ana',
+    entrega: { direccion: { calle: 'Larios', numero: 3, cp: '29005' }, zona: 'centro', oferta_centimos: 450, punto: PUNTO, destino: DESTINO, ...extra }
+  });
+  const pedido_id = pedido.pedido_id;
+  const acogido = await rpc('pedido-mercado.aceptar.request', { project_id: PLAZA, pedido_id, rol: 'tienda', tienda_id: TIENDA });
+  assert.strictEqual(acogido.status, 200, JSON.stringify(acogido));
+  pz.listo({ pedido_id, hora: LISTO });
   return pedido_id;
 }
 

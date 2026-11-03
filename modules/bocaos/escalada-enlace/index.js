@@ -100,7 +100,10 @@ class EscaladaEnlace extends ModuloBocaos {
 
     const pedido = await this._pedidoDe(d.project_id, d.pedido_id);
     const zona = d.zona || pedido.zona || it.zona || null;
-    const oferta = this._cents(it.oferta_cents) ?? this._cents(pedido.oferta_reparto_cents);
+    // La oferta del cliente vive en el precio del pedido del mercado (E01/E03): `precio.oferta_centimos`.
+    const oferta = this._cents(it.oferta_cents)
+      ?? this._cents(pedido?.precio?.oferta_centimos)
+      ?? this._cents(pedido.oferta_reparto_cents);
     it.zona = zona;
     it.oferta_cents = oferta;
     if (pedido.tienda_id) it.tienda_id = pedido.tienda_id;
@@ -213,7 +216,7 @@ class EscaladaEnlace extends ModuloBocaos {
     // Cancelación explícita: se PIDE al custodio del pedido. Si no contesta, el hecho queda
     // como prueba y el pedido no se cancela por la espalda de su registro.
     try {
-      const r = await this._rpc('pedido.cancelar.request', {
+      const r = await this._rpc('pedido-mercado.cancelar.request', {
         project_id: d.project_id, pedido_id: d.pedido_id, rol: 'plaza', motivo: `sin reparto: ${motivo}`
       }, { timeout_ms: 800 });
       if (r && typeof r.status === 'number' && r.status >= 400) {
@@ -249,7 +252,9 @@ class EscaladaEnlace extends ModuloBocaos {
 
   async _pedidoDe(project_id, pedido_id) {
     try {
-      const r = await this._rpc('pedido.de.request', { project_id, pedido_id }, { timeout_ms: TIMEOUT_BUS_MS });
+      // El pedido del mercado vive en `pedido-mercado` (el `pedido` de la v2 publicaba dentro del
+      // namespace de pizzepos y guardaba un pedido ajeno: está retirado).
+      const r = await this._rpc('pedido-mercado.de.request', { project_id, pedido_id }, { timeout_ms: TIMEOUT_BUS_MS });
       const p = r?.data?.pedido;
       return p && typeof p === 'object' ? p : {};
     } catch (_) {

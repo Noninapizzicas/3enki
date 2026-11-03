@@ -1,0 +1,115 @@
+{
+  "_doc": "pedido-mercado — custodio single-writer del pedido DEL MERCADO en la plaza (C02 EstadoPedido · C07 Cancelación). Nace del pedido.creado de pizzepos con EL MISMO pedido_id (la clave de unión) y el sello plaza_id; NO guarda líneas, ni importe de comida, ni estado de cocina, ni pago — eso es de la tienda. Tabla cerrada de transiciones: RECIBIDO → ACEPTADO/RECHAZADO/CANCELADO; ACEPTADO → LISTO/CANCELADO; LISTO → EN_REPARTO/CANCELADO; EN_REPARTO → ENTREGADO; los terminales no se reabren. Ninguna flecha sin un hecho con hora, y ninguna entrega sin prueba o su falta declarada. Cancelación con tabla de quién y hasta cuándo (cliente → RECIBIDO, tienda → ACEPTADO, plaza → LISTO): quién paga es Q36 y aquí NO se cobra a nadie. El pedido de recogida (sin bloque entrega) no entra: no es del mercado. Isla: no lee el almacén de nadie, sólo escucha hechos del bus.",
+  "name": "pedido-mercado",
+  "version": "0.1.0",
+  "description": "El pedido del mercado con el id de pizzepos como clave: tabla cerrada de estados del reparto, entrega que sólo se cierra con prueba y cancelación con quién y hasta cuándo (C02, C07).",
+  "unidad": "plaza",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "pedido.creado",
+      "handler": "onPedidoCreado",
+      "description": "C02: nace el pedido del mercado del pedido.creado de pizzepos (mismo pedido_id, sello plaza_id). Sin entrega, dirección y oferta no nace: es un pedido de la tienda, no del mercado."
+    },
+    {
+      "event": "pedido.cancelado",
+      "handler": "onPedidoCancelado",
+      "description": "La tienda (o el cliente por su canal) canceló: transición CANCELADO con su hora. Se anota; no se cobra a nadie (Q36)."
+    },
+    {
+      "event": "pedido-mercado.aceptar.request",
+      "handler": "onAceptarRequest",
+      "description": "C02/Q27: la tienda dueña acepta. RECIBIDO → ACEPTADO con hecho."
+    },
+    {
+      "event": "pedido-mercado.rechazar.request",
+      "handler": "onRechazarRequest",
+      "description": "C02/Q36: la tienda dueña rechaza. RECIBIDO → RECHAZADO; se anota el motivo y la deuda queda visible, no cobrada."
+    },
+    {
+      "event": "pedido-mercado.cancelar.request",
+      "handler": "onCancelarRequest",
+      "description": "C07: cancelación con la tabla de quién y hasta cuándo (cliente | tienda | plaza)."
+    },
+    {
+      "event": "pedido-mercado.de.request",
+      "handler": "onDeRequest",
+      "description": "C02/C07: el pedido del mercado con sus hechos y quién puede cancelar ahora."
+    },
+    {
+      "event": "bocaos.pedido_listo",
+      "handler": "onPedidoListo",
+      "description": "C04: la tienda declaró listo y la plaza lo anotó. ACEPTADO → LISTO."
+    },
+    {
+      "event": "bocaos.hecho_reparto_anotado",
+      "handler": "onHechoRepartoAnotado",
+      "description": "F01: la recogida pone el pedido EN_REPARTO; la entrega se anota pero NO entrega (eso exige prueba)."
+    },
+    {
+      "event": "bocaos.prueba_anotada",
+      "handler": "onPruebaAnotada",
+      "description": "F02: hay prueba o su falta declarada. Es lo único que cierra el pedido en ENTREGADO."
+    },
+    {
+      "event": "bocaos.contrato_cerrado",
+      "handler": "onContratoCerrado",
+      "description": "El contrato se cerró: se sella la hora de cierre. No entrega el pedido; si no consta el hecho de entrega, lo dice en sus huecos."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Fija el sello de la plaza e hidrata el registro (una plaza = un despliegue)."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "pedido-mercado.aceptar.response",
+      "description": "La aceptación de la tienda, con el pedido y su estado."
+    },
+    {
+      "event": "pedido-mercado.aceptar.failed",
+      "description": "No se puede aceptar: el autor no es la tienda dueña, el pedido no consta o la transición no está en la tabla."
+    },
+    {
+      "event": "pedido-mercado.rechazar.response",
+      "description": "El rechazo de la tienda con su hora."
+    },
+    {
+      "event": "pedido-mercado.rechazar.failed",
+      "description": "No se puede rechazar (autor, dueño o transición)."
+    },
+    {
+      "event": "pedido-mercado.cancelar.response",
+      "description": "La cancelación con su rol, su hora y el estado resultante."
+    },
+    {
+      "event": "pedido-mercado.cancelar.failed",
+      "description": "Cancelación fuera de plazo, rol no declarado o pedido que no consta."
+    },
+    {
+      "event": "pedido-mercado.de.response",
+      "description": "El pedido del mercado con sus hechos y la tabla de quién puede cancelar."
+    },
+    {
+      "event": "pedido-mercado.de.failed",
+      "description": "El pedido no consta en el registro de esta plaza."
+    },
+    {
+      "event": "bocaos.pedido_creado",
+      "description": "HECHO: nace el pedido del mercado con su plaza_id, su dirección, su oferta congelada y su hora."
+    },
+    {
+      "event": "bocaos.pedido_aceptado",
+      "description": "HECHO: la tienda aceptó. Lleva el precio para que el dato viaje con el hecho."
+    },
+    {
+      "event": "bocaos.pedido_rechazado",
+      "description": "HECHO: la tienda rechazó, con su motivo. No se cobra a nadie (Q36)."
+    },
+    {
+      "event": "bocaos.pedido_cancelado",
+      "description": "HECHO: cancelado, con quién, por qué y con la deuda visible sin cobrar."
+    }
+  ]
+}

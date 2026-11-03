@@ -1,0 +1,52 @@
+{
+  "_doc": "instrucciones-acceso — custodio single-writer de cómo se entra a cada destino (F05 InstruccionesAcceso). Portal, piso e indicaciones libres, por pedido y por plaza. Las escribe el cliente por el canal de la tienda; se muestran SÓLO al rider del contrato vivo, y al cerrar el contrato dejan de mostrarse aunque el dato siga escrito (de → NO_HAY). Otro rider recibe 403. El contrato no se guarda aquí: se pide a contrato-puntual.de por el bus en cada lectura (una segunda copia sería una verdad vieja), y bocaos.contrato_cerrado cierra la ventana también en este almacén. Dato personal del cliente DEL cliente: no entra en ningún agregado ni en ningún histórico de tienda — por eso el texto no viaja en el hecho.",
+  "name": "instrucciones-acceso",
+  "version": "0.1.0",
+  "description": "Cómo se entra a cada destino: portal, piso e indicaciones del cliente, visibles sólo al rider del contrato vivo y sólo mientras lo está (F05).",
+  "unidad": "plaza",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "instrucciones-acceso.anotar.request",
+      "handler": "onAnotarRequest",
+      "description": "F05: anota las instrucciones de un pedido (portal, piso, texto) con su hora. Corregir añade: la anterior queda en el historial."
+    },
+    {
+      "event": "instrucciones-acceso.de.request",
+      "handler": "onDeRequest",
+      "description": "F05: las instrucciones para el rider del contrato vivo. Sin contrato vivo o cerrado el contrato → NO_HAY; otro rider → 403."
+    },
+    {
+      "event": "bocaos.contrato_cerrado",
+      "handler": "onContratoCerrado",
+      "description": "F05: cerrado el contrato, la ventana se cierra también aquí. El dato sigue escrito; deja de mostrarse."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Hidrata el registro de la plaza y fija su sello (una plaza = un despliegue)."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "instrucciones-acceso.anotar.response",
+      "description": "La instrucción anotada, con su id y su hora."
+    },
+    {
+      "event": "instrucciones-acceso.anotar.failed",
+      "description": "No se anota: falta el pedido o no hay ni texto ni portal ni piso."
+    },
+    {
+      "event": "instrucciones-acceso.de.response",
+      "description": "Las instrucciones del pedido para ese rider, o NO_HAY con su motivo (sin contrato, contrato cerrado, sin instrucciones)."
+    },
+    {
+      "event": "instrucciones-acceso.de.failed",
+      "description": "No se pueden mostrar: falta el pedido o el rider, o el rider no es el del contrato vivo."
+    },
+    {
+      "event": "bocaos.instrucciones_anotadas",
+      "description": "HECHO: hay instrucciones para un pedido. NO lleva el texto: es dato personal del cliente del cliente (F05)."
+    }
+  ]
+}

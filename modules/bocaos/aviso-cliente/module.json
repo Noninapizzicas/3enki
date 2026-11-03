@@ -1,0 +1,66 @@
+{
+  "_doc": "aviso-cliente — puente al cliente final por el canal DE LA TIENDA (C05 EstadoCocinaVisible · C06 AvisoCliente · K02 GuardaMarcaAjena). El cliente ve CUATRO estados podados (recibido · en cocina · en camino · entregado), nunca el interno: no ve «en cola», ni «sin rider», ni «esperando propuesta». Dos hechos que caen en el mismo estado no producen dos mensajes. K02 dentro: si el texto lleva la marca de Bocaos o la de la plaza (nombre, «powered by», enlace), el aviso NO sale y se emite bocaos.aviso_rechazado con la marca encontrada. El transporte son las TOOLS de whatsapp-bot (whatsapp.enviar), no su copy: su par honesto se publica tal cual (whatsapp.mensaje.enviado | whatsapp.envio.fallido) y el fallo es visible. Sin teléfono no se inventa un destino: se publica el fallo (SIN_DESTINO). Sin store: el pedido y el teléfono se quedan en la tienda; el aviso es transporte, no verdad.",
+  "name": "aviso-cliente",
+  "version": "0.1.0",
+  "description": "El único canal de Bocaos hacia el cliente final: cuatro estados podados por el canal de la tienda y ni una marca de Bocaos ni de la plaza en el texto (C05, C06, K02).",
+  "unidad": "tienda",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "bocaos.pedido_creado",
+      "handler": "onPedidoCreado",
+      "description": "El pedido existe: el cliente recibe «recibido»."
+    },
+    {
+      "event": "bocaos.pedido_aceptado",
+      "handler": "onPedidoAceptado",
+      "description": "La tienda lo aceptó: el cliente recibe «en cocina»."
+    },
+    {
+      "event": "bocaos.pedido_listo",
+      "handler": "onPedidoListo",
+      "description": "Ya está listo: sigue siendo «en cocina» para el cliente (C05). Si es el mismo estado, no se repite el mensaje."
+    },
+    {
+      "event": "bocaos.contrato_creado",
+      "handler": "onContratoCreado",
+      "description": "Hay rider: el cliente NO ve «rider asignado»; el estado podado sigue siendo «en cocina»."
+    },
+    {
+      "event": "bocaos.hecho_reparto_anotado",
+      "handler": "onHechoRepartoAnotado",
+      "description": "Recogida → «en camino»; entrega → «entregado». Los demás hechos del reparto no son estados del cliente."
+    },
+    {
+      "event": "aviso-cliente.componer.request",
+      "handler": "onComponerRequest",
+      "description": "Compone y envía un aviso: poda el estado, pasa la guarda de marca ajena y publica el par honesto del transporte."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "aviso-cliente.componer.response",
+      "description": "El aviso compuesto y enviado (o no enviado, con su motivo: mismo estado, en vuelo)."
+    },
+    {
+      "event": "aviso-cliente.componer.failed",
+      "description": "El aviso no salió: estado no visible, marca ajena en el texto, sin destino o transporte que falla."
+    },
+    {
+      "event": "whatsapp.mensaje.enviado",
+      "description": "HECHO del transporte: el mensaje salió al cliente por el canal de la tienda, con su message_id y su kind."
+    },
+    {
+      "event": "whatsapp.envio.fallido",
+      "description": "HECHO del transporte: no se pudo enviar (sin destino, credencial, rate limit, API). Visible, no silencioso."
+    },
+    {
+      "event": "bocaos.cliente_avisado",
+      "description": "HECHO: el cliente fue avisado de un estado podado, por qué canal y con qué texto exacto."
+    },
+    {
+      "event": "bocaos.aviso_rechazado",
+      "description": "HECHO: el aviso llevaba la marca de Bocaos o de la plaza y NO salió (C06/K02). Lleva la marca encontrada."
+    }
+  ]
+}

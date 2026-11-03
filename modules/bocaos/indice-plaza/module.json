@@ -1,0 +1,42 @@
+{
+  "_doc": "indice-plaza — reflejo del escaparate de la plaza (D07 PlazaPública · D08 NeutralidadOrden · L02 GuardaPropiedadCliente · K02 GuardaMarcaAjena). El índice no filtra ni ordena por su cuenta: pide la cobertura a frontera-plaza (S02) y sirve las tiendas que LLEGAN, en el orden declarado del censo. Ningún campo permite pagar por posición: si aparece uno (posicion, destacado, prioridad, ranking, peso, promocionado…), la guarda FALLA y el índice no se sirve. K02 vive aquí porque la marca que hay que ocultar es de la plaza y del nacional, y la tienda no puede vigilar una marca que no conoce: se revisa el texto, el asunto, el remitente y los enlaces del aviso al cliente final. L02: cualquier consulta que cruce tiendas devuelve FALLA, también dentro de la misma plaza. Sin store: no escribe posiciones ni nada.",
+  "name": "indice-plaza",
+  "version": "0.1.0",
+  "description": "El índice de la plaza: las tiendas que reparten en la dirección consultada, en orden declarado y neutro, con las guardas de neutralidad, marca ajena y propiedad del cliente (D07, D08, L02, K02).",
+  "unidad": "plaza",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "indice-plaza.indice.request",
+      "handler": "onIndiceRequest",
+      "description": "D07: el escaparate de la dirección consultada, ya filtrado por cobertura (S02) y en orden declarado. Sin ranking ni destacados."
+    },
+    {
+      "event": "indice-plaza.guarda.request",
+      "handler": "onGuardaRequest",
+      "description": "D08/K02/L02: revisa un orden mostrado, una comunicación al cliente final o una consulta que cruce tiendas. Devuelve conforme | FALLA con la lista de lo que miró."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "indice-plaza.indice.response",
+      "description": "El escaparate servido: tiendas que llegan, cobertura aplicada, las que no llegan con su motivo y los huecos."
+    },
+    {
+      "event": "indice-plaza.indice.failed",
+      "description": "No se sirve el índice: falta el proyecto, no hay frontera, o el orden trae un campo que permite pagar por posición."
+    },
+    {
+      "event": "indice-plaza.guarda.response",
+      "description": "El resultado de la guarda: conforme o FALLA, con la regla y el campo de cada falla."
+    },
+    {
+      "event": "indice-plaza.guarda.failed",
+      "description": "No se puede revisar: falta el proyecto."
+    },
+    {
+      "event": "bocaos.indice_servido",
+      "description": "HECHO: se sirvió un índice de la plaza, con su zona, su número de tiendas y su orden declarado."
+    }
+  ]
+}

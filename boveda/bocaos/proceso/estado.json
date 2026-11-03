@@ -1,6 +1,6 @@
 {
   "vertical": "bocaos",
-  "actualizado": "2026-11-03T14:01:15Z",
+  "actualizado": "2026-11-03T15:30:00Z",
   "fuente": "proceso/fase3b/plan-construccion.md §11 (espina enki-plan, F3b v3 con inventario real)",
   "nota": "Bocaos es SÓLO el mercado. La tienda ya existe: pizzepos (tienda-api · pedidos · cocina · carta-digital · carta-marketing · tarifas · whatsapp-bot · pago-gateway · impresion). Lo de la tienda NO se construye: se engancha por evento (pedido.creado · pedido.cancelado · cocina.pedido_listo · pedido.pagado). Las 3 ADAPTAR son las únicas que tocan un módulo existente, y son aditivas.",
   "tracking": {
@@ -72,20 +72,28 @@
     ],
     "realizados": [
       "acta-decisiones",
-      "config-mercado",
-      "censo-parte",
-      "estado-parte",
-      "terminos-parte",
-      "ruta-viva",
-      "hecho-listo",
-      "foto-mercado",
-      "propuesta",
+      "aviso-cliente",
+      "aviso-tienda",
       "canal-rider",
+      "censo-parte",
+      "config-mercado",
       "contrato-puntual",
-      "hechos-reparto",
+      "contrato-tramos",
       "enlace",
       "escalada-enlace",
-      "redaccion-propuesta"
+      "estado-parte",
+      "foto-mercado",
+      "frontera-plaza",
+      "hecho-listo",
+      "hechos-reparto",
+      "indice-plaza",
+      "instrucciones-acceso",
+      "pedido-mercado",
+      "propuesta",
+      "redaccion-propuesta",
+      "ruta-viva",
+      "tarifa-pedido",
+      "terminos-parte"
     ],
     "reutilizados": [
       "scheduler",
@@ -100,14 +108,6 @@
       "cobro-gestion"
     ],
     "pendientes": [
-      "contrato-tramos",
-      "frontera-plaza",
-      "indice-plaza",
-      "pedido-mercado",
-      "aviso-cliente",
-      "aviso-tienda",
-      "instrucciones-acceso",
-      "tarifa-pedido",
       "entrada-listo",
       "chat-enmascarado",
       "medida-cocina",
@@ -142,9 +142,14 @@
       "fed-versiones",
       "fed-aviso"
     ],
-    "proximo": "contrato-tramos",
+    "proximo": "entrada-listo",
     "total": 64,
-    "hechos": 15,
-    "faltan": 41
+    "hechos": 23,
+    "faltan": 33,
+    "retirados": [
+      "tienda-captura (C01: duplicaba tienda-api + pedidos)",
+      "tienda-hora-listo (C04: duplicaba cocina.mark-ready)",
+      "pedido (renombrado a pedido-mercado: publicaba en el namespace pedido.* de pizzepos)"
+    ]
   }
 }

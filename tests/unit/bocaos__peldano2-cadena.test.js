@@ -24,9 +24,9 @@ const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 
-const TiendaCaptura = require('../../modules/bocaos/tienda-captura/index.js');
-const Pedido = require('../../modules/bocaos/pedido/index.js');
-const TiendaHoraListo = require('../../modules/bocaos/tienda-hora-listo/index.js');
+const PedidoMercado = require('../../modules/bocaos/pedido-mercado/index.js');
+const TarifaPedido = require('../../modules/bocaos/tarifa-pedido/index.js');
+const ContratoTramos = require('../../modules/bocaos/contrato-tramos/index.js');
 const HechoListo = require('../../modules/bocaos/hecho-listo/index.js');
 const FotoMercado = require('../../modules/bocaos/foto-mercado/index.js');
 const Enlace = require('../../modules/bocaos/enlace/index.js');
@@ -132,6 +132,58 @@ function puertos(bus, { desvio = 312 } = {}) {
   return disco;
 }
 
+// ─── PIZZEPOS DE MENTIRA: los eventos REALES de la frontera (pedido.creado · cocina.pedido_listo) ───
+function pizzepos(bus) {
+  const pedidos = new Map();
+  bus.subscribe('pedido.get.request', (e) => {
+    const p = pedidos.get(e.data.pedido_id);
+    if (!p) return bus.publish('pedido.get.response', { request_id: e.data.request_id, status: 404, error: { code: 'RESOURCE_NOT_FOUND', message: 'sin pedido' } });
+    bus.publish('pedido.get.response', { request_id: e.data.request_id, status: 200, data: { pedido: p } });
+  });
+  return {
+    creado(payload) {
+      const pedido = { cuenta_id: 'cta-1', modo_consumo: 'domicilio', ...payload };
+      pedidos.set(pedido.pedido_id, pedido);
+      bus.publish('pedido.creado', pedido);
+      return pedido;
+    },
+    listo({ pedido_id, hora, dispositivo = 'horno-1' }) {
+      const p = pedidos.get(pedido_id) || {};
+      bus.publish('cocina.pedido_listo', {
+        pedido_id, cuenta_id: p.cuenta_id || null,
+        project_id: p.project_id || TIENDA, project_slug: p.project_slug || TIENDA,
+        hora, dispositivo
+      });
+    },
+    pedidos
+  };
+}
+
+// ─── entrada-listo (hoja 23 del peldaño, todavía NO construida) ───
+function entradaListo(bus, rpc) {
+  bus.subscribe('cocina.pedido_listo', async (e) => {
+    const d = e.data;
+    const pedido = (await rpc('pedido.get.request', { project_id: d.project_id, pedido_id: d.pedido_id }))?.data?.pedido || null;
+    const precio = (await rpc('tarifa-pedido.de.request', { project_id: PLAZA, pedido_id: d.pedido_id }))?.data?.precio || null;
+    if (!pedido || !precio) {
+      bus.publish('bocaos.hueco_nombrado', {
+        pedido_id: d.pedido_id, plaza_id: PLAZA,
+        motivo: !pedido ? 'pizzepos no da el pedido' : 'sin precio de reparto cerrado (E03)',
+        hueco: !pedido ? 'sin pedido' : 'sin precio'
+      });
+      return;
+    }
+    const entrega = pedido.entrega || {};
+    bus.publish('bocaos.listo_declarado', {
+      plaza_id: PLAZA, tienda_id: pedido.project_slug || TIENDA, pedido_id: d.pedido_id,
+      hora_listo: d.hora, hora: d.hora,
+      precio_congelado: { total_cents: pedido.total_centimos, moneda: 'EUR', reparto_cents: precio.precio_centimos },
+      punto: entrega.punto || null, destino: entrega.destino || null, zona: entrega.zona || null,
+      autor: { rol: 'tienda', tienda_id: pedido.project_slug || TIENDA }
+    });
+  });
+}
+
 const RAIZ = path.join(__dirname, '../../modules/bocaos');
 
 function montar(opciones = {}) {
@@ -140,9 +192,9 @@ function montar(opciones = {}) {
   const enviados = [];
 
   const modulos = {
-    'tienda-captura': new TiendaCaptura(),
-    pedido: new Pedido(),
-    'tienda-hora-listo': new TiendaHoraListo(),
+    'pedido-mercado': new PedidoMercado(),
+    'tarifa-pedido': new TarifaPedido(),
+    'contrato-tramos': new ContratoTramos(),
     'hecho-listo': new HechoListo(),
     'foto-mercado': new FotoMercado(),
     enlace: new Enlace(),
@@ -185,6 +237,10 @@ function montar(opciones = {}) {
   }
 
   puertos(bus, opciones);
+  const pz = pizzepos(bus);
+  entradaListo(bus, rpc);
+  modulos.__pizzepos = pz;   // el doble de pizzepos, para que el arnés pueda dar de alta
+  modulos.__pizzepos_pub = (ev, p) => bus.publish(ev, p);
   bus.publish('project.activated', { project_id: PLAZA });
   bus.publish('project.activated', { project_id: TIENDA });
   return { bus, modulos, rpc, enviados };
@@ -213,21 +269,39 @@ async function abrirPlaza(rpc, { chat = CHAT, umbrales = {} } = {}) {
   assert.strictEqual(pos.status, 200, JSON.stringify(pos));
 }
 
+// El alta la hace PIZZEPOS (pedido.creado real, con su bloque entrega). El tope que el cliente
+// autoriza al pedir viaja con la entrega Y como hecho `bocaos.tarifa`, que es lo que escucha la
+// escalada: ese hecho lo emitía el `pedido` retirado y hoy no tiene emisor en el plano — se dice
+// aquí en vez de esconderlo detrás del arnés.
 async function altaDePedido(rpc, modulos, cliente = 'cli-1', extra = {}) {
-  const tc = modulos['tienda-captura'];
-  const alta = await tc.onAltaRequest({ request_id: `alt-${cliente}`, data: {
-    project_id: TIENDA, plaza_id: PLAZA, tienda_id: TIENDA, cliente_id: cliente,
-    lineas: [{ sku: 'campero', cantidad: 1 }], precio_congelado: PRECIO, oferta_reparto_cents: 450,
-    punto: PUNTO, destino: DESTINO, zona: 'centro', ...extra
-  } });
-  assert.strictEqual(alta.status, 201, JSON.stringify(alta));
-  const pedido_id = alta.data.pedido_id;
-  await rpc('pedido.aceptar.request', { project_id: PLAZA, pedido_id, rol: 'tienda', tienda_id: TIENDA });
-  const decl = await modulos['tienda-hora-listo'].onDeclararRequest({ request_id: `lst-${cliente}`, data: {
-    project_id: TIENDA, pedido_id, hora_listo: LISTO,
-    autor: { rol: 'tienda', tienda_id: TIENDA }, precio_congelado: PRECIO
-  } });
-  assert.strictEqual(decl.status, 201, JSON.stringify(decl));
+  const pz = modulos.__pizzepos;
+  const { tope_reparto_cents, escalon_cents, ...resto } = extra;
+  const pedido = pz.creado({
+    pedido_id: `ped-${cliente}`,
+    project_id: TIENDA, project_slug: TIENDA,
+    total_centimos: PRECIO.total_cents, items_count: 1, cliente_nombre: 'Ana',
+    entrega: {
+      direccion: { calle: 'Larios', numero: 3, cp: '29005' }, zona: 'centro',
+      oferta_centimos: 450, punto: PUNTO, destino: DESTINO,
+      ...(tope_reparto_cents ? { tope_centimos: tope_reparto_cents } : {}),
+      ...resto
+    }
+  });
+  const pedido_id = pedido.pedido_id;
+  if (tope_reparto_cents) {
+    // El tope autorizado por el cliente es un HECHO con consumidor (escalada-enlace), y viaja
+    // junto al pedido: lo emite el lado del pedido, no el mercado.
+    modulos.__pizzepos_pub('bocaos.tarifa', {
+      pedido_id, plaza_id: PLAZA, tienda_id: TIENDA,
+      tope_cents: tope_reparto_cents,
+      escalon_cents: Number.isInteger(escalon_cents) ? escalon_cents : null,
+      autor: 'cliente'
+    });
+  }
+  const acogido = await rpc('pedido-mercado.aceptar.request', { project_id: PLAZA, pedido_id, rol: 'tienda', tienda_id: TIENDA });
+  assert.strictEqual(acogido.status, 200, JSON.stringify(acogido));
+  // Cocina marca listo (evento REAL) y entrada-listo compone el hecho de la plaza.
+  pz.listo({ pedido_id, hora: LISTO });
   return pedido_id;
 }
 
@@ -285,8 +359,11 @@ test('la cadena entera: pedido → LISTO → foto → enlace → propuesta → m
   assert.strictEqual(contrato.data.contrato.rider_id, RIDER);
   assert.strictEqual(contrato.data.contrato.precio_cents, 450);
 
-  const pedido = await rpc('pedido.de.request', { project_id: PLAZA, pedido_id });
-  assert.strictEqual(pedido.data.pedido.estado, 'EN_REPARTO');
+  // El contrato NO mueve el pedido: lo mueve la RECOGIDA (el rider se lo lleva). El estado sigue
+  // LISTO hasta que hay un hecho de recogida, y eso es lo que impide que un pedido «aparezca» en
+  // la calle porque alguien firmó un contrato.
+  const pedido = await rpc('pedido-mercado.de.request', { project_id: PLAZA, pedido_id });
+  assert.strictEqual(pedido.data.pedido.estado, 'LISTO');
 
   const parte = await rpc('estado-parte.de.request', { project_id: PLAZA, plaza_id: PLAZA, parte_id: RIDER });
   assert.strictEqual(parte.data.parte.estado, 'ocupado', 'el contrato vivo pone «ocupado»');
@@ -400,7 +477,7 @@ test('sin tope autorizado no se paga más: escalada agotada, pedido sin reparto 
   assert.strictEqual(sinReparto.length, 1, 'cancelación explícita, no silencio');
   assert.strictEqual(sinReparto[0].p.pedido_id, pedido_id);
 
-  const pedido = await rpc('pedido.de.request', { project_id: PLAZA, pedido_id });
+  const pedido = await rpc('pedido-mercado.de.request', { project_id: PLAZA, pedido_id });
   assert.strictEqual(pedido.data.pedido.estado, 'CANCELADO', 'el pedido no se queda esperando un rider que no existe');
 
   // Y no se entrega nada a ningún móvil: no hubo propuesta que entregar.

@@ -34,6 +34,13 @@ class ContratoPuntual extends ModuloBocaos {
   async onPropuestaAceptada(e) {
     const d = this.datos(e);
     if (!d.project_id || !d.pedido_id) return;
+    // A27: el contrato nace del HECHO del custodio de la propuesta, no de una voz del móvil que
+    // use el mismo tópico. Se acepta su sello (origen 'propuesta') o la forma completa del hecho
+    // (hora de aceptación + las medidas ya compuestas): una voz sin números no construye un
+    // contrato sin precio.
+    const esHecho = d.origen === 'propuesta'
+      || (!!d.hora_aceptacion && !!d.medidas && typeof d.medidas === 'object');
+    if (!esHecho) return;
     const est = await this.estado(d.project_id);
     est.aceptaciones = est.aceptaciones || {};
     est.aceptaciones[d.pedido_id] = {

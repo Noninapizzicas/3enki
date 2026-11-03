@@ -1,0 +1,48 @@
+{
+  "_doc": "escalada-enlace — PUENTE de los tres peldaños sin sala humana (Q43). Escucha bocaos.enlace_agotado y pide al bus el siguiente peldaño: 1) los dos candidatos agotados → abrir a TODOS los riders activos de la zona (30 s); 2+) subir la oferta en escalones, NUNCA por encima del tope que el cliente autorizó en bocaos.tarifa; agotado → bocaos.escalada_agotada + bocaos.pedido_sin_reparto y petición explícita de cancelación al custodio del pedido. Emite bocaos.escalada_peldano {pedido_id, peldaño, segundos, nuevo_tope} y bocaos.escalada_reintentar para que el enlace vuelva a medir. Guarda su estado por pedido (peldaño, oferta, tope): sin él, cada agotado volvería a empezar por el peldaño 1.",
+  "name": "escalada-enlace",
+  "version": "0.1.0",
+  "description": "Los tres peldaños sin sala humana: abre a todos, sube la oferta hasta el tope autorizado y, si no hay forma, deja el pedido sin reparto explícitamente (Q43).",
+  "unidad": "plaza",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "bocaos.enlace_agotado",
+      "handler": "onEnlaceAgotado",
+      "description": "El enlace no encontró a quién proponer: se decide y se pide el siguiente peldaño."
+    },
+    {
+      "event": "bocaos.tarifa",
+      "handler": "onTarifa",
+      "description": "El cliente autorizó un tope para ese pedido: se guarda; sin él la oferta no sube."
+    },
+    {
+      "event": "bocaos.contrato_creado",
+      "handler": "onContratoCreado",
+      "description": "El pedido ya tiene reparto: la escalada de ese pedido termina y se limpia."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Hidrata el estado de escalada de la plaza y fija su sello."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "bocaos.escalada_peldano",
+      "description": "HECHO: el peldaño que toca, sus segundos y el nuevo tope de la oferta (null en el peldaño 1)."
+    },
+    {
+      "event": "bocaos.escalada_reintentar",
+      "description": "Petición al enlace: vuelve a medir con el mercado abierto y/o la oferta nueva."
+    },
+    {
+      "event": "bocaos.escalada_agotada",
+      "description": "HECHO: no hay más peldaños posibles, con el motivo y el último tope."
+    },
+    {
+      "event": "bocaos.pedido_sin_reparto",
+      "description": "HECHO: cancelación explícita del pedido; nadie lo deja esperando en silencio."
+    }
+  ]
+}

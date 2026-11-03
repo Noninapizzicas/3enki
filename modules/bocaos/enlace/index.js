@@ -116,7 +116,7 @@ class Enlace extends ModuloBocaos {
         continue;
       }
 
-      const { medidas, bloqueantes } = await this._medir(c, foto, pedido, d.project_id);
+      const { medidas, bloqueantes } = await this._medir(c, foto, pedido, d.project_id, d.oferta_cents);
       if (bloqueantes.length > 0) {
         for (const hueco of bloqueantes) {
           this.hecho('bocaos.hueco_nombrado', { pedido_id: pedido.pedido_id, rider_id: c.rider_id, hueco });
@@ -173,7 +173,9 @@ class Enlace extends ModuloBocaos {
   }
 
   // ================= las medidas (A05…A11) =================
-  async _medir(c, foto, pedido, project_id) {
+  // `oferta_cents` sólo llega de la escalada (Q43): el precio congelado del cliente NO se toca,
+  // se mide con la oferta vigente que el cliente ya autorizó. Sin escalada, es el congelado.
+  async _medir(c, foto, pedido, project_id, oferta_cents) {
     const instante = Date.parse(foto.instante);
     const bloqueantes = [];
     const politica = foto.politica || {};
@@ -216,7 +218,9 @@ class Enlace extends ModuloBocaos {
     retraso_min = this._round(retraso_min, 2);
 
     // A11 · cobra: `paga` siempre consta (E03 ya compuesto); `neto` exige coste declarado.
-    const paga_cents = pedido.precio_congelado.reparto_cents;
+    const paga_cents = Number.isInteger(oferta_cents) && oferta_cents >= 0
+      ? oferta_cents
+      : pedido.precio_congelado.reparto_cents;
     const campo = politica.campo_cobra === 'neto' ? 'neto' : 'paga';
     let neto_cents = null;
     let cobra_cents = paga_cents;

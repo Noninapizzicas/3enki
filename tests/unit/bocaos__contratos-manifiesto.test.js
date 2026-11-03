@@ -44,6 +44,12 @@ test('hay al menos los nueve módulos del peldaño 0', () => {
   }
 });
 
+test('hay al menos las tres islas del peldaño 2', () => {
+  for (const esperado of ['canal-rider', 'redaccion-propuesta', 'escalada-enlace']) {
+    assert.ok(MODULOS.includes(esperado), `falta modules/bocaos/${esperado}`);
+  }
+});
+
 test('cada manifest: name = carpeta, version semver, description y unidad', () => {
   for (const dir of MODULOS) {
     const { man } = leer(dir);
@@ -117,8 +123,8 @@ test('la base común requiere _shared y resuelve', () => {
 });
 
 test('quien escribe estado tiene store propio por proyecto; quien no, no lo finge', () => {
-  const conEstado = ['pedido', 'tienda-hora-listo', 'hecho-listo', 'propuesta', 'contrato-puntual', 'hechos-reparto'];
-  const sinEstado = ['tienda-captura', 'foto-mercado', 'enlace'];
+  const conEstado = ['pedido', 'tienda-hora-listo', 'hecho-listo', 'propuesta', 'contrato-puntual', 'hechos-reparto', 'escalada-enlace'];
+  const sinEstado = ['tienda-captura', 'foto-mercado', 'enlace', 'canal-rider', 'redaccion-propuesta'];
   for (const dir of conEstado) {
     const m = new (require(path.join(RAIZ, dir, 'index.js')))();
     assert.ok(/^\/bocaos\/[a-z-]+\.json$/.test(m._path || ''), `${dir}: store propio en /bocaos/`);

@@ -127,6 +127,14 @@ class Pedido extends ModuloBocaos {
     if (!CENTIMOS(p.oferta_reparto_cents)) {
       return this._errorResponse(400, 'INVALID_INPUT', 'oferta_reparto_cents requerido (la oferta del cliente viaja con el pedido)', { field: 'oferta_reparto_cents' });
     }
+    // Q43: el cliente puede autorizar un TOPE por encima de su oferta. Si lo autoriza, viaja con
+    // el pedido (y se anuncia como bocaos.tarifa): sin esa autorización la escalada no paga más.
+    const tope = p.tope_reparto_cents ?? null;
+    if (tope !== null && (!CENTIMOS(tope) || tope < p.oferta_reparto_cents)) {
+      return this._errorResponse(400, 'INVALID_INPUT',
+        'tope_reparto_cents debe ser un entero ≥ la oferta del cliente: el tope no rebaja lo ofrecido',
+        { field: 'tope_reparto_cents', oferta_reparto_cents: p.oferta_reparto_cents });
+    }
 
     const est = await this.estado(project_id);
     est.pedidos = est.pedidos || {};
@@ -149,6 +157,7 @@ class Pedido extends ModuloBocaos {
       lineas: Array.isArray(p.lineas) ? p.lineas : [],
       precio_congelado: p.precio_congelado,
       oferta_reparto_cents: p.oferta_reparto_cents,
+      tope_reparto_cents: tope,
       estado: 'RECIBIDO',
       hora_pedido: p.hora_pedido || hora,
       hora_listo: null,
@@ -159,6 +168,18 @@ class Pedido extends ModuloBocaos {
     };
     est.pedidos[pedido_id] = nuevo;
     await this.guardar(project_id);
+
+    if (tope !== null) {
+      // El tope autorizado es un hecho propio: la escalada lo escucha y no sube sin él.
+      this.hecho('bocaos.tarifa', {
+        pedido_id,
+        plaza_id: nuevo.plaza_id,
+        tienda_id: nuevo.tienda_id,
+        tope_cents: tope,
+        escalon_cents: Number.isInteger(p.escalon_cents) && p.escalon_cents > 0 ? p.escalon_cents : null,
+        autor: p.tarifa_autor || 'cliente'
+      });
+    }
 
     this.hecho('bocaos.pedido_creado', {
       pedido_id,

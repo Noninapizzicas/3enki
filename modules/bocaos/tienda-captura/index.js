@@ -63,6 +63,11 @@ class TiendaCaptura extends ModuloBocaos {
       lineas: d.lineas,
       precio_congelado: d.precio_congelado,
       oferta_reparto_cents: d.oferta_reparto_cents,
+      // Q43: si el cliente autoriza un tope para la escalada, viaja con el pedido y no se queda
+      // en la tienda. Quien lo valida es el custodio del pedido (una sola verdad).
+      tope_reparto_cents: d.tope_reparto_cents ?? null,
+      escalon_cents: d.escalon_cents ?? null,
+      tarifa_autor: d.tarifa_autor || 'cliente',
       hora_pedido: d.hora_pedido || this.ahora()
     };
 

@@ -1,0 +1,25 @@
+{
+  "_doc": "redaccion-propuesta — MICRO-AGENTE de la frase del rider (A18). Escucha bocaos.propuesta_emitida y emite bocaos.propuesta_redactada con la plantilla determinista: «Recoge en {tienda}, {desvío} m de más. Ganas {margen} € netos. Tienes {segundos} s.». No decide nada: los números vienen del evento. Un LLM opcional (this.llm, inyectado) puede adornarla; si falla, tarda o INVENTA una cifra que no está en el evento, se descarta (bocaos.propuesta_redaccion_descartada) y sale la plantilla. SIEMPRE hay frase. Sin estado: el local se pregunta a hecho-listo por el bus.",
+  "name": "redaccion-propuesta",
+  "version": "0.1.0",
+  "description": "La frase que el rider lee: plantilla determinista con los números del evento y un adorno opcional que se descarta si inventa cifras (A18).",
+  "unidad": "plaza",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "bocaos.propuesta_emitida",
+      "handler": "onPropuestaEmitida",
+      "description": "Hay propuesta: se redacta la frase del rider con los números que ya venían calculados."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "bocaos.propuesta_redactada",
+      "description": "HECHO: la frase del rider (siempre hay una), con su fuente, la plantilla y las cifras usadas."
+    },
+    {
+      "event": "bocaos.propuesta_redaccion_descartada",
+      "description": "HECHO: un adorno del LLM se descartó (inventó cifras, falló o tardó); se dice cuál y por qué."
+    }
+  ]
+}

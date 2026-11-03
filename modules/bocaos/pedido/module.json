@@ -99,6 +99,10 @@
       "description": "El pedido no consta en esta plaza."
     },
     {
+      "event": "bocaos.tarifa",
+      "description": "HECHO: el cliente autorizó un tope para la escalada de este pedido (Q43). Sin este hecho no se sube la oferta."
+    },
+    {
       "event": "bocaos.pedido_creado",
       "description": "HECHO: nace un pedido con precio congelado y plaza_id."
     },

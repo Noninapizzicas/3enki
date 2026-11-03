@@ -1,0 +1,62 @@
+{
+  "_doc": "canal-rider — PUENTE del último tramo (Q42 · A15). Pone la propuesta en el móvil del rider y devuelve lo que el rider hizo. Escucha bocaos.propuesta_emitida, resuelve el chat_id POR EL BUS (estado-parte.de, el contacto es suyo) y entrega con un transporte inyectable (por defecto telegram.send_message). Espera la frase de redaccion-propuesta como mucho espera_redaccion_ms; si no llega, entrega con la frase de la propuesta (latencia crítica). La vuelta entra por canal-rider.recibir (puerta del transporte: el móvil no habla el bus) o por los eventos de la voz del móvil, y se reenvía al custodio como propuesta.<op>.request: el canal NO decide ni escribe estado. El acuse queda además como hecho del bus (via movil). Sin estado propio.",
+  "name": "canal-rider",
+  "version": "0.1.0",
+  "description": "El último tramo: entrega la propuesta en el móvil del rider y reenvía al bus su acuse, su sí o su no, sin decidir nada (Q42, A15).",
+  "unidad": "plaza",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "bocaos.propuesta_emitida",
+      "handler": "onPropuestaEmitida",
+      "description": "Hay propuesta: se resuelve el móvil del rider por el bus y se entrega (o se nombra el hueco)."
+    },
+    {
+      "event": "bocaos.propuesta_redactada",
+      "handler": "onPropuestaRedactada",
+      "description": "La frase del micro-agente está lista: si la entrega estaba armada, sale ahora con ella; si llegó antes, se guarda."
+    },
+    {
+      "event": "bocaos.propuesta_acuse",
+      "handler": "onPropuestaAcuse",
+      "description": "El móvil acusó recibo: se reenvía como propuesta.acuse.request (el acuse arranca el reloj de decisión, no lo arranca el canal)."
+    },
+    {
+      "event": "bocaos.propuesta_aceptada",
+      "handler": "onPropuestaAceptada",
+      "description": "Voz de sí desde el móvil: se reenvía como propuesta.aceptar.request. Los hechos del custodio (origen propuesta) se ignoran."
+    },
+    {
+      "event": "bocaos.propuesta_rechazada",
+      "handler": "onPropuestaRechazada",
+      "description": "Voz de no desde el móvil: se reenvía como propuesta.rechazar.request, con su motivo."
+    },
+    {
+      "event": "canal-rider.recibir.request",
+      "handler": "onRecibirRequest",
+      "description": "Puerta del transporte: el móvil entrega acuse | aceptar | rechazar y el canal lo pone en el bus y se lo pide al custodio. Una intención se aplica una vez."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "bocaos.propuesta_entregada",
+      "description": "HECHO: la propuesta está en el móvil del rider, con el chat, el mensaje y el texto exacto que vio."
+    },
+    {
+      "event": "bocaos.propuesta_no_entregada",
+      "description": "HECHO: no se pudo entregar (sin chat_id en el censo o transporte que falla), con el hueco nombrado."
+    },
+    {
+      "event": "bocaos.propuesta_acuse",
+      "description": "HECHO: la voz del móvil que acusa recibo (via movil). Es la entrada que el canal reenvía al custodio; el hecho del custodio es propuesta_acusada."
+    },
+    {
+      "event": "canal-rider.recibir.response",
+      "description": "La acción del móvil entró y el custodio la aplicó (o dijo por qué no)."
+    },
+    {
+      "event": "canal-rider.recibir.failed",
+      "description": "No se pudo recibir: falta propuesta_id, acción inválida o el custodio no contesta."
+    }
+  ]
+}

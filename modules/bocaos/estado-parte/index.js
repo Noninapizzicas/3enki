@@ -23,6 +23,9 @@
  * Isla: no lee el almacén de nadie. El coste del rider se resuelve preguntando a config-mercado
  * por el bus (Q57) y la capacidad vigente le llega como HECHO desde ruta-viva (B05), que es su
  * único escritor. Este módulo no estima ni deduce nada.
+ *
+ * El CONTACTO (chat_id del móvil) también vive aquí, y por la misma regla: lo declara él, como
+ * sus zonas o su vehículo. El canal-rider lo PIDE a este censo por el bus; no lo guarda él.
  */
 
 const ModuloBocaos = require('../_bocaos');
@@ -185,6 +188,7 @@ class EstadoParte extends ModuloBocaos {
       capacidad_fuente: Number.isInteger(d.capacidad) ? 'alta' : null,
       capacidad_hora: Number.isInteger(d.capacidad) ? hora : null,
       coste: this._coste(d.coste),
+      chat_id: this._contacto(d.chat_id),
       contratos_vivos: 0,
       alta_en: hora,
       historial: [{ estado, hora, autor: d.autor || parte_id, motivo: 'alta' }]
@@ -225,11 +229,12 @@ class EstadoParte extends ModuloBocaos {
         'el censo no inventa: sin alta no hay estado (I01/I02)', { field: 'parte_id', hueco: 'parte sin alta' });
     }
 
-    // Los atributos que son SUYOS (zonas, vehículo, capacidad, coste) los declara él, no la sala.
-    const tocaAtributos = ['zonas', 'vehiculo', 'capacidad', 'coste'].some((k) => d[k] !== undefined);
+    // Los atributos que son SUYOS (zonas, vehículo, capacidad, coste, contacto) los declara él,
+    // no la sala. El chat_id es su móvil: nadie más lo apunta ni lo cambia.
+    const tocaAtributos = ['zonas', 'vehiculo', 'capacidad', 'coste', 'chat_id'].some((k) => d[k] !== undefined);
     if (tocaAtributos && !this._esLaParte(d, parte)) {
       return this._errorResponse(403, 'FORMA_NO_ES_SUYA',
-        'las zonas, el vehículo, la capacidad y el coste los declara la parte, no la sala',
+        'las zonas, el vehículo, la capacidad, el coste y el contacto los declara la parte, no la sala',
         { field: 'rol', hueco: 'atributo declarado por otro' });
     }
     if (d.zonas !== undefined) {
@@ -250,6 +255,7 @@ class EstadoParte extends ModuloBocaos {
       parte.capacidad_hora = this._iso(d.hora) || this.ahora();
     }
     if (d.coste !== undefined) parte.coste = this._coste(d.coste);
+    if (d.chat_id !== undefined) parte.chat_id = this._contacto(d.chat_id);
 
     if (!d.estado) {
       await this.guardar(d.project_id);
@@ -410,6 +416,16 @@ class EstadoParte extends ModuloBocaos {
     return { eur_km, eur_min };
   }
 
+  // El contacto del rider (chat de su móvil): una cadena, no un objeto. Se guarda tal cual lo
+  // declara él; el canal lo PIDE por el bus cuando tiene que entregar una propuesta.
+  _contacto(v) {
+    if (v === null || v === undefined) return null;
+    if (typeof v === 'number' && Number.isFinite(v)) return String(v);
+    if (typeof v !== 'string') return null;
+    const s = v.trim();
+    return s ? s : null;
+  }
+
   // Q57: el coste por vehículo es config de la plaza. Se PREGUNTA al bus; si no contesta, el
   // coste queda como hueco nombrado en vez de inventarse.
   async _costeDeLaPlaza(project_id, plaza_id, instante) {
@@ -451,6 +467,7 @@ class EstadoParte extends ModuloBocaos {
       capacidad_hora: parte.capacidad_hora || null,
       coste,
       coste_fuente,
+      chat_id: parte.chat_id || null,
       contratos_vivos: parte.contratos_vivos || 0,
       sancion: parte.sancion || null,
       alta_en: parte.alta_en || null,

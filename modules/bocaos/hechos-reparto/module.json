@@ -1,0 +1,78 @@
+{
+  "_doc": "hechos-reparto — custodio append-only de los hechos del reparto y su prueba (F01/F02/F03). Sin hora no hay hecho; la falta de prueba se DECLARA con motivo y es un hecho distinto de no tener nada. El acta se compone aquí y devuelve INCOMPLETA con el nombre del que falta (Q30). Peldaño 0 de Bocaos.",
+  "name": "hechos-reparto",
+  "version": "0.1.0",
+  "description": "Hechos del reparto con hora, prueba o su falta declarada, y el acta con sus relojes (F01, F02, F03).",
+  "unidad": "plaza",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "hechos-reparto.anotar.request",
+      "handler": "onAnotarRequest",
+      "description": "Anota un hecho del reparto: tipo + hora + autor. Sin hora se rechaza."
+    },
+    {
+      "event": "hechos-reparto.prueba.request",
+      "handler": "onPruebaRequest",
+      "description": "Anota la prueba (foto, firma, código) o su FALTA declarada con motivo."
+    },
+    {
+      "event": "hechos-reparto.acta.request",
+      "handler": "onActaRequest",
+      "description": "El acta completa con sus relojes | INCOMPLETA con el nombre del que falta."
+    },
+    {
+      "event": "bocaos.contrato_creado",
+      "handler": "onContratoCreado",
+      "description": "Hay contrato puntual con un rider: se abre el reparto con su hora de aceptación."
+    },
+    {
+      "event": "bocaos.pedido_listo",
+      "handler": "onPedidoListo",
+      "description": "Llega la hora de listo: sin ella la espera real no se puede medir."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Hidrata los repartos del proyecto de la plaza."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "hechos-reparto.anotar.response",
+      "description": "Hecho anotado."
+    },
+    {
+      "event": "hechos-reparto.anotar.failed",
+      "description": "No se anota: falta tipo, hora o pedido."
+    },
+    {
+      "event": "hechos-reparto.prueba.response",
+      "description": "Prueba anotada (o su falta declarada)."
+    },
+    {
+      "event": "hechos-reparto.prueba.failed",
+      "description": "No se anota: prueba sin valor o falta sin motivo."
+    },
+    {
+      "event": "hechos-reparto.acta.response",
+      "description": "Acta completa con relojes, o incompleta con lo que falta."
+    },
+    {
+      "event": "hechos-reparto.acta.failed",
+      "description": "No hay reparto abierto para ese pedido."
+    },
+    {
+      "event": "bocaos.hecho_reparto_anotado",
+      "description": "HECHO: recogida, entrega, espera o salida, con hora y autor."
+    },
+    {
+      "event": "bocaos.prueba_anotada",
+      "description": "HECHO: la prueba de la entrega o la falta declarada con motivo."
+    },
+    {
+      "event": "bocaos.acta_incompleta",
+      "description": "HECHO: el acta no se puede cerrar y se dice qué falta."
+    }
+  ]
+}

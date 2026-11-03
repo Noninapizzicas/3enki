@@ -1,0 +1,74 @@
+{
+  "_doc": "contrato-puntual — custodio del contrato de un pedido con un rider (A24). Puntual: sin turno, sin jornada, sin duración. Nace de la aceptación libre (hecho bocaos.propuesta_aceptada) y no de una asignación; sin aceptación no hay constructor (A27). Cierra con el hecho de entrega. Peldaño 0 de Bocaos.",
+  "name": "contrato-puntual",
+  "version": "0.1.0",
+  "description": "El contrato puntual de un pedido con un rider: sin turno ni jornada, nacido de una aceptación libre (A24).",
+  "unidad": "plaza",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "contrato-puntual.crear.request",
+      "handler": "onCrearRequest",
+      "description": "Crea el contrato: exige aceptación libre previa y rechaza turno/jornada/duración."
+    },
+    {
+      "event": "contrato-puntual.de.request",
+      "handler": "onDeRequest",
+      "description": "El contrato de un pedido o de un contrato_id."
+    },
+    {
+      "event": "contrato-puntual.cerrar.request",
+      "handler": "onCerrarRequest",
+      "description": "Cierra el contrato con su motivo y su hora."
+    },
+    {
+      "event": "bocaos.propuesta_aceptada",
+      "handler": "onPropuestaAceptada",
+      "description": "El rider dijo sí: se anota la aceptación y NACE el contrato (A24)."
+    },
+    {
+      "event": "bocaos.hecho_reparto_anotado",
+      "handler": "onHechoRepartoAnotado",
+      "description": "Hay entrega: el contrato se cierra con el hecho, no con un reloj."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Hidrata contratos y aceptaciones del proyecto de la plaza."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "contrato-puntual.crear.response",
+      "description": "Contrato creado, o ya existente (idempotente)."
+    },
+    {
+      "event": "contrato-puntual.crear.failed",
+      "description": "No hay contrato: sin aceptación, otro rider, o con duración."
+    },
+    {
+      "event": "contrato-puntual.de.response",
+      "description": "El contrato con su precio y su hora prometida."
+    },
+    {
+      "event": "contrato-puntual.de.failed",
+      "description": "No consta contrato."
+    },
+    {
+      "event": "contrato-puntual.cerrar.response",
+      "description": "Contrato cerrado."
+    },
+    {
+      "event": "contrato-puntual.cerrar.failed",
+      "description": "No hay contrato que cerrar."
+    },
+    {
+      "event": "bocaos.contrato_creado",
+      "description": "HECHO: hay contrato puntual con un rider, con su aceptación detrás."
+    },
+    {
+      "event": "bocaos.contrato_cerrado",
+      "description": "HECHO: el contrato se cerró con el hecho de entrega."
+    }
+  ]
+}

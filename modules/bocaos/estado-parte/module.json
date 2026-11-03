@@ -47,6 +47,16 @@
       "description": "B05: la capacidad que el rider declaró llega como hecho desde ruta-viva (su único escritor) y se guarda tal cual."
     },
     {
+      "event": "bocaos.parte_censada",
+      "handler": "onParteCensada",
+      "description": "I01/I02 → I03/I04: el alta COMPLETA del censo abre la parte aquí (sin alta no hay estado). El hecho lo publica censo-parte; la capacidad no viaja en él (su escritor es ruta-viva)."
+    },
+    {
+      "event": "bocaos.censo_actualizado",
+      "handler": "onParteCensada",
+      "description": "M02: el rider cambió sus zonas en el censo (su dueño). Aquí se PROYECTA la ficha; no se reescribe el estado."
+    },
+    {
       "event": "project.activated",
       "handler": "onProjectActivated",
       "description": "Hidrata el censo de la plaza y fija su sello."

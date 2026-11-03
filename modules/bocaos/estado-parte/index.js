@@ -122,6 +122,48 @@ class EstadoParte extends ModuloBocaos {
     return null;
   }
 
+  // I01/I02 → I03/I04: el alta COMPLETA del censo abre la parte aquí. La plaza escribe su censo Y
+  // su estado y publica el hecho; esto es el otro lado del hecho, no un require.
+  // El mismo handler atiende `bocaos.censo_actualizado`: la ficha (zonas, vehículo) la declara la
+  // parte en el censo (M02) y aquí se PROYECTA. La capacidad NO viaja en este hecho: su único
+  // escritor es ruta-viva (B05).
+  async onParteCensada(e) {
+    const d = this.datos(e);
+    if (!d.project_id || !d.parte_id) return null;
+
+    const est = await this.estado(d.project_id);
+    est.partes = est.partes || {};
+    const parte = est.partes[d.parte_id];
+
+    if (parte) {
+      let tocado = false;
+      // Un `null` en el hecho significa «no lo dice», no «bórralo»: el hecho no puede vaciar lo
+      // que la parte declaró por su puerta.
+      if (Array.isArray(d.zonas) && d.zonas.length > 0) { parte.zonas = this._zonas(d.zonas); tocado = true; }
+      if (typeof d.vehiculo === 'string' && d.vehiculo) { parte.vehiculo = d.vehiculo; tocado = true; }
+      if (d.chat_id !== undefined && d.chat_id !== null && !parte.chat_id) { parte.chat_id = this._contacto(d.chat_id); tocado = true; }
+      if (tocado) await this.guardar(d.project_id);
+      return null;
+    }
+
+    if (d.estado_alta && d.estado_alta !== 'COMPLETA') return null;   // un alta a medias no da estado
+
+    // Sin estado declarado no se inventa uno: el alta entra por la misma puerta que `alta`, con
+    // sus guardas (pausa, ocupado, suspendido), y el hecho sale con su hora.
+    await this._alta({
+      project_id: d.project_id,
+      plaza_id: d.plaza_id,
+      parte_id: d.parte_id,
+      tipo: d.tipo,
+      zonas: d.zonas === undefined ? undefined : d.zonas,
+      vehiculo: d.vehiculo === undefined ? undefined : d.vehiculo,
+      chat_id: d.chat_id === undefined ? undefined : d.chat_id,
+      autor: `censo:${d.parte_id}`,
+      hora: d.publicado_en || null
+    });
+    return null;
+  }
+
   async onProjectActivated(e) {
     const d = (e && e.data) || e || {};
     if (d.project_id && /^plaza-/.test(d.project_id)) this.plaza_id = d.project_id;

@@ -1,0 +1,60 @@
+{
+  "_doc": "terminos-parte — custodio de lo que cada parte aceptó, con versión y hora (I08 TérminosParte). Sin términos vigentes no hay propuesta ni devengo para esa parte: no se puede cobrar por algo que nadie aceptó, y `vigentes` devuelve la puerta ya resuelta (`puerta: {propuesta, devengo}`) para que enlace y liquidacion no reinterpreten. Un cambio de términos NO es retroactivo: la lista de aceptaciones es append-only y cada pregunta lleva su instante, así que quien no acepta la v2 sigue con la v1 hasta que la acepte o se vaya (y se va sin penalización, M03). Una versión es un TEXTO: si dos partes dicen «v3» con cláusulas distintas, 409 VERSION_CONTRADICHA. La acepta la parte, no la sala: una firma ajena es 403. Se pregunta al bus si la parte está en el censo (`censo-parte.de.request`); si el censo no contesta, se acepta y se dice `censo_verificado: false` en vez de inventar un alta. Isla: cero require entre islas.",
+  "name": "terminos-parte",
+  "version": "0.1.0",
+  "description": "Lo que cada parte aceptó, con versión y hora: sin términos vigentes no hay propuesta ni devengo, y un cambio no es retroactivo (I08).",
+  "unidad": "plaza",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "terminos-parte.aceptar.request",
+      "handler": "onAceptarRequest",
+      "description": "I08: aceptación de una versión con sus cláusulas y su hora. Ni retroactiva ni firmada por otro."
+    },
+    {
+      "event": "terminos-parte.de.request",
+      "handler": "onDeRequest",
+      "description": "I08: qué aceptó una parte y cuándo — o el catálogo de versiones vistas y quién sigue en una anterior."
+    },
+    {
+      "event": "terminos-parte.vigentes.request",
+      "handler": "onVigentesRequest",
+      "description": "I08: la versión vigente PARA ESA PARTE en un instante, con la puerta de propuesta y devengo ya resuelta."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Hidrata el registro de aceptaciones de la plaza y fija su sello."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "terminos-parte.aceptar.response",
+      "description": "La aceptación asentada, la versión que queda vigente para esa parte y la puerta abierta."
+    },
+    {
+      "event": "terminos-parte.aceptar.failed",
+      "description": "No se acepta: sin versión, firmada por otro, reescribiendo lo aceptado, con vigencia hacia atrás, versión con dos textos o parte sin alta."
+    },
+    {
+      "event": "terminos-parte.de.response",
+      "description": "Las aceptaciones de una parte con la vigente, o el catálogo de versiones con las partes desfasadas."
+    },
+    {
+      "event": "terminos-parte.de.failed",
+      "description": "Esa parte no ha aceptado ninguna versión en esta plaza."
+    },
+    {
+      "event": "terminos-parte.vigentes.response",
+      "description": "La versión en vigor para la parte en ese instante, con `al_dia` y la última versión del mercado."
+    },
+    {
+      "event": "terminos-parte.vigentes.failed",
+      "description": "Sin términos vigentes: 404 NO_CONSTA con el hueco, la puerta cerrada y, si los aceptó después, cuándo."
+    },
+    {
+      "event": "bocaos.terminos_aceptados",
+      "description": "HECHO: la parte aceptó una versión. Lleva versión, hora, cláusulas, huella y a qué versión sustituye."
+    }
+  ]
+}

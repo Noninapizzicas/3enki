@@ -1,0 +1,104 @@
+{
+  "_doc": "censo-parte — custodio del censo de la plaza (I01 AltaTienda · I02 AltaRider · M02 ZonaRider · M03 GuardaSinExclusividad · P04 ChecklistAlta). Un rider a medias NO entra: `alta` devuelve COMPLETA o INCOMPLETA con la lista exacta de lo que falta (P04, derivada del tipo y de lo acreditado; si algo no está en la lista, no se puede exigir después). Las acreditaciones son identidad, autónomo, seguro, vehículo, el documento que explica que hay un sistema que decide a quién se propone, y las reglas aceptadas (Q34; el documento de términos llega como hecho `bocaos.terminos_aceptados` de terminos-parte). Sin exclusividad, permanencia, turno, cuota mínima ni antigüedad (M03 · Q35 = 0): si el alta trae algo de eso se rechaza nombrando el campo. Las zonas las declara el rider y las cambia él (M02). Al completarse el alta publica `bocaos.parte_censada` — es lo que abre la parte en estado-parte: la plaza escribe su censo Y su estado. Dar de alta una tienda pide su proyecto al project-manager por el bus (`project.create`, casado por correlation_id cuando vuelve `project.created`). Isla: cero require entre islas.",
+  "name": "censo-parte",
+  "version": "0.1.0",
+  "description": "El censo de la plaza: qué tiendas y riders existen para el mercado, qué acreditan, qué zona declaran y qué les falta (I01, I02, M02, M03, P04).",
+  "unidad": "plaza",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "censo-parte.alta.request",
+      "handler": "onAltaRequest",
+      "description": "I01/I02: alta de tienda o rider con sus acreditaciones. Devuelve COMPLETA o INCOMPLETA con el checklist; un alta incompleta no entra."
+    },
+    {
+      "event": "censo-parte.checklist.request",
+      "handler": "onChecklistRequest",
+      "description": "P04: qué falta para el alta, derivado del tipo y de lo que consta (o de lo que se piensa presentar), sin memoria ni criterios ocultos."
+    },
+    {
+      "event": "censo-parte.de.request",
+      "handler": "onDeRequest",
+      "description": "I01/I02: la ficha declarada de una parte — o el censo entero con las incompletas y sus huecos."
+    },
+    {
+      "event": "censo-parte.vigentes.request",
+      "handler": "onVigentesRequest",
+      "description": "Quién existe para el mercado AHORA: alta completa (y zona declarada, si se pregunta por zona), con los criterios escritos y las excluidas con su motivo."
+    },
+    {
+      "event": "censo-parte.zona.request",
+      "handler": "onZonaRequest",
+      "description": "M02: el rider declara sus zonas y las cambia cuando quiere. Nadie le asigna zona."
+    },
+    {
+      "event": "bocaos.terminos_aceptados",
+      "handler": "onTerminosAceptados",
+      "description": "I08 → I02: la aceptación de términos la escribe terminos-parte; aquí se proyecta como acreditación del alta, con la fuente nombrada."
+    },
+    {
+      "event": "project.created",
+      "handler": "onProjectCreado",
+      "description": "I01: la confirmación del proyecto de la tienda vuelve como hecho y se casa por correlation_id con la parte que lo pidió."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Hidrata el censo de la plaza y fija su sello."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "censo-parte.alta.response",
+      "description": "La parte con su estado de alta y su checklist; 201 si entra, 200 si completa un alta a medias."
+    },
+    {
+      "event": "censo-parte.alta.failed",
+      "description": "No hay alta: ya consta completa, una parte no cambia de naturaleza, o trae exclusividad/permanencia/turno/cuota/antigüedad (M03)."
+    },
+    {
+      "event": "censo-parte.checklist.response",
+      "description": "Requeridos, acreditados, faltantes y lo presentado sin verificar (Q34 abierta)."
+    },
+    {
+      "event": "censo-parte.checklist.failed",
+      "description": "No se puede decir qué falta: ni la parte consta ni se dice qué tipo es."
+    },
+    {
+      "event": "censo-parte.de.response",
+      "description": "La ficha de una parte o el censo entero con las incompletas y sus faltantes."
+    },
+    {
+      "event": "censo-parte.de.failed",
+      "description": "La parte no consta en el censo de esta plaza."
+    },
+    {
+      "event": "censo-parte.vigentes.response",
+      "description": "Las partes que existen para el mercado, con los criterios usados y las excluidas con su motivo."
+    },
+    {
+      "event": "censo-parte.vigentes.failed",
+      "description": "No se puede responder sin proyecto o con un tipo que no existe."
+    },
+    {
+      "event": "censo-parte.zona.response",
+      "description": "Las zonas declaradas por el rider, con la ficha del censo."
+    },
+    {
+      "event": "censo-parte.zona.failed",
+      "description": "No se declaran zonas: parte sin alta, tienda, firma ajena o lista vacía."
+    },
+    {
+      "event": "bocaos.parte_censada",
+      "description": "HECHO: un alta llegó a COMPLETA. Lleva la ficha operativa (zonas, vehículo, contacto, acreditados) y es lo que abre la parte en estado-parte."
+    },
+    {
+      "event": "bocaos.censo_actualizado",
+      "description": "HECHO: una parte ya completa cambió algo suyo — sus zonas (M02) o sus términos aceptados (I08)."
+    },
+    {
+      "event": "bocaos.censo_incompleto",
+      "description": "HECHO: hay un alta a medias. Lleva lo que falta, para que la sala no tenga que adivinarlo."
+    }
+  ]
+}

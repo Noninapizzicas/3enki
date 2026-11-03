@@ -1,0 +1,65 @@
+{
+  "_doc": "acta-decisiones — custodio del acta de la plaza (O02 ActaDeDecisiones). Ningún cambio de política (J01, J02, G01, E06) se escribe sin acta: el cambio y el acta van juntos o no hay cambio. El acta NO se corrige: se asienta otra que nombra a la anterior en `sustituye_a`, y la sustituida conserva su texto (lo que se deriva es quién la sustituye). La firma lleva ÁMBITO (plaza | tienda) y no se cruza: el dueño de la plaza no firma por una tienda, ni una tienda firma el acta de otra. Un dictamen firmado entra por `bocaos.dictamen_firmado` y se asienta con el MISMO id que config-mercado usará como acta (acta · acta_id · dictamen_id · firma_id), de modo que la referencia de su política apunta a un acta que existe. Append-only: no hay op de editar ni de borrar. Isla: no lee el almacén de nadie y no importa a nadie.",
+  "name": "acta-decisiones",
+  "version": "0.1.0",
+  "description": "El acta de la plaza: ningún cambio de criterio se escribe sin acta, el acta no se corrige (se sustituye) y la firma dice el ámbito (O02).",
+  "unidad": "plaza",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "acta-decisiones.asentar.request",
+      "handler": "onAsentarRequest",
+      "description": "O02: asienta un cambio con su qué, su por qué, su quién, su desde cuándo, su ámbito y lo que se esperaba que pasara."
+    },
+    {
+      "event": "acta-decisiones.de.request",
+      "handler": "onDeRequest",
+      "description": "O02: el acta de una cosa concreta — una acta por id, o la que hoy rige para un asunto con su cadena de sustituciones."
+    },
+    {
+      "event": "acta-decisiones.listar.request",
+      "handler": "onListarRequest",
+      "description": "O02: las actas de un periodo, las vigentes (no sustituidas) y qué estaba vigente en un instante."
+    },
+    {
+      "event": "bocaos.dictamen_firmado",
+      "handler": "onDictamenFirmado",
+      "description": "O02/O04: un dictamen firmado es una decisión; se asienta con el mismo id que config-mercado sella como acta."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Hidrata el libro de actas de la plaza y fija su sello."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "acta-decisiones.asentar.response",
+      "description": "El acta asentada, con su huella y su vista (o la idempotente si ya estaba)."
+    },
+    {
+      "event": "acta-decisiones.asentar.failed",
+      "description": "No hay acta: sin motivo ni dictamen, sin cambio, sin firma, con la firma cruzada, o intentando corregir una ya asentada."
+    },
+    {
+      "event": "acta-decisiones.de.response",
+      "description": "El acta pedida, o la vigente de un asunto con la cadena de cómo se llegó a ella."
+    },
+    {
+      "event": "acta-decisiones.de.failed",
+      "description": "No hay acta que dar: sin acta_id ni asunto, o un asunto que no tiene acta en esta plaza."
+    },
+    {
+      "event": "acta-decisiones.listar.response",
+      "description": "Las actas del periodo, las vigentes, las sustituidas y la que regía en un instante."
+    },
+    {
+      "event": "acta-decisiones.listar.failed",
+      "description": "No se puede listar: falta el proyecto o el acta pedida no consta."
+    },
+    {
+      "event": "bocaos.acta_asentada",
+      "description": "HECHO: se firmó un acta. Lleva ámbito, autor, desde, qué cambió, por qué, qué se esperaba y a quién sustituye."
+    }
+  ]
+}

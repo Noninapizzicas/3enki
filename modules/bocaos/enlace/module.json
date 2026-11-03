@@ -1,0 +1,66 @@
+{
+  "_doc": "enlace — el cuello de Bocaos (A05-A23, A25, A28, A30, A31, A34, A35). Entra un hecho listo, sale UNA propuesta o un hueco con nombre. Cuatro comparaciones en AND sobre una foto congelada; cero IA, cero pesos, cero barrido de pedidos (A28). Sin estado propio: pide la foto, mide, y pide la propuesta por el bus. Peldaño 0.",
+  "name": "enlace",
+  "version": "0.1.0",
+  "description": "El cuello: mide desvío, espera, retraso y cobra sobre una foto congelada y propone a un rider o nombra el hueco (A05-A35).",
+  "unidad": "plaza",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "enlace.ejecutar.request",
+      "handler": "onEjecutarRequest",
+      "description": "Ejecuta el cuello para un pedido listo: propuesta emitida | hueco | agotado."
+    },
+    {
+      "event": "bocaos.pedido_listo",
+      "handler": "onPedidoListo",
+      "description": "Hay un hecho de listo: se dispara el cuello."
+    },
+    {
+      "event": "bocaos.hecho_desmentido",
+      "handler": "onHechoDesmentido",
+      "description": "La hora de listo cambió: el pedido se vuelve a medir."
+    },
+    {
+      "event": "bocaos.propuesta_rechazada",
+      "handler": "onPropuestaRechazada",
+      "description": "El rider dijo no: se pasa al siguiente candidato, sin coste."
+    },
+    {
+      "event": "bocaos.propuesta_caducada_sin_respuesta",
+      "handler": "onPropuestaCaducadaSinRespuesta",
+      "description": "Nadie respondió en la ventana: se salta el candidato y se sigue (A23)."
+    },
+    {
+      "event": "bocaos.escalada_reintentar",
+      "handler": "onEscaladaReintentar",
+      "description": "La escalada subió la oferta o pidió reintento: se vuelve a medir."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "enlace.ejecutar.response",
+      "description": "Propuesta emitida con las medidas, o agotado con las razones."
+    },
+    {
+      "event": "enlace.ejecutar.failed",
+      "description": "No se ejecuta: falta plaza, hora de listo, precio o hay una cola (A28)."
+    },
+    {
+      "event": "bocaos.medidas_calculadas",
+      "description": "HECHO: las cuatro medidas de un candidato y el test que falló."
+    },
+    {
+      "event": "bocaos.hueco_nombrado",
+      "description": "HECHO: falta un dato y se dice cuál; no se descarta al candidato en silencio (A34)."
+    },
+    {
+      "event": "bocaos.enlace_completado",
+      "description": "HECHO: hay propuesta para ese pedido, con sus números y su huella."
+    },
+    {
+      "event": "bocaos.enlace_agotado",
+      "description": "HECHO: no hay a quién proponer, con las razones de cada candidato."
+    }
+  ]
+}

@@ -1,0 +1,69 @@
+{
+  "_doc": "hecho-listo — custodio del hecho de listo en la plaza (A01). Una sola vez, con el dato dentro; sin precio congelado no hay hecho sino hueco nombrado (A34). El plaza_id lo sella la plaza. Corregir = desmentir con un segundo hecho, las dos horas quedan. Peldaño 0 de Bocaos.",
+  "name": "hecho-listo",
+  "version": "0.1.0",
+  "description": "El hecho de listo con hora y con el dato dentro, sellado por la plaza y desmentible (A01).",
+  "unidad": "plaza",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "hecho-listo.anotar.request",
+      "handler": "onAnotarRequest",
+      "description": "Anota el hecho con todo el dato dentro: nadie lo busca después."
+    },
+    {
+      "event": "hecho-listo.desmentir.request",
+      "handler": "onDesmentirRequest",
+      "description": "Segunda hora que desmiente la primera; las dos quedan."
+    },
+    {
+      "event": "hecho-listo.de.request",
+      "handler": "onDeRequest",
+      "description": "El hecho vigente de un pedido | NO_CONSTA."
+    },
+    {
+      "event": "bocaos.listo_declarado",
+      "handler": "onListoDeclarado",
+      "description": "La tienda declaró listo: la plaza lo anota con su sello."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Hidrata los hechos del proyecto de la plaza."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "hecho-listo.anotar.response",
+      "description": "Hecho anotado con su sello."
+    },
+    {
+      "event": "hecho-listo.anotar.failed",
+      "description": "No hay hecho: sin precio, de otra plaza o ya anotado."
+    },
+    {
+      "event": "hecho-listo.desmentir.response",
+      "description": "Hecho desmentido; el anterior queda en el archivo."
+    },
+    {
+      "event": "hecho-listo.desmentir.failed",
+      "description": "No hay hecho vigente que desmentir o falta la hora nueva."
+    },
+    {
+      "event": "hecho-listo.de.response",
+      "description": "Hecho vigente y su historia."
+    },
+    {
+      "event": "hecho-listo.de.failed",
+      "description": "No consta hecho de listo para ese pedido."
+    },
+    {
+      "event": "bocaos.pedido_listo",
+      "description": "HECHO: listo, con hora, precio, punto y sello de la plaza."
+    },
+    {
+      "event": "bocaos.hecho_desmentido",
+      "description": "HECHO: la hora vigente cambió; el pedido se vuelve a medir."
+    }
+  ]
+}

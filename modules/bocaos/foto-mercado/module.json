@@ -1,0 +1,55 @@
+{
+  "_doc": "foto-mercado — reflejo stateless de la foto del instante (A02 compone, A03 congela con huella, A04 elige elegibles sin puntuar). Pide estado-parte, ruta-viva y config-mercado POR EL BUS; el dato vuelve en la response y viaja con la foto. No guarda copia: dos verdades serían una vieja. Peldaño 0 de Bocaos.",
+  "name": "foto-mercado",
+  "version": "0.1.0",
+  "description": "La foto congelada del instante del mercado, con huella, y los candidatos que pasan el censo (A02, A03, A04).",
+  "unidad": "plaza",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "foto-mercado.componer.request",
+      "handler": "onComponerRequest",
+      "description": "Compone la vista del instante para un hecho y la congela con huella."
+    },
+    {
+      "event": "foto-mercado.elegibles.request",
+      "handler": "onElegiblesRequest",
+      "description": "Candidatos que pasan estado, zona y capacidad — sin puntuar ni reordenar (A04)."
+    },
+    {
+      "event": "foto-mercado.reproducir.request",
+      "handler": "onReproducirRequest",
+      "description": "Devuelve la foto con su huella o falla si fue alterada (A29)."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "foto-mercado.componer.response",
+      "description": "La foto congelada, con huella y con los huecos nombrados."
+    },
+    {
+      "event": "foto-mercado.componer.failed",
+      "description": "No hay foto: falta proyecto, plaza o pedido."
+    },
+    {
+      "event": "foto-mercado.elegibles.response",
+      "description": "Candidatos con sus faltantes y los descartados con su razón."
+    },
+    {
+      "event": "foto-mercado.elegibles.failed",
+      "description": "No hay foto que filtrar."
+    },
+    {
+      "event": "foto-mercado.reproducir.response",
+      "description": "La misma foto con la misma huella."
+    },
+    {
+      "event": "foto-mercado.reproducir.failed",
+      "description": "La foto no reproduce su huella."
+    },
+    {
+      "event": "bocaos.foto_congelada",
+      "description": "HECHO: la foto del instante quedó congelada con su huella."
+    }
+  ]
+}

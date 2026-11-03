@@ -1,0 +1,67 @@
+{
+  "que_es": "un marco para tres agentes (cliente, restaurante y repartidor autonomo) que ayuda, si ellos tienen voluntad, a que sus flujos de trabajo aporten a todas las partes",
+  "que_vende": "software TPV pizzepos + coordinacion de reparto a tres bandas + escaparate propio por tienda",
+  "como_lo_elabora": "plataforma propia; el reparto lo ejecutan repartidores autonomos que se ofertan a los restaurantes del mercado; la plataforma no retiene el dinero ni cobra el ticket",
+  "propósito": "que un restaurante pequeno tenga el escaparate y la logistica de una cadena sin entregar su cliente ni su margen",
+  "tipo_derivado": "mercado de dos lados con coordinacion: infraestructura + software + adjudicacion de fallos",
+  "interlocutores": [
+    {
+      "rol": "cliente",
+      "canal": "web de su tienda (no hay app de cliente)",
+      "relacion": "pide y paga la comida y su reparto"
+    },
+    {
+      "rol": "restaurante",
+      "canal": "TPV pizzepos + escaparate propio",
+      "relacion": "pone el pedido, su marca y su cliente; paga la coordinacion"
+    },
+    {
+      "rol": "repartidor autonomo",
+      "canal": "ofertas de la plataforma",
+      "relacion": "acepta repartos, los enlaza y cobra del cliente"
+    },
+    {
+      "rol": "Bocaos",
+      "canal": "plataforma",
+      "relacion": "pone el suelo del mercado, coordina y adjudica fallos"
+    }
+  ],
+  "preguntas_abiertas": [
+    {
+      "campo": "precio_coordinacion",
+      "para": "fijar el ingreso de Bocaos",
+      "porque": "el dueno no ha decidido si es suscripcion, centimos por transaccion o mixto",
+      "respondida": false
+    },
+    {
+      "campo": "mecanismo_adjudicacion",
+      "para": "que cada cual pague su fallo sin arbitraje humano",
+      "porque": "el principio esta decidido; como se prueba y quien decide, no",
+      "respondida": false
+    },
+    {
+      "campo": "responsabilidad_legal",
+      "para": "saber de que responde Bocaos en un reparto hecho por un autonomo",
+      "porque": "no se ha consultado; el rider no es empleado ni la plataforma transportista",
+      "respondida": false
+    },
+    {
+      "campo": "umbrales_enlazado",
+      "para": "que el reflejo decida el enlazado sin IA: desvio, espera, retraso, pago minimo",
+      "porque": "el enlazado por trayecto se decidio despues de la F0 inicial; faltan los cuatro numeros",
+      "respondida": false
+    },
+    {
+      "campo": "rechazo_rider",
+      "para": "que el rider sea libre de rechazar una propuesta de enlazado sin penalizacion",
+      "porque": "es la frontera legal entre mercado y empleador; asignar acerca a Glovo",
+      "respondida": false
+    },
+    {
+      "campo": "transparencia_enlace",
+      "para": "decidir si el cliente sabe que su pedido comparte viaje y si eso le baja el precio",
+      "porque": "afecta al contrato cliente-rider y a la promesa del escaparate",
+      "respondida": false
+    }
+  ]
+}

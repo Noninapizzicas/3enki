@@ -1,0 +1,118 @@
+{
+  "_doc": "ruta-viva — custodio del trayecto que el rider ya lleva encima (B01 posición con frescura · B02 paradas derivadas de contratos vivos · B03 promesa que sólo mejora · B04 orden de UNA ruta · B05 capacidad declarada · B06 fin de trayecto). Guarda el ÚLTIMO punto, no una traza; si el punto es viejo la posición es NO_CONSTA. Las paradas se derivan: un contrato cerrado borra su parada sin escribir nada. La capacidad que queda es el MÍNIMO de tres techos: el volumen que declaró, la ventana de viaje (sin romper la promesa más próxima) y el desvío acumulado contra el umbral de la plaza — cada techo se devuelve con su número y el que manda se nombra. La frescura, la velocidad, el umbral de retraso y lo que cuesta una parada más se preguntan a config-mercado por el bus. Isla: no lee el almacén de nadie.",
+  "name": "ruta-viva",
+  "version": "0.1.0",
+  "description": "El trayecto vivo del rider en la plaza: último punto con frescura, paradas derivadas de sus contratos, promesa por parada, orden de una sola ruta y capacidad declarada (B01-B06).",
+  "unidad": "plaza",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "ruta-viva.posicion.request",
+      "handler": "onPosicionRequest",
+      "description": "B01: anota el último punto con su hora. Un hecho, no un chorro."
+    },
+    {
+      "event": "ruta-viva.paradas.request",
+      "handler": "onParadasRequest",
+      "description": "B02/B04: las paradas pendientes del rider, derivadas de sus contratos vivos y en su orden."
+    },
+    {
+      "event": "ruta-viva.promesa.request",
+      "handler": "onPromesaRequest",
+      "description": "B03: promete (o mejora) la hora de una parada. Empeorarla por debajo del umbral es PROMESA_ROTA."
+    },
+    {
+      "event": "ruta-viva.capacidad.request",
+      "handler": "onCapacidadRequest",
+      "description": "B05: el rider declara cuánto le cabe. Se declara, no se estima."
+    },
+    {
+      "event": "ruta-viva.de.request",
+      "handler": "onDeRequest",
+      "description": "A02: la ruta viva de un rider o de toda la plaza, con la posición fresca y el ETA a la tienda del pedido."
+    },
+    {
+      "event": "bocaos.contrato_creado",
+      "handler": "onContratoCreado",
+      "description": "B02: un contrato vivo añade su parada y abre el trayecto."
+    },
+    {
+      "event": "bocaos.contrato_cerrado",
+      "handler": "onContratoCerrado",
+      "description": "B02/B06: cerrado el contrato, su parada desaparece sola; sin paradas, el trayecto se cierra."
+    },
+    {
+      "event": "bocaos.pedido_listo",
+      "handler": "onPedidoListo",
+      "description": "A01: el hecho de listo trae los puntos (tienda, destino) que el contrato no lleva; la parada derivada los necesita para tener ETA."
+    },
+    {
+      "event": "bocaos.hecho_reparto_anotado",
+      "handler": "onHechoRepartoAnotado",
+      "description": "F01: la recogida y la entrega marcan la parada; la entrega la saca de la ruta viva."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Hidrata los trayectos de la plaza y fija su sello."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "ruta-viva.posicion.response",
+      "description": "El último punto anotado, con su hora y su plaza."
+    },
+    {
+      "event": "ruta-viva.posicion.failed",
+      "description": "No se anota: falta rider o el punto no tiene coordenadas."
+    },
+    {
+      "event": "ruta-viva.paradas.response",
+      "description": "Las paradas del rider en su orden, con sus huecos nombrados."
+    },
+    {
+      "event": "ruta-viva.paradas.failed",
+      "description": "Ese rider no tiene trayecto en esta plaza."
+    },
+    {
+      "event": "ruta-viva.promesa.response",
+      "description": "La promesa guardada, con su versión y la hora anterior."
+    },
+    {
+      "event": "ruta-viva.promesa.failed",
+      "description": "No se promete por una parada que no existe, o se rompe la promesa sin pasar el umbral."
+    },
+    {
+      "event": "ruta-viva.capacidad.response",
+      "description": "La capacidad declarada, con su hora."
+    },
+    {
+      "event": "ruta-viva.capacidad.failed",
+      "description": "Sin entero no hay capacidad: no se estima."
+    },
+    {
+      "event": "ruta-viva.de.response",
+      "description": "Las rutas vivas de la plaza, con posición fresca, paradas, promesas y el ETA a la tienda."
+    },
+    {
+      "event": "ruta-viva.de.failed",
+      "description": "No hay ruta que devolver para ese rider o falta el proyecto."
+    },
+    {
+      "event": "bocaos.posicion_anotada",
+      "description": "HECHO: hay un punto nuevo con su hora (el anterior se pisó: se guarda el último)."
+    },
+    {
+      "event": "bocaos.promesa_guardada",
+      "description": "HECHO: hay promesa para una parada, con su versión y si mejoró."
+    },
+    {
+      "event": "bocaos.capacidad_declarada",
+      "description": "HECHO: el rider declaró cuánto le cabe. Lo refleja estado-parte sin reescribirlo."
+    },
+    {
+      "event": "bocaos.trayecto_cerrado",
+      "description": "HECHO: no queda parada viva. Cerrar no puntúa a nadie (B06)."
+    }
+  ]
+}

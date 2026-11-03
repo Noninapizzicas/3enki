@@ -1,0 +1,129 @@
+{
+  "_doc": "propuesta — custodio único de la propuesta y su desenlace (A13 emitida, A14 bloqueo, A15 ventana, A19 aceptación libre, A27 guarda, A29 reproducir, A33 única viva, M05 vista). Cuatro clases del diseño escriben la MISMA propuesta: un solo escritor o hay carrera. Dos relojes distintos: sin acuse (falló el canal) ≠ sin respuesta (el rider no dijo). Peldaño 0 de Bocaos.",
+  "name": "propuesta",
+  "version": "0.2.0",
+  "description": "La propuesta con sus cuatro números, su ventana y su único desenlace: aceptada, rechazada o caducada (A13-A19, A33, M05).",
+  "unidad": "plaza",
+  "language": "es",
+  "subscribes": [
+    {
+      "event": "propuesta.emitir.request",
+      "handler": "onEmitirRequest",
+      "description": "Emite la propuesta de un candidato; una viva por pedido (A33)."
+    },
+    {
+      "event": "propuesta.acuse.request",
+      "handler": "onAcuseRequest",
+      "description": "El canal acusó recibo; arranca el reloj de decisión (A15)."
+    },
+    {
+      "event": "propuesta.aceptar.request",
+      "handler": "onAceptarRequest",
+      "description": "El sí del rider: atómico, con hora, único camino al contrato (A19)."
+    },
+    {
+      "event": "propuesta.rechazar.request",
+      "handler": "onRechazarRequest",
+      "description": "El no, sin coste y sin entrar en la elegibilidad (A21)."
+    },
+    {
+      "event": "propuesta.cerrar.request",
+      "handler": "onCerrarRequest",
+      "description": "Cierra por caducidad: sin acuse o sin respuesta, dos clases distintas."
+    },
+    {
+      "event": "propuesta.de.request",
+      "handler": "onDeRequest",
+      "description": "La propuesta viva de un pedido | NO_HAY."
+    },
+    {
+      "event": "bocaos.propuesta_entregada",
+      "handler": "onPropuestaEntregada",
+      "description": "El canal entregó la propuesta al rider."
+    },
+    {
+      "event": "bocaos.propuesta_no_entregada",
+      "handler": "onPropuestaNoEntregada",
+      "description": "El canal no pudo entregar: caducidad sin acuse, no culpa del rider."
+    },
+    {
+      "event": "project.activated",
+      "handler": "onProjectActivated",
+      "description": "Hidrata propuestas y viva por pedido del proyecto de la plaza."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "propuesta.emitir.response",
+      "description": "Propuesta emitida con sus cuatro números y su vista."
+    },
+    {
+      "event": "propuesta.emitir.failed",
+      "description": "No se emite: medida sin constar, sin política o ya hay una viva."
+    },
+    {
+      "event": "propuesta.acuse.response",
+      "description": "Acuse recibido y reloj de decisión abierto."
+    },
+    {
+      "event": "propuesta.acuse.failed",
+      "description": "Acuse fuera de ventana, de otro rider o de propuesta cerrada."
+    },
+    {
+      "event": "propuesta.aceptar.response",
+      "description": "El sí anotado con su hora."
+    },
+    {
+      "event": "propuesta.aceptar.failed",
+      "description": "El sí no vale: ya hay desenlace, otro rider o fuera de ventana."
+    },
+    {
+      "event": "propuesta.rechazar.response",
+      "description": "El no anotado, con coste cero."
+    },
+    {
+      "event": "propuesta.rechazar.failed",
+      "description": "El no no vale: ya hay desenlace u otro rider."
+    },
+    {
+      "event": "propuesta.cerrar.response",
+      "description": "Propuesta cerrada por caducidad."
+    },
+    {
+      "event": "propuesta.cerrar.failed",
+      "description": "No se cierra: sigue viva o ya está cerrada."
+    },
+    {
+      "event": "propuesta.de.response",
+      "description": "La propuesta viva de un pedido con su vista."
+    },
+    {
+      "event": "propuesta.de.failed",
+      "description": "No hay propuesta viva para ese pedido."
+    },
+    {
+      "event": "bocaos.propuesta_emitida",
+      "description": "HECHO: se ofreció esto, a este rider, con estos números y estos umbrales."
+    },
+    {
+      "event": "bocaos.propuesta_acusada",
+      "description": "HECHO: el canal acusó recibo; corre el reloj de decisión."
+    },
+    {
+      "event": "bocaos.propuesta_aceptada",
+      "description": "HECHO: el rider dijo sí, con hora de aceptación."
+    },
+    {
+      "event": "bocaos.propuesta_rechazada",
+      "description": "HECHO: el rider dijo no, sin coste."
+    },
+    {
+      "event": "bocaos.propuesta_caducada_sin_acuse",
+      "description": "HECHO: caducó sin acuse — falló el canal."
+    },
+    {
+      "event": "bocaos.propuesta_caducada_sin_respuesta",
+      "description": "HECHO: hubo acuse y no hubo decisión."
+    }
+  ]
+}

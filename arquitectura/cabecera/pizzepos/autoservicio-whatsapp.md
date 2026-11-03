@@ -13,7 +13,7 @@ fuentes:
   - modules/_shared/lector-servicio.js
   - frontend/src/lib/components/comandero/ServicioToggle.svelte
   - tests/unit/pizzepos__servicio.test.js
-verificado: 2026-10-28 (pago-gateway v3.1.0: el webhook de Stripe reconsulta la sesión; clave RAK; los métodos del checkout los sirve el panel de Stripe)
+verificado: 2026-11-03 (tras releer: el cambio de static-template.js del 3-nov es el ORDEN DE BLOQUES de la ficha del producto — nombre → receta → descripción → hermanas → extras — y no toca el escaparate suelto, ni el #P1, ni el re-tasado del bot; sigue vigente pago-gateway v3.1.0: el webhook de Stripe reconsulta la sesión; clave RAK; los métodos del checkout los sirve el panel de Stripe)
 ---
 
 # SUBSISTEMA AUTOSERVICIO — Pedido del cliente por WhatsApp (PWA → bot → cocina)

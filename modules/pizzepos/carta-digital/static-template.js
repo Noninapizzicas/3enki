@@ -1939,6 +1939,15 @@ async function pedirTelegram() {
     alert('Escribe a nombre de quién es el pedido.');
     return;
   }
+  // VÍA A — BANDEJA DE COMPARTIR del móvil (la buena cuando existe).
+  // Telegram no acepta texto precargado en un enlace a un BOT, pero el móvil sí puede
+  // compartir el mensaje: el cliente elige el chat del bot y el texto llega tal cual.
+  // Es el MISMO mensaje canónico de WhatsApp, con su línea #P1 (ids): el servidor
+  // re-tasa contra la carta y los precios del navegador no viajan. Sin código, sin
+  // borrador y sin caducidad de 30 minutos.
+  if (_hayBandejaCompartir()) { return _compartirPedidoTelegram(nombre); }
+
+  // VÍA B — sin bandeja: código corto + t.me/<bot>?start=p_<codigo>.
   var btn = document.getElementById('btn-telegram');
   if (btn) { btn.disabled = true; btn.textContent = 'Abriendo Telegram…'; }
   try {
@@ -1965,6 +1974,28 @@ async function pedirTelegram() {
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = '✈️ Telegram'; }
   }
+}
+
+// ¿Este dispositivo tiene bandeja de compartir? Se exige móvil a propósito: en
+// escritorio navigator.share existe en algunos navegadores pero abre la bandeja del
+// sistema operativo, donde el chat del bot puede no aparecer. En el móvil está probado.
+function _hayBandejaCompartir() {
+  return typeof navigator !== 'undefined' && !!navigator.share &&
+    /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || '');
+}
+
+// Comparte el pedido por la bandeja del sistema. El carrito se limpia SOLO si el cliente
+// completa el envío: si cierra la bandeja (AbortError) su pedido sigue ahí y puede
+// reintentarlo sin recomponerlo.
+function _compartirPedidoTelegram(nombre) {
+  var msg = buildOrderMsg();
+  if (!msg) return;
+  return navigator.share({ title: 'Mi pedido — ' + CONFIG.nombre_negocio, text: msg })
+    .then(function () { saveLastOrder(); _cerrarPedido(nombre); })
+    .catch(function (err) {
+      if (err && err.name === 'AbortError') return;
+      alert('No se pudo compartir el pedido. Inténtalo otra vez en un momento.');
+    });
 }
 
 // Items del pedido ONLINE (tienda-api → pedido.crear-tienda). Además del texto que lee el

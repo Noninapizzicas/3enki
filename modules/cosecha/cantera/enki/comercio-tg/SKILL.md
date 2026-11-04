@@ -86,6 +86,42 @@ CLIENTE (TG) → bot del negocio (telegram-service, polling)
 4. `checkout-tg` — cierre del pedido: método de pago (link pago-gateway,
    transferencia, "pago al recoger") + generación del ticket (texto o PDF)
 
+## 2a · El canal Telegram de pedidos (v1 CONSTRUIDO, nov-2026)
+
+El patrón de the-pirate (WhatsApp: la carta compone por ids → el servidor re-tasa →
+`pedido.crear-tienda`) aplicado a Telegram **choca con un límite de la plataforma**:
+Telegram no abre un chat con texto precargado (`t.me/<bot>?start=` son 64 chars).
+Inventar un "pegar el pedido a mano" es fricción fea. La solución construida:
+
+```
+carta (buildOrderItems, POR IDS, sin precios)
+  → POST /tienda/telegram/borrador/<slug>      [módulo pedido-telegram]
+  → { codigo: '5S9TRB', url: 't.me/<bot>?start=p_5S9TRB' }
+  → el cliente abre el enlace → Telegram manda /start p_<codigo>
+  → RE-TASADO contra la carta del canal digital (precios del navegador ignorados)
+  → pedido.crear-tienda { canal_origen: 'telegram', cliente_telegram: chatId }
+  → confirmación en el chat del cliente
+```
+
+- **Módulo**: `pizzepos/pedido-telegram` — simétrico a `tienda-api` (web) y
+  `whatsapp-bot` (WhatsApp). Sin tools del LLM.
+- **Identidad sin login**: el `chatId` es el ancla del cliente (sustituye al
+  teléfono de WhatsApp). Eso es lo que pedía el dueño: "que el Telegram sirva
+  para loguear al cliente sin pedirle el teléfono".
+- **Invariantes**: un código = un pedido (se consume al abrirse, TTL 30 min,
+  persistido para sobrevivir a un restart); el body del borrador NO lleva precios
+  (se verifica en el test: `PRECIOS_EN_BODY=false`).
+- **El bridge NO debe reenviar `/start p_<codigo>` al chat** (si no, el LLM
+  contesta ADEMÁS de la confirmación del pedido). Guard en `telegram-bridge`:
+  comando `start` con arg `p_…` y texto que sea exactamente `p_…` → `return`.
+- **Activar por instancia = DATA**: `opciones_visualizacion.telegram_bot =
+  "<botName>"` en el config de carta-digital del proyecto (fs.write por el bus,
+  ruta `pizzepos/carta-digital/config.json` **sin** el prefijo `storage/` — con
+  `storage/…` el módulo escribe en `storage/storage/…`) + republicar la carta.
+- **Límite a tener presente**: escribir en `data/projects/<slug>/config/` (la
+  config del PROYECTO) sigue prohibido para Hermes; la de la CARTA vive en
+  `storage/pizzepos/carta-digital/config.json` y esa sí se escribe por el bus.
+
 ## 2b · La NATURALEZA de lo que se construye (la regla del dueño)
 
 Lo que se está montando NO es una tienda: es la **INFRAESTRUCTURA

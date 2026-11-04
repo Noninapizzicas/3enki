@@ -286,8 +286,11 @@ caso('familia FIJADA: el bloque es el mismo al abrir cualquiera de sus miembros'
 
 // ─── Canario del DATO VIVO: las familias fijadas de the-pirate ──────────────────
 // Este bloque corre donde vive la carta (el VPS); en un árbol sin data/ se salta y lo dice.
-// Fija lo que el dueño aprobó: jamón de york (ancla Milonga + 7), bacon (ancla + 10),
-// atún (ancla Pizza de atún + las 4 de Nónina, SIN Punk: una pizza, una familia).
+// Fija lo que el dueño aprobó: jamón de york (ancla Milonga + 7), bacon (ancla + 9),
+// atún (ancla + 6, con Barbanegra), pepperoni (ancla + 6, con Calico Jack) y ternera
+// (ancla + 4, con Calico Jack). Los miembros son SIEMPRE los portadores reales: un producto
+// que sale de la carta deja de ser miembro (poda 4-nov-2026: Swing, Pop, Ranchera, Rockabilly,
+// Funk, Cumbia, Barbarroja y Diego García eran fantasmas).
 const CARTA_VIVA = [
   process.env.CARTA_VIVA,   // permite probar que el canario MUERDE contra una copia retocada
   path.join(RAIZ, 'data/projects/the-pirate/storage/pizzepos/cartas/the-pirate-v4.json'),
@@ -305,40 +308,47 @@ if (!CARTA_VIVA) {
     const jamon = fam('pizzas_pizza_de_jamon_york');
     assert.strictEqual(jamon.ingrediente_id, 'jamon_de_york', 'jamón de york fijado');
     assert.strictEqual(jamon.ancla, 'pizzas_pizza_de_jamon_york');
-    assert.deepStrictEqual(jamon.miembros, [
-      'pizzas_indie', 'pizzas_jazz', 'pizzas_k_pop', 'pizzas_merengue', 'pizzas_punk',
-      'pizzas_swing', 'pizzas_vallenato', 'la_flota_mahon'
+    // Swing salió de la carta: su hueco en la familia era un FANTASMA (un miembro que ya no
+    // existe). Se podó el 4-nov-2026 y aquí queda la lista de portadores REALES.
+    assert.deepStrictEqual(jamon.miembros.slice().sort(), [
+      'la_flota_mahon', 'pizzas_indie', 'pizzas_jazz', 'pizzas_k_pop', 'pizzas_merengue',
+      'pizzas_punk', 'pizzas_vallenato'
     ]);
 
     const bacon = fam('pizzas_pizza_de_bacon');
     assert.strictEqual(bacon.ingrediente_id, 'bacon', 'bacon fijado');
-    assert.strictEqual(bacon.miembros.length, 12, 'las 12 hermanas de bacon (las 10 de Nónina + Merengue + Nassau de La Flota)');
+    // Nueve reales: las de Nónina que siguen vivas + Merengue + Nassau de La Flota.
+    // Pop, Ranchera y Rockabilly salieron de la carta y se podaron de la lista (4-nov-2026).
+    assert.strictEqual(bacon.miembros.length, 9, 'las nueve hermanas de bacon que existen hoy');
 
     const atun = fam('pizzas_pizza_de_atun');
     assert.strictEqual(atun.ingrediente_id, 'atun', 'atún fijado');
     assert.strictEqual(atun.ancla, 'pizzas_pizza_de_atun');
-    // Los dos bocadillos de El Fardel que llevan atún (Barbanegra y Barbarroja) entran aquí:
-    // la pertenencia es del INGREDIENTE, no de la categoría (regla del dueño 2026-10-21).
-    assert.deepStrictEqual(atun.miembros, [
-      'pizzas_blues', 'pizzas_bossa_nova', 'pizzas_chillout', 'pizzas_tango', 'pizzas_punk',
-      'el_fardel_barbanegra', 'el_fardel_barbarroja'
+    // La pertenencia es del INGREDIENTE, no de la categoría (regla del dueño 2026-10-21):
+    // Barbanegra (bocadillo de El Fardel) entra por llevar atún. Barbarroja ya no existe →
+    // fuera de la lista.
+    assert.deepStrictEqual(atun.miembros.slice().sort(), [
+      'el_fardel_barbanegra', 'pizzas_blues', 'pizzas_bossa_nova', 'pizzas_chillout',
+      'pizzas_punk', 'pizzas_tango'
     ]);
     assert.ok(atun.miembros.includes('pizzas_punk'), 'Punk SÍ entra en atún: la familia es del ingrediente');
 
     // Pepperoni y ternera: el dueño las pidió con el mismo proceder (2026-10-21).
+    // Calico Jack (bocadillo que entró en El Fardel) lleva pepperoni Y ternera: sale en las dos.
     const pepperoni = fam('pizzas_pizza_de_pepperoni');
     assert.strictEqual(pepperoni.ingrediente_id, 'pepperoni', 'pepperoni fijado');
     assert.strictEqual(pepperoni.ancla, 'pizzas_pizza_de_pepperoni');
-    assert.deepStrictEqual(pepperoni.miembros, [
-      'pizzas_indie', 'pizzas_hip_hop', 'pizzas_soul', 'pizzas_trap', 'pizzas_flamenco', 'pizzas_funk'
+    assert.deepStrictEqual(pepperoni.miembros.slice().sort(), [
+      'el_fardel_calico_jack', 'pizzas_flamenco', 'pizzas_hip_hop', 'pizzas_indie',
+      'pizzas_soul', 'pizzas_trap'
     ]);
 
     const ternera = fam('pizzas_pizza_de_carne_de_ternera');
     assert.strictEqual(ternera.ingrediente_id, 'ternera', 'ternera fijada');
     assert.strictEqual(ternera.ancla, 'pizzas_pizza_de_carne_de_ternera');
-    assert.deepStrictEqual(ternera.miembros, [
-      'pizzas_hip_hop', 'pizzas_r_b_rhythm_and_blues', 'pizzas_cumbia', 'la_flota_ile_sainte_marie',
-      'el_fardel_diego_garcia_de_paredes_el_sanson_extremeno'
+    assert.deepStrictEqual(ternera.miembros.slice().sort(), [
+      'el_fardel_calico_jack', 'la_flota_ile_sainte_marie', 'pizzas_hip_hop',
+      'pizzas_r_b_rhythm_and_blues'
     ]);
 
     // La regla del dueño, como invariante: miembros = TODOS los portadores reales, sin el ancla.
@@ -381,17 +391,20 @@ if (!CARTA_VIVA) {
     assert.ok((carta.categorias || []).some(c => c.id === 'la_flota' && c.nombre === 'La Flota'),
       'categoría La Flota se queda declarada');
 
+    // PRECIOS: La Flota se vendió a 12 € planos (decisión del dueño; el Mahón salió a 12 €
+    // en el pedido real de WhatsApp del 3-nov-2026, 21:00, cobrado en caja). Los 10,50 / 12,50 /
+    // 13 / 9,95 eran la fotografía anterior y ya no se cobran.
     const mahon = flota[0];
     assert.strictEqual(mahon.id, 'la_flota_mahon');
-    assert.strictEqual(mahon.precio, 10.5, 'precio de su carta anterior (the-pirate v1/v2 y Glovo)');
+    assert.strictEqual(mahon.precio, 12, 'precio en servicio de La Flota');
     assert.deepStrictEqual((mahon.ingredientes || []).map(i => i.id),
-      ['salsa_the_pirate', 'mozzarella', 'mezcla_de_quesos', 'jamon_de_york'],
-      'los ingredientes en el orden DICTADO: salsa de la casa, mozzarella, mezcla, jamón');
+      ['salsa_the_pirate', 'mezcla_de_quesos', 'jamon_de_york'],
+      'los ingredientes en el orden DICTADO: salsa de la casa, mezcla de quesos, jamón');
     for (const i of mahon.ingredientes) assert.ok(i.emoji, `Mahón: ${i.nombre} sin emoji`);
 
     const sainte = flota[1];
     assert.strictEqual(sainte.id, 'la_flota_ile_sainte_marie');
-    assert.strictEqual(sainte.precio, 12, 'precio de su carta anterior (the-pirate v1/v2 y Glovo)');
+    assert.strictEqual(sainte.precio, 12, 'precio en servicio de La Flota');
     assert.deepStrictEqual((sainte.ingredientes || []).map(i => i.id),
       ['tomate', 'cebolla', 'ternera', 'mozzarella', 'mezcla_de_quesos', 'pina', 'salsa_vitorino'],
       'los ingredientes en el orden DICTADO: tomate, cebolla, ternera, mozzarella, mezcla, piña, y salsa Vitorino al salir del horno');
@@ -399,7 +412,7 @@ if (!CARTA_VIVA) {
 
     const cartagena = flota[2];
     assert.strictEqual(cartagena.id, 'la_flota_cartagena_de_indias');
-    assert.strictEqual(cartagena.precio, 12.5, 'precio de su carta anterior (the-pirate v1/v2 y Glovo)');
+    assert.strictEqual(cartagena.precio, 12, 'precio en servicio de La Flota');
     assert.deepStrictEqual((cartagena.ingredientes || []).map(i => i.id),
       ['tomate', 'tomatitos_asados_con_mantequilla_de_ajo', 'salami', 'mozzarella', 'sesamo', 'albahaca'],
       'los ingredientes en el orden DICTADO: tomate, tomatitos asados con mantequilla de ajo, salami, mozzarella, sésamo y albahaca fresca');
@@ -407,17 +420,17 @@ if (!CARTA_VIVA) {
 
     const nassau = flota[3];
     assert.strictEqual(nassau.id, 'la_flota_nassau');
-    assert.strictEqual(nassau.precio, 13, 'precio de su carta anterior (the-pirate v1/v2 y Glovo)');
+    assert.strictEqual(nassau.precio, 12, 'precio en servicio de La Flota');
     assert.deepStrictEqual((nassau.ingredientes || []).map(i => i.id),
       ['gorgonzola', 'mozzarella', 'nata', 'uva', 'bacon', 'sesamo'],
       'los ingredientes en el orden DICTADO: gorgonzola, mozzarella, nata, uva, bacon y sésamo');
     for (const i of nassau.ingredientes) assert.ok(i.emoji, `Nassau: ${i.nombre} sin emoji`);
 
-    // Quinta y última de la flota (dictada 2026-10-22). Precio REAL de su carta anterior:
-    // 9,95 € — rectificada de 17,50 € por escandallo, no los 13,50 € que dije de memoria.
+    // Quinta y última de la flota (dictada 2026-10-22). Se llegó a fijar en 9,95 €; en servicio
+    // va a 12 € como el resto de La Flota.
     const portRoyal = flota[4];
     assert.strictEqual(portRoyal.id, 'la_flota_port_royal');
-    assert.strictEqual(portRoyal.precio, 9.95, 'precio de su carta anterior (the-pirate v1/v2 y Glovo)');
+    assert.strictEqual(portRoyal.precio, 12, 'precio en servicio de La Flota');
     assert.deepStrictEqual((portRoyal.ingredientes || []).map(i => i.id),
       ['cebolla', 'champinon', 'mozzarella', 'tomates_secos', 'salsa_de_ajo_trufa', 'anchoas'],
       'los ingredientes en el orden DICTADO: cebolla, champiñones, mozzarella, tomate seco, salsa de ajo trufa y anchoas en frío');
@@ -442,43 +455,46 @@ if (!CARTA_VIVA) {
     assert.ok((carta.categorias || []).some(c => c.id === 'el_fardel' && c.nombre === 'El Fardel' && c.orden === 3),
       'categoría El Fardel declarada, en su sitio (después de las clásicas)');
 
+    // CENSO VIGENTE (4-nov-2026): el dueño rehízo El Fardel — entraron Calico Jack y Perrito
+    // Caliente y salieron Barbarroja y Diego García de Paredes. El Perrito se cobró a 3,50 € en
+    // tres pedidos reales de WhatsApp del 3-nov, así que ese precio es el que está en la calle.
     assert.deepStrictEqual(fardel.map(p => p.nombre),
-      ['Barbanegra', 'Barbarroja', 'Anne Bonny',
-       'Diego García de Paredes «El Sansón Extremeño»', 'Sir Francis Drake'],
-      'los cinco bocadillos, en el orden de la carta anterior');
+      ['Barbanegra', 'Anne Bonny', 'Sir Francis Drake', 'Calico Jack', 'Perrito Caliente'],
+      'los cinco bocadillos que se venden hoy, en el orden de la carta');
 
     const barbanegra = fardel[0];
     assert.strictEqual(barbanegra.id, 'el_fardel_barbanegra');
-    assert.strictEqual(barbanegra.precio, 8, 'precio de su carta anterior, no inventado');
+    assert.strictEqual(barbanegra.precio, 5, 'precio en servicio de El Fardel');
     assert.deepStrictEqual((barbanegra.ingredientes || []).map(i => i.id),
       ['atun', 'cebolla', 'mostaza_dijon'],
       'atún, cebolla, mostaza Dijon (el pan NO es ingrediente: es intrínseco al bocadillo)');
 
-    const barbarroja = fardel[1];
-    assert.strictEqual(barbarroja.id, 'el_fardel_barbarroja');
-    assert.strictEqual(barbarroja.precio, 7.5);
-    assert.deepStrictEqual((barbarroja.ingredientes || []).map(i => i.id),
-      ['alioli_de_leche', 'atun', 'pimiento_verde', 'olivas_negras']);
-
-    const anne = fardel[2];
+    const anne = fardel[1];
     assert.strictEqual(anne.id, 'el_fardel_anne_bonny');
-    assert.strictEqual(anne.precio, 7);
+    assert.strictEqual(anne.precio, 6);
     assert.deepStrictEqual((anne.ingredientes || []).map(i => i.id),
       ['pollo', 'mayonesa', 'pepinillo_agridulce']);
 
-    const diego = fardel[3];
-    assert.strictEqual(diego.id, 'el_fardel_diego_garcia_de_paredes_el_sanson_extremeno');
-    assert.strictEqual(diego.precio, 8.5, 'precio de su carta anterior, no inventado');
-    assert.deepStrictEqual((diego.ingredientes || []).map(i => i.id),
-      ['ternera', 'salsa_de_queso_manchego', 'pimientos_padron_encurtidos'],
-      'ternera, salsa de queso manchego, pimientos Padrón');
-
-    const drake = fardel[4];
+    const drake = fardel[2];
     assert.strictEqual(drake.id, 'el_fardel_sir_francis_drake');
-    assert.strictEqual(drake.precio, 8);
+    assert.strictEqual(drake.precio, 5);
     assert.deepStrictEqual((drake.ingredientes || []).map(i => i.id),
       ['jamon_serrano', 'tomate_triturado', 'aove', 'sal'],
       'jamón serrano, tomate triturado, AOVE, sal');
+
+    const calico = fardel[3];
+    assert.strictEqual(calico.id, 'el_fardel_calico_jack');
+    assert.strictEqual(calico.precio, 6);
+    assert.deepStrictEqual((calico.ingredientes || []).map(i => i.id),
+      ['ternera', 'pepperoni', 'mezcla_de_quesos', 'salsa_vitorino'],
+      'ternera, pepperoni, mezcla de quesos y salsa Vitorino');
+
+    const perrito = fardel[4];
+    assert.strictEqual(perrito.id, 'el_fardel_perrito_caliente');
+    assert.strictEqual(perrito.precio, 3.5);
+    assert.deepStrictEqual((perrito.ingredientes || []).map(i => i.id),
+      ['salchicha_frankfurt', 'cebolla', 'ketchup', 'mostaza'],
+      'salchicha Frankfurt, cebolla, ketchup y mostaza');
 
     for (const p of fardel) {
       for (const i of p.ingredientes || []) assert.ok(i.emoji, `${p.nombre}: ${i.nombre} sin emoji`);
@@ -498,21 +514,24 @@ if (!CARTA_VIVA) {
     assert.deepStrictEqual(portadoresPan.map(p => p.nombre), [],
       'ningún producto de la carta lleva pan como ingrediente: hay un solo pan y va implícito');
 
-    // La familia es del ingrediente: Diego García lleva ternera, así que sale en esa sección
-    // además de en El Fardel. Sir Francis Drake lleva jamón SERRANO (no de york): no entra.
+    // La familia es del ingrediente: Calico Jack lleva ternera Y pepperoni, así que sale en
+    // las dos secciones. Sir Francis Drake lleva jamón SERRANO (no de york): no entra en esas.
     const terneraFam = (carta.productos || []).find(p => p.familia && p.familia.ingrediente_id === 'ternera');
-    assert.ok(terneraFam.familia.miembros.includes(diego.id),
-      'Diego García entra en la familia de ternera: la pertenencia es del ingrediente');
+    assert.ok(terneraFam.familia.miembros.includes(calico.id),
+      'Calico Jack entra en la familia de ternera: la pertenencia es del ingrediente');
+    const pepperoniFam = (carta.productos || []).find(p => p.familia && p.familia.ingrediente_id === 'pepperoni');
+    assert.ok(pepperoniFam.familia.miembros.includes(calico.id),
+      'y también en la de pepperoni — repetirse no cuesta');
     assert.ok(!terneraFam.familia.miembros.includes(drake.id),
       'Sir Francis Drake no entra en ternera');
     const yorkFam = (carta.productos || []).find(p => p.familia && p.familia.ingrediente_id === 'jamon_de_york');
     assert.ok(!yorkFam.familia.miembros.includes(drake.id),
       'jamón serrano no es jamón de york: Drake no entra en esa familia');
 
-    // Ningún bocadillo de la carta anterior queda fuera ni duplicado.
+    // Ningún bocadillo queda fuera ni duplicado.
     const ids = fardel.map(p => p.id);
     assert.strictEqual(new Set(ids).size, ids.length, 'ningún bocadillo de El Fardel duplicado');
-    assert.strictEqual(fardel.length, 5, 'los cinco de la carta anterior, ni uno menos');
+    assert.strictEqual(fardel.length, 5, 'los cinco bocadillos que vende El Fardel, ni uno menos');
   });
 
   // Orden de las SECCIONES de la carta (2026-10-22). No es alfabético ni histórico: es el

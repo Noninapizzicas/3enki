@@ -1922,29 +1922,13 @@ function sendWhatsApp() {
   _cerrarPedido(nombre);    // el pedido ya salió hacia WhatsApp: el carrito se vacía
 }
 
-// Pedir por TELEGRAM.
-//
-// DOS CAMINOS, y el primero es el bueno:
-//
-// 1) COMPARTIR (sin código). En el móvil el pedido viaja como TEXTO con la bandeja del
-//    sistema: el cliente elige el bot del negocio y el mensaje llega tal cual — el MISMO
-//    formato canónico que WhatsApp, con su #P1 de ids. El canal Telegram lo re-tasa
-//    contra la carta real igual que el canal WhatsApp, así que el precio del navegador
-//    sigue sin viajar. No hay borrador, ni código, ni caducidad, ni ruta HTTP que abrir.
-//
-// 2) CÓDIGO (respaldo). Donde no hay bandeja de compartir (escritorio) se conserva el
-//    camino viejo: se pide un borrador al canal (pedido-telegram) con las líneas POR IDS,
-//    el servidor devuelve un código corto y se abre t.me/<bot>?start=p_<codigo>. Al
-//    pulsar /start, el servidor RE-TASA contra la carta real.
-//
-// En los dos, el chatId ata el pedido al cliente sin pedirle el teléfono.
-function _puedeCompartir() {
-  if (typeof navigator === 'undefined' || typeof navigator.share !== 'function') return false;
-  // Solo en móvil: en escritorio la bandeja del sistema no llega a Telegram y el cliente
-  // se quedaría con el carrito vacío y sin pedido. Ahí manda el camino del código.
-  return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '');
-}
-
+// Pedir por TELEGRAM. Aquí NO se puede repetir el truco de WhatsApp: Telegram no abre
+// un chat con texto precargado (t.me/<bot>?start= admite 64 chars y punto). Así que el
+// pedido viaja como CÓDIGO: se pide un borrador al canal (pedido-telegram) con las líneas
+// POR IDS, el servidor devuelve un código corto, y se abre el bot con ese código. Al
+// pulsar /start, el servidor RE-TASA contra la carta real — los precios del navegador no
+// viajan, igual que en el camino #P1 de WhatsApp. El chatId ata el pedido al cliente sin
+// pedirle el teléfono.
 async function pedirTelegram() {
   if (cart.length === 0 || !CONFIG.telegram_bot) return;
   if (servicioCerrado()) { alert(mensajeServicio()); return; }
@@ -1955,29 +1939,16 @@ async function pedirTelegram() {
     alert('Escribe a nombre de quién es el pedido.');
     return;
   }
+  // VÍA A — BANDEJA DE COMPARTIR del móvil (la buena cuando existe).
+  // Telegram no acepta texto precargado en un enlace a un BOT, pero el móvil sí puede
+  // compartir el mensaje: el cliente elige el chat del bot y el texto llega tal cual.
+  // Es el MISMO mensaje canónico de WhatsApp, con su línea #P1 (ids): el servidor
+  // re-tasa contra la carta y los precios del navegador no viajan. Sin código, sin
+  // borrador y sin caducidad de 30 minutos.
+  if (_hayBandejaCompartir()) { return _compartirPedidoTelegram(nombre); }
+
+  // VÍA B — sin bandeja: código corto + t.me/<bot>?start=p_<codigo>.
   var btn = document.getElementById('btn-telegram');
-
-  // ── 1 · compartir el pedido con el bot (móvil) ──────────────────────────────
-  if (_puedeCompartir()) {
-    var msg = buildOrderMsg();   // mismo texto canónico que WhatsApp, con su #P1
-    if (msg) {
-      if (btn) { btn.disabled = true; btn.textContent = 'Abriendo…'; }
-      try {
-        await navigator.share({ text: msg });
-        saveLastOrder();
-        _cerrarPedido(nombre);
-        return;
-      } catch (e) {
-        // El cliente cerró la bandeja: no es un error, no hay nada que hacer.
-        if (e && e.name === 'AbortError') return;
-        // Cualquier otro fallo cae al camino del código (abajo).
-      } finally {
-        if (btn) { btn.disabled = false; btn.textContent = '✈️ Telegram'; }
-      }
-    }
-  }
-
-  // ── 2 · respaldo: código corto (escritorio, o si la bandeja falló) ──────────
   if (btn) { btn.disabled = true; btn.textContent = 'Abriendo Telegram…'; }
   try {
     var urlBorrador = CONFIG.telegram_borrador;
@@ -2003,6 +1974,28 @@ async function pedirTelegram() {
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = '✈️ Telegram'; }
   }
+}
+
+// ¿Este dispositivo tiene bandeja de compartir? Se exige móvil a propósito: en
+// escritorio navigator.share existe en algunos navegadores pero abre la bandeja del
+// sistema operativo, donde el chat del bot puede no aparecer. En el móvil está probado.
+function _hayBandejaCompartir() {
+  return typeof navigator !== 'undefined' && !!navigator.share &&
+    /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || '');
+}
+
+// Comparte el pedido por la bandeja del sistema. El carrito se limpia SOLO si el cliente
+// completa el envío: si cierra la bandeja (AbortError) su pedido sigue ahí y puede
+// reintentarlo sin recomponerlo.
+function _compartirPedidoTelegram(nombre) {
+  var msg = buildOrderMsg();
+  if (!msg) return;
+  return navigator.share({ title: 'Mi pedido — ' + CONFIG.nombre_negocio, text: msg })
+    .then(function () { saveLastOrder(); _cerrarPedido(nombre); })
+    .catch(function (err) {
+      if (err && err.name === 'AbortError') return;
+      alert('No se pudo compartir el pedido. Inténtalo otra vez en un momento.');
+    });
 }
 
 // Items del pedido ONLINE (tienda-api → pedido.crear-tienda). Además del texto que lee el

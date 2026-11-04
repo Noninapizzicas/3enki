@@ -5,15 +5,17 @@ resumen: Pedido del cliente por WhatsApp: PWA arma #P1 por ids, el bot re-tasa s
 fuentes:
   - modules/whatsapp-bot/**
   - modules/pizzepos/carta-digital/**
+  - modules/pizzepos/pedido-telegram/**
   - modules/pizzepos/pedidos/**
   - modules/pizzepos/tienda-api/**
   - modules/_shared/pedido-tasador.js
+  - modules/_shared/pedido-mensaje-parser.js
   - modules/_shared/horario-servicio.js
   - modules/pago-gateway/**
   - modules/_shared/lector-servicio.js
   - frontend/src/lib/components/comandero/ServicioToggle.svelte
   - tests/unit/pizzepos__servicio.test.js
-verificado: 2026-11-03 (tras releer: el cambio de static-template.js del 3-nov es el ORDEN DE BLOQUES de la ficha del producto — nombre → receta → descripción → hermanas → extras — y no toca el escaparate suelto, ni el #P1, ni el re-tasado del bot; sigue vigente pago-gateway v3.1.0: el webhook de Stripe reconsulta la sesión; clave RAK; los métodos del checkout los sirve el panel de Stripe)
+verificado: 2026-11-04 (Canal Telegram: la carta comparte el pedido por la bandeja del móvil —navigator.share con el mismo mensaje #P1 de WhatsApp— y pedido-telegram lo parsea, re-tasa y crea el pedido sin borrador ni código; el camino del código corto queda como fallback. Guardas nuevas: sin #P1 no hay pedido, slug y bot tienen que ser del mismo proyecto, anti-duplicado por nonce. Sin cambios en el #P1, el tasador ni la puerta de WhatsApp)
 ---
 
 # SUBSISTEMA AUTOSERVICIO — Pedido del cliente por WhatsApp (PWA → bot → cocina)
@@ -301,6 +303,39 @@ sendTemplate (Meta plantillas · salientes >24h) {
 //   v2.5.0 — fuera el cerebro FANTASMA del chat (default ai_chat_path '/modules/ai-gateway/chat',
 //            endpoint que nadie sirve) → '/chat' (el cf-worker, único cerebro real, escenario suelto).
 //            El ALOJADO (publicar) NO setea ai_endpoint → chat OFF por diseño (autoservicio puro).
+```
+
+## Canal Telegram — el mensaje viaja por la BANDEJA del móvil, no por un código (4-nov-2026)
+
+```javascript
+// El muro: t.me/<bot>?start=<payload> admite 64 caracteres y nada más, así que un
+// carrito NO cabe en un enlace a un bot. Pero el muro es del ENLACE, no de Telegram:
+// el cuerpo de un mensaje no tiene techo. De ahí las dos puertas, en este orden:
+
+// puerta A — BANDEJA DE COMPARTIR (la buena):
+//   pedirTelegram() → _hayBandejaCompartir() (móvil + navigator.share)
+//     → navigator.share({ text: buildOrderMsg() })   ← el MISMO mensaje canónico de WhatsApp
+//     → el cliente elige el chat del bot → llega como mensaje normal
+//     → pedido-telegram.onTelegramText() → parsearPedido() → RE-TASA → pedido.crear-tienda
+//   Sin borrador, sin código, sin TTL. El carrito se vacía SOLO si el share resuelve:
+//   si el cliente cierra la bandeja (AbortError) su pedido sigue compuesto.
+
+// puerta B — código corto (fallback sin bandeja, y lo que existía antes):
+//   POST /tienda/telegram/borrador/<slug> {items por ids} → {codigo,url t.me?start=p_<codigo>}
+//   → /start p_<codigo> → borrador re-tasado → pedido.crear-tienda.
+
+// Las dos desembocan en el MISMO _crearPedidoDesde(): ni un precio del cliente.
+// Tres guardas que la puerta A necesita y la B no:
+//   · sin línea #P1 no hay ids → NO se crea pedido (si no, se cobraría el precio tecleado);
+//   · el slug viaja en el texto y es editable → el bot que recibe manda: slug y bot tienen
+//     que ser del MISMO proyecto, o se rechaza;
+//   · doble pulsación en la bandeja = dos mensajes idénticos → anti-duplicado por
+//     <chat>:<slug>:<nonce> durante el TTL. Un carrito de más en cocina es dinero real.
+// módulo: modules/pizzepos/pedido-telegram · parser compartido: modules/_shared/pedido-mensaje-parser.js
+//   (el de whatsapp-bot queda como shim: un contrato de mensaje, un solo sitio)
+// PENDIENTE en vapers: el #P1 no lleva el gate de +18 → mayor_edad_confirmado llega null
+//   («sin información»). Se comprueba al entregar; si se quiere el flag, tiene que viajar
+//   en el #P1 (buildP1Line), no en el texto.
 ```
 
 ## Pago del pedido — efectivo o tarjeta (el método viaja en el #P1, el bot lo engancha)

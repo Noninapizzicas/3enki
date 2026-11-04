@@ -9,7 +9,7 @@ fuentes:
   - blueprints/project-types/www.json
   - deployment/caddy/**
   - deployment/reconcile.js
-verificado: 2026-10-22
+verificado: 2026-11-04 (tras releer: el cambio del 4-nov en carta-digital/static-template.js es SOLO el botón de pedido por Telegram —usa la bandeja de compartir del móvil— y no toca la publicación, el árbol servido por Caddy ni el publicador; el bundle se sigue generando y sirviendo igual)
 ---
 
 # SERVIR WWW POR PROYECTO — árbol libre en /<ns>/<slug>/ (Caddy estático + symlink)

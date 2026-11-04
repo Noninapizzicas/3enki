@@ -9,7 +9,7 @@
 
   "subscribes": [
     { "event": "telegram.command.received", "handler": "onTelegramCommand", "description": "/start p_<codigo> → resuelve el borrador, re-tasa y crea el pedido." },
-    { "event": "telegram.text.received", "handler": "onTelegramText", "description": "Dos entradas: (a) el PEDIDO que el cliente COMPARTE desde la carta (formato canónico de WhatsApp, con #P1 de ids) → re-tasado directo, sin borrador ni código; (b) el código pegado a mano (p_<codigo>) → mismo camino que /start." },
+    { "event": "telegram.text.received", "handler": "onTelegramText", "description": "Dos puertas por texto: (a) el cliente pega el código (p_<codigo>) → mismo camino que /start; (b) el cliente COMPARTE el pedido desde la bandeja del móvil (navigator.share) → llega el mensaje canónico con su #P1, se parsea, se re-tasa y se crea el pedido sin código ni caducidad. Anti duplicado por nonce." },
     { "event": "pedido.crear-tienda.response", "handler": "onPedidoCreado", "description": "Respuesta de pedidos al pedido.crear-tienda → confirma al cliente por el mismo chat." },
     { "event": "project.activated", "handler": "onProjectActivated", "description": "Tiende el puente slug↔project_id cuando project-manager activa un proyecto." }
   ],

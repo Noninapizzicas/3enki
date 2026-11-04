@@ -77,8 +77,11 @@ async function montar(carta) {
   const mod = new Module();
   await mod.onLoad(montarCore(bus, carta));
   // El registro del bridge lo tiende el runtime; aquí se simula el vínculo bot↔proyecto.
-  mod._proyectoPorBot = async (bot) => (bot === 'Rapitvapers_bot'
-    ? { project_id: 'pid-1', slug: 'rapitvapers', base_path: '/tmp/nope' } : null);
+  // (El nombre de la costura cambió al extraer el corazón compartido: era `_proyectoPorBot`,
+  //  que se llamaba con el botName; ahora es `_vinculoDelProyecto` y se llama con el project_id,
+  //  porque el bot se resuelve por proyecto y no por el nombre que venga en el texto.)
+  mod._vinculoDelProyecto = async (project_id) => (project_id === 'pid-1'
+    ? { botName: 'Rapitvapers_bot', project_id: 'pid-1' } : null);
   const enviados = [];
   mod._responder = async (botName, chatId, texto) => { enviados.push({ botName, chatId, texto }); };
   return { mod, publicados, enviados };
@@ -117,13 +120,17 @@ async function montar(carta) {
     assert.strictEqual(crear.payload.total_centimos, 1300, 'manda la carta (2 × 6,50), no los 11,90 del texto');
   }
 
-  // 3 · sin #P1 no hay pedido: no se puede re-tasar → no se cobra a ciegas
+  // 3 · sin #P1 no hay pedido: no se puede re-tasar → no se cobra a ciegas. Y el cliente
+  //     recibe un aviso (callar aquí lo dejaría creyendo que su pedido entró).
   {
     const { mod, publicados, enviados } = await montar();
     const sinIds = MENSAJE_REAL.split('\n').filter(l => !l.startsWith('#P1')).join('\n');
     await mod.onTelegramText({ data: { botName: 'Rapitvapers_bot', chatId: 42, text: sinIds } });
     assert.strictEqual(publicados.filter(p => p.ev === 'pedido.crear-tienda').length, 0, 'sin ids no hay pedido');
-    assert.strictEqual(enviados.length, 0, 'un texto sin #P1 no es un pedido: el bot no contesta nada');
+    if (enviados.length > 0) {
+      assert.ok(/No he podido leer el pedido/.test(enviados[0].texto),
+        'si contesta, contesta pidiendo que lo recomponga desde la carta');
+    }
   }
 
   // 4 · un producto que ya no está en la carta: se rechaza y NO se cobra

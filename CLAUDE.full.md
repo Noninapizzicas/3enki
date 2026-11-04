@@ -5969,6 +5969,41 @@ EVENTO {                                             // topics REALES
 
 ---
 
+## pedido-telegram — el canal Telegram de pedidos (v1.1.0)
+
+```javascript
+// Hermano de tienda-api (canal web) y whatsapp-bot (canal WhatsApp): misma
+// responsabilidad (meter un pedido del cliente en el bus) y misma garantía
+// (el precio lo pone el SERVIDOR). Vive en modules/pizzepos/pedido-telegram.
+//
+// EL MURO: t.me/<bot>?start=<payload> admite 64 caracteres → un carrito no cabe en un
+// ENLACE a un bot. Pero el muro es del enlace, no del mensaje: el cuerpo de un mensaje
+// no tiene techo. De ahí DOS puertas:
+
+// PUERTA A — bandeja de compartir (preferida, 4-nov-2026)
+//   carta: pedirTelegram() → _hayBandejaCompartir() (móvil + navigator.share)
+//          → navigator.share({ text: buildOrderMsg() })   ← el mensaje canónico de WhatsApp
+//   cliente elige el chat del bot → telegram.text.received
+//   módulo: onTelegramText → parsearPedido() → _crearPedidoDesde()
+//   Sin borrador, sin código, sin TTL. El carrito se vacía SOLO si el share resuelve
+//   (AbortError = cerró la bandeja → el pedido sigue compuesto).
+
+// PUERTA B — código corto (fallback sin bandeja)
+//   POST /tienda/telegram/borrador/<slug> { items por ids } → { codigo, url t.me?start=p_<codigo> }
+//   → telegram.command.received → _abrirBorrador() → re-tasa → _crearPedidoDesde()
+
+// Las dos desembocan en el MISMO _crearPedidoDesde: tasarPedido() contra la carta viva
+// + pedido.crear-tienda con canal_origen='telegram' y cliente_telegram = chatId (el chat
+// es el ancla del cliente: no se pide teléfono).
+// GUARDAS de la puerta A: sin línea #P1 no hay pedido (no se cobra el precio tecleado);
+// el slug viaja en el texto y es editable → bot que recibe y slug tienen que ser del
+// mismo proyecto; anti-duplicado por <chat>:<slug>:<nonce> durante el TTL.
+// El parser del mensaje es COMPARTIDO: modules/_shared/pedido-mensaje-parser.js
+// (modules/whatsapp-bot/services/pedido-parser.js queda como shim).
+```
+
+---
+
 ## BLUEPRINTS
 
 ### PROJECT-TYPE BLUEPRINT DRIVER
@@ -16121,6 +16156,39 @@ sendTemplate (Meta plantillas · salientes >24h) {
 //   v2.5.0 — fuera el cerebro FANTASMA del chat (default ai_chat_path '/modules/ai-gateway/chat',
 //            endpoint que nadie sirve) → '/chat' (el cf-worker, único cerebro real, escenario suelto).
 //            El ALOJADO (publicar) NO setea ai_endpoint → chat OFF por diseño (autoservicio puro).
+```
+
+## Canal Telegram — el mensaje viaja por la BANDEJA del móvil, no por un código (4-nov-2026)
+
+```javascript
+// El muro: t.me/<bot>?start=<payload> admite 64 caracteres y nada más, así que un
+// carrito NO cabe en un enlace a un bot. Pero el muro es del ENLACE, no de Telegram:
+// el cuerpo de un mensaje no tiene techo. De ahí las dos puertas, en este orden:
+
+// puerta A — BANDEJA DE COMPARTIR (la buena):
+//   pedirTelegram() → _hayBandejaCompartir() (móvil + navigator.share)
+//     → navigator.share({ text: buildOrderMsg() })   ← el MISMO mensaje canónico de WhatsApp
+//     → el cliente elige el chat del bot → llega como mensaje normal
+//     → pedido-telegram.onTelegramText() → parsearPedido() → RE-TASA → pedido.crear-tienda
+//   Sin borrador, sin código, sin TTL. El carrito se vacía SOLO si el share resuelve:
+//   si el cliente cierra la bandeja (AbortError) su pedido sigue compuesto.
+
+// puerta B — código corto (fallback sin bandeja, y lo que existía antes):
+//   POST /tienda/telegram/borrador/<slug> {items por ids} → {codigo,url t.me?start=p_<codigo>}
+//   → /start p_<codigo> → borrador re-tasado → pedido.crear-tienda.
+
+// Las dos desembocan en el MISMO _crearPedidoDesde(): ni un precio del cliente.
+// Tres guardas que la puerta A necesita y la B no:
+//   · sin línea #P1 no hay ids → NO se crea pedido (si no, se cobraría el precio tecleado);
+//   · el slug viaja en el texto y es editable → el bot que recibe manda: slug y bot tienen
+//     que ser del MISMO proyecto, o se rechaza;
+//   · doble pulsación en la bandeja = dos mensajes idénticos → anti-duplicado por
+//     <chat>:<slug>:<nonce> durante el TTL. Un carrito de más en cocina es dinero real.
+// módulo: modules/pizzepos/pedido-telegram · parser compartido: modules/_shared/pedido-mensaje-parser.js
+//   (el de whatsapp-bot queda como shim: un contrato de mensaje, un solo sitio)
+// PENDIENTE en vapers: el #P1 no lleva el gate de +18 → mayor_edad_confirmado llega null
+//   («sin información»). Se comprueba al entregar; si se quiere el flag, tiene que viajar
+//   en el #P1 (buildP1Line), no en el texto.
 ```
 
 ## Pago del pedido — efectivo o tarjeta (el método viaja en el #P1, el bot lo engancha)

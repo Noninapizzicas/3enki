@@ -9,24 +9,31 @@
  *
  * ── El problema de transporte que resuelve ────────────────────────────────────
  * En WhatsApp la carta compone un texto y abre wa.me con ese texto precargado.
- * Telegram NO permite eso: `t.me/<bot>?start=<payload>` admite 64 caracteres y
- * nada más. Así que el pedido no viaja como texto: viaja como CÓDIGO CORTO.
+ * Telegram NO permite eso en un enlace a un bot: `t.me/<bot>?start=<payload>` admite
+ * 64 caracteres y nada más. Por eso hay DOS puertas, y la buena es la segunda:
  *
+ *   VÍA A — BANDEJA DE COMPARTIR (la preferida). La carta llama a `navigator.share`
+ *   con el MISMO mensaje canónico de WhatsApp (líneas humanas + `#P1` con los ids).
+ *   El cliente elige el chat del bot y el texto llega como mensaje normal: sin
+ *   código, sin borrador, sin caducidad. Aquí se parsea el mensaje, se RE-TASA
+ *   contra la carta y se emite `pedido.crear-tienda` (canal_origen='telegram').
+ *
+ *   VÍA B — CÓDIGO CORTO (fallback sin bandeja de compartir):
  *   1. La carta POSTea el pedido POR IDS a /tienda/telegram/borrador/<slug>
  *      → este módulo guarda el borrador y devuelve { codigo, url }.
  *   2. La carta abre `https://t.me/<bot>?start=p_<codigo>`.
  *   3. Telegram manda `/start p_<codigo>` al bot del negocio.
- *   4. Aquí se RE-TASA el borrador contra la carta real (precios del cliente
- *      ignorados) y se emite `pedido.crear-tienda` con canal_origen='telegram'.
+ *   4. Aquí se RE-TASA el borrador contra la carta real.
  *   5. `pedidos` crea la cuenta igual que un pedido de mesa y el cliente recibe
  *      la confirmación en SU chat.
  *
- * Efecto de segundo orden (el que importa): el chatId es una identidad de hecho
- * — el cliente queda atado a su pedido sin pedirle el teléfono, y el mismo hilo
- * sirve para avisarle del estado. El teléfono era el ancla de WhatsApp; aquí el
- * ancla es el chat.
+ * Las dos vías desembocan en el mismo `_crearPedidoDesde`: ni un precio del cliente
+ * entra en el pedido. El chatId es una identidad de hecho — el cliente queda atado a
+ * su pedido sin pedirle el teléfono, y el mismo hilo sirve para avisarle del estado.
+ * El teléfono era el ancla de WhatsApp; aquí el ancla es el chat.
  *
- * Dinero en CÉNTIMOS de punta a punta. El borrador NO guarda total: guarda ids.
+ * Dinero en CÉNTIMOS de punta a punta. Ni el borrador ni el mensaje compartido
+ * mandan el total: mandan ids.
  */
 
 const path = require('path');
@@ -35,10 +42,7 @@ const crypto = require('crypto');
 
 const BaseModule = require('../../_shared/base-module');
 const { tasarPedido } = require('../../_shared/pedido-tasador');
-// Mismo parser que el canal WhatsApp: el mensaje que comparte el cliente desde la
-// carta es el MISMO texto canónico (líneas humanas + `#P1` con los ids). Una sola
-// definición del formato para los dos canales.
-const { parsearPedido } = require('../../whatsapp-bot/services/pedido-parser');
+const { parsearPedido } = require('../../_shared/pedido-mensaje-parser');
 
 // Sin 0/O/1/I: el código se teclea y se lee en un móvil.
 const ALFABETO = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -54,6 +58,7 @@ class PedidoTelegramModule extends BaseModule {
     this.moduleRegistry = null;
 
     this.borradores = new Map();   // codigo -> borrador
+    this.compartidos = new Map();  // "<chat>:<slug>:<nonce>" -> ts (anti doble-pulsación)
     this.pendientes = new Map();   // request_id -> { botName, chatId, codigo, project_slug }
     this.pidPorSlug = new Map();   // slug -> project_id (lo tiende project.activated)
     this.basePathPorPid = new Map();
@@ -90,6 +95,7 @@ class PedidoTelegramModule extends BaseModule {
     await this._guardarBorradores();
     for (const [, p] of this.pendientes) if (p.timeoutHandle) clearTimeout(p.timeoutHandle);
     this.pendientes.clear();
+    this.compartidos.clear();
     this.borradores.clear();
     this.logger?.info?.('module.unloaded', { module: this.name });
   }
@@ -215,91 +221,19 @@ class PedidoTelegramModule extends BaseModule {
   async onTelegramText(event) {
     const d = event?.data || event;
     const texto = String(d?.text || '').trim();
-
-    // ── Vía SIN CÓDIGO: el cliente comparte el pedido con el bot ────────────────
-    // Compone en la carta y pulsa «Compartir» → bandeja del móvil → elige este bot.
-    // Llega el mismo texto canónico que por WhatsApp (`PEDIDO slug-NONCE`, líneas,
-    // `Nombre:` y `#P1`). Se exige el `#P1`: sin ids no hay re-tasado, y sin
-    // re-tasado el precio sería el del navegador.
-    if (/^PEDIDO\s+/i.test(texto) && /(^|\n)#P1\s+\S+/.test(texto)) {
-      await this._pedidoCompartido(d?.botName, d?.chatId, texto);
-      return;
-    }
-
-    // El cliente pegó el código a mano (formato p_ABC123). Se exige el prefijo: sin él,
+    // (1) El cliente pegó el CÓDIGO a mano (formato p_ABC123). Se exige el prefijo: sin él,
     // cualquier palabra corta («HOLA») parecería un código y el cliente recibiría un
     // «no encuentro ese pedido» en vez de hablar con el chat del negocio.
     const m = texto.match(/^p_([A-Za-z0-9]{4,10})$/i);
-    if (!m) return;
-    await this._abrirBorrador(d?.botName, d?.chatId, d?.from, m[1].toUpperCase());
-  }
-
-  /**
-   * PEDIDO compartido desde la carta (#P1). El camino corto: no hay borrador, ni
-   * código, ni caducidad, ni ruta HTTP que abrir.
-   *
-   * El negocio se resuelve por el BOT que recibe, no por el slug escrito en el
-   * texto: el texto lo teclea el cliente y el slug de otro negocio no debe servir
-   * para meter un pedido aquí. El chatId hace de ancla del cliente (sin teléfono).
-   */
-  async _pedidoCompartido(botName, chatId, texto) {
-    const parseado = parsearPedido(texto);
-    if (!parseado?.ok) {
-      this.logger?.warn?.('pedido-telegram.compartido.ilegible', { kind: parseado?.kind, botName });
-      this.metrics?.increment?.('pedido-telegram.compartido.ilegible');
-      await this._responder(botName, chatId,
-        'No he podido leer el pedido. Vuelve a la carta y pulsa «Compartir con Telegram» otra vez.');
+    if (m) {
+      await this._abrirBorrador(d?.botName, d?.chatId, d?.from, m[1].toUpperCase());
       return;
     }
-
-    // Los ids del #P1 son la única fuente aceptable. El texto de las líneas y el total
-    // son para que el cliente vea su pedido; aquí se ignoran.
-    const items = Array.isArray(parseado.estructura?.items) ? parseado.estructura.items : null;
-    if (!items || items.length === 0) {
-      this.logger?.warn?.('pedido-telegram.compartido.sin_ids', { project: parseado.project_slug });
-      this.metrics?.increment?.('pedido-telegram.compartido.sin_ids');
-      await this._responder(botName, chatId,
-        'Ese pedido no trae los productos. Vuelve a la carta y púlsalo desde el botón, por favor.');
-      return;
-    }
-
-    // El negocio lo decide el BOT que recibe, no el slug escrito en el texto: el texto
-    // lo teclea el cliente. Un bot sin proyecto vinculado no crea pedidos (mismo criterio
-    // que el 409 CHANNEL_NOT_CONFIGURED de la vía por código).
-    const porBot = await this._proyectoPorBot(botName);
-    const slug = porBot?.slug || parseado.project_slug;
-
-    if (!porBot?.project_id) {
-      this.logger?.warn?.('pedido-telegram.compartido.sin_proyecto', { slug, botName });
-      this.metrics?.increment?.('pedido-telegram.compartido.sin_proyecto');
-      await this._responder(botName, chatId,
-        'Este pedido no es de este negocio. Ábrelo desde la carta del negocio.');
-      return;
-    }
-    const proyecto = { id: porBot.project_id, base_path: porBot.base_path || null };
-
-    this.metrics?.increment?.('pedido-telegram.compartido.recibido', { project: slug });
-    this.logger?.info?.('pedido-telegram.compartido', {
-      project_slug: slug, items: items.length, bot: botName,
-      chat_id: chatId != null ? String(chatId).slice(-4) : null
-    });
-
-    await this._crearPedido({
-      botName,
-      chatId,
-      project_slug: slug,
-      project_id: proyecto.id,
-      base_path: proyecto.base_path || null,
-      items,
-      nombre_cliente: parseado.cliente_nombre,
-      modo_consumo: parseado.modo_consumo,
-      hora_recogida: parseado.hora_recogida,
-      metodo_pago: parseado.metodo_pago,
-      mayor_edad_confirmado: parseado.mayor_edad_confirmado === true
-        || parseado.estructura?.mayor_edad_confirmado === true,
-      codigo: null,
-      origen: 'compartido'
-    });
+    // (2) El cliente COMPARTIÓ el pedido desde la bandeja del móvil (navigator.share).
+    // Llega el mensaje canónico de la carta con su línea #P1 — el mismo contrato que
+    // WhatsApp. No se confunde con una conversación normal: se exige la cabecera o la #P1.
+    if (!/^PEDIDO\s+\S+/i.test(texto) && !/(^|\n)#P1\s+\S+/.test(texto)) return;
+    await this._abrirPedidoCompartido(d?.botName, d?.chatId, texto);
   }
 
   /**
@@ -330,48 +264,104 @@ class PedidoTelegramModule extends BaseModule {
       return;
     }
 
-    await this._crearPedido({
-      botName,
-      chatId,
-      project_slug: borrador.project_slug,
-      project_id: borrador.project_id,
-      base_path: borrador.base_path || null,
-      items: borrador.items,
-      nombre_cliente: borrador.nombre_cliente,
-      modo_consumo: borrador.modo_consumo,
-      hora_recogida: borrador.hora_recogida,
-      metodo_pago: borrador.metodo_pago,
-      mayor_edad_confirmado: borrador.mayor_edad_confirmado,
-      codigo,
-      origen: 'codigo'
-    });
+    await this._crearPedidoDesde(borrador, botName, chatId);
   }
 
   /**
-   * El corazón, compartido por las dos entradas (código `p_XXXX` y PEDIDO compartido):
-   * RE-TASA contra la carta real y emite `pedido.crear-tienda`.
+   * VÍA 2 — el cliente COMPARTE el pedido desde la bandeja del móvil.
    *
-   * El total NO viene del cliente: sale de `tasarPedido` sobre la carta del servidor.
-   * `codigo` != null → se consume ese borrador (un código = un pedido); si el re-tasado
-   * falla, el borrador NO se consume y el cliente puede reintentar.
+   * Es el mismo mensaje canónico de WhatsApp (`navigator.share`), no un código: el
+   * cuerpo de un mensaje no tiene el techo de 64 caracteres del `?start=`, así que el
+   * carrito entero viaja de una vez y **sin caducidad ni borrador**. El chatId llega
+   * igual que en el `/start` y sigue siendo el ancla del pedido.
+   *
+   * Lo que NO cambia: el precio lo pone el servidor. El mensaje solo aporta los ids
+   * del `#P1`; las líneas con euros son decorativas.
    */
-  async _crearPedido(ctx) {
-    const { botName, chatId, project_slug, codigo } = ctx;
+  async _abrirPedidoCompartido(botName, chatId, texto) {
+    const parsed = parsearPedido(texto);
 
-    const carta = await this._carta(ctx);
-    if (!carta) {
+    // Sin `#P1` no hay ids → no se puede re-tasar. Antes que cobrar el precio del texto
+    // (que es editable a mano) se le pide repetirlo desde la carta, que es la única
+    // fuente que emite ids.
+    if (!parsed.ok || !parsed.estructura) {
+      this.logger?.warn?.('pedido-telegram.compartido.ilegible', { kind: parsed?.kind, botName });
+      this.metrics?.increment?.('pedido-telegram.compartido.ilegible');
       await this._responder(botName, chatId,
-        'Estamos cargando la carta. Espera unos segundos y vuelve a intentarlo.');
-      this.metrics?.increment?.('pedido-telegram.sin_carta', { project: project_slug });
+        'No he podido leer el pedido. Vuelve a la carta, compón el pedido y pulsa «Telegram» otra vez.');
       return;
     }
 
-    const tasado = tasarPedido(ctx.items, carta);
+    const proyecto = this._resolverProyecto(parsed.project_slug);
+    if (!proyecto?.id) {
+      this.logger?.warn?.('pedido-telegram.compartido.sin_proyecto', { slug: parsed.project_slug });
+      await this._responder(botName, chatId,
+        'No encuentro esa tienda. Vuelve a la carta y pulsa «Telegram» otra vez.');
+      return;
+    }
+
+    // El slug viaja DENTRO del texto, y el texto es editable a mano: sin este cotejo,
+    // cualquiera podría escribir «PEDIDO <otro-negocio>-XXXX» en este chat y pedir
+    // contra la carta de otro negocio. El bot que recibe manda.
+    const vinculo = await this._vinculoDelProyecto(proyecto.id);
+    if (!vinculo?.botName || (botName && String(vinculo.botName) !== String(botName))) {
+      this.logger?.warn?.('pedido-telegram.compartido.bot_no_coincide', {
+        botName, esperado: vinculo?.botName || null, slug: parsed.project_slug
+      });
+      await this._responder(botName, chatId, 'Este pedido no es de este negocio.');
+      return;
+    }
+
+    // Doble pulsación en la bandeja = dos mensajes idénticos = dos pedidos en cocina.
+    // El nonce del header identifica el pedido; se recuerda por chat durante el TTL.
+    this._purgarCompartidos();
+    const clave = `${chatId}:${parsed.project_slug}:${parsed.nonce}`;
+    if (this.compartidos.has(clave)) {
+      this.metrics?.increment?.('pedido-telegram.compartido.duplicado', { project: parsed.project_slug });
+      await this._responder(botName, chatId, 'Ya tengo tu pedido, dame un momento.');
+      return;
+    }
+    this.compartidos.set(clave, Date.now());
+
+    await this._crearPedidoDesde({
+      codigo: null,
+      project_slug: parsed.project_slug,
+      project_id: proyecto.id,
+      base_path: proyecto.base_path || null,
+      botName: vinculo.botName,
+      items: parsed.estructura.items,
+      nombre_cliente: parsed.cliente_nombre,
+      modo_consumo: parsed.modo_consumo,
+      hora_recogida: parsed.hora_recogida,
+      metodo_pago: parsed.metodo_pago,
+      // El #P1 no lleva el gate de edad (la carta no lo emite): si el proyecto lo
+      // necesita, se comprueba al entregar. null = «sin información», no «false».
+      mayor_edad_confirmado: parsed.mayor_edad_confirmado
+    }, botName, chatId);
+  }
+
+  /**
+   * El corazón compartido por las dos vías: borrador re-tasado contra la carta viva y
+   * `pedido.crear-tienda`. Aquí no entra ni un precio del cliente.
+   */
+  async _crearPedidoDesde(borrador, botName, chatId) {
+    const codigo = borrador.codigo || null;
+    const origen = codigo ? 'borrador' : 'compartido';
+
+    const carta = await this._carta(borrador);
+    if (!carta) {
+      await this._responder(botName, chatId,
+        'Estamos cargando la carta. Espera unos segundos y vuelve a abrir el enlace.');
+      this.metrics?.increment?.('pedido-telegram.sin_carta', { project: borrador.project_slug });
+      return;
+    }
+
+    const tasado = tasarPedido(borrador.items, carta);
     if (!tasado.ok) {
-      this.logger?.warn?.('pedido-telegram.retasado_fallo', { codigo, errores: tasado.errores });
-      this.metrics?.increment?.('pedido-telegram.retasado_fallo', { project: project_slug });
+      this.logger?.warn?.('pedido-telegram.retasado_fallo', { codigo, origen, errores: tasado.errores });
+      this.metrics?.increment?.('pedido-telegram.retasado_fallo', { project: borrador.project_slug });
       await this._publicar('pedido-telegram.pedido.rechazado', {
-        project_slug,
+        project_slug: borrador.project_slug,
         codigo,
         motivo: 'retasado',
         errores: tasado.errores
@@ -404,14 +394,15 @@ class PedidoTelegramModule extends BaseModule {
 
     this.pendientes.set(request_id, {
       botName, chatId, codigo,
-      project_slug,
-      nombre_cliente: ctx.nombre_cliente,
+      project_slug: borrador.project_slug,
+      nombre_cliente: borrador.nombre_cliente,
       total_centimos: tasado.total_centimos,
       timeoutHandle
     });
 
-    // El borrador se consume aquí: un código = un pedido. Si el bus falla, el
-    // cliente recibe el error y vuelve a la tienda (nunca dos pedidos del mismo).
+    // Un borrador = un pedido: se consume ANTES de emitir. Si el bus falla, el cliente
+    // recibe el error y vuelve a la tienda (nunca dos pedidos del mismo código). El
+    // mensaje compartido no tiene código que consumir; su duplicado lo corta el nonce.
     if (codigo) {
       this.borradores.delete(codigo);
       await this._guardarBorradores();
@@ -420,27 +411,32 @@ class PedidoTelegramModule extends BaseModule {
     await this._publicar('pedido.crear-tienda', {
       request_id,
       correlation_id: request_id,
-      project_slug,
+      project_slug: borrador.project_slug,
       items,
       total_centimos: tasado.total_centimos,
       canal_origen: 'telegram',
       cliente_telegram: chatId != null ? String(chatId) : null,
-      cliente_nombre: ctx.nombre_cliente,
-      modo_consumo: ctx.modo_consumo,
-      hora_recogida: ctx.hora_recogida,
-      metodo_pago: ctx.metodo_pago || 'efectivo',
-      mayor_edad_confirmado: ctx.mayor_edad_confirmado === true
+      cliente_nombre: borrador.nombre_cliente,
+      modo_consumo: borrador.modo_consumo,
+      hora_recogida: borrador.hora_recogida,
+      metodo_pago: borrador.metodo_pago || 'efectivo',
+      mayor_edad_confirmado: borrador.mayor_edad_confirmado === true
     });
 
-    this.metrics?.increment?.('pedido-telegram.pedido.solicitado', { project: project_slug });
+    this.metrics?.increment?.('pedido-telegram.pedido.solicitado', { project: borrador.project_slug });
     this.logger?.info?.('pedido-telegram.pedido.solicitado', {
-      project_slug,
+      project_slug: borrador.project_slug,
+      origen,
       codigo,
-      origen: ctx.origen || null,
       items: items.length,
       total_centimos: tasado.total_centimos,
       chat_id: chatId != null ? String(chatId).slice(-4) : null
     });
+  }
+
+  _purgarCompartidos() {
+    const limite = Date.now() - this.ttlMs;
+    for (const [k, t] of this.compartidos) if (t < limite) this.compartidos.delete(k);
   }
 
   async onPedidoCreado(event) {
@@ -581,23 +577,6 @@ class PedidoTelegramModule extends BaseModule {
       this.logger?.warn?.('pedido-telegram.registro.lectura_failed', { error: err?.message });
     }
     return null;
-  }
-
-  /** botName → { project_id, slug, base_path } (registro del telegram-bridge, solo lectura). */
-  async _proyectoPorBot(botName) {
-    if (!botName) return null;
-    const file = path.join(__dirname, '..', '..', '..', 'data', 'telegram-bridge', 'registro.json');
-    try {
-      const reg = JSON.parse(await fs.readFile(file, 'utf8'));
-      const v = reg?.vinculos?.[botName];
-      if (!v?.project_id) return null;
-      const slug = v.project_slug || v.slug
-        || (v.base_path ? path.basename(String(v.base_path)) : null);
-      return { project_id: v.project_id, slug, base_path: v.base_path || null };
-    } catch (err) {
-      this.logger?.warn?.('pedido-telegram.bot.sin_vinculo', { botName, error: err?.message });
-      return null;
-    }
   }
 
   // ==========================================

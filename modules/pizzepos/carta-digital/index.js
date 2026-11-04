@@ -481,6 +481,10 @@ class CartaDigitalModule extends BaseModule {
       base_href: `/${nsPub}/${slug}/`,
       pago_online: !!op.pago_online,
       pedido_endpoint: op.pedido_endpoint || '',
+      // CANAL Telegram: nombre EXACTO del bot del negocio (username de getMe). Si está,
+      // la carta pinta el botón «Telegram» y pide un borrador con código corto a
+      // pedido-telegram (Telegram no admite abrir el chat con el pedido precargado).
+      telegram_bot: op.telegram_bot || '',
       tema: { color_primario: colorPrimario, color_fondo: colorFondo, color_texto: colores.texto || '#e5e5e5', logo_emoji: logoEmoji }
     };
 

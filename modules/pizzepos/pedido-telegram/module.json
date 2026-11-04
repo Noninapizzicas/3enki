@@ -1,0 +1,56 @@
+{
+  "_doc": "Canal TELEGRAM de pedidos — el hermano de tienda-api (canal web) y whatsapp-bot (canal WhatsApp). El cliente compone el pedido en la carta (por ids, nunca por precio) y la carta pide un BORRADOR a este módulo: se guarda con un código corto y se devuelve el enlace t.me/<bot>?start=p_<codigo>. Al abrirlo, Telegram manda /start con ese código al bot del negocio, este módulo RE-TASA el pedido contra la carta real (precios del cliente ignorados) y emite pedido.crear-tienda con canal_origen='telegram'. Por qué así: Telegram no permite abrir un chat con texto precargado (solo ?start= con 64 chars), así que el pedido viaja como CÓDIGO, no como texto — y de paso el chatId identifica al cliente sin pedirle el teléfono.",
+  "name": "pedido-telegram",
+  "version": "1.0.0",
+  "description": "Canal Telegram de pedidos: borrador por ids en la carta + enlace t.me?start=<codigo> + re-tasado server-side contra la carta + pedido.crear-tienda (canal_origen telegram). Simétrico a tienda-api (web) y whatsapp-bot (WhatsApp).",
+  "author": "Event Core Team",
+  "language": "es",
+  "main": "index.js",
+
+  "subscribes": [
+    { "event": "telegram.command.received", "handler": "onTelegramCommand", "description": "/start p_<codigo> → resuelve el borrador, re-tasa y crea el pedido." },
+    { "event": "telegram.text.received", "handler": "onTelegramText", "description": "El cliente pega el código (p_<codigo>) como texto → mismo camino que /start." },
+    { "event": "pedido.crear-tienda.response", "handler": "onPedidoCreado", "description": "Respuesta de pedidos al pedido.crear-tienda → confirma al cliente por el mismo chat." },
+    { "event": "project.activated", "handler": "onProjectActivated", "description": "Tiende el puente slug↔project_id cuando project-manager activa un proyecto." }
+  ],
+
+  "publishes": [
+    { "event": "pedido.crear-tienda", "description": "El pedido re-tasado, con precios del servidor (nunca del cliente)." },
+    { "event": "telegram.send_message.request", "description": "Respuesta al cliente en su chat (confirmación o error explicado)." },
+    { "event": "pedido-telegram.borrador.creado", "description": "Se creó un borrador (auditoría/observabilidad)." },
+    { "event": "pedido-telegram.pedido.rechazado", "description": "El borrador no se pudo re-tasar (producto fuera de carta, código caducado, bot no vinculado)." }
+  ],
+
+  "apis": [
+    {
+      "method": "POST",
+      "path": "/tienda/telegram/borrador/:project",
+      "handler": "handleBorradorPost",
+      "description": "La carta pide un borrador: body { items (por ids), nombre_cliente, modo_consumo, hora_recogida, metodo_pago, mayor_edad_confirmado }. Devuelve { codigo, url, expira_en_s }. El total NO viaja: lo calcula el servidor al abrir el enlace."
+    },
+    {
+      "method": "OPTIONS",
+      "path": "/tienda/telegram/borrador/:project",
+      "handler": "handleBorradorOptions",
+      "description": "CORS preflight permisivo (la carta vive en otro origen)."
+    },
+    {
+      "method": "GET",
+      "path": "/health",
+      "handler": "handleHealth",
+      "description": "Health del módulo: borradores vivos y pedidos en vuelo."
+    }
+  ],
+
+  "tools": [],
+
+  "dependencies": [],
+
+  "tracing": { "propaga_correlation_id": true },
+
+  "config": {
+    "codigo_len": 6,
+    "ttl_ms": 1800000,
+    "pedido_wait_timeout_ms": 30000
+  }
+}

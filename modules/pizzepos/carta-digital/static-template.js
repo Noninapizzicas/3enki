@@ -33,6 +33,9 @@ function generateStaticHTML(carta, config, options = {}) {
     nombre_negocio = config.nombre_negocio || 'Pizzicas',
     moneda = config.moneda || '€',
     whatsapp_telefono = config.whatsapp_telefono || '',
+    // Canal Telegram: username del bot del negocio (ej. 'Rapitvapers_bot'). Si viene,
+    // el carrito pinta el botón Telegram → pide un borrador (código corto) y abre t.me.
+    telegram_bot = config.telegram_bot || '',
     mensaje_header = config.mensaje_header || '¡Hola! Quiero pedir:',
     // Slug del proyecto: se hornea para que el mensaje wa.me lleve la cabecera
     // canónica "PEDIDO <slug>-<NONCE>" que el whatsapp-bot (parser) entiende.
@@ -145,7 +148,11 @@ function generateStaticHTML(carta, config, options = {}) {
   const dataJSON = JSON.stringify({ categorias, productos, alergenos_leyenda: alergenosLeyenda, catalogo_ingredientes: catalogoIngredientes });
   const configJSON = JSON.stringify({
     nombre_negocio, moneda, whatsapp_telefono, mensaje_header, project_slug,
-    ai_endpoint, ai_provider, ai_chat_path, chat_enabled, pedido_endpoint, estado_endpoint, pago_online
+    ai_endpoint, ai_provider, ai_chat_path, chat_enabled, pedido_endpoint, estado_endpoint, pago_online,
+    telegram_bot,
+    // Endpoint del borrador del canal Telegram. Derivado del proyecto para que no haya
+    // campo nuevo que configurar: mismo patrón que pedido_endpoint (/tienda/pedido/<slug>).
+    telegram_borrador: project_slug ? ('/tienda/telegram/borrador/' + project_slug) : ''
   });
 
   // Build system prompt for AI assistant with full menu context + upselling
@@ -1617,13 +1624,18 @@ function updateCart() {
   const waBtn = CONFIG.whatsapp_telefono
     ? '<button class="' + (CONFIG.pedido_endpoint ? 'btn-share' : 'btn-wa') + '" onclick="sendWhatsApp()">WhatsApp</button>'
     : (CONFIG.pedido_endpoint ? '' : '<button class="btn-share" onclick="shareOrder()">' + T.share + '</button>');
-  const nombreInput = (CONFIG.whatsapp_telefono || CONFIG.pedido_endpoint)
+  // CANAL Telegram: el pedido viaja como CÓDIGO (Telegram no abre el chat con texto), así
+  // que el botón pide un borrador y abre t.me/<bot>?start=p_<codigo>. El servidor re-tasa.
+  const tgBtn = CONFIG.telegram_bot
+    ? '<button class="' + (CONFIG.pedido_endpoint ? 'btn-share' : 'btn-wa') + '" id="btn-telegram" onclick="pedirTelegram()">✈️ Telegram</button>'
+    : '';
+  const nombreInput = (CONFIG.whatsapp_telefono || CONFIG.pedido_endpoint || CONFIG.telegram_bot)
     ? '<input id="cliente-nombre" class="cart-nombre" type="text" placeholder="¿A nombre de? (obligatorio)" aria-label="A nombre de" autocomplete="name" required>'
     : '';
   // CANAL (modo de consumo): el cliente elige cómo consume, igual que pone su nombre.
   // mesa = en sala · recoger = pasa a por él (con hora) · llevar = se lo lleva ya.
   // El campo de hora solo aparece para 'recoger'. Estado en _modoConsumo (persiste el re-render).
-  const modoSel = (CONFIG.whatsapp_telefono || CONFIG.pedido_endpoint)
+  const modoSel = (CONFIG.whatsapp_telefono || CONFIG.pedido_endpoint || CONFIG.telegram_bot)
     ? '<div class="cart-modo" role="group" aria-label="Modo de consumo">' +
         '<button type="button" class="modo-btn' + (_modoConsumo === 'mesa' ? ' active' : '') + '" data-modo="mesa" onclick="setModo(\\'mesa\\')">🍽 Mesa</button>' +
         '<button type="button" class="modo-btn' + (_modoConsumo === 'recoger' ? ' active' : '') + '" data-modo="recoger" onclick="setModo(\\'recoger\\')">🛍 Recoger</button>' +
@@ -1643,7 +1655,7 @@ function updateCart() {
     nombreInput + modoSel + metodoSel +
     '<div id="fecha-cont"></div>' +
     '<div id="cart-recogida">' + recogidaHTML() + '</div>' +
-    '<div class="cart-actions"><button class="btn-clear" onclick="clearCart()">' + T.clear + '</button>' + pagarBtn + onlineBtn + waBtn + '</div>';
+    '<div class="cart-actions"><button class="btn-clear" onclick="clearCart()">' + T.clear + '</button>' + pagarBtn + onlineBtn + tgBtn + waBtn + '</div>';
   renderFechaRow();   // encargo: bloque "¿Para cuándo?" (verde/rojo según dias_sale)
   aplicarEstadoServicio();
 }
@@ -1908,6 +1920,51 @@ function sendWhatsApp() {
   saveLastOrder();          // copia para «repetir último pedido»: vaciar no pierde el pedido
   window.open('https://wa.me/' + CONFIG.whatsapp_telefono + '?text=' + encodeURIComponent(msg), '_blank');
   _cerrarPedido(nombre);    // el pedido ya salió hacia WhatsApp: el carrito se vacía
+}
+
+// Pedir por TELEGRAM. Aquí NO se puede repetir el truco de WhatsApp: Telegram no abre
+// un chat con texto precargado (t.me/<bot>?start= admite 64 chars y punto). Así que el
+// pedido viaja como CÓDIGO: se pide un borrador al canal (pedido-telegram) con las líneas
+// POR IDS, el servidor devuelve un código corto, y se abre el bot con ese código. Al
+// pulsar /start, el servidor RE-TASA contra la carta real — los precios del navegador no
+// viajan, igual que en el camino #P1 de WhatsApp. El chatId ata el pedido al cliente sin
+// pedirle el teléfono.
+async function pedirTelegram() {
+  if (cart.length === 0 || !CONFIG.telegram_bot) return;
+  if (servicioCerrado()) { alert(mensajeServicio()); return; }
+  var nombre = _pedNombre();
+  if (!nombre) {
+    var nmt = document.getElementById('cliente-nombre');
+    if (nmt) { nmt.focus(); nmt.style.borderColor = '#ff5252'; }
+    alert('Escribe a nombre de quién es el pedido.');
+    return;
+  }
+  var btn = document.getElementById('btn-telegram');
+  if (btn) { btn.disabled = true; btn.textContent = 'Abriendo Telegram…'; }
+  try {
+    var urlBorrador = CONFIG.telegram_borrador;
+    var body = {
+      items: buildOrderItems(),
+      nombre_cliente: nombre,
+      modo_consumo: _pedModo(),
+      hora_recogida: _pedHora() || null,
+      metodo_pago: _pedMetodo(),
+      mayor_edad_confirmado: true
+    };
+    var r = await fetch(urlBorrador, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    var data = await r.json().catch(function () { return null; });
+    var cuerpo = (data && data.data) || data;   // el gateway sirve el cuerpo PLANO; toleramos {data:{...}}
+    if (!r.ok || !cuerpo || !cuerpo.url) {
+      throw new Error((data && data.error && data.error.message) || ('HTTP ' + r.status));
+    }
+    saveLastOrder();
+    window.open(cuerpo.url, '_blank');   // t.me/<bot>?start=p_<codigo>
+    _cerrarPedido(nombre);
+  } catch (e) {
+    alert('No se pudo abrir Telegram.' + (CONFIG.whatsapp_telefono ? ' Prueba por WhatsApp.' : ' Inténtalo otra vez en un momento.'));
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '✈️ Telegram'; }
+  }
 }
 
 // Items del pedido ONLINE (tienda-api → pedido.crear-tienda). Además del texto que lee el

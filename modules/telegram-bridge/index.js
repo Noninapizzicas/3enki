@@ -155,13 +155,20 @@ class TelegramBridgeModule extends ModuloHibridoReflejo {
   async onTelegramTextReceived(event) {
     const d = (event && event.data) || event || {};
     if (!d.text) return;
+    // Código de pedido pegado a mano (p_ABC123): lo atiende el canal pedido-telegram.
+    if (/^p_[A-Za-z0-9]{4,10}$/.test(String(d.text).trim())) return;
     await this._reenviarAlChat(d, d.text);
   }
 
   async onTelegramCommandReceived(event) {
     const d = (event && event.data) || event || {};
     if (!d.command) return;
-    const texto = `/${d.command}${(d.args || []).length ? ' ' + d.args.join(' ') : ''}`;
+    // `/start p_<codigo>` es un PEDIDO, no una conversación: lo atiende el canal
+    // pedido-telegram (re-tasa y crea la cuenta). Reenviarlo al chat haría que el LLM
+    // contestara ADEMÁS de la confirmación del pedido — dos respuestas al mismo gesto.
+    const args = Array.isArray(d.args) ? d.args : [];
+    if (String(d.command).toLowerCase() === 'start' && args[0] && /^p_[A-Za-z0-9]{4,10}$/.test(args[0])) return;
+    const texto = `/${d.command}${args.length ? ' ' + args.join(' ') : ''}`;
     await this._reenviarAlChat(d, texto);
   }
 

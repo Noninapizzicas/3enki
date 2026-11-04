@@ -43,6 +43,20 @@ pizzepos.es {
 		reverse_proxy localhost:9001
 	}
 
+	# Canal TELEGRAM de pedidos — el borrador que pide la carta. Mismo patrón que
+	# `/tienda/*` → tienda-api: ruta pública limpia, el bundle no filtra el nombre
+	# del módulo interno. Va ANTES por legibilidad; Caddy resuelve `handle` por
+	# especificidad de path, así que `/tienda/telegram/*` gana a `/tienda/*` sin
+	# depender del orden.
+	#   carta → POST /tienda/telegram/borrador/<project>  (items por id, sin precios)
+	#         → /modules/pedido-telegram/tienda/telegram/borrador/<project>
+	#   → { codigo, url: t.me/<bot>?start=p_<codigo> } → el cliente pulsa /start
+	#   → el servidor RE-TASA contra la carta y emite pedido.crear-tienda.
+	handle /tienda/telegram/* {
+		rewrite * /modules/pedido-telegram{path}
+		reverse_proxy localhost:3000
+	}
+
 	# Vertical vapers — endpoint público de la PWA para enviar pedidos.
 	# Rewrite a `/modules/tienda-api/tienda/pedido/<project>` (path interno con
 	# prefix del module HTTP gateway). Razón de mantener `/tienda/*` público

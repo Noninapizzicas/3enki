@@ -1,0 +1,74 @@
+{
+  "_doc": "Aviso al CLIENTE cuando la cocina termina el pedido entero. Escucha cocina.pedido_listo (que cocina emite SOLO cuando TODOS los items del pedido estan en estado 'listo', no por item) y, si la cuenta viene de un canal de pedido (origen='tienda') y es de recogida (no de mesa), manda un WhatsApp al cliente por el puente QR: 'tu pedido ya esta listo, pasa a recogerlo' + el codigo de turno (L 395) y el nombre que tiene que dar en la barra. El destino es la JID de WhatsApp que trajo el pedido (cliente_jid) o, si solo hay movil, el telefono internacional; la cuenta del puente por la que SALE el aviso es la misma por la que ENTRO el pedido (canal_cuenta), para no escribirle desde un numero que el cliente no conoce. Opcional: config/config.json del proyecto -> whatsapp_qr {url, slug, activo} para forzar otro puente o apagarlo. Sin datos suficientes no manda nada y lo declara.",
+  "name": "aviso-pedido-listo",
+  "version": "1.0.0",
+  "description": "Avisa al cliente por WhatsApp cuando cocina marca listo el pedido completo: 'pasa a recogerlo' con su codigo de turno y su nombre. Cierra el circulo del canal (pedido entrante por puente QR -> aviso de recogida por el MISMO puente).",
+  "author": "Enki Team",
+  "language": "es",
+  "main": "index.js",
+  "config": {
+    "persistence": {
+      "pattern": "ninguno",
+      "_doc": "Modulo stateless: la cuenta y su cliente se leen en el momento (cuentas.handleGetCuenta) y la config se relee del proyecto en cada aviso. Sin cache que se quede fria tras un reinicio."
+    }
+  },
+  "horizonte": "vertical-tienda-pwa-sin-datos",
+  "horizonte_doc": "arquitectura/cabecera/pizzepos/pos-nucleo.md",
+  "events": {
+    "subscribes": [
+      {
+        "event": "cocina.pedido_listo",
+        "handler": "onCocinaPedidoListo",
+        "razon": "Disparador: cocina solo lo emite cuando TODOS los items del pedido estan listos. Ese es exactamente el momento en que el cliente puede pasar a recogerlo."
+      }
+    ]
+  },
+  "subscribes": [
+    {
+      "event": "cocina.pedido_listo",
+      "handler": "onCocinaPedidoListo"
+    }
+  ],
+  "eventos_publicados_que_requieren_consumer": [
+    {
+      "event": "project.get.request",
+      "consumer_esperado": "modules/project-manager",
+      "razon": "Resolver base_path del proyecto para leer config/config.json (whatsapp_qr). Sin proyecto no se sabe a que puente mandar."
+    }
+  ],
+  "publishes": [
+    "aviso_pedido_listo.enviado",
+    "aviso_pedido_listo.fallido"
+  ],
+  "observability": {
+    "metrics": [
+      {
+        "name": "aviso_pedido.enviado.total",
+        "type": "counter",
+        "labels": [
+          "project"
+        ],
+        "_doc": "Avisos enviados al cliente con exito."
+      },
+      {
+        "name": "aviso_pedido.fallido.total",
+        "type": "counter",
+        "labels": [
+          "project",
+          "razon"
+        ],
+        "_doc": "Avisos que no se pudieron enviar. Razones: sin_contacto (ni JID ni telefono), sin_cuenta_puente (el pedido no dice por que cuenta del puente entro), proyecto_no_resuelto, puente_no_responde, puente_rechaza, cuenta_no_encontrada."
+      },
+      {
+        "name": "aviso_pedido.descartado.total",
+        "type": "counter",
+        "labels": [
+          "project",
+          "razon"
+        ],
+        "_doc": "Pedidos listos sin aviso al cliente por diseno: no_es_pedido_de_canal (mesa/POS), duplicado."
+      }
+    ]
+  },
+  "dependencies": []
+}

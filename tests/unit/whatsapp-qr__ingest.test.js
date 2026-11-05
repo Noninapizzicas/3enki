@@ -70,6 +70,10 @@ test('el precio sale de la carta, no del texto (0,01 € → 5,95 €)', () => {
   assert.strictEqual(payload.items[0].precio_unitario_centimos, 595);
   assert.strictEqual(payload.total_centimos, 595);
   assert.strictEqual(payload.cliente_telefono, '34600000000', 'un @s.whatsapp.net SÍ es un teléfono');
+  // El destino del aviso "tu pedido está listo" y la cuenta por la que sale: sin esto
+  // el aviso de recogida no tiene por dónde ni a quién.
+  assert.strictEqual(payload.cliente_jid, '34600000000@s.whatsapp.net', 'la JID completa viaja al pedido');
+  assert.ok(payload.canal_cuenta, 'el pedido dice por qué cuenta del puente entró');
 });
 
 test('dos líneas y cantidades: el total lo compone la carta', () => {

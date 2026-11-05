@@ -525,6 +525,61 @@ function publishedOf(mocks, name) {
     await m.onUnload();
   });
 
+  await testAsync('tienda · la JID de WhatsApp llega a la CUENTA (destino del aviso de recogida)', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    let metadataCuenta = null;
+    const cuentas = {
+      handleCreateCuenta: async (d) => {
+        metadataCuenta = d.metadata;
+        return { status: 201, data: { id: 'llevar_test1', ref_display: 'Juan L 001' } };
+      }
+    };
+    const comandero = {
+      handleAddItem: async (d) => ({ status: 201, data: { item: { precio: d.precio ?? 0, cantidad: d.cantidad } } }),
+      handleEnviarCocina: async () => ({ status: 200, data: {} })
+    };
+    m.moduleRegistry = { get: (n) => (n === 'cuentas' ? { instance: cuentas } : n === 'comandero' ? { instance: comandero } : null) };
+    const r = await m.handleCreatePedidoTienda(validInputTienda({
+      items: [{ cantidad: 1, descripcion: 'Anne Bonny', precio_unitario_centimos: 1500 }],
+      total_centimos: 1500,
+      cliente_jid: '191624311222342@lid',
+      canal_cuenta: 'the-pirate'
+    }));
+    assert.strictEqual(r.status, 201);
+    // Sin JID en la cuenta, el aviso "tu pedido esta listo" no tiene a donde ir cuando
+    // el cliente escribe con numero oculto (LID): el telefono llega vacio.
+    assert.strictEqual(metadataCuenta.cliente_jid, '191624311222342@lid');
+    // Y la cuenta del puente por la que saldra el aviso (no se deriva del slug del proyecto).
+    assert.strictEqual(metadataCuenta.canal_cuenta, 'the-pirate');
+    assert.strictEqual(m.pedidos.get(r.data.pedido_id).cliente_jid, '191624311222342@lid');
+    await m.onUnload();
+  });
+
+  await testAsync('tienda · una JID que no lo parece NO se guarda (no se inventa destino)', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    let metadataCuenta = null;
+    const cuentas = {
+      handleCreateCuenta: async (d) => {
+        metadataCuenta = d.metadata;
+        return { status: 201, data: { id: 'llevar_test2', ref_display: 'Juan L 002' } };
+      }
+    };
+    const comandero = {
+      handleAddItem: async (d) => ({ status: 201, data: { item: { precio: d.precio ?? 0, cantidad: d.cantidad } } }),
+      handleEnviarCocina: async () => ({ status: 200, data: {} })
+    };
+    m.moduleRegistry = { get: (n) => (n === 'cuentas' ? { instance: cuentas } : n === 'comandero' ? { instance: comandero } : null) };
+    await m.handleCreatePedidoTienda(validInputTienda({
+      items: [{ cantidad: 1, descripcion: 'Anne Bonny', precio_unitario_centimos: 1500 }],
+      total_centimos: 1500,
+      cliente_jid: '34600000000'   // numero pelado: NO es una JID
+    }));
+    assert.strictEqual(metadataCuenta.cliente_jid, null);
+    await m.onUnload();
+  });
+
   await testAsync('tienda · sin items devuelve 400 INVALID_INPUT', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);

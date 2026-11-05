@@ -628,6 +628,8 @@ class PedidosModule extends BaseModule {
         total_centimos,
         canal_origen,
         cliente_telefono,
+        cliente_jid,
+        canal_cuenta,
         cliente_nombre,
         modo_consumo,
         hora_recogida,
@@ -768,6 +770,12 @@ class PedidosModule extends BaseModule {
         total: total_centimos / 100,
         cliente_nombre: cliente_nombre_norm,
         cliente_telefono: cliente_telefono || null,
+        // JID completa de WhatsApp del cliente (`...@s.whatsapp.net` o `...@lid`). Es lo que
+        // permite avisarle cuando la cocina termina: con numero oculto (LID) no hay movil
+        // que componer, y los avisos de recogida se quedarian sin destino.
+        cliente_jid: this._normalizarJid(cliente_jid),
+        // Cuenta del puente por la que entro el pedido: por ahi sale el aviso de recogida.
+        canal_cuenta: this._normalizarCuentaPuente(canal_cuenta),
         modo_consumo: modo_consumo_norm,
         hora_recogida: hora_recogida_norm,
         metodo_pago: metodo_pago_norm,
@@ -1384,6 +1392,24 @@ class PedidosModule extends BaseModule {
       .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'item';
   }
 
+  // JID de WhatsApp normalizada (`<usuario>@<servidor>`), o null si no lo parece.
+  // No se inventa un `@s.whatsapp.net` a partir de un numero suelto: eso es lo que
+  // convierte un LID (id interno de WhatsApp) en un "telefono" que no existe.
+  _normalizarJid(valor) {
+    if (typeof valor !== 'string') return null;
+    const s = valor.trim().toLowerCase();
+    if (!s || s.length > 80) return null;
+    return /^[a-z0-9.:_-]+@(s\.whatsapp\.net|lid|c\.us)$/.test(s) ? s : null;
+  }
+
+  // Slug de la cuenta del PUENTE de WhatsApp (`tienda`, `the-pirate`…). No es el slug
+  // del proyecto y no se deriva de el: es la sesion de WhatsApp por la que entro el pedido.
+  _normalizarCuentaPuente(valor) {
+    if (typeof valor !== 'string') return null;
+    const s = valor.trim().toLowerCase();
+    return /^[a-z0-9][a-z0-9_-]{0,39}$/.test(s) ? s : null;
+  }
+
   // Crea una cuenta POS operativa desde un pedido de tienda y la alimenta por el
   // FLUJO REAL del comandero (no se reinventa nada, todo eventos):
   //   cuentas.handleCreateCuenta  → cuenta vacía
@@ -1420,6 +1446,11 @@ class PedidosModule extends BaseModule {
           hora_recogida: pedido.hora_recogida || null,
           cliente_nombre: pedido.cliente_nombre || null,
           cliente_telefono: pedido.cliente_telefono || null,
+          // Destino del AVISO DE RECOGIDA: la cuenta es lo unico que sigue existiendo
+          // cuando la cocina termina (el pedido de tienda puede haberse reciclado), asi
+          // que la JID de WhatsApp tiene que vivir aqui, no solo en el pedido.
+          cliente_jid: pedido.cliente_jid || null,
+          canal_cuenta: pedido.canal_cuenta || null,
           pedido_tienda_id: pedido.id,
           // Un pedido de tienda no tiene mesa ni ticket: nadie del canal lo va a
           // cerrar, así que el cierre es del COBRO (y con él, la venta al libro).

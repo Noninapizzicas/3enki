@@ -401,6 +401,14 @@ async function procesar(ev) {
     total_centimos,
     nombre_cliente: parsed.cliente_nombre || 'Cliente WhatsApp',
     cliente_telefono: tel,
+    // JID COMPLETA (`...@s.whatsapp.net` o `...@lid`). Es el destino real del aviso de
+    // recogida: contestar un LID por telefono es imposible, y hoy WhatsApp identifica
+    // asi a los remitentes con numero oculto. El puente acepta la JID entera.
+    cliente_jid: de || null,
+    // Cuenta del PUENTE por la que entro el pedido (la misma por la que se le confirma).
+    // El aviso de "ya esta listo" sale por aqui: contestarle desde otra cuenta es
+    // escribirle desde un numero que el cliente no conoce.
+    canal_cuenta: SEND_SLUG || null,
     modo_consumo: parsed.modo_consumo || 'recoger',
     hora_recogida: parsed.hora_recogida || null,
     mayor_edad_confirmado: parsed.mayor_edad_confirmado,

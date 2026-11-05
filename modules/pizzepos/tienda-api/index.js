@@ -49,6 +49,16 @@ class TiendaApiModule extends BaseModule {
     if (body.cliente_telefono != null && typeof body.cliente_telefono !== 'string') {
       return { ok: false, error: { code: 'INVALID_INPUT', message: 'cliente_telefono must be a string', details: { kind: 'invalid_format', field: 'cliente_telefono' } } };
     }
+    // JID de WhatsApp del cliente (`...@s.whatsapp.net` o `...@lid`). Es el destino
+    // real del aviso de recogida: el movil no siempre viaja (WhatsApp identifica por
+    // LID a los remitentes con numero oculto) y sin JID hay clientes inalcanzables.
+    if (body.cliente_jid != null && typeof body.cliente_jid !== 'string') {
+      return { ok: false, error: { code: 'INVALID_INPUT', message: 'cliente_jid must be a string', details: { kind: 'invalid_format', field: 'cliente_jid' } } };
+    }
+    // Cuenta del puente por la que ENTRO el pedido (el canal contesta por donde le hablaron).
+    if (body.canal_cuenta != null && typeof body.canal_cuenta !== 'string') {
+      return { ok: false, error: { code: 'INVALID_INPUT', message: 'canal_cuenta must be a string', details: { kind: 'invalid_format', field: 'canal_cuenta' } } };
+    }
     if (body.nombre_cliente != null && typeof body.nombre_cliente !== 'string') {
       return { ok: false, error: { code: 'INVALID_INPUT', message: 'nombre_cliente must be a string', details: { kind: 'invalid_format', field: 'nombre_cliente' } } };
     }
@@ -303,6 +313,8 @@ class TiendaApiModule extends BaseModule {
         total_centimos: normalized.total_centimos,
         canal_origen: 'web',
         cliente_telefono: normalized.cliente_telefono,
+        cliente_jid: normalized.cliente_jid,     // JID de WhatsApp (destino del aviso de recogida)
+        canal_cuenta: normalized.canal_cuenta,   // cuenta del puente por la que entro (salida del aviso)
         cliente_nombre: normalized.nombre_cliente,
         modo_consumo: normalized.modo_consumo,
         hora_recogida: normalized.hora_recogida,

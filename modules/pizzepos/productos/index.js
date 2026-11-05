@@ -42,6 +42,14 @@ class ProductosModule extends BaseModule {
     this.storageSection = 'pizzepos';
     this.projectPaths = new Map();
     this.pendingProjectRequests = new Map();
+
+    // Proyectos cuyo catálogo YA se proyectó al arrancar. Tras un reinicio las cachés de
+    // comandero y pedidos nacen VACÍAS: su categoría y la ficha del plato se pueblan por
+    // `catalogo.actualizado`, y sin este empujón dependían de que alguien abriera el POS
+    // (productos/load_carta). Resultado medido el 5-nov: deploy → cocina sin categoría y
+    // sin ingredientes hasta que alguien recargaba a mano. Se empuja UNA vez por proyecto,
+    // en cuanto tarifas dice qué carta manda.
+    this.proyectadosAlArranque = new Set();
   }
 
   // ==========================================
@@ -341,6 +349,7 @@ class ProductosModule extends BaseModule {
       pending.reject(new Error('Module unloading'));
     }
     this.pendingProjectRequests.clear();
+    this.proyectadosAlArranque.clear();
     this.logger.info('module.unloaded', { module: this.name });
   }
 
@@ -434,6 +443,9 @@ class ProductosModule extends BaseModule {
   // ==========================================
 
   // Emite catalogo.actualizado con la proyección lite (el comandero re-pull carta_completa).
+  // La FICHA viaja con el catálogo: cocina pinta bajo el nombre lo que lleva el plato. Sin
+  // ella, un pedido de la web o de Telegram (que no la mandan) llega a cocina con el nombre
+  // y nada más — el dueño: «aparece la pizza, lo que no aparece son los ingredientes».
   async _emitCatalogo(project_id, carta, source, sourceEvent) {
     const { productos } = this._proyectar(carta);
     await this._publicarEvento('catalogo.actualizado', {
@@ -441,7 +453,9 @@ class ProductosModule extends BaseModule {
       menu_id: carta?.meta?.id || null,
       source,
       productos: productos.map(p => ({
-        id: p.id, nombre: p.nombre, precio: p.precio, categoria: p.categoria || null, estaciones: p.estaciones || null
+        id: p.id, nombre: p.nombre, precio: p.precio, categoria: p.categoria || null, estaciones: p.estaciones || null,
+        ingredientes_base: (Array.isArray(p.ingredientes_base) ? p.ingredientes_base : [])
+          .map(i => (typeof i === 'string' ? i : i?.nombre)).filter(Boolean)
       }))
     }, sourceEvent);
     this.metrics?.increment?.('catalogo.actualizado.total');
@@ -529,6 +543,18 @@ class ProductosModule extends BaseModule {
       llevadoo: canales.llevadoo || null
     };
     this.mappingCanalesPerProject.set(project_id, mapping);
+
+    // Empujón de ARRANQUE: con el mapping ya sabemos qué carta manda, así que proyectamos el
+    // catálogo UNA vez por proyecto. Sin esto, tras cualquier reinicio el comandero y pedidos
+    // tienen la caché vacía (nacen vacías y solo se pueblan con `catalogo.actualizado`) y la
+    // cocina pinta las líneas sin categoría y sin ficha hasta que alguien abre el POS.
+    if (!this.proyectadosAlArranque.has(project_id)) {
+      this.proyectadosAlArranque.add(project_id);
+      this._cartaActiva(project_id)
+        .then(carta => (carta ? this._emitCatalogo(project_id, carta, 'arranque') : null))
+        .catch(err => this.logger.warn('catalogo.arranque.error', { project_id, error: err?.message }));
+    }
+
     this.logger.info('tarifas.config.applied', {
       project_id,
       tipo: data?.tipo || 'unknown',

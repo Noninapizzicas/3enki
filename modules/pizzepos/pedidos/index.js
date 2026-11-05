@@ -405,7 +405,11 @@ class PedidosModule extends BaseModule {
           nombre: producto.nombre || producto.id,
           precio: producto.precio,
           categoria: producto.categoria,
-          estaciones: producto.estaciones || null
+          estaciones: producto.estaciones || null,
+          // La FICHA del plato (lo que lleva) viaja con el catálogo: es lo que la cocina
+          // pinta bajo el nombre. Se guardan los NOMBRES porque es lo que se lee en la
+          // pantalla; el comandero manual hace exactamente lo mismo.
+          ingredientes_base: this._nombresIngredientes(producto)
         });
       }
     }
@@ -416,11 +420,28 @@ class PedidosModule extends BaseModule {
 
   async onProductoActualizado(event) {
     const data = event?.data || event?.payload || event;
-    const { id, nombre, precio, categoria } = data || {};
+    const { id, nombre, precio, categoria, estaciones } = data || {};
     if (id && precio !== undefined) {
-      this.productosCache.set(id, { nombre: nombre || id, precio, categoria });
+      const previo = this.productosCache.get(id) || {};
+      this.productosCache.set(id, {
+        nombre: nombre || id,
+        precio,
+        categoria,
+        estaciones: estaciones || previo.estaciones || null,
+        ingredientes_base: this._nombresIngredientes(data) || previo.ingredientes_base || null
+      });
       this.logger.info('pedidos.producto.cache_updated', { producto_id: id, precio });
     }
+  }
+
+  // Nombres de los ingredientes de un producto de la carta, tolerando las dos claves
+  // (ingredientes_base / ingredientes) y los dos shapes (string u objeto).
+  _nombresIngredientes(producto) {
+    const lista = (Array.isArray(producto?.ingredientes_base) && producto.ingredientes_base.length)
+      ? producto.ingredientes_base
+      : (Array.isArray(producto?.ingredientes) ? producto.ingredientes : []);
+    const nombres = lista.map(i => (typeof i === 'string' ? i : i?.nombre)).filter(Boolean);
+    return nombres.length ? nombres : null;
   }
 
   _buildPedidoItem(item, defaultEstado = 'pendiente') {
@@ -1454,6 +1475,16 @@ class PedidosModule extends BaseModule {
           const subtotalCentimos = baseCentimos * unidades + extra;
           precioLinea = Math.round((subtotalCentimos / unidades)) / 100;
         }
+        // LA FICHA DEL PLATO: si el canal no la manda (web, WhatsApp, Telegram), sale de
+        // la carta — el plato se reconoce por su `producto_id` y el POS ya tiene el
+        // catálogo. Sin esto la cocina ve el nombre y nada más: no sabe qué lleva el plato,
+        // ni qué le han quitado ni añadido. Lo que el cliente pidió de más SÍ viaja en
+        // `variaciones`; esto es lo que el plato lleva de fábrica.
+        const enCache = it.producto_id ? this.productosCache.get(it.producto_id) : null;
+        const ingredientesBase = (Array.isArray(it.ingredientes_base) && it.ingredientes_base.length)
+          ? it.ingredientes_base
+          : (enCache?.ingredientes_base || null);
+
         await comandero.handleAddItem({
           cuenta_id, project_id,
           producto_id: it.producto_id || `tienda:${this._slugItem(it.descripcion)}`,
@@ -1465,7 +1496,7 @@ class PedidosModule extends BaseModule {
           // `tipo` solo mitad/al_gusto (enum del comandero); normal va solo con `variaciones`.
           ...((it.tipo === 'mitad_mitad' || it.tipo === 'al_gusto') ? { tipo: it.tipo } : {}),
           ...(it.variaciones ? { variaciones: it.variaciones } : {}),
-          ...(Array.isArray(it.ingredientes_base) ? { ingredientes_base: it.ingredientes_base } : {}),
+          ...(Array.isArray(ingredientesBase) ? { ingredientes_base: ingredientesBase } : {}),
           ...(it.pizza_izquierda ? { pizza_izquierda: it.pizza_izquierda } : {}),
           ...(it.pizza_derecha ? { pizza_derecha: it.pizza_derecha } : {})
         });

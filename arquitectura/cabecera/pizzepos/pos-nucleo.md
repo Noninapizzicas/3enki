@@ -15,7 +15,7 @@ fuentes:
   - modules/pizzepos/tarifas/**
   - modules/pizzepos/persistencia-comandero/**
   - modules/pizzepos/impresion/**
-verificado: 2026-10-27
+verificado: 2026-11-05 (pedidos: la JID completa del cliente y la cuenta del puente por la que entró viajan a datos_especificos de la CUENTA — el DESTINO del aviso de recogida; con número oculto (LID) el móvil llega vacío y el aviso se quedaría sin a quién mandarlo)
 ---
 
 # PizzePOS Módulos — Subsistema de Punto de Venta (v3.2.0)
@@ -872,6 +872,14 @@ CLASE Pedido {
   }
 }
 ```
+
+**El DESTINO del cliente viaja en la CUENTA (5-nov-2026).** El pedido de tienda no se queda en el
+móvil: lleva la JID completa de WhatsApp (`cliente_jid`, `…@s.whatsapp.net` o `…@lid`) y la cuenta
+del puente por la que ENTRÓ (`canal_cuenta`) hasta `datos_especificos` de la CUENTA. Con número
+oculto (LID) el teléfono llega vacío y sin JID no habría a quién avisar cuando la cocina termine;
+`_normalizarJid` guarda `null` ante algo que no parece JID en vez de inventar un destino. Son datos
+de la cuenta —los escribe `handleCreatePedidoTienda`— y los lee quien avisa al cliente
+(`modules/pizzepos/aviso-pedido-listo`, rebanada `autoservicio-whatsapp`).
 
 ### 10. TARIFAS (v1.0.0) — Mapeo Canal→Carta
 

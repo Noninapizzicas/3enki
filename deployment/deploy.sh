@@ -86,6 +86,7 @@ rsync -a --delete \
     --exclude='frontend/build' \
     --exclude='frontend/.svelte-kit' \
     --exclude='frontend/package-lock.json' \
+    --exclude='enki-sense/target' \
     "${REPO_DIR}/" "${INSTALL_DIR}/"
 
 # 2) Deps backend
@@ -129,6 +130,16 @@ normalizar_permisos "${REPO_DIR}/modules"
 #    reconciliador resuelve sus plantillas por __dirname y escribe rutas absolutas.
 log "Reconciliando infra (dirs · systemd · Caddy)..."
 node "${REPO_DIR}/deployment/reconcile.js"
+
+# 5) AVISO: los binarios Rust (motor-hermes y compania) NO se compilan en este deploy y
+#    `rsync --delete` los borraba si no se excluia `enki-sense/target` (ya excluido). Si aun
+#    asi falta el del bridge, el puerto 8130 no escucha y TODO lo que va por el bus desde fuera
+#    (Hermes, cron de entrada documental) falla en silencio: avisamos aqui.
+if [ ! -x "${INSTALL_DIR}/enki-sense/target/release/motor-hermes" ]; then
+    warn "motor-hermes NO esta compilado: el bridge 8130 no arrancara. Compila con:"
+    warn "  cd ${INSTALL_DIR}/enki-sense && cargo build --release -p motor-hermes"
+    warn "  systemctl restart motor-hermes"
+fi
 
 echo ""
 log "Deploy completado"

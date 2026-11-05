@@ -28,6 +28,7 @@ for _arg in "$@"; do
         --docker)         ENKI_ENABLE_DOCKER=1 ;;
         --whatsapp)       ENKI_ENABLE_WHATSAPP=1 ;;
         --whatsapp-slug=*) ENKI_WHATSAPP_SLUG="${_arg#--whatsapp-slug=}" ;;
+        --whatsapp-proyecto=*) ENKI_WHATSAPP_PROYECTO="${_arg#--whatsapp-proyecto=}" ;;
         --permitir-sucio) : ;;   # ya es el comportamiento normal (se despliega con aviso)
         --forzar=*)       ENKI_DEPLOY_FORZAR="${_arg#--forzar=}" ;;
         --*)      echo "[!] flag desconocido ignorado: $_arg" ;;
@@ -906,7 +907,9 @@ if [ "${ENKI_ENABLE_WHATSAPP:-0}" = "1" ]; then
     WA_BASE=/opt/whatsapp
     # Se compila como root (ya tiene el toolchain de §3a-ter-aa) y luego se cede
     # al usuario del servicio, para que la sesión y los JSONL sean suyos.
-    if WA_BASE="${WA_BASE}" SLUG="${ENKI_WHATSAPP_SLUG:-tienda}" ENKI_HOME="${INSTALL_DIR}" \
+    if WA_BASE="${WA_BASE}" SLUG="${ENKI_WHATSAPP_SLUG:-tienda}" \
+       PROYECTO="${ENKI_WHATSAPP_PROYECTO:-${ENKI_WHATSAPP_SLUG:-tienda}}" \
+       ENKI_HOME="${INSTALL_DIR}" \
        UNIT_USER=www-data UNIT_GROUP=www-data \
        bash "${REPO_DIR}/bridges/whatsapp-qr/install.sh"; then
         chown -R www-data:www-data "${WA_BASE}" 2>/dev/null || true

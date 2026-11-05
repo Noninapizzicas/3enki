@@ -15,12 +15,21 @@
 # no puede levantar nada. El pidfile con kill -0 muere con el proceso, sin herencia.
 # Se lanza SIEMPRE desde watchdog.sh (que hace setsid), nunca en primer plano.
 set -u
-BASE=/home/hermes
+# Config por máquina: install.sh escribe $DIR/wa.env (rutas, cuenta del puente,
+# proyecto de Enki, ENKI_HOME). Sin él —la VPS original— rigen los valores de
+# siempre, así que este fichero no cambia nada donde ya corría.
+WA_ENV=${WA_ENV:-$(cd "$(dirname "$0")" && pwd)/wa.env}
+[ -f "$WA_ENV" ] && { set -a; . "$WA_ENV"; set +a; }
+BASE=${WA_BASE:-/home/hermes}
+SLUG=${WA_SLUG:-tienda}                 # cuenta del puente (fichero de eventos)
+PROYECTO=${WA_PROYECTO:-rapitvapers}    # slug del proyecto en Enki (carta, POS)
+CUENTAS=${WA_ACCOUNTS:-accounts-$SLUG.json}
+EVENTOS=${WA_EVENTOS:-$BASE/wa-rust/data/eventos-$SLUG.jsonl}
 DIR=$BASE/wa-servicio
 LOG=$DIR/servicio.log
 PIDFILE=$DIR/servicio.pid
 MIO_PIDFILE=$DIR/ingest.$$.pid   # el ingest de ESTE supervisor, no el de otro
-PUENTE_CMD="enki-wa-bridge data/accounts-tienda.json"
+PUENTE_CMD="enki-wa-bridge data/$CUENTAS"
 mkdir -p "$DIR"
 
 log() { echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) [servicio] $*" >> "$LOG"; }
@@ -40,7 +49,7 @@ puente_pid() { pgrep -f "$PUENTE_CMD" | head -1; }
 
 arrancar_puente() {
   cd "$BASE/wa-rust" || return 1
-  ./target/release/examples/enki-wa-bridge data/accounts-tienda.json >> "$DIR/puente.log" 2>&1 &
+  ./target/release/enki-wa-bridge "data/$CUENTAS" >> "$DIR/puente.log" 2>&1 &
   local i
   for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
     sleep 2
@@ -90,9 +99,9 @@ H1=$!
       sleep 5
     done
     [ "$hasta" = 1 ] && log "POS arriba, arranco el ingest"
-    log "arrancando ingest rapitvapers"
+    log "arrancando ingest $PROYECTO"
     cd "$BASE/enki-wa-ingest" || { log "no existe $BASE/enki-wa-ingest"; sleep 30; continue; }
-    node ingest.js --slug rapitvapers --eventos "$BASE/wa-rust/data/eventos-tienda.jsonl" >> "$DIR/ingest.log" 2>&1 &
+    node ingest.js --slug "$PROYECTO" --eventos "$EVENTOS" --send-slug "$SLUG" >> "$DIR/ingest.log" 2>&1 &
     ING=$!
     echo "$ING" > "$MIO_PIDFILE"
     wait "$ING"

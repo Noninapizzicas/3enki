@@ -81,6 +81,21 @@ git clone <repo> && cd 3enki/bridges/whatsapp-qr
 ./install.sh                     # layout en $HOME (WA_BASE=... para otro sitio)
 ```
 
+Dos slugs que **no** son el mismo y confundirlos deja el canal mudo:
+
+| variable | qué es | ejemplo |
+|---|---|---|
+| `SLUG` | cuenta del **puente** (nombre del fichero `eventos-<slug>.jsonl`) | `tienda` |
+| `PROYECTO` | proyecto de **Enki** donde nace el pedido (carta, POS) | `rapitvapers` |
+
+```bash
+SLUG=tienda PROYECTO=rapitvapers ./install.sh
+```
+
+El install deja las diferencias de la máquina en `wa-servicio/wa.env` (rutas,
+slugs, `ENKI_HOME`), que `servicio.sh` lee al arrancar. El script que viaja en el
+repo no lleva ni una ruta ni un slug de un cliente concreto.
+
 O, como parte del alta de la VPS entera (instala pero **no arranca**):
 
 ```bash

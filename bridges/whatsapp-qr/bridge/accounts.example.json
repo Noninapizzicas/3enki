@@ -1,7 +1,7 @@
 {
   "port": 8235,
-  "eventos": "/home/hermes/wa-rust/data/eventos-tienda.jsonl",
+  "eventos": "__WA_BASE__/wa-rust/data/eventos-__SLUG__.jsonl",
   "accounts": [
-    { "slug": "rapitvapers", "db": "data/rapitvapers.db", "enabled": true }
+    { "slug": "__SLUG__", "db": "data/__SLUG__.db", "enabled": true }
   ]
 }

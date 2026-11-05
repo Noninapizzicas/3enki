@@ -3,7 +3,13 @@
 #
 #   ./install.sh                          # layout por defecto ($HOME/wa-*, el de la VPS)
 #   WA_BASE=/opt/whatsapp ./install.sh     # otro sitio (lo usa vps-setup.sh --whatsapp)
-#   SLUG=tienda ./install.sh               # slug de la cuenta del puente (def. "tienda")
+#   SLUG=tienda ./install.sh               # cuenta del puente (def. "tienda")
+#   PROYECTO=rapitvapers ./install.sh      # proyecto de Enki atendido (def. = SLUG)
+#
+# SLUG y PROYECTO NO son lo mismo y confundirlos deja el canal mudo: el puente
+# guarda los eventos en `eventos-<SLUG>.jsonl` y el lector crea el pedido en el
+# proyecto `<PROYECTO>` de Enki. Si no coinciden, el parser devuelve otro slug y
+# el lector descarta el pedido como "de otro negocio".
 #
 # Reproduce el MISMO layout que corre en la VPS, con tres piezas:
 #   $WA_BASE/wa-rust/         el puente (compilado AQUÍ, no se copia ningún binario)
@@ -17,6 +23,7 @@ set -eu
 AQUI=$(cd "$(dirname "$0")" && pwd)
 WA_BASE=${WA_BASE:-$HOME}
 SLUG=${SLUG:-tienda}
+PROYECTO=${PROYECTO:-$SLUG}
 ENKI_HOME_DIR=${ENKI_HOME:-/opt/enki}
 UNIT_USER=${UNIT_USER:-$(id -un)}
 UNIT_GROUP=${UNIT_GROUP:-$(id -gn)}
@@ -43,13 +50,14 @@ BIN="$WA_BASE/wa-rust/target/release/enki-wa-bridge"
 say "   binario: $BIN ($(du -h "$BIN" | cut -f1))"
 
 say "== 3/6 · config de cuentas (no viaja en el repo: lleva teléfonos y rutas)"
-CFG="$WA_BASE/wa-rust/data/accounts-tienda.json"
+CFG="$WA_BASE/wa-rust/data/accounts-$SLUG.json"
 mkdir -p "$WA_BASE/wa-rust/data"
 if [ ! -f "$CFG" ]; then
-  sed -e "s#/home/hermes#$WA_BASE#g" -e "s#\"rapitvapers\"#\"$SLUG\"#g" \
+  sed -e "s#__WA_BASE__#$WA_BASE#g" -e "s#__SLUG__#$SLUG#g" \
     "$AQUI/bridge/accounts.example.json" > "$CFG"
   chmod 600 "$CFG"
-  say "   creada $CFG (cuenta \"$SLUG\"). Añade más cuentas en ese fichero."
+  say "   creada $CFG (cuenta \"$SLUG\", eventos en eventos-$SLUG.jsonl)."
+  say "   Añade más cuentas en ese fichero; el puente es multi-cuenta."
 else
   say "   ya existía $CFG — no la toco (tiene la sesión/teléfonos de esta máquina)."
 fi
@@ -67,12 +75,22 @@ fi
 say "== 5/6 · supervisor → $WA_BASE/wa-servicio"
 mkdir -p "$WA_BASE/wa-servicio"
 for f in servicio.sh watchdog.sh; do
-  sed -e "s#/home/hermes#$WA_BASE#g" \
-      -e "s#target/release/examples/enki-wa-bridge#target/release/enki-wa-bridge#g" \
-      -e "s#--slug rapitvapers#--slug $SLUG#g" \
-      "$AQUI/servicio/$f" > "$WA_BASE/wa-servicio/$f"
+  cp "$AQUI/servicio/$f" "$WA_BASE/wa-servicio/$f"
   chmod +x "$WA_BASE/wa-servicio/$f"
 done
+# Lo que distingue a ESTA máquina no se mete en el script (que viaja en el repo):
+# va en wa.env, que servicio.sh lee al arrancar. Así el clon de otra tienda no
+# hereda rutas ni slugs ajenos.
+cat > "$WA_BASE/wa-servicio/wa.env" <<ENV
+WA_BASE=$WA_BASE
+WA_SLUG=$SLUG
+WA_PROYECTO=$PROYECTO
+WA_ACCOUNTS=accounts-$SLUG.json
+WA_EVENTOS=$WA_BASE/wa-rust/data/eventos-$SLUG.jsonl
+ENKI_HOME=$ENKI_HOME_DIR
+ENV
+chmod 600 "$WA_BASE/wa-servicio/wa.env"
+say "   wa.env: cuenta=$SLUG · proyecto=$PROYECTO · Enki=$ENKI_HOME_DIR"
 # La unit de systemd se genera con las rutas y el usuario de ESTA máquina.
 sed -e "s#/home/hermes#$WA_BASE#g" \
     -e "s#^User=hermes#User=$UNIT_USER#" \

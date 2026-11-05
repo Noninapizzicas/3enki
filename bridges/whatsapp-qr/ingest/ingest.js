@@ -13,7 +13,7 @@
  *          ->  POST /send del puente               (confirmacion al cliente)
  *
  * Uso:
- *   node ingest.js --slug rapitvapers [--eventos <ruta>] [--once] [--dry-run] [--desde-inicio]
+ *   node ingest.js --slug tienda [--eventos <ruta>] [--once] [--dry-run] [--desde-inicio]
  */
 
 const fs = require('fs');
@@ -24,7 +24,7 @@ const args = process.argv.slice(2);
 const arg = (n, d) => { const i = args.indexOf('--' + n); return i >= 0 ? args[i + 1] : d; };
 const flag = (n) => args.includes('--' + n);
 
-const SLUG = arg('slug', 'rapitvapers');
+const SLUG = arg('slug', 'tienda');
 const EVENTOS = arg('eventos', path.join(process.env.HOME, 'wa-rust/data/eventos-tienda.jsonl'));
 const OFFSET_FILE = path.join(__dirname, `.offset-${SLUG}`);
 const ONCE = flag('once');
@@ -41,7 +41,7 @@ const CARTA = arg('carta', path.join(ENKI, 'data/projects', SLUG, 'storage/pizze
 const TIENDA = `http://127.0.0.1:3000/modules/tienda-api/tienda/pedido/${SLUG}`;
 const PUENTE = 'http://127.0.0.1:8235/send';
 // El slug del PUENTE no es el del proyecto: un mismo puente sirve varios negocios y
-// cada uno entra por su cuenta ("tienda" para rapitvapers). La confirmacion al cliente
+// cada uno entra por su cuenta. La confirmacion al cliente
 // tiene que salir por la cuenta del negocio que atendio el pedido.
 const SEND_SLUG = arg('send-slug', 'tienda');
 

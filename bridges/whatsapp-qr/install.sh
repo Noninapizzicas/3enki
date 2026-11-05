@@ -4,7 +4,7 @@
 #   ./install.sh                          # layout por defecto ($HOME/wa-*, el de la VPS)
 #   WA_BASE=/opt/whatsapp ./install.sh     # otro sitio (lo usa vps-setup.sh --whatsapp)
 #   SLUG=tienda ./install.sh               # cuenta del puente (def. "tienda")
-#   PROYECTO=rapitvapers ./install.sh      # proyecto de Enki atendido (def. = SLUG)
+#   PROYECTO=<slug-proyecto> ./install.sh  # proyecto de Enki atendido (def. = SLUG)
 #
 # SLUG y PROYECTO NO son lo mismo y confundirlos deja el canal mudo: el puente
 # guarda los eventos en `eventos-<SLUG>.jsonl` y el lector crea el pedido en el

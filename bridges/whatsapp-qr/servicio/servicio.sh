@@ -1,5 +1,6 @@
 #!/bin/bash
-# Supervisor de entrada de WhatsApp para Enki (rapitvapers).
+# Supervisor de entrada de WhatsApp para Enki. Sin cuenta dentro: lo de ESTA
+# máquina (cuenta, proyecto, rutas) llega en wa.env.
 #
 # Dos hilos INDEPENDIENTES, porque el fallo que importa es el que no se ve:
 #   hilo 1 — puente Rust (:8235): lo levanta si NO hay proceso; si el proceso vive
@@ -22,7 +23,7 @@ WA_ENV=${WA_ENV:-$(cd "$(dirname "$0")" && pwd)/wa.env}
 [ -f "$WA_ENV" ] && { set -a; . "$WA_ENV"; set +a; }
 BASE=${WA_BASE:-$HOME}
 SLUG=${WA_SLUG:-tienda}                 # cuenta del puente (fichero de eventos)
-PROYECTO=${WA_PROYECTO:-rapitvapers}    # slug del proyecto en Enki (carta, POS)
+PROYECTO=${WA_PROYECTO:-$SLUG}          # proyecto de Enki (carta, POS); si no, la misma cuenta
 CUENTAS=${WA_ACCOUNTS:-accounts-$SLUG.json}
 EVENTOS=${WA_EVENTOS:-$BASE/wa-rust/data/eventos-$SLUG.jsonl}
 DIR=$BASE/wa-servicio

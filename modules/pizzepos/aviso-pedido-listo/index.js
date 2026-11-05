@@ -110,7 +110,14 @@ class AvisoPedidoListoModule extends BaseModule {
       return;
     }
 
-    const datos = cuenta.datos_especificos || {};
+    // Los datos del canal viven en `cuenta.metadata`: es lo que guarda
+    // cuentas.handleCreateCuenta (y a lo que la restauración mapea los ficheros
+    // viejos). NO en `datos_especificos`, que es la forma del fichero de
+    // persistencia y no existe en la cuenta viva: leer esa forma deja `datos` vacío,
+    // todo pedido se descarta como «no es de canal» y el cliente no recibe nada.
+    // Medido: la cuenta real de un pedido de WhatsApp es
+    //   { tipo: 'llevar', metadata: { origen: 'tienda', cliente_jid, canal_cuenta, ... } }
+    const datos = this._datosCuenta(cuenta);
     // Solo pedidos de CANAL. Un pedido de mesa lo sirve el camarero; uno del POS
     // interno no tiene cliente al que escribir. Se descarta sin ruido.
     if (datos.origen !== 'tienda') {
@@ -253,8 +260,18 @@ class AvisoPedidoListoModule extends BaseModule {
     }
   }
 
+  /** Los datos del canal de una cuenta, venga de la cuenta viva (`metadata`) o de un
+   *  fichero restaurado viejo (`datos_especificos`). Una sola puerta: si cada sitio
+   *  eligiera su campo, volvería el fallo que dejó al cliente sin aviso. */
+  _datosCuenta(cuenta) {
+    const m = cuenta && cuenta.metadata;
+    if (m && typeof m === 'object' && Object.keys(m).length > 0) return m;
+    const d = cuenta && cuenta.datos_especificos;
+    return (d && typeof d === 'object') ? d : {};
+  }
+
   _destino(cuenta) {
-    const d = (cuenta && cuenta.datos_especificos) || {};
+    const d = this._datosCuenta(cuenta);
     const jid = typeof d.cliente_jid === 'string' ? d.cliente_jid.trim() : '';
     if (jid) return jid;
     const tel = typeof d.cliente_telefono === 'string' ? d.cliente_telefono.trim() : '';

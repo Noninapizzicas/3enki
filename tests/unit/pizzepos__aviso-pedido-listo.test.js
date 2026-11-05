@@ -64,7 +64,10 @@ function makeCuenta(over) {
     ref_display: 'francisco sanchez L 395',
     nombre: 'francisco sanchez',
     estado: 'listo',
-    datos_especificos: {
+    // FORMA REAL: cuentas.handleCreateCuenta devuelve `metadata` (no
+    // `datos_especificos`). El test usaba la forma del fichero de persistencia, así
+    // que daba por bueno un módulo que en producción no habría avisado a nadie.
+    metadata: {
       origen: 'tienda',
       canal_origen: 'web',
       modo_consumo: 'recoger',
@@ -330,6 +333,58 @@ test('la ref se saca del turno si la cuenta no trae ref_display', async () => {
   assert.strictEqual(mod._refCorta({ turno: 42, tipo: 'llevar' }, {}), 'L 042');
   assert.strictEqual(mod._refCorta({ ref_display: 'pepe L 007' }, {}), 'L 007');
   assert.strictEqual(mod._refCorta({ turno: 9, tipo: 'mesa' }, {}), 'M 009');
+});
+
+test('la cuenta VIVA de cuentas (id + metadata, sin datos_especificos) se avisa', async () => {
+  // Copia literal de una cuenta real del the-pirate (persistencia/current/eventos.json,
+  // cuenta.creada del pedido L 395): no tiene `datos_especificos` por ningún lado.
+  // Este es el test que faltaba: con la forma del fichero de persistencia el módulo
+  // "pasaba" los tests y en producción no avisaba a nadie.
+  const cuentaReal = {
+    id: 'llevar_4849f0b2',
+    project_id: 'the-pirate',
+    turno: 395,
+    tipo: 'llevar',
+    nombre: 'francisco sanchez',
+    ref_display: 'francisco sanchez L 395',
+    estado: 'listo',
+    pagado: false,
+    hora: '18:36',
+    items: 1,
+    total: 10.5,
+    alerta: false,
+    metadata: {
+      origen: 'tienda',
+      canal_origen: 'web',
+      modo_consumo: 'recoger',
+      hora_recogida: null,
+      cliente_nombre: 'francisco sanchez',
+      cliente_telefono: null,
+      cliente_jid: '191624311222342@lid',
+      canal_cuenta: 'the-pirate',
+      pedido_tienda_id: '237f211c-aa70-48b8-885a-10524e58b4fc',
+      cerrar_al_cobrar: true
+    },
+    created_at: '2026-11-05T18:36:52.428Z',
+    updated_at: '2026-11-05T18:36:52.428Z'
+  };
+  const h = await montar({ cuenta: cuentaReal });
+  try {
+    await h.listo({ cuenta_id: 'llevar_4849f0b2' });
+    assert.strictEqual(h.eventos('aviso_pedido_listo.enviado').length, 1, 'la cuenta real tiene que avisar');
+    assert.strictEqual(h.puente.recibidos[0].to, '191624311222342@lid', 'y al LID, no a un móvil inventado');
+    assert.match(h.puente.recibidos[0].text, /L 395/);
+  } finally { await h.cerrar(); }
+});
+
+test('una cuenta vieja restaurada (datos_especificos) también se entiende', async () => {
+  const vieja = { id: 'llevar_abc123', tipo: 'llevar', turno: 395, ref_display: 'pepe L 395',
+    datos_especificos: { origen: 'tienda', cliente_jid: '34111222333@s.whatsapp.net', canal_cuenta: 'the-pirate' } };
+  const h = await montar({ cuenta: vieja });
+  try {
+    await h.listo();
+    assert.strictEqual(h.eventos('aviso_pedido_listo.enviado').length, 1);
+  } finally { await h.cerrar(); }
 });
 
 // ==========================================

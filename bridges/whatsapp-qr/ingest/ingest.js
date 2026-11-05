@@ -26,7 +26,7 @@ const flag = (n) => args.includes('--' + n);
 
 const SLUG = arg('slug', 'rapitvapers');
 const EVENTOS = arg('eventos', path.join(process.env.HOME, 'wa-rust/data/eventos-tienda.jsonl'));
-const OFFSET_FILE = path.join(process.env.HOME, 'enki-wa-ingest', `.offset-${SLUG}`);
+const OFFSET_FILE = path.join(__dirname, `.offset-${SLUG}`);
 const ONCE = flag('once');
 const DRY = flag('dry-run');
 const DESDE_INICIO = flag('desde-inicio');

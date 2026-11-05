@@ -92,7 +92,7 @@ H1=$!
     [ "$hasta" = 1 ] && log "POS arriba, arranco el ingest"
     log "arrancando ingest rapitvapers"
     cd "$BASE/enki-wa-ingest" || { log "no existe $BASE/enki-wa-ingest"; sleep 30; continue; }
-    node ingest.js --slug rapitvapers >> "$DIR/ingest.log" 2>&1 &
+    node ingest.js --slug rapitvapers --eventos "$BASE/wa-rust/data/eventos-tienda.jsonl" >> "$DIR/ingest.log" 2>&1 &
     ING=$!
     echo "$ING" > "$MIO_PIDFILE"
     wait "$ING"

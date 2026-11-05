@@ -74,10 +74,21 @@ con la máquina, así que devuelve el servicio sin root tras un reinicio.
 
 ## Instalar en otra máquina
 
+Un clon del repo basta: no hay binarios ni credenciales que copiar.
+
 ```bash
 git clone <repo> && cd 3enki/bridges/whatsapp-qr
 ./install.sh                     # layout en $HOME (WA_BASE=... para otro sitio)
 ```
+
+O, como parte del alta de la VPS entera (instala pero **no arranca**):
+
+```bash
+sudo ./deployment/vps-setup.sh <dominio> --whatsapp [--whatsapp-slug=tienda]
+```
+
+El `install.sh` compila el puente desde las fuentes de `bridge/` (el `target/` no
+viaja: son GB de caché) y escribe rutas y usuario de la máquina en la unit.
 
 Después, vincular (una vez por máquina):
 

@@ -1,66 +1,98 @@
 #!/bin/bash
 # Instala el canal WhatsApp-QR en una máquina, desde un clon de este repo.
 #
-#   ./install.sh              # layout por defecto (~/wa-servicio, ~/enki-wa-ingest, ~/wa-rust)
-#   WA_BASE=/srv/tienda ./install.sh
+#   ./install.sh                          # layout por defecto ($HOME/wa-*, el de la VPS)
+#   WA_BASE=/opt/whatsapp ./install.sh     # otro sitio (lo usa vps-setup.sh --whatsapp)
+#   SLUG=tienda ./install.sh               # slug de la cuenta del puente (def. "tienda")
 #
-# Reproduce el MISMO layout que corre en la VPS (por eso los scripts se copian
-# tal cual y solo se reescribe la raíz), con tres piezas:
-#   $WA_BASE/wa-rust/         el puente (crate de bridge/, compilado aquí)
+# Reproduce el MISMO layout que corre en la VPS, con tres piezas:
+#   $WA_BASE/wa-rust/         el puente (compilado AQUÍ, no se copia ningún binario)
 #   $WA_BASE/enki-wa-ingest/  el lector JSONL -> pedido en el POS
 #   $WA_BASE/wa-servicio/     supervisor + watchdog + unit de systemd
 #
-# NO copia credenciales de WhatsApp: la sesión NACE escaneando el QR en esta
-# máquina. Es lo único que no viaja en el repo, a propósito.
+# NO copia credenciales de WhatsApp ni la caché de compilación: la sesión NACE
+# escaneando el QR en esta máquina (data/*.db) y target/ son varios GB.
 set -eu
+
 AQUI=$(cd "$(dirname "$0")" && pwd)
 WA_BASE=${WA_BASE:-$HOME}
-SLUG=${SLUG:-rapitvapers}
+SLUG=${SLUG:-tienda}
 ENKI_HOME_DIR=${ENKI_HOME:-/opt/enki}
+UNIT_USER=${UNIT_USER:-$(id -un)}
+UNIT_GROUP=${UNIT_GROUP:-$(id -gn)}
 
 say() { printf '%s\n' "$*"; }
+die() { say "ERROR: $*" >&2; exit 1; }
 
-say "== 1/5 · puente en $WA_BASE/wa-rust"
+command -v node > /dev/null 2>&1 || die "falta node (>= 18). Instálalo y repite."
+CARGO=${CARGO:-$(command -v cargo 2>/dev/null || echo "$HOME/.cargo/bin/cargo")}
+[ -x "$CARGO" ] || die "falta cargo (toolchain Rust): curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y"
+
+say "== 1/6 · fuentes del puente → $WA_BASE/wa-rust"
 mkdir -p "$WA_BASE/wa-rust"
-cp -r "$AQUI/bridge/." "$WA_BASE/wa-rust/"
-"$AQUI/build.sh" >/dev/null
-[ -x "$WA_BASE/wa-rust/target/release/enki-wa-bridge" ] || {
-  say "ERROR: no se construyó el binario. Corre $AQUI/build.sh y mira el error."
-  exit 1
-}
-if [ ! -f "$WA_BASE/wa-rust/data/accounts-tienda.json" ]; then
-  mkdir -p "$WA_BASE/wa-rust/data"
-  sed "s#/home/hermes#$WA_BASE#g" "$AQUI/bridge/accounts.example.json" \
-    > "$WA_BASE/wa-rust/data/accounts-tienda.json"
-  chmod 600 "$WA_BASE/wa-rust/data/accounts-tienda.json"
-  say "   config de cuentas creada (slug=$SLUG). Añade más cuentas en ese fichero."
-fi
+# Solo las fuentes: target/ es caché de compilación (GB) y no viaja en el repo.
+for f in main.rs Cargo.toml Cargo.lock accounts.example.json; do
+  cp "$AQUI/bridge/$f" "$WA_BASE/wa-rust/"
+done
 
-say "== 2/5 · lector en $WA_BASE/enki-wa-ingest"
+say "== 2/6 · compilando el puente (la 1ª vez tarda varios minutos)"
+cd "$WA_BASE/wa-rust"
+"$CARGO" build --release > /dev/null
+BIN="$WA_BASE/wa-rust/target/release/enki-wa-bridge"
+[ -x "$BIN" ] || die "no se construyó $BIN. Mira la salida de cargo arriba."
+say "   binario: $BIN ($(du -h "$BIN" | cut -f1))"
+
+say "== 3/6 · config de cuentas (no viaja en el repo: lleva teléfonos y rutas)"
+CFG="$WA_BASE/wa-rust/data/accounts-tienda.json"
+mkdir -p "$WA_BASE/wa-rust/data"
+if [ ! -f "$CFG" ]; then
+  sed -e "s#/home/hermes#$WA_BASE#g" -e "s#\"rapitvapers\"#\"$SLUG\"#g" \
+    "$AQUI/bridge/accounts.example.json" > "$CFG"
+  chmod 600 "$CFG"
+  say "   creada $CFG (cuenta \"$SLUG\"). Añade más cuentas en ese fichero."
+else
+  say "   ya existía $CFG — no la toco (tiene la sesión/teléfonos de esta máquina)."
+fi
+mkdir -p "$WA_BASE/wa-rust/data/sesiones"
+
+say "== 4/6 · lector → $WA_BASE/enki-wa-ingest"
 mkdir -p "$WA_BASE/enki-wa-ingest"
 cp "$AQUI/ingest/ingest.js" "$WA_BASE/enki-wa-ingest/"
+if [ ! -f "$ENKI_HOME_DIR/modules/_shared/pedido-mensaje-parser.js" ]; then
+  say "   AVISO: no encuentro $ENKI_HOME_DIR/modules/_shared/pedido-mensaje-parser.js"
+  say "          el lector arranca pero no sabrá parsear pedidos hasta que exista."
+  say "          (pon ENKI_HOME=/ruta/a/tu/clon si Enki no está en /opt/enki)"
+fi
 
-say "== 3/5 · supervisor en $WA_BASE/wa-servicio"
+say "== 5/6 · supervisor → $WA_BASE/wa-servicio"
 mkdir -p "$WA_BASE/wa-servicio"
-for f in servicio.sh watchdog.sh pair-pirata.sh; do
+for f in servicio.sh watchdog.sh; do
   sed -e "s#/home/hermes#$WA_BASE#g" \
       -e "s#target/release/examples/enki-wa-bridge#target/release/enki-wa-bridge#g" \
+      -e "s#--slug rapitvapers#--slug $SLUG#g" \
       "$AQUI/servicio/$f" > "$WA_BASE/wa-servicio/$f"
   chmod +x "$WA_BASE/wa-servicio/$f"
 done
+# La unit de systemd se genera con las rutas y el usuario de ESTA máquina.
+sed -e "s#/home/hermes#$WA_BASE#g" \
+    -e "s#^User=hermes#User=$UNIT_USER#" \
+    -e "s#^Group=hermes#Group=$UNIT_GROUP#" \
+    "$AQUI/servicio/wa-servicio.service.in" > "$WA_BASE/wa-servicio/wa-servicio.service"
+# El lector importa el parser de pedidos de Enki: la unit le dice DÓNDE está el
+# runtime, para que el mismo clon funcione aunque Enki no viva en /opt/enki.
+sed -i "/^\[Service\]/a Environment=ENKI_HOME=${ENKI_HOME_DIR}" "$WA_BASE/wa-servicio/wa-servicio.service"
 
-say "== 4/5 · ENKI_HOME apuntando a $ENKI_HOME_DIR"
-# El lector importa el parser de pedidos de Enki y la carta del proyecto.
-if [ ! -f "$ENKI_HOME_DIR/modules/_shared/pedido-mensaje-parser.js" ]; then
-  say "   AVISO: no encuentro $ENKI_HOME_DIR/modules/_shared/pedido-mensaje-parser.js"
-  say "          el lector arrancará pero no sabrá parsear pedidos hasta que exista."
-fi
+say "== 6/6 · listo — así se arranca"
+cat <<FIN
 
-say "== 5/5 · arranque"
-say "   ahora:         setsid $WA_BASE/wa-servicio/servicio.sh </dev/null >>$WA_BASE/wa-servicio/servicio.out 2>&1 &"
-say "   con systemd:   la unit está en servicio/wa-servicio.service.in (reescribe rutas y cópiala a /etc/systemd/system)"
-say "   latido Hermes: cron cada 2 min → $WA_BASE/wa-servicio/watchdog.sh (silencio = todo bien)"
-say
-say "Vincular el móvil: abre $WA_BASE/wa-servicio/puente.log y busca el QR, o"
-say "  curl -s http://127.0.0.1:8235/codigo/$SLUG"
-say "Después: WhatsApp > Dispositivos vinculados > Vincular un dispositivo."
+  ahora mismo:   setsid $WA_BASE/wa-servicio/servicio.sh </dev/null >>$WA_BASE/wa-servicio/servicio.out 2>&1 &
+  en el arranque:  sudo cp $WA_BASE/wa-servicio/wa-servicio.service /etc/systemd/system/ \\
+                   && sudo systemctl daemon-reload && sudo systemctl enable --now wa-servicio
+  red si systemd no:  cron cada 2 min → $WA_BASE/wa-servicio/watchdog.sh  (silencio = todo bien)
+
+Vincula el móvil (una vez por máquina):
+  curl -s http://127.0.0.1:8235/codigo/$SLUG     # QR; el primero tras arrancar dura 59 s
+  WhatsApp → Ajustes → Dispositivos vinculados → Vincular un dispositivo
+
+Nada de esto se activa solo: sin sesión escaneada el puente no tiene a qué contestar.
+FIN

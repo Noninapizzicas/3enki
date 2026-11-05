@@ -1,0 +1,9 @@
+# Lo que NUNCA entra al repo (credenciales de sesión y ruido de ejecución)
+bridge/target/
+data/*.db
+data/*.db-*
+data/accounts*.json
+data/eventos-*.jsonl
+*.log
+*.pid
+*.out

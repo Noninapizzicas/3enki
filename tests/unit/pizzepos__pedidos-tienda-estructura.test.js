@@ -161,3 +161,59 @@ test('un pedido, un id — el puente completa el envío y NO crea gemelo si el p
   assert.equal(pedido.cuenta_id, 'cuenta-1');
   assert.equal(pedido.items[0].descripcion, 'Bachata', 'el shape de origen se conserva');
 });
+
+// ── la ficha del plato sale de la CARTA, no del canal (6-nov-2026) ──────────
+// El dueño: «aparece la pizza, pero lo que no aparece son los ingredientes de la
+// pizza». El canal (web, WhatsApp) no manda la ficha: el POS la resuelve por
+// producto_id contra el catálogo vivo. Sin esto la cocina ve el nombre y nada más.
+test('ingredientes_base — si el canal NO la manda, sale del catálogo (una sola puerta)', async () => {
+  const { m, addItemCalls } = await instanciarConBridge();
+
+  await m.onCatalogoActualizado({ data: { productos: [{
+    id: 'pizzas_la_clasica', nombre: 'La Clásica', precio: 10.5, categoria: 'pizzas',
+    ingredientes: [
+      { id: 'tomate', nombre: 'Tomate' },
+      { id: 'anchoas', nombre: 'Anchoas' },
+      { id: 'mozzarella', nombre: 'Mozzarella' }
+    ]
+  }] } });
+
+  await m.handleCreatePedidoTienda({
+    project_slug: 'the-pirate', canal_origen: 'web', total_centimos: 1050,
+    cliente_nombre: 'Cliente', cliente_telefono: null,
+    items: [{ cantidad: 1, descripcion: 'La Clásica', producto_id: 'pizzas_la_clasica',
+      precio_unitario_centimos: 1050, precio_total_centimos: 1050 }]
+  });
+
+  assert.deepEqual(addItemCalls[0].ingredientes_base, ['Tomate', 'Anchoas', 'Mozzarella'],
+    'la cocina recibe lo que LLEVA el plato aunque el canal no lo diga');
+});
+
+test('ingredientes_base — lo que manda el canal GANA a la carta (no se pisa)', async () => {
+  const { m, addItemCalls } = await instanciarConBridge();
+  await m.onCatalogoActualizado({ data: { productos: [{
+    id: 'pizzas_la_clasica', nombre: 'La Clásica', precio: 10.5, categoria: 'pizzas',
+    ingredientes: [{ id: 'tomate', nombre: 'Tomate' }]
+  }] } });
+
+  await m.handleCreatePedidoTienda({
+    project_slug: 'the-pirate', canal_origen: 'web', total_centimos: 1050,
+    cliente_nombre: 'Cliente', cliente_telefono: null,
+    items: [{ cantidad: 1, descripcion: 'La Clásica', producto_id: 'pizzas_la_clasica',
+      precio_unitario_centimos: 1050, precio_total_centimos: 1050,
+      ingredientes_base: ['Tomate', 'Olivas negras', 'Alcaparras'] }]
+  });
+
+  assert.deepEqual(addItemCalls[0].ingredientes_base, ['Tomate', 'Olivas negras', 'Alcaparras']);
+});
+
+test('producto sin ficha en la carta — ingredientes_base NO se inventa (queda sin ficha)', async () => {
+  const { m, addItemCalls } = await instanciarConBridge();
+  await m.handleCreatePedidoTienda({
+    project_slug: 'the-pirate', canal_origen: 'web', total_centimos: 500,
+    cliente_nombre: 'Cliente', cliente_telefono: null,
+    items: [{ cantidad: 1, descripcion: 'Cosa rara', producto_id: 'no_existe',
+      precio_unitario_centimos: 500, precio_total_centimos: 500 }]
+  });
+  assert.equal(addItemCalls[0].ingredientes_base, undefined);
+});

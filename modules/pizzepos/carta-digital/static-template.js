@@ -2016,9 +2016,36 @@ function pedidoItemsTienda() {
       for (var k in i.estructura) {
         if (Object.prototype.hasOwnProperty.call(i.estructura, k)) it[k] = i.estructura[k];
       }
-      // Extras del "al gusto": viajan como variaciones (es lo que el comandero re-tasa).
-      if (Array.isArray(i.estructura.anadir) && !it.variaciones) {
-        it.variaciones = { ingredientes_anadir: i.estructura.anadir, ingredientes_quitar: [] };
+      // LO QUE QUITA (gratis, va por nombre) y LO QUE AÑADE (por id, con su precio de la
+      // carta): la cocina los pinta bajo el plato. Antes solo viajaba "anadir", y como ids
+      // sueltos sin nombre — la pantalla mostraba "bacon" en crudo y perdía los "sin X".
+      var _anadir = function (lista) {
+        return (lista || []).map(function (a) {
+          var info = catIngPorId(typeof a === 'string' ? a : (a.id || a.nombre));
+          return {
+            nombre: (a && a.nombre) || (info && info.nombre) || String(a),
+            cantidad: (a && a.cantidad) || 1,
+            precio_extra: (a && a.precio_extra != null) ? Number(a.precio_extra) : (info ? Number(info.precio_extra) || 0 : 0)
+          };
+        });
+      };
+      var _quitar = function (lista) {
+        return (lista || []).map(function (n) { return typeof n === 'string' ? n : (n && n.nombre) || ''; }).filter(Boolean);
+      };
+      var v = { ingredientes_quitar: _quitar(i.estructura.quitar), ingredientes_anadir: _anadir(i.estructura.anadir) };
+      if (v.ingredientes_quitar.length || v.ingredientes_anadir.length) it.variaciones = v;
+      // Mitad y mitad: cada mitad lleva sus propios "sin X" / "+Y" (por nombre).
+      if (i.estructura.pizza_izquierda) {
+        it.pizza_izquierda = Object.assign({}, i.estructura.pizza_izquierda, {
+          quitar: _quitar(i.estructura.pizza_izquierda.quitar),
+          anadir: _anadir(i.estructura.pizza_izquierda.anadir)
+        });
+      }
+      if (i.estructura.pizza_derecha) {
+        it.pizza_derecha = Object.assign({}, i.estructura.pizza_derecha, {
+          quitar: _quitar(i.estructura.pizza_derecha.quitar),
+          anadir: _anadir(i.estructura.pizza_derecha.anadir)
+        });
       }
     } else {
       it.producto_id = i.id;

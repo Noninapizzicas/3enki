@@ -949,6 +949,11 @@ class ComanderoModule extends BaseModule {
       created_at:  it?.created_at || new Date().toISOString(),
       enviado:     true,
       enviado_at:  it?.updated_at || it?.created_at || new Date().toISOString(),
+      // La ficha del plato viaja con la línea: si se pierde al rehidratar el buffer
+      // (reinicio del core), la cocina deja de saber qué lleva el plato.
+      ...(Array.isArray(it?.ingredientes_base) && it.ingredientes_base.length
+        ? { ingredientes_base: it.ingredientes_base }
+        : {}),
       pedido_id
     };
   }

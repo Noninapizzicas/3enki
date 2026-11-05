@@ -6,7 +6,7 @@
 //! El fichero de cuentas:
 //! {
 //!   "port": 8235,
-//!   "eventos": "/home/hermes/wa-rust/data/eventos.jsonl",
+//!   "eventos": "$WA_BASE/wa-rust/data/eventos-tienda.jsonl",
 //!   "accounts": [
 //!     { "slug": "rapitvapers", "db": "data/rapitvapers.db", "phone": "34600111222" },
 //!     { "slug": "the-pirate",  "db": "data/the-pirate.db" }

@@ -20,7 +20,7 @@ set -u
 # siempre, así que este fichero no cambia nada donde ya corría.
 WA_ENV=${WA_ENV:-$(cd "$(dirname "$0")" && pwd)/wa.env}
 [ -f "$WA_ENV" ] && { set -a; . "$WA_ENV"; set +a; }
-BASE=${WA_BASE:-/home/hermes}
+BASE=${WA_BASE:-$HOME}
 SLUG=${WA_SLUG:-tienda}                 # cuenta del puente (fichero de eventos)
 PROYECTO=${WA_PROYECTO:-rapitvapers}    # slug del proyecto en Enki (carta, POS)
 CUENTAS=${WA_ACCOUNTS:-accounts-$SLUG.json}

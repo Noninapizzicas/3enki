@@ -74,7 +74,7 @@ fi
 
 say "== 5/6 · supervisor → $WA_BASE/wa-servicio"
 mkdir -p "$WA_BASE/wa-servicio"
-for f in servicio.sh watchdog.sh; do
+for f in servicio.sh watchdog.sh pair.sh; do
   cp "$AQUI/servicio/$f" "$WA_BASE/wa-servicio/$f"
   chmod +x "$WA_BASE/wa-servicio/$f"
 done
@@ -92,9 +92,9 @@ ENV
 chmod 600 "$WA_BASE/wa-servicio/wa.env"
 say "   wa.env: cuenta=$SLUG · proyecto=$PROYECTO · Enki=$ENKI_HOME_DIR"
 # La unit de systemd se genera con las rutas y el usuario de ESTA máquina.
-sed -e "s#/home/hermes#$WA_BASE#g" \
-    -e "s#^User=hermes#User=$UNIT_USER#" \
-    -e "s#^Group=hermes#Group=$UNIT_GROUP#" \
+sed -e "s#__WA_BASE__#$WA_BASE#g" \
+    -e "s#__USER__#$UNIT_USER#" \
+    -e "s#__GROUP__#$UNIT_GROUP#" \
     "$AQUI/servicio/wa-servicio.service.in" > "$WA_BASE/wa-servicio/wa-servicio.service"
 # El lector importa el parser de pedidos de Enki: la unit le dice DÓNDE está el
 # runtime, para que el mismo clon funcione aunque Enki no viva en /opt/enki.

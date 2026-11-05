@@ -8,7 +8,7 @@
 # Silencio = todo bien (nada en stdout = nada que contar).
 # Habla solo cuando ha tenido que intervenir, y dice que hizo.
 set -u
-DIR=/home/hermes/wa-servicio
+DIR=$(cd "$(dirname "$0")" && pwd)
 PIDFILE=$DIR/servicio.pid
 WDLOG=$DIR/watchdog.log
 

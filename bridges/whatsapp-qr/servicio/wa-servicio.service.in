@@ -7,11 +7,11 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=hermes
-Group=hermes
-WorkingDirectory=/home/hermes/wa-servicio
-Environment=HOME=/home/hermes
-ExecStart=/bin/bash /home/hermes/wa-servicio/servicio.sh
+User=__USER__
+Group=__GROUP__
+WorkingDirectory=__WA_BASE__/wa-servicio
+Environment=HOME=__WA_BASE__
+ExecStart=/bin/bash __WA_BASE__/wa-servicio/servicio.sh
 Restart=always
 RestartSec=5
 # el supervisor ya relanza sus dos mitades; systemd solo lo vigila a el

@@ -7,3 +7,6 @@ data/eventos-*.jsonl
 *.log
 *.pid
 *.out
+
+# Estado del lector (posición leída del JSONL) — de cada máquina, no del repo
+.offset-*

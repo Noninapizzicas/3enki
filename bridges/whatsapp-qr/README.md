@@ -53,7 +53,7 @@ bridge/            el puente (crate Rust standalone)
   Cargo.toml       whatsapp-rust pineado por REV (no por rama)
   accounts.example.json
 ingest/ingest.js   lector JSONL → pedido en el POS (Node, sin dependencias)
-servicio/          servicio.sh (2 hilos) · watchdog.sh (1 tiro) · pair-pirata.sh · unit systemd
+servicio/          servicio.sh (2 hilos) · watchdog.sh (1 tiro) · pair.sh · unit systemd
 build.sh           compila el puente
 install.sh         reproduce el layout vivo en otra máquina
 ```

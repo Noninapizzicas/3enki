@@ -1,0 +1,22 @@
+[Unit]
+Description=WhatsApp de la tienda (puente Rust :8235 + lector de pedidos al POS)
+# Arranca en el boot, sin esperar al latido de Hermes. Es la via "de primera":
+# el cron del vigilante (cada 2 min) sigue siendo la red por si este servicio muere.
+After=network-online.target enki.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=__USER__
+Group=__GROUP__
+WorkingDirectory=__WA_BASE__/wa-servicio
+Environment=HOME=__WA_BASE__
+ExecStart=/bin/bash __WA_BASE__/wa-servicio/servicio.sh
+Restart=always
+RestartSec=5
+# el supervisor ya relanza sus dos mitades; systemd solo lo vigila a el
+KillMode=control-group
+TimeoutStopSec=20
+
+[Install]
+WantedBy=multi-user.target

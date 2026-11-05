@@ -11,6 +11,7 @@
 #   sudo ./vps-setup.sh                    # Modo IP (sin dominio, HTTP en puerto 80)
 #   sudo ./vps-setup.sh pizzepos.es        # Modo dominio (HTTPS automático)
 #   sudo ./vps-setup.sh pizzepos.es --docker  # Habilita ejecutor en contenedor (opt-in seguridad)
+#   sudo ./vps-setup.sh pizzepos.es --whatsapp  # Instala el canal WhatsApp-QR (opt-in, no se arranca)
 #
 # =============================================================================
 
@@ -25,6 +26,9 @@ DOMAIN=""
 for _arg in "$@"; do
     case "$_arg" in
         --docker)         ENKI_ENABLE_DOCKER=1 ;;
+        --whatsapp)       ENKI_ENABLE_WHATSAPP=1 ;;
+        --whatsapp-slug=*) ENKI_WHATSAPP_SLUG="${_arg#--whatsapp-slug=}" ;;
+        --whatsapp-proyecto=*) ENKI_WHATSAPP_PROYECTO="${_arg#--whatsapp-proyecto=}" ;;
         --permitir-sucio) : ;;   # ya es el comportamiento normal (se despliega con aviso)
         --forzar=*)       ENKI_DEPLOY_FORZAR="${_arg#--forzar=}" ;;
         --*)      echo "[!] flag desconocido ignorado: $_arg" ;;
@@ -714,6 +718,7 @@ rsync -a --delete \
     --exclude='frontend/build' \
     --exclude='frontend/.svelte-kit' \
     --exclude='frontend/package-lock.json' \
+    --exclude='bridges/whatsapp-qr/bridge/target' \
     "${REPO_DIR}/" "${INSTALL_DIR}/"
 
 # ── SELLO DE VERSIÓN: producción dice qué commit corre ────────────────────────
@@ -889,6 +894,35 @@ cp "${REPO_DIR}/deployment/systemd/hermes-dashboard.service" /etc/systemd/system
 # Crear directorio de datos y asignar permisos
 mkdir -p "${INSTALL_DIR}/data"
 chown -R www-data:www-data "${INSTALL_DIR}"
+
+# ---- 6b-ter. WhatsApp por QR (OPT-IN --whatsapp) ----
+# El canal de entrada de pedidos SIN la Cloud API de Meta: puente Rust (:8235) +
+# lector JSONL -> pedido en el POS. Ver bridges/whatsapp-qr/README.md.
+# NO se arranca aquí a propósito: sin una sesión de WhatsApp escaneada en ESTA
+# máquina el puente no tiene a qué contestar, y cada arranque pide un código de
+# emparejamiento nuevo (Meta responde 429 y el freno dura >1 h).
+# Vive fuera de ${INSTALL_DIR} porque ese árbol es un rsync --delete del repo.
+if [ "${ENKI_ENABLE_WHATSAPP:-0}" = "1" ]; then
+    log "Canal WhatsApp-QR (puente + lector)..."
+    WA_BASE=/opt/whatsapp
+    # Se compila como root (ya tiene el toolchain de §3a-ter-aa) y luego se cede
+    # al usuario del servicio, para que la sesión y los JSONL sean suyos.
+    if WA_BASE="${WA_BASE}" SLUG="${ENKI_WHATSAPP_SLUG:-tienda}" \
+       PROYECTO="${ENKI_WHATSAPP_PROYECTO:-${ENKI_WHATSAPP_SLUG:-tienda}}" \
+       ENKI_HOME="${INSTALL_DIR}" \
+       UNIT_USER=www-data UNIT_GROUP=www-data \
+       bash "${REPO_DIR}/bridges/whatsapp-qr/install.sh"; then
+        chown -R www-data:www-data "${WA_BASE}" 2>/dev/null || true
+        # Unit INSTALADA pero NO habilitada: se habilita al vincular el móvil.
+        cp "${WA_BASE}/wa-servicio/wa-servicio.service" /etc/systemd/system/wa-servicio.service
+        systemctl daemon-reload
+        log "Unit instalada sin habilitar (se enciende al vincular)"
+        warn "Pendiente: vincular el móvil → curl -s http://127.0.0.1:8235/codigo/${ENKI_WHATSAPP_SLUG:-tienda}"
+        warn "Después: systemctl enable --now wa-servicio"
+    else
+        warn "WhatsApp NO quedó instalado (mira el error de arriba). El resto de Enki sigue igual."
+    fi
+fi
 
 # ---- 7. Activar servicios ----
 log "Activando servicios..."

@@ -118,7 +118,7 @@ class ConfirmacionPedidoModule {
   // le hablaría en el mostrador. Su pedido ya está en cocina.
   async onPedidoClienteHabitual(event) {
     const data = event?.data || event || {};
-    const { pedido_id, project_slug, cliente_jid, cliente_nombre, pedidos_entregados } = data;
+    const { pedido_id, project_slug, cliente_jid, cliente_nombre } = data;
     if (!project_slug || !cliente_jid) return;
 
     const cfg = await this._config(project_slug);
@@ -129,7 +129,7 @@ class ConfirmacionPedidoModule {
     }
     const texto = cfg.texto_habitual
       ? this._formatear(cfg.texto_habitual, { nombre: this._pila(cliente_nombre), ref: null, pedido_id })
-      : this._textoHabitual(this._pila(cliente_nombre), pedidos_entregados);
+      : this._textoHabitual(this._pila(cliente_nombre));
 
     const envio = await this._enviar(puente, cliente_jid, texto);
     this._metric(envio.ok ? 'confirmacion_pedido.habitual.total' : 'confirmacion_pedido.fallido.total',
@@ -181,14 +181,11 @@ class ConfirmacionPedidoModule {
     ].join('\n');
   }
 
-  _textoHabitual(nombre, entregados) {
-    const cuantos = Number(entregados) || 0;
+  _textoHabitual(nombre) {
     const saludo = nombre ? `¡${nombre}!` : '¡Hola!';
     return [
-      `${saludo} Ya estamos con tu pedido 🍕`,
-      cuantos > 0
-        ? `Con esta van ${cuantos + 1} — gracias por seguir viniendo.`
-        : 'Gracias por venir.',
+      `${saludo} Qué alegría verte por aquí 🍕`,
+      'Ya estamos con tu pedido.',
       'Te avisamos en cuanto esté listo.'
     ].join('\n');
   }

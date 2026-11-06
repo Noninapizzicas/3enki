@@ -107,7 +107,10 @@ const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
     } });
     assert.strictEqual(enviados.length, 1);
     assert.match(enviados[0].text, /Paco/);
+    assert.match(enviados[0].text, /alegría/, 'trato cordial, de casa');
     assert.doesNotMatch(enviados[0].text, /Responde SÍ/, 'a un habitual no se le pide confirmación');
+    assert.doesNotMatch(enviados[0].text, /\bvan \d|\d+ pedidos|esta es la \d/,
+      'nada de contar pedidos: solo cordialidad, no un marcador');
     await m.onUnload();
   }
 

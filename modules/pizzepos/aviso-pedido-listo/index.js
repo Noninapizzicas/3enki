@@ -239,20 +239,21 @@ class AvisoPedidoListoModule extends BaseModule {
    * Trato: cordial y de casa, sin numeros ni contadores. El cliente no es un tique.
    */
   formatearAviso({ nombre, ref, recogida, marca } = {}) {
-    const nombreCorto = this._nombrePresentable(nombre);
+    const nombreCompleto = this._nombrePresentable(nombre);
+    const nombrePila = this._nombreDePila(nombreCompleto);
     const sitio = this._nombrePresentable(marca);
     const r = recogida || {};
     const direccion = [r.direccion, r.ciudad].filter(Boolean).join(', ') || null;
 
     const lineas = [];
-    lineas.push(nombreCorto ? `¡${nombreCorto}, tu pedido ya está listo! 🍕` : '¡Tu pedido ya está listo! 🍕');
+    lineas.push(nombrePila ? `¡${nombrePila}, tu pedido ya está listo! 🍕` : '¡Tu pedido ya está listo! 🍕');
     lineas.push(sitio
       ? `Puedes pasar a recogerlo por ${sitio} cuando quieras: te esperamos con muchas ganas.`
       : 'Puedes pasar a recogerlo cuando quieras: te esperamos con muchas ganas.');
     lineas.push('Lo hemos preparado con todo el cariño, para que llegue calentito a tus manos.');
     lineas.push('');
     if (ref) lineas.push(`Pedido: ${ref}`);
-    if (nombreCorto) lineas.push(`A nombre de: ${nombreCorto}`);
+    if (nombreCompleto) lineas.push(`A nombre de: ${nombreCompleto}`);
     if (direccion) lineas.push('', `📍 ${direccion}`);
     if (r.maps_url) lineas.push(`Cómo llegar: ${r.maps_url}`);
     return lineas.join('\n').trim();
@@ -303,6 +304,16 @@ class AvisoPedidoListoModule extends BaseModule {
     const n = typeof nombre === 'string' ? nombre.trim().replace(/\s+/g, ' ') : '';
     if (!n) return null;
     return n.charAt(0).toUpperCase() + n.slice(1);
+  }
+
+  /**
+   * Al cliente se le saluda por su nombre de pila, no por el nombre completo: el
+   * nombre completo es para el mostrador ("a nombre de"), el saludo es de casa.
+   */
+  _nombreDePila(nombreCompleto) {
+    const n = this._nombrePresentable(nombreCompleto);
+    if (!n) return null;
+    return n.split(' ')[0];
   }
 
   /** El codigo que el cliente da en la barra: "L 395". */

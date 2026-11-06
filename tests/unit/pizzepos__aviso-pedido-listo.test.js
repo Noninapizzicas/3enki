@@ -246,6 +246,18 @@ test('el aviso lleva DONDE recoger: el negocio, la direccion y el enlace del map
   } finally { await h.cerrar(); }
 });
 
+test('al cliente se le saluda por su nombre de pila, y el completo queda para el mostrador', async () => {
+  const h = await montar();
+  try {
+    await h.listo();
+    const texto = h.puente.recibidos[0].text;
+    assert.match(texto, /^¡Francisco, tu pedido ya está listo!/, 'el saludo es de casa: nombre de pila');
+    assert.doesNotMatch(texto, /^¡Francisco sanchez,/, 'el nombre completo no saluda: eso es del mostrador');
+    assert.match(texto, /A nombre de: Francisco sanchez/, 'el completo sigue, para que la barra lo identifique');
+    assert.doesNotMatch(texto, /\bvan \d|\d+ pedidos?\b/, 'sin contadores: el cliente no es un tique');
+  } finally { await h.cerrar(); }
+});
+
 test('la ubicacion sale de la config de servicio: si el dueño la mueve, el aviso se mueve', async () => {
   const h = await montar({
     servicio: { ...SERVICIO, recogida: { direccion: 'Alameda de Cervantes, 2', ciudad: 'Lorca', maps_url: 'https://maps.example.com/pirate-nuevo' } }

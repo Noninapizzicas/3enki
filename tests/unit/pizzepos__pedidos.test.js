@@ -525,6 +525,91 @@ function publishedOf(mocks, name) {
     await m.onUnload();
   });
 
+  await testAsync('tienda · la JID de WhatsApp llega a la CUENTA (destino del aviso de recogida)', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    let metadataCuenta = null;
+    const cuentas = {
+      handleCreateCuenta: async (d) => {
+        metadataCuenta = d.metadata;
+        return { status: 201, data: { id: 'llevar_test1', ref_display: 'Juan L 001' } };
+      }
+    };
+    const comandero = {
+      handleAddItem: async (d) => ({ status: 201, data: { item: { precio: d.precio ?? 0, cantidad: d.cantidad } } }),
+      handleEnviarCocina: async () => ({ status: 200, data: {} })
+    };
+    m.moduleRegistry = { get: (n) => (n === 'cuentas' ? { instance: cuentas } : n === 'comandero' ? { instance: comandero } : null) };
+    const r = await m.handleCreatePedidoTienda(validInputTienda({
+      items: [{ cantidad: 1, descripcion: 'Anne Bonny', precio_unitario_centimos: 1500 }],
+      total_centimos: 1500,
+      cliente_jid: '191624311222342@lid',
+      canal_cuenta: 'the-pirate'
+    }));
+    assert.strictEqual(r.status, 201);
+    // Sin JID en la cuenta, el aviso "tu pedido esta listo" no tiene a donde ir cuando
+    // el cliente escribe con numero oculto (LID): el telefono llega vacio.
+    assert.strictEqual(metadataCuenta.cliente_jid, '191624311222342@lid');
+    // Y la cuenta del puente por la que saldra el aviso (no se deriva del slug del proyecto).
+    assert.strictEqual(metadataCuenta.canal_cuenta, 'the-pirate');
+    assert.strictEqual(m.pedidos.get(r.data.pedido_id).cliente_jid, '191624311222342@lid');
+    await m.onUnload();
+  });
+
+  await testAsync('tienda · una JID que no lo parece NO se guarda (no se inventa destino)', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    let metadataCuenta = null;
+    const cuentas = {
+      handleCreateCuenta: async (d) => {
+        metadataCuenta = d.metadata;
+        return { status: 201, data: { id: 'llevar_test2', ref_display: 'Juan L 002' } };
+      }
+    };
+    const comandero = {
+      handleAddItem: async (d) => ({ status: 201, data: { item: { precio: d.precio ?? 0, cantidad: d.cantidad } } }),
+      handleEnviarCocina: async () => ({ status: 200, data: {} })
+    };
+    m.moduleRegistry = { get: (n) => (n === 'cuentas' ? { instance: cuentas } : n === 'comandero' ? { instance: comandero } : null) };
+    await m.handleCreatePedidoTienda(validInputTienda({
+      items: [{ cantidad: 1, descripcion: 'Anne Bonny', precio_unitario_centimos: 1500 }],
+      total_centimos: 1500,
+      cliente_jid: '34600000000'   // numero pelado: NO es una JID
+    }));
+    assert.strictEqual(metadataCuenta.cliente_jid, null);
+    await m.onUnload();
+  });
+
+  await testAsync('tienda · la JID del puente se lee de notas_generales (carril compartido intacto)', async () => {
+    // El lector del puente (`bridges/whatsapp-qr/ingest/ingest.js`) es un carril
+    // COMPARTIDO con rapitvapers: no manda `cliente_jid`, pero SI escribe el remitente
+    // en `notas_generales` como "WhatsApp <jid> · <nonce>". De ahi se lee, para que el
+    // aviso de recogida tenga destino sin meter ni una linea en el puente del otro negocio.
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    let metadataCuenta = null;
+    const cuentas = {
+      handleCreateCuenta: async (d) => {
+        metadataCuenta = d.metadata;
+        return { status: 201, data: { id: 'llevar_test3', ref_display: 'Ana L 003' } };
+      }
+    };
+    const comandero = {
+      handleAddItem: async (d) => ({ status: 201, data: { item: { precio: d.precio ?? 0, cantidad: d.cantidad } } }),
+      handleEnviarCocina: async () => ({ status: 200, data: {} })
+    };
+    m.moduleRegistry = { get: (n) => (n === 'cuentas' ? { instance: cuentas } : n === 'comandero' ? { instance: comandero } : null) };
+    const r = await m.handleCreatePedidoTienda(validInputTienda({
+      items: [{ cantidad: 1, descripcion: 'Anne Bonny', precio_unitario_centimos: 1500 }],
+      total_centimos: 1500,
+      notas_generales: 'WhatsApp 191624311222342@lid · the-pirate-AB12 '
+    }));
+    assert.strictEqual(r.status, 201);
+    assert.strictEqual(metadataCuenta.cliente_jid, '191624311222342@lid');
+    assert.strictEqual(m.pedidos.get(r.data.pedido_id).cliente_jid, '191624311222342@lid');
+    await m.onUnload();
+  });
+
   await testAsync('tienda · sin items devuelve 400 INVALID_INPUT', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
@@ -709,6 +794,156 @@ function publishedOf(mocks, name) {
     assert.strictEqual(evs[0].cuenta_id, 'mesa_5');
     assert.strictEqual(evs[0].tipo, undefined);
     assert.strictEqual(evs[0].codigo_recogida, undefined);
+    await m.onUnload();
+  });
+
+  // ── LA PUERTA DE LA CONFIANZA ───────────────────────────────────────────────
+  // Cliente habitual = ya recogió N pedidos. Uno nuevo no entra en cocina hasta
+  // confirmar. La puerta es DATO del proyecto: sin `confirmacion_pedidos` no cambia nada.
+
+  await testAsync('confianza · sin config la puerta está cerrada y el pedido va a cocina', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    let cocina = 0;
+    const cuentas = {
+      handleCreateCuenta: async () => ({ status: 201, data: { id: 'llevar_x1', ref_display: 'Ana L 010' } })
+    };
+    const comandero = {
+      handleAddItem: async (d) => ({ status: 201, data: { item: { precio: d.precio ?? 0, cantidad: d.cantidad } } }),
+      handleEnviarCocina: async () => { cocina++; return { status: 200, data: {} }; }
+    };
+    m.moduleRegistry = { get: (n) => (n === 'cuentas' ? { instance: cuentas } : n === 'comandero' ? { instance: comandero } : null) };
+    const r = await m.handleCreatePedidoTienda(validInputTienda({
+      items: [{ cantidad: 1, descripcion: 'Anne Bonny', precio_unitario_centimos: 1500 }],
+      total_centimos: 1500,
+      cliente_jid: '111@lid'
+    }));
+    assert.strictEqual(r.status, 201);
+    assert.strictEqual(cocina, 1, 'sin config el pedido entra en cocina como siempre');
+    assert.strictEqual(publishedOf(mocks, 'pedido.confirmacion_pendiente').length, 0);
+    await m.onUnload();
+  });
+
+  await testAsync('confianza · cliente NUEVO espera confirmación: no entra en cocina', async () => {
+    // Base del proyecto en tmp con la puerta activa.
+    const base = path.join(TMP_ROOT, 'proj-pirata');
+    fs.mkdirSync(path.join(base, 'config'), { recursive: true });
+    fs.writeFileSync(path.join(base, 'config', 'config.json'),
+      JSON.stringify({ confirmacion_pedidos: { activo: true, pedidos_habitual: 3, espera_segundos: 30 } }));
+
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    m.moduleRegistry = {
+      get: (n) => {
+        if (n === 'project-manager') return { instance: { handleGetProject: async () => ({ status: 200, data: { project: { id: 'the-pirate', base_path: base } } }) } };
+        if (n === 'cuentas') return { instance: { handleCreateCuenta: async () => ({ status: 201, data: { id: 'llevar_new1', ref_display: 'Ana L 011' } }) } };
+        if (n === 'comandero') return { instance: {
+          handleAddItem: async (d) => ({ status: 201, data: { item: { precio: d.precio ?? 0, cantidad: d.cantidad } } }),
+          handleEnviarCocina: async () => { throw new Error('un cliente nuevo NO debe entrar en cocina'); }
+        } };
+        return null;
+      }
+    };
+    const r = await m.handleCreatePedidoTienda(validInputTienda({
+      project_slug: 'the-pirate',
+      items: [{ cantidad: 1, descripcion: 'Anne Bonny', precio_unitario_centimos: 1500 }],
+      total_centimos: 1500,
+      cliente_jid: '222@lid',
+      cliente_nombre: 'Ana'
+    }));
+    assert.strictEqual(r.status, 201);
+    assert.strictEqual(r.data.estado, 'pendiente_confirmacion');
+    const p = m.pedidos.get(r.data.pedido_id);
+    assert.strictEqual(p.estado, 'pendiente_confirmacion');
+    assert.strictEqual(p.confirmacion.estado, 'pendiente');
+    // La cuenta SÍ existe: el de la barra lo ve, puede editarlo y cobrarlo.
+    assert.strictEqual(p.cuenta_id, 'llevar_new1');
+    assert.strictEqual(p.enviado_cocina_at, undefined);
+    assert.strictEqual(publishedOf(mocks, 'pedido.confirmacion_pendiente').length, 1);
+    await m.onUnload();
+  });
+
+  await testAsync('confianza · el habitual (3 recogidos) entra directo y con trato familiar', async () => {
+    const base = path.join(TMP_ROOT, 'proj-pirata-2');
+    fs.mkdirSync(path.join(base, 'config'), { recursive: true });
+    fs.mkdirSync(path.join(base, 'storage', 'pizzepos'), { recursive: true });
+    fs.writeFileSync(path.join(base, 'config', 'config.json'),
+      JSON.stringify({ confirmacion_pedidos: { activo: true, pedidos_habitual: 3 } }));
+    fs.writeFileSync(path.join(base, 'storage', 'pizzepos', 'clientes.json'), JSON.stringify({
+      clientes: [{ jid: '333@lid', nombre: 'Paco', pedidos_entregados: 3 }]
+    }));
+
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    let cocina = 0;
+    m.moduleRegistry = {
+      get: (n) => {
+        if (n === 'project-manager') return { instance: { handleGetProject: async () => ({ status: 200, data: { project: { id: 'the-pirate', base_path: base } } }) } };
+        if (n === 'cuentas') return { instance: { handleCreateCuenta: async () => ({ status: 201, data: { id: 'llevar_hab1', ref_display: 'Paco L 012' } }) } };
+        if (n === 'comandero') return { instance: {
+          handleAddItem: async (d) => ({ status: 201, data: { item: { precio: d.precio ?? 0, cantidad: d.cantidad } } }),
+          handleEnviarCocina: async () => { cocina++; return { status: 200, data: {} }; }
+        } };
+        return null;
+      }
+    };
+    const r = await m.handleCreatePedidoTienda(validInputTienda({
+      project_slug: 'the-pirate',
+      items: [{ cantidad: 1, descripcion: 'Anne Bonny', precio_unitario_centimos: 1500 }],
+      total_centimos: 1500,
+      cliente_jid: '333@lid',
+      cliente_nombre: 'Paco'
+    }));
+    assert.strictEqual(r.status, 201);
+    assert.strictEqual(cocina, 1);
+    assert.ok(m.pedidos.get(r.data.pedido_id).enviado_cocina_at, 'el habitual sale a cocina al instante');
+    const hab = publishedOf(mocks, 'pedido.cliente_habitual');
+    assert.strictEqual(hab.length, 1);
+    assert.strictEqual(hab[0].pedidos_entregados, 3);
+    await m.onUnload();
+  });
+
+  await testAsync('confianza · el contador sube al ENTREGAR, no al pedir', async () => {
+    const base = path.join(TMP_ROOT, 'proj-pirata-3');
+    fs.mkdirSync(path.join(base, 'config'), { recursive: true });
+    fs.writeFileSync(path.join(base, 'config', 'config.json'),
+      JSON.stringify({ confirmacion_pedidos: { activo: true, pedidos_habitual: 3 } }));
+
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    m.moduleRegistry = {
+      get: (n) => {
+        if (n === 'project-manager') return { instance: { handleGetProject: async () => ({ status: 200, data: { project: { id: 'the-pirate', base_path: base } } }) } };
+        if (n === 'cuentas') return { instance: { handleCreateCuenta: async () => ({ status: 201, data: { id: 'llevar_c1', ref_display: 'Luis L 013' } }) } };
+        if (n === 'comandero') return { instance: {
+          handleAddItem: async (d) => ({ status: 201, data: { item: { precio: d.precio ?? 0, cantidad: d.cantidad } } }),
+          handleEnviarCocina: async () => ({ status: 200, data: {} })
+        } };
+        return null;
+      }
+    };
+    const r = await m.handleCreatePedidoTienda(validInputTienda({
+      project_slug: 'the-pirate',
+      items: [{ cantidad: 1, descripcion: 'Anne Bonny', precio_unitario_centimos: 1500 }],
+      total_centimos: 1500,
+      cliente_jid: '444@lid',
+      cliente_nombre: 'Luis'
+    }));
+    // Pedir NO suma: sigue sin ficha.
+    assert.strictEqual((await m._fichaCliente('the-pirate', '444@lid')), null);
+
+    // Entregar sí suma — y queda escrito en el proyecto.
+    const pedido = m.pedidos.get(r.data.pedido_id);
+    pedido.estado = 'pendiente_recogida';
+    await m.handleConfirmarRecogida({ pedido_id: pedido.id });
+    const ficha = await m._fichaCliente('the-pirate', '444@lid');
+    assert.strictEqual(ficha.pedidos_entregados, 1);
+    const enDisco = JSON.parse(fs.readFileSync(path.join(base, 'storage', 'pizzepos', 'clientes.json'), 'utf8'));
+    assert.strictEqual(enDisco.clientes.length, 1);
+    assert.strictEqual(enDisco.clientes[0].jid, '444@lid');
+    // Sin gustos: la ficha es identificador + nombre + contador, nada más.
+    assert.deepStrictEqual(Object.keys(enDisco.clientes[0]).sort(),
+      ['creado_at', 'jid', 'nombre', 'pedidos_entregados', 'primer_pedido_at', 'ultimo_pedido_at']);
     await m.onUnload();
   });
 

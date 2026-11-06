@@ -8,6 +8,7 @@ fuentes:
   - modules/pizzepos/pedido-telegram/**
   - modules/pizzepos/pedidos/**
   - modules/pizzepos/tienda-api/**
+  - modules/pizzepos/aviso-pedido-listo/**
   - modules/_shared/pedido-tasador.js
   - modules/_shared/pedido-mensaje-parser.js
   - modules/_shared/horario-servicio.js
@@ -15,7 +16,7 @@ fuentes:
   - modules/_shared/lector-servicio.js
   - frontend/src/lib/components/comandero/ServicioToggle.svelte
   - tests/unit/pizzepos__servicio.test.js
-verificado: 2026-11-04 (Canal Telegram: la carta comparte el pedido por la bandeja del móvil —navigator.share con el mismo mensaje #P1 de WhatsApp— y pedido-telegram lo parsea, re-tasa y crea el pedido sin borrador ni código; el camino del código corto queda como fallback. Guardas nuevas: sin #P1 no hay pedido, slug y bot tienen que ser del mismo proyecto, anti-duplicado por nonce. Sin cambios en el #P1, el tasador ni la puerta de WhatsApp)
+verificado: 2026-11-05 (Aviso de recogida: `cocina.pedido_listo` → WhatsApp al cliente por el MISMO puente que trajo el pedido, con su código de turno y su nombre; `cliente_jid` y `canal_cuenta` viajan hasta la cuenta) · 2026-11-04 (Canal Telegram: la carta comparte el pedido por la bandeja del móvil —navigator.share con el mismo mensaje #P1 de WhatsApp— y pedido-telegram lo parsea, re-tasa y crea el pedido sin borrador ni código; el camino del código corto queda como fallback. Guardas nuevas: sin #P1 no hay pedido, slug y bot tienen que ser del mismo proyecto, anti-duplicado por nonce. Sin cambios en el #P1, el tasador ni la puerta de WhatsApp)
 ---
 
 # SUBSISTEMA AUTOSERVICIO — Pedido del cliente por WhatsApp (PWA → bot → cocina)
@@ -564,3 +565,49 @@ cliente en el mensaje que cierra el pedido.
 sobre el runtime real — zona horaria, franja que cruza medianoche, día vacío, excepción, prelación
 del interruptor, reapertura por `hasta`, 409/412 sin crear pedido, degradación honesta sin config,
 y la respuesta HTTP del espejo.
+
+## El círculo se cierra — el aviso de recogida al cliente (5-nov-2026)
+
+Hasta aquí el camino terminaba a medias: el cliente pedía por WhatsApp, el pedido entraba al POS y a
+cocina, la cocina lo marcaba listo… y nadie se lo decía. El cliente esperaba una pizza que ya estaba
+hecha en la barra.
+
+`cocina` YA emitía `cocina.pedido_listo` —y solo cuando **todos** los ítems del pedido están listos,
+no por ítem—. Lo que faltaba era quien lo escuchara del lado del canal.
+
+```
+CLASE AvisoPedidoListo HEREDA BaseModule {
+  SUBSCRIBES 'cocina.pedido_listo' → onPedidoListo
+
+  onPedidoListo(event) {
+    cuenta  ← cuentas.handleGetCuenta(cuenta_id)        // el cliente vive en la CUENTA
+    SI cuenta.origen != 'tienda'         : RETORNA      // POS interno: no hay cliente
+    SI cuenta.modo_consumo == 'mesa'     : RETORNA      // en mesa lo sirve el camarero
+    destino ← cuenta.datos_especificos.cliente_jid ?? movilInternacional(telefono)
+    SI NO destino                        : DECLARA 'sin destino'; RETORNA
+    salida  ← cuenta.datos_especificos.canal_cuenta     // por donde ENTRÓ, no por donde "toque"
+    SI NO salida                         : DECLARA 'sin salida'; RETORNA
+    SI ya_avisado(pedido_id)             : RETORNA      // un pedido se avisa UNA vez
+    manda('ya está listo, pasa a recogerlo' + código de turno + nombre) por el puente {salida, destino}
+  }
+}
+```
+
+| pieza | qué hace |
+|---|---|
+| `modules/pizzepos/aviso-pedido-listo/` | escucha y avisa. Sin estado: lee la cuenta y la config en el momento (un reinicio no lo deja frío) |
+| `datos_especificos.cliente_jid` | la JID completa del cliente. Con número oculto (LID) el móvil llega vacío: sin JID no hay destino |
+| `datos_especificos.canal_cuenta` | la cuenta del puente por la que entró el pedido: el aviso se contesta por donde le hablaron |
+| `config/config.json → whatsapp_qr {url, slug, activo}` | opcional; solo para forzar otro puente o apagarlo |
+
+**El slug NO se deriva del proyecto.** `tienda` sirve a rapitvapers y `the-pirate` a la pizzería: el
+slug del puente es un dato, no una convención. Sin dato de salida no se manda nada — se declara.
+
+**El fracaso se distingue.** Un rechazo firme del puente (destino inválido, no es un número) NO se
+reintenta: reintentarlo es ruido. «Sesión no conectada» SÍ, tres intentos cortos: es transitorio.
+
+**Fijado en tests.** `tests/unit/pizzepos__aviso-pedido-listo.test.js` —17 casos contra un puente
+HTTP real—: destino por JID y por móvil, mesa y POS interno mudos, aviso una sola vez, reintento
+solo en «sesión no conectada», sin datos no manda, config para forzar puente y para apagarlo. Más 2
+casos en `pizzepos__pedidos` (la JID y el canal del puente llegan a la cuenta; una JID falsa se
+guarda como `null`) y 2 aserciones en el lector `whatsapp-qr`.

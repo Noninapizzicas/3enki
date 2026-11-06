@@ -1,0 +1,79 @@
+{
+  "_doc": "La puerta de la confianza, del lado del cliente. UN negocio, su puente, su texto: no comparte nada con el lector del puente (bridges/whatsapp-qr), que es carril compartido. Escucha pedido.confirmacion_pendiente (cliente nuevo: su pedido esta parado, no ha entrado en cocina) y a los N segundos le pide por WhatsApp que responda SI. Escucha pedido.cliente_habitual (ya lleva pedidos recogidos): no le pide nada, le saluda por su nombre. Lee la respuesta del mismo fichero de eventos del puente (config whatsapp_qr.eventos), mirando solo los jid que tienen un pedido esperando: un 'si' llama a pedidos.handleConfirmarPedido (que lo manda a cocina) y un 'no' a handleRechazarPedido. Si no contesta en 10 minutos emite pedido.sin_confirmar para que la barra decida: un pedido no se queda colgado en silencio.",
+  "name": "confirmacion-pedido",
+  "version": "1.0.0",
+  "description": "Pide confirmacion al cliente nuevo por WhatsApp antes de mandar su pedido a cocina, y saluda al habitual sin pedirle nada. Lee la respuesta sin tocar el lector compartido del puente.",
+  "author": "Enki Team",
+  "language": "es",
+  "main": "index.js",
+  "config": {
+    "persistence": {
+      "pattern": "ninguno",
+      "_doc": "Stateless: la config se lee del proyecto y los pendientes viven en memoria mientras dura la conversacion. Un reinicio no pierde pedidos (los pedidos son de `pedidos`), solo deja de esperar respuestas viejas."
+    }
+  },
+  "horizonte": "vertical-tienda-pwa-sin-datos",
+  "horizonte_doc": "arquitectura/cabecera/pizzepos/pos-nucleo.md",
+  "events": {
+    "subscribes": [
+      {
+        "event": "pedido.confirmacion_pendiente",
+        "handler": "onPedidoConfirmacionPendiente",
+        "razon": "Disparador: pedidos ya dejo el pedido parado en 'pendiente_confirmacion' y no lo mando a cocina."
+      },
+      {
+        "event": "pedido.cliente_habitual",
+        "handler": "onPedidoClienteHabitual",
+        "razon": "El cliente de siempre no confirma: se le saluda y su pedido ya esta en cocina."
+      }
+    ]
+  },
+  "subscribes": [
+    {
+      "event": "pedido.confirmacion_pendiente",
+      "handler": "onPedidoConfirmacionPendiente"
+    },
+    {
+      "event": "pedido.cliente_habitual",
+      "handler": "onPedidoClienteHabitual"
+    }
+  ],
+  "publishes": [
+    "pedido.sin_confirmar"
+  ],
+  "observability": {
+    "metrics": [
+      {
+        "name": "confirmacion_pedido.pedida.total",
+        "type": "counter",
+        "labels": ["project"],
+        "_doc": "Peticiones de confirmacion enviadas al cliente."
+      },
+      {
+        "name": "confirmacion_pedido.confirmado.total",
+        "type": "counter",
+        "labels": ["project"],
+        "_doc": "Clientes que respondieron SI; su pedido entro en cocina."
+      },
+      {
+        "name": "confirmacion_pedido.rechazado.total",
+        "type": "counter",
+        "labels": ["project"],
+        "_doc": "Clientes que respondieron NO; su pedido se cerro sin entrar en cocina."
+      },
+      {
+        "name": "confirmacion_pedido.sin_confirmar.total",
+        "type": "counter",
+        "labels": ["project"],
+        "_doc": "Pedidos que siguen esperando 10 minutos despues de pedir confirmacion. Para que la barra decida."
+      },
+      {
+        "name": "confirmacion_pedido.fallido.total",
+        "type": "counter",
+        "labels": ["project", "razon"],
+        "_doc": "Mensajes que no salieron: sin_puente (falta whatsapp_qr en la config), puente_no_responde, puente_rechaza."
+      }
+    ]
+  },
+  "dependencies": ["pedidos", "cuentas"]
+}

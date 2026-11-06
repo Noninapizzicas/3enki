@@ -3036,6 +3036,59 @@ CLASE Pedido {
 }
 ```
 
+**El DESTINO del cliente viaja en la CUENTA (5-nov-2026).** El pedido de tienda no se queda en el
+móvil: lleva la JID completa de WhatsApp (`cliente_jid`, `…@s.whatsapp.net` o `…@lid`) y la cuenta
+del puente por la que ENTRÓ (`canal_cuenta`) hasta `datos_especificos` de la CUENTA. Con número
+oculto (LID) el teléfono llega vacío y sin JID no habría a quién avisar cuando la cocina termine;
+`_normalizarJid` guarda `null` ante algo que no parece JID en vez de inventar un destino. Son datos
+de la cuenta —los escribe `handleCreatePedidoTienda`— y los lee quien avisa al cliente
+(`modules/pizzepos/aviso-pedido-listo`, rebanada `autoservicio-whatsapp`).
+
+### 9-bis. CONFIRMACION-PEDIDO (v1.0.0) — La puerta de la confianza
+
+```
+CLASE ConfirmacionPedidoModule {
+  ATRIBUTOS {
+    pendientes: Map<pedido_id, {jid, nombre, cuenta_id, creado_en, timer, timerAviso}>
+    porJid: Map<project_slug:jid, Set<pedido_id>>
+    offsets: Map<fichero_eventos, byte_leido>
+  }
+
+  ESCUCHA pedido.confirmacion_pendiente   // cliente NUEVO: su pedido está PARADO
+    └─ espera N s (config, 30) → WhatsApp "responde SÍ" + nº de pedido
+    └─ programa aviso a 10 min → pedido.sin_confirmar (la barra decide)
+
+  ESCUCHA pedido.cliente_habitual         // ya recogió N pedidos: su pedido YA está en cocina
+    └─ saludo por su nombre, sin pedir nada
+
+  LEE la respuesta del fichero de eventos del puente (config whatsapp_qr.eventos)
+    └─ solo mensajes 1-a-1 cuyo `de` tiene un pedido pendiente
+    └─ ignora grupos, el eco del propio bot y frases largas
+    └─ "sí" → pedidos.handleConfirmarPedido (entra en cocina)
+       "no" → pedidos.handleRechazarPedido (se cierra sin cocina)
+}
+```
+
+**La regla vive en `pedidos`, el dato vive en el proyecto.** `handleCreatePedidoTienda`
+consulta `_reglaConfirmacion(project_slug)`:
+`config/config.json → confirmacion_pedidos: {activo, pedidos_habitual, espera_segundos}`.
+Sin ese bloque nada cambia (el pedido va a cocina como siempre): la puerta no se
+activa sola en ningún proyecto ni en ningún canal.
+
+- **Habitual** = `pedidos_entregados >= pedidos_habitual` en `storage/pizzepos/clientes.json`.
+  La ficha se indexa por **JID completa** (`...@lid`), no por teléfono: WhatsApp ya casi
+  no manda el móvil. Guarda identificador, nombre del último pedido y contador. **Los gustos
+  no se guardan**: se leen de sus pedidos, que ya están persistidos.
+- **El contador sube al ENTREGAR** (`handleConfirmarRecogida` → `_anotarRecogida`), nunca al
+  crear: tres pedidos que se quedaron en el aire no hacen de nadie un cliente de confianza.
+- **Cliente nuevo**: su cuenta POS se crea igual (el de la barra lo ve, lo edita y lo cobra)
+  pero `_crearCuentaTienda(..., {enviar_cocina:false})` NO llama a `comandero.handleEnviarCocina`.
+  El pedido queda en `pendiente_confirmacion`. Sin JID no hay identidad posible: se trata como
+  nuevo y no se frena a quien no vino por un canal con JID.
+- **La respuesta se lee sin tocar el lector compartido** (`bridges/whatsapp-qr/ingest`): se
+  relee el mismo fichero de eventos y se filtra por los jid con pedido esperando. El carril
+  del puente es compartido con otros negocios y no se toca.
+
 ### 10. TARIFAS (v1.0.0) — Mapeo Canal→Carta
 
 ```
@@ -5460,6 +5513,52 @@ CLASE PedidoKitchen {
     completed_at: Number
   }
 }
+```
+
+### AVISO-PEDIDO-LISTO — el cliente se entera de que puede venir (v1.0.0)
+
+```
+INTERFAZ AvisoPedidoListoContract {
+  onCocinaPedidoListo(evt): Promise<Void>       // disparador: cocina.pedido_listo
+  formatearAviso({nombre, ref}): String         // "ya está listo" + CÓMO se identifica
+}
+
+CLASE AvisoPedidoListo IMPLEMENTA AvisoPedidoListoContract {
+  ATRIBUTOS {
+    avisados   : Map<project:cuenta, ISO>       // un pedido se avisa UNA vez (bounded 500)
+    intentos   : 3 · espera 2s·n · timeout 6s   // el puente puede estar reconectando
+  }
+
+  METODO onCocinaPedidoListo(evt): Promise<Void>
+    PRECONDICION evt.data.cuenta_id Y evt.data.project_id
+    SI avisados.tiene(clave) → DESCARTAR 'duplicado'      // dos pantallas marcando a la vez
+    cuenta ← cuentas.handleGetCuenta({project_id, id: cuenta_id})
+    SI cuenta.datos_especificos.origen ≠ 'tienda' → DESCARTAR 'no_es_pedido_de_canal'
+    SI modo_consumo == 'mesa'                     → DESCARTAR 'pedido_de_mesa'  // lo sirve el camarero
+    destino ← cliente_jid ?? cliente_telefono                   // la JID que trajo el pedido MANDA
+    SI destino == null → PUBLICAR aviso_pedido_listo.fallido {motivo:'sin_contacto'}   // no se inventa
+    cuenta_puente ← canal_cuenta del pedido ?? config.whatsapp_qr.slug   // se contesta por donde le hablaron
+    SI cuenta_puente == null → PUBLICAR .fallido {motivo:'sin_cuenta_puente'}
+    POST (config.whatsapp_qr.url ?? WA_PUENTE_URL ?? :8235/send) {slug: cuenta_puente, to: destino, text}
+    SI ok              → avisados.recordar(clave) · PUBLICAR aviso_pedido_listo.enviado
+    SI rechazo firme   → PUBLICAR .fallido {motivo:'puente_rechaza'}   // NO se reintenta
+    SI transitorio     → reintentar hasta 3, luego .fallido {motivo:'puente_no_responde'}
+  }
+}
+
+// El texto que recibe el cliente (el código es lo que canta la barra):
+//   ¡Francisco sanchez, tu pedido ya está listo! 🍕
+//   Puedes pasar a recogerlo cuando quieras.
+//   Pedido: L 395
+//   A nombre de: Francisco sanchez
+//
+// DESTINO: la JID completa viaja del puente al pedido y a la CUENTA
+// (datos_especificos.cliente_jid). Con número oculto (LID) el teléfono llega
+// vacío y una JID mal compuesta da 406: por eso no se compone, se arrastra.
+// SALIDA: por la MISMA cuenta del puente por la que entró el pedido
+// (datos_especificos.canal_cuenta) — contestar desde otro número es hablarle
+// al cliente desde un desconocido. El slug del puente NO se deriva del proyecto.
+// La config `whatsapp_qr` es solo para forzar otro puente o apagarlo (`activo:false`).
 ```
 
 ### RECETAS MANAGER
@@ -16417,6 +16516,52 @@ cliente en el mensaje que cierra el pedido.
 sobre el runtime real — zona horaria, franja que cruza medianoche, día vacío, excepción, prelación
 del interruptor, reapertura por `hasta`, 409/412 sin crear pedido, degradación honesta sin config,
 y la respuesta HTTP del espejo.
+
+## El círculo se cierra — el aviso de recogida al cliente (5-nov-2026)
+
+Hasta aquí el camino terminaba a medias: el cliente pedía por WhatsApp, el pedido entraba al POS y a
+cocina, la cocina lo marcaba listo… y nadie se lo decía. El cliente esperaba una pizza que ya estaba
+hecha en la barra.
+
+`cocina` YA emitía `cocina.pedido_listo` —y solo cuando **todos** los ítems del pedido están listos,
+no por ítem—. Lo que faltaba era quien lo escuchara del lado del canal.
+
+```
+CLASE AvisoPedidoListo HEREDA BaseModule {
+  SUBSCRIBES 'cocina.pedido_listo' → onPedidoListo
+
+  onPedidoListo(event) {
+    cuenta  ← cuentas.handleGetCuenta(cuenta_id)        // el cliente vive en la CUENTA
+    SI cuenta.origen != 'tienda'         : RETORNA      // POS interno: no hay cliente
+    SI cuenta.modo_consumo == 'mesa'     : RETORNA      // en mesa lo sirve el camarero
+    destino ← cuenta.datos_especificos.cliente_jid ?? movilInternacional(telefono)
+    SI NO destino                        : DECLARA 'sin destino'; RETORNA
+    salida  ← cuenta.datos_especificos.canal_cuenta     // por donde ENTRÓ, no por donde "toque"
+    SI NO salida                         : DECLARA 'sin salida'; RETORNA
+    SI ya_avisado(pedido_id)             : RETORNA      // un pedido se avisa UNA vez
+    manda('ya está listo, pasa a recogerlo' + código de turno + nombre) por el puente {salida, destino}
+  }
+}
+```
+
+| pieza | qué hace |
+|---|---|
+| `modules/pizzepos/aviso-pedido-listo/` | escucha y avisa. Sin estado: lee la cuenta y la config en el momento (un reinicio no lo deja frío) |
+| `datos_especificos.cliente_jid` | la JID completa del cliente. Con número oculto (LID) el móvil llega vacío: sin JID no hay destino |
+| `datos_especificos.canal_cuenta` | la cuenta del puente por la que entró el pedido: el aviso se contesta por donde le hablaron |
+| `config/config.json → whatsapp_qr {url, slug, activo}` | opcional; solo para forzar otro puente o apagarlo |
+
+**El slug NO se deriva del proyecto.** `tienda` sirve a rapitvapers y `the-pirate` a la pizzería: el
+slug del puente es un dato, no una convención. Sin dato de salida no se manda nada — se declara.
+
+**El fracaso se distingue.** Un rechazo firme del puente (destino inválido, no es un número) NO se
+reintenta: reintentarlo es ruido. «Sesión no conectada» SÍ, tres intentos cortos: es transitorio.
+
+**Fijado en tests.** `tests/unit/pizzepos__aviso-pedido-listo.test.js` —17 casos contra un puente
+HTTP real—: destino por JID y por móvil, mesa y POS interno mudos, aviso una sola vez, reintento
+solo en «sesión no conectada», sin datos no manda, config para forzar puente y para apagarlo. Más 2
+casos en `pizzepos__pedidos` (la JID y el canal del puente llegan a la cuenta; una JID falsa se
+guarda como `null`) y 2 aserciones en el lector `whatsapp-qr`.
 
 ---
 

@@ -32,6 +32,13 @@ const BaseModule = require('../../_shared/base-module');
 const LectorServicio = require('../../_shared/lector-servicio');
 const { estadoServicio, mensajeCierre } = require('../../_shared/horario-servicio');
 
+// Cuántos pedidos RECOGIDOS convierten a un cliente en habitual. A partir de ahí su
+// pedido entra directo a cocina: ya le hemos visto la cara y no se le hace esperar
+// una confirmación. Por debajo, el pedido espera su "sí" (o el botón de barra).
+// Se cuenta lo ENTREGADO, no lo pedido: tres pedidos que se quedaron en el aire no
+// hacen de nadie un cliente de confianza.
+const PEDIDOS_HABITUAL = 3;
+
 class PedidosModule extends BaseModule {
   constructor() {
     super();
@@ -42,6 +49,12 @@ class PedidosModule extends BaseModule {
     this.pedidosPorCuenta = new Map();
     this.pedidosPorProject = new Map();
     this.productosCache = new Map();
+    // Ficha mínima del cliente: identificador de WhatsApp + nombre + cuántos pedidos
+    // ha RECOGIDO. Sin gustos y sin teléfono inventado: WhatsApp manda un LID, no un móvil.
+    this.fichasClientes = new Map();
+    this.fichasCargadas = new Set();
+    this.reglasConfirmacion = new Map();
+    this.basePathCache = new Map();
     this.uiHandler = null;
     this.config = null;
   }
@@ -85,6 +98,10 @@ class PedidosModule extends BaseModule {
     this.pedidosPorCuenta.clear();
     this.pedidosPorProject.clear();
     this.productosCache.clear();
+    this.fichasClientes.clear();
+    this.fichasCargadas.clear();
+    this.reglasConfirmacion.clear();
+    this.basePathCache.clear();
 
     this.logger.info('module.unloaded', { module: this.name });
   }
@@ -628,6 +645,8 @@ class PedidosModule extends BaseModule {
         total_centimos,
         canal_origen,
         cliente_telefono,
+        cliente_jid,
+        canal_cuenta,
         cliente_nombre,
         modo_consumo,
         hora_recogida,
@@ -768,6 +787,12 @@ class PedidosModule extends BaseModule {
         total: total_centimos / 100,
         cliente_nombre: cliente_nombre_norm,
         cliente_telefono: cliente_telefono || null,
+        // JID completa de WhatsApp del cliente (`...@s.whatsapp.net` o `...@lid`). Es lo que
+        // permite avisarle cuando la cocina termina: con numero oculto (LID) no hay movil
+        // que componer, y los avisos de recogida se quedarian sin destino.
+        cliente_jid: this._normalizarJid(cliente_jid) || this._jidDesdeNotas(notas_generales),
+        // Cuenta del puente por la que entro el pedido: por ahi sale el aviso de recogida.
+        canal_cuenta: this._normalizarCuentaPuente(canal_cuenta),
         modo_consumo: modo_consumo_norm,
         hora_recogida: hora_recogida_norm,
         metodo_pago: metodo_pago_norm,
@@ -797,12 +822,67 @@ class PedidosModule extends BaseModule {
       // método) con el pedido inyectado. cuentas emite comandero.enviar_cocina → el
       // pedido entra en cocina por la ruta normal, atado al cuenta_id real. Fallback:
       // si cuentas no está disponible, envío directo a cocina (no romper el flujo).
-      pedido.enviado_cocina_at = new Date().toISOString();
-      await this._crearCuentaTienda(pedido, { correlation_id });
+      // ── LA PUERTA DE LA CONFIANZA ──────────────────────────────────────────────
+      // El pedido NO sale siempre a cocina. Dos caminos, una sola regla:
+      //   · cliente HABITUAL (ya recogió los pedidos de confianza) → directo, como siempre.
+      //   · cliente NUEVO → se queda parado en 'pendiente_confirmacion', con su cuenta
+      //     creada (para que el de la barra lo vea y lo pueda editar/cobrar) pero SIN
+      //     entrar en cocina, hasta que confirme. Así un pedido de un desconocido no
+      //     arranca la cocina sin que nadie lo haya mirado.
+      // La puerta se abre SOLO si el proyecto la pide en su config (`confirmacion_pedidos`).
+      // Sin ese dato el comportamiento es el de siempre: ningún otro canal ni proyecto
+      // se entera de este cambio.
+      const regla = await this._reglaConfirmacion(project_slug);
+      const ficha = regla.activo ? await this._fichaCliente(project_slug, pedido.cliente_jid) : null;
+      const entregados = (ficha && ficha.pedidos_entregados) || 0;
+      // Sin identificador no se puede reconocer a nadie: se comporta como nuevo, sin
+      // inventar identidad (y sin frenar a quien no vino por un canal con JID).
+      const habitual = !regla.activo || !pedido.cliente_jid || entregados >= regla.pedidos_habitual;
+
+      if (habitual) {
+        pedido.enviado_cocina_at = new Date().toISOString();
+        await this._crearCuentaTienda(pedido, { correlation_id });
+      } else {
+        pedido.estado = 'pendiente_confirmacion';
+        pedido.confirmacion = {
+          estado: 'pendiente',
+          pedidos_entregados: entregados,
+          pedida_at: null,
+          respondida_at: null
+        };
+        await this._crearCuentaTienda(pedido, { correlation_id }, { enviar_cocina: false });
+      }
 
       // pedido.creado DESPUÉS de crear la cuenta → ya lleva cuenta_id (lo usa el
       // whatsapp-bot para confirmar al cliente y para avisarle "ven a recoger".
       await this._publishPedidoCreado(pedido, { correlation_id });
+
+      // Quien habla con el cliente es el módulo de confirmación: aquí solo se le dice
+      // qué pasó. Un habitual recibe trato de siempre; uno nuevo, la petición de "sí".
+      // Si el proyecto no tiene la puerta activa, no se avisa a nadie: el flujo es el
+      // de antes, sin mensajes nuevos.
+      if (regla.activo && habitual) {
+        await this._publicarEvento('pedido.cliente_habitual', {
+          pedido_id,
+          project_id: project_slug,
+          project_slug,
+          cuenta_id: pedido.cuenta_id || null,
+          cliente_jid: pedido.cliente_jid || null,
+          cliente_nombre: pedido.cliente_nombre || null,
+          pedidos_entregados: entregados
+        }, { correlation_id });
+      } else if (regla.activo) {
+        await this._publicarEvento('pedido.confirmacion_pendiente', {
+          pedido_id,
+          project_id: project_slug,
+          project_slug,
+          cuenta_id: pedido.cuenta_id || null,
+          cliente_jid: pedido.cliente_jid || null,
+          cliente_nombre: pedido.cliente_nombre || null,
+          total_centimos,
+          pedidos_entregados: entregados
+        }, { correlation_id });
+      }
 
       this.logger.info('pedidos.tienda.creado', {
         pedido_id,
@@ -910,6 +990,10 @@ class PedidosModule extends BaseModule {
       pedido.updated_at = recogido_at;
 
       this.metrics?.increment?.('pedidos.tienda.recogido', { project: pedido.project_slug });
+      // El pedido ENTREGADO es lo que hace a un cliente habitual: aquí, y solo aquí,
+      // se suma a su ficha. Contarlo al crear sería regalar confianza a quien pedía
+      // y nunca venía.
+      await this._anotarRecogida(pedido);
       await this._publicarEvento('pedido.recogido', {
         pedido_id: pedido.id,
         project_id: pedido.project_id,
@@ -1384,6 +1468,229 @@ class PedidosModule extends BaseModule {
       .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'item';
   }
 
+  // ==========================================
+  // Ficha del cliente
+  // ==========================================
+
+  // ¿Este proyecto pide confirmación a los clientes nuevos? Es DATO suyo, en
+  // `config/config.json`:
+  //   "confirmacion_pedidos": { "activo": true, "pedidos_habitual": 3, "espera_segundos": 30 }
+  // Sin ese bloque (o con activo=false) no cambia nada: el pedido va a cocina como
+  // siempre. La puerta no se activa sola en ningún proyecto ni en ningún canal.
+  async _reglaConfirmacion(project_slug) {
+    const porDefecto = { activo: false, pedidos_habitual: PEDIDOS_HABITUAL, espera_segundos: 30 };
+    if (!project_slug) return porDefecto;
+    if (this.reglasConfirmacion.has(project_slug)) return this.reglasConfirmacion.get(project_slug);
+    const base = await this._basePath(project_slug);
+    let regla = porDefecto;
+    if (base) {
+      const cfg = await this._readJsonSafe(path.join(base, 'config', 'config.json'));
+      const c = cfg && cfg.confirmacion_pedidos;
+      if (c && c.activo === true) {
+        regla = {
+          activo: true,
+          pedidos_habitual: Number.isInteger(c.pedidos_habitual) && c.pedidos_habitual > 0
+            ? c.pedidos_habitual : PEDIDOS_HABITUAL,
+          espera_segundos: Number.isInteger(c.espera_segundos) && c.espera_segundos >= 0
+            ? c.espera_segundos : 30
+        };
+      }
+    }
+    this.reglasConfirmacion.set(project_slug, regla);
+    return regla;
+  }
+
+  // WhatsApp ya casi no manda el móvil: manda un identificador interno (LID) que es
+  // estable para esa cuenta. Por eso la ficha se indexa por la JID completa y no por
+  // teléfono — con el móvil, la mitad de los clientes no tendrían ficha. Se guarda lo
+  // mínimo: identificador, nombre del último pedido y cuántos ha recogido. Los gustos
+  // NO se guardan aquí: se leen de sus pedidos, que ya están persistidos.
+  _claveCliente(project_slug, jid) {
+    const j = String(jid || '').trim().toLowerCase();
+    return j ? `${project_slug}:${j}` : null;
+  }
+
+  async _basePath(project_id) {
+    if (!project_id) return null;
+    if (this.basePathCache.has(project_id)) return this.basePathCache.get(project_id);
+    let base = null;
+    try {
+      const pm = this.moduleRegistry?.get('project-manager')?.instance;
+      const res = await pm?.handleGetProject?.({ params: { id: project_id } });
+      base = res?.data?.project?.base_path || null;
+    } catch (_err) {
+      base = null;   // sin project-manager la ficha vive solo en memoria (degradación honesta)
+    }
+    this.basePathCache.set(project_id, base);
+    return base;
+  }
+
+  async _cargarFichas(project_slug) {
+    if (!project_slug || this.fichasCargadas.has(project_slug)) return;
+    this.fichasCargadas.add(project_slug);
+    const base = await this._basePath(project_slug);
+    if (!base) return;
+    const datos = await this._readJsonSafe(path.join(base, 'storage', 'pizzepos', 'clientes.json'));
+    for (const f of (datos && Array.isArray(datos.clientes) ? datos.clientes : [])) {
+      const clave = this._claveCliente(project_slug, f.jid);
+      if (clave) this.fichasClientes.set(clave, f);
+    }
+  }
+
+  async _guardarFichas(project_slug) {
+    const base = await this._basePath(project_slug);
+    if (!base) return;
+    const clientes = [];
+    for (const [clave, f] of this.fichasClientes) {
+      if (clave.startsWith(`${project_slug}:`)) clientes.push(f);
+    }
+    try {
+      const dir = path.join(base, 'storage', 'pizzepos');
+      await fs.mkdir(dir, { recursive: true });
+      await fs.writeFile(
+        path.join(dir, 'clientes.json'),
+        JSON.stringify({ actualizado_at: new Date().toISOString(), clientes }, null, 2)
+      );
+    } catch (err) {
+      this.logger?.warn?.('pedidos.clientes.persist_error', {
+        project_slug, error_message: err && err.message ? err.message : String(err)
+      });
+    }
+  }
+
+  async _fichaCliente(project_slug, jid) {
+    const clave = this._claveCliente(project_slug, jid);
+    if (!clave) return null;
+    await this._cargarFichas(project_slug);
+    return this.fichasClientes.get(clave) || null;
+  }
+
+  async _anotarRecogida(pedido) {
+    const clave = this._claveCliente(pedido?.project_slug, pedido?.cliente_jid);
+    if (!clave) return null;
+    const ahora = pedido.recogido_at || new Date().toISOString();
+    const ficha = this.fichasClientes.get(clave) || {
+      jid: pedido.cliente_jid,
+      nombre: null,
+      pedidos_entregados: 0,
+      primer_pedido_at: pedido.created_at || ahora,
+      creado_at: ahora
+    };
+    ficha.pedidos_entregados = (Number(ficha.pedidos_entregados) || 0) + 1;
+    ficha.nombre = pedido.cliente_nombre || ficha.nombre || null;
+    ficha.ultimo_pedido_at = ahora;
+    this.fichasClientes.set(clave, ficha);
+    await this._guardarFichas(pedido.project_slug);
+    this.logger?.info?.('pedidos.cliente.recogida_anotada', {
+      project_slug: pedido.project_slug,
+      pedidos_entregados: ficha.pedidos_entregados
+    });
+    return ficha;
+  }
+
+  // El cliente dijo SÍ. Su pedido estaba esperando esa confirmación: ahora sí entra
+  // en cocina, por la misma puerta que cualquier otro pedido (comandero.enviar_cocina).
+  async handleConfirmarPedido(data) {
+    try {
+      const { pedido_id } = data || {};
+      const pedido = this.pedidos.get(pedido_id);
+      if (!pedido) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'Pedido no encontrado', { pedido_id });
+      if (pedido.estado !== 'pendiente_confirmacion') {
+        return this._errorResponse(409, 'CONFLICT_STATE', `El pedido no espera confirmación (estado: ${pedido.estado})`, { pedido_id, estado: pedido.estado });
+      }
+      const comandero = this.moduleRegistry?.get('comandero')?.instance;
+      if (!pedido.cuenta_id || !comandero?.handleEnviarCocina) {
+        return this._errorResponse(409, 'CONFLICT_STATE', 'El pedido no tiene cuenta operativa o falta el comandero', { pedido_id });
+      }
+      const envio = await comandero.handleEnviarCocina({
+        cuenta_id: pedido.cuenta_id,
+        project_id: pedido.project_id || pedido.project_slug,
+        pedido_id: pedido.id
+      });
+      if (envio && envio.status >= 400) {
+        return this._errorResponse(502, 'UPSTREAM_ERROR', 'El comandero no pudo enviar el pedido a cocina', { pedido_id });
+      }
+      pedido.estado = 'en_cocina';
+      pedido.enviado_cocina_at = new Date().toISOString();
+      pedido.confirmacion = {
+        ...(pedido.confirmacion || {}),
+        estado: 'confirmado',
+        respondida_at: pedido.enviado_cocina_at
+      };
+      pedido.updated_at = pedido.enviado_cocina_at;
+      await this._publicarEvento('pedido.confirmado', {
+        pedido_id: pedido.id,
+        project_id: pedido.project_id || pedido.project_slug,
+        cuenta_id: pedido.cuenta_id,
+        cliente_nombre: pedido.cliente_nombre || null,
+        confirmado_at: pedido.enviado_cocina_at
+      }, data);
+      this.metrics?.increment?.('pedidos.confirmado.total', { project: pedido.project_slug });
+      this.logger.info('pedidos.confirmado', { pedido_id: pedido.id, project_slug: pedido.project_slug });
+      return { status: 200, data: { pedido_id: pedido.id, estado: pedido.estado } };
+    } catch (err) {
+      return this._handleHandlerError('pedidos.confirmar.error', err);
+    }
+  }
+
+  // El cliente dijo NO (o se echó atrás). El pedido se cierra sin entrar en cocina.
+  async handleRechazarPedido(data) {
+    try {
+      const { pedido_id, motivo } = data || {};
+      const pedido = this.pedidos.get(pedido_id);
+      if (!pedido) return this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'Pedido no encontrado', { pedido_id });
+      if (pedido.estado !== 'pendiente_confirmacion') {
+        return this._errorResponse(409, 'CONFLICT_STATE', `El pedido no espera confirmación (estado: ${pedido.estado})`, { pedido_id, estado: pedido.estado });
+      }
+      pedido.estado = 'cancelado';
+      pedido.cancelado_at = new Date().toISOString();
+      pedido.motivo_cancelacion = motivo || 'cliente_no_confirma';
+      pedido.confirmacion = {
+        ...(pedido.confirmacion || {}),
+        estado: 'rechazado',
+        respondida_at: pedido.cancelado_at
+      };
+      pedido.updated_at = pedido.cancelado_at;
+      await this._publishPedidoCancelado(pedido, pedido.motivo_cancelacion, data);
+      this.metrics?.increment?.('pedidos.rechazado_por_cliente.total', { project: pedido.project_slug });
+      this.logger.info('pedidos.rechazado_por_cliente', { pedido_id: pedido.id, motivo: pedido.motivo_cancelacion });
+      return { status: 200, data: { pedido_id: pedido.id, estado: pedido.estado } };
+    } catch (err) {
+      return this._handleHandlerError('pedidos.rechazar.error', err);
+    }
+  }
+
+  // La JID que trae el pedido de WhatsApp, sacada de su propio texto libre.
+  // El lector del puente (`bridges/whatsapp-qr/ingest/ingest.js`) NO manda un campo
+  // `cliente_jid`: ya escribe el remitente dentro de `notas_generales` como
+  // `WhatsApp <jid> · <nonce>`. Se lee de ahi en vez de tocar ese lector, que es un
+  // carril COMPARTIDO (lo arranca tambien rapitvapers): lo que sirve a un negocio no
+  // puede meter codigo en el puente del otro. Sin JID no hay destino al que contestar
+  // cuando el cliente escribe con numero oculto; con ella, el aviso sale igual.
+  _jidDesdeNotas(notas) {
+    if (typeof notas !== 'string') return null;
+    const m = notas.match(/whatsapp\s+([a-z0-9.:_-]+@(?:s\.whatsapp\.net|lid|c\.us))/i);
+    return m ? this._normalizarJid(m[1]) : null;
+  }
+
+  // JID de WhatsApp normalizada (`<usuario>@<servidor>`), o null si no lo parece.
+  // No se inventa un `@s.whatsapp.net` a partir de un numero suelto: eso es lo que
+  // convierte un LID (id interno de WhatsApp) en un "telefono" que no existe.
+  _normalizarJid(valor) {
+    if (typeof valor !== 'string') return null;
+    const s = valor.trim().toLowerCase();
+    if (!s || s.length > 80) return null;
+    return /^[a-z0-9.:_-]+@(s\.whatsapp\.net|lid|c\.us)$/.test(s) ? s : null;
+  }
+
+  // Slug de la cuenta del PUENTE de WhatsApp (`tienda`, `the-pirate`…). No es el slug
+  // del proyecto y no se deriva de el: es la sesion de WhatsApp por la que entro el pedido.
+  _normalizarCuentaPuente(valor) {
+    if (typeof valor !== 'string') return null;
+    const s = valor.trim().toLowerCase();
+    return /^[a-z0-9][a-z0-9_-]{0,39}$/.test(s) ? s : null;
+  }
+
   // Crea una cuenta POS operativa desde un pedido de tienda y la alimenta por el
   // FLUJO REAL del comandero (no se reinventa nada, todo eventos):
   //   cuentas.handleCreateCuenta  → cuenta vacía
@@ -1392,14 +1699,18 @@ class PedidosModule extends BaseModule {
   //   comandero.handleEnviarCocina → comandero.enviar_cocina → bridge → cocina
   // Mismo patrón de delegación por instancia que cuentas-canales. Si falta algún
   // módulo o algo falla, cae al envío directo a cocina (no romper).
-  async _crearCuentaTienda(pedido, sourcePayload) {
+  async _crearCuentaTienda(pedido, sourcePayload, opciones = {}) {
+    // `enviar_cocina: false` = crear la cuenta y sus líneas SIN arrancar la cocina.
+    // Es lo que necesita un pedido de cliente nuevo: el de barra lo ve, puede
+    // editarlo y cobrarlo, pero la cocina no empieza hasta que el cliente confirma.
+    const enviar_cocina = opciones.enviar_cocina !== false;
     const cuentas   = this.moduleRegistry?.get('cuentas')?.instance;
     const comandero = this.moduleRegistry?.get('comandero')?.instance;
     if (!cuentas?.handleCreateCuenta || !comandero?.handleAddItem || !comandero?.handleEnviarCocina) {
       this.logger.warn('pedidos.tienda.modulos_no_disponibles', {
         pedido_id: pedido.id, cuentas: !!cuentas, comandero: !!comandero
       });
-      await this._enviarTiendaACocina(pedido, sourcePayload);
+      if (enviar_cocina) await this._enviarTiendaACocina(pedido, sourcePayload);
       return null;
     }
 
@@ -1420,6 +1731,11 @@ class PedidosModule extends BaseModule {
           hora_recogida: pedido.hora_recogida || null,
           cliente_nombre: pedido.cliente_nombre || null,
           cliente_telefono: pedido.cliente_telefono || null,
+          // Destino del AVISO DE RECOGIDA: la cuenta es lo unico que sigue existiendo
+          // cuando la cocina termina (el pedido de tienda puede haberse reciclado), asi
+          // que la JID de WhatsApp tiene que vivir aqui, no solo en el pedido.
+          cliente_jid: pedido.cliente_jid || null,
+          canal_cuenta: pedido.canal_cuenta || null,
           pedido_tienda_id: pedido.id,
           // Un pedido de tienda no tiene mesa ni ticket: nadie del canal lo va a
           // cerrar, así que el cierre es del COBRO (y con él, la venta al libro).
@@ -1430,7 +1746,7 @@ class PedidosModule extends BaseModule {
       });
       if (!cuentaRes || cuentaRes.status >= 400) {
         this.logger.error('pedidos.tienda.cuenta_create_failed', { pedido_id: pedido.id, status: cuentaRes?.status });
-        await this._enviarTiendaACocina(pedido, sourcePayload);
+        if (enviar_cocina) await this._enviarTiendaACocina(pedido, sourcePayload);
         return null;
       }
       const cuenta_id = cuentaRes.data.id;
@@ -1505,17 +1821,20 @@ class PedidosModule extends BaseModule {
       // 3) Enviar a cocina por el flujo normal del comandero.
       //    pedido_id = el id de ESTE pedido de tienda: comandero y pedidos hablan del mismo.
       //    project_id viaja explícito: sin él, comandero cae a DEFAULT_PROJECT_ID ('default').
-      await comandero.handleEnviarCocina({ cuenta_id, project_id, pedido_id: pedido.id });
+      //    Un cliente NUEVO no llega aquí: su cuenta se crea igual, pero la cocina espera.
+      if (enviar_cocina) {
+        await comandero.handleEnviarCocina({ cuenta_id, project_id, pedido_id: pedido.id });
+      }
 
       this.metrics?.increment?.('pedidos.tienda.cuenta_creada', { project: pedido.project_slug });
       this.logger.info('pedidos.tienda.cuenta_creada', {
         pedido_id: pedido.id, cuenta_id, ref_display: cuentaRes.data.ref_display,
-        items: pedido.items.length, con_precio: conPrecio
+        items: pedido.items.length, con_precio: conPrecio, enviado_cocina: enviar_cocina
       });
       return cuentaRes.data;
     } catch (err) {
       this.logger.error('pedidos.tienda.cuenta_create_error', { pedido_id: pedido.id, error: err.message });
-      await this._enviarTiendaACocina(pedido, sourcePayload);
+      if (enviar_cocina) await this._enviarTiendaACocina(pedido, sourcePayload);
       return null;
     }
   }

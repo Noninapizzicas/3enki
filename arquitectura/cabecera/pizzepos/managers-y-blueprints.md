@@ -1,12 +1,12 @@
 ---
 id: pizzepos/managers-y-blueprints
 dominio: pizzepos
-resumen: Managers de dominio pizzepos (cuentas, productos, categorías, cobros, pedidos, cocina, recetas, ingredientes, variaciones, escandallo, viabilidad, carta-digital, menu-generator) + blueprint drivers.
+resumen: Managers de dominio pizzepos (cuentas, productos, categorías, cobros, pedidos, cocina, recetas, ingredientes, variaciones, escandallo, viabilidad, carta-digital, menu-generator, aviso-pedido-listo) + blueprint drivers.
 fuentes:
   - modules/pizzepos/**
   - modules/pago-gateway/**
   - blueprints/**
-verificado: 2026-11-04 (pedido-telegram v1.1.0: el canal Telegram abre una segunda puerta —la bandeja de compartir del móvil, con el mensaje canónico de WhatsApp— y el código corto queda como fallback; las dos re-tasan contra la carta viva en _crearPedidoDesde. carta-digital v2.25.1: la FICHA del producto ordena sus bloques nombre → receta → descripción → hermanas → Añadir extras — la receta va PEGADA al nombre, encima de descripción y hermanas; sigue vigente pago-gateway v3.1.0: Stripe con paridad — libro, idempotencia, webhook-puntero y conciliación; los métodos los manda el panel de Stripe, payment_method_types ya no se envía)
+verificado: 2026-11-05 (aviso-pedido-listo v1.0.0: cocina.pedido_listo —que ya existía y nadie escuchaba— ahora cierra el círculo del canal: aviso al cliente por el MISMO puente que trajo el pedido, con su código de turno (L 395) y su nombre; el destino es la JID que viaja puente→pedido→cuenta porque con número oculto (LID) el teléfono llega vacío. pedido-telegram v1.1.0: el canal Telegram abre una segunda puerta —la bandeja de compartir del móvil, con el mensaje canónico de WhatsApp— y el código corto queda como fallback; las dos re-tasan contra la carta viva en _crearPedidoDesde. carta-digital v2.25.1: la FICHA del producto ordena sus bloques nombre → receta → descripción → hermanas → Añadir extras — la receta va PEGADA al nombre, encima de descripción y hermanas; sigue vigente pago-gateway v3.1.0: Stripe con paridad — libro, idempotencia, webhook-puntero y conciliación; los métodos los manda el panel de Stripe, payment_method_types ya no se envía)
 ---
 
 # Módulos Pizzepos y Blueprints
@@ -825,6 +825,52 @@ CLASE PedidoKitchen {
     completed_at: Number
   }
 }
+```
+
+### AVISO-PEDIDO-LISTO — el cliente se entera de que puede venir (v1.0.0)
+
+```
+INTERFAZ AvisoPedidoListoContract {
+  onCocinaPedidoListo(evt): Promise<Void>       // disparador: cocina.pedido_listo
+  formatearAviso({nombre, ref}): String         // "ya está listo" + CÓMO se identifica
+}
+
+CLASE AvisoPedidoListo IMPLEMENTA AvisoPedidoListoContract {
+  ATRIBUTOS {
+    avisados   : Map<project:cuenta, ISO>       // un pedido se avisa UNA vez (bounded 500)
+    intentos   : 3 · espera 2s·n · timeout 6s   // el puente puede estar reconectando
+  }
+
+  METODO onCocinaPedidoListo(evt): Promise<Void>
+    PRECONDICION evt.data.cuenta_id Y evt.data.project_id
+    SI avisados.tiene(clave) → DESCARTAR 'duplicado'      // dos pantallas marcando a la vez
+    cuenta ← cuentas.handleGetCuenta({project_id, id: cuenta_id})
+    SI cuenta.datos_especificos.origen ≠ 'tienda' → DESCARTAR 'no_es_pedido_de_canal'
+    SI modo_consumo == 'mesa'                     → DESCARTAR 'pedido_de_mesa'  // lo sirve el camarero
+    destino ← cliente_jid ?? cliente_telefono                   // la JID que trajo el pedido MANDA
+    SI destino == null → PUBLICAR aviso_pedido_listo.fallido {motivo:'sin_contacto'}   // no se inventa
+    cuenta_puente ← canal_cuenta del pedido ?? config.whatsapp_qr.slug   // se contesta por donde le hablaron
+    SI cuenta_puente == null → PUBLICAR .fallido {motivo:'sin_cuenta_puente'}
+    POST (config.whatsapp_qr.url ?? WA_PUENTE_URL ?? :8235/send) {slug: cuenta_puente, to: destino, text}
+    SI ok              → avisados.recordar(clave) · PUBLICAR aviso_pedido_listo.enviado
+    SI rechazo firme   → PUBLICAR .fallido {motivo:'puente_rechaza'}   // NO se reintenta
+    SI transitorio     → reintentar hasta 3, luego .fallido {motivo:'puente_no_responde'}
+  }
+}
+
+// El texto que recibe el cliente (el código es lo que canta la barra):
+//   ¡Francisco sanchez, tu pedido ya está listo! 🍕
+//   Puedes pasar a recogerlo cuando quieras.
+//   Pedido: L 395
+//   A nombre de: Francisco sanchez
+//
+// DESTINO: la JID completa viaja del puente al pedido y a la CUENTA
+// (datos_especificos.cliente_jid). Con número oculto (LID) el teléfono llega
+// vacío y una JID mal compuesta da 406: por eso no se compone, se arrastra.
+// SALIDA: por la MISMA cuenta del puente por la que entró el pedido
+// (datos_especificos.canal_cuenta) — contestar desde otro número es hablarle
+// al cliente desde un desconocido. El slug del puente NO se deriva del proyecto.
+// La config `whatsapp_qr` es solo para forzar otro puente o apagarlo (`activo:false`).
 ```
 
 ### RECETAS MANAGER

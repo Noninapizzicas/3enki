@@ -12,10 +12,11 @@ fuentes:
   - modules/pizzepos/ingredientes/**
   - modules/pizzepos/variaciones/**
   - modules/pizzepos/pedidos/**
+  - modules/pizzepos/confirmacion-pedido/**
   - modules/pizzepos/tarifas/**
   - modules/pizzepos/persistencia-comandero/**
   - modules/pizzepos/impresion/**
-verificado: 2026-10-27
+verificado: 2026-11-06 (pedidos: puerta de la confianza + ficha de cliente por JID; confirmacion-pedido: pide el sí al cliente nuevo y lee su respuesta sin tocar el lector compartido del puente)
 ---
 
 # PizzePOS Módulos — Subsistema de Punto de Venta (v3.2.0)
@@ -872,6 +873,59 @@ CLASE Pedido {
   }
 }
 ```
+
+**El DESTINO del cliente viaja en la CUENTA (5-nov-2026).** El pedido de tienda no se queda en el
+móvil: lleva la JID completa de WhatsApp (`cliente_jid`, `…@s.whatsapp.net` o `…@lid`) y la cuenta
+del puente por la que ENTRÓ (`canal_cuenta`) hasta `datos_especificos` de la CUENTA. Con número
+oculto (LID) el teléfono llega vacío y sin JID no habría a quién avisar cuando la cocina termine;
+`_normalizarJid` guarda `null` ante algo que no parece JID en vez de inventar un destino. Son datos
+de la cuenta —los escribe `handleCreatePedidoTienda`— y los lee quien avisa al cliente
+(`modules/pizzepos/aviso-pedido-listo`, rebanada `autoservicio-whatsapp`).
+
+### 9-bis. CONFIRMACION-PEDIDO (v1.0.0) — La puerta de la confianza
+
+```
+CLASE ConfirmacionPedidoModule {
+  ATRIBUTOS {
+    pendientes: Map<pedido_id, {jid, nombre, cuenta_id, creado_en, timer, timerAviso}>
+    porJid: Map<project_slug:jid, Set<pedido_id>>
+    offsets: Map<fichero_eventos, byte_leido>
+  }
+
+  ESCUCHA pedido.confirmacion_pendiente   // cliente NUEVO: su pedido está PARADO
+    └─ espera N s (config, 30) → WhatsApp "responde SÍ" + nº de pedido
+    └─ programa aviso a 10 min → pedido.sin_confirmar (la barra decide)
+
+  ESCUCHA pedido.cliente_habitual         // ya recogió N pedidos: su pedido YA está en cocina
+    └─ saludo por su nombre, sin pedir nada
+
+  LEE la respuesta del fichero de eventos del puente (config whatsapp_qr.eventos)
+    └─ solo mensajes 1-a-1 cuyo `de` tiene un pedido pendiente
+    └─ ignora grupos, el eco del propio bot y frases largas
+    └─ "sí" → pedidos.handleConfirmarPedido (entra en cocina)
+       "no" → pedidos.handleRechazarPedido (se cierra sin cocina)
+}
+```
+
+**La regla vive en `pedidos`, el dato vive en el proyecto.** `handleCreatePedidoTienda`
+consulta `_reglaConfirmacion(project_slug)`:
+`config/config.json → confirmacion_pedidos: {activo, pedidos_habitual, espera_segundos}`.
+Sin ese bloque nada cambia (el pedido va a cocina como siempre): la puerta no se
+activa sola en ningún proyecto ni en ningún canal.
+
+- **Habitual** = `pedidos_entregados >= pedidos_habitual` en `storage/pizzepos/clientes.json`.
+  La ficha se indexa por **JID completa** (`...@lid`), no por teléfono: WhatsApp ya casi
+  no manda el móvil. Guarda identificador, nombre del último pedido y contador. **Los gustos
+  no se guardan**: se leen de sus pedidos, que ya están persistidos.
+- **El contador sube al ENTREGAR** (`handleConfirmarRecogida` → `_anotarRecogida`), nunca al
+  crear: tres pedidos que se quedaron en el aire no hacen de nadie un cliente de confianza.
+- **Cliente nuevo**: su cuenta POS se crea igual (el de la barra lo ve, lo edita y lo cobra)
+  pero `_crearCuentaTienda(..., {enviar_cocina:false})` NO llama a `comandero.handleEnviarCocina`.
+  El pedido queda en `pendiente_confirmacion`. Sin JID no hay identidad posible: se trata como
+  nuevo y no se frena a quien no vino por un canal con JID.
+- **La respuesta se lee sin tocar el lector compartido** (`bridges/whatsapp-qr/ingest`): se
+  relee el mismo fichero de eventos y se filtra por los jid con pedido esperando. El carril
+  del puente es compartido con otros negocios y no se toca.
 
 ### 10. TARIFAS (v1.0.0) — Mapeo Canal→Carta
 

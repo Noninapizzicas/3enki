@@ -56,6 +56,18 @@
   $: anadirList = extractAnadir(item);
   $: hasVariaciones = quitarList.length > 0 || anadirList.length > 0;
 
+  // — Ingredientes en ORDEN DE MONTAJE: el orden de la carta es el orden en que se ponen
+  //   sobre la masa. Se numeran en pantalla y se omiten los que el cliente quitó (esos
+  //   salen aparte como SIN). —
+  $: baseList = (item.ingredientes_base || [])
+    .map((n: any) => (typeof n === 'string' ? n : n?.nombre))
+    .filter(Boolean)
+    .filter((n: string) => !quitarList.some(q => q.toLowerCase() === n.toLowerCase()));
+  $: hasIngredientesBase = !isMitad && !isAlGusto && baseList.length > 0;
+
+  // — Pieza: 2 pizzas iguales son DOS piezas (1/2, 2/2) que se marcan por separado —
+  $: marcaPieza = item.pieza && item.pieza.de > 1 ? `${item.pieza.n}/${item.pieza.de}` : null;
+
   // — Compact inline summary (pendiente/listo) —
   $: compactVariaciones = [
     ...quitarList.map(n => `SIN ${n.toUpperCase()}`),
@@ -169,6 +181,9 @@
       {:else if item.tipo === 'al_gusto'}
         <span class="tipo-badge badge-algusto">AL GUSTO</span>
       {/if}
+      {#if marcaPieza}
+        <span class="tipo-badge badge-pieza">PIEZA {marcaPieza}</span>
+      {/if}
       {#if isPreparando && deviceColor}
         <span class="device-badge" style="background: {deviceColor}" title="{deviceNombre || ''}">
           {#if deviceNombre}{deviceNombre}{/if}
@@ -183,8 +198,8 @@
         {#if hasIngredientesBase}
           <div class="detail-section base-section">
             <ul class="base-list">
-              {#each item.ingredientes_base || [] as ing}
-                <li class="base-item">{ing}</li>
+              {#each baseList as ing, i}
+                <li class="base-item">{i + 1}. {ing}</li>
               {/each}
             </ul>
           </div>
@@ -523,6 +538,11 @@
   .badge-algusto {
     background: #0891b2;
     color: #ecfeff;
+  }
+
+  .badge-pieza {
+    background: #b45309;
+    color: #fffbeb;
   }
 
   .device-badge {

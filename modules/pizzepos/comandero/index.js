@@ -170,7 +170,10 @@ class ComanderoModule extends BaseModule {
         project_id: { type: 'string' },
         // Identidad del envío: si el origen ya tiene pedido (tienda, WhatsApp,
         // cualquier canal), su id viaja aquí y el comandero NO acuña otro.
-        pedido_id:  { type: 'string', minLength: 1 }
+        pedido_id:  { type: 'string', minLength: 1 },
+        // Notas GENERALES del pedido (no de la línea): el destino de una entrega a
+        // domicilio llega por aquí y se imprime en el ticket de cocina.
+        notas_generales: { type: 'string' }
       }
     });
 
@@ -786,7 +789,9 @@ class ComanderoModule extends BaseModule {
         ref_display:     this.refDisplayCache.get(cuenta_id) || null,
         items:           itemsParaEnviar,
         total:           totalEnviado,
-        notas_generales: pedido.notas,
+        notas_generales: (typeof data.notas_generales === 'string' && data.notas_generales.trim())
+          ? data.notas_generales.trim()
+          : pedido.notas,
         created_at:      ahora
       }, data);
 

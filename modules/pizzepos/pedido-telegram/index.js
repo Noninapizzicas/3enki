@@ -150,6 +150,8 @@ class PedidoTelegramModule extends BaseModule {
       items: validacion.items,
       nombre_cliente: validacion.nombre_cliente,
       modo_consumo: validacion.modo_consumo,
+      direccion_entrega: validacion.direccion_entrega || null,
+      cliente_telefono: validacion.cliente_telefono || null,
       hora_recogida: validacion.hora_recogida,
       metodo_pago: validacion.metodo_pago,
       mayor_edad_confirmado: validacion.mayor_edad_confirmado,
@@ -332,6 +334,8 @@ class PedidoTelegramModule extends BaseModule {
       items: parsed.estructura.items,
       nombre_cliente: parsed.cliente_nombre,
       modo_consumo: parsed.modo_consumo,
+      direccion_entrega: parsed.direccion_entrega || null,
+      cliente_telefono: parsed.cliente_telefono || null,
       hora_recogida: parsed.hora_recogida,
       metodo_pago: parsed.metodo_pago,
       // El #P1 no lleva el gate de edad (la carta no lo emite): si el proyecto lo
@@ -418,6 +422,8 @@ class PedidoTelegramModule extends BaseModule {
       cliente_telegram: chatId != null ? String(chatId) : null,
       cliente_nombre: borrador.nombre_cliente,
       modo_consumo: borrador.modo_consumo,
+      direccion_entrega: borrador.direccion_entrega || null,
+      cliente_telefono: borrador.cliente_telefono || null,
       hora_recogida: borrador.hora_recogida,
       metodo_pago: borrador.metodo_pago || 'efectivo',
       mayor_edad_confirmado: borrador.mayor_edad_confirmado === true
@@ -602,16 +608,24 @@ class PedidoTelegramModule extends BaseModule {
     const nombre = typeof body.nombre_cliente === 'string' ? body.nombre_cliente.trim() : '';
     if (!nombre) return err('nombre_cliente required (ancla de recogida)');
 
-    const modo = ['mesa', 'recoger', 'llevar'].includes(body.modo_consumo) ? body.modo_consumo : null;
+    const modo = ['mesa', 'recoger', 'llevar', 'domicilio'].includes(body.modo_consumo) ? body.modo_consumo : null;
     const pago = ['efectivo', 'tarjeta'].includes(body.metodo_pago) ? body.metodo_pago : 'efectivo';
     const hora = (modo === 'recoger' && typeof body.hora_recogida === 'string' && body.hora_recogida.trim())
       ? body.hora_recogida.trim().slice(0, 20) : null;
+    // Entrega a domicilio: destino y teléfono viajan con el borrador y se exigen al crear
+    // el pedido (pedidos es la puerta; aquí solo se transporta).
+    const direccion = (modo === 'domicilio' && typeof body.direccion_entrega === 'string' && body.direccion_entrega.trim())
+      ? body.direccion_entrega.trim().replace(/\s+/g, ' ').slice(0, 240) : null;
+    const telCliente = (modo === 'domicilio' && typeof body.cliente_telefono === 'string' && body.cliente_telefono.trim())
+      ? body.cliente_telefono.trim().slice(0, 30) : null;
 
     return {
       ok: true,
       items,
       nombre_cliente: nombre.slice(0, 60),
       modo_consumo: modo,
+      direccion_entrega: direccion,
+      cliente_telefono: telCliente,
       hora_recogida: hora,
       metodo_pago: pago,
       mayor_edad_confirmado: body.mayor_edad_confirmado === true

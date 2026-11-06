@@ -61,7 +61,12 @@ function _decodificarEstructura(text) {
     if (!payload || payload.v !== 1 || !Array.isArray(payload.items) || payload.items.length === 0) return null;
     // CANAL (modo de consumo) + hora pactada, autoritativos por venir en el #P1 (no en
     // el texto editable). Opcionales: si la PWA no los puso, quedan null.
-    const modo_consumo = ['mesa', 'recoger', 'llevar'].includes(payload.modo_consumo) ? payload.modo_consumo : null;
+    const modo_consumo = ['mesa', 'recoger', 'llevar', 'domicilio'].includes(payload.modo_consumo) ? payload.modo_consumo : null;
+    // DESTINO del reparto: solo viaja (y solo se acepta) en 'domicilio'. Viene en el #P1,
+    // no en el texto: el cliente puede editar el texto del mensaje, la línea no.
+    const direccion_entrega = (modo_consumo === 'domicilio' && typeof payload.direccion_entrega === 'string' && payload.direccion_entrega.trim())
+      ? payload.direccion_entrega.trim().replace(/\s+/g, ' ').slice(0, 240)
+      : null;
     const hora_recogida = (modo_consumo === 'recoger' && typeof payload.hora_recogida === 'string' && payload.hora_recogida.trim())
       ? payload.hora_recogida.trim().slice(0, 20)
       : null;
@@ -69,7 +74,7 @@ function _decodificarEstructura(text) {
     // por la pasarela). Autoritativo por venir en el #P1 (no en el texto editable). Opcional:
     // sin él queda null → el consumidor decide (por defecto 'efectivo', el comportamiento previo).
     const metodo_pago = ['efectivo', 'tarjeta'].includes(payload.metodo_pago) ? payload.metodo_pago : null;
-    return { items: payload.items, modo_consumo, hora_recogida, metodo_pago };
+    return { items: payload.items, modo_consumo, direccion_entrega, hora_recogida, metodo_pago };
   } catch (_) {
     return null;   // payload corrupto → el bot cae al texto legacy o pide reenviar
   }
@@ -176,8 +181,10 @@ function parsearPedido(textoBruto) {
     total_centimos,
     cliente_nombre,
     mayor_edad_confirmado,
-    // CANAL elegido en la PWA (mesa | recoger | llevar) + hora pactada, leídos del #P1.
+    // CANAL elegido en la PWA (mesa | recoger | llevar | domicilio) + dónde se entrega
+    // + hora pactada, leídos del #P1.
     modo_consumo: estructura?.modo_consumo || null,
+    direccion_entrega: estructura?.direccion_entrega || null,
     hora_recogida: estructura?.hora_recogida || null,
     // MÉTODO DE PAGO elegido en la PWA (efectivo | tarjeta), leído del #P1. null si la PWA no lo puso.
     metodo_pago: estructura?.metodo_pago || null,

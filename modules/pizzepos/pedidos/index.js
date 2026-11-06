@@ -649,6 +649,7 @@ class PedidosModule extends BaseModule {
         canal_cuenta,
         cliente_nombre,
         modo_consumo,
+        direccion_entrega,
         hora_recogida,
         metodo_pago,
         mayor_edad_confirmado,
@@ -662,11 +663,18 @@ class PedidosModule extends BaseModule {
         ? cliente_nombre.trim().replace(/\s+/g, ' ').slice(0, 60)
         : null;
 
-      // MODO DE CONSUMO (el CANAL, lo que marca el ritmo): mesa | recoger | llevar.
+      // MODO DE CONSUMO (el CANAL, lo que marca el ritmo): mesa | recoger | llevar | domicilio.
       // Es lo que el cliente elige en la PWA junto al nombre. Opcional: si no llega
       // (caller legacy), 'llevar' preserva el comportamiento previo (tienda = takeaway).
-      const MODOS_CONSUMO = ['mesa', 'recoger', 'llevar'];
+      const MODOS_CONSUMO = ['mesa', 'recoger', 'llevar', 'domicilio'];
       const modo_consumo_norm = MODOS_CONSUMO.includes(modo_consumo) ? modo_consumo : 'llevar';
+      // DIRECCIÓN DE ENTREGA — solo tiene sentido (y es obligatoria) en 'domicilio'.
+      // Sin destino no hay entrega: el pedido se rechaza en la puerta en vez de nacer
+      // con una cuenta que nadie sabe dónde llevar. El TELÉFONO es el otro dato sin el
+      // cual el reparto no se puede cerrar (se llama al llegar).
+      const direccion_entrega_norm = (typeof direccion_entrega === 'string' && direccion_entrega.trim())
+        ? direccion_entrega.trim().replace(/\s+/g, ' ').slice(0, 240)
+        : null;
       // HORA pactada (solo aplica a 'recoger'). Texto libre tipo "20:30" o ISO; la
       // agenda (pieza futura) la leerá para inyectar al turno X min antes. Hoy solo
       // viaja y se muestra; el FIFO no se altera.
@@ -704,6 +712,19 @@ class PedidosModule extends BaseModule {
       if (!cliente_nombre_norm || cliente_nombre_norm.length < 2) {
         this.metrics?.increment?.('pedidos.errors', { code: 'INVALID_INPUT', kind: 'create_tienda' });
         return this._errorResponse(400, 'INVALID_INPUT', 'cliente_nombre es requerido (ancla de recogida)', { field: 'cliente_nombre' });
+      }
+      // ENTREGA A DOMICILIO: dos datos sin los cuales el reparto no existe — destino y
+      // teléfono. Se piden en la puerta (no en la PWA, que se puede saltar).
+      if (modo_consumo_norm === 'domicilio') {
+        if (!direccion_entrega_norm || direccion_entrega_norm.length < 6) {
+          this.metrics?.increment?.('pedidos.errors', { code: 'INVALID_INPUT', kind: 'create_tienda' });
+          return this._errorResponse(400, 'INVALID_INPUT', 'direccion_entrega es requerida para entrega a domicilio', { field: 'direccion_entrega' });
+        }
+        const digitosTel = String(cliente_telefono || '').replace(/\D/g, '');
+        if (digitosTel.length < 9) {
+          this.metrics?.increment?.('pedidos.errors', { code: 'INVALID_INPUT', kind: 'create_tienda' });
+          return this._errorResponse(400, 'INVALID_INPUT', 'cliente_telefono es requerido para entrega a domicilio', { field: 'cliente_telefono' });
+        }
       }
 
       // ── GUARD DE SERVICIO — la puerta donde el pedido NACE ─────────────────────
@@ -794,6 +815,8 @@ class PedidosModule extends BaseModule {
         // Cuenta del puente por la que entro el pedido: por ahi sale el aviso de recogida.
         canal_cuenta: this._normalizarCuentaPuente(canal_cuenta),
         modo_consumo: modo_consumo_norm,
+        // DESTINO del reparto. Solo en 'domicilio'; null en mesa/recoger/llevar.
+        direccion_entrega: direccion_entrega_norm,
         hora_recogida: hora_recogida_norm,
         metodo_pago: metodo_pago_norm,
         // Decision 6.2 = C: configurable por proyecto. Si la PWA mostro gate
@@ -900,6 +923,7 @@ class PedidosModule extends BaseModule {
           pedido_id,
           cliente_nombre: cliente_nombre_norm,
           modo_consumo: modo_consumo_norm,
+          direccion_entrega: direccion_entrega_norm,
           hora_recogida: hora_recogida_norm,
           metodo_pago: metodo_pago_norm,
           expira_at,
@@ -1721,13 +1745,16 @@ class PedidosModule extends BaseModule {
       // 1) Cuenta operativa SIN pedido_inicial (ese atajo salta el buffer del comandero).
       const cuentaRes = await cuentas.handleCreateCuenta({
         project_id,
-        tipo: pedido.modo_consumo || 'llevar',     // MODO del cliente: mesa | recoger | llevar.
-                                                  // cuentas lo canoniza a CANAL (recoger→llevar).
+        tipo: pedido.modo_consumo || 'llevar',     // MODO del cliente: mesa | recoger | llevar | domicilio.
+                                                  // cuentas lo canoniza a CANAL (recoger/domicilio→llevar).
         nombre: pedido.cliente_nombre || null,
         metadata: {
           origen: 'tienda',
           canal_origen: pedido.canal_origen || null,
           modo_consumo: pedido.modo_consumo || null,
+          // El DESTINO vive en la cuenta: es lo que el de mostrador mira cuando sale
+          // el pedido, y lo que se imprime en el ticket de cocina.
+          direccion_entrega: pedido.direccion_entrega || null,
           hora_recogida: pedido.hora_recogida || null,
           cliente_nombre: pedido.cliente_nombre || null,
           cliente_telefono: pedido.cliente_telefono || null,
@@ -1823,7 +1850,15 @@ class PedidosModule extends BaseModule {
       //    project_id viaja explícito: sin él, comandero cae a DEFAULT_PROJECT_ID ('default').
       //    Un cliente NUEVO no llega aquí: su cuenta se crea igual, pero la cocina espera.
       if (enviar_cocina) {
-        await comandero.handleEnviarCocina({ cuenta_id, project_id, pedido_id: pedido.id });
+        await comandero.handleEnviarCocina({
+          cuenta_id, project_id, pedido_id: pedido.id,
+          // EL DESTINO VA EN EL TICKET. Sin esto, la cocina ve "1 x Elf Bar" y el de
+          // mostrador no sabe a dónde sale el pedido: la entrega se queda a medias.
+          ...(pedido.direccion_entrega ? {
+            notas_generales: `🛵 ENTREGA A DOMICILIO: ${pedido.direccion_entrega}`
+              + (pedido.cliente_telefono ? ` · Tel: ${pedido.cliente_telefono}` : '')
+          } : {})
+        });
       }
 
       this.metrics?.increment?.('pedidos.tienda.cuenta_creada', { project: pedido.project_slug });
@@ -1846,7 +1881,8 @@ class PedidosModule extends BaseModule {
       canal: 'tienda',
       canal_origen: pedido.canal_origen || null,
       // Etiqueta para cocina: el nombre del cliente (ancla de recogida); fallback al id corto.
-      ref_display: `🛍 ${pedido.cliente_nombre || pedido.id.slice(0, 6)}`,
+      // El icono dice el MODO de un vistazo: 🛵 domicilio · 🛍 recoger/llevar.
+      ref_display: `${pedido.direccion_entrega ? '🛵' : '🛍'} ${pedido.cliente_nombre || pedido.id.slice(0, 6)}`,
       project_id: pedido.project_id || pedido.project_slug || null,
       items: (pedido.items || []).map(it => ({
         item_id: it.item_id,
@@ -1855,9 +1891,12 @@ class PedidosModule extends BaseModule {
         cantidad: it.cantidad
       })),
       items_count: (pedido.items || []).length,
-      notas_generales: pedido.notas_generales || null,
+      notas_generales: pedido.direccion_entrega
+        ? `🛵 ENTREGA A DOMICILIO: ${pedido.direccion_entrega}`
+          + (pedido.cliente_telefono ? ` · Tel: ${pedido.cliente_telefono}` : '')
+        : (pedido.notas_generales || null),
       enviado_at: pedido.enviado_cocina_at || new Date().toISOString(),
-      metadata: { tipo: 'tienda', modo_consumo: pedido.modo_consumo || null, hora_recogida: pedido.hora_recogida || null, cliente_nombre: pedido.cliente_nombre || null, cliente_telefono: pedido.cliente_telefono || null }
+      metadata: { tipo: 'tienda', modo_consumo: pedido.modo_consumo || null, direccion_entrega: pedido.direccion_entrega || null, hora_recogida: pedido.hora_recogida || null, cliente_nombre: pedido.cliente_nombre || null, cliente_telefono: pedido.cliente_telefono || null }
     }, sourcePayload);
   }
 

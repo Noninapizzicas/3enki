@@ -1183,6 +1183,7 @@ class WhatsappBotModule extends BaseModule {
       cliente_telefono: msg.from,
       cliente_nombre: parsed.cliente_nombre,
       modo_consumo: parsed.modo_consumo || null,
+      direccion_entrega: parsed.direccion_entrega || null,
       hora_recogida: parsed.hora_recogida || null,
       metodo_pago: parsed.metodo_pago || 'efectivo',
       mayor_edad_confirmado: parsed.mayor_edad_confirmado
@@ -1259,6 +1260,7 @@ class WhatsappBotModule extends BaseModule {
       items, total_centimos, canal_origen: 'whatsapp',
       cliente_telefono: msg.from, cliente_nombre: parsed.cliente_nombre,
       modo_consumo: parsed.modo_consumo || null,
+      direccion_entrega: parsed.direccion_entrega || null,
       hora_recogida: parsed.hora_recogida || null,
       metodo_pago: parsed.metodo_pago || 'efectivo',
       mayor_edad_confirmado: parsed.mayor_edad_confirmado

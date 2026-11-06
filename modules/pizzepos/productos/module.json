@@ -1,6 +1,6 @@
 {
   "name": "productos",
-  "version": "5.3.2",
+  "version": "5.3.3",
   "_v5_3_2_changelog": "v5.3.2 (2026-10-19): la peticion de snapshot a tarifas se repite en momentos DETERMINISTAS (onLoad = hot-reload | core.modules.loaded.all = arranque en frio, todos los modulos cargados). La nota de la rama achacaba el fallo a una carrera de SUSCRIPCION y era FALSA: el loader cablea antes de onLoad. El hueco real es el RESPONDEDOR ausente en frio (tarifas aun no cargado) -> el mapping canal->carta_id nacia vacio y _esCartaGeneral podia no ver la general. Sin timers: retirado el setTimeout de 1,5 s; repetir es inocuo (full-replace por proyecto).",
   "_v5_3_1_changelog": "v5.3.1 (2026-10-19): el mapping canal->carta_id se hidrata TAMBIEN en onLoad. Antes solo llegaba en project.activated: tras un hot-reload o un restart el mapa nacia VACIO y el gate _esCartaGeneral (5.3.0) no veia la carta general -> una carta de canal habria vuelto a proyectar al catalogo global, pisando precios de mostrador. productos publica tarifas.config.solicitada {tipo:snapshot} al cargar (tarifas responde un snapshot por proyecto conocido, mismo patron que comandero). Verificado en vivo: proyectos_con_mapping=1 tras el reload.",
   "_v5_3_changelog": "v5.3.0 (2026-10-19): LA CARTA DE CANAL NO PISA EL CATALOGO GLOBAL. Bug latente que aparecia al crear la primera carta de canal (glovo/llevar/telefono): productos proyectaba CUALQUIER carta.actualizada a catalogo.actualizado, y comandero/pedidos cachean por producto_id SIN discriminar carta (el menu_id se emite pero nadie lo lee) — asi que los precios del canal (8,50 en glovo) sustituian a los de mostrador (6,50) en el cache POS, en TODOS los canales. Ahora _esCartaGeneral(project_id, carta) compara con tarifas.general (mappingCanalesPerProject, hidratado por tarifas.config.actualizada): sola la general proyecta. La carta de canal sigue hidratando su cache POR CARTA (carta.actualizada -> comandero.cartasProductosCache) y el precio se resuelve canal->carta con fallback al base. Sin config de tarifas conocida (arranque temprano) se emite como antes: ningun refresco se pierde.",
@@ -14,49 +14,236 @@
   "main": "index.js",
   "events": {
     "publishes": [
-      { "event": "catalogo.actualizado",  "description": "SEÑAL de refresco: la carta activa del proyecto cambio (o se activo el proyecto). Lleva la proyeccion lite. Consumido por comandero/pedidos para re-pull carta_completa. project_id top-level + correlation_id + timestamp." },
-      { "event": "carta.get.request",     "description": "RPC a carta-manager (reflejo): pide la carta activa para proyectarla. Correlacionado por request_id." },
-      { "event": "carta.list.request",    "description": "RPC a carta-manager (reflejo): resuelve la carta en_servicio cuando tarifas no fija general. Correlacionado por request_id." },
-      { "event": "carta.update_product.request", "description": "RPC a carta-manager: delega la edicion de un producto (productos no escribe; la carta es la fuente)." },
-      { "event": "carta.add_product.request", "description": "RPC a carta-manager: delega el ALTA de un producto (productos no escribe; la carta es la fuente y quien sube version). Disparado por la tool productos.crear." },
-      { "event": "carta.add_category.request", "description": "RPC a carta-manager: delega el ALTA de una categoria/seccion. Disparado por la tool productos.crear_categoria." },
-      { "event": "carta.remove_product.request", "description": "RPC a carta-manager: delega el borrado de un producto." },
-      { "event": "project.get.request",   "description": "Request a project-manager para resolver base_path. Correlacionado por request_id." },
-      { "event": "tarifas.config.solicitada", "description": "Solicita snapshot de tarifas en onProjectActivated para hidratar el mapping canal->carta_id. Fire-and-forget." }
+      {
+        "event": "catalogo.actualizado",
+        "description": "SEÑAL de refresco: la carta activa del proyecto cambio (o se activo el proyecto). Lleva la proyeccion lite. Consumido por comandero/pedidos para re-pull carta_completa. project_id top-level + correlation_id + timestamp."
+      },
+      {
+        "event": "carta.get.request",
+        "description": "RPC a carta-manager (reflejo): pide la carta activa para proyectarla. Correlacionado por request_id."
+      },
+      {
+        "event": "carta.list.request",
+        "description": "RPC a carta-manager (reflejo): resuelve la carta en_servicio cuando tarifas no fija general. Correlacionado por request_id."
+      },
+      {
+        "event": "carta.update_product.request",
+        "description": "RPC a carta-manager: delega la edicion de un producto (productos no escribe; la carta es la fuente)."
+      },
+      {
+        "event": "carta.add_product.request",
+        "description": "RPC a carta-manager: delega el ALTA de un producto (productos no escribe; la carta es la fuente y quien sube version). Disparado por la tool productos.crear."
+      },
+      {
+        "event": "carta.add_category.request",
+        "description": "RPC a carta-manager: delega el ALTA de una categoria/seccion. Disparado por la tool productos.crear_categoria."
+      },
+      {
+        "event": "carta.remove_product.request",
+        "description": "RPC a carta-manager: delega el borrado de un producto."
+      },
+      {
+        "event": "project.get.request",
+        "description": "Request a project-manager para resolver base_path. Correlacionado por request_id."
+      },
+      {
+        "event": "tarifas.config.solicitada",
+        "description": "Solicita snapshot de tarifas en onProjectActivated para hidratar el mapping canal->carta_id. Fire-and-forget."
+      }
     ],
     "subscribes": [
-      { "event": "carta.actualizada",        "handler": "onCartaGenerada",            "description": "Carta creada o modificada (save/restore) — auto-sync al catalogo. Payload con carta entera embebida." },
-      { "event": "carta.editada",            "handler": "onCartaGenerada",            "description": "Carta editada (add/remove/update producto, add_category, update_prices). Mismo handler que carta.actualizada: shape de payload identico (carta entera embebida)." },
-      { "event": "carta.borrada",            "handler": "onCartaBorrada",             "description": "Carta archivada (soft-delete). Productos saca esta carta de su catalogo activo si era la asignada." },
-      { "event": "tarifas.config.actualizada", "handler": "onTarifasConfigActualizada", "description": "Snapshot del estado de tarifas. Productos cachea el mapping canal->carta_id en memoria. No expone tool de resolucion --los consumers hacen el resolve (postura C)." },
-      { "event": "project.activated",        "handler": "onProjectActivated",         "description": "Cache base_path del proyecto + auto-load cartas desde disco + solicita snapshot inicial de tarifas." },
-      { "event": "core.modules.loaded.all", "handler": "onCoreModulesLoadedAll",     "description": "Todos los modulos cargados: re-pide a tarifas el snapshot (en frio tarifas no existia cuando onLoad pidio)." },
-      { "event": "project.get.response",     "handler": "onProjectGetResponse",       "description": "Resolves pending project path resolve por request_id." }
+      {
+        "event": "carta.actualizada",
+        "handler": "onCartaGenerada",
+        "description": "Carta creada o modificada (save/restore) — auto-sync al catalogo. Payload con carta entera embebida."
+      },
+      {
+        "event": "carta.editada",
+        "handler": "onCartaGenerada",
+        "description": "Carta editada (add/remove/update producto, add_category, update_prices). Mismo handler que carta.actualizada: shape de payload identico (carta entera embebida)."
+      },
+      {
+        "event": "carta.borrada",
+        "handler": "onCartaBorrada",
+        "description": "Carta archivada (soft-delete). Productos saca esta carta de su catalogo activo si era la asignada."
+      },
+      {
+        "event": "tarifas.config.actualizada",
+        "handler": "onTarifasConfigActualizada",
+        "description": "Snapshot del estado de tarifas. Productos cachea el mapping canal->carta_id en memoria. No expone tool de resolucion --los consumers hacen el resolve (postura C)."
+      },
+      {
+        "event": "project.activated",
+        "handler": "onProjectActivated",
+        "description": "Cache base_path del proyecto + auto-load cartas desde disco + solicita snapshot inicial de tarifas."
+      },
+      {
+        "event": "core.modules.loaded.all",
+        "handler": "onCoreModulesLoadedAll",
+        "description": "Todos los modulos cargados: re-pide a tarifas el snapshot (en frio tarifas no existia cuando onLoad pidio)."
+      },
+      {
+        "event": "project.get.response",
+        "handler": "onProjectGetResponse",
+        "description": "Resolves pending project path resolve por request_id."
+      }
     ]
   },
   "ui_handlers": [
-    { "domain": "productos", "action": "list",            "handler": "handleListProductos",   "type": "workspace_module", "zone": "barra_modulos" },
-    { "domain": "productos", "action": "get",             "handler": "handleGetProducto",     "type": "workspace_module", "zone": "barra_modulos" },
-    { "domain": "productos", "action": "search",          "handler": "handleSearchProductos", "type": "workspace_module", "zone": "barra_modulos" },
-    { "domain": "productos", "action": "update",          "handler": "handleUpdateProducto",  "type": "workspace_module", "zone": "barra_modulos" },
-    { "domain": "productos", "action": "delete",          "handler": "handleDeleteProducto",  "type": "workspace_module", "zone": "barra_modulos" },
-    { "domain": "productos", "action": "categorias",      "handler": "handleListCategorias",  "type": "workspace_module", "zone": "barra_modulos" },
-    { "domain": "productos", "action": "ingredientes",    "handler": "handleListIngredientes","type": "workspace_module", "zone": "barra_modulos" },
-    { "domain": "productos", "action": "pizzas",          "handler": "handleListPizzas",      "type": "workspace_module", "zone": "barra_modulos" },
-    { "domain": "productos", "action": "stats",           "handler": "handleGetStats",        "type": "workspace_module", "zone": "barra_modulos" },
-    { "domain": "productos", "action": "health",          "handler": "handleHealthCheck",     "type": "workspace_module", "zone": "barra_modulos" },
-    { "domain": "productos", "action": "metrics",         "handler": "handleGetMetrics",      "type": "workspace_module", "zone": "barra_modulos" },
-    { "domain": "productos", "action": "load_carta",      "handler": "handleLoadCarta",       "type": "workspace_module", "zone": "barra_modulos" },
-    { "domain": "productos", "action": "carta_completa",  "handler": "handleCartaCompleta",   "type": "workspace_module", "zone": "barra_modulos" },
-    { "domain": "ingredientes", "action": "list",           "handler": "handleIngredientesList",          "type": "workspace_module", "zone": "barra_modulos" },
-    { "domain": "ingredientes", "action": "get",            "handler": "handleIngredientesGet",           "type": "workspace_module", "zone": "barra_modulos" },
-    { "domain": "ingredientes", "action": "get_precio",     "handler": "handleIngredientesGetPrecio",     "type": "workspace_module", "zone": "barra_modulos" },
-    { "domain": "ingredientes", "action": "search",         "handler": "handleIngredientesSearch",        "type": "workspace_module", "zone": "barra_modulos" },
-    { "domain": "ingredientes", "action": "alergenos",      "handler": "handleIngredientesAlergenos",     "type": "workspace_module", "zone": "barra_modulos" },
-    { "domain": "ingredientes", "action": "update",         "handler": "handleIngredientesUpdate",        "type": "workspace_module", "zone": "barra_modulos" },
-    { "domain": "ingredientes", "action": "update_precios", "handler": "handleIngredientesUpdatePrecios", "type": "workspace_module", "zone": "barra_modulos" },
-    { "domain": "ingredientes", "action": "health",         "handler": "handleIngredientesHealth",        "type": "workspace_module", "zone": "barra_modulos" },
-    { "domain": "ingredientes", "action": "metrics",        "handler": "handleIngredientesMetrics",       "type": "workspace_module", "zone": "barra_modulos" }
+    {
+      "domain": "productos",
+      "action": "list",
+      "handler": "handleListProductos",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "productos",
+      "action": "get",
+      "handler": "handleGetProducto",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "productos",
+      "action": "search",
+      "handler": "handleSearchProductos",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "productos",
+      "action": "update",
+      "handler": "handleUpdateProducto",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "productos",
+      "action": "delete",
+      "handler": "handleDeleteProducto",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "productos",
+      "action": "categorias",
+      "handler": "handleListCategorias",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "productos",
+      "action": "ingredientes",
+      "handler": "handleListIngredientes",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "productos",
+      "action": "pizzas",
+      "handler": "handleListPizzas",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "productos",
+      "action": "stats",
+      "handler": "handleGetStats",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "productos",
+      "action": "health",
+      "handler": "handleHealthCheck",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "productos",
+      "action": "metrics",
+      "handler": "handleGetMetrics",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "productos",
+      "action": "load_carta",
+      "handler": "handleLoadCarta",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "productos",
+      "action": "carta_completa",
+      "handler": "handleCartaCompleta",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "ingredientes",
+      "action": "list",
+      "handler": "handleIngredientesList",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "ingredientes",
+      "action": "get",
+      "handler": "handleIngredientesGet",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "ingredientes",
+      "action": "get_precio",
+      "handler": "handleIngredientesGetPrecio",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "ingredientes",
+      "action": "search",
+      "handler": "handleIngredientesSearch",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "ingredientes",
+      "action": "alergenos",
+      "handler": "handleIngredientesAlergenos",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "ingredientes",
+      "action": "update",
+      "handler": "handleIngredientesUpdate",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "ingredientes",
+      "action": "update_precios",
+      "handler": "handleIngredientesUpdatePrecios",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "ingredientes",
+      "action": "health",
+      "handler": "handleIngredientesHealth",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    },
+    {
+      "domain": "ingredientes",
+      "action": "metrics",
+      "handler": "handleIngredientesMetrics",
+      "type": "workspace_module",
+      "zone": "barra_modulos"
+    }
   ],
   "tools": [
     {
@@ -65,16 +252,32 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "project_id":   { "type": "string", "description": "Identificador del proyecto (multi-tenant)." },
-          "categoria":    { "type": "string", "description": "Filtro opcional por nombre de categoria." },
-          "categoria_id": { "type": "string", "description": "Filtro opcional por id de categoria." },
-          "activo":       { "description": "Filtro opcional por estado activo (boolean o 'true'/'false')." }
+          "project_id": {
+            "type": "string",
+            "description": "Identificador del proyecto (multi-tenant)."
+          },
+          "categoria": {
+            "type": "string",
+            "description": "Filtro opcional por nombre de categoria."
+          },
+          "categoria_id": {
+            "type": "string",
+            "description": "Filtro opcional por id de categoria."
+          },
+          "activo": {
+            "description": "Filtro opcional por estado activo (boolean o 'true'/'false')."
+          }
         },
-        "required": ["project_id"],
+        "required": [
+          "project_id"
+        ],
         "additionalProperties": false
       },
       "handler": "handleListProductos",
-      "errores_conocidos": ["INVALID_INPUT", "UNKNOWN_ERROR"]
+      "errores_conocidos": [
+        "INVALID_INPUT",
+        "UNKNOWN_ERROR"
+      ]
     },
     {
       "name": "productos.get",
@@ -82,14 +285,27 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "project_id": { "type": "string", "description": "Identificador del proyecto." },
-          "id":         { "type": "string", "description": "Identificador del producto." }
+          "project_id": {
+            "type": "string",
+            "description": "Identificador del proyecto."
+          },
+          "id": {
+            "type": "string",
+            "description": "Identificador del producto."
+          }
         },
-        "required": ["project_id", "id"],
+        "required": [
+          "project_id",
+          "id"
+        ],
         "additionalProperties": false
       },
       "handler": "handleGetProducto",
-      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UNKNOWN_ERROR"]
+      "errores_conocidos": [
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND",
+        "UNKNOWN_ERROR"
+      ]
     },
     {
       "name": "productos.search",
@@ -97,14 +313,26 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "project_id": { "type": "string", "description": "Identificador del proyecto." },
-          "q":          { "type": "string", "description": "Termino de busqueda (case-insensitive)." }
+          "project_id": {
+            "type": "string",
+            "description": "Identificador del proyecto."
+          },
+          "q": {
+            "type": "string",
+            "description": "Termino de busqueda (case-insensitive)."
+          }
         },
-        "required": ["project_id", "q"],
+        "required": [
+          "project_id",
+          "q"
+        ],
         "additionalProperties": false
       },
       "handler": "handleSearchProductos",
-      "errores_conocidos": ["INVALID_INPUT", "UNKNOWN_ERROR"]
+      "errores_conocidos": [
+        "INVALID_INPUT",
+        "UNKNOWN_ERROR"
+      ]
     },
     {
       "name": "productos.update",
@@ -112,14 +340,27 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "project_id": { "type": "string", "description": "Identificador del proyecto." },
-          "id":         { "type": "string", "description": "Identificador del producto." }
+          "project_id": {
+            "type": "string",
+            "description": "Identificador del proyecto."
+          },
+          "id": {
+            "type": "string",
+            "description": "Identificador del producto."
+          }
         },
-        "required": ["project_id", "id"],
+        "required": [
+          "project_id",
+          "id"
+        ],
         "additionalProperties": true
       },
       "handler": "handleUpdateProducto",
-      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UNKNOWN_ERROR"]
+      "errores_conocidos": [
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND",
+        "UNKNOWN_ERROR"
+      ]
     },
     {
       "name": "productos.crear",
@@ -127,32 +368,98 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "project_id": { "type": "string", "description": "Identificador del proyecto." },
-          "nombre": { "type": "string", "description": "Nombre visible del producto." },
-          "precio": { "type": "number", "description": "Precio de venta en EUROS (>= 0)." },
-          "categoria_id": { "type": "string", "description": "Categoria destino (productos.categorias la lista; productos.crear_categoria la crea)." },
+          "project_id": {
+            "type": "string",
+            "description": "Identificador del proyecto."
+          },
+          "nombre": {
+            "type": "string",
+            "description": "Nombre visible del producto."
+          },
+          "precio": {
+            "type": "number",
+            "description": "Precio de venta en EUROS (>= 0)."
+          },
+          "categoria_id": {
+            "type": "string",
+            "description": "Categoria destino (productos.categorias la lista; productos.crear_categoria la crea)."
+          },
           "ingredientes": {
             "type": "array",
             "description": "Ingredientes del producto: [{id?, nombre, familia?, emoji?, precio_extra?}]. precio_extra ausente = extra estandar.",
-            "items": { "type": "object" }
+            "items": {
+              "type": "object"
+            }
           },
-          "descripcion": { "type": "string" },
-          "etiquetas": { "type": "array", "items": { "type": "string" } },
-          "alergenos": { "type": "array", "items": { "type": "string" } },
-          "disponible": { "type": "boolean" },
-          "tipo": { "type": "string" },
-          "emoji": { "type": "string" },
-          "estaciones": { "type": "array", "items": { "type": "string" }, "description": "Estaciones de cocina por las que pasa (ej. ['horno'])." },
-          "ingredientes_base": { "type": "array", "items": { "type": "object" } },
-          "dietas": { "type": "object" },
-          "variaciones": { "type": "object", "description": "{permite_quitar[], permite_anadir, max_ingredientes_extra, extras_sugeridos[{ingrediente_id, precio_extra?}]}" },
-          "carta_id": { "type": "string", "description": "Opcional: carta concreta. Sin el, resuelve la activa (canal -> general -> en_servicio)." },
-          "canal": { "type": "string", "description": "Opcional: canal de venta para resolver la carta." }
+          "descripcion": {
+            "type": "string"
+          },
+          "etiquetas": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "alergenos": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "disponible": {
+            "type": "boolean"
+          },
+          "tipo": {
+            "type": "string"
+          },
+          "emoji": {
+            "type": "string"
+          },
+          "estaciones": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Estaciones de cocina por las que pasa (ej. ['horno'])."
+          },
+          "ingredientes_base": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "dietas": {
+            "type": "object"
+          },
+          "variaciones": {
+            "type": "object",
+            "description": "{permite_quitar[], permite_anadir, max_ingredientes_extra, extras_sugeridos[{ingrediente_id, precio_extra?}]}"
+          },
+          "carta_id": {
+            "type": "string",
+            "description": "Opcional: carta concreta. Sin el, resuelve la activa (canal -> general -> en_servicio)."
+          },
+          "canal": {
+            "type": "string",
+            "description": "Opcional: canal de venta para resolver la carta."
+          }
         },
-        "required": ["project_id", "nombre", "precio", "categoria_id"]
+        "required": [
+          "project_id",
+          "nombre",
+          "precio",
+          "categoria_id"
+        ]
       },
       "handler": "handleCrearProducto",
-      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "PRECONDITION_FAILED", "ALREADY_EXISTS", "UPSTREAM_UNREACHABLE", "UNKNOWN_ERROR"]
+      "errores_conocidos": [
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND",
+        "PRECONDITION_FAILED",
+        "ALREADY_EXISTS",
+        "UPSTREAM_UNREACHABLE",
+        "UNKNOWN_ERROR"
+      ]
     },
     {
       "name": "productos.crear_categoria",
@@ -160,17 +467,40 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "project_id": { "type": "string", "description": "Identificador del proyecto." },
-          "nombre": { "type": "string", "description": "Nombre de la seccion (ej. Postres)." },
-          "descripcion": { "type": "string" },
-          "orden": { "type": "number" },
-          "carta_id": { "type": "string" },
-          "canal": { "type": "string" }
+          "project_id": {
+            "type": "string",
+            "description": "Identificador del proyecto."
+          },
+          "nombre": {
+            "type": "string",
+            "description": "Nombre de la seccion (ej. Postres)."
+          },
+          "descripcion": {
+            "type": "string"
+          },
+          "orden": {
+            "type": "number"
+          },
+          "carta_id": {
+            "type": "string"
+          },
+          "canal": {
+            "type": "string"
+          }
         },
-        "required": ["project_id", "nombre"]
+        "required": [
+          "project_id",
+          "nombre"
+        ]
       },
       "handler": "handleCrearCategoria",
-      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "ALREADY_EXISTS", "UPSTREAM_UNREACHABLE", "UNKNOWN_ERROR"]
+      "errores_conocidos": [
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND",
+        "ALREADY_EXISTS",
+        "UPSTREAM_UNREACHABLE",
+        "UNKNOWN_ERROR"
+      ]
     },
     {
       "name": "productos.delete",
@@ -178,14 +508,27 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "project_id": { "type": "string", "description": "Identificador del proyecto." },
-          "id":         { "type": "string", "description": "Identificador del producto." }
+          "project_id": {
+            "type": "string",
+            "description": "Identificador del proyecto."
+          },
+          "id": {
+            "type": "string",
+            "description": "Identificador del producto."
+          }
         },
-        "required": ["project_id", "id"],
+        "required": [
+          "project_id",
+          "id"
+        ],
         "additionalProperties": false
       },
       "handler": "handleDeleteProducto",
-      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UNKNOWN_ERROR"]
+      "errores_conocidos": [
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND",
+        "UNKNOWN_ERROR"
+      ]
     },
     {
       "name": "productos.categorias",
@@ -193,13 +536,21 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "project_id": { "type": "string", "description": "Identificador del proyecto." }
+          "project_id": {
+            "type": "string",
+            "description": "Identificador del proyecto."
+          }
         },
-        "required": ["project_id"],
+        "required": [
+          "project_id"
+        ],
         "additionalProperties": false
       },
       "handler": "handleListCategorias",
-      "errores_conocidos": ["INVALID_INPUT", "UNKNOWN_ERROR"]
+      "errores_conocidos": [
+        "INVALID_INPUT",
+        "UNKNOWN_ERROR"
+      ]
     },
     {
       "name": "productos.ingredientes",
@@ -207,15 +558,29 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "project_id": { "type": "string", "description": "Identificador del proyecto." },
-          "tipo":       { "type": "string", "description": "Filtro opcional por tipo de ingrediente." },
-          "grupo":      { "type": "string", "description": "Filtro opcional por grupo de ingrediente." }
+          "project_id": {
+            "type": "string",
+            "description": "Identificador del proyecto."
+          },
+          "tipo": {
+            "type": "string",
+            "description": "Filtro opcional por tipo de ingrediente."
+          },
+          "grupo": {
+            "type": "string",
+            "description": "Filtro opcional por grupo de ingrediente."
+          }
         },
-        "required": ["project_id"],
+        "required": [
+          "project_id"
+        ],
         "additionalProperties": false
       },
       "handler": "handleListIngredientes",
-      "errores_conocidos": ["INVALID_INPUT", "UNKNOWN_ERROR"]
+      "errores_conocidos": [
+        "INVALID_INPUT",
+        "UNKNOWN_ERROR"
+      ]
     },
     {
       "name": "productos.pizzas",
@@ -223,13 +588,21 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "project_id": { "type": "string", "description": "Identificador del proyecto." }
+          "project_id": {
+            "type": "string",
+            "description": "Identificador del proyecto."
+          }
         },
-        "required": ["project_id"],
+        "required": [
+          "project_id"
+        ],
         "additionalProperties": false
       },
       "handler": "handleListPizzas",
-      "errores_conocidos": ["INVALID_INPUT", "UNKNOWN_ERROR"]
+      "errores_conocidos": [
+        "INVALID_INPUT",
+        "UNKNOWN_ERROR"
+      ]
     },
     {
       "name": "productos.stats",
@@ -237,24 +610,37 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "project_id": { "type": "string", "description": "Identificador del proyecto (opcional)." }
+          "project_id": {
+            "type": "string",
+            "description": "Identificador del proyecto (opcional)."
+          }
         },
         "additionalProperties": false
       },
       "handler": "handleGetStats",
-      "errores_conocidos": ["UNKNOWN_ERROR"]
+      "errores_conocidos": [
+        "UNKNOWN_ERROR"
+      ]
     },
     {
       "name": "productos.health",
       "description": "Health check: estado del modulo, totales agregados de productos/categorias/menus pendientes.",
-      "parameters": { "type": "object", "properties": {}, "additionalProperties": false },
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
       "handler": "handleHealthCheck",
       "errores_conocidos": []
     },
     {
       "name": "productos.metrics",
       "description": "Metricas operativas del catalogo (counters y gauges).",
-      "parameters": { "type": "object", "properties": {}, "additionalProperties": false },
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
       "handler": "handleGetMetrics",
       "errores_conocidos": []
     },
@@ -264,13 +650,22 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "project_id": { "type": "string", "description": "Identificador del proyecto." }
+          "project_id": {
+            "type": "string",
+            "description": "Identificador del proyecto."
+          }
         },
-        "required": ["project_id"],
+        "required": [
+          "project_id"
+        ],
         "additionalProperties": false
       },
       "handler": "handleLoadCarta",
-      "errores_conocidos": ["INVALID_INPUT", "RESOURCE_NOT_FOUND", "UNKNOWN_ERROR"]
+      "errores_conocidos": [
+        "INVALID_INPUT",
+        "RESOURCE_NOT_FOUND",
+        "UNKNOWN_ERROR"
+      ]
     },
     {
       "name": "productos.carta_completa",
@@ -278,15 +673,25 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "project_id": { "type": "string", "description": "Identificador del proyecto (opcional)." }
+          "project_id": {
+            "type": "string",
+            "description": "Identificador del proyecto (opcional)."
+          }
         },
         "additionalProperties": false
       },
       "handler": "handleCartaCompleta",
-      "errores_conocidos": ["RESOURCE_NOT_FOUND", "UNKNOWN_ERROR"]
+      "errores_conocidos": [
+        "RESOURCE_NOT_FOUND",
+        "UNKNOWN_ERROR"
+      ]
     }
   ],
-  "dependencies": ["project-manager", "ingredientes", "carta-manager"],
+  "dependencies": [
+    "project-manager",
+    "ingredientes",
+    "carta-manager"
+  ],
   "tracing": {
     "propaga_correlation_id": true
   },
@@ -297,7 +702,10 @@
       "paths": [],
       "_nota_fuente_de_verdad": "La carta (carta-manager, /storage/pizzepos/cartas/) es la UNICA fuente. productos la LEE via carta.get.request (RPC al dueño, NO fs directo) y la proyecta a POS al vuelo. El unico estado en memoria es mappingCanalesPerProject (canal->carta_id, de tarifas), reconstruible desde tarifas.config.actualizada.",
       "restart_resilient": true,
-      "lost_on_restart": ["mappingCanalesPerProject", "pendingProjectRequests"]
+      "lost_on_restart": [
+        "mappingCanalesPerProject",
+        "pendingProjectRequests"
+      ]
     }
   },
   "observability": {

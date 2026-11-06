@@ -6,7 +6,7 @@ fuentes:
   - modules/pizzepos/**
   - modules/pago-gateway/**
   - blueprints/**
-verificado: 2026-11-05 (aviso-pedido-listo v1.0.0: cocina.pedido_listo —que ya existía y nadie escuchaba— ahora cierra el círculo del canal: aviso al cliente por el MISMO puente que trajo el pedido, con su código de turno (L 395) y su nombre; el destino es la JID que viaja puente→pedido→cuenta porque con número oculto (LID) el teléfono llega vacío. pedido-telegram v1.1.0: el canal Telegram abre una segunda puerta —la bandeja de compartir del móvil, con el mensaje canónico de WhatsApp— y el código corto queda como fallback; las dos re-tasan contra la carta viva en _crearPedidoDesde. carta-digital v2.25.1: la FICHA del producto ordena sus bloques nombre → receta → descripción → hermanas → Añadir extras — la receta va PEGADA al nombre, encima de descripción y hermanas; sigue vigente pago-gateway v3.1.0: Stripe con paridad — libro, idempotencia, webhook-puntero y conciliación; los métodos los manda el panel de Stripe, payment_method_types ya no se envía)
+verificado: 2026-11-06 (carta-digital v2.26.0: los modos de consumo los manda el DATO del canal y «A domicilio» entra como modo con dirección y teléfono exigidos en el carrito; pedidos v3.1.0: la puerta exige destino y teléfono cuando el modo es domicilio, el modo se canoniza a llevar (ticket que se cierra al cobrar, no cuenta huérfana) y el destino llega al comandero como nota general impresa en cocina. Siglo previo: 2026-11-05 (aviso-pedido-listo v1.0.0: cocina.pedido_listo —que ya existía y nadie escuchaba— ahora cierra el círculo del canal: aviso al cliente por el MISMO puente que trajo el pedido, con su código de turno (L 395) y su nombre; el destino es la JID que viaja puente→pedido→cuenta porque con número oculto (LID) el teléfono llega vacío. pedido-telegram v1.1.0: el canal Telegram abre una segunda puerta —la bandeja de compartir del móvil, con el mensaje canónico de WhatsApp— y el código corto queda como fallback; las dos re-tasan contra la carta viva en _crearPedidoDesde. carta-digital v2.25.1: la FICHA del producto ordena sus bloques nombre → receta → descripción → hermanas → Añadir extras — la receta va PEGADA al nombre, encima de descripción y hermanas; sigue vigente pago-gateway v3.1.0: Stripe con paridad — libro, idempotencia, webhook-puntero y conciliación; los métodos los manda el panel de Stripe, payment_method_types ya no se envía)
 ---
 
 # Módulos Pizzepos y Blueprints
@@ -552,6 +552,13 @@ CLASE Cobro {
 ```
 
 ### PEDIDOS MANAGER
+
+> v3.1.0 (6-nov-2026) — LA PUERTA del modo «a domicilio»: `handleCreatePedidoTienda` acepta
+> `direccion_entrega` y `cliente_telefono` y los EXIGE cuando el modo es 'domicilio' (400 en la
+> puerta: sin destino ni teléfono no hay reparto). El modo se canoniza a 'llevar' en cuentas, así
+> que el pedido nace ticket que se cierra al cobrar; el destino va como nota general al comandero
+> y sale impreso en el ticket de cocina con 🛵. El transporte (tienda-api, parser del #P1,
+> pedido-telegram, whatsapp-bot) solo valida FORMA y transporta; quién manda es esta puerta.
 
 ```
 INTERFAZ PedidosContract {
@@ -1267,6 +1274,13 @@ CLASE EstudioViabilidad {
 > desde los ingredientes que cada producto YA declara — si la carta cambia, cambian solas.
 > Misma regla de plantilla HORNEADA: tras desplegar hay que REPUBLICAR o la ficha servida
 > conserva el orden viejo.
+> v2.26.0 (6-nov-2026) — MODOS DE CONSUMO los manda el DATO: la carta pinta solo los modos que el
+> negocio ofrece (config del canal) y AÑADE «A domicilio» como modo propio, con dirección y teléfono
+> EXIGIDOS en la puerta del carrito antes de enviar. No es un canal nuevo: el pedido nace como
+> ticket que se cierra al cobrar (cuentas lo canoniza a 'llevar'), así que no deja cuenta huérfana.
+> El destino viaja en el #P1 (`direccion_entrega`) y no en el texto editable. Si el negocio ofrece
+> recoger+domicilio, mesa y llevar dejan de pintarse — un modo que el local no tiene es una cuenta
+> que nadie cierra.
 
 ```
 INTERFAZ CartaDigitalContract {                 // ui_handlers (RPC del bus / frontend)

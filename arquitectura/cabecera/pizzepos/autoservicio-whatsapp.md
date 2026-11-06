@@ -16,7 +16,7 @@ fuentes:
   - modules/_shared/lector-servicio.js
   - frontend/src/lib/components/comandero/ServicioToggle.svelte
   - tests/unit/pizzepos__servicio.test.js
-verificado: 2026-11-05 (Aviso de recogida: `cocina.pedido_listo` → WhatsApp al cliente por el MISMO puente que trajo el pedido, con su código de turno y su nombre; `cliente_jid` y `canal_cuenta` viajan hasta la cuenta) · 2026-11-04 (Canal Telegram: la carta comparte el pedido por la bandeja del móvil —navigator.share con el mismo mensaje #P1 de WhatsApp— y pedido-telegram lo parsea, re-tasa y crea el pedido sin borrador ni código; el camino del código corto queda como fallback. Guardas nuevas: sin #P1 no hay pedido, slug y bot tienen que ser del mismo proyecto, anti-duplicado por nonce. Sin cambios en el #P1, el tasador ni la puerta de WhatsApp)
+verificado: 2026-11-06 (Entrega a domicilio: `modo_consumo: 'domicilio'` viaja en el #P1 con `direccion_entrega`; se canoniza a 'llevar' en cuentas (ticket que se cierra al cobrar, no cuenta huérfana), pedidos exige dirección y teléfono en su puerta y el destino se imprime en el ticket de cocina. Sigue vigente: 2026-11-05 (Aviso de recogida: `cocina.pedido_listo` → WhatsApp al cliente por el MISMO puente que trajo el pedido, con su código de turno y su nombre; `cliente_jid` y `canal_cuenta` viajan hasta la cuenta) · 2026-11-04 (Canal Telegram: la carta comparte el pedido por la bandeja del móvil —navigator.share con el mismo mensaje #P1 de WhatsApp— y pedido-telegram lo parsea, re-tasa y crea el pedido sin borrador ni código; el camino del código corto queda como fallback. Guardas nuevas: sin #P1 no hay pedido, slug y bot tienen que ser del mismo proyecto, anti-duplicado por nonce. Desde 6-nov el #P1 sí admite `direccion_entrega` (ver arriba); el tasador y la puerta de WhatsApp siguen igual)
 ---
 
 # SUBSISTEMA AUTOSERVICIO — Pedido del cliente por WhatsApp (PWA → bot → cocina)
@@ -70,7 +70,8 @@ El mensaje wa.me que arma la PWA es el FORMATO CANÓNICO + una línea autoritati
   Total: <X,XX> EUR                                  ← HUMANO (ignorado)
   Nombre: <nombre del cliente>
   #P1 <base64url(JSON)>                              ← AUTORITATIVO: { v:1, items:[ItemEstructurado],
-                                                        modo_consumo?, hora_recogida?, fecha_deseada?,
+                                                        modo_consumo?, direccion_entrega?,
+                                                        hora_recogida?, fecha_deseada?,
                                                         metodo_pago? }
 
 ItemEstructurado (por IDS, nunca por precio):
@@ -93,6 +94,13 @@ REGLA  modo_consumo es el MODO DEL CLIENTE, no el CANAL de la cuenta. 'recoger' 
        tiene dueño y nadie lo cierra nunca (ni mesa ni ticket → la venta no llega al libro de
        ventas). El modo original se conserva en metadata.modo_consumo y es lo que pinta el
        comandero. Un pedido de tienda se cierra AL COBRAR (metadata.cerrar_al_cobrar:true).
+REGLA  modo_consumo 'domicilio' (6-nov-2026) = entrega a domicilio. Viaja en el #P1 igual que
+       el resto (el texto editable no manda) y SOLO en ese modo se acepta direccion_entrega,
+       que el parser recorta y limita a 240 chars. El modo se canoniza a 'llevar' en cuentas
+       (misma razón que 'recoger': ticket que se cierra al cobrar, no cuenta huérfana) y
+       pedidos exige dirección (≥6) y teléfono (≥9 dígitos) en su puerta — el transporte no
+       decide obligatoriedad, solo forma. El destino llega al comandero como notas_generales y
+       sale impreso en el ticket de cocina.
 ```
 
 ## El tasador — re-tasado server-side (función PURA, seguridad)

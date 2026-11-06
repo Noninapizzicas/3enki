@@ -278,6 +278,10 @@
       "errores_conocidos": ["INVALID_INPUT", "CONFLICT_STATE", "UPSTREAM_UNREACHABLE"]
     }
   ],
+  "publishes": [
+    "pedido.cliente_habitual",
+    "pedido.confirmacion_pendiente"
+  ],
   "dependencies": [],
   "tracing": {
     "propaga_correlation_id": true

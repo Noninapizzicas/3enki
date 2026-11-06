@@ -93,6 +93,10 @@ const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
     assert.match(enviados[0].text, /Francisco/, 'saluda por su nombre de pila');
     assert.match(enviados[0].text, /SÍ/, 'dice exactamente qué tiene que responder');
     assert.match(enviados[0].text, /L 395/, 'lleva el número de pedido que dirá en la barra');
+    assert.match(enviados[0].text, /preferimos preguntarte/, 'cordial y empática: explica por qué se pregunta');
+    assert.match(enviados[0].text, /Sin tu SÍ no lo ponemos en marcha/, 'firme: el pedido no arranca sin su sí');
+    assert.doesNotMatch(enviados[0].text, /van \d|\d+ pedidos|esta es la \d/,
+      'a un cliente nuevo no se le cuenta nada de su historial');
     await m.onUnload();
   }
 

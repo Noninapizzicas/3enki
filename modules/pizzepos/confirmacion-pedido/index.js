@@ -175,9 +175,11 @@ class ConfirmacionPedidoModule {
     const saludo = nombre ? `¡Hola, ${nombre}!` : '¡Hola!';
     return [
       `${saludo} 👋`,
-      `Hemos recibido tu pedido${ref ? ` ${ref}` : ''} y queremos confirmarlo antes de ponerlo en marcha.`,
-      'Responde SÍ y lo mandamos a cocina ahora mismo.',
-      'Si quieres cambiar algo, dínoslo por aquí.'
+      `Tenemos tu pedido${ref ? ` ${ref}` : ''} apuntado, con todo lo que nos has dicho.`,
+      'Antes de ponerlo en cocina queremos asegurarnos de que está bien: preferimos preguntarte un momento a servirte algo que no querías.',
+      'Responde SÍ y lo mandamos al horno ahora mismo.',
+      'Si quieres cambiar algo, dínoslo y lo ajustamos sin problema.',
+      'Sin tu SÍ no lo ponemos en marcha 🙏'
     ].join('\n');
   }
 

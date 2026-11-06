@@ -860,9 +860,21 @@ CLASE AvisoPedidoListo IMPLEMENTA AvisoPedidoListoContract {
 
 // El texto que recibe el cliente (el código es lo que canta la barra):
 //   ¡Francisco sanchez, tu pedido ya está listo! 🍕
-//   Puedes pasar a recogerlo cuando quieras.
+//   Puedes pasar a recogerlo por The Pirate cuando quieras: te esperamos con muchas ganas.
+//   Lo hemos preparado con todo el cariño, para que llegue calentito a tus manos.
+//
 //   Pedido: L 395
 //   A nombre de: Francisco sanchez
+//
+//   📍 Juan Carlo I, 49, Lorca
+//   Cómo llegar: https://www.google.com/maps/search/?api=1&query=Juan+Carlo+I+49,+Lorca
+//
+// EL NEGOCIO Y LA DIRECCIÓN NO SE ESCRIBEN AQUÍ: el nombre sale de la marca
+// (carta-marketing.get_perfil → marca.json) y la dirección + el enlace del bloque
+// `recogida` de la config de servicio — el mismo dato que publican carta y PWA. Si
+// el dueño mueve la dirección, el siguiente aviso ya la lleva. Sin config de
+// servicio el aviso sale igual (sin el hueco del mapa): el cliente tiene que saber
+// que está listo aunque falte la dirección. Un maps_url que no sea http(s) no entra.
 //
 // DESTINO: la JID completa viaja del puente al pedido y a la CUENTA
 // (datos_especificos.cliente_jid). Con número oculto (LID) el teléfono llega

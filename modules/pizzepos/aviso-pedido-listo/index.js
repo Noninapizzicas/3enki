@@ -5,6 +5,7 @@ const fs = require('fs').promises;
 const crypto = require('crypto');
 
 const BaseModule = require('../../_shared/base-module');
+const LectorServicio = require('../../_shared/lector-servicio');
 
 /**
  * aviso-pedido-listo
@@ -29,6 +30,12 @@ const BaseModule = require('../../_shared/base-module');
  *   "whatsapp_qr": { "url": "http://127.0.0.1:8235/send", "slug": "the-pirate", "activo": true }
  * `slug` es la cuenta del PUENTE (no el slug del proyecto: el puente sirve varias
  * cuentas y cada una tiene su sesion de WhatsApp).
+ *
+ * Donde recoger: el bloque `recogida` de la config de servicio del proyecto
+ * (/pizzepos/servicio/config.json), leido por su unica puerta (LectorServicio).
+ * Es el MISMO dato que publican la carta y la PWA: si el dueno mueve la direccion,
+ * el aviso se mueve con el. El nombre del negocio sale de la marca del proyecto
+ * (carta-marketing -> /pizzepos/marca.json).
  */
 class AvisoPedidoListoModule extends BaseModule {
   constructor() {
@@ -63,6 +70,16 @@ class AvisoPedidoListoModule extends BaseModule {
     this.metrics = core.metrics;
     this.eventBus = core.eventBus;
     this.moduleRegistry = core.moduleRegistry;
+
+    // Donde se recoge: una sola puerta a la config de servicio del proyecto, con su
+    // cache corta. Si el dueno mueve la direccion, el siguiente aviso ya la lleva.
+    this.servicio = new LectorServicio({
+      eventBus: core.eventBus,
+      logger: core.logger,
+      metrics: core.metrics,
+      ttlMs: 15000,
+      timeoutMs: 4000
+    });
 
     this._unsubscribeProjectGetResponse = await this.eventBus.subscribe(
       'project.get.response',
@@ -165,7 +182,15 @@ class AvisoPedidoListoModule extends BaseModule {
 
     const nombre = datos.cliente_nombre || cuenta.nombre || null;
     const ref = this._refCorta(cuenta, data);
-    const texto = this.formatearAviso({ nombre, ref });
+
+    // Lo que el cliente necesita para VENIR: donde recoge y como llegar. Se leen en
+    // paralelo con el resto: la cocina acaba de decir que esta listo, no hay tiempo
+    // que perder preguntando dos veces al bus.
+    const [recogida, marca] = await Promise.all([
+      this._lugarRecogida(project_id),
+      this._nombreNegocio(project_id)
+    ]);
+    const texto = this.formatearAviso({ nombre, ref, recogida, marca });
 
     const envio = await this._enviarAlPuente(cfg, destino, texto);
     if (!envio.ok) {
@@ -205,19 +230,73 @@ class AvisoPedidoListoModule extends BaseModule {
   // ==========================================
 
   /**
-   * Lo que el cliente necesita para venir a por su pedido: que esta listo, donde
-   * (a recoger), COMO se identifica (el codigo de turno que canta la barra) y a
-   * nombre de quien esta. Sin codigo ni nombre, el aviso no sirve de nada.
+   * Lo que el cliente necesita para venir a por su pedido: que esta listo, DONDE
+   * (por el negocio, con su direccion y el enlace del mapa), COMO se identifica (el
+   * codigo de turno que canta la barra) y a nombre de quien esta. Sin codigo ni
+   * nombre el aviso no sirve de nada; sin direccion, el cliente tiene que buscarse
+   * la vida — por eso el enlace va pegado al aviso, no en otro mensaje.
+   *
+   * Trato: cordial y de casa, sin numeros ni contadores. El cliente no es un tique.
    */
-  formatearAviso({ nombre, ref } = {}) {
+  formatearAviso({ nombre, ref, recogida, marca } = {}) {
     const nombreCorto = this._nombrePresentable(nombre);
+    const sitio = this._nombrePresentable(marca);
+    const r = recogida || {};
+    const direccion = [r.direccion, r.ciudad].filter(Boolean).join(', ') || null;
+
     const lineas = [];
     lineas.push(nombreCorto ? `¡${nombreCorto}, tu pedido ya está listo! 🍕` : '¡Tu pedido ya está listo! 🍕');
-    lineas.push('Puedes pasar a recogerlo cuando quieras.');
+    lineas.push(sitio
+      ? `Puedes pasar a recogerlo por ${sitio} cuando quieras: te esperamos con muchas ganas.`
+      : 'Puedes pasar a recogerlo cuando quieras: te esperamos con muchas ganas.');
+    lineas.push('Lo hemos preparado con todo el cariño, para que llegue calentito a tus manos.');
     lineas.push('');
     if (ref) lineas.push(`Pedido: ${ref}`);
     if (nombreCorto) lineas.push(`A nombre de: ${nombreCorto}`);
+    if (direccion) lineas.push('', `📍 ${direccion}`);
+    if (r.maps_url) lineas.push(`Cómo llegar: ${r.maps_url}`);
     return lineas.join('\n').trim();
+  }
+
+  /**
+   * Donde recoge y como llegar. Sale del bloque `recogida` de la config de servicio
+   * — el MISMO dato que publican la carta y la PWA (una sola verdad; si el dueno
+   * mueve la direccion, el aviso se mueve con el).
+   * Un enlace que no sea http(s) no entra en el mensaje: al cliente se le manda un
+   * mapa, no cualquier cosa que alguien haya dejado escrita en la config.
+   */
+  async _lugarRecogida(project_id) {
+    try {
+      const servicio = await this.servicio.leer(project_id);
+      const recogida = (servicio && servicio.recogida) || null;
+      if (!recogida) return null;
+      const texto = (v) => (typeof v === 'string' && v.trim() ? v.trim() : null);
+      const url = texto(recogida.maps_url);
+      return {
+        direccion: texto(recogida.direccion),
+        ciudad: texto(recogida.ciudad),
+        maps_url: url && /^https?:\/\//i.test(url) ? url : null
+      };
+    } catch (err) {
+      this.logger?.warn?.('aviso-pedido-listo.recogida_no_leida', {
+        project_id, error_message: err && err.message ? err.message : String(err)
+      });
+      return null;
+    }
+  }
+
+  /** El nombre del negocio, por la puerta del dueno (carta-marketing -> /pizzepos/marca.json). */
+  async _nombreNegocio(project_id) {
+    try {
+      const cartaMarketing = this.moduleRegistry?.get?.('carta-marketing')?.instance;
+      if (!cartaMarketing || typeof cartaMarketing.handleGetPerfil !== 'function') return null;
+      const res = await cartaMarketing.handleGetPerfil({ project_id });
+      const nombre = res && res.data && res.data.esencia && res.data.esencia.nombre;
+      return (typeof nombre === 'string' && nombre.trim()) ? nombre.trim() : null;
+    } catch (err) {
+      this.logger?.debug?.('aviso-pedido-listo.marca_no_leida', { project_id });
+      return null;
+    }
   }
 
   _nombrePresentable(nombre) {

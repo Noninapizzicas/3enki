@@ -26,12 +26,15 @@ const tests = [];
 function test(name, fn) { tests.push({ name, fn }); }
 const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
 
-function makeBus(project) {
+function makeBus(project, opciones) {
+  const opts = opciones || {};
   const published = [];
   const subscribers = new Map();
   return {
     published,
     project: project === undefined ? { success: true, project: { base_path: '/tmp' } } : project,
+    // Los ficheros que el módulo puede leer por el bus (fs.read.request).
+    fsFiles: opts.fsFiles || {},
     publish(eventType, data) {
       published.push({ eventType, data });
       if (eventType === 'project.get.request' && this.project !== null) {
@@ -41,16 +44,31 @@ function makeBus(project) {
           for (const h of handlers) { try { h({ data: responseData }); } catch (_) { /* ignore */ } }
         });
       }
+      // fs.read: se contesta SIEMPRE (con el fichero o con error). Si no, el lector de
+      // servicio se comería su timeout en cada test y la suite tardaría minutos.
+      if (eventType === 'fs.read.request') {
+        const contenido = this.fsFiles[data.path];
+        const respuesta = contenido === undefined
+          ? { request_id: data.request_id, error: { code: 'RESOURCE_NOT_FOUND' } }
+          : { request_id: data.request_id, content: contenido, error: null };
+        const handlers = subscribers.get('fs.read.response') || [];
+        setImmediate(() => {
+          for (const h of handlers) { try { h({ data: respuesta }); } catch (_) { /* ignore */ } }
+        });
+      }
       return Promise.resolve();
     },
     subscribe(eventType, handler) {
       if (!subscribers.has(eventType)) subscribers.set(eventType, []);
       subscribers.get(eventType).push(handler);
-      return Promise.resolve(() => {
+      // DEVUELVE LA FUNCION, no una promesa: el bus real (`core/events/bus.js`) es
+      // sincrono aqui y los lectores compartidos (LectorServicio) llaman `unsub()`
+      // sin await. Un doble que devolviera promesa esconde ese contrato y cuelga.
+      return () => {
         const arr = subscribers.get(eventType) || [];
         const i = arr.indexOf(handler);
         if (i >= 0) arr.splice(i, 1);
-      });
+      };
     }
   };
 }
@@ -110,7 +128,20 @@ function proyectoConConfig(whatsapp_qr) {
   return base;
 }
 
-async function montar({ cuenta, project, qr, respuesta } = {}) {
+// Config de servicio del the-pirate real (storage/pizzepos/servicio/config.json).
+const SERVICIO = {
+  zona_horaria: 'Europe/Madrid',
+  horario: { lunes: [], martes: ['18:00-23:30'] },
+  interruptor: { abierto: true },
+  recogida: {
+    direccion: 'Juan Carlo I, 49',
+    ciudad: 'Lorca',
+    maps_url: 'https://www.google.com/maps/search/?api=1&query=Juan+Carlo+I+49,+Lorca',
+    notas: null
+  }
+};
+
+async function montar({ cuenta, project, qr, respuesta, servicio, marca } = {}) {
   const puente = await arrancarPuente(respuesta);
   // qr === undefined → config valida apuntando al puente de prueba
   // qr === null      → config SIN bloque whatsapp_qr (proyecto que no lo tiene puesto)
@@ -121,7 +152,15 @@ async function montar({ cuenta, project, qr, respuesta } = {}) {
   // mentira para no tocar el WhatsApp real de la maquina.
   if (qr === null) process.env.WA_PUENTE_URL = puente.url;
   else delete process.env.WA_PUENTE_URL;
-  const bus = makeBus(project === undefined ? { success: true, project: { base_path: base } } : project);
+  // servicio === undefined → el the-pirate real (con direccion y mapa)
+  // servicio === null      → proyecto sin config de servicio (no hay donde recoger escrito)
+  const fsFiles = {};
+  const servicioCfg = servicio === undefined ? SERVICIO : servicio;
+  if (servicioCfg) fsFiles['/pizzepos/servicio/config.json'] = JSON.stringify(servicioCfg);
+  const bus = makeBus(
+    project === undefined ? { success: true, project: { base_path: base } } : project,
+    { fsFiles }
+  );
   const logs = [];
   const metrics = [];
   const logger = {
@@ -140,7 +179,16 @@ async function montar({ cuenta, project, qr, respuesta } = {}) {
           return { status: 200, data: typeof cuenta === 'function' ? cuenta() : (cuenta || makeCuenta()) };
         }
       }
-    } : undefined
+    } : (nombre === 'carta-marketing' ? {
+      instance: {
+        // Puerta del dueño: la marca del proyecto (marca.json → esencia.nombre).
+        // marca === null → proyecto sin marca puesta.
+        handleGetPerfil: async () => ({
+          status: 200,
+          data: { esencia: { nombre: marca === null ? null : (marca === undefined ? 'The Pirate' : marca) } }
+        })
+      }
+    } : undefined)
   };
 
   const mod = new AvisoPedidoListo();
@@ -184,6 +232,65 @@ test('el texto dice que esta listo, que pase a recogerlo y COMO se identifica', 
     assert.match(enviado.text, /recogerlo/);
     assert.match(enviado.text, /L 395/);
     assert.match(enviado.text, /Francisco sanchez/);
+  } finally { await h.cerrar(); }
+});
+
+test('el aviso lleva DONDE recoger: el negocio, la direccion y el enlace del mapa', async () => {
+  const h = await montar();
+  try {
+    await h.listo();
+    const texto = h.puente.recibidos[0].text;
+    assert.match(texto, /recogerlo por The Pirate/, 'el cliente tiene que saber POR QUE negocio viene');
+    assert.match(texto, /📍 Juan Carlo I, 49, Lorca/, 'la direccion, escrita en el mensaje');
+    assert.match(texto, /Cómo llegar: https:\/\/www\.google\.com\/maps\//, 'y el enlace del mapa, pegado al aviso');
+  } finally { await h.cerrar(); }
+});
+
+test('la ubicacion sale de la config de servicio: si el dueño la mueve, el aviso se mueve', async () => {
+  const h = await montar({
+    servicio: { ...SERVICIO, recogida: { direccion: 'Alameda de Cervantes, 2', ciudad: 'Lorca', maps_url: 'https://maps.example.com/pirate-nuevo' } }
+  });
+  try {
+    await h.listo();
+    const texto = h.puente.recibidos[0].text;
+    assert.match(texto, /Alameda de Cervantes, 2, Lorca/);
+    assert.match(texto, /https:\/\/maps\.example\.com\/pirate-nuevo/);
+    assert.doesNotMatch(texto, /Juan Carlo/, 'la direccion vieja no puede quedarse pegada en el codigo');
+  } finally { await h.cerrar(); }
+});
+
+test('sin config de servicio el aviso sale igual, sin hueco de mapa vacio', async () => {
+  const h = await montar({ servicio: null });
+  try {
+    await h.listo();
+    const texto = h.puente.recibidos[0].text;
+    assert.strictEqual(h.eventos('aviso_pedido_listo.enviado').length, 1, 'sin direccion el aviso NO se cae: el cliente tiene que saber que esta listo');
+    assert.match(texto, /ya está listo/);
+    assert.doesNotMatch(texto, /Cómo llegar/);
+    assert.doesNotMatch(texto, /📍/);
+  } finally { await h.cerrar(); }
+});
+
+test('un enlace que no es http(s) no se le manda al cliente', async () => {
+  const h = await montar({
+    servicio: { ...SERVICIO, recogida: { direccion: 'Juan Carlo I, 49', ciudad: 'Lorca', maps_url: 'javascript:alert(1)' } }
+  });
+  try {
+    await h.listo();
+    const texto = h.puente.recibidos[0].text;
+    assert.match(texto, /Juan Carlo I, 49/, 'la direccion escrita si vale');
+    assert.doesNotMatch(texto, /javascript:/, 'por el bufé de WhatsApp no se cuela cualquier cosa');
+    assert.doesNotMatch(texto, /Cómo llegar/);
+  } finally { await h.cerrar(); }
+});
+
+test('sin marca puesta el aviso no inventa el nombre del negocio', async () => {
+  const h = await montar({ marca: null });
+  try {
+    await h.listo();
+    const texto = h.puente.recibidos[0].text;
+    assert.match(texto, /Puedes pasar a recogerlo cuando quieras/);
+    assert.doesNotMatch(texto, /null|undefined/);
   } finally { await h.cerrar(); }
 });
 

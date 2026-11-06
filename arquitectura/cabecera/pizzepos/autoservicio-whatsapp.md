@@ -588,7 +588,10 @@ CLASE AvisoPedidoListo HEREDA BaseModule {
     salida  ← cuenta.datos_especificos.canal_cuenta     // por donde ENTRÓ, no por donde "toque"
     SI NO salida                         : DECLARA 'sin salida'; RETORNA
     SI ya_avisado(pedido_id)             : RETORNA      // un pedido se avisa UNA vez
-    manda('ya está listo, pasa a recogerlo' + código de turno + nombre) por el puente {salida, destino}
+    recogida ← LectorServicio.leer(project).recogida     // donde y como llegar (una sola verdad)
+    marca    ← carta-marketing.handleGetPerfil(project).esencia.nombre
+    manda('ya está listo, pasa a recogerlo POR {marca}' + código de turno + nombre
+          + dirección + enlace del mapa) por el puente {salida, destino}
   }
 }
 ```
@@ -598,6 +601,8 @@ CLASE AvisoPedidoListo HEREDA BaseModule {
 | `modules/pizzepos/aviso-pedido-listo/` | escucha y avisa. Sin estado: lee la cuenta y la config en el momento (un reinicio no lo deja frío) |
 | `datos_especificos.cliente_jid` | la JID completa del cliente. Con número oculto (LID) el móvil llega vacío: sin JID no hay destino |
 | `datos_especificos.canal_cuenta` | la cuenta del puente por la que entró el pedido: el aviso se contesta por donde le hablaron |
+| `servicio.config.recogida {direccion, ciudad, maps_url}` | **donde recoge**. El MISMO bloque que publican carta y PWA (`LectorServicio`, caché 15 s): si el dueño mueve la dirección, el aviso se mueve solo — no hay dirección escrita en el código. Solo entra un `maps_url` http(s) |
+| `marca.json → esencia.nombre` | el nombre del negocio, por la puerta del dueño (`carta-marketing.get_perfil`). Sin marca, el aviso sale sin el nombre: no se inventa |
 | `config/config.json → whatsapp_qr {url, slug, activo}` | opcional; solo para forzar otro puente o apagarlo |
 
 **El slug NO se deriva del proyecto.** `tienda` sirve a rapitvapers y `the-pirate` a la pizzería: el
@@ -606,8 +611,11 @@ slug del puente es un dato, no una convención. Sin dato de salida no se manda n
 **El fracaso se distingue.** Un rechazo firme del puente (destino inválido, no es un número) NO se
 reintenta: reintentarlo es ruido. «Sesión no conectada» SÍ, tres intentos cortos: es transitorio.
 
-**Fijado en tests.** `tests/unit/pizzepos__aviso-pedido-listo.test.js` —17 casos contra un puente
+**Fijado en tests.** `tests/unit/pizzepos__aviso-pedido-listo.test.js` —24 casos contra un puente
 HTTP real—: destino por JID y por móvil, mesa y POS interno mudos, aviso una sola vez, reintento
-solo en «sesión no conectada», sin datos no manda, config para forzar puente y para apagarlo. Más 2
+solo en «sesión no conectada», sin datos no manda, config para forzar puente y para apagarlo, y el
+DONDE recoger: negocio + dirección + enlace del mapa salen de la config de servicio (y se mueven con
+ella), sin config el aviso sale igual sin hueco de mapa, y un enlace que no es http(s) no llega al
+cliente. Más 2
 casos en `pizzepos__pedidos` (la JID y el canal del puente llegan a la cuenta; una JID falsa se
 guarda como `null`) y 2 aserciones en el lector `whatsapp-qr`.

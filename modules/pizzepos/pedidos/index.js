@@ -773,7 +773,7 @@ class PedidosModule extends BaseModule {
         // JID completa de WhatsApp del cliente (`...@s.whatsapp.net` o `...@lid`). Es lo que
         // permite avisarle cuando la cocina termina: con numero oculto (LID) no hay movil
         // que componer, y los avisos de recogida se quedarian sin destino.
-        cliente_jid: this._normalizarJid(cliente_jid),
+        cliente_jid: this._normalizarJid(cliente_jid) || this._jidDesdeNotas(notas_generales),
         // Cuenta del puente por la que entro el pedido: por ahi sale el aviso de recogida.
         canal_cuenta: this._normalizarCuentaPuente(canal_cuenta),
         modo_consumo: modo_consumo_norm,
@@ -1390,6 +1390,19 @@ class PedidosModule extends BaseModule {
   _slugItem(desc) {
     return String(desc || 'item').toLowerCase()
       .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'item';
+  }
+
+  // La JID que trae el pedido de WhatsApp, sacada de su propio texto libre.
+  // El lector del puente (`bridges/whatsapp-qr/ingest/ingest.js`) NO manda un campo
+  // `cliente_jid`: ya escribe el remitente dentro de `notas_generales` como
+  // `WhatsApp <jid> · <nonce>`. Se lee de ahi en vez de tocar ese lector, que es un
+  // carril COMPARTIDO (lo arranca tambien rapitvapers): lo que sirve a un negocio no
+  // puede meter codigo en el puente del otro. Sin JID no hay destino al que contestar
+  // cuando el cliente escribe con numero oculto; con ella, el aviso sale igual.
+  _jidDesdeNotas(notas) {
+    if (typeof notas !== 'string') return null;
+    const m = notas.match(/whatsapp\s+([a-z0-9.:_-]+@(?:s\.whatsapp\.net|lid|c\.us))/i);
+    return m ? this._normalizarJid(m[1]) : null;
   }
 
   // JID de WhatsApp normalizada (`<usuario>@<servidor>`), o null si no lo parece.

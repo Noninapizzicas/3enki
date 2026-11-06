@@ -580,6 +580,36 @@ function publishedOf(mocks, name) {
     await m.onUnload();
   });
 
+  await testAsync('tienda · la JID del puente se lee de notas_generales (carril compartido intacto)', async () => {
+    // El lector del puente (`bridges/whatsapp-qr/ingest/ingest.js`) es un carril
+    // COMPARTIDO con rapitvapers: no manda `cliente_jid`, pero SI escribe el remitente
+    // en `notas_generales` como "WhatsApp <jid> · <nonce>". De ahi se lee, para que el
+    // aviso de recogida tenga destino sin meter ni una linea en el puente del otro negocio.
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    let metadataCuenta = null;
+    const cuentas = {
+      handleCreateCuenta: async (d) => {
+        metadataCuenta = d.metadata;
+        return { status: 201, data: { id: 'llevar_test3', ref_display: 'Ana L 003' } };
+      }
+    };
+    const comandero = {
+      handleAddItem: async (d) => ({ status: 201, data: { item: { precio: d.precio ?? 0, cantidad: d.cantidad } } }),
+      handleEnviarCocina: async () => ({ status: 200, data: {} })
+    };
+    m.moduleRegistry = { get: (n) => (n === 'cuentas' ? { instance: cuentas } : n === 'comandero' ? { instance: comandero } : null) };
+    const r = await m.handleCreatePedidoTienda(validInputTienda({
+      items: [{ cantidad: 1, descripcion: 'Anne Bonny', precio_unitario_centimos: 1500 }],
+      total_centimos: 1500,
+      notas_generales: 'WhatsApp 191624311222342@lid · the-pirate-AB12 '
+    }));
+    assert.strictEqual(r.status, 201);
+    assert.strictEqual(metadataCuenta.cliente_jid, '191624311222342@lid');
+    assert.strictEqual(m.pedidos.get(r.data.pedido_id).cliente_jid, '191624311222342@lid');
+    await m.onUnload();
+  });
+
   await testAsync('tienda · sin items devuelve 400 INVALID_INPUT', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);

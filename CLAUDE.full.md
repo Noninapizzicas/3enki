@@ -2373,11 +2373,12 @@ CLASE CuentasModule HEREDA BaseModule {
 
     async handleCreateCuenta(data: {project_id, tipo?, nombre?, metadata?, pedido_inicial?}): Promise<Response>
       VALIDA project_id obligatorio
-      CANONIZA el tipo a CANAL con dueño: ALIAS_CANAL = { recoger: 'llevar' }
-        // El MODO del cliente no es el CANAL: 'recoger' es un pedido para llevar.
-        // Un tipo sin strategy (prefijo sin dueño) nace HUÉRFANO — ni mesa ni ticket,
-        // nadie lo cierra, y su venta no llega al libro. El modo se queda en
-        // metadata.modo_consumo (es lo que pinta el comandero). Única puerta: aquí.
+      CANONIZA el tipo a CANAL con dueño: ALIAS_CANAL = { recoger: 'llevar', domicilio: 'llevar' }
+        // El MODO del cliente no es el CANAL: 'recoger' y 'domicilio' son pedidos para
+        // llevar (ticket que se cierra al cobrar). Lo que los distingue viaja en metadata:
+        // modo_consumo ('domicilio') + direccion_entrega. Un tipo sin strategy (prefijo sin
+        // dueño) nace HUÉRFANO — ni mesa ni ticket, nadie lo cierra, y su venta no llega al
+        // libro. El modo se queda en metadata.modo_consumo (es lo que pinta el comandero).
       OBTIENE o genera cuenta_id
       GENERA turno via _getNextTurno()
       GENERA ref_display via _generateRefDisplay(tipo, nombre)
@@ -2970,12 +2971,16 @@ CLASE PedidosModule HEREDA BaseModule {
       PUBLICA pedido.creado
       RETORNA {status: 201, data: pedido}
 
-    async handleCreatePedidoTienda(data: {project_slug, items, cliente_nombre, modo_consumo, hora_recogida, metodo_pago}): Promise<Response>
+    async handleCreatePedidoTienda(data: {project_slug, items, cliente_nombre, modo_consumo, direccion_entrega?, cliente_telefono?, hora_recogida, metodo_pago}): Promise<Response>
       NORMALIZA metodo_pago EN ['efectivo','tarjeta']  // opcional: sin el → 'efectivo' (comportamiento previo)
       metodo_pago SOLO REGISTRA la preferencia del cliente (lo que pidio en la PWA por el #P1)
       QUIEN MANDA SOBRE EL COBRO es la VERDAD del pago (pedido.pago.estado), NO esta preferencia
+      MODOS_CONSUMO = ['mesa','recoger','llevar','domicilio']   // elige el negocio (dato), no el código
+      SI modo == 'domicilio' → EXIGE direccion_entrega (>=6 chars) Y cliente_telefono (>=9 digitos)
+        // sin destino ni teléfono no hay reparto: 400 en la PUERTA, no una cuenta sin rumbo
       CREA pedido tienda (ancla = cliente_nombre) → _crearCuentaTienda → comandero.enviar_cocina
-      PUBLICA pedido.creado (lleva metodo_pago)
+        // en 'domicilio' el ticket de cocina lleva "🛵 ENTREGA A DOMICILIO: <dirección> · Tel"
+      PUBLICA pedido.creado (lleva metodo_pago y direccion_entrega)
 
     async onPagoConfirmado(event: {pedido_id, project_id, monto_centimos, project_slug?, cliente_nombre?, cliente_telefono?}): Void
       SI pedido NO esta EN memoria                              // el pago es ASINCRONO y el pedido de

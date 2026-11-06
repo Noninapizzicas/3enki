@@ -398,7 +398,7 @@ class ImpresionModule extends BaseModule {
     const {
       pedido_id, cuenta_id, canal, ref_display,
       item_id, nombre, cantidad, categoria, estacion,
-      ingredientes, variaciones, notas, impresora, project_id
+      ingredientes, variaciones, notas, impresora, project_id, pieza
     } = data;
 
     if (cuenta_id && ref_display) {
@@ -412,7 +412,7 @@ class ImpresionModule extends BaseModule {
       const ticket = this.formatearTicketPieza({
         pedido_id, cuenta_id, canal, ref_display,
         nombre, cantidad, categoria, estacion,
-        ingredientes, variaciones, notas
+        ingredientes, variaciones, notas, pieza
       });
 
       await this._enviarImpresora(ticket, destino, project_id);
@@ -718,7 +718,7 @@ class ImpresionModule extends BaseModule {
 
   formatearTicketPieza({ pedido_id, cuenta_id, canal, ref_display,
                          nombre, cantidad, categoria, estacion,
-                         ingredientes, variaciones, notas }) {
+                         ingredientes, variaciones, notas, pieza }) {
     const lineas = [];
     lineas.push(CMD.INIT + CMD.CODEPAGE_437);
     lineas.push(CMD.FEED_3);
@@ -739,6 +739,28 @@ class ImpresionModule extends BaseModule {
 
     const prod = cantidad > 1 ? this.truncar(`${cantidad}x ${nombre}`) : this.truncar(nombre);
     lineas.push(CMD.DOUBLE_ON + CMD.BOLD_ON + prod + CMD.BOLD_OFF + CMD.DOUBLE_OFF);
+
+    // PIEZA n/N en su propia linea: si hay dos pizzas iguales el cocinero sabe que esta es
+    // una de dos y que la otra tambien hay que hacerla. Va aparte para que el nombre largo
+    // del plato no se la coma el truncado.
+    if (pieza && pieza.de > 1) {
+      lineas.push(CMD.ALIGN_CENTER + CMD.BOLD_ON + `PIEZA ${pieza.n}/${pieza.de}` + CMD.BOLD_OFF + CMD.ALIGN_LEFT);
+    }
+
+    // INGREDIENTES EN ORDEN DE MONTAJE. La carta los guarda en el orden en que se ponen
+    // sobre la masa, y ese orden ES informacion de cocina: se imprimen numerados de arriba
+    // abajo. Se omiten los que el cliente ha quitado (esos salen aparte como SIN).
+    const quitarSet = new Set((variaciones?.ingredientes_quitar || [])
+      .map(n => String((n && n.nombre) || n).toLowerCase()));
+    const enOrden = (Array.isArray(ingredientes) ? ingredientes : [])
+      .map(ing => (typeof ing === 'string' ? ing : (ing && ing.nombre) || ''))
+      .filter(Boolean)
+      .filter(ing => !quitarSet.has(String(ing).toLowerCase()));
+    if (enOrden.length > 0) {
+      enOrden.forEach((ing, i) => {
+        lineas.push(this.truncar(` ${i + 1}. ${ing}`));
+      });
+    }
 
     if (variaciones && Object.keys(variaciones).length > 0) {
       const v = variaciones;

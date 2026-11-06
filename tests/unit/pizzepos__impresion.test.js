@@ -497,6 +497,31 @@ function publishedOf(mocks, name) {
     await m.onUnload();
   });
 
+  await testAsync('ticket pieza: ingredientes EN ORDEN de montaje, numerados, y la pieza marcada', async () => {
+    const mocks = makeMocks({ noMqtt: true });
+    const { module: m } = await instantiate(mocks);
+    const ticket = m.formatearTicketPieza({
+      pedido_id: 'p-1', cuenta_id: 'c-1', ref_display: 'Luis', canal: 'llevar',
+      nombre: 'Pizza de jamón York (Milonga)', cantidad: 1, categoria: 'pizzas', estacion: 'horno',
+      pieza: { n: 1, de: 2 },
+      ingredientes: ['Tomate', 'Jamón de york', 'Mozzarella'],
+      variaciones: { ingredientes_quitar: ['Mozzarella'], ingredientes_anadir: ['Bacon'] },
+      notas: ''
+    });
+    // La pieza va numerada: el cocinero sabe que hay otra igual
+    assert.ok(ticket.includes('PIEZA 1/2'), 'la pieza se marca en el ticket');
+    // Orden de montaje: tomate (1) ANTES de jamon (2) — el orden de la carta, no alfabetico
+    const i1 = ticket.indexOf('1. Tomate');
+    const i2 = ticket.indexOf('2. Jamón de york');
+    assert.ok(i1 > -1, 'el primer ingrediente va numerado');
+    assert.ok(i2 > i1, 'el orden es el de la carta: tomate antes que jamon');
+    // Lo que el cliente quita NO se lista como ingrediente (sale aparte como SIN)
+    assert.ok(!ticket.includes('3. Mozzarella'), 'la mozzarella quitada no va en la lista de montaje');
+    assert.ok(ticket.includes('SIN MOZZARELLA'), 'sale como SIN, que es la instruccion real');
+    assert.ok(ticket.includes('+ CON Bacon'), 'lo añadido sale como añadido');
+    await m.onUnload();
+  });
+
   console.log('\nTodos los tests pasaron.');
   process.exit(0);
 })();

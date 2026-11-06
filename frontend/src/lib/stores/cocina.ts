@@ -48,6 +48,8 @@ export interface ItemCocina {
   pizza_derecha?: string | PizzaHalf;
   ingredientes?: Array<string | IngredienteAlGusto>;
   ingredientes_base?: string[];
+  // Pieza dentro de un lote: 2 pizzas iguales llegan como 2 piezas (1/2, 2/2)
+  pieza?: { n: number; de: number };
   preparando_at?: string;
   preparado_at?: string;
   // Multi-dispositivo

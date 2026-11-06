@@ -195,6 +195,42 @@ async function testAsync(description, fn) {
     await m.onUnload();
   });
 
+  // Decisión del dueño (the pirate): las bebidas SALEN EN COCINA. No se sacan del
+  // pedido de cocina ni se dan por hechas en barra: son una pieza más que alguien marca.
+  // Consecuencia asumida: mientras la bebida no se marque, el pedido no se declara listo
+  // y el cliente no recibe el aviso de recogida.
+  await testAsync('la Coca-Cola es una PIEZA más: hasta que se marca, el pedido no está listo', async () => {
+    const mocks = makeMocks();
+    const m = await instantiate(mocks);
+
+    await m.onPedidoEnviadoCocina(makePedidoEvent({
+      pedido_id: 'p-cola',
+      items: [
+        { item_id: 'it-mil', producto_id: 'milonga', nombre: 'Milonga', cantidad: 1, categoria: 'pizzas' },
+        { item_id: 'it-cola', producto_id: 'cola', nombre: 'Coca-Cola', cantidad: 1, categoria: 'bebidas' }
+      ]
+    }));
+    flushSnapshotTimer(m);
+
+    const card = m.pedidosActivos.get('p-cola');
+    assert.strictEqual(card.items.length, 2, 'la bebida entra en cocina como una pieza más');
+    assert.ok(card.items.some(i => i.producto_id === 'cola' && i.categoria === 'bebidas'),
+      'la bebida no se filtra fuera de cocina');
+
+    let r = await m.handlePrepararItem({ item_id: 'it-mil', done: true });
+    assert.ok(isCanonicalSuccess(r), 'la pizza se marca');
+    assert.strictEqual(r.data.pedido_completo, false, 'sin la bebida marcada el pedido no está listo');
+    assert.strictEqual(publishedOf(mocks, 'cocina.pedido_listo').length, 0, 'todavía no hay aviso al cliente');
+
+    r = await m.handlePrepararItem({ item_id: 'it-cola', done: true });
+    assert.ok(isCanonicalSuccess(r), 'la bebida se marca en cocina');
+    assert.strictEqual(r.data.pedido_completo, true, 'con la bebida marcada el pedido cierra');
+    assert.strictEqual(publishedOf(mocks, 'cocina.pedido_listo').length, 1, 'el aviso sale al marcar la bebida');
+
+    flushSnapshotTimer(m);
+    await m.onUnload();
+  });
+
   teardownTmpCwd();
   console.log('\nTodos los tests pasaron.');
 })().catch(e => {

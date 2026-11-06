@@ -1,6 +1,8 @@
 ---
 name: agenda-operacion
-description: Custodio single-writer de la operación diaria del negocio (the-pirate): horario por franja, ciclo de tareas del día y predicción de demanda.
+description: >-
+  Custodio single-writer de la operación diaria del negocio (the-pirate): horario por franja,
+  ciclo de tareas del día y predicción de demanda.
 tags: [enki, the-pirate, agenda, operacion, horario]
 ---
 # agenda-operacion

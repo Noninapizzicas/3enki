@@ -1,6 +1,8 @@
 ---
 name: adaptador-slicing
-description: Puente al slicer externo (CrealityPrint CLI en el PC del dueño) del proyecto 3D. Slicear .3mf -> gcode y leer metadatos del .3mf. PUENTE stateless: sin store, escucha y delega.
+description: >-
+  Puente al slicer externo (CrealityPrint CLI en el PC del dueño) del proyecto 3D. Slicear
+  .3mf -> gcode y leer metadatos del .3mf. PUENTE stateless: sin store, escucha y delega.
 when-to-use: Cuando necesites operar, depurar o extender el módulo adaptador-slicing del proyecto 3D (taller personal de impresión 3D, impresora SPARKX i7). También cuando el ciclo de impresión necesite generar gcode a partir de un .3mf o extraer metadatos de un .3mf en el flujo de importación.
 tags: [enki, modulo, puente, 3d, slicing, gcode, crealityprint, 3mf, proyecto-3d]
 ---

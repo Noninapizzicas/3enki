@@ -59,6 +59,14 @@ function generateStaticHTML(carta, config, options = {}) {
     // Endpoint de pedido online (tienda-api). Si está → la PWA hace POST (escenario
     // ALOJADO: VPS+dominio). Si NO → checkout por WhatsApp (escenario PWA suelta).
     pedido_endpoint = config.pedido_endpoint || '',
+    // MODOS DE CONSUMO que ESTE negocio ofrece — DATO del proyecto, no código. El default
+    // es el histórico (mesa/recoger/llevar) para no cambiar ninguna carta ya publicada.
+    // Una tienda sin mesas pone ['recoger','domicilio']: la carta deja de pintar Mesa
+    // (un pedido de mesa en un local sin plano nace en el plano y su cuenta no la cierra
+    // nadie) y ofrece entrega a domicilio.
+    modos_consumo = Array.isArray(config.modos_consumo) && config.modos_consumo.length
+      ? config.modos_consumo
+      : ['mesa', 'recoger', 'llevar'],
     // Estado de servicio (horario + interruptor del dueño). El endpoint se deriva del de
     // pedido si no viene explícito: /tienda/pedido/<slug> → /tienda/estado/<slug>. La PWA
     // lo consulta al abrir: si el local está cerrado, se ve y no se puede pedir, SIN
@@ -149,6 +157,7 @@ function generateStaticHTML(carta, config, options = {}) {
   const configJSON = JSON.stringify({
     nombre_negocio, moneda, whatsapp_telefono, mensaje_header, project_slug,
     ai_endpoint, ai_provider, ai_chat_path, chat_enabled, pedido_endpoint, estado_endpoint, pago_online,
+    modos_consumo,
     telegram_bot,
     // Endpoint del borrador del canal Telegram. Derivado del proyecto para que no haya
     // campo nuevo que configurar: mismo patrón que pedido_endpoint (/tienda/pedido/<slug>).
@@ -1619,7 +1628,7 @@ function updateCart() {
     ? '<button class="btn-wa" id="btn-pagar" onclick="pagarAhora()">💳 Pagar ahora</button>'
     : '';
   const onlineBtn = CONFIG.pedido_endpoint
-    ? '<button class="' + (CONFIG.pago_online ? 'btn-share' : 'btn-wa') + '" id="btn-pedir" onclick="pedirOnline()">Pedir y pagar al recoger</button>'
+    ? '<button class="' + (CONFIG.pago_online ? 'btn-share' : 'btn-wa') + '" id="btn-pedir" onclick="pedirOnline()">Pedir</button>'
     : '';
   const waBtn = CONFIG.whatsapp_telefono
     ? '<button class="' + (CONFIG.pedido_endpoint ? 'btn-share' : 'btn-wa') + '" onclick="sendWhatsApp()">WhatsApp</button>'
@@ -1632,22 +1641,45 @@ function updateCart() {
   const nombreInput = (CONFIG.whatsapp_telefono || CONFIG.pedido_endpoint || CONFIG.telegram_bot)
     ? '<input id="cliente-nombre" class="cart-nombre" type="text" placeholder="¿A nombre de? (obligatorio)" aria-label="A nombre de" autocomplete="name" required>'
     : '';
-  // CANAL (modo de consumo): el cliente elige cómo consume, igual que pone su nombre.
-  // mesa = en sala · recoger = pasa a por él (con hora) · llevar = se lo lleva ya.
-  // El campo de hora solo aparece para 'recoger'. Estado en _modoConsumo (persiste el re-render).
+  // CANAL (modo de consumo): SOLO los modos que el negocio ofrece (CONFIG.modos_consumo,
+  // dato del proyecto). El cliente elige cómo recibe, igual que pone su nombre.
+  // mesa = en sala · recoger = pasa a por él (con hora) · llevar = se lo lleva ya ·
+  // domicilio = se lo llevamos (dirección + teléfono obligatorios).
+  // Estado en _modoConsumo (persiste el re-render).
+  var _MODOS_UI = {
+    mesa:      { icono: '🍽', label: 'Mesa' },
+    recoger:   { icono: '🛍', label: 'Recoger' },
+    llevar:    { icono: '🥡', label: 'Llevar' },
+    domicilio: { icono: '🛵', label: 'A domicilio' }
+  };
+  var _modosOn = [];
+  var _modosCfg = (CONFIG.modos_consumo && CONFIG.modos_consumo.length) ? CONFIG.modos_consumo : ['mesa', 'recoger', 'llevar'];
+  for (var _mi = 0; _mi < _modosCfg.length; _mi++) {
+    if (_MODOS_UI[_modosCfg[_mi]]) _modosOn.push(_modosCfg[_mi]);
+  }
+  if (_modosOn.length === 0) _modosOn = ['recoger'];
+  if (_modosOn.indexOf(_modoConsumo) < 0) _modoConsumo = _modosOn[0];
+  var _botonesModo = '';
+  for (var _mj = 0; _mj < _modosOn.length; _mj++) {
+    var _m = _modosOn[_mj];
+    _botonesModo += '<button type="button" class="modo-btn' + (_modoConsumo === _m ? ' active' : '') +
+      '" data-modo="' + _m + '" onclick="setModo(\\'' + _m + '\\')">' +
+      _MODOS_UI[_m].icono + ' ' + _MODOS_UI[_m].label + '</button>';
+  }
+  var _esDomicilio = (_modoConsumo === 'domicilio');
   const modoSel = (CONFIG.whatsapp_telefono || CONFIG.pedido_endpoint || CONFIG.telegram_bot)
-    ? '<div class="cart-modo" role="group" aria-label="Modo de consumo">' +
-        '<button type="button" class="modo-btn' + (_modoConsumo === 'mesa' ? ' active' : '') + '" data-modo="mesa" onclick="setModo(\\'mesa\\')">🍽 Mesa</button>' +
-        '<button type="button" class="modo-btn' + (_modoConsumo === 'recoger' ? ' active' : '') + '" data-modo="recoger" onclick="setModo(\\'recoger\\')">🛍 Recoger</button>' +
-        '<button type="button" class="modo-btn' + (_modoConsumo === 'llevar' ? ' active' : '') + '" data-modo="llevar" onclick="setModo(\\'llevar\\')">🥡 Llevar</button>' +
-      '</div>' +
-      '<input id="cliente-hora" class="cart-nombre" type="time" aria-label="Hora de recogida" style="display:' + (_modoConsumo === 'recoger' ? 'block' : 'none') + '">'
+    ? '<div class="cart-modo" role="group" aria-label="Modo de consumo">' + _botonesModo + '</div>' +
+      '<input id="cliente-hora" class="cart-nombre" type="time" aria-label="Hora de recogida" style="display:' + (_modoConsumo === 'recoger' ? 'block' : 'none') + '">' +
+      // ENTREGA A DOMICILIO: sin destino ni teléfono no hay reparto. Se piden aquí y se
+      // exigen antes de enviar; el servidor los vuelve a exigir (la PWA se puede saltar).
+      '<input id="cliente-direccion" class="cart-nombre" type="text" placeholder="Dirección de entrega (calle, número, piso)" aria-label="Dirección de entrega" autocomplete="street-address" style="display:' + (_esDomicilio ? 'block' : 'none') + '">' +
+      '<input id="cliente-telefono" class="cart-nombre" type="tel" placeholder="Tu teléfono (te llamamos al llegar)" aria-label="Teléfono de contacto" autocomplete="tel" style="display:' + (_esDomicilio ? 'block' : 'none') + '">'
     : '';
   // METODO DE PAGO: solo se ofrece si el proyecto tiene pasarela (pago_online). Sin ella no
   // hay eleccion que hacer y el flujo queda igual que siempre (paga al recoger).
   const metodoSel = CONFIG.pago_online
     ? '<div class="cart-modo" role="group" aria-label="Metodo de pago">' +
-        '<button type="button" class="modo-btn' + (_metodoPago === 'efectivo' ? ' active' : '') + '" data-metodo="efectivo" onclick="setMetodo(\\'efectivo\\')">💶 Efectivo al recoger</button>' +
+        '<button type="button" class="modo-btn' + (_metodoPago === 'efectivo' ? ' active' : '') + '" data-metodo="efectivo" onclick="setMetodo(\\'efectivo\\')">💶 Efectivo</button>' +
         '<button type="button" class="modo-btn' + (_metodoPago === 'tarjeta' ? ' active' : '') + '" data-metodo="tarjeta" onclick="setMetodo(\\'tarjeta\\')">💳 Tarjeta</button>' +
       '</div>'
     : '';
@@ -1706,7 +1738,7 @@ function aplicarEstadoServicio() {
     if (btnPagar) { btnPagar.disabled = true; btnPagar.textContent = '🔒 Cerrado ahora'; }
   } else {
     if (aviso && aviso.parentNode) aviso.parentNode.removeChild(aviso);
-    if (btnPedir) { btnPedir.disabled = false; btnPedir.textContent = 'Pedir y pagar al recoger'; }
+    if (btnPedir) { btnPedir.disabled = false; btnPedir.textContent = 'Pedir'; }
     if (btnPagar) { btnPagar.disabled = false; btnPagar.textContent = '💳 Pagar ahora'; }
   }
 }
@@ -1754,9 +1786,15 @@ function _pedNombre() {
   return nm && nm.value ? nm.value.trim().replace(/\\s+/g, ' ').slice(0, 60) : '';
 }
 // CANAL elegido (modo de consumo). Estado vivo que sobrevive al re-render del footer.
-var _modoConsumo = 'recoger';
+// Arranca en un modo que ESTE negocio ofrezca (si no ofrece recoger, no arranca ahí).
+var _modoConsumo = (function () {
+  var cfg = (CONFIG.modos_consumo && CONFIG.modos_consumo.length) ? CONFIG.modos_consumo : ['mesa', 'recoger', 'llevar'];
+  return cfg.indexOf('recoger') >= 0 ? 'recoger' : cfg[0];
+})();
 function setModo(m) {
-  if (m !== 'mesa' && m !== 'recoger' && m !== 'llevar') return;
+  // Solo modos ofrecidos por el negocio (dato del proyecto).
+  var cfg = (CONFIG.modos_consumo && CONFIG.modos_consumo.length) ? CONFIG.modos_consumo : ['mesa', 'recoger', 'llevar'];
+  if (cfg.indexOf(m) < 0) return;
   _modoConsumo = m;
   var btns = document.querySelectorAll('.modo-btn[data-modo]');
   for (var i = 0; i < btns.length; i++) {
@@ -1764,8 +1802,41 @@ function setModo(m) {
   }
   var h = document.getElementById('cliente-hora');
   if (h) h.style.display = (m === 'recoger') ? 'block' : 'none';
+  var d = document.getElementById('cliente-direccion');
+  if (d) d.style.display = (m === 'domicilio') ? 'block' : 'none';
+  var t = document.getElementById('cliente-telefono');
+  if (t) t.style.display = (m === 'domicilio') ? 'block' : 'none';
 }
 function _pedModo() { return _modoConsumo || 'recoger'; }
+// DIRECCIÓN y TELÉFONO de entrega — solo existen (y solo viajan) en 'domicilio'.
+function _pedDireccion() {
+  var d = document.getElementById('cliente-direccion');
+  return (_pedModo() === 'domicilio' && d && d.value) ? d.value.trim().replace(/\s+/g, ' ').slice(0, 240) : '';
+}
+function _pedTelefono() {
+  var t = document.getElementById('cliente-telefono');
+  return (_pedModo() === 'domicilio' && t && t.value) ? t.value.trim().slice(0, 30) : '';
+}
+// Puerta del navegador: sin destino ni teléfono no se envía. El servidor lo vuelve a
+// exigir (esta comprobación es comodidad, no seguridad). Devuelve true si puede seguir.
+function _validarEntrega() {
+  if (_pedModo() !== 'domicilio') return true;
+  var dir = _pedDireccion();
+  if (dir.length < 6) {
+    var d = document.getElementById('cliente-direccion');
+    if (d) { d.focus(); d.style.borderColor = '#ff5252'; }
+    alert('Escribe la dirección de entrega (calle y número).');
+    return false;
+  }
+  var tel = _pedTelefono().replace(/\D/g, '');
+  if (tel.length < 9) {
+    var t = document.getElementById('cliente-telefono');
+    if (t) { t.focus(); t.style.borderColor = '#ff5252'; }
+    alert('Escribe tu teléfono: te llamamos al llegar.');
+    return false;
+  }
+  return true;
+}
 // Hora pactada — solo tiene sentido en 'recoger'. "HH:MM" del input time.
 function _pedHora() {
   var h = document.getElementById('cliente-hora');
@@ -1869,6 +1940,12 @@ function buildP1Line() {
     var payload = { v: 1, items: buildOrderItems() };
     var modo = _pedModo(); if (modo) payload.modo_consumo = modo;
     var hora = _pedHora(); if (hora) payload.hora_recogida = hora;
+    // ENTREGA A DOMICILIO: destino y teléfono viajan en el #P1 (no en el texto editable):
+    // el bot los lee de aquí, no de lo que el cliente haya podido cambiar.
+    if (modo === 'domicilio') {
+      var dir = _pedDireccion(); if (dir) payload.direccion_entrega = dir;
+      var tel = _pedTelefono(); if (tel) payload.cliente_telefono = tel;
+    }
     var met = _pedMetodo(); if (met) payload.metodo_pago = met;
     // Encargo anticipado: fecha deseada (día futuro) → el parser lo publica con fecha_deseada.
     var fec = _fechaDeseada(); if (fec) payload.fecha_deseada = fec;
@@ -1899,6 +1976,14 @@ function buildOrderMsg() {
   var total = cart.reduce(function(s, i) { return s + i.precio * i.qty; }, 0);
   msg += 'Total: ' + _pedEur(total) + '\\n';
   msg += 'Nombre: ' + nombre;
+  // Entrega a domicilio: destino y teléfono EN CLARO para que el de la tienda los lea
+  // en el chat. El parser los toma del #P1 (autoritativo), no de estas líneas.
+  if (_pedModo() === 'domicilio') {
+    var dir = _pedDireccion();
+    var tel = _pedTelefono();
+    if (dir) msg += '\\nEntrega: ' + dir;
+    if (tel) msg += '\\nTelefono: ' + tel;
+  }
   // Encargo: fecha deseada en claro (el parser la lee; la #P1 la lleva autoritativa).
   var fec = _fechaDeseada();
   if (fec) msg += '\\nPara: ' + fec;
@@ -1914,6 +1999,7 @@ function sendWhatsApp() {
     alert('Escribe a nombre de quién es el pedido.');
     return;
   }
+  if (!_validarEntrega()) return;
   const msg = buildOrderMsg();
   if (!msg) return;
   var nombre = _pedNombre();
@@ -1939,6 +2025,7 @@ async function pedirTelegram() {
     alert('Escribe a nombre de quién es el pedido.');
     return;
   }
+  if (!_validarEntrega()) return;
   // VÍA A — BANDEJA DE COMPARTIR del móvil (la buena cuando existe).
   // Telegram no acepta texto precargado en un enlace a un BOT, pero el móvil sí puede
   // compartir el mensaje: el cliente elige el chat del bot y el texto llega tal cual.
@@ -1957,6 +2044,8 @@ async function pedirTelegram() {
       nombre_cliente: nombre,
       modo_consumo: _pedModo(),
       hora_recogida: _pedHora() || null,
+      direccion_entrega: (_pedModo() === 'domicilio') ? _pedDireccion() : null,
+      cliente_telefono: (_pedModo() === 'domicilio') ? _pedTelefono() : null,
       metodo_pago: _pedMetodo(),
       mayor_edad_confirmado: true
     };
@@ -2066,6 +2155,7 @@ async function pagarAhora() {
     alert('Escribe a nombre de quién es el pedido.');
     return;
   }
+  if (!_validarEntrega()) return;
   var total = cart.reduce(function(s, i){ return s + i.precio * i.qty; }, 0);
   var body = {
     items: pedidoItemsTienda(),
@@ -2073,6 +2163,8 @@ async function pagarAhora() {
     nombre_cliente: nombre,
     modo_consumo: _pedModo(),
     hora_recogida: _pedHora() || null,
+    direccion_entrega: (_pedModo() === 'domicilio') ? _pedDireccion() : null,
+    cliente_telefono: (_pedModo() === 'domicilio') ? _pedTelefono() : null,
     fecha_deseada: _fechaDeseada() || null,
     metodo_pago: 'tarjeta',
     pago_online: true,
@@ -2113,6 +2205,7 @@ async function pedirOnline() {
     alert('Escribe a nombre de quién es el pedido.');
     return;
   }
+  if (!_validarEntrega()) return;
   var total = cart.reduce(function(s, i){ return s + i.precio * i.qty; }, 0);
   var body = {
     items: pedidoItemsTienda(),
@@ -2120,6 +2213,8 @@ async function pedirOnline() {
     nombre_cliente: nombre,
     modo_consumo: _pedModo(),
     hora_recogida: _pedHora() || null,
+    direccion_entrega: (_pedModo() === 'domicilio') ? _pedDireccion() : null,
+    cliente_telefono: (_pedModo() === 'domicilio') ? _pedTelefono() : null,
     metodo_pago: _pedMetodo(),
     fecha_deseada: _fechaDeseada() || null,
     notas_generales: null
@@ -2139,7 +2234,7 @@ async function pedirOnline() {
   } catch (e) {
     alert('No se pudo enviar el pedido.' + (CONFIG.whatsapp_telefono ? ' Prueba por WhatsApp.' : ' Inténtalo de nuevo en un momento.'));
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = 'Pedir para recoger'; }
+    if (btn) { btn.disabled = false; btn.textContent = 'Pedir'; }
   }
 }
 

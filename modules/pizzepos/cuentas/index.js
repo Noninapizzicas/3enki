@@ -86,7 +86,12 @@ class CuentasModule extends BaseModule {
   // pedido para llevar y su canal operativo es `llevar`. El modo original se
   // conserva en `metadata.modo_consumo` (lo escribe quien crea la cuenta).
   static ALIAS_CANAL = {
-    recoger: 'llevar'
+    recoger: 'llevar',
+    // ENTREGA A DOMICILIO: como 'recoger', es un MODO del cliente, no un canal con
+    // dueño. Su canal operativo es 'llevar' (ticket que se cierra al cobrar y cuya
+    // venta llega al libro). Lo que la hace distinta viaja en metadata: `modo_consumo`
+    // = 'domicilio' y `direccion_entrega`. Sin este alias la cuenta nacería HUÉRFANA.
+    domicilio: 'llevar'
   };
 
   /**

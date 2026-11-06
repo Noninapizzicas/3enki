@@ -22,6 +22,9 @@ const { proyectarCartaPublica, normalizarTelefono } = require('./proyeccion');
 const { generateStaticHTML, generateServiceWorker, generateManifest, generateIcon, slugify } = require('./static-template');
 
 const CONFIG_PATH = '/pizzepos/carta-digital/config.json';
+// Los modos de consumo que el sistema sabe operar. Un negocio ELIGE un subconjunto en
+// su config (dato); aquí solo se filtra lo que no existe para no publicar botones muertos.
+const MODOS_VALIDOS = ['mesa', 'recoger', 'llevar', 'domicilio'];
 const DISENO_PATH = '/pizzepos/carta-digital/diseno.json';   // el look que compone Enki, por proyecto
 // Bundle estático servido por Caddy en /<ns>/<slug>/. project-manager symlinka
 // /opt/enki/public/<ns>/<slug> → <proyecto>/storage/www/ al activar la feature `www`.
@@ -472,6 +475,12 @@ class CartaDigitalModule extends BaseModule {
     const tplConfig = {
       nombre_negocio: b.nombre || this.activos.get(project_id)?.name || 'Carta',
       moneda: op.moneda || '€',
+      // MODOS que ofrece ESTE negocio (dato, no código). Sin esta clave la carta pinta
+      // los tres históricos; con ella, una tienda sin mesas publica ['recoger','domicilio']
+      // y el botón Mesa desaparece. Se filtran valores desconocidos en el borde.
+      modos_consumo: Array.isArray(op.modos_consumo) && op.modos_consumo.length
+        ? op.modos_consumo.filter(m => MODOS_VALIDOS.includes(m))
+        : MODOS_VALIDOS,
       whatsapp_telefono: normalizarTelefono(op.whatsapp_telefono || b.negocio?.redes?.whatsapp || b.negocio?.local?.telefono || ''),
       mensaje_header: op.mensaje_pedido || '¡Hola! Quiero pedir:',
       project_slug: slug,
@@ -631,6 +640,9 @@ class CartaDigitalModule extends BaseModule {
       const tplConfig = {                              // espejo del de publicar, pero suelta
         nombre_negocio: b.nombre || this.activos.get(project_id)?.name || 'Carta',
         moneda: op.moneda || '€',
+        modos_consumo: Array.isArray(op.modos_consumo) && op.modos_consumo.length
+          ? op.modos_consumo.filter(m => MODOS_VALIDOS.includes(m))
+          : MODOS_VALIDOS,
         whatsapp_telefono: normalizarTelefono(op.whatsapp_telefono || b.negocio?.redes?.whatsapp || b.negocio?.local?.telefono || ''),
         mensaje_header: op.mensaje_pedido || '¡Hola! Quiero pedir:',
         project_slug: this.activos.get(project_id)?.slug || String(project_id).slice(0, 8),

@@ -74,8 +74,13 @@ class TiendaApiModule extends BaseModule {
       return { ok: false, error: { code: 'INVALID_INPUT', message: 'notas_generales must be a string', details: { kind: 'invalid_format', field: 'notas_generales' } } };
     }
     // CANAL elegido en la PWA (modo de consumo). Opcional; si falta, pedidos cae a 'llevar'.
-    if (body.modo_consumo != null && !['mesa', 'recoger', 'llevar'].includes(body.modo_consumo)) {
-      return { ok: false, error: { code: 'INVALID_INPUT', message: "modo_consumo must be 'mesa' | 'recoger' | 'llevar'", details: { kind: 'invalid_format', field: 'modo_consumo' } } };
+    if (body.modo_consumo != null && !['mesa', 'recoger', 'llevar', 'domicilio'].includes(body.modo_consumo)) {
+      return { ok: false, error: { code: 'INVALID_INPUT', message: "modo_consumo must be 'mesa' | 'recoger' | 'llevar' | 'domicilio'", details: { kind: 'invalid_format', field: 'modo_consumo' } } };
+    }
+    // Destino del reparto. Solo se valida la FORMA; que sea obligatorio en 'domicilio'
+    // lo decide pedidos (la puerta donde el pedido nace), no el transporte HTTP.
+    if (body.direccion_entrega != null && typeof body.direccion_entrega !== 'string') {
+      return { ok: false, error: { code: 'INVALID_INPUT', message: 'direccion_entrega must be a string', details: { kind: 'invalid_format', field: 'direccion_entrega' } } };
     }
     if (body.hora_recogida != null && typeof body.hora_recogida !== 'string') {
       return { ok: false, error: { code: 'INVALID_INPUT', message: 'hora_recogida must be a string', details: { kind: 'invalid_format', field: 'hora_recogida' } } };
@@ -317,6 +322,7 @@ class TiendaApiModule extends BaseModule {
         canal_cuenta: normalized.canal_cuenta,   // cuenta del puente por la que entro (salida del aviso)
         cliente_nombre: normalized.nombre_cliente,
         modo_consumo: normalized.modo_consumo,
+        direccion_entrega: normalized.direccion_entrega || null,
         hora_recogida: normalized.hora_recogida,
         metodo_pago: normalized.metodo_pago,     // efectivo | tarjeta (lo normaliza pedidos)
         mayor_edad_confirmado: normalized.mayor_edad_confirmado,

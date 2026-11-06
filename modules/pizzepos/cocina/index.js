@@ -473,7 +473,7 @@ class CocinaModule extends BaseModule {
       // (no_silent_failures): si un emisor manda un item mudo, queda el warn para cazarlo. El gate
       // fuerte es el comandero (rechaza en la puerta); esto garantiza que el cocinero nunca la vea.
       const itemsCocina = [];
-      for (const it of (items || [])) {
+      for (const it of this._desagruparPiezas(items)) {
         const ci = this._buildCocinaItem(it);
         if (!ci.nombre) {
           this.logger.warn('cocina.item.sin_nombre_descartado', {
@@ -509,7 +509,7 @@ class CocinaModule extends BaseModule {
         cuenta_id,
         nombre_cuenta,
         canal: canal || null,
-        items: pedidoCocina.items.map(i => ({ nombre: i.nombre, cantidad: i.cantidad, categoria: i.categoria })),
+        items: pedidoCocina.items.map(i => ({ nombre: i.nombre, cantidad: i.cantidad, categoria: i.categoria, pieza: i.pieza || null })),
         items_count: pedidoCocina.items.length
       }, data);
     } catch (err) {
@@ -536,6 +536,27 @@ class CocinaModule extends BaseModule {
     }
   }
 
+  // La cocina trabaja PIEZAS, no lotes: 2 pizzas iguales son DOS piezas que se marcan
+  // por separado y cada una lleva su ficha completa (sus ingredientes, en el orden de la
+  // carta = el orden de montaje). El pedido del POS conserva su linea "2x" — alli el
+  // dinero manda; aqui manda el obrador. Sin agrupar, el aviso de recogida solo sale
+  // cuando la cocina marca la ULTIMA pieza, no cuando marca "2x" de una vez.
+  _desagruparPiezas(items) {
+    const salida = [];
+    for (const it of (items || [])) {
+      const n = Number.isInteger(it?.cantidad) && it.cantidad > 1 ? it.cantidad : 1;
+      for (let k = 1; k <= n; k++) {
+        salida.push({
+          ...it,
+          item_id: n > 1 && it.item_id ? `${it.item_id}#${k}` : it.item_id,
+          cantidad: 1,
+          ...(n > 1 ? { pieza: { n: k, de: n } } : {})
+        });
+      }
+    }
+    return salida;
+  }
+
   _buildCocinaItem(item) {
     const cocinaItem = {
       item_id: item.item_id,
@@ -548,6 +569,7 @@ class CocinaModule extends BaseModule {
       estado: 'pendiente',
       pase: 0
     };
+    if (item.pieza) cocinaItem.pieza = item.pieza;
     if (item.tipo) cocinaItem.tipo = item.tipo;
     if (item.pizza_izquierda) cocinaItem.pizza_izquierda = item.pizza_izquierda;
     if (item.pizza_derecha) cocinaItem.pizza_derecha = item.pizza_derecha;
@@ -1090,14 +1112,14 @@ class CocinaModule extends BaseModule {
         const pedido_id = pedidoData.pedido_id;
         if (!pedido_id || this.pedidosActivos.has(pedido_id)) continue;
 
-        const items = (pedidoData.items || []).map((item, idx) => {
-          const cocinaItem = this._buildCocinaItem({
-            ...item,
-            item_id: item.item_id || item.id || `${pedido_id}_item_${idx + 1}`,
-            cantidad: item.cantidad || 1
-          });
-          return cocinaItem;
-        });
+        const normalizados = (pedidoData.items || []).map((item, idx) => ({
+          ...item,
+          item_id: item.item_id || item.id || `${pedido_id}_item_${idx + 1}`,
+          cantidad: item.cantidad || 1
+        }));
+        // Un snapshot viejo puede traer lineas agrupadas ("2x"): al despertar tambien se
+        // despliegan en piezas, para que la cocina no cambie de criterio tras un reinicio.
+        const items = this._desagruparPiezas(normalizados).map(it => this._buildCocinaItem(it));
 
         if (items.length === 0) continue;
 
@@ -1267,6 +1289,7 @@ class CocinaModule extends BaseModule {
       cantidad: item.cantidad,
       categoria: item.categoria || null,
       estacion,
+      pieza: item.pieza || null,
       ingredientes: item.ingredientes || item.ingredientes_base || null,
       variaciones: item.variaciones || null,
       notas: item.notas || null,

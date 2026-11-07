@@ -41,10 +41,29 @@ const crypto = require('crypto');
 const ModuloHibridoReflejo = require('../_shared/modulo-hibrido-reflejo');
 const PosPersistencia = require('../_shared/pos-persistencia');
 const googleOAuth = require('./oauth/google');
+const nousOAuth = require('./oauth/nous');
+
+// Inyección de test: el módulo captura `nousOAuth` en la carga, así que un test
+// no puede sustituir el export del módulo. Por convención, startDeviceCode y
+// pollForToken miran __testOverride si existe (solo lo usan los tests).
+function nousStartDeviceCode(opts) {
+  return nousOAuth.__testOverride?.startDeviceCode
+    ? nousOAuth.__testOverride.startDeviceCode(opts)
+    : nousOAuth.startDeviceCode(opts);
+}
+function nousPollForToken(opts) {
+  return nousOAuth.__testOverride?.pollForToken
+    ? nousOAuth.__testOverride.pollForToken(opts)
+    : nousOAuth.pollForToken(opts);
+}
 
 const VALID_LEVELS = ['GLOBAL', 'PROJECT', 'CLIENT', 'CUSTOM', 'BOT'];
-const SUPPORTED_PROVIDERS = ['GMAIL', 'GOOGLE'];
+const SUPPORTED_PROVIDERS = ['GMAIL', 'GOOGLE', 'NOUS'];
 const PENDING_TTL_MS = 10 * 60 * 1000; // 10 minutos
+
+// Proveedores que usan el flujo de DISPOSITIVO (RFC 8628), no authorization
+// code: no hay callback HTTP ni redirect_uri. El pending se canjea con polling.
+const DEVICE_FLOW_PROVIDERS = new Set(['NOUS']);
 
 class CredentialOAuthModule extends ModuloHibridoReflejo {
   constructor() {
@@ -162,8 +181,12 @@ class CredentialOAuthModule extends ModuloHibridoReflejo {
   // ─────────────────────────────────────────────
 
   /** handleUIOAuthStart (~1541) — inicia el flujo: URL + state único */
-  _start(input) {
-    const { provider, level, identifier, scopes = ['gmail'], project_id } = input;
+  async _start(input) {
+    const { provider, level, identifier, project_id } = input;
+    const providerRaw = String(provider || '').toUpperCase();
+    // Scopes por defecto por proveedor: Nous no usa los scopes de Gmail.
+    const defaultScopes = DEVICE_FLOW_PROVIDERS.has(providerRaw) ? ['inference:invoke'] : ['gmail'];
+    const scopes = input.scopes || defaultScopes;
 
     if (!provider) return this._invalid('provider');
     if (!level) return this._invalid('level');
@@ -195,20 +218,60 @@ class CredentialOAuthModule extends ModuloHibridoReflejo {
         break;
       }
     }
-    if (!clientId || !clientSecret) {
+    const requiereSecret = !DEVICE_FLOW_PROVIDERS.has(providerUpper);
+    if (!clientId || (requiereSecret && !clientSecret)) {
       for (const accId of accountIdsToTry) {
         const env = this._envConfig(accId);
-        if (env.clientId && env.clientSecret) {
+        if (env.clientId && (env.clientSecret || !requiereSecret)) {
           clientId = env.clientId;
-          clientSecret = env.clientSecret;
+          clientSecret = env.clientSecret || '';
           usedAccountId = accId;
           break;
         }
       }
     }
-    if (!clientId || !clientSecret) {
+    // Flujo de dispositivo = PUBLIC CLIENT (RFC 8628 §3.1): no hay client_secret.
+    if (!clientId || (requiereSecret && !clientSecret)) {
       return this._errorResponse(400, 'MISSING_OAUTH_CREDENTIALS',
-        'No OAuth config found. Configure client_id/client_secret first (credential.oauth_config.create.request).');
+        `No OAuth config found for ${providerUpper}. Configure client_id${requiereSecret ? '/client_secret' : ''} first (credential.oauth_config.create.request).`);
+    }
+
+    // ── Flujo de DISPOSITIVO (Nous): no hay callback HTTP ni redirect_uri. ──
+    // El "state" del flow es el device_code y el canje se hace por polling.
+    if (DEVICE_FLOW_PROVIDERS.has(providerUpper)) {
+      const dev = await nousStartDeviceCode({ clientId, scope: scopes.join(' ') });
+      const stateId = crypto.randomBytes(16).toString('hex');
+
+      this.oauthPending.set(stateId, {
+        provider: providerUpper,
+        level,
+        identifier: identifier || null,
+        scopes,
+        clientId,
+        clientSecret,
+        deviceCode: dev.device_code,
+        deviceExpiresIn: dev.expires_in,
+        deviceInterval: dev.interval,
+        flow: 'device_code',
+        createdAt: Date.now()
+      });
+      this._cleanupPendingOAuth();
+
+      this.logger?.info('credential-oauth.device.started', {
+        provider: providerUpper, stateId, verification_uri: dev.verification_uri
+      });
+
+      return {
+        status: 200,
+        data: {
+          flow: 'device_code',
+          auth_url: nousOAuth.verificationUrl(dev.user_code),
+          user_code: dev.user_code,
+          state_id: stateId,
+          expires_in: Math.floor(PENDING_TTL_MS / 1000),
+          instructions: `Abre ${nousOAuth.verificationUrl(dev.user_code)} e introduce el código ${dev.user_code}. Este módulo canjeará automáticamente.`
+        }
+      };
     }
 
     // State único para validar el callback
@@ -248,7 +311,7 @@ class CredentialOAuthModule extends ModuloHibridoReflejo {
   }
 
   /** handleUIOAuthStatus (~1683) — polling del flow pendiente */
-  _status(input) {
+  async _status(input) {
     const { state_id } = input;
 
     if (!state_id) return this._invalid('state_id');
@@ -264,6 +327,69 @@ class CredentialOAuthModule extends ModuloHibridoReflejo {
 
     const elapsed = Date.now() - pending.createdAt;
     const remainingMs = Math.max(0, PENDING_TTL_MS - elapsed);
+
+    // Flujo de dispositivo: el polling del FRONT se convierte en canje real.
+    // Canjear aquí (y no en el callback HTTP) es lo que hace posible el device
+    // flow: no hay callback que dispare nada.
+    if (pending.flow === 'device_code') {
+      if (elapsed > PENDING_TTL_MS) {
+        this.oauthPending.delete(state_id);
+        return { status: 200, data: { state_id, status: 'expired', provider: pending.provider } };
+      }
+      try {
+        const tokens = await nousPollForToken({
+          deviceCode: pending.deviceCode,
+          clientId: pending.clientId,
+          timeoutMs: Math.min(remainingMs, 15000), // un poll por llamada; el front reintenta
+          intervalMs: (pending.deviceInterval || 5) * 1000
+        });
+
+        // Canjeado: registrar como credencial ROTATIVA. El refresh posterior lo
+        // hace credential-manager; este módulo NO vuelve a tocar el token.
+        this.eventBus.publish('credential.rotate.start.request', {
+          request_id: crypto.randomUUID(),
+          provider: pending.provider,
+          level: pending.level,
+          identifier: pending.identifier || null,
+          access_token: tokens.access_token,
+          refresh_token: tokens.refresh_token,
+          expires_in: tokens.expires_in,
+          client_id: pending.clientId,
+          token_type: tokens.token_type,
+          scope: tokens.scope,
+          token_url: nousOAuth.INFERENCE_TOKEN_URL
+        });
+
+        this.oauthPending.delete(state_id);
+        this.metrics?.increment('credential-oauth.device.completed', { provider: pending.provider });
+        this.logger?.info('credential-oauth.device.completed', {
+          provider: pending.provider, level: pending.level,
+          generation: 'registrada'
+        });
+
+        return {
+          status: 200,
+          data: {
+            state_id,
+            status: 'completed',
+            provider: pending.provider,
+            level: pending.level,
+            identifier: pending.identifier,
+            rotation: 'credential.rotate.start.response'
+          }
+        };
+      } catch (err) {
+        // authorization_pending NO es un error: el humano aún no ha autorizado.
+        const pendiente = /authorization_pending|timeout esperando/i.test(err.message);
+        return {
+          status: 200,
+          data: pendiente
+            ? { state_id, status: 'pending', provider: pending.provider,
+                remaining_seconds: Math.floor(remainingMs / 1000), detail: err.message }
+            : { state_id, status: 'failed', provider: pending.provider, error: err.message }
+        };
+      }
+    }
 
     return {
       status: 200,
@@ -302,6 +428,33 @@ class CredentialOAuthModule extends ModuloHibridoReflejo {
         usedAccount = acc;
         break;
       }
+    }
+
+    // ── Nous: el par (access + refresh) vive como credencial ROTATIVA en
+    // credential-manager, no como key estática. _resolve lo saca de ahí, y es
+    // credential-manager quien lo refresca si expiró (rotando el refresh).
+    // No exige client_id: el access_token ya está en la rotación.
+    if (String(provider || '').toUpperCase() === 'NOUS') {
+      const resp = await this._rpc('credential.rotate.resolve.request', {
+        provider: 'NOUS',
+        level: 'GLOBAL',
+        force: true
+      });
+      if (resp && resp.success && resp.data?.token) {
+        return {
+          success: true,
+          account: usedAccount || 'default',
+          resolved_from: 'ROTATION',
+          credentials: {
+            clientId: oauthConfig?.clientId || process.env.NOUS_CLIENT_ID || null,
+            clientSecret: oauthConfig?.clientSecret || '',
+            refreshToken: resp.data.token,   // access_token vigente (ya refrescado)
+            expires_at: resp.data.expires_at,
+            generation: resp.data.generation
+          }
+        };
+      }
+      return { success: false, error: `Nous: sin credencial rotativa (${resp?.error?.code || 'desconocido'})` };
     }
 
     if (!oauthConfig) {
@@ -638,6 +791,11 @@ class CredentialOAuthModule extends ModuloHibridoReflejo {
   }
 
   _envConfig(accountId) {
+    // Nous no tiene client_secret (el flujo de dispositivo es public client):
+    // solo client_id. Si alguien pone un secreto, se respeta.
+    if (process.env.NOUS_CLIENT_ID) {
+      return { clientId: process.env.NOUS_CLIENT_ID, clientSecret: process.env.NOUS_CLIENT_SECRET || '' };
+    }
     if (accountId === 'default') {
       return { clientId: process.env.GMAIL_CLIENT_ID, clientSecret: process.env.GMAIL_CLIENT_SECRET };
     }

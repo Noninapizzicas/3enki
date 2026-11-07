@@ -6,7 +6,7 @@ fuentes:
   - modules/pizzepos/**
   - modules/pago-gateway/**
   - blueprints/**
-verificado: 2026-11-06 (carta-digital v2.26.0: los modos de consumo los manda el DATO del canal y «A domicilio» entra como modo con dirección y teléfono exigidos en el carrito; pedidos v3.1.0: la puerta exige destino y teléfono cuando el modo es domicilio, el modo se canoniza a llevar (ticket que se cierra al cobrar, no cuenta huérfana) y el destino llega al comandero como nota general impresa en cocina. Siglo previo: 2026-11-05 (aviso-pedido-listo v1.0.0: cocina.pedido_listo —que ya existía y nadie escuchaba— ahora cierra el círculo del canal: aviso al cliente por el MISMO puente que trajo el pedido, con su código de turno (L 395) y su nombre; el destino es la JID que viaja puente→pedido→cuenta porque con número oculto (LID) el teléfono llega vacío. pedido-telegram v1.1.0: el canal Telegram abre una segunda puerta —la bandeja de compartir del móvil, con el mensaje canónico de WhatsApp— y el código corto queda como fallback; las dos re-tasan contra la carta viva en _crearPedidoDesde. carta-digital v2.25.1: la FICHA del producto ordena sus bloques nombre → receta → descripción → hermanas → Añadir extras — la receta va PEGADA al nombre, encima de descripción y hermanas; sigue vigente pago-gateway v3.1.0: Stripe con paridad — libro, idempotencia, webhook-puntero y conciliación; los métodos los manda el panel de Stripe, payment_method_types ya no se envía)
+verificado: 2026-11-07 (ubicación del cliente: pin opcional en el #P1, mapa del reparto al staff) · 2026-11-06 (carta-digital v2.26.0: los modos de consumo los manda el DATO del canal y «A domicilio» entra como modo con dirección y teléfono exigidos en el carrito; pedidos v3.1.0: la puerta exige destino y teléfono cuando el modo es domicilio, el modo se canoniza a llevar (ticket que se cierra al cobrar, no cuenta huérfana) y el destino llega al comandero como nota general impresa en cocina. Siglo previo: 2026-11-05 (aviso-pedido-listo v1.0.0: cocina.pedido_listo —que ya existía y nadie escuchaba— ahora cierra el círculo del canal: aviso al cliente por el MISMO puente que trajo el pedido, con su código de turno (L 395) y su nombre; el destino es la JID que viaja puente→pedido→cuenta porque con número oculto (LID) el teléfono llega vacío. pedido-telegram v1.1.0: el canal Telegram abre una segunda puerta —la bandeja de compartir del móvil, con el mensaje canónico de WhatsApp— y el código corto queda como fallback; las dos re-tasan contra la carta viva en _crearPedidoDesde. carta-digital v2.25.1: la FICHA del producto ordena sus bloques nombre → receta → descripción → hermanas → Añadir extras — la receta va PEGADA al nombre, encima de descripción y hermanas; sigue vigente pago-gateway v3.1.0: Stripe con paridad — libro, idempotencia, webhook-puntero y conciliación; los métodos los manda el panel de Stripe, payment_method_types ya no se envía)
 ---
 
 # Módulos Pizzepos y Blueprints
@@ -559,6 +559,11 @@ CLASE Cobro {
 > que el pedido nace ticket que se cierra al cobrar; el destino va como nota general al comandero
 > y sale impreso en el ticket de cocina con 🛵. El transporte (tienda-api, parser del #P1,
 > pedido-telegram, whatsapp-bot) solo valida FORMA y transporta; quién manda es esta puerta.
+> (7-nov-2026) — UBICACIÓN DEL CLIENTE (pedidos): la puerta acepta `ubicacion` ({lat,lng}) OPCIONAL,
+> la normaliza (rangos, fuera el (0,0) del GPS sin fix) y compone `mapa_entrega` UNA sola vez —
+> pin si lo hay, dirección escrita si no, null si no hay ninguna. La publica en `pedido.creado`
+> junto a `direccion_entrega`, para que el aviso al staff lleve el enlace que el repartidor abre
+> desde el móvil. Un pin inválido NO tumba el pedido: cae a la dirección. En 'recoger' se descarta.
 
 ```
 INTERFAZ PedidosContract {
@@ -1281,6 +1286,12 @@ CLASE EstudioViabilidad {
 > El destino viaja en el #P1 (`direccion_entrega`) y no en el texto editable. Si el negocio ofrece
 > recoger+domicilio, mesa y llevar dejan de pintarse — un modo que el local no tiene es una cuenta
 > que nadie cierra.
+> (7-nov-2026) — EL PUNTO DEL CLIENTE (carta-digital): junto a la dirección se pinta «📍 Mi ubicación
+> exacta». El toque es el gesto que iOS exige; el navegador manda ({lat,lng}) y el runtime lo
+> mete en el #P1 como `ubicacion` (también en el POST de pedir/pagar). Opcional por diseño: sin
+> permiso o sin tocar el botón, el pedido sale igual con la dirección escrita. Con dirección
+> escrita (o pin) el carrito pinta «🧭 Ver el punto en el mapa» ANTES de enviar, para que el
+> cliente vea si el pin cayó donde no es. El mapa es de Google Maps por enlace (sin API key).
 
 ```
 INTERFAZ CartaDigitalContract {                 // ui_handlers (RPC del bus / frontend)

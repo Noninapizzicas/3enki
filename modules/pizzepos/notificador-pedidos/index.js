@@ -234,6 +234,12 @@ class NotificadorPedidosModule extends BaseModule {
     if (pedido.mayor_edad_confirmado === true) {
       lines.push('Mayor 18: confirmado en PWA');
     }
+    // REPARTO: el destino y el enlace del mapa viajan en el evento (los compone pedidos
+    // una sola vez). El que sale a repartir toca el enlace y navega; sin él, copia a mano.
+    if (pedido.direccion_entrega) {
+      lines.push(`🛵 Entrega: ${pedido.direccion_entrega}`);
+      if (pedido.mapa_entrega) lines.push(`Mapa: ${pedido.mapa_entrega}`);
+    }
     lines.push('');
     const items = Array.isArray(pedido.items) ? pedido.items : [];
     if (items.length === 0) {

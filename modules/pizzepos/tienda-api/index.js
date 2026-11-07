@@ -82,6 +82,12 @@ class TiendaApiModule extends BaseModule {
     if (body.direccion_entrega != null && typeof body.direccion_entrega !== 'string') {
       return { ok: false, error: { code: 'INVALID_INPUT', message: 'direccion_entrega must be a string', details: { kind: 'invalid_format', field: 'direccion_entrega' } } };
     }
+    // PUNTO EXACTO del cliente (lat/lng del botón "Mi ubicación"). Aquí solo se valida
+    // la FORMA: que sea un punto usable (rangos, null island) lo decide el normalizador
+    // compartido, y que cuente para el reparto lo decide pedidos.
+    if (body.ubicacion != null && (typeof body.ubicacion !== 'object' || Array.isArray(body.ubicacion))) {
+      return { ok: false, error: { code: 'INVALID_INPUT', message: 'ubicacion must be an object {lat,lng}', details: { kind: 'invalid_format', field: 'ubicacion' } } };
+    }
     if (body.hora_recogida != null && typeof body.hora_recogida !== 'string') {
       return { ok: false, error: { code: 'INVALID_INPUT', message: 'hora_recogida must be a string', details: { kind: 'invalid_format', field: 'hora_recogida' } } };
     }
@@ -323,6 +329,7 @@ class TiendaApiModule extends BaseModule {
         cliente_nombre: normalized.nombre_cliente,
         modo_consumo: normalized.modo_consumo,
         direccion_entrega: normalized.direccion_entrega || null,
+        ubicacion: normalized.ubicacion || null,   // pin del cliente (opcional)
         hora_recogida: normalized.hora_recogida,
         metodo_pago: normalized.metodo_pago,     // efectivo | tarjeta (lo normaliza pedidos)
         mayor_edad_confirmado: normalized.mayor_edad_confirmado,

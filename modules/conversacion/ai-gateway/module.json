@@ -1,6 +1,6 @@
 {
   "name": "ai-gateway",
-  "version": "2.36.0",
+  "version": "2.38.0",
   "_v2_37_nota": "v2.37.0: MUNDO-CHAT SIN 460 TOOLS (piloto proyecto B). reja_abierta=false + reja_abierta_proyectos=[B]: el LLM recibe UNA tool generica ui.request + GLOBAL_TOOLS; catalogo compacto de capacidades (toolsRegistry, name+desc 1 linea) como seccion del system prompt; schema bajo demanda con detalle_capacidad; ranking por significado con buscar_capacidad. Indice vectorial de tools (Turso) = v2. Resto del sistema intacto (default true).",
   "_v2_35_nota": "v2.35.0: RETIRADO el provider 'hermes' — Hermes queda SEPARADO del ecosistema (decisión del dueño). Se elimina el provider hermes-provider.js, el singleton hermes-switch.js, el interruptor 'hermes-agente', el evento de audit hermes.invocado, la entrada del selector en el frontend (ProviderPanel) y todo el provisioning del deploy (deployment/hermes/, bloque en vps-setup.sh, servicio condicional en vps.manifest.js). Retirada LIMPIA: nada bloqueado ni saboteado; Hermes sigue existiendo por su cuenta si el dueño lo mantiene en el VPS, solo deja de estar acoplado a Enki. La v2.34.0 lo había integrado como trabajador (provider OpenAI-compat contra api_server local); esta versión deshace ese acoplamiento.",
   "_v2_33_nota": "v2.33.0 (2026-07-16): POSICIÓN 1 (NACIMIENTO) del blindaje de escritura — fs.write SALE de GLOBAL_TOOLS. Era una primitiva peligrosa del módulo FS que se filtraba a TODA página; en una página de dominio el LLM debe hablar los EVENTOS de su dominio (el dato de dominio se cambia emitiendo la causa de su dueño, no forjando el fichero). Raíz del incidente the-pirate: el LLM en la página escandallo tenía fs.write y truncó recetas.json (dato ajeno, otro módulo) → 25 recetas perdidas. Ahora fs.write nace SOLO donde escribir ficheros ES el dominio (chat plano sin page_id devuelve `all`; páginas con prefijo 'fs' por prefijo). fs.read/list/search se quedan universales (leer es libre). Complementa la RED (filesystem 2.3.0 snapshot). Test: ai-gateway-cajones (fs.write NO llega a página de cajones · fs.read sí).",
@@ -252,7 +252,7 @@
           "minimax-m3.1-flash",
           "minimax-m3",
           "mistral-large-4",
-                    "nemotron-3-super",
+          "nemotron-3-super",
           "nemotron-3-ultra"
         ],
         "_nota": "Ollama Cloud — API NATIVA https://ollama.com/api. La lista de models es FALLBACK: el provider captura el catálogo VIVO de /api/tags en configure() y esa es la fuente de verdad (catalogoVivo). Así el selector y el coerce usan siempre la oferta viva."
@@ -279,6 +279,20 @@
           "kimi-k2-thinking",
           "moonshot-v1-128k"
         ]
+      },
+      "nous": {
+        "enabled": true,
+        "priority": 10,
+        "api_base": "https://inference-api.nousresearch.com/v1",
+        "default_model": "meituan/longcat-2.5:free",
+        "models": [
+          "meituan/longcat-2.5:free",
+          "stepfun/step-3.7-flash:free",
+          "upstage/solar-mini4:free",
+          "reflection/beam-1.0-501b-a23b:free",
+          "stealth/crouton-alpha"
+        ],
+        "_nota": "Nous Portal (cuenta del dueno). La credencial NO es una API key: es una credencial ROTATIVA en credential-manager (credential.rotate.*), porque Nous da access_token de 1 h y refresh ROTATORIO que el Portal revoca si dos refrescadores pisan el mismo token. El provider pide el access vigente a credential-manager y NUNCA toca el refresh. Sin rotacion -> no disponible (NO_TOKEN) y el fallback del gateway sigue. SOLO modelos :free del catálogo VIVO: la cuenta no tiene saldo y un modelo de pago da 404 'requires available credits'. El catálogo se captura de /v1/models en configure(). priority 10: seleccionable, NUNCA auto-default. Test: ai-gateway__nous-provider."
       }
     },
     "retry": {
@@ -334,5 +348,6 @@
         "ai-gateway.pending_fs_reads"
       ]
     }
-  }
+  },
+  "_v2_38_nota": "v2.38.0: PROVIDER 'nous' (Nous Portal, la cuenta del dueno). Endpoints OpenAI-compat en inference-api.nousresearch.com/v1 con el access_token que sale de la credencial ROTATIVA de credential-manager. Tres decisiones, todas medidas: (1) SOLO modelos :free — la cuenta no tiene saldo y un de pago devuelve 404 'requires available credits'; (2) la credencial es credential.rotate.resolve.request, NO credential.resolve ni el entorno: Nous no da API key duradera, da access_token de 1 h y refresh ROTATORIO; (3) el provider NO refresca: el refresh rota el token y dos refrescadores peleando revocan la cadena (el fallo refresh_token_reused). credential-manager es el UNICO refrescador. Si la rotacion esta vencida/revocada, el provider queda no disponible y el fallback sigue. priority 10: seleccionable, NUNCA auto-default. Test: ai-gateway__nous-provider."
 }

@@ -1,6 +1,8 @@
 ---
 name: banco-ideas
-description: Gestiona un banco de ideas compartido entre módulos: guardar, listar y recuperar ideas con autor opcional.
+description: >-
+  Gestiona un banco de ideas compartido entre módulos: guardar, listar y recuperar ideas con
+  autor opcional.
 tags: [enki, ideas, banco, memoria, utilidad]
 ---
 # banco-ideas

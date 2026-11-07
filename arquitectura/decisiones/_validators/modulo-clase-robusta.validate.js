@@ -59,6 +59,22 @@ const SECCION_KEYWORDS = {
 
 function loadJson(p) { return JSON.parse(fs.readFileSync(p, 'utf-8')); }
 
+// El canon declara subscribes/publishes/tools como LISTA. Un manifest que los trae
+// como DICT ({evento: handler}) dice lo mismo con otra forma: se NORMALIZA en vez de
+// reventar. Antes, un solo manifest así tumbaba el validador con «subs is not
+// iterable» y el gate moría sin medir nada (SCHEMA FAIL).
+const esDict = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
+function comoLista(v) {
+  if (Array.isArray(v)) return v.map((x) => (typeof x === 'string' ? { event: x } : x));
+  if (esDict(v)) {
+    return Object.entries(v).map(([event, h]) => ({
+      event,
+      handler: typeof h === 'string' ? h : (h && typeof h === 'object' ? h.handler : undefined)
+    }));
+  }
+  return [];
+}
+
 function lineOf(content, idx) { return content.slice(0, idx).split('\n').length; }
 
 function listModuleIndexes() {
@@ -324,9 +340,9 @@ function checkBusHandlersNaming(modules, findings) {
     if (isPoc(slug)) continue;
     let manifest;
     try { manifest = loadJson(manifestPath); } catch (_) { continue; }
-    const subs = manifest?.events?.subscribes || manifest?.subscribes || [];
+    const subs = comoLista(manifest?.events?.subscribes ?? manifest?.subscribes);
     for (const s of subs) {
-      const handler = s.handler;
+      const handler = typeof s === 'string' ? s : s.handler;
       if (!handler) continue;
       if (handler === 'onLoad' || handler === 'onUnload') continue;
       if (!/^on[A-Z]/.test(handler)) {
@@ -342,7 +358,7 @@ function checkHttpHandlersNaming(modules, findings) {
     if (isPoc(slug)) continue;
     let manifest;
     try { manifest = loadJson(manifestPath); } catch (_) { continue; }
-    const apis = manifest?.apis_http || manifest?.apis || [];
+    const apis = comoLista(manifest?.apis_http || manifest?.apis);
     for (const a of apis) {
       const handler = a.handler;
       if (!handler) continue;
@@ -363,14 +379,14 @@ function checkSubscribeSinHandler(modules, findings) {
     const methods = new Set(listClassMethods(content));
     // Skip handlers with dotted notation (Class.method, Strategy/Pattern.method) — patrones de delegacion
     const isFlatHandler = (h) => h && !/[.\/]/.test(h);
-    const subs = manifest?.events?.subscribes || manifest?.subscribes || [];
+    const subs = comoLista(manifest?.events?.subscribes || manifest?.subscribes);
     for (const s of subs) {
       if (!isFlatHandler(s.handler)) continue;
       if (!methods.has(s.handler)) {
         findings.errors.push(`drift_subscribe_sin_handler_implementado: ${slug} — subscribe declara handler "${s.handler}" pero el metodo no existe en index.js`);
       }
     }
-    const apis = manifest?.apis_http || manifest?.apis || [];
+    const apis = comoLista(manifest?.apis_http || manifest?.apis);
     for (const a of apis) {
       if (!isFlatHandler(a.handler)) continue;
       if (!methods.has(a.handler)) {
@@ -392,15 +408,15 @@ function checkHandlerSinDeclarar(modules, findings) {
     const declared = new Set();
     // Aceptar dos estructuras de manifest: `events.subscribes` (anidado) y
     // `subscribes` (top-level). Ambas son convenciones validas pre-existentes.
-    const subs = manifest?.events?.subscribes || manifest?.subscribes || [];
+    const subs = comoLista(manifest?.events?.subscribes || manifest?.subscribes);
     for (const s of subs) if (s.handler) declared.add(s.handler);
-    const apis = manifest?.apis_http || manifest?.apis || [];
+    const apis = comoLista(manifest?.apis_http || manifest?.apis);
     for (const a of apis) if (a.handler) declared.add(a.handler);
-    for (const t of (manifest?.tools || [])) {
+    for (const t of comoLista(manifest?.tools)) {
       if (typeof t.handler === 'string') declared.add(t.handler);
       else if (t.handler?.method) declared.add(t.handler.method);
     }
-    for (const u of (manifest?.ui_handlers || manifest?.uiActions || [])) if (u.handler) declared.add(u.handler);
+    for (const u of comoLista(manifest?.ui_handlers || manifest?.uiActions)) if (u.handler) declared.add(u.handler);
     for (const m of methods) {
       if (CANONICOS.has(m)) continue;
       if (declared.has(m)) continue;

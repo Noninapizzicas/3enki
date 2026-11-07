@@ -1,6 +1,8 @@
 ---
 name: envase-embalaje
-description: Custodio single-writer del envase y embalaje (the-pirate): elección de envase por tipo de producto y stock de envases.
+description: >-
+  Custodio single-writer del envase y embalaje (the-pirate): elección de envase por tipo de
+  producto y stock de envases.
 tags: [enki, the-pirate, envase, embalaje]
 ---
 # envase-embalaje

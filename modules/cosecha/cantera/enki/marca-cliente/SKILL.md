@@ -1,6 +1,8 @@
 ---
 name: marca-cliente
-description: Custodio single-writer de la relación con el cliente (the-pirate): voz de marca, presencia digital, clientes y fidelización.
+description: >-
+  Custodio single-writer de la relación con el cliente (the-pirate): voz de marca, presencia
+  digital, clientes y fidelización.
 tags: [enki, the-pirate, marca, cliente, fidelizacion]
 ---
 # marca-cliente

@@ -1,6 +1,11 @@
 ---
 name: adaptador-avisos
-description: Skill FULL del módulo PUENTE adaptador-avisos del proyecto 3D (taller personal de impresión 3D). Recibe el evento de aviso, construye el mensaje (CONVERSOR interno _construirMensaje) y lo envía por el canal del dueño (telegram-bridge) con ack. Tipos de aviso: terminado, cambio_filamento, fallo, cola_vacia, filamento_bajo. Nadie da por hecho el envío sin ok:true explícito del proveedor.
+description: >-
+  Skill FULL del módulo PUENTE adaptador-avisos del proyecto 3D (taller personal de impresión
+  3D). Recibe el evento de aviso, construye el mensaje (CONVERSOR interno _construirMensaje) y
+  lo envía por el canal del dueño (telegram-bridge) con ack. Tipos de aviso: terminado,
+  cambio_filamento, fallo, cola_vacia, filamento_bajo. Nadie da por hecho el envío sin ok:true
+  explícito del proveedor.
 when-to-use: Cuando necesites operar, depurar, extender o verificar el módulo adaptador-avisos del proyecto 3D — el puente que notifica al dueño por Telegram los avisos del taller (fin de impresión, cambio de filamento, fallo, cola vacía, filamento bajo). También para entender cómo un PUENTE transporta por un canal externo con ack y cierra su círculo con un par de fallo.
 tags: [enki, modulo, puente, 3d, avisos, telegram, reflejo, proyecto-3d]
 ---

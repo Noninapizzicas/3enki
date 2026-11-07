@@ -1,6 +1,8 @@
 ---
 name: entrega
-description: Custodio single-writer de la entrega (the-pirate): estimación de tiempo de preparación/entrega y configuración de reparto (radio, coste, tiempo por km).
+description: >-
+  Custodio single-writer de la entrega (the-pirate): estimación de tiempo de
+  preparación/entrega y configuración de reparto (radio, coste, tiempo por km).
 tags: [enki, the-pirate, entrega, reparto]
 ---
 # entrega

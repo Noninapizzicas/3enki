@@ -16444,7 +16444,7 @@ PIEZAS {
   modules/pizzepos/carta-digital (2.25.1)        (PWA emite #P1 + paridad mitad + nombre obligatorio + botones metodo_pago)
   modules/pizzepos/pedidos (3.5.0)               (estructura tienda → cocina ; ancla = cliente_nombre ; metodo_pago ; onPagoConfirmado con recreación del huérfano)
   modules/pago-gateway (3.1.0)                  (ÓRGANO de cobro provider-agnóstico: Stripe + SumUp; cuenta y clave POR PROYECTO)
-  modules/credential-manager (2.2.0)             (META_WHATSAPP[_VERIFY_TOKEN] + GLOVO PROJECT_ONLY + la clave de pago por proyecto)
+  modules/credential-manager (2.3.0)             (META_WHATSAPP[_VERIFY_TOKEN] + GLOVO PROJECT_ONLY + la clave de pago por proyecto)
   frontend credentials (CredentialsPanel + stores) (4ª pestaña 💬 WhatsApp · fix agrupado de la lista)
   cocina (_buildCocinaItem → ItemLine)           (YA pintaba la estructura, del comandero)
 }
@@ -18569,7 +18569,7 @@ PIEZAS {
   modules/estados (0.4.0 · reflejo 0.4.0)   la cúpula custodio (single-writer, freno entre pasos + EL JUEZ)
                                             + TOOLS del chat (crear·anadir·completar·ver·borrar·fijar_objetivo·evaluar_rail)
   modules/_shared/procesos-semilla.js       las plantillas de proceso por arquetipo (PRISMA hereda)
-  ai-gateway (2.36.0)                      el nervio: _leerRailActivo + _composeRailSection (activa + objetivo + juez)
+  ai-gateway (2.38.0)                      el nervio: _leerRailActivo + _composeRailSection (activa + objetivo + juez)
                                             + EL TIRO AUTOMÁTICO (_evaluarRailAuto post-turno, detached, safety caps)
 }
 LA MANO QUE ESCRIBE (v0.2.0)  el diseño decía "el LLM PROPONE · el reflejo SOSTIENE". v0.1 construyó el que

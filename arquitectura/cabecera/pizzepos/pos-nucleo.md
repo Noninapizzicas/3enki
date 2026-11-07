@@ -16,7 +16,7 @@ fuentes:
   - modules/pizzepos/tarifas/**
   - modules/pizzepos/persistencia-comandero/**
   - modules/pizzepos/impresion/**
-verificado: 2026-11-06 (pedidos: puerta de la confianza + ficha de cliente por JID; confirmacion-pedido: pide el sí al cliente nuevo y lee su respuesta sin tocar el lector compartido del puente)
+verificado: 2026-11-06 (entrega a domicilio: el modo 'domicilio' existe como MODO, no como canal — cuentas lo canoniza a 'llevar' para que nazca ticket que se cierra al cobrar y no cuenta huérfana; pedidos exige direccion_entrega y cliente_telefono en la puerta (400 sin ellos) y el comandero acepta notas_generales por parámetro para que el destino se imprima en el ticket de cocina; además: pedidos: puerta de la confianza + ficha de cliente por JID; confirmacion-pedido: pide el sí al cliente nuevo y lee su respuesta sin tocar el lector compartido del puente)
 ---
 
 # PizzePOS Módulos — Subsistema de Punto de Venta (v3.2.0)
@@ -123,13 +123,16 @@ CLASE ComanderoModule HEREDA BaseModule IMPLEMENTA ComanderoContract {
       PERSISTE
       RETORNA {status: 200, data: {item, pedido}}
 
-    async handleEnviarCocina(data: {cuenta_id, project_id?, pedido_id?}): Promise<Response>
+    async handleEnviarCocina(data: {cuenta_id, project_id?, pedido_id?, notas_generales?}): Promise<Response>
       OBTIENE pedido SI items == 0: 409 CONFLICT_STATE
       MARCA items.enviado = true + item.enviado_at = now()
       // UN PEDIDO, UN ID: si el origen (tienda/WhatsApp) ya creó su pedido, su id viaja
       // aquí y ES el pedido. Solo el comandero manual acuña `ped_<ts>_<rand>` (verificado 2026-10-24).
       GENERA pedido_id = data.pedido_id || ped_<ts>_<rand>
-      PUBLICA comandero.enviar_cocina {pedido_id, project_id, items, total, notas}
+      // NOTAS GENERALES por PARÁMETRO: el destino de una entrega a domicilio no es nota de
+      // línea ni vive en el buffer — lo trae el canal y se imprime en el ticket de cocina.
+      PUBLICA comandero.enviar_cocina {pedido_id, project_id, items, total,
+                                       notas_generales: data.notas_generales || pedido.notas}
       // project_id viaja explícito: sin él el evento cae a DEFAULT_PROJECT_ID ('default')
       PERSISTE
       RETORNA {status: 200, data: {pedido_id, items_enviados}}

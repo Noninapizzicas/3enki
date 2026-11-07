@@ -26,9 +26,6 @@
     { id: 'gemini', name: 'Google Gemini', icon: '💎', models: ['gemini-2.5-flash', 'gemini-2.5-pro'] },
     { id: 'ollama', name: 'Ollama (Cloud)', icon: '🦙', models: ['deepseek-v4.1-flash', 'deepseek-v4-pro:0813', 'glm-5.2', 'glm-5.3', 'glm-5.3-flash', 'kimi-k2.6', 'kimi-k2.7-code', 'kimi-k3', 'gpt-oss:120b', 'gpt-oss:20b', 'gemma4:31b', 'minimax-m2.7', 'minimax-m3', 'mistral-large-3:675b', 'nemotron-3-nano:30b', 'nemotron-3-super', 'nemotron-3-ultra'] },
     { id: 'claude-cli', name: 'Claude Code (1M)', icon: '🟣', models: ['sonnet', 'opus', 'haiku'] },
-    // Nous Portal: solo los `:free` (la cuenta no tiene saldo). El provider captura el
-    // catálogo vivo en caliente; esta lista es el respaldo si no se capturó.
-    { id: 'nous', name: 'Nous Portal (gratis)', icon: '✨', models: ['meituan/longcat-2.5:free', 'stepfun/step-3.7-flash:free', 'upstage/solar-mini4:free', 'reflection/beam-1.0-501b-a23b:free'] },
   ];
 
   let selectedProvider: Provider | null = $activeProvider || providers[0];

@@ -26,7 +26,6 @@ const GeminiProvider    = require('./providers/gemini-provider');
 const OllamaProvider    = require('./providers/ollama-provider');
 const ClaudeCliProvider = require('./providers/claude-cli-provider');
 const KimiProvider      = require('./providers/kimi-provider');
-const NousProvider      = require('./providers/nous-provider');
 
 const BaseModule = require('../../_shared/base-module');
 const Sintonizador = require('../../_shared/sintonizador');
@@ -310,8 +309,7 @@ class AiGatewayModule extends BaseModule {
       gemini: GeminiProvider,
       ollama: OllamaProvider,
       'claude-cli': ClaudeCliProvider,
-      kimi: KimiProvider,
-      nous: NousProvider
+      kimi: KimiProvider
     };
     const credentialResolver = (provider, projectId) => this._resolveCredential(provider, projectId);
 

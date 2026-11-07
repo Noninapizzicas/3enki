@@ -74,16 +74,54 @@ const GLOVO_FIELDS = ['GLOVO_CLIENT_ID', 'GLOVO_CLIENT_SECRET', 'GLOVO_CHAIN_ID'
 // Glovo entra aquí: varios proyectos, cada uno con sus credenciales de Glovo, aislados.
 const PROJECT_ONLY_PROVIDERS = new Set(['META_WHATSAPP', 'META_WHATSAPP_VERIFY_TOKEN', ...GLOVO_FIELDS]);
 
+// ── ROTACIÓN DE TOKEN (v2.3.0) ──────────────────────────────────────────────
+// Hay credenciales que NO son una key estática: OAuth2 devuelve un access_token
+// de corta vida + un refresh_token que ROTA en cada uso. Este módulo nunca fue
+// diseñado para eso (su modelo es "una key por provider, inmutable"). En vez de
+// reescribir el modelo — rompiendo las 50+ credenciales estáticas que ya viven
+// en los .env — la rotación vive en una FILA aparte del .env, con metadatos
+// versionados. Una credencial rotativa NO ocupa el hueco `*_API_KEY_*`:
+//
+//   credential.rotations.json   { "<provider>": { <levelKey>: {token, refresh_token,
+//                                  expires_at, client_id, refreshed_at, generation} } }
+//
+// Por qué una fila aparte y no el .env:
+//   1. _saveEnvFile() reescribe el .env entero desde this.credentials → un token
+//      que rota cada hora reescribiría el fichero de credenciales estáticas
+//      constantemente (y con ellas, la ventana de corrupción).
+//   2. El .env lo lee/writes credential-manager; el ciclo OAuth lo manejan
+//      credential-oauth y el refrescador. Una fila aparte con su lock evita que
+//      dos escritores se pisen (que es exactamente lo que revoca la cadena).
+//   3. El legacy (`_loadEnvFile`) no toca estas claves: siguen siendo de otros
+//      módulos.
+//
+// INVARIANTES (probados en tests/unit/credential-manager__rotacion.test.js):
+//   - Una rotación NUNCA escribe en this.credentials ni en el .env de credenciales.
+//   - El access_token sirve solo si NO está vencido (expires_at en el futuro).
+//   - Si está vencido: se intenta refrescar con el refresh_token. Si el refresh
+//     falla (revocado/caducado), la credencial pasa a ESTADO REVOCADA y NO se
+//     reintenta a ciegas — devuelve el error y espera re-login humano.
+//   - La rotación del refresh_token se persiste ANTES de dar el nuevo access_token
+//     por bueno: si el proceso muere entre medias, el siguiente refresh usa el
+//     último refresh_token bueno, no uno quemado.
+const ROTATION_FILE = 'credential.rotations.json';
+const ROTATION_TTL_FALLBACK_MS = 55 * 60 * 1000; // 55 min si el emisor no da expires_in
+const REVOKED_RETRY_MS = 10 * 60 * 1000;         // no reintentar una credencial revocada
+
 class CredentialManagerModule extends BaseModule {
   constructor() {
     super();
     this.name    = 'credential-manager';
-    this.version = '2.1.0';
+    this.version = '2.3.0';
     this.uiHandler = null;
     this.config    = null;
 
     this.envFilePath = null;
     this.credentials = new Map();
+    // Fila de rotaciones: provider -> levelKey -> registro (ver ROTATION_FILE).
+    this.rotations = new Map();
+    this.rotationFilePath = null;
+    this._rotationLock = false;
   }
 
   // ==========================================
@@ -108,6 +146,10 @@ class CredentialManagerModule extends BaseModule {
       this.envFilePath = path.join(dataDir, '.env');
     }
 
+    // Fila de rotaciones: MISMO directorio que el .env, para que el reconciliador
+    // y el backup los traten como una unidad.
+    this.rotationFilePath = path.join(path.dirname(this.envFilePath), ROTATION_FILE);
+    await this._loadRotations();
     await this._loadEnvFile();
     this._updateCredentialMetrics();
 
@@ -122,6 +164,7 @@ class CredentialManagerModule extends BaseModule {
   async onUnload() {
     this.logger.info('credential-manager.unloading');
     this.credentials.clear();
+    this.rotations.clear();
     this.logger.info('credential-manager.unloaded');
   }
 
@@ -219,6 +262,317 @@ class CredentialManagerModule extends BaseModule {
     for (const [level, count] of Object.entries(byLevel)) {
       this.metrics.gauge(`credential-manager.count.${level.toLowerCase()}`, count);
     }
+  }
+
+  // ==========================================
+  // ROTACIÓN DE TOKEN (v2.3.0) — credenciales OAuth que expiran y rotan
+  // ==========================================
+  // Una credencial rotativa es un registro con metadatos: access_token (vida
+  // corta) + refresh_token (ROTORIO) + expires_at + client_id. Vive en
+  // this.rotations, en su propia fila, y NUNCA toca this.credentials.
+  //
+  // Contrato de eventos:
+  //   credential.rotate.start.request   { provider, level, identifier?, client_id?,
+  //                                       access_token, refresh_token, expires_in?,
+  //                                       token_type?, scope? }
+  //     → credential.rotate.start.response { request_id, status, data }  (vía _atender)
+  //   credential.rotate.resolve.request { provider, level?, identifier?, force? }
+  //     → credential.rotate.resolve.response { request_id, status, data: { token, ...} }
+  //   credential.rotate.revoke.request  { provider, level?, identifier? }
+  //     → credential.rotate.revoke.response  { request_id, status, data }
+  //
+  // El refresh lo hace AQUÍ (no credential-oauth): es el único sitio que posee
+  // el refresh_token y el cliente HTTP. credential-oauth solo entrega el primer
+  // par (access+refresh) al terminar el consentimiento.
+
+  // RPC request/response (mismo contrato que _atender de modulo-hibrido-reflejo,
+  // pero aquí: credential-manager extiende BaseModule, que no lo tiene). Publica
+  // { request_id, status, data } y devuelve el resultado al caller.
+  _atender(event, op, responseEvent, proyeccion) {
+    const d = (event && event.data) || event || {};
+    const run = async () => {
+      let result;
+      try {
+        result = await proyeccion(d);
+        this.metrics?.increment(`${this.name}.reflejo.served`, { op });
+      } catch (err) {
+        this.logger?.error(`${this.name}.reflejo.failed`, { op, error: err.message });
+        this.metrics?.increment(`${this.name}.reflejo.errors`, { op });
+        result = this._errorResponse(500, 'UNKNOWN_ERROR', err.message);
+      }
+      this.eventBus.publish(responseEvent, { request_id: d.request_id, ...result });
+      return result;
+    };
+    return run();
+  }
+
+  _rotationKey(provider, level, identifier) {
+    const lvl = level || 'GLOBAL';
+    return lvl === 'GLOBAL' ? 'GLOBAL' : `${lvl}:${identifier || ''}`;
+  }
+
+  _loadRotations() {
+    if (!fsSync.existsSync(this.rotationFilePath)) return;
+    try {
+      const raw = fsSync.readFileSync(this.rotationFilePath, 'utf-8');
+      const parsed = JSON.parse(raw);
+      const providers = parsed?.providers || parsed || {};
+      for (const [provider, levels] of Object.entries(providers)) {
+        if (!levels || typeof levels !== 'object') continue;
+        const inner = new Map();
+        for (const [k, v] of Object.entries(levels)) inner.set(k, v);
+        this.rotations.set(String(provider).toUpperCase(), inner);
+      }
+      this.logger.info('credential-manager.rotations.loaded', {
+        providers: this.rotations.size,
+        records: [...this.rotations.values()].reduce((a, m) => a + m.size, 0)
+      });
+    } catch (err) {
+      // Una fila corrupta NO tumba el módulo: se queda sin rotaciones y lo dice.
+      this.logger.error('credential-manager.rotations.load.failed', {
+        path: this.rotationFilePath, error: err.message
+      });
+      this.metrics?.increment('credential-manager.errors', { kind: 'rotations_load' });
+    }
+  }
+
+  async _saveRotations() {
+    if (this._rotationLock) {
+      // Un refresco en vuelo: su propia escritura ya cubrirá este cambio. Sin await
+      // cruzado: dos escritores peleando por el refresh_token es lo que revoca la cadena.
+      this.logger.warn('credential-manager.rotations.write.deferred', { reason: 'lock' });
+      return;
+    }
+    this._rotationLock = true;
+    try {
+      const out = { _schema: 1, updated_at: new Date().toISOString(), providers: {} };
+      for (const [provider, levels] of this.rotations.entries()) {
+        out.providers[provider] = Object.fromEntries(levels.entries());
+      }
+      const tmp = `${this.rotationFilePath}.tmp.${process.pid}.${Date.now()}`;
+      await fs.writeFile(tmp, JSON.stringify(out, null, 2));
+      await fs.rename(tmp, this.rotationFilePath);
+    } finally {
+      this._rotationLock = false;
+    }
+  }
+
+  _getRotation(provider, level, identifier) {
+    return this.rotations.get(String(provider).toUpperCase())?.get(this._rotationKey(provider, level, identifier)) || null;
+  }
+
+  _isExpired(reg) {
+    if (!reg?.expires_at) return false;
+    return Date.now() >= new Date(reg.expires_at).getTime();
+  }
+
+  /** Registro de UI (nunca expone el token ni el refresh). */
+  _rotationState(provider, level, identifier) {
+    const reg = this._getRotation(provider, level, identifier);
+    if (!reg) return null;
+    return {
+      provider: String(provider).toUpperCase(),
+      level: reg.level || 'GLOBAL',
+      identifier: reg.identifier || null,
+      status: reg.revoked_at ? 'REVOKED' : (this._isExpired(reg) ? 'EXPIRED' : 'ACTIVE'),
+      expires_at: reg.expires_at || null,
+      refreshed_at: reg.refreshed_at || null,
+      generation: reg.generation || 1,
+      token_preview: this._maskApiKey(reg.token || ''),
+      client_id: reg.client_id || null
+    };
+  }
+
+  async onRotationStartRequest(event) {
+    const d = event?.data || event || {};
+    const { request_id, provider, level, identifier, access_token, refresh_token, expires_in, client_id } = d;
+    try {
+      return this._atender(event, 'rotate.start', 'credential.rotate.start.response', async () => {
+        if (!provider || !access_token) {
+          return this._errorResponse(400, 'INVALID_INPUT', 'provider y access_token son requeridos', { kind: 'domain' });
+        }
+        const lvl = level || 'GLOBAL';
+        const validated = this._validateLevel(lvl, identifier);
+        if (!validated.valid) {
+          return this._errorResponse(400, 'INVALID_INPUT', validated.message, validated.details);
+        }
+        const providerUpper = String(provider).toUpperCase();
+        const key = this._rotationKey(providerUpper, lvl, identifier);
+
+        const prev = this._getRotation(providerUpper, lvl, identifier);
+        const reg = {
+          provider: providerUpper,
+          level: lvl,
+          identifier: identifier || null,
+          token: access_token,
+          refresh_token: refresh_token || prev?.refresh_token || null,
+          expires_at: this._computeExpiry(expires_in),
+          client_id: client_id || prev?.client_id || null,
+          token_type: d.token_type || 'Bearer',
+          scope: d.scope || prev?.scope || null,
+          created_at: prev?.created_at || new Date().toISOString(),
+          refreshed_at: new Date().toISOString(),
+          generation: (prev?.generation || 0) + 1,
+          revoked_at: null
+        };
+        if (!this.rotations.has(providerUpper)) this.rotations.set(providerUpper, new Map());
+        this.rotations.get(providerUpper).set(key, reg);
+        await this._saveRotations();
+
+        this.metrics?.increment('credential-manager.rotations.started', { provider: providerUpper });
+        this.logger.info('credential-manager.rotations.started', {
+          provider: providerUpper, level: lvl, generation: reg.generation
+        });
+        return { status: 200, data: this._rotationState(providerUpper, lvl, identifier) };
+      });
+    } catch (err) {
+      return this._handleHandlerError('credential-manager.rotate.start.failed', err, 'rotate_start');
+    }
+  }
+
+  _computeExpiry(expires_in) {
+    const ms = Number(expires_in) > 0 ? Number(expires_in) * 1000 : ROTATION_TTL_FALLBACK_MS;
+    return new Date(Date.now() + ms).toISOString();
+  }
+
+  /**
+   * Resuelve el access_token vigente; si está vencido, lo refresca con el
+   * refresh_token y persiste el nuevo par (incluido el refresh rotado).
+   * Devuelve { token, expires_at, generation, refreshed } o un error canónico.
+   */
+  async onRotationResolveRequest(event) {
+    const d = event?.data || event || {};
+    const { provider, level, identifier, force } = d;
+    return this._atender(event, 'rotate.resolve', 'credential.rotate.resolve.response', async () => {
+      try {
+        if (!provider) {
+          return this._errorResponse(400, 'INVALID_INPUT', 'provider requerido', { kind: 'domain' });
+        }
+        const providerUpper = String(provider).toUpperCase();
+        const reg = this._getRotation(providerUpper, level, identifier);
+        if (!reg) {
+          return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `No hay credencial rotativa para ${providerUpper}`,
+            { entity_type: 'rotation', entity_id: providerUpper });
+        }
+        if (reg.revoked_at) {
+          return this._errorResponse(409, 'CREDENTIAL_REVOKED',
+            `La credencial rotativa de ${providerUpper} está revocada. Reautoriza (credential.rotate.start.request).`,
+            { entity_type: 'rotation', entity_id: providerUpper });
+        }
+
+        if (!this._isExpired(reg) && !force) {
+          return { status: 200, data: {
+            token: reg.token, expires_at: reg.expires_at,
+            generation: reg.generation, refreshed: false, status: 'ACTIVE'
+          } };
+        }
+
+        if (!reg.refresh_token) {
+          // Sin refresh: solo queda reautorizar. NO se reintenta a ciegas.
+          return this._errorResponse(409, 'CREDENTIAL_EXPIRED',
+            `El token de ${providerUpper} expiró y no hay refresh_token. Reautoriza.`,
+            { entity_type: 'rotation', entity_id: providerUpper });
+        }
+
+        const tokenUrl = d.token_url || reg.token_url || process.env[`${providerUpper}_TOKEN_URL`] || null;
+        if (!tokenUrl) {
+          return this._errorResponse(400, 'MISSING_TOKEN_URL',
+            `No hay endpoint de refresh para ${providerUpper} (token_url).`,
+            { kind: 'config', field: 'token_url' });
+        }
+
+        const resp = await this._refreshTokens({
+          token_url: tokenUrl,
+          client_id: reg.client_id || undefined,
+          refresh_token: reg.refresh_token,
+          provider: providerUpper
+        });
+        if (!resp?.access_token) throw new Error('el endpoint de refresh no devolvió access_token');
+
+        // Persistir el refresh ANTES de dar el access por bueno: si el proceso
+        // muere aquí, el siguiente refresco usa el último refresh_token bueno.
+        reg.refresh_token = resp.refresh_token || reg.refresh_token;
+        reg.token = resp.access_token;
+        reg.expires_at = this._computeExpiry(resp.expires_in);
+        reg.refreshed_at = new Date().toISOString();
+        reg.generation = (reg.generation || 1) + 1;
+        await this._saveRotations();
+
+        this.metrics?.increment('credential-manager.rotations.refreshed', { provider: providerUpper });
+        this.logger.info('credential-manager.rotations.refreshed', {
+          provider: providerUpper, generation: reg.generation
+        });
+        return { status: 200, data: {
+          token: reg.token, expires_at: reg.expires_at,
+          generation: reg.generation, refreshed: true, status: 'ACTIVE'
+        } };
+      } catch (err) {
+        const revocado = /revok|reus|invalid_grant/i.test(err.message);
+        if (revocado) {
+          const reg = this._getRotation(String(provider || '').toUpperCase(), level, identifier);
+          if (reg) {
+            reg.revoked_at = new Date().toISOString();
+            await this._saveRotations();
+            this.metrics?.increment('credential-manager.rotations.revoked', { provider: String(provider).toUpperCase() });
+            this.logger.warn('credential-manager.rotations.revoked', {
+              provider: String(provider).toUpperCase(), reason: err.message
+            });
+          }
+        }
+        this.metrics?.increment('credential-manager.rotations.refresh.failed', { provider: String(provider || '').toUpperCase() });
+        return this._errorResponse(revocado ? 409 : 502,
+          revocado ? 'CREDENTIAL_REVOKED' : 'REFRESH_FAILED',
+          err.message, { entity_type: 'rotation', entity_id: String(provider || '').toUpperCase() });
+      }
+    });
+  }
+
+  async _refreshTokens({ token_url, client_id, refresh_token, provider }) {
+    const body = new URLSearchParams({ grant_type: 'refresh_token', refresh_token });
+    if (client_id) body.set('client_id', client_id);
+    const resp = await this._fetchWithTimeout(token_url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString()
+    }, 15000);
+    const json = typeof resp === 'string' ? JSON.parse(resp) : resp;
+    if (!json?.access_token) throw new Error('refresh sin access_token');
+    return json;
+  }
+
+  async onRotationRevokeRequest(event) {
+    const d = event?.data || event || {};
+    const { provider, level, identifier } = d;
+    return this._atender(event, 'rotate.revoke', 'credential.rotate.revoke.response', async () => {
+      const providerUpper = String(provider || '').toUpperCase();
+      const reg = this._getRotation(providerUpper, level, identifier);
+      if (!reg) {
+        return this._errorResponse(404, 'RESOURCE_NOT_FOUND', `No hay credencial rotativa para ${providerUpper}`,
+          { entity_type: 'rotation', entity_id: providerUpper });
+      }
+      reg.revoked_at = new Date().toISOString();
+      await this._saveRotations();
+      this.metrics?.increment('credential-manager.rotations.revoked', { provider: providerUpper });
+      this.logger.info('credential-manager.rotations.revoked', { provider: providerUpper, level: level || 'GLOBAL' });
+      return { status: 200, data: { provider: providerUpper, revoked: true } };
+    });
+  }
+
+  async onRotationStateRequest(event) {
+    const d = event?.data || event || {};
+    const correlation_id = event?.correlation_id || event?.correlationId;
+    const out = [];
+    for (const [provider, levels] of this.rotations.entries()) {
+      for (const reg of levels.values()) {
+        out.push(this._rotationState(reg.provider, reg.level, reg.identifier));
+      }
+    }
+    const payload = { rotations: out, total: out.length, env_file: this.envFilePath };
+    if (d.request_id) {
+      return this.eventBus.publish('credential.rotate.state.response', { request_id: d.request_id, ...payload });
+    }
+    await this._publicarEvento('credential.rotate.state', payload, { correlation_id });
+    return null;
   }
 
   // ==========================================
@@ -739,7 +1093,11 @@ class CredentialManagerModule extends BaseModule {
             level: c.level,
             identifier: c.identifier,
             preview: c.preview
-          }))
+          })),
+          // Las rotaciones se listan aparte: son credenciales vivas con estado,
+          // no keys estáticas. Nunca con token ni refresh.
+          rotations_total: state.rotations_total,
+          rotations: state.rotations
         }
       };
     } catch (err) {
@@ -766,11 +1124,21 @@ class CredentialManagerModule extends BaseModule {
         preview: this._maskApiKey(value)
       });
     }
+    // Rotaciones (nunca con token ni refresh: solo estado y preview).
+    const rotations = [];
+    for (const [provider, levels] of this.rotations.entries()) {
+      for (const reg of levels.values()) {
+        rotations.push(this._rotationState(reg.provider, reg.level, reg.identifier));
+      }
+    }
     return {
       credentials,
       total: credentials.length,
       glovoConfigs: this._getGlovoConfigs(),
-      env_file: this.envFilePath
+      rotations,
+      rotations_total: rotations.length,
+      env_file: this.envFilePath,
+      rotations_file: this.rotationFilePath
     };
   }
 

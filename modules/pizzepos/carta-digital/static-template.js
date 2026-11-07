@@ -1672,7 +1672,14 @@ function updateCart() {
       '<input id="cliente-hora" class="cart-nombre" type="time" aria-label="Hora de recogida" style="display:' + (_modoConsumo === 'recoger' ? 'block' : 'none') + '">' +
       // ENTREGA A DOMICILIO: sin destino ni teléfono no hay reparto. Se piden aquí y se
       // exigen antes de enviar; el servidor los vuelve a exigir (la PWA se puede saltar).
-      '<input id="cliente-direccion" class="cart-nombre" type="text" placeholder="Dirección de entrega (calle, número, piso)" aria-label="Dirección de entrega" autocomplete="street-address" style="display:' + (_esDomicilio ? 'block' : 'none') + '">' +
+      '<input id="cliente-direccion" class="cart-nombre" type="text" placeholder="Dirección de entrega (calle, número, piso)" aria-label="Dirección de entrega" autocomplete="street-address" oninput="_pintarMapaEntrega()" style="display:' + (_esDomicilio ? 'block' : 'none') + '">' +
+      // PUNTO EXACTO (opcional): el cliente toca y su móvil manda el pin. Negar el
+      // permiso NO deja sin pedido — su dirección escrita sigue valiendo.
+      '<div id="cliente-ubicacion" style="display:' + (_esDomicilio ? 'block' : 'none') + '">' +
+        '<button type="button" class="modo-btn" id="btn-ubicacion" onclick="pedirUbicacion()">📍 Mi ubicación exacta</button>' +
+        '<p id="cliente-ubicacion-estado" style="font-size:12px;color:#8a8f98;margin:4px 0 0"></p>' +
+        '<div id="cliente-mapa"></div>' +
+      '</div>' +
       '<input id="cliente-telefono" class="cart-nombre" type="tel" placeholder="Tu teléfono (te llamamos al llegar)" aria-label="Teléfono de contacto" autocomplete="tel" style="display:' + (_esDomicilio ? 'block' : 'none') + '">'
     : '';
   // METODO DE PAGO: solo se ofrece si el proyecto tiene pasarela (pago_online). Sin ella no
@@ -1806,6 +1813,8 @@ function setModo(m) {
   if (d) d.style.display = (m === 'domicilio') ? 'block' : 'none';
   var t = document.getElementById('cliente-telefono');
   if (t) t.style.display = (m === 'domicilio') ? 'block' : 'none';
+  var ub = document.getElementById('cliente-ubicacion');
+  if (ub) ub.style.display = (m === 'domicilio') ? 'block' : 'none';
 }
 function _pedModo() { return _modoConsumo || 'recoger'; }
 // DIRECCIÓN y TELÉFONO de entrega — solo existen (y solo viajan) en 'domicilio'.
@@ -1816,6 +1825,50 @@ function _pedDireccion() {
 function _pedTelefono() {
   var t = document.getElementById('cliente-telefono');
   return (_pedModo() === 'domicilio' && t && t.value) ? t.value.trim().slice(0, 30) : '';
+}
+// PUNTO del cliente. Vive en memoria de la pestaña (no se guarda: es del pedido, no
+// del cliente) y solo cuenta en 'domicilio'. El navegador exige un gesto — el botón
+// ES el gesto, y es lo que hace que iOS deje leer la posición.
+var _geoUbicacion = null;
+function pedirUbicacion() {
+  var estado = document.getElementById('cliente-ubicacion-estado');
+  if (typeof navigator === 'undefined' || !navigator.geolocation) {
+    if (estado) estado.textContent = 'Este móvil no deja compartir la ubicación. Escribe la dirección y listo.';
+    return;
+  }
+  if (estado) estado.textContent = 'Buscando tu ubicación…';
+  navigator.geolocation.getCurrentPosition(function (pos) {
+    var lat = Math.round(pos.coords.latitude * 1000000) / 1000000;
+    var lng = Math.round(pos.coords.longitude * 1000000) / 1000000;
+    _geoUbicacion = { lat: lat, lng: lng };
+    if (estado) estado.textContent = '✅ Ubicación añadida. El repartidor llega al punto exacto.';
+    var b = document.getElementById('btn-ubicacion');
+    if (b) b.classList.add('active');
+    _pintarMapaEntrega();
+  }, function () {
+    if (estado) estado.textContent = 'Sin permiso de ubicación. Tu dirección escrita vale igual.';
+  }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 });
+}
+function _pedUbicacion() {
+  return (_pedModo() === 'domicilio' && _geoUbicacion) ? _geoUbicacion : null;
+}
+// Mismo contrato que modules/_shared/ubicacion-entrega.js: el pin manda; sin pin, la
+// dirección escrita. Sin dirección con forma no hay enlace (nunca se inventa un mapa).
+function _pedMapa() {
+  var u = _pedUbicacion();
+  if (u) return 'https://www.google.com/maps/search/?api=1&query=' + u.lat + ',' + u.lng;
+  var dir = _pedDireccion();
+  if (dir.length < 6) return '';
+  return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(dir);
+}
+// El cliente ve el mapa ANTES de enviar: si el pin cayó en otro sitio, lo ve aquí.
+function _pintarMapaEntrega() {
+  var cont = document.getElementById('cliente-mapa');
+  if (!cont) return;
+  var url = _pedMapa();
+  cont.innerHTML = url
+    ? '<a class="pedido-mapa" href="' + esc(url) + '" target="_blank" rel="noopener">🧭 Ver el punto en el mapa</a>'
+    : '';
 }
 // Puerta del navegador: sin destino ni teléfono no se envía. El servidor lo vuelve a
 // exigir (esta comprobación es comodidad, no seguridad). Devuelve true si puede seguir.
@@ -1945,6 +1998,8 @@ function buildP1Line() {
     if (modo === 'domicilio') {
       var dir = _pedDireccion(); if (dir) payload.direccion_entrega = dir;
       var tel = _pedTelefono(); if (tel) payload.cliente_telefono = tel;
+      // PUNTO del cliente: viaja SOLO si tocó el botón y dio permiso. Opcional a propósito.
+      var ubi = _pedUbicacion(); if (ubi) payload.ubicacion = { lat: ubi.lat, lng: ubi.lng };
     }
     var met = _pedMetodo(); if (met) payload.metodo_pago = met;
     // Encargo anticipado: fecha deseada (día futuro) → el parser lo publica con fecha_deseada.
@@ -1983,6 +2038,8 @@ function buildOrderMsg() {
     var tel = _pedTelefono();
     if (dir) msg += '\\nEntrega: ' + dir;
     if (tel) msg += '\\nTelefono: ' + tel;
+    // El mapa también en el texto: el de la tienda lo abre desde el propio chat.
+    var mapa = _pedMapa(); if (mapa) msg += '\\nMapa: ' + mapa;
   }
   // Encargo: fecha deseada en claro (el parser la lee; la #P1 la lleva autoritativa).
   var fec = _fechaDeseada();
@@ -2165,6 +2222,7 @@ async function pagarAhora() {
     hora_recogida: _pedHora() || null,
     direccion_entrega: (_pedModo() === 'domicilio') ? _pedDireccion() : null,
     cliente_telefono: (_pedModo() === 'domicilio') ? _pedTelefono() : null,
+    ubicacion: (_pedModo() === 'domicilio') ? _pedUbicacion() : null,
     fecha_deseada: _fechaDeseada() || null,
     metodo_pago: 'tarjeta',
     pago_online: true,
@@ -2215,6 +2273,7 @@ async function pedirOnline() {
     hora_recogida: _pedHora() || null,
     direccion_entrega: (_pedModo() === 'domicilio') ? _pedDireccion() : null,
     cliente_telefono: (_pedModo() === 'domicilio') ? _pedTelefono() : null,
+    ubicacion: (_pedModo() === 'domicilio') ? _pedUbicacion() : null,
     metodo_pago: _pedMetodo(),
     fecha_deseada: _fechaDeseada() || null,
     notas_generales: null
@@ -2242,23 +2301,35 @@ async function pedirOnline() {
 // Vacía el carrito y deja la confirmación a la vista. Se llama DESPUÉS de saveLastOrder(): así
 // el respaldo «repetir último pedido» guarda las líneas y vaciar no pierde nada.
 function _cerrarPedido(nombre) {
+  // El destino se LEE ANTES de vaciar: updateCart() repinta el footer y los campos
+  // desaparecen, así que la confirmación necesita su copia ya tomada.
+  var destino = (_pedModo() === 'domicilio')
+    ? { direccion: _pedDireccion(), mapa: _pedMapa() }
+    : null;
   cart = [];
   updateCart();                  // vacía + persiste en localStorage + oculta el footer
-  mostrarConfirmacion(nombre);   // y el panel pasa a decir «pedido confirmado»
+  mostrarConfirmacion(nombre, destino);   // y el panel pasa a decir «pedido confirmado»
 }
 
 // Confirmación accesible: el ancla de recogida es el NOMBRE (el dependiente lo pide al recoger).
-function mostrarConfirmacion(nombre) {
+function mostrarConfirmacion(nombre, destino) {
   var el = document.getElementById('cart-items');
   var footer = document.getElementById('cart-footer');
   if (footer) footer.style.display = 'none';
   if (el) {
+    // A domicilio la confirmación dice A DÓNDE va el pedido (y el punto), no "ven a
+    // recogerlo": el cliente acaba de pagar un reparto, no una recogida.
+    var donde = (destino && destino.direccion)
+      ? '<p>Te lo llevamos a:</p>' +
+        '<div class="pedido-codigo">' + esc(destino.direccion) + '</div>' +
+        (destino.mapa ? '<a class="pedido-mapa" href="' + esc(destino.mapa) + '" target="_blank" rel="noopener">🧭 Ver el punto en el mapa</a>' : '')
+      : '<p>Cuando lo recojas, di tu nombre:</p>' +
+        '<div class="pedido-codigo">' + esc(nombre) + '</div>' +
+        recogidaHTML();
     el.innerHTML = '<div class="pedido-ok" role="status" aria-live="polite">' +
       '<div class="pedido-ok-check">✅</div>' +
       '<h3>¡Pedido confirmado!</h3>' +
-      '<p>Cuando lo recojas, di tu nombre:</p>' +
-      '<div class="pedido-codigo">' + esc(nombre) + '</div>' +
-      recogidaHTML() +
+      donde +
       (getLastOrder() ? '<button class="btn-share" onclick="repeatLastOrder();toggleCart()">🔄 ' + T.repeat_order + '</button>' : '') +
       '<button class="btn-wa" onclick="toggleCart()">Cerrar</button></div>';
   }

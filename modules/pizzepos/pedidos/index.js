@@ -31,6 +31,7 @@ const path = require('path');
 const BaseModule = require('../../_shared/base-module');
 const LectorServicio = require('../../_shared/lector-servicio');
 const { estadoServicio, mensajeCierre } = require('../../_shared/horario-servicio');
+const { normalizarUbicacion, enlaceMapa } = require('../../_shared/ubicacion-entrega');
 
 // Cuántos pedidos RECOGIDOS convierten a un cliente en habitual. A partir de ahí su
 // pedido entra directo a cocina: ya le hemos visto la cara y no se le hace esperar
@@ -650,6 +651,7 @@ class PedidosModule extends BaseModule {
         cliente_nombre,
         modo_consumo,
         direccion_entrega,
+        ubicacion,
         hora_recogida,
         metodo_pago,
         mayor_edad_confirmado,
@@ -674,6 +676,18 @@ class PedidosModule extends BaseModule {
       // cual el reparto no se puede cerrar (se llama al llegar).
       const direccion_entrega_norm = (typeof direccion_entrega === 'string' && direccion_entrega.trim())
         ? direccion_entrega.trim().replace(/\s+/g, ' ').slice(0, 240)
+        : null;
+      // PUNTO EXACTO del cliente — el botón "Mi ubicación" de la PWA. OPCIONAL por
+      // diseño: negar el permiso del móvil no puede dejar a nadie sin pedido. Si llega,
+      // el repartidor navega al punto; si no, el enlace se compone de la dirección.
+      // Sin pin, sin dirección y en domicilio → la puerta de abajo lo rechaza igual.
+      const ubicacion_entrega = (modo_consumo_norm === 'domicilio')
+        ? normalizarUbicacion(ubicacion)
+        : null;
+      // ENLACE DEL REPARTO — se compone UNA vez, aquí, para que cliente, staff y
+      // cocina no discrepen: con pin abre el punto exacto, sin pin busca la dirección.
+      const mapa_entrega = (modo_consumo_norm === 'domicilio')
+        ? enlaceMapa({ direccion: direccion_entrega_norm, ubicacion: ubicacion_entrega })
         : null;
       // HORA pactada (solo aplica a 'recoger'). Texto libre tipo "20:30" o ISO; la
       // agenda (pieza futura) la leerá para inyectar al turno X min antes. Hoy solo
@@ -817,6 +831,8 @@ class PedidosModule extends BaseModule {
         modo_consumo: modo_consumo_norm,
         // DESTINO del reparto. Solo en 'domicilio'; null en mesa/recoger/llevar.
         direccion_entrega: direccion_entrega_norm,
+        ubicacion_entrega: ubicacion_entrega,
+        mapa_entrega: mapa_entrega,
         hora_recogida: hora_recogida_norm,
         metodo_pago: metodo_pago_norm,
         // Decision 6.2 = C: configurable por proyecto. Si la PWA mostro gate
@@ -924,6 +940,8 @@ class PedidosModule extends BaseModule {
           cliente_nombre: cliente_nombre_norm,
           modo_consumo: modo_consumo_norm,
           direccion_entrega: direccion_entrega_norm,
+          ubicacion_entrega: ubicacion_entrega,
+          mapa_entrega: mapa_entrega,
           hora_recogida: hora_recogida_norm,
           metodo_pago: metodo_pago_norm,
           expira_at,
@@ -1407,6 +1425,13 @@ class PedidosModule extends BaseModule {
     if (pedido.expira_at) payload.expira_at = pedido.expira_at;
     if (pedido.project_slug) payload.project_slug = pedido.project_slug;
     if (pedido.metodo_pago) payload.metodo_pago = pedido.metodo_pago;
+    // REPARTO: el modo, el destino y el enlace del mapa. Sin esto, quien avisa al
+    // repartidor (staff) solo sabe que hay un pedido, no a dónde va. El TELÉFONO
+    // sigue sin viajar (anti-fraude + RGPD-cero); la dirección ya iba al ticket.
+    if (pedido.modo_consumo) payload.modo_consumo = pedido.modo_consumo;
+    if (pedido.direccion_entrega) payload.direccion_entrega = pedido.direccion_entrega;
+    if (pedido.mapa_entrega) payload.mapa_entrega = pedido.mapa_entrega;
+    if (pedido.ubicacion_entrega) payload.ubicacion_entrega = pedido.ubicacion_entrega;
     if (pedido.total_centimos !== undefined && pedido.total_centimos !== null) {
       payload.total_centimos = pedido.total_centimos;
     }
@@ -1896,7 +1921,7 @@ class PedidosModule extends BaseModule {
           + (pedido.cliente_telefono ? ` · Tel: ${pedido.cliente_telefono}` : '')
         : (pedido.notas_generales || null),
       enviado_at: pedido.enviado_cocina_at || new Date().toISOString(),
-      metadata: { tipo: 'tienda', modo_consumo: pedido.modo_consumo || null, direccion_entrega: pedido.direccion_entrega || null, hora_recogida: pedido.hora_recogida || null, cliente_nombre: pedido.cliente_nombre || null, cliente_telefono: pedido.cliente_telefono || null }
+      metadata: { tipo: 'tienda', modo_consumo: pedido.modo_consumo || null, direccion_entrega: pedido.direccion_entrega || null, mapa_entrega: pedido.mapa_entrega || null, hora_recogida: pedido.hora_recogida || null, cliente_nombre: pedido.cliente_nombre || null, cliente_telefono: pedido.cliente_telefono || null }
     }, sourcePayload);
   }
 

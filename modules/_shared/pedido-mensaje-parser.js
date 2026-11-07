@@ -13,6 +13,8 @@
  * quien cobra es el servidor, re-tasando contra la carta viva.
  */
 
+const { normalizarUbicacion } = require('./ubicacion-entrega');
+
 const FORMATO_PEDIDO_DOC = `
 Formato canonico del mensaje que la PWA tienda genera (WhatsApp y Telegram):
 
@@ -67,6 +69,10 @@ function _decodificarEstructura(text) {
     const direccion_entrega = (modo_consumo === 'domicilio' && typeof payload.direccion_entrega === 'string' && payload.direccion_entrega.trim())
       ? payload.direccion_entrega.trim().replace(/\s+/g, ' ').slice(0, 240)
       : null;
+    // PUNTO EXACTO del cliente (botón "Mi ubicación" de la PWA). Opcional: sin
+    // permiso del móvil el pedido sale igual con la dirección escrita. Solo cuenta
+    // en 'domicilio' — un pin en un pedido de recogida no lleva a ninguna parte.
+    const ubicacion_entrega = (modo_consumo === 'domicilio') ? normalizarUbicacion(payload.ubicacion) : null;
     const hora_recogida = (modo_consumo === 'recoger' && typeof payload.hora_recogida === 'string' && payload.hora_recogida.trim())
       ? payload.hora_recogida.trim().slice(0, 20)
       : null;
@@ -74,7 +80,7 @@ function _decodificarEstructura(text) {
     // por la pasarela). Autoritativo por venir en el #P1 (no en el texto editable). Opcional:
     // sin él queda null → el consumidor decide (por defecto 'efectivo', el comportamiento previo).
     const metodo_pago = ['efectivo', 'tarjeta'].includes(payload.metodo_pago) ? payload.metodo_pago : null;
-    return { items: payload.items, modo_consumo, direccion_entrega, hora_recogida, metodo_pago };
+    return { items: payload.items, modo_consumo, direccion_entrega, ubicacion_entrega, hora_recogida, metodo_pago };
   } catch (_) {
     return null;   // payload corrupto → el bot cae al texto legacy o pide reenviar
   }
@@ -185,6 +191,7 @@ function parsearPedido(textoBruto) {
     // + hora pactada, leídos del #P1.
     modo_consumo: estructura?.modo_consumo || null,
     direccion_entrega: estructura?.direccion_entrega || null,
+    ubicacion_entrega: estructura?.ubicacion_entrega || null,
     hora_recogida: estructura?.hora_recogida || null,
     // MÉTODO DE PAGO elegido en la PWA (efectivo | tarjeta), leído del #P1. null si la PWA no lo puso.
     metodo_pago: estructura?.metodo_pago || null,

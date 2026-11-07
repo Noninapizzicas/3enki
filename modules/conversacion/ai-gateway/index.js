@@ -26,6 +26,7 @@ const GeminiProvider    = require('./providers/gemini-provider');
 const OllamaProvider    = require('./providers/ollama-provider');
 const ClaudeCliProvider = require('./providers/claude-cli-provider');
 const KimiProvider      = require('./providers/kimi-provider');
+const NousProvider      = require('./providers/nous-provider');
 
 const BaseModule = require('../../_shared/base-module');
 const Sintonizador = require('../../_shared/sintonizador');
@@ -309,7 +310,8 @@ class AiGatewayModule extends BaseModule {
       gemini: GeminiProvider,
       ollama: OllamaProvider,
       'claude-cli': ClaudeCliProvider,
-      kimi: KimiProvider
+      kimi: KimiProvider,
+      nous: NousProvider
     };
     const credentialResolver = (provider, projectId) => this._resolveCredential(provider, projectId);
 
@@ -356,6 +358,14 @@ class AiGatewayModule extends BaseModule {
   // ============================================================
 
   async _resolveCredential(provider, projectId) {
+    // Nous NO es una key estática: es una credencial ROTATIVA (access_token de
+    // 1 h + refresh que rota). Se resuelve por credential.rotate.resolve.request,
+    // que devuelve el access vigente y refresca si expiró. Si expiró sin refresh
+    // o está revocada, credential-manager devuelve error → el provider no está
+    // disponible (nunca se reintenta a ciegas).
+    if (String(provider).toUpperCase() === 'NOUS') {
+      return this._resolveRotacion(projectId);
+    }
     const cached = this.credentialCache.get(provider);
     if (cached && cached.projectId === projectId && Date.now() - cached.resolvedAt < 300000) {
       return cached.apiKey;
@@ -371,15 +381,41 @@ class AiGatewayModule extends BaseModule {
     });
   }
 
+  /**
+   * Resuelve la credencial ROTATIVA de Nous (credential.rotate.resolve.request).
+   * Devuelve el access_token vigente, o lanza si la rotación no existe/está
+   * vencida/revocada — en ese caso el provider queda no disponible.
+   */
+  async _resolveRotacion(projectId) {
+    const cached = this.credentialCache.get('NOUS');
+    if (cached && cached.projectId === projectId && Date.now() - cached.resolvedAt < 60000) {
+      return cached.apiKey;
+    }
+    const request_id = crypto.randomUUID();
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.pendingCredentials.delete(request_id);
+        reject(new Error('credential rotate resolve timeout: NOUS'));
+      }, 5000);
+      this.pendingCredentials.set(request_id, { resolve, reject, timeout, provider: 'NOUS', projectId });
+      this.eventBus.publish('credential.rotate.resolve.request', {
+        request_id, provider: 'NOUS', level: 'GLOBAL', force: false
+      });
+    });
+  }
+
   onCredentialResponse(event) {
-    const { request_id, api_key, error } = event.data || event;
+    const d = event.data || event;
+    const { request_id, api_key, error } = d;
     const pending = this.pendingCredentials.get(request_id);
     if (!pending) return;
     clearTimeout(pending.timeout);
     this.pendingCredentials.delete(request_id);
-    if (error || !api_key) return pending.reject(new Error(error || 'no api key'));
-    this.credentialCache.set(pending.provider, { apiKey: api_key, resolvedAt: Date.now(), projectId: pending.projectId });
-    pending.resolve(api_key);
+    // La rotación devuelve { data: { token } }; la credencial estática { api_key }.
+    const valor = api_key || d.data?.token || null;
+    if (error || d.error || !valor) return pending.reject(new Error(error || d.error?.message || 'no api key'));
+    this.credentialCache.set(pending.provider, { apiKey: valor, resolvedAt: Date.now(), projectId: pending.projectId });
+    pending.resolve(valor);
   }
 
   onCredentialSaved(event) {

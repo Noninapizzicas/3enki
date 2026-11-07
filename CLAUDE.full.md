@@ -2285,13 +2285,16 @@ CLASE ComanderoModule HEREDA BaseModule IMPLEMENTA ComanderoContract {
       PERSISTE
       RETORNA {status: 200, data: {item, pedido}}
 
-    async handleEnviarCocina(data: {cuenta_id, project_id?, pedido_id?}): Promise<Response>
+    async handleEnviarCocina(data: {cuenta_id, project_id?, pedido_id?, notas_generales?}): Promise<Response>
       OBTIENE pedido SI items == 0: 409 CONFLICT_STATE
       MARCA items.enviado = true + item.enviado_at = now()
       // UN PEDIDO, UN ID: si el origen (tienda/WhatsApp) ya creó su pedido, su id viaja
       // aquí y ES el pedido. Solo el comandero manual acuña `ped_<ts>_<rand>` (verificado 2026-10-24).
       GENERA pedido_id = data.pedido_id || ped_<ts>_<rand>
-      PUBLICA comandero.enviar_cocina {pedido_id, project_id, items, total, notas}
+      // NOTAS GENERALES por PARÁMETRO: el destino de una entrega a domicilio no es nota de
+      // línea ni vive en el buffer — lo trae el canal y se imprime en el ticket de cocina.
+      PUBLICA comandero.enviar_cocina {pedido_id, project_id, items, total,
+                                       notas_generales: data.notas_generales || pedido.notas}
       // project_id viaja explícito: sin él el evento cae a DEFAULT_PROJECT_ID ('default')
       PERSISTE
       RETORNA {status: 200, data: {pedido_id, items_enviados}}
@@ -5246,6 +5249,13 @@ CLASE Cobro {
 
 ### PEDIDOS MANAGER
 
+> v3.1.0 (6-nov-2026) — LA PUERTA del modo «a domicilio»: `handleCreatePedidoTienda` acepta
+> `direccion_entrega` y `cliente_telefono` y los EXIGE cuando el modo es 'domicilio' (400 en la
+> puerta: sin destino ni teléfono no hay reparto). El modo se canoniza a 'llevar' en cuentas, así
+> que el pedido nace ticket que se cierra al cobrar; el destino va como nota general al comandero
+> y sale impreso en el ticket de cocina con 🛵. El transporte (tienda-api, parser del #P1,
+> pedido-telegram, whatsapp-bot) solo valida FORMA y transporta; quién manda es esta puerta.
+
 ```
 INTERFAZ PedidosContract {
   createPedido(cuenta_id: String, productos: Array): Promise<Pedido>
@@ -5960,6 +5970,13 @@ CLASE EstudioViabilidad {
 > desde los ingredientes que cada producto YA declara — si la carta cambia, cambian solas.
 > Misma regla de plantilla HORNEADA: tras desplegar hay que REPUBLICAR o la ficha servida
 > conserva el orden viejo.
+> v2.26.0 (6-nov-2026) — MODOS DE CONSUMO los manda el DATO: la carta pinta solo los modos que el
+> negocio ofrece (config del canal) y AÑADE «A domicilio» como modo propio, con dirección y teléfono
+> EXIGIDOS en la puerta del carrito antes de enviar. No es un canal nuevo: el pedido nace como
+> ticket que se cierra al cobrar (cuentas lo canoniza a 'llevar'), así que no deja cuenta huérfana.
+> El destino viaja en el #P1 (`direccion_entrega`) y no en el texto editable. Si el negocio ofrece
+> recoger+domicilio, mesa y llevar dejan de pintarse — un modo que el local no tiene es una cuenta
+> que nadie cierra.
 
 ```
 INTERFAZ CartaDigitalContract {                 // ui_handlers (RPC del bus / frontend)
@@ -16038,7 +16055,8 @@ El mensaje wa.me que arma la PWA es el FORMATO CANÓNICO + una línea autoritati
   Total: <X,XX> EUR                                  ← HUMANO (ignorado)
   Nombre: <nombre del cliente>
   #P1 <base64url(JSON)>                              ← AUTORITATIVO: { v:1, items:[ItemEstructurado],
-                                                        modo_consumo?, hora_recogida?, fecha_deseada?,
+                                                        modo_consumo?, direccion_entrega?,
+                                                        hora_recogida?, fecha_deseada?,
                                                         metodo_pago? }
 
 ItemEstructurado (por IDS, nunca por precio):
@@ -16061,6 +16079,13 @@ REGLA  modo_consumo es el MODO DEL CLIENTE, no el CANAL de la cuenta. 'recoger' 
        tiene dueño y nadie lo cierra nunca (ni mesa ni ticket → la venta no llega al libro de
        ventas). El modo original se conserva en metadata.modo_consumo y es lo que pinta el
        comandero. Un pedido de tienda se cierra AL COBRAR (metadata.cerrar_al_cobrar:true).
+REGLA  modo_consumo 'domicilio' (6-nov-2026) = entrega a domicilio. Viaja en el #P1 igual que
+       el resto (el texto editable no manda) y SOLO en ese modo se acepta direccion_entrega,
+       que el parser recorta y limita a 240 chars. El modo se canoniza a 'llevar' en cuentas
+       (misma razón que 'recoger': ticket que se cierra al cobrar, no cuenta huérfana) y
+       pedidos exige dirección (≥6) y teléfono (≥9 dígitos) en su puerta — el transporte no
+       decide obligatoriedad, solo forma. El destino llega al comandero como notas_generales y
+       sale impreso en el ticket de cocina.
 ```
 
 ## El tasador — re-tasado server-side (función PURA, seguridad)

@@ -9,6 +9,7 @@ const { parsearPedido } = require('./services/pedido-parser');
 const LectorServicio = require('../_shared/lector-servicio');
 const { MetaCloudClient, parseWebhookEvent } = require('./services/meta-cloud-client');
 const { tasarPedido } = require('../_shared/pedido-tasador');
+const { enlaceMapa } = require('../_shared/ubicacion-entrega');
 
 const ENV_TOKEN_PATTERN = /^META_WHATSAPP_API_KEY_PROJECT_(.+)$/;
 const ENV_VERIFY_PATTERN = /^META_WHATSAPP_VERIFY_TOKEN_API_KEY_PROJECT_(.+)$/;
@@ -1164,6 +1165,11 @@ class WhatsappBotModule extends BaseModule {
       items,
       total_centimos: parsed.total_centimos,
       cliente_nombre: parsed.cliente_nombre,
+      // Destino vivo del reparto: la confirmación al cliente se compone con él
+      // (sin esto el bot le dice «pasa a recoger» a quien pidió a domicilio).
+      modo_consumo: parsed.modo_consumo || null,
+      direccion_entrega: parsed.direccion_entrega || null,
+      ubicacion_entrega: parsed.ubicacion_entrega || null,
       metodo_pago: parsed.metodo_pago || 'efectivo',
       mayor_edad_confirmado: parsed.mayor_edad_confirmado,
       timeoutHandle,
@@ -1184,6 +1190,7 @@ class WhatsappBotModule extends BaseModule {
       cliente_nombre: parsed.cliente_nombre,
       modo_consumo: parsed.modo_consumo || null,
       direccion_entrega: parsed.direccion_entrega || null,
+      ubicacion: parsed.ubicacion_entrega || null,
       hora_recogida: parsed.hora_recogida || null,
       metodo_pago: parsed.metodo_pago || 'efectivo',
       mayor_edad_confirmado: parsed.mayor_edad_confirmado
@@ -1251,6 +1258,9 @@ class WhatsappBotModule extends BaseModule {
     this.pendingPedidos.set(request_id, {
       project_slug, from: msg.from, message_id: msg.message_id,
       items, total_centimos, cliente_nombre: parsed.cliente_nombre,
+      modo_consumo: parsed.modo_consumo || null,
+      direccion_entrega: parsed.direccion_entrega || null,
+      ubicacion_entrega: parsed.ubicacion_entrega || null,
       metodo_pago: parsed.metodo_pago || 'efectivo',
       mayor_edad_confirmado: parsed.mayor_edad_confirmado, timeoutHandle, created_at: Date.now()
     });
@@ -1261,6 +1271,7 @@ class WhatsappBotModule extends BaseModule {
       cliente_telefono: msg.from, cliente_nombre: parsed.cliente_nombre,
       modo_consumo: parsed.modo_consumo || null,
       direccion_entrega: parsed.direccion_entrega || null,
+      ubicacion: parsed.ubicacion_entrega || null,
       hora_recogida: parsed.hora_recogida || null,
       metodo_pago: parsed.metodo_pago || 'efectivo',
       mayor_edad_confirmado: parsed.mayor_edad_confirmado
@@ -1396,13 +1407,27 @@ class WhatsappBotModule extends BaseModule {
     const meta = this.projectsByMeta.get(pending.project_slug);
     const display = meta?.display_number ? `\nNumero del negocio: ${meta.display_number}` : '';
     const aNombre = pending.cliente_nombre ? ` a nombre de ${pending.cliente_nombre}` : '';
-    // DÓNDE recoger: la dirección y el mapa viven en el config del proyecto (bloque servicio),
-    // no en el código del bot. Si no hay dirección configurada, el mensaje no la inventa.
-    const recogida = await this._lineaRecogida(pending.project_slug);
-    const msg = (pending.metodo_pago === 'tarjeta')
-      ? `Pedido recibido${aNombre}. Te envío ahora el enlace para pagar con tarjeta.${recogida}${display}`
-      : `Pedido recibido${aNombre}. Pasa a recoger y paga al recoger.${recogida}${display}`;
+    // DÓNDE va el pedido: si el cliente pidió a domicilio, la línea es la SUYA (y su
+    // punto en el mapa), no la de recogida. Decirle «pasa a recoger» a quien pidió
+    // entrega es mandarlo a la tienda por un pedido que sale hacia su casa.
+    const esDomicilio = pending.modo_consumo === 'domicilio' || !!pending.direccion_entrega;
+    const destino = esDomicilio
+      ? this._lineaEntrega(pending)
+      : await this._lineaRecogida(pending.project_slug);
+    const pago = (pending.metodo_pago === 'tarjeta')
+      ? 'Te envío ahora el enlace para pagar con tarjeta.'
+      : (esDomicilio ? 'Pagas al recibir.' : 'Pasa a recoger y paga al recoger.');
+    const msg = `Pedido recibido${aNombre}. ${pago}${destino}${display}`;
     await this._enviarMensajeSeguro(pending.project_slug, pending.from, msg);
+  }
+
+  // Línea de ENTREGA para el cliente: a dónde se lo llevamos y, si compartió su punto,
+  // el enlace para que compruebe que el pin es el suyo ANTES de que salga el reparto.
+  _lineaEntrega(pending) {
+    const dir = typeof pending.direccion_entrega === 'string' ? pending.direccion_entrega.trim() : '';
+    if (!dir) return '';
+    const mapa = enlaceMapa({ direccion: dir, ubicacion: pending.ubicacion_entrega });
+    return `\nTe lo llevamos a ${dir}.` + (mapa ? `\nComprueba el punto: ${mapa}` : '');
   }
 
   // Línea de recogida para el cliente: dirección + link del mapa si están configurados.
@@ -1435,6 +1460,13 @@ class WhatsappBotModule extends BaseModule {
     ];
     if (pending.mayor_edad_confirmado === true) {
       lines.push('Mayor 18: confirmado en PWA');
+    }
+    // REPARTO: quien sale a la calle necesita el destino como línea propia y el enlace
+    // que abre el punto exacto en su móvil. Sin esto tiene que copiar la dirección a mano.
+    if (pending.direccion_entrega) {
+      lines.push(`🛵 Entrega: ${pending.direccion_entrega}`);
+      const mapaStaff = enlaceMapa({ direccion: pending.direccion_entrega, ubicacion: pending.ubicacion_entrega });
+      if (mapaStaff) lines.push(`Mapa: ${mapaStaff}`);
     }
     lines.push('', itemsTxt, '', `Total: ${totalEur} EUR`, '', `Expira: ${pedido.expira_at}`);
     const text = lines.join('\n');

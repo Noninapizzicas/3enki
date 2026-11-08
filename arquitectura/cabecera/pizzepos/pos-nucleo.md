@@ -16,7 +16,7 @@ fuentes:
   - modules/pizzepos/tarifas/**
   - modules/pizzepos/persistencia-comandero/**
   - modules/pizzepos/impresion/**
-verificado: 2026-11-06 (entrega a domicilio: el modo 'domicilio' existe como MODO, no como canal — cuentas lo canoniza a 'llevar' para que nazca ticket que se cierra al cobrar y no cuenta huérfana; pedidos exige direccion_entrega y cliente_telefono en la puerta (400 sin ellos) y el comandero acepta notas_generales por parámetro para que el destino se imprima en el ticket de cocina; además: pedidos: puerta de la confianza + ficha de cliente por JID; confirmacion-pedido: pide el sí al cliente nuevo y lee su respuesta sin tocar el lector compartido del puente)
+verificado: 2026-11-07 (ubicación del cliente: pin opcional en el #P1, mapa del reparto al staff) · 2026-11-06 (entrega a domicilio: el modo 'domicilio' existe como MODO, no como canal — cuentas lo canoniza a 'llevar' para que nazca ticket que se cierra al cobrar y no cuenta huérfana; pedidos exige direccion_entrega y cliente_telefono en la puerta (400 sin ellos) y el comandero acepta notas_generales por parámetro para que el destino se imprima en el ticket de cocina; además: pedidos: puerta de la confianza + ficha de cliente por JID; confirmacion-pedido: pide el sí al cliente nuevo y lee su respuesta sin tocar el lector compartido del puente)
 ---
 
 # PizzePOS Módulos — Subsistema de Punto de Venta (v3.2.0)
@@ -812,16 +812,20 @@ CLASE PedidosModule HEREDA BaseModule {
       PUBLICA pedido.creado
       RETORNA {status: 201, data: pedido}
 
-    async handleCreatePedidoTienda(data: {project_slug, items, cliente_nombre, modo_consumo, direccion_entrega?, cliente_telefono?, hora_recogida, metodo_pago}): Promise<Response>
+    async handleCreatePedidoTienda(data: {project_slug, items, cliente_nombre, modo_consumo, direccion_entrega?, ubicacion?, cliente_telefono?, hora_recogida, metodo_pago}): Promise<Response>
       NORMALIZA metodo_pago EN ['efectivo','tarjeta']  // opcional: sin el → 'efectivo' (comportamiento previo)
       metodo_pago SOLO REGISTRA la preferencia del cliente (lo que pidio en la PWA por el #P1)
       QUIEN MANDA SOBRE EL COBRO es la VERDAD del pago (pedido.pago.estado), NO esta preferencia
       MODOS_CONSUMO = ['mesa','recoger','llevar','domicilio']   // elige el negocio (dato), no el código
       SI modo == 'domicilio' → EXIGE direccion_entrega (>=6 chars) Y cliente_telefono (>=9 digitos)
         // sin destino ni teléfono no hay reparto: 400 en la PUERTA, no una cuenta sin rumbo
+      ubicacion ({lat,lng}) es OPCIONAL: normaliza (rangos, fuera el (0,0) = GPS sin fix) y si es
+        basura se DESCARTA sin tumbar el pedido — la dirección escrita sigue valiendo (7-nov-2026)
+      mapa_entrega = enlaceMapa({direccion, ubicacion})  // punto si lo hay, dirección si no; null sin nada
       CREA pedido tienda (ancla = cliente_nombre) → _crearCuentaTienda → comandero.enviar_cocina
         // en 'domicilio' el ticket de cocina lleva "🛵 ENTREGA A DOMICILIO: <dirección> · Tel"
-      PUBLICA pedido.creado (lleva metodo_pago y direccion_entrega)
+        // el ENLACE no va al papel: va al evento (staff lo abre desde el móvil)
+      PUBLICA pedido.creado (lleva metodo_pago, modo_consumo, direccion_entrega, mapa_entrega, ubicacion_entrega)
 
     async onPagoConfirmado(event: {pedido_id, project_id, monto_centimos, project_slug?, cliente_nombre?, cliente_telefono?}): Void
       SI pedido NO esta EN memoria                              // el pago es ASINCRONO y el pedido de

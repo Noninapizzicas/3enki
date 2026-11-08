@@ -16,7 +16,7 @@ fuentes:
   - modules/_shared/lector-servicio.js
   - frontend/src/lib/components/comandero/ServicioToggle.svelte
   - tests/unit/pizzepos__servicio.test.js
-verificado: 2026-11-06 (Entrega a domicilio: `modo_consumo: 'domicilio'` viaja en el #P1 con `direccion_entrega`; se canoniza a 'llevar' en cuentas (ticket que se cierra al cobrar, no cuenta huérfana), pedidos exige dirección y teléfono en su puerta y el destino se imprime en el ticket de cocina. Sigue vigente: 2026-11-05 (Aviso de recogida: `cocina.pedido_listo` → WhatsApp al cliente por el MISMO puente que trajo el pedido, con su código de turno y su nombre; `cliente_jid` y `canal_cuenta` viajan hasta la cuenta) · 2026-11-04 (Canal Telegram: la carta comparte el pedido por la bandeja del móvil —navigator.share con el mismo mensaje #P1 de WhatsApp— y pedido-telegram lo parsea, re-tasa y crea el pedido sin borrador ni código; el camino del código corto queda como fallback. Guardas nuevas: sin #P1 no hay pedido, slug y bot tienen que ser del mismo proyecto, anti-duplicado por nonce. Desde 6-nov el #P1 sí admite `direccion_entrega` (ver arriba); el tasador y la puerta de WhatsApp siguen igual)
+verificado: 2026-11-07 (Republicación: guardar el config del canal rehornea el bundle — v2.26.0 del módulo carta-digital; hasta hoy el evento cartadigital.config.actualizada nacía sin oyente y la carta pública se quedaba con la foto vieja) · 2026-11-06 (Entrega a domicilio: `modo_consumo: 'domicilio'` viaja en el #P1 con `direccion_entrega`; se canoniza a 'llevar' en cuentas (ticket que se cierra al cobrar, no cuenta huérfana), pedidos exige dirección y teléfono en su puerta y el destino se imprime en el ticket de cocina. Sigue vigente: 2026-11-05 (Aviso de recogida: `cocina.pedido_listo` → WhatsApp al cliente por el MISMO puente que trajo el pedido, con su código de turno y su nombre; `cliente_jid` y `canal_cuenta` viajan hasta la cuenta) · 2026-11-04 (Canal Telegram: la carta comparte el pedido por la bandeja del móvil —navigator.share con el mismo mensaje #P1 de WhatsApp— y pedido-telegram lo parsea, re-tasa y crea el pedido sin borrador ni código; el camino del código corto queda como fallback. Guardas nuevas: sin #P1 no hay pedido, slug y bot tienen que ser del mismo proyecto, anti-duplicado por nonce. Desde 6-nov el #P1 sí admite `direccion_entrega` (ver arriba); el tasador y la puerta de WhatsApp siguen igual)
 ---
 
 # SUBSISTEMA AUTOSERVICIO — Pedido del cliente por WhatsApp (PWA → bot → cocina)
@@ -307,6 +307,14 @@ sendTemplate (Meta plantillas · salientes >24h) {
 //   pedido', guardada ANTES de vaciar (saveLastOrder) → vaciar no pierde nada.
 //   Antes: sendWhatsApp dejaba el carrito lleno (y volvía al recargar) y el camino online
 //   repintaba 'carrito vacío' encima de la confirmación (nunca se veía).
+// REPUBLICACIÓN DEL BUNDLE (módulo v2.26.0): el HTML de la PWA es ESTÁTICO y lleva HORNEADOS los
+//   botones de modo (`modos_consumo`), la moneda, el teléfono, el mensaje de pedido, el pago online
+//   y el bot de Telegram. Guardar el config del canal (update_config → opciones_visualizacion)
+//   rehornea solo: el módulo suscribe su propio `cartadigital.config.actualizada` (v2.26.0 — antes
+//   lo emitía y NINGÚN módulo lo escuchaba, así que la web se quedaba con la foto vieja mientras el
+//   dato ya era nuevo: visto en Rapitvapers, modos recoger+domicilio guardados el 6-nov y la carta
+//   pública del 5-nov pintando Mesa). Mismo debounce 4s, mismo guard de DISCO (solo rehornea si el
+//   proyecto YA publicó) y mismo interruptor `auto_publicar === false`.
 // PODA previa de carta-digital:
 //   v2.4.0 — fuera ofertas/reseñas/track (la proyección no los daba: UI viva alimentada por vacío).
 //   v2.5.0 — fuera el cerebro FANTASMA del chat (default ai_chat_path '/modules/ai-gateway/chat',

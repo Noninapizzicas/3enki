@@ -1343,6 +1343,7 @@ CLASE CartaDigitalModule EXTIENDE BaseModule {  // PROYECTOR, no manager-con-sto
     onLoad(core):
       SUSCRIBE tarifas.config.actualizada · carta.{actualizada,editada,borrada}
               · contenido.actualizado · marketing.perfil.actualizado
+              · cartadigital.config.actualizada   // v2.26: TODO lo que se hornea en el bundle
               · project.{activated,deactivated}
               · cartadigital.{validar,guardar_diseno,publicar}.request
   }

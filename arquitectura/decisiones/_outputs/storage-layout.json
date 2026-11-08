@@ -1,13 +1,63 @@
 {
   "_meta": {
     "schema_version": "1.0.0",
-    "generated_at": "2026-06-02T21:55:26.604Z",
+    "generated_at": "2026-11-07T01:00:49.578Z",
     "contract_version": "1.0.0"
   },
   "modulos": [
     {
       "name": "_template",
       "ubicacion": "modules/_template",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "adaptador-avisos",
+      "ubicacion": "modules/adaptador-avisos",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "adaptador-confirmacion",
+      "ubicacion": "modules/adaptador-confirmacion",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "adaptador-impresora",
+      "ubicacion": "modules/adaptador-impresora",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "adaptador-laser",
+      "ubicacion": "modules/adaptador-laser",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "adaptador-slicing",
+      "ubicacion": "modules/adaptador-slicing",
       "vertical": null,
       "persiste": false,
       "evidence_file": null,
@@ -26,9 +76,189 @@
       "declarado_completo": null
     },
     {
-      "name": "bienvenida-tienda",
-      "ubicacion": "modules/bienvenida-tienda",
+      "name": "agenda-operacion",
+      "ubicacion": "modules/agenda-operacion",
       "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "bitacora",
+      "ubicacion": "modules/agentes/bitacora",
+      "vertical": "agentes",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "registro",
+      "ubicacion": "modules/agentes/registro",
+      "vertical": "agentes",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "apis-publicas",
+      "ubicacion": "modules/apis-publicas",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": "system",
+      "data_path": "apis-publicas",
+      "declarado_completo": null
+    },
+    {
+      "name": "banco",
+      "ubicacion": "modules/banco",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": "project",
+      "data_path": "banco",
+      "declarado_completo": null
+    },
+    {
+      "name": "banco-ideas",
+      "ubicacion": "modules/banco-ideas",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "bibliotecario",
+      "ubicacion": "modules/bibliotecario",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": "system",
+      "data_path": "bibliotecario",
+      "declarado_completo": null
+    },
+    {
+      "name": "config-mercado",
+      "ubicacion": "modules/bocaos/config-mercado",
+      "vertical": "bocaos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "contrato-puntual",
+      "ubicacion": "modules/bocaos/contrato-puntual",
+      "vertical": "bocaos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "enlace",
+      "ubicacion": "modules/bocaos/enlace",
+      "vertical": "bocaos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "estado-parte",
+      "ubicacion": "modules/bocaos/estado-parte",
+      "vertical": "bocaos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "foto-mercado",
+      "ubicacion": "modules/bocaos/foto-mercado",
+      "vertical": "bocaos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "hecho-listo",
+      "ubicacion": "modules/bocaos/hecho-listo",
+      "vertical": "bocaos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "hechos-reparto",
+      "ubicacion": "modules/bocaos/hechos-reparto",
+      "vertical": "bocaos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "pedido",
+      "ubicacion": "modules/bocaos/pedido",
+      "vertical": "bocaos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "propuesta",
+      "ubicacion": "modules/bocaos/propuesta",
+      "vertical": "bocaos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "ruta-viva",
+      "ubicacion": "modules/bocaos/ruta-viva",
+      "vertical": "bocaos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "tienda-captura",
+      "ubicacion": "modules/bocaos/tienda-captura",
+      "vertical": "bocaos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "tienda-hora-listo",
+      "ubicacion": "modules/bocaos/tienda-hora-listo",
+      "vertical": "bocaos",
       "persiste": false,
       "evidence_file": null,
       "scope": null,
@@ -43,6 +273,56 @@
       "evidence_file": null,
       "scope": null,
       "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "buscador-repositorios",
+      "ubicacion": "modules/buscador-repositorios",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "calendario",
+      "ubicacion": "modules/calendario",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "cantera-semantica",
+      "ubicacion": "modules/cantera-semantica",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": "system",
+      "data_path": "cantera-semantica",
+      "declarado_completo": null
+    },
+    {
+      "name": "cartero",
+      "ubicacion": "modules/cartero",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "catalogo",
+      "ubicacion": "modules/catalogo",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": "project",
+      "data_path": "catalogo",
       "declarado_completo": null
     },
     {
@@ -66,6 +346,26 @@
       "declarado_completo": null
     },
     {
+      "name": "chat-p2p",
+      "ubicacion": "modules/chat-p2p",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "ciclo-impresion",
+      "ubicacion": "modules/ciclo-impresion",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": "runtime",
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
       "name": "code-executor",
       "ubicacion": "modules/code-executor",
       "vertical": null,
@@ -76,13 +376,13 @@
       "declarado_completo": null
     },
     {
-      "name": "comandero-cliente-builder",
-      "ubicacion": "modules/comandero-cliente-builder",
+      "name": "cola",
+      "ubicacion": "modules/cola",
       "vertical": null,
       "persiste": false,
       "evidence_file": null,
       "scope": "project",
-      "data_path": "comandero-cliente-builder",
+      "data_path": "cola",
       "declarado_completo": null
     },
     {
@@ -96,9 +396,9 @@
       "declarado_completo": null
     },
     {
-      "name": "agent-observer",
-      "ubicacion": "modules/conversacion/agent-observer",
-      "vertical": "conversacion",
+      "name": "confluencia",
+      "ubicacion": "modules/confluencia",
+      "vertical": null,
       "persiste": false,
       "evidence_file": null,
       "scope": null,
@@ -106,8 +406,1278 @@
       "declarado_completo": null
     },
     {
-      "name": "ai-agent-framework",
-      "ubicacion": "modules/conversacion/ai-agent-framework",
+      "name": "confluencia-h3",
+      "ubicacion": "modules/confluencia-h3",
+      "vertical": null,
+      "persiste": true,
+      "evidence_file": "modules/confluencia-h3/index.js",
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": false
+    },
+    {
+      "name": "conserje",
+      "ubicacion": "modules/conserje",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "consumo",
+      "ubicacion": "modules/consumo",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "activacion-vertical",
+      "ubicacion": "modules/contabilidad-analitica/activacion-vertical",
+      "vertical": "contabilidad-analitica",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "aislamiento-negocio",
+      "ubicacion": "modules/contabilidad-analitica/aislamiento-negocio",
+      "vertical": "contabilidad-analitica",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "ajuste-inventario",
+      "ubicacion": "modules/contabilidad-analitica/ajuste-inventario",
+      "vertical": "contabilidad-analitica",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "alta-activo",
+      "ubicacion": "modules/contabilidad-analitica/alta-activo",
+      "vertical": "contabilidad-analitica",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "aviso-al-negocio",
+      "ubicacion": "modules/contabilidad-analitica/aviso-al-negocio",
+      "vertical": "contabilidad-analitica",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "baja-activo",
+      "ubicacion": "modules/contabilidad-analitica/baja-activo",
+      "vertical": "contabilidad-analitica",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "cola-declaraciones-criterio",
+      "ubicacion": "modules/contabilidad-analitica/cola-declaraciones-criterio",
+      "vertical": "contabilidad-analitica",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "comparador-periodos",
+      "ubicacion": "modules/contabilidad-analitica/comparador-periodos",
+      "vertical": "contabilidad-analitica",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "consolidacion",
+      "ubicacion": "modules/contabilidad-analitica/consolidacion",
+      "vertical": "contabilidad-analitica",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "consulta-cuentas-bajo-demanda",
+      "ubicacion": "modules/contabilidad-analitica/consulta-cuentas-bajo-demanda",
+      "vertical": "contabilidad-analitica",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "coste-indirecto",
+      "ubicacion": "modules/contabilidad-analitica/coste-indirecto",
+      "vertical": "contabilidad-analitica",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "cuadro-mando-contable",
+      "ubicacion": "modules/contabilidad-analitica/cuadro-mando-contable",
+      "vertical": "contabilidad-analitica",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "desviacion",
+      "ubicacion": "modules/contabilidad-analitica/desviacion",
+      "vertical": "contabilidad-analitica",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "eliminacion-intercompany",
+      "ubicacion": "modules/contabilidad-analitica/eliminacion-intercompany",
+      "vertical": "contabilidad-analitica",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "etiquetado-analitico",
+      "ubicacion": "modules/contabilidad-analitica/etiquetado-analitico",
+      "vertical": "contabilidad-analitica",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "frontera-ficha-producto",
+      "ubicacion": "modules/contabilidad-analitica/frontera-ficha-producto",
+      "vertical": "contabilidad-analitica",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "informe-accionable",
+      "ubicacion": "modules/contabilidad-analitica/informe-accionable",
+      "vertical": "contabilidad-analitica",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "informe-rico",
+      "ubicacion": "modules/contabilidad-analitica/informe-rico",
+      "vertical": "contabilidad-analitica",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "marca-borrador-validado",
+      "ubicacion": "modules/contabilidad-analitica/marca-borrador-validado",
+      "vertical": "contabilidad-analitica",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "marca-sociedad",
+      "ubicacion": "modules/contabilidad-analitica/marca-sociedad",
+      "vertical": "contabilidad-analitica",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "margen-analitico",
+      "ubicacion": "modules/contabilidad-analitica/margen-analitico",
+      "vertical": "contabilidad-analitica",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "motor-avisos",
+      "ubicacion": "modules/contabilidad-analitica/motor-avisos",
+      "vertical": "contabilidad-analitica",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "narrador-estados",
+      "ubicacion": "modules/contabilidad-analitica/narrador-estados",
+      "vertical": "contabilidad-analitica",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "onboarding-negocio",
+      "ubicacion": "modules/contabilidad-analitica/onboarding-negocio",
+      "vertical": "contabilidad-analitica",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "plan-amortizacion",
+      "ubicacion": "modules/contabilidad-analitica/plan-amortizacion",
+      "vertical": "contabilidad-analitica",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "presupuesto",
+      "ubicacion": "modules/contabilidad-analitica/presupuesto",
+      "vertical": "contabilidad-analitica",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "puente-lenguaje-dueno",
+      "ubicacion": "modules/contabilidad-analitica/puente-lenguaje-dueno",
+      "vertical": "contabilidad-analitica",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "sello-cobertura",
+      "ubicacion": "modules/contabilidad-analitica/sello-cobertura",
+      "vertical": "contabilidad-analitica",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "tablero-margen-dimension",
+      "ubicacion": "modules/contabilidad-analitica/tablero-margen-dimension",
+      "vertical": "contabilidad-analitica",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "valor-neto-contable",
+      "ubicacion": "modules/contabilidad-analitica/valor-neto-contable",
+      "vertical": "contabilidad-analitica",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "valoracion-existencia",
+      "ubicacion": "modules/contabilidad-analitica/valoracion-existencia",
+      "vertical": "contabilidad-analitica",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "variacion-stock-valorada",
+      "ubicacion": "modules/contabilidad-analitica/variacion-stock-valorada",
+      "vertical": "contabilidad-analitica",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "anclaje-cierre-vertical",
+      "ubicacion": "modules/contabilidad-entrada/anclaje-cierre-vertical",
+      "vertical": "contabilidad-entrada",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "antiguedad-de-saldos",
+      "ubicacion": "modules/contabilidad-entrada/antiguedad-de-saldos",
+      "vertical": "contabilidad-entrada",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "aviso-revision",
+      "ubicacion": "modules/contabilidad-entrada/aviso-revision",
+      "vertical": "contabilidad-entrada",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "captura-documento",
+      "ubicacion": "modules/contabilidad-entrada/captura-documento",
+      "vertical": "contabilidad-entrada",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "clasificador-documento",
+      "ubicacion": "modules/contabilidad-entrada/clasificador-documento",
+      "vertical": "contabilidad-entrada",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "completitud-cobertura",
+      "ubicacion": "modules/contabilidad-entrada/completitud-cobertura",
+      "vertical": "contabilidad-entrada",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "contrapartida-asistida",
+      "ubicacion": "modules/contabilidad-entrada/contrapartida-asistida",
+      "vertical": "contabilidad-entrada",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "contrato-hecho-minimo",
+      "ubicacion": "modules/contabilidad-entrada/contrato-hecho-minimo",
+      "vertical": "contabilidad-entrada",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "control-cuadre-documento",
+      "ubicacion": "modules/contabilidad-entrada/control-cuadre-documento",
+      "vertical": "contabilidad-entrada",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "cruce-factura-recepcion",
+      "ubicacion": "modules/contabilidad-entrada/cruce-factura-recepcion",
+      "vertical": "contabilidad-entrada",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "cuenta-proveedor",
+      "ubicacion": "modules/contabilidad-entrada/cuenta-proveedor",
+      "vertical": "contabilidad-entrada",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "declaracion-fuente-faltante",
+      "ubicacion": "modules/contabilidad-entrada/declaracion-fuente-faltante",
+      "vertical": "contabilidad-entrada",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "deduplicacion-hecho",
+      "ubicacion": "modules/contabilidad-entrada/deduplicacion-hecho",
+      "vertical": "contabilidad-entrada",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "desatasco-entrada",
+      "ubicacion": "modules/contabilidad-entrada/desatasco-entrada",
+      "vertical": "contabilidad-entrada",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "emision-factura-venta",
+      "ubicacion": "modules/contabilidad-entrada/emision-factura-venta",
+      "vertical": "contabilidad-entrada",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "encolado-excepcion",
+      "ubicacion": "modules/contabilidad-entrada/encolado-excepcion",
+      "vertical": "contabilidad-entrada",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "estado-cuenta-proveedor",
+      "ubicacion": "modules/contabilidad-entrada/estado-cuenta-proveedor",
+      "vertical": "contabilidad-entrada",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "extraccion-dato",
+      "ubicacion": "modules/contabilidad-entrada/extraccion-dato",
+      "vertical": "contabilidad-entrada",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "extractor-juicio",
+      "ubicacion": "modules/contabilidad-entrada/extractor-juicio",
+      "vertical": "contabilidad-entrada",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "factura-rectificativa",
+      "ubicacion": "modules/contabilidad-entrada/factura-rectificativa",
+      "vertical": "contabilidad-entrada",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "hecho-compra",
+      "ubicacion": "modules/contabilidad-entrada/hecho-compra",
+      "vertical": "contabilidad-entrada",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "hecho-rectificativo",
+      "ubicacion": "modules/contabilidad-entrada/hecho-rectificativo",
+      "vertical": "contabilidad-entrada",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "historial-proceso-contable",
+      "ubicacion": "modules/contabilidad-entrada/historial-proceso-contable",
+      "vertical": "contabilidad-entrada",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "ingesta-documental",
+      "ubicacion": "modules/contabilidad-entrada/ingesta-documental",
+      "vertical": "contabilidad-entrada",
+      "persiste": true,
+      "evidence_file": "modules/contabilidad-entrada/ingesta-documental/index.js",
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": false
+    },
+    {
+      "name": "lector-documento",
+      "ubicacion": "modules/contabilidad-entrada/lector-documento",
+      "vertical": "contabilidad-entrada",
+      "persiste": true,
+      "evidence_file": "modules/contabilidad-entrada/lector-documento/index.js",
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": false
+    },
+    {
+      "name": "lote-admision",
+      "ubicacion": "modules/contabilidad-entrada/lote-admision",
+      "vertical": "contabilidad-entrada",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "maestro-terceros",
+      "ubicacion": "modules/contabilidad-entrada/maestro-terceros",
+      "vertical": "contabilidad-entrada",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "normalizador-hecho",
+      "ubicacion": "modules/contabilidad-entrada/normalizador-hecho",
+      "vertical": "contabilidad-entrada",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "padron-terceros",
+      "ubicacion": "modules/contabilidad-entrada/padron-terceros",
+      "vertical": "contabilidad-entrada",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "panel-proceso-contable",
+      "ubicacion": "modules/contabilidad-entrada/panel-proceso-contable",
+      "vertical": "contabilidad-entrada",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "puerto-cobro-pos",
+      "ubicacion": "modules/contabilidad-entrada/puerto-cobro-pos",
+      "vertical": "contabilidad-entrada",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "puerto-documento",
+      "ubicacion": "modules/contabilidad-entrada/puerto-documento",
+      "vertical": "contabilidad-entrada",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "puerto-documento-digital",
+      "ubicacion": "modules/contabilidad-entrada/puerto-documento-digital",
+      "vertical": "contabilidad-entrada",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "puerto-evento-vertical",
+      "ubicacion": "modules/contabilidad-entrada/puerto-evento-vertical",
+      "vertical": "contabilidad-entrada",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "rappel-pronto-pago",
+      "ubicacion": "modules/contabilidad-entrada/rappel-pronto-pago",
+      "vertical": "contabilidad-entrada",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "regla-contrapartida",
+      "ubicacion": "modules/contabilidad-entrada/regla-contrapartida",
+      "vertical": "contabilidad-entrada",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "tasa-cobertura-entrada",
+      "ubicacion": "modules/contabilidad-entrada/tasa-cobertura-entrada",
+      "vertical": "contabilidad-entrada",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "vencimiento-pago",
+      "ubicacion": "modules/contabilidad-entrada/vencimiento-pago",
+      "vertical": "contabilidad-entrada",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "acceso-nomina",
+      "ubicacion": "modules/contabilidad-fiscal/acceso-nomina",
+      "vertical": "contabilidad-fiscal",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "acuse-presentacion",
+      "ubicacion": "modules/contabilidad-fiscal/acuse-presentacion",
+      "vertical": "contabilidad-fiscal",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "asiento-personal",
+      "ubicacion": "modules/contabilidad-fiscal/asiento-personal",
+      "vertical": "contabilidad-fiscal",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "calendario-fiscal",
+      "ubicacion": "modules/contabilidad-fiscal/calendario-fiscal",
+      "vertical": "contabilidad-fiscal",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "conceptos-extra-nomina",
+      "ubicacion": "modules/contabilidad-fiscal/conceptos-extra-nomina",
+      "vertical": "contabilidad-fiscal",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "estado-presentacion-fiscal",
+      "ubicacion": "modules/contabilidad-fiscal/estado-presentacion-fiscal",
+      "vertical": "contabilidad-fiscal",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "estimacion-is-irpf",
+      "ubicacion": "modules/contabilidad-fiscal/estimacion-is-irpf",
+      "vertical": "contabilidad-fiscal",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "factura-electronica",
+      "ubicacion": "modules/contabilidad-fiscal/factura-electronica",
+      "vertical": "contabilidad-fiscal",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "generador-modelo",
+      "ubicacion": "modules/contabilidad-fiscal/generador-modelo",
+      "vertical": "contabilidad-fiscal",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "lineas-nomina",
+      "ubicacion": "modules/contabilidad-fiscal/lineas-nomina",
+      "vertical": "contabilidad-fiscal",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "liquidacion-baja-empleado",
+      "ubicacion": "modules/contabilidad-fiscal/liquidacion-baja-empleado",
+      "vertical": "contabilidad-fiscal",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "liquidacion-iva",
+      "ubicacion": "modules/contabilidad-fiscal/liquidacion-iva",
+      "vertical": "contabilidad-fiscal",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "modelo-303",
+      "ubicacion": "modules/contabilidad-fiscal/modelo-303",
+      "vertical": "contabilidad-fiscal",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "modelo-390",
+      "ubicacion": "modules/contabilidad-fiscal/modelo-390",
+      "vertical": "contabilidad-fiscal",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "obligacion-seguridad-social",
+      "ubicacion": "modules/contabilidad-fiscal/obligacion-seguridad-social",
+      "vertical": "contabilidad-fiscal",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "pagos-a-cuenta-empleado",
+      "ubicacion": "modules/contabilidad-fiscal/pagos-a-cuenta-empleado",
+      "vertical": "contabilidad-fiscal",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "perfil-administrativo",
+      "ubicacion": "modules/contabilidad-fiscal/perfil-administrativo",
+      "vertical": "contabilidad-fiscal",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "puerto-nomina",
+      "ubicacion": "modules/contabilidad-fiscal/puerto-nomina",
+      "vertical": "contabilidad-fiscal",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "recibo-nomina",
+      "ubicacion": "modules/contabilidad-fiscal/recibo-nomina",
+      "vertical": "contabilidad-fiscal",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "rectificacion-declaracion",
+      "ubicacion": "modules/contabilidad-fiscal/rectificacion-declaracion",
+      "vertical": "contabilidad-fiscal",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "registro-verifactu",
+      "ubicacion": "modules/contabilidad-fiscal/registro-verifactu",
+      "vertical": "contabilidad-fiscal",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "retenciones",
+      "ubicacion": "modules/contabilidad-fiscal/retenciones",
+      "vertical": "contabilidad-fiscal",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "apertura-ejercicio",
+      "ubicacion": "modules/contabilidad-libro/apertura-ejercicio",
+      "vertical": "contabilidad-libro",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "asiento-ajuste",
+      "ubicacion": "modules/contabilidad-libro/asiento-ajuste",
+      "vertical": "contabilidad-libro",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "aviso-cuadre",
+      "ubicacion": "modules/contabilidad-libro/aviso-cuadre",
+      "vertical": "contabilidad-libro",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "balance-situacion",
+      "ubicacion": "modules/contabilidad-libro/balance-situacion",
+      "vertical": "contabilidad-libro",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "cambio-desde-ultima-revision",
+      "ubicacion": "modules/contabilidad-libro/cambio-desde-ultima-revision",
+      "vertical": "contabilidad-libro",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "catalogo-cuentas",
+      "ubicacion": "modules/contabilidad-libro/catalogo-cuentas",
+      "vertical": "contabilidad-libro",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "cierre-ejercicio",
+      "ubicacion": "modules/contabilidad-libro/cierre-ejercicio",
+      "vertical": "contabilidad-libro",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "clave-natural",
+      "ubicacion": "modules/contabilidad-libro/clave-natural",
+      "vertical": "contabilidad-libro",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "conciliacion-bancaria",
+      "ubicacion": "modules/contabilidad-libro/conciliacion-bancaria",
+      "vertical": "contabilidad-libro",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "control-calidad-muestreo",
+      "ubicacion": "modules/contabilidad-libro/control-calidad-muestreo",
+      "vertical": "contabilidad-libro",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "cuadre-cobro-pago",
+      "ubicacion": "modules/contabilidad-libro/cuadre-cobro-pago",
+      "vertical": "contabilidad-libro",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "cuenta-resultados",
+      "ubicacion": "modules/contabilidad-libro/cuenta-resultados",
+      "vertical": "contabilidad-libro",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "escritor-diario",
+      "ubicacion": "modules/contabilidad-libro/escritor-diario",
+      "vertical": "contabilidad-libro",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "expediente-documental",
+      "ubicacion": "modules/contabilidad-libro/expediente-documental",
+      "vertical": "contabilidad-libro",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "flujo-firma",
+      "ubicacion": "modules/contabilidad-libro/flujo-firma",
+      "vertical": "contabilidad-libro",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "frontera-planos",
+      "ubicacion": "modules/contabilidad-libro/frontera-planos",
+      "vertical": "contabilidad-libro",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "informe-conciliacion",
+      "ubicacion": "modules/contabilidad-libro/informe-conciliacion",
+      "vertical": "contabilidad-libro",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "maestro-cuentas-bancarias",
+      "ubicacion": "modules/contabilidad-libro/maestro-cuentas-bancarias",
+      "vertical": "contabilidad-libro",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "mayor-balanza",
+      "ubicacion": "modules/contabilidad-libro/mayor-balanza",
+      "vertical": "contabilidad-libro",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "partida-conciliatoria",
+      "ubicacion": "modules/contabilidad-libro/partida-conciliatoria",
+      "vertical": "contabilidad-libro",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "partida-no-identificada",
+      "ubicacion": "modules/contabilidad-libro/partida-no-identificada",
+      "vertical": "contabilidad-libro",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "periodificacion",
+      "ubicacion": "modules/contabilidad-libro/periodificacion",
+      "vertical": "contabilidad-libro",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "prevision-caja",
+      "ubicacion": "modules/contabilidad-libro/prevision-caja",
+      "vertical": "contabilidad-libro",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "puerto-exportacion",
+      "ubicacion": "modules/contabilidad-libro/puerto-exportacion",
+      "vertical": "contabilidad-libro",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "puerto-extracto",
+      "ubicacion": "modules/contabilidad-libro/puerto-extracto",
+      "vertical": "contabilidad-libro",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "puerto-plan-contable",
+      "ubicacion": "modules/contabilidad-libro/puerto-plan-contable",
+      "vertical": "contabilidad-libro",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "ratificacion-regla-aprendida",
+      "ubicacion": "modules/contabilidad-libro/ratificacion-regla-aprendida",
+      "vertical": "contabilidad-libro",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "regla-movimiento-bancario",
+      "ubicacion": "modules/contabilidad-libro/regla-movimiento-bancario",
+      "vertical": "contabilidad-libro",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "saldo-tesoreria",
+      "ubicacion": "modules/contabilidad-libro/saldo-tesoreria",
+      "vertical": "contabilidad-libro",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "single-writer",
+      "ubicacion": "modules/contabilidad-libro/single-writer",
+      "vertical": "contabilidad-libro",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "traza-asiento",
+      "ubicacion": "modules/contabilidad-libro/traza-asiento",
+      "vertical": "contabilidad-libro",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "vista-revisable",
+      "ubicacion": "modules/contabilidad-libro/vista-revisable",
+      "vertical": "contabilidad-libro",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "agent-observer",
+      "ubicacion": "modules/conversacion/agent-observer",
       "vertical": "conversacion",
       "persiste": false,
       "evidence_file": null,
@@ -196,6 +1766,26 @@
       "declarado_completo": null
     },
     {
+      "name": "cosecha",
+      "ubicacion": "modules/cosecha",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": "module",
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "crawl4rs",
+      "ubicacion": "modules/crawl4rs",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
       "name": "credential-manager",
       "ubicacion": "modules/credential-manager",
       "vertical": null,
@@ -204,6 +1794,66 @@
       "scope": null,
       "data_path": null,
       "declarado_completo": null
+    },
+    {
+      "name": "credential-oauth",
+      "ubicacion": "modules/credential-oauth",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "cuenta-recurrente",
+      "ubicacion": "modules/cuenta-recurrente",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": "project",
+      "data_path": "prisma/cuenta-recurrente",
+      "declarado_completo": null
+    },
+    {
+      "name": "cupula-eventos",
+      "ubicacion": "modules/cupula-eventos",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": "system",
+      "data_path": "cupula-eventos",
+      "declarado_completo": null
+    },
+    {
+      "name": "cupula-gcode",
+      "ubicacion": "modules/cupula-gcode",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": "project",
+      "data_path": "cupula-gcode",
+      "declarado_completo": null
+    },
+    {
+      "name": "cupula-tools",
+      "ubicacion": "modules/cupula-tools",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "cupulas",
+      "ubicacion": "modules/cupulas",
+      "vertical": null,
+      "persiste": true,
+      "evidence_file": "modules/cupulas/index.js",
+      "scope": "project",
+      "data_path": "cupulas",
+      "declarado_completo": true
     },
     {
       "name": "dashboard",
@@ -224,6 +1874,16 @@
       "scope": null,
       "data_path": null,
       "declarado_completo": null
+    },
+    {
+      "name": "destilador",
+      "ubicacion": "modules/destilador",
+      "vertical": null,
+      "persiste": true,
+      "evidence_file": "modules/destilador/index.js",
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": false
     },
     {
       "name": "device-health",
@@ -256,6 +1916,56 @@
       "declarado_completo": null
     },
     {
+      "name": "disenador_parametrico",
+      "ubicacion": "modules/disenador_parametrico",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "ejecutor",
+      "ubicacion": "modules/ejecutor",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "entrega",
+      "ubicacion": "modules/entrega",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "envase-embalaje",
+      "ubicacion": "modules/envase-embalaje",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "escribano",
+      "ubicacion": "modules/escribano",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": "system",
+      "data_path": "escribano",
+      "declarado_completo": null
+    },
+    {
       "name": "esp32-dev",
       "ubicacion": "modules/esp32-dev",
       "vertical": null,
@@ -268,6 +1978,26 @@
     {
       "name": "esp32-flasher",
       "ubicacion": "modules/esp32-flasher",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "estados",
+      "ubicacion": "modules/estados",
+      "vertical": null,
+      "persiste": true,
+      "evidence_file": "modules/estados/index.js",
+      "scope": "project",
+      "data_path": "estados",
+      "declarado_completo": true
+    },
+    {
+      "name": "evaluador",
+      "ubicacion": "modules/evaluador",
       "vertical": null,
       "persiste": false,
       "evidence_file": null,
@@ -303,6 +2033,26 @@
       "evidence_file": null,
       "scope": null,
       "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "feeder",
+      "ubicacion": "modules/feeder",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": "module",
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "filamento",
+      "ubicacion": "modules/filamento",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": "project",
+      "data_path": "filamento",
       "declarado_completo": null
     },
     {
@@ -346,12 +2096,122 @@
       "declarado_completo": null
     },
     {
+      "name": "gestor-credenciales-nicho",
+      "ubicacion": "modules/gestor-credenciales-nicho",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": "project",
+      "data_path": "proceso-negocio/gestor-credenciales",
+      "declarado_completo": null
+    },
+    {
+      "name": "hermes-bridge",
+      "ubicacion": "modules/hermes-bridge",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "hermes-gateway",
+      "ubicacion": "modules/hermes-gateway",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "hermes-relay",
+      "ubicacion": "modules/hermes-relay",
+      "vertical": null,
+      "persiste": true,
+      "evidence_file": "modules/hermes-relay/index.js",
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": false
+    },
+    {
+      "name": "historial",
+      "ubicacion": "modules/historial",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": "project",
+      "data_path": "historial",
+      "declarado_completo": null
+    },
+    {
+      "name": "homeostasis",
+      "ubicacion": "modules/homeostasis",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "importacion",
+      "ubicacion": "modules/importacion",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "interfaz",
+      "ubicacion": "modules/interfaz",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "interruptores",
+      "ubicacion": "modules/interruptores",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
       "name": "inventario",
       "ubicacion": "modules/inventario",
       "vertical": null,
       "persiste": false,
       "evidence_file": null,
       "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "invitaciones",
+      "ubicacion": "modules/invitaciones",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": "system",
+      "data_path": "invitaciones",
+      "declarado_completo": null
+    },
+    {
+      "name": "lentes-diseno",
+      "ubicacion": "modules/lentes-diseno",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": "module",
       "data_path": null,
       "declarado_completo": null
     },
@@ -366,8 +2226,158 @@
       "declarado_completo": null
     },
     {
-      "name": "mercadona-api",
-      "ubicacion": "modules/mercadona-api",
+      "name": "lotes",
+      "ubicacion": "modules/lotes",
+      "vertical": null,
+      "persiste": true,
+      "evidence_file": "modules/lotes/index.js",
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": false
+    },
+    {
+      "name": "manejo-fallo",
+      "ubicacion": "modules/manejo-fallo",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "marca-cliente",
+      "ubicacion": "modules/marca-cliente",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "marketing-analytics",
+      "ubicacion": "modules/marketing-analytics",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "marketing-audience",
+      "ubicacion": "modules/marketing-audience",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "marketing-automation",
+      "ubicacion": "modules/marketing-automation",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "marketing-budget",
+      "ubicacion": "modules/marketing-budget",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "marketing-calendar",
+      "ubicacion": "modules/marketing-calendar",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "marketing-campaigns",
+      "ubicacion": "modules/marketing-campaigns",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "marketing-channels",
+      "ubicacion": "modules/marketing-channels",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "marketing-competitors",
+      "ubicacion": "modules/marketing-competitors",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "marketing-content",
+      "ubicacion": "modules/marketing-content",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "marketing-funnel",
+      "ubicacion": "modules/marketing-funnel",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "marketing-relations",
+      "ubicacion": "modules/marketing-relations",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "marketing-strategy",
+      "ubicacion": "modules/marketing-strategy",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "masa",
+      "ubicacion": "modules/masa",
       "vertical": null,
       "persiste": false,
       "evidence_file": null,
@@ -396,6 +2406,556 @@
       "declarado_completo": true
     },
     {
+      "name": "motor-encadenamiento",
+      "ubicacion": "modules/motor-encadenamiento",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "motor-oido",
+      "ubicacion": "modules/motor-oido",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "motor-ojo",
+      "ubicacion": "modules/motor-ojo",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "motor-propuesta",
+      "ubicacion": "modules/motor-propuesta",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "motor-sonido",
+      "ubicacion": "modules/motor-sonido",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "motor-traduce",
+      "ubicacion": "modules/motor-traduce",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "motor-trazo",
+      "ubicacion": "modules/motor-trazo",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "motor-voz",
+      "ubicacion": "modules/motor-voz",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "ajustador-umbrales",
+      "ubicacion": "modules/nichos/ajustador-umbrales",
+      "vertical": "nichos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "alerta-sangria",
+      "ubicacion": "modules/nichos/alerta-sangria",
+      "vertical": "nichos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "batch-validacion",
+      "ubicacion": "modules/nichos/batch-validacion",
+      "vertical": "nichos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "camino-encontrar-construir",
+      "ubicacion": "modules/nichos/camino-encontrar-construir",
+      "vertical": "nichos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "canal-distribucion",
+      "ubicacion": "modules/nichos/canal-distribucion",
+      "vertical": "nichos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "capturador-semilla",
+      "ubicacion": "modules/nichos/capturador-semilla",
+      "vertical": "nichos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "catalogo-capacidades",
+      "ubicacion": "modules/nichos/catalogo-capacidades",
+      "vertical": "nichos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "clasificador-intencion",
+      "ubicacion": "modules/nichos/clasificador-intencion",
+      "vertical": "nichos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "cola-candidatos",
+      "ubicacion": "modules/nichos/cola-candidatos",
+      "vertical": "nichos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "cola-decisiones",
+      "ubicacion": "modules/nichos/cola-decisiones",
+      "vertical": "nichos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "confirmacion-valor",
+      "ubicacion": "modules/nichos/confirmacion-valor",
+      "vertical": "nichos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "conversor-fuente",
+      "ubicacion": "modules/nichos/conversor-fuente",
+      "vertical": "nichos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "cortador-temprano",
+      "ubicacion": "modules/nichos/cortador-temprano",
+      "vertical": "nichos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "cosechador-alto",
+      "ubicacion": "modules/nichos/cosechador-alto",
+      "vertical": "nichos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "criterio-viabilidad",
+      "ubicacion": "modules/nichos/criterio-viabilidad",
+      "vertical": "nichos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "cuadro-salud",
+      "ubicacion": "modules/nichos/cuadro-salud",
+      "vertical": "nichos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "ensamblador-solucion",
+      "ubicacion": "modules/nichos/ensamblador-solucion",
+      "vertical": "nichos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "escalones-mensaje",
+      "ubicacion": "modules/nichos/escalones-mensaje",
+      "vertical": "nichos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "estudio-competencia",
+      "ubicacion": "modules/nichos/estudio-competencia",
+      "vertical": "nichos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "estudio-demanda",
+      "ubicacion": "modules/nichos/estudio-demanda",
+      "vertical": "nichos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "gate-decision-operar",
+      "ubicacion": "modules/nichos/gate-decision-operar",
+      "vertical": "nichos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "gestion-limites-fuente",
+      "ubicacion": "modules/nichos/gestion-limites-fuente",
+      "vertical": "nichos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "historial",
+      "ubicacion": "modules/nichos/historial",
+      "vertical": "nichos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "imputacion-coste-fuente",
+      "ubicacion": "modules/nichos/imputacion-coste-fuente",
+      "vertical": "nichos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "imputacion-costes",
+      "ubicacion": "modules/nichos/imputacion-costes",
+      "vertical": "nichos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "manejo-fallo",
+      "ubicacion": "modules/nichos/manejo-fallo",
+      "vertical": "nichos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "motor-cobro",
+      "ubicacion": "modules/nichos/motor-cobro",
+      "vertical": "nichos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "normalizador-semilla",
+      "ubicacion": "modules/nichos/normalizador-semilla",
+      "vertical": "nichos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "orquestador",
+      "ubicacion": "modules/nichos/orquestador",
+      "vertical": "nichos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "paquetador-decision",
+      "ubicacion": "modules/nichos/paquetador-decision",
+      "vertical": "nichos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "perfil-cobro-entrega",
+      "ubicacion": "modules/nichos/perfil-cobro-entrega",
+      "vertical": "nichos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "perfil-limite-busqueda",
+      "ubicacion": "modules/nichos/perfil-limite-busqueda",
+      "vertical": "nichos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "perfil-supervision",
+      "ubicacion": "modules/nichos/perfil-supervision",
+      "vertical": "nichos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "pipeline",
+      "ubicacion": "modules/nichos/pipeline",
+      "vertical": "nichos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "proponedor-modelo-cobro",
+      "ubicacion": "modules/nichos/proponedor-modelo-cobro",
+      "vertical": "nichos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "propuesta-valor-canal",
+      "ubicacion": "modules/nichos/propuesta-valor-canal",
+      "vertical": "nichos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "puente-humano",
+      "ubicacion": "modules/nichos/puente-humano",
+      "vertical": "nichos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "puerto-canal",
+      "ubicacion": "modules/nichos/puerto-canal",
+      "vertical": "nichos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "puerto-fuente-datos",
+      "ubicacion": "modules/nichos/puerto-fuente-datos",
+      "vertical": "nichos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "pulso-avance",
+      "ubicacion": "modules/nichos/pulso-avance",
+      "vertical": "nichos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "registro-cobros",
+      "ubicacion": "modules/nichos/registro-cobros",
+      "vertical": "nichos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "reglas-aprendidas-validacion",
+      "ubicacion": "modules/nichos/reglas-aprendidas-validacion",
+      "vertical": "nichos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "reglas-exclusion",
+      "ubicacion": "modules/nichos/reglas-exclusion",
+      "vertical": "nichos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "sembrador-norte",
+      "ubicacion": "modules/nichos/sembrador-norte",
+      "vertical": "nichos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "sondeador-territorio",
+      "ubicacion": "modules/nichos/sondeador-territorio",
+      "vertical": "nichos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "veredicto-viabilidad",
+      "ubicacion": "modules/nichos/veredicto-viabilidad",
+      "vertical": "nichos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "vista-portafolio",
+      "ubicacion": "modules/nichos/vista-portafolio",
+      "vertical": "nichos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
       "name": "notas-poc",
       "ubicacion": "modules/notas-poc",
       "vertical": null,
@@ -406,8 +2966,38 @@
       "declarado_completo": null
     },
     {
-      "name": "notificador-pedidos",
-      "ubicacion": "modules/notificador-pedidos",
+      "name": "ocr4rs",
+      "ubicacion": "modules/ocr4rs",
+      "vertical": null,
+      "persiste": true,
+      "evidence_file": "modules/ocr4rs/index.js",
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": false
+    },
+    {
+      "name": "pago-gateway",
+      "ubicacion": "modules/pago-gateway",
+      "vertical": null,
+      "persiste": true,
+      "evidence_file": "modules/pago-gateway/index.js",
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": false
+    },
+    {
+      "name": "panel-jefe",
+      "ubicacion": "modules/panel-jefe",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "panel-trabajador",
+      "ubicacion": "modules/panel-trabajador",
       "vertical": null,
       "persiste": false,
       "evidence_file": null,
@@ -446,11 +3036,31 @@
       "declarado_completo": null
     },
     {
+      "name": "aviso-pedido-listo",
+      "ubicacion": "modules/pizzepos/aviso-pedido-listo",
+      "vertical": "pizzepos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "bienvenida-tienda",
+      "ubicacion": "modules/pizzepos/bienvenida-tienda",
+      "vertical": "pizzepos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
       "name": "carta-design",
       "ubicacion": "modules/pizzepos/carta-design",
       "vertical": "pizzepos",
       "persiste": true,
-      "evidence_file": "modules/pizzepos/carta-design/carta-design.blueprint.json",
+      "evidence_file": "modules/pizzepos/carta-design/index.js",
       "scope": "project",
       "data_path": "pizzepos/carta-design",
       "declarado_completo": true
@@ -460,19 +3070,9 @@
       "ubicacion": "modules/pizzepos/carta-digital",
       "vertical": "pizzepos",
       "persiste": true,
-      "evidence_file": "modules/pizzepos/carta-digital/carta-digital.blueprint.json",
+      "evidence_file": "modules/pizzepos/carta-digital/index.js",
       "scope": "project",
       "data_path": "pizzepos/carta-digital",
-      "declarado_completo": true
-    },
-    {
-      "name": "carta-impresion",
-      "ubicacion": "modules/pizzepos/carta-impresion",
-      "vertical": "pizzepos",
-      "persiste": true,
-      "evidence_file": "modules/pizzepos/carta-impresion/carta-impresion.blueprint.json",
-      "scope": "project",
-      "data_path": "pizzepos/cartas-impresion",
       "declarado_completo": true
     },
     {
@@ -480,7 +3080,7 @@
       "ubicacion": "modules/pizzepos/carta-manager",
       "vertical": "pizzepos",
       "persiste": true,
-      "evidence_file": "modules/pizzepos/carta-manager/carta-manager.blueprint.json",
+      "evidence_file": "modules/pizzepos/carta-manager/index.js",
       "scope": "project",
       "data_path": "pizzepos/cartas",
       "declarado_completo": true
@@ -490,7 +3090,7 @@
       "ubicacion": "modules/pizzepos/carta-marketing",
       "vertical": "pizzepos",
       "persiste": true,
-      "evidence_file": "modules/pizzepos/carta-marketing/carta-marketing.blueprint.json",
+      "evidence_file": "modules/pizzepos/carta-marketing/index.js",
       "scope": "project",
       "data_path": "pizzepos/carta-marketing",
       "declarado_completo": true
@@ -556,6 +3156,26 @@
       "declarado_completo": null
     },
     {
+      "name": "confirmacion-pedido",
+      "ubicacion": "modules/pizzepos/confirmacion-pedido",
+      "vertical": "pizzepos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "contenido",
+      "ubicacion": "modules/pizzepos/contenido",
+      "vertical": "pizzepos",
+      "persiste": true,
+      "evidence_file": "modules/pizzepos/contenido/index.js",
+      "scope": "project",
+      "data_path": "pizzepos/contenido",
+      "declarado_completo": true
+    },
+    {
       "name": "cuentas",
       "ubicacion": "modules/pizzepos/cuentas",
       "vertical": "pizzepos",
@@ -596,8 +3216,8 @@
       "declarado_completo": null
     },
     {
-      "name": "ingredientes",
-      "ubicacion": "modules/pizzepos/ingredientes",
+      "name": "media-generator",
+      "ubicacion": "modules/pizzepos/media-generator",
       "vertical": "pizzepos",
       "persiste": false,
       "evidence_file": null,
@@ -608,6 +3228,36 @@
     {
       "name": "menu-generator",
       "ubicacion": "modules/pizzepos/menu-generator",
+      "vertical": "pizzepos",
+      "persiste": true,
+      "evidence_file": "modules/pizzepos/menu-generator/index.js",
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": false
+    },
+    {
+      "name": "mercadona-api",
+      "ubicacion": "modules/pizzepos/mercadona-api",
+      "vertical": "pizzepos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "notificador-pedidos",
+      "ubicacion": "modules/pizzepos/notificador-pedidos",
+      "vertical": "pizzepos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "pedido-telegram",
+      "ubicacion": "modules/pizzepos/pedido-telegram",
       "vertical": "pizzepos",
       "persiste": false,
       "evidence_file": null,
@@ -650,10 +3300,20 @@
       "ubicacion": "modules/pizzepos/recetas",
       "vertical": "pizzepos",
       "persiste": true,
-      "evidence_file": "modules/pizzepos/recetas/recetas.blueprint.json",
+      "evidence_file": "modules/pizzepos/recetas/index.js",
       "scope": "project",
       "data_path": "pizzepos/recetas",
       "declarado_completo": true
+    },
+    {
+      "name": "reporte-cierre",
+      "ubicacion": "modules/pizzepos/reporte-cierre",
+      "vertical": "pizzepos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
     },
     {
       "name": "tarifas",
@@ -669,11 +3329,21 @@
       "name": "tecnicas",
       "ubicacion": "modules/pizzepos/tecnicas",
       "vertical": "pizzepos",
-      "persiste": true,
-      "evidence_file": "modules/pizzepos/tecnicas/tecnicas.blueprint.json",
+      "persiste": false,
+      "evidence_file": null,
       "scope": "project",
       "data_path": "pizzepos/tecnicas",
-      "declarado_completo": true
+      "declarado_completo": null
+    },
+    {
+      "name": "tienda-api",
+      "ubicacion": "modules/pizzepos/tienda-api",
+      "vertical": "pizzepos",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
     },
     {
       "name": "variaciones",
@@ -690,14 +3360,324 @@
       "ubicacion": "modules/pizzepos/viabilidad",
       "vertical": "pizzepos",
       "persiste": true,
-      "evidence_file": "modules/pizzepos/viabilidad/viabilidad.blueprint.json",
+      "evidence_file": "modules/pizzepos/viabilidad/index.js",
       "scope": "project",
       "data_path": "pizzepos/viabilidad",
       "declarado_completo": true
     },
     {
+      "name": "planes-y-tiers",
+      "ubicacion": "modules/planes-y-tiers",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "planificador",
+      "ubicacion": "modules/planificador",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": "module",
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "planos",
+      "ubicacion": "modules/planos",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
       "name": "plugin-manager",
       "ubicacion": "modules/plugin-manager",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "portal",
+      "ubicacion": "modules/portal",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "adaptador",
+      "ubicacion": "modules/prisma/adaptador",
+      "vertical": "prisma",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "arquetipos",
+      "ubicacion": "modules/prisma/arquetipos",
+      "vertical": "prisma",
+      "persiste": true,
+      "evidence_file": "modules/prisma/arquetipos/index.js",
+      "scope": "project",
+      "data_path": "prisma",
+      "declarado_completo": true
+    },
+    {
+      "name": "boss",
+      "ubicacion": "modules/prisma/boss",
+      "vertical": "prisma",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "calendario",
+      "ubicacion": "modules/prisma/calendario",
+      "vertical": "prisma",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "carrito",
+      "ubicacion": "modules/prisma/carrito",
+      "vertical": "prisma",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "cierre",
+      "ubicacion": "modules/prisma/cierre",
+      "vertical": "prisma",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "cobro",
+      "ubicacion": "modules/prisma/cobro",
+      "vertical": "prisma",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "comercio",
+      "ubicacion": "modules/prisma/comercio",
+      "vertical": "prisma",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "compuestos",
+      "ubicacion": "modules/prisma/compuestos",
+      "vertical": "prisma",
+      "persiste": true,
+      "evidence_file": "modules/prisma/compuestos/index.js",
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": false
+    },
+    {
+      "name": "conversor",
+      "ubicacion": "modules/prisma/conversor",
+      "vertical": "prisma",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "coste",
+      "ubicacion": "modules/prisma/coste",
+      "vertical": "prisma",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "costeador",
+      "ubicacion": "modules/prisma/costeador",
+      "vertical": "prisma",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "cuenta",
+      "ubicacion": "modules/prisma/cuenta",
+      "vertical": "prisma",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "enforcement",
+      "ubicacion": "modules/prisma/enforcement",
+      "vertical": "prisma",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "escaparate",
+      "ubicacion": "modules/prisma/escaparate",
+      "vertical": "prisma",
+      "persiste": true,
+      "evidence_file": "modules/prisma/escaparate/index.js",
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": false
+    },
+    {
+      "name": "formulador",
+      "ubicacion": "modules/prisma/formulador",
+      "vertical": "prisma",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "insumos",
+      "ubicacion": "modules/prisma/insumos",
+      "vertical": "prisma",
+      "persiste": true,
+      "evidence_file": "modules/prisma/insumos/index.js",
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": false
+    },
+    {
+      "name": "opciones",
+      "ubicacion": "modules/prisma/opciones",
+      "vertical": "prisma",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "preparar",
+      "ubicacion": "modules/prisma/preparar",
+      "vertical": "prisma",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": "project",
+      "data_path": "prisma/preparar",
+      "declarado_completo": null
+    },
+    {
+      "name": "producir",
+      "ubicacion": "modules/prisma/producir",
+      "vertical": "prisma",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "producto-manager",
+      "ubicacion": "modules/prisma/producto-manager",
+      "vertical": "prisma",
+      "persiste": true,
+      "evidence_file": "modules/prisma/producto-manager/index.js",
+      "scope": "project",
+      "data_path": "prisma/catalogo",
+      "declarado_completo": true
+    },
+    {
+      "name": "proyector",
+      "ubicacion": "modules/prisma/proyector",
+      "vertical": "prisma",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "puente-compuesto",
+      "ubicacion": "modules/prisma/puente-compuesto",
+      "vertical": "prisma",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "ticket",
+      "ubicacion": "modules/prisma/ticket",
+      "vertical": "prisma",
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "ui-forge",
+      "ubicacion": "modules/prisma/ui-forge",
+      "vertical": "prisma",
+      "persiste": true,
+      "evidence_file": "modules/prisma/ui-forge/index.js",
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": false
+    },
+    {
+      "name": "proceso-negocio",
+      "ubicacion": "modules/proceso-negocio",
+      "vertical": null,
+      "persiste": true,
+      "evidence_file": "modules/proceso-negocio/index.js",
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": false
+    },
+    {
+      "name": "productor-modulos",
+      "ubicacion": "modules/productor-modulos",
       "vertical": null,
       "persiste": false,
       "evidence_file": null,
@@ -716,8 +3696,48 @@
       "declarado_completo": null
     },
     {
+      "name": "project-profile",
+      "ubicacion": "modules/project-profile",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
       "name": "prompt-manager",
       "ubicacion": "modules/prompt-manager",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "propiocepcion",
+      "ubicacion": "modules/propiocepcion",
+      "vertical": null,
+      "persiste": true,
+      "evidence_file": "modules/propiocepcion/index.js",
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": false
+    },
+    {
+      "name": "publicador",
+      "ubicacion": "modules/publicador",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "radar-fuente",
+      "ubicacion": "modules/radar-fuente",
       "vertical": null,
       "persiste": false,
       "evidence_file": null,
@@ -736,6 +3756,36 @@
       "declarado_completo": true
     },
     {
+      "name": "redactor",
+      "ubicacion": "modules/redactor",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "reloj",
+      "ubicacion": "modules/reloj",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "rpc-index",
+      "ubicacion": "modules/rpc-index",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
       "name": "scheduler",
       "ubicacion": "modules/scheduler",
       "vertical": null,
@@ -746,8 +3796,38 @@
       "declarado_completo": null
     },
     {
+      "name": "scope-provider",
+      "ubicacion": "modules/scope-provider",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "security-core",
+      "ubicacion": "modules/security-core",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
       "name": "security-p2p",
       "ubicacion": "modules/security-p2p",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
+      "name": "sonda",
+      "ubicacion": "modules/sonda",
       "vertical": null,
       "persiste": false,
       "evidence_file": null,
@@ -786,6 +3866,16 @@
       "declarado_completo": null
     },
     {
+      "name": "telegram-bridge",
+      "ubicacion": "modules/telegram-bridge",
+      "vertical": null,
+      "persiste": false,
+      "evidence_file": null,
+      "scope": null,
+      "data_path": null,
+      "declarado_completo": null
+    },
+    {
       "name": "telegram-service",
       "ubicacion": "modules/telegram-service",
       "vertical": null,
@@ -806,8 +3896,8 @@
       "declarado_completo": null
     },
     {
-      "name": "tienda-api",
-      "ubicacion": "modules/tienda-api",
+      "name": "verificador-visual",
+      "ubicacion": "modules/verificador-visual",
       "vertical": null,
       "persiste": false,
       "evidence_file": null,
@@ -843,6 +3933,20 @@
       "drifts": []
     },
     {
+      "id": "oraculo",
+      "file": "blueprints/project-types/oraculo.json",
+      "directorios": [
+        "storage/oraculo/bundle"
+      ],
+      "archivos_iniciales": [
+        "storage/oraculo/bundle/index.html",
+        "storage/oraculo/bundle/manifest.json",
+        "storage/oraculo/bundle/sw.js"
+      ],
+      "cumple_namespace": true,
+      "drifts": []
+    },
+    {
       "id": "pizzepos",
       "file": "blueprints/project-types/pizzepos.json",
       "directorios": [
@@ -858,6 +3962,21 @@
       "drifts": []
     },
     {
+      "id": "prisma",
+      "file": "blueprints/project-types/prisma.json",
+      "directorios": [
+        "storage/prisma",
+        "storage/prisma/catalogo"
+      ],
+      "archivos_iniciales": [
+        "storage/prisma/arquetipos.json"
+      ],
+      "cumple_namespace": false,
+      "drifts": [
+        "directorio fuera de namespace: storage/prisma"
+      ]
+    },
+    {
       "id": "tienda",
       "file": "blueprints/project-types/tienda.json",
       "directorios": [
@@ -870,6 +3989,20 @@
       ],
       "cumple_namespace": true,
       "drifts": []
+    },
+    {
+      "id": "www",
+      "file": "blueprints/project-types/www.json",
+      "directorios": [
+        "storage/www"
+      ],
+      "archivos_iniciales": [
+        "storage/www/index.html"
+      ],
+      "cumple_namespace": false,
+      "drifts": [
+        "directorio fuera de namespace: storage/www"
+      ]
     }
   ],
   "prefijos_prohibidos": [

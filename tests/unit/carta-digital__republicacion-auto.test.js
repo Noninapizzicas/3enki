@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * carta-digital — REPUBLICACIÓN AUTOMÁTICA (v2.25.0).
+ * carta-digital — REPUBLICACIÓN AUTOMÁTICA (v2.26.0).
  *
  * El bundle de la PWA es ESTÁTICO: hasta v2.24 cada cambio de carta exigía pulsar `publicar` a
  * mano, y si el dueño no lo hacía la web se quedaba VIEJA EN SILENCIO. Ahora el proyector
@@ -10,6 +10,9 @@
  *   2) UN horneado por edición (debounce: N carta.editada → 1 horneado).
  *   3) Interruptor por proyecto (opciones_visualizacion.auto_publicar === false).
  * Y nada es silencioso: cada fallo emite cartadigital.republicar.fallido.
+ *
+ * v2.26.0 añade la sexta señal: cartadigital.config.actualizada (el config del canal también
+ * se hornea dentro del bundle). Sus dos tests van por la suscripción y el handler reales.
  *
  * Ejecutar: node tests/unit/carta-digital__republicacion-auto.test.js
  */
@@ -90,6 +93,60 @@ test('señal sin project_id → no arranca timer', async () => {
   m._autoPublicar({ data: { motivo: 'x' } });
   await esperar(40);
   assert.strictEqual(m.horneados.length, 0);
+});
+
+// ── la COSTURA que faltaba: guardar el config del canal rehornea (v2.26.0) ──
+// Los tests de arriba llaman a _autoPublicar DIRECTAMENTE, así que no veían el agujero: las cinco
+// señales suscritas no incluían `cartadigital.config.actualizada`, el evento que emite el propio
+// módulo al guardar opciones_visualizacion (moneda, modos_consumo, teléfono, pago_online, bot de
+// Telegram…). El dato cambiaba y la web se quedaba con los botones viejos. Estos dos tests van por
+// la SUSCRIPCIÓN REAL (onLoad) y por el HANDLER REAL (handleUpdateConfig), no por el atajo.
+function conBus() {
+  const m = nuevo();
+  const handlers = new Map();
+  m.responses = [];
+  // Bus fiel en miniatura: publicar REPARTE a los suscriptores (si solo registrara el evento,
+  // la cadena publicar→suscribir no se probaría y el test pasaría sin probar nada).
+  m.eventBus = {
+    publish: (ev, p) => {
+      m.responses.push([ev, p]);
+      (handlers.get(ev) || []).forEach(fn => { try { fn({ data: p }); } catch (_) {} });
+    },
+    subscribe: (ev, fn) => { handlers.set(ev, [...(handlers.get(ev) || []), fn]); return () => {}; }
+  };
+  m.emitir = (ev, data) => (handlers.get(ev) || []).forEach(fn => fn({ data }));
+  return m;
+}
+
+const coreFalso = (m) => ({ logger: m.logger, metrics: m.metrics, eventBus: m.eventBus, uiHandler: {}, config: {}, moduleRegistry: {} });
+
+test('SUSCRIPCIÓN: cartadigital.config.actualizada rehornea el bundle', async () => {
+  const m = conBus();
+  await m.onLoad(coreFalso(m));
+  m.emitir('cartadigital.config.actualizada', { project_id: PID, motivo: 'update_config' });
+  await esperar(60);
+  assert.strictEqual(m.horneados.length, 1, `esperaba 1 horneado, hubo ${m.horneados.length}`);
+  await m.onUnload();
+});
+
+test('CADENA COMPLETA: guardar modos_consumo (update_config) → config escrito + evento + horneado', async () => {
+  const m = conBus();
+  let guardado = null;
+  m._leerConfig = async () => ({ _version: '1.0', opciones_visualizacion: { moneda: '€' } });
+  m._guardarConfig = async (pid, cfg) => { guardado = { pid, cfg }; return { status: 200, data: cfg }; };
+  await m.onLoad(coreFalso(m));
+
+  const r = await m.handleUpdateConfig({ project_id: PID, campos: { opciones_visualizacion: { modos_consumo: ['recoger', 'domicilio'] } } });
+  assert.strictEqual(r.status, 200);
+  assert.deepStrictEqual(guardado.cfg.opciones_visualizacion.modos_consumo, ['recoger', 'domicilio'],
+    'el dato se escribe con los modos nuevos');
+  const ev = m.responses.find(x => x[0] === 'cartadigital.config.actualizada');
+  assert.ok(ev, 'debe emitir cartadigital.config.actualizada');
+  assert.strictEqual(ev[1].motivo, 'update_config', 'el evento lleva motivo legible para el log');
+
+  await esperar(60);
+  assert.strictEqual(m.horneados.length, 1, `la web debe rehornearse sola; horneados=${m.horneados.length}`);
+  await m.onUnload();
 });
 
 // ── el guard de _publicarBundle (fs multi-tenant) ──

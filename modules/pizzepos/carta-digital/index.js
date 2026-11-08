@@ -25,6 +25,11 @@ const CONFIG_PATH = '/pizzepos/carta-digital/config.json';
 // Los modos de consumo que el sistema sabe operar. Un negocio ELIGE un subconjunto en
 // su config (dato); aquí solo se filtra lo que no existe para no publicar botones muertos.
 const MODOS_VALIDOS = ['mesa', 'recoger', 'llevar', 'domicilio'];
+// El DEFAULT de una carta que NO ha elegido es el histórico: mesa/recoger/llevar. Un modo
+// nuevo (domicilio) NO se pinta por existir en el sistema — se pinta cuando el negocio lo
+// pide como DATO. Usar MODOS_VALIDOS como default metía «A domicilio» en la carta de todo
+// negocio que nunca lo pidió (le pasó a the-pirate, 7-nov-2026: la pizzería ofrecía reparto).
+const MODOS_DEFAULT = ['mesa', 'recoger', 'llevar'];
 const DISENO_PATH = '/pizzepos/carta-digital/diseno.json';   // el look que compone Enki, por proyecto
 // Bundle estático servido por Caddy en /<ns>/<slug>/. project-manager symlinka
 // /opt/enki/public/<ns>/<slug> → <proyecto>/storage/www/ al activar la feature `www`.
@@ -486,7 +491,7 @@ class CartaDigitalModule extends BaseModule {
       // y el botón Mesa desaparece. Se filtran valores desconocidos en el borde.
       modos_consumo: Array.isArray(op.modos_consumo) && op.modos_consumo.length
         ? op.modos_consumo.filter(m => MODOS_VALIDOS.includes(m))
-        : MODOS_VALIDOS,
+        : MODOS_DEFAULT,
       whatsapp_telefono: normalizarTelefono(op.whatsapp_telefono || b.negocio?.redes?.whatsapp || b.negocio?.local?.telefono || ''),
       mensaje_header: op.mensaje_pedido || '¡Hola! Quiero pedir:',
       project_slug: slug,
@@ -648,7 +653,7 @@ class CartaDigitalModule extends BaseModule {
         moneda: op.moneda || '€',
         modos_consumo: Array.isArray(op.modos_consumo) && op.modos_consumo.length
           ? op.modos_consumo.filter(m => MODOS_VALIDOS.includes(m))
-          : MODOS_VALIDOS,
+          : MODOS_DEFAULT,
         whatsapp_telefono: normalizarTelefono(op.whatsapp_telefono || b.negocio?.redes?.whatsapp || b.negocio?.local?.telefono || ''),
         mensaje_header: op.mensaje_pedido || '¡Hola! Quiero pedir:',
         project_slug: this.activos.get(project_id)?.slug || String(project_id).slice(0, 8),

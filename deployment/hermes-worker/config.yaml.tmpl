@@ -2,11 +2,23 @@
 # La escribe el reconciliador (deployment/reconcile.js) desde el repo.
 # __API_SERVER_KEY__ se sustituye por la key real (preservada del config vivo
 # si existe, o {{API_SERVER_KEY_ENV}} si se pasa por env — NUNCA versionada).
+#
+# MODELO: Nous Portal (la cuenta del dueño). Es el único provider con modelos
+# gratuitos vivos y, además, el que usa el Hermes admin — así el worker y el
+# admin hablan el mismo modelo y los chats de Enki no se quedan mudos.
+#
+# La credencial NO va aquí: es OAuth con access_token de 1 h y refresh ROTATORIO.
+# El worker la toma de su propio auth.json (device flow, una sola vez). Poner una
+# key congelada aquí NO serviría: el Portal la revoca. Y un segundo refrescador
+# (un script, un health check) provoca refresh_token_reused y revoca la cadena.
+#
+# __NOUS_CLIENT_ID__ y __NOUS_MODEL__ se leen del .env vivo de Enki (nunca versionados).
+# NOUS_MODEL debe ser un `:free` del catálogo vivo del Portal: la cuenta no tiene
+# saldo y un modelo de pago da 404 "requires available credits".
 model:
-  default: deepseek-v4.1-flash
-  provider: custom
-  base_url: https://ollama.com/v1
-  api_key: __OLLAMA_API_KEY__
+  default: __NOUS_MODEL__
+  provider: nous
+  client_id: __NOUS_CLIENT_ID__
 agent:
   max_turns: 150
 display:

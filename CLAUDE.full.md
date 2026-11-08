@@ -2974,16 +2974,20 @@ CLASE PedidosModule HEREDA BaseModule {
       PUBLICA pedido.creado
       RETORNA {status: 201, data: pedido}
 
-    async handleCreatePedidoTienda(data: {project_slug, items, cliente_nombre, modo_consumo, direccion_entrega?, cliente_telefono?, hora_recogida, metodo_pago}): Promise<Response>
+    async handleCreatePedidoTienda(data: {project_slug, items, cliente_nombre, modo_consumo, direccion_entrega?, ubicacion?, cliente_telefono?, hora_recogida, metodo_pago}): Promise<Response>
       NORMALIZA metodo_pago EN ['efectivo','tarjeta']  // opcional: sin el → 'efectivo' (comportamiento previo)
       metodo_pago SOLO REGISTRA la preferencia del cliente (lo que pidio en la PWA por el #P1)
       QUIEN MANDA SOBRE EL COBRO es la VERDAD del pago (pedido.pago.estado), NO esta preferencia
       MODOS_CONSUMO = ['mesa','recoger','llevar','domicilio']   // elige el negocio (dato), no el código
       SI modo == 'domicilio' → EXIGE direccion_entrega (>=6 chars) Y cliente_telefono (>=9 digitos)
         // sin destino ni teléfono no hay reparto: 400 en la PUERTA, no una cuenta sin rumbo
+      ubicacion ({lat,lng}) es OPCIONAL: normaliza (rangos, fuera el (0,0) = GPS sin fix) y si es
+        basura se DESCARTA sin tumbar el pedido — la dirección escrita sigue valiendo (7-nov-2026)
+      mapa_entrega = enlaceMapa({direccion, ubicacion})  // punto si lo hay, dirección si no; null sin nada
       CREA pedido tienda (ancla = cliente_nombre) → _crearCuentaTienda → comandero.enviar_cocina
         // en 'domicilio' el ticket de cocina lleva "🛵 ENTREGA A DOMICILIO: <dirección> · Tel"
-      PUBLICA pedido.creado (lleva metodo_pago y direccion_entrega)
+        // el ENLACE no va al papel: va al evento (staff lo abre desde el móvil)
+      PUBLICA pedido.creado (lleva metodo_pago, modo_consumo, direccion_entrega, mapa_entrega, ubicacion_entrega)
 
     async onPagoConfirmado(event: {pedido_id, project_id, monto_centimos, project_slug?, cliente_nombre?, cliente_telefono?}): Void
       SI pedido NO esta EN memoria                              // el pago es ASINCRONO y el pedido de
@@ -5255,6 +5259,11 @@ CLASE Cobro {
 > que el pedido nace ticket que se cierra al cobrar; el destino va como nota general al comandero
 > y sale impreso en el ticket de cocina con 🛵. El transporte (tienda-api, parser del #P1,
 > pedido-telegram, whatsapp-bot) solo valida FORMA y transporta; quién manda es esta puerta.
+> (7-nov-2026) — UBICACIÓN DEL CLIENTE (pedidos): la puerta acepta `ubicacion` ({lat,lng}) OPCIONAL,
+> la normaliza (rangos, fuera el (0,0) del GPS sin fix) y compone `mapa_entrega` UNA sola vez —
+> pin si lo hay, dirección escrita si no, null si no hay ninguna. La publica en `pedido.creado`
+> junto a `direccion_entrega`, para que el aviso al staff lleve el enlace que el repartidor abre
+> desde el móvil. Un pin inválido NO tumba el pedido: cae a la dirección. En 'recoger' se descarta.
 
 ```
 INTERFAZ PedidosContract {
@@ -5977,6 +5986,12 @@ CLASE EstudioViabilidad {
 > El destino viaja en el #P1 (`direccion_entrega`) y no en el texto editable. Si el negocio ofrece
 > recoger+domicilio, mesa y llevar dejan de pintarse — un modo que el local no tiene es una cuenta
 > que nadie cierra.
+> (7-nov-2026) — EL PUNTO DEL CLIENTE (carta-digital): junto a la dirección se pinta «📍 Mi ubicación
+> exacta». El toque es el gesto que iOS exige; el navegador manda ({lat,lng}) y el runtime lo
+> mete en el #P1 como `ubicacion` (también en el POST de pedir/pagar). Opcional por diseño: sin
+> permiso o sin tocar el botón, el pedido sale igual con la dirección escrita. Con dirección
+> escrita (o pin) el carrito pinta «🧭 Ver el punto en el mapa» ANTES de enviar, para que el
+> cliente vea si el pin cayó donde no es. El mapa es de Google Maps por enlace (sin API key).
 
 ```
 INTERFAZ CartaDigitalContract {                 // ui_handlers (RPC del bus / frontend)
@@ -16087,6 +16102,14 @@ REGLA  modo_consumo 'domicilio' (6-nov-2026) = entrega a domicilio. Viaja en el 
        pedidos exige dirección (≥6) y teléfono (≥9 dígitos) en su puerta — el transporte no
        decide obligatoriedad, solo forma. El destino llega al comandero como notas_generales y
        sale impreso en el ticket de cocina.
+REGLA  ubicación del CLIENTE (7-nov-2026) = OPCIONAL y por gesto. La PWA pinta «📍 Mi ubicación
+       exacta» junto a la dirección; el toque ES el gesto que iOS exige para leer la posición.
+       El punto ({lat,lng}) viaja en el #P1 como `ubicacion` y el parser lo normaliza (rangos
+       -90..90 / -180..180, fuera el (0,0) del GPS sin fix). Sin permiso, sin botón o con punto
+       basura el pedido SALE IGUAL con la dirección escrita: el pin sirve para que el repartidor
+       llegue, no para verificar a nadie. pedidos compone UNA vez `mapa_entrega` (pin si lo hay,
+       dirección si no) y lo publica en pedido.creado; el staff lo abre desde el móvil. No va al
+       ticket de cocina: el papel se imprime y un enlace largo es ruido.
 ```
 
 ## El tasador — re-tasado server-side (función PURA, seguridad)

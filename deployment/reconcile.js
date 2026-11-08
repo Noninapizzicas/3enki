@@ -403,6 +403,14 @@ async function main() {
       const ollamaViva = (envOllama.match(/^OLLAMA_API_KEY=(\S+)/m) || [])[1] || (envOllama.match(/^OLLAMA_CLOUD_API_KEY_GLOBAL=(\S+)/m) || [])[1] || '';
       let renderedCfg = tmplCfg.replace(/__API_SERVER_KEY__/g, keyHermesViva);
       renderedCfg = renderedCfg.replace(/__OLLAMA_API_KEY__/g, ollamaViva);
+      // Nous Portal: client_id + modelo gratuito del .env vivo (nunca versionados).
+      // NOUS_MODEL debe existir en el catálogo VIVO del Portal (`:free`): la cuenta
+      // no tiene saldo y un modelo de pago da 404 "requires available credits".
+      const nousClientId = (envOllama.match(/^NOUS_CLIENT_ID=(\S+)/m) || [])[1] || '';
+      const nousModel = (envOllama.match(/^NOUS_MODEL=(\S+)/m) || [])[1] || 'meituan/longcat-2.5:free';
+      if (!nousClientId) warn('NOUS_CLIENT_ID ausente en el .env vivo: el worker no podrá hacer el device flow de Nous');
+      renderedCfg = renderedCfg.replace(/__NOUS_CLIENT_ID__/g, nousClientId);
+      renderedCfg = renderedCfg.replace(/__NOUS_MODEL__/g, nousModel);
       // Token del MCP de OpenSCAD: se lee del .env vivo (nunca versionado).
       const mcpToken = (envOllama.match(/^ENKI_MCP_TOKEN=(\S+)/m) || [])[1] || '';
       renderedCfg = renderedCfg.replace(/__ENKI_MCP_TOKEN__/g, mcpToken);

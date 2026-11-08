@@ -25,6 +25,11 @@ const CONFIG_PATH = '/pizzepos/carta-digital/config.json';
 // Los modos de consumo que el sistema sabe operar. Un negocio ELIGE un subconjunto en
 // su config (dato); aquí solo se filtra lo que no existe para no publicar botones muertos.
 const MODOS_VALIDOS = ['mesa', 'recoger', 'llevar', 'domicilio'];
+// El DEFAULT de una carta que NO ha elegido es el histórico: mesa/recoger/llevar. Un modo
+// nuevo (domicilio) NO se pinta por existir en el sistema — se pinta cuando el negocio lo
+// pide como DATO. Usar MODOS_VALIDOS como default metía «A domicilio» en la carta de todo
+// negocio que nunca lo pidió (le pasó a the-pirate, 7-nov-2026: la pizzería ofrecía reparto).
+const MODOS_DEFAULT = ['mesa', 'recoger', 'llevar'];
 const DISENO_PATH = '/pizzepos/carta-digital/diseno.json';   // el look que compone Enki, por proyecto
 // Bundle estático servido por Caddy en /<ns>/<slug>/. project-manager symlinka
 // /opt/enki/public/<ns>/<slug> → <proyecto>/storage/www/ al activar la feature `www`.
@@ -78,6 +83,12 @@ class CartaDigitalModule extends BaseModule {
     sub('carta.borrada', e => { this._reemitir(e); this._autoPublicar(e); });
     sub('contenido.actualizado', e => { this._reemitir(e); this._autoPublicar(e); });
     sub('marketing.perfil.actualizado', e => { this._reemitir(e); this._autoPublicar(e); });
+    // CONFIG DEL CANAL (update_config → opciones_visualizacion): moneda, modos_consumo, teléfono,
+    // mensaje de pedido, pago_online, telegram_bot — TODO eso se hornea dentro del bundle, así que
+    // cambiarlo dejaba la web VIEJA con el dato nuevo (visto en Rapitvapers: guardar los modos
+    // recoger+domicilio y la carta pública seguía pintando Mesa/Recoger/Llevar). Este evento lo
+    // emite el propio módulo y hasta v2.26 no lo escuchaba nadie: el dato cambiaba en silencio.
+    sub('cartadigital.config.actualizada', e => this._autoPublicar(e));
     sub('project.activated', e => this._onProjectActivated(e));
     sub('project.deactivated', e => this._onProjectDeactivated(e));
     // Fuente de verdad de los carriles (id, name, base_path) → todas las caras.
@@ -480,7 +491,7 @@ class CartaDigitalModule extends BaseModule {
       // y el botón Mesa desaparece. Se filtran valores desconocidos en el borde.
       modos_consumo: Array.isArray(op.modos_consumo) && op.modos_consumo.length
         ? op.modos_consumo.filter(m => MODOS_VALIDOS.includes(m))
-        : MODOS_VALIDOS,
+        : MODOS_DEFAULT,
       whatsapp_telefono: normalizarTelefono(op.whatsapp_telefono || b.negocio?.redes?.whatsapp || b.negocio?.local?.telefono || ''),
       mensaje_header: op.mensaje_pedido || '¡Hola! Quiero pedir:',
       project_slug: slug,
@@ -642,7 +653,7 @@ class CartaDigitalModule extends BaseModule {
         moneda: op.moneda || '€',
         modos_consumo: Array.isArray(op.modos_consumo) && op.modos_consumo.length
           ? op.modos_consumo.filter(m => MODOS_VALIDOS.includes(m))
-          : MODOS_VALIDOS,
+          : MODOS_DEFAULT,
         whatsapp_telefono: normalizarTelefono(op.whatsapp_telefono || b.negocio?.redes?.whatsapp || b.negocio?.local?.telefono || ''),
         mensaje_header: op.mensaje_pedido || '¡Hola! Quiero pedir:',
         project_slug: this.activos.get(project_id)?.slug || String(project_id).slice(0, 8),
@@ -711,7 +722,7 @@ class CartaDigitalModule extends BaseModule {
     }
     const w = await this._guardarConfig(data.project_id, config);
     if (w.status >= 400) return w;
-    this.eventBus.publish('cartadigital.config.actualizada', { project_id: data.project_id, correlation_id: data.correlation_id || crypto.randomUUID(), timestamp: new Date().toISOString() });
+    this.eventBus.publish('cartadigital.config.actualizada', { project_id: data.project_id, motivo: 'update_config', correlation_id: data.correlation_id || crypto.randomUUID(), timestamp: new Date().toISOString() });
     return { status: 200, data: config };
   }
 

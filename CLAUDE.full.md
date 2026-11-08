@@ -6039,6 +6039,7 @@ CLASE CartaDigitalModule EXTIENDE BaseModule {  // PROYECTOR, no manager-con-sto
     onLoad(core):
       SUSCRIBE tarifas.config.actualizada · carta.{actualizada,editada,borrada}
               · contenido.actualizado · marketing.perfil.actualizado
+              · cartadigital.config.actualizada   // v2.26: TODO lo que se hornea en el bundle
               · project.{activated,deactivated}
               · cartadigital.{validar,guardar_diseno,publicar}.request
   }
@@ -16292,6 +16293,14 @@ sendTemplate (Meta plantillas · salientes >24h) {
 //   pedido', guardada ANTES de vaciar (saveLastOrder) → vaciar no pierde nada.
 //   Antes: sendWhatsApp dejaba el carrito lleno (y volvía al recargar) y el camino online
 //   repintaba 'carrito vacío' encima de la confirmación (nunca se veía).
+// REPUBLICACIÓN DEL BUNDLE (módulo v2.26.0): el HTML de la PWA es ESTÁTICO y lleva HORNEADOS los
+//   botones de modo (`modos_consumo`), la moneda, el teléfono, el mensaje de pedido, el pago online
+//   y el bot de Telegram. Guardar el config del canal (update_config → opciones_visualizacion)
+//   rehornea solo: el módulo suscribe su propio `cartadigital.config.actualizada` (v2.26.0 — antes
+//   lo emitía y NINGÚN módulo lo escuchaba, así que la web se quedaba con la foto vieja mientras el
+//   dato ya era nuevo: visto en Rapitvapers, modos recoger+domicilio guardados el 6-nov y la carta
+//   pública del 5-nov pintando Mesa). Mismo debounce 4s, mismo guard de DISCO (solo rehornea si el
+//   proyecto YA publicó) y mismo interruptor `auto_publicar === false`.
 // PODA previa de carta-digital:
 //   v2.4.0 — fuera ofertas/reseñas/track (la proyección no los daba: UI viva alimentada por vacío).
 //   v2.5.0 — fuera el cerebro FANTASMA del chat (default ai_chat_path '/modules/ai-gateway/chat',
@@ -16441,10 +16450,10 @@ PIEZAS {
   modules/whatsapp-bot (1.5.0)                   (webhook Meta REAL + alta por UI + snapshot + #P1 + re-tasado + sendTemplate + _rpc/_iniciarPagoTarjeta/onPedidoPagado)
   modules/whatsapp-bot/services/meta-cloud-client.js (Meta Cloud API: sendText/sendTemplate/_postMessage/parseWebhookEvent)
   modules/whatsapp-bot/services/pedido-parser.js (#P1: _decodificarEstructura + metodo_pago)
-  modules/pizzepos/carta-digital (2.25.1)        (PWA emite #P1 + paridad mitad + nombre obligatorio + botones metodo_pago)
+  modules/pizzepos/carta-digital (2.26.0)        (PWA emite #P1 + paridad mitad + nombre obligatorio + botones metodo_pago)
   modules/pizzepos/pedidos (3.5.0)               (estructura tienda → cocina ; ancla = cliente_nombre ; metodo_pago ; onPagoConfirmado con recreación del huérfano)
   modules/pago-gateway (3.1.0)                  (ÓRGANO de cobro provider-agnóstico: Stripe + SumUp; cuenta y clave POR PROYECTO)
-  modules/credential-manager (2.2.0)             (META_WHATSAPP[_VERIFY_TOKEN] + GLOVO PROJECT_ONLY + la clave de pago por proyecto)
+  modules/credential-manager (2.3.0)             (META_WHATSAPP[_VERIFY_TOKEN] + GLOVO PROJECT_ONLY + la clave de pago por proyecto)
   frontend credentials (CredentialsPanel + stores) (4ª pestaña 💬 WhatsApp · fix agrupado de la lista)
   cocina (_buildCocinaItem → ItemLine)           (YA pintaba la estructura, del comandero)
 }
@@ -16636,7 +16645,7 @@ guarda como `null`) y 2 aserciones en el lector `whatsapp-qr`.
   },
   "genera_el_contenido": {
     "carta-digital._publicarBundle": "VIVO — proyecta la carta pública al vuelo, escribe el bundle PWA en la RAÍZ de www/ (la carta ES la home). AUTO-ACTIVA la feature www antes de escribir.",
-    "carta-digital._autoPublicar": "VIVO — RE-HORNEA SOLO. El bundle es estático, así que un cambio de carta sin republicar dejaba la web vieja en silencio; las 5 señales de fuente (carta.actualizada/editada/borrada, contenido.actualizado, marketing.perfil.actualizado) disparan _rehornear con debounce 4s por proyecto. Solo actúa si el proyecto YA publicó (verdad en el DISCO: fs.exists /www/index.html — la primera publicación sigue siendo acto del dueño) y obedece el interruptor opciones_visualizacion.auto_publicar===false. Fallo → warn + métrica + evento cartadigital.republicar.fallido (nunca silencioso).",
+    "carta-digital._autoPublicar": "VIVO — RE-HORNEA SOLO. El bundle es estático, así que un cambio de carta sin republicar dejaba la web vieja en silencio; las 6 señales de fuente (carta.actualizada/editada/borrada, contenido.actualizado, marketing.perfil.actualizado y cartadigital.config.actualizada —v2.26: moneda, modos_consumo, teléfono, mensaje de pedido, pago_online, bot de Telegram se hornean DENTRO del bundle, así que cambiarlos también deja la web vieja—) disparan _rehornear con debounce 4s por proyecto. Solo actúa si el proyecto YA publicó (verdad en el DISCO: fs.exists /www/index.html — la primera publicación sigue siendo acto del dueño) y obedece el interruptor opciones_visualizacion.auto_publicar===false. Fallo → warn + métrica + evento cartadigital.republicar.fallido (nunca silencioso).",
     "árbol libre":  "lo que el comerciante suba a www/ (www/catalogo/…) convive al lado y se espeja en la URL"
   },
   "shop_desaparece": "el modelo viejo /<ns>/shop/<slug> (feature 'tienda', bundle rígido) queda LEGACY. Migración runtime: reactivar www + republicar.",
@@ -18569,7 +18578,7 @@ PIEZAS {
   modules/estados (0.4.0 · reflejo 0.4.0)   la cúpula custodio (single-writer, freno entre pasos + EL JUEZ)
                                             + TOOLS del chat (crear·anadir·completar·ver·borrar·fijar_objetivo·evaluar_rail)
   modules/_shared/procesos-semilla.js       las plantillas de proceso por arquetipo (PRISMA hereda)
-  ai-gateway (2.36.0)                      el nervio: _leerRailActivo + _composeRailSection (activa + objetivo + juez)
+  ai-gateway (2.38.0)                      el nervio: _leerRailActivo + _composeRailSection (activa + objetivo + juez)
                                             + EL TIRO AUTOMÁTICO (_evaluarRailAuto post-turno, detached, safety caps)
 }
 LA MANO QUE ESCRIBE (v0.2.0)  el diseño decía "el LLM PROPONE · el reflejo SOSTIENE". v0.1 construyó el que

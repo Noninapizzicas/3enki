@@ -70,6 +70,17 @@ class GestorLlaves extends ModuloHibridoReflejo {
     });
   }
 
+  // Arrancar con el estado que ya está en disco. `project.activated` llega una
+  // sola vez; si este módulo carga después, sin esto arrancaría VACÍO teniendo
+  // su fichero (404 falsos, llaves invisibles). No bloquea el arranque.
+  async onLoad(ctx) {
+    const r = await super.onLoad(ctx);
+    this._persist.restaurarTodos()
+      .then((n) => { if (n) this.logger?.info(`${this.name}.restaurado-de-disco`, { module: this.name, proyectos: n }); })
+      .catch(() => { /* best-effort: se reintenta en project.activated */ });
+    return r;
+  }
+
   async onUnload() {
     await this._persist.flush();
     this._persist.detener();

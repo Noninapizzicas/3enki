@@ -42,6 +42,15 @@
  *
  * Mapa exhaustivo (PASO 0 del rewrite) en
  * arquitectura/migracion/notas/conversacion__chat-io-mapa.md
+ *
+ * ── HOOK DE ADMISIÓN · INTERRUPTOR TEMPORAL (v2.3.0) ─────────────────────
+ * Con la config `conversaciones.gate` = true, `handleSend` publica
+ * `conversacion.entrada.recibida` y ESPERA `conversacion.entrada_resultado`
+ * (correlado por request_id, timeout declarado) ANTES de escribir nada.
+ * RECHAZAR / timeout / fallo = fail-closed: no se inserta el mensaje.
+ * Con el interruptor en false (default) el camino es el de siempre, byte a
+ * byte: ni una petición extra al bus. El interruptor es TEMPORAL — se retira
+ * cuando la cadena de admisión esté estable.
  */
 
 'use strict';
@@ -86,16 +95,28 @@ const isUUID = (s) => typeof s === 'string' && UUID_REGEX.test(s);
 const defaultSettings = () => ({ context_window: 20, temperature: 0.7, max_tokens: 4096 });
 const DB_TIMEOUT_MS = 10000;
 
+// Hook de admisión (TEMPORAL). La clave de config vive en module.json → config.
+const GATE_CONFIG_KEY = 'conversaciones.gate';
+const GATE_TIMEOUT_MS = 8000;
+const EVENTO_ENTRADA = 'conversacion.entrada.recibida';
+const EVENTO_ENTRADA_RESULTADO = 'conversacion.entrada_resultado';
+
 class ChatIoModule extends BaseModule {
   constructor() {
     super();
     this.name = 'chat-io';
-    this.version = '2.0.0';
+    this.version = '2.3.0';
     this.mqtt      = null;
 
     this.pendingDb           = new Map();
     this.schemaReady         = new Set();
     this.knownConversations  = new Map();
+
+    // HOOK DE ADMISIÓN (TEMPORAL): RPC de entrada en vuelo.
+    // Map request_id → { cerrar, timeout, unsubs, cerrado }.
+    this.pendingEntrada      = new Map();
+    this.moduleConfig        = {};
+    this.gateTimeoutMs       = GATE_TIMEOUT_MS;
   }
 
   // ==========================================
@@ -107,10 +128,25 @@ class ChatIoModule extends BaseModule {
     this.metrics   = context.metrics;
     this.eventBus  = context.eventBus;
     this.mqtt      = context.uiHandler?.mqtt || context.mqtt || null;
+    this.moduleConfig = context.moduleConfig || {};
+
+    const gateCfg = this.moduleConfig.conversaciones;
+    if (gateCfg && Number.isFinite(gateCfg.gate_timeout_ms) && gateCfg.gate_timeout_ms > 0) {
+      this.gateTimeoutMs = gateCfg.gate_timeout_ms;
+    }
 
     this.logger.info('chat-io.loading', {
       module: this.name, version: this.version
     });
+
+    if (this._gateActivo()) {
+      this.logger.warn('chat-io.gate.activo', {
+        module: this.name,
+        clave: GATE_CONFIG_KEY,
+        timeout_ms: this.gateTimeoutMs,
+        nota: 'INTERRUPTOR TEMPORAL: la entrada se admite ANTES de escribir (fail-closed)'
+      });
+    }
 
     this.logger.info('chat-io.loaded');
   }
@@ -118,9 +154,18 @@ class ChatIoModule extends BaseModule {
   async onUnload() {
     this.logger.info('chat-io.unloading', {
       pending_db: this.pendingDb.size,
+      pending_entrada: this.pendingEntrada.size,
       cached_conversations: this.knownConversations.size,
       schema_ready_projects: this.schemaReady.size
     });
+
+    // RPC de admisión en vuelo: se cierran en fallo (nunca se resuelven como
+    // admisión) para que ningún handleSend quede colgado tras el unload.
+    for (const entrada of Array.from(this.pendingEntrada.values())) {
+      try { entrada.cerrar({ ok: false, motivo: 'MODULE_UNLOADING' }); }
+      catch (_) { this.metrics?.increment('chat-io.errors', { kind: 'unload_entrada' }); }
+    }
+    this.pendingEntrada.clear();
 
     const pending = Array.from(this.pendingDb.values());
     this.pendingDb.clear();
@@ -329,6 +374,28 @@ class ChatIoModule extends BaseModule {
       // valores almacenados en la conversacion.
       const settings = { ...dbSettings, ...(data?.settings || {}) };
 
+      // ── HOOK DE ADMISIÓN (TEMPORAL · config `conversaciones.gate`) ────────
+      // El orden de siempre ESCRIBE antes de admitir (INSERT del mensaje →
+      // UPDATE de la conversacion → chat.message.saved). Con el interruptor ON
+      // la entrada se publica ANTES de cualquier escritura y se espera
+      // `conversacion.entrada_resultado` correlado por request_id.
+      //   ADMITIR/ABRIR → se sigue con el camino de siempre (INSERT intacto).
+      //   RECHAZAR / timeout / fallo → fail-closed: NO se escribe nada.
+      // Con el interruptor OFF este bloque no se ejecuta: cero peticiones
+      // extra al bus y el camino es exactamente el de siempre.
+      let relayPayloadAdmitido = null;
+      if (this._gateActivo()) {
+        const admision = await this._admitirEntrada({
+          project_id, conversation_id, user_id, user_message, correlation_id,
+          channel, channel_context, settings, attachments, intencion,
+          page_id, page_context: ctx, entrada: data
+        });
+        if (!admision.ok) throw admision.error;
+        // El coordinador NO publica el relay: entrega el payload enriquecido
+        // (sobre + sesión + referencia) y chat-io lo publica como suyo.
+        relayPayloadAdmitido = admision.relay_payload || null;
+      }
+
       const message_id = crypto.randomUUID();
       const now = Date.now();
 
@@ -375,7 +442,10 @@ class ChatIoModule extends BaseModule {
         settings,
         page_id,
         prompt_id,
-        page_context: ctx && Object.keys(ctx).length > 0 ? ctx : undefined
+        page_context: ctx && Object.keys(ctx).length > 0 ? ctx : undefined,
+        // Con el gate ON, el payload del coordinador (sobre + sesión atada +
+        // referencia) enriquece el MISMO evento. Un solo emisor: chat-io.
+        ...(relayPayloadAdmitido || {})
       });
       this.metrics?.increment('chat-io.message.sent');
 
@@ -383,6 +453,202 @@ class ChatIoModule extends BaseModule {
     } catch (err) {
       return this._handleHandlerError('chat-io.ui.send.failed', err, 'ui_send');
     }
+  }
+
+  // ==========================================
+  // HOOK DE ADMISIÓN — INTERRUPTOR TEMPORAL (`conversaciones.gate`)
+  // ==========================================
+  //
+  // Se retira entero cuando la cadena de admisión (coordinador → sobre →
+  // llaves → puerta → sesión) esté estable en producción. Mientras viva:
+  //   ON  → publica `conversacion.entrada.recibida` y espera el resultado
+  //         correlado ANTES de escribir. RECHAZAR/timeout/fallo = fail-closed.
+  //   OFF → no se ejecuta ni una línea (default; camino de siempre).
+
+  _gateActivo() {
+    const cfg = this.moduleConfig || {};
+    const anidado = cfg.conversaciones && typeof cfg.conversaciones === 'object'
+      ? cfg.conversaciones.gate
+      : undefined;
+    // Acepta también la clave plana "conversaciones.gate" por si el config
+    // llega aplanado desde el loader.
+    const v = anidado !== undefined ? anidado : cfg[GATE_CONFIG_KEY];
+    return v === true || v === 'true' || v === 1 || v === '1';
+  }
+
+  async _admitirEntrada(d) {
+    const request_id = crypto.randomUUID();
+    const espera = this._esperarEntradaResultado(request_id);
+
+    const payload = {
+      request_id,
+      correlation_id: d.correlation_id,
+      project_id: d.project_id,
+      conversacion: d.conversation_id,
+      conversacion_id: d.conversation_id,
+      participante: d.user_id,
+      user_message: d.user_message,
+      mensaje: d.entrada?.message_id || null,
+      acto: 'ESCRIBIR',
+      canal: d.channel,
+      channel: d.channel,
+      channel_context: d.channel_context || {},
+      estado_conversacion: d.entrada?.estado_conversacion ?? d.entrada?.estado ?? null,
+      politica: d.entrada?.politica ?? null,
+      settings: d.settings,
+      attachments: d.attachments,
+      intencion: d.intencion,
+      page_id: d.page_id,
+      page_context: d.page_context || null,
+      ahora: new Date().toISOString()
+    };
+
+    try {
+      await this.eventBus.publish(EVENTO_ENTRADA, payload);
+    } catch (err) {
+      // Sin petición no hay admisión: fail-closed (nada se escribe).
+      espera.cerrar({ ok: false, motivo: 'PUBLISH_FALLIDO', error: err.message });
+      return {
+        ok: false,
+        error: this._errorDeEntrada({ motivo: 'PUBLISH_FALLIDO', causa: err.message, request_id })
+      };
+    }
+
+    const r = await espera.promesa;
+
+    if (!r || r.ok === false) {
+      // Timeout declarado / publish fallido / unload: NUNCA se disfraza de
+      // admisión (fail-closed).
+      return {
+        ok: false,
+        error: this._errorDeEntrada({
+          motivo: r?.motivo || 'SIN_RESULTADO',
+          causa: r?.error || null,
+          request_id
+        })
+      };
+    }
+
+    const status = Number(r.status) || 0;
+    if (status >= 400 || r.error || r.data?.admitida === false) {
+      const detalle = r.error?.details || {};
+      return {
+        ok: false,
+        error: this._errorDeEntrada({
+          motivo: detalle.motivo || r.error?.code || 'ENTRADA_RECHAZADA',
+          paso: detalle.paso || null,
+          causa: detalle.causa || null,
+          status,
+          code: r.error?.code || null,
+          request_id
+        })
+      };
+    }
+
+    this.metrics?.increment('chat-io.entrada.admitida');
+    this.logger.info('chat-io.entrada.admitida', {
+      module: this.name,
+      project_id: d.project_id,
+      conversation_id: d.conversation_id,
+      request_id,
+      sesion: r.data?.sesion?.id || null
+    });
+    return {
+      ok: true,
+      request_id,
+      resultado: r.data || null,
+      // Payload enriquecido que entrega el coordinador para el evento del relay
+      // (sobre + sesión atada + referencia). chat-io lo publica como suyo.
+      relay_payload: r.data?.relay_payload || null
+    };
+  }
+
+  /**
+   * Espera `conversacion.entrada_resultado` correlado por request_id.
+   * Devuelve { promesa, cerrar }: cerrar resuelve con { ok:false, motivo }
+   * para que el llamante pueda cortar (publish fallido, unload).
+   * El timeout es DECLARADO: al vencer resuelve fallo, jamás inventa admisión.
+   */
+  _esperarEntradaResultado(request_id) {
+    const entrada = { timeout: null, unsubs: [], cerrado: false };
+    const promesa = new Promise((resolve) => { entrada._resolve = resolve; });
+
+    entrada.cerrar = (res) => {
+      if (entrada.cerrado) return;
+      entrada.cerrado = true;
+      if (entrada.timeout) clearTimeout(entrada.timeout);
+      for (const u of entrada.unsubs) { try { u(); } catch (_) { /* ya no importa */ } }
+      if (this.pendingEntrada.get(request_id) === entrada) this.pendingEntrada.delete(request_id);
+      entrada._resolve(res);
+    };
+
+    entrada.timeout = setTimeout(() => {
+      this.metrics?.increment('chat-io.entrada.timeout');
+      entrada.cerrar({ ok: false, motivo: 'TIMEOUT', timeout_ms: this.gateTimeoutMs });
+    }, this.gateTimeoutMs);
+
+    this.pendingEntrada.set(request_id, entrada);
+
+    // Suscripción dinámica (sólo con el gate ON). Si el bus no la soporta, el
+    // handler declarado en module.json (onEntradaResultado) sigue siendo válido.
+    if (typeof this.eventBus?.subscribe === 'function') {
+      try {
+        entrada.unsubs.push(this.eventBus.subscribe(EVENTO_ENTRADA_RESULTADO, (ev) => {
+          this.onEntradaResultado(ev);
+        }));
+      } catch (err) {
+        this.logger?.debug('chat-io.entrada.subscribe.skip', { error: err.message });
+      }
+    }
+
+    return { promesa, cerrar: entrada.cerrar };
+  }
+
+  /** Handler del bus: cierra el pending del request_id (idempotente). */
+  onEntradaResultado(event) {
+    const payload = event?.data || event || {};
+    const request_id = payload.request_id;
+    if (!request_id) return;
+    const pending = this.pendingEntrada.get(request_id);
+    if (!pending || pending.cerrado) return;
+    pending.cerrar(payload);
+  }
+
+  /** Rechazo de entrada → error canonico del modulo (status via _statusFromCode). */
+  _errorDeEntrada(det = {}) {
+    const status = Number(det.status) || 0;
+    const code = det.code
+      || (det.motivo === 'TIMEOUT'          ? 'UPSTREAM_TIMEOUT'
+        : det.motivo === 'PUBLISH_FALLIDO'
+          || det.motivo === 'MODULE_UNLOADING'
+          || det.motivo === 'SIN_RESULTADO'  ? 'UPSTREAM_UNREACHABLE'
+        : status === 403                     ? 'PERMISSION_DENIED'
+        : 'PRECONDITION_FAILED');
+
+    const motivo = det.motivo || 'ENTRADA_RECHAZADA';
+    const err = new Error(
+      `entrada no admitida: ${motivo}`
+      + (det.paso ? ` (paso: ${det.paso})` : '')
+      + (det.causa ? ` · causa: ${det.causa}` : '')
+    );
+    err._code = code;
+    err._details = {
+      kind: 'ENTRADA_RECHAZADA',
+      motivo,
+      paso: det.paso || null,
+      causa: det.causa || null,
+      request_id: det.request_id || null,
+      persistido: false
+    };
+    this.metrics?.increment('chat-io.entrada.rechazada', { motivo });
+    this.logger?.warn('chat-io.entrada.rechazada', {
+      module: this.name,
+      motivo,
+      paso: det.paso || null,
+      code,
+      request_id: det.request_id || null
+    });
+    return err;
   }
 
   async handleCreate(data) {

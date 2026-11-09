@@ -60,6 +60,8 @@ class GestorLlaves extends ModuloHibridoReflejo {
 
     // project_id → asientos[] (SÓLO-AÑADIR). El ledger ES el estado.
     this.ledger = new Map();
+    // Proyectos cuyo ledger YA se ha leído de disco (merge por id).
+    this.hidratados = new Set();
 
     this._persist = new PosPersistencia({
       modulo: this,
@@ -124,6 +126,10 @@ class GestorLlaves extends ModuloHibridoReflejo {
     if (!project_id) return this._falloEmitir('project_id requerido', 'project_id');
     if (!Array.isArray(actos) || actos.length === 0) return this._falloEmitir('actos[] requerido (LEER ≠ ESCRIBIR)', 'actos');
     if (!emisor) return this._falloEmitir('emisor requerido (toda llave tiene quién la emite)', 'emisor');
+
+    // Antes de añadir un asiento: leer el ledger del disco (si aún no se hizo).
+    // Sin esto, un ledger vacío en memoria pisa el fichero al hacer flush.
+    await this._asegurarHidratado(project_id);
 
     // El hilo lo custodia chat-io: aquí llega HIDRATADO por valor (isla).
     if (orden.hilo_existe === false) {
@@ -190,6 +196,10 @@ class GestorLlaves extends ModuloHibridoReflejo {
     if (!project_id) return this._errorResponse(400, 'INVALID_INPUT', 'project_id requerido', { kind: 'domain', field: 'project_id' });
     if (!id) return this._errorResponse(400, 'INVALID_INPUT', 'id de llave requerido', { kind: 'domain', field: 'id' });
     if (!actor) return this._errorResponse(400, 'INVALID_INPUT', 'actor requerido (la revocación se traza)', { kind: 'domain', field: 'actor' });
+
+    // Igual que al emitir: primero se lee el ledger, después se añade el asiento.
+    // Si no, buscar la emisión en un ledger vacío da 404 falso y el flush pisa.
+    await this._asegurarHidratado(project_id);
 
     const emision = this._asientos(project_id).find((a) => a.tipo === 'EMISION' && a.id === id);
     if (!emision) {
@@ -285,12 +295,31 @@ class GestorLlaves extends ModuloHibridoReflejo {
   }
 
   _hidratar(project_id, data) {
+    this.hidratados.add(project_id);
     const asientos = Array.isArray(data?.asientos) ? data.asientos : [];
     const actuales = this._asientos(project_id);
     for (const a of asientos) {
       if (!a || !a.id) continue;
       if (!actuales.some((x) => x.id === a.id)) actuales.push(a);   // merge por id: nunca duplica
     }
+  }
+
+  /**
+   * Un custodio ESCRIBE sólo lo que ha LEÍDO.
+   *
+   * Si el proyecto no se había hidratado (arranque, o el evento llegó antes de
+   * que el módulo estuviera suscrito), `_emitir` añadía un asiento a un ledger
+   * VACÍO en memoria y el siguiente flush escribía el snapshot con SOLO ese
+   * asiento: el fichero perdía todos los anteriores.
+   *
+   * Pasó en producción: 9 llaves emitidas a las 13:27 desaparecieron cuando el
+   * módulo emitió una nueva tras un restart. El ledger es sólo-añadir: perder
+   * asientos es corromperlo.
+   */
+  async _asegurarHidratado(project_id) {
+    if (!project_id || this.hidratados.has(project_id)) return;
+    await this._persist.restaurar(project_id);
+    this.hidratados.add(project_id);
   }
 
   async _solicitarDecision(orden, tipo, motivo) {

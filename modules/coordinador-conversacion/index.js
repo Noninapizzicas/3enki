@@ -241,7 +241,10 @@ class CoordinadorConversacion extends ModuloHibridoReflejo {
       }, correlacion);
     }
 
-    await this._publicarEvento(EVENTO_RELAY, pase.payload, d);
+    // UN SOLO DUEÑO DEL RELAY: chat-io publica `chat.message.saved` (es suyo
+    // desde siempre). El coordinador NO lo publica — solo ENTREGA el payload
+    // enriquecido (sobre + sesión + referencia) para que chat-io lo use al
+    // publicarlo. Dos emisores del mismo evento = el relay razona dos veces.
     this.metrics?.increment(`${this.name}.entrada.admitida`, {});
     this.logger?.info('coordinador-conversacion.admitida', {
       module: this.name,
@@ -262,6 +265,9 @@ class CoordinadorConversacion extends ModuloHibridoReflejo {
         sesion: { id: sesion.id, participante: sesion.participante, conversacion: sesion.conversacion },
         sobre: sobre.sobre,
         relay_event: EVENTO_RELAY,
+        // El llamador (chat-io) publica EVENTO_RELAY con ESTE payload: lleva el
+        // sobre, la sesión atada y la referencia. El coordinador no publica.
+        relay_payload: pase.payload,
         referencia
       }
     };

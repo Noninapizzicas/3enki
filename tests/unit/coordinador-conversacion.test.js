@@ -155,23 +155,29 @@ async function caso(nombre, fn) {
     assert.strictEqual(r.status, 200);
     assert.strictEqual(r.data.ok, true);
     assert.strictEqual(r.data.admitida, true);
+    // UN SOLO DUEÑO DEL RELAY (v2): el coordinador NO publica chat.message.saved.
+    // Entrega `relay_payload` y es chat-io quien lo publica (si no, el relay
+    // razonaría dos veces por mensaje).
     assert.deepStrictEqual(traza, [
       'sobre.construir.request',
       'sobre.validar.request',
       'llave.vigentes.request',
       'conversacion.admitir.request',
-      'sesion.resolver.request',
-      EVENTO_RELAY
+      'sesion.resolver.request'
     ]);
-    pasosOrden = traza.length - 1; // 5 llamadas + el pase al relay
+    pasosOrden = traza.length;
 
     const resultado = ultimo(bus, 'conversacion.entrada_resultado');
     assert.strictEqual(resultado.status, 200);
     assert.strictEqual(resultado.request_id, 'req-entrada-1');
     assert.strictEqual(resultado.data.sesion.id, 'sesion-1');
 
-    const pase = ultimo(bus, EVENTO_RELAY);
-    assert.ok(pase, 'el paso al relay debe publicarse');
+    // El coordinador NO publica el relay: lo ENTREGA.
+    assert.strictEqual(bus.publicados.filter((p) => p.event === EVENTO_RELAY).length, 0,
+      'el coordinador NO debe publicar chat.message.saved (dueño único: chat-io)');
+
+    const pase = resultado.data.relay_payload;
+    assert.ok(pase, 'el coordinador debe entregar relay_payload');
     assert.strictEqual(pase.project_id, 'sistema-de-conversaciones');
     assert.strictEqual(pase.conversation_id, 'c-1');
     assert.strictEqual(pase.user_message, 'hola, ¿qué tal?');
@@ -285,9 +291,13 @@ async function caso(nombre, fn) {
     assert.strictEqual(r.data.sesion.participante, 'ana');
     assert.strictEqual(r.data.sesion.conversacion, 'c-1');
 
-    const pase = ultimo(bus, EVENTO_RELAY);
-    assert.ok(pase, 'el relay real recibe chat.message.saved');
+    // Dueño único del relay: el coordinador entrega, chat-io publica.
+    assert.strictEqual(bus.publicados.filter((p) => p.event === EVENTO_RELAY).length, 0,
+      'el coordinador NO publica chat.message.saved');
+    const pase = r.data.relay_payload;
+    assert.ok(pase, 'el coordinador entrega relay_payload con el sobre y la sesión');
     assert.strictEqual(pase.user_message, 'hola, ¿qué tal?');
+    assert.strictEqual(pase.sesion.id, r.data.sesion.id);
 
     for (const m of mods) { try { await m.onUnload(); } catch (_) { /* limpieza */ } }
   });

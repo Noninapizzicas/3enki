@@ -383,6 +383,7 @@ class ChatIoModule extends BaseModule {
       //   RECHAZAR / timeout / fallo → fail-closed: NO se escribe nada.
       // Con el interruptor OFF este bloque no se ejecuta: cero peticiones
       // extra al bus y el camino es exactamente el de siempre.
+      let relayPayloadAdmitido = null;
       if (this._gateActivo()) {
         const admision = await this._admitirEntrada({
           project_id, conversation_id, user_id, user_message, correlation_id,
@@ -390,6 +391,9 @@ class ChatIoModule extends BaseModule {
           page_id, page_context: ctx, entrada: data
         });
         if (!admision.ok) throw admision.error;
+        // El coordinador NO publica el relay: entrega el payload enriquecido
+        // (sobre + sesión + referencia) y chat-io lo publica como suyo.
+        relayPayloadAdmitido = admision.relay_payload || null;
       }
 
       const message_id = crypto.randomUUID();
@@ -438,7 +442,10 @@ class ChatIoModule extends BaseModule {
         settings,
         page_id,
         prompt_id,
-        page_context: ctx && Object.keys(ctx).length > 0 ? ctx : undefined
+        page_context: ctx && Object.keys(ctx).length > 0 ? ctx : undefined,
+        // Con el gate ON, el payload del coordinador (sobre + sesión atada +
+        // referencia) enriquece el MISMO evento. Un solo emisor: chat-io.
+        ...(relayPayloadAdmitido || {})
       });
       this.metrics?.increment('chat-io.message.sent');
 
@@ -546,7 +553,14 @@ class ChatIoModule extends BaseModule {
       request_id,
       sesion: r.data?.sesion?.id || null
     });
-    return { ok: true, request_id, resultado: r.data || null };
+    return {
+      ok: true,
+      request_id,
+      resultado: r.data || null,
+      // Payload enriquecido que entrega el coordinador para el evento del relay
+      // (sobre + sesión atada + referencia). chat-io lo publica como suyo.
+      relay_payload: r.data?.relay_payload || null
+    };
   }
 
   /**

@@ -116,6 +116,11 @@ async function montar({ over = {}, timeouts = {} } = {}) {
     'sobre.construir.request': ['sobre.construir.response', SOBRE_CONSTRUIDO],
     'sobre.validar.request': ['sobre.validar.response', VEREDICTO_OK],
     'llave.vigentes.request': ['llave.vigentes.response', VIGENTES],
+    // Default del mock: el proyecto NO ha declarado política (404 del custodio).
+    'politica.consultar.request': ['politica.consultar.response', {
+      status: 404,
+      error: { code: 'RESOURCE_NOT_FOUND', message: 'El proyecto no ha declarado política de admisión' }
+    }],
     'conversacion.admitir.request': ['conversacion.admitir.response', ABRIR],
     'sesion.resolver.request': ['sesion.resolver.response', SESION]
   };
@@ -300,6 +305,88 @@ async function caso(nombre, fn) {
     assert.strictEqual(pase.sesion.id, r.data.sesion.id);
 
     for (const m of mods) { try { await m.onUnload(); } catch (_) { /* limpieza */ } }
+  });
+
+  // ─── (g) sin política declarada ⇒ corta en politica_no_declarada ─────────
+  await caso('(g) sin política declarada: corta en `politica_no_declarada`, 0 llamadas a la puerta, 0 mensajes', async () => {
+    const { mod, bus, traza } = await montar({
+      over: {
+        'politica.consultar.request': {
+          status: 404,
+          error: { code: 'RESOURCE_NOT_FOUND', message: 'El proyecto no ha declarado política de admisión' }
+        }
+      }
+    });
+    const entrada = entradaOK();
+    delete entrada.politica;                       // el chat no la manda: la resuelve el coordinador
+    const r = await mod.onEntradaRecibida({ data: entrada });
+
+    assert.strictEqual(r.status, 422);
+    assert.strictEqual(r.error.code, 'PRECONDITION_FAILED');
+    assert.strictEqual(r.error.details.motivo, 'politica_no_declarada');
+    assert.strictEqual(r.error.details.paso, 'politica');
+    assert.strictEqual(bus.publicados.filter((p) => p.event === 'conversacion.admitir.request').length, 0,
+      'sin política NO se llama a la puerta (no se inventa una política por defecto)');
+    assert.strictEqual(bus.publicados.filter((p) => p.event === EVENTO_RELAY).length, 0,
+      'sin política el mensaje NO puede llegar al LLM');
+    assert.deepStrictEqual(traza, ['sobre.construir.request', 'sobre.validar.request', 'llave.vigentes.request', 'politica.consultar.request']);
+
+    const hecho = ultimo(bus, 'conversacion.entrada_rechazada');
+    assert.strictEqual(hecho.motivo, 'politica_no_declarada');
+    assert.strictEqual(hecho.paso, 'politica');
+    assert.strictEqual(mod.politicas.size, 0, 'un 404 NO se cachea: declarar surte efecto en el siguiente mensaje');
+  });
+
+  // ─── (h) política consultada ⇒ llega a la puerta y ABRE ──────────────────
+  await caso('(h) con política declarada (consultada al custodio): llega a la puerta y ABRE', async () => {
+    const POLITICA = {
+      actosPorEntrada: { ESCRIBIR: ['LEER', 'ESCRIBIR'] },
+      actosPorEstado: { ABIERTA: ['LEER', 'ESCRIBIR'] },
+      estadosQueAdmiten: ['ABIERTA', 'ACTIVA'],
+      emisor: 'dueno',
+      version: 1
+    };
+    const { mod, bus, traza } = await montar({
+      over: { 'politica.consultar.request': { status: 200, data: { politica: POLITICA } } }
+    });
+    const entrada = entradaOK();
+    delete entrada.politica;
+    const r = await mod.onEntradaRecibida({ data: entrada });
+
+    assert.strictEqual(r.status, 200, JSON.stringify(r));
+    assert.strictEqual(r.data.admitida, true);
+    assert.deepStrictEqual(traza, [
+      'sobre.construir.request',
+      'sobre.validar.request',
+      'llave.vigentes.request',
+      'politica.consultar.request',
+      'conversacion.admitir.request',
+      'sesion.resolver.request'
+    ]);
+    // La puerta recibió LA política consultada (hidratada por valor, es isla).
+    const aLaPuerta = bus.publicados.find((p) => p.event === 'conversacion.admitir.request');
+    assert.deepStrictEqual(aLaPuerta.data.politica, POLITICA);
+    assert.ok(r.data.relay_payload, 'ABRIR entrega relay_payload');
+    assert.strictEqual(r.data.relay_payload.admitido, true);
+  });
+
+  // ─── (i) la caché evita pedir la política en cada mensaje (TTL 60 s) ─────
+  await caso('(i) dos entradas del MISMO proyecto ⇒ una sola consulta de política (caché TTL)', async () => {
+    const POLITICA = {
+      actosPorEntrada: { ESCRIBIR: ['LEER', 'ESCRIBIR'] },
+      actosPorEstado: { ABIERTA: ['LEER', 'ESCRIBIR'] }
+    };
+    const { mod, bus } = await montar({
+      over: { 'politica.consultar.request': { status: 200, data: { politica: POLITICA } } }
+    });
+    const primera = entradaOK(); delete primera.politica;
+    const segunda = entradaOK(); delete segunda.politica;
+
+    assert.strictEqual((await mod.onEntradaRecibida({ data: primera })).status, 200);
+    assert.strictEqual((await mod.onEntradaRecibida({ data: segunda })).status, 200);
+    assert.strictEqual(bus.publicados.filter((p) => p.event === 'politica.consultar.request').length, 1,
+      'la segunda entrada usa la caché (TTL 60 s por proyecto)');
+    assert.strictEqual(mod.politicaTTL, 60000);
   });
 
   // ─── recuento ────────────────────────────────────────────────────────────

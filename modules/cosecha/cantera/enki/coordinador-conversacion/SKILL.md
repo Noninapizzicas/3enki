@@ -250,3 +250,12 @@ Timeouts por paso (module.json, inyectables en el constructor para tests):
   `entrada_request_id` como rastro.
 - Al cambiar la costura a `llamada.nativa.request` (op futura del relay, §5.2),
   se toca **sólo** `EVENTO_RELAY` y su descripción en el manifest.
+- **Dependencia de ensamblaje declarada (ADN R3).** `conversacion.entrada.recibida`
+  es un evento de DOMINIO y su emisor es el hook de `chat-io` con el gate
+  `conversaciones.gate` ON (plan §5.2, "(3) hook de entrada"). Mientras ese hook
+  no exista en el repo, `node scripts/verificar-adn-modulo.js coordinador-conversacion`
+  marca `R3 · escucha 'conversacion.entrada.recibida' y NADIE del repo lo emite` y
+  el gate `completar_fase { fase:'construido' }` devuelve **409 FASE_INCOMPLETA**.
+  No se silencia desde este módulo (declarar el evento en `publishes` sin emitirlo
+  sería mentir): el cierre de F4 espera al hook de chat-io. Los RPC `.request` no
+  sufren R3 (el ADN los trata como preguntas, no como hechos huérfanos).

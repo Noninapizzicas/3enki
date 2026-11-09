@@ -190,10 +190,10 @@
     },
     "conversaciones": {
       "_doc": "INTERRUPTOR TEMPORAL (se retira cuando la cadena de admision este estable). gate=true → handleSend publica conversacion.entrada.recibida y espera conversacion.entrada_resultado ANTES de escribir; RECHAZAR/timeout/fallo = fail-closed (no se inserta el mensaje). gate=false (default) → camino de siempre, sin peticiones extra al bus.",
-      "gate": true,
+      "gate": false,
       "gate_timeout_ms": 8000,
       "_doc_llave": "Al crear una conversacion se emite su llave (actos LEER+ESCRIBIR) para que su primer mensaje pueda ser admitido.",
-      "_doc_estado": "ENCENDIDO 2026-11-09: la entrada se admite ANTES de escribir. Las 9 conversaciones existentes tienen su llave; las nuevas la reciben al crearse (handleCreate)."
+      "_doc_estado": "APAGADO 2026-11-09 a peticion del dueno. La cadena de admision queda construida y verificada; el camino del chat vuelve a ser el de siempre (sin esperar veredicto)."
     }
   },
   "observability": {

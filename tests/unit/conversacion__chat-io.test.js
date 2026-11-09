@@ -763,6 +763,10 @@ async function createConversation(m, opts = {}) {
     assert.strictEqual(e.user_message, 'con gate');
     assert.strictEqual(e.acto, 'ESCRIBIR');
     assert.strictEqual(e.channel, 'web');
+    // El estado NO vive en la tabla `conversations`: se declara el hecho.
+    // Una conversación existente está ACTIVA; una nueva, ABIERTA. Si mandara
+    // null, la puerta no encontraría `actosPorEstado[null]` y rechazaría todo.
+    assert.strictEqual(e.estado_conversacion, 'ACTIVA');
 
     // 2) se espero el resultado y el INSERT ocurrio DESPUES (orden real del bus)
     const iEntrada = indiceDe(trace, 'ev:conversacion.entrada.recibida');

@@ -493,7 +493,7 @@ class ChatIoModule extends BaseModule {
       canal: d.channel,
       channel: d.channel,
       channel_context: d.channel_context || {},
-      estado_conversacion: d.entrada?.estado_conversacion ?? d.entrada?.estado ?? null,
+      estado_conversacion: d.entrada?.estado_conversacion ?? d.entrada?.estado ?? (d.conversation_id ? 'ACTIVA' : 'ABIERTA'),
       politica: d.entrada?.politica ?? null,
       settings: d.settings,
       attachments: d.attachments,

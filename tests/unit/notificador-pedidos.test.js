@@ -283,6 +283,62 @@ test('_formatPedidoMessage con items vacios muestra "(pedido sin items)"', () =>
 });
 
 // ==========================================
+// Tests: pedido.sin_confirmar — el evento que antes no escuchaba nadie
+// ==========================================
+
+test('onPedidoSinConfirmar resuelve proyecto y avisa a la barra por telegram', async () => {
+  const fix = setupProjectFs('the-pirate', { chatId: 777, botName: 'pirata_bot' });
+  try {
+    const { m, mock } = await makeInstance({
+      projectAutoResponse: { success: true, project: { id: 'p-1', slug: 'the-pirate', base_path: fix.basePath } }
+    });
+    await m.onPedidoSinConfirmar({
+      data: {
+        pedido_id: 'ped-9',
+        project_id: 'p-1',
+        project_slug: 'the-pirate',
+        cliente_nombre: 'Sin Respuesta',
+        pedida_at: '2026-11-09T20:05:00.000Z',
+        esperando_desde: '2026-11-09T19:35:00.000Z'
+      }
+    });
+    const sendMsg = mock.published.find(p => p.eventType === 'telegram.send_message.request');
+    assert.ok(sendMsg, 'debe publicar telegram.send_message.request');
+    assert.strictEqual(sendMsg.data.chatId, 777);
+    assert.strictEqual(sendMsg.data.botName, 'pirata_bot');
+    assert.ok(sendMsg.data.text.includes('SIN CONFIRMAR'), 'el aviso se distingue de un pedido nuevo');
+    assert.ok(sendMsg.data.text.includes('THE-PIRATE'));
+    assert.ok(sendMsg.data.text.includes('A nombre de: Sin Respuesta'));
+    assert.ok(sendMsg.data.text.includes('ped-9'), 'lleva el id para localizarlo en pedidos');
+    assert.ok(sendMsg.data.text.includes('10 minutos'), 'explica por qué se avisa');
+    const met = mock.metrics._calls.find(c => c.name === 'notificador.sin_confirmar.notificado.total');
+    assert.ok(met, 'métrica de aviso entregado');
+    assert.strictEqual(met.labels.canal, 'telegram');
+  } finally { fix.cleanup(); }
+});
+
+test('onPedidoSinConfirmar sin chatId del staff descarta + metric proyecto_sin_chatid', async () => {
+  const fix = setupProjectFs('the-pirate', { chatId: '<PENDIENTE>' });
+  try {
+    const { m, mock } = await makeInstance({
+      projectAutoResponse: { success: true, project: { id: 'p-1', slug: 'the-pirate', base_path: fix.basePath } }
+    });
+    await m.onPedidoSinConfirmar({ data: { pedido_id: 'ped-9', project_id: 'p-1' } });
+    assert.ok(!mock.published.find(p => p.eventType === 'telegram.send_message.request'));
+    const desc = mock.metrics._calls.find(c => c.labels && c.labels.razon === 'proyecto_sin_chatid');
+    assert.ok(desc);
+  } finally { fix.cleanup(); }
+});
+
+test('onPedidoSinConfirmar sin project_id descarta sin tocar el bus', async () => {
+  const { m, mock } = await makeInstance();
+  await m.onPedidoSinConfirmar({ data: { pedido_id: 'ped-9' } });
+  assert.strictEqual(mock.published.length, 0);
+  const desc = mock.metrics._calls.find(c => c.labels && c.labels.razon === 'sin_project_id');
+  assert.ok(desc);
+});
+
+// ==========================================
 // Runner
 // ==========================================
 

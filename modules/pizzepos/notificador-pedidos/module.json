@@ -1,8 +1,8 @@
 {
-  "_doc": "Modulo de notificacion al staff cuando llega un pedido nuevo desde la PWA tienda. Escucha pedido.creado con canal_origen='web' (= pedido de PWA via tienda-api o MQTT directo del bundle) y publica telegram.send_message.request con resumen del pedido + nombre del cliente (ancla de recogida) al chatId del staff del proyecto. Resuelve la config del proyecto on-demand via project.get.request/response (sin cache, sin dependencia de project.activated) — evita la fragilidad operativa de depender del foco UI session. Diseñado para extension multi-canal: en v2 se anyadira branch para discord.send_message.request cuando discord-service exista. El ancla de recogida es el nombre que el cliente introduce (el codigo_recogida fue retirado): el dependiente lo pide y lo canta al recoger.",
+  "_doc": "Modulo de notificacion al staff cuando llega un pedido nuevo desde la PWA tienda. Escucha pedido.creado con canal_origen='web' (= pedido de PWA via tienda-api o MQTT directo del bundle) y publica telegram.send_message.request con resumen del pedido + nombre del cliente (ancla de recogida) al chatId del staff del proyecto. Tambien escucha pedido.sin_confirmar (lo publica confirmacion-pedido a los 10 min sin respuesta del cliente) y avisa a la BARRA por el mismo carril: un pedido colgado en silencio es peor que uno rechazado. Resuelve la config del proyecto on-demand via project.get.request/response (sin cache, sin dependencia de project.activated) — evita la fragilidad operativa de depender del foco UI session. Diseñado para extension multi-canal: en v2 se anyadira branch para discord.send_message.request cuando discord-service exista. El ancla de recogida es el nombre que el cliente introduce (el codigo_recogida fue retirado): el dependiente lo pide y lo canta al recoger.",
   "name": "notificador-pedidos",
-  "version": "2.0.0",
-  "description": "Orquesta notificaciones de pedido nuevo al staff por los canales configurados del proyecto (Telegram en v1; Discord en v2). Reemplaza la responsabilidad que tenia whatsapp-bot para la vertical tienda PWA tras pivote a Telegram-first.",
+  "version": "2.1.0",
+  "description": "Orquesta notificaciones al staff por los canales configurados del proyecto (Telegram en v1; Discord en v2): pedido nuevo (pedido.creado canal web) y pedido SIN CONFIRMAR (pedido.sin_confirmar, 10 min sin respuesta del cliente). Reemplaza la responsabilidad que tenia whatsapp-bot para la vertical tienda PWA tras pivote a Telegram-first.",
   "author": "Enki Team",
   "language": "es",
   "main": "index.js",
@@ -23,12 +23,18 @@
         "event": "pedido.creado",
         "handler": "onPedidoCreado",
         "razon": "Disparador principal: cuando pedidos crea un pedido nuevo, notificador-pedidos decide si emitir notificacion al staff segun canal_origen del pedido."
+      },
+      {
+        "event": "pedido.sin_confirmar",
+        "handler": "onPedidoSinConfirmar",
+        "razon": "El cliente no contesto en 10 min: el pedido sigue parado en pendiente_confirmacion y la barra tiene que decidir. Antes este evento se publicaba y NADIE lo escuchaba (evento huerfano)."
       }
     ]
   },
 
   "subscribes": [
-    { "event": "pedido.creado", "handler": "onPedidoCreado" }
+    { "event": "pedido.creado", "handler": "onPedidoCreado" },
+    { "event": "pedido.sin_confirmar", "handler": "onPedidoSinConfirmar" }
   ],
 
   "eventos_publicados_que_requieren_consumer": [
@@ -48,7 +54,10 @@
     "metrics": [
       { "name": "notificador.pedido.recibido.total",   "type": "counter", "labels": ["project", "canal_origen"], "_doc": "Pedidos observados via pedido.creado (todos, antes del filtro de canal)." },
       { "name": "notificador.pedido.notificado.total", "type": "counter", "labels": ["project", "canal"],        "_doc": "Notificaciones emitidas con exito por canal (telegram, discord...)." },
-      { "name": "notificador.pedido.descartado.total", "type": "counter", "labels": ["project", "razon"],        "_doc": "Pedidos descartados sin notificar. Razones: canal_origen_no_web, sin_project_id, project_resolve_failed, project_no_encontrado, config_read_failed, proyecto_sin_chatid." }
+      { "name": "notificador.pedido.descartado.total", "type": "counter", "labels": ["project", "razon"],        "_doc": "Pedidos descartados sin notificar. Razones: canal_origen_no_web, sin_project_id, project_resolve_failed, project_no_encontrado, config_read_failed, proyecto_sin_chatid." },
+      { "name": "notificador.sin_confirmar.recibido.total",   "type": "counter", "labels": ["project"], "_doc": "Avisos pedido.sin_confirmar observados." },
+      { "name": "notificador.sin_confirmar.notificado.total",  "type": "counter", "labels": ["project", "canal"], "_doc": "Avisos 'pedido sin confirmar' entregados al staff por canal." },
+      { "name": "notificador.sin_confirmar.descartado.total",  "type": "counter", "labels": ["project", "razon"], "_doc": "Avisos 'pedido sin confirmar' no entregados. Razones: sin_project_id, project_resolve_failed, project_no_encontrado, config_read_failed, proyecto_sin_chatid." }
     ]
   },
 

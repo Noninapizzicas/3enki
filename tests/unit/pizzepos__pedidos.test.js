@@ -947,6 +947,66 @@ function publishedOf(mocks, name) {
     await m.onUnload();
   });
 
+  // Group: la respuesta del cliente llega por el BUS (pedido.confirmacion_respondida
+  // / pedido.confirmacion_rechazada) y la aplica el dueño del pedido.
+
+  await testAsync('onPedidoConfirmacionRespondida aplica handleConfirmarPedido: el pedido entra en cocina', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    let enviado = null;
+    m.moduleRegistry = {
+      get: (n) => n === 'comandero'
+        ? { instance: { handleEnviarCocina: async (a) => { enviado = a; return { status: 200 }; } } }
+        : null
+    };
+    m.pedidos.set('p-conf', {
+      id: 'p-conf', estado: 'pendiente_confirmacion', cuenta_id: 'c-1',
+      project_id: 'the-pirate', project_slug: 'the-pirate', items: []
+    });
+
+    const r = await m.onPedidoConfirmacionRespondida({ data: { pedido_id: 'p-conf', jid: '666@lid', respuesta: 'si' } });
+
+    assert.strictEqual(r.status, 200);
+    assert.strictEqual(enviado.pedido_id, 'p-conf', 'el SI desbloquea el envío a cocina');
+    assert.strictEqual(m.pedidos.get('p-conf').estado, 'en_cocina');
+    assert.strictEqual(m.pedidos.get('p-conf').confirmacion.estado, 'confirmado');
+    assert.strictEqual(publishedOf(mocks, 'pedido.confirmado').length, 1);
+    assert.strictEqual(mocks.metricsCalls.filter(c => c[1] === 'pedidos.confirmacion.fallida.total').length, 0);
+    await m.onUnload();
+  });
+
+  await testAsync('onPedidoConfirmacionRechazada aplica handleRechazarPedido: el pedido se cierra sin cocina', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    m.pedidos.set('p-no', {
+      id: 'p-no', estado: 'pendiente_confirmacion', cuenta_id: 'c-1',
+      project_id: 'the-pirate', project_slug: 'the-pirate', items: []
+    });
+
+    const r = await m.onPedidoConfirmacionRechazada({ data: { pedido_id: 'p-no', motivo: 'cliente_dijo_no' } });
+
+    assert.strictEqual(r.status, 200);
+    const pedido = m.pedidos.get('p-no');
+    assert.strictEqual(pedido.estado, 'cancelado');
+    assert.strictEqual(pedido.motivo_cancelacion, 'cliente_dijo_no');
+    assert.strictEqual(pedido.confirmacion.estado, 'rechazado');
+    assert.strictEqual(publishedOf(mocks, 'pedido.cancelado').length, 1);
+    await m.onUnload();
+  });
+
+  await testAsync('onPedidoConfirmacionRespondida de un pedido inexistente: warn + métrica (no se pierde en silencio)', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+
+    const r = await m.onPedidoConfirmacionRespondida({ data: { pedido_id: 'fantasma', project_slug: 'the-pirate' } });
+
+    assert.strictEqual(r.status, 404);
+    assert.ok(mocks.logs.some(l => l[0] === 'warn' && l[1] === 'pedidos.confirmacion_respondida.no_aplicada'),
+      'el fallo queda en el log, no en un null mudo');
+    assert.strictEqual(mocks.metricsCalls.filter(c => c[1] === 'pedidos.confirmacion.fallida.total').length, 1);
+    await m.onUnload();
+  });
+
   teardownTmpCwd();
   console.log('\nTodos los tests pasaron.');
 })().catch(e => {

@@ -22,7 +22,10 @@
       "event": "conversacion.entrada.recibida",
       "description": "HOOK TEMPORAL (config conversaciones.gate=true): entrada CRUDA del chat publicada ANTES de escribir nada. Payload: { request_id, correlation_id, project_id, conversacion, participante, user_message, acto, channel, estado_conversacion, politica, settings, ... }. Lo consume coordinador-conversacion, que responde en conversacion.entrada_resultado. Con el gate en false NO se publica."
     },
-    "db.query.request"
+    {
+      "event": "db.query.request",
+      "description": "(normalizado)"
+    }
   ],
   "subscribes": [
     {

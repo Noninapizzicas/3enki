@@ -5,7 +5,6 @@
   "description": "REFLEJO puro: definición única del sobre (campos obligatorios) + construir/validar el sobre sin completar jamás un campo ausente.",
   "language": "es",
   "main": "index.js",
-
   "subscribes": [
     {
       "event": "sobre.definicion.request",
@@ -23,29 +22,55 @@
       "description": "VeredictoDeSobre: { estado: AUSENTE|PARCIAL|COMPLETO|POR_DECLARAR, faltantes[], camposPresentes[], sobre }. Payload: { request_id, sobre|declaracion, definicion? }. Sin sobre → sobre.validar.failed."
     }
   ],
-
   "publishes": [
-    { "event": "sobre.definicion.response", "description": "Definición vigente + su fuente (context.json|payload)." },
-    { "event": "sobre.construir.response", "description": "Sobre construido + faltantes nombrados + estado." },
-    { "event": "sobre.validar.response", "description": "VeredictoDeSobre correlado por request_id." },
-    { "event": "sobre.validar.failed", "description": "Error de dominio de la validación (payload sin sobre) — nunca un timeout como sustituto del error." },
-    { "event": "sobre.definicion_cambiada", "description": "Hecho: la definición se adoptó de un payload y cambió. Se publica DESPUÉS de adoptarla. { antes, despues, declaradaPor }." }
+    {
+      "event": "sobre.definicion.response",
+      "description": "Definición vigente + su fuente (context.json|payload)."
+    },
+    {
+      "event": "sobre.construir.response",
+      "description": "Sobre construido + faltantes nombrados + estado."
+    },
+    {
+      "event": "sobre.validar.response",
+      "description": "VeredictoDeSobre correlado por request_id."
+    },
+    {
+      "event": "sobre.validar.failed",
+      "description": "Error de dominio de la validación (payload sin sobre) — nunca un timeout como sustituto del error."
+    },
+    {
+      "event": "sobre.definicion_cambiada",
+      "description": "Hecho: la definición se adoptó de un payload y cambió. Se publica DESPUÉS de adoptarla. { antes, despues, declaradaPor }."
+    }
   ],
-
   "config": {
     "persistence": {
       "pattern": "none",
       "restart_resilient": false,
-      "lost_on_restart": ["definicion adoptada por payload (la declarada vive en context.json)"]
+      "lost_on_restart": [
+        "definicion adoptada por payload (la declarada vive en context.json)"
+      ]
     }
   },
-
   "observability": {
-    "logging": { "level": "info", "structured": true, "correlation_id": true },
+    "logging": {
+      "level": "info",
+      "structured": true,
+      "correlation_id": true
+    },
     "metrics": {
       "enabled": true,
-      "counters": ["sobre-conversacion.reflejo.served", "sobre-conversacion.reflejo.errors"],
+      "counters": [
+        "sobre-conversacion.reflejo.served",
+        "sobre-conversacion.reflejo.errors"
+      ],
       "gauges": []
     }
+  },
+  "ui_decision": {
+    "necesita": false,
+    "motivo": "Definicion pura del sobre: la usan otros modulos por evento/tool, no un humano en pantalla.",
+    "decidido_el": "2026-11-09"
   }
 }

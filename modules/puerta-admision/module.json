@@ -5,7 +5,6 @@
   "description": "REFLEJO puro: decide si una entrada se admite en un hilo (ABRIR | RECHAZAR con motivo y base), en 5 pasos y sin almacén.",
   "language": "es",
   "main": "index.js",
-
   "subscribes": [
     {
       "event": "conversacion.admitir.request",
@@ -13,12 +12,16 @@
       "description": "Veredicto de admisión. Payload: { request_id, veredicto, proyecto, conversacion, participante, acto, politica, llaves[], ahora }. Devuelve { decision: ABRIR|RECHAZAR, actos, llaves, motivo?, base }."
     }
   ],
-
   "publishes": [
-    { "event": "conversacion.admitir.response", "description": "DecisionDeAdmision correlada por request_id (incluye base SIEMPRE y motivo si rechaza)." },
-    { "event": "conversacion.admitir.failed", "description": "Error de dominio: ctx sin veredicto (el clasificador P13 siempre pasa antes). Nunca un timeout como sustituto del error." }
+    {
+      "event": "conversacion.admitir.response",
+      "description": "DecisionDeAdmision correlada por request_id (incluye base SIEMPRE y motivo si rechaza)."
+    },
+    {
+      "event": "conversacion.admitir.failed",
+      "description": "Error de dominio: ctx sin veredicto (el clasificador P13 siempre pasa antes). Nunca un timeout como sustituto del error."
+    }
   ],
-
   "config": {
     "persistence": {
       "pattern": "none",
@@ -26,13 +29,24 @@
       "lost_on_restart": []
     }
   },
-
   "observability": {
-    "logging": { "level": "info", "structured": true, "correlation_id": true },
+    "logging": {
+      "level": "info",
+      "structured": true,
+      "correlation_id": true
+    },
     "metrics": {
       "enabled": true,
-      "counters": ["puerta-admision.reflejo.served", "puerta-admision.reflejo.errors"],
+      "counters": [
+        "puerta-admision.reflejo.served",
+        "puerta-admision.reflejo.errors"
+      ],
       "gauges": []
     }
+  },
+  "ui_decision": {
+    "necesita": false,
+    "motivo": "Veredicto ABRIR/RECHAZAR por evento: la consumen otros modulos, no hay operacion humana directa.",
+    "decidido_el": "2026-11-09"
   }
 }

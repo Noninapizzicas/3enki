@@ -5,7 +5,6 @@
   "description": "CUSTODIO del derecho de entrada: emite/revoca llaves por conversación sobre la referencia al secreto del proyecto, con ledger sólo-añadir y vigentes hidratadas.",
   "language": "es",
   "main": "index.js",
-
   "subscribes": [
     {
       "event": "llave.emitir.request",
@@ -33,18 +32,40 @@
       "description": "Restaura el ledger de llaves del proyecto activado desde /conversaciones/llaves.json."
     }
   ],
-
   "publishes": [
-    { "event": "llave.emitida", "description": "Hecho: se anexó una emisión. Se publica DESPUÉS de escribir. { llave }." },
-    { "event": "llave.revocada", "description": "Hecho: se anexó una revocación. { llave, actor }." },
-    { "event": "llave.emitir.response", "description": "Respuesta correlada del alta (201 con la llave, o el error canónico)." },
-    { "event": "llave.emitir.failed", "description": "Error de dominio de la emisión (orden incompleta) — nunca un timeout como sustituto del error." },
-    { "event": "llave.revocar.response", "description": "Respuesta correlada de la revocación." },
-    { "event": "llave.vigentes.response", "description": "Llaves vigentes + total + si la caducidad está declarada." },
-    { "event": "llave.listar.response", "description": "Todas las emisiones del hilo con su revocación." },
-    { "event": "decision.solicitada", "description": "El módulo se BLOQUEA en vez de inventar: forma de llave POR_DECLARAR o emisor sin autorización declarada. { solicitud }." }
+    {
+      "event": "llave.emitida",
+      "description": "Hecho: se anexó una emisión. Se publica DESPUÉS de escribir. { llave }."
+    },
+    {
+      "event": "llave.revocada",
+      "description": "Hecho: se anexó una revocación. { llave, actor }."
+    },
+    {
+      "event": "llave.emitir.response",
+      "description": "Respuesta correlada del alta (201 con la llave, o el error canónico)."
+    },
+    {
+      "event": "llave.emitir.failed",
+      "description": "Error de dominio de la emisión (orden incompleta) — nunca un timeout como sustituto del error."
+    },
+    {
+      "event": "llave.revocar.response",
+      "description": "Respuesta correlada de la revocación."
+    },
+    {
+      "event": "llave.vigentes.response",
+      "description": "Llaves vigentes + total + si la caducidad está declarada."
+    },
+    {
+      "event": "llave.listar.response",
+      "description": "Todas las emisiones del hilo con su revocación."
+    },
+    {
+      "event": "decision.solicitada",
+      "description": "El módulo se BLOQUEA en vez de inventar: forma de llave POR_DECLARAR o emisor sin autorización declarada. { solicitud }."
+    }
   ],
-
   "config": {
     "persistence": {
       "pattern": "json-file-per-project",
@@ -55,9 +76,12 @@
       "lost_on_restart": []
     }
   },
-
   "observability": {
-    "logging": { "level": "info", "structured": true, "correlation_id": true },
+    "logging": {
+      "level": "info",
+      "structured": true,
+      "correlation_id": true
+    },
     "metrics": {
       "enabled": true,
       "counters": [
@@ -69,5 +93,10 @@
       ],
       "gauges": []
     }
+  },
+  "ui_decision": {
+    "necesita": false,
+    "motivo": "Emision/revocacion de llaves por evento: la administra el dueno via otros flujos, no una pantalla propia.",
+    "decidido_el": "2026-11-09"
   }
 }

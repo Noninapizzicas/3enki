@@ -5,7 +5,6 @@
   "description": "CUSTODIO de sesiones atadas al par (participante, conversación): resolver/senal/cerrar/huerfanas, con snapshot por proyecto y sin sesión global.",
   "language": "es",
   "main": "index.js",
-
   "subscribes": [
     {
       "event": "sesion.resolver.request",
@@ -33,18 +32,40 @@
       "description": "Restaura las sesiones del proyecto activado desde /conversaciones/sesiones.json."
     }
   ],
-
   "publishes": [
-    { "event": "sesion.abierta", "description": "Hecho: se abrió una sesión para el par. Se publica DESPUÉS de escribir. { sesion }." },
-    { "event": "sesion.cerrada", "description": "Hecho: se cerró una sesión (sólo la sesión). { sesion, motivo }." },
-    { "event": "sesion.huerfana_detectada", "description": "Hecho: una sesión viva dejó de dar señal dentro del umbral declarado. { sesion, umbral_ms }." },
-    { "event": "sesion.resolver.response", "description": "Sesión del par + si se reutilizó, correlada por request_id." },
-    { "event": "sesion.resolver.failed", "description": "Rechazo de dominio del resolver (participante DESCONOCIDO / conversación ausente) — nunca un timeout como sustituto del error." },
-    { "event": "sesion.senal.response", "description": "Sesión con la última señal actualizada." },
-    { "event": "sesion.cerrar.response", "description": "Sesión cerrada." },
-    { "event": "sesion.huerfanas.response", "description": "Sesiones huérfanas + total + umbral aplicado." }
+    {
+      "event": "sesion.abierta",
+      "description": "Hecho: se abrió una sesión para el par. Se publica DESPUÉS de escribir. { sesion }."
+    },
+    {
+      "event": "sesion.cerrada",
+      "description": "Hecho: se cerró una sesión (sólo la sesión). { sesion, motivo }."
+    },
+    {
+      "event": "sesion.huerfana_detectada",
+      "description": "Hecho: una sesión viva dejó de dar señal dentro del umbral declarado. { sesion, umbral_ms }."
+    },
+    {
+      "event": "sesion.resolver.response",
+      "description": "Sesión del par + si se reutilizó, correlada por request_id."
+    },
+    {
+      "event": "sesion.resolver.failed",
+      "description": "Rechazo de dominio del resolver (participante DESCONOCIDO / conversación ausente) — nunca un timeout como sustituto del error."
+    },
+    {
+      "event": "sesion.senal.response",
+      "description": "Sesión con la última señal actualizada."
+    },
+    {
+      "event": "sesion.cerrar.response",
+      "description": "Sesión cerrada."
+    },
+    {
+      "event": "sesion.huerfanas.response",
+      "description": "Sesiones huérfanas + total + umbral aplicado."
+    }
   ],
-
   "config": {
     "persistence": {
       "pattern": "json-file-per-project",
@@ -54,9 +75,12 @@
       "lost_on_restart": []
     }
   },
-
   "observability": {
-    "logging": { "level": "info", "structured": true, "correlation_id": true },
+    "logging": {
+      "level": "info",
+      "structured": true,
+      "correlation_id": true
+    },
     "metrics": {
       "enabled": true,
       "counters": [
@@ -68,5 +92,10 @@
       ],
       "gauges": []
     }
+  },
+  "ui_decision": {
+    "necesita": false,
+    "motivo": "Atadura de sesion por evento: es infraestructura del cable, sin cara de usuario.",
+    "decidido_el": "2026-11-09"
   }
 }

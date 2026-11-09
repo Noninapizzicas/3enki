@@ -713,15 +713,17 @@ async function createConversation(m, opts = {}) {
   // conversacion.entrada.recibida y espera conversacion.entrada_resultado ANTES
   // de escribir; RECHAZAR/timeout = fail-closed. Gate OFF = camino de siempre.
 
-  await testAsync('gate OFF (default en module.json) → guarda y NO publica conversacion.entrada.recibida', async () => {
+  await testAsync('gate OFF (apagado a mano) → guarda y NO publica conversacion.entrada.recibida', async () => {
     const mocks = makeMocks();
     const { module: m, trace } = await instantiate(mocks);
 
-    // Default declarado en el manifest: el interruptor nace apagado.
+    // El interruptor está ENCENDIDO en el manifest desde 2026-11-09; este caso
+    // comprueba que apagarlo devuelve exactamente el camino de siempre.
     const manifest = JSON.parse(fs.readFileSync(
       path.join(__dirname, '../../modules/conversacion/chat-io/module.json'), 'utf8'));
-    assert.strictEqual(manifest.config.conversaciones.gate, false, 'el default tiene que ser false');
-    assert.strictEqual(m._gateActivo(), false, 'sin moduleConfig el gate esta apagado');
+    assert.strictEqual(manifest.config.conversaciones.gate, true, 'el interruptor está encendido en el manifest');
+    m.moduleConfig = { conversaciones: { gate: false } };
+    assert.strictEqual(m._gateActivo(), false, 'apagado no admite antes de escribir');
 
     const cid = await createConversation(m);
     mocks.published.length = 0;

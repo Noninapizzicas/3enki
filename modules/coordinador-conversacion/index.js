@@ -10,6 +10,7 @@
  * Esta hoja construye el camino de ENTRADA (F1/F2) sobre las islas ya vivas:
  *   1  SOBRE     sobre-conversacion  construir + validar (nada se completa: S1)
  *   2  LLAVES    gestor-llaves       hidratar las vigentes del hilo (I7)
+ *   2b POLÍTICA  politica-admision   resolver el DATO que la puerta consume (P04)
  *   3  PUERTA    puerta-admision     veredicto ABRIR | RECHAZAR (I6)
  *   4  SESIÓN    amarre-sesion       atar el par (participante, conversación) (I4)
  *   5  RELAY     chat.message.saved  SÓLO tras ABRIR + sesión atada
@@ -47,7 +48,20 @@
  *     → chat.message.saved (el paso al relay, SÓLO si ABRIR + sesión atada)
  *
  * Dependencias SÓLO por evento (nunca por require): sobre-conversacion,
- * gestor-llaves, puerta-admision, amarre-sesion, hermes-relay.
+ * gestor-llaves, politica-admision, puerta-admision, amarre-sesion, hermes-relay.
+ *
+ * LA POLÍTICA (paso 2b): la puerta NO consulta almacenes (es isla), así que la
+ * política viaja hidratada por valor en el contexto. Si la entrada la trae
+ * (`entrada.politica`), se usa tal cual; si no, el coordinador la pide a
+ * `politica.consultar.request` ANTES de llamar a la puerta. Si el proyecto no la
+ * ha declarado (404) o el paso falla, la cadena CORTA con `politica_no_declarada`
+ * y el mensaje no llega al relay: no se inventa una política por defecto (PA3).
+ *
+ * CACHÉ DE POLÍTICA: `politicaTTL` (default 60000 ms = 60 s) por proyecto, para no
+ * pedirla en cada mensaje. Sólo se cachean políticas DECLARADAS: el 404 NO se
+ * cachea, de modo que declarar la política surte efecto en el mensaje siguiente.
+ * Consecuencia declarada: una REDEFINICIÓN tarda como máximo `politicaTTL` en
+ * notarse en el camino de entrada (la entrada puede forzarla pasando `politica`).
  */
 
 const crypto = require('crypto');
@@ -65,9 +79,13 @@ const PASO_DE_EVENTO = {
   'sobre.construir.request': 'sobre',
   'sobre.validar.request': 'sobre',
   'llave.vigentes.request': 'llaves',
+  'politica.consultar.request': 'politica',
   'conversacion.admitir.request': 'puerta',
   'sesion.resolver.request': 'sesion'
 };
+
+// TTL de la caché de política por proyecto (ms). Declarado, no mágico.
+const POLITICA_TTL_MS = 60000;
 
 class CoordinadorConversacion extends ModuloHibridoReflejo {
   constructor(opts = {}) {
@@ -79,11 +97,19 @@ class CoordinadorConversacion extends ModuloHibridoReflejo {
     // No hay almacén de negocio: el coordinador no escribe estado ajeno (CO4).
     this.pendientes = new Map();
 
+    // Caché de política DECLARADA por proyecto: project_id → { politica, hasta }.
+    // Sólo se cachea lo que existe (el 404 no se cachea: ver cabecera).
+    this.politicas = new Map();
+    this.politicaTTL = Number.isFinite(opts.politicaTTL) && opts.politicaTTL > 0
+      ? opts.politicaTTL
+      : POLITICA_TTL_MS;
+
     // Timeouts DECLARADOS por paso (nunca espera infinita). Inyectables en test.
     this.timeouts = {
       default: 8000,
       sobre: 8000,
       llaves: 8000,
+      politica: 6000,
       puerta: 8000,
       sesion: 8000,
       ...(opts.timeouts || {})
@@ -184,6 +210,22 @@ class CoordinadorConversacion extends ModuloHibridoReflejo {
       ? (this._data(vigentes) || {}).llaves
       : [];
 
+    // ── 2b · LA POLÍTICA (P04) — el DATO que la puerta consume ───────────
+    // La puerta es isla: si no le llega la política rechaza todo con
+    // MOTIVO_POLITICA_NO_DECLARADA. El coordinador la resuelve ANTES (la entrada
+    // puede traerla) y, si el proyecto no la ha declarado, CORTA la cadena aquí.
+    const resolucion = await this._resolverPolitica(proyecto, entrada);
+    if (!resolucion.ok) {
+      return this._rechazo('politica_no_declarada', {
+        status: 422,
+        code: 'PRECONDITION_FAILED',
+        paso: 'politica',
+        referencia,
+        detalle: { causa: resolucion.causa || null, project_id: proyecto }
+      }, correlacion);
+    }
+    const politica = resolucion.politica;
+
     // ── 3 · LA PUERTA (P03) — veredicto reproducible (I6) ────────────────
     const admitida = await this._pedir('conversacion.admitir.request', {
       veredicto,
@@ -195,7 +237,7 @@ class CoordinadorConversacion extends ModuloHibridoReflejo {
       },
       participante: { id: participante },
       acto,
-      politica: entrada.politica ?? null,
+      politica,
       llaves,
       ahora
     });
@@ -348,6 +390,47 @@ class CoordinadorConversacion extends ModuloHibridoReflejo {
   }
 
   // ───────────────────────────────────────────────────────────────────────
+  // La política del proyecto (paso 2b) — caché con TTL declarado
+  // ───────────────────────────────────────────────────────────────────────
+
+  /**
+   * Resuelve la política que viaja a la puerta.
+   * Orden: (1) la que trae la entrada · (2) caché vigente · (3) RPC al custodio.
+   * Sin política declarada NO se inventa nada: `{ ok:false, causa }` y la cadena corta.
+   *
+   * @returns {Promise<{ok:boolean, politica?:object, origen?:string, causa?:string}>}
+   */
+  async _resolverPolitica(proyecto, entrada = {}) {
+    // (1) Hidratada por valor por el llamador: manda sobre caché y almacén.
+    const directa = entrada.politica;
+    if (directa && typeof directa === 'object' && directa.actosPorEntrada) {
+      return { ok: true, politica: directa, origen: 'entrada' };
+    }
+
+    // (2) Caché por proyecto (sólo políticas DECLARADAS, con TTL).
+    const cache = proyecto ? this.politicas.get(proyecto) : null;
+    if (cache && cache.hasta > Date.now()) {
+      return { ok: true, politica: cache.politica, origen: 'cache' };
+    }
+
+    // (3) El custodio: P04 es el único que declara y guarda la política.
+    if (!proyecto) return { ok: false, causa: 'PROYECTO_NO_RESUELVE' };
+    const r = await this._pedir('politica.consultar.request', { project_id: proyecto });
+    if (!this._ok(r)) {
+      // 404 RESOURCE_NOT_FOUND del custodio (o timeout/failed): se propaga la
+      // causa literal. NO se cachea la ausencia y NO se usa ningún default.
+      return { ok: false, causa: this._codigoDe(r) || r?.motivo || 'POLITICA_NO_DECLARADA' };
+    }
+    const politica = (this._data(r) || {}).politica;
+    if (!politica || typeof politica !== 'object' || !politica.actosPorEntrada) {
+      // Respuesta 200 sin política = no hay dato: se trata como no declarada.
+      return { ok: false, causa: 'POLITICA_NO_DECLARADA' };
+    }
+    this.politicas.set(proyecto, { politica, hasta: Date.now() + this.politicaTTL });
+    return { ok: true, politica, origen: 'consultada' };
+  }
+
+  // ───────────────────────────────────────────────────────────────────────
   // El paso al relay (el único evento que el cable escucha hoy)
   // ───────────────────────────────────────────────────────────────────────
 
@@ -435,11 +518,14 @@ class CoordinadorConversacion extends ModuloHibridoReflejo {
     };
   }
 
-  /** Rechazo de dominio decidido por la puerta/sobre: hecho + resultado correlado. */
+  /** Rechazo de dominio (sobre/política/puerta): hecho + resultado correlado. */
   async _rechazo(motivo, { status = 403, code = 'PERMISSION_DENIED', detalle = null, referencia = null, base = null, paso = null } = {}, correlacion) {
+    // El paso se nombra en el hecho Y en el resultado: chat-io lo lee para
+    // decir DÓNDE se cortó (sobre | llaves | politica | puerta | sesion).
+    const pasoFinal = paso || (code === 'PRECONDITION_FAILED' ? 'sobre' : 'puerta');
     await this._publicarEvento('conversacion.entrada_rechazada', {
       motivo,
-      paso: paso || (code === 'PRECONDITION_FAILED' ? 'sobre' : 'puerta'),
+      paso: pasoFinal,
       base,
       detalle,
       referencia
@@ -451,7 +537,7 @@ class CoordinadorConversacion extends ModuloHibridoReflejo {
       error: {
         code,
         message: `entrada rechazada: ${motivo}`,
-        details: { kind: 'domain', motivo, ...(detalle ? { detalle } : {}) }
+        details: { kind: 'domain', motivo, paso: pasoFinal, ...(detalle ? { detalle } : {}) }
       }
     };
   }

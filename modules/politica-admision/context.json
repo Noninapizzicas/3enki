@@ -1,0 +1,37 @@
+{
+  "_type": "module_context",
+  "_module": "politica-admision",
+
+  "capabilities": [
+    "declarar la política de admisión de un proyecto (actosPorEntrada + estadosQueAdmiten + emisor)",
+    "redefinirla SOBREESCRIBIENDO y subiendo version (una política es vigente o no lo es)",
+    "consultar la política vigente y responder 404 cuando no existe (nunca un default)",
+    "publicar el hecho politica.definida tras escribir, con el emisor y la versión",
+    "expresar la misma política en la forma que la puerta consume (actosPorEstado), derivada de actosPorEntrada"
+  ],
+
+  "definicion": {
+    "actos_validos": ["LEER", "ESCRIBIR"],
+    "estadosQueAdmiten_por_defecto": ["ABIERTA", "ACTIVA"],
+    "_nota": "El default de estadosQueAdmiten está DECLARADO (no estimado) y documentado en module.json. Si quien declara no lo dice, se aplica ese default y la respuesta lo devuelve explícito en politica.estadosQueAdmiten. Los actos se validan contra actos_validos: cualquier otro nombre es un error de quien declara (ACTO_INVALIDO), no un acto nuevo. LEER ≠ ESCRIBIR."
+  },
+
+  "domain_knowledge": {
+    "que_es_la_politica": "El DATO que convierte la puerta en una función: sin política la puerta no puede decidir y rechaza con MOTIVO_POLITICA_NO_DECLARADA (O12). La política NO se inventa en la puerta ni en el coordinador: se declara aquí.",
+    "actosPorEntrada": "Mapa acto_de_entrada → actos que ESA entrada pide. Ejemplo canónico: { \"ESCRIBIR\": [\"LEER\",\"ESCRIBIR\"], \"LEER\": [\"LEER\"] } — escribir exige llave de LEER y de ESCRIBIR; leer exige sólo LEER (I7).",
+    "estadosQueAdmiten": "Estados del hilo que admiten entrada. Un estado no listado (ARCHIVADA, CERRADA) no admite NADA: la puerta responde MOTIVO_ESTADO_NO_ADMITE.",
+    "actosPorEstado": "Derivación: para cada estado de estadosQueAdmiten, el conjunto de actos pedibles por la política (unión de actosPorEntrada). Es la forma que lee puerta-admision._permite; no se declara a mano.",
+    "version": "Entero que sube en cada redefinición del proyecto (empieza en 1). Permite saber que la política cambió sin guardar historia: el hecho politica.definida es la traza.",
+    "emisor": "Quién declara la política. Sin emisor no hay declaración (PA2): una política sin dueño no es una política.",
+    "404": "politica.consultar sobre un proyecto sin política devuelve 404 RESOURCE_NOT_FOUND ('El proyecto no ha declarado política de admisión'). El coordinador lo propaga como corte de cadena (politica_no_declarada) y el mensaje NO llega al relay."
+  },
+
+  "invariantes": [
+    "PA1 único escritor de la política de admisión",
+    "PA2 sin emisor no hay declaración",
+    "PA3 sin declaración no hay política por defecto (404 honesto)",
+    "PA4 actosPorEntrada obligatorio, no vacío, sólo LEER|ESCRIBIR",
+    "O12 la ausencia se declara, no se rellena",
+    "I7 LEER ≠ ESCRIBIR: cada entrada declara el conjunto exacto de actos que pide"
+  ]
+}

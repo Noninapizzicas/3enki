@@ -38,8 +38,12 @@
       "description": "Paso 2 · P07: hidratar por valor las llaves vigentes del hilo (la puerta es isla y no consulta almacenes). Se espera llave.vigentes.response."
     },
     {
+      "event": "politica.consultar.request",
+      "description": "Paso 2b · P04: resolver la política de admisión del proyecto cuando la entrada NO la trae (hoy siempre). Se cachea por proyecto 60 s (politicaTTL); el 404 NO se cachea. Se espera politica.consultar.response. 404 (RESOURCE_NOT_FOUND: 'El proyecto no ha declarado política de admisión'), failed o timeout ⇒ la cadena corta con motivo `politica_no_declarada` y paso `politica` (error.details.detalle.causa lleva el código literal), sin llamar a la puerta y sin publicar el paso al relay."
+    },
+    {
       "event": "conversacion.admitir.request",
-      "description": "Paso 3 · P03: pedir el veredicto de admisión con { veredicto, proyecto, conversacion, participante, acto, politica, llaves[], ahora }. Se espera conversacion.admitir.response | .failed."
+      "description": "Paso 3 · P03: pedir el veredicto de admisión con { veredicto, proyecto, conversacion, participante, acto, politica (resuelta: la de la entrada, la cacheada o la consultada al custodio), llaves[], ahora }. Se espera conversacion.admitir.response | .failed."
     },
     {
       "event": "sesion.resolver.request",

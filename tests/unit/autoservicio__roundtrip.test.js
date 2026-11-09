@@ -7,7 +7,7 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert');
-const { parsearPedido } = require('../../modules/whatsapp-bot/services/pedido-parser');
+const { parsearPedido } = require('../../modules/_shared/pedido-mensaje-parser');
 const { tasarPedido } = require('../../modules/_shared/pedido-tasador');
 
 // Réplica EXACTA de buildP1Line() de la PWA (btoa(unescape(encodeURIComponent(json))) → base64url).

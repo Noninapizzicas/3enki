@@ -15,7 +15,9 @@
  *      pin inválido NO tumba el pedido — cae a la dirección; un pin en 'recoger' se
  *      descarta (un punto no lleva a ninguna parte si el cliente pasa a por él).
  *   5. El aviso al repartidor (staff): lleva destino Y enlace del mapa.
- *   6. La confirmación al cliente: a domicilio dice «te lo llevamos», no «pasa a recoger».
+ *
+ * (La confirmación al cliente por WhatsApp se probaba aquí; ese carril salió del repo:
+ *  el único carril de WhatsApp es el puente Rust que publica whatsapp.mensaje.recibido.)
  */
 const assert = require('assert');
 const vm = require('vm');
@@ -25,7 +27,6 @@ const { parsearPedido } = require('../../modules/_shared/pedido-mensaje-parser.j
 const { normalizarUbicacion, enlaceMapa } = require('../../modules/_shared/ubicacion-entrega.js');
 const PedidosModule = require('../../modules/pizzepos/pedidos/index.js');
 const NotificadorPedidos = require('../../modules/pizzepos/notificador-pedidos/index.js');
-const WhatsappBotModule = require('../../modules/whatsapp-bot/index.js');
 
 const CARTA = {
   nombre_negocio: 'Rapitvapers',
@@ -260,41 +261,7 @@ function avisoStaff() {
   console.log('OK · aviso al staff: destino y enlace del mapa');
 }
 
-// ── 6 · confirmación al cliente por modo ────────────────────────────────────────
-async function confirmacionCliente() {
-  const bot = new WhatsappBotModule();
-  bot.logger = { info() {}, warn() {}, error() {}, debug() {} };
-  bot.metrics = { increment() {} };
-  bot.eventBus = { publish: async () => {}, subscribe() {} };
-  bot.config = {};
-  const enviados = [];
-  bot._enviarMensajeSeguro = async (slug, to, text) => { enviados.push(text); };
-
-  await bot._confirmarPedidoCliente({
-    project_slug: 'rapitvapers', from: '34600000000', cliente_nombre: 'Ana',
-    modo_consumo: 'domicilio', direccion_entrega: 'Calle Mayor 14, 3ºB',
-    ubicacion_entrega: PIN, metodo_pago: 'efectivo'
-  }, { expira_at: '2026-11-07T23:00:00Z' });
-
-  const domicilio = enviados[0];
-  assert.ok(domicilio.includes('Te lo llevamos a Calle Mayor 14, 3ºB'), 'debe decir a dónde va: ' + domicilio);
-  assert.ok(!/Pasa a recoger/.test(domicilio), 'a domicilio NO se le manda a la tienda: ' + domicilio);
-  assert.ok(domicilio.includes('37.6712,-1.6987'), 'el cliente comprueba su punto en el mapa');
-
-  bot.servicio = { leer: async () => ({ recogida: { direccion: 'Juan Carlos I, 49', ciudad: 'Lorca', maps_url: 'https://maps.example/x' } }) };
-  await bot._confirmarPedidoCliente({
-    project_slug: 'rapitvapers', from: '34600000000', cliente_nombre: 'Ana',
-    modo_consumo: 'recoger', metodo_pago: 'efectivo'
-  }, {});
-  const recoger = enviados[1];
-  assert.ok(/Pasa a recoger/.test(recoger), 'recoger mantiene su mensaje de siempre: ' + recoger);
-  assert.ok(/Juan Carlos I, 49/.test(recoger), 'recoger sigue diciendo dónde recoger');
-
-  console.log('OK · confirmación: domicilio «te lo llevamos» · recoger intacto');
-}
-
 puerta()
   .then(avisoStaff)
-  .then(confirmacionCliente)
-  .then(() => console.log('entrega-ubicacion: 6/6 OK'))
+  .then(() => console.log('entrega-ubicacion: 5/5 OK'))
   .catch(err => { console.error('FAIL ·', err.message); process.exit(1); });

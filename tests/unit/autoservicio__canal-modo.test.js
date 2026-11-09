@@ -10,7 +10,7 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert');
-const { parsearPedido } = require('../../modules/whatsapp-bot/services/pedido-parser');
+const { parsearPedido } = require('../../modules/_shared/pedido-mensaje-parser');
 const PedidosModule = require('../../modules/pizzepos/pedidos/index.js');
 
 function p1Line(payload) {

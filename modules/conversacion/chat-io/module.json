@@ -25,6 +25,10 @@
     {
       "event": "db.query.request",
       "description": "(normalizado)"
+    },
+    {
+      "event": "llave.emitir.request",
+      "description": "GATE ON: al abrir un hilo se le pone SU llave (LEER+ESCRIBIR). Quien abre el hilo le pone la llave; la autorizacion viaja como DATO (emisor_autorizado). Sin llave la conversacion NO se crea (fail-closed)."
     }
   ],
   "subscribes": [
@@ -89,6 +93,16 @@
       "event": "invoke_agent.response",
       "handler": "onInvokeAgentDoneBridge",
       "description": "Puente al frontend: invoke_agent.response es alias de agent.execute.response; normalizamos para cerrar el marco del chat."
+    },
+    {
+      "event": "llave.emitir.response",
+      "handler": "onLlaveEmitida",
+      "description": "Respuesta del gestor-llaves al abrir un hilo (gate ON)."
+    },
+    {
+      "event": "llave.emitir.failed",
+      "handler": "onLlaveFallida",
+      "description": "Emision rechazada: la conversacion no se crea."
     }
   ],
   "ui_handlers": [
@@ -176,8 +190,10 @@
     },
     "conversaciones": {
       "_doc": "INTERRUPTOR TEMPORAL (se retira cuando la cadena de admision este estable). gate=true → handleSend publica conversacion.entrada.recibida y espera conversacion.entrada_resultado ANTES de escribir; RECHAZAR/timeout/fallo = fail-closed (no se inserta el mensaje). gate=false (default) → camino de siempre, sin peticiones extra al bus.",
-      "gate": false,
-      "gate_timeout_ms": 8000
+      "gate": true,
+      "gate_timeout_ms": 8000,
+      "_doc_llave": "Al crear una conversacion se emite su llave (actos LEER+ESCRIBIR) para que su primer mensaje pueda ser admitido.",
+      "_doc_estado": "ENCENDIDO 2026-11-09: la entrada se admite ANTES de escribir. Las 9 conversaciones existentes tienen su llave; las nuevas la reciben al crearse (handleCreate)."
     }
   },
   "observability": {

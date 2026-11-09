@@ -471,13 +471,6 @@ class WhatsappBotModule extends BaseModule {
     await this._publicarEvento('whatsapp.mensaje.recibido', {
       project_slug, phone_number_id: msg.phone_number_id, from: msg.from,
       message_type: msg.message_type, message_id: msg.message_id, has_text: !!msg.text,
-      // El TEXTO ya normalizado por el parser (incluye el título del botón/lista cuando
-      // el cliente responde tocando una opción). Sin él, un consumidor de negocio no
-      // puede entender la respuesta ("sí"/"no") sin volver a Meta — confirmacion-pedido
-      // lo necesita para cerrar la puerta de la confianza.
-      text: msg.text || null,
-      timestamp: msg.timestamp || null,
-      contact_name: msg.contact_name || null,
       // Entrada interactiva estructurada (botón/list) o encuesta. El módulo de negocio
       // sabe EXACTAMENTE qué tocó el cliente. {type: button|list|flow|poll, ...}. Ver README.
       interaction: msg.interaction || null,

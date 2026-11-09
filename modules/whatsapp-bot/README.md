@@ -149,7 +149,7 @@ NO se mezcla con los catálogos de Enki.
 
 | Evento | Payload | Cuándo | Para qué |
 |---|---|---|---|
-| `whatsapp.mensaje.recibido` | `{ project_slug, phone_number_id, from, message_type, message_id, has_text, text, timestamp, contact_name, interaction, media, location }` | Cada mensaje entrante | Tu módulo reacciona al texto/estado |
+| `whatsapp.mensaje.recibido` | `{ project_slug, phone_number_id, from, message_type, message_id, has_text, interaction, media, location }` | Cada mensaje entrante | Tu módulo reacciona al texto/estado |
 | `whatsapp.pedido.detectado` | `{ project_slug, from, items[], total_centimos, message_id }` | El parser reconoció un pedido en el mensaje | Prevenir/pre-procesar |
 | `whatsapp.mensaje.enviado` | `{ project_slug, to (enmascarado), message_id, kind }` | Envío exitoso (kind: `text` \| `template` \| `media_<tipo>` \| `location` \| `interactive_<tipo>` \| `poll` \| `catalog` \| `auto`) | Audit / tracking |
 | `whatsapp.envio.fallido` | `{ project_slug, to (enmascarado), error_code, error_message }` | Envío fallido | Retry / alertas |

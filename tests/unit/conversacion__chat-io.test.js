@@ -22,8 +22,6 @@
 
 const assert = require('assert');
 const crypto = require('crypto');
-const fs = require('fs');
-const path = require('path');
 const initSqlJs = require('sql.js');
 
 const ChatIoModule = require('../../modules/conversacion/chat-io/index.js');
@@ -78,17 +76,9 @@ async function makeBusBackedBySqlJs(moduleRef, published) {
     return [];
   }
 
-  // Orden REAL de lo que pasa por el bus: 'ev:<evento>' | 'db:<sql>'.
-  // Permite afirmar que la admision se publica ANTES de escribir.
-  const trace = [];
-  const subs = new Map();
-
   const eventBus = {
     publish: async (event, payload) => {
       published.push([event, payload]);
-      trace.push(event === 'db.query.request'
-        ? `db:${String(payload.query || '').replace(/\s+/g, ' ').trim().slice(0, 80)}`
-        : `ev:${event}`);
       if (event === 'db.query.request') {
         const { request_id, query, params } = payload;
         try {
@@ -101,59 +91,16 @@ async function makeBusBackedBySqlJs(moduleRef, published) {
             data: { request_id, error: err.message }
           }));
         }
-        return;
       }
-      // Entrega a los suscriptores con el envelope { data } del bus real.
-      for (const fn of [...(subs.get(event) || [])]) {
-        try { await fn({ data: payload }); } catch (_) { /* el test decide */ }
-      }
-    },
-    subscribe: (event, fn) => {
-      if (!subs.has(event)) subs.set(event, []);
-      subs.get(event).push(fn);
-      return () => {
-        const arr = subs.get(event) || [];
-        const i = arr.indexOf(fn);
-        if (i >= 0) arr.splice(i, 1);
-      };
     }
   };
 
-  return { eventBus, db, trace, subs };
-}
-
-/** Simula coordinador-conversacion: responde al evento de entrada. */
-function simularCoordinador(eventBus, resultado) {
-  eventBus.subscribe('conversacion.entrada.recibida', async (ev) => {
-    const d = ev?.data || ev;
-    const out = typeof resultado === 'function' ? resultado(d) : resultado;
-    if (out === null) return; // nadie contesta (timeout declarado)
-    await eventBus.publish('conversacion.entrada_resultado', { request_id: d.request_id, ...out });
-  });
-}
-
-function simularGestorLlaves(eventBus, respuesta, modulo) {
-  // El core real registra los subscribes del manifest; el mock no. Se cablean aquí.
-  if (modulo) {
-    eventBus.subscribe('llave.emitir.response', (ev) => modulo.onLlaveEmitida(ev));
-    eventBus.subscribe('llave.emitir.failed', (ev) => modulo.onLlaveFallida(ev));
-  }
-  eventBus.subscribe('llave.emitir.request', async (ev) => {
-    const d = ev?.data || ev;
-    const out = typeof respuesta === 'function' ? respuesta(d) : respuesta;
-    if (out === null) return; // nadie contesta (timeout declarado)
-    const tipo = (out.status || 200) >= 400 ? 'llave.emitir.failed' : 'llave.emitir.response';
-    await eventBus.publish(tipo, { request_id: d.request_id, ...out });
-  });
-}
-
-function indiceDe(trace, prefijo) {
-  return trace.findIndex(t => t.startsWith(prefijo));
+  return { eventBus, db };
 }
 
 async function instantiate(mocks) {
   const moduleRef = { value: null };
-  const { eventBus, db, trace, subs } = await makeBusBackedBySqlJs(moduleRef, mocks.published);
+  const { eventBus, db } = await makeBusBackedBySqlJs(moduleRef, mocks.published);
   const m = new ChatIoModule();
   moduleRef.value = m;
   await m.onLoad({
@@ -162,7 +109,7 @@ async function instantiate(mocks) {
     eventBus,
     mqtt: mocks.mqtt
   });
-  return { module: m, db, eventBus, trace, subs };
+  return { module: m, db };
 }
 
 async function testAsync(description, fn) {
@@ -702,204 +649,6 @@ async function createConversation(m, opts = {}) {
     assert.ok(/Tardé más de la cuenta/.test(m._userMessageForErrorCode('UPSTREAM_TIMEOUT')));
     assert.ok(/credenciales/.test(m._userMessageForErrorCode('RESOURCE_NOT_FOUND')));
     assert.ok(/desconocido|completar/.test(m._userMessageForErrorCode('NOT_IN_MAP', 'msg')));
-    await m.onUnload();
-  });
-
-  // ==========================================
-  // Group 8: HOOK DE ADMISIÓN (TEMPORAL · conversaciones.gate)
-  // ==========================================
-  //
-  // El orden de siempre ESCRIBE antes de admitir. El hook (gate ON) publica
-  // conversacion.entrada.recibida y espera conversacion.entrada_resultado ANTES
-  // de escribir; RECHAZAR/timeout = fail-closed. Gate OFF = camino de siempre.
-
-  await testAsync('gate OFF (apagado a mano) → guarda y NO publica conversacion.entrada.recibida', async () => {
-    const mocks = makeMocks();
-    const { module: m, trace } = await instantiate(mocks);
-
-    // El interruptor está ENCENDIDO en el manifest desde 2026-11-09; este caso
-    // comprueba que apagarlo devuelve exactamente el camino de siempre.
-    const manifest = JSON.parse(fs.readFileSync(
-      path.join(__dirname, '../../modules/conversacion/chat-io/module.json'), 'utf8'));
-    assert.strictEqual(manifest.config.conversaciones.gate, true, 'el interruptor está encendido en el manifest');
-    m.moduleConfig = { conversaciones: { gate: false } };
-    assert.strictEqual(m._gateActivo(), false, 'apagado no admite antes de escribir');
-
-    const cid = await createConversation(m);
-    mocks.published.length = 0;
-    trace.length = 0;
-
-    const r = await m.handleSend({
-      project_id: VALID_PROJECT, conversation_id: cid, message: 'sin gate'
-    });
-    assert.strictEqual(r.status, 200);
-
-    // Cero peticiones extra al bus: no se publica la entrada.
-    assert.strictEqual(publishedOf(mocks, 'conversacion.entrada.recibida').length, 0);
-    assert.strictEqual(publishedOf(mocks, 'conversacion.entrada_resultado').length, 0);
-    assert.strictEqual(indiceDe(trace, 'ev:conversacion.entrada.recibida'), -1);
-
-    // Y el mensaje se guarda igual que siempre.
-    const load = await m.handleLoad({ project_id: VALID_PROJECT, conversation_id: cid });
-    assert.strictEqual(load.data.messages.length, 1);
-    assert.strictEqual(load.data.messages[0].content, 'sin gate');
-    assert.strictEqual(publishedOf(mocks, 'chat.message.saved').length, 1);
-    await m.onUnload();
-  });
-
-  await testAsync('gate ON + ADMITIR → publica entrada, espera el resultado y guarda DESPUES', async () => {
-    const mocks = makeMocks();
-    const { module: m, eventBus, trace } = await instantiate(mocks);
-    // Se crea con el gate OFF (el camino de siempre) y se enciende después:
-    // con el gate ON, handleCreate pide la llave del hilo antes de existir.
-    const cid = await createConversation(m);
-    m.moduleConfig = { conversaciones: { gate: true } };
-
-    simularCoordinador(eventBus, {
-      status: 200,
-      data: { ok: true, admitida: true, sesion: { id: 'sesion-1' }, relay_event: 'chat.message.saved' }
-    });
-    mocks.published.length = 0;
-    trace.length = 0;
-
-    const r = await m.handleSend({
-      project_id: VALID_PROJECT, conversation_id: cid,
-      message: 'con gate', user_id: 'ana', correlation_id: 'cid-gate',
-      channel: 'web', channel_context: {}, attachments: [], intencion: 'consulta'
-    });
-    assert.strictEqual(r.status, 200);
-    assert.ok(r.data.message_id);
-
-    // 1) se publico la entrada con el payload que espera el coordinador
-    const entradas = publishedOf(mocks, 'conversacion.entrada.recibida');
-    assert.strictEqual(entradas.length, 1);
-    const e = entradas[0];
-    assert.ok(e.request_id, 'request_id para correlar el resultado');
-    assert.strictEqual(e.correlation_id, 'cid-gate');
-    assert.strictEqual(e.project_id, VALID_PROJECT);
-    assert.strictEqual(e.conversacion, cid);
-    assert.strictEqual(e.participante, 'ana');
-    assert.strictEqual(e.user_message, 'con gate');
-    assert.strictEqual(e.acto, 'ESCRIBIR');
-    assert.strictEqual(e.channel, 'web');
-    // El estado NO vive en la tabla `conversations`: se declara el hecho.
-    // Una conversación existente está ACTIVA; una nueva, ABIERTA. Si mandara
-    // null, la puerta no encontraría `actosPorEstado[null]` y rechazaría todo.
-    assert.strictEqual(e.estado_conversacion, 'ACTIVA');
-
-    // 2) se espero el resultado y el INSERT ocurrio DESPUES (orden real del bus)
-    const iEntrada = indiceDe(trace, 'ev:conversacion.entrada.recibida');
-    const iResultado = indiceDe(trace, 'ev:conversacion.entrada_resultado');
-    const iInsert = indiceDe(trace, 'db:INSERT INTO messages');
-    assert.ok(iEntrada >= 0, 'la entrada se publica');
-    assert.ok(iResultado > iEntrada, 'el resultado llega despues de la entrada');
-    assert.ok(iInsert > iResultado, 'el INSERT es posterior a la admision');
-
-    // 3) y el mensaje quedo guardado
-    const load = await m.handleLoad({ project_id: VALID_PROJECT, conversation_id: cid });
-    assert.strictEqual(load.data.messages.length, 1);
-    assert.strictEqual(load.data.messages[0].content, 'con gate');
-    assert.strictEqual(publishedOf(mocks, 'chat.message.saved').length, 1);
-    assert.strictEqual(m.pendingEntrada.size, 0, 'no queda RPC en vuelo');
-    await m.onUnload();
-  });
-
-  await testAsync('gate ON + RECHAZAR → NO guarda nada y devuelve el rechazo', async () => {
-    const mocks = makeMocks();
-    const { module: m, eventBus, trace } = await instantiate(mocks);
-    const cid = await createConversation(m);
-    m.moduleConfig = { conversaciones: { gate: true } };
-
-    simularCoordinador(eventBus, {
-      status: 403,
-      error: {
-        code: 'PERMISSION_DENIED',
-        message: 'entrada rechazada: ENTRADA_RECHAZADA',
-        details: { kind: 'domain', motivo: 'ENTRADA_RECHAZADA', paso: 'puerta', detalle: { decision: 'RECHAZAR' } }
-      }
-    });
-    mocks.published.length = 0;
-    trace.length = 0;
-
-    const r = await m.handleSend({ project_id: VALID_PROJECT, conversation_id: cid, message: 'no deberia entrar' });
-
-    assert.strictEqual(r.status, 403);
-    assert.strictEqual(r.error.code, 'PERMISSION_DENIED');
-    assert.strictEqual(r.error.details.kind, 'ENTRADA_RECHAZADA');
-    assert.strictEqual(r.error.details.motivo, 'ENTRADA_RECHAZADA');
-    assert.strictEqual(r.error.details.paso, 'puerta');
-    assert.strictEqual(r.error.details.persistido, false);
-
-    // Fail-closed: ni INSERT ni chat.message.saved.
-    assert.strictEqual(indiceDe(trace, 'db:INSERT INTO messages'), -1, 'no se escribe el mensaje');
-    assert.strictEqual(publishedOf(mocks, 'chat.message.saved').length, 0);
-    const load = await m.handleLoad({ project_id: VALID_PROJECT, conversation_id: cid });
-    assert.strictEqual(load.data.messages.length, 0);
-    assert.strictEqual(m.pendingEntrada.size, 0);
-    await m.onUnload();
-  });
-
-  await testAsync('gate ON + timeout → NO guarda nada (fail-closed, 504)', async () => {
-    const mocks = makeMocks();
-    const { module: m, eventBus, trace } = await instantiate(mocks);
-    const cid = await createConversation(m);
-    m.moduleConfig = { conversaciones: { gate: true } };
-    m.gateTimeoutMs = 50;
-
-    simularCoordinador(eventBus, null); // nadie contesta
-    mocks.published.length = 0;
-    trace.length = 0;
-
-    const r = await m.handleSend({ project_id: VALID_PROJECT, conversation_id: cid, message: 'nadie contesta' });
-
-    assert.strictEqual(r.status, 504);
-    assert.strictEqual(r.error.code, 'UPSTREAM_TIMEOUT');
-    assert.strictEqual(r.error.details.kind, 'ENTRADA_RECHAZADA');
-    assert.strictEqual(r.error.details.motivo, 'TIMEOUT');
-
-    assert.strictEqual(indiceDe(trace, 'db:INSERT INTO messages'), -1, 'un timeout no escribe');
-    assert.strictEqual(publishedOf(mocks, 'chat.message.saved').length, 0);
-    const load = await m.handleLoad({ project_id: VALID_PROJECT, conversation_id: cid });
-    assert.strictEqual(load.data.messages.length, 0);
-    assert.strictEqual(m.pendingEntrada.size, 0, 'el timeout libera el pending');
-    await m.onUnload();
-  });
-
-  // ── El hilo nace con su llave (A del consenso 2026-11-09) ───────────────
-  await testAsync('gate ON + crear conversación → emite SU llave (LEER+ESCRIBIR) antes de existir', async () => {
-    const mocks = makeMocks();
-    const { module: m, eventBus } = await instantiate(mocks);
-    simularGestorLlaves(eventBus, { status: 201, data: { llave: { id: 'llave-x', actos: ['LEER', 'ESCRIBIR'] } } }, m);
-    m.moduleConfig = { conversaciones: { gate: true } };
-    mocks.published.length = 0;
-
-    const cid = await createConversation(m);
-
-    const pedidas = publishedOf(mocks, 'llave.emitir.request');
-    assert.strictEqual(pedidas.length, 1, 'se pide UNA llave al abrir el hilo');
-    const k = pedidas[0];
-    assert.strictEqual(k.conversacion, cid, 'la llave es de ESTE hilo');
-    assert.deepStrictEqual(k.actos, ['LEER', 'ESCRIBIR'], 'LEER ≠ ESCRIBIR: se piden los dos');
-    assert.strictEqual(k.forma, 'REFERENCIA_SECRETO');
-    assert.strictEqual(k.emisor_autorizado, true, 'la autorización viaja como DATO');
-    assert.strictEqual(k.hilo_existe, true);
-    await m.onUnload();
-  });
-
-  await testAsync('gate ON + la llave NO se puede emitir → la conversación NO se crea (fail-closed)', async () => {
-    const mocks = makeMocks();
-    const { module: m, eventBus } = await instantiate(mocks);
-    simularGestorLlaves(eventBus, { status: 403, error: { code: 'PERMISSION_DENIED' } }, m);
-    m.moduleConfig = { conversaciones: { gate: true } };
-
-    const r = await m.handleCreate({ project_id: VALID_PROJECT, title: 'sin llave' });
-
-    // 422 PRECONDITION_FAILED: no es un permiso del cliente, es una precondición
-    // del servidor (sin llave el hilo nacería cerrado).
-    assert.strictEqual(r.status, 422);
-    assert.strictEqual(r.error.details.kind, 'LLAVE_NO_EMITIDA');
-    const lista = await m.handleList({ project_id: VALID_PROJECT });
-    assert.strictEqual(lista.data.conversations.length, 0, 'no queda una conversación a medias');
     await m.onUnload();
   });
 

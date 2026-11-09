@@ -51,33 +51,6 @@ class PosPersistencia {
     }
   }
 
-  /**
-   * Restaura TODOS los proyectos al arrancar.
-   *
-   * `project.activated` llega UNA vez. Si el módulo carga después de ese
-   * evento, el custodio arranca VACÍO teniendo su fichero en disco: 404 falsos,
-   * llaves invisibles, y el chat se cierra hasta que alguien re-active a mano.
-   *
-   * Restaurar al cargar quita ese punto único de fallo. El evento sigue
-   * sirviendo para re-activar en caliente; deja de ser requisito para arrancar.
-   */
-  async restaurarTodos() {
-    let ids = [];
-    try {
-      const r = await this.modulo._rpc('project.list.request', {});
-      const lista = r?.data?.projects || r?.projects || r?.data?.data?.projects || [];
-      ids = lista.map((p) => p.project_id || p.id).filter(Boolean);
-    } catch (_) { return 0; }
-    let restaurados = 0;
-    for (const pid of ids) {
-      try {
-        const data = await this.modulo._leerJson(pid, this.path);
-        if (data) { this._hidratar(pid, data); restaurados++; }
-      } catch (_) { /* best-effort: un proyecto ilegible no frena el arranque */ }
-    }
-    return restaurados;
-  }
-
   async restaurar(project_id) {
     if (!project_id) return;
     try {

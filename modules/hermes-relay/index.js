@@ -133,9 +133,7 @@ class HermesRelayModule extends BaseModule {
       const ctx = { project_id, conversation_id, page_id, page_context };
       const messages = this._formatMessages(history, user_message, ctx);
 
-      // El modelo de la CONVERSACIÓN gobierna. chat-io lo manda en `settings`
-      // (lo lee de la tabla). Si no viene, se usa el de la config como respaldo.
-      const result = await this._callHermes(messages, settings?.model);
+      const result = await this._callHermes(messages);
 
       const { texto: assistantMessage, adjuntos } =
         await this._extraerAdjuntos(result.content || '', project_id, conversation_id);
@@ -388,10 +386,10 @@ class HermesRelayModule extends BaseModule {
 
   // ── HTTP a Hermes ─────────────────────────────────────────────
 
-  _callHermes(messages, model) {
+  _callHermes(messages) {
     const url = new URL(this.config.hermes_url);
     const payload = JSON.stringify({
-      model: model || this.config.hermes_model,
+      model: this.config.hermes_model,
       messages,
       stream: false
     });

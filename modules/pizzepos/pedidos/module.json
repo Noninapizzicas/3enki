@@ -33,7 +33,9 @@
       { "event": "caja.cerrada",             "handler": "onCajaCerrada",           "description": "Cierre de caja — limpiar pedidos del dia." },
       { "event": "dia.iniciado",             "handler": "onDiaIniciado",           "description": "Nuevo dia — limpiar pedidos stale." },
       { "event": "pago.confirmado",          "handler": "onPagoConfirmado",        "description": "Pago online confirmado (pasarela) — marcar el pedido pagado y liberarlo." },
-      { "event": "servicio.cambiado",        "handler": "onServicioCambiado",      "description": "Interruptor de servicio cambiado — soltar la cache de config de servicio del proyecto." }
+      { "event": "servicio.cambiado",        "handler": "onServicioCambiado",      "description": "Interruptor de servicio cambiado — soltar la cache de config de servicio del proyecto." },
+      { "event": "pedido.confirmacion_respondida", "handler": "onPedidoConfirmacionRespondida", "description": "El cliente dijo SI por WhatsApp (lo publica confirmacion-pedido) — aplicar handleConfirmarPedido: su pedido entra en cocina." },
+      { "event": "pedido.confirmacion_rechazada",  "handler": "onPedidoConfirmacionRechazada",  "description": "El cliente dijo NO por WhatsApp (lo publica confirmacion-pedido) — aplicar handleRechazarPedido: su pedido se cierra sin cocina." }
     ]
   },
   "ui_handlers": [

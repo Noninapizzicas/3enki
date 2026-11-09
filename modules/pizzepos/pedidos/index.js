@@ -1709,6 +1709,49 @@ class PedidosModule extends BaseModule {
     }
   }
 
+  // ── La respuesta del cliente, que llega por el BUS ───────────────────────────
+  // `confirmacion-pedido` habla con el cliente; aquí se APLICA su respuesta, porque
+  // `pedidos` es el dueño del pedido. Antes el módulo de confirmación llamaba a este
+  // en proceso (`pedidos.handleConfirmarPedido`): si `pedidos` no estaba cargado en ese
+  // instante devolvía null y el "sí" del cliente se perdía EN SILENCIO. Por evento el
+  // contrato es el mismo aunque el otro módulo se recargue, y si no se puede aplicar
+  // queda un warn + métrica en vez de un null mudo.
+  async onPedidoConfirmacionRespondida(event) {
+    const data = event?.data || event || {};
+    const r = await this.handleConfirmarPedido({ pedido_id: data.pedido_id });
+    if (r && r.status >= 400) {
+      this.logger?.warn?.('pedidos.confirmacion_respondida.no_aplicada', {
+        pedido_id: data.pedido_id || null,
+        status: r.status,
+        code: r.error?.code || null,
+        project_slug: data.project_slug || null
+      });
+      this.metrics?.increment?.('pedidos.confirmacion.fallida.total',
+        { project: data.project_slug || data.project_id || 'unknown' });
+    }
+    return r;
+  }
+
+  // El cliente dijo NO: su pedido se cierra sin entrar en cocina.
+  async onPedidoConfirmacionRechazada(event) {
+    const data = event?.data || event || {};
+    const r = await this.handleRechazarPedido({
+      pedido_id: data.pedido_id,
+      motivo: data.motivo || 'cliente_dijo_no'
+    });
+    if (r && r.status >= 400) {
+      this.logger?.warn?.('pedidos.confirmacion_rechazada.no_aplicada', {
+        pedido_id: data.pedido_id || null,
+        status: r.status,
+        code: r.error?.code || null,
+        project_slug: data.project_slug || null
+      });
+      this.metrics?.increment?.('pedidos.confirmacion.fallida.total',
+        { project: data.project_slug || data.project_id || 'unknown' });
+    }
+    return r;
+  }
+
   // La JID que trae el pedido de WhatsApp, sacada de su propio texto libre.
   // El lector del puente (`bridges/whatsapp-qr/ingest/ingest.js`) NO manda un campo
   // `cliente_jid`: ya escribe el remitente dentro de `notas_generales` como

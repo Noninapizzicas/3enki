@@ -1,8 +1,8 @@
 {
-  "_doc": "La puerta de la confianza, del lado del cliente. UN negocio, su puente, su texto: no comparte nada con el lector del puente (bridges/whatsapp-qr), que es carril compartido. Escucha pedido.confirmacion_pendiente (cliente nuevo: su pedido esta parado, no ha entrado en cocina) y a los N segundos le pide por WhatsApp que responda SI. Escucha pedido.cliente_habitual (ya lleva pedidos recogidos): no le pide nada, le saluda por su nombre. Lee la respuesta del mismo fichero de eventos del puente (config whatsapp_qr.eventos), mirando solo los jid que tienen un pedido esperando: un 'si' llama a pedidos.handleConfirmarPedido (que lo manda a cocina) y un 'no' a handleRechazarPedido. Si no contesta en 10 minutos emite pedido.sin_confirmar para que la barra decida: un pedido no se queda colgado en silencio.",
+  "_doc": "La puerta de la confianza, del lado del cliente. UN negocio, su puente, su texto: no comparte nada con el lector del puente (bridges/whatsapp-qr), que es carril compartido. Escucha pedido.confirmacion_pendiente (cliente nuevo: su pedido esta parado, no ha entrado en cocina) y a los N segundos le pide por WhatsApp que responda SI. Escucha pedido.cliente_habitual (ya lleva pedidos recogidos): no le pide nada, le saluda por su nombre. La respuesta del cliente llega por el BUS: se suscribe a whatsapp.mensaje.recibido (que publica whatsapp-bot por cada mensaje entrante) y, si el que escribe tiene un pedido esperando, publica pedido.confirmacion_respondida o pedido.confirmacion_rechazada; el que aplica la respuesta es `pedidos` (su dueño), no este modulo. Sin ficheros, sin offsets y sin timers de sondeo: cero costuras fuera del bus. Idempotente por message_id (el puente puede repetir el mismo mensaje). Si no contesta en 10 minutos emite pedido.sin_confirmar, que consume notificador-pedidos para avisar a la barra: un pedido no se queda colgado en silencio.",
   "name": "confirmacion-pedido",
-  "version": "1.0.0",
-  "description": "Pide confirmacion al cliente nuevo por WhatsApp antes de mandar su pedido a cocina, y saluda al habitual sin pedirle nada. Lee la respuesta sin tocar el lector compartido del puente.",
+  "version": "1.1.0",
+  "description": "Pide confirmacion al cliente nuevo por WhatsApp antes de mandar su pedido a cocina, y saluda al habitual sin pedirle nada. La respuesta del cliente llega por whatsapp.mensaje.recibido y se publica como pedido.confirmacion_respondida / pedido.confirmacion_rechazada: 100% por eventos.",
   "author": "Enki Team",
   "language": "es",
   "main": "index.js",
@@ -25,6 +25,11 @@
         "event": "pedido.cliente_habitual",
         "handler": "onPedidoClienteHabitual",
         "razon": "El cliente de siempre no confirma: se le saluda y su pedido ya esta en cocina."
+      },
+      {
+        "event": "whatsapp.mensaje.recibido",
+        "handler": "onWhatsappMensajeRecibido",
+        "razon": "La RESPUESTA del cliente. Antes se leia el fichero JSONL del puente con un setInterval de 5s y un offset de bytes; ahora es el evento canonico de whatsapp-bot. Es idempotente por message_id porque el puente puede repetir el mismo mensaje."
       }
     ]
   },
@@ -36,10 +41,33 @@
     {
       "event": "pedido.cliente_habitual",
       "handler": "onPedidoClienteHabitual"
+    },
+    {
+      "event": "whatsapp.mensaje.recibido",
+      "handler": "onWhatsappMensajeRecibido"
     }
   ],
   "publishes": [
+    "pedido.confirmacion_respondida",
+    "pedido.confirmacion_rechazada",
     "pedido.sin_confirmar"
+  ],
+  "eventos_publicados_que_requieren_consumer": [
+    {
+      "event": "pedido.confirmacion_respondida",
+      "consumer_esperado": "modules/pizzepos/pedidos",
+      "razon": "El dueno del pedido aplica el SI (handleConfirmarPedido: lo manda a cocina). Por evento, el 'si' del cliente no se pierde si pedidos se recarga: no hay llamada en proceso."
+    },
+    {
+      "event": "pedido.confirmacion_rechazada",
+      "consumer_esperado": "modules/pizzepos/pedidos",
+      "razon": "El dueno del pedido aplica el NO (handleRechazarPedido: cierra el pedido sin cocina)."
+    },
+    {
+      "event": "pedido.sin_confirmar",
+      "consumer_esperado": "modules/pizzepos/notificador-pedidos",
+      "razon": "Aviso a la barra de que un pedido lleva 10 min esperando respuesta, para que confirme o cancele con un clic."
+    }
   ],
   "observability": {
     "metrics": [
@@ -53,13 +81,13 @@
         "name": "confirmacion_pedido.confirmado.total",
         "type": "counter",
         "labels": ["project"],
-        "_doc": "Clientes que respondieron SI; su pedido entro en cocina."
+        "_doc": "Clientes que respondieron SI; se publico pedido.confirmacion_respondida."
       },
       {
         "name": "confirmacion_pedido.rechazado.total",
         "type": "counter",
         "labels": ["project"],
-        "_doc": "Clientes que respondieron NO; su pedido se cerro sin entrar en cocina."
+        "_doc": "Clientes que respondieron NO; se publico pedido.confirmacion_rechazada."
       },
       {
         "name": "confirmacion_pedido.sin_confirmar.total",

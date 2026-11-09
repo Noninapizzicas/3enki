@@ -30,7 +30,7 @@ class NotificadorPedidosModule extends BaseModule {
   constructor() {
     super();
     this.name = 'notificador-pedidos';
-    this.version = '2.0.0';
+    this.version = '2.1.0';
 
     // request_id -> { resolve, reject, timeoutHandle } para correlar project.get.response.
     this._pendingProjectResolves = new Map();
@@ -140,6 +140,67 @@ class NotificadorPedidosModule extends BaseModule {
     }
   }
 
+  // Un pedido lleva 10 minutos esperando el "si" del cliente y sigue parado (lo publica
+  // confirmacion-pedido). No se confirma solo ni se cancela solo: se avisa a la BARRA
+  // por el mismo carril multicanal que los pedidos nuevos, para que lo mire, confirme
+  // o cancele. Un pedido colgado en silencio es peor que uno rechazado.
+  //
+  // Este evento no trae items ni total (el pedido aun esta en `pedidos`): solo lo justo
+  // para que quien esta en la barra sepa de que pedido y de que cliente se trata.
+  async onPedidoSinConfirmar(event) {
+    const data = (event && event.data) || event || {};
+    const project_id = data.project_id || data.project_slug || null;
+
+    this._incrementMetric('notificador.sin_confirmar.recibido.total', { project: project_id || 'unknown' });
+
+    if (!project_id) {
+      this.logger.warn('notificador-pedidos.sin_confirmar.sin_project_id', { pedido_id: data.pedido_id });
+      this._incrementMetric('notificador.sin_confirmar.descartado.total', { project: 'unknown', razon: 'sin_project_id' });
+      return;
+    }
+
+    let project;
+    try {
+      project = await this._resolveProject(project_id);
+    } catch (err) {
+      this.logger.warn('notificador-pedidos.sin_confirmar.resolve_failed', {
+        project_id, pedido_id: data.pedido_id, error_message: err && err.message ? err.message : String(err)
+      });
+      this._incrementMetric('notificador.sin_confirmar.descartado.total', { project: project_id, razon: 'project_resolve_failed' });
+      return;
+    }
+    if (!project || !project.base_path) {
+      this.logger.warn('notificador-pedidos.sin_confirmar.project_no_encontrado', { project_id, pedido_id: data.pedido_id });
+      this._incrementMetric('notificador.sin_confirmar.descartado.total', { project: project_id, razon: 'project_no_encontrado' });
+      return;
+    }
+
+    let projectConfig;
+    try {
+      projectConfig = await this._readProjectConfig(project.base_path);
+    } catch (err) {
+      this.logger.warn('notificador-pedidos.sin_confirmar.config_read_failed', {
+        project_id, base_path: project.base_path, error_message: err && err.message ? err.message : String(err)
+      });
+      this._incrementMetric('notificador.sin_confirmar.descartado.total', { project: project_id, razon: 'config_read_failed' });
+      return;
+    }
+
+    const resolved = {
+      project_slug: data.project_slug || project.slug || project.name || null,
+      base_path: project.base_path,
+      telegram: this._extractTelegramConfig(projectConfig),
+      canales: this._extractCanales(projectConfig)
+    };
+
+    const canales = resolved.canales && resolved.canales.length > 0 ? resolved.canales : ['telegram'];
+    for (const canal of canales) {
+      if (canal === 'telegram') {
+        await this._notificarSinConfirmarTelegram(resolved, data, event);
+      }
+    }
+  }
+
   // ==========================================
   // Resolucion de proyecto via bus (request/response)
   // ==========================================
@@ -181,16 +242,29 @@ class NotificadorPedidosModule extends BaseModule {
   // ==========================================
 
   async _notificarTelegram(config, pedido, sourceEvent) {
+    const text = this._formatPedidoMessage(config, pedido);
+    await this._enviarTelegram(config, text, pedido && pedido.pedido_id, sourceEvent,
+      'notificador.pedido.notificado.total');
+  }
+
+  async _notificarSinConfirmarTelegram(config, aviso, sourceEvent) {
+    const text = this._formatSinConfirmarMessage(config, aviso);
+    await this._enviarTelegram(config, text, aviso && aviso.pedido_id, sourceEvent,
+      'notificador.sin_confirmar.notificado.total');
+  }
+
+  // Un solo carril de salida para los dos avisos (pedido nuevo / pedido sin confirmar):
+  // el chatId del staff se resuelve igual y el contrato con telegram-service es el mismo.
+  async _enviarTelegram(config, text, pedido_id, sourceEvent, metricName) {
     const tg = config.telegram;
     if (!tg || !tg.chatId || String(tg.chatId).startsWith('<PENDIENTE')) {
       this.logger.warn('notificador-pedidos.telegram.sin_chatid', {
         project_slug: config.project_slug,
-        pedido_id: pedido.pedido_id
+        pedido_id
       });
       this._incrementMetric('notificador.pedido.descartado.total', { project: config.project_slug || 'unknown', razon: 'proyecto_sin_chatid' });
       return;
     }
-    const text = this._formatPedidoMessage(config, pedido);
     const correlation_id = (sourceEvent && sourceEvent.metadata && sourceEvent.metadata.correlation_id) || crypto.randomUUID();
     try {
       await this.eventBus.publish('telegram.send_message.request', {
@@ -200,16 +274,16 @@ class NotificadorPedidosModule extends BaseModule {
         text,
         correlation_id
       });
-      this._incrementMetric('notificador.pedido.notificado.total', { project: config.project_slug || 'unknown', canal: 'telegram' });
+      this._incrementMetric(metricName, { project: config.project_slug || 'unknown', canal: 'telegram' });
       this.logger.info('notificador-pedidos.telegram.notificado', {
         project_slug: config.project_slug,
-        pedido_id: pedido.pedido_id,
+        pedido_id,
         chatId: Number(tg.chatId)
       });
     } catch (err) {
       this.logger.warn('notificador-pedidos.telegram.publish_failed', {
         project_slug: config.project_slug,
-        pedido_id: pedido.pedido_id,
+        pedido_id,
         error_message: err && err.message ? err.message : String(err)
       });
     }
@@ -257,6 +331,37 @@ class NotificadorPedidosModule extends BaseModule {
     if (totalEur) lines.push(`Total: ${totalEur} EUR`);
     if (pedido.expira_at) lines.push(`Expira: ${pedido.expira_at}`);
     return lines.join('\n');
+  }
+
+  /**
+   * Aviso a la barra: un pedido lleva 10 minutos sin que el cliente conteste al "si".
+   * No lleva items ni total (el pedido sigue en `pedidos`, que es su dueño): lleva lo
+   * que hace falta para identificarlo y decidir — cliente, id y desde cuándo espera.
+   */
+  _formatSinConfirmarMessage(config, aviso) {
+    const slug = (config.project_slug || aviso.project_slug || 'pedido').toUpperCase();
+    const lines = [
+      `Pedido SIN CONFIRMAR - ${slug}`,
+      `A nombre de: ${aviso.cliente_nombre || '(sin nombre)'}`
+    ];
+    if (aviso.pedido_id) lines.push(`Pedido: ${aviso.pedido_id}`);
+    const pedida = this._hhmm(aviso.pedida_at);
+    if (pedida) lines.push(`Se le pidio confirmacion: ${pedida}`);
+    const espera = this._hhmm(aviso.esperando_desde);
+    if (espera) lines.push(`Esperando desde: ${espera}`);
+    lines.push('');
+    lines.push('No ha contestado en 10 minutos. Entra en pedidos y confirmalo (va a cocina) o cancelalo.');
+    return lines.join('\n');
+  }
+
+  // ISO → HH:MM en hora local del servidor (lo que lee quien está en la barra).
+  _hhmm(iso) {
+    if (!iso) return null;
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return null;
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mm = String(d.getMinutes()).padStart(2, '0');
+    return `${hh}:${mm}`;
   }
 
   // ==========================================

@@ -11,9 +11,9 @@
 
 ```
 /home/admin/3enki               [main]                          ← SOLO LECTURA. Nadie commitea aquí.
-/home/admin/3enki-contabilidad  [vertical/contabilidad]         ← sesión de contabilidad
+/home/admin/3enki-contabilidad  [proyecto/contabilidad]         ← sesión de contabilidad
 /home/admin/3enki-pizzepos      [proyecto/pizzepos]             ← sesión de pizzepos
-/home/admin/3enki-skill         [hermes/skill-vertical-subagentes]  ← sesión de skills
+/home/admin/3enki-skill         [proyecto/skills]               ← sesión de skills
 ```
 
 Cada sesión trabaja **siempre** dentro de SU worktree, en SU rama.
@@ -33,20 +33,22 @@ Un hook `pre-commit` lo bloquea (ver §3).
 ### R2 — Cada sesión vive en su worktree
 | Sesión | Worktree | Rama |
 |---|---|---|
-| Contabilidad | `~/3enki-contabilidad` | `vertical/contabilidad` |
+| Contabilidad | `~/3enki-contabilidad` | `proyecto/contabilidad` |
 | Pizzepos | `~/3enki-pizzepos` | `proyecto/pizzepos` |
-| Skills | `~/3enki-skill` | `hermes/skill-*` |
-| Nichos / general | `~/3enki-<tema>` (crear) | `hermes/<tema>` |
-| **Cualquier tarea nueva** | crear worktree nuevo | rama nueva |
+| Skills | `~/3enki-skill` | `proyecto/skills` |
+| Cualquier proyecto | `~/3enki-<slug>` (crear) | `proyecto/<slug>` |
+| **Cualquier tarea nueva** | crear worktree nuevo | `proyecto/<slug>` del proyecto al que sirve |
+
+**El nombre de rama es `proyecto/<slug>` y nada más.** Sin `<tema>`, sin excepciones: el nombre dice **a quién sirve**, no qué tarea es. Si un módulo lo usan diez proyectos, la rama se nombra por el proyecto que lo pidió — así se sabe de qué va sin abrir el diff.
 
 Crear un worktree nuevo:
 ```bash
 cd ~/3enki && git fetch origin
-git worktree add ~/3enki-<tema> -b hermes/<tema> origin/main
+git worktree add ~/3enki-<slug> -b proyecto/<slug> origin/main
 ```
 
 ### R3 — Nunca commit directo a `main`
-Todo trabajo va en una rama `hermes/<tema>` → **PR**. Nada de push a `main`.
+Todo trabajo va en una rama `proyecto/<slug>` → **PR**. Nada de push a `main`.
 
 ### R4 — Sincronizar el worktree antes de empezar
 Cada worktree está en su rama, pero **su rama hay que refrescarla**:
@@ -88,8 +90,8 @@ No es un error de git: es la norma funcionando. Significa que estás a punto de
 commitear en el sitio equivocado. La salida es:
 
 ```bash
-cd ~/3enki && git worktree add ~/3enki-<tema> -b hermes/<tema> origin/main
-cd ~/3enki-<tema>    # y repite el commit AQUÍ
+cd ~/3enki && git worktree add ~/3enki-<slug> -b proyecto/<slug> origin/main
+cd ~/3enki-<slug>    # y repite el commit AQUÍ
 ```
 
 ---
@@ -115,3 +117,18 @@ git fetch origin -q && echo "por detrás: $(git rev-list --count HEAD..origin/ma
 # ¿hay commits locales sobre main? (no debería haber ninguno)
 git log --oneline origin/main..main
 ```
+
+---
+
+## 6. Quién manda en qué (no hay dos normas peleadas)
+
+| Materia | Manda |
+|---|---|
+| **Nombre de rama** | la skill `enki-git-por-proyecto` → `proyecto/<slug>` |
+| **Aislamiento del árbol** (worktree por sesión, `~/3enki` solo lectura) | **este documento** |
+| **Merge + deploy** | **el dueño** |
+
+No compiten: se reparten la materia. Antes de la norma única (2026-11-09), este fichero
+imponía `hermes/<tema>` y la skill pedía `proyecto/<slug>`; un chat tuvo que elegir a
+ciegas entre las dos. Si vuelve a aparecer una rama `hermes/<tema>`, es una norma rota:
+se corrige aquí, no se adapta.

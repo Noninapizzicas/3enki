@@ -16203,7 +16203,12 @@ CLASE WhatsappBotModule HEREDA BaseModule {  // ── el INSIDER que re-tasa
 > nombre del módulo no cambia (el loader monta por `manifest.name`, no por carpeta), así que la
 > ruta HTTP del webhook de este bot sigue siendo la de siempre.
 
-## WhatsApp Cloud API — OPERATIVO end-to-end (v1.5.0) · webhook real de Meta + alta por UI
+## WhatsApp Cloud API — BORRADO del repo (última v1.5.0) · el único carril es el puente Rust
+
+> **Estado: histórico.** `modules/whatsapp-bot` (WhatsApp Cloud API de Meta) se eliminó del
+> árbol. Lo que sigue documenta cómo era, no lo que hay: hoy el único carril de WhatsApp es
+> el puente Rust que publica `whatsapp.mensaje.recibido` al bus. El parser del mensaje
+> canónico (`#P1`) sigue vivo en `modules/_shared/pedido-mensaje-parser.js`.
 
 > Estado: VIVO en producción (enki-ai.online, proyecto nonina). El transporte ÚNICO es el
 > webhook de Meta (graph.facebook.com) — HTTP, sin navegador. La PUERTA es el verify_token;
@@ -16470,7 +16475,7 @@ EVENTOS {
 }
 PIEZAS {
   modules/_shared/pedido-tasador.js              (función pura: tasarPedido — re-tasado seguridad)
-  modules/whatsapp-bot (1.5.0)                   (webhook Meta REAL + alta por UI + snapshot + #P1 + re-tasado + sendTemplate + _rpc/_iniciarPagoTarjeta/onPedidoPagado)
+  modules/whatsapp-bot (v1.5.0, BORRADO)                                   (era: webhook Meta + alta por UI + snapshot + #P1 + re-tasado + sendTemplate; hoy el carril es el puente Rust → whatsapp.mensaje.recibido)
   modules/whatsapp-bot/services/meta-cloud-client.js (Meta Cloud API: sendText/sendTemplate/_postMessage/parseWebhookEvent)
   modules/whatsapp-bot/services/pedido-parser.js (#P1: _decodificarEstructura + metodo_pago)
   modules/pizzepos/carta-digital (2.26.0)        (PWA emite #P1 + paridad mitad + nombre obligatorio + botones metodo_pago)

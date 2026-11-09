@@ -132,6 +132,21 @@ function simularCoordinador(eventBus, resultado) {
   });
 }
 
+function simularGestorLlaves(eventBus, respuesta, modulo) {
+  // El core real registra los subscribes del manifest; el mock no. Se cablean aquí.
+  if (modulo) {
+    eventBus.subscribe('llave.emitir.response', (ev) => modulo.onLlaveEmitida(ev));
+    eventBus.subscribe('llave.emitir.failed', (ev) => modulo.onLlaveFallida(ev));
+  }
+  eventBus.subscribe('llave.emitir.request', async (ev) => {
+    const d = ev?.data || ev;
+    const out = typeof respuesta === 'function' ? respuesta(d) : respuesta;
+    if (out === null) return; // nadie contesta (timeout declarado)
+    const tipo = (out.status || 200) >= 400 ? 'llave.emitir.failed' : 'llave.emitir.response';
+    await eventBus.publish(tipo, { request_id: d.request_id, ...out });
+  });
+}
+
 function indiceDe(trace, prefijo) {
   return trace.findIndex(t => t.startsWith(prefijo));
 }
@@ -733,8 +748,10 @@ async function createConversation(m, opts = {}) {
   await testAsync('gate ON + ADMITIR → publica entrada, espera el resultado y guarda DESPUES', async () => {
     const mocks = makeMocks();
     const { module: m, eventBus, trace } = await instantiate(mocks);
-    m.moduleConfig = { conversaciones: { gate: true } };
+    // Se crea con el gate OFF (el camino de siempre) y se enciende después:
+    // con el gate ON, handleCreate pide la llave del hilo antes de existir.
     const cid = await createConversation(m);
+    m.moduleConfig = { conversaciones: { gate: true } };
 
     simularCoordinador(eventBus, {
       status: 200,
@@ -763,6 +780,10 @@ async function createConversation(m, opts = {}) {
     assert.strictEqual(e.user_message, 'con gate');
     assert.strictEqual(e.acto, 'ESCRIBIR');
     assert.strictEqual(e.channel, 'web');
+    // El estado NO vive en la tabla `conversations`: se declara el hecho.
+    // Una conversación existente está ACTIVA; una nueva, ABIERTA. Si mandara
+    // null, la puerta no encontraría `actosPorEstado[null]` y rechazaría todo.
+    assert.strictEqual(e.estado_conversacion, 'ACTIVA');
 
     // 2) se espero el resultado y el INSERT ocurrio DESPUES (orden real del bus)
     const iEntrada = indiceDe(trace, 'ev:conversacion.entrada.recibida');
@@ -784,8 +805,8 @@ async function createConversation(m, opts = {}) {
   await testAsync('gate ON + RECHAZAR → NO guarda nada y devuelve el rechazo', async () => {
     const mocks = makeMocks();
     const { module: m, eventBus, trace } = await instantiate(mocks);
-    m.moduleConfig = { conversaciones: { gate: true } };
     const cid = await createConversation(m);
+    m.moduleConfig = { conversaciones: { gate: true } };
 
     simularCoordinador(eventBus, {
       status: 403,
@@ -819,9 +840,9 @@ async function createConversation(m, opts = {}) {
   await testAsync('gate ON + timeout → NO guarda nada (fail-closed, 504)', async () => {
     const mocks = makeMocks();
     const { module: m, eventBus, trace } = await instantiate(mocks);
+    const cid = await createConversation(m);
     m.moduleConfig = { conversaciones: { gate: true } };
     m.gateTimeoutMs = 50;
-    const cid = await createConversation(m);
 
     simularCoordinador(eventBus, null); // nadie contesta
     mocks.published.length = 0;
@@ -839,6 +860,44 @@ async function createConversation(m, opts = {}) {
     const load = await m.handleLoad({ project_id: VALID_PROJECT, conversation_id: cid });
     assert.strictEqual(load.data.messages.length, 0);
     assert.strictEqual(m.pendingEntrada.size, 0, 'el timeout libera el pending');
+    await m.onUnload();
+  });
+
+  // ── El hilo nace con su llave (A del consenso 2026-11-09) ───────────────
+  await testAsync('gate ON + crear conversación → emite SU llave (LEER+ESCRIBIR) antes de existir', async () => {
+    const mocks = makeMocks();
+    const { module: m, eventBus } = await instantiate(mocks);
+    simularGestorLlaves(eventBus, { status: 201, data: { llave: { id: 'llave-x', actos: ['LEER', 'ESCRIBIR'] } } }, m);
+    m.moduleConfig = { conversaciones: { gate: true } };
+    mocks.published.length = 0;
+
+    const cid = await createConversation(m);
+
+    const pedidas = publishedOf(mocks, 'llave.emitir.request');
+    assert.strictEqual(pedidas.length, 1, 'se pide UNA llave al abrir el hilo');
+    const k = pedidas[0];
+    assert.strictEqual(k.conversacion, cid, 'la llave es de ESTE hilo');
+    assert.deepStrictEqual(k.actos, ['LEER', 'ESCRIBIR'], 'LEER ≠ ESCRIBIR: se piden los dos');
+    assert.strictEqual(k.forma, 'REFERENCIA_SECRETO');
+    assert.strictEqual(k.emisor_autorizado, true, 'la autorización viaja como DATO');
+    assert.strictEqual(k.hilo_existe, true);
+    await m.onUnload();
+  });
+
+  await testAsync('gate ON + la llave NO se puede emitir → la conversación NO se crea (fail-closed)', async () => {
+    const mocks = makeMocks();
+    const { module: m, eventBus } = await instantiate(mocks);
+    simularGestorLlaves(eventBus, { status: 403, error: { code: 'PERMISSION_DENIED' } }, m);
+    m.moduleConfig = { conversaciones: { gate: true } };
+
+    const r = await m.handleCreate({ project_id: VALID_PROJECT, title: 'sin llave' });
+
+    // 422 PRECONDITION_FAILED: no es un permiso del cliente, es una precondición
+    // del servidor (sin llave el hilo nacería cerrado).
+    assert.strictEqual(r.status, 422);
+    assert.strictEqual(r.error.details.kind, 'LLAVE_NO_EMITIDA');
+    const lista = await m.handleList({ project_id: VALID_PROJECT });
+    assert.strictEqual(lista.data.conversations.length, 0, 'no queda una conversación a medias');
     await m.onUnload();
   });
 

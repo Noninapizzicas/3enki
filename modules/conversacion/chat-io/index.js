@@ -115,6 +115,7 @@ class ChatIoModule extends BaseModule {
     // HOOK DE ADMISIÓN (TEMPORAL): RPC de entrada en vuelo.
     // Map request_id → { cerrar, timeout, unsubs, cerrado }.
     this.pendingEntrada      = new Map();
+    this.pendingLlave        = new Map();   // request_id → cerrar() (emisión de llave al abrir hilo)
     this.moduleConfig        = {};
     this.gateTimeoutMs       = GATE_TIMEOUT_MS;
   }
@@ -493,7 +494,7 @@ class ChatIoModule extends BaseModule {
       canal: d.channel,
       channel: d.channel,
       channel_context: d.channel_context || {},
-      estado_conversacion: d.entrada?.estado_conversacion ?? d.entrada?.estado ?? null,
+      estado_conversacion: d.entrada?.estado_conversacion ?? d.entrada?.estado ?? (d.conversation_id ? 'ACTIVA' : 'ABIERTA'),
       politica: d.entrada?.politica ?? null,
       settings: d.settings,
       attachments: d.attachments,
@@ -614,6 +615,24 @@ class ChatIoModule extends BaseModule {
     pending.cerrar(payload);
   }
 
+  /** Handler del bus: el gestor emitió la llave del hilo recién abierto. */
+  onLlaveEmitida(event) {
+    const p = event?.data || event || {};
+    const pide = p.request_id && this.pendingLlave.get(p.request_id);
+    if (!pide) return;
+    this.pendingLlave.delete(p.request_id);
+    pide(p);
+  }
+
+  /** Handler del bus: la emisión falló → la conversación no se crea. */
+  onLlaveFallida(event) {
+    const p = event?.data || event || {};
+    const pide = p.request_id && this.pendingLlave.get(p.request_id);
+    if (!pide) return;
+    this.pendingLlave.delete(p.request_id);
+    pide({ ok: false, motivo: 'EMISION_FALLIDA', error: p.error || null, status: p.status || null });
+  }
+
   /** Rechazo de entrada → error canonico del modulo (status via _statusFromCode). */
   _errorDeEntrada(det = {}) {
     const status = Number(det.status) || 0;
@@ -651,6 +670,50 @@ class ChatIoModule extends BaseModule {
     return err;
   }
 
+  /**
+   * Al abrir un hilo se le pone su llave (sólo con el gate ON).
+   *
+   * Quien abre un hilo le pone su llave: es una decisión DECLARADA en el
+   * contrato del módulo, no una suposición en tiempo de ejecución. La
+   * autorización del emisor viaja como DATO (`emisor_autorizado`), y el
+   * gestor de llaves la exige — no se la cree a ciegas.
+   *
+   * Sin llave, el hilo nacería cerrado para su primer mensaje (403). Por eso
+   * el fallo es fail-closed: no se deja la conversación a medias.
+   */
+  async _emitirLlaveDelHilo({ project_id, conversation_id }) {
+    const request_id = crypto.randomUUID();
+    const espera = new Promise((resolve) => {
+      const t = setTimeout(() => {
+        this.pendingLlave.delete(request_id);
+        resolve({ ok: false, motivo: 'TIMEOUT' });
+      }, this.gateTimeoutMs);
+      this.pendingLlave.set(request_id, (r) => { clearTimeout(t); resolve(r); });
+    });
+
+    try {
+      await this.eventBus.publish('llave.emitir.request', {
+        request_id,
+        project_id,
+        conversacion: conversation_id,
+        actos: ['LEER', 'ESCRIBIR'],
+        emisor: 'chat-io',
+        forma: 'REFERENCIA_SECRETO',
+        emisor_autorizado: true,
+        hilo_existe: true
+      });
+    } catch (err) {
+      return { ok: false, motivo: 'PUBLISH_FALLIDO', error: err.message };
+    }
+
+    const r = await espera;
+    const status = Number(r?.status) || 0;
+    if (r?.ok === false || r?.error || (status && status >= 400)) {
+      return { ok: false, motivo: r?.motivo || r?.error?.code || 'EMISION_RECHAZADA', status, error: r?.error || null };
+    }
+    return { ok: true, llave: r?.data?.llave || null, request_id };
+  }
+
   async handleCreate(data) {
     try {
       const { project_id, title, context_window, temperature, max_tokens, prompt_id, provider, model } = data || {};
@@ -673,6 +736,26 @@ class ChatIoModule extends BaseModule {
       );
 
       this.knownConversations.set(id, project_id);
+
+      // GATE ON: el hilo nace con su llave. Sin ella su primer mensaje sería
+      // rechazado (403) y la conversación quedaría a medias → fail-closed:
+      // si la llave no se puede emitir, la conversación NO se crea.
+      if (this._gateActivo()) {
+        const emision = await this._emitirLlaveDelHilo({ project_id, conversation_id: id });
+        if (!emision.ok) {
+          try { await this._db(project_id, 'DELETE FROM conversations WHERE id = ?', [id]); } catch { /* noop */ }
+          this.knownConversations.delete(id);
+          this.metrics?.increment('chat-io.conversation.sin_llave', { motivo: emision.motivo });
+          const err = new Error(`no se creó la conversación: sin llave (${emision.motivo})`);
+          err._code = 'PRECONDITION_FAILED';
+          err._details = { kind: 'LLAVE_NO_EMITIDA', motivo: emision.motivo, status: emision.status || null };
+          throw err;
+        }
+        this.logger?.info('chat-io.conversation.llave', {
+          module: this.name, conversation_id: id, llave: emision.llave?.id || null
+        });
+      }
+
       this.metrics?.increment('chat-io.conversation.created');
 
       const conversation = this._serializeConversation({

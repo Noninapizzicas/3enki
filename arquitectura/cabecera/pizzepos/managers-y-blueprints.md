@@ -1,12 +1,12 @@
 ---
 id: pizzepos/managers-y-blueprints
 dominio: pizzepos
-resumen: Managers de dominio pizzepos (cuentas, productos, categorías, cobros, pedidos, cocina, recetas, ingredientes, variaciones, escandallo, viabilidad, carta-digital, menu-generator, aviso-pedido-listo) + blueprint drivers.
+resumen: Managers de dominio pizzepos (cuentas, productos, categorías, cobros, pedidos, cocina, recetas, ingredientes, variaciones, escandallo, viabilidad, carta-digital, menu-generator, aviso-pedido-listo, confirmacion-pedido, notificador-pedidos) + blueprint drivers.
 fuentes:
   - modules/pizzepos/**
   - modules/pago-gateway/**
   - blueprints/**
-verificado: 2026-11-07 (ubicación del cliente: pin opcional en el #P1, mapa del reparto al staff) · 2026-11-06 (carta-digital v2.26.0: los modos de consumo los manda el DATO del canal y «A domicilio» entra como modo con dirección y teléfono exigidos en el carrito; pedidos v3.1.0: la puerta exige destino y teléfono cuando el modo es domicilio, el modo se canoniza a llevar (ticket que se cierra al cobrar, no cuenta huérfana) y el destino llega al comandero como nota general impresa en cocina. Siglo previo: 2026-11-05 (aviso-pedido-listo v1.0.0: cocina.pedido_listo —que ya existía y nadie escuchaba— ahora cierra el círculo del canal: aviso al cliente por el MISMO puente que trajo el pedido, con su código de turno (L 395) y su nombre; el destino es la JID que viaja puente→pedido→cuenta porque con número oculto (LID) el teléfono llega vacío. pedido-telegram v1.1.0: el canal Telegram abre una segunda puerta —la bandeja de compartir del móvil, con el mensaje canónico de WhatsApp— y el código corto queda como fallback; las dos re-tasan contra la carta viva en _crearPedidoDesde. carta-digital v2.25.1: la FICHA del producto ordena sus bloques nombre → receta → descripción → hermanas → Añadir extras — la receta va PEGADA al nombre, encima de descripción y hermanas; sigue vigente pago-gateway v3.1.0: Stripe con paridad — libro, idempotencia, webhook-puntero y conciliación; los métodos los manda el panel de Stripe, payment_method_types ya no se envía)
+verificado: 2026-11-10 (confirmacion-pedido v1.2.0 + notificador-pedidos: la DOBLE PUERTA del cliente nuevo —su pedido nace como cuenta con `enviar_cocina:false` y no entra en cocina hasta el SÍ; a los 10 min un último mensaje amable, a los 20 aviso a la barra y retirada del pedido CON su cuenta; el SÍ/NO se acepta en los dos shapes del bus, incluido el del puente Rust `slug/de/texto/id`, sin el cual se ignoraba en silencio) · 2026-11-07 (ubicación del cliente: pin opcional en el #P1, mapa del reparto al staff) · 2026-11-06 (carta-digital v2.26.0: los modos de consumo los manda el DATO del canal y «A domicilio» entra como modo con dirección y teléfono exigidos en el carrito; pedidos v3.1.0: la puerta exige destino y teléfono cuando el modo es domicilio, el modo se canoniza a llevar (ticket que se cierra al cobrar, no cuenta huérfana) y el destino llega al comandero como nota general impresa en cocina. Siglo previo: 2026-11-05 (aviso-pedido-listo v1.0.0: cocina.pedido_listo —que ya existía y nadie escuchaba— ahora cierra el círculo del canal: aviso al cliente por el MISMO puente que trajo el pedido, con su código de turno (L 395) y su nombre; el destino es la JID que viaja puente→pedido→cuenta porque con número oculto (LID) el teléfono llega vacío. pedido-telegram v1.1.0: el canal Telegram abre una segunda puerta —la bandeja de compartir del móvil, con el mensaje canónico de WhatsApp— y el código corto queda como fallback; las dos re-tasan contra la carta viva en _crearPedidoDesde. carta-digital v2.25.1: la FICHA del producto ordena sus bloques nombre → receta → descripción → hermanas → Añadir extras — la receta va PEGADA al nombre, encima de descripción y hermanas; sigue vigente pago-gateway v3.1.0: Stripe con paridad — libro, idempotencia, webhook-puntero y conciliación; los métodos los manda el panel de Stripe, payment_method_types ya no se envía)
 ---
 
 # Módulos Pizzepos y Blueprints
@@ -1449,6 +1449,38 @@ EVENTO {                                             // topics REALES
 // mismo proyecto; anti-duplicado por <chat>:<slug>:<nonce> durante el TTL.
 // El parser del mensaje es COMPARTIDO: modules/_shared/pedido-mensaje-parser.js
 // (modules/whatsapp-bot/services/pedido-parser.js queda como shim).
+```
+
+---
+
+## confirmacion-pedido (v1.2.0) + notificador-pedidos — la DOBLE PUERTA del cliente nuevo
+
+```
+// El pedido de un cliente NUEVO no entra en cocina: nace como CUENTA con
+// enviar_cocina:false y queda parado en pendiente_confirmacion. Cocina no lo ve.
+// La barra sí (ve la cuenta en el mostrador). Sale de ahí solo con el SÍ del cliente.
+
+//   0 s    pedido.confirmacion_pendiente → confirmacion-pedido (espera_segundos: 30)
+//   30 s   mensaje amable por el MISMO puente que trajo el pedido:
+//          «¿Serías tan amable de confirmarnos el pedido para empezar a prepararlo?»
+//   SÍ     pedido.confirmacion_respondida → pedidos manda el pedido a cocina
+//   NO     pedido.confirmacion_rechazada  → pedidos RETIRA el pedido Y su cuenta
+//   10 min sin respuesta → ÚLTIMO mensaje: «¿lo ponemos en marcha?» (texto_recordatorio,
+//          pisable por config del proyecto) y arranca la SEGUNDA espera
+//          (segunda_espera_segundos, 600 por defecto)
+//   20 min sin respuesta → pedido.sin_confirmar → notificador-pedidos avisa a la barra
+//          por Telegram y pedidos RETIRA el pedido con su cuenta (_retirarPedido).
+//          Nunca entró en cocina: no queda nada abierto en el mostrador.
+
+// El SÍ/NO llega por el BUS (whatsapp.mensaje.recibido) y se acepta en los DOS shapes:
+//   · whatsapp-bot  → { project_slug, from, text, message_id }
+//   · puente Rust   → { slug, de, texto, id, push_name }   ← el carril VIVO (bridges/whatsapp-qr)
+// Sin el segundo, el handler salía por `if (!jid) return` EN SILENCIO: el cliente
+// contestaba «sí» y su pedido seguía parado hasta retirarse (arreglado 2026-11-10).
+// Idempotencia por message_id (o por huella slug|de|texto|timestamp si no hay id):
+// el puente puede entregar el mismo mensaje dos veces.
+// Estado de la conversación: EN MEMORIA (un reinicio deja de esperar respuestas viejas;
+// el pedido vive en `pedidos`, no aquí). Sin ficheros, sin offsets, sin sondeo.
 ```
 
 ---

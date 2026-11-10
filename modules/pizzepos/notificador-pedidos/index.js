@@ -350,7 +350,10 @@ class NotificadorPedidosModule extends BaseModule {
     const espera = this._hhmm(aviso.esperando_desde);
     if (espera) lines.push(`Esperando desde: ${espera}`);
     lines.push('');
-    lines.push('No ha contestado en 10 minutos. Entra en pedidos y confirmalo (va a cocina) o cancelalo.');
+    lines.push('No ha contestado ni al primer aviso ni al recordatorio (10 + 10 minutos).');
+    lines.push('El pedido y su cuenta se retiran del sistema: nunca entró en cocina.');
+    lines.push('Si el cliente llama o se presenta, este es el pedido que no confirmó — no');
+    lines.push('busques la cuenta, ya no está.');
     return lines.join('\n');
   }
 

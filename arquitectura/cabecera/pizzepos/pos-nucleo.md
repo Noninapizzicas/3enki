@@ -16,7 +16,7 @@ fuentes:
   - modules/pizzepos/tarifas/**
   - modules/pizzepos/persistencia-comandero/**
   - modules/pizzepos/impresion/**
-verificado: 2026-11-10 (confirmacion-pedido: el segundo mensaje pide la confirmación con amabilidad — «¿serías tan amable de confirmarnos el pedido?», y la última línea dice el efecto sin reproche; la CONDUCTA no cambia: sigue pidiendo el sí antes de cocina) · 2026-11-07 (ubicación del cliente: pin opcional en el #P1, mapa del reparto al staff) · 2026-11-06 (entrega a domicilio: el modo 'domicilio' existe como MODO, no como canal — cuentas lo canoniza a 'llevar' para que nazca ticket que se cierra al cobrar y no cuenta huérfana; pedidos exige direccion_entrega y cliente_telefono en la puerta (400 sin ellos) y el comandero acepta notas_generales por parámetro para que el destino se imprima en el ticket de cocina; además: pedidos: puerta de la confianza + ficha de cliente por JID; confirmacion-pedido: pide el sí al cliente nuevo y lee su respuesta sin tocar el lector compartido del puente)
+verificado: 2026-11-10 (confirmacion-pedido v1.2: la espera tiene DOS tramos — a los 10 min un último mensaje amable «¿serías tan amable de confirmarnos el pedido?» y otros 10 min después se retira; pedidos retira pedido Y cuenta con `_retirarPedido` (también en el NO), notificador avisa a la barra con el mismo `pedido.sin_confirmar`) · 2026-11-10 (el segundo mensaje pide la confirmación con amabilidad) · 2026-11-07 (ubicación del cliente: pin opcional en el #P1, mapa del reparto al staff) · 2026-11-06 (entrega a domicilio: el modo 'domicilio' existe como MODO, no como canal — cuentas lo canoniza a 'llevar' para que nazca ticket que se cierra al cobrar y no cuenta huérfana; pedidos exige direccion_entrega y cliente_telefono en la puerta (400 sin ellos) y el comandero acepta notas_generales por parámetro para que el destino se imprima en el ticket de cocina)
 ---
 
 # PizzePOS Módulos — Subsistema de Punto de Venta (v3.2.0)
@@ -894,30 +894,40 @@ oculto (LID) el teléfono llega vacío y sin JID no habría a quién avisar cuan
 de la cuenta —los escribe `handleCreatePedidoTienda`— y los lee quien avisa al cliente
 (`modules/pizzepos/aviso-pedido-listo`, rebanada `autoservicio-whatsapp`).
 
-### 9-bis. CONFIRMACION-PEDIDO (v1.0.0) — La puerta de la confianza
+### 9-bis. CONFIRMACION-PEDIDO (v1.2.0) — La puerta de la confianza
 
 ```
 CLASE ConfirmacionPedidoModule {
   ATRIBUTOS {
-    pendientes: Map<pedido_id, {jid, nombre, cuenta_id, creado_en, timer, timerAviso}>
+    pendientes: Map<pedido_id, {jid, nombre, cuenta_id, creado_en, pedida_at,
+                                recordado_at, timer, timerRecordatorio, timerBorrado}>
     porJid: Map<project_slug:jid, Set<pedido_id>>
-    offsets: Map<fichero_eventos, byte_leido>
+    vistos:  Map<message_id, ts>          // idempotencia: el puente repite mensajes
   }
 
   ESCUCHA pedido.confirmacion_pendiente   // cliente NUEVO: su pedido está PARADO
-    └─ espera N s (config, 30) → WhatsApp "responde SÍ" + nº de pedido
-    └─ programa aviso a 10 min → pedido.sin_confirmar (la barra decide)
+    └─ espera N s (config, 30) → WhatsApp pide el SÍ + nº de pedido
+    └─ 10 min sin respuesta → ÚLTIMO mensaje amable (texto_recordatorio): «sigue apartado»
+    └─ otros 10 min (segunda_espera_segundos) → pedido.sin_confirmar + cierra el pendiente
 
   ESCUCHA pedido.cliente_habitual         // ya recogió N pedidos: su pedido YA está en cocina
     └─ saludo por su nombre, sin pedir nada
 
-  LEE la respuesta del fichero de eventos del puente (config whatsapp_qr.eventos)
-    └─ solo mensajes 1-a-1 cuyo `de` tiene un pedido pendiente
+  ESCUCHA whatsapp.mensaje.recibido       // la RESPUESTA llega por el BUS, no de un fichero
+    └─ solo mensajes 1-a-1 cuyo jid tiene un pedido pendiente
     └─ ignora grupos, el eco del propio bot y frases largas
-    └─ "sí" → pedidos.handleConfirmarPedido (entra en cocina)
-       "no" → pedidos.handleRechazarPedido (se cierra sin cocina)
+    └─ "sí" → pedido.confirmacion_respondida   (pedidos lo manda a cocina)
+       "no" → pedido.confirmacion_rechazada    (pedidos lo retira con su cuenta)
 }
 ```
+
+**Las DOS esperas son la doble puerta del dueño, y el final es una DESAPARICIÓN.** Agotada la
+segunda, `pedido.sin_confirmar` tiene dos consumidores: `notificador-pedidos` avisa a la barra por
+Telegram («no busques la cuenta, ya no está») y `pedidos` ejecuta `_retirarPedido` —publica
+`pedido.cancelado`, borra la cuenta por `cuentas.handleDeleteCuenta` y saca el pedido de todos sus
+índices—. El MISMO `_retirarPedido` se usa cuando el cliente dice NO: ni un rechazo ni un silencio
+pueden dejar una cuenta huérfana en el mostrador. Un pedido que nunca entró en cocina no tiene nada
+que deshacer, pero tampoco puede quedarse ocupando sitio.
 
 **La regla vive en `pedidos`, el dato vive en el proyecto.** `handleCreatePedidoTienda`
 consulta `_reglaConfirmacion(project_slug)`:
@@ -935,9 +945,11 @@ activa sola en ningún proyecto ni en ningún canal.
   pero `_crearCuentaTienda(..., {enviar_cocina:false})` NO llama a `comandero.handleEnviarCocina`.
   El pedido queda en `pendiente_confirmacion`. Sin JID no hay identidad posible: se trata como
   nuevo y no se frena a quien no vino por un canal con JID.
-- **La respuesta se lee sin tocar el lector compartido** (`bridges/whatsapp-qr/ingest`): se
-  relee el mismo fichero de eventos y se filtra por los jid con pedido esperando. El carril
-  del puente es compartido con otros negocios y no se toca.
+- **La respuesta se ESCUCHA del bus** (`whatsapp.mensaje.recibido`, que publica el carril de
+  WhatsApp): no se lee el fichero del puente ni se comparan offsets, así que el lector compartido
+  con otros negocios (`bridges/whatsapp-qr/ingest`) no se toca. Idempotente por `message_id`.
+- **El final de la espera se ve en las dos puntas**: la barra se entera (Telegram) y el pedido
+  desaparece con su cuenta (`_retirarPedido`). Nada de pedidos colgados ni cuentas huérfanas.
 
 ### 10. TARIFAS (v1.0.0) — Mapeo Canal→Carta
 

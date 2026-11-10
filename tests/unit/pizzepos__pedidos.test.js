@@ -975,22 +975,108 @@ function publishedOf(mocks, name) {
     await m.onUnload();
   });
 
-  await testAsync('onPedidoConfirmacionRechazada aplica handleRechazarPedido: el pedido se cierra sin cocina', async () => {
+  await testAsync('onPedidoConfirmacionRechazada: el pedido se retira CON su cuenta (no queda nada abierto)', async () => {
     const mocks = makeMocks();
     const { module: m } = await instantiate(mocks);
+    const borradas = [];
+    m.moduleRegistry = {
+      get: (n) => n === 'cuentas'
+        ? { instance: { handleDeleteCuenta: async (a) => { borradas.push(a); return { status: 200, data: { id: a.id, deleted: true } }; } } }
+        : null
+    };
     m.pedidos.set('p-no', {
       id: 'p-no', estado: 'pendiente_confirmacion', cuenta_id: 'c-1',
       project_id: 'the-pirate', project_slug: 'the-pirate', items: []
     });
+    m.pedidosPorCuenta.set('c-1', new Set(['p-no']));
+    m.pedidosPorProject.set('the-pirate', new Set(['p-no']));
 
     const r = await m.onPedidoConfirmacionRechazada({ data: { pedido_id: 'p-no', motivo: 'cliente_dijo_no' } });
 
     assert.strictEqual(r.status, 200);
-    const pedido = m.pedidos.get('p-no');
-    assert.strictEqual(pedido.estado, 'cancelado');
-    assert.strictEqual(pedido.motivo_cancelacion, 'cliente_dijo_no');
-    assert.strictEqual(pedido.confirmacion.estado, 'rechazado');
-    assert.strictEqual(publishedOf(mocks, 'pedido.cancelado').length, 1);
+    assert.strictEqual(r.data.retirado, true);
+    assert.strictEqual(m.pedidos.has('p-no'), false, 'el pedido no se queda en memoria');
+    assert.strictEqual(m.pedidosPorCuenta.has('c-1'), false, 'ni en el índice por cuenta');
+    assert.strictEqual(m.pedidosPorProject.has('the-pirate'), false, 'ni en el índice por proyecto');
+    assert.deepStrictEqual(borradas, [{ project_id: 'the-pirate', id: 'c-1' }],
+      'la cuenta se borra por su dueño (cuentas), no se deja huérfana en la barra');
+    const cancelados = publishedOf(mocks, 'pedido.cancelado');
+    assert.strictEqual(cancelados.length, 1);
+    assert.strictEqual(cancelados[0].motivo, 'cliente_dijo_no');
+    assert.strictEqual(cancelados[0].cuenta_id, 'c-1', 'el evento lleva la cuenta que se retira');
+    await m.onUnload();
+  });
+
+  // Los 10 minutos sin confirmar: la barra YA recibió el aviso (notificador-pedidos) y el
+  // pedido se retira con su cuenta. Nunca entró en cocina; lo que no puede quedar es una
+  // cuenta abierta sin pedido.
+
+  await testAsync('onPedidoSinConfirmar: retira el pedido y su cuenta (motivo expirado)', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    const borradas = [];
+    m.moduleRegistry = {
+      get: (n) => n === 'cuentas'
+        ? { instance: { handleDeleteCuenta: async (a) => { borradas.push(a); return { status: 200, data: { id: a.id, deleted: true } }; } } }
+        : null
+    };
+    m.pedidos.set('p-exp', {
+      id: 'p-exp', estado: 'pendiente_confirmacion', cuenta_id: 'c-9',
+      project_id: 'the-pirate', project_slug: 'the-pirate', items: [],
+      confirmacion: { estado: 'pendiente', pedida_at: '2026-11-10T18:00:00.000Z' }
+    });
+    m.pedidosPorCuenta.set('c-9', new Set(['p-exp']));
+    m.pedidosPorProject.set('the-pirate', new Set(['p-exp']));
+
+    const r = await m.onPedidoSinConfirmar({ data: {
+      pedido_id: 'p-exp', project_slug: 'the-pirate', cuenta_id: 'c-9', cliente_nombre: 'Paco'
+    } });
+
+    assert.strictEqual(r.status, 200);
+    assert.strictEqual(r.data.retirado, true);
+    assert.strictEqual(r.data.motivo, 'sin_confirmacion');
+    assert.strictEqual(m.pedidos.has('p-exp'), false, 'el pedido desaparece de memoria');
+    assert.strictEqual(m.pedidosPorCuenta.has('c-9'), false);
+    assert.deepStrictEqual(borradas, [{ project_id: 'the-pirate', id: 'c-9' }],
+      'la cuenta de la barra se borra: nunca tuvo pedido en cocina');
+    const cancelados = publishedOf(mocks, 'pedido.cancelado');
+    assert.strictEqual(cancelados.length, 1);
+    assert.strictEqual(cancelados[0].motivo, 'sin_confirmacion');
+    await m.onUnload();
+  });
+
+  await testAsync('onPedidoSinConfirmar: si el pedido ya está en cocina (confirmó al expirar) NO se toca', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+    const borradas = [];
+    m.moduleRegistry = {
+      get: (n) => n === 'cuentas'
+        ? { instance: { handleDeleteCuenta: async (a) => { borradas.push(a); return { status: 200 }; } } }
+        : null
+    };
+    m.pedidos.set('p-vivo', {
+      id: 'p-vivo', estado: 'en_cocina', cuenta_id: 'c-2',
+      project_id: 'the-pirate', project_slug: 'the-pirate', items: []
+    });
+
+    await m.onPedidoSinConfirmar({ data: { pedido_id: 'p-vivo', project_slug: 'the-pirate' } });
+
+    assert.strictEqual(m.pedidos.get('p-vivo').estado, 'en_cocina', 'un pedido vivo no se retira');
+    assert.strictEqual(borradas.length, 0, 'ni se le borra la cuenta');
+    assert.strictEqual(publishedOf(mocks, 'pedido.cancelado').length, 0);
+    assert.ok(mocks.logs.some(l => l[1] === 'pedidos.sin_confirmar.ignorado'),
+      'el aviso tardío queda en el log, no se aplica');
+    await m.onUnload();
+  });
+
+  await testAsync('onPedidoSinConfirmar de un pedido ya retirado: no rompe ni duplica', async () => {
+    const mocks = makeMocks();
+    const { module: m } = await instantiate(mocks);
+
+    const r = await m.onPedidoSinConfirmar({ data: { pedido_id: 'fantasma' } });
+
+    assert.strictEqual(r, undefined, 'sin pedido no hay nada que retirar');
+    assert.strictEqual(publishedOf(mocks, 'pedido.cancelado').length, 0);
     await m.onUnload();
   });
 

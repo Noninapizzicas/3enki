@@ -148,6 +148,8 @@ const subsDe = (manifest) => (manifest.subscribes || manifest.events?.subscribes
     const pedidosEscucha = subsDe(PEDIDOS_MANIFEST).map(s => s.event);
     assert.ok(pedidosEscucha.includes('pedido.confirmacion_respondida'), 'pedidos consume el SÍ');
     assert.ok(pedidosEscucha.includes('pedido.confirmacion_rechazada'), 'pedidos consume el NO');
+    assert.ok(pedidosEscucha.includes('pedido.sin_confirmar'),
+      'pedidos consume el aviso de los 10 minutos: es quien retira el pedido con su cuenta');
     assert.ok(subsDe(NOTIFICADOR_MANIFEST).some(s => s.event === 'pedido.sin_confirmar'),
       'pedido.sin_confirmar ya NO es un evento huérfano: lo consume notificador-pedidos');
 
@@ -334,23 +336,77 @@ const subsDe = (manifest) => (manifest.subscribes || manifest.events?.subscribes
     await m.onUnload();
   }
 
-  // ── 10 minutos sin respuesta → pedido.sin_confirmar (y la barra se entera) ───
+  // ── Dos esperas: a los 10 min un último mensaje; 10 min más y se retira ─────
 
   {
     const dir = base();
-    const { m, bus } = await instanciar(dir);
-    m.esperaRespuestaMs = 20;   // el reloj real son 10 min; aquí se acorta el disparador
+    const { m, bus, enviados } = await instanciar(dir);
+    m.esperaRespuestaMs = 100;  // el reloj real son 10 min; aquí se acorta el disparador
+    m.segundaEsperaMs = 150;    // y otros 10 minutos tras el recordatorio
     await m.onPedidoConfirmacionPendiente({ data: {
       pedido_id: 'p7', project_slug: 'the-pirate', project_id: 'the-pirate',
       cuenta_id: 'c7', cliente_jid: '111@lid', cliente_nombre: 'Sin Respuesta'
     } });
-    await esperar(120);
+
+    // Tramo 1: el primer mensaje pide el SÍ.
+    await esperar(40);
+    assert.strictEqual(enviados.length, 1, 'primero se pide la confirmación');
+    assert.match(enviados[0].text, /confirmarnos el pedido/, 'el primer mensaje pide el SÍ');
+    assert.strictEqual(publicadosDe(bus, 'pedido.sin_confirmar').length, 0,
+      'a los 10 minutos NO se retira nada todavía: hay una segunda oportunidad');
+    assert.ok(m.pendientes.has('p7'), 'el pedido sigue esperando');
+
+    // Tramo 2: el último mensaje, amable, con la misma firmeza.
+    await esperar(100);
+    assert.strictEqual(enviados.length, 2, 'a los 10 min se le escribe UNA vez más');
+    assert.match(enviados[1].text, /sigue apartado/, 'le recuerda que su pedido sigue ahí');
+    assert.match(enviados[1].text, /«sí»/, 'dice exactamente qué tiene que responder');
+    assert.doesNotMatch(enviados[1].text, /van \d|\d+ pedidos|esta es la \d/,
+      'sin marcador de historial ni cifras de pedidos');
+
+    // Tramo 3: agotada la segunda espera, aviso a la barra y el pendiente se cierra.
+    await esperar(260);
     const avisos = publicadosDe(bus, 'pedido.sin_confirmar');
-    assert.strictEqual(avisos.length, 1, 'a los 10 min se avisa: un pedido no se queda colgado');
+    assert.strictEqual(avisos.length, 1, 'agotadas las dos esperas se avisa: un pedido no se queda colgado');
     assert.strictEqual(avisos[0].pedido_id, 'p7');
     assert.strictEqual(avisos[0].project_id, 'the-pirate');
     assert.strictEqual(avisos[0].cliente_nombre, 'Sin Respuesta');
     assert.ok(avisos[0].esperando_desde, 'dice desde cuándo espera');
+    assert.ok(avisos[0].recordado_at, 'y que ya hubo un recordatorio');
+    assert.strictEqual(enviados.length, 2, 'no se le machaca: dos mensajes y se acabó');
+
+    // El aviso CIERra el pendiente: el pedido se retira con su cuenta en `pedidos`, así
+    // que un "sí" que llegue después no puede resucitar nada (ni abrir un pedido fantasma).
+    assert.strictEqual(m.pendientes.size, 0, 'el aviso cierra el pendiente');
+    await bus.publish('whatsapp.mensaje.recibido', {
+      project_slug: 'the-pirate', from: '111@lid', text: 'si', message_id: 'wa-tarde'
+    });
+    await esperar(40);
+    assert.strictEqual(publicadosDe(bus, 'pedido.confirmacion_respondida').length, 0,
+      'un sí tardío no responde por un pedido que ya no existe');
+    await m.onUnload();
+  }
+
+  // ── Si contesta entre las dos esperas, su SÍ vale (no se retira nada) ───────
+
+  {
+    const dir = base();
+    const { m, bus } = await instanciar(dir);
+    m.esperaRespuestaMs = 60;
+    m.segundaEsperaMs = 400;
+    await m.onPedidoConfirmacionPendiente({ data: {
+      pedido_id: 'p7b', project_slug: 'the-pirate', project_id: 'the-pirate',
+      cuenta_id: 'c7b', cliente_jid: '112@lid', cliente_nombre: 'Dudó'
+    } });
+    await esperar(120);     // ya recibió el recordatorio
+    await bus.publish('whatsapp.mensaje.recibido', {
+      project_slug: 'the-pirate', from: '112@lid', text: 'sí', message_id: 'wa-dudo'
+    });
+    await esperar(400);     // pasa de largo la segunda espera
+    const respondidas = publicadosDe(bus, 'pedido.confirmacion_respondida');
+    assert.strictEqual(respondidas.length, 1, 'el SÍ del segundo tramo confirma igual');
+    assert.strictEqual(publicadosDe(bus, 'pedido.sin_confirmar').length, 0,
+      'y no se retira un pedido que ya confirmó');
     await m.onUnload();
   }
 

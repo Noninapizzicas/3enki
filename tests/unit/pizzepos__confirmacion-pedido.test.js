@@ -193,10 +193,11 @@ const subsDe = (manifest) => (manifest.subscribes || manifest.events?.subscribes
     assert.strictEqual(enviados[0].slug, 'the-pirate');
     assert.strictEqual(enviados[0].to, '444@lid');
     assert.match(enviados[0].text, /Francisco/, 'saluda por su nombre de pila');
-    assert.match(enviados[0].text, /SÍ/, 'dice exactamente qué tiene que responder');
+    assert.match(enviados[0].text, /confirmarnos el pedido/, 'pide la confirmación, amable: "¿serías tan amable de…?"');
+    assert.match(enviados[0].text, /Con un «sí» nos basta/, 'dice exactamente qué tiene que responder');
     assert.match(enviados[0].text, /L 395/, 'lleva el número de pedido que dirá en la barra');
     assert.match(enviados[0].text, /preferimos preguntarte/, 'cordial y empática: explica por qué se pregunta');
-    assert.match(enviados[0].text, /Sin tu SÍ no lo ponemos en marcha/, 'firme: el pedido no arranca sin su sí');
+    assert.match(enviados[0].text, /En cuanto nos confirmes/, 'firme: el pedido no arranca sin su sí');
     assert.doesNotMatch(enviados[0].text, /van \d|\d+ pedidos|esta es la \d/,
       'a un cliente nuevo no se le cuenta nada de su historial');
     await m.onUnload();
@@ -214,7 +215,7 @@ const subsDe = (manifest) => (manifest.subscribes || manifest.events?.subscribes
     assert.strictEqual(enviados.length, 1);
     assert.match(enviados[0].text, /Paco/);
     assert.match(enviados[0].text, /alegría/, 'trato cordial, de casa');
-    assert.doesNotMatch(enviados[0].text, /Responde SÍ/, 'a un habitual no se le pide confirmación');
+    assert.doesNotMatch(enviados[0].text, /confirmarnos el pedido|Con un «sí»/, 'a un habitual no se le pide confirmación');
     assert.doesNotMatch(enviados[0].text, /\bvan \d|\d+ pedidos|esta es la \d/,
       'nada de contar pedidos: solo cordialidad, no un marcador');
     await m.onUnload();

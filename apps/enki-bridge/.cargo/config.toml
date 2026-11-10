@@ -1,0 +1,8 @@
+# Flags de enlace para Android (ver skill rust-android-build).
+# IMPORTANTE: cargo lee este fichero desde el directorio ACTUAL hacia arriba,
+# no desde --manifest-path. Ejecutar cargo desde la raiz del crate.
+[target.'cfg(target_os = "android")']
+rustflags = ["-C", "link-arg=-Wl,--build-id=sha1"]
+
+[target.'cfg(all(target_os = "android", any(target_arch = "aarch64", target_arch = "x86_64")))']
+rustflags = ["-C", "link-arg=-Wl,-z,max-page-size=16384"]

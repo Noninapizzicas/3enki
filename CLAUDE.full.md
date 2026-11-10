@@ -6165,6 +6165,38 @@ EVENTO {                                             // topics REALES
 
 ---
 
+## confirmacion-pedido (v1.2.0) + notificador-pedidos — la DOBLE PUERTA del cliente nuevo
+
+```
+// El pedido de un cliente NUEVO no entra en cocina: nace como CUENTA con
+// enviar_cocina:false y queda parado en pendiente_confirmacion. Cocina no lo ve.
+// La barra sí (ve la cuenta en el mostrador). Sale de ahí solo con el SÍ del cliente.
+
+//   0 s    pedido.confirmacion_pendiente → confirmacion-pedido (espera_segundos: 30)
+//   30 s   mensaje amable por el MISMO puente que trajo el pedido:
+//          «¿Serías tan amable de confirmarnos el pedido para empezar a prepararlo?»
+//   SÍ     pedido.confirmacion_respondida → pedidos manda el pedido a cocina
+//   NO     pedido.confirmacion_rechazada  → pedidos RETIRA el pedido Y su cuenta
+//   10 min sin respuesta → ÚLTIMO mensaje: «¿lo ponemos en marcha?» (texto_recordatorio,
+//          pisable por config del proyecto) y arranca la SEGUNDA espera
+//          (segunda_espera_segundos, 600 por defecto)
+//   20 min sin respuesta → pedido.sin_confirmar → notificador-pedidos avisa a la barra
+//          por Telegram y pedidos RETIRA el pedido con su cuenta (_retirarPedido).
+//          Nunca entró en cocina: no queda nada abierto en el mostrador.
+
+// El SÍ/NO llega por el BUS (whatsapp.mensaje.recibido) y se acepta en los DOS shapes:
+//   · whatsapp-bot  → { project_slug, from, text, message_id }
+//   · puente Rust   → { slug, de, texto, id, push_name }   ← el carril VIVO (bridges/whatsapp-qr)
+// Sin el segundo, el handler salía por `if (!jid) return` EN SILENCIO: el cliente
+// contestaba «sí» y su pedido seguía parado hasta retirarse (arreglado 2026-11-10).
+// Idempotencia por message_id (o por huella slug|de|texto|timestamp si no hay id):
+// el puente puede entregar el mismo mensaje dos veces.
+// Estado de la conversación: EN MEMORIA (un reinicio deja de esperar respuestas viejas;
+// el pedido vive en `pedidos`, no aquí). Sin ficheros, sin offsets, sin sondeo.
+```
+
+---
+
 ## BLUEPRINTS
 
 ### PROJECT-TYPE BLUEPRINT DRIVER
@@ -16306,6 +16338,18 @@ sendTemplate (Meta plantillas · salientes >24h) {
 //   publica cuenta.cerrada — el único evento por el que persistencia apunta LA venta.
 //   Sin esto el cobro quedaba en el registro y el libro del día no veía el dinero
 //   (the-pirate 2026-10-30: 5 cobros 95,50 en efectivo, libro 92,50).
+
+// LA PUERTA DEL CLIENTE NUEVO (v3.4.0) — el pedido NO entra en cocina hasta el SÍ:
+//   cliente nuevo → pedido en `pendiente_confirmacion` + cuenta con enviar_cocina:false
+//   (nunca se llama a comandero.handleEnviarCocina). La barra ve la cuenta; cocina no.
+//   · pedido.confirmacion_respondida (SÍ)  → _enviarPedidoACocina: entra de verdad
+//   · pedido.confirmacion_rechazada  (NO)  → _retirarPedido
+//   · pedido.sin_confirmar (silencio)      → _retirarPedido (tras las dos esperas)
+//   _retirarPedido saca el pedido de TODOS sus índices y borra su CUENTA
+//   (cuentas.handleDeleteCuenta). Antes el NO y el silencio dejaban la cuenta abierta
+//   en el mostrador para siempre: un pedido fantasma al que un mensaje tardío confirmaba.
+//   El cliente HABITUAL (≥ pedidos_habitual recogidos, config del proyecto: 3) no pasa
+//   por la puerta: su pedido entra directo y solo se le saluda por su nombre.
 ```
 
 ## CLASE carta-digital (PWA) — emite el pedido por ids (#P1) + paridad comandero + ENCARGO con fecha

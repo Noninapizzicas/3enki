@@ -16,7 +16,7 @@ fuentes:
   - modules/pizzepos/tarifas/**
   - modules/pizzepos/persistencia-comandero/**
   - modules/pizzepos/impresion/**
-verificado: 2026-11-07 (ubicación del cliente: pin opcional en el #P1, mapa del reparto al staff) · 2026-11-06 (entrega a domicilio: el modo 'domicilio' existe como MODO, no como canal — cuentas lo canoniza a 'llevar' para que nazca ticket que se cierra al cobrar y no cuenta huérfana; pedidos exige direccion_entrega y cliente_telefono en la puerta (400 sin ellos) y el comandero acepta notas_generales por parámetro para que el destino se imprima en el ticket de cocina; además: pedidos: puerta de la confianza + ficha de cliente por JID; confirmacion-pedido: pide el sí al cliente nuevo y lee su respuesta sin tocar el lector compartido del puente)
+verificado: 2026-11-10 (confirmacion-pedido: el segundo mensaje pide la confirmación con amabilidad — «¿serías tan amable de confirmarnos el pedido?», y la última línea dice el efecto sin reproche; la CONDUCTA no cambia: sigue pidiendo el sí antes de cocina) · 2026-11-07 (ubicación del cliente: pin opcional en el #P1, mapa del reparto al staff) · 2026-11-06 (entrega a domicilio: el modo 'domicilio' existe como MODO, no como canal — cuentas lo canoniza a 'llevar' para que nazca ticket que se cierra al cobrar y no cuenta huérfana; pedidos exige direccion_entrega y cliente_telefono en la puerta (400 sin ellos) y el comandero acepta notas_generales por parámetro para que el destino se imprima en el ticket de cocina; además: pedidos: puerta de la confianza + ficha de cliente por JID; confirmacion-pedido: pide el sí al cliente nuevo y lee su respuesta sin tocar el lector compartido del puente)
 ---
 
 # PizzePOS Módulos — Subsistema de Punto de Venta (v3.2.0)

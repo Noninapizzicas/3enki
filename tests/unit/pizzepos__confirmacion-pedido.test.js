@@ -291,6 +291,29 @@ const subsDe = (manifest) => (manifest.subscribes || manifest.events?.subscribes
     await m.onUnload();
   }
 
+  // ── El shape del PUENTE RUST (de/texto/id/slug) también confirma ───────────
+  // El puente publica el JSONL tal cual: sin esta rama el «sí» del cliente se
+  // ignoraba en silencio (el handler salía por `if (!jid) return`).
+
+  {
+    const { m, bus } = await instanciar(base());
+    await m.onPedidoConfirmacionPendiente({ data: {
+      pedido_id: 'p7', project_slug: 'the-pirate', cliente_jid: '555@lid', cliente_nombre: 'Paco'
+    } });
+    await esperar(80);
+    // Tal cual lo manda el puente: de/texto/id/slug, sin project_slug ni from.
+    await bus.publish('whatsapp.mensaje.recibido', {
+      tipo: 'mensaje', slug: 'the-pirate', de: '555@lid', push_name: 'Paco',
+      texto: 'Si', id: 'wa-1', grupo: false, timestamp: '2026-11-09T13:00:00+00:00'
+    });
+
+    const respondidas = publicadosDe(bus, 'pedido.confirmacion_respondida');
+    assert.strictEqual(respondidas.length, 1, 'el shape del puente también confirma');
+    assert.strictEqual(respondidas[0].respuesta, 'si');
+    assert.strictEqual(respondidas[0].whatsapp_message_id, 'wa-1', 'el id del puente viaja como message_id');
+    await m.onUnload();
+  }
+
   // ── Ruido que NO debe confirmar nada ────────────────────────────────────────
 
   {

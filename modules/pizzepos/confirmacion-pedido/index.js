@@ -274,21 +274,26 @@ class ConfirmacionPedidoModule {
   // fichero ni se compara ningún offset: si el que escribe es un cliente con un pedido
   // esperando y su texto es un sí/no, se publica la respuesta y el que la aplica es
   // `pedidos` (su dueño), no este módulo.
+  //
+  // El puente Rust (bridges/whatsapp-qr/bridge/main.rs) NO publica esos nombres: manda el
+  // JSONL tal cual — {tipo, slug, de, push_name, texto, id, grupo, timestamp}. Sin aceptar
+  // los dos shapes el handler salía por `if (!jid) return` en silencio y el «sí» del cliente
+  // dejaba el pedido colgado hasta que la espera lo retiraba.
   async onWhatsappMensajeRecibido(event) {
     const data = event?.data || event || {};
-    const message_id = data.message_id ? String(data.message_id) : null;
+    const message_id = (data.message_id || data.id) ? String(data.message_id || data.id) : null;
 
     // Mismo mensaje dos veces = misma respuesta una sola vez. Se recuerda el id ANTES
     // de mirar nada más, para que un reintento del puente no vuelva a preguntar.
     if (!this._primeraVez(message_id, data)) return;
 
-    const project_slug = data.project_slug ? String(data.project_slug) : null;
-    const jid = String(data.from || '').trim().toLowerCase();
+    const project_slug = (data.project_slug || data.slug) ? String(data.project_slug || data.slug) : null;
+    const jid = String(data.from || data.de || '').trim().toLowerCase();
     if (!jid) return;
     if (jid.endsWith('@g.us')) return;                        // un grupo no confirma un pedido
 
     // El texto es la respuesta; si el cliente tocó un botón/lista, su título es el texto.
-    const texto = String(data.text || data.interaction?.title || '').trim();
+    const texto = String(data.text || data.texto || data.interaction?.title || '').trim();
     if (!texto || texto.length > 40) return;                  // un párrafo no es un "sí"
     // Los mensajes que MANDA el negocio no son respuestas (retro-compat: el eco del puente).
     if (/^pedido recibido/i.test(texto)) return;
@@ -332,7 +337,7 @@ class ConfirmacionPedidoModule {
   _primeraVez(message_id, data) {
     const clave = message_id
       ? `id:${message_id}`
-      : `huella:${data.project_slug || ''}|${data.from || ''}|${data.text || ''}|${data.timestamp || ''}`;
+      : `huella:${data.project_slug || data.slug || ''}|${data.from || data.de || ''}|${data.text || data.texto || ''}|${data.timestamp || ''}`;
     if (this.vistos.has(clave)) return false;
     this.vistos.set(clave, Date.now());
     if (this.vistos.size > VISTOS_MAX) {

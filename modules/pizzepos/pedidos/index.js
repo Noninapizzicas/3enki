@@ -1682,7 +1682,9 @@ class PedidosModule extends BaseModule {
     }
   }
 
-  // El cliente dijo NO (o se echó atrás). El pedido se cierra sin entrar en cocina.
+  // El cliente dijo NO (o se echó atrás). El pedido se retira con su cuenta sin haber
+  // entrado nunca en cocina: la doble puerta sirve justo para eso — que un "no" no deje
+  // rastro operativo (ni un pedido esperando, ni una cuenta abierta en el mostrador).
   async handleRechazarPedido(data) {
     try {
       const { pedido_id, motivo } = data || {};
@@ -1691,22 +1693,108 @@ class PedidosModule extends BaseModule {
       if (pedido.estado !== 'pendiente_confirmacion') {
         return this._errorResponse(409, 'CONFLICT_STATE', `El pedido no espera confirmación (estado: ${pedido.estado})`, { pedido_id, estado: pedido.estado });
       }
-      pedido.estado = 'cancelado';
-      pedido.cancelado_at = new Date().toISOString();
-      pedido.motivo_cancelacion = motivo || 'cliente_no_confirma';
-      pedido.confirmacion = {
-        ...(pedido.confirmacion || {}),
-        estado: 'rechazado',
-        respondida_at: pedido.cancelado_at
-      };
-      pedido.updated_at = pedido.cancelado_at;
-      await this._publishPedidoCancelado(pedido, pedido.motivo_cancelacion, data);
+      const r = await this._retirarPedido(pedido, {
+        motivo: motivo || 'cliente_no_confirma',
+        estado_confirmacion: 'rechazado'
+      }, data);
       this.metrics?.increment?.('pedidos.rechazado_por_cliente.total', { project: pedido.project_slug });
       this.logger.info('pedidos.rechazado_por_cliente', { pedido_id: pedido.id, motivo: pedido.motivo_cancelacion });
-      return { status: 200, data: { pedido_id: pedido.id, estado: pedido.estado } };
+      return r;
     } catch (err) {
       return this._handleHandlerError('pedidos.rechazar.error', err);
     }
+  }
+
+  // El cliente NO confirmó. `confirmacion-pedido` ya publicó el aviso (la barra lo recibe
+  // por Telegram, con nombre y hora) tras agotar las DOS esperas —10 minutos y un último
+  // mensaje amable, otros 10 minutos— y aquí se aplica la retirada: el pedido desaparece
+  // del sistema junto con su cuenta. Nunca estuvo en cocina —esperaba en
+  // `pendiente_confirmacion` con la cuenta abierta—, así que el obrador no tiene nada
+  // que deshacer; lo que no puede quedar es una cuenta sin pedido en la barra.
+  async onPedidoSinConfirmar(event) {
+    const data = event?.data || event || {};
+    const pedido_id = data.pedido_id || null;
+    if (!pedido_id) {
+      this.logger?.warn?.('pedidos.sin_confirmar.sin_pedido_id', {});
+      return;
+    }
+    const pedido = this.pedidos.get(pedido_id);
+    if (!pedido) return;                        // ya retirado (o el aviso llega dos veces)
+    if (pedido.estado !== 'pendiente_confirmacion') {
+      // Confirmó justo cuando expiraba: su pedido está vivo y este aviso llega tarde.
+      this.logger?.info?.('pedidos.sin_confirmar.ignorado', { pedido_id, estado: pedido.estado });
+      return;
+    }
+    return this._retirarPedido(pedido, {
+      motivo: 'sin_confirmacion',
+      estado_confirmacion: 'expirado'
+    }, data);
+  }
+
+  // Retira un pedido que no llegó a arrancar: lo marca cancelado (para que el evento
+  // `pedido.cancelado` lleve el rastro), borra su CUENTA operativa —la que se creó para
+  // que la barra lo viera y lo pudiera editar— y lo saca de la memoria del módulo.
+  // Un pedido que nunca entró en cocina no puede dejar una cuenta huérfana ocupando sitio.
+  async _retirarPedido(pedido, { motivo, estado_confirmacion }, sourcePayload) {
+    const ahora = new Date().toISOString();
+    pedido.estado = 'cancelado';
+    pedido.cancelado_at = ahora;
+    pedido.motivo_cancelacion = motivo;
+    pedido.confirmacion = {
+      ...(pedido.confirmacion || {}),
+      estado: estado_confirmacion,
+      respondida_at: ahora
+    };
+    pedido.updated_at = ahora;
+
+    // Primero el evento —quien lo escuche (cocina) aún resuelve el pedido por su id— y
+    // después la retirada de la cuenta y del propio pedido.
+    await this._publishPedidoCancelado(pedido, motivo, sourcePayload);
+
+    const cuenta_id = pedido.cuenta_id || null;
+    if (cuenta_id) {
+      const cuentas = this.moduleRegistry?.get('cuentas')?.instance;
+      try {
+        const r = await cuentas?.handleDeleteCuenta?.({ project_id: pedido.project_id || pedido.project_slug, id: cuenta_id });
+        if (r && r.status >= 400) {
+          this.logger?.warn?.('pedidos.retirar.cuenta_no_borrada', {
+            pedido_id: pedido.id, cuenta_id, status: r.status, code: r.error?.code || null
+          });
+        }
+      } catch (err) {
+        this.logger?.warn?.('pedidos.retirar.cuenta_error', {
+          pedido_id: pedido.id, cuenta_id, error_message: err && err.message ? err.message : String(err)
+        });
+      }
+    }
+
+    this._olvidarPedido(pedido.id);
+    this.metrics?.increment?.('pedidos.retirado.total', { project: pedido.project_slug, motivo });
+    this.logger?.info?.('pedidos.retirado', { pedido_id: pedido.id, cuenta_id, motivo });
+    return { status: 200, data: { pedido_id: pedido.id, estado: 'cancelado', retirado: true, motivo } };
+  }
+
+  // Saca el pedido de todos los índices del módulo (pedidos, por proyecto y por cuenta).
+  _olvidarPedido(id) {
+    const pedido = this.pedidos.get(id);
+    if (!pedido) return;
+    this.pedidos.delete(id);
+
+    const porProject = this.pedidosPorProject.get(pedido.project_slug);
+    if (porProject) {
+      porProject.delete(id);
+      if (porProject.size === 0) this.pedidosPorProject.delete(pedido.project_slug);
+    }
+
+    if (pedido.cuenta_id) {
+      const porCuenta = this.pedidosPorCuenta.get(pedido.cuenta_id);
+      if (porCuenta) {
+        porCuenta.delete(id);
+        if (porCuenta.size === 0) this.pedidosPorCuenta.delete(pedido.cuenta_id);
+      }
+    }
+
+    this.metrics?.gauge?.('pedidos.activos.count', this.pedidos.size);
   }
 
   // ── La respuesta del cliente, que llega por el BUS ───────────────────────────

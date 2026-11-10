@@ -1,7 +1,7 @@
 {
-  "_doc": "La puerta de la confianza, del lado del cliente. UN negocio, su puente, su texto: no comparte nada con el lector del puente (bridges/whatsapp-qr), que es carril compartido. Escucha pedido.confirmacion_pendiente (cliente nuevo: su pedido esta parado, no ha entrado en cocina) y a los N segundos le pide por WhatsApp que responda SI. Escucha pedido.cliente_habitual (ya lleva pedidos recogidos): no le pide nada, le saluda por su nombre. La respuesta del cliente llega por el BUS: se suscribe a whatsapp.mensaje.recibido (que publica whatsapp-bot por cada mensaje entrante) y, si el que escribe tiene un pedido esperando, publica pedido.confirmacion_respondida o pedido.confirmacion_rechazada; el que aplica la respuesta es `pedidos` (su dueño), no este modulo. Sin ficheros, sin offsets y sin timers de sondeo: cero costuras fuera del bus. Idempotente por message_id (el puente puede repetir el mismo mensaje). Si no contesta en 10 minutos emite pedido.sin_confirmar, que consume notificador-pedidos para avisar a la barra: un pedido no se queda colgado en silencio.",
+  "_doc": "La puerta de la confianza, del lado del cliente. UN negocio, su puente, su texto: no comparte nada con el lector del puente (bridges/whatsapp-qr), que es carril compartido. Escucha pedido.confirmacion_pendiente (cliente nuevo: su pedido esta parado, no ha entrado en cocina) y a los N segundos le pide por WhatsApp que responda SI. Escucha pedido.cliente_habitual (ya lleva pedidos recogidos): no le pide nada, le saluda por su nombre. La respuesta del cliente llega por el BUS: se suscribe a whatsapp.mensaje.recibido (que publica whatsapp-bot por cada mensaje entrante) y, si el que escribe tiene un pedido esperando, publica pedido.confirmacion_respondida o pedido.confirmacion_rechazada; el que aplica la respuesta es `pedidos` (su dueño), no este modulo. Sin ficheros, sin offsets y sin timers de sondeo: cero costuras fuera del bus. Idempotente por message_id (el puente puede repetir el mismo mensaje). Si no contesta, la espera tiene DOS tramos: a los 10 minutos le manda un ultimo mensaje amable (texto_recordatorio) y, si pasan otros 10 sin respuesta (segunda_espera_segundos), emite pedido.sin_confirmar: notificador-pedidos avisa a la barra y pedidos retira el pedido con su cuenta. Un pedido parado no se queda colgado ni deja una cuenta huerfana.",
   "name": "confirmacion-pedido",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Pide confirmacion al cliente nuevo por WhatsApp antes de mandar su pedido a cocina, y saluda al habitual sin pedirle nada. La respuesta del cliente llega por whatsapp.mensaje.recibido y se publica como pedido.confirmacion_respondida / pedido.confirmacion_rechazada: 100% por eventos.",
   "author": "Enki Team",
   "language": "es",
@@ -65,8 +65,8 @@
     },
     {
       "event": "pedido.sin_confirmar",
-      "consumer_esperado": "modules/pizzepos/notificador-pedidos",
-      "razon": "Aviso a la barra de que un pedido lleva 10 min esperando respuesta, para que confirme o cancele con un clic."
+      "consumer_esperado": "modules/pizzepos/notificador-pedidos + modules/pizzepos/pedidos",
+      "razon": "Agotadas las dos esperas (10 min + 10 min tras el recordatorio). notificador-pedidos avisa a la barra por Telegram y pedidos retira el pedido con su cuenta: nunca entro en cocina."
     }
   ],
   "observability": {
@@ -76,6 +76,12 @@
         "type": "counter",
         "labels": ["project"],
         "_doc": "Peticiones de confirmacion enviadas al cliente."
+      },
+      {
+        "name": "confirmacion_pedido.recordatorio.total",
+        "type": "counter",
+        "labels": ["project"],
+        "_doc": "Segunda oportunidad enviada: 10 minutos sin respuesta, ultimo mensaje amable antes de retirar el pedido."
       },
       {
         "name": "confirmacion_pedido.confirmado.total",
@@ -93,7 +99,7 @@
         "name": "confirmacion_pedido.sin_confirmar.total",
         "type": "counter",
         "labels": ["project"],
-        "_doc": "Pedidos que siguen esperando 10 minutos despues de pedir confirmacion. Para que la barra decida."
+        "_doc": "Pedidos que agotaron las dos esperas sin respuesta. pedidos los retira con su cuenta; la barra ya recibio el aviso."
       },
       {
         "name": "confirmacion_pedido.fallido.total",

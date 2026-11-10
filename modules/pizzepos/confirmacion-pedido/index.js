@@ -14,8 +14,15 @@
  * escribe es un cliente con un pedido esperando. Un "sí" publica
  * `pedido.confirmacion_respondida` (lo aplica `pedidos`, que es su dueño) y un "no"
  * publica `pedido.confirmacion_rechazada`. Nadie llama a nadie en proceso: si
- * `pedidos` se recarga, el evento sigue siendo el mismo contrato. Si el cliente no
- * contesta en 10 minutos, se publica `pedido.sin_confirmar` y la barra decide.
+ * `pedidos` se recarga, el evento sigue siendo el mismo contrato.
+ *
+ * La espera tiene DOS tramos (la doble puerta que pidió el dueño):
+ *   · a los 10 minutos sin contestar, un ÚLTIMO mensaje amable: «¿lo ponemos en
+ *     marcha?». Se da por hecho que la gente se distrae; nadie pierde su cena por eso.
+ *   · diez minutos más sin contestar, se publica `pedido.sin_confirmar`: la barra
+ *     recibe el aviso por Telegram y `pedidos` RETIRA el pedido con su cuenta. Nunca
+ *     entró en cocina (su cuenta nació con enviar_cocina:false), así que no queda nada
+ *     abierto en el mostrador ni un pedido fantasma al que un mensaje tardío confirme.
  *
  * Idempotencia: el puente puede entregar el MISMO mensaje dos veces (mismo
  * `message_id`, ver bridges/whatsapp-qr/ingest/ingest.js). El id se recuerda: la
@@ -35,18 +42,20 @@ const SI = ['si', 'sii', 'siii', 'ok', 'okei', 'okey', 'vale', 'confirmo', 'conf
 const NO = ['no', 'nop', 'nope', 'cancela', 'cancelalo', 'anula', 'anulalo', 'mejor no',
   'dejalo', 'nada', 'olvidalo'];
 
-const ESPERA_RESPUESTA_MS = 10 * 60 * 1000;   // 10 min sin respuesta → aviso a barra
-const VISTOS_MAX = 1000;                      // ids de mensaje recordados (ventana acotada)
+const ESPERA_RESPUESTA_MS = 10 * 60 * 1000;   // 1ª espera → último mensaje antes de retirar
+const SEGUNDA_ESPERA_MS  = 10 * 60 * 1000;    // 2ª espera → se retira el pedido
+const VISTOS_MAX = 1000;                     // ids de mensaje recordados (ventana acotada)
 
 class ConfirmacionPedidoModule {
   constructor() {
     this.name = 'confirmacion-pedido';
-    this.version = '1.1.0';
+    this.version = '1.2.0';
 
     this.pendientes = new Map();      // pedido_id → { project_slug, jid, nombre, ... timers }
     this.porJid = new Map();          // `${project_slug}:${jid}` → Set<pedido_id>
     this.vistos = new Map();          // clave de mensaje ya atendido → ts (idempotencia)
     this.esperaRespuestaMs = ESPERA_RESPUESTA_MS;
+    this.segundaEsperaMs = SEGUNDA_ESPERA_MS;
     this.configCache = new Map();
   }
 
@@ -70,6 +79,8 @@ class ConfirmacionPedidoModule {
     for (const p of this.pendientes.values()) {
       if (p.timer) clearTimeout(p.timer);
       if (p.timerAviso) clearTimeout(p.timerAviso);
+      if (p.timerRecordatorio) clearTimeout(p.timerRecordatorio);
+      if (p.timerBorrado) clearTimeout(p.timerBorrado);
     }
     this.pendientes.clear();
     this.porJid.clear();
@@ -106,8 +117,11 @@ class ConfirmacionPedidoModule {
       nombre: cliente_nombre || null,
       creado_en: Date.now(),
       pedida_at: null,
+      recordado_at: null,
       timer: null,
-      timerAviso: null
+      timerAviso: null,
+      timerRecordatorio: null,
+      timerBorrado: null
     };
     reg.timer = setTimeout(() => { this._pedirConfirmacion(reg).catch(() => {}); }, espera * 1000);
     if (reg.timer.unref) reg.timer.unref();
@@ -167,10 +181,49 @@ class ConfirmacionPedidoModule {
       return;
     }
     reg.pedida_at = new Date().toISOString();
-    reg.timerAviso = setTimeout(() => { this._avisarSinConfirmar(reg).catch(() => {}); }, this.esperaRespuestaMs);
-    if (reg.timerAviso.unref) reg.timerAviso.unref();
+    // Primera espera agotada → último mensaje. No se retira nada todavía: aquí se
+    // supone buena fe (el cliente está ocupado, no ha mirado el móvil).
+    reg.timerRecordatorio = setTimeout(() => { this._recordar(reg).catch(() => {}); }, this.esperaRespuestaMs);
+    if (reg.timerRecordatorio.unref) reg.timerRecordatorio.unref();
     this._metric('confirmacion_pedido.pedida.total', { project: reg.project_slug });
     this.logger?.info?.('confirmacion-pedido.pedida', { pedido_id: reg.pedido_id, ref });
+  }
+
+  // La segunda oportunidad: pasados los primeros 10 minutos sin respuesta se le
+  // pregunta UNA vez más, con el mismo tono cordial y la misma firmeza. Su pedido
+  // sigue parado (nunca entró en cocina) y su SÍ aún vale.
+  async _recordar(reg) {
+    if (!this.pendientes.has(reg.pedido_id)) return;   // respondió o se cerró mientras
+    const cfg = await this._config(reg.project_slug);
+    const puente = this._puente(cfg);
+    if (!puente) {
+      this._metric('confirmacion_pedido.fallido.total', { project: reg.project_slug, razon: 'sin_puente' });
+      await this._avisarSinConfirmar(reg);
+      return;
+    }
+    const ref = await this._refPedido(reg);
+    const texto = cfg.texto_recordatorio
+      ? this._formatear(cfg.texto_recordatorio, { nombre: this._pila(reg.nombre), ref, pedido_id: reg.pedido_id })
+      : this._textoRecordatorio(this._pila(reg.nombre), ref);
+
+    const envio = await this._enviar(puente, reg.jid, texto);
+    if (!envio.ok) {
+      // Si ya no se puede hablar con el cliente, no se le deja otros 10 minutos de
+      // espera que nadie va a leer: se retira y la barra recibe el aviso.
+      this._metric('confirmacion_pedido.fallido.total', { project: reg.project_slug, razon: envio.motivo });
+      this.logger?.warn?.('confirmacion-pedido.recordatorio_fallido', { pedido_id: reg.pedido_id, motivo: envio.motivo });
+      await this._avisarSinConfirmar(reg);
+      return;
+    }
+
+    reg.recordado_at = new Date().toISOString();
+    const segunda = Number.isInteger(cfg.segunda_espera_segundos) && cfg.segunda_espera_segundos >= 0
+      ? cfg.segunda_espera_segundos * 1000
+      : this.segundaEsperaMs;
+    reg.timerBorrado = setTimeout(() => { this._avisarSinConfirmar(reg).catch(() => {}); }, segunda);
+    if (reg.timerBorrado.unref) reg.timerBorrado.unref();
+    this._metric('confirmacion_pedido.recordatorio.total', { project: reg.project_slug });
+    this.logger?.info?.('confirmacion-pedido.recordatorio', { pedido_id: reg.pedido_id, ref, segunda_espera_ms: segunda });
   }
 
   _textoConfirmacion(nombre, ref) {
@@ -182,6 +235,16 @@ class ConfirmacionPedidoModule {
       '¿Serías tan amable de confirmarnos el pedido para empezar a prepararlo? Con un «sí» nos basta.',
       'Si quieres cambiar algo, dínoslo y lo ajustamos sin problema.',
       'En cuanto nos confirmes, lo ponemos en marcha ahora mismo 🙏'
+    ].join('\n');
+  }
+
+  _textoRecordatorio(nombre, ref) {
+    const saludo = nombre ? `¡Hola de nuevo, ${nombre}!` : '¡Hola de nuevo!';
+    return [
+      `${saludo} 👋`,
+      `Tu pedido${ref ? ` ${ref}` : ''} sigue apartado aquí, esperándote.`,
+      '¿Lo ponemos en marcha? Con un «sí» nos basta y lo mandamos al horno.',
+      'Si prefieres dejarlo, respóndenos «no» y lo quitamos sin ningún problema.'
     ].join('\n');
   }
 
@@ -211,21 +274,26 @@ class ConfirmacionPedidoModule {
   // fichero ni se compara ningún offset: si el que escribe es un cliente con un pedido
   // esperando y su texto es un sí/no, se publica la respuesta y el que la aplica es
   // `pedidos` (su dueño), no este módulo.
+  //
+  // El puente Rust (bridges/whatsapp-qr/bridge/main.rs) NO publica esos nombres: manda el
+  // JSONL tal cual — {tipo, slug, de, push_name, texto, id, grupo, timestamp}. Sin aceptar
+  // los dos shapes el handler salía por `if (!jid) return` en silencio y el «sí» del cliente
+  // dejaba el pedido colgado hasta que la espera lo retiraba.
   async onWhatsappMensajeRecibido(event) {
     const data = event?.data || event || {};
-    const message_id = data.message_id ? String(data.message_id) : null;
+    const message_id = (data.message_id || data.id) ? String(data.message_id || data.id) : null;
 
     // Mismo mensaje dos veces = misma respuesta una sola vez. Se recuerda el id ANTES
     // de mirar nada más, para que un reintento del puente no vuelva a preguntar.
     if (!this._primeraVez(message_id, data)) return;
 
-    const project_slug = data.project_slug ? String(data.project_slug) : null;
-    const jid = String(data.from || '').trim().toLowerCase();
+    const project_slug = (data.project_slug || data.slug) ? String(data.project_slug || data.slug) : null;
+    const jid = String(data.from || data.de || '').trim().toLowerCase();
     if (!jid) return;
     if (jid.endsWith('@g.us')) return;                        // un grupo no confirma un pedido
 
     // El texto es la respuesta; si el cliente tocó un botón/lista, su título es el texto.
-    const texto = String(data.text || data.interaction?.title || '').trim();
+    const texto = String(data.text || data.texto || data.interaction?.title || '').trim();
     if (!texto || texto.length > 40) return;                  // un párrafo no es un "sí"
     // Los mensajes que MANDA el negocio no son respuestas (retro-compat: el eco del puente).
     if (/^pedido recibido/i.test(texto)) return;
@@ -269,7 +337,7 @@ class ConfirmacionPedidoModule {
   _primeraVez(message_id, data) {
     const clave = message_id
       ? `id:${message_id}`
-      : `huella:${data.project_slug || ''}|${data.from || ''}|${data.text || ''}|${data.timestamp || ''}`;
+      : `huella:${data.project_slug || data.slug || ''}|${data.from || data.de || ''}|${data.text || data.texto || ''}|${data.timestamp || ''}`;
     if (this.vistos.has(clave)) return false;
     this.vistos.set(clave, Date.now());
     if (this.vistos.size > VISTOS_MAX) {
@@ -327,15 +395,19 @@ class ConfirmacionPedidoModule {
     if (!reg) return;
     if (reg.timer) clearTimeout(reg.timer);
     if (reg.timerAviso) clearTimeout(reg.timerAviso);
+    if (reg.timerRecordatorio) clearTimeout(reg.timerRecordatorio);
+    if (reg.timerBorrado) clearTimeout(reg.timerBorrado);
     this.pendientes.delete(pedido_id);
     const k = this._clave(reg.project_slug, reg.jid);
     const set = this.porJid.get(k);
     if (set) { set.delete(pedido_id); if (set.size === 0) this.porJid.delete(k); }
   }
 
-  // No contestó. No se confirma solo: se avisa para que el de la barra lo mande con
-  // un clic (`pedidos.handleConfirmarPedido`) o llame al cliente. Un pedido parado en
-  // silencio es peor que un pedido rechazado.
+  // Se agotaron las DOS esperas (10 + 10 minutos) sin una palabra del cliente. Se
+  // publica el aviso para la barra (notificador-pedidos → Telegram) y se CIERRA el
+  // pendiente: `pedidos` retira el pedido con su cuenta, así que ya no hay nada a lo
+  // que un mensaje tardío pueda confirmar. Si el cliente escribe más tarde no se abre
+  // un pedido fantasma: su pedido, sencillamente, ya no existe.
   async _avisarSinConfirmar(reg) {
     if (!this.pendientes.has(reg.pedido_id)) return;
     await this._publicar('pedido.sin_confirmar', {
@@ -345,11 +417,14 @@ class ConfirmacionPedidoModule {
       cuenta_id: reg.cuenta_id,
       cliente_nombre: reg.nombre,
       pedida_at: reg.pedida_at,
-      esperando_desde: new Date(reg.creado_en).toISOString()
+      recordado_at: reg.recordado_at || null,
+      esperando_desde: new Date(reg.creado_en).toISOString(),
+      motivo: 'sin_respuesta'
     });
     this._metric('confirmacion_pedido.sin_confirmar.total', { project: reg.project_slug });
     this.logger?.info?.('confirmacion-pedido.sin_confirmar', { pedido_id: reg.pedido_id });
-    // Sigue pendiente: si más tarde contesta, su "sí" aún vale.
+    // El pedido se retira del sistema: este pendiente ya no tiene a qué responder.
+    this._cerrar(reg.pedido_id);
   }
 
   // ==========================================

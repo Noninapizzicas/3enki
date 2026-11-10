@@ -179,9 +179,9 @@ class ConfirmacionPedidoModule {
       `${saludo} 👋`,
       `Tenemos tu pedido${ref ? ` ${ref}` : ''} apuntado, con todo lo que nos has dicho.`,
       'Antes de ponerlo en cocina queremos asegurarnos de que está bien: preferimos preguntarte un momento a servirte algo que no querías.',
-      'Responde SÍ y lo mandamos al horno ahora mismo.',
+      '¿Serías tan amable de confirmarnos el pedido para empezar a prepararlo? Con un «sí» nos basta.',
       'Si quieres cambiar algo, dínoslo y lo ajustamos sin problema.',
-      'Sin tu SÍ no lo ponemos en marcha 🙏'
+      'En cuanto nos confirmes, lo ponemos en marcha ahora mismo 🙏'
     ].join('\n');
   }
 

@@ -1,0 +1,101 @@
+{
+  "_doc": "CUSTODIO B1 · PadronDeCuentas del proyecto instagram-bridge. Es el INDICE DE DUENOS del puente: que cuenta sirve a que proyecto y en que aparato, con su historia. No es la ficha (E1), ni el estado de sesion (D2), ni la cola (G3). Cardinalidades: una cuenta tiene UN proyecto vigente (cambiarlo es traspaso, que deja historia); un proyecto puede tener N cuentas; un aparato sostiene por defecto UNA cuenta (W3). La baja ARCHIVA, nunca borra. Ningun asiento se guarda sin sello (P1) ni con un secreto dentro (V1): el custodio audita el almacen entero antes de cada escritura. Origen: plan-construccion.md seccion 2 (B1), 5.2 (estados de la cuenta) y 8 (bloque 2).",
+  "name": "padron-cuentas",
+  "version": "0.1.0",
+  "description": "Custodio del padron de cuentas del puente de Instagram: indice unico de que cuenta pertenece a que proyecto y en que aparato, con archivo historico (la baja archiva, el traspaso deja historia) y escritura single-writer sobre storage/instagram-bridge/padron.json.",
+  "language": "es",
+  "main": "index.js",
+  "dependencies": [],
+  "config": {
+    "persistence": {
+      "concurrency": "single-writer",
+      "scope": "global",
+      "pattern": "single-json-file",
+      "path": "storage/instagram-bridge/padron.json",
+      "esquema": "padron-cuentas-v1",
+      "escritura": "temporal + rename (atomica)"
+    },
+    "plataformas": ["instagram"],
+    "estados": ["vigente", "archivada"],
+    "cardinalidad": {
+      "proyectos_vigentes_por_cuenta": 1,
+      "cuentas_por_proyecto": "N",
+      "cuentas_por_aparato": 1
+    },
+    "baja": "archiva (conserva asiento, archivo e historia); borrar exige orden explicita de B4",
+    "invariantes": ["sin_sello_no_hay_asiento", "ningun_secreto_en_el_padron", "sin_autorizacion_no_se_archiva"]
+  },
+  "subscribes": [
+    {
+      "event": "instagram.cuenta.padron.alta.request",
+      "handler": "onAltaRequest",
+      "description": "Inscribe una cuenta en un proyecto y un aparato. Rechaza si la cuenta ya tiene dueno vigente (se traspasa), si el aparato ya sostiene otra cuenta (W3) o si la entrada trae un secreto."
+    },
+    {
+      "event": "instagram.cuenta.padron.baja.request",
+      "handler": "onBajaRequest",
+      "description": "Archiva el asiento con permiso registrado (autorizacion_id). El asiento NO se borra: conserva archivo e historia."
+    },
+    {
+      "event": "instagram.cuenta.padron.traspaso.request",
+      "handler": "onTraspasoRequest",
+      "description": "Cambia el dueno vigente de una cuenta anadiendo un paso a la historia; el alta de nacimiento no se reescribe."
+    },
+    {
+      "event": "instagram.cuenta.padron.consultar.request",
+      "handler": "onConsultarRequest",
+      "description": "Devuelve el asiento de una cuenta (vigente o archivado) y si esta hallada."
+    },
+    {
+      "event": "instagram.cuenta.padron.listar.request",
+      "handler": "onListarRequest",
+      "description": "Lista asientos por ambito (proyecto, aparato o cuenta). Sin criterio de ambito rechaza con ambito_incompleto: el padron no se devuelve entero y mezclado."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "instagram.cuenta.padron.alta.response",
+      "description": "Respuesta correlada: asiento inscrito y sellado."
+    },
+    {
+      "event": "instagram.cuenta.padron.alta.failed",
+      "description": "Par de fallo del alta: cuenta_ya_inscrita, cardinalidad_aparato, secreto_recibido, entrada_invalida, sin_padron."
+    },
+    {
+      "event": "instagram.cuenta.padron.baja.response",
+      "description": "Respuesta correlada: asiento archivado, historia conservada."
+    },
+    {
+      "event": "instagram.cuenta.padron.baja.failed",
+      "description": "Par de fallo de la baja: sin_autorizacion, cuenta_desconocida, ya_archivada, sin_padron."
+    },
+    {
+      "event": "instagram.cuenta.padron.traspaso.response",
+      "description": "Respuesta correlada: dueno vigente cambiado, con el paso de historia."
+    },
+    {
+      "event": "instagram.cuenta.padron.traspaso.failed",
+      "description": "Par de fallo del traspaso: cuenta_desconocida, cuenta_archivada, mismo_proyecto, cardinalidad_aparato."
+    },
+    {
+      "event": "instagram.cuenta.padron.consultar.response",
+      "description": "Respuesta correlada: asiento (o null) y hallada."
+    },
+    {
+      "event": "instagram.cuenta.padron.consultar.failed",
+      "description": "Par de fallo de la consulta: sin_padron, entrada_invalida."
+    },
+    {
+      "event": "instagram.cuenta.padron.listar.response",
+      "description": "Respuesta correlada: asientos del ambito pedido, sin mezclar proyectos."
+    },
+    {
+      "event": "instagram.cuenta.padron.listar.failed",
+      "description": "Par de fallo del listado: ambito_incompleto, entrada_invalida, sin_padron."
+    }
+  ],
+  "notes": [
+    "El topic instagram.cuenta.exclusividad.comprobar (contrato 8 del plano) lo responde U1 en el aparato, no este modulo: el padron dice que cuenta se esperaba en un aparato, pero si coincide o no se comprueba delante de la pantalla.",
+    "El candado de single-writer de esta pieza es en proceso (cola de promesas). Para dos instancias del cerebro en maquinas distintas hace falta contabilidad-libro/single-writer, que no es de este bloque."
+  ]
+}

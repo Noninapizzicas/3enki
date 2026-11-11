@@ -1,0 +1,19 @@
+# Flags de enlace SOLO para Android. En escritorio (cargo test, cargo run) este
+# fichero no aplica: los `cfg` no casan y no se pasa ningun flag.
+#
+# build-id: el driver del NDK no anade build ID a un enlace de Rust; sin el, un
+# .so strippeado no se puede emparejar con su fichero de simbolos. Se pide sha1
+# explicito porque un `--build-id` a secas escribe 8 bytes que LLDB no reconoce.
+#
+# max-page-size=16384: en arm64-v8a y x86_64 los segmentos LOAD tienen que estar
+# alineados a 16 KiB (requisito de Android moderno). En ABI de 32 bits no se
+# aplica: el NDK enlaza a 4 KiB y no hay plan de 16 KiB para ellas.
+#
+# NUNCA exportar RUSTFLAGS ni CARGO_ENCODED_RUSTFLAGS en el entorno de build:
+# sustituyen a estas tablas en vez de sumarse, y los flags desaparecen sin aviso.
+
+[target.'cfg(target_os = "android")']
+rustflags = ["-C", "link-arg=-Wl,--build-id=sha1"]
+
+[target.'cfg(all(target_os = "android", any(target_arch = "aarch64", target_arch = "x86_64")))']
+rustflags = ["-C", "link-arg=-Wl,-z,max-page-size=16384"]

@@ -1,0 +1,24 @@
+[package]
+name = "enki-instagram-bridge"
+version = "0.1.0"
+edition = "2021"
+description = "Puente de Instagram para Enki: mundo A (el aparato). Crate de escritorio y cdylib para Android."
+publish = false
+
+[lib]
+name = "enki_instagram_bridge"
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "puente"
+path = "src/main.rs"
+
+# El perfil de release del crate del aparato (heredado por cualquier perfil que
+# se anada despues). `panic = "unwind"` porque en el borde JNI un panic tiene que
+# poder convertirse en excepcion Java, no matar el proceso; `strip = "none"`
+# porque el empaquetado de Android extrae los simbolos del artefacto sin
+# strippear (si Cargo lo strippea, no hay simbolos que extraer).
+[profile.release]
+panic = "unwind"
+strip = "none"
+debug = "line-tables-only"

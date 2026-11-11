@@ -6,7 +6,7 @@ PartOf=enki.service
 
 [Service]
 Type=simple
-ExecStart=/opt/enki/enki-sense/target/release/motor-hermes
+ExecStart=/usr/local/bin/motor-hermes
 WorkingDirectory=/opt/enki
 Environment=MOTOR_HERMES_BROKER=127.0.0.1
 Environment=MOTOR_HERMES_PORT=8130

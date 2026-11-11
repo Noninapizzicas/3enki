@@ -83,16 +83,23 @@ function instancia({ cartaBorrador = false } = {}) {
     assert.ok(d.piezas.length > 0);
   });
 
-  await probar('lo que escribe COINCIDE con lo que sirve la calle (pieza a pieza)', async () => {
+  // Lo publicado tiene que estar ENTERO en lo que el constructor produce hoy: si
+  // una pieza de la calle desaparece o cambia, el cliente está viendo algo que el
+  // código ya no sabe hacer → falla. Al revés no: una pieza nueva que aún no está
+  // publicada es un deploy pendiente, no una incoherencia — se canta y se sigue.
+  await probar('todo lo que sirve la calle está en lo que escribe (y lo nuevo se canta)', async () => {
     if (!fs.existsSync(PUBLICADO)) throw new Error(`sin publicado en ${PUBLICADO}`);
     const { m, escritos } = instancia();
     await m._construir({ project_id: 'the-pirate' }, 'test');
     const nuevo = JSON.parse(escritos['/www/escaparate/bloques.json']);
     const vivo = JSON.parse(fs.readFileSync(PUBLICADO, 'utf8'));
     const firma = p => [p.id, p.forma, p.zona || '-', p.precio || '-', p.titulo || '-', p.imagen ? 'img' : 'sin'].join('|');
-    const A = nuevo.piezas.map(firma);
-    const B = vivo.piezas.map(firma);
-    assert.deepStrictEqual(A.slice().sort(), B.slice().sort());
+    const construidas = new Set(nuevo.piezas.map(firma));
+    const publicadas = vivo.piezas.map(firma);
+    const ausentes = publicadas.filter(f => !construidas.has(f));
+    assert.deepStrictEqual(ausentes, [], 'la calle sirve piezas que el constructor ya no produce');
+    const nuevas = [...construidas].filter(f => !publicadas.includes(f));
+    if (nuevas.length) console.log(`        (${nuevas.length} piezas nuevas sin publicar — deploy pendiente: ${nuevas.length > 3 ? nuevas.slice(0, 3).join(', ') + '…' : nuevas.join(', ')})`);
     assert.strictEqual(nuevo.sello.carta.version, vivo.sello.carta.version);
   });
 

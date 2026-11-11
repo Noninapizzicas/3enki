@@ -14,6 +14,7 @@
 
 const assert = require('assert');
 const { construir, huellaImagen } = require('../construir');
+const { desdeAprobadas, quincenaDe } = require('../fuentes/promos');
 
 let ok = 0;
 const probar = (nombre, fn) => {
@@ -75,6 +76,68 @@ probar('porciones de HOY entran con el precio formateado', () => {
 probar('carta en BORRADOR no se construye', () => {
   const datos = { carta: { meta: { id: 'c1', version: 1, estado: 'borrador' }, productos: [] } };
   assert.throws(() => construirCon(datos), /borrador/);
+});
+
+// ── promos: la oferta solo entra con la aprobación de la quincena ──────────
+
+console.log('\npromos (quincena aprobada)');
+
+const oferta = { promos: [{ id: 'saqueo', titulo: 'La Hora del Saqueo', texto: 'De 19:30 a 20:30.', desde: '2026-11-01', hasta: '2026-11-30' }] };
+const calendario = (estado, canal, fecha) => ({
+  entradas: [{ id: 'saqueo', titulo: 'La Hora del Saqueo', canal_id: canal, fecha, estado }]
+});
+
+probar('sin oferta o sin calendario → null (la zona no se inventa)', () => {
+  assert.strictEqual(desdeAprobadas(null, null, '2026-11-11', 'escaparate'), null);
+  assert.strictEqual(desdeAprobadas(calendario('programado', 'escaparate', '2026-11-11'), null, '2026-11-11', 'escaparate'), null);
+  assert.strictEqual(desdeAprobadas(null, oferta, '2026-11-11', 'escaparate'), null);
+});
+
+probar('oferta + entrada programada en la quincena y en su canal → entra, con su fecha de aprobación', () => {
+  const d = desdeAprobadas(calendario('programado', 'escaparate', '2026-11-12'), oferta, '2026-11-11', 'escaparate');
+  assert.strictEqual(d.promos.length, 1);
+  assert.strictEqual(d.promos[0].id, 'saqueo');
+  assert.strictEqual(d.promos[0].aprobada_en, '2026-11-12');
+  assert.strictEqual(d.quincena, '2026-11-01..2026-11-15');
+});
+
+probar('BORRADOR no es aprobación: la idea no se anuncia', () => {
+  assert.strictEqual(desdeAprobadas(calendario('borrador', 'escaparate', '2026-11-11'), oferta, '2026-11-11', 'escaparate'), null);
+});
+
+probar('aprobada para OTRO canal no sale en esta pantalla', () => {
+  assert.strictEqual(desdeAprobadas(calendario('programado', 'instagram', '2026-11-11'), oferta, '2026-11-11', 'escaparate'), null);
+});
+
+probar('sin canal declarado en el cableado no hay nada aprobado para la pantalla', () => {
+  assert.strictEqual(desdeAprobadas(calendario('programado', 'escaparate', '2026-11-11'), oferta, '2026-11-11', null), null);
+});
+
+probar('la aprobación de OTRA quincena no vale hoy', () => {
+  // hoy 11-nov → quincena 01..15; una entrada del 20-nov es de la siguiente
+  assert.strictEqual(desdeAprobadas(calendario('programado', 'escaparate', '2026-11-20'), oferta, '2026-11-11', 'escaparate'), null);
+  // hoy 20-nov → quincena 16..30: la misma entrada ahora sí
+  assert.ok(desdeAprobadas(calendario('programado', 'escaparate', '2026-11-20'), oferta, '2026-11-20', 'escaparate'));
+});
+
+probar('la quincena es la del calendario: 1-15 y 16-fin (febrero incluido)', () => {
+  assert.deepStrictEqual(quincenaDe('2026-11-11'), { inicio: '2026-11-01', fin: '2026-11-15' });
+  assert.deepStrictEqual(quincenaDe('2026-11-20'), { inicio: '2026-11-16', fin: '2026-11-30' });
+  assert.deepStrictEqual(quincenaDe('2026-02-20'), { inicio: '2026-02-16', fin: '2026-02-28' });
+  assert.strictEqual(quincenaDe('no-es-fecha'), null);
+});
+
+probar('una promo fuera de su ventana no entra en el carrusel', () => {
+  const cableadoPromos = { ...cableado, bloques: [{ id: 'promos', zona: 'C', fuente: 'promos', activo: true }] };
+  const r = construir({
+    cableado: cableadoPromos, proyectar, hoy: '2026-11-11',
+    datos: { carta: carta(), promos: { promos: [
+      { id: 'pasada', titulo: 'Ya pasó', desde: '2026-11-01', hasta: '2026-11-05' },
+      { id: 'hoy', titulo: 'Vale hoy', desde: '2026-11-11', hasta: '2026-11-11' }
+    ] } }
+  });
+  const titulos = r.salida.piezas.filter(p => p.bloque === 'promos').map(p => p.titulo);
+  assert.deepStrictEqual(titulos, ['Vale hoy']);
 });
 
 probar('el sello lleva carta, versión y estado', () => {

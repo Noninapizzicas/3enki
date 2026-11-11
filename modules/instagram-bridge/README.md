@@ -106,6 +106,25 @@ pueda leer como "vale".
 `Mirada` vive en `percepcion` y `mano::exclusividad` la reexporta: una sola
 lista de valores para el campo `mirada`, no dos que se desincronicen.
 
+## Bloque 5b · La mano (parte B): ejecutar y recuperar
+
+La mano que toca. A3 ejecuta **un** paso, A5 decide que hacer cuando falla, y la
+operacion `publicar` es el bucle que pone una mirada nueva delante de cada paso.
+
+| Pieza | Fichero | Que hace ejecutable |
+|---|---|---|
+| A3 `EjecutorDeElemento` | `crate/src/mano/ejecutor.rs` | Ejecuta **un** paso: localiza el ancla, valida la accion contra el catalogo cerrado (`tocar`, `escribir`, `desplazar`, `esperar`), entrega **un** gesto y se para. **La foto no se reutiliza**: si la `version` y el `momento` son los de la ultima foto con la que actuo, se para con `FotoRepetida` — dos pasos encadenados con la misma foto es la forma de tocar donde ya no hay nada. **Sin ancla no se improvisa**: se para y se nombra el paso (`AnclaAusente`, con su numero). **Una accion fuera del catalogo se RECHAZA**, no se degrada a `tocar`. Reporta el `EfectoEnElMundo` (`sin_efecto` / `efecto_posible` / `indeterminado`) y no decide nada mas. |
+| A5 `EscaleraDeRecuperacion` | `crate/src/mano/escalera.rs` | Ante un fallo decide **reintentar / volver / escalar**, y nada mas. **Regla sagrada: un paso que ya cambio el mundo no se reintenta nunca; si no se sabe si lo cambio, tampoco.** El orden de la tabla ES la regla: los dos casos de efecto van antes que el techo de intentos, para que ningun numero pueda autorizar un duplicado. Solo `plataforma` admite un segundo intento (R1), y solo si el paso no toco nada. La escalada viaja con el `Remedio` de su familia (`pedir_persona`, `declarar_rotura`, `preguntar`, `regular`), nunca con `reintentar`. |
+| La operacion `publicar` | `crate/src/mano/publicar.rs` | El bucle: **mirada nueva antes de cada paso** (A1), **U1 delante de cada gesto**, consecuencia del paso anterior comprobada en esa misma foto, presupuesto medido con el reloj inyectado, y A3 por paso. Si un paso se para, obedece a A5: `Reintentar` = un intento mas con mirada nueva; `Volver` / `Escalar` = se para y el informe lleva la decision. Tres desenlaces honestos: `publicado` (exige postcondicion vista), `sin_confirmar`, `parado` (**no** significa "no paso nada": `gestos` y `pudo_cambiar_el_mundo()` lo dicen). |
+| Gestos Android | `android/.../Gestos.kt` | El puerto `Superficie` de A3 de verdad: `ACTION_CLICK` o `dispatchGesture` para tocar, `ACTION_FOCUS` + `ACTION_SET_TEXT` para escribir (sin nodo no escribe: nunca teclea a ciegas), trazo para desplazar, `Thread.sleep` para esperar, `GLOBAL_ACTION_BACK` para el `volver` de A5. Espera el `onCompleted`/`onCancelled` del gesto porque A3 necesita saber si ocurrio. **PENDIENTE DE COMPILAR EN EL PORTATIL.** |
+| Compartir Android | `android/.../Compartir.kt` | El `Intent.ACTION_SEND` del share sheet (`FileProvider` + permiso de lectura + `<queries>`). Devuelve `Intento`, **nunca** `Hecho`: un `ACTION_SEND` que sale bien solo abre el editor de Instagram, y desde ahi nadie puede confirmar. La confirmacion es una mirada nueva a la postcondicion. **PENDIENTE DE COMPILAR EN EL PORTATIL.** |
+
+El bucle no vive en A3 a proposito. Un ejecutor que recorre la receta entera es
+un ejecutor que, tarde o temprano, la recorre **con la foto del principio**.
+Partirlo en "un paso" (A3) y "el bucle" (`publicar`) pone la regla de la mirada
+nueva en el unico sitio donde se puede comprobar —cada vuelta— y deja que A3 se
+niegue a repetir una foto sin saber nada de recetas.
+
 ## Tests
 
 Un fichero por pieza, con el nombre que fija la espina `enki-plan` del plan
@@ -125,7 +144,7 @@ node modules/instagram-bridge/tests/resolver.test.js
 ```
 
 ```bash
-cd modules/instagram-bridge/crate && cargo test --offline   # U1, A4.2 y A1, en escritorio
+cd modules/instagram-bridge/crate && cargo test --offline   # U1, A4.2, A1, A3 y A5, en escritorio
 ```
 
 Los tests del padron y del catalogo no tocan los ficheros del repo: cada prueba de

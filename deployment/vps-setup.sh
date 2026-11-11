@@ -651,6 +651,31 @@ if [ -x /usr/local/bin/motor-coherencia ]; then
     fi
 fi
 
+# ---- 3a-ter-nonies. motor-hermes — BRIDGE Hermes↔Enki (Rust nativo, :8130) ----
+# Puente HTTP→MQTT entre el agente Hermes (Python) y el core: recibe tool calls por
+# HTTP y las despacha por MQTT al gateway, que tiene el toolsRegistry completo.
+# Sin este binario el agente se queda SIN las tools del bus y el servicio entra en
+# bucle 203/EXEC (pasó el 11-nov: el ejecutable vivía sólo en target/release y
+# desapareció al limpiar el árbol). Va a /usr/local/bin como los otros 7 motores.
+if command -v cargo &>/dev/null; then
+    log "Compilando motor-hermes (enki-sense/crates/motor-hermes — recompila si el código cambió)..."
+    cargo install --force --path "${REPO_DIR}/enki-sense/crates/motor-hermes" --root /usr/local --locked 2>&1 | tail -1 \
+        && log "motor-hermes compilado/actualizado en /usr/local/bin" \
+        || warn "cargo install de motor-hermes falló — el agente se queda sin tools del bus"
+else
+    warn "sin cargo: motor-hermes no se compiló. El agente se queda sin tools del bus."
+fi
+if [ -x /usr/local/bin/motor-hermes ]; then
+    install -m 0644 "${REPO_DIR}/deployment/systemd/motor-hermes.service" /etc/systemd/system/motor-hermes.service 2>/dev/null
+    systemctl daemon-reload
+    systemctl enable motor-hermes > /dev/null 2>&1
+    if systemctl restart motor-hermes > /dev/null 2>&1; then
+        log "motor-hermes activo en 0.0.0.0:8130 (bridge HTTP→MQTT del agente)"
+    else
+        warn "motor-hermes instalado pero el servicio no arrancó (revisa: journalctl -u motor-hermes -f)"
+    fi
+fi
+
 # ---- 3b. Ejecutor en contenedor (OPT-IN --docker — la ÚNICA concesión de seguridad) ----
 # El engine Docker ya lo asegura la sección 3a-bis (crawl4rs/headroom lo usan sin conceder
 # nada: los levanta root y el core les habla por HTTP). Lo que ESTE flag habilita es otra

@@ -1,0 +1,149 @@
+{
+  "_doc": "BLOQUE 11a · PUBLICAR Y SUS FRONTERAS del proyecto instagram-bridge. Cinco piezas y una sola pregunta de fondo: que puede salir, que se puede deshacer y a quien no se le escribe. L1 PreparadorDePieza (operacion/piezas.js, CONVERSOR): la unica frontera de formato del sistema; `admitir` no toca nada y dice que falta exactamente, `adaptar` recorta frases ENTERAS por el final y el resultado es un PREFIJO del original (por eso no puede invertir el sentido ni comerse un dato: no añade, no reordena, no corta una frase por la mitad), y si la primera frase no cabe se rechaza en vez de recortarla. Los adjuntos no se procesan aqui: se declara el ENCUADRE (proporcion admitida mas cercana y cuanto se conserva) y el recorte de pixels lo hace el aparato. L3 RetiradaDePublicacion (operacion/retirada.js, PUENTE): retirar, corregir y borrar caen en la MISMA casilla (borrar) porque las tres son irreversibles y visibles; RETIRAR PASA POR PERMISO AUNQUE EL NIVEL DECLARADO SEA EJECUTAR, y eso se hace ejecutable poniendole TECHO 'permiso' al nivel ANTES de preguntar a Q6 (el nivel no es un cheque en blanco para deshacer); despues, en orden: respaldo de lo que habia (sin respaldo no se retira), la mano (que se inyecta: este modulo no ejecuta), la verificacion (O: 'ya no esta' es una consecuencia observable) y la evidencia (O3, anclada al respaldo). A5: un fallo de la mano va a revision y NO se reintenta. M3 RecorteDePrivacidad (core/recorte.js, REFLEJO): minimiza ANTES de guardar con lista CERRADA de lo que se conserva; lo que no se guardo no hay que borrarlo, el texto del mensaje no se reescribe (se avisa si trae un dato) y `auditar` es el test permanente sobre lo ya guardado. S1 DestinatarioPrevio (puente/destinatario.js, REFLEJO): solo se responde a quien escribio primero, se comprueba en CADA envio (no al configurar), se contesta en el mismo hilo y del mismo tipo, y si abrimos nosotros la conversacion no se contesta aunque luego nos respondan. S2 DetectorDeFueraDeAlcance (puente/alcance.js, REFLEJO, reglas y no LLM): crecimiento fuera, operacion dentro, se detecta por FORMA (tabla cerrada y ordenada); diez cuentas DISTINTAS con el mismo texto es fuera de alcance, pero repetir el propio mensaje no lo es (se cuentan cuentas, no mensajes) y se responde nombrando la frontera, sin negociar una 'version pequena'. Origen: plan-construccion.md bloque 11 (L1, L3, M3, S1, S2) y diseno-oop.md.",
+  "name": "operacion",
+  "version": "0.1.0",
+  "description": "Publicar y sus fronteras: preparador de pieza (conversor que recorta sin cambiar el sentido), retirada de publicacion (puente que siempre pasa por permiso, respalda antes de tocar y verifica despues), recorte de privacidad (minimiza antes de guardar), destinatario previo (solo se responde a quien escribio primero) y detector de fuera de alcance (mismo texto a varias cuentas). Custodio single-writer del respaldo previo a una retirada en storage/instagram-bridge/respaldos-retirada.json, escritura temporal + rename.",
+  "language": "es",
+  "main": "index.js",
+  "dependencies": [],
+  "config": {
+    "persistence": {
+      "concurrency": "single-writer",
+      "scope": "por-proyecto",
+      "pattern": "single-json-file",
+      "paths": [
+        "storage/instagram-bridge/respaldos-retirada.json"
+      ],
+      "esquemas": {
+        "respaldos": "respaldos-retirada-v1"
+      },
+      "escritura": "temporal + rename (atomica), un candado en proceso",
+      "regla": "append-only: un respaldo no se edita ni se borra (borrarlo seria borrar la prueba de lo que habia)"
+    },
+    "plataformas": ["instagram"],
+    "piezas": {
+      "L1": { "nombre": "PreparadorDePieza", "forma": "conversor", "fichero": "operacion/piezas.js" },
+      "L3": { "nombre": "RetiradaDePublicacion", "forma": "puente", "fichero": "operacion/retirada.js" },
+      "M3": { "nombre": "RecorteDePrivacidad", "forma": "reflejo", "fichero": "core/recorte.js" },
+      "S1": { "nombre": "DestinatarioPrevio", "forma": "reflejo", "fichero": "puente/destinatario.js" },
+      "S2": { "nombre": "DetectorDeFueraDeAlcance", "forma": "reflejo", "fichero": "puente/alcance.js" }
+    },
+    "formato": {
+      "destinos": ["publicacion", "historia", "reel"],
+      "campos_de_texto": ["texto", "caption", "pie", "titulo", "descripcion"],
+      "texto_max": 2200,
+      "adjuntos_max": 10,
+      "regla_del_recorte": "frases enteras por el final; el resultado es un prefijo del original; la primera frase no se toca",
+      "regla_del_encuadre": "se declara la proporcion admitida mas cercana y lo que se conserva; si se perderia lo que la pieza ensena, se rechaza",
+      "ejecuta_el_recorte": "aparato",
+      "no_publica": true
+    },
+    "retirada": {
+      "operaciones": ["retirar", "corregir", "borrar"],
+      "veredictos": ["retirada", "no_retirada", "revision"],
+      "casilla": "borrar (las tres operaciones: borrar el feed, corregir lo publicado y borrar son irreversibles y visibles)",
+      "techo_de_nivel": "permiso",
+      "orden_de_pasos": ["forma", "permiso", "respaldo", "mano", "verificacion", "evidencia"],
+      "puertos": {
+        "permiso": "autonomia/politica.js (Q6), por defecto la real",
+        "respaldo": "operacion/index.js#RespaldoDeRetiradas (custodio local)",
+        "mano": "A3, inyectado; sin mano no hay retirada (sin_puerto)",
+        "verificador": "O, inyectado; sin verificador el veredicto es revision, nunca retirada",
+        "evidencia": "puente/evidencia.js (O3)"
+      },
+      "no_reintenta": true
+    },
+    "privacidad": {
+      "se_conserva": ["sello", "cuenta", "plataforma", "conversacion_id", "mensaje_id", "remitente", "texto", "momento", "tipo"],
+      "motivos_para_conservar": ["responder", "no_repetir"],
+      "el_texto_no_se_reescribe": true,
+      "momento": "antes de guardar, no despues"
+    },
+    "destinatario": {
+      "regla": "solo se responde a quien escribio primero",
+      "se_comprueba": "antes de cada envio, no al configurar",
+      "tipos_de_hilo": ["comentario", "dm"],
+      "prohibido": ["abrir_conversacion", "escribir_primero", "contestar_en_otro_hilo"]
+    },
+    "alcance": {
+      "umbral_cuentas_distintas": 3,
+      "umbral_destinatarios": 20,
+      "umbral_parecido": 0.85,
+      "se_detecta_por": "forma de la peticion, no por tamano",
+      "protege": "repetir el propio mensaje no es volumen: se cuentan cuentas distintas, no mensajes",
+      "negociable": false
+    },
+    "invariantes": [
+      "recortar_no_puede_invertir_el_sentido",
+      "el_recorte_es_un_prefijo_del_original",
+      "una_frase_no_se_corta_por_la_mitad",
+      "retirar_pasa_por_permiso_aunque_el_nivel_sea_ejecutar",
+      "sin_respaldo_previo_no_se_retira",
+      "lo_que_no_se_guardo_no_hay_que_borrarlo",
+      "si_no_hay_mensaje_previo_no_hay_envio",
+      "diez_cuentas_con_el_mismo_texto_es_fuera_de_alcance",
+      "repetir_el_propio_mensaje_no_es_volumen",
+      "un_fallo_de_la_mano_no_se_reintenta"
+    ]
+  },
+  "subscribes": [
+    {
+      "event": "instagram.operacion.pieza.admitir.request",
+      "handler": "onPiezaAdmitirRequest",
+      "description": "L1 · comprueba que la pieza cabe en la plataforma y el destino, SIN adaptarla. Rechaza con `que_falta` exacto (caracteres, MB, segundos de mas)."
+    },
+    {
+      "event": "instagram.operacion.pieza.preparar.request",
+      "handler": "onPiezaPrepararRequest",
+      "description": "L1 · prepara la pieza: recorta el texto por frases enteras (prefijo del original) y declara el encuadre de los adjuntos. Si no cabe sin cambiar lo que dice, rechaza con su motivo."
+    },
+    {
+      "event": "instagram.operacion.retirada.request",
+      "handler": "onRetiradaRequest",
+      "description": "L3 · retirar / corregir / borrar (campo `operacion`). Siempre pasa por Q6 con el nivel CON TECHO `permiso`; respalda lo que habia antes de tocar la mano, verifica con O y deja evidencia O3. Sin mano, sin respaldo o sin verificador devuelve el puerto que falta o revision."
+    },
+    {
+      "event": "instagram.operacion.recorte.recortar.request",
+      "handler": "onRecorteRecortarRequest",
+      "description": "M3 · recorta un hecho visible ANTES de guardarlo: lista cerrada de lo que se conserva, cada descarte con su motivo, y `puede_responder` dice si queda utilizable."
+    },
+    {
+      "event": "instagram.operacion.recorte.auditar.request",
+      "handler": "onRecorteAuditarRequest",
+      "description": "M3 · audita un retrato ya guardado y devuelve la lista de excesos (campos de la tabla de descartes, valores con forma de identificador y campos fuera de la lista)."
+    },
+    {
+      "event": "instagram.operacion.destinatario.comprobar.request",
+      "handler": "onDestinatarioComprobarRequest",
+      "description": "S1 · comprueba, antes de un envio, que la persona escribio primero, que se contesta en el mismo hilo y del mismo tipo, y devuelve la prueba del mensaje previo."
+    },
+    {
+      "event": "instagram.operacion.alcance.detectar.request",
+      "handler": "onAlcanceDetectarRequest",
+      "description": "S2 · decide si una peticion o un envio es operacion (dentro) o crecimiento (fuera), por forma y por cuentas distintas con el mismo texto. Devuelve motivo y frase de frontera."
+    }
+  ],
+  "publishes": [
+    { "event": "instagram.operacion.pieza.admitir.response", "description": "Pieza admitida con sus encuadres, o rechazo con `que_falta`." },
+    { "event": "instagram.operacion.pieza.admitir.failed", "description": "Par de fallo: sin_mensaje, plataforma_desconocida, destino_desconocido, texto_no_cabe, pesa_de_mas, duracion_de_mas, adjuntos_de_mas, entrada_invalida." },
+    { "event": "instagram.operacion.pieza.preparar.response", "description": "Pieza preparada con `recorte` (que se quito, con el original) y `encuadres`." },
+    { "event": "instagram.operacion.pieza.preparar.failed", "description": "Par de fallo: texto_no_cabe_sin_cambiar_el_sentido, proporcion_no_admisible, sin_mensaje, pesa_de_mas, duracion_de_mas, adjuntos_de_mas." },
+    { "event": "instagram.operacion.retirada.response", "description": "Retirada ejecutada y verificada: veredicto, autorizacion_id, techo aplicado, respaldo_id y evidencia." },
+    { "event": "instagram.operacion.retirada.failed", "description": "Par de fallo: retirada_exige_permiso, nivel_conservador_no_retira, permiso_denegado, sin_respaldo_previo, paso_fallido, sin_verificador, no_se_observo_que_ya_no_esta, sin_puerto, sin_sello_de_cuenta, sin_momento." },
+    { "event": "instagram.operacion.recorte.recortar.response", "description": "Hecho recortado con `conservado`, `descartado`, `avisos`, `faltan` y `puede_responder`." },
+    { "event": "instagram.operacion.recorte.recortar.failed", "description": "Par de fallo: entrada_invalida." },
+    { "event": "instagram.operacion.recorte.auditar.response", "description": "`ok` con la lista de excesos (vacia si el retrato esta limpio)." },
+    { "event": "instagram.operacion.recorte.auditar.failed", "description": "Par de fallo: retrato invalido." },
+    { "event": "instagram.operacion.destinatario.comprobar.response", "description": "Legitimo con su prueba, o invalido con el motivo (sin_mensaje_previo, abrimos_nosotros_la_conversacion, hilo_distinto...)." },
+    { "event": "instagram.operacion.destinatario.comprobar.failed", "description": "Par de fallo: entrada_invalida." },
+    { "event": "instagram.operacion.alcance.detectar.response", "description": "Dentro, o fuera con motivo y frase de frontera (`negociable: false`)." },
+    { "event": "instagram.operacion.alcance.detectar.failed", "description": "Par de fallo: entrada_invalida (sin texto ni destinatarios)." }
+  ],
+  "notes": [
+    "L1, M3, S1 y S2 son reflejos puros: sin IO, sin reloj, sin estado global. El unico IO del bloque es el respaldo previo de L3, y vive en index.js.",
+    "L3 no ejecuta, no concede permisos y no verifica: los cuatro puertos se inyectan. Sin ellos devuelve `sin_puerto` con los que faltan, porque un puente sin mano que dice 'hecho' es una mentira con sintaxis correcta.",
+    "El techo de nivel no es una segunda politica: solo impide que el nivel declarado compre una retirada. Q6 sigue decidiendo todo lo demas (casilla, rol, historial, autorizacion, ventana).",
+    "El `momento` entra siempre en el payload: este modulo no tiene reloj. `guardado_en` del respaldo es metadato del fichero, no del negocio.",
+    "S2 se declara reflejo aunque el diseno lo llame micro-agente: un clasificador que a veces dice que si a mandar el mismo texto a diez cuentas no es un detector, es una moneda."
+  ]
+}

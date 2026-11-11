@@ -304,6 +304,26 @@ E2 evita que lo publicado quede sin dueno; T1 evita que el puente se convierta e
 autor (incluido el relleno que tapa un hueco); T2 evita que exista una identidad
 del puente, en lo publicado y en el padron.
 
+## Bloque 11a · Publicar y sus fronteras: lo que sale, lo que se deshace y a quien no se escribe
+
+Cinco piezas de las once del bloque 11 (las que publican y las tres fronteras que
+la rodean). Un conversor, un puente y tres reflejos.
+
+| Pieza | Fichero | Que hace ejecutable |
+|---|---|---|
+| L1 `PreparadorDePieza` | `operacion/piezas.js` | La **unica frontera de formato** del sistema. `admitir` no toca nada y rechaza con `que_falta` exacto (caracteres, MB, segundos de mas); `adaptar` recorta el texto **por frases enteras y por el final**, y el resultado es **un prefijo del original**: no añade, no reordena y no corta una frase por la mitad, asi que no puede invertir el sentido ni comerse un dato (`45 €` no se convierte en `4`). **La primera frase no se toca**: si ella sola no cabe, se rechaza (`texto_no_cabe_sin_cambiar_el_sentido`) en vez de recortarla. Los adjuntos no se procesan aqui: se declara el **encuadre** (proporcion admitida mas cercana y cuanto se conserva) y el recorte de pixels lo hace el aparato; si se perderia lo que la pieza ensena, se rechaza. No publica: prepara. |
+| L3 `RetiradaDePublicacion` | `operacion/retirada.js` | `retirar`, `corregir` y `borrar` caen en la **misma casilla** (`borrar`): las tres son irreversibles y visibles, porque la notificacion ya salio. **Retirar pasa por PERMISO aunque el nivel declarado sea «ejecutar»**: L3 le pone **techo `permiso`** al nivel antes de preguntar a Q6, asi que el nivel no compra una retirada y la unica forma de obtener `ejecutar` es una autorizacion real de una persona. Despues, en orden: **respaldo de lo que habia** (sin respaldo no se retira: despues ya no se podra mirar), **la mano** (se inyecta; este modulo no ejecuta), **la verificacion** (O: «ya no esta» es una consecuencia observable) y **la evidencia** (O3, anclada al respaldo). A5: un fallo de la mano va a **revision** y **no se reintenta**. Una autorizacion de otra accion, cuenta, proyecto o rol no vale. |
+| M3 `RecorteDePrivacidad` | `core/recorte.js` | Minimiza **antes de guardar**: **lo que no se guardo no hay que borrarlo**. Lista **cerrada** de lo que se conserva (sello, cuenta, conversacion, mensaje, remitente, texto, momento, tipo) y cada descarte nombrado con su motivo (`identificador_de_tercero`, `dato_sensible`, `historial`, `fuera_de_la_lista`). **El texto del mensaje no se reescribe** (recortarlo seria cambiar lo que la persona dijo): si trae un correo o un telefono, se **avisa** sin copiar el valor. `conservar(tercero, motivo)` solo admite `responder` y `no_repetir`; `auditar` es el test permanente sobre lo ya guardado; `olvidar` dice `no_habia_nada` cuando de verdad no queda nada. |
+| S1 `DestinatarioPrevio` | `puente/destinatario.js` | **Solo se responde a quien escribio primero**, y se comprueba **en cada envio**, no al configurar. Tres comprobaciones en orden: hay conversacion; **la abrio la otra persona** (si el primer mensaje es nuestro, no se contesta aunque luego nos respondan); se contesta **al autor del mensaje previo**, **en el mismo hilo y del mismo tipo** (un comentario no se contesta por mensaje directo). Devuelve la **prueba** del mensaje previo (id, momento, autor) para que el envio se pueda justificar despues. Sin mensaje previo **no hay envio**: no se abre conversacion nunca. |
+| S2 `DetectorDeFueraDeAlcance` | `puente/alcance.js` | Crecimiento fuera, operacion dentro. Se detecta **por forma** (tabla cerrada y **ordenada**: manda el patron mas especifico): conseguir seguidores, escribir a listas, me gusta y seguimientos en masa, «un poquito de cada». **Diez cuentas distintas con el mismo texto es fuera de alcance** (umbral 3; el mismo texto se reconoce normalizado y por parecido, no por bytes), y veinte destinatarios ya es volumen. **No bloquea al usuario legitimo**: se cuentan **cuentas distintas**, no mensajes, asi que la misma persona insistiendo diez veces no es una campana. Se rechaza **nombrando la frontera** («esto no lo hago porque solo contesto a quien me escribio») y **no se negocia** una version pequena de lo mismo. |
+
+L1, M3, S1 y S2 son **reflejos puros** (sin IO, sin reloj, sin estado global, sin
+LLM). L3 es **puente**: compone pasos sobre puertos que se inyectan (`permiso` =
+Q6, `respaldo`, `mano` = A3, `verificador` = O, `evidencia` = O3) y devuelve
+`sin_puerto` nombrando el que falta: un puente sin mano que dice «hecho» es una
+mentira con sintaxis correcta. El unico IO del bloque es el respaldo previo a una
+retirada, un custodio append-only en `storage/instagram-bridge/respaldos-retirada.json`.
+
 ## Tests
 
 Un fichero por pieza, con el nombre que fija la espina `enki-plan` del plan
@@ -339,6 +359,11 @@ node modules/instagram-bridge/tests/ficha.test.js
 node modules/instagram-bridge/tests/atribucion.test.js
 node modules/instagram-bridge/tests/frontera-contenido.test.js
 node modules/instagram-bridge/tests/frontera-identidad.test.js
+node modules/instagram-bridge/tests/piezas.test.js
+node modules/instagram-bridge/tests/retirada.test.js
+node modules/instagram-bridge/tests/recorte.test.js
+node modules/instagram-bridge/tests/destinatario.test.js
+node modules/instagram-bridge/tests/alcance.test.js
 ```
 
 ```bash

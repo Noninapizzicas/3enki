@@ -6,7 +6,8 @@ Este directorio **no es un modulo del bus**: es el arbol de la vertical. El
 loader (`core/modules/loader.js`) trata una carpeta sin `module.json` como
 agrupacion y busca manifiestos en sus subdirectorios, asi que aqui conviven
 librerias puras (`core/`) y los modulos con manifest (`cuentas/`, `recetas/`;
-mas adelante `ritmo/`, `sesion/`, `operacion/`, `puente/`, `autonomia/`). Ver
+`cuentas/`, `recetas/`, `ritmo/`, `puente/`; mas adelante `sesion/`, `operacion/`,
+`autonomia/`). Ver
 `plan-construccion.md` seccion 8.
 
 ## Bloque 1 · El suelo innegociable
@@ -141,6 +142,43 @@ El testigo no decide politica ni escribe la memoria verificable: decide si hay
 prueba (O1/O2, sin IO ni reloj) y pide a la bitacora que la guarde (O3). La
 bitacora sigue siendo la unica duena de `agentes/bitacoras`.
 
+## Bloque 7 · El regulador de paso: lo que impide que la cuenta se queme
+
+Cinco inputs y una sintesis. Ninguna de las cinco piezas decide sola; el que
+decide es G6, y decide **en orden fijo**, dejando escrito por que.
+
+| Pieza | Fichero | Que hace ejecutable |
+|---|---|---|
+| G1 `PerfilDeRitmo` | `core/ritmo.js` | Cada tipo de accion tiene su **precio** en una tabla cerrada: publicar 12, leer 2, el pulso 1. Una accion sin precio no se cobra como cero, se nombra. El **techo** sale de la conservaduria de la cuenta (100 = maximo conservador → 20 unidades/dia; 10 → 120), y `publicaciones_al_dia` se **calcula** del techo, no se declara aparte. Sin dato, se arranca en el maximo conservador. |
+| G4 `OrdenDePrioridad` | `core/prioridad.js` | Una escala, tres reglas: **lo empezado gana a lo nuevo** (1000), **el dueno gana al agente** (100), **publicar gana a leer** (50 > 10). La urgencia pesa 3 por escalon (maximo 9) y por eso **no puede volcar ninguna de las tres**. Desempate FIFO por secuencia y, al final, por id: el orden es **total** y reproducible. |
+| G3 `ColaDeTrabajos` | `ritmo/{index.js,cola.js}` + `ritmo/module.json` + `storage/instagram-bridge/cola.json` | **NUNCA dos trabajos en curso para la misma cuenta**: `tomar_siguiente` se niega (`cuenta_ocupada`) y `auditar()` vuelve a comprobarlo sobre el fichero. La cuenta ocupa a la **cuenta**, no al proyecto. Todo trabajo nace con `expira_en`: lo caducado se archiva y deja de ocupar. Lo cerrado pasa al historial: la cola no borra. |
+| G5 `MemoriaDeTolerancia` | `ritmo/tolerancia.js` + `storage/instagram-bridge/tolerancia.json` | **Cuenta nueva arranca en el maximo conservador** (`origen: 'cuenta_nueva'`, conservaduria 100). La memoria es **append-only** y la conservaduria **no se guarda: se deriva** del historial (una sola verdad). Un castigo firme devuelve la cuenta al maximo. El estado es por cuenta: una no contamina a otra. |
+| G2 `LectorDeCastigo` | `ritmo/castigo.js` | Recibe la senal **ya observada** y la clasifica en `firme` / `dudosa` / `ausente`. **La duda se resuelve como dudosa** (baja el ritmo, no para). Toda senal firme o dudosa lleva **fin declarado**; si el texto no lo dice, lo pone el puente y lo dice (`fin_origen: 'por_defecto'`). Sin LLM funciona igual; con LLM, el modelo **no puede borrar** una senal firme escrita ni romper el juicio si devuelve basura. |
+| G6 `ReguladorDePaso` | `ritmo/regulador.js` | La sintesis: recorre **techo -> castigo -> turno -> espera -> veredicto** y emite `seguir` / `esperar` / `parar` con `razon`, `hasta` y `fin_declarado`, mas el recorrido completo en `porque`. **Solo la plataforma para** (castigo firme); el techo, el turno y la espera se **esperan**. |
+
+**Por que ese orden.** El techo va primero porque es el unico veto que no
+depende de nadie (ni de la plataforma, ni del dueno, ni del agente): sigue
+siendo verdad a las once de la noche igual que a las nueve. El castigo va
+segundo porque **la plataforma manda sobre la prisa del dueno**, y va antes del
+turno para no llamar "turno" a lo que en realidad es una cuenta bloqueada. El
+turno va tercero: solo se actua si la cuenta esta libre y el trabajo es el que
+toca. La espera va cuarta porque es la presion mas blanda: es lo unico que se
+puede acortar (o alargar, con una duda) cuando las tres de arriba ya dijeron que
+si. El veredicto va ultimo porque no es una comprobacion: es la sintesis, y solo
+entonces se sabe a quien citar.
+
+**Dos invariantes que no se negocian.** (a) *Ninguna presion veta para
+siempre*: todo veredicto que no sea `seguir` lleva `hasta` y `fin_declarado`, y
+hay un **tope duro de 24 h** que recorta y avisa (`fin_declarado: 'tope'`). (b)
+*Solo la plataforma para*: `parar` es exclusivo del castigo firme; una senal
+dudosa deja **mitad de presupuesto y doble de espera** y no para jamas.
+
+G1, G4, G6 y G2 son reflejos puros (sin IO, sin reloj, sin estado). G3 y G5 son
+custodios: `cola.js` / `tolerancia.js` son puros y `index.js` es el borde (dos
+candados de single-writer, escritura temporal + `rename`, auditoria antes de
+cada escritura, y un fichero ilegible **no se sobrescribe**: `sin_cola` /
+`sin_tolerancia`).
+
 ## Tests
 
 Un fichero por pieza, con el nombre que fija la espina `enki-plan` del plan
@@ -158,15 +196,23 @@ node modules/instagram-bridge/tests/demostracion.test.js
 node modules/instagram-bridge/tests/ensayo.test.js
 node modules/instagram-bridge/tests/resolver.test.js
 node modules/instagram-bridge/tests/evidencia.test.js
+node modules/instagram-bridge/tests/ritmo.test.js
+node modules/instagram-bridge/tests/prioridad.test.js
+node modules/instagram-bridge/tests/cola.test.js
+node modules/instagram-bridge/tests/tolerancia.test.js
+node modules/instagram-bridge/tests/castigo.test.js
+node modules/instagram-bridge/tests/regulador.test.js
 ```
 
 ```bash
-cd modules/instagram-bridge/crate && cargo test --offline   # U1, A4.2, A1, A3 y A5, en escritorio
+cd modules/instagram-bridge/crate && cargo test --offline   # U1, A4.2, A1, A3, A5 y O1/O2, en escritorio
 ```
 
-Los tests del padron y del catalogo no tocan los ficheros del repo: cada prueba de
-disco se hace en un directorio temporal propio y lo borra al terminar. Los del
-repo se leen una vez para comprobar que son validos y estan vacios.
+Los tests del padron, del catalogo, de la cola y de la tolerancia no tocan los
+ficheros del repo: cada prueba de disco se hace en un directorio temporal propio
+y lo borra al terminar (`crear({directorio})`). Los del repo se leen una vez para
+comprobar que son validos y estan vacios: un almacen de ejemplo con datos dentro
+seria un estado inventado que nadie sabe de donde sale.
 
 No estan encadenados en `package.json` a proposito: ese fichero es compartido
 con los demas bloques y cada bloque anade su entrada al ensamblar.

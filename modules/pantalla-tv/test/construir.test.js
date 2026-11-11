@@ -14,6 +14,7 @@
 
 const assert = require('assert');
 const { construir, huellaImagen } = require('../construir');
+const { desdeDocumentos } = require('../fuentes/promos');
 
 let ok = 0;
 const probar = (nombre, fn) => {
@@ -75,6 +76,45 @@ probar('porciones de HOY entran con el precio formateado', () => {
 probar('carta en BORRADOR no se construye', () => {
   const datos = { carta: { meta: { id: 'c1', version: 1, estado: 'borrador' }, productos: [] } };
   assert.throws(() => construirCon(datos), /borrador/);
+});
+
+// ── promos: las dos fuentes de carta-marketing, una sola forma ─────────────
+
+console.log('\npromos (carta-marketing)');
+
+probar('sin promos ni en copy ni en promos.json → null (la zona no se inventa)', () => {
+  assert.strictEqual(desdeDocumentos(null, null), null);
+  assert.strictEqual(desdeDocumentos({ promos: [] }, { promos: [] }), null);
+});
+
+probar('lo que el dueño escribió en copy.json entra sin ventana, con id del título', () => {
+  const d = desdeDocumentos({ promos: [{ titulo: 'La Hora del Saqueo', texto: 'De 19:30 a 20:30.' }] }, null);
+  assert.deepStrictEqual(d.promos, [
+    { id: 'la-hora-del-saqueo', titulo: 'La Hora del Saqueo', texto: 'De 19:30 a 20:30.' }
+  ]);
+});
+
+probar('la ficha CON ventana manda sobre el texto suelto del mismo título (y no se duplica)', () => {
+  const d = desdeDocumentos(
+    { promos: [{ titulo: 'La Hora del Saqueo', texto: 'texto viejo' }] },
+    { promos: [{ id: 'saqueo', titulo: 'La Hora del Saqueo', desde: '2026-11-01', hasta: '2026-11-30', precio: 2 }] }
+  );
+  assert.strictEqual(d.promos.length, 1);
+  assert.strictEqual(d.promos[0].id, 'saqueo');
+  assert.strictEqual(d.promos[0].precio, 2);
+});
+
+probar('una promo fuera de su ventana no entra en el carrusel', () => {
+  const cableadoPromos = { ...cableado, bloques: [{ id: 'promos', zona: 'C', fuente: 'promos', activo: true }] };
+  const r = construir({
+    cableado: cableadoPromos, proyectar, hoy: '2026-11-11',
+    datos: { carta: carta(), promos: { promos: [
+      { id: 'pasada', titulo: 'Ya pasó', desde: '2026-11-01', hasta: '2026-11-05' },
+      { id: 'hoy', titulo: 'Vale hoy', desde: '2026-11-11', hasta: '2026-11-11' }
+    ] } }
+  });
+  const titulos = r.salida.piezas.filter(p => p.bloque === 'promos').map(p => p.titulo);
+  assert.deepStrictEqual(titulos, ['Vale hoy']);
 });
 
 probar('el sello lleva carta, versión y estado', () => {

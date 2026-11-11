@@ -1,7 +1,8 @@
 {
   "_doc": "pantalla-tv — LA PANTALLA DE CALLE, GENÉRICA. Una pantalla que no sabe de pizzas: recibe PIEZAS ya hechas y las coloca. Cada proyecto la cablea en su storage (pantalla-tv/cableado.json) diciendo qué bloques entran, en qué zona y con qué curación; sin cableado el módulo no publica nada (la pantalla es opt-in, no un efecto colateral de tener carta). El módulo es el TIMBRE, no el fabricante: escucha los eventos que ya emite el sistema (carta, contenido, marca, servicio, republicación de la carta digital) y vuelve a montar los ficheros. No barre discos ni adivina por fecha de modificación. Si la carta en servicio está en BORRADOR no publica: la pantalla se queda con la última buena antes que enseñar precios que no son. Cadencia de cada bloque (fijo/día/tanda) y forma (cabecera/cinta/foto/ficha/contacto/franja/cifra) se declaran en el cableado y en fuentes/*.js — el render no opina.",
   "name": "pantalla-tv",
-  "version": "0.1.0",
+  "version": "0.2.0",
+  "_v0_2_0_nota": "v0.2.0 (11-nov-2026): las promos dejan de esperar un fichero que nadie escribía. Se leen de carta-marketing — copy.json (lo que el dueño redactó, {promos:[{titulo,texto}]}) y promos.json (la ventana con fechas, {id,titulo,texto,desde,hasta,precio?,imagen?}) — y se funden por título: la oferta con ventana manda sobre su texto suelto. El bloque no cambia de forma; si no hay ninguna de las dos, la zona queda vacía. Se escucha marketing.copy.generado, así que regenerar el copy de la carta repinta la pantalla.",
   "_v0_1_0_nota": "v0.1.0 (12-nov-2026): primer corte. Contrato de piezas (contrato.js), constructor PURO (construir.js: cableado + datos → piezas, sin discos ni rutas), bloques carta/servicio/marca/porciones/promos y el reflejo que los engancha al bus. Sustituye al demonio que vivía fuera del repo y que llevaba dentro la ruta del storage y el UUID del proyecto. Los bloques porciones y promos existen SIN fuente: devuelven cero piezas y la franja se colapsa (nunca un hueco ni un precio de relleno) hasta que exista el módulo porciones y el fichero de promos. Verificado: el mismo constructor, alimentado con los datos vivos de the-pirate, reproduce las piezas que la pantalla publicada está sirviendo.",
   "description": "Pantalla de calle genérica: piezas neutras colocadas en zonas (cabecera, zonas del día, carrusel, contacto, franja). Cada proyecto la cablea; no sabe de pizzas ni de precios.",
   "language": "es",
@@ -36,6 +37,11 @@
       "event": "marketing.perfil.actualizado",
       "handler": "onMarcaCambiada",
       "description": "Cambió la marca (nombre, lema, colores, logo, teléfono, dirección) → idem."
+    },
+    {
+      "event": "marketing.copy.generado",
+      "handler": "onCopyMarketing",
+      "description": "carta-marketing regeneró el copy de la carta (incluye sus promos) → idem; la pantalla anuncia lo que el dueño acaba de escribir."
     },
     {
       "event": "servicio.cambiado",

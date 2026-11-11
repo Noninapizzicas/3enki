@@ -14,7 +14,8 @@
  * modificación — si el dato cambia, alguien lo dice por el bus.
  *
  * LEER   tarifas (qué carta está en servicio) → carta → marca → contenido → servicio
- *        → porciones → promos, todo por fs reflejo y con el project_id del evento.
+ *        → porciones → promos (copy.json de carta-marketing + promos.json), todo
+ *        por fs reflejo y con el project_id del evento.
  * PENSAR construir.js (PURO): cableado + datos → piezas. No toca disco.
  * GUARDAR /www/<destino>/index.html + bloques.json (sellado con huella y versión).
  * EMITIR  pantalla-tv.publicada
@@ -30,6 +31,7 @@ const path = require('path');
 const ModuloHibridoReflejo = require('../_shared/modulo-hibrido-reflejo');
 const ResolutorProyecto = require('../_shared/resolutor-proyecto');
 const { construir, hoyEn } = require('./construir');
+const { desdeDocumentos } = require('./fuentes/promos');
 const { proyectarCartaPublica, normalizarTelefono } = require('../pizzepos/carta-digital/proyeccion');
 
 const REBOTE_MS = 4000;              // una edición de carta emite N eventos; se hornea una vez
@@ -40,7 +42,7 @@ class PantallaTvReflejo extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'pantalla-tv';
-    this.version = '0.1.0';
+    this.version = '0.2.0';
     this._temporizadores = new Map();   // project_id → timeout del rebote
     this._plantilla = null;
     this._resolutor = null;
@@ -70,6 +72,7 @@ class PantallaTvReflejo extends ModuloHibridoReflejo {
   }
   onPorcionesCambiadas(e) { this._programar(e, 'porciones'); }
   onPromosCambiadas(e) { this._programar(e, 'promos'); }
+  onCopyMarketing(e) { this._programar(e, 'promos'); }
   onRepublicada(e) { this._programar(e, 'cartadigital.publicado'); }
 
   // ── la puerta manual (verificar, forzar, recuperar tras un reinicio) ────
@@ -131,13 +134,19 @@ class PantallaTvReflejo extends ModuloHibridoReflejo {
       return this._errorResponse(409, 'CARTA_NO_EN_SERVICIO', `la carta ${carta_id} está en "${carta.meta.estado}": no se publica`, { project_id, carta_id, estado: carta.meta.estado });
     }
 
-    const [marca, contenidoRaw, servicio, porciones, promos] = await Promise.all([
+    const [marca, contenidoRaw, servicio, porciones, promos, copyMarketing] = await Promise.all([
       this._leer(project_id, 'pizzepos/marca.json'),
       this._leer(project_id, 'pizzepos/contenido.json'),
       this._leer(project_id, 'pizzepos/servicio/config.json'),
       this._leer(project_id, 'pizzepos/porciones.json'),
-      this._leer(project_id, 'pizzepos/promos.json')
+      this._leer(project_id, 'pizzepos/promos.json'),
+      this._leer(project_id, 'pizzepos/carta-marketing/copy.json')
     ]);
+
+    // Las promos viven en carta-marketing (copy.json es lo que el dueño redactó;
+    // promos.json es la ventana con fechas). El bloque funde las dos: la misma
+    // oferta con ventana manda sobre su texto suelto. Sin ninguna → null.
+    const promosFundidas = desdeDocumentos(copyMarketing, promos);
 
     const contenido = (contenidoRaw && contenidoRaw.productos) || contenidoRaw || {};
     const telefono = (marca && marca.negocio && marca.negocio.local && marca.negocio.local.telefono) || null;
@@ -152,7 +161,7 @@ class PantallaTvReflejo extends ModuloHibridoReflejo {
         datos: {
           project_id, carta_id, carta, tarifas, marca,
           contenido, servicio: servicio || {},
-          porciones: porciones || null, promos: promos || null,
+          porciones: porciones || null, promos: promosFundidas,
           huellas,
           whatsapp_url: telefono ? `https://wa.me/${normalizarTelefono(telefono)}` : null
         }

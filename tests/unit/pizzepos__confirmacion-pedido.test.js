@@ -291,6 +291,39 @@ const subsDe = (manifest) => (manifest.subscribes || manifest.events?.subscribes
     await m.onUnload();
   }
 
+  // ── El puente sirve DOS cuentas: el mismo id llega dos veces con slug distinto ─
+  // Verificado en vivo (11-nov, the-pirate): cada mensaje entrante se publica una vez
+  // por cuenta vinculada ("tienda" y "the-pirate") con el MISMO id. La copia del
+  // negocio vecino llegaba primero, marcaba el id como visto y la copia buena se
+  // descartaba como duplicada → el «sí» del cliente no confirmaba y el pedido se
+  // retiraba por espera. La identidad del mensaje es (proyecto, id).
+
+  {
+    const { m, bus } = await instanciar(base());
+    await m.onPedidoConfirmacionPendiente({ data: {
+      pedido_id: 'p6', project_slug: 'the-pirate', cliente_jid: '666@lid', cliente_nombre: 'Ana'
+    } });
+    await esperar(80);
+
+    // Primero la copia de la otra cuenta (no tiene pedido que confirmar)…
+    await bus.publish('whatsapp.mensaje.recibido', mensaje({
+      project_slug: 'tienda', from: '666@lid', text: 'sí', message_id: 'wamid.dos-cuentas-1'
+    }));
+    assert.strictEqual(publicadosDe(bus, 'pedido.confirmacion_respondida').length, 0,
+      'la copia del negocio vecino no confirma nada');
+
+    // …y después la del proyecto dueño del pedido: ESA sí tiene que confirmar.
+    await bus.publish('whatsapp.mensaje.recibido', mensaje({
+      project_slug: 'the-pirate', from: '666@lid', text: 'sí', message_id: 'wamid.dos-cuentas-1'
+    }));
+    const eventos = publicadosDe(bus, 'pedido.confirmacion_respondida');
+    assert.strictEqual(eventos.length, 1,
+      'el mismo id en OTRO proyecto no puede consumir la respuesta del pedido');
+    assert.strictEqual(eventos[0].pedido_id, 'p6');
+    assert.strictEqual(m.pendientes.size, 0);
+    await m.onUnload();
+  }
+
   // ── El shape del PUENTE RUST (de/texto/id/slug) también confirma ───────────
   // El puente publica el JSONL tal cual: sin esta rama el «sí» del cliente se
   // ignoraba en silencio (el handler salía por `if (!jid) return`).

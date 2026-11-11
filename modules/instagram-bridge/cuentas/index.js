@@ -1,13 +1,16 @@
 'use strict';
 
 /**
- * cuentas — B1 · PadronDeCuentas · CUSTODIO (single-writer de su almacen).
+ * cuentas — B1 · PadronDeCuentas y E1 · FichaDeCuenta · CUSTODIOS.
  *
  * Esta pieza es el borde con el mundo: lee y escribe
- * `storage/instagram-bridge/padron.json` (global: el indice de duenos es comun a
- * todos los proyectos, porque una cuenta pertenece a un proyecto y hay que poder
- * preguntarlo desde cualquiera). Toda la logica de dominio esta en `padron.js`,
- * que es puro; aqui solo hay IO, correlacion de eventos y el candado de escritura.
+ * `storage/instagram-bridge/{padron.json,fichas.json}` (el padron es global: el
+ * indice de duenos es comun a todos los proyectos, porque una cuenta pertenece a
+ * un proyecto y hay que poder preguntarlo desde cualquiera; las fichas NO: cada
+ * una es de un proyecto). La logica de dominio esta en `padron.js` y `ficha.js`,
+ * que son puros; aqui solo hay IO, correlacion de eventos y el candado de
+ * escritura. La ficha vive en `ficha.js` con su propio candado, porque es otro
+ * almacen y otra pieza del plano: este fichero solo la hospeda en el mismo modulo.
  *
  * Contrato real (module.json):
  *   instagram.cuenta.padron.alta.request      -> .response | .failed
@@ -15,6 +18,10 @@
  *   instagram.cuenta.padron.traspaso.request  -> .response | .failed
  *   instagram.cuenta.padron.consultar.request -> .response | .failed
  *   instagram.cuenta.padron.listar.request    -> .response | .failed
+ *   instagram.ficha.leer.request              -> .response | .failed
+ *   instagram.ficha.declarar.request          -> .response | .failed
+ *   instagram.ficha.actualizar.request        -> .response | .failed
+ *   instagram.ficha.admitir.request           -> .response | .failed
  *
  * Reglas de esta capa:
  *   - **Single-writer.** Las mutaciones pasan por una cola de promesas: dos altas
@@ -38,6 +45,7 @@ const fsp = require('fs/promises');
 
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
 const padron = require('./padron');
+const ficha = require('./ficha');
 
 const TOPICS = Object.freeze({
   ALTA: 'instagram.cuenta.padron.alta',
@@ -62,11 +70,18 @@ class PadronDeCuentas extends ModuloHibridoReflejo {
   constructor(opts = {}) {
     super();
     this.name = 'padron-cuentas';
-    this.version = '0.1.0';
+    this.version = '0.2.0';
 
     this._directorio = opts.directorio || process.env.ENKI_INSTAGRAM_STORAGE || DIR_POR_DEFECTO;
     this._fichero = opts.fichero || FICHERO;
     this._ruta = path.join(this._directorio, this._fichero);
+
+    // E1 comparte carpeta y modulo con B1, pero tiene SU almacen y SU candado: el
+    // padron dice de quien es la cuenta; la ficha dice como habla.
+    this.fichas = ficha.crear({
+      directorio: this._directorio,
+      fichero: opts.fichero_fichas || ficha.FICHERO
+    });
 
     this._estado = padron.estado_vacio();
     this._cargado = false;
@@ -81,16 +96,19 @@ class PadronDeCuentas extends ModuloHibridoReflejo {
   async onLoad(context) {
     await super.onLoad(context);
     await this.cargar();
+    await this.fichas.onLoad(context);
     this.logger?.info('padron-cuentas.loaded', {
       module: this.name,
       ruta: this._ruta,
       asientos: this._estado.asientos.length,
+      fichas: this.fichas.foto().fichas.length,
       revision: this._estado.revision
     });
   }
 
   async onUnload() {
     await this._cola; // no dejar una escritura a medias
+    await this.fichas.onUnload();
     return super.onUnload();
   }
 
@@ -258,6 +276,24 @@ class PadronDeCuentas extends ModuloHibridoReflejo {
     return this._rpc(TOPICS.LISTAR, e, (d) => this.listar(d));
   }
 
+  // ---- E1 · la ficha (mismo modulo, otro almacen y otro candado) -----------
+
+  onFichaLeerRequest(e) {
+    return this.fichas.onLeerRequest(e);
+  }
+
+  onFichaDeclararRequest(e) {
+    return this.fichas.onDeclararRequest(e);
+  }
+
+  onFichaActualizarRequest(e) {
+    return this.fichas.onActualizarRequest(e);
+  }
+
+  onFichaAdmitirRequest(e) {
+    return this.fichas.onAdmitirRequest(e);
+  }
+
   /**
    * Atiende un RPC con su PAR DE FALLO. `_atender` de la base solo publica la
    * response; el contrato del puente exige que un rechazo salga por `.failed`
@@ -309,7 +345,9 @@ module.exports = {
   crear,
   // La logica pura se re-exporta para que un consumidor no tenga que saber en
   // que fichero vive: `cuentas/index.js#padron` es el nombre del plano.
-  padron
+  padron,
+  // E1 vive en el mismo modulo (bloque 10): `cuentas/index.js#ficha`.
+  ficha
 };
 
 // Vista "clase" del plano (cuentas/index.js#padron).

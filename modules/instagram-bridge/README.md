@@ -280,6 +280,30 @@ cuenta. En cualquier otro caso se rechaza (`confirmacion_sin_contexto` /
 se puede atar a su pregunta no es un si**. Para cerrar el circulo del todo, al
 adaptador le falta ecoar el `confirmacion_id` en el `callback_data` de los botones.
 
+## Bloque 10 · El nombre y los vetos: quien habla y en nombre de quien
+
+Cuatro piezas pequenas que evitan cuatro errores grandes. Antes de hablar por
+alguien hay que saber **quien es y como habla** (E1); y hay que tener escrito que
+el puente **no origina nada y no firma nada** (T1, T2, E2).
+
+| Pieza | Fichero | Que hace ejecutable |
+|---|---|---|
+| E1 `FichaDeCuenta` | `cuentas/ficha.js` + `cuentas/module.json` + `storage/instagram-bridge/fichas.json` | La ficha de una cuenta **en un proyecto**: identidad visible, voz (tono, vocabulario, lo que nunca dice, limites de tema) y limites propios (`no_publica`, `no_contesta`). **Sin ficha no se opera**; **sin voz declarada la cuenta SOLO LEE** (modo `lectura`, `admite` contesta `sin_voz`). La voz la declara el proyecto (`declarada_por: 'proyecto'` + `autorizacion_id`): el puente la aplica y no la inventa. La ficha es por cuenta **y por proyecto**: leerla sin proyecto es `ambito_incompleto` y desde otro proyecto es `ficha_de_otro_proyecto`, sin devolver contenido. Una cuenta sin proyecto dueno es un **fallo de alta** (`cuenta_sin_proyecto_dueno`), no una ficha incompleta. Custodio: single-writer, temporal + `rename`, auditoria antes de cada escritura (sello P1, secretos V1, ambito privado P3) y almacen ilegible que no se sobrescribe (`sin_fichas`). |
+| E2 `SelloDeAtribucion` | `core/atribucion.js` | `sellar(pieza, cuenta)` pone la atribucion del **proyecto dueno** de la cuenta sobre una pieza ya sellada (P1); `verificar` contesta `atribuida` o `huerfana`; `auditar` devuelve la lista de huerfanas. **Una pieza huerfana NO sale** (sin sello, sin atribucion, atribucion incoherente o de otro proyecto) y **el puente no firma**: `firmar` siempre rechaza y una atribucion al puente es `firma_del_puente`. La atribucion **no se reescribe**: mismo dueno es idempotente, otro dueno es `atribucion_ya_fijada` (corregir = retirar y republicar). |
+| T1 `FronteraSinContenido` | `core/frontera-contenido.js` | `comprobar` contesta `recibida` u `originada`; `rechazar_si_originada` para la publicacion. La pieza tiene que venir de un proyecto (origen + autor + sello coherentes). **El texto de relleno tambien es contenido propio**: se rechaza si el campo declara procedencia del puente (`procedencia.texto`) **y** si el texto es una frase de la tabla cerrada de relleno ("mira mi perfil", "no te lo pierdas"...), aunque la procedencia diga `proyecto`. Sin origen se falla cerrado (`sin_origen`). |
+| T2 `FronteraSinIdentidad` | `core/frontera-identidad.js` | `auditar(atribuciones)` exige que todo este atribuido a un proyecto y que ninguna firma sea del puente; `vetar(firma)` rechaza toda firma del puente. `hay_cuenta_del_sistema(padron)` audita el padron **entero**: una cuenta con proyecto o handle del puente es `cuenta_del_sistema`; un asiento **sin proyecto dueno NO es una cuenta del sistema: es un fallo de alta** (`cuenta_sin_proyecto_dueno`), y se devuelve aparte para que no se disfrace de prohibicion. |
+
+E2, T1 y T2 son **reflejos puros** (sin IO, sin reloj, sin estado global). E1 es
+**custodio** y vive en el mismo modulo que el padron (`cuentas/`), con su propio
+almacen (`fichas.json`) y su propio candado: el padron dice **de quien es** la
+cuenta; la ficha dice **como habla**. `propiedad.js` declara `fichas` como
+almacen privado (P3): la voz de una cuenta es de su proyecto y no se comparte.
+
+**Que cierra cada veto.** E1 evita que el puente hable con una voz inventada;
+E2 evita que lo publicado quede sin dueno; T1 evita que el puente se convierta en
+autor (incluido el relleno que tapa un hueco); T2 evita que exista una identidad
+del puente, en lo publicado y en el padron.
+
 ## Tests
 
 Un fichero por pieza, con el nombre que fija la espina `enki-plan` del plan
@@ -311,14 +335,18 @@ node modules/instagram-bridge/tests/ventana.test.js
 node modules/instagram-bridge/tests/politica.test.js
 node modules/instagram-bridge/tests/autorizaciones.test.js
 node modules/instagram-bridge/tests/autonomia.test.js
+node modules/instagram-bridge/tests/ficha.test.js
+node modules/instagram-bridge/tests/atribucion.test.js
+node modules/instagram-bridge/tests/frontera-contenido.test.js
+node modules/instagram-bridge/tests/frontera-identidad.test.js
 ```
 
 ```bash
 cd modules/instagram-bridge/crate && cargo test --offline   # U1, A4.2, A1, A3, A5, O1/O2, D1, D3, D4 y D5, en escritorio
 ```
 
-Los tests del padron, del catalogo, de la cola, de la tolerancia y de la autonomia
-no tocan los ficheros del repo: cada prueba de disco se hace en un directorio temporal propio
+Los tests del padron, del catalogo, de la cola, de la tolerancia, de la autonomia y
+de la ficha no tocan los ficheros del repo: cada prueba de disco se hace en un directorio temporal propio
 y lo borra al terminar (`crear({directorio})`). Los del repo se leen una vez para
 comprobar que son validos y estan vacios: un almacen de ejemplo con datos dentro
 seria un estado inventado que nadie sabe de donde sale.

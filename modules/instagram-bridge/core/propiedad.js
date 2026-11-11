@@ -33,7 +33,10 @@ const PRIVADOS = Object.freeze([
   'tolerancia',
   'evidencia',
   'confirmaciones',
-  'autorizaciones'
+  'autorizaciones',
+  // La ficha (E1) es estado privado: la voz de una cuenta es de SU proyecto y no
+  // se comparte jamas con otro (bloque 10).
+  'fichas'
 ]);
 const REGISTROS = Object.freeze(['padron']);
 

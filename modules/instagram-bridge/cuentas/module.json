@@ -1,8 +1,8 @@
 {
   "_doc": "CUSTODIO B1 · PadronDeCuentas del proyecto instagram-bridge. Es el INDICE DE DUENOS del puente: que cuenta sirve a que proyecto y en que aparato, con su historia. No es la ficha (E1), ni el estado de sesion (D2), ni la cola (G3). Cardinalidades: una cuenta tiene UN proyecto vigente (cambiarlo es traspaso, que deja historia); un proyecto puede tener N cuentas; un aparato sostiene por defecto UNA cuenta (W3). La baja ARCHIVA, nunca borra. Ningun asiento se guarda sin sello (P1) ni con un secreto dentro (V1): el custodio audita el almacen entero antes de cada escritura. Origen: plan-construccion.md seccion 2 (B1), 5.2 (estados de la cuenta) y 8 (bloque 2).",
   "name": "padron-cuentas",
-  "version": "0.1.0",
-  "description": "Custodio del padron de cuentas del puente de Instagram: indice unico de que cuenta pertenece a que proyecto y en que aparato, con archivo historico (la baja archiva, el traspaso deja historia) y escritura single-writer sobre storage/instagram-bridge/padron.json.",
+  "version": "0.2.0",
+  "description": "Custodio del padron de cuentas del puente de Instagram (B1) y de la ficha de cada cuenta (E1): el padron es el indice unico de que cuenta pertenece a que proyecto y en que aparato, con archivo historico (la baja archiva, el traspaso deja historia); la ficha guarda la identidad visible, la voz declarada por el proyecto y los limites propios, con escritura single-writer sobre storage/instagram-bridge/{padron.json,fichas.json}.",
   "language": "es",
   "main": "index.js",
   "dependencies": [],
@@ -15,6 +15,15 @@
       "esquema": "padron-cuentas-v1",
       "escritura": "temporal + rename (atomica)"
     },
+    "persistence_fichas": {
+      "concurrency": "single-writer",
+      "scope": "por proyecto (una ficha por cuenta y proyecto; nunca se comparte entre proyectos)",
+      "pattern": "single-json-file",
+      "path": "storage/instagram-bridge/fichas.json",
+      "esquema": "fichas-de-cuenta-v1",
+      "clase": "privado",
+      "escritura": "temporal + rename (atomica)"
+    },
     "plataformas": ["instagram"],
     "estados": ["vigente", "archivada"],
     "cardinalidad": {
@@ -23,7 +32,14 @@
       "cuentas_por_aparato": 1
     },
     "baja": "archiva (conserva asiento, archivo e historia); borrar exige orden explicita de B4",
-    "invariantes": ["sin_sello_no_hay_asiento", "ningun_secreto_en_el_padron", "sin_autorizacion_no_se_archiva"]
+    "invariantes": ["sin_sello_no_hay_asiento", "ningun_secreto_en_el_padron", "sin_autorizacion_no_se_archiva"],
+    "invariantes_ficha": [
+      "sin_ficha_no_se_opera",
+      "sin_voz_declarada_solo_se_lee",
+      "la_voz_la_declara_el_proyecto_nunca_el_puente",
+      "cuenta_sin_proyecto_dueno_es_fallo_de_alta",
+      "una_ficha_no_se_lee_desde_otro_proyecto"
+    ]
   },
   "subscribes": [
     {
@@ -50,6 +66,26 @@
       "event": "instagram.cuenta.padron.listar.request",
       "handler": "onListarRequest",
       "description": "Lista asientos por ambito (proyecto, aparato o cuenta). Sin criterio de ambito rechaza con ambito_incompleto: el padron no se devuelve entero y mezclado."
+    },
+    {
+      "event": "instagram.ficha.leer.request",
+      "handler": "onFichaLeerRequest",
+      "description": "Devuelve la ficha de una cuenta EN UN PROYECTO (identidad, voz, limites, modo). Sin proyecto rechaza con ambito_incompleto: la ficha no se comparte entre proyectos. Si solo existe en otro proyecto, hallada:false y motivo ficha_de_otro_proyecto, sin devolver contenido."
+    },
+    {
+      "event": "instagram.ficha.declarar.request",
+      "handler": "onFichaDeclararRequest",
+      "description": "Declara la ficha de una cuenta en un proyecto (identidad visible, voz opcional, limites) con autorizacion del dueno. Sin proyecto dueno es fallo de alta (cuenta_sin_proyecto_dueno). Una voz que no declara el proyecto se rechaza (voz_invalida). Si no hay voz, la ficha nace en modo lectura."
+    },
+    {
+      "event": "instagram.ficha.actualizar.request",
+      "handler": "onFichaActualizarRequest",
+      "description": "Cambia identidad, voz o limites con autorizacion; deja paso en la historia y NO toca el sello de nacimiento. Declarar la voz por primera vez es este camino y es lo que convierte la ficha de lectura en operativa."
+    },
+    {
+      "event": "instagram.ficha.admitir.request",
+      "handler": "onFichaAdmitirRequest",
+      "description": "La puerta del redactor (N3): dice si la voz de la ficha admite un texto. Sin ficha o sin voz contesta que no (sin_ficha / sin_voz) y nombra la frase o el tema que no pasa."
     }
   ],
   "publishes": [
@@ -92,9 +128,43 @@
     {
       "event": "instagram.cuenta.padron.listar.failed",
       "description": "Par de fallo del listado: ambito_incompleto, entrada_invalida, sin_padron."
+    },
+    {
+      "event": "instagram.ficha.leer.response",
+      "description": "Respuesta correlada: ficha (o null), hallada, modo y puede_operar."
+    },
+    {
+      "event": "instagram.ficha.leer.failed",
+      "description": "Par de fallo de la lectura: ambito_incompleto, entrada_invalida, sin_fichas."
+    },
+    {
+      "event": "instagram.ficha.declarar.response",
+      "description": "Respuesta correlada: ficha declarada y sellada, con su modo (operativa si trae voz, lectura si no)."
+    },
+    {
+      "event": "instagram.ficha.declarar.failed",
+      "description": "Par de fallo del alta de ficha: cuenta_sin_proyecto_dueno, ficha_ya_declarada, voz_invalida, secreto_recibido, entrada_invalida, sin_fichas."
+    },
+    {
+      "event": "instagram.ficha.actualizar.response",
+      "description": "Respuesta correlada: ficha actualizada con historia conservada y modo derivado de la voz."
+    },
+    {
+      "event": "instagram.ficha.actualizar.failed",
+      "description": "Par de fallo de la actualizacion: ficha_inexistente, sin_autorizacion, voz_invalida, entrada_invalida, sin_fichas."
+    },
+    {
+      "event": "instagram.ficha.admitir.response",
+      "description": "Respuesta correlada: si el texto pasa la voz (tono y limites) o el motivo por el que no."
+    },
+    {
+      "event": "instagram.ficha.admitir.failed",
+      "description": "Par de fallo de la admision: sin_ficha, sin_voz, dice_lo_que_nunca_dice, tema_fuera_de_limite, no_se_publica, texto_vacio, sin_fichas."
     }
   ],
   "notes": [
+    "La ficha (E1) vive en este modulo a proposito: es de la misma carpeta del plano (cuentas/) y comparte el borde, pero tiene almacen y candado propios (fichas.json). No es el padron: el padron dice de quien es una cuenta; la ficha dice como habla.",
+    "La voz NUNCA se inventa: si no viene declarada por el proyecto (declarada_por: proyecto + autorizacion_id) la ficha queda en modo lectura y admite contesta sin_voz. No hay plantilla de voz por defecto.",
     "El topic instagram.cuenta.exclusividad.comprobar (contrato 8 del plano) lo responde U1 en el aparato, no este modulo: el padron dice que cuenta se esperaba en un aparato, pero si coincide o no se comprueba delante de la pantalla.",
     "El candado de single-writer de esta pieza es en proceso (cola de promesas). Para dos instancias del cerebro en maquinas distintas hace falta contabilidad-libro/single-writer, que no es de este bloque."
   ]

@@ -85,6 +85,27 @@ sello (P1), cero secretos (V1), clase de almacen compartible (P3), forma A4.1 de
 cada receta y **una sola vigente por clave**. Un catalogo ilegible **no se
 sobrescribe**: se devuelve `sin_catalogo`.
 
+## Bloque 5a · La mano (parte A): mirar y resolver
+
+Dos piezas y el arbol falso que las hace testeables sin un movil. A1 mira, A2
+decide que receta se aplica; ninguna de las dos toca el mundo (eso es A3, en la
+parte B).
+
+| Pieza | Fichero | Que hace ejecutable |
+|---|---|---|
+| A2 `ResolvedorDeReceta` | `recetas/resolver.js` | Emparejamiento **exacto por dos claves** (plataforma, capacidad). Cuatro salidas: `aplicar`, `sin_receta`, `preguntar`, `rechazo`. **Sin receta vigente NO se improvisa**: ni antecesora, ni propuesta, ni la parecida; devuelve `sin_receta` y para. **Con dos vigentes en la misma clave NO elige**: devuelve `preguntar` con las dos versiones. Una vigente que no pasa la forma (A4.1) no se aplica a medias. |
+| A1 `ObservadorDeEstado` | `crate/src/percepcion/{mod,observador}.rs` | `mirar(fuente, ambito, momento)` inyecta el arbol por el puerto `FuenteDeArbol`, `hay(ancla)` y `elementos_visibles()` contestan sobre la ultima mirada, `mirar_antes_y_despues()` rodea una operacion. **Sin mirada nueva NO se rellena con la anterior**: el estado es `Vista::Desconocido(motivo)` y `hay()` deja de contestar `Presente`. Una mirada parcial se declara parcial y no afirma ausencias. |
+| El simulador | `crate/src/percepcion/simulador.rs` | El ARBOL DE NODOS FALSO: nodos con id, texto/descripcion, tipo, caja y `tocable`, construibles en memoria, y `mutar(Cambio)` para simular que la pantalla cambio (anadir, quitar, mover, ocultar, cegar el servicio). Es lo que permite probar A1 —y despues A3 y A5— con `cargo test`, sin Android y sin cuenta. |
+| Puente Android | `android/app/src/main/java/online/enki/instagram/Accesibilidad.kt` | `AccessibilityService` que lee `AccessibilityNodeInfo` (texto, descripcion, `viewIdResourceName`, `getBoundsInScreen`, `isClickable`, `isEnabled`, `isEditable`) y entrega la instantanea en JSON con la forma del crate. **PENDIENTE DE COMPILAR EN EL PORTATIL**: no hay Android SDK en el servidor, asi que este fichero se revisa y se compila alli. |
+
+El estado desconocido se NOMBRA siempre (`Desconocido::NuncaSeMiro`,
+`NoSePudoMirar(SinMirada)`, `MiradaParcial`, `MiradaParcialSinMotivo`,
+`AmbitoIncompleto`, `AnclaSinNombre`): no hay un "desconocido generico" que se
+pueda leer como "vale".
+
+`Mirada` vive en `percepcion` y `mano::exclusividad` la reexporta: una sola
+lista de valores para el campo `mirada`, no dos que se desincronicen.
+
 ## Tests
 
 Un fichero por pieza, con el nombre que fija la espina `enki-plan` del plan
@@ -100,10 +121,11 @@ node modules/instagram-bridge/tests/forma-receta.test.js
 node modules/instagram-bridge/tests/catalogo.test.js
 node modules/instagram-bridge/tests/demostracion.test.js
 node modules/instagram-bridge/tests/ensayo.test.js
+node modules/instagram-bridge/tests/resolver.test.js
 ```
 
 ```bash
-cd modules/instagram-bridge/crate && cargo test --offline   # U1 y A4.2, en escritorio
+cd modules/instagram-bridge/crate && cargo test --offline   # U1, A4.2 y A1, en escritorio
 ```
 
 Los tests del padron y del catalogo no tocan los ficheros del repo: cada prueba de

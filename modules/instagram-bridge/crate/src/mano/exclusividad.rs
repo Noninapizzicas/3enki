@@ -40,24 +40,13 @@
 
 use std::fmt;
 
-/// Como de entera fue la mirada que produjo el hecho.
+/// Como de entera fue la mirada que produjo el hecho (`completa | parcial`).
 ///
-/// Espejo del campo `mirada` de `HechoVisible` en `core/formas.js`
-/// (`completa | parcial`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Mirada {
-    Completa,
-    Parcial,
-}
-
-impl Mirada {
-    pub fn como_str(&self) -> &'static str {
-        match self {
-            Mirada::Completa => "completa",
-            Mirada::Parcial => "parcial",
-        }
-    }
-}
+/// Se REEXPORTA desde `percepcion`: A1 es quien produce el dato y U1 quien lo
+/// consume, y dos enums iguales en el mismo crate acabarian desincronizandose
+/// (una lista nueva se anade en una y no en la otra). El nombre publico sigue
+/// siendo `mano::exclusividad::Mirada`, que es como lo importan los tests y el CLI.
+pub use crate::percepcion::Mirada;
 
 /// Lo que el aparato vio, reducido a lo que U1 necesita para decidir.
 ///

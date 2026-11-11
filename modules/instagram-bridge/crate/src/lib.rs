@@ -30,6 +30,12 @@
 //!     (VerificadorDeConsecuencia) y O2 (VeredictoDeEjecucion): tres salidas que
 //!     no se colapsan (`Ocurrio` / `NoOcurrio` / `NoSeSabe`) y un veredicto
 //!     unico por ejecucion. La espera agotada es `NoSeSabe`, nunca `Ocurrio`.
+//!   - `percepcion::pulso` (D1), `percepcion::salud` (D3) y `percepcion::avisos`
+//!     (D5): el pulso de la sesion, la salud del aparato y el lector de avisos de
+//!     la plataforma. Las tres respetan la misma regla: `no se` no es `no`, y lo
+//!     que no esta en la tabla no se adivina.
+//!   - `mano::arbitro` (D4): quien tiene el aparato y cuando se puede soltar. Un
+//!     paso con consecuencia incierta NO se aborta: se termina o se para limpio.
 
 pub mod almacen;
 pub mod contrato;

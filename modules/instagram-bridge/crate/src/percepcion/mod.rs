@@ -34,7 +34,10 @@
 //! compila con `cargo test --offline` en el servidor y en el portatil: cada
 //! dependencia nueva es una cosa mas que puede no estar cuando hay que probar.
 
+pub mod avisos;
 pub mod observador;
+pub mod pulso;
+pub mod salud;
 pub mod simulador;
 
 use std::fmt;

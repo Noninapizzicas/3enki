@@ -179,6 +179,39 @@ candados de single-writer, escritura temporal + `rename`, auditoria antes de
 cada escritura, y un fichero ilegible **no se sobrescribe**: `sin_cola` /
 `sin_tolerancia`).
 
+## Bloque 8 · El pulso: lo que permite operar sin supervision
+
+Siete piezas y un borde Kotlin. Si el aparato se cae, la plataforma pide algo o la
+sesion se cierra, el puente tiene que **parar LIMPIO**, no morir a medias. Y la
+primera regla del pulso es no confundir una duda con una muerte:
+
+```text
+no se  !=  muerto
+```
+
+| Pieza | Fichero | Que hace ejecutable |
+|---|---|---|
+| D1 `PulsoDeSesion` | `crate/src/percepcion/pulso.rs` | La senal de vida de la sesion: `Viva`, `Muerta` (con evidencia) o `NoSe` (con motivo). **`no se` NO es `muerto` antes de operar**: `NoSe` manda `mirar_antes_de_operar`, nunca pedir persona ni, por supuesto, operar. Un latido caducado es `NoSe(lectura_vieja)`, no muerte. La muerte exige ver la pantalla de entrada, ver cerrarse la sesion o que la plataforma pida volver a entrar. El `momento` entra por parametro: sin reloj dentro. |
+| D3 `SaludDelAparato` | `crate/src/percepcion/salud.rs` | **Un indicador ESENCIAL ausente es `fuera`** (accesibilidad, pantalla encendida, desbloqueo, version de app, sitio para la evidencia). Un esencial que NO contesto tambien deja fuera, pero se etiqueta `esencial_no_se` y su remedio es `mirar_otra_vez`: no es una averia. Lo deseable (bateria, red) no echa fuera: **degrada** y opera H3. |
+| D4 `ArbitroDelAparato` | `crate/src/mano/arbitro.rs` | Arbitra el aparato entre la persona y el puente. **Regla dura: no se aborta a mitad de un paso con consecuencia INCIERTA: se termina o se para limpio.** `PararLimpio` solo con `EfectoEnElMundo::SinEfecto`; con `EfectoPosible` o `Indeterminado` contesta `TerminarPrimero`, deja el paso abierto y NO suelta el aparato. Un paso abierto tambien niega `soltar` y `relevar`: no se entrega a medias. |
+| D5 `LectorDeAvisosPlataforma` | `crate/src/percepcion/avisos.rs` | Lee el aviso de la plataforma contra una **tabla cerrada** (codigo canonico y alias exactos normalizados), sin LLM. El aviso dice **que hace falta** (abrir sesion, verificar identidad, esperar, actualizar), nunca "error". **Un aviso NO PREVISTO se trata como `exige_persona`**: lo que no esta en la tabla no se adivina. Una pantalla con un aviso no previsto exige persona entera, aunque al lado haya un limite reconocido. |
+| D2 `CaidaYReautenticacion` | `sesion/{caida.js,index.js}` + `sesion/module.json` + `storage/instagram-bridge/sesion.json` | Cuando la sesion se cae, decide el destino del trabajo en vuelo: **lo reversible (consecuencia `ninguna`) vuelve con su paso** a la cola, con numero, ancla y accion intactos; **lo irreversible (`posible`/`incierta`, o no declarado) va a revision** con lo que hace falta. La reautenticacion es **siempre humana**: exige `quien: 'dueno'` y `autorizacion_id`; `sistema` y `agente` reciben `reauth_exige_persona`. **Una revision no se cierra por reautenticar**: la sesion vuelve, la duda sigue, y se resuelve con `resolver_revision` (persona + autorizacion + decision + motivo). |
+| H1 `AparatoAusente` | `sesion/ausente.js` + `storage/instagram-bridge/ausente.json` | Aviso con **acuse REAL**: enviarlo deja el aviso `pendiente_de_acuse` (`cerrado: false`, `requiere_acuse: true`); volver a avisar es un **recordatorio** (sube el contador, no acusa); solo `dueno` con `referencia` y `momento` cierra el aviso. Un aviso ya acusado no se reabre por un reintento (`reabrir_exige_persona`). El resumen dice `todo_acusado`: cero pendientes es la unica prueba de que alguien lo vio. |
+| H3 `ModoDegradado` | `sesion/degradado.js` | Reflejo puro. **Sin plataforma solo sobrevive lo ya traido**: se lee la cache y se marca `origen: 'cache'`, `fresco: false`; publicar, comentar, escribir, seguir... prohibido (`nada_nuevo_sin_plataforma`); una clave que no esta en la cache devuelve `no_esta_en_la_cache`, **nunca `[]`** (una lista vacia es un dato; un hueco no). Una accion que no esta en ninguna de las dos listas se prohibe: lista cerrada. |
+| Borde Android | `android/.../{PrimerPlano,Pantalla,Decision}.kt` | `PrimerPlano` lee pantalla, bloqueo, servicio, version, sitio, bateria y red con los MISMOS nombres que D1/D3 y entrega `no_se` cuando no puede leer (nunca `no`). `Pantalla` no adivina por textos: la pantalla la declara el cerebro y la deteccion de ENTRADA es una tabla cerrada de prefijos de view-id; si no se pudo mirar, `mirada: parcial` y motivo. `Decision` convierte los dictamenes del crate en una accion con una tabla en orden fijo, y **un estado no reconocido no autoriza nada** (`mirar_antes_de_operar`). **PENDIENTE DE COMPILAR EN EL PORTATIL.** |
+
+`caida.js` y `ausente.js` son puros (sin IO, sin reloj): reciben el estado y
+devuelven uno nuevo. `index.js` es el borde: dos candados de single-writer (uno por
+fichero), escritura temporal + `rename`, auditoria antes de cada escritura y un
+almacen ilegible que **no se sobrescribe** (`sin_sesion` / `sin_avisos`). La
+auditoria comprueba ademas las invariantes de la pieza: `reauth_pendiente` exige
+persona, lo autorizado lo autorizo `dueno`, `en_revision` lleva su
+`que_hace_falta`, y un aviso acusado lo acuso una persona con referencia.
+
+`degradado.js` no tiene fichero ni candado porque el modo **viaja con cada
+llamada**, no vive en un estado global: dos operaciones del mismo puente pueden
+estar una degradada y otra no.
+
 ## Tests
 
 Un fichero por pieza, con el nombre que fija la espina `enki-plan` del plan
@@ -202,10 +235,11 @@ node modules/instagram-bridge/tests/cola.test.js
 node modules/instagram-bridge/tests/tolerancia.test.js
 node modules/instagram-bridge/tests/castigo.test.js
 node modules/instagram-bridge/tests/regulador.test.js
+node modules/instagram-bridge/tests/sesion.test.js
 ```
 
 ```bash
-cd modules/instagram-bridge/crate && cargo test --offline   # U1, A4.2, A1, A3, A5 y O1/O2, en escritorio
+cd modules/instagram-bridge/crate && cargo test --offline   # U1, A4.2, A1, A3, A5, O1/O2, D1, D3, D4 y D5, en escritorio
 ```
 
 Los tests del padron, del catalogo, de la cola y de la tolerancia no tocan los

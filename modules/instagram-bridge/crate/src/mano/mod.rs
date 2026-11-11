@@ -27,6 +27,7 @@
 //! (cada vuelta del bucle) y que A3 pueda negarse a repetir una foto sin saber
 //! nada de recetas.
 
+pub mod arbitro;
 pub mod ejecutor;
 pub mod escalera;
 pub mod exclusividad;

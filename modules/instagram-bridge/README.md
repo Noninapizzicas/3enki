@@ -125,6 +125,22 @@ Partirlo en "un paso" (A3) y "el bucle" (`publicar`) pone la regla de la mirada
 nueva en el unico sitio donde se puede comprobar —cada vuelta— y deja que A3 se
 niegue a repetir una foto sin saber nada de recetas.
 
+## Bloque 6 · El testigo: lo que impide decir "hecho" sin prueba
+
+Entre la mano que toca y la percepcion que mira hay un hueco por el que se cuela
+el unico fallo que de verdad importa: decir que se hizo algo que no se hizo. El
+testigo lo tapa con dos reflejos puros (Rust) y un custodio (JS).
+
+| Pieza | Fichero | Que hace ejecutable |
+|---|---|---|
+| O1 `VerificadorDeConsecuencia` | `crate/src/testigo/verificador.rs` | Dada la consecuencia que un paso tenia que dejar y una mirada **nueva**, contesta `Ocurrio` / `NoOcurrio` / `NoSeSabe`. **Regla sagrada: la espera agotada es NO SE, nunca SI**: dejar de esperar no prueba nada. `Ocurrio` exige prueba visible (nodo, momento y cuenta), no "no fallo nada". `NoOcurrio` exige mirada completa, plazo agotado y consecuencia **persistente**; un dialogo que no se ve ahora pudo abrirse y cerrarse, y eso es `NoSeSabe`. La foto tiene que ser de la misma cuenta y posterior al paso, y un ancla que ya estaba antes no prueba el efecto. **`NoSeSabe` siempre viaja con `que_haria_falta`**: no se puede construir sin el. |
+| O2 `VeredictoDeEjecucion` | `crate/src/testigo/veredicto.rs` | Junta los resultados por paso en **un** veredicto: `Ocurrio` / `NoOcurrio` / `NoSeSabe`. No existe `Parcial`. Precedencia `NoSeSabe > NoOcurrio > Ocurrio`: **un solo paso no sabido envenena la ejecucion entera**, y la mayoria no asciende un no-saber a hecho. El mismo paso dos veces con resultados distintos es contradiccion, no dato. El veredicto lleva sus pruebas (para la evidencia) y lo que falta. |
+| O3 `EvidenciaConservada` | `puente/evidencia.js` | Custodio de la evidencia: **sin `SelloDeCuenta` se rechaza** (`sin_sello_de_cuenta`), el proyecto del registro tiene que ser el del sello (`proyecto_ajeno`), ningun secreto entra (V1), y nada se escribe sin auditar. Escritura atomica (temporal + `rename`) bajo candado de single-writer. **No reimplementa la bitacora**: emite las peticiones del contrato de `agentes-bitacora` (`bitacora.abrir.request` / `.paso.request` / `.sellar.request` / `.leer.request`), y el registro sellado queda en `storage/instagram-bridge/evidencia/<request_id>.json` como fuente para reemitir si el bus estaba caido. Un `no_se_sabe` se sella con `verificado: false` y `no_confirmado: true`. |
+
+El testigo no decide politica ni escribe la memoria verificable: decide si hay
+prueba (O1/O2, sin IO ni reloj) y pide a la bitacora que la guarde (O3). La
+bitacora sigue siendo la unica duena de `agentes/bitacoras`.
+
 ## Tests
 
 Un fichero por pieza, con el nombre que fija la espina `enki-plan` del plan
@@ -141,6 +157,7 @@ node modules/instagram-bridge/tests/catalogo.test.js
 node modules/instagram-bridge/tests/demostracion.test.js
 node modules/instagram-bridge/tests/ensayo.test.js
 node modules/instagram-bridge/tests/resolver.test.js
+node modules/instagram-bridge/tests/evidencia.test.js
 ```
 
 ```bash

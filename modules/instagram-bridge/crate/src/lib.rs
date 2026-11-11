@@ -26,11 +26,16 @@
 //!     (TaxonomiaDeFallos) como enum espejo de `core/fallos.js`: el aparato
 //!     nombra el fallo con el mismo codigo que el cerebro, y el test de paridad
 //!     lee este fichero para que no haya dos listas.
+//!   - `testigo`: lo que impide decir "hecho" sin prueba. Aqui viven O1
+//!     (VerificadorDeConsecuencia) y O2 (VeredictoDeEjecucion): tres salidas que
+//!     no se colapsan (`Ocurrio` / `NoOcurrio` / `NoSeSabe`) y un veredicto
+//!     unico por ejecucion. La espera agotada es `NoSeSabe`, nunca `Ocurrio`.
 
 pub mod almacen;
 pub mod contrato;
 pub mod mano;
 pub mod percepcion;
+pub mod testigo;
 
 /// Version del crate, la misma que declara `Cargo.toml` y que viaja en
 /// `bridge/instagram/estado` (topic D11) como `version_app`.

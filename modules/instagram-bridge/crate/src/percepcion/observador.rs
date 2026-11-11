@@ -233,6 +233,14 @@ impl HechoVisible {
         self.nodos.iter().any(|n| n.coincide(ancla))
     }
 
+    /// El nodo que coincide con el ancla, si lo hay.
+    ///
+    /// O1 lo necesita para que `Ocurrio` lleve PRUEBA (`nodo_id`), no un simple
+    /// booleano: "se vio" sin decir donde ni en que foto no es una prueba.
+    pub fn nodo_que_coincide(&self, ancla: &Ancla) -> Option<&NodoVisible> {
+        self.nodos.iter().find(|n| n.coincide(ancla))
+    }
+
     /// Un hecho es utilizable por A3/O1 si se puede afirmar algo con el.
     pub fn es_completo(&self) -> bool {
         self.mirada == Mirada::Completa

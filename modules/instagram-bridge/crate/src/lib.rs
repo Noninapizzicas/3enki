@@ -15,7 +15,12 @@
 //!     de "la cuenta que se ve es la esperada" tiene que ocurrir ANTES del primer
 //!     gesto y en local, porque el padron vive en el cerebro pero la parada
 //!     ocurre delante de la pantalla.
+//!   - `almacen`: lo que el aparato guarda mientras trabaja. Aqui vive A4.2
+//!     (SembradorDeDemostracion): el grabador de pasos humanos que produce una
+//!     receta PROPUESTA. Vive en el aparato porque la observacion solo ocurre
+//!     delante de la pantalla.
 
+pub mod almacen;
 pub mod mano;
 
 /// Version del crate, la misma que declara `Cargo.toml` y que viaja en

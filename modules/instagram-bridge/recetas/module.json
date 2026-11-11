@@ -1,0 +1,132 @@
+{
+  "_doc": "CUSTODIO A4.4 · CatalogoDeRecetas del proyecto instagram-bridge. Es DONDE VIVE el saber hacer: las recetas de cada (plataforma, capacidad), con sus versiones y su historia. Una sola vigente por clave, siempre; la antecesora se conserva entera para poder volver atras cuando una reparacion empeora las cosas (F2/F5). Nada se borra: se marca. Una receta NACE PROPUESTA (proponer) y solo se promueve con autorizacion humana registrada (Q5); sin autorizacion_id no hay vigencia. Solo entra lo que A4.1 valida, y se revalida al publicar. El almacen es GLOBAL y COMPARTIDO a proposito (P3): el saber hacer se mejora una vez para todos los proyectos; el estado privado de cada proyecto no entra aqui jamas. Es el UNICO escritor de recetas. Origen: plan-construccion.md secciones 4.2 (RPC 12), 7 (almacen global) y 8 (bloque 3); diseno-oop.md A4.4.",
+  "name": "catalogo-recetas",
+  "version": "0.1.0",
+  "description": "Custodio del catalogo de recetas del puente de Instagram: versiona el saber hacer por (plataforma, capacidad), mantiene una sola vigente por clave y conserva las antecesoras, con escritura single-writer y auditoria (sello P1, cero secretos V1, forma A4.1, saber comun P3) sobre storage/instagram-bridge/catalogo-recetas.json.",
+  "language": "es",
+  "main": "index.js",
+  "dependencies": [],
+  "config": {
+    "persistence": {
+      "concurrency": "single-writer",
+      "scope": "global",
+      "pattern": "single-json-file",
+      "path": "storage/instagram-bridge/catalogo-recetas.json",
+      "esquema": "catalogo-recetas-v1",
+      "escritura": "temporal + rename (atomica)"
+    },
+    "clave": ["plataforma", "capacidad"],
+    "plataformas": ["instagram"],
+    "estados": ["propuesta", "vigente", "antecesora", "no_vigente"],
+    "origenes": ["demostracion", "reparacion", "chat", "importada"],
+    "vigencia": {
+      "nace": "propuesta",
+      "promueve": "publicar con autorizacion_id (Q5)",
+      "degradacion": "la vigente anterior pasa a antecesora en el mismo acto",
+      "retirada": "marcar_no_vigente (no borra: marca)",
+      "vuelta_atras": "restaurar con autorizacion_id"
+    },
+    "cardinalidad": {
+      "vigentes_por_clave": 1,
+      "versiones_por_clave": "N (historial completo, nunca borrado)"
+    },
+    "invariantes": [
+      "una_sola_vigente_por_clave",
+      "receta_nace_propuesta_y_nunca_vigente",
+      "sin_autorizacion_no_hay_vigencia",
+      "nada_se_borra_se_marca",
+      "sin_sello_no_hay_entrada",
+      "ningun_secreto_en_el_catalogo",
+      "solo_entra_lo_que_valida_forma_receta"
+    ]
+  },
+  "subscribes": [
+    {
+      "event": "instagram.receta.proponer.request",
+      "handler": "onProponerRequest",
+      "description": "Inscribe una receta NUEVA como propuesta (nunca vigente). Valida las cuatro partes con A4.1, sella la entrada y le asigna el siguiente numero de version de su clave. Rechaza con nace_propuesta si la entrada se declara vigente."
+    },
+    {
+      "event": "instagram.receta.publicar.request",
+      "handler": "onPublicarRequest",
+      "description": "Promueve una version a vigente (RPC 12 del plano). Exige autorizacion_id: sin confirmacion humana registrada devuelve sin_confirmacion. Si recibe una receta nueva, la hace nacer propuesta y la publica en el mismo acto; la vigente anterior pasa a antecesora."
+    },
+    {
+      "event": "instagram.receta.vigente.request",
+      "handler": "onVigenteRequest",
+      "description": "Devuelve la receta vigente de una clave (plataforma, capacidad) con su version. Que no haya receta es una respuesta legitima (hallada:false), no un error del catalogo."
+    },
+    {
+      "event": "instagram.receta.antecesoras.request",
+      "handler": "onAntecesorasRequest",
+      "description": "Devuelve las versiones publicadas que ya no estan vigentes, de mas vieja a mas nueva, con su receta y su firma de publicacion intactas."
+    },
+    {
+      "event": "instagram.receta.marcar_no_vigente.request",
+      "handler": "onMarcarNoVigenteRequest",
+      "description": "Retira una version (rotura declarada F1): cambia la situacion a no_vigente y deja el paso en la historia. No borra nada y no toca las antecesoras."
+    },
+    {
+      "event": "instagram.receta.restaurar.request",
+      "handler": "onRestaurarRequest",
+      "description": "Devuelve a vigente una antecesora con autorizacion registrada: la salida cuando una reparacion empeora las cosas (F2/F5). La vigente que habia pasa a antecesora."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "instagram.receta.proponer.response",
+      "description": "Respuesta correlada: receta propuesta, clave y version asignada (vigente:false)."
+    },
+    {
+      "event": "instagram.receta.proponer.failed",
+      "description": "Par de fallo del nacimiento: nace_propuesta, defecto_de_forma, clave_incoherente, secreto_recibido, entrada_invalida, sin_catalogo."
+    },
+    {
+      "event": "instagram.receta.publicar.response",
+      "description": "Respuesta correlada: version publicada, estado_receta vigente y que version sustituye."
+    },
+    {
+      "event": "instagram.receta.publicar.failed",
+      "description": "Par de fallo de la publicacion: sin_confirmacion, defecto_de_forma, receta_inexistente, receta_no_vigente, secreto_recibido, entrada_invalida, sin_catalogo."
+    },
+    {
+      "event": "instagram.receta.vigente.response",
+      "description": "Respuesta correlada: receta vigente de la clave (o null con hallada:false)."
+    },
+    {
+      "event": "instagram.receta.vigente.failed",
+      "description": "Par de fallo de la lectura: entrada_invalida (sin capacidad), sin_catalogo."
+    },
+    {
+      "event": "instagram.receta.antecesoras.response",
+      "description": "Respuesta correlada: versiones antecesoras de la clave, con su receta y su publicacion."
+    },
+    {
+      "event": "instagram.receta.antecesoras.failed",
+      "description": "Par de fallo del listado: entrada_invalida (sin capacidad), sin_catalogo."
+    },
+    {
+      "event": "instagram.receta.marcar_no_vigente.response",
+      "description": "Respuesta correlada: version retirada, con el paso de historia."
+    },
+    {
+      "event": "instagram.receta.marcar_no_vigente.failed",
+      "description": "Par de fallo de la retirada: receta_inexistente, entrada_invalida, secreto_recibido, sin_catalogo."
+    },
+    {
+      "event": "instagram.receta.restaurar.response",
+      "description": "Respuesta correlada: version restaurada a vigente, con la autorizacion que lo respalda."
+    },
+    {
+      "event": "instagram.receta.restaurar.failed",
+      "description": "Par de fallo de la restauracion: sin_confirmacion, no_es_antecesora, receta_inexistente, entrada_invalida, sin_catalogo."
+    }
+  ],
+  "notes": [
+    "El topic instagram.receta.resolver (RPC 11) es de A2 y no de este modulo: el catalogo dice cual es la vigente de una clave; emparejar la receta con la operacion es del resolutor (bloque 5).",
+    "El topic instagram.receta.ensayar (RPC 13) es de A4.3 (recetas/ensayo.js), que es reflejo y no persiste: el catalogo no ensaya.",
+    "proponer no aparece en la tabla de RPC del plano (que solo lista publicar, resolver, ensayar y demostracion.cerrar) porque es el camino de nacimiento que A4.2 necesita: sin el, 'una receta nace propuesta y nunca vigente' no se podria ejecutar. No sustituye a publicar ni lo relaja.",
+    "El candado de single-writer es en proceso (cola de promesas). Para dos instancias del cerebro en maquinas distintas haria falta contabilidad-libro/single-writer, que no es de este bloque.",
+    "El almacen es global por diseno (P3): auditarlo con ReglaDePropiedad exige que cada entrada se declare almacen 'catalogo-recetas'. Una entrada de otro almacen es un exceso y no se persiste."
+  ]
+}

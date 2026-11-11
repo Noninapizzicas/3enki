@@ -49,7 +49,7 @@ const VISTOS_MAX = 1000;                     // ids de mensaje recordados (venta
 class ConfirmacionPedidoModule {
   constructor() {
     this.name = 'confirmacion-pedido';
-    this.version = '1.2.0';
+    this.version = '1.2.1';
 
     this.pendientes = new Map();      // pedido_id → { project_slug, jid, nombre, ... timers }
     this.porJid = new Map();          // `${project_slug}:${jid}` → Set<pedido_id>
@@ -282,12 +282,16 @@ class ConfirmacionPedidoModule {
   async onWhatsappMensajeRecibido(event) {
     const data = event?.data || event || {};
     const message_id = (data.message_id || data.id) ? String(data.message_id || data.id) : null;
-
-    // Mismo mensaje dos veces = misma respuesta una sola vez. Se recuerda el id ANTES
-    // de mirar nada más, para que un reintento del puente no vuelva a preguntar.
-    if (!this._primeraVez(message_id, data)) return;
-
     const project_slug = (data.project_slug || data.slug) ? String(data.project_slug || data.slug) : null;
+
+    // Mismo mensaje dos veces = misma respuesta una sola vez, DENTRO del mismo negocio.
+    // La identidad de un mensaje es (proyecto, id), no el id a secas: un puente puede
+    // servir varios negocios y publica el MISMO `id` una vez por cada cuenta vinculada
+    // (slug "tienda" y slug del proyecto). Con una clave global, la copia del negocio
+    // vecino marcaba el id como visto y la copia buena se descartaba como duplicada:
+    // el «sí» del cliente no confirmaba nada y el pedido se retiraba solo por espera.
+    if (!this._primeraVez(project_slug, message_id, data)) return;
+
     const jid = String(data.from || data.de || '').trim().toLowerCase();
     if (!jid) return;
     if (jid.endsWith('@g.us')) return;                        // un grupo no confirma un pedido
@@ -334,10 +338,10 @@ class ConfirmacionPedidoModule {
   // ¿Primera vez que vemos este mensaje? Se recuerda el `message_id` (o, si el evento
   // no lo trae, una huella de lo que identifica el mensaje) con ventana acotada: un
   // proceso de días no puede acumular ids sin fin.
-  _primeraVez(message_id, data) {
+  _primeraVez(project_slug, message_id, data) {
     const clave = message_id
-      ? `id:${message_id}`
-      : `huella:${data.project_slug || data.slug || ''}|${data.from || data.de || ''}|${data.text || data.texto || ''}|${data.timestamp || ''}`;
+      ? `id:${project_slug || ''}|${message_id}`
+      : `huella:${project_slug || data.project_slug || data.slug || ''}|${data.from || data.de || ''}|${data.text || data.texto || ''}|${data.timestamp || ''}`;
     if (this.vistos.has(clave)) return false;
     this.vistos.set(clave, Date.now());
     if (this.vistos.size > VISTOS_MAX) {

@@ -39,9 +39,9 @@
       "description": "Cambió la marca (nombre, lema, colores, logo, teléfono, dirección) → idem."
     },
     {
-      "event": "marketing.copy.generado",
-      "handler": "onCopyMarketing",
-      "description": "carta-marketing regeneró el copy de la carta (incluye sus promos) → idem; la pantalla anuncia lo que el dueño acaba de escribir."
+      "event": "marketing.calendar.actualizado",
+      "handler": "onCalendarioMarketing",
+      "description": "El calendario de marketing cambió (una promo pasó a 'programado' o se movió de quincena) → se reprograma el horneado; la pantalla solo anuncia lo aprobado."
     },
     {
       "event": "servicio.cambiado",

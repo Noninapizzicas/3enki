@@ -14,8 +14,8 @@
  * modificación — si el dato cambia, alguien lo dice por el bus.
  *
  * LEER   tarifas (qué carta está en servicio) → carta → marca → contenido → servicio
- *        → porciones → promos (copy.json de carta-marketing + promos.json), todo
- *        por fs reflejo y con el project_id del evento.
+ *        → porciones → promos (promos.json + la aprobación de la quincena en
+ *        marketing-calendar), todo por fs reflejo y con el project_id del evento.
  * PENSAR construir.js (PURO): cableado + datos → piezas. No toca disco.
  * GUARDAR /www/<destino>/index.html + bloques.json (sellado con huella y versión).
  * EMITIR  pantalla-tv.publicada
@@ -31,7 +31,7 @@ const path = require('path');
 const ModuloHibridoReflejo = require('../_shared/modulo-hibrido-reflejo');
 const ResolutorProyecto = require('../_shared/resolutor-proyecto');
 const { construir, hoyEn } = require('./construir');
-const { desdeDocumentos } = require('./fuentes/promos');
+const { desdeAprobadas } = require('./fuentes/promos');
 const { proyectarCartaPublica, normalizarTelefono } = require('../pizzepos/carta-digital/proyeccion');
 
 const REBOTE_MS = 4000;              // una edición de carta emite N eventos; se hornea una vez
@@ -72,7 +72,7 @@ class PantallaTvReflejo extends ModuloHibridoReflejo {
   }
   onPorcionesCambiadas(e) { this._programar(e, 'porciones'); }
   onPromosCambiadas(e) { this._programar(e, 'promos'); }
-  onCopyMarketing(e) { this._programar(e, 'promos'); }
+  onCalendarioMarketing(e) { this._programar(e, 'promos'); }
   onRepublicada(e) { this._programar(e, 'cartadigital.publicado'); }
 
   // ── la puerta manual (verificar, forzar, recuperar tras un reinicio) ────
@@ -134,19 +134,22 @@ class PantallaTvReflejo extends ModuloHibridoReflejo {
       return this._errorResponse(409, 'CARTA_NO_EN_SERVICIO', `la carta ${carta_id} está en "${carta.meta.estado}": no se publica`, { project_id, carta_id, estado: carta.meta.estado });
     }
 
-    const [marca, contenidoRaw, servicio, porciones, promos, copyMarketing] = await Promise.all([
+    const [marca, contenidoRaw, servicio, porciones, promos, calendarioMarketing] = await Promise.all([
       this._leer(project_id, 'pizzepos/marca.json'),
       this._leer(project_id, 'pizzepos/contenido.json'),
       this._leer(project_id, 'pizzepos/servicio/config.json'),
       this._leer(project_id, 'pizzepos/porciones.json'),
       this._leer(project_id, 'pizzepos/promos.json'),
-      this._leer(project_id, 'pizzepos/carta-marketing/copy.json')
+      this._leer(project_id, 'prisma/marketing/marketing-calendar.json')
     ]);
 
-    // Las promos viven en carta-marketing (copy.json es lo que el dueño redactó;
-    // promos.json es la ventana con fechas). El bloque funde las dos: la misma
-    // oferta con ventana manda sobre su texto suelto. Sin ninguna → null.
-    const promosFundidas = desdeDocumentos(copyMarketing, promos);
+    // Las promos no se leen de un texto suelto: entran por la QUINCENA APROBADA.
+    // La oferta (promos.json) y la aprobación (marketing-calendar, entrada
+    // 'programado'/'ejecutado' del canal de la pantalla, con fecha en la quincena
+    // vigente) tienen que coincidir. Sin aprobación no se anuncia nada.
+    const hoy = hoyEn(servicio && servicio.zona_horaria);
+    const canalPromos = (cableado.promos && cableado.promos.canal_id) || null;
+    const promosAprobadas = desdeAprobadas(calendarioMarketing, promos, hoy, canalPromos);
 
     const contenido = (contenidoRaw && contenidoRaw.productos) || contenidoRaw || {};
     const telefono = (marca && marca.negocio && marca.negocio.local && marca.negocio.local.telefono) || null;
@@ -157,11 +160,11 @@ class PantallaTvReflejo extends ModuloHibridoReflejo {
     let resultado;
     try {
       resultado = construir({
-        cableado, proyectar: proyectarCartaPublica, hoy: hoyEn(servicio && servicio.zona_horaria),
+        cableado, proyectar: proyectarCartaPublica, hoy,
         datos: {
           project_id, carta_id, carta, tarifas, marca,
           contenido, servicio: servicio || {},
-          porciones: porciones || null, promos: promosFundidas,
+          porciones: porciones || null, promos: promosAprobadas,
           huellas,
           whatsapp_url: telefono ? `https://wa.me/${normalizarTelefono(telefono)}` : null
         }

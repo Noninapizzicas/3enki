@@ -6,29 +6,96 @@
   "url_publica": "/a/the-pirate/escaparate/",
   "logo_url": "/a/the-pirate/escaparate2/sello.png",
   "qr_url": null,
-  "lienzo": { "ancho": 1920, "alto": 1080 },
+  "lienzo": {
+    "ancho": 1920,
+    "alto": 1080
+  },
   "zonas": {
-    "A": { "nombre": "cabecera", "alto": 96 },
-    "F": { "nombre": "cinta", "alto": 34 },
-    "B": { "nombre": "columna", "ancho": 452 },
-    "C": { "nombre": "carrusel", "ancho": "1fr" },
-    "D": { "nombre": "columna", "ancho": 342 },
-    "E": { "nombre": "franja", "alto": 104, "colapsa_sin_datos": true }
+    "A": {
+      "nombre": "cabecera",
+      "alto": 96
+    },
+    "F": {
+      "nombre": "cinta",
+      "alto": 34
+    },
+    "B": {
+      "nombre": "columna",
+      "ancho": 452
+    },
+    "C": {
+      "nombre": "carrusel",
+      "ancho": "1fr"
+    },
+    "D": {
+      "nombre": "columna",
+      "ancho": 342
+    },
+    "E": {
+      "nombre": "franja",
+      "alto": 104,
+      "colapsa_sin_datos": true
+    }
   },
   "bloques": [
-    { "id": "marca",             "zona": "A", "fuente": "marca",     "activo": true },
-    { "id": "servicio.estado",   "zona": "A", "fuente": "servicio",  "activo": true },
-    { "id": "servicio.cinta",    "zona": "F", "fuente": "servicio",  "activo": true },
-    { "id": "carta.dia",         "zona": "B", "fuente": "carta",     "activo": true },
-    { "id": "carta.vitrina",     "zona": "C", "fuente": "carta",     "activo": true },
-    { "id": "promos",            "zona": "C", "fuente": "promos",    "activo": true },
-    { "id": "servicio.contacto", "zona": "D", "fuente": "servicio",  "activo": true },
-    { "id": "porciones",         "zona": "E", "fuente": "porciones", "activo": true }
+    {
+      "id": "marca",
+      "zona": "A",
+      "fuente": "marca",
+      "activo": true
+    },
+    {
+      "id": "servicio.estado",
+      "zona": "A",
+      "fuente": "servicio",
+      "activo": true
+    },
+    {
+      "id": "servicio.cinta",
+      "zona": "F",
+      "fuente": "servicio",
+      "activo": true
+    },
+    {
+      "id": "carta.dia",
+      "zona": "B",
+      "fuente": "carta",
+      "activo": true
+    },
+    {
+      "id": "carta.vitrina",
+      "zona": "C",
+      "fuente": "carta",
+      "activo": true
+    },
+    {
+      "id": "promos",
+      "zona": "C",
+      "fuente": "promos",
+      "activo": true
+    },
+    {
+      "id": "servicio.contacto",
+      "zona": "D",
+      "fuente": "servicio",
+      "activo": true
+    },
+    {
+      "id": "porciones",
+      "zona": "E",
+      "fuente": "porciones",
+      "activo": true
+    }
   ],
   "curacion": {
-    "excluir_categorias": ["bebidas", "para_picar"],
+    "excluir_categorias": [
+      "bebidas",
+      "para_picar"
+    ],
     "precio_min": 10,
-    "dia": { "precio_min": 10 },
+    "dia": {
+      "precio_min": 10
+    },
     "vitrina": {
       "max": 12,
       "precio_alto": 12,
@@ -36,5 +103,9 @@
       "peso_precio_alto": 2,
       "peso_base": 1
     }
+  },
+  "promos": {
+    "canal_id": "escaparate",
+    "_doc": "Canal por el que se aprueban las promos que salen en esta pantalla. Una entrada del calendario de marketing (estado programado/ejecutado, este canal_id, fecha en la quincena vigente) es la que autoriza que una oferta de promos.json se anuncie aquí."
   }
 }

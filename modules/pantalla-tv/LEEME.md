@@ -71,9 +71,13 @@ campo equivocado deja el enganche mudo sin dar ningún error.
 - **Carta en borrador**: no se publica nada. La pantalla se queda con la última buena.
   Precios viejos, nunca; precios de un borrador, jamás.
 - **Proyecto sin cableado**: no hay pantalla. Es opt-in, no un efecto colateral.
-- **Bloque sin fuente** (`porciones`, `promos` hoy): cero piezas y la franja se colapsa.
-  Ni un hueco ni un precio de relleno — un «— €» en el escaparate es peor que no enseñar
-  la franja.
+- **Bloque sin fuente** (`porciones`, y `promos` mientras no haya quincena aprobada):
+  cero piezas y la franja se colapsa. Ni un hueco ni un precio de relleno — un «— €»
+  en el escaparate es peor que no enseñar la franja.
+- **Promo sin aprobación**: no se anuncia. La oferta (`pizzepos/promos.json`) solo entra
+  si en el calendario de marketing hay una entrada `programado`/`ejecutado`, del canal
+  declarado en `cableado.promos.canal_id` y con fecha dentro de la quincena vigente
+  (1-15 o 16-fin). Un borrador es una idea, y una idea no se pone en la calle.
 - **Dato de ayer** (porciones): no se pinta.
 - **La misma foto no se repite**: si el fichero es idéntico, la segunda pasa a ficha. Si
   son remotas, dos URLs distintas son dos fotos (el bug de «solo hay una foto» con cuatro

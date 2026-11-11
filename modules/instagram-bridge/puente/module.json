@@ -1,0 +1,117 @@
+{
+  "_doc": "Manifest de instagram-bridge/puente — LA BOCA (bloque 13) y EL FALLO CONTADO (bloque 14). Cinco piezas que comparten oficio (hablar con el dueno) y por eso viven en el mismo modulo: C1 ClasificadorDePeticion (lo que pide → una de cinco capacidades; BAJO EL UMBRAL devuelve DOS CANDIDATAS y pregunta, no elige), C2 CompletadorDePeticion (completa lo que falta preguntando; una respuesta que NO ENCAJA se repregunta UNA VEZ y despues se rinde con lo que tenga, sin bucle), C4 NarradorDeResultado (cuenta el resultado en el idioma del dueno; NUNCA dice 'hecho' sin veredicto 'ocurrio' Y evidencia), R2 TraductorDeFallo (al dueno NO se le nombran pantallas, ni botones, ni terminos tecnicos: se le dice QUE HACE FALTA) y R4 AvisoAnticipado (avisa ANTES de que pregunten; UN aviso por causa y ventana). Las cinco funcionan SIN LLM: C1 admite un juicio opcional que solo puede elegir entre las cinco capacidades y cuyo fallo no rompe nada; el resto es determinista. Ninguna tiene reloj (la ventana del aviso y el momento de la evidencia los trae quien llama) ni red. C4 viste sus frases con el modulo REAL contabilidad-analitica/puente-lenguaje-dueno (mitad refleja Q2, op a_cifra) usando las plantillas DECLARADAS del puente: no hay una segunda traduccion aqui. R4 produce por el modulo REAL motor-avisos (motor-avisos.producir.request), que sube el aviso a aviso-al-negocio y de ahi a adaptador-avisos: no se llama a adaptador-avisos directo porque su tabla de tipos es cerrada y de otro proyecto (un 400 disfrazado de entrega). Unica memoria del modulo: las claves causa::ventana de la anti-repeticion de avisos, en RAM, exportables con avisados() y rehidratables con sembrar_avisados().",
+  "name": "puente",
+  "version": "0.1.0",
+  "description": "La boca y el fallo contado del puente de Instagram: clasifica la peticion del dueno (dos candidatas bajo el umbral), completa lo que falta (una sola repregunta), narra el resultado (nunca 'hecho' sin veredicto y evidencia), traduce el fallo sin nombrar pantallas y avisa antes de que pregunten (un aviso por causa y ventana).",
+  "language": "es",
+  "main": "index.js",
+  "dependencies": [],
+  "config": {
+    "plataformas": ["instagram"],
+    "piezas": {
+      "C1": { "nombre": "ClasificadorDePeticion", "forma": "micro-agente", "fichero": "puente/clasificador.js" },
+      "C2": { "nombre": "CompletadorDePeticion", "forma": "micro-agente", "fichero": "puente/completador.js" },
+      "C4": { "nombre": "NarradorDeResultado", "forma": "micro-agente", "fichero": "puente/narrador.js" },
+      "R2": { "nombre": "TraductorDeFallo", "forma": "micro-agente", "fichero": "puente/traductor.js" },
+      "R4": { "nombre": "AvisoAnticipado", "forma": "puente", "fichero": "puente/avisos.js" }
+    },
+    "capacidades": ["publicar", "responder", "mirar", "demostrar", "reparar"],
+    "clasificacion": {
+      "umbral": 2,
+      "margen": 1,
+      "candidatas_bajo_el_umbral": 2,
+      "regla": "bajo el umbral se devuelven dos candidatas y una pregunta; no se elige",
+      "regla_del_sintoma": "una averia declarada ('se ha roto', 'dejo de', 'ya no') manda sobre la capacidad que se rompio: se clasifica como reparar"
+    },
+    "completado": {
+      "repreguntas_por_campo": 1,
+      "regla": "una respuesta que no encaja se repregunta una vez; despues se rinde con lo que tenga",
+      "no_respuestas": ["no se", "no lo se", "da igual", "nada", "ninguno", "lo que sea", "tu mismo"]
+    },
+    "narracion": {
+      "veredictos": ["ocurrio", "no_ocurrio", "sin_veredicto", "fallo"],
+      "regla": "nunca dice 'hecho' sin veredicto 'ocurrio' Y evidencia_id",
+      "mapeo": "contabilidad-analitica/puente-lenguaje-dueno · a_cifra (mitad refleja real, plantillas declaradas)",
+      "seguro": "si una plantilla dijera 'hecho' sin prueba, se sustituye por la honesta (comprobado en cada narracion)"
+    },
+    "fallo": {
+      "regla": "al dueno no se le nombran pantallas, ni botones, ni terminos tecnicos; se le dice que hace falta",
+      "no_repite_el_mensaje_tecnico": true,
+      "seguro": "revisar() comprueba cada frase contra las listas de pantallas, botones y tecnicismos antes de devolverla"
+    },
+    "avisos": {
+      "regla": "un aviso por causa y ventana",
+      "clave": "causa::ventana (normalizadas)",
+      "ventana": "obligatoria y declarada por quien llama: el modulo no tiene reloj",
+      "productor": "motor-avisos.producir.request (real) → aviso-al-negocio.entregar.request → adaptador-avisos",
+      "memoria": "claves avisadas en RAM; avisados() para exportarlas, sembrar_avisados() para rehidratarlas",
+      "sin_productor": "sin bus o sin respuesta NO se marca como avisado: no se puede decir 'ya avise' de un aviso que no salio"
+    },
+    "invariantes": [
+      "bajo_el_umbral_dos_candidatas_y_pregunta",
+      "el_clasificador_no_elige_cuando_duda",
+      "una_respuesta_que_no_encaja_se_repregunta_una_vez_y_no_se_insiste",
+      "nunca_se_dice_hecho_sin_veredicto_ocurrio_y_evidencia",
+      "al_dueno_no_se_le_nombran_pantallas_ni_botones_ni_tecnicos",
+      "el_traductor_nombra_lo_que_hace_falta",
+      "un_aviso_por_causa_y_ventana",
+      "sin_llm_las_cinco_piezas_funcionan",
+      "ninguna_pieza_tiene_reloj_ni_red",
+      "un_aviso_que_no_salio_no_se_marca_como_dado"
+    ]
+  },
+  "subscribes": [
+    {
+      "event": "instagram.pedir.request",
+      "handler": "onPedirRequest",
+      "description": "C1 (+C2) · la boca. {peticion, datos?, proyecto?, umbral?, margen?} → si la capacidad esta clara: {decidida:true, capacidad, completo, pregunta, estado}; si no: {decidida:false, candidatas:[dos], pregunta} y NO elige. Sin peticion → instagram.pedir.failed."
+    },
+    {
+      "event": "instagram.completar.request",
+      "handler": "onCompletarRequest",
+      "description": "C2 · recibe la respuesta a la pregunta en curso. {estado, respuesta} → {encaja, repreguntar, se_rinde, completa, pregunta?, con_lo_que_tengo?}. Un 'no encaja' no es un error: se devuelve como decision."
+    },
+    {
+      "event": "instagram.narrar.request",
+      "handler": "onNarrarRequest",
+      "description": "C4 · cuenta el resultado en el idioma del dueno. {resultado:{veredicto, que, evidencia_id?, fallo?}, proyecto?} → {dice_hecho, frase, veredicto}. Nunca dice 'hecho' sin veredicto 'ocurrio' Y evidencia_id."
+    },
+    {
+      "event": "instagram.fallo.traducir.request",
+      "handler": "onFalloTraducirRequest",
+      "description": "R2 · traduce el fallo al dueno. {fallo:{codigo, detalle?, pantalla?, ancla?}} → {frase, hace_falta, codigo}. El detalle tecnico NO se repite: se sustituye por lo que hace falta."
+    },
+    {
+      "event": "instagram.aviso.avisar.request",
+      "handler": "onAvisoAvisarRequest",
+      "description": "R4 · avisa antes de que pregunten. {causa, ventana, project_id, detalle?, titulo?, severidad?} → {avisado, clave, aviso_id?}. UN aviso por causa y ventana; la segunda llamada del mismo par devuelve ya_avisado sin producir nada."
+    }
+  ],
+  "publishes": [
+    { "event": "instagram.pedir.response", "description": "Respuesta correlada de la boca: capacidad decidida con su pregunta, o dos candidatas y la pregunta." },
+    { "event": "instagram.pedir.failed", "description": "Par de fallo: sin_peticion (no llego nada que clasificar)." },
+    { "event": "instagram.completar.response", "description": "Respuesta correlada: la respuesta encajo (y la siguiente pregunta) o no encajo (repregunta una vez, o se rinde con lo que tenga)." },
+    { "event": "instagram.completar.failed", "description": "Par de fallo: sin_estado (no hay peticion abierta que completar)." },
+    { "event": "instagram.narrar.response", "description": "Respuesta correlada: la frase del dueno, su veredicto y si se puede decir 'hecho'." },
+    { "event": "instagram.narrar.failed", "description": "Par de fallo: sin_resultado (no hay nada que contar)." },
+    { "event": "instagram.fallo.traducir.response", "description": "Respuesta correlada: que ha pasado y que hace falta, sin pantallas, botones ni tecnicos." },
+    { "event": "instagram.fallo.traducir.failed", "description": "Par de fallo: entrada_invalida (fallo ilegible)." },
+    { "event": "instagram.aviso.avisar.response", "description": "Respuesta correlada: avisado (con aviso_id del productor) o ya_avisado / sin_ventana / productor_no_contesto." },
+    { "event": "instagram.aviso.avisar.failed", "description": "Par de fallo: sin_project_id, sin_causa, sin_ventana, sin_productor." }
+  ],
+  "tools": [
+    { "name": "instagram.pedir", "description": "Clasifica (PREGUNTA) lo que pide el dueno en una de las cinco capacidades; bajo el umbral devuelve dos candidatas y pregunta, no elige." },
+    { "name": "instagram.completar", "description": "Completa (PREGUNTA) lo que falta: recibe una respuesta y repregunta una sola vez si no encaja." },
+    { "name": "instagram.narrar", "description": "Narra (PREGUNTA) un resultado en el idioma del dueno; nunca dice 'hecho' sin veredicto y evidencia." },
+    { "name": "instagram.fallo.traducir", "description": "Traduce (PREGUNTA) un fallo al idioma del dueno, sin pantallas, botones ni terminos tecnicos." },
+    { "name": "instagram.aviso.avisar", "description": "Avisa (ORDEN) antes de que pregunten: un aviso por causa y ventana, producido por motor-avisos." }
+  ],
+  "notes": [
+    "C1, C2, C4 y R2 son micro-agentes sin LLM obligatorio; R4 es puente (compone y habla por el bus). Ninguna pieza tiene reloj propio ni red.",
+    "C4 no inventa lengua: las frases las renderiza contabilidad-analitica/puente-lenguaje-dueno (a_cifra) con las plantillas declaradas del puente. Si el modulo real no tiene plantilla, devuelve frase null y aqui se declara el hueco en vez de inventar una frase.",
+    "R4 no llama a adaptador-avisos directamente: su tabla de tipos es cerrada y de otro proyecto (terminado, cambio_filamento, cola_vacia...). El camino real es motor-avisos, que sube aviso-al-negocio.entregar.request y de ahi al adaptador.",
+    "La anti-repeticion de los avisos vive en RAM a proposito: persistirla aqui crearia un segundo dueno de la misma verdad. Quien la quiera duradera guarda avisados() y la siembra al arrancar con sembrar_avisados().",
+    "El 'hecho' de C4 exige evidencia ademas del veredicto: el techo de la pieza es la prueba (bloque 6), no la palabra del veredicto.",
+    "Bajo el umbral no se abre estado de operacion: sin capacidad no hay hueco que completar. La pregunta vuelve al dueno y la peticion no se ejecuta a medias."
+  ]
+}

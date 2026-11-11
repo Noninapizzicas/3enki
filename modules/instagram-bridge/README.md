@@ -5,9 +5,9 @@ Puente de operacion de cuentas de Instagram para los proyectos de Enki.
 Este directorio **no es un modulo del bus**: es el arbol de la vertical. El
 loader (`core/modules/loader.js`) trata una carpeta sin `module.json` como
 agrupacion y busca manifiestos en sus subdirectorios, asi que aqui conviven
-librerias puras (`core/`) y los modulos con manifest (`cuentas/`, `recetas/`;
-`cuentas/`, `recetas/`, `ritmo/`, `puente/`; mas adelante `sesion/`, `operacion/`,
-`autonomia/`). Ver
+librerias puras (`core/`) y los modulos con manifest (`padron-cuentas`,
+`catalogo-recetas`, `ritmo`, `sesion-cuentas`, `operacion`, `autonomia` y, desde el
+bloque 13, tambien `puente`). Ver
 `plan-construccion.md` seccion 8.
 
 ## Bloque 1 · El suelo innegociable
@@ -373,6 +373,42 @@ para un paso roto: solo salen de nodos **nombrados** del hecho de AHORA (con su
 `nodo_id`, la prueba de que no se inventaron), no propone el ancla perdida ni las que
 otros pasos usan, y con **mirada parcial no propone nada** — pide otra mirada.
 
+## Bloque 13 · La boca: operar por conversacion
+
+Cinco piezas para hablar con el dueno, y el primer bloque que **no habla de la
+cuenta sino de la persona**. Dos de ida (entender lo que pide y completar lo que
+falta), una de vuelta (contar lo que paso) — y una verdad comoda de decir y dificil
+de cumplir: **quien adivina la intencion acaba publicando lo que no era**.
+
+| Pieza | Fichero | Que hace ejecutable |
+|---|---|---|
+| C1 `ClasificadorDePeticion` | `puente/clasificador.js` | **BAJO EL UMBRAL SE DEVUELVEN DOS CANDIDATAS Y SE PREGUNTA: NO SE ELIGE.** La tabla cerrada de lexico puntua cinco capacidades (`publicar`, `responder`, `mirar`, `demostrar`, `reparar`) con raices de palabra (peso 2 los verbos, 1 los sustantivos). Decide solo si la primera pasa el umbral (2) **y** le saca margen (1) a la segunda; si no, devuelve `capacidad: null`, **dos** candidatas con sus puntos y una pregunta que las nombra. Dos y no una (una es elegir disfrazado de duda) ni cinco (eso es devolverle al dueno el trabajo que venia a delegar). **Regla del sintoma**: «se ha roto», «dejo de», «ya no» son una averia declarada, no una tarea, y mandan sobre la capacidad que se rompio — publicar de mas no se deshace, arreglar de mas si. El **juicio (LLM) es opcional** y solo puede ratificar o corregir **dentro de las cinco**; si lanza, devuelve una promesa, una capacidad que no existe o basura, manda la tabla. Nunca lanza. |
+| C2 `CompletadorDePeticion` | `puente/completador.js` | **UNA RESPUESTA QUE NO ENCAJA SE REPREGUNTA UNA VEZ, y despues se rinde con lo que tenga.** Un campo por pregunta, en el orden declarado, cada uno con su forma (`texto`, `cuenta`, `hilo`, `capacidad`). «No encaja» es: vacio, `no se`, `da igual`, `nada`, un signo suelto, o un dato que no tiene la forma del campo (una cuenta con espacios, una capacidad que no existe). **Lo que no encaja NO se guarda**: un «no se» que entra como texto es un «no se» que se publica. La segunda vez no hay repregunta: `se_rinde`, `con_lo_que_tengo` con lo que falta **nombrado** y una nota. Insistir por tercera vez es la unica salida que no existe. El estado es un objeto plano que entra y **no se muta**: se puede guardar entre dos mensajes. |
+| C4 `NarradorDeResultado` | `puente/narrador.js` | **NUNCA DICE «hecho» SIN VEREDICTO `ocurrio` — y ni siquiera entonces si falta la evidencia.** Cuatro veredictos (`ocurrio`, `no_ocurrio`, `sin_veredicto`, `fallo`) y un techo: el «hecho» exige `evidencia_id` (bloque 6: sin prueba no hay hecho). `ocurrio` sin prueba se cuenta como «ha pasado, pero no lo puedo sostener». El **mapeo es el modulo real**: las frases las viste `contabilidad-analitica/puente-lenguaje-dueno` (`a_cifra`) con las plantillas declaradas del puente, asi que no hay una segunda traduccion que pueda mentir distinto. **Seguro ejecutable**: si una plantilla declarada dijera «hecho» sin prueba, se sustituye por la honesta y se dice. Un `fallo` se cuenta con R2, no con una plantilla de resultado. |
+| R2 `TraductorDeFallo` | `puente/traductor.js` | **Al dueno NO se le nombran pantallas, ni botones, ni terminos tecnicos: se le dice QUE HACE FALTA.** El mensaje tecnico **no se limpia, no se cita y no se resume**: se sustituye (un tecnico entre comillas sigue siendo un tecnico). Tabla cerrada de 18 codigos, cada uno con su frase y su `hace_falta` («tu permiso para seguir», «que la cuenta vuelva a entrar», «que una persona lo mire conmigo en la cuenta»). Un codigo que no esta no se inventa: frase honesta y «que una persona lo mire». Una prosa de error **no se toma por un codigo** (un codigo es una etiqueta, no una frase). `revisar()` es el seguro —pantallas, botones, tecnicismos— y la propia pieza lo usa antes de devolver nada. |
+| R4 `AvisoAnticipado` | `puente/avisos.js` | **UN AVISO POR CAUSA Y VENTANA.** Avisa antes de que pregunten (sesion, rotura, publicacion que no salio, ritmo, cobertura) y no repite: la clave `causa::ventana` se marca cuando el aviso **salio**. La `ventana` es **obligatoria** y la declara quien llama (aqui no hay reloj): sin ella no hay anti-repeticion, y las dos alternativas —repetirse siempre o no volver a darse nunca— son peores que no avisar. Cableado al productor **real** `motor-avisos.producir.request`, que sube el aviso a `aviso-al-negocio` (y detras, `adaptador-avisos`): no se llama al adaptador directo porque su tabla de tipos es cerrada y es de otro proyecto. Un aviso que **no salio** (sin bus, productor mudo, productor que rechaza) **no se marca como dado**: poder reintentar es la diferencia entre un aviso perdido y una mentira. La memoria es RAM, exportable (`avisados()`) y rehidratable (`sembrar()`). |
+
+C1, C2, C4 y R2 son **micro-agentes**: sin LLM funcionan; C1 admite juicio
+opcional y su fallo no rompe nada. R4 es **puente** (compone y habla por el bus).
+Ninguna de las cinco tiene reloj ni red, y las cinco comparten modulo (`puente/`)
+porque comparten oficio. El borde vive en `puente/index.js` y **no piensa**: solo
+correlaciona `request` → `response` | `failed`.
+
+## Bloque 14 · El fallo contado: lo que el dueno lee cuando algo no sale
+
+Dos piezas para el peor momento — y el que mas se nota. R2 pone el fallo en su
+idioma y dice que hace falta; R4 evita que se entere por su cuenta. La regla que
+las une: **al dueno no se le da un parte tecnico ni se le repite lo que ya sabe;
+se le dice que pasa y que se necesita.**
+
+R2 ya esta descrita arriba porque comparte modulo con la boca: el fallo contado
+es parte de hablar con el dueno, no un anexo. Lo que añade R4 es el tiempo: un
+aviso **antes** de la pregunta, uno solo por causa y ventana, producido por el
+`motor-avisos` real y entregado por el camino real (`aviso-al-negocio` →
+`adaptador-avisos`). Las dos piezas son la misma doctrina vista desde dos lados:
+no inventar (R2 no repite el tecnico, R4 no marca lo que no salio) y no cansar
+(R2 no da codigos, R4 no repite avisos).
+
 ## Tests
 
 Un fichero por pieza, con el nombre que fija la espina `enki-plan` del plan
@@ -423,6 +459,11 @@ node modules/instagram-bridge/tests/rotura.test.js
 node modules/instagram-bridge/tests/reparar.test.js
 node modules/instagram-bridge/tests/cambios.test.js
 node modules/instagram-bridge/tests/desglose.test.js
+node modules/instagram-bridge/tests/clasificador.test.js
+node modules/instagram-bridge/tests/completador.test.js
+node modules/instagram-bridge/tests/narrador.test.js
+node modules/instagram-bridge/tests/traductor.test.js
+node modules/instagram-bridge/tests/avisos.test.js
 ```
 
 ```bash

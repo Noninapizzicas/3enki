@@ -512,6 +512,123 @@ El test de integracion **solo se suscribe y comprueba CONNACK + SUBACK +
 PINGRESP**: no publica nada en el bus. Un test que publica en produccion para
 probar que el canal funciona deja basura que alguien lee como una orden.
 
+## Bloque 17 · proyecto Android
+
+El crate sabia abrir el canal y los seis `.kt` sabian mirar, tocar, compartir y
+decidir; lo que faltaba era **el envoltorio**: el proyecto Gradle, el manifiesto,
+los dos servicios y la pantalla. Sin esto no se puede abrir en Android Studio ni
+sacar un APK. Este bloque **no cambia ni una linea del crate ni del cerebro**:
+solo añade `android/`.
+
+| Pieza | Fichero | Que hace ejecutable |
+|---|---|---|
+| El build | `android/settings.gradle.kts`, `android/build.gradle.kts`, `android/gradle.properties` | AGP 8.7.3 (no 8.5.x: **8.5.1+ es la primera que comprueba la alineacion de 16 KiB** al empaquetar; con una anterior el `.so` de 4 KiB entra sin aviso y el fallo se ve en el movil), Kotlin 2.0.21, `androidx`, `nonTransitiveRClass`. Un solo modulo (`:app`). El crate **no** es un subproyecto Gradle. |
+| El modulo | `android/app/build.gradle.kts` | `namespace`/`applicationId` = `online.enki.instagram`, `compileSdk 35`, `minSdk 26`, `targetSdk 35`, Java/Kotlin 17, `jniLibs.useLegacyPackaging = false`, release sin minificar y **firmado con debug** para que se pueda instalar. Y la tarea `compilarCrate`: una `Exec` **por ABI** que llama `cargo ndk -t <abi> -o src/main/jniLibs build --release` con un `CARGO_TARGET_DIR` propio (`crate/target/android-<abi>`) y **borrando `RUSTFLAGS` y `CARGO_ENCODED_RUSTFLAGS` del entorno** — si el portatil los tiene exportados, sustituyen a `crate/.cargo/config.toml` en silencio y se pierden el build-id y el `max-page-size=16384`. |
+| El manifiesto | `android/app/src/main/AndroidManifest.xml` | `INTERNET`, `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_SPECIAL_USE`, `POST_NOTIFICATIONS`, `RECEIVE_BOOT_COMPLETED`; el `<service>` de accesibilidad con `BIND_ACCESSIBILITY_SERVICE` + `@xml/accesibilidad`; el `<service>` del primer plano con `foregroundServiceType="specialUse"` y su subtipo; `MainActivity` como launcher; `usesCleartextTraffic="false"`; `<queries>` de Instagram y el `FileProvider` que exige `Compartir.kt`. |
+| El servicio de accesibilidad | `res/xml/accesibilidad.xml` | `typeWindowStateChanged|typeWindowContentChanged`, `feedbackGeneric`, `notificationTimeout=100`, `packageNames=com.instagram.android`. **Mas dos flags que sin ellos el puente esta ciego**: `flagReportViewIds` (sin el, `viewIdResourceName` es `null` y `Pantalla.kt` no reconoce la pantalla de entrada) y `canPerformGestures` (sin el, `dispatchGesture` no existe y todo gesto da `gesto_sin_respuesta`). |
+| El puente | `java/.../PuenteNativo.kt` | `System.loadLibrary("enki_instagram_bridge")` y los tres simbolos `external`: `iniciar(url, llave): Boolean`, `detener()`, `estado(): String` → `Java_online_enki_instagram_PuenteNativo_{iniciar,detener,estado}`. Cada llamada va dentro de un envoltorio `*Seguro` que atrapa `Throwable` (`UnsatisfiedLinkError` **no es una `Exception`**): sin esto, un simbolo que falta mata el proceso en la primera llamada y sin log util. |
+| El primer plano | `java/.../ServicioEnki.kt` | `LifecycleService` en primer plano con notificacion persistente y accion *Parar*. `iniciar()` hace red (TLS + CONNECT + SUBACK): se llama en un hilo aparte. Refresca el estado cada 3 s. `START_NOT_STICKY` a proposito: un reintento del sistema llega sin llave. |
+| La pantalla | `java/.../MainActivity.kt` + `res/layout/actividad_principal.xml` | Estado del canal, estado del servicio de accesibilidad, URL y llave, y tres botones (conectar / desconectar / ajustes de accesibilidad). **La llave no se guarda**: se pasa como extra del `Intent`, el servicio la tiene en memoria y el campo se vacia. La URL si se recuerda (no es un secreto). |
+| Recursos | `res/values/strings.xml`, `res/values/themes.xml`, `res/drawable/ic_notificacion.xml`, `res/xml/rutas_ficheros.xml` | Tema Material del sistema (`android:Theme.Material.Light.NoActionBar`: no se añade Material Components por una pantalla de tres botones), icono vectorial blanco de 24 dp, y la unica ruta que el `FileProvider` puede entregar (`cache/compartir/`). |
+| El wrapper | `android/gradle/wrapper/gradle-wrapper.properties` | Gradle 8.9. El `.jar` del wrapper no viaja en el repo (es un binario): lo genera Android Studio al sincronizar, o `gradle wrapper --gradle-version 8.9`. |
+
+### El borde JNI: lo que este bloque deja declarado y lo que falta
+
+`PuenteNativo` declara los tres simbolos con la firma exacta que tiene que exportar
+Rust:
+
+```rust
+#[no_mangle]
+pub extern "system" fn Java_online_enki_instagram_PuenteNativo_iniciar(
+    env: JNIEnv, _esto: JObject, url: JString, llave: JString) -> jboolean
+#[no_mangle]
+pub extern "system" fn Java_online_enki_instagram_PuenteNativo_detener(env: JNIEnv, _esto: JObject)
+#[no_mangle]
+pub extern "system" fn Java_online_enki_instagram_PuenteNativo_estado(
+    env: JNIEnv, _esto: JObject) -> jstring
+```
+
+**El crate todavia no los exporta** (el borde Rust es el bloque siguiente). Por eso
+la app **no finge**: si el simbolo no esta, el estado dice `sin_borde_jni` con su
+motivo en la pantalla y en la notificacion, en vez de caerse o de enseñar
+"conectado". Un `cargo ndk ... build --release` ya produce
+`libenki_instagram_bridge.so` con el codigo de percepcion y canal dentro; lo unico
+que falta es la puerta.
+
+### Compilar el APK en el portatil (Windows)
+
+Lo que hay que instalar, en este orden:
+
+1. **JDK 17** (Temurin/Adoptium o el que trae Android Studio). AGP 8.7 exige 17, no
+   11 y no 21.
+2. **Android Studio** (Ladybug o posterior) con, en *SDK Manager*:
+   - **Android SDK Platform 35** (compileSdk/targetSdk)
+   - **Android SDK Build-Tools** (la que proponga Studio)
+   - **NDK (Side by side) r30** — el crate enlaza a 16 KiB y r30 es el que se probo
+   - **CMake** no hace falta: no hay codigo C/C++ que compilar.
+3. **Rust** por `rustup` (`https://rustup.rs`), y las dos dianas de Android:
+   ```powershell
+   rustup target add aarch64-linux-android x86_64-linux-android
+   ```
+4. **cargo-ndk**:
+   ```powershell
+   cargo install cargo-ndk --locked
+   cargo ndk --version        # tiene que contestar una version, no "no such command"
+   ```
+5. La variable de entorno del NDK, apuntando a la carpeta `...\ndk\30.x.x`:
+   ```powershell
+   setx ANDROID_NDK_HOME "%LOCALAPPDATA%\Android\Sdk\ndk\30.0.0000000"
+   ```
+   (Y abrir una consola nueva. `ANDROID_HOME` tambien vale si esta puesto: cargo-ndk
+   busca ahi.)
+
+Despues:
+
+```powershell
+# 1 · Abrir la carpeta android\ en Android Studio y dejar que sincronice
+#     (genera gradle-wrapper.jar y el SDK local en local.properties).
+
+# 2 · Desde la raiz del repo, o desde el terminal de Studio:
+cd modules\instagram-bridge\android
+.\gradlew.bat :app:assembleDebug
+# APK -> app\build\outputs\apk\debug\app-debug.apk   (con las dos ABI)
+
+# 3 · Solo el crate, sin Gradle (util para ver el error de Rust limpio):
+cd ..\crate
+cargo ndk -t arm64-v8a -o ..\android\app\src\main\jniLibs build --release
+
+# 4 · Instalar en el movil por USB (depuracion activada):
+adb install -r app\build\outputs\apk\debug\app-debug.apk
+```
+
+Si no hay Rust en el portatil y solo se quiere revisar la capa Kotlin:
+`.\gradlew.bat :app:assembleDebug -Penki.sin-rust=true` (el APK sale **sin** `.so`
+y la pantalla lo dice: `sin_biblioteca`).
+
+### Despues de instalar, en el movil
+
+1. Abrir **Puente Enki**, teclear `wss://…/mqtt?k=<llave>` y la llave, *Conectar*.
+   La notificacion persistente pasa a `arrancando` y luego a `conectado` (o al
+   motivo del fallo).
+2. *Abrir ajustes de accesibilidad* → **Puente Enki · Instagram** → activar. Es el
+   unico permiso que se da a mano, y es el que permite leer el arbol y tocar.
+3. Aceptar el permiso de notificaciones (Android 13+). Sin el, el servicio en
+   primer plano sigue vivo pero su notificacion no se ve.
+
+### Verificacion del bloque (sin SDK, que es lo que se puede hacer aqui)
+
+```bash
+cd modules/instagram-bridge/android
+find . -type f -not -path './.git/*' | sort | xargs wc -c   # todos existen, ninguno vacio
+grep -rn 'package online.enki.instagram' app/src/main/java  # los 9 .kt, el mismo paquete
+grep -o '@xml/[a-z_]*' app/src/main/AndroidManifest.xml     # cada recurso existe en res/
+grep -o '@drawable/[a-z_]*' app/src/main/AndroidManifest.xml
+```
+
+Lo que **no** se puede verificar aqui y hay que ver en el portatil: que Gradle
+resuelva los plugins, que `cargo ndk` encuentre el NDK, y que el APK instale. Este
+servidor no tiene ni SDK ni NDK.
+
 ## Tests
 
 Un fichero por pieza, con el nombre que fija la espina `enki-plan` del plan

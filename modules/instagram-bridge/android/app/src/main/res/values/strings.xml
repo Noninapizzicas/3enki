@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <string name="app_name">Puente Enki</string>
+
+    <!-- Servicio de accesibilidad: el nombre y la descripcion son lo unico que el
+         dueño lee antes de dar el permiso mas invasivo del sistema. Se dice lo que
+         hace y lo que NO hace, sin adornos. -->
+    <string name="servicio_accesibilidad_nombre">Puente Enki · Instagram</string>
+    <string name="servicio_accesibilidad_descripcion">Lee el arbol de pantalla de Instagram y entrega los toques que le pide el puente de Enki. Solo mira la app de Instagram (com.instagram.android), no otras apps, y no envia nada a ningun sitio por su cuenta: el canal lo abre el servicio en primer plano con la llave del bus.</string>
+
+    <!-- Pantalla principal -->
+    <string name="campo_url_hint">URL del bus (wss://…)</string>
+    <string name="campo_llave_hint">Llave del bus</string>
+    <string name="boton_conectar">Conectar</string>
+    <string name="boton_desconectar">Desconectar</string>
+    <string name="boton_accesibilidad">Abrir ajustes de accesibilidad</string>
+
+    <string name="estado_canal">Canal: %1$s</string>
+    <string name="canal_detenido">detenido</string>
+    <string name="accesibilidad_activa">Servicio de accesibilidad: ACTIVO</string>
+    <string name="accesibilidad_inactiva">Servicio de accesibilidad: APAGADO</string>
+    <string name="biblioteca_presente">Libreria nativa: cargada (enki_instagram_bridge)</string>
+    <string name="biblioteca_ausente">Libreria nativa: NO cargada. El APK se construyo sin jniLibs (compilacion del crate pendiente).</string>
+
+    <string name="nota_inicial">La llave no se guarda en el aparato: se teclea en cada arranque y vive solo en memoria mientras el servicio esta vivo.</string>
+    <string name="aviso_llave_no_se_guarda">Canal arrancando. La llave no se guarda en disco; si cierras la app, hay que volver a teclearla.</string>
+
+    <string name="error_url_insegura">La URL tiene que empezar por wss://. El crate no abre un canal sin TLS, asi que un ws:// solo daria un error mas tarde y peor.</string>
+    <string name="error_sin_llave">Falta la llave del bus.</string>
+    <string name="error_sin_ajustes">Este aparato no tiene pantalla de ajustes de accesibilidad.</string>
+
+    <!-- Notificacion del servicio en primer plano -->
+    <string name="notificacion_canal_nombre">Canal del puente</string>
+    <string name="notificacion_canal_descripcion">Estado del canal con el bus de Enki mientras el servicio esta en marcha.</string>
+    <string name="notificacion_titulo">Puente Enki</string>
+    <string name="notificacion_texto">Canal: %1$s</string>
+    <string name="accion_parar">Parar</string>
+
+</resources>

@@ -27,11 +27,11 @@
 
 #![recursion_limit = "512"]
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use log::{error, info, warn};
@@ -103,6 +103,85 @@ fn ahora_ms() -> u64 {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_millis() as u64)
         .unwrap_or(0)
+}
+
+
+/// Ids de mensaje YA emitidos por CUALQUIER sesión de este proceso.
+///
+/// Dos cuentas del puente pueden recibir el mismo chat: WhatsApp entrega
+/// entonces el mismo mensaje a las dos sesiones y el JSONL quedaba con dos
+/// líneas iguales, mismo `id`, con 1 ms de diferencia. Quien identifica el
+/// mensaje por su posición en el fichero —o marca el id al primer visto sin
+/// mirar de qué proyecto es— pierde la segunda copia; medido el 11-nov: el «sí»
+/// de una clienta se consumió en la copia de la cuenta que no tenía su pedido.
+///
+/// La identidad del mensaje es su `id`, no la sesión que lo recibió: se emite
+/// la primera copia que llega y las demás se cuentan pero no se escriben.
+static VISTOS_MENSAJE: OnceLock<Mutex<VistosMensaje>> = OnceLock::new();
+
+/// Cuántos ids se recuerdan. El volumen de entrada es de decenas al día; 2000
+/// cubre días de conversación y acota la memoria del proceso.
+const VISTOS_MAX: usize = 2000;
+
+#[derive(Default)]
+struct VistosMensaje {
+    orden: VecDeque<String>,
+    set: HashSet<String>,
+}
+
+impl VistosMensaje {
+    /// `true` = primera vez que se ve el id (hay que emitirlo).
+    /// Un mensaje sin id no tiene identidad: se emite siempre.
+    fn primera_vez(&mut self, id: &str) -> bool {
+        if id.is_empty() {
+            return true;
+        }
+        if !self.set.insert(id.to_string()) {
+            return false;
+        }
+        self.orden.push_back(id.to_string());
+        while self.orden.len() > VISTOS_MAX {
+            if let Some(viejo) = self.orden.pop_front() {
+                self.set.remove(&viejo);
+            }
+        }
+        true
+    }
+}
+
+/// Sembrar el registro con lo que YA está en el JSONL: si el puente se reinicia
+/// (el watchdog lo levanta, WhatsApp reentrega lo pendiente), la copia que llegue
+/// después del reinicio sigue siendo la misma y no debe escribirse otra vez.
+fn sembrar_vistos(path: &str) {
+    let Ok(texto) = std::fs::read_to_string(path) else {
+        return;
+    };
+    let vistos = VISTOS_MENSAJE.get_or_init(|| Mutex::new(VistosMensaje::default()));
+    let Ok(mut g) = vistos.lock() else {
+        return;
+    };
+    for linea in texto.lines() {
+        let Ok(v) = serde_json::from_str::<serde_json::Value>(linea) else {
+            continue;
+        };
+        if v.get("tipo").and_then(|t| t.as_str()) != Some("mensaje") {
+            continue;
+        }
+        if let Some(id) = v.get("id").and_then(|i| i.as_str()) {
+            g.primera_vez(id);
+        }
+    }
+    info!("dedupe: {} ids de mensaje ya en el JSONL", g.set.len());
+}
+
+/// `true` si este id no se ha emitido todavía en este proceso.
+fn primera_vez(id: &str) -> bool {
+    let vistos = VISTOS_MENSAJE.get_or_init(|| Mutex::new(VistosMensaje::default()));
+    match vistos.lock() {
+        Ok(mut g) => g.primera_vez(id),
+        // Un cerrojo envenenado no puede callar un mensaje de un cliente.
+        Err(_) => true,
+    }
 }
 
 /// Append de una línea JSON. Abre y cierra por evento: el volumen aquí es de
@@ -222,6 +301,21 @@ async fn construir(
                 let id = ctx.info.id.to_string();
                 let grupo = ctx.info.source.is_group;
                 r_msg.fetch_add(1, Ordering::Relaxed);
+                // LO QUE TÚ MANDAS NO ES LO QUE TE LLEGA. WhatsApp devuelve a los
+                // demás dispositivos de la misma cuenta una copia de cada mensaje
+                // que sale de cualquiera de ellos; esa copia entraba como
+                // "recibido" y duplicaba el mensaje.
+                if ctx.info.source.is_from_me {
+                    info!("[{slug}] -> {de} ({push}): eco de un mensaje propio, no es una entrada");
+                    return;
+                }
+                // Misma cuenta en dos sesiones = mismo mensaje dos veces.
+                if !primera_vez(&id) {
+                    info!(
+                        "[{slug}] <- {de} ({push}): copia del mismo mensaje (id {id}) ya emitida por otra sesion, no se duplica"
+                    );
+                    return;
+                }
                 info!("[{slug}] <- {de} ({push}): {texto}");
                 emitir(
                     &ev,
@@ -233,6 +327,7 @@ async fn construir(
                         "texto":texto,
                         "id":id,
                         "grupo":grupo,
+                        "from_me":false,
                         "timestamp":ctx.info.timestamp.to_rfc3339(),
                     }),
                 );
@@ -359,6 +454,9 @@ fn main() {
     if let Some(dir) = std::path::Path::new(&cfg.eventos).parent() {
         let _ = std::fs::create_dir_all(dir);
     }
+
+    // Lo que ya está en el fichero no se vuelve a emitir tras un reinicio.
+    sembrar_vistos(&cfg.eventos);
 
     let rt = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(2)
@@ -540,5 +638,50 @@ mod tests_jid_destino {
         ] {
             assert_eq!(jid_destino(entrada).to_string(), esperado, "entrada: {entrada:?}");
         }
+    }
+}
+
+#[cfg(test)]
+mod tests_dedupe_entre_sesiones {
+    use super::*;
+
+    /// El caso que rompió el «sí» de una clienta: la MISMA cuenta recibida por
+    /// dos sesiones produce dos líneas con el mismo id. Ahora la primera se
+    /// emite y la segunda no.
+    #[test]
+    fn el_mismo_id_solo_se_emite_una_vez() {
+        let mut v = VistosMensaje::default();
+        assert!(v.primera_vez("3EB0AF95354F4B5F107A0A"), "la primera copia se emite");
+        assert!(!v.primera_vez("3EB0AF95354F4B5F107A0A"), "la segunda copia se descarta");
+    }
+
+    /// Dos mensajes distintos del mismo cliente no son copias: los dos salen.
+    #[test]
+    fn mensajes_distintos_los_dos_salen() {
+        let mut v = VistosMensaje::default();
+        assert!(v.primera_vez("AC1A95EA1B9A448DAAA602"));
+        assert!(v.primera_vez("AC6CC31C487A5431D0D5BF"));
+    }
+
+    /// Sin id no hay identidad que comparar: se emite (mejor duplicar que perder).
+    #[test]
+    fn sin_id_se_emite_siempre() {
+        let mut v = VistosMensaje::default();
+        assert!(v.primera_vez(""));
+        assert!(v.primera_vez(""));
+    }
+
+    /// La ventana es finita: pasados VISTOS_MAX ids, el más viejo se olvida y
+    /// vuelve a contar como nuevo. La memoria del proceso no crece sin freno.
+    #[test]
+    fn la_ventana_olvida_lo_mas_viejo() {
+        let mut v = VistosMensaje::default();
+        assert!(v.primera_vez("viejo"));
+        for i in 0..VISTOS_MAX {
+            assert!(v.primera_vez(&format!("id-{i}")));
+        }
+        assert_eq!(v.set.len(), VISTOS_MAX, "el registro está acotado");
+        assert!(v.primera_vez("viejo"), "el id olvidado se vuelve a emitir");
+        assert!(!v.primera_vez("viejo"), "y después ya no");
     }
 }

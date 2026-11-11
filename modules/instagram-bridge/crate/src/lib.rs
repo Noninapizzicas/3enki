@@ -45,10 +45,19 @@
 //!     `bridge/resultado` con par de fallo: una simulacion nunca contesta
 //!     `ok:true`. Es la unica carpeta con dependencias externas, y estan
 //!     justificadas en el `Cargo.toml` y en el README.
+//!   - `jni` (bloque 18): el borde con Kotlin. **Solo existe en Android** (todo
+//!     el modulo esta bajo `cfg(target_os = "android")`): exporta los tres
+//!     simbolos `Java_online_enki_instagram_PuenteNativo_*` que `PuenteNativo.kt`
+//!     declara como `external`, arranca y para el canal en un hilo, y publica el
+//!     estado. No reimplementa el canal: llama a `canal::mqtt` y `canal::bucle`.
+//!     En escritorio el modulo ni se parsea, y `tests/jni_paridad.rs` comprueba
+//!     sobre el FUENTE que los nombres de los dos lados no divergen.
 
 pub mod almacen;
 pub mod canal;
 pub mod contrato;
+#[cfg(target_os = "android")]
+pub mod jni;
 pub mod mano;
 pub mod percepcion;
 pub mod testigo;

@@ -548,7 +548,9 @@ pub extern "system" fn Java_online_enki_instagram_PuenteNativo_estado(
     env: JNIEnv, _esto: JObject) -> jstring
 ```
 
-**El crate todavia no los exporta** (el borde Rust es el bloque siguiente). Por eso
+**El bloque 17 dejo los simbolos declarados y sin exportar**; el borde que los
+pone es el bloque 18 (mas abajo). La firma de arriba es el contrato que ese borde
+cumple. Por eso
 la app **no finge**: si el simbolo no esta, el estado dice `sin_borde_jni` con su
 motivo en la pantalla y en la notificacion, en vez de caerse o de enseñar
 "conectado". Un `cargo ndk ... build --release` ya produce
@@ -628,6 +630,119 @@ grep -o '@drawable/[a-z_]*' app/src/main/AndroidManifest.xml
 Lo que **no** se puede verificar aqui y hay que ver en el portatil: que Gradle
 resuelva los plugins, que `cargo ndk` encuentre el NDK, y que el APK instale. Este
 servidor no tiene ni SDK ni NDK.
+
+## Bloque 18 · el borde JNI
+
+Lo que faltaba para que la app dejara de decir `sin_borde_jni`: **el crate exporta
+los tres simbolos** que `PuenteNativo.kt` declara como `external`. Nada mas — este
+bloque no cambia el canal, ni el bucle, ni una linea de Kotlin.
+
+| Pieza | Fichero | Que hace |
+|---|---|---|
+| El borde | `crate/src/jni/mod.rs` (todo bajo `#![cfg(target_os = "android")]`) | Los tres `Java_online_enki_instagram_PuenteNativo_{iniciar,detener,estado}`, el estado global y el hilo del canal. |
+| La caja | `crate/Cargo.toml` → `[target.'cfg(target_os = "android")'.dependencies]` | `jni = { version = "0.21", default-features = false }`, **solo para Android**. |
+| El modulo | `crate/src/lib.rs` | `#[cfg(target_os = "android")] pub mod jni;` — en escritorio ni se parsea. |
+| El test | `crate/tests/jni_paridad.rs` | Lee `PuenteNativo.kt` y este borde: falla si un nombre o una firma divergen, y si `conectado` se puede decir sin CONNACK. |
+
+### Las cuatro reglas del borde
+
+1. **Nada bloquea.** `iniciar` crea un hilo, deja el estado en `conectando` y
+   contesta; **no espera el CONNACK**. Quien llama es el servicio en primer plano
+   de Android y el hilo principal no puede quedarse 5 s en una lectura TLS (ANR).
+   El progreso se lee con `estado`, que es lo que la notificacion refresca cada
+   3 s. Consecuencia asumida: `iniciar` devuelve `true` cuando hay canal *en
+   marcha*, no cuando esta conectado; el "conectado" de verdad lo dice `estado`.
+2. **`conectado` solo despues del CONNACK.** La unica construccion de
+   `Estado::Conectado` esta en `confirmar_conexion`, y la unica llamada a
+   `confirmar_conexion` cuelga del `?` de `Canal::suscribir`: sin SUBACK no corre,
+   y sin CONNACK no hay SUBACK (`Canal::conectar` lo exige). El test lo comprueba
+   sobre el **fuente**, porque esto no se puede probar sin movil.
+3. **Un panic no mata la app.** `panic = "unwind"` (ya estaba, puesto para esto) y
+   cada borde envuelve su cuerpo en `catch_unwind`: `iniciar` devuelve
+   `JNI_FALSE`, `detener` no hace nada y `estado` contesta
+   `{"canal":"error:panic"}`. Un puente que se cae al arrancar no se puede ni
+   diagnosticar desde el movil.
+4. **La llave no se guarda ni se loguea.** Se lee del `JString`, se compone en la
+   URL y vive en la memoria del hilo. No hay `static` con la llave, y no se
+   imprime la URL (una URL con `k=` en el logcat es la llave en el logcat).
+
+### Por que se añade `jni` (y por que solo en Android)
+
+Exportar `Java_...` es hablar `JNIEnv`, `JString` y `jboolean` con las firmas
+exactas de la JVM: eso es `jni-sys` (punteros y constantes de la especificacion)
+mas el envoltorio seguro que comprueba que un `JObject` es de verdad un
+`java.lang.String` antes de leerlo. Escribirlo a mano es codigo de seguridad en
+el borde mas delicado del aparato, y el `0 dependencias` del crate ya se rompio
+con criterio en el bloque 16.
+
+Tres decisiones que no son de estilo:
+
+  - **`[target.'cfg(target_os = "android")'.dependencies]`**, no `[dependencies]`:
+    asi `cargo test --offline` en un servidor sin NDK no compila ni una linea de
+    `jni`. El modulo esta bajo el mismo `cfg`; los dos lados dicen lo mismo.
+  - **`default-features = false`**: la unica feature (`invocation`) arrastra
+    `java-locator` y `libloading` para *arrancar* una JVM desde Rust. Aqui se hace
+    lo contrario — el `.so` vive dentro de una y recibe el `JNIEnv` hecho.
+  - **`JObject` y no `JClass`** como segundo argumento: `PuenteNativo` es un
+    `object` de Kotlin, y sus metodos son de INSTANCIA (la clase lleva su
+    `INSTANCE`), asi que la JVM pasa la instancia. En la ABI los dos son un
+    `jobject`, pero el tipo documenta el contrato.
+
+### El estado que viaja a Kotlin
+
+`estado()` devuelve **JSON**, porque es lo que ya leen los dos consumidores de
+Kotlin (`PuenteNativo.leerMotivo` y `ServicioEnki.leerCampo`), y un texto pelado
+perderia el motivo del fallo justo cuando hace falta:
+
+```json
+{"canal":"conectando","motivo":null,"version":"0.1.0"}
+{"canal":"error:connack_rechazado","motivo":"el broker rechazo el CONNECT con el codigo 4 (usuario o clave incorrectos): revisar llave y url","version":"0.1.0"}
+```
+
+La clave `canal` lleva **exactamente** uno de los cuatro valores del contrato:
+`desconectado`, `conectando`, `conectado`, `error:<codigo>`. `error:<codigo>` usa
+el `codigo()` de `FalloDeCanal` (`connack_rechazado`, `tls`, `red`,
+`sin_respuesta`, `url_no_segura`, `panic`, ...): el codigo se compara, el
+`motivo` se lee.
+
+### Lo que el borde NO hace
+
+  - **No ejecuta nada real.** La mano que se enchufa al bucle es `ManoAusente`,
+    la misma del CLI: toda orden se contesta con su par de fallo
+    (`sin_mano` / `simulacion`) y nada sale del aparato.
+  - **No reimplementa el canal.** Llama a `canal::mqtt` (conectar, suscribir,
+    publicar) y a `canal::bucle::servir` (validar la orden contra el catalogo
+    cerrado y contestar). Un segundo cliente MQTT en el mismo aparato seria dos
+    dialogos con el mismo broker y la misma llave.
+  - **No reconecta ni abre un segundo canal.** Si ya hay uno vivo, `iniciar`
+    contesta `JNI_FALSE` con motivo `ya_hay_canal`: se para y despues se abre, que
+    es lo que ya hace `ServicioEnki`.
+  - **La suscripcion no se repite aqui.** `bucle::servir` se suscribe el mismo a
+    `TOPIC_ORDENES`; el borde solo envuelve el `Bus` para que la bandera de parada
+    corte el bucle (`Opcion::Cerrado`) sin reescribirlo.
+
+### Verificacion del bloque
+
+```bash
+cd modules/instagram-bridge/crate
+cargo test --offline            # 60 tests + 2 de paridad JNI <-> Kotlin = 62
+cargo check --offline           # el modulo jni ni se compila aqui (cfg android)
+cargo test --offline --test jni_paridad -- --nocapture
+```
+
+El test de paridad **tiene dientes**, y se comprueba asi: se renombra un
+`external fun` en `PuenteNativo.kt` (por ejemplo `iniciar` -> `abrir`), se corre
+`cargo test --test jni_paridad` y **falla** con el simbolo que falta; se restaura
+y vuelve a pasar. Igual si se añade un `Estado::Conectado` fuera de
+`confirmar_conexion`.
+
+Lo que **no** se puede verificar en este servidor: que el `.so` enlace con la JVM
+del movil, que `System.loadLibrary` lo encuentre con la ABI correcta y que el
+canal conecte de verdad. Eso es del portatil con NDK y del movil. Lo que si se
+comprobo aqui, ademas de los tests: el modulo `jni` **compila** (se copio el crate
+a un directorio de trabajo, se quitaron los dos `cfg` y se añadio la caja como
+dependencia normal: `cargo check --offline` limpio, sin warnings). Es la unica
+forma de type-checkear un `extern "system"` contra `jni 0.21` sin NDK.
 
 ## Tests
 

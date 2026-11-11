@@ -38,8 +38,16 @@
 //!     que no esta en la tabla no se adivina.
 //!   - `mano::arbitro` (D4): quien tiene el aparato y cuando se puede soltar. Un
 //!     paso con consecuencia incierta NO se aborta: se termina o se para limpio.
+//!   - `canal` (bloque 16): lo unico que sale a la red. El cliente MQTT 3.1.1
+//!     minimo sobre WebSocket seguro (la llave del bus viaja en la URL y los
+//!     clientes de libreria la tiran), el `Framer` que acumula bytes antes de
+//!     dar un paquete por completo, y el bucle `bridge/orden` ->
+//!     `bridge/resultado` con par de fallo: una simulacion nunca contesta
+//!     `ok:true`. Es la unica carpeta con dependencias externas, y estan
+//!     justificadas en el `Cargo.toml` y en el README.
 
 pub mod almacen;
+pub mod canal;
 pub mod contrato;
 pub mod mano;
 pub mod percepcion;

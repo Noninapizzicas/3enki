@@ -432,6 +432,86 @@ en el aparato (U1, A4.2, A1, A3, A5, O1/O2, D1, D3, D4, D5, F1b) y 52 suites JS
 en el cerebro, una por fichero de pieza (o por grupo, cuando la pieza es una
 seccion de un modulo).
 
+## Bloque 16 · El canal: lo que hace falta para hablar con el bus
+
+Las 63 piezas del arbol dicen que hacer; ninguna sabia **por donde**. El crate
+solo tenia `--comprobar`. Este bloque pone el canal: el cliente MQTT, el bucle de
+ordenes y las tres trampas que cuestan una tarde cada una. Y lo pone **sin tocar
+ni una pieza de las anteriores**: el canal las llama por su puerto, no las
+reescribe.
+
+| Pieza | Fichero | Que hace ejecutable |
+|---|---|---|
+| El canal MQTT | `crate/src/canal/mqtt.rs` | **LA LLAVE VIAJA EN LA URL, Y ESO OBLIGA A ESCRIBIR EL CLIENTE.** El broker se alcanza por `wss://enki-ai.online/mqtt?k=<llave>`, pero los clientes MQTT de libreria se quedan con host y puerto y **tiran el path y la query**: la llave se pierde antes del handshake y el broker contesta 401. Aqui hay un cliente minimo y completo en lo que necesita: CONNECT 3.1.1, SUBSCRIBE, PUBLISH QoS 0, PINGREQ y DISCONNECT, mas el `Framer`. `tungstenite` pone el WebSocket (RFC 6455) y nada mas; el dialogo MQTT es propio. Cada fallo tiene nombre (`url_no_segura`, `red`, `tls`, `handshake_rechazado`, `connack_rechazado` con su codigo, `suback_rechazado`, `sin_respuesta`, `protocolo`): un `Err("error")` obliga a adivinar si fue la llave o el DNS. |
+| El bucle de ordenes | `crate/src/canal/bucle.rs` | **UNA ORDEN QUE NO SE ENTIENDE NO SE EJECUTA, Y SIEMPRE SE CONTESTA CON PAR DE FALLO.** Se suscribe a `core/core-a/events/bridge/orden/#` y valida el payload contra un catalogo **cerrado** (`ACCIONES = ["publicar"]`, `REDES = ["instagram"]`): una accion desconocida no se degrada a la que haya a mano, se nombra. La mano (A3) solo se mueve si `simulacion != false` —ausente se lee como simulacion, porque ejecutar de verdad sin que nadie lo pida es irreversible— y el resultado va a `core/core-a/events/bridge/resultado` con `{ok, motivo}` **siempre los dos**: una simulacion nunca contesta `ok:true`, porque nada salio del aparato. La unica forma de `ok:true` es que la mano confirme la publicacion con su postcondicion vista, y hoy este binario no tiene mano real: lo dice con su nombre (`ejecucion_real_no_habilitada`) en vez de fingir. |
+| El JSON del canal | `crate/src/canal/json.rs` | **BUSCAR UNA CLAVE CON SUBCADENAS ES EJECUTAR LO QUE NO ERA.** Una orden es JSON y hay que leerla de verdad: claves repetidas se rechazan (quedarse con la ultima es como se cuela un `simulacion:false` detras de un `true`), `"false"` en texto no es `false`, y lo que no es JSON se nombra con el byte donde se rompio. Es un parser pequeño y estricto, no un `serde`: el crate no añade una cuarta dependencia para leer ocho claves. |
+| El CLI | `crate/src/main.rs` | **PROBAR UNA ORDEN A MANO Y RECIBIRLA DEL BUS PASAN POR EL MISMO CODIGO.** `--comprobar` se queda como estaba (U1); `--simular --llave <k> --url <wss://...>` abre el canal, comprueba CONNACK, suscripcion y PINGRESP y **no ejecuta nada** durante la ventana de escucha; `--orden '<json>' --simular` imprime el resultado tal cual se publicaria. `--orden` no es una puerta trasera: con `simulacion:false` contesta `ejecucion_real_no_habilitada` y no toca nada. La URL se imprime **sin la query**: un canal que loguea su URL loguea la llave. |
+
+### Las tres trampas, y donde esta cada una en el codigo
+
+1. **El subprotocolo.** El handshake tiene que declarar
+   `Sec-WebSocket-Protocol: mqtt` o el broker cierra con 400 y el sintoma que se
+   ve es "no conecta" sin mas pista. Esta en `Canal::conectar`
+   (`ClientRequestBuilder::with_sub_protocol("mqtt")`). `tungstenite` ademas
+   falla el handshake si pedimos `mqtt` y la respuesta no lo devuelve, asi que la
+   trampa se convierte en un error con nombre.
+2. **El proveedor criptografico.** Con `rustls` hay que instalar el proveedor
+   **antes** de construir cualquier configuracion TLS
+   (`rustls::crypto::ring::default_provider().install_default()`), o el proceso
+   aborta al conectar con un mensaje que habla de `CryptoProvider` y no del
+   canal. Esta en `instalar_proveedor()`, una vez por proceso (`Once`), y es la
+   primera linea util de `Canal::conectar`.
+3. **El framer.** Algunos brokers entregan el CONNACK partido en frames de **un
+   byte**. Leer "un paquete por mensaje" da `[0x20]` y un falso codigo de
+   rechazo. El `Framer` acumula bytes y extrae paquetes completos por la longitud
+   variable de MQTT: `None` significa **"todavia no"**, nunca "no hay nada". Los
+   tres tests de particion (`el_framer_extrae_paquetes_partidos`,
+   `el_framer_extrae_dos_paquetes_en_un_solo_frame`,
+   `el_framer_no_se_come_bytes_incompletos`) son los que protegen esto, y son
+   puros: cero red, cero reloj.
+
+### Por que se rompe el "0 dependencias" (y hasta donde)
+
+El crate se escribio sin dependencias a proposito: la mano, la mirada, la
+escalera y el testigo se prueban en escritorio con puertos inyectados y no
+arrastran nada. Hay **una** superficie donde eso no se puede cumplir sin
+reescribir un estandar: el canal. Y se rompe con una lista **cerrada** de tres
+cajas, cada una con su razon:
+
+| Crate | Version | Por que |
+|---|---|---|
+| `tungstenite` | 0.30, `default-features = false`, `handshake` + `rustls-tls-webpki-roots` | El handshake y el framing de WebSocket (RFC 6455): enmascarado, SHA-1 de la llave, parseo de frames. Es codigo de seguridad, no de negocio. Se usan SOLO `Message` y el handshake; el dialogo MQTT sigue siendo nuestro. |
+| `rustls` | 0.23, `default-features = false`, `ring` + `std` + `tls12` | TLS 1.2/1.3 en Rust puro. Sin OpenSSL (no existe en el NDK de Android) y sin `aws-lc-rs` (el default de rustls, que necesita cmake y compilador de C en el NDK). |
+| `webpki-roots` | 1 | Las raices de confianza compiladas dentro: el aparato no tiene por que llevar el almacen de certificados del sistema. |
+
+Nota de ajuste real: la receta pedia `tungstenite` con
+`default-features = false, features = ["rustls-tls-webpki-roots"]`, y **asi no
+compila**: el modulo `client` de tungstenite esta detras de la feature
+`handshake`, que no viene en `default = ["handshake"]` cuando se desactivan los
+defaults. Se añade `handshake` a la lista; ninguna otra feature de mas.
+
+Y hasta donde llega la grieta: ningun otro fichero del crate importa estas
+cajas. `canal/` es la unica carpeta que sale a la red; las otras cinco siguen
+siendo `std` puro. El test `el_enum_de_rust_no_arrastra_dependencias_externas`
+(`tests/fallos.test.js`) ya no exige un `[dependencies]` vacio —eso seria una
+mentira— sino **exactamente estas tres y ninguna mas**, y sigue comprobando que
+el contrato no usa `serde`.
+
+### Verificacion del bloque
+
+```bash
+cd modules/instagram-bridge/crate
+cargo build                    # compila lib + bin, sin avisos
+cargo test --offline           # 44 tests previos + 5 del framer + 8 unitarios del canal
+# el test contra el bus real NO corre en CI: necesita la llave
+ENKI_BUS_URL='wss://enki-ai.online/mqtt?k=<llave>' \
+  cargo test --test canal_integracion -- --ignored --nocapture
+```
+
+El test de integracion **solo se suscribe y comprueba CONNACK + SUBACK +
+PINGRESP**: no publica nada en el bus. Un test que publica en produccion para
+probar que el canal funciona deja basura que alguien lee como una orden.
+
 ## Tests
 
 Un fichero por pieza, con el nombre que fija la espina `enki-plan` del plan
@@ -491,9 +571,18 @@ node modules/instagram-bridge/tests/alta.test.js
 node modules/instagram-bridge/tests/baja.test.js
 ```
 
+Ademas, desde el bloque 16, las dos suites del canal en el aparato:
+
 ```bash
-cd modules/instagram-bridge/crate && cargo test --offline   # U1, A4.2, A1, A3, A5, O1/O2, D1, D3, D4, D5 y F1b, en escritorio
+cd modules/instagram-bridge/crate && cargo test --offline   # U1, A4.2, A1, A3, A5, O1/O2, D1, D3, D4, D5, F1b y el canal, en escritorio
 ```
+
+  - `crate/tests/mqtt_framer.rs` — **puros, sin red**: las tres formas de partir y
+    juntar bytes (CONNACK en frames de un byte, dos paquetes en un frame, un
+    paquete incompleto que no se escupe) y la codificacion de CONNECT y PUBLISH.
+    Son los que protegen la trampa 3.
+  - `crate/tests/canal_integracion.rs` — `#[ignore]`: contra el bus real, **solo
+    se suscribe** y comprueba CONNACK + SUBACK + PINGRESP. No publica nada.
 
 Los tests del padron, del catalogo, de la memoria de cambios, de la cola, de la
 tolerancia, de la autonomia y de la ficha no tocan los ficheros del repo: cada prueba de disco se hace en un directorio temporal propio

@@ -300,7 +300,25 @@ test('el_enum_de_rust_no_arrastra_dependencias_externas', () => {
   const cargo = fs.readFileSync(RUTA_CARGO, 'utf8');
   const deps = /\[dependencies\]([\s\S]*?)(\n\[|$)/.exec(cargo);
   const cuerpo = deps ? deps[1].replace(/#[^\n]*/g, '').trim() : '';
-  assert.strictEqual(cuerpo, '', 'el crate del aparato no tiene dependencias en el bloque 4');
+
+  // El bloque 16 rompe el "0 dependencias" del crate en UNA superficie: el canal
+  // con el bus (WebSocket seguro + TLS). No es una grieta abierta: es una lista
+  // cerrada. Cualquier crate que no sea una de estas tres hace fallar este test,
+  // y las tres estan justificadas en Cargo.toml y en el README (bloque 16).
+  const PERMITIDAS = ['rustls', 'tungstenite', 'webpki-roots'];
+  // Solo las lineas `nombre = ...` cuentan: las continuaciones de una tabla
+  // (`features = [...]` partido en varias lineas) no son dependencias.
+  const declaradas = [...cuerpo.matchAll(/^([A-Za-z0-9_-]+)\s*=/gm)].map((m) => m[1]);
+
+  assert.deepStrictEqual(
+    declaradas.slice().sort(),
+    PERMITIDAS.slice().sort(),
+    `el aparato solo admite las dependencias del canal; declara: ${declaradas.join(', ')}`
+  );
+  assert.ok(
+    !/serde/i.test(cuerpo),
+    'el contrato del aparato no usa serde: el JSON del canal es propio'
+  );
 });
 
 // ---------------------------------------------------------------------------

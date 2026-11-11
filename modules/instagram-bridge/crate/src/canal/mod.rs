@@ -1,0 +1,34 @@
+//! `canal` — hablar con el bus de Enki desde el aparato.
+//!
+//! Es la unica parte del crate que sale a la red, y por eso es la unica que
+//! rompe la regla de "0 dependencias" (ver la nota del `Cargo.toml` y el bloque
+//! 16 del README). Las otras cinco carpetas del crate (`mano`, `percepcion`,
+//! `contrato`, `testigo`, `almacen`) siguen siendo `std` puro con puertos
+//! inyectados: el canal no las toca, solo las llama por su puerto.
+//!
+//! Piezas, cada una con un oficio:
+//!
+//!   - `mqtt`: el cliente MQTT 3.1.1 minimo sobre WebSocket seguro — CONNECT,
+//!     SUBSCRIBE, PUBLISH QoS 0, PINGREQ y DISCONNECT — con su `Framer`, que es
+//!     lo que impide leer medio CONNACK como si fuera un rechazo.
+//!   - `bucle`: el contrato de ordenes (`bridge/orden` -> la mano ->
+//!     `bridge/resultado`), la validacion contra catalogo cerrado y el par de
+//!     fallo que impide dar un envio por hecho.
+//!   - `json`: el lector y escritor de JSON minimo, porque una orden es JSON y
+//!     buscarla con subcadenas es la clase de atajo que ejecuta lo que no era.
+//!
+//! # Lo que el canal NO hace
+//!
+//!   - No decide **si** se puede publicar. Eso lo decidio el cerebro (ritmo,
+//!     autonomia, ventana). El canal solo lleva la orden y trae la respuesta.
+//!   - No guarda la llave. La llave viaja en la URL (`wss://.../mqtt?k=<llave>`)
+//!     y se pasa por argumento: el crate no la escribe en ningun sitio, ni en
+//!     logs. Un canal que loguea su URL loguea la llave.
+//!   - No reintenta ni reconecta: eso es politica y vive fuera de aqui.
+
+pub mod bucle;
+pub mod json;
+pub mod mqtt;
+
+pub use bucle::{atender, servir, Bus, HechoDeMano, ManoAusente, ManoDeOrdenes, Opcion, Orden, Resultado};
+pub use mqtt::{url_con_llave, Canal, FalloDeCanal, Framer};

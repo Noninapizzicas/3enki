@@ -76,6 +76,13 @@ La norma no se sostiene con buenas intenciones. Hay un hook que la hace cumplir:
 **`.githooks/pre-commit`** — rechaza cualquier commit si `HEAD` apunta a `main`
 **en el worktree principal**.
 
+**`.githooks/post-checkout`** — el worktree principal **no cambia de rama**. Si
+alguien hace `git checkout <otra-rama>` en `~/3enki`, el hook lo revierte a
+`main` en el acto y explica cómo crear un worktree. Sin esto, el `pre-commit`
+no bastaba: impedía commitear, pero el árbol se quedaba secuestrado en una rama
+y `git pull --ff-only origin main` abortaba con «diverging branches», dejando
+el deploy bloqueado durante horas.
+
 Instalarlo (una vez por clon/worktree):
 ```bash
 cd ~/3enki && git config core.hooksPath .githooks

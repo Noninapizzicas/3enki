@@ -1,0 +1,9 @@
+{
+  "esquema": "autorizaciones-v1",
+  "almacen": "autorizaciones",
+  "revision": 0,
+  "secuencia": 0,
+  "actualizado": null,
+  "autorizaciones": [],
+  "consumos": []
+}

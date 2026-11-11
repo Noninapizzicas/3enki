@@ -1,0 +1,252 @@
+{
+  "_doc": "BLOQUE 9 · LA AUTONOMIA del proyecto instagram-bridge. Seis piezas que responden a una sola pregunta: QUIEN puede hacer QUE sin pedir permiso. Q1 CasillaDeAccion (core/casillas.js): cada accion tiene su casilla reversible/irreversible y visible/privada, y UNA ACCION SIN CASILLA NO SE EJECUTA. Q3 NivelDeAutonomia (autonomia/nivel.js): nivel por cuenta, y SIN NIVEL DECLARADO EL NIVEL ES EL CONSERVADOR (borrador); solo el dueno puede declarar, y una declaracion de otra cuenta u otro proyecto no vale. Q2 PuertaDeConfirmacion (autonomia/puerta.js + storage/instagram-bridge/confirmaciones.json): el si y su caducidad — UN SI VIEJO ES UN NO, el silencio no es si, solo contesta una persona con referencia, y una pregunta se contesta una vez. Cableada al modulo real adaptador-confirmacion: la pregunta sale por adaptador-confirmacion.confirmar.request y la respuesta vuelve por adaptador-confirmacion.confirmacion_recibida, y las dos desembocan en la MISMA funcion responder(). Q5 RegistroDeAutorizaciones (autonomia/autorizaciones.js + storage/instagram-bridge/autorizaciones.json): el libro append-only de los si; EL SILENCIO NUNCA SE ANOTA COMO AUTORIZACION (via solo puerta o canal), sin persona no hay autorizacion, el si tambien caduca y un si se gasta UNA vez. Q4 VentanaDeArrepentimiento (autonomia/ventana.js): el rato para deshacer antes de lo irreversible, con el momento INYECTADO y sin acortarse por peticion; cancelar NO es fallar. Q6 PoliticaDeAutonomia (autonomia/politica.js): LA SINTESIS rol x casilla x nivel x historial -> ejecutar|borrador|permiso|no, en orden fijo, con la REGLA DURA de que el HISTORIAL INFORMA PERO NO AUTORIZA (si pudiera, el sistema se concederia permisos a si mismo). El ataque que este bloque cierra es el de las DOS VIAS: conseguir permiso por un camino y ejecutar por otro; se cierra con la huella (proyecto|cuenta|accion|rol|casilla), con el gasto unico y con una sola puerta de entrada. Origen: plan-construccion.md bloque 9 y diseno-oop.md.",
+  "name": "autonomia",
+  "version": "0.1.0",
+  "description": "La autonomia del puente de Instagram: casilla por accion (Q1), nivel por cuenta con el conservador por defecto (Q3), puerta de confirmacion con caducidad y sin silencio (Q2), registro append-only de autorizaciones de un solo uso (Q5), ventana de arrepentimiento con momento inyectado (Q4) y la sintesis rol x casilla x nivel x historial donde el historial informa pero no autoriza (Q6). Custodio single-writer sobre storage/instagram-bridge/{confirmaciones.json,autorizaciones.json}, escritura temporal + rename y auditoria antes de cada escritura.",
+  "language": "es",
+  "main": "index.js",
+  "dependencies": [],
+  "config": {
+    "persistence": {
+      "concurrency": "single-writer",
+      "scope": "por-proyecto",
+      "pattern": "single-json-file",
+      "paths": [
+        "storage/instagram-bridge/confirmaciones.json",
+        "storage/instagram-bridge/autorizaciones.json"
+      ],
+      "esquemas": {
+        "confirmaciones": "confirmaciones-v1",
+        "autorizaciones": "autorizaciones-v1"
+      },
+      "escritura": "temporal + rename (atomica), un candado por almacen",
+      "orden_de_escritura": "confirmaciones -> autorizaciones (primero se contesta, luego se acuna el permiso; si se muere entre los dos queda un si sin permiso, que es el lado seguro)"
+    },
+    "plataformas": ["instagram"],
+    "casillas": {
+      "reversibilidad": ["reversible", "irreversible"],
+      "visibilidad": ["visible", "privada"],
+      "regla": "una accion sin casilla no se ejecuta",
+      "regla_de_reversibilidad": "si el estado se puede restaurar pero la notificacion ya salio, es IRREVERSIBLE",
+      "tabla": "core/casillas.js"
+    },
+    "niveles": {
+      "escalera": ["borrador", "permiso", "ejecutar"],
+      "conservador": "borrador",
+      "declarante": "dueno",
+      "regla": "sin nivel declarado, el conservador; una declaracion sin declarante o de otra cuenta no se aplica"
+    },
+    "dictamenes": ["ejecutar", "borrador", "permiso", "no"],
+    "roles": ["dueno", "agente", "sistema"],
+    "orden_de_la_sintesis": ["casilla", "rol", "nivel", "historial", "autorizacion", "ventana"],
+    "confirmacion": {
+      "ttl_por_defecto_segundos": 900,
+      "ttl_maximo_segundos": 3600,
+      "vias": ["puerta", "canal"],
+      "vias_prohibidas": ["silencio", "historial", "costumbre", "sistema"],
+      "cierra": "una persona con referencia y momento; un si viejo es un no",
+      "el_silencio_no_es_si": true,
+      "una_respuesta_una_autorizacion": true
+    },
+    "autorizacion": {
+      "un_solo_uso": true,
+      "atada_a_huella": true,
+      "ttl_por_defecto_segundos": 900,
+      "ttl_maximo_segundos": 3600,
+      "via_del_historial": "prohibida"
+    },
+    "ventana": {
+      "tope_segundos": 600,
+      "no_se_acorta_por_peticion": true,
+      "cancelar_no_es_fallar": true,
+      "reloj": "momento inyectado, nunca Date.now()"
+    },
+    "canal": {
+      "modulo": "adaptador-confirmacion",
+      "pregunta": "adaptador-confirmacion.confirmar.request",
+      "respuesta": "adaptador-confirmacion.confirmacion_recibida",
+      "tipo_si": "modelo_aprobado",
+      "tipo_no": "modelo_rechazado",
+      "atadura": "por confirmacion_id o cf:<id> en callback_data; si no, solo con UNA pregunta viva en ese proyecto y cuenta; en cualquier otro caso se rechaza"
+    },
+    "invariantes": [
+      "una_accion_sin_casilla_no_se_ejecuta",
+      "sin_nivel_declarado_el_conservador",
+      "el_silencio_nunca_se_anota_como_autorizacion",
+      "un_si_viejo_es_un_no",
+      "el_si_y_su_caducidad",
+      "un_si_se_gasta_una_vez",
+      "la_autorizacion_esta_atada_a_su_huella",
+      "el_historial_informa_pero_no_autoriza",
+      "no_hay_segunda_via_para_conseguir_permiso",
+      "cancelar_no_es_fallar",
+      "la_ventana_no_se_acorta_por_peticion",
+      "sin_una_persona_no_hay_autorizacion"
+    ]
+  },
+  "subscribes": [
+    {
+      "event": "instagram.autonomia.casilla.consultar.request",
+      "handler": "onCasillaConsultarRequest",
+      "description": "Q1. Devuelve la casilla de una accion (reversibilidad, visibilidad, ventana) o la tabla entera si no se pide ninguna. Una accion sin casilla responde `ejecutable: false` con motivo accion_sin_casilla."
+    },
+    {
+      "event": "instagram.autonomia.nivel.consultar.request",
+      "handler": "onNivelConsultarRequest",
+      "description": "Q3. Devuelve el nivel EFECTIVO de una cuenta a partir de su declaracion. Sin declaracion, declaracion sin declarante, de otra cuenta o de otro proyecto: el conservador (borrador), con `declarado` para ver el intento."
+    },
+    {
+      "event": "instagram.autonomia.ventana.abrir.request",
+      "handler": "onVentanaAbrirRequest",
+      "description": "Q4. Abre la ventana de arrepentimiento de una accion con el momento inyectado. Calcula `cierra_en`; nunca da menos rato del declarado por la casilla y nunca mas del tope (600 s)."
+    },
+    {
+      "event": "instagram.autonomia.ventana.cancelar.request",
+      "handler": "onVentanaCancelarRequest",
+      "description": "Q4. Cancela la ventana a tiempo. Devuelve resultado 'cancelacion' y `es_fallo: false`: arrepentirse no es fallar. Si la ventana ya cerro, responde ventana_cerrada y tampoco es un fallo."
+    },
+    {
+      "event": "instagram.autonomia.confirmacion.pedir.request",
+      "handler": "onConfirmacionPedirRequest",
+      "description": "Q2. Abre una pregunta al dueno (nace SIEMPRE con caducidad) y la manda por el modulo real adaptador-confirmacion. Rechaza una accion sin casilla y el nivel conservador. Si ya hay una pregunta viva para la misma huella, devuelve esa y no abre otra."
+    },
+    {
+      "event": "instagram.autonomia.confirmacion.responder.request",
+      "handler": "onConfirmacionResponderRequest",
+      "description": "Q2. La UNICA entrada de un si. Exige decision declarada, quien='dueno', referencia y momento; un si posterior a la caducidad se anota como caducada y autoriza=false. Si autoriza, acuna la autorizacion en el registro (Q5)."
+    },
+    {
+      "event": "instagram.autonomia.confirmacion.consultar.request",
+      "handler": "onConfirmacionConsultarRequest",
+      "description": "Q2. Devuelve una pregunta con su estado y su respuesta."
+    },
+    {
+      "event": "instagram.autonomia.confirmacion.vencer.request",
+      "handler": "onConfirmacionVencerRequest",
+      "description": "Q2. Pasa a caducada toda pregunta que nadie contesto antes de su caducidad, con respuesta null. El silencio se registra como silencio: autoriza=false, siempre."
+    },
+    {
+      "event": "instagram.autonomia.autorizacion.consumir.request",
+      "handler": "onAutorizacionConsumirRequest",
+      "description": "Q5. Gasta una autorizacion para UNA ejecucion concreta. Exige que la accion, cuenta, proyecto y rol sean exactamente los autorizados y que la huella cuadre; si ya se gasto, no hay gasto. Devuelve el consumo anotado."
+    },
+    {
+      "event": "instagram.autonomia.autorizacion.consultar.request",
+      "handler": "onAutorizacionConsultarRequest",
+      "description": "Q5. Devuelve una autorizacion con su estado DERIVADO (gastada o no, viva o caducada en el momento que se pregunta). No hay topic para anotar: el unico camino es la puerta."
+    },
+    {
+      "event": "instagram.autonomia.decidir.request",
+      "handler": "onDecidirRequest",
+      "description": "Q6. LA SINTESIS. Recorre casilla -> rol -> nivel -> historial -> autorizacion -> ventana y devuelve ejecutar|borrador|permiso|no con su `porque`. El historial solo puede bajar un escalon. La autorizacion, si viene, se busca en el registro por `autorizacion_id`: lo que traiga el payload en `autorizacion` se descarta."
+    },
+    {
+      "event": "adaptador-confirmacion.confirmacion_recibida",
+      "handler": "onConfirmacionRecibida",
+      "description": "Fire-and-forget del canal del dueno. Ata la respuesta a UNA pregunta (por confirmacion_id o cf:<id>; si no, solo con una unica pregunta viva en ese proyecto y cuenta), y la mete por la misma puerta que el RPC directo. Si no se puede atar, publica autonomia.confirmacion.rechazada y no autoriza nada."
+    },
+    {
+      "event": "adaptador-confirmacion.confirmar.failed",
+      "handler": "onConfirmarFailed",
+      "description": "El canal no pudo entregar la pregunta. Se anota como intento fallido de ESA pregunta; no la resuelve, no la caduca y por supuesto no la autoriza."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "instagram.autonomia.casilla.consultar.response",
+      "description": "Casilla de la accion (o la tabla entera) con `ejecutable`."
+    },
+    {
+      "event": "instagram.autonomia.casilla.consultar.failed",
+      "description": "Par de fallo: entrada invalida o casilla ajena (el que pide trae otra casilla)."
+    },
+    {
+      "event": "instagram.autonomia.nivel.consultar.response",
+      "description": "Nivel efectivo, origen ('declarado' | 'sin_declarar' | 'rebajado') y lo declarado."
+    },
+    {
+      "event": "instagram.autonomia.nivel.consultar.failed",
+      "description": "Par de fallo de la consulta de nivel."
+    },
+    {
+      "event": "instagram.autonomia.ventana.abrir.response",
+      "description": "La ventana abierta (cierra_en, segundos, exigida)."
+    },
+    {
+      "event": "instagram.autonomia.ventana.abrir.failed",
+      "description": "Par de fallo: accion sin casilla o sin momento."
+    },
+    {
+      "event": "instagram.autonomia.ventana.cancelar.response",
+      "description": "Cancelacion registrada como cancelacion (es_fallo false)."
+    },
+    {
+      "event": "instagram.autonomia.ventana.cancelar.failed",
+      "description": "Par de fallo: ventana cerrada, sin motivo o sin quien."
+    },
+    {
+      "event": "instagram.autonomia.confirmacion.pedir.response",
+      "description": "La pregunta abierta con su caducidad y el resultado de mandarla por el canal."
+    },
+    {
+      "event": "instagram.autonomia.confirmacion.pedir.failed",
+      "description": "Par de fallo: accion sin casilla, nivel conservador, sin caducidad valida o almacen ilegible."
+    },
+    {
+      "event": "instagram.autonomia.confirmacion.responder.response",
+      "description": "La respuesta con su veredicto: autoriza true/false y, si autoriza, la autorizacion anotada."
+    },
+    {
+      "event": "instagram.autonomia.confirmacion.responder.failed",
+      "description": "Par de fallo: silencio, respuesta no declarada, sin persona, sin referencia, si caducado, ya resuelta."
+    },
+    {
+      "event": "instagram.autonomia.confirmacion.consultar.response",
+      "description": "Estado de una pregunta y su respuesta."
+    },
+    {
+      "event": "instagram.autonomia.confirmacion.consultar.failed",
+      "description": "Par de fallo: pregunta desconocida o almacen ilegible."
+    },
+    {
+      "event": "instagram.autonomia.confirmacion.vencer.response",
+      "description": "Las preguntas vencidas por silencio, con autoriza=false."
+    },
+    {
+      "event": "instagram.autonomia.confirmacion.vencer.failed",
+      "description": "Par de fallo del vencimiento."
+    },
+    {
+      "event": "instagram.autonomia.autorizacion.consumir.response",
+      "description": "Consumo anotado (una sola vez por autorizacion)."
+    },
+    {
+      "event": "instagram.autonomia.autorizacion.consumir.failed",
+      "description": "Par de fallo: permiso de otra accion, otra cuenta, otro proyecto, otro rol, otra casilla, ya gastado, caducado o desconocido."
+    },
+    {
+      "event": "instagram.autonomia.autorizacion.consultar.response",
+      "description": "Autorizacion con gastada/vigente derivados."
+    },
+    {
+      "event": "instagram.autonomia.autorizacion.consultar.failed",
+      "description": "Par de fallo: autorizacion desconocida o almacen ilegible."
+    },
+    {
+      "event": "instagram.autonomia.decidir.response",
+      "description": "Veredicto (ejecutar|borrador|permiso|no), motivo, casilla, nivel, presion del historial, si exige ventana y el recorrido completo en `porque`."
+    },
+    {
+      "event": "instagram.autonomia.decidir.failed",
+      "description": "Par de fallo del veredicto (ambito incompleto, autorizacion desconocida, error interno)."
+    },
+    {
+      "event": "instagram.autonomia.confirmacion.rechazada",
+      "description": "Una respuesta del canal que no se pudo atar a su pregunta (sin contexto, ambigua o sin momento). No autoriza nada; queda como rastro."
+    },
+    {
+      "event": "adaptador-confirmacion.confirmar.request",
+      "description": "La pregunta al dueno por el canal real (RPC). Lleva project_id, confirmacion_id, tipo, nombre y detalle."
+    }
+  ]
+}

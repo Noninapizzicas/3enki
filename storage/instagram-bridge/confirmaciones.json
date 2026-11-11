@@ -1,0 +1,8 @@
+{
+  "esquema": "confirmaciones-v1",
+  "almacen": "confirmaciones",
+  "revision": 0,
+  "secuencia": 0,
+  "actualizado": null,
+  "confirmaciones": []
+}

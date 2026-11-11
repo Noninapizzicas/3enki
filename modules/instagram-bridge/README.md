@@ -212,6 +212,74 @@ persona, lo autorizado lo autorizo `dueno`, `en_revision` lleva su
 llamada**, no vive en un estado global: dos operaciones del mismo puente pueden
 estar una degradada y otra no.
 
+## Bloque 9 · La autonomia: quien puede hacer que sin pedir permiso
+
+Seis piezas y un agujero que cerrar. El agujero es el de siempre: **conseguir el
+permiso por una via y ejecutar por otra**. Aqui se decide quien puede hacer que
+sin preguntar, y todo lo que se decide se puede auditar despues.
+
+| Pieza | Fichero | Que hace ejecutable |
+|---|---|---|
+| Q1 `CasillaDeAccion` | `core/casillas.js` | Cada accion tiene **su** casilla: `reversible`/`irreversible` y `visible`/`privada`, y su rato de arrepentimiento. **Una accion SIN casilla NO se ejecuta**: no hay casilla por defecto ni casilla que traiga el payload (si contradice la tabla se rechaza con `casilla_ajena`). La regla de reversibilidad es la de los abogados: **si el estado se restaura pero la notificacion ya salio, es irreversible**. |
+| Q3 `NivelDeAutonomia` | `autonomia/nivel.js` | Nivel por cuenta en una escalera de tres: `borrador` < `permiso` < `ejecutar`. **Sin nivel declarado, el CONSERVADOR (`borrador`)**. Y tres reglas que evitan el auto-permiso: **una declaracion sin declarante no es una declaracion** (un `'ejecutar'` suelto cae a borrador); **solo el dueno declara** (si firma `agente` o `sistema` se devuelve el conservador y se conserva lo declarado para ver el intento); y **el nivel es de una cuenta y un proyecto** (no se pide prestado). |
+| Q2 `PuertaDeConfirmacion` | `autonomia/puerta.js` + `autonomia/index.js` + `storage/instagram-bridge/confirmaciones.json` | **El si y su caducidad.** Toda pregunta nace con `caduca_en` (15 min; techo 1 h). **Un si viejo es un no**: si la respuesta llega tarde se cierra como `caducada` con `respuesta: null` y `autoriza: false`. **El silencio no es si**: `vencer()` cierra lo que nadie contesto, y no hay rama que lo convierta en autorizada. Solo contesta `dueno`, con `referencia` y momento, y **una pregunta se contesta una vez**. |
+| Q5 `RegistroDeAutorizaciones` | `autonomia/autorizaciones.js` + `storage/instagram-bridge/autorizaciones.json` | El libro **append-only** de los si. **El silencio nunca se anota como autorizacion**: `via` solo puede ser `puerta` o `canal`; `silencio`, `historial`, `costumbre` y `sistema` se rechazan con su nombre. Sin persona no hay autorizacion, **el si tambien caduca** (techo 1 h) y **un si se gasta UNA vez**: el gasto es otro asiento (el libro no se edita) y `esta_gastada` se **deriva**. |
+| Q4 `VentanaDeArrepentimiento` | `autonomia/ventana.js` | El rato para deshacer antes de lo irreversible. Se abre con el **momento inyectado** (nunca `Date.now()`), **no se acorta por peticion** (se puede pedir mas, con tope de 600 s) y cerrar antes de tiempo no vale. **Cancelar NO es fallar**: se registra como `cancelacion` con `es_fallo: false`; solo lo que la plataforma rechaza es un fallo. |
+| Q6 `PoliticaDeAutonomia` | `autonomia/politica.js` | **LA SINTESIS**: `rol` x `casilla` x `nivel` x `historial` -> `ejecutar` / `borrador` / `permiso` / `no`, en orden fijo `casilla -> rol -> nivel -> historial -> autorizacion -> ventana`, dejando el `porque` entero. **REGLA DURA: el historial INFORMA pero NO AUTORIZA.** |
+
+**Como se cierra el ataque de las dos vias.** Cuatro cerrojos, y ninguno se fia
+del otro:
+
+1. **Una sola puerta.** La pregunta sale por el modulo real
+   `adaptador-confirmacion` y la respuesta vuelve por su evento, pero **el canal y
+   el RPC directo desembocan en la misma `responder()`**, con las mismas
+   comprobaciones. No hay un segundo camino de entrada de un si.
+2. **Una sola huella.** El permiso se concede para
+   `(proyecto, cuenta, accion, rol)` **con la casilla vigente**, y `politica` la
+   recalcula al decidir: un si de "comentar" presentado para "publicar" es `no`
+   (`permiso_de_otra_accion`), y lo mismo para otra cuenta, otro proyecto, otro rol
+   o una casilla mas blanda.
+3. **Un solo uso.** `consumir` anota el gasto y la siguiente ejecucion ve
+   `permiso_ya_gastado`. Dos ejecuciones simultaneas no pueden gastar el mismo si:
+   el gasto pasa por el candado del custodio.
+4. **Una sola fuente.** `decidir` **descarta** la autorizacion que traiga el
+   payload y la busca en el registro por `autorizacion_id`; y no hay ningun topic
+   para anotar una autorizacion: solo la puerta puede acunar un permiso.
+
+**Por que el historial no autoriza.** `presion_del_historial()` devuelve 0 o 1 y
+ese 1 solo puede **bajar un escalon** (`ejecutar` -> `permiso`). No existe una
+rama que suba por historial ni que rellene el hueco de una autorizacion; un
+asiento que se presenta como permiso (`autoriza: true`) se ignora y se deja
+escrito en el `porque`. Si el historial pudiera, el sistema se estaria concediendo
+permisos a si mismo: bastaria portarse bien unas cuantas veces. Un buen historial
+no es un permiso; es, como mucho, la ausencia de un motivo para desconfiar.
+
+**Que hace un actor de cada clase.** El `sistema` observa y no toca el mundo
+(`pulso` y `leer` pasan; publicar, comentar, seguir... `no`). El `agente` y el
+`dueno` juegan con el nivel de la cuenta: en `borrador` preparan, en `permiso`
+preguntan, en `ejecutar` actuan con la ventana de arrepentimiento delante. Las
+acciones **inocuas** (reversibles y privadas) se permiten hasta en `borrador`:
+un puente que no puede mirar no puede trabajar.
+
+Q1, Q3, Q4 y Q6 son **reflejos puros** (sin IO, sin reloj, sin estado global) y ni
+siquiera escriben cuando se les llama por el bus. Q2 y Q5 son **custodios**:
+`puerta.js` / `autorizaciones.js` son puros y `index.js` es el borde (dos candados
+de single-writer, escritura temporal + `rename`, auditoria antes de cada
+escritura, y un fichero roto **no se sobrescribe**: `sin_confirmaciones` /
+`sin_autorizaciones`). El orden de escritura es siempre confirmaciones ->
+autorizaciones: si el proceso muere entre las dos, queda un si **sin** permiso,
+que es el lado seguro del fallo.
+
+**Limite conocido y declarado.** El adaptador es del taller 3D: su vocabulario de
+tipos es cerrado (`modelo_aprobado` / `modelo_rechazado`) y su `contexto` no
+incluye la cuenta. Por eso una respuesta del canal solo se acepta si se puede atar
+a **una** pregunta: por `confirmacion_id` (o un `callback_data` con `cf:<id>`), o
+—si no lo trae— cuando hay **exactamente una** pregunta viva en ese proyecto y esa
+cuenta. En cualquier otro caso se rechaza (`confirmacion_sin_contexto` /
+`confirmacion_ambigua`) y la pregunta sigue pendiente hasta caducar: **un si que no
+se puede atar a su pregunta no es un si**. Para cerrar el circulo del todo, al
+adaptador le falta ecoar el `confirmacion_id` en el `callback_data` de los botones.
+
 ## Tests
 
 Un fichero por pieza, con el nombre que fija la espina `enki-plan` del plan
@@ -236,14 +304,21 @@ node modules/instagram-bridge/tests/tolerancia.test.js
 node modules/instagram-bridge/tests/castigo.test.js
 node modules/instagram-bridge/tests/regulador.test.js
 node modules/instagram-bridge/tests/sesion.test.js
+node modules/instagram-bridge/tests/casillas.test.js
+node modules/instagram-bridge/tests/nivel.test.js
+node modules/instagram-bridge/tests/puerta.test.js
+node modules/instagram-bridge/tests/ventana.test.js
+node modules/instagram-bridge/tests/politica.test.js
+node modules/instagram-bridge/tests/autorizaciones.test.js
+node modules/instagram-bridge/tests/autonomia.test.js
 ```
 
 ```bash
 cd modules/instagram-bridge/crate && cargo test --offline   # U1, A4.2, A1, A3, A5, O1/O2, D1, D3, D4 y D5, en escritorio
 ```
 
-Los tests del padron, del catalogo, de la cola y de la tolerancia no tocan los
-ficheros del repo: cada prueba de disco se hace en un directorio temporal propio
+Los tests del padron, del catalogo, de la cola, de la tolerancia y de la autonomia
+no tocan los ficheros del repo: cada prueba de disco se hace en un directorio temporal propio
 y lo borra al terminar (`crear({directorio})`). Los del repo se leen una vez para
 comprobar que son validos y estan vacios: un almacen de ejemplo con datos dentro
 seria un estado inventado que nadie sabe de donde sale.

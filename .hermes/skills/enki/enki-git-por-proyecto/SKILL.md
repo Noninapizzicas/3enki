@@ -80,11 +80,10 @@ Antes de tocar git, resolver estas variables del proyecto concreto:
 
 1. Revisar el PR de `proyecto/<SLUG>`.
 2. **Merge** (squash) → main.
-3. **Deploy inmediato** (< 15 min, antes del Guardian). **Nunca desde `~/3enki`**
-   si otro chat lo tiene ocupado — usa el worktree de deploy en `main`:
+3. **Deploy inmediato** (< 15 min, antes del Guardian) **desde `~/3enki`**.
+   El dueño es el ÚNICO que trabaja ahí, y sólo en `main`:
    ```bash
-   cd ~/3enki && git worktree add ~/3enki-deploy origin/main   # una vez
-   cd ~/3enki-deploy && git fetch origin && git reset --hard origin/main
+   cd ~/3enki && git checkout main && git pull --ff-only origin main
    sudo ./deployment/vps-setup.sh <dominio>
    ```
 4. Borrar la rama `proyecto/<SLUG>` local y remota tras merge.

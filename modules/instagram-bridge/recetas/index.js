@@ -36,6 +36,7 @@ const fsp = require('fs/promises');
 
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
 const catalogo = require('./catalogo');
+const cambios = require('./cambios');
 
 const TOPICS = Object.freeze({
   PROPONER: 'instagram.receta.proponer',
@@ -43,7 +44,13 @@ const TOPICS = Object.freeze({
   VIGENTE: 'instagram.receta.vigente',
   ANTECESORAS: 'instagram.receta.antecesoras',
   MARCAR_NO_VIGENTE: 'instagram.receta.marcar_no_vigente',
-  RESTAURAR: 'instagram.receta.restaurar'
+  RESTAURAR: 'instagram.receta.restaurar',
+  // F3: la memoria de cambios de la interfaz. Vive en este modulo porque es el
+  // mismo oficio (custodiar el saber hacer comun) y comparte directorio de
+  // almacenes; el fichero y el candado son SUYOS (cambios.js).
+  CAMBIO_REGISTRAR: 'instagram.cambio.registrar',
+  CAMBIO_LISTAR: 'instagram.cambio.listar',
+  CAMBIO_BUSCAR: 'instagram.cambio.buscar'
 });
 
 // `ENKI_INSTAGRAM_STORAGE` permite apuntar a otro sitio en pruebas o en una
@@ -65,6 +72,10 @@ class CatalogoDeRecetas extends ModuloHibridoReflejo {
     this._ruta = path.join(this._directorio, this._fichero);
 
     this._estado = catalogo.estado_vacio();
+    this._cambios = new cambios.CustodioDeCambios({
+      directorio: this._directorio,
+      fichero: opts.fichero_cambios
+    });
     this._cargado = false;
     this._ilegible = null;
     this._cola = Promise.resolve(); // candado de single-writer
@@ -77,17 +88,22 @@ class CatalogoDeRecetas extends ModuloHibridoReflejo {
   async onLoad(context) {
     await super.onLoad(context);
     await this.cargar();
+    // La memoria de cambios es otro almacen: si esta rota, el catalogo sigue
+    // sirviendo recetas (su custodio devolvera `sin_cambios` hasta que se mire).
+    await this._cambios.cargar();
     this.logger?.info('catalogo-recetas.loaded', {
       module: this.name,
       ruta: this._ruta,
       recetas: this._estado.recetas.length,
       claves: new Set(this._estado.recetas.map((r) => r.clave)).size,
-      revision: this._estado.revision
+      revision: this._estado.revision,
+      cambios_de_interfaz: this._cambios.foto().cambios.length
     });
   }
 
   async onUnload() {
     await this._cola; // no dejar una escritura a medias
+    await this._cambios.cerrar();
     return super.onUnload();
   }
 
@@ -253,6 +269,20 @@ class CatalogoDeRecetas extends ModuloHibridoReflejo {
     return this._rpc(TOPICS.RESTAURAR, e, (d) => this.restaurar(d));
   }
 
+  // ---- F3 · la memoria de cambios de la interfaz ---------------------------
+
+  onCambioRegistrarRequest(e) {
+    return this._rpc(TOPICS.CAMBIO_REGISTRAR, e, (d) => this._cambios.registrar(d));
+  }
+
+  onCambioListarRequest(e) {
+    return this._rpc(TOPICS.CAMBIO_LISTAR, e, (d) => this._cambios.listar(d));
+  }
+
+  onCambioBuscarRequest(e) {
+    return this._rpc(TOPICS.CAMBIO_BUSCAR, e, (d) => this._cambios.buscar(d));
+  }
+
   /**
    * Atiende un RPC con su PAR DE FALLO. Un rechazo sale por `.failed` con su
    * motivo: nadie puede leer un fallo como un exito.
@@ -299,7 +329,8 @@ module.exports = {
   TOPICS,
   CatalogoDeRecetas,
   crear,
-  catalogo
+  catalogo,
+  cambios
 };
 
 // Vista "clase" del plano (recetas/index.js#catalogo).

@@ -1,5 +1,5 @@
 {
-  "_doc": "CUSTODIO A4.4 · CatalogoDeRecetas del proyecto instagram-bridge. Es DONDE VIVE el saber hacer: las recetas de cada (plataforma, capacidad), con sus versiones y su historia. Una sola vigente por clave, siempre; la antecesora se conserva entera para poder volver atras cuando una reparacion empeora las cosas (F2/F5). Nada se borra: se marca. Una receta NACE PROPUESTA (proponer) y solo se promueve con autorizacion humana registrada (Q5); sin autorizacion_id no hay vigencia. Solo entra lo que A4.1 valida, y se revalida al publicar. El almacen es GLOBAL y COMPARTIDO a proposito (P3): el saber hacer se mejora una vez para todos los proyectos; el estado privado de cada proyecto no entra aqui jamas. Es el UNICO escritor de recetas. Origen: plan-construccion.md secciones 4.2 (RPC 12), 7 (almacen global) y 8 (bloque 3); diseno-oop.md A4.4.",
+  "_doc": "CUSTODIO A4.4 · CatalogoDeRecetas del proyecto instagram-bridge. Es DONDE VIVE el saber hacer: las recetas de cada (plataforma, capacidad), con sus versiones y su historia. Una sola vigente por clave, siempre; la antecesora se conserva entera para poder volver atras cuando una reparacion empeora las cosas (F2/F5). Nada se borra: se marca. Una receta NACE PROPUESTA (proponer) y solo se promueve con autorizacion humana registrada (Q5); sin autorizacion_id no hay vigencia. Solo entra lo que A4.1 valida, y se revalida al publicar. El almacen es GLOBAL y COMPARTIDO a proposito (P3): el saber hacer se mejora una vez para todos los proyectos; el estado privado de cada proyecto no entra aqui jamas. Es el UNICO escritor de recetas. Desde el bloque 12 el mismo modulo custodia tambien la MemoriaDeCambios (F3): el saber de COMO CAMBIA la interfaz de la plataforma, compartido a proposito para que una rotura descubierta por un proyecto ahorre el golpe a todos, y sin guardar jamas el estado de ninguna cuenta. Origen: plan-construccion.md secciones 4.2 (RPC 12), 7 (almacen global) y 8 (bloque 3); diseno-oop.md A4.4.",
   "name": "catalogo-recetas",
   "version": "0.1.0",
   "description": "Custodio del catalogo de recetas del puente de Instagram: versiona el saber hacer por (plataforma, capacidad), mantiene una sola vigente por clave y conserva las antecesoras, con escritura single-writer y auditoria (sello P1, cero secretos V1, forma A4.1, saber comun P3) sobre storage/instagram-bridge/catalogo-recetas.json.",
@@ -11,9 +11,16 @@
       "concurrency": "single-writer",
       "scope": "global",
       "pattern": "single-json-file",
-      "path": "storage/instagram-bridge/catalogo-recetas.json",
-      "esquema": "catalogo-recetas-v1",
-      "escritura": "temporal + rename (atomica)"
+      "paths": [
+        "storage/instagram-bridge/catalogo-recetas.json",
+        "storage/instagram-bridge/cambios.json"
+      ],
+      "esquemas": {
+        "catalogo": "catalogo-recetas-v1",
+        "cambios": "memoria-cambios-v1"
+      },
+      "escritura": "temporal + rename (atomica), un candado por almacen",
+      "orden_de_escritura": "independientes: la memoria de cambios no espera al catalogo ni al reves"
     },
     "clave": ["plataforma", "capacidad"],
     "plataformas": ["instagram"],
@@ -37,7 +44,10 @@
       "nada_se_borra_se_marca",
       "sin_sello_no_hay_entrada",
       "ningun_secreto_en_el_catalogo",
-      "solo_entra_lo_que_valida_forma_receta"
+      "solo_entra_lo_que_valida_forma_receta",
+      "la_memoria_de_cambios_es_comun_y_no_se_sella_por_proyecto",
+      "la_memoria_de_cambios_no_guarda_estado_de_ninguna_cuenta",
+      "la_memoria_de_cambios_es_de_campos_cerrados"
     ]
   },
   "subscribes": [
@@ -70,6 +80,21 @@
       "event": "instagram.receta.restaurar.request",
       "handler": "onRestaurarRequest",
       "description": "Devuelve a vigente una antecesora con autorizacion registrada: la salida cuando una reparacion empeora las cosas (F2/F5). La vigente que habia pasa a antecesora."
+    },
+    {
+      "event": "instagram.cambio.registrar.request",
+      "handler": "onCambioRegistrarRequest",
+      "description": "F3 · anota un cambio de la interfaz (que paso, de que ancla a que ancla) en la memoria COMPARTIDA. Si el cambio ya estaba, lo corrobora: suma confirmaciones y anota al testigo en visto_por sin duplicar la entrada. Rechaza con estado_de_cuenta_en_memoria cualquier entrada que pretenda guardar estado de una cuenta."
+    },
+    {
+      "event": "instagram.cambio.listar.request",
+      "handler": "onCambioListarRequest",
+      "description": "F3 · lista cambios de interfaz por plataforma, capacidad o tipo. Exige criterio: la memoria no se lee entera y mezclada."
+    },
+    {
+      "event": "instagram.cambio.buscar.request",
+      "handler": "onCambioBuscarRequest",
+      "description": "F3 · el cambio que explica un paso roto: lo que la memoria ya sabe de ese paso. Es lo que F2 mira antes de proponer nada, para no pagar dos veces el mismo golpe."
     }
   ],
   "publishes": [
@@ -120,6 +145,30 @@
     {
       "event": "instagram.receta.restaurar.failed",
       "description": "Par de fallo de la restauracion: sin_confirmacion, no_es_antecesora, receta_inexistente, entrada_invalida, sin_catalogo."
+    },
+    {
+      "event": "instagram.cambio.registrar.response",
+      "description": "Respuesta correlada: cambio anotado o corroborado, con confirmaciones y cambio_id."
+    },
+    {
+      "event": "instagram.cambio.registrar.failed",
+      "description": "Par de fallo del registro: estado_de_cuenta_en_memoria, campo_no_permitido, tipo_no_declarado, ancla_incoherente, descubridor_invalido, secreto_recibido, sin_cambios."
+    },
+    {
+      "event": "instagram.cambio.listar.response",
+      "description": "Respuesta correlada: cambios que cumplen el ambito, ordenados por confirmaciones."
+    },
+    {
+      "event": "instagram.cambio.listar.failed",
+      "description": "Par de fallo del listado: ambito_incompleto, entrada_invalida, sin_cambios."
+    },
+    {
+      "event": "instagram.cambio.buscar.response",
+      "description": "Respuesta correlada: hallado true/false con el cambio que explica el paso (o cambio_inexistente)."
+    },
+    {
+      "event": "instagram.cambio.buscar.failed",
+      "description": "Par de fallo de la busqueda: ambito_incompleto, entrada_invalida, sin_cambios."
     }
   ],
   "notes": [

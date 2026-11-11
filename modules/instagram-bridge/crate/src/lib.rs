@@ -18,7 +18,9 @@
 //!   - `almacen`: lo que el aparato guarda mientras trabaja. Aqui vive A4.2
 //!     (SembradorDeDemostracion): el grabador de pasos humanos que produce una
 //!     receta PROPUESTA. Vive en el aparato porque la observacion solo ocurre
-//!     delante de la pantalla.
+//!     delante de la pantalla. Y aqui vive F1b (`almacen::anclas`): las anclas
+//!     candidatas que salen de lo observado para reparar una receta rota, sin
+//!     inventar ninguna.
 //!   - `percepcion`: lo que el aparato VE antes de tocar nada. Aqui viven A1
 //!     (ObservadorDeEstado) y el simulador del arbol de accesibilidad, que es lo
 //!     que permite probar la mano entera en escritorio sin un movil.

@@ -346,6 +346,33 @@ reflejos puros. N2 y N3 son micro-agentes: el juicio se inyecta
 (`opts.juicio_llegada` / `opts.juicio_borrador`) y su ausencia o su fallo **no
 rompe nada**, porque la tabla cerrada es el suelo.
 
+## Bloque 12 · La rotura: lo que la plataforma cambia y lo que el puente sabe hacer
+
+Cuatro piezas y una verdad incomoda. La plataforma cambia su interfaz cuando le
+da la gana: un boton se llama distinto, un paso desaparece, la postcondicion deja de
+ocurrir. Aqui se declara la rotura (con dos evidencias, no con una), se repara la
+receta con una persona, se recuerda el cambio para todos los proyectos y se dice la
+**verdad sobre lo que hoy se sabe hacer**.
+
+| Pieza | Fichero | Que hace ejecutable |
+|---|---|---|
+| F1 `DeclaradorDeRotura` | `recetas/rotura.js` | **DOS evidencias independientes del mismo sintoma son ROTURA; UNA es SOSPECHA.** Con una sola no se distingue un cambio de plataforma de un dedo que resbaló o de una pantalla a medio cargar, y declarar rotura retira una receta que funciona para todos. La misma evidencia reenviada **no cuenta dos veces** (se deduplica por `evidencia_id`, o por paso+tipo+ancla+instante+testigo): copiarla no la convierte en dos. Dos sintomas distintos vistos una vez cada uno son **dos sospechas**, no se suman. Cada evidencia ilegible se descarta **nombrando el motivo**. Reflejo puro; la `firma()` de la declaracion es igual vista desde dos proyectos, asi que F3 no guarda dos veces el mismo cambio. |
+| F2 `ReparadorDeReceta` | `recetas/reparar.js` | **Sin confirmacion registrada NO llega al catalogo**, y **la reparacion no se autopromueve**: nace `propuesta`, la confirma el **dueno** (un agente o el sistema pueden proponer, no confirmar) y aun asi entra como propuesta — publicar vuelve a exigir `autorizacion_id`. Un `estado: 'vigente'`, un `autorizacion_id` o un `confirmada: true` que lleguen en la entrada se **descartan y se dicen**. Las anclas candidatas **salen de lo observado** (nodos con nombre del `HechoVisible` de ahora, sin reusar el ancla rota ni las de otros pasos, sin nodos sin nombre, solo tocables si el paso toca). El **juicio (LLM) es opcional**: solo puede elegir entre esas candidatas, y si lanza, inventa o no contesta, se sigue con la regla. Una **sospecha no reescribe el saber comun** (`solo_sospecha`), y si un paso roto no tiene candidata se devuelve `sin_observacion_suficiente` con lo que hay que mirar, en vez de una receta a medias. Micro-agente puro (sin IO): la confirmacion la registra el custodio. |
+| F3 `MemoriaDeCambios` | `recetas/cambios.js` + `storage/instagram-bridge/cambios.json` | **COMPARTIDA a proposito**: una rotura descubierta por un proyecto ahorra el golpe a todos, asi que **no lleva sello de proyecto** (una entrada sellada se rechaza) y si lleva **quien la descubrio** (`descubierto_por`) y quienes la **corroboraron** (`visto_por`): atribucion, no propiedad. El mismo cambio visto por dos proyectos es **una entrada corroborada** (sube `confirmaciones`), no dos. **NO guarda estado de ninguna cuenta**: los campos son una **lista cerrada** y `auditar()` recorre el fichero entero buscando campos de cuenta (`seguidores`, `retrato`, `sesion`, `metricas`...) — si aparecen, `estado_de_cuenta_en_memoria` y no se escribe nada. Custodio single-writer (candado, temporal + rename, auditoria antes de cada escritura, fichero roto que **no se pisa**, ningun secreto V1). |
+| F4 `CoberturaOperativa` | `recetas/cobertura.js` | **UNA RECETA VIGENTE QUE NO ENSAYA ES UNA CAPACIDAD CAIDA, no «casi lista».** Solo hay dos estados (`operativa`, `caida`) y el tercero no existe a proposito. Un ensayo **apto** de la **firma vigente** es lo unico que la hace operativa; uno no apto la deja caida con su motivo; una receta **reparada** exige ensayo **nuevo** (`receta_cambiada_sin_ensayo`) aunque la version coincida, porque la version puede mentir y la firma no. Una capacidad **esperada sin receta** y una receta **retirada por rotura** tambien son caidas. Devuelve numeros (`operativas/total`, `cobertura_pct`), el **porque de cada caida** y un resumen que lo dice sin adornos. Reflejo puro. |
+
+F1 y F4 son **reflejos puros** (sin IO, sin reloj, sin estado global). F2 es
+**micro-agente**: sin LLM funciona con reglas, el juicio es opcional y su fallo no
+rompe nada. F3 es **custodio**: single-writer, temporal + rename, auditoria antes de
+cada escritura y fichero roto que no se sobrescribe. F3 vive en el modulo `recetas`
+porque es el mismo oficio (custodiar el saber hacer comun) y comparte directorio de
+almacenes, con **fichero y candado propios**.
+
+En el aparato, `crate/src/almacen/anclas.rs` (F1b) propone las **anclas candidatas**
+para un paso roto: solo salen de nodos **nombrados** del hecho de AHORA (con su
+`nodo_id`, la prueba de que no se inventaron), no propone el ancla perdida ni las que
+otros pasos usan, y con **mirada parcial no propone nada** — pide otra mirada.
+
 ## Tests
 
 Un fichero por pieza, con el nombre que fija la espina `enki-plan` del plan
@@ -392,14 +419,18 @@ node modules/instagram-bridge/tests/bandeja.test.js
 node modules/instagram-bridge/tests/llegada.test.js
 node modules/instagram-bridge/tests/borrador.test.js
 node modules/instagram-bridge/tests/silencio.test.js
+node modules/instagram-bridge/tests/rotura.test.js
+node modules/instagram-bridge/tests/reparar.test.js
+node modules/instagram-bridge/tests/cambios.test.js
+node modules/instagram-bridge/tests/desglose.test.js
 ```
 
 ```bash
-cd modules/instagram-bridge/crate && cargo test --offline   # U1, A4.2, A1, A3, A5, O1/O2, D1, D3, D4 y D5, en escritorio
+cd modules/instagram-bridge/crate && cargo test --offline   # U1, A4.2, A1, A3, A5, O1/O2, D1, D3, D4, D5 y F1b, en escritorio
 ```
 
-Los tests del padron, del catalogo, de la cola, de la tolerancia, de la autonomia y
-de la ficha no tocan los ficheros del repo: cada prueba de disco se hace en un directorio temporal propio
+Los tests del padron, del catalogo, de la memoria de cambios, de la cola, de la
+tolerancia, de la autonomia y de la ficha no tocan los ficheros del repo: cada prueba de disco se hace en un directorio temporal propio
 y lo borra al terminar (`crear({directorio})`). Los del repo se leen una vez para
 comprobar que son validos y estan vacios: un almacen de ejemplo con datos dentro
 seria un estado inventado que nadie sabe de donde sale.

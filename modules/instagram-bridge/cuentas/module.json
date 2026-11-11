@@ -1,7 +1,7 @@
 {
   "_doc": "CUSTODIO B1 · PadronDeCuentas del proyecto instagram-bridge. Es el INDICE DE DUENOS del puente: que cuenta sirve a que proyecto y en que aparato, con su historia. No es la ficha (E1), ni el estado de sesion (D2), ni la cola (G3). Cardinalidades: una cuenta tiene UN proyecto vigente (cambiarlo es traspaso, que deja historia); un proyecto puede tener N cuentas; un aparato sostiene por defecto UNA cuenta (W3). La baja ARCHIVA, nunca borra. Ningun asiento se guarda sin sello (P1) ni con un secreto dentro (V1): el custodio audita el almacen entero antes de cada escritura. Origen: plan-construccion.md seccion 2 (B1), 5.2 (estados de la cuenta) y 8 (bloque 2).",
   "name": "padron-cuentas",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Custodio del padron de cuentas del puente de Instagram (B1) y de la ficha de cada cuenta (E1): el padron es el indice unico de que cuenta pertenece a que proyecto y en que aparato, con archivo historico (la baja archiva, el traspaso deja historia); la ficha guarda la identidad visible, la voz declarada por el proyecto y los limites propios, con escritura single-writer sobre storage/instagram-bridge/{padron.json,fichas.json}.",
   "language": "es",
   "main": "index.js",
@@ -39,7 +39,32 @@
       "la_voz_la_declara_el_proyecto_nunca_el_puente",
       "cuenta_sin_proyecto_dueno_es_fallo_de_alta",
       "una_ficha_no_se_lee_desde_otro_proyecto"
-    ]
+    ],
+    "ciclo_de_vida": {
+      "piezas": {
+        "B2": { "nombre": "AltaDeCuenta", "forma": "puente", "fichero": "cuentas/alta.js" },
+        "B4": { "nombre": "BajaYTraspaso", "forma": "custodio", "fichero": "cuentas/baja.js" }
+      },
+      "pasos_de_alta": [
+        "padron.inscribir (B1)",
+        "ficha.declarar (E1)",
+        "catalogo.recetas_vigentes (A4.4)",
+        "ventana.declarar (H3 · W7)",
+        "nivel.declarar (Q3)",
+        "ensayo.ejecutar (A4.3)",
+        "primera_operacion.leer (O1/O2 · testigo)"
+      ],
+      "estados_de_alta": ["esperando_persona", "en_curso", "operativa", "detenida", "abortada"],
+      "sesion": "la abre una persona (dueno); el puente no abre sesiones ni guarda credenciales (V1)",
+      "si_un_paso_falta": "se nombra el paso, el alta queda detenida y NO se salta al siguiente; continuar() la retoma en ese paso",
+      "aislamiento_de_la_ceremonia": "una ceremonia por cuenta y proyecto; un alta esperando persona NO bloquea a otros proyectos",
+      "ventana_por_defecto": "cuando_la_persona_no_lo_este_usando (W7 declarado, no un horario inventado)",
+      "primera_operacion": "LEER con testigo completo: veredicto `ocurrio` CON evidencia; publicar de estreno se rechaza",
+      "baja": "archiva: conserva asiento, archivo e historia; exige autorizacion_id",
+      "traspaso": "exige ficha del proyecto destino; si no la hay queda pendiente y la cuenta sigue sirviendo al anterior",
+      "traspaso_no_reescribe": "el sello (P1) y el alta de nacimiento quedan intactos; solo crece la historia",
+      "borrar": "no lo hace B4: dice que se pierde y exige orden explicita distinta registrada en Q5"
+    }
   },
   "subscribes": [
     {
@@ -86,6 +111,41 @@
       "event": "instagram.ficha.admitir.request",
       "handler": "onFichaAdmitirRequest",
       "description": "La puerta del redactor (N3): dice si la voz de la ficha admite un texto. Sin ficha o sin voz contesta que no (sin_ficha / sin_voz) y nombra la frase o el tema que no pasa."
+    },
+    {
+      "event": "instagram.cuenta.alta.iniciar.request",
+      "handler": "onAltaIniciarRequest",
+      "description": "B2 · abre la ceremonia del alta en `esperando_persona`. {proyecto, cuenta, aparato, momento, quien, identidad_visible?, voz?, autorizacion_id?, recetas?, ventana_servicio?, nivel_declarado?}. No toca el padron hasta que una persona abre la sesion. Una ceremonia por cuenta y proyecto: otra abierta devuelve alta_ya_en_curso."
+    },
+    {
+      "event": "instagram.cuenta.alta.sesion.request",
+      "handler": "onAltaSesionRequest",
+      "description": "B2 · una persona abre la sesion y se recorren los siete pasos en orden. {clave|proyecto,cuenta, quien:'dueno', momento, mirada?, prueba?}. `agente`/`sistema` no abren sesiones (la_sesion_la_abre_una_persona). Si un paso falta o rechaza: paso_faltante con el nombre del paso, alta detenida."
+    },
+    {
+      "event": "instagram.cuenta.alta.continuar.request",
+      "handler": "onAltaContinuarRequest",
+      "description": "B2 · retoma un alta detenida EN EL PASO donde se paro (no la reinicia). {clave, mirada?, prueba?, momento?}. Sin sesion abierta devuelve sesion_no_abierta."
+    },
+    {
+      "event": "instagram.cuenta.alta.consultar.request",
+      "handler": "onAltaConsultarRequest",
+      "description": "B2 · estado de una ceremonia ({clave} o {proyecto, cuenta}) o de todas si no se da ninguna: estado, paso_actual y donde_esta. Sirve para ver que un alta atascada no para las demas."
+    },
+    {
+      "event": "instagram.cuenta.alta.abortar.request",
+      "handler": "onAltaAbortarRequest",
+      "description": "B2 · aborta una ceremonia abierta con su motivo. No toca el padron: lo ya inscrito se retira con B4."
+    },
+    {
+      "event": "instagram.cuenta.baja.ordenar.request",
+      "handler": "onCuentaBajaRequest",
+      "description": "B4 · da de baja una cuenta: la ARCHIVA (asiento, archivo e historia se conservan). {cuenta, motivo, momento, quien, autorizacion_id, proyecto?}. Sin autorizacion_id: sin_autorizacion. Despues de escribir RELEE el asiento y lo comprueba."
+    },
+    {
+      "event": "instagram.cuenta.traspaso.ordenar.request",
+      "handler": "onCuentaTraspasoRequest",
+      "description": "B4 · cambia el dueno vigente conservando la historia. {cuenta, proyecto_destino, motivo, momento, quien, aparato?, autorizacion_id?}. Exige ficha del destino (E1); sin ella queda pendiente (ficha_destino_ausente) y la cuenta sigue sirviendo al anterior. El sello y el alta de nacimiento no se reescriben."
     }
   ],
   "publishes": [
@@ -160,12 +220,71 @@
     {
       "event": "instagram.ficha.admitir.failed",
       "description": "Par de fallo de la admision: sin_ficha, sin_voz, dice_lo_que_nunca_dice, tema_fuera_de_limite, no_se_publica, texto_vacio, sin_fichas."
+    },
+    {
+      "event": "instagram.cuenta.alta.iniciar.response",
+      "description": "Respuesta correlada: ceremonia abierta en esperando_persona, con los siete pasos declarados y lo que hace falta."
+    },
+    {
+      "event": "instagram.cuenta.alta.iniciar.failed",
+      "description": "Par de fallo del arranque: entrada_invalida, alta_ya_en_curso, alta_ya_cerrada."
+    },
+    {
+      "event": "instagram.cuenta.alta.sesion.response",
+      "description": "Respuesta correlada: los siete pasos recorridos, cuenta_operativa y la ceremonia entera (asiento, ficha, recetas, ventana, nivel, ensayo, prueba)."
+    },
+    {
+      "event": "instagram.cuenta.alta.sesion.failed",
+      "description": "Par de fallo de la sesion: la_sesion_la_abre_una_persona, paso_sin_pieza, paso_rechazo, sin_recetas_vigentes, recetas_no_vigentes, sin_mirada_del_aparato, ensayo_no_apto, sin_prueba_de_la_primera_operacion, prueba_no_concluyente, primera_operacion_no_es_lectura, alta_desconocida, alta_ya_cerrada, alta_abortada."
+    },
+    {
+      "event": "instagram.cuenta.alta.continuar.response",
+      "description": "Respuesta correlada: la ceremonia retomada desde el paso donde se paro, hasta operativa o hasta el siguiente hueco."
+    },
+    {
+      "event": "instagram.cuenta.alta.continuar.failed",
+      "description": "Par de fallo: alta_desconocida, sesion_no_abierta, alta_ya_cerrada, alta_abortada, paso_sin_pieza, paso_rechazo."
+    },
+    {
+      "event": "instagram.cuenta.alta.consultar.response",
+      "description": "Respuesta correlada: estado de una ceremonia o lista de todas (clave, cuenta, proyecto, estado, paso_actual, donde_esta)."
+    },
+    {
+      "event": "instagram.cuenta.alta.consultar.failed",
+      "description": "Par de fallo de la consulta: alta_desconocida."
+    },
+    {
+      "event": "instagram.cuenta.alta.abortar.response",
+      "description": "Respuesta correlada: ceremonia abortada con su motivo."
+    },
+    {
+      "event": "instagram.cuenta.alta.abortar.failed",
+      "description": "Par de fallo: alta_desconocida, alta_ya_cerrada."
+    },
+    {
+      "event": "instagram.cuenta.baja.ordenar.response",
+      "description": "Respuesta correlada: cuenta archivada, borrado:false, con su archivo e historia conservados y el asiento releido."
+    },
+    {
+      "event": "instagram.cuenta.baja.ordenar.failed",
+      "description": "Par de fallo de la baja: sin_autorizacion, cuenta_desconocida, cuenta_de_otro_proyecto, ya_archivada, archivo_inconsistente, entrada_invalida, sin_padron."
+    },
+    {
+      "event": "instagram.cuenta.traspaso.ordenar.response",
+      "description": "Respuesta correlada: traspaso hecho con historia conservada, sello_intacto y alta_intacta."
+    },
+    {
+      "event": "instagram.cuenta.traspaso.ordenar.failed",
+      "description": "Par de fallo del traspaso: ficha_destino_ausente (pendiente, la cuenta sigue sirviendo al anterior), cuenta_desconocida, cuenta_archivada, mismo_proyecto, cardinalidad_aparato, se_reescribio_la_historia, entrada_invalida, sin_padron, sin_fichas."
     }
   ],
   "notes": [
     "La ficha (E1) vive en este modulo a proposito: es de la misma carpeta del plano (cuentas/) y comparte el borde, pero tiene almacen y candado propios (fichas.json). No es el padron: el padron dice de quien es una cuenta; la ficha dice como habla.",
     "La voz NUNCA se inventa: si no viene declarada por el proyecto (declarada_por: proyecto + autorizacion_id) la ficha queda en modo lectura y admite contesta sin_voz. No hay plantilla de voz por defecto.",
     "El topic instagram.cuenta.exclusividad.comprobar (contrato 8 del plano) lo responde U1 en el aparato, no este modulo: el padron dice que cuenta se esperaba en un aparato, pero si coincide o no se comprueba delante de la pantalla.",
-    "El candado de single-writer de esta pieza es en proceso (cola de promesas). Para dos instancias del cerebro en maquinas distintas hace falta contabilidad-libro/single-writer, que no es de este bloque."
+    "El candado de single-writer de esta pieza es en proceso (cola de promesas). Para dos instancias del cerebro en maquinas distintas hace falta contabilidad-libro/single-writer, que no es de este bloque.",
+    "B2 y B4 (bloque 15) viven en esta carpeta porque comparten el padron, pero no son el padron: B2 es un BORDE que pide los siete pasos a B1/E1/A4.4/H3/Q3/A4.3 y espera el veredicto de O1/O2; B4 pide la baja y el traspaso a B1 y COMPRUEBA el resultado releyendo el asiento.",
+    "La ceremonia del alta no tiene candado global: cada cuenta tiene su estado. Un alta en esperando_persona no abre ningun candado del padron, asi que otros proyectos siguen inscribiendo y operando; la prueba esta en tests/alta.test.js (alta_esperando_persona_no_bloquea_a_otros_proyectos).",
+    "B4 no borra: `borrar()` devuelve borrar_no_es_dar_de_baja con lo que se perderia y la orden que haria falta (Q5). Si el padron no tiene la operacion de borrado, no se inventa en el borde."
   ]
 }

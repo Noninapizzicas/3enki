@@ -409,6 +409,29 @@ aviso **antes** de la pregunta, uno solo por causa y ventana, producido por el
 no inventar (R2 no repite el tecnico, R4 no marca lo que no salio) y no cansar
 (R2 no da codigos, R4 no repite avisos).
 
+## Bloque 15 · El ciclo de vida: poner en marcha y retirar sin perder la memoria
+
+Las dos ultimas piezas son las que **abren y cierran** todo lo anterior, y por eso
+van al final: construir la puerta antes de la casa no ensena nada. Y las dos
+comparten una misma conviccion: **el sistema no se pone en marcha solo y no olvida
+a quien retiro**.
+
+| Pieza | Fichero | Que hace ejecutable |
+|---|---|---|
+| B2 `AltaDeCuenta` | `cuentas/alta.js` | **NO HAY ALTA SIN UNA PERSONA, Y UN ALTA ATASCADA NO PARA A NADIE.** La ceremonia nace en `esperando_persona` y no escribe el padron hasta que el dueno abre la sesion delante del aparato: `agente` y `sistema` no abren sesiones (un sistema que se abre solo la puerta no tiene puerta) y el puente no guarda credenciales. Despues recorre **siete pasos en orden** — inscribir (B1), ficha (E1), recetas vigentes (A4.4), ventana de servicio (H3 · W7), nivel (Q3), ensayo (A4.3) y **primera lectura con testigo** (O1/O2) — pidiendo cada uno a su pieza: no reimplementa ninguno. **Si un paso falta, se NOMBRA y se para ahi**: `paso_sin_pieza` / `paso_rechazo` con el `paso_faltante`, los pasos hechos y `donde_esta`; no se salta al siguiente ni se rellena con lo plausible, y `continuar()` la retoma **en ese mismo paso** (no la reinicia: B1 rechazaria la reinscripcion). Cada cuenta tiene SU ceremonia y su estado, sin candado global: mientras A espera a una persona, B se da de alta y opera. **La cuenta esta operativa cuando existe la primera prueba**: el veredicto de O1/O2 tiene que ser `ocurrio` CON `evidencia_id`, y tiene que ser de **lectura** — estrenar publicando se rechaza con su nombre. La ventana por defecto es la de W7 (`cuando_la_persona_no_lo_este_usando`), declarada como default y no como horario inventado; el nivel, si nadie lo declara, es el conservador de Q3. |
+| B4 `BajaYTraspaso` | `cuentas/baja.js` | **DAR DE BAJA ARCHIVA; NO BORRA. Y EL TRASPASO NO REESCRIBE EL SELLO.** La baja pasa por el padron (una sola pluma) y despues **relee el asiento para comprobarlo**: si no quedo `archivada`, con su `archivo` y su historia, la baja se declara inconsistente en vez de decir que fue bien. Retirada no es desaparecida: `consultar` sigue encontrando la cuenta. Sin `autorizacion_id` no hay baja (el padron lo impone y B4 no lo rellena). El traspaso exige **ficha en el proyecto destino**: sin ella queda **pendiente** —`ficha_destino_ausente`— y la cuenta **sigue sirviendo a quien servia**, porque mudarla seria dejar sin voz una cuenta en un proyecto que no la conoce. Cuando se hace, crece la `historia` con un paso (de/a/motivo/momento/quien) y se comprueba que el `sello` (P1) y el `alta` de nacimiento quedan **byte a byte** como estaban; si cambiaron, el traspaso se rechaza aunque el padron haya dicho que si. `borrar()` no borra: dice las **tres cosas que se perderian** y la orden explicita distinta que haria falta (registrada en Q5). |
+
+Las dos viven en `cuentas/` porque comparten el padron, no porque sean el padron:
+B2 es un **borde** que pide los siete pasos y B4 pide la baja y el traspaso. El
+borde del modulo (`cuentas/index.js`) solo correlaciona `request` →
+`response` | `failed` y deja los topics en `instagram.cuenta.alta.*`,
+`instagram.cuenta.baja.ordenar` y `instagram.cuenta.traspaso.ordenar`.
+
+Con este bloque, **las 63 piezas del arbol estan implementadas**: 44 tests Rust
+en el aparato (U1, A4.2, A1, A3, A5, O1/O2, D1, D3, D4, D5, F1b) y 52 suites JS
+en el cerebro, una por fichero de pieza (o por grupo, cuando la pieza es una
+seccion de un modulo).
+
 ## Tests
 
 Un fichero por pieza, con el nombre que fija la espina `enki-plan` del plan
@@ -464,6 +487,8 @@ node modules/instagram-bridge/tests/completador.test.js
 node modules/instagram-bridge/tests/narrador.test.js
 node modules/instagram-bridge/tests/traductor.test.js
 node modules/instagram-bridge/tests/avisos.test.js
+node modules/instagram-bridge/tests/alta.test.js
+node modules/instagram-bridge/tests/baja.test.js
 ```
 
 ```bash

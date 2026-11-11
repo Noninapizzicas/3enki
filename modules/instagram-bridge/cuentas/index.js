@@ -46,13 +46,25 @@ const fsp = require('fs/promises');
 const ModuloHibridoReflejo = require('../../_shared/modulo-hibrido-reflejo');
 const padron = require('./padron');
 const ficha = require('./ficha');
+const alta = require('./alta');
+const baja = require('./baja');
 
 const TOPICS = Object.freeze({
   ALTA: 'instagram.cuenta.padron.alta',
   BAJA: 'instagram.cuenta.padron.baja',
   TRASPASO: 'instagram.cuenta.padron.traspaso',
   CONSULTAR: 'instagram.cuenta.padron.consultar',
-  LISTAR: 'instagram.cuenta.padron.listar'
+  LISTAR: 'instagram.cuenta.padron.listar',
+  // B2 · la ceremonia de alta (bloque 15). Es un BORDE: no inscribe ni declara
+  // nada por su cuenta, se lo pide a B1/E1/A4.4/Q3/A4.3 y espera el testigo.
+  ALTA_INICIAR: 'instagram.cuenta.alta.iniciar',
+  ALTA_SESION: 'instagram.cuenta.alta.sesion',
+  ALTA_CONTINUAR: 'instagram.cuenta.alta.continuar',
+  ALTA_CONSULTAR: 'instagram.cuenta.alta.consultar',
+  ALTA_ABORTAR: 'instagram.cuenta.alta.abortar',
+  // B4 · la baja y el traspaso (bloque 15). La pluma sigue siendo la del padron.
+  CUENTA_BAJA: 'instagram.cuenta.baja.ordenar',
+  CUENTA_TRASPASO: 'instagram.cuenta.traspaso.ordenar'
 });
 
 // Directorio del almacen. `ENKI_INSTAGRAM_STORAGE` existe para poder apuntar a
@@ -70,7 +82,7 @@ class PadronDeCuentas extends ModuloHibridoReflejo {
   constructor(opts = {}) {
     super();
     this.name = 'padron-cuentas';
-    this.version = '0.2.0';
+    this.version = '0.3.0';
 
     this._directorio = opts.directorio || process.env.ENKI_INSTAGRAM_STORAGE || DIR_POR_DEFECTO;
     this._fichero = opts.fichero || FICHERO;
@@ -82,6 +94,11 @@ class PadronDeCuentas extends ModuloHibridoReflejo {
       directorio: this._directorio,
       fichero: opts.fichero_fichas || ficha.FICHERO
     });
+
+    // B2 y B4 viven en este modulo porque comparten el padron (una pluma), pero
+    // son piezas propias: la ceremonia y la retirada no reimplementan B1.
+    this.altas = alta.crear({ padron: this, fichas: this.fichas });
+    this.bajas = baja.crear({ padron: this, fichas: this.fichas });
 
     this._estado = padron.estado_vacio();
     this._cargado = false;
@@ -276,6 +293,47 @@ class PadronDeCuentas extends ModuloHibridoReflejo {
     return this._rpc(TOPICS.LISTAR, e, (d) => this.listar(d));
   }
 
+  // ---- B2 · AltaDeCuenta (la ceremonia de siete pasos) ---------------------
+
+  onAltaIniciarRequest(e) {
+    return this._rpc(TOPICS.ALTA_INICIAR, e, (d) => this.altas.iniciar(d));
+  }
+
+  onAltaSesionRequest(e) {
+    // La sesion la abre una persona: `quien` debe ser `dueno`. B2 lo comprueba.
+    return this._rpc(TOPICS.ALTA_SESION, e, (d) => this.altas.abrir_sesion(d.clave || d, d));
+  }
+
+  onAltaContinuarRequest(e) {
+    return this._rpc(TOPICS.ALTA_CONTINUAR, e, (d) => this.altas.continuar(d.clave || d, d));
+  }
+
+  onAltaConsultarRequest(e) {
+    return this._rpc(TOPICS.ALTA_CONSULTAR, e, (d) => {
+      const sel = d.clave || (d.proyecto && d.cuenta ? { proyecto: d.proyecto, cuenta: d.cuenta } : null);
+      return this.altas.estado(sel);
+    });
+  }
+
+  onAltaAbortarRequest(e) {
+    return this._rpc(TOPICS.ALTA_ABORTAR, e, (d) => this.altas.abortar(d.clave || d, d.motivo));
+  }
+
+  // ---- B4 · BajaYTraspaso (archiva; el traspaso conserva la historia) ------
+
+  onCuentaBajaRequest(e) {
+    return this._rpc(TOPICS.CUENTA_BAJA, e, (d) => this.bajas.dar_de_baja(d));
+  }
+
+  onCuentaTraspasoRequest(e) {
+    return this._rpc(TOPICS.CUENTA_TRASPASO, e, (d) => this.bajas.traspasar(d));
+  }
+
+  /** Las cuentas que esperan a una persona (sin bloquear a los demas proyectos). */
+  altas_esperando_persona() {
+    return this.altas.esperando_persona();
+  }
+
   // ---- E1 · la ficha (mismo modulo, otro almacen y otro candado) -----------
 
   onFichaLeerRequest(e) {
@@ -326,7 +384,10 @@ class PadronDeCuentas extends ModuloHibridoReflejo {
       faltan: (r && r.faltan) || [],
       invalidos: (r && r.invalidos) || []
     };
-    for (const campo of ['rutas', 'familias', 'problemas', 'detalle', 'pista', 'asiento', 'cuenta']) {
+    for (const campo of ['rutas', 'familias', 'problemas', 'detalle', 'pista', 'asiento', 'cuenta',
+      'alta', 'paso_faltante', 'paso_actual', 'pasos_hechos', 'continuable', 'donde_esta',
+      'falta', 'faltas', 'pendiente', 'se_pierde', 'proyecto_actual', 'cuenta_sigue_sirviendo',
+      'sello_intacto', 'alta_intacta', 'historia_conservada', 'veredicto', 'evidencia_id']) {
       if (r && r[campo] !== undefined) fallo[campo] = r[campo];
     }
     this.eventBus?.publish(`${topic}.failed`, fallo);
@@ -347,7 +408,11 @@ module.exports = {
   // que fichero vive: `cuentas/index.js#padron` es el nombre del plano.
   padron,
   // E1 vive en el mismo modulo (bloque 10): `cuentas/index.js#ficha`.
-  ficha
+  ficha,
+  // B2 y B4 viven aqui (bloque 15) porque comparten el padron, no porque sean
+  // el padron: la ceremonia y la retirada se piden, no se reimplementan.
+  alta,
+  baja
 };
 
 // Vista "clase" del plano (cuentas/index.js#padron).
@@ -359,3 +424,7 @@ module.exports.Padron = Object.freeze({
   listar: padron.listar,
   auditar: padron.auditar
 });
+
+// Vistas "clase" del plano para el bloque 15 (cuentas/{alta,baja}.js).
+module.exports.AltaDeCuenta = alta.AltaDeCuenta;
+module.exports.BajaYTraspaso = baja.BajaYTraspaso;

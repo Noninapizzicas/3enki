@@ -324,6 +324,28 @@ Q6, `respaldo`, `mano` = A3, `verificador` = O, `evidencia` = O3) y devuelve
 mentira con sintaxis correcta. El unico IO del bloque es el respaldo previo a una
 retirada, un custodio append-only en `storage/instagram-bridge/respaldos-retirada.json`.
 
+## Bloque 11b · Leer y responder: la foto con fecha, la deuda y lo que no se calla
+
+Seis piezas (las que miran y contestan). Dos custodios, dos reflejos y dos
+micro-agentes. La regla que las une: **no se inventa informacion ni se cierra una
+deuda sin prueba.**
+
+| Pieza | Fichero | Que hace ejecutable |
+|---|---|---|
+| M1 `RetratoFechado` | `operacion/retratos.js` | La foto de la cuenta **con su fecha y con la fecha de cada dato**. **Un dato sin `leido_en` es una opinion**: se rechaza nombrandolo (`dato_sin_fecha`), y un dato posterior a la foto tambien (`dato_posterior_al_retrato`). `valor: null` con fecha **es un dato** («a las 09:00 no se pudo leer»), no un hueco. **Append-only**: la foto no se corrige, se toma otra; reenviar el mismo `retrato_id` es idempotente y reenviarlo con otros datos es un rechazo. Custodio single-writer (temporal + rename, auditoria antes de escribir, almacen ilegible que no se pisa). |
+| M2 `CambioDesdeUltimaLectura` | `core/cambio.js` | **Sin retrato anterior hay PRIMERA LECTURA, no cambio**: `delta: null`, `hay_delta: false` y `sin_cambio: false` (un «0 cambios» contra la nada se lee como «todo igual»). Tampoco son cambio un anterior **de otra cuenta**, **ilegible** o **sin fecha**; un anterior **posterior** o **del mismo instante** se rechaza (`no_comparable`) porque el delta saldria con el signo cambiado. Los datos sin fecha se **omiten y se nombran**; si todos lo estan, no hay nada comparable. Con `historial`, compara contra la lectura **inmediatamente anterior**, no contra la mas vieja. Reflejo puro. |
+| N1 `BandejaDeEspera` | `operacion/bandeja.js` | **Lo que espera respuesta, en FIFO.** **Contestado exige `veredicto: 'ocurrio'` Y `evidencia_id`**: sin ellos la marca se **RECHAZA** y la fila **SIGUE en la bandeja** (`sigue_esperando`), porque «se intento contestar» no es «la persona lo recibio». Lo contestado **no se reabre** (contestar dos veces es peor que no contestar) y un silencio **no cierra una queja** aunque la decision venga firmada. Custodio single-writer con auditoria. |
+| N2 `ClasificadorDeLlegada` | `operacion/llegada.js` | **Un mensaje ININTELIGIBLE es delicado, no ruido**: `delicado: true`, `destino: 'escalar'`, `se_descarta: false`. No se puede decidir que un mensaje no importa sin haberlo entendido. **Micro-agente sin LLM obligatorio**: la tabla cerrada decide por lexico y forma; el juicio es opcional, sincrono, y **no puede bajar dos suelos** (lo ilegible y la queja). Si falta, lanza, devuelve una promesa o una clase desconocida, se usa la tabla. Nunca lanza: si algo se rompe, el mensaje se escala. |
+| N3 `RedactorDeBorrador` | `operacion/borrador.js` | **Un borrador NUNCA envia y NUNCA persiste.** No importa `fs`, `path`, red ni ningun puerto de envio; devuelve `se_envia:false`, `se_persiste:false`, `envio:null`, `persistencia:null` y `destino:'revision_humana'`. Escribe con la **voz de E1**: sin voz declarada por el proyecto **no redacta** (`sin_voz`, modo lectura); `lo_que_nunca_dice` y `limites_de_tema` se revisan **antes** de devolver el texto y, si ninguna variante los respeta, no se devuelve un «casi». Tampoco redacta para lo ininteligible ni para spam: no se inventa una respuesta a lo que no se ha entendido. |
+| N5 `SilencioElegido` | `operacion/silencio.js` | **Una QUEJA no se silencia, se escala**, por **clase** y por **texto**: una queja mal clasificada como `consulta` se escala igual y se devuelve `reclasificacion: 'queja'`. Los clasificadores se equivocan y el silencio es la unica decision que no se puede deshacer. **Si pueden callarse** spam y agradecimiento; **no** lo ininteligible ni lo delicado. Una clase desconocida **se responde**: callar por defecto pierde personas. Reflejo puro. |
+
+M1 y N1 comparten el borde de IO (`operacion/custodia.js`): single-writer por
+cola de promesas, escritura temporal + rename, **auditoria antes de cada
+escritura** y un almacen ilegible que **no se sobrescribe**. M2 y N5 son
+reflejos puros. N2 y N3 son micro-agentes: el juicio se inyecta
+(`opts.juicio_llegada` / `opts.juicio_borrador`) y su ausencia o su fallo **no
+rompe nada**, porque la tabla cerrada es el suelo.
+
 ## Tests
 
 Un fichero por pieza, con el nombre que fija la espina `enki-plan` del plan
@@ -364,6 +386,12 @@ node modules/instagram-bridge/tests/retirada.test.js
 node modules/instagram-bridge/tests/recorte.test.js
 node modules/instagram-bridge/tests/destinatario.test.js
 node modules/instagram-bridge/tests/alcance.test.js
+node modules/instagram-bridge/tests/retratos.test.js
+node modules/instagram-bridge/tests/cambio.test.js
+node modules/instagram-bridge/tests/bandeja.test.js
+node modules/instagram-bridge/tests/llegada.test.js
+node modules/instagram-bridge/tests/borrador.test.js
+node modules/instagram-bridge/tests/silencio.test.js
 ```
 
 ```bash

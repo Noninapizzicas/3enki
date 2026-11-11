@@ -1,16 +1,30 @@
 'use strict';
 
 /**
- * operacion — bloque 11a · publicar y sus fronteras.
+ * operacion — los bloques 11a (publicar y sus fronteras) y 11b (leer y
+ * responder).
  *
- * Cinco piezas con las que el puente PREPARA una pieza, la RETIRA y protege las
- * tres fronteras de alrededor:
+ * 11a · cinco piezas con las que el puente PREPARA una pieza, la RETIRA y
+ * protege las tres fronteras de alrededor:
  *
  *   L1 `PreparadorDePieza`      operacion/piezas.js     conversor (puro)
  *   L3 `RetiradaDePublicacion`  operacion/retirada.js   puente (compone)
  *   M3 `RecorteDePrivacidad`    core/recorte.js         reflejo (puro)
  *   S1 `DestinatarioPrevio`     puente/destinatario.js  reflejo (puro)
  *   S2 `DetectorDeFueraDeAlcance` puente/alcance.js     reflejo (puro)
+ *
+ * 11b · seis piezas con las que el puente MIRA y CONTESTA:
+ *
+ *   M1 `RetratoFechado`           operacion/retratos.js  custodio
+ *   M2 `CambioDesdeUltimaLectura` core/cambio.js         reflejo (puro)
+ *   N1 `BandejaDeEspera`          operacion/bandeja.js   custodio
+ *   N2 `ClasificadorDeLlegada`    operacion/llegada.js   micro-agente
+ *   N3 `RedactorDeBorrador`       operacion/borrador.js  micro-agente
+ *   N5 `SilencioElegido`          operacion/silencio.js  reflejo (puro)
+ *
+ * Los dos custodios comparten `operacion/custodia.js` (single-writer, temporal
+ * + rename, auditoria antes de escribir). Los dos micro-agentes funcionan sin
+ * LLM: el juicio se inyecta y, si falta o falla, decide su tabla cerrada.
  *
  * Este fichero es el BORDE: correlacion de eventos, los puertos de L3 y el
  * UNICO IO del bloque — el respaldo de lo que habia antes de retirar, en
@@ -29,6 +43,9 @@
  *     `guardado_en` del respaldo es metadato del fichero, no del negocio.
  *   - **No recorta, no detecta, no prepara.** Esas cuatro piezas son puras y se
  *     llaman tal cual: un reflejo envuelto en IO deja de ser un reflejo.
+ *   - **No envia nada.** El unico puerto de salida sigue siendo la mano
+ *     inyectada de L3, y N3 no la importa ni la conoce: un borrador no sale de
+ *     este modulo con permiso de envio.
  */
 
 const path = require('path');
@@ -39,6 +56,12 @@ const { es_objeto, texto_no_vacio } = require('../core/formas');
 
 const piezas = require('./piezas');
 const retirada = require('./retirada');
+const retratos = require('./retratos');
+const bandeja = require('./bandeja');
+const llegada = require('./llegada');
+const borrador = require('./borrador');
+const silencio = require('./silencio');
+const cambio = require('../core/cambio');
 const recorte = require('../core/recorte');
 const destinatario = require('../puente/destinatario');
 const alcance = require('../puente/alcance');
@@ -56,7 +79,21 @@ const TOPICS = Object.freeze({
   RECORTE_RECORTAR: 'instagram.operacion.recorte.recortar.request',
   RECORTE_AUDITAR: 'instagram.operacion.recorte.auditar.request',
   DESTINATARIO_COMPROBAR: 'instagram.operacion.destinatario.comprobar.request',
-  ALCANCE_DETECTAR: 'instagram.operacion.alcance.detectar.request'
+  ALCANCE_DETECTAR: 'instagram.operacion.alcance.detectar.request',
+  // bloque 11b · leer y responder
+  RETRATO_TOMAR: 'instagram.operacion.retrato.tomar.request',
+  RETRATO_ULTIMO: 'instagram.operacion.retrato.ultimo.request',
+  RETRATO_HISTORIAL: 'instagram.operacion.retrato.historial.request',
+  RETRATO_AUDITAR: 'instagram.operacion.retrato.auditar.request',
+  CAMBIO_COMPARAR: 'instagram.operacion.cambio.comparar.request',
+  BANDEJA_ENTRAR: 'instagram.operacion.bandeja.entrar.request',
+  BANDEJA_PENDIENTES: 'instagram.operacion.bandeja.pendientes.request',
+  BANDEJA_RESUMEN: 'instagram.operacion.bandeja.resumen.request',
+  BANDEJA_CONTESTAR: 'instagram.operacion.bandeja.contestar.request',
+  BANDEJA_SILENCIAR: 'instagram.operacion.bandeja.silenciar.request',
+  LLEGADA_CLASIFICAR: 'instagram.operacion.llegada.clasificar.request',
+  BORRADOR_REDACTAR: 'instagram.operacion.borrador.redactar.request',
+  SILENCIO_DECIDIR: 'instagram.operacion.silencio.decidir.request'
 });
 
 // ---------------------------------------------------------------------------
@@ -190,7 +227,7 @@ class Operacion extends ModuloHibridoReflejo {
   constructor(opts = {}) {
     super();
     this.name = 'operacion';
-    this.version = '0.1.0';
+    this.version = '0.2.0';
 
     this._directorio = opts.directorio || process.env.ENKI_INSTAGRAM_STORAGE || DIR_POR_DEFECTO;
 
@@ -208,9 +245,31 @@ class Operacion extends ModuloHibridoReflejo {
 
     this._evidencia = opts.evidencia || new evidencia.EvidenciaConservada({ directorio: path.join(this._directorio, 'evidencia') });
 
+    // ---- bloque 11b · los dos custodios --------------------------------
+    this._retratos = opts.retratos || new retratos.RetratosFechados({
+      directorio: this._directorio,
+      fichero: opts.fichero_retratos,
+      reloj: opts.reloj
+    });
+    this._bandeja = opts.bandeja || new bandeja.BandejaDeEspera({
+      directorio: this._directorio,
+      fichero: opts.fichero_bandeja,
+      reloj: opts.reloj
+    });
+
+    // ---- los dos micro-agentes: el juicio es OPCIONAL ----------------
+    // Sin juicio, N2 y N3 funcionan con su tabla cerrada. Si el juicio se
+    // inyecta y falla, cada pieza cae a la tabla por su cuenta.
+    this._juicio_llegada = typeof opts.juicio_llegada === 'function' ? opts.juicio_llegada : null;
+    this._juicio_borrador = typeof opts.juicio_borrador === 'function' ? opts.juicio_borrador : null;
+
     this._retiradas = 0;
     this._piezas = 0;
     this._recortes = 0;
+    this._retratos_tomados = 0;
+    this._clasificaciones = 0;
+    this._borradores = 0;
+    this._silencios = 0;
   }
 
   get retirada() {
@@ -229,17 +288,27 @@ class Operacion extends ModuloHibridoReflejo {
     await super.onLoad(context);
     this._evidencia.onLoad({ eventBus: this.eventBus, logger: this.logger });
     const estado = await this._respaldo.cargar();
+    const retratos_ok = await this._retratos.cargar();
+    const bandeja_ok = await this._bandeja.cargar();
     this.logger?.info('operacion.loaded', {
       module: this.name,
       respaldos: this._respaldo.total(),
       respaldos_ok: estado.ok,
+      retratos: this._retratos.total(),
+      retratos_ok: retratos_ok.ok,
+      bandeja: this._bandeja.total(),
+      bandeja_ok: bandeja_ok.ok,
       mano: this._mano !== null,
-      verificador: this._verificador !== null
+      verificador: this._verificador !== null,
+      juicio_llegada: this._juicio_llegada !== null,
+      juicio_borrador: this._juicio_borrador !== null
     });
   }
 
   async onUnload() {
     await this._respaldo.drenar();
+    await this._retratos.drenar();
+    await this._bandeja.drenar();
     return super.onUnload();
   }
 
@@ -337,6 +406,101 @@ class Operacion extends ModuloHibridoReflejo {
   onAlcanceDetectarRequest(event) {
     return this._responder(TOPICS.ALCANCE_DETECTAR, event, (d) => alcance.detectar(d.peticion || d, d.interlocutor));
   }
+
+  // ---- M1 · retrato fechado --------------------------------------------
+
+  onRetratoTomarRequest(event) {
+    return this._responder(TOPICS.RETRATO_TOMAR, event, async (d) => {
+      const r = await this._retratos.custodiar(d.retrato || d);
+      if (r.ok === true && r.repetido !== true) this._retratos_tomados += 1;
+      return r;
+    });
+  }
+
+  onRetratoUltimoRequest(event) {
+    return this._responder(TOPICS.RETRATO_ULTIMO, event, (d) => this._retratos.ultimo(d.consulta || d));
+  }
+
+  onRetratoHistorialRequest(event) {
+    return this._responder(TOPICS.RETRATO_HISTORIAL, event, (d) => this._retratos.historial(d.consulta || d));
+  }
+
+  onRetratoAuditarRequest(event) {
+    return this._responder(TOPICS.RETRATO_AUDITAR, event, () => this._retratos.auditar_almacen());
+  }
+
+  // ---- M2 · cambio desde la ultima lectura ------------------------------
+
+  onCambioCompararRequest(event) {
+    return this._responder(TOPICS.CAMBIO_COMPARAR, event, (d) => {
+      const actual = d.actual || d.retrato;
+      if (Array.isArray(d.historial)) return cambio.comparar_con_historial(actual, d.historial, d.opciones);
+      return cambio.comparar(actual, d.anterior === undefined ? null : d.anterior, d.opciones);
+    });
+  }
+
+  // ---- N1 · bandeja de espera -------------------------------------------
+
+  onBandejaEntrarRequest(event) {
+    return this._responder(TOPICS.BANDEJA_ENTRAR, event, (d) => this._bandeja.entrar(d.espera || d));
+  }
+
+  onBandejaPendientesRequest(event) {
+    return this._responder(TOPICS.BANDEJA_PENDIENTES, event, (d) => this._bandeja.pendientes(d.consulta || d));
+  }
+
+  onBandejaResumenRequest(event) {
+    return this._responder(TOPICS.BANDEJA_RESUMEN, event, (d) => this._bandeja.resumen(d.consulta || d));
+  }
+
+  onBandejaContestarRequest(event) {
+    return this._responder(TOPICS.BANDEJA_CONTESTAR, event, (d) => this._bandeja.marcar_contestado(d));
+  }
+
+  onBandejaSilenciarRequest(event) {
+    return this._responder(TOPICS.BANDEJA_SILENCIAR, event, (d) => this._bandeja.marcar_silenciado(d));
+  }
+
+  // ---- N2 · clasificador de llegada -------------------------------------
+
+  onLlegadaClasificarRequest(event) {
+    return this._responder(TOPICS.LLEGADA_CLASIFICAR, event, (d) => {
+      const r = llegada.clasificar(d.mensaje || d, { juicio: this._juicio_llegada });
+      this._clasificaciones += 1;
+      return r;
+    });
+  }
+
+  // ---- N3 · redactor de borrador ----------------------------------------
+  // Se fuerza `ok: true` y los dos `false`: la ausencia de borrador (sin voz,
+  // ininteligible, spam) es una DECISION, no una averia — y el borde no deja
+  // salir un borrador con permiso de envio aunque la pieza cambiara manana.
+
+  onBorradorRedactarRequest(event) {
+    return this._responder(TOPICS.BORRADOR_REDACTAR, event, (d) => {
+      const r = borrador.redactar(d.peticion || d, { juicio: this._juicio_borrador, largo_max: d.largo_max });
+      if (r.ok === true) this._borradores += 1;
+      return Object.assign({}, r, {
+        ok: true,
+        redacta: r.ok === true,
+        hay_borrador: r.ok === true,
+        se_envia: false,
+        se_persiste: false,
+        envio: null,
+        persistencia: null
+      });
+    });
+  }
+
+  // ---- N5 · silencio elegido --------------------------------------------
+
+  onSilencioDecidirRequest(event) {
+    return this._responder(TOPICS.SILENCIO_DECIDIR, event, (d) => {
+      const r = silencio.decidir(d.peticion || d, { politica: d.politica });
+      if (r.ok === true && r.silencio === true) this._silencios += 1;
+      return r;
+    });
+  }
 }
 
 function crear(opts) {
@@ -351,6 +515,12 @@ module.exports = {
   crear,
   piezas,
   retirada,
+  retratos,
+  bandeja,
+  llegada,
+  borrador,
+  silencio,
+  cambio,
   recorte,
   destinatario,
   alcance,
@@ -362,3 +532,9 @@ module.exports.RetiradaDePublicacion = retirada.RetiradaDePublicacion;
 module.exports.RecorteDePrivacidad = recorte;
 module.exports.DestinatarioPrevio = destinatario;
 module.exports.DetectorDeFueraDeAlcance = alcance;
+module.exports.RetratoFechado = retratos.RetratoFechado;
+module.exports.CambioDesdeUltimaLectura = cambio.CambioDesdeUltimaLectura;
+module.exports.BandejaDeEspera = bandeja.BandejaDeEsperaPieza;
+module.exports.ClasificadorDeLlegada = llegada.ClasificadorDeLlegada;
+module.exports.RedactorDeBorrador = borrador.RedactorDeBorrador;
+module.exports.SilencioElegido = silencio.SilencioElegido;

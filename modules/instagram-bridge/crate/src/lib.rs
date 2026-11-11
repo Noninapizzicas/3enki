@@ -19,8 +19,13 @@
 //!     (SembradorDeDemostracion): el grabador de pasos humanos que produce una
 //!     receta PROPUESTA. Vive en el aparato porque la observacion solo ocurre
 //!     delante de la pantalla.
+//!   - `contrato`: los nombres que cruzan los puertos. Aqui vive R1
+//!     (TaxonomiaDeFallos) como enum espejo de `core/fallos.js`: el aparato
+//!     nombra el fallo con el mismo codigo que el cerebro, y el test de paridad
+//!     lee este fichero para que no haya dos listas.
 
 pub mod almacen;
+pub mod contrato;
 pub mod mano;
 
 /// Version del crate, la misma que declara `Cargo.toml` y que viaja en

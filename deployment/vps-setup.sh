@@ -1094,6 +1094,21 @@ else
     echo "    ws://${SERVER_IP}/mqtt       → MQTT WebSocket"
 fi
 
+# ---- Devolver el árbol al DUEÑO ------------------------------------------
+# Este script corre con sudo y compila con `cargo install --path ${REPO_DIR}/...`
+# SIN --target-dir: cargo escribe ${REPO_DIR}/enki-sense/target como ROOT. Con el
+# tiempo el árbol entero queda de root y el dueño (admin) ya no puede ni hacer
+# `git pull`: "error: unable to unlink old ...: Permission denied".
+# Se devuelve la propiedad al final, con el grupo www-data intacto (hermes ∈
+# www-data sigue pudiendo escribir donde haga falta).
+if [ -d "${REPO_DIR}/.git" ]; then
+    if chown -R admin:www-data "${REPO_DIR}" 2>/dev/null; then
+        log "árbol devuelto a admin:www-data (el deploy no lo deja de root)"
+    else
+        warn "no se pudo devolver el árbol a admin:www-data — revisa permisos de ${REPO_DIR}"
+    fi
+fi
+
 echo ""
 echo "  Comandos útiles:"
 echo "    sudo systemctl status enki"

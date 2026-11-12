@@ -13,117 +13,131 @@
     --sans: Inter, Lato, "Helvetica Neue", Arial, sans-serif;
   }
   *{box-sizing:border-box;margin:0;padding:0}
-  html,body{width:1920px;height:1080px;overflow:hidden;background:var(--fondo);color:var(--texto);font-family:var(--sans)}
-  #lienzo{width:1920px;height:1080px;display:flex;flex-direction:column}
+  /* ── EL PANEL: la tele no gira la ventana, la giramos nosotros ────────────
+     Una webOS de consumo no tiene ajuste de rotación: aunque el panel esté
+     colgado en vertical, el navegador sigue declarando 1920x1080. Por eso se
+     compone un lienzo vertical de 1080x1920 y se le da un cuarto de vuelta
+     exacto: girado, su caja mide 1920x1080 y llena el panel sin escalar y sin
+     recortar. El signo de abajo dice hacia dónde: rotamos la IMAGEN a la
+     derecha (90deg), o sea que la tele se cuelga girándola hacia la IZQUIERDA
+     (su borde derecho arriba). Si se cuelga al revés se ve del derecho
+     cambiando 90deg por -90deg — una línea. */
+  html,body{width:1920px;height:1080px;overflow:hidden;background:#000;color:var(--texto);font-family:var(--sans)}
+  #lienzo{position:fixed;top:50%;left:50%;width:1080px;height:1920px;
+    transform:translate(-50%,-50%) rotate(90deg);transform-origin:center center;
+    display:flex;flex-direction:column;background:var(--fondo)}
 
-  /* ── A · cabecera (fija) */
-  #A{height:96px;display:grid;grid-template-columns:220px minmax(0,1fr) 220px;align-items:center;padding:0 28px;border-bottom:1px solid var(--linea)}
+  /* ── A · cabecera (fija) — marca, abierto, hora */
+  #A{height:118px;display:grid;grid-template-columns:92px minmax(0,1fr) 92px;align-items:center;padding:0 22px;border-bottom:1px solid var(--linea)}
   #A .lado{display:flex;align-items:center;justify-content:flex-start}
   #A .lado.der{justify-content:flex-end}
-  #A .lado img{height:58px;width:58px;object-fit:contain;opacity:.95;border-radius:50%;-webkit-mask-image:radial-gradient(circle at 50% 50%,#000 66%,transparent 76%);mask-image:radial-gradient(circle at 50% 50%,#000 66%,transparent 76%)}
-  #A .centro{display:flex;align-items:center;justify-content:center;gap:22px;min-width:0}
-  .marca-nombre{font-family:var(--serif);font-size:30px;letter-spacing:.16em;text-transform:uppercase;color:var(--texto);white-space:nowrap}
-  .estado{display:flex;align-items:center;gap:12px;padding-left:22px;border-left:1px solid var(--linea)}
-  .punto{width:14px;height:14px;border-radius:50%;background:var(--tenue);box-shadow:0 0 0 6px rgba(255,255,255,.04)}
+  #A .lado img{height:66px;width:66px;object-fit:contain;opacity:.95;border-radius:50%;
+    -webkit-mask-image:radial-gradient(circle at 50% 50%,#000 66%,transparent 76%);
+    mask-image:radial-gradient(circle at 50% 50%,#000 66%,transparent 76%)}
+  #A .centro{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;min-width:0}
+  .marca-nombre{font-family:var(--serif);font-size:36px;line-height:1;letter-spacing:.18em;text-transform:uppercase;color:var(--texto);white-space:nowrap}
+  .estado{display:flex;align-items:center;gap:11px}
+  .punto{width:13px;height:13px;border-radius:50%;background:var(--tenue);box-shadow:0 0 0 5px rgba(255,255,255,.04);flex:0 0 auto}
   .punto.abierto{background:var(--verde);box-shadow:0 0 18px rgba(91,208,138,.55)}
   .punto.cerrado{background:var(--rojo);box-shadow:0 0 18px rgba(228,103,79,.4)}
-  .estado-txt{font-size:22px;font-weight:700;letter-spacing:.12em;text-transform:uppercase}
+  .estado-linea{display:flex;align-items:baseline;gap:10px}
+  .estado-txt{font-size:20px;font-weight:700;letter-spacing:.14em;text-transform:uppercase}
   .estado-sub{font-size:17px;color:var(--tenue);letter-spacing:.04em}
-  .reloj{font-variant-numeric:tabular-nums;font-size:22px;color:var(--texto);letter-spacing:.06em;padding-left:22px;border-left:1px solid var(--linea)}
+  .reloj{font-variant-numeric:tabular-nums;font-size:16px;color:var(--tenue);letter-spacing:.14em}
 
   /* ── F · cinta */
-  #F{height:34px;display:flex;align-items:center;overflow:hidden;background:linear-gradient(90deg,rgba(212,165,55,.12),rgba(212,165,55,.03));border-bottom:1px solid var(--linea)}
-  .cinta-track{display:flex;gap:52px;white-space:nowrap;animation:corre 60s linear infinite;will-change:transform}
-  .cinta-track span{font-size:15px;letter-spacing:.18em;text-transform:uppercase;color:#c9bda2}
-  .cinta-track span::after{content:"·";margin-left:52px;color:var(--acento)}
+  #F{height:38px;display:flex;align-items:center;overflow:hidden;padding-left:20px;
+     background:linear-gradient(90deg,rgba(212,165,55,.12),rgba(212,165,55,.03));border-bottom:1px solid var(--linea)}
+  .cinta-track{display:flex;gap:48px;white-space:nowrap;animation:corre 60s linear infinite;will-change:transform}
+  .cinta-track span{font-size:16px;letter-spacing:.18em;text-transform:uppercase;color:#c9bda2}
+  .cinta-track span::after{content:"·";margin-left:48px;color:var(--acento)}
   #F.vacia{display:none}
   @keyframes corre{from{transform:translateX(0)}to{transform:translateX(-50%)}}
 
-  /* ── cuerpo */
-  #cuerpo{flex:1;min-height:0;display:grid;grid-template-columns:452px minmax(0,1fr) 342px;gap:18px;padding:18px 28px 14px}
-  .col{min-width:0;display:flex;flex-direction:column}
-  .panel{background:var(--panel);border:1px solid var(--linea);border-radius:6px;min-width:0;position:relative;overflow:hidden}
+  /* ── cuerpo: una sola columna, de arriba abajo */
+  #cuerpo{flex:1;min-height:0;display:flex;flex-direction:column;gap:16px;padding:16px 20px 14px}
+  .panel{background:var(--panel);border:1px solid var(--linea);border-radius:8px;min-width:0;position:relative;overflow:hidden}
 
-  /* B · zona del día — identidad propia: es un CARTEL vertical, no una ficha
-     del carrusel. Con foto, la foto va A SANGRE y el texto encima; sin foto,
-     fondo cálido. Así el panel nunca enseña un hueco muerto. */
-  #B{align-items:stretch;padding:0!important}
+  /* B · el cartel del día: manda la foto, texto encima */
+  #B{flex:0 0 800px;padding:0!important;border:0;background:none}
   #B .bloque-dia{position:relative;height:100%;display:flex;flex-direction:column;
-    justify-content:space-between;gap:16px;padding:30px;overflow:hidden;
+    justify-content:space-between;gap:14px;padding:34px 34px 30px;overflow:hidden;border-radius:8px;
     background:radial-gradient(120% 90% at 15% 0%,#221d15 0%,#14120f 55%,#0c0c0b 100%)}
-  #B .bloque-dia .texto{display:flex;flex-direction:column;gap:12px;position:relative;z-index:2}
-  #B .bloque-dia .top{position:relative;z-index:2}
-  #B .bloque-dia .pie-dia{position:relative;z-index:2}
-  #B .eyebrow{display:flex;align-items:center;gap:10px;font-size:14px;letter-spacing:.22em;text-transform:uppercase;color:var(--acento)}
-  #B .eyebrow::before{content:"";width:26px;height:1px;background:var(--acento)}
-  #B .titulo{font-family:var(--serif);font-size:58px;line-height:1.02;color:#fff;text-wrap:balance}
-  #B .sub{font-size:19px;line-height:1.5;color:#c3baa9}
-  #B .precio{font-family:var(--serif);font-size:62px;color:var(--acento);padding-top:18px;border-top:1px solid var(--linea)}
-  #B .vig{font-size:14px;letter-spacing:.18em;text-transform:uppercase;color:var(--tenue);margin-top:8px}
+  #B .bloque-dia .texto{display:flex;flex-direction:column;gap:14px;position:relative;z-index:2;margin-top:auto}
+  #B .bloque-dia .top,#B .bloque-dia .pie-dia{position:relative;z-index:2}
+  #B .eyebrow{display:flex;align-items:center;gap:12px;font-size:17px;letter-spacing:.24em;text-transform:uppercase;color:var(--acento)}
+  #B .eyebrow::before{content:"";width:34px;height:1px;background:var(--acento)}
+  #B .titulo{font-family:var(--serif);font-size:88px;line-height:1.0;color:#fff;text-wrap:balance}
+  #B .sub{font-size:23px;line-height:1.45;color:#c3baa9}
+  #B .precio{font-family:var(--serif);font-size:92px;line-height:1;color:var(--acento);padding-top:18px;border-top:1px solid var(--linea)}
+  #B .vig{font-size:16px;letter-spacing:.2em;text-transform:uppercase;color:var(--tenue);margin-top:10px}
   #B .foto{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0}
   #B .velo-b{position:absolute;inset:0;z-index:1;
-    background:linear-gradient(180deg,rgba(8,8,8,.86) 0%,rgba(8,8,8,.18) 30%,rgba(8,8,8,.72) 62%,rgba(8,8,8,.97) 100%)}
-  #B .filete{height:1px;background:linear-gradient(90deg,var(--linea),transparent);margin:10px 0 0}
+    background:linear-gradient(180deg,rgba(8,8,8,.88) 0%,rgba(8,8,8,.22) 16%,rgba(8,8,8,.18) 34%,rgba(8,8,8,.42) 46%,rgba(8,8,8,.78) 56%,rgba(8,8,8,.94) 66%,rgba(8,8,8,.99) 100%)}
+  #B .filete{height:1px;background:linear-gradient(90deg,var(--linea),transparent);margin:11px 0 0}
 
   /* C · carrusel */
+  #C{flex:1 1 auto;min-height:0;display:flex;flex-direction:column}
   #C .marco{flex:1;min-height:0;position:relative}
-  .slide{position:absolute;inset:0;opacity:0;transition:opacity .7s ease;display:flex;flex-direction:column;overflow:hidden;border-radius:6px}
+  .slide{position:absolute;inset:0;opacity:0;transition:opacity .7s ease;display:flex;flex-direction:column;overflow:hidden;border-radius:8px}
   .slide.on{opacity:1}
   .slide .fondo{position:absolute;inset:0;background-size:cover;background-position:center;transform:scale(1.03)}
-  .slide .velo{position:absolute;inset:0;background:linear-gradient(180deg,rgba(8,8,8,.62) 0%,rgba(8,8,8,.12) 26%,rgba(8,8,8,.55) 48%,rgba(8,8,8,.94) 100%)}
-  .slide .cuerpo{position:relative;margin-top:auto;padding:56px 56px 48px}
-  .slide .seccion{font-size:15px;letter-spacing:.24em;text-transform:uppercase;color:var(--acento)}
-  .slide .nom{font-family:var(--serif);font-size:86px;line-height:.98;color:#fff;margin-top:10px;max-width:92%;text-wrap:balance}
-  .slide .arg{font-size:24px;line-height:1.4;color:#ddd4c3;margin-top:16px;max-width:80%}
-  .slide .pie{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;margin-top:26px}
-  .slide .pvp{font-family:var(--serif);font-size:62px;color:var(--acento);white-space:nowrap}
-  .chips{display:flex;flex-wrap:wrap;gap:8px;max-width:70%}
-  .chip{font-size:15px;letter-spacing:.1em;text-transform:uppercase;color:#cfc4ad;border:1px solid rgba(212,165,55,.35);border-radius:999px;padding:6px 13px;background:rgba(0,0,0,.25)}
+  .slide .velo{position:absolute;inset:0;background:linear-gradient(180deg,rgba(8,8,8,.6) 0%,rgba(8,8,8,.1) 24%,rgba(8,8,8,.55) 46%,rgba(8,8,8,.95) 100%)}
+  .slide .cuerpo{position:relative;margin-top:auto;padding:44px 40px 36px}
+  .slide .seccion{font-size:16px;letter-spacing:.24em;text-transform:uppercase;color:var(--acento)}
+  .slide .nom{font-family:var(--serif);font-size:78px;line-height:.99;color:#fff;margin-top:10px;max-width:94%;text-wrap:balance}
+  .slide .arg{font-size:25px;line-height:1.35;color:#ddd4c3;margin-top:14px;max-width:88%}
+  .slide .pie{display:flex;align-items:flex-end;justify-content:space-between;gap:22px;margin-top:22px}
+  .slide .pvp{font-family:var(--serif);font-size:70px;color:var(--acento);white-space:nowrap}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;max-width:66%}
+  .chip{font-size:16px;letter-spacing:.1em;text-transform:uppercase;color:#cfc4ad;border:1px solid rgba(212,165,55,.35);border-radius:999px;padding:6px 14px;background:rgba(0,0,0,.25)}
   .slide.solo-texto{background:radial-gradient(120% 100% at 20% 0%,#211d16 0%,#111 55%,#0b0b0b 100%)}
-  .slide.solo-texto .cuerpo{margin-top:0;height:100%;display:flex;flex-direction:column;
-    justify-content:center;padding-top:150px;padding-bottom:44px}
-  .slide.solo-texto .nom{font-size:110px;max-width:96%}
+  .slide.solo-texto .cuerpo{margin-top:0;height:100%;display:flex;flex-direction:column;justify-content:space-between;padding-top:130px;padding-bottom:30px}
+  .slide.solo-texto .bloque-txt{display:flex;flex-direction:column;gap:14px}
+  .slide.solo-texto .bloque-pie{display:flex;flex-direction:column;gap:4px}
+  .slide.solo-texto .nom{font-size:78px;max-width:96%}
+  .slide.solo-texto .arg{font-size:23px;line-height:1.32}
+  .slide.solo-texto .pvp{font-size:58px}
   /* identidad de la ficha sin foto: el nombre de la casa en marca de agua llena
      el aire de arriba, así el vacío se lee como diseño y no como hueco. */
-  .slide .marca-agua{position:absolute;top:44px;left:52px;right:52px;font-family:var(--serif);
-    font-size:132px;line-height:.9;text-transform:uppercase;letter-spacing:.01em;
-    color:rgba(212,165,55,.10);max-width:90%;overflow:hidden}
-  .slide .num{position:absolute;top:44px;right:52px;font-size:15px;letter-spacing:.22em;
-    color:rgba(245,230,200,.32);font-variant-numeric:tabular-nums}
-  .slide .raya{position:absolute;top:0;left:0;width:46%;height:3px;
-    background:linear-gradient(90deg,var(--acento),transparent);opacity:.75}
-  .slide .alerg{font-size:14px;letter-spacing:.14em;text-transform:uppercase;color:#8d8677;margin-top:14px}
-  .slide .cifra{font-family:var(--serif);font-size:150px;color:var(--acento);line-height:1}
-  #C .progreso{height:3px;background:rgba(255,255,255,.08);border-radius:2px;margin-top:12px;overflow:hidden}
+  .slide .marca-agua{position:absolute;top:26px;left:38px;right:38px;font-family:var(--serif);
+    font-size:104px;line-height:.88;text-transform:uppercase;letter-spacing:.01em;
+    color:rgba(212,165,55,.10);max-width:92%;overflow:hidden}
+  .slide .num{position:absolute;top:34px;right:38px;font-size:16px;letter-spacing:.22em;
+    color:rgba(245,230,200,.62);font-variant-numeric:tabular-nums;text-shadow:0 1px 4px rgba(0,0,0,.85)}
+  .slide .raya{position:absolute;top:0;left:0;width:46%;height:3px;background:linear-gradient(90deg,var(--acento),transparent);opacity:.75}
+  .slide .alerg{font-size:15px;letter-spacing:.14em;text-transform:uppercase;color:#8d8677;margin-top:12px}
+  .slide .cifra{font-family:var(--serif);font-size:130px;color:var(--acento);line-height:1}
+  #C .progreso{height:3px;background:rgba(255,255,255,.08);border-radius:2px;margin-top:10px;overflow:hidden}
   #C .progreso i{display:block;height:100%;width:0;background:var(--acento)}
 
-  /* D · contacto (fijo) — identidad propia: es una TARJETA, con tres pisos
-     repartidos (dónde / cómo / teléfono). No rota nunca. */
-  #D .contacto-in{display:flex;flex-direction:column;justify-content:space-between;height:100%;min-height:0;gap:18px}
-  #D .rot{font-size:14px;letter-spacing:.22em;text-transform:uppercase;color:var(--acento)}
-  #D .dir{font-family:var(--serif);font-size:34px;line-height:1.15;color:#fff;margin-top:12px}
-  #D .ciudad{font-size:19px;color:#b9b0a0;margin-top:6px}
-  #D .tel{font-family:var(--serif);font-size:44px;color:var(--texto);letter-spacing:.02em}
-  #D .extra{font-size:16px;color:#a89e8c;margin-top:10px;line-height:1.5}
-  #D .qr{display:flex;align-items:center;gap:16px}
-  #D .qr img{width:132px;height:132px;border-radius:4px}
-  #D .qr .t{font-size:13px;letter-spacing:.16em;text-transform:uppercase;color:var(--tenue);line-height:1.6}
-  #D .horario{display:flex;flex-direction:column;gap:7px}
-  #D .horario .h{display:flex;justify-content:space-between;gap:12px;align-items:baseline;
-    border-bottom:1px dashed rgba(212,165,55,.16);padding-bottom:6px}
-  #D .horario .hd{font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:var(--acento);white-space:nowrap}
-  #D .horario .hf{font-size:15px;color:#cfc4ad;font-variant-numeric:tabular-nums;text-align:right}
-  #D .como{font-size:15px;letter-spacing:.12em;text-transform:uppercase;color:var(--tenue);margin-top:10px;padding-top:10px;border-top:1px solid var(--linea)}
-  #D .sello-final{margin-top:14px;font-family:var(--serif);font-size:20px;color:var(--acento);letter-spacing:.04em}
+  /* D · contacto: tarjeta horizontal, tres pisos en fila */
+  #D{flex:0 0 246px;padding:24px 26px!important}
+  #D .contacto-in{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr) auto;gap:24px;align-items:center;height:100%}
+  #D .rot{font-size:15px;letter-spacing:.22em;text-transform:uppercase;color:var(--acento)}
+  #D .dir{font-family:var(--serif);font-size:40px;line-height:1.12;color:#fff;margin-top:12px}
+  #D .ciudad{font-size:21px;color:#b9b0a0;margin-top:6px}
+  #D .tel{font-family:var(--serif);font-size:52px;color:var(--texto);letter-spacing:.02em;white-space:nowrap}
+  #D .como{font-size:15px;letter-spacing:.14em;text-transform:uppercase;color:var(--tenue);margin-top:10px;padding-top:10px;border-top:1px solid var(--linea)}
+  #D .extra{font-size:18px;color:#a89e8c;margin-top:6px}
+  #D .horario{margin-top:12px;display:flex;flex-direction:column;gap:6px}
+  #D .horario .h{display:flex;justify-content:space-between;gap:12px;align-items:baseline;border-bottom:1px dashed rgba(212,165,55,.16);padding-bottom:5px}
+  #D .horario .hd{font-size:14px;letter-spacing:.14em;text-transform:uppercase;color:var(--acento);white-space:nowrap}
+  #D .horario .hf{font-size:16px;color:#cfc4ad;font-variant-numeric:tabular-nums;text-align:right}
+  #D .qr{display:flex;flex-direction:column;align-items:center;gap:10px}
+  #D .qr img{width:150px;height:150px;border-radius:4px}
+  #D .qr .t{font-size:14px;letter-spacing:.16em;text-transform:uppercase;color:var(--tenue);line-height:1.5;text-align:center}
 
-  /* E · franja (porciones) */
-  #E{height:104px;display:flex;align-items:stretch;gap:14px;padding:0 28px 14px}
+  /* E · franja (trozos) — las tarjetas se reparten el ancho: con 4 o 5 piezas
+     ninguna se sale del lienzo (medido: con ancho fijo la cuarta se cortaba). */
+  #E{flex:0 0 96px;display:flex;align-items:stretch;gap:12px}
   #E.vacia{display:none}
-  .trozo{flex:0 0 auto;min-width:210px;display:flex;align-items:center;gap:14px;background:var(--panel);border:1px solid var(--linea);border-radius:6px;padding:0 20px}
-  .trozo .t{font-family:var(--serif);font-size:24px;color:#fff;line-height:1.1}
-  .trozo .p{font-family:var(--serif);font-size:30px;color:var(--acento);margin-left:auto;white-space:nowrap}
-  .trozo .et{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--tenue)}
-  #E .rot-e{align-self:center;font-size:13px;letter-spacing:.22em;text-transform:uppercase;color:var(--acento);writing-mode:vertical-rl;transform:rotate(180deg)}
+  .trozo{flex:1 1 0;min-width:0;display:flex;align-items:center;gap:12px;background:var(--panel);border:1px solid var(--linea);border-radius:8px;padding:0 18px}
+  .trozo .t{font-family:var(--serif);font-size:21px;color:#fff;line-height:1.18;overflow:hidden;
+    display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical}
+  .trozo .p{font-family:var(--serif);font-size:28px;color:var(--acento);margin-left:auto;white-space:nowrap}
+  .trozo .et{display:none}   /* el rótulo ya lo dice el «Al corte · hoy» de la izquierda */
+  #E .rot-e{align-self:center;font-size:14px;letter-spacing:.22em;text-transform:uppercase;color:var(--acento);writing-mode:vertical-rl;transform:rotate(180deg)}
 </style>
 </head>
 <body>
@@ -135,11 +149,11 @@
   </header>
   <div id="F"><div class="cinta-track" id="F-track"></div></div>
   <main id="cuerpo">
-    <section class="col panel" id="B"></section>
-    <section class="col" id="C"><div class="marco" id="C-marco"></div><div class="progreso"><i id="C-barra"></i></div></section>
-    <section class="col panel" id="D"></section>
+    <section class="panel" id="B"></section>
+    <section id="C"><div class="marco" id="C-marco"></div><div class="progreso"><i id="C-barra"></i></div></section>
+    <section class="panel" id="D"></section>
+    <footer id="E"></footer>
   </main>
-  <footer id="E"></footer>
 </div>
 
 <script>
@@ -208,8 +222,9 @@ const FORMA = {
     if (tipo === 'estado') {
       const marca = (datos.presentacion && datos.presentacion.nombre) || '';
       return `<span class="marca-nombre">${esc(marca)}</span>
-        <span class="estado"><i class="punto" id="punto"></i>
-          <span><span class="estado-txt" id="estado-txt">—</span><br><span class="estado-sub" id="estado-sub"></span></span>
+        <span class="estado-linea"><i class="punto" id="punto"></i>
+          <span class="estado-txt" id="estado-txt">—</span>
+          <span class="estado-sub" id="estado-sub"></span>
         </span>
         <span class="reloj" id="reloj"></span>`;
     }
@@ -231,14 +246,17 @@ const FORMA = {
       <div class="raya"></div>
       <div class="num">${String(i+1).padStart(2,'0')} / ${String(n).padStart(2,'0')}</div>
       <div class="cuerpo">
-        <div class="seccion">${esc(seccion)}</div>
-        <div class="nom">${esc(p.titulo)}</div>
-        ${p.subtitulo?`<div class="arg">${esc(p.subtitulo)}</div>`:''}
-        <div class="pie">
-          <div class="chips">${(p.etiquetas||[]).map(e=>`<span class="chip">${esc(e)}</span>`).join('')}</div>
-          <div class="pvp">${esc(p.precio||'')}</div>
+        <div class="bloque-txt">
+          <div class="nom">${esc(p.titulo)}</div>
+          ${p.subtitulo?`<div class="arg">${esc(p.subtitulo)}</div>`:''}
         </div>
-        ${(p.datos&&p.datos.alergenos_texto)?`<div class="alerg">Contiene ${esc(p.datos.alergenos_texto)}</div>`:''}
+        <div class="bloque-pie">
+          <div class="pie">
+            <div class="chips">${(p.etiquetas||[]).map(e=>`<span class="chip">${esc(e)}</span>`).join('')}</div>
+            <div class="pvp">${esc(p.precio||'')}</div>
+          </div>
+          ${(p.datos&&p.datos.alergenos_texto)?`<div class="alerg">Contiene ${esc(p.datos.alergenos_texto)}</div>`:''}
+        </div>
       </div>
     </div>`;
   },
@@ -286,15 +304,15 @@ const FORMA = {
         <div class="dir">${esc(d.direccion||'')}</div>
         <div class="ciudad">${esc(d.ciudad||'')}</div>
       </div>
-      ${d.whatsapp?`<div class="qr"><img src="${esc((datos.presentacion&&datos.presentacion.qr)||'qr.png')}" alt=""><div class="t">Pide<br>desde<br>el móvil</div></div>`:''}
-      ${(Array.isArray(d.horario)&&d.horario.length)?`<div class="horario">${d.horario.map(h=>
-        `<div class="h"><span class="hd">${esc(h.dias)}</span><span class="hf">${esc((h.franjas||[]).map(f=>String(f).replace('-',' – ')).join(' · '))}</span></div>`
-      ).join('')}</div>`:''}
-      <div class="c-pie">
+      <div class="c-medio">
         <div class="tel">${esc(telFmt)}</div>
         <div class="como">Pedidos por WhatsApp</div>
         ${insta?`<div class="extra">${esc(insta)}</div>`:''}
+        ${(Array.isArray(d.horario)&&d.horario.length)?`<div class="horario">${d.horario.map(h=>
+          `<div class="h"><span class="hd">${esc(h.dias)}</span><span class="hf">${esc((h.franjas||[]).map(f=>String(f).replace('-',' – ')).join(' · '))}</span></div>`
+        ).join('')}</div>`:''}
       </div>
+      ${d.whatsapp?`<div class="qr"><img src="${esc((datos.presentacion&&datos.presentacion.qr)||'qr.png')}" alt=""><div class="t">Pide<br>desde el móvil</div></div>`:''}
     </div>`;
   },
 
@@ -350,7 +368,7 @@ function pintar(){
   // D
   const D = zona('D')[0];
   const elD = document.getElementById('D');
-  if (D) { elD.style.padding = '28px'; elD.innerHTML = FORMA.contacto(D); }
+  if (D) { elD.innerHTML = FORMA.contacto(D); }
   else elD.style.display = 'none';
 
   // E

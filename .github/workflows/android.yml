@@ -11,7 +11,7 @@ on:
 jobs:
   apk:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
@@ -21,25 +21,29 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: NDK
+      - name: SDK y NDK (licencias aceptadas sin preguntar)
         run: |
           set -e
-          yes | sdkmanager --licenses > /dev/null 2>&1 || true
-          # intenta r30; si no existe, la primera LTS disponible
-          if ! sdkmanager --install "ndk;30.0.16248370" > /dev/null 2>&1; then
-            echo "r30 no disponible, buscando alternativa..."
-            CAND=$(sdkmanager --list 2>/dev/null | grep -oE "ndk;[0-9.]+" | sort -u | tail -1)
-            echo "instalando $CAND"
-            yes | sdkmanager --install "$CAND"
-          fi
-          NDK_DIR=$(ls -d "$ANDROID_HOME/ndk/"* | tail -1)
-          echo "ANDROID_NDK_HOME=$NDK_DIR" >> $GITHUB_ENV
-          echo "NDK instalado en $NDK_DIR"
+          export ANDROID_HOME=/usr/local/lib/android/sdk
+          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
+          echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
+          echo "PATH=$PATH" >> $GITHUB_ENV
 
-      - name: Rust
+          # 'yes' delante: sin esto se queda esperando (y/N) y el job muere
+          yes | sdkmanager --licenses > /dev/null 2>&1 || true
+
+          sdkmanager --install "platforms;android-35" "build-tools;35.0.0" > /dev/null
+          echo "SDK base instalado"
+
+          NDK_PKG=$(sdkmanager --list 2>/dev/null | grep -oE "ndk;[0-9.]+" | sort -uV | tail -1)
+          echo "instalando $NDK_PKG"
+          sdkmanager --install "$NDK_PKG" > /dev/null
+          NDK_VER=${NDK_PKG#ndk;}
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/$NDK_VER" >> $GITHUB_ENV
+          echo "NDK en $ANDROID_HOME/ndk/$NDK_VER"
+          ls "$ANDROID_HOME/ndk/$NDK_VER" | head -3
+
+      - name: Rust y cargo-ndk
         run: |
           rustup target add aarch64-linux-android
           rustup target add x86_64-linux-android
@@ -49,11 +53,14 @@ jobs:
         working-directory: modules/instagram-bridge/crate
         run: cargo test --offline || cargo test
 
+      - name: Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
       - name: Compilar APK
         working-directory: modules/instagram-bridge/android
-        run: |
-          gradle wrapper --gradle-version 8.9 || true
-          ./gradlew :app:assembleDebug --no-daemon --stacktrace
+        run: gradle :app:assembleDebug --no-daemon --stacktrace
 
       - name: Subir APK
         uses: actions/upload-artifact@v4

@@ -12,13 +12,23 @@
 //!      ordenes. Si el borde tuviera su propio dialogo, habria dos clientes MQTT
 //!      en el mismo aparato y el que gana es el que este mas cerca del dedo.
 //!
-//! # Los tres simbolos (los nombres los dicta la JVM, no nosotros)
+//! # Los seis simbolos (los nombres los dicta la JVM, no nosotros)
 //!
 //! ```text
 //! Java_online_enki_instagram_PuenteNativo_iniciar (JString, JString) -> jboolean
 //! Java_online_enki_instagram_PuenteNativo_detener (JObject)
 //! Java_online_enki_instagram_PuenteNativo_estado  () -> JString
+//!
+//! Java_online_enki_instagram_PuenteNativo_siguientePeticion () -> JString
+//! Java_online_enki_instagram_PuenteNativo_entregarRespuesta (jlong, JString) -> jboolean
+//! Java_online_enki_instagram_PuenteNativo_arbolVisible     () -> JString
 //! ```
+//!
+//! Los tres primeros son el canal (bloque 18); los tres ultimos son la MANO
+//! (bloque 19a). Los de la mano no hablan con Kotlin: solo miran la cola de
+//! `mano::cola`. Kotlin la sondea cada 150 ms y contesta; si no contesta, la
+//! peticion caduca por plazo. **Aqui no hay ni un callback JNI** y esa es la
+//! decision de arquitectura, explicada en `mano::cola`.
 //!
 //! El segundo argumento es un `JObject` y no un `JClass`: `PuenteNativo` es un
 //! `object` de Kotlin, y un `object` tiene metodos de INSTANCIA (la clase lleva
@@ -49,11 +59,19 @@
 //!
 //! # Lo que este borde NO hace (y por que)
 //!
-//!   - **No ejecuta nada real.** La mano que se enchufa al bucle es
-//!     `ManoAusente`, la misma del CLI: toda orden se contesta con su par de
-//!     fallo (`sin_mano`, `simulacion`) y nada sale del aparato. La mano de
-//!     verdad (arbol de accesibilidad + gestos) es otro bloque, y el dia que
-//!     llegue se cambia en `canal::bucle::atender` — un unico sitio.
+//!   - **No decide el camino.** El bucle tiene enganchada la mano del aparato
+//!     (`mano::android::ManoAndroid`), que sabe MIRAR (`FuenteDeArbol`) y
+//!     ENTREGAR UN PASO (`Superficie`) por la cola. Lo que no hace es ejecutar
+//!     una orden entera: eso es una RECETA, y el encadenado con
+//!     `mano::publicar` es el bloque siguiente. Por eso `ManoAndroid` contesta
+//!     `sin_receta` a una orden: escribir una receta fija en el borde seria
+//!     publicar un camino que nadie diseno.
+//!   - **No llama a Kotlin.** Ni `AttachCurrentThread` ni `GlobalRef` ni
+//!     callbacks. Kotlin sondea (`siguientePeticion`) y contesta
+//!     (`entregarRespuesta`); el hilo del canal espera con plazo. Un callback
+//!     que se cruza con una espera es un interbloqueo, y un `GlobalRef` a un
+//!     servicio que Android reciclo es un proceso muerto dentro de un
+//!     `extern "system"`.
 //!   - **No reconecta.** Un canal caido se queda caido y el estado lo dice. Dos
 //!     canales con la misma llave y el mismo client id hacen que el broker cierre
 //!     el primero, y el sintoma es "conecta y se cae" sin motivo.
@@ -69,12 +87,14 @@ use std::thread::JoinHandle;
 use std::time::Duration;
 
 use jni::objects::{JObject, JString};
-use jni::sys::{jboolean, JNI_FALSE, JNI_TRUE};
+use jni::sys::{jboolean, jlong, JNI_FALSE, JNI_TRUE};
 use jni::JNIEnv;
 
-use crate::canal::bucle::{self, Bus, ManoAusente, Opcion};
+use crate::canal::bucle::{self, Bus, Opcion};
 use crate::canal::json::Valor;
 use crate::canal::mqtt::{self, url_con_llave, Canal, FalloDeCanal};
+use crate::mano::android::{cola, ManoAndroid};
+use crate::mano::cola::TipoDePeticion;
 use crate::VERSION;
 
 /// Cuanto se espera a que el hilo del canal termine al parar.
@@ -246,7 +266,9 @@ fn servir_canal(url: &str, llave: &str, parada: &Arc<AtomicBool>) {
     // reimplementa aqui: la validacion y el par de fallo son los mismos que usa
     // el CLI de escritorio, y por eso valen igual en el movil.
     let mut bus = BusConParada::nuevo(canal, parada.clone());
-    let mut mano = ManoAusente::nueva();
+    // La mano del aparato (bloque 19a). Mira y toca por la cola; si Kotlin no
+    // contesta, cada peticion caduca con `mano_sin_respuesta`.
+    let mut mano = ManoAndroid::nueva();
     let desenlace = bucle::servir(&mut bus, &mut mano, None);
     bus.desconectar();
 
@@ -393,6 +415,13 @@ fn parar() {
         (guard.parada.take(), guard.hilo.take(), guard.fin.take())
     };
 
+    // La cola se vacia con el canal: un canal nuevo no puede empezar con
+    // recados del anterior (una mirada vieja serviria para decidir ahora).
+    cola().vaciar();
+    if let Ok(mut ultimo) = ultimo_arbol().lock() {
+        *ultimo = None;
+    }
+
     if let Some(bandera) = parada {
         bandera.store(true, Ordering::SeqCst);
     }
@@ -410,13 +439,18 @@ fn parar() {
 }
 
 /// El estado como JSON con la forma que ya lee `ServicioEnki.kt`:
-/// `{"canal":"...","motivo":...,"version":"..."}`.
+/// `{"canal":"...","motivo":...,"version":"...","mano":"...","cola":{...}}`.
 ///
 /// La clave `canal` lleva **exactamente** uno de los cuatro valores del contrato
 /// (`desconectado`, `conectando`, `conectado`, `error:<codigo>`). Se devuelve
 /// como JSON y no como texto pelado porque los dos consumidores de Kotlin
 /// (`PuenteNativo.leerMotivo` y `ServicioEnki.leerCampo`) leen claves: un texto
 /// pelado perderia el motivo del fallo justo cuando hace falta.
+///
+/// `mano` dice QUE mano esta enganchada al bucle (`android` en el movil) y
+/// `cola` cuenta lo que la cola tiene entre manos: si `pendientes` crece y no
+/// baja, el sondeo de Kotlin (`BucleDeMano`) no esta corriendo, y eso se ve en
+/// una notificacion sin abrir un logcat.
 fn leer_estado() -> String {
     let guard = cerrojo();
     let canal = guard.estado.como_texto();
@@ -424,10 +458,26 @@ fn leer_estado() -> String {
         Some(detalle) => Valor::texto(detalle),
         None => Valor::Nulo,
     };
+    drop(guard);
+
+    let (pendientes, en_vuelo, huerfanas) = {
+        let la_cola = cola();
+        (la_cola.pendientes(), la_cola.en_vuelo(), la_cola.huerfanas())
+    };
+
     Valor::objeto(vec![
         ("canal", Valor::texto(canal)),
         ("motivo", motivo),
         ("version", Valor::texto(VERSION)),
+        ("mano", Valor::texto("android")),
+        (
+            "cola",
+            Valor::objeto(vec![
+                ("pendientes", Valor::Numero(pendientes as f64)),
+                ("en_vuelo", Valor::Numero(en_vuelo as f64)),
+                ("huerfanas", Valor::Numero(huerfanas as f64)),
+            ]),
+        ),
     ])
     .a_texto()
 }
@@ -506,10 +556,137 @@ pub extern "system" fn Java_online_enki_instagram_PuenteNativo_estado<'local>(
     });
 
     // Si ni el `JString` se puede crear (memoria de la JVM agotada), se devuelve
-    // null: Kotlin lo trata como `sin_estado` y la app sigue. Es el unico `null`
-    // que este borde produce.
+    // null: Kotlin lo trata como `sin_estado` y la app sigue.
     match env.new_string(texto) {
         Ok(cadena) => cadena,
         Err(_) => JObject::null().into(),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// La mano: la cola que cruza a Kotlin (bloque 19a)
+// ---------------------------------------------------------------------------
+//
+// Tres simbolos y ninguno de ellos bloquea. El borde de la mano es TONTO a
+// proposito: mira la cola, deja lo que llega y contesta. Quien decide es
+// `mano::android`, quien ejecuta es `BucleDeMano.kt`.
+//
+// El limite de los 50 ms del hilo de la UI:
+//
+//   - `siguientePeticion` coge un cerrojo, saca una peticion de una `VecDeque`
+//     y compone una cadena corta. Nada de red, nada de disco, nada de esperar.
+//   - `entregarRespuesta` coge el mismo cerrojo, guarda una cadena y avisa a una
+//     `Condvar`. El aviso despierta al hilo del canal (que esta esperando), no
+//     al de la UI.
+//   - `arbolVisible` lee un `Option<String>` de un cerrojo.
+//
+// Ninguno de los tres puede quedarse esperando a otro hilo: el cerrojo de la
+// cola se toma para operaciones de memoria. Eso es lo que hace que se puedan
+// llamar desde el hilo principal de Android sin ANR.
+
+/// El ultimo arbol que el aparato entrego, tal cual. Lo lee `arbolVisible`.
+///
+/// Se guarda el JSON CRUDO y no un `Arbol` parseado: el que necesita el arbol
+/// proyectado es A1 (`ManoAndroid::observar`, que lo pide por la cola), y este
+/// cache solo existe para que Kotlin pueda enseñar lo que el crate recibio sin
+/// volver a mirar la pantalla. Parsearlo aqui seria hacer el trabajo dos veces
+/// por mirada.
+static ULTIMO_ARBOL: OnceLock<Mutex<Option<String>>> = OnceLock::new();
+
+fn ultimo_arbol() -> &'static Mutex<Option<String>> {
+    ULTIMO_ARBOL.get_or_init(|| Mutex::new(None))
+}
+
+/// `siguientePeticion(): String?`
+///
+/// La peticion mas antigua, como JSON, o `null` si no hay nada. Kotlin la llama
+/// cada 150 ms: `null` es la respuesta normal de un aparato quieto, no un error.
+///
+/// Entregar la peticion la SACA de la cola (regla 1 de `mano::cola`): si Kotlin
+/// se muere despues de recibirla, esa peticion caduca y no se repite.
+#[no_mangle]
+pub extern "system" fn Java_online_enki_instagram_PuenteNativo_siguientePeticion<'local>(
+    env: JNIEnv<'local>,
+    _esto: JObject<'local>,
+) -> JString<'local> {
+    let peticion = catch_unwind(AssertUnwindSafe(|| cola().siguiente())).ok().flatten();
+
+    let texto = match peticion {
+        Some(peticion) => peticion.a_json(),
+        // Un panic leyendo la cola no puede tumbar la app: se contesta `null`,
+        // que es lo mismo que "no hay nada que hacer ahora".
+        None => return JObject::null().into(),
+    };
+
+    match env.new_string(texto) {
+        Ok(cadena) => cadena,
+        Err(_) => JObject::null().into(),
+    }
+}
+
+/// `entregarRespuesta(id: Long, json: String): Boolean`
+///
+/// `true` si la respuesta era de una peticion en vuelo; `false` si llego tarde
+/// (su peticion ya caduco) o si el id no es de nadie. Las dos cosas son
+/// normales: una respuesta huerfana se cuenta y se descarta, no se propaga.
+///
+/// El id va como `jlong` y no como texto porque el viaje de vuelta no necesita
+/// interpretar nada: es el numero que la cola dio.
+#[no_mangle]
+pub extern "system" fn Java_online_enki_instagram_PuenteNativo_entregarRespuesta<'local>(
+    mut env: JNIEnv<'local>,
+    _esto: JObject<'local>,
+    id: jlong,
+    json: JString<'local>,
+) -> jboolean {
+    let intento = catch_unwind(AssertUnwindSafe(|| -> Result<TipoDePeticion, ()> {
+        let texto: String = env.get_string(&json).map_err(|_| ())?.into();
+        // Un id negativo no existe en la cola (empiezan en 1): el `as u64` lo
+        // convierte en un numero enorme que no empareja con nada, y la respuesta
+        // se cuenta como huerfana. No hay que rechazarla a mano.
+        let contestada = cola().entregar(id as u64, texto.clone());
+        match contestada {
+            Ok(tipo) => {
+                if tipo == TipoDePeticion::Observar {
+                    // Lo unico que se cachea: la ultima observacion. Un paso
+                    // ejecutado no es un arbol y no pisa el que se enseña.
+                    if let Ok(mut ultimo) = ultimo_arbol().lock() {
+                        *ultimo = Some(texto);
+                    }
+                }
+                Ok(tipo)
+            }
+            Err(_huerfana) => Err(()),
+        }
+    }));
+
+    match intento {
+        Ok(Ok(_)) => JNI_TRUE,
+        // JSON que no es utf-8, o respuesta huerfana: `false` y la app sigue.
+        Ok(Err(())) | Err(_) => JNI_FALSE,
+    }
+}
+
+/// `arbolVisible(): String?`
+///
+/// El JSON de la ULTIMA observacion que el aparato entrego (el arbol, o el
+/// motivo por el que no pudo mirar), o `null` si todavia no hubo ninguna. Es
+/// diagnostico: quien decide mira por la cola, no por aqui.
+#[no_mangle]
+pub extern "system" fn Java_online_enki_instagram_PuenteNativo_arbolVisible<'local>(
+    env: JNIEnv<'local>,
+    _esto: JObject<'local>,
+) -> JString<'local> {
+    let texto = match ultimo_arbol().lock() {
+        Ok(guard) => guard.clone(),
+        Err(envenenado) => envenenado.into_inner().clone(),
+    };
+
+    match texto {
+        Some(texto) => match env.new_string(texto) {
+            Ok(cadena) => cadena,
+            Err(_) => JObject::null().into(),
+        },
+        None => JObject::null().into(),
     }
 }

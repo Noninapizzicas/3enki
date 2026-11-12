@@ -129,6 +129,12 @@ android {
 dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.lifecycle:lifecycle-service:2.8.7")
+    // El sondeo de la mano (`BucleDeMano.kt`, bloque 19a) es una coroutine en
+    // `Dispatchers.IO`: sin esto no compila. Se declara explicita y no se confia
+    // en que otra libreria la arrastre, porque un cambio de version de
+    // `lifecycle` la quitaria y el fallo seria un `NoClassDefFoundError` en el
+    // movil, no en el portatil.
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
 }
 
 // ---------------------------------------------------------------------------

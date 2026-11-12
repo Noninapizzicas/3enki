@@ -707,9 +707,11 @@ el `codigo()` de `FalloDeCanal` (`connack_rechazado`, `tls`, `red`,
 
 ### Lo que el borde NO hace
 
-  - **No ejecuta nada real.** La mano que se enchufa al bucle es `ManoAusente`,
-    la misma del CLI: toda orden se contesta con su par de fallo
-    (`sin_mano` / `simulacion`) y nada sale del aparato.
+  - **No ejecuta nada real (hasta el bloque 19a).** Aqui la mano que se enchufa al
+    bucle era `ManoAusente`, la misma del CLI: toda orden se contesta con su par
+    de fallo (`sin_mano` / `simulacion`). Desde el 19a la mano es
+    `mano::android::ManoAndroid`, que mira y toca por una cola — pero sigue sin
+    ejecutar una orden entera: una orden sin receta se contesta `sin_receta`.
   - **No reimplementa el canal.** Llama a `canal::mqtt` (conectar, suscribir,
     publicar) y a `canal::bucle::servir` (validar la orden contra el catalogo
     cerrado y contestar). Un segundo cliente MQTT en el mismo aparato seria dos
@@ -725,7 +727,7 @@ el `codigo()` de `FalloDeCanal` (`connack_rechazado`, `tls`, `red`,
 
 ```bash
 cd modules/instagram-bridge/crate
-cargo test --offline            # 60 tests + 2 de paridad JNI <-> Kotlin = 62
+cargo test --offline            # 60 tests + 2 de paridad JNI <-> Kotlin = 62 (sin el bloque 19a)
 cargo check --offline           # el modulo jni ni se compila aqui (cfg android)
 cargo test --offline --test jni_paridad -- --nocapture
 ```
@@ -743,6 +745,118 @@ comprobo aqui, ademas de los tests: el modulo `jni` **compila** (se copio el cra
 a un directorio de trabajo, se quitaron los dos `cfg` y se añadio la caja como
 dependencia normal: `cargo check --offline` limpio, sin warnings). Es la unica
 forma de type-checkear un `extern "system"` contra `jni 0.21` sin NDK.
+
+## Bloque 19a · La mano Android: la cola de peticiones
+
+El movil lo dijo el solo en su primera respuesta: *"este binario no tiene arbol de
+accesibilidad ni gestos: la mano vive en la capa Android"*. Este bloque cablea la
+mano de verdad. Lo que **no** hace: ejecutar una orden entera (eso es una receta,
+y es el bloque siguiente).
+
+| Pieza | Fichero | Que hace |
+|---|---|---|
+| La cola | `crate/src/mano/cola.rs` (Rust puro) | `Mutex<VecDeque<Peticion>>` + respuestas + `Condvar`. Encola, entrega UNA vez, espera con plazo. |
+| La mano | `crate/src/mano/android.rs` (`cfg(android)`) | `ManoAndroid`: implementa `FuenteDeArbol` (mirar) y `Superficie` (tocar/escribir/desplazar/esperar) encolando en la misma cola. |
+| El contrato del arbol | `crate/src/mano/arbol_json.rs` (Rust puro) | JSON del movil -> `Arbol`, incluido el montaje de la lista plana en arbol. **Fuera** de `cfg(android)` para poder probarlo en escritorio. |
+| El borde | `crate/src/jni/mod.rs` | Tres simbolos nuevos: `siguientePeticion`, `entregarRespuesta`, `arbolVisible`. Ninguno bloquea. |
+| El sondeo | `android/.../BucleDeMano.kt` | Coroutine en `Dispatchers.IO`, cada 150 ms: pregunta, ejecuta con `Accesibilidad`/`Gestos` y contesta SIEMPRE. |
+| El arranque | `android/.../ServicioEnki.kt` | `BucleDeMano.arrancar()` al abrir el canal, `parar()` al cerrarlo. |
+| Los tests | `crate/tests/cola_mano.rs`, `crate/tests/jni_paridad.rs` | 7 de cola (puros) + la paridad ampliada a los seis simbolos. |
+
+### Por que una cola y no un callback JNI
+
+La tentacion es que Rust llame a Kotlin: buscar la clase, `GlobalRef`,
+`AttachCurrentThread` en el hilo del bucle, llamar, `DetachCurrentThread`. En una
+demo funciona. En el aparato:
+
+  - **El hilo.** El bucle del canal es un hilo de Rust que la JVM no conoce. Un
+    attach que se olvida deja un hilo colgado de la JVM; un detach con trabajo
+    pendiente mata el proceso.
+  - **Las referencias.** Un `GlobalRef` al servicio sobrevive al servicio. El dia
+    que Android lo recicla, la siguiente llamada revienta dentro de un
+    `extern "system"`, donde no hay `catch` de Kotlin que la pare.
+  - **El cruce.** Si Kotlin espera algo de Rust mientras Rust espera el callback,
+    no hay salida: es un interbloqueo, no un fallo.
+
+Con la cola, el peor caso es un plazo agotado **con nombre**
+(`mano_sin_respuesta`), y la cola entera se prueba en el servidor con hilos de
+verdad (`cargo test --offline --test cola_mano`).
+
+### El protocolo (lo que cruza)
+
+```json
+{"id":7,"tipo":"observar"}
+{"id":8,"tipo":"ejecutar","paso":{"accion":"tocar","id":"com.instagram.android:id/x","x":980,"y":60}}
+{"id":9,"tipo":"ejecutar","paso":{"accion":"escribir","id":"...","x":1,"y":2,"texto":"hola"}}
+{"id":10,"tipo":"ejecutar","paso":{"accion":"desplazar","direccion":"abajo","distancia":600}}
+{"id":11,"tipo":"ejecutar","paso":{"accion":"esperar","ms":800}}
+```
+
+Las respuestas de `observar` son el JSON de `Accesibilidad.json()` tal cual
+(`{"lectura":"observada",...}` o `{"lectura":"desconocida","motivo":...}`) y las de
+`ejecutar` son `{"ok":true,"via":"nodo"}` / `{"ok":false,"motivo":"nodo_no_localizado"}`.
+`mano::arbol_json` acepta tambien `{"ok":false,...}`, para que un fallo del bucle
+Kotlin y un no-pude del servicio se lean por el mismo camino.
+
+### Las tres reglas de la cola
+
+1. **Una peticion se entrega UNA vez.** `siguiente()` la saca y la apunta en
+   vuelo. Si se pudiera leer dos veces, un toque se ejecutaria dos veces.
+2. **Una respuesta de un id que nadie espera no rompe nada.** Se cuenta como
+   huerfana y se descarta: es la respuesta de una peticion que ya caduco, y tirar
+   el proceso por eso seria cambiar un dato viejo por una app caida.
+3. **Nada crece sin tope.** Lo que se fue en vuelo y nunca se contesto, y las
+   respuestas que nadie recogio, se podan (16 y 64; un aparato vive dias).
+
+### El plazo
+
+Toda peticion espera `PLAZO_DE_RESPUESTA` (10 s) y lo agotado es
+`FalloDeMano::SinRespuesta` -> `mano_sin_respuesta` con su id y su plazo. La
+excepcion es `esperar(ms)`: el plazo es `10 s + ms`, porque el paso pide dormir y
+dormir mas que el plazo no es un fallo de nadie. **Nunca un panic y nunca un
+bloqueo eterno**: el hilo del canal puede quedarse 10 s sin leer ordenes, pero
+vuelve.
+
+### Por que `ManoAndroid` no ejecuta una `Orden`
+
+Una orden es "publica este texto en Instagram": eso necesita una RECETA (que ancla
+se toca, en que orden, que se comprueba despues) y el encadenado con
+`mano::publicar`. Escribir aqui dos toques fijos seria una receta escondida en el
+borde, y una mano que improvisa el camino publica en la cuenta equivocada. Asi que
+`ManoDeOrdenes::ejecutar` contesta `sin_receta` y **no toca nada**.
+
+### Verificacion del bloque (real, en este servidor)
+
+```bash
+cd modules/instagram-bridge/crate
+cargo test --offline
+# 77 pasan, 0 fallan (antes del bloque: 62)
+#   lib            21  (14 + 7 de arbol_json)
+#   cola_mano       7  (nuevos)
+#   jni_paridad     3  (2 + el sondeo atiende los tipos de la cola)
+#   resto          46
+
+for f in ../tests/*.test.js; do node "$f" >/dev/null || echo "FALLO $f"; done
+# 52 suites JS OK
+```
+
+El test de paridad **tiene dientes** comprobado aqui, no de palabra:
+
+  - se añade un `external fun simboloQueNoExiste(): String?` en `PuenteNativo.kt`
+    -> `los_simbolos_jni_coinciden_con_los_de_kotlin` **falla** con
+    `se leyeron 7: [..., "simboloQueNoExiste"]`;
+  - se cambia `entregarRespuesta(id: Long, ...)` por `id: String` -> **falla** con
+    `recibe ["id: String", "json: String"] ... y su simbolo Rust declara ["jlong", "JString"]`;
+  - se restaura y vuelve a pasar.
+
+Y el modulo `jni` **compila** contra `jni 0.21` sin NDK: se copio el crate a un
+directorio de trabajo, se quitaron los `cfg` y se añadio la caja como dependencia
+normal -> `cargo check --offline` limpio, sin warnings. Igual con
+`mano::android` (que es Rust puro: no toca ni una API de Android).
+
+Lo que **no** se puede verificar en este servidor: que Kotlin compile (no hay
+`kotlinc` ni Android SDK), que el `.so` enlace y que el sondeo mueva el arbol en
+el movil. Eso es del portatil con NDK y del movil.
 
 ## Tests
 

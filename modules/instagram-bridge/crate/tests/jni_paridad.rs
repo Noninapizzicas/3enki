@@ -88,6 +88,63 @@ fn vuelta_kotlin(firma: &str) -> Option<String> {
     }
 }
 
+/// El tipo JNI que corresponde a un parametro Kotlin (`id: Long` -> `jlong`).
+///
+/// La tabla esta CERRADA a proposito: si alguien anade un parametro de un tipo
+/// que aqui no esta, este test falla y hay que decidir que simbolo exporta Rust.
+/// Un `Any` o un `IntArray` no se contemplan porque el borde no los usa.
+fn tipo_jni_de(parametro: &str) -> &'static str {
+    let tipo = parametro
+        .split_once(':')
+        .map(|(_, t)| t.trim())
+        .unwrap_or_else(|| panic!("parametro Kotlin sin tipo: {parametro}"));
+    match tipo.trim_end_matches('?') {
+        "String" => "JString",
+        "Long" => "jlong",
+        "Boolean" => "jboolean",
+        "Int" => "jint",
+        otro => panic!("tipo Kotlin no contemplado en el borde: {otro}"),
+    }
+}
+
+/// Los tipos de los parametros de un simbolo Rust, en orden y sin el entorno.
+///
+/// La JVM pasa siempre `JNIEnv` y el `jobject` de la instancia delante: esos dos
+/// no cuentan como parametros del metodo Kotlin. El resto tiene que casar uno a
+/// uno y EN ORDEN: `(Long, String)` en Kotlin es `(jlong, JString)` en Rust, y
+/// un `(JString, jlong)` compilaria igual y fallaria en el movil.
+fn tipos_rust_sin_entorno(firma: &str) -> Vec<String> {
+    let solo_parametros = firma.split_once("->").map(|par| par.0).unwrap_or(firma);
+    let (_, resto) = match solo_parametros.split_once('(') {
+        Some(par) => par,
+        None => return Vec::new(),
+    };
+    let dentro = match resto.split_once(')') {
+        Some(par) => par.0,
+        None => return Vec::new(),
+    };
+
+    let mut tipos: Vec<String> = dentro
+        .split(',')
+        .map(str::trim)
+        .filter(|p| !p.is_empty())
+        .map(|p| {
+            let tipo = p.rsplit_once(':').map(|(_, t)| t).unwrap_or(p).trim();
+            // `JString<'local>` -> `JString`
+            tipo.chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect::<String>()
+        })
+        .collect();
+
+    // `env: JNIEnv<'local>` y `_esto: JObject<'local>` van siempre delante.
+    if tipos.first().map(String::as_str) == Some("JNIEnv") {
+        tipos.remove(0);
+    }
+    if tipos.first().map(String::as_str) == Some("JObject") {
+        tipos.remove(0);
+    }
+    tipos
+}
+
 /// El nombre de la funcion de una linea de firma Rust, si lo es.
 fn nombre_de_funcion_rust(linea: &str) -> Option<String> {
     let t = linea.trim_start();
@@ -176,12 +233,13 @@ fn los_simbolos_jni_coinciden_con_los_de_kotlin() {
             externos.push((nombre, parametros_kotlin(t), vuelta_kotlin(t)));
         }
     }
-    // Tres y no cero: un parseo que no ve nada pasaria el resto del test sin
-    // comprobar nada, que es la forma mas silenciosa de no tener test.
+    // Seis y no cero: un parseo que no ve nada pasaria el resto del test sin
+    // comprobar nada, que es la forma mas silenciosa de no tener test. Tres son
+    // el canal (bloque 18) y tres la mano (bloque 19a).
     assert_eq!(
         externos.len(),
-        3,
-        "se esperaban los tres `external fun` de PuenteNativo (iniciar, detener, estado) y se leyeron {}: {:?}",
+        6,
+        "se esperaban los seis `external fun` de PuenteNativo (iniciar, detener, estado, siguientePeticion, entregarRespuesta, arbolVisible) y se leyeron {}: {:?}",
         externos.len(),
         externos.iter().map(|e| &e.0).collect::<Vec<_>>()
     );
@@ -213,30 +271,30 @@ fn los_simbolos_jni_coinciden_con_los_de_kotlin() {
             "Kotlin declara `{metodo}` y el crate NO exporta `{esperado}`: la app se quedaria en sin_borde_jni sin error de compilacion en ningun lado. Exporta: {exportados:?}"
         );
 
-        // La firma, no solo el nombre: un `(String, String) -> Boolean` tiene que
-        // ser `(JString, JString) -> jboolean`. Dos `JString` en los parametros y
-        // el `jboolean` de vuelta; `detener` no lleva ni una cosa ni la otra;
-        // `estado` devuelve `JString` y no recibe ninguno.
+        // La firma, no solo el nombre. Los parametros tienen que casar UNO A UNO
+        // Y EN ORDEN: un `(Long, String)` de Kotlin es `(jlong, JString)` en
+        // Rust, y al reves compilaria igual y fallaria en el movil (la JVM no
+        // convierte nada: pasa los bits que le digan).
         let firma = firma_rust(&rust, &esperado);
-        // `detener` no declara tipo de vuelta: sin `->`, la firma entera son
-        // parametros.
-        let solo_parametros = firma.split_once("->").map(|par| par.0).unwrap_or(&firma);
-        let jstring_en_parametros = solo_parametros.matches("JString").count();
+        let esperados: Vec<&'static str> = parametros.iter().map(|p| tipo_jni_de(p)).collect();
+        let en_rust = tipos_rust_sin_entorno(&firma);
         assert_eq!(
-            jstring_en_parametros,
-            parametros.len(),
-            "`{metodo}` recibe {} parametros en Kotlin y su simbolo Rust declara {jstring_en_parametros} `JString`: {firma}",
-            parametros.len()
+            en_rust,
+            esperados.iter().map(|t| t.to_string()).collect::<Vec<_>>(),
+            "`{metodo}` recibe {parametros:?} en Kotlin y su simbolo Rust declara {en_rust:?}: {firma}"
         );
 
-        match vuelta.as_deref() {
+        // Y el valor de vuelta. `String?` y `String` son el MISMO `JString` en la
+        // ABI (la JVM pasa null como referencia nula); `Boolean` es `jboolean`.
+        let vuelta = vuelta.as_deref().map(|t| t.trim_end_matches('?'));
+        match vuelta {
             Some("Boolean") => assert!(
                 firma.contains("-> jboolean"),
                 "`{metodo}: Boolean` en Kotlin exige `-> jboolean` en Rust: {firma}"
             ),
             Some("String") => assert!(
                 firma.contains("-> JString"),
-                "`{metodo}: String` en Kotlin exige `-> JString` en Rust: {firma}"
+                "`{metodo}: String?` en Kotlin exige `-> JString` en Rust (null = referencia nula): {firma}"
             ),
             None => assert!(
                 !firma.contains("->"),
@@ -368,5 +426,59 @@ fn el_borde_no_devuelve_conectado_sin_connack() {
     assert!(
         !cuerpo_iniciar.lines().any(|l| l.contains("Estado::Conectado")),
         "`iniciar` no puede devolver un canal conectado: el CONNACK todavia no ha llegado"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// 3 · El sondeo de la mano atiende lo que la cola puede encolar (19a)
+// ---------------------------------------------------------------------------
+
+/// Si `BucleDeMano.kt` no distingue un tipo de peticion, ese tipo caduca siempre.
+///
+/// El fallo tipico es este: alguien anade `TipoDePeticion::Pulsar` en la cola,
+/// el crate lo encola, y Kotlin no sabe que hacer con el. No hay error de
+/// compilacion en ningun lado y el sintoma es `mano_sin_respuesta` cada 10 s. El
+/// test lee los DOS fuentes y compara los nombres.
+#[test]
+fn el_sondeo_de_la_mano_atiende_los_tipos_que_la_cola_encola() {
+    let cola = leer(&ruta_de("src/mano/cola.rs"));
+    let bucle = leer(&ruta_de(
+        "../android/app/src/main/java/online/enki/instagram/BucleDeMano.kt",
+    ));
+    let servicio = leer(&ruta_de(
+        "../android/app/src/main/java/online/enki/instagram/ServicioEnki.kt",
+    ));
+
+    // Los dos tipos del contrato, leidos de los dos lados.
+    for tipo in ["observar", "ejecutar"] {
+        assert!(
+            cola.contains(&format!("\"{tipo}\"")),
+            "la cola ya no declara el tipo `{tipo}`: revisa `TipoDePeticion::como_str`"
+        );
+        assert!(
+            bucle.contains(&format!("\"{tipo}\"")),
+            "BucleDeMano.kt no distingue el tipo `{tipo}`: toda peticion de ese tipo caducaria con mano_sin_respuesta"
+        );
+    }
+
+    // El sondeo habla por los dos simbolos de la cola, y siempre contesta.
+    assert!(
+        bucle.contains("siguientePeticion"),
+        "BucleDeMano.kt no sondea `siguientePeticion`: la cola no se vaciaria nunca"
+    );
+    assert!(
+        bucle.contains("entregarRespuesta"),
+        "BucleDeMano.kt no contesta con `entregarRespuesta`: el crate esperaria 10 s por peticion"
+    );
+
+    // Y el servicio lo arranca y lo para CON el canal: un sondeo huerfano gasta
+    // bateria, y uno que no arranca deja la mano muda.
+    assert!(
+        servicio.contains("BucleDeMano.arrancar"),
+        "ServicioEnki.kt no arranca el sondeo de la mano al abrir el canal"
+    );
+    assert!(
+        servicio.contains("BucleDeMano.parar"),
+        "ServicioEnki.kt no para el sondeo de la mano al cerrar el canal"
     );
 }

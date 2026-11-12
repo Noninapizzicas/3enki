@@ -13,6 +13,17 @@
 //!   - `publicar`: la operacion compuesta. Es el bucle que pone una mirada
 //!     nueva delante de cada paso, comprueba la cuenta, vigila las
 //!     consecuencias y obedece a A5 cuando algo falla.
+//!   - `cola` (19a): la UNICA via por la que el crate mueve la mano Android.
+//!     Una peticion con id que se entrega UNA vez y una respuesta que caduca
+//!     con nombre (`mano_sin_respuesta`) en vez de colgarse. `std` puro: se
+//!     prueba en escritorio.
+//!   - `arbol_json` (19a): de la foto que manda el movil (`Accesibilidad`)
+//!     al `Arbol` que come A1, incluido el montaje de la lista plana en arbol.
+//!     Fuera de `cfg(android)` a proposito: es el contrato donde un nombre mal
+//!     escrito se convierte en `arbol_vacio` sin que nadie se entere.
+//!   - `android` (19a, solo Android): `ManoAndroid`, la implementacion de
+//!     produccion de los puertos `FuenteDeArbol` y `Superficie`. No habla JNI:
+//!     encola y espera. Si el otro lado se muere, la peticion caduca.
 //!
 //! La regla que comparten todas las piezas de `mano`: lo que se toca se decide
 //! aqui y se prueba aqui. El cerebro no dictamina sobre el mundo; solo repite lo
@@ -28,7 +39,14 @@
 //! nada de recetas.
 
 pub mod arbitro;
+pub mod arbol_json;
+pub mod cola;
 pub mod ejecutor;
 pub mod escalera;
 pub mod exclusividad;
 pub mod publicar;
+
+/// La mano de produccion. Solo existe en Android: en escritorio la mano es
+/// `ManoAusente` y el arbol, el `Simulador`.
+#[cfg(target_os = "android")]
+pub mod android;

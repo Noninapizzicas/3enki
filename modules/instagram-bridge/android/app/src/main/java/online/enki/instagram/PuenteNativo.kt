@@ -2,31 +2,35 @@
 //
 // PuenteNativo.kt — el borde JNI. La UNICA puerta entre Kotlin y el crate.
 //
-// Lo que hace: declara las tres funciones nativas que el crate exporta y las
-// envuelve en versiones "seguras" que no pueden tumbar la app. Nada mas: este
-// fichero no decide, no mira y no toca. Todo eso vive en Accesibilidad.kt,
-// Gestos.kt y en el crate.
+// Lo que hace: declara las funciones nativas que el crate exporta y las envuelve
+// en versiones "seguras" que no pueden tumbar la app. Nada mas: este fichero no
+// decide, no mira y no toca. Todo eso vive en Accesibilidad.kt, Gestos.kt,
+// BucleDeMano.kt y en el crate.
 //
-// # Los tres simbolos
+// # Los seis simbolos
 //
 // ```text
 // Java_online_enki_instagram_PuenteNativo_iniciar
 // Java_online_enki_instagram_PuenteNativo_detener
 // Java_online_enki_instagram_PuenteNativo_estado
+// Java_online_enki_instagram_PuenteNativo_siguientePeticion
+// Java_online_enki_instagram_PuenteNativo_entregarRespuesta
+// Java_online_enki_instagram_PuenteNativo_arbolVisible
 // ```
+//
+// Los tres primeros son el CANAL (bloque 18): abrir, cerrar y contar el estado.
+// Los tres ultimos son la MANO (bloque 19a): el crate deja peticiones en una cola
+// y BucleDeMano.kt la sondea cada 150 ms. **No hay callbacks JNI**: una llamada
+// de Rust a Kotlin necesita AttachCurrentThread, GlobalRefs y un hilo de la JVM
+// por cada llamada, y un callback cruzado con una espera es un interbloqueo. La
+// cola convierte "se murio el otro lado" en un plazo agotado con nombre
+// (`mano_sin_respuesta`), que es un fallo que se puede leer.
 //
 // El nombre no se elige aqui: lo dicta la JVM a partir del paquete y la clase
 // (`online.enki.instagram.PuenteNativo`) y del nombre del metodo. Un `object` de
 // Kotlin genera una clase con el MISMO nombre y metodos de instancia, asi que el
-// simbolo no lleva `$Companion` ni mangling: `iniciar`, `detener`, `estado` no
-// tienen guiones bajos ni sobrecargas, que es lo que obligaria a manglear.
-//
-// **EL CRATE TODAVIA NO EXPORTA ESTOS TRES SIMBOLOS.** El borde Rust es el bloque
-// siguiente (5b). Por eso cada llamada va dentro de un `try/catch`: hoy el
-// `System.loadLibrary` puede funcionar (el .so existe) y la llamada lanzar
-// `UnsatisfiedLinkError` por el simbolo que falta. La app no se cae y el estado
-// dice `sin_borde_jni` con su motivo, en vez de fingir un canal conectado. Un
-// puente que se cae al arrancar no se puede ni diagnosticar desde el movil.
+// simbolo no lleva `$Companion` ni mangling: ninguno de los seis tiene guiones
+// bajos ni sobrecargas, que es lo que obligaria a manglear.
 //
 // # Lo que NO hace
 //
@@ -66,6 +70,9 @@ object PuenteNativo {
     const val MOTIVO_SIN_ESTADO = "sin_estado"
     const val MOTIVO_INICIAR_ROTO = "iniciar_roto"
 
+    /** La cola de la mano no se pudo ni leer ni contestar (borde roto de verdad). */
+    const val MOTIVO_COLA_ROTA = "cola_rota"
+
     /**
      * Si el .so se pudo cargar. Se intenta UNA vez, al tocar el objeto por primera
      * vez: `loadLibrary` no es idempotente ni barato, y reintentarlo en cada
@@ -88,10 +95,12 @@ object PuenteNativo {
     /** El motivo del ultimo fallo, o `null` si no hubo. */
     fun ultimoMotivo(): String? = ultimo
 
-    // ---- los tres simbolos del crate ---------------------------------------
+    // ---- los simbolos del crate ---------------------------------------------
     //
     // Las firmas NO se pueden cambiar sin cambiar el Rust: `(String, String) ->
-    // Boolean` es `(JString, JString) -> jboolean` en el otro lado.
+    // Boolean` es `(JString, JString) -> jboolean` en el otro lado, y `(Long,
+    // String) -> Boolean` es `(jlong, JString) -> jboolean`. `tests/jni_paridad.rs`
+    // lee este fichero y el borde Rust y falla si un nombre o un tipo se separa.
 
     /** Abre el canal con el bus. `true` solo si el CONNECT fue aceptado. */
     external fun iniciar(url: String, llave: String): Boolean
@@ -101,6 +110,30 @@ object PuenteNativo {
 
     /** El estado del canal como JSON: `{"canal": "...", "motivo": ...}`. */
     external fun estado(): String
+
+    // ---- los simbolos de la mano (bloque 19a) -------------------------------
+    //
+    // La mano NO se llama por callback: el crate deja peticiones en una cola y
+    // este lado la sondea cada 150 ms. Tres funciones y ninguna bloquea el hilo
+    // de la UI (el crate solo toca memoria: nada de red ni de disco).
+
+    /**
+     * La peticion mas antigua que el crate espera, como JSON:
+     * `{"id":7,"tipo":"observar"}` o `{"id":8,"tipo":"ejecutar","paso":{...}}`.
+     * `null` si no hay nada (lo normal en un aparato quieto).
+     */
+    external fun siguientePeticion(): String?
+
+    /**
+     * La respuesta a una peticion, como JSON. `id` es el que traia la peticion.
+     *
+     * `false` = llego tarde o ese id no es de nadie (el crate la cuenta como
+     * huerfana y no se rompe nada).
+     */
+    external fun entregarRespuesta(id: Long, json: String): Boolean
+
+    /** El JSON de la ultima observacion entregada, o `null`. Diagnostico. */
+    external fun arbolVisible(): String?
 
     // ---- los envoltorios que no pueden tumbar la app ------------------------
 
@@ -163,6 +196,71 @@ object PuenteNativo {
             json(MOTIVO_SIN_BORDE_JNI, "el crate no exporta Java_online_enki_instagram_PuenteNativo_estado")
         } catch (e: Throwable) {
             json("estado_roto", e.message ?: e.javaClass.simpleName)
+        }
+    }
+
+    // ---- la mano (bloque 19a): los envoltorios de la cola -------------------
+
+    /**
+     * La siguiente peticion que el crate pide a la mano, o `null` si no hay.
+     *
+     * NUNCA lanza: si falta el simbolo, no hay biblioteca o el crate entro en
+     * panic, devuelve `null` y deja el motivo en `ultimo`. `null` es tambien la
+     * respuesta normal de un aparato quieto, asi que el sondeo puede tratar los
+     * dos casos igual... salvo por `ultimoMotivo()`, que es lo que distingue "no
+     * hay nada" de "no hay borde" (y lo usa `BucleDeMano` para pararse en vez de
+     * repetir el fallo seis veces por segundo).
+     */
+    fun siguientePeticionSeguro(): String? {
+        if (!cargada) {
+            ultimo = MOTIVO_SIN_BIBLIOTECA
+            return null
+        }
+        return try {
+            siguientePeticion()
+        } catch (e: UnsatisfiedLinkError) {
+            ultimo = MOTIVO_SIN_BORDE_JNI
+            null
+        } catch (e: Throwable) {
+            ultimo = MOTIVO_COLA_ROTA + ": " + (e.message ?: e.javaClass.simpleName)
+            null
+        }
+    }
+
+    /**
+     * Devuelve al crate la respuesta de una peticion.
+     *
+     * `false` significa "llego tarde o ese id no es de nadie": el crate la cuenta
+     * como huerfana y sigue. No es un error que haya que reintentar (reintentar
+     * una respuesta seria contestar dos veces al mismo recado).
+     */
+    fun entregarRespuestaSeguro(id: Long, json: String): Boolean {
+        if (!cargada) return false
+        return try {
+            entregarRespuesta(id, json)
+        } catch (e: UnsatisfiedLinkError) {
+            ultimo = MOTIVO_SIN_BORDE_JNI
+            false
+        } catch (e: Throwable) {
+            ultimo = MOTIVO_COLA_ROTA + ": " + (e.message ?: e.javaClass.simpleName)
+            false
+        }
+    }
+
+    /**
+     * El JSON de la ultima observacion que el crate recibio, o `null` si aun no
+     * hubo ninguna. Diagnostico: lo que se enseña en la pantalla del puente.
+     */
+    fun arbolVisibleSeguro(): String? {
+        if (!cargada) return null
+        return try {
+            arbolVisible()
+        } catch (e: UnsatisfiedLinkError) {
+            ultimo = MOTIVO_SIN_BORDE_JNI
+            null
+        } catch (e: Throwable) {
+            ultimo = MOTIVO_COLA_ROTA + ": " + (e.message ?: e.javaClass.simpleName)
+            null
         }
     }
 

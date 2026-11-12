@@ -7,6 +7,11 @@
 // el movil duerme, Android mata cualquier cosa que no sea un servicio en primer
 // plano: sin esto el canal dura lo que dura la pantalla encendida.
 //
+// Ademas enciende y apaga la MANO (`BucleDeMano`, bloque 19a) junto con el canal:
+// el crate deja peticiones en una cola y el sondeo las ejecuta. Van juntos porque
+// una mano sin canal no tiene a quien contestar y un canal sin mano contesta
+// `sin_receta` a todo.
+//
 // # Lo que NO hace, a proposito
 //
 //   - NO guarda la llave. Ni en `SharedPreferences` ni en la notificacion ni en el
@@ -172,6 +177,13 @@ class ServicioEnki : LifecycleService() {
         motivoDelCanal = null
         actualizarNotificacion()
 
+        // La mano se enciende CON el canal, y antes de abrirlo: el crate puede
+        // pedir una mirada en cuanto el bus le mande una orden, y una peticion
+        // sin sondeo es un plazo agotado esperando a nadie. Si el borde nativo
+        // no esta, `arrancar()` devuelve `false` y no pasa nada: el canal
+        // funciona igual y la mano contesta `sin_mano`/`sin_receta`.
+        BucleDeMano.arrancar()
+
         Thread({
             if (habiaCanal) {
                 PuenteNativo.detenerSeguro()
@@ -193,6 +205,10 @@ class ServicioEnki : LifecycleService() {
     /** Cierra el canal y baja el servicio. Idempotente. */
     private fun pararCanal() {
         refresco.removeCallbacks(vigilante)
+        // La mano se apaga ANTES del canal: si el sondeo esta a mitad de un
+        // gesto, que termine (cortarlo dejaria el aparato a medias); y una vez
+        // parado, ninguna peticion nueva se queda sin quien la conteste.
+        BucleDeMano.parar()
         if (enMarcha) {
             PuenteNativo.detenerSeguro()
         }

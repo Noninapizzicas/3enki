@@ -52,12 +52,12 @@
     }
   ],
   "config": {
-    "_doc": "Config del puente. bot_name y chat_id identifican el destino de Telegram; telegram_activo permite apagar el canal sin borrar la config; email_destino es opcional (vacio = no se envia email y se declara en abierto). bots_por_proyecto es el mapa declarado a mano proyecto -> bot: su clave puede ser el slug ('nonina') o el UUID del proyecto y gana sobre bot_name (que queda como ultimo recurso cuando no hay vinculo en el bridge ni entrada en el mapa). bot_por_proyecto=false desactiva todo el reparto y usa siempre bot_name.",
-    "bot_name": "Pro_nonina_bot",
-    "chat_id": "",
+    "_doc": "Config del puente. bot_name y chat_id identifican el destino de Telegram; telegram_activo permite apagar el canal sin borrar la config; email_destino es opcional (vacio = no se envia email y se declara en abierto). bots_por_proyecto es el mapa declarado a mano proyecto -> bot: su clave puede ser el slug ('nonina') o el UUID del proyecto y gana sobre bot_name (que queda como ultimo recurso cuando no hay vinculo en el bridge ni entrada en el mapa). bot_por_proyecto=false desactiva todo el reparto y usa siempre bot_name. El reparto por bridge esta apagado a proposito: el proyecto the-pirate tiene DOS bots vinculados (el general y Cierres_thepirate_bot) y el bridge devuelve los dos, asi que 'el primero que encaje' es indeterminado. El cierre sale siempre por el bot de cierres.",
+    "bot_name": "Cierres_thepirate_bot",
+    "chat_id": "1934798567",
     "telegram_activo": true,
     "email_destino": "",
-    "bot_por_proyecto": true,
+    "bot_por_proyecto": false,
     "bots_por_proyecto": {},
     "timeout_bridge_ms": 5000
   },

@@ -3361,6 +3361,16 @@ PATRON Multi-Tenant {
 > y su venta no llega al libro, que solo apunta en `cuenta.cerrada`. Por eso una cuenta
 > sin mesa ni ticket declara `cerrar_al_cobrar:true` y emite su `cuenta.cerrada` al
 > cobrarse (the-pirate 2026-10-30: 5 cobros 95,50 frente a un libro de 92,50).
+>
+> **LA EXCEPCIÓN DECLARADA: `trozos_` no es un canal, es EXISTENCIA (2026-11-12).** El botón
+> «Trozos» del comandero abre una cuenta `trozos_<8>` (símbolo `P` en `TIPOS_SIMBOLO`) que NO es
+> una venta: no se cobra, no emite `cuenta.cerrada` y por tanto no toca el libro. Es la orden de
+> producción de las pizzas que se venden al corte en el mostrador — el dinero entra trozo a trozo
+> por caja. Nace a propósito sin `cerrar_al_cobrar` y sin strategy de canal: aquí el tipo huérfano
+> no es un olvido, es la ley. Su pedido viaja a cocina por la puerta común
+> (`comandero.enviar_cocina` → `pedidos` → bridge) y `pantalla-tv` lo traduce a la franja del día:
+> solo prefijo `trozos_` (una venta de mesa o de llevar no son existencias del mostrador), solo la
+> fecha del negocio, suma dentro del día y descarta entero lo de ayer.
 
 ```json
 {
@@ -4741,6 +4751,12 @@ desde cualquier proceso que hable MQTT, no solo desde dentro del core Node.js.
 > (`recoger` → `llevar`) y por eso una cuenta que no tiene mesa ni ticket declara
 > `metadata.cerrar_al_cobrar:true` y emite su `cuenta.cerrada` al cobrarse. El modo
 > original viaja intacto en `metadata.modo_consumo`.
+>
+> **La excepción declarada: `trozos_` (2026-11-12).** El botón «Trozos» del comandero crea
+> `trozos_<8>` (símbolo `P`) y NO es un canal ni una venta: es EXISTENCIA del mostrador — no se
+> cobra, no emite `cuenta.cerrada`, no apunta en el libro, y se limpia al cerrar caja. Aquí el
+> «tipo sin strategy» es deliberado. `pantalla-tv` consume su pedido (el que ya va a cocina por la
+> puerta común) y publica la franja del día, sumando dentro del día y descartando lo de ayer.
 
 > **Alta de producto — la cadena canónica (verificada en vivo 2026-10-19).** La puerta
 > del asistente es `productos.crear` / `productos.crear_categoria` (productos NO escribe:

@@ -20,6 +20,12 @@
 //     (`declararPantalla`), o es "desconocida". Adivinar la pantalla por los
 //     textos seria exactamente la interpretacion que A1 no hace.
 //
+// Ademas del arbol de A1, este fichero presta al VOLCADO (bloque 19b) lo que solo
+// el servicio puede saber: la instancia viva (`instancia()`), la clase de la
+// actividad que el sistema anuncio (`actividadVisible()`) y la regla de
+// `recycle()` de la version del aparato (`reciclarNodo()`). Nada de eso decide:
+// mirar sigue siendo `mirar()`.
+//
 // API de Android usada (ni una inventada): AccessibilityService,
 // AccessibilityNodeInfo, getBoundsInScreen, isClickable, isEnabled, isEditable,
 // isVisibleToUser, getText, getContentDescription, getViewIdResourceName,
@@ -93,6 +99,19 @@ class Accesibilidad : AccessibilityService() {
 
         /** La instancia enganchada, o null si el servicio no esta vivo. */
         fun instancia(): Accesibilidad? = viva
+
+        /**
+         * `recycle()` condicionado a la version del aparato.
+         *
+         * Obligatorio antes de API 33 y deprecado (el sistema recicla solo)
+         * desde 33. Vive aqui, en el companion, porque el volcado (19b) recorre
+         * el MISMO arbol y no puede llevar su propia copia de la regla de
+         * version: dos copias son dos oportunidades de reciclar dos veces.
+         */
+        @Suppress("DEPRECATION")
+        fun reciclarNodo(nodo: AccessibilityNodeInfo) {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) nodo.recycle()
+        }
     }
 
     // ---- formas de dato (espejo de `percepcion`) -------------------------
@@ -157,6 +176,22 @@ class Accesibilidad : AccessibilityService() {
     private var ultimaInstantanea: Instantanea? = null
 
     /**
+     * La clase de la ACTIVIDAD que el sistema anuncio por ultimo en un
+     * `TYPE_WINDOW_STATE_CHANGED` de Instagram, o null si nunca lo hizo.
+     *
+     * Se guarda porque es el UNICO sitio del modulo donde ese dato existe: el
+     * arbol de accesibilidad no lleva el nombre de la actividad, y el volcado
+     * (19b) tiene que poder decir en que pantalla estaba cuando lo tomo. Puede
+     * ser la ultima anunciada y no exactamente la de ahora; por eso el volcado
+     * lleva tambien `momento` y por eso esto no se usa para decidir nada.
+     */
+    @Volatile
+    private var ultimaActividad: String? = null
+
+    /** La actividad anunciada por el sistema, o null (no se adivina). */
+    fun actividadVisible(): String? = ultimaActividad
+
+    /**
      * La ultima foto tomada, para el informe o el log. Se llama `ultima` y no
      * `estado` por el mismo motivo que en el crate: es lo de antes, no lo de
      * ahora. Quien quiera lo de ahora llama a `mirar()`.
@@ -186,6 +221,14 @@ class Accesibilidad : AccessibilityService() {
         // la de Instagram. No se actua sobre eventos: mirar es a peticion.
         val paquete = event?.packageName?.toString() ?: return
         if (paquete != PAQUETE_INSTAGRAM) return
+
+        // El nombre de la actividad solo lo anuncia el sistema, y solo en este
+        // tipo de evento: se apunta para el volcado (19b).
+        if (event?.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+            val clase = event?.className?.toString()?.trim()
+            ultimaActividad = if (clase.isNullOrEmpty()) null else clase
+        }
+
         val lectura = mirar()
         if (lectura is Lectura.Observada) ultimaInstantanea = lectura.instantanea
     }
@@ -407,10 +450,7 @@ class Accesibilidad : AccessibilityService() {
      * siendo obligatorio en versiones anteriores. Se llama condicionado a la
      * version: ni fuga en Android viejo ni doble reciclado en Android nuevo.
      */
-    @Suppress("DEPRECATION")
-    private fun reciclar(nodo: AccessibilityNodeInfo) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) nodo.recycle()
-    }
+    private fun reciclar(nodo: AccessibilityNodeInfo) = reciclarNodo(nodo)
 
     // ---- entrega al crate (JSON con la forma de `percepcion`) ------------
 

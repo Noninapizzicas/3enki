@@ -86,6 +86,31 @@
             android:layout_marginTop="8dp"
             android:text="@string/boton_accesibilidad" />
 
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginTop="20dp"
+            android:layout_marginBottom="20dp"
+            android:background="#22000000" />
+
+        <!-- El volcado de pantalla (19b): lo que permite escribir una receta con
+             los anclas REALES. OBSERVAR manda el JSON al bus; COPIAR lo deja en el
+             portapapeles para pegarlo en Telegram si el canal no esta. -->
+        <Button
+            android:id="@+id/boton_observar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:enabled="false"
+            android:text="@string/boton_observar" />
+
+        <Button
+            android:id="@+id/boton_copiar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:enabled="false"
+            android:text="@string/boton_copiar" />
+
         <TextView
             android:id="@+id/nota"
             android:layout_width="match_parent"

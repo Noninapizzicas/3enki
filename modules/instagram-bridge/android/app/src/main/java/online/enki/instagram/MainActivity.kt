@@ -3,8 +3,10 @@
 // MainActivity.kt — la pantalla minima del puente.
 //
 // Lo que hace: enseñar el estado del canal y del servicio de accesibilidad, dejar
-// teclear la URL y la llave del bus, arrancar/parar el servicio en primer plano y
-// abrir los ajustes de accesibilidad. Nada mas.
+// teclear la URL y la llave del bus, arrancar/parar el servicio en primer plano,
+// abrir los ajustes de accesibilidad y OBSERVAR LA PANTALLA (bloque 19b): leer el
+// arbol real, serializarlo y mandarlo al bus, o copiarlo al portapapeles si el
+// bus no esta. Nada mas.
 //
 // # Lo que NO hace, a proposito
 //
@@ -19,6 +21,11 @@
 //     exactamente lo que Android prohibe (y lo que un malware hace).
 //   - NO arranca el canal al abrir la app. Abrir una pantalla no puede abrir dos
 //     canales con la misma llave.
+//   - NO mira la pantalla por su cuenta. El volcado se hace cuando el dueño
+//     pulsa el boton: espiar en bucle es otra cosa (y no es esta).
+//   - NO publica el volcado si el crate no esta: lo dice en pantalla y deja el
+//     JSON en el portapapeles. Un "no se pudo" sin salida obligaria a repetir el
+//     volcado, y el volcado es una foto que caduca.
 //
 // # Refresco
 //
@@ -30,6 +37,8 @@ package online.enki.instagram
 
 import android.Manifest
 import android.app.Activity
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
@@ -63,6 +72,18 @@ class MainActivity : Activity() {
     private lateinit var campoUrl: EditText
     private lateinit var campoLlave: EditText
     private lateinit var nota: TextView
+    private lateinit var botonObservar: Button
+    private lateinit var botonCopiar: Button
+
+    /**
+     * El ultimo volcado que se tomo, para el boton de copiar.
+     *
+     * Se guarda en memoria y no en disco: un volcado lleva los textos de la
+     * pantalla de una cuenta y no tiene por que sobrevivir a la app. Si el
+     * proceso muere, se vuelve a pulsar OBSERVAR.
+     */
+    private var ultimoVolcado: String? = null
+    private var nodosDelVolcado: Int = 0
 
     private val refresco = Handler(Looper.getMainLooper())
     private val tareaDeRefresco = object : Runnable {
@@ -93,6 +114,15 @@ class MainActivity : Activity() {
         findViewById<Button>(R.id.boton_accesibilidad).setOnClickListener {
             abrirAjustesDeAccesibilidad()
         }
+
+        // El volcado (bloque 19b). Los dos botones comparten el mismo JSON: si
+        // el bus no lo quiere, se copia y se pega en Telegram, que es como se
+        // mira hoy una pantalla cuando el canal no esta.
+        botonObservar = findViewById(R.id.boton_observar)
+        botonObservar.setOnClickListener { observarPantalla() }
+        botonCopiar = findViewById(R.id.boton_copiar)
+        botonCopiar.setOnClickListener { copiarVolcado() }
+        botonCopiar.isEnabled = ultimoVolcado != null
 
         pedirPermisoDeNotificaciones()
         pintarEstado()
@@ -168,6 +198,89 @@ class MainActivity : Activity() {
         }
     }
 
+    // ---- el volcado de pantalla (bloque 19b) ------------------------------
+
+    /**
+     * OBSERVAR PANTALLA: lee el arbol real, lo serializa y lo manda al bus.
+     *
+     * Todo el trabajo pesado (recorrer 4000 nodos y montar el JSON) va en un
+     * hilo aparte: en el hilo de la UI seria un ANR con una pantalla grande de
+     * Instagram, que es justo la que se quiere volcar.
+     *
+     * El orden importa: primero se mira (aqui), despues se publica (en el hilo
+     * de la UI, que es barato: el crate solo encola). Si el bus no lo quiere, el
+     * JSON se queda en `ultimoVolcado` y COPIAR VOLCADO sigue funcionando: la
+     * foto no se pierde por un canal caido.
+     */
+    private fun observarPantalla() {
+        if (!PrimerPlano.servicioActivo(this)) {
+            // El boton ya esta apagado sin servicio; esto es por si el estado
+            // cambio entre el ultimo repintado y el toque.
+            nota.text = getString(R.string.observar_sin_accesibilidad)
+            return
+        }
+
+        botonObservar.isEnabled = false
+        nota.text = getString(R.string.observar_leyendo)
+
+        Thread {
+            val resultado = Volcado.leer()
+            runOnUiThread { terminarVolcado(resultado) }
+        }.start()
+    }
+
+    /** La segunda mitad del volcado: enseñar el resultado y publicarlo. */
+    private fun terminarVolcado(resultado: Volcado.Resultado) {
+        botonObservar.isEnabled = PrimerPlano.servicioActivo(this)
+
+        when (resultado) {
+            is Volcado.Resultado.Imposible -> {
+                nota.text = getString(R.string.observar_sin_leer, resultado.motivo)
+            }
+
+            is Volcado.Resultado.Hecho -> {
+                ultimoVolcado = resultado.json
+                nodosDelVolcado = resultado.nodos
+                botonCopiar.isEnabled = true
+
+                if (PuenteNativo.publicarObservacionSeguro(resultado.json)) {
+                    nota.text = getString(
+                        if (resultado.truncado) {
+                            R.string.observar_enviado_truncado
+                        } else {
+                            R.string.observar_enviado
+                        },
+                        resultado.nodos
+                    )
+                } else {
+                    // El motivo lo pone el crate (`sin_canal` con el estado
+                    // dentro, `json_vacio`, `buzon_lleno`...). Si no dijo nada,
+                    // se dice que no dijo nada en vez de inventarlo.
+                    val motivo = PuenteNativo.ultimoMotivo() ?: "sin motivo"
+                    nota.text = getString(R.string.observar_no_enviado, motivo)
+                }
+            }
+        }
+    }
+
+    /**
+     * COPIAR VOLCADO: el JSON al portapapeles.
+     *
+     * Es la salida cuando el bus falla: se pega en Telegram y se ve igual. No
+     * necesita canal ni servicio (el JSON ya esta tomado), asi que no vuelve a
+     * mirar la pantalla: copia lo que se vio, no lo que hay ahora.
+     */
+    private fun copiarVolcado() {
+        val json = ultimoVolcado
+        if (json.isNullOrBlank()) {
+            nota.text = getString(R.string.volcado_nada)
+            return
+        }
+        val portapapeles = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        portapapeles.setPrimaryClip(ClipData.newPlainText("volcado", json))
+        nota.text = getString(R.string.volcado_copiado, nodosDelVolcado)
+    }
+
     // ---- pintura ----------------------------------------------------------
 
     private fun pintarEstado() {
@@ -178,13 +291,19 @@ class MainActivity : Activity() {
         }
         estadoCanal.text = getString(R.string.estado_canal, canal)
 
+        val accesibilidadActiva = PrimerPlano.servicioActivo(this)
         estadoAccesibilidad.text = getString(
-            if (PrimerPlano.servicioActivo(this)) {
+            if (accesibilidadActiva) {
                 R.string.accesibilidad_activa
             } else {
                 R.string.accesibilidad_inactiva
             }
         )
+
+        // Sin servicio no hay arbol que leer: el boton se apaga en vez de fallar
+        // al pulsarlo (y `observarPantalla` lo vuelve a comprobar, porque el
+        // estado puede cambiar entre dos repintados).
+        botonObservar.isEnabled = accesibilidadActiva
 
         val motivo = ServicioEnki.motivo()
         detalle.text = buildString {

@@ -15,6 +15,8 @@
     <string name="boton_conectar">Conectar</string>
     <string name="boton_desconectar">Desconectar</string>
     <string name="boton_accesibilidad">Abrir ajustes de accesibilidad</string>
+    <string name="boton_observar">OBSERVAR PANTALLA</string>
+    <string name="boton_copiar">COPIAR VOLCADO</string>
 
     <string name="estado_canal">Canal: %1$s</string>
     <string name="canal_detenido">detenido</string>
@@ -29,6 +31,18 @@
     <string name="error_url_insegura">La URL tiene que empezar por wss://. El crate no abre un canal sin TLS, asi que un ws:// solo daria un error mas tarde y peor.</string>
     <string name="error_sin_llave">Falta la llave del bus.</string>
     <string name="error_sin_ajustes">Este aparato no tiene pantalla de ajustes de accesibilidad.</string>
+
+    <!-- Volcado de pantalla (bloque 19b). Se dice lo que ha pasado con el numero
+         de nodos delante: "enviado" sin cifra no distingue un arbol vacio de uno
+         truncado, y las dos cosas cambian la receta. -->
+    <string name="observar_sin_accesibilidad">activa el servicio primero</string>
+    <string name="observar_leyendo">Leyendo la pantalla…</string>
+    <string name="observar_enviado">volcado enviado: %1$d nodos</string>
+    <string name="observar_enviado_truncado">volcado enviado: %1$d nodos (truncado: se corto el arbol en el tope)</string>
+    <string name="observar_no_enviado">volcado NO enviado (%1$s). Usa COPIAR VOLCADO y pegalo en Telegram.</string>
+    <string name="observar_sin_leer">no se pudo leer la pantalla: %1$s</string>
+    <string name="volcado_copiado">volcado copiado al portapapeles (%1$d nodos)</string>
+    <string name="volcado_nada">todavia no hay volcado: pulsa OBSERVAR PANTALLA primero</string>
 
     <!-- Notificacion del servicio en primer plano -->
     <string name="notificacion_canal_nombre">Canal del puente</string>

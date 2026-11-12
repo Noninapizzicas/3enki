@@ -7,7 +7,7 @@
 // decide, no mira y no toca. Todo eso vive en Accesibilidad.kt, Gestos.kt,
 // BucleDeMano.kt y en el crate.
 //
-// # Los seis simbolos
+// # Los siete simbolos
 //
 // ```text
 // Java_online_enki_instagram_PuenteNativo_iniciar
@@ -16,11 +16,14 @@
 // Java_online_enki_instagram_PuenteNativo_siguientePeticion
 // Java_online_enki_instagram_PuenteNativo_entregarRespuesta
 // Java_online_enki_instagram_PuenteNativo_arbolVisible
+// Java_online_enki_instagram_PuenteNativo_publicarObservacion
 // ```
 //
 // Los tres primeros son el CANAL (bloque 18): abrir, cerrar y contar el estado.
-// Los tres ultimos son la MANO (bloque 19a): el crate deja peticiones en una cola
-// y BucleDeMano.kt la sondea cada 150 ms. **No hay callbacks JNI**: una llamada
+// Los tres siguientes son la MANO (bloque 19a): el crate deja peticiones en una
+// cola y BucleDeMano.kt la sondea cada 150 ms. El ultimo es el VOLCADO (19b): se
+// mira la pantalla, se serializa y el crate la manda al bus.
+// **No hay callbacks JNI**: una llamada
 // de Rust a Kotlin necesita AttachCurrentThread, GlobalRefs y un hilo de la JVM
 // por cada llamada, y un callback cruzado con una espera es un interbloqueo. La
 // cola convierte "se murio el otro lado" en un plazo agotado con nombre
@@ -72,6 +75,9 @@ object PuenteNativo {
 
     /** La cola de la mano no se pudo ni leer ni contestar (borde roto de verdad). */
     const val MOTIVO_COLA_ROTA = "cola_rota"
+
+    /** El volcado no se pudo entregar al crate (borde roto, no canal caido). */
+    const val MOTIVO_OBSERVACION_ROTA = "observacion_rota"
 
     /**
      * Si el .so se pudo cargar. Se intenta UNA vez, al tocar el objeto por primera
@@ -134,6 +140,22 @@ object PuenteNativo {
 
     /** El JSON de la ultima observacion entregada, o `null`. Diagnostico. */
     external fun arbolVisible(): String?
+
+    // ---- el simbolo del volcado de pantalla (bloque 19b) --------------------
+    //
+    // Un puente TONTO: recibe el JSON de `Volcado.kt` y el crate lo publica en
+    // `core/core-a/events/bridge/observacion` dentro del sobre del bus. El crate
+    // NO lo parsea (un volcado transformado no es lo que el aparato vio), asi que
+    // aqui tampoco se toca: se pasa la cadena tal cual.
+
+    /**
+     * El volcado de pantalla, camino del bus.
+     *
+     * `true` = el crate lo dejo encolado para el hilo del canal (QoS 0: nadie
+     * puede afirmar que el broker lo tenga). `false` = no se encolo; el motivo
+     * se lee en `estadoSeguro()`, clave `volcado.motivo`.
+     */
+    external fun publicarObservacion(json: String): Boolean
 
     // ---- los envoltorios que no pueden tumbar la app ------------------------
 
@@ -264,7 +286,59 @@ object PuenteNativo {
         }
     }
 
+    // ---- el volcado (bloque 19b): el envoltorio del puente tonto ------------
+
+    /**
+     * Publica un volcado de pantalla sin poder matar el proceso.
+     *
+     * `false` NO se queda mudo: el crate deja el motivo en `estado().volcado`
+     * (`sin_canal` con el estado del canal dentro, `json_vacio`,
+     * `json_no_objeto`, `buzon_lleno`) y se lee aqui para que la pantalla lo
+     * pueda enseñar. Un "no se pudo" sin motivo no se puede arreglar desde el
+     * movil.
+     *
+     * El JSON no se toca: `Volcado.json()` lo construye y esto solo lo pasa.
+     */
+    fun publicarObservacionSeguro(json: String): Boolean {
+        if (!cargada) {
+            ultimo = MOTIVO_SIN_BIBLIOTECA
+            return false
+        }
+        return try {
+            val encolado = publicarObservacion(json)
+            ultimo = if (encolado) {
+                null
+            } else {
+                leerMotivoDeVolcado(estadoSeguro())
+                    ?: "el crate no encolo el volcado y no dijo por que"
+            }
+            encolado
+        } catch (e: UnsatisfiedLinkError) {
+            ultimo = MOTIVO_SIN_BORDE_JNI
+            false
+        } catch (e: Throwable) {
+            ultimo = MOTIVO_OBSERVACION_ROTA + ": " + (e.message ?: e.javaClass.simpleName)
+            false
+        }
+    }
+
     // ---- lectura del JSON del crate ---------------------------------------
+
+    /**
+     * El motivo del ultimo volcado dentro del estado del crate
+     * (`volcado.motivo`), o `null` si no lo trae. Se lee de `estado()` y no de la
+     * respuesta de `publicarObservacion` porque esa solo puede ser un booleano.
+     */
+    private fun leerMotivoDeVolcado(bruto: String): String? = try {
+        val volcado = JSONObject(bruto).optJSONObject("volcado")
+        if (volcado == null || volcado.isNull("motivo")) {
+            null
+        } else {
+            volcado.optString("motivo").ifBlank { null }
+        }
+    } catch (e: Exception) {
+        null
+    }
 
     /** El `motivo` de un estado, o `null` si no lo trae o no es JSON. */
     private fun leerMotivo(bruto: String): String? = try {

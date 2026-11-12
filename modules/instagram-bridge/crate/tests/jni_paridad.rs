@@ -233,13 +233,13 @@ fn los_simbolos_jni_coinciden_con_los_de_kotlin() {
             externos.push((nombre, parametros_kotlin(t), vuelta_kotlin(t)));
         }
     }
-    // Seis y no cero: un parseo que no ve nada pasaria el resto del test sin
+    // Siete y no cero: un parseo que no ve nada pasaria el resto del test sin
     // comprobar nada, que es la forma mas silenciosa de no tener test. Tres son
-    // el canal (bloque 18) y tres la mano (bloque 19a).
+    // el canal (bloque 18), tres la mano (bloque 19a) y uno el volcado (19b).
     assert_eq!(
         externos.len(),
-        6,
-        "se esperaban los seis `external fun` de PuenteNativo (iniciar, detener, estado, siguientePeticion, entregarRespuesta, arbolVisible) y se leyeron {}: {:?}",
+        7,
+        "se esperaban los siete `external fun` de PuenteNativo (iniciar, detener, estado, siguientePeticion, entregarRespuesta, arbolVisible, publicarObservacion) y se leyeron {}: {:?}",
         externos.len(),
         externos.iter().map(|e| &e.0).collect::<Vec<_>>()
     );
@@ -312,6 +312,41 @@ fn los_simbolos_jni_coinciden_con_los_de_kotlin() {
             "el crate exporta `{simbolo}` y Kotlin no declara ese metodo: sobra o esta mal nombrado"
         );
     }
+
+    // ---- el volcado (19b): un solo topic y ni un parseo ----
+    //
+    // El topic se escribe en UN sitio (`canal::observacion::TOPIC_OBSERVACION`).
+    // Si el borde lo llevara escrito a mano, cambiar el topic en el modulo
+    // dejaria al movil publicando donde nadie escucha, sin error en ningun lado.
+    let observacion = leer(&ruta_de("src/canal/observacion.rs"));
+    assert!(
+        observacion.contains("\"core/core-a/events/bridge/observacion\""),
+        "el topic del volcado tiene que estar declarado en canal/observacion.rs"
+    );
+    assert!(
+        observacion.contains("pub const CORE_ID: &str = \"external\""),
+        "el volcado tiene que presentarse como `external` en el sobre del bus: como `core-a`, el bus lo descarta por self-loop"
+    );
+    assert!(
+        rust.contains("observacion::encolar_para_el_bus") && rust.contains("observacion::buzon()"),
+        "el borde no usa `canal::observacion`: estaria publicando el volcado por su cuenta (o no lo publica)"
+    );
+    assert!(
+        !rust.contains("core/core-a/events/bridge/observacion"),
+        "el borde no puede llevar el topic del volcado escrito a mano: vive en canal::observacion"
+    );
+
+    // El simbolo del volcado NO parsea: si algun dia alguien mete un
+    // `json::leer` ahi para "arreglar" el volcado, el dato que llega al
+    // servidor deja de ser lo que el aparato vio.
+    let cuerpo_volcado = rust
+        .split_once("fn Java_online_enki_instagram_PuenteNativo_publicarObservacion")
+        .expect("simbolo publicarObservacion")
+        .1;
+    assert!(
+        !cuerpo_volcado.contains("json::leer"),
+        "el borde del volcado no puede parsear el JSON: es un puente tonto a proposito"
+    );
 }
 
 // ---------------------------------------------------------------------------

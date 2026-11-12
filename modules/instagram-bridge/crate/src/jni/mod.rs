@@ -12,7 +12,7 @@
 //!      ordenes. Si el borde tuviera su propio dialogo, habria dos clientes MQTT
 //!      en el mismo aparato y el que gana es el que este mas cerca del dedo.
 //!
-//! # Los seis simbolos (los nombres los dicta la JVM, no nosotros)
+//! # Los siete simbolos (los nombres los dicta la JVM, no nosotros)
 //!
 //! ```text
 //! Java_online_enki_instagram_PuenteNativo_iniciar (JString, JString) -> jboolean
@@ -22,13 +22,16 @@
 //! Java_online_enki_instagram_PuenteNativo_siguientePeticion () -> JString
 //! Java_online_enki_instagram_PuenteNativo_entregarRespuesta (jlong, JString) -> jboolean
 //! Java_online_enki_instagram_PuenteNativo_arbolVisible     () -> JString
+//!
+//! Java_online_enki_instagram_PuenteNativo_publicarObservacion (JString) -> jboolean
 //! ```
 //!
-//! Los tres primeros son el canal (bloque 18); los tres ultimos son la MANO
-//! (bloque 19a). Los de la mano no hablan con Kotlin: solo miran la cola de
-//! `mano::cola`. Kotlin la sondea cada 150 ms y contesta; si no contesta, la
-//! peticion caduca por plazo. **Aqui no hay ni un callback JNI** y esa es la
-//! decision de arquitectura, explicada en `mano::cola`.
+//! Los tres primeros son el canal (bloque 18); los tres siguientes son la MANO
+//! (bloque 19a); el ultimo es el VOLCADO (bloque 19b): Kotlin mira la pantalla,
+//! la serializa y el borde la manda al bus. Los de la mano no hablan con Kotlin:
+//! solo miran la cola de `mano::cola`. Kotlin la sondea cada 150 ms y contesta;
+//! si no contesta, la peticion caduca por plazo. **Aqui no hay ni un callback
+//! JNI** y esa es la decision de arquitectura, explicada en `mano::cola`.
 //!
 //! El segundo argumento es un `JObject` y no un `JClass`: `PuenteNativo` es un
 //! `object` de Kotlin, y un `object` tiene metodos de INSTANCIA (la clase lleva
@@ -78,6 +81,10 @@
 //!   - **No abre un segundo canal.** Si ya hay uno vivo, `iniciar` contesta
 //!     `JNI_FALSE` con motivo `ya_hay_canal`: se para primero (`detener`) y
 //!     despues se abre, que es lo que ya hace `ServicioEnki`.
+//!   - **No parsea el volcado.** `publicarObservacion` recibe el JSON de
+//!     `Volcado.kt` y lo deja en el buzon de `canal::observacion` sin tocarlo:
+//!     envolver y publicar es todo. Un volcado "arreglado" por el borde seria
+//!     una pantalla que el aparato no vio.
 
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -93,6 +100,7 @@ use jni::JNIEnv;
 use crate::canal::bucle::{self, Bus, Opcion};
 use crate::canal::json::Valor;
 use crate::canal::mqtt::{self, url_con_llave, Canal, FalloDeCanal};
+use crate::canal::observacion::{self, FalloDeObservacion};
 use crate::mano::android::{cola, ManoAndroid};
 use crate::mano::cola::TipoDePeticion;
 use crate::VERSION;
@@ -305,6 +313,25 @@ impl BusConParada {
     fn desconectar(&mut self) {
         self.canal.desconectar();
     }
+
+    /// Vacia el buzon del volcado: lo que Kotlin dejo esperando se publica aqui,
+    /// en el UNICO hilo que puede tocar el canal.
+    ///
+    /// Se llama antes de cada espera, asi que un volcado sale en la siguiente
+    /// vuelta del bucle (2 s como mucho, el plazo de lectura). Si el PUBLISH
+    /// falla, el recado se devuelve al frente del buzon y el error sube: un
+    /// canal roto que se traga el volcado en silencio dejaria al dueno pulsando
+    /// el boton sin saber por que no llega nada.
+    fn drenar_volcados(&mut self) -> Result<(), FalloDeCanal> {
+        let buzon = observacion::buzon();
+        while let Some(recado) = buzon.sacar() {
+            if let Err(e) = self.canal.publicar(&recado.topic, recado.payload.as_bytes()) {
+                buzon.devolver(recado);
+                return Err(e);
+            }
+        }
+        Ok(())
+    }
 }
 
 impl Bus for BusConParada {
@@ -322,6 +349,8 @@ impl Bus for BusConParada {
         if self.parada.load(Ordering::SeqCst) {
             return Ok(Opcion::Cerrado);
         }
+        // Antes de esperar: lo que la UI dejo en el buzon sale ahora.
+        self.drenar_volcados()?;
         self.canal.recibir()
     }
 }
@@ -418,6 +447,9 @@ fn parar() {
     // La cola se vacia con el canal: un canal nuevo no puede empezar con
     // recados del anterior (una mirada vieja serviria para decidir ahora).
     cola().vaciar();
+    // Y el buzon del volcado, por lo mismo: un volcado de un canal muerto no se
+    // publica por el siguiente (llegaria al servidor como foto de ahora).
+    observacion::buzon().vaciar();
     if let Ok(mut ultimo) = ultimo_arbol().lock() {
         *ultimo = None;
     }
@@ -439,7 +471,7 @@ fn parar() {
 }
 
 /// El estado como JSON con la forma que ya lee `ServicioEnki.kt`:
-/// `{"canal":"...","motivo":...,"version":"...","mano":"...","cola":{...}}`.
+/// `{"canal":"...","motivo":...,"version":"...","mano":"...","cola":{...},"volcado":{...}}`.
 ///
 /// La clave `canal` lleva **exactamente** uno de los cuatro valores del contrato
 /// (`desconectado`, `conectando`, `conectado`, `error:<codigo>`). Se devuelve
@@ -451,6 +483,11 @@ fn parar() {
 /// `cola` cuenta lo que la cola tiene entre manos: si `pendientes` crece y no
 /// baja, el sondeo de Kotlin (`BucleDeMano`) no esta corriendo, y eso se ve en
 /// una notificacion sin abrir un logcat.
+///
+/// `volcado` es lo que paso con el ultimo volcado de pantalla (bloque 19b):
+/// `enviado` o `rechazado`, con el motivo cuando lo hay. Existe porque
+/// `publicarObservacion` solo puede contestar un booleano: sin esta clave, un
+/// "no" del borde no tendria explicacion en ningun sitio que el dueno pueda leer.
 fn leer_estado() -> String {
     let guard = cerrojo();
     let canal = guard.estado.como_texto();
@@ -478,6 +515,7 @@ fn leer_estado() -> String {
                 ("huerfanas", Valor::Numero(huerfanas as f64)),
             ]),
         ),
+        ("volcado", nota_de_volcado()),
     ])
     .a_texto()
 }
@@ -688,5 +726,110 @@ pub extern "system" fn Java_online_enki_instagram_PuenteNativo_arbolVisible<'loc
             Err(_) => JObject::null().into(),
         },
         None => JObject::null().into(),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// El volcado de pantalla: el puente tonto (bloque 19b)
+// ---------------------------------------------------------------------------
+//
+// Un simbolo y un buzon. Kotlin mira (`Volcado.kt`), serializa el arbol y llama
+// aqui con el JSON. El borde NO lo parsea: `canal::observacion` comprueba la
+// forma (dos bytes), lo mete en el sobre del bus y lo deja en el buzon para que
+// lo publique el hilo del canal.
+//
+// `JNI_TRUE` significa **encolado**, no "el broker lo tiene": en QoS 0 nadie
+// puede afirmar eso, y afirmarlo seria la clase de mentira que el resto del
+// crate no se permite. Lo que si se puede afirmar es el motivo del `JNI_FALSE`,
+// y por eso se deja escrito en el estado (`volcado`): un booleano no cabe un
+// motivo, y "no se pudo" sin motivo no se puede arreglar desde el movil.
+
+/// Lo que el borde sabe de la ultima publicacion de un volcado.
+#[derive(Debug, Clone, Default)]
+struct NotaDeVolcado {
+    /// `enviado` o `rechazado`; `None` mientras nadie haya pulsado el boton.
+    resultado: Option<&'static str>,
+    motivo: Option<String>,
+    momento: u64,
+}
+
+static ULTIMO_VOLCADO: OnceLock<Mutex<NotaDeVolcado>> = OnceLock::new();
+
+fn ultimo_volcado() -> &'static Mutex<NotaDeVolcado> {
+    ULTIMO_VOLCADO.get_or_init(|| Mutex::new(NotaDeVolcado::default()))
+}
+
+fn anotar_volcado(resultado: &'static str, motivo: Option<String>, momento: u64) {
+    let mut guard = ultimo_volcado().lock().unwrap_or_else(|e| e.into_inner());
+    *guard = NotaDeVolcado { resultado: Some(resultado), motivo, momento };
+}
+
+/// La nota como `Valor`, para el JSON de `estado`.
+fn nota_de_volcado() -> Valor {
+    let nota = {
+        let guard = ultimo_volcado().lock().unwrap_or_else(|e| e.into_inner());
+        guard.clone()
+    };
+    Valor::objeto(vec![
+        ("resultado", Valor::texto(nota.resultado.unwrap_or("nada"))),
+        (
+            "motivo",
+            match nota.motivo {
+                Some(detalle) => Valor::texto(detalle),
+                None => Valor::Nulo,
+            },
+        ),
+        ("momento", Valor::Numero(nota.momento as f64)),
+    ])
+}
+
+/// `publicarObservacion(json): Boolean`
+///
+/// `true` = el volcado quedo encolado para el hilo del canal. `false` = no se
+/// encolo, y el motivo se lee en `estado().volcado.motivo`.
+///
+/// No bloquea: lee un `JString`, mira el estado con el cerrojo (memoria) y deja
+/// un recado en una `VecDeque`. Nada de red, nada de disco.
+#[no_mangle]
+pub extern "system" fn Java_online_enki_instagram_PuenteNativo_publicarObservacion<'local>(
+    mut env: JNIEnv<'local>,
+    _esto: JObject<'local>,
+    json: JString<'local>,
+) -> jboolean {
+    let momento = observacion::ahora_ms();
+
+    let intento = catch_unwind(AssertUnwindSafe(
+        || -> Result<observacion::Recado, FalloDeObservacion> {
+            let texto: String = env
+                .get_string(&json)
+                .map_err(|e| FalloDeObservacion::NoUtf8(e.to_string()))?
+                .into();
+            // El estado del canal se lee aqui y no se guarda: entre esta lectura
+            // y el PUBLISH del hilo del canal el canal puede caerse, y entonces
+            // el recado muere con el (el buzon se vacia al parar).
+            let estado = cerrojo().estado.como_texto();
+            observacion::encolar_para_el_bus(&texto, &estado)
+        },
+    ));
+
+    match intento {
+        Ok(Ok(recado)) => {
+            anotar_volcado("enviado", None, recado.momento);
+            JNI_TRUE
+        }
+        Ok(Err(fallo)) => {
+            anotar_volcado("rechazado", Some(fallo.to_string()), momento);
+            JNI_FALSE
+        }
+        Err(_) => {
+            // Un panic aqui no puede tumbar la app (regla 3 del borde): se dice
+            // en la nota y se contesta que no.
+            anotar_volcado(
+                "rechazado",
+                Some("panic (el borde no tumbo la app)".to_string()),
+                momento,
+            );
+            JNI_FALSE
+        }
     }
 }

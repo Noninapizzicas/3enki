@@ -858,6 +858,124 @@ Lo que **no** se puede verificar en este servidor: que Kotlin compile (no hay
 `kotlinc` ni Android SDK), que el `.so` enlace y que el sondeo mueva el arbol en
 el movil. Eso es del portatil con NDK y del movil.
 
+## Bloque 19b · El volcado de pantalla por el bus
+
+Escribir la receta de `publicar` exige conocer los anclas REALES del movil, y esos
+anclas no se pueden inventar desde el servidor: hay que verlos. Este bloque añade
+un boton que lee el arbol de accesibilidad de verdad, lo serializa plano y lo
+publica por el bus.
+
+| Pieza | Fichero | Que hace |
+|---|---|---|
+| El puente | `crate/src/canal/observacion.rs` (Rust puro) | Sobre del bus + buzon de recados + comprobacion de forma. **No parsea el volcado.** Fuera de `cfg(android)` para probarlo en escritorio. |
+| El borde | `crate/src/jni/mod.rs` | Septimo simbolo: `publicarObservacion`. Encola; el hilo del canal vacia el buzon antes de cada espera. |
+| El volcado | `android/.../Volcado.kt` | Recorre el arbol en preorden y lo serializa a JSON plano con `view_id`, `texto`, `desc`, `hint`, caja, banderas. |
+| La pantalla | `android/.../MainActivity.kt` + `actividad_principal.xml` | Botones OBSERVAR PANTALLA y COPIAR VOLCADO, con el numero de nodos en pantalla. |
+| El servicio | `android/.../Accesibilidad.kt` | Presta `instancia()`, `actividadVisible()` (la que anuncia `TYPE_WINDOW_STATE_CHANGED`) y `reciclarNodo()` (regla de `recycle()` por version). |
+| Los tests | `crate/tests/observacion_puente.rs`, `crate/tests/jni_paridad.rs` | 2 puros nuevos + la paridad ampliada a los siete simbolos. |
+
+### Donde publica (el topic exacto)
+
+```text
+core/core-a/events/bridge/observacion
+```
+
+Con el sobre completo del bus y **`source.core_id = "external"`**:
+
+```json
+{"event_id":"obs-<momento>-<n>","event_type":"bridge.observacion",
+ "timestamp":<ms>,"source":{"core_id":"external","module":"instagram-bridge","version":"0.1.0"},
+ "data":{ ...el volcado, TAL CUAL... }}
+```
+
+`external` no es cosmetico: si el aparato se presentara como `core-a`, el bus
+descartaria el evento por self-loop (un core no se escucha a si mismo) y el
+volcado no llegaria nunca. El aparato no es un core del bus: es un dispositivo.
+
+### El contrato del volcado (lo que se serializa)
+
+```json
+{"paquete":"com.instagram.android","actividad":"com.instagram.android.activity.MainTabActivity",
+ "momento":1712345678901,"truncado":false,
+ "nodos":[{"id":0,"padre":null,"profundidad":1,"clase":"FrameLayout","view_id":null,
+           "texto":null,"desc":null,"hint":null,"tocable":false,"editable":false,
+           "visible":true,"habilitado":true,"x1":0,"y1":0,"x2":1080,"y2":2400,
+           "seleccionado":false,"marcado":false}]}
+```
+
+`id` es el **indice** del nodo en la lista y `padre` el indice del padre: es lo que
+permite reconstruir el arbol cuando diez `image_button` comparten el mismo
+`view_id`. Topes: 4000 nodos y profundidad 64 (los mismos que reconstruye
+`mano::arbol_json`); si se corta, `"truncado": true`.
+
+### Por que el puente no parsea el JSON
+
+1. **Un volcado es prueba, no contrato.** Si el borde "arreglara" el JSON
+   (recortando campos que no conoce, normalizando numeros), lo que llega al
+   servidor no seria lo que el aparato vio, y la receta se escribiria sobre una
+   pantalla que no existe. Ese fallo no da error en ningun sitio: da una receta
+   que falla el dia que se usa.
+2. **Parsear cuesta y puede fallar.** 4000 nodos con 18 campos son cientos de KB;
+   un parser que se atraganta con un texto raro perderia el volcado entero por un
+   detalle. Se comprueba la FORMA (no vacio, empieza en `{` y acaba en `}`) y nada
+   mas.
+
+### Por que un buzon y no un PUBLISH directo desde Kotlin
+
+`Canal::publicar` pide `&mut Canal` y el canal vive en UN hilo
+(`jni::servir_canal`). La llamada de Kotlin corre en el hilo de la UI, que no
+puede tocar ese canal sin bloquearse, y **no se abre un segundo cliente**: dos
+conexiones con la misma llave y el mismo client id hacen que el broker cierre la
+primera. Asi que el borde empuja un recado (`VecDeque` con tope de 8) y el hilo
+del canal lo vacia antes de cada espera. Precio: hasta 2 s de retardo
+(`PLAZO_LECTURA`). Lo que se compra: el hilo de la UI nunca espera a la red.
+
+### Que significa `true` (y que no)
+
+`publicarObservacion` contesta `JNI_TRUE` cuando el volcado quedo **encolado**, no
+cuando el broker lo tenga: en QoS 0 nadie puede afirmar eso. El `JNI_FALSE` si
+lleva motivo, y se lee en `estado()` bajo la clave `volcado` (`sin_canal` con el
+estado del canal dentro, `json_vacio`, `json_no_objeto`, `buzon_lleno`). Un
+booleano no cabe un motivo, y "no se pudo" sin motivo no se arregla desde el
+movil.
+
+### El boton COPIAR VOLCADO
+
+Si el bus no esta, el JSON se queda en memoria y COPIAR VOLCADO lo lleva al
+portapapeles: se pega en Telegram y se ve igual. No vuelve a mirar la pantalla
+(copia lo que se vio, no lo que hay ahora) y no necesita canal ni servicio.
+
+### Verificacion del bloque (real, en este servidor)
+
+```bash
+cd modules/instagram-bridge/crate
+cargo test --offline
+# 79 pasan, 0 fallan (antes del bloque: 77)
+#   observacion_puente  2  (nuevos: el puente no cambia el JSON · sin canal da motivo)
+#   jni_paridad         3  (ampliado a los siete simbolos + topic unico + sin parseo)
+#   resto              74
+
+for f in ../tests/*.test.js; do node "$f" >/dev/null || echo "FALLO $f"; done
+# 52 suites JS OK
+```
+
+El modulo `jni` (que en escritorio ni se parsea) **compila** contra `jni 0.21` sin
+NDK: se copio el crate a un directorio de trabajo, se quitaron los `cfg` y se
+añadio la caja como dependencia normal -> `cargo check --offline --all-targets`
+limpio, sin warnings.
+
+El test de paridad **tiene dientes** comprobado aqui, no de palabra:
+
+  - renombrar `publicarObservacion` a `publicarVolcado` solo en Kotlin -> **falla**
+    con `Kotlin declara publicarVolcado y el crate NO exporta ...`;
+  - cambiar su vuelta a `: String` -> **falla** con `publicarObservacion: String?
+    en Kotlin exige -> JString en Rust`;
+  - se restaura y vuelve a pasar.
+
+Lo que **no** se puede verificar en este servidor: que Kotlin compile (no hay
+`kotlinc` ni Android SDK), que el `.so` enlace, y que el arbol real del movil
+produzca el volcado (eso lo dice el primer boton pulsado en el aparato).
+
 ## Tests
 
 Un fichero por pieza, con el nombre que fija la espina `enki-plan` del plan

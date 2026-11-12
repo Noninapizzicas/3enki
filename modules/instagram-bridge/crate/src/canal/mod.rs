@@ -16,6 +16,10 @@
 //!     fallo que impide dar un envio por hecho.
 //!   - `json`: el lector y escritor de JSON minimo, porque una orden es JSON y
 //!     buscarla con subcadenas es la clase de atajo que ejecuta lo que no era.
+//!   - `observacion` (bloque 19b): el volcado de pantalla del aparato camino del
+//!     bus. Es un puente TONTO a proposito: envuelve el JSON que le dan y no lo
+//!     parsea, porque un volcado transformado ya no es lo que el aparato vio.
+//!     Lleva un buzon para que el hilo de la UI de Android no toque la red.
 //!
 //! # Lo que el canal NO hace
 //!
@@ -29,6 +33,7 @@
 pub mod bucle;
 pub mod json;
 pub mod mqtt;
+pub mod observacion;
 
 pub use bucle::{atender, servir, Bus, HechoDeMano, ManoAusente, ManoDeOrdenes, Opcion, Orden, Resultado};
 pub use mqtt::{url_con_llave, Canal, FalloDeCanal, Framer};
